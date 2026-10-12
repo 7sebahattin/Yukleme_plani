@@ -61,6 +61,9 @@ require_once __DIR__ . '/taslak_lib.php';
 // "Tekrar gönder": gönderimde taslağın beyaz listeli kopyası + Gönderilenler'den
 // forma dolu tohum (salt okunur; taslak yazmanın tek yolu yine hks_taslak_olustur).
 require_once __DIR__ . '/tekrar_gonder_lib.php';
+// Referans künye SEÇİM kuralları (fiyat yakınlığı → eski tarih → küçük kalan) +
+// künye/sıfat uyumsuzluğu kaydı. Gönderim yolu değişmez (hks_bildirim_kaydet tek yol).
+require_once __DIR__ . '/kunye_secim_lib.php';
 
 
 // =============================================================================
@@ -68,64 +71,33 @@ require_once __DIR__ . '/tekrar_gonder_lib.php';
 // =============================================================================
 // Kullanıcı taslağı künye seçmeden, yalnız "toplam kilo + birim fiyat" ile
 // kaydeder. Gönder'e basıldığında künyeler HKS'ten TAZE çekilir ve hedef kiloya
-// ulaşana kadar sırayla dağıtılır — tarayıcıdaki "⚡ Otomatik Dağıt" (app.html
-// btnDagit) ile BİREBİR aynı greedy mantık: liste sırasına göre her künyeden
-// min(kalan, kalanHedef) alınır.
+// ulaşana kadar greedy dağıtılır (her künyeden min(kalan, kalanHedef)).
+//
+// SEÇİM SIRASI (kullanıcı kararı — halkayit/kunye_secim_lib.php):
+//   satış fiyatı girildiyse alış fiyatı ona EN YAKIN → EN ESKİ tarih → EN KÜÇÜK
+//   kalan → künye no. Bu taslağın bildirimci sıfatıyla (ortak.sifatId) daha önce
+//   uyumsuz çıkmış künyeler (firma bazlı kayıt, 30 gün) DENENMEZ.
+// Alış fiyatları hks_kunye_detaylari_getir() ile BEST-EFFORT alınır: hata ya da
+// kısmi hata → eksik fiyatlı künyeler fiyatsız sayılır (yalnız bellek, kv yok).
 //
 // Künyeler kaydetme anında DEĞİL gönderim anında çözülür; böylece aradaki
 // sürede stok değişse bile bildirim her zaman O ANKİ gerçek kalanlarla gider.
 //
-// Dönüş: ['satirlar' => [...]] veya ['hata' => '...'] (taslak KORUNUR).
-function hks_plan_kunye_coz($cfg, $ortak) {
-  $hedef = round((float)($ortak['planKg'] ?? 0), 3);
-  if ($hedef <= 0) return ['hata' => 'Plan taslağında toplam kilo yok.'];
-
-  $sorgu = (array)($ortak['planSorgu'] ?? []);
-  if (empty($sorgu['urunId'])) return ['hata' => 'Plan taslağında ürün bilgisi yok.'];
-
-  $kunyeler = hks_kunyeleri_getir($cfg, [
-    'urunId'        => $sorgu['urunId'],
-    'aySayisi'      => (int)($sorgu['aySayisi'] ?? 12),
-    'isletmeTuruId' => (int)($sorgu['isletmeTuruId'] ?? 0),
-    'sirala'        => (string)($sorgu['sirala'] ?? 'azalan'),
-  ]);
-
-  $toplamKalan = 0.0;
-  foreach ($kunyeler as $k) $toplamKalan += max(0.0, (float)$k['kalan']);
-  $toplamKalan = round($toplamKalan, 3);
-
-  // "Eğer stok varsa" kuralı: yetmiyorsa HİÇBİR ŞEY gönderilmez. Kısmi gönderim
-  // yapılmaz — geri alınamaz olduğu için kullanıcıya karar bırakılır.
-  if ($toplamKalan < $hedef) {
-    return ['hata' => 'Stok yetersiz: plan ' . rtrim(rtrim(number_format($hedef, 3, ',', '.'), '0'), ',') .
-      ' KG istiyor, künyelerde toplam ' . rtrim(rtrim(number_format($toplamKalan, 3, ',', '.'), '0'), ',') .
-      ' KG kalan var. Hiçbir bildirim gönderilmedi, taslak silinmedi — stok girişi ' .
-      'yapıldıktan sonra tekrar deneyin veya taslağı düzenleyip kiloyu düşürün.'];
+// Dönüş: ['satirlar' => [...]] veya ['hata' => '...'] (taslak KORUNUR); ikisine
+// de 'atlananSifatUyumsuz' => [kunyeNo...] ve 'fiyatSiralamaKullanildi' => bool eklenir.
+function hks_plan_kunye_coz($cfg, $ortak, $firmaId = '') {
+  $dislanan = [];
+  try {
+    $dislanan = hks_kunye_dislanan_set(hks_kunye_sifat_uyumsuz_oku($firmaId), $ortak['sifatId'] ?? 0);
+  } catch (Throwable $e) {
+    error_log('[hks] künye sıfat kaydı okunamadı: ' . $e->getMessage());   // dışlamasız devam
   }
-
-  $satirlar = [];
-  $kalanHedef = $hedef;
-  foreach ($kunyeler as $k) {
-    if ($kalanHedef <= 0) break;
-    $kalan = (float)$k['kalan'];
-    if ($kalan <= 0) continue;
-    $al = round(min($kalan, $kalanHedef), 3);
-    if ($al <= 0) continue;
-    $satirlar[] = ['kunyeNo' => $k['kunyeNo'], 'miktar' => $al];
-    $kalanHedef = round($kalanHedef - $al, 3);
-  }
-
-  if ($kalanHedef > 0) {
-    return ['hata' => 'Künyeler hedef kiloyu karşılayamadı (' .
-      rtrim(rtrim(number_format($kalanHedef, 3, ',', '.'), '0'), ',') .
-      ' KG açık kaldı). Hiçbir bildirim gönderilmedi, taslak silinmedi.'];
-  }
-  // HKS tek istekte en fazla 100 bildirim kabul eder (bkz. hks_bildirim_dogrula).
-  if (count($satirlar) > 100) {
-    return ['hata' => 'Bu kilo ' . count($satirlar) . ' künyeye dağıldı; HKS tek seferde en fazla ' .
-      '100 bildirime izin veriyor. Taslağı düzenleyip kiloyu bölün. Hiçbir bildirim gönderilmedi.'];
-  }
-  return ['satirlar' => $satirlar];
+  return hks_plan_kunye_coz_cekirdek(
+    (array)$ortak,
+    fn(array $secenek) => hks_kunyeleri_getir($cfg, $secenek),
+    fn(int $ay) => hks_kunye_detaylari_getir($cfg, $ay),
+    $dislanan
+  );
 }
 
 // "Son kullanılanlar" anahtarı FİRMA BAZLIDIR — firmalar arasında veri karışmaz.
@@ -343,6 +315,13 @@ try {
       if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
       @set_time_limit(300);   // 5 yıllık taramada 60 ardışık SOAP çağrısı olabilir
       $liste = hks_kunyeleri_getir($cfg, $g);
+      // Opsiyonel 'sifatId': bu sıfatla uyumsuz kayıtlı künyelere sifatUyumsuz=true
+      // (yalnız bilgi — liste süzülmez). sifatId yoksa alan HİÇ eklenmez.
+      if (isset($g['sifatId']) && (int)$g['sifatId'] > 0) {
+        try { $__sm = hks_kunye_sifat_uyumsuz_oku($g['firmaId'] ?? ''); }
+        catch (Throwable $e) { $__sm = []; error_log('[hks] künye sıfat kaydı okunamadı: ' . $e->getMessage()); }
+        $liste = hks_kunyelere_sifat_bayragi($liste, $__sm, $g['sifatId']);
+      }
       hks_json_cikti(['kunyeler' => $liste]);
     }
 
@@ -526,7 +505,7 @@ try {
       $planMi = empty($satirlar) && (float)($ortak['planKg'] ?? 0) > 0;
       if ($planMi) {
         @set_time_limit(300);   // 'kunyeler' eylemiyle aynı üst sınır
-        $__plan = hks_plan_kunye_coz($cfg, $ortak);
+        $__plan = hks_plan_kunye_coz($cfg, $ortak, $t['firma_id']);
         if (!empty($__plan['hata'])) {
           $taslagiGeriKoy();
           hks_json_cikti(['hata' => $__plan['hata'], 'taslakKorundu' => true], 400);
@@ -697,6 +676,23 @@ try {
             'ekranından künyenin oluşup oluşmadığını KONTROL EDİN; oluştuysa taslağı silin.',
           'taslakKorundu' => true,
         ], 502);
+      }
+
+      // KÜNYE / SIFAT UYUMSUZLUĞU KAYDI — başarı/başarısızlık fark etmez, tam
+      // başarısızlıkta taslak geri konmadan ÖNCE. Yalnız künyeye ÖZGÜ sıfat
+      // hataları (bkz. hks_kunye_sifat_hatali_satirlar) firma bazlı kaydedilir;
+      // sonraki otomatik seçim o künyeyi bu sıfatla denemez. Yeniden deneme /
+      // ikinci gönderim YOK. Referanssız bildirimde künye yoktur. Hata YUTULUR.
+      $sonuc['sifatUyumsuzKunyeler'] = [];
+      if (empty($ortak['referanssiz'])) {
+        try {
+          $__sk = hks_kunye_sifat_hatali_satirlar((array)($sonuc['sonuclar'] ?? []), (array)$satirlar);
+          if ($__sk) {
+            $sonuc['sifatUyumsuzKunyeler'] = hks_kunye_sifat_uyumsuz_ekle($t['firma_id'], $__sk, $ortak['sifatId'] ?? 0);
+          }
+        } catch (Throwable $e) {
+          error_log('[hks] künye sıfat kaydı yazılamadı: ' . $e->getMessage());
+        }
       }
 
       // Gönderilenler kaydı (tek satır özet)

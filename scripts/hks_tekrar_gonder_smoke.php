@@ -463,7 +463,7 @@ ok("INSERT veri JSON'u kopyayı taşır", strpos($api,
 $pCase = strpos($api, "case 'taslak_gonder':");
 $pVeri = strpos($api, "\$veri = json_decode(\$t['veri'], true);", (int)$pCase);
 $pKopya = strpos($api, '$__kopya = hks_gonderim_kopyasi(is_array($veri) ? $veri : []);', (int)$pCase);
-$pPlan = strpos($api, '$__plan = hks_plan_kunye_coz($cfg, $ortak);', (int)$pCase);
+$pPlan = strpos($api, '$__plan = hks_plan_kunye_coz($cfg, $ortak', (int)$pCase);
 $pAdres = strpos($api, "\$ortak['gidecekAdres'] = \$__adres;", (int)$pCase);
 $pGonder = strpos($api, '$sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak, $__secenek);', (int)$pCase);
 $pInsert = strpos($api, "INSERT INTO ' . hks_tablo('gonderilenler')", (int)$pCase);
