@@ -832,6 +832,31 @@ $h_not = render_beyan($B_NOT);
 ok('[not] önizlemede not görünüyor ve kaçışlı', mb_strpos($h_not, 'İlk satır') !== false && strpos($h_not, '&lt;b&gt;x&lt;/b&gt;') !== false);
 ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), 'bf-emoji" aria-hidden="true">📝</span> Not') === false);
 ok('[not] düzenleme formu kayıtlı notu dolduruyor', mb_strpos(render_form($B_NOT), 'İlk satır') !== false);
+// Hızlı plaka girişi (v340)
+$B_PL = beyan_ekle(['party_no' => 'PL-1']);
+db()->prepare("UPDATE customs_declarations SET vehicle_plate = NULL WHERE id = ?")->execute([$B_PL]);
+$h_pl = render_beyan($B_PL);
+file_put_contents(sys_get_temp_dir() . '/beyan_view_plaka.html', $h_pl);
+ok('[plaka] eksik plakada tıklanabilir hücre + hızlı pencere', strpos($h_pl, 'id="plakaHizliBtn"') !== false && strpos($h_pl, 'id="plakaHizliDlg"') !== false
+   && strpos($h_pl, 'api_beyan_plaka.php') !== false);
+db()->prepare("UPDATE customs_declarations SET vehicle_plate = '34ABC123' WHERE id = ?")->execute([$B_PL]);
+$h_pl2 = render_beyan($B_PL);
+ok('[plaka] plaka doluyken hücre düz ve pencere yok', strpos($h_pl2, 'plakaHizliBtn') === false && strpos($h_pl2, '34ABC123') !== false);
+db()->prepare("UPDATE customs_declarations SET vehicle_plate = NULL, deleted_at = '2026-01-01 00:00:00' WHERE id = ?")->execute([$B_PL]);
+ok('[plaka] arşivlenmiş beyanda hızlı giriş yok', strpos(render_beyan($B_PL), 'plakaHizliBtn') === false);
+$api_pl = (string)file_get_contents($ROOT . '/api_beyan_plaka.php');
+ok('[plaka] uç: POST + CSRF + yetki + yalnız vehicle_plate + audit',
+   strpos($api_pl, "REQUEST_METHOD'] !== 'POST'") !== false && strpos($api_pl, 'csrf_check(') !== false
+   && strpos($api_pl, "can_beyan('write') && can_beyan('hks.write')") !== false
+   && preg_match('/UPDATE customs_declarations SET vehicle_plate = \?, updated_by = \?, updated_at = NOW\(\) WHERE id = \? AND deleted_at IS NULL/', $api_pl) === 1
+   && strpos($api_pl, 'beyan_plaka_normalize(') !== false && strpos($api_pl, 'audit_log_event(') !== false);
+// Form temizliği (v340): parantez içi ipuçları ve alt metinler yok
+$f_tmp = render_form($ID_BOS);
+ok('[temiz] düzenleme formunda ipucu/alt metin yok',
+   strpos($f_tmp, 'isteğe bağlı') === false && strpos($f_tmp, 'Red durumunda zorunlu') === false
+   && strpos($f_tmp, 'HKS hazırlığı için') === false && strpos($f_tmp, 'Silme işlemi beyanı') === false
+   && strpos($f_tmp, 'katalogdan eşleşti') === false && strpos($f_tmp, 'Akıştaki sıradaki durum') === false
+   && strpos($f_tmp, 'Dolu alanlar WhatsApp') === false && strpos($f_tmp, 'Mesajı yapıştırıp') === false);
 // Numune (v334)
 ok('[numune] formda 4 numune alanı Analiz sekmesinde (Not bölümünden SONRA, Kaynak sekmesinden ÖNCE)', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
    && strpos($f_sil, 'name="sample_crate_type"') !== false && strpos($f_sil, 'name="sample_gross_kg"') !== false

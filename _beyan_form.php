@@ -39,12 +39,10 @@ $field = static function (string $name, string $label, string $icon, string $mod
     <div class="page-head beyan-workspace-head">
         <div class="beyan-workspace-heading">
             <h1><?= $is_edit ? '✏️ Beyan Düzenle' : '🧾 Yeni Beyan' ?></h1>
-            <p class="muted">
-                <?php if ($is_edit): ?><?= h($beyan['party_no'] ?: '(parti no yok)') ?> <?= beyan_badge_html($cur_status) ?><?php else: ?>Beyan bilgileri, analiz ve kaynak metin<?php endif; ?>
-            </p>
+            <?php if ($is_edit): ?><p class="muted"><?= h((string)$beyan['party_no']) ?> <?= beyan_badge_html($cur_status) ?></p><?php endif; ?>
         </div>
         <div id="beyanSingleActions" class="beyan-workspace-actions">
-            <span class="muted beyan-dirty" data-beyan-dirty aria-live="polite">Değişiklik yok</span>
+            <span class="muted beyan-dirty" data-beyan-dirty aria-live="polite" hidden></span>
             <a href="<?= h($return_url) ?>" class="btn btn-ghost bf-iptal" data-ic="carpi"><?= $is_edit ? 'İptal' : 'Beyanlar' ?></a>
             <!-- İlk submit her zaman kaydet: Enter tuşu silmeyi başlatmamalı. -->
             <button type="submit" form="beyanForm" class="btn btn-primary bf-kaydet" data-ic="kaydet"><?= $is_edit ? 'Güncelle' : 'Kaydet' ?></button>
@@ -89,9 +87,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
                             <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>><?= h($sv['label']) ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <?php if ($is_edit && !empty($next_states)): ?>
-                        <div class="form-hint">Akıştaki sıradaki durum: <?= h(implode(', ', array_map(static fn($ns) => $statuses[$ns]['label'] ?? $ns, $next_states))) ?>. Tüm durumlar seçilebilir.</div>
-                        <?php endif; ?>
                     </div>
                 </section>
 
@@ -128,8 +123,8 @@ $field = static function (string $name, string $label, string $icon, string $mod
                 <section class="beyan-section" data-bf="uyari" data-beyan-single-section>
                     <h2 class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</h2>
                     <div class="form-group" data-ic="metin">
-                        <label class="form-label" for="bf_note">Not <span class="muted">(isteğe bağlı, en fazla 2000 karakter)</span></label>
-                        <textarea id="bf_note" name="note" rows="3" maxlength="2000" class="form-control" placeholder="Bu beyanla ilgili hatırlatma veya açıklama…"><?= h($f['note'] ?? '') ?></textarea>
+                        <label class="form-label" for="bf_note">Not</label>
+                        <textarea id="bf_note" name="note" rows="3" maxlength="2000" class="form-control"><?= h($f['note'] ?? '') ?></textarea>
                     </div>
                 </section>
             </div>
@@ -150,10 +145,9 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         </div>
                     </div>
                     <?php else: ?>
-                    <p class="muted">Numune ve sonuç tarihleri beyan oluşturulduktan sonra düzenlenebilir.</p>
                     <?php endif; ?>
                     <div class="form-group" data-ic="kalem">
-                        <label class="form-label" for="analysisNote">Analiz Notu <span class="muted" id="noteRequired">(Red durumunda zorunlu)</span></label>
+                        <label class="form-label" for="analysisNote">Analiz Notu</label>
                         <textarea name="analysis_note" id="analysisNote" rows="3" class="form-control"<?= $f['status'] === 'red' ? ' required' : '' ?>><?= h((string)$f['analysis_note']) ?></textarea>
                     </div>
                 </fieldset>
@@ -166,7 +160,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <?php $field('sample_gross_kg', 'Numune Brüt KG', 'agirlik', 'decimal'); ?>
                         <?php $field('sample_net_kg', 'Numune Net KG', 'terazi', 'decimal'); ?>
                     </div>
-                    <div class="form-hint">İsteğe bağlı. Dolu alanlar WhatsApp metnindeki NUMUNE bölümüne eklenir (tarih girilmese de).</div>
                 </section>
             </div>
 
@@ -184,7 +177,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
             <?php if (can_beyan('source.read')): ?>
             <div id="beyanPanel_kaynak" data-beyan-panel="kaynak" role="tabpanel" aria-labelledby="beyanTab_kaynak">
                 <fieldset <?= !can_beyan('source.write') ? 'disabled' : '' ?> class="beyan-section" data-bf="wa">
-                    <h2 class="beyan-section-title" data-ic="mesaj"><span class="bf-emoji" aria-hidden="true">📱</span> WhatsApp Metni<small class="bf-alt">Mesajı yapıştırıp ayrıştırın; bulunan bilgileri kaydetmeden önce kontrol edin.</small></h2>
+                    <h2 class="beyan-section-title" data-ic="mesaj"><span class="bf-emoji" aria-hidden="true">📱</span> WhatsApp Metni</h2>
                     <div class="form-group" data-ic="metin">
                         <label class="form-label" for="bf_raw_text">Kaynak metin</label>
                         <textarea id="bf_raw_text" name="raw_text" rows="6" class="form-control beyan-source-text" placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırın."><?= h((string)$f['raw_text']) ?></textarea>
@@ -211,7 +204,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
     <?php if ($is_edit && can_beyan('delete')): ?>
     <details class="beyan-workspace-delete" data-beyan-single-section>
         <summary>Diğer işlemler</summary>
-        <p class="muted">Silme işlemi beyanı arşivden gizler.</p>
         <button type="submit" class="btn btn-ghost" formaction="beyan_delete.php" formmethod="post" formnovalidate
                 onclick="return confirm('Bu beyan arşivden gizlenecek. Devam edilsin mi?')">Sil</button>
     </details>

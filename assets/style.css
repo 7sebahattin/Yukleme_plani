@@ -6197,6 +6197,16 @@ html[data-theme="dark"] body:not(.print-mode) .bv .bk-hucre.bk-eksik { backgroun
 .bv .bk-hucre.bk-eksik { background: rgba(217,119,6,.09); border-color: rgba(217,119,6,.3); }
 .bv .bk-hucre.bk-eksik[data-ic]::before { background: rgba(217,119,6,.14); border-color: rgba(217,119,6,.3); }
 .bv .bk-hucre.bk-eksik[data-ic]::after { background: #d97706; }
+.bv button.bk-tikla { font: inherit; text-align: left; color: inherit; width: 100%; cursor: pointer; transition: box-shadow .15s, transform .1s; }
+.bv button.bk-tikla:hover { box-shadow: 0 0 0 2px rgba(217,119,6,.35); }
+.bv button.bk-tikla:active { transform: scale(.99); }
+.bv button.bk-tikla:focus-visible { outline: 2px solid #d97706; outline-offset: 2px; }
+.plaka-hizli { border: 1px solid var(--border); border-radius: 16px; padding: 18px; width: min(360px, calc(100vw - 32px)); background: var(--card, #fff); color: var(--text, inherit); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.plaka-hizli::backdrop { background: rgba(15,23,42,.5); }
+.plaka-hizli h3 { margin: 0 0 12px; font-size: 1.05rem; }
+.plaka-hizli input { width: 100%; font-size: 1.1rem; letter-spacing: .06em; font-weight: 600; }
+.plaka-hizli-hata { margin-top: 8px; color: var(--danger, #b91c1c); font-size: .88rem; }
+.plaka-hizli-btn { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .bv .bk-alt {
     margin-top: 0;
     padding-top: 14px;
