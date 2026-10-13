@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v348');
+    define('APP_SURUM', 'v349');
 }
 
 // --- HTML kaçışı ---
@@ -3453,15 +3453,21 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
     $urun_sec = (string)($f['hks_urun_id'] ?? '');
     $ulke_sec = (string)($f['hks_ulke_id'] ?? '');
     $urun_not = '';
-    // HKS Ürün Adı alanı (v347/v348): VARSAYILAN pasif (kilitli). Ürün adı bir HKS ürünüyle otomatik
-    // eşleşirse değer gelir ve pasif kalır; ad yazılmış ama eşleşme YOKSA alan açılır (serbest, farklı çerçeve).
+    // HKS Ürün Adı alanı (v349): KİLİT yalnız deterministik eşleşmede (katalog tam ad / benzer ad) —
+    // öğrenilen eşleşme KİLİTLEMEZ (yanlış öğrenilmiş "ACUR→KABAK" alanı kalıcı kilitlemişti).
+    // Eşleşme yoksa alan açık: önce kayıtlı seçim, yoksa öğrenilen öneri. Sunucu kayıtta aynı kuralı uygular.
     $urun_kilit = true;
     $urun_serbest = false;
     $pn = trim((string)($f['product_name'] ?? ($beyan['product_name'] ?? '')));
-    if ($pn !== '') {
-        $t = bb_tahmin('urun', $pn, $katalog['urunler']);
+    if ($pn === '') {
+        $urun_sec = '';
+    } else {
+        $t = beyan_hks_urun_otomatik($pn, $katalog['urunler']);
         if ($t['id'] !== '') { $urun_sec = $t['id']; }
-        else { $urun_kilit = false; $urun_serbest = true; }
+        else {
+            $urun_kilit = false; $urun_serbest = true;
+            if ($urun_sec === '') { $o = hks_eslesme_bul('urun', $pn); if ($o) $urun_sec = (string)$o['hks_id']; }
+        }
     }
     if ($ulke_sec === '' && $beyan) {
         $t = bb_ulke_tahmin(bb_ulke_adaylari($beyan, bb_bagli_plan($beyan)), $katalog['ulkeler']);
@@ -3493,8 +3499,9 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
             echo '<option value="' . h($secili) . '" selected>Mevcut seçim (katalogda bulunamadı): ' . h($secili) . '</option>';
         }
         echo '</select>';
-        // Kilitli select disabled olduğundan POST'a girmez; değeri gizli alan taşır (JS kilidi açınca kaldırır).
-        if ($kilit) echo '<input type="hidden" name="' . h($ad) . '" value="' . h($secili) . '" data-hks-ayna>';
+        // Kilitli select disabled olduğundan POST'a girmez; değeri SUNUCU ürün adından yeniden çözer
+        // (beyan_hks_urun_post_coz). İşaret alanı, alanın formda olduğunu bildirir.
+        if ($ad === 'hks_urun_id') echo '<input type="hidden" name="hks_urun_alan" value="1">';
         echo '</div>';
     };
 
@@ -3503,6 +3510,31 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
         return;
     }
     $sec('hks_urun_id', 'HKS Ürün Adı', $katalog['urunler'], $urun_sec, $urun_not, 'Ürün yazın veya listeden seçin', 'paket', $urun_kilit, !$show_plate && !$urun_kilit, $urun_serbest && $show_plate);
+}
+
+// Ürün adı → HKS ürünü, YALNIZ deterministik yollar (katalog tam ad, benzer ad). Öğrenilen eşleşme
+// dahil DEĞİL: alanı kilitleyen karar budur ve yanlış öğrenilmiş bir satır kalıcı kilit yaratmamalı (v349).
+function beyan_hks_urun_otomatik(string $ad, array $urunler): array {
+    $ad = trim($ad);
+    if ($ad === '' || !$urunler) return ['id' => '', 'ad' => '', 'kaynak' => 'yok'];
+    return bb_tahmin('urun', $ad, $urunler, false);
+}
+
+// Kayıtta HKS ürününü SUNUCU belirler (v349). Formda alan varsa (hks_urun_alan):
+//  • ürün adı otomatik eşleşiyorsa → o id (gönderilen değer yok sayılır; kilitli alan),
+//  • ürün adı boşsa → boş,
+//  • eşleşme yoksa → kullanıcının açık alandan seçtiği değer (gönderilmediyse boş).
+// Dönüş: [güncellenmiş post, 'elle' = kullanıcı açık alandan seçti mi (yalnız o zaman öğrenilir)].
+function beyan_hks_urun_post_coz(array $post, string $product_name): array {
+    if (!array_key_exists('hks_urun_alan', $post)) return [$post, array_key_exists('hks_urun_id', $post)];
+    $katalog = bb_katalog();
+    if (!$katalog) return [$post, false];
+    $pn = trim($product_name);
+    if ($pn === '') { $post['hks_urun_id'] = ''; return [$post, false]; }
+    $t = beyan_hks_urun_otomatik($pn, $katalog['urunler']);
+    if ($t['id'] !== '') { $post['hks_urun_id'] = $t['id']; return [$post, false]; }
+    $post['hks_urun_id'] = trim((string)($post['hks_urun_id'] ?? ''));
+    return [$post, $post['hks_urun_id'] !== ''];
 }
 
 // Gönderici Firma adı → HKS firma id (TR-duyarsız TAM ad eşleşmesi). Eşleşmezse '' (serbest ad).

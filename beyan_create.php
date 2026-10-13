@@ -80,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_POST['hks_firma_id'] = $g['id'];
         $f['sender_company_name'] = $g['ad'];
     }
+    [$_POST, $hks_urun_elle] = beyan_hks_urun_post_coz($_POST, $f['product_name']);
     try { $hks = beyan_hks_form_oku($_POST); }
     catch (InvalidArgumentException $e) { $errors[] = $e->getMessage(); }
 
@@ -153,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Eşleştirme seçimlerini ÖĞREN — sonraki beyanlarda alan hazır gelsin.
         // Öneri üretir, karar vermez: kullanıcı formda her zaman değiştirebilir.
-        if (can_beyan('hks.write') && $hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
+        if (can_beyan('hks.write') && $hks['urun_id'] && !empty($hks_urun_elle)) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
         if (can_beyan('hks.write')) beyan_hks_ulke_ogren($f, (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
         if (can_beyan('hks.write') && $hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
 

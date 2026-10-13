@@ -2297,24 +2297,15 @@ function ekranAlti() {
                 if (addressInput.value !== lastAutoAddress) lastAutoAddress = null;
             });
         }
-        // HKS Ürün Adı: alan HER ZAMAN pasif başlar. Ürün Adı'ndan çıkılınca (change) sunucu eşleştirir
-        // (api_beyan_urun_esle.php): eşleşirse değer gelir ve pasif kalır; eşleşmezse alan boş + açık
-        // (farklı çerçeve) olur ve kullanıcı listeden seçer. Eşleşme kararı SUNUCUDADIR.
+        // HKS Ürün Adı (v349): alan pasif başlar. Ürün Adı'ndan çıkılınca (change) api_beyan_urun_esle.php
+        // sorulur: eşleşirse değer gelir ve pasif kalır; eşleşmezse alan AÇILIR (turuncu çerçeve), öğrenilmiş
+        // öneri varsa ön-seçilir. KAYDI SUNUCU BELİRLER (beyan_hks_urun_post_coz) — buradaki değer yalnız görüntüdür;
+        // istek hata verirse alan açılır (eski kilit/değer asla kalmaz).
         if (productInput && productSelect) {
             var durum = function (hal, id) {   // hal: 'kilit' | 'serbest'
                 var proxy = productSelect._araInput;
-                var kap = productSelect.parentNode;
-                var ayna = kap.querySelector('input[data-hks-ayna]');
                 var kilitli = hal === 'kilit';
-                if (kilitli) {
-                    productSelect.value = id || '';
-                    if (!ayna) {
-                        ayna = document.createElement('input');
-                        ayna.type = 'hidden'; ayna.name = productSelect.name; ayna.setAttribute('data-hks-ayna', '');
-                        kap.appendChild(ayna);
-                    }
-                    ayna.value = id || '';
-                } else if (ayna) ayna.remove();
+                productSelect.value = id || '';
                 productSelect.disabled = kilitli;
                 if (kilitli) { productSelect.dataset.hksKilit = '1'; delete productSelect.dataset.hksSerbest; }
                 else { delete productSelect.dataset.hksKilit; productSelect.dataset.hksSerbest = '1'; }
@@ -2323,29 +2314,35 @@ function ekranAlti() {
                     proxy.classList.toggle('hks-serbest', !kilitli);
                     if (typeof productSelect._araTazele === 'function') productSelect._araTazele();
                 }
+                productSelect.dispatchEvent(new Event('change', {bubbles: true}));
+            };
+            var secenekVar = function (id) {
+                return !!id && Array.prototype.some.call(productSelect.options, function (o) { return o.value === id; });
             };
             var sayac = 0;
             var esle = function () {
                 var ad = productInput.value.trim();
                 var no = ++sayac;
-                if (ad === '') { durum('kilit', ''); productSelect.dispatchEvent(new Event('change', {bubbles: true})); return; }
+                if (ad === '') { durum('kilit', ''); return; }
+                productSelect.dataset.hksBekliyor = '1';
                 fetch('api_beyan_urun_esle.php?ad=' + encodeURIComponent(ad), {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
-                    .then(function (r) { return r.json(); })
+                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                     .then(function (j) {
-                        if (no !== sayac || !j || !j.ok) return;
+                        if (no !== sayac) return;
+                        if (!j || !j.ok) throw new Error('yanıt');
                         var id = j.id ? String(j.id) : '';
-                        if (id && !Array.prototype.some.call(productSelect.options, function (o) { return o.value === id; })) id = '';
-                        if (id) durum('kilit', id);
-                        else { durum('serbest'); productSelect.value = ''; if (productSelect._araTazele) productSelect._araTazele(); }
-                        productSelect.dispatchEvent(new Event('change', {bubbles: true}));
-                    }).catch(function () {});
+                        if (secenekVar(id)) durum('kilit', id);
+                        else durum('serbest', secenekVar(String(j.oneri || '')) ? String(j.oneri) : '');
+                    })
+                    .catch(function () { if (no === sayac) durum('serbest', ''); })
+                    .then(function () { if (no === sayac) delete productSelect.dataset.hksBekliyor; });
             };
             // Yalnızca alandan çıkılınca (change) sorgulanır; yazarken sorgu yok.
             productInput.addEventListener('change', esle);
             // İlk açılış: sunucunun verdiği durum uygulanır (aranabilir kutu kurulduktan sonra).
             var ilk = function () {
-                if (productSelect.dataset.hksKilit === '1') { var m = productSelect.parentNode.querySelector('input[data-hks-ayna]'); durum('kilit', m ? m.value : productSelect.value); }
-                else if (productSelect.dataset.hksSerbest === '1') durum('serbest');
+                if (productSelect.dataset.hksSerbest === '1' && productSelect._araInput) productSelect._araInput.classList.add('hks-serbest');
+                if (productSelect.dataset.hksKilit === '1' && productSelect._araInput) productSelect._araInput.disabled = true;
             };
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ilk); else ilk();
         }

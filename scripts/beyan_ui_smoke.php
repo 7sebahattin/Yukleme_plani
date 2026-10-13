@@ -902,9 +902,9 @@ ok('[numune] doluyken önizlemede kart + WhatsApp metni', strpos($h_nm, '🧪</s
    && strpos($h_nm, 'Net: 4 KG') !== false && strpos($h_nm, '\ud83e\uddea') === false && strpos($h_nm, '🧪 *NUMUNE*') !== false);
 file_put_contents(sys_get_temp_dir() . '/beyan_form_ciktisi.html', render_form($B_NM));
 $fk = render_form($B_NM);
-ok('[hks-ürün] ürün adı eşleşiyorsa alan kilitli + değer gizli alanda',
+ok('[hks-ürün] ürün adı eşleşiyorsa alan kilitli; değeri sunucu çözer (alan işareti var, gizli değer kopyası YOK)',
    preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-kilit="1" disabled/', $fk) === 1
-   && preg_match('/<input type="hidden" name="hks_urun_id" value="\d+" data-hks-ayna>/', $fk) === 1);
+   && strpos($fk, 'name="hks_urun_alan" value="1"') !== false && strpos($fk, 'data-hks-ayna') === false);
 db()->prepare("UPDATE customs_declarations SET product_name='ZZZ BILINMEYEN', hks_urun_id=NULL, hks_urun_ad=NULL WHERE id=?")->execute([$B_NM]);
 $fb = render_form($B_NM);
 ok('[hks-ürün] ad yazılı ama eşleşme yoksa alan AÇIK + serbest çerçeve (kilit/ayna yok)',
@@ -912,9 +912,19 @@ ok('[hks-ürün] ad yazılı ama eşleşme yoksa alan AÇIK + serbest çerçeve 
    && preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-serbest="1"/', $fb) === 1 && preg_match('/<select[^>]*name="hks_urun_id"[^>]*disabled/', $fb) !== 1);
 db()->prepare("UPDATE customs_declarations SET product_name='' WHERE id=?")->execute([$B_NM]);
 $fe = render_form($B_NM);
-ok('[hks-ürün] ürün adı boşken alan pasif (kilitli, boş değer gizli alanda)',
-   preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-kilit="1" disabled/', $fe) === 1
-   && preg_match('/<input type="hidden" name="hks_urun_id" value="" data-hks-ayna>/', $fe) === 1);
+ok('[hks-ürün] ürün adı boşken alan pasif (kilitli)',
+   preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-kilit="1" disabled/', $fe) === 1);
+// v349: kayıtta HKS ürününü SUNUCU belirler — kilitli alanın eski değeri asla kaydedilmez, otomatik eşleşme öğrenilmez
+[$pp, $el] = beyan_hks_urun_post_coz(['hks_urun_alan' => '1', 'hks_urun_id' => '11'], 'KAYISI');
+ok('[hks-ürün] sunucu: ad eşleşiyorsa gönderilen (eski) id yok sayılır', $pp['hks_urun_id'] === '10' && $el === false);
+[$pp, $el] = beyan_hks_urun_post_coz(['hks_urun_alan' => '1'], 'ZZZ BILINMEYEN');
+ok('[hks-ürün] sunucu: eşleşme yok + değer gönderilmedi → boş (eski değer korunmaz)', $pp['hks_urun_id'] === '' && $el === false);
+[$pp, $el] = beyan_hks_urun_post_coz(['hks_urun_alan' => '1', 'hks_urun_id' => '11'], 'ZZZ BILINMEYEN');
+ok('[hks-ürün] sunucu: eşleşme yok + elle seçim → kabul + öğrenilir', $pp['hks_urun_id'] === '11' && $el === true);
+db()->prepare("INSERT INTO hks_eslesme (tip,kaynak_norm,hks_id,hks_ad,kullanim,updated_at) VALUES ('urun',?,'11','Kiraz',1,'2026-10-13')")->execute([hks_eslesme_norm('KAYISI')]);
+[$pp, $el] = beyan_hks_urun_post_coz(['hks_urun_alan' => '1'], 'KAYISI');
+ok('[hks-ürün] sunucu: yanlış öğrenilmiş eşleşme kilidi etkilemez (katalog tam adı kazanır)', $pp['hks_urun_id'] === '10');
+db()->exec("DELETE FROM hks_eslesme WHERE tip='urun'");
 ok('[numune] düzenleme formu kayıtlı numuneyi dolduruyor', strpos(render_form($B_NM), 'value="TAHTA KASA"') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',
