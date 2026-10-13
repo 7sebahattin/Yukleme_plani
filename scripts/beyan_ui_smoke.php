@@ -907,8 +907,14 @@ ok('[hks-ürün] ürün adı eşleşiyorsa alan kilitli + değer gizli alanda',
    && preg_match('/<input type="hidden" name="hks_urun_id" value="\d+" data-hks-ayna>/', $fk) === 1);
 db()->prepare("UPDATE customs_declarations SET product_name='ZZZ BILINMEYEN', hks_urun_id=NULL, hks_urun_ad=NULL WHERE id=?")->execute([$B_NM]);
 $fb = render_form($B_NM);
-ok('[hks-ürün] eşleşme yoksa alan serbest (kilit/ayna yok)',
-   strpos($fb, 'data-hks-kilit') === false && strpos($fb, 'data-hks-ayna') === false && preg_match('/<select[^>]*name="hks_urun_id"/', $fb) === 1);
+ok('[hks-ürün] ad yazılı ama eşleşme yoksa alan AÇIK + serbest çerçeve (kilit/ayna yok)',
+   strpos($fb, 'data-hks-kilit') === false && strpos($fb, 'data-hks-ayna') === false
+   && preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-serbest="1"/', $fb) === 1 && preg_match('/<select[^>]*name="hks_urun_id"[^>]*disabled/', $fb) !== 1);
+db()->prepare("UPDATE customs_declarations SET product_name='' WHERE id=?")->execute([$B_NM]);
+$fe = render_form($B_NM);
+ok('[hks-ürün] ürün adı boşken alan pasif (kilitli, boş değer gizli alanda)',
+   preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-kilit="1" disabled/', $fe) === 1
+   && preg_match('/<input type="hidden" name="hks_urun_id" value="" data-hks-ayna>/', $fe) === 1);
 ok('[numune] düzenleme formu kayıtlı numuneyi dolduruyor', strpos(render_form($B_NM), 'value="TAHTA KASA"') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',
