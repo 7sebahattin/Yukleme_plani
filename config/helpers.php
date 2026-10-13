@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v342');
+    define('APP_SURUM', 'v343');
 }
 
 // --- HTML kaçışı ---
@@ -1702,6 +1702,13 @@ endif;
                 $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `note` TEXT NULL DEFAULT NULL");
             }
 
+            // v343 (sahip GO verdi): Çekici plaka + serbest gönderici firma adı. Yalnız nullable ADD COLUMN.
+            foreach (['tractor_plate' => 'VARCHAR(20)', 'sender_company_name' => 'VARCHAR(150)'] as $_sc => $_st) {
+                if (!in_array($_sc, $cd_cols, true)) {
+                    $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `$_sc` $_st NULL DEFAULT NULL");
+                }
+            }
+
             // NUMUNE (v334, sahip GO verdi): Not'un üstündeki Numune bölümü; WhatsApp metnine girer.
             // Yalnız nullable ADD COLUMN — mevcut veriye dokunmaz.
             foreach (['sample_gross_kg' => 'DECIMAL(12,3)', 'sample_net_kg' => 'DECIMAL(12,3)',
@@ -3142,7 +3149,44 @@ function bb_tahmin(string $tip, string $metin, array $liste, bool $ogrenilenAra 
             }
         }
     }
+    // ÜRÜN: elle yazılan kısa ad ("Kapya") katalogdaki uzun adla ("Biber Salçalık (Kapya)")
+    // eşleşsin. Yalnız TEK aday kalırsa seçilir (v343); belirsizse boş.
+    if ($tip === 'urun') {
+        $b = bb_urun_benzer($metin, $liste);
+        if ($b) return ['id' => (string)$b['id'], 'ad' => (string)$b['ad'], 'kaynak' => 'benzer'];
+    }
     return ['id' => '', 'ad' => '', 'kaynak' => 'yok'];
+}
+
+// Benzer ürün adı: sorgunun TÜM sözcükleri (≥3 harf, TR-duyarsız, noktalama ayrıcı) katalog adının
+// sözcüklerinden biriyle AYNI ya da onun öneki ise aday sayılır. En az fazla sözcüğü olan aday kazanır;
+// beraberlikte (belirsiz) null döner — id uydurulmaz. Bildirim yine taslağa düşer, kullanıcı görür.
+function bb_urun_benzer(string $metin, array $liste): ?array {
+    $tok = function (string $x): array {
+        $x = hks_eslesme_norm($x);
+        $x = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $x);
+        return array_values(array_filter(explode(' ', (string)$x), fn($t) => $t !== ''));
+    };
+    $q = array_values(array_filter($tok($metin), fn($t) => mb_strlen($t, 'UTF-8') >= 3));
+    if (!$q) return null;
+    $adaylar = [];
+    foreach ($liste as $x) {
+        $ct = $tok((string)$x['ad']);
+        if (!$ct) continue;
+        $tamam = true;
+        foreach ($q as $qt) {
+            $bulundu = false;
+            foreach ($ct as $c) {
+                if ($c === $qt || (mb_strlen($qt, 'UTF-8') >= 4 && str_starts_with($c, $qt))) { $bulundu = true; break; }
+            }
+            if (!$bulundu) { $tamam = false; break; }
+        }
+        if ($tamam) $adaylar[] = ['x' => $x, 'fazla' => count($ct) - count($q)];
+    }
+    if (!$adaylar) return null;
+    usort($adaylar, fn($a, $b) => $a['fazla'] <=> $b['fazla']);
+    if (count($adaylar) > 1 && $adaylar[0]['fazla'] === $adaylar[1]['fazla']) return null;
+    return $adaylar[0]['x'];
 }
 
 
@@ -3365,38 +3409,16 @@ function bb_ulke_tahmin(array $adaylar, array $ulkeler): array {
 //
 // $f: form değerleri (hks_firma_id / hks_urun_id / hks_ulke_id)
 // $beyan: mevcut beyan satırı (yeni kayıtta null) — ön-doldurma ipuçları için
-function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate = true): void {
+function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate = true, string $bolum = 'urun'): void {
+    // $bolum: 'urun' = Hal Bildirim sekmesi (yalnız HKS Ürünü, kart çerçeveli)
+    //         'sevkiyat' = Parti/Sevkiyat kartına gömülen alanlar (Gönderici Firma + Ülke; çerçevesiz)
+    // $show_plate: eski imza için korunur — plaka artık Parti/Sevkiyat kartında ("Dorse Plaka").
     $katalog = bb_katalog();
+    $sevk = $bolum === 'sevkiyat';
 
-    // data-bf / data-ic / .bf-emoji: yalnız Yeni Beyan formunun (form.bf) görsel
-    // kancaları — Düzenle formunda etkisizdir, orada görünüm aynen kalır.
-    echo '<div class="beyan-section" data-bf="hks">'
-       . '<div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Bildirim Bilgileri</div>';
-
-    // Araç plakası — KATALOGDAN BAĞIMSIZ. Katalog indirilmemiş olsa bile
-    // girilebilmeli, bu yüzden aşağıdaki fail-closed dönüşünden ÖNCE çizilir.
-    // (Beyanın tek plaka alanı budur; "Temel Bilgiler"de ikinci bir kopya
-    //  OLUŞTURMAYIN — aynı `name` ile iki alan POST'ta çakışır.)
-    $plaka_alani = function (array $f) use ($show_plate): void {
-        if (!$show_plate) return;
-        ?>
-        <div class="form-group" data-ic="arac">
-            <label class="form-label">Araç Plakası</label>
-            <input type="text" name="vehicle_plate" class="form-control"
-                   value="<?= h((string)($f['vehicle_plate'] ?? '')) ?>"
-                   data-uppercase="tr" data-nospace inputmode="latin"
-                   autocomplete="off" autocapitalize="characters">
-        </div>
-    <?php };
-
-    if (!$katalog) {
-        echo '<p class="muted" style="font-size:.88rem">HKS katalog listeleri henüz indirilmemiş. '
-           . '<a href="halkayit/index.php">Hal Kayıt panelini</a> açıp bir firma seçin ve '
-           . '"Listeleri Güncelle"ye basın; sonra ürün ve ülke seçilebilir.</p>';
-        echo '<div class="beyan-form-grid">';
-        $plaka_alani($f);
-        echo '</div></div>';
-        return;
+    if (!$sevk) {
+        echo '<div class="beyan-section" data-bf="hks">'
+           . '<div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Bildirim Bilgileri</div>';
     }
 
     // Firma listesi — aynı veritabanındaki hks_firmalar, salt-okunur.
@@ -3408,35 +3430,51 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
         }
     } catch (PDOException $e) {}
 
+    $firma_sec = (string)($f['hks_firma_id'] ?? '');
+    if ($firma_sec === '' && trim((string)($f['sender_company_name'] ?? '')) === '') $firma_sec = bb_son_firma();
+
+    // Gönderici Firma: HKS firmalarından seçilir (datalist) ama listede olmayan ad da yazılabilir.
+    // Tam ad eşleşirse sunucu hks_firma_id'yi kendisi çözer (beyan_gonderici_coz).
+    if ($sevk) {
+        $gname = trim((string)($f['sender_company_name'] ?? ''));
+        if ($gname === '' && $firma_sec !== '') {
+            foreach ($firmalar as $x) if ($x['id'] === $firma_sec) { $gname = $x['ad']; break; }
+        }
+        echo '<div class="form-group" data-ic="bina">'
+           . '<label class="form-label" for="bf_sender_company_name">Gönderici Firma</label>'
+           . '<input type="text" id="bf_sender_company_name" name="sender_company_name" class="form-control" maxlength="150"'
+           . ' list="bfGondericiListe" autocomplete="off" value="' . h($gname) . '">'
+           . '<datalist id="bfGondericiListe">';
+        foreach ($firmalar as $x) echo '<option value="' . h($x['ad']) . '"></option>';
+        echo '</datalist></div>';
+    }
+
+    if (!$katalog) {
+        if (!$sevk) {
+            echo '<p class="muted" style="font-size:.88rem">HKS katalog listeleri henüz indirilmemiş. '
+               . '<a href="halkayit/index.php">Hal Kayıt panelini</a> açıp bir firma seçin ve '
+               . '"Listeleri Güncelle"ye basın; sonra ürün seçilebilir.</p></div>';
+        }
+        return;
+    }
+
     // ── Ön-doldurma: yalnız alan BOŞSA öneri yapılır; kullanıcının kaydettiği
     //    değer ASLA ezilmez (öneri bir kolaylıktır, karar mercii değildir).
     $urun_sec = (string)($f['hks_urun_id'] ?? '');
     $ulke_sec = (string)($f['hks_ulke_id'] ?? '');
-    $firma_sec = (string)($f['hks_firma_id'] ?? '');
-    $urun_not = $ulke_not = '';
+    $urun_not = '';
 
     if ($urun_sec === '' && $beyan) {
         $t = bb_tahmin('urun', (string)($beyan['product_name'] ?? ''), $katalog['urunler']);
         if ($t['id'] !== '') {
             $urun_sec = $t['id'];
-            $urun_not = $t['kaynak'] === 'ogrenilen' ? 'önceki seçiminizden önerildi' : 'katalogdan eşleşti';
+            if ($t['kaynak'] === 'benzer') $urun_not = 'benzer isimle eşleşti';
         }
     }
     if ($ulke_sec === '' && $beyan) {
         $t = bb_ulke_tahmin(bb_ulke_adaylari($beyan, bb_bagli_plan($beyan)), $katalog['ulkeler']);
-        if ($t['id'] !== '') {
-            $ulke_sec = $t['id'];
-            $ipucu = ['plan'   => 'yükleme planından',
-                      'sirket' => 'şirket adından',
-                      'adres'  => 'adresten',
-                      'alici'  => 'alıcıdan',
-                      'gecmis' => 'aynı alıcıya son yüklemeden',
-                      'metin'  => 'beyan metninden'][$t['ipucu']] ?? 'katalogdan';
-            $urun_not_ek = $t['kaynakMetin'] !== '' ? ' (' . $t['kaynakMetin'] . ')' : '';
-            $ulke_not = $ipucu . $urun_not_ek . ' önerildi';
-        }
+        if ($t['id'] !== '') $ulke_sec = $t['id'];
     }
-    if ($firma_sec === '') $firma_sec = bb_son_firma();
 
     // Uzun listeler YAZARAK ARANABİLİR olur (Hal Kayıt'taki "İhracat Yapılan
     // Ülke" kutusunun aynısı — app.js `data-aramali`). Kısa listelerde arama
@@ -3464,15 +3502,28 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
         echo '</select></div>';
     };
 
+    if ($sevk) {
+        $sec('hks_ulke_id', 'Ülke', $katalog['ulkeler'], $ulke_sec, '', 'Ülke yazın veya listeden seçin', 'kure');
+        return;
+    }
     echo '<div class="beyan-form-grid">';
-    $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '',
-         'Firma yazın veya listeden seçin', 'bina');
-    $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  '',
-         'Ürün yazın veya listeden seçin', 'paket');
-    $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  '',
-         'Ülke yazın veya listeden seçin', 'kure');
-    $plaka_alani($f);
+    $sec('hks_urun_id', 'HKS Ürünü', $katalog['urunler'], $urun_sec, $urun_not, 'Ürün yazın veya listeden seçin', 'paket');
     echo '</div></div>';
+}
+
+// Gönderici Firma adı → HKS firma id (TR-duyarsız TAM ad eşleşmesi). Eşleşmezse '' (serbest ad).
+// Eşleşirse ad, HKS'teki resmi yazımla döner.
+function beyan_gonderici_coz(string $ad): array {
+    $ad = mb_substr(trim($ad), 0, 150, 'UTF-8');
+    if ($ad === '') return ['id' => '', 'ad' => ''];
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    $norm = hks_eslesme_norm($ad);
+    try {
+        foreach (db()->query("SELECT id, ad FROM `{$on}firmalar`") as $r) {
+            if (hks_eslesme_norm((string)$r['ad']) === $norm) return ['id' => (string)$r['id'], 'ad' => (string)$r['ad']];
+        }
+    } catch (PDOException $e) {}
+    return ['id' => '', 'ad' => $ad];
 }
 
 // Form POST'undan eşleştirme alanlarını okur; id'leri KATALOĞA karşı doğrular

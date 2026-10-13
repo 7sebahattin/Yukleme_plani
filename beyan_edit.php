@@ -31,6 +31,8 @@ $f = [
     'company_address'    => (string)($beyan['company_address']    ?? ''),
     'transport_type'     => (string)($beyan['transport_type']     ?? ''),
     'vehicle_plate'      => (string)($beyan['vehicle_plate']      ?? ''),
+    'tractor_plate'      => (string)($beyan['tractor_plate']      ?? ''),
+    'sender_company_name' => (string)($beyan['sender_company_name'] ?? ''),
     'hks_firma_id'       => (string)($beyan['hks_firma_id']       ?? ''),
     'hks_urun_id'        => (string)($beyan['hks_urun_id']        ?? ''),
     'hks_ulke_id'        => (string)($beyan['hks_ulke_id']        ?? ''),
@@ -110,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     foreach (array_keys($f) as $k) {
         // Formdan kaldırılan eski başlığı sıradan düzenlemede silme.
-        if (in_array($k, ['declaration_title', 'note', 'sample_gross_kg', 'sample_net_kg', 'sample_crate_type', 'sample_crate_count'], true) && !array_key_exists($k, $_POST)) continue;   // gönderilmeyen alan korunur
+        if (in_array($k, ['declaration_title', 'note', 'tractor_plate', 'sender_company_name', 'sample_gross_kg', 'sample_net_kg', 'sample_crate_type', 'sample_crate_count'], true) && !array_key_exists($k, $_POST)) continue;   // gönderilmeyen alan korunur
         $f[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
@@ -134,7 +136,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sample_at = $checked['values']['sample_taken_at'];
     $result_at = $checked['values']['analysis_result_at'];
     try {
-        if (can_beyan('hks.write')) $hks = beyan_hks_form_oku($_POST, $beyan);
+        if (can_beyan('hks.write')) {
+            if (array_key_exists('sender_company_name', $_POST)) {   // Gönderici Firma: HKS adı eşleşirse id çözülür, değilse serbest ad
+                $g = beyan_gonderici_coz((string)$_POST['sender_company_name']);
+                $_POST['hks_firma_id'] = $g['id'];
+                $f['sender_company_name'] = $g['ad'];
+            }
+            $hks = beyan_hks_form_oku($_POST, $beyan);
+        }
         else {
             $hks = [];
             foreach (['firma_id','urun_id','urun_ad','ulke_id','ulke_ad'] as $key) $hks[$key] = $beyan['hks_' . $key] ?? null;
@@ -165,6 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Plaka boşluksuz + büyük harf — HKS böyle bekler (tek doğruluk kaynağı
         // sunucu; istemcideki data-nospace yalnız kolaylıktır).
         $f['vehicle_plate'] = beyan_plaka_normalize($f['vehicle_plate']);
+        $f['tractor_plate'] = mb_substr(beyan_plaka_normalize($f['tractor_plate']), 0, 20, 'UTF-8');
 
         $st = db()->prepare("UPDATE customs_declarations SET
             raw_text = ?, unmatched_text = ?, declaration_title = ?,
@@ -175,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit_depot = ?, contact_person = ?, buyer_name = ?, brand = ?,
             status = ?, analysis_note = ?, sample_taken_at = ?, analysis_result_at = ?,
             hks_firma_id = ?, hks_urun_id = ?, hks_urun_ad = ?, hks_ulke_id = ?, hks_ulke_ad = ?,
-            note = ?,
+            note = ?, tractor_plate = ?, sender_company_name = ?,
             sample_gross_kg = ?, sample_net_kg = ?, sample_crate_type = ?, sample_crate_count = ?,
             updated_by = ?, updated_at = NOW()
             WHERE id = ?");
@@ -211,6 +221,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hks['ulke_id'],
             $hks['ulke_ad'],
             $f['note'] ?: null,
+            $f['tractor_plate'] ?: null,
+            $f['sender_company_name'] ?: null,
             $checked['values']['sample_gross_kg'] ?? null,
             $checked['values']['sample_net_kg'] ?? null,
             $f['sample_crate_type'] ?: null,

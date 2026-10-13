@@ -41,15 +41,15 @@ $ins = db()->prepare("INSERT INTO customs_declarations
     (company_name, company_address, transport_type, line_type, pallet_count,
      product_name, product_variety, gross_kg, net_kg, crate_count, crate_type,
      exit_depot, contact_person, buyer_name, brand, status,
-     hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad,
+     hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad, sender_company_name,
      created_by, updated_by, created_at, updated_at)
-    VALUES (?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,'taslak', ?,?,?,?,?, ?,?,NOW(),NOW())");
+    VALUES (?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,'taslak', ?,?,?,?,?,?, ?,?,NOW(),NOW())");
 $ins->execute([
     $src['company_name'], $src['company_address'], $src['transport_type'], $src['line_type'], $src['pallet_count'],
     $src['product_name'], $src['product_variety'], $src['gross_kg'], $src['net_kg'], $src['crate_count'], $src['crate_type'],
     $src['exit_depot'], $src['contact_person'], $src['buyer_name'], $src['brand'],
     $src['hks_firma_id'] ?? null, $src['hks_urun_id'] ?? null, $src['hks_urun_ad'] ?? null,
-    $src['hks_ulke_id'] ?? null, $src['hks_ulke_ad'] ?? null,
+    $src['hks_ulke_id'] ?? null, $src['hks_ulke_ad'] ?? null, $src['sender_company_name'] ?? null,
     $user_id, $user_id,
 ]);
 $new_id = (int)db()->lastInsertId();
