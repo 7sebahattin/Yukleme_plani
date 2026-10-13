@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v344');
+    define('APP_SURUM', 'v345');
 }
 
 // --- HTML kaçışı ---
@@ -3897,39 +3897,29 @@ function beyan_whatsapp_metin(array $b): string {
     $t = 'beyan_whatsapp_temizle';
     $bol = [];   // bölümler; aralarına ayraç konur
 
-    // 1) Firma + adres
-    $s = [];
+    // 1) Başlık + firma + adres (adres için ikon/başlık yok)
+    $s = ['📝 *YENİ BEYAN*'];
     $firma = $t($b['company_name'] ?? '');
-    if ($firma !== '') $s[] = '🏢 *' . $firma . '*';
     $adres = trim((string)($b['company_address'] ?? ''));
-    $tin = '';
+    if ($firma !== '' || $adres !== '') $s[] = '';
+    if ($firma !== '') $s[] = '🏢 *' . $firma . '*';
     if ($adres !== '') {
-        if (preg_match('/\bTIN\s*\/\s*KPP\s*[:\-]?\s*([\d\/]+)/iu', $adres, $m)) {
-            $tin = $m[1];
-            $adres = trim((string)preg_replace('/\bTIN\s*\/\s*KPP\s*[:\-]?\s*[\d\/]+/iu', '', $adres));
-        }
         $adres = trim((string)preg_replace('/\s+/u', ' ', str_replace(["\r", "\n"], ' ', $adres)), " ,;");
-        $baslik = 'ADRES';
-        if (preg_match('/^([^:\d]{2,40}):\s*(.+)$/u', $adres, $m)) { $baslik = $t($m[1]); $adres = $m[2]; }
+        if (preg_match('/^([^:\d]{2,40}):\s*(.+)$/u', $adres, $m)) $adres = $m[2];
         $parca = array_values(array_filter(array_map($t, explode(',', $adres)), fn($x) => $x !== ''));
         if ($parca) {
-            if ($s) $s[] = '';
-            $s[] = '📍 *' . tr_upper($baslik) . '*';
             $satir = array_map(fn($c) => implode(', ', $c), array_chunk($parca, 2));
             $son = count($satir) - 1;
             foreach ($satir as $i => $ln) $s[] = $ln . ($i < $son ? ',' : '');
         }
     }
-    if ($tin !== '') { if ($s) $s[] = ''; $s[] = '📑 *TIN/KPP:* ' . $t($tin); }
-    if ($s) $bol[] = implode("\n", $s);
+    $bol[] = implode("\n", $s);
 
-    // 2) Taşıma + başlık
+    // 2) Taşıma
     $s = [];
     if (($v = $t($b['transport_type'] ?? '')) !== '') $s[] = '🚛 *' . $v . '*';
     if (($v = $t($b['line_type'] ?? '')) !== '') $s[] = '🌿 *' . $v . '*';
-    if ($s) $s[] = '';
-    $s[] = '📝 *YENİ BEYAN*';
-    $bol[] = implode("\n", $s);
+    if ($s) $bol[] = implode("\n", $s);
 
     // 3) Parti / ürün / yük
     $s = [];
