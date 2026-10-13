@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v345` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v346` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1063,6 +1063,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   `beyanlar.php…` kabul edilir → aynı filtre/sayfaya döner); RED için `prompt` + `analysis_note`; yetki `beyan.status`.
   Test: `beyan_suggest_smoke.php` (sil/geri getir) · `beyan_ui_smoke.php` `[durum-menü]`.
 - **WhatsApp metin düzeni (v345):** `beyan_whatsapp_metin()` sırası: 📝 YENİ BEYAN (en üstte) → 🏢 firma + adres satırları (adres için 📍/ADRES başlığı ve ayrı TIN/KPP satırı YOK, metin olduğu gibi) → 🚛 taşıma/🌿 hat → parti/ürün/yük → numune → çıkış/ilgili/alıcı/marka → not. Geri ekleme. Test: `beyan_whatsapp_smoke.php`.
+- **Önizleme renk sadeleştirmesi (v346):** `beyan_view.php` bölümleri (Temel/Ürün/Numune/Lojistik/Analiz/Bağlantı) tek nötr zemin + başlık bandsız (Yeni Beyan formu gibi); simge karoları/alan simgeleri bölüm renginde KALIR. Hal Kayıt Bildirimi (`hks`) ve uyarı kartları renkli. style.css sonundaki v346 bloğu.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

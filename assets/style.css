@@ -6684,3 +6684,18 @@ fieldset.beyan-section { min-width: 0; margin-inline: 0; }
  .rol-selected-filter, .rol-total { padding:4px 0; }
  .rol-editor .rol-perm-group-head { gap:4px; margin-bottom:2px; }
 }
+
+/* v346 — Önizleme: göz yormasın. Hal Kayıt Bildirimi (hks) ve uyarı kartları dışındaki
+   bölümlerin zemini/başlık bandı tek nötr renk (Yeni Beyan formu gibi); simge karoları
+   ve alan simgeleri bölüm renginde KALIR (--bf-acc değişkenleri dokunulmadı). */
+body:not(.print-mode) .bv .beyan-section[data-bf]:not([data-bf="hks"]):not([data-bf="uyari"]) {
+    background: var(--bf-kart);
+}
+body:not(.print-mode) .bv .beyan-section[data-bf]:not([data-bf="hks"]):not([data-bf="uyari"]):not(.bv-katla) > .beyan-section-title {
+    background: none;
+    border-bottom: 1px solid var(--bf-kart-kenar);
+}
+html[data-theme="dark"] body:not(.print-mode) .bv .beyan-section[data-bf]:not([data-bf="hks"]):not([data-bf="uyari"]):not(.bv-katla) > .beyan-section-title {
+    background: none;
+    border-bottom-color: var(--bf-kart-kenar);
+}
