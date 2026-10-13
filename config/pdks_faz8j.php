@@ -380,11 +380,7 @@ function pdks_faz8j_oturum_coz(PDO $pdo, int $foremanId, string $workDate, strin
     }
 
     if (!$yaz) return ['ok' => true, 'oturum' => null, 'yeni' => true];
-    $normalDk = 540;
-    if (pdks_gunluk_kolon_var($pdo, 'foremen', 'normal_work_minutes')) {
-        $sn = $pdo->prepare('SELECT normal_work_minutes FROM foremen WHERE id = ?'); $sn->execute([$foremanId]);
-        $nv = $sn->fetchColumn(); if ($nv !== false && $nv !== null) $normalDk = (int)$nv;
-    }
+    $normalDk = pdks_cavus_sure_dk($foremanId, $workDate, $pdo);
     $acilis = (string)($kapali['acilis'] ?? ($workDate . ' 00:00:00'));
     $kapanis = (string)($kapali['kapanis'] ?? $acilis);
     $kol = 'foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id, closed_at, closed_by_user_id, notes';

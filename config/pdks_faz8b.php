@@ -516,6 +516,7 @@ function pdks_faz8b_donemleri_siniflandir(array $rows, PDO $pdo): array
 {
     $saatHazir = pdks_faz8b_saat_kolonlari_hazir($pdo);
     $onbellek = [];
+    $sureGecmisi = [];
     foreach ($rows as &$r) {
         $oran = null;
         $tip = $r['worker_type_id_snapshot'] ?? null;
@@ -525,6 +526,23 @@ function pdks_faz8b_donemleri_siniflandir(array $rows, PDO $pdo): array
                 $onbellek[$k] = pdks_hakedis_oran_gecerli((int)$r['_s_foreman_id'], (int)$tip, (string)$r['_s_work_date'], $pdo);
             }
             $oran = $onbellek[$k];
+        }
+        if (!empty($r['_s_foreman_id']) && !empty($r['_s_work_date'])) {
+            $cavusId = (int)$r['_s_foreman_id'];
+            if (!array_key_exists($cavusId, $sureGecmisi)) {
+                $sureGecmisi[$cavusId] = pdks_cavus_sure_gecmis($cavusId, $pdo);
+            }
+            $sureDonemi = pdks_cavus_sure_listeden_gecerli($sureGecmisi[$cavusId], (string)$r['_s_work_date']);
+            if ($sureDonemi !== null) {
+                $r['normal_work_minutes_snapshot'] = (int)$sureDonemi['normal_work_minutes'];
+                // Kopyadaki süre eşikleri kaldırılır: anlaşmalı süre Tam ve FM
+                // için otoriterdir. Fiyat kaydı ve para/çift eşikleri değişmez.
+                if ($oran !== null) {
+                    $oran['full_day_minutes'] = null;
+                    $oran['overtime_start_minutes'] = null;
+                }
+                $r['_cavus_sure_donemi_id'] = (int)$sureDonemi['id'];
+            }
         }
         $r['_faz8b_oran'] = $oran;
         $r['faz8b'] = pdks_faz8b_donem_siniflandir($r, $oran);
@@ -740,13 +758,7 @@ function pdks_faz8b_sinif_etiketi(?string $sinif): string
 function pdks_faz8b_cavus_normal_sure_dk(int $foremanId, ?PDO $pdo = null): int
 {
     $pdo = $pdo ?? db();
-    if (!pdks_faz8b_kolon_var($pdo, 'foremen', 'normal_work_minutes')) {
-        return PDKS_FAZ8B_NORMAL_DK;
-    }
-    $st = $pdo->prepare("SELECT normal_work_minutes FROM foremen WHERE id = ?");
-    $st->execute([$foremanId]);
-    $v = $st->fetchColumn();
-    return ($v !== false && $v !== null) ? (int)$v : PDKS_FAZ8B_NORMAL_DK;
+    return pdks_cavus_sure_dk($foremanId, date('Y-m-d'), $pdo);
 }
 
 /**
@@ -1780,6 +1792,7 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
     $st->execute([$sessionId]);
     $oturum = $st->fetch();
     if (!$oturum) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+    $sureRevizyon = pdks_cavus_sure_revizyon((int)$oturum['foreman_id'], $pdo);
 
     $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id = ?");
     $stE->execute([$sessionId]);
@@ -1968,6 +1981,17 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
 
     $pdo->beginTransaction();
     try {
+        // Tarihli süre kaydıyla aynı çavuş kilidi: hesap okunduktan sonra
+        // değişmişse eski toplamı yeni taslağın üstüne yazma.
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+            $stKil = $pdo->prepare('SELECT id FROM foremen WHERE id = ? FOR UPDATE');
+            $stKil->execute([(int)$oturum['foreman_id']]);
+            $stKil->fetchColumn();
+        }
+        if (pdks_cavus_sure_revizyon((int)$oturum['foreman_id'], $pdo) !== $sureRevizyon) {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'sure_degisti', 'hata' => 'Hesap sırasında çavuşun çalışma süresi değişti. Hakedişi yeniden hesaplayın.'];
+        }
         if ($mevcut) {
             $entId = (int)$mevcut['id'];
             $pdo->prepare("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?")
@@ -2084,18 +2108,22 @@ function pdks_faz8b_hakedis_finalize(
     if (!$hesap['ok']) return $hesap;
 
     $simdi = date('Y-m-d H:i:s');
-    $pdo->prepare(
+    $stFinal = $pdo->prepare(
         "UPDATE foreman_daily_entitlements
             SET status = 'final', finalized_at = ?, finalized_by_user_id = ?,
                 missing_exit_ack = ?, needs_recalculation = 0, updated_at = ?
-          WHERE id = ?"
-    )->execute([
+          WHERE id = ? AND status = 'draft' AND needs_recalculation = 0"
+    );
+    $stFinal->execute([
         $simdi,
         $userId,
         $eksikToplam > 0 ? 1 : 0,
         $simdi,
         (int)$hesap['entitlement_id'],
     ]);
+    if ($stFinal->rowCount() !== 1) {
+        return ['ok' => false, 'kod' => 'sure_degisti', 'hata' => 'Hakediş hesabı değişti. Yeniden hesaplayıp kesinleştirin.'];
+    }
 
     if (function_exists('audit_log_event')) {
         audit_log_event('finalize', 'foreman_daily_entitlements', (int)$hesap['entitlement_id'], null, [
