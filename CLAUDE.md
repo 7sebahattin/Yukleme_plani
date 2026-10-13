@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v346` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v347` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1064,6 +1064,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   Test: `beyan_suggest_smoke.php` (sil/geri getir) · `beyan_ui_smoke.php` `[durum-menü]`.
 - **WhatsApp metin düzeni (v345):** `beyan_whatsapp_metin()` sırası: 📝 YENİ BEYAN (en üstte) → 🏢 firma + adres satırları (adres için 📍/ADRES başlığı ve ayrı TIN/KPP satırı YOK, metin olduğu gibi) → 🚛 taşıma/🌿 hat → parti/ürün/yük → numune → çıkış/ilgili/alıcı/marka → not. Geri ekleme. Test: `beyan_whatsapp_smoke.php`.
 - **Önizleme renk sadeleştirmesi (v346):** `beyan_view.php` bölümleri (Temel/Ürün/Numune/Lojistik/Analiz/Bağlantı) tek nötr zemin + başlık bandsız (Yeni Beyan formu gibi); simge karoları/alan simgeleri bölüm renginde KALIR. Hal Kayıt Bildirimi (`hks`) ve uyarı kartları renkli. style.css sonundaki v346 bloğu.
+- **Hal Bildirim sekmesi KALDIRILDI + HKS Ürün Adı (v347):** formda sekmeler Beyan · Analiz · Kaynak metin. "HKS Ürün Adı" (`hks_urun_id`, `beyan_hks_form_bolumu($f,$beyan,$yazabilir)` — 'urun' kipi) Ürün ve Miktarlar kartında Ürün Adı'nın yanındadır. Ürün adı bir HKS ürünüyle OTOMATİK eşleşiyorsa (`bb_tahmin`: öğrenilen → tam ad → benzer) alan KİLİTLİ (select `disabled` + `data-hks-kilit` + POST'u taşıyan gizli `input[data-hks-ayna]`); eşleşmiyorsa kullanıcı listeden seçer. Canlı eşleşme `api_beyan_urun_esle.php` (GET, salt okunur, `hks.read`) + app.js (400 ms gecikmeli; eşleşme gidince eski otomatik değer temizlenir). Sunucu kaydı eskisi gibi katalogla doğrular. Katalog boşsa alan çizilmez. Önizlemede Gümrük Adı + Gümrük Adresi Temel Bilgiler'de AYNI satırda (`.bv-gumruk-ad/-adres`, ≥900px flex; ad sığmazsa kendi sütununda sarar, mobilde alt alta). Test: `beyan_ui_smoke.php` `[hks-ürün]`.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

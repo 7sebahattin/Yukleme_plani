@@ -141,6 +141,7 @@ function ekranAlti() {
 
         sel._araInput = inp;
         sel._araDl    = dl;
+        sel._araTazele = function () { araSelectTazele(sel); };
         inp.addEventListener('input',  function () { araSelectEslestir(sel, inp.value); });
         inp.addEventListener('change', function () { araSelectEslestir(sel, inp.value); });
         araSelectTazele(sel);
@@ -2296,17 +2297,60 @@ function ekranAlti() {
                 if (addressInput.value !== lastAutoAddress) lastAutoAddress = null;
             });
         }
+        // HKS Ürün Adı: ürün adı bir HKS ürünüyle eşleşirse alan kilitlenir (değer otomatik gelir);
+        // eşleşmezse kullanıcı listeden seçer. Eşleşme kararı SUNUCUDADIR (api_beyan_urun_esle.php).
         if (productInput && productSelect) {
-            productInput.addEventListener('change', function () {
-                var match = lookup(beyanMeta.products, productInput.value);
-                // Katalogda olmayan/çok anlamlı ürün HKS kimliği uydurmaz.
-                var wanted = match && match.urun_id ? String(match.urun_id) : '';
-                if (wanted && !Array.prototype.some.call(productSelect.options, function (option) { return option.value === wanted; })) wanted = '';
-                if (productSelect.value !== wanted) {
-                    productSelect.value = wanted;
-                    productSelect.dispatchEvent(new Event('change', {bubbles: true}));
+            var kilitle = function (kilitli, id) {
+                var proxy = productSelect._araInput;
+                var kap = productSelect.parentNode;
+                var ayna = kap.querySelector('input[data-hks-ayna]');
+                if (kilitli) {
+                    productSelect.value = id;
+                    productSelect.disabled = true;
+                    productSelect.dataset.hksKilit = '1';
+                    if (!ayna) {
+                        ayna = document.createElement('input');
+                        ayna.type = 'hidden'; ayna.name = productSelect.name; ayna.setAttribute('data-hks-ayna', '');
+                        kap.appendChild(ayna);
+                    }
+                    ayna.value = id;
+                } else {
+                    if (ayna) ayna.remove();
+                    productSelect.disabled = false;
+                    delete productSelect.dataset.hksKilit;
                 }
+                if (proxy) {
+                    proxy.disabled = !!kilitli;
+                    if (typeof productSelect._araTazele === 'function') productSelect._araTazele();
+                }
+            };
+            var sayac = 0, zamanlayici = null;
+            var esle = function () {
+                var ad = productInput.value.trim();
+                var no = ++sayac;
+                if (ad === '') { if (productSelect.dataset.hksKilit === '1') { kilitle(false); productSelect.value = ''; productSelect.dispatchEvent(new Event('change', {bubbles: true})); } return; }
+                fetch('api_beyan_urun_esle.php?ad=' + encodeURIComponent(ad), {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                    .then(function (r) { return r.json(); })
+                    .then(function (j) {
+                        if (no !== sayac || !j || !j.ok) return;
+                        var id = j.id ? String(j.id) : '';
+                        if (id && !Array.prototype.some.call(productSelect.options, function (o) { return o.value === id; })) id = '';
+                        if (id) {
+                            kilitle(true, id);
+                            productSelect.dispatchEvent(new Event('change', {bubbles: true}));
+                        } else if (productSelect.dataset.hksKilit === '1') {
+                            kilitle(false);
+                            productSelect.value = '';       // eski otomatik değer yeni ada yanlış taşınmasın
+                            productSelect.dispatchEvent(new Event('change', {bubbles: true}));
+                        }
+                    }).catch(function () {});
+            };
+            ['input', 'change'].forEach(function (ev) {
+                productInput.addEventListener(ev, function () { clearTimeout(zamanlayici); zamanlayici = setTimeout(esle, ev === 'input' ? 400 : 0); });
             });
+            // Sayfa ilk açıldığında sunucunun verdiği kilit durumu uygulanır (aranabilir kutu kurulduktan sonra).
+            var ilk = function () { if (productSelect.dataset.hksKilit === '1') { var m = productSelect.parentNode.querySelector('input[data-hks-ayna]'); kilitle(true, m ? m.value : productSelect.value); } };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ilk); else ilk();
         }
     }
 

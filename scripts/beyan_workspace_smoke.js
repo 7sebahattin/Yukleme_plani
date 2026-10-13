@@ -116,6 +116,10 @@ function ok(condition, label) { if (!condition) throw Error(label); count++; con
         await page.evaluate(() => {
             window.definitionRequests = [];
             window.fetch = async (url, options) => {
+                if (String(url).includes('api_beyan_urun_esle')) {   // sunucu eşleştirmesi (v347)
+                    const hit = decodeURIComponent(String(url).split('ad=')[1]).toLocaleUpperCase('tr-TR') === 'DOMATES';
+                    return {json: async () => ({ok: true, id: hit ? '7' : '', ad: hit ? 'DOMATES' : '', kaynak: 'katalog'})};
+                }
                 const body = JSON.parse(options.body); window.definitionRequests.push({url, body});
                 return {json: async () => ({ok: true, name: body.name.toLocaleUpperCase('tr-TR'), address: body.company_address})};
             };
@@ -145,10 +149,12 @@ function ok(condition, label) { if (!condition) throw Error(label); count++; con
         ok(linkedAddress.body.field === 'company_address' && linkedAddress.body.name === 'ADRES A' && linkedAddress.body.company_name === 'GÜMRÜK B', 'existing address can explicitly link to a different customs');
         await page.locator('[name=product_name]').fill('domates');
         await page.locator('[name=product_name]').dispatchEvent('change');
-        ok(await page.locator('[name=hks_urun_id]').inputValue() === '7', 'canonical catalog product selects matching HKS ID');
+        await page.waitForTimeout(150);
+        ok(await page.locator('[name=hks_urun_id]').first().inputValue() === '7' && await page.evaluate(() => document.querySelector('select[name=hks_urun_id]').disabled), 'canonical catalog product selects matching HKS ID and locks the field');
         await page.locator('[name=product_name]').fill('başka ürün');
         await page.locator('[name=product_name]').dispatchEvent('change');
-        ok(await page.locator('[name=hks_urun_id]').inputValue() === '', 'manual product clears stale HKS ID');
+        await page.waitForTimeout(150);
+        ok(await page.locator('select[name=hks_urun_id]').inputValue() === '' && !(await page.evaluate(() => document.querySelector('select[name=hks_urun_id]').disabled)), 'manual product clears stale HKS ID and unlocks the field');
         ok(errors.length === 0, 'no browser errors: ' + errors.join('; '));
         console.log(count + ' workspace/parser/bulk checks passed.');
     } finally { await browser.close(); }

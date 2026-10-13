@@ -6699,3 +6699,28 @@ html[data-theme="dark"] body:not(.print-mode) .bv .beyan-section[data-bf]:not([d
     background: none;
     border-bottom-color: var(--bf-kart-kenar);
 }
+
+/* v347 — Önizleme: Gümrük Adı ve Gümrük Adresi aynı satırda; ad sığmazsa kendi sütununda alt satıra kayar. */
+.bv .beyan-view-grid > .bv-satir-kir { display: none; }
+.bv .beyan-view-grid > .bv-gumruk-ad,
+.bv .beyan-view-grid > .bv-gumruk-adres { min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 900px) {
+    .bv .beyan-view-grid > .bv-satir-kir { display: block; flex: 0 0 100%; height: 0; margin: -12px 0 0; }
+    .bv .beyan-view-grid > .bv-gumruk-ad { flex: 1 1 28%; }
+    .bv .beyan-view-grid > .bv-gumruk-adres { flex: 2 1 55%; }
+}
+@media (min-width: 1024px) {
+    .bv .beyan-view-grid > .bv-gumruk-adres { grid-column: auto; }
+}
+@media (min-width: 640px) and (max-width: 899px) {
+    .bv .beyan-view-grid > .bv-gumruk-ad,
+    .bv .beyan-view-grid > .bv-gumruk-adres { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+    .bv .beyan-view-grid > .bv-gumruk-ad,
+    .bv .beyan-view-grid > .bv-gumruk-adres { flex: 1 1 100%; }
+}
+/* HKS Ürün Adı alanı: ürün adı bir HKS ürünüyle eşleşince kilitli görünür */
+.ara-sec:disabled, select[data-hks-kilit="1"] { background-color: var(--surface-2, #f1f5f9); color: var(--muted, #64748b); cursor: not-allowed; }
+body:not(.print-mode) form.bf select[data-hks-kilit="1"] { background-color: rgba(100,116,139,.12); color: var(--muted, #64748b); cursor: not-allowed; opacity: 1; }
+html[data-theme="dark"] body:not(.print-mode) form.bf select[data-hks-kilit="1"] { background-color: rgba(148,163,184,.14); }
