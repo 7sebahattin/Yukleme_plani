@@ -118,7 +118,7 @@ function ok(condition, label) { if (!condition) throw Error(label); count++; con
             window.fetch = async (url, options) => {
                 if (String(url).includes('api_beyan_urun_esle')) {   // sunucu eşleştirmesi (v347)
                     const hit = decodeURIComponent(String(url).split('ad=')[1]).toLocaleUpperCase('tr-TR') === 'DOMATES';
-                    return {json: async () => ({ok: true, id: hit ? '7' : '', ad: hit ? 'DOMATES' : '', kaynak: 'katalog'})};
+                    return {ok: true, json: async () => ({ok: true, id: hit ? '7' : '', ad: hit ? 'DOMATES' : '', kaynak: 'katalog', oneri: ''})};
                 }
                 const body = JSON.parse(options.body); window.definitionRequests.push({url, body});
                 return {json: async () => ({ok: true, name: body.name.toLocaleUpperCase('tr-TR'), address: body.company_address})};
