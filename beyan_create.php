@@ -18,6 +18,8 @@ $f = [
     'company_address'   => '',
     'transport_type'    => '',
     'vehicle_plate'     => '',
+    'tractor_plate'     => '',
+    'sender_company_name' => '',
     'hks_firma_id'      => '',
     'hks_urun_id'       => '',
     'hks_ulke_id'       => '',
@@ -73,6 +75,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sample_at = $checked['values']['sample_taken_at'];
     $result_at = $checked['values']['analysis_result_at'];
     if (in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) $result_at = date('Y-m-d H:i:s');
+    if (array_key_exists('sender_company_name', $_POST)) {   // Gönderici Firma: HKS adı eşleşirse id çözülür, değilse serbest ad
+        $g = beyan_gonderici_coz((string)$_POST['sender_company_name']);
+        $_POST['hks_firma_id'] = $g['id'];
+        $f['sender_company_name'] = $g['ad'];
+    }
     try { $hks = beyan_hks_form_oku($_POST); }
     catch (InvalidArgumentException $e) { $errors[] = $e->getMessage(); }
 
@@ -81,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Plaka boşluksuz + büyük harf — HKS böyle bekler (tek doğruluk kaynağı
         // sunucu; istemcideki data-nospace yalnız kolaylıktır).
         $f['vehicle_plate'] = beyan_plaka_normalize($f['vehicle_plate']);
+        $f['tractor_plate'] = mb_substr(beyan_plaka_normalize($f['tractor_plate']), 0, 20, 'UTF-8');
 
         $st = db()->prepare("INSERT INTO customs_declarations
             (raw_text, unmatched_text, declaration_title, company_name, company_address,
@@ -89,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              buyer_name, brand, status, analysis_note, sample_taken_at, analysis_result_at,
              hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad, note,
              sample_gross_kg, sample_net_kg, sample_crate_type, sample_crate_count,
+             tractor_plate, sender_company_name,
              created_by, updated_by, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?,
@@ -96,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+             ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
 
         $st->execute([
             $f['raw_text']          ?: null,
@@ -133,6 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $checked['values']['sample_net_kg'] ?? null,
             $f['sample_crate_type'] ?: null,
             $checked['values']['sample_crate_count'] ?? null,
+            $f['tractor_plate'] ?: null,
+            $f['sender_company_name'] ?: null,
             $user_id,
             $user_id,
         ]);

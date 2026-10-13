@@ -263,7 +263,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 <?php if ($bk_plaka_hizli && $hks_plaka === ''): ?>
 <dialog id="plakaHizliDlg" class="plaka-hizli" aria-labelledby="plakaHizliBaslik">
     <form method="dialog" id="plakaHizliForm" autocomplete="off">
-        <h3 id="plakaHizliBaslik">Araç Plakası</h3>
+        <h3 id="plakaHizliBaslik">Dorse Plaka</h3>
         <input type="text" id="plakaHizliInput" class="form-control" maxlength="20" inputmode="latin"
                autocapitalize="characters" spellcheck="false" aria-label="Araç plakası">
         <div id="plakaHizliHata" class="plaka-hizli-hata" role="alert" hidden></div>
@@ -321,10 +321,6 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
             <span class="lbl">Nakliye Türü</span>
             <span class="val"><?= h($beyan['transport_type'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row" data-ic="arac">
-            <span class="lbl">Araç Plakası</span>
-            <span class="val"><?= h(($beyan['vehicle_plate'] ?? '') ?: '—') ?></span>
-        </div>
         <div class="beyan-view-row" data-ic="rota">
             <span class="lbl">Hat / Güzergah</span>
             <span class="val"><?= h($beyan['line_type'] ?: '—') ?></span>
@@ -379,10 +375,57 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
 </div>
 
+<?php
+// Numune (v343): Ürün Bilgileri gibi tek satır + 3B kart; yalnız doluysa.
+$nm_kasa = ($beyan['sample_crate_count'] ?? null) !== null && (int)$beyan['sample_crate_count'] > 0 ? number_format((int)$beyan['sample_crate_count'], 0, ',', '.') : '';
+$nm_cins = trim((string)($beyan['sample_crate_type'] ?? ''));
+$nm_brut = ($beyan['sample_gross_kg'] ?? null) !== null && (float)$beyan['sample_gross_kg'] > 0 ? fmt_kg($beyan['sample_gross_kg']) : '';
+$nm_net  = ($beyan['sample_net_kg'] ?? null) !== null && (float)$beyan['sample_net_kg'] > 0 ? fmt_kg($beyan['sample_net_kg']) : '';
+if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
+<div class="beyan-section" data-bf="urun">
+    <div class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune Bilgileri</div>
+    <div class="beyan-view-grid">
+        <div class="beyan-view-row" data-ic="kutu">
+            <span class="lbl">Kasa Adedi</span>
+            <span class="val"><?= $nm_kasa !== '' ? h($nm_kasa) : '—' ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="kasa">
+            <span class="lbl">Kasa Cinsi</span>
+            <span class="val"><?= $nm_cins !== '' ? h($nm_cins) : '—' ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="agirlik">
+            <span class="lbl">Brüt KG</span>
+            <span class="val"><?= $nm_brut !== '' ? h($nm_brut) : '—' ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="terazi">
+            <span class="lbl">Net KG</span>
+            <span class="val strong"><?= $nm_net !== '' ? h($nm_net) : '—' ?></span>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php $lj_gonderici = trim((string)($beyan['sender_company_name'] ?? '')) ?: $hks_firma_adi; ?>
 <!-- 3. Lojistik / Alıcı -->
 <div class="beyan-section" data-bf="lojistik">
     <div class="beyan-section-title" data-ic="bina"><span class="bf-emoji" aria-hidden="true">🚚</span> Lojistik / Alıcı</div>
     <div class="beyan-view-grid">
+        <div class="beyan-view-row" data-ic="bina">
+            <span class="lbl">Gönderici</span>
+            <span class="val"><?= h($lj_gonderici ?: '—') ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="kure">
+            <span class="lbl">Ülke</span>
+            <span class="val"><?= h(trim((string)($beyan['hks_ulke_ad'] ?? '')) ?: '—') ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="arac">
+            <span class="lbl">Çekici Plaka</span>
+            <span class="val"><?= h(trim((string)($beyan['tractor_plate'] ?? '')) ?: '—') ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="arac">
+            <span class="lbl">Dorse Plaka</span>
+            <span class="val"><?= h($hks_plaka ?: '—') ?></span>
+        </div>
         <div class="beyan-view-row" data-ic="depo">
             <span class="lbl">Çıkış Depo</span>
             <span class="val"><?= h($beyan['exit_depot'] ?: '—') ?></span>
@@ -402,14 +445,6 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
 </div>
 
-<?php
-$nm_kasa = ($beyan['sample_crate_count'] ?? null) !== null && (int)$beyan['sample_crate_count'] > 0 ? number_format((int)$beyan['sample_crate_count'], 0, ',', '.') : '';
-$nm_cins = trim((string)($beyan['sample_crate_type'] ?? ''));
-$nm_brut = ($beyan['sample_gross_kg'] ?? null) !== null && (float)$beyan['sample_gross_kg'] > 0 ? fmt_unit_kg($beyan['sample_gross_kg']) . ' KG' : '';
-$nm_net  = ($beyan['sample_net_kg'] ?? null) !== null && (float)$beyan['sample_net_kg'] > 0 ? fmt_unit_kg($beyan['sample_net_kg']) . ' KG' : '';
-$nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Brüt: ' . $nm_brut : '', $nm_net !== '' ? 'Net: ' . $nm_net : '']);
-?>
-<div class="bv-yanyana<?= $nm_parca ? ' bv-yanyana-2' : '' ?>">
 <!-- 4. Analiz / Durum -->
 <div class="beyan-section" data-bf="durum">
     <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz / Durum</div>
@@ -488,14 +523,6 @@ $nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Br
     <?php endif; ?>
 </div>
 
-<!-- Numune (v334): Analiz kartının yanında, yalnız doluysa -->
-<?php if ($nm_parca): ?>
-<div class="beyan-section" data-bf="urun">
-    <div class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune</div>
-    <div class="bv-not"><?= implode('<br>', array_map('h', $nm_parca)) ?></div>
-</div>
-<?php endif; ?>
-</div>
 
 <!-- Not (v332) -->
 <?php if (trim((string)($beyan['note'] ?? '')) !== ''): ?>

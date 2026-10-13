@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v342` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v343` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1040,6 +1040,18 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   logo satırında tema düğmesi (`.tema-dongu.sidebar-tema`, `asyaTemaDondur()`; tema JS'i `.tema-dongu` sınıfıyla TÜM düğmeleri
   günceller — id'ye bağlama). Koyu tema düzeltmeleri: öneri kutusu "+ ekle" satırı (`.ms-sug-add` koyu kuralı), beyan liste
   sayaç rozeti kontrastı. Yeni açık renkli yüzey/rozet eklerken `html[data-theme="dark"]` karşılığını DA yaz.
+- **Gönderici/Ülke/Çekici/Dorse + Numune taşıması + benzer ürün eşleme (v343, sahip GO verdi — 2 nullable ADD COLUMN):**
+  `customs_declarations.tractor_plate` (VARCHAR 20) ve `sender_company_name` (VARCHAR 150), auto-migration helpers.php. **Parti/Sevkiyat**
+  kartında: Gönderici Firma (HKS firmalarından datalist, listede olmayan ad da serbest — `beyan_gonderici_coz()` TR-duyarsız TAM ad
+  eşleşirse `hks_firma_id`'yi çözer, değilse boş bırakır) · Ülke (`hks_ulke_id`, HKS kataloğu) · Çekici Plaka (`tractor_plate`, HKS'e GİTMEZ)
+  · Dorse Plaka (= `vehicle_plate`, HKS bildirimindeki plaka). Hal Bildirim sekmesinde YALNIZ HKS Ürünü kaldı
+  (`beyan_hks_form_bolumu(..., 'sevkiyat'|'urun')`). `sender_company_name` HKS izin grubundadır (`beyan_permission_fields`).
+  Önizlemede Lojistik / Alıcı kartı bu 4 alanı listeler; **WhatsApp metnine EKLENMEZ** (test denetler). Kopyala (Taslak Oluştur) göndericiyi
+  kopyalar, plakaları kopyalamaz. **Numune** formda Beyan sekmesine (Ürün ve Miktarlar'ın altı), önizlemede Ürün Bilgileri gibi tek satırlı 3B
+  "Numune Bilgileri" kartına taşındı (Analiz yanındaki `.bv-yanyana` kalktı). **Benzer ürün eşleme** `bb_urun_benzer()`: elle yazılan kısa ad
+  ("Kapya") katalogdaki "Biber Salçalık (Kapya)" ile eşleşir — sorgunun TÜM sözcükleri (≥3 harf) katalog sözcüğüne eşit/önek ise aday; TEK
+  aday (ya da en az fazla sözcüklü benzersiz aday) seçilir, belirsizse boş; yalnız ÜRÜNDE (ülkede benzer eşleme YOK); form ön-doldurması
+  "benzer isimle eşleşti" rozetiyle, Eşleştir düğmesi de aynı. Gönderim yine taslak üzerinden kullanıcı denetiminde.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

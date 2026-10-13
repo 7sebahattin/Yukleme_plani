@@ -61,7 +61,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -449,9 +449,15 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        'bulunan: ' . substr_count($form, 'name="vehicle_plate"') . ' adet');
 
     // Plaka "Hal Bildirim Bilgileri" bölümünün İÇİNDE olmalı.
-    ok('[form] plaka Hal Bildirim bölümünde',
-       preg_match('/Hal Bildirim Bilgileri.*?name="vehicle_plate"/s', $form) === 1,
-       'plaka hala Temel Bilgiler bolumunde');
+    ok('[form] Dorse plaka Parti/Sevkiyat kartında (Hal Bildirim sekmesinden önce)',
+       preg_match('/Parti\/Sevkiyat.*?name="vehicle_plate".*?Hal Bildirim Bilgileri/s', $form) === 1,
+       'dorse plaka Parti/Sevkiyat kartında olmalı');
+    ok('[form] Çekici plaka + Gönderici firma + Ülke Parti/Sevkiyat kartında',
+       preg_match('/Parti\/Sevkiyat.*?name="sender_company_name".*?name="hks_ulke_id".*?name="tractor_plate".*?name="vehicle_plate".*?Ürün ve Miktarlar/s', $form) === 1);
+    ok('[form] Hal Bildirim sekmesinde yalnız HKS Ürünü (firma/ülke select\'i yok)',
+       preg_match('/<select[^>]*name="hks_firma_id"/', $form) !== 1
+       && preg_match('/Hal Bildirim Bilgileri.*name="hks_urun_id"/s', $form) === 1
+       && preg_match('/Hal Bildirim Bilgileri.*name="hks_ulke_id"/s', $form) !== 1);
 
     // Plaka: örnek metin YOK, boşluksuz giriş açık.
     ok('[form] plaka alanında örnek metin yok',
@@ -480,13 +486,13 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        'kisa listede arama kutusu fazladan tiklama getirir');
 
     // Asıl <select> DOM'da KALMALI — değeri o taşır, POST ona bağlı.
-    foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id'] as $alan) {
+    foreach (['hks_urun_id', 'hks_ulke_id'] as $alan) {
         ok("[form] $alan hâlâ <select>", preg_match('/<select[^>]*name="' . $alan . '"/', $form) === 1,
            'select input ile DEGISTIRILMIS — POST degeri kaybolur');
     }
 
     // Dört alan da orada mı?
-    foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id', 'vehicle_plate'] as $alan) {
+    foreach (['sender_company_name', 'hks_urun_id', 'hks_ulke_id', 'tractor_plate', 'vehicle_plate'] as $alan) {
         ok("[form] $alan alanı var", strpos($form, 'name="' . $alan . '"') !== false);
     }
 }
@@ -857,17 +863,39 @@ ok('[temiz] düzenleme formunda ipucu/alt metin yok',
    && strpos($f_tmp, 'HKS hazırlığı için') === false && strpos($f_tmp, 'Silme işlemi beyanı') === false
    && strpos($f_tmp, 'katalogdan eşleşti') === false && strpos($f_tmp, 'Akıştaki sıradaki durum') === false
    && strpos($f_tmp, 'Dolu alanlar WhatsApp') === false && strpos($f_tmp, 'Mesajı yapıştırıp') === false);
+// Gönderici / Ülke / Çekici / Dorse (v343)
+$B_LJ = beyan_ekle(['party_no' => 'LJ-1']);
+db()->prepare("UPDATE customs_declarations SET sender_company_name='ÖZEL FİRMA LTD', tractor_plate='06TRK06', vehicle_plate='34DRS34', hks_ulke_ad='Rusya' WHERE id=?")->execute([$B_LJ]);
+$h_lj = render_beyan($B_LJ);
+ok('[lojistik] önizleme: Gönderici Firma, Ülke, Çekici Plaka, Dorse Plaka listeleniyor',
+   preg_match('/Lojistik \/ Alıcı.*Gönderici.*ÖZEL FİRMA LTD.*Ülke.*Rusya.*Çekici Plaka.*06TRK06.*Dorse Plaka.*34DRS34/s', $h_lj) === 1);
+ok('[lojistik] WhatsApp metnine gönderici/çekici/dorse/ülke EKLENMEDİ',
+   preg_match('/id="waMetin">(.*?)<\/script>/s', $h_lj, $mw) === 1
+   && strpos($mw[1], 'ÖZEL') === false && strpos($mw[1], '06TRK06') === false && strpos($mw[1], '34DRS34') === false && stripos($mw[1], 'Rusya') === false);
+db()->exec("INSERT INTO hks_firmalar (id,ad,vergi_no) VALUES ('f9','Agronatural Tarım','9999999999')");
+$g1 = beyan_gonderici_coz('AGRONATURAL TARIM');
+$g2 = beyan_gonderici_coz('Başka Firma');
+ok('[gönderici] HKS firma adı TR-duyarsız eşleşince id çözülür, resmi ad döner', $g1['id'] === 'f9' && $g1['ad'] === 'Agronatural Tarım');
+ok('[gönderici] listede olmayan firma adı serbest kabul edilir (id boş)', $g2['id'] === '' && $g2['ad'] === 'Başka Firma');
+$kat_u = [['id' => '1', 'ad' => 'Biber Salçalık (Kapya)'], ['id' => '2', 'ad' => 'Biber Dolmalık'], ['id' => '3', 'ad' => 'Elma Starking'], ['id' => '4', 'ad' => 'Elma Golden']];
+ok('[benzer] "Kapya" → "Biber Salçalık (Kapya)"', (bb_urun_benzer('Kapya', $kat_u)['id'] ?? '') === '1');
+ok('[benzer] "kapya biber" tek adaya iner', (bb_urun_benzer('kapya biber', $kat_u)['id'] ?? '') === '1');
+ok('[benzer] belirsiz ("Elma") eşleşme YOK', bb_urun_benzer('Elma', $kat_u) === null);
+ok('[benzer] alakasız ad eşleşmez', bb_urun_benzer('Portakal', $kat_u) === null);
+ok('[benzer] bb_tahmin urun için benzer kaynağı döner', (bb_tahmin('urun', 'Kapya', $kat_u, false)['kaynak'] ?? '') === 'benzer');
+ok('[benzer] ülkede benzer eşleşme YOK', bb_tahmin('ulke', 'Rus', [['id' => '9', 'ad' => 'Rusya']], false)['id'] === '');
 // Numune (v334)
-ok('[numune] formda 4 numune alanı Analiz sekmesinde (Not bölümünden SONRA, Kaynak sekmesinden ÖNCE)', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
+ok('[numune] formda 4 numune alanı BEYAN sekmesinde (Ürün ve Miktarlar sonrası, Analiz sekmesinden önce)', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
    && strpos($f_sil, 'name="sample_crate_type"') !== false && strpos($f_sil, 'name="sample_gross_kg"') !== false
-   && strpos($f_sil, 'name="sample_net_kg"') !== false && $pn > strpos($f_sil, 'id="beyanPanel_analiz"') && $pn < strpos($f_sil, 'id="beyanPanel_kaynak"') && $pn > strpos($f_sil, 'name="note"'));
+   && strpos($f_sil, 'name="sample_net_kg"') !== false && $pn > strpos($f_sil, 'name="net_kg"') && $pn < strpos($f_sil, 'id="beyanPanel_analiz"'));
 ok('[numune] boşken önizlemede numune kartı yok', strpos(render_beyan($ID_BOS), '🧪</span> Numune') === false);
 $B_NM = beyan_ekle(['party_no' => 'NM-1']);
 db()->prepare("UPDATE customs_declarations SET sample_gross_kg=5, sample_net_kg=4, sample_crate_type='TAHTA KASA', sample_crate_count=1 WHERE id=?")->execute([$B_NM]);
 $h_nm = render_beyan($B_NM);
 file_put_contents(sys_get_temp_dir() . '/beyan_view_nm.html', $h_nm);
-ok('[numune] önizlemede numune kartı Analiz kartıyla aynı yanyana kabında', preg_match('/bv-yanyana bv-yanyana-2.*Analiz \/ Durum.*Numune/s', $h_nm) === 1
-   && preg_match('/class="bv-yanyana"/', render_beyan($ID_BOS)) === 1);
+ok('[numune] önizlemede Numune Bilgileri kartı Ürün Bilgileri ile Lojistik arasında, tek satır ızgara',
+   preg_match('/Ürün Bilgileri.*Numune Bilgileri.*Kasa Adedi.*Net KG.*Lojistik \/ Alıcı.*Analiz \/ Durum/s', $h_nm) === 1
+   && strpos($h_nm, 'bv-yanyana') === false);
 ok('[numune] doluyken önizlemede kart + WhatsApp metni', strpos($h_nm, '🧪</span> Numune') !== false
    && strpos($h_nm, 'Net: 4 KG') !== false && strpos($h_nm, '\ud83e\uddea') === false && strpos($h_nm, '🧪 *NUMUNE*') !== false);
 file_put_contents(sys_get_temp_dir() . '/beyan_form_ciktisi.html', render_form($B_NM));
