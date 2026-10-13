@@ -43,6 +43,7 @@ foreach ($servisListe as $sv) {
     <div class="sv-body">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="action" value="servis_ekle">
+    <input type="hidden" name="scroll_y" value="">
     <input type="hidden" name="istek_id" value="<?= h(bin2hex(random_bytes(16))) ?>"><?php /* tekrar gönderim (çift tıklama/F5) koruması */ ?>
     <p class="sv-bilgi"><strong><?= h($oturum['foreman_name_snapshot']) ?></strong> · <?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?><br>
         <span class="muted">Servis adedi hakedişe tür başına <b>adet × fiyat</b> olarak eklenir. Aynı mesaiye birden çok kez eklenebilir; yanlış kayıt listeden iptal edilir.</span></p>
@@ -84,6 +85,7 @@ foreach ($servisListe as $sv) {
 <form method="post" class="isk-card-modal-body">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="action" value="servis_iptal">
+    <input type="hidden" name="scroll_y" value="">
     <input type="hidden" name="servis_id" id="svIptalId" value="">
     <p style="margin:0 0 10px"><strong id="svIptalEtiket"></strong> servis kaydı iptal edilir; kayıt silinmez, listede iptal olarak kalır ve hakediş yeniden hesaplanmalıdır.</p>
     <label><span class="form-label">İptal nedeni *</span><textarea name="reason" maxlength="500" required rows="3"></textarea></label>
@@ -127,6 +129,26 @@ foreach ($servisListe as $sv) {
 <?php if ($servisGoster): ?>
 <script>
 (function () {
+    var url = new URL(window.location.href), savedY = url.searchParams.get('servis_scroll');
+    if (savedY !== null && /^\d{1,8}$/.test(savedY) && Number(savedY) <= 10000000) {
+        var restoration = history.scrollRestoration;
+        history.scrollRestoration = 'manual';
+        url.searchParams.delete('servis_scroll'); url.hash = '';
+        history.replaceState(history.state, '', url.href);
+        var restore = function () {
+            requestAnimationFrame(function () {
+                window.scrollTo({ top: Number(savedY), left: 0, behavior: 'instant' });
+                history.scrollRestoration = restoration;
+            });
+        };
+        if (document.readyState === 'complete') restore();
+        else window.addEventListener('load', restore, { once: true });
+    }
+    document.querySelectorAll('#servisForm, #servisIptal form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!e.defaultPrevented) form.elements.scroll_y.value = String(Math.round(window.scrollY));
+        });
+    });
     // Detay sayfasının pdksPuantajDialogAc() tanımı kart listesi boşken çizilmez — yedek.
     if (typeof window.pdksPuantajDialogAc !== 'function') {
         window.pdksPuantajDialogAc = function (id) {

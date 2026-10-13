@@ -114,7 +114,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
         $mesaj = $sonuc['ok'] ? 'Servis kaydı iptal edildi. Taslak hakediş yeniden hesaplanmalıdır.' : $sonuc['hata'];
     }
     set_flash($sonuc['ok'] ? 'success' : 'error', $mesaj);
-    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id . '#servisler'); exit;
+    $scrollY = filter_var($_POST['scroll_y'] ?? '', FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 0, 'max_range' => 10000000]]);
+    // Servis listesine atlama; formun gönderildiği kaydırma konumuna dön.
+    // Boş fragment, eski #servisler bağlantısının redirect'e taşınmasını da önler.
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id
+        . ($scrollY !== false ? '&servis_scroll=' . $scrollY : '') . '#'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['puantaj_duzeltme', 'puantaj_iptal', 'puantaj_ekle', 'toplu_geri_al'], true)) {
     csrf_check($_POST['csrf'] ?? null);
