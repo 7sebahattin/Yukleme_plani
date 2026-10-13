@@ -76,6 +76,21 @@ ck('long reject',rejects(fn()=>beyan_suggest_save($pdo,'brand',str_repeat('A',51
 ck('address needs name',rejects(fn()=>beyan_suggest_save($pdo,'company_address','adres')));
 beyan_suggest_save($pdo,'company_name','YENİ GÜMRÜK');
 beyan_suggest_save($pdo,'company_address','açık adres','yeni gumruk');
+// Öneriden sil (v344)
+beyan_suggest_save($pdo,'buyer_name','hatalı alıcı');
+ck('silmeden önce öneride var',in_array('HATALI ALICI',beyan_suggest_form_data()['values']['buyer_name'],true));
+beyan_suggest_hide($pdo,'buyer_name','hatali alici');
+ck('silinen öneri görünmez',!in_array('HATALI ALICI',beyan_suggest_form_data()['values']['buyer_name'],true));
+ck('silinen KV kaydı kalkar',!isset(beyan_suggest_read($pdo,'buyer_name')['HATALI ALICI']));
+beyan_suggest_save($pdo,'buyer_name','hatalı alıcı');
+ck('açık +ekle silinen öneriyi geri getirir',in_array('HATALI ALICI',beyan_suggest_form_data()['values']['buyer_name'],true));
+ck('katalog ürünü silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'product_name','şeftali')));
+ck('izinsiz alan silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'status','X')));
+ck('boş değer silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'brand','  ')));
+beyan_suggest_save($pdo,'company_name','Silinecek Gümrük','','adres x');
+ck('silmeden önce gümrük+adres var',isset(beyan_suggest_form_data()['companies']['SİLİNECEK GÜMRÜK']));
+beyan_suggest_hide($pdo,'company_name','SİLİNECEK GÜMRÜK');
+ck('silinen gümrük adresiyle birlikte görünmez',!isset(beyan_suggest_form_data()['companies']['SİLİNECEK GÜMRÜK']));
 $d=beyan_suggest_form_data();
 ck('address linked canonical',$d['companies']['YENİ GÜMRÜK']==='AÇIK ADRES');
 beyan_suggest_save($pdo,'company_name','Yeni Gümrük');

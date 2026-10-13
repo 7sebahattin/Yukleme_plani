@@ -2159,6 +2159,20 @@ function ekranAlti() {
             });
         }
 
+        function sil(name) {
+            fetch('api_beyan_tanim_sil.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ csrf: csrf, field: field, name: name })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                if (!j || !j.ok) { alert((j && j.error) || 'Öneri silinemedi.'); return; }
+                var ayni = function (x) { return fold(x) !== fold(name); };
+                items = items.filter(ayni);
+                if (Array.isArray(POOL[field])) POOL[field] = POOL[field].filter(ayni);
+                render();
+            }).catch(function () { alert('Bağlantı hatası — öneri silinemedi.'); });
+        }
+
         /* mousedown + touchstart: input blur'undan ÖNCE çalışır.
            İkisi birden tetiklenirse tek sefer çalışsın diye kilit var. */
         function onTap(el, fn) {
@@ -2189,6 +2203,19 @@ function ekranAlti() {
                 row.className = 'ms-sug-row';
                 row.textContent = name;
                 onTap(row, function () { pick(name); });
+                // Beyan formu: üzerine gelince sağda "×" — öneriyi listeden siler (kayıtlara dokunmaz).
+                // HKS katalog ürünleri silinemez. Düğme METİNSİZdir (× CSS ile) — satır metni değişmez.
+                if (metaEl && input.dataset.suggestEndpoint && !(field === 'product_name' && lookup(beyanMeta.products, name))) {
+                    var del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'ms-sug-del';
+                    del.title = 'Öneriden sil';
+                    del.setAttribute('aria-label', name + ' önerisini sil');
+                    var delTap = function (e) { e.preventDefault(); e.stopPropagation(); sil(name); };
+                    del.addEventListener('mousedown', delTap);
+                    del.addEventListener('touchstart', delTap, { passive: false });
+                    row.appendChild(del);
+                }
                 list.appendChild(row);
             });
             // Birebir eşleşme yoksa "+ ekle" satırı — boş/anlamsız değerde gösterme

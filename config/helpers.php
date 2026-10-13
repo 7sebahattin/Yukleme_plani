@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v343');
+    define('APP_SURUM', 'v344');
 }
 
 // --- HTML kaçışı ---
@@ -3690,15 +3690,63 @@ function beyan_suggest_read(PDO $pdo, string $field): array {
     $rows = json_decode((string)$st->fetchColumn(), true);
     return is_array($rows) ? $rows : [];
 }
+// Öneriden "silinen" değerler (v344): form önerilerinde görünmez; yalnız açık "+ ekle" ile geri gelir.
+// KV anahtarı beyan_defs_hidden = {alan: {normalize_anahtar: zaman}}. Beyan KAYITLARINA dokunmaz.
+function beyan_suggest_hidden_read(PDO $pdo): array {
+    $st = $pdo->prepare('SELECT deger FROM `' . beyan_suggest_kv_table() . '` WHERE anahtar = ?');
+    $st->execute(['beyan_defs_hidden']);
+    $h = json_decode((string)$st->fetchColumn(), true);
+    return is_array($h) ? $h : [];
+}
+function beyan_suggest_hidden_write(PDO $pdo, array $h): void {
+    $pdo->prepare('REPLACE INTO `' . beyan_suggest_kv_table() . '` (anahtar, deger) VALUES (?, ?)')
+        ->execute(['beyan_defs_hidden', json_encode($h, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
+}
+function beyan_suggest_hide(PDO $pdo, string $field, string $raw): string {
+    $meta = beyan_suggest_fields()[$field] ?? null;
+    if (!$meta) throw new InvalidArgumentException('Bu alan için öneri silinemez.');
+    $name = beyan_suggest_normalize($field, $raw);
+    if ($name === '') throw new InvalidArgumentException('Silinecek değer boş.');
+    $key = beyan_suggest_key($name);
+    if ($field === 'product_name') {
+        // HKS kataloğu resmî listedir — buradan silinmez.
+        try {
+            foreach ((bb_katalog()['urunler'] ?? []) as $row) {
+                if (beyan_suggest_key((string)($row['ad'] ?? '')) === $key) throw new InvalidArgumentException('HKS katalog ürünü öneriden silinemez.');
+            }
+        } catch (InvalidArgumentException $e) { throw $e; } catch (Throwable $e) {}
+    }
+    $table = beyan_suggest_kv_table();
+    $sqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    $pdo->beginTransaction();
+    try {
+        $pdo->exec(($sqlite ? "INSERT OR IGNORE" : "INSERT IGNORE") . " INTO `$table` (anahtar,deger) VALUES ('beyan_defs_lock','{}')");
+        $pdo->query("SELECT deger FROM `$table` WHERE anahtar='beyan_defs_lock'" . ($sqlite ? '' : ' FOR UPDATE'))->fetchColumn();
+        $rows = beyan_suggest_read($pdo, $field);
+        if (isset($rows[$key])) {
+            unset($rows[$key]);
+            $pdo->prepare("REPLACE INTO `$table` (anahtar, deger) VALUES (?, ?)")
+                ->execute(['beyan_defs_' . $field, json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
+        }
+        $h = beyan_suggest_hidden_read($pdo);
+        $h[$field][$key] = date('Y-m-d H:i:s');
+        beyan_suggest_hidden_write($pdo, $h);
+        $pdo->commit();
+        return $name;
+    } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+}
+
 function beyan_suggest_form_data(): array {
     $fields = beyan_suggest_fields();
+    try { $hidden = beyan_suggest_hidden_read(db()); } catch (Throwable $e) { $hidden = []; }
     $sets = array_fill_keys(array_keys($fields), []);
     $companies = [];
     $products = [];
-    $add = static function(string $field, string $name) use (&$sets, $fields): string {
+    $add = static function(string $field, string $name, bool $katalog = false) use (&$sets, $fields, &$hidden): string {
         $name = beyan_suggest_normalize($field, $name);
         if ($name === '' || mb_strlen($name, 'UTF-8') > $fields[$field]['max']) return '';
         $key = beyan_suggest_key($name);
+        if (!$katalog && isset($hidden[$field][$key])) return '';   // öneriden silinmiş
         if (!isset($sets[$field][$key])) $sets[$field][$key] = $name;
         return $sets[$field][$key];
     };
@@ -3706,7 +3754,7 @@ function beyan_suggest_form_data(): array {
     try {
         $ids = [];
         foreach ((bb_katalog()['urunler'] ?? []) as $row) {
-            $name = $add('product_name', (string)($row['ad'] ?? ''));
+            $name = $add('product_name', (string)($row['ad'] ?? ''), true);
             if ($name !== '' && (string)($row['id'] ?? '') !== '') $ids[$name][(string)$row['id']] = true;
         }
         foreach ($ids as $name => $set) if (count($set) === 1) $products[$name] = ['urun_id'=>(string)array_key_first($set)];
@@ -3732,6 +3780,7 @@ function beyan_suggest_form_data(): array {
             }
         } catch (Throwable $e) { /* KV yoksa öneri ve kayıt formu yine açılır. */ }
     }
+    foreach (array_keys($companies) as $cn) if (isset($hidden['company_name'][beyan_suggest_key($cn)])) unset($companies[$cn]);
     $values = [];
     foreach ($sets as $field => $set) { $values[$field] = array_values($set); sort($values[$field], SORT_NATURAL); }
     return ['values'=>$values, 'companies'=>$companies, 'products'=>$products];
@@ -3769,6 +3818,8 @@ function beyan_suggest_save(PDO $pdo, string $field, string $raw, string $compan
         $write = static function(string $f, string $n, ?string $a = null) use ($pdo, $table): string {
             $rows = beyan_suggest_read($pdo, $f);
             $key = beyan_suggest_key($n);
+            $hid = beyan_suggest_hidden_read($pdo);   // açık "+ ekle" silinmiş öneriyi geri getirir
+            if (isset($hid[$f][$key])) { unset($hid[$f][$key]); beyan_suggest_hidden_write($pdo, $hid); }
             $entry = $rows[$key] ?? ['name'=>$n];
             if (empty($entry['added_at']) || (string)$entry['added_at'] < BEYAN_ONERI_BASLANGIC) $entry['added_at'] = date('Y-m-d H:i:s');
             if ($a !== null && $a !== '') $entry['address'] = $a;
