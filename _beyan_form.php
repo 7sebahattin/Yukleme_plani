@@ -149,7 +149,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
             <div id="beyanPanel_analiz" data-beyan-panel="analiz" role="tabpanel" aria-labelledby="beyanTab_analiz">
                 <fieldset <?= !can_beyan('analysis.write') ? 'disabled' : '' ?> class="beyan-section" data-bf="durum" data-beyan-single-section>
                     <h2 class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz Bilgileri</h2>
-                    <?php if ($is_edit): ?>
                     <div class="beyan-form-grid">
                         <div class="form-group" data-ic="tup">
                             <label class="form-label" for="bf_sample_taken_at">Numune Alındı Tarihi</label>
@@ -160,8 +159,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
                             <input type="datetime-local" id="bf_analysis_result_at" name="analysis_result_at" class="form-control" value="<?= h($f['analysis_result_at']) ?>">
                         </div>
                     </div>
-                    <?php else: ?>
-                    <?php endif; ?>
                     <div class="form-group" data-ic="kalem">
                         <label class="form-label" for="analysisNote">Analiz Notu</label>
                         <textarea name="analysis_note" id="analysisNote" rows="3" class="form-control"<?= $f['status'] === 'red' ? ' required' : '' ?>><?= h((string)$f['analysis_note']) ?></textarea>

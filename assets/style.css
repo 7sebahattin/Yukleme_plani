@@ -6731,3 +6731,8 @@ html[data-theme="dark"] body:not(.print-mode) form.bf .beyan-section[data-bf] se
 html[data-theme="dark"] body:not(.print-mode) form.bf .beyan-section[data-bf] input.ara-sec.hks-serbest { background-color: rgba(245,158,11,.10); border-color: #f59e0b; }
 body:not(.print-mode) form.bf .beyan-section[data-bf] select[data-hks-kilit="1"],
 body:not(.print-mode) form.bf .beyan-section[data-bf] input.ara-sec:disabled { background-color: rgba(100,116,139,.12); color: var(--muted, #64748b); cursor: not-allowed; opacity: 1; }
+
+/* v353 — Önizleme: Düzenle düğmesi turuncu (açık + koyu tema) */
+.btn.btn-duzenle { background: linear-gradient(180deg, #f97316, #ea580c); border-color: #c2410c; color: #fff; }
+.btn.btn-duzenle:hover, .btn.btn-duzenle:focus-visible { background: linear-gradient(180deg, #fb923c, #c2410c); border-color: #9a3412; color: #fff; }
+html[data-theme="dark"] .btn.btn-duzenle { background: linear-gradient(180deg, #ea580c, #c2410c); border-color: #f97316; color: #fff; }

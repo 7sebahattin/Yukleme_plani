@@ -98,7 +98,7 @@ function user_primary_role(): ?array { return ['slug' => 'operator', 'label' => 
 require_once $ROOT . '/config/helpers.php';
 
 // Sayfayı require'ları sıyırarak çalıştır (beyan_ui_smoke.php ile aynı desen).
-$sayfalar = ['/beyan_edit.php', '/beyan_view.php', '/api_beyan_urun_esle.php'];
+$sayfalar = ['/beyan_edit.php', '/beyan_view.php', '/beyan_create.php', '/api_beyan_urun_esle.php'];
 if (!in_array($yol, $sayfalar, true)) { http_response_code(404); echo 'yok'; exit; }
 $src = (string)file_get_contents($ROOT . $yol);
 $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);

@@ -143,6 +143,22 @@ const beyan = () => sql('SELECT product_name, hks_urun_id, hks_urun_ad FROM cust
             const tutarli = ekran.kilit ? (ekran.dis && ekran.val === kayit && kayit !== '') : (!ekran.dis && ekran.serbest && kayit === '');
             ok('I ' + ad + ' → ekran ' + (ekran.kilit ? 'kilitli ' + ekran.val : 'açık') + ' / kayıt ' + (kayit || 'boş'), tutarli, JSON.stringify(ekran));
         }
+
+        // J) v353 — Yeni Beyan'da Analiz sekmesinde tarihler girilebilir ve kaydedilir; önizlemede Düzenle turuncu
+        kur();
+        await page.goto(URL + '/beyan_create.php');
+        const tarihAlan = await page.locator('#bf_sample_taken_at, #bf_analysis_result_at').count();
+        ok('J1 Yeni Beyan formunda iki analiz tarihi alanı var', tarihAlan === 2, String(tarihAlan));
+        await page.locator('[name=party_no]').fill('J-1');
+        await page.locator('[name=product_name]').fill('KABAK'); await page.locator('[name=product_variety]').click();
+        await page.locator('[data-beyan-tab=analiz]').click();
+        await page.locator('#bf_sample_taken_at').fill('2026-10-12T09:30');
+        await page.locator('#bf_analysis_result_at').fill('2026-10-13T14:15');
+        await Promise.all([page.waitForURL(/beyan_view\.php/), page.click('button[type=submit]:has-text("Kaydet")')]);
+        const yeni = sql("SELECT sample_taken_at, analysis_result_at FROM customs_declarations WHERE party_no='J-1'")[0] || {};
+        ok('J2 yeni beyanda tarihler kaydedildi', String(yeni.sample_taken_at || '').startsWith('2026-10-12 09:30') && String(yeni.analysis_result_at || '').startsWith('2026-10-13 14:15'), JSON.stringify(yeni));
+        const renk = await page.evaluate(() => { const a = [...document.querySelectorAll('a.btn')].find(x => x.textContent.trim() === 'Düzenle'); return a ? getComputedStyle(a).backgroundImage + '|' + getComputedStyle(a).color : ''; });
+        ok('J3 önizlemede Düzenle düğmesi turuncu', /249, 115, 22|234, 88, 12/.test(renk) && renk.endsWith('rgb(255, 255, 255)'), renk);
         await page.close();
     } finally {
         await browser.close();
