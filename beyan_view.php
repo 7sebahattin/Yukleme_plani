@@ -149,7 +149,7 @@ render_flash();
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
         <?php if (!$is_deleted && can_beyan('edit')): ?>
-        <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
+        <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary btn-duzenle">Düzenle</a>
         <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('delete')): ?>
         <form method="post" action="beyan_delete.php" style="display:inline"
