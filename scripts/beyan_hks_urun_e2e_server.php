@@ -46,7 +46,10 @@ if (PHP_SAPI === 'cli' && ($argv[1] ?? '') === '--kur') {
     $p->prepare("INSERT INTO hks_kv (anahtar, deger) VALUES ('listeler_cache', ?)")->execute([json_encode([
         'zaman' => '2026-10-13T10:00:00+03:00',
         'urunler' => [['id' => '30', 'ad' => 'Kabak'], ['id' => '31', 'ad' => 'Acur'], ['id' => '32', 'ad' => 'Biber Salçalık (Kapya)'],
-                      ['id' => '33', 'ad' => 'Domates']],
+                      ['id' => '33', 'ad' => 'Domates'], ['id' => '34', 'ad' => 'Domates Çeri'], ['id' => '35', 'ad' => 'Kabak Sakız'],
+                      ['id' => '36', 'ad' => 'Biber Sivri'], ['id' => '37', 'ad' => 'Biber Dolmalık'], ['id' => '38', 'ad' => 'İncir'],
+                      ['id' => '39', 'ad' => 'Isırgan Otu'], ['id' => '40', 'ad' => 'Elma Starking'], ['id' => '41', 'ad' => 'Elma Granny Smith'],
+                      ['id' => '42', 'ad' => 'Üzüm (Sultani)']],   // >10 ürün → canlıdaki gibi aranabilir kutu
         'ulkeler' => [['id' => '20', 'ad' => 'Rusya']],
         'sifatlar' => [['id' => '7', 'ad' => 'İhracat']],
         'bildirimTurleri' => [['id' => '5', 'ad' => 'Satış']],

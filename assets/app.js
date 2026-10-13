@@ -2297,11 +2297,47 @@ function ekranAlti() {
                 if (addressInput.value !== lastAutoAddress) lastAutoAddress = null;
             });
         }
-        // HKS Ürün Adı (v349): alan pasif başlar. Ürün Adı'ndan çıkılınca (change) api_beyan_urun_esle.php
-        // sorulur: eşleşirse değer gelir ve pasif kalır; eşleşmezse alan AÇILIR (turuncu çerçeve), öğrenilmiş
-        // öneri varsa ön-seçilir. KAYDI SUNUCU BELİRLER (beyan_hks_urun_post_coz) — buradaki değer yalnız görüntüdür;
-        // istek hata verirse alan açılır (eski kilit/değer asla kalmaz).
+        // HKS Ürün Adı (v350): alan pasif başlar. Ürün Adı'ndan çıkılınca (change) KİLİT KARARI TARAYICIDA,
+        // AĞA GİTMEDEN verilir — sunucunun kayıtta uyguladığı kuralın BİREBİR aynası (beyan_hks_urun_otomatik:
+        // katalog tam ad → benzer ad). Böylece "Güncelle'de eşleşiyor ama ekranda açılıyor" ayrışması olmaz.
+        // Eşleşirse değer gelir ve alan PASİF kalır (hiç açılmaz); eşleşmezse alan AÇILIR (turuncu) ve
+        // api_beyan_urun_esle.php yalnız öğrenilmiş ÖNERİ için sorulur (hata verirse öneri yok, karar değişmez).
+        // KAYDI SUNUCU BELİRLER (beyan_hks_urun_post_coz); PHP kuralını değiştirirsen urunNorm/urunBenzer'i de değiştir.
         if (productInput && productSelect) {
+            var urunNorm = function (s) {   // hks_eslesme_norm(): İ→i, I→ı, küçük harf
+                return String(s == null ? '' : s).trim().replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+            };
+            var urunTok = function (s) {
+                return urunNorm(s).replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(function (t) { return t !== ''; });
+            };
+            var katalog = function () {
+                return Array.prototype.filter.call(productSelect.options, function (o) {
+                    return o.value !== '' && !o.hasAttribute('data-katalog-disi');
+                }).map(function (o) { return {id: o.value, ad: o.textContent}; });
+            };
+            var urunBenzer = function (metin, liste) {   // bb_urun_benzer() aynası
+                var q = urunTok(metin).filter(function (t) { return Array.from(t).length >= 3; });
+                if (!q.length) return '';
+                var adaylar = [];
+                liste.forEach(function (x) {
+                    var ct = urunTok(x.ad);
+                    if (!ct.length) return;
+                    var tamam = q.every(function (qt) {
+                        return ct.some(function (c) { return c === qt || (Array.from(qt).length >= 4 && c.indexOf(qt) === 0); });
+                    });
+                    if (tamam) adaylar.push({id: x.id, fazla: ct.length - q.length});
+                });
+                if (!adaylar.length) return '';
+                adaylar.sort(function (a, b) { return a.fazla - b.fazla; });
+                if (adaylar.length > 1 && adaylar[0].fazla === adaylar[1].fazla) return '';
+                return adaylar[0].id;
+            };
+            var otomatik = function (ad) {   // beyan_hks_urun_otomatik() aynası
+                var liste = katalog(), n = urunNorm(ad);
+                if (n === '') return '';
+                for (var i = 0; i < liste.length; i++) if (urunNorm(liste[i].ad) === n) return liste[i].id;
+                return urunBenzer(ad, liste);
+            };
             var durum = function (hal, id) {   // hal: 'kilit' | 'serbest'
                 var proxy = productSelect._araInput;
                 var kilitli = hal === 'kilit';
@@ -2324,20 +2360,21 @@ function ekranAlti() {
                 var ad = productInput.value.trim();
                 var no = ++sayac;
                 if (ad === '') { durum('kilit', ''); return; }
-                productSelect.dataset.hksBekliyor = '1';
+                var id = otomatik(ad);
+                if (id) { durum('kilit', id); return; }          // eşleşti: alan hiç açılmaz
+                durum('serbest', '');                              // eşleşmedi: hemen açılır
                 fetch('api_beyan_urun_esle.php?ad=' + encodeURIComponent(ad), {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
                     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                     .then(function (j) {
-                        if (no !== sayac) return;
-                        if (!j || !j.ok) throw new Error('yanıt');
-                        var id = j.id ? String(j.id) : '';
-                        if (secenekVar(id)) durum('kilit', id);
-                        else durum('serbest', secenekVar(String(j.oneri || '')) ? String(j.oneri) : '');
+                        if (no !== sayac || !j || !j.ok || productSelect.dataset.hksSerbest !== '1') return;
+                        var sid = String(j.id || '');
+                        if (secenekVar(sid)) { durum('kilit', sid); return; }   // sunucu daha bilgiliyse ona uy
+                        var oneri = String(j.oneri || '');
+                        if (productSelect.value === '' && secenekVar(oneri)) durum('serbest', oneri);
                     })
-                    .catch(function () { if (no === sayac) durum('serbest', ''); })
-                    .then(function () { if (no === sayac) delete productSelect.dataset.hksBekliyor; });
+                    .catch(function () {});   // öneri alınamadı — alan açık ve boş kalır
             };
-            // Yalnızca alandan çıkılınca (change) sorgulanır; yazarken sorgu yok.
+            // Yalnızca alandan çıkılınca (change) karar verilir; yazarken alan değişmez.
             productInput.addEventListener('change', esle);
             // İlk açılış: sunucunun verdiği durum uygulanır (aranabilir kutu kurulduktan sonra).
             var ilk = function () {
