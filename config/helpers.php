@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v347');
+    define('APP_SURUM', 'v348');
 }
 
 // --- HTML kaçışı ---
@@ -3453,12 +3453,15 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
     $urun_sec = (string)($f['hks_urun_id'] ?? '');
     $ulke_sec = (string)($f['hks_ulke_id'] ?? '');
     $urun_not = '';
-    $urun_kilit = false;   // ürün adı bir HKS ürünüyle otomatik eşleşiyorsa alan kilitlenir (v347)
-
+    // HKS Ürün Adı alanı (v347/v348): VARSAYILAN pasif (kilitli). Ürün adı bir HKS ürünüyle otomatik
+    // eşleşirse değer gelir ve pasif kalır; ad yazılmış ama eşleşme YOKSA alan açılır (serbest, farklı çerçeve).
+    $urun_kilit = true;
+    $urun_serbest = false;
     $pn = trim((string)($f['product_name'] ?? ($beyan['product_name'] ?? '')));
     if ($pn !== '') {
         $t = bb_tahmin('urun', $pn, $katalog['urunler']);
-        if ($t['id'] !== '') { $urun_sec = $t['id']; $urun_kilit = true; }
+        if ($t['id'] !== '') { $urun_sec = $t['id']; }
+        else { $urun_kilit = false; $urun_serbest = true; }
     }
     if ($ulke_sec === '' && $beyan) {
         $t = bb_ulke_tahmin(bb_ulke_adaylari($beyan, bb_bagli_plan($beyan)), $katalog['ulkeler']);
@@ -3470,13 +3473,13 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
     // kutusu fayda yerine fazladan tıklama getirir; eşik halkayit/app.html'in
     // kendi gerekçesiyle aynıdır ("kısa listeler bilerek dışarıda").
     $sec = function (string $ad, string $etiket, array $liste, string $secili, string $not,
-                     string $aramaIpucu = '', string $ikon = '', bool $kilit = false, bool $pasif = false) {
+                     string $aramaIpucu = '', string $ikon = '', bool $kilit = false, bool $pasif = false, bool $serbest = false) {
         $aramali = $aramaIpucu !== '' && count($liste) > 10;
         echo '<div class="form-group"' . ($ikon !== '' ? ' data-ic="' . h($ikon) . '"' : '') . '>'
            . '<label class="form-label">' . h($etiket);
         if ($not !== '') echo ' <span class="beyan-hks-rozet beyan-hks-rozet-ok">' . h($not) . '</span>';
         echo '</label><select name="' . h($ad) . '" class="form-control"'
-           . ($kilit ? ' data-hks-kilit="1" disabled' : '') . ($pasif ? ' disabled' : '')
+           . ($kilit ? ' data-hks-kilit="1" disabled' : '') . ($serbest ? ' data-hks-serbest="1"' : '') . ($pasif ? ' disabled' : '')
            . ($aramali ? ' data-aramali="' . h($aramaIpucu) . '"' : '') . '>';
         echo '<option value="">— seçilmedi —</option>';
         $has_selected = $secili === '';
@@ -3491,7 +3494,7 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
         }
         echo '</select>';
         // Kilitli select disabled olduğundan POST'a girmez; değeri gizli alan taşır (JS kilidi açınca kaldırır).
-        if ($kilit && $secili !== '') echo '<input type="hidden" name="' . h($ad) . '" value="' . h($secili) . '" data-hks-ayna>';
+        if ($kilit) echo '<input type="hidden" name="' . h($ad) . '" value="' . h($secili) . '" data-hks-ayna>';
         echo '</div>';
     };
 
@@ -3499,7 +3502,7 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
         $sec('hks_ulke_id', 'Ülke', $katalog['ulkeler'], $ulke_sec, '', 'Ülke yazın veya listeden seçin', 'kure');
         return;
     }
-    $sec('hks_urun_id', 'HKS Ürün Adı', $katalog['urunler'], $urun_sec, $urun_not, 'Ürün yazın veya listeden seçin', 'paket', $urun_kilit, !$show_plate && !$urun_kilit);
+    $sec('hks_urun_id', 'HKS Ürün Adı', $katalog['urunler'], $urun_sec, $urun_not, 'Ürün yazın veya listeden seçin', 'paket', $urun_kilit, !$show_plate && !$urun_kilit, $urun_serbest && $show_plate);
 }
 
 // Gönderici Firma adı → HKS firma id (TR-duyarsız TAM ad eşleşmesi). Eşleşmezse '' (serbest ad).
