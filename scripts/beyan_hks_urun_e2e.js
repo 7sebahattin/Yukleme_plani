@@ -144,7 +144,7 @@ const beyan = () => sql('SELECT product_name, hks_urun_id, hks_urun_ad FROM cust
             ok('I ' + ad + ' → ekran ' + (ekran.kilit ? 'kilitli ' + ekran.val : 'açık') + ' / kayıt ' + (kayit || 'boş'), tutarli, JSON.stringify(ekran));
         }
 
-        // J) v352 — Yeni Beyan'da Analiz sekmesinde tarihler girilebilir ve kaydedilir; önizlemede Düzenle turuncu
+        // J) v353 — Yeni Beyan'da Analiz sekmesinde tarihler girilebilir ve kaydedilir; önizlemede Düzenle turuncu
         kur();
         await page.goto(URL + '/beyan_create.php');
         const tarihAlan = await page.locator('#bf_sample_taken_at, #bf_analysis_result_at').count();
