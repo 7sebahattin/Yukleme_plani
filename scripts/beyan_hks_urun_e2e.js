@@ -75,9 +75,9 @@ const beyan = () => sql('SELECT product_name, hks_urun_id, hks_urun_ad FROM cust
         await adYaz(page, 'YABANCI'); await page.keyboard.press('Tab'); await page.waitForTimeout(500);
         s = await sec(page);
         ok('D1 eşleşmeyen ad → açık, boş, turuncu', !s.dis && s.serbest && s.val === '', JSON.stringify(s));
-        const cerceve = await page.evaluate(() => getComputedStyle(document.querySelector('select[name=hks_urun_id]')).borderTopColor);
-        ok('D2 açık alanın çerçevesi turuncu', cerceve === 'rgb(245, 158, 11)', cerceve);
-        await page.selectOption('select[name=hks_urun_id]', '33');
+        const cerceve = await page.evaluate(() => { const s = document.querySelector('select[name=hks_urun_id]'); return getComputedStyle(s._araInput || s).borderTopColor; });
+        ok('D2 açık alanın (görünen kutunun) çerçevesi turuncu', cerceve === 'rgb(245, 158, 11)', cerceve);
+        await page.locator('input.ara-sec').fill('Domates'); await page.keyboard.press('Tab');
         await kaydet(page);
         ok('D3 elle seçim kaydedildi', beyan().hks_urun_id === '33', JSON.stringify(beyan()));
         ok('D4 elle seçim öğrenildi (yabancı→Domates)', sql("SELECT hks_id FROM hks_eslesme WHERE tip='urun'").map(r => r.hks_id).join() === '33');
@@ -113,6 +113,37 @@ const beyan = () => sql('SELECT product_name, hks_urun_id, hks_urun_ad FROM cust
         await Promise.all([page.waitForURL(/beyan_view\.php/), page.click('button[type=submit]:has-text("Güncelle")')]);
         ok('G1 JS kapalı + eski kilit → sunucu Acur yazdı', beyan().hks_urun_id === '31', JSON.stringify(beyan()));
         await ctx.close();
+
+        // H) v350 — kullanıcının ikinci şikâyeti: eşleştirme ucu HİÇ cevap vermese de (canlıda başarısız oluyordu)
+        //    ACUR → KABAK yazıp başka satıra geçince alan AÇILMADAN Kabak'a kilitlenmeli (kilit kararı tarayıcıda).
+        kur();
+        sql("UPDATE customs_declarations SET product_name='ACUR', hks_urun_id='31', hks_urun_ad='Acur' WHERE id=1");
+        page = await browser.newPage();
+        const istekler = [];
+        await page.route('**/api_beyan_urun_esle.php*', r => { istekler.push(r.request().url()); r.abort(); });
+        await page.goto(URL + '/beyan_edit.php?id=1');
+        await adYaz(page, 'KABAK'); await page.locator('[name=product_variety]').click(); await page.waitForTimeout(200);
+        s = await sec(page);
+        ok('H1 uç kapalıyken ACUR→KABAK + başka satır → alan açılmadan Kabak kilitli', s.dis && s.kilit && s.val === '30', JSON.stringify(s));
+        ok('H2 eşleşen ad için ağ isteği YAPILMADI', istekler.length === 0, istekler.join());
+        const proxyDis = await page.evaluate(() => { const s = document.querySelector('select[name=hks_urun_id]'); return !!(s._araInput && s._araInput.disabled && s._araInput.value === 'Kabak'); });
+        ok('H3 aranabilir kutu da pasif ve "Kabak" yazıyor', proxyDis);
+        await kaydet(page);
+        ok('H4 kayıt Kabak', beyan().hks_urun_id === '30', JSON.stringify(beyan()));
+
+        // I) EKRAN = KAYIT eşitliği: her ad için alandan çıkınca görünen durum, Güncelle'nin kaydettiğiyle aynı olmalı
+        const adlar = ['KABAK', 'kabak', 'ACUR', 'KAPYA', 'BİBER', 'DOMATES', 'ÇERİ', 'İNCİR', 'ISIRGAN', 'ELMA', 'SULTANİ', 'SAKIZ', 'YABANCI', 'BİBER SİVRİ'];
+        for (const ad of adlar) {
+            kur();
+            await page.goto(URL + '/beyan_edit.php?id=1');
+            await adYaz(page, ad); await page.locator('[name=product_variety]').click(); await page.waitForTimeout(150);
+            const ekran = await sec(page);
+            await kaydet(page);
+            const kayit = beyan().hks_urun_id || '';
+            const tutarli = ekran.kilit ? (ekran.dis && ekran.val === kayit && kayit !== '') : (!ekran.dis && ekran.serbest && kayit === '');
+            ok('I ' + ad + ' → ekran ' + (ekran.kilit ? 'kilitli ' + ekran.val : 'açık') + ' / kayıt ' + (kayit || 'boş'), tutarli, JSON.stringify(ekran));
+        }
+        await page.close();
     } finally {
         await browser.close();
         srv.kill();

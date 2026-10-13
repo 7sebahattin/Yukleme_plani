@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v349');
+    define('APP_SURUM', 'v350');
 }
 
 // --- HTML kaçışı ---
@@ -3496,7 +3496,7 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
                . h((string)$x['ad']) . '</option>';
         }
         if (!$has_selected) {
-            echo '<option value="' . h($secili) . '" selected>Mevcut seçim (katalogda bulunamadı): ' . h($secili) . '</option>';
+            echo '<option value="' . h($secili) . '" selected data-katalog-disi>Mevcut seçim (katalogda bulunamadı): ' . h($secili) . '</option>';
         }
         echo '</select>';
         // Kilitli select disabled olduğundan POST'a girmez; değeri SUNUCU ürün adından yeniden çözer
