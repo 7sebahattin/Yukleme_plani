@@ -43,6 +43,7 @@ declare(strict_types=1);
 // filtre + tıklanabilir satır). Saf fonksiyon tanımları — DB/oturum/çıktı yok;
 // bu modülün her sayfası zaten bu dosyayı yüklediği için buradan bağlanır.
 require_once __DIR__ . '/pdks_liste_ui.php';
+require_once __DIR__ . '/pdks_cavus_sure.php';
 
 // ── Yapılandırma ──────────────────────────────────────────
 defined('PDKS_GUNLUK_AKTIF') || define('PDKS_GUNLUK_AKTIF', true);
@@ -1488,15 +1489,8 @@ function pdks_gunluk_oturum_ac_veya_getir(int $foremanId, int $userId, ?PDO $pdo
     // çalışma süresini (dakika) oku — kolon henüz migrate edilmemişse
     // (Faz 8B ALTER'ı çalışmadıysa) eski sabit varsayılana (540 dk / 9 saat)
     // düş, hiçbir yerde HATA VERMEZ.
-    $normalDk = 540;
-    if (pdks_gunluk_kolon_var($pdo, 'foremen', 'normal_work_minutes')) {
-        $stN = $pdo->prepare("SELECT normal_work_minutes FROM foremen WHERE id = ?");
-        $stN->execute([$foremanId]);
-        $v = $stN->fetchColumn();
-        if ($v !== false && $v !== null) $normalDk = (int)$v;
-    }
-
     $tarih = date('Y-m-d');
+    $normalDk = pdks_cavus_sure_dk($foremanId, $tarih, $pdo);
     $depo  = function_exists('active_depot') ? (active_depot() ?? '') : '';
 
     $stF = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE foreman_id = ? AND work_date = ? AND depo = ?");
