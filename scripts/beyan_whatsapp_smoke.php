@@ -19,21 +19,17 @@ $tam = ['company_name' => 'LLC ZAPADNYE VOROTA',
   'exit_depot' => 'Hasyurt Fabrika', 'contact_person' => 'Yasin Bey', 'buyer_name' => 'Tolga Moskova', 'brand' => 'Asya',
   'note' => '61-08 parti ile birleşecektir !!!'];
 $beklenen = <<<'TXT'
-🏢 *LLC ZAPADNYE VOROTA*
+📝 *YENİ BEYAN*
 
-📍 *SEPARATE SUBDIVISION*
+🏢 *LLC ZAPADNYE VOROTA*
 143200, RUSSIAN FEDERATION,
 MOSCOW REGION, MOZHAISK,
-PROEZD MIRA, 3
-
-📑 *TIN/KPP:* 5004025693/5028455001
+PROEZD MIRA, 3 TIN/KPP: 5004025693/5028455001
 
 ━━━━━━━━━━━━━━━━
 
 🚛 *KARAYOLU (YEŞİLHAT)*
 🌿 *VİTAMİNRUS*
-
-📝 *YENİ BEYAN*
 
 ━━━━━━━━━━━━━━━━
 
@@ -80,7 +76,7 @@ $m = beyan_whatsapp_metin(['company_name' => 'A*B', 'brand' => 'x*y_z', 'note' =
 ok('* ve _ değer içinde temizlenir (biçim bozulmaz)', strpos($m, '🏢 *AB*') !== false && strpos($m, 'MARKA:* XY Z') !== false);
 ok('çok satırlı not: her satır ayrı ⚠️', substr_count($m, '⚠️ *') === 2 && strpos($m, '⚠️ *BİR*') !== false && strpos($m, '⚠️ *İKİ*') !== false);
 $m = beyan_whatsapp_metin(['company_address' => "Moscow, Lenina 5\nTIN/KPP: 123/456"]);
-ok('başlıksız adres: 📍 *ADRES* + TIN ayrı satır', strpos($m, '📍 *ADRES*') !== false && strpos($m, '📑 *TIN/KPP:* 123/456') !== false);
+ok('adres: ikon/başlık yok, metin korunur; YENİ BEYAN en üstte', strpos($m, '📍') === false && strpos($m, 'ADRES') === false && strpos($m, '123/456') !== false && strpos($m, '📝 *YENİ BEYAN*') === 0);
 $m = beyan_whatsapp_metin(['raw_text' => "x\nNUMUNE\n2 kasa\nBrüt: 10\nNet: 8"]);
 ok('numune ham metinden (etiket: değer biçimi)', strpos($m, '📦 2 Tahta Kasa') !== false && strpos($m, 'Brüt: 10 KG') !== false && strpos($m, 'Net: 8 KG') !== false);
 ok('numune kelimesi yoksa bölüm yok', strpos(beyan_whatsapp_metin(['raw_text' => "1 kasa 5 kg brüt"]), 'NUMUNE') === false);
