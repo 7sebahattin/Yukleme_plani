@@ -711,6 +711,12 @@ ok('[liste] etkin filtre dugmede yaziyor',
 
 // ── Liste sayfasi RENDER testleri ─────────────────────────────────────────
 $liste_kapali = render_liste([]);
+file_put_contents(sys_get_temp_dir() . '/beyan_liste_ciktisi.html', $liste_kapali);
+ok('[durum-menü] liste: masaüstü durum rozeti açılır menü + return_to=liste', strpos($liste_kapali, 'class="bl-durum"') !== false && (
+   strpos($liste_kapali, 'name="return_to" value="liste"') !== false && strpos($liste_kapali, 'bl-durum-sec') !== false));
+$PERMS_D = $PERMS; $PERMS = ['beyan.read'];
+ok('[durum-menü] beyan.status yoksa menü YOK (düz rozet)', strpos(render_liste([]), 'class="bl-durum"') === false);
+$PERMS = $PERMS_D;
 // Durum filtresi arsiv bolumunun sifatidir — gecerli deger KAPALI bir durum.
 $liste_acik   = render_liste(['status' => 'yuklendi']);
 foreach (['filtresiz' => $liste_kapali, 'durum filtreli' => $liste_acik] as $ad => $html) {

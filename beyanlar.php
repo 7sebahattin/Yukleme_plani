@@ -389,6 +389,63 @@ render_flash();
 </section>
 
 <script>
+// Liste: durum rozeti üzerine gelince aşağı açılan durum seçenekleri (v344). Menü position:fixed —
+// .table-wrap kaydırma alanında kesilmez. Fare ayrılınca 3 sn sonra kapanır; geri gelirse iptal.
+(function () {
+    var masaustu = window.matchMedia('(min-width: 1024px)');
+    var acik = null, zamanlayici = null;
+    function iptal() { if (zamanlayici) { clearTimeout(zamanlayici); zamanlayici = null; } }
+    function kapat(f) {
+        if (!f) return;
+        f.classList.remove('is-open');
+        var t = f.querySelector('.bl-durum-tetik'), m = f.querySelector('.bl-durum-menu');
+        if (t) t.setAttribute('aria-expanded', 'false');
+        if (m) m.inert = true;
+        if (acik === f) acik = null;
+    }
+    function ac(f) {
+        if (!masaustu.matches) return;
+        iptal();
+        if (acik && acik !== f) kapat(acik);
+        var t = f.querySelector('.bl-durum-tetik'), m = f.querySelector('.bl-durum-menu');
+        var r = t.getBoundingClientRect();
+        m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 180)) + 'px';
+        m.style.top = (r.bottom + 4) + 'px';
+        m.style.maxHeight = Math.max(120, window.innerHeight - r.bottom - 16) + 'px';
+        f.classList.add('is-open');
+        t.setAttribute('aria-expanded', 'true');
+        m.inert = false;
+        acik = f;
+    }
+    function planla(f) {
+        iptal();
+        zamanlayici = setTimeout(function () { kapat(f); }, 3000);
+    }
+    document.querySelectorAll('[data-bl-durum]').forEach(function (f) {
+        f.addEventListener('mouseenter', function () { ac(f); });
+        f.addEventListener('mouseleave', function () { planla(f); });
+        f.addEventListener('focusin', function () { ac(f); });
+        f.addEventListener('focusout', function (e) { if (!f.contains(e.relatedTarget)) planla(f); });
+        f.querySelector('.bl-durum-tetik').addEventListener('click', function () { f.classList.contains('is-open') ? kapat(f) : ac(f); });
+        f.addEventListener('keydown', function (e) { if (e.key === 'Escape') { kapat(f); f.querySelector('.bl-durum-tetik').focus(); } });
+        f.addEventListener('submit', function (e) {
+            var b = e.submitter;
+            if (b && b.hasAttribute('data-red')) {
+                var n = prompt('Red için analiz notu giriniz (zorunlu):');
+                if (!n || !n.trim()) { e.preventDefault(); return; }
+                var h = document.createElement('input');
+                h.type = 'hidden'; h.name = 'analysis_note'; h.value = n.trim();
+                f.appendChild(h);
+            }
+        });
+    });
+    document.addEventListener('click', function (e) { if (acik && !acik.contains(e.target)) kapat(acik); });
+    window.addEventListener('scroll', function () { if (acik) kapat(acik); }, true);
+    window.addEventListener('resize', function () { if (acik) kapat(acik); });
+})();
+</script>
+
+<script>
 (function () {
     var toggle = document.getElementById('beyanFilterToggle');
     var panel  = document.getElementById('beyanFilterPanel');

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v343` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v344` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1052,6 +1052,16 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   ("Kapya") katalogdaki "Biber Salçalık (Kapya)" ile eşleşir — sorgunun TÜM sözcükleri (≥3 harf) katalog sözcüğüne eşit/önek ise aday; TEK
   aday (ya da en az fazla sözcüklü benzersiz aday) seçilir, belirsizse boş; yalnız ÜRÜNDE (ülkede benzer eşleme YOK); form ön-doldurması
   "benzer isimle eşleşti" rozetiyle, Eşleştir düğmesi de aynı. Gönderim yine taslak üzerinden kullanıcı denetiminde.
+- **Öneriden sil + listede durum menüsü (v344, migration YOK):** Beyan formu öneri kutusunda (Gümrük Adı vb.) satırın üzerine gelince
+  sağda **×** çıkar (`.ms-sug-del`, METİNSİZ düğme — `textContent` değişmez; dokunmatikte hep görünür) → `api_beyan_tanim_sil.php`
+  (POST JSON + CSRF, `beyan.create|edit`, adres/alıcı/ilgili için `contact.write`, audit `delete`/`definitions`) →
+  `beyan_suggest_hide()`: tanımı KV'den (`beyan_defs_<alan>`) siler VE `beyan_defs_hidden`'a yazar; `beyan_suggest_form_data()` gizlileri
+  önerilerden/`companies`'ten çıkarır. Beyan KAYITLARINA dokunmaz; açık "+ ekle" gizliyi geri getirir (`beyan_suggest_save`);
+  **HKS katalog ürünleri silinemez**. Liste (`beyanlar.php` + `_beyan_liste.php`): masaüstünde (≥1024px) durum rozeti üzerine gelince
+  seçenekler **aşağı doğru** açılır (`.bl-durum`, `position:fixed` menü — `.table-wrap` kırpmaz; fare ayrılınca 3 sn sonra kapanır,
+  scroll/resize kapatır). Her satırda tek POST formu `beyan_edit.php` `status_only` + `return_to=liste` + `liste_url` (yalnız
+  `beyanlar.php…` kabul edilir → aynı filtre/sayfaya döner); RED için `prompt` + `analysis_note`; yetki `beyan.status`.
+  Test: `beyan_suggest_smoke.php` (sil/geri getir) · `beyan_ui_smoke.php` `[durum-menü]`.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

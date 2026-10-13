@@ -95,6 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_status     = (string)($_POST['status'] ?? '');
         $valid_statuses = array_keys(beyan_statuses());
         $return_url = ($_POST['return_to'] ?? '') === 'view' ? 'beyan_view.php?id=' . $id : 'beyanlar.php';
+        // Liste ekranından hızlı durum değişimi: aynı filtre/sayfaya dön (yalnız beyanlar.php adresleri kabul edilir).
+        if (($_POST['return_to'] ?? '') === 'liste' && preg_match('~^beyanlar\.php(\?[^\r\n#]*)?$~', (string)($_POST['liste_url'] ?? ''))) {
+            $return_url = (string)$_POST['liste_url'];
+        }
         if (!in_array($new_status, $valid_statuses, true)) {
             set_flash('error', 'Geçersiz durum geçişi.');
             header('Location: ' . $return_url); exit;

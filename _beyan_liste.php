@@ -19,6 +19,11 @@ if (!isset($sec_rows)) return;
 $sec_rows = array_map('beyan_redact_fields', $sec_rows);
 $firma_adlari  = $firma_adlari  ?? [];
 $kopyala_yetki = $kopyala_yetki ?? false;
+$durum_degistir  = can_beyan('status');
+$durum_etiketleri = beyan_statuses();
+$durum_sirasi    = beyan_durum_akis_sirasi();
+$liste_url = (string)($_SERVER['REQUEST_URI'] ?? 'beyanlar.php');
+$liste_url = preg_match('~^/?(?:[^?#]*/)?(beyanlar\.php(?:\?[^\r\n#]*)?)$~', $liste_url, $__m) ? $__m[1] : 'beyanlar.php';
 $firma_ad = function (array $r) use ($firma_adlari): string {
     $fid = (string)($r['hks_firma_id'] ?? '');
     return $fid === '' ? '' : ($firma_adlari[$fid] ?? '');
@@ -80,7 +85,24 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             <td><?php if (trim((string)($r['vehicle_plate'] ?? '')) !== ''): ?><span class="bl-plaka"><?= h($r['vehicle_plate']) ?></span><?php else: ?><span class="bl-eksik">eksik</span><?php endif; ?></td>
             <?php if (can_beyan('hks.read')): ?><td><?php $fa = $firma_ad($r); echo $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>'; ?></td>
             <td><?= h(($r['hks_ulke_ad'] ?? '') ?: '—') ?></td><?php endif; ?>
-            <td><?= beyan_badge_html($r['status']) ?><?php
+            <td class="bl-durum-td"><?php
+                // v344: masaüstünde durum rozeti üzerine gelince aşağı doğru açılan seçenekler — içine girmeden değiştir.
+                if ($durum_degistir):
+                    $sv0 = $durum_etiketleri[$r['status']] ?? ['label' => $r['status'], 'css' => 'taslak'];
+            ?><form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" class="bl-durum" data-bl-durum>
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="status_only" value="1">
+                    <input type="hidden" name="return_to" value="liste">
+                    <input type="hidden" name="liste_url" value="<?= h($liste_url) ?>">
+                    <button type="button" class="beyan-badge beyan-badge-<?= h($sv0['css']) ?> bl-durum-tetik" aria-haspopup="true" aria-expanded="false"
+                            title="Durumu değiştir"><?= h($sv0['label']) ?> <span class="bl-durum-ok" aria-hidden="true">▾</span></button>
+                    <div class="bl-durum-menu" role="group" aria-label="Durum seçenekleri" inert>
+                        <?php foreach ($durum_sirasi as $i => $ns): if ($ns === $r['status']) continue; $sv1 = $durum_etiketleri[$ns] ?? null; if (!$sv1) continue; ?>
+                        <button type="submit" name="status" value="<?= h($ns) ?>" class="beyan-badge beyan-badge-<?= h($sv1['css']) ?> bl-durum-sec"
+                                style="--sira:<?= (int)$i ?>"<?= $ns === 'red' ? ' data-red="1"' : '' ?>><?= h($sv1['label']) ?></button>
+                        <?php endforeach; ?>
+                    </div>
+                </form><?php else: echo beyan_badge_html($r['status']); endif;
                 $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
                 if (can_beyan('hks.read') && $hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
             ?></td>
