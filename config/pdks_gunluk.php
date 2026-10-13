@@ -3200,6 +3200,11 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
             if (!$disTx) $pdo->rollBack();
             return ['ok' => false] + $tanimEngel;
         }
+        // v354: başka çavuşun TERS havuzundaki kart bu mesaiye giremez (tablo yoksa null).
+        if (($tersEngel = pdks_gunluk_ters_havuz_engeli($pdo, (int)$kart['id'], (int)$session['foreman_id'], (string)$session['depo'])) !== null) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false] + $tersEngel;
+        }
 
         $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, (int)$kart['id']);
         if ($acik !== null) {
@@ -3665,6 +3670,60 @@ function pdks_gunluk_yonelme_eki(string $s): string
     return "'" . ($unluyleBiter ? 'y' : '') . ($arka ? 'a' : 'e');
 }
 
+// =========================================================
+// v354 — TERS KART TAKİP bağlantı noktası (kart sahipliği kapısı)
+// =========================================================
+// Ters Kart Takip modülü (config/pdks_ters.php) çavuş başına KALICI bir kart
+// havuzu tutar (`ters_havuz_kart`, kart başına TEK aktif üyelik). Sahip kararı:
+// bir kartın İKİ farklı sahibi olmaz — başka çavuşun ters havuzundaki kart
+//   • normal kiosk GİRİŞ'inde (pdks_gunluk_faz8a_giris_kaydet, kart kilidi altında),
+//   • Kart Havuzu tanımında (pdks_gunluk_kart_tanim_kaydet + Seri Kart sınıflaması),
+//   • elle/toplu eklemede (pdks_faz8j_tanim_kart_engeli)
+// REDDEDİLİR. Aynı çavuş + aynı depo serbesttir (kart bazlı kilit çift girişi engeller).
+// Kapı TEK yerde: pdks_gunluk_ters_havuz_engeli(). Tablo yoksa (modül kurulmamış)
+// hiçbir şey değişmez — null döner. Bu dosya pdks_ters.php'yi require ETMEZ.
+
+/** Ters havuz tablosu var mı — yalnız "var" sonucu istek içinde önbelleklenir. */
+function pdks_gunluk_ters_havuz_sema_hazir(PDO $pdo): bool
+{
+    static $var;
+    $var ??= new WeakMap();
+    if (isset($var[$pdo])) return true;
+    if (!pdks_gunluk_tablo_var($pdo, 'ters_havuz_kart')) return false;
+    $var[$pdo] = true;
+    return true;
+}
+
+/** Kartın AKTİF ters havuz üyeliği (çavuş adıyla) ya da null. Tablo yoksa null. */
+function pdks_gunluk_ters_havuz_aktif(PDO $pdo, int $kartId): ?array
+{
+    if ($kartId < 1 || !pdks_gunluk_ters_havuz_sema_hazir($pdo)) return null;
+    $st = $pdo->prepare(
+        "SELECT h.*, f.name AS foreman_name
+           FROM ters_havuz_kart h
+           JOIN foremen f ON f.id = h.foreman_id
+          WHERE h.aktif_kart_id = ?"
+    );
+    $st->execute([$kartId]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Kart başka bir çavuşun (ya da başka deponun) ters havuzundaysa
+ * ['kod' => 'kart_ters_havuzda', 'hata' => …]; değilse null. Yazma yolunda kart
+ * kilidi ALTINDA çağrılır.
+ */
+function pdks_gunluk_ters_havuz_engeli(PDO $pdo, int $kartId, int $foremanId, string $depo): ?array
+{
+    $h = pdks_gunluk_ters_havuz_aktif($pdo, $kartId);
+    if ($h === null) return null;
+    $depoFarkli = pdks_gunluk_depo_fold(trim((string)$h['depo'])) !== pdks_gunluk_depo_fold(trim($depo));
+    if (!$depoFarkli && (int)$h['foreman_id'] === $foremanId) return null;
+    return ['kod' => 'kart_ters_havuzda',
+            'hata' => 'Bu kart ' . ($depoFarkli ? trim((string)$h['depo']) . ' deposunda ' : '')
+                    . (string)$h['foreman_name'] . ' çavuşunun ters kart havuzunda — yalnız o çavuşun mesaisinde kullanılabilir.'];
+}
+
 /**
  * Kartın AKTİF tanımı (çavuş/tip adlarıyla) ya da null. Tablo yoksa null —
  * çağıranlar "tanım yok" gibi davranır. Yazma yolunda kart kilidi ALTINDA çağrılır.
@@ -3790,6 +3849,11 @@ function pdks_gunluk_kart_tanim_kaydet(int $kartId, int $foremanId, int $tipId, 
     try {
         if (!$disTx) $pdo->beginTransaction();
         pdks_gunluk_faz8a_kart_kilitle($pdo, $kartId);
+        // v354: başka çavuşun TERS havuzundaki karta tanım yapılamaz (bir kartın iki sahibi olmaz).
+        if (($tersEngel = pdks_gunluk_ters_havuz_engeli($pdo, $kartId, $foremanId, $depo)) !== null) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'kart_ters_havuzda', 'hata' => $tersEngel['hata'] . ' Önce ters havuzdan çıkarın.'];
+        }
         $eski = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
         if ($eski && (int)$eski['foreman_id'] === $foremanId && (int)$eski['worker_type_id'] === (int)$tip['id']
             && pdks_gunluk_depo_fold((string)$eski['depo']) === pdks_gunluk_depo_fold($depo)) {
@@ -4030,8 +4094,10 @@ function pdks_gunluk_kart_tanim_satir_bilgi(PDO $pdo, string $ham, string $kayna
     $kart   = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
     $kalici = pdks_gunluk_uid_kalici_kartta_mi($kanonik, $pdo);
     $tanim  = $kart ? pdks_gunluk_kart_tanim_aktif($pdo, (int)$kart['id']) : null;
+    $ters   = $kart ? pdks_gunluk_ters_havuz_aktif($pdo, (int)$kart['id']) : null;
     return [
         'ok' => true, 'canonical' => $kanonik, 'exists' => $kart !== null,
+        'ters' => $ters ? ['foreman_id' => (int)$ters['foreman_id'], 'foreman_name' => (string)$ters['foreman_name'], 'depo' => (string)$ters['depo']] : null,
         'card_id' => $kart ? (int)$kart['id'] : null, 'card_no' => $kart ? (string)$kart['card_no'] : null,
         'status' => $kart ? (string)$kart['status'] : null,
         'kartsiz' => $kart ? (string)($kart['enrolled_source'] ?? '') === 'kartsiz' : false,
@@ -4058,6 +4124,13 @@ function pdks_gunluk_kart_tanim_satir_sinifla(array $b, int $foremanId, int $tip
     if (!empty($b['kartsiz'])) return ['sinif' => 'hata', 'kod' => 'kartsiz_kart', 'hata' => 'Kartsız mesainin sanal kartı.'];
     if ($b['status'] === 'lost')     return ['sinif' => 'hata', 'kod' => 'kart_kayip', 'hata' => 'Kart KAYIP olarak işaretli (' . $b['card_no'] . ').'];
     if ($b['status'] === 'disabled') return ['sinif' => 'hata', 'kod' => 'kart_devre_disi', 'hata' => 'Kart DEVRE DIŞI (' . $b['card_no'] . ').'];
+    // v354: başka çavuşun (ya da başka deponun) TERS havuzundaki kart → ENGEL.
+    $tr = $b['ters'] ?? null;
+    if ($tr !== null && ((int)$tr['foreman_id'] !== $foremanId
+            || pdks_gunluk_depo_fold((string)$tr['depo']) !== pdks_gunluk_depo_fold(trim($depo)))) {
+        return ['sinif' => 'baska_cavus', 'kod' => 'kart_ters_havuzda',
+                'hata' => 'Kart ' . $tr['foreman_name'] . ' çavuşunun ters kart havuzunda (' . $tr['depo'] . ') — önce ters havuzdan çıkarın.'];
+    }
     $t = $b['tanim'];
     if ($t === null) return ['sinif' => 'tanimlanacak'];
     if ((int)$t['foreman_id'] !== $foremanId) {
@@ -4361,6 +4434,9 @@ function pdks_gunluk_kart_gecmis_tablolari(): array
         'daily_worker_card_events'  => 'worker_card_id',
         'daily_worker_work_periods' => 'worker_card_id',
         'worker_card_assignments'   => 'worker_card_id',
+        // v354 Ters Kart Takip (opsiyonel tablolar — yoksa çağıranın tablo_var süzgeci atlar)
+        'ters_havuz_kart'           => 'worker_card_id',
+        'ters_sayim_kart'           => 'worker_card_id',
     ];
 }
 
@@ -4468,6 +4544,10 @@ function pdks_gunluk_kart_tanimsiz_sil(array $kartIds, string $reason, string $i
             if ($tanimHazir && ($t = pdks_gunluk_kart_tanim_aktif($pdo, $kid))) {
                 $hatalar[] = ['kart_id' => $kid, 'card_no' => $no,
                               'hata' => 'Kart ' . pdks_gunluk_kart_tanim_kime($t) . ' tanımlı — önce Tanımı Kaldır.']; continue;
+            }
+            if ($h = pdks_gunluk_ters_havuz_aktif($pdo, $kid)) {
+                $hatalar[] = ['kart_id' => $kid, 'card_no' => $no,
+                              'hata' => 'Kart ' . (string)$h['foreman_name'] . ' çavuşunun ters kart havuzunda — önce ters havuzdan çıkarın.']; continue;
             }
             $ic = $faz8a ? pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid) : pdks_gunluk_kart_acik_girisi($kid, $pdo);
             if ($ic) {

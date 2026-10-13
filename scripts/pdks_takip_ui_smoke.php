@@ -153,12 +153,12 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
     printf("%-84s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    → " . $ipucu);
 }
 
-echo "\n=== Faz 8I. personel_takip.php — admin: tam 10 aktif kart görünür ===\n";
+echo "\n=== Faz 8I. personel_takip.php — admin: tam 11 aktif kart görünür (v354: +Ters Kart Takip) ===\n";
 $IS_ADMIN = true;
 $s0 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0, 'Notice:'));
-ok('admin: tam 10 ana home-card var', substr_count($s0, 'class="home-card"') === 10);
+ok('admin: tam 11 ana home-card var (v354: +Ters Kart Takip)', substr_count($s0, 'class="home-card"') === 11);
 ok('admin: iki rapor kartı aynı bölümde yan yana',
     (bool)preg_match('/Yönetim Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
 foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Ücretleri', 'Hakedişler',

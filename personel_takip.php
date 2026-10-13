@@ -92,6 +92,14 @@ render_flash();
 </a>
 <?php endif; ?>
 
+<?php if ($p_adm || can('attendance.daily_scan') || can('attendance.worker_cards') || can('attendance.daily_reports')): ?>
+<a href="ters_kart.php" class="home-card">
+    <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
+    <div class="home-card-title">↩ Ters Kart Takip</div>
+    <div class="home-card-sub">Sabah kalan kart sayımı · hızlı çıkış · mutabakat</div>
+</a>
+<?php endif; ?>
+
 <?php if ($p_adm || can('attendance.daily_reports')): ?>
 <a href="gunluk_isci_puantaj.php" class="home-card">
     <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
