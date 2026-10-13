@@ -22,7 +22,7 @@ $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 $base = base_url();
 $depo = pdks_ters_aktif_depo();
-$tarih = (string)($_GET['tarih'] ?? date('Y-m-d'));
+$tarih = is_string($_GET['tarih'] ?? null) ? $_GET['tarih'] : date('Y-m-d');
 $d = DateTimeImmutable::createFromFormat('!Y-m-d', $tarih);
 if (!$d || $d->format('Y-m-d') !== $tarih || $tarih > date('Y-m-d')) $tarih = date('Y-m-d');
 $hazir = pdks_ters_sema_hazir($pdo);
@@ -74,6 +74,7 @@ render_flash();
         <div><dt>Aktif kart havuzu</dt><dd><?= (int)$r['havuz']['aktif'] ?><?= $r['havuz']['toplam'] !== $r['havuz']['aktif'] ? ' <small class="muted">(+' . ($r['havuz']['toplam'] - $r['havuz']['aktif']) . ' kayıp/bozuk/pasif)</small>' : '' ?></dd></div>
         <div><dt>Sabah dağıtılmamış (elde kalan)</dt><dd><?= (int)$r['kalan'] ?></dd></div>
         <div><dt>Dağıtılmış kart</dt><dd><strong><?= (int)$r['dagitilan'] ?></strong><?= ($s['beyan'] ?? null) !== null ? ' <small class="muted">(çavuş beyanı ' . (int)$s['beyan'] . ')</small>' : '' ?></dd></div>
+        <?php if ($r['teyitli']): ?><div class="tk-mt-turuncu"><dt>Bunun "bugün dağıtıldı" teyitli (dönmemiş) kart</dt><dd><?= (int)$r['teyitli'] ?></dd></div><?php endif; ?>
         <div><dt>Giriş kaydı</dt><dd><?= (int)$r['giris'] ?><?= $r['iptal'] ? ' <small class="muted">(' . (int)$r['iptal'] . ' iptal)</small>' : '' ?></dd></div>
         <div><dt>Çıkış kaydı = geri alınan kart</dt><dd><?= (int)$r['cikis'] ?></dd></div>
         <div class="<?= $r['iceride'] ? 'tk-mt-mavi' : '' ?>"><dt>Hâlâ içeride (mesai açık)</dt><dd><?= (int)$r['iceride'] ?></dd></div>

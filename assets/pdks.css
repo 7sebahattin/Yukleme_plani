@@ -2607,3 +2607,6 @@ html[data-theme="dark"] .pdks-badge-ters { background: #1e1b4b; color: #c7d2fe; 
 @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) .pdks-badge-ters { background: #1e1b4b; color: #c7d2fe; border-color: #3730a3; } }
 
 @media print { .tk-sekmeler, .tk-tara, .tk-eylemler, .tk-sonuc { display: none !important; } }
+/* v354: koyu temada aktif sekme — beyaz yazı için yeterli kontrast (≥4.5:1) */
+html[data-theme="dark"] .tk-sekme.aktif { background: #1d4ed8; border-color: #1d4ed8; }
+@media (prefers-color-scheme: dark) { html:not([data-theme="light"]) .tk-sekme.aktif { background: #1d4ed8; border-color: #1d4ed8; } }

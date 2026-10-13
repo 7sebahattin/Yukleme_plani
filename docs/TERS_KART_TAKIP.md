@@ -135,3 +135,31 @@ TK_SAYFA=sayim php scripts/pdks_ters_kart_render.php > _test_ters_sayim.html   #
   okuyucu kullanılır.
 - Bağlantı koparsa okutma kaydedilmez ve ekranda kırmızı uyarı çıkar (çevrimdışı
   kuyruk yok); taslak sunucuda olduğu için kaydedilenler kaybolmaz.
+
+## Bağımsız denetim (v354) — düzeltilenler ve açık konular
+
+Düzeltildi:
+- İleri tarihli sabit saatte (≤2 sa) giriş saatinden ÖNCE çıkış yazılabiliyordu →
+  `pdks_gunluk_faz8a_cikis_kaydet()` artık `giris_saati_gelmedi` ile reddeder (eski
+  yollar giriş saatini hep ≤ şimdi yazdığı için mevcut davranış değişmez).
+- Saat ayarı olmayan çavuşta elle girilen saat gerekçesiz geçiyordu → gerekçe zorunlu.
+- Bugün çalışıp çıkmış kart sayımda okutulmazsa ikinci katılım sessizce yazılıyordu →
+  önizlemede/onayda **uyarı** (sahip kararı: karışık gün serbest, engel değil). Aynı
+  saatlerle çakışan dönem zaten ENGEL.
+- "Bugün dağıtıldı" teyidi ve sayım ekranından "Kayıp" yalnız önceki günden dönmemiş
+  kartlar için; mutabakat teyitli kart sayısını ayrıca gösterir.
+- Aktarmada hedef havuz sınırı ve tanım tipi, eklemede havuz sınırı kart yaratılmadan önce.
+- Personel Takibi kartı tablolar yokken yalnız yöneticiye görünür.
+
+Açık (sahip kararı gerekir, kod DEĞİŞTİRİLMEDİ):
+- **Sabit saatin alt sınırı yok.** Gerekçe zorunlu ve audit'te, ama ör. öğleden sonra
+  "00:00" girilebilir. İstenirse "onay anından en fazla N saat önce" kuralı eklenir.
+- **Mesaiyi Kapat ile onay yarışı (paylaşılan kod):** `pdks_gunluk_oturum_kapat()` mesai
+  satırını kilitlemeden özet okur; çok dar bir zaman penceresinde onayla eşzamanlı kapatma
+  yeni açık dönemlerle mesaiyi gerekçesiz kapatabilir (ertesi sabah bu kartlar "dönmemiş"
+  olarak onayı engeller — sessiz kayıp yok). Düzeltme kiosk tarafını da etkiler.
+- **Havuz ekranı bilinmeyen UID için kart oluşturur** (görev tanımındaki "yeni kart
+  ekleme"); v301'deki "kart eklemenin tek yolu Seri Kart Tanımla" kararına ikinci bir
+  giriş noktası. Ters havuz dışında kullanılmaz; istenirse yalnız mevcut kartlarla sınırlanır.
+- Onay ile havuz işlemleri farklı kilit sırasıyla çakışırsa InnoDB deadlock'u bir tarafı
+  geri alır (veri bozulmaz, "eşzamanlı işlem" mesajı).

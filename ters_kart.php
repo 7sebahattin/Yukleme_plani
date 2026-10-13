@@ -57,7 +57,7 @@ render_flash();
 <?php else: ?>
 <div class="tk-cavus-grid">
     <?php foreach ($durumlar as $c): $sd = $c['sayim']['durum'] ?? null; ?>
-    <a class="tk-cavus-kart" href="<?= $y['tarama'] ? 'ters_kart_sayim.php?cavus=' . (int)$c['foreman_id'] : 'ters_kart_mutabakat.php' ?>">
+    <a class="tk-cavus-kart" href="<?= h($y['tarama'] ? 'ters_kart_sayim.php?cavus=' . (int)$c['foreman_id'] : ($y['mutabakat'] ? 'ters_kart_mutabakat.php' : 'ters_kart_havuz.php?cavus=' . (int)$c['foreman_id'])) ?>">
         <span class="tk-cavus-ad"><?= h($c['name']) ?></span>
         <span class="tk-cavus-alt">Havuz <?= (int)$c['havuz']['aktif'] ?> aktif<?= $c['havuz']['kayip'] ? ' · ' . (int)$c['havuz']['kayip'] . ' kayıp' : '' ?><?= $c['havuz']['bozuk'] ? ' · ' . (int)$c['havuz']['bozuk'] . ' bozuk' : '' ?></span>
         <?php if ($sd === 'onayli'): ?><span class="tk-rozet tk-rozet-ok">✓ <?= (int)$c['sayim']['dagitilan'] ?> kişi girdi</span>

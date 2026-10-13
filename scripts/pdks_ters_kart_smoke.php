@@ -99,7 +99,7 @@ function kartIdUid(string $uid): int { return say("SELECT id FROM worker_cards W
 $kadin = say("SELECT id FROM worker_types WHERE code='KADIN'");
 $erkek = say("SELECT id FROM worker_types WHERE code='ERKEK'");
 $cavus = [];
-foreach (['A', 'B', 'C', 'D'] as $i => $h) {
+foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $i => $h) {
     $cavus[$h] = (int)pdks_gunluk_cavus_olustur(['code' => 'C' . str_pad((string)($i + 1), 3, '0', STR_PAD_LEFT), 'name' => 'Çavuş ' . $h], 1, db())['id'];
 }
 $uidA = fn(int $i): string => (string)(200000000 + $i);   // Çavuş A havuzu (1..60)
@@ -346,9 +346,9 @@ $r = pdks_gunluk_faz8a_giris_kaydet($uidC(1), 'usb_decimal', $sC, $erkek, 'auto'
 ok('C havuz kartı C\'nin normal girişine girebilir', !empty($r['ok']), j($r));
 $sc = (int)pdks_ters_sayim_ac($cavus['C'], 1, db())['sayim']['id'];
 foreach ([9, 10] as $i) pdks_ters_sayim_okut($sc, $uidC($i), 'usb_decimal', 1, db());
-$d = pdks_ters_sayim_onizle($sc, $saat, '', '', db())['degerlendirme'];
+$d = pdks_ters_sayim_onizle($sc, $saat, 'ayar yok', '', db())['degerlendirme'];
 ok('C önizleme: zaten içeride 1 · dağıtılacak 7 · çalışan 8', $d['ok'] && $d['ozet']['zaten_iceride'] === 1 && $d['ozet']['dagitilacak'] === 7 && $d['ozet']['calisan'] === 8, j($d['ozet']) . j($d['genel']));
-$r = pdks_ters_sayim_onayla($sc, $saat, '', '', istek(), 1, db());
+$r = pdks_ters_sayim_onayla($sc, $saat, 'ayar yok', '', istek(), 1, db());
 ok('C onay: 7 yeni giriş, zaten içerideki kart için ikinci dönem YOK', !empty($r['ok']) && $r['ozet']['yeni_giris'] === 7
     && say("SELECT COUNT(*) FROM daily_worker_work_periods WHERE worker_card_id = ? AND is_voided = 0", [kartIdUid($uidC(1))]) === 1, j($r));
 
@@ -379,6 +379,8 @@ $uidD = fn(int $i): string => (string)(500000000 + $i);
 for ($i = 1; $i <= 6; $i++) pdks_ters_havuz_ekle($uidD($i), 'usb_decimal', $cavus['D'], $kadin, 1, db());
 $sd = (int)pdks_ters_sayim_ac($cavus['D'], 1, db())['sayim']['id'];
 pdks_ters_sayim_okut($sd, $uidD(6), 'usb_decimal', 1, db());
+$r = pdks_ters_sayim_onayla($sd, $saat, '', '', istek(), 1, db());
+ok('ayarsız çavuşta elle saat GEREKÇESİZ → red (denetim bulgusu)', ($r['kod'] ?? '') === 'onaylanamaz' && str_contains($r['hata'], 'gerekçe'), j($r));
 $r = pdks_ters_sayim_onayla($sd, $saat, 'ayar yok', '', istek(), 1, db());
 ok('D onay (ayarsız çavuş: saat elle) → 5 giriş', !empty($r['ok']) && $r['ozet']['yeni_giris'] === 5, j($r));
 $sidD = (int)$r['session_id'];
@@ -389,7 +391,7 @@ $yeniD = (int)$r['yeni_sayim_id'];
 ok('yeni taslak kalan okutmayı devraldı (1 kalan)', pdks_ters_sayim_sayac(db(), pdks_ters_sayim_getir(db(), $yeniD))['kalan'] === 1);
 ok('eski sayım geri_alindi, anahtar boşaldı', ($x = pdks_ters_sayim_getir(db(), $sd)) && $x['durum'] === 'geri_alindi' && $x['aktif_anahtar'] === null);
 pdks_ters_sayim_okut($yeniD, $uidD(5), 'usb_decimal', 1, db());
-$r = pdks_ters_sayim_onayla($yeniD, $saat, '', '', istek(), 1, db());
+$r = pdks_ters_sayim_onayla($yeniD, $saat, 'ayar yok', '', istek(), 1, db());
 ok('düzeltilmiş sayım onaylandı → 4 giriş (iptal edilenler kart kilitlemez)', !empty($r['ok']) && $r['ozet']['yeni_giris'] === 4, j($r));
 ok('mesai özeti yalnız etkin dönemleri sayar (4)', pdks_gunluk_faz8a_oturum_ozet($sidD, db())['giris_toplam'] === 4);
 // aynı anahtar ikinci aktif sayım: UNIQUE
@@ -411,6 +413,41 @@ ok('aktarma: kart C havuzuna geçti', !empty($r['ok']) && (int)pdks_gunluk_ters_
 $r = pdks_ters_havuz_sifirla($cavus['D'], 'yeniden kurulum', 1, db());
 ok('havuz sıfırlandı (üyelikler kapandı, satırlar duruyor)', !empty($r['ok']) && pdks_ters_havuz_uyeleri(db(), $cavus['D'], 'Depo A') === [] && say("SELECT COUNT(*) FROM ters_havuz_kart WHERE foreman_id = ?", [$cavus['D']]) >= 6, j($r));
 ok('geçmiş: kart hareketleri okunur', count(pdks_ters_kart_hareketleri(db(), kartIdUid($uidA(10)))) >= 2);
+
+echo "\n=== K. Denetim bulguları (v354 düzeltmeleri) ===\n";
+$uidE = fn(int $i): string => (string)(900000000 + $i);
+for ($i = 1; $i <= 4; $i++) pdks_ters_havuz_ekle($uidE($i), 'usb_decimal', $cavus['E'], $kadin, 1, db());
+// (3) bugün normal girip çıkmış kart sayımda okutulmazsa → İKİNCİ katılım UYARISI (engel değil)
+$sE = (int)pdks_gunluk_oturum_ac_veya_getir($cavus['E'], 1, db())['session']['id'];
+pdks_gunluk_faz8a_giris_kaydet($uidE(1), 'usb_decimal', $sE, $kadin, 'auto', 1, db());
+pdks_gunluk_ortak_cikis_kaydet($uidE(1), 'usb_decimal', 1, db());
+$se = (int)pdks_ters_sayim_ac($cavus['E'], 1, db())['sayim']['id'];
+$d = pdks_ters_sayim_onizle($se, $saat, 'x', '', db())['degerlendirme'];
+ok('bugün sabit saatten SONRA çıkmış kart → çakışma ENGELİ (aynı saatlerde iki dönem yok)', !$d['ok'] && count($d['hatalar']) === 1 && str_contains($d['hatalar'][0]['sebep'], 'çakışan'), j($d['hatalar']));
+if ((int)date('H') <= 22) {
+    $d = pdks_ters_sayim_onizle($se, sprintf('%02d:00', (int)date('H') + 1), 'x', '', db())['degerlendirme'];
+    ok('bugün çalışıp ÇIKMIŞ kart, sabit saat sonra → ikinci katılım UYARISI (engel değil)', $d['ok'] && str_contains(implode(' ', $d['uyarilar']), 'İKİNCİ'), j($d['uyarilar']) . j($d['genel']));
+} else { ok('(23:xx — ikinci katılım uyarısı testi atlandı)', true); }
+// (4)/(5) teyit ve sayım ekranından kayıp YALNIZ dönmemiş kart için
+$r = pdks_ters_sayim_karar($se, kartIdUid($uidE(2)), 'dagitildi', '', 1, db());
+ok('dönmemiş olmayan karta "bugün dağıtıldı" teyidi verilemez', ($r['kod'] ?? '') === 'donmemis_degil', j($r));
+$r = pdks_ters_sayim_karar($se, kartIdUid($uidE(2)), 'kayip', '', 1, db());
+ok('sayım ekranından dönmemiş olmayan kart Kayıp işaretlenemez', ($r['kod'] ?? '') === 'donmemis_degil' && satir("SELECT status FROM worker_cards WHERE id = ?", [kartIdUid($uidE(2))])['status'] === 'available', j($r));
+// (1) ileri tarihli sabit saat: çıkış giriş saatinden önce yazılamaz
+$ileriSaat = (int)date('H') + 1;
+if ($ileriSaat <= 23) {
+    $uidF = fn(int $i): string => (string)(950000000 + $i);
+    for ($i = 1; $i <= 2; $i++) pdks_ters_havuz_ekle($uidF($i), 'usb_decimal', $cavus['F'], $kadin, 1, db());
+    $sf = (int)pdks_ters_sayim_ac($cavus['F'], 1, db())['sayim']['id'];
+    $r = pdks_ters_sayim_onayla($sf, sprintf('%02d:00', $ileriSaat), 'erken onay', '', istek(), 1, db());
+    ok('sabit saat ileride (≤2 sa) → onay kabul', !empty($r['ok']), j($r));
+    $r = pdks_ters_cikis_kaydet($uidF(1), 'usb_decimal', 1, db());
+    ok('giriş saati gelmeden çıkış → giris_saati_gelmedi, çıkış yazılmadı', ($r['kod'] ?? '') === 'giris_saati_gelmedi'
+        && say("SELECT COUNT(*) FROM daily_worker_card_events WHERE worker_card_id = ? AND event_type = 'CIKIS'", [kartIdUid($uidF(1))]) === 0, j($r));
+} else { ok('(23:xx — ileri saat çıkış testi atlandı)', true); }
+$mt = pdks_ters_mutabakat(db(), date('Y-m-d'), 'Depo A');
+$ra = array_values(array_filter($mt['satirlar'], fn($x) => $x['foreman_id'] === $cavus['A']))[0] ?? [];
+ok('mutabakat teyitli (dönmemiş) kart sayısını ayrıca gösterir (A: 2)', ($ra['teyitli'] ?? -1) === 2, j($ra['teyitli'] ?? null));
 
 echo "\n=== J. Statik sözleşmeler ===\n";
 $src = file_get_contents($ROOT . '/config/pdks_ters.php');

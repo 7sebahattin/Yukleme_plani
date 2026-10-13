@@ -49,6 +49,14 @@ if ($p_adm || can('attendance.daily_scan')) {
         if (pdks_gunluk_sema_hazir()) $eskiAcikSayi = count(pdks_gunluk_eski_acik_oturumlar());
     } catch (Throwable $e) { $eskiAcikSayi = 0; }
 }
+// v354 Ters Kart Takip kartı: tablolar kurulmadıysa yalnız yönetici görür (kurulum uyarısı için). Hata sayfayı bozmaz.
+$tersGoster = $p_adm;
+if (!$tersGoster && $_fn && (can('attendance.daily_scan') || can('attendance.worker_cards') || can('attendance.daily_reports'))) {
+    try {
+        require_once __DIR__ . '/config/pdks_gunluk.php';
+        $tersGoster = pdks_gunluk_ters_havuz_sema_hazir(db());
+    } catch (Throwable $e) { $tersGoster = false; }
+}
 
 render_header('Personel Takibi');
 echo '<link rel="stylesheet" href="' . base_url() . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
@@ -92,7 +100,7 @@ render_flash();
 </a>
 <?php endif; ?>
 
-<?php if ($p_adm || can('attendance.daily_scan') || can('attendance.worker_cards') || can('attendance.daily_reports')): ?>
+<?php if ($tersGoster): ?>
 <a href="ters_kart.php" class="home-card">
     <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
     <div class="home-card-title">↩ Ters Kart Takip</div>

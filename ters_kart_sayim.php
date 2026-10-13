@@ -173,8 +173,8 @@ render_flash();
             <?php if ($sayim['varsayilan_giris_saati'] === null): ?>
                 <div class="tk-kutu tk-kutu-uyari">Bu çavuş için tanımlı giriş saati yok — saati elle girin<?= $y['havuz'] ? ' (kalıcı ayar: <a href="ters_kart_havuz.php?cavus=' . (int)$cavusId . '">Kart Havuzu</a>)' : '' ?>.</div>
             <?php endif; ?>
-            <label class="tk-etiket" id="tkNedenAlan" hidden>Saat değişikliği gerekçesi
-                <input type="text" id="tkNeden" maxlength="255" placeholder="Tanımlı saatten farklı — neden?">
+            <label class="tk-etiket" id="tkNedenAlan"<?= $sayim['varsayilan_giris_saati'] === null ? '' : ' hidden' ?>>Saat gerekçesi
+                <input type="text" id="tkNeden" maxlength="255" placeholder="<?= $sayim['varsayilan_giris_saati'] === null ? 'Tanımlı saat yok — neden bu saat?' : 'Tanımlı saatten farklı — neden?' ?>">
             </label>
             <div id="tkOnizleme" class="tk-onizleme" aria-live="polite"></div>
             <button type="button" id="tkOnayBtn" class="btn btn-primary tk-buyuk-btn" disabled>✅ Girişleri onayla</button>

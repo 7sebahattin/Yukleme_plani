@@ -3382,6 +3382,14 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
         }
 
         $simdi = date('Y-m-d H:i:s');
+        // v354: çıkış girişten ÖNCE olamaz. Yalnız Ters Kart Takip'in ileri tarihli sabit
+        // giriş saati (ör. 06:30'da onaylanan 08:00 girişi) bu duruma düşebilir; eski yollar
+        // giriş saatini hep ≤ şimdi yazdığı için mevcut davranış DEĞİŞMEZ.
+        if ($simdi < (string)$acik['entry_time']) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'giris_saati_gelmedi',
+                    'hata' => 'Bu kartın giriş saati (' . substr((string)$acik['entry_time'], 11, 5) . ') henüz gelmedi — çıkış giriş saatinden önce yazılamaz.'];
+        }
         $insE = $pdo->prepare(
             "INSERT INTO daily_worker_card_events
                 (session_id, worker_card_id, event_type, source, canonical_uid_snapshot,

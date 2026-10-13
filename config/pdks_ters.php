@@ -486,6 +486,9 @@ function pdks_ters_havuz_ekle(string $ham, string $kaynak, int $foremanId, int $
     if (!$u['ok']) return $u;
     $kart = $u['kart'];
     $yeniKart = false;
+    if ($kart === null && count(pdks_ters_havuz_uyeleri($pdo, $foremanId, $depo)) >= PDKS_TERS_HAVUZ_LIMIT) {
+        return pdks_ters_red('limit', 'Bir çavuşun havuzunda en çok ' . PDKS_TERS_HAVUZ_LIMIT . ' kart olabilir.');   // kart yaratılmadan önce
+    }
     if ($kart === null) {
         $engel = pdks_gunluk_kalici_kart_engeli($ham, $kaynak, $pdo);
         if ($engel !== null) return ['ok' => false] + $engel;
@@ -608,9 +611,13 @@ function pdks_ters_havuz_aktar(int $kartId, int $foremanId, int $hedefForemanId,
         if (!$m) { $pdo->rollBack(); return pdks_ters_red('uye_degil', 'Kart bu çavuşun havuzunda değil.'); }
         $st = $pdo->prepare('SELECT * FROM worker_cards WHERE id = ?'); $st->execute([$kartId]); $kart = $st->fetch();
         $t = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
-        if ($t && ((int)$t['foreman_id'] !== $hedefForemanId || !pdks_ters_depo_esit((string)$t['depo'], $depo))) {
+        if ($t && ((int)$t['foreman_id'] !== $hedefForemanId || !pdks_ters_depo_esit((string)$t['depo'], $depo) || (int)$t['worker_type_id'] !== (int)$m['worker_type_id'])) {
             $pdo->rollBack();
             return pdks_ters_red('tanim_cakisma', 'Kart Kart Havuzu\'nda ' . pdks_gunluk_kart_tanim_kime($t) . ' tanımlı — önce Tanımı Kaldır.');
+        }
+        if (count(pdks_ters_havuz_uyeleri($pdo, $hedefForemanId, $depo)) >= PDKS_TERS_HAVUZ_LIMIT) {
+            $pdo->rollBack();
+            return pdks_ters_red('limit', 'Hedef çavuşun havuzu dolu (en çok ' . PDKS_TERS_HAVUZ_LIMIT . ' kart).');
         }
         pdks_ters_uyelik_kapat($pdo, (int)$m['id'], $kartId, $user, 'Aktarıldı: ' . $reason);
         $yeni = pdks_ters_uyelik_ac($pdo, $hedefForemanId, $depo, $kartId, (int)$m['worker_type_id'], $user);
@@ -700,6 +707,7 @@ function pdks_ters_kart_durum(int $kartId, int $foremanId, string $islem, string
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
+        if (pdks_ters_eszamanli($e)) return pdks_ters_red('eszamanli', PDKS_TERS_ESZAMANLI);
         error_log('[pdks_ters_kart_durum] ' . $e->getMessage());
         return pdks_ters_red('yazma_hatasi', 'Kart durumu değiştirilemedi. Lütfen tekrar deneyin.');
     }
@@ -909,6 +917,11 @@ function pdks_ters_sayim_karar(int $sayimId, int $kartId, string $karar, string 
         $s = pdks_ters_sayim_getir($pdo, $sayimId);
         if (!$s) return pdks_ters_red('sayim_yok', 'Sayım bulunamadı.');
         if ((string)$s['durum'] !== 'taslak') return pdks_ters_red('sayim_kapali', 'Sayım taslak değil.');
+        if (!pdks_ters_depo_esit((string)$s['depo'], pdks_ters_aktif_depo())) return pdks_ters_red('yanlis_depo', 'Bu sayım aktif depoya ait değil.');
+        if ((string)$s['work_date'] !== date('Y-m-d')) return pdks_ters_red('eski_gun', 'Bu sayım geçmiş bir güne ait.');
+        // Denetim bulgusu: sayım ekranından (daily_scan) YALNIZ dönmemiş kart kayıp işaretlenir; diğerleri Kart Havuzu (worker_cards).
+        $dm = pdks_ters_donmemis($pdo, $kartId);
+        if (!$dm || (string)$dm['work_date'] >= (string)$s['work_date']) return pdks_ters_red('donmemis_degil', 'Sayım ekranından yalnız önceki günden dönmemiş kart Kayıp işaretlenebilir — diğer kartlar için Kart Havuzu ekranını kullanın.');
         $r = pdks_ters_kart_durum($kartId, (int)$s['foreman_id'], 'kayip', $not !== '' ? $not : 'Sabah sayımında dönmemiş kart', $user, $pdo);
         if (!$r['ok']) return $r;
         return ['ok' => true, 'sayac' => pdks_ters_sayim_sayac($pdo, $s)];
@@ -931,6 +944,9 @@ function pdks_ters_sayim_karar(int $sayimId, int $kartId, string $karar, string 
                 $pdo->rollBack(); return pdks_ters_red('havuz_disi', 'Kart bu çavuşun havuzunda değil.');
             }
             if ($mevcut) { $pdo->rollBack(); return pdks_ters_red('zaten', $mevcut['rol'] === 'kalan' ? 'Kart kalan olarak okutulmuş.' : 'Teyit zaten verilmiş.'); }
+            // Denetim bulgusu: teyit YALNIZ önceki günden dönmemiş kart için (aksi hâlde normal kart zaten dağıtılmış sayılır).
+            $dm = pdks_ters_donmemis($pdo, $kartId);
+            if (!$dm || (string)$dm['work_date'] >= (string)$s['work_date']) { $pdo->rollBack(); return pdks_ters_red('donmemis_degil', 'Teyit yalnız önceki günden dönmemiş kartlar için verilir.'); }
             $c = $pdo->prepare('SELECT card_no FROM worker_cards WHERE id = ?'); $c->execute([$kartId]);
             $pdo->prepare('INSERT INTO ters_sayim_kart (sayim_id, worker_card_id, rol, worker_type_id_snapshot, worker_type_name_snapshot, card_no_snapshot, okutma_zamani, user_id) VALUES (?,?,?,?,?,?,?,?)')
                 ->execute([$sayimId, $kartId, 'teyit', (int)$m['worker_type_id'], pdks_ters_tip_adi($pdo, (int)$m['worker_type_id']), (string)$c->fetchColumn(), date('Y-m-d H:i:s'), $user]);
@@ -1013,6 +1029,10 @@ function pdks_ters_sayim_degerlendir(PDO $pdo, array $sayim, ?string $girisZaman
     $satirlar = pdks_ters_sayim_satirlari($pdo, (int)$sayim['id']);
     $uyeler = pdks_ters_havuz_uyeleri($pdo, $foremanId, $depo);
     $stK = $pdo->prepare('SELECT * FROM worker_cards WHERE id = ?');
+    $stB = $pdo->prepare("SELECT p.entry_time, p.exit_time, COALESCE(f.name, s.foreman_name_snapshot) AS foreman_name
+                            FROM daily_worker_work_periods p JOIN daily_work_sessions s ON s.id = p.session_id LEFT JOIN foremen f ON f.id = s.foreman_id
+                           WHERE p.worker_card_id = ? AND p.work_date_snapshot = ? AND p.exit_time IS NOT NULL AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
+                           ORDER BY p.exit_time DESC LIMIT 1");
     $uyeIds = [];
     foreach ($uyeler as $u) {
         $kid = (int)$u['worker_card_id']; $uyeIds[$kid] = true;
@@ -1027,6 +1047,8 @@ function pdks_ters_sayim_degerlendir(PDO $pdo, array $sayim, ?string $girisZaman
             $out['ozet']['havuz_aktif']++;
             if ($sr && $sr['rol'] === 'kalan') {
                 $r['durum'] = 'kalan';
+                $acikK = pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid);
+                if ($acikK) $out['uyarilar'][] = 'Kart ' . $u['card_no'] . ' kalan okutuldu ama şu an ' . $acikK['foreman_name'] . ' mesaisinde içeride görünüyor — kartın gerçekten elde olduğunu kontrol edin.';
             } else {
                 $r['teyit'] = (bool)($sr && $sr['rol'] === 'teyit');
                 $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid);
@@ -1050,7 +1072,15 @@ function pdks_ters_sayim_degerlendir(PDO $pdo, array $sayim, ?string $girisZaman
                             ['foreman_id' => $foremanId, 'depo' => $mesai ? (string)$mesai['depo'] : $depo])
                         : pdks_faz8j_tanim_kart_engeli($pdo, $kid, $foremanId, $depo);
                     if ($kontrol !== null) { $r['durum'] = 'hata'; $r['sebep'] = $kontrol; }
-                    else $r['durum'] = 'dagitilacak';
+                    else {
+                        $r['durum'] = 'dagitilacak';
+                        // Denetim bulgusu: bugün zaten çalışıp çıkmış kart (normal okutma) → ikinci katılım. ENGEL DEĞİL (sahip kararı: karışık gün serbest).
+                        $stB->execute([$kid, $gun]);
+                        if ($b = $stB->fetch()) {
+                            $out['uyarilar'][] = 'Kart ' . $u['card_no'] . ' bugün ' . substr((string)$b['entry_time'], 11, 5) . '–' . substr((string)$b['exit_time'], 11, 5)
+                                . ' arasında zaten çalıştı (' . $b['foreman_name'] . ') — onaylanırsa İKİNCİ katılım yazılır. Kart elde ise kalan olarak okutun.';
+                        }
+                    }
                 }
             }
         }
@@ -1086,6 +1116,10 @@ function pdks_ters_giris_coz(array $sayim, string $saatHam, string $neden): arra
     if (mb_strlen($neden) > 255) return pdks_ters_red('gerekce', 'Açıklama en fazla 255 karakter olabilir.');
     if ($vars !== null && $saat !== $vars && $neden === '') {
         return pdks_ters_red('gerekce', 'Giriş saati çavuşun tanımlı saatinden (' . $vars . ') farklı — gerekçe yazın.');
+    }
+    // Denetim bulgusu: tanımlı saat yoksa elle girilen her saat gerekçe ister (audit'te kalır).
+    if ($vars === null && $neden === '') {
+        return pdks_ters_red('gerekce', 'Bu çavuşa tanımlı giriş saati yok — elle girilen saat için gerekçe yazın (kalıcı ayar: Kart Havuzu).');
     }
     return ['ok' => true, 'saat' => $saat, 'zaman' => (string)$sayim['work_date'] . ' ' . $saat . ':00', 'neden' => $neden, 'degisti' => $vars !== null && $saat !== $vars];
 }
@@ -1415,7 +1449,7 @@ function pdks_ters_mutabakat(PDO $pdo, string $workDate, string $depo): array
         $s = $sayimlar[$fid] ?? null;
         $row = ['foreman_id' => $fid, 'foreman_name' => (string)$c['name'], 'havuz' => $c['havuz'], 'sayim' => null,
                 'dagitilan' => 0, 'kalan' => 0, 'haric' => 0, 'giris' => 0, 'cikis' => 0, 'iceride' => 0, 'eksik_cikis' => 0, 'iptal' => 0,
-                'donmeyen_kartlar' => [], 'mesai' => null, 'mesai_toplam' => null];
+                'donmeyen_kartlar' => [], 'teyitli' => 0, 'mesai' => null, 'mesai_toplam' => null];
         $mesai = pdks_ters_bugunku_mesai($pdo, $fid, $workDate, $depo);
         if ($mesai) {
             $row['mesai'] = ['id' => (int)$mesai['id'], 'status' => (string)$mesai['status']];
@@ -1428,7 +1462,7 @@ function pdks_ters_mutabakat(PDO $pdo, string $workDate, string $depo): array
             if ((string)$s['durum'] === 'onayli') {
                 $row['dagitilan'] = (int)$s['dagitilan_adet']; $row['kalan'] = (int)$s['kalan_adet']; $row['haric'] = (int)$s['haric_adet'];
                 $q = $pdo->prepare(
-                    "SELECT k.card_no_snapshot AS card_no, k.worker_type_name_snapshot AS tip, p.exit_time, p.is_voided, s2.status AS s_status
+                    "SELECT k.card_no_snapshot AS card_no, k.worker_type_name_snapshot AS tip, k.teyitli, p.exit_time, p.is_voided, s2.status AS s_status
                        FROM ters_sayim_kart k
                        JOIN daily_worker_work_periods p ON p.id = k.period_id
                        JOIN daily_work_sessions s2 ON s2.id = p.session_id
@@ -1437,6 +1471,7 @@ function pdks_ters_mutabakat(PDO $pdo, string $workDate, string $depo): array
                 $q->execute([(int)$s['id']]);
                 foreach ($q->fetchAll() as $p) {
                     if ((int)($p['is_voided'] ?? 0)) { $row['iptal']++; continue; }
+                    if ((int)$p['teyitli']) $row['teyitli']++;
                     $row['giris']++;
                     if ($p['exit_time'] !== null) { $row['cikis']++; continue; }
                     if ((string)$p['s_status'] === 'open') $row['iceride']++; else $row['eksik_cikis']++;
@@ -1521,7 +1556,7 @@ function pdks_ters_json_govde(): array
 {
     $g = json_decode((string)file_get_contents('php://input'), true);
     if (!is_array($g)) $g = [];
-    csrf_check($g['csrf'] ?? null);
+    csrf_check(is_string($g['csrf'] ?? null) ? $g['csrf'] : null);
     return $g;
 }
 

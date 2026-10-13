@@ -279,7 +279,7 @@
         // ── Önizleme (salt okunur) + onay ──
         function nedenGoster() {
             if (!nedenAlan || !saatIn) return;
-            nedenAlan.hidden = !(v.varsayilan_saat && saatIn.value && saatIn.value !== v.varsayilan_saat);
+            nedenAlan.hidden = !(!v.varsayilan_saat || (saatIn.value && saatIn.value !== v.varsayilan_saat));
         }
         function onizleGecikmeli() { clearTimeout(onizZam); onizZam = setTimeout(onizle, 400); }
         function onizle() {
