@@ -12,7 +12,6 @@ if (!can_beyan('hks.read')) $suggest_data['products'] = [];
 $f = beyan_redact_fields($f);
 $tabs = ['beyan' => 'Beyan'];
 if (can_beyan('analysis.read')) $tabs['analiz'] = 'Analiz';
-if (can_beyan('hks.read')) $tabs['hks'] = 'Hal Bildirim';
 if (can_beyan('source.read')) $tabs['kaynak'] = 'Kaynak metin';
 $field = static function (string $name, string $label, string $icon, string $mode = '') use ($f): void {
     $section = null;
@@ -90,6 +89,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
                     <h2 class="beyan-section-title" data-ic="paket"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün ve Miktarlar</h2>
                     <div class="beyan-form-grid beyan-workspace-fields">
                         <?php $field('product_name', 'Ürün Adı', 'elma'); ?>
+                        <?php if (can_beyan('hks.read')): beyan_hks_form_bolumu($f, $is_edit ? $beyan : null, can_beyan('hks.write')); endif; ?>
                         <?php $field('product_variety', 'Ürün Çeşidi', 'etiket'); ?>
                         <?php $field('brand', 'Ambalaj Marka', 'rozet'); ?>
                     </div>
@@ -171,16 +171,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
             </div>
 
             <?php endif; ?>
-            <?php if (can_beyan('hks.read')): ?>
-            <div id="beyanPanel_hks" data-beyan-panel="hks" role="tabpanel" aria-labelledby="beyanTab_hks">
-                <div class="beyan-workspace-hks" aria-label="HKS hazırlık bilgileri" data-beyan-single-section>
-                    <fieldset class="beyan-permission-fieldset"<?= !can_beyan('hks.write') ? ' disabled' : '' ?>>
-                    <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null, can_beyan('hks.write')); ?>
-                    </fieldset>
-                </div>
-            </div>
-            <?php endif; ?>
-
             <?php if (can_beyan('source.read')): ?>
             <div id="beyanPanel_kaynak" data-beyan-panel="kaynak" role="tabpanel" aria-labelledby="beyanTab_kaynak">
                 <fieldset <?= !can_beyan('source.write') ? 'disabled' : '' ?> class="beyan-section" data-bf="wa">

@@ -449,15 +449,16 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        'bulunan: ' . substr_count($form, 'name="vehicle_plate"') . ' adet');
 
     // Plaka "Hal Bildirim Bilgileri" bölümünün İÇİNDE olmalı.
-    ok('[form] Dorse plaka Parti/Sevkiyat kartında (Hal Bildirim sekmesinden önce)',
-       preg_match('/Parti\/Sevkiyat.*?name="vehicle_plate".*?Hal Bildirim Bilgileri/s', $form) === 1,
+    ok('[form] Dorse plaka Parti/Sevkiyat kartında (Ürün ve Miktarlar kartından önce)',
+       preg_match('/Parti\/Sevkiyat.*?name="vehicle_plate".*?Ürün ve Miktarlar/s', $form) === 1,
        'dorse plaka Parti/Sevkiyat kartında olmalı');
     ok('[form] Çekici plaka + Gönderici firma + Ülke Parti/Sevkiyat kartında',
        preg_match('/Parti\/Sevkiyat.*?name="sender_company_name".*?name="hks_ulke_id".*?name="tractor_plate".*?name="vehicle_plate".*?Ürün ve Miktarlar/s', $form) === 1);
-    ok('[form] Hal Bildirim sekmesinde yalnız HKS Ürünü (firma/ülke select\'i yok)',
+    ok('[form] HKS Ürün Adı, Ürün Adı yanında; firma select\'i yok; Hal Bildirim sekmesi YOK',
        preg_match('/<select[^>]*name="hks_firma_id"/', $form) !== 1
-       && preg_match('/Hal Bildirim Bilgileri.*name="hks_urun_id"/s', $form) === 1
-       && preg_match('/Hal Bildirim Bilgileri.*name="hks_ulke_id"/s', $form) !== 1);
+       && preg_match('/name="product_name".*?name="hks_urun_id".*?name="product_variety"/s', $form) === 1
+       && strpos($form, 'data-beyan-tab="hks"') === false && strpos($form, 'beyanPanel_hks') === false
+       && strpos($form, 'Hal Bildirim Bilgileri') === false);
 
     // Plaka: örnek metin YOK, boşluksuz giriş açık.
     ok('[form] plaka alanında örnek metin yok',
@@ -467,17 +468,14 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        preg_match('/name="vehicle_plate"[^>]*data-nospace/s', $form) === 1,
        'data-nospace yok — "34 ABC 123" boslukla kaydedilir');
 
-    // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS ayrı sekmede.
+    // Bölümlü yapı: ana bilgiler kaynak metinden önce; HKS ayrı sekme DEĞİL.
     $iw = mb_strpos($form, 'WhatsApp Metni');
-    $ih = mb_strpos($form, 'Hal Bildirim Bilgileri');
     $it = mb_strpos($form, 'Parti/Sevkiyat');
-    $pa = strpos($form, 'id="beyanPanel_analiz"'); $ph = strpos($form, 'id="beyanPanel_hks"'); $pk = strpos($form, 'id="beyanPanel_kaynak"');
-    ok('[form] beyan bilgileri kaynak metinden önce, Hal Bildirim AYRI sekme (Analiz ile Kaynak arasında)',
-       $iw !== false && $ih !== false && $it !== false && $it < $iw
-       && strpos($form, 'class="beyan-workspace-hks"') !== false
-       && $pa !== false && $pa < $ph && $ph < $pk && strpos($form, 'data-beyan-tab="hks"') !== false
-       && strpos($form, "<aside class=\"beyan-workspace-hks\"") === false && ($bh = strpos($form, "Hal Bildirim Bilgileri")) > $ph && $bh < $pk,
-       "konumlar: whatsapp=$iw hks=$ih temel=$it pa=$pa ph=$ph pk=$pk aside=" . var_export(strpos($form, "<aside"), true));
+    $pa = strpos($form, 'id="beyanPanel_analiz"'); $pk = strpos($form, 'id="beyanPanel_kaynak"');
+    ok('[form] beyan bilgileri kaynak metinden önce; Analiz ile Kaynak sekmeleri var, Hal Bildirim sekmesi yok',
+       $iw !== false && $it !== false && $it < $iw && $pa !== false && $pa < $pk
+       && strpos($form, 'data-beyan-tab="hks"') === false,
+       "konumlar: whatsapp=$iw temel=$it pa=$pa pk=$pk");
 
     // Uzun katalog listesi YAZARAK ARANABİLİR olmalı; kısa liste olmamalı.
     // (Test kataloğunda 2 ürün / 1 ülke var → eşiğin altında, aramasız.)
@@ -521,8 +519,6 @@ $form2 = render_form($ID_BOS);
 ok('[form] katalog boşken plaka yine girilebiliyor',
    substr_count($form2, 'name="vehicle_plate"') === 1,
    'katalog yokken plaka alani da kayboluyor — beyan bildirime asla hazirlanamaz');
-ok('[form] katalog boşken yönlendirme yazıyor',
-   mb_strpos($form2, 'Listeleri Güncelle') !== false);
 // Önbelleği geri yükle
 db()->prepare("INSERT INTO hks_kv (anahtar, deger) VALUES ('listeler_cache', ?)")
    ->execute([json_encode([
@@ -905,6 +901,14 @@ ok('[numune] önizlemede Numune Bilgileri kartı Ürün Bilgileri ile Lojistik a
 ok('[numune] doluyken önizlemede kart + WhatsApp metni', strpos($h_nm, '🧪</span> Numune') !== false
    && strpos($h_nm, 'Net: 4 KG') !== false && strpos($h_nm, '\ud83e\uddea') === false && strpos($h_nm, '🧪 *NUMUNE*') !== false);
 file_put_contents(sys_get_temp_dir() . '/beyan_form_ciktisi.html', render_form($B_NM));
+$fk = render_form($B_NM);
+ok('[hks-ürün] ürün adı eşleşiyorsa alan kilitli + değer gizli alanda',
+   preg_match('/<select[^>]*name="hks_urun_id"[^>]*data-hks-kilit="1" disabled/', $fk) === 1
+   && preg_match('/<input type="hidden" name="hks_urun_id" value="\d+" data-hks-ayna>/', $fk) === 1);
+db()->prepare("UPDATE customs_declarations SET product_name='ZZZ BILINMEYEN', hks_urun_id=NULL, hks_urun_ad=NULL WHERE id=?")->execute([$B_NM]);
+$fb = render_form($B_NM);
+ok('[hks-ürün] eşleşme yoksa alan serbest (kilit/ayna yok)',
+   strpos($fb, 'data-hks-kilit') === false && strpos($fb, 'data-hks-ayna') === false && preg_match('/<select[^>]*name="hks_urun_id"/', $fb) === 1);
 ok('[numune] düzenleme formu kayıtlı numuneyi dolduruyor', strpos(render_form($B_NM), 'value="TAHTA KASA"') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',

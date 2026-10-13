@@ -325,14 +325,15 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
             <span class="lbl">Hat / Güzergah</span>
             <span class="val"><?= h($beyan['line_type'] ?: '—') ?></span>
         </div>
+        <?php if ($beyan['company_name'] || $beyan['company_address']): ?><div class="bv-satir-kir" aria-hidden="true"></div><?php endif; ?>
         <?php if ($beyan['company_name']): ?>
-        <div class="beyan-view-row" style="grid-column:1/-1" data-ic="bina">
+        <div class="beyan-view-row bv-gumruk-ad" data-ic="bina">
             <span class="lbl">Gümrük Adı</span>
             <span class="val"><?= h($beyan['company_name']) ?></span>
         </div>
         <?php endif; ?>
         <?php if ($beyan['company_address']): ?>
-        <div class="beyan-view-row" style="grid-column:1/-1" data-ic="konum">
+        <div class="beyan-view-row bv-gumruk-adres" data-ic="konum">
             <span class="lbl">Gümrük Adresi</span>
             <span class="val" style="white-space:pre-wrap"><?= h($beyan['company_address']) ?></span>
         </div>
