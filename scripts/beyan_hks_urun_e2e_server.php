@@ -25,7 +25,7 @@ if (PHP_SAPI === 'cli' && ($argv[1] ?? '') === '--kur') {
       sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
       hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
       hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL,
-      sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT,
+      sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT, driver_name TEXT, driver_phone TEXT,
       created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-10-13 10:00',
       updated_at TEXT, deleted_at TEXT)");
     $p->exec("CREATE TABLE beyan_hks_bildirim (id INTEGER PRIMARY KEY AUTOINCREMENT, beyan_id INT, hks_firma_id TEXT,

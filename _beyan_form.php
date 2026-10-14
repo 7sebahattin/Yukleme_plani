@@ -21,7 +21,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
     ?>
     <div class="form-group" data-ic="<?= h($icon) ?>">
         <label class="form-label" for="<?= h($field_id) ?>"><?= h($label) ?></label>
-        <input type="text" id="<?= h($field_id) ?>" name="<?= h($name) ?>" class="form-control"
+        <input type="<?= $mode === 'tel' ? 'tel' : 'text' ?>" id="<?= h($field_id) ?>" name="<?= h($name) ?>" class="form-control"
                value="<?= h((string)($f[$name] ?? '')) ?>"<?= $section !== null && !can_beyan($section . '.write') ? ' disabled' : '' ?><?= $mode !== '' ? ' inputmode="' . h($mode) . '"' : ' data-uppercase="tr"' ?><?= $name === 'vehicle_plate' ? ' data-nospace autocomplete="off"' : '' ?><?php if (isset(beyan_suggest_fields()[$name])): ?> data-suggest="<?= h($name) ?>" data-suggest-label="<?= h($label) ?>" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"<?php endif; ?>>
     </div>
     <?php
@@ -82,6 +82,10 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <?php if (can_beyan('hks.read')): beyan_hks_form_bolumu($f, $is_edit ? $beyan : null, true, 'sevkiyat'); endif; ?>
                         <?php $field('tractor_plate', 'Çekici Plaka', 'arac'); ?>
                         <?php $field('vehicle_plate', 'Dorse Plaka', 'arac'); ?>
+                    </div>
+                    <div class="beyan-form-grid beyan-workspace-fields">
+                        <?php $field('driver_name', 'Şoför Adı', 'kisi'); ?>
+                        <?php $field('driver_phone', 'Şoför Telefonu', 'telefon', 'tel'); ?>
                     </div>
                 </section>
 

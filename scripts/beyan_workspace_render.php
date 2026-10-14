@@ -50,7 +50,7 @@ db()->exec("CREATE TABLE customs_declarations (
   exit_depot TEXT, contact_person TEXT, buyer_name TEXT, brand TEXT,
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
-  note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT,
+  note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT, driver_name TEXT, driver_phone TEXT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
   hks_ulke_id TEXT, hks_ulke_ad TEXT,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
@@ -102,12 +102,12 @@ db()->exec("INSERT INTO customs_declarations
     (party_no, product_name, product_variety, net_kg, gross_kg, pallet_count, crate_count,
      crate_type, status, vehicle_plate, hks_firma_id, hks_urun_id, hks_urun_ad,
      hks_ulke_id, hks_ulke_ad, buyer_name, transport_type, exit_depot, brand,
-     company_name, company_address, contact_person, raw_text, unmatched_text, updated_at)
+     company_name, company_address, contact_person, raw_text, unmatched_text, driver_name, driver_phone, updated_at)
     VALUES ('13-41', 'KAYISI', 'PRICIA', 19800.45, 21100.75, 26, 1800, 'PLASTİK',
      'analiz_bekliyor', '34ABC123', 'f1', '10', 'Kayısı', '20', 'Rusya',
      'ÖRNEK ALICI', 'DENİZYOLU', 'DEPO', 'ÖRNEK MARKA', 'ÖRNEK FİRMA',
      'ÖRNEK ADRES', 'İLGİLİ BİRİM', 'Parti: 13-41\nÜrün: Kayısı\nNet KG: 19.800,450',
-     'Kontrol edilecek örnek satır', '2026-10-11 10:00:00')");
+     'Kontrol edilecek örnek satır', 'TEST SOFOR', '+90 555 000 00 00', '2026-10-11 10:00:00')");
 $_GET = $mode === 'edit' ? ['id' => '1'] : [];
 $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SERVER['SCRIPT_NAME'] = '/beyan_' . $mode . '.php';

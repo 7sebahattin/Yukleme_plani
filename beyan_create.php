@@ -19,6 +19,8 @@ $f = [
     'transport_type'    => '',
     'vehicle_plate'     => '',
     'tractor_plate'     => '',
+    'driver_name'       => '',
+    'driver_phone'      => '',
     'sender_company_name' => '',
     'hks_firma_id'      => '',
     'hks_urun_id'       => '',
@@ -58,12 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Büyük harf — seçili metin alanları
     foreach (['declaration_title', 'company_name', 'company_address', 'transport_type', 'vehicle_plate',
               'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type', 'sample_crate_type',
-              'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
+              'exit_depot', 'contact_person', 'buyer_name', 'brand', 'driver_name'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
     foreach (beyan_suggest_fields() as $_tf => $_meta) {
         $f[$_tf] = beyan_suggest_normalize($_tf, $f[$_tf]);
     }
+    $f['driver_phone'] = beyan_telefon_normalize($f['driver_phone']);
 
     $checked = beyan_veri_dogrula($f);
     $errors = $checked['errors'];
@@ -98,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              buyer_name, brand, status, analysis_note, sample_taken_at, analysis_result_at,
              hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad, note,
              sample_gross_kg, sample_net_kg, sample_crate_type, sample_crate_count,
-             tractor_plate, sender_company_name,
+             tractor_plate, sender_company_name, driver_name, driver_phone,
              created_by, updated_by, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?,
@@ -106,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
 
         $st->execute([
             $f['raw_text']          ?: null,
@@ -145,6 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $checked['values']['sample_crate_count'] ?? null,
             $f['tractor_plate'] ?: null,
             $f['sender_company_name'] ?: null,
+            $f['driver_name'] ?: null,
+            $f['driver_phone'] ?: null,
             $user_id,
             $user_id,
         ]);

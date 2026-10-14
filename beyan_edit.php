@@ -32,6 +32,8 @@ $f = [
     'transport_type'     => (string)($beyan['transport_type']     ?? ''),
     'vehicle_plate'      => (string)($beyan['vehicle_plate']      ?? ''),
     'tractor_plate'      => (string)($beyan['tractor_plate']      ?? ''),
+    'driver_name'        => (string)($beyan['driver_name']        ?? ''),
+    'driver_phone'       => (string)($beyan['driver_phone']       ?? ''),
     'sender_company_name' => (string)($beyan['sender_company_name'] ?? ''),
     'hks_firma_id'       => (string)($beyan['hks_firma_id']       ?? ''),
     'hks_urun_id'        => (string)($beyan['hks_urun_id']        ?? ''),
@@ -116,19 +118,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     foreach (array_keys($f) as $k) {
         // Formdan kaldırılan eski başlığı sıradan düzenlemede silme.
-        if (in_array($k, ['declaration_title', 'note', 'tractor_plate', 'sender_company_name', 'sample_gross_kg', 'sample_net_kg', 'sample_crate_type', 'sample_crate_count'], true) && !array_key_exists($k, $_POST)) continue;   // gönderilmeyen alan korunur
+        if (in_array($k, ['declaration_title', 'note', 'tractor_plate', 'sender_company_name', 'driver_name', 'driver_phone', 'sample_gross_kg', 'sample_net_kg', 'sample_crate_type', 'sample_crate_count'], true) && !array_key_exists($k, $_POST)) continue;   // gönderilmeyen alan korunur
         $f[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
     // Büyük harf — seçili metin alanları
     foreach (['declaration_title', 'company_name', 'company_address', 'transport_type', 'vehicle_plate',
               'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type', 'sample_crate_type',
-              'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
+              'exit_depot', 'contact_person', 'buyer_name', 'brand', 'driver_name'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
     foreach (beyan_suggest_fields() as $_tf => $_meta) {
         $f[$_tf] = beyan_suggest_normalize($_tf, $f[$_tf]);
     }
+    $f['driver_phone'] = beyan_telefon_normalize($f['driver_phone']);
 
     $checked = beyan_veri_dogrula($f);
     $errors = $checked['errors'];
@@ -190,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit_depot = ?, contact_person = ?, buyer_name = ?, brand = ?,
             status = ?, analysis_note = ?, sample_taken_at = ?, analysis_result_at = ?,
             hks_firma_id = ?, hks_urun_id = ?, hks_urun_ad = ?, hks_ulke_id = ?, hks_ulke_ad = ?,
-            note = ?, tractor_plate = ?, sender_company_name = ?,
+            note = ?, tractor_plate = ?, sender_company_name = ?, driver_name = ?, driver_phone = ?,
             sample_gross_kg = ?, sample_net_kg = ?, sample_crate_type = ?, sample_crate_count = ?,
             updated_by = ?, updated_at = NOW()
             WHERE id = ?");
@@ -228,6 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $f['note'] ?: null,
             $f['tractor_plate'] ?: null,
             $f['sender_company_name'] ?: null,
+            $f['driver_name'] ?: null,
+            $f['driver_phone'] ?: null,
             $checked['values']['sample_gross_kg'] ?? null,
             $checked['values']['sample_net_kg'] ?? null,
             $f['sample_crate_type'] ?: null,

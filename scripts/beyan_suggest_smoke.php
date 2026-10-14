@@ -84,6 +84,20 @@ ck('silinen öneri görünmez',!in_array('HATALI ALICI',beyan_suggest_form_data(
 ck('silinen KV kaydı kalkar',!isset(beyan_suggest_read($pdo,'buyer_name')['HATALI ALICI']));
 beyan_suggest_save($pdo,'buyer_name','hatalı alıcı');
 ck('açık +ekle silinen öneriyi geri getirir',in_array('HATALI ALICI',beyan_suggest_form_data()['values']['buyer_name'],true));
+// Şoför Adı (v356): beyan önerisi, KV beyan_defs_driver_name; material_definitions 'sofor' tipine bağlı DEĞİL
+ck('driver_name öneri alanı (max 150)',(beyan_suggest_fields()['driver_name']['max'] ?? 0)===150 && (beyan_suggest_fields()['driver_name']['type'] ?? 'x')==='');
+$pdo->exec("INSERT INTO material_definitions VALUES ('sofor','ESKİ TANIM ŞOFÖR',1)");
+$pdo->exec("INSERT INTO customs_declarations (created_at,driver_name) VALUES ('2026-10-13 10:00:00','Geçmiş Şoför'), ('2025-10-01 10:00:00','ESKİ ŞOFÖR')");
+$dd=beyan_suggest_form_data()['values']['driver_name'];
+ck('driver_name: geçmiş beyandan öneri (temiz başlangıç sonrası)',in_array('GEÇMİŞ ŞOFÖR',$dd,true));
+ck('driver_name: temiz başlangıç öncesi beyan + material_definitions sofor tipi karışmaz',!in_array('ESKİ ŞOFÖR',$dd,true) && !in_array('ESKİ TANIM ŞOFÖR',$dd,true));
+ck('driver_name: +ekle büyük harfe çevirir',beyan_suggest_save($pdo,'driver_name','test şofor')['name']==='TEST ŞOFOR' && isset(beyan_suggest_read($pdo,'driver_name')['TEST SOFOR']));
+ck('driver_name: +ekle öneriye girer',in_array('TEST ŞOFOR',beyan_suggest_form_data()['values']['driver_name'],true));
+ck('driver_name: uzunluk sınırı 150',rejects(fn()=>beyan_suggest_save($pdo,'driver_name',str_repeat('A',151))));
+beyan_suggest_hide($pdo,'driver_name','test sofor');
+ck('driver_name: silinen öneri görünmez, KV kaydı kalkar',!in_array('TEST ŞOFOR',beyan_suggest_form_data()['values']['driver_name'],true) && !isset(beyan_suggest_read($pdo,'driver_name')['TEST SOFOR']));
+beyan_suggest_save($pdo,'driver_name','test şofor');
+ck('driver_name: açık +ekle silinen öneriyi geri getirir',in_array('TEST ŞOFOR',beyan_suggest_form_data()['values']['driver_name'],true));
 ck('katalog ürünü silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'product_name','şeftali')));
 ck('izinsiz alan silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'status','X')));
 ck('boş değer silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'brand','  ')));

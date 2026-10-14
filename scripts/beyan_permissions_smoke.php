@@ -57,6 +57,17 @@ check_permission('creation default status', $new['status'] === 'beyan_acildi');
 check_permission('creation cannot inject HKS', $new['hks_firma_id'] === '');
 $admin = true;
 check_permission('admin recovery', can_beyan('delete') && can_beyan('hks.write'));
+// Şoför adı/telefonu (v356) kişisel veridir: contact grubunda; contact.read yoksa gizlenir, contact.write yoksa korunur.
+check_permission('driver fields in contact group', array_diff(['driver_name', 'driver_phone'], beyan_permission_fields()['contact']) === []);
+$admin = false;
+$permissions = ['beyan.read','beyan.edit','beyan.permissions.detailed'];
+$redacted = beyan_redact_fields(['driver_name' => 'X', 'driver_phone' => '5550000', 'party_no' => 'P']);
+check_permission('driver fields redacted without contact.read', $redacted['driver_name'] === null && $redacted['driver_phone'] === null && $redacted['party_no'] === 'P');
+$protected = beyan_protect_input(['driver_name' => 'HACK', 'driver_phone' => '1111111'], ['driver_name' => 'OLD', 'driver_phone' => '2222222']);
+check_permission('driver fields kept without contact.write', $protected['driver_name'] === 'OLD' && $protected['driver_phone'] === '2222222');
+$permissions = ['beyan.read','beyan.edit','beyan.permissions.detailed','beyan.contact.read','beyan.contact.write'];
+$protected = beyan_protect_input(['driver_name' => 'NEW', 'driver_phone' => '3333333'], ['driver_name' => 'OLD']);
+check_permission('driver fields editable with contact.write', $protected['driver_name'] === 'NEW' && $protected['driver_phone'] === '3333333');
 foreach ([['beyan_create.php','create'], ['beyan_bulk_save.php','create'], ['beyan_kopyala.php','create'], ['beyan_edit.php','edit'], ['beyan_edit.php','status'], ['beyan_eslestir.php','match'], ['api_beyan_bildirim.php','notify']] as [$endpoint, $action]) {
     $proc = proc_open([PHP_BINARY, __FILE__, '--endpoint', $endpoint, $action], [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']], $pipes);
     if (!is_resource($proc)) throw new RuntimeException('Unable to launch endpoint test');
