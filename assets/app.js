@@ -2015,7 +2015,7 @@ function ekranAlti() {
 
     var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     var metaEl = document.getElementById('beyanSuggestMeta');
-    var beyanMeta = {companies: {}, products: {}};
+    var beyanMeta = {companies: {}, products: {}, drivers: {}};
     if (metaEl) {
         try { beyanMeta = JSON.parse(metaEl.textContent || '{}'); } catch (_) {}
     }
@@ -2295,6 +2295,27 @@ function ekranAlti() {
             });
             addressInput.addEventListener('input', function () {
                 if (addressInput.value !== lastAutoAddress) lastAutoAddress = null;
+            });
+        }
+        // Şoför Adı → Şoför Telefonu (v361): şoför seçilince/yazılıp çıkılınca bilinen telefonu gelir.
+        // Gümrük adresiyle AYNI kural: telefon yalnız boşken ya da önceki OTOMATİK değerken değişir —
+        // elle yazılan/düzeltilen telefon başka şoför seçildiğinde sessizce ezilmez.
+        var driverInput = document.querySelector('[name="driver_name"]');
+        var phoneInput = document.querySelector('[name="driver_phone"]');
+        if (driverInput && phoneInput) {
+            var drivers = beyanMeta.drivers || {};
+            var lastAutoPhone = null;
+            if (phoneInput.value.trim() !== '' && phoneInput.value === lookup(drivers, driverInput.value)) lastAutoPhone = phoneInput.value;
+            driverInput.addEventListener('change', function () {
+                var phone = lookup(drivers, driverInput.value);
+                if (phoneInput.value.trim() !== '' && phoneInput.value !== lastAutoPhone) return;
+                phoneInput.value = phone || '';
+                lastAutoPhone = phone ? phoneInput.value : null;
+                phoneInput.dispatchEvent(new Event('input', {bubbles: true}));
+                phoneInput.dispatchEvent(new Event('change', {bubbles: true}));
+            });
+            phoneInput.addEventListener('input', function () {
+                if (phoneInput.value !== lastAutoPhone) lastAutoPhone = null;
             });
         }
         // HKS Ürün Adı (v350): alan pasif başlar. Ürün Adı'ndan çıkılınca (change) KİLİT KARARI TARAYICIDA,

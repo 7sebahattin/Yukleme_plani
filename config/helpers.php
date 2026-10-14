@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v360');
+    define('APP_SURUM', 'v361');
 }
 
 // --- HTML kaçışı ---
@@ -3928,9 +3928,26 @@ function beyan_suggest_form_data(): array {
         } catch (Throwable $e) { /* KV yoksa öneri ve kayıt formu yine açılır. */ }
     }
     foreach (array_keys($companies) as $cn) if (isset($hidden['company_name'][beyan_suggest_key($cn)])) unset($companies[$cn]);
+    // v361: Şoför Adı → Şoför Telefonu bağı. Geçmiş beyanlardan (temiz başlangıçtan sonra) her şoförün EN SON
+    // telefonu; form şoför seçilince/yazılınca telefonu kendiliğinden doldurur (assets/app.js, companies emsali).
+    // Ayrı sorgu: driver_phone kolonu yoksa (eski kurulum) öneri listeleri etkilenmez.
+    $drivers = [];
+    try {
+        $rows = db()->query("SELECT driver_name, driver_phone FROM customs_declarations
+                             WHERE deleted_at IS NULL AND created_at >= " . db()->quote(BEYAN_ONERI_BASLANGIC) . "
+                               AND driver_name IS NOT NULL AND driver_name <> '' AND driver_phone IS NOT NULL AND driver_phone <> ''
+                             ORDER BY id DESC LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $row) {   // yeniden eskiye: ilk görülen = en son telefon
+            $dn = beyan_suggest_normalize('driver_name', (string)($row['driver_name'] ?? ''));
+            $dp = beyan_telefon_normalize((string)($row['driver_phone'] ?? ''));
+            if ($dn === '' || $dp === '' || isset($drivers[$dn])) continue;
+            if (isset($hidden['driver_name'][beyan_suggest_key($dn)])) continue;   // öneriden silinmiş şoför
+            $drivers[$dn] = $dp;
+        }
+    } catch (Throwable $e) { /* Telefon bağı yoksa şoför adı yine serbest yazılır. */ }
     $values = [];
     foreach ($sets as $field => $set) { $values[$field] = array_values($set); sort($values[$field], SORT_NATURAL); }
-    return ['values'=>$values, 'companies'=>$companies, 'products'=>$products];
+    return ['values'=>$values, 'companies'=>$companies, 'products'=>$products, 'drivers'=>$drivers];
 }
 // Yalnız açık +ekle isteğinde çağrılır; form kaydetmek tanım oluşturmaz.
 function beyan_suggest_save(PDO $pdo, string $field, string $raw, string $company = '', string $address = ''): array {

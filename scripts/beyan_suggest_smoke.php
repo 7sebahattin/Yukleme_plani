@@ -8,7 +8,7 @@ for ($i=0,$n=count($tokens);$i<$n;$i++) {
     if (!is_array($tokens[$i]) || $tokens[$i][0] !== T_FUNCTION) continue;
     $j=$i+1; while (is_array($tokens[$j] ?? null) && $tokens[$j][0]===T_WHITESPACE) $j++;
     $name=$tokens[$j][1] ?? '';
-    if ($name !== 'tr_upper' && !str_starts_with($name, 'beyan_suggest_')) continue;
+    if ($name !== 'tr_upper' && $name !== 'beyan_telefon_normalize' && !str_starts_with($name, 'beyan_suggest_')) continue;
     $code='';$depth=0;$started=false;
     for (;$i<$n;$i++) { $t=$tokens[$i];$code.=is_array($t)?$t[1]:$t;
         if ($t==='{') { $depth++;$started=true; }
@@ -22,7 +22,7 @@ $catalog=['urunler'=>[['id'=>'1','ad'=>'Şeftali'],['id'=>'1','ad'=>'SEFTALI'],[
 function bb_katalog(): array { global $catalog; return $catalog; }
 $pdo->exec('CREATE TABLE hks_kv (anahtar TEXT PRIMARY KEY, deger TEXT)');
 $pdo->exec('CREATE TABLE material_definitions (type TEXT,name TEXT,is_active INTEGER)');
-$cols=implode(' TEXT, ',array_keys(beyan_suggest_fields())) . ' TEXT';
+$cols=implode(' TEXT, ',array_keys(beyan_suggest_fields())) . ' TEXT, driver_phone TEXT';
 $pdo->exec("CREATE TABLE customs_declarations (id INTEGER PRIMARY KEY, deleted_at TEXT, created_at TEXT, $cols)");
 $pdo->exec("INSERT INTO material_definitions VALUES ('urun','seftali',1), ('alici','ÖRNEK ALICI',1)");
 $pdo->exec("INSERT INTO customs_declarations (created_at,company_name,company_address,buyer_name) VALUES ('2026-03-13 10:00:00','GÜMRÜK A','ADRES A','Geçmiş Alıcı')");
@@ -98,6 +98,20 @@ beyan_suggest_hide($pdo,'driver_name','test sofor');
 ck('driver_name: silinen öneri görünmez, KV kaydı kalkar',!in_array('TEST ŞOFOR',beyan_suggest_form_data()['values']['driver_name'],true) && !isset(beyan_suggest_read($pdo,'driver_name')['TEST SOFOR']));
 beyan_suggest_save($pdo,'driver_name','test şofor');
 ck('driver_name: açık +ekle silinen öneriyi geri getirir',in_array('TEST ŞOFOR',beyan_suggest_form_data()['values']['driver_name'],true));
+// Şoför Adı → Şoför Telefonu bağı (v361): geçmiş beyanlardan, aynı şoförün EN SON telefonu; temiz başlangıç + gizleme geçerli
+$pdo->exec("INSERT INTO customs_declarations (created_at,driver_name,driver_phone) VALUES
+  ('2026-10-13 11:00:00','Ali Veli','+90 555 111 11 11'),
+  ('2026-10-14 09:00:00','ALİ VELİ','+90 (555) 222-22-22'),
+  ('2025-10-01 10:00:00','Eski Telefonlu','0555 999 99 99'),
+  ('2026-10-14 10:00:00','Gizli Şoför','0555 333 33 33'),
+  ('2026-10-14 11:00:00','Telefonsuz Şoför','')");
+beyan_suggest_save($pdo,'driver_name','gizli şoför');
+beyan_suggest_hide($pdo,'driver_name','GİZLİ ŞOFÖR');
+$drv=beyan_suggest_form_data()['drivers'];
+ck('drivers: şoförün EN SON telefonu (ad büyük harf + TR-duyarsız birleşir)',($drv['ALİ VELİ'] ?? '')==='+90 (555) 222-22-22' && count(array_filter(array_keys($drv),fn($k)=>str_starts_with($k,'ALİ')))===1,json_encode($drv,JSON_UNESCAPED_UNICODE));
+ck('drivers: temiz başlangıç öncesi beyanın telefonu YOK',!isset($drv['ESKİ TELEFONLU']));
+ck('drivers: öneriden silinen şoförün telefonu da gelmez',!isset($drv['GİZLİ ŞOFÖR']));
+ck('drivers: telefonu boş şoför haritada YOK',!isset($drv['TELEFONSUZ ŞOFÖR']));
 ck('katalog ürünü silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'product_name','şeftali')));
 ck('izinsiz alan silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'status','X')));
 ck('boş değer silinemez',rejects(fn()=>beyan_suggest_hide($pdo,'brand','  ')));

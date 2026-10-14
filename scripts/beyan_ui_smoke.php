@@ -1236,6 +1236,14 @@ ok('[yazdır] boş sonuçta düğmeler/veri YOK', !str_contains(render_liste(['b
 db()->prepare("UPDATE customs_declarations SET party_no=? WHERE id=?")->execute([$YZ_B_ESKI, $YZ_B]);
 db()->prepare("UPDATE customs_declarations SET driver_name=NULL, driver_phone=NULL, tractor_plate=NULL, vehicle_plate=? WHERE id=?")->execute([$YZ_A_PLAKA === false ? null : $YZ_A_PLAKA, $YZ_A]);
 
+// Şoför Adı → Telefon bağı (v361): form harita taşır (geçmiş beyandan); contact.read yoksa hiç gömülmez.
+db()->exec("UPDATE customs_declarations SET driver_name='HARITA SOFOR', driver_phone='+90 555 777 77 77', created_at='2026-10-13 10:00:00' WHERE id=$ID_BOS");
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+$hf = render_form($ID_BOS);
+ok('[şoför-bağ] form şoför→telefon haritasını taşır', preg_match('~id="beyanSuggestMeta">(.*?)</script>~s', $hf, $hm) === 1
+   && (json_decode($hm[1], true)['drivers']['HARITA SOFOR'] ?? '') === '+90 555 777 77 77');
+ok('[şoför-bağ] şoför adı + telefon alanları forma bağlanabilir (name özniteliği)',
+   str_contains($hf, 'name="driver_name"') && str_contains($hf, 'name="driver_phone"'));
 // Detailed roles: protected content must never reach HTML or inline scripts.
 db()->exec("UPDATE customs_declarations SET buyer_name='CONTACT_SECRET_942', company_address='ADDRESS_SECRET_942', contact_person='PERSON_SECRET_942', analysis_note='ANALYSIS_SECRET_942', raw_text='SOURCE_SECRET_942', unmatched_text='UNMATCHED_SECRET_942', hks_ulke_ad='COUNTRY_SECRET_942' WHERE id=$ID_BOS");
 $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
@@ -1243,7 +1251,8 @@ db()->exec("UPDATE customs_declarations SET driver_name='DRIVER_SECRET_942', dri
 db()->exec("UPDATE customs_declarations SET sample_crate_type='SAMPLE_SECRET_942', sample_gross_kg=9, sample_net_kg=8, sample_crate_count=2 WHERE id=$ID_BOS");
 $restricted_detail = render_beyan($ID_BOS);
 $restricted_list = render_liste([]);
-foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942','SAMPLE_SECRET_942','DRIVER_SECRET_942','DRVPHONE942'] as $secret) {
+$restricted_list .= render_form($ID_BOS);   // v361: şoför→telefon haritası da contact.read olmadan sızmaz
+foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942','SAMPLE_SECRET_942','DRIVER_SECRET_942','DRVPHONE942','HARITA SOFOR','777 77 77'] as $secret) {
     ok('[yetki] gizli veri HTML/JS içinde yok: ' . $secret, !str_contains($restricted_detail . $restricted_list, $secret));
 }
 ok('[yetki] HKS kartı ve tablo başlığı gizli', !str_contains($restricted_detail, 'bk-kart') && !str_contains($restricted_list, '<th>HKS Firma</th>'));

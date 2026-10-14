@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v360` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v361` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -1127,6 +1127,13 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   (boşsa '—', `tel:` bağlantısı yok). Test: `beyan_ui_smoke.php` `[şoför]` satırları (oluştur→DB→düzenle→önizleme, geçersiz telefon, yetkisiz kullanıcı,
   gönderilmeyen alan, durum şeridi) · `beyan_suggest_smoke.php` · `beyan_data_smoke.php` · `beyan_kopyala_smoke.php` · `beyan_permissions_smoke.php` ·
   `beyan_workspace_permissions_smoke.js`.
+- **Şoför Adı → Şoför Telefonu bağı (v361, migration YOK):** beyan formunda şoför seçilince/yazılıp çıkılınca (`change`) bilinen telefonu kendiliğinden gelir.
+  Veri `beyan_suggest_form_data()['drivers']` = `{ŞOFÖR ADI: son telefon}` (geçmiş beyanlardan, `BEYAN_ONERI_BASLANGIC` sonrası; aynı şoförün EN SON telefonu;
+  ad `beyan_suggest_normalize` ile büyük harf/TR-duyarsız birleşir; öneriden silinen şoför haritadan da çıkar; telefon `beyan_telefon_normalize`; AYRI sorgu — kolon yoksa
+  öneri listeleri etkilenmez) → `_beyan_form.php` `#beyanSuggestMeta.drivers` (**`contact.read` yoksa boş**). İstemci `assets/app.js` öneri bloğunda, gümrük adresi bağıyla
+  AYNI kural: telefon yalnız BOŞKEN ya da önceki OTOMATİK değerken değişir (`lastAutoPhone`) — elle yazılan/düzeltilen telefon ezilmez; telefonu bilinmeyen şoförde önceki
+  otomatik telefon temizlenir. Yükleme kaydındaki `record_sofor_phone_map()` KULLANILMAZ (temiz başlangıç kararı; geri ekleme istenirse ayrı karar). Yeni beyan kaydedildikçe harita kendiliğinden öğrenir.
+  Test: `beyan_suggest_smoke.php` (drivers) · `beyan_ui_smoke.php` `[şoför-bağ]` + `[yetki]` · `node scripts/beyan_workspace_smoke.js` (şoför→telefon satırları).
 - **Bekleyen Beyanlar — Yazdır / PDF Gönder (v357, migration YOK, yeni yetki YOK):** `beyanlar.php` "İşlem Bekleyen Beyanlar" kartının başlığında
   **🖨️ Yazdır** ve **📤 PDF Gönder** (masaüstünde "⬇️ PDF İndir") düğmeleri (`.bl-aksiyon`, `#bekleyenYazdirBtn` / `#bekleyenPdfBtn`; kartta satır
   yoksa YOK). Çalışma biçimi Hal Kayıt › Bildirim Çoklu Künye Basım ile AYNI (`halkayit/app.html` `topluYazdirPenceresiAc`/`topluPdfPaylas`): Yazdır = yeni
