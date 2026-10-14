@@ -232,6 +232,15 @@ render_flash();
             </h2>
             <span class="muted beyan-blok-not">Açık işler · <?= $bek_result_total ?> sonuç · Sayfa <?= $bek_page ?> / <?= $bek_total_pages ?></span>
         </div>
+        <?php if (!empty($bekleyen_rows)): ?>
+        <!-- v357: kartta görünen satırları yazdır / PDF olarak gönder (assets/beyan_yazdir.js) -->
+        <div class="bl-aksiyon" role="group" aria-label="Bekleyen beyanları yazdır veya PDF gönder">
+            <button type="button" class="btn btn-sm bl-yazdir-btn" id="bekleyenYazdirBtn"
+                    title="Bu sayfadaki bekleyen beyanları yazdır">🖨️ Yazdır</button>
+            <button type="button" class="btn btn-sm bl-pdf-btn" id="bekleyenPdfBtn"
+                    title="Telefonda WhatsApp'a gönderir, bilgisayarda PDF indirir">📤 PDF Gönder</button>
+        </div>
+        <?php endif; ?>
         <span class="bl-bilgi bl-bilgi-acik">Onay ve yükleme bekleyen beyan kayıtlarıdır.</span>
     </div>
 
@@ -444,6 +453,14 @@ render_flash();
     window.addEventListener('resize', function () { if (acik) kapat(acik); });
 })();
 </script>
+
+<?php if (!empty($bekleyen_rows)): ?>
+<script type="application/json" id="bekleyenYazdirVeri"><?= json_encode(
+    beyan_bekleyen_yazdir_veri($bekleyen_rows, $firma_adlari, (string)(active_depot() ?? ''), $bek_q),
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PARTIAL_OUTPUT_ON_ERROR
+) ?></script>
+<script src="assets/beyan_yazdir.js?v=<?= (int)@filemtime(__DIR__ . '/assets/beyan_yazdir.js') ?>" defer></script>
+<?php endif; ?>
 
 <script>
 (function () {

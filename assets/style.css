@@ -6757,3 +6757,17 @@ body:not(.print-mode) form.bf .beyan-section[data-bf] input.ara-sec:disabled { b
 .btn.btn-duzenle { background: linear-gradient(180deg, #f97316, #ea580c); border-color: #c2410c; color: #fff; }
 .btn.btn-duzenle:hover, .btn.btn-duzenle:focus-visible { background: linear-gradient(180deg, #fb923c, #c2410c); border-color: #9a3412; color: #fff; }
 html[data-theme="dark"] .btn.btn-duzenle { background: linear-gradient(180deg, #ea580c, #c2410c); border-color: #f97316; color: #fff; }
+
+/* ── v357: "İşlem Bekleyen Beyanlar" kartı — Yazdır / PDF Gönder (assets/beyan_yazdir.js) ── */
+.beyan-blok-acik .beyan-blok-head { grid-template-columns: auto minmax(0,1fr) auto auto; }
+.bl-aksiyon { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.bl-aksiyon .btn { white-space: nowrap; font-weight: 700; }
+.bl-pdf-btn { background: #25D366; border-color: #1da851; color: #fff; }
+.bl-pdf-btn:hover:not(:disabled) { background: #1fbd5a; color: #fff; }
+.bl-pdf-btn:disabled { cursor: wait; }
+@media (max-width: 767px) {
+    .beyan-blok-acik .beyan-blok-head { grid-template-columns: auto minmax(0,1fr); }
+    .bl-aksiyon { grid-column: 1 / -1; justify-content: stretch; }
+    .bl-aksiyon .btn { flex: 1 1 0; min-height: 40px; }
+}
+@media print { .bl-aksiyon { display: none !important; } }
