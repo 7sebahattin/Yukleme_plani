@@ -71,11 +71,12 @@ const pdfSayfa = buf => (buf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)
       await popup.waitForLoadState();
       await popup.evaluate(() => { window.print = () => { window.__yazdirildi = true; }; });
       const basliklar = await popup.locator('#byzTablo thead th').allTextContents();
-      for (const b of ['Tarih', 'Parti No', 'Ürün / Çeşit', 'Palet', 'Kasa', 'Brüt KG', 'Net KG', 'Alıcı', 'Marka', 'Çıkış Depo', 'Plaka', 'HKS Firma', 'Ülke', 'Durum', 'Şoför Adı', 'Şoför Telefonu']) {
+      for (const b of ['Tarih', 'Parti No', 'Ürün / Çeşit', 'Palet', 'Kasa', 'Brüt KG', 'Net KG', 'Alıcı', 'Marka', 'Çıkış Depo', 'HKS Firma', 'Ülke', 'Durum', 'Şoför Adı', 'Şoför Telefonu', 'Çekici Plaka', 'Dorse Plaka']) {
         ok(basliklar.includes(b), 'yazdırma raporunda sütun var: ' + b);
       }
+      ok(!basliklar.includes('Plaka') && basliklar.slice(-4).join('|') === 'Şoför Adı|Şoför Telefonu|Çekici Plaka|Dorse Plaka', 'tek "Plaka" sütunu yok; şoför telefonunun yanında Çekici + Dorse Plaka');
       const govde = await popup.locator('#pdfIcerik').textContent();
-      ok(govde.includes('YAZDIR SOFOR') && govde.includes('+90 555 000 00 00'), 'rapor şoför adı + telefonunu basar');
+      ok(govde.includes('YAZDIR SOFOR') && govde.includes('+90 555 000 00 00') && govde.includes('55CEK55') && govde.includes('34ABC123'), 'rapor şoför adı + telefonu + çekici/dorse plakayı basar');
       ok(govde.includes('TOPLAM') && govde.includes('İşlem Bekleyen Beyanlar'), 'rapor başlık + TOPLAM satırı taşır');
       const css0 = await popup.evaluate(() => document.head.textContent);
       ok(/@page\{size:A4 landscape/.test(css0), 'yazdırma sayfası yatay A4');

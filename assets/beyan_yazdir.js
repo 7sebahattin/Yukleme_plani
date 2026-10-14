@@ -57,7 +57,7 @@
     var th = kol.map(function (k) {
       return '<th class="' + (k.t === 'sayi' ? 'byz-s' : '') + '">' + esc(k.l) + '</th>';
     }).join('');
-    var nowrapKey = { tarih: 1, parti: 1, plaka: 1, telefon: 1 };
+    var nowrapKey = { tarih: 1, parti: 1, telefon: 1, cekici: 1, dorse: 1 };
     var tr = veri.satirlar.map(function (s) {
       return '<tr>' + s.map(function (h, i) {
         var k = kol[i];

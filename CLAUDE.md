@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v357` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v358` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -1135,7 +1135,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   `NotAllowedError`) PDF saklanır, düğme "PDF hazır — Paylaş" olur, sonraki dokunuş paylaşır. Sayfa kesimi satır sınırında, 2. sayfadan itibaren tablo başlığı
   tekrarlanır. **Kapsam = kartta o an görünen sayfa** (arama + sayfalama aynen; ekranda görüneni basar). Veri sunucudan hazır gelir:
   `beyan_bekleyen_yazdir_veri()` (config/helpers.php, saf) → `<script type="application/json" id="bekleyenYazdirVeri">` (JSON_HEX_* ile `</script>` kıramaz);
-  sütunlar ekrandaki tablo + sonda **Şoför Adı / Şoför Telefonu**; `Alıcı` + şoför sütunları yalnız `contact.read`, `HKS Firma`/`Ülke` yalnız `hks.read` ile
+  sütunlar ekrandaki tablo (**tek "Plaka" sütunu YOK — v358**) + sonda **Şoför Adı / Şoför Telefonu / Çekici Plaka (`tractor_plate`) / Dorse Plaka (`vehicle_plate`)**; `Alıcı` + şoför sütunları yalnız `contact.read`, `HKS Firma`/`Ülke` yalnız `hks.read` ile
   gelir (satırlar `beyan_redact_fields()`'ten geçmiş); TOPLAM satırı Palet/Kasa/Brüt/Net. İstemci `assets/beyan_yazdir.js` (yalnız beyanlar.php'de yüklenir;
   maliyet.js/hesap.js emsali — app.js'e dokunmaz); hücreler istemcide kaçışlanır. Yeni sütun = YALNIZ `beyan_bekleyen_yazdir_veri()`'ye ekle.
   Test: `php scripts/beyan_ui_smoke.php` (`[yazdır]` satırları) · `node scripts/beyan_yazdir_smoke.js` (kendi fixture'ını `--render-liste` ile üretir:
