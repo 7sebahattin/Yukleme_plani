@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v358');
+    define('APP_SURUM', 'v359');
 }
 
 // --- HTML kaçışı ---
@@ -3680,7 +3680,7 @@ function beyan_telefon_normalize(?string $t): string {
 }
 
 // "İşlem Bekleyen Beyanlar" kartının Yazdır / PDF Gönder verisi (v357). Saf — DB/oturum yok
-// (yetki kararı can_beyan() ile). Ekranda görünen tablo sütunları (tek Plaka hariç) + Şoför Adı / Telefonu + Çekici / Dorse Plaka.
+// (yetki kararı can_beyan() ile). Ekranda görünen tablo sütunları (tek Plaka, Ülke ve Durum hariç) + Şoför Adı / Telefonu + Çekici / Dorse Plaka; aynı dorse plakalı satırlara `satir_grup`.
 // Satırlar zaten beyan_redact_fields()'den geçmiş gelir; yetkisi olmayan sütun hiç eklenmez.
 // Hücreler HAM metindir — kaçışlama istemcide (assets/beyan_yazdir.js).
 // 't' = 'sayi' (sağa hizalı, toplanır) | 'metin'.
@@ -3699,11 +3699,8 @@ function beyan_bekleyen_yazdir_veri(array $rows, array $firma_adlari = [], strin
     if ($iletisim) $kolonlar[] = ['k' => 'alici', 'l' => 'Alıcı', 't' => 'metin'];
     $kolonlar[] = ['k' => 'marka', 'l' => 'Marka',       't' => 'metin'];
     $kolonlar[] = ['k' => 'depo',  'l' => 'Çıkış Depo',  't' => 'metin'];
-    if ($hks) {
-        $kolonlar[] = ['k' => 'firma', 'l' => 'HKS Firma', 't' => 'metin'];
-        $kolonlar[] = ['k' => 'ulke',  'l' => 'Ülke',      't' => 'metin'];
-    }
-    $kolonlar[] = ['k' => 'durum', 'l' => 'Durum', 't' => 'metin'];
+    // v359: yazdırmada Ülke ve Durum sütunları YOK (ekran listesinde kalır).
+    if ($hks) $kolonlar[] = ['k' => 'firma', 'l' => 'HKS Firma', 't' => 'metin'];
     if ($iletisim) {
         $kolonlar[] = ['k' => 'sofor',   'l' => 'Şoför Adı',     't' => 'metin'];
         $kolonlar[] = ['k' => 'telefon', 'l' => 'Şoför Telefonu', 't' => 'metin'];
@@ -3712,7 +3709,6 @@ function beyan_bekleyen_yazdir_veri(array $rows, array $firma_adlari = [], strin
     $kolonlar[] = ['k' => 'cekici', 'l' => 'Çekici Plaka', 't' => 'metin'];
     $kolonlar[] = ['k' => 'dorse',  'l' => 'Dorse Plaka',  't' => 'metin'];
 
-    $durumlar = beyan_statuses();
     $sayi = static fn($v): string => $v === null || $v === '' ? '' : number_format((int)round((float)$v), 0, '', '.');
     $satirlar = [];
     $top = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'net' => 0.0];
@@ -3730,8 +3726,6 @@ function beyan_bekleyen_yazdir_veri(array $rows, array $firma_adlari = [], strin
             'marka'   => trim((string)($r['brand'] ?? '')),
             'depo'    => trim((string)($r['exit_depot'] ?? '')),
             'firma'   => $fid === '' ? '' : (string)($firma_adlari[$fid] ?? ''),
-            'ulke'    => trim((string)($r['hks_ulke_ad'] ?? '')),
-            'durum'   => (string)($durumlar[$r['status'] ?? '']['label'] ?? ($r['status'] ?? '')),
             'sofor'   => trim((string)($r['driver_name'] ?? '')),
             'telefon' => trim((string)($r['driver_phone'] ?? '')),
             'cekici'  => trim((string)($r['tractor_plate'] ?? '')),
@@ -3749,6 +3743,21 @@ function beyan_bekleyen_yazdir_veri(array $rows, array $firma_adlari = [], strin
     foreach ($kolonlar as $k) {
         $toplam[] = isset($top[$k['k']]) ? number_format((int)round($top[$k['k']]), 0, '', '.') : '';
     }
+    // v359: aynı dorse plakalı (≥2 satır) beyanların Parti No'su aynı renkte — satır başına grup no
+    // (ilk görülme sırasıyla 0,1,2…), tek başına olan / plakası boş satır null. Renk paleti istemcide.
+    $anahtarlar = [];
+    foreach ($rows as $r) {
+        $a = preg_replace('/[^A-Z0-9]/', '', mb_strtoupper(trim((string)($r['vehicle_plate'] ?? '')), 'UTF-8'));
+        $anahtarlar[] = (string)$a;
+    }
+    $adetler = array_count_values(array_filter($anahtarlar, static fn($a) => $a !== ''));
+    $grupNo = [];
+    $satirGrup = [];
+    foreach ($anahtarlar as $a) {
+        if ($a === '' || ($adetler[$a] ?? 0) < 2) { $satirGrup[] = null; continue; }
+        if (!isset($grupNo[$a])) $grupNo[$a] = count($grupNo);
+        $satirGrup[] = $grupNo[$a];
+    }
     return [
         'baslik'   => 'İşlem Bekleyen Beyanlar',
         'tarih'    => date('d.m.Y H:i'),
@@ -3758,6 +3767,7 @@ function beyan_bekleyen_yazdir_veri(array $rows, array $firma_adlari = [], strin
         'adet'     => count($satirlar),
         'kolonlar' => $kolonlar,
         'satirlar' => $satirlar,
+        'satir_grup' => $satirGrup,
         'toplam'   => $toplam,
     ];
 }

@@ -1190,11 +1190,12 @@ if (preg_match('~<script type="application/json" id="bekleyenYazdirVeri">(.*?)</
 ok('[yazdır] veri JSON olarak çözülüyor', is_array($yz) && !empty($yz['satirlar']), 'JSON yok/bozuk');
 if (is_array($yz)) {
     $etik = array_column($yz['kolonlar'], 'l');
-    foreach (['Tarih','Parti No','Ürün / Çeşit','Palet','Kasa','Brüt KG','Net KG','Alıcı','Marka','Çıkış Depo','HKS Firma','Ülke','Durum','Çekici Plaka','Dorse Plaka'] as $e) {
+    foreach (['Tarih','Parti No','Ürün / Çeşit','Palet','Kasa','Brüt KG','Net KG','Alıcı','Marka','Çıkış Depo','HKS Firma','Çekici Plaka','Dorse Plaka'] as $e) {
         ok("[yazdır] ekrandaki sütun yazdırmada da var: $e", in_array($e, $etik, true));
     }
     ok('[yazdır] Şoför Adı + Telefonu, yanlarında Çekici + Dorse Plaka (sonda)', array_slice($etik, -4) === ['Şoför Adı', 'Şoför Telefonu', 'Çekici Plaka', 'Dorse Plaka']);
     ok('[yazdır] tek "Plaka" sütunu kaldırıldı', !in_array('Plaka', $etik, true));
+    ok('[yazdır] Ülke ve Durum sütunları yazdırmada YOK', !in_array('Ülke', $etik, true) && !in_array('Durum', $etik, true));
     $isoforIx = array_search('Şoför Adı', $etik, true); $itelIx = array_search('Şoför Telefonu', $etik, true);
     $partiIx = array_search('Parti No', $etik, true);
     $satirTam = null;
@@ -1211,6 +1212,25 @@ if (is_array($yz)) {
     ok('[yazdır] Net KG toplamı satırlarla tutuyor', (int)str_replace('.', '', (string)$yz['toplam'][$netIx]) === $netTop, $yz['toplam'][$netIx] . ' ≠ ' . $netTop);
     ok('[yazdır] ham metin JSON içinde </script> ile tabloyu kıramaz', !str_contains($mm[1], '</script>') && str_contains($mm[1], 'u003C'));
 }
+// Aynı dorse plakası → aynı grup (satir_grup): boşluk/tire/küçük harf fark etmez, tek kalan ve plakasız satır null.
+$yz_ids = array_map('intval', db()->query("SELECT id FROM customs_declarations WHERE deleted_at IS NULL AND status NOT IN ('yuklendi','iptal','red') ORDER BY id DESC LIMIT 5")->fetchAll(PDO::FETCH_COLUMN));
+$yz_eski = [];
+foreach ($yz_ids as $yid) $yz_eski[$yid] = db()->query("SELECT vehicle_plate FROM customs_declarations WHERE id=$yid")->fetchColumn();
+$yz_pl = ['34 abc-123', '34ABC123', '06XYZ06', '06xyz06', ''];   // 1+2 aynı, 3+4 aynı, 5 plakasız
+foreach ($yz_ids as $ix => $yid) db()->prepare("UPDATE customs_declarations SET vehicle_plate=? WHERE id=?")->execute([$yz_pl[$ix] === '' ? null : $yz_pl[$ix], $yid]);
+$yz2 = null;
+if (preg_match('~<script type="application/json" id="bekleyenYazdirVeri">(.*?)</script>~s', render_liste([]), $m2)) $yz2 = json_decode($m2[1], true);
+$sg = is_array($yz2) ? ($yz2['satir_grup'] ?? null) : null;
+ok('[yazdır] satir_grup: satır başına bir değer', is_array($sg) && count($sg) === count($yz2['satirlar']));
+if (is_array($sg)) {
+    ok('[yazdır] aynı dorse plakalı satırlar aynı grupta (biçim farkı önemsiz)', $sg[0] === 0 && $sg[1] === 0 && $sg[2] === 1 && $sg[3] === 1, json_encode($sg));
+    ok('[yazdır] plakasız satır gruba girmez', $sg[4] === null, json_encode($sg));
+}
+db()->exec("UPDATE customs_declarations SET vehicle_plate='TEK-PLAKA-1' WHERE id={$yz_ids[0]}");
+if (preg_match('~<script type="application/json" id="bekleyenYazdirVeri">(.*?)</script>~s', render_liste([]), $m3)) $sg3 = (json_decode($m3[1], true) ?? [])['satir_grup'] ?? null;
+ok('[yazdır] tek başına plaka renklenmez (grup null)', isset($sg3) && $sg3[0] === null && $sg3[1] === null, json_encode($sg3 ?? null));
+foreach ($yz_eski as $yid => $pl) db()->prepare("UPDATE customs_declarations SET vehicle_plate=? WHERE id=?")->execute([$pl === false ? null : $pl, $yid]);
+
 ok('[yazdır] boş sonuçta düğmeler/veri YOK', !str_contains(render_liste(['bek_q' => 'ZZZ_HICBIRSEY_' . mt_rand()]), 'bekleyenYazdirBtn'));
 db()->prepare("UPDATE customs_declarations SET party_no=? WHERE id=?")->execute([$YZ_B_ESKI, $YZ_B]);
 db()->prepare("UPDATE customs_declarations SET driver_name=NULL, driver_phone=NULL, tractor_plate=NULL, vehicle_plate=? WHERE id=?")->execute([$YZ_A_PLAKA === false ? null : $YZ_A_PLAKA, $YZ_A]);

@@ -71,10 +71,18 @@ const pdfSayfa = buf => (buf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)
       await popup.waitForLoadState();
       await popup.evaluate(() => { window.print = () => { window.__yazdirildi = true; }; });
       const basliklar = await popup.locator('#byzTablo thead th').allTextContents();
-      for (const b of ['Tarih', 'Parti No', 'Ürün / Çeşit', 'Palet', 'Kasa', 'Brüt KG', 'Net KG', 'Alıcı', 'Marka', 'Çıkış Depo', 'HKS Firma', 'Ülke', 'Durum', 'Şoför Adı', 'Şoför Telefonu', 'Çekici Plaka', 'Dorse Plaka']) {
+      for (const b of ['Tarih', 'Parti No', 'Ürün / Çeşit', 'Palet', 'Kasa', 'Brüt KG', 'Net KG', 'Alıcı', 'Marka', 'Çıkış Depo', 'HKS Firma', 'Şoför Adı', 'Şoför Telefonu', 'Çekici Plaka', 'Dorse Plaka']) {
         ok(basliklar.includes(b), 'yazdırma raporunda sütun var: ' + b);
       }
       ok(!basliklar.includes('Plaka') && basliklar.slice(-4).join('|') === 'Şoför Adı|Şoför Telefonu|Çekici Plaka|Dorse Plaka', 'tek "Plaka" sütunu yok; şoför telefonunun yanında Çekici + Dorse Plaka');
+      ok(!basliklar.includes('Ülke') && !basliklar.includes('Durum'), 'Ülke ve Durum sütunları yazdırmada yok');
+      // Aynı dorse plakası → Parti No hücreleri aynı renk; plakasız satır renksiz.
+      const renkler = await popup.locator('#byzTablo tbody tr').evaluateAll((trs, pIx) => trs.map(tr => {
+        const td = tr.children[pIx]; return {renk: td.style.background || '', dorse: tr.lastElementChild.textContent};
+      }), basliklar.indexOf('Parti No'));
+      const grupluRenk = renkler.filter(r => r.dorse === '34ABC123').map(r => r.renk);
+      ok(grupluRenk.length >= 2 && grupluRenk.every(r => r && r === grupluRenk[0]), 'aynı dorse plakalı Parti No hücreleri aynı renkte (' + grupluRenk.length + ' satır)');
+      ok(renkler.filter(r => r.dorse === '—').every(r => !r.renk), 'plakasız satırın Parti No hücresi renksiz');
       const govde = await popup.locator('#pdfIcerik').textContent();
       ok(govde.includes('YAZDIR SOFOR') && govde.includes('+90 555 000 00 00') && govde.includes('55CEK55') && govde.includes('34ABC123'), 'rapor şoför adı + telefonu + çekici/dorse plakayı basar');
       ok(govde.includes('TOPLAM') && govde.includes('İşlem Bekleyen Beyanlar'), 'rapor başlık + TOPLAM satırı taşır');
@@ -93,6 +101,22 @@ const pdfSayfa = buf => (buf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)
       await page.waitForFunction(() => document.querySelector('#bekleyenPdfBtn').textContent.includes('PDF İndir') && !document.querySelector('#bekleyenPdfBtn').disabled);
       ok(await page.locator('body > div[aria-hidden="true"]').count() === 0, 'PDF sonrası geçici yakalama öğesi temizlendi');
       ok(errors.length === 0, 'masaüstü: sayfa hatası yok ' + errors.join('|'));
+      await ctx.close();
+    }
+
+    // ── İki farklı dorse grubu → iki farklı renk ─────────────────────────────
+    {
+      const m = html.match(SCRIPT_RE), v = JSON.parse(m[1]);
+      v.satir_grup = v.satirlar.map((_, i) => i < 2 ? 0 : (i < 4 ? 1 : null));
+      const ctx = await browser.newContext({viewport: {width: 1440, height: 900}});
+      await kur(ctx, html.replace(SCRIPT_RE, () => '<script type="application/json" id="bekleyenYazdirVeri">' + JSON.stringify(v) + '</script>'));
+      const page = await ctx.newPage();
+      await page.goto('https://beyan.test/beyanlar.php');
+      const [popup] = await Promise.all([ctx.waitForEvent('page'), page.locator('#bekleyenYazdirBtn').click()]);
+      await popup.waitForLoadState();
+      const r = await popup.locator('#byzTablo td.byz-grup').evaluateAll(tds => tds.map(td => td.style.background));
+      ok(r.length === 4 && r[0] === r[1] && r[2] === r[3] && r[0] !== r[2], 'iki dorse grubu iki farklı renk alır');
+      ok(await popup.evaluate(() => /print-color-adjust:exact/.test(document.head.textContent)), 'yazıcıda arka plan rengi korunur (print-color-adjust)');
       await ctx.close();
     }
 

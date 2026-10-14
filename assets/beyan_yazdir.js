@@ -35,6 +35,9 @@
     return /Android|iPhone|iPod|iPad/i.test(ua) || (/Macintosh/.test(ua) && (n.maxTouchPoints || 0) > 1);
   }
 
+  // Aynı dorse plakası → aynı renk. Açık tonlar: siyah yazı okunur, yazıcıda/PDF'te soluk kalmaz.
+  var RENKLER = ['#fde68a', '#bfdbfe', '#bbf7d0', '#fbcfe8', '#ddd6fe', '#fed7aa', '#a5f3fc', '#fecaca', '#d9f99d', '#e9d5ff'];
+
   var CSS =
     '.byz{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;font-size:11px;line-height:1.3}' +
     '.byz h2{font-size:16px;margin:0 0 4px}' +
@@ -44,6 +47,7 @@
     '.byz thead th{background:#eee;font-size:10.5px;white-space:nowrap}' +
     '.byz td.byz-s,.byz th.byz-s{text-align:right;white-space:nowrap}' +
     '.byz td.byz-nw{white-space:nowrap}' +
+    '.byz td{-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
     '.byz tfoot td{font-weight:700;background:#f6f6f6}' +
     '.byz tr{page-break-inside:avoid}.byz thead{display:table-header-group}';
 
@@ -58,11 +62,19 @@
       return '<th class="' + (k.t === 'sayi' ? 'byz-s' : '') + '">' + esc(k.l) + '</th>';
     }).join('');
     var nowrapKey = { tarih: 1, parti: 1, telefon: 1, cekici: 1, dorse: 1 };
-    var tr = veri.satirlar.map(function (s) {
+    var gruplar = veri.satir_grup || [];
+    var tr = veri.satirlar.map(function (s, ri) {
+      var g = gruplar[ri];
       return '<tr>' + s.map(function (h, i) {
         var k = kol[i];
         var cls = k.t === 'sayi' ? 'byz-s' : (nowrapKey[k.k] ? 'byz-nw' : '');
-        return '<td class="' + cls + '">' + esc(h === '' ? '—' : h) + '</td>';
+        var stil = '';
+        // Aynı dorse plakalı beyanların Parti No hücresi aynı renkte (sunucu grup no verir).
+        if (k.k === 'parti' && g !== null && g !== undefined) {
+          stil = ' style="background:' + RENKLER[g % RENKLER.length] + ';font-weight:700"';
+          cls += ' byz-grup';
+        }
+        return '<td class="' + cls + '"' + stil + '>' + esc(h === '' ? '—' : h) + '</td>';
       }).join('') + '</tr>';
     }).join('');
     var ft = veri.toplam.map(function (h, i) {
