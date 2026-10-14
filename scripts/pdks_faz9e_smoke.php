@@ -86,8 +86,8 @@ foreach (['gunluk_puantaj_yazdir.php', 'cavus_hakedis_yazdir.php'] as $yazdirma)
     ok9e("$yazdirma: render_header()/render_footer() ÇAĞIRMIYOR (aktif-durum kavramı geçersiz)",
         !str_contains($src, 'render_header(') && !str_contains($src, 'render_footer('));
 }
-ok9e('personel_takip.php (FAZ 8I 10-kart iniş yapısı) BU FAZDA DEĞİŞMEDİ (dosya mevcut, home-card sayısı hâlâ 10)',
-    substr_count(oku9e('personel_takip.php'), 'class="home-card"') === 10);
+ok9e('personel_takip.php (FAZ 8I iniş yapısı; v354 +Ters Kart Takip kartı → 11 home-card)',
+    substr_count(oku9e('personel_takip.php'), 'class="home-card"') === 11);
 
 // =========================================================
 // § B — Gün kapanışı kontrol listesi

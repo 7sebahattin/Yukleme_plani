@@ -317,6 +317,8 @@ function pdks_faz8j_kart_tanim_suz(PDO $pdo, array $kartlar, ?int $foremanId = n
  * Tanım tablosu yoksa null. Yazma yolunda kart kilidi ALTINDA çağrılır.
  */
 function pdks_faz8j_tanim_kart_engeli(PDO $pdo, int $kartId, int $foremanId, string $depo): ?string {
+    // v354: başka çavuşun TERS havuzundaki kart da aynı kurala tabidir (tablo yoksa null).
+    if ($tr = pdks_gunluk_ters_havuz_engeli($pdo, $kartId, $foremanId, $depo)) return $tr['hata'];
     $t = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
     if (!$t) return null;
     $depoFarkli = pdks_gunluk_depo_fold(trim((string)$t['depo'])) !== pdks_gunluk_depo_fold(trim($depo));
@@ -486,20 +488,29 @@ function pdks_faz8j_kartsiz_kart_olustur(PDO $pdo, int $workerTypeId, int $user)
  * çağrılır. Hakediş işaretini çağıran (oturum başına bir kez) koyar.
  * $satir['kart'] dolu olmalı (kartsız satırda sanal kart önceden oluşturulur).
  * $meta: reason, note, yeni_mesai, simdi, [toplu_id]
+ * v354 (Ters Kart Takip) — isteğe bağlı, varsayılanlar ESKİ davranışın aynısı:
+ *   kaynak       'manual' (varsayılan) | 'ters' — olay + dönem `source` değeri (PDKS_FAZ8J_SATIR_KAYNAKLARI)
+ *   olay_zamani  GİRİŞ olayının server_event_time'ı (varsayılan = giriş saati). Ters sabah
+ *                sayımı GERÇEK kayıt anını yazar; dönemin entry_time'ı yine sabit giriş saatidir.
+ *   audit_action satır audit eylemi (varsayılan 'puantaj_ekle').
  */
+const PDKS_FAZ8J_SATIR_KAYNAKLARI = ['manual', 'ters'];
 function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, array $meta): int {
     $sid = (int)$oturum['id']; $workDate = (string)$oturum['work_date']; $depo = (string)$oturum['depo'];
     $kart = $satir['kart']; $card = (int)$kart['id']; $tip = $satir['tip'];
     $type = (int)$tip['id']; $typeName = (string)$tip['name'];
     $entry = (string)$satir['entry']; $exit = $satir['exit'] ?? null;
-    $insE = $pdo->prepare("INSERT INTO daily_worker_card_events (session_id, worker_card_id, event_type, source, canonical_uid_snapshot, worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot, recorded_by_user_id, server_event_time) VALUES (?,?,?,'manual',?,?,?,?,?,?,?)");
-    $evPar = fn(string $tur, string $zaman) => [$sid, $card, $tur, (string)$kart['canonical_uid'], $type, $typeName, $workDate, $depo, $user, $zaman];
-    $insE->execute($evPar('GIRIS', $entry)); $girisEv = (int)$pdo->lastInsertId();
+    $kaynak = (string)($meta['kaynak'] ?? 'manual');
+    if (!in_array($kaynak, PDKS_FAZ8J_SATIR_KAYNAKLARI, true)) throw new RuntimeException('Geçersiz kayıt kaynağı.');
+    $girisOlayZamani = (string)($meta['olay_zamani'] ?? $entry);
+    $insE = $pdo->prepare("INSERT INTO daily_worker_card_events (session_id, worker_card_id, event_type, source, canonical_uid_snapshot, worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot, recorded_by_user_id, server_event_time) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+    $evPar = fn(string $tur, string $zaman) => [$sid, $card, $tur, $kaynak, (string)$kart['canonical_uid'], $type, $typeName, $workDate, $depo, $user, $zaman];
+    $insE->execute($evPar('GIRIS', $girisOlayZamani)); $girisEv = (int)$pdo->lastInsertId();
     $cikisEv = null;
     if ($exit !== null) { $insE->execute($evPar('CIKIS', $exit)); $cikisEv = (int)$pdo->lastInsertId(); }
     $status = $exit !== null ? 'closed' : 'open';
-    $pdo->prepare("INSERT INTO daily_worker_work_periods (session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot, entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class, work_date_snapshot, depo_snapshot, status, source) VALUES (?,?,?,?,?,?,?,?,'auto',?,?,?,'manual')")
-        ->execute([$sid, $card, $type, $typeName, $girisEv, $cikisEv, $entry, $exit, $workDate, $depo, $status]);
+    $pdo->prepare("INSERT INTO daily_worker_work_periods (session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot, entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class, work_date_snapshot, depo_snapshot, status, source) VALUES (?,?,?,?,?,?,?,?,'auto',?,?,?,?)")
+        ->execute([$sid, $card, $type, $typeName, $girisEv, $cikisEv, $entry, $exit, $workDate, $depo, $status, $kaynak]);
     $pid = (int)$pdo->lastInsertId();
     $kayit = [
         'session_id' => $sid, 'period_id' => $pid, 'worker_card_id' => $card, 'card_no' => (string)$kart['card_no'],
@@ -511,7 +522,8 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     ];
     if (!empty($meta['toplu_id'])) $kayit['toplu_id'] = (string)$meta['toplu_id'];
     if (!empty($meta['istek_id'])) $kayit['istek_id'] = (string)$meta['istek_id'];
-    pdks_faz8j_audit($pdo, $user, 'puantaj_ekle', $pid, [], $kayit);
+    if ($kaynak !== 'manual') $kayit['kaynak'] = $kaynak;
+    pdks_faz8j_audit($pdo, $user, (string)($meta['audit_action'] ?? 'puantaj_ekle'), $pid, [], $kayit);
     return $pid;
 }
 

@@ -313,7 +313,7 @@ $sg = $ggovde('pdks_gunluk_kart_tanimsiz_sil');
 ok('silme: is_admin kapısı fonksiyon içinde', str_contains($sg, "is_admin()"));
 ok('silme: kartlar girişle AYNI kilitle (faz8a_kart_kilitle) ve istek kontrolü kilitten SONRA', ($k = strpos($sg, 'pdks_gunluk_faz8a_kart_kilitle(')) !== false && ($i = strpos($sg, 'pdks_gunluk_kart_sil_istek_kayitli', $k)) !== false);
 ok('silme: catch\'te PDOException kontrolü genel hatadan önce', str_contains($sg, 'catch (Throwable $e)') && strpos($sg, 'instanceof PDOException') < strpos($sg, "'yazma_hatasi'"));
-ok('geçmiş tabloları listesi: events + periods + assignments', pdks_gunluk_kart_gecmis_tablolari() === ['daily_worker_card_events' => 'worker_card_id', 'daily_worker_work_periods' => 'worker_card_id', 'worker_card_assignments' => 'worker_card_id']);
+ok('geçmiş tabloları listesi: events + periods + assignments + ters (v354)', pdks_gunluk_kart_gecmis_tablolari() === ['daily_worker_card_events' => 'worker_card_id', 'daily_worker_work_periods' => 'worker_card_id', 'worker_card_assignments' => 'worker_card_id', 'ters_havuz_kart' => 'worker_card_id', 'ters_sayim_kart' => 'worker_card_id']);
 $fk = [];
 foreach (glob($ROOT . '/config/*.php') as $f) {
     if (preg_match_all('/`(\w+)`\s+INT[^,]*,(?:(?!CREATE TABLE).)*?FOREIGN KEY \(`\1`\)\s*REFERENCES `worker_cards`/s', (string)file_get_contents($f), $mm)) $fk = array_merge($fk, $mm[1]);

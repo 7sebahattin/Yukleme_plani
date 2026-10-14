@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v353` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v354` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -28,7 +28,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `dogum_deney_lib.php` + `dogum_deney.php` (doğum tarihi biçim deneyi, admin) · `tekrar_gonder_lib.php` (Gönderilenler → Tekrar gönder, salt okunur) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_dogum_deney_smoke` · `hks_tekrar_gonder_smoke` · `hks_kisi_pencere_smoke.js` · `hks_gonderilenler_smoke.js` |
 | Hesap | `hesap` · `hesap_liste/kayit/durum/muhasebe/personel/yazdir/export/sil/dosya/dosya_sil` · `hesap_muhasebe_fis_pdf` · `hesap_config` | `hesap_calc` · `hesap_pdf` | `hesap.css` · `hesap.js` | `hesap_smoke` · `hesap_ui_smoke` · `hesap_izolasyon_smoke` · `hesap_pdf_smoke` |
 | Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
-| PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`) | `pdks.css` · `pdks.js` · `print_pdks.css` | `pdks_*_smoke` |
+| PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` · `ters_kart*` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`, `pdks_ters`) | `pdks.css` · `pdks.js` · `print_pdks.css` · `ters_kart.js` | `pdks_*_smoke` |
 | Raporlar | `reports` · `raporlar` · `rapor_malzeme` · `rapor_yazdir` · `kantar_raporu` | `xlsx_export` | — | `rapor_malzeme_xlsx_smoke` |
 | Yönetim | `definitions` · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
 | **Kaldırılan / 410 tombstone** | `admin_db_backup_download` · `hesap_sahipsiz` · `depo_tasima` · `firma_eslestirme` · `fix_brand` · `repair_xz_tables` · `faz8b_migrate` · `record_new` | — | — | `rol_kapilari_smoke` (değişmezleri denetler) |
@@ -806,6 +806,35 @@ v316 ek bir kısaltma koruması yuvarlıyordu — v317'de ikisi de bu simetrik k
 - **Sıralama:** Mesai Detayı "Kart Hareketleri" varsayılan sırası SUNUCUDA, yalnız `gunluk_isci_puantaj_detay.php`'de `usort`: son işlem (çıkış varsa çıkış, yoksa giriş) DESC, beraberlikte `period_id` DESC. Paylaşılan `pdks_gunluk_faz8a_oturum_donemleri()` SQL'i (ASC) Gün Sonu Fişi ile ortaktır, KRONOLOJİK kalır — ona sıralama ekleme.
 - **Başlık sıralaması TEK yerde:** `config/pdks_liste_ui.php`. `<table data-pdks-sirala>` + `<th data-sirala="metin|sayi|zaman">` içinde GERÇEK `<button>` + hücrede ham `data-sirala-deger`; artan → azalan → varsayılan, boşlar her iki yönde sonda, metin `tr` doğal (K2 < K10), aktif `th`'de `aria-sort`. Mobil karşılığı `select[data-pdks-sirala-sec]` + `data-sd-*`. Yeni tabloda ayrı script YAZMA. Test: `PUANTAJ_FAZ8B=1 PUANTAJ_SIRALA=1 php scripts/pdks_puantaj_dialog_render.php > _test_sirala.html` + `PUANTAJ_SIRALA=1 PUANTAJ_KAPALI=1 … > _test_kapanis_notu.html` → `node scripts/pdks_sirala_smoke.js`.
 - **Kapanış notu düzenleme:** `pdks_gunluk_oturum_not_guncelle()` (config/pdks_faz8h.php) — YALNIZ admin (sahip kararı), mesai aktif depoda, YALNIZ `status='closed'` (her tarih), gerekçe yok, boş → NULL, ≤1000 karakter, tek tx + `FOR UPDATE`, audit `daily_session_note_edit`. Hakediş/cari bu kolonu okumaz; hakediş tablolarına/`needs_recalculation`'a DOKUNMAZ (kesin hakedişte de çalışır) — gövdeye ekleme (test denetler). Ekran: kapalı mesaide "✏ Notu Düzenle" → native `<dialog id="kapanisNotu">`, POST `action=kapanis_notu` + CSRF, mesai id'si sunucudan. Test: `php scripts/pdks_kapanis_notu_smoke.php`.
+
+### Ters Kart Takip (v354)
+Bağımsız, paralel günlük işçi modeli: sabah yalnız çavuşun elinde KALAN kartlar okutulur, dağıtılanlar (UID bazında)
+onayla birlikte SABİT giriş saatiyle açık dönem alır; akşam mevcut Ortak Çıkış. Normal kiosk/Tanımlı Giriş/Ortak Çıkış
+AYNEN çalışır. Ayrıntı + sahip kararları: `docs/TERS_KART_TAKIP.md`.
+- **Dosyalar:** `config/pdks_ters.php` (şema + tüm mantık) · `ters_kart.php` (hub) · `ters_kart_havuz.php` (A) ·
+  `ters_kart_sayim.php` (B) · `ters_kart_cikis.php` (C) · `ters_kart_mutabakat.php` (D) · `assets/ters_kart.js` ·
+  `pdks.css` "v354" `.tk-*` bloğu. Yeni yetki YOK (havuz `worker_cards`, sayım/çıkış `daily_scan`, mutabakat +`daily_reports`).
+- **4 yeni tablo** (sahip GO — ALTER YOK): `ters_havuz_kart` (kart başına tek aktif üyelik, `aktif_kart_id` UNIQUE) ·
+  `ters_cavus_ayar` (tarihli saat) · `ters_sayim` (`aktif_anahtar` UNIQUE = çavuş+gün+depo başına tek aktif sayım,
+  `istek_id` UNIQUE) · `ters_sayim_kart` (onayda havuzun anlık görüntüsü). `pdks_ters_tablolar/_migrate/_sema_hazir`;
+  genel sema_hazir'lere EKLENMEZ, kurulum yalnız migrate.php kartı. Tablo yoksa modül "kurulmamış" der, eski sistem aynen.
+- **İkinci yazma yolu YOK:** giriş `pdks_faz8j_satir_kontrol` + `pdks_faz8j_satir_yaz` (meta `kaynak`='ters',
+  `olay_zamani`=gerçek an, `audit_action`='ters_giris'; varsayılanlar eski davranış), mesai `pdks_faz8j_oturum_coz`,
+  çıkış `pdks_gunluk_ortak_cikis_kaydet`, geri alma `pdks_faz8j_void_uygula`. pdks_ters.php dönem/olay/worker_cards
+  tablolarına doğrudan yazmaz (test denetler).
+- **Zamanlar:** dönem `entry_time` = sabit saat; GİRİŞ olayı `source='ters'`, `server_event_time` = gerçek kayıt anı;
+  onay anı `ters_sayim.onay_zamani`. Sabit saat onaydan en çok 2 sa ileride (`PDKS_TERS_ILERI_DK`).
+- **Onay HEP-YA-HİÇ**, kilit sırası: sayım FOR UPDATE → mesai FOR UPDATE → üyelik + kartlar (artan id) FOR UPDATE →
+  `pdks_ters_sayim_degerlendir()` kilit altında yeniden. Bu kilitlerden ÖNCE kilitsiz okuma EKLEME (InnoDB anlık görüntüsü
+  erken sabitlenir → kiosk girişini görmeyip çift açık dönem). Dönmemiş kart (son dönemi eksik çıkışlı) karar verilmeden
+  onay ENGELLİ; bu çavuşun mesaisinde normal okutmayla içerideki kart `zaten_iceride` (ikinci dönem yok).
+- **Kart sahipliği kapısı TEK yerde** `pdks_gunluk_ters_havuz_engeli()` (pdks_gunluk.php, tablo yoksa null): normal giriş
+  (kart kilidi altında), tanım yazımı, Seri Kart sınıflaması, Kart Havuzu silme, `pdks_faz8j_tanim_kart_engeli`.
+  `ters_havuz_kart` + `ters_sayim_kart` `pdks_gunluk_kart_gecmis_tablolari()`'nda.
+- **Geri al** ilk çıkışa kadar (daily_scan, gerekçe); dönemler iptal (silinmez), okutmalar yeni taslağa kopyalanır.
+- Mesai Detayı'nda `source='ters'` → "↩ Ters" rozeti. Hakediş/cari/rapor kaynağa göre DALLANMAZ — dallanma EKLEME.
+- Test: `php scripts/pdks_ters_kart_smoke.php` (A–J) · `node scripts/pdks_ters_kart_smoke.js` (render'ı kendisi üretir;
+  tek render: `TK_SAYFA=<sayfa> php scripts/pdks_ters_kart_render.php`).
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

@@ -41,6 +41,7 @@ require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
+require_once __DIR__ . '/config/pdks_ters.php';   // v354 Ters Kart Takip (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/pdks_servis.php';   // v299 Servis Ücreti
 // Faz 9D / H-03: hakediş düzeltme/mahsup (foreman_entitlement_adjustments)
 // tablosu da AYNI sebeple BURADAN elle tetiklenir. Faz 1-9C tablolarına
@@ -106,6 +107,7 @@ $pdks_faz9d_results = []; $pdks_faz9d_ran = false;   // Faz 9D (hakediş düzelt
 $pdks_cavus_ucret_results = []; $pdks_cavus_ucret_ran = false;   // Çavuş Ücreti (Faz 8B eki)
 $pdks_cavus_b_results = []; $pdks_cavus_b_ran = false;   // Çavuş Ücreti Yöntem B (dönem kapanışı)
 $pdks_kart_tanim_results = []; $pdks_kart_tanim_ran = false;   // v298 Tanımlı Giriş (kart → çavuş + tip + depo)
+$pdks_ters_results = []; $pdks_ters_ran = false;   // v354 Ters Kart Takip (4 yeni tablo)
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
@@ -220,6 +222,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_kart_tanim', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_ters') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_ters_ran     = true;
+    $pdks_ters_results = pdks_ters_migrate($pdo);
+    foreach ($pdks_ters_results as $ptr) {
+        if ($ptr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_ters', null, null,
+                ['operation' => 'create_table', 'table' => $ptr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'mail') {
@@ -432,6 +444,47 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_gunluk_kart_tanim_tablolar() as $pksql) { echo h($pksql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Ters Kart Takip — Tablolar (v354)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: 4 YENİ tablo (<code>ters_havuz_kart</code>, <code>ters_cavus_ayar</code>, <code>ters_sayim</code>,
+      <code>ters_sayim_kart</code>) — mevcut tablolara ALTER YOK. Önkoşul: Günlük İşçi + Faz 8A + Faz 8J. Günlük İşçi'nin genel
+      hazır-mı kontrollerine BİLEREK EKLENMEZ — tablolar kurulmasa da mevcut giriş-çıkış ekranları AYNEN çalışır, yalnız
+      Ters Kart Takip ekranları "kurulmamış" der.
+      <?php if ($pdks_ters_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_ters_results as $ptr): ?>
+        <br>&nbsp;&nbsp;<?= h($ptr['tablo']) ?>: <?= h($ptr['durum']) ?> — <?= h($ptr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_ters_tablolar()) as $ptt):
+          $pte = pdks_gunluk_tablo_var($pdo, $ptt); ?>
+          <tr>
+            <td><?= h($ptt) ?></td>
+            <td style="color:<?= $pte ? '#1f9d55' : '#c0392b' ?>;font-weight:600;"><?= $pte ? '✓ Var' : '✗ Eksik' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_ters">
+      <button type="submit" class="btn btn-primary">Ters Kart Takip Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_ters_tablolar() as $ptsql) { echo h($ptsql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>

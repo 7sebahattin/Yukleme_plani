@@ -120,8 +120,8 @@ ok('personel_takip.php: yalnız aktif modüllere erişimi olmayan kullanıcı fo
     (bool)preg_match('/if \(!\$p_gunluk && !\$p_hakcari && !\$p_rapor\)\s*\{\s*\n\s*forbidden\(/', $takipSrc));
 ok('personel_takip.php: legacy PDKS izinleri landing erişim koşulunda kullanılmıyor',
     !str_contains($takipSrc, 'attendance.employees') && !str_contains($takipSrc, 'attendance.cards') && !str_contains($takipSrc, 'attendance.scan'));
-ok('personel_takip.php: tam 10 ana kartın her biri kendi aktif hedef izniyle sarılı',
-    substr_count($takipSrc, 'class="home-card"') === 10 && substr_count($takipSrc, "can('attendance.") >= 10);
+ok('personel_takip.php: tam 11 ana kartın (v354: +Ters Kart Takip) her biri kendi aktif hedef izniyle sarılı',
+    substr_count($takipSrc, 'class="home-card"') === 11 && substr_count($takipSrc, "can('attendance.") >= 11);
 ok('personel_takip.php: legacy kartlar ve Ekstre landing kartı yok',
     !str_contains($takipSrc, 'href="personel.php"') && !str_contains($takipSrc, 'href="personel_kartlar.php"')
     && !str_contains($takipSrc, 'href="giris_cikis.php"') && !str_contains($takipSrc, 'href="isci_tipleri.php"')
