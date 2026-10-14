@@ -7,7 +7,7 @@ $suggest_data = beyan_suggest_form_data();
 foreach (beyan_permission_fields() as $section => $names) {
     if (!can_beyan($section . '.read')) foreach ($names as $name) unset($suggest_data['values'][$name]);
 }
-if (!can_beyan('contact.read')) $suggest_data['companies'] = [];
+if (!can_beyan('contact.read')) { $suggest_data['companies'] = []; $suggest_data['drivers'] = []; }
 if (!can_beyan('hks.read')) $suggest_data['products'] = [];
 $f = beyan_redact_fields($f);
 $tabs = ['beyan' => 'Beyan'];
@@ -209,4 +209,4 @@ $field = static function (string $name, string $label, string $icon, string $mod
 </form>
 </div>
 <script type="application/json" id="suggestData"><?= json_encode($suggest_data['values'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
-<script type="application/json" id="beyanSuggestMeta"><?= json_encode(['companies' => $suggest_data['companies'], 'products' => $suggest_data['products']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+<script type="application/json" id="beyanSuggestMeta"><?= json_encode(['companies' => $suggest_data['companies'], 'products' => $suggest_data['products'], 'drivers' => $suggest_data['drivers'] ?? []], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>

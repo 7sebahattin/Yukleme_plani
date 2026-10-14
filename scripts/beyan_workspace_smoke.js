@@ -109,10 +109,11 @@ function ok(condition, label) { if (!condition) throw Error(label); count++; con
         // Full batch source already exists: transfer remains explicit via conflict review.
         await page.locator('[data-beyan-tab=kaynak]').click();
         ok((await page.locator('#beyanParseCompare').textContent()).includes('two'), 'single transfer offers exact row source for review');
-        await page.setContent(`<meta name="csrf-token" content="test"><script id="suggestData" type="application/json">{"company_name":["GÜMRÜK A","GÜMRÜK B"],"company_address":["ADRES A","ADRES B"],"product_name":["DOMATES"]}</script>
-            <script id="beyanSuggestMeta" type="application/json">{"companies":{"GÜMRÜK A":"ADRES A","GÜMRÜK B":"ADRES B"},"products":{"DOMATES":{"urun_id":"7"}}}</script>
+        await page.setContent(`<meta name="csrf-token" content="test"><script id="suggestData" type="application/json">{"company_name":["GÜMRÜK A","GÜMRÜK B"],"company_address":["ADRES A","ADRES B"],"product_name":["DOMATES"],"driver_name":["ALİ VELİ","AYŞE KAYA","TELEFONSUZ ŞOFÖR"]}</script>
+            <script id="beyanSuggestMeta" type="application/json">{"companies":{"GÜMRÜK A":"ADRES A","GÜMRÜK B":"ADRES B"},"products":{"DOMATES":{"urun_id":"7"}},"drivers":{"ALİ VELİ":"+90 555 111 11 11","AYŞE KAYA":"+90 555 222 22 22"}}</script>
             <input name="company_name" value="GÜMRÜK A" data-uppercase="tr" data-suggest="company_name" data-suggest-endpoint="api_beyan_tanim_ekle.php"><textarea name="company_address" data-uppercase="tr" data-suggest="company_address" data-suggest-endpoint="api_beyan_tanim_ekle.php">ADRES A</textarea>
-            <input name="product_name" data-uppercase="tr" data-suggest="product_name" data-suggest-endpoint="api_beyan_tanim_ekle.php"><select name="hks_urun_id"><option value="">Seçiniz</option><option value="7">DOMATES</option></select>`);
+            <input name="product_name" data-uppercase="tr" data-suggest="product_name" data-suggest-endpoint="api_beyan_tanim_ekle.php"><select name="hks_urun_id"><option value="">Seçiniz</option><option value="7">DOMATES</option></select>
+            <input name="driver_name" data-uppercase="tr" data-suggest="driver_name" data-suggest-endpoint="api_beyan_tanim_ekle.php"><input name="driver_phone" type="tel">`);
         await page.evaluate(() => {
             window.definitionRequests = [];
             window.fetch = async (url, options) => {
@@ -155,6 +156,30 @@ function ok(condition, label) { if (!condition) throw Error(label); count++; con
         await page.locator('[name=product_name]').dispatchEvent('change');
         await page.waitForTimeout(150);
         ok(await page.locator('select[name=hks_urun_id]').inputValue() === '' && !(await page.evaluate(() => document.querySelector('select[name=hks_urun_id]').disabled)), 'manual product clears stale HKS ID and unlocks the field');
+        // Şoför Adı → Şoför Telefonu (v361)
+        const drvName = page.locator('[name=driver_name]'), drvPhone = page.locator('[name=driver_phone]');
+        await drvName.fill('ali');
+        await drvName.dispatchEvent('focus');
+        await page.locator('.ms-sug-row').filter({hasText: 'ALİ VELİ'}).first().dispatchEvent('mousedown');
+        ok(await drvName.inputValue() === 'ALİ VELİ' && await drvPhone.inputValue() === '+90 555 111 11 11', 'şoför önerisinden seçilince bilinen telefonu kendiliğinden gelir');
+        await drvName.fill('ayşe kaya');
+        await drvName.dispatchEvent('change');
+        ok(await drvPhone.inputValue() === '+90 555 222 22 22', 'şoför adı yazılıp çıkılınca da (TR-duyarsız) telefonu gelir; önceki OTOMATİK telefon yenisiyle değişir');
+        await drvName.fill('telefonsuz şoför');
+        await drvName.dispatchEvent('change');
+        ok(await drvPhone.inputValue() === '', 'telefonu bilinmeyen şoförde önceki otomatik telefon temizlenir (yanlış kişinin numarası kalmaz)');
+        await drvName.fill('ali veli');
+        await drvName.dispatchEvent('change');
+        await drvPhone.fill('0532 000 00 00');
+        await drvName.fill('ayşe kaya');
+        await drvName.dispatchEvent('change');
+        ok(await drvPhone.inputValue() === '0532 000 00 00', 'elle yazılan/düzeltilen telefon başka şoför seçilince ezilmez');
+        await drvPhone.fill('');
+        await drvName.dispatchEvent('change');
+        ok(await drvPhone.inputValue() === '+90 555 222 22 22', 'telefon boşaltılınca tekrar otomatik dolar');
+        await drvName.fill('');
+        await drvName.dispatchEvent('change');
+        ok(await drvPhone.inputValue() === '', 'şoför adı silinince otomatik telefon da silinir');
         ok(errors.length === 0, 'no browser errors: ' + errors.join('; '));
         console.log(count + ' workspace/parser/bulk checks passed.');
     } finally { await browser.close(); }
