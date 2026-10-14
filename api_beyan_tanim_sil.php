@@ -19,7 +19,7 @@ if (!is_array($in)) beyan_tanim_sil_json(['ok'=>false,'error'=>'Geçersiz istek.
 csrf_check($in['csrf'] ?? null);
 if (!is_string($in['field'] ?? null) || !is_string($in['name'] ?? null)) beyan_tanim_sil_json(['ok'=>false,'error'=>'Geçersiz alan değeri.'], 422);
 $field = $in['field'];
-if (in_array($field, ['company_address', 'contact_person', 'buyer_name'], true) && !can_beyan('contact.write')) forbidden();
+if (in_array($field, ['company_address', 'contact_person', 'buyer_name', 'driver_name'], true) && !can_beyan('contact.write')) forbidden();
 try {
     $name = beyan_suggest_hide(db(), $field, $in['name']);
     audit_log_event('delete', 'definitions', null, ['source'=>'beyan_form','field'=>$field,'name'=>$name], null);

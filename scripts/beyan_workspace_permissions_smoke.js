@@ -23,12 +23,12 @@ function ok(value, label) { if (!value) throw Error(label); count++; console.log
       ok(await page.locator('[name=vehicle_plate]').isEnabled(), profile + ' base plate editable independently of HKS');
       ok(await page.evaluate(() => new FormData(document.querySelector('#beyanForm')).get('vehicle_plate') === '34ABC123'), profile + ' plate retained in submission');
       if (profile === 'restricted') {
-        ok(await page.locator('[name=buyer_name], [name=analysis_note], [name=raw_text], .beyan-workspace-hks').count() === 0, 'restricted controls omitted from DOM');
+        ok(await page.locator('[name=buyer_name], [name=driver_name], [name=driver_phone], [name=analysis_note], [name=raw_text], .beyan-workspace-hks').count() === 0, 'restricted controls omitted from DOM');
         ok(!html.includes('ÖRNEK ALICI') && !html.includes('ÖRNEK ADRES') && !html.includes('Kontrol edilecek örnek satır'), 'restricted values absent from HTML and JSON');
         ok(await page.locator('[data-beyan-tab]').count() === 1, 'only authorized tab rendered');
       }
       if (profile === 'readonly') {
-        for (const field of ['buyer_name', 'company_address', 'analysis_note', 'raw_text', 'sample_crate_count', 'sample_crate_type', 'sample_gross_kg', 'sample_net_kg']) {
+        for (const field of ['buyer_name', 'driver_name', 'driver_phone', 'company_address', 'analysis_note', 'raw_text', 'sample_crate_count', 'sample_crate_type', 'sample_gross_kg', 'sample_net_kg']) {
           ok(await page.locator('[name="'+field+'"]').isDisabled(), field + ' read-only');
         }
         ok(await page.evaluate(() => !new FormData(document.querySelector('#beyanForm')).has('buyer_name')), 'disabled values not submitted');

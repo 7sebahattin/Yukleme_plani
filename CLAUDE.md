@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v355` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v356` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -1112,6 +1112,21 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 - **HKS Ürün Adı — SUNUCU KARAR VERİR (v349, hata düzeltmesi):** v348'de ürün adı KABAK→ACUR değiştirilince kilitli alanın gizli kopyasındaki ESKİ id (KABAK) kaydediliyor, kayıt bunu "ACUR→KABAK" diye `hks_eslesme`'ye ÖĞRENİYOR, öğrenilen eşleşme `bb_tahmin`'de önce geldiği için alan sonraki açılışta yine KABAK'a KİLİTLENİYORDU (kendini besleyen döngü; JS isteği gecikir/başarısız olur/eski app.js önbellekte kalırsa tetiklenir). Kurallar: (1) kilit kararı `beyan_hks_urun_otomatik()` = YALNIZ katalog tam ad + benzer ad (`bb_tahmin(..., false)`) — öğrenilen eşleşme KİLİTLEMEZ, yalnız açık alanda öneri; (2) kayıtta `beyan_hks_urun_post_coz($_POST, product_name)` (beyan_edit + beyan_create, `beyan_hks_form_oku`'dan ÖNCE): formda `hks_urun_alan=1` varsa otomatik eşleşme → o id (gönderilen yok sayılır), ad boş → boş, eşleşme yok → yalnız açık select'ten gelen değer (gelmediyse boş); (3) `hks_eslesme_yaz('urun',…)` YALNIZ elle seçimde (`$hks_urun_elle`); (4) gizli değer kopyası (`data-hks-ayna`) KALDIRILDI — geri ekleme; (5) JS uç hatasında alan AÇILIR. Uçtan uca test: `node scripts/beyan_hks_urun_e2e.js` (php -S + dosya SQLite, `scripts/beyan_hks_urun_e2e_server.php`; kullanıcı senaryosu, yarış, uç hatası, elle seçim, zehirli öğrenme, JS kapalı).
 - **HKS Ürün Adı — kilit kararı TARAYICIDA, ağsız (v350):** v349'da kilit kararı `api_beyan_urun_esle.php` isteğine bağlıydı; canlıda istek başarısız olunca alan boş AÇILIYOR, Güncelle'de ise sunucu aynı adı eşleştiriyordu (ekran ≠ kayıt). Artık Ürün Adı'ndan çıkılınca (`change`) app.js kararı `otomatik()` ile AĞA GİTMEDEN verir: `urunNorm` = `hks_eslesme_norm` (İ→i, I→ı, küçük harf), tam ad → `urunBenzer` = `bb_urun_benzer` BİREBİR aynası (≥3 harf sözcük, ≥4 harfte önek, en az fazla sözcük, beraberlik → yok); katalog = select option'ları (`data-katalog-disi` "Mevcut seçim" hariç). Eşleşirse alan HİÇ açılmaz; eşleşmezse açılır ve uç YALNIZ öğrenilmiş öneri için sorulur (hata → öneri yok). **PHP kuralını (`beyan_hks_urun_otomatik`/`bb_urun_benzer`/`hks_eslesme_norm`) değiştirirsen JS aynasını da değiştir** — e2e `I` bölümü 14 adda "ekran = kayıt" eşitliğini sınar. Uç artık `ob_start` + `display_errors=0` ile ara çıktıyı JSON'dan atar.
 - **Yeni Beyan'da analiz tarihleri + turuncu Düzenle (v353):** Analiz sekmesindeki Numune Alındı / Analiz Sonuç tarihleri artık oluşturma formunda da çizilir (eskiden `$is_edit` koşuluyla yalnız düzenlemede vardı; `beyan_create.php` bu alanları zaten okuyup kaydediyordu). Önizleme üst çubuğundaki Düzenle `.btn-duzenle` ile turuncu (açık + koyu). Test: e2e `J` bölümü.
+- **Şoför Adı + Şoför Telefonu (v356, sahip GO verdi — 2 nullable ADD COLUMN):** `customs_declarations.driver_name VARCHAR(150)` ve
+  `driver_phone VARCHAR(40)` (auto-migration `config/helpers.php`, v343 `foreach` kalıbı). Form: Parti/Sevkiyat kartının 3. satırında Dorse
+  Plaka'dan sonra (`_beyan_form.php`; `$field(..., 'tel')` kipi YALNIZ telefonda `type="tel"` + `inputmode="tel"` verir, `data-uppercase` basmaz;
+  `style.css` sonunda `form.bf` için YALNIZ-EKLEME `input[type="tel"]` girdi kuralı (mevcut satırlara dokunulmaz — `pdks_faz1b_static_smoke` silinen satırı reddeder); yeni `data-ic="telefon"` simgesi `form.bf, .bv` kapsamında, açık + koyu tema).
+  **Şoför Adı = öneri alanı** (`beyan_suggest_fields()['driver_name']`, KV `beyan_defs_driver_name`, max 150): "+ ekle", × ile silme
+  (`api_beyan_tanim_ekle/sil.php`, `contact.write` kapısında) ve temiz başlangıç (`BEYAN_ONERI_BASLANGIC`) aynen geçerli; yükleme kaydındaki
+  `material_definitions` `sofor` tipiyle KARIŞMAZ (`type` bilerek boş). `beyan_suggest_form_data()` geçmiş önerileri yeni kolondan okur — kolon yoksa
+  öneriler sessizce boş kalır, bu yüzden test şemalarına kolon eklendi. **Telefon öneri listesine GİRMEZ**: `beyan_telefon_normalize()` (saf; yalnız rakam
+  ve `+ ( ) - .` boşluk, ardışık boşluk tekler, ≤40) + `beyan_veri_dogrula()` alan gönderildiyse 7–15 rakam ister ("Şoför telefonu 7–15 haneli olmalıdır.").
+  İzin: `beyan_permission_fields()` **`contact`** grubu (kişisel veri) — `beyan_redact_fields`/`beyan_protect_input` önizleme + düzenlemede otomatik
+  uygular. Edit'te alan HİÇ gönderilmezse eski değer korunur (`tractor_plate` listesinde). **Kopyala'ya (`beyan_kopyala.php`), WhatsApp metnine
+  (`beyan_whatsapp_metin`), audit değerlerine ve toplu yola (`beyan_insert`) GİRMEZ**; önizlemede Lojistik / Alıcı kartında Dorse Plaka'dan sonra
+  (boşsa '—', `tel:` bağlantısı yok). Test: `beyan_ui_smoke.php` `[şoför]` satırları (oluştur→DB→düzenle→önizleme, geçersiz telefon, yetkisiz kullanıcı,
+  gönderilmeyen alan, durum şeridi) · `beyan_suggest_smoke.php` · `beyan_data_smoke.php` · `beyan_kopyala_smoke.php` · `beyan_permissions_smoke.php` ·
+  `beyan_workspace_permissions_smoke.js`.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

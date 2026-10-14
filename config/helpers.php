@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v355');
+    define('APP_SURUM', 'v356');
 }
 
 // --- HTML kaçışı ---
@@ -1711,6 +1711,13 @@ endif;
                 }
             }
 
+            // v356 (sahip GO verdi): Şoför adı + telefonu. Yalnız nullable ADD COLUMN.
+            foreach (['driver_name' => 'VARCHAR(150)', 'driver_phone' => 'VARCHAR(40)'] as $_sc => $_st) {
+                if (!in_array($_sc, $cd_cols, true)) {
+                    $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `$_sc` $_st NULL DEFAULT NULL");
+                }
+            }
+
             // NUMUNE (v334, sahip GO verdi): Not'un üstündeki Numune bölümü; WhatsApp metnine girer.
             // Yalnız nullable ADD COLUMN — mevcut veriye dokunmaz.
             foreach (['sample_gross_kg' => 'DECIMAL(12,3)', 'sample_net_kg' => 'DECIMAL(12,3)',
@@ -2598,6 +2605,14 @@ function beyan_veri_dogrula(array $data): array {
         } catch (InvalidArgumentException $e) {
             $values[$k] = null;
             $errors[] = $label . ': ' . $e->getMessage();
+        }
+    }
+    // Şoför telefonu (v356): yalnız alan gönderildiyse işlenir (toplu kayıt/durum şeridi etkilenmez).
+    if (array_key_exists('driver_phone', $data)) {
+        $values['driver_phone'] = beyan_telefon_normalize((string)$data['driver_phone']);
+        $rakam = strlen((string)preg_replace('/\D+/', '', $values['driver_phone']));
+        if ($values['driver_phone'] !== '' && ($rakam < 7 || $rakam > 15)) {
+            $errors[] = 'Şoför telefonu 7–15 haneli olmalıdır.';
         }
     }
     if (($values['sample_net_kg'] ?? null) !== null && ($values['sample_gross_kg'] ?? null) !== null
@@ -3655,6 +3670,14 @@ function beyan_plaka_normalize(?string $p): string {
     return mb_strtoupper(trim($p), 'UTF-8');
 }
 
+// Şoför telefonu (v356): serbest biçim; yalnız rakam ve + ( ) - . boşluk kalır,
+// ardışık boşluk teklenir, en çok 40 karakter. Saf — DB/oturum yok. Büyük harf
+// dönüşümü anlamsız olduğundan öneri listesine girmez.
+function beyan_telefon_normalize(?string $t): string {
+    $t = (string)preg_replace('/[^0-9+().\-\s]/u', '', (string)$t);
+    $t = (string)preg_replace('/\s+/u', ' ', $t);
+    return mb_substr(trim($t), 0, 40, 'UTF-8');
+}
 
 function beyan_hks_eslesme_tam(array $beyan): bool {
     return trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
@@ -3697,6 +3720,9 @@ function beyan_suggest_fields(): array {
         'company_name' => ['type'=>'gumruk','label'=>'Gümrük Adı','max'=>255],
         'company_address' => ['type'=>'','label'=>'Gümrük Adresi','max'=>2000],
         'contact_person' => ['type'=>'','label'=>'İlgili Kişi','max'=>150],
+        // v356: Şoför Adı — beyan önerisi (KV beyan_defs_driver_name). Yükleme kaydındaki
+        // material_definitions 'sofor' tipiyle KARIŞTIRILMAZ (type bilerek boş).
+        'driver_name' => ['type'=>'','label'=>'Şoför Adı','max'=>150],
     ];
 }
 function beyan_suggest_normalize(string $field, string $raw): string {

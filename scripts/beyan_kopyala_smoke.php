@@ -111,7 +111,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT, driver_name TEXT, driver_phone TEXT,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -167,7 +167,7 @@ function beyan_ekle(array $a = []): int {
         'transport_type' => 'KARAYOLU', 'line_type' => 'HAT-1',
         'company_name' => 'LLC ZAPADNYE', 'company_address' => 'RUSSIA, 108811, MOSKVA',
         'contact_person' => 'KİŞİ', 'raw_text' => 'HAM METİN', 'unmatched_text' => 'EŞLEŞMEYEN',
-        'analysis_note' => 'NOT', 'sample_taken_at' => '2026-07-01', 'analysis_result_at' => '2026-07-03',
+        'analysis_note' => 'NOT', 'driver_name' => 'TEST SOFOR', 'driver_phone' => '+90 555 000 00 00', 'sample_taken_at' => '2026-07-01', 'analysis_result_at' => '2026-07-03',
         'loading_record_id' => 99, 'hks_durum' => 'gonderildi',
         'hks_firma_id' => null, 'hks_urun_id' => null, 'hks_urun_ad' => null,
         'hks_ulke_id' => null, 'hks_ulke_ad' => null, 'deleted_at' => null,
@@ -234,7 +234,7 @@ ok('[A] yönlendirme beyan_edit.php?id=<yeni>', konum($r) === 'beyan_edit.php?id
 $k = satir($yeni); $s = satir($KAYNAK);
 ok('[A] kopya durumu taslak (kaynak yuklendi iken)', ($k['status'] ?? '') === 'taslak', (string)($k['status'] ?? ''));
 foreach (['party_no', 'vehicle_plate', 'raw_text', 'unmatched_text', 'analysis_note', 'sample_taken_at',
-          'analysis_result_at', 'loading_record_id', 'hks_durum'] as $kol) {
+          'analysis_result_at', 'loading_record_id', 'hks_durum', 'driver_name', 'driver_phone'] as $kol) {
     ok("[A] KOPYALANMAZ: $kol", ($k[$kol] ?? null) === null || ($k[$kol] ?? '') === '',
        "$kol = " . var_export($k[$kol] ?? null, true));
 }
@@ -247,7 +247,8 @@ foreach (['product_name', 'product_variety', 'buyer_name', 'brand', 'exit_depot'
 ok('[A] created_by/updated_by = oturum kullanıcısı', (int)$k['created_by'] === 7 && (int)$k['updated_by'] === 7,
    'created_by=' . var_export($k['created_by'] ?? null, true));
 ok('[A] kaynak değişmedi (status yuklendi, party_no duruyor)',
-   $s['status'] === 'yuklendi' && $s['party_no'] === '13-41' && $s['vehicle_plate'] === '34ABC123');
+   $s['status'] === 'yuklendi' && $s['party_no'] === '13-41' && $s['vehicle_plate'] === '34ABC123'
+   && $s['driver_name'] === 'TEST SOFOR' && $s['driver_phone'] === '+90 555 000 00 00');
 ok('[A] audit beyan_kopyala yazıldı', audit_say('beyan_kopyala') === 1, 'adet: ' . audit_say('beyan_kopyala'));
 $au = db()->query("SELECT * FROM audit_log WHERE action='beyan_kopyala'")->fetch();
 $av = json_decode((string)($au['new_values'] ?? ''), true) ?: [];
@@ -610,7 +611,7 @@ ok('[F] beyan_kopyala: POST kapısı, csrf_check, can_beyan(create)',
    strpos($kop, "REQUEST_METHOD'] !== 'POST'") !== false && strpos($kop, 'csrf_check(') !== false && strpos($kop, "can_beyan('create')") !== false);
 ok('[F] beyan_kopyala: parti/plaka/ham metin INSERT\'te yok',
    preg_match('/INSERT INTO customs_declarations\s*\(([^)]*)\)/s', $kop, $mi) === 1
-   && !preg_match('/party_no|vehicle_plate|raw_text|unmatched_text|loading_record_id|hks_durum|analysis_note|sample_taken_at|analysis_result_at/', $mi[1]));
+   && !preg_match('/party_no|vehicle_plate|driver_name|driver_phone|raw_text|unmatched_text|loading_record_id|hks_durum|analysis_note|sample_taken_at|analysis_result_at/', $mi[1]));
 ok('[F] beyan_kopyala: CSRF yetki kontrolünden SONRA, POST kapısından SONRA ve yazmadan ÖNCE',
    strpos($kop, 'csrf_check(') < strpos($kop, 'INSERT INTO customs_declarations') && strpos($kop, "can_beyan('create')") < strpos($kop, 'csrf_check('));
 ok('[F] sw.js/APP_SURUM senkron', (function () use ($ROOT) {

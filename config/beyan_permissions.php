@@ -17,7 +17,7 @@ function beyan_expand_role_permissions(array $permissions): array {
 
 function beyan_permission_fields(): array {
     return [
-        'contact' => ['company_address','contact_person','buyer_name'],
+        'contact' => ['company_address','contact_person','buyer_name','driver_name','driver_phone'],
         'analysis' => ['sample_taken_at','analysis_result_at','analysis_note','sample_gross_kg','sample_net_kg','sample_crate_type','sample_crate_count'],
         'source' => ['raw_text','unmatched_text'],
         'hks' => ['hks_firma_id','sender_company_name','hks_urun_id','hks_urun_ad','hks_ulke_id','hks_ulke_ad'],

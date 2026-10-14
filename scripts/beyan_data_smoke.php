@@ -5,7 +5,7 @@ require_once dirname(__DIR__) . '/config/beyan_permissions.php';
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 // helpers.php üst düzeyde auto-migration içerir; include etmek yerine yalnız
 // test edilen gerçek fonksiyonları tokenizer ile yükle. Migration ASLA çalışmaz.
-$wanted = array_flip(['beyan_suggest_fields', 'beyan_suggest_normalize', 'tr_upper', 'beyan_statuses', 'beyan_num_or_null', 'beyan_int_or_null', 'beyan_edit_kg', 'beyan_veri_dogrula', 'beyan_edit_token', 'beyan_duzenleme_kilitle', 'beyan_durum_kaydet', 'beyan_insert', 'beyan_hks_secimleri_coz', 'beyan_plaka_normalize']);
+$wanted = array_flip(['beyan_suggest_fields', 'beyan_suggest_normalize', 'tr_upper', 'beyan_statuses', 'beyan_num_or_null', 'beyan_int_or_null', 'beyan_edit_kg', 'beyan_veri_dogrula', 'beyan_edit_token', 'beyan_duzenleme_kilitle', 'beyan_durum_kaydet', 'beyan_insert', 'beyan_hks_secimleri_coz', 'beyan_plaka_normalize', 'beyan_telefon_normalize']);
 $tokens = token_get_all((string)file_get_contents(dirname(__DIR__) . '/config/helpers.php'));
 for ($i = 0, $n = count($tokens); $i < $n; $i++) {
     if (!is_array($tokens[$i]) || $tokens[$i][0] !== T_FUNCTION) continue;
@@ -100,6 +100,11 @@ $id = beyan_insert($base + ['gross_kg' => 123.45, 'net_kg' => '123,450', 'pallet
 function row_data(int $id): array { return db()->query('SELECT * FROM customs_declarations WHERE id = ' . $id)->fetch(); }
 $row = row_data($id);
 check_data('bulk insert decimal roundtrip', (float)$row['gross_kg'] === 123.45 && (float)$row['net_kg'] === 123.45);
+check_data('driver_name uzunluk sınırı beyan_veri_dogrula\'da', (bool)array_filter(beyan_veri_dogrula(['driver_name' => str_repeat('A', 151), 'party_no' => 'X'])['errors'], fn($e) => str_contains($e, 'Şoför Adı')));
+check_data('driver_phone gönderilmediyse işlenmez', !array_key_exists('driver_phone', beyan_veri_dogrula(['party_no' => 'X'])['values']));
+check_data('driver_phone 12 → hata', in_array('Şoför telefonu 7–15 haneli olmalıdır.', beyan_veri_dogrula(['driver_phone' => '12', 'party_no' => 'X'])['errors'], true));
+check_data('driver_phone geçerli → normalize', beyan_veri_dogrula(['driver_phone' => '+90 (555) 000-00-00', 'party_no' => 'X'])['values']['driver_phone'] === '+90 (555) 000-00-00');
+check_data('beyan_insert (toplu yol) şoför kolonlarına dokunmaz', !array_key_exists('driver_name', $row) || $row['driver_name'] === null);
 check_data('bulk insert plate preserved normalized', $row['vehicle_plate'] === '34ABC123');
 check_data('bulk dates saved', $row['sample_taken_at'] === '2026-02-28 12:00:00');
 $token = beyan_edit_token($row);

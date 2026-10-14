@@ -20,7 +20,7 @@ foreach (['field','name','company_name','company_address'] as $key) {
     if (isset($in[$key]) && !is_string($in[$key])) beyan_tanim_json(['ok'=>false,'error'=>'Geçersiz alan değeri.'], 422);
 }
 try {
-    if (in_array($in['field'] ?? '', ['company_address','contact_person','buyer_name'], true) && !can_beyan('contact.write')) forbidden();
+    if (in_array($in['field'] ?? '', ['company_address','contact_person','buyer_name','driver_name'], true) && !can_beyan('contact.write')) forbidden();
     if (!can_beyan('contact.write')) $in['company_address'] = '';
     $result = beyan_suggest_save(db(), $in['field'] ?? '', $in['name'] ?? '', $in['company_name'] ?? '', $in['company_address'] ?? '');
     audit_log_event('create', 'definitions', null, null, ['source'=>'beyan_form','field'=>$in['field'],'name'=>$result['name']]);

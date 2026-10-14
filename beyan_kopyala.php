@@ -7,9 +7,9 @@
 // • YALNIZ POST + CSRF + beyan.write (GET veri değiştirmez).
 // • Kopya her zaman `taslak` durumundadır; kaynak beyanın durumu ne olursa olsun.
 // • Beyan başına DEĞİŞEN alanlar KOPYALANMAZ: parti no, araç plakası, ham
-//   WhatsApp metni, analiz/numune bilgileri, yükleme planı bağı ve HKS bildirim
-//   izi. Plaka/parti no'nun yanlışlıkla eski beyandan kalması, yanlış HKS
-//   bildirimi demektir.
+//   WhatsApp metni, analiz/numune bilgileri, şoför adı/telefonu (v356, kişisel
+//   veri), yükleme planı bağı ve HKS bildirim izi. Plaka/parti no'nun
+//   yanlışlıkla eski beyandan kalması, yanlış HKS bildirimi demektir.
 // • HKS eşleştirmesi (firma/ürün/ülke) KOPYALANIR — benzer beyanın asıl
 //   kazancı budur.
 // =========================================================

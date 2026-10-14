@@ -427,6 +427,14 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
             <span class="lbl">Dorse Plaka</span>
             <span class="val"><?= h($hks_plaka ?: '—') ?></span>
         </div>
+        <div class="beyan-view-row" data-ic="kisi">
+            <span class="lbl">Şoför Adı</span>
+            <span class="val"><?= h(trim((string)($beyan['driver_name'] ?? '')) ?: '—') ?></span>
+        </div>
+        <div class="beyan-view-row" data-ic="telefon">
+            <span class="lbl">Şoför Telefonu</span>
+            <span class="val"><?= h(trim((string)($beyan['driver_phone'] ?? '')) ?: '—') ?></span>
+        </div>
         <div class="beyan-view-row" data-ic="depo">
             <span class="lbl">Çıkış Depo</span>
             <span class="val"><?= h($beyan['exit_depot'] ?: '—') ?></span>

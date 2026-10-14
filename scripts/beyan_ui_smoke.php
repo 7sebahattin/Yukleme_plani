@@ -61,7 +61,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER, tractor_plate TEXT, sender_company_name TEXT, driver_name TEXT, driver_phone TEXT,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -1010,13 +1010,162 @@ ok('[eşleştirme] yüklendi işaretli bağlantısız beyan eşleştirilebilir',
 $PERMS = ['beyan.read', 'beyan.write'];
 ok('[eşleştirme] plan düzenleme yetkisi olmadan eşleştirme açılmaz', strpos(render_beyan($ID_BOS), 'id="beyanMatchOpenBtn"') === false);
 
+// Şoför Adı / Şoför Telefonu (v356) ─────────────────────────────────────
+// POST testleri: sayfa kaynağı geçici kopyada çalıştırılır; header() yakalanır,
+// exit; yerine özel istisna atılır (başarılı kayıt yönlendirip çıkar).
+class SmokeCikis extends RuntimeException {}
+function smoke_hdr(string $h, bool $replace = true, int $code = 0): void { $GLOBALS['__SMOKE_HDR'][] = $h; }
+function post_sayfa(string $script, array $post, array $get = []): array {
+    global $ROOT;
+    $src = (string)file_get_contents($ROOT . '/' . $script);
+    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
+    $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+    $src = str_replace("__DIR__ . '/_beyan_form.php'", var_export($ROOT . '/_beyan_form.php', true), $src);
+    $src = preg_replace('/\bheader\(/', 'smoke_hdr(', $src);
+    $src = preg_replace('/\bexit;/', "throw new SmokeCikis('exit');", $src);
+    $tmp = sys_get_temp_dir() . '/beyan_post_smoke_' . getmypid() . '_' . md5($script) . '.php';
+    file_put_contents($tmp, $src);
+    $GLOBALS['__SMOKE_HDR'] = [];
+    $_GET = $get;
+    $_POST = ['csrf' => csrf_token()] + $post;
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    ob_start();
+    $cikti = null;
+    try { include $tmp; }
+    catch (SmokeCikis $e) { /* yönlendirme */ }
+    catch (Throwable $e) { ob_end_clean(); @unlink($tmp); $_SERVER['REQUEST_METHOD'] = 'GET'; return ['html' => '__HATA__' . $e->getMessage() . ' @ ' . $e->getLine(), 'hdr' => []]; }
+    $html = (string)ob_get_clean();
+    @unlink($tmp);
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_POST = [];
+    return ['html' => $html, 'hdr' => $GLOBALS['__SMOKE_HDR']];
+}
+function beyan_satir(int $id): array { return db()->query('SELECT * FROM customs_declarations WHERE id=' . $id)->fetch() ?: []; }
+function beyan_post_taban(int $id): array {
+    $r = beyan_satir($id);
+    return ['edit_token' => beyan_edit_token($r), 'party_no' => 'SF-1', 'product_name' => 'KAYISI', 'status' => 'beyan_acildi'];
+}
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+
+// (a) form: alanlar var, sıra Dorse Plaka'dan sonra, telefon type=tel, ad öneri bağlı
+$form_sf = render_form($ID_BOS);
+ok('[şoför] formda Şoför Adı + Şoför Telefonu alanları Dorse Plaka\'dan sonra, Ürün ve Miktarlar\'dan önce',
+   preg_match('/name="vehicle_plate".*?name="driver_name".*?name="driver_phone".*?Ürün ve Miktarlar/s', $form_sf) === 1
+   && strpos($form_sf, '>Şoför Adı</label>') !== false && strpos($form_sf, '>Şoför Telefonu</label>') !== false);
+ok('[şoför] telefon type="tel" + inputmode="tel", büyük harf/öneri bağı yok',
+   preg_match('/<input type="tel"[^>]*name="driver_phone"[^>]*inputmode="tel"/', $form_sf) === 1
+   && preg_match('/name="driver_phone"[^>]*data-(uppercase|suggest)/', $form_sf) !== 1);
+ok('[şoför] yalnız telefon type="tel"; diğer alanlar type="text"',
+   substr_count($form_sf, 'type="tel"') === 1 && preg_match('/<input type="text"[^>]*name="driver_name"/', $form_sf) === 1);
+ok('[şoför] ad alanı öneri sistemine bağlı (data-suggest=driver_name, ekle ucu)',
+   preg_match('/name="driver_name"[^>]*data-uppercase="tr"[^>]*data-suggest="driver_name"[^>]*api_beyan_tanim_ekle\.php/', $form_sf) === 1);
+ok('[şoför] formda ipucu/placeholder yok', preg_match('/name="driver_(name|phone)"[^>]*placeholder=/', $form_sf) !== 1);
+ok('[şoför] yeni ikon CSS\'te var (telefon)', strpos((string)file_get_contents($ROOT . '/assets/style.css'), 'data-ic="telefon"') !== false);
+ok('[şoför] oluştur/düzenle kaynağında şoför kolonları + normalizasyon',
+   strpos((string)file_get_contents($ROOT . '/beyan_create.php'), 'beyan_telefon_normalize(') !== false
+   && strpos((string)file_get_contents($ROOT . '/beyan_edit.php'), 'beyan_telefon_normalize(') !== false);
+ok('[şoför] audit değerlerine şoför girmiyor',
+   !preg_match('/audit_log_event\([^;]*driver_/s', (string)file_get_contents($ROOT . '/beyan_create.php') . (string)file_get_contents($ROOT . '/beyan_edit.php')));
+
+// beyan_telefon_normalize (saf)
+ok('[şoför] telefon: izinli karakterler korunur, diğerleri atılır, boşluk tekler',
+   beyan_telefon_normalize(" +90  (555)\t000-00.00 ab#x ") === '+90 (555) 000-00.00');
+ok('[şoför] telefon: 40 karakterde kesilir', mb_strlen(beyan_telefon_normalize(str_repeat('1', 60)), 'UTF-8') === 40);
+$v1 = beyan_veri_dogrula(['driver_phone' => '12', 'party_no' => 'X', 'status' => 'beyan_acildi']);
+ok('[şoför] telefon 7 haneden kısa → Türkçe hata', in_array('Şoför telefonu 7–15 haneli olmalıdır.', $v1['errors'], true));
+$v2 = beyan_veri_dogrula(['driver_phone' => str_repeat('5', 16), 'party_no' => 'X', 'status' => 'beyan_acildi']);
+ok('[şoför] telefon 15 haneden uzun → hata', in_array('Şoför telefonu 7–15 haneli olmalıdır.', $v2['errors'], true));
+$v3 = beyan_veri_dogrula(['driver_phone' => '+90 555 000 00 00', 'party_no' => 'X', 'status' => 'beyan_acildi']);
+ok('[şoför] geçerli telefon hatasız', $v3['errors'] === [] && $v3['values']['driver_phone'] === '+90 555 000 00 00');
+$v4 = beyan_veri_dogrula(['party_no' => 'X', 'status' => 'beyan_acildi']);
+ok('[şoför] alan gönderilmediyse işlenmez (toplu/durum yolu etkilenmez)', !array_key_exists('driver_phone', $v4['values']) && $v4['errors'] === []);
+
+// (b) oluştur → DB → düzenle formunda geri gelir (büyük harf + normalize)
+$sayac0 = (int)db()->query('SELECT COUNT(*) FROM customs_declarations')->fetchColumn();
+$r = post_sayfa('beyan_create.php', ['party_no' => 'SF-OLUSTUR', 'product_name' => 'KAYISI', 'status' => 'beyan_acildi',
+    'driver_name' => '  test   sofor ', 'driver_phone' => " +90  555 000 00 00x "]);
+ok('[şoför] oluştur POST başarılı (yönlendirme)', strncmp($r['html'], '__HATA__', 8) !== 0 && $r['hdr'] !== [] && str_contains($r['hdr'][0], 'beyan_view.php?id='),
+   substr($r['html'], 0, 300));
+$yeni = (int)db()->query("SELECT id FROM customs_declarations WHERE party_no='SF-OLUSTUR'")->fetchColumn();
+$yr = beyan_satir($yeni);
+ok('[şoför] DB: ad büyük harf + tekil boşluk, telefon normalize', ($yr['driver_name'] ?? '') === 'TEST SOFOR' && ($yr['driver_phone'] ?? '') === '+90 555 000 00 00',
+   json_encode([$yr['driver_name'] ?? null, $yr['driver_phone'] ?? null]));
+$fe = render_form($yeni);
+ok('[şoför] düzenleme formunda değerler geri geliyor',
+   preg_match('/name="driver_name"[^>]*value="TEST SOFOR"/', $fe) === 1 && preg_match('/name="driver_phone"[^>]*value="\+90 555 000 00 00"/', $fe) === 1);
+// (d) önizleme + (e) WhatsApp
+$hv = render_beyan($yeni);
+ok('[şoför] önizlemede Şoför Adı + Telefonu Dorse Plaka\'dan sonra görünür',
+   preg_match('/Dorse Plaka.*?Şoför Adı.*?TEST SOFOR.*?Şoför Telefonu.*?\+90 555 000 00 00/s', $hv) === 1);
+ok('[şoför] önizleme HTML dengesi', empty(etiket_dengesi($hv)), implode(' | ', etiket_dengesi($hv)));
+ok('[şoför] WhatsApp metnine şoför EKLENMEZ',
+   preg_match('/id="waMetin">(.*?)<\/script>/s', $hv, $mw2) === 1 && stripos($mw2[1], 'SOFOR') === false && strpos($mw2[1], '555 000') === false);
+$bos_v = render_beyan($ID_TAM);
+ok('[şoför] boşken önizlemede \'—\'', preg_match('/Şoför Adı<\/span>\s*<span class="val">—<\/span>.*?Şoför Telefonu<\/span>\s*<span class="val">—<\/span>/s', $bos_v) === 1);
+ok('[şoför] oluşturma tam bir satır ekledi',
+   (int)db()->query('SELECT COUNT(*) FROM customs_declarations')->fetchColumn() === $sayac0 + 1);
+
+// (c) geçersiz telefon reddedilir, kayıt yapılmaz, form değerleri korunur
+$r = post_sayfa('beyan_create.php', ['party_no' => 'SF-HATALI', 'product_name' => 'KAYISI', 'status' => 'beyan_acildi',
+    'driver_name' => 'Test Sofor', 'driver_phone' => '12']);
+ok('[şoför] oluştur: geçersiz telefon reddedilir, kayıt yok, yönlendirme yok',
+   str_contains($r['html'], 'Şoför telefonu 7–15 haneli olmalıdır.') && $r['hdr'] === []
+   && (int)db()->query("SELECT COUNT(*) FROM customs_declarations WHERE party_no='SF-HATALI'")->fetchColumn() === 0);
+ok('[şoför] oluştur: hata sonrası form değerleri korunur',
+   preg_match('/name="driver_name"[^>]*value="TEST SOFOR"/', $r['html']) === 1 && preg_match('/name="driver_phone"[^>]*value="12"/', $r['html']) === 1);
+$r = post_sayfa('beyan_edit.php', beyan_post_taban($yeni) + ['driver_name' => 'DEGISTI', 'driver_phone' => '12'], ['id' => (string)$yeni]);
+ok('[şoför] düzenle: geçersiz telefon reddedilir, DB değişmez, değerler formda kalır',
+   str_contains($r['html'], 'Şoför telefonu 7–15 haneli olmalıdır.') && $r['hdr'] === []
+   && beyan_satir($yeni)['driver_name'] === 'TEST SOFOR' && beyan_satir($yeni)['driver_phone'] === '+90 555 000 00 00'
+   && preg_match('/name="driver_name"[^>]*value="DEGISTI"/', $r['html']) === 1);
+
+// düzenleme güncelliyor
+$r = post_sayfa('beyan_edit.php', beyan_post_taban($yeni) + ['driver_name' => 'yeni sofor', 'driver_phone' => '0555 111 22 33'], ['id' => (string)$yeni]);
+ok('[şoför] düzenle: başarılı güncelleme', $r['hdr'] !== [] && beyan_satir($yeni)['driver_name'] === 'YENİ SOFOR' && beyan_satir($yeni)['driver_phone'] === '0555 111 22 33',
+   substr($r['html'], 0, 300) . json_encode(beyan_satir($yeni)));
+// boş gönderim alanı temizler (gönderildi ama boş)
+$r = post_sayfa('beyan_edit.php', beyan_post_taban($yeni) + ['driver_name' => '', 'driver_phone' => ''], ['id' => (string)$yeni]);
+ok('[şoför] düzenle: boş gönderilen alan temizlenir (NULL)', beyan_satir($yeni)['driver_name'] === null && beyan_satir($yeni)['driver_phone'] === null);
+// (g) alanlar HİÇ gönderilmezse eski değer silinmez
+db()->prepare("UPDATE customs_declarations SET driver_name='KORUNAN SOFOR', driver_phone='0555 999 88 77' WHERE id=?")->execute([$yeni]);
+$r = post_sayfa('beyan_edit.php', beyan_post_taban($yeni), ['id' => (string)$yeni]);
+ok('[şoför] düzenle: alanlar gönderilmezse eski değer korunur',
+   $r['hdr'] !== [] && beyan_satir($yeni)['driver_name'] === 'KORUNAN SOFOR' && beyan_satir($yeni)['driver_phone'] === '0555 999 88 77');
+// durum şeridi (status_only) şoföre dokunmaz
+$r = post_sayfa('beyan_edit.php', ['status_only' => '1', 'status' => 'temiz'], ['id' => (string)$yeni]);
+ok('[şoför] durum şeridi (status_only) durumu değiştirir, şoföre dokunmaz',
+   beyan_satir($yeni)['status'] === 'temiz' && beyan_satir($yeni)['driver_name'] === 'KORUNAN SOFOR' && beyan_satir($yeni)['driver_phone'] === '0555 999 88 77');
+
+// (f) contact izni olmayan kullanıcı: görmez, değiştiremez
+$PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
+$hv_k = render_beyan($yeni);
+$fe_k = render_form($yeni);
+ok('[şoför:yetki] contact.read yokken önizleme + form şoför değerini sızdırmaz',
+   !str_contains($hv_k . $fe_k, 'KORUNAN SOFOR') && !str_contains($hv_k . $fe_k, '0555 999 88 77')
+   && strpos($fe_k, 'name="driver_name"') === false && strpos($fe_k, 'name="driver_phone"') === false);
+$r = post_sayfa('beyan_edit.php', beyan_post_taban($yeni) + ['driver_name' => 'HACKED', 'driver_phone' => '0555 000 00 01'], ['id' => (string)$yeni]);
+ok('[şoför:yetki] contact.write yokken POST ile şoför değiştirilemez',
+   beyan_satir($yeni)['driver_name'] === 'KORUNAN SOFOR' && beyan_satir($yeni)['driver_phone'] === '0555 999 88 77');
+$PERMS = ['beyan.read', 'beyan.create', 'beyan.permissions.detailed'];
+$r = post_sayfa('beyan_create.php', ['party_no' => 'SF-YETKISIZ', 'product_name' => 'KAYISI', 'status' => 'beyan_acildi', 'driver_name' => 'HACKED', 'driver_phone' => '0555 000 00 01']);
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+$yr2 = db()->query("SELECT * FROM customs_declarations WHERE party_no='SF-YETKISIZ'")->fetch();
+ok('[şoför:yetki] contact.write yoksa oluşturmada şoför yazılmaz (kayıt açılır, alanlar boş)', $yr2 !== false && ($yr2['driver_name'] === null && $yr2['driver_phone'] === null),
+   json_encode($yr2) . substr($r['html'], 0, 200));
+// öneri uçları: kapı listesinde driver_name
+ok('[şoför] öneri ekle/sil uçları driver_name için contact.write ister',
+   strpos((string)file_get_contents($ROOT . '/api_beyan_tanim_ekle.php'), "'driver_name'") !== false
+   && strpos((string)file_get_contents($ROOT . '/api_beyan_tanim_sil.php'), "'driver_name'") !== false);
+ok('[şoför] contact izin grubunda driver_name + driver_phone', !array_diff(['driver_name', 'driver_phone'], beyan_permission_fields()['contact']));
+
 // Detailed roles: protected content must never reach HTML or inline scripts.
 db()->exec("UPDATE customs_declarations SET buyer_name='CONTACT_SECRET_942', company_address='ADDRESS_SECRET_942', contact_person='PERSON_SECRET_942', analysis_note='ANALYSIS_SECRET_942', raw_text='SOURCE_SECRET_942', unmatched_text='UNMATCHED_SECRET_942', hks_ulke_ad='COUNTRY_SECRET_942' WHERE id=$ID_BOS");
 $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
+db()->exec("UPDATE customs_declarations SET driver_name='DRIVER_SECRET_942', driver_phone='+90 DRVPHONE942' WHERE id=$ID_BOS");
 db()->exec("UPDATE customs_declarations SET sample_crate_type='SAMPLE_SECRET_942', sample_gross_kg=9, sample_net_kg=8, sample_crate_count=2 WHERE id=$ID_BOS");
 $restricted_detail = render_beyan($ID_BOS);
 $restricted_list = render_liste([]);
-foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942','SAMPLE_SECRET_942'] as $secret) {
+foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942','SAMPLE_SECRET_942','DRIVER_SECRET_942','DRVPHONE942'] as $secret) {
     ok('[yetki] gizli veri HTML/JS içinde yok: ' . $secret, !str_contains($restricted_detail . $restricted_list, $secret));
 }
 ok('[yetki] HKS kartı ve tablo başlığı gizli', !str_contains($restricted_detail, 'bk-kart') && !str_contains($restricted_list, '<th>HKS Firma</th>'));
