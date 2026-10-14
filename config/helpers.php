@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v356');
+    define('APP_SURUM', 'v357');
 }
 
 // --- HTML kaçışı ---
@@ -3677,6 +3677,86 @@ function beyan_telefon_normalize(?string $t): string {
     $t = (string)preg_replace('/[^0-9+().\-\s]/u', '', (string)$t);
     $t = (string)preg_replace('/\s+/u', ' ', $t);
     return mb_substr(trim($t), 0, 40, 'UTF-8');
+}
+
+// "İşlem Bekleyen Beyanlar" kartının Yazdır / PDF Gönder verisi (v357). Saf — DB/oturum yok
+// (yetki kararı can_beyan() ile). Ekranda görünen tablo sütunları + Şoför Adı / Şoför Telefonu.
+// Satırlar zaten beyan_redact_fields()'den geçmiş gelir; yetkisi olmayan sütun hiç eklenmez.
+// Hücreler HAM metindir — kaçışlama istemcide (assets/beyan_yazdir.js).
+// 't' = 'sayi' (sağa hizalı, toplanır) | 'metin'.
+function beyan_bekleyen_yazdir_veri(array $rows, array $firma_adlari = [], string $depo = '', string $aranan = ''): array {
+    $iletisim = can_beyan('contact.read');
+    $hks      = can_beyan('hks.read');
+    $kolonlar = [
+        ['k' => 'tarih',   'l' => 'Tarih',       't' => 'metin'],
+        ['k' => 'parti',   'l' => 'Parti No',    't' => 'metin'],
+        ['k' => 'urun',    'l' => 'Ürün / Çeşit', 't' => 'metin'],
+        ['k' => 'palet',   'l' => 'Palet',       't' => 'sayi'],
+        ['k' => 'kasa',    'l' => 'Kasa',        't' => 'sayi'],
+        ['k' => 'brut',    'l' => 'Brüt KG',     't' => 'sayi'],
+        ['k' => 'net',     'l' => 'Net KG',      't' => 'sayi'],
+    ];
+    if ($iletisim) $kolonlar[] = ['k' => 'alici', 'l' => 'Alıcı', 't' => 'metin'];
+    $kolonlar[] = ['k' => 'marka', 'l' => 'Marka',       't' => 'metin'];
+    $kolonlar[] = ['k' => 'depo',  'l' => 'Çıkış Depo',  't' => 'metin'];
+    $kolonlar[] = ['k' => 'plaka', 'l' => 'Plaka',       't' => 'metin'];
+    if ($hks) {
+        $kolonlar[] = ['k' => 'firma', 'l' => 'HKS Firma', 't' => 'metin'];
+        $kolonlar[] = ['k' => 'ulke',  'l' => 'Ülke',      't' => 'metin'];
+    }
+    $kolonlar[] = ['k' => 'durum', 'l' => 'Durum', 't' => 'metin'];
+    if ($iletisim) {
+        $kolonlar[] = ['k' => 'sofor',   'l' => 'Şoför Adı',     't' => 'metin'];
+        $kolonlar[] = ['k' => 'telefon', 'l' => 'Şoför Telefonu', 't' => 'metin'];
+    }
+
+    $durumlar = beyan_statuses();
+    $sayi = static fn($v): string => $v === null || $v === '' ? '' : number_format((int)round((float)$v), 0, '', '.');
+    $satirlar = [];
+    $top = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'net' => 0.0];
+    foreach ($rows as $r) {
+        $fid = (string)($r['hks_firma_id'] ?? '');
+        $hucre = [
+            'tarih'   => fmt_datetime((string)($r['created_at'] ?? '')),
+            'parti'   => trim((string)($r['party_no'] ?? '')),
+            'urun'    => trim(trim((string)($r['product_name'] ?? '')) . ' ' . trim((string)($r['product_variety'] ?? ''))),
+            'palet'   => $sayi($r['pallet_count'] ?? null),
+            'kasa'    => $sayi($r['crate_count'] ?? null),
+            'brut'    => $sayi($r['gross_kg'] ?? null),
+            'net'     => $sayi($r['net_kg'] ?? null),
+            'alici'   => trim((string)($r['buyer_name'] ?? '')),
+            'marka'   => trim((string)($r['brand'] ?? '')),
+            'depo'    => trim((string)($r['exit_depot'] ?? '')),
+            'plaka'   => trim((string)($r['vehicle_plate'] ?? '')),
+            'firma'   => $fid === '' ? '' : (string)($firma_adlari[$fid] ?? ''),
+            'ulke'    => trim((string)($r['hks_ulke_ad'] ?? '')),
+            'durum'   => (string)($durumlar[$r['status'] ?? '']['label'] ?? ($r['status'] ?? '')),
+            'sofor'   => trim((string)($r['driver_name'] ?? '')),
+            'telefon' => trim((string)($r['driver_phone'] ?? '')),
+        ];
+        $top['palet'] += (int)($r['pallet_count'] ?? 0);
+        $top['kasa']  += (int)($r['crate_count'] ?? 0);
+        $top['brut']  += (float)($r['gross_kg'] ?? 0);
+        $top['net']   += (float)($r['net_kg'] ?? 0);
+        $satir = [];
+        foreach ($kolonlar as $k) $satir[] = $hucre[$k['k']];
+        $satirlar[] = $satir;
+    }
+    $toplam = [];
+    foreach ($kolonlar as $k) {
+        $toplam[] = isset($top[$k['k']]) ? number_format((int)round($top[$k['k']]), 0, '', '.') : '';
+    }
+    return [
+        'baslik'   => 'İşlem Bekleyen Beyanlar',
+        'tarih'    => date('d.m.Y H:i'),
+        'depo'     => $depo,
+        'aranan'   => $aranan,
+        'dosya'    => 'Bekleyen Beyanlar ' . date('Y-m-d'),
+        'adet'     => count($satirlar),
+        'kolonlar' => $kolonlar,
+        'satirlar' => $satirlar,
+        'toplam'   => $toplam,
+    ];
 }
 
 function beyan_hks_eslesme_tam(array $beyan): bool {

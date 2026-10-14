@@ -207,6 +207,17 @@ function render_liste(array $get): string {
     return (string)ob_get_clean();
 }
 
+// Tarayıcı testi için liste fixture'ı (Yazdır / PDF Gönder — scripts/beyan_yazdir_smoke.js).
+// php scripts/beyan_ui_smoke.php --render-liste OUTPUT_PATH
+if (PHP_SAPI === 'cli' && ($argv[1] ?? '') === '--render-liste') {
+    if (empty($argv[2])) { fwrite(STDERR, "Usage: --render-liste OUTPUT_PATH\n"); exit(1); }
+    db()->exec("UPDATE customs_declarations SET driver_name='YAZDIR SOFOR', driver_phone='+90 555 000 00 00', buyer_name='TOLGA MOSKOVA', brand='ASYA', exit_depot='POMONA', gross_kg=12800, net_kg=11550, crate_count=1664 WHERE id=$ID_TAM");
+    $listeHtml = render_liste([]);
+    if (str_starts_with($listeHtml, '__HATA__')) { fwrite(STDERR, $listeHtml); exit(1); }
+    file_put_contents($argv[2], $listeHtml);
+    exit(0);
+}
+
 $fail = 0;
 function ok(string $ad, bool $c, string $ipucu = ''): void {
     global $fail;
@@ -1157,6 +1168,48 @@ ok('[şoför] öneri ekle/sil uçları driver_name için contact.write ister',
    strpos((string)file_get_contents($ROOT . '/api_beyan_tanim_ekle.php'), "'driver_name'") !== false
    && strpos((string)file_get_contents($ROOT . '/api_beyan_tanim_sil.php'), "'driver_name'") !== false);
 ok('[şoför] contact izin grubunda driver_name + driver_phone', !array_diff(['driver_name', 'driver_phone'], beyan_permission_fields()['contact']));
+
+// "İşlem Bekleyen Beyanlar" kartı — Yazdır / PDF Gönder (v357) ───────────────
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+// Liste en yeni 50 bekleyeni gösterir — fixture satırları sayfa 1'de olmayabilir; en yeni iki bekleyeni kullan.
+[$YZ_A, $YZ_B] = array_map('intval', db()->query("SELECT id FROM customs_declarations WHERE deleted_at IS NULL AND status NOT IN ('yuklendi','iptal','red') ORDER BY id DESC LIMIT 2")->fetchAll(PDO::FETCH_COLUMN));
+$YZ_B_ESKI = (string)db()->query("SELECT party_no FROM customs_declarations WHERE id=$YZ_B")->fetchColumn();
+db()->exec("UPDATE customs_declarations SET driver_name='YAZDIR SOFOR', driver_phone='+90 555 000 00 00' WHERE id=$YZ_A");
+db()->exec("UPDATE customs_declarations SET party_no='</script><b>XSS' WHERE id=$YZ_B");
+$yz_html = render_liste([]);
+ok('[yazdır] Yazdır + PDF Gönder düğmeleri bekleyen kartta var',
+   str_contains($yz_html, 'id="bekleyenYazdirBtn"') && str_contains($yz_html, 'id="bekleyenPdfBtn"')
+   && str_contains($yz_html, 'assets/beyan_yazdir.js'));
+ok('[yazdır] düğmeler İşlem Bekleyen kartın başlığında (Kapanan bölümde değil)',
+   preg_match('/beyan-blok-acik.*?bl-aksiyon.*?beyan-blok-kapanmis/s', $yz_html) === 1
+   && substr_count($yz_html, 'id="bekleyenYazdirBtn"') === 1);
+ok('[yazdır] HTML etiket dengesi bozulmadı', empty(etiket_dengesi($yz_html)), implode(' | ', etiket_dengesi($yz_html)));
+$yz = null;
+if (preg_match('~<script type="application/json" id="bekleyenYazdirVeri">(.*?)</script>~s', $yz_html, $mm)) $yz = json_decode($mm[1], true);
+ok('[yazdır] veri JSON olarak çözülüyor', is_array($yz) && !empty($yz['satirlar']), 'JSON yok/bozuk');
+if (is_array($yz)) {
+    $etik = array_column($yz['kolonlar'], 'l');
+    foreach (['Tarih','Parti No','Ürün / Çeşit','Palet','Kasa','Brüt KG','Net KG','Alıcı','Marka','Çıkış Depo','Plaka','HKS Firma','Ülke','Durum'] as $e) {
+        ok("[yazdır] ekrandaki sütun yazdırmada da var: $e", in_array($e, $etik, true));
+    }
+    ok('[yazdır] Şoför Adı + Şoför Telefonu sütunları eklendi (sonda)', array_slice($etik, -2) === ['Şoför Adı', 'Şoför Telefonu']);
+    $isoforIx = array_search('Şoför Adı', $etik, true); $itelIx = array_search('Şoför Telefonu', $etik, true);
+    $partiIx = array_search('Parti No', $etik, true);
+    $satirTam = null;
+    foreach ($yz['satirlar'] as $sr) if (($sr[$isoforIx] ?? '') === 'YAZDIR SOFOR') $satirTam = $sr;
+    ok('[yazdır] şoför adı + telefonu satırda', $satirTam !== null && ($satirTam[$itelIx] ?? '') === '+90 555 000 00 00');
+    ok('[yazdır] her satırın hücre sayısı = sütun sayısı',
+       count(array_filter($yz['satirlar'], fn($sr) => count($sr) === count($yz['kolonlar']))) === count($yz['satirlar'])
+       && count($yz['toplam']) === count($yz['kolonlar']));
+    ok('[yazdır] adet = ekrandaki bekleyen satır sayısı', $yz['adet'] === count($yz['satirlar']) && $yz['adet'] >= 2);
+    $netIx = array_search('Net KG', $etik, true);
+    $netTop = 0; foreach ($yz['satirlar'] as $sr) $netTop += (int)str_replace('.', '', (string)$sr[$netIx]);
+    ok('[yazdır] Net KG toplamı satırlarla tutuyor', (int)str_replace('.', '', (string)$yz['toplam'][$netIx]) === $netTop, $yz['toplam'][$netIx] . ' ≠ ' . $netTop);
+    ok('[yazdır] ham metin JSON içinde </script> ile tabloyu kıramaz', !str_contains($mm[1], '</script>') && str_contains($mm[1], 'u003C'));
+}
+ok('[yazdır] boş sonuçta düğmeler/veri YOK', !str_contains(render_liste(['bek_q' => 'ZZZ_HICBIRSEY_' . mt_rand()]), 'bekleyenYazdirBtn'));
+db()->prepare("UPDATE customs_declarations SET party_no=? WHERE id=?")->execute([$YZ_B_ESKI, $YZ_B]);
+db()->exec("UPDATE customs_declarations SET driver_name=NULL, driver_phone=NULL WHERE id=$YZ_A");
 
 // Detailed roles: protected content must never reach HTML or inline scripts.
 db()->exec("UPDATE customs_declarations SET buyer_name='CONTACT_SECRET_942', company_address='ADDRESS_SECRET_942', contact_person='PERSON_SECRET_942', analysis_note='ANALYSIS_SECRET_942', raw_text='SOURCE_SECRET_942', unmatched_text='UNMATCHED_SECRET_942', hks_ulke_ad='COUNTRY_SECRET_942' WHERE id=$ID_BOS");
