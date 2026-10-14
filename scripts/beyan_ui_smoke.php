@@ -1231,6 +1231,7 @@ if (preg_match('~<script type="application/json" id="bekleyenYazdirVeri">(.*?)</
 ok('[yazdır] tek başına plaka renklenmez (grup null)', isset($sg3) && $sg3[0] === null && $sg3[1] === null, json_encode($sg3 ?? null));
 foreach ($yz_eski as $yid => $pl) db()->prepare("UPDATE customs_declarations SET vehicle_plate=? WHERE id=?")->execute([$pl === false ? null : $pl, $yid]);
 
+ok('[başlık] bölüm başlıklarında açıklama pili (.bl-bilgi) YOK', !str_contains($yz_html, 'bl-bilgi') && !str_contains($yz_html, 'beyan kayıtlarıdır') && !str_contains($yz_html, 'reddedilen kayıtlardır'));
 ok('[yazdır] boş sonuçta düğmeler/veri YOK', !str_contains(render_liste(['bek_q' => 'ZZZ_HICBIRSEY_' . mt_rand()]), 'bekleyenYazdirBtn'));
 db()->prepare("UPDATE customs_declarations SET party_no=? WHERE id=?")->execute([$YZ_B_ESKI, $YZ_B]);
 db()->prepare("UPDATE customs_declarations SET driver_name=NULL, driver_phone=NULL, tractor_plate=NULL, vehicle_plate=? WHERE id=?")->execute([$YZ_A_PLAKA === false ? null : $YZ_A_PLAKA, $YZ_A]);

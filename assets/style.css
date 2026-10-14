@@ -6771,3 +6771,8 @@ html[data-theme="dark"] .btn.btn-duzenle { background: linear-gradient(180deg, #
     .bl-aksiyon .btn { flex: 1 1 0; min-height: 40px; }
 }
 @media print { .bl-aksiyon { display: none !important; } }
+
+/* v360: bölüm başlıklarındaki açıklama pili (.bl-bilgi) kaldırıldı — bekleyen kartta boş 4. sütun kalmasın. */
+@media (min-width: 768px) {
+    .beyan-blok-acik .beyan-blok-head { grid-template-columns: auto minmax(0,1fr) auto; }
+}

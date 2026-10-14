@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v359` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v360` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -1255,6 +1255,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   - Uygunluk kapısı (`$bildirim_uygun`) ve toplu bildirim **bölümden bağımsız** —
     `$rows` iki bölümün birleşimidir, aktif bağ sorgusu tek sorguda kalır.
   - İki bölüm de `BEYAN_PER_PAGE` (50) ile sayfalanır; 200 kayıt kesme sınırı yoktur.
+- **Bölüm başlıklarında açıklama pili YOK (v360, sahip kararı):** "Onay ve yükleme bekleyen beyan kayıtlarıdır." / "Yükleme tamamlanan, iptal veya reddedilen kayıtlardır." yazıları (`.bl-bilgi`) kaldırıldı — gereksiz yer kaplıyordu; geri ekleme.
 - **Filtre şeridi tek satır** (`beyanlar.php`): `[arama] [Ara] [▾ Filtre] [Temizle]`.
   Detay paneli **her genişlikte katlanır** — eskiden `.beyan-filter-toggle`
   yalnız `<768px`'de görünürdü, masaüstünde panel kalıcı açık kalıyor ve on
