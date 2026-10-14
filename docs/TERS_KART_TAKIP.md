@@ -173,3 +173,13 @@ Sahip kararı: ters ve normal sistem aynı yerden çıkar. Ayrı "Hızlı Çık�
 - `pdks_gunluk_faz8a_cikis_kaydet()` yanıtına `card.entry_source` eklendi (yalnız bilgi). Kiosk ÇIKIŞ sonucunda
   kaynak `scan` değilse bir satır gösterir: "↩ Ters Kart · sabit giriş HH:MM", "🏷 Tanımlı giriş", "✍ Elle eklenmiş giriş".
 - Mutabakat ve hakediş hangi ekrandan çıkış yapıldığına bakmaz; dönem tablosundan sayar.
+
+## v355 — Görünen ad: "Giriş Tanımlı"
+
+Sahip kararıyla modülün ekrandaki adı "Giriş Tanımlı" oldu (Personel Takibi kartı yeni kapı ikonuyla, sayfa
+başlıkları, mesajlar, Mesai Detayı rozeti "↩ Giriş Tanımlı", Ortak Çıkış sonuç satırı "↩ Giriş Tanımlı · sabit giriş
+08:00"). Kod kimlikleri, URL'ler (`ters_kart*.php`) ve tablo adları (`ters_*`) değişmedi. Not: kiosktaki
+"🏷 TANIMLI GİRİŞ" (kart → çavuş tanımıyla giriş, v298) ayrı bir özelliktir.
+
+"Çıkış girişten önce yazılamaz" kapısı yalnız `source='ters'` dönemlere uygulanır; diğer giriş kaynaklarında
+çıkış davranışı v354 öncesiyle aynıdır.

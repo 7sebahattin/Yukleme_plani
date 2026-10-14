@@ -839,6 +839,12 @@ AYNEN çalışır. Ayrıntı + sahip kararları: `docs/TERS_KART_TAKIP.md`.
   `pdks_gunluk_faz8a_cikis_kaydet()` yanıtı `card.entry_source` (scan/tanimli/manual/ters/legacy_backfill — yalnız bilgi)
   taşır; kiosk ÇIKIŞ sonucunda scan dışı kaynakta `.pdks-result-kaynak` satırı ("↩ Ters Kart · sabit giriş 08:00").
   Mutabakat çıkışı hangi ekrandan yapıldığına bakmaz (dönem tablosundan sayar). Ters sekmesi/hub "🚪 Ortak Çıkış".
+  `?mod=ortak` + önceki günden açık mesai: ÖNCE #giEskiSec penceresi, "Sonra"/son mesai kapanınca Ortak Çıkış (`ortakDonus`, tek seferlik).
+- **v355 — görünen ad "Giriş Tanımlı"** (sahip kararı; kod/URL/tablo adları `ters_*` KALDI). Personel Takibi kartı ikonu
+  `assets/mobile-visual/giris-tanimli.svg` (`.pdks-icon-giris-tanimli`). ⚠ v298 "🏷 TANIMLI GİRİŞ" (kiosk, kart→çavuş tanımı)
+  AYRI özelliktir — karıştırma.
+- **"Çıkış girişten önce olamaz" kapısı YALNIZ `source='ters'`** (`pdks_gunluk_faz8a_cikis_kaydet`, kod `giris_saati_gelmedi`).
+  Genelleştirme: v354'te tüm kaynaklara uygulanınca `pdks_faz8h_smoke` (sabit 08:00 girişli veri) sabah erken saatte düşüyordu.
 - Test: `php scripts/pdks_ters_kart_smoke.php` (A–J) · `node scripts/pdks_ters_kart_smoke.js` (render'ı kendisi üretir;
   tek render: `TK_SAYFA=<sayfa> php scripts/pdks_ters_kart_render.php`).
 

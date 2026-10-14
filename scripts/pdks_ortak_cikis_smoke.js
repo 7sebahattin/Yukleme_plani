@@ -44,8 +44,21 @@ function ok(ad, kosul, ipucu) {
 
 // Yalnız sayfa + assets/ sunan küçük statik sunucu (fetch file:// ile çalışmaz).
 const TIPLER = { '.css': 'text/css', '.js': 'application/javascript', '.svg': 'image/svg+xml', '.png': 'image/png' };
+// v355: /eski — aynı sayfa, önceki günden kapatılmamış bir mesaiyle (pencere açık
+// başlar). Sunucu render'ı yerine HTML'de yalnız iki yer değiştirilir: pencerenin
+// `hidden`'ı çavuş listesine taşınır ve #giEskiVeri bir satırla doldurulur.
+const ESKI_VERI = [{ id: 77, foreman_id: 2, foreman_name: 'Çavuş B', work_date: '2026-10-13', depo: 'Depo A',
+                     ozet: { giris_toplam: 3, cikis_toplam: 1, icerde_toplam: 2, eksik_toplam: 0 } }];
+function eskiSayfa() {
+    let html = fs.readFileSync(SAYFA, 'utf8');
+    html = html.replace('id="giEskiVeri">[]</script>', 'id="giEskiVeri">' + JSON.stringify(ESKI_VERI) + '</script>');
+    html = html.replace(/(<div id="giEskiSec"[^>]*?) hidden>/, '$1>');
+    html = html.replace('<div id="giCavusSec" class="pdks-kiosk-modesec">', '<div id="giCavusSec" class="pdks-kiosk-modesec" hidden>');
+    return html;
+}
 const sunucu = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
+    if (u.pathname === '/eski') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(eskiSayfa()); return; }
     const dosya = u.pathname === '/' ? SAYFA : path.join(ROOT, path.normalize(u.pathname).replace(/^(\.\.[/\\])+/, ''));
     if (!dosya.startsWith(ROOT) || !fs.existsSync(dosya) || fs.statSync(dosya).isDirectory()) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'Content-Type': TIPLER[path.extname(dosya)] || 'text/html; charset=utf-8' });
@@ -275,6 +288,158 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         ok('GİRİŞ sonucu: daire = toplam giriş (5), kalan sayısı değil', r7.daire === '5' && !r7.kalan, JSON.stringify(r7));
         const tas = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
         ok('yatay taşma yok (sonuç sonrası)', !tas);
+        await page.close();
+    }
+
+    // ── v355: giriş kaynağı satırı (card.entry_source) + ?mod=ortak derin bağlantısı ──
+    for (const ekran of [{ ad: 'MASAÜSTÜ', width: 1280, height: 900 },
+                         { ad: 'MOBİL',    width: 390,  height: 844 }]) {
+        console.log(`\n=== v355 ${ekran.ad} (${ekran.width}×${ekran.height}) ===`);
+        const page = await browser.newPage({ viewport: { width: ekran.width, height: ekran.height } });
+        const istekler = [];
+        let ortakYanit = null;
+        await page.route('**/gunluk_isci_giris_cikis.php?ajax=*', async route => {
+            const req = route.request();
+            const uc = new URL(req.url()).searchParams.get('ajax');
+            let govde = {};
+            try { govde = JSON.parse(req.postData() || '{}'); } catch (e) {}
+            istekler.push({ uc, govde });
+            let yanit;
+            if (uc === 'ortak_mesailer') yanit = { ok: true, mesailer: MESAILER };
+            else if (uc === 'ortak_cikis') yanit = ortakYanit || { ok: false, kod: 'acik_donem_yok', hata: 'test' };
+            else if (uc === 'kapat') yanit = { ok: true };
+            else yanit = { ok: false };
+            await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(yanit) });
+        });
+        const gorunur = () => page.evaluate(() => {
+            const gor = id => { const el = document.getElementById(id); if (!el) return false; const r = el.getBoundingClientRect(); return !el.hidden && getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0; };
+            return { tarama: gor('giScanSec'), cavus: gor('giCavusSec'), eski: gor('giEskiSec'),
+                     rozet: document.getElementById('giModeBadge').textContent, ad: document.getElementById('giScanCavusAd').textContent,
+                     tasma: document.documentElement.scrollWidth > innerWidth };
+        });
+
+        // (d) ?mod=ortak → doğrudan ortak modda tarama ekranı, çavuş listesi gizli
+        await page.goto(KOK + '?mod=ortak');
+        await page.waitForTimeout(300);
+        const d1 = await gorunur();
+        ok('v355 ?mod=ortak: tarama ekranı açık, rozet "ORTAK ÇIKIŞ", çavuş listesi gizli', d1.tarama && !d1.cavus && !d1.eski && /ORTAK ÇIKIŞ/.test(d1.rozet) && d1.ad === 'Tüm çavuşlar', JSON.stringify(d1));
+        ok('v355 ?mod=ortak: yatay taşma yok', !d1.tasma, JSON.stringify(d1));
+        const odak = await page.evaluate(() => document.activeElement && document.activeElement.id);
+        ok('v355 ?mod=ortak: odak USB okuma kutusunda', odak === 'giScanInput', String(odak));
+
+        const okut = async (yanit, uid) => {
+            ortakYanit = yanit;
+            istekler.length = 0;
+            await page.waitForTimeout(100);
+            await page.focus('#giScanInput');
+            await page.keyboard.type(uid || '100000003');
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(450);
+            return page.evaluate(() => {
+                const k = document.querySelector('#giResultInner .pdks-result-kaynak');
+                const t = document.querySelector('#giResultInner .pdks-result-time');
+                const r = k ? k.getBoundingClientRect() : null;
+                return { var: !!k, sinif: k ? k.className : '', metin: k ? k.textContent : '',
+                         saatAltinda: !!(k && t && (t.compareDocumentPosition(k) & Node.DOCUMENT_POSITION_FOLLOWING)),
+                         ekranda: r ? (r.left >= -0.5 && r.right <= innerWidth + 0.5 && r.width > 0) : null,
+                         bg: k ? getComputedStyle(k).backgroundColor : '',
+                         sonuc: document.getElementById('giResult').hidden ? '' : document.getElementById('giResultInner').textContent.replace(/\s+/g, ' '),
+                         tasma: document.documentElement.scrollWidth > innerWidth };
+            });
+        };
+        const cikis = (kaynak, giris) => ({ ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 17:05:00',
+            card: { card_no: 'K003', worker_type_name: 'Kadın', entry_time: giris === undefined ? BUGUN + ' 08:00:00' : giris, entry_source: kaynak },
+            ozet: { giris: { 'Kadın': 4 }, cikis: { 'Kadın': 1 }, eksik_tip: { 'Kadın': 3 } },
+            cavus: { id: 1, ad: 'Çavuş A', session_id: 11, work_date: BUGUN, onceki_gun: false }, mesailer: MESAILER });
+
+        // (a) ters
+        const a = await okut(cikis('ters'));
+        ok('v355 (a) ters: istek ortak_cikis ucuna gitti', istekler.some(i => i.uc === 'ortak_cikis'), JSON.stringify(istekler));
+        ok('v355 (a) ters: .pdks-result-kaynak-ters görünür, "Giriş Tanımlı" + "08:00"', a.var && /pdks-result-kaynak-ters/.test(a.sinif) && /Giriş Tanımlı/.test(a.metin) && /sabit giriş 08:00/.test(a.metin), JSON.stringify(a));
+        ok('v355 (a) ters: kaynak satırı saat satırının ALTINDA, ekran içinde, taşma yok', a.saatAltinda && a.ekranda && !a.tasma, JSON.stringify(a));
+        ok('v355 (a) ters: ÇIKIŞ KAYDEDİLDİ + saat 08:00 → 17:05 korunur', /ÇIKIŞ KAYDEDİLDİ/.test(a.sonuc) && /08:00 → 17:05/.test(a.sonuc), a.sonuc);
+        ok('v355 (a) ters: açık temada indigo zemin (#eef2ff)', a.bg === 'rgb(238, 242, 255)', a.bg);
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+        const koyu = await page.evaluate(() => { const k = document.querySelector('#giResultInner .pdks-result-kaynak'); return k ? getComputedStyle(k).backgroundColor + '|' + getComputedStyle(k).color : ''; });
+        ok('v355 (a) ters: koyu temada #1e1b4b / #c7d2fe', koyu === 'rgb(30, 27, 75)|rgb(199, 210, 254)', koyu);
+        await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+        // ters, giriş saati gelmediyse yalnız etiket (uydurma saat YOK)
+        const a2 = await okut(cikis('ters', null));
+        ok('v355 ters, entry_time yok: yalnız "↩ Giriş Tanımlı" (saat uydurulmaz)', a2.var && a2.metin === '↩ Giriş Tanımlı', JSON.stringify(a2));
+
+        // (b) scan → satır YOK; boş/bilinmeyen/legacy de YOK
+        const b = await okut(cikis('scan'));
+        ok('v355 (b) scan: kaynak satırı YOK (eski görünüm)', !b.var && /ÇIKIŞ KAYDEDİLDİ/.test(b.sonuc), JSON.stringify(b));
+        const b2 = await okut(cikis(undefined));
+        ok('v355 entry_source yok: kaynak satırı YOK', !b2.var && /ÇIKIŞ KAYDEDİLDİ/.test(b2.sonuc), JSON.stringify(b2));
+        const b3 = await okut(cikis('legacy_backfill'));
+        ok('v355 legacy_backfill: kaynak satırı YOK', !b3.var && /ÇIKIŞ KAYDEDİLDİ/.test(b3.sonuc), JSON.stringify(b3));
+        const b4 = await okut(cikis('"><img src=x onerror=alert(1)>'));
+        ok('v355 bilinmeyen/kötü niyetli kaynak: satır YOK, işaretleme enjekte edilmez', !b4.var && !(await page.$('#giResultInner img')), JSON.stringify(b4));
+
+        // (c) tanimli / manual
+        const c1 = await okut(cikis('tanimli'));
+        ok('v355 (c) tanimli: "🏷 Tanımlı giriş"', c1.var && /pdks-result-kaynak-tanimli/.test(c1.sinif) && c1.metin === '🏷 Tanımlı giriş' && c1.ekranda, JSON.stringify(c1));
+        const c2 = await okut(cikis('manual'));
+        ok('v355 (c) manual: "✍ Elle eklenmiş giriş"', c2.var && /pdks-result-kaynak-manual/.test(c2.sinif) && c2.metin === '✍ Elle eklenmiş giriş' && c2.ekranda, JSON.stringify(c2));
+
+        // GİRİŞ sonucu DEĞİŞMEZ — entry_source gelse bile satır yok
+        const g = await okut({ ok: true, event_type: 'GIRIS', server_time: BUGUN + ' 08:00:00',
+            card: { card_no: 'K003', worker_type_name: 'Kadın', entry_time: BUGUN + ' 08:00:00', entry_source: 'ters' },
+            ozet: { giris: { 'Kadın': 4 } } });
+        ok('v355 GİRİŞ sonucu: kaynak satırı YOK', !g.var && /GİRİŞ KAYDEDİLDİ/.test(g.sonuc), JSON.stringify(g));
+        ok('v355 (e) sonuç sonrası yatay taşma yok', !g.tasma && !a.tasma && !c1.tasma && !c2.tasma);
+
+        // Bilinmeyen ?mod → yok sayılır (çavuş listesi)
+        await page.goto(KOK + '?mod=xyz');
+        await page.waitForTimeout(300);
+        const x = await gorunur();
+        ok('v355 bilinmeyen ?mod=xyz yok sayılır: çavuş listesi açık, tarama gizli', x.cavus && !x.tarama && !x.eski, JSON.stringify(x));
+        // Parametresiz açılış eskisi gibi
+        await page.goto(KOK);
+        await page.waitForTimeout(300);
+        const y = await gorunur();
+        ok('v355 parametresiz açılış: çavuş listesi (eski davranış)', y.cavus && !y.tarama, JSON.stringify(y));
+
+        // ?mod=ortak + kapatılmamış mesai penceresi → ÖNCE pencere, "Sonra" → ortak mod
+        await page.goto(KOK + 'eski?mod=ortak');
+        await page.waitForTimeout(300);
+        const e1 = await gorunur();
+        const eskiSatir = await page.evaluate(() => document.getElementById('giEskiListe').textContent);
+        ok('v355 ?mod=ortak + açık eski mesai: ÖNCE kapatılmamış mesai penceresi', e1.eski && !e1.tarama && !e1.cavus && /Çavuş B/.test(eskiSatir), JSON.stringify(e1));
+        await page.click('#giEskiSonra');
+        await page.waitForTimeout(300);
+        const e2 = await gorunur();
+        ok('v355 pencerede "Sonra" → ORTAK ÇIKIŞ tarama ekranı (çavuş listesi DEĞİL)', e2.tarama && !e2.cavus && !e2.eski && /ORTAK ÇIKIŞ/.test(e2.rozet), JSON.stringify(e2));
+        ok('v355 pencere sonrası yatay taşma yok', !e2.tasma, JSON.stringify(e2));
+        // Ortak moddan çavuş seçimine dönüp banner ile pencereyi açınca "Sonra" artık çavuş listesine döner
+        await page.click('#giCavusDegistir2');
+        await page.waitForTimeout(200);
+        await page.click('#giEskiBanner');
+        await page.waitForTimeout(200);
+        await page.click('#giEskiSonra');
+        await page.waitForTimeout(300);
+        const e3 = await gorunur();
+        ok('v355 derin bağlantı tek seferlik: sonraki "Sonra" çavuş listesine döner', e3.cavus && !e3.tarama && !e3.eski, JSON.stringify(e3));
+        // Pencereli sayfa, parametresiz: "Sonra" eskisi gibi çavuş listesi
+        await page.goto(KOK + 'eski');
+        await page.waitForTimeout(300);
+        await page.click('#giEskiSonra');
+        await page.waitForTimeout(300);
+        const e4 = await gorunur();
+        ok('v355 parametresiz pencereli açılış: "Sonra" → çavuş listesi (eski davranış)', e4.cavus && !e4.tarama, JSON.stringify(e4));
+        // ?mod=ortak + pencereden son eski mesai kapatılınca → ortak mod (kapatma yine ?ajax=kapat)
+        page.on('dialog', dlg => dlg.accept());
+        await page.goto(KOK + 'eski?mod=ortak');
+        await page.waitForTimeout(300);
+        await page.click('[data-gi-eski-id="77"]');
+        await page.waitForTimeout(200);
+        istekler.length = 0;
+        await page.click('#giCloseConfirmBtn');
+        await page.waitForTimeout(400);
+        const e5 = await gorunur();
+        const kapatIst = istekler.find(i => i.uc === 'kapat');
+        ok('v355 ?mod=ortak: son eski mesai ?ajax=kapat ile kapanınca → ORTAK ÇIKIŞ', !!kapatIst && kapatIst.govde.session_id === 77 && e5.tarama && !e5.eski && /ORTAK ÇIKIŞ/.test(e5.rozet), JSON.stringify({ e5, istekler }));
         await page.close();
     }
 
