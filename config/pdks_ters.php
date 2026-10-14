@@ -1567,7 +1567,8 @@ function pdks_ters_sekmeler(string $aktif, array $y): void
         'hub'       => ['ters_kart.php', '↩ Özet', true],
         'havuz'     => ['ters_kart_havuz.php', '🗂 Kart Havuzu', $y['havuz']],
         'sayim'     => ['ters_kart_sayim.php', '🌅 Sabah Sayımı', $y['tarama']],
-        'cikis'     => ['ters_kart_cikis.php', '🚪 Hızlı Çıkış', $y['tarama']],
+        // v355: çıkış TEK noktadan — Ortak Çıkış (ters + normal girişler; kaynak sonuçta görünür).
+        'cikis'     => ['gunluk_isci_giris_cikis.php?mod=ortak', '🚪 Ortak Çıkış', $y['tarama']],
         'mutabakat' => ['ters_kart_mutabakat.php', '📋 Mutabakat', $y['mutabakat']],
     ];
     echo '<nav class="tk-sekmeler" aria-label="Ters Kart Takip">';

@@ -3428,6 +3428,9 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
             'declared_class' => (string)$acik['declared_attendance_class'],
             'declared_class_label' => pdks_gunluk_faz8a_mesai_siniflari()[$acik['declared_attendance_class']] ?? $acik['declared_attendance_class'],
             'entry_time' => (string)$acik['entry_time'],
+            // v355: girişin KÖKENİ (scan | tanimli | manual | ters | legacy_backfill) — yalnız
+            // bilgi; Ortak Çıkış ekranı Ters Kart Takip girişlerini ("sabit giriş") tanıtır.
+            'entry_source' => (string)($acik['source'] ?? 'scan'),
         ],
         'server_time' => $simdi,
         'ozet' => pdks_gunluk_faz8a_oturum_ozet($sessionId, $pdo),

@@ -44,7 +44,7 @@ render_flash();
     <?php endif; ?>
     <?php if ($y['tarama']): ?>
     <a class="tk-hub-kart tk-hub-ana" href="ters_kart_sayim.php"><span class="tk-hub-ikon" aria-hidden="true">🌅</span><span class="tk-hub-ad">B · Sabah Kalan Kart Sayımı</span><span class="tk-hub-alt">Elde kalan kartları okut, girişleri onayla</span></a>
-    <a class="tk-hub-kart" href="ters_kart_cikis.php"><span class="tk-hub-ikon" aria-hidden="true">🚪</span><span class="tk-hub-ad">C · Hızlı Çıkış</span><span class="tk-hub-alt">Tek ekrandan, çavuş seçmeden çıkış</span></a>
+    <a class="tk-hub-kart" href="gunluk_isci_giris_cikis.php?mod=ortak"><span class="tk-hub-ikon" aria-hidden="true">🚪</span><span class="tk-hub-ad">C · Ortak Çıkış</span><span class="tk-hub-alt">Ters ve normal girişler tek ekrandan, çavuş seçmeden çıkar</span></a>
     <?php endif; ?>
     <?php if ($y['mutabakat']): ?>
     <a class="tk-hub-kart" href="ters_kart_mutabakat.php"><span class="tk-hub-ikon" aria-hidden="true">📋</span><span class="tk-hub-ad">D · Gün Sonu ve Mutabakat</span><span class="tk-hub-alt">Dağıtılan, dönen, dönmeyen kartlar</span></a>

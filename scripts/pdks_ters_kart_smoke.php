@@ -449,6 +449,27 @@ $mt = pdks_ters_mutabakat(db(), date('Y-m-d'), 'Depo A');
 $ra = array_values(array_filter($mt['satirlar'], fn($x) => $x['foreman_id'] === $cavus['A']))[0] ?? [];
 ok('mutabakat teyitli (dönmemiş) kart sayısını ayrıca gösterir (A: 2)', ($ra['teyitli'] ?? -1) === 2, j($ra['teyitli'] ?? null));
 
+echo "\n=== L. v355 — Ortak Çıkış tek çıkış noktası (ters girişleri tanır) ===\n";
+// Ortak Çıkış (kiosk ?ajax=ortak_cikis → pdks_gunluk_ortak_cikis_kaydet) ters girişini kapatır ve kaynağı söyler.
+$kartTers = (int)db()->query("SELECT worker_card_id FROM daily_worker_work_periods WHERE source = 'ters' AND status = 'open' AND is_voided = 0 AND session_id = " . (int)$sidA2 . " ORDER BY id LIMIT 1")->fetchColumn();
+$uidTers = (string)(int)hexdec((string)db()->query("SELECT canonical_uid FROM worker_cards WHERE id = $kartTers")->fetchColumn());
+$r = pdks_gunluk_ortak_cikis_kaydet($uidTers, 'usb_decimal', 1, db());
+ok('Ortak Çıkış ters girişini kapatır, yanıtta entry_source=ters + sabit giriş saati', !empty($r['ok']) && ($r['card']['entry_source'] ?? '') === 'ters'
+    && substr((string)$r['card']['entry_time'], 11, 5) === $saat, j($r['card'] ?? $r));
+$mt2 = pdks_ters_mutabakat(db(), date('Y-m-d'), 'Depo A');
+$ra2 = array_values(array_filter($mt2['satirlar'], fn($x) => $x['foreman_id'] === $cavus['A']))[0] ?? [];
+ok('Ortak Çıkış\'tan yapılan çıkış ters mutabakatında "çıkış" sayılır', ($ra2['cikis'] ?? 0) === (($ra['cikis'] ?? 0) + 1), j(['once' => $ra['cikis'] ?? null, 'sonra' => $ra2['cikis'] ?? null]));
+$sB2 = (int)pdks_gunluk_oturum_ac_veya_getir($cavus['B'], 1, db())['session']['id'];
+pdks_gunluk_kart_olustur(['card_no' => 'BX09', 'ham_uid' => $uidB(9), 'kaynak' => 'usb_decimal'], 1, db());
+pdks_gunluk_faz8a_giris_kaydet($uidB(9), 'usb_decimal', $sB2, $kadin, 'auto', 1, db());
+$r = pdks_gunluk_ortak_cikis_kaydet($uidB(9), 'usb_decimal', 1, db());
+ok('normal okutmalı giriş → entry_source=scan (kiosk ek satır göstermez)', !empty($r['ok']) && ($r['card']['entry_source'] ?? '') === 'scan', j($r['card'] ?? $r));
+$cs = file_get_contents($ROOT . '/ters_kart_cikis.php');
+ok('ters_kart_cikis.php Ortak Çıkış moduna yönlendirir (?mod=ortak), kendi ekranı yok', str_contains($cs, "gunluk_isci_giris_cikis.php?mod=ortak") && !str_contains($cs, 'render_header('));
+ok('ters sekmesi/hub/sayım "Ortak Çıkış"a bağlanır', str_contains(file_get_contents($ROOT . '/config/pdks_ters.php'), "'gunluk_isci_giris_cikis.php?mod=ortak'")
+    && str_contains(file_get_contents($ROOT . '/ters_kart.php'), 'gunluk_isci_giris_cikis.php?mod=ortak')
+    && str_contains(file_get_contents($ROOT . '/ters_kart_sayim.php'), 'gunluk_isci_giris_cikis.php?mod=ortak'));
+
 echo "\n=== J. Statik sözleşmeler ===\n";
 $src = file_get_contents($ROOT . '/config/pdks_ters.php');
 ok('pdks_ters.php dönem/olay tablolarına DOĞRUDAN yazmaz (tek yazma yolu)', !preg_match('/(INSERT\s+INTO|UPDATE)\s+`?daily_worker_(work_periods|card_events)/i', $src));

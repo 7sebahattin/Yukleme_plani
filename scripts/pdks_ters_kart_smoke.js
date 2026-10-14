@@ -33,7 +33,7 @@ if (!chromium) {
 }
 
 const ROOT = path.dirname(__dirname);
-const SAYFALAR = ['hub', 'havuz', 'sayim', 'sayim_onayli', 'sayim_secim', 'cikis', 'mutabakat'];
+const SAYFALAR = ['hub', 'havuz', 'sayim', 'sayim_onayli', 'sayim_secim', 'mutabakat'];
 
 // ── Render (gerçek sayfa kodu) ──
 function render(ad, sayfa, ekEnv) {
@@ -480,81 +480,9 @@ const tasma = page => page.evaluate(() => ({ sw: document.documentElement.scroll
     }
 
     // ===================================================================
-    // 5) Hızlı çıkış
+    // 5) Hızlı çıkış → v355'ten beri Ortak Çıkış (gunluk_isci_giris_cikis.php?mod=ortak).
+    //    Kiosk tarafı scripts/pdks_ortak_cikis_smoke.js'te test edilir.
     // ===================================================================
-    console.log('\n=== 5) Hızlı çıkış ===');
-    for (const ekran of [EKRANLAR[0], EKRANLAR[2]]) {
-        const durum = varsayilan();
-        const { ctx, page } = await sayfaAc(browser, HTML.cikis, { width: ekran.width, height: ekran.height }, durum);
-        const ilk = await page.evaluate(() => ({ t: document.getElementById('tkIcerdeToplam').textContent, n: document.querySelectorAll('#tkIcerdeListe .tk-icerde-satir').length }));
-        ok(`${ekran.width}px açılış: içeride listesi sayfa verisinden (Çavuş B 3)`, ilk.t === '3' && ilk.n === 1, JSON.stringify(ilk));
-        ok(`${ekran.width}px NDEFReader YOK → #tkNfcBtn gizli`, !(await gorunur(page, '#tkNfcBtn')));
-        durum.yanit.cikis = { ok: true, card: { card_no: 'K803', worker_type_name: 'Kadın', entry_time: BUGUN + ' 07:00:00' }, server_time: BUGUN + ' 17:05:12',
-            cavus: { ad: 'Çavuş B', icerde: 2, session_id: 1 },
-            mesailer: [{ session_id: 1, foreman_name: 'Çavuş B', work_date: BUGUN, onceki_gun: false, icerde: 2 },
-                       { session_id: 9, foreman_name: 'Çavuş Anadolu', work_date: '2026-10-12', onceki_gun: true, icerde: 1 },
-                       { session_id: 10, foreman_name: 'Çavuş C', work_date: BUGUN, onceki_gun: false, icerde: 0 }] };
-        durum.istekler.length = 0;
-        await okut(page, '800000003', 0);
-        const t0 = Date.now();
-        await page.waitForTimeout(350);
-        const c = istek(durum, 'cikis');
-        ok(`${ekran.width}px okutma → 1 POST cikis (ters_kart_cikis.php)`, c.length === 1 && c[0].dosya === 'ters_kart_cikis.php', JSON.stringify(durum.istekler));
-        const g = c[0] ? c[0].govde : {};
-        ok(`${ekran.width}px cikis gövdesi YALNIZ {csrf, ham_uid, kaynak}`, anahtarlar(g) === JSON.stringify(['csrf', 'ham_uid', 'kaynak']) && g.ham_uid === '800000003' && g.kaynak === 'usb_decimal', JSON.stringify(g));
-        const s = await sonucOku(page);
-        ok(`${ekran.width}px başarı: yeşil + "İçeride kalan 2" + saatler 07:00 → 17:05`, !s.gizli && /tk-sonuc-ok/.test(s.sinif) && /İçeride kalan\s*2/.test(s.metin) && /07:00 → 17:05/.test(s.metin) && /Çavuş B/.test(s.metin), JSON.stringify(s));
-        const l = await page.evaluate(() => ({ t: document.getElementById('tkIcerdeToplam').textContent,
-            satir: [...document.querySelectorAll('#tkIcerdeListe .tk-icerde-satir')].map(r => ({ m: r.textContent.replace(/\s+/g, ' ').trim(), sifir: r.classList.contains('tk-sifir') })) }));
-        ok(`${ekran.width}px yanıttaki mesailer → liste 3 satır, toplam 3`, l.t === '3' && l.satir.length === 3, JSON.stringify(l));
-        ok(`${ekran.width}px önceki gün mesaisi tarihli "(12.10.2026)", 0 içeride soluk`, /Çavuş Anadolu \(12\.10\.2026\)/.test(l.satir[1] ? l.satir[1].m : '') && l.satir[2] && l.satir[2].sifir, JSON.stringify(l));
-        // aynı UID 3 sn içinde (1.6 sn — sayım süresini AŞAN ama çıkış süresinin içinde)
-        await page.waitForTimeout(Math.max(0, 1700 - (Date.now() - t0)));
-        durum.istekler.length = 0;
-        await okut(page, '800000003', 250);
-        ok(`${ekran.width}px aynı UID ${Date.now() - t0} ms sonra (<3000) → POST GİTMEDİ`, istek(durum, 'cikis').length === 0, JSON.stringify(durum.istekler));
-        // acik_donem_yok → turuncu
-        durum.yanit.cikis = { ok: false, kod: 'acik_donem_yok', hata: 'Bu kartın açık girişi yok.', mesailer: [{ session_id: 1, foreman_name: 'Çavuş B', work_date: BUGUN, onceki_gun: false, icerde: 2 }] };
-        await okut(page, '800000004', 350);
-        let s2 = await sonucOku(page);
-        ok(`${ekran.width}px acik_donem_yok → turuncu (tk-sonuc-uyari) + açıklama`, /tk-sonuc-uyari/.test(s2.sinif) && /açık girişi yok/.test(s2.metin), JSON.stringify(s2));
-        ok(`${ekran.width}px hata yanıtındaki mesailer de listeyi tazeler (toplam 2)`, (await page.textContent('#tkIcerdeToplam')) === '2');
-        durum.yanit.cikis = { ok: false, kod: 'kart_tanimsiz', hata: 'Kart sistemde tanımlı değil.' };
-        await okut(page, '800000005', 350);
-        s2 = await sonucOku(page);
-        ok(`${ekran.width}px diğer hata → kırmızı`, /tk-sonuc-hata/.test(s2.sinif) && /tanımlı değil/.test(s2.metin), JSON.stringify(s2));
-        // 3 sn sonra aynı UID yeniden
-        await page.waitForTimeout(Math.max(0, 3150 - (Date.now() - t0)));
-        durum.istekler.length = 0;
-        await okut(page, '800000003', 300);
-        ok(`${ekran.width}px 3 sn sonra aynı UID yeniden gider`, istek(durum, 'cikis').length === 1);
-        ok(`${ekran.width}px JS hatası yok (çıkış)`, durum.hatalar.length === 0, durum.hatalar.join(' | '));
-        await ctx.close();
-    }
-    {   // NFC
-        const durum = varsayilan();
-        durum.yanit.cikis = { ok: true, card: { card_no: 'K900', worker_type_name: 'Erkek', entry_time: BUGUN + ' 07:00:00' }, server_time: BUGUN + ' 16:00:00', cavus: { ad: 'Çavuş B', icerde: 1 }, mesailer: [] };
-        const { ctx, page } = await sayfaAc(browser, HTML.cikis, { width: 390, height: 844 }, durum, { nfc: true });
-        ok('NDEFReader taklidi VAR → #tkNfcBtn görünür', await gorunur(page, '#tkNfcBtn'));
-        await page.click('#tkNfcBtn');
-        await page.waitForTimeout(200);
-        const nb = await page.evaluate(() => ({ dis: document.getElementById('tkNfcBtn').disabled, t: document.getElementById('tkNfcBtn').textContent, d: document.getElementById('tkNfcDurum').textContent, r: !!(window.__ndef && window.__ndef.l.reading) }));
-        ok('tık → NFC dinlemede (buton pasif, durum metni), reading dinleyicisi kuruldu', nb.dis && /dinleniyor/.test(nb.t) && /NFC açık/.test(nb.d) && nb.r, JSON.stringify(nb));
-        durum.istekler.length = 0;
-        await page.evaluate(() => window.__ndef.l.reading({ serialNumber: '04:a1:b2:c3:d4:e5:f6' }));
-        await page.waitForTimeout(400);
-        const c = istek(durum, 'cikis');
-        ok('reading olayı → POST cikis {ham_uid: seri no, kaynak: web_nfc}', c.length === 1 && c[0].govde.kaynak === 'web_nfc' && c[0].govde.ham_uid === '04:a1:b2:c3:d4:e5:f6' && anahtarlar(c[0].govde) === JSON.stringify(['csrf', 'ham_uid', 'kaynak']), JSON.stringify(c.map(x => x.govde)));
-        await page.evaluate(() => window.__ndef.l.reading({ serialNumber: '04:a1:b2:c3:d4:e5:f6' }));
-        await page.waitForTimeout(300);
-        ok('aynı NFC kartı hemen tekrar → POST gitmez', istek(durum, 'cikis').length === 1);
-        await page.evaluate(() => window.__ndef.l.reading({ serialNumber: '' }));
-        await page.waitForTimeout(200);
-        const s = await sonucOku(page);
-        ok('boş seri no → kırmızı uyarı, POST yok', /tk-sonuc-hata/.test(s.sinif) && /seri numarası boş/.test(s.metin) && istek(durum, 'cikis').length === 1, JSON.stringify(s));
-        ok('JS hatası yok (NFC)', durum.hatalar.length === 0, durum.hatalar.join(' | '));
-        await ctx.close();
-    }
     {   // NFC — sayım sayfasında da
         const durum = varsayilan();
         const { ctx, page } = await sayfaAc(browser, HTML.sayim, { width: 390, height: 844 }, durum, { nfc: true });

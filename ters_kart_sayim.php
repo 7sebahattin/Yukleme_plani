@@ -203,7 +203,7 @@ render_flash();
         <?php endif; ?>
         <div id="tkSonuc" class="tk-sonuc" role="status" aria-live="polite" hidden></div>
         <div class="tk-eylemler">
-            <a href="ters_kart_cikis.php" class="btn btn-primary">🚪 Hızlı Çıkış</a>
+            <a href="gunluk_isci_giris_cikis.php?mod=ortak" class="btn btn-primary">🚪 Ortak Çıkış</a>
             <a href="ters_kart_mutabakat.php" class="btn">📋 Mutabakat</a>
             <?php if ($sayim['session_id']): ?><a href="gunluk_isci_puantaj_detay.php?id=<?= (int)$sayim['session_id'] ?>" class="btn">Mesai Detayı</a><?php endif; ?>
             <button type="button" id="tkGeriAlBtn" class="btn btn-danger">↺ Sayımı Geri Al</button>
