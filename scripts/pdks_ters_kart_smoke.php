@@ -367,7 +367,7 @@ ok('kullanıma alındı → aktif 10', !empty($r['ok']) && pdks_ters_havuz_ozet(
 $r = pdks_ters_kart_durum(kartIdUid($uidA(1)), $cavus['C'], 'kayip', '', 1, db());
 ok('başka çavuşun havuz kartının durumu bu çavuştan değiştirilemez', ($r['kod'] ?? '') === 'uye_degil', j($r));
 $r = pdks_gunluk_kart_tanimsiz_sil([kartIdUid($uidC(3))], 'test', istek(), 1, db());
-ok('ters havuzdaki kart Kart Havuzu\'ndan silinemez/arşivlenemez', empty($r['ok']) && str_contains(j($r['hatalar'] ?? []), 'ters kart havuzunda'), j($r));
+ok('ters havuzdaki kart Kart Havuzu\'ndan silinemez/arşivlenemez', empty($r['ok']) && str_contains(j($r['hatalar'] ?? []), 'Giriş Tanımlı havuzunda'), j($r));
 
 echo "\n=== I. Eşzamanlılık / geri alma ===\n";
 $r = pdks_ters_sayim_geri_al($sc, '', 1, db());

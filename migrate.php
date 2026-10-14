@@ -449,12 +449,12 @@ render_header('Şema Migrasyon');
   </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">
-    <h2 style="margin-top:0;">Ters Kart Takip — Tablolar (v354)</h2>
+    <h2 style="margin-top:0;">Giriş Tanımlı — Tablolar (v354)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: 4 YENİ tablo (<code>ters_havuz_kart</code>, <code>ters_cavus_ayar</code>, <code>ters_sayim</code>,
       <code>ters_sayim_kart</code>) — mevcut tablolara ALTER YOK. Önkoşul: Günlük İşçi + Faz 8A + Faz 8J. Günlük İşçi'nin genel
       hazır-mı kontrollerine BİLEREK EKLENMEZ — tablolar kurulmasa da mevcut giriş-çıkış ekranları AYNEN çalışır, yalnız
-      Ters Kart Takip ekranları "kurulmamış" der.
+      Giriş Tanımlı ekranları "kurulmamış" der.
       <?php if ($pdks_ters_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
         <?php foreach ($pdks_ters_results as $ptr): ?>
@@ -479,7 +479,7 @@ render_header('Şema Migrasyon');
     <form method="post" style="margin-top:16px;">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="pdks_ters">
-      <button type="submit" class="btn btn-primary">Ters Kart Takip Tablolarını Oluştur</button>
+      <button type="submit" class="btn btn-primary">Giriş Tanımlı Tablolarını Oluştur</button>
     </form>
     <details style="margin-top:12px;">
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>

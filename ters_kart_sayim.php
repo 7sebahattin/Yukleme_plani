@@ -30,7 +30,7 @@ $ajax = (string)($_GET['ajax'] ?? '');
 if ($ajax !== '') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') pdks_ters_json(['ok' => false, 'hata' => 'Yalnız POST.'], 405);
     $g = pdks_ters_json_govde();
-    if (!$hazir) pdks_ters_json(pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip kurulmamış.'));
+    if (!$hazir) pdks_ters_json(pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı kurulmamış.'));
     $sid = (int)$m($g['sayim_id'] ?? 0);
     $r = match ($ajax) {
         'okut'    => pdks_ters_sayim_okut($sid, $m($g['ham_uid'] ?? ''), $m($g['kaynak'] ?? ''), $user, $pdo),
@@ -50,7 +50,7 @@ $cavusId = (int)($_GET['cavus'] ?? 0);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'baslat') {
     csrf_check($_POST['csrf'] ?? null);
     $cavusId = (int)($_POST['cavus'] ?? 0);
-    $r = $hazir ? pdks_ters_sayim_ac($cavusId, $user, $pdo) : pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip kurulmamış.');
+    $r = $hazir ? pdks_ters_sayim_ac($cavusId, $user, $pdo) : pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı kurulmamış.');
     if (empty($r['ok'])) set_flash('error', (string)$r['hata']);
     header('Location: ters_kart_sayim.php?cavus=' . $cavusId);
     exit;
@@ -61,7 +61,7 @@ $sayim = $cavus ? pdks_ters_sayim_aktif($pdo, $cavusId, $depo, date('Y-m-d')) : 
 $uyeler = $cavus ? pdks_ters_havuz_uyeleri($pdo, $cavusId, $depo) : [];
 $havuzOzet = pdks_ters_havuz_ozet($uyeler);
 
-render_header('Sabah Sayımı — Ters Kart Takip');
+render_header('Sabah Sayımı — Giriş Tanımlı');
 pdks_ters_varliklar($base);
 render_flash();
 ?>
@@ -69,7 +69,7 @@ render_flash();
 <div class="page-head">
     <h1>🌅 Sabah Kalan Kart Sayımı</h1>
     <div class="page-head-actions">
-        <a href="ters_kart.php" class="btn btn-geri">← Ters Kart Takip</a>
+        <a href="ters_kart.php" class="btn btn-geri">← Giriş Tanımlı</a>
     </div>
 </div>
 <?php pdks_ters_sekmeler('sayim', $y); ?>
@@ -80,7 +80,7 @@ render_flash();
     <p class="muted">Sayım yapılacak çavuşu seçin. Depo: <strong><?= h($depo) ?></strong></p>
     <?php $durumlar = pdks_ters_hub_durumlari($pdo, $depo); ?>
     <?php if (!$durumlar): ?>
-        <div class="tk-kutu tk-kutu-bilgi">Bu depoda ters kart havuzu tanımlanmış çavuş yok.<?= $y['havuz'] ? ' <a href="ters_kart_havuz.php">Kart Havuzu</a> ekranından kartları tanımlayın.' : '' ?></div>
+        <div class="tk-kutu tk-kutu-bilgi">Bu depoda Giriş Tanımlı havuzu tanımlanmış çavuş yok.<?= $y['havuz'] ? ' <a href="ters_kart_havuz.php">Kart Havuzu</a> ekranından kartları tanımlayın.' : '' ?></div>
     <?php else: ?>
     <div class="tk-cavus-grid">
         <?php foreach ($durumlar as $c): $sd = $c['sayim']['durum'] ?? null; ?>
@@ -109,7 +109,7 @@ render_flash();
             <div class="tk-sayac tk-sayac-soluk"><span class="tk-sayac-n"><?= (int)($havuzOzet['toplam'] - $havuzOzet['aktif']) ?></span><span class="tk-sayac-et">Kayıp / bozuk / pasif</span></div>
         </div>
         <?php if (!$uyeler): ?>
-            <div class="tk-kutu tk-kutu-bilgi">Bu çavuşun ters kart havuzu boş.<?= $y['havuz'] ? ' <a href="ters_kart_havuz.php?cavus=' . (int)$cavusId . '">Kart Havuzu</a> ekranından kartları tanımlayın.' : '' ?></div>
+            <div class="tk-kutu tk-kutu-bilgi">Bu çavuşun Giriş Tanımlı havuzu boş.<?= $y['havuz'] ? ' <a href="ters_kart_havuz.php?cavus=' . (int)$cavusId . '">Kart Havuzu</a> ekranından kartları tanımlayın.' : '' ?></div>
         <?php else: ?>
         <form method="post" class="tk-baslat">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">

@@ -3732,7 +3732,7 @@ function pdks_gunluk_ters_havuz_engeli(PDO $pdo, int $kartId, int $foremanId, st
     if (!$depoFarkli && (int)$h['foreman_id'] === $foremanId) return null;
     return ['kod' => 'kart_ters_havuzda',
             'hata' => 'Bu kart ' . ($depoFarkli ? trim((string)$h['depo']) . ' deposunda ' : '')
-                    . (string)$h['foreman_name'] . ' çavuşunun ters kart havuzunda — yalnız o çavuşun mesaisinde kullanılabilir.'];
+                    . (string)$h['foreman_name'] . ' çavuşunun Giriş Tanımlı havuzunda — yalnız o çavuşun mesaisinde kullanılabilir.'];
 }
 
 /**
@@ -4140,7 +4140,7 @@ function pdks_gunluk_kart_tanim_satir_sinifla(array $b, int $foremanId, int $tip
     if ($tr !== null && ((int)$tr['foreman_id'] !== $foremanId
             || pdks_gunluk_depo_fold((string)$tr['depo']) !== pdks_gunluk_depo_fold(trim($depo)))) {
         return ['sinif' => 'baska_cavus', 'kod' => 'kart_ters_havuzda',
-                'hata' => 'Kart ' . $tr['foreman_name'] . ' çavuşunun ters kart havuzunda (' . $tr['depo'] . ') — önce ters havuzdan çıkarın.'];
+                'hata' => 'Kart ' . $tr['foreman_name'] . ' çavuşunun Giriş Tanımlı havuzunda (' . $tr['depo'] . ') — önce Giriş Tanımlı havuzundan çıkarın.'];
     }
     $t = $b['tanim'];
     if ($t === null) return ['sinif' => 'tanimlanacak'];
@@ -4558,7 +4558,7 @@ function pdks_gunluk_kart_tanimsiz_sil(array $kartIds, string $reason, string $i
             }
             if ($h = pdks_gunluk_ters_havuz_aktif($pdo, $kid)) {
                 $hatalar[] = ['kart_id' => $kid, 'card_no' => $no,
-                              'hata' => 'Kart ' . (string)$h['foreman_name'] . ' çavuşunun ters kart havuzunda — önce ters havuzdan çıkarın.']; continue;
+                              'hata' => 'Kart ' . (string)$h['foreman_name'] . ' çavuşunun Giriş Tanımlı havuzunda — önce Giriş Tanımlı havuzundan çıkarın.']; continue;
             }
             $ic = $faz8a ? pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid) : pdks_gunluk_kart_acik_girisi($kid, $pdo);
             if ($ic) {

@@ -28,7 +28,7 @@ if (!$d || $d->format('Y-m-d') !== $tarih || $tarih > date('Y-m-d')) $tarih = da
 $hazir = pdks_ters_sema_hazir($pdo);
 $mt = $hazir ? pdks_ters_mutabakat($pdo, $tarih, $depo) : ['satirlar' => [], 'toplam' => []];
 
-render_header('Mutabakat — Ters Kart Takip');
+render_header('Mutabakat — Giriş Tanımlı');
 pdks_ters_varliklar($base);
 render_flash();
 ?>
@@ -36,7 +36,7 @@ render_flash();
 <div class="page-head">
     <h1>📋 Gün Sonu ve Mutabakat</h1>
     <div class="page-head-actions">
-        <a href="ters_kart.php" class="btn btn-geri">← Ters Kart Takip</a>
+        <a href="ters_kart.php" class="btn btn-geri">← Giriş Tanımlı</a>
     </div>
 </div>
 <?php pdks_ters_sekmeler('mutabakat', $y); ?>
@@ -49,7 +49,7 @@ render_flash();
 </form>
 
 <?php if (!$mt['satirlar']): ?>
-    <div class="tk-kutu tk-kutu-bilgi">Bu tarih ve depo için ters kart havuzu ya da sayım yok.</div>
+    <div class="tk-kutu tk-kutu-bilgi">Bu tarih ve depo için Giriş Tanımlı havuzu ya da sayım yok.</div>
 <?php else: $t = $mt['toplam']; ?>
 <div class="tk-sayaclar">
     <div class="tk-sayac"><span class="tk-sayac-n"><?= (int)$t['dagitilan'] ?></span><span class="tk-sayac-et">Dağıtılan kart</span></div>
