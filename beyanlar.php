@@ -241,7 +241,6 @@ render_flash();
                     title="Telefonda WhatsApp'a gönderir, bilgisayarda PDF indirir">📤 PDF Gönder</button>
         </div>
         <?php endif; ?>
-        <span class="bl-bilgi bl-bilgi-acik">Onay ve yükleme bekleyen beyan kayıtlarıdır.</span>
     </div>
 
     <form method="get" class="beyan-pending-search">
@@ -297,7 +296,6 @@ render_flash();
                 <?php if ($total_pages > 1): ?> · Sayfa <?= $page ?> / <?= $total_pages ?><?php endif; ?>
             </span>
         </div>
-        <span class="bl-bilgi bl-bilgi-kapali">Yükleme tamamlanan, iptal veya reddedilen kayıtlardır.</span>
     </div>
 
     <!-- ── Filtre formu — yalnız bu bölümü süzer ── -->
