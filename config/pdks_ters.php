@@ -42,7 +42,7 @@ const PDKS_TERS_ILERI_DK = 120;          // sabit saat onay anından en fazla bu
 const PDKS_TERS_HAVUZ_LIMIT = 500;       // çavuş başına aktif havuz kartı
 const PDKS_TERS_GEREKCE_MAX = 500;
 const PDKS_TERS_ESZAMANLI = 'Aynı anda başka bir işlem yapıldı — hiçbir şey yazılmadı. Sayfayı yenileyip tekrar deneyin.';
-const PDKS_TERS_SAYIM_NOTU = 'Ters Kart Takip — sabah kalan kart sayımı';
+const PDKS_TERS_SAYIM_NOTU = 'Giriş Tanımlı — sabah kalan kart sayımı';
 
 /** Kart işlem etiketi → worker_cards.status (+ ters havuz etiketi). */
 function pdks_ters_kart_islemleri(): array
@@ -336,7 +336,7 @@ function pdks_ters_giris_saati_gecmis(PDO $pdo, int $foremanId, string $depo): a
 function pdks_ters_giris_saati_kaydet(int $foremanId, string $saat, string $validFrom, string $reason, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     $depo = pdks_ters_aktif_depo();
     if ($depo === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
     $c = pdks_ters_cavus($pdo, $foremanId);
@@ -472,7 +472,7 @@ function pdks_ters_havuz_kart_engeli(PDO $pdo, array $kart, int $foremanId, stri
 function pdks_ters_havuz_ekle(string $ham, string $kaynak, int $foremanId, int $tipId, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     $depo = pdks_ters_aktif_depo();
     if ($depo === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
@@ -495,7 +495,7 @@ function pdks_ters_havuz_ekle(string $ham, string $kaynak, int $foremanId, int $
         // Kart no sıradan; eşzamanlı iki ekleme aynı numarayı alırsa bir kez yeniden dener.
         for ($deneme = 0; $deneme < 3 && $kart === null; $deneme++) {
             $o = pdks_gunluk_kart_olustur(['card_no' => pdks_gunluk_sonraki_kart_no(0, $pdo), 'ham_uid' => $ham, 'kaynak' => $kaynak,
-                                           'notes' => 'Ters Kart Takip havuzuna eklendi'], $user, $pdo);
+                                           'notes' => 'Giriş Tanımlı havuzuna eklendi'], $user, $pdo);
             $kart = pdks_gunluk_faz8a_kart_coz((string)$u['kanonik'], $pdo);
             if ($kart === null && (string)($o['kod'] ?? '') !== 'kart_no_kullanimda') {
                 return pdks_ters_red((string)($o['kod'] ?? 'kart_eklenemedi'), (string)($o['hata'] ?? 'Kart havuza eklenemedi.'));
@@ -569,7 +569,7 @@ function pdks_ters_uyelik_dogrula(PDO $pdo, int $kartId, int $foremanId, string 
 function pdks_ters_havuz_cikar(int $kartId, int $foremanId, string $reason, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     $depo = pdks_ters_aktif_depo();
     if ($depo === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
     $reason = trim($reason);
@@ -597,7 +597,7 @@ function pdks_ters_havuz_cikar(int $kartId, int $foremanId, string $reason, int 
 function pdks_ters_havuz_aktar(int $kartId, int $foremanId, int $hedefForemanId, string $reason, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     $depo = pdks_ters_aktif_depo();
     if ($depo === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
     $reason = trim($reason);
@@ -641,7 +641,7 @@ function pdks_ters_havuz_aktar(int $kartId, int $foremanId, int $hedefForemanId,
 function pdks_ters_havuz_sifirla(int $foremanId, string $reason, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     $depo = pdks_ters_aktif_depo();
     if ($depo === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
@@ -682,7 +682,7 @@ function pdks_ters_havuz_sifirla(int $foremanId, string $reason, int $user, ?PDO
 function pdks_ters_kart_durum(int $kartId, int $foremanId, string $islem, string $not, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     $islemler = pdks_ters_kart_islemleri();
     if (!isset($islemler[$islem])) return pdks_ters_red('gecersiz', 'Geçersiz işlem.');
@@ -773,7 +773,7 @@ function pdks_ters_sayim_satirlari(PDO $pdo, int $sayimId): array
 function pdks_ters_sayim_ac(int $foremanId, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     $depo = pdks_ters_aktif_depo();
     if ($depo === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
     $bugun = date('Y-m-d');
@@ -782,7 +782,7 @@ function pdks_ters_sayim_ac(int $foremanId, int $user, ?PDO $pdo = null): array
     if (!$c) return pdks_ters_red('cavus_yok', 'Çavuş bulunamadı.');
     if (!(int)$c['is_active']) return pdks_ters_red('cavus_pasif', 'Bu çavuş pasif — önce aktifleştirin.');
     if (!pdks_ters_havuz_uyeleri($pdo, $foremanId, $depo)) {
-        return pdks_ters_red('havuz_bos', 'Bu çavuşun ters kart havuzu boş — önce Kart Havuzu ekranından kartları tanımlayın.');
+        return pdks_ters_red('havuz_bos', 'Bu çavuşun Giriş Tanımlı havuzu boş — önce Kart Havuzu ekranından kartları tanımlayın.');
     }
     $ayar = pdks_ters_giris_saati($pdo, $foremanId, $depo, $bugun);
     try {
@@ -837,7 +837,7 @@ function pdks_ters_sayim_sayac(PDO $pdo, array $sayim): array
 function pdks_ters_sayim_okut(int $sayimId, string $ham, string $kaynak, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     $u = pdks_ters_uid_coz($pdo, $ham, $kaynak);
     if (!$u['ok']) return $u;
@@ -908,7 +908,7 @@ function pdks_ters_tip_adi(PDO $pdo, int $tipId): string
 function pdks_ters_sayim_karar(int $sayimId, int $kartId, string $karar, string $not, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     if (!in_array($karar, ['kalan_sil', 'dagitildi', 'teyit_sil', 'kayip'], true)) return pdks_ters_red('gecersiz', 'Geçersiz işlem.');
     $not = trim($not);
@@ -1145,7 +1145,7 @@ function pdks_ters_beyan_uyarisi(?int $beyan, int $calisan): ?string
 function pdks_ters_sayim_onizle(int $sayimId, string $saatHam, string $neden, $beyanHam, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     $s = pdks_ters_sayim_getir($pdo, $sayimId);
     if (!$s) return pdks_ters_red('sayim_yok', 'Sayım bulunamadı.');
     if (!pdks_ters_depo_esit((string)$s['depo'], pdks_ters_aktif_depo())) return pdks_ters_red('yanlis_depo', 'Bu sayım aktif depoya ait değil.');
@@ -1175,7 +1175,7 @@ function pdks_ters_sayim_onizle(int $sayimId, string $saatHam, string $neden, $b
 function pdks_ters_sayim_onayla(int $sayimId, string $saatHam, string $neden, $beyanHam, string $istekIdHam, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     $istekId = pdks_ters_istek_id($istekIdHam);
     if ($istekId === null) return pdks_ters_red('istek_gecersiz', 'Geçersiz istek anahtarı; sayfayı yenileyip tekrar deneyin.');
@@ -1322,7 +1322,7 @@ function pdks_ters_sayim_ozet_satiri(array $s): array
 function pdks_ters_sayim_geri_al(int $sayimId, string $reason, int $user, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip tabloları kurulmamış (migrate.php).');
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
     if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
     $reason = trim($reason);
     if ($reason === '' || mb_strlen($reason) > PDKS_TERS_GEREKCE_MAX) return pdks_ters_red('gerekce', 'Geri alma gerekçesi zorunludur (en fazla 500 karakter).');
@@ -1537,7 +1537,7 @@ function pdks_ters_require(array $gerekli): array
     if (function_exists('enforce_active_depot')) enforce_active_depot();
     $y = pdks_ters_yetkiler();
     foreach ($gerekli as $g) if (!empty($y[$g])) return $y;
-    forbidden('Bu sayfaya erişim yetkiniz yok. (Ters Kart Takip)');
+    forbidden('Bu sayfaya erişim yetkiniz yok. (Giriş Tanımlı)');
     return $y;
 }
 
@@ -1567,10 +1567,11 @@ function pdks_ters_sekmeler(string $aktif, array $y): void
         'hub'       => ['ters_kart.php', '↩ Özet', true],
         'havuz'     => ['ters_kart_havuz.php', '🗂 Kart Havuzu', $y['havuz']],
         'sayim'     => ['ters_kart_sayim.php', '🌅 Sabah Sayımı', $y['tarama']],
-        'cikis'     => ['ters_kart_cikis.php', '🚪 Hızlı Çıkış', $y['tarama']],
+        // v355: çıkış TEK noktadan — Ortak Çıkış (ters + normal girişler; kaynak sonuçta görünür).
+        'cikis'     => ['gunluk_isci_giris_cikis.php?mod=ortak', '🚪 Ortak Çıkış', $y['tarama']],
         'mutabakat' => ['ters_kart_mutabakat.php', '📋 Mutabakat', $y['mutabakat']],
     ];
-    echo '<nav class="tk-sekmeler" aria-label="Ters Kart Takip">';
+    echo '<nav class="tk-sekmeler" aria-label="Giriş Tanımlı">';
     foreach ($s as $k => [$url, $ad, $izin]) {
         if (!$izin) continue;
         echo '<a href="' . h($url) . '" class="tk-sekme' . ($k === $aktif ? ' aktif" aria-current="page' : '') . '">' . h($ad) . '</a>';
@@ -1582,8 +1583,8 @@ function pdks_ters_sekmeler(string $aktif, array $y): void
 function pdks_ters_kurulum_uyarisi(PDO $pdo): bool
 {
     if (pdks_ters_sema_hazir($pdo)) return false;
-    echo '<div class="tk-kutu tk-kutu-bilgi"><strong>Ters Kart Takip henüz kurulmamış.</strong> '
-       . 'Bir yöneticinin <a href="migrate.php">migrate.php</a> sayfasındaki "Ters Kart Takip Tabloları" kartından kurulumu yapması gerekir. '
+    echo '<div class="tk-kutu tk-kutu-bilgi"><strong>Giriş Tanımlı henüz kurulmamış.</strong> '
+       . 'Bir yöneticinin <a href="migrate.php">migrate.php</a> sayfasındaki "Giriş Tanımlı Tabloları" kartından kurulumu yapması gerekir. '
        . 'Mevcut giriş-çıkış sistemi bundan etkilenmez.</div>';
     return true;
 }

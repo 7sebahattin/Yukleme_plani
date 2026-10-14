@@ -4,7 +4,7 @@
 // sayfa koduyla (bellek içi SQLite) tek HTML'e basar. Tek amacı tarayıcı
 // testine (pdks_ters_kart_smoke.js) girdi üretmektir; canlı DB'ye dokunmaz.
 //
-//   TK_SAYFA=hub|havuz|sayim|sayim_onayli|sayim_secim|cikis|mutabakat [TK_KURULU=0]
+//   TK_SAYFA=hub|havuz|sayim|sayim_onayli|sayim_secim|mutabakat [TK_KURULU=0]   (v355: çıkış = Ortak Çıkış)
 //   php scripts/pdks_ters_kart_render.php > _test_ters_<sayfa>.html
 // =========================================================
 declare(strict_types=1);
@@ -117,7 +117,7 @@ if ($KURULU) {
 }
 
 $dosya = ['hub' => 'ters_kart.php', 'havuz' => 'ters_kart_havuz.php', 'sayim' => 'ters_kart_sayim.php', 'sayim_onayli' => 'ters_kart_sayim.php',
-          'sayim_secim' => 'ters_kart_sayim.php', 'cikis' => 'ters_kart_cikis.php', 'mutabakat' => 'ters_kart_mutabakat.php'][$SAYFA] ?? null;
+          'sayim_secim' => 'ters_kart_sayim.php', 'mutabakat' => 'ters_kart_mutabakat.php'][$SAYFA] ?? null;
 if ($dosya === null) { fwrite(STDERR, "Bilinmeyen TK_SAYFA: $SAYFA\n"); exit(1); }
 $_GET = match ($SAYFA) { 'havuz' => ['cavus' => (string)$a], 'sayim' => ['cavus' => (string)$a], 'sayim_onayli' => ['cavus' => (string)$b], default => [] };
 $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';

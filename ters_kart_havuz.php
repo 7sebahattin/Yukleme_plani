@@ -30,7 +30,7 @@ $ajax = (string)($_GET['ajax'] ?? '');
 if ($ajax !== '') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') pdks_ters_json(['ok' => false, 'hata' => 'Yalnız POST.'], 405);
     $g = pdks_ters_json_govde();
-    if (!$hazir) pdks_ters_json(pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip kurulmamış.'));
+    if (!$hazir) pdks_ters_json(pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı kurulmamış.'));
     $fid = (int)$m($g['foreman_id'] ?? 0);
     if ($ajax === 'ekle') {
         pdks_ters_json(pdks_ters_havuz_ekle($m($g['ham_uid'] ?? ''), $m($g['kaynak'] ?? ''), $fid, (int)$m($g['worker_type_id'] ?? 0), $user, $pdo));
@@ -55,7 +55,7 @@ $cavusId = (int)($_GET['cavus'] ?? $_POST['cavus'] ?? 0);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'saat') {
     csrf_check($_POST['csrf'] ?? null);
     $r = $hazir ? pdks_ters_giris_saati_kaydet($cavusId, $m($_POST['giris_saati'] ?? ''), $m($_POST['valid_from'] ?? ''), $m($_POST['reason'] ?? ''), $user, $pdo)
-               : pdks_ters_red('sema_hazir_degil', 'Ters Kart Takip kurulmamış.');
+               : pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı kurulmamış.');
     set_flash(empty($r['ok']) ? 'error' : 'success', empty($r['ok']) ? (string)$r['hata'] : 'Giriş saati kaydedildi: ' . $r['giris_saati'] . ' (' . date('d.m.Y', strtotime($r['valid_from'])) . ' itibarıyla).');
     header('Location: ters_kart_havuz.php?cavus=' . $cavusId);
     exit;
@@ -69,15 +69,15 @@ $tipler = $hazir ? pdks_gunluk_desteklenen_tip_listele($pdo) : [];
 $ayar = $cavus ? pdks_ters_giris_saati($pdo, $cavusId, $depo, date('Y-m-d')) : null;
 $durumSinif = ['lost' => 'hata', 'disabled' => 'uyari', 'available' => 'ok'];
 
-render_header('Kart Havuzu — Ters Kart Takip');
+render_header('Kart Havuzu — Giriş Tanımlı');
 pdks_ters_varliklar($base);
 render_flash();
 ?>
 <div class="tk-sayfa" data-tk-sayfa="havuz">
 <div class="page-head">
-    <h1>🗂 Ters Kart Havuzu</h1>
+    <h1>🗂 Giriş Tanımlı Havuzu</h1>
     <div class="page-head-actions">
-        <a href="ters_kart.php" class="btn btn-geri">← Ters Kart Takip</a>
+        <a href="ters_kart.php" class="btn btn-geri">← Giriş Tanımlı</a>
     </div>
 </div>
 <?php pdks_ters_sekmeler('havuz', $y); ?>

@@ -3382,10 +3382,11 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
         }
 
         $simdi = date('Y-m-d H:i:s');
-        // v354: çıkış girişten ÖNCE olamaz. Yalnız Ters Kart Takip'in ileri tarihli sabit
-        // giriş saati (ör. 06:30'da onaylanan 08:00 girişi) bu duruma düşebilir; eski yollar
-        // giriş saatini hep ≤ şimdi yazdığı için mevcut davranış DEĞİŞMEZ.
-        if ($simdi < (string)$acik['entry_time']) {
+        // v354/v355: Ters Kart Takip'in (Giriş Tanımlı) ileri tarihli sabit giriş saatinde
+        // (ör. 06:30'da onaylanan 08:00 girişi) çıkış girişten ÖNCE yazılamaz. Kapı YALNIZ
+        // source='ters' dönemlerde — diğer kaynakların davranışı v354 öncesiyle birebir aynı
+        // (pdks_faz8h_smoke sabit 08:00 girişli test verisiyle sabah erken saatte koşar).
+        if ((string)($acik['source'] ?? '') === 'ters' && $simdi < (string)$acik['entry_time']) {
             if (!$disTx) $pdo->rollBack();
             return ['ok' => false, 'kod' => 'giris_saati_gelmedi',
                     'hata' => 'Bu kartın giriş saati (' . substr((string)$acik['entry_time'], 11, 5) . ') henüz gelmedi — çıkış giriş saatinden önce yazılamaz.'];
@@ -3428,6 +3429,9 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
             'declared_class' => (string)$acik['declared_attendance_class'],
             'declared_class_label' => pdks_gunluk_faz8a_mesai_siniflari()[$acik['declared_attendance_class']] ?? $acik['declared_attendance_class'],
             'entry_time' => (string)$acik['entry_time'],
+            // v355: girişin KÖKENİ (scan | tanimli | manual | ters | legacy_backfill) — yalnız
+            // bilgi; Ortak Çıkış ekranı Ters Kart Takip girişlerini ("sabit giriş") tanıtır.
+            'entry_source' => (string)($acik['source'] ?? 'scan'),
         ],
         'server_time' => $simdi,
         'ozet' => pdks_gunluk_faz8a_oturum_ozet($sessionId, $pdo),
@@ -3729,7 +3733,7 @@ function pdks_gunluk_ters_havuz_engeli(PDO $pdo, int $kartId, int $foremanId, st
     if (!$depoFarkli && (int)$h['foreman_id'] === $foremanId) return null;
     return ['kod' => 'kart_ters_havuzda',
             'hata' => 'Bu kart ' . ($depoFarkli ? trim((string)$h['depo']) . ' deposunda ' : '')
-                    . (string)$h['foreman_name'] . ' çavuşunun ters kart havuzunda — yalnız o çavuşun mesaisinde kullanılabilir.'];
+                    . (string)$h['foreman_name'] . ' çavuşunun Giriş Tanımlı havuzunda — yalnız o çavuşun mesaisinde kullanılabilir.'];
 }
 
 /**
@@ -4137,7 +4141,7 @@ function pdks_gunluk_kart_tanim_satir_sinifla(array $b, int $foremanId, int $tip
     if ($tr !== null && ((int)$tr['foreman_id'] !== $foremanId
             || pdks_gunluk_depo_fold((string)$tr['depo']) !== pdks_gunluk_depo_fold(trim($depo)))) {
         return ['sinif' => 'baska_cavus', 'kod' => 'kart_ters_havuzda',
-                'hata' => 'Kart ' . $tr['foreman_name'] . ' çavuşunun ters kart havuzunda (' . $tr['depo'] . ') — önce ters havuzdan çıkarın.'];
+                'hata' => 'Kart ' . $tr['foreman_name'] . ' çavuşunun Giriş Tanımlı havuzunda (' . $tr['depo'] . ') — önce Giriş Tanımlı havuzundan çıkarın.'];
     }
     $t = $b['tanim'];
     if ($t === null) return ['sinif' => 'tanimlanacak'];
@@ -4555,7 +4559,7 @@ function pdks_gunluk_kart_tanimsiz_sil(array $kartIds, string $reason, string $i
             }
             if ($h = pdks_gunluk_ters_havuz_aktif($pdo, $kid)) {
                 $hatalar[] = ['kart_id' => $kid, 'card_no' => $no,
-                              'hata' => 'Kart ' . (string)$h['foreman_name'] . ' çavuşunun ters kart havuzunda — önce ters havuzdan çıkarın.']; continue;
+                              'hata' => 'Kart ' . (string)$h['foreman_name'] . ' çavuşunun Giriş Tanımlı havuzunda — önce Giriş Tanımlı havuzundan çıkarın.']; continue;
             }
             $ic = $faz8a ? pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid) : pdks_gunluk_kart_acik_girisi($kid, $pdo);
             if ($ic) {

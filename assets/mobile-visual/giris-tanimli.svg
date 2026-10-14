@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Giriş Tanımlı">
+  <defs>
+    <linearGradient id="gtCerceve" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8edf5"/>
+      <stop offset=".45" stop-color="#9aa6b8"/>
+      <stop offset="1" stop-color="#5d6a7e"/>
+    </linearGradient>
+    <linearGradient id="gtIc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f8ef7"/>
+      <stop offset="1" stop-color="#1747b8"/>
+    </linearGradient>
+    <linearGradient id="gtKapi" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1d4fc4"/>
+      <stop offset=".6" stop-color="#3a7bf0"/>
+      <stop offset="1" stop-color="#2459d6"/>
+    </linearGradient>
+    <linearGradient id="gtKisi" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6aa6ff"/>
+      <stop offset="1" stop-color="#1f5fd8"/>
+    </linearGradient>
+    <radialGradient id="gtBas" cx=".35" cy=".3" r=".75">
+      <stop offset="0" stop-color="#f3dcc6"/>
+      <stop offset="1" stop-color="#b58e6c"/>
+    </radialGradient>
+    <radialGradient id="gtGolge" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#0b1a33" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#0b1a33" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- zemin gölgesi -->
+  <ellipse cx="60" cy="108" rx="44" ry="7" fill="url(#gtGolge)"/>
+  <!-- kapı çerçevesi (metal kenar + mavi iç) -->
+  <path d="M18 106V30a20 20 0 0 1 20-20h28a20 20 0 0 1 20 20v76h-12V32a10 10 0 0 0-10-10H40a10 10 0 0 0-10 10v74z" fill="url(#gtCerceve)"/>
+  <path d="M22 106V31a16 16 0 0 1 16-16h28a16 16 0 0 1 16 16v75h-5V32a12 12 0 0 0-12-12H39a12 12 0 0 0-12 12v74z" fill="url(#gtIc)"/>
+  <!-- kapı açıklığı (aydınlık iç) -->
+  <path d="M30 106V33a10 10 0 0 1 10-10h24a10 10 0 0 1 10 10v73z" fill="#f4f8ff"/>
+  <!-- anahtar (sol kanat) -->
+  <g fill="#f4f8ff">
+    <circle cx="24.5" cy="62" r="3.2"/>
+    <rect x="23.6" y="64" width="1.8" height="9" rx=".9"/>
+    <rect x="25" y="68" width="2.6" height="1.6" rx=".6"/>
+    <rect x="25" y="71" width="2" height="1.4" rx=".6"/>
+  </g>
+  <circle cx="24.5" cy="62" r="1.3" fill="#1d4fc4"/>
+  <!-- açık kapı kanadı (perspektif) -->
+  <path d="M74 106V26l26-8v84z" fill="url(#gtKapi)" stroke="#123a96" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M79 98V31l16-4.5v67z" fill="none" stroke="#5c95ff" stroke-width="1.6" stroke-linejoin="round" opacity=".8"/>
+  <circle cx="81.5" cy="64" r="2.2" fill="#dfe8ff"/>
+  <!-- içeri yürüyen kişi -->
+  <g>
+    <circle cx="52" cy="38" r="8" fill="url(#gtBas)"/>
+    <path d="M44 50c2-3 6-4.5 10-3.5 3 .7 5 2.8 6 5.6l4 12 7 4.5c1.6 1 2 3 1 4.6s-3 2-4.6 1l-8.4-5.4-2-5.5-3 11 8 9 3 14c.4 2-1 3.8-3 4.2s-3.8-.9-4.2-2.8l-2.6-12.2-7-7.5-4 11-9 9c-1.4 1.4-3.6 1.4-5 0s-1.4-3.6 0-5l8.2-8.2 6.8-21-4.6 4.4-6 2.4c-1.8.7-3.8-.2-4.5-2s.2-3.8 2-4.5l5-2z" fill="url(#gtKisi)" stroke="#164bb8" stroke-width="1" stroke-linejoin="round"/>
+  </g>
+</svg>

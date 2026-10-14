@@ -102,8 +102,8 @@ render_flash();
 
 <?php if ($tersGoster): ?>
 <a href="ters_kart.php" class="home-card">
-    <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
-    <div class="home-card-title">↩ Ters Kart Takip</div>
+    <div class="home-card-icon pdks-icon-giris-tanimli" aria-hidden="true"></div>
+    <div class="home-card-title">↩ Giriş Tanımlı</div>
     <div class="home-card-sub">Sabah kalan kart sayımı · hızlı çıkış · mutabakat</div>
 </a>
 <?php endif; ?>

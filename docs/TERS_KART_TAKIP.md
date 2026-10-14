@@ -35,7 +35,7 @@ geri alınırken tek tek okutulabiliyor. Bu yüzden sabah süreci tersine çevri
 | `ters_kart.php` | Ana sayfa: 4 ekrana bağlantı + aktif depodaki çavuşların bugünkü durumu | worker_cards / daily_scan / daily_reports |
 | `ters_kart_havuz.php` (A) | Çavuş seç → kart okut (tip seçili) → havuza ekle; Kayıp / Bozuk / Pasif / Kullanıma Al / Aktar / Çıkar; Havuzu sıfırla; sabit giriş saati + geçmişi; havuz geçmişi | `attendance.worker_cards` |
 | `ters_kart_sayim.php` (B) | Çavuş seç → Sayımı Başlat → elde kalan kartları okut → canlı sayaçlar + önizleme → Onayla; onaylıda özet + Sayımı Geri Al | `attendance.daily_scan` |
-| `ters_kart_cikis.php` (C) | Çavuş seçmeden tek ekrandan çıkış; çavuş, kart, tip, giriş→çıkış saati, içeride kalan | `attendance.daily_scan` |
+| C · Ortak Çıkış (v355) | `gunluk_isci_giris_cikis.php?mod=ortak` — ters ve normal girişler TEK ekrandan çıkar; sonuç kartı giriş kaynağını gösterir ("↩ Ters Kart · sabit giriş 08:00"). `ters_kart_cikis.php` buraya yönlendirir | `attendance.daily_scan` |
 | `ters_kart_mutabakat.php` (D) | Tarih seç; çavuş bazında havuz · kalan · dağıtılan · giriş · çıkış · içeride · eksik çıkış · dönmeyen kartlar | daily_scan / daily_reports |
 
 Mevcut ekranlara eklenenler: Personel Takibi'nde "↩ Ters Kart Takip" kartı, Kart
@@ -163,3 +163,23 @@ Açık (sahip kararı gerekir, kod DEĞİŞTİRİLMEDİ):
   giriş noktası. Ters havuz dışında kullanılmaz; istenirse yalnız mevcut kartlarla sınırlanır.
 - Onay ile havuz işlemleri farklı kilit sırasıyla çakışırsa InnoDB deadlock'u bir tarafı
   geri alır (veri bozulmaz, "eşzamanlı işlem" mesajı).
+
+## v355 — Tek çıkış noktası: Ortak Çıkış
+
+Sahip kararı: ters ve normal sistem aynı yerden çıkar. Ayrı "Hızlı Çıkış" ekranı kaldırıldı.
+- `ters_kart_cikis.php` → `gunluk_isci_giris_cikis.php?mod=ortak` (302). Eski önbellekli sayfalar için POST
+  `?ajax=cikis` korunur ve aynı `pdks_gunluk_ortak_cikis_kaydet()` yolunu çağırır.
+- Kiosk `?mod=ortak` ile doğrudan Ortak Çıkış modunda açılır.
+- `pdks_gunluk_faz8a_cikis_kaydet()` yanıtına `card.entry_source` eklendi (yalnız bilgi). Kiosk ÇIKIŞ sonucunda
+  kaynak `scan` değilse bir satır gösterir: "↩ Ters Kart · sabit giriş HH:MM", "🏷 Tanımlı giriş", "✍ Elle eklenmiş giriş".
+- Mutabakat ve hakediş hangi ekrandan çıkış yapıldığına bakmaz; dönem tablosundan sayar.
+
+## v355 — Görünen ad: "Giriş Tanımlı"
+
+Sahip kararıyla modülün ekrandaki adı "Giriş Tanımlı" oldu (Personel Takibi kartı yeni kapı ikonuyla, sayfa
+başlıkları, mesajlar, Mesai Detayı rozeti "↩ Giriş Tanımlı", Ortak Çıkış sonuç satırı "↩ Giriş Tanımlı · sabit giriş
+08:00"). Kod kimlikleri, URL'ler (`ters_kart*.php`) ve tablo adları (`ters_*`) değişmedi. Not: kiosktaki
+"🏷 TANIMLI GİRİŞ" (kart → çavuş tanımıyla giriş, v298) ayrı bir özelliktir.
+
+"Çıkış girişten önce yazılamaz" kapısı yalnız `source='ters'` dönemlere uygulanır; diğer giriş kaynaklarında
+çıkış davranışı v354 öncesiyle aynıdır.

@@ -310,7 +310,7 @@ if ($basari !== ''): ?>
     <h1>🪪 Kart Havuzu</h1>
     <div class="page-head-actions">
         <a href="isci_tipleri.php" class="btn btn-ghost">⚙️ İşçi Tipleri</a>
-        <?php if (pdks_gunluk_ters_havuz_sema_hazir($pdo)): ?><a href="ters_kart_havuz.php" class="btn btn-ghost" title="Ters Kart Takip — çavuşların kalıcı kart havuzu (ayrı sistem)">↩ Ters Kart Havuzu</a><?php endif; ?>
+        <?php if (pdks_gunluk_ters_havuz_sema_hazir($pdo)): ?><a href="ters_kart_havuz.php" class="btn btn-ghost" title="Giriş Tanımlı — çavuşların kalıcı kart havuzu (ayrı sistem)">↩ Giriş Tanımlı Havuzu</a><?php endif; ?>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>

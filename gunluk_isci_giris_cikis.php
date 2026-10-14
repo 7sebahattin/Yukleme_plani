@@ -701,6 +701,9 @@ render_flash();
     // çavuşunu/mesaisini/tipini sunucu bulur (?ajax=tanimli_giris). Yalnız GİRİŞ.
     var tanimliMod = false;
     var tanimliDonus = false;   // kapatılmamış mesai penceresinden sonra Tanımlı moda dön
+    // v355: ?mod=ortak ile açılan sayfada önce kapatılmamış mesai penceresi
+    // gösterildiyse, pencereden çıkınca ("Sonra" / son mesai kapandı) ORTAK ÇIKIŞ'a dönülür.
+    var ortakDonus = false;
     var sonTanimliOkuma = { uid: '', zaman: 0 };   // aynı kartın ~3 sn içinde tekrar okunması yok sayılır
     var TANIMLI_TEKRAR_MS = 3000;
     var modeRequest = 0;
@@ -764,7 +767,7 @@ render_flash();
     document.querySelectorAll('[data-gi-cavus-id]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             ortakModKapat();
-            tanimliModKapat(); tanimliDonus = false;
+            tanimliModKapat(); tanimliDonus = false; ortakDonus = false;
             seciliCavusId = parseInt(btn.getAttribute('data-gi-cavus-id'), 10);
             seciliCavusAd = btn.getAttribute('data-gi-cavus-ad');
             document.getElementById('giSeciliCavusAd').textContent = seciliCavusAd;
@@ -870,6 +873,7 @@ render_flash();
     });
     document.getElementById('giEskiSonra').addEventListener('click', function () {
         if (tanimliDonus) { tanimliModAc(); return; }   // v298: Tanımlı Giriş'ten gelindiyse oraya dön
+        if (ortakDonus) { kapatKaynak = 'mod'; ortakModAc(); return; }   // v355: ?mod=ortak derin bağlantısı
         cavusDegistir();
     });
     if (eskiBanner) eskiBanner.addEventListener('click', function () { eskiPencereAc(null); });
@@ -913,7 +917,7 @@ render_flash();
             .catch(function () { /* rozet yalnız bilgi */ });
     }
     function ortakModAc() {
-        tanimliModKapat(); tanimliDonus = false;
+        tanimliModKapat(); tanimliDonus = false; ortakDonus = false;
         modeRequest++;
         seciliCavusId = null; seciliCavusAd = null;
         seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
@@ -951,7 +955,7 @@ render_flash();
     var tanimliBtn = document.getElementById('giTanimliGirisBtn');
     function tanimliModAc() {
         ortakModKapat();
-        tanimliDonus = false;
+        tanimliDonus = false; ortakDonus = false;
         modeRequest++;
         seciliCavusId = null; seciliCavusAd = null;
         seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
@@ -989,7 +993,7 @@ render_flash();
         // close the session. Sessions stay server-side until explicitly closed.")
         modeRequest++;
         ortakModKapat();
-        tanimliModKapat(); tanimliDonus = false;
+        tanimliModKapat(); tanimliDonus = false; ortakDonus = false;
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
         seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         kapatKaynak = 'mod';
@@ -1202,9 +1206,25 @@ render_flash();
         var tipKayit = tipKayitBul(tip);
         var tipSinif = tipKayit ? ' is-' + tipKayit.renk : '';
         var saatBilgi = saat;
+        var girisSaat = '';
         if (d.event_type === 'CIKIS' && kart.entry_time) {
-            var girisSaat = (kart.entry_time.split(' ')[1] || kart.entry_time).slice(0, 5);
+            girisSaat = (kart.entry_time.split(' ')[1] || kart.entry_time).slice(0, 5);
             saatBilgi = girisSaat + ' → ' + saat;
+        }
+        // v355: Ortak Çıkış, Ters Kart Takip için de TEK çıkış noktasıdır — ÇIKIŞ
+        // sonucunda girişin hangi yoldan yapıldığı (sunucu card.entry_source) küçük bir
+        // satırla söylenir. 'scan' (normal okutma) / boş / bilinmeyen → satır YOK
+        // (eski görünüm birebir). Sınıf adı yalnız bu beyaz listeden üretilir.
+        var kaynakHtml = '';
+        if (d.event_type === 'CIKIS') {
+            var kaynak = String(kart.entry_source || '');
+            var kaynakMetin = '';
+            if (kaynak === 'ters') kaynakMetin = '↩ Giriş Tanımlı' + (girisSaat ? ' · sabit giriş ' + girisSaat : '');
+            else if (kaynak === 'tanimli') kaynakMetin = '🏷 Tanımlı giriş';
+            else if (kaynak === 'manual') kaynakMetin = '✍ Elle eklenmiş giriş';
+            if (kaynakMetin) {
+                kaynakHtml = '<div class="pdks-result-kaynak pdks-result-kaynak-' + kaynak + '">' + escHtml(kaynakMetin) + '</div>';
+            }
         }
         // ⚠ v240 (kullanıcı isteği): yeşil tik yerine o günün o cinsiyetteki
         // TOPLAM GİRİŞ sayısı gösterilir — hem GİRİŞ hem ÇIKIŞ okutmasında,
@@ -1247,6 +1267,7 @@ render_flash();
             ikonHtml +
             (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + gKisiIkon + '<span>' + escHtml(tip) + '</span></div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
+            kaynakHtml +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
             '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>' +
             // v288: ortak çıkışta çıkışın HANGİ çavuşa yazıldığı (dünden açık mesaiyse tarihiyle).
@@ -1542,6 +1563,7 @@ render_flash();
                         }
                     }
                     if (tanimliDonus) { tanimliModAc(); return; }   // v298: Tanımlı Giriş'e dön
+                    if (ortakDonus) { kapatKaynak = 'mod'; currentSession = null; ortakModAc(); return; }   // v355
                     cavusDegistir();
                     return;
                 }
@@ -1635,6 +1657,20 @@ render_flash();
         kapat(not);
     });
     document.getElementById('giReconVazgecBtn').addEventListener('click', kapatmadanVazgec);
+
+    // ── v355) Derin bağlantı: ?mod=ortak → doğrudan ORTAK ÇIKIŞ tarama ekranı ──
+    // Yalnız JS okur (sunucu ?mod için hiçbir şey yapmaz); bilinmeyen değer yok
+    // sayılır; düğme sayfada yoksa (çavuş yok / Faz 8A kurulu değil) hiçbir şey olmaz.
+    // Önceki günden kapatılmamış mesai penceresi açıksa ÖNCE o kalır (Z raporu
+    // hatırlatması gizlenmez); pencereden "Sonra" ya da son mesai kapanınca ortak
+    // moda geçilir (ortakDonus).
+    (function () {
+        var istenen = null;
+        try { istenen = new URLSearchParams(window.location.search).get('mod'); } catch (e) { istenen = null; }
+        if (istenen !== 'ortak' || !ortakBtn) return;
+        if (eskiSec && !eskiSec.hidden) { ortakDonus = true; return; }
+        ortakModAc();
+    })();
 })();
 </script>
 

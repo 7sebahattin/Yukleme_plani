@@ -24,13 +24,13 @@ $depo = pdks_ters_aktif_depo();
 $hazir = pdks_ters_sema_hazir($pdo);
 $durumlar = $hazir ? pdks_ters_hub_durumlari($pdo, $depo) : [];
 
-render_header('Ters Kart Takip');
+render_header('Giriş Tanımlı');
 pdks_ters_varliklar($base);
 render_flash();
 ?>
 <div class="tk-sayfa" data-tk-sayfa="hub">
 <div class="page-head">
-    <h1>↩ Ters Kart Takip</h1>
+    <h1>↩ Giriş Tanımlı</h1>
     <div class="page-head-actions">
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
@@ -44,7 +44,7 @@ render_flash();
     <?php endif; ?>
     <?php if ($y['tarama']): ?>
     <a class="tk-hub-kart tk-hub-ana" href="ters_kart_sayim.php"><span class="tk-hub-ikon" aria-hidden="true">🌅</span><span class="tk-hub-ad">B · Sabah Kalan Kart Sayımı</span><span class="tk-hub-alt">Elde kalan kartları okut, girişleri onayla</span></a>
-    <a class="tk-hub-kart" href="ters_kart_cikis.php"><span class="tk-hub-ikon" aria-hidden="true">🚪</span><span class="tk-hub-ad">C · Hızlı Çıkış</span><span class="tk-hub-alt">Tek ekrandan, çavuş seçmeden çıkış</span></a>
+    <a class="tk-hub-kart" href="gunluk_isci_giris_cikis.php?mod=ortak"><span class="tk-hub-ikon" aria-hidden="true">🚪</span><span class="tk-hub-ad">C · Ortak Çıkış</span><span class="tk-hub-alt">Ters ve normal girişler tek ekrandan, çavuş seçmeden çıkar</span></a>
     <?php endif; ?>
     <?php if ($y['mutabakat']): ?>
     <a class="tk-hub-kart" href="ters_kart_mutabakat.php"><span class="tk-hub-ikon" aria-hidden="true">📋</span><span class="tk-hub-ad">D · Gün Sonu ve Mutabakat</span><span class="tk-hub-alt">Dağıtılan, dönen, dönmeyen kartlar</span></a>
@@ -53,7 +53,7 @@ render_flash();
 
 <h2 class="tk-alt-baslik">Bugün · <?= h(date('d.m.Y')) ?> · <?= h($depo) ?></h2>
 <?php if (!$durumlar): ?>
-    <div class="tk-kutu tk-kutu-bilgi">Bu depoda ters kart havuzu tanımlanmış çavuş yok.<?= $y['havuz'] ? ' <a href="ters_kart_havuz.php">Kart Havuzu</a> ekranından başlayın.' : '' ?></div>
+    <div class="tk-kutu tk-kutu-bilgi">Bu depoda Giriş Tanımlı havuzu tanımlanmış çavuş yok.<?= $y['havuz'] ? ' <a href="ters_kart_havuz.php">Kart Havuzu</a> ekranından başlayın.' : '' ?></div>
 <?php else: ?>
 <div class="tk-cavus-grid">
     <?php foreach ($durumlar as $c): $sd = $c['sayim']['durum'] ?? null; ?>

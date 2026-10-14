@@ -359,51 +359,6 @@
     }
 
     // =========================================================
-    // SAYFA: HIZLI ÇIKIŞ (ters_kart_cikis.php)
-    // =========================================================
-    function cikisSayfasi() {
-        var sonucKutu = document.getElementById('tkSonuc'), liste = document.getElementById('tkIcerdeListe');
-        var toplamEl = document.getElementById('tkIcerdeToplam');
-        function listeCiz(mesailer) {
-            if (!liste || !Array.isArray(mesailer)) return;
-            liste.textContent = '';
-            var toplam = 0;
-            mesailer.forEach(function (m) {
-                toplam += +m.icerde || 0;
-                var r = TK.el('div', 'tk-icerde-satir' + (+m.icerde ? '' : ' tk-sifir'));
-                r.appendChild(TK.el('span', 'tk-icerde-ad', m.foreman_name + (m.onceki_gun ? ' (' + m.work_date.split('-').reverse().join('.') + ')' : '')));
-                r.appendChild(TK.el('strong', 'tk-icerde-n', m.icerde));
-                liste.appendChild(r);
-            });
-            if (!mesailer.length) liste.appendChild(TK.el('div', 'tk-bos', 'Aktif depoda açık mesai yok.'));
-            if (toplamEl) toplamEl.textContent = toplam;
-        }
-        listeCiz(TK.veri('tkMesailer') || []);
-        TK.okuyucu({
-            input: document.getElementById('tkScanInput'), nfcBtn: document.getElementById('tkNfcBtn'),
-            nfcDurum: document.getElementById('tkNfcDurum'), tekrarMs: 3000,
-            nfcHata: function (m) { TK.sonuc(sonucKutu, 'hata', '⛔ ' + m, [], 5000); },
-            isle: function (ham, kaynak) {
-                return TK.post('ters_kart_cikis.php?ajax=cikis', { ham_uid: ham, kaynak: kaynak }).then(function (d) {
-                    if (d.ok) {
-                        var c = d.cavus || {}, k = d.card || {};
-                        TK.sonuc(sonucKutu, 'ok', '✅ ÇIKIŞ — ' + (k.card_no || ''), [
-                            ['Çavuş', c.ad || '—'], ['Tip', k.worker_type_name || '—'],
-                            ['Giriş → Çıkış', TK.saatMetni(k.entry_time) + ' → ' + TK.saatMetni(d.server_time)],
-                            ['İçeride kalan', String(c.icerde != null ? c.icerde : '—')]
-                        ], 3000);
-                    } else if (d.kod === 'acik_donem_yok') {
-                        TK.sonuc(sonucKutu, 'uyari', '⚠ ' + d.hata, ['Bu kart bugün dağıtılmış/girmiş görünmüyor ya da çıkışı zaten yapıldı.'], 5000);
-                    } else {
-                        TK.sonuc(sonucKutu, 'hata', '⛔ ' + d.hata, [], 5000);
-                    }
-                    if (d.mesailer) listeCiz(d.mesailer);
-                });
-            }
-        });
-    }
-
-    // =========================================================
     // SAYFA: KART HAVUZU (ters_kart_havuz.php)
     // =========================================================
     function havuzSayfasi(kok) {
@@ -484,6 +439,5 @@
     if (!kok) return;
     var sayfa = kok.getAttribute('data-tk-sayfa');
     if (sayfa === 'sayim') sayimSayfasi(kok);
-    else if (sayfa === 'cikis') cikisSayfasi(kok);
     else if (sayfa === 'havuz') havuzSayfasi(kok);
 })();

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v354` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v355` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -833,6 +833,18 @@ AYNEN çalışır. Ayrıntı + sahip kararları: `docs/TERS_KART_TAKIP.md`.
   `ters_havuz_kart` + `ters_sayim_kart` `pdks_gunluk_kart_gecmis_tablolari()`'nda.
 - **Geri al** ilk çıkışa kadar (daily_scan, gerekçe); dönemler iptal (silinmez), okutmalar yeni taslağa kopyalanır.
 - Mesai Detayı'nda `source='ters'` → "↩ Ters" rozeti. Hakediş/cari/rapor kaynağa göre DALLANMAZ — dallanma EKLEME.
+- **v355 — TEK çıkış noktası = Ortak Çıkış** (sahip kararı): ayrı "Hızlı Çıkış" ekranı kalktı; `ters_kart_cikis.php`
+  yalnız `gunluk_isci_giris_cikis.php?mod=ortak`'a yönlendirir (eski önbellekli sayfalar için POST `?ajax=cikis` aynı
+  `pdks_gunluk_ortak_cikis_kaydet()`'i çağırır). Kiosk `?mod=ortak` ile doğrudan Ortak Çıkış modunda açılır.
+  `pdks_gunluk_faz8a_cikis_kaydet()` yanıtı `card.entry_source` (scan/tanimli/manual/ters/legacy_backfill — yalnız bilgi)
+  taşır; kiosk ÇIKIŞ sonucunda scan dışı kaynakta `.pdks-result-kaynak` satırı ("↩ Ters Kart · sabit giriş 08:00").
+  Mutabakat çıkışı hangi ekrandan yapıldığına bakmaz (dönem tablosundan sayar). Ters sekmesi/hub "🚪 Ortak Çıkış".
+  `?mod=ortak` + önceki günden açık mesai: ÖNCE #giEskiSec penceresi, "Sonra"/son mesai kapanınca Ortak Çıkış (`ortakDonus`, tek seferlik).
+- **v355 — görünen ad "Giriş Tanımlı"** (sahip kararı; kod/URL/tablo adları `ters_*` KALDI). Personel Takibi kartı ikonu
+  `assets/mobile-visual/giris-tanimli.svg` (`.pdks-icon-giris-tanimli`). ⚠ v298 "🏷 TANIMLI GİRİŞ" (kiosk, kart→çavuş tanımı)
+  AYRI özelliktir — karıştırma.
+- **"Çıkış girişten önce olamaz" kapısı YALNIZ `source='ters'`** (`pdks_gunluk_faz8a_cikis_kaydet`, kod `giris_saati_gelmedi`).
+  Genelleştirme: v354'te tüm kaynaklara uygulanınca `pdks_faz8h_smoke` (sabit 08:00 girişli veri) sabah erken saatte düşüyordu.
 - Test: `php scripts/pdks_ters_kart_smoke.php` (A–J) · `node scripts/pdks_ters_kart_smoke.js` (render'ı kendisi üretir;
   tek render: `TK_SAYFA=<sayfa> php scripts/pdks_ters_kart_render.php`).
 
