@@ -103,8 +103,15 @@ render_flash();
     <div class="tk-sayac tk-sayac-kirmizi"><span class="tk-sayac-n" data-tk-sayac="kayip"><?= $oz['kayip'] ?></span><span class="tk-sayac-et">Kayıp</span></div>
     <div class="tk-sayac tk-sayac-turuncu"><span class="tk-sayac-n" data-tk-sayac="bozuk"><?= $oz['bozuk'] ?></span><span class="tk-sayac-et">Bozuk</span></div>
     <div class="tk-sayac tk-sayac-soluk"><span class="tk-sayac-n" data-tk-sayac="kullanim_disi"><?= $oz['kullanim_disi'] ?></span><span class="tk-sayac-et">Kullanım dışı</span></div>
+    <?php
+    // Tip bazında aktif kart sayısı — sayaç kartlarıyla aynı sırada (eski küçük "Aktif: Kadın N · Erkek M" satırının yerine).
+    $tkTipKart = [];
+    foreach ($tipler as $t) $tkTipKart[(string)$t['name']] = strtolower((string)$t['code']);
+    foreach (array_keys($oz['tipler']) as $ad) if (!isset($tkTipKart[$ad])) $tkTipKart[$ad] = '';
+    foreach ($tkTipKart as $ad => $kod): ?>
+    <div class="tk-sayac tk-sayac-tip<?= $kod !== '' ? ' tk-sayac-tip-' . h($kod) : '' ?>"><span class="tk-sayac-n" data-tk-tip-sayac="<?= h($ad) ?>"><?= (int)($oz['tipler'][$ad] ?? 0) ?></span><span class="tk-sayac-et">Aktif <?= h($ad) ?></span></div>
+    <?php endforeach; ?>
 </div>
-<?php if ($oz['tipler']): ?><p class="muted">Aktif: <?= h(implode(' · ', array_map(fn($t, $n) => "$t $n", array_keys($oz['tipler']), $oz['tipler']))) ?></p><?php endif; ?>
 
 <div class="tk-iki-kolon">
 <section class="tk-blok">

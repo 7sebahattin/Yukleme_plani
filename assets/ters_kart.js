@@ -379,6 +379,9 @@
             ['toplam', 'aktif', 'kayip', 'bozuk', 'kullanim_disi'].forEach(function (k) {
                 var e = kok.querySelector('[data-tk-sayac="' + k + '"]'); if (e) e.textContent = o[k];
             });
+            kok.querySelectorAll('[data-tk-tip-sayac]').forEach(function (e) {
+                var t = (o.tipler || {})[e.getAttribute('data-tk-tip-sayac')]; e.textContent = t || 0;
+            });
         }
         var okuyucu = null;
         var input = document.getElementById('tkScanInput');
