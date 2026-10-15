@@ -2483,6 +2483,14 @@ dialog.cf-sd[open] > form { display: flex; flex-direction: column; max-height: 9
 .tk-sayac-kirmizi { border-top-color: var(--danger); } .tk-sayac-kirmizi .tk-sayac-n { color: var(--danger); }
 .tk-sayac-turuncu { border-top-color: var(--warn); } .tk-sayac-turuncu .tk-sayac-n { color: var(--warn); }
 .tk-sayac-soluk .tk-sayac-n { color: var(--muted); }
+/* v362 — tip bazında aktif sayaç kartları (Kadın pembe · Erkek mavi · Rampacı turuncu) */
+@media (min-width: 1024px) { .tk-sayaclar { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); } }
+.tk-sayac-tip-kadin { border-top-color: #db2777; } .tk-sayac-tip-kadin .tk-sayac-n { color: #db2777; }
+.tk-sayac-tip-erkek { border-top-color: #2563eb; } .tk-sayac-tip-erkek .tk-sayac-n { color: #2563eb; }
+.tk-sayac-tip-rampaci { border-top-color: #ea580c; } .tk-sayac-tip-rampaci .tk-sayac-n { color: #ea580c; }
+html[data-theme="dark"] .tk-sayac-tip-kadin .tk-sayac-n { color: #f472b6; }
+html[data-theme="dark"] .tk-sayac-tip-erkek .tk-sayac-n { color: #60a5fa; }
+html[data-theme="dark"] .tk-sayac-tip-rampaci .tk-sayac-n { color: #fb923c; }
 
 /* Okutma alanı */
 .tk-tara { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 18px; border: 2px dashed var(--primary); border-radius: 14px; background: var(--primary-soft); margin: 12px 0; min-width: 0; }
