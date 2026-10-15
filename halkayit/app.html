@@ -3844,9 +3844,14 @@ function kaynakTcPad(v) {
 function kaynakKesinTc(k) {
   const kendi = aktifFirma ? kaynakTcPad(aktifFirma.vergiNo || '') : '';
   const b = kaynakTcPad(k.bildirimciTc || '');
-  if (b && b !== kendi) return b;
+  if (b) return b;   // kendi VKN'miz de KESİN kaynaktır (künyeyi biz doğurduk → geri sevk edilemez)
   const o = kaynakTcPad(k.kaynakKoken || '');
   return o && o !== kendi ? o : '';
+}
+// Künyenin bildirimini kendi firmamız mı yaptı (ör. müstahsilden alım)?
+function kaynakKendiMi(k) {
+  const kendi = aktifFirma ? kaynakTcPad(aktifFirma.vergiNo || '') : '';
+  return !!kendi && kaynakKesinTc(k) === kendi;
 }
 // Öneri (TC doldurma) için: kesin kaynak, yoksa en son denenen TC (kaynakTc).
 function kaynakTcBul(k) {
@@ -3863,8 +3868,9 @@ function kaynakRozetGuncelle() {
   const mod = kaynakSevkModuMu();
   const tc = tcRakam($('oIkTc').value);
   kunyeler.forEach((k, i) => {
-    const kt = mod && tc ? kaynakKesinTc(k) : '';
-    k.kaynakBaska = !!(kt && kt !== tc);
+    const kt = mod ? kaynakKesinTc(k) : '';
+    const kendiMi = mod && kaynakKendiMi(k);
+    k.kaynakBaska = !!(kt && (kendiMi || (tc && kt !== tc)));
     const cb = kap.querySelector(`input[type=checkbox][data-i="${i}"]`);
     const satir = cb && cb.closest('.kunye');
     if (!satir) return;
@@ -3876,7 +3882,7 @@ function kaynakRozetGuncelle() {
         r.title = 'Depo/Tasnif sevkinde yalnız künyeyi size gönderen kişiye geri sevk yapılabilir; otomatik dağıtıma girmez.';
         (satir.querySelector('.detay') || satir).appendChild(r);
       }
-      r.textContent = 'kaynak: başka kişi (TC ' + tcMaske(kt) + ')';
+      r.textContent = kendiMi ? 'kaynak: kendi bildiriminiz — geri sevk edilemez' : 'kaynak: başka kişi (TC ' + tcMaske(kt) + ')';
     } else if (r) {
       r.remove();
     }
@@ -3887,6 +3893,13 @@ function kaynakUygula() {
   if (!kaynakSevkModuMu()) { kaynakNot(''); return; }
   const secili = kaynakSeciliKunyeler();
   if (!secili.length) { kaynakNot(''); return; }
+  const kendiler = secili.filter(kaynakKendiMi);
+  if (kendiler.length) {
+    kaynakNot('⚠️ Seçili künyelerden ' + kendiler.map(k => k.kunyeNo).join(', ') + ' bildirimini KENDİ firmanız yapmış ' +
+      '(ör. müstahsilden alım). Depo/Tasnif sıfatıyla yalnız künyeyi size gönderen kişiye geri sevk yapılabilir — bu künyeleri ' +
+      'çıkarın; HKS reddeder (HataKodu 108).', 'hata');
+    return;
+  }
   const tcler = [...new Set(secili.map(kaynakTcBul).filter(Boolean))];
   if (tcler.length > 1) {
     kaynakNot('⚠️ Farklı kaynaklardan gelen künyeler tek bildirimde sevk edilemez (' + tcler.join(', ') +

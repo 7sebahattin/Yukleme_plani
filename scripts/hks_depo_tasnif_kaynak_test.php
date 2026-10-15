@@ -78,9 +78,24 @@ ok('kaynak bilinmiyor → engel yok', hks_kaynak_tc_engeli([['kunyeNo' => $KUNYE
 $__kh0 = hks_kunye_koken_haritasi([$KUNYE => ['kunyeNo' => $KUNYE, 'bildirimciTc' => '91880872']], '1111111111');
 ok('baştaki sıfırsız VKN 10 haneye tamamlanır', ($__kh0[hks_kunye_no_norm($KUNYE)] ?? '') === '0091880872', json_encode($__kh0));
 ok('baştaki sıfırsız kaynak = 0091880872 → engel yok', hks_kaynak_tc_engeli([['kunyeNo' => $KUNYE]], $__kh0, '0091880872') === []);
-ok('kendi VKN sıfırsız gelse de kaynak sayılmaz', hks_kunye_koken_haritasi([$KUNYE => ['kunyeNo' => $KUNYE, 'bildirimciTc' => '91880872']], '0091880872') === []);
-ok('künyeyi kendimiz doğurduysak (bildirimci = kendi VKN) kaynak sayılmaz',
-    hks_kunye_koken_haritasi([$KUNYE => ['kunyeNo' => $KUNYE, 'bildirimciTc' => $KENDI]], $KENDI) === []);
+// Canlı vaka (15.10.2026): künyenin bildirimcisi KENDİ firmamız (alım) → AGRO'ya geri sevk edilemez.
+$__khK = hks_kunye_koken_haritasi([$KUNYE => ['kunyeNo' => $KUNYE, 'bildirimciTc' => $KENDI]], $KENDI);
+ok('bildirimci = kendi VKN → kaynak KENDİMİZ (bilinmiyor değil)', ($__khK[hks_kunye_no_norm($KUNYE)] ?? '') === $KENDI, json_encode($__khK));
+$__eK = hks_kaynak_tc_engeli([['kunyeNo' => $KUNYE]], $__khK, $AGRO, $KENDI);
+ok('kendi bildirimimiz olan künye AGRO\'ya → engel (kendi=true)', count($__eK) === 1 && $__eK[0]['kendi'] === true, json_encode($__eK));
+$__khK0 = hks_kunye_koken_haritasi([$KUNYE => ['kunyeNo' => $KUNYE, 'bildirimciTc' => '91880872']], '0091880872');
+ok('kendi VKN sıfırsız gelse de kendimiz olarak tanınır', ($__khK0[hks_kunye_no_norm($KUNYE)] ?? '') === '0091880872');
+// Plan çözümü: kendi alımımız (fiyatlı) atlanır, AGRO'nun sevki (fiyatsız) seçilir.
+$__agroK = '1204159260026750522';
+$__plan = hks_plan_kunye_coz_cekirdek(
+  ['planKg' => 10000, 'yurtIci' => true, 'planSorgu' => ['urunId' => 5]],
+  fn($s) => [['kunyeNo' => $KUNYE, 'kalan' => 20000, 'tarih' => '2026-09-30'], ['kunyeNo' => $__agroK, 'kalan' => 23500, 'tarih' => '2026-10-06']],
+  fn($ay) => ['harita' => [
+    $KUNYE => ['kunyeNo' => $KUNYE, 'bildirimciTc' => $KENDI, 'fiyat' => 25],
+    $__agroK => ['kunyeNo' => $__agroK, 'bildirimciTc' => $AGRO, 'fiyat' => 0]]],
+  [], ['tc' => $AGRO, 'kendi' => $KENDI, 'ogrenilen' => []]);
+$__secilen = array_map(fn($s) => $s['kunyeNo'], (array)($__plan['satirlar'] ?? []));
+ok('plan: kendi alımımız atlanır, AGRO künyesi seçilir', $__secilen === [$__agroK] && in_array($KUNYE, $__plan['atlananKaynakFarkli'] ?? [], true), json_encode($__plan));
 // 108 öğrenildi: AGRO + İhracat reddedildi → aynı üçlü gönderilmez, Tüccar serbest.
 $map = hks_kunye_kaynak_map_ekle([], [$KUNYE], $AGRO, 2, date('Y-m-d'));
 ok('108 sonrası aynı TC + sıfat → red engeli', hks_kaynak_red_engeli([['kunyeNo' => $KUNYE]], $map, $AGRO, 2) === [$KUNYE]);

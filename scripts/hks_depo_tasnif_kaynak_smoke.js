@@ -183,6 +183,31 @@ const sunucu = http.createServer((q, s) => {
   const rz2 = await sayfa.evaluate(() => document.querySelectorAll('#kunyeListe .kaynak-baska').length);
   ok('(G) bildirimci sıfatı değişince rozetler kalkar', rz2 === 0, String(rz2));
 
+  // (H) canlı vaka (15.10.2026): künyenin bildirimcisi KENDİ firmamız (alım, fiyatlı) → rozet, dağıtım dışı,
+  //     seçilirse uyarı ve TC KENDİ VKN'mizle doldurulmaz; AGRO'nun sevk künyesi seçilir.
+  kunyeVeri = [
+    K('1204159260026133175', { kalan: 20000, tarih: '2026-09-30' }),
+    K('1204159260026750522', { kalan: 23500, tarih: '2026-10-06' }),
+  ];
+  detayVeri = {
+    '1204159260026133175': { kunyeNo: '1204159260026133175', bildirimciTc: '1111111111', fiyat: 25 },
+    '1204159260026750522': { kunyeNo: '1204159260026750522', bildirimciTc: KAYNAK },
+  };
+  await ac(9);
+  await sayfa.click('#btnKunyeler');
+  await sayfa.waitForSelector('#kunyeListe .kunye');
+  const rzH = await sayfa.evaluate(() => [...document.querySelectorAll('#kunyeListe .kunye')].map(d => (d.querySelector('.kaynak-baska') || {}).textContent || ''));
+  ok('(H) kendi bildirimimiz rozetli (TC girilmeden de)', /kendi bildiriminiz/.test(rzH[0]) && !rzH[1], JSON.stringify(rzH));
+  await sayfa.fill('#hedefKilo', '15000');
+  await sayfa.click('#btnDagit');
+  const gH = await sayfa.evaluate(() => [...document.querySelectorAll('#kunyeListe .kunye')].filter(d => d.querySelector('input[type=checkbox]').checked).map(d => d.querySelector('.no').textContent));
+  ok('(H) otomatik dağıtım AGRO künyesini seçti, kendi alımımızı atladı', gH.join() === '1204159260026750522', JSON.stringify(gH));
+  await ac(9);
+  await getirSec([0]);
+  await sayfa.waitForTimeout(300);
+  d = await durum();
+  ok('(H) kendi künyemiz seçilince uyarı, TC kendi VKN ile doldurulmadı', /KENDİ firmanız/.test(d.not) && /hata/.test(d.notSinif) && d.tc === '', JSON.stringify(d));
+
   // (F) gönderim sonucu: 108 → #kaynakHataBilgi, "sıfatla uyumsuz" yazısı YOK
   gonderYanit = {
     sonuclar: [{ miktar: 100, hataKodu: 108, mesaj: 'Depo/Tasnif sıfatından sevk ederken, ancak referans künye bildirimini yapan kişiye ve sıfatına geri bildirim yapabilirsiniz.. Referans künye no : "1204159260026133175"' }],

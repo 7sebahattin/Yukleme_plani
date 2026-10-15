@@ -197,7 +197,7 @@ function hks_plan_kunye_coz_cekirdek(array $ortak, callable $kunyeGetir, ?callab
   // (3b) Depo/Tasnif kaynak kuralı: kaynağı başka kişi olan künyeler denenmez.
   if ($kaynak !== null) {
     $ek['kokenHarita'] = hks_kunye_koken_haritasi($detayHam, $kaynak['kendi'] ?? '', (array)($kaynak['ogrenilen'] ?? []));
-    $hedefTc = hks_kunye_no_norm($kaynak['tc'] ?? '');
+    $hedefTc = hks_kaynak_tc_norm($kaynak['tc'] ?? '');
     $kaynakKg = 0.0;
     foreach ($kunyeler as $k) {
       $n = hks_kunye_no_norm($k['kunyeNo'] ?? '');
@@ -211,7 +211,7 @@ function hks_plan_kunye_coz_cekirdek(array $ortak, callable $kunyeGetir, ?callab
     }
     if ($ek['atlananKaynakFarkli']) {
       $atlanNot .= ' ' . count($ek['atlananKaynakFarkli']) . ' künye (' . hks_kunye_kg_metni(round($kaynakKg, 3)) .
-        ' KG) başka kişiden geldiği için atlandı (Depo/Tasnif sevkinde yalnız künyeyi size gönderen kişiye geri sevk yapılabilir).';
+        ' KG) başka kişiden geldiği ya da bildirimini kendiniz yaptığınız için atlandı (Depo/Tasnif sevkinde yalnız künyeyi size gönderen kişiye geri sevk yapılabilir).';
     }
   }
 
@@ -570,8 +570,10 @@ function hks_kunyelere_kaynak_bilgisi(array $kunyeler, array $map): array {
   return $kunyeler;
 }
 
-// Künyelerin KESİN kaynakları: detay haritasındaki bildirimciTc (kendi VKN'miz
-// değilse — o künyeyi biz doğurmuşuz demektir) önce, yoksa öğrenilmiş koken.
+// Künyelerin KESİN kaynakları: detay haritasındaki bildirimciTc önce, yoksa
+// öğrenilmiş koken. Bildirimci KENDİ VKN'miz ise (künyeyi biz doğurduk — ör.
+// müstahsilden Satın Alım) kaynak = kendimiz: Depo/Tasnif sıfatıyla bu künye
+// başka kimseye "geri" sevk edilemez (HKS 108; canlı, 15.10.2026) → dışlanır.
 // $detayHarita: hks_kunye_detaylari_getir()['harita'] biçimi. Dönüş {norm: tc}.
 // Kaynak TC/VKN karşılaştırma biçimi: yalnız rakam; HKS VKN'yi baştaki sıfırları
 // atılmış dönebilir ("91880872") → 10 haneye tamamlanır (TC 11 hane, 0'la başlamaz).
@@ -591,7 +593,7 @@ function hks_kunye_koken_haritasi(array $detayHarita, $kendiVkn, array $ogrenile
     if (!is_array($d)) continue;
     $a = hks_kunye_no_norm($d['kunyeNo'] ?? $no);
     $b = hks_kaynak_tc_norm($d['bildirimciTc'] ?? '');
-    if ($a !== '' && $b !== '' && $b !== $kendi) $l[$a] = $b;
+    if ($a !== '' && $b !== '') $l[$a] = $b;
   }
   return $l;
 }
@@ -599,8 +601,9 @@ function hks_kunye_koken_haritasi(array $detayHarita, $kendiVkn, array $ogrenile
 // GÖNDERİM ÖNCESİ ENGEL (saf): kaynağı KESİN bilinen ve karşı taraf TC'sinden
 // FARKLI olan satırlar → [['kunyeNo' => …, 'kaynakTc' => …], …]. Kaynağı
 // bilinmeyen künye engellenmez.
-function hks_kaynak_tc_engeli(array $satirlar, array $kokenHarita, $tc): array {
+function hks_kaynak_tc_engeli(array $satirlar, array $kokenHarita, $tc, $kendiVkn = ''): array {
   $t = hks_kaynak_tc_norm($tc);
+  $kendi = hks_kaynak_tc_norm($kendiVkn);
   if ($t === '' || !$kokenHarita) return [];
   $l = []; $gor = [];
   foreach ($satirlar as $st) {
@@ -608,7 +611,8 @@ function hks_kaynak_tc_engeli(array $satirlar, array $kokenHarita, $tc): array {
     $n = hks_kunye_no_norm($no);
     if ($n === '' || isset($gor[$n]) || !isset($kokenHarita[$n])) continue;
     $gor[$n] = true;
-    if ($kokenHarita[$n] !== $t) $l[] = ['kunyeNo' => $no, 'kaynakTc' => $kokenHarita[$n]];
+    if ($kokenHarita[$n] !== $t) $l[] = ['kunyeNo' => $no, 'kaynakTc' => $kokenHarita[$n],
+      'kendi' => $kendi !== '' && $kokenHarita[$n] === $kendi];
   }
   return $l;
 }
