@@ -315,9 +315,11 @@ ok('kunyeler ucu: yalnız kaydı olana kaynak alanları', ($bay[0]['kaynakKoken'
 // Kaynak (koken) haritası + TC engeli
 $kh = hks_kunye_koken_haritasi([K1 => ['kunyeNo' => K1, 'bildirimciTc' => $BASKA], K2 => ['kunyeNo' => K2, 'bildirimciTc' => '1111111111'],
     K3 => ['kunyeNo' => K3, 'bildirimciTc' => '']], '1111111111', [K4 => $AGRO, K1 => $AGRO]);
-ok('koken: detay öğrenilenden öncelikli, kendi VKN ve boş sayılmaz', $kh === [K4 => $AGRO, K1 => $BASKA], json_encode($kh));
-$e = hks_kaynak_tc_engeli([['kunyeNo' => K1], ['kunyeNo' => K3], ['kunyeNo' => K4]], $kh, $AGRO);
-ok('TC engeli: yalnız kaynağı KESİN ve farklı olan', $e === [['kunyeNo' => K1, 'kaynakTc' => $BASKA]], json_encode($e));
+// v366 düzeltmesi: bildirimci = KENDİ VKN → kaynak kendimiz (alım künyesi; geri sevk edilemez), boş sayılmaz.
+ok('koken: detay öğrenilenden öncelikli, kendi VKN kaynak sayılır, boş sayılmaz', $kh === [K4 => $AGRO, K1 => $BASKA, K2 => '1111111111'], json_encode($kh));
+$e = hks_kaynak_tc_engeli([['kunyeNo' => K1], ['kunyeNo' => K2], ['kunyeNo' => K3], ['kunyeNo' => K4]], $kh, $AGRO, '1111111111');
+ok('TC engeli: yalnız kaynağı KESİN ve farklı olan (kendi bildirimimiz dahil)', $e === [['kunyeNo' => K1, 'kaynakTc' => $BASKA, 'kendi' => false],
+    ['kunyeNo' => K2, 'kaynakTc' => '1111111111', 'kendi' => true]], json_encode($e));
 ok('TC engeli: kaynak bilinmiyorsa engel yok', hks_kaynak_tc_engeli([['kunyeNo' => K3]], $kh, $AGRO) === []);
 ok('maske', hks_tc_maske($AGRO) === '***0872' && hks_tc_maske('') === '');
 
@@ -331,7 +333,7 @@ ok('kaynak kipi: fiyatsız da detay çağrılır', $cagri2 === 1);
 ok('kaynak kipi: başka kaynaklı K2 atlanır → K3, K1', nolar($p['satirlar'] ?? []) === [K3, K1] && $p['atlananKaynakFarkli'] === [K2], json_encode($p));
 ok('kaynak kipi: kokenHarita döner', ($p['kokenHarita'][K3] ?? '') === $AGRO);
 $p = hks_plan_kunye_coz_cekirdek(['planKg' => 700] + $ortakK, fn($s) => $stokK, $detayK, [], ['tc' => $AGRO, 'kendi' => '', 'ogrenilen' => []]);
-ok('kaynak kipi: stok yetersiz notunda başka kişiden atlanan', isset($p['hata']) && strpos($p['hata'], 'başka kişiden geldiği için atlandı') !== false, $p['hata'] ?? '');
+ok('kaynak kipi: stok yetersiz notunda başka kişiden atlanan', isset($p['hata']) && strpos($p['hata'], 'başka kişiden geldiği ya da bildirimini kendiniz yaptığınız için atlandı') !== false, $p['hata'] ?? '');
 $p = hks_plan_kunye_coz_cekirdek($ortakK, fn($s) => $stokK, $patlak, [], ['tc' => $AGRO, 'kendi' => '', 'ogrenilen' => [K1 => $BASKA]]);
 ok('kaynak kipi: detay patlarsa öğrenilen koken yine uygulanır', nolar($p['satirlar'] ?? []) === [K2, K3] && $p['atlananKaynakFarkli'] === [K1], json_encode($p));
 $cagri2 = 0;

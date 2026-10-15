@@ -571,12 +571,13 @@ try {
           catch (Throwable $e) { /* öğrenilmiş kaynak yok sayılır */ }
           $__kokenHarita = hks_kunye_koken_haritasi($__detayHam, $cfg['vergiNo'] ?? '', $__ogr);
         }
-        $__tcEngel = hks_kaynak_tc_engeli((array)$satirlar, $__kokenHarita, $ortak['ikinciTc'] ?? '');
+        $__tcEngel = hks_kaynak_tc_engeli((array)$satirlar, $__kokenHarita, $ortak['ikinciTc'] ?? '', $cfg['vergiNo'] ?? '');
         if ($__tcEngel) {
           $taslagiGeriKoy();
           hks_json_cikti(['hata' => 'Depo/Tasnif sevkinde yalnız künyeyi size gönderen kişiye (ve o bildirimdeki ' .
             'sıfatına) geri sevk yapılabilir. ' . implode('; ', array_map(fn($x) => 'Künye ' . $x['kunyeNo'] .
-            ' size TC ' . hks_tc_maske($x['kaynakTc']) . ' tarafından gönderilmiş', $__tcEngel)) .
+            (!empty($x['kendi']) ? "'in bildirimini kendi firmanız yapmış (ör. alım)"
+              : ' size TC ' . hks_tc_maske($x['kaynakTc']) . ' tarafından gönderilmiş'), $__tcEngel)) .
             ' — karşı taraf (' . hks_tc_maske($ortak['ikinciTc'] ?? '') . ') farklı. Bu künyeleri çıkarın ya da ' .
             'karşı tarafı değiştirin. Bildirim gönderilmedi, taslak silinmedi.',
             'taslakKorundu' => true, 'kaynakTcEngel' => array_map(fn($x) => ['kunyeNo' => $x['kunyeNo'],

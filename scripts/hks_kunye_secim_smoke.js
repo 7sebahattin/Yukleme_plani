@@ -150,6 +150,8 @@ const mik = (r, no) => (r.sec.find(x => x[0] === no) || [])[1];
   // (6) sonuç ekranı
   async function gonder(yanit) {
     gonderYanit = yanit;
+    // Önceki sonucun başlığı/içeriği okunmasın (yarış): önce temizle, sonra gönder.
+    await sayfa.evaluate(() => { document.getElementById('modalBaslik').textContent = ''; document.getElementById('modalIcerik').textContent = ''; });
     await sayfa.evaluate(() => { gonderilecekTaslakId = 'T1'; document.getElementById('btnOnay').click(); });
     await sayfa.waitForFunction(() => document.getElementById('modalBaslik').textContent.includes('Gönderim Sonucu'));
     return sayfa.evaluate(() => document.getElementById('modalIcerik').innerText);
