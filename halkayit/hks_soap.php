@@ -840,12 +840,28 @@ function hks_bildirimsorgu_dto_ayikla($b) {
     'malinSahibiTc'  => trim((string)hks_deger($b, 'MalinSahibiTcKimlikVergiNo')),
     'bildirimciTc'   => trim((string)hks_deger($b, 'BildirimciTcKimlikVergiNo')),
     'ureticiTc'      => trim((string)hks_deger($b, 'UreticiTcKimlikVergiNo')),
+    // Bildirimcinin bu bildirimde kullandığı sıfat (Depo/Tasnif kaynak kuralı, v366).
+    // DOĞRULANMADI: kılavuz değişiklik notu "(I) ve (II) metotları için Sifat ...
+    // eklendi" diyor ama alanın ADI ve ANLAMI (bildirimcinin mi, malın sahibinin mi
+    // sıfatı) canlı yanıtta görülmedi. Bilinen aday adlardan ilk sıfır olmayan tam
+    // sayı alınır; hiçbiri yoksa 0 (= bilinmiyor; arayüz öğrenilen red listesine düşer).
+    'bildirimciSifatId' => hks_bildirimsorgu_sifat_id($b),
     // Kalan/miktar zaten hks_kunye_penceresi'nden gelir (KalanMiktar/MalinMiktari
     // burada da var ama çapraz doğrulama dışında kullanılmaz — tek kaynak karışıklığı
     // olmasın diye eşlemede taşınmaz).
     'tarihSaat' => (string)hks_deger($b, 'BildirimTarihi'),   // ham, kırpılmamış (saat dahil)
     'analiz'    => (stripos((string)hks_deger($b, 'AnalizStatus'), 'true') !== false),
   ];
+}
+
+// BildirimSorguDTO'dan bildirimci sıfat id'si — aday alan adlarından ilk sıfır
+// olmayan tam sayı (yalnız rakamsal değer; iç içe/bozuk değer 0 sayılır).
+function hks_bildirimsorgu_sifat_id($b) {
+  foreach (['Sifat', 'BildirimciSifat', 'BildirimciKisiSifat', 'BildirimciSifatId'] as $etiket) {
+    $v = trim((string)hks_deger($b, $etiket));
+    if ($v !== '' && preg_match('/^\d+$/', $v) && (int)$v > 0) return (int)$v;
+  }
+  return 0;
 }
 
 // Tek aylık pencere için künye DETAY sorgusu. hks_stok_penceresi ile BİREBİR aynı
