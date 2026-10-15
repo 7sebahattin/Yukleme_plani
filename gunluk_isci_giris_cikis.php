@@ -162,12 +162,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'ortak_ci
     csrf_check($govde['csrf'] ?? null);
     require_pdks_gunluk('daily_scan');
 
-    $sonuc = pdks_gunluk_ortak_cikis_kaydet(
-        trim((string)($govde['ham_uid'] ?? '')),
-        trim((string)($govde['kaynak'] ?? '')),
-        (int)$auth_user['id'],
-        $pdo
-    );
+    $ortakHam = trim((string)($govde['ham_uid'] ?? ''));
+    $ortakKaynak = trim((string)($govde['kaynak'] ?? ''));
+    $sonuc = pdks_gunluk_ortak_cikis_kaydet($ortakHam, $ortakKaynak, (int)$auth_user['id'], $pdo);
+    // v363 — Giriş Tanımlı MANUEL SAYIM: kartın açık dönemi yoksa ve kart, mesaisi açık
+    // manuel sayımı olan bir çavuşun havuzundaysa çıkış (sabit giriş + gerçek çıkış) orada
+    // yazılır. Uygulanamazsa özgün yanıt AYNEN döner. Ortak çıkış fonksiyonu DEĞİŞMEDİ.
+    if (($sonuc['kod'] ?? '') === 'acik_donem_yok') {
+        require_once __DIR__ . '/config/pdks_ters.php';
+        if (function_exists('pdks_ters_ortak_cikis_manuel_yedek')) {
+            $sonuc = pdks_ters_ortak_cikis_manuel_yedek($sonuc, $ortakHam, $ortakKaynak, (int)$auth_user['id'], $pdo);
+        }
+    }
     $sonuc['mesailer'] = pdks_gunluk_ortak_cikis_mesailer(null, $pdo);
     echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
     exit;
@@ -1220,6 +1226,8 @@ render_flash();
             var kaynak = String(kart.entry_source || '');
             var kaynakMetin = '';
             if (kaynak === 'ters') kaynakMetin = '↩ Giriş Tanımlı' + (girisSaat ? ' · sabit giriş ' + girisSaat : '');
+            // v363: manuel sayımla yapılan çıkış — "28/30 çıkış" (sayılar sunucudan).
+            if (kaynak === 'ters' && d.manuel) kaynakMetin += ' · 🔢 ' + (parseInt(d.manuel.cikan, 10) || 0) + '/' + (parseInt(d.manuel.dagitilan, 10) || 0) + ' çıkış';
             else if (kaynak === 'tanimli') kaynakMetin = '🏷 Tanımlı giriş';
             else if (kaynak === 'manual') kaynakMetin = '✍ Elle eklenmiş giriş';
             if (kaynakMetin) {
@@ -1252,6 +1260,9 @@ render_flash();
                     return v;
                 };
                 var kalan = ozet.eksik_tip ? tara(ozet.eksik_tip) : Math.max(0, tara(ozet.giris) - tara(ozet.cikis));
+                // v363: manuel sayımda dönem sabah yazılmadığı için tipe göre açık dönem yok —
+                // daire o çavuşun manuel sayımına göre hâlâ çıkış yapmamış kişi sayısını gösterir.
+                if (d.manuel && d.manuel.kalan != null) kalan = parseInt(d.manuel.kalan, 10) || 0;
                 ikonHtml = '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" data-sayi="kalan" aria-hidden="true"><span>' + escHtml(String(kalan)) + '</span></div>';
             }
         }

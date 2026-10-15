@@ -38,6 +38,9 @@ if ($ajax !== '') {
         'onizle'  => pdks_ters_sayim_onizle($sid, $m($g['giris_saati'] ?? ''), $m($g['neden'] ?? ''), $g['beyan'] ?? '', $pdo),
         'onayla'  => pdks_ters_sayim_onayla($sid, $m($g['giris_saati'] ?? ''), $m($g['neden'] ?? ''), $g['beyan'] ?? '', $m($g['istek_id'] ?? ''), $user, $pdo),
         'geri_al' => pdks_ters_sayim_geri_al($sid, $m($g['gerekce'] ?? ''), $user, $pdo),
+        // v363 — manuel sayım (kart okutmadan elde kalan SAYISI)
+        'manuel_onizle' => pdks_ters_manuel_onizle($sid, $g['kalan'] ?? '', $m($g['giris_saati'] ?? ''), $m($g['neden'] ?? ''), $g['beyan'] ?? '', $pdo),
+        'manuel_onayla' => pdks_ters_manuel_onayla($sid, $g['kalan'] ?? '', $m($g['giris_saati'] ?? ''), $m($g['neden'] ?? ''), $g['beyan'] ?? '', $m($g['istek_id'] ?? ''), $user, $pdo),
         default   => ['ok' => false, 'hata' => 'Bilinmeyen işlem.'],
     };
     if ($ajax === 'onizle' && !empty($r['ok'])) unset($r['sayim']);
@@ -88,6 +91,7 @@ render_flash();
             <span class="tk-cavus-ad"><?= h($c['name']) ?></span>
             <span class="tk-cavus-alt"><?= (int)$c['havuz']['aktif'] ?> aktif kart<?= $c['havuz']['toplam'] !== $c['havuz']['aktif'] ? ' · ' . ($c['havuz']['toplam'] - $c['havuz']['aktif']) . ' hariç' : '' ?></span>
             <?php if ($sd === 'onayli'): ?><span class="tk-rozet tk-rozet-ok">✓ Onaylı · <?= (int)$c['sayim']['dagitilan'] ?> kişi</span>
+            <?php elseif ($sd === PDKS_TERS_DURUM_MANUEL): ?><span class="tk-rozet tk-rozet-ok">🔢 Manuel · <?= (int)$c['sayim']['manuel_limit'] ?> kişi · <?= (int)$c['sayim']['cikan'] ?> çıktı</span>
             <?php elseif ($sd === 'taslak'): ?><span class="tk-rozet tk-rozet-uyari">Sayım sürüyor</span>
             <?php else: ?><span class="tk-rozet">Sayım yok</span><?php endif; ?>
         </a>
@@ -124,7 +128,13 @@ render_flash();
         <?php
         $satirlar = pdks_ters_sayim_satirlari($pdo, (int)$sayim['id']);
         $sayac = pdks_ters_sayim_sayac($pdo, $sayim);
+        $manuelOn = pdks_ters_manuel_degerlendir($pdo, $sayim, null, null);   // v363: canlı hesap için havuz + zaten içeride
         ?>
+        <div class="tk-yontem" role="group" aria-label="Sayım yöntemi">
+            <button type="button" class="tk-yontem-btn aktif" data-tk-yontem="kart" aria-pressed="true"><span aria-hidden="true">📇</span> Kartla Say</button>
+            <button type="button" class="tk-yontem-btn" data-tk-yontem="manuel" aria-pressed="false"><span aria-hidden="true">🔢</span> Manuel Sayı Gir</button>
+        </div>
+        <div data-tk-yontem-panel="kart">
         <div class="tk-sayaclar">
             <div class="tk-sayac"><span class="tk-sayac-n" data-tk-sayac="havuz_aktif"><?= (int)$sayac['havuz_aktif'] ?></span><span class="tk-sayac-et">Aktif havuz</span></div>
             <div class="tk-sayac tk-sayac-mavi"><span class="tk-sayac-n" data-tk-sayac="kalan"><?= (int)$sayac['kalan'] ?></span><span class="tk-sayac-et">Elde kalan (okutulan)</span></div>
@@ -180,6 +190,74 @@ render_flash();
             <button type="button" id="tkOnayBtn" class="btn btn-primary tk-buyuk-btn" disabled>✅ Girişleri onayla</button>
             <p class="muted tk-kucuk">Onayla birlikte dağıtılan her kart için bu saatle GİRİŞ yazılır. Gerçek işlem zamanı ayrıca saklanır; fiziksel okutma yerine geçmez.</p>
         </section>
+        </div>
+
+        <?php /* v363 — MANUEL SAYIM paneli: kart okutmadan elde kalan kart SAYISI */ ?>
+        <section class="tk-blok tk-manuel-panel" data-tk-yontem-panel="manuel" hidden>
+            <h3>🔢 Manuel sayım</h3>
+            <p class="muted">Kartları okutmadan çavuşun elinde kalan kart <strong>sayısını</strong> girin. Sabah giriş kaydı yazılmaz; akşam Ortak Çıkış'ta bu çavuşun havuz kartlarından en fazla çalışan sayısı kadar çıkış yapılır ve her çıkış sabit giriş saatiyle kaydedilir.</p>
+            <div class="tk-sayaclar">
+                <div class="tk-sayac"><span class="tk-sayac-n"><?= (int)$manuelOn['ozet']['havuz_aktif'] ?></span><span class="tk-sayac-et">Aktif havuz</span></div>
+                <?php if ((int)$manuelOn['ozet']['zaten_iceride'] > 0): ?>
+                <div class="tk-sayac tk-sayac-mavi"><span class="tk-sayac-n"><?= (int)$manuelOn['ozet']['zaten_iceride'] ?></span><span class="tk-sayac-et">Zaten içeride (normal okutma)</span></div>
+                <?php endif; ?>
+                <div class="tk-sayac tk-sayac-soluk"><span class="tk-sayac-n"><?= (int)$manuelOn['ozet']['haric'] ?></span><span class="tk-sayac-et">Kayıp / bozuk</span></div>
+            </div>
+            <div class="tk-manuel-giris">
+                <label class="tk-etiket tk-manuel-etiket" for="tkManuelKalan">Elde kalan kart
+                    <input type="number" id="tkManuelKalan" class="tk-manuel-input" min="0" max="<?= (int)$manuelOn['ozet']['havuz_aktif'] ?>" step="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="0">
+                </label>
+                <div class="tk-manuel-sonuc" id="tkManuelSonuc" aria-live="polite"><span aria-hidden="true">→</span> <strong data-tk-manuel-calisan>—</strong> <span>kişi çalışacak</span></div>
+            </div>
+            <div class="tk-form-satir">
+                <label class="tk-etiket">Sabit giriş saati
+                    <input type="time" id="tkManuelSaat" step="60" value="<?= h((string)($sayim['varsayilan_giris_saati'] ?? '')) ?>" required>
+                </label>
+                <label class="tk-etiket">Çavuşun getirdiği işçi sayısı <small class="muted">(isteğe bağlı)</small>
+                    <input type="number" id="tkManuelBeyan" min="0" max="2000" inputmode="numeric">
+                </label>
+            </div>
+            <label class="tk-etiket" id="tkManuelNedenAlan"<?= $sayim['varsayilan_giris_saati'] === null ? '' : ' hidden' ?>>Saat gerekçesi
+                <input type="text" id="tkManuelNeden" maxlength="255" placeholder="<?= $sayim['varsayilan_giris_saati'] === null ? 'Tanımlı saat yok — neden bu saat?' : 'Tanımlı saatten farklı — neden?' ?>">
+            </label>
+            <?php if ($satirlar): ?><div class="tk-kutu tk-kutu-bilgi tk-kucuk">Bu taslakta okutulmuş <?= count($satirlar) ?> kart var; manuel sayım onaylanırsa bu okutmalar kullanılmaz (kayıt geçmişinde kalır).</div><?php endif; ?>
+            <div id="tkManuelOnizleme" class="tk-onizleme" aria-live="polite"></div>
+            <button type="button" id="tkManuelOnayBtn" class="btn btn-primary tk-buyuk-btn" disabled>✅ Manuel sayımı onayla</button>
+        </section>
+
+    <?php elseif (pdks_ters_sayim_manuel_mi($sayim)): /* v363 — manuel onaylı */ ?>
+        <?php
+        $mLimit = pdks_ters_manuel_limit($sayim);
+        $mCikanlar = pdks_ters_manuel_cikanlar($pdo, (int)$sayim['id']);
+        $mCikan = pdks_ters_manuel_cikan($pdo, (int)$sayim['id']);
+        $mHerhangi = count($mCikanlar);
+        ?>
+        <?php if (isset($_GET['onay'])): ?><div class="tk-kutu tk-kutu-ok" role="status">✅ Manuel sayım kaydedildi.</div><?php endif; ?>
+        <div class="tk-kutu tk-kutu-ok tk-onayli">
+            <div class="tk-onayli-buyuk">🔢 Manuel · <?= (int)$mLimit ?> kişi çalışıyor · giriş <?= h((string)$sayim['giris_saati']) ?></div>
+            <div class="muted tk-kucuk">Onay: <?= h(date('d.m.Y H:i', strtotime((string)$sayim['onay_zamani']))) ?> · Havuz <?= (int)$sayim['havuz_aktif'] ?> · Kalan <?= (int)$sayim['kalan_adet'] ?> · Dağıtılan <?= (int)$sayim['dagitilan_adet'] ?><?= (int)$sayim['zaten_iceride_adet'] ? ' · ' . (int)$sayim['zaten_iceride_adet'] . ' zaten içerideydi' : '' ?><?= (int)$sayim['haric_adet'] ? ' · ' . (int)$sayim['haric_adet'] . ' hariç' : '' ?><?= $sayim['beyan_adet'] !== null ? ' · Beyan ' . (int)$sayim['beyan_adet'] : '' ?><?= $sayim['giris_saati_nedeni'] ? ' · Saat gerekçesi: ' . h((string)$sayim['giris_saati_nedeni']) : '' ?></div>
+        </div>
+        <div class="tk-sayaclar">
+            <div class="tk-sayac"><span class="tk-sayac-n"><?= (int)$mLimit ?></span><span class="tk-sayac-et">Çalışan (manuel)</span></div>
+            <div class="tk-sayac tk-sayac-yesil"><span class="tk-sayac-n"><?= (int)$mCikan ?></span><span class="tk-sayac-et">Çıkış yapan</span></div>
+            <div class="tk-sayac tk-sayac-mavi"><span class="tk-sayac-n"><?= max(0, $mLimit - $mCikan) ?></span><span class="tk-sayac-et">Çıkışı okutulmayan</span></div>
+        </div>
+        <div id="tkSonuc" class="tk-sonuc" role="status" aria-live="polite" hidden></div>
+        <div class="tk-eylemler">
+            <a href="gunluk_isci_giris_cikis.php?mod=ortak" class="btn btn-primary">🚪 Ortak Çıkış</a>
+            <a href="ters_kart_mutabakat.php" class="btn">📋 Mutabakat</a>
+            <?php if ($sayim['session_id']): ?><a href="gunluk_isci_puantaj_detay.php?id=<?= (int)$sayim['session_id'] ?>" class="btn">Mesai Detayı</a><?php endif; ?>
+            <?php if ($mHerhangi === 0): ?><button type="button" id="tkGeriAlBtn" class="btn btn-danger">↺ Sayımı Geri Al</button><?php endif; ?>
+        </div>
+        <p class="muted tk-kucuk"><?= $mHerhangi === 0 ? 'Geri alma yalnız ilk çıkış okutulana kadar yapılabilir.' : 'Çıkış okutulmaya başlandığı için sayım geri alınamaz; düzeltmeler yönetici tarafından Mesai Detayı\'ndan yapılır.' ?> Akşam Ortak Çıkış'ta en fazla <?= (int)$mLimit ?> kart çıkış yapabilir.</p>
+        <details class="tk-blok"<?= $mCikanlar ? '' : ' hidden' ?>>
+            <summary>Çıkış yapan kartlar (<?= count($mCikanlar) ?>)</summary>
+            <div class="tk-cip-liste">
+                <?php foreach ($mCikanlar as $r): ?>
+                <span class="tk-cip tk-cip-dagitilan<?= (int)$r['is_voided'] ? ' tk-cip-iptal' : '' ?>" title="<?= h((int)$r['is_voided'] ? 'İptal edildi' : 'Çıkış ' . substr((string)$r['exit_time'], 11, 5)) ?>"><?= h($r['card_no']) ?> <small><?= h($r['tip']) ?></small></span>
+                <?php endforeach; ?>
+            </div>
+        </details>
 
     <?php else: /* onaylı */ ?>
         <?php
@@ -221,7 +299,8 @@ render_flash();
     <?php endif; ?>
 
     <?php if ($sayim): ?>
-    <script type="application/json" id="tkSayimVeri"><?= json_encode(['sayim_id' => (int)$sayim['id'], 'durum' => (string)$sayim['durum'], 'foreman_id' => $cavusId, 'varsayilan_saat' => $sayim['varsayilan_giris_saati']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+    <script type="application/json" id="tkSayimVeri"><?= json_encode(['sayim_id' => (int)$sayim['id'], 'durum' => (string)$sayim['durum'], 'foreman_id' => $cavusId, 'varsayilan_saat' => $sayim['varsayilan_giris_saati'],
+        'manuel' => isset($manuelOn) ? ['havuz_aktif' => (int)$manuelOn['ozet']['havuz_aktif'], 'zaten_iceride' => (int)$manuelOn['ozet']['zaten_iceride']] : null], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
     <?php endif; ?>
 <?php endif; ?>
 <?php endif; ?>

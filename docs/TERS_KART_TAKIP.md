@@ -183,3 +183,68 @@ başlıkları, mesajlar, Mesai Detayı rozeti "↩ Giriş Tanımlı", Ortak Çı
 
 "Çıkış girişten önce yazılamaz" kapısı yalnız `source='ters'` dönemlere uygulanır; diğer giriş kaynaklarında
 çıkış davranışı v354 öncesiyle aynıdır.
+
+## v363 — Manuel Sayım (kartsız sabah sayımı)
+
+Sahip isteği: kartla sayıma GÜNLÜK bir alternatif. Operatör o gün için ya kartla sayar
+(mevcut akış, değişmedi) ya da yalnız çavuşun elinde kalan kart **sayısını** girer.
+Örnek: havuzda 50 aktif kart, 20 geri geldi → "20" → 30 kişi çalışıyor. Akşam Ortak
+Çıkış bu çavuşun havuz kartlarından en fazla 30 çıkışa izin verir; gün sonunda dağıtılan
+kartların listesi çıkışlardan kendiliğinden oluşur.
+
+**Şema değişmedi** (ALTER / yeni tablo yok):
+- `ters_sayim.durum = 'manuel'` → onaylı manuel sayım (`aktif_anahtar` dolu kalır; çavuş +
+  gün + depo başına yine TEK aktif sayım). Onaylı mı sorusu TEK yerde:
+  `pdks_ters_sayim_onayli_mi()` (`onayli` | `manuel`); aktif durum listesi
+  `pdks_ters_aktif_durumlar()` (mutabakat sorgusu).
+- `ters_sayim_kart.rol = 'manuel_cikis'` → akşam çıkış yapan kart + oluşan dönem.
+  `UNIQUE(sayim_id, worker_card_id)` aynı kartın ikinci çıkışını yapısal olarak engeller.
+
+**Sabah — `pdks_ters_manuel_onayla()`** (önizleme `pdks_ters_manuel_onizle()`, değerlendirme
+`pdks_ters_manuel_degerlendir()`): taslak sayım; kalan 0..aktif havuz (aktif = kayıp/bozuk/
+kullanım dışı HARİÇ, kartla sayımla aynı tanım); dağıtılan = aktif − kalan ≥ 1. Sabit saat,
+gerekçe, ≤2 sa ileri, mesai kuralları kartla sayımla AYNI (`pdks_ters_giris_coz`,
+`pdks_ters_sayim_genel_kontrol`). Tek transaction, kilit sırası kartla aynı (sayım → mesai →
+üyelik + kartlar). Mesai kiosk yoluyla (`pdks_faz8j_oturum_coz`) açılır; **sabah DÖNEM
+YAZILMAZ**. `istek_id` ile tekrar gönderim güvenli. Audit `ters_sayim_manuel_onay`.
+- **Zaten içeride:** bu çavuşun bugünkü mesaisinde normal okutmayla içeride olan havuz kartı
+  (açık dönemi var) kendi normal çıkışını yapar; manuel çıkış hakkı
+  **limit = dağıtılan − zaten içeride** (`pdks_ters_manuel_limit`). Limit < 1 → onay yok.
+- Başka mesaide içeride / önceki günden dönmemiş / bugün eksik çıkışlı / tipi desteklenmeyen
+  kartlar manuel sayımda bilinemez → **uyarı** (engel değil): bu kartlar akşam manuel çıkış
+  yapamaz (`pdks_faz8j_satir_kontrol` reddeder).
+- **Taslakta okutulmuş kalan/teyit satırları** manuel onayda SİLİNİR, listesi onay audit'inde
+  (`silinen_taslak_okutma`) kalır — UNIQUE anahtar aynı kartın akşam `manuel_cikis` satırını
+  engellerdi.
+
+**Akşam — `pdks_ters_manuel_cikis()`**: kiosk `?ajax=ortak_cikis` (ve eski `ters_kart_cikis.php`
+`?ajax=cikis`) YALNIZ `pdks_gunluk_ortak_cikis_kaydet()` `acik_donem_yok` döndürdüğünde
+`pdks_ters_ortak_cikis_manuel_yedek()` ile dener. **Ortak çıkış fonksiyonu değişmedi.**
+Uygulanamazsa (kart ters havuzda değil / başka depoda / çavuşun mesaisi açık manuel sayımı
+yok) `null` → özgün hata aynen. Tek transaction, kilit sırası sayım → mesai → kart; sıra:
+mükerrer (`mukerrer_cikis` "Bu kart bugün zaten çıkış yaptı.") → limit (`manuel_limit` "Bu
+çavuşun manuel sayımına göre N kişi çalışıyor — N çıkış tamamlandı, fazla çıkış yapılamaz.")
+→ giriş saati geldi mi (`giris_saati_gelmedi`) → kesin hakediş → tip → `pdks_faz8j_satir_kontrol`
+→ `pdks_faz8j_satir_yaz` (kaynak `ters`, giriş = sabit saat, çıkış = gerçek saat, KAPALI dönem,
+audit `ters_manuel_cikis`) → `ters_sayim_kart` `manuel_cikis`. Yanıt Ortak Çıkış başarı
+yanıtıyla aynı biçimde (+ `manuel: {dagitilan, cikan, kalan}`, `mesaj`): kiosk sonuç kartında
+kaynak satırı "↩ Giriş Tanımlı · sabit giriş 08:00 · 🔢 28/30 çıkış", daire = hâlâ çıkış yapmamış
+kişi sayısı (manuelde tipe göre açık dönem olmadığı için toplam).
+
+**Geri al:** yalnız ilk manuel çıkıştan ÖNCE ve mesai açıkken (`pdks_ters_manuel_geri_al_tx`,
+`pdks_ters_sayim_geri_al` içinden); iptal edilecek dönem yok; sayım `geri_alindi`, aynı gün için
+BOŞ yeni taslak. Sonrası yalnız yönetici, Mesai Detayı araçlarıyla.
+
+**Gün sonu / mutabakat:** Yöntem "Manuel" · havuz · kalan (manuel) · dağıtılan · çıkış yapan /
+limit · çıkışı okutulmayan (= limit − çıkan; mesai açıkken "İçeride" toplamına da girer) ·
+çıkış yapan kartlar listesi (= dağıtılan kartlar). Okutulmayan kişi için dönem/çıkış
+**uydurulmaz**. Hub "İçeride" = mesainin açık dönemleri + (limit − çıkan).
+
+**Ekran:** taslak sayımda "📇 Kartla Say" / "🔢 Manuel Sayı Gir" seçimi (manuel modda kart
+okuyucu durur). Manuel panel: aktif havuz, "Elde kalan kart" (inputmode numeric, büyük yazı),
+canlı "→ N kişi çalışacak", sabit saat + gerekçe + isteğe bağlı beyan, onay penceresi. Onaylı
+manuel görünüm: özet + Çalışan / Çıkış yapan / Çıkışı okutulmayan + Geri Al (çıkış yoksa).
+pdks.css "v363" bloğu.
+
+Test: `php scripts/pdks_ters_kart_smoke.php` (bölüm M) · `node scripts/pdks_ters_kart_smoke.js`
+(4b; render `TK_SAYFA=sayim_manuel_onayli`).

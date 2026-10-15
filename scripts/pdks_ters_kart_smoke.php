@@ -8,7 +8,7 @@
 //   D akşam çıkış (Ortak Çıkış, gerçek saat) + mutabakat · E yeni gün (yeniden okutmadan,
 //   dönmemiş kart kararı) · F paralel kullanım (normal kiosk / tanım / elle ekleme kapıları)
 //   G aynı kart iki sistemde · H kayıp/bozuk · I eşzamanlılık/idempotens/geri alma
-//   J statik sözleşmeler (tek yazma yolu, opsiyonel şema)
+//   J statik sözleşmeler (tek yazma yolu, opsiyonel şema) · M v363 manuel sayım
 // Bellek içi SQLite — canlı DB'ye dokunmaz.
 //   php scripts/pdks_ters_kart_smoke.php   → çıkış kodu 0 = tüm testler geçti
 // =========================================================
@@ -469,6 +469,136 @@ ok('ters_kart_cikis.php Ortak Çıkış moduna yönlendirir (?mod=ortak), kendi 
 ok('ters sekmesi/hub/sayım "Ortak Çıkış"a bağlanır', str_contains(file_get_contents($ROOT . '/config/pdks_ters.php'), "'gunluk_isci_giris_cikis.php?mod=ortak'")
     && str_contains(file_get_contents($ROOT . '/ters_kart.php'), 'gunluk_isci_giris_cikis.php?mod=ortak')
     && str_contains(file_get_contents($ROOT . '/ters_kart_sayim.php'), 'gunluk_isci_giris_cikis.php?mod=ortak'));
+
+echo "\n=== M. v363 — Manuel sayım (kart okutmadan elde kalan SAYISI) ===\n";
+$cavus['G'] = (int)pdks_gunluk_cavus_olustur(['code' => 'C007', 'name' => 'Çavuş G'], 1, db())['id'];
+$cavus['H'] = (int)pdks_gunluk_cavus_olustur(['code' => 'C008', 'name' => 'Çavuş H'], 1, db())['id'];
+$uidG = fn(int $i): string => (string)(970000000 + $i);
+$uidH = fn(int $i): string => (string)(980000000 + $i);
+for ($i = 1; $i <= 10; $i++) pdks_ters_havuz_ekle($uidG($i), 'usb_decimal', $cavus['G'], $i <= 6 ? $kadin : $erkek, 1, db());
+pdks_ters_giris_saati_kaydet($cavus['G'], $saat, $bugun, 'manuel test', 1, db());
+$sg = (int)pdks_ters_sayim_ac($cavus['G'], 1, db())['sayim']['id'];
+pdks_ters_sayim_okut($sg, $uidG(10), 'usb_decimal', 1, db());   // taslakta kartla okutma (manuel onayda kullanılmaz)
+$donemOnce = say("SELECT COUNT(*) FROM daily_worker_work_periods");
+$r = pdks_ters_manuel_onayla($sg, '11', $saat, '', '', istek(), 1, db());
+ok('manuel: kalan > aktif havuz (11 > 10) → red', ($r['kod'] ?? '') === 'onaylanamaz' && str_contains($r['hata'], 'fazla olamaz'), j($r));
+$r = pdks_ters_manuel_onayla($sg, '10', $saat, '', '', istek(), 1, db());
+ok('manuel: dağıtılan 0 (tüm kartlar elde) → red', ($r['kod'] ?? '') === 'onaylanamaz' && str_contains($r['hata'], 'Dağıtılmış kart yok'), j($r));
+$r = pdks_ters_manuel_onayla($sg, 'abc', $saat, '', '', istek(), 1, db());
+ok('manuel: sayı olmayan kalan → kalan_gecersiz', ($r['kod'] ?? '') === 'kalan_gecersiz', j($r));
+$r = pdks_ters_manuel_onayla($sg, '', $saat, '', '', istek(), 1, db());
+ok('manuel: kalan boş → kalan_bos', ($r['kod'] ?? '') === 'kalan_bos', j($r));
+$farkliSaat = $saat === '00:00' ? '01:00' : '00:00';
+$r = pdks_ters_manuel_onayla($sg, '3', $farkliSaat, '', '', istek(), 1, db());
+ok('manuel: tanımlı saatten farklı saat gerekçesiz → red', ($r['kod'] ?? '') === 'onaylanamaz' && str_contains($r['hata'], 'gerekçe'), j($r));
+$r = pdks_ters_manuel_onayla($sg, '3', $saat, '', '', 'kotu', 1, db());
+ok('manuel: istek anahtarı geçersiz → red', ($r['kod'] ?? '') === 'istek_gecersiz', j($r));
+if ((int)date('H') + 3 <= 23) {
+    $r = pdks_ters_manuel_onayla($sg, '3', sprintf('%02d:00', (int)date('H') + 3), 'erken', '', istek(), 1, db());
+    ok('manuel: sabit saat 2 saatten ileride → red (kartla aynı kural)', ($r['kod'] ?? '') === 'onaylanamaz' && str_contains($r['hata'], '2 saat'), j($r));
+} else { ok('(gece — manuel ileri saat testi atlandı)', true); }
+$o = pdks_ters_manuel_onizle($sg, '3', $saat, '', '5', db());
+$d = $o['degerlendirme'] ?? [];
+ok('manuel önizleme: havuz 10 · kalan 3 · dağıtılan 7 · limit 7', !empty($d['ok']) && $d['ozet']['havuz_aktif'] === 10 && $d['ozet']['dagitilan'] === 7 && $d['ozet']['manuel_limit'] === 7, j($d));
+ok('manuel önizleme: beyan 5 ≠ 7 → uyarı (engel değil)', !empty($d['ok']) && str_contains(implode(' ', $d['uyarilar']), 'beyan'), j($d['uyarilar'] ?? null));
+ok('red/önizlemeler YAN ETKİSİZ (dönem/mesai yok, sayım taslak)', say("SELECT COUNT(*) FROM daily_worker_work_periods") === $donemOnce
+    && !pdks_ters_bugunku_mesai(db(), $cavus['G'], $bugun, 'Depo A') && pdks_ters_sayim_getir(db(), $sg)['durum'] === 'taslak');
+$ist = istek();
+$r = pdks_ters_manuel_onayla($sg, '3', $saat, '', '7', $ist, 1, db());
+ok('MANUEL ONAY: dağıtılan 7, mesai açıldı', !empty($r['ok']) && $r['ozet']['dagitilan'] === 7 && $r['ozet']['manuel_limit'] === 7 && $r['yeni_mesai'], j($r));
+$sidG = (int)($r['session_id'] ?? 0);
+$s = pdks_ters_sayim_getir(db(), $sg);
+ok('sayım durum=manuel, aktif anahtar DOLU, sayılar dondu', $s['durum'] === 'manuel' && $s['aktif_anahtar'] !== null && (int)$s['kalan_adet'] === 3
+    && (int)$s['dagitilan_adet'] === 7 && (int)$s['yeni_giris_adet'] === 0 && (int)$s['session_id'] === $sidG && $s['giris_zamani'] === $girisZamani, j($s));
+ok('pdks_ters_sayim_onayli_mi: manuel ve onayli true, taslak false', pdks_ters_sayim_onayli_mi($s) && pdks_ters_sayim_onayli_mi(['durum' => 'onayli']) && !pdks_ters_sayim_onayli_mi(['durum' => 'taslak']));
+ok('sabah HİÇBİR dönem yazılmadı', say("SELECT COUNT(*) FROM daily_worker_work_periods") === $donemOnce && say("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ?", [$sidG]) === 0);
+ok('taslak okutmaları silindi (listesi audit\'te)', say("SELECT COUNT(*) FROM ters_sayim_kart WHERE sayim_id = ?", [$sg]) === 0
+    && str_contains((string)satir("SELECT new_values FROM audit_log WHERE action = 'ters_sayim_manuel_onay' AND record_id = ?", [$sg])['new_values'], 'silinen_taslak_okutma'));
+$r = pdks_ters_manuel_onayla($sg, '3', $saat, '', '7', $ist, 1, db());
+ok('aynı istekle tekrar → "tekrar", ikinci yazma yok', !empty($r['ok']) && !empty($r['tekrar']) && say("SELECT COUNT(*) FROM audit_log WHERE action = 'ters_sayim_manuel_onay'") === 1, j($r));
+$r = pdks_ters_manuel_onayla($sg, '3', $saat, '', '', istek(), 1, db());
+ok('farklı istekle ikinci manuel onay → zaten_onayli', ($r['kod'] ?? '') === 'zaten_onayli', j($r));
+$r = pdks_ters_sayim_onayla($sg, $saat, '', '', istek(), 1, db());
+ok('manuel sayıma kartla onay → zaten_onayli', ($r['kod'] ?? '') === 'zaten_onayli', j($r));
+$r = pdks_ters_sayim_okut($sg, $uidG(9), 'usb_decimal', 1, db());
+ok('manuel onaylı sayıma kart okutulamaz (sayim_kapali)', ($r['kod'] ?? '') === 'sayim_kapali', j($r));
+// Geri al — ilk çıkıştan ÖNCE serbest
+$r = pdks_ters_sayim_geri_al($sg, 'sayı yanlış girildi', 1, db());
+ok('manuel geri al (çıkıştan önce) → ok, iptal edilecek dönem yok, yeni taslak', !empty($r['ok']) && $r['iptal_edilen'] === 0 && $r['yeni_sayim_id'] > 0, j($r));
+ok('eski manuel sayım geri_alindi, anahtar boşaldı', ($x = pdks_ters_sayim_getir(db(), $sg)) && $x['durum'] === 'geri_alindi' && $x['aktif_anahtar'] === null);
+$sg = (int)$r['yeni_sayim_id'];
+$r = pdks_ters_manuel_onayla($sg, '3', $saat, '', '', istek(), 1, db());
+ok('yeni taslak manuel yeniden onaylandı (aynı mesai)', !empty($r['ok']) && (int)$r['session_id'] === $sidG, j($r));
+// Akşam — Ortak Çıkış (kiosk yolu: ortak çıkış + manuel yedek)
+$kioskCikis = fn(string $uid) => pdks_ters_ortak_cikis_manuel_yedek(pdks_gunluk_ortak_cikis_kaydet($uid, 'usb_decimal', 1, db()), $uid, 'usb_decimal', 1, db());
+$r = $kioskCikis($uidG(1));
+ok('1. çıkış: ok, entry_source=ters, giriş=sabit saat, 1/7', !empty($r['ok']) && $r['event_type'] === 'CIKIS' && ($r['card']['entry_source'] ?? '') === 'ters'
+    && $r['card']['entry_time'] === $girisZamani && $r['manuel']['cikan'] === 1 && $r['manuel']['dagitilan'] === 7 && $r['manuel']['kalan'] === 6
+    && str_contains($r['mesaj'], '1/7') && ($r['cavus']['session_id'] ?? 0) === $sidG && isset($r['ozet']['giris']), j($r));
+$p = satir("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND session_id = ?", [kartIdUid($uidG(1)), $sidG]);
+ok('… KAPALI ters dönem: giriş sabit saat, çıkış gerçek saat', ($p['status'] ?? '') === 'closed' && $p['source'] === 'ters' && $p['entry_time'] === $girisZamani
+    && abs(strtotime((string)$p['exit_time']) - time()) <= 5, j($p));
+ok('… GİRİŞ+ÇIKIŞ olayı source=ters, ters_sayim_kart rol=manuel_cikis', say("SELECT COUNT(*) FROM daily_worker_card_events WHERE worker_card_id = ? AND source = 'ters'", [kartIdUid($uidG(1))]) === 2
+    && say("SELECT COUNT(*) FROM ters_sayim_kart WHERE sayim_id = ? AND rol = 'manuel_cikis' AND period_id = ?", [$sg, (int)$p['id']]) === 1);
+ok('… satır audit ters_manuel_cikis', say("SELECT COUNT(*) FROM audit_log WHERE action = 'ters_manuel_cikis'") === 1);
+$r = $kioskCikis($uidG(1));
+ok('aynı kart ikinci çıkış → mukerrer_cikis, yeni olay yok', ($r['kod'] ?? '') === 'mukerrer_cikis' && say("SELECT COUNT(*) FROM daily_worker_card_events WHERE worker_card_id = ?", [kartIdUid($uidG(1))]) === 2, j($r));
+$r = pdks_ters_sayim_geri_al($sg, 'deneme', 1, db());
+ok('ilk çıkıştan SONRA manuel geri al → geri_alinamaz', ($r['kod'] ?? '') === 'geri_alinamaz' && str_contains($r['hata'], 'Çıkış'), j($r));
+$r = pdks_ters_cikis_kaydet($uidG(2), 'usb_decimal', 1, db());
+ok('eski ?ajax=cikis yolu (pdks_ters_cikis_kaydet) da manuel çıkışı yazar', !empty($r['ok']) && $r['manuel']['cikan'] === 2 && !empty($r['ters']), j($r));
+foreach ([3, 4, 5] as $i) $r = $kioskCikis($uidG($i));
+ok('5 çıkış tamam (5/7)', !empty($r['ok']) && $r['manuel']['cikan'] === 5, j($r));
+$mt = pdks_ters_mutabakat(db(), $bugun, 'Depo A');
+$rg = array_values(array_filter($mt['satirlar'], fn($x) => $x['foreman_id'] === $cavus['G']))[0] ?? [];
+ok('mutabakat (5/7): yöntem manuel · dağıtılan 7 · kalan 3 · çıkış 5 · okutulmayan 2 · içeride 2', ($rg['yontem'] ?? '') === 'manuel' && $rg['dagitilan'] === 7 && $rg['kalan'] === 3
+    && $rg['cikis'] === 5 && $rg['giris'] === 5 && $rg['manuel']['okutulmayan'] === 2 && $rg['iceride'] === 2 && count($rg['manuel']['kartlar']) === 5 && $rg['eksik_cikis'] === 0, j($rg));
+$hub = array_values(array_filter(pdks_ters_hub_durumlari(db(), 'Depo A'), fn($x) => $x['foreman_id'] === $cavus['G']))[0] ?? [];
+ok('hub: manuel · limit 7 · çıkan 5 · içeride 2', ($hub['sayim']['durum'] ?? '') === 'manuel' && $hub['sayim']['manuel_limit'] === 7 && $hub['sayim']['cikan'] === 5 && $hub['icerde'] === 2, j($hub));
+foreach ([6, 7] as $i) $r = $kioskCikis($uidG($i));
+ok('7/7 çıkış tamam, kalan 0', !empty($r['ok']) && $r['manuel']['cikan'] === 7 && $r['manuel']['kalan'] === 0, j($r));
+$r = $kioskCikis($uidG(8));
+ok('8. kart → manuel_limit ("7 kişi çalışıyor"), yazılmadı', ($r['kod'] ?? '') === 'manuel_limit' && str_contains($r['hata'], '7 kişi çalışıyor') && str_contains($r['hata'], 'fazla çıkış yapılamaz')
+    && say("SELECT COUNT(*) FROM daily_worker_work_periods WHERE worker_card_id = ?", [kartIdUid($uidG(8))]) === 0, j($r));
+ok('mesai özeti: 7 giriş · 7 çıkış · içeride 0', ($oz = pdks_gunluk_faz8a_oturum_ozet($sidG, db())) && $oz['giris_toplam'] === 7 && $oz['cikis_toplam'] === 7 && $oz['icerde_toplam'] === 0, j($oz ?? null));
+// Uygulanmayan durumlar → null (özgün hata)
+$r = pdks_ters_manuel_cikis($uidB(1), 'usb_decimal', 1, db());
+ok('havuz dışı kart → manuel null (özgün acik_donem_yok gösterilir)', $r === null);
+$r0 = pdks_gunluk_ortak_cikis_kaydet($uidB(1), 'usb_decimal', 1, db());
+ok('… yedek özgün yanıtı AYNEN döner', pdks_ters_ortak_cikis_manuel_yedek($r0, $uidB(1), 'usb_decimal', 1, db()) === $r0 && ($r0['kod'] ?? '') === 'acik_donem_yok', j($r0));
+ok('kartla sayım yapan çavuşun (A) kalan kartı → manuel null', pdks_ters_manuel_cikis($uidA(2), 'usb_decimal', 1, db()) === null);
+$AKTIF_DEPO = 'Depo B';
+ok('başka depodan → manuel null', pdks_ters_manuel_cikis($uidG(9), 'usb_decimal', 1, db()) === null);
+$AKTIF_DEPO = 'Depo A';
+// Zaten içeride (normal okutma) — limit = dağıtılan − zaten içeride
+for ($i = 1; $i <= 5; $i++) pdks_ters_havuz_ekle($uidH($i), 'usb_decimal', $cavus['H'], $erkek, 1, db());
+$sH = (int)pdks_gunluk_oturum_ac_veya_getir($cavus['H'], 1, db())['session']['id'];
+pdks_gunluk_faz8a_giris_kaydet($uidH(1), 'usb_decimal', $sH, $erkek, 'auto', 1, db());
+$sh = (int)pdks_ters_sayim_ac($cavus['H'], 1, db())['sayim']['id'];
+$d = pdks_ters_manuel_onizle($sh, '4', $saat, 'ayar yok', '', db())['degerlendirme'];
+ok('zaten içeride 1, kalan 4 → manuel çıkış yok → red', !$d['ok'] && $d['ozet']['zaten_iceride'] === 1 && str_contains(implode(' ', $d['genel']), 'zaten normal okutmayla'), j($d));
+$r = pdks_ters_manuel_onayla($sh, '1', $saat, 'ayar yok', '', istek(), 1, db());
+ok('H manuel onay: dağıtılan 4, zaten içeride 1 → limit 3, mevcut mesai', !empty($r['ok']) && $r['ozet']['dagitilan'] === 4 && $r['ozet']['manuel_limit'] === 3 && (int)$r['session_id'] === $sH, j($r));
+$r = $kioskCikis($uidH(1));
+ok('zaten içerideki kart NORMAL ortak çıkışla çıkar (manuel sayılmaz)', !empty($r['ok']) && !isset($r['manuel']) && pdks_ters_manuel_cikan(db(), $sh) === 0, j($r));
+foreach ([2, 3, 4] as $i) $r = $kioskCikis($uidH($i));
+ok('H: 3 manuel çıkış (3/3)', !empty($r['ok']) && $r['manuel']['cikan'] === 3, j($r));
+$r = $kioskCikis($uidH(5));
+ok('H: 4. manuel çıkış → manuel_limit', ($r['kod'] ?? '') === 'manuel_limit', j($r));
+// Gün sonu — mesai kapanınca manuel çıkış artık uygulanmaz; okutulmayan uydurulmaz
+$r = pdks_gunluk_oturum_kapat($sidG, null, 1, db());
+ok('G mesaisi kapatıldı (açık dönem yok → gerekçesiz)', !empty($r['ok']), j($r));
+ok('mesai kapalı → manuel null', pdks_ters_manuel_cikis($uidG(9), 'usb_decimal', 1, db()) === null);
+$mt = pdks_ters_mutabakat(db(), $bugun, 'Depo A');
+$rg = array_values(array_filter($mt['satirlar'], fn($x) => $x['foreman_id'] === $cavus['G']))[0] ?? [];
+ok('mutabakat (kapalı): çıkış 7 · okutulmayan 0 · içeride 0 · dönem uydurulmadı', $rg['cikis'] === 7 && $rg['manuel']['okutulmayan'] === 0 && $rg['iceride'] === 0
+    && !$rg['manuel']['mesai_acik'] && say("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ?", [$sidG]) === 7, j($rg));
+$srcK = file_get_contents($ROOT . '/gunluk_isci_giris_cikis.php');
+ok('kiosk ortak_cikis ucu manuel yedeği YALNIZ acik_donem_yok\'ta çağırır', (bool)preg_match("/=== 'acik_donem_yok'\\) \\{\\s*require_once __DIR__ \\. '\\/config\\/pdks_ters\\.php';\\s*if \\(function_exists\\('pdks_ters_ortak_cikis_manuel_yedek'\\)\\)/", $srcK));
+ok('kiosk sonuç kartı manuel sayaçları gösterir (d.manuel)', str_contains($srcK, 'd.manuel.cikan') && str_contains($srcK, 'd.manuel.kalan'));
+$srcT = file_get_contents($ROOT . '/config/pdks_ters.php');
+ok('manuel çıkış yazımı satir_kontrol + satir_yaz üzerinden', (bool)preg_match('/function pdks_ters_manuel_cikis\(.*?pdks_faz8j_satir_kontrol\(.*?pdks_faz8j_satir_yaz\(/s', $srcT));
+ok('mutabakat aktif durum listesi manuel dahil', pdks_ters_aktif_durumlar() === ['taslak', 'onayli', 'manuel'] && !str_contains($srcT, "durum IN ('taslak','onayli')"));
 
 echo "\n=== J. Statik sözleşmeler ===\n";
 $src = file_get_contents($ROOT . '/config/pdks_ters.php');

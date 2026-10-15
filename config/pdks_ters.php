@@ -43,6 +43,21 @@ const PDKS_TERS_HAVUZ_LIMIT = 500;       // çavuş başına aktif havuz kartı
 const PDKS_TERS_GEREKCE_MAX = 500;
 const PDKS_TERS_ESZAMANLI = 'Aynı anda başka bir işlem yapıldı — hiçbir şey yazılmadı. Sayfayı yenileyip tekrar deneyin.';
 const PDKS_TERS_SAYIM_NOTU = 'Giriş Tanımlı — sabah kalan kart sayımı';
+// v363 — MANUEL SAYIM: kart okutmadan elde kalan kart SAYISI girilir. Şema DEĞİŞMEDİ:
+// ters_sayim.durum = 'manuel' (VARCHAR(20)) onaylı manuel sayımdır; aktif_anahtar dolu kalır.
+const PDKS_TERS_DURUM_MANUEL = 'manuel';
+const PDKS_TERS_ROL_MANUEL_CIKIS = 'manuel_cikis';
+const PDKS_TERS_MANUEL_NOTU = 'Giriş Tanımlı — manuel sayım (çıkışta kayıt)';
+
+/** Onaylı sayım mı (kartla 'onayli' YA DA manuel 'manuel'). Durum kontrolü için TEK yer. */
+function pdks_ters_sayim_onayli_mi(array $s): bool
+{
+    return in_array((string)($s['durum'] ?? ''), ['onayli', PDKS_TERS_DURUM_MANUEL], true);
+}
+/** Manuel (kartsız) onaylı sayım mı. */
+function pdks_ters_sayim_manuel_mi(array $s): bool { return (string)($s['durum'] ?? '') === PDKS_TERS_DURUM_MANUEL; }
+/** Aktif (iptal/geri alınmamış) sayım durumları — SQL IN listesi için. */
+function pdks_ters_aktif_durumlar(): array { return ['taslak', 'onayli', PDKS_TERS_DURUM_MANUEL]; }
 
 /** Kart işlem etiketi → worker_cards.status (+ ters havuz etiketi). */
 function pdks_ters_kart_islemleri(): array
@@ -805,7 +820,7 @@ function pdks_ters_taslak_kapi(PDO $pdo, int $sayimId): array
     if (!$s) return pdks_ters_red('sayim_yok', 'Sayım bulunamadı.');
     if (!pdks_ters_depo_esit((string)$s['depo'], pdks_ters_aktif_depo())) return pdks_ters_red('yanlis_depo', 'Bu sayım aktif depoya ait değil.');
     if ((string)$s['durum'] !== 'taslak') {
-        return pdks_ters_red('sayim_kapali', (string)$s['durum'] === 'onayli'
+        return pdks_ters_red('sayim_kapali', pdks_ters_sayim_onayli_mi($s)
             ? 'Bu sayım onaylandı — değişiklik için önce "Sayımı Geri Al".' : 'Bu sayım geri alınmış.');
     }
     if ((string)$s['work_date'] !== date('Y-m-d')) return pdks_ters_red('eski_gun', 'Bu sayım geçmiş bir güne ait — bugün için yeni sayım başlatın.');
@@ -992,6 +1007,34 @@ function pdks_ters_donmemis(PDO $pdo, int $kartId): ?array
 }
 
 /**
+ * Sayımın kart dışı (mesai + zaman) ön koşulları — SALT OKUNUR. Kartla sayım
+ * (pdks_ters_sayim_degerlendir) ve manuel sayım (pdks_ters_manuel_degerlendir)
+ * AYNI kuralları buradan alır. @return array{0:list<string>, 1:?array} [genel hatalar, bugünkü mesai]
+ */
+function pdks_ters_sayim_genel_kontrol(PDO $pdo, array $sayim, ?string $girisZamani): array
+{
+    $foremanId = (int)$sayim['foreman_id']; $depo = (string)$sayim['depo']; $gun = (string)$sayim['work_date'];
+    $genel = [];
+    $mesai = pdks_ters_bugunku_mesai($pdo, $foremanId, $gun, $depo);
+    $c = pdks_ters_cavus($pdo, $foremanId);
+    if (!$c) $genel[] = 'Çavuş bulunamadı.';
+    elseif (!$mesai && !(int)$c['is_active']) $genel[] = 'Bu çavuş pasif — önce aktifleştirin.';
+    if ($mesai && (string)$mesai['status'] !== 'open') $genel[] = 'Bu çavuşun bugünkü mesaisi kapatılmış — kapalı mesaiye giriş yazılamaz.';
+    if ($mesai && pdks_faz8j_entitlement($pdo, (int)$mesai['id']) === 'final') $genel[] = 'Bu mesainin kesinleşmiş hakedişi var — önce hakediş yönetici tarafından yeniden açılmalı.';
+    if (!$mesai && $gun === date('Y-m-d')) {
+        $eski = pdks_gunluk_eski_acik_oturumlar($depo, $foremanId, $pdo);
+        if ($eski) $genel[] = 'Bu çavuşun ' . date('d.m.Y', strtotime((string)$eski[0]['work_date'])) . ' tarihli mesaisi kapatılmamış — önce o mesaiyi kapatın (Giriş-Çıkış ekranı → Mesaiyi Kapat).';
+    }
+    if ($girisZamani !== null) {
+        if (substr($girisZamani, 0, 10) !== $gun) $genel[] = 'Giriş saati mesai gününe ait olmalı.';
+        elseif (strtotime($girisZamani) > time() + PDKS_TERS_ILERI_DK * 60) {
+            $genel[] = 'Sabit giriş saati şu andan en fazla ' . intdiv(PDKS_TERS_ILERI_DK, 60) . ' saat ileride olabilir.';
+        }
+    }
+    return [$genel, $mesai];
+}
+
+/**
  * Sabah sayımını SALT OKUNUR değerlendirir (önizleme ve onay AYNI fonksiyon; onay bunu
  * kart kilitleri ALTINDA yeniden çağırır). Havuzun HER aktif üyesi sınıflanır:
  *   kalan          — elde kalan olarak okutuldu
@@ -1008,23 +1051,8 @@ function pdks_ters_sayim_degerlendir(PDO $pdo, array $sayim, ?string $girisZaman
             'ozet' => ['havuz_toplam' => 0, 'havuz_aktif' => 0, 'kalan' => 0, 'dagitilacak' => 0, 'zaten_iceride' => 0,
                        'haric' => 0, 'hata' => 0, 'calisan' => 0, 'tipler' => []],
             'session' => null];
-    $mesai = pdks_ters_bugunku_mesai($pdo, $foremanId, $gun, $depo);
+    [$out['genel'], $mesai] = pdks_ters_sayim_genel_kontrol($pdo, $sayim, $girisZamani);
     $out['session'] = $mesai;
-    $c = pdks_ters_cavus($pdo, $foremanId);
-    if (!$c) $out['genel'][] = 'Çavuş bulunamadı.';
-    elseif (!$mesai && !(int)$c['is_active']) $out['genel'][] = 'Bu çavuş pasif — önce aktifleştirin.';
-    if ($mesai && (string)$mesai['status'] !== 'open') $out['genel'][] = 'Bu çavuşun bugünkü mesaisi kapatılmış — kapalı mesaiye giriş yazılamaz.';
-    if ($mesai && pdks_faz8j_entitlement($pdo, (int)$mesai['id']) === 'final') $out['genel'][] = 'Bu mesainin kesinleşmiş hakedişi var — önce hakediş yönetici tarafından yeniden açılmalı.';
-    if (!$mesai && $gun === date('Y-m-d')) {
-        $eski = pdks_gunluk_eski_acik_oturumlar($depo, $foremanId, $pdo);
-        if ($eski) $out['genel'][] = 'Bu çavuşun ' . date('d.m.Y', strtotime((string)$eski[0]['work_date'])) . ' tarihli mesaisi kapatılmamış — önce o mesaiyi kapatın (Giriş-Çıkış ekranı → Mesaiyi Kapat).';
-    }
-    if ($girisZamani !== null) {
-        if (substr($girisZamani, 0, 10) !== $gun) $out['genel'][] = 'Giriş saati mesai gününe ait olmalı.';
-        elseif (strtotime($girisZamani) > time() + PDKS_TERS_ILERI_DK * 60) {
-            $out['genel'][] = 'Sabit giriş saati şu andan en fazla ' . intdiv(PDKS_TERS_ILERI_DK, 60) . ' saat ileride olabilir.';
-        }
-    }
 
     $satirlar = pdks_ters_sayim_satirlari($pdo, (int)$sayim['id']);
     $uyeler = pdks_ters_havuz_uyeleri($pdo, $foremanId, $depo);
@@ -1199,6 +1227,7 @@ function pdks_ters_sayim_onayla(int $sayimId, string $saatHam, string $neden, $b
             }
             return pdks_ters_red('zaten_onayli', 'Bu sayım başka bir işlemle zaten onaylandı.');
         }
+        if (pdks_ters_sayim_manuel_mi($s)) { $pdo->rollBack(); return pdks_ters_red('zaten_onayli', 'Bu sayım manuel sayım olarak zaten onaylandı.'); }
         if ((string)$s['durum'] !== 'taslak') throw new RuntimeException('Bu sayım geri alınmış — yeni sayımı kullanın.');
         if (!pdks_ters_depo_esit((string)$s['depo'], $depoAktif)) throw new RuntimeException('Bu sayım aktif depoya ait değil.');
         if ((string)$s['work_date'] !== date('Y-m-d')) throw new RuntimeException('Bu sayım geçmiş bir güne ait — onaylanamaz.');
@@ -1332,6 +1361,12 @@ function pdks_ters_sayim_geri_al(int $sayimId, string $reason, int $user, ?PDO $
         $pdo->beginTransaction();
         $s = pdks_ters_sayim_getir($pdo, $sayimId, true);
         if (!$s) throw new RuntimeException('Sayım bulunamadı.');
+        if (pdks_ters_sayim_manuel_mi($s)) {   // v363: manuel sayımın kendi (dönem yazmayan) geri alması
+            if (!pdks_ters_depo_esit((string)$s['depo'], $depoAktif)) throw new RuntimeException('Bu sayım aktif depoya ait değil.');
+            $r = pdks_ters_manuel_geri_al_tx($pdo, $s, $reason, $user);
+            $pdo->commit();
+            return $r;
+        }
         if ((string)$s['durum'] !== 'onayli') throw new RuntimeException('Yalnız onaylanmış sayım geri alınabilir.');
         if (!pdks_ters_depo_esit((string)$s['depo'], $depoAktif)) throw new RuntimeException('Bu sayım aktif depoya ait değil.');
         $sid = (int)$s['session_id']; $depo = (string)$s['depo'];
@@ -1388,6 +1423,401 @@ function pdks_ters_sayim_geri_al(int $sayimId, string $reason, int $user, ?PDO $
 }
 
 // =========================================================
+// v363 — MANUEL SAYIM (kartsız sayım) — kartla sayımın GÜNLÜK alternatifi
+// =========================================================
+// Sabah kartları tek tek okutmak yerine çavuşun elinde KALAN kart SAYISI girilir:
+// havuz aktif 50, kalan 20 → 30 kişi çalışıyor. Sabah HİÇBİR dönem yazılmaz.
+// Akşam Ortak Çıkış'ta bu çavuşun havuz kartı (açık dönemi YOKSA) çıkış okuttuğunda
+// sabit giriş saati + gerçek çıkış saatiyle KAPALI bir dönem yazılır — en fazla
+// "manuel limit" (= dağıtılan − sabah zaten normal okutmayla içeride olan) kart.
+// Gün sonunda dağıtılan kartların listesi çıkışlardan kendiliğinden oluşur; çıkışı
+// okutulmayan kişi için dönem/çıkış UYDURULMAZ.
+//
+// ⚠ ŞEMA DEĞİŞMEDİ: ters_sayim.durum = 'manuel' (onaylı manuel sayım; aktif_anahtar dolu),
+//   çıkışlar ters_sayim_kart.rol = 'manuel_cikis' (UNIQUE(sayim_id, worker_card_id) =
+//   aynı kartın ikinci çıkışına yapısal engel).
+// ⚠ İKİNCİ YAZMA YOLU YOK: dönem/olay → pdks_faz8j_satir_kontrol + pdks_faz8j_satir_yaz
+//   (kaynak 'ters', audit 'ters_manuel_cikis'); mesai → pdks_faz8j_oturum_coz (kiosk yolu).
+//   pdks_gunluk_ortak_cikis_kaydet() DEĞİŞMEDİ — manuel çıkış onun DIŞINDA, yalnız o
+//   'acik_donem_yok' döndürdüğünde denenir (pdks_ters_ortak_cikis_manuel_yedek).
+// ⚠ Taslakta okutulmuş kalan/teyit satırları manuel onayda SİLİNİR (listesi onay audit'inde
+//   kalır): UNIQUE(sayim_id, worker_card_id) aynı kartın akşam manuel_cikis satırını engellerdi.
+
+/** Manuel sayımda akşam en fazla kaç kart çıkış yapabilir (dağıtılan − zaten içeride). */
+function pdks_ters_manuel_limit(array $s): int
+{
+    return max(0, (int)$s['dagitilan_adet'] - (int)$s['zaten_iceride_adet']);
+}
+
+/** Manuel sayımın etkin (iptal edilmemiş) çıkış sayısı. */
+function pdks_ters_manuel_cikan(PDO $pdo, int $sayimId): int
+{
+    $st = $pdo->prepare("SELECT COUNT(*) FROM ters_sayim_kart k JOIN daily_worker_work_periods p ON p.id = k.period_id
+                          WHERE k.sayim_id = ? AND k.rol = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p'));
+    $st->execute([$sayimId, PDKS_TERS_ROL_MANUEL_CIKIS]);
+    return (int)$st->fetchColumn();
+}
+
+/** Manuel sayımla çıkış yapmış kartlar (kart no doğal sırada). */
+function pdks_ters_manuel_cikanlar(PDO $pdo, int $sayimId): array
+{
+    $st = $pdo->prepare("SELECT k.worker_card_id, k.card_no_snapshot AS card_no, k.worker_type_name_snapshot AS tip, k.period_id,
+                                p.entry_time, p.exit_time, p.is_voided
+                           FROM ters_sayim_kart k JOIN daily_worker_work_periods p ON p.id = k.period_id
+                          WHERE k.sayim_id = ? AND k.rol = ?");
+    $st->execute([$sayimId, PDKS_TERS_ROL_MANUEL_CIKIS]);
+    $rows = $st->fetchAll();
+    usort($rows, fn($a, $b) => strnatcasecmp((string)$a['card_no'], (string)$b['card_no']));
+    return $rows;
+}
+
+/** Elde kalan kart sayısı girdisi: boş → null (henüz girilmedi); 0-9999 tam sayı. */
+function pdks_ters_kalan_adet($x): array
+{
+    $v = pdks_ters_metin($x);
+    if ($v === '') return ['ok' => true, 'kalan' => null];
+    if (!preg_match('/^\d{1,4}$/D', $v)) return pdks_ters_red('kalan_gecersiz', 'Elde kalan kart sayısı 0 ya da pozitif bir tam sayı olmalı.');
+    return ['ok' => true, 'kalan' => (int)$v];
+}
+
+/**
+ * Manuel sayımı SALT OKUNUR değerlendirir (önizleme ve onay AYNI fonksiyon; onay bunu
+ * kilitler ALTINDA yeniden çağırır). Mesai/zaman kuralları kartla sayımla AYNI
+ * (pdks_ters_sayim_genel_kontrol). $kalan null → sayı henüz girilmedi (ok=false).
+ * Kart bazında bilinemeyenler (başka mesaide içeride, dönmemiş, desteklenmeyen tip)
+ * ENGEL DEĞİL, UYARI: bu kartlar akşam manuel çıkış yapamaz.
+ */
+function pdks_ters_manuel_degerlendir(PDO $pdo, array $sayim, ?int $kalan, ?string $girisZamani): array
+{
+    $foremanId = (int)$sayim['foreman_id']; $depo = (string)$sayim['depo']; $gun = (string)$sayim['work_date'];
+    [$genel, $mesai] = pdks_ters_sayim_genel_kontrol($pdo, $sayim, $girisZamani);
+    $uyeler = pdks_ters_havuz_uyeleri($pdo, $foremanId, $depo);
+    $hoz = pdks_ters_havuz_ozet($uyeler);
+    $oz = ['havuz_toplam' => $hoz['toplam'], 'havuz_aktif' => $hoz['aktif'], 'haric' => $hoz['toplam'] - $hoz['aktif'],
+           'kalan' => $kalan, 'dagitilan' => null, 'zaten_iceride' => 0, 'manuel_limit' => null, 'tipler' => $hoz['tipler']];
+    $baska = []; $donmemis = []; $bugunEksik = []; $tipsiz = [];
+    foreach ($uyeler as $u) {
+        if ($u['status'] !== 'available') continue;
+        $kid = (int)$u['worker_card_id'];
+        $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid);
+        if ($acik && $mesai && (int)$acik['session_id'] === (int)$mesai['id']) { $oz['zaten_iceride']++; continue; }
+        if ($acik) { $baska[] = (string)$u['card_no']; continue; }
+        if ($d = pdks_ters_donmemis($pdo, $kid)) {
+            if ((string)$d['work_date'] === $gun) $bugunEksik[] = (string)$u['card_no']; else $donmemis[] = (string)$u['card_no'];
+            continue;
+        }
+        if (!pdks_faz8j_desteklenen_tip($pdo, (int)$u['worker_type_id'])) $tipsiz[] = (string)$u['card_no'];
+    }
+    $liste = fn(array $k) => implode(', ', array_slice($k, 0, 10)) . (count($k) > 10 ? ' …' : '');
+    $uyarilar = [];
+    if ($baska) $uyarilar[] = count($baska) . ' kart başka bir mesaide içeride görünüyor (' . $liste($baska) . ') — bu kartlar akşam manuel çıkış yapamaz.';
+    if ($donmemis) $uyarilar[] = count($donmemis) . ' kart önceki günden dönmedi (' . $liste($donmemis) . ') — elde değilse Kayıp işaretleyin; bu kartlarla akşam manuel çıkış yapılamaz.';
+    if ($bugunEksik) $uyarilar[] = count($bugunEksik) . ' kart bugün eksik çıkışla kapatılan bir mesaide kaldı (' . $liste($bugunEksik) . ') — bugün yeniden çıkış yapamaz.';
+    if ($tipsiz) $uyarilar[] = count($tipsiz) . ' kartın havuz tipi pasif ya da desteklenmiyor (' . $liste($tipsiz) . ') — akşam çıkışı reddedilir; Kart Havuzu ekranından düzeltin.';
+    if ($hoz['aktif'] === 0) $genel[] = 'Havuzda kullanılabilir kart yok.';
+    if ($kalan !== null && $hoz['aktif'] > 0) {
+        if ($kalan > $hoz['aktif']) {
+            $genel[] = 'Elde kalan kart sayısı (' . $kalan . ') aktif havuzdan (' . $hoz['aktif'] . ') fazla olamaz.';
+        } else {
+            $oz['dagitilan'] = $hoz['aktif'] - $kalan;
+            $oz['manuel_limit'] = $oz['dagitilan'] - $oz['zaten_iceride'];
+            if ($oz['dagitilan'] < 1) $genel[] = 'Dağıtılmış kart yok (havuzdaki tüm kartlar elde) — onaylanacak sayım yok.';
+            elseif ($oz['manuel_limit'] < 1) $genel[] = 'Dağıtılan kartların hepsi zaten normal okutmayla içeride — manuel sayıma gerek yok.';
+        }
+    }
+    return ['ok' => !$genel && $kalan !== null, 'genel' => $genel, 'uyarilar' => $uyarilar, 'ozet' => $oz, 'session' => $mesai];
+}
+
+/** Manuel sayım önizlemesi — HİÇBİR şey yazmaz. */
+function pdks_ters_manuel_onizle(int $sayimId, $kalanHam, string $saatHam, string $neden, $beyanHam, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
+    $s = pdks_ters_sayim_getir($pdo, $sayimId);
+    if (!$s) return pdks_ters_red('sayim_yok', 'Sayım bulunamadı.');
+    if (!pdks_ters_depo_esit((string)$s['depo'], pdks_ters_aktif_depo())) return pdks_ters_red('yanlis_depo', 'Bu sayım aktif depoya ait değil.');
+    if ((string)$s['durum'] !== 'taslak') return pdks_ters_red('sayim_kapali', pdks_ters_sayim_onayli_mi($s) ? 'Bu sayım zaten onaylandı.' : 'Bu sayım geri alınmış.');
+    $k = pdks_ters_kalan_adet($kalanHam);
+    $g = $saatHam !== '' ? pdks_ters_giris_coz($s, $saatHam, $neden) : ['ok' => true, 'zaman' => null];
+    $b = pdks_ters_beyan($beyanHam);
+    $d = pdks_ters_manuel_degerlendir($pdo, $s, $k['ok'] ? $k['kalan'] : null, $g['ok'] ? $g['zaman'] : null);
+    if (!$k['ok']) { $d['genel'][] = $k['hata']; $d['ok'] = false; }
+    if (!$g['ok']) { $d['genel'][] = $g['hata']; $d['ok'] = false; }
+    if ($saatHam === '') $d['ok'] = false;   // onay için saat zorunlu
+    if (!$b['ok']) { $d['genel'][] = $b['hata']; $d['ok'] = false; }
+    elseif ($d['ozet']['dagitilan'] !== null && ($u = pdks_ters_beyan_uyarisi($b['beyan'], (int)$d['ozet']['dagitilan']))) $d['uyarilar'][] = $u;
+    unset($d['session']);
+    return ['ok' => true, 'degerlendirme' => $d];
+}
+
+/**
+ * MANUEL ONAY — tek transaction. Kilit sırası kartla onayla AYNI: sayım FOR UPDATE →
+ * mesai FOR UPDATE → havuz üyelikleri + kartlar (artan id) → değerlendirme kilit ALTINDA.
+ * Sabah DÖNEM YAZILMAZ; yalnız mesai (kiosk yolu) açılır ve sayım satırı 'manuel' olur.
+ * Tekrar gönderim: aynı istek_id ile manuel onaylanmış sayım → aynı sonuç ('tekrar').
+ * Yetki ÇAĞIRANDA (attendance.daily_scan).
+ */
+function pdks_ters_manuel_onayla(int $sayimId, $kalanHam, string $saatHam, string $neden, $beyanHam, string $istekIdHam, int $user, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_ters_sema_hazir($pdo)) return pdks_ters_red('sema_hazir_degil', 'Giriş Tanımlı tabloları kurulmamış (migrate.php).');
+    if ($pdo->inTransaction()) return pdks_ters_red('ic_ice_islem', 'Bu işlem başka bir işlemin içinde çalıştırılamaz.');
+    $istekId = pdks_ters_istek_id($istekIdHam);
+    if ($istekId === null) return pdks_ters_red('istek_gecersiz', 'Geçersiz istek anahtarı; sayfayı yenileyip tekrar deneyin.');
+    $k = pdks_ters_kalan_adet($kalanHam);
+    if (!$k['ok']) return $k;
+    if ($k['kalan'] === null) return pdks_ters_red('kalan_bos', 'Elde kalan kart sayısını girin (hiç kalmadıysa 0).');
+    $b = pdks_ters_beyan($beyanHam);
+    if (!$b['ok']) return $b;
+    $depoAktif = pdks_ters_aktif_depo();
+    if ($depoAktif === '') return pdks_ters_red('depo_yok', 'Önce bir depo seçmelisiniz.');
+    $simdi = date('Y-m-d H:i:s');
+    $kilit = pdks_ters_kilit_ek($pdo);
+    try {
+        $pdo->beginTransaction();
+        $s = pdks_ters_sayim_getir($pdo, $sayimId, true);
+        if (!$s) throw new RuntimeException('Sayım bulunamadı.');
+        if (pdks_ters_sayim_onayli_mi($s)) {
+            $pdo->rollBack();
+            if (pdks_ters_sayim_manuel_mi($s) && (string)$s['istek_id'] === $istekId) {
+                return ['ok' => true, 'tekrar' => true, 'sayim_id' => $sayimId, 'session_id' => (int)$s['session_id'],
+                        'ozet' => pdks_ters_sayim_ozet_satiri($s) + ['manuel_limit' => pdks_ters_manuel_limit($s)]];
+            }
+            return pdks_ters_red('zaten_onayli', 'Bu sayım başka bir işlemle zaten onaylandı.');
+        }
+        if ((string)$s['durum'] !== 'taslak') throw new RuntimeException('Bu sayım geri alınmış — yeni sayımı kullanın.');
+        if (!pdks_ters_depo_esit((string)$s['depo'], $depoAktif)) throw new RuntimeException('Bu sayım aktif depoya ait değil.');
+        if ((string)$s['work_date'] !== date('Y-m-d')) throw new RuntimeException('Bu sayım geçmiş bir güne ait — onaylanamaz.');
+        $g = pdks_ters_giris_coz($s, $saatHam, $neden);
+        if (!$g['ok']) throw new RuntimeException($g['hata']);
+        $foremanId = (int)$s['foreman_id']; $gun = (string)$s['work_date']; $depo = (string)$s['depo'];
+        // mesai satırı (KİLİTLİ) — kartla onayla aynı arama
+        $stM = $pdo->prepare('SELECT id, depo FROM daily_work_sessions WHERE foreman_id = ? AND work_date = ?' . $kilit);
+        $stM->execute([$foremanId, $gun]);
+        $mesaiDepo = $depoAktif;
+        foreach ($stM->fetchAll() as $m0) if (pdks_ters_depo_esit((string)$m0['depo'], $depo)) { $mesaiDepo = (string)$m0['depo']; break; }
+        // üyelik + kart kilitleri (artan id) — "zaten içeride" sayısı kiosk girişiyle yarışmasın
+        $stU = $pdo->prepare('SELECT worker_card_id, depo FROM ters_havuz_kart WHERE foreman_id = ? AND aktif_kart_id IS NOT NULL ORDER BY worker_card_id ASC' . $kilit);
+        $stU->execute([$foremanId]);
+        foreach ($stU->fetchAll() as $r) if (pdks_ters_depo_esit((string)$r['depo'], $depo)) pdks_gunluk_faz8a_kart_kilitle($pdo, (int)$r['worker_card_id']);
+
+        $d = pdks_ters_manuel_degerlendir($pdo, $s, $k['kalan'], $g['zaman']);
+        if (!$d['ok']) {
+            $pdo->rollBack();
+            return pdks_ters_red('onaylanamaz', $d['genel'] ? implode(' ', $d['genel']) : 'Manuel sayım onaylanamadı.', ['degerlendirme' => array_diff_key($d, ['session' => 1])]);
+        }
+        $oc = pdks_faz8j_oturum_coz($pdo, $foremanId, $gun, $mesaiDepo, $user, true);
+        if (!$oc['ok']) throw new RuntimeException((string)$oc['hata']);
+        $sid = (int)$oc['oturum']['id'];
+        if (pdks_faz8j_entitlement($pdo, $sid) === 'final') {
+            throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi var — önce hakediş yönetici tarafından yeniden açılmalı.');
+        }
+        // Taslak okutmaları (kalan/teyit) — UNIQUE nedeniyle silinir, listesi audit'te kalır.
+        $stT = $pdo->prepare('SELECT worker_card_id, rol, card_no_snapshot FROM ters_sayim_kart WHERE sayim_id = ? ORDER BY id ASC');
+        $stT->execute([$sayimId]);
+        $taslakOkutma = array_map(fn($r) => ['kart_id' => (int)$r['worker_card_id'], 'card_no' => (string)$r['card_no_snapshot'], 'rol' => (string)$r['rol']], $stT->fetchAll());
+        if ($taslakOkutma) $pdo->prepare('DELETE FROM ters_sayim_kart WHERE sayim_id = ?')->execute([$sayimId]);
+
+        $oz = $d['ozet'];
+        $pdo->prepare("UPDATE ters_sayim SET durum = ?, session_id = ?, giris_saati = ?, giris_zamani = ?, giris_saati_nedeni = ?,
+                              havuz_aktif = ?, kalan_adet = ?, dagitilan_adet = ?, yeni_giris_adet = 0, zaten_iceride_adet = ?, haric_adet = ?,
+                              beyan_adet = ?, istek_id = ?, onaylayan_user_id = ?, onay_zamani = ?
+                        WHERE id = ? AND durum = 'taslak'")
+            ->execute([PDKS_TERS_DURUM_MANUEL, $sid, $g['saat'], $g['zaman'], $g['neden'] !== '' ? $g['neden'] : null,
+                       $oz['havuz_aktif'], $oz['kalan'], $oz['dagitilan'], $oz['zaten_iceride'], $oz['haric'],
+                       $b['beyan'], $istekId, $user, $simdi, $sayimId]);
+        $uyarilar = $d['uyarilar'];
+        if ($bu = pdks_ters_beyan_uyarisi($b['beyan'], (int)$oz['dagitilan'])) $uyarilar[] = $bu;
+        pdks_ters_audit($pdo, $user, 'ters_sayim_manuel_onay', 'ters_sayim', $sayimId, ['durum' => 'taslak'], [
+            'istek_id' => $istekId, 'yontem' => 'manuel', 'foreman_id' => $foremanId, 'depo' => $depo, 'work_date' => $gun,
+            'session_id' => $sid, 'yeni_mesai' => $oc['yeni'], 'giris_saati' => $g['saat'], 'varsayilan_giris_saati' => $s['varsayilan_giris_saati'],
+            'giris_saati_nedeni' => $g['neden'], 'havuz_aktif' => $oz['havuz_aktif'], 'kalan' => $oz['kalan'], 'dagitilan' => $oz['dagitilan'],
+            'zaten_iceride' => $oz['zaten_iceride'], 'manuel_limit' => $oz['manuel_limit'], 'haric' => $oz['haric'], 'beyan' => $b['beyan'],
+            'silinen_taslak_okutma' => $taslakOkutma, 'onay_zamani' => $simdi,
+        ]);
+        $pdo->commit();
+        return ['ok' => true, 'sayim_id' => $sayimId, 'session_id' => $sid, 'yeni_mesai' => $oc['yeni'],
+                'ozet' => ['havuz_aktif' => $oz['havuz_aktif'], 'kalan' => $oz['kalan'], 'dagitilan' => $oz['dagitilan'], 'yeni_giris' => 0,
+                           'zaten_iceride' => $oz['zaten_iceride'], 'haric' => $oz['haric'], 'manuel_limit' => $oz['manuel_limit'],
+                           'giris_saati' => $g['saat'], 'onay_zamani' => $simdi],
+                'uyarilar' => $uyarilar];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($e instanceof RuntimeException && !$e instanceof PDOException) return pdks_ters_red('onaylanamaz', $e->getMessage());
+        if (pdks_ters_eszamanli($e)) return pdks_ters_red('eszamanli', PDKS_TERS_ESZAMANLI);
+        error_log('[pdks_ters_manuel_onayla] ' . $e->getMessage());
+        return pdks_ters_red('yazma_hatasi', 'Onay sırasında teknik bir hata oluştu — hiçbir şey yazılmadı. Lütfen tekrar deneyin.');
+    }
+}
+
+/**
+ * Manuel sayımın geri alması — pdks_ters_sayim_geri_al() transaction'ı İÇİNDE, sayım satırı
+ * kilitliyken çağrılır. Kural kartla sayımla aynı: İLK ÇIKIŞA kadar (bir kart bile manuel
+ * çıkış yaptıysa geri alınamaz) ve mesai açıkken. İptal edilecek dönem YOKTUR (sabah dönem
+ * yazılmadı); sayım 'geri_alindi' olur, aynı gün için BOŞ yeni taslak açılır.
+ */
+function pdks_ters_manuel_geri_al_tx(PDO $pdo, array $s, string $reason, int $user): array
+{
+    $sayimId = (int)$s['id']; $sid = (int)$s['session_id']; $depo = (string)$s['depo'];
+    pdks_faz8j_oturum_kilitle($pdo, (int)$s['foreman_id'], (string)$s['work_date'], $depo);
+    $st = $pdo->prepare('SELECT COUNT(*) FROM ters_sayim_kart WHERE sayim_id = ? AND rol = ?');
+    $st->execute([$sayimId, PDKS_TERS_ROL_MANUEL_CIKIS]);
+    $cikan = (int)$st->fetchColumn();
+    if ($cikan > 0) {
+        throw new RuntimeException('Çıkış okutulmaya başlandı (' . $cikan . ' kart) — manuel sayım artık geri alınamaz. Düzeltme yalnız yönetici tarafından Mesai Detayı\'ndan yapılır.');
+    }
+    $stS = $pdo->prepare('SELECT status FROM daily_work_sessions WHERE id = ?'); $stS->execute([$sid]);
+    if ((string)$stS->fetchColumn() !== 'open') throw new RuntimeException('Mesai kapatılmış — sayım geri alınamaz.');
+    $simdi = date('Y-m-d H:i:s');
+    $pdo->prepare("UPDATE ters_sayim SET durum = 'geri_alindi', aktif_anahtar = NULL, geri_alan_user_id = ?, geri_alma_zamani = ?, geri_alma_nedeni = ? WHERE id = ? AND durum = ?")
+        ->execute([$user, $simdi, $reason, $sayimId, PDKS_TERS_DURUM_MANUEL]);
+    $yeniId = 0;
+    if ((string)$s['work_date'] === date('Y-m-d')) {
+        $pdo->prepare('INSERT INTO ters_sayim (foreman_id, depo, work_date, durum, aktif_anahtar, varsayilan_giris_saati, onceki_sayim_id, olusturan_user_id) VALUES (?,?,?,?,?,?,?,?)')
+            ->execute([(int)$s['foreman_id'], $depo, (string)$s['work_date'], 'taslak', pdks_ters_anahtar((int)$s['foreman_id'], (string)$s['work_date'], $depo),
+                       $s['varsayilan_giris_saati'], $sayimId, $user]);
+        $yeniId = (int)$pdo->lastInsertId();
+    }
+    pdks_ters_audit($pdo, $user, 'ters_sayim_geri_al', 'ters_sayim', $sayimId, ['durum' => PDKS_TERS_DURUM_MANUEL],
+        ['durum' => 'geri_alindi', 'yontem' => 'manuel', 'reason' => $reason, 'iptal_edilen_donem' => 0, 'yeni_sayim_id' => $yeniId]);
+    return ['ok' => true, 'iptal_edilen' => 0, 'yeni_sayim_id' => $yeniId];
+}
+
+/** Çavuş + depo için çıkış alabilecek manuel sayım (mesaisi AÇIK) id'si ya da 0. */
+function pdks_ters_manuel_acik_sayim(PDO $pdo, int $foremanId, string $depo): int
+{
+    $st = $pdo->prepare("SELECT s.id, s.depo FROM ters_sayim s JOIN daily_work_sessions w ON w.id = s.session_id
+                          WHERE s.foreman_id = ? AND s.durum = ? AND s.aktif_anahtar IS NOT NULL AND w.status = 'open'
+                          ORDER BY s.work_date DESC, s.id DESC");
+    $st->execute([$foremanId, PDKS_TERS_DURUM_MANUEL]);
+    foreach ($st->fetchAll() as $r) if (pdks_ters_depo_esit((string)$r['depo'], $depo)) return (int)$r['id'];
+    return 0;
+}
+
+/**
+ * AKŞAM MANUEL ÇIKIŞ. Ortak Çıkış kartın açık dönemini bulamadığında ('acik_donem_yok')
+ * çağrılır. Uygulanamıyorsa NULL döner (kart ters havuzda değil / başka depoda / çavuşun
+ * mesaisi açık manuel sayımı yok) — çağıran ÖZGÜN hatayı gösterir. Uygulanıyorsa:
+ * tek transaction, kilit sırası sayım → mesai → kart; limit, mükerrer, giriş saati ve
+ * satır kuralları (pdks_faz8j_satir_kontrol) denetlenir; dönem sabit giriş + gerçek çıkış
+ * saatiyle KAPALI yazılır (pdks_faz8j_satir_yaz, kaynak 'ters'); ters_sayim_kart'a
+ * 'manuel_cikis' satırı (UNIQUE = ikinci çıkış engeli). Yanıt Ortak Çıkış başarı
+ * yanıtıyla AYNI biçimde (+ 'manuel' sayaçları) — kiosk sonuç kartı aynen çalışır.
+ */
+function pdks_ters_manuel_cikis(string $ham, string $kaynak, int $user, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_ters_sema_hazir($pdo) || $pdo->inTransaction()) return null;
+    $u = pdks_ters_uid_coz($pdo, $ham, $kaynak);
+    if (!$u['ok'] || $u['kart'] === null) return null;
+    $kartId = (int)$u['kart']['id'];
+    $depoAktif = pdks_ters_aktif_depo();
+    $m = pdks_gunluk_ters_havuz_aktif($pdo, $kartId);
+    if (!$m || $depoAktif === '' || !pdks_ters_depo_esit((string)$m['depo'], $depoAktif)) return null;
+    $sayimId = pdks_ters_manuel_acik_sayim($pdo, (int)$m['foreman_id'], (string)$m['depo']);
+    if ($sayimId === 0) return null;
+    $simdi = date('Y-m-d H:i:s');
+    $kilit = pdks_ters_kilit_ek($pdo);
+    $red = function (string $kod, string $hata, array $ek = []) use ($pdo): array {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return pdks_ters_red($kod, $hata, $ek);
+    };
+    try {
+        $pdo->beginTransaction();
+        // 1 — sayım satırı (eşzamanlı iki terminal limiti birlikte aşamasın)
+        $s = pdks_ters_sayim_getir($pdo, $sayimId, true);
+        if (!$s || !pdks_ters_sayim_manuel_mi($s) || $s['aktif_anahtar'] === null) { $pdo->rollBack(); return null; }
+        $sid = (int)$s['session_id'];
+        // 2 — mesai satırı (Mesaiyi Kapat ile yarış)
+        $stM = $pdo->prepare('SELECT s.*, COALESCE(f.name, s.foreman_name_snapshot) AS foreman_name FROM daily_work_sessions s LEFT JOIN foremen f ON f.id = s.foreman_id WHERE s.id = ?' . $kilit);
+        $stM->execute([$sid]);
+        $mesai = $stM->fetch();
+        if (!$mesai || (string)$mesai['status'] !== 'open') { $pdo->rollBack(); return null; }
+        // 3 — kart kilidi (kiosk giriş/çıkışıyla AYNI) + kilit altında yeniden okuma
+        pdks_gunluk_faz8a_kart_kilitle($pdo, $kartId);
+        $m = pdks_gunluk_ters_havuz_aktif($pdo, $kartId);
+        if (!$m || (int)$m['foreman_id'] !== (int)$s['foreman_id'] || !pdks_ters_depo_esit((string)$m['depo'], (string)$s['depo'])) { $pdo->rollBack(); return null; }
+        $stK = $pdo->prepare('SELECT * FROM worker_cards WHERE id = ?'); $stK->execute([$kartId]);
+        $kart = $stK->fetch();
+        if (pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kartId)) {
+            return $red('acik_donem_var', 'Kart ' . $kart['card_no'] . ' için az önce açık bir giriş oluştu — kartı tekrar okutun.');
+        }
+        $limit = pdks_ters_manuel_limit($s);
+        $stV = $pdo->prepare('SELECT rol FROM ters_sayim_kart WHERE sayim_id = ? AND worker_card_id = ?');
+        $stV->execute([$sayimId, $kartId]);
+        if ($stV->fetchColumn() !== false) {
+            return $red('mukerrer_cikis', 'Bu kart bugün zaten çıkış yaptı.', ['card_no' => (string)$kart['card_no']]);
+        }
+        $cikan = pdks_ters_manuel_cikan($pdo, $sayimId);
+        if ($cikan >= $limit) {
+            return $red('manuel_limit', 'Bu çavuşun manuel sayımına göre ' . $limit . ' kişi çalışıyor — ' . $cikan . ' çıkış tamamlandı, fazla çıkış yapılamaz.',
+                        ['card_no' => (string)$kart['card_no'], 'manuel' => ['sayim_id' => $sayimId, 'dagitilan' => $limit, 'cikan' => $cikan, 'kalan' => 0]]);
+        }
+        $giris = (string)$s['giris_zamani'];
+        if ($simdi <= $giris) {
+            return $red('giris_saati_gelmedi', 'Bu kartın giriş saati (' . substr($giris, 11, 5) . ') henüz gelmedi — çıkış giriş saatinden önce yazılamaz.');
+        }
+        if (pdks_faz8j_entitlement($pdo, $sid) === 'final') {
+            return $red('hakedis_kesin', 'Bu mesainin kesinleşmiş hakedişi var — çıkış yazılamaz. Hakediş yönetici tarafından yeniden açılmalı.');
+        }
+        $tip = pdks_faz8j_desteklenen_tip($pdo, (int)$m['worker_type_id']);
+        if (!$tip) return $red('tip_desteklenmiyor', 'Kart ' . $kart['card_no'] . ' havuz tipi pasif ya da desteklenmiyor — Kart Havuzu ekranından düzeltin.');
+        $satir = ['kartsiz' => false, 'kart' => $kart, 'tip' => $tip, 'entry' => $giris, 'exit' => $simdi];
+        if ($h = pdks_faz8j_satir_kontrol($pdo, $sid, (string)$mesai['work_date'], $satir, ['foreman_id' => (int)$s['foreman_id'], 'depo' => (string)$mesai['depo']])) {
+            return $red('kart_uygun_degil', 'Kart ' . $kart['card_no'] . ': ' . $h, ['card_no' => (string)$kart['card_no']]);
+        }
+        $pid = pdks_faz8j_satir_yaz($pdo, $mesai, $satir, $user, [
+            'reason' => PDKS_TERS_MANUEL_NOTU, 'note' => '', 'yeni_mesai' => false, 'simdi' => $simdi,
+            'toplu_id' => 'TS' . $sayimId, 'kaynak' => PDKS_TERS_KAYNAK, 'olay_zamani' => $simdi, 'audit_action' => 'ters_manuel_cikis',
+        ]);
+        $pdo->prepare('INSERT INTO ters_sayim_kart (sayim_id, worker_card_id, rol, worker_type_id_snapshot, worker_type_name_snapshot, card_no_snapshot, period_id, okutma_kaynak, okutma_zamani, user_id) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$sayimId, $kartId, PDKS_TERS_ROL_MANUEL_CIKIS, (int)$tip['id'], (string)$tip['name'], (string)$kart['card_no'], $pid, $kaynak, $simdi, $user]);
+        pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);
+        $stE = $pdo->prepare('SELECT exit_event_id FROM daily_worker_work_periods WHERE id = ?'); $stE->execute([$pid]);
+        $eventId = (int)$stE->fetchColumn();
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if (pdks_ters_eszamanli($e)) return pdks_ters_red('eszamanli', 'Bu kart aynı anda başka bir terminalden okutuldu — tekrar okutun.');
+        error_log('[pdks_ters_manuel_cikis] ' . $e->getMessage());
+        return pdks_ters_red('yazma_hatasi', 'Kayıt sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.');
+    }
+    $cikan++;
+    $workDate = (string)$mesai['work_date'];
+    return [
+        'ok' => true, 'event_id' => $eventId, 'event_type' => 'CIKIS',
+        'card' => [
+            'card_no' => (string)$kart['card_no'], 'worker_type_name' => (string)$tip['name'],
+            'declared_class' => 'auto', 'declared_class_label' => pdks_gunluk_faz8a_mesai_siniflari()['auto'] ?? 'auto',
+            'entry_time' => $giris, 'entry_source' => PDKS_TERS_KAYNAK,
+        ],
+        'server_time' => $simdi,
+        'ozet' => pdks_gunluk_faz8a_oturum_ozet($sid, $pdo),
+        'cavus' => ['id' => (int)$s['foreman_id'], 'ad' => (string)$mesai['foreman_name'], 'session_id' => $sid,
+                    'work_date' => $workDate, 'onceki_gun' => $workDate < date('Y-m-d')],
+        'manuel' => ['sayim_id' => $sayimId, 'dagitilan' => $limit, 'cikan' => $cikan, 'kalan' => max(0, $limit - $cikan)],
+        'mesaj' => '🔢 Manuel sayım · ' . $cikan . '/' . $limit . ' çıkış',
+    ];
+}
+
+/**
+ * Ortak Çıkış yanıtına manuel sayım yedeği: özgün yanıt 'acik_donem_yok' ise ve kart
+ * açık manuel sayımı olan bir çavuşun havuzundaysa manuel çıkış yazılır; değilse özgün
+ * yanıt AYNEN döner. pdks_gunluk_ortak_cikis_kaydet()'in DIŞINDA çağrılır (o değişmez).
+ */
+function pdks_ters_ortak_cikis_manuel_yedek(array $sonuc, string $ham, string $kaynak, int $user, ?PDO $pdo = null): array
+{
+    if (!empty($sonuc['ok']) || ($sonuc['kod'] ?? '') !== 'acik_donem_yok') return $sonuc;
+    try {
+        $m = pdks_ters_manuel_cikis($ham, $kaynak, $user, $pdo);
+    } catch (Throwable $e) {
+        error_log('[pdks_ters_ortak_cikis_manuel_yedek] ' . $e->getMessage());
+        return $sonuc;
+    }
+    return $m ?? $sonuc;
+}
+
+// =========================================================
 // HIZLI ÇIKIŞ — mevcut ORTAK ÇIKIŞ'ın ince sarmalayıcısı (yazma YOK)
 // =========================================================
 
@@ -1401,6 +1831,7 @@ function pdks_ters_cikis_kaydet(string $ham, string $kaynak, int $user, ?PDO $pd
 {
     $pdo = $pdo ?? db();
     $r = pdks_gunluk_ortak_cikis_kaydet($ham, $kaynak, $user, $pdo);
+    $r = pdks_ters_ortak_cikis_manuel_yedek($r, $ham, $kaynak, $user, $pdo);   // v363: manuel sayım
     if (empty($r['ok'])) return $r;
     $sid = (int)($r['cavus']['session_id'] ?? 0);
     $mesailer = pdks_gunluk_ortak_cikis_mesailer(null, $pdo);
@@ -1432,8 +1863,9 @@ function pdks_ters_cikis_kaydet(string $ham, string $kaynak, int $user, ?PDO $pd
  */
 function pdks_ters_mutabakat(PDO $pdo, string $workDate, string $depo): array
 {
-    $st = $pdo->prepare("SELECT * FROM ters_sayim WHERE work_date = ? AND durum IN ('taslak','onayli') ORDER BY id ASC");
-    $st->execute([$workDate]);
+    $durumlar = pdks_ters_aktif_durumlar();   // v363: 'manuel' dahil
+    $st = $pdo->prepare('SELECT * FROM ters_sayim WHERE work_date = ? AND durum IN (' . implode(',', array_fill(0, count($durumlar), '?')) . ') ORDER BY id ASC');
+    $st->execute(array_merge([$workDate], $durumlar));
     $sayimlar = [];
     foreach ($st->fetchAll() as $s) if (pdks_ters_depo_esit((string)$s['depo'], $depo)) $sayimlar[(int)$s['foreman_id']] = $s;
     $satirlar = [];
@@ -1449,7 +1881,8 @@ function pdks_ters_mutabakat(PDO $pdo, string $workDate, string $depo): array
         $s = $sayimlar[$fid] ?? null;
         $row = ['foreman_id' => $fid, 'foreman_name' => (string)$c['name'], 'havuz' => $c['havuz'], 'sayim' => null,
                 'dagitilan' => 0, 'kalan' => 0, 'haric' => 0, 'giris' => 0, 'cikis' => 0, 'iceride' => 0, 'eksik_cikis' => 0, 'iptal' => 0,
-                'donmeyen_kartlar' => [], 'teyitli' => 0, 'mesai' => null, 'mesai_toplam' => null];
+                'donmeyen_kartlar' => [], 'teyitli' => 0, 'mesai' => null, 'mesai_toplam' => null,
+                'yontem' => null, 'manuel' => null];
         $mesai = pdks_ters_bugunku_mesai($pdo, $fid, $workDate, $depo);
         if ($mesai) {
             $row['mesai'] = ['id' => (int)$mesai['id'], 'status' => (string)$mesai['status']];
@@ -1459,7 +1892,24 @@ function pdks_ters_mutabakat(PDO $pdo, string $workDate, string $depo): array
         if ($s) {
             $row['sayim'] = ['id' => (int)$s['id'], 'durum' => (string)$s['durum'], 'giris_saati' => $s['giris_saati'], 'onay_zamani' => $s['onay_zamani'],
                              'beyan' => $s['beyan_adet'] !== null ? (int)$s['beyan_adet'] : null];
-            if ((string)$s['durum'] === 'onayli') {
+            if (pdks_ters_sayim_manuel_mi($s)) {
+                // v363 — MANUEL: dağıtılan kart listesi çıkışlardan oluşur; çıkışı okutulmayan
+                // kişi için dönem/çıkış UYDURULMAZ (mesai açıkken "içeride", kapanınca "okutulmayan").
+                $row['yontem'] = 'manuel';
+                $row['dagitilan'] = (int)$s['dagitilan_adet']; $row['kalan'] = (int)$s['kalan_adet']; $row['haric'] = (int)$s['haric_adet'];
+                $limit = pdks_ters_manuel_limit($s);
+                $kartlar = [];
+                foreach (pdks_ters_manuel_cikanlar($pdo, (int)$s['id']) as $p) {
+                    if ((int)($p['is_voided'] ?? 0)) { $row['iptal']++; continue; }
+                    $row['giris']++; $row['cikis']++;
+                    $kartlar[] = ['card_no' => (string)$p['card_no'], 'tip' => (string)$p['tip'], 'cikis' => substr((string)$p['exit_time'], 11, 5)];
+                }
+                $okutulmayan = max(0, $limit - $row['cikis']);
+                $acik = $mesai && (string)$mesai['status'] === 'open';
+                if ($acik) $row['iceride'] = $okutulmayan;
+                $row['manuel'] = ['limit' => $limit, 'zaten_iceride' => (int)$s['zaten_iceride_adet'], 'cikan' => $row['cikis'],
+                                  'okutulmayan' => $okutulmayan, 'mesai_acik' => $acik, 'kartlar' => $kartlar];
+            } elseif ((string)$s['durum'] === 'onayli') {
                 $row['dagitilan'] = (int)$s['dagitilan_adet']; $row['kalan'] = (int)$s['kalan_adet']; $row['haric'] = (int)$s['haric_adet'];
                 $q = $pdo->prepare(
                     "SELECT k.card_no_snapshot AS card_no, k.worker_type_name_snapshot AS tip, k.teyitli, p.exit_time, p.is_voided, s2.status AS s_status
@@ -1498,8 +1948,17 @@ function pdks_ters_hub_durumlari(PDO $pdo, string $depo): array
     $out = [];
     foreach (pdks_ters_havuzlu_cavuslar($pdo, $depo) as $c) {
         $s = pdks_ters_sayim_aktif($pdo, $c['foreman_id'], $depo, $bugun);
-        $out[] = $c + ['sayim' => $s ? ['id' => (int)$s['id'], 'durum' => (string)$s['durum'], 'dagitilan' => (int)$s['dagitilan_adet']] : null,
-                       'icerde' => (int)($mesailer[$c['foreman_id']]['icerde'] ?? 0)];
+        $sayim = $s ? ['id' => (int)$s['id'], 'durum' => (string)$s['durum'], 'dagitilan' => (int)$s['dagitilan_adet']] : null;
+        $icerde = (int)($mesailer[$c['foreman_id']]['icerde'] ?? 0);
+        if ($s && pdks_ters_sayim_manuel_mi($s)) {   // v363: manuel — içeride = çalışan − çıkan (dönem yok)
+            $limit = pdks_ters_manuel_limit($s);
+            $cikan = pdks_ters_manuel_cikan($pdo, (int)$s['id']);
+            $sayim += ['manuel_limit' => $limit, 'cikan' => $cikan];
+            if (pdks_ters_manuel_acik_sayim($pdo, (int)$c['foreman_id'], $depo) === (int)$s['id']) {   // mesai açık
+                $icerde += max(0, $limit - $cikan);
+            }
+        }
+        $out[] = $c + ['sayim' => $sayim, 'icerde' => $icerde];
     }
     return $out;
 }

@@ -4,7 +4,7 @@
 // sayfa koduyla (bellek içi SQLite) tek HTML'e basar. Tek amacı tarayıcı
 // testine (pdks_ters_kart_smoke.js) girdi üretmektir; canlı DB'ye dokunmaz.
 //
-//   TK_SAYFA=hub|havuz|sayim|sayim_onayli|sayim_secim|mutabakat [TK_KURULU=0]   (v355: çıkış = Ortak Çıkış)
+//   TK_SAYFA=hub|havuz|sayim|sayim_onayli|sayim_manuel_onayli|sayim_secim|mutabakat [TK_KURULU=0]   (v355: çıkış = Ortak Çıkış; v363: manuel)
 //   php scripts/pdks_ters_kart_render.php > _test_ters_<sayfa>.html
 // =========================================================
 declare(strict_types=1);
@@ -97,6 +97,7 @@ $erkek = (int)db()->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fet
 $a = (int)pdks_gunluk_cavus_olustur(['code' => 'C001', 'name' => 'Çavuş Anadolu Uzun İsimli Ekip'], 1, db())['id'];
 $b = (int)pdks_gunluk_cavus_olustur(['code' => 'C002', 'name' => 'Çavuş B'], 1, db())['id'];
 pdks_gunluk_cavus_olustur(['code' => 'C003', 'name' => 'Çavuş C'], 1, db());
+$dm = (int)pdks_gunluk_cavus_olustur(['code' => 'C004', 'name' => 'Çavuş Manuel Sayımlı Ekip'], 1, db())['id'];
 $saat = date('H') . ':00';
 
 if ($KURULU) {
@@ -114,12 +115,17 @@ if ($KURULU) {
     pdks_ters_sayim_okut($sb, '800000006', 'usb_decimal', 1, db());
     pdks_ters_sayim_onayla($sb, $saat, 'test', '5', bin2hex(random_bytes(16)), 1, db());
     foreach ([1, 2] as $i) pdks_ters_cikis_kaydet((string)(800000000 + $i), 'usb_decimal', 1, db());
+    // v363 — D: manuel onaylı sayım (8 kart, 2 kalan → 6 çalışan) + 2 manuel çıkış
+    for ($i = 1; $i <= 8; $i++) pdks_ters_havuz_ekle((string)(810000000 + $i), 'usb_decimal', $dm, $i <= 5 ? $kadin : $erkek, 1, db());
+    $sdm = (int)pdks_ters_sayim_ac($dm, 1, db())['sayim']['id'];
+    pdks_ters_manuel_onayla($sdm, '2', $saat, 'test', '6', bin2hex(random_bytes(16)), 1, db());
+    foreach ([1, 2] as $i) pdks_ters_cikis_kaydet((string)(810000000 + $i), 'usb_decimal', 1, db());
 }
 
-$dosya = ['hub' => 'ters_kart.php', 'havuz' => 'ters_kart_havuz.php', 'sayim' => 'ters_kart_sayim.php', 'sayim_onayli' => 'ters_kart_sayim.php',
+$dosya = ['hub' => 'ters_kart.php', 'havuz' => 'ters_kart_havuz.php', 'sayim' => 'ters_kart_sayim.php', 'sayim_onayli' => 'ters_kart_sayim.php', 'sayim_manuel_onayli' => 'ters_kart_sayim.php',
           'sayim_secim' => 'ters_kart_sayim.php', 'mutabakat' => 'ters_kart_mutabakat.php'][$SAYFA] ?? null;
 if ($dosya === null) { fwrite(STDERR, "Bilinmeyen TK_SAYFA: $SAYFA\n"); exit(1); }
-$_GET = match ($SAYFA) { 'havuz' => ['cavus' => (string)$a], 'sayim' => ['cavus' => (string)$a], 'sayim_onayli' => ['cavus' => (string)$b], default => [] };
+$_GET = match ($SAYFA) { 'havuz' => ['cavus' => (string)$a], 'sayim' => ['cavus' => (string)$a], 'sayim_onayli' => ['cavus' => (string)$b], 'sayim_manuel_onayli' => ['cavus' => (string)$dm], default => [] };
 $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SERVER['REQUEST_URI'] = '/' . $dosya;
 $src = file_get_contents($ROOT . '/' . $dosya);

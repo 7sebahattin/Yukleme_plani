@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v362` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v363` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -845,7 +845,13 @@ AYNEN çalışır. Ayrıntı + sahip kararları: `docs/TERS_KART_TAKIP.md`.
   AYRI özelliktir — karıştırma.
 - **"Çıkış girişten önce olamaz" kapısı YALNIZ `source='ters'`** (`pdks_gunluk_faz8a_cikis_kaydet`, kod `giris_saati_gelmedi`).
   Genelleştirme: v354'te tüm kaynaklara uygulanınca `pdks_faz8h_smoke` (sabit 08:00 girişli veri) sabah erken saatte düşüyordu.
-- Test: `php scripts/pdks_ters_kart_smoke.php` (A–J) · `node scripts/pdks_ters_kart_smoke.js` (render'ı kendisi üretir;
+- **v363 — Manuel Sayım** (şema YOK): taslakta "📇 Kartla Say" / "🔢 Manuel Sayı Gir". Manuel = elde kalan kart SAYISI;
+  `ters_sayim.durum='manuel'` (onaylı mı → `pdks_ters_sayim_onayli_mi()`, `'onayli'` diye elle yazma), sabah DÖNEM YAZILMAZ.
+  Akşam Ortak Çıkış `acik_donem_yok` dönerse `pdks_ters_ortak_cikis_manuel_yedek()` → `pdks_ters_manuel_cikis()` (satir_kontrol +
+  satir_yaz, sabit giriş + gerçek çıkış, KAPALI dönem, `ters_sayim_kart.rol='manuel_cikis'`); en fazla limit = dağıtılan − zaten
+  içeride, aşılırsa `manuel_limit`. `pdks_gunluk_ortak_cikis_kaydet()` DEĞİŞMEDİ. Geri al yalnız ilk çıkıştan önce. Okutulmayan
+  kişi için dönem UYDURULMAZ. Ayrıntı: `docs/TERS_KART_TAKIP.md` "v363".
+- Test: `php scripts/pdks_ters_kart_smoke.php` (A–M) · `node scripts/pdks_ters_kart_smoke.js` (render'ı kendisi üretir;
   tek render: `TK_SAYFA=<sayfa> php scripts/pdks_ters_kart_render.php`).
 
 ## Aktif Depo Sistemi (Sprint Depo-01)

@@ -62,14 +62,39 @@ render_flash();
 <?php foreach ($mt['satirlar'] as $r):
     $s = $r['sayim'];
     $uyari = $s && $s['durum'] === 'onayli' && ($r['iceride'] + $r['eksik_cikis']) > 0;
+    $mn = $r['manuel'] ?? null;   // v363: manuel sayım
+    if ($mn) $uyari = $mn['okutulmayan'] > 0;
 ?>
 <article class="tk-mt-kart<?= $uyari ? ' tk-mt-uyari' : '' ?>">
     <header class="tk-baslik-satir">
         <h3><?= h($r['foreman_name']) ?></h3>
         <?php if (!$s): ?><span class="tk-rozet">Sayım yok</span>
         <?php elseif ($s['durum'] === 'taslak'): ?><span class="tk-rozet tk-rozet-uyari">Sayım onaylanmadı</span>
-        <?php else: ?><span class="tk-rozet tk-rozet-ok">Giriş <?= h((string)$s['giris_saati']) ?> · onay <?= h(date('H:i', strtotime((string)$s['onay_zamani']))) ?></span><?php endif; ?>
+        <?php else: ?><span class="tk-rozet tk-rozet-ok"><?= $mn ? '🔢 Manuel · ' : '' ?>Giriş <?= h((string)$s['giris_saati']) ?> · onay <?= h(date('H:i', strtotime((string)$s['onay_zamani']))) ?></span><?php endif; ?>
     </header>
+    <?php if ($mn): /* v363 — manuel sayım: kart listesi çıkışlardan oluşur */ ?>
+    <dl class="tk-mt-tablo">
+        <div><dt>Yöntem</dt><dd><strong>Manuel</strong> <small class="muted">(kalan kart sayısı girildi)</small></dd></div>
+        <div><dt>Aktif kart havuzu</dt><dd><?= (int)$r['havuz']['aktif'] ?><?= $r['havuz']['toplam'] !== $r['havuz']['aktif'] ? ' <small class="muted">(+' . ($r['havuz']['toplam'] - $r['havuz']['aktif']) . ' kayıp/bozuk/pasif)</small>' : '' ?></dd></div>
+        <div><dt>Sabah elde kalan (manuel)</dt><dd><?= (int)$r['kalan'] ?></dd></div>
+        <div><dt>Dağıtılan</dt><dd><strong><?= (int)$r['dagitilan'] ?></strong><?= ($s['beyan'] ?? null) !== null ? ' <small class="muted">(çavuş beyanı ' . (int)$s['beyan'] . ')</small>' : '' ?><?= $mn['zaten_iceride'] ? ' <small class="muted">(' . (int)$mn['zaten_iceride'] . ' zaten içerideydi)</small>' : '' ?></dd></div>
+        <div><dt>Çıkış yapan</dt><dd><?= (int)$mn['cikan'] ?> / <?= (int)$mn['limit'] ?><?= $r['iptal'] ? ' <small class="muted">(' . (int)$r['iptal'] . ' iptal)</small>' : '' ?></dd></div>
+        <div class="<?= $mn['okutulmayan'] ? ($mn['mesai_acik'] ? 'tk-mt-mavi' : 'tk-mt-turuncu') : '' ?>"><dt>Çıkışı okutulmayan<?= $mn['mesai_acik'] ? ' (mesai açık)' : ' (mesai kapatıldı)' ?></dt><dd><?= (int)$mn['okutulmayan'] ?></dd></div>
+        <?php if ($r['mesai_toplam']): ?>
+        <div><dt>Mesainin tüm girişleri <small class="muted">(normal okutma dahil)</small></dt><dd><?= (int)$r['mesai_toplam']['giris'] ?> giriş · <?= (int)$r['mesai_toplam']['cikis'] ?> çıkış</dd></div>
+        <?php endif; ?>
+    </dl>
+    <?php if ($mn['kartlar']): ?>
+    <details>
+        <summary>Dağıtılan kartlar — çıkışlardan (<?= count($mn['kartlar']) ?>)</summary>
+        <div class="tk-cip-liste">
+            <?php foreach ($mn['kartlar'] as $k): ?>
+            <span class="tk-cip tk-cip-dagitilan" title="Çıkış <?= h($k['cikis']) ?>"><?= h($k['card_no']) ?> <small><?= h($k['tip']) ?></small></span>
+            <?php endforeach; ?>
+        </div>
+    </details>
+    <?php endif; ?>
+    <?php else: ?>
     <dl class="tk-mt-tablo">
         <div><dt>Aktif kart havuzu</dt><dd><?= (int)$r['havuz']['aktif'] ?><?= $r['havuz']['toplam'] !== $r['havuz']['aktif'] ? ' <small class="muted">(+' . ($r['havuz']['toplam'] - $r['havuz']['aktif']) . ' kayıp/bozuk/pasif)</small>' : '' ?></dd></div>
         <div><dt>Sabah dağıtılmamış (elde kalan)</dt><dd><?= (int)$r['kalan'] ?></dd></div>
@@ -83,6 +108,7 @@ render_flash();
         <div><dt>Mesainin tüm girişleri <small class="muted">(normal okutma dahil)</small></dt><dd><?= (int)$r['mesai_toplam']['giris'] ?> giriş · <?= (int)$r['mesai_toplam']['cikis'] ?> çıkış</dd></div>
         <?php endif; ?>
     </dl>
+    <?php endif; ?>
     <?php if ($r['donmeyen_kartlar']): ?>
     <details>
         <summary>Henüz dönmeyen kartlar (<?= count($r['donmeyen_kartlar']) ?>)</summary>

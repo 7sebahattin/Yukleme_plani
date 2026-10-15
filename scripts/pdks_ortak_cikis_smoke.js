@@ -383,6 +383,15 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         const c2 = await okut(cikis('manual'));
         ok('v355 (c) manual: "✍ Elle eklenmiş giriş"', c2.var && /pdks-result-kaynak-manual/.test(c2.sinif) && c2.metin === '✍ Elle eklenmiş giriş' && c2.ekranda, JSON.stringify(c2));
 
+        // v363 — manuel sayım çıkışı: kaynak satırına "🔢 28/30 çıkış", daire = manuel kalan (toplam)
+        const mY = cikis('ters'); mY.manuel = { sayim_id: 5, dagitilan: 30, cikan: 28, kalan: 2 }; mY.ozet = { giris: { 'Kadın': 28 }, cikis: { 'Kadın': 28 }, eksik_tip: {} };
+        const m1 = await okut(mY);
+        const daire = await page.evaluate(() => { const e = document.querySelector('#giResultInner [data-sayi="kalan"]'); return e ? e.textContent.trim() : null; });
+        ok('v363 manuel: kaynak satırı "… · 🔢 28/30 çıkış", daire 2 (manuel kalan)', m1.var && /sabit giriş 08:00 · 🔢 28\/30 çıkış/.test(m1.metin) && daire === '2' && m1.ekranda && !m1.tasma, JSON.stringify(m1) + ' daire=' + daire);
+        const m2 = await okut(cikis('ters'));
+        const daire2 = await page.evaluate(() => { const e = document.querySelector('#giResultInner [data-sayi="kalan"]'); return e ? e.textContent.trim() : null; });
+        ok('v363 manuel OLMAYAN ters çıkış: eski metin + daire eksik_tip (3) değişmedi', m2.metin === '↩ Giriş Tanımlı · sabit giriş 08:00' && daire2 === '3', JSON.stringify(m2) + ' daire=' + daire2);
+
         // GİRİŞ sonucu DEĞİŞMEZ — entry_source gelse bile satır yok
         const g = await okut({ ok: true, event_type: 'GIRIS', server_time: BUGUN + ' 08:00:00',
             card: { card_no: 'K003', worker_type_name: 'Kadın', entry_time: BUGUN + ' 08:00:00', entry_source: 'ters' },

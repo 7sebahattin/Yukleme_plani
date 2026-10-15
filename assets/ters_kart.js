@@ -267,8 +267,9 @@
                 if (d.ok) onizleGecikmeli();
             });
         }
+        var okuyucu = null;
         if (v.durum === 'taslak') {
-            TK.okuyucu({
+            okuyucu = TK.okuyucu({
                 input: document.getElementById('tkScanInput'), nfcBtn: document.getElementById('tkNfcBtn'),
                 nfcDurum: document.getElementById('tkNfcDurum'),
                 nfcHata: function (m) { TK.sonuc(sonucKutu, 'hata', '⛔ ' + m, [], 5000); },
@@ -345,9 +346,86 @@
             });
         });
 
+        // ── v363: yöntem seçimi (Kartla Say / Manuel Sayı Gir) + manuel panel ──
+        var yontemBtns = kok.querySelectorAll('[data-tk-yontem]');
+        var paneller = kok.querySelectorAll('[data-tk-yontem-panel]');
+        var mKalan = document.getElementById('tkManuelKalan'), mSaat = document.getElementById('tkManuelSaat');
+        var mNeden = document.getElementById('tkManuelNeden'), mNedenAlan = document.getElementById('tkManuelNedenAlan');
+        var mBeyan = document.getElementById('tkManuelBeyan'), mBtn = document.getElementById('tkManuelOnayBtn');
+        var mOniz = document.getElementById('tkManuelOnizleme'), mCalisan = kok.querySelector('[data-tk-manuel-calisan]');
+        var mIstek = TK.istekId(), mNo = 0, mZam = null, mSon = null;
+        function yontemSec(y) {
+            yontemBtns.forEach(function (b) {
+                var a = b.getAttribute('data-tk-yontem') === y;
+                b.classList.toggle('aktif', a); b.setAttribute('aria-pressed', a ? 'true' : 'false');
+            });
+            paneller.forEach(function (p) { p.hidden = p.getAttribute('data-tk-yontem-panel') !== y; });
+            if (okuyucu) { if (y === 'kart') okuyucu.baslat(); else okuyucu.durdur(); }   // manuelde kart okutması sayılmaz
+            if (y === 'manuel') { if (mKalan) { try { mKalan.focus({ preventScroll: true }); } catch (e) { mKalan.focus(); } } manuelOnizle(); }
+        }
+        yontemBtns.forEach(function (b) { b.addEventListener('click', function () { yontemSec(b.getAttribute('data-tk-yontem')); }); });
+        function manuelCanli() {
+            if (!mCalisan || !mKalan) return;
+            var mv = v.manuel || {}, k = mKalan.value.trim();
+            var n = /^\d+$/.test(k) ? (mv.havuz_aktif || 0) - parseInt(k, 10) : -1;
+            mCalisan.textContent = n >= 0 ? String(n) : '—';
+        }
+        function manuelNedenGoster() {
+            if (!mNedenAlan || !mSaat) return;
+            mNedenAlan.hidden = !(!v.varsayilan_saat || (mSaat.value && mSaat.value !== v.varsayilan_saat));
+        }
+        function manuelOnizleGecikmeli() { manuelCanli(); manuelNedenGoster(); if (mBtn) mBtn.disabled = true; clearTimeout(mZam); mZam = setTimeout(manuelOnizle, 400); }
+        function manuelOnizle() {
+            if (v.durum !== 'taslak' || !mOniz) return;
+            var no = ++mNo;
+            manuelCanli(); manuelNedenGoster();
+            if (mBtn) mBtn.disabled = true;
+            return TK.post(url + 'manuel_onizle', { sayim_id: v.sayim_id, kalan: mKalan ? mKalan.value : '', giris_saati: mSaat ? mSaat.value : '', neden: mNeden ? mNeden.value : '', beyan: mBeyan ? mBeyan.value : '' }).then(function (r) {
+                if (no !== mNo) return;
+                mOniz.textContent = ''; mSon = null;
+                if (!r.ok) { mOniz.appendChild(TK.el('div', 'tk-kutu tk-kutu-hata', '⛔ ' + r.hata)); return; }
+                var d = r.degerlendirme, o = d.ozet;
+                if (o.dagitilan != null) {
+                    var oz = TK.el('div', 'tk-oniz-ozet');
+                    oz.appendChild(TK.el('div', 'tk-oniz-buyuk', o.dagitilan + ' kişi çalışıyor'));
+                    oz.appendChild(TK.el('div', 'tk-oniz-alt', 'Havuz ' + o.havuz_aktif + ' − kalan ' + o.kalan + (o.zaten_iceride ? ' · ' + o.zaten_iceride + ' kişi zaten içeride (normal okutma)' : '')
+                        + (o.manuel_limit != null && o.manuel_limit > 0 ? ' · akşam en fazla ' + o.manuel_limit + ' kart manuel çıkış yapabilir' : '')));
+                    mOniz.appendChild(oz);
+                }
+                (d.genel || []).forEach(function (m) { mOniz.appendChild(TK.el('div', 'tk-kutu tk-kutu-hata', '⛔ ' + m)); });
+                (d.uyarilar || []).forEach(function (m) { mOniz.appendChild(TK.el('div', 'tk-kutu tk-kutu-uyari', '⚠ ' + m)); });
+                if (d.ok) mSon = o;
+                if (mBtn) {
+                    mBtn.disabled = !d.ok;
+                    mBtn.textContent = d.ok ? '✅ ' + o.dagitilan + ' kişi — manuel sayımı onayla' + (mSaat && mSaat.value ? ' (' + mSaat.value + ')' : '') : '✅ Manuel sayımı onayla';
+                }
+            });
+        }
+        [mKalan, mSaat, mNeden, mBeyan].forEach(function (e) { if (e) e.addEventListener('input', manuelOnizleGecikmeli); });
+        if (mKalan) mKalan.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(mZam); manuelOnizle(); } });
+        if (mBtn) mBtn.addEventListener('click', function () {
+            var o = mSon;
+            if (!o) return;
+            TK.sor(dlg, { baslik: 'Manuel sayımı onayla', metin: o.dagitilan + ' kişi çalışıyor kabul edilecek (havuz ' + o.havuz_aktif + ' − elde kalan ' + o.kalan + '). Sabah giriş kaydı yazılmaz; akşam Ortak Çıkış\'ta bu çavuşun kartlarından en fazla ' + o.manuel_limit + ' çıkış yapılır.', gerekce: false, tamam: 'Onayla' })
+                .then(function (r) {
+                    if (!r) return;
+                    mBtn.disabled = true;
+                    var eski = mBtn.textContent; mBtn.textContent = '⏳ Kaydediliyor…';
+                    TK.post(url + 'manuel_onayla', { sayim_id: v.sayim_id, kalan: mKalan.value, giris_saati: mSaat ? mSaat.value : '', neden: mNeden ? mNeden.value : '', beyan: mBeyan ? mBeyan.value : '', istek_id: mIstek }).then(function (d) {
+                        if (d.ok) { location.href = 'ters_kart_sayim.php?cavus=' + encodeURIComponent(v.foreman_id) + '&onay=1'; return; }
+                        mBtn.textContent = eski;
+                        mOniz.insertBefore(TK.el('div', 'tk-kutu tk-kutu-hata', '⛔ ' + d.hata), mOniz.firstChild);
+                        TK.ses('hata');
+                    });
+                });
+        });
+
         var geriBtn = document.getElementById('tkGeriAlBtn');
         if (geriBtn) geriBtn.addEventListener('click', function () {
-            TK.sor(dlg, { baslik: 'Sayımı Geri Al', metin: 'Bu sayımla yazılan girişler İPTAL edilir (silinmez) ve okutmalarınız korunarak yeni bir taslak açılır. Çıkış okutulmaya başlandıysa geri alınamaz.', gerekce: 'zorunlu', tamam: 'Geri Al', tehlike: true })
+            var manuelMi = v.durum === 'manuel';
+            TK.sor(dlg, { baslik: 'Sayımı Geri Al', metin: manuelMi
+                ? 'Manuel sayım geri alınır (sabah giriş kaydı yazılmamıştı) ve yeni bir taslak açılır. İlk çıkış okutulduysa geri alınamaz.'
+                : 'Bu sayımla yazılan girişler İPTAL edilir (silinmez) ve okutmalarınız korunarak yeni bir taslak açılır. Çıkış okutulmaya başlandıysa geri alınamaz.', gerekce: 'zorunlu', tamam: 'Geri Al', tehlike: true })
                 .then(function (r) {
                     if (!r) return;
                     TK.post(url + 'geri_al', { sayim_id: v.sayim_id, gerekce: r.gerekce }).then(function (d) {
