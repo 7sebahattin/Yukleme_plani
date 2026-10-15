@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v364` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v365` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -1172,6 +1172,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   maliyet.js/hesap.js emsali — app.js'e dokunmaz); hücreler istemcide kaçışlanır. Yeni sütun = YALNIZ `beyan_bekleyen_yazdir_veri()`'ye ekle.
   Test: `php scripts/beyan_ui_smoke.php` (`[yazdır]` satırları) · `node scripts/beyan_yazdir_smoke.js` (kendi fixture'ını `--render-liste` ile üretir:
   masaüstü + telefon, yazdırma penceresi, gerçek PDF indirme, çok sayfa, Web Share, izin reddi).
+- **Aynı plaka = aynı Parti No rengi (v365):** "İşlem Bekleyen" listesinde (masaüstü tablo + mobil kart; Kapanan bölümde YOK) dorse plakası aynı olan ≥2 satırın `.bn-parti` rozeti aynı renkte (`bn-g bn-g0..9`, style.css v365 bloğu, açık+koyu). Kural yazdırmayla ORTAK: `beyan_plaka_grup_listesi()` (helpers.php) — iki yerde ayrı yazma. Tek/boş plaka mavi kalır. Sayfa başına (50 satır) hesaplanır. Migration YOK.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

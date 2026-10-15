@@ -721,6 +721,13 @@ $liste_kapali = render_liste([]);
 file_put_contents(sys_get_temp_dir() . '/beyan_liste_ciktisi.html', $liste_kapali);
 ok('[durum-menü] liste: masaüstü durum rozeti açılır menü + return_to=liste', strpos($liste_kapali, 'class="bl-durum"') !== false && (
    strpos($liste_kapali, 'name="return_to" value="liste"') !== false && strpos($liste_kapali, 'bl-durum-sec') !== false));
+// v365: aynı plaka = aynı Parti No rengi (bekleyen bölüm), kural yazdırmayla ortak
+preg_match_all('/bn-parti bn-g bn-g(\d)/', $liste_kapali, $__pg);
+ok('[plaka-renk] aynı plakalı bekleyen satırlar rozeti aynı grup renginde', count($__pg[1]) >= 2 && count(array_unique($__pg[1])) === 1,
+   'grup sınıfları: ' . implode(',', $__pg[1]));
+ok('[plaka-renk] plakası boş / tek olan satır renksiz (mavi) kalır', preg_match('/class="row-link-a bn-parti" href/', $liste_kapali) === 1);
+ok('[plaka-renk] kural tek yerde: beyan_plaka_grup_listesi',
+   beyan_plaka_grup_listesi([['vehicle_plate'=>'34 ABC 1'],['vehicle_plate'=>'34abc1'],['vehicle_plate'=>'06X'],['vehicle_plate'=>''],['vehicle_plate'=>'35K'],['vehicle_plate'=>'35-K']]) === [0,0,null,null,1,1]);
 $PERMS_D = $PERMS; $PERMS = ['beyan.read'];
 ok('[durum-menü] beyan.status yoksa menü YOK (düz rozet)', strpos(render_liste([]), 'class="bl-durum"') === false);
 $PERMS = $PERMS_D;

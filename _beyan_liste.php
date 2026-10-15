@@ -55,7 +55,16 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
         </tr>
         </thead>
         <tbody>
-        <?php foreach ($sec_rows as $r): ?>
+        <?php
+// v365: İşlem Bekleyen bölümünde aynı dorse plakalı beyanların Parti No rozeti aynı renkte
+// ($sec_plaka_grup=true yalnız bekleyen bölüm için). Kural yazdırmayla ortak: beyan_plaka_grup_listesi().
+$__grup = !empty($sec_plaka_grup) ? beyan_plaka_grup_listesi(array_values($sec_rows)) : [];
+$pg = static function ($i) use ($__grup): string {
+    $g = $__grup[$i] ?? null;
+    return $g === null ? '' : ' bn-g bn-g' . ($g % 10);
+};
+?>
+<?php foreach ($sec_rows as $__i => $r): ?>
         <!-- Satır tıklanabilir (app.js: tr[data-href]) — İşlem sütunu kaldırıldı.
              Klavye/yeni sekme için Parti No gerçek bir bağlantıdır. Durum
              değişikliği (Yüklendi dahil) beyan_view.php'deki durum şeridinden. -->
@@ -68,7 +77,7 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             </td>
             <?php endif; ?>
             <td class="muted" style="font-size:.82rem"><?= h(fmt_datetime($r['created_at'])) ?></td>
-            <td><a class="row-link-a bn-parti" href="beyan_view.php?id=<?= (int)$r['id'] ?>"><?= h($r['party_no'] ?: '—') ?></a></td>
+            <td><a class="row-link-a bn-parti<?= $pg($__i) ?>" href="beyan_view.php?id=<?= (int)$r['id'] ?>"><?= h($r['party_no'] ?: '—') ?></a></td>
             <td>
                 <?= h($r['product_name'] ?: '—') ?>
                 <?php if ($r['product_variety']): ?>
@@ -124,7 +133,7 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
 
 <!-- Mobil: kart listesi -->
 <div class="card-list mobile-only">
-    <?php foreach ($sec_rows as $r): ?>
+    <?php foreach ($sec_rows as $__i => $r): ?>
     <div class="beyan-card" style="cursor:default">
         <div class="beyan-card-head">
             <div>
@@ -133,7 +142,7 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
                     <input type="checkbox" class="bb-sec" value="<?= (int)$r['id'] ?>"
                            title="Toplu bildirim için seç" style="margin-right:6px;vertical-align:middle">
                     <?php endif; ?>
-                    <span class="bn-parti"><?= h($r['party_no'] ?: '(parti no yok)') ?></span>
+                    <span class="bn-parti<?= $pg($__i) ?>"><?= h($r['party_no'] ?: '(parti no yok)') ?></span>
                 </div>
                 <div class="beyan-card-urun">
                     <?= h($r['product_name'] ?: '—') ?>

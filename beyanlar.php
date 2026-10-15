@@ -269,6 +269,7 @@ render_flash();
     <?php
         $sec_rows  = $bekleyen_rows;
         $sec_secim = (bool)$uygun_sayisi;
+        $sec_plaka_grup = true;
         include __DIR__ . '/_beyan_liste.php';
     ?>
     <?php if ($bek_total_pages > 1): ?>
@@ -375,6 +376,7 @@ render_flash();
     <?php
         $sec_rows  = $kapali_rows;
         $sec_secim = (bool)$uygun_sayisi;
+        $sec_plaka_grup = false;
         include __DIR__ . '/_beyan_liste.php';
     ?>
 
