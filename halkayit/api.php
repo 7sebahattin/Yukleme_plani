@@ -92,11 +92,21 @@ function hks_plan_kunye_coz($cfg, $ortak, $firmaId = '') {
   } catch (Throwable $e) {
     error_log('[hks] künye sıfat kaydı okunamadı: ' . $e->getMessage());   // dışlamasız devam
   }
+  // Depo/Tasnif kaynak kuralı (v366): kaynağı başka kişi olan künyeler denenmez;
+  // detay haritası fiyatsız sevkte de istenir (BildirimciTcKimlikVergiNo).
+  $kaynak = null;
+  if (hks_kaynak_sevk_mi($ortak)) {
+    $ogr = [];
+    try { $ogr = hks_kunye_kaynak_kokenler(hks_kunye_kaynak_oku($firmaId)); }
+    catch (Throwable $e) { error_log('[hks] künye kaynak kaydı okunamadı: ' . $e->getMessage()); }
+    $kaynak = ['tc' => hks_tc_normalize($ortak['ikinciTc'] ?? ''), 'kendi' => (string)($cfg['vergiNo'] ?? ''), 'ogrenilen' => $ogr];
+  }
   return hks_plan_kunye_coz_cekirdek(
     (array)$ortak,
     fn(array $secenek) => hks_kunyeleri_getir($cfg, $secenek),
     fn(int $ay) => hks_kunye_detaylari_getir($cfg, $ay),
-    $dislanan
+    $dislanan,
+    $kaynak
   );
 }
 
@@ -322,6 +332,11 @@ try {
         catch (Throwable $e) { $__sm = []; error_log('[hks] künye sıfat kaydı okunamadı: ' . $e->getMessage()); }
         $liste = hks_kunyelere_sifat_bayragi($liste, $__sm, $g['sifatId']);
       }
+      // Depo/Tasnif kaynak kuralı (v366): HKS'in 108 ile reddettiği karşı taraf
+      // TC/sıfatları öğrenildiyse künyeye kaynakTc / kaynakRedSifatlar / kaynakRed
+      // eklenir (yalnız bilgi — arayüz karşı taraf sıfatını buna göre ayarlar).
+      try { $liste = hks_kunyelere_kaynak_bilgisi($liste, hks_kunye_kaynak_oku($g['firmaId'] ?? '')); }
+      catch (Throwable $e) { error_log('[hks] künye kaynak kaydı okunamadı: ' . $e->getMessage()); }
       hks_json_cikti(['kunyeler' => $liste]);
     }
 
@@ -512,6 +527,8 @@ try {
         }
         $satirlar = $__plan['satirlar'];
       }
+      // Künye KAYNAKLARI (Depo/Tasnif kaynak kuralı, v366) — {künyeNorm: kaynakTc}.
+      $__kokenHarita = $planMi ? (array)($__plan['kokenHarita'] ?? []) : [];
 
       // GÖNDERİM ÖNCESİ KURAL BÜTÜNLÜĞÜ (P1) — taslak kaydedildiğinde geçerliydi;
       // gönderim ANINDA da geçerli olduğu TEKRAR doğrulanır (referans künye,
@@ -533,6 +550,50 @@ try {
         $taslagiGeriKoy();
         hks_json_cikti(['hata' => 'Taslak artık geçerli kurallara uymuyor: ' . $__revalHata .
           ' Taslak silinmedi — "Düzenle" ile güncelleyip tekrar deneyin.'], 400);
+      }
+
+      // DEPO/TASNİF KAYNAK KURALI (v366) — HKS bu künyeyi bu karşı taraf TC +
+      // sıfatıyla daha önce 108 ile reddettiyse aynı üçlü yine reddedilir:
+      // HİÇBİR ŞEY gönderilmez, taslak geri konur. Kayıt okunamazsa engel yok.
+      if (hks_kaynak_sevk_mi($ortak)) {
+        // Elle seçilmiş künyeler: kaynakları (BildirimSorgu → BildirimciTcKimlikVergiNo)
+        // gönderimden ÖNCE best-effort sorgulanır (salt okunur); öğrenilmiş kaynak da
+        // eklenir. Kaynağı KESİN bilinip karşı taraftan farklı olan künye GÖNDERİLMEZ.
+        if (!$planMi) {
+          @set_time_limit(300);
+          $__detayHam = [];
+          try {
+            $__ay = max(1, min(60, (int)($ortak['planSorgu']['aySayisi'] ?? 12)));
+            $__detayHam = (array)(hks_kunye_detaylari_getir($cfg, $__ay)['harita'] ?? []);
+          } catch (Throwable $e) { error_log('[hks] künye detayı alınamadı: ' . $e->getMessage()); }
+          $__ogr = [];
+          try { $__ogr = hks_kunye_kaynak_kokenler(hks_kunye_kaynak_oku($t['firma_id'])); }
+          catch (Throwable $e) { /* öğrenilmiş kaynak yok sayılır */ }
+          $__kokenHarita = hks_kunye_koken_haritasi($__detayHam, $cfg['vergiNo'] ?? '', $__ogr);
+        }
+        $__tcEngel = hks_kaynak_tc_engeli((array)$satirlar, $__kokenHarita, $ortak['ikinciTc'] ?? '');
+        if ($__tcEngel) {
+          $taslagiGeriKoy();
+          hks_json_cikti(['hata' => 'Depo/Tasnif sevkinde yalnız künyeyi size gönderen kişiye (ve o bildirimdeki ' .
+            'sıfatına) geri sevk yapılabilir. ' . implode('; ', array_map(fn($x) => 'Künye ' . $x['kunyeNo'] .
+            ' size TC ' . hks_tc_maske($x['kaynakTc']) . ' tarafından gönderilmiş', $__tcEngel)) .
+            ' — karşı taraf (' . hks_tc_maske($ortak['ikinciTc'] ?? '') . ') farklı. Bu künyeleri çıkarın ya da ' .
+            'karşı tarafı değiştirin. Bildirim gönderilmedi, taslak silinmedi.',
+            'taslakKorundu' => true, 'kaynakTcEngel' => array_map(fn($x) => ['kunyeNo' => $x['kunyeNo'],
+              'kaynakTc' => hks_tc_maske($x['kaynakTc'])], $__tcEngel)], 400);
+        }
+        $__kaynakEngel = [];
+        try {
+          $__kaynakEngel = hks_kaynak_red_engeli((array)$satirlar, hks_kunye_kaynak_oku($t['firma_id']),
+            $ortak['ikinciTc'] ?? '', $ortak['ikinciSifatId'] ?? 0);
+        } catch (Throwable $e) { error_log('[hks] künye kaynak kaydı okunamadı: ' . $e->getMessage()); }
+        if ($__kaynakEngel) {
+          $taslagiGeriKoy();
+          hks_json_cikti(['hata' => 'Bu künye (' . implode(', ', $__kaynakEngel) . ') daha önce bu karşı taraf ' .
+            'sıfatıyla reddedildi; Depo/Tasnif sevkinde karşı taraf künyeyi size gönderen kişi ve onun sıfatı ' .
+            'olmalı. Karşı taraf sıfatını (veya kişiyi) değiştirip tekrar deneyin. Bildirim gönderilmedi, ' .
+            'taslak silinmedi.', 'taslakKorundu' => true, 'kaynakEngel' => $__kaynakEngel], 400);
+        }
       }
 
       // GÖNDERİM ÖNCESİ SON GÜVENLİK (AYNA) — karşı tarafın GTB kayıt durumu,
@@ -692,6 +753,33 @@ try {
           }
         } catch (Throwable $e) {
           error_log('[hks] künye sıfat kaydı yazılamadı: ' . $e->getMessage());
+        }
+      }
+      // DEPO/TASNİF KAYNAK KURALI (v366): HataKodu 108 alan künyeler için "bu TC +
+      // bu sıfat kaynak değil" öğrenilir (60 gün). Yeniden deneme YOK. Hata yutulur.
+      $sonuc['kaynakHatalari'] = [];
+      if (empty($ortak['referanssiz'])) {
+        try {
+          $__kh = hks_kaynak_hatali_kunyeler((array)($sonuc['sonuclar'] ?? []), (array)$satirlar);
+          if ($__kh) {
+            $__ktc = hks_tc_normalize($ortak['ikinciTc'] ?? '');
+            $__ksf = (int)($ortak['ikinciSifatId'] ?? 0);
+            // Künyenin kaynağı biliniyorsa (detay haritası) o da öğrenilir.
+            $__kk = [];
+            foreach ($__kh as $__kn) {
+              $__n = hks_kunye_no_norm($__kn);
+              if (isset($__kokenHarita[$__n])) $__kk[$__kn] = $__kokenHarita[$__n];
+            }
+            hks_kunye_kaynak_ekle($t['firma_id'], $__kh, $__ktc, $__ksf, $__kk);
+            foreach ($__kh as $__kn) {
+              $__koken = (string)($__kk[$__kn] ?? '');
+              $sonuc['kaynakHatalari'][] = ['kunyeNo' => $__kn, 'tc' => $__ktc, 'sifatId' => $__ksf,
+                'kaynakTc' => $__koken === '' ? '' : hks_tc_maske($__koken),
+                'kaynakFarkli' => $__koken !== '' && $__koken !== hks_kaynak_tc_norm($__ktc)];
+            }
+          }
+        } catch (Throwable $e) {
+          error_log('[hks] künye kaynak kaydı yazılamadı: ' . $e->getMessage());
         }
       }
 

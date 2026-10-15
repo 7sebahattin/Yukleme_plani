@@ -264,6 +264,80 @@ for ($i = 1; $i <= 101; $i++) $cok[] = kunye(sprintf('26%017d', $i), '2026-01-01
 $p = hks_plan_kunye_coz_cekirdek(['planKg' => 101] + $ortak, fn($s) => $cok, null, []);
 ok('100 künye sınırı korunur', isset($p['hata']) && strpos($p['hata'], '101 künyeye dağıldı') !== false);
 
+echo "── Depo/Tasnif kaynak kuralı (HataKodu 108, v366) ──\n";
+$m108 = 'Depo/Tasnif sıfatından sevk ederken, ancak referans künye bildirimini yapan kişiye ve sıfatına geri bildirim yapabilirsiniz.. Referans künye no : "' . K2 . '"';
+$h108 = ['yeniKunyeNo' => '0', 'hataKodu' => 108, 'mesaj' => $m108];
+ok('108: kaynak karşı taraf hatası', hks_kaynak_karsi_taraf_hatasi_mi($h108));
+ok('108 metni kodsuz da tanınır (büyük harf/İ)', hks_kaynak_karsi_taraf_hatasi_mi(['hataKodu' => 5, 'mesaj' => mb_strtoupper('REFERANS KÜNYE BİLDİRİMİNİ YAPAN KİŞİYE', 'UTF-8')]));
+ok('sıradan sıfat hatası 108 sayılmaz', !hks_kaynak_karsi_taraf_hatasi_mi($hata()) && !hks_kaynak_karsi_taraf_hatasi_mi($gsm));
+$r = hks_kunye_sifat_hatali_satirlar([$h108], [['kunyeNo' => K2, 'miktar' => 1]]);
+ok('108 künye×sıfat uyumsuzluğu olarak KAYDEDİLMEZ (tek satır)', $r === [], json_encode($r));
+$r = hks_kunye_sifat_hatali_satirlar([$basari, $h108, $hata()], $sat3);
+ok('karışık: 108 atlanır, gerçek sıfat hatası (K3) yine kaydedilir', $r === [K3], json_encode($r));
+$r = hks_kaynak_hatali_kunyeler([$basari, $h108, $hata()], $sat3);
+ok('108 satırı künyesi (mesajdaki no) bulunur', $r === [K2], json_encode($r));
+$r = hks_kaynak_hatali_kunyeler([['hataKodu' => 108, 'mesaj' => 'kaynak']], [['kunyeNo' => K4]]);
+ok('108 mesajda no yoksa sıra eşlemesi', $r === [K4], json_encode($r));
+ok('108 sayı farklı + no yok → atanmaz', hks_kaynak_hatali_kunyeler([['hataKodu' => 108, 'mesaj' => 'x']], $sat3) === []);
+
+// Tek seferlik temizlik bayrağı
+$F2 = 'f1800000000000';
+$GLOBALS['__KV']['kunye_sifat_uyumsuz_' . $F2] = json_encode([K1 => ['9' => '2026-10-10']]);
+$m = hks_kunye_sifat_uyumsuz_oku($F2, '2026-10-15');
+ok('v366 temizliği: bayrak yokken eski harita boşaltılır', $m === [] && json_decode($GLOBALS['__KV']['kunye_sifat_uyumsuz_' . $F2], true) === []);
+ok('temizlik bayrağı yazıldı (anahtar ≤ 60)', isset($GLOBALS['__KV']['kunye_sifat_v366_' . $F2]) && strlen('kunye_sifat_v366_' . $F2) <= 60);
+hks_kunye_sifat_uyumsuz_ekle($F2, [K1], 9, '2026-10-15');
+ok('bayraktan sonra yeni kayıtlar korunur', hks_kunye_dislanan_set(hks_kunye_sifat_uyumsuz_oku($F2, '2026-10-16'), 9) === [K1]);
+
+// Kaynak haritası
+$AGRO = '0091880872'; $BASKA = '1234567890';
+$km = hks_kunye_kaynak_map_ekle([], [K1], $AGRO, 2, '2026-10-01');
+$km = hks_kunye_kaynak_map_ekle($km, [K1], $AGRO, 7, '2026-10-02', [K1 => $BASKA]);
+$b = hks_kunye_kaynak_bilgisi($km, K1);
+ok('kaynak bilgisi: koken öncelikli kaynakTc', $b['kaynakTc'] === $BASKA && $b['kaynakKoken'] === $BASKA, json_encode($b));
+ok('kaynak bilgisi: TC bazında red listesi', (array)$b['kaynakRed'] === [$AGRO => [2, 7]], json_encode($b));
+$km2 = hks_kunye_kaynak_map_ekle([], [K2], $AGRO, 2, '2026-10-01');
+$b2 = hks_kunye_kaynak_bilgisi($km2, K2);
+ok('koken yoksa kaynakTc = son denenen TC, red = o TC', $b2['kaynakTc'] === $AGRO && $b2['kaynakKoken'] === '' && $b2['kaynakRedSifatlar'] === [2], json_encode($b2));
+ok('red engeli: aynı künye+TC+sıfat', hks_kaynak_red_engeli([['kunyeNo' => K1]], $km, $AGRO, 7) === [K1]);
+ok('red engeli: farklı sıfat / TC engel yok',
+    hks_kaynak_red_engeli([['kunyeNo' => K1]], $km, $AGRO, 11) === [] && hks_kaynak_red_engeli([['kunyeNo' => K1]], $km, $BASKA, 2) === []);
+ok('TTL 60 gün: red ve koken düşer', hks_kunye_kaynak_map_temizle($km, '2026-12-05') === []);
+ok('TTL içinde korunur', isset(hks_kunye_kaynak_map_temizle($km, '2026-11-29')[K1]['koken']));
+ok('bozuk kayıt → boş', hks_kunye_kaynak_map_temizle('x', '2026-10-01') === [] && hks_kunye_kaynak_map_temizle([K1 => ['red' => [$AGRO => ['2' => 'dün']]]], '2026-10-01') === []);
+ok('kokenler listesi', hks_kunye_kaynak_kokenler($km) === [K1 => $BASKA]);
+$FK = 'f1900000000000';
+hks_kunye_kaynak_ekle($FK, [K3], $AGRO, 2, [K3 => $AGRO], '2026-10-10');
+ok('kv sarmalayıcı: yaz/oku (kunye_kaynak_<firma>)', isset(hks_kunye_kaynak_oku($FK, '2026-10-11')[K3]['red'][$AGRO]['2']) && strlen('kunye_kaynak_' . $FK) <= 60);
+$bay = hks_kunyelere_kaynak_bilgisi([kunye(K3, 'x', 1), kunye(K4, 'x', 1)], hks_kunye_kaynak_oku($FK, '2026-10-11'));
+ok('kunyeler ucu: yalnız kaydı olana kaynak alanları', ($bay[0]['kaynakKoken'] ?? '') === $AGRO && !isset($bay[1]['kaynakTc']));
+
+// Kaynak (koken) haritası + TC engeli
+$kh = hks_kunye_koken_haritasi([K1 => ['kunyeNo' => K1, 'bildirimciTc' => $BASKA], K2 => ['kunyeNo' => K2, 'bildirimciTc' => '1111111111'],
+    K3 => ['kunyeNo' => K3, 'bildirimciTc' => '']], '1111111111', [K4 => $AGRO, K1 => $AGRO]);
+ok('koken: detay öğrenilenden öncelikli, kendi VKN ve boş sayılmaz', $kh === [K4 => $AGRO, K1 => $BASKA], json_encode($kh));
+$e = hks_kaynak_tc_engeli([['kunyeNo' => K1], ['kunyeNo' => K3], ['kunyeNo' => K4]], $kh, $AGRO);
+ok('TC engeli: yalnız kaynağı KESİN ve farklı olan', $e === [['kunyeNo' => K1, 'kaynakTc' => $BASKA]], json_encode($e));
+ok('TC engeli: kaynak bilinmiyorsa engel yok', hks_kaynak_tc_engeli([['kunyeNo' => K3]], $kh, $AGRO) === []);
+ok('maske', hks_tc_maske($AGRO) === '***0872' && hks_tc_maske('') === '');
+
+// Plan çekirdeği kaynak kipi: fiyatsız sevkte detay istenir, başka kaynaklı künye atlanır
+$cagri2 = 0;
+$detayK = function (int $ay) use (&$cagri2, $BASKA, $AGRO) { $cagri2++; return ['harita' => [K2 => ['kunyeNo' => K2, 'bildirimciTc' => $BASKA], K3 => ['kunyeNo' => K3, 'bildirimciTc' => $AGRO]]]; };
+$stokK = [kunye(K1, '2026-03-01', 400), kunye(K2, '2026-01-01', 300), kunye(K3, '2026-02-01', 200)];
+$ortakK = ['planKg' => 500, 'planSorgu' => ['urunId' => 12, 'aySayisi' => 6], 'sifatId' => 9];
+$p = hks_plan_kunye_coz_cekirdek($ortakK, fn($s) => $stokK, $detayK, [], ['tc' => $AGRO, 'kendi' => '1111111111', 'ogrenilen' => []]);
+ok('kaynak kipi: fiyatsız da detay çağrılır', $cagri2 === 1);
+ok('kaynak kipi: başka kaynaklı K2 atlanır → K3, K1', nolar($p['satirlar'] ?? []) === [K3, K1] && $p['atlananKaynakFarkli'] === [K2], json_encode($p));
+ok('kaynak kipi: kokenHarita döner', ($p['kokenHarita'][K3] ?? '') === $AGRO);
+$p = hks_plan_kunye_coz_cekirdek(['planKg' => 700] + $ortakK, fn($s) => $stokK, $detayK, [], ['tc' => $AGRO, 'kendi' => '', 'ogrenilen' => []]);
+ok('kaynak kipi: stok yetersiz notunda başka kişiden atlanan', isset($p['hata']) && strpos($p['hata'], 'başka kişiden geldiği için atlandı') !== false, $p['hata'] ?? '');
+$p = hks_plan_kunye_coz_cekirdek($ortakK, fn($s) => $stokK, $patlak, [], ['tc' => $AGRO, 'kendi' => '', 'ogrenilen' => [K1 => $BASKA]]);
+ok('kaynak kipi: detay patlarsa öğrenilen koken yine uygulanır', nolar($p['satirlar'] ?? []) === [K2, K3] && $p['atlananKaynakFarkli'] === [K1], json_encode($p));
+$cagri2 = 0;
+hks_plan_kunye_coz_cekirdek($ortakK, fn($s) => $stokK, $detayK, []);
+ok('kaynak kipi kapalı + fiyatsız: detay çağrılmaz (eski davranış)', $cagri2 === 0);
+
 echo "── api.php / .htaccess (statik) ──\n";
 $api = (string)file_get_contents("$KOK/halkayit/api.php");
 // Yorumsuz kaynak (token_get_all) — çağrı sayımları yorumlardaki adlardan etkilenmesin.
@@ -290,6 +364,13 @@ ok('sıfat kaydı referanssızda atlanır + hata yutulur',
     strpos($blok, "empty(\$ortak['referanssiz'])") !== false && strpos($blok, 'catch (Throwable $e)') !== false);
 ok('yanıtta sifatUyumsuzKunyeler', strpos($api, "\$sonuc['sifatUyumsuzKunyeler'] = [];") !== false);
 ok('gönderim yolu tek: hks_bildirim_kaydet yalnız bir kez çağrılır', preg_match_all('/\\bhks_bildirim_kaydet\\s*\\(/', $apiKod) === 1);
+ok('kaynakHatalari yanıtı + 108 öğrenme gönderimden sonra', ($pK = strpos($api, "\$sonuc['kaynakHatalari'] = [];")) !== false && $pK > $pKaydet && $pK < $pTam
+    && strpos($api, 'hks_kunye_kaynak_ekle($t[\'firma_id\']') !== false);
+$pTcE = strpos($api, 'hks_kaynak_tc_engeli(');
+$pRedE = strpos($api, 'hks_kaynak_red_engeli(');
+ok('kaynak engelleri gönderimden ÖNCE, taslak geri konarak', $pTcE !== false && $pRedE !== false && $pTcE < $pKaydet && $pRedE < $pKaydet
+    && strpos(substr($api, $pTcE, 400), '$taslagiGeriKoy();') !== false && strpos(substr($api, $pRedE, 600), '$taslagiGeriKoy();') !== false);
+ok('kunyeler ucu: kaynak bilgisi eklenir', strpos($api, 'hks_kunyelere_kaynak_bilgisi($liste, hks_kunye_kaynak_oku(') !== false);
 ok('kunyeler ucu: sifatId varsa bayrak', strpos($api, 'hks_kunyelere_sifat_bayragi($liste, $__sm, $g[\'sifatId\'])') !== false);
 $lib = kod_yorumsuz((string)file_get_contents("$KOK/halkayit/kunye_secim_lib.php"));
 ok('lib SOAP / gönderim çağırmaz, çıktı basmaz',

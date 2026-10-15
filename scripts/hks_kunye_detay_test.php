@@ -131,6 +131,17 @@ ok('eksik fiyat 0.0 olarak geliyor',   $dEksik['fiyat'] === 0.0);
 ok('eksik rusum 0.0 olarak geliyor',   $dEksik['rusum'] === 0.0);
 ok('eksik tarihSaat boş dize',         $dEksik['tarihSaat'] === '');
 
+ok('eksik sıfat → bildirimciSifatId 0',  $dEksik['bildirimciSifatId'] === 0);
+ok('tam DTO (Sifat yok) → bildirimciSifatId 0', $d['bildirimciSifatId'] === 0);
+
+echo "\n── Bildirimci sıfatı (v366, alan adı DOĞRULANMAMIŞ — aday adlar) ──\n";
+ok('Sifat=11 → 11',                 parseTekDto(['KunyeNo' => '1', 'Sifat' => '11'])['bildirimciSifatId'] === 11);
+ok('BildirimciSifat=9 → 9',         parseTekDto(['KunyeNo' => '1', 'BildirimciSifat' => '9'])['bildirimciSifatId'] === 9);
+ok('Sifat=0 + BildirimciKisiSifat=4 → 4', parseTekDto(['KunyeNo' => '1', 'Sifat' => '0', 'BildirimciKisiSifat' => '4'])['bildirimciSifatId'] === 4);
+ok('BildirimciSifatId=2 → 2',       parseTekDto(['KunyeNo' => '1', 'BildirimciSifatId' => '2'])['bildirimciSifatId'] === 2);
+ok('sayısal olmayan Sifat → 0',     parseTekDto(['KunyeNo' => '1', 'Sifat' => 'Tüccar'])['bildirimciSifatId'] === 0);
+ok('SifatId gibi BAŞKA etiket Sifat sayılmaz', parseTekDto(['KunyeNo' => '1', 'SifatAdi' => '7'])['bildirimciSifatId'] === 0);
+
 echo "\n── Çok kayıtlı yanıt — blok sınırları karışmıyor ──\n";
 $govde = fakeDto(['KunyeNo' => 'A1', 'MalinSatisFiyati' => '10', 'MalinAdi' => 'ELMA'])
        . fakeDto(['KunyeNo' => 'A2', 'MalinSatisFiyati' => '20', 'MalinAdi' => 'ARMUT'])

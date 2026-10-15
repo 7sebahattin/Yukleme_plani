@@ -238,6 +238,8 @@
   .kunye .kalan-blok { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; }
   .kunye .kalan { font-weight:800; color:var(--navy); font-size:13px; white-space:nowrap; }
   /* Fiyat — künye listesiyle birlikte otomatik gelir (bkz. $('btnKunyeler').onclick — künye + fiyat tek render) */
+  .kunye .kaynak-baska { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:99px; font-size:10.5px; font-weight:800; background:#fff1e0; color:#9a4a00; max-width:100%; }
+  html[data-theme="dark"] .kunye .kaynak-baska { background:rgba(255,160,60,.16); color:#ffb870; }
   .kunye .sifat-uyumsuz { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:99px; font-size:10.5px; font-weight:800; background:var(--hata-bg,#fde8e8); color:var(--hata-tx,#b42318); white-space:nowrap; }
   .kunye .kalan-fiyat { font-size:11px; color:var(--tamam-tx); font-weight:700; white-space:nowrap; margin-top:1px; }
   .kunye input.miktar { width:88px; padding:9px; font-size:14px; flex-shrink:0; border-radius:10px; }
@@ -1000,6 +1002,8 @@
         <label id="ikSifatEtiket">Karşı Taraf Sıfatı</label>
         <select id="sIkSifat"><option value="">— Seçiniz —</option></select>
         <div class="mesaj tamam gizli" id="ikCokluSifatUyari"></div>
+        <!-- Depo/Tasnif kaynak kuralı (v366): kaynakUygula() yazar (yalnız textContent). -->
+        <div class="mesaj" id="ikKaynakNot" role="status"></div>
       </div>
 
       <div class="mesaj" id="bildirimMesaj"></div>
@@ -2420,6 +2424,7 @@ function formuTemizle() {
   ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   kopyaNotlariniGoster(null);       // "Tekrar gönder" uyarı kutusu yeni formda görünmesin
   $('ikCokluSifatUyari').classList.add('gizli');
+  kaynakOtoSifat = ''; kaynakNot('');   // Depo/Tasnif kaynak notu (v366)
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   // EN SONDA: yukarıdaki tüm select sıfırlamaları ve listeleriDoldur() bittikten
   // sonra arama kutuları temizlenir. Daha erken çalışsaydı, sonradan sıfırlanan
@@ -3167,6 +3172,7 @@ $('btnIkDogrula').onclick = async () => {
   } catch (e) { ikDogrulandi = null; mesajGoster('ikDurum', e.message, 'hata'); }
   $('btnIkDogrula').disabled = false; $('btnIkDogrula').textContent = '✔️ Doğrula';
   turDegisti();  // doğrulama sonucuna göre hedef alt-modunu ayarla
+  kaynakUygula(); // kayıtlı sıfatlar geldi → Depo/Tasnif kaynak kuralı (v366)
 };
 
 // TC/VKN tam uzunluğa ulaşınca sorguyu KENDİLİĞİNDEN çalıştırmak için zamanlayıcı.
@@ -3188,6 +3194,7 @@ $('oIkTc').oninput = () => {
   $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
   ['isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   turDegisti();
+  kaynakRozetGuncelle();   // karşı taraf değişti → "kaynak: başka kişi" rozetleri (v366)
 
   // OTOMATİK SORGU: VKN 10, TC 11 hanedir. Uzunluk tamamlandığında "Doğrula"ya
   // basmaya gerek kalmaz. Buton yerinde durur (tekrar denemek/elle tetiklemek
@@ -3209,7 +3216,9 @@ $('oIkCep').onblur = () => { $('oIkCep').value = cepRakam($('oIkCep').value); };
 // neyin gideceğini görsün (cep telefonuyla aynı davranış).
 $('oIkTc').onblur = () => { const t = tcRakam($('oIkTc').value);
   if ($('oIkTc').value !== t) $('oIkTc').value = t; };
-$('sTur').onchange = turDegisti;
+$('sTur').onchange = () => { turDegisti(); kaynakUygula(); };
+// Bildirimci sıfatı Depo/Tasnif ↔ başka: kaynak kuralı açılır/kapanır (v366).
+$('sSifat').addEventListener('change', () => kaynakUygula());
 // Sıfat "Üretici" ↔ başka: kayıtlı kişide cep alanının görünürlüğü değişir.
 $('sIkSifat').addEventListener('change', turDegisti);
 $('chkYurtDisi').onchange = turDegisti;
@@ -3351,6 +3360,7 @@ async function karsiTarafSec(k) {
     if ([...sel.options].some(o => o.value === String(k.sifatId))) sel.value = String(k.sifatId);
   }
   turDegisti();   // sıfat atandıktan sonra cep alanı görünürlüğünü yeniden değerlendir
+  kaynakUygula(); // Depo/Tasnif kaynak kuralı (v366)
 }
 
 // ================= KİŞİ HAVUZU PENCERESİ =================
@@ -3664,13 +3674,14 @@ function kunyeCiz() {
     };
   });
   kap.querySelectorAll('input.miktar').forEach(inp => { binlikGirisBagla(inp); inp.oninput = ozetGuncelle; });
+  kaynakRozetGuncelle();   // Depo/Tasnif kaynak rozeti (v366)
 }
 
 // Statik kilo/fiyat kutuları — canlı binlik biçimi (künye satırları kunyeCiz'de bağlanır).
 ['oMalMiktar', 'oMalFiyat', 'oPlanKilo', 'oPlanFiyat', 'oFiyat', 'hedefKilo'].forEach(id => binlikGirisBagla($(id)));
 
 // KÜNYE ÖNCELİK SIRASI — SUNUCUDAKİ algoritmanın JS aynası (ikisi BİRLİKTE değişir).
-// Aday: kalan > 0 ve sifatUyumsuz !== true. Artan anahtar: [fiyatFarki, tarih, kalan, kunyeNo].
+// Aday: kalan > 0 ve sifatUyumsuz !== true ve kaynakBaska !== true (Depo/Tasnif kaynak kuralı, v366). Artan anahtar: [fiyatFarki, tarih, kalan, kunyeNo].
 // fiyatFarki: satış fiyatı > 0 iken künye fiyatı varsa |alış − satış| (2 ondalık); fiyatsız künye
 // en sonda (sabit çok büyük); satış fiyatı yoksa hepsi 0. Boş tarih sonda.
 const KUNYE_FIYATSIZ_FARK = 1e15;
@@ -3684,7 +3695,7 @@ function kunyeTarihAnahtar(t) {
 function kunyeOncelikSirasi(liste, satisFiyat) {
   const adaylar = [];
   liste.forEach((k, i) => {
-    if (!(k.kalan > 0) || k.sifatUyumsuz === true) return;
+    if (!(k.kalan > 0) || k.sifatUyumsuz === true || k.kaynakBaska === true) return;
     let fark = 0;
     if (satisFiyat > 0) {
       fark = (k.fiyat > 0) ? Math.round(Math.abs(k.fiyat - satisFiyat) * 100) / 100 : KUNYE_FIYATSIZ_FARK;
@@ -3710,6 +3721,7 @@ $('btnDagit').onclick = () => {
   if (kalanHedef <= 0) return;
   const satisFiyat = trSayi($('oFiyat').value) || 0;
   const kap = $('kunyeListe');
+  kaynakRozetGuncelle();   // kaynak bayrakları güncel olsun
   const secilen = new Map();   // künye indeksi → miktar
   kunyeOncelikSirasi(kunyeler, satisFiyat).forEach(i => {
     if (kalanHedef <= 0) return;
@@ -3730,16 +3742,18 @@ $('btnDagit').onclick = () => {
     }
   });
   const atlanan = kunyeler.filter(k => k.kalan > 0 && k.sifatUyumsuz === true).length;
+  const kaynakAtlanan = kunyeler.filter(k => k.kalan > 0 && k.sifatUyumsuz !== true && k.kaynakBaska === true).length;
+  const kaynakNotu = kaynakAtlanan ? ` · ${kaynakAtlanan} künye başka kişiden geldiği için atlandı (Depo/Tasnif)` : '';
   const nedenNot = (satisFiyat > 0
       ? 'fiyata en yakın + en eski + küçük kalanlı künyeler seçildi'
       : 'fiyat girilmediği için en eski + küçük kalanlı künyeler seçildi') +
     ` (${secilen.size} künye)` +
-    (atlanan ? ` · ${atlanan} künye sıfat uyumsuz olduğu için atlandı` : '');
+    (atlanan ? ` · ${atlanan} künye sıfat uyumsuz olduğu için atlandı` : '') + kaynakNotu;
   if (kalanHedef > 0) {
     mesajGoster('dagitMesaj',
       `⚠️ DİKKAT: Hedefin ${fmt(kalanHedef)} KG'lık kısmı KARŞILANAMADI! ` +
       `Künyelerin toplam kalanı (${fmt(hedef - kalanHedef)} KG) yetersiz. ` +
-      `Aralığı genişletip tekrar sorgulayın.` + (atlanan ? ` ${atlanan} künye sıfat uyumsuz olduğu için atlandı.` : ''), 'hata');
+      `Aralığı genişletip tekrar sorgulayın.` + (atlanan ? ` ${atlanan} künye sıfat uyumsuz olduğu için atlandı.` : '') + kaynakNotu, 'hata');
   } else {
     mesajGoster('dagitMesaj', `✓ Hedefin tamamı (${fmt(hedef)} KG) künyelere dağıtıldı · ${nedenNot}`, 'tamam');
   }
@@ -3775,6 +3789,158 @@ function ozetGuncelle() {
   $('ozetKilo').textContent = fmt(toplam) + ' KG';
   $('ozetAdet').textContent = satirlar.length + ' künye · ' + (aktifFirma ? aktifFirma.ad : '');
   $('ozet').classList.toggle('gizli', satirlar.length === 0 || $('ekranBildirim').classList.contains('gizli'));
+  kaynakUygula();   // künye seçimi değişti → Depo/Tasnif kaynak kuralı (v366)
+}
+
+// ================= DEPO/TASNİF KAYNAK KURALI (v366) =================
+// HKS HataKodu 108: "Depo/Tasnif sıfatından sevk ederken, ancak referans künye
+// bildirimini yapan kişiye ve sıfatına geri bildirim yapabilirsiniz". Bu modda
+// (bildirimci sıfatı Depo/Tasnif + Sevk Etme) karşı taraf, seçili künyeleri
+// SİZE bildiren kişi (künye detayındaki bildirimciTc; yoksa sunucunun 108'den
+// öğrendiği kaynakTc) ve o bildirimdeki sıfatı olmalıdır.
+//  • TC boşsa kaynağın TC'si doldurulur ve NORMAL doğrulama (canlı KayitliKisiSorgu)
+//    çalışır; TC farklıysa yalnız UYARI verilir (otomatik değiştirilmez).
+//  • Sıfat: künye detayındaki bildirimciSifatId (DOĞRULANMAMIŞ alan) seçeneklerde
+//    varsa o; yoksa kişinin kayıtlı sıfatlarından HKS'in 108 ile reddettikleri
+//    (kaynakRed) çıkarılınca TEK aday kalırsa o seçilir. Kullanıcının elle seçtiği
+//    sıfat ezilmez — yalnız boş / son otomatik değer / reddedilmiş sıfat değişir.
+//  • Plan taslağında (künye seçili değil) hiçbir şey yapılmaz; sunucu 108'i öğrenir
+//    ve aynı TC+sıfatla tekrar göndermeyi engeller (hks_kaynak_red_engeli).
+let kaynakOtoSifat = '';
+function depoTasnifSifatId() {
+  const l = ((listeler && listeler.sifatlar) || []).filter(x => {
+    const n = trNorm(x.ad);
+    return n.includes('depo') && n.includes('tasnif');
+  });
+  return l.length === 1 ? String(l[0].id) : '';
+}
+function kaynakSevkModuMu() {
+  const id = depoTasnifSifatId();
+  return !!id && sevkModuMu() && String($('sSifat').value) === id;
+}
+function kaynakNot(metin, tip) {
+  const el = $('ikKaynakNot');
+  if (!el) return;
+  el.textContent = metin || '';
+  el.className = metin ? 'mesaj ' + (tip || 'tamam') : 'mesaj';
+}
+// İşaretli künye nesneleri (miktar girilmemiş olsa da).
+function kaynakSeciliKunyeler() {
+  const kap = $('kunyeListe');
+  if (!kap || !Array.isArray(kunyeler)) return [];
+  return kunyeler.filter((k, i) => {
+    const cb = kap.querySelector(`input[type=checkbox][data-i="${i}"]`);
+    return cb && cb.checked;
+  });
+}
+// KESİN kaynak: künye detayındaki bildirimci (kendi VKN'miz değilse) ya da
+// sunucunun 108 anında öğrendiği kaynak (kaynakKoken). Bilinmiyorsa ''.
+// HKS VKN'yi baştaki sıfırları atılmış dönebilir ("91880872") — 10 haneye tamamla
+// (TC 11 hanedir ve 0 ile başlamaz, etkilenmez).
+function kaynakTcPad(v) {
+  const d = tcRakam(String(v || ''));
+  return d && d.length < 10 ? d.padStart(10, '0') : d;
+}
+function kaynakKesinTc(k) {
+  const kendi = aktifFirma ? kaynakTcPad(aktifFirma.vergiNo || '') : '';
+  const b = kaynakTcPad(k.bildirimciTc || '');
+  if (b && b !== kendi) return b;
+  const o = kaynakTcPad(k.kaynakKoken || '');
+  return o && o !== kendi ? o : '';
+}
+// Öneri (TC doldurma) için: kesin kaynak, yoksa en son denenen TC (kaynakTc).
+function kaynakTcBul(k) {
+  return kaynakKesinTc(k) || kaynakTcPad(k.kaynakTc || '');
+}
+const tcMaske = (t) => { t = tcRakam(t); return t ? '***' + t.slice(-4) : ''; };
+// Künye listesinde "kaynak: başka kişi" rozeti + k.kaynakBaska bayrağı. Yalnız
+// Depo/Tasnif sevk modunda ve karşı taraf TC'si girilmişken; kaynağı bilinmeyen
+// künye işaretlenmez. Bayraklı künye OTOMATİK dağıtıma girmez (elle seçilebilir,
+// sunucu gönderimden önce yine reddeder — hks_kaynak_tc_engeli).
+function kaynakRozetGuncelle() {
+  const kap = $('kunyeListe');
+  if (!kap || !Array.isArray(kunyeler)) return;
+  const mod = kaynakSevkModuMu();
+  const tc = tcRakam($('oIkTc').value);
+  kunyeler.forEach((k, i) => {
+    const kt = mod && tc ? kaynakKesinTc(k) : '';
+    k.kaynakBaska = !!(kt && kt !== tc);
+    const cb = kap.querySelector(`input[type=checkbox][data-i="${i}"]`);
+    const satir = cb && cb.closest('.kunye');
+    if (!satir) return;
+    let r = satir.querySelector('.kaynak-baska');
+    if (k.kaynakBaska) {
+      if (!r) {
+        r = document.createElement('span');
+        r.className = 'kaynak-baska';
+        r.title = 'Depo/Tasnif sevkinde yalnız künyeyi size gönderen kişiye geri sevk yapılabilir; otomatik dağıtıma girmez.';
+        (satir.querySelector('.detay') || satir).appendChild(r);
+      }
+      r.textContent = 'kaynak: başka kişi (TC ' + tcMaske(kt) + ')';
+    } else if (r) {
+      r.remove();
+    }
+  });
+}
+function kaynakUygula() {
+  kaynakRozetGuncelle();
+  if (!kaynakSevkModuMu()) { kaynakNot(''); return; }
+  const secili = kaynakSeciliKunyeler();
+  if (!secili.length) { kaynakNot(''); return; }
+  const tcler = [...new Set(secili.map(kaynakTcBul).filter(Boolean))];
+  if (tcler.length > 1) {
+    kaynakNot('⚠️ Farklı kaynaklardan gelen künyeler tek bildirimde sevk edilemez (' + tcler.join(', ') +
+      '). Depo/Tasnif sevkinde her bildirim, künyeyi size gönderen kişiye yapılır — künyeleri kaynağa göre ayırın.', 'hata');
+    return;
+  }
+  const mevcutTc = tcRakam($('oIkTc').value);
+  if (tcler.length === 1) {
+    const kt = tcler[0];
+    if (!mevcutTc) {
+      // Aynı akış: TC dolar + CANLI doğrulama; bitince kaynakUygula yeniden çalışır.
+      kaynakNot('Depo/Tasnif sevkinde karşı taraf künyeyi size gönderen kişi olmalı — TC/VKN ' + kt +
+        ' dolduruldu, doğrulanıyor…', 'tamam');
+      karsiTarafSec({ tc: kt });
+      return;
+    }
+    if (mevcutTc !== kt) {
+      kaynakNot('⚠️ Seçili künyeleri size bildiren kişi ' + kt + '. Depo/Tasnif sevkinde karşı taraf bu kişi ' +
+        've onun sıfatı olmalı — girilen TC/VKN (' + mevcutTc + ') farklı; HKS reddedecektir (HataKodu 108).', 'hata');
+      return;
+    }
+  }
+  if (!mevcutTc || !ikDogrulandi || tcRakam(String(ikDogrulandi.tcVkn || '')) !== mevcutTc) { kaynakNot(''); return; }
+
+  const sel = $('sIkSifat');
+  const secenek = new Set([...sel.options].map(o => o.value).filter(Boolean));
+  const red = new Set();
+  secili.forEach(k => (((k.kaynakRed || {})[mevcutTc]) || []).forEach(x => red.add(String(x))));
+  let hedef = '';
+  // 1) Künye detayındaki bildirimci sıfatı (yalnız kaynağı bu TC olan ve hepsinde aynıysa).
+  const ks = [...new Set(secili.map(k => (kaynakTcPad(k.bildirimciTc || '') === mevcutTc ? (Number(k.bildirimciSifatId) || 0) : 0)))];
+  if (ks.length === 1 && ks[0] > 0 && secenek.has(String(ks[0])) && !red.has(String(ks[0]))) hedef = String(ks[0]);
+  // 2) Kayıtlı sıfatlar − HKS'in reddettikleri = tek aday.
+  if (!hedef && red.size) {
+    const aday = [...new Set((ikDogrulandi.sifatlar || []).map(String))].filter(id => secenek.has(id) && !red.has(id));
+    if (aday.length === 1) hedef = aday[0];
+  }
+  const cur = String(sel.value || '');
+  if (hedef && cur !== hedef && (!cur || cur === kaynakOtoSifat || red.has(cur))) {
+    selectDegerAta('sIkSifat', hedef);   // aramalı kutu da güncellensin
+    kaynakOtoSifat = hedef;
+    turDegisti();
+  }
+  const ad = id => kisiSifatAdi(id) || id;
+  if (hedef && sel.value === hedef) {
+    kaynakNot('Depo/Tasnif sevkinde karşı taraf, künyeyi size gönderen kişi ve sıfatı olmalı — sıfat künye ' +
+      'kaynağına göre ayarlandı: ' + ad(hedef), 'tamam');
+  } else if (sel.value && red.has(String(sel.value))) {
+    kaynakNot('⚠️ "' + ad(sel.value) + '" sıfatı bu künyede HKS tarafından reddedildi (HataKodu 108). ' +
+      'Karşı tarafın künyeyi size bildirirken kullandığı sıfatı seçin.', 'hata');
+  } else {
+    kaynakNot('ℹ️ Depo/Tasnif sevkinde karşı taraf, künyeyi size gönderen kişi ve o bildirimde kullandığı ' +
+      'sıfat olmalıdır.' + (hedef ? ' Önerilen sıfat: ' + ad(hedef) + '.' : ''), 'tamam');
+  }
 }
 
 // ================= TASLAĞA KAYDET =================
@@ -4496,6 +4662,24 @@ $('btnOnay').onclick = async () => {
         'Şu künyeler seçilen sıfatla uyumsuz bulundu ve kaydedildi: <b>' +
         eHtml(j.sifatUyumsuzKunyeler.join(', ')) +
         '</b>. Sonraki denemede bu künyeler otomatik atlanır.</div>';
+    }
+    // Depo/Tasnif kaynak kuralı (HataKodu 108, v366): künye×sıfat uyumsuzluğu DEĞİL —
+    // karşı taraf künyenin kaynağı (bildirimi size yapan kişi + sıfatı) değil.
+    if (Array.isArray(j.kaynakHatalari) && j.kaynakHatalari.length) {
+      const _kh = j.kaynakHatalari;
+      html += '<div class="mesaj hata" id="kaynakHataBilgi" style="display:block;margin-top:8px">' +
+        '↩ <b>Depo/Tasnif kaynak kuralı:</b> Depo/Tasnif sıfatından sevk ederken bildirim yalnız ' +
+        'referans künyeyi <b>size bildiren kişiye ve onun o bildirimdeki sıfatına</b> yapılabilir. ' +
+        'Künye: <b>' + eHtml([...new Set(_kh.map(x => x.kunyeNo))].join(', ')) + '</b> · denenen karşı taraf ' +
+        eHtml([...new Set(_kh.map(x => x.tc + ' / ' + (kisiSifatAdi(x.sifatId) || x.sifatId)))].join(', ')) +
+        '. ' + _kh.filter(x => x.kaynakFarkli && x.kaynakTc).map(x =>
+          'Künye ' + eHtml(x.kunyeNo) + ' size TC ' + eHtml(x.kaynakTc) + ' tarafından gönderilmiş; Depo/Tasnif ' +
+          'sevkinde yalnız <b>o kişiye</b> (ve o bildirimdeki sıfatına) geri gönderebilirsiniz. ').join('') +
+        (_kh.some(x => !x.kaynakFarkli)
+          ? 'Kişi doğruysa sorun <b>karşı taraf sıfatı</b>dır: karşı tarafın bu künyeyi size bildirirken kullandığı sıfatı seçin. '
+          : '') +
+        'Sistem bunu öğrendi: bu künyede bu kişi/sıfat bir daha önerilmez ve tekrar gönderilmez; ' +
+        'künyeleri yeniden getirdiğinizde karşı taraf künye kaynağına göre ayarlanır.</div>';
     }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;

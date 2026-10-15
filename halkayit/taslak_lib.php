@@ -97,6 +97,30 @@ function hks_uretici_sifat_id() {
   return null;
 }
 
+// HKS sıfat kataloğunda "Depo/Tasnif" sıfatının ID'si — ADA göre (normalize ad
+// hem "depo" hem "tasnif" içerir); ID hard-code EDİLMEZ. Katalog yoksa ya da
+// eşleşme TEK değilse null (belirsizlikte yeni kural uygulanmaz).
+function hks_depo_tasnif_sifat_id() {
+  $cache = hks_kv_oku('listeler_cache', null);
+  if (!$cache || empty($cache['sifatlar'])) return null;
+  $bulunan = [];
+  foreach ($cache['sifatlar'] as $s) {
+    $n = hks_tr_normalize((string)($s['ad'] ?? ''));
+    if (strpos($n, 'depo') !== false && strpos($n, 'tasnif') !== false) $bulunan[] = (int)($s['id'] ?? 0);
+  }
+  return count($bulunan) === 1 && $bulunan[0] > 0 ? $bulunan[0] : null;
+}
+
+// Depo/Tasnif kaynak kuralı (v366, HKS HataKodu 108) geçerli mi? Bildirimci
+// sıfatı Depo/Tasnif + Sevk Etme (yurt içi, referanslı, fiyatsız). Bu modda karşı
+// taraf, referans künyenin bildirimini yapan kişi ve onun o bildirimdeki sıfatı
+// OLMALIDIR. Katalog yoksa false (bilinmeyen durumda yeni engel konmaz).
+function hks_kaynak_sevk_mi($o) {
+  if (!is_array($o) || hks_bildirim_turu_kodu($o) !== 'SEVK_ETME') return false;
+  $id = hks_depo_tasnif_sifat_id();
+  return $id !== null && (int)($o['sifatId'] ?? 0) === $id;
+}
+
 // Yurt içi bildirimde karşı taraf sıfatı katalogdaki TAM "Üretici" mi? O zaman
 // HKS cep telefonunu ZORUNLU ister (HataKodu 263), kayıt durumundan bağımsız.
 // Katalog yoksa false (bilinmeyen durumda yeni engel koyulmaz; HKS yine söyler).
