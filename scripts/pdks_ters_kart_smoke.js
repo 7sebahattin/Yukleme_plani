@@ -544,6 +544,21 @@ const tasma = page => page.evaluate(() => ({ sw: document.documentElement.scroll
         ok(`${ekran.width}px JS hatası yok (manuel)`, durum.hatalar.length === 0, durum.hatalar.join(' | '));
         await ctx.close();
     }
+    {   // inceleme (6): başarısız manuel onaydan sonra önizleme yeniden alınır, düğme yeniden AKTİF olur
+        const durum = varsayilan();
+        durum.yanit.manuel_onizle = MANUEL_ONIZ;
+        durum.yanit.manuel_onayla = { ok: false, kod: 'eszamanli', hata: 'Aynı anda başka bir işlem yapıldı.' };
+        const { ctx, page } = await sayfaAc(browser, HTML.sayim, { width: 390, height: 844 }, durum);
+        await page.click('[data-tk-yontem="manuel"]'); await page.waitForTimeout(150);
+        await page.fill('#tkManuelKalan', '5'); await page.waitForTimeout(700);
+        await page.click('#tkManuelOnayBtn'); await page.waitForTimeout(200);
+        const onizOnce = istek(durum, 'manuel_onizle').length;
+        await page.click('[data-tk-dlg-tamam]'); await page.waitForTimeout(700);
+        const r = await page.evaluate(() => ({ btn: document.getElementById('tkManuelOnayBtn').disabled, t: document.getElementById('tkManuelOnizleme').textContent }));
+        ok('(inceleme 6) manuel onay reddi → hata görünür, önizleme yeniden alındı, Onayla yeniden AKTİF',
+            !r.btn && /başka bir işlem/.test(r.t) && /14 kişi çalışıyor/.test(r.t) && istek(durum, 'manuel_onizle').length > onizOnce && !durum.gezinme, JSON.stringify(r));
+        await ctx.close();
+    }
     {   // geri dönüş: Kartla Say yeniden okutmayı açar
         const durum = varsayilan();
         durum.yanit.manuel_onizle = MANUEL_ONIZ;

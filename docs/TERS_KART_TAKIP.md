@@ -248,3 +248,15 @@ pdks.css "v363" bloğu.
 
 Test: `php scripts/pdks_ters_kart_smoke.php` (bölüm M) · `node scripts/pdks_ters_kart_smoke.js`
 (4b; render `TK_SAYFA=sayim_manuel_onayli`).
+
+### v363 — bağımsız inceleme düzeltmeleri
+- **Eski eksik çıkış manuel çıkışı engellemez:** `pdks_faz8j_satir_kontrol()`'e OPT-IN `$secenek['kapali_mesai_eksik']`
+  (varsayılan `[]` = mevcut tüm çağıranlar için davranış BİREBİR aynı). Yalnız `pdks_ters_manuel_cikis()` açar: KAPATILMIŞ
+  mesaide çıkışsız kalmış dönem mesainin `closed_at`'inde biter sayılır (yoksa yok sayılır); AÇIK mesaideki çıkışsız dönem
+  yine engeller. Sabah önizlemesi, son dönemi olmasa da düzeltilmemiş eksik çıkışı olan her kart için uyarır.
+- **Mutabakat tutarlılığı:** manuel onayda "zaten içeride" kartlar `ters_sayim_kart` `rol='zaten_iceride'` (dönem id'li)
+  anlık görüntüsüyle yazılır (kartla sayımdaki gibi); mutabakat bunları giriş/çıkış/içeride/eksik'e katar. Okutulmayan manuel
+  kişi mesai açıkken `iceride`, kapanınca `eksik_cikis` (toplama da girer) — çıkış + içeride + eksik = dağıtılan.
+- **İptal edilen manuel çıkış:** mükerrer kontrolü yalnız iptal EDİLMEMİŞ döneme bakar; yönetici yanlış çıkışı iptal ederse
+  aynı kart yeniden çıkış yapar ve mevcut satır (UNIQUE) aynı kilitli işlemde yeni döneme UPDATE edilir.
+- Başarısız manuel onaydan sonra önizleme yeniden alınır (düğme sunucu durumuna göre tazelenir).

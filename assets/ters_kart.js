@@ -414,8 +414,11 @@
                     TK.post(url + 'manuel_onayla', { sayim_id: v.sayim_id, kalan: mKalan.value, giris_saati: mSaat ? mSaat.value : '', neden: mNeden ? mNeden.value : '', beyan: mBeyan ? mBeyan.value : '', istek_id: mIstek }).then(function (d) {
                         if (d.ok) { location.href = 'ters_kart_sayim.php?cavus=' + encodeURIComponent(v.foreman_id) + '&onay=1'; return; }
                         mBtn.textContent = eski;
-                        mOniz.insertBefore(TK.el('div', 'tk-kutu tk-kutu-hata', '⛔ ' + d.hata), mOniz.firstChild);
                         TK.ses('hata');
+                        // kartla sayımdaki gibi önizleme yeniden alınır (düğme durumu sunucuya göre tazelenir),
+                        // hata metni önizlemenin üstünde kalır.
+                        var hataMetni = '⛔ ' + d.hata;
+                        Promise.resolve(manuelOnizle()).then(function () { mOniz.insertBefore(TK.el('div', 'tk-kutu tk-kutu-hata', hataMetni), mOniz.firstChild); });
                     });
                 });
         });
