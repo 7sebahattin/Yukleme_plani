@@ -2672,3 +2672,30 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 .tk-manuel-sonuc { flex: 1 1 180px; min-width: 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; background: var(--success-soft); border: 1px solid var(--success); font-size: 16px; }
 .tk-manuel-sonuc strong { font-size: 28px; color: var(--success); font-variant-numeric: tabular-nums; }
 .tk-cip-iptal { text-decoration: line-through; opacity: .6; }
+
+/* ── v364 — Seri Tanım Kaldır (Kart Havuzu, #iskSeriKaldirModal) ───────────────
+   Seri Kart Tanımla penceresinin (.isk-seri) yapısını paylaşır; yalnız EKLEME.
+   Araya <form> SARILMAZ (.pm-dialog flex zinciri). Renkler token — koyu tema hazır. */
+.isk-kaldir-ac { border-color: var(--danger); color: var(--danger); }
+.isk-kaldir-ac:hover { background: var(--danger-soft); }
+.isk-kaldir .isk-kaldir-depo { font-size: .85rem; }
+.isk-kaldir .isk-kaldir-neden { display: block; margin-top: 14px; min-width: 0; }
+.isk-kaldir .isk-kaldir-neden input { width: 100%; max-width: 100%; box-sizing: border-box; }
+.isk-kaldir-sayaclar { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.isk-kaldir-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    font-size: .78rem; font-weight: 700; background: var(--surface-2); color: var(--muted); white-space: nowrap;
+}
+.isk-kaldir-chip b { font-weight: 800; }
+.isk-kaldir-chip.is-kaldir { background: var(--warn-soft); color: var(--text); }
+.isk-kaldir-sayaclar.hatali .is-engel { background: var(--danger); color: #fff; }
+.isk-seri-s-kaldirilacak { border-left-color: var(--warn); }
+.isk-seri-s-kaldirilacak .isk-seri-rozet { background: var(--warn-soft); color: var(--text); }
+.isk-seri-s-tanimsiz { border-left-color: var(--border-strong); opacity: .8; }
+.isk-seri-s-baska_depo { border-left-color: var(--danger); background: var(--danger-soft); }
+.isk-seri-s-baska_depo .isk-seri-rozet { background: var(--danger); color: #fff; }
+.isk-seri-s-baska_depo .isk-seri-alt { color: var(--danger); font-weight: 600; }
+.isk-kaldir-uyari { color: var(--text); font-weight: 600; }
+@media (max-width: 767px) {
+    .isk-kaldir .isk-kaldir-neden input, .isk-kaldir .pdks-scan-input { font-size: 16px; }
+}

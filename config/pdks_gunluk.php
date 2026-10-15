@@ -4193,11 +4193,11 @@ function pdks_gunluk_kart_tanim_toplu_degerlendir(PDO $pdo, array $satirlar, int
     return $son;
 }
 
-/** Bu istek_id ile toplu tanım daha önce yazıldı mı? */
-function pdks_gunluk_kart_tanim_toplu_istek_kayitli(PDO $pdo, string $istekId): bool
+/** Bu istek_id ile toplu tanım (v364: $action = kart_tanim_kaldir_toplu → toplu tanım kaldırma) daha önce yazıldı mı? */
+function pdks_gunluk_kart_tanim_toplu_istek_kayitli(PDO $pdo, string $istekId, string $action = 'kart_tanim_toplu'): bool
 {
-    $st = $pdo->prepare("SELECT 1 FROM audit_log WHERE action = 'kart_tanim_toplu' AND new_values LIKE ? LIMIT 1");
-    $st->execute(['%"istek_id":"' . $istekId . '"%']);
+    $st = $pdo->prepare("SELECT 1 FROM audit_log WHERE action = ? AND new_values LIKE ? LIMIT 1");
+    $st->execute([$action, '%"istek_id":"' . $istekId . '"%']);
     return (bool)$st->fetchColumn();
 }
 
@@ -4321,13 +4321,217 @@ function pdks_gunluk_kart_tanim_toplu_kaydet(array $satirlar, int $foremanId, in
     }
 }
 
-/** Özet audit satırı (kart_tanim_toplu). JSON_THROW — başarısızsa transaction geri alınır. */
-function pdks_gunluk_kart_tanim_toplu_audit(PDO $pdo, int $userId, int $recordId, array $yeni): void
+/** Özet audit satırı (kart_tanim_toplu; v364: kart_tanim_kaldir_toplu). JSON_THROW — başarısızsa transaction geri alınır. */
+function pdks_gunluk_kart_tanim_toplu_audit(PDO $pdo, int $userId, int $recordId, array $yeni, string $action = 'kart_tanim_toplu'): void
 {
     $pdo->prepare('INSERT INTO audit_log (user_id, action, module, record_id, old_values, new_values, ip, user_agent) VALUES (?,?,?,?,?,?,?,?)')
-        ->execute([$userId, 'kart_tanim_toplu', 'worker_cards', $recordId > 0 ? $recordId : null, null,
+        ->execute([$userId, $action, 'worker_cards', $recordId > 0 ? $recordId : null, null,
                    json_encode($yeni, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
                    $_SERVER['REMOTE_ADDR'] ?? null, substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255)]);
+}
+
+// =========================================================
+// v364 — SERİ TANIM KALDIR (Kart Havuzu: kartları art arda okut, listeyi kontrol
+// et, TEK düğmeyle hepsinin tanımını kaldır). Seri Kart Tanımla'nın aynası.
+// =========================================================
+// ⚠ İKİNCİ YAZMA YOLU YOK: pdks_gunluk_kart_tanim_kaldir_toplu() worker_cards /
+// worker_card_assignments'a DOĞRUDAN yazmaz (test gövdeyi denetler); her kart
+// MEVCUT pdks_gunluk_kart_tanim_bitir() ile kapanır (dış transaction'a katılır,
+// satır SİLİNMEZ: valid_to + aktif_kart_id=NULL; kart havuzda nötr kalır).
+// HEP-YA-HİÇ: tek transaction; ENGEL (başka depo / hata) satırı varsa HİÇBİR ŞEY
+// yazılmaz. Depo = aktif depo (istemciden ALINMAZ). Tekrar gönderim koruması:
+// `istek_id` özet audit `kart_tanim_kaldir_toplu`'da aranır (Seri Kart emsali).
+// Kart içerideyse ENGEL DEĞİL, `uyari` (tekli Tanımı Kaldır ile aynı).
+
+const PDKS_GUNLUK_TANIM_KALDIR_LIMIT = 100;
+const PDKS_GUNLUK_TANIM_KALDIR_TEKRAR = 'Bu liste zaten işlendi (tekrar gönderim) — sayfayı yenileyin.';
+const PDKS_GUNLUK_TANIM_KALDIR_GEREKCE = 'Seri tanım kaldırma';
+
+/**
+ * Satır durumunu aktif depoya göre SINIFLAR (saf; DB yok). Girdi: pdks_gunluk_kart_tanim_satir_bilgi().
+ * Sınıflar: kaldirilacak · tanimsiz (atlanır, bilgi) · baska_depo (ENGEL) · hata (ENGEL).
+ * Kayıp/devre dışı kartın tanımı da kaldırılabilir (tanım kendiliğinden bitmez — v298).
+ * @return array{sinif:string, kod?:string, hata?:string}
+ */
+function pdks_gunluk_kart_tanim_kaldir_satir_sinifla(array $b, string $depo): array
+{
+    if (empty($b['ok'])) return ['sinif' => 'hata', 'kod' => (string)($b['kod'] ?? 'hata'), 'hata' => (string)($b['hata'] ?? 'Geçersiz okuma.')];
+    if (empty($b['exists'])) return ['sinif' => 'hata', 'kod' => 'kart_yok', 'hata' => 'Bu kart havuzda kayıtlı değil.'];
+    if (!empty($b['kartsiz'])) return ['sinif' => 'hata', 'kod' => 'kartsiz_kart', 'hata' => 'Kartsız mesainin sanal kartı.'];
+    $t = $b['tanim'] ?? null;
+    if ($t === null) return ['sinif' => 'tanimsiz', 'kod' => 'tanim_yok', 'hata' => 'Tanımı yok — atlanır.'];
+    if (pdks_gunluk_depo_fold((string)$t['depo']) !== pdks_gunluk_depo_fold(trim($depo))) {
+        return ['sinif' => 'baska_depo', 'kod' => 'tanim_baska_depo',
+                'hata' => 'Kart ' . trim((string)$t['depo']) . ' deposunda tanımlı — o depoyu seçip kaldırın.'];
+    }
+    return ['sinif' => 'kaldirilacak'];
+}
+
+/**
+ * Bir okutmanın SALT OKUNUR kaldırma durumu (ajax=tanim_kaldir_satir ve toplu değerlendirmenin
+ * ortak kaynağı): satir_bilgi + sınıf + (kaldırılacak kart içerideyse) uyarı.
+ */
+function pdks_gunluk_kart_tanim_kaldir_satir(PDO $pdo, string $ham, string $kaynak, string $depo): array
+{
+    $b = pdks_gunluk_kart_tanim_satir_bilgi($pdo, $ham, $kaynak);
+    $c = pdks_gunluk_kart_tanim_kaldir_satir_sinifla($b, $depo);
+    $c['uyari'] = null;
+    if ($c['sinif'] === 'kaldirilacak' && pdks_gunluk_faz8a_sema_hazir($pdo)
+            && ($acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, (int)$b['card_id']))) {
+        $c['uyari'] = 'Kart şu an ' . $acik['foreman_name'] . ' mesaisinde içeride — açık dönem o mesaide kalır.';
+    }
+    return $b + $c;
+}
+
+/**
+ * Toplu kaldırma listesini YAN ETKİSİZ değerlendirir (kaydet bunu kilit ALTINDA yeniden çağırır).
+ * $satirlar: [['ham_uid'=>…, 'kaynak'=>…], …]. Aynı kanonik UID ikinci kez → hata.
+ * @return array{ok:bool, genel_hata:?string, satirlar:array, ozet:array{kaldirilacak:int,tanimsiz:int,engel:int}}
+ */
+function pdks_gunluk_kart_tanim_kaldir_degerlendir(PDO $pdo, array $satirlar, string $depo): array
+{
+    $son = ['ok' => false, 'genel_hata' => null, 'satirlar' => [], 'ozet' => ['kaldirilacak' => 0, 'tanimsiz' => 0, 'engel' => 0]];
+    if (!pdks_gunluk_kart_tanim_sema_hazir($pdo)) { $son['genel_hata'] = 'Tanımlı Kart tablosu henüz kurulmamış (migrate.php).'; return $son; }
+    $depo = trim($depo);
+    if ($depo === '') { $son['genel_hata'] = 'Önce bir depo seçmelisiniz.'; return $son; }
+    $satirlar = array_values($satirlar);
+    if (!$satirlar) { $son['genel_hata'] = 'Liste boş — önce kartları okutun.'; return $son; }
+    if (count($satirlar) > PDKS_GUNLUK_TANIM_KALDIR_LIMIT) {
+        $son['genel_hata'] = 'Bir seferde en çok ' . PDKS_GUNLUK_TANIM_KALDIR_LIMIT . ' kartın tanımı kaldırılabilir.';
+        return $son;
+    }
+    $gorulen = [];
+    foreach ($satirlar as $i => $s) {
+        $ham = is_array($s) && isset($s['ham_uid']) && is_scalar($s['ham_uid']) ? trim((string)$s['ham_uid']) : '';
+        $kay = is_array($s) && isset($s['kaynak']) && is_scalar($s['kaynak']) ? trim((string)$s['kaynak']) : '';
+        $r = pdks_gunluk_kart_tanim_kaldir_satir($pdo, $ham, $kay, $depo);
+        $kan = $r['canonical'] ?? null;
+        if ($kan !== null && isset($gorulen[$kan])) {
+            $r = ['sinif' => 'hata', 'kod' => 'yinelenen', 'hata' => 'Aynı kart listede birden fazla kez var (' . ($gorulen[$kan] + 1) . '. satır).', 'uyari' => null] + $r;
+        } elseif ($kan !== null) {
+            $gorulen[$kan] = $i;
+        }
+        $son['satirlar'][] = ['idx' => $i, 'ham_uid' => $ham, 'kaynak' => $kay, 'canonical' => $kan,
+            'card_id' => $r['card_id'] ?? null, 'card_no' => $r['card_no'] ?? null, 'tanim' => $r['tanim'] ?? null,
+            'sinif' => $r['sinif'], 'kod' => $r['kod'] ?? null, 'hata' => $r['hata'] ?? null, 'uyari' => $r['uyari'] ?? null];
+        $k = in_array($r['sinif'], ['baska_depo', 'hata'], true) ? 'engel' : $r['sinif'];
+        $son['ozet'][$k]++;
+    }
+    $son['ok'] = $son['ozet']['engel'] === 0;
+    return $son;
+}
+
+/**
+ * SERİ TANIM KALDIR — listedeki kartların AKTİF DEPODAKİ tanımlarını kaldırır. HEP-YA-HİÇ,
+ * tek transaction. Yetki kapısı ÇAĞIRANDA (Kart Havuzu: attendance.worker_cards).
+ * Depo istemciden değil aktif depodan (active_depot()) gelir.
+ *
+ * @return array{ok:bool, kod?:string, hata?:string, tekrar?:bool, satirlar?:array,
+ *               toplu_id?:string, kaldirilan?:int, atlanan?:int, uyarilar?:array}
+ */
+function pdks_gunluk_kart_tanim_kaldir_toplu(array $satirlar, string $reason, string $istekId, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $depo = trim((string)(function_exists('active_depot') ? (active_depot() ?? '') : ''));
+    $istekId = trim($istekId);
+    $reason = trim($reason);
+    if ($reason === '') $reason = PDKS_GUNLUK_TANIM_KALDIR_GEREKCE;
+    $reason = mb_substr($reason, 0, 255);
+    if (!preg_match('/^[a-f0-9]{16,64}$/D', $istekId)) {
+        return ['ok' => false, 'kod' => 'istek_gecersiz', 'hata' => 'Geçersiz ya da eksik istek anahtarı; pencereyi kapatıp yeniden açın.'];
+    }
+    if ($pdo->inTransaction()) {
+        return ['ok' => false, 'kod' => 'ic_ice_islem', 'hata' => 'Seri tanım kaldırma başka bir işlemin içinde çalıştırılamaz.'];
+    }
+    if (pdks_gunluk_kart_tanim_sema_hazir($pdo) && pdks_gunluk_kart_tanim_toplu_istek_kayitli($pdo, $istekId, 'kart_tanim_kaldir_toplu')) {
+        return ['ok' => false, 'kod' => 'tekrar', 'tekrar' => true, 'hata' => PDKS_GUNLUK_TANIM_KALDIR_TEKRAR];
+    }
+    // Ucuz ön eleme (kilitsiz): başlık/limit/engel satırı varsa transaction hiç açılmaz.
+    $on = pdks_gunluk_kart_tanim_kaldir_degerlendir($pdo, $satirlar, $depo);
+    if ($on['genel_hata'] !== null) return ['ok' => false, 'kod' => 'gecersiz', 'hata' => $on['genel_hata']];
+    if (!$on['ok']) return ['ok' => false, 'kod' => 'hatali_satir', 'hata' => 'Listede engelli satırlar var — hiçbir tanım kaldırılmadı.', 'satirlar' => $on['satirlar']];
+    if ($on['ozet']['kaldirilacak'] === 0) return ['ok' => false, 'kod' => 'kaldirilacak_yok', 'hata' => 'Listede tanımı kaldırılacak kart yok.', 'satirlar' => $on['satirlar']];
+
+    $mysql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+    $kilitAlindi = false;
+    $kullaniciHatasi = null;
+    try {
+        $pdo->beginTransaction();
+        // Seri Kart Tanımla ile AYNI kilit — iki toplu tanım işlemi sırayla çalışır. Tx'in İLK işi.
+        if ($mysql) {
+            $st = $pdo->prepare('SELECT GET_LOCK(?, 10)');
+            $st->execute(['pdks_kart_tanim_toplu']);
+            if ((string)$st->fetchColumn() !== '1') {
+                $pdo->rollBack();
+                return ['ok' => false, 'kod' => 'kilit', 'hata' => 'Sistem şu anda meşgul (başka bir seri tanım işlemi sürüyor), lütfen tekrar deneyin.'];
+            }
+            $kilitAlindi = true;
+        }
+        if (pdks_gunluk_kart_tanim_toplu_istek_kayitli($pdo, $istekId, 'kart_tanim_kaldir_toplu')) {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'tekrar', 'tekrar' => true, 'hata' => PDKS_GUNLUK_TANIM_KALDIR_TEKRAR];
+        }
+
+        // Kartlar ARTAN id sırasıyla kilitlenir (girişle AYNI kilit; deadlock önlemi).
+        $idler = [];
+        foreach (array_values($satirlar) as $s) {
+            $kan = is_array($s) ? pdks_gunluk_uid_kanonik((string)($s['ham_uid'] ?? ''), (string)($s['kaynak'] ?? '')) : null;
+            if ($kan !== null && ($k = pdks_gunluk_faz8a_kart_coz($kan, $pdo))) $idler[(int)$k['id']] = true;
+        }
+        $idler = array_keys($idler);
+        sort($idler, SORT_NUMERIC);
+        foreach ($idler as $kid) pdks_gunluk_faz8a_kart_kilitle($pdo, $kid);
+
+        // Kilit ALTINDA yeniden değerlendir — arada biri tanımı değiştirdiyse hiçbir şey yazma.
+        $ds = pdks_gunluk_kart_tanim_kaldir_degerlendir($pdo, $satirlar, $depo);
+        if ($ds['genel_hata'] !== null || !$ds['ok'] || $ds['ozet']['kaldirilacak'] === 0) {
+            $pdo->rollBack();
+            if ($ds['genel_hata'] !== null) return ['ok' => false, 'kod' => 'gecersiz', 'hata' => $ds['genel_hata']];
+            if (!$ds['ok']) return ['ok' => false, 'kod' => 'hatali_satir', 'hata' => 'Listede engelli satırlar var — hiçbir tanım kaldırılmadı.', 'satirlar' => $ds['satirlar']];
+            return ['ok' => false, 'kod' => 'kaldirilacak_yok', 'hata' => 'Listede tanımı kaldırılacak kart yok.', 'satirlar' => $ds['satirlar']];
+        }
+
+        $kartlar = []; $kaldirilan = 0; $atlanan = 0; $uyarilar = [];
+        foreach ($ds['satirlar'] as $r) {
+            $kartId = (int)($r['card_id'] ?? 0);
+            $cardNo = (string)($r['card_no'] ?? '');
+            if ($r['sinif'] !== 'kaldirilacak') {
+                $atlanan++;
+                $kartlar[] = ['card_id' => $kartId ?: null, 'card_no' => $cardNo, 'sonuc' => 'atlandi'];
+                continue;
+            }
+            $b = pdks_gunluk_kart_tanim_bitir($kartId, $reason, $userId, $pdo);
+            if (empty($b['ok'])) { $kullaniciHatasi = ($r['idx'] + 1) . '. satır (' . $cardNo . '): ' . (string)($b['hata'] ?? 'Tanım kaldırılamadı.'); throw new RuntimeException($kullaniciHatasi); }
+            $kaldirilan++;
+            if (!empty($r['uyari'])) $uyarilar[] = ['card_no' => $cardNo, 'uyari' => (string)$r['uyari']];
+            $t = $r['tanim'] ?? [];
+            $kartlar[] = ['card_id' => $kartId, 'card_no' => $cardNo, 'sonuc' => 'kaldirildi', 'tanim_id' => (int)$b['tanim_id'],
+                          'foreman_id' => (int)($t['foreman_id'] ?? 0), 'worker_type_id' => (int)($t['worker_type_id'] ?? 0)];
+        }
+
+        $topluId = 'KK' . bin2hex(random_bytes(6));
+        $ilk = 0;
+        foreach ($kartlar as $k) { if ($k['sonuc'] === 'kaldirildi') { $ilk = (int)$k['card_id']; break; } }
+        pdks_gunluk_kart_tanim_toplu_audit($pdo, $userId, $ilk, [
+            'istek_id' => $istekId, 'toplu_id' => $topluId, 'depo' => $depo, 'reason' => $reason,
+            'toplam' => count($kartlar), 'kaldirilan' => $kaldirilan, 'atlanan' => $atlanan,
+            'kartlar' => $kartlar, 'uyarilar' => $uyarilar,
+        ], 'kart_tanim_kaldir_toplu');
+        $pdo->commit();
+        return ['ok' => true, 'toplu_id' => $topluId, 'toplam' => count($kartlar), 'kaldirilan' => $kaldirilan,
+                'atlanan' => $atlanan, 'uyarilar' => $uyarilar];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($kullaniciHatasi !== null) {
+            return ['ok' => false, 'kod' => 'yazma_reddi', 'hata' => $kullaniciHatasi . ' — hiçbir tanım kaldırılmadı.'];
+        }
+        error_log('[pdks_gunluk_kart_tanim_kaldir_toplu] ' . $e->getMessage());
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Tanımlar kaldırılamadı — hiçbir değişiklik yapılmadı. Lütfen tekrar deneyin.'];
+    } finally {
+        if ($kilitAlindi) {
+            try { $pdo->prepare('SELECT RELEASE_LOCK(?)')->execute(['pdks_kart_tanim_toplu']); } catch (Throwable $e) { /* bağlantı kopmuşsa kilit zaten düşer */ }
+        }
+    }
 }
 
 // =========================================================
