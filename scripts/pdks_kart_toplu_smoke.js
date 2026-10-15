@@ -9,7 +9,8 @@
 // okuması · 45 satırda gövde KAYAR, alt çubuk (Kaydet) ekranda ve TIKLANABİLİR,
 // son satırın sil düğmesine ulaşılır · yatay taşma yok · POST gövdesi (depo
 // YOK, istek_id, sıra) · sunucu hata satırları listeyi korur · çift tıklama
-// tek POST · başarıda ?ok= yönlendirmesi · Temizle · Esc. Ölçümden önce 400 ms
+// tek POST · başarıda ?ok= yönlendirmesi · Temizle · Esc. v364: "🧹 Seri Tanım
+// Kaldır" penceresi (L bölümü) aynı ölçümlerle. Ölçümden önce 400 ms
 // beklenir (açılış animasyonu — CLAUDE.md "Modal içinde form").
 //
 // Sunucu cevapları (ajax=tanim_satir) MOCK'lanır; mock verisi sayfaya gömülü
@@ -73,6 +74,15 @@ async function mockKur(page, durum) {
             const c = FIXTURE.cevap[anahtar];
             if (!c) { await route.fulfill({ status: 404, body: 'fixture yok: ' + anahtar }); return; }
             await route.fulfill({ contentType: 'application/json', body: JSON.stringify(c) });
+        } else if (ajax === 'tanim_kaldir_satir') {
+            const c = FIXTURE.kaldir[[u.searchParams.get('kaynak'), u.searchParams.get('uid')].join('|')];
+            if (!c) { await route.fulfill({ status: 404, body: 'fixture yok' }); return; }
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify(c) });
+        } else if (ajax === 'tanim_kaldir_toplu') {
+            durum.kposts = durum.kposts || [];
+            durum.kposts.push(JSON.parse(route.request().postData()));
+            if (durum.gecikme) await new Promise(r => setTimeout(r, durum.gecikme));
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify(durum.kcevap || {}) });
         } else if (ajax === 'tanim_toplu_kaydet') {
             durum.posts.push(JSON.parse(route.request().postData()));
             if (durum.gecikme) await new Promise(r => setTimeout(r, durum.gecikme));
@@ -96,27 +106,39 @@ async function tara(page, uid) {
 const satirlar = page => page.$$eval('#iskSeriListe .isk-seri-satir', els => els.map(e => ({ cls: e.className, txt: e.textContent.replace(/\s+/g, ' ').trim() })));
 const sinifVar = (liste, i, s) => !!liste[i] && liste[i].cls.includes('isk-seri-s-' + s);
 
-async function olc(page) {
-    return page.evaluate(() => {
-        const ovl = document.getElementById('iskSeriModal');
+async function olc(page, modalId = 'iskSeriModal', kaydetId = 'iskSeriKaydet') {
+    return page.evaluate(([modalId, kaydetId]) => {
+        const ovl = document.getElementById(modalId);
         const dlgEl = ovl.querySelector('.pm-dialog');
         const dlg = dlgEl.getBoundingClientRect();
         const govde = ovl.querySelector('.isk-seri-body');
-        const kaydet = document.getElementById('iskSeriKaydet').getBoundingClientRect();
+        const kaydet = document.getElementById(kaydetId).getBoundingClientRect();
         const ust = document.elementFromPoint(kaydet.left + kaydet.width / 2, kaydet.top + kaydet.height / 2);
         return {
             acik: !ovl.hidden, vw: innerWidth, vh: innerHeight,
             dlg: { sol: dlg.left, sag: dlg.right, ust: dlg.top, alt: dlg.bottom },
             kaydetEkranda: kaydet.top >= 0 && kaydet.bottom <= innerHeight && kaydet.left >= 0 && kaydet.right <= innerWidth,
-            kaydetTiklanir: !!ust && !!ust.closest('#iskSeriKaydet'),
+            kaydetTiklanir: !!ust && !!ust.closest('#' + kaydetId),
             govdeKayar: govde.scrollHeight > govde.clientHeight + 1,
             govdeOverflow: getComputedStyle(govde).overflowY,
             tasma: document.documentElement.scrollWidth > innerWidth,
             tasmaDlg: dlgEl.scrollWidth > dlgEl.clientWidth + 1,
             tasmaGovde: govde.scrollWidth > govde.clientWidth + 1,
         };
-    });
+    }, [modalId, kaydetId]);
 }
+
+// ── v364 Seri Tanım Kaldır yardımcıları ──
+async function kBekle(page) {
+    await page.waitForFunction(() => !document.querySelector('#iskKaldirListe .isk-seri-s-bekliyor'), null, { timeout: 5000 });
+}
+async function kTara(page, uid) {
+    await page.fill('#iskKaldirGiris', uid);
+    await page.press('#iskKaldirGiris', 'Enter');
+    await kBekle(page);
+}
+const kSatirlar = page => page.$$eval('#iskKaldirListe .isk-seri-satir', els => els.map(e => ({ cls: e.className, txt: e.textContent.replace(/\s+/g, ' ').trim() })));
+const kSayac = page => page.$$eval('#iskKaldirSayac [data-sayac]', els => Object.fromEntries(els.map(e => [e.getAttribute('data-sayac'), +e.textContent])));
 
 (async () => {
     await new Promise(r => sunucu.listen(0, '127.0.0.1', r));
@@ -274,6 +296,109 @@ async function olc(page) {
         await page2.waitForTimeout(100);
         ok('Esc pencereyi kapatır', await page2.evaluate(() => document.getElementById('iskSeriModal').hidden));
         await ctx2.close();
+
+        // ── L. v364 Seri Tanım Kaldır ──
+        const ctx3 = await browser.newContext({ viewport: { width: ekran.width, height: ekran.height } });
+        await ctx3.addInitScript(() => {
+            window.NDEFReader = class { constructor() { window.__ndef = this; this.l = {}; } addEventListener(t, f) { this.l[t] = f; } scan() { return Promise.resolve(); } };
+        });
+        const p3 = await ctx3.newPage();
+        const d3 = { posts: [], kposts: [], cevap: {}, kcevap: {}, gecikme: 0 };
+        await mockKur(p3, d3);
+        let onaylar = 0, onayCevap = true;
+        p3.on('dialog', async dlg => { onaylar++; if (onayCevap) await dlg.accept(); else await dlg.dismiss(); });
+        await p3.goto(KOK);
+        await p3.waitForTimeout(300);
+        ok('KALDIR: "🧹 Seri Tanım Kaldır" düğmesi Seri Kart Tanımla\'nın yanında görünür', await p3.isVisible('#iskKaldirAc')
+            && await p3.evaluate(() => document.getElementById('iskKaldirAc').parentElement === document.getElementById('iskSeriAc').parentElement));
+        await p3.click('#iskKaldirAc');
+        await p3.waitForTimeout(400);
+        let k = await olc(p3, 'iskSeriKaldirModal', 'iskKaldirKaydet');
+        ok('KALDIR: pencere açıldı; ekran içinde; yatay taşma yok', k.acik && k.dlg.sol >= -0.5 && k.dlg.sag <= k.vw + 0.5 && k.dlg.alt <= k.vh + 0.5 && !k.tasma && !k.tasmaDlg && !k.tasmaGovde, JSON.stringify(k));
+        ok('KALDIR: tarama kutusu AÇIK (seçim gerekmez), Kaydet KAPALI, depo = aktif depo', !(await p3.isDisabled('#iskKaldirGiris')) && await p3.isDisabled('#iskKaldirKaydet')
+            && /Depo A/.test(await p3.textContent('#iskSeriKaldirModal .isk-seri-body')));
+        if (ekran.width < 768) {
+            const fs16 = await p3.evaluate(() => ['iskKaldirGiris', 'iskKaldirNeden'].map(id => parseFloat(getComputedStyle(document.getElementById(id)).fontSize)));
+            ok('KALDIR mobil: girdi yazı boyutu ≥ 16px', fs16.every(x => x >= 16), JSON.stringify(fs16));
+        }
+        await kTara(p3, '100000002');   // K002: A / Kadın / Depo A → kaldırılacak
+        await kTara(p3, '100000001');   // K001: tanımsız → atlanır
+        await kTara(p3, '100000006');   // K006: Depo B → engel
+        let ks = await kSatirlar(p3);
+        ok('KALDIR: 3 satır — kaldırılacak · tanımsız · başka depo', ks.length === 3 && ks[0].cls.includes('isk-seri-s-kaldirilacak') && ks[1].cls.includes('isk-seri-s-tanimsiz') && ks[2].cls.includes('isk-seri-s-baska_depo'), JSON.stringify(ks));
+        ok('KALDIR: satır metni kart no · çavuş · tip · depo; engel satırı depoyu söyler', /K002/.test(ks[0].txt) && /Çavuş A/.test(ks[0].txt) && /Kadın/.test(ks[0].txt) && /Depo A/.test(ks[0].txt) && /Depo B/.test(ks[2].txt), JSON.stringify(ks));
+        let kc = await kSayac(p3);
+        ok('KALDIR: sayaçlar Kaldırılacak 1 / Atlanacak 1 / Engel 1; engel varken Kaydet KAPALI', kc.kaldirilacak === 1 && kc.tanimsiz === 1 && kc.engel === 1 && await p3.isDisabled('#iskKaldirKaydet'), JSON.stringify(kc));
+        await p3.fill('#iskKaldirGiris', '100000002');
+        await p3.press('#iskKaldirGiris', 'Enter');
+        await p3.waitForTimeout(80);
+        ok('KALDIR: aynı kart tekrar → yeni satır YOK', (await kSatirlar(p3)).length === 3);
+        await p3.click('#iskKaldirListe .isk-seri-satir:nth-child(3) [data-sil]');
+        ok('KALDIR: engel satırı ✕ ile silinince Kaydet AÇIK', (await kSatirlar(p3)).length === 2 && !(await p3.isDisabled('#iskKaldirKaydet')));
+        ok('KALDIR: NFC düğmesi görünür', await p3.isVisible('#iskKaldirNfc'));
+        await p3.click('#iskKaldirNfc');
+        await p3.waitForTimeout(50);
+        await p3.evaluate(() => window.__ndef.l.reading({ serialNumber: '04:a1:b2:c3' }));
+        await kBekle(p3);
+        ks = await kSatirlar(p3);
+        ok('KALDIR: NFC okuması satır ekler (havuzda yok → HATA, Kaydet KAPALI)', ks.length === 3 && ks[2].cls.includes('isk-seri-s-hata') && await p3.isDisabled('#iskKaldirKaydet'), JSON.stringify(ks[2]));
+        await p3.click('#iskKaldirListe .isk-seri-satir:nth-child(3) [data-sil]');
+        for (let i = 1; i <= 40; i++) await kTara(p3, String(700000000 + i));
+        ks = await kSatirlar(p3);
+        kc = await kSayac(p3);
+        ok('KALDIR: 42 satır, sayaç 41 / 1 / 0', ks.length === 42 && kc.kaldirilacak === 41 && kc.tanimsiz === 1 && kc.engel === 0, JSON.stringify(kc));
+        await p3.waitForTimeout(400);
+        k = await olc(p3, 'iskSeriKaldirModal', 'iskKaldirKaydet');
+        ok('KALDIR: gövde KAYAR; Kaydet ekranda ve TIKLANABİLİR; yatay taşma yok', k.govdeKayar && /auto|scroll/.test(k.govdeOverflow) && k.kaydetEkranda && k.kaydetTiklanir && !k.tasma && !k.tasmaDlg && !k.tasmaGovde, JSON.stringify(k));
+        const kSon = await p3.evaluate(() => {
+            const g = document.querySelector('#iskSeriKaldirModal .isk-seri-body');
+            g.scrollTop = g.scrollHeight;
+            const b = [...document.querySelectorAll('#iskKaldirListe [data-sil]')].pop();
+            const r = b.getBoundingClientRect(), f = document.getElementById('iskKaldirKaydet').getBoundingClientRect();
+            const ust = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return { tik: !!ust && ust.closest('[data-sil]') === b, altaSigar: r.bottom <= f.top + 1 };
+        });
+        ok('KALDIR: en alttaki satırın sil düğmesi TIKLANABİLİR', kSon.tik && kSon.altaSigar, JSON.stringify(kSon));
+
+        // Onay reddedilirse POST YOK
+        onayCevap = false;
+        await p3.click('#iskKaldirKaydet');
+        await p3.waitForTimeout(100);
+        ok('KALDIR: onay penceresi çıkar; vazgeçilirse POST YOK', onaylar === 1 && d3.kposts.length === 0);
+        onayCevap = true;
+        // Sunucu engel satırı döndürür → liste korunur
+        await p3.fill('#iskKaldirNeden', 'Sezon sonu');
+        d3.kcevap = { ok: false, kod: 'hatali_satir', hata: 'Listede engelli satırlar var — hiçbir tanım kaldırılmadı.',
+                      satirlar: [{ idx: 0, sinif: 'baska_depo', hata: 'Kart Depo B deposunda tanımlı', card_no: 'K002', tanim: null }] };
+        await p3.click('#iskKaldirKaydet');
+        await p3.waitForSelector('#iskKaldirMesaj:not([hidden])');
+        ks = await kSatirlar(p3);
+        const kp = d3.kposts[0];
+        ok('KALDIR: sunucu engeli → bildirim, liste KORUNDU (42), 1. satır kırmızı, Kaydet KAPALI', ks.length === 42 && ks[0].cls.includes('isk-seri-s-baska_depo') && /hiçbir tanım/.test(await p3.textContent('#iskKaldirMesaj')) && await p3.isDisabled('#iskKaldirKaydet'));
+        ok('KALDIR: POST gövdesi csrf + 32 hane istek_id + gerekçe + 42 satır sırayla — DEPO YOK', d3.kposts.length === 1 && kp.csrf === 'testcsrf' && /^[a-f0-9]{32}$/.test(kp.istek_id)
+            && kp.gerekce === 'Sezon sonu' && kp.satirlar.length === 42 && kp.satirlar[0].uid === '100000002' && !('depo' in kp), JSON.stringify(kp).slice(0, 200));
+        await p3.evaluate(() => document.querySelector('#iskKaldirListe .isk-seri-satir [data-sil]').click());
+        d3.kcevap = { ok: true, mesaj: '40 kartın tanımı kaldırıldı, 1 tanımsız kart atlandı. Kartlar havuzda boşta.' };
+        d3.gecikme = 300;
+        await p3.dblclick('#iskKaldirKaydet');
+        await p3.waitForURL(/isci_kartlari\.php\?ok=/, { timeout: 5000 });
+        ok('KALDIR: başarıda ?ok= yönlendirmesi; çift tıklama TEK POST; istek_id yenilendi', /ok=40%20kart/.test(p3.url()) && d3.kposts.length === 2 && d3.kposts[1].istek_id !== d3.kposts[0].istek_id && d3.kposts[1].satirlar.length === 41, p3.url() + ' ' + d3.kposts.length);
+        await ctx3.close();
+
+        const ctx4 = await browser.newContext({ viewport: { width: ekran.width, height: ekran.height } });
+        const p4 = await ctx4.newPage();
+        await mockKur(p4, { posts: [], kposts: [], cevap: {}, kcevap: {}, gecikme: 0 });
+        await p4.goto(KOK);
+        await p4.waitForTimeout(300);
+        await p4.click('#iskKaldirAc');
+        await p4.waitForTimeout(400);
+        await kTara(p4, '100000002');
+        await p4.click('#iskKaldirTemizle');
+        ok('KALDIR: Listeyi Temizle → 0 satır, boş metni, Kaydet KAPALI', (await kSatirlar(p4)).length === 0 && await p4.isVisible('#iskKaldirBos') && await p4.isDisabled('#iskKaldirKaydet'));
+        await p4.keyboard.press('Escape');
+        await p4.waitForTimeout(100);
+        ok('KALDIR: Esc pencereyi kapatır; Seri Kart penceresi açılmadı', await p4.evaluate(() => document.getElementById('iskSeriKaldirModal').hidden && document.getElementById('iskSeriModal').hidden));
+        await ctx4.close();
     }
 
     await browser.close();

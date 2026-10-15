@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v363` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v364` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Çavuş tarihli normal süre (v351):** `cavus_form.php` ayrı süre formu + aynı ekranda geçmiş. `config/pdks_cavus_sure.php`, mevcut `audit_log` üzerinde `normal_sure_donemi` olayları; bu kayıtlar işlevsel veri, silinmez. Dahil tarih aralığı / süresiz, son kayıt önceliği; geçmiş snapshot ve onay düzeltmesi, taslak yeniden hesaplama; final varsa tam RED. Fiyat Tam/FM saatlerinden öncelikli, parasal ücret değişmez. Migration yok. Ayrıntı: `docs/CAVUS_SURE_DONEMLERI.md`.
 
@@ -663,6 +663,25 @@ Kart Havuzu "⚡ Seri Kart Tanımla": çavuş + tip (`pdks_gunluk_desteklenen_ti
 - **UI:** `#iskSeriModal` = başlık / kayan gövde / sabit alt çubuk, `<form>` SARILMAZ (`.pm-dialog > form` kuralı kalsın). pdks.css "v299" bloğu.
 - Test: `php scripts/pdks_kart_toplu_tanim_smoke.php` · `php scripts/pdks_kart_toplu_render.php > _test_kart_toplu.html` → `node scripts/pdks_kart_toplu_smoke.js`.
 - **v301 — tekli "Yeni Kart Tanımla" KALDIRILDI** (sahip kararı): kart ekleme/tanımlamanın TEK yolu Seri Kart Tanımla. Sayfadan `kart_ekle` POST dalı, `ajax=onizle` ucu ve `$onerilenKartNo` gitti; `pdks_gunluk_kart_olustur()` / `pdks_gunluk_sonraki_kart_no()` Seri Kart'ın toplu kaydı için KALIR, `assets/pdks.js` `data-pdks-scan` yardımcısı `personel_kartlar`/`personel_form` için KALIR — silme. `$seriHazir` false (tablo/Faz 8A/aktif depo yok) iken sayfa `#iskSeriYok` ile nedenini + migrate.php yönlendirmesini söyler; o durumda kart eklenemez. Düzenle/Durum/Tanım modalları ve Kart Sorgula DEĞİŞMEDİ. Testler bölümün YOKLUĞUNU denetler (kaynakta "Yeni Kart Tanımla" / `kart_ekle` geçmemeli — yorumda bile).
+
+### Seri Tanım Kaldır (v364)
+Kart Havuzu "🧹 Seri Tanım Kaldır" (Seri Kart Tanımla'nın yanında, aynı `$seriHazir` koşuluyla gizli): kartlar art arda okutulur
+(USB / sürekli NFC), liste (kart no · çavuş · tip · depo) kontrol edilir, opsiyonel not, TEK "Tanımları Kaldır" (onay penceresi) ile
+hepsinin AKTİF DEPODAKİ tanımı biter. Kart havuzda nötr kalır, hiçbir şey SİLİNMEZ (geçmiş satırı `valid_to` + `aktif_kart_id=NULL`).
+Yeni yetki YOK (kapı `worker_cards`), migration YOK.
+- **Sınıflar** (`pdks_gunluk_kart_tanim_kaldir_satir_sinifla()`, saf): kaldirilacak · tanimsiz (atlanır) · baska_depo (ENGEL) · hata
+  (geçersiz UID, havuzda yok, kartsız sanal kart, yinelenen). Kayıp/devre dışı kartın tanımı da kaldırılır. İçerideki kart = `uyari`
+  (engel değil). Sınıf SUNUCUDAN: GET `ajax=tanim_kaldir_satir` (`pdks_gunluk_kart_tanim_kaldir_satir()`, salt okunur) — JS kopyası YOK.
+- **Yazma** POST JSON `ajax=tanim_kaldir_toplu` → `pdks_gunluk_kart_tanim_kaldir_toplu($satirlar, $reason, $istekId, $userId, $pdo)`:
+  depo = `active_depot()` (istemciden ALINMAZ), HEP-YA-HİÇ tek tx, MySQL'de Seri Kart ile AYNI `GET_LOCK('pdks_kart_tanim_toplu')` tx'in ilk
+  işi, kartlar artan id ile kilitli, kilit altında yeniden değerlendirme; engel varsa hiçbir şey yazılmaz. Her kart MEVCUT
+  `pdks_gunluk_kart_tanim_bitir()` ile kapanır (dış tx'e katılır, erken commit yok; kart başına audit `kart_tanim_bitir`) — gövdede
+  worker_card_assignments'a doğrudan UPDATE YOK (test denetler). Varsayılan gerekçe "Seri tanım kaldırma". `istek_id` özet audit
+  `kart_tanim_kaldir_toplu`'da aranır (`..._toplu_istek_kayitli/_audit`'e `$action` parametresi eklendi). Sınır 100.
+- **UI:** `#iskSeriKaldirModal` (`.isk-seri .isk-kaldir`; başlık / kayan gövde / sabit alt çubuk, `<form>` SARILMAZ), sayaçlar
+  Kaldırılacak / Atlanacak / Engel; pdks.css "v364" bloğu.
+- Test: `php scripts/pdks_kart_tanim_kaldir_smoke.php` · `php scripts/pdks_kart_toplu_render.php > _test_kart_toplu.html` →
+  `node scripts/pdks_kart_toplu_smoke.js` (L bölümü).
 
 ### Kart Havuzu — Tanımlı/Tanımsız Ayrımı + Seçerek Silme (v303)
 Sahip kararları: normal kiosk girişi DEĞİŞMEDİ (tanımlı kart kendi çavuşu+tipiyle normal ekrandan girebilir);

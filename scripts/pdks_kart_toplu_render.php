@@ -1,7 +1,7 @@
 <?php
 // =========================================================
 // scripts/pdks_kart_toplu_render.php — v299 Kart Havuzu "⚡ Seri Kart Tanımla"
-// penceresinin tarayıcı testi (pdks_kart_toplu_smoke.js) için sayfayı GERÇEK
+// (+ v364 "🧹 Seri Tanım Kaldır") penceresinin tarayıcı testi (pdks_kart_toplu_smoke.js) için sayfayı GERÇEK
 // CSS/JS ile tek HTML dosyasına basar. Bellek içi SQLite (canlı DB'ye dokunmaz).
 // Sunucu cevaplarını (ajax=tanim_satir) tarayıcı testi MOCK'lar; mock verisi,
 // GERÇEK sunucu fonksiyonlarıyla (bilgi + sinifla) burada üretilip sayfanın
@@ -120,6 +120,19 @@ foreach ($uidler as [$kay, $uid]) {
         $bilgi = pdks_gunluk_kart_tanim_satir_bilgi(db(), $uid, $kay);
         $fx['cevap']["$kay|$uid|$c|$t"] = $bilgi + pdks_gunluk_kart_tanim_satir_sinifla($bilgi, $c, $t, 'Depo A');
     }
+}
+// v364 Seri Tanım Kaldır: K006 başka depoda (Depo B) tanımlı → engel; 40 tanımlı kart (uzun liste).
+pdks_gunluk_kart_tanim_kaydet($kid('K006'), $a, $kadin, 'Depo B', 1, db());
+foreach (range(1, 40) as $i) {
+    $o = pdks_gunluk_kart_olustur(['card_no' => 'T' . str_pad((string)$i, 3, '0', STR_PAD_LEFT), 'ham_uid' => (string)(700000000 + $i), 'kaynak' => 'usb_decimal'], 1, db());
+    pdks_gunluk_kart_tanim_kaydet((int)$o['card_id'], $b, $erkek, 'Depo A', 1, db());
+}
+// Mock verisi: her (kaynak, uid) için ajax=tanim_kaldir_satir'ın GERÇEK cevabı.
+$fx['kaldir'] = [];
+$kUidler = $uidler;
+foreach (range(1, 40) as $i) $kUidler[] = ['usb_decimal', (string)(700000000 + $i)];
+foreach ($kUidler as [$kay, $uid]) {
+    $fx['kaldir']["$kay|$uid"] = pdks_gunluk_kart_tanim_kaldir_satir(db(), $uid, $kay, 'Depo A');
 }
 $FIXTURE_JSON = str_replace('</', '<\\/', json_encode($fx, JSON_UNESCAPED_UNICODE));
 
