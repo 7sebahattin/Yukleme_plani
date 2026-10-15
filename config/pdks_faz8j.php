@@ -413,8 +413,13 @@ function pdks_faz8j_oturum_coz(PDO $pdo, int $foremanId, string $workDate, strin
  * v303 $hedef: ['foreman_id' => int, 'depo' => string] — hedef mesainin çavuşu/deposu
  * (tanımlı kart kapısı). Verilmezse $sessionId'den okunur; ikisi de yoksa tanımlı
  * kart REDDEDİLİR (fail-closed).
+ * v363 $secenek (OPT-IN; varsayılan [] = eski davranış birebir):
+ *   'kapali_mesai_eksik' => true — çıkışlı satırın çakışma kontrolünde, KAPATILMIŞ mesaide
+ *   çıkışsız kalmış (eksik çıkış) dönem sonsuza uzanmış SAYILMAZ: mesainin closed_at'inde
+ *   biter (closed_at yoksa yok sayılır). AÇIK mesaideki çıkışsız dönem yine engeller.
+ *   Yalnız Giriş Tanımlı manuel çıkışı (pdks_ters_manuel_cikis) kullanır.
  */
-function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, array $satir, ?array $hedef = null): ?string {
+function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, array $satir, ?array $hedef = null, array $secenek = []): ?string {
     $entry = (string)$satir['entry']; $exit = $satir['exit'] ?? null;
     if (!empty($satir['kartsiz'])) {
         return $exit === null ? 'Kartsız mesaide çıkış tarihi ve saati zorunludur.' : null;
@@ -451,6 +456,14 @@ function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, a
         }
         $ov = $pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id = ? AND is_voided = 0 AND exit_time IS NOT NULL AND exit_time > ? LIMIT 1");
         $ov->execute([$cardId, $entry]);
+    } elseif (!empty($secenek['kapali_mesai_eksik'])) {
+        $ov = $pdo->prepare("SELECT p.id FROM daily_worker_work_periods p JOIN daily_work_sessions s ON s.id = p.session_id
+                              WHERE p.worker_card_id = ? AND p.is_voided = 0 AND p.entry_time < ?
+                                AND (p.exit_time > ?
+                                     OR (p.exit_time IS NULL AND s.status = 'open')
+                                     OR (p.exit_time IS NULL AND s.status <> 'open' AND s.closed_at IS NOT NULL AND s.closed_at > ?))
+                              LIMIT 1");
+        $ov->execute([$cardId, $exit, $entry, $entry]);
     } else {
         $ov = $pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id = ? AND is_voided = 0 AND entry_time < ? AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
         $ov->execute([$cardId, $exit, $entry]);

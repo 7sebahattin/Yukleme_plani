@@ -61,6 +61,7 @@ render_flash();
         <span class="tk-cavus-ad"><?= h($c['name']) ?></span>
         <span class="tk-cavus-alt">Havuz <?= (int)$c['havuz']['aktif'] ?> aktif<?= $c['havuz']['kayip'] ? ' · ' . (int)$c['havuz']['kayip'] . ' kayıp' : '' ?><?= $c['havuz']['bozuk'] ? ' · ' . (int)$c['havuz']['bozuk'] . ' bozuk' : '' ?></span>
         <?php if ($sd === 'onayli'): ?><span class="tk-rozet tk-rozet-ok">✓ <?= (int)$c['sayim']['dagitilan'] ?> kişi girdi</span>
+        <?php elseif ($sd === PDKS_TERS_DURUM_MANUEL): ?><span class="tk-rozet tk-rozet-ok">🔢 Manuel · <?= (int)$c['sayim']['manuel_limit'] ?> kişi · <?= (int)$c['sayim']['cikan'] ?> çıktı</span>
         <?php elseif ($sd === 'taslak'): ?><span class="tk-rozet tk-rozet-uyari">Sayım sürüyor</span>
         <?php else: ?><span class="tk-rozet">Sayım yok</span><?php endif; ?>
         <?php if ($c['icerde']): ?><span class="tk-rozet tk-rozet-mavi">İçeride <?= (int)$c['icerde'] ?></span><?php endif; ?>

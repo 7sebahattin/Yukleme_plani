@@ -2651,3 +2651,24 @@ html[data-theme="dark"] .pdks-result-kaynak-manual  { background: #431407; color
 @media (prefers-reduced-motion: reduce) { .pdks-daily-kiosk #giResult .pdks-result-kaynak { animation: none; } }
 /* v355: "Giriş Tanımlı" (Ters Kart Takip) Personel Takibi kartı ikonu — sprite yerine kendi SVG'si */
 .pdks-dashboard-grid .home-card-icon.pdks-icon-giris-tanimli { background-image: url('mobile-visual/giris-tanimli.svg'); background-size: contain; background-position: center; }
+
+/* =========================================================
+   v363 — Giriş Tanımlı · MANUEL SAYIM (ters_kart_sayim.php)
+   Yöntem seçimi (Kartla Say / Manuel Sayı Gir) + manuel panel.
+   Renkler tema tokenlarından (açık/koyu kendiliğinden); seçili düğme
+   koyu temada .tk-sekme.aktif ile aynı koyu mavi (beyaz yazı ≥4.5:1).
+   ========================================================= */
+.tk-yontem { display: flex; gap: 8px; margin: 12px 0; min-width: 0; }
+.tk-yontem-btn { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--border); background: var(--card); color: var(--text); font-weight: 800; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-align: center; line-height: 1.2; }
+.tk-yontem-btn:hover, .tk-yontem-btn:focus-visible { border-color: var(--primary); }
+.tk-yontem-btn.aktif { background: var(--primary); border-color: var(--primary); color: #fff; }
+@media (min-width: 768px) { .tk-yontem-btn { flex: 0 1 auto; padding: 10px 20px; } }
+html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color: #1d4ed8; }
+@media (prefers-color-scheme: dark) { html:not([data-theme="light"]) .tk-yontem-btn.aktif { background: #1d4ed8; border-color: #1d4ed8; } }
+.tk-manuel-panel[hidden], [data-tk-yontem-panel][hidden] { display: none; }
+.tk-manuel-giris { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin: 12px 0; min-width: 0; }
+.tk-manuel-etiket { flex: 0 1 200px; font-size: 14px; }
+.tk-manuel-input { width: 100%; box-sizing: border-box; min-height: 56px; font-size: 28px !important; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.tk-manuel-sonuc { flex: 1 1 180px; min-width: 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; background: var(--success-soft); border: 1px solid var(--success); font-size: 16px; }
+.tk-manuel-sonuc strong { font-size: 28px; color: var(--success); font-variant-numeric: tabular-nums; }
+.tk-cip-iptal { text-decoration: line-through; opacity: .6; }

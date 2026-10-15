@@ -33,7 +33,7 @@ if (!chromium) {
 }
 
 const ROOT = path.dirname(__dirname);
-const SAYFALAR = ['hub', 'havuz', 'sayim', 'sayim_onayli', 'sayim_secim', 'mutabakat'];
+const SAYFALAR = ['hub', 'havuz', 'sayim', 'sayim_onayli', 'sayim_manuel_onayli', 'sayim_secim', 'mutabakat'];
 
 // ── Render (gerçek sayfa kodu) ──
 function render(ad, sayfa, ekEnv) {
@@ -203,7 +203,8 @@ const tasma = page => page.evaluate(() => ({ sw: document.documentElement.scroll
             const zemin = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c && c.a > 0.5) return c; } return rgb(getComputedStyle(document.documentElement).backgroundColor) || { r: 255, g: 255, b: 255 }; };
             const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
             const kontrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-            return [...document.querySelectorAll('.tk-sayac-n'), document.querySelector('.tk-sekme.aktif'), ...document.querySelectorAll('.tk-sekme:not(.aktif)')]
+            // v363: gizli (seçilmemiş) manuel paneldeki sayaçlar ölçülmez — yalnız görünenler.
+            return [...[...document.querySelectorAll('.tk-sayac-n')].filter(e => !e.closest('[hidden]')), document.querySelector('.tk-sekme.aktif'), ...document.querySelectorAll('.tk-sekme:not(.aktif)')]
                 .filter(Boolean).map(el => { const c = rgb(getComputedStyle(el).color), z = zemin(el); return { s: el.className + ' "' + el.textContent.trim().slice(0, 14) + '"', c, z, k: +kontrast(c, z).toFixed(2), ayni: c.r === z.r && c.g === z.g && c.b === z.b }; });
         });
         const sayacN = k.filter(x => /tk-sayac-n/.test(x.s)), sekme = k.filter(x => /tk-sekme aktif/.test(x.s));
@@ -476,6 +477,108 @@ const tasma = page => page.evaluate(() => ({ sw: document.documentElement.scroll
         await page.click('[data-tk-dlg-tamam]'); await page.waitForTimeout(400);
         const s = await sonucOku(page);
         ok('sunucu reddi → #tkSonuc kırmızı + metin, sayfa yerinde', /tk-sonuc-hata/.test(s.sinif) && /geri alınamaz/.test(s.metin) && !durum.gezinme, JSON.stringify(s));
+        await ctx.close();
+    }
+
+    // ===================================================================
+    // 4b) v363 — Manuel sayım paneli (taslak) + onaylı manuel görünüm
+    // ===================================================================
+    console.log('\n=== 4b) Manuel sayım ===');
+    const MANUEL_ONIZ = g => {
+        const k = String(g.kalan || '');
+        if (k === '') return { ok: true, degerlendirme: { ok: false, genel: [], uyarilar: [], ozet: { havuz_aktif: 19, kalan: null, dagitilan: null, zaten_iceride: 0, manuel_limit: null, haric: 1 } } };
+        const n = 19 - (+k);
+        return { ok: true, degerlendirme: { ok: n > 0, genel: n > 0 ? [] : ['Dağıtılmış kart yok.'], uyarilar: ['1 kart önceki günden dönmedi (K099) — elde değilse Kayıp işaretleyin.'],
+            ozet: { havuz_aktif: 19, kalan: +k, dagitilan: n, zaten_iceride: 0, manuel_limit: n, haric: 1 } } };
+    };
+    for (const ekran of [EKRANLAR[0], EKRANLAR[2]]) {
+        const durum = varsayilan();
+        durum.yanit.manuel_onizle = MANUEL_ONIZ;
+        durum.yanit.manuel_onayla = { ok: true, sayim_id: 1, ozet: { dagitilan: 14 } };
+        const { ctx, page } = await sayfaAc(browser, HTML.sayim, { width: ekran.width, height: ekran.height }, durum);
+        ok(`${ekran.width}px yöntem düğmeleri var, açılışta "Kartla Say" seçili, manuel panel gizli`,
+            (await gorunur(page, '[data-tk-yontem="kart"]')) && (await gorunur(page, '[data-tk-yontem="manuel"]'))
+            && (await page.getAttribute('[data-tk-yontem="kart"]', 'aria-pressed')) === 'true' && !(await gorunur(page, '#tkManuelKalan')) && (await gorunur(page, '#tkOnayBtn')));
+        await page.click('[data-tk-yontem="manuel"]');
+        await page.waitForTimeout(250);
+        const st = await page.evaluate(() => { const i = document.getElementById('tkManuelKalan'); const r = i.getBoundingClientRect();
+            return { fs: parseFloat(getComputedStyle(i).fontSize), w: r.width, h: r.height, sol: r.left, sag: r.right, vw: innerWidth, im: i.getAttribute('inputmode'),
+                     kart: !!document.querySelector('[data-tk-yontem-panel="kart"]').hidden, odak: document.activeElement === i,
+                     basili: document.querySelector('[data-tk-yontem="manuel"]').getAttribute('aria-pressed') }; });
+        ok(`${ekran.width}px "Manuel Sayı Gir" → manuel panel görünür, kart paneli gizli, aria-pressed`, (await gorunur(page, '#tkManuelKalan')) && st.kart && st.basili === 'true', JSON.stringify(st));
+        ok(`${ekran.width}px "Elde kalan kart" kutusu ekran içinde, ≥16px yazı, inputmode=numeric, odakta`, st.sol >= 0 && st.sag <= st.vw && st.fs >= 16 && st.h >= 44 && st.im === 'numeric' && st.odak, JSON.stringify(st));
+        const t = await tasma(page);
+        ok(`${ekran.width}px manuel panel: yatay taşma yok`, t.sw <= t.vw + 1, JSON.stringify(t));
+        // Kartla sayım okuyucusu manuel modda DURUR — USB okutması POST üretmez
+        durum.istekler.length = 0;
+        await page.evaluate(() => { const i = document.getElementById('tkScanInput'); i.value = '700000009'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+        await page.waitForTimeout(300);
+        ok(`${ekran.width}px manuel modda kart okutması POST okut GÖNDERMEZ`, istek(durum, 'okut').length === 0, JSON.stringify(durum.istekler.map(x => x.uc)));
+        await page.fill('#tkManuelKalan', '5');
+        await page.waitForTimeout(700);
+        const canli = await page.textContent('[data-tk-manuel-calisan]');
+        ok(`${ekran.width}px kalan 5 yazıldı → "→ 14 kişi çalışacak" (havuz 19 − 5)`, canli.trim() === '14', canli);
+        const mo = istek(durum, 'manuel_onizle');
+        const so = mo[mo.length - 1];
+        ok(`${ekran.width}px POST manuel_onizle {csrf, sayim_id, kalan:"5", giris_saati, neden, beyan}`, !!so && so.govde.kalan === '5' && so.govde.sayim_id === 1
+            && anahtarlar(so.govde) === JSON.stringify(['beyan', 'csrf', 'giris_saati', 'kalan', 'neden', 'sayim_id']), JSON.stringify(mo.map(x => x.govde)));
+        const oz = await page.evaluate(() => ({ t: document.getElementById('tkManuelOnizleme').textContent, btn: document.getElementById('tkManuelOnayBtn').disabled, bt: document.getElementById('tkManuelOnayBtn').textContent }));
+        ok(`${ekran.width}px önizleme: "14 kişi çalışıyor" + uyarı; Onayla AKTİF`, /14 kişi çalışıyor/.test(oz.t) && /dönmedi/.test(oz.t) && !oz.btn && /14 kişi/.test(oz.bt), JSON.stringify(oz));
+        await page.fill('#tkManuelKalan', '19');
+        await page.waitForTimeout(700);
+        const oz2 = await page.evaluate(() => ({ t: document.getElementById('tkManuelOnizleme').textContent, btn: document.getElementById('tkManuelOnayBtn').disabled }));
+        ok(`${ekran.width}px kalan 19 (= havuz) → hata + Onayla PASİF`, /Dağıtılmış kart yok/.test(oz2.t) && oz2.btn, JSON.stringify(oz2));
+        await page.fill('#tkManuelKalan', '5');
+        await page.waitForTimeout(700);
+        durum.istekler.length = 0;
+        await page.click('#tkManuelOnayBtn');
+        await page.waitForTimeout(250);
+        const dl = await page.evaluate(() => { const g = document.getElementById('tkDlg'); const r = g.getBoundingClientRect(); return { open: g.open, m: g.querySelector('[data-tk-dlg-metin]').textContent, sag: r.right, vw: innerWidth }; });
+        ok(`${ekran.width}px Onayla → onay penceresi (14 kişi, en fazla 14 çıkış), ekran içinde`, dl.open && /14 kişi/.test(dl.m) && /en fazla 14/.test(dl.m) && dl.sag <= dl.vw, JSON.stringify(dl));
+        ok(`${ekran.width}px pencere onaylanmadan manuel_onayla GİTMEDİ`, istek(durum, 'manuel_onayla').length === 0);
+        await page.click('[data-tk-dlg-tamam]');
+        await page.waitForTimeout(400);
+        const mon = istek(durum, 'manuel_onayla');
+        ok(`${ekran.width}px POST manuel_onayla {kalan:"5", istek_id(32 hex)} → ?cavus=1&onay=1`, mon.length === 1 && mon[0].govde.kalan === '5' && /^[a-f0-9]{32}$/.test(mon[0].govde.istek_id || '')
+            && durum.gezinme === 'ters_kart_sayim.php?cavus=1&onay=1', JSON.stringify(mon.map(x => x.govde)) + ' ' + durum.gezinme);
+        ok(`${ekran.width}px JS hatası yok (manuel)`, durum.hatalar.length === 0, durum.hatalar.join(' | '));
+        await ctx.close();
+    }
+    {   // inceleme (6): başarısız manuel onaydan sonra önizleme yeniden alınır, düğme yeniden AKTİF olur
+        const durum = varsayilan();
+        durum.yanit.manuel_onizle = MANUEL_ONIZ;
+        durum.yanit.manuel_onayla = { ok: false, kod: 'eszamanli', hata: 'Aynı anda başka bir işlem yapıldı.' };
+        const { ctx, page } = await sayfaAc(browser, HTML.sayim, { width: 390, height: 844 }, durum);
+        await page.click('[data-tk-yontem="manuel"]'); await page.waitForTimeout(150);
+        await page.fill('#tkManuelKalan', '5'); await page.waitForTimeout(700);
+        await page.click('#tkManuelOnayBtn'); await page.waitForTimeout(200);
+        const onizOnce = istek(durum, 'manuel_onizle').length;
+        await page.click('[data-tk-dlg-tamam]'); await page.waitForTimeout(700);
+        const r = await page.evaluate(() => ({ btn: document.getElementById('tkManuelOnayBtn').disabled, t: document.getElementById('tkManuelOnizleme').textContent }));
+        ok('(inceleme 6) manuel onay reddi → hata görünür, önizleme yeniden alındı, Onayla yeniden AKTİF',
+            !r.btn && /başka bir işlem/.test(r.t) && /14 kişi çalışıyor/.test(r.t) && istek(durum, 'manuel_onizle').length > onizOnce && !durum.gezinme, JSON.stringify(r));
+        await ctx.close();
+    }
+    {   // geri dönüş: Kartla Say yeniden okutmayı açar
+        const durum = varsayilan();
+        durum.yanit.manuel_onizle = MANUEL_ONIZ;
+        const { ctx, page } = await sayfaAc(browser, HTML.sayim, { width: 390, height: 844 }, durum);
+        await page.click('[data-tk-yontem="manuel"]'); await page.waitForTimeout(150);
+        await page.click('[data-tk-yontem="kart"]'); await page.waitForTimeout(150);
+        durum.istekler.length = 0;
+        await okut(page, '700000008', 350);
+        ok('Kartla Say\'a dönünce okutma yeniden POST okut gönderir', istek(durum, 'okut').length === 1 && !(await gorunur(page, '#tkManuelKalan')), JSON.stringify(durum.istekler.map(x => x.uc)));
+        await ctx.close();
+    }
+    for (const ekran of [EKRANLAR[0], EKRANLAR[2]]) {   // onaylı manuel sayım görünümü
+        const durum = varsayilan();
+        durum.yanit.geri_al = { ok: false, kod: 'geri_alinamaz', hata: 'Çıkış okutulmaya başlandı.' };
+        const { ctx, page } = await sayfaAc(browser, HTML.sayim_manuel_onayli, { width: ekran.width, height: ekran.height }, durum);
+        const g = await page.evaluate(() => ({ t: document.querySelector('.tk-onayli').textContent, sayac: [...document.querySelectorAll('.tk-sayac')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
+            geri: !!document.getElementById('tkGeriAlBtn'), yontem: document.querySelectorAll('[data-tk-yontem]').length, cip: document.querySelectorAll('.tk-cip-dagitilan').length }));
+        ok(`${ekran.width}px onaylı manuel: "Manuel · 6 kişi çalışıyor", sayaçlar 6 / 2 çıkış / 4 okutulmayan`, /Manuel · 6 kişi çalışıyor/.test(g.t) && g.sayac.some(x => /^6 ?Çalışan/.test(x)) && g.sayac.some(x => /^2 ?Çıkış yapan/.test(x)) && g.sayac.some(x => /^4 ?Çıkışı okutulmayan/.test(x)), JSON.stringify(g));
+        ok(`${ekran.width}px çıkış başladığı için Geri Al düğmesi YOK, yöntem seçimi YOK, 2 çıkış çipi`, !g.geri && g.yontem === 0 && g.cip === 2, JSON.stringify(g));
+        ok(`${ekran.width}px onaylı manuel: okut/onizle isteği GİTMEDİ, JS hatası yok`, durum.istekler.length === 0 && durum.hatalar.length === 0, JSON.stringify(durum.istekler) + durum.hatalar.join(' | '));
         await ctx.close();
     }
 
