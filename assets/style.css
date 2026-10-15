@@ -6776,3 +6776,19 @@ html[data-theme="dark"] .btn.btn-duzenle { background: linear-gradient(180deg, #
 @media (min-width: 768px) {
     .beyan-blok-acik .beyan-blok-head { grid-template-columns: auto minmax(0,1fr) auto; }
 }
+
+/* v365: aynı dorse plakalı bekleyen beyanların Parti No rozeti aynı renkte (yazdırma paletiyle aynı sıra) */
+.bn-parti.bn-g0 { --g-bg:#fde68a; --g-tx:#92400e; --g-ac:#f59e0b; }
+.bn-parti.bn-g1 { --g-bg:#bfdbfe; --g-tx:#1e3a8a; --g-ac:#3b82f6; }
+.bn-parti.bn-g2 { --g-bg:#bbf7d0; --g-tx:#14532d; --g-ac:#22c55e; }
+.bn-parti.bn-g3 { --g-bg:#fbcfe8; --g-tx:#831843; --g-ac:#ec4899; }
+.bn-parti.bn-g4 { --g-bg:#ddd6fe; --g-tx:#4c1d95; --g-ac:#8b5cf6; }
+.bn-parti.bn-g5 { --g-bg:#fed7aa; --g-tx:#7c2d12; --g-ac:#f97316; }
+.bn-parti.bn-g6 { --g-bg:#a5f3fc; --g-tx:#134e4a; --g-ac:#06b6d4; }
+.bn-parti.bn-g7 { --g-bg:#fecaca; --g-tx:#7f1d1d; --g-ac:#ef4444; }
+.bn-parti.bn-g8 { --g-bg:#d9f99d; --g-tx:#365314; --g-ac:#84cc16; }
+.bn-parti.bn-g9 { --g-bg:#e9d5ff; --g-tx:#581c87; --g-ac:#a855f7; }
+.bn-parti.bn-g { color: var(--g-tx); background: linear-gradient(180deg, #ffffff 0%, var(--g-bg) 100%); border-color: var(--g-ac);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 2px 0 var(--g-ac), 0 6px 12px -4px rgba(0,0,0,.25); }
+html[data-theme="dark"] .bn-parti.bn-g { color: var(--g-bg); background: linear-gradient(180deg, color-mix(in srgb, var(--g-ac) 38%, #1e2a4a) 0%, color-mix(in srgb, var(--g-ac) 22%, #141b30) 100%);
+    border-color: var(--g-ac); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 0 #121b33, 0 6px 12px -4px rgba(0,0,0,.6); }
