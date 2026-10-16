@@ -221,7 +221,7 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
             <p style="color:#666;font-size:.9em"><strong>Sağlayıcı (sunucu ayarı):</strong> <?= h(mail_ceviri_yapilandirma_ozeti()) ?>
                 <?php $cd = mail_ceviri_durum_oku(); if ($cd): ?><br>Son kuyruk çalışması: <?= h((string)$cd['zaman']) ?> — durum: <?= h((string)$cd['durum']) ?><?= !empty($cd['mesaj']) ? ' (' . h((string)$cd['mesaj']) . ')' : '' ?><?php endif; ?>
                 <br>Sağlayıcı <code>config/local.php</code> içinden seçilir (bkz. docs/MAIL_CENTER_AGENT_BRIDGE.md); anahtar buraya yazılmaz.</p>
-            <div class="form-group"><label><input type="checkbox" name="translate_enabled" value="1"<?= !empty($f['translate_enabled']) ? ' checked' : '' ?>> Bu hesap için otomatik çeviri — AÇILIRSA mail metni (adres/başlık/ek hariç) üçüncü taraf çeviri servisine gönderilir; sağlayıcı ayrıca sunucu ayarından açılmalıdır</label></div>
+            <div class="form-group"><label><input type="checkbox" name="translate_enabled" value="1"<?= !empty($f['translate_enabled']) ? ' checked' : '' ?>> Bu hesapta çeviriye izin ver — mail yalnız "Türkçeye çevir"e basınca (otomatik değil) üçüncü taraf çeviri servisine gönderilir (adres/başlık/ek hariç); sağlayıcı ayrıca sunucu ayarından açılmalıdır</label></div>
             <div class="form-group"><label>Hedef dil</label><input type="text" name="target_lang" maxlength="10" value="<?= $v('target_lang') ?>"></div>
 
             <h3>Erişebilecek kullanıcılar</h3>

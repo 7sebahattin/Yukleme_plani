@@ -229,7 +229,7 @@ function mail_gonderen_adi(array $m): string
 
 function mail_ceviri_durum_etiketi(string $d): string
 {
-    return ['pending' => 'Çeviri bekleniyor', 'translated' => 'Çevrildi', 'failed' => 'Çeviri başarısız', 'skipped' => 'Çeviri kapalı'][$d] ?? $d;
+    return ['pending' => 'Çevrilmedi (çeviri yalnız istek üzerine yapılır)', 'translated' => 'Çevrildi', 'failed' => 'Çeviri başarısız', 'skipped' => 'Çeviri kapalı'][$d] ?? $d;
 }
 
 /** mail.css / mail.js — yalnız mail sayfalarında (hesap_assets() emsali; style.css/app.js'e dokunmaz). */

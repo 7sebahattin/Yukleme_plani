@@ -307,13 +307,19 @@ ok('senkronda dil yerel tespit edilir; Türkçe mail kuyruğa girmez, İngilizce
 
 echo "\n=== 11. Cron entegrasyonu ===\n";
 $sag = new SahteSaglayici();
+// v369: varsayılan — otomatik çeviri KAPALI: sağlayıcı açık olsa bile cron hiçbir maili sağlayıcıya göndermez.
+$bekleyenOnce = (int)$db->query("SELECT COUNT(*) FROM mail_messages WHERE tr_status = 'pending'")->fetchColumn();
 $r = mail_cron_calistir($db, ['kilit_dizin' => $DIZIN, 'simdi' => $NOW + 30 * 3600, 'ceviri_saglayici' => $sag, 'istemci' => function ($h) { throw new MailImapException('connect', 'x'); }]);
-ok('cron çıktısında CEVIRI satırı + sayılar', (bool)preg_grep('/^CEVIRI durum=ok ceviri=\d+/', $r['satirlar']), json_encode($r['satirlar']));
-$r = mail_cron_calistir($db, ['kilit_dizin' => $DIZIN, 'simdi' => $NOW, 'ceviri_saglayici' => null, 'istemci' => function ($h) { throw new MailImapException('connect', 'x'); }]);
+ok('v369: otomatik çeviri KAPALIYKEN cron sağlayıcıya HİÇBİR ŞEY göndermez, pending mailler bekler', $sag->cagrilar === [] && !preg_grep('/^CEVIRI/', $r['satirlar'])
+    && $bekleyenOnce > 0 && (int)$db->query("SELECT COUNT(*) FROM mail_messages WHERE tr_status = 'pending'")->fetchColumn() === $bekleyenOnce, json_encode($r['satirlar']));
+ok('v369: MAIL_TRANSLATE_AUTO tanımsız → mail_ceviri_otomatik_acik() false', !defined('MAIL_TRANSLATE_AUTO') && mail_ceviri_otomatik_acik() === false);
+$r = mail_cron_calistir($db, ['kilit_dizin' => $DIZIN, 'simdi' => $NOW + 30 * 3600, 'ceviri_saglayici' => $sag, 'ceviri_otomatik' => true, 'istemci' => function ($h) { throw new MailImapException('connect', 'x'); }]);
+ok('otomatik çeviri AÇIKKEN cron çıktısında CEVIRI satırı + sayılar', (bool)preg_grep('/^CEVIRI durum=ok ceviri=\d+/', $r['satirlar']), json_encode($r['satirlar']));
+$r = mail_cron_calistir($db, ['kilit_dizin' => $DIZIN, 'simdi' => $NOW, 'ceviri_saglayici' => null, 'ceviri_otomatik' => true, 'istemci' => function ($h) { throw new MailImapException('connect', 'x'); }]);
 ok('çeviri kapalıyken cron\'da CEVIRI satırı YOK', !preg_grep('/^CEVIRI/', $r['satirlar']));
 $sag = new SahteSaglayici(fn() => throw new MailTranslateException('config', 'anahtar'));
 $mz = mesaj($A, 'cron cfg', 'Dear Sir, we kindly ask you to confirm the payment for the order. Best regards', ['tarih' => '2026-10-06 11:30:00']);
-$r = mail_cron_calistir($db, ['kilit_dizin' => $DIZIN, 'simdi' => $NOW + 20 * 3600, 'ceviri_saglayici' => $sag, 'istemci' => function ($h) { throw new MailImapException('connect', 'x'); }]);
+$r = mail_cron_calistir($db, ['kilit_dizin' => $DIZIN, 'simdi' => $NOW + 20 * 3600, 'ceviri_saglayici' => $sag, 'ceviri_otomatik' => true, 'istemci' => function ($h) { throw new MailImapException('connect', 'x'); }]);
 ok('çeviri yapılandırma hatası cron çıkış kodunu ETKİLEMEZ (senkron sonucu belirler)', (bool)preg_grep('/^CEVIRI durum=/', $r['satirlar']));
 
 echo "\n=== 12. Sızıntı ===\n";

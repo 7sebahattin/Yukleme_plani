@@ -306,7 +306,19 @@ function mail_ceviri_yapilandirma_ozeti(): string
     $p = defined('MAIL_TRANSLATE_PROVIDER') ? strtolower((string)MAIL_TRANSLATE_PROVIDER) : 'none';
     if ($p === '' || $p === 'none') return 'KAPALI — mail içeriği hiçbir dış servise gönderilmiyor.';
     if ($saglayici === null) return "Sağlayıcı \"$p\" seçili ama yapılandırma eksik/geçersiz (anahtar veya https adres) — çeviri çalışmıyor.";
-    return "AÇIK — sağlayıcı: $p. Yalnız gövde metni ve konu gönderilir (adres/başlık/ek gönderilmez).";
+    return "AÇIK — sağlayıcı: $p. Yalnız gövde metni ve konu gönderilir (adres/başlık/ek gönderilmez). "
+        . (mail_ceviri_otomatik_acik() ? 'Gelen mailler cron ile OTOMATİK çevrilir (MAIL_TRANSLATE_AUTO).' : 'Gelen mailler YALNIZ istek üzerine ("Türkçeye çevir") çevrilir.');
+}
+
+/**
+ * Gelen maillerin cron ile OTOMATİK çevrilmesi açık mı (v369, sahip kararı: varsayılan KAPALI — istenmeden çeviri token harcar).
+ * Açmak için config/local.php'de `define('MAIL_TRANSLATE_AUTO', true);`. Kapalıyken yalnız kullanıcının "Türkçeye çevir"
+ * tıklaması (mail_ceviri_simdi) sağlayıcıya gider; kuyruk (mail_ceviri_isle) cron'dan ÇAĞRILMAZ.
+ */
+function mail_ceviri_otomatik_acik(): bool
+{
+    if (!defined('MAIL_TRANSLATE_AUTO') && is_file(__DIR__ . '/local.php')) require_once __DIR__ . '/local.php';
+    return defined('MAIL_TRANSLATE_AUTO') && MAIL_TRANSLATE_AUTO === true;
 }
 
 // ── Metin hazırlama + parçalama ─────────────────────────────────────────
@@ -541,7 +553,7 @@ function mail_ceviri_simdi(PDO $pdo, ?MailTranslationProviderInterface $p, int $
     return match ($r['durum']) {
         'translated' => ['ok' => true, 'mesaj' => 'Çevrildi.'],
         'skipped'    => ['ok' => true, 'mesaj' => 'Mail zaten hedef dilde; çeviri gerekmedi.'],
-        'retry'      => ['ok' => false, 'mesaj' => 'Çeviri şu an başarısız; otomatik olarak tekrar denenecek: ' . $r['hata']],
+        'retry'      => ['ok' => false, 'mesaj' => 'Çeviri şu an başarısız; birazdan "Türkçeye çevir" ile tekrar deneyebilirsiniz: ' . $r['hata']],
         default      => ['ok' => false, 'mesaj' => 'Çeviri başarısız: ' . ($r['hata'] ?? '?')],
     };
 }

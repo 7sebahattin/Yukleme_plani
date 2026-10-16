@@ -32,6 +32,7 @@ $cevapYetki = can_mail('reply');
 $sendYetki = can_mail('send');
 $hesapIds = $hazir ? mail_gorunur_hesap_idleri($uid, $pdo) : [];
 $ceviriHazir = mail_ceviri_saglayici() !== null;   // sağlayıcı yapılandırılmış mı (kapalıysa hiçbir şey dışarı gitmez)
+$ceviriOto  = $ceviriHazir && mail_ceviri_otomatik_acik();   // v369: varsayılan KAPALI — çeviri yalnız "Türkçeye çevir" tıklamasıyla
 
 // ── Parametreler (hepsi doğrulanır; yabancı hesap id'si SESSİZCE yok sayılır) ──
 $aSecili = (int)($_GET['a'] ?? $_POST['a'] ?? 0);
@@ -215,7 +216,7 @@ mail_assets();
                 <div class="mail-oz"><?= h(mail_oz($r['ozet'])) ?>
                     <?php if (count($etiketler) > 1): ?><span class="mail-hesap-etiket"><?= h($etiketler[(int)$r['account_id']] ?? '') ?></span><?php endif; ?>
                     <?php if ($r['tr_status'] === 'failed'): ?><span class="mail-durum mail-durum--failed">çeviri hatası</span><?php endif; ?>
-                    <?php if ($r['tr_status'] === 'pending'): ?><span class="mail-durum mail-durum--pending">çeviri bekliyor</span><?php endif; ?></div>
+                    <?php if ($ceviriOto && $r['tr_status'] === 'pending'): ?><span class="mail-durum mail-durum--pending">çeviri bekliyor</span><?php endif; ?></div>
             </a>
             <?php endforeach; ?>
             <?php if (!$liste['satirlar']): ?><p class="mail-bos"><?= $q !== '' ? 'Aramayla eşleşen mail yok.' : 'Bu klasörde mail yok.' ?></p><?php endif; ?>
@@ -336,6 +337,8 @@ mail_assets();
             $trVar = $m['tr_status'] === 'translated' && trim((string)$m['body_tr']) !== '';
             $aktif = $sekme !== '' ? $sekme : ($trVar ? 'tr' : 'orj');
             $uzakVar = $m['body_html_safe'] !== null && str_contains((string)$m['body_html_safe'], 'data-blocked-src');
+            // v369: çeviri YALNIZ bu tıklamayla yapılır (otomatik değil); düğme sağlayıcı + hesap izni varsa çizilir.
+            $ceviriDugme = $ceviriHazir && !$trVar && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true) && mail_hesap_ceviri_acik($pdo, (int)$m['account_id']);
         ?>
             <div class="mail-okuyucu-arac">
                 <a class="btn btn-geri mail-geri" href="<?= h($url(['m' => null])) ?>">← Liste</a>
@@ -346,6 +349,9 @@ mail_assets();
                     <?php if ($cevapYetki): ?>
                     <button class="btn" name="islem" value="<?= $m['replied_at'] === null && (int)$m['needs_reply'] === 1 ? 'cevaplandi' : 'cevap_bekliyor' ?>" type="submit">
                         <?= $m['replied_at'] === null && (int)$m['needs_reply'] === 1 ? 'Cevaplandı say' : 'Cevap bekliyor say' ?></button>
+                    <?php endif; ?>
+                    <?php if ($ceviriDugme && $aktif === 'orj'): ?>
+                    <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Çeviriyi tekrar dene' : 'Türkçeye çevir' ?></button>
                     <?php endif; ?>
                 </form>
             </div>
@@ -384,11 +390,11 @@ mail_assets();
                 <div class="mail-bilgi"><?= h(mail_ceviri_durum_etiketi((string)$m['tr_status'])) ?>.
                     <?php if ($m['tr_status'] === 'failed' && $m['tr_error']): ?><span class="mail-hata-metin"><?= h($m['tr_error']) ?></span><?php endif; ?>
                     Orijinal metin <a href="<?= h($url(['v' => 'orj'])) ?>">Orijinal</a> sekmesinde okunabilir.
-                    <?php if ($ceviriHazir && mail_hesap_ceviri_acik($pdo, (int)$m['account_id']) && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true)): ?>
+                    <?php if ($ceviriDugme): ?>
                     <form method="post" class="mail-satir-form">
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">
                         <input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">
-                        <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Tekrar dene' : 'Şimdi çevir' ?></button>
+                        <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Tekrar dene' : 'Türkçeye çevir' ?></button>
                     </form>
                     <?php endif; ?></div>
                 <?php endif; ?>

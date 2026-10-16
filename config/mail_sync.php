@@ -477,7 +477,8 @@ function mail_yapilandirma_uyarilari(PDO $pdo, array $opt = []): array
     if (function_exists('mail_ceviri_saglayici')) {
         try {
             $p = mail_ceviri_saglayici();
-            if ($p !== null && $p->ad() !== 'none') $u[] = ['seviye' => 'bilgi', 'mesaj' => 'Çeviri sağlayıcısı AÇIK (' . $p->ad() . '): mail metni (adres/başlık/ek hariç) üçüncü taraf servise gönderilir.'];
+            if ($p !== null && $p->ad() !== 'none') $u[] = ['seviye' => 'bilgi', 'mesaj' => 'Çeviri sağlayıcısı AÇIK (' . $p->ad() . '): mail metni (adres/başlık/ek hariç) üçüncü taraf servise gönderilir — '
+                . (function_exists('mail_ceviri_otomatik_acik') && mail_ceviri_otomatik_acik() ? 'gelen mailler OTOMATİK çevrilir.' : 'yalnız kullanıcı "Türkçeye çevir"e bastığında.')];
         } catch (Throwable $e) { /* yapılandırma hatası ayrıca gösteriliyor */ }
     }
     return $u;
@@ -613,8 +614,10 @@ function mail_cron_calistir_ic(PDO $pdo, array $opt = []): array
         $sonuc = mail_sync_tum($pdo, $opt);
         $satirlar = []; $basarili = 0; $hatali = 0;
         // Çeviri kuyruğu (varsa): hata/kapalı durumu senkronu ve çıkış kodunu ETKİLEMEZ.
+        // v369: YALNIZ otomatik çeviri açıkça açıldıysa (MAIL_TRANSLATE_AUTO) — varsayılan: gelen mail istenmeden çevrilmez.
         $ceviriSatiri = null;
-        if (function_exists('mail_ceviri_isle')) {
+        $ceviriOto = array_key_exists('ceviri_otomatik', $opt) ? (bool)$opt['ceviri_otomatik'] : (function_exists('mail_ceviri_otomatik_acik') && mail_ceviri_otomatik_acik());
+        if ($ceviriOto && function_exists('mail_ceviri_isle')) {
             try {
                 $cs = mail_ceviri_isle($pdo, array_key_exists('ceviri_saglayici', $opt) ? $opt['ceviri_saglayici'] : mail_ceviri_saglayici(), ['dizin' => $opt['kilit_dizin'] ?? null, 'simdi' => $opt['simdi'] ?? null, 'sure' => 60.0]);
                 if ($cs['durum'] !== 'kapali') {

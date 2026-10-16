@@ -159,7 +159,7 @@ const MOBIL = (w) => w < 768;
                 const txt = await page.textContent('.mail-metin');
                 ok(`${sayfa}@${w}: Türkçe çeviri gösteriliyor, HTML KAÇIRILMIŞ (<b> etiket olarak değil metin)`, txt.includes('sipariş onaylandı') && txt.includes('<b>satır</b>') && (await page.$$('.mail-metin b')).length === 0);
             }
-            if (sayfa === 'detay_tr_bekleyen') ok(`${sayfa}@${w}: çeviri yokken bilgi + Orijinal'e yönlendirme`, (await page.textContent('.mail-bilgi')).includes('Çeviri bekleniyor'));
+            if (sayfa === 'detay_tr_bekleyen') ok(`${sayfa}@${w}: çeviri yokken bilgi + Orijinal'e yönlendirme`, (await page.textContent('.mail-bilgi')).includes('Çevrilmedi'));
             if (sayfa === 'detay_html_img') {
                 const frame = page.frames().find(f => f !== page.mainFrame());
                 const src = frame ? await frame.evaluate(() => (document.querySelector('img') || {}).getAttribute && document.querySelector('img').getAttribute('src')) : null;
