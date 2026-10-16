@@ -41,8 +41,13 @@ final class FakeMailStream implements MailStream
         if ($p === false) return null;
         $l = substr($this->out, 0, $p);
         $this->out = substr($this->out, $p + 2);
+        // Gerçek akış (MailSocketStream) gibi satır sınırını uygular: uzun SEARCH yanıtı testleri ancak böyle anlamlıdır.
+        if (strlen($l) > $max + 2) throw new MailImapException('limit', 'Sunucu satırı çok uzun.');
+        $this->enUzunSatir = max($this->enUzunSatir, strlen($l));
+        if ($this->kok) $this->kok->enUzunSatir = max($this->kok->enUzunSatir, strlen($l));
         return $l;
     }
+    public int $enUzunSatir = 0;
     public function readBytes(int $n): ?string
     {
         if ($this->dusuruldu) return null;
@@ -167,6 +172,7 @@ final class FakeMailStream implements MailStream
         if ($this->cfg['bye_on_fetch'] && str_contains($items, 'BODY.PEEK[')) { $this->cevap("* BYE server shutting down\r\n"); return; }
         foreach ($set as $uid) {
             if (!isset($this->mesajlar[$uid])) continue;
+            if (isset($this->cfg['fetch_kanca']) && str_contains($items, 'BODY.PEEK[')) ($this->cfg['fetch_kanca'])($uid);   // test: gövde çekimi anı
             $ms = $this->mesajlar[$uid]; $raw = $ms['raw'];
             $idx = array_search($uid, $uids, true) + 1;
             $p = ["UID $uid"];

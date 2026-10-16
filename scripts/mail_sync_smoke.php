@@ -262,4 +262,78 @@ $srv14->mesajlar[7] = msg('g7', 'Kendi gönderdiğim', '2026-10-06 11:40:00', []
 senk($a14);
 ok('hesap eklendikten SONRA gelen mail cevap bekler; kendi mailimiz beklemez', sayi('mail_messages', "account_id = $a14 AND needs_reply = 1") === 1
     && (int)$db->query("SELECT needs_reply FROM mail_messages WHERE account_id = $a14 AND uid = 6")->fetchColumn() === 1);
+
+echo "\n=== 15. Uzun UID SEARCH yanıtı hesabı kilitlemez ===\n";
+$a15 = hesapEkle('cokmail@asya.com', 'imap-parola-ABC', ['initial_days' => 365]);
+$ham15 = mail_test_raw(['msgid' => null, 'subject' => 'Toplu']);
+$m15 = []; for ($i = 1; $i <= 9000; $i++) $m15[1000000 + $i] = ['raw' => $ham15, 'flags' => ['\Seen'], 'date' => '2026-10-01 10:00:00'];
+$srv15 = sunucu($a15, $m15); unset($m15);
+$c = new MailImapClient($srv15->yeniBaglanti(), ['max_satir_ara' => 65536]); $c->baslat(false); $c->girisYap('cokmail@asya.com', 'imap-parola-ABC'); $c->klasorAc('INBOX');
+$e = null; try { $c->uidAra('SINCE 01-Sep-2026'); } catch (MailImapException $ex) { $e = $ex; }
+ok('(koşul gerçek) 9000 × 7 haneli UID tek satırı 64 KB\'ı aşar → eski sınırla limit hatası', $e !== null && $e->kind === 'limit');
+$r = senk($a15);
+ok('SEARCH yanıtı > 64 KB: senkron başarılı, çalıştırma limiti kadar alındı, kalan raporlandı', $r['ok'] && $r['inserted'] === 200 && $r['kalan'] === 8800 && $srv15->enUzunSatir > 65536, json_encode($r) . ' satır=' . $srv15->enUzunSatir);
+ok('imleç ilerledi (sonraki çalıştırma kaldığı yerden)', (int)$db->query("SELECT last_uid FROM mail_sync_state WHERE account_id = $a15")->fetchColumn() === 1000200);
+$r = senk($a15);
+ok('ikinci çalıştırma (UID n:* araması da uzun satır) sorunsuz devam eder', $r['ok'] && $r['inserted'] === 200 && sayi('mail_messages', "account_id = $a15") === 400, json_encode($r));
+$c->kapatZorla(); unset($srv15, $SUNUCULAR[$a15]);
+$db->exec("UPDATE mail_accounts SET is_active = 0 WHERE id = $a15");
+
+echo "\n=== 16. Bağlantı bayt bütçesi normal yükte HATA değildir ===\n";
+$a16 = hesapEkle('butce@asya.com');
+$m16 = []; for ($i = 1; $i <= 7; $i++) $m16[$i] = msg("bt$i", "BT$i", '2026-10-05 10:00:00', [], ['body' => str_repeat('b', 1800)]);
+sunucu($a16, $m16);
+$boy16 = strlen($m16[1]['raw']);
+$kucukButce = function (array $h) use ($boy16) {   // 2 mesaj sığar, 3.'sü sığmaz
+    global $SUNUCULAR;
+    $c = new MailImapClient($SUNUCULAR[(int)$h['id']]->yeniBaglanti(), ['max_toplam' => 65536 + $boy16 * 2 + 100]);
+    $c->baslat(false); $c->girisYap($h['imap_user'], $h['imap_pass']); return $c;
+};
+$r = senk($a16, ['istemci' => $kucukButce]);
+ok('bütçe dolunca mesaj ÇEKİLMEDEN durur: başarı, 2 alındı, 5 kalan', $r['ok'] && $r['error'] === null && $r['inserted'] === 2 && $r['kalan'] === 5 && (bool)preg_grep('/veri bütçesi/', $r['notlar']), json_encode($r));
+ok('hata sayacı artmadı, günlük ok', (int)$db->query("SELECT consecutive_failures FROM mail_sync_state WHERE account_id = $a16")->fetchColumn() === 0
+    && $db->query("SELECT status FROM mail_sync_log WHERE account_id = $a16 ORDER BY id DESC LIMIT 1")->fetchColumn() === 'ok');
+senk($a16, ['istemci' => $kucukButce]); senk($a16, ['istemci' => $kucukButce]); senk($a16, ['istemci' => $kucukButce]);
+ok('sonraki çalıştırmalar kalanı alır: toplam 7, çift yok', sayi('mail_messages', "account_id = $a16") === 7);
+
+echo "\n=== 17. Çökme koruması (yakalanamayan fatal: bellek/süre sınırı) ===\n";
+$a17 = hesapEkle('cokme@asya.com');
+$m17 = []; for ($i = 1; $i <= 3; $i++) $m17[$i] = msg("ck$i", "CK$i", '2026-10-05 10:00:00');
+$srv17 = sunucu($a17, $m17);
+$isYol = mail_sync_isaret_yolu($a17, $KILIT);
+$gozlem = [];
+$srv17->cfg['fetch_kanca'] = function (int $uid) use (&$gozlem, $a17) { global $KILIT; $gozlem[$uid] = mail_sync_isaret_oku($a17, $KILIT)['aktif']['uid'] ?? null; };
+$r = senk($a17);
+ok('her mesaj çekilmeden ÖNCE "işleniyor" işareti o UID\'i gösterir', $gozlem === [1 => 1, 2 => 2, 3 => 3], json_encode($gozlem));
+ok('normal bitişte işaret dosyası kalmaz', $r['ok'] && !is_file($isYol));
+// Yakalanan hata (ağ kopması) mesajın suçu değildir: işaret temizlenir, çökme sayılmaz.
+$srv17->mesajlar[4] = msg('ck4', 'CK4', '2026-10-05 11:00:00');
+$srv17->cfg['drop_in_fetch'] = true;
+$r = senk($a17);
+$srv17->cfg['drop_in_fetch'] = false;
+ok('ağ kopması (yakalanan hata): işaret dosyası kalmaz', $r['ok'] === false && !is_file($isYol));
+$r = senk($a17);
+ok('sonraki çalıştırma bunu çökme SAYMAZ', $r['ok'] && !preg_grep('/yarıda kesildi/', $r['notlar']) && sayi('mail_messages', "account_id = $a17") === 4);
+// Fatal benzetimi: önceki süreç uid 6'yı işlerken öldü (işaret kaldı, günlük 'running' kaldı).
+$srv17->mesajlar[5] = msg('ck5', 'CK5', '2026-10-05 12:00:00');
+$srv17->mesajlar[6] = msg('ck6', 'CK6 zehir', '2026-10-05 12:01:00');
+$srv17->mesajlar[7] = msg('ck7', 'CK7', '2026-10-05 12:02:00');
+mail_sync_isaret_yaz($a17, ['aktif' => ['klasor' => 'INBOX', 'uidv' => 1000, 'uid' => 6], 'supheli' => []], $KILIT);
+$db->exec("INSERT INTO mail_sync_log (account_id, started_at, status) VALUES ($a17, '2026-10-06 11:55:00', 'running')");
+$yariLog = (int)$db->lastInsertId();
+$gozlem = [];
+$r = senk($a17);
+ok('ilk çökme: yarım günlük satırı error\'a çekildi, not düşüldü', $db->query("SELECT status FROM mail_sync_log WHERE id = $yariLog")->fetchColumn() === 'error' && (bool)preg_grep('/uid 6 işlenirken yarıda kesildi/', $r['notlar']), json_encode($r['notlar']));
+ok('ilk çökmeden sonra mail YENİDEN denenir (tek kesinti sağlam maili kaybettirmez)', $r['ok'] && isset($gozlem[6]) && sayi('mail_messages', "account_id = $a17 AND subject = 'CK6 zehir'") === 1 && !is_file($isYol), json_encode($gozlem));
+// İkinci kez aynı mailde öldü (şüpheli sayacı 1 + yeni aktif işaret) → çekilmeden yer tutucu.
+$srv17->mesajlar[8] = msg('ck8', 'CK8 zehir', '2026-10-05 12:03:00');
+$srv17->mesajlar[9] = msg('ck9', 'CK9', '2026-10-05 12:04:00');
+mail_sync_isaret_yaz($a17, ['aktif' => ['klasor' => 'INBOX', 'uidv' => 1000, 'uid' => 8], 'supheli' => ['INBOX|1000|8' => 1]], $KILIT);
+$gozlem = [];
+$r = senk($a17);
+$st8 = $db->query("SELECT subject, body_truncated FROM mail_messages WHERE account_id = $a17 AND uid = 8")->fetch();
+ok('art arda 2. çökme: zehirli mail ÇEKİLMEDEN yer tutucu yazıldı', $r['ok'] && !isset($gozlem[8]) && str_starts_with((string)$st8['subject'], '(işlenemedi') && (int)$st8['body_truncated'] === 1, json_encode([$r, $gozlem, $st8]));
+ok('zehirden sonraki mail alındı, imleç ilerledi, işaret temiz', sayi('mail_messages', "account_id = $a17 AND subject = 'CK9'") === 1
+    && (int)$db->query("SELECT last_uid FROM mail_sync_state WHERE account_id = $a17")->fetchColumn() === 9 && !is_file($isYol));
+ok('çökme izleri başka hesabı etkilemez (işaret hesap başına)', mail_sync_isaret_yolu($a17, $KILIT) !== mail_sync_isaret_yolu($a16, $KILIT));
 mail_test_bitir();

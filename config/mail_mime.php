@@ -19,6 +19,10 @@ const MAIL_MIME_MAX_DERINLIK = 10;
 const MAIL_MIME_MAX_PARCA    = 200;
 const MAIL_METIN_MAX         = 1048576;   // 1 MB gövde metni
 const MAIL_HTML_MAX          = 2097152;   // 2 MB temiz HTML
+// DOM'a (libxml) verilecek ham HTML üst sınırı. libxml belleği PHP memory_limit'e SAYILMAZ: 8 MB HTML yüz MB'larca düğüm
+// üretip paylaşımlı hostta süreci öldürebiliyordu (fatal yakalanamaz → senkron aynı maili sonsuza dek yeniden dener).
+// Aşan kısım kesilir ve body_truncated işaretlenir (Gmail de ~100 KB'ta keser).
+const MAIL_HTML_DOM_MAX      = 524288;    // 512 KB
 
 // ── Karakter kümesi ─────────────────────────────────────────────────────
 
@@ -266,18 +270,29 @@ function mail_mime_govde_coz(string $govde, string $cte): string
 // ── MIME ağacı ──────────────────────────────────────────────────────────
 
 /**
+ * BELLEK: parça içeriği KOPYALANMAZ — tüm ağaç aynı $ham dizgesi üzerinde [$bas, $son) aralıklarıyla gezilir
+ * (PHP dizgeleri değerle geçse de paylaşılır). Yalnız YAPRAK gövdesi bir kez substr ile alınır. Eskiden her MIME
+ * katmanı gövdenin birkaç tam kopyasını ("\n".$govde, $tam, substr, preg_replace) tutuyordu: 10 katlı ~9 MB mail
+ * 230+ MB'a çıkıp paylaşımlı hostta süreci öldürüyordu (zehirli mail → senkron kalıcı durur).
  * @param array{parca:int} $durum paylaşılan sayaç (parça sınırı)
+ * @param int $bas bu parçanın $ham içindeki başlangıcı · @param int|null $son bitişi (hariç; null = dizge sonu)
  * @return array{ctype:string,params:array,cte:string,disp:string,dparams:array,headers:array,govde:string,cocuklar:list<array>,parca:string}
  */
-function mail_mime_ayristir(string $ham, int $derinlik = 0, string $parcaNo = '1', array &$durum = ['parca' => 0]): array
+function mail_mime_ayristir(string $ham, int $derinlik = 0, string $parcaNo = '1', array &$durum = ['parca' => 0], int $bas = 0, ?int $son = null): array
 {
     $durum['parca']++;
-    if (preg_match('/^\r?\n/', $ham, $m0)) {          // başlıksız parça: ilk satır boş → hepsi gövde
-        $blok = ''; $govde = substr($ham, strlen($m0[0]));
+    $son = $son === null ? strlen($ham) : min($son, strlen($ham));
+    $bas = min(max(0, $bas), $son);
+    if ($bas < $son && ($ham[$bas] === "\n" || ($ham[$bas] === "\r" && $bas + 1 < $son && $ham[$bas + 1] === "\n"))) {
+        $blok = ''; $govdeBas = $bas + ($ham[$bas] === "\r" ? 2 : 1);   // başlıksız parça: ilk satır boş → hepsi gövde
     } else {
-        $p = preg_match('/\r?\n\r?\n/', $ham, $mm, PREG_OFFSET_CAPTURE) ? $mm[0][1] : strlen($ham);
-        $blok = substr($ham, 0, $p);
-        $govde = $p < strlen($ham) ? substr($ham, $p + strlen($mm[0][0])) : '';
+        // Başlık/gövde ayırıcısı YALNIZ bu parçanın içinde aranır (aralık dışına taşan eşleşme yok sayılır).
+        $p = $son; $ayr = 0;
+        if (preg_match('/\r?\n\r?\n/', $ham, $mm, PREG_OFFSET_CAPTURE, $bas) && $mm[0][1] + strlen($mm[0][0]) <= $son) {
+            $p = $mm[0][1]; $ayr = strlen($mm[0][0]);
+        }
+        $blok = substr($ham, $bas, $p - $bas);
+        $govdeBas = $p + $ayr;
     }
     $h = mail_mime_basliklar($blok);
     $ct = mail_mime_param_coz($h['content-type'][0] ?? 'text/plain; charset=us-ascii');
@@ -289,21 +304,30 @@ function mail_mime_ayristir(string $ham, int $derinlik = 0, string $parcaNo = '1
     if (str_starts_with($ct['deger'], 'multipart/') && $derinlik < MAIL_MIME_MAX_DERINLIK && !empty($ct['params']['boundary'])) {
         // RFC 2046: ayraç satırları ("--b"); ilk "--b--" kapanışta HER ŞEYİ bitirir (epilog parça DEĞİLDİR);
         // ayracın kendi satır sonu parçaya dahil değildir; HER parça (boş olsa da) IMAP numarasında sayılır.
+        // Gövdenin hemen önündeki "\n" (başlık ayırıcısının sonu) aramaya dahil edilir: gövdenin İLK satırındaki ayraç da
+        // "\r?\n--b" biçimine uyar (eskiden gövdenin başına "\n" eklenerek — yani kopyalanarak — yapılıyordu).
         $b = preg_quote($ct['params']['boundary'], '/');
-        preg_match_all('/\r?\n--' . $b . '(--)?[ \t]*(?=\r?\n|$)/', "\n" . $govde, $dm, PREG_OFFSET_CAPTURE | PREG_SET_ORDER);
-        $tam = "\n" . $govde; $i = 0;
+        $re = '/\r?\n--' . $b . '(--)?[ \t]*(?=\r?\n|$)/';
+        $dm = []; $off = ($govdeBas > $bas && $govdeBas <= $son && $ham[$govdeBas - 1] === "\n") ? $govdeBas - 1 : $govdeBas;
+        while ($off < $son && count($dm) <= MAIL_MIME_MAX_PARCA && preg_match($re, $ham, $x, PREG_OFFSET_CAPTURE, $off)) {
+            if ($x[0][1] + strlen($x[0][0]) > $son) break;                     // bu parçanın dışı (kardeş/ebeveyn bölgesi)
+            $dm[] = $x;
+            if (($x[1][1] ?? -1) >= 0 && ($x[1][0] ?? '') === '--') break;      // kapanış ayracı: sonrası epilog
+            $off = $x[0][1] + strlen($x[0][0]);
+        }
+        $i = 0;
         foreach ($dm as $k => $d) {
             if (($d[1][1] ?? -1) >= 0 && ($d[1][0] ?? '') === '--') break;   // kapanış ayracı
             if ($durum['parca'] >= MAIL_MIME_MAX_PARCA) break;
-            $bas = $d[0][1] + strlen($d[0][0]);
-            $son = isset($dm[$k + 1]) ? $dm[$k + 1][0][1] : strlen($tam);
-            $pc = substr($tam, $bas, max(0, $son - $bas));
-            $pc = (string)preg_replace('/^\r?\n/', '', $pc, 1);            // ayraç satırının sonu
+            $cb = $d[0][1] + strlen($d[0][0]);
+            $cs = isset($dm[$k + 1]) ? $dm[$k + 1][0][1] : $son;
+            if ($cb < $cs && $ham[$cb] === "\r" && $cb + 1 < $cs && $ham[$cb + 1] === "\n") $cb += 2;   // ayraç satırının sonu
+            elseif ($cb < $cs && $ham[$cb] === "\n") $cb += 1;
             $i++;
-            $dugum['cocuklar'][] = mail_mime_ayristir($pc, $derinlik + 1, $parcaNo === '1' && $derinlik === 0 ? (string)$i : $parcaNo . '.' . $i, $durum);
+            $dugum['cocuklar'][] = mail_mime_ayristir($ham, $derinlik + 1, $parcaNo === '1' && $derinlik === 0 ? (string)$i : $parcaNo . '.' . $i, $durum, $cb, max($cb, $cs));
         }
     } else {
-        $dugum['govde'] = $govde;
+        $dugum['govde'] = $govdeBas < $son ? substr($ham, $govdeBas, $son - $govdeBas) : '';
     }
     return $dugum;
 }
@@ -357,17 +381,27 @@ function mail_mime_mesaj(string $ham, bool $kesik = false): array
     $inReply = mail_mime_idler($ilk('in-reply-to'))[0] ?? null;
 
     $metinler = []; $htmller = []; $ekler = [];
+    // Toplanan metin/HTML, kullanılacak sınırın biraz üstünde kesilir (fazlası zaten atılır; büyük kopyalar bellekte birikmesin).
+    $metinBoy = 0; $htmlBoy = 0; $erkenKesik = false;
+    $topla = static function (array &$liste, int &$boy, string $s, int $sinir) use (&$erkenKesik): void {
+        if ($boy > $sinir) { $erkenKesik = true; return; }
+        if ($boy + strlen($s) > $sinir + 1) { $s = mb_strcut($s, 0, $sinir + 1 - $boy, 'UTF-8'); $erkenKesik = true; }
+        $liste[] = $s; $boy += strlen($s) + 2;
+    };
     foreach (mail_mime_yapraklar($kok) as $y) {
         $ct = $y['ctype'];
         $ad = $y['dparams']['filename'] ?? ($y['params']['name'] ?? '');
         $ek = $y['disp'] === 'attachment' || $ad !== '';   // adı olan her parça ek sayılır
-        if (!$ek && $ct === 'text/plain') { $metinler[] = mail_mime_yaprak_metin($y); continue; }
-        if (!$ek && $ct === 'text/html')  { $htmller[] = mail_mime_yaprak_metin($y); continue; }
-        if (!$ek && str_starts_with($ct, 'text/') && $ct !== 'text/calendar') { $metinler[] = mail_mime_yaprak_metin($y); continue; }
+        if (!$ek && $ct === 'text/plain') { $topla($metinler, $metinBoy, mail_mime_yaprak_metin($y), MAIL_METIN_MAX); continue; }
+        if (!$ek && $ct === 'text/html')  { $topla($htmller, $htmlBoy, mail_mime_yaprak_metin($y), MAIL_HTML_DOM_MAX); continue; }
+        if (!$ek && str_starts_with($ct, 'text/') && $ct !== 'text/calendar') { $topla($metinler, $metinBoy, mail_mime_yaprak_metin($y), MAIL_METIN_MAX); continue; }
         $cid = isset($y['headers']['content-id'][0]) ? (mail_mime_idler($y['headers']['content-id'][0])[0] ?? null) : null;
         if ($y['cte'] === 'base64') {
-            $g = (string)preg_replace('/\s+/', '', $y['govde']);
-            $boyut = max(0, intdiv(strlen($g) * 3, 4) - substr_count(substr($g, -2), '='));
+            // Boşluksuz uzunluk KOPYASIZ hesaplanır (eskiden preg_replace ile ekin tam kopyası çıkarılıyordu).
+            $g = $y['govde'];
+            $net = strlen($g) - substr_count($g, "\r") - substr_count($g, "\n") - substr_count($g, ' ') - substr_count($g, "\t");
+            $sonu = substr((string)preg_replace('/\s+/', '', substr($g, -16)), -2);
+            $boyut = max(0, intdiv($net * 3, 4) - substr_count($sonu, '='));
         } else {
             $boyut = strlen($y['govde']);
         }
@@ -387,7 +421,7 @@ function mail_mime_mesaj(string $ham, bool $kesik = false): array
     $htmlKesik = false;
     $guvenli = $htmlHam !== '' ? mail_html_sanitize($htmlHam, $htmlKesik) : '';
     if ($metin === '' && $htmlHam !== '') $metin = mail_html_to_text($htmlHam);
-    $kesildi = $kesik || $htmlKesik;
+    $kesildi = $kesik || $htmlKesik || $erkenKesik;
     if (strlen($metin) > MAIL_METIN_MAX) { $metin = mb_strcut($metin, 0, MAIL_METIN_MAX, 'UTF-8'); $kesildi = true; }
     if (strlen($guvenli) > MAIL_HTML_MAX) { $guvenli = ''; $kesildi = true; }   // yarım HTML GÖSTERME (etiket dengesi bozulur)
 
@@ -495,8 +529,10 @@ function mail_html_sanitize(string $html, ?bool &$kesildi = null): string
 {
     $kesildi = false;
     if (trim($html) === '') return '';
+    // ÖNCE kes (temizlik kopyası küçük kalsın). Ayrı bayrak: $kesildi yürüyücünün "dur" sinyalidir, burada true olsa hiç çıktı üretilmezdi.
+    $girdiKesik = false;
+    if (strlen($html) > MAIL_HTML_DOM_MAX) { $html = mb_strcut($html, 0, MAIL_HTML_DOM_MAX, 'UTF-8'); $girdiKesik = true; }
     $html = mail_mime_temiz($html);
-    if (strlen($html) > 4 * MAIL_HTML_MAX) { $html = mb_strcut($html, 0, 4 * MAIL_HTML_MAX, 'UTF-8'); $kesildi = true; }
     $doc = new DOMDocument();
     $onceki = libxml_use_internal_errors(true);
     $doc->loadHTML('<?xml encoding="UTF-8"?><!DOCTYPE html><html><body>' . mail_html_hazirla($html) . '</body></html>',
@@ -565,16 +601,19 @@ function mail_html_sanitize(string $html, ?bool &$kesildi = null): string
         }
         return $o;
     };
-    return $yaz($body, 0);
+    $out = $yaz($body, 0);
+    $kesildi = $kesildi || $girdiKesik;
+    return $out;
 }
 
 /** HTML → düz metin (gövdede yalnız HTML varsa; arama/çeviri/özet için). */
 function mail_html_to_text(string $html): string
 {
     if (trim($html) === '') return '';
+    if (strlen($html) > MAIL_HTML_DOM_MAX) $html = mb_strcut($html, 0, MAIL_HTML_DOM_MAX, 'UTF-8');   // libxml bellek sınırı (bkz. MAIL_HTML_DOM_MAX)
     $doc = new DOMDocument();
     $onceki = libxml_use_internal_errors(true);
-    $doc->loadHTML('<?xml encoding="UTF-8"?><html><body>' . mail_html_hazirla($html) . '</body></html>', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+    $doc->loadHTML('<?xml encoding="UTF-8"?><html><body>' . mail_html_hazirla($html) . '</body></html>', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_COMPACT);
     libxml_clear_errors(); libxml_use_internal_errors($onceki);
     $body = $doc->getElementsByTagName('body')->item(0);
     if (!$body) return '';

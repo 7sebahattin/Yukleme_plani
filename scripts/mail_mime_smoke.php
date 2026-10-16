@@ -236,6 +236,24 @@ $t0 = microtime(true); $c = mail_html_sanitize($derin);
 ok('5000 derinlikli HTML çökmez, makul sürede biter', is_string($c) && microtime(true) - $t0 < 3);
 ok('devasa HTML sınır içinde', strlen(mail_html_sanitize(str_repeat('<p>x</p>', 600000))) <= MAIL_HTML_MAX * 4);
 
+echo "\n=== A5. Bellek: zehirli büyük/iç içe mail ===\n";
+// 9 katlı multipart içinde ~6 MB HTML: eskiden her katman gövdenin birkaç tam kopyasını tutuyordu (~9 MB'ta 230+ MB tepe).
+$html = str_repeat('<div><span>x</span><b>y</b></div>', 180000);
+$ic = "Content-Type: text/html; charset=utf-8\r\n\r\n" . $html; unset($html);
+for ($d = 0; $d < 9; $d++) $ic = "Content-Type: multipart/mixed; boundary=\"Z$d\"\r\n\r\n--Z$d\r\n" . $ic . "\r\n--Z$d--\r\n";
+$hamB = "From: a@x.com\r\nSubject: buyuk\r\nMIME-Version: 1.0\r\n" . $ic; unset($ic);
+gc_collect_cycles();
+$taban = memory_get_usage();
+if (function_exists('memory_reset_peak_usage')) memory_reset_peak_usage();
+$mB = mail_mime_mesaj($hamB);
+$tepe = memory_get_peak_usage() - $taban;
+ok('iç içe ~6 MB mail: PHP bellek tepesi < 48 MB (katman başına kopya yok)', !function_exists('memory_reset_peak_usage') || $tepe < 48 * 1048576, round($tepe / 1048576, 1) . ' MB');
+ok('büyük HTML DOM sınırında kesilir, temiz HTML yine üretilir, body_truncated=1', $mB['body_truncated'] === 1 && $mB['body_html_safe'] !== '' && strlen($mB['body_html_safe']) <= MAIL_HTML_MAX && str_contains($mB['body_html_safe'], '<span>x</span>'));
+$kk = null;
+ok('sanitize: girdi DOM sınırını aşınca kesilir ama çıktı BOŞ DEĞİL (kesildi bayrağı yürüyüşü durdurmaz)', mail_html_sanitize(str_repeat('<p>a</p>', 80000), $kk) !== '' && $kk === true);
+ok('html_to_text de DOM sınırına uyar', strlen(mail_html_to_text(str_repeat('<p>abc</p>', 120000))) <= MAIL_HTML_DOM_MAX);
+unset($hamB, $mB);
+
 echo "\n=== C. iframe srcdoc ===\n";
 $sd = mail_html_iframe_srcdoc('<p>x</p><img data-blocked-src="https://t/p.gif">');
 $csp = html_entity_decode((string)(preg_match('/Content-Security-Policy" content="([^"]*)"/', $sd, $cm) ? $cm[1] : ''), ENT_QUOTES);
