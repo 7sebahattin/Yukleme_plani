@@ -110,7 +110,8 @@ echo "\n=== 5. UIDVALIDITY değişimi ===\n";
 $once = sayi();
 $yeni = [];
 foreach ($db->query("SELECT uid, message_id FROM mail_messages WHERE account_id = $a1 ORDER BY uid")->fetchAll() as $row) {
-    $yeni[(int)$row['uid'] + 100] = ['raw' => mail_test_raw(['msgid' => '<' . $row['message_id'] . '>', 'subject' => 'x']), 'flags' => [], 'date' => '2026-10-05 10:00:00'];
+    // Aynı mesaj yeni UID'le geri gelir: ham baytlar (Message-ID + gönderen + konu + Date) AYNI.
+    $yeni[(int)$row['uid'] + 100] = ['raw' => $srv->mesajlar[(int)$row['uid']]['raw'], 'flags' => [], 'date' => '2026-10-05 10:00:00'];
 }
 $yeni[200] = msg('yepyeni', 'Epoch sonrası yeni', '2026-10-06 10:00:00');
 $srv = sunucu($a1, $yeni, ['uidvalidity' => 2000]);
@@ -246,4 +247,19 @@ sunucu($aBozuk2, [], ['pass' => 'BASKA-parola']);
 $t = mail_imap_test($db, $aBozuk2, ['istemci' => fabrika()]);
 ok('test: yanlış şifre → anlaşılır mesaj, şifre YOK', !$t['ok'] && str_contains($t['mesaj'], 'auth') && !str_contains($t['mesaj'], 'dogru-parola-QQQ') && !str_contains($t['mesaj'], 'BASKA-parola'));
 ok('test sunucuda değişiklik yapmıyor', !preg_grep('/STORE|DELETE|APPEND|EXPUNGE/i', $SUNUCULAR[$a10]->received));
+
+echo "\n=== 14. Geri dolum \"Cevap Bekleyen\"i doldurmaz ===\n";
+$a14 = hesapEkle('geridolum@asya.com');
+$db->exec("UPDATE mail_accounts SET created_at = '2026-10-06 11:00:00' WHERE id = $a14");   // hesap simdi'den 1 sa önce eklendi
+$m14 = []; for ($i = 1; $i <= 5; $i++) $m14[$i] = msg("g$i", "G$i", "2026-10-0{$i} 09:00:00");
+$srv14 = sunucu($a14, $m14);
+$r = senk($a14, ['limit' => 2]);
+ok('ilk tarama: geçmiş mailler cevap beklemiyor', $r['inserted'] === 2 && sayi('mail_messages', "account_id = $a14 AND needs_reply = 1") === 0, json_encode($r));
+senk($a14, ['limit' => 2]); senk($a14, ['limit' => 2]);
+ok('birkaç çalıştırmaya yayılan geri dolum: hesap eklenmeden önceki mailler de cevap beklemiyor', sayi('mail_messages', "account_id = $a14") === 5 && sayi('mail_messages', "account_id = $a14 AND needs_reply = 1") === 0);
+$srv14->mesajlar[6] = msg('g6', 'Yeni gelen', '2026-10-06 11:30:00');
+$srv14->mesajlar[7] = msg('g7', 'Kendi gönderdiğim', '2026-10-06 11:40:00', [], ['from' => 'Biz <geridolum@asya.com>']);
+senk($a14);
+ok('hesap eklendikten SONRA gelen mail cevap bekler; kendi mailimiz beklemez', sayi('mail_messages', "account_id = $a14 AND needs_reply = 1") === 1
+    && (int)$db->query("SELECT needs_reply FROM mail_messages WHERE account_id = $a14 AND uid = 6")->fetchColumn() === 1);
 mail_test_bitir();

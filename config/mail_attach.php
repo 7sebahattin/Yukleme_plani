@@ -40,7 +40,17 @@ function mail_ek_hazirla(PDO $pdo, int $msgId, string $parca, array $hesapIds, a
         $c = isset($opt['istemci']) ? ($opt['istemci'])($h) : mail_imap_baglan($h, 15.0);
         $k = $c->klasorAc((string)$m['folder']);
         if ($k['uidvalidity'] !== (int)$m['uidvalidity']) {
-            return $hata(409, 'Sunucudaki posta kutusu yeniden indekslenmiş; bu ek güvenli biçimde indirilemez (yeni bir senkron bekleyin).');
+            // Geri tarama bu satırın dönemine karşı SÜRÜYORSA satır yeni UID'e taşınabilir → beklemek işe yarar. Aksi hâlde satır
+            // eski dönemde kalıcıdır (geri tarama penceresi dışında / sunucuda silinmiş): "senkron bekleyin" demek yanıltıcıydı.
+            $tarama = false;
+            try {
+                $rs = $pdo->prepare('SELECT rescan_from_epoch FROM mail_sync_state WHERE account_id = ? AND folder = ?');
+                $rs->execute([(int)$m['account_id'], (string)$m['folder']]);
+                $tarama = (int)$rs->fetchColumn() === (int)$m['uidvalidity'];
+            } catch (Throwable $e) { /* durum okunamadı: kalıcı say */ }
+            return $hata(409, $tarama
+                ? 'Sunucudaki posta kutusu yeniden indekslendi ve yeniden tarama sürüyor; tarama bitince eki tekrar deneyin.'
+                : 'Bu mail sunucuda artık bu kimlikle bulunmuyor (posta kutusu yeniden indekslendi); eki doğrudan posta sağlayıcınızın web arayüzünden açın.');
         }
         $ham = $c->uidParca((int)$m['uid'], $parca, MAIL_EK_MAX * 2);   // base64 şişmesi payı
         if ($ham === null) return $hata(404, 'Ek sunucuda bulunamadı (silinmiş olabilir).');

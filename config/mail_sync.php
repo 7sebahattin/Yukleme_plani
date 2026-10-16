@@ -153,12 +153,18 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
     // TAŞINIR → aynı satır bir daha eşleşemez. Normal çalışmada hiçbir Message-ID dedupe'u YOKTUR: aynı dönemde aynı
     // Message-ID'yi taşıyan farklı UID'li mesajlar sunucuda AYRI mesajlardır ve sessizce atılmamalı (bozuk gönderici
     // betikleri sabit Message-ID basar; yeni mailin eski satırın UID'sini ele geçirmesi de engellenir).
+    // Message-ID gönderenin elindedir: geri tarama sırasında eski bir Message-ID'yi yeniden kullanan YENİ mail eski satırı
+    // kendi UID'sine taşıyıp (içerik eski kalır, yenisi hiç görünmez) gizlenebilirdi. Taşıma ancak gönderen + konu (+ ikisinde
+    // de varsa Date başlığı) da aynıysa yapılır; tutmazsa mail yeni satır olur (en kötü ihtimal çift görünüm, kayıp değil).
     if ($oncekiEpoch !== null) {
-        $st = $pdo->prepare('SELECT id FROM mail_messages WHERE account_id = ? AND folder = ? AND message_id_hash = ? AND uidvalidity = ? ORDER BY id LIMIT 1');
+        $st = $pdo->prepare('SELECT id, from_addr, subject, date_header FROM mail_messages WHERE account_id = ? AND folder = ? AND message_id_hash = ? AND uidvalidity = ? ORDER BY id LIMIT 20');
         $st->execute([$hid, $klasor, $m['message_id_hash'], $oncekiEpoch]);
-        $var = $st->fetchColumn();
-        if ($var !== false) {
-            $pdo->prepare('UPDATE mail_messages SET uidvalidity = ?, uid = ? WHERE id = ?')->execute([$uidvalidity, $uid, (int)$var]);
+        $norm = static fn($s): string => mb_strtolower(trim((string)preg_replace('/\s+/u', ' ', (string)$s)), 'UTF-8');
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $eski) {
+            if ($norm($eski['from_addr']) !== $norm(mb_substr((string)$m['from_addr'], 0, 255))) continue;
+            if ($norm($eski['subject']) !== $norm($m['subject'])) continue;
+            if ($eski['date_header'] !== null && $m['date'] !== null && strtotime((string)$eski['date_header']) !== strtotime((string)$m['date'])) continue;
+            $pdo->prepare('UPDATE mail_messages SET uidvalidity = ?, uid = ? WHERE id = ?')->execute([$uidvalidity, $uid, (int)$eski['id']]);
             return 'tekrar';
         }
     }
@@ -170,6 +176,12 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
     $trDurum = empty($hesap['translate_enabled']) || ($dil !== null && $dil === $hedefDil) ? 'skipped' : 'pending';
     $seen = in_array('\\Seen', (array)($meta['flags'] ?? []), true) ? 1 : 0;
     $kendi = $m['from_addr'] !== '' && strtolower($m['from_addr']) === strtolower((string)$hesap['email']);
+    // Geri dolum (hesap eklenince geçmiş N günün içe alınması) "Cevap Bekleyen"i doldurmaz: hesabın İLK taraması
+    // (UIDVALIDITY geri taraması DEĞİL — o taramada yeni gelen mail gerçekten yenidir) ve ilk tarama birkaç çalıştırmaya
+    // yayıldığında hesap eklenmeden ÖNCE alınmış mailler cevap beklemiyor sayılır. Kullanıcı isterse elle işaretler.
+    $hesapOlus = (string)($hesap['created_at'] ?? '');
+    $geriDolum = ($ilkTarama && $oncekiEpoch === null) || ($hesapOlus !== '' && $alindi < $hesapOlus);
+    $cevapBekler = !$kendi && !$geriDolum;
     $own = !$pdo->inTransaction();
     for ($deneme = 0; ; $deneme++) {   // kilitlenme (MySQL 1213/1205) güvenle TEKRAR denenir; işlem baştan
     if ($own) $pdo->beginTransaction();
@@ -191,7 +203,7 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
                 $m['body_text'], $m['body_html_safe'] !== '' ? $m['body_html_safe'] : null, (int)$m['body_truncated'],
                 $trDurum, $dil,
                 $m['attachments'] ? (json_encode($m['attachments'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: null) : null, $m['attachments'] ? 1 : 0, (int)$m['size'],
-                $seen, $ilkTarama ? $seen : 0, $kendi ? 0 : 1,
+                $seen, $ilkTarama ? $seen : 0, $cevapBekler ? 1 : 0,
             ]);
         $pdo->prepare('UPDATE mail_threads SET message_count = message_count + 1,
             last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END WHERE id = ?')

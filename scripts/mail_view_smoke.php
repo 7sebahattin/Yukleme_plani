@@ -109,6 +109,11 @@ ok('parça numarası enjeksiyonu reddedilir', mail_ek_hazirla($db, $ekMsg, "2]\r
 $srv = new FakeMailStream(['user' => 'a@asya.com', 'pass' => 'imap-parola-ABC', 'uidvalidity' => 7777, 'mesajlar' => [500 => ['raw' => $raw, 'flags' => [], 'date' => '2026-10-05 10:00:00', 'parcalar' => ['2' => 'BASKA MESAJ']]]]);
 $r = mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab]);
 ok('UIDVALIDITY değişmişse ek İNDİRİLMEZ (UID başka mesajı gösterebilir) → 409', $r['ok'] === false && $r['kod'] === 409 && !str_contains($r['mesaj'], 'BASKA'), json_encode($r));
+ok('409 mesajı dürüst: geri tarama yoksa "senkron bekleyin" DEMEZ, sağlayıcıyı gösterir', !str_contains($r['mesaj'], 'senkron bekleyin') && str_contains($r['mesaj'], 'posta sağlayıcınızın'), $r['mesaj']);
+$db->prepare("INSERT INTO mail_sync_state (account_id, folder, last_uid, rescan_from_epoch) VALUES (?, 'INBOX', 0, 1000)")->execute([$A]);
+$r = mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab]);
+ok('geri tarama bu döneme karşı sürüyorsa "tarama bitince tekrar deneyin"', $r['kod'] === 409 && str_contains($r['mesaj'], 'tarama bitince'), $r['mesaj']);
+$db->exec("DELETE FROM mail_sync_state WHERE account_id = $A");
 $srv = new FakeMailStream(['user' => 'a@asya.com', 'pass' => 'YANLIS', 'uidvalidity' => 1000, 'mesajlar' => []]);
 $r = mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab]);
 ok('IMAP hatası → 502, parola sızmıyor', $r['ok'] === false && $r['kod'] === 502 && !str_contains($r['mesaj'], 'imap-parola-ABC') && !str_contains($r['mesaj'], 'YANLIS'));
