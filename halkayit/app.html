@@ -276,9 +276,15 @@
      Gönderilenler kartında ölçüler NORMAL kalır — yalnız renkler ortaktır. */
   .taslak-kart .tk-satir.tk-plaka .d { font-size:16px; }
   .taslak-kart .tk-satir.tk-kilo .d  { font-size:15px; }
-  .taslak-kart .tk-butonlar { display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+  /* 4 düğme (Gönder · Kopyala · Düzenle · Sil, v368): geniş ekranda tek satır,
+     dar telefonda (<420px) 2×2 — 360px'te taşmaz. */
+  .taslak-kart .tk-butonlar { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px;
     padding:12px 16px 14px; }
-  .taslak-kart .tk-butonlar .btn { padding:12px 6px; font-size:13.5px; margin-top:0; }
+  .taslak-kart .tk-butonlar .btn { padding:12px 4px; font-size:13.5px; margin-top:0; min-width:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width:419px) {
+    .taslak-kart .tk-butonlar { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
 
   /* Masaüstünde (≥900px) kartlar 2 kolon — geniş ekranda satırlar aşırı uzamasın.
      Mobil düzen (tek kolon) DEĞİŞMEZ. */
@@ -4370,6 +4376,7 @@ async function taslakEkraniAc() {
           ? '—' : `${fmt(t.ortak.fiyat)} TL/KG`) +
         `<div class="tk-butonlar">` +
         `<button class="btn btn-amber" data-gonder="${t.id}">📤 Gönder</button>` +
+        `<button class="btn btn-soluk" data-kopyala="${t.id}" title="Taslağın kopyasını forma yükle — asıl taslak yerinde kalır">📋 Kopyala</button>` +
         `<button class="btn btn-soluk" data-duzenle="${t.id}">✏️ Düzenle</button>` +
         `<button class="btn btn-soluk" data-sil="${t.id}" style="color:var(--hata-tx)">🗑️ Sil</button>` +
         `</div>`;
@@ -4380,6 +4387,13 @@ async function taslakEkraniAc() {
     });
     kap.querySelectorAll('[data-duzenle]').forEach(b => {
       b.onclick = () => taslakDuzenle(taslaklar.find(t => t.id === b.dataset.duzenle));
+    });
+    // Kopyala (v368): AYNI yükleme yolu, kopya kipinde — duzenlenenTaslakId null kalır,
+    // kayıtta eskiTaslakId GİTMEZ, asıl taslak SİLİNMEZ; beyan bağı (ortak.kaynak) forma
+    // girmediği için kopyaya taşınmaz. Yazma yine normal "Taslağa Kaydet".
+    kap.querySelectorAll('[data-kopyala]').forEach(b => {
+      b.onclick = () => taslakDuzenle(taslaklar.find(t => t.id === b.dataset.kopyala),
+        { kopya: true, toast: TASLAK_KOPYA_TOAST });
     });
     kap.querySelectorAll('[data-sil]').forEach(b => {
       b.onclick = async () => {
@@ -4403,9 +4417,13 @@ async function taslakEkraniAc() {
 // SİLİNMEZ (silinecek bir taslak zaten yok; beyan bağı da taşınmaz). Yazma yolu
 // yine normal "Taslağa Kaydet"tir; burada sunucuya HİÇBİR ŞEY yazılmaz.
 // secenek.notlar: sunucunun kullanıcıya söylediği uyarılar (formun üstünde görünür).
+// secenek.toast: kopya kipinde gösterilecek bildirim (Taslaklar → "📋 Kopyala", v368);
+// verilmezse Tekrar gönder metni (KOPYA_TOAST).
 const KOPYA_TOAST = '↻ Önceki gönderim forma yüklendi — plaka/kilo kontrol edip Taslağa Kaydet';
+const TASLAK_KOPYA_TOAST = '📋 Taslak kopyalandı — değiştirip Taslağa Kaydet; asıl taslak yerinde kalır';
 async function taslakDuzenle(t, secenek) {
   const kopya = !!(secenek && secenek.kopya);
+  const kopyaToast = (kopya && secenek.toast) || KOPYA_TOAST;
   formuTemizle();                 // duzenlenenTaslakId'yi de sıfırlar — sonra set
   duzenlenenTaslakId = kopya ? null : t.id;
   if (kopya) kopyaNotlariniGoster(secenek.notlar);
@@ -4499,7 +4517,7 @@ async function taslakDuzenle(t, secenek) {
     $('btnPlanAc').textContent = '✖️ Taslak Oluşturmayı Kapat';
     $('planFiyatBlok').classList.toggle('gizli', sevkModuMu());
     aramaliSelectleriSenkronla();
-    toast(kopya ? KOPYA_TOAST : '✏️ Plan taslağı forma yüklendi — düzenleyip tekrar Taslağı Kaydet');
+    toast(kopya ? kopyaToast : '✏️ Plan taslağı forma yüklendi — düzenleyip tekrar Taslağı Kaydet');
     return;
   }
 
@@ -4530,7 +4548,7 @@ async function taslakDuzenle(t, secenek) {
   // Aramalı alanların görünen metni en sonda, tek seferde eşitlenir — aksi
   // hâlde taslak yüklenince kutular boş görünür ama değer seçili olurdu.
   aramaliSelectleriSenkronla();
-  toast(kopya ? KOPYA_TOAST : '✏️ Taslak forma yüklendi — düzenleyip tekrar Taslağa Kaydet');
+  toast(kopya ? kopyaToast : '✏️ Taslak forma yüklendi — düzenleyip tekrar Taslağa Kaydet');
 }
 
 // "Tekrar gönder" bilgi kutusu: sunucunun uyarıları formun ÜSTÜNDE görünür.
