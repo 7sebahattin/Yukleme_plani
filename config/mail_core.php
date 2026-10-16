@@ -558,8 +558,9 @@ function mail_hesap_kaydet(array $in, ?int $id, ?int $userId, ?PDO $pdo = null):
         }
     }
 
+    $own = !$pdo->inTransaction();   // çağıran (mail_hesaplar.php) kayıt + kullanıcı atamasını TEK transaction'da tutabilir
     try {
-        $pdo->beginTransaction();
+        if ($own) $pdo->beginTransaction();
         if ($id === null) {
             $cols = $alanlar; $ph = array_fill(0, count($cols), '?');
             $vals = [];
@@ -575,16 +576,16 @@ function mail_hesap_kaydet(array $in, ?int $id, ?int $userId, ?PDO $pdo = null):
             $st = $pdo->prepare('UPDATE mail_accounts SET ' . implode(', ', $set) . ' WHERE id = ?');
             $st->execute($vals);
             $var = $pdo->prepare('SELECT 1 FROM mail_accounts WHERE id = ?'); $var->execute([$id]);
-            if (!$var->fetchColumn()) { $pdo->rollBack(); return ['ok' => false, 'id' => 0, 'hatalar' => ['Hesap bulunamadı.']]; }
+            if (!$var->fetchColumn()) { if ($own) $pdo->rollBack(); return ['ok' => false, 'id' => 0, 'hatalar' => ['Hesap bulunamadı.']]; }
         }
         foreach (MAIL_SIFRE_ALANLARI as $a) {
             if ($v[$a] === '') continue; // boş = değiştirme
             $pdo->prepare("UPDATE mail_accounts SET {$a}_enc = ? WHERE id = ?")
                 ->execute([mail_sifrele($v[$a], mail_aad($id, $a)), $id]);
         }
-        $pdo->commit();
+        if ($own) $pdo->commit();
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($own && $pdo->inTransaction()) $pdo->rollBack();   // dış transaction'ı çağıran geri alır (dönüş ok=false)
         $msg = $e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'UNIQUE'))
             ? 'Bu e-posta adresi zaten kayıtlı.' : 'Hesap kaydedilemedi.';
         error_log('[mail_hesap_kaydet] ' . mail_redact($e->getMessage()));
@@ -625,6 +626,27 @@ function mail_hesap_goster(int $id, ?PDO $pdo = null): ?array
     $r['smtp_pass_var'] = ($r['smtp_pass_enc'] ?? '') !== '' ? 1 : 0;
     unset($r['imap_pass_enc'], $r['smtp_pass_enc']);
     return $r;
+}
+
+/** Audit'e yazılabilen (SIRSIZ) hesap alanları: değişimin eski→yeni farkı. Parola/anahtar alanları KASTEN yok. */
+const MAIL_HESAP_AUDIT_ALANLARI = ['label', 'email', 'display_name', 'reply_to', 'imap_host', 'imap_port', 'imap_security', 'imap_user',
+    'smtp_host', 'smtp_port', 'smtp_security', 'smtp_user', 'sync_folder', 'sent_folder', 'append_sent', 'initial_days', 'translate_enabled', 'target_lang'];
+
+/**
+ * mail_hesap_goster() satırlarından yalnız DEĞİŞEN şifresiz alanları çıkarır.
+ * $eski null ise (yeni hesap) yalnız dolu alanlar yeni'ye girer.
+ * @return array{eski:array,yeni:array}
+ */
+function mail_hesap_audit_fark(?array $eski, ?array $yeni): array
+{
+    $e = []; $y = [];
+    foreach (MAIL_HESAP_AUDIT_ALANLARI as $a) {
+        $ev = (string)($eski[$a] ?? ''); $yv = (string)($yeni[$a] ?? '');
+        if ($eski === null ? $yv === '' : $ev === $yv) continue;
+        if ($eski !== null) $e[$a] = $ev;
+        $y[$a] = $yv;
+    }
+    return ['eski' => $e, 'yeni' => $y];
 }
 
 /** Hesaba erişecek kullanıcıların TAM listesini değiştirir (yalnız mail.admin çağırır). */

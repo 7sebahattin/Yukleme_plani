@@ -3,6 +3,8 @@
 // mail_hesaplar.php — Mail hesapları (yalnız can_mail('admin'))
 // Şifreler yalnız yazılır: forma ASLA geri basılmaz, boş bırakmak = değiştirme.
 // Kimlik bilgisi AES-256-GCM ile şifrelenir (config/mail_core.php).
+// Başarılı POST → PRG (set_flash + yönlendirme): yenileme işlemi tekrarlamaz. Doğrulama hatasında yönlendirme YOK
+// (girilen değerler formda kalır, şifreler hariç).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -21,12 +23,15 @@ $pdo   = db();
 $uid   = (int)$auth_user['id'];
 $hazir = mail_sema_hazir($pdo);
 $hatalar = [];
-$basari  = '';
 
 $kullanicilar = [];
 try {
     $kullanicilar = $pdo->query("SELECT id, username, display_name FROM users WHERE is_active = 1 ORDER BY username")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) { $kullanicilar = []; }
+
+$duzenleId = isset($_GET['duzenle']) ? (int)$_GET['duzenle'] : 0;
+$geriDon = 'mail_hesaplar.php' . ($duzenleId > 0 ? '?duzenle=' . $duzenleId : '');   // PRG hedefi: aynı düzenleme bağlamı
+$postAtanan = null;   // doğrulama hatasında kullanıcının işaretlediği erişim listesi (DB'den DEĞİL, POST'tan doldurulur)
 
 if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
@@ -34,52 +39,83 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = isset($_POST['id']) && $_POST['id'] !== '' ? (int)$_POST['id'] : null;
 
     if ($islem === 'kaydet') {
-        $r = mail_hesap_kaydet($_POST, $id, $uid, $pdo);
-        if ($r['ok']) {
-            if (!empty($_POST['kullanicilar_gonderildi'])) {
+        $eski = $id !== null ? mail_hesap_goster($id, $pdo) : null;
+        $eskiAtanan = $id !== null ? mail_hesap_kullanicilari($id, $pdo) : [];
+        $atamaGonderildi = !empty($_POST['kullanicilar_gonderildi']);
+        $yeniAtanan = $eskiAtanan;
+        // Kayıt + erişim ataması TEK transaction: biri başarısızsa hiçbiri yazılmaz (hesap var, atama yok yarı hâli oluşmaz).
+        try {
+            $pdo->beginTransaction();
+            $r = mail_hesap_kaydet($_POST, $id, $uid, $pdo);
+            if ($r['ok'] && $atamaGonderildi) {
                 $secili = array_map('intval', (array)($_POST['kullanicilar'] ?? []));
-                $gecerli = array_map('intval', array_column($kullanicilar, 'id'));
-                mail_hesap_kullanici_ata($r['id'], array_values(array_intersect($secili, $gecerli)), $pdo);
+                $gorunen = array_map('intval', array_column($kullanicilar, 'id'));
+                // Formda görünmeyen (pasif) kullanıcıların mevcut ataması sessizce silinmez.
+                $yeniAtanan = array_values(array_unique(array_merge(array_intersect($secili, $gorunen), array_diff($eskiAtanan, $gorunen))));
+                sort($yeniAtanan);
+                mail_hesap_kullanici_ata($r['id'], $yeniAtanan, $pdo);
             }
-            // Audit: yalnız kimlik + alan ADLARI; şifre/değer YOK.
-            audit_log_event($id === null ? 'mail_account_create' : 'mail_account_update', 'mail_accounts', $r['id'], null, [
-                'sifre_degisti' => array_values(array_filter(MAIL_SIFRE_ALANLARI, static fn($a) => ($_POST[$a] ?? '') !== '')),
-            ]);
-            $basari = $id === null ? 'Hesap eklendi.' : 'Hesap güncellendi.';
-            $id = $r['id'];
-        } else {
-            $hatalar = $r['hatalar'];
+            if ($r['ok']) $pdo->commit(); elseif ($pdo->inTransaction()) $pdo->rollBack();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('[mail_hesaplar kaydet] ' . mail_redact($e->getMessage()));
+            $r = ['ok' => false, 'id' => 0, 'hatalar' => ['Hesap kaydedilemedi.']];
         }
+        if ($r['ok']) {
+            // Audit: değişen ŞİFRESİZ alanlar eski→yeni, erişim değişimi (kullanıcı id), şifre için yalnız "hangi alan değişti" (değer YOK).
+            $fark = mail_hesap_audit_fark($eski, mail_hesap_goster($r['id'], $pdo));
+            $yeniDeg = $fark['yeni'];
+            $yeniDeg['sifre_degisti'] = array_values(array_filter(MAIL_SIFRE_ALANLARI, static fn($a) => ($_POST[$a] ?? '') !== ''));
+            $eklenen = array_values(array_diff($yeniAtanan, $eskiAtanan)); $cikarilan = array_values(array_diff($eskiAtanan, $yeniAtanan));
+            if ($eklenen || $cikarilan) $yeniDeg['erisim'] = ['eklenen' => $eklenen, 'cikarilan' => $cikarilan];
+            audit_log_event($id === null ? 'mail_account_create' : 'mail_account_update', 'mail_accounts', $r['id'], $eski === null ? null : $fark['eski'], $yeniDeg);
+            set_flash('success', $id === null ? 'Hesap eklendi.' : 'Hesap güncellendi.');
+            mail_yonlendir($id === null ? 'mail_hesaplar.php' : 'mail_hesaplar.php?duzenle=' . (int)$r['id']);
+        }
+        $hatalar = $r['hatalar'];
+        if ($atamaGonderildi) $postAtanan = array_map('intval', (array)($_POST['kullanicilar'] ?? []));
     } elseif ($islem === 'test' && $id !== null) {
         // Salt okunur: bağlan + giriş + klasörü aç (EXAMINE). Sunucuda hiçbir şey değişmez.
         $t = mail_imap_test($pdo, $id);
         audit_log_event('mail_account_test', 'mail_accounts', $id, null, ['sonuc' => $t['ok'] ? 'ok' : 'hata']);
-        if ($t['ok']) $basari = $t['mesaj']; else $hatalar[] = 'IMAP testi başarısız: ' . $t['mesaj'];
+        set_flash($t['ok'] ? 'success' : 'error', $t['ok'] ? $t['mesaj'] : 'IMAP testi başarısız: ' . $t['mesaj']);
+        mail_yonlendir($geriDon);
     } elseif ($islem === 'durum' && $id !== null) {
-        $pdo->prepare('UPDATE mail_accounts SET is_active = 1 - is_active, updated_at = ? WHERE id = ?')
-            ->execute([date('Y-m-d H:i:s'), $id]);
-        audit_log_event('mail_account_toggle', 'mail_accounts', $id);
-        $basari = 'Hesap durumu değiştirildi.';
+        // Hedef durum istekle GELİR (1 - is_active çevirmesi değil): sayfa yenilenip POST tekrarlansa da sonuç aynı kalır.
+        $hedef = (string)($_POST['hedef'] ?? '');
+        $mevcut = mail_hesap_goster($id, $pdo);
+        if (!in_array($hedef, ['0', '1'], true) || $mevcut === null) {
+            set_flash('error', $mevcut === null ? 'Hesap bulunamadı.' : 'Geçersiz istek.');
+        } elseif ((int)$mevcut['is_active'] === (int)$hedef) {
+            set_flash('success', 'Hesap zaten ' . ($hedef === '1' ? 'aktif' : 'pasif') . '.');
+        } else {
+            $pdo->prepare('UPDATE mail_accounts SET is_active = ?, updated_at = ? WHERE id = ?')->execute([(int)$hedef, date('Y-m-d H:i:s'), $id]);
+            audit_log_event('mail_account_toggle', 'mail_accounts', $id, ['is_active' => (int)$mevcut['is_active']], ['is_active' => (int)$hedef]);
+            set_flash('success', $hedef === '1' ? 'Hesap aktifleştirildi.' : 'Hesap pasifleştirildi.');
+        }
+        mail_yonlendir($geriDon);
     } elseif ($islem === 'deepseek_test') {
         // Yalnız mail.admin + CSRF. GERÇEK MÜŞTERİ VERİSİ gönderilmez; sabit örnek.
         $p = mail_ceviri_saglayici();
         if ($p === null || $p->ad() !== 'deepseek') {
-            $hatalar[] = 'DeepSeek anahtarı/sağlayıcısı henüz yapılandırılmamış.';
+            set_flash('error', 'DeepSeek anahtarı/sağlayıcısı henüz yapılandırılmamış.');
         } else {
             try {
                 $r = $p->cevir('Good morning.', 'en', 'tr');
-                $basari = 'DeepSeek bağlantısı başarılı. Örnek çeviri: ' . mb_substr(mail_redact((string)$r['metin']), 0, 120);
+                set_flash('success', 'DeepSeek bağlantısı başarılı. Örnek çeviri: ' . mb_substr(mail_redact((string)$r['metin']), 0, 120));
                 audit_log_event('mail_translation_test', 'mail_translate', null, null, ['saglayici' => 'deepseek', 'sonuc' => 'ok']);
             } catch (MailTranslateException $e) {
-                $hatalar[] = 'DeepSeek testi başarısız: ' . mb_substr(mail_redact($e->getMessage()), 0, 180);
+                set_flash('error', 'DeepSeek testi başarısız: ' . mb_substr(mail_redact($e->getMessage()), 0, 180));
                 audit_log_event('mail_translation_test', 'mail_translate', null, null, ['saglayici' => 'deepseek', 'sonuc' => 'hata', 'tur' => $e->kind]);
             }
         }
+        mail_yonlendir($geriDon);
     }
 }
 
 $duzenle = null;
-if ($hazir && isset($_GET['duzenle'])) $duzenle = mail_hesap_goster((int)$_GET['duzenle'], $pdo);
+if ($hazir && $duzenleId > 0) $duzenle = mail_hesap_goster($duzenleId, $pdo);
+if ($hazir && $hatalar && $duzenle === null && ($_POST['islem'] ?? '') === 'kaydet' && ($_POST['id'] ?? '') !== '') $duzenle = mail_hesap_goster((int)$_POST['id'], $pdo);   // hatalı düzenleme gönderimi düzenleme modunda kalır
 $liste = $hazir ? $pdo->query("SELECT id, label, email, is_active FROM mail_accounts ORDER BY label")->fetchAll(PDO::FETCH_ASSOC) : [];
 $atananlar = $duzenle ? mail_hesap_kullanicilari((int)$duzenle['id'], $pdo) : [];
 $f = $duzenle ?? ['label'=>'','email'=>'','display_name'=>'','imap_host'=>'','imap_port'=>993,'imap_security'=>'ssl','imap_user'=>'',
@@ -88,6 +124,10 @@ $f = $duzenle ?? ['label'=>'','email'=>'','display_name'=>'','imap_host'=>'','im
 if ($hatalar && ($_POST['islem'] ?? '') === 'kaydet') {
     // Doğrulama hatasında yazılanlar kaybolmasın — ŞİFRELER hariç (forma ASLA geri basılmaz).
     $f = array_merge($f, array_diff_key($_POST, array_flip(['imap_pass', 'smtp_pass', 'csrf'])));
+    // İşaretlenmemiş kutu POST'ta HİÇ gelmez → DB değeri geri dolardı; kutuları ve erişim listesini gönderilen forma göre doldur.
+    $f['append_sent'] = !empty($_POST['append_sent']) ? 1 : 0;
+    $f['translate_enabled'] = !empty($_POST['translate_enabled']) ? 1 : 0;
+    if ($postAtanan !== null) $atananlar = $postAtanan;
 }
 $v = static fn(string $k) => h((string)($f[$k] ?? ''));
 
@@ -97,6 +137,7 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
 <div class="mail-kap">
     <p><a class="btn btn-geri" href="mail.php">← Mail Merkezi</a></p>
     <h1 style="margin:0 0 12px">Mail Hesapları</h1>
+    <?php render_flash(); ?>
 
     <?php if (!$hazir): ?>
 
@@ -112,7 +153,6 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
     <?php foreach (mail_yapilandirma_uyarilari($pdo) as $uy): if ($uy['mesaj'] === '' || ($uy['seviye'] === 'hata' && !mail_crypto_hazir())) continue; ?>
     <div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid <?= $uy['seviye'] === 'hata' ? '#dc2626' : ($uy['seviye'] === 'uyari' ? '#d97706' : '#2563eb') ?>;overflow-wrap:anywhere"><?= h($uy['mesaj']) ?><?php if (!empty($uy['komut'])): ?><code class="mail-komut"><?= h($uy['komut']) ?></code><?php endif; ?></div>
     <?php endforeach; ?>
-    <?php if ($basari): ?><div class="card" style="padding:10px;margin-bottom:12px;border-left:4px solid #16a34a"><?= h($basari) ?></div><?php endif; ?>
     <?php foreach ($hatalar as $e): ?><div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid #dc2626"><?= h($e) ?></div><?php endforeach; ?>
 
     <div class="table-wrap" style="margin-bottom:16px">
@@ -135,7 +175,8 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
                             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                             <input type="hidden" name="islem" value="durum">
                             <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
-                            <button class="btn" type="submit"><?= (int)$a['is_active'] === 1 ? 'Pasifleştir' : 'Aktifleştir' ?></button>
+                            <input type="hidden" name="hedef" value="<?= (int)$a['is_active'] === 1 ? '0' : '1' ?>">
+                            <button class="btn" type="submit"<?= (int)$a['is_active'] === 1 ? ' data-onay="Hesap pasifleştirilsin mi? Senkron ve cevap gönderimi durur; atanmış kullanıcılar hesabı göremez."' : '' ?>><?= (int)$a['is_active'] === 1 ? 'Pasifleştir' : 'Aktifleştir' ?></button>
                         </form>
                     </div></td>
                 </tr>
@@ -218,17 +259,18 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
             <div class="form-group"><label><input type="checkbox" name="append_sent" value="1"<?= !empty($f['append_sent']) ? ' checked' : '' ?>> Gönderilen kopyayı IMAP Gönderilenler'e yaz</label></div>
 
             <h3>Çeviri</h3>
-            <p style="color:#666;font-size:.9em"><strong>Sağlayıcı (sunucu ayarı):</strong> <?= h(mail_ceviri_yapilandirma_ozeti()) ?>
+            <p class="mail-ince"><strong>Sağlayıcı (sunucu ayarı):</strong> <?= h(mail_ceviri_yapilandirma_ozeti()) ?>
                 <?php $cd = mail_ceviri_durum_oku(); if ($cd): ?><br>Son kuyruk çalışması: <?= h((string)$cd['zaman']) ?> — durum: <?= h((string)$cd['durum']) ?><?= !empty($cd['mesaj']) ? ' (' . h((string)$cd['mesaj']) . ')' : '' ?><?php endif; ?>
                 <br>Sağlayıcı <code>config/local.php</code> içinden seçilir (bkz. docs/MAIL_CENTER_AGENT_BRIDGE.md); anahtar buraya yazılmaz.</p>
             <div class="form-group"><label><input type="checkbox" name="translate_enabled" value="1"<?= !empty($f['translate_enabled']) ? ' checked' : '' ?>> Bu hesap için otomatik çeviri — AÇILIRSA mail metni (adres/başlık/ek hariç) üçüncü taraf çeviri servisine gönderilir; sağlayıcı ayrıca sunucu ayarından açılmalıdır</label></div>
             <div class="form-group"><label>Hedef dil</label><input type="text" name="target_lang" maxlength="10" value="<?= $v('target_lang') ?>"></div>
 
             <h3>Erişebilecek kullanıcılar</h3>
-            <p style="color:#666;font-size:.9em">Seçilmeyen kullanıcılar bu hesabı GÖRMEZ (yöneticiler hariç).</p>
-            <?php foreach ($kullanicilar as $k): ?>
+            <p class="mail-ince">Seçilmeyen kullanıcılar bu hesabı GÖRMEZ (yöneticiler hariç).</p>
+            <?php foreach ($kullanicilar as $k): $okur = mail_kullanici_okuyabilir_mi((int)$k['id'], $pdo); ?>
             <div class="form-group"><label><input type="checkbox" name="kullanicilar[]" value="<?= (int)$k['id'] ?>"<?= in_array((int)$k['id'], $atananlar, true) ? ' checked' : '' ?>>
-                <?= h($k['display_name'] ?: $k['username']) ?></label></div>
+                <?= h($k['display_name'] ?: $k['username']) ?>
+                <?php if ($okur === false): ?><span class="mail-durum mail-durum--failed" title="Bu kullanıcının rolünde mail.read yetkisi yok: hesap atansa bile Mail Merkezi'ni açamaz">mail.read yok</span><?php endif; ?></label></div>
             <?php endforeach; ?>
 
             <button class="btn btn-primary" type="submit">Kaydet</button>
@@ -236,4 +278,4 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
     </div>
     <?php endif; ?>
 </div>
-<?php render_footer(); ?>
+<?php mail_scripts(); render_footer(); ?>
