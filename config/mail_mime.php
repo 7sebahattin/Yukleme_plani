@@ -243,7 +243,9 @@ function mail_mime_gonder_adi(?string $ad): string
     $ad = (string)preg_replace('/[\x{200b}-\x{200f}\x{202a}-\x{202e}\x{2066}-\x{2069}\x{feff}]/u', '', $ad);
     $ad = str_replace(['/', '\\', "\0"], '_', $ad);
     $ad = trim((string)preg_replace('/\s+/u', ' ', $ad));
-    return mb_substr($ad, 0, 180);
+    // Sondaki nokta/boşluk atılır: Windows kaydederken zaten atar ("fatura.exe." → fatura.exe), uzantı denetimi ise
+    // pathinfo() ile boş uzantı görüp tehlikeli eki kaçırıyordu.
+    return (string)preg_replace('/[\s.\x{00a0}\x{3000}]+$/u', '', mb_substr($ad, 0, 180));
 }
 
 // ── Gövde çözme ─────────────────────────────────────────────────────────
@@ -611,6 +613,8 @@ function mail_html_iframe_srcdoc(string $guvenliHtml, bool $uzakGorsel = false):
     $csp = "default-src 'none'; img-src data:" . ($uzakGorsel ? ' https:' : '') . "; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
     return '<!doctype html><html><head><meta charset="utf-8">'
         . '<meta http-equiv="Content-Security-Policy" content="' . htmlspecialchars($csp, ENT_QUOTES) . '">'
+        // Uzak görsel açılınca izleyici sunucuya sitenin adresi (Referer) SIZMASIN; srcdoc belgesi aksi hâlde ana sayfanınkini kullanır.
+        . '<meta name="referrer" content="no-referrer">'
         . '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . '<style>body{margin:0;padding:8px;font:14px/1.45 system-ui,sans-serif;color:#1b2430;overflow-wrap:anywhere}'
         . 'img{max-width:100%;height:auto}table{max-width:100%}blockquote{margin:6px 0 6px 6px;padding-left:10px;border-left:3px solid #c9d2de;color:#4a5668}'

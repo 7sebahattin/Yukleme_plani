@@ -60,6 +60,10 @@ function mail_ek_tehlikeli(string $ad, string $mime = ''): bool
     static $uzanti = ['exe', 'com', 'bat', 'cmd', 'scr', 'pif', 'msi', 'msp', 'js', 'jse', 'vbs', 'vbe', 'wsf', 'wsh', 'ps1', 'psm1', 'jar',
         'hta', 'cpl', 'lnk', 'reg', 'dll', 'sys', 'html', 'htm', 'xhtml', 'svg', 'xml', 'iso', 'img', 'dmg', 'apk', 'docm', 'xlsm', 'pptm',
         'dotm', 'xlam', 'ppam', 'sh', 'py', 'pl', 'php', 'asp', 'aspx', 'jsp', 'chm', 'inf', 'gadget', 'app', 'command', 'url', 'one', 'swf'];
+    // Windows sondaki nokta/boşluğu kaydederken atar: "fatura.exe." / "fatura.exe  " → fatura.exe. pathinfo() bunlarda uzantıyı
+    // BOŞ döndürüp uyarıyı atlatıyordu. Sıfır genişlikli / yön karakterleri de (eski kayıtlarda temizlenmemiş olabilir) atılır.
+    $ad = (string)preg_replace('/[\x{200b}-\x{200f}\x{202a}-\x{202e}\x{2066}-\x{2069}\x{feff}]/u', '', mb_scrub($ad, 'UTF-8'));
+    $ad = (string)preg_replace('/[\s.\x{00a0}\x{3000}]+$/u', '', $ad);
     $uz = strtolower((string)pathinfo($ad, PATHINFO_EXTENSION));
     if (in_array($uz, $uzanti, true)) return true;
     return (bool)preg_match('#^(text/html|application/(x-)?(msdownload|javascript|x-sh|x-executable|vnd\.microsoft\.portable-executable|xhtml\+xml)|image/svg\+xml)#i', $mime);

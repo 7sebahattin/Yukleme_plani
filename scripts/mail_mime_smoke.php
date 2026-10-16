@@ -243,5 +243,6 @@ ok('CSP: script/frame YOK, görsel yalnız data:', str_contains($csp, "default-s
 ok('uzak görsel kapalıyken data-blocked-src dönüştürülmez', str_contains($sd, 'data-blocked-src') && !str_contains($sd, ' src="https'));
 $sd2 = mail_html_iframe_srcdoc('<img data-blocked-src="https://t/p.gif">', true);
 ok('kullanıcı açınca src olur ve CSP https: ekler', str_contains($sd2, ' src="https://t/p.gif"') && str_contains($sd2, 'img-src data: https:'));
+ok('uzak görsel açıkken Referer sızmaz (meta referrer no-referrer)', str_contains($sd2, '<meta name="referrer" content="no-referrer">') && str_contains($sd, '<meta name="referrer" content="no-referrer">'));
 ok('base target=_blank, form-action none, base-uri none', str_contains($sd, '<base target="_blank">') && str_contains($csp, "form-action 'none'") && str_contains($csp, "base-uri 'none'"));
 mail_test_bitir();

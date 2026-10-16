@@ -78,6 +78,8 @@ ok('başka hesapta cevap durumu DEĞİŞTİRİLEMEZ', mail_cevap_durumu_yaz($db,
 
 echo "\n=== Yardımcılar ===\n";
 ok('riskli ek türleri', mail_ek_tehlikeli('fatura.exe') && mail_ek_tehlikeli('a.HTML') && mail_ek_tehlikeli('x.svg') && mail_ek_tehlikeli('x.pdf', 'text/html') && mail_ek_tehlikeli('m.docm') && !mail_ek_tehlikeli('fatura.pdf', 'application/pdf') && !mail_ek_tehlikeli('foto.jpg', 'image/jpeg'));
+ok('sondaki nokta/boşluk uzantı denetimini atlatamaz', mail_ek_tehlikeli('fatura.exe.') && mail_ek_tehlikeli('fatura.exe  ') && mail_ek_tehlikeli("fatura.exe. . \u{00A0}") && mail_ek_tehlikeli("fatura.exe\u{200B}.") && !mail_ek_tehlikeli('fatura.pdf.'));
+ok('dosya adı: sondaki nokta/boşluk atılır', mail_mime_gonder_adi('fatura.exe. . ') === 'fatura.exe' && mail_mime_gonder_adi('rapor.pdf') === 'rapor.pdf');
 ok('boyut biçimi', mail_boyut_fmt(500) === '500 B' && mail_boyut_fmt(2048) === '2 KB' && str_contains(mail_boyut_fmt(5242880), 'MB'));
 ok('zaman biçimi', mail_zaman_fmt(date('Y-m-d') . ' 14:05:00') === '14:05' && mail_zaman_fmt('2020-01-02 03:04:05') === '02.01.2020' && mail_zaman_fmt(null) === '');
 ok('gönderen adı yedeği', mail_gonderen_adi(['from_name' => '', 'from_addr' => 'a@b.com']) === 'a@b.com' && mail_gonderen_adi(['from_name' => 'Ali', 'from_addr' => 'a@b.com']) === 'Ali' && mail_gonderen_adi([]) === '(bilinmeyen)');
