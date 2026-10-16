@@ -47,6 +47,18 @@ ok('geçersiz adres atılır', !in_array('kotu@', array_column($a, 'email'), tru
 ok('encoded isim', in_array(['name' => 'Çağlar', 'email' => 'cagla@x.com'], $a, true));
 ok('tekrarlayan adres tekilleşir', count(mail_mime_adresler('a@x.com, A@X.com')) === 1);
 ok('CRLF enjeksiyonlu adres geçersiz', mail_mime_adresler("a@x.com\r\nBcc: z@z.com") === [] || array_column(mail_mime_adresler("a@x.com\r\nBcc: z@z.com"), 'email') === ['a@x.com']);
+// RFC 2047 §5: encoded-word ayraç taşıyamaz — liste HAM başlıkta bölünür, ad parçası SONRA çözülür (gönderen sahteciliği).
+$sahte = mail_mime_adresler('=?UTF-8?B?' . base64_encode('Muhasebe <muhasebe@asyafresh.com>,') . '?= <attacker@evil.example>');
+ok('encoded-word içine gizlenmiş adres AYRAÇ sayılmaz (gönderen sahteciliği)', array_column($sahte, 'email') === ['attacker@evil.example']
+    && $sahte[0]['name'] === 'Muhasebe <muhasebe@asyafresh.com>,', json_encode($sahte));
+$m = mail_mime_mesaj(mail_test_raw(['from' => '=?UTF-8?B?' . base64_encode('Muhasebe <muhasebe@asyafresh.com>,') . '?= <attacker@evil.example>']));
+ok('sahte From: from_addr gerçek adres', $m['from_addr'] === 'attacker@evil.example', $m['from_addr']);
+ok('Q kodlu virgüllü ad kesilmez', mail_mime_adresler('=?UTF-8?Q?Y=C4=B1lmaz=2C_Ahmet?= <a@x.com>') === [['name' => 'Yılmaz, Ahmet', 'email' => 'a@x.com']]);
+ok('encoded-word içindeki tırnak/köşeli parantez listeyi bozmaz',
+    array_column(mail_mime_adresler('=?UTF-8?B?' . base64_encode('"x <y@z.com>') . '?= <a@x.com>, b@x.com'), 'email') === ['a@x.com', 'b@x.com']);
+ok('tırnak içi encoded-word (yaygın istemci hatası) yine çözülür', mail_mime_adresler('"=?UTF-8?B?w4dhxJ9sYXI=?=" <c@x.com>') === [['name' => 'Çağlar', 'email' => 'c@x.com']]);
+ok('yorum içi encoded-word ad olarak çözülür', mail_mime_adresler('c@x.com (=?UTF-8?B?w4dhxJ9sYXI=?=)') === [['name' => 'Çağlar', 'email' => 'c@x.com']]);
+ok('ham 8-bit adlı adres korunur', mail_mime_adresler("G\xF6nderen <g@x.com>") === [['name' => 'Gönderen', 'email' => 'g@x.com']]);
 ok('100 adres sınırı', count(mail_mime_adresler(implode(',', array_map(fn($i) => "u$i@x.com", range(1, 300))))) === 100);
 
 echo "\n=== A3. RFC2231 parametreler ===\n";

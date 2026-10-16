@@ -163,7 +163,13 @@ function mail_mime_param_coz(string $v): array
     return ['deger' => $deger, 'params' => $params];
 }
 
-/** Adres listesi → [['name'=>…, 'email'=>…], …]; geçersiz adresler atılır. */
+/**
+ * Adres listesi → [['name'=>…, 'email'=>…], …]; geçersiz adresler atılır.
+ * RFC 2047 §5: encoded-word YALNIZ görünen ad (phrase / yorum) içinde anlamlıdır. Liste HAM başlık üzerinde (tırnak,
+ * yorum, köşeli parantez gözetilerek) bölünür; encoded-word ancak SONRA ve yalnız ad parçasında çözülür. Eskiden önce
+ * çözülüp sonra bölünüyordu: =?UTF-8?B?…?= içine gizlenmiş 'Muhasebe <muhasebe@bizim.com>,' ilk adres sayılıyordu
+ * (gönderen sahteciliği — hesabın kendi adresiyse mail "kendi mailimiz" görünüp Cevap Bekleyen'den düşüyordu).
+ */
 function mail_mime_adresler(string $v): array
 {
     $v = mail_mime_baslik_coz_adres($v);
@@ -198,6 +204,7 @@ function mail_mime_adresler(string $v): array
         } else continue;
         $isim = trim($isim, " \t\"");
         $isim = stripcslashes($isim);
+        $isim = mail_mime_baslik_coz($isim);   // encoded-word yalnız burada (bölmeden SONRA, yalnız ad parçasında) çözülür
         $email = strtolower(preg_replace('/\s+/', '', $email) ?? '');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || isset($goruldu[$email])) continue;
         $goruldu[$email] = true;
@@ -207,10 +214,13 @@ function mail_mime_adresler(string $v): array
     return $out;
 }
 
-/** Adres başlığında encoded-word'leri çözerken ayraçları ("<", ",") bozmamak için yalnız kelimeleri çözer. */
+/**
+ * Adres başlığını BÖLMEYE hazırlar: katlama açılır, ham 8-bit baytlar UTF-8'e çevrilir, kontrol karakterleri atılır.
+ * Encoded-word'ler burada ÇÖZÜLMEZ — çözülmüş ad içindeki "<", "," ya da '"' ayraç sanılırdı (bkz. mail_mime_adresler).
+ */
 function mail_mime_baslik_coz_adres(string $v): string
 {
-    return mail_mime_baslik_coz($v);
+    return mail_mime_temiz(mail_mime_utf8((string)preg_replace('/\r?\n[ \t]+/', ' ', $v), 'utf-8'));
 }
 
 /** <id> belirteçlerini döndürür (normalize: küçük harf, <> yok). @return list<string> */
