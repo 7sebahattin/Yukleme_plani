@@ -53,6 +53,9 @@ function depo_sql_records_in(string $a = 'r'): array { return ['', []]; }
 function depo_sql_column(string $c): array { return ['', []]; }
 function depo_sql_in(string $c): array { return ['', []]; }
 function user_primary_role(): ?array { return ['slug' => 'operator', 'label' => 'Operatör']; }
+// PRG yönlendirmesi: sayfa kodu mail_yonlendir() çağırır (config/mail_view.php exit'li sürümü tanımlar); testte istisna fırlatır (exit süreci öldürürdü).
+class MailTestYonlendirme extends RuntimeException { public function __construct(public string $url) { parent::__construct('yonlendir: ' . $url); } }
+function mail_yonlendir(string $url): never { throw new MailTestYonlendirme($url); }
 
 require_once $ROOT . '/config/helpers.php';
 require_once $ROOT . '/config/mail_core.php';

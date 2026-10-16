@@ -115,6 +115,9 @@ $sayfalar = [
     'onay_failed'  => [['o' => $G_FAIL, 'f' => 'hatali'], false, ['mail.read', 'mail.reply', 'mail.send']],
     'onay_sent'    => [['o' => $G_SENT, 'f' => 'gonderilen'], false, ['mail.read', 'mail.reply', 'mail.send']],
     'onay_draft'   => [['o' => $G_DRAFT, 'f' => 'taslak'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_gelen'   => [['m' => $ID_TR, 'o' => $G_TR], false, ['mail.read', 'mail.reply', 'mail.send']],   // gelen listesi + onay paneli: liste bağlantıları o= taşımamalı
+    'cevap_bekleyen' => [['f' => 'cevap'], false, ['mail.read', 'mail.reply']],   // toplu "cevaplandı say"
+    'detay_noreply' => [['m' => $ID_TR, 'v' => 'tr'], false, ['mail.read']],   // mail.reply yok: boş yapışkan Cevapla şeridi çizilmez
     'hesaplar'     => [[], true, [], 1, 'mail_hesaplar.php'],   // yönetici: hesap tablosu (mobil kart), uyarılar, senkron günlüğü
 ];
 $manifest = ['sayfalar' => [], 'id' => ['html' => $ID_HTML, 'tr' => $ID_TR, 'xss' => $ID_XSS]];
