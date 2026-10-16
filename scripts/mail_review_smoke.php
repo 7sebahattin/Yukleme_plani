@@ -124,6 +124,24 @@ srv($a3, [101 => M(mail_test_raw(['msgid' => '<fatura@x>', 'subject' => 'Invoice
 $r = senk($a3);
 ok('sonradan gelen, eski Message-ID\'yi yeniden kullanan mail YENİ SATIR olur (atılmaz)', $r['inserted'] === 1 && n("account_id = $a3") === 3, json_encode($r));
 ok('eski satırın UID\'si ele geçirilmedi (Invoice hâlâ uid 101)', $db->query("SELECT uid FROM mail_messages WHERE account_id = $a3 AND subject = 'Invoice'")->fetchColumn() == 101 && $db->query("SELECT subject FROM mail_messages WHERE account_id = $a3 AND uid = 103")->fetchColumn() === 'ACİL: yeni banka bilgileri');
+// Geri tarama SIRASINDA eski Message-ID'yi yeniden kullanan farklı mail eski satırı kendi UID'sine taşıyamaz (gizleme).
+$a3h = hesap('epochh@asya.com');
+srv($a3h, [1 => M(mail_test_raw(['msgid' => '<odeme@x>', 'subject' => 'Ödeme talimatı', 'date' => 'Mon, 05 Oct 2026 10:00:00 +0300']))]);
+senk($a3h);
+srv($a3h, [
+    201 => M(mail_test_raw(['msgid' => '<odeme@x>', 'subject' => 'ACİL: IBAN değişti', 'from' => 'Muhasebe <saldirgan@evil.example>'])),
+    202 => M(mail_test_raw(['msgid' => '<odeme@x>', 'subject' => 'Ödeme talimatı', 'date' => 'Mon, 05 Oct 2026 10:00:00 +0300'])),
+], ['uidvalidity' => 7000]);
+$r = senk($a3h);
+$hsat = $db->query("SELECT uidvalidity, uid, subject, from_addr FROM mail_messages WHERE account_id = $a3h ORDER BY id")->fetchAll();
+ok('geri taramada aynı Message-ID + FARKLI gönderen/konu: eski satır taşınmaz, yeni satır olur', count($hsat) === 2 && (int)$hsat[0]['uidvalidity'] === 7000 && (int)$hsat[0]['uid'] === 202
+    && $hsat[0]['subject'] === 'Ödeme talimatı' && $hsat[1]['from_addr'] === 'saldirgan@evil.example' && (int)$hsat[1]['uid'] === 201, json_encode($hsat));
+$a3d = hesap('epochd@asya.com');
+srv($a3d, [1 => M(mail_test_raw(['msgid' => '<rapor@x>', 'subject' => 'Rapor', 'date' => 'Mon, 05 Oct 2026 10:00:00 +0300']))]);
+senk($a3d);
+srv($a3d, [301 => M(mail_test_raw(['msgid' => '<rapor@x>', 'subject' => 'Rapor', 'date' => 'Tue, 06 Oct 2026 08:00:00 +0300']))], ['uidvalidity' => 7100]);
+senk($a3d);
+ok('geri taramada aynı Message-ID/gönderen/konu ama FARKLI Date: taşınmaz', n("account_id = $a3d") === 2 && n("account_id = $a3d AND uidvalidity = 7100") === 1);
 // Geri tarama birkaç çalıştırmaya yayılırsa bayrak KALICI olmalı (çiftleme sürmeli)
 $a3b = hesap('epoch2@asya.com');
 $eski = []; for ($i = 1; $i <= 5; $i++) $eski[$i] = M(mail_test_raw(['msgid' => "<e$i@x>", 'subject' => "E$i"]));

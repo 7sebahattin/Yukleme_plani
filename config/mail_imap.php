@@ -100,15 +100,20 @@ final class MailSocketStream implements MailStream
         if (!$this->fp) return null;
         $bitis = $this->bitisHesapla($this->timeout);
         stream_set_blocking($this->fp, false);
+        $bak = 0;   // tamponun taranmış kısmı yeniden taranmaz (çok MB'lık SEARCH satırında karesel strpos olmasın)
         while (true) {
-            $p = strpos($this->rbuf, "\n");
+            $p = strpos($this->rbuf, "\n", $bak);
             if ($p !== false) {
                 $line = substr($this->rbuf, 0, $p + 1); $this->rbuf = (string)substr($this->rbuf, $p + 1);
                 if (strlen($line) > $max + 2) throw new MailImapException('limit', 'Sunucu satırı çok uzun.');
                 return rtrim($line, "\r\n");
             }
-            if (strlen($this->rbuf) > $max + 2) { $this->rbuf = ''; throw new MailImapException('limit', 'Sunucu satırı çok uzun.'); }
+            $bak = strlen($this->rbuf);
+            if ($bak > $max + 2) { $this->rbuf = ''; throw new MailImapException('limit', 'Sunucu satırı çok uzun.'); }
             if (microtime(true) > $bitis || !$this->doldur($bitis)) return null;
+            // Uzun satır (64 KB üstü: büyük SEARCH yanıtı) veri gelmeye devam ettikçe işlem süresi yenilenir; mutlak sınır
+            // oturum bitişi (sureSinirla) + $max bayttır — yavaş-damla sunucu oturumu yine uzatamaz.
+            if (strlen($this->rbuf) > $bak && $bak > 65536) $bitis = $this->bitisHesapla($this->timeout);
         }
     }
 
@@ -215,6 +220,9 @@ final class MailImapClient
     {
         $this->o = $opts + [
             'max_satir'     => 65536,
+            // YALNIZ UID SEARCH yanıtı: ~8000 adet 7 haneli UID 64 KB'ı aşıyordu → her çalıştırma 'limit' hatası, hesap HİÇ
+            // senkronlanmıyordu. 4 MB ≈ 500 000 UID; senkron yine partiler hâlinde (çalıştırma başına limit) işler.
+            'max_satir_ara' => 4194304,
             'max_literal'   => 26214400,   // 25 MB — tek literal
             'max_toplam'    => 157286400,  // 150 MB — bağlantı başına
             'sure'          => 120.0,      // tek komut için duvar saati bütçesi (sn)
@@ -241,9 +249,9 @@ final class MailImapClient
     // ── Düşük seviye ───────────────────────────────────────────────
 
     /** @return array{0:string,1:list<string>} mantıksal satır (literaller yer tutucuyla) + literaller */
-    private function mantiksalOku(): array
+    private function mantiksalOku(?int $maxSatir = null): array
     {
-        $satir = $this->s->readLine($this->o['max_satir']);
+        $satir = $this->s->readLine($maxSatir ?? (int)$this->o['max_satir']);
         if ($satir === null) throw new MailImapException('timeout', 'Sunucu yanıt vermedi ya da bağlantı kesildi.');
         $lits = [];
         while (preg_match('/\{(\d{1,10})\+?\}$/', $satir, $m)) {
@@ -261,7 +269,7 @@ final class MailImapClient
             $this->toplamBayt += $n;
             $lits[] = $veri;
             $satir = substr($satir, 0, -strlen($m[0])) . "\x01L" . (count($lits) - 1) . "\x01";
-            $devam = $this->s->readLine($this->o['max_satir']);
+            $devam = $this->s->readLine((int)$this->o['max_satir']);
             if ($devam === null) throw new MailImapException('timeout', 'Yanıt yarıda kesildi.');
             $satir .= $devam;
         }
@@ -317,7 +325,7 @@ final class MailImapClient
      * + son 'tamam' metni. NO/BAD → MailImapException.
      * @param callable|null $devam '+' devam isteğinde çağrılır (string|null döner → gönderilir)
      */
-    private function komut(string $cmd, ?callable $devam = null, ?string $gunlukMetni = null): array
+    private function komut(string $cmd, ?callable $devam = null, ?string $gunlukMetni = null, ?int $maxSatir = null): array
     {
         if ($this->kapali) throw new MailImapException('connect', 'Bağlantı kapalı.');
         $this->bitis = $this->komutBitisi();
@@ -327,7 +335,7 @@ final class MailImapClient
         $untagged = []; $devamSay = 0;
         while (true) {
             if (microtime(true) > $this->bitis) { $this->kapat(); throw new MailImapException('timeout', 'Komut zaman aşımına uğradı.'); }
-            [$satir, $lits] = $this->mantiksalOku();
+            [$satir, $lits] = $this->mantiksalOku($maxSatir);
             if (str_starts_with($satir, $tag . ' ')) {
                 $rest = substr($satir, strlen($tag) + 1);
                 if (preg_match('/^(OK|NO|BAD)\b\s*(.*)$/si', $rest, $m)) {
@@ -372,7 +380,11 @@ final class MailImapClient
             if (preg_match('/^\[([A-Za-z0-9-]+)(?:\s+([^\]]*))?\]/', $m[2], $k)) $kod = [strtoupper($k[1]), $k[2] ?? ''];
             return ['tip' => strtoupper($m[1]), 'sayi' => null, 'belirtec' => $kod, 'ham' => $m[2]];
         }
-        if (preg_match('/^(SEARCH|CAPABILITY|FLAGS|LIST|LSUB|STATUS)\b\s*(.*)$/si', $satir, $m)) {
+        if (preg_match('/^SEARCH\b\s*/i', $satir, $m)) {
+            // Çok MB olabilir: belirteç dizisine BÖLÜNMEZ (yüz binlerce küçük dizge belleği şişirirdi); uidAra ham metni tarar.
+            return ['tip' => 'SEARCH', 'sayi' => null, 'belirtec' => [], 'ham' => substr($satir, strlen($m[0]))];
+        }
+        if (preg_match('/^(CAPABILITY|FLAGS|LIST|LSUB|STATUS)\b\s*(.*)$/si', $satir, $m)) {
             return ['tip' => strtoupper($m[1]), 'sayi' => null, 'belirtec' => preg_split('/\s+/', trim($m[2])) ?: [], 'ham' => $m[2]];
         }
         return ['tip' => 'DIGER', 'sayi' => null, 'belirtec' => [], 'ham' => $ham];
@@ -463,11 +475,13 @@ final class MailImapClient
     public function uidAra(string $kriter): array
     {
         if (!preg_match('/^[A-Za-z0-9 :*,\-]+$/', $kriter)) throw new MailImapException('bad', 'Geçersiz arama ölçütü.');
-        $r = $this->komut('UID SEARCH ' . $kriter);
+        $r = $this->komut('UID SEARCH ' . $kriter, null, null, (int)$this->o['max_satir_ara']);
         $ids = [];
         foreach ($r['untagged'] as $u) {
             if ($u['tip'] !== 'SEARCH') continue;
-            foreach ($u['belirtec'] as $x) if (ctype_digit((string)$x) && (int)$x > 0) $ids[(int)$x] = true;
+            for ($x = strtok((string)$u['ham'], " \t"); $x !== false; $x = strtok(" \t")) {
+                if (ctype_digit($x) && strlen($x) <= 10 && (int)$x > 0) $ids[(int)$x] = true;
+            }
         }
         $ids = array_keys($ids);
         sort($ids, SORT_NUMERIC);
@@ -588,6 +602,9 @@ final class MailImapClient
     }
 
     public function kapatZorla(): void { $this->kapat(); }
+
+    /** Bu bağlantının kalan literal bayt bütçesi (max_toplam − alınan). Senkron, bütçeyi aşacak mesajı ÇEKMEDEN durur. */
+    public function kalanBayt(): int { return max(0, (int)$this->o['max_toplam'] - $this->toplamBayt); }
 }
 
 /**

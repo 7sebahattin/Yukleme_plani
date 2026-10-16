@@ -170,6 +170,32 @@ ok('Reply-To ≠ From uyarısı onay panelinde', str_contains($kaynak, 'Reply-To
 ok('onay panelinde gönderen kimliği gösterilir', str_contains($kaynak, '<dt>Gönderen</dt>'));
 ok('translated durumunda alıntı varsayılan AÇIK', str_contains($kaynak, "\$os === 'translated' ? 'open' : ''") && str_contains($kaynak, 'quote_text'));
 
+echo "\n=== B8. 'failed' (KESİN gönderilmedi) dedupe_key'i serbest bırakır; at-most-once korunur ===\n";
+$mp = gelen($A, 'b8@musteri.ru');
+$fa = hazir($mp, 'Reddedilen alıcı metni');
+$SMTP->cfg['reject_rcpt'] = ['ivan@musteri.ru'];
+$say0 = count($SMTP->mesajlar);
+$r = onayla($fa);
+$SMTP->cfg['reject_rcpt'] = [];
+ok('RCPT reddi → failed, mesaj gitmedi, dedupe_key serbest', !$r['ok'] && satir($fa)['status'] === 'failed' && satir($fa)['dedupe_key'] === null && count($SMTP->mesajlar) === $say0, json_encode($r));
+$fb = hazir($mp, 'Reddedilen alıcı metni');
+$r = onayla($fb);
+ok('aynı içerikli YENİ taslak onaylanıp gönderilebilir ("eşzamanlı onay" yanıltıcı reddi yok)', $r['ok'] && satir($fb)['status'] === 'sent' && count($SMTP->mesajlar) - $say0 === 1, json_encode($r));
+$r = mail_outbox_tekrar($db, $fa, $H, 8, true, ['smtp' => $fab, 'simdi' => $NOW]);
+ok('eski failed satırın "tekrar dene"si artık reddedilir (aynı cevap ikinci kez GİTMEZ)', !$r['ok'] && str_contains($r['mesaj'], 'Çift gönderim') && count($SMTP->mesajlar) - $say0 === 1 && satir($fa)['status'] === 'failed');
+// unknown / sent anahtarı KORUR; insan "gönderilmedi" deyince serbest kalır
+$mu = gelen($A, 'b8u@musteri.ru');
+$fu = hazir($mu, 'Belirsiz metin');
+$SMTP->cfg['final'] = 'SILENT';
+$r = onayla($fu);
+$SMTP->cfg['final'] = '250 2.0.0 Ok: queued as ABC123';
+ok('belirsiz (unknown) satır dedupe_key\'i KORUR', satir($fu)['status'] === 'unknown' && satir($fu)['dedupe_key'] !== null, satir($fu)['status']);
+$fu2 = hazir($mu, 'Belirsiz metin');
+ok('unknown varken aynı içerikli yeni taslak onaylanamaz', !onayla($fu2)['ok'] && satir($fu2)['status'] === 'translated');
+mail_outbox_belirsiz_coz($db, $fu, $H, 8, true, 'gonderilmedi');
+ok('insan "gönderilmedi" deyince failed + dedupe_key serbest', satir($fu)['status'] === 'failed' && satir($fu)['dedupe_key'] === null);
+ok('sent satır dedupe_key\'i KORUR', satir($fb)['dedupe_key'] !== null);
+
 echo "\n=== B7. IMAP APPEND devam isteği tek sefer ===\n";
 $IM = new FakeMailStream(['user' => 'rv@asya.com', 'pass' => 'imap-SIR-1', 'caps' => ['IMAP4rev1'], 'double_continuation' => true]);
 $c = new MailImapClient($IM); $c->baslat(false); $c->girisYap('rv@asya.com', 'imap-SIR-1');

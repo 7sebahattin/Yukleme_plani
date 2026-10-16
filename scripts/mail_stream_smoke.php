@@ -44,6 +44,18 @@ ok('yavaş-damla: sürekli bayt gelse de satır süresi dolunca bırakır (<2.5 
 posix_kill($pid, SIGKILL); pcntl_waitpid($pid, $st);
 }
 
+// Çok MB'lık tek satır (büyük UID SEARCH yanıtı): soket tamponundan büyük, parça parça gelir; karesel tarama olmadan okunur.
+[$s, $srv] = cift(2.0);
+$buyuk = '* SEARCH ' . implode(' ', range(1000001, 1250000));   // ~2 MB
+$pid = function_exists('pcntl_fork') ? pcntl_fork() : -1;
+if ($pid === -1) { ok('büyük satır testi atlandı (pcntl yok)', true); }
+elseif ($pid === 0) { stream_set_blocking($srv, true); foreach (str_split($buyuk . "\r\n* OK\r\n", 32768) as $p) { fwrite($srv, $p); usleep(2000); } exit(0); }
+if ($pid !== -1) {
+    $t = microtime(true); $okunan = $s->readLine(4194304);
+    ok('~2 MB satır eksiksiz okunur, makul sürede (<3 sn)', $okunan === $buyuk && $s->readLine(100) === '* OK' && microtime(true) - $t < 3.0, round(microtime(true) - $t, 2) . ' sn');
+    pcntl_waitpid($pid, $st);
+}
+
 [$s, $srv] = cift(5.0);
 fwrite($srv, "5\r\nhello");
 ok('readBytes tam n bayt döner, kalanı tamponda', $s->readLine(50) === '5' && $s->readBytes(3) === 'hel' && $s->readBytes(2) === 'lo');
