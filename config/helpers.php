@@ -378,7 +378,7 @@ function nav_aktif_anahtar(): ?string {
     $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
                                'hesap_personel.php'], true);
-    $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php', 'mail_api.php'], true);
+    $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
@@ -959,6 +959,9 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php endif; ?>
             <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
             <a href="<?= $base ?>beyanlar.php" <?= in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php'], true) ? 'class="active"' : '' ?>>Beyanlar</a>
+            <?php endif; ?>
+            <?php if (can_mail('read')): ?>
+            <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?>>Mail</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
             <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
