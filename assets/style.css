@@ -6792,3 +6792,22 @@ html[data-theme="dark"] .btn.btn-duzenle { background: linear-gradient(180deg, #
     box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 2px 0 var(--g-ac), 0 6px 12px -4px rgba(0,0,0,.25); }
 html[data-theme="dark"] .bn-parti.bn-g { color: var(--g-bg); background: linear-gradient(180deg, color-mix(in srgb, var(--g-ac) 38%, #1e2a4a) 0%, color-mix(in srgb, var(--g-ac) 22%, #141b30) 100%);
     border-color: var(--g-ac); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 0 #121b33, 0 6px 12px -4px rgba(0,0,0,.6); }
+
+/* v370: Mail Merkezi okunmamış rozeti (kenar çubuğu · üst menü · alt çubuk · "Diğer" sayfası).
+   İşaretleme PHP'de (nav_rozet_html); beyaz #dc2626 üstünde 4.8:1 — açık ve koyu temada aynı. Animasyon yok. */
+.nav-rozet {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
+    border-radius: 999px; background: #dc2626; color: #fff;
+    font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0;
+    font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
+}
+.nav-rozet[hidden] { display: none; }
+.sidebar-link .nav-rozet { margin-left: auto; }
+.topnav a .nav-rozet { margin-left: 6px; vertical-align: 1px; }
+.bn-item .ni-wrap .nav-rozet {
+    position: absolute; top: -4px; right: -9px; z-index: 2;
+    box-shadow: 0 0 0 2px var(--bn-dock); pointer-events: none;
+}
+.bn-tile .nav-rozet-tile { position: absolute; top: 2px; right: calc(50% + 14px); box-shadow: 0 0 0 2px var(--card); pointer-events: none; }
+html[data-theme="dark"] .nav-rozet { background: #ef4444; color: #1a0606; }

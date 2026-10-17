@@ -558,8 +558,9 @@ function mail_hesap_kaydet(array $in, ?int $id, ?int $userId, ?PDO $pdo = null):
         }
     }
 
+    $own = !$pdo->inTransaction();   // çağıran (mail_hesaplar.php) kayıt + kullanıcı atamasını TEK transaction'da tutabilir
     try {
-        $pdo->beginTransaction();
+        if ($own) $pdo->beginTransaction();
         if ($id === null) {
             $cols = $alanlar; $ph = array_fill(0, count($cols), '?');
             $vals = [];
@@ -575,16 +576,16 @@ function mail_hesap_kaydet(array $in, ?int $id, ?int $userId, ?PDO $pdo = null):
             $st = $pdo->prepare('UPDATE mail_accounts SET ' . implode(', ', $set) . ' WHERE id = ?');
             $st->execute($vals);
             $var = $pdo->prepare('SELECT 1 FROM mail_accounts WHERE id = ?'); $var->execute([$id]);
-            if (!$var->fetchColumn()) { $pdo->rollBack(); return ['ok' => false, 'id' => 0, 'hatalar' => ['Hesap bulunamadı.']]; }
+            if (!$var->fetchColumn()) { if ($own) $pdo->rollBack(); return ['ok' => false, 'id' => 0, 'hatalar' => ['Hesap bulunamadı.']]; }
         }
         foreach (MAIL_SIFRE_ALANLARI as $a) {
             if ($v[$a] === '') continue; // boş = değiştirme
             $pdo->prepare("UPDATE mail_accounts SET {$a}_enc = ? WHERE id = ?")
                 ->execute([mail_sifrele($v[$a], mail_aad($id, $a)), $id]);
         }
-        $pdo->commit();
+        if ($own) $pdo->commit();
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($own && $pdo->inTransaction()) $pdo->rollBack();   // dış transaction'ı çağıran geri alır (dönüş ok=false)
         $msg = $e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'UNIQUE'))
             ? 'Bu e-posta adresi zaten kayıtlı.' : 'Hesap kaydedilemedi.';
         error_log('[mail_hesap_kaydet] ' . mail_redact($e->getMessage()));
@@ -627,6 +628,27 @@ function mail_hesap_goster(int $id, ?PDO $pdo = null): ?array
     return $r;
 }
 
+/** Audit'e yazılabilen (SIRSIZ) hesap alanları: değişimin eski→yeni farkı. Parola/anahtar alanları KASTEN yok. */
+const MAIL_HESAP_AUDIT_ALANLARI = ['label', 'email', 'display_name', 'reply_to', 'imap_host', 'imap_port', 'imap_security', 'imap_user',
+    'smtp_host', 'smtp_port', 'smtp_security', 'smtp_user', 'sync_folder', 'sent_folder', 'append_sent', 'initial_days', 'translate_enabled', 'target_lang'];
+
+/**
+ * mail_hesap_goster() satırlarından yalnız DEĞİŞEN şifresiz alanları çıkarır.
+ * $eski null ise (yeni hesap) yalnız dolu alanlar yeni'ye girer.
+ * @return array{eski:array,yeni:array}
+ */
+function mail_hesap_audit_fark(?array $eski, ?array $yeni): array
+{
+    $e = []; $y = [];
+    foreach (MAIL_HESAP_AUDIT_ALANLARI as $a) {
+        $ev = (string)($eski[$a] ?? ''); $yv = (string)($yeni[$a] ?? '');
+        if ($eski === null ? $yv === '' : $ev === $yv) continue;
+        if ($eski !== null) $e[$a] = $ev;
+        $y[$a] = $yv;
+    }
+    return ['eski' => $e, 'yeni' => $y];
+}
+
 /** Hesaba erişecek kullanıcıların TAM listesini değiştirir (yalnız mail.admin çağırır). */
 function mail_hesap_kullanici_ata(int $hesapId, array $userIds, ?PDO $pdo = null): void
 {
@@ -654,6 +676,29 @@ function mail_hesap_kullanicilari(int $hesapId, ?PDO $pdo = null): array
     return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
 }
 
+/**
+ * Gelen kutusu sorgularına eklenen SQL parçası: hesabın GÖNDERİLENLER klasöründen okunmuş satırları (mail_messages.folder = hesabın
+ * sent_folder'ı, gelen kutusundan farklıysa) gelen/okunmamış/cevap bekleyen listeleri ve sayaçlarından dışlar.
+ * $tablo = sorguda mail_messages için kullanılan ad/takma ad. MySQL + SQLite uyumlu (ilişkili NOT EXISTS, hesap PK araması).
+ */
+function mail_gonderilen_disla_sql(string $tablo = 'mail_messages'): string
+{
+    if (!preg_match('/^[a-z_][a-z0-9_]*$/i', $tablo)) $tablo = 'mail_messages';
+    return " AND NOT EXISTS (SELECT 1 FROM mail_accounts _ga WHERE _ga.id = $tablo.account_id AND _ga.sent_folder IS NOT NULL AND _ga.sent_folder <> ''"
+        . " AND _ga.sent_folder <> _ga.sync_folder AND $tablo.folder = _ga.sent_folder)";
+}
+
+/** Bu mesaj hesabın GÖNDERİLENLER klasöründen mi okundu (kendi yazdığımız mail)? Cevap yazılamaz / gelen listelerinde yer almaz. */
+function mail_mesaj_gonderilen_mi(PDO $pdo, array $m): bool
+{
+    $st = $pdo->prepare('SELECT sent_folder, sync_folder FROM mail_accounts WHERE id = ?');
+    $st->execute([(int)($m['account_id'] ?? 0)]);
+    $h = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$h) return false;
+    $g = trim((string)($h['sent_folder'] ?? ''));
+    return $g !== '' && $g !== (string)$h['sync_folder'] && (string)($m['folder'] ?? '') === $g;
+}
+
 /** Görünür hesaplar için okunmamış sayısı: [hesapId => sayı]. Tablo yoksa []. */
 function mail_okunmamis_sayilari(int $userId, ?PDO $pdo = null, ?bool $yonetici = null): array
 {
@@ -662,12 +707,52 @@ function mail_okunmamis_sayilari(int $userId, ?PDO $pdo = null, ?bool $yonetici 
     if ($ids === [] || !mail_tablo_var($pdo, 'mail_messages')) return [];
     try {
         $in = implode(',', array_fill(0, count($ids), '?'));
-        $st = $pdo->prepare("SELECT account_id, COUNT(*) c FROM mail_messages WHERE is_read = 0 AND account_id IN ($in) GROUP BY account_id");
+        $st = $pdo->prepare("SELECT account_id, COUNT(*) c FROM mail_messages WHERE is_read = 0 AND account_id IN ($in)" . mail_gonderilen_disla_sql() . " GROUP BY account_id");
         $st->execute($ids);
         $out = array_fill_keys($ids, 0);
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(int)$r['account_id']] = (int)$r['c'];
         return $out;
     } catch (PDOException $e) {
         return [];
+    }
+}
+
+/**
+ * Görünür hesaplardaki okunmamış mail TOPLAMI — TEK sorgu (her sayfanın kenar çubuğu / alt çubuğu rozeti için).
+ * Görünürlük mail_gorunur_hesap_idleri() ile AYNI: yönetici = tüm hesaplar, diğerleri = atanmış + AKTİF hesaplar.
+ * Tablo yok / hata → 0 (rozet sayfayı ASLA bozmaz). mail_okunmamis_sayilari() toplamıyla birebir eşittir (test denetler).
+ */
+function mail_okunmamis_toplam(int $userId, ?PDO $pdo = null, ?bool $yonetici = null): int
+{
+    return mail_gorunur_say('is_read = 0', [], $userId, $pdo, $yonetici);
+}
+
+/**
+ * Cevap bekleyen (needs_reply=1, replied_at boş) ve $saat saatten ESKİ mailler — Ana Sayfa "N saattir cevapsız" uyarısı.
+ * ACL mail_okunmamis_toplam() ile aynı. Hata → 0.
+ */
+function mail_cevapsiz_eski_sayisi(int $userId, int $saat = 24, ?PDO $pdo = null, ?bool $yonetici = null): int
+{
+    $esik = date('Y-m-d H:i:s', time() - max(1, $saat) * 3600);
+    return mail_gorunur_say('needs_reply = 1 AND replied_at IS NULL AND received_at < ?', [$esik], $userId, $pdo, $yonetici);
+}
+
+/** @internal Görünür hesaplardaki mesajları $kosul ile sayar (tek sorgu; kosul yalnız sabit SQL). */
+function mail_gorunur_say(string $kosul, array $par, int $userId, ?PDO $pdo, ?bool $yonetici): int
+{
+    try {
+        $pdo = $pdo ?? db();
+        $yonetici = $yonetici ?? mail_tum_hesaplar_mi();
+        if ($yonetici) {
+            $st = $pdo->prepare("SELECT COUNT(*) FROM mail_messages WHERE $kosul");
+            $st->execute($par);
+        } else {
+            $st = $pdo->prepare("SELECT COUNT(*) FROM mail_messages WHERE $kosul AND account_id IN
+                (SELECT a.id FROM mail_accounts a JOIN mail_account_users u ON u.account_id = a.id WHERE u.user_id = ? AND a.is_active = 1)");
+            $st->execute(array_merge($par, [$userId]));
+        }
+        return max(0, (int)$st->fetchColumn());
+    } catch (Throwable $e) {
+        return 0;
     }
 }

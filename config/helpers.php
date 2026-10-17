@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v368');
+    define('APP_SURUM', 'v370');
 }
 
 // --- HTML kaçışı ---
@@ -378,7 +378,7 @@ function nav_aktif_anahtar(): ?string {
     $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
                                'hesap_personel.php'], true);
-    $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php', 'mail_api.php'], true);
+    $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
@@ -472,10 +472,12 @@ function render_desktop_sidebar(string $base): void {
     $a_aud   = $ak === 'audit';
     $a_bkp   = $ak === 'backup';
 
-    $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
-        echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
+    $lnk = function (string $href, string $icon, string $label, bool $active, int $rozet = 0) use ($base) {
+        echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '"'
+           . ($rozet > 0 ? ' aria-label="' . h($label) . ', ' . $rozet . ' okunmamış"' : '') . '>'
            . '<span class="sidebar-link-icon" aria-hidden="true">' . $icon . '</span>'
-           . '<span class="sidebar-link-label">' . h($label) . '</span></a>';
+           . '<span class="sidebar-link-label">' . h($label) . '</span>'
+           . nav_rozet_html($rozet, false) . '</a>';
     };
     ?>
 <aside class="desktop-sidebar" aria-label="Masaüstü gezinme">
@@ -513,7 +515,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
-        <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail); ?>
+        <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
 <?php   // ⚠ Maliyet girişi BİLEREK burada YOK (Sprint Navigasyon-03, kullanıcı
         // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
         // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
@@ -577,6 +579,44 @@ function render_desktop_sidebar(string $base): void {
 if (!defined('NAV_ALT_CEREZ')) define('NAV_ALT_CEREZ', 'asya_nav');
 // Sunucunun HER ZAMAN çizdiği slot sayısı (390px altında CSS 4.'yü gizler).
 if (!defined('NAV_ALT_SLOT')) define('NAV_ALT_SLOT', 4);
+
+/**
+ * Mail Merkezi okunmamış rozeti (kenar çubuğu · üst menü · alt çubuk) — istek başına BİR kez, TEK sorgu.
+ * Yalnız can_mail('read') iken ve mail_core.php yalnız o zaman yüklenir (mail yetkisi olmayan sayfalar ağır dosya yüklemez).
+ * Tablo yok / her türlü hata → 0 (rozet sayfayı ASLA bozmaz). $sifirla yalnız testler içindir.
+ */
+function nav_mail_okunmamis(bool $sifirla = false): int {
+    static $n = null;
+    if ($sifirla) $n = null;
+    if ($n !== null) return $n;
+    $n = 0;
+    try {
+        if (!function_exists('can_mail') || !can_mail('read')) return $n;
+        $u = function_exists('current_user') ? current_user() : null;
+        if (!$u || !isset($u['id'])) return $n;
+        require_once __DIR__ . '/mail_core.php';
+        $n = mail_okunmamis_toplam((int)$u['id']);
+    } catch (Throwable $e) {
+        $n = 0;
+    }
+    return $n;
+}
+
+/** Rozet metni: 1–99 olduğu gibi, üstü "99+". */
+function nav_rozet_metni(int $n): string {
+    return $n > 99 ? '99+' : (string)max(0, $n);
+}
+
+/**
+ * Okunmamış rozeti işaretlemesi (n<=0 → ''). $okunur=true: rozet kendi başına okunur (role=img + aria-label "N okunmamış");
+ * false: üstündeki bağlantının aria-label'ı sayıyı zaten taşıyor → aria-hidden.
+ */
+function nav_rozet_html(int $n, bool $okunur = true, string $ekSinif = '', bool $gizli = false): string {
+    if ($n <= 0) return '';
+    return '<span class="nav-rozet' . ($ekSinif !== '' ? ' ' . $ekSinif : '') . '"'
+        . ($okunur ? ' role="img" aria-label="' . $n . ' okunmamış"' : ' aria-hidden="true"')
+        . ($gizli ? ' hidden' : '') . '>' . h(nav_rozet_metni($n)) . '</span>';
+}
 
 /**
  * Alt çubuk + "Diğer" sayfasının SAYFA KAYDI. Saf veri — DB/yetki çağrısı
@@ -776,13 +816,17 @@ function nav_alt_ciz(array $m, string $base): void {
         return '<span class="bn-label" data-kisa="' . h($p['kisa']) . '"'
             . ($p['dar'] !== null ? ' data-xs="' . h($p['dar']) . '"' : '') . '>' . h($p['kisa']) . '</span>';
     };
-    $oge = function (string $k, string $href, string $sinif, bool $akt, bool $gizli) use ($K, $base, $etiket): string {
+    // Mail Merkezi okunmamış rozeti (yalnız mail adayı; istek başına TEK sorgu — nav_mail_okunmamis()).
+    // İşaretleme SUNUCUDA basılır; app.js yalnız "Diğer"in rozetini göster/gizle yapar, yeni işaretleme üretmez.
+    $mailN = in_array('mail', $m['adaylar'], true) ? nav_mail_okunmamis() : 0;
+    $oge = function (string $k, string $href, string $sinif, bool $akt, bool $gizli) use ($K, $base, $etiket, $mailN): string {
         $p = $K[$k];
+        $rz = $k === 'mail' ? $mailN : 0;
         return '<a href="' . h($href) . '" class="bn-item' . $sinif . ($akt ? ' is-active' : '') . '"'
-            . ' data-nav="' . h($k) . '" style="--c2:' . h($p['renk']) . '" aria-label="' . h($p['etiket']) . '"'
+            . ' data-nav="' . h($k) . '" style="--c2:' . h($p['renk']) . '" aria-label="' . h($p['etiket']) . ($rz > 0 ? ', ' . $rz . ' okunmamış' : '') . '"'
             . ($akt ? ' aria-current="page"' : '') . ($gizli ? ' hidden' : '') . '>'
             . '<span class="ni-wrap"><img class="ni" src="' . h(nav_alt_ikon_url($p, $base)) . '" width="42" height="42" alt="" decoding="async"'
-            . ($gizli ? ' loading="lazy"' : '') . '></span>'
+            . ($gizli ? ' loading="lazy"' : '') . '>' . nav_rozet_html($rz, false) . '</span>'
             . $etiket($p) . '</a>';
     };
 
@@ -807,11 +851,13 @@ function nav_alt_ciz(array $m, string $base): void {
         $more = nav_alt_ikon_url($K['more'], $base);
         echo '<button type="button" class="bn-item bn-more' . ($digerDar ? ' bn-more-dar' : '') . ($digerAktif ? ' is-active' : '') . '"'
             . ' id="bnMore" aria-haspopup="dialog" aria-expanded="false" aria-controls="bnSheet"'
-            . ' aria-label="Diğer sayfalar' . ($digerAktif ? ', şu an: ' . h($K[$dk]['etiket']) : '') . '"'
+            . ' aria-label="Diğer sayfalar' . ($digerAktif ? ', şu an: ' . h($K[$dk]['etiket']) . ($aktif === 'mail' && $mailN > 0 ? ', ' . $mailN . ' okunmamış' : '') : '') . '"'
             . ($digerAktif ? ' aria-current="page"' : '') . ' style="--c2:' . h($K[$dk]['renk']) . '">'
             . '<span class="ni-wrap"><img class="ni" src="' . h(nav_alt_ikon_url($K[$dk], $base)) . '" width="42" height="42" alt="" decoding="async">'
             . '<span class="more-badge" aria-hidden="true"' . ($digerAktif ? '' : ' hidden') . '>'
-            . '<img src="' . h($more) . '" width="18" height="18" alt="" decoding="async"></span></span>'
+            . '<img src="' . h($more) . '" width="18" height="18" alt="" decoding="async"></span>'
+            // Mail "Diğer"in güncel öğesi olduğunda (sunucuda ya da dar ekranda app.js ile) okunmamış rozetini taşır.
+            . nav_rozet_html($mailN, false, 'nav-rozet-more', !($digerAktif && $aktif === 'mail')) . '</span>'
             . $etiket($K[$dk]) . '</button>';
     }
     echo '</div></nav>';
@@ -840,9 +886,11 @@ function nav_alt_ciz(array $m, string $base): void {
             $cls = ($aktif === $k ? ' is-current' : '') . (in_array($k, $slotlar, true) ? ' in-bar' : '')
                  . (in_array($k, $m['sabit'], true) ? ' pinned' : '');
             echo '<div class="bn-tile' . $cls . '" data-nav="' . h($k) . '">'
-                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($aktif === $k ? ' aria-current="page"' : '') . '>'
+                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($aktif === $k ? ' aria-current="page"' : '')
+                . ($k === 'mail' && $mailN > 0 ? ' aria-label="' . h($p['etiket']) . ', ' . $mailN . ' okunmamış"' : '') . '>'
                 . '<img src="' . h(nav_alt_ikon_url($p, $base)) . '" width="50" height="50" alt="" decoding="async" loading="lazy">'
-                . '<span>' . h($p['etiket']) . '</span></a>'
+                . '<span>' . h($p['etiket']) . '</span>'
+                . ($k === 'mail' ? nav_rozet_html($mailN, false, 'nav-rozet-tile') : '') . '</a>'
                 . '<span class="bn-pin-badge" aria-hidden="true">' . $pin . '</span></div>';
         }
         echo '</div>';
@@ -959,6 +1007,10 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php endif; ?>
             <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
             <a href="<?= $base ?>beyanlar.php" <?= in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php'], true) ? 'class="active"' : '' ?>>Beyanlar</a>
+            <?php endif; ?>
+            <?php if (can_mail('read')): ?>
+            <?php $__tm = nav_mail_okunmamis(); ?>
+            <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?><?= $__tm > 0 ? ' aria-label="Mail, ' . $__tm . ' okunmamış"' : '' ?>>Mail<?= nav_rozet_html($__tm, false) ?></a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
             <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>

@@ -38,6 +38,7 @@ const MOBIL = (w) => w < 768;
         const hatalar = [];
         page.on('console', m => { if (m.type() === 'error' && !/mail\.php|Failed to fetch|ERR_FILE|CORS|file:\/\/|ERR_TUNNEL|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED/.test(m.text())) hatalar.push(m.text()); });
         page.on('pageerror', e => hatalar.push('pageerror: ' + e.message));
+        if (secenek.init) await page.addInitScript(secenek.init);
         await page.goto('file://' + path.join(OUT, sayfa + '.html'));
         await page.waitForTimeout(450);   // açılış animasyonları + iframe yüklemesi (CLAUDE.md: ölçümden önce bekle)
         return { ctx, page, hatalar };
@@ -159,7 +160,7 @@ const MOBIL = (w) => w < 768;
                 const txt = await page.textContent('.mail-metin');
                 ok(`${sayfa}@${w}: Türkçe çeviri gösteriliyor, HTML KAÇIRILMIŞ (<b> etiket olarak değil metin)`, txt.includes('sipariş onaylandı') && txt.includes('<b>satır</b>') && (await page.$$('.mail-metin b')).length === 0);
             }
-            if (sayfa === 'detay_tr_bekleyen') ok(`${sayfa}@${w}: çeviri yokken bilgi + Orijinal'e yönlendirme`, (await page.textContent('.mail-bilgi')).includes('Çeviri bekleniyor'));
+            if (sayfa === 'detay_tr_bekleyen') ok(`${sayfa}@${w}: çeviri yokken bilgi + Orijinal'e yönlendirme`, (await page.textContent('.mail-bilgi')).includes('Çevrilmedi'));
             if (sayfa === 'detay_html_img') {
                 const frame = page.frames().find(f => f !== page.mainFrame());
                 const src = frame ? await frame.evaluate(() => (document.querySelector('img') || {}).getAttribute && document.querySelector('img').getAttribute('src')) : null;
@@ -200,8 +201,13 @@ const MOBIL = (w) => w < 768;
                 const k = await page.$$eval('.mail-onay-kutu', es => es.map(e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, r: r.right, b: r.bottom, w: r.width }; }));
                 ok(`${sayfa}@${w}: iki kutu var (Türkçe orijinal + gönderilecek çeviri)`, k.length === 2);
                 if (k.length === 2) {
-                    if (mobil) ok(`${sayfa}@${w}: mobilde kutular ALT ALTA`, k[1].y >= k[0].b - 1, JSON.stringify(k));
-                    else ok(`${sayfa}@${w}: ≥768'de kutular YAN YANA`, k[1].x >= k[0].r - 1 && Math.abs(k[0].y - k[1].y) < 4, JSON.stringify(k));
+                    // Kapsayıcı sorgusu: okuyucu paneli ≥620px ise yan yana, değilse ALT ALTA (eskiden ≥768'de 127-229px'lik dar kutular çıkıyordu)
+                    const kapW = await page.$eval('.mail-onay-kap', e => e.getBoundingClientRect().width);
+                    const yanyana = kapW >= 620;
+                    if (!yanyana) ok(`${sayfa}@${w}: dar panelde (${Math.round(kapW)}px) kutular ALT ALTA`, k[1].y >= k[0].b - 1, JSON.stringify(k));
+                    else ok(`${sayfa}@${w}: geniş panelde (${Math.round(kapW)}px) kutular YAN YANA`, k[1].x >= k[0].r - 1 && Math.abs(k[0].y - k[1].y) < 4, JSON.stringify(k));
+                    ok(`${sayfa}@${w}: iki kutu da ≥ 240px genişlikte (dar kutu yok)`, k.every(x => x.w >= 240), k.map(x => Math.round(x.w)).join(','));
+                    ok(`${sayfa}@${w}: kutular panelin dışına taşmıyor`, k.every(x => x.r <= w + 0.5));
                 }
                 ok(`${sayfa}@${w}: başlıklar TÜRKÇE ORİJİNAL CEVAP / GÖNDERİLECEK ÇEVİRİ`, (await page.textContent('.mail-onay-kutular')).includes('TÜRKÇE ORİJİNAL CEVAP') && (await page.textContent('.mail-onay-kutular')).includes('GÖNDERİLECEK ÇEVİRİ'));
                 const txt = await page.textContent('.mail-onay-kutular');
@@ -238,6 +244,141 @@ const MOBIL = (w) => w < 768;
         }
     }
 
+    // ── Dalga 2 ──
+    // (1) `o=` (onay paneli) hiçbir liste/klasör/sayfalama/sekme bağlantısına yapışmaz
+    for (const [w, h] of [[390, 844], [1280, 800]]) {
+        const { ctx, page, hatalar } = await ac('onay_gelen', w, h);
+        const hrefler = await page.$$eval('.mail-chip, .mail-oge, .mail-sayfalar a, .mail-sekmeler a', es => es.map(e => e.getAttribute('href') || ''));
+        ok(`[${w}] onay+gelen: ${hrefler.length} bağlantının HİÇBİRİ o= taşımıyor (panelde sıkışma yok)`, hrefler.length > 8 && hrefler.every(u => !/[?&]o=/.test(u)), hrefler.filter(u => /[?&]o=/.test(u)).join(' | '));
+        ok(`[${w}] onay+gelen: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+    // (5)(17) .mail-bilgi blok kutu; sekmeler düz bağlantı + aria-current (role=tab yok)
+    for (const [w, h] of [[360, 740], [1440, 900]]) {
+        let { ctx, page } = await ac('detay_tr_bekleyen', w, h);
+        const bilgi = await page.$eval('.mail-bilgi', e => { const cs = getComputedStyle(e); return { d: cs.display, t: e.getBoundingClientRect().right - e.parentElement.getBoundingClientRect().right }; });
+        ok(`[${w}] bilgi kutusu display:block (cümle parçaları sütunlara kırılmıyor)`, bilgi.d === 'block', bilgi.d);
+        ok(`[${w}] sekmeler: role=tab YOK, tek aria-current="page"`, (await page.$$('[role="tab"], [role="tablist"]')).length === 0 && (await page.$$('.mail-sekmeler a[aria-current="page"]')).length === 1);
+        await ctx.close();
+        ({ ctx, page } = await ac('detay_html', w, h));
+        const eylem = await page.$eval('.mail-bilgi .mail-bilgi-eylem a.btn', e => { const r = e.getBoundingClientRect(), p = e.closest('.mail-bilgi').getBoundingClientRect(); return { alt: r.top >= p.top + 10 && r.bottom <= p.bottom + 1 && r.right <= p.right + 1, h: r.height }; });
+        ok(`[${w}] "Görselleri göster" düğmesi bilgi kutusunun İÇİNDE, ayrı satırda`, eylem.alt, JSON.stringify(eylem));
+        await ctx.close();
+    }
+    // (9) mail.reply yoksa boş yapışkan Cevapla şeridi YOK ve gereksiz alt boşluk YOK
+    for (const [w, h] of [[390, 844], [1280, 800]]) {
+        const { ctx, page } = await ac('detay_noreply', w, h);
+        ok(`[${w}] reply yok: .mail-cevapbar çizilmez`, (await page.$('.mail-cevapbar')) === null);
+        const pb = await page.$eval('.mail-okuyucu', e => parseFloat(getComputedStyle(e).paddingBottom));
+        ok(`[${w}] reply yok: okuyucuda 76px'lik alt boşluk yok`, pb < 40, pb + '');
+        ok(`[${w}] reply yok: yetki notu düz metin olarak görünür`, (await page.textContent('.mail-okuyucu')).includes('mail.reply yetkisi gerekir'));
+        await ctx.close();
+    }
+    // (6) Cevap Bekleyen: toplu işaretleme
+    for (const [w, h] of [[390, 844], [1280, 800]]) {
+        const mobil = MOBIL(w);
+        const { ctx, page, hatalar } = await ac('cevap_bekleyen', w, h);
+        const t = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        ok(`[${w}] toplu: yatay taşma yok`, t <= 0, 'taşma=' + t);
+        const n = (await page.$$('input[name="ids[]"]')).length;
+        ok(`[${w}] toplu: her satırda onay kutusu (${n})`, n >= 5 && n === (await page.$$('.mail-oge-sar')).length);
+        const sec = await page.$$eval('.mail-sec', es => es.map(e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }));
+        ok(`[${w}] toplu: onay kutusu dokunma alanı ≥ 44px`, sec.every(([a, b]) => a >= 43.5 && b >= 43.5), JSON.stringify(sec[0]));
+        if (mobil) {
+            const bh = await page.$$eval('.mail-toplu .btn', es => es.map(e => e.getBoundingClientRect().height));
+            ok(`[${w}] toplu: düğmeler ≥ 44px`, bh.length === 2 && bh.every(x => x >= 43.5), bh.join(','));
+        }
+        await page.check('input[data-toplu-tumu]');
+        ok(`[${w}] toplu: "Tümünü seç" hepsini işaretler`, (await page.$$('input[name="ids[]"]:checked')).length === n);
+        await page.uncheck('input[name="ids[]"] >> nth=0');
+        ok(`[${w}] toplu: bir kutu kalkınca "Tümü" tam değil (indeterminate)`, await page.$eval('input[data-toplu-tumu]', e => !e.checked && e.indeterminate));
+        await page.uncheck('input[name="ids[]"]:checked >> nth=0').catch(() => {});
+        for (const k of await page.$$('input[name="ids[]"]:checked')) await k.uncheck();
+        let msg = null;
+        page.once('dialog', async d => { msg = d.type() + ':' + d.message(); await d.dismiss(); });
+        await page.click('button[data-gerek-secim]');
+        ok(`[${w}] toplu: hiç seçim yokken uyarı (alert), gönderim yok`, msg !== null && msg.startsWith('alert:') && msg.includes('Önce işaretlenecek'), String(msg));
+        await page.check('input[name="ids[]"] >> nth=1');
+        msg = null;
+        page.once('dialog', async d => { msg = d.type() + ':' + d.message(); await d.dismiss(); });
+        const url0 = page.url();
+        await page.click('button[data-gerek-secim]');
+        ok(`[${w}] toplu: seçim varken onay sorusu (confirm), vazgeçilince gönderilmez`, msg !== null && msg.startsWith('confirm:') && page.url() === url0, String(msg));
+        ok(`[${w}] toplu: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        if (w === 390 || w === 1280) await page.screenshot({ path: path.join(SHOTS, `${w}_cevap_bekleyen.png`) });
+        await ctx.close();
+    }
+    // (3) Cevap taslağı yedeği: yenilemede geri gelir; onay paneli açılınca temizlenir; depolama kapalıysa sayfa yine çalışır
+    {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: 'light', reducedMotion: 'reduce' });
+        const page = await ctx.newPage(); const hatalar = [];
+        page.on('pageerror', e => hatalar.push('pageerror: ' + e.message));
+        await page.goto('file://' + path.join(OUT, 'cevap_yaz.html'));
+        await page.waitForTimeout(300);
+        await page.fill('#mail-tr', 'Taslak metni — ürün hazır, çarşamba yüklenir.');
+        await page.selectOption('#mail-dil', 'ru');
+        await page.waitForTimeout(700);   // 400ms'lik gecikmeli kayıt
+        await page.reload(); await page.waitForTimeout(300);
+        ok('taslak yedeği: sayfa yenilenince yazılan metin GERİ GELİR', (await page.inputValue('#mail-tr')) === 'Taslak metni — ürün hazır, çarşamba yüklenir.', await page.inputValue('#mail-tr'));
+        ok('taslak yedeği: hedef dil de geri gelir + "geri yüklendi" bilgisi', (await page.inputValue('#mail-dil')) === 'ru' && (await page.textContent('[role="status"]')).includes('geri yüklendi'));
+        await page.click('[role="status"] button');
+        ok('taslak yedeği: "Taslağı sil" metni temizler', (await page.inputValue('#mail-tr')) === '' && (await page.$('[role="status"]')) === null);
+        await page.fill('#mail-tr', 'Tekrar yazıldı'); await page.waitForTimeout(700);
+        await page.goto('file://' + path.join(OUT, 'onay_translated.html')); await page.waitForTimeout(300);   // aynı mesaja ait onay paneli = taslak sunucuda kayıtlı
+        await page.goto('file://' + path.join(OUT, 'cevap_yaz.html')); await page.waitForTimeout(300);
+        ok('taslak yedeği: onay paneli açılınca yedek TEMİZLENİR (boş form)', (await page.inputValue('#mail-tr')) === '');
+        ok('taslak yedeği: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+        // depolama erişimi atıyor (gizli pencere/engelli): form yine çalışır, hata yok
+        const c2 = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+        const p2 = await c2.newPage(); const h2 = [];
+        p2.on('pageerror', e => h2.push('pageerror: ' + e.message));
+        await p2.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('SecurityError'); } }); });
+        await p2.goto('file://' + path.join(OUT, 'cevap_yaz.html')); await p2.waitForTimeout(300);
+        await p2.fill('#mail-tr', 'yazılabilir'); await p2.waitForTimeout(600);
+        ok('taslak yedeği: localStorage ERİŞİMİ HATA VERİYORSA form çalışır, pageerror yok', (await p2.inputValue('#mail-tr')) === 'yazılabilir' && h2.length === 0, h2.join(' | '));
+        await c2.close();
+    }
+    // (16) Okundu işaretlenince çip sayaçları (Tümü / hesap / Okunmamış klasörü) bir azalır, satır noktası kalkar
+    {
+        const sahteFetch = () => { window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, mesaj: '' }) }); };
+        const { ctx, page, hatalar } = await ac('detay_html', 1280, 900, { init: sahteFetch });
+        const oku = () => page.evaluate(() => { const n = (s) => { const e = document.querySelector(s); return e ? parseInt(e.textContent, 10) : 0; };
+            return { tumu: n('.mail-chip[data-hesap="0"] .mail-rozet'), hesap: n('.mail-chip[data-hesap="1"] .mail-rozet'), klasor: n('.mail-chip[data-filtre="okunmamis"] .mail-say'),
+                nokta: document.querySelectorAll('.mail-oge[aria-current="true"] .mail-nokta').length }; });
+        const once = await oku();
+        await page.waitForTimeout(1700);
+        const sonra = await oku();
+        ok('okundu: "Tümü" rozeti 1 azaldı', once.tumu >= 1 && sonra.tumu === once.tumu - 1, JSON.stringify([once, sonra]));
+        ok('okundu: hesap çipi rozeti 1 azaldı', once.hesap >= 1 && sonra.hesap === once.hesap - 1, JSON.stringify([once, sonra]));
+        ok('okundu: "Okunmamış" klasör sayacı 1 azaldı', once.klasor >= 1 && sonra.klasor === once.klasor - 1, JSON.stringify([once, sonra]));
+        ok('okundu: seçili satırın okunmamış noktası kalktı, düğme "Okunmadı yap"', once.nokta >= 0 && sonra.nokta === 0 && (await page.textContent('.mail-okuyucu-arac button[value="okunmadi"]')).includes('Okunmadı yap'));
+        ok('okundu: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+    // (8) Tablet (768–899): yapışkan liste yapışkan üst barın ALTINDA kalır
+    for (const w of [768, 800, 899]) {
+        const { ctx, page } = await ac('detay_uzun', w, 900);
+        await page.evaluate(() => window.scrollTo({ top: 300, behavior: 'instant' }));
+        await page.waitForTimeout(250);
+        const r = await page.evaluate(() => ({ tb: document.querySelector('.topbar').getBoundingClientRect().bottom, lt: document.querySelector('.mail-liste').getBoundingClientRect().top, kaydi: window.scrollY }));
+        ok(`[${w}] tablet: yapışkan liste üst barın altında (liste.top ${Math.round(r.lt)} ≥ topbar.bottom ${Math.round(r.tb)})`, r.kaydi > 100 && r.lt >= r.tb - 0.5, JSON.stringify(r));
+        await ctx.close();
+    }
+    {
+        const { ctx, page } = await ac('detay_uzun', 1280, 900);
+        const top = await page.$eval('.mail-liste', e => getComputedStyle(e).top);
+        ok('[1280] masaüstü: üst bar yok → liste top 8px (tablet kuralı sızmadı)', top === '8px', top);
+        await ctx.close();
+    }
+    // (7) Tablet üst menüsünde Mail bağlantısı
+    for (const w of [768, 899]) {
+        const { ctx, page } = await ac('liste', w, 900);
+        const a = await page.$('.topnav a[href$="mail.php"]');
+        ok(`[${w}] tablet: üst menüde Mail bağlantısı var, görünür ve tıklanabilir`, !!a && await a.isVisible() === true);
+        await ctx.close();
+    }
+
     // ── Koyu tema kontrast ──
     {
         const lum = (c) => { const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
@@ -255,6 +396,114 @@ const MOBIL = (w) => w < 768;
                 ok(`kontrast ${koyu ? 'KOYU' : 'açık'} ${sel} ≥ 3:1`, o >= 3, o.toFixed(2) + ' ' + r.fg + ' / ' + r.bg);
             }
             await page.screenshot({ path: path.join(SHOTS, `1280_detay_tr_${koyu ? 'koyu' : 'acik'}.png`) });
+            await ctx.close();
+            // Dalga 2 yüzeyleri: toplu çubuk, bilgi kutusu, onay kutuları, soluk metin (.mail-ince) — açık VE koyu temada okunur
+            for (const [sayfa, seciciler, kul] of [['cevap_bekleyen', ['.mail-toplu', '.mail-toplu-tumu', '.mail-toplu .btn'], ['perms']], ['detay_tr_bekleyen', ['.mail-bilgi', '.mail-sekmeler a'], []],
+                ['onay_translated', ['.mail-onay-kutu h3', '.mail-onay-metin', '.mail-onay-kutu--cikis .mail-onay-metin'], []], ['hesaplar', ['.mail-ince'], []]]) {
+                const { ctx: c2, page: p2 } = await ac(sayfa, 1280, 900, { koyu });
+                if (koyu) await p2.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+                await p2.waitForTimeout(150);
+                for (const sel of seciciler) {
+                    const r = await p2.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; let bg = 'rgba(0, 0, 0, 0)', n = e;
+                        while (n && /rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { bg = getComputedStyle(n).backgroundColor; n = n.parentElement; }
+                        return { fg: getComputedStyle(e).color, bg }; }, sel);
+                    ok(`kontrast ${koyu ? 'KOYU' : 'açık'} ${sayfa} ${sel} bulundu`, !!r);
+                    if (!r) continue;
+                    const o = oran(r.fg, r.bg);
+                    ok(`kontrast ${koyu ? 'KOYU' : 'açık'} ${sayfa} ${sel} ≥ 3:1`, o >= 3, o.toFixed(2) + ' ' + r.fg + ' / ' + r.bg);
+                }
+                await c2.close();
+            }
+        }
+    }
+
+    // ── Dalga 3A: okunmamış rozeti (kenar çubuğu · tablet üst menü · alt çubuk · "Diğer") + okuyucuda Beyan Taslağı düğmesi ──
+    {
+        const lum = (c) => { const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+        const oran = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        // Rozet ölçümü: görünür · sayı biçimi · dokunma halkası dışında viewport içinde · kontrast ≥ 4.5 · boyut (≥16px yükseklik)
+        const olc = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+            return { gorunur: cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0, metin: e.textContent.trim(), h: r.height, w: r.width, l: r.left, r: r.right, t: r.top, b: r.bottom,
+                fg: cs.color, bg: cs.backgroundColor, vw: innerWidth, vh: innerHeight, hidden: e.hidden, tasma: document.documentElement.scrollWidth - innerWidth }; }, sel);
+        for (const koyu of [false, true]) {
+            const tag = koyu ? 'KOYU' : 'açık';
+            for (const [w, h] of [[360, 740], [390, 844], [768, 900], [899, 900], [900, 800], [1280, 800]]) {
+                const { ctx, page, hatalar } = await ac('rozet_mail', w, h, { koyu });
+                if (koyu) { await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await page.waitForTimeout(120); }
+                let sel, ad;
+                if (w >= 900) { sel = '.sidebar-link[href$="mail.php"] .nav-rozet'; ad = 'kenar çubuğu'; }
+                else if (w >= 768) { sel = '.topnav a[href$="mail.php"] .nav-rozet'; ad = 'üst menü'; }
+                else { sel = '.bn-item[data-nav="mail"] .nav-rozet'; ad = 'alt çubuk'; }
+                const r = await olc(page, sel);
+                ok(`[${w}] rozet ${tag} ${ad}: görünür, sayı biçimli`, !!r && r.gorunur && /^(\d{1,2}|99\+)$/.test(r.metin), JSON.stringify(r));
+                if (r) {
+                    ok(`[${w}] rozet ${tag} ${ad}: yükseklik ≥ 16px, ekran içinde, yatay taşma yok`, r.h >= 16 && r.l >= 0 && r.r <= r.vw && r.t >= -1 && r.tasma <= 0, JSON.stringify(r));
+                    const bg = koyu || true ? r.bg : r.bg;
+                    ok(`[${w}] rozet ${tag} ${ad}: kontrast ≥ 4.5:1`, oran(r.fg, bg) >= 4.5, oran(r.fg, bg).toFixed(2) + ' ' + r.fg + ' / ' + bg);
+                }
+                const lbl = await page.evaluate((s) => { const e = document.querySelector(s); const a = e && e.closest('a'); return a && a.getAttribute('aria-label'); }, sel);
+                ok(`[${w}] rozet ${tag} ${ad}: bağlantı aria-label "okunmamış" der`, /, \d+ okunmamış$/.test(lbl || ''), String(lbl));
+                if (w < 768) {
+                    const kutu = await page.evaluate(() => { const rz = document.querySelector('.bn-item[data-nav="mail"] .nav-rozet'), dk = document.querySelector('.bn-dock'); if (!rz || !dk) return null; const a = rz.getBoundingClientRect(), d = dk.getBoundingClientRect(); return { ust: a.top - d.top, sag: d.right - a.right }; });
+                    ok(`[${w}] rozet ${tag} alt çubuk: dok sınırlarının içinde (kırpılmıyor)`, !!kutu && kutu.sag >= 0, JSON.stringify(kutu));
+                }
+                ok(`[${w}] rozet ${tag}: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+                if (!koyu && (w === 390 || w === 1280 || w === 768)) await page.screenshot({ path: path.join(SHOTS, `${w}_rozet_${koyu ? 'koyu' : 'acik'}.png`) });
+                if (koyu && (w === 390 || w === 1280)) await page.screenshot({ path: path.join(SHOTS, `${w}_rozet_koyu.png`) });
+                await ctx.close();
+            }
+            // "Diğer": Mail güncel öğe. app.js kullanım puanıyla Mail'i dar ekranda 4. slottan "Diğer"e düşürür, geniş ekranda (≥390) slota alır:
+            // her iki durumda da rozet tam bir yerde görünür olmalı (slot karosu YA DA "Diğer" düğmesi) ve "Diğer" sayfasında Mail karosunda bulunmalı.
+            for (const [w, h] of [[360, 740], [390, 844], [430, 900]]) {
+                const { ctx, page, hatalar } = await ac('rozet_diger', w, h, { koyu });
+                if (koyu) { await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await page.waitForTimeout(120); }
+                const slotta = await page.evaluate(() => { const a = document.querySelector('.bn-item[data-nav="mail"]'); return !!a && !a.hidden && getComputedStyle(a).display !== 'none' && a.getBoundingClientRect().width > 0; });
+                const rs = await olc(page, '.bn-item[data-nav="mail"] .nav-rozet');
+                const rm = await olc(page, '#bnMore .nav-rozet-more');
+                const gorunenSayi = (rs && slotta && rs.gorunur ? 1 : 0) + (rm && rm.gorunur && !rm.hidden ? 1 : 0);
+                ok(`[${w}] rozet ${tag} Mail (${slotta ? 'slotta' : '"Diğer"de'}): rozet TAM BİR yerde görünür`, gorunenSayi === 1, JSON.stringify({ slotta, rs, rm }));
+                const hedef = slotta ? rs : rm;
+                if (hedef) {
+                    ok(`[${w}] rozet ${tag} Mail (${slotta ? 'slotta' : '"Diğer"de'}): ekran içinde, kontrast ≥ 4.5:1`, hedef.r <= hedef.vw && hedef.l >= 0 && hedef.tasma <= 0 && oran(hedef.fg, hedef.bg) >= 4.5, JSON.stringify(hedef));
+                }
+                if (!slotta) {
+                    const al = await page.$eval('#bnMore', e => e.getAttribute('aria-label'));
+                    ok(`[${w}] rozet ${tag} "Diğer": aria-label mail ve okunmamışı söyler`, /Mail Merkezi, \d+ okunmamış/.test(al || ''), al);
+                }
+                await page.click('#bnMore'); await page.waitForTimeout(350);
+                const t = await olc(page, '.bn-tile[data-nav="mail"] .nav-rozet');
+                ok(`[${w}] rozet ${tag} "Diğer" sayfası: Mail karosunda rozet görünür`, !!t && t.gorunur && t.r <= t.vw && t.l >= 0, JSON.stringify(t));
+                if (t) ok(`[${w}] rozet ${tag} "Diğer" sayfası: kontrast ≥ 4.5:1`, oran(t.fg, t.bg) >= 4.5, oran(t.fg, t.bg).toFixed(2));
+                if (!koyu && w === 390) await page.screenshot({ path: path.join(SHOTS, `${w}_rozet_diger_sayfa.png`) });
+                ok(`[${w}] rozet ${tag} "Diğer": konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+                await ctx.close();
+            }
+        }
+        // Rozet app.js tarafından yok edilmiyor / hareket yok (reducedMotion açık; rozetin geçiş/animasyonu zaten yok)
+        {
+            const { ctx, page } = await ac('rozet_mail', 390, 844);
+            const an = await page.$eval('.bn-item[data-nav="mail"] .nav-rozet', e => { const c = getComputedStyle(e); return c.animationName + '|' + c.transitionDuration; });
+            ok('[390] rozet: animasyon yok (prefers-reduced-motion\'a uygun)', an === 'none|0s', an);
+            await ctx.close();
+        }
+        // "📝 Beyan Taslağı Oluştur" düğmesi (okuyucu araç çubuğu): yetkiliye görünür, ekran içinde, mobilde ≥ 40px, taşma yok; yetkisize YOK
+        for (const [w, h] of [[360, 740], [390, 844], [768, 900], [1280, 800]]) {
+            const { ctx, page, hatalar } = await ac('detay_beyan', w, h);
+            const r = await olc(page, '#mailBeyanTaslak');
+            ok(`[${w}] beyan taslağı düğmesi görünür`, !!r && r.gorunur, JSON.stringify(r));
+            if (r) {
+                ok(`[${w}] beyan taslağı düğmesi ekran içinde, yatay taşma yok`, r.l >= 0 && r.r <= r.vw && r.tasma <= 0, JSON.stringify(r));
+                if (MOBIL(w)) ok(`[${w}] beyan taslağı düğmesi dokunma hedefi ≥ 40px`, r.h >= 39.5, r.h + '');
+            }
+            const arac = await page.evaluate(() => { const a = document.querySelector('.mail-okuyucu-arac'); return a ? { tasma: a.scrollWidth - a.clientWidth } : null; });
+            ok(`[${w}] okuyucu araç çubuğu taşmıyor`, !!arac && arac.tasma <= 1, JSON.stringify(arac));
+            if (w === 390 || w === 1280) await page.screenshot({ path: path.join(SHOTS, `${w}_detay_beyan.png`) });
+            ok(`[${w}] beyan taslağı: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
+        {
+            const { ctx, page } = await ac('detay_noreply', 390, 844);   // beyan yetkisi olmayan kullanıcı (yalnız mail.read)
+            ok('[390] beyan yetkisi yoksa düğme YOK', (await page.$('#mailBeyanTaslak')) === null);
             await ctx.close();
         }
     }
@@ -275,6 +524,38 @@ const MOBIL = (w) => w < 768;
         ok(`[${w}] hesaplar: cron komutu kartın içinde kırılarak görünür`, r.komutSigar === true, String(r.komutSigar));
         ok(`[${w}] hesaplar: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         if (w === 390 || w === 1280) await page.screenshot({ path: path.join(SHOTS, `${w}_hesaplar.png`), fullPage: false });
+        await ctx.close();
+    }
+
+    // ── Dalga 3B: yalnız konu çevirisi (okuyucuda Türkçe konu satırı, listede soluk satır, iki çeviri düğmesi) ──
+    if (M.sayfalar.includes('detay_konu_tr')) for (const [w, h] of EKRANLAR) {
+        let { ctx, page, hatalar } = await ac('detay_konu_tr', w, h);
+        const kt = await page.evaluate(() => { const e = document.querySelector('.mail-konu-tr--okuyucu'); const h2 = document.querySelector('.mail-okuyucu-konu'); if (!e) return null;
+            const r = e.getBoundingClientRect(), r2 = h2.getBoundingClientRect(); return { gorunur: r.width > 0 && r.height > 0, alt: r.top >= r2.bottom - 1, tasma: e.scrollWidth - e.clientWidth, sagTasma: r.right - innerWidth, metin: e.textContent, fs: parseFloat(getComputedStyle(e).fontSize), sayfaTasma: document.documentElement.scrollWidth - innerWidth }; });
+        ok(`[${w}] konu-tr: okuyucuda orijinal konunun ALTINDA, görünür`, kt && kt.gorunur && kt.alt, JSON.stringify(kt));
+        ok(`[${w}] konu-tr: uzun Türkçe konu taşmıyor (yatay taşma yok)`, kt && kt.tasma <= 1 && kt.sagTasma <= 0.5 && kt.sayfaTasma <= 0, JSON.stringify(kt));
+        ok(`[${w}] konu-tr: orijinal konudan küçük/soluk (≤ 15px)`, kt && kt.fs <= 15, kt && kt.fs + '');
+        ok(`[${w}] konu-tr: konu çevrildiği için "Yalnız konuyu çevir" düğmesi yok`, (await page.$('button[value="ceviri_konu"]')) === null);
+        ok(`[${w}] konu-tr: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+        ({ ctx, page, hatalar } = await ac('liste', w, h));
+        const lk = await page.evaluate(() => { const e = document.querySelector('.mail-oge .mail-konu-tr'); if (!e) return null; const o = e.closest('.mail-oge').getBoundingClientRect(), r = e.getBoundingClientRect();
+            return { r: r.right, oR: o.right, h: r.height, ogeH: o.height, kes: getComputedStyle(e).textOverflow, ws: getComputedStyle(e).whiteSpace, sayfaTasma: document.documentElement.scrollWidth - innerWidth }; });
+        ok(`[${w}] liste: konu-tr satırı satırın içinde, tek satır kesilir, taşma yok`, lk && lk.r <= lk.oR + 0.5 && lk.kes === 'ellipsis' && lk.ws === 'nowrap' && lk.sayfaTasma <= 0, JSON.stringify(lk));
+        if (MOBIL(w)) { const ogeler = await page.$$eval('.mail-oge', es => es.map(e => e.getBoundingClientRect().height)); ok(`[${w}] liste: konu-tr eklenince de satır dokunma hedefi ≥ 44px`, ogeler.every(x => x >= 44), Math.min(...ogeler) + ''); }
+        await ctx.close();
+    }
+    if (M.sayfalar.includes('detay_konu_btn')) for (const [w, h] of EKRANLAR) {
+        const { ctx, page, hatalar } = await ac('detay_konu_btn', w, h);
+        const b = await page.evaluate(() => { const tam = document.querySelector('.mail-okuyucu-arac button[value="ceviri_simdi"]'), konu = document.querySelector('.mail-okuyucu-arac button[value="ceviri_konu"]');
+            if (!tam || !konu) return null; const t = tam.getBoundingClientRect(), k = konu.getBoundingClientRect(); const arac = document.querySelector('.mail-okuyucu-arac').getBoundingClientRect();
+            return { tH: t.height, kH: k.height, kR: k.right, tR: t.right, aR: arac.right, kL: k.left, tL: t.left, vw: innerWidth, sayfaTasma: document.documentElement.scrollWidth - innerWidth, kTitle: konu.title }; });
+        ok(`[${w}] konu düğmesi: "Türkçeye çevir" yanında iki düğme de görünür`, !!b, 'düğme yok');
+        ok(`[${w}] konu düğmesi: ekran dışına taşmıyor, sayfa taşması yok`, b && b.kR <= b.vw + 0.5 && b.tR <= b.vw + 0.5 && b.kL >= 0 && b.sayfaTasma <= 0, JSON.stringify(b));
+        if (MOBIL(w)) ok(`[${w}] konu düğmesi: dokunma hedefi ≥ 40px`, b && b.kH >= 39.5 && b.tH >= 39.5, b && (b.kH + '/' + b.tH));
+        ok(`[${w}] konu düğmesi: açıklayıcı ipucu (gövde gönderilmez)`, b && /gövde gönderilmez/.test(b.kTitle), b && b.kTitle);
+        ok(`[${w}] konu düğmesi: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        if (w === 390) await page.screenshot({ path: path.join(SHOTS, `${w}_konu_btn.png`), fullPage: false });
         await ctx.close();
     }
 

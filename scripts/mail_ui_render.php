@@ -47,6 +47,7 @@ for ($i = 0; $i < 14; $i++) {
     ekle(['subject' => ['Order 4411 — payment confirmation and loading schedule for next week', 'Re: Offer', 'Fatura', 'Reklamation Nr. 7', 'Заказ №12 — подтверждение'][$i % 5],
         'from' => $kimler[$i % 5], 'okundu' => $i % 3 === 0 ? 1 : 0, 'tarih' => date('Y-m-d H:i:s', time() - $i * 7200),
         'body' => str_repeat('Lorem ipsum dolor sit amet, consectetur adipiscing elit. ', 4), 'acc' => $i % 2 ? 2 : 1,
+        'subject_tr' => $i === 0 ? 'Sipariş 4411 — ödeme onayı ve gelecek hafta için yükleme programı (uzun Türkçe konu satırı denemesi)' : null,
         'ek' => $i === 1 ? [['part' => '2', 'filename' => 'invoice.pdf', 'mime' => 'application/pdf', 'size' => 123456, 'inline' => false, 'cid' => null, 'cte' => 'base64']] : null]);
 }
 $guvenliHtml = mail_html_sanitize('<p style="color:#1a1a1a">Dear <b>partner</b>,</p><p>Please see the <a href="https://example.com/x">details</a>.</p><table style="width:100%"><tr><td>Item</td><td>12 pallets</td></tr></table><img src="https://track.example.net/p.gif" alt="logo" width="200"><blockquote>On Monday you wrote: thanks.</blockquote>');
@@ -57,6 +58,11 @@ $ID_TR = ekle(['subject' => 'Order confirmation', 'body' => "Hello,\nthe order i
 // Savunma derinliği: temizleyicinin atlandığı VARSAYIMIYLA ham zararlı HTML doğrudan saklı → iframe sandbox + CSP yine korumalı olmalı.
 $ID_XSS = ekle(['subject' => 'SAKLI XSS DENEMESİ', 'html' => '<p>zararlı</p><script>window.__pwned=1</script><img src=x onerror="window.__pwned=2"><a id="jslink" href="javascript:window.__pwned=3">tıkla</a><iframe srcdoc="<script>parent.__pwned=4</script>"></iframe><form action="https://evil.example/" method="post"><button id="f">gönder</button></form>', 'body' => 'x']);
 $ID_UZUN = ekle(['subject' => str_repeat('Çok uzun konu satırı ', 12), 'from' => 'Maria Gonzalez-Fernandez-De-La-Cruz-Y-Fernandez', 'body' => str_repeat('uzunkelime', 30) . "\n" . str_repeat('Satır satır metin. ', 80), 'trunc' => 1]);
+
+// Dalga 3B: yalnız konu çevirisi — çevrilmiş uzun konu (okuyucu) + çevrilmemiş mail (düğme sayfası: sağlayıcı açık + hesapta çeviri açık)
+$ID_KT = ekle(['subject' => 'Payment confirmation and loading schedule for next week — urgent attention please', 'subject_tr' => 'Ödeme onayı ve gelecek hafta için yükleme programı — lütfen acil ilgilenin ' . str_repeat('uzunkonuçevirisi', 8),
+    'lang' => 'en', 'tr' => 'pending', 'body' => 'Dear Sir, please confirm the payment.']);
+$ID_KB = ekle(['subject' => 'Payment confirmation and loading schedule for next week — urgent', 'lang' => 'en', 'tr' => 'pending', 'body' => 'Dear Sir, please confirm the payment.']);
 
 // Giden kayıtları (cevap taslağı/durumları) — onay ekranı ölçümleri için; uzun metin + zararlı görünümlü metin.
 function giden(string $durum, array $o = []): int {
@@ -81,6 +87,7 @@ $fileRoot = 'file://' . $ROOT . '/';
 function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perms = ['mail.read', 'mail.reply', 'mail.send'], int $uid = 2, string $dosya = 'mail.php'): string {
     global $ROOT, $cssBase, $cssMail, $fileRoot, $PERMS, $IS_ADMIN, $UID;
     $PERMS = $perms; $IS_ADMIN = $yonetici; $UID = $uid;
+    nav_mail_okunmamis(true);   // okunmamış rozeti istek başına önbelleklenir; sayfalar arası yetki/kullanıcı değişir
     $src = (string)file_get_contents($ROOT . '/' . $dosya);
     $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate|mail_smtp|mail_outbox)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
@@ -93,7 +100,8 @@ function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perm
     $html = preg_replace_callback('#<link rel="stylesheet" href="[^"]*assets/style\.css\?v=\d+">#', fn() => "<style data-kaynak=\"style.css\">\n$cssBase\n</style>", $html, 1, $n1);
     $html = preg_replace_callback('#<link rel="stylesheet" href="assets/mail\.css\?v=\d+">#', fn() => "<style data-kaynak=\"mail.css\">\n$cssMail\n</style>", $html, 1, $n2);
     if ($n1 !== 1 || $n2 !== 1) throw new RuntimeException("CSS bağlantısı bulunamadı ($ad): style=$n1 mail=$n2");
-    $html = str_replace(['src="assets/', 'href="assets/', '"/assets/', 'href="manifest.json"'], ['src="' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'assets/', '"' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'manifest.json"'], $html);
+    // base_url() CLI'de '../' döner → app.js (alt çubuk "Diğer" sayfası vb.) da gerçek tarayıcıda yüklensin
+    $html = str_replace(['src="assets/', 'href="assets/', '"/assets/', '"../assets/', 'href="manifest.json"'], ['src="' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'assets/', '"' . $fileRoot . 'assets/', '"' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'manifest.json"'], $html);
     return $html;
 }
 
@@ -115,14 +123,27 @@ $sayfalar = [
     'onay_failed'  => [['o' => $G_FAIL, 'f' => 'hatali'], false, ['mail.read', 'mail.reply', 'mail.send']],
     'onay_sent'    => [['o' => $G_SENT, 'f' => 'gonderilen'], false, ['mail.read', 'mail.reply', 'mail.send']],
     'onay_draft'   => [['o' => $G_DRAFT, 'f' => 'taslak'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_gelen'   => [['m' => $ID_TR, 'o' => $G_TR], false, ['mail.read', 'mail.reply', 'mail.send']],   // gelen listesi + onay paneli: liste bağlantıları o= taşımamalı
+    'cevap_bekleyen' => [['f' => 'cevap'], false, ['mail.read', 'mail.reply']],   // toplu "cevaplandı say"
+    'detay_noreply' => [['m' => $ID_TR, 'v' => 'tr'], false, ['mail.read']],   // mail.reply yok: boş yapışkan Cevapla şeridi çizilmez
+    // Dalga 3A: okunmamış rozeti (kenar çubuğu / üst menü / alt çubuk / "Diğer") + okuyucuda "Beyan Taslağı Oluştur" düğmesi
+    'rozet_mail'   => [[], false, ['dashboard.read', 'mail.read', 'mail.reply']],
+    'rozet_diger'  => [[], false, ['dashboard.read', 'records.read', 'reports.read', 'beyan.read', 'kantar.read', 'stok.read', 'hesap.read', 'mail.read']],
+    'detay_beyan'  => [['m' => $ID_TR, 'v' => 'tr'], false, ['mail.read', 'mail.reply', 'mail.send', 'beyan.read', 'beyan.write']],
     'hesaplar'     => [[], true, [], 1, 'mail_hesaplar.php'],   // yönetici: hesap tablosu (mobil kart), uyarılar, senkron günlüğü
+    'detay_konu_tr'  => [['m' => $ID_KT, 'v' => 'orj'], true],      // çevrilmiş uzun konu: orijinalin altında küçük satır
+    'detay_konu_btn' => [['m' => $ID_KB, 'v' => 'orj'], true],      // sağlayıcı AÇIK + hesapta çeviri açık: "Türkçeye çevir" + "Yalnız konuyu çevir"
 ];
-$manifest = ['sayfalar' => [], 'id' => ['html' => $ID_HTML, 'tr' => $ID_TR, 'xss' => $ID_XSS]];
+$manifest = ['sayfalar' => [], 'id' => ['html' => $ID_HTML, 'tr' => $ID_TR, 'xss' => $ID_XSS, 'kt' => $ID_KT, 'kb' => $ID_KB]];
 foreach ($sayfalar as $ad => $s) {
     if ($ad === 'hesaplar') {   // canlıdaki gibi uzun etiket + adres: dar ekranda tablo genişler, düğmeler kesiliyordu (yalnız bu sayfa için; son sayfa)
         mail_hesap_kaydet(['label' => 'Asya EXPORT Uluslararası', 'email' => 'export.department@asyafresh-international.com', 'imap_host' => 'i.test.com',
             'imap_user' => 'export.department@asyafresh-international.com', 'imap_pass' => 'p-imap-1', 'smtp_host' => 's.test.com',
             'smtp_user' => 'export.department@asyafresh-international.com', 'smtp_pass' => 'p-smtp-1'], null, 1, $db);
+    }
+    if ($ad === 'detay_konu_tr') {   // bu noktadan sonra sağlayıcı açık (süreç boyunca) ve hesapta çeviri açık
+        define('MAIL_TRANSLATE_PROVIDER', 'mymemory');
+        $db->exec('UPDATE mail_accounts SET translate_enabled = 1');
     }
     $html = basla_sayfa($s[0], $ad, $s[1] ?? false, $s[2] ?? ['mail.read', 'mail.reply', 'mail.send'], $s[3] ?? 2, $s[4] ?? 'mail.php');
     file_put_contents("$OUT/$ad.html", $html);

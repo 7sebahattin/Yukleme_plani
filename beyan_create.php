@@ -175,8 +175,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Mail Merkezi → "Beyan Taslağı Oluştur" (Dalga 3A): mailin metni YALNIZ "Kaynak metin" alanına dolar; hiçbir şey kaydedilmez
+// (kullanıcı gözden geçirip Kaydet'e basar). Metin URL'de değil, oturumda TEK KULLANIMLIK taşınır (config/mail_beyan.php).
+$mail_taslak_bilgi = '';
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['mail_taslak'] ?? '') === '1' && can_beyan('source.write')) {
+    require_once __DIR__ . '/config/mail_beyan.php';
+    $mt = mail_beyan_taslak_al((int)($auth_user['id'] ?? 0));
+    if ($mt !== null) {
+        $f['raw_text'] = $mt['metin'];
+        $mail_taslak_bilgi = 'Mail #' . (int)$mt['m'] . ' metni "Kaynak metin" sekmesine aktarıldı. Henüz KAYDEDİLMEDİ: '
+            . '"Metni Ayrıştır" ile alanları doldurup kontrol edin, sonra Kaydet\'e basın.';
+    }
+}
+
 $statuses = beyan_statuses();
 render_header('Yeni Beyan');
 render_flash();
+if ($mail_taslak_bilgi !== '') echo '<div class="flash" id="mailTaslakBilgi" role="status" style="background:var(--warn-soft);border:1px solid var(--warn);color:var(--text)">' . h($mail_taslak_bilgi) . '</div>';
 require __DIR__ . '/_beyan_form.php';
 render_footer();

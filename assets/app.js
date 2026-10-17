@@ -2715,6 +2715,11 @@ function ekranAlti() {
     // Aktif öğe: güncel sayfa GÖRÜNEN bir slottaysa o; değilse (dar ekranda
     // 4. slot dahil) "Diğer" o sayfanın ikonunu/etiketini alır.
     function gorunenSlotlar() { return slotlar.slice(0, dar.matches ? SLOT - 1 : SLOT); }
+    // Okunmamış rozeti (sunucu basar): "Diğer" yalnız güncel öğe Mail ise onunkini gösterir — burada yalnız hidden değişir.
+    function mrz(hedef) {
+        var r = more && more.querySelector('.nav-rozet-more');
+        if (r) r.hidden = !(hedef && hedef.getAttribute('data-nav') === 'mail');
+    }
     function durum() {
         var gorunen = gorunenSlotlar();
         izinli.forEach(function (k) {
@@ -2737,6 +2742,7 @@ function ekranAlti() {
                 more.classList.add('is-active');
                 more.setAttribute('aria-current', 'page');
                 more.setAttribute('aria-label', 'Diğer sayfalar, şu an: ' + hedef.getAttribute('aria-label'));
+                mrz(hedef);
             } else {
                 // Rozet her zaman "Diğer" ikonunu taşır — varsayılan ikon oradan
                 img.setAttribute('src', rozet.querySelector('img').getAttribute('src'));
@@ -2747,6 +2753,7 @@ function ekranAlti() {
                 more.classList.remove('is-active');
                 more.removeAttribute('aria-current');
                 more.setAttribute('aria-label', 'Diğer sayfalar');
+                mrz(null);
             }
         }
         if (sheet) {

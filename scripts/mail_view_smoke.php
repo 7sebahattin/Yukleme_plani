@@ -78,6 +78,8 @@ ok('başka hesapta cevap durumu DEĞİŞTİRİLEMEZ', mail_cevap_durumu_yaz($db,
 
 echo "\n=== Yardımcılar ===\n";
 ok('riskli ek türleri', mail_ek_tehlikeli('fatura.exe') && mail_ek_tehlikeli('a.HTML') && mail_ek_tehlikeli('x.svg') && mail_ek_tehlikeli('x.pdf', 'text/html') && mail_ek_tehlikeli('m.docm') && !mail_ek_tehlikeli('fatura.pdf', 'application/pdf') && !mail_ek_tehlikeli('foto.jpg', 'image/jpeg'));
+ok('sondaki nokta/boşluk uzantı denetimini atlatamaz', mail_ek_tehlikeli('fatura.exe.') && mail_ek_tehlikeli('fatura.exe  ') && mail_ek_tehlikeli("fatura.exe. . \u{00A0}") && mail_ek_tehlikeli("fatura.exe\u{200B}.") && !mail_ek_tehlikeli('fatura.pdf.'));
+ok('dosya adı: sondaki nokta/boşluk atılır', mail_mime_gonder_adi('fatura.exe. . ') === 'fatura.exe' && mail_mime_gonder_adi('rapor.pdf') === 'rapor.pdf');
 ok('boyut biçimi', mail_boyut_fmt(500) === '500 B' && mail_boyut_fmt(2048) === '2 KB' && str_contains(mail_boyut_fmt(5242880), 'MB'));
 ok('zaman biçimi', mail_zaman_fmt(date('Y-m-d') . ' 14:05:00') === '14:05' && mail_zaman_fmt('2020-01-02 03:04:05') === '02.01.2020' && mail_zaman_fmt(null) === '');
 ok('gönderen adı yedeği', mail_gonderen_adi(['from_name' => '', 'from_addr' => 'a@b.com']) === 'a@b.com' && mail_gonderen_adi(['from_name' => 'Ali', 'from_addr' => 'a@b.com']) === 'Ali' && mail_gonderen_adi([]) === '(bilinmeyen)');
@@ -107,6 +109,11 @@ ok('parça numarası enjeksiyonu reddedilir', mail_ek_hazirla($db, $ekMsg, "2]\r
 $srv = new FakeMailStream(['user' => 'a@asya.com', 'pass' => 'imap-parola-ABC', 'uidvalidity' => 7777, 'mesajlar' => [500 => ['raw' => $raw, 'flags' => [], 'date' => '2026-10-05 10:00:00', 'parcalar' => ['2' => 'BASKA MESAJ']]]]);
 $r = mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab]);
 ok('UIDVALIDITY değişmişse ek İNDİRİLMEZ (UID başka mesajı gösterebilir) → 409', $r['ok'] === false && $r['kod'] === 409 && !str_contains($r['mesaj'], 'BASKA'), json_encode($r));
+ok('409 mesajı dürüst: geri tarama yoksa "senkron bekleyin" DEMEZ, sağlayıcıyı gösterir', !str_contains($r['mesaj'], 'senkron bekleyin') && str_contains($r['mesaj'], 'posta sağlayıcınızın'), $r['mesaj']);
+$db->prepare("INSERT INTO mail_sync_state (account_id, folder, last_uid, rescan_from_epoch) VALUES (?, 'INBOX', 0, 1000)")->execute([$A]);
+$r = mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab]);
+ok('geri tarama bu döneme karşı sürüyorsa "tarama bitince tekrar deneyin"', $r['kod'] === 409 && str_contains($r['mesaj'], 'tarama bitince'), $r['mesaj']);
+$db->exec("DELETE FROM mail_sync_state WHERE account_id = $A");
 $srv = new FakeMailStream(['user' => 'a@asya.com', 'pass' => 'YANLIS', 'uidvalidity' => 1000, 'mesajlar' => []]);
 $r = mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab]);
 ok('IMAP hatası → 502, parola sızmıyor', $r['ok'] === false && $r['kod'] === 502 && !str_contains($r['mesaj'], 'imap-parola-ABC') && !str_contains($r['mesaj'], 'YANLIS'));

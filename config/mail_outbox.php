@@ -136,6 +136,7 @@ function mail_outbox_taslak(PDO $pdo, int $msgId, array $hesapIds, int $uid, str
     $hesap = $a->fetch(PDO::FETCH_ASSOC);
     if (!$hesap || (int)$hesap['is_active'] !== 1) return $hata('Hesap pasif.');
     if (($hesap['smtp_pass_enc'] ?? '') === '') return $hata('Hesapta SMTP şifresi tanımlı değil.');
+    if (mail_mesaj_gonderilen_mi($pdo, $m)) return $hata('Gönderilenler klasöründeki kendi mailinize cevap yazılamaz.');
 
     $var = $pdo->prepare('SELECT id, in_reply_to_msg_id FROM mail_outbox WHERE account_id = ? AND idempotency_key = ?');
     $var->execute([(int)$m['account_id'], $idemKey]);
@@ -302,7 +303,12 @@ function mail_outbox_gonder(PDO $pdo, int $id, array $opt = []): array
     }
     $sonlandir = function (string $durum, string $mesaj, ?string $hata = null, array $ek = []) use ($pdo, $id, $token): array {
         // Başarısızlık/belirsizlik yazımı yalnız hâlâ BİZİM token'ımızla ve sending/unknown iken (insan kararını ezme).
-        $ok = mail_outbox_yaz($pdo, $id, ['status' => $durum, 'last_error' => $hata !== null ? mb_substr(mail_redact($hata), 0, 250) : null] + $ek, ['status' => ['sending', 'unknown'], 'send_token' => $token]);
+        // 'failed' = KESİN gönderilmedi (SMTP'ye hiç ulaşılmadı / DATA öncesi hata / sunucu "." sonrası açıkça reddetti) →
+        // dedupe_key serbest kalır (iptal ile aynı ilke): yoksa aynı içerikli YENİ taslak onaylanamıyor ve yanıltıcı
+        // "eşzamanlı onay" mesajı alıyordu. 'unknown'/'sending'/'sent' anahtarı KORUR — at-most-once yalnız bunlara dayanır.
+        $alan = ['status' => $durum, 'last_error' => $hata !== null ? mb_substr(mail_redact($hata), 0, 250) : null] + $ek;
+        if ($durum === 'failed') $alan['dedupe_key'] = null;
+        $ok = mail_outbox_yaz($pdo, $id, $alan, ['status' => ['sending', 'unknown'], 'send_token' => $token]);
         return ['ok' => $durum === 'sent', 'durum' => $durum, 'mesaj' => $mesaj, '_yazildi' => $ok];
     };
     $kimlik = mail_outbox_hesap_kimligi($pdo, (int)$o['account_id']);
@@ -411,7 +417,8 @@ function mail_outbox_belirsiz_coz(PDO $pdo, int $id, array $hesapIds, int $uid, 
         $ok = mail_outbox_yaz($pdo, $id, ['status' => 'sent', 'sent_at' => date('Y-m-d H:i:s'), 'last_error' => 'Belirsizlik, kullanıcı tarafından "gönderildi" olarak doğrulandı.'], ['status' => 'unknown']);
         if ($ok && $o['in_reply_to_msg_id']) $pdo->prepare('UPDATE mail_messages SET needs_reply = 0, replied_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s'), (int)$o['in_reply_to_msg_id']]);
     } elseif ($karar === 'gonderilmedi') {
-        $ok = mail_outbox_yaz($pdo, $id, ['status' => 'failed', 'last_error' => 'Belirsizlik, kullanıcı tarafından "gönderilmedi" olarak doğrulandı; tekrar denenebilir.'], ['status' => 'unknown']);
+        // İnsan "gönderilmedi" dedi → 'failed' ile aynı kural: dedupe_key serbest (tekrar dene anahtarı yeniden alır).
+        $ok = mail_outbox_yaz($pdo, $id, ['status' => 'failed', 'dedupe_key' => null, 'last_error' => 'Belirsizlik, kullanıcı tarafından "gönderilmedi" olarak doğrulandı; tekrar denenebilir.'], ['status' => 'unknown']);
     } else return ['ok' => false, 'mesaj' => 'Geçersiz karar.'];
     if ($ok) audit_log_event('mail_send_resolve', 'mail_outbox', $id, null, ['karar' => $karar, 'kullanici' => $uid]);
     return ['ok' => $ok, 'mesaj' => $ok ? ($karar === 'gonderildi' ? 'Gönderildi olarak işaretlendi.' : 'Gönderilmedi olarak işaretlendi; yeniden deneyebilirsiniz.') : 'Kayıt başka bir istekle değiştirildi.'];

@@ -1273,5 +1273,59 @@ $PERMS = ['beyan.read', 'beyan.match', 'records.write', 'beyan.permissions.detai
 $match_role = render_beyan($ID_BOS);
 ok('[yetki] sadece eşleştirme yetkisi durum formunu açmaz', !str_contains($match_role, 'class="beyan-durum-form"') && str_contains($match_role, 'id="beyanMatchOpenBtn"'));
 
+// ── Mail Merkezi → "Beyan Taslağı Oluştur" (Dalga 3A): beyan_create.php GET kancası ───────────────
+// Mailin metni YALNIZ "Kaynak metin" alanına dolar; oturumda tek kullanımlık taşınır; hiçbir şey kaydedilmez.
+function create_get(array $get): string {
+    global $ROOT;
+    $src = (string)file_get_contents($ROOT . '/beyan_create.php');
+    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
+    $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+    $src = str_replace(["__DIR__ . '/_beyan_form.php'", "__DIR__ . '/config/mail_beyan.php'"], [var_export($ROOT . '/_beyan_form.php', true), var_export($ROOT . '/config/mail_beyan.php', true)], $src);
+    $tmp = sys_get_temp_dir() . '/beyan_create_get_smoke_' . getmypid() . '.php';
+    file_put_contents($tmp, $src);
+    $_GET = $get; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+    ob_start();
+    try { include $tmp; } catch (Throwable $e) { ob_end_clean(); @unlink($tmp); return '__HATA__' . $e->getMessage() . ' @ ' . $e->getLine(); }
+    @unlink($tmp);
+    return (string)ob_get_clean();
+}
+function mail_oturum_yaz(array $o = []): void {
+    if (session_status() === PHP_SESSION_NONE) @session_start();
+    $_SESSION['mail_beyan_taslak'] = $o + ['m' => 77, 'u' => 1, 'metin' => "PARTİ: 9\nÜRÜN: <b>MAILKAYNAKXZ</b> </textarea><script>alert(1)</script>\nNET KG: 1000", 't' => time()];
+}
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read', 'mail.read'];
+$cikis_n = db()->query('SELECT COUNT(*) FROM customs_declarations')->fetchColumn();
+mail_oturum_yaz();
+$mt = create_get(['mail_taslak' => '1']);
+ok('[mail-taslak] render edildi', strncmp($mt, '__HATA__', 8) !== 0, substr($mt, 0, 300));
+ok('[mail-taslak] mail metni Kaynak metin alanında (textarea içinde, kaçışlı)', preg_match('#<textarea[^>]*name="raw_text"[^>]*>PARTİ: 9\nÜRÜN: &lt;b&gt;MAILKAYNAKXZ&lt;/b&gt; &lt;/textarea&gt;&lt;script&gt;#', $mt) === 1);
+ok('[mail-taslak] zararlı metin HTML\'e KAÇIŞSIZ geçmez', !str_contains($mt, '<script>alert(1)</script>') && !str_contains($mt, '</textarea><script>'));
+ok('[mail-taslak] bilgi bandı: "KAYDEDİLMEDİ", mail numarası', str_contains($mt, 'id="mailTaslakBilgi"') && str_contains($mt, 'Mail #77') && str_contains($mt, 'KAYDEDİLMEDİ'));
+ok('[mail-taslak] hiçbir beyan kaydı OLUŞMADI (GET veri yazmaz)', (int)db()->query('SELECT COUNT(*) FROM customs_declarations')->fetchColumn() === (int)$cikis_n);
+ok('[mail-taslak] tek kullanımlık: oturum temizlendi', !isset($_SESSION['mail_beyan_taslak']));
+$mt2 = create_get(['mail_taslak' => '1']);
+ok('[mail-taslak] ikinci açılışta (yenileme) form BOŞ, bilgi bandı yok', !str_contains($mt2, 'id="mailTaslakBilgi"') && !str_contains($mt2, 'MAILKAYNAKXZ'));
+mail_oturum_yaz();
+$mt3 = create_get([]);
+ok('[mail-taslak] ?mail_taslak=1 olmadan metin forma GELMEZ (ve oturumda kalır)', !str_contains($mt3, 'MAILKAYNAKXZ') && isset($_SESSION['mail_beyan_taslak']));
+unset($_SESSION['mail_beyan_taslak']);
+mail_oturum_yaz(['u' => 2]);
+$mt4 = create_get(['mail_taslak' => '1']);
+ok('[mail-taslak] başka kullanıcının taslağı forma GİRMEZ', !str_contains($mt4, 'MAILKAYNAKXZ') && !str_contains($mt4, 'mailTaslakBilgi'));
+mail_oturum_yaz();
+$PERMS = ['beyan.read', 'beyan.write', 'records.write'];   // mail.read yok
+$mt5 = create_get(['mail_taslak' => '1']);
+ok('[mail-taslak] mail.read kalkmışsa metin forma GİRMEZ', !str_contains($mt5, 'MAILKAYNAKXZ'));
+mail_oturum_yaz();
+$PERMS = ['beyan.read', 'beyan.create', 'beyan.permissions.detailed', 'mail.read'];   // source.write yok
+$mt6 = create_get(['mail_taslak' => '1']);
+ok('[mail-taslak] source.write yoksa kancadan metin alınmaz', !str_contains($mt6, 'MAILKAYNAKXZ'));
+unset($_SESSION['mail_beyan_taslak']);
+$_GET['raw_text'] = 'URLDEN GELEN';
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+$mt7 = create_get(['mail_taslak' => '1', 'raw_text' => 'URLDEN GELEN', 'text' => 'URLDEN GELEN']);
+ok('[mail-taslak] URL parametresiyle metin enjekte EDİLEMEZ', !str_contains($mt7, 'URLDEN GELEN'));
+$_GET = []; $_POST = [];
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);
