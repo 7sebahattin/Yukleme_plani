@@ -77,7 +77,7 @@ function mail_mesaj_listele(PDO $pdo, array $hesapIds, string $filtre, string $q
 {
     if (!$hesapIds) return ['satirlar' => [], 'toplam' => 0];
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
-    $w = "account_id IN ($in)"; $p = array_map('intval', $hesapIds);
+    $w = "account_id IN ($in)" . mail_gonderilen_disla_sql(); $p = array_map('intval', $hesapIds);   // Gönderilenler klasöründen okunan satırlar gelen listesinde yok
     if ($filtre === 'okunmamis') $w .= ' AND is_read = 0';
     elseif ($filtre === 'cevap') $w .= ' AND needs_reply = 1 AND replied_at IS NULL';
     if ($q !== '') {
@@ -175,9 +175,10 @@ function mail_filtre_sayilari(PDO $pdo, array $hesapIds): array
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
     $p = array_map('intval', $hesapIds);
     $q = static function (string $sql, array $par) use ($pdo): int { $s = $pdo->prepare($sql); $s->execute($par); return (int)$s->fetchColumn(); };
-    $o['gelen']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in)", $p);
-    $o['okunmamis'] = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND is_read = 0", $p);
-    $o['cevap']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND needs_reply = 1 AND replied_at IS NULL", $p);
+    $gd = mail_gonderilen_disla_sql();   // Gönderilenler klasöründen okunan satırlar gelen sayaçlarına girmez
+    $o['gelen']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in)$gd", $p);
+    $o['okunmamis'] = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND is_read = 0$gd", $p);
+    $o['cevap']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND needs_reply = 1 AND replied_at IS NULL$gd", $p);
     if (mail_tablo_var($pdo, 'mail_outbox')) {
         $o['taslak']     = $q("SELECT COUNT(*) FROM mail_outbox WHERE account_id IN ($in) AND status IN ('draft','translated','approved','sending')", $p);
         $o['gonderilen'] = $q("SELECT COUNT(*) FROM mail_outbox WHERE account_id IN ($in) AND status = 'sent'", $p);
@@ -267,7 +268,9 @@ function mail_senkron_durumlari(PDO $pdo, array $hesapIds): array
 {
     if (!$hesapIds || !mail_tablo_var($pdo, 'mail_sync_state')) return [];
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
-    $st = $pdo->prepare("SELECT account_id, last_ok_at, last_error, consecutive_failures FROM mail_sync_state WHERE account_id IN ($in)");
+    // Hesap başına YALNIZ gelen kutusu (sync_folder) durumu: Gönderilenler klasörü ayrı satırdır ve burayı ezmemeli.
+    $st = $pdo->prepare("SELECT s.account_id, s.last_ok_at, s.last_error, s.consecutive_failures FROM mail_sync_state s
+        JOIN mail_accounts a ON a.id = s.account_id AND a.sync_folder = s.folder WHERE s.account_id IN ($in)");
     $st->execute(array_map('intval', $hesapIds));
     $o = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $o[(int)$r['account_id']] = $r;

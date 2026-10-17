@@ -208,7 +208,7 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
             <?php foreach ($sg['durum'] as $d): $n = (int)($d['consecutive_failures'] ?? 0); ?>
                 <tr><td><?= h($d['label']) ?></td><td><?= h($d['last_ok_at'] ?? '—') ?></td><td><?= $n ?></td>
                     <td><?= $n >= 3 && $d['last_sync_at'] ? h(date('Y-m-d H:i', strtotime((string)$d['last_sync_at']) + (int)$d['bekleme_sn'])) : '—' ?></td>
-                    <td><?= h($d['last_error'] ?? '—') ?></td></tr>
+                    <td><?= h($d['last_error'] ?? '—') ?><?php if (!empty($d['sent_error'])): ?><br>Gönderilenler klasörü: <?= h($d['sent_error']) ?><?php endif; ?></td></tr>
             <?php endforeach; ?>
             <?php if (!$sg['durum']): ?><tr><td colspan="5">Hesap yok.</td></tr><?php endif; ?>
             </tbody></table></div>
