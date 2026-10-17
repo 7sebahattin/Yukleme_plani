@@ -9,6 +9,7 @@ require_once __DIR__ . '/_mail_test_lib.php';
 require_once $ROOT . '/config/mail_imap.php';
 require_once $ROOT . '/config/mail_mime.php';
 require_once $ROOT . '/config/mail_sync.php';
+require_once $ROOT . '/config/mail_view.php';
 require_once __DIR__ . '/_mail_fake_imap.php';
 
 $db = db();
@@ -336,4 +337,140 @@ ok('art arda 2. çökme: zehirli mail ÇEKİLMEDEN yer tutucu yazıldı', $r['ok
 ok('zehirden sonraki mail alındı, imleç ilerledi, işaret temiz', sayi('mail_messages', "account_id = $a17 AND subject = 'CK9'") === 1
     && (int)$db->query("SELECT last_uid FROM mail_sync_state WHERE account_id = $a17")->fetchColumn() === 9 && !is_file($isYol));
 ok('çökme izleri başka hesabı etkilemez (işaret hesap başına)', mail_sync_isaret_yolu($a17, $KILIT) !== mail_sync_isaret_yolu($a16, $KILIT));
+echo "\n=== 18. Gönderilenler klasörünü oku (Dalga 3B) ===\n";
+function msgS(string $id, string $subj, string $date, array $raw = []): array {
+    return msg($id, $subj, $date, ['\Seen'], array_merge(['from' => 'Biz <sent18@asya.com>', 'to' => 'ahmet@musteri.com', 'msgid' => "<$id@asya.com>"], $raw));
+}
+$ENG = "Dear Sir, please find attached the payment confirmation for your order. We will ship the goods with the next vessel. Best regards";
+$a18 = hesapEkle('sent18@asya.com', 'imap-parola-ABC', ['sent_folder' => 'Sent', 'translate_enabled' => 1]);
+$db->exec("UPDATE mail_accounts SET created_at = '2026-10-01 00:00:00' WHERE id = $a18");
+$kl = fn(array $inbox, array $sent) => ['klasorler' => ['INBOX' => ['mesajlar' => $inbox], 'Sent' => ['mesajlar' => $sent]]];
+$srv18 = sunucu($a18, [], $kl([1 => msg('eski18', 'Eski', '2026-10-02 09:00:00', ['\Seen'], ['body' => $ENG])], []));
+$r = senk($a18);
+ok('ilk senkron (Gönderilenler boş) başarılı', $r['ok'] && sayi('mail_messages', "account_id = $a18") === 1, json_encode($r));
+// Yeni gelenler + Outlook/telefondan yazılmış cevaplar (Gönderilenler'de)
+$cfg = &$srv18->cfg['klasorler'];
+$cfg['INBOX']['mesajlar'] += [
+    2 => msg('q1', 'Order 1', '2026-10-05 09:00:00', [], ['body' => $ENG]),
+    3 => msg('q2', 'Order 2', '2026-10-05 10:00:00', [], ['body' => $ENG]),
+    4 => msg('q3', 'Order 3', '2026-10-05 11:00:00', [], ['body' => $ENG]),
+    5 => msg('q4', 'Order 4', '2026-10-05 12:00:00', [], ['body' => $ENG]),
+];
+$cfg['Sent']['mesajlar'] = [
+    1 => msgS('s1', 'Re: Order 1', '2026-10-05 12:00:00', ['body' => $ENG, 'extra' => ['In-Reply-To: <q1@musteri.com>', 'References: <q1@musteri.com>']]),
+    2 => msgS('s2', 'Yeni konu', '2026-10-05 12:30:00', ['body' => $ENG]),
+    3 => msgS('s3', 'Re: Order 2', '2026-10-05 13:00:00', ['body' => $ENG, 'extra' => ['References: <root@musteri.com> <q2@musteri.com>']]),
+    4 => msgS('s4', 'Re: Order 4 (eski tarihli)', '2026-10-05 08:00:00', ['body' => $ENG, 'extra' => ['In-Reply-To: <q4@musteri.com>']]),
+];
+unset($cfg);
+$konuBaglanti = $BAGLANTILAR;
+$r = senk($a18);
+ok('ikinci senkron: gelen kutusu + Gönderilenler okundu (4 yeni gelen, 4 gönderilen)', $r['ok'] && $r['inserted'] === 8 && sayi('mail_messages', "account_id = $a18 AND folder = 'INBOX'") === 5 && sayi('mail_messages', "account_id = $a18 AND folder = 'Sent'") === 4, json_encode($r));
+ok('Gönderilenler için AYRI bağlantı (kendi bayt bütçesi): bu turda toplam 2 bağlantı', $BAGLANTILAR - $konuBaglanti === 2);
+$s18 = $db->query("SELECT * FROM mail_messages WHERE account_id = $a18 AND folder = 'Sent' ORDER BY uid")->fetchAll();
+ok('gönderilen satırlar: okundu, cevap beklemez, çevrilmez (translate_enabled=1 olsa bile)', count(array_filter($s18, fn($x) => (int)$x['is_read'] === 1 && (int)$x['needs_reply'] === 0 && $x['tr_status'] === 'skipped')) === 4, json_encode(array_map(fn($x) => [$x['is_read'], $x['needs_reply'], $x['tr_status']], $s18)));
+$gelen18 = $db->query("SELECT message_id, needs_reply, replied_at, tr_status FROM mail_messages WHERE account_id = $a18 AND folder = 'INBOX' ORDER BY uid")->fetchAll();
+$g = array_column($gelen18, null, 'message_id');
+ok('gelen kutusu mailleri çeviri kuyruğuna girdi (pending), gönderilenler girmedi', $g['q1@musteri.com']['tr_status'] === 'pending' && sayi('mail_messages', "account_id = $a18 AND folder = 'Sent' AND tr_status = 'pending'") === 0);
+ok('In-Reply-To ile cevaplanan ebeveyn: replied_at dolu, needs_reply=0', $g['q1@musteri.com']['replied_at'] !== null && (int)$g['q1@musteri.com']['needs_reply'] === 0, json_encode($g['q1@musteri.com']));
+ok('yalnız References ile cevaplanan (son öğe = ebeveyn) da temizlenir', $g['q2@musteri.com']['replied_at'] !== null && (int)$g['q2@musteri.com']['needs_reply'] === 0);
+ok('cevaplanmayan mail hâlâ cevap bekliyor', (int)$g['q3@musteri.com']['needs_reply'] === 1 && $g['q3@musteri.com']['replied_at'] === null);
+ok('ebeveyninden ÖNCE tarihli "cevap" ebeveyni temizlemez (zaman tutarlılığı)', (int)$g['q4@musteri.com']['needs_reply'] === 1 && $g['q4@musteri.com']['replied_at'] === null);
+$t1 = (int)$db->query("SELECT thread_id FROM mail_messages WHERE account_id = $a18 AND message_id = 'q1@musteri.com'")->fetchColumn();
+ok('gönderilen cevap ebeveyniyle AYNI thread (başlıklarla bağlı)', $t1 > 0 && (int)$db->query("SELECT thread_id FROM mail_messages WHERE account_id = $a18 AND message_id = 's1@asya.com'")->fetchColumn() === $t1);
+$kimlik18 = [$a18];
+$gelenListe = mail_mesaj_listele($db, $kimlik18, 'gelen', '', 1);
+ok('"Gelen" listesi Gönderilenler satırlarını İÇERMEZ', $gelenListe['toplam'] === 5 && !array_filter($gelenListe['satirlar'], fn($x) => str_ends_with((string)$x['subject'], 'Yeni konu') || str_starts_with((string)$x['subject'], 'Re: Order 1')), json_encode($gelenListe['toplam']));
+$say18 = mail_filtre_sayilari($db, $kimlik18);
+ok('sayaçlar: gelen=5, okunmamış=4 (q1..q4), cevap bekleyen=2 (q3,q4)', $say18['gelen'] === 5 && $say18['okunmamis'] === 4 && $say18['cevap'] === 2, json_encode($say18));
+ok('okunmamış/cevap listeleri de gönderilenleri içermez', mail_mesaj_listele($db, $kimlik18, 'okunmamis', '', 1)['toplam'] === 4 && mail_mesaj_listele($db, $kimlik18, 'cevap', '', 1)['toplam'] === 2);
+// Gönderilenler satırı elle "okunmadı" yapılsa bile gelen sayaçlarına girmez
+$sid = (int)$db->query("SELECT id FROM mail_messages WHERE account_id = $a18 AND message_id = 's2@asya.com'")->fetchColumn();
+$db->exec("UPDATE mail_messages SET is_read = 0, needs_reply = 1 WHERE id = $sid");
+$say18b = mail_filtre_sayilari($db, $kimlik18);
+ok('(savunma) elle okunmadı/cevap bekliyor yapılan gönderilen satır gelen sayaçlarına girmez', $say18b['okunmamis'] === 4 && $say18b['cevap'] === 2 && $say18b['gelen'] === 5);
+ok('(savunma) ana sayfa okunmamış rozet sorgusu da dışlar', (mail_okunmamis_sayilari(1, $db, true)[$a18] ?? -1) === 4, json_encode(mail_okunmamis_sayilari(1, $db, true)));
+$db->exec("UPDATE mail_messages SET is_read = 1, needs_reply = 0 WHERE id = $sid");
+$gorunen = mail_thread_mesajlari($db, mail_mesaj_getir($db, (int)$db->query("SELECT id FROM mail_messages WHERE account_id = $a18 AND message_id = 'q1@musteri.com'")->fetchColumn(), $kimlik18));
+ok('thread görünümünde ("Konuşmadaki diğer mailler") gönderilen cevap görünür', count(array_filter($gorunen, fn($x) => str_starts_with((string)$x['subject'], 'Re: Order 1'))) === 1);
+$durumlar = $db->query("SELECT folder, last_uid, consecutive_failures FROM mail_sync_state WHERE account_id = $a18 ORDER BY folder")->fetchAll();
+ok('klasör başına AYRI durum satırı: INBOX imleci 5, Sent imleci 4', count($durumlar) === 2 && (int)$durumlar[0]['last_uid'] === 5 && $durumlar[0]['folder'] === 'INBOX' && (int)$durumlar[1]['last_uid'] === 4 && $durumlar[1]['folder'] === 'Sent', json_encode($durumlar));
+ok('senkron durumu (mail_senkron_durumlari) yalnız gelen kutusu satırını verir', count(mail_senkron_durumlari($db, $kimlik18)) === 1);
+ok('SALT OKUNUR: sunucuya STORE/APPEND/SELECT/EXPUNGE/DELETE gitmedi', !preg_grep('/\bSTORE\b|\bAPPEND\b|\bSELECT\b|EXPUNGE|\bDELETE\b|\+FLAGS/i', $srv18->received));
+ok('Gönderilenler EXAMINE ile açıldı', (bool)preg_grep('/EXAMINE "Sent"/', $srv18->received));
+// Tekrar senkron: çift yok, hiçbir şey ezilmez
+$once = sayi('mail_messages', "account_id = $a18");
+$ra = $db->query("SELECT replied_at FROM mail_messages WHERE message_id = 'q1@musteri.com' AND account_id = $a18")->fetchColumn();
+$r = senk($a18);
+ok('tekrar senkron: yeni mail yok, çift yok, replied_at değişmedi', $r['ok'] && $r['inserted'] === 0 && sayi('mail_messages', "account_id = $a18") === $once && $db->query("SELECT replied_at FROM mail_messages WHERE message_id = 'q1@musteri.com' AND account_id = $a18")->fetchColumn() === $ra);
+// Sonradan Gönderilenler'e düşen cevap q3'ü temizler
+$srv18->cfg['klasorler']['Sent']['mesajlar'][5] = msgS('s5', 'Re: Order 3', '2026-10-05 15:00:00', ['body' => $ENG, 'extra' => ['In-Reply-To: <q3@musteri.com>']]);
+$r = senk($a18);
+ok('sonradan yazılan cevap (Outlook) q3\'ü "Cevap Bekleyen"den çıkarır', $r['ok'] && (int)$db->query("SELECT needs_reply FROM mail_messages WHERE account_id = $a18 AND message_id = 'q3@musteri.com'")->fetchColumn() === 0 && mail_filtre_sayilari($db, $kimlik18)['cevap'] === 1);
+// append_sent ile kendi cevabımızın yeniden okunması: outbox zaten replied_at yazmış → ezilmez, yanlış işaretleme olmaz
+$db->exec("UPDATE mail_messages SET replied_at = '2026-10-05 14:10:00', needs_reply = 0 WHERE account_id = $a18 AND message_id = 'q4@musteri.com'");
+$srv18->cfg['klasorler']['Sent']['mesajlar'][6] = msgS('s6', 'Re: Order 4', '2026-10-05 14:20:00', ['body' => $ENG, 'extra' => ['In-Reply-To: <q4@musteri.com>']]);
+senk($a18);
+ok('append_sent geri okuması: zaten cevaplanmış ebeveynin replied_at değeri EZİLMEZ', $db->query("SELECT replied_at FROM mail_messages WHERE account_id = $a18 AND message_id = 'q4@musteri.com'")->fetchColumn() === '2026-10-05 14:10:00');
+
+require_once $ROOT . '/config/mail_smtp.php';
+require_once $ROOT . '/config/mail_outbox.php';
+$sentMsg = mail_mesaj_getir($db, (int)$db->query("SELECT id FROM mail_messages WHERE account_id = $a18 AND message_id = 's1@asya.com'")->fetchColumn(), $kimlik18);
+$gelenMsg = mail_mesaj_getir($db, (int)$db->query("SELECT id FROM mail_messages WHERE account_id = $a18 AND message_id = 'q3@musteri.com'")->fetchColumn(), $kimlik18);
+ok('Gönderilenler satırı "kendi mailiniz" diye tanınır; gelen satırı tanınmaz', mail_mesaj_gonderilen_mi($db, $sentMsg) && !mail_mesaj_gonderilen_mi($db, $gelenMsg));
+ok('Gönderilenler satırına cevap taslağı AÇILAMAZ; gelen mailde açılır', !mail_outbox_taslak($db, (int)$sentMsg['id'], $kimlik18, 1, bin2hex(random_bytes(16)), ['body_tr' => 'x', 'target_lang' => 'en'])['ok']
+    && mail_outbox_taslak($db, (int)$gelenMsg['id'], $kimlik18, 1, bin2hex(random_bytes(16)), ['body_tr' => 'x', 'target_lang' => 'en'])['ok']);
+ok('mail_cevap_engeli: gönderilen satırda Türkçe neden, gelen satırda boş', str_contains(mail_cevap_engeli($db, $sentMsg), 'Gönderilenler klasöründeki kendi mailinizdir') && mail_cevap_engeli($db, $gelenMsg) === '');
+
+echo "\n=== 19. Gönderilenler: hata yalıtımı, kalan, aynı klasör ===\n";
+$a19 = hesapEkle('sent19@asya.com', 'imap-parola-ABC', ['sent_folder' => 'Sent']);
+$db->exec("UPDATE mail_accounts SET created_at = '2026-10-01 00:00:00' WHERE id = $a19");
+$srv19 = sunucu($a19, [], ['klasorler' => ['INBOX' => ['mesajlar' => [1 => msg('x1', 'X1', '2026-10-05 09:00:00')]]]]);   // Sent klasörü sunucuda YOK
+$r = senk($a19);
+$st19 = $db->query("SELECT folder, last_error, consecutive_failures FROM mail_sync_state WHERE account_id = $a19 ORDER BY folder")->fetchAll(PDO::FETCH_UNIQUE | PDO::FETCH_ASSOC);
+ok('Gönderilenler klasörü yoksa gelen kutusu YİNE başarılı, not düşer', $r['ok'] && $r['inserted'] === 1 && (bool)preg_grep('/Gönderilenler klasörü okunamadı/', $r['notlar']), json_encode($r));
+ok('hata yalnız Sent durum satırına yazıldı; gelen kutusu satırı temiz', (int)$st19['Sent']['consecutive_failures'] === 1 && $st19['Sent']['last_error'] !== null && (int)$st19['INBOX']['consecutive_failures'] === 0 && $st19['INBOX']['last_error'] === null, json_encode($st19));
+$gd = mail_sync_gunluk_getir($db, 5)['durum'];
+$gd19 = array_values(array_filter($gd, fn($x) => (int)$x['id'] === $a19))[0];
+ok('yönetici ekranı verisi: Gönderilenler hatası ayrı alanda, gelen kutusu hatasız', $gd19['sent_error'] !== null && $gd19['last_error'] === null && (int)$gd19['consecutive_failures'] === 0);
+senk($a19); senk($a19);
+ok('3 hatadan sonra Gönderilenler geri çekilir, gelen kutusu etkilenmez', (int)$db->query("SELECT consecutive_failures FROM mail_sync_state WHERE account_id = $a19 AND folder = 'Sent'")->fetchColumn() === 3);
+$srv19->cfg['klasorler']['INBOX']['mesajlar'][2] = msg('x2', 'X2', '2026-10-05 10:00:00');
+$r = mail_sync_hesap($db, $a19, ['istemci' => fabrika(), 'kilit_dizin' => $KILIT, 'simdi' => strtotime('2026-10-06 12:00:30')]);   // zorla YOK
+ok('geri çekilmedeki Gönderilenler atlanır (not), gelen kutusu yine alınır', $r['ok'] && !empty($r['bekle']) === false && sayi('mail_messages', "account_id = $a19 AND uid = 2") === 1 && (bool)preg_grep('/Gönderilenler klasörü art arda 3 hata/', $r['notlar']), json_encode($r));
+// Gönderilenler sonradan oluşur → iyileşir
+$srv19->cfg['klasorler']['Sent'] = ['mesajlar' => [1 => msgS('y1', 'Re: X1', '2026-10-05 11:00:00', ['extra' => ['In-Reply-To: <x1@musteri.com>']])]];
+$r = senk($a19);
+ok('klasör düzelince Gönderilenler okunur, hata sayacı sıfırlanır', $r['ok'] && sayi('mail_messages', "account_id = $a19 AND folder = 'Sent'") === 1 && (int)$db->query("SELECT consecutive_failures FROM mail_sync_state WHERE account_id = $a19 AND folder = 'Sent'")->fetchColumn() === 0);
+// sent_folder = sync_folder → ikinci geçiş YOK
+$a19b = hesapEkle('sent19b@asya.com', 'imap-parola-ABC', ['sent_folder' => 'INBOX']);
+sunucu($a19b, [1 => msg('z1', 'Z1', '2026-10-05 09:00:00')]);
+$b0 = $BAGLANTILAR; senk($a19b);
+ok('sent_folder = gelen kutusu → tek bağlantı, çift okuma yok', $BAGLANTILAR - $b0 === 1 && sayi('mail_messages', "account_id = $a19b") === 1);
+$a19c = hesapEkle('sent19c@asya.com');
+sunucu($a19c, [1 => msg('w1', 'W1', '2026-10-05 09:00:00')]);
+$b0 = $BAGLANTILAR; senk($a19c);
+ok('sent_folder boş → tek bağlantı (eski davranış)', $BAGLANTILAR - $b0 === 1);
+// Gelen kutusunda bitmemiş iş varsa Gönderilenler beklenir (ebeveyn henüz yokken cevaplandı işlenemez)
+$a19d = hesapEkle('sent19d@asya.com', 'imap-parola-ABC', ['sent_folder' => 'Sent']);
+$db->exec("UPDATE mail_accounts SET created_at = '2026-10-01 00:00:00' WHERE id = $a19d");
+sunucu($a19d, [], ['klasorler' => ['INBOX' => ['mesajlar' => [1 => msg('k1', 'K1', '2026-10-05 09:00:00'), 2 => msg('k2', 'K2', '2026-10-05 10:00:00'), 3 => msg('k3', 'K3', '2026-10-05 11:00:00')]],
+    'Sent' => ['mesajlar' => [1 => msgS('k1r', 'Re: K1', '2026-10-05 12:00:00', ['extra' => ['In-Reply-To: <k1@musteri.com>']])]]]]);
+$r = senk($a19d, ['limit' => 2]);
+ok('gelen kutusunda kalan iş varken Gönderilenler okunmaz (not düşer)', $r['ok'] && $r['kalan'] === 1 && sayi('mail_messages', "account_id = $a19d AND folder = 'Sent'") === 0 && (bool)preg_grep('/Gönderilenler klasörü gelen kutusu tamamlanınca/', $r['notlar']), json_encode($r));
+$r = senk($a19d, ['limit' => 2]);
+ok('gelen kutusu bitince Gönderilenler okunur', $r['ok'] && sayi('mail_messages', "account_id = $a19d AND folder = 'Sent'") === 1);
+// Çökme işareti klasör-bilinçli: Sent'te art arda süreci öldüren mail yer tutucuya düşer
+$srv19d = $SUNUCULAR[$a19d];
+$srv19d->cfg['klasorler']['Sent']['mesajlar'][2] = msgS('k2zehir', 'zehir', '2026-10-05 12:30:00');
+$srv19d->cfg['klasorler']['Sent']['mesajlar'][3] = msgS('k3s', 'Re: K3', '2026-10-05 13:00:00', ['extra' => ['In-Reply-To: <k3@musteri.com>']]);
+mail_sync_isaret_yaz($a19d, ['aktif' => ['klasor' => 'Sent', 'uidv' => 1000, 'uid' => 2], 'supheli' => ['Sent|1000|2' => 1]], $KILIT);
+$r = senk($a19d);
+$stub = $db->query("SELECT subject, folder FROM mail_messages WHERE account_id = $a19d AND uid = 2 AND folder = 'Sent'")->fetch();
+ok('çökme işareti Gönderilenler\'de de çalışır: yer tutucu, sonraki mail alındı', $stub && str_starts_with((string)$stub['subject'], '(işlenemedi') && sayi('mail_messages', "account_id = $a19d AND folder = 'Sent' AND uid = 3") === 1, json_encode([$r['notlar'], $stub]));
+ok('yer tutucu da gelen listesinde görünmez', !array_filter(mail_mesaj_listele($db, [$a19d], 'gelen', '', 1)['satirlar'], fn($x) => str_starts_with((string)$x['subject'], '(işlenemedi')));
+ok('çökme sonrası işaret dosyası temiz', !is_file(mail_sync_isaret_yolu($a19d, $KILIT)));
+$leak = json_encode($db->query('SELECT * FROM mail_sync_state')->fetchAll()) . json_encode($db->query('SELECT * FROM mail_sync_log')->fetchAll());
+ok('durum/günlük şifre İÇERMİYOR (Gönderilenler yolu)', !str_contains($leak, 'imap-parola-ABC'));
+
 mail_test_bitir();

@@ -527,6 +527,38 @@ const MOBIL = (w) => w < 768;
         await ctx.close();
     }
 
+    // ── Dalga 3B: yalnız konu çevirisi (okuyucuda Türkçe konu satırı, listede soluk satır, iki çeviri düğmesi) ──
+    if (M.sayfalar.includes('detay_konu_tr')) for (const [w, h] of EKRANLAR) {
+        let { ctx, page, hatalar } = await ac('detay_konu_tr', w, h);
+        const kt = await page.evaluate(() => { const e = document.querySelector('.mail-konu-tr--okuyucu'); const h2 = document.querySelector('.mail-okuyucu-konu'); if (!e) return null;
+            const r = e.getBoundingClientRect(), r2 = h2.getBoundingClientRect(); return { gorunur: r.width > 0 && r.height > 0, alt: r.top >= r2.bottom - 1, tasma: e.scrollWidth - e.clientWidth, sagTasma: r.right - innerWidth, metin: e.textContent, fs: parseFloat(getComputedStyle(e).fontSize), sayfaTasma: document.documentElement.scrollWidth - innerWidth }; });
+        ok(`[${w}] konu-tr: okuyucuda orijinal konunun ALTINDA, görünür`, kt && kt.gorunur && kt.alt, JSON.stringify(kt));
+        ok(`[${w}] konu-tr: uzun Türkçe konu taşmıyor (yatay taşma yok)`, kt && kt.tasma <= 1 && kt.sagTasma <= 0.5 && kt.sayfaTasma <= 0, JSON.stringify(kt));
+        ok(`[${w}] konu-tr: orijinal konudan küçük/soluk (≤ 15px)`, kt && kt.fs <= 15, kt && kt.fs + '');
+        ok(`[${w}] konu-tr: konu çevrildiği için "Yalnız konuyu çevir" düğmesi yok`, (await page.$('button[value="ceviri_konu"]')) === null);
+        ok(`[${w}] konu-tr: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+        ({ ctx, page, hatalar } = await ac('liste', w, h));
+        const lk = await page.evaluate(() => { const e = document.querySelector('.mail-oge .mail-konu-tr'); if (!e) return null; const o = e.closest('.mail-oge').getBoundingClientRect(), r = e.getBoundingClientRect();
+            return { r: r.right, oR: o.right, h: r.height, ogeH: o.height, kes: getComputedStyle(e).textOverflow, ws: getComputedStyle(e).whiteSpace, sayfaTasma: document.documentElement.scrollWidth - innerWidth }; });
+        ok(`[${w}] liste: konu-tr satırı satırın içinde, tek satır kesilir, taşma yok`, lk && lk.r <= lk.oR + 0.5 && lk.kes === 'ellipsis' && lk.ws === 'nowrap' && lk.sayfaTasma <= 0, JSON.stringify(lk));
+        if (MOBIL(w)) { const ogeler = await page.$$eval('.mail-oge', es => es.map(e => e.getBoundingClientRect().height)); ok(`[${w}] liste: konu-tr eklenince de satır dokunma hedefi ≥ 44px`, ogeler.every(x => x >= 44), Math.min(...ogeler) + ''); }
+        await ctx.close();
+    }
+    if (M.sayfalar.includes('detay_konu_btn')) for (const [w, h] of EKRANLAR) {
+        const { ctx, page, hatalar } = await ac('detay_konu_btn', w, h);
+        const b = await page.evaluate(() => { const tam = document.querySelector('.mail-okuyucu-arac button[value="ceviri_simdi"]'), konu = document.querySelector('.mail-okuyucu-arac button[value="ceviri_konu"]');
+            if (!tam || !konu) return null; const t = tam.getBoundingClientRect(), k = konu.getBoundingClientRect(); const arac = document.querySelector('.mail-okuyucu-arac').getBoundingClientRect();
+            return { tH: t.height, kH: k.height, kR: k.right, tR: t.right, aR: arac.right, kL: k.left, tL: t.left, vw: innerWidth, sayfaTasma: document.documentElement.scrollWidth - innerWidth, kTitle: konu.title }; });
+        ok(`[${w}] konu düğmesi: "Türkçeye çevir" yanında iki düğme de görünür`, !!b, 'düğme yok');
+        ok(`[${w}] konu düğmesi: ekran dışına taşmıyor, sayfa taşması yok`, b && b.kR <= b.vw + 0.5 && b.tR <= b.vw + 0.5 && b.kL >= 0 && b.sayfaTasma <= 0, JSON.stringify(b));
+        if (MOBIL(w)) ok(`[${w}] konu düğmesi: dokunma hedefi ≥ 40px`, b && b.kH >= 39.5 && b.tH >= 39.5, b && (b.kH + '/' + b.tH));
+        ok(`[${w}] konu düğmesi: açıklayıcı ipucu (gövde gönderilmez)`, b && /gövde gönderilmez/.test(b.kTitle), b && b.kTitle);
+        ok(`[${w}] konu düğmesi: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        if (w === 390) await page.screenshot({ path: path.join(SHOTS, `${w}_konu_btn.png`), fullPage: false });
+        await ctx.close();
+    }
+
     await browser.close();
     console.log(`\n${pass} geçti, ${fail} kaldı  (ekran görüntüleri: ${SHOTS})`);
     process.exit(fail > 0 ? 1 : 0);

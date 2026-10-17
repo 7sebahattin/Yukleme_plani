@@ -77,7 +77,7 @@ function mail_mesaj_listele(PDO $pdo, array $hesapIds, string $filtre, string $q
 {
     if (!$hesapIds) return ['satirlar' => [], 'toplam' => 0];
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
-    $w = "account_id IN ($in)"; $p = array_map('intval', $hesapIds);
+    $w = "account_id IN ($in)" . mail_gonderilen_disla_sql(); $p = array_map('intval', $hesapIds);   // Gönderilenler klasöründen okunan satırlar gelen listesinde yok
     if ($filtre === 'okunmamis') $w .= ' AND is_read = 0';
     elseif ($filtre === 'cevap') $w .= ' AND needs_reply = 1 AND replied_at IS NULL';
     if ($q !== '') {
@@ -88,11 +88,11 @@ function mail_mesaj_listele(PDO $pdo, array $hesapIds, string $filtre, string $q
     $c->execute($p);
     $toplam = (int)$c->fetchColumn();
     $off = max(0, ($sayfa - 1) * $limit);
-    $st = $pdo->prepare("SELECT id, account_id, thread_id, from_name, from_addr, subject, received_at, is_read, has_attachments, tr_status,
+    $st = $pdo->prepare("SELECT id, account_id, thread_id, from_name, from_addr, subject, subject_tr, received_at, is_read, has_attachments, tr_status,
             needs_reply, replied_at, SUBSTR(body_text, 1, 300) AS ozet
         FROM mail_messages WHERE $w ORDER BY received_at DESC, id DESC LIMIT " . (int)$limit . ' OFFSET ' . (int)$off);
     $st->execute($p);
-    return ['satirlar' => array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'from_name', 'ozet']), $st->fetchAll(PDO::FETCH_ASSOC)), 'toplam' => $toplam];
+    return ['satirlar' => array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'subject_tr', 'from_name', 'ozet']), $st->fetchAll(PDO::FETCH_ASSOC)), 'toplam' => $toplam];
 }
 
 /** Giden kutusu listesi. @return array{satirlar:list<array>,toplam:int} */
@@ -175,9 +175,10 @@ function mail_filtre_sayilari(PDO $pdo, array $hesapIds): array
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
     $p = array_map('intval', $hesapIds);
     $q = static function (string $sql, array $par) use ($pdo): int { $s = $pdo->prepare($sql); $s->execute($par); return (int)$s->fetchColumn(); };
-    $o['gelen']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in)", $p);
-    $o['okunmamis'] = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND is_read = 0", $p);
-    $o['cevap']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND needs_reply = 1 AND replied_at IS NULL", $p);
+    $gd = mail_gonderilen_disla_sql();   // Gönderilenler klasöründen okunan satırlar gelen sayaçlarına girmez
+    $o['gelen']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in)$gd", $p);
+    $o['okunmamis'] = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND is_read = 0$gd", $p);
+    $o['cevap']     = $q("SELECT COUNT(*) FROM mail_messages WHERE account_id IN ($in) AND needs_reply = 1 AND replied_at IS NULL$gd", $p);
     if (mail_tablo_var($pdo, 'mail_outbox')) {
         $o['taslak']     = $q("SELECT COUNT(*) FROM mail_outbox WHERE account_id IN ($in) AND status IN ('draft','translated','approved','sending')", $p);
         $o['gonderilen'] = $q("SELECT COUNT(*) FROM mail_outbox WHERE account_id IN ($in) AND status = 'sent'", $p);
@@ -267,7 +268,9 @@ function mail_senkron_durumlari(PDO $pdo, array $hesapIds): array
 {
     if (!$hesapIds || !mail_tablo_var($pdo, 'mail_sync_state')) return [];
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
-    $st = $pdo->prepare("SELECT account_id, last_ok_at, last_error, consecutive_failures FROM mail_sync_state WHERE account_id IN ($in)");
+    // Hesap başına YALNIZ gelen kutusu (sync_folder) durumu: Gönderilenler klasörü ayrı satırdır ve burayı ezmemeli.
+    $st = $pdo->prepare("SELECT s.account_id, s.last_ok_at, s.last_error, s.consecutive_failures FROM mail_sync_state s
+        JOIN mail_accounts a ON a.id = s.account_id AND a.sync_folder = s.folder WHERE s.account_id IN ($in)");
     $st->execute(array_map('intval', $hesapIds));
     $o = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $o[(int)$r['account_id']] = $r;
@@ -331,6 +334,7 @@ function mail_cevap_engeli(PDO $pdo, array $m): string
     $h = $a->fetch(PDO::FETCH_ASSOC);
     if (!$h || (int)$h['is_active'] !== 1) return 'Hesap pasif olduğu için cevap yazılamaz. Önce Hesaplar ekranından hesabı aktifleştirin.';
     if (($h['smtp_pass_enc'] ?? '') === '') return 'Hesapta SMTP şifresi tanımlı değil; cevap gönderilemez. Hesaplar ekranından SMTP şifresini girin.';
+    if (mail_mesaj_gonderilen_mi($pdo, $m)) return 'Bu, Gönderilenler klasöründeki kendi mailinizdir; cevap yazılamaz (müşterinin mailini açıp oradan cevaplayın).';
     $to = trim((string)($m['reply_to_addr'] ?: $m['from_addr']));
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Cevaplanacak adres geçersiz ya da yok.';
     return '';
@@ -406,6 +410,11 @@ function mail_post_isle(PDO $pdo, array $c, string $islem, array $g = [], array 
         $r = mail_ceviri_simdi($pdo, $sagl(), $mId, $hesapIds);
         $ok = $r['ok']; $mesaj = $r['mesaj'];
         if ($ok) audit_log_event('mail_translate_manual', 'mail_messages', $mId, null, ['sonuc' => 'ok']);
+    } elseif ($islem === 'ceviri_konu') {
+        // Ucuz yol: yalnız konu satırı (≤300 karakter) çevrilir, yalnız subject_tr yazılır; gövde çevirisi ayrıca yapılabilir.
+        $r = mail_ceviri_konu($pdo, $sagl(), $mId, $hesapIds, isset($opt['simdi']) ? (int)$opt['simdi'] : null);
+        $ok = $r['ok']; $mesaj = $r['mesaj'];
+        if ($ok && $r['karakter'] > 0) audit_log_event('mail_translate_subject', 'mail_messages', $mId, null, ['karakter' => $r['karakter']]);
     } elseif ($islem === 'cevap_onizle') {
         // Türkçe taslak → (gerekirse) kaydet → çeviri önizle. SMTP'ye DOKUNMAZ.
         if (!$c['cevap']) return $yasak('Cevap yazmak için mail.reply yetkisi gerekir.');

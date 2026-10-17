@@ -676,6 +676,29 @@ function mail_hesap_kullanicilari(int $hesapId, ?PDO $pdo = null): array
     return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
 }
 
+/**
+ * Gelen kutusu sorgularına eklenen SQL parçası: hesabın GÖNDERİLENLER klasöründen okunmuş satırları (mail_messages.folder = hesabın
+ * sent_folder'ı, gelen kutusundan farklıysa) gelen/okunmamış/cevap bekleyen listeleri ve sayaçlarından dışlar.
+ * $tablo = sorguda mail_messages için kullanılan ad/takma ad. MySQL + SQLite uyumlu (ilişkili NOT EXISTS, hesap PK araması).
+ */
+function mail_gonderilen_disla_sql(string $tablo = 'mail_messages'): string
+{
+    if (!preg_match('/^[a-z_][a-z0-9_]*$/i', $tablo)) $tablo = 'mail_messages';
+    return " AND NOT EXISTS (SELECT 1 FROM mail_accounts _ga WHERE _ga.id = $tablo.account_id AND _ga.sent_folder IS NOT NULL AND _ga.sent_folder <> ''"
+        . " AND _ga.sent_folder <> _ga.sync_folder AND $tablo.folder = _ga.sent_folder)";
+}
+
+/** Bu mesaj hesabın GÖNDERİLENLER klasöründen mi okundu (kendi yazdığımız mail)? Cevap yazılamaz / gelen listelerinde yer almaz. */
+function mail_mesaj_gonderilen_mi(PDO $pdo, array $m): bool
+{
+    $st = $pdo->prepare('SELECT sent_folder, sync_folder FROM mail_accounts WHERE id = ?');
+    $st->execute([(int)($m['account_id'] ?? 0)]);
+    $h = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$h) return false;
+    $g = trim((string)($h['sent_folder'] ?? ''));
+    return $g !== '' && $g !== (string)$h['sync_folder'] && (string)($m['folder'] ?? '') === $g;
+}
+
 /** Görünür hesaplar için okunmamış sayısı: [hesapId => sayı]. Tablo yoksa []. */
 function mail_okunmamis_sayilari(int $userId, ?PDO $pdo = null, ?bool $yonetici = null): array
 {
@@ -684,7 +707,7 @@ function mail_okunmamis_sayilari(int $userId, ?PDO $pdo = null, ?bool $yonetici 
     if ($ids === [] || !mail_tablo_var($pdo, 'mail_messages')) return [];
     try {
         $in = implode(',', array_fill(0, count($ids), '?'));
-        $st = $pdo->prepare("SELECT account_id, COUNT(*) c FROM mail_messages WHERE is_read = 0 AND account_id IN ($in) GROUP BY account_id");
+        $st = $pdo->prepare("SELECT account_id, COUNT(*) c FROM mail_messages WHERE is_read = 0 AND account_id IN ($in)" . mail_gonderilen_disla_sql() . " GROUP BY account_id");
         $st->execute($ids);
         $out = array_fill_keys($ids, 0);
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(int)$r['account_id']] = (int)$r['c'];

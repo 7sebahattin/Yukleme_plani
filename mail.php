@@ -249,6 +249,7 @@ mail_assets();
                     <span class="mail-zaman"><?= h(mail_zaman_fmt($r['received_at'])) ?></span>
                 </div>
                 <div class="mail-konu"><?= h($r['subject'] ?: '(konu yok)') ?><?php if ((int)$r['has_attachments'] === 1): ?> <span class="mail-ek-ikon" title="Ek var">📎</span><?php endif; ?></div>
+                <?php if (trim((string)($r['subject_tr'] ?? '')) !== ''): ?><div class="mail-konu-tr" title="Konunun Türkçesi"><?= h($r['subject_tr']) ?></div><?php endif; ?>
                 <div class="mail-oz"><?= h(mail_oz($r['ozet'])) ?>
                     <?php if (count($etiketler) > 1): ?><span class="mail-hesap-etiket"><?= h($etiketler[(int)$r['account_id']] ?? '') ?></span><?php endif; ?>
                     <?php if ($r['tr_status'] === 'failed'): ?><span class="mail-durum mail-durum--failed">çeviri hatası</span><?php endif; ?>
@@ -385,6 +386,7 @@ mail_assets();
             $uzakVar = $m['body_html_safe'] !== null && str_contains((string)$m['body_html_safe'], 'data-blocked-src');
             // v369: çeviri YALNIZ bu tıklamayla yapılır (otomatik değil); düğme sağlayıcı + hesap izni varsa çizilir.
             $ceviriDugme = $ceviriHazir && !$trVar && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true) && mail_hesap_ceviri_acik($pdo, (int)$m['account_id']);
+            $konuDugme = $ceviriDugme && trim((string)$m['subject']) !== '' && trim((string)$m['subject_tr']) === '';   // ucuz yol: yalnız konu
         ?>
             <div class="mail-okuyucu-arac">
                 <a class="btn btn-geri mail-geri" href="<?= h($url(['m' => null])) ?>">← Liste</a>
@@ -398,6 +400,7 @@ mail_assets();
                     <?php endif; ?>
                     <?php if ($ceviriDugme && $aktif === 'orj'): ?>
                     <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Çeviriyi tekrar dene' : 'Türkçeye çevir' ?></button>
+                    <?php if ($konuDugme): ?><button class="btn" name="islem" value="ceviri_konu" type="submit" title="Yalnız konu satırı (en çok 300 karakter) çeviri servisine gönderilir; gövde gönderilmez">Yalnız konuyu çevir</button><?php endif; ?>
                     <?php endif; ?>
                 </form>
                 <?php if (can_beyan('create') && can_beyan('source.write')): /* Dalga 3A: mail_beyan_taslak_yetkisi() ile AYNI kapı; yalnız mail id'si POST edilir, kaydetmez */ ?>
@@ -409,6 +412,7 @@ mail_assets();
             </div>
 
             <h2 class="mail-okuyucu-konu"><?= h($m['subject'] ?: '(konu yok)') ?></h2>
+            <?php if (trim((string)$m['subject_tr']) !== ''): ?><div class="mail-konu-tr mail-konu-tr--okuyucu" title="Konunun Türkçesi"><?= h($m['subject_tr']) ?></div><?php endif; ?>
             <dl class="mail-meta">
                 <dt>Kimden</dt><dd><?= h(mail_gonderen_adi($m)) ?><?php if ($m['from_name'] !== '' && $m['from_addr'] !== ''): ?> &lt;<?= h($m['from_addr']) ?>&gt;<?php endif; ?></dd>
                 <dt>Kime</dt><dd><?= h(implode(', ', array_map(static fn($a) => ($a['name'] !== '' ? $a['name'] . ' ' : '') . '<' . $a['email'] . '>', $m['to_list']))) ?></dd>
@@ -448,6 +452,7 @@ mail_assets();
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">
                         <input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">
                         <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Tekrar dene' : 'Türkçeye çevir' ?></button>
+                        <?php if ($konuDugme): ?><button class="btn" name="islem" value="ceviri_konu" type="submit" title="Yalnız konu satırı (en çok 300 karakter) çeviri servisine gönderilir; gövde gönderilmez">Yalnız konuyu çevir</button><?php endif; ?>
                     </form></div>
                     <?php endif; ?></div>
                 <?php endif; ?>

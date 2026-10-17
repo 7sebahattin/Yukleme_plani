@@ -208,7 +208,7 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
             <?php foreach ($sg['durum'] as $d): $n = (int)($d['consecutive_failures'] ?? 0); ?>
                 <tr><td><?= h($d['label']) ?></td><td><?= h($d['last_ok_at'] ?? '—') ?></td><td><?= $n ?></td>
                     <td><?= $n >= 3 && $d['last_sync_at'] ? h(date('Y-m-d H:i', strtotime((string)$d['last_sync_at']) + (int)$d['bekleme_sn'])) : '—' ?></td>
-                    <td><?= h($d['last_error'] ?? '—') ?></td></tr>
+                    <td><?= h($d['last_error'] ?? '—') ?><?php if (!empty($d['sent_error'])): ?><br>Gönderilenler klasörü: <?= h($d['sent_error']) ?><?php endif; ?></td></tr>
             <?php endforeach; ?>
             <?php if (!$sg['durum']): ?><tr><td colspan="5">Hesap yok.</td></tr><?php endif; ?>
             </tbody></table></div>
@@ -261,7 +261,9 @@ mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri
             <h3>Çeviri</h3>
             <p class="mail-ince"><strong>Sağlayıcı (sunucu ayarı):</strong> <?= h(mail_ceviri_yapilandirma_ozeti()) ?>
                 <?php $cd = mail_ceviri_durum_oku(); if ($cd): ?><br>Son kuyruk çalışması: <?= h((string)$cd['zaman']) ?> — durum: <?= h((string)$cd['durum']) ?><?= !empty($cd['mesaj']) ? ' (' . h((string)$cd['mesaj']) . ')' : '' ?><?php endif; ?>
-                <br>Sağlayıcı <code>config/local.php</code> içinden seçilir (bkz. docs/MAIL_CENTER_AGENT_BRIDGE.md); anahtar buraya yazılmaz.</p>
+                <?php $ku = mail_ceviri_kullanim_ozeti(); $kf = static fn(array $c): string => number_format($c['karakter'], 0, ',', '.') . ' karakter · ' . number_format($c['giris'] + $c['cikis'], 0, ',', '.') . ' token · ' . $c['cagri'] . ' çağrı' . ($c['hata'] > 0 ? ' (' . $c['hata'] . ' hatalı)' : ''); ?>
+                <br><strong>Çeviri kullanımı</strong> — bugün: <?= h($kf($ku['bugun'])) ?> · bu ay: <?= h($kf($ku['ay'])) ?> · günlük sınır: <?= $ku['limit'] > 0 ? h(number_format($ku['limit'], 0, ',', '.')) . ' karakter (kalan ' . h(number_format((int)$ku['kalan'], 0, ',', '.')) . ')' : 'yok' ?>
+                <br>Sağlayıcı <code>config/local.php</code> içinden seçilir (bkz. docs/MAIL_CENTER_AGENT_BRIDGE.md); anahtar buraya yazılmaz. Günlük sınır: <code>MAIL_TRANSLATE_GUNLUK_LIMIT</code> (karakter; token yalnız DeepSeek bildirir).</p>
             <div class="form-group"><label><input type="checkbox" name="translate_enabled" value="1"<?= !empty($f['translate_enabled']) ? ' checked' : '' ?>> Bu hesapta çeviriye izin ver — mail yalnız "Türkçeye çevir"e basınca (otomatik değil) üçüncü taraf çeviri servisine gönderilir (adres/başlık/ek hariç); sağlayıcı ayrıca sunucu ayarından açılmalıdır</label></div>
             <div class="form-group"><label>Hedef dil</label><input type="text" name="target_lang" maxlength="10" value="<?= $v('target_lang') ?>"></div>
 
