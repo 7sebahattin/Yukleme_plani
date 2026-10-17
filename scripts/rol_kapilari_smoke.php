@@ -75,6 +75,34 @@ ok('hiç yetki yok → null (403 mesajı gösterilir)', first_allowed_page() ===
 $PERMS = ['dashboard.read'];
 ok('yalnız dashboard.read → null (index.php zaten açılır)', first_allowed_page() === null);
 
+$PERMS = ['siparis.read'];
+ok('yalnız siparis.read → siparisler.php', first_allowed_page() === 'siparisler.php',
+    'dönen: ' . var_export(first_allowed_page(), true));
+
+$PERMS = ['siparis.read', 'records.read'];
+ok('records.read varsa sıra yine records.php (siparisler ondan SONRA)', first_allowed_page() === 'records.php');
+
+$PERMS = ['siparis.write', 'siparis.delete', 'siparis.match'];
+ok('siparis.read olmadan write/delete/match → siparisler.php YOK',
+    first_allowed_page() !== 'siparisler.php' && !can_siparis('read') && !can_siparis('write'));
+
+$PERMS = ['records.read', 'records.write', 'beyan.read', 'beyan.write', 'dashboard.read'];
+ok('sessiz köprü YOK: records.*/beyan.* siparis kapısını AÇMIYOR',
+    !can_siparis('read') && !can_siparis('write') && !can_siparis('delete') && !can_siparis('match'));
+
+$PERMS = ['siparis.read'];
+ok('can_siparis matrisi: read açık, write/delete/match kapalı',
+    can_siparis('read') && !can_siparis('write') && !can_siparis('delete') && !can_siparis('match'));
+$PERMS = ['siparis.read', 'siparis.write', 'siparis.match'];
+ok('can_siparis: operator seti → read/write/match açık, delete kapalı',
+    can_siparis('read') && can_siparis('write') && can_siparis('match') && !can_siparis('delete'));
+ok('can_siparis: bilinmeyen izin adı → false', !can_siparis('admin') && !can_siparis(''));
+
+$IS_ADMIN = true; $PERMS = [];
+ok('can_siparis: admin dört yetkiyi açar, bilinmeyeni açmaz',
+    can_siparis('read') && can_siparis('write') && can_siparis('delete') && can_siparis('match') && !can_siparis('x'));
+$IS_ADMIN = false;
+
 $IS_ADMIN = true; $PERMS = [];
 ok('admin (yetkisi boşalmış olsa da) → beyanlar.php',
     first_allowed_page() === 'beyanlar.php', 'admin hiçbir yere gidemiyor');
@@ -82,7 +110,7 @@ $IS_ADMIN = false;
 
 // first_allowed_page'in döndürdüğü her sayfa gerçekten var mı?
 foreach (['records.php','beyanlar.php','kantar.php','halkayit/index.php','reports.php',
-          'malzeme_stok.php','hesap.php','maliyet.php','personel_takip.php',
+          'malzeme_stok.php','hesap.php','mail.php','siparisler.php','maliyet.php','personel_takip.php',
           'definitions.php','users.php'] as $sayfa) {
     ok("hedef dosya mevcut: $sayfa", file_exists($ROOT . '/' . $sayfa));
 }

@@ -23,6 +23,8 @@ require_once __DIR__ . '/config/pdks.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 // Mail Merkezi: tablolar YALNIZ buradan (admin, CSRF, audit) kurulur; sayfalar şema değiştirmez.
 require_once __DIR__ . '/config/mail_core.php';
+// Siparişler (v371): tablolar YALNIZ buradan (admin, CSRF, audit) kurulur; sayfalar şema değiştirmez.
+require_once __DIR__ . '/config/siparis_core.php';
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -111,6 +113,7 @@ $pdks_ters_results = []; $pdks_ters_ran = false;   // v354 Ters Kart Takip (4 ye
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
+$siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -242,6 +245,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($mr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'mail', null, null,
                 ['operation' => 'create_table', 'table' => $mr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis') {
+    csrf_check($_POST['csrf'] ?? null);
+    $siparis_ran     = true;
+    $siparis_results = siparis_migrate($pdo);
+    foreach ($siparis_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'siparis', null, null,
+                ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cavus_b') {
@@ -527,6 +540,47 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (mail_tablolar() as $msql) { echo h($msql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" id="siparis" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Siparişler — Tablolar</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>siparis_sevkiyatlar</code>, <code>siparis_kalemler</code>, <code>siparis_belgeler</code>,
+      <code>siparis_belge_bag</code>, <code>siparis_catismalar</code>, <code>siparis_olaylar</code>, <code>siparis_pkl</code>,
+      <code>siparis_sayaclar</code>, <code>siparis_profiller</code>, <code>siparis_beyan</code> tablolarını ekler
+      (mevcut tablolara ALTER YOK, yabancı anahtar YOK). Kurulmazsa Siparişler kurulum uyarısı gösterir, diğer modüller etkilenmez.
+      <?php if ($siparis_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($siparis_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(siparis_tablolar()) as $sipt):
+          $sipte = siparis_tablo_var($pdo, $sipt); ?>
+          <tr>
+            <td><?= h($sipt) ?></td>
+            <td style="color:<?= $sipte ? '#1f9d55' : '#c0392b' ?>;font-weight:600;"><?= $sipte ? '✓ Var' : '✗ Eksik' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="siparis">
+      <button type="submit" class="btn btn-primary">Sipariş Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (siparis_tablolar() as $ssql) { echo h($ssql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>

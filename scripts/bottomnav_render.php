@@ -103,7 +103,7 @@ $PROFILLER = [
     'muhasebe' => [
         'ad' => 'Muhasebe benzeri', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
         'rol' => ['slug' => 'muhasebe', 'label' => 'Muhasebe'],
-        'perms' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements','attendance.foreman_accounts','attendance.foreman_payments','attendance.management_reports'],
+        'perms' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','siparis.read','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements','attendance.foreman_accounts','attendance.foreman_payments','attendance.management_reports'],
     ],
     'viewer' => [
         // Depo YOK: aktif depo seçilmemiş hâl (render_header değişkeni basmaz).
@@ -198,6 +198,7 @@ $GATES = [
     'stok.php'              => ['stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],
     'hesap.php'             => ['hesap.php', "require_hesap('read');", fn() => can('hesap.read') || is_admin(), 'hesap_can(read) = is_admin() || hesap.read'],
     'mail.php'              => ['mail.php', "require_mail('read');", fn() => can('mail.read') || can('mail.admin') || is_admin(), 'can_mail(read) = mail.read || mail.admin || is_admin()'],
+    'siparisler.php'        => ['siparisler.php', "require_siparis('read');", fn() => can('siparis.read') || is_admin(), 'can_siparis(read) = siparis.read || is_admin()'],
     'maliyet.php'           => ['maliyet.php', "require_maliyet('read');", fn() => can('maliyet.read') || is_admin(), 'can_maliyet(read) = maliyet.read || is_admin()'],
     'definitions.php'       => ['definitions.php', "require_perm('defs.read');", fn() => can('defs.read'), 'defs.read'],
     'users.php'             => ['users.php', "require_perm('users.admin');", fn() => can('users.admin'), 'users.admin'],
@@ -214,12 +215,12 @@ $GATES = [
 $ANAHTAR_SAYFA = [
     'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
     'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php',
-    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'ptak' => 'personel_takip.php',
+    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'ptak' => 'personel_takip.php',
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'cikma', 'beyan', 'kantar', 'mstok', 'hesap', 'mail', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'cikma', 'beyan', 'kantar', 'mstok', 'hesap', 'mail', 'siparis', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }
@@ -256,6 +257,7 @@ $SAYFALAR = [
     'reports'     => ['self' => '/reports.php',       'kapi' => 'reports.php',        'bolum' => 'reports.php',        'baslik' => 'Raporlar'],
     'maliyet'     => ['self' => '/maliyet.php',        'kapi' => 'maliyet.php',        'bolum' => 'reports.php',        'baslik' => 'Maliyet'],
     'hesap'       => ['self' => '/hesap.php',          'kapi' => 'hesap.php',          'bolum' => 'hesap.php',          'baslik' => 'Hesap'],
+    'siparisler'  => ['self' => '/siparisler.php',     'kapi' => 'siparisler.php',     'bolum' => 'siparisler.php',     'baslik' => 'Siparişler'],
     'definitions' => ['self' => '/definitions.php',    'kapi' => 'definitions.php',    'bolum' => 'definitions.php',    'baslik' => 'Tanımlar'],
 ];
 
