@@ -88,11 +88,11 @@ function mail_mesaj_listele(PDO $pdo, array $hesapIds, string $filtre, string $q
     $c->execute($p);
     $toplam = (int)$c->fetchColumn();
     $off = max(0, ($sayfa - 1) * $limit);
-    $st = $pdo->prepare("SELECT id, account_id, thread_id, from_name, from_addr, subject, received_at, is_read, has_attachments, tr_status,
+    $st = $pdo->prepare("SELECT id, account_id, thread_id, from_name, from_addr, subject, subject_tr, received_at, is_read, has_attachments, tr_status,
             needs_reply, replied_at, SUBSTR(body_text, 1, 300) AS ozet
         FROM mail_messages WHERE $w ORDER BY received_at DESC, id DESC LIMIT " . (int)$limit . ' OFFSET ' . (int)$off);
     $st->execute($p);
-    return ['satirlar' => array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'from_name', 'ozet']), $st->fetchAll(PDO::FETCH_ASSOC)), 'toplam' => $toplam];
+    return ['satirlar' => array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'subject_tr', 'from_name', 'ozet']), $st->fetchAll(PDO::FETCH_ASSOC)), 'toplam' => $toplam];
 }
 
 /** Giden kutusu listesi. @return array{satirlar:list<array>,toplam:int} */
@@ -406,6 +406,11 @@ function mail_post_isle(PDO $pdo, array $c, string $islem, array $g = [], array 
         $r = mail_ceviri_simdi($pdo, $sagl(), $mId, $hesapIds);
         $ok = $r['ok']; $mesaj = $r['mesaj'];
         if ($ok) audit_log_event('mail_translate_manual', 'mail_messages', $mId, null, ['sonuc' => 'ok']);
+    } elseif ($islem === 'ceviri_konu') {
+        // Ucuz yol: yalnız konu satırı (≤300 karakter) çevrilir, yalnız subject_tr yazılır; gövde çevirisi ayrıca yapılabilir.
+        $r = mail_ceviri_konu($pdo, $sagl(), $mId, $hesapIds, isset($opt['simdi']) ? (int)$opt['simdi'] : null);
+        $ok = $r['ok']; $mesaj = $r['mesaj'];
+        if ($ok && $r['karakter'] > 0) audit_log_event('mail_translate_subject', 'mail_messages', $mId, null, ['karakter' => $r['karakter']]);
     } elseif ($islem === 'cevap_onizle') {
         // Türkçe taslak → (gerekirse) kaydet → çeviri önizle. SMTP'ye DOKUNMAZ.
         if (!$c['cevap']) return $yasak('Cevap yazmak için mail.reply yetkisi gerekir.');

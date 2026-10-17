@@ -183,3 +183,7 @@ a.mail-oge:hover { background: var(--surface-2); }
     .mail-hesap-eylem .btn { width: 100%; min-height: 44px; }
 }
 @media (prefers-reduced-motion: no-preference) { .mail-chip, .mail-oge { transition: background-color .12s, border-color .12s; } }
+
+/* Dalga 3B: konunun Türkçesi (yalnız konu çevrilince ya da tam çeviriden sonra) */
+.mail-konu-tr { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-konu-tr--okuyucu { white-space: normal; overflow-wrap: anywhere; margin: -4px 0 8px; font-size: .9rem; }
