@@ -413,6 +413,15 @@ $srv18->cfg['klasorler']['Sent']['mesajlar'][6] = msgS('s6', 'Re: Order 4', '202
 senk($a18);
 ok('append_sent geri okuması: zaten cevaplanmış ebeveynin replied_at değeri EZİLMEZ', $db->query("SELECT replied_at FROM mail_messages WHERE account_id = $a18 AND message_id = 'q4@musteri.com'")->fetchColumn() === '2026-10-05 14:10:00');
 
+require_once $ROOT . '/config/mail_smtp.php';
+require_once $ROOT . '/config/mail_outbox.php';
+$sentMsg = mail_mesaj_getir($db, (int)$db->query("SELECT id FROM mail_messages WHERE account_id = $a18 AND message_id = 's1@asya.com'")->fetchColumn(), $kimlik18);
+$gelenMsg = mail_mesaj_getir($db, (int)$db->query("SELECT id FROM mail_messages WHERE account_id = $a18 AND message_id = 'q3@musteri.com'")->fetchColumn(), $kimlik18);
+ok('Gönderilenler satırı "kendi mailiniz" diye tanınır; gelen satırı tanınmaz', mail_mesaj_gonderilen_mi($db, $sentMsg) && !mail_mesaj_gonderilen_mi($db, $gelenMsg));
+ok('Gönderilenler satırına cevap taslağı AÇILAMAZ; gelen mailde açılır', !mail_outbox_taslak($db, (int)$sentMsg['id'], $kimlik18, 1, bin2hex(random_bytes(16)), ['body_tr' => 'x', 'target_lang' => 'en'])['ok']
+    && mail_outbox_taslak($db, (int)$gelenMsg['id'], $kimlik18, 1, bin2hex(random_bytes(16)), ['body_tr' => 'x', 'target_lang' => 'en'])['ok']);
+ok('mail_cevap_engeli: gönderilen satırda Türkçe neden, gelen satırda boş', str_contains(mail_cevap_engeli($db, $sentMsg), 'Gönderilenler klasöründeki kendi mailinizdir') && mail_cevap_engeli($db, $gelenMsg) === '');
+
 echo "\n=== 19. Gönderilenler: hata yalıtımı, kalan, aynı klasör ===\n";
 $a19 = hesapEkle('sent19@asya.com', 'imap-parola-ABC', ['sent_folder' => 'Sent']);
 $db->exec("UPDATE mail_accounts SET created_at = '2026-10-01 00:00:00' WHERE id = $a19");

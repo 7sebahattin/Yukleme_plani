@@ -688,6 +688,17 @@ function mail_gonderilen_disla_sql(string $tablo = 'mail_messages'): string
         . " AND _ga.sent_folder <> _ga.sync_folder AND $tablo.folder = _ga.sent_folder)";
 }
 
+/** Bu mesaj hesabın GÖNDERİLENLER klasöründen mi okundu (kendi yazdığımız mail)? Cevap yazılamaz / gelen listelerinde yer almaz. */
+function mail_mesaj_gonderilen_mi(PDO $pdo, array $m): bool
+{
+    $st = $pdo->prepare('SELECT sent_folder, sync_folder FROM mail_accounts WHERE id = ?');
+    $st->execute([(int)($m['account_id'] ?? 0)]);
+    $h = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$h) return false;
+    $g = trim((string)($h['sent_folder'] ?? ''));
+    return $g !== '' && $g !== (string)$h['sync_folder'] && (string)($m['folder'] ?? '') === $g;
+}
+
 /** Görünür hesaplar için okunmamış sayısı: [hesapId => sayı]. Tablo yoksa []. */
 function mail_okunmamis_sayilari(int $userId, ?PDO $pdo = null, ?bool $yonetici = null): array
 {

@@ -136,6 +136,7 @@ function mail_outbox_taslak(PDO $pdo, int $msgId, array $hesapIds, int $uid, str
     $hesap = $a->fetch(PDO::FETCH_ASSOC);
     if (!$hesap || (int)$hesap['is_active'] !== 1) return $hata('Hesap pasif.');
     if (($hesap['smtp_pass_enc'] ?? '') === '') return $hata('Hesapta SMTP şifresi tanımlı değil.');
+    if (mail_mesaj_gonderilen_mi($pdo, $m)) return $hata('Gönderilenler klasöründeki kendi mailinize cevap yazılamaz.');
 
     $var = $pdo->prepare('SELECT id, in_reply_to_msg_id FROM mail_outbox WHERE account_id = ? AND idempotency_key = ?');
     $var->execute([(int)$m['account_id'], $idemKey]);

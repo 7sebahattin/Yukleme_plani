@@ -334,6 +334,7 @@ function mail_cevap_engeli(PDO $pdo, array $m): string
     $h = $a->fetch(PDO::FETCH_ASSOC);
     if (!$h || (int)$h['is_active'] !== 1) return 'Hesap pasif olduğu için cevap yazılamaz. Önce Hesaplar ekranından hesabı aktifleştirin.';
     if (($h['smtp_pass_enc'] ?? '') === '') return 'Hesapta SMTP şifresi tanımlı değil; cevap gönderilemez. Hesaplar ekranından SMTP şifresini girin.';
+    if (mail_mesaj_gonderilen_mi($pdo, $m)) return 'Bu, Gönderilenler klasöründeki kendi mailinizdir; cevap yazılamaz (müşterinin mailini açıp oradan cevaplayın).';
     $to = trim((string)($m['reply_to_addr'] ?: $m['from_addr']));
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Cevaplanacak adres geçersiz ya da yok.';
     return '';
