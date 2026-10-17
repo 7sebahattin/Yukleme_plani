@@ -400,6 +400,12 @@ mail_assets();
                     <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Çeviriyi tekrar dene' : 'Türkçeye çevir' ?></button>
                     <?php endif; ?>
                 </form>
+                <?php if (can_beyan('create') && can_beyan('source.write')): /* Dalga 3A: mail_beyan_taslak_yetkisi() ile AYNI kapı; yalnız mail id'si POST edilir, kaydetmez */ ?>
+                <form method="post" action="mail_beyan_taslak.php" class="mail-satir-form">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">
+                    <button class="btn" id="mailBeyanTaslak" type="submit" title="Mail metniyle yeni beyan formu açar; hiçbir şey kaydedilmez, kaydetmeden önce gözden geçirirsiniz">📝 Beyan Taslağı Oluştur</button>
+                </form>
+                <?php endif; ?>
             </div>
 
             <h2 class="mail-okuyucu-konu"><?= h($m['subject'] ?: '(konu yok)') ?></h2>

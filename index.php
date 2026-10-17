@@ -134,11 +134,13 @@ if (can('hesap.read') || is_admin()) {
 // Mail Merkezi özeti — kartın kapısı mail.php'nin kapısıyla AYNI (can_mail). Tablo kurulu
 // değilse kart yine görünür (sayfa kurulum durumunu anlatır), yalnız rozet yok.
 $mail_okunmamis = 0;
+$mail_cevapsiz24 = 0;   // 24 saattir cevap bekleyen mail (needs_reply=1, replied_at boş, ACL kapsamında)
 if (can_mail('read')) {
     try {
+        $mail_okunmamis = nav_mail_okunmamis();   // kenar çubuğu rozetiyle AYNI sayı (istek başına tek sorgu)
         require_once __DIR__ . '/config/mail_core.php';
-        $mail_okunmamis = array_sum(mail_okunmamis_sayilari((int)$auth_user['id']));
-    } catch (Throwable $e) { $mail_okunmamis = 0; }
+        $mail_cevapsiz24 = mail_cevapsiz_eski_sayisi((int)$auth_user['id'], 24);
+    } catch (Throwable $e) { $mail_okunmamis = 0; $mail_cevapsiz24 = 0; }
 }
 
 // Kullanıcı sayısı — sadece users.admin yetkisiyle hesapla
@@ -358,6 +360,9 @@ if (nav_ptak_gorunur()):
         <?php if ($mail_okunmamis > 0): ?>
         <div class="home-card-badge" style="background:var(--warn)"><?= (int)$mail_okunmamis ?></div>
         <div class="home-card-sub">Okunmamış: <?= (int)$mail_okunmamis ?></div>
+        <?php endif; ?>
+        <?php if ($mail_cevapsiz24 > 0): ?>
+        <div class="home-card-sub home-card-uyari" style="color:var(--danger);font-weight:600">24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail</div>
         <?php endif; ?>
     </a>
 <?php endif; ?>

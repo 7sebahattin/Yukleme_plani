@@ -81,6 +81,7 @@ $fileRoot = 'file://' . $ROOT . '/';
 function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perms = ['mail.read', 'mail.reply', 'mail.send'], int $uid = 2, string $dosya = 'mail.php'): string {
     global $ROOT, $cssBase, $cssMail, $fileRoot, $PERMS, $IS_ADMIN, $UID;
     $PERMS = $perms; $IS_ADMIN = $yonetici; $UID = $uid;
+    nav_mail_okunmamis(true);   // okunmamış rozeti istek başına önbelleklenir; sayfalar arası yetki/kullanıcı değişir
     $src = (string)file_get_contents($ROOT . '/' . $dosya);
     $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate|mail_smtp|mail_outbox)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
@@ -93,7 +94,8 @@ function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perm
     $html = preg_replace_callback('#<link rel="stylesheet" href="[^"]*assets/style\.css\?v=\d+">#', fn() => "<style data-kaynak=\"style.css\">\n$cssBase\n</style>", $html, 1, $n1);
     $html = preg_replace_callback('#<link rel="stylesheet" href="assets/mail\.css\?v=\d+">#', fn() => "<style data-kaynak=\"mail.css\">\n$cssMail\n</style>", $html, 1, $n2);
     if ($n1 !== 1 || $n2 !== 1) throw new RuntimeException("CSS bağlantısı bulunamadı ($ad): style=$n1 mail=$n2");
-    $html = str_replace(['src="assets/', 'href="assets/', '"/assets/', 'href="manifest.json"'], ['src="' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'assets/', '"' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'manifest.json"'], $html);
+    // base_url() CLI'de '../' döner → app.js (alt çubuk "Diğer" sayfası vb.) da gerçek tarayıcıda yüklensin
+    $html = str_replace(['src="assets/', 'href="assets/', '"/assets/', '"../assets/', 'href="manifest.json"'], ['src="' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'assets/', '"' . $fileRoot . 'assets/', '"' . $fileRoot . 'assets/', 'href="' . $fileRoot . 'manifest.json"'], $html);
     return $html;
 }
 
@@ -118,6 +120,10 @@ $sayfalar = [
     'onay_gelen'   => [['m' => $ID_TR, 'o' => $G_TR], false, ['mail.read', 'mail.reply', 'mail.send']],   // gelen listesi + onay paneli: liste bağlantıları o= taşımamalı
     'cevap_bekleyen' => [['f' => 'cevap'], false, ['mail.read', 'mail.reply']],   // toplu "cevaplandı say"
     'detay_noreply' => [['m' => $ID_TR, 'v' => 'tr'], false, ['mail.read']],   // mail.reply yok: boş yapışkan Cevapla şeridi çizilmez
+    // Dalga 3A: okunmamış rozeti (kenar çubuğu / üst menü / alt çubuk / "Diğer") + okuyucuda "Beyan Taslağı Oluştur" düğmesi
+    'rozet_mail'   => [[], false, ['dashboard.read', 'mail.read', 'mail.reply']],
+    'rozet_diger'  => [[], false, ['dashboard.read', 'records.read', 'reports.read', 'beyan.read', 'kantar.read', 'stok.read', 'hesap.read', 'mail.read']],
+    'detay_beyan'  => [['m' => $ID_TR, 'v' => 'tr'], false, ['mail.read', 'mail.reply', 'mail.send', 'beyan.read', 'beyan.write']],
     'hesaplar'     => [[], true, [], 1, 'mail_hesaplar.php'],   // yönetici: hesap tablosu (mobil kart), uyarılar, senkron günlüğü
 ];
 $manifest = ['sayfalar' => [], 'id' => ['html' => $ID_HTML, 'tr' => $ID_TR, 'xss' => $ID_XSS]];

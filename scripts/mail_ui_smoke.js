@@ -417,6 +417,97 @@ const MOBIL = (w) => w < 768;
         }
     }
 
+    // ── Dalga 3A: okunmamış rozeti (kenar çubuğu · tablet üst menü · alt çubuk · "Diğer") + okuyucuda Beyan Taslağı düğmesi ──
+    {
+        const lum = (c) => { const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+        const oran = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        // Rozet ölçümü: görünür · sayı biçimi · dokunma halkası dışında viewport içinde · kontrast ≥ 4.5 · boyut (≥16px yükseklik)
+        const olc = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+            return { gorunur: cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0, metin: e.textContent.trim(), h: r.height, w: r.width, l: r.left, r: r.right, t: r.top, b: r.bottom,
+                fg: cs.color, bg: cs.backgroundColor, vw: innerWidth, vh: innerHeight, hidden: e.hidden, tasma: document.documentElement.scrollWidth - innerWidth }; }, sel);
+        for (const koyu of [false, true]) {
+            const tag = koyu ? 'KOYU' : 'açık';
+            for (const [w, h] of [[360, 740], [390, 844], [768, 900], [899, 900], [900, 800], [1280, 800]]) {
+                const { ctx, page, hatalar } = await ac('rozet_mail', w, h, { koyu });
+                if (koyu) { await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await page.waitForTimeout(120); }
+                let sel, ad;
+                if (w >= 900) { sel = '.sidebar-link[href$="mail.php"] .nav-rozet'; ad = 'kenar çubuğu'; }
+                else if (w >= 768) { sel = '.topnav a[href$="mail.php"] .nav-rozet'; ad = 'üst menü'; }
+                else { sel = '.bn-item[data-nav="mail"] .nav-rozet'; ad = 'alt çubuk'; }
+                const r = await olc(page, sel);
+                ok(`[${w}] rozet ${tag} ${ad}: görünür, sayı biçimli`, !!r && r.gorunur && /^(\d{1,2}|99\+)$/.test(r.metin), JSON.stringify(r));
+                if (r) {
+                    ok(`[${w}] rozet ${tag} ${ad}: yükseklik ≥ 16px, ekran içinde, yatay taşma yok`, r.h >= 16 && r.l >= 0 && r.r <= r.vw && r.t >= -1 && r.tasma <= 0, JSON.stringify(r));
+                    const bg = koyu || true ? r.bg : r.bg;
+                    ok(`[${w}] rozet ${tag} ${ad}: kontrast ≥ 4.5:1`, oran(r.fg, bg) >= 4.5, oran(r.fg, bg).toFixed(2) + ' ' + r.fg + ' / ' + bg);
+                }
+                const lbl = await page.evaluate((s) => { const e = document.querySelector(s); const a = e && e.closest('a'); return a && a.getAttribute('aria-label'); }, sel);
+                ok(`[${w}] rozet ${tag} ${ad}: bağlantı aria-label "okunmamış" der`, /, \d+ okunmamış$/.test(lbl || ''), String(lbl));
+                if (w < 768) {
+                    const kutu = await page.evaluate(() => { const rz = document.querySelector('.bn-item[data-nav="mail"] .nav-rozet'), dk = document.querySelector('.bn-dock'); if (!rz || !dk) return null; const a = rz.getBoundingClientRect(), d = dk.getBoundingClientRect(); return { ust: a.top - d.top, sag: d.right - a.right }; });
+                    ok(`[${w}] rozet ${tag} alt çubuk: dok sınırlarının içinde (kırpılmıyor)`, !!kutu && kutu.sag >= 0, JSON.stringify(kutu));
+                }
+                ok(`[${w}] rozet ${tag}: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+                if (!koyu && (w === 390 || w === 1280 || w === 768)) await page.screenshot({ path: path.join(SHOTS, `${w}_rozet_${koyu ? 'koyu' : 'acik'}.png`) });
+                if (koyu && (w === 390 || w === 1280)) await page.screenshot({ path: path.join(SHOTS, `${w}_rozet_koyu.png`) });
+                await ctx.close();
+            }
+            // "Diğer": Mail güncel öğe. app.js kullanım puanıyla Mail'i dar ekranda 4. slottan "Diğer"e düşürür, geniş ekranda (≥390) slota alır:
+            // her iki durumda da rozet tam bir yerde görünür olmalı (slot karosu YA DA "Diğer" düğmesi) ve "Diğer" sayfasında Mail karosunda bulunmalı.
+            for (const [w, h] of [[360, 740], [390, 844], [430, 900]]) {
+                const { ctx, page, hatalar } = await ac('rozet_diger', w, h, { koyu });
+                if (koyu) { await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await page.waitForTimeout(120); }
+                const slotta = await page.evaluate(() => { const a = document.querySelector('.bn-item[data-nav="mail"]'); return !!a && !a.hidden && getComputedStyle(a).display !== 'none' && a.getBoundingClientRect().width > 0; });
+                const rs = await olc(page, '.bn-item[data-nav="mail"] .nav-rozet');
+                const rm = await olc(page, '#bnMore .nav-rozet-more');
+                const gorunenSayi = (rs && slotta && rs.gorunur ? 1 : 0) + (rm && rm.gorunur && !rm.hidden ? 1 : 0);
+                ok(`[${w}] rozet ${tag} Mail (${slotta ? 'slotta' : '"Diğer"de'}): rozet TAM BİR yerde görünür`, gorunenSayi === 1, JSON.stringify({ slotta, rs, rm }));
+                const hedef = slotta ? rs : rm;
+                if (hedef) {
+                    ok(`[${w}] rozet ${tag} Mail (${slotta ? 'slotta' : '"Diğer"de'}): ekran içinde, kontrast ≥ 4.5:1`, hedef.r <= hedef.vw && hedef.l >= 0 && hedef.tasma <= 0 && oran(hedef.fg, hedef.bg) >= 4.5, JSON.stringify(hedef));
+                }
+                if (!slotta) {
+                    const al = await page.$eval('#bnMore', e => e.getAttribute('aria-label'));
+                    ok(`[${w}] rozet ${tag} "Diğer": aria-label mail ve okunmamışı söyler`, /Mail Merkezi, \d+ okunmamış/.test(al || ''), al);
+                }
+                await page.click('#bnMore'); await page.waitForTimeout(350);
+                const t = await olc(page, '.bn-tile[data-nav="mail"] .nav-rozet');
+                ok(`[${w}] rozet ${tag} "Diğer" sayfası: Mail karosunda rozet görünür`, !!t && t.gorunur && t.r <= t.vw && t.l >= 0, JSON.stringify(t));
+                if (t) ok(`[${w}] rozet ${tag} "Diğer" sayfası: kontrast ≥ 4.5:1`, oran(t.fg, t.bg) >= 4.5, oran(t.fg, t.bg).toFixed(2));
+                if (!koyu && w === 390) await page.screenshot({ path: path.join(SHOTS, `${w}_rozet_diger_sayfa.png`) });
+                ok(`[${w}] rozet ${tag} "Diğer": konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+                await ctx.close();
+            }
+        }
+        // Rozet app.js tarafından yok edilmiyor / hareket yok (reducedMotion açık; rozetin geçiş/animasyonu zaten yok)
+        {
+            const { ctx, page } = await ac('rozet_mail', 390, 844);
+            const an = await page.$eval('.bn-item[data-nav="mail"] .nav-rozet', e => { const c = getComputedStyle(e); return c.animationName + '|' + c.transitionDuration; });
+            ok('[390] rozet: animasyon yok (prefers-reduced-motion\'a uygun)', an === 'none|0s', an);
+            await ctx.close();
+        }
+        // "📝 Beyan Taslağı Oluştur" düğmesi (okuyucu araç çubuğu): yetkiliye görünür, ekran içinde, mobilde ≥ 40px, taşma yok; yetkisize YOK
+        for (const [w, h] of [[360, 740], [390, 844], [768, 900], [1280, 800]]) {
+            const { ctx, page, hatalar } = await ac('detay_beyan', w, h);
+            const r = await olc(page, '#mailBeyanTaslak');
+            ok(`[${w}] beyan taslağı düğmesi görünür`, !!r && r.gorunur, JSON.stringify(r));
+            if (r) {
+                ok(`[${w}] beyan taslağı düğmesi ekran içinde, yatay taşma yok`, r.l >= 0 && r.r <= r.vw && r.tasma <= 0, JSON.stringify(r));
+                if (MOBIL(w)) ok(`[${w}] beyan taslağı düğmesi dokunma hedefi ≥ 40px`, r.h >= 39.5, r.h + '');
+            }
+            const arac = await page.evaluate(() => { const a = document.querySelector('.mail-okuyucu-arac'); return a ? { tasma: a.scrollWidth - a.clientWidth } : null; });
+            ok(`[${w}] okuyucu araç çubuğu taşmıyor`, !!arac && arac.tasma <= 1, JSON.stringify(arac));
+            if (w === 390 || w === 1280) await page.screenshot({ path: path.join(SHOTS, `${w}_detay_beyan.png`) });
+            ok(`[${w}] beyan taslağı: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
+        {
+            const { ctx, page } = await ac('detay_noreply', 390, 844);   // beyan yetkisi olmayan kullanıcı (yalnız mail.read)
+            ok('[390] beyan yetkisi yoksa düğme YOK', (await page.$('#mailBeyanTaslak')) === null);
+            await ctx.close();
+        }
+    }
+
     // ── Mail Hesapları (yönetici): hesap satırı düğmeleri hiçbir genişlikte kesilmez; cron komutu kutuya sığar ──
     if (M.sayfalar.includes('hesaplar')) for (const [w, h] of EKRANLAR) {
         const { ctx, page, hatalar } = await ac('hesaplar', w, h);

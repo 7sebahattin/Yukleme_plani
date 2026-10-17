@@ -693,3 +693,43 @@ function mail_okunmamis_sayilari(int $userId, ?PDO $pdo = null, ?bool $yonetici 
         return [];
     }
 }
+
+/**
+ * Görünür hesaplardaki okunmamış mail TOPLAMI — TEK sorgu (her sayfanın kenar çubuğu / alt çubuğu rozeti için).
+ * Görünürlük mail_gorunur_hesap_idleri() ile AYNI: yönetici = tüm hesaplar, diğerleri = atanmış + AKTİF hesaplar.
+ * Tablo yok / hata → 0 (rozet sayfayı ASLA bozmaz). mail_okunmamis_sayilari() toplamıyla birebir eşittir (test denetler).
+ */
+function mail_okunmamis_toplam(int $userId, ?PDO $pdo = null, ?bool $yonetici = null): int
+{
+    return mail_gorunur_say('is_read = 0', [], $userId, $pdo, $yonetici);
+}
+
+/**
+ * Cevap bekleyen (needs_reply=1, replied_at boş) ve $saat saatten ESKİ mailler — Ana Sayfa "N saattir cevapsız" uyarısı.
+ * ACL mail_okunmamis_toplam() ile aynı. Hata → 0.
+ */
+function mail_cevapsiz_eski_sayisi(int $userId, int $saat = 24, ?PDO $pdo = null, ?bool $yonetici = null): int
+{
+    $esik = date('Y-m-d H:i:s', time() - max(1, $saat) * 3600);
+    return mail_gorunur_say('needs_reply = 1 AND replied_at IS NULL AND received_at < ?', [$esik], $userId, $pdo, $yonetici);
+}
+
+/** @internal Görünür hesaplardaki mesajları $kosul ile sayar (tek sorgu; kosul yalnız sabit SQL). */
+function mail_gorunur_say(string $kosul, array $par, int $userId, ?PDO $pdo, ?bool $yonetici): int
+{
+    try {
+        $pdo = $pdo ?? db();
+        $yonetici = $yonetici ?? mail_tum_hesaplar_mi();
+        if ($yonetici) {
+            $st = $pdo->prepare("SELECT COUNT(*) FROM mail_messages WHERE $kosul");
+            $st->execute($par);
+        } else {
+            $st = $pdo->prepare("SELECT COUNT(*) FROM mail_messages WHERE $kosul AND account_id IN
+                (SELECT a.id FROM mail_accounts a JOIN mail_account_users u ON u.account_id = a.id WHERE u.user_id = ? AND a.is_active = 1)");
+            $st->execute(array_merge($par, [$userId]));
+        }
+        return max(0, (int)$st->fetchColumn());
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
