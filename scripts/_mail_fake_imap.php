@@ -18,6 +18,7 @@ final class FakeMailStream implements MailStream
     public array $eklenen = [];
     private ?array $appendBekle = null;   // şablon sunucu: her bağlantının komutları buraya da yazılır
     public bool $kapandi = false;
+    public ?string $secili = null;          // çok klasörlü kip: şu an EXAMINE edilen klasör
     private string $in = '';
     private string $out = '';
     private ?string $bekleyenTag = null;   // AUTHENTICATE devam bekliyor
@@ -128,8 +129,18 @@ final class FakeMailStream implements MailStream
                 $this->cevap($u === $this->cfg['user'] && $pw === $this->cfg['pass'] ? "$tag OK logged in\r\n" : "$tag NO [AUTHENTICATIONFAILED] bad login\r\n");
                 break;
             case 'EXAMINE': case 'SELECT':
+                // Çok klasörlü kip (cfg['klasorler'] = ad => ['mesajlar'=>…, 'uidvalidity'=>…]): seçilen klasörün mesajlarına geçilir.
+                // Tek klasörlü eski testler cfg['klasorler'] vermez → davranış aynı kalır. Listede olmayan klasör NO döner (gerçek sunucu gibi).
+                $uidvKlasor = $this->cfg['uidvalidity'];
+                if (isset($this->cfg['klasorler']) && preg_match('/^"((?:[^"\\\\]|\\\\.)*)"/', $arg, $km)) {
+                    $kad = stripcslashes($km[1]);
+                    if (!isset($this->cfg['klasorler'][$kad])) { $this->cevap("$tag NO [NONEXISTENT] Mailbox does not exist\r\n"); break; }
+                    $this->mesajlar = $this->cfg['klasorler'][$kad]['mesajlar'] ?? [];
+                    $uidvKlasor = $this->cfg['klasorler'][$kad]['uidvalidity'] ?? $uidvKlasor;
+                    $this->secili = $kad;
+                }
                 $uids = array_keys($this->mesajlar); $max = $uids ? max($uids) : 0;
-                $this->cevap('* ' . count($uids) . " EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY {$this->cfg['uidvalidity']}] ok\r\n"
+                $this->cevap('* ' . count($uids) . " EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY {$uidvKlasor}] ok\r\n"
                     . '* OK [UIDNEXT ' . ($this->cfg['uidnext'] ?? $max + 1) . "] next\r\n* FLAGS (\\Seen \\Answered)\r\n$tag OK [READ-ONLY] examined\r\n");
                 break;
             case 'UID':

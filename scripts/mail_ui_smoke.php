@@ -195,6 +195,35 @@ ok('v369: Orijinal sekmesinde de araç çubuğunda TEK "Türkçeye çevir" düğ
 $h = sayfa_render('mail.php', []);
 ok('v369: otomatik çeviri kapalıyken listede "çeviri bekliyor" rozeti YOK', !str_contains($h, 'çeviri bekliyor'));
 ok('hesap ekranı sağlayıcıyı AÇIK gösteriyor', str_contains(sayfa_render('mail_hesaplar.php'), 'AÇIK — sağlayıcı: mymemory'));
+// ── Dalga 3B: yalnız konu çevirisi + Gönderilenler satırları + kullanım özeti ──
+$hOrj = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'orj']);
+ok('3B: Orijinal sekmesi araç çubuğunda "Yalnız konuyu çevir" (islem=ceviri_konu), tam çeviri düğmesinin yanında', substr_count($hOrj, 'value="ceviri_konu"') === 1 && str_contains($hOrj, 'Yalnız konuyu çevir') && substr_count($hOrj, 'value="ceviri_simdi"') === 1);
+$hTr = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
+ok('3B: Türkçe sekmesi (çevrilmemiş) bilgi kutusunda da "Yalnız konuyu çevir" var', str_contains($hTr, 'value="ceviri_konu"') && str_contains($hTr, 'name="csrf"'));
+ok('3B: konu çevirisi yokken Türkçe konu satırı YOK', !str_contains($hOrj, 'mail-konu-tr'));
+$db->exec("UPDATE mail_messages SET subject_tr = 'Kalın konu (Türkçesi) <b>x</b>' WHERE id = $mid");
+$hOrj = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'orj']);
+ok('3B: subject_tr varsa okuyucuda orijinal konunun ALTINDA küçük satır (kaçırılmış)', str_contains($hOrj, 'mail-konu-tr--okuyucu') && str_contains($hOrj, 'Kalın konu (Türkçesi) &lt;b&gt;x&lt;/b&gt;') && !str_contains($hOrj, '<b>x</b>'));
+ok('3B: konu çevrildiyse "Yalnız konuyu çevir" düğmesi kalkar; tam çeviri düğmesi kalır', !str_contains($hOrj, 'value="ceviri_konu"') && str_contains($hOrj, 'value="ceviri_simdi"'));
+$hListe = sayfa_render('mail.php', []);
+ok('3B: listede subject_tr küçük soluk satır (kaçırılmış)', str_contains($hListe, 'class="mail-konu-tr"') && str_contains($hListe, 'Kalın konu (Türkçesi) &lt;b&gt;x&lt;/b&gt;'));
+$db->exec("UPDATE mail_messages SET subject_tr = NULL WHERE id = $mid");
+// Gönderilenler klasöründen okunmuş satır gelen listesinde görünmez
+$db->exec("UPDATE mail_accounts SET sent_folder = 'Sent' WHERE id = 1");
+$db->exec("INSERT INTO mail_messages (account_id, folder, uidvalidity, uid, message_id_hash, subject, from_name, from_addr, received_at, body_text, is_read, needs_reply, tr_status, to_addrs, cc_addrs)
+    VALUES (1, 'Sent', 1, 1, '" . sha1('sent-ui') . "', 'GÖNDERİLEN-SATIRI-UI', 'Biz', 'info@asya.com', '2026-10-05 11:00:00', 'giden', 1, 0, 'skipped', '[]', '[]')");
+$hListe = sayfa_render('mail.php', []);
+ok('3B: Gönderilenler klasöründen okunan satır "Gelen" listesinde YOK', !str_contains($hListe, 'GÖNDERİLEN-SATIRI-UI') && str_contains($hListe, 'Kalın'));
+$IS_ADMIN = true; $PERMS = [];
+$hh = sayfa_render('mail_hesaplar.php');
+ok('3B: yönetici ekranı çeviri kullanımı (bugün/ay/sınır) gösterir', str_contains($hh, 'Çeviri kullanımı') && str_contains($hh, 'bu ay:') && str_contains($hh, 'günlük sınır:'));
+$kulDizin = sys_get_temp_dir() . '/mail_ui_kul_' . getmypid(); @mkdir($kulDizin, 0700, true);
+mail_ceviri_ayar(['dizin' => $kulDizin, 'limit' => 5000]);
+mail_ceviri_kullanim_kaydet('deepseek', 120, 300, 40);
+$hh = sayfa_render('mail_hesaplar.php');
+ok('3B: sayaç + sınır ekranda (karakter, token, çağrı, kalan)', str_contains($hh, '120 karakter') && str_contains($hh, '340 token') && str_contains($hh, '1 çağrı') && str_contains($hh, '5.000 karakter (kalan 4.880)'));
+mail_ceviri_ayar(['dizin' => $kulDizin, 'limit' => 0]);
+$IS_ADMIN = false; $PERMS = ['mail.read', 'mail.reply'];
 $IS_ADMIN = false; $PERMS = ['mail.read', 'mail.reply'];
 $IS_ADMIN = false; $PERMS = ['mail.read'];
 $h = sayfa_render('mail.php', ['m' => (string)$mid]);
