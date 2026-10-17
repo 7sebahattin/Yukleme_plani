@@ -1,0 +1,119 @@
+{
+ "_aciklama": "SENTETİK test verisi. PC: TC900011.10 kalibre bölümü PO/LL'den farklı (14 yok, 12'de 2810 = 200'e bölünmez), miras fiyat; TC900099.10 hiçbir PO'da yok (taslak açar).",
+ "doc_type": "price_confirmation",
+ "header": {
+  "cw": 51,
+  "cw_year": 2026,
+  "date": "2026-12-10",
+  "time": null,
+  "supplier_no": "1102720",
+  "clerk": "CLERK",
+  "clerk_email": "test@example.invalid",
+  "page_count": 1
+ },
+ "cw": {
+  "week": 51,
+  "year": 2026
+ },
+ "destination_text": "LIDL YY GMBH, LIDL ZZ SRL",
+ "sold_to_list": [
+  "LIDL YY GMBH",
+  "LIDL ZZ SRL"
+ ],
+ "rows": [
+  {
+   "row_no": 1,
+   "item_group": 1,
+   "sold_to": "LIDL YY GMBH",
+   "ian": "90002",
+   "description": "Testfruit 10 PC LOSE (TR)",
+   "product": "Testfruit",
+   "pcs_per_box": 10,
+   "pack_mode": "LOSE",
+   "origin": "TR",
+   "collo_content": 10,
+   "preisrel": "-",
+   "variety": "TESTVAR",
+   "box_weight": "3,5 KG",
+   "incoterm": "EXW",
+   "price": 4.11,
+   "currency": "EUR",
+   "price_unit": "CAR",
+   "order_ref": "TC900011.10",
+   "pricing_date": "2026-12-12",
+   "quantity": 2400,
+   "promo": null,
+   "price_inherited": false
+  },
+  {
+   "row_no": 2,
+   "item_group": 2,
+   "sold_to": "LIDL YY GMBH",
+   "ian": "90002",
+   "description": "Testfruit 12 PC LOSE (TR)",
+   "product": "Testfruit",
+   "pcs_per_box": 12,
+   "pack_mode": "LOSE",
+   "origin": "TR",
+   "collo_content": 12,
+   "preisrel": "-",
+   "variety": "TESTVAR",
+   "box_weight": "3,5 KG",
+   "incoterm": "EXW",
+   "price": 4.11,
+   "currency": "EUR",
+   "price_unit": "CAR",
+   "order_ref": "TC900011.10",
+   "pricing_date": "2026-12-12",
+   "quantity": 2810,
+   "promo": null,
+   "price_inherited": true
+  },
+  {
+   "row_no": 3,
+   "item_group": 3,
+   "sold_to": "LIDL ZZ SRL",
+   "ian": "90009",
+   "description": "Testfruit 14 PC LOSE (TR)",
+   "product": "Testfruit",
+   "pcs_per_box": 14,
+   "pack_mode": "LOSE",
+   "origin": "TR",
+   "collo_content": 14,
+   "preisrel": "-",
+   "variety": "TESTVAR2",
+   "box_weight": "3,5 KG",
+   "incoterm": "EXW",
+   "price": 5.22,
+   "currency": "EUR",
+   "price_unit": "CAR",
+   "order_ref": "TC900099.10",
+   "pricing_date": "2026-12-13",
+   "quantity": 960,
+   "promo": null,
+   "price_inherited": false
+  }
+ ],
+ "totals_by_order_ref": [
+  {
+   "order_ref": "TC900011.10",
+   "quantity": 5210,
+   "pricing_date": "2026-12-12"
+  },
+  {
+   "order_ref": "TC900099.10",
+   "quantity": 960,
+   "pricing_date": "2026-12-13"
+  }
+ ],
+ "checks": [],
+ "warnings": [],
+ "meta": {
+  "pages": 1,
+  "creator": "TEST",
+  "producer": "TEST",
+  "created": "2026-12-10 15:00:00",
+  "page_sizes": [],
+  "bytes": 1000
+ }
+}

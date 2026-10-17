@@ -291,6 +291,26 @@ function can_mail(string $perm): bool {
 }
 
 /**
+ * Siparişler modülü (v371) yetki kapısı — TEK kaynak: sidebar, topnav, bottomnav,
+ * first_allowed_page(), index kartı ve require_siparis() (config/siparis_core.php)
+ * AYNI fonksiyonu çağırır. can() yoksa FAIL-CLOSED. is_admin() dört yetkiyi açar;
+ * başka modülün yetkisinden (records.*, beyan.*) SESSİZ KÖPRÜ YOK. Eşleştirme
+ * ('match') sayfada ayrıca can_beyan('read') ister.
+ */
+function can_siparis(string $perm): bool {
+    if (!function_exists('can')) return false;                      // fail-closed
+    if (function_exists('is_admin') && is_admin()) return in_array($perm, ['read', 'write', 'delete', 'match'], true);
+    $oku = can('siparis.read');
+    return match ($perm) {
+        'read'   => $oku,
+        'write'  => $oku && can('siparis.write'),
+        'delete' => $oku && can('siparis.delete'),
+        'match'  => $oku && can('siparis.match'),
+        default  => false,
+    };
+}
+
+/**
  * Personel Takibi girişi bu kullanıcıya gösterilsin mi?
  *
  * ⚠ TEK kaynak (sidebar + bottomnav). personel_takip.php'nin KENDİ kapı

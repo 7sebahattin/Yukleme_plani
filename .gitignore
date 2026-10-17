@@ -23,3 +23,7 @@ _test_*.html
 # Mail Merkezi çalışma dosyaları (kilitler, cron kalp atışı, çeviri durumu) — sunucuda üretilir, depoya girmez
 storage/mail/*
 !storage/mail/.htaccess
+
+# Sipariş modülü belgeleri (yüklenen PDF/XLSX ve üretilen PKL) — sunucuda üretilir, depoya girmez
+storage/siparis/*
+!storage/siparis/.htaccess

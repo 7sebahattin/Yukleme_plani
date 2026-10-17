@@ -1,0 +1,44 @@
+{
+  "_aciklama": "SENTETİK test verisi (gerçek belge değil). PO: 1 kalem x 2 sipariş, ilk siparişte iki boşaltma yeri.",
+  "doc_type": "purchase_order",
+  "header": {"cw": 50, "cw_year": 2026, "date": "2026-12-01", "time": "10:00:00", "supplier_no": "1102720", "clerk": "CLERK", "clerk_email": "test@example.invalid", "page_count": 2},
+  "destination": {"id": "1000001", "name": "LIDL XX"},
+  "items": [
+    {"item_no": 1, "ian": "90001", "description": "Testfruit 14 PC LOSE (TR)", "product": "Testfruit", "pcs_per_box": 14, "pack_mode": "LOSE", "origin": "TR",
+     "pallets": 30, "pf": 160, "quantity": 4800, "quantity_unit": "CAR", "incoterm": "EXW", "destination_id": "1000001", "article_no": "10000014",
+     "calibre_field": "-", "box_weight": "3,5 KG", "variety": "TESTVAR", "alt_calibre": null, "ean_cert": null, "packaging": "Carton",
+     "box_dims": "40 x 30 x 11 CM", "quality": "Brix min: 15.0", "extra_lines": []}
+  ],
+  "loadings": [
+    {"loading_date": "2026-12-03", "logistics": "OGL", "incoterm": "EXW", "page": 2, "order_ref": "TC900001.10", "tour": "9000000001",
+     "loading_point": "ASYA FRESH - TEST", "customs_raw": null, "customs_office": null, "vat_no": "XX000000001", "carrier_text": "NAKLIYE A 34 TST 900",
+     "carrier_name": "NAKLIYE A", "planned_plates": ["34TST900"], "planned_time": "12:00:00 AM", "sold_to": "LIDL XX KD",
+     "columns": [{"name": "LIDL XX KD", "role": "customer"}, {"name": "LIDL XX A", "role": "location"}, {"name": "LIDL XX B", "role": "location"}],
+     "items": [
+       {"ian": "90001", "description": "Testfruit 14 PC LOSE (TR)", "product": "Testfruit", "pcs_per_box": 14, "pack_mode": "LOSE", "origin": "TR",
+        "price_eur": 0.01, "bpm_unit": "CAR", "pallets": 20, "pallet_type": "EV", "pf": 160, "quantity": 3200, "quantity_unit": "CAR",
+        "calibre_field": "-", "box_weight": "3,5 KG", "variety": "TESTVAR", "alt_calibre": null, "summary_item_no": 1,
+        "locations": [{"name": "LIDL XX A", "role": "location", "code": "1000101", "pallets": 11, "pf": 160, "cartons": 1760},
+                      {"name": "LIDL XX B", "role": "location", "code": "1000102", "pallets": 9, "pf": 160, "cartons": 1440}]}
+     ],
+     "totals": {"pallets": 20, "quantity": 3200, "by_location": [{"name": "LIDL XX A", "pallets": 11, "cartons": 1760}, {"name": "LIDL XX B", "pallets": 9, "cartons": 1440}]}},
+    {"loading_date": "2026-12-05", "logistics": "OGL", "incoterm": "EXW", "page": 2, "order_ref": "TC900002.10", "tour": "9000000002",
+     "loading_point": "ASYA FRESH - TEST", "customs_raw": null, "customs_office": null, "vat_no": "XX000000001", "carrier_text": "NAKLIYE A",
+     "carrier_name": "NAKLIYE A", "planned_plates": [], "planned_time": null, "sold_to": "LIDL XX KD",
+     "columns": [{"name": "LIDL XX KD", "role": "customer"}, {"name": "LIDL XX A", "role": "location"}],
+     "items": [
+       {"ian": "90001", "description": "Testfruit 14 PC LOSE (TR)", "product": "Testfruit", "pcs_per_box": 14, "pack_mode": "LOSE", "origin": "TR",
+        "price_eur": 0.01, "bpm_unit": "CAR", "pallets": 10, "pallet_type": "EV", "pf": 160, "quantity": 1600, "quantity_unit": "CAR",
+        "calibre_field": "-", "box_weight": "3,5 KG", "variety": "TESTVAR", "alt_calibre": null, "summary_item_no": 1,
+        "locations": [{"name": "LIDL XX A", "role": "location", "code": "1000101", "pallets": 10, "pf": 160, "cartons": 1600}]}
+     ],
+     "totals": {"pallets": 10, "quantity": 1600, "by_location": [{"name": "LIDL XX A", "pallets": 10, "cartons": 1600}]}}
+  ],
+  "unloading_locations": [{"name": "LIDL XX A", "code": "1000101", "address": "TEST STREET 1, 00000 TEST"}, {"name": "LIDL XX B", "code": "1000102", "address": "TEST STREET 2, 00000 TEST"}],
+  "pallet_types": [{"code": "EV", "name": "EV Euro Loss Pallet"}],
+  "instruction_lines": [],
+  "packing_list_emails": ["test@example.invalid"],
+  "checks": [],
+  "warnings": [],
+  "meta": {"pages": 2, "creator": "TEST", "producer": "TEST", "created": "2026-12-01 10:00:00", "page_sizes": [], "bytes": 1000}
+}
