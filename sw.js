@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v370';
+const CACHE_NAME = 'yukleme-plani-v371';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -25,6 +25,7 @@ const SHELL = [
   './assets/nav-icons/mstok.svg',
   './assets/nav-icons/hesap.svg',
   './assets/nav-icons/mail.svg',
+  './assets/nav-icons/siparis.svg',
   './assets/nav-icons/ptak.svg',
   './assets/nav-icons/defs.svg',
   './assets/nav-icons/users.svg',
@@ -64,6 +65,8 @@ self.addEventListener('fetch', function(e) {
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   // Mail Merkezi: posta içeriği (sayfa, JSON, ek) cihazın CacheStorage'ına HİÇ yazılmaz.
   if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır
+  // Siparişler: sayfa, belge/PDF/XLSX ve ZIP uçları HİÇ önbelleğe alınmaz (kişisel/ticari veri; PATH_INFO da atlanır)
+  if (/\/siparis(ler|_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   e.respondWith(
     fetch(e.request).then(function(response) {
       // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.

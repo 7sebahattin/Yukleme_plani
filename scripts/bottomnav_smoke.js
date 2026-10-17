@@ -123,7 +123,7 @@ let bag_ctx = {};
 const r1 = (n) => Math.round(n * 10) / 10;
 // Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
 const SAYFA_ADI = { records: 'Yüklemeler', cikma: 'Çıkmalar', beyan: 'Beyanlar', kantar: 'Kantar', hks: 'Hal Bildirimi',
-    rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', ptak: 'Personel Takibi', defs: 'Tanımlar',
+    rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
     users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
 // Göreli href'i uygulama köküne göre yola çevir (base_url '../' dahil)

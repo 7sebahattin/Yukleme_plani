@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v370` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v371` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -34,6 +34,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
 | PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` · `ters_kart*` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`, `pdks_ters`) | `pdks.css` · `pdks.js` · `print_pdks.css` · `ters_kart.js` | `pdks_*_smoke` |
 | Raporlar | `reports` · `raporlar` · `rapor_malzeme` · `rapor_yazdir` · `kantar_raporu` | `xlsx_export` | — | `rapor_malzeme_xlsx_smoke` |
+| Siparişler | `siparisler` · `siparis_view/yukle/kaydet/pkl/belge/dosya/zip/beyan_bagla/ayarlar` · `_siparis_liste` | `siparis_core` · `siparis_pdf` · `siparis_eslestir` · `siparis_pkl` · `siparis_beyan` | `siparis.css` · `siparis.js` · `nav-icons/siparis.svg` · `templates/excel/pkl_v14_blank.xlsx` | `siparis_core_smoke` · `siparis_pdf_smoke` · `siparis_pkl_smoke` · `siparis_ui_smoke`(`.js`) · `siparis_gate_static_smoke` |
 | Yönetim | `definitions` · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
 | **Kaldırılan / 410 tombstone** | `admin_db_backup_download` · `hesap_sahipsiz` · `depo_tasima` · `firma_eslestirme` · `fix_brand` · `repair_xz_tables` · `faz8b_migrate` · `record_new` | — | — | `rol_kapilari_smoke` (değişmezleri denetler) |
 | Klasörler | `scripts/` (testler + `create_admin_user`, `deploy*`, `db_backup_cron`) · `scripts/arsiv/` (biten tek seferlik araçlar; çalıştırılmaz) · `docs/` · `docs/arsiv/` (biten faz/sprint belgeleri) · `tools/arsiv/` · `templates/excel/` · `storage/` (yedekler) · `uploads/` · `vendor/` | | | |
@@ -78,6 +79,10 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | hesap.approve/pay | ✓ | — | — | ✓ |
 | hesap.delete | ✓ | — | — | — |
 | hesap.admin (tüm personeli görür) | ✓ | — | — | — |
+| siparis.read | ✓ | ✓ | ✓ | ✓ |
+| siparis.write | ✓ | ✓ | — | — |
+| siparis.delete | ✓ | — | — | — |
+| siparis.match | ✓ | ✓ | — | — |
 | users.admin | ✓ | — | — | — |
 | is_admin() | ✓ | — | — | — |
 
@@ -1512,6 +1517,47 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
   aktif firma hariç). Lib `taslak_lib.php`'yi require ETMEZ (test edilebilirlik; api.php yükler).
 - Test: `php scripts/hks_tekrar_gonder_smoke.php` · `node scripts/hks_gonderilenler_smoke.js`
   (`GSHOT=<klasör>` ekran görüntüsü kaydeder).
+
+## Siparişler — Sevkiyat Takibi (v371)
+
+Müşteri PDF'leri (PO / Loading List / Price Confirmation) yüklenir, içerikten sınıflanır ve
+**sevkiyata** (= 1 order_ref = 1 tır) bağlanır; Packing List (PKL) müşterinin KENDİ şablonundan üretilir.
+**Kapı TEK kaynak `can_siparis()`** (helpers.php, `can_mail` yanında, `rol_kapilari_smoke` eval bölgesinde): sidebar,
+topnav, bottomnav, `first_allowed_page()`, index kartı ve sayfalardaki `require_siparis()` aynı fonksiyonu çağırır.
+Yetkiler: `siparis.read/write/delete/match` (eşleştirme ayrıca `can_beyan('read')` ister); başka modülün yetkisinden
+sessiz köprü YOK. Sayfa `require_siparis('read');` satırı birebir durur (bottomnav kapı iğnesi).
+
+- **Şema yalnız migrate.php kartından** (`siparis_migrate()`, 10 tablo, ALTER/FK YOK, GO kuralı; kart `#siparis`).
+  Tablo yoksa sayfalar "kurulmadı" kutusu gösterir. `db.php`/helpers IIFE'ye EKLEME. Depo adı değişince
+  `sync_depot_name_in_data()` `siparis_sevkiyatlar.depo` + `siparis_belgeler.depo`'yu da çeker.
+- **Ayrıştırıcı saf PHP** (`config/siparis_pdf.php`, `strict_types` YOK — gevşek tip dönüşümüne
+  dayanır). Belge türü DOSYA ADINDAN DEĞİL içerikten. Ham sonuç `siparis_belgeler.parse_json`.
+- **Elle girilen değer asla ezilmez:** `elle_alanlar` kilidi; sonraki belge yalnız
+  `siparis_catismalar` satırı açar. Otorite: plan (PO) < gerçek (LL: araç/plaka/navlun/yükleme; PC:
+  fiyat/boşaltma). Miktarlar kaynak başına ayrı kolonda (po/ll/pc); etkin = elle > PC > LL > PO;
+  kalibre bölümü farklıysa `split_differs` uyarısı — "doğru" kaynak kullanıcı kararıdır.
+- **Eski revizyon** (aynı tür, daha eski belge tarihi) bağlanır ama `gecerli=0`, değer uygulamaz.
+- **PKL = doğrudan XML yamalama** (`config/siparis_pkl.php`, `templates/excel/pkl_v14_blank.xlsx`).
+  PhpSpreadsheet ile PKL ÜRETME (doğrulamaları/stilleri bozar, 14 sn/320 MB) — dosyada `PhpOffice` YOK (test denetler).
+  Şablonu Excel'de açıp kaydetme; değişirse `siparis_pkl_smoke` stil karşılaştırması kırılır. Dosya adı
+  `PKL-<order_ref>-<AsyaDocNNN>-<gg.aa.yyyy (C5)>.xlsx`, sonda `_` yok.
+- **Sayaçlar sezonluk** (sezon = düz yıl dizgisi, ör. `'2026'`; Temmuz'da döner — `siparis_sezon()`; sayaç adları
+  `palet_<yıl>`, `belge_no_<yıl>`): numara PKL ilk üretildiğinde `FOR UPDATE` ile ayrılır, yeniden üretim aynı aralığı
+  kullanır. Düzeltme yalnız Ayarlar'dan (`siparis.delete`, audit `siparis_sayac_duzelt`). Lot = "L " + ISO hafta + " - " +
+  ISO gün (paketleme tarihi); CW'den TÜRETME.
+- **"Mail gönderildi" ELLE bayraktır** (uygulama ekli mail göndermez); PKL yoksa basılamaz, kısmi
+  PKL'de ek onay ister ve süreci kapatır.
+- **Dosyalar** `storage/siparis/` (web kapalı, `.htaccess` git'te, `.gitignore` `storage/siparis/*`), yalnız
+  `siparis_dosya.php` / `siparis_zip.php` sunar (depo + yetki, nosniff, no-store). sw.js `siparis*.php`'yi HİÇ
+  önbelleğe almaz (`siparis.css/js` SHELL'de de YOK, mail emsali). Gerçek örnek belgeler kişisel veri içerir — repoya
+  KOYMA; testler `SIPARIS_ORNEK_DIR` yoksa atlar, commit'li fixture'lar sentetiktir.
+- **Beyan bağı** yalnız `siparis_beyan` tablosuna yazılır; `customs_declarations`'a ve yükleme
+  planına DOKUNMAZ (beyan_eslestir.php yan etkilerini tekrarlama).
+- **Gezinme:** nav anahtarı `siparis` (sidebar Operasyon, `nav_alt_sayfalar` mail'den sonra, renk #b45309, ikon
+  `assets/nav-icons/siparis.svg`); `nav_aktif_anahtar()` `$a_sip` listesine yeni sipariş sayfası eklersen oraya yaz.
+Test: `php scripts/siparis_core_smoke.php` · `siparis_pkl_smoke.php` · `siparis_pdf_smoke.php`
+(`SIPARIS_ORNEK_DIR=…` ile gerçek örnekler) · `siparis_gate_static_smoke.php` ·
+`SIPARIS_UI_OUT=/tmp/sip php scripts/siparis_ui_render.php && node scripts/siparis_ui_smoke.js`.
 
 ## Excel İndir — CSV + XLSX (Sprint Excel-01)
 

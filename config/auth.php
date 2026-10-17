@@ -273,6 +273,12 @@ function permission_catalog(): array {
             'beyan.source.read' => 'Ham metni gör (tüm kaynak bilgilerini içerir)',
             'beyan.source.write' => 'Ham metni düzenle / ayrıştır',
         ],
+        'Siparişler' => [
+            'siparis.read'   => 'Siparişleri, belgeleri ve Packing List\'i görüntüle / indir',
+            'siparis.write'  => 'Belge yükle, alan düzelt, durum değiştir, PKL oluştur, "mail gönderildi" işaretle',
+            'siparis.delete' => 'Sevkiyat / belge sil, PKL sayaçlarını düzelt, profil sil',
+            'siparis.match'  => 'Siparişi beyanla eşleştir / bağı kaldır (beyan görüntüleme yetkisi de gerekir)',
+        ],
         'Kantar' => [
             'kantar.read'   => 'Kantar kayıtlarını görüntüle',
             'kantar.write'  => 'Kantar kaydı oluştur / düzenle',

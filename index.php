@@ -159,7 +159,7 @@ if (is_admin()) {
 // nav_ptak_gorunur(): Personel Takibi kartı bu bölümün içinde — yalnız PDKS
 // izni olan kullanıcı (ör. yalnız attendance.foremen) bölüm kapalı olduğu
 // için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
-$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read') || nav_ptak_gorunur() || can_mail('read');
+$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read') || nav_ptak_gorunur() || can_siparis('read') || can_mail('read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -364,6 +364,13 @@ if (nav_ptak_gorunur()):
         <?php if ($mail_cevapsiz24 > 0): ?>
         <div class="home-card-sub home-card-uyari" style="color:var(--danger);font-weight:600">24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail</div>
         <?php endif; ?>
+    </a>
+<?php endif; ?>
+
+<?php if (can_siparis('read')): ?>
+    <a href="siparisler.php" class="home-card">
+        <div class="home-card-icon" style="background:#fdf0dc">📦</div>
+        <div class="home-card-title">Siparişler</div>
     </a>
 <?php endif; ?>
 

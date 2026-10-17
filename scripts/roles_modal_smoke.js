@@ -123,7 +123,11 @@ function ok(ad, kosul, ipucu) {
             !await page.isChecked('#rolCreateModal input[value="records.unlock"]'));
         const search = page.locator('#rolCreateModal .rol-search');
         await search.fill('Beyan');
-        ok('arama yalnız Beyan modülünü gösterir', await page.locator('#rolCreateModal .rol-perm-group:visible').count() === 1);
+        // v371: "Siparişler" grubunun siparis.match açıklaması da "beyan" içerir — o grup da eşleşir.
+        const gorunenGruplar = await page.locator('#rolCreateModal .rol-perm-group:visible .rol-perm-group-title').allTextContents();
+        ok('arama yalnız Beyan modülünü gösterir',
+            gorunenGruplar.some(t => t.trim().startsWith('Beyan')) &&
+            gorunenGruplar.every(t => /^(Beyan|Sipari)/.test(t.trim())));
         await page.click('#rolCreateModal .rol-perm-group:visible [data-mode="read"]');
         ok('görüntüleme işlemleri açmaz', await page.isChecked('#rolCreateModal input[value="beyan.read"]') && !await page.isChecked('#rolCreateModal input[value="beyan.create"]'));
         ok('bölüm görüntüleme açılır', await page.isChecked('#rolCreateModal input[value="beyan.contact.read"]'));
