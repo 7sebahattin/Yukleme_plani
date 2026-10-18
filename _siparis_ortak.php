@@ -417,6 +417,39 @@ function sipui_mail_durum_html(array $s, array $belgeGorunur = []): string
 }
 
 /**
+ * Belgenin ayrıştırıcı uyarıları (parse_json.warnings, seviye warn/error) → okunur metin listesi ("Etiket — ayrıntı").
+ * Sayı (uyari_sayisi) ile aynı süzgeç; belge sayfasındaki "Denetimler ve uyarılar" tablosunun metni.
+ * @return list<string>
+ */
+function sipui_belge_uyari_metinleri(?string $parseJson, int $en = 8): array
+{
+    if ($parseJson === null || $parseJson === '') return [];
+    $pj = json_decode($parseJson, true);
+    $out = [];
+    foreach ((array)($pj['warnings'] ?? []) as $w) {
+        if (!is_array($w) || !in_array($w['level'] ?? '', ['warn', 'error'], true)) continue;
+        $kod = (string)($w['code'] ?? '');
+        $et = sipui_uyari_kodu_etiketi($kod);
+        $msg = trim((string)($w['message'] ?? ''));
+        $out[] = $et !== null ? ($msg !== '' ? $et . ' — ' . $msg : $et) : ($msg !== '' ? $msg : $kod);
+        if (count($out) >= $en) break;
+    }
+    return $out;
+}
+
+/** Sonuç satırındaki uyarı sayısının altına açılır liste (sayı > 0 ve metin varsa). */
+function sipui_mail_uyari_detay_html(array $s, array $uyariMetin): string
+{
+    $b = (int)($s['belge_id'] ?? 0);
+    $n = (int)($s['uyari'] ?? 0);
+    $l = $b > 0 ? ($uyariMetin[$b] ?? []) : [];
+    if ($n <= 0 || !$l) return '';
+    $o = '<details class="sip-ms-uyari"><summary>⚠ ' . $n . ' uyarı — göster</summary><ul>';
+    foreach ($l as $m) $o .= '<li>' . h($m) . '</li>';
+    return $o . '</ul><a href="siparis_belge.php?id=' . $b . '#sipBKontrol">Belgede aç</a></details>';
+}
+
+/**
  * Mail sorgusu sonuç kartı (SUNUCUDA, tek render: ilk açılış ve JS 'bitti' yanıtı aynı HTML'i kullanır).
  * Gönderen / konu / mail tarihi mail_messages'tan YALNIZ $hesapIds (izleyenin görünür hesapları) içindeki mailler için okunur;
  * görünmüyorsa "—". Kullanıcı verisinin tamamı h() ile kaçırılır.
@@ -439,13 +472,15 @@ function sipui_mail_sonuc_html(PDO $pdo, array $son, array $hesapIds): string
         }
     }
     $belgeGorunur = [];
+    $uyariMetin = [];   // belge_id → uyarı metinleri (yalnız görünür belge + uyarılı satır)
     foreach ($satirlar as $s) {
         $b = (int)($s['belge_id'] ?? 0);
         if ($b <= 0 || isset($belgeGorunur[$b])) continue;
-        $q = $pdo->prepare('SELECT id, depo, deleted_at FROM siparis_belgeler WHERE id = ?');
+        $q = $pdo->prepare('SELECT id, depo, deleted_at, parse_json FROM siparis_belgeler WHERE id = ?');
         $q->execute([$b]);
         $bs = $q->fetch(PDO::FETCH_ASSOC);
         $belgeGorunur[$b] = $bs && $bs['deleted_at'] === null && siparis_belge_gorunur($pdo, $bs);
+        if ($belgeGorunur[$b] && (int)($s['uyari'] ?? 0) > 0) $uyariMetin[$b] = sipui_belge_uyari_metinleri((string)($bs['parse_json'] ?? ''));
     }
     $sy = (array)($son['sayac'] ?? []);
     $bitis = (int)($son['bitis'] ?? 0);
@@ -477,14 +512,14 @@ function sipui_mail_sonuc_html(PDO $pdo, array $son, array $hesapIds): string
         $o .= '<tr class="sip-ms-satir' . $sat($s) . '" data-durum="' . h((string)$s['durum']) . '"><td class="nowrap">' . h($mi['tarih']) . '</td><td><span class="sip-kes">' . h($mi['ad']) . '</span>' . $konu . '</td>'
             . '<td><span class="sip-kes" title="' . h((string)$s['dosya']) . '">' . h((string)$s['dosya']) . '</span>'
             . ($mi['link'] ? '<div class="sip-soluk"><a href="mail.php?m=' . (int)$s['m'] . '">Maili aç</a></div>' : '') . '</td>'
-            . '<td>' . (empty($s['tur']) ? '—' : sipui_tur_rozeti((string)$s['tur'])) . '</td><td>' . sipui_mail_durum_html($s, $belgeGorunur) . '</td>'
+            . '<td>' . (empty($s['tur']) ? '—' : sipui_tur_rozeti((string)$s['tur'])) . '</td><td>' . sipui_mail_durum_html($s, $belgeGorunur) . sipui_mail_uyari_detay_html($s, $uyariMetin) . '</td>'
             . '<td class="num">' . (int)($s['catisma'] ?? 0) . '</td><td class="num">' . (int)($s['uyari'] ?? 0) . '</td></tr>';
     }
     $o .= '</tbody></table></div><div class="card-list mobile-only sip-mail-kartlar">';
     foreach ($satirlar as $s) {
         $mi = $mailBilgi((int)$s['m']);
         $o .= '<div class="sip-mini-kart sip-ms-satir' . $sat($s) . '" data-durum="' . h((string)$s['durum']) . '"><div class="sip-mini-ust"><strong class="sip-kes" title="' . h((string)$s['dosya']) . '">' . h((string)$s['dosya']) . '</strong>'
-            . (empty($s['tur']) ? '' : sipui_tur_rozeti((string)$s['tur'])) . '</div><div class="sip-soluk">' . h($mi['kisa']) . ' · ' . h($mi['ad']) . '</div><div>' . sipui_mail_durum_html($s, $belgeGorunur) . '</div>';
+            . (empty($s['tur']) ? '' : sipui_tur_rozeti((string)$s['tur'])) . '</div><div class="sip-soluk">' . h($mi['kisa']) . ' · ' . h($mi['ad']) . '</div><div>' . sipui_mail_durum_html($s, $belgeGorunur) . '</div>' . sipui_mail_uyari_detay_html($s, $uyariMetin);
         if ((int)($s['catisma'] ?? 0) > 0 || (int)($s['uyari'] ?? 0) > 0) $o .= '<div class="sip-soluk">Çatışma: ' . (int)($s['catisma'] ?? 0) . ' · Uyarı: ' . (int)($s['uyari'] ?? 0) . '</div>';
         $o .= ($mi['link'] ? '<div class="sip-soluk"><a href="mail.php?m=' . (int)$s['m'] . '">Maili aç</a></div>' : '') . '</div>';
     }
