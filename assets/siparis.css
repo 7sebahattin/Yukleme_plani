@@ -561,4 +561,10 @@ html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
     .sip-mail-dugmeler { grid-template-columns: 1fr; }
     .sip-mail-btn { min-height: 48px; font-size: .9rem; }
 }
+/* v379: sonuç satırında açılır uyarı listesi */
+.sip-ms-uyari { margin-top: 6px; font-size: .85em; }
+.sip-ms-uyari > summary { cursor: pointer; color: #b45309; font-weight: 600; }
+.sip-ms-uyari ul { margin: 4px 0 4px 18px; padding: 0; }
+.sip-ms-uyari li { margin: 2px 0; line-height: 1.35; overflow-wrap: anywhere; }
+html[data-theme="dark"] .sip-ms-uyari > summary { color: #fbbf24; }
 /* ==== /MAİLDEN AL v378 ==== */

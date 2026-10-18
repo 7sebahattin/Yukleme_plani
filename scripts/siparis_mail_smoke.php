@@ -369,6 +369,18 @@ ok('başlık: tür · son 15 gün · tarih · kullanıcı', str_contains($html, 
 ok('"Daha önce alınmış" satırları gizli (düğme + sınıf)', str_contains($html, 'data-sip-mail-onceden') && str_contains($html, 'sip-mail-onceden'));
 ok('özet çipleri + PDF eki olmayan mail sayısı', str_contains($html, 'Bulunan mail') && str_contains($html, 'PDF eki olmayan 3 mail'));
 ok('görünür belge bağlantısı yalnız görünür/varlıksız belge için verilmez (777 yok → düz metin)', !str_contains($html, 'siparis_belge.php?id=777'));
+// Uyarı sayısının içeriği: belgedeki warn/error uyarıları satırda açılır liste olarak görünür (info görünmez, kullanıcı verisi kaçışlı)
+$bUy = (int)$db->query('SELECT id FROM siparis_belgeler ORDER BY id LIMIT 1')->fetchColumn();
+$db->prepare('UPDATE siparis_belgeler SET parse_json = ?, uyari_sayisi = 2, deleted_at = NULL WHERE id = ?')->execute([json_encode(['warnings' => [
+    ['level' => 'warn', 'code' => 'no_plates', 'message' => 'Plaka <b>yok</b>'], ['level' => 'info', 'code' => 'ignored_line', 'message' => 'bilgi satiri'],
+    ['level' => 'error', 'code' => 'zzz_bilinmeyen', 'message' => 'Ozel hata metni'],
+]]), $bUy]);
+$sonU = $son;
+$sonU['satirlar'] = [siparis_mail_satir(['m' => $hGor, 'p' => '2', 'dosya' => 'uy.pdf'], 'alindi', ['tur' => 'll', 'belge_id' => $bUy, 'uyari' => 2])];
+$htmlU = sipui_mail_sonuc_html($db, $sonU, [$A]);
+ok('uyarı metinleri satırda görünür (kod etiketi + ayrıntı), info görünmez', str_contains($htmlU, 'Belgede plaka yok') && str_contains($htmlU, 'Ozel hata metni') && !str_contains($htmlU, 'bilgi satiri') && str_contains($htmlU, 'sip-ms-uyari'), $htmlU);
+ok('uyarı ayrıntısı kaçışlı + "Belgede aç" bağlantısı', !str_contains($htmlU, '<b>yok</b>') && str_contains($htmlU, 'siparis_belge.php?id=' . $bUy . '#sipBKontrol'));
+ok('uyarısız satırda açılır liste YOK', !str_contains($html, 'sip-ms-uyari'));
 $blok = sipui_mail_blok_html(['hazir' => true, 'ayarli' => ['siparis' => true, 'lojistik' => false, 'fiyat' => true], 'ayar_link' => true, 'mail_admin' => true, 'yarim' => ['tarama_id' => 'abcd', 'tur' => 'lojistik', 'i' => 5, 'toplam' => 12], 'son' => []]);
 ok('blok: 3 düğme, ayarsız olan pasif', substr_count($blok, 'data-sip-mail="') === 3 && (bool)preg_match('/data-sip-mail="lojistik" disabled/', $blok) && !preg_match('/data-sip-mail="siparis" disabled/', $blok));
 ok('blok: yarım tarama şeridi (Yarım kalan mail sorgusu (Lojistik, 5/12))', str_contains($blok, 'Yarım kalan mail sorgusu (Lojistik, 5/12)') && str_contains($blok, 'data-sip-mail-devam="abcd"'));
