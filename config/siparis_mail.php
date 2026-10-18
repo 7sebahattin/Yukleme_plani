@@ -22,6 +22,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/siparis_core.php';
 require_once __DIR__ . '/siparis_eslestir.php';
 require_once __DIR__ . '/mail_core.php';
+require_once __DIR__ . '/mail_mime.php';   // mail_view.php'nin mail_gorunum_charset_duzelt() çağrısı mail_mime_mojibake_duzelt() ister (sayfa render'ında da yüklü olmalı)
 require_once __DIR__ . '/mail_view.php';
 
 const SIPARIS_MAIL_GUN = 15;            // sabit pencere (ekranda yazar)
@@ -294,13 +295,13 @@ function siparis_mail_defter_yaz(int $mailId, string $parca, string $sonuc, int 
 
 /**
  * Defter kaydı bu düğme için SON karar mı? (değilse ek yeniden indirilir/denenir)
- * alindi/zaten/silinmis/gecersiz → evet · taninmadi → yalnız aynı ayrıştırıcı sürümüyle · baska_tur → yalnız defterdeki tür
+ * alindi/zaten/silinmis/gecersiz/ek_yok → evet · taninmadi → yalnız aynı ayrıştırıcı sürümüyle · baska_tur → yalnız defterdeki tür
  * bu düğmenin türünden FARKLIYSA (aynıysa doğru düğmede alınabilir) · hata/diğer → hayır.
  */
 function siparis_mail_defter_son_mu(array $d, string $beklenen): bool
 {
     $s = (string)($d['sonuc'] ?? '');
-    if (in_array($s, ['alindi', 'zaten', 'silinmis', 'gecersiz'], true)) return true;
+    if (in_array($s, ['alindi', 'zaten', 'silinmis', 'gecersiz', 'ek_yok'], true)) return true;
     if ($s === 'taninmadi') return (string)($d['surum'] ?? '') === SIPARIS_PDF_SURUM;
     if ($s === 'baska_tur') return isset($d['tur']) && $d['tur'] !== null && $d['tur'] !== $beklenen;
     return false;
@@ -441,6 +442,13 @@ function siparis_mail_ek_isle(PDO $pdo, array $oge, string $beklenen, int $uid, 
     }
     if (!$r['ok']) {
         if (($r['kod'] ?? 0) === 413) return siparis_mail_satir($oge, 'cok_buyuk');
+        // 404 (ek sunucuda yok/silinmiş) KALICIDIR: deftere yazılır, her sorguda IMAP'a yeniden gidilmez. 409 (yeniden tarama sürüyor),
+        // 502/503 (bağlantı/kimlik) geçicidir: defter YOK, sonraki sorguda yeniden denenir.
+        if ((int)($r['kod'] ?? 0) === 404) {
+            $satir = siparis_mail_satir($oge, 'ek_yok', ['hata' => (string)$r['mesaj']]);
+            siparis_mail_defter_yaz($m, $p, 'ek_yok', $h, $uid, ['mesaj' => siparis_kirp((string)$r['mesaj'], 120)]);
+            return $satir;
+        }
         return siparis_mail_satir($oge, 'hata', ['hata' => (string)$r['mesaj']]);   // defter YOK: sonraki sorguda yeniden denenir
     }
 
