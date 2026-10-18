@@ -16,6 +16,20 @@ function sipui_tarih(?string $v): string
     return $d !== null ? date('d.m.Y', (int)strtotime($d . ' 12:00:00')) : '—';
 }
 
+/**
+ * v376 — liste tarihi, bugüne göre renkli: geçmiş → yeşil + kalın, bugün → turuncu + kalın, henüz gelmemiş → normal metin rengi.
+ * Renk yalnız görsel ipucu; durum `title` ile de yazılır. Boş / çözülemeyen → '—' (düz).
+ */
+function sipui_tarih_html(?string $v): string
+{
+    $d = $v !== null ? siparis_tarih_coz($v) : null;
+    if ($d === null) return '—';
+    $bugun = date('Y-m-d');
+    $sinif = $d < $bugun ? 'gecmis' : ($d === $bugun ? 'bugun' : 'gelecek');
+    $ipucu = ['gecmis' => 'Tarih geçti', 'bugun' => 'Bugün', 'gelecek' => 'Henüz gelmedi'][$sinif];
+    return '<span class="sip-tar sip-tar--' . $sinif . '" title="' . h($ipucu) . '">' . h(sipui_tarih($v)) . '</span>';
+}
+
 /** gg.aa.yyyy ss:dd ; boş → '—'. */
 function sipui_zaman(?string $v): string
 {
