@@ -249,7 +249,7 @@ function siparis_test_ornekler(): ?array
 {
     $dir = (string)(getenv('SIPARIS_ORNEK_DIR') ?: '');
     if ($dir === '' || !is_dir($dir)) return null;
-    $setler = ['TC426865.10' => '1', 'TC418910.10' => '2'];
+    $setler = ['TC426865.10' => '1', 'TC418910.10' => '2', 'TC426877.10' => '3'];   // set 3: tek LL'de iki tır (v374)
     $out = [];
     $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
     $dosyalar = [];

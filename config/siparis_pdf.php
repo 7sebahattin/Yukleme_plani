@@ -22,7 +22,7 @@
 // =========================================================
 
 /** Ayrıştırıcı sürümü — siparis_belgeler.parser_surum'a yazılır. */
-const SIPARIS_PDF_SURUM = 'v2';
+const SIPARIS_PDF_SURUM = 'v3';
 
 /**
  * Minimal pure-PHP PDF text-run extractor (no binaries, only zlib).
@@ -906,6 +906,8 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
              'unloading_location' => '/^Unloading location$/', 'unloading_date' => '/^Unloading Date$/', 'order_ref' => '/^Order reference$/', 'tour_id' => '/^Tour-ID$/',
              'temp' => '/^Temp\.?$/', 'client' => '/^Client$/', 'final_unloading_location' => '/^Final unloading location$/'];
     $cols = null; $skipHdr = false; $rows = []; $lines = sipdf_body_lines($pages); $n = count($lines);
+    $blocks = []; $cur = null; $blockLbl = ['transport', 'additional', 'company', 'info', 'licence plate'];
+    $tf = ['transport_no', 'transport_company', 'plates', 'additional_info'];
     $valueBelow = function (int $i, string $labelRe) use ($lines) {              // label on line i, value = nearest segment on the next line
         foreach ($lines[$i]['segs'] as $s) if (preg_match($labelRe, sipdf_t($s))) {
             $nx = $lines[$i + 1] ?? null; if (!$nx) return null; $best = null; $bd = 60;
@@ -921,7 +923,8 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
         }
         if (preg_match('/^Agency\b/', $t) && preg_match('/Vendor/', $t)) { $H['agency'] = $valueBelow($i, '/^Agency$/'); $H['vendor'] = $valueBelow($i, '/^Vendor$/'); continue; }
         if (sipdf_t($ln['segs'][0]) === 'Transport' && isset($ln['segs'][1]) && preg_match('/^\d{6,}$/', sipdf_t($ln['segs'][1]))) {
-            $H['transport_no'] = sipdf_t($ln['segs'][1]);
+            // v374: one loading list can carry SEVERAL transport blocks (one per truck) - each block starts here and applies to the rows below it
+            $tno = sipdf_t($ln['segs'][1]);
             $lpIdx = null; foreach ($ln['segs'] as $k => $s) if (preg_match('/^Licence plate$/i', sipdf_t($s))) $lpIdx = $k;
             $addX = null; foreach ($lines[$i - 1]['segs'] ?? [] as $s) if (preg_match('/^Additional$/i', sipdf_t($s))) $addX = $s['x'];
             $comp = []; $plates = []; $add = [];
@@ -931,9 +934,11 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
                 if ($lpIdx === null || $k < $lpIdx) { $comp[] = $x; continue; }
                 if ($addX !== null && $s['x'] >= $addX - 5) $add[] = $x; else $plates[] = $x;
             }
-            $H['transport_company'] = $comp ? implode(' ', $comp) : null; $H['plates'] = $plates; $H['additional_info'] = $add ? implode(' ', $add) : null;
+            $blocks[] = ['transport_no' => $tno, 'transport_company' => $comp ? implode(' ', $comp) : null, 'plates' => $plates, 'additional_info' => $add ? implode(' ', $add) : null];
+            $cur = count($blocks) - 1; $skipHdr = true;
             continue;
         }
+        if ($ln['segs'] && !array_filter($ln['segs'], fn($s) => !in_array(strtolower(sipdf_t($s)), $blockLbl, true))) { $skipHdr = true; continue; }  // "Transport / Additional" + "company / info" label lines
         $c = sipdf_cols_from_labels($ln['segs'], $spec);
         if ($c) { $cols = $c; $skipHdr = true; continue; }
         if ($cols === null) continue;
@@ -943,14 +948,23 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
         if ($ref !== null) {
             $rows[] = ['product' => $one('product'), 'ian' => $one('ian'), 'pallet_type' => $one('pallet_type'), 'pallets' => sipdf_int($one('pallets')), 'pf' => sipdf_int($one('pf')), 'colli' => sipdf_int($one('colli')),
                        'seq' => sipdf_int($one('seq')), 'unloading_location' => $one('unloading_location'), 'unloading_date' => sipdf_dmy($one('unloading_date')), 'order_ref' => $ref, 'tour_id' => $one('tour_id'),
-                       'temp' => $one('temp'), 'client' => $one('client'), 'final_unloading_location' => $one('final_unloading_location')];
+                       'temp' => $one('temp'), 'client' => $one('client'), 'final_unloading_location' => $one('final_unloading_location'), '_blk' => $cur];
             $skipHdr = false;
         } elseif (!$skipHdr && $rows && $t !== '' && count($cells) <= 4) {                       // wrapped text of the previous row
             $last = count($rows) - 1;
             foreach ($cells as $k => $tx) if (isset($rows[$last][$k]) && is_string($rows[$last][$k])) $rows[$last][$k] .= ' ' . implode(' ', $tx);
         }
     }
+    // header keeps the FIRST transport block (compatibility); every block is listed in transports[]
+    if ($blocks) foreach ($tf as $f) $H[$f] = $blocks[0][$f];
+    $H['transports'] = $blocks;
     unset($H);
+    foreach ($rows as &$r) {                                                                  // stray wrapped text must not corrupt the key columns
+        if ($r['ian'] !== null && preg_match('/\d{4,}/', $r['ian'], $mm)) $r['ian'] = $mm[0];
+        if ($r['tour_id'] !== null && preg_match('/\d{6,}/', $r['tour_id'], $mm)) $r['tour_id'] = $mm[0];
+        $b = $r['_blk'] !== null ? $blocks[$r['_blk']] : ['transport_no' => null, 'transport_company' => null, 'plates' => [], 'additional_info' => null];
+        unset($r['_blk']); foreach ($tf as $f) $r[$f] = $b[$f];
+    } unset($r);
     foreach ($rows as &$r) { $a = sipdf_parse_article($r['product']); $r['description'] = $r['product']; $r['product'] = $a['product']; $r['pcs_per_box'] = $a['pcs_per_box']; $r['pack_mode'] = $a['pack_mode']; $r['origin'] = $a['origin']; } unset($r);
     $out['rows'] = $rows;
     foreach ($rows as $r) { $out['total_pallets'] += (int)$r['pallets']; $out['total_colli'] += (int)$r['colli']; }
@@ -958,7 +972,9 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
     $sh = [];
     foreach ($rows as $r) {
         $k = $r['order_ref'] . '|' . $r['tour_id'];
-        $sh[$k] ??= ['order_ref' => $r['order_ref'], 'tour_id' => $r['tour_id'], 'pallets' => 0, 'colli' => 0, 'row_count' => 0, 'unloading_date' => $r['unloading_date'], 'items' => []];
+        $sh[$k] ??= ['order_ref' => $r['order_ref'], 'tour_id' => $r['tour_id'], 'pallets' => 0, 'colli' => 0, 'row_count' => 0, 'unloading_date' => $r['unloading_date'], 'items' => [],
+                     'transport_no' => $r['transport_no'], 'transport_company' => $r['transport_company'], 'plates' => $r['plates'], 'additional_info' => $r['additional_info'], '_tnos' => []];
+        $sh[$k]['_tnos'][(string)$r['transport_no']] = true;
         $sh[$k]['pallets'] += (int)$r['pallets']; $sh[$k]['colli'] += (int)$r['colli']; $sh[$k]['row_count']++;
         $sh[$k]['items'][] = ['pcs_per_box' => $r['pcs_per_box'], 'ian' => $r['ian'], 'pallets' => $r['pallets'], 'pf' => $r['pf'], 'colli' => $r['colli'], 'unloading_location' => $r['unloading_location'], 'seq' => $r['seq']];
     }
@@ -967,7 +983,13 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
     $H = $out['header'];
     if ($H['loading_date'] === null) sipdf_warn($w, 'error', 'loading_date_missing', 'Loading date not found.');
     if ($H['transport_no'] === null) sipdf_warn($w, 'warn', 'transport_missing', 'Transport (freight order) number not found.');
-    if (!$H['plates']) sipdf_warn($w, 'info', 'no_plates', 'No licence plate on the loading list (not announced yet) - enter manually.');
+    if (count($blocks) > 1) {
+        foreach ($blocks as $b) if (!$b['plates']) sipdf_warn($w, 'info', 'no_plates', 'Transport ' . $b['transport_no'] . ': no licence plate on the loading list (not announced yet) - enter manually.');
+    } elseif (!$H['plates']) sipdf_warn($w, 'info', 'no_plates', 'No licence plate on the loading list (not announced yet) - enter manually.');
+    foreach ($out['shipments'] as &$s) {
+        if (count($s['_tnos']) > 1) sipdf_warn($w, 'warn', 'shipment_multi_transport', 'Order ' . $s['order_ref'] . ' spans several transports (' . implode(', ', array_keys($s['_tnos'])) . ') - the first one is used.');
+        unset($s['_tnos']);
+    } unset($s);
     if (!$rows) sipdf_warn($w, 'error', 'no_rows', 'No data rows found.');
     foreach ($rows as $i => $r) {
         $sc = ($r['order_ref'] ?? '?') . ' row ' . ($i + 1);
@@ -1029,7 +1051,9 @@ function siparis_pdf_capraz_kontrol(array $docs): array
                 foreach ($d['shipments'] as $sh) {
                     $s = &sipdf_ship($S, $sh['order_ref']); $s['ll'] = ['pallets' => $sh['pallets'], 'quantity' => $sh['colli'], 'file' => $d['_file'] ?? null];
                     $s['tour']['ll'] = $sh['tour_id']; $s['loading_date']['ll'] = $d['header']['loading_date']; $s['unloading_date_ll'] = $sh['unloading_date'];
-                    $s['carrier']['ll_actual'] = $d['header']['transport_company']; $s['carrier']['ll_plates'] = $d['header']['plates']; $s['transport_no'] = $d['header']['transport_no'];
+                    $s['carrier']['ll_actual'] = array_key_exists('transport_company', $sh) ? $sh['transport_company'] : $d['header']['transport_company'];   // v374: per truck
+                    $s['carrier']['ll_plates'] = array_key_exists('plates', $sh) ? $sh['plates'] : $d['header']['plates'];
+                    $s['transport_no'] = array_key_exists('transport_no', $sh) ? $sh['transport_no'] : $d['header']['transport_no'];
                     foreach ($sh['items'] as $it) { $k = (string)$it['pcs_per_box']; $e = $s['items'][$k]['ll'] ?? ['pallets' => 0, 'quantity' => 0]; $e['pallets'] += (int)$it['pallets']; $e['quantity'] += (int)$it['colli']; $s['items'][$k]['ll'] = $e; }
                     unset($s);
                 }
