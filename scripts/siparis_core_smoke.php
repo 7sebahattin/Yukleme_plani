@@ -151,8 +151,8 @@ ok('TC900002.10: 10 palet, tek kalem', (int)$s2['toplam_palet'] === 10 && count(
 ok('olusturuldu olayı "PO ile"', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND tur = 'olusturuldu' AND aciklama = 'PO ile'", [(int)$s1['id']]) === 1);
 ok('belge_eklendi olayı', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND tur = 'belge_eklendi'", [(int)$s1['id']]) === 1);
 $bel = $db->query("SELECT * FROM siparis_belgeler WHERE id = $poBelge")->fetch();
-ok('belge: tur po, islendi, belge_tarihi = başlık tarih+saat, cw, tedarikçi, parser v2', $bel['tur'] === 'po' && $bel['durum'] === 'islendi' && $bel['belge_tarihi'] === '2026-12-01 10:00:00'
-    && (int)$bel['cw_hafta'] === 50 && $bel['tedarikci_no'] === '1102720' && $bel['parser_surum'] === 'v2' && str_contains((string)$bel['parse_json'], 'TC900001.10'));
+ok('belge: tur po, islendi, belge_tarihi = başlık tarih+saat, cw, tedarikçi, parser v3', $bel['tur'] === 'po' && $bel['durum'] === 'islendi' && $bel['belge_tarihi'] === '2026-12-01 10:00:00'
+    && (int)$bel['cw_hafta'] === 50 && $bel['tedarikci_no'] === '1102720' && $bel['parser_surum'] === 'v3' && str_contains((string)$bel['parse_json'], 'TC900001.10'));
 ok('siparis_belgeler(): bağlı belge + gecerli', count(siparis_belgeler($db, (int)$s1['id'])) === 1 && (int)siparis_belgeler($db, (int)$s1['id'])[0]['gecerli'] === 1);
 
 echo "\n=== 5c. LL (plakalı) → araç atandı ===\n";
@@ -591,5 +591,51 @@ foreach (token_get_all($src) as $t) if (!is_array($t) || !in_array($t[0], [T_COM
 ok('kütüphanelerde exec/shell/eval yok', !preg_match('/(?<!->)\b(shell_exec|exec|passthru|system|proc_open|popen|eval)\s*\(/', $kod));
 ok('siparis_migrate yalnız tanımda (çağrı yok)', preg_match_all('/siparis_migrate\(/', $kod) === 1 && str_contains($kod, 'function siparis_migrate('));
 ok('siparis_pkl.php PhpOffice/PhpSpreadsheet kullanmaz', !str_contains((string)file_get_contents($ROOT . '/config/siparis_pkl.php'), 'PhpOffice'));
+
+echo "\n=== 15. LL: tek belgede iki Transport (iki tır) + aynı belgenin yeniden okunması (v374) ===\n";
+$dogru = siparis_test_fixture('ll_iki_transport');
+// v373 ayrıştırıcısının hatalı çıktısı: başlıkta yalnız SON blok, sevkiyatlarda taşıma alanı yok,
+// "Additional / company / info" etiketleri ilk tırın 2. satırına yapışmış (sahte tur no + sahte IAN → fazladan kalem)
+$hatali = $dogru; unset($hatali['header']['transports']);
+foreach (['transport_no', 'transport_company', 'plates', 'additional_info'] as $f) $hatali['header'][$f] = $dogru['header']['transports'][1][$f];
+foreach ($hatali['shipments'] as &$x) foreach (['transport_no', 'transport_company', 'plates', 'additional_info'] as $f) unset($x[$f]); unset($x);
+$sahte = $hatali['shipments'][0]; $sahte['tour_id'] = '9000000091 Additional info'; $sahte['items'] = [$sahte['items'][1]]; $sahte['items'][0]['ian'] = '90009 company';
+$sahte['pallets'] = 2; $sahte['colli'] = 320; $sahte['row_count'] = 1;
+$hatali['shipments'][0]['items'] = [$hatali['shipments'][0]['items'][0]]; $hatali['shipments'][0]['pallets'] = 2; $hatali['shipments'][0]['colli'] = 320; $hatali['shipments'][0]['row_count'] = 1;
+array_splice($hatali['shipments'], 1, 0, [$sahte]);
+$hatali['rows'][1]['ian'] = '90009 company'; $hatali['rows'][1]['tour_id'] = '9000000091 Additional info';
+$r = siparis_test_isle($db, $hatali, 'll_iki_hatali');
+$ikiBelge = (int)$r['kayit']['belge_id'];
+$a = siparis_test_sev($db, 'TC900091.10'); $b = siparis_test_sev($db, 'TC900092.10');
+ok('hatalı okuma (eski davranışın kopyası): 1. tır 2. tırın navlununu almış', $r['isle']['ok'] && $a['navlun_no'] === '6100000092' && $a['nakliyeci'] === 'NAKLIYE Y' && $a['plakalar'] === null);
+ok('hatalı okuma: 1. tırda sahte IAN ile fazladan kalem', count(siparis_kalemler($db, (int)$a['id'])) === 2);
+ok('aynı order ref iki kez: ilk kaydın kalemi "yok" sayılmaz', count(array_filter(siparis_kalemler($db, (int)$a['id']), fn($k) => (int)$k['ll_koli'] === 320)) === 2);
+// aynı belge (aynı id) düzeltilmiş ayrıştırıcıyla yeniden işlenir — "↻ Yeniden işle"
+$GLOBALS['_siparis_parse_override'] = fn(string $yol): array => $dogru;
+try { $i = siparis_belge_isle($db, $ikiBelge, 1, null); } finally { unset($GLOBALS['_siparis_parse_override']); }
+$a = siparis_test_sev($db, 'TC900091.10'); $b = siparis_test_sev($db, 'TC900092.10');
+ok('yeniden işle başarılı, iki sevkiyat', $i['ok'] && count($i['sevkiyatlar']) === 2);
+ok('1. tır KENDİ navlun / nakliyeci / plakasını aldı', $a['navlun_no'] === '6100000091' && $a['nakliyeci'] === 'NAKLIYE X' && $a['plakalar'] === '34TST091-34TST092');
+ok('2. tır kendi navlun / nakliyecisini korudu, plakasız', $b['navlun_no'] === '6100000092' && $b['nakliyeci'] === 'NAKLIYE Y' && $b['plakalar'] === null);
+ok('1. tır tur no = 9000000091 (sahte metin düzeldi)', $a['tur_no'] === '9000000091');
+$ka = siparis_kalemler($db, (int)$a['id']);
+ok('sahte IAN\'lı kalem kaldırıldı, tek kalem 4 pal / 640 koli', count($ka) === 1 && $ka[0]['ian'] === '90009' && (int)$ka[0]['ll_palet'] === 4 && (int)$ka[0]['ll_koli'] === 640);
+ok('kaldırma olayı yazıldı', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND tur = 'uyari' AND aciklama LIKE ?", [(int)$a['id'], '%yeniden okumasında yok%']) === 1);
+$bel = $db->query("SELECT ozet FROM siparis_belgeler WHERE id = $ikiBelge")->fetchColumn();
+ok('belge özeti iki tırı da sayar', str_contains((string)$bel, '6100000091 · NAKLIYE X') && str_contains((string)$bel, '6100000092 · NAKLIYE Y'));
+// elle girilen navlun yeniden okumada EZİLMEZ (çatışma)
+$db->prepare("UPDATE siparis_sevkiyatlar SET navlun_no = 'ELLE1', elle_alanlar = ? WHERE id = ?")->execute([json_encode(['navlun_no' => ['uid' => 1]]), (int)$b['id']]);
+$GLOBALS['_siparis_parse_override'] = fn(string $yol): array => $dogru;
+try { siparis_belge_isle($db, $ikiBelge, 1, null); } finally { unset($GLOBALS['_siparis_parse_override']); }
+ok('elle kilitli navlun korunur', siparis_test_sev($db, 'TC900092.10')['navlun_no'] === 'ELLE1');
+// geri alma: bu belgenin önceki okuması plaka yazdı, yeni okumada plaka yok → yalnız BU belgenin değeri geri alınır
+$plakasiz = $dogru; $plakasiz['header']['transports'][0]['plates'] = []; $plakasiz['shipments'][0]['plates'] = [];
+$GLOBALS['_siparis_parse_override'] = fn(string $yol): array => $plakasiz;
+try { siparis_belge_isle($db, $ikiBelge, 1, null); } finally { unset($GLOBALS['_siparis_parse_override']); }
+ok('aynı belgenin önceki plakası yeni okumada yoksa geri alınır', siparis_test_sev($db, 'TC900091.10')['plakalar'] === null);
+// eski parse_json (sevkiyatta taşıma alanı yok) başlığa düşer
+$eskiBicim = $dogru; unset($eskiBicim['header']['transports']); foreach ($eskiBicim['shipments'] as &$x) unset($x['transport_no'], $x['transport_company'], $x['plates'], $x['additional_info']); unset($x);
+$r = siparis_test_isle($db, $eskiBicim, 'll_eski_bicim');
+ok('eski biçim: sevkiyatta alan yoksa başlık kullanılır', $r['isle']['ok'] && siparis_test_sev($db, 'TC900092.10')['nakliyeci'] === 'NAKLIYE X');
 
 siparis_test_bitir();

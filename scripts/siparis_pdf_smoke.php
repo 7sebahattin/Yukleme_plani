@@ -14,7 +14,7 @@ ok('strict_types YOK (gevşek tip dönüşümüne dayanır)', !preg_match('/^\s*
 ok('iç önek sipdf_, eski sp_ öneki kalmadı', !preg_match('/\bsp_[a-z]/', preg_replace('#//[^\n]*#', '', $src)) && str_contains($src, 'function sipdf_lines('));
 ok('genel API adları duruyor', function_exists('siparis_pdf_oku') && function_exists('siparis_pdf_belge_turu') && function_exists('siparis_pdf_parse_order')
     && function_exists('siparis_pdf_parse_price_confirmation') && function_exists('siparis_pdf_parse_loading_list') && function_exists('siparis_pdf_isle') && function_exists('siparis_pdf_capraz_kontrol'));
-ok('SIPARIS_PDF_SURUM = v2', SIPARIS_PDF_SURUM === 'v2');
+ok('SIPARIS_PDF_SURUM = v3', SIPARIS_PDF_SURUM === 'v3');
 ok('exec/shell/eval yok, CLI bloğu yok', !preg_match('/\b(shell_exec|passthru|proc_open|popen|eval)\s*\(|(?<!->)\bexec\s*\(|PHP_SAPI|\$argv/', $src));
 ok('XML okumada LIBXML_NOENT / DTDLOAD yok', !preg_match('/LIBXML_NOENT|LIBXML_DTDLOAD/', $src));
 
@@ -108,6 +108,23 @@ if ($orn === null) {
         ok('set 2: tüm belge içi denetimler OK', $tumOk($po) && $tumOk($ll) && $tumOk($pc));
         $cc = siparis_pdf_capraz_kontrol([$po, $ll, $pc]);
         ok('set 2 çapraz: 6 split_differs uyarısı, denetimler OK', count(array_filter($cc['warnings'], fn($w) => $w['code'] === 'split_differs')) === 6 && array_filter($cc['checks'], fn($c) => !$c['ok']) === []);
+    }
+    // — set 3 (v374): tek yükleme listesinde İKİ Transport bloğu — her tır kendi navlun/nakliyeci/plakasını alır —
+    $s = $orn['3'] ?? [];
+    if (!isset($s['ll'])) echo "set 3 ATLANDI (iki tırlı LL örneği yok)\n";
+    else {
+        $ll = siparis_pdf_isle($s['ll']);
+        $byRef = array_column($ll['shipments'], null, 'order_ref');
+        ok('set 3 LL: 2 transport bloğu, 2 sevkiyat', count($ll['header']['transports']) === 2 && count($ll['shipments']) === 2);
+        ok('set 3 LL: TC426877.10 → 6100128178 · ÖZ LIDERTRANS · 2 plaka', ($byRef['TC426877.10']['transport_no'] ?? null) === '6100128178'
+            && $byRef['TC426877.10']['transport_company'] === 'ÖZ LIDERTRANS' && $byRef['TC426877.10']['plates'] === ['33ARP359', '33ARP360']);
+        ok('set 3 LL: TC427747.10 → 6100128599 · NILCARGO · plakasız', ($byRef['TC427747.10']['transport_no'] ?? null) === '6100128599'
+            && $byRef['TC427747.10']['transport_company'] === 'NILCARGO' && $byRef['TC427747.10']['plates'] === []);
+        ok('set 3 LL: etiket satırları satıra yapışmaz (IAN / tur no temiz)', array_unique(array_column($ll['rows'], 'ian')) === ['80646']
+            && $byRef['TC426877.10']['tour_id'] === '9000168107' && count($ll['rows']) === 7);
+        ok('set 3: tüm belge içi denetimler OK', $tumOk($ll));
+        $cc = siparis_pdf_capraz_kontrol([$ll]);
+        ok('set 3 çapraz: navlun sevkiyat bazında', ($cc['shipments']['TC426877.10']['transport_no'] ?? null) === '6100128178' && ($cc['shipments']['TC427747.10']['transport_no'] ?? null) === '6100128599');
     }
     // — fuzz: run_v2 --selftest portu — her satır sınırında sayfa bölünür, sonuç bölünmemiş ayrıştırmayla AYNI olmalı —
     $norm = function (array $d): string {

@@ -1,0 +1,218 @@
+{
+ "_aciklama": "SENTETİK test verisi. LL: tek belgede İKİ Transport bloğu (iki tır). TC900091.10 → 1. blok (plakalı), TC900092.10 → 2. blok (plakasız).",
+ "doc_type": "loading_list",
+ "header": {
+  "agency": "TEST AGENCY",
+  "vendor": "ASYA FRESH - TEST",
+  "loading_date": "2026-12-15",
+  "loading_location": "ASYA FRESH - FINIKE",
+  "transport_no": "6100000091",
+  "transport_company": "NAKLIYE X",
+  "plates": [
+   "34TST091",
+   "34TST092"
+  ],
+  "additional_info": null,
+  "transports": [
+   {
+    "transport_no": "6100000091",
+    "transport_company": "NAKLIYE X",
+    "plates": [
+     "34TST091",
+     "34TST092"
+    ],
+    "additional_info": null
+   },
+   {
+    "transport_no": "6100000092",
+    "transport_company": "NAKLIYE Y",
+    "plates": [],
+    "additional_info": "XX000001"
+   }
+  ]
+ },
+ "rows": [
+  {
+   "product": "Testfruit",
+   "ian": "90009",
+   "pallet_type": "EV",
+   "pallets": 2,
+   "pf": 160,
+   "colli": 320,
+   "seq": 1,
+   "unloading_location": "LIDL YY A",
+   "unloading_date": "2026-12-20",
+   "order_ref": "TC900091.10",
+   "tour_id": "9000000091",
+   "temp": "5-7C",
+   "client": "TEST CLIENT",
+   "final_unloading_location": "LIDL YY A",
+   "transport_no": "6100000091",
+   "transport_company": "NAKLIYE X",
+   "plates": [
+    "34TST091",
+    "34TST092"
+   ],
+   "additional_info": null,
+   "description": "Testfruit 14 PC LOSE (TR)",
+   "pcs_per_box": 14,
+   "pack_mode": "LOSE",
+   "origin": "TR"
+  },
+  {
+   "product": "Testfruit",
+   "ian": "90009",
+   "pallet_type": "EV",
+   "pallets": 2,
+   "pf": 160,
+   "colli": 320,
+   "seq": 1,
+   "unloading_location": "LIDL YY B",
+   "unloading_date": "2026-12-20",
+   "order_ref": "TC900091.10",
+   "tour_id": "9000000091",
+   "temp": "5-7C",
+   "client": "TEST CLIENT",
+   "final_unloading_location": "LIDL YY B",
+   "transport_no": "6100000091",
+   "transport_company": "NAKLIYE X",
+   "plates": [
+    "34TST091",
+    "34TST092"
+   ],
+   "additional_info": null,
+   "description": "Testfruit 14 PC LOSE (TR)",
+   "pcs_per_box": 14,
+   "pack_mode": "LOSE",
+   "origin": "TR"
+  },
+  {
+   "product": "Testfruit",
+   "ian": "90009",
+   "pallet_type": "EV",
+   "pallets": 1,
+   "pf": 160,
+   "colli": 160,
+   "seq": 1,
+   "unloading_location": "LIDL YY C",
+   "unloading_date": "2026-12-19",
+   "order_ref": "TC900092.10",
+   "tour_id": "9000000092",
+   "temp": "5-7C",
+   "client": "TEST CLIENT",
+   "final_unloading_location": "LIDL YY C",
+   "transport_no": "6100000092",
+   "transport_company": "NAKLIYE Y",
+   "plates": [],
+   "additional_info": "XX000001",
+   "description": "Testfruit 10 PC LOSE (TR)",
+   "pcs_per_box": 10,
+   "pack_mode": "LOSE",
+   "origin": "TR"
+  },
+  {
+   "product": "Testfruit",
+   "ian": "90009",
+   "pallet_type": "EV",
+   "pallets": 1,
+   "pf": 160,
+   "colli": 160,
+   "seq": 1,
+   "unloading_location": "LIDL YY C",
+   "unloading_date": "2026-12-19",
+   "order_ref": "TC900092.10",
+   "tour_id": "9000000092",
+   "temp": "5-7C",
+   "client": "TEST CLIENT",
+   "final_unloading_location": "LIDL YY C",
+   "transport_no": "6100000092",
+   "transport_company": "NAKLIYE Y",
+   "plates": [],
+   "additional_info": "XX000001",
+   "description": "Testfruit 12 PC LOSE (TR)",
+   "pcs_per_box": 12,
+   "pack_mode": "LOSE",
+   "origin": "TR"
+  }
+ ],
+ "shipments": [
+  {
+   "order_ref": "TC900091.10",
+   "tour_id": "9000000091",
+   "pallets": 4,
+   "colli": 640,
+   "row_count": 2,
+   "unloading_date": "2026-12-20",
+   "items": [
+    {
+     "pcs_per_box": 14,
+     "ian": "90009",
+     "pallets": 2,
+     "pf": 160,
+     "colli": 320,
+     "unloading_location": "LIDL YY A",
+     "seq": 1
+    },
+    {
+     "pcs_per_box": 14,
+     "ian": "90009",
+     "pallets": 2,
+     "pf": 160,
+     "colli": 320,
+     "unloading_location": "LIDL YY B",
+     "seq": 1
+    }
+   ],
+   "transport_no": "6100000091",
+   "transport_company": "NAKLIYE X",
+   "plates": [
+    "34TST091",
+    "34TST092"
+   ],
+   "additional_info": null
+  },
+  {
+   "order_ref": "TC900092.10",
+   "tour_id": "9000000092",
+   "pallets": 2,
+   "colli": 320,
+   "row_count": 2,
+   "unloading_date": "2026-12-19",
+   "items": [
+    {
+     "pcs_per_box": 10,
+     "ian": "90009",
+     "pallets": 1,
+     "pf": 160,
+     "colli": 160,
+     "unloading_location": "LIDL YY C",
+     "seq": 1
+    },
+    {
+     "pcs_per_box": 12,
+     "ian": "90009",
+     "pallets": 1,
+     "pf": 160,
+     "colli": 160,
+     "unloading_location": "LIDL YY C",
+     "seq": 1
+    }
+   ],
+   "transport_no": "6100000092",
+   "transport_company": "NAKLIYE Y",
+   "plates": [],
+   "additional_info": "XX000001"
+  }
+ ],
+ "total_pallets": 6,
+ "total_colli": 960,
+ "checks": [],
+ "warnings": [
+  {
+   "level": "info",
+   "code": "no_plates",
+   "message": "Transport 6100000092: no licence plate on the loading list (not announced yet) - enter manually."
+  }
+ ],
+ "meta": {}
+}

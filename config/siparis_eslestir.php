@@ -702,6 +702,8 @@ function siparis_ll_uygula(PDO $pdo, int $sid, array $belge, array $doc, array $
     $bid = (int)$belge['id']; $sira = siparis_belge_sira($belge);
     $u = fn(string $alan, mixed $v): string => siparis_alan_uygula($pdo, 'sevkiyat', $sid, $alan, $v, 'll', $bid, $sira);
     $h = (array)($doc['header'] ?? []);
+    // v374: bir yükleme listesinde birden çok tır (Transport bloğu) olabilir — taşıma bilgisi SEVKİYATIN kendi bloğundan; eski parse_json'da başlıktan
+    foreach (['transport_no', 'transport_company', 'plates', 'additional_info'] as $f) if (array_key_exists($f, $sh)) $h[$f] = $sh[$f];
     $plakalar = array_values(array_filter(array_map('strval', (array)($h['plates'] ?? [])), fn($x) => trim($x) !== ''));
     $yerler = [];
     foreach ((array)($sh['items'] ?? []) as $it) { $y = trim((string)($it['unloading_location'] ?? '')); if ($y !== '' && !in_array($y, $yerler, true)) $yerler[] = $y; }
@@ -715,6 +717,10 @@ function siparis_ll_uygula(PDO $pdo, int $sid, array $belge, array $doc, array $
         $u('bosaltma_yerleri', $yerler ? implode(', ', $yerler) : null),
     ];
     if ($plakalar) $r[] = $u('plakalar', siparis_plaka_normalize(implode('-', $plakalar))['deger']);
+    // Bu belge önceki (hatalı) okumada bu tıra değer yazdıysa ve artık boş geliyorsa: yalnız BU belgenin değeri geri alınır
+    foreach (['nakliyeci' => $h['transport_company'] ?? null, 'navlun_no' => $h['transport_no'] ?? null, 'plakalar' => $plakalar ? 'x' : null] as $alan => $v) {
+        if ($v === null || trim((string)$v) === '') siparis_alan_belge_geri_al($pdo, 'sevkiyat', $sid, $alan, 'll', $bid);
+    }
     $ref = (string)($sh['order_ref'] ?? '');
     $grup = [];
     foreach ((array)($sh['items'] ?? []) as $it) {
@@ -740,7 +746,79 @@ function siparis_ll_uygula(PDO $pdo, int $sid, array $belge, array $doc, array $
         $r[] = siparis_alan_uygula($pdo, 'kalem', $kid, 'pf', $it['pf'] ?? null, 'll', $bid, $sira);
     }
     siparis_yok_isaretle($pdo, $sid, 'll', $gorulen);
+    siparis_kalem_belge_temizle($pdo, $sid, 'll', $bid, $gorulen);
     return siparis_uygula_sayi($r);
+}
+
+/**
+ * v374 — aynı belge yeniden işlenince, belgenin ÖNCEKİ okumasının bu alana yazdığı değeri geri alır
+ * (yeni okumada alan boş). Elle kilitli alana ve başka kaynağın/belgenin değerine DOKUNMAZ; başka kaynağın
+ * saklı değeri varsa en yetkilisine döner, yoksa alan boşalır.
+ */
+function siparis_alan_belge_geri_al(PDO $pdo, string $varlik, int $id, string $alan, string $kaynak, int $belgeId): void
+{
+    $tanim = siparis_alan_tanimlari()[$varlik][$alan] ?? null;
+    if ($tanim === null || $belgeId <= 0) return;
+    $tablo = siparis_varlik_tablo($varlik);
+    $st = $pdo->prepare("SELECT * FROM `$tablo` WHERE id = ?");
+    $st->execute([$id]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) return;
+    $kay = siparis_json_coz($row['kaynaklar']);
+    $elle = siparis_json_coz($row['elle_alanlar']);
+    if (!isset($kay[$alan][$kaynak]) || (int)($kay[$alan][$kaynak]['b'] ?? 0) !== $belgeId) return;
+    unset($kay[$alan][$kaynak]);
+    $deger = $row[$alan] ?? null; $degerYaz = false;
+    if (!isset($elle[$alan]) && ($kay[$alan]['_s'] ?? null) === $kaynak) {
+        $en = null;
+        foreach ($kay[$alan] as $k => $e) {
+            if ($k === '_s' || !is_array($e) || siparis_deger_normalize($e['v'] ?? null, $tanim['tip']) === null) continue;
+            if ($en === null || siparis_kaynak_sira($tanim, (string)$k) > siparis_kaynak_sira($tanim, $en)) $en = (string)$k;
+        }
+        if ($en !== null) { $kay[$alan]['_s'] = $en; $deger = siparis_deger_normalize($kay[$alan][$en]['v'], $tanim['tip']); }
+        else { unset($kay[$alan]['_s']); $deger = null; }
+        $degerYaz = true;
+    }
+    if (!array_diff(array_keys($kay[$alan]), ['_s'])) unset($kay[$alan]);
+    $pdo->prepare("UPDATE `$tablo` SET `$alan` = ?, kaynaklar = ?, updated_at = ? WHERE id = ?")
+        ->execute([$degerYaz ? $deger : $row[$alan], $kay ? siparis_json($kay) : null, siparis_simdi(), $id]);
+    if ($degerYaz) siparis_olay($pdo, $varlik === 'sevkiyat' ? $id : (int)$row['sevkiyat_id'], 'alan_guncellendi', $row[$alan], $deger,
+        $tanim['etiket'] . ' — ' . siparis_kaynak_etiket($kaynak) . ' (yeniden okuma)', $belgeId, null);
+}
+
+/**
+ * v374 — aynı belge yeniden işlenince, belgenin önceki okumasından kalan ama artık GÖRÜLMEYEN kalemlerin
+ * bu kaynaktaki miktarlarını siler. Kalemin başka kaynakta miktarı, elle değeri ya da PKL'de kullanımı yoksa
+ * (hatalı okumayla doğmuş kalem) kalem de silinir.
+ */
+function siparis_kalem_belge_temizle(PDO $pdo, int $sid, string $src, int $belgeId, array $gorulenIds): void
+{
+    $kol = ['po' => ['po_palet', 'po_koli'], 'll' => ['ll_palet', 'll_koli'], 'pc' => ['pc_koli']];
+    if (!isset($kol[$src]) || $belgeId <= 0) return;
+    $st = $pdo->prepare('SELECT * FROM siparis_kalemler WHERE sevkiyat_id = ?');
+    $st->execute([$sid]);
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $k) {
+        $kid = (int)$k['id'];
+        if (in_array($kid, $gorulenIds, true)) continue;
+        $kay = siparis_json_coz($k['kaynaklar']);
+        if ((int)($kay['_miktar'][$src]['b'] ?? 0) !== $belgeId) continue;
+        unset($kay['_miktar'][$src]);
+        if (!$kay['_miktar']) unset($kay['_miktar']);
+        $yj = siparis_json_coz($k['yerler_json']); unset($yj[$src]);
+        $baskaMiktar = false;
+        foreach ($kol as $s2 => $cs) { if ($s2 === $src) continue; foreach ($cs as $c) if ($k[$c] !== null && (int)$k[$c] !== 0) $baskaMiktar = true; }
+        $pkl = $pdo->prepare('SELECT COUNT(*) FROM siparis_pkl WHERE veri_json LIKE ? OR veri_json LIKE ?');
+        $pkl->execute(['%"kalem_id":' . $kid . ',%', '%"kalem_id":' . $kid . '}%']);
+        if (!$baskaMiktar && !siparis_json_coz($k['elle_alanlar']) && (int)$pkl->fetchColumn() === 0) {
+            $pdo->prepare("DELETE FROM siparis_catismalar WHERE kalem_id = ? AND durum = 'acik'")->execute([$kid]);
+            $pdo->prepare('DELETE FROM siparis_kalemler WHERE id = ?')->execute([$kid]);
+            siparis_olay($pdo, $sid, 'uyari', null, null, 'Kalem (IAN ' . $k['ian'] . ', kalibre ' . $k['kalibre'] . ') belgenin yeniden okumasında yok — kaldırıldı', $belgeId, null);
+            continue;
+        }
+        $set = []; foreach ($kol[$src] as $c) $set[] = "`$c` = NULL";
+        $pdo->prepare('UPDATE siparis_kalemler SET ' . implode(', ', $set) . ', kaynaklar = ?, yerler_json = ?, updated_at = ? WHERE id = ?')
+            ->execute([$kay ? siparis_json($kay) : null, $yj ? siparis_json($yj) : null, siparis_simdi(), $kid]);
+    }
 }
 
 /** PC satırları (bir order_ref) → sevkiyat + kalemler. @return int çatışma sayısı */
@@ -959,7 +1037,16 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
             $ozet = 'PO CW' . ($cwH ?? '?') . '.' . ($cwY ?? '?') . ($dest !== '' ? ' · ' . $dest : '') . ' · ' . $sayi . ' sevkiyat';
         } elseif ($tur === 'll') {
             $sayi = 0;
+            // Aynı order ref birden çok kez gelebilir (ör. iki tur no): TEK birimde uygulanır — yoksa sonraki kayıt, öncekinin
+            // kalemlerini "bu belgede yok" sayardı. İlk kaydın tur/taşıma bilgisi geçerli, kalemler birleşir.
+            $llSev = [];
             foreach ((array)($doc['shipments'] ?? []) as $sh) {
+                $ref = (string)($sh['order_ref'] ?? '');
+                if (!isset($llSev[$ref])) { $llSev[$ref] = $sh; continue; }
+                $llSev[$ref]['items'] = array_merge((array)($llSev[$ref]['items'] ?? []), (array)($sh['items'] ?? []));
+                foreach (['pallets', 'colli', 'row_count'] as $f) $llSev[$ref][$f] = (int)($llSev[$ref][$f] ?? 0) + (int)($sh[$f] ?? 0);
+            }
+            foreach ($llSev as $sh) {
                 $ref = (string)($sh['order_ref'] ?? '');
                 if (!$refGecerli($ref)) { $sonuc['mesajlar'][] = 'Order ref okunamayan Loading List satırı atlandı.'; continue; }
                 [$sid, $guncel] = $birim($ref, isset($sh['tour_id']) ? (string)$sh['tour_id'] : null, 'll');
@@ -967,7 +1054,8 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
                 $sayi++;
             }
             $h = (array)($doc['header'] ?? []);
-            $ozet = 'LL ' . trim((string)($h['transport_no'] ?? '?')) . (trim((string)($h['transport_company'] ?? '')) !== '' ? ' · ' . trim((string)$h['transport_company']) : '') . ' · ' . $sayi . ' sevkiyat';
+            $tlar = array_values(array_filter((array)($h['transports'] ?? []), 'is_array')) ?: [$h];   // v374: tır başına bir Transport bloğu
+            $ozet = 'LL ' . implode(' + ', array_map(fn($b) => trim((string)($b['transport_no'] ?? '?')) . (trim((string)($b['transport_company'] ?? '')) !== '' ? ' · ' . trim((string)$b['transport_company']) : ''), $tlar)) . ' · ' . $sayi . ' sevkiyat';
         } elseif ($tur === 'pc') {
             $gruplar = [];
             // PC satırlarında IAN yalnız grubun ilk satırında basılı olabilir: aynı ürün/sold-to'nun bilinen IAN'ı eksik satırlara taşınır
