@@ -406,7 +406,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             let { ctx, page, hatalar } = await ac('mail_ayarsiz', w, h);
             const d = await page.evaluate(() => ({ n: document.querySelectorAll('[data-sip-mail]').length, pasif: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => b.disabled),
                 not: (document.querySelector('.sip-mail-not') || {}).textContent || '', link: !!document.querySelector('.sip-mail-not a[href="siparis_ayarlar.php#mail"]') }));
-            ok(`[${w}] mail ayarsız: 3 düğme, hepsi pasif`, d.n === 3 && d.pasif, JSON.stringify(d));
+            ok(`[${w}] mail ayarsız: 2 düğme, hepsi pasif`, d.n === 2 && d.pasif, JSON.stringify(d));
             ok(`[${w}] mail ayarsız (yönetici): ayar bağlantısı görünür`, d.link && /Mail sorgu ayarları/.test(d.not), d.not);
             ok(`[${w}] mail ayarsız: yatay taşma yok`, (await tasma(page)) <= 0);
             ok(`[${w}] mail ayarsız: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
@@ -433,10 +433,10 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 return { n: bs.length, hepsiAktif: bs.every(b => !b.disabled), tops: rc.map(x => Math.round(x.top)), w: rc.map(x => Math.round(x.width)), h: rc.map(x => x.height), kapW: kr.width,
                     sutun: cs.display === 'grid' ? cs.gridTemplateColumns.split(' ').length : 0, tasar: rc.some(x => x.right > kr.right + 1 || x.left < kr.left - 1) };
             });
-            ok(`[${w}] mail: üç düğme etkin ve kapsayıcıdan taşmıyor`, r.n === 3 && r.hepsiAktif && !r.tasar, JSON.stringify(r));
-            if (w < 390) ok(`[${w}] mail: <390px düğmeler alt alta, tam genişlik`, r.sutun === 1 && r.tops[0] < r.tops[1] && r.tops[1] < r.tops[2] && r.w.every(x => x >= r.kapW - 2), JSON.stringify(r));
-            else if (w < 768) ok(`[${w}] mail: <768px 3 eşit sütun, aynı satır`, r.sutun === 3 && r.tops[0] === r.tops[1] && r.tops[1] === r.tops[2] && Math.max(...r.w) - Math.min(...r.w) <= 2, JSON.stringify(r));
-            else ok(`[${w}] mail: masaüstü/tablet düğmeler aynı satırda`, r.tops[0] === r.tops[1] && r.tops[1] === r.tops[2], JSON.stringify(r));
+            ok(`[${w}] mail: iki düğme etkin ve kapsayıcıdan taşmıyor`, r.n === 2 && r.hepsiAktif && !r.tasar, JSON.stringify(r));
+            if (w < 390) ok(`[${w}] mail: <390px düğmeler alt alta, tam genişlik`, r.sutun === 1 && r.tops[0] < r.tops[1] && r.w.every(x => x >= r.kapW - 2), JSON.stringify(r));
+            else if (w < 768) ok(`[${w}] mail: <768px 2 eşit sütun, aynı satır`, r.sutun === 2 && r.tops[0] === r.tops[1] && Math.max(...r.w) - Math.min(...r.w) <= 2, JSON.stringify(r));
+            else ok(`[${w}] mail: masaüstü/tablet düğmeler aynı satırda`, r.tops[0] === r.tops[1], JSON.stringify(r));
             if (w < 768) ok(`[${w}] mail: dokunma hedefleri ≥ 44px`, r.h.every(x => x >= 43.5), JSON.stringify(r.h));
             ok(`[${w}] mail: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
             if (w === 390) await page.screenshot({ path: path.join(SHOTS, '390_mail_ayarli.png'), fullPage: true });
@@ -476,9 +476,9 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 if (g.islem === 'baslat') return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: g.tur, i: 0, toplam: 2, sayac: SAYAC0, uyarilar: [], bitti: false }));
                 devamNo++;
                 if (devamNo === 1) return route.abort('failed');
-                return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: 'fiyat', i: 2, toplam: 2, sayac: { ...SAYAC0, alindi: 2 }, uyarilar: [], bitti: true, html: SONUC_HTML }));
+                return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: 'siparis', i: 2, toplam: 2, sayac: { ...SAYAC0, alindi: 2 }, uyarilar: [], bitti: true, html: SONUC_HTML }));
             }));
-            await page.click('[data-sip-mail="fiyat"]');
+            await page.click('[data-sip-mail="siparis"]');
             await page.waitForFunction(() => { const e = document.querySelector('[data-sip-mail-hata]'); return e && !e.hidden && /Bağlantı kesildi/.test(e.textContent); }, null, { timeout: 5000 });
             const k = await page.evaluate(() => { const b = document.querySelector('[data-sip-mail-ilerleme] [data-sip-mail-devam-et]'); const r = b.getBoundingClientRect();
                 return { hata: document.querySelector('[data-sip-mail-hata]').textContent, devamGorunur: !b.hidden && r.width > 0 && r.height >= 43.5, dugmelerAcik: Array.from(document.querySelectorAll('[data-sip-mail]')).every(x => !x.disabled) }; });
@@ -515,7 +515,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 return { baslik: (kartlar[0].querySelector('h2') || {}).textContent, kartSay: kartlar.length, onceki: !!document.querySelector('details.sip-mail-onceki'), oncekiAcik: !!(document.querySelector('details.sip-mail-onceki') || {}).open,
                     cipler: Array.from(kartlar[0].querySelectorAll('.sip-mail-chip')).map(c => c.textContent.replace(/\s+/g, ' ').trim()) };
             });
-            ok(`[${w}] mail sonuç: en yeni sorgu üstte ("Mail sorgusu — Fiyat · son 15 gün · …"), önceki sorgu kapalı <details>`, /^Mail sorgusu — Fiyat · son 15 gün · \d{2}\.\d{2}\.\d{4} \d{2}:\d{2} · /.test(o.baslik) && o.onceki && !o.oncekiAcik, JSON.stringify(o));
+            ok(`[${w}] mail sonuç: en yeni sorgu üstte ("Mail sorgusu — Sipariş · son 15 gün · …"), önceki sorgu kapalı <details>`, /^Mail sorgusu — Sipariş · son 15 gün · \d{2}\.\d{2}\.\d{4} \d{2}:\d{2} · /.test(o.baslik) && o.onceki && !o.oncekiAcik, JSON.stringify(o));
             ok(`[${w}] mail sonuç: özet çipleri (Bulunan mail / PDF / Alındı …)`, ['Bulunan mail', 'PDF', 'Alındı', 'Zaten vardı', 'Daha önce alınmış', 'Atlandı', 'Hata'].every((e, i) => o.cipler[i] && o.cipler[i].startsWith(e)), JSON.stringify(o.cipler));
             // önceki sorgu (Lojistik): "Daha önce alınmış" satırları gizli → düğme açar
             await page.click('details.sip-mail-onceki > summary'); await page.waitForTimeout(100);
@@ -576,9 +576,9 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 return { baslik: document.querySelector('#sipMailAyarBas').textContent, kutu: f.querySelectorAll('input[name="hesaplar[]"]').length, isaretli: f.querySelectorAll('input[name="hesaplar[]"]:checked').length, ta: ta.map(t => t.name), taFont: ta.map(t => parseFloat(getComputedStyle(t).fontSize)),
                     yonlendirme: /Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin\./.test(document.querySelector('#mail').textContent), csrf: !!f.querySelector('input[name=csrf]'), islem: (f.querySelector('input[name=islem]') || {}).value,
                     degerler: ta.map(t => t.value), btn: f.querySelector('button[type=submit]').getBoundingClientRect().height }; });
-            ok(`[${w}] mail ayar kartı: başlık, posta kutusu onay kutuları, 3 gönderen alanı, CSRF, islem=mail_ayar`, /Mail sorgu ayarları/.test(k.baslik) && k.kutu >= 1 && k.isaretli >= 1 && k.ta.join() === 'g_siparis,g_lojistik,g_fiyat' && k.csrf && k.islem === 'mail_ayar', JSON.stringify(k));
+            ok(`[${w}] mail ayar kartı: başlık, posta kutusu onay kutuları, 2 gönderen alanı, CSRF, islem=mail_ayar`, /Mail sorgu ayarları/.test(k.baslik) && k.kutu >= 1 && k.isaretli >= 1 && k.ta.join() === 'g_siparis,g_lojistik' && k.csrf && k.islem === 'mail_ayar', JSON.stringify(k));
             ok(`[${w}] mail ayar kartı: "X adına Y" yönlendirmesi görünür`, k.yonlendirme);
-            ok(`[${w}] mail ayar kartı: kayıtlı adresler alanlara dolu`, k.degerler[0] === 'po@ornek.test' && k.degerler[1] === 'log@ornek.test\nkisi@ornek.test' && k.degerler[2] === 'po@ornek.test', JSON.stringify(k.degerler));
+            ok(`[${w}] mail ayar kartı: kayıtlı adresler alanlara dolu`, k.degerler[0] === 'po@ornek.test' && k.degerler[1] === 'log@ornek.test\nkisi@ornek.test' && k.degerler.length === 2, JSON.stringify(k.degerler));
             if (w < 768) ok(`[${w}] mail ayar kartı: mobil girdi 16px + düğme ≥44px`, k.taFont.every(x => x >= 16) && k.btn >= 43.5, JSON.stringify([k.taFont, k.btn]));
             ok(`[${w}] mail ayar kartı: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
             ok(`[${w}] mail ayar kartı: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));

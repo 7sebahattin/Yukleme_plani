@@ -518,7 +518,7 @@
         pklApi = { hazirla: hazirla, topla: topla, paletGuncelle: paletGuncelle };
     }
 
-    /* ── v378: Mailden al (Sipariş / Lojistik / Fiyat sorgula) ─────────────────────────
+    /* ── v378: Mailden al (Sipariş / Lojistik sorgula) ─────────────────────────
        Tek tık = tara + içe aktar. İş sunucuda parçalı yürür (siparis_mail.php: baslat → devam… → bitti); burada yalnız döngü + ilerleme.
        Sonuç HTML'i sunucunun h() ile kaçırdığı TEK render (innerHTML yalnız bu). Ağ kopunca "Devam et" aynı tarama_id'yle sürer. */
     function mailAl(kap) {
@@ -530,7 +530,7 @@
         var ilkPasif = dugmeler.map(function (b) { return b.disabled; });
         var devamIl = ilerleme ? q('[data-sip-mail-devam-et]', ilerleme) : null, vazgecIl = ilerleme ? q('[data-sip-mail-vazgec]', ilerleme) : null;
         var durum = { tid: '', tur: '', calisiyor: false };
-        var ETIKET = { siparis: 'Sipariş', lojistik: 'Lojistik', fiyat: 'Fiyat' };
+        var ETIKET = { siparis: 'Sipariş', lojistik: 'Lojistik' };
 
         function kilitle(kilit) {
             kap.setAttribute('aria-busy', kilit ? 'true' : 'false');

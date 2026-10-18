@@ -47,17 +47,17 @@ ok('geçersiz e-posta reddedilir', !siparis_mail_ayar_kaydet($db, ['hesaplar' =>
 ok('olmayan posta kutusu reddedilir', !siparis_mail_ayar_kaydet($db, ['hesaplar' => [9999], 'gonderen' => []], 1)['ok']);
 ok('pasif posta kutusu reddedilir', !siparis_mail_ayar_kaydet($db, ['hesaplar' => [$C], 'gonderen' => []], 1)['ok']);
 $cok = implode("\n", array_map(fn($i) => "u$i@ornek.test", range(1, 11)));
-ok('tür başına en çok 10 gönderen', !siparis_mail_ayar_kaydet($db, ['hesaplar' => [$A], 'gonderen' => ['fiyat' => $cok]], 1)['ok']);
+ok('tür başına en çok 10 gönderen', !siparis_mail_ayar_kaydet($db, ['hesaplar' => [$A], 'gonderen' => ['siparis' => $cok]], 1)['ok']);
 ok('geçersiz ayarlar KV\'ye yazılmadı', siparis_mail_kv_oku($db, SIPARIS_MAIL_KV_AYAR) === null);
-$y = siparis_mail_ayar_kaydet($db, ['hesaplar' => [$A, $B, $A], 'gonderen' => ['siparis' => "PO@Ornek.Test\n po@ornek.test, \nkisi@ornek.test;", 'lojistik' => ['LOG@ornek.test'], 'fiyat' => '']], 1);
+$y = siparis_mail_ayar_kaydet($db, ['hesaplar' => [$A, $B, $A], 'gonderen' => ['siparis' => "PO@Ornek.Test\n po@ornek.test, \nkisi@ornek.test;", 'lojistik' => ['LOG@ornek.test']]], 1);
 $ay = siparis_mail_ayar_oku($db);
-ok('ayar kaydedildi; adresler küçük harf + tekil + sıralı', $y['ok'] && $ay['hesaplar'] === [$A, $B] && $ay['gonderen']['siparis'] === ['po@ornek.test', 'kisi@ornek.test'] && $ay['gonderen']['lojistik'] === ['log@ornek.test'] && $ay['gonderen']['fiyat'] === [], json_encode($ay));
-ok('ayarli_mi: hesap + o türün gönderen listesi', siparis_mail_ayarli_mi($ay, 'siparis') && siparis_mail_ayarli_mi($ay, 'lojistik') && !siparis_mail_ayarli_mi($ay, 'fiyat'));
+ok('ayar kaydedildi; adresler küçük harf + tekil + sıralı', $y['ok'] && $ay['hesaplar'] === [$A, $B] && $ay['gonderen']['siparis'] === ['po@ornek.test', 'kisi@ornek.test'] && $ay['gonderen']['lojistik'] === ['log@ornek.test'] && !isset($ay['gonderen']['fiyat']), json_encode($ay));
+ok('ayarli_mi: hesap + o türün gönderen listesi', siparis_mail_ayarli_mi($ay, 'siparis') && siparis_mail_ayarli_mi($ay, 'lojistik') && !isset(siparis_mail_turleri()['fiyat']));
 $aud = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_mail_ayar'")->fetchAll(PDO::FETCH_COLUMN);
 ok('audit siparis_mail_ayar yazıldı ve yalnız SAYILAR içerir (adres geçmez)', count($aud) === 1 && !str_contains($aud[0], 'ornek.test') && !str_contains($aud[0], '@') && str_contains($aud[0], '"hesap_sayisi":2'), json_encode($aud));
 $db->exec("UPDATE hks_kv SET deger = '{bozuk' WHERE anahtar = 'siparis_mail_ayar'");
 ok('bozuk ayar → boş (fail-closed)', siparis_mail_ayar_oku($db)['hesaplar'] === [] && !siparis_mail_ayarli_mi(siparis_mail_ayar_oku($db), 'siparis'));
-smt_ayar([$A, $B], ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test'], 'fiyat' => ['po@ornek.test']]);
+smt_ayar([$A, $B], ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test']]);
 ok('siparis_mail_hazir: şema + anahtar + hks_kv', siparis_mail_hazir($db));
 ok('hks_kv tablo adı beyan öneri emsaliyle aynı', siparis_mail_kv_tablo() === beyan_suggest_kv_table());
 
@@ -135,7 +135,7 @@ ok('sayaçlar: mail 5, pdf 2, alindi 1, atlandi 3', $r['son']['sayac']['mail'] =
 echo "\n=== D. İçe aktarım ===\n";
 $db->exec('DELETE FROM mail_messages');
 $db->exec("DELETE FROM audit_log WHERE action IN ('siparis_mail_ek','siparis_belge_yukle')");
-smt_ayar([$A, $B], ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test'], 'fiyat' => ['po@ornek.test']]);
+smt_ayar([$A, $B], ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test']]);
 $dLL = smt_mail($A, $MAIL[$A], 'log@ornek.test', [smt_ek('2', 'LOADLIST.pdf', smt_pdf('ll-d1'))], '2026-10-16 08:00:00');
 smt_sayac_sifirla();
 $belgeOnce = $denetle('SELECT COUNT(*) FROM siparis_belgeler');
@@ -161,25 +161,34 @@ ok('2. tarama → onceden (Daha önce alınmış)', smt_durumlar($r) === ['onced
 ok('2. taramada IMAP bağlantısı 0', $SMT_BAGLANTI === 0, "bağlantı: $SMT_BAGLANTI");
 ok('2. taramada belge sayısı artmadı', $denetle('SELECT COUNT(*) FROM siparis_belgeler') === $belgeOnce + 1);
 
-// PO + PC, ortak gönderen: Sipariş düğmesi PC'yi ALMAZ, Fiyat düğmesi PO'yu ALMAZ
+// PO + PC, ortak gönderen (v381): Sipariş düğmesi İKİSİNİ de alır (Fiyat düğmesi kalktı); LL'yi almaz
 $dPO = smt_mail($A, $MAIL[$A], 'po@ornek.test', [smt_ek('2', 'PO.pdf', smt_pdf('po-d1'))], '2026-10-16 09:00:00');
 $dPC = smt_mail($A, $MAIL[$A], 'po@ornek.test', [smt_ek('2', 'PC.pdf', smt_pdf('pc-d1'))], '2026-10-16 09:30:00');
+$dLL = smt_mail($A, $MAIL[$A], 'po@ornek.test', [smt_ek('2', 'LL.pdf', smt_pdf('ll-d9'))], '2026-10-16 09:45:00');
 $belgeOnce = $denetle('SELECT COUNT(*) FROM siparis_belgeler');
 smt_sayac_sifirla();
 $r = smt_tara('siparis', 1, 'DEPO1', ['simdi' => $SIMDI]);
 $st = array_column($r['son']['satirlar'], 'durum', 'm');
-ok('Sipariş düğmesi: PO → alindi, PC → baska_tur', ($st[$dPO] ?? '') === 'alindi' && ($st[$dPC] ?? '') === 'baska_tur', json_encode($st));
-$bt = array_values(array_filter($r['son']['satirlar'], fn($s) => $s['durum'] === 'baska_tur'))[0];
-ok('baska_tur: tür=pc kaydedildi, BELGE SATIRI AÇILMADI (yalnız PO için +1)', $bt['tur'] === 'pc' && $denetle('SELECT COUNT(*) FROM siparis_belgeler') === $belgeOnce + 1);
-ok('baska_tur metni doğru düğmeyi söyler', str_contains(sipui_mail_durum_html($bt), 'Fiyat sorgula'), sipui_mail_durum_html($bt));
-smt_sayac_sifirla();
-$r = smt_tara('fiyat', 1, 'DEPO1', ['simdi' => $SIMDI]);
-$st = array_column($r['son']['satirlar'], 'durum', 'm');
-ok('Fiyat düğmesi: PC → alindi; PO daha önce alınmış (onceden)', ($st[$dPC] ?? '') === 'alindi' && ($st[$dPO] ?? '') === 'onceden', json_encode($st));
-ok('Fiyat taramasında yalnız PC için IMAP bağlantısı (PO defterden)', $SMT_BAGLANTI === 1, "bağlantı: $SMT_BAGLANTI");
+ok('Sipariş düğmesi: PO → alindi, PC → alindi (fiyat onayı da Sipariş ile gelir), LL → baska_tur', ($st[$dPO] ?? '') === 'alindi' && ($st[$dPC] ?? '') === 'alindi' && ($st[$dLL] ?? '') === 'baska_tur', json_encode($st));
+$bt = array_values(array_filter($r['son']['satirlar'], fn($x) => $x['durum'] === 'baska_tur'))[0];
+ok('baska_tur (LL): BELGE SATIRI AÇILMADI (PO + PC için +2) ve metin Lojistik düğmesini söyler', $bt['tur'] === 'll' && $denetle('SELECT COUNT(*) FROM siparis_belgeler') === $belgeOnce + 2 && str_contains(sipui_mail_durum_html($bt), 'Lojistik sorgula'), sipui_mail_durum_html($bt));
+ok('Fiyat düğmesi artık YOK (tür listesi yalnız siparis + lojistik)', array_keys(siparis_mail_turleri()) === ['siparis', 'lojistik'] && !siparis_mail_baslat($db, 'fiyat', 1, 'DEPO1', ['simdi' => $SIMDI])['ok']);
 smt_sayac_sifirla();
 $r = smt_tara('siparis', 1, 'DEPO1', ['simdi' => $SIMDI]);
-ok('Sipariş yeniden: PC artık alındı (defterde son karar alindi) → onceden, IMAP 0', smt_durumlar($r) === ['onceden', 'onceden'] && $SMT_BAGLANTI === 0, json_encode(smt_durumlar($r)) . " bağlantı:$SMT_BAGLANTI");
+ok('Sipariş yeniden: PO + PC onceden, LL baska_tur (defterden), IMAP 0', $SMT_BAGLANTI === 0 && (array_column($r['son']['satirlar'], 'durum', 'm')[$dPC] ?? '') === 'onceden' && (array_column($r['son']['satirlar'], 'durum', 'm')[$dPO] ?? '') === 'onceden', json_encode(smt_durumlar($r)) . " bağlantı:$SMT_BAGLANTI");
+
+// Eski sürümde (v378-v380) "baska_tur / tur=pc" yazılmış PC artık Sipariş ile alınır (defter kararı bu düğme için artık son değil)
+$dEski = smt_mail($A, $MAIL[$A], 'po@ornek.test', [smt_ek('2', 'PCeski.pdf', smt_pdf('pc-d2'))], '2026-10-16 09:50:00');
+siparis_mail_defter_yaz($dEski, '2', 'baska_tur', $A, 1, ['tur' => 'pc']);
+smt_sayac_sifirla();
+$r = smt_tara('siparis', 1, 'DEPO1', ['simdi' => $SIMDI]);
+ok('eski defterdeki baska_tur(pc) → Sipariş taramasında yeniden indirilip alındı', (array_column($r['son']['satirlar'], 'durum', 'm')[$dEski] ?? '') === 'alindi' && $SMT_BAGLANTI === 1, json_encode(smt_durumlar($r)) . " bağlantı:$SMT_BAGLANTI");
+
+// Eski ayarda ayrı 'fiyat' gönderen listesi varsa Sipariş listesine katılır
+$db->prepare("REPLACE INTO hks_kv (anahtar, deger) VALUES ('siparis_mail_ayar', ?)")->execute([json_encode(['hesaplar' => [$A], 'gonderen' => ['siparis' => ['po@ornek.test'], 'lojistik' => [], 'fiyat' => ['fiyat-eski@ornek.test']]])]);
+$ayE = siparis_mail_ayar_oku($db);
+ok('eski fiyat gönderen listesi Sipariş listesine katıldı', $ayE['gonderen']['siparis'] === ['po@ornek.test', 'fiyat-eski@ornek.test'] && !isset($ayE['gonderen']['fiyat']), json_encode($ayE));
+smt_ayar([$A, $B], ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test']]);
 
 // Tanınmayan PDF
 $dX = smt_mail($A, $MAIL[$A], 'log@ornek.test', [smt_ek('2', 'rapor.pdf', smt_pdf('bilinmiyor-1'))], '2026-10-16 10:00:00');
@@ -381,8 +390,8 @@ $htmlU = sipui_mail_sonuc_html($db, $sonU, [$A]);
 ok('uyarı metinleri satırda görünür (kod etiketi + ayrıntı), info görünmez', str_contains($htmlU, 'Belgede plaka yok') && str_contains($htmlU, 'Ozel hata metni') && !str_contains($htmlU, 'bilgi satiri') && str_contains($htmlU, 'sip-ms-uyari'), $htmlU);
 ok('uyarı ayrıntısı kaçışlı + "Belgede aç" bağlantısı', !str_contains($htmlU, '<b>yok</b>') && str_contains($htmlU, 'siparis_belge.php?id=' . $bUy . '#sipBKontrol'));
 ok('uyarısız satırda açılır liste YOK', !str_contains($html, 'sip-ms-uyari'));
-$blok = sipui_mail_blok_html(['hazir' => true, 'ayarli' => ['siparis' => true, 'lojistik' => false, 'fiyat' => true], 'ayar_link' => true, 'mail_admin' => true, 'yarim' => ['tarama_id' => 'abcd', 'tur' => 'lojistik', 'i' => 5, 'toplam' => 12], 'son' => []]);
-ok('blok: 3 düğme, ayarsız olan pasif', substr_count($blok, 'data-sip-mail="') === 3 && (bool)preg_match('/data-sip-mail="lojistik" disabled/', $blok) && !preg_match('/data-sip-mail="siparis" disabled/', $blok));
+$blok = sipui_mail_blok_html(['hazir' => true, 'ayarli' => ['siparis' => true, 'lojistik' => false], 'ayar_link' => true, 'mail_admin' => true, 'yarim' => ['tarama_id' => 'abcd', 'tur' => 'lojistik', 'i' => 5, 'toplam' => 12], 'son' => []]);
+ok('blok: 2 düğme (Sipariş + Lojistik), ayarsız olan pasif', substr_count($blok, 'data-sip-mail="') === 2 && (bool)preg_match('/data-sip-mail="lojistik" disabled/', $blok) && !preg_match('/data-sip-mail="siparis" disabled/', $blok));
 ok('blok: yarım tarama şeridi (Yarım kalan mail sorgusu (Lojistik, 5/12))', str_contains($blok, 'Yarım kalan mail sorgusu (Lojistik, 5/12)') && str_contains($blok, 'data-sip-mail-devam="abcd"'));
 ok('blok: hazır değilse düğme YOK; yalnız mail yöneticisine not', !str_contains(sipui_mail_blok_html(['hazir' => false, 'mail_admin' => false]), 'data-sip-mail') && sipui_mail_blok_html(['hazir' => false, 'mail_admin' => false]) === '' && str_contains(sipui_mail_blok_html(['hazir' => false, 'mail_admin' => true]), 'kurulu değil'));
 
