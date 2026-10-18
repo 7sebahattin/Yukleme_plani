@@ -133,8 +133,15 @@ function sipui_tur_parti_html(array $sev, array $parti, bool $satir = true): str
     $sid = (int)($sev['id'] ?? 0);
     $ic = '';
     if (isset($parti[$sid]) && (string)$parti[$sid]['parti'] !== '') {
-        $fz = (int)($parti[$sid]['fazla'] ?? 0);
-        $ic = '<span title="Bağlı beyanın parti numarası">Parti ' . h((string)$parti[$sid]['parti']) . ($fz > 0 ? ' +' . $fz : '') . '</span>';
+        // Bağlı TÜM beyanların parti no'ları alt alta (sayı sınırı yok); eski biçim ('liste' yok) tek parti.
+        $liste = array_values(array_filter(array_map('strval', (array)($parti[$sid]['liste'] ?? [$parti[$sid]['parti']])), fn($x) => $x !== ''));
+        if (count($liste) > 1) {
+            $ic = '';
+            foreach ($liste as $p) $ic .= '<span class="sip-parti-satir" title="Bağlı beyanın parti numarası">Parti ' . h($p) . '</span>';
+            return $satir ? '<div class="sip-soluk sip-turparti sip-turparti-coklu">' . $ic . '</div>'
+                          : '<span class="sip-soluk sip-turparti sip-turparti-coklu">' . $ic . '</span>';
+        }
+        $ic = '<span title="Bağlı beyanın parti numarası">Parti ' . h($liste[0] ?? (string)$parti[$sid]['parti']) . '</span>';
     } elseif (trim((string)($sev['tur_no'] ?? '')) !== '') {
         $ic = '<span>Tur ' . h((string)$sev['tur_no']) . '</span>';
     }

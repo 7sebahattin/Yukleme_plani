@@ -601,18 +601,29 @@ ok('PO palet yedeği (etkin boşsa po_palet) + palet/PF yoksa meta satırı yok'
 ok('5 kalem: en çok 3 satır + "+2 daha"', substr_count($t4, 'class="sip-urun"') === 3 && str_contains($t4, '+2 daha'));
 ok('ürün bölümü mobil kartta', str_contains($kart($r['html'], $ID['s1']), 'sip-card-urun') && str_contains($kart($r['html'], $ID['s1']), 'Pal. 20 · PF 160'));
 ok('kalem metni kaçırılıyor (XSS yok)', !str_contains(sipui_kalem_html([['aciklama' => '<script>x</script>', 'po_palet' => 1]]), '<script>'));
-ok('yönetici: bağlı beyanın parti no\'su Tur no yerine ("+1" ile)', str_contains($t1, 'Parti TC900001.10-A +1') && !str_contains($t1, 'Tur 9000000001'), substr($t1, 0, 300));
-ok('parti no mobil kartta da', str_contains($kart($r['html'], $ID['s1']), 'Parti TC900001.10-A +1'));
+ok('yönetici: bağlı beyanların parti no\'ları Tur no yerine, ALT ALTA (her biri ayrı satır)', str_contains($t1, '<span class="sip-parti-satir" title="Bağlı beyanın parti numarası">Parti TC900001.10-A</span>') && substr_count($t1, 'class="sip-parti-satir"') === 2 && !str_contains($t1, 'Tur 9000000001') && !str_contains($t1, ' +1'), substr($t1, 0, 400));
+ok('parti no mobil kartta da (alt alta)', substr_count($kart($r['html'], $ID['s1']), 'class="sip-parti-satir"') === 2 && str_contains($kart($r['html'], $ID['s1']), 'Parti TC900001.10-A'));
+// kaç tane olursa olsun: aynı parti no iki beyanda geçerse TEK satır, farklı olanların hepsi ayrı satır, "+N" kısaltması YOK
+$db->exec("INSERT INTO customs_declarations (status, party_no, created_at) VALUES ('taslak', 'EK-3', '2026-12-02 12:00:00'), ('taslak', 'EK-4', '2026-12-02 12:00:00'), ('taslak', 'TC900001.10-A', '2026-12-02 12:00:00')");
+$__ek = (int)$db->lastInsertId();                                   // son eklenen = 'TC900001.10-A' kopyası
+$bagEkle($ID['s12'], $__ek - 2); $bagEkle($ID['s12'], $__ek - 1); $bagEkle($ID['s12'], $__ek); $bagEkle($ID['s12'], 1);   // beyan 1 de 'TC900001.10-A' → tekrar
+$r2 = sayfa('siparisler.php'); $ta = $satir($r2['html'], $ID['s12']);
+ok('4 bağ (3 farklı + 1 tekrar parti no) → tekrarsız 3 satır alt alta, "+N" yok', substr_count($ta, 'class="sip-parti-satir"') === 3 && str_contains($ta, 'Parti EK-3') && str_contains($ta, 'Parti EK-4') && str_contains($ta, 'Parti TC900001.10-A') && !str_contains($ta, ' +'), substr($ta, 0, 400));
+$bagEkle($ID['s12'], 2);                                             // beyan 2 (başka parti no) → 4 satır
+$r2 = sayfa('siparisler.php'); $ta = $satir($r2['html'], $ID['s12']);
+ok('4 farklı parti no → 4 ayrı satır (mobil kartta da)', substr_count($ta, 'class="sip-parti-satir"') === 4 && substr_count($kart($r2['html'], $ID['s12']), 'class="sip-parti-satir"') === 4, substr($ta, 0, 400));
+$db->exec("DELETE FROM siparis_beyan WHERE sevkiyat_id = " . (int)$ID['s12']);
+$db->exec("DELETE FROM customs_declarations WHERE id > " . ($__ek - 3));
 ok('bağı olmayan / kaldırılmış / silinmiş beyan: Tur no', str_contains($t2, 'Tur 9000000031') && str_contains($t3, 'Tur 9000000011') && !str_contains($t3, 'SILINMIS') && !str_contains($t3, 'Parti'));
 rol($OPER, false, 5);          // siparis.read + beyan.read
 $r = sayfa('siparisler.php');
-ok('beyan.read olan operatör parti no\'yu görür', temiz($r) && str_contains($satir($r['html'], $ID['s1']), 'Parti TC900001.10-A +1'));
+ok('beyan.read olan operatör parti no\'yu görür', temiz($r) && substr_count($satir($r['html'], $ID['s1']), 'class="sip-parti-satir"') === 2 && str_contains($satir($r['html'], $ID['s1']), 'Parti TC900001.10-A'));
 rol($VIEW, false, 6);          // yalnız siparis.read
 $r = sayfa('siparisler.php');
 $v1 = $satir($r['html'], $ID['s1']);
 ok('beyan.read yok: parti no görünmez, Tur no gösterilir', temiz($r) && str_contains($v1, 'Tur 9000000001') && !str_contains($v1, 'Parti') && !str_contains($r['html'], 'TC900001.10-A'), substr($v1, 0, 300));
 ok('beyan.read yok: navlun + ürün satırları yine görünür', str_contains($v1, 'Navlun 6100000001') && str_contains($v1, 'Pal. 20 · PF 160'));
-ok('parti haritası: yetkisizde boş, yetkilide dolu', siparis_beyan_parti_haritasi($db, [$ID['s1']]) === [] && (rol($ADMIN, true) || true) && siparis_beyan_parti_haritasi($db, [$ID['s1'], $ID['s2'], $ID['s11']]) === [$ID['s1'] => ['parti' => 'TC900001.10-A', 'fazla' => 1]]);
+ok('parti haritası: yetkisizde boş, yetkilide dolu', siparis_beyan_parti_haritasi($db, [$ID['s1']]) === [] && (rol($ADMIN, true) || true) && siparis_beyan_parti_haritasi($db, [$ID['s1'], $ID['s2'], $ID['s11']]) === [$ID['s1'] => ['parti' => 'TC900001.10-A', 'fazla' => 1, 'liste' => ['TC900001.10-A', (string)$db->query('SELECT party_no FROM customs_declarations WHERE id = 2')->fetchColumn()]]]);
 $db->exec('ALTER TABLE customs_declarations RENAME TO cd_yedek');   // beyan tablosu yok → sayfa yine çizilir
 rol($ADMIN, true);
 $r = sayfa('siparisler.php');
