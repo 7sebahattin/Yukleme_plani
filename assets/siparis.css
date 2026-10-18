@@ -504,7 +504,7 @@ html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
 }
 /* ==== /LİSTE v376 ==== */
 /* ==== MAİLDEN AL v378 ==== */
-/* "📧 Mailden al": Sipariş / Lojistik / Fiyat sorgula düğmeleri + ilerleme + sonuç (siparis_mail.php). Renkler mevcut tokenlardan;
+/* "📧 Mailden al": Sipariş / Lojistik sorgula düğmeleri + ilerleme + sonuç (siparis_mail.php). Renkler mevcut tokenlardan;
    ok/uyarı/hata tonları rozet paletinden (--sip-*-bg/fg: açık + koyu tema zaten tanımlı). Hedefler mobilde 44px, yatay taşma YOK. */
 .sip-mail { margin: 0 0 14px; padding: 0 0 14px; border-bottom: 1px solid var(--border); min-width: 0; }
 .sip-mail-baslik h2 { margin: 0 0 2px; font-size: 1.05rem; }
@@ -550,8 +550,8 @@ html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
 .sip-mail-gonderenler { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 14px; }
 .sip-mail-gonderenler textarea { min-height: 84px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 @media (max-width: 767px) {
-    /* mobil: üç düğme 3 eşit sütun; metin sığmazsa sarar (yatay taşma yok) */
-    .sip-mail-dugmeler { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    /* mobil: iki düğme 2 eşit sütun; metin sığmazsa sarar (yatay taşma yok) */
+    .sip-mail-dugmeler { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
     .sip-mail-btn { white-space: normal; line-height: 1.25; padding: 8px 4px; font-size: .82rem; text-align: center; min-height: 56px; }
     .sip-mail-ilerleme-dugme { width: 100%; }
     .sip-mail-ilerleme-dugme .btn { flex: 1 1 auto; }

@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// siparis_mail.php — "Sipariş / Lojistik / Fiyat sorgula" JSON ucu (POST; siparis.write + mail.read) — v378
+// siparis_mail.php — "Sipariş / Lojistik sorgula" JSON ucu (POST; siparis.write + mail.read) — v378
 //
 // islem: baslat {tur} | devam {tarama_id} | vazgec {tarama_id}. Tek tık = tara + içe aktar; iş parçalı yürür
 // (adım başına ≤ 20 sn / ≤ 6 ek) ve JS döngüsüyle sürer. Mantık: config/siparis_mail.php (burada yalnız kapı + JSON).

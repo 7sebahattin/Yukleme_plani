@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// config/siparis_mail.php — Siparişler ← Mail Merkezi: "Sipariş / Lojistik / Fiyat sorgula" (v378)
+// config/siparis_mail.php — Siparişler ← Mail Merkezi: "Sipariş / Lojistik sorgula" (v378; v381: Fiyat düğmesi Sipariş ile birleşti)
 //
 // Tek tık = tara + içe aktar (önizleme adımı YOK). Mail Merkezi'nin DB'deki kayıtlarından (cron doldurur) son 15 günün
 // aday mailleri seçilir (ayarlı posta kutusu + From TAM adres allowlist), PDF ekleri mail_ek_hazirla() ile o an IMAP'tan
@@ -40,20 +40,22 @@ const SIPARIS_MAIL_KV_SON = 'siparis_mail_son_';
 
 // ── TÜRLER + YETKİ ─────────────────────────────────────────────────────
 
-/** @return array<string,array{etiket:string,dugme:string,belge:string}> tur → etiketler + beklenen belge türü (po|ll|pc) */
+/**
+ * @return array<string,array{etiket:string,dugme:string,belgeler:list<string>}> tur → etiketler + bu düğmenin ALDIĞI belge türleri (po|ll|pc).
+ * v381: Fiyat düğmesi kalktı — Price Confirmation Sipariş düğmesiyle (aynı gönderen) alınır.
+ */
 function siparis_mail_turleri(): array
 {
     return [
-        'siparis'  => ['etiket' => 'Sipariş',  'dugme' => '📥 Sipariş sorgula',  'belge' => 'po'],
-        'lojistik' => ['etiket' => 'Lojistik', 'dugme' => '🚚 Lojistik sorgula', 'belge' => 'll'],
-        'fiyat'    => ['etiket' => 'Fiyat',    'dugme' => '💶 Fiyat sorgula',    'belge' => 'pc'],
+        'siparis'  => ['etiket' => 'Sipariş',  'dugme' => '📥 Sipariş sorgula',  'belgeler' => ['po', 'pc']],
+        'lojistik' => ['etiket' => 'Lojistik', 'dugme' => '🚚 Lojistik sorgula', 'belgeler' => ['ll']],
     ];
 }
 
 /** Belge türü koduna (po/ll/pc) karşılık gelen düğmenin türü; yoksa null. */
 function siparis_mail_belge_turu(string $belge): ?string
 {
-    foreach (siparis_mail_turleri() as $t => $m) if ($m['belge'] === $belge) return $t;
+    foreach (siparis_mail_turleri() as $t => $m) if (in_array($belge, $m['belgeler'], true)) return $t;
     return null;
 }
 
@@ -147,7 +149,10 @@ function siparis_mail_ayar_oku(PDO $pdo): array
     $out = ['hesaplar' => array_keys($h), 'gonderen' => $bos['gonderen']];
     foreach (array_keys($out['gonderen']) as $t) {
         $l = [];
-        foreach ((array)($j['gonderen'][$t] ?? []) as $a) {
+        // v381: kaldırılan 'fiyat' listesi (v378-v380) Sipariş listesine katılır — aynı gönderenden gelen PC kaybolmasın
+        $kaynak = (array)($j['gonderen'][$t] ?? []);
+        if ($t === 'siparis') $kaynak = array_merge($kaynak, (array)($j['gonderen']['fiyat'] ?? []));
+        foreach ($kaynak as $a) {
             $a = strtolower(trim((string)$a));
             if ($a !== '' && filter_var($a, FILTER_VALIDATE_EMAIL) !== false) $l[$a] = true;
         }
@@ -296,14 +301,15 @@ function siparis_mail_defter_yaz(int $mailId, string $parca, string $sonuc, int 
 /**
  * Defter kaydı bu düğme için SON karar mı? (değilse ek yeniden indirilir/denenir)
  * alindi/zaten/silinmis/gecersiz/ek_yok → evet · taninmadi → yalnız aynı ayrıştırıcı sürümüyle · baska_tur → yalnız defterdeki tür
- * bu düğmenin türünden FARKLIYSA (aynıysa doğru düğmede alınabilir) · hata/diğer → hayır.
+ * bu düğmenin ALDIĞI türlerden biri DEĞİLSE (öyleyse bu düğmede alınabilir) · hata/diğer → hayır.
+ * @param list<string> $beklenenler
  */
-function siparis_mail_defter_son_mu(array $d, string $beklenen): bool
+function siparis_mail_defter_son_mu(array $d, array $beklenenler): bool
 {
     $s = (string)($d['sonuc'] ?? '');
     if (in_array($s, ['alindi', 'zaten', 'silinmis', 'gecersiz', 'ek_yok'], true)) return true;
     if ($s === 'taninmadi') return (string)($d['surum'] ?? '') === SIPARIS_PDF_SURUM;
-    if ($s === 'baska_tur') return isset($d['tur']) && $d['tur'] !== null && $d['tur'] !== $beklenen;
+    if ($s === 'baska_tur') return isset($d['tur']) && $d['tur'] !== null && !in_array($d['tur'], $beklenenler, true);
     return false;
 }
 
@@ -341,11 +347,11 @@ function siparis_mail_satir(array $oge, string $durum, array $ek = []): array
 function siparis_mail_plan(PDO $pdo, string $tur, array $hesapIds, array $ayar, string $simdi): array
 {
     $turler = siparis_mail_turleri();
-    $beklenen = $turler[$tur]['belge'] ?? '';
+    $beklenen = $turler[$tur]['belgeler'] ?? [];
     $sayac = siparis_mail_sayac_bos();
     $uyarilar = [];
     $plan = ['oge' => [], 'satirlar' => [], 'sayac' => $sayac, 'uyarilar' => $uyarilar];
-    if ($beklenen === '') return $plan;
+    if (!$beklenen) return $plan;
     $t = strtotime($simdi);
     $bas = date('Y-m-d 00:00:00', strtotime('-' . SIPARIS_MAIL_GUN . ' days', $t !== false ? $t : time()));
     $satirlar = siparis_mail_adaylar($pdo, $hesapIds, (array)($ayar['gonderen'][$tur] ?? []), $bas, SIPARIS_MAIL_MAX_MAIL);
@@ -426,7 +432,7 @@ function siparis_mail_pdf_adi(string $ad): string
  * @param array $opt istemci: callable (mail_ek_hazirla test kancası)
  * @return array satır (siparis_mail_satir biçimi)
  */
-function siparis_mail_ek_isle(PDO $pdo, array $oge, string $beklenen, int $uid, string $depo, array $hesapIds, array $opt = []): array
+function siparis_mail_ek_isle(PDO $pdo, array $oge, array $beklenen, int $uid, string $depo, array $hesapIds, array $opt = []): array
 {
     $m = (int)$oge['m']; $h = (int)($oge['h'] ?? 0); $p = (string)$oge['p'];
     if ((int)($oge['size'] ?? 0) > SIPARIS_MAX_DOSYA) return siparis_mail_satir($oge, 'cok_buyuk');   // IMAP'a hiç gidilmez
@@ -484,7 +490,7 @@ function siparis_mail_ek_isle(PDO $pdo, array $oge, string $beklenen, int $uid, 
             }
             $t = siparis_pdf_tur_kodu($doc);
             if ($t === 'bilinmiyor') return $kaydet('taninmadi', ['tur' => null], ['sha256' => $sha]);
-            if ($t !== $beklenen) return $kaydet('baska_tur', ['tur' => $t], ['sha256' => $sha]);
+            if (!in_array($t, $beklenen, true)) return $kaydet('baska_tur', ['tur' => $t], ['sha256' => $sha]);
         }
 
         // 6) ORTAK yazma yolu (siparis_yukle.php ile aynı fonksiyon)
@@ -657,7 +663,7 @@ function siparis_mail_adim(PDO $pdo, string $taramaId, int $uid, string $depo, a
         $simdi = isset($opt['simdi']) ? (strtotime((string)$opt['simdi']) ?: time()) : time();
         $gorunur = mail_gorunur_hesap_idleri($uid, $pdo);
         $hesapIds = array_values(array_filter(array_map('intval', (array)$k['hesaplar']), static fn(int $i): bool => in_array($i, $gorunur, true)));
-        $beklenen = siparis_mail_turleri()[$k['tur']]['belge'];
+        $beklenen = siparis_mail_turleri()[$k['tur']]['belgeler'];
         $bu = 0;
         while ($k['i'] < count($k['oge'])) {
             if ($bu > 0 && ($bu >= SIPARIS_MAIL_ADIM_EK || (float)$saat() - $t0 >= SIPARIS_MAIL_ADIM_SN)) break;

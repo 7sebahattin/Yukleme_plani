@@ -138,7 +138,7 @@ if ($mailSenaryo) {
         file_put_contents("$OUT/$ad.html", basla_sayfa($dosya, $get, $ad, $perms, $yonetici));
         $manifest['sayfalar'][] = $ad;
     };
-    $tumAyar = ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test'], 'fiyat' => ['po@ornek.test']];
+    $tumAyar = ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test']];
     if (in_array('ayarsiz', $mailSenaryo, true)) $mYaz('mail_ayarsiz', 'siparisler.php');
     if (in_array('ayarsiz', $mailSenaryo, true)) $mYaz('mail_ayarsiz_operator', 'siparisler.php', [], ['siparis.read', 'siparis.write', 'mail.read'], false);
     smt_ayar([$mA], $tumAyar);
@@ -162,7 +162,7 @@ if ($mailSenaryo) {
         smt_tara('lojistik', 1, 'DEPO1', ['simdi' => '2026-10-18 12:00:00']);
         $son = smt_tara('lojistik', 1, 'DEPO1', ['simdi' => '2026-10-18 12:05:00']);        // 2. tarama: "Daha önce alınmış" satırları
         $fp = $mm('po@ornek.test', [smt_ek('2', 'PC_CW50.pdf', smt_pdf('pc-ui-2'))], '2026-10-17 10:00:00', ['subject' => 'Price confirmation CW50', 'from_name' => 'Satış Ofisi']);
-        smt_tara('fiyat', 1, 'DEPO1', ['simdi' => '2026-10-18 12:10:00']);                    // en yeni sonuç: Fiyat (Alındı satırı görünür)
+        smt_tara('siparis', 1, 'DEPO1', ['simdi' => '2026-10-18 12:10:00']);                  // en yeni sonuç: Sipariş (PC Alındı satırı görünür)
         if (in_array('son', $mailSenaryo, true)) $mYaz('mail_son', 'siparisler.php');
         if (in_array('yarim', $mailSenaryo, true)) {
             $mm('po@ornek.test', [smt_ek('2', 'PO_CW51.pdf', smt_pdf('po-ui-1'))], '2026-10-17 11:00:00', ['subject' => 'Purchase order CW51']);
