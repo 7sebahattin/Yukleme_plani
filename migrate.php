@@ -114,6 +114,7 @@ $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatler
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
+$siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -255,6 +256,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'siparis', null, null,
                 ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_sofor') {
+    csrf_check($_POST['csrf'] ?? null);
+    $siparis_sofor_ran     = true;
+    $siparis_sofor_results = siparis_sofor_migrate($pdo);
+    foreach ($siparis_sofor_results as $sr) {
+        if ($sr['durum'] === 'eklendi') {
+            audit_log_event('migrate', 'siparis', null, null,
+                ['operation' => 'add_column', 'column' => $sr['adim']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cavus_b') {
@@ -581,6 +592,35 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (siparis_tablolar() as $ssql) { echo h($ssql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" id="siparis-sofor" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Siparişler — Şoför alanları</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>siparis_sevkiyatlar</code> tablosuna iki boş (NULL) kolon ekler —
+      <code>sofor_adi</code> (VARCHAR 100) ve <code>sofor_telefon</code> (VARCHAR 40). Mevcut veriye dokunmaz, yabancı anahtar YOK.
+      Sevkiyat sayfasında plakaların altında elle girilen şoför adı / telefonu için kullanılır. Çalıştırılmazsa bu iki alan gizli kalır,
+      Siparişler aynen çalışır. Önce yukarıdaki Sipariş tabloları kurulu olmalı.
+      <?php if ($siparis_sofor_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($siparis_sofor_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['adim']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $sipsh = siparis_tablo_var($pdo, 'siparis_sevkiyatlar') && siparis_sofor_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $sipsh ? '#1f9d55' : '#c0392b' ?>;"><?= $sipsh ? '✓ Kolonlar var' : '✗ Kolonlar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="siparis_sofor">
+      <button type="submit" class="btn btn-primary">Şoför Alanlarını Ekle</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">ALTER SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (siparis_sofor_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
   </div>

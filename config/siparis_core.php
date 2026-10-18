@@ -1082,3 +1082,6 @@ function siparis_tarih_coz(mixed $v): ?string
     }
     return null;
 }
+
+// v377: şoför alanları (ekleyici migrasyon) — kendi dosyasında; bu dosyada ALTER YOK değişmezi korunur
+require_once __DIR__ . '/siparis_sofor.php';

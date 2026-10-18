@@ -684,6 +684,41 @@ foreach (glob($ROOT . '/siparis*.php') as $f) {
     $s = file_get_contents($f);
     ok(basename($f) . ': style.css/app.js/config dosyalarına dokunmuyor, inline onclick yok', !preg_match('/\sonclick=|\sonsubmit=|\sonchange=/i', $s));
 }
+echo "\n=== 9z. Şoför adı + telefonu (v377) ===\n";
+rol($ADMIN, true);
+$tokS = csrf(); $KS = fn(array $p) => sayfa('siparis_kaydet.php', [], ['csrf' => $tokS] + $p);
+$sidS = $ID['s1'];
+$g = sayfa('siparis_view.php', ['id' => $sidS])['html'];
+ok('şoför: kolonlar yokken alanlar gizli; yönetici için kurulum notu (migrate.php kartı)', !str_contains($g, 'data-alan="sofor_adi"') && str_contains($g, 'migrate.php#siparis-sofor'));
+rol($ADMIN, false);
+ok('şoför: yönetici olmayana kurulum notu gösterilmez', !str_contains(sayfa('siparis_view.php', ['id' => $sidS])['html'], 'migrate.php#siparis-sofor'));
+rol($ADMIN, true);
+$x = $KS(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$sidS, 'alan' => 'sofor_adi', 'deger' => 'Test Sürücü']);
+ok('şoför: kolonlar yokken yazma reddedilir (şema güncellemesi uyarısı)', ($x['flash']['type'] ?? '') === 'error' && str_contains((string)($x['flash']['msg'] ?? ''), 'şema güncellemesi'), json_encode($x['flash']));
+siparis_sofor_migrate($db);
+$g = sayfa('siparis_view.php', ['id' => $sidS])['html'];
+$pPl = strpos($g, 'data-alan="plakalar"'); $pSa = strpos($g, 'data-alan="sofor_adi"'); $pTe = strpos($g, 'data-alan="sofor_telefon"'); $pNv = strpos($g, 'data-alan="navlun_no"');
+ok('şoför: plakaların altında — Şoför adı, Şoför telefonu, sonra navlun', $pPl !== false && $pSa > $pPl && $pTe > $pSa && $pNv > $pTe && str_contains($g, '<dt>Şoför adı</dt>') && str_contains($g, '<dt>Şoför telefonu</dt>') && !str_contains($g, 'migrate.php#siparis-sofor'));
+$x = $KS(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$sidS, 'alan' => 'sofor_adi', 'deger' => 'Test Sürücü', 'donus' => 'bilgi']);
+$x2 = $KS(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$sidS, 'alan' => 'sofor_telefon', 'deger' => '+90 532 000 00 00', 'donus' => 'bilgi']);
+$sv = siparis_sevkiyat($db, $sidS);
+ok('şoför: ad + telefon kaydedildi (PRG #bilgi)', $sv['sofor_adi'] === 'Test Sürücü' && $sv['sofor_telefon'] === '+90 532 000 00 00' && ($x['flash']['type'] ?? '') === 'success' && ($x2['flash']['type'] ?? '') === 'success' && str_contains((string)$x['git'], '#bilgi'));
+$x = $KS(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$sidS, 'alan' => 'sofor_telefon', 'deger' => 'abc']);
+ok('şoför: geçersiz telefon hata verir, eski değer korunur', ($x['flash']['type'] ?? '') === 'error' && siparis_sevkiyat($db, $sidS)['sofor_telefon'] === '+90 532 000 00 00');
+$g = sayfa('siparis_view.php', ['id' => $sidS])['html'];
+ok('şoför: değerler ekranda', str_contains($g, 'Test Sürücü') && str_contains($g, '+90 532 000 00 00'));
+preg_match('#data-alan="sofor_adi">(.*?)</dd>#s', $g, $ra); preg_match('#data-alan="sofor_telefon">(.*?)</dd>#s', $g, $rt);
+ok('şoför: "Elle" rozeti ve "Kilidi kaldır" YOK (değeri silerdi); düzenleme bağlantısı var', !str_contains((string)($ra[1] ?? ''), 'Kilidi kaldır') && !str_contains((string)($ra[1] ?? ''), 'sip-src') && !str_contains((string)($rt[1] ?? ''), 'Kilidi kaldır')
+    && str_contains((string)($ra[1] ?? ''), 'duzenle=sofor_adi') && str_contains((string)($rt[1] ?? ''), 'data-sip-alan='));
+$g = sayfa('siparis_view.php', ['id' => $sidS, 'duzenle' => 'sofor_telefon'])['html'];
+ok('şoför: telefon düzenleme formu tel girdisi', str_contains($g, 'type="tel"') && str_contains($g, 'inputmode="tel"'));
+rol(['siparis.read'], false);
+$g = sayfa('siparis_view.php', ['id' => $sidS])['html'];
+ok('şoför: izleyici değerleri görür, düzenleme bağlantısı yok', str_contains($g, 'Test Sürücü') && !str_contains($g, 'duzenle=sofor_adi'));
+rol($ADMIN, true);
+$gl = sayfa('siparisler.php')['html'];
+ok('şoför: liste sayfası etkilenmez', !str_contains($gl, 'Test Sürücü'));
+
 $css = file_get_contents($ROOT . '/assets/siparis.css');
 ok('CSS: [hidden] kuralı + 16px mobil input + --bn-h kullanımı + overflow-x:hidden YOK', str_contains($css, '.sip-mod [hidden]') && str_contains($css, 'font-size: 16px') && str_contains($css, 'var(--bn-h)') && !preg_match('/overflow-x:\s*hidden/', $css));
 ok('CSS: koyu tema karşılığı', str_contains($css, 'html[data-theme="dark"] .sip-mod'));

@@ -62,6 +62,8 @@ function siparis_alan_tanimlari(): array
             'plakalar'            => $a('Plakalar', 'plaka', 60, ['ll' => 1]),
             'navlun_no'           => $a('Navlun (Freight Order) no', 'metin', 30, ['ll' => 1]),
             'notlar'              => $a('Notlar', 'metin', 2000, []),          // yalnız elle (kaynak sistemi dışı)
+            'sofor_adi'           => $a('Şoför adı', 'metin', 100, []),         // v377: yalnız elle (kaynak sistemi dışı); kolonlar migrate.php kartından
+            'sofor_telefon'       => $a('Şoför telefonu', 'telefon', 40, []),
         ],
         'kalem' => [
             'urun'        => $a('Ürün', 'metin', 80, ['po' => 1, 'pc' => 1]),
@@ -113,6 +115,10 @@ function siparis_deger_normalize(mixed $v, string $tip): ?string
             return $t === '-0' ? '0' : $t;
         case 'plaka':
             return siparis_plaka_normalize((string)$v)['deger'];
+        case 'telefon':          // v377: yalnız rakam ve + ( ) - . boşluk; 7–15 hane, aksi geçersiz (null)
+            $t = trim((string)preg_replace('/\s+/u', ' ', (string)preg_replace('/[^\d+()\-.\s]/u', '', (string)$v)));
+            $hane = preg_match_all('/\d/', $t);
+            return ($hane >= 7 && $hane <= 15) ? $t : null;
         default:
             $s = trim((string)preg_replace('/\s+/u', ' ', (string)$v));
             return $s === '' ? null : $s;
@@ -317,7 +323,7 @@ function siparis_alan_elle(PDO $pdo, string $varlik, int $id, string $alan, mixe
     $yeni = siparis_deger_normalize($ham, $tanim['tip']);
     if ($ham !== '' && $yeni === null) {
         return ['ok' => false, 'hata' => match ($tanim['tip']) {
-            'tarih' => 'Tarih geçersiz (gg.aa.yyyy).', 'sayi' => 'Tam sayı girin.', 'ondalik' => 'Sayı girin.', default => 'Değer geçersiz.' }];
+            'tarih' => 'Tarih geçersiz (gg.aa.yyyy).', 'sayi' => 'Tam sayı girin.', 'ondalik' => 'Sayı girin.', 'telefon' => 'Telefon 7–15 haneli olmalı.', default => 'Değer geçersiz.' }];
     }
     if ($yeni !== null && $tanim['tip'] === 'sayi' && (int)$yeni < 0) return ['ok' => false, 'hata' => 'Negatif sayı girilemez.'];
     if ($yeni !== null && mb_strlen($yeni, 'UTF-8') > (int)$tanim['max']) return ['ok' => false, 'hata' => 'Değer çok uzun (en çok ' . $tanim['max'] . ' karakter).'];

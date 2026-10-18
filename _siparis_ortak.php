@@ -329,11 +329,12 @@ function sipui_yok_sayfasi(string $baslik, string $mesaj = 'Kayıt bulunamadı y
 }
 
 /** Düzenlenebilir alanların gösterim grupları (siparis_view.php) — [grup başlığı => [alanlar]]. */
-function sipui_alan_gruplari(): array
+function sipui_alan_gruplari(bool $sofor = false): array
 {
     return [
         'Sevkiyat' => ['tur_no', 'yukleme_tarihi', 'yukleme_yeri', 'bosaltma_tarihi', 'bosaltma_yerleri'],
-        'Araç ve navlun' => ['nakliyeci', 'plakalar', 'navlun_no'],
+        // v377: elle girilen şoför adı + telefon plakaların altında (yalnız şema hazırsa — siparis_sofor_hazir())
+        'Araç ve navlun' => $sofor ? ['nakliyeci', 'plakalar', 'sofor_adi', 'sofor_telefon', 'navlun_no'] : ['nakliyeci', 'plakalar', 'navlun_no'],
         'Alıcı' => ['alici_kodu', 'alici_adi', 'sold_to'],
         'Gümrük' => ['gumruk', 'kdv_no', 'incoterm'],
     ];
