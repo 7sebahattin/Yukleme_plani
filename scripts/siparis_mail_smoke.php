@@ -265,6 +265,24 @@ $r = smt_tara('lojistik', 1, 'DEPO1', ['simdi' => $SIMDI]);
 ok('hata olan ek (eB) sonraki taramada yeniden denendi ve alındı', ($st[$eB] ?? '') === 'alindi');
 ok('gecersiz deftere yazıldı: sonraki taramada indirilmez, durum görünür kalır (IMAP 0)', ($stt = array_column($r['son']['satirlar'], 'durum', 'm')) && ($stt[$eN] ?? '') === 'gecersiz' && ($stt[$eZ] ?? '') === 'gecersiz' && ($stt[$eB] ?? '') === 'onceden' && $SMT_BAGLANTI === 0, json_encode($stt) . " bağlantı:$SMT_BAGLANTI");
 
+// Sunucuda artık olmayan ek (404) KALICIDIR: bir kez denenir, deftere yazılır, sonraki sorgularda IMAP'a gidilmez
+$eY = smt_mail($A, $MAIL[$A], 'log@ornek.test', [smt_ek('2', 'yok.pdf', smt_pdf('ll-yok'))], '2026-10-16 16:00:00');
+unset(smt_srv($MAIL[$A])->mesajlar[(int)$db->query("SELECT uid FROM mail_messages WHERE id = $eY")->fetchColumn()]);   // sunucudan silinmiş (EXPUNGE)
+smt_sayac_sifirla();
+$r = smt_tara('lojistik', 1, 'DEPO1', ['simdi' => $SIMDI]);
+$stY = array_column($r['son']['satirlar'], 'durum', 'm');
+ok('sunucuda olmayan ek → ek_yok (hata DEĞİL), defter yazıldı', ($stY[$eY] ?? '') === 'ek_yok' && (siparis_mail_defter($db, [$eY])[$eY]['2']['sonuc'] ?? '') === 'ek_yok', json_encode($stY));
+smt_sayac_sifirla();
+$r = smt_tara('lojistik', 1, 'DEPO1', ['simdi' => $SIMDI]);
+$stY = array_column($r['son']['satirlar'], 'durum', 'm');
+ok('ek_yok sonraki taramada yeniden denenmez (IMAP 0), durum görünür kalır', ($stY[$eY] ?? '') === 'ek_yok' && $SMT_BAGLANTI === 0, json_encode($stY) . " bağlantı:$SMT_BAGLANTI");
+ok('ek_yok metni tekrar denenmeyeceğini söyler', str_contains(sipui_mail_durum_html(['durum' => 'ek_yok']), 'tekrar denenmez'));
+
+// Sayfa render'ı: yalnız siparis_mail.php yüklüyken (siparisler.php gibi) sonuç kartı fatal vermemeli (mail_mime_mojibake_duzelt)
+$kod = 'require ' . var_export($ROOT . '/config/siparis_mail.php', true) . '; echo function_exists("mail_mime_mojibake_duzelt") ? "OK" : "YOK";';
+$cikti = (string)shell_exec(escapeshellarg(PHP_BINARY) . ' -d display_errors=1 -r ' . escapeshellarg($kod) . ' 2>&1');
+ok('config/siparis_mail.php tek başına mail_mime yardımcılarını yükler (render fatal regresyonu)', trim($cikti) === 'OK', $cikti);
+
 echo "\n=== F. Parçalı yürütme ===\n";
 $db->exec('DELETE FROM mail_messages');
 $db->exec("DELETE FROM audit_log WHERE action = 'siparis_mail_ek'");

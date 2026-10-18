@@ -370,7 +370,7 @@ function sipui_onizle_modal_html(): string
 function sipui_mail_durum_adi(string $durum): string
 {
     return ['alindi' => 'Alındı', 'zaten' => 'Zaten vardı', 'onceden' => 'Daha önce alınmış', 'baska_tur' => 'Başka tür', 'taninmadi' => 'Tanınmadı',
-            'gecersiz' => 'Geçersiz', 'silinmis' => 'Silinmiş', 'cok_buyuk' => 'Çok büyük', 'iletilmis' => 'İletilmiş', 'ek_eksik' => 'Ek eksik', 'hata' => 'Hata'][$durum] ?? $durum;
+            'gecersiz' => 'Geçersiz', 'silinmis' => 'Silinmiş', 'cok_buyuk' => 'Çok büyük', 'iletilmis' => 'İletilmiş', 'ek_eksik' => 'Ek eksik', 'ek_yok' => 'Sunucuda yok', 'hata' => 'Hata'][$durum] ?? $durum;
 }
 
 /**
@@ -409,6 +409,8 @@ function sipui_mail_durum_html(array $s, array $belgeGorunur = []): string
             return 'Ek olarak iletilmiş mail — bu sürümde açılmıyor; PDF\'i elle yükleyin.';
         case 'ek_eksik':
             return 'Mail tam okunamadı (çok büyük ya da bozuk); ek listesi eksik — posta kutusundan indirip elle yükleyin.';
+        case 'ek_yok':
+            return 'Ek posta sunucusunda bulunamadı (silinmiş ya da klasör yenilenmiş) — tekrar denenmez. Gerekirse elle yükleyin.';
         default:
             return '<span class="sip-hata-metin">Hata: ' . h((string)($s['hata'] ?? 'işlenemedi')) . '</span><div class="sip-soluk">Sonraki sorguda yeniden denenir.</div>';
     }
