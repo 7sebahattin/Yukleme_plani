@@ -638,4 +638,76 @@ $eskiBicim = $dogru; unset($eskiBicim['header']['transports']); foreach ($eskiBi
 $r = siparis_test_isle($db, $eskiBicim, 'll_eski_bicim');
 ok('eski biçim: sevkiyatta alan yoksa başlık kullanılır', $r['isle']['ok'] && siparis_test_sev($db, 'TC900092.10')['nakliyeci'] === 'NAKLIYE X');
 
+echo "\n=== 16. v375: eski okuyucuyla okunmuş belge yeniden okunur + bayat açık çatışma temizlenir ===\n";
+// aynı iki-tır fixture'ı farklı order ref / tur / navlun ile (bölüm 15 verisiyle karışmasın)
+$yerine = ['TC900091' => 'TC900093', 'TC900092' => 'TC900094', '9000000091' => '9000000093', '9000000092' => '9000000094',
+    '6100000091' => '6100000093', '6100000092' => '6100000094', '34TST091' => '34TST093', '34TST092' => '34TST094'];
+$dogru16 = json_decode(strtr((string)json_encode(siparis_test_fixture('ll_iki_transport')), $yerine), true);
+$po16 = json_decode(strtr((string)json_encode(siparis_test_fixture('po_iki_sevkiyat')), ['TC900001' => 'TC900093', 'TC900002' => 'TC900094', '9000000001' => '9000000093', '9000000002' => '9000000094', '90001' => '90009']), true);
+$r = siparis_test_isle($db, $po16, 'po93');
+ok('PO (TC900093/94) işlendi, tur no PO\'dan', $r['isle']['ok'] && siparis_test_sev($db, 'TC900093.10')['tur_no'] === '9000000093' && siparis_test_sev($db, 'TC900094.10')['tur_no'] === '9000000094');
+// v2'nin hatalı çıktısı (bölüm 15 ile aynı kalıp): başlıkta yalnız son blok, sevkiyatta taşıma yok, sahte "… Additional info" turu
+$hatali = $dogru16; unset($hatali['header']['transports']);
+foreach (['transport_no', 'transport_company', 'plates', 'additional_info'] as $f) $hatali['header'][$f] = $dogru16['header']['transports'][1][$f];
+foreach ($hatali['shipments'] as &$x) foreach (['transport_no', 'transport_company', 'plates', 'additional_info'] as $f) unset($x[$f]); unset($x);
+$sahte = $hatali['shipments'][0]; $sahte['tour_id'] = '9000000093 Additional info'; $sahte['items'] = [$sahte['items'][1]]; $sahte['items'][0]['ian'] = '90009 company';
+$sahte['pallets'] = 2; $sahte['colli'] = 320; $sahte['row_count'] = 1;
+$hatali['shipments'][0]['items'] = [$hatali['shipments'][0]['items'][0]]; $hatali['shipments'][0]['pallets'] = 2; $hatali['shipments'][0]['colli'] = 320; $hatali['shipments'][0]['row_count'] = 1;
+array_splice($hatali['shipments'], 1, 0, [$sahte]);
+$hatali['rows'][1]['ian'] = '90009 company'; $hatali['rows'][1]['tour_id'] = '9000000093 Additional info';
+$hatali['shipments'][0]['tour_id'] = '9000000093 Additional info';       // aynı ref'te İLK kayıt geçerli: sahte tur no PO'nunkiyle (eşit yetki) çatışır
+$r = siparis_test_isle($db, $hatali, 'll93_v2');
+$b16 = (int)$r['kayit']['belge_id'];
+$a = siparis_test_sev($db, 'TC900093.10'); $b = siparis_test_sev($db, 'TC900094.10');
+$acikTur = fn(int $sid) => siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND alan = 'tur_no' AND durum = 'acik'", [$sid]);
+ok('v2 okuması: navlun/nakliyeci yanlış tırda, sahte kalem, tur_no çatışması AÇIK (bu belgeden)', $r['isle']['ok'] && in_array('tur_farkli', array_column($a['_uyarilar'], 'kod'), true) && $a['navlun_no'] === '6100000094' && $a['nakliyeci'] === 'NAKLIYE Y'
+    && count(siparis_kalemler($db, (int)$a['id'])) === 2 && $acikTur((int)$a['id']) === 1 && (int)$a['acik_catisma'] >= 1
+    && siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND alan = 'tur_no' AND belge_id = ?", [(int)$a['id'], $b16]) === 1,
+    json_encode([$a['navlun_no'], $a['nakliyeci'], count(siparis_kalemler($db, (int)$a['id'])), $acikTur((int)$a['id']), $a['acik_catisma'], $db->query('SELECT alan,gelen_deger,belge_id,durum FROM siparis_catismalar')->fetchAll(PDO::FETCH_ASSOC)]));
+// siparis_belge_surum_eski kuralları
+$db->prepare("UPDATE siparis_belgeler SET parser_surum = 'v2' WHERE id = ?")->execute([$b16]);
+$satir = fn() => $db->query("SELECT * FROM siparis_belgeler WHERE id = $b16")->fetch(PDO::FETCH_ASSOC);
+ok('surum_eski: eski sürüm + işlenmiş → true', siparis_belge_surum_eski($satir()) === true);
+$db->exec("UPDATE siparis_belgeler SET parser_surum = NULL WHERE id = $b16");
+ok('surum_eski: parser_surum NULL (PKL / görsel) → false', siparis_belge_surum_eski($satir()) === false);
+$db->exec("UPDATE siparis_belgeler SET parser_surum = '" . SIPARIS_PDF_SURUM . "' WHERE id = $b16");
+ok('surum_eski: güncel sürüm → false', siparis_belge_surum_eski($satir()) === false);
+$db->exec("UPDATE siparis_belgeler SET parser_surum = 'v2', durum = 'hata' WHERE id = $b16");
+ok('surum_eski: durum hata → false (zaten yeniden işlenir)', siparis_belge_surum_eski($satir()) === false);
+$db->exec("UPDATE siparis_belgeler SET durum = 'islendi' WHERE id = $b16");
+ok('surum_eski: ham dizi (ham değerler)', siparis_belge_surum_eski(['parser_surum' => 'v2', 'durum' => 'islendi']) && !siparis_belge_surum_eski(['durum' => 'islendi']) && !siparis_belge_surum_eski(['parser_surum' => '', 'durum' => 'islendi']));
+// aynı baytların yeniden yüklenmesi tekilleşir (ikinci satır yok); yeniden okuma AYNI belge id'siyle
+$nBelge = siparis_test_say($db, 'siparis_belgeler');
+$k = siparis_dosya_kaydet($db, siparis_test_dosya(siparis_test_pdf('ll93_v2'), 'll93_v2.pdf'), 1, 'DEPO1', siparis_test_mover());
+ok('aynı bayt: yeni=false, aynı belge id, satır sayısı değişmedi', $k['ok'] && $k['yeni'] === false && (int)$k['belge_id'] === $b16 && siparis_test_say($db, 'siparis_belgeler') === $nBelge);
+$GLOBALS['_siparis_parse_override'] = fn(string $y): array => $dogru16;
+try { $i = siparis_belge_isle($db, $b16, 1, null); } finally { unset($GLOBALS['_siparis_parse_override']); }
+$a = siparis_test_sev($db, 'TC900093.10'); $b = siparis_test_sev($db, 'TC900094.10');
+ok('yeniden okuma başarılı, iki sevkiyat', $i['ok'] && count($i['sevkiyatlar']) === 2);
+ok('93: kendi navlun / nakliyeci / plaka / tur no', $a['navlun_no'] === '6100000093' && $a['nakliyeci'] === 'NAKLIYE X' && $a['plakalar'] === '34TST093-34TST094' && $a['tur_no'] === '9000000093');
+ok('94: kendi navlun / nakliyeci / plaka yok / tur no', $b['navlun_no'] === '6100000094' && $b['nakliyeci'] === 'NAKLIYE Y' && $b['plakalar'] === null && $b['tur_no'] === '9000000094');
+$ka = siparis_kalemler($db, (int)$a['id']);
+ok('sahte kalem gitti, tek kalem 4 pal / 640 koli', count($ka) === 1 && $ka[0]['ian'] === '90009' && (int)$ka[0]['ll_palet'] === 4 && (int)$ka[0]['ll_koli'] === 640);
+ok('bayat açık tur_no çatışması silindi, acik_catisma 0', $acikTur((int)$a['id']) === 0 && siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND durum = 'acik'", [(int)$a['id']]) === 0 && (int)$a['acik_catisma'] === 0, json_encode([$a['acik_catisma']]));
+ok('"tur_farkli" uyarısı kalmadı', !in_array('tur_farkli', array_column($a['_uyarilar'], 'kod'), true) && !in_array('tur_farkli', array_column($b['_uyarilar'], 'kod'), true));
+ok('belge sürümü (siparis_belge_isle yazdı) güncel, artık "eski" değil', siparis_belge_surum_eski($satir()) === false && $satir()['durum'] === 'islendi');
+// elle kilitli alanın AÇIK çatışması yeniden okumada silinmez (elle dalı bayat_sil çağırmaz)
+$db->prepare("UPDATE siparis_sevkiyatlar SET navlun_no = 'ELLE2', elle_alanlar = ? WHERE id = ?")->execute([json_encode(['navlun_no' => ['uid' => 1]]), (int)$b['id']]);
+foreach ([1, 2] as $tur) {
+    $GLOBALS['_siparis_parse_override'] = fn(string $y): array => $dogru16;
+    try { siparis_belge_isle($db, $b16, 1, null); } finally { unset($GLOBALS['_siparis_parse_override']); }
+}
+ok('elle kilitli navlun: korundu, çatışma AÇIK ve silinmedi (tek satır)', siparis_test_sev($db, 'TC900094.10')['navlun_no'] === 'ELLE2'
+    && siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND alan = 'navlun_no' AND durum = 'acik' AND belge_id = ?", [(int)$b['id'], $b16]) === 1);
+// başka belgenin / kabul edilmiş çatışmaya dokunmaz
+$bid94 = (int)$b['id'];
+$ekle = fn(string $durum, ?int $belge, string $gelen) => $db->prepare("INSERT INTO siparis_catismalar (sevkiyat_id, kalem_id, alan, mevcut_deger, mevcut_kaynak, gelen_deger, gelen_kaynak, belge_id, durum, created_at) VALUES (?, NULL, 'kdv_no', 'M', 'po', ?, 'll', ?, ?, ?)")
+    ->execute([$bid94, $gelen, $belge, $durum, siparis_simdi()]);
+$ekle('acik', $b16, 'ESKI'); $ekle('acik', $poBelge, 'BASKA'); $ekle('kabul', $b16, 'KABUL'); $ekle('acik', $b16, 'YENI');
+siparis_catisma_bayat_sil($db, $bid94, null, 'kdv_no', 'll', $b16, 'YENI');
+$kal = $db->query("SELECT gelen_deger FROM siparis_catismalar WHERE sevkiyat_id = $bid94 AND alan = 'kdv_no' ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+ok('bayat_sil: yalnız aynı belge+kaynak, açık ve farklı değerli satır silinir (başka belge / kabul / aynı değer kalır)', $kal === ['BASKA', 'KABUL', 'YENI'], json_encode($kal));
+siparis_catisma_bayat_sil($db, $bid94, null, 'kdv_no', 'll', 0, 'X');
+ok('bayat_sil: belge id 0 → hiçbir şey silmez', siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND alan = 'kdv_no'", [$bid94]) === 3);
+
 siparis_test_bitir();

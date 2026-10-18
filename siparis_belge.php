@@ -136,7 +136,7 @@ render_flash();
         <div class="sip-dl-satir"><dt>Yüklenme</dt><dd><?= h(sipui_zaman((string)$b['created_at'])) ?><?= $yukleyen !== '' ? ' · ' . h($yukleyen) : '' ?><?= $b['kaynak'] === 'uretim' ? ' · sistemde üretildi' : '' ?></dd></div>
         <div class="sip-dl-satir"><dt>Belge tarihi</dt><dd><?= h(sipui_zaman((string)$b['belge_tarihi'])) ?></dd></div>
         <?php if ($b['cw_hafta'] !== null): ?><div class="sip-dl-satir"><dt>Hafta</dt><dd>CW<?= (int)$b['cw_hafta'] ?>/<?= (int)$b['cw_yil'] ?></dd></div><?php endif; ?>
-        <div class="sip-dl-satir"><dt>Ayrıştırıcı</dt><dd><?= h((string)($b['parser_surum'] ?? '—')) ?></dd></div>
+        <div class="sip-dl-satir"><dt>Ayrıştırıcı</dt><dd><?= h((string)($b['parser_surum'] ?? '—')) ?><?= siparis_belge_surum_eski($b) ? ' <span class="sip-soluk">(eski — ↻ Yeniden işle)</span>' : '' ?></dd></div>
         <div class="sip-dl-satir"><dt>Bağlı sevkiyatlar</dt><dd>
           <?php if (!$sevler): ?><span class="sip-soluk">Hiçbirine bağlı değil</span>
           <?php else: foreach ($sevler as $i => $s): ?><?= $i ? ', ' : '' ?><a href="siparis_view.php?id=<?= (int)$s['id'] ?>"><?= h((string)$s['order_ref']) ?></a><?= (int)$s['gecerli'] === 0 ? ' <span class="sip-eski-rozet">eski sürüm</span>' : '' ?><?php endforeach; endif; ?></dd></div>

@@ -82,14 +82,17 @@ foreach ($dosyalar as $dosya) {
         $k = siparis_dosya_kaydet($pdo, $dosya, $uid, $depo, $moverFn);
         if (!$k['ok']) { $r['hata'] = (string)($k['hata'] ?? 'Dosya kaydedilemedi.'); $sonuclar[] = $r; $say['hata']++; continue; }
         $belgeId = (int)$k['belge_id'];
-        $b = $pdo->prepare('SELECT durum, tur FROM siparis_belgeler WHERE id = ?');
+        $b = $pdo->prepare('SELECT id, depo, durum, tur, parser_surum FROM siparis_belgeler WHERE id = ?');
         $b->execute([$belgeId]);
-        $bs = $b->fetch(PDO::FETCH_ASSOC) ?: ['durum' => 'yuklendi', 'tur' => 'bilinmiyor'];
+        $bs = $b->fetch(PDO::FETCH_ASSOC) ?: ['id' => $belgeId, 'depo' => '', 'durum' => 'yuklendi', 'tur' => 'bilinmiyor', 'parser_surum' => null];
         $baglar = $pdo->prepare('SELECT s.id, s.order_ref FROM siparis_belge_bag bb JOIN siparis_sevkiyatlar s ON s.id = bb.sevkiyat_id WHERE bb.belge_id = ? AND s.deleted_at IS NULL');
         $baglar->execute([$belgeId]);
         $mevcutBaglar = $baglar->fetchAll(PDO::FETCH_ASSOC);
         $hedefeBagli = $hedef === null || in_array((int)$hedef['id'], array_map('intval', array_column($mevcutBaglar, 'id')), true);
-        $isle = $k['yeni'] || $silinmisti || $bs['durum'] !== 'islendi' || !$hedefeBagli;
+        // v375: aynı dosya eski okuyucuyla okunmuşsa (parser_surum ≠ güncel) yeniden okunur — aynı belge id, ikinci satır YOK
+        $yenidenOku = !$k['yeni'] && !$silinmisti && siparis_belge_surum_eski($bs) && siparis_belge_gorunur($pdo, $bs);
+        $eskiSurum = $yenidenOku ? (string)$bs['parser_surum'] : null;
+        $isle = $k['yeni'] || $silinmisti || $bs['durum'] !== 'islendi' || !$hedefeBagli || $yenidenOku;
         $r['tur'] = (string)$bs['tur'];
         if (!$isle) {
             $r['durum'] = 'zaten';
@@ -105,6 +108,7 @@ foreach ($dosyalar as $dosya) {
             $say['hata']++;
         } else {
             $r['durum'] = 'islendi';
+            if ($yenidenOku) { $r['yeniden'] = 1; $r['eski_surum'] = $eskiSurum; }
             $r['sevkiyatlar'] = $x['sevkiyatlar'];
             $r['catisma'] = (int)$x['catisma'];
             $r['uyari'] = (int)$x['uyari'];
@@ -114,7 +118,7 @@ foreach ($dosyalar as $dosya) {
         audit_log_event('siparis_belge_yukle', 'siparis', $belgeId, null, [
             'belge_id' => $belgeId, 'tur' => $r['tur'], 'yeni' => $k['yeni'] ? 1 : 0, 'ok' => $x['ok'] ? 1 : 0,
             'sevkiyat_ids' => array_map(fn($s) => (int)$s['id'], $x['sevkiyatlar']),
-        ]);
+        ] + ($yenidenOku ? ['islem' => 'surum_yenile', 'eski_surum' => $eskiSurum] : ['islem' => 'yukle']));
     } catch (Throwable $e) {
         error_log('[siparis_yukle] ' . get_class($e) . ': ' . $e->getMessage());
         $r['hata'] = 'Dosya işlenemedi. Teknik ayrıntılar sunucu günlüğüne kaydedildi.';
