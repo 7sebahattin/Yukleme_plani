@@ -188,3 +188,37 @@ function siparis_beyan_bag_kaldir(PDO $pdo, int $bagId, int $uid): array
         return ['ok' => false, 'hata' => 'Bağ kaldırılamadı.'];
     }
 }
+
+/**
+ * Liste için: sevkiyat → aktif bağlı beyanların parti no'su (tek sorgu, N+1 yok). Silinmiş beyanlar atlanır;
+ * parti no'su boş beyan sayılmaz. Birden çok bağ varsa ilk (en eski bağ) + fazla = diğerlerinin sayısı.
+ * Kapı: can_beyan('read') yoksa ya da beyan tabloları/kolonları yoksa BOŞ dizi (çağıran Tur no'ya düşer);
+ * parti no beyan_redact_fields()'ten geçirilir (bugün hiçbir izin grubunda değil, grup eklenirse otomatik gizlenir).
+ * @param list<int> $sevIds
+ * @return array<int,array{parti:string,fazla:int}>
+ */
+function siparis_beyan_parti_haritasi(PDO $pdo, array $sevIds): array
+{
+    $sevIds = array_values(array_unique(array_filter(array_map('intval', $sevIds), fn($x) => $x > 0)));
+    if (!$sevIds || !function_exists('can_beyan') || !can_beyan('read')) return [];
+    $out = [];
+    try {
+        $st = $pdo->prepare("SELECT sb.sevkiyat_id, c.party_no FROM siparis_beyan sb
+            JOIN customs_declarations c ON c.id = sb.beyan_id
+            WHERE sb.durum = 'aktif' AND c.deleted_at IS NULL AND sb.sevkiyat_id IN (" . implode(',', array_fill(0, count($sevIds), '?')) . ')
+            ORDER BY sb.sevkiyat_id, sb.id');
+        $st->execute($sevIds);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $red = function_exists('beyan_redact_fields') ? beyan_redact_fields(['party_no' => $r['party_no']]) : ['party_no' => $r['party_no']];
+            $p = trim((string)($red['party_no'] ?? ''));
+            if ($p === '') continue;
+            $sid = (int)$r['sevkiyat_id'];
+            if (!isset($out[$sid])) $out[$sid] = ['parti' => $p, 'fazla' => 0];
+            else $out[$sid]['fazla']++;
+        }
+    } catch (PDOException $e) {
+        error_log('[siparis_beyan_parti_haritasi] ' . $e->getMessage());
+        return [];
+    }
+    return $out;
+}

@@ -6,6 +6,9 @@
 // Beklenen: $sec_rows (siparis_sevkiyatlar satırları; siparisler.php'nin $cols kolon kümesi)
 // =========================================================
 if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; }
+// $sec_kalem: sevkiyat id → siparis_kalemler satırları; $sec_parti: sevkiyat id → ['parti','fazla'] (ikisi de isteğe bağlı)
+$sec_kalem = isset($sec_kalem) && is_array($sec_kalem) ? $sec_kalem : [];
+$sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
 ?>
 <div class="table-wrap pc-only">
   <table class="data-table sip-table">
@@ -19,12 +22,13 @@ if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; 
     <?php foreach ($sec_rows as $r):
         $__id = (int)$r['id'];
         $__uy = (int)$r['acik_catisma'] + (int)$r['uyari_sayisi'];
+        $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []);   // ürün / palet / PF — satırın altında tam genişlikte alt satır (sütun 1280px'e sığmıyor)
         $__poEt = $r['cw_hafta'] !== null ? 'CW' . (int)$r['cw_hafta'] . ' · ' . ((string)$r['alici_adi'] !== '' ? (string)$r['alici_adi'] : 'PO #' . (int)$r['po_belge_id']) : 'PO #' . (int)$r['po_belge_id'];
     ?>
-      <tr class="row-link<?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
+      <tr class="row-link<?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?><?= $__ur !== '' ? ' sip-ust' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
         <td>
           <a class="sip-ref" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?></a>
-          <?php if ((string)$r['tur_no'] !== ''): ?><div class="sip-soluk nowrap">Tur <?= h((string)$r['tur_no']) ?></div><?php endif; ?>
+          <?= sipui_tur_parti_html($r, $sec_parti) ?>
           <?php if ($__uy > 0): ?>
             <a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>"
                title="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a>
@@ -38,6 +42,7 @@ if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; 
         <td class="nowrap"><?= h(sipui_tarih($r['yukleme_tarihi'])) ?></td>
         <td>
           <?= sipui_arac($r) ?>
+          <?= sipui_navlun_html($r) ?>
           <?php if ((string)$r['nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes"><?= h((string)$r['nakliyeci']) ?></div>
           <?php elseif ((string)$r['planlanan_nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes" title="Planlanan nakliyeci"><?= h((string)$r['planlanan_nakliyeci']) ?></div><?php endif; ?>
         </td>
@@ -55,6 +60,11 @@ if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; 
           </div>
         </td>
       </tr>
+      <?php if ($__ur !== ''): ?>
+      <tr class="row-link sip-urun-tr<?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
+        <td colspan="8"><?= $__ur ?></td>
+      </tr>
+      <?php endif; ?>
     <?php endforeach; ?>
     </tbody>
   </table>
@@ -79,8 +89,10 @@ if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; 
           if ($__arac !== '—') $__parca[] = $__arac;
           echo $__parca ? implode(' · ', $__parca) : '<span class="sip-soluk">Alıcı / tarih / araç bilgisi bekleniyor</span>';
         ?>
-        <?php if ((string)$r['tur_no'] !== ''): ?><span class="sip-soluk"> · Tur <?= h((string)$r['tur_no']) ?></span><?php endif; ?>
+        <?= sipui_tur_parti_html($r, $sec_parti, false) ?>
+        <?= sipui_navlun_html($r) ?>
       </div>
+      <?php $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []); if ($__ur !== ''): ?><div class="sip-card-urun"><?= $__ur ?></div><?php endif; ?>
       <div class="sip-card-alt">
         <?= sipui_dok_rozetleri($r) ?>
         <span class="sip-card-miktar"><?= h(sipui_sayi($r['toplam_palet'])) ?> palet · <?= h(sipui_sayi($r['toplam_koli'])) ?> koli</span>

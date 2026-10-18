@@ -8,6 +8,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
+require_once __DIR__ . '/config/siparis_beyan.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -74,7 +75,7 @@ elseif ($f_durum === 'kapali') { $bolumAcik = false; }
 elseif ($f_durum === 'arac_bekleyen') { $tek = true; $tekSql = "s.durum IN ('siparis_alindi','hazirlik')"; }
 elseif ($f_durum !== '') { $tek = true; $tekSql = "s.durum = '" . $f_durum . "'"; }   // f_durum beyaz listeden
 
-$cols = 's.id, s.order_ref, s.tur_no, s.po_belge_id, s.cw_hafta, s.cw_yil, s.alici_kodu, s.alici_adi, s.yukleme_tarihi, s.plakalar, s.planlanan_plakalar, '
+$cols = 's.id, s.order_ref, s.tur_no, s.navlun_no, s.po_belge_id, s.cw_hafta, s.cw_yil, s.alici_kodu, s.alici_adi, s.yukleme_tarihi, s.plakalar, s.planlanan_plakalar, '
       . 's.nakliyeci, s.planlanan_nakliyeci, s.toplam_palet, s.toplam_koli, s.var_po, s.var_ll, s.var_pc, s.var_pkl, s.acik_catisma, s.uyari_sayisi, s.durum, s.depo';
 $bolum = function (string $ekSql, string $siralama, int $sayfa, int $per) use ($pdo, $temelWhere, $temelPar, $cols): array {
     $w = $temelWhere . ($ekSql !== '' ? ' AND ' . $ekSql : '');
@@ -94,6 +95,23 @@ else {
     if ($bolumAcik)   $B_acik   = $bolum($acikSql, $acikSira, $acik_page, 100);
     if ($bolumKapali) $B_kapali = $bolum($kapaliSql, 's.yukleme_tarihi DESC, s.id DESC', $kapali_page, SIPARIS_PER_PAGE);
 }
+
+// ── Liste zenginleştirme: listelenen TÜM sevkiyatlar için 2 ek sorgu (N+1 yok) ──
+//    ürün kalemleri (Article specification / palet / PF) + aktif bağlı beyanın parti no'su
+$listeIds = [];
+foreach ([$B_acik, $B_kapali, $B_tek] as $__b) { if ($__b !== null) foreach ($__b['rows'] as $__r) $listeIds[] = (int)$__r['id']; }
+$kalemHarita = [];
+if ($listeIds) {
+    try {
+        $kq = $pdo->prepare('SELECT sevkiyat_id, kalibre, sira, urun, aciklama, cesit, koli_icerik, pf, po_palet, etkin_palet, etkin_koli FROM siparis_kalemler
+            WHERE sevkiyat_id IN (' . implode(',', array_fill(0, count($listeIds), '?')) . ') ORDER BY sevkiyat_id, sira, (kalibre + 0), kalibre, id');
+        $kq->execute($listeIds);
+        foreach ($kq->fetchAll(PDO::FETCH_ASSOC) as $__k) $kalemHarita[(int)$__k['sevkiyat_id']][] = $__k;
+    } catch (PDOException $e) {
+        error_log('[siparisler] kalemler: ' . $e->getMessage());
+    }
+}
+$partiHarita = siparis_beyan_parti_haritasi($pdo, $listeIds);
 
 // ── KPI (yalnız depo süzgeci; açık sevkiyatlar) ─────────
 $kpi = ['acik' => 0, 'arac' => 0, 'yolda' => 0, 'pkl' => 0, 'mail' => 0, 'catisma' => 0, 'po' => 0];
@@ -299,12 +317,12 @@ $bolumBas = function (string $baslik, int $say, string $id): string {
   </form>
 
   <?php
-  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos) use ($bolumBas, $sayfalama, $yaz, $sil): void {
+  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos) use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita): void {
       echo '<section class="sip-bolum" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id);
       if (!$b['rows']) {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
       } else {
-          $sec_rows = $b['rows'];
+          $sec_rows = $b['rows']; $sec_kalem = $kalemHarita; $sec_parti = $partiHarita;
           include __DIR__ . '/_siparis_liste.php';
           echo $sayfalama($b, $param);
       }
