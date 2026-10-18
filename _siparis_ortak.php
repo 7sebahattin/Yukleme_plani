@@ -89,9 +89,11 @@ function sipui_tur_rozeti(string $tur): string
 function sipui_dok_rozetleri(array $sev): string
 {
     $o = '<span class="sip-doks" role="group" aria-label="Belge durumu">';
+    $ad = ['po' => 'Purchase Order (sipariş)', 'll' => 'Loading List (yükleme listesi / araç bilgisi)',
+           'pc' => 'Price Confirmation (fiyat onayı)', 'pkl' => 'Packing List (PKL Excel)'];
     foreach (['po' => 'PO', 'll' => 'LL', 'pc' => 'PC', 'pkl' => 'PKL'] as $k => $et) {
         $var = (int)($sev['var_' . $k] ?? 0) === 1;
-        $o .= '<span class="sip-dok ' . ($var ? 'sip-dok--var' : 'sip-dok--yok') . '" title="' . h($et . ($var ? ' yüklü' : ' eksik')) . '">'
+        $o .= '<span class="sip-dok ' . ($var ? 'sip-dok--var' : 'sip-dok--yok') . '" title="' . h($ad[$k] . ($var ? ' — yüklü' : ' — eksik')) . '">'
             . h($et) . ' <span aria-hidden="true">' . ($var ? '✓' : '–') . '</span><span class="sip-sr">' . ($var ? ' var' : ' eksik') . '</span></span>';
     }
     return $o . '</span>';
