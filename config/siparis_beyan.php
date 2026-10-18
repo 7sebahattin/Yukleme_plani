@@ -213,8 +213,8 @@ function siparis_beyan_parti_haritasi(PDO $pdo, array $sevIds): array
             $p = trim((string)($red['party_no'] ?? ''));
             if ($p === '') continue;
             $sid = (int)$r['sevkiyat_id'];
-            if (!isset($out[$sid])) $out[$sid] = ['parti' => $p, 'fazla' => 0];
-            else $out[$sid]['fazla']++;
+            if (!isset($out[$sid])) $out[$sid] = ['parti' => $p, 'fazla' => 0, 'liste' => [$p]];
+            elseif (!in_array($p, $out[$sid]['liste'], true)) { $out[$sid]['liste'][] = $p; $out[$sid]['fazla']++; }
         }
     } catch (PDOException $e) {
         error_log('[siparis_beyan_parti_haritasi] ' . $e->getMessage());

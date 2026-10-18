@@ -468,3 +468,7 @@ td.sip-hucre-bos { background: var(--warn-soft); }
 .sip-table tr.sip-ust:hover + tr.sip-urun-tr > td, .sip-table tr.sip-ust:has(+ tr.sip-urun-tr:hover) > td { background: var(--primary-soft); }
 .sip-card-urun { padding: 6px 8px; border-left: 3px solid var(--border-strong); background: var(--surface-2); border-radius: 0 6px 6px 0; }
 .sip-card-urun .sip-urunler { grid-template-columns: 1fr; }
+
+/* v373: birden çok bağlı beyan → her parti no ayrı satırda */
+.sip-turparti-coklu { display: block; }
+.sip-turparti-coklu .sip-parti-satir { display: block; white-space: nowrap; }
