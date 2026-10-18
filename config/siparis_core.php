@@ -776,10 +776,12 @@ function siparis_dosya_dogrula(array $file): array
  * Dosyayı depoya yazar ve belge satırını açar (tur='bilinmiyor', durum='yuklendi').
  * Aynı sha256 varsa YENİ satır açılmaz: silinmişse geri getirilir, yeni=false döner.
  * $mover varsayılanı move_uploaded_file; testler copy enjekte eder.
+ * $kaynak (v378): belgenin kökeni — yalnız beyaz liste ['yukleme','mail']; bilinmeyen değer 'yukleme' sayılır.
  * @return array{ok:bool,belge_id?:int,yeni?:bool,hata?:string}
  */
-function siparis_dosya_kaydet(PDO $pdo, array $file, int $uid, string $depo, ?callable $mover = null): array
+function siparis_dosya_kaydet(PDO $pdo, array $file, int $uid, string $depo, ?callable $mover = null, string $kaynak = 'yukleme'): array
 {
+    if (!in_array($kaynak, ['yukleme', 'mail'], true)) $kaynak = 'yukleme';
     $d = siparis_dosya_dogrula($file);
     if (!$d['ok']) return ['ok' => false, 'hata' => $d['hata'] ?? 'Dosya geçersiz.'];
     $tmp = (string)$file['tmp_name'];
@@ -806,7 +808,7 @@ function siparis_dosya_kaydet(PDO $pdo, array $file, int $uid, string $depo, ?ca
         try {
             $pdo->prepare('INSERT INTO siparis_belgeler (tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime, boyut, depo, yukleyen, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                ->execute(['bilinmiyor', 'yukleme', 'yuklendi', $sha, $ad, $orj, (string)$d['mime'], (int)filesize($hedef), $depo, $uid, siparis_simdi()]);
+                ->execute(['bilinmiyor', $kaynak, 'yuklendi', $sha, $ad, $orj, (string)$d['mime'], (int)filesize($hedef), $depo, $uid, siparis_simdi()]);
         } catch (PDOException $e) {
             @unlink($hedef);
             if (!siparis_tekrar_mi($e)) throw $e;

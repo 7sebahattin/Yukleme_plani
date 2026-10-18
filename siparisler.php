@@ -9,6 +9,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/siparis_beyan.php';
+require_once __DIR__ . '/config/siparis_mail.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -179,6 +180,32 @@ if (isset($_SESSION['siparis_yukleme']) && is_array($_SESSION['siparis_yukleme']
     unset($_SESSION['siparis_yukleme']);
 }
 
+// v378 — "📧 Mailden al": yalnız siparis.write + mail.read olana; kurulu değilse düğme HİÇ çizilmez. Salt okunur (yazan uç: siparis_mail.php).
+// Son sonuçlar yalnız AKTİF DEPODA yapılmış sorgulardan gösterilir; gönderen / konu yalnız izleyenin görünür posta kutularından okunur.
+$mailBlok = '';
+if ($yaz && siparis_mail_yetkisi()) {
+    $mUid = (int)$auth_user['id']; $mDepo = (string)(active_depot() ?? '');
+    $mHazir = siparis_mail_hazir($pdo);
+    $mD = ['hazir' => $mHazir, 'mail_admin' => can_mail('admin')];
+    if ($mHazir) {
+        $mAyar = siparis_mail_ayar_oku($pdo);
+        $mD['ayarli'] = [];
+        foreach (array_keys(siparis_mail_turleri()) as $mt) $mD['ayarli'][$mt] = siparis_mail_ayarli_mi($mAyar, $mt);
+        $mD['ayar_link'] = siparis_mail_ayar_yetkisi();
+        $mY = siparis_mail_yarim($pdo, $mUid);
+        $mD['yarim'] = $mY !== null && $mY['depo'] === $mDepo ? $mY : null;
+        $mGor = mail_gorunur_hesap_idleri($mUid, $pdo);
+        $mSon = [];
+        foreach (array_keys(siparis_mail_turleri()) as $mt) {
+            $mx = siparis_mail_son($pdo, $mt);
+            if ($mx !== null && (string)($mx['depo'] ?? '') === $mDepo) $mSon[] = ['tur' => $mt, 'bitis' => (int)($mx['bitis'] ?? 0), 'html' => sipui_mail_sonuc_html($pdo, $mx, $mGor)];
+        }
+        usort($mSon, static fn(array $a, array $b): int => $b['bitis'] <=> $a['bitis']);
+        $mD['son'] = $mSon;
+    }
+    $mailBlok = sipui_mail_blok_html($mD);
+}
+
 $detayFiltre = $f_cw !== '' || $f_alici !== '' || $f_eksik !== '' || $f_catisma || $f_po > 0 || $t_bas !== '' || $t_bit !== '' || ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true));
 $filtreVar = $detayFiltre || $q !== '' || in_array($f_durum, ['acik', 'kapali'], true);
 $detayOzet = [];
@@ -249,6 +276,7 @@ $bolumBas = function (string $baslik, int $say, string $id): string {
 
   <?php if ($yaz): ?>
   <section class="card sip-yukle" id="yukle" aria-label="Belge yükle">
+    <?= $mailBlok ?>
     <form method="post" action="siparis_yukle.php" enctype="multipart/form-data" <?= sipui_yukleme_ozellikleri() ?>>
       <?= sipui_csrf() ?>
       <?= sipui_dropzone_html('sipDosyaListe', false) ?>

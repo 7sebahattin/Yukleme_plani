@@ -5,11 +5,14 @@
 // Görüntüleme: siparis.read. Profil kaydet: siparis.write. Sayaç düzeltme + profil silme: siparis.delete.
 // POST'lar bu sayfaya gelir (CSRF + kapı burada); mutasyon ve audit kütüphanededir.
 // Audit'e profil DEĞERLERİ (üretici adı, GGN, laboratuvar) yazılmaz — kütüphane yalnız id + alan adları yazar.
+// v378: "📧 Mail sorgu ayarları" (#mail) — posta kutuları + tür başına gönderen adresleri (hks_kv; adresler repoya GİRMEZ).
+//        Kapı: siparis.delete + Mail Merkezi yönetimi (siparis_mail_ayar_yetkisi()); audit yalnız SAYILAR yazar.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
+require_once __DIR__ . '/config/siparis_mail.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -50,6 +53,16 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Profil kaydedildi.' : (string)($r['hata'] ?? 'Profil kaydedilemedi.'));
         $git('#profiller');
     }
+    if ($islem === 'mail_ayar') {
+        require_siparis('delete');
+        if (!siparis_mail_ayar_yetkisi() || !siparis_mail_hazir($pdo)) { set_flash('error', 'Mail sorgu ayarları için Mail Merkezi yönetim yetkisi gerekir (ya da özellik kurulu değil).'); $git('#mail'); }
+        $r = siparis_mail_ayar_kaydet($pdo, [
+            'hesaplar' => (array)($_POST['hesaplar'] ?? []),
+            'gonderen' => ['siparis' => (string)($_POST['g_siparis'] ?? ''), 'lojistik' => (string)($_POST['g_lojistik'] ?? ''), 'fiyat' => (string)($_POST['g_fiyat'] ?? '')],
+        ], $uid);
+        set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Mail sorgu ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayarlar kaydedilemedi.'));
+        $git('#mail');
+    }
     if ($islem === 'profil_sil') {
         require_siparis('delete');
         $ok = siparis_profil_sil($pdo, (int)($_POST['profil_id'] ?? 0), $uid);
@@ -81,6 +94,11 @@ $ps = $pdo->prepare('SELECT p.id, p.sevkiyat_id, p.durum, p.sezon, p.belge_no, p
 $ps->execute($dp);
 $pkller = $ps->fetchAll(PDO::FETCH_ASSOC);
 $profiller = siparis_profiller($pdo, false);
+// v378 mail sorgu ayarları (yalnız ayar yetkisi olana çizilir; adresler ekranda görünür, repoda yok)
+$mailAyarYetki = siparis_mail_ayar_yetkisi();
+$mailHazir = $mailAyarYetki && siparis_mail_hazir($pdo);
+$mailAyar = $mailHazir ? siparis_mail_ayar_oku($pdo) : [];
+$mailHesaplar = $mailHazir ? siparis_mail_hesaplar($pdo) : [];
 $profilVeri = function (array $p): array {
     $v = ['profil_id' => (int)$p['id'], '_yazi:profil_baslik' => 'Profili düzenle'];
     foreach (array_keys(siparis_profil_alanlari()) as $k) $v[$k] = (string)($p[$k] ?? '');
@@ -115,6 +133,36 @@ $profilVeri = function (array $p): array {
     <?php endforeach; ?>
     <?php if (!$sil): ?><p class="sip-bilgi" role="note">Sayaç düzeltmek için siparis.delete yetkisi gerekir.</p><?php endif; ?>
   </section>
+
+  <?php if ($mailAyarYetki): ?>
+  <section class="card" id="mail" aria-labelledby="sipMailAyarBas">
+    <div class="card-head"><h2 id="sipMailAyarBas">📧 Mail sorgu ayarları</h2><span class="sip-soluk">Son <?= (int)SIPARIS_MAIL_GUN ?> gün</span></div>
+    <?php if (!$mailHazir): ?>
+      <p class="sip-bilgi" role="note">Mail sorgusu kurulu değil: Mail Merkezi tabloları, MAIL_MASTER_KEY ve Hal Kayıt ayar tablosu (hks_kv) gerekir.</p>
+    <?php else: ?>
+      <p class="muted">Siparişler sayfasındaki <strong>Sipariş / Lojistik / Fiyat sorgula</strong> düğmeleri yalnız burada işaretlenen posta kutularını ve yalnız aşağıdaki gönderen adreslerinden gelen mailleri tarar. Belge türü PDF içeriğinden anlaşılır; adres alan adına göre değil, <strong>tam adrese</strong> göre eşleşir.</p>
+      <p class="sip-bilgi" role="note">Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin.</p>
+      <form method="post" action="siparis_ayarlar.php#mail" class="sip-form sip-mail-ayar" data-sip-tek>
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="mail_ayar">
+        <fieldset class="sip-mail-hesaplar"><legend>Taranacak posta kutuları</legend>
+          <?php if (!$mailHesaplar): ?><p class="sip-soluk">Aktif posta kutusu yok (Mail Merkezi › Hesaplar).</p><?php endif; ?>
+          <?php foreach ($mailHesaplar as $mh): ?>
+            <label class="sip-onay-satir"><input type="checkbox" name="hesaplar[]" value="<?= (int)$mh['id'] ?>"<?= in_array((int)$mh['id'], $mailAyar['hesaplar'], true) ? ' checked' : '' ?>> <?= h($mh['label']) ?> <span class="sip-soluk">(<?= h($mh['email']) ?>)</span></label>
+          <?php endforeach; ?>
+        </fieldset>
+        <div class="sip-mail-gonderenler">
+          <?php foreach (['siparis' => ['g_siparis', 'Sipariş (PO) gönderenleri'], 'lojistik' => ['g_lojistik', 'Lojistik (Loading List) gönderenleri'], 'fiyat' => ['g_fiyat', 'Fiyat (Price Confirmation) gönderenleri']] as $t => [$ad, $et]): ?>
+            <label><?= h($et) ?>
+              <textarea name="<?= h($ad) ?>" rows="3" maxlength="1500" autocomplete="off" spellcheck="false"><?= h(implode("\n", $mailAyar['gonderen'][$t] ?? [])) ?></textarea>
+            </label>
+          <?php endforeach; ?>
+        </div>
+        <p class="sip-soluk">Satır başına bir adres; her tür için en çok <?= (int)SIPARIS_MAIL_GONDEREN_MAX ?>. Sipariş ve Fiyat aynı adresten geliyorsa iki kutuya da yazın. Boş bırakılan türün düğmesi pasif kalır.</p>
+        <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
+      </form>
+    <?php endif; ?>
+  </section>
+  <?php endif; ?>
 
   <section class="card" id="pkller" aria-labelledby="sipPklListBas">
     <div class="card-head"><h2 id="sipPklListBas">Son PKL'ler</h2></div>

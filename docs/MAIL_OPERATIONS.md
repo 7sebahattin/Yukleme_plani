@@ -86,3 +86,8 @@ Not: şifre blob'u biçimi `v1:<anahtar kimliği>:<base64>`; anahtar kimliği ya
 | "cron durmuş olabilir" (eski sürüm) ama cron kurulu | Eski uyarı yalnız senkron günlüğüne bakıyordu; hesap geri çekilmedeyken günlük satırı yazılmaz | Güncel sürümde kalp atışı ile ayrılır |
 | Çeviri "beklemede" kalıyor | Sağlayıcı kapalı ya da kota doldu | Bölüm 1/7; kota 6 sa duraklatılır |
 | "Çift gönderim engellendi" | Aynı cevap zaten onaylanmış/gönderilmiş | Beklenen davranış |
+
+## 6. Siparişler "Mailden al" (v378) — cron bağımlılığı
+
+Siparişler sayfasındaki **Sipariş / Lojistik / Fiyat sorgula** düğmeleri posta kutusunu canlı taramaz; cron'un doldurduğu `mail_messages` kayıtlarından son 15 günün aday maillerini seçer ve yalnız PDF ekini o an IMAP'tan (salt okunur, `BODY.PEEK`) çeker. Cron durmuşsa yeni mailler henüz DB'de olmaz — sonuç kartı "en son N dk önce senkronlandı" uyarısı verir (çözüm Mail Hesapları'ndaki cron uyarısıdır). Ayar (hangi posta kutuları, hangi gönderen adresleri) `Siparişler › Ayarlar › 📧 Mail sorgu ayarları` kartındadır; gönderen adresleri DB'de (hks_kv) saklanır, repoda yoktur. Mailde "X adına Y" görünüyorsa iki adres de eklenmelidir.
+

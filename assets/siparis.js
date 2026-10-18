@@ -518,8 +518,119 @@
         pklApi = { hazirla: hazirla, topla: topla, paletGuncelle: paletGuncelle };
     }
 
+    /* ── v378: Mailden al (Sipariş / Lojistik / Fiyat sorgula) ─────────────────────────
+       Tek tık = tara + içe aktar. İş sunucuda parçalı yürür (siparis_mail.php: baslat → devam… → bitti); burada yalnız döngü + ilerleme.
+       Sonuç HTML'i sunucunun h() ile kaçırdığı TEK render (innerHTML yalnız bu). Ağ kopunca "Devam et" aynı tarama_id'yle sürer. */
+    function mailAl(kap) {
+        var url = kap.getAttribute('data-sip-mail-url') || 'siparis_mail.php';
+        var csrf = kap.getAttribute('data-sip-mail-csrf') || '';
+        var dugmeler = qa('[data-sip-mail]', kap);
+        var ilerleme = q('[data-sip-mail-ilerleme]', kap), metin = q('[data-sip-mail-ilerleme-metin]', kap), bar = ilerleme ? q('progress', ilerleme) : null;
+        var hataKutu = q('[data-sip-mail-hata]', kap), sonucKap = q('[data-sip-mail-sonuc]', kap);
+        var ilkPasif = dugmeler.map(function (b) { return b.disabled; });
+        var devamIl = ilerleme ? q('[data-sip-mail-devam-et]', ilerleme) : null, vazgecIl = ilerleme ? q('[data-sip-mail-vazgec]', ilerleme) : null;
+        var durum = { tid: '', tur: '', calisiyor: false };
+        var ETIKET = { siparis: 'Sipariş', lojistik: 'Lojistik', fiyat: 'Fiyat' };
+
+        function kilitle(kilit) {
+            kap.setAttribute('aria-busy', kilit ? 'true' : 'false');
+            dugmeler.forEach(function (b, i) { b.disabled = kilit ? true : ilkPasif[i]; });
+        }
+        function hataYaz(m) { if (hataKutu) { hataKutu.textContent = m || ''; hataKutu.hidden = !m; } }
+        function ilerlemeGoster(goster) { if (ilerleme) ilerleme.hidden = !goster; }
+        function dugmeGoster(devam, vazgec) { if (devamIl) devamIl.hidden = !devam; if (vazgecIl) vazgecIl.hidden = !vazgec; }
+        function seritKaldir() { qa('[data-sip-mail-devam]', kap).forEach(function (e) { e.parentNode.removeChild(e); }); }
+        function ilerlemeYaz(y) {
+            if (!ilerleme) return;
+            var sy = y.sayac || {}, t = y.toplam || 0;
+            if (bar) { bar.max = Math.max(1, t); bar.value = Math.min(t, y.i || 0); }
+            var m = 'Mailler taranıyor… ' + (y.i || 0) + ' / ' + t + ' ek · ' + (sy.alindi || 0) + ' alındı · ' + (sy.zaten || 0) + ' zaten vardı';
+            if (sy.hata) m += ' · ' + sy.hata + ' hata';
+            metin.textContent = m;
+        }
+        function bitir(y) {
+            durum.calisiyor = false; durum.tid = '';
+            ilerlemeGoster(false); dugmeGoster(false, false); seritKaldir(); hataYaz('');
+            if (sonucKap && y.html) { sonucKap.innerHTML = y.html; try { sonucKap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { /* yok say */ } }
+            kilitle(false);
+        }
+        function sorun(m, devamEdilebilir) {
+            durum.calisiyor = false;
+            hataYaz(m);
+            dugmeGoster(devamEdilebilir, !!durum.tid);
+            if (devamEdilebilir && metin) metin.textContent = 'Mail sorgusu yarıda kaldı.';
+            else ilerlemeGoster(false);
+            kilitle(false);
+        }
+        function post(govde) {
+            var ac = typeof AbortController === 'function' ? new AbortController() : null;
+            var zaman = ac ? setTimeout(function () { ac.abort(); }, 80000) : null;
+            return fetch(url, {
+                method: 'POST', credentials: 'same-origin', signal: ac ? ac.signal : undefined,
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(Object.assign({ csrf: csrf }, govde))
+            }).then(function (r) { if (zaman) clearTimeout(zaman); return r.text(); }).then(function (t) {
+                try { return JSON.parse(t); } catch (e) { return { ok: false, mesaj: 'Sunucudan beklenmeyen yanıt geldi (oturum süresi dolmuş olabilir). Sayfayı yenileyin.' }; }
+            }, function () { if (zaman) clearTimeout(zaman); throw new Error('ag'); });
+        }
+        function hatamsi(y) { return y.mesaj || y.error || 'İşlem yapılamadı.'; }
+        function dongu() {
+            durum.calisiyor = true; dugmeGoster(false, true); hataYaz('');
+            post({ islem: 'devam', tarama_id: durum.tid }).then(function (y) {
+                if (!y.ok) { durum.tid = (y.kod === 'sona_erdi' || y.kod === 'depo') ? '' : durum.tid; sorun(hatamsi(y), false); return; }
+                ilerlemeYaz(y);
+                if (y.bitti) bitir(y); else dongu();
+            }, function () { sorun('Bağlantı kesildi — kaldığı yerden devam edebilirsiniz.', true); });
+        }
+        function baslat(tur) {
+            durum.tur = tur; hataYaz(''); kilitle(true); ilerlemeGoster(true); dugmeGoster(false, false);
+            seritKaldir();
+            if (bar) { bar.max = 1; bar.value = 0; }
+            metin.textContent = (ETIKET[tur] || '') + ' sorgusu başlatılıyor…';
+            post({ islem: 'baslat', tur: tur }).then(function (y) {
+                if (!y.ok) { sorun(hatamsi(y), false); return; }
+                durum.tid = y.tarama_id;
+                ilerlemeYaz(y);
+                if (y.bitti) bitir(y); else dongu();
+            }, function () { sorun('Bağlantı kesildi — sorgu başlatılamadı. Yeniden deneyin.', false); });
+        }
+        kap.addEventListener('click', function (e) {
+            var d = e.target.closest('[data-sip-mail]');
+            if (d && kap.contains(d)) { if (!d.disabled && !durum.calisiyor) baslat(d.getAttribute('data-sip-mail')); return; }
+            var dv = e.target.closest('[data-sip-mail-devam-et]');
+            if (dv) {
+                var serit = dv.closest('[data-sip-mail-devam]');
+                if (serit) { durum.tid = serit.getAttribute('data-sip-mail-devam') || ''; durum.tur = serit.getAttribute('data-sip-mail-tur') || ''; }
+                if (!durum.tid || durum.calisiyor) return;
+                kilitle(true); ilerlemeGoster(true); hataYaz('');
+                if (metin) metin.textContent = (ETIKET[durum.tur] || 'Mail') + ' sorgusu sürdürülüyor…';
+                dongu();
+                return;
+            }
+            var vz = e.target.closest('[data-sip-mail-vazgec]');
+            if (vz) {
+                var s2 = vz.closest('[data-sip-mail-devam]');
+                var tid = s2 ? (s2.getAttribute('data-sip-mail-devam') || '') : durum.tid;
+                if (!tid) return;
+                post({ islem: 'vazgec', tarama_id: tid }).then(function (y) {
+                    if (y.ok) { durum.tid = tid; bitir(y); } else { seritKaldir(); durum.tid = ''; sorun(hatamsi(y), false); }
+                }, function () { sorun('Bağlantı kesildi — vazgeçme isteği ulaşmadı.', true); });
+                return;
+            }
+            var on = e.target.closest('[data-sip-mail-onceden]');
+            if (on) {
+                var kart = on.closest('[data-sip-mail-sonuc-kart]');
+                if (!kart) return;
+                var acik = kart.classList.toggle('sip-mail-onceden-acik');
+                on.setAttribute('aria-pressed', acik ? 'true' : 'false');
+                on.textContent = on.textContent.replace(acik ? 'göster' : 'gizle', acik ? 'gizle' : 'göster');
+            }
+        });
+    }
+
     function basla() {
         qa('form[data-sip-upload]').forEach(yukleme);
+        qa('[data-sip-mail-kap]').forEach(mailAl);
         var p = q('form[data-sip-pkl]'); if (p) { pkl(p); pklIzgara(p); }
         zipGuncelle();
         qa('[data-sip-durum-form]').forEach(gerekceGuncelle);

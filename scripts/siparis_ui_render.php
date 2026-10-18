@@ -5,8 +5,10 @@
 //   SIPARIS_UI_OUT=/tmp/sip-ui node scripts/siparis_ui_smoke.js
 // Bellek içi SQLite + stub auth + SENTETİK fixture'lar (kişisel veri yok); canlı DB'ye ve storage/siparis'e dokunmaz.
 // Üretim style.css + siparis.css satır içi, JS dosyaları file:// ile yüklenir (app.js + siparis.js gerçekten çalışır).
+// v378 mail senaryoları (varsayılan: hepsi; SIPARIS_UI_MAIL=ayarsiz,ayarli,yetkisiz,son,yarim ile süzülür): mail şeması + sahte IMAP ile GERÇEK
+// tarama çalıştırılıp sonuç sayfaya basılır (adresler yalnız @ornek.test).
 // =========================================================
-require_once __DIR__ . '/_siparis_test_lib.php';
+require_once __DIR__ . '/_siparis_mail_test_lib.php';   // _siparis_test_lib + Mail Merkezi (v378 mail senaryoları)
 
 /** Ortak tohum: tam akış (PO → LL → çatışma → PKL → PC → mail) + ikinci depo + beyan. @return array<string,int> */
 function siparis_ui_tohum(PDO $db): array
@@ -124,6 +126,54 @@ $manifest = ['sayfalar' => array_keys($sayfalar), 'id' => $ID];
 foreach ($sayfalar as $ad => $s) {
     $html = basla_sayfa($s[0], $s[1], $ad, $s[2] ?? [], $s[3] ?? true);
     file_put_contents("$OUT/$ad.html", $html);
+}
+
+// ── v378: "📧 Mailden al" senaryoları (mail şeması bu noktadan sonra kurulur: yukarıdaki sayfalar şemasız = "kurulu değil" notu) ──
+$mailSenaryo = array_filter(array_map('trim', explode(',', (string)(getenv('SIPARIS_UI_MAIL') ?: 'ayarsiz,ayarli,yetkisiz,son,yarim'))));
+if ($mailSenaryo) {
+    mail_test_sema_kur($db); mail_test_anahtar_kur();
+    $db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+    $mA = smt_hesap('export@ornek.test');
+    $mYaz = function (string $ad, string $dosya, array $get = [], array $perms = ['siparis.read', 'siparis.write', 'mail.read'], bool $yonetici = true) use ($OUT, &$manifest): void {
+        file_put_contents("$OUT/$ad.html", basla_sayfa($dosya, $get, $ad, $perms, $yonetici));
+        $manifest['sayfalar'][] = $ad;
+    };
+    $tumAyar = ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test'], 'fiyat' => ['po@ornek.test']];
+    if (in_array('ayarsiz', $mailSenaryo, true)) $mYaz('mail_ayarsiz', 'siparisler.php');
+    if (in_array('ayarsiz', $mailSenaryo, true)) $mYaz('mail_ayarsiz_operator', 'siparisler.php', [], ['siparis.read', 'siparis.write', 'mail.read'], false);
+    smt_ayar([$mA], $tumAyar);
+    if (in_array('ayarli', $mailSenaryo, true)) { $mYaz('mail_ayarli', 'siparisler.php'); $mYaz('mail_ayar_sayfa', 'siparis_ayarlar.php'); }
+    if (in_array('yetkisiz', $mailSenaryo, true)) { $mYaz('mail_yetkisiz', 'siparisler.php', [], ['siparis.read', 'siparis.write'], false); $mYaz('mail_ayar_yetkisiz', 'siparis_ayarlar.php', [], ['siparis.read', 'siparis.write', 'mail.read'], false); }
+    if (in_array('son', $mailSenaryo, true) || in_array('yarim', $mailSenaryo, true)) {
+        smt_parse_kancasi_kur();
+        global $PERMS, $IS_ADMIN, $UID;
+        $PERMS = []; $IS_ADMIN = true; $UID = 1;        // basla_sayfa() son sayfanın yetkisini bırakır: taramalar yönetici olarak çalışır
+        $uzun = str_repeat('Çok uzun bir konu satırı ', 8);
+        $mm = fn(string $from, array $ekler, string $z, array $o = []) => smt_mail($mA, 'export@ornek.test', $from, $ekler, $z, $o);
+        $mm('LOG@ornek.test', [smt_ek('2', 'LL_TC900091_TC900092.pdf', smt_pdf('ll-ui-yeni-iki'))], '2026-10-17 08:10:00', ['subject' => 'Loading List KW 49 · TC900091.10 / TC900092.10', 'from_name' => 'Lojistik Birimi']);
+        $mm('log@ornek.test', [smt_ek('2', 'LL_eski.pdf', smt_pdf('ll1'))], '2026-10-17 09:00:00', ['subject' => 'Loading List (yeniden gönderim)', 'from_name' => 'Lojistik Birimi']);
+        $mm('kisi@ornek.test', [smt_ek('2', 'PriceConf_CW49.pdf', smt_pdf('pc-ui-1'))], '2026-10-16 17:30:00', ['subject' => 'Price confirmation CW49', 'from_name' => 'Satış Ofisi']);
+        $mm('log@ornek.test', [smt_ek('2', 'Rapor_' . str_repeat('x', 90) . '.pdf', smt_pdf('bilinmiyor-ui'))], '2026-10-16 12:00:00', ['subject' => $uzun, 'from_name' => 'Lojistik Birimi']);
+        $mm('log@ornek.test', [smt_ek('2', 'dev_arsiv.pdf', null, 'application/pdf', ['size' => 22 * 1048576])], '2026-10-16 11:00:00', ['subject' => 'Büyük ek']);
+        $mm('log@ornek.test', [smt_ek('2', 'WG_Loading_List.eml', null, 'message/rfc822')], '2026-10-15 15:00:00', ['subject' => 'WG: Loading List', 'from_name' => 'Lojistik Birimi']);
+        $mm('log@ornek.test', [smt_ek('3', 'imza.png', null, 'image/png')], '2026-10-15 14:00:00', ['subject' => 'Çok büyük mail', 'body_truncated' => 1]);
+        $mm('log@ornek.test', [smt_ek('2', 'LL_uidv.pdf', smt_pdf('ll-ui-uidv'))], '2026-10-15 13:00:00', ['subject' => 'Sunucu yeniden indekslendi', 'uidv' => 4242]);
+        $mm('log@ornek.test', [smt_ek('4', 'logo.png', null, 'image/png')], '2026-10-15 10:00:00', ['subject' => 'Yalnız görsel']);
+        smt_tara('lojistik', 1, 'DEPO1', ['simdi' => '2026-10-18 12:00:00']);
+        $son = smt_tara('lojistik', 1, 'DEPO1', ['simdi' => '2026-10-18 12:05:00']);        // 2. tarama: "Daha önce alınmış" satırları
+        $fp = $mm('po@ornek.test', [smt_ek('2', 'PC_CW50.pdf', smt_pdf('pc-ui-2'))], '2026-10-17 10:00:00', ['subject' => 'Price confirmation CW50', 'from_name' => 'Satış Ofisi']);
+        smt_tara('fiyat', 1, 'DEPO1', ['simdi' => '2026-10-18 12:10:00']);                    // en yeni sonuç: Fiyat (Alındı satırı görünür)
+        if (in_array('son', $mailSenaryo, true)) $mYaz('mail_son', 'siparisler.php');
+        if (in_array('yarim', $mailSenaryo, true)) {
+            $mm('po@ornek.test', [smt_ek('2', 'PO_CW51.pdf', smt_pdf('po-ui-1'))], '2026-10-17 11:00:00', ['subject' => 'Purchase order CW51']);
+            $mm('po@ornek.test', [smt_ek('2', 'PO_CW52.pdf', smt_pdf('po-ui-2'))], '2026-10-17 11:30:00', ['subject' => 'Purchase order CW52']);
+            $b = siparis_mail_baslat($db, 'siparis', 1, 'DEPO1', ['simdi' => date('Y-m-d H:i:s')]);
+            if (!$b['ok']) throw new RuntimeException('yarım tarama kurulamadı: ' . json_encode($b));
+            $manifest['yarim_tid'] = $b['tarama_id'];
+            $mYaz('mail_yarim', 'siparisler.php');
+        }
+        unset($GLOBALS['_siparis_parse_override']);
+    }
 }
 file_put_contents("$OUT/manifest.json", json_encode($manifest));
 echo count($sayfalar) . " sayfa yazıldı → $OUT\n";

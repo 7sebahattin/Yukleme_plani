@@ -72,49 +72,8 @@ function mail_test_bitir(): never {
     exit($fail > 0 ? 1 : 0);
 }
 
-// ── MySQL DDL → SQLite çevirici (pdks_cavus_b_smoke.php'nin sadeleştirilmişi) ──
-function mail_ddl_sqlite(string $mysql): array
-{
-    if (!preg_match('/CREATE TABLE IF NOT EXISTS\s+`([^`]+)`\s*\((.*)\)\s*ENGINE=/si', $mysql, $m)) {
-        throw new RuntimeException('DDL ayrıştırılamadı');
-    }
-    $tablo = $m[1]; $govde = $m[2];
-    $parcalar = []; $buf = ''; $d = 0;
-    for ($i = 0, $n = strlen($govde); $i < $n; $i++) {
-        $c = $govde[$i];
-        if ($c === '(') $d++;
-        if ($c === ')') $d--;
-        if ($c === ',' && $d === 0) { $parcalar[] = trim($buf); $buf = ''; continue; }
-        $buf .= $c;
-    }
-    if (trim($buf) !== '') $parcalar[] = trim($buf);
-    $kolonlar = []; $indeksler = [];
-    foreach ($parcalar as $p) {
-        $p = preg_replace('/\s+/', ' ', $p);
-        if (preg_match('/^UNIQUE KEY `([^`]+)` \((.+)\)$/i', $p, $mm)) { $indeksler[] = "CREATE UNIQUE INDEX `{$mm[1]}` ON `{$tablo}` ({$mm[2]})"; continue; }
-        if (preg_match('/^(?:INDEX|KEY) `([^`]+)` \((.+)\)$/i', $p, $mm)) { $indeksler[] = "CREATE INDEX `{$mm[1]}` ON `{$tablo}` ({$mm[2]})"; continue; }
-        if (preg_match('/^CONSTRAINT `([^`]+)` FOREIGN KEY/i', $p)) continue;
-        $p = preg_replace('/\b(?:INT|BIGINT) AUTO_INCREMENT PRIMARY KEY\b/i', 'INTEGER PRIMARY KEY AUTOINCREMENT', $p);
-        $kolonlar[] = $p;
-    }
-    return ["CREATE TABLE `{$tablo}` (\n  " . implode(",\n  ", $kolonlar) . "\n)", $indeksler];
-}
-/** mail_migrate() gerçek akışını SQLite'ta çalıştırmak için: DDL'i çevirip uygular. */
-function mail_test_sema_kur(PDO $db): void
-{
-    if (mail_test_mysql()) {   // gerçek DDL, olduğu gibi (FK'ler dahil)
-        $db->exec('SET FOREIGN_KEY_CHECKS=0');
-        foreach (array_reverse(array_keys(mail_tablolar())) as $t) $db->exec("DROP TABLE IF EXISTS `$t`");
-        $db->exec('SET FOREIGN_KEY_CHECKS=1');
-        foreach (mail_tablolar() as $sql) $db->exec($sql);
-        return;
-    }
-    foreach (mail_tablolar() as $sql) {
-        [$create, $ix] = mail_ddl_sqlite($sql);
-        $db->exec($create);
-        foreach ($ix as $x) $db->exec($x);
-    }
-}
+// mail_ddl_sqlite / mail_test_sema_kur / mail_test_anahtar_kur: stub'sız ortak dosyada (siparis_mail_smoke harness'i de kullanır).
+require_once __DIR__ . '/_mail_test_sema.php';
 function mail_test_diger_tablolar(PDO $db): void
 {
     if (mail_test_mysql()) {
@@ -127,14 +86,6 @@ function mail_test_diger_tablolar(PDO $db): void
     $db->exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, display_name TEXT, is_active INT DEFAULT 1)");
     $db->exec("INSERT INTO users (username, display_name) VALUES ('u1','Kullanıcı 1'),('u2','Kullanıcı 2'),('u3','Kullanıcı 3')");
     $db->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INT, action TEXT, module TEXT, record_id INT, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
-}
-
-/** Yalnız test: sahte (üretilmiş) anahtar; gerçek anahtar ASLA kullanılmaz. */
-function mail_test_anahtar_kur(): string
-{
-    $b64 = base64_encode(str_repeat("\x07", 16) . random_bytes(16));
-    putenv('MAIL_MASTER_KEY=' . $b64);
-    return $b64;
 }
 
 /** auth.php'yi yüklemeden (stub çakışması) GERÇEK permission_catalog()'u kaynaktan çıkarır. */

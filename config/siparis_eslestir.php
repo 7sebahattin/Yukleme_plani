@@ -524,10 +524,12 @@ function siparis_bag_yaz(PDO $pdo, int $belgeId, int $sid, ?int $uid): bool
         if (!siparis_tekrar_mi($e)) throw $e;
         return false;
     }
-    $b = $pdo->prepare('SELECT tur, orijinal_ad FROM siparis_belgeler WHERE id = ?');
+    $b = $pdo->prepare('SELECT tur, orijinal_ad, kaynak FROM siparis_belgeler WHERE id = ?');
     $b->execute([$belgeId]);
-    $br = $b->fetch(PDO::FETCH_ASSOC) ?: ['tur' => '', 'orijinal_ad' => ''];
-    siparis_olay($pdo, $sid, 'belge_eklendi', null, (string)$br['tur'], (siparis_belge_tur_etiketleri()[(string)$br['tur']] ?? 'Belge') . ': ' . (string)$br['orijinal_ad'], $belgeId, $uid);
+    $br = $b->fetch(PDO::FETCH_ASSOC) ?: ['tur' => '', 'orijinal_ad' => '', 'kaynak' => ''];
+    // v378: mailden alınan belge zaman çizelgesinde "(mailden)" ile anılır (yeni olay türü YOK)
+    siparis_olay($pdo, $sid, 'belge_eklendi', null, (string)$br['tur'], (siparis_belge_tur_etiketleri()[(string)$br['tur']] ?? 'Belge') . ': ' . (string)$br['orijinal_ad']
+        . ((string)($br['kaynak'] ?? '') === 'mail' ? ' (mailden)' : ''), $belgeId, $uid);
     return true;
 }
 
@@ -944,6 +946,18 @@ function siparis_belge_surum_eski(array $belge): bool
 }
 
 /**
+ * PDF ayrıştırıcı çıktısının belge türü kodu (po/ll/pc; diğeri hedef sevkiyat varsa 'diger', yoksa 'bilinmiyor').
+ * TEK eşleme: siparis_belge_isle() ve mail yolunun ön tür kapısı (config/siparis_mail.php) aynı fonksiyonu çağırır.
+ */
+function siparis_pdf_tur_kodu(array $doc, bool $hedefVar = false): string
+{
+    return match ((string)($doc['doc_type'] ?? '')) {
+        'purchase_order' => 'po', 'loading_list' => 'll', 'price_confirmation' => 'pc',
+        default => $hedefVar ? 'diger' : 'bilinmiyor',
+    };
+}
+
+/**
  * Belgeyi sınıflar, ayrıştırır, sevkiyatlara bağlar ve değerleri uygular (tek transaction).
  * İdempotent. Hata → rollback + belge durum='hata' (ayrı ifade), ok=false.
  * @return array{ok:bool, tur:string, ozet:string, sevkiyatlar:list<array{id:int,order_ref:string,yeni:bool}>, catisma:int, uyari:int, mesajlar:list<string>, hata?:string}
@@ -1004,7 +1018,7 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
         $ted = SIPARIS_VARSAYILAN_TEDARIKCI; $ozet = ''; $uyariSay = 0; $parseJson = null; $surum = null;
         $tedCoz = fn($v): string => is_scalar($v) && preg_match('/^\d{5,10}$/', trim((string)$v)) ? trim((string)$v) : SIPARIS_VARSAYILAN_TEDARIKCI;
         if ($doc !== null) {
-            $tur = match ($doc['doc_type'] ?? '') { 'purchase_order' => 'po', 'loading_list' => 'll', 'price_confirmation' => 'pc', default => $hedef !== null ? 'diger' : 'bilinmiyor' };
+            $tur = siparis_pdf_tur_kodu($doc, $hedef !== null);
             $h = (array)($doc['header'] ?? []);
             $meta = (array)($doc['meta'] ?? []);
             $pdfOl = isset($meta['created']) && is_string($meta['created']) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $meta['created']) ? $meta['created'] : null;
@@ -1152,6 +1166,84 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
         $sonuc['sevkiyatlar'] = []; $sonuc['mesajlar'] = [];
         return $hataYaz('Belge işlenemedi. Teknik ayrıntılar sunucu günlüğüne kaydedildi.');
     }
+}
+
+// ── ORTAK YÜKLEME YOLU (v378) ───────────────────────────────────────────
+
+/**
+ * Tek dosyayı kaydeder + (gerekiyorsa) işler + audit 'siparis_belge_yukle'. siparis_yukle.php (elle yükleme) ve
+ * config/siparis_mail.php (mailden alma) AYNI fonksiyonu çağırır — İKİNCİ YAZMA YOLU AÇMA.
+ * $opt: kaynak ('yukleme'|'mail'), islem (audit 'islem'; varsayılan 'yukle'), audit_ek (array; kişisel veri YOK: mail_id, hesap_id, parca),
+ *       silineni_geri_getir (bool, varsayılan true — mail yolu false geçer: silinmiş belge DİRİLTİLMEZ, durum 'silinmis').
+ * @return array{dosya:string,durum:'islendi'|'zaten'|'silinmis'|'hata',tur:?string,sevkiyatlar:list<array{id:int,order_ref:string,yeni:bool}>,
+ *               catisma:int,uyari:int,mesajlar:list<string>,belge_id:?int,yeni:bool,yeniden?:int,eski_surum?:?string,hata?:string}
+ */
+function siparis_dosya_yukle_isle(PDO $pdo, array $dosya, int $uid, string $depo, ?array $hedef, ?callable $mover, array $opt = []): array
+{
+    $r = ['dosya' => siparis_kirp(basename(str_replace('\\', '/', (string)$dosya['name'])), 120), 'durum' => 'hata', 'tur' => null, 'sevkiyatlar' => [], 'catisma' => 0, 'uyari' => 0, 'mesajlar' => [],
+          'belge_id' => null, 'yeni' => false];
+    $kaynak = (string)($opt['kaynak'] ?? 'yukleme');
+    $geriGetir = ($opt['silineni_geri_getir'] ?? true) !== false;
+    try {
+        // Aynı içerik daha önce silinmiş miydi? (kaydet geri getirir; sevkiyat etkisi yeniden uygulanmalı)
+        $silinmisti = false;
+        if (is_file((string)$dosya['tmp_name'])) {
+            $sha = (string)hash_file('sha256', $dosya['tmp_name']);
+            $o = $pdo->prepare('SELECT id, deleted_at FROM siparis_belgeler WHERE sha256 = ?');
+            $o->execute([$sha]);
+            $oncekiSatir = $o->fetch(PDO::FETCH_ASSOC);
+            $silinmisti = $oncekiSatir && $oncekiSatir['deleted_at'] !== null;
+            if ($silinmisti && !$geriGetir) {   // mail yolu: kullanıcının bilerek sildiği belge her taramada dirilmez
+                $r['durum'] = 'silinmis';
+                $r['belge_id'] = (int)$oncekiSatir['id'];
+                return $r;
+            }
+        }
+        $k = siparis_dosya_kaydet($pdo, $dosya, $uid, $depo, $mover, $kaynak);
+        if (!$k['ok']) { $r['hata'] = (string)($k['hata'] ?? 'Dosya kaydedilemedi.'); return $r; }
+        $belgeId = (int)$k['belge_id'];
+        $r['belge_id'] = $belgeId;
+        $r['yeni'] = (bool)$k['yeni'];
+        $b = $pdo->prepare('SELECT id, depo, durum, tur, parser_surum FROM siparis_belgeler WHERE id = ?');
+        $b->execute([$belgeId]);
+        $bs = $b->fetch(PDO::FETCH_ASSOC) ?: ['id' => $belgeId, 'depo' => '', 'durum' => 'yuklendi', 'tur' => 'bilinmiyor', 'parser_surum' => null];
+        $baglar = $pdo->prepare('SELECT s.id, s.order_ref FROM siparis_belge_bag bb JOIN siparis_sevkiyatlar s ON s.id = bb.sevkiyat_id WHERE bb.belge_id = ? AND s.deleted_at IS NULL');
+        $baglar->execute([$belgeId]);
+        $mevcutBaglar = $baglar->fetchAll(PDO::FETCH_ASSOC);
+        $hedefeBagli = $hedef === null || in_array((int)$hedef['id'], array_map('intval', array_column($mevcutBaglar, 'id')), true);
+        // v375: aynı dosya eski okuyucuyla okunmuşsa (parser_surum ≠ güncel) yeniden okunur — aynı belge id, ikinci satır YOK
+        $yenidenOku = !$k['yeni'] && !$silinmisti && siparis_belge_surum_eski($bs) && siparis_belge_gorunur($pdo, $bs);
+        $eskiSurum = $yenidenOku ? (string)$bs['parser_surum'] : null;
+        $isle = $k['yeni'] || $silinmisti || $bs['durum'] !== 'islendi' || !$hedefeBagli || $yenidenOku;
+        $r['tur'] = (string)$bs['tur'];
+        if (!$isle) {
+            $r['durum'] = 'zaten';
+            foreach ($mevcutBaglar as $m) $r['sevkiyatlar'][] = ['id' => (int)$m['id'], 'order_ref' => (string)$m['order_ref'], 'yeni' => false];
+            return $r;
+        }
+        $x = siparis_belge_isle($pdo, $belgeId, $uid, $hedef !== null ? (int)$hedef['id'] : null);
+        $r['tur'] = (string)$x['tur'];
+        if (!$x['ok']) {
+            $r['hata'] = (string)($x['hata'] ?? 'Belge işlenemedi.');
+        } else {
+            $r['durum'] = 'islendi';
+            if ($yenidenOku) { $r['yeniden'] = 1; $r['eski_surum'] = $eskiSurum; }
+            $r['sevkiyatlar'] = $x['sevkiyatlar'];
+            $r['catisma'] = (int)$x['catisma'];
+            $r['uyari'] = (int)$x['uyari'];
+            $r['mesajlar'] = array_slice($x['mesajlar'], 0, 8);
+        }
+        $islem = $yenidenOku ? 'surum_yenile' : (string)($opt['islem'] ?? 'yukle');
+        audit_log_event('siparis_belge_yukle', 'siparis', $belgeId, null, [
+            'belge_id' => $belgeId, 'tur' => $r['tur'], 'yeni' => $k['yeni'] ? 1 : 0, 'ok' => $x['ok'] ? 1 : 0,
+            'sevkiyat_ids' => array_map(fn($s) => (int)$s['id'], $x['sevkiyatlar']),
+        ] + ['islem' => $islem] + ($yenidenOku ? ['eski_surum' => $eskiSurum] : []) + (array)($opt['audit_ek'] ?? []));
+    } catch (Throwable $e) {
+        error_log('[siparis_yukle] ' . get_class($e) . ': ' . $e->getMessage());
+        $r['durum'] = 'hata';
+        $r['hata'] = 'Dosya işlenemedi. Teknik ayrıntılar sunucu günlüğüne kaydedildi.';
+    }
+    return $r;
 }
 
 // ── YENİDEN HESAP (C.8) ─────────────────────────────────────────────────
