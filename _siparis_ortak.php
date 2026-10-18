@@ -255,6 +255,9 @@ function sipui_yukleme_sonuc_html(array $sonuclar): string
             else $parca[] = 'Eşleşti ' . $a;
         }
         $o = $parca ? implode('<br>', $parca) : 'İşlendi — sevkiyata bağlanmadı';
+        if (!empty($r['yeniden'])) {   // v375: aynı dosya eski okuyucuyla okunmuştu
+            $o = '<div class="sip-soluk">Zaten yüklüydü — yeni okuyucuyla (' . h((string)($r['eski_surum'] ?? '?')) . ' → ' . h(SIPARIS_PDF_SURUM) . ') yeniden okundu, sevkiyat değerleri güncellendi.</div>' . $o;
+        }
         foreach ((array)($r['mesajlar'] ?? []) as $m) {
             $kirmizi = str_contains((string)$m, 'içeriyor; o sevkiyata bağlandı');
             $o .= '<div class="' . ($kirmizi ? 'sip-hata-metin' : 'sip-soluk') . ' sip-sonuc-mesaj">' . h((string)$m) . '</div>';

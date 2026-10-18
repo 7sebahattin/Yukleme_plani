@@ -190,6 +190,16 @@ function siparis_alan_etiketi(string $varlik, string $alan): string
 
 // ── ALAN UYGULAMA ───────────────────────────────────────────────────────
 
+/** v375 — aynı belgenin aynı kaynaktan açtığı, artık gelmeyen değerli AÇIK çatışmayı siler (kabul/red'e dokunmaz). */
+function siparis_catisma_bayat_sil(PDO $pdo, int $sid, ?int $kalemId, string $alan, string $kaynak, int $belgeId, string $yeni): void
+{
+    if ($belgeId <= 0) return;
+    $kalemSql = $kalemId === null ? 'kalem_id IS NULL' : 'kalem_id = ?';
+    $par = [$sid, $alan, $kaynak, $belgeId, $yeni];
+    if ($kalemId !== null) $par[] = $kalemId;
+    $pdo->prepare("DELETE FROM siparis_catismalar WHERE sevkiyat_id = ? AND alan = ? AND gelen_kaynak = ? AND belge_id = ? AND durum = 'acik' AND (gelen_deger IS NULL OR gelen_deger <> ?) AND $kalemSql")->execute($par);
+}
+
 /**
  * Belgeden gelen değeri otorite kurallarıyla uygular:
  *  1 boş gelen → 'bos' (veri SİLİNMEZ)   2 kaynaklar[alan][src] = {v,b,t} HER ZAMAN saklanır
@@ -242,17 +252,20 @@ function siparis_alan_uygula(PDO $pdo, string $varlik, int $id, string $alan, mi
     if ($mevcut === null) {
         $kay[$alan]['_s'] = $kaynak;
         $kaydet($yeni, true);
+        siparis_catisma_bayat_sil($pdo, $sid, $kalemId, $alan, $kaynak, $belgeId, $yeni);
         return 'uygulandi';
     }
     if (siparis_deger_esit($mevcut, $yeni, $tanim['tip'])) {
         if ($sira > siparis_kaynak_sira($tanim, $s)) $kay[$alan]['_s'] = $kaynak;    // aynı değer daha yetkili kaynaktan
         $kaydet(null, false);
+        siparis_catisma_bayat_sil($pdo, $sid, $kalemId, $alan, $kaynak, $belgeId, $yeni);
         return 'ayni';
     }
     if ($sira > siparis_kaynak_sira($tanim, $s) || ($kaynak === $s && strcmp($belgeSira, $sT) >= 0)) {
         $kay[$alan]['_s'] = $kaynak;
         $kaydet($yeni, true);
         siparis_olay($pdo, $sid, 'alan_guncellendi', $mevcut, $yeni, $etiket . ' — ' . siparis_kaynak_etiket($kaynak), $belgeId > 0 ? $belgeId : null, null);
+        siparis_catisma_bayat_sil($pdo, $sid, $kalemId, $alan, $kaynak, $belgeId, $yeni);
         return 'uygulandi';
     }
     // Daha az yetkili kaynak: değeri İLK kez getiriyorsa ya da kendi önceki değerini TEKRARLIYORSA
@@ -916,6 +929,13 @@ function siparis_pkl_yuklenen_uygula(PDO $pdo, int $sid, array $belge, array $pk
 }
 
 // ── BELGE İŞLEME ────────────────────────────────────────────────────────
+
+/** v375 — belge eski okuyucuyla okunmuş mu? (PDF okuması parser_surum yazar; PKL/görsel NULL kalır → asla "eski" sayılmaz) */
+function siparis_belge_surum_eski(array $belge): bool
+{
+    $s = $belge['parser_surum'] ?? null;
+    return $s !== null && (string)$s !== '' && (string)$s !== SIPARIS_PDF_SURUM && ($belge['durum'] ?? '') === 'islendi';
+}
 
 /**
  * Belgeyi sınıflar, ayrıştırır, sevkiyatlara bağlar ve değerleri uygular (tek transaction).

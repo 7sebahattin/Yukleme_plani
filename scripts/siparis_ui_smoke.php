@@ -460,6 +460,25 @@ $x = $yukle($cok);
 ok('yükleme: 11 dosya reddedilir, hiçbiri kaydedilmez', say($db, 'siparis_belgeler') === $n0 && ($x['flash']['type'] ?? '') === 'error');
 $x = $yukle([['a.pdf', siparis_test_pdf('u1')]]);
 ok('yükleme: aynı içerik → "Zaten yüklü"', (($_SESSION['siparis_yukleme'][0]['durum'] ?? '') === 'zaten'));
+// v375: aynı dosya eski okuyucuyla (parser_surum ≠ güncel) okunmuşsa yeniden yüklemede kendiliğinden yeniden okunur
+$u1 = (int)$db->query("SELECT id FROM siparis_belgeler WHERE orijinal_ad = 'rastgele.pdf'")->fetchColumn();
+$db->prepare("UPDATE siparis_belgeler SET parser_surum = 'v2' WHERE id = ?")->execute([$u1]);
+ok('v375: eski sürümlü belge "eski" sayılır (işlenmiş durumda)', siparis_belge_surum_eski(['parser_surum' => 'v2', 'durum' => 'islendi']) && !siparis_belge_surum_eski(['parser_surum' => null, 'durum' => 'islendi'])
+    && !siparis_belge_surum_eski(['parser_surum' => SIPARIS_PDF_SURUM, 'durum' => 'islendi']) && !siparis_belge_surum_eski(['parser_surum' => 'v2', 'durum' => 'hata']));
+$nB = say($db, 'siparis_belgeler');
+rol($ADMIN, false, 9, ['DEPO2']); $tok = csrf();
+$x = $yukle([['a.pdf', siparis_test_pdf('u1')]]);
+ok('v375: depo kapısı — başka depodan yükleyen eski belgeyi YENİDEN OKUTAMAZ ("Zaten yüklü", sürüm aynı)', (($_SESSION['siparis_yukleme'][0]['durum'] ?? '') === 'zaten')
+    && $db->query("SELECT parser_surum FROM siparis_belgeler WHERE id = $u1")->fetchColumn() === 'v2');
+rol($ADMIN, true); $tok = csrf();
+$x = $yukle([['a.pdf', siparis_test_pdf('u1')]]);
+$s1 = $_SESSION['siparis_yukleme'][0] ?? [];
+ok('v375: eski sürümlü aynı dosya → yeniden işlendi (durum islendi, yeniden=1, eski_surum v2)', ($s1['durum'] ?? '') === 'islendi' && ($s1['yeniden'] ?? 0) === 1 && ($s1['eski_surum'] ?? '') === 'v2', json_encode($s1));
+ok('v375: ikinci belge satırı AÇILMADI, sürüm güncellendi', say($db, 'siparis_belgeler') === $nB && $db->query("SELECT parser_surum FROM siparis_belgeler WHERE id = $u1")->fetchColumn() === SIPARIS_PDF_SURUM);
+ok('v375: audit islem=surum_yenile + eski_surum', say($db, 'audit_log', "action = 'siparis_belge_yukle' AND new_values LIKE ?", ['%"islem":"surum_yenile"%']) === 1 && say($db, 'audit_log', "action = 'siparis_belge_yukle' AND new_values LIKE ?", ['%"eski_surum":"v2"%']) === 1);
+ok('v375: sonuç özetinde "yeni okuyucuyla ... yeniden okundu" notu', str_contains(sayfa('siparisler.php')['html'], 'yeniden okundu, sevkiyat değerleri güncellendi'));
+$x = $yukle([['a.pdf', siparis_test_pdf('u1')]]);
+ok('v375: sürüm güncel olunca tekrar yükleme yine "Zaten yüklü"', (($_SESSION['siparis_yukleme'][0]['durum'] ?? '') === 'zaten') && say($db, 'siparis_belgeler') === $nB);
 $x = $yukle([['b.pdf', siparis_test_pdf('hedefli')]], ['sevkiyat_id' => (string)$sid1], ['sevkiyat_id' => (string)$sid1]);
 ok('yükleme: hedef sevkiyatla → detaya yönlendirir, tanınmayan belge "diğer" bağlanır', str_contains((string)$x['git'], 'siparis_view.php?id=' . $sid1) && say($db, 'siparis_belge_bag', 'sevkiyat_id = ?', [$sid1]) >= 2);
 $x = $yukle([['c.pdf', siparis_test_pdf('x')]], [], [], ['CONTENT_LENGTH' => (string)(sipui_ini_bayt((string)ini_get('post_max_size')) + 5)]);
