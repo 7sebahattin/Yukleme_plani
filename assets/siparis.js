@@ -34,6 +34,7 @@
         }
         if (modal.id === 'sipProfilModal') profilKopyala(modal);
         if (modal.id === 'sipDurumModal') gerekceGuncelle(q('form', modal));
+        if (modal.id === 'sipYapistirModal' && pklApi) pklApi.hazirla();
         modal.hidden = false;
         var ilk = q('input:not([type=hidden]):not([disabled]):not([hidden]), textarea:not([disabled]), select', modal) || q('button', modal);
         if (ilk && window.matchMedia('(min-width: 768px)').matches) { try { ilk.focus({ preventScroll: true }); } catch (e) { /* yok say */ } }
@@ -252,9 +253,273 @@
         topla();
     }
 
+    /* ── PKL: Excel benzeri satır ızgarası (v372) ───────────
+       Brüt/Net yapıştırma (hücreye ya da pencereye), Enter/↑/↓ ile sütunda gezinme, canlı toplamlar ve Palet ID
+       numaralandırması + boşluk/çakışma uyarısı. Hiçbir şey kaydedilmez: yalnız girdiler dolar, `input` olayı yayılır. */
+    var pklApi = null;
+    function kgCoz(ham) {
+        var s = String(ham == null ? '' : ham).replace(/[\s ]/g, '');
+        if (s === '') return { bos: true };
+        if (s.charAt(0) === '-') return { ok: false, neden: 'negatif olamaz' };
+        if (!/^[\d.,]+$/.test(s)) return { ok: false, neden: 'sayı değil' };
+        var t;
+        if (s.indexOf(',') >= 0) {
+            if (!/^(\d{1,3}(\.\d{3})+|\d+),\d+$/.test(s)) return { ok: false, neden: 'biçim anlaşılamadı (örn. 1.234,5)' };
+            t = s.replace(/\./g, '').replace(',', '.');
+        } else if (s.indexOf('.') >= 0) {
+            // num() noktayı HEP binlik ayırıcı sayar: "812.5" 8125 olurdu. Sessiz 10x hata yerine reddet.
+            if (!/^\d{1,3}(\.\d{3})+$/.test(s)) return { ok: false, neden: 'nokta belirsiz (ondalık için virgül kullanın: 812,5)' };
+            t = s.replace(/\./g, '');
+        } else t = s;
+        var n = parseFloat(t);
+        if (!isFinite(n) || n > 1e9) return { ok: false, neden: 'çok büyük' };
+        n = Math.round(n * 1000) / 1000;
+        return { ok: true, n: n, metin: Number.isInteger(n) ? String(n) : String(n).replace('.', ',') };
+    }
+    function yapistirCoz(metin) {
+        var satirlar = String(metin == null ? '' : metin).replace(/\r\n?/g, '\n').split('\n');
+        while (satirlar.length && satirlar[satirlar.length - 1].trim() === '') satirlar.pop();
+        var hucre = satirlar.map(function (l) {
+            var c = l.split('\t');
+            while (c.length > 1 && c[c.length - 1].trim() === '') c.pop();
+            return c;
+        });
+        var sut = hucre.reduce(function (m, c) { return Math.max(m, c.length); }, 0);
+        var r = { satir: hucre.length, sut: sut, deger: [], hatalar: [], bos: 0 };
+        if (!hucre.length) return r;
+        if (sut > 2) { r.hatalar.push('En çok 2 sütun yapıştırılabilir (Brüt | Net); ' + sut + ' sütun algılandı. Başlık ve fazladan sütunları seçmeyin.'); return r; }
+        hucre.forEach(function (c, i) {
+            var satir = [];
+            for (var k = 0; k < sut; k++) {
+                var x = kgCoz(c[k] || '');
+                if (x.bos) r.bos++;
+                else if (!x.ok) r.hatalar.push('Satır ' + (i + 1) + ', ' + (k === 0 ? 'ilk' : 'ikinci') + ' sütun: “' + String(c[k]).trim().slice(0, 24) + '” — ' + x.neden);
+                satir.push(x);
+            }
+            r.deger.push(satir);
+        });
+        return r;
+    }
+    function trSayi(n) { return Math.round(n).toLocaleString('tr-TR'); }
+    /** PHP siparis_pkl_palet_uyarilari_hesapla aynası. */
+    function paletUyarilari(son, diger, bas, adet) {
+        var o = [];
+        if (adet < 1 || bas < 1) return o;
+        var bit = bas + adet - 1, cakisan = diger.filter(function (d) { return d.bas <= bit && d.bit >= bas; });
+        if (cakisan.length) {
+            var p = cakisan.slice(0, 3).map(function (d) { return (String(d.belge_no).trim() || 'başka bir PKL') + (String(d.order_ref).trim() ? ' (' + String(d.order_ref).trim() + ')' : '') + ' ' + d.bas + '–' + d.bit; });
+            o.push({ kod: 'palet_cakisma', mesaj: 'Palet aralığı ' + bas + '–' + bit + ', ' + p.join(', ') + (cakisan.length > 3 ? ' ve ' + (cakisan.length - 3) + ' PKL daha' : '') + ' ile çakışıyor — kaydedebilirsiniz, ancak PKL oluşturulurken sistem bunu reddeder; başlangıç numarasını değiştirin.' });
+        } else if (bas <= son) {
+            o.push({ kod: 'palet_geride', mesaj: 'Başlangıç (' + bas + '), önceki siparişin son palet no\'sundan (' + son + ') küçük; daha önce boşta kalmış bir aralık kullanılıyor.' });
+        }
+        if (bas > son + 1) {
+            var bos = bas - son - 1, aralik = bos === 1 ? (son + 1) + ' numarası' : (son + 1) + '–' + (bas - 1) + ' arası ' + bos + ' numara';
+            o.push({ kod: 'palet_bosluk', mesaj: son < 1 ? 'Bu sezonda henüz palet numarası ayrılmadı; ' + aralik + ' boşta kalıyor.' : 'Önceki siparişin son palet no\'su ' + son + '; ' + aralik + ' boşta kalıyor.' });
+        }
+        return o;
+    }
+    function pklIzgara(form) {
+        var tablo = q('[data-sip-izgara]', form);
+        if (!tablo) return;
+        var satirlar = qa('tbody tr', tablo), n = satirlar.length;
+        var durum = q('[data-sip-yapistir-durum]', form), detay = q('.sip-satir-detay', form);
+        var modal = document.getElementById('sipYapistirModal');
+        function olay(el) { el.dispatchEvent(new Event('input', { bubbles: true })); }
+        function hucre(i, sut) { return satirlar[i] ? q('[data-sip-sutun="' + sut + '"]', satirlar[i]) : null; }
+        function durumYaz(tip, parcalar) {
+            if (!durum) return;
+            durum.textContent = '';
+            (Array.isArray(parcalar) ? parcalar : [parcalar]).forEach(function (m) { var d = document.createElement('div'); d.textContent = m; durum.appendChild(d); });
+            durum.className = 'sip-yap-durum sip-yap-durum--' + tip;
+            durum.hidden = false;
+        }
+
+        /* — etkin değer / canlı toplamlar / ortak değer ipuçları — */
+        function ortak(sut, bi) {
+            var b = form.elements['bloklar[' + bi + '][' + sut + ']'], c = form.elements['varsayilan[' + sut + ']'];
+            var x = b && b.value.trim() !== '' ? kgCoz(b.value) : { bos: true };
+            if (x.ok) return x;
+            var y = c && c.value.trim() !== '' ? kgCoz(c.value) : { bos: true };
+            return y.ok ? y : { bos: true };
+        }
+        function topla() {
+            var tb = 0, tn = 0, dolu = 0;
+            satirlar.forEach(function (tr) {
+                var bi = tr.getAttribute('data-sip-blok'), v = {};
+                ['M', 'N'].forEach(function (sut) {
+                    var i = q('[data-sip-sutun="' + sut + '"]', tr), x = i && i.value.trim() !== '' ? kgCoz(i.value) : { bos: true };
+                    if (!x.ok) x = ortak(sut, bi);
+                    v[sut] = x;
+                    if (i) { var ip = ortak(sut, bi); i.placeholder = ip.ok ? ip.metin : ''; i.classList.toggle('sip-hucre-bos', !x.ok); }
+                });
+                if (v.M.ok) tb += v.M.n;
+                if (v.N.ok) tn += v.N.n;
+                if (v.M.ok && v.N.ok) dolu++;
+            });
+            var set = function (a, t) { var e = q(a, form); if (e) e.textContent = t; };
+            set('[data-sip-t-brut]', trSayi(tb)); set('[data-sip-t-net]', trSayi(tn)); set('[data-sip-t-dolu]', String(dolu));
+        }
+
+        /* — Palet ID numaralandırması + uyarılar — */
+        var basInp = q('[data-sip-palet-bas]', form), uyariKap = q('[data-sip-palet-uyari]', form);
+        var son = +form.getAttribute('data-sip-palet-son') || 0, ilk = +form.getAttribute('data-sip-palet-ilk') || 1, diger = [];
+        try { diger = JSON.parse(form.getAttribute('data-sip-palet-diger') || '[]'); } catch (x) { diger = []; }
+        function paletBas() {
+            if (!basInp) return ilk;
+            var v = parseInt(String(basInp.value).replace(/\D/g, ''), 10);
+            return v >= 1 ? v : (+basInp.getAttribute('data-sip-palet-varsayilan') || ilk);
+        }
+        function paletGuncelle() {
+            var bas = paletBas();
+            satirlar.forEach(function (tr, i) {
+                var no = String(bas + i), s = q('[data-sip-palet-no]', tr);
+                if (s) s.textContent = no;
+                qa('[data-sip-sutun]', tr).forEach(function (inp) { inp.setAttribute('aria-label', (inp.getAttribute('aria-label') || '').replace(/\d+$/, no)); });
+            });
+            qa('[data-sip-palet-aralik-yazi]').forEach(function (e) { e.textContent = bas + '–' + (bas + n - 1); });
+            if (uyariKap) {
+                uyariKap.textContent = '';
+                paletUyarilari(son, diger, bas, n).forEach(function (u) {
+                    var d = document.createElement('div');
+                    d.className = 'sip-ok-uyari sip-palet-uyari-satir' + (u.kod === 'palet_cakisma' ? ' sip-palet-uyari-satir--guclu' : '');
+                    d.setAttribute('data-kod', u.kod);
+                    d.textContent = '⚠ ' + u.mesaj;
+                    uyariKap.appendChild(d);
+                });
+            }
+        }
+        if (basInp) {
+            basInp.addEventListener('input', paletGuncelle);
+            basInp.addEventListener('change', function () { var v = parseInt(String(basInp.value).replace(/\D/g, ''), 10); basInp.value = v >= 1 ? String(v) : String(+basInp.getAttribute('data-sip-palet-varsayilan') || ilk); paletGuncelle(); });
+        }
+
+        /* — klavye: Enter/Shift+Enter/↑/↓ — */
+        function git(inp, yon) {
+            var tr = inp.closest('tr'), sut = inp.getAttribute('data-sip-sutun'), sk = tr;
+            while ((sk = yon > 0 ? sk.nextElementSibling : sk.previousElementSibling)) {
+                var h = q('[data-sip-sutun="' + sut + '"]', sk);
+                if (h && !h.disabled) { h.focus(); try { h.select(); } catch (x) { /* yok say */ } return true; }
+            }
+            return false;
+        }
+        tablo.addEventListener('keydown', function (e) {
+            if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+            var inp = e.target;
+            if (!inp.matches || !inp.matches('input.sip-hucre')) return;
+            if (inp.hasAttribute('data-sip-palet-bas')) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault(); inp.dispatchEvent(new Event('change', { bubbles: true }));
+                var h0 = hucre(0, 'M'); if (h0) { h0.focus(); try { h0.select(); } catch (x) { /* yok say */ } }
+                return;
+            }
+            if (e.key === 'Enter' || ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.shiftKey)) {
+                e.preventDefault();                      // forma ASLA gönderme
+                var yon = (e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey)) ? -1 : 1;
+                if (!git(inp, yon) && yon > 0 && e.key === 'Enter') inp.blur();          // son satır: klavyeyi kapat
+            }
+        });
+
+        /* — yapıştırma — */
+        function uygula(basSatir, hedef, coz) {
+            var uygun = n - basSatir, yaz = Math.min(coz.satir, uygun), say = 0, ilkEl = null;
+            for (var i = 0; i < yaz; i++) {
+                for (var k = 0; k < coz.sut; k++) {
+                    var el = hucre(basSatir + i, k === 0 ? hedef : 'N'), x = coz.deger[i][k];
+                    if (!el) continue;
+                    el.value = x.ok ? x.metin : '';
+                    el.classList.add('sip-hucre--yeni');
+                    (function (e2) { setTimeout(function () { e2.classList.remove('sip-hucre--yeni'); }, 1600); })(el);
+                    olay(el); say++;
+                    if (!ilkEl) ilkEl = el;
+                }
+            }
+            if (detay) detay.open = true;
+            return { yazilan: say, satir: yaz, fazla: Math.max(0, coz.satir - yaz), kalan: Math.max(0, uygun - yaz), ilkEl: ilkEl };
+        }
+        function sonucMesaj(sonuc, coz, hedefAd) {
+            var m = ['✓ ' + sonuc.satir + ' satır dolduruldu (' + hedefAd + '). Kaydetmek için «Taslağı kaydet» düğmesine basın.'], tip = 'ok';
+            if (coz.bos) { m.push(coz.bos + ' boş hücre yapıştırıldı — ilgili hücreler temizlendi (ortak değeri kullanır).'); }
+            if (sonuc.fazla > 0) { m.push('Uyarı: ' + sonuc.fazla + ' satır fazla geldi, yok sayıldı (tabloda yalnız ' + sonuc.satir + ' satır kalmıştı).'); tip = 'uyari'; }
+            else if (sonuc.kalan > 0) { m.push('Uyarı: yapıştırılan satır sayısı (' + coz.satir + ') palet satırından az; kalan ' + sonuc.kalan + ' satıra dokunulmadı.'); tip = 'uyari'; }
+            durumYaz(tip, m);
+        }
+        tablo.addEventListener('paste', function (e) {
+            var inp = e.target;
+            if (!inp.matches || !inp.matches('input[data-sip-sutun]')) return;
+            var sut = inp.getAttribute('data-sip-sutun');
+            if (sut !== 'M' && sut !== 'N') return;
+            var metin = (e.clipboardData || window.clipboardData) ? (e.clipboardData || window.clipboardData).getData('text') : '';
+            if (metin === '') return;
+            e.preventDefault();
+            var coz = yapistirCoz(metin), basSatir = satirlar.indexOf(inp.closest('tr'));
+            if (!coz.satir) return;
+            if (coz.hatalar.length) { durumYaz('hata', ['Yapıştırma uygulanmadı — hiçbir hücre değişmedi:'].concat(coz.hatalar.slice(0, 4)).concat(coz.hatalar.length > 4 ? ['… ve ' + (coz.hatalar.length - 4) + ' hata daha'] : [])); return; }
+            if (coz.sut === 2 && sut !== 'M') { durumYaz('hata', ['İki sütun (Brüt | Net) yalnız Brüt hücresinden başlayarak yapıştırılabilir; hiçbir hücre değişmedi.']); return; }
+            var sonuc = uygula(basSatir, sut, coz);
+            sonucMesaj(sonuc, coz, coz.sut === 2 ? 'Brüt + Net' : (sut === 'M' ? 'Brüt' : 'Net'));
+        });
+
+        /* — pencere — */
+        var ta = modal ? q('[data-sip-yap-metin]', modal) : null, sat = modal ? q('[data-sip-yap-satir]', modal) : null, hed = modal ? q('[data-sip-yap-hedef]', modal) : null;
+        var onz = modal ? q('[data-sip-yap-onizleme]', modal) : null, uyg = modal ? q('[data-sip-yap-uygula]', modal) : null;
+        function onizle() {
+            if (!ta) return;
+            onz.textContent = ''; uyg.disabled = true;
+            var ekle = function (sinif, t) { var d = document.createElement('div'); d.className = sinif; d.textContent = t; onz.appendChild(d); };
+            var coz = yapistirCoz(ta.value);
+            if (!coz.satir) { ekle('sip-soluk', 'Henüz bir şey yapıştırılmadı.'); return; }
+            if (coz.hatalar.length) {
+                ekle('sip-yap-onz--hata', 'Uygulanamaz — ' + coz.hatalar.length + ' sorun:');
+                coz.hatalar.slice(0, 4).forEach(function (h) { ekle('sip-yap-onz--hata', '• ' + h); });
+                if (coz.hatalar.length > 4) ekle('sip-yap-onz--hata', '… ve ' + (coz.hatalar.length - 4) + ' sorun daha');
+                return;
+            }
+            if (coz.sut === 2) hed.value = 'M';
+            var ilkB = coz.deger[0][0], ilkN = coz.sut === 2 ? coz.deger[0][1] : null, fmt = function (x) { return x && x.ok ? x.metin : '—'; };
+            ekle('', coz.satir + ' satır · ' + (coz.sut === 2 ? 'Brüt | Net' : (hed.value === 'M' ? 'Brüt' : 'Net')) + ' · ilk ' + (coz.sut === 2 ? 'Brüt ' + fmt(ilkB) + ', Net ' + fmt(ilkN) : (hed.value === 'M' ? 'Brüt ' : 'Net ') + fmt(ilkB)));
+            var bas = parseInt(sat.value, 10) || 0, uygun = n - bas;
+            if (coz.satir > uygun) ekle('sip-yap-onz--uyari', '⚠ ' + coz.satir + ' satır yapıştırıldı, seçilen satırdan itibaren yalnız ' + uygun + ' palet satırı var: fazla ' + (coz.satir - uygun) + ' satır yok sayılacak.');
+            else if (coz.satir < uygun) ekle('sip-yap-onz--uyari', '⚠ ' + coz.satir + ' satır yapıştırıldı, palet satırı ' + uygun + ': kalan ' + (uygun - coz.satir) + ' satıra dokunulmayacak.');
+            if (coz.bos) ekle('sip-yap-onz--uyari', '⚠ ' + coz.bos + ' boş hücre var: ilgili hücreler temizlenir.');
+            uyg.disabled = false;
+        }
+        function hazirla() {
+            if (!modal) return;
+            var mevcut = sat.value;
+            sat.textContent = '';
+            satirlar.forEach(function (tr, i) {
+                var o = document.createElement('option'), no = q('[data-sip-palet-no]', tr), pb = no ? no.textContent : String(paletBas() + i);
+                o.value = String(i); o.textContent = (i + 1) + '. satır · Palet ' + pb + ' · kalibre ' + (tr.children[1] ? tr.children[1].textContent.trim() : '');
+                sat.appendChild(o);
+            });
+            if (mevcut && sat.options[+mevcut]) sat.value = mevcut;
+            ta.value = ''; onizle();
+        }
+        if (modal) {
+            ta.addEventListener('input', onizle); sat.addEventListener('change', onizle); hed.addEventListener('change', onizle);
+            uyg.addEventListener('click', function () {
+                var coz = yapistirCoz(ta.value);
+                if (!coz.satir || coz.hatalar.length) return;
+                var hedef = coz.sut === 2 ? 'M' : hed.value;
+                var sonuc = uygula(parseInt(sat.value, 10) || 0, hedef, coz);
+                kapat(modal);
+                sonucMesaj(sonuc, coz, coz.sut === 2 ? 'Brüt + Net' : (hedef === 'M' ? 'Brüt' : 'Net'));
+                if (sonuc.ilkEl && sonuc.ilkEl.scrollIntoView) sonuc.ilkEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            });
+        }
+
+        /* — canlı toplam tetikleyicileri — */
+        form.addEventListener('input', function (e) {
+            var t = e.target, ad = t && t.name ? t.name : '';
+            if (t.hasAttribute && (t.hasAttribute('data-sip-sutun') || /^varsayilan\[(M|N)\]$/.test(ad) || /^bloklar\[\d+\]\[(M|N)\]$/.test(ad))) topla();
+        });
+        paletGuncelle(); topla();
+        pklApi = { hazirla: hazirla, topla: topla, paletGuncelle: paletGuncelle };
+    }
+
     function basla() {
         qa('form[data-sip-upload]').forEach(yukleme);
-        var p = q('form[data-sip-pkl]'); if (p) pkl(p);
+        var p = q('form[data-sip-pkl]'); if (p) { pkl(p); pklIzgara(p); }
         zipGuncelle();
         qa('[data-sip-durum-form]').forEach(gerekceGuncelle);
     }

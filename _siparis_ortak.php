@@ -117,6 +117,70 @@ function sipui_arac(array $sev): string
     return $pl !== '' ? '<span class="sip-soluk" title="Planlanan plaka">' . h($pl) . '</span>' : '—';
 }
 
+/** Navlun (Freight Order) numarası — araç sütununda plakaların altında ince satır; boşsa ''. */
+function sipui_navlun_html(array $sev): string
+{
+    $n = trim((string)($sev['navlun_no'] ?? ''));
+    return $n === '' ? '' : '<div class="sip-navlun" title="Navlun (Freight Order) numarası">Navlun ' . h($n) . '</div>';
+}
+
+/**
+ * Sipariş sütunu alt satırı: aktif beyan bağı varsa "Parti 12345 (+N)", yoksa "Tur 9000…"; ikisi de yoksa ''.
+ * $parti = siparis_beyan_parti_haritasi() sonucu (sevkiyat id → ['parti','fazla']). $sar: ön ek (mobilde " · ").
+ */
+function sipui_tur_parti_html(array $sev, array $parti, bool $satir = true): string
+{
+    $sid = (int)($sev['id'] ?? 0);
+    $ic = '';
+    if (isset($parti[$sid]) && (string)$parti[$sid]['parti'] !== '') {
+        $fz = (int)($parti[$sid]['fazla'] ?? 0);
+        $ic = '<span title="Bağlı beyanın parti numarası">Parti ' . h((string)$parti[$sid]['parti']) . ($fz > 0 ? ' +' . $fz : '') . '</span>';
+    } elseif (trim((string)($sev['tur_no'] ?? '')) !== '') {
+        $ic = '<span>Tur ' . h((string)$sev['tur_no']) . '</span>';
+    }
+    if ($ic === '') return '';
+    return $satir ? '<div class="sip-soluk nowrap sip-turparti">' . $ic . '</div>' : '<span class="sip-soluk sip-turparti"> · ' . $ic . '</span>';
+}
+
+/**
+ * Liste için ürün satırları (PO "Article specification" + palet + PF). $kalemler: siparis_kalemler satırları
+ * (sira sırasıyla). Palet: etkin_palet varsa o, yoksa po_palet. Hiç gönderilmeyecek kalem (etkin palet 0 ve etkin koli 0/boş)
+ * atlanır. En çok $max satır; kalanı "+N daha".
+ * @return array{satirlar:list<array{ad:string,meta:string}>,fazla:int}
+ */
+function sipui_kalem_satirlari(array $kalemler, int $max = 3): array
+{
+    $tum = [];
+    foreach ($kalemler as $k) {
+        $pal = ($k['etkin_palet'] ?? null) !== null && $k['etkin_palet'] !== '' ? $k['etkin_palet'] : ($k['po_palet'] ?? null);
+        $koli = $k['etkin_koli'] ?? null;
+        if ($pal !== null && is_numeric($pal) && (int)$pal === 0 && ($koli === null || $koli === '' || (int)$koli === 0)) continue;
+        $ad = trim((string)($k['aciklama'] ?? ''));
+        if ($ad === '') $ad = trim(trim((string)($k['urun'] ?? '')) . ' ' . trim((string)($k['kalibre'] ?? '')));
+        $parca = array_values(array_filter([$ad, trim((string)($k['cesit'] ?? '')), trim((string)($k['koli_icerik'] ?? ''))], fn($x) => $x !== ''));
+        $meta = [];
+        if ($pal !== null && is_numeric($pal)) $meta[] = 'Pal. ' . sipui_sayi($pal);
+        if (($k['pf'] ?? null) !== null && is_numeric($k['pf'])) $meta[] = 'PF ' . sipui_sayi($k['pf']);
+        if (!$parca && !$meta) continue;
+        $tum[] = ['ad' => implode(' · ', $parca), 'meta' => implode(' · ', $meta)];
+    }
+    return ['satirlar' => array_slice($tum, 0, max(1, $max)), 'fazla' => max(0, count($tum) - max(1, $max))];
+}
+
+/** Ürün / palet / PF hücresi (masaüstü sütunu ve mobil kart bölümü ortak); kalem yoksa ''. */
+function sipui_kalem_html(array $kalemler): string
+{
+    $k = sipui_kalem_satirlari($kalemler);
+    if (!$k['satirlar']) return '';
+    $o = '<div class="sip-urunler">';
+    foreach ($k['satirlar'] as $s) {
+        $o .= '<div class="sip-urun" title="' . h($s['ad'] . ($s['meta'] !== '' ? ' — ' . $s['meta'] : '')) . '"><span class="sip-urun-ad">' . h($s['ad']) . '</span>'
+            . ($s['meta'] !== '' ? '<span class="sip-urun-meta">' . h($s['meta']) . '</span>' : '') . '</div>';
+    }
+    if ($k['fazla'] > 0) $o .= '<div class="sip-urun-fazla">+' . (int)$k['fazla'] . ' daha</div>';
+    return $o . '</div>';
+}
+
 /** Zaman çizelgesi olay etiketleri: tür → [simge, metin]. */
 function sipui_olay_etiketleri(): array
 {

@@ -519,6 +519,90 @@ function siparis_pkl_durum(PDO $pdo, int $sid): array
     ];
 }
 
+// ── PALET NUMARASI DENETİMİ (v372) ──────────────────────────────────────
+
+/**
+ * Sezonun palet numaralandırma bağlamı (salt okunur): `son` = karşılaştırma ölçütü olan "önceki son palet no",
+ * `diger` = AYNI sezondaki BAŞKA sevkiyatların PKL aralıkları, `kendi_bas` = bu sevkiyatın ayrılmış başlangıcı (yoksa null).
+ *  - Bu sevkiyatın aralığı HENÜZ ayrılmadıysa (taslak) ölçüt sezon sayacının son değeridir (öneri = son + 1).
+ *  - Ayrılmışsa (üretildi) ölçüt, kendi başlangıcından küçük olan en büyük "diğer" bitiştir (sayaç kendi aralığını da içerir).
+ * Aralık çakışması sunucuda siparis_aralik_cakisma_denetle() ile de aranır (aynı küme: siparis_pkl satırları, kendi kaydı hariç).
+ * @return array{son:int, diger:list<array{belge_no:string,order_ref:string,bas:int,bit:int}>, kendi_bas:?int}
+ */
+function siparis_pkl_palet_baglam(PDO $pdo, string $sezon, ?int $haricSevkiyatId): array
+{
+    $harc = $haricSevkiyatId ?? 0;
+    $st = $pdo->prepare('SELECT p.belge_no, p.palet_bas, p.palet_bit, s.order_ref FROM siparis_pkl p
+        LEFT JOIN siparis_sevkiyatlar s ON s.id = p.sevkiyat_id
+        WHERE p.sezon = ? AND p.sevkiyat_id <> ? AND p.palet_bas IS NOT NULL AND p.palet_bit IS NOT NULL ORDER BY p.palet_bas, p.id');
+    $st->execute([$sezon, $harc]);
+    $diger = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $x) {
+        $diger[] = ['belge_no' => (string)($x['belge_no'] ?? ''), 'order_ref' => (string)($x['order_ref'] ?? ''), 'bas' => (int)$x['palet_bas'], 'bit' => (int)$x['palet_bit']];
+    }
+    $kendi = null;
+    if ($harc > 0) {
+        $k = $pdo->prepare('SELECT palet_bas FROM siparis_pkl WHERE sevkiyat_id = ?');
+        $k->execute([$harc]);
+        $v = $k->fetchColumn();
+        if ($v !== false && $v !== null) $kendi = (int)$v;
+    }
+    if ($kendi !== null) {
+        $son = 0;
+        foreach ($diger as $d) if ($d['bit'] < $kendi) $son = max($son, $d['bit']);
+    } else {
+        $son = siparis_sayac_oku($pdo, 'palet_' . $sezon);
+    }
+    return ['son' => $son, 'diger' => $diger, 'kendi_bas' => $kendi];
+}
+
+/**
+ * Saf kural (DB yok; assets/siparis.js `paletUyarilari` aynasıdır — ikisini birlikte değiştir):
+ * [bas, bas+adet-1] aralığı için ENGELLEMEYEN uyarılar.
+ *  - palet_cakisma: başka bir PKL'in aralığıyla kesişiyor (PKL oluşturulurken sunucu bunu REDDEDER).
+ *  - palet_geride:  başlangıç ≤ önceki son ama kesişme yok (boşta kalmış aralık kullanılıyor).
+ *  - palet_bosluk:  başlangıç > önceki son + 1 → araya kalan numaralar boşta kalır.
+ * @param list<array{belge_no:string,order_ref:string,bas:int,bit:int}> $diger
+ * @return list<array{seviye:string,kod:string,mesaj:string}>
+ */
+function siparis_pkl_palet_uyarilari_hesapla(int $son, array $diger, int $bas, int $adet): array
+{
+    $o = [];
+    if ($adet < 1 || $bas < 1) return $o;
+    $bit = $bas + $adet - 1;
+    $cakisan = [];
+    foreach ($diger as $d) if ((int)$d['bas'] <= $bit && (int)$d['bit'] >= $bas) $cakisan[] = $d;
+    if ($cakisan) {
+        $p = [];
+        foreach (array_slice($cakisan, 0, 3) as $d) {
+            $ad = trim((string)$d['belge_no']) !== '' ? trim((string)$d['belge_no']) : 'başka bir PKL';
+            $p[] = $ad . (trim((string)$d['order_ref']) !== '' ? ' (' . trim((string)$d['order_ref']) . ')' : '') . ' ' . (int)$d['bas'] . '–' . (int)$d['bit'];
+        }
+        $o[] = ['seviye' => 'uyari', 'kod' => 'palet_cakisma', 'mesaj' => "Palet aralığı {$bas}–{$bit}, " . implode(', ', $p) . (count($cakisan) > 3 ? ' ve ' . (count($cakisan) - 3) . ' PKL daha' : '')
+            . ' ile çakışıyor — kaydedebilirsiniz, ancak PKL oluşturulurken sistem bunu reddeder; başlangıç numarasını değiştirin.'];
+    } elseif ($bas <= $son) {
+        $o[] = ['seviye' => 'uyari', 'kod' => 'palet_geride', 'mesaj' => "Başlangıç ({$bas}), önceki siparişin son palet no'sundan ({$son}) küçük; daha önce boşta kalmış bir aralık kullanılıyor."];
+    }
+    if ($bas > $son + 1) {
+        $bos = $bas - $son - 1;
+        $aralik = $bos === 1 ? ($son + 1) . ' numarası' : ($son + 1) . '–' . ($bas - 1) . ' arası ' . $bos . ' numara';
+        $o[] = ['seviye' => 'uyari', 'kod' => 'palet_bosluk', 'mesaj' => $son < 1
+            ? "Bu sezonda henüz palet numarası ayrılmadı; {$aralik} boşta kalıyor."
+            : "Önceki siparişin son palet no'su {$son}; {$aralik} boşta kalıyor."];
+    }
+    return $o;
+}
+
+/**
+ * Bir PKL taslağı için palet numarası uyarıları (bağlamı DB'den okur). $haricSevkiyatId = bu sevkiyat (kendi aralığı hariç).
+ * @return list<array{seviye:string,kod:string,mesaj:string}>
+ */
+function siparis_pkl_palet_uyarilari(PDO $pdo, string $sezon, int $bas, int $adet, ?int $haricSevkiyatId): array
+{
+    $b = siparis_pkl_palet_baglam($pdo, $sezon, $haricSevkiyatId);
+    return siparis_pkl_palet_uyarilari_hesapla($b['son'], $b['diger'], $bas, $adet);
+}
+
 /** Başlık girdisini temizler: belge_tarihi/etd/eta (tarih), plakalar (plaka), navlun_no/alici_kodu/alici_adi (metin), profil_id. */
 function siparis_pkl_baslik_girdi_temizle(array $g): array
 {

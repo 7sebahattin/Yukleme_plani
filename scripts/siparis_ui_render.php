@@ -62,6 +62,12 @@ ini_set('session.use_cookies', '0');
 session_start();
 $db = db();
 $ID = siparis_ui_tohum($db);
+// liste görünümü (v372): aktif beyan bağı (parti no) + 5 kalemli sevkiyat ("+N daha")
+$db->exec("INSERT INTO siparis_beyan (sevkiyat_id, beyan_id, tur, durum, created_by, created_at) VALUES (" . (int)$ID['s2'] . ", 2, 'elle', 'aktif', 1, '2026-12-04 10:00:00')");
+foreach ([16, 18] as $i => $kal) {
+    $db->prepare("INSERT INTO siparis_kalemler (sevkiyat_id, ian, kalibre, sira, urun, aciklama, cesit, koli_icerik, pf, po_palet, etkin_palet, etkin_koli) VALUES (?, '', ?, ?, 'Testfruit', ?, 'TESTVAR', '3,5 KG', 200, 2, 2, 400)")
+        ->execute([$ID['s12'], (string)$kal, 3 + $i, "Testfruit $kal PC LOSE (TR)"]);
+}
 $cssBase = file_get_contents($ROOT . '/assets/style.css');
 $cssSip = file_get_contents($ROOT . '/assets/siparis.css');
 $fileRoot = 'file://' . $ROOT . '/';
@@ -105,6 +111,7 @@ $sayfalar = [
     'detay_operator' => ['siparis_view.php', ['id' => $ID['s2']], $yaz, false],
     'pkl'            => ['siparis_pkl.php', ['id' => $ID['s1']]],
     'pkl_viewer'     => ['siparis_pkl.php', ['id' => $ID['s1']], ['siparis.read'], false],
+    'pkl_taslak'     => ['siparis_pkl.php', ['id' => $ID['s2']]],                               // ayrılmamış palet aralığı: Palet ID düzenlenebilir (v372)
     'belge_pdf'      => ['siparis_belge.php', ['id' => $ID['po1']]],
     'belge_xlsx'     => ['siparis_belge.php', ['id' => $ID['pkl1']]],
     'ayarlar'        => ['siparis_ayarlar.php', []],

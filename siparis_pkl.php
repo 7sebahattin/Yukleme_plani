@@ -59,6 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $islem = (string)($_POST['islem'] ?? '');
     $baslikG = is_array($_POST['baslik'] ?? null) ? $_POST['baslik'] : [];
     $post = $profilUygula($_POST);
+    // Palet ID başlangıcı: kullanıcı ÖNERİLEN numarayı değiştirmediyse sabitleme (aradaki başka PKL sayacı ilerletirse
+    // otomatik sıradaki numara alınsın). Daha önce açıkça kaydedilmiş aynı değer korunur.
+    $pbVars = trim((string)($post['palet_bas_varsayilan'] ?? ''));
+    if ($pbVars !== '' && trim((string)($post['palet_bas_istenen'] ?? '')) === $pbVars) {
+        $kayitliIst = siparis_pkl_durum($pdo, $id)['veri']['palet_bas_istenen'] ?? null;
+        if ($kayitliIst === null || (string)(int)$kayitliIst !== $pbVars) $post['palet_bas_istenen'] = '';
+    }
     if ($baslikG && !isset($baslikG['profil_id']) && isset($post['profil_id'])) $baslikG['profil_id'] = $post['profil_id'];
     if (isset($_POST['profil_id']) && !isset($baslikG['profil_id'])) $baslikG['profil_id'] = $_POST['profil_id'];
 
@@ -132,6 +139,9 @@ $kontrol  = siparis_pkl_on_kontrol($sev, $kalemler, $veri, $baslik, $satirlar);
 $eksik    = siparis_pkl_eksikler($baslik, $satirlar);
 $hatalar  = array_values(array_filter($kontrol, fn($x) => $x['seviye'] === 'hata'));
 $uyarilar = array_values(array_filter($kontrol, fn($x) => $x['seviye'] === 'uyari'));
+$paletKilitli = $pklRow !== null && $pklRow['palet_bas'] !== null;        // aralık ayrıldı: yeniden üretimde korunur, başlangıç değişmez
+$paletBaglam = siparis_pkl_palet_baglam($pdo, (string)$oneri['sezon'], $id);
+$uyarilar = array_merge($uyarilar, siparis_pkl_palet_uyarilari_hesapla($paletBaglam['son'], $paletBaglam['diger'], $paletBas, count($satirlar)));
 $vg = (array)($veri['varsayilan'] ?? []);
 $bloklar = (array)($veri['bloklar'] ?? []);
 $n = count($satirlar);
@@ -141,6 +151,8 @@ $varlikDurum = $pklRow !== null ? (string)$pklRow['durum'] : 'yok';
 $etkinToplam = (int)($sev['toplam_palet'] ?? 0);
 $tarihGoster = fn($v): string => ($v !== null && $v !== '' && siparis_tarih_coz((string)$v) !== null) ? sipui_tarih((string)$v) : (string)($v ?? '');
 $satirOv = (array)($veri['satir'] ?? []);
+$satirBlok = [];                                // satır indeksi → blok indeksi (ortak değer önceliği: satır > blok > ortak)
+foreach ($bloklar as $bi => $bl) for ($pi = 0, $pa = max(0, (int)($bl['palet'] ?? 0)); $pi < $pa && count($satirBlok) < count($satirlar); $pi++) $satirBlok[] = (int)$bi;
 
 render_header('Packing List ' . (string)$sev['order_ref']);
 siparis_assets();
@@ -151,7 +163,7 @@ render_flash();
     <div>
       <a class="btn btn-geri" href="siparis_view.php?id=<?= $id ?>#pkl">← <?= h((string)$sev['order_ref']) ?></a>
       <h1 class="sip-h1">Packing List <span class="sip-pkl-durum sip-pkl-durum--<?= h($varlikDurum) ?>"><?= h(['yok' => 'Yok', 'taslak' => 'Taslak', 'uretildi' => 'Üretildi', 'yuklendi' => 'Yüklendi'][$varlikDurum] ?? $varlikDurum) ?></span></h1>
-      <p class="muted sip-alt-satir"><?= h($belgeNo) ?> · <?= $n ?> palet · palet ID <?= $paletBas ?>–<?= $paletBas + max(0, $n - 1) ?> · sezon <?= h($sezon) ?></p>
+      <p class="muted sip-alt-satir"><?= h($belgeNo) ?> · <?= $n ?> palet · palet ID <span data-sip-palet-aralik-yazi><?= $paletBas ?>–<?= $paletBas + max(0, $n - 1) ?></span> · sezon <?= h($sezon) ?></p>
     </div>
   </div>
 
@@ -179,7 +191,8 @@ render_flash();
     <?php endif; ?>
   </section>
 
-  <form method="post" action="siparis_pkl.php?id=<?= $id ?>" class="sip-pkl-form" id="sipPklForm" data-sip-pkl data-sip-etkin-palet="<?= $etkinToplam ?>" data-sip-dara="<?= SIPARIS_DARA_KG ?>">
+  <form method="post" action="siparis_pkl.php?id=<?= $id ?>" class="sip-pkl-form" id="sipPklForm" data-sip-pkl data-sip-etkin-palet="<?= $etkinToplam ?>" data-sip-dara="<?= SIPARIS_DARA_KG ?>"
+    data-sip-palet-son="<?= (int)$paletBaglam['son'] ?>" data-sip-palet-diger="<?= sipui_json_attr($paletBaglam['diger']) ?>" data-sip-palet-ilk="<?= $paletBas ?>" data-sip-palet-kilitli="<?= $paletKilitli ? '1' : '0' ?>">
     <?= sipui_csrf() ?><input type="hidden" name="id" value="<?= $id ?>">
     <fieldset class="sip-fieldset"<?= $yaz ? '' : ' disabled' ?>>
       <section class="card" aria-labelledby="sipBaslikBas">
@@ -238,9 +251,9 @@ render_flash();
           <div class="sip-izgara">
             <label>Paketevi (R)<input type="text" name="varsayilan[R]" value="<?= h((string)($vg['R'] ?? '')) ?>" maxlength="255"></label>
             <label>Paketevi GLN (S)<input type="text" name="varsayilan[S]" value="<?= h((string)($vg['S'] ?? '')) ?>" inputmode="numeric" maxlength="20"></label>
-            <?php if (!$rezerve || ($pklRow && $pklRow['palet_bas'] === null)): ?>
-              <label>Palet ID başlangıcı<input type="text" inputmode="numeric" name="palet_bas_istenen" value="<?= h((string)($veri['palet_bas_istenen'] ?? '')) ?>" placeholder="<?= (int)$oneri['palet_bas'] ?>"><span class="sip-ipucu">Boş = sayaçtaki sıradaki (<?= (int)$oneri['palet_bas'] ?>).</span></label>
-            <?php else: ?><div class="sip-salt">Palet aralığı<strong><?= (int)$pklRow['palet_bas'] ?> – <?= (int)$pklRow['palet_bit'] ?></strong><span class="sip-ipucu">Ayrıldı; yeniden üretimde korunur.</span></div><?php endif; ?>
+            <?php if ($paletKilitli): ?><div class="sip-salt">Palet aralığı<strong><?= (int)$pklRow['palet_bas'] ?> – <?= (int)$pklRow['palet_bit'] ?></strong><span class="sip-ipucu">Ayrıldı; yeniden üretimde korunur.</span></div>
+            <?php elseif ($n > 0 && $n <= SIPARIS_PKL_MAX_PALET): ?><div class="sip-salt">Palet ID başlangıcı<strong data-sip-palet-aralik-yazi><?= $paletBas ?>–<?= $paletBas + max(0, $n - 1) ?></strong><span class="sip-ipucu">«Satır bazında düzenle» tablosunun ilk satırındaki Palet ID'den değiştirilir; sonraki satırlar +1 gider.</span></div>
+            <?php else: ?><label>Palet ID başlangıcı<input type="text" inputmode="numeric" name="palet_bas_istenen" value="<?= h((string)($veri['palet_bas_istenen'] ?? '')) ?>" placeholder="<?= (int)$oneri['palet_bas'] ?>"><span class="sip-ipucu">Boş = sayaçtaki sıradaki (<?= (int)$oneri['palet_bas'] ?>).</span></label><?php endif; ?>
           </div>
         </details>
       </section>
@@ -277,18 +290,28 @@ render_flash();
       </section>
 
       <?php if ($n > 0 && $n <= SIPARIS_PKL_MAX_PALET): ?>
-      <section class="card" aria-labelledby="sipSatirBas">
-        <details class="sip-satir-detay"<?= $onizleVeri !== null ? '' : '' ?>>
+      <section class="card sip-satir-kart" aria-labelledby="sipSatirBas" data-sip-izgara-kart>
+        <div class="sip-satir-arac">
+          <?php if ($yaz): ?><button type="button" class="btn btn-sm" data-sip-ac="sipYapistirModal" title="Excel'den kopyaladığınız Brüt (ve Net) sütununu yapıştırın">📋 Excelden yapıştır</button><?php endif; ?>
+          <span class="sip-toplam" data-sip-toplam aria-live="polite">Σ Brüt <strong data-sip-t-brut>0</strong> kg · Σ Net <strong data-sip-t-net>0</strong> kg · Dolu satır <strong data-sip-t-dolu>0</strong> / <?= $n ?></span>
+        </div>
+        <div class="sip-yap-durum" data-sip-yapistir-durum role="status" aria-live="polite" hidden></div>
+        <div class="sip-palet-uyari" data-sip-palet-uyari aria-live="polite"></div>
+        <details class="sip-satir-detay">
           <summary id="sipSatirBas">Satır bazında düzenle (<?= $n ?> satır)</summary>
-          <p class="muted">Boş bırakılan hücre ortak değeri kullanır (gri ipucu). Yalnız farklı olanı yazın.</p>
+          <p class="muted">Boş bırakılan hücre ortak değeri kullanır (gri ipucu). Yalnız farklı olanı yazın. <span class="sip-ipucu">Enter / ↓ bir alt satır · Shift+Enter / ↑ bir üst satır · Brüt/Net hücresine Excel'den çok satırlı yapıştırabilirsiniz.</span></p>
+          <?php if ($paletKilitli): ?><p class="sip-ipucu" data-sip-palet-kilit-not>Palet ID aralığı ayrıldı (<?= (int)$pklRow['palet_bas'] ?>–<?= (int)$pklRow['palet_bit'] ?>); yeniden oluşturmada korunur, başlangıç buradan değiştirilemez.</p><?php endif; ?>
           <div class="table-wrap sip-satir-izgara" tabindex="0" aria-label="Satır bazında değerler (yatay kaydırılır)">
-            <table class="data-table small sip-table sip-satir-tablo">
+            <table class="data-table small sip-table sip-satir-tablo" data-sip-izgara>
               <thead><tr><th class="sip-sticky">Palet ID</th><th>Kalibre</th><th>Lot (Q)</th>
                 <?php foreach (['M', 'N', 'O', 'P', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'] as $c): ?><th><?= h($sutunAd[$c]) ?> <span class="sip-soluk">(<?= $c ?>)</span></th><?php endforeach; ?></tr></thead>
               <tbody>
               <?php foreach ($satirlar as $i => $r): ?>
-                <tr>
-                  <td class="sip-sticky"><strong><?= (int)$r['C'][1] ?></strong></td>
+                <tr data-sip-satir="<?= $i ?>" data-sip-blok="<?= (int)($satirBlok[$i] ?? 0) ?>">
+                  <td class="sip-sticky"><?php if ($i === 0 && $yaz && !$paletKilitli): ?>
+                    <input type="text" inputmode="numeric" enterkeyhint="next" maxlength="9" class="sip-hucre sip-palet-bas" name="palet_bas_istenen" value="<?= $paletBas ?>" data-sip-palet-bas data-sip-palet-varsayilan="<?= (int)$oneri['palet_bas'] ?>" aria-label="Palet ID başlangıcı (ilk satır; sonraki satırlar +1)" autocomplete="off">
+                    <input type="hidden" name="palet_bas_varsayilan" value="<?= (int)$oneri['palet_bas'] ?>">
+                  <?php else: ?><strong data-sip-palet-no><?= (int)$r['C'][1] ?></strong><?php endif; ?></td>
                   <td><?= h((string)($r['G'][1] ?? '')) ?></td>
                   <td><?= h((string)($r['Q'][1] ?? '—')) ?></td>
                   <?php foreach (['M', 'N', 'O', 'P', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB'] as $c):
@@ -296,8 +319,9 @@ render_flash();
                       $ph = isset($r[$c]) ? (string)$r[$c][1] : '';
                       $tarihSutun = SIPARIS_PKL_SUTUN_TIP[$c] === 'd';
                       if ($tarihSutun) { $ov = $ov !== '' ? sipui_tarih((string)$ov) : ''; $ph = $ph !== '' ? sipui_tarih($ph) : ''; }
+                      $im = in_array($c, ['M', 'N'], true) ? ' inputmode="decimal"' : (in_array($c, ['T', 'U'], true) ? ' inputmode="numeric"' : '');
                   ?>
-                    <td><input type="text" name="satir[<?= $i ?>][<?= $c ?>]" value="<?= h((string)$ov) ?>" placeholder="<?= h($ph) ?>" aria-label="<?= h($sutunAd[$c] . ' · palet ' . (int)$r['C'][1]) ?>" class="sip-hucre<?= $ph === '' && $ov === '' ? ' sip-hucre-bos' : '' ?>" autocomplete="off"></td>
+                    <td><input type="text" name="satir[<?= $i ?>][<?= $c ?>]" value="<?= h((string)$ov) ?>" placeholder="<?= h($ph) ?>" aria-label="<?= h($sutunAd[$c] . ' · palet ' . (int)$r['C'][1]) ?>" class="sip-hucre<?= $ph === '' && $ov === '' ? ' sip-hucre-bos' : '' ?>" autocomplete="off" data-sip-sutun="<?= $c ?>"<?= $im ?> enterkeyhint="<?= $i === $n - 1 ? 'done' : 'next' ?>"></td>
                   <?php endforeach; ?>
                 </tr>
               <?php endforeach; ?>
@@ -338,6 +362,25 @@ render_flash();
     </div>
     <?php endif; ?>
   </form>
+
+  <?php if ($yaz && $n > 0 && $n <= SIPARIS_PKL_MAX_PALET): ?>
+  <div class="pm-overlay" id="sipYapistirModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipYapistirBaslik">
+    <div class="pm-dialog">
+      <div class="pm-header"><h2 class="pm-title" id="sipYapistirBaslik">Excel'den yapıştır</h2><button type="button" class="pm-close" data-sip-kapat aria-label="Kapat">✕</button></div>
+      <div class="pm-body sip-form">
+        <label>Yapıştırılacak metin
+          <textarea rows="7" class="sip-yap-metin" data-sip-yap-metin placeholder="Excel'de Brüt (ve yanındaki Net) sütununu seçip kopyalayın, buraya yapıştırın" autocomplete="off" spellcheck="false" inputmode="text"></textarea></label>
+        <div class="sip-izgara sip-yap-sec">
+          <label>Başlangıç satırı<select data-sip-yap-satir></select></label>
+          <label>Hedef sütun<select data-sip-yap-hedef><option value="M">Brüt kg (M)</option><option value="N">Net kg (N)</option></select><span class="sip-ipucu">İki sütun (Brüt | Net) yapıştırırsanız Brüt'ten başlar.</span></label>
+        </div>
+        <div class="sip-yap-onizleme" data-sip-yap-onizleme aria-live="polite"></div>
+        <p class="muted sip-ipucu">Sayılar Türkçe biçimde okunur: nokta binlik ayırıcı, virgül ondalık (1.234,5). Hiçbir şey kaydedilmez; hücreler dolar, sonra «Taslağı kaydet»'e basın.</p>
+      </div>
+      <div class="pm-footer"><button type="button" class="btn" data-sip-kapat>Vazgeç</button><button type="button" class="btn btn-primary" data-sip-yap-uygula disabled>Uygula</button></div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <?php if ($yaz): ?>
   <div class="pm-overlay" id="sipProfilModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipProfilBaslik">

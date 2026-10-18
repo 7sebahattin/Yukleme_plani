@@ -200,7 +200,7 @@ echo "\n=== 5. PKL editörü, belge sayfası, ayarlar ===\n";
 $r = sayfa('siparis_pkl.php', ['id' => $ID['s1']]);
 ok('PKL editörü temiz + dengeli', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . (string)html_dengeli($r['html']));
 foreach (['name="baslik[plakalar]"', 'name="varsayilan[M]"', 'name="bloklar[0][palet]"', 'name="satir[0][M]"', 'class="sip-bar"', 'Σ palet', 'id="onkontrol"'] as $a) ok("PKL: $a", str_contains($r['html'], $a));
-ok('PKL: satır sayısı 20, palet ID önizlemesi 28..47', substr_count($r['html'], 'name="satir[') === 20 * 13 && str_contains($r['html'], '<strong>28</strong>') && str_contains($r['html'], '<strong>47</strong>'));
+ok('PKL: satır sayısı 20, palet ID önizlemesi 28..47', substr_count($r['html'], 'name="satir[') === 20 * 13 && str_contains($r['html'], '<strong data-sip-palet-no>28</strong>') && str_contains($r['html'], '<strong data-sip-palet-no>29</strong>') && str_contains($r['html'], '<strong data-sip-palet-no>47</strong>'));
 ok('PKL: eksik hücre uyarısı + eksik alanlarla oluştur kartı', str_contains($r['html'], 'Boş zorunlu hücre') && str_contains($r['html'], 'name="eksik_izin" value="1"'));
 ok('PKL: belge no ayrıldı → salt okunur', str_contains($r['html'], 'readonly') && !str_contains($r['html'], 'name="belge_no_istenen"'));
 $r = sayfa('siparis_pkl.php', ['id' => $ID['s2']]);
@@ -299,8 +299,40 @@ $x = $K(['islem' => 'catisma', 'catisma_id' => (string)$cid, 'karar' => 'red', '
 ok('çatışma: mevcut korundu', ($x['flash']['type'] ?? '') === 'success' && say($db, 'siparis_catismalar', "id = ? AND durum = 'red'", [$cid]) === 1);
 $x = $K(['islem' => 'catisma', 'catisma_id' => (string)$cid, 'karar' => 'kabul']);
 ok('çatışma: çözülmüşe tekrar karar reddedilir', ($x['flash']['type'] ?? '') === 'error');
-// durum
+// PKL editörü: Excel benzeri ızgara + Palet ID başlangıcı / boşluk-çakışma uyarısı (v372)
 $sid2 = $ID['s2'];
+$PP = fn(array $p) => sayfa('siparis_pkl.php', ['id' => $sid2], ['csrf' => $tok] + $p);
+$r = sayfa('siparis_pkl.php', ['id' => $sid2]);
+ok('PKL ızgara: Excelden yapıştır düğmesi + yapıştırma penceresi + araç çubuğu toplamları', temiz($r) && str_contains($r['html'], 'data-sip-ac="sipYapistirModal"') && str_contains($r['html'], 'id="sipYapistirModal"') && str_contains($r['html'], 'data-sip-t-brut') && str_contains($r['html'], 'data-sip-t-net') && str_contains($r['html'], 'data-sip-t-dolu'));
+ok('PKL ızgara: yapıştırma penceresi .pm-dialog, <form> ile SARILMAZ, Uygula pasif başlar', preg_match('#id="sipYapistirModal".*?<div class="pm-dialog">\s*<div class="pm-header">#s', $r['html']) === 1 && str_contains($r['html'], 'data-sip-yap-uygula disabled'));
+ok('PKL ızgara: Brüt/Net inputmode=decimal, enterkeyhint, sütun/satır öznitelikleri', str_contains($r['html'], 'name="satir[0][M]"') && preg_match('#name="satir\[0\]\[M\]"[^>]*data-sip-sutun="M" inputmode="decimal" enterkeyhint="next"#', $r['html']) === 1 && preg_match('#name="satir\[\d+\]\[N\]"[^>]*inputmode="decimal" enterkeyhint="done"#', $r['html']) === 1 && str_contains($r['html'], 'data-sip-satir="0" data-sip-blok="0"'));
+ok('PKL ızgara: ilk satır Palet ID düzenlenebilir girdi (name=palet_bas_istenen) + varsayılan gizli alan, başka yerde ikinci palet_bas_istenen YOK',
+    str_contains($r['html'], 'class="sip-hucre sip-palet-bas" name="palet_bas_istenen"') && str_contains($r['html'], 'name="palet_bas_varsayilan"') && substr_count($r['html'], 'name="palet_bas_istenen"') === 1);
+ok('PKL ızgara: palet bağlamı form özniteliklerinde (son, diğer aralıklar JSON, kilitli=0)', str_contains($r['html'], 'data-sip-palet-son="') && str_contains($r['html'], 'data-sip-palet-diger="[') && str_contains($r['html'], 'data-sip-palet-kilitli="0"') && str_contains($r['html'], 'AsyaDoc'));
+$sirada = preg_match('#name="palet_bas_varsayilan" value="(\d+)"#', $r['html'], $mm) ? (int)$mm[1] : 0;
+$kal2 = siparis_kalemler($db, $sid2);
+$blk = array_map(fn($k) => ['kalem_id' => (string)$k['id'], 'palet' => (string)$k['etkin_palet']], array_values(array_filter($kal2, fn($k) => (int)$k['etkin_palet'] > 0)));
+$pbi = fn() => (siparis_json_coz($db->query("SELECT veri_json FROM siparis_pkl WHERE sevkiyat_id = $sid2")->fetchColumn())['palet_bas_istenen'] ?? 'yok');
+$PP(['islem' => 'kaydet', 'bloklar' => $blk, 'varsayilan' => ['M' => '800'], 'palet_bas_istenen' => (string)$sirada, 'palet_bas_varsayilan' => (string)$sirada]);
+ok('Palet ID: önerilen numara değiştirilmediyse SABİTLENMEZ (boş = otomatik sıradaki)', $sirada > 0 && $pbi() === 'yok', json_encode($pbi()));
+$PP(['islem' => 'kaydet', 'bloklar' => $blk, 'varsayilan' => ['M' => '800'], 'palet_bas_istenen' => (string)($sirada + 40), 'palet_bas_varsayilan' => (string)$sirada]);
+ok('Palet ID: değiştirilen başlangıç aynen saklanır', $pbi() === $sirada + 40, json_encode($pbi()));
+$r = sayfa('siparis_pkl.php', ['id' => $sid2]);
+ok('Palet ID: kayıtlı başlangıç girdide, boşluk uyarısı "Üretim öncesi denetim"de (sunucu çizimi)', str_contains($r['html'], 'name="palet_bas_istenen" value="' . ($sirada + 40) . '"') && str_contains($r['html'], 'numara boşta kalıyor') && str_contains($r['html'], 'id="onkontrol"'));
+$pk1r = $db->query("SELECT palet_bas, palet_bit, belge_no FROM siparis_pkl WHERE sevkiyat_id = " . (int)$sid1)->fetch();
+$PP(['islem' => 'kaydet', 'bloklar' => $blk, 'varsayilan' => ['M' => '800'], 'palet_bas_istenen' => (string)((int)$pk1r['palet_bas'] + 2), 'palet_bas_varsayilan' => (string)$sirada]);
+$r = sayfa('siparis_pkl.php', ['id' => $sid2]);
+ok('Palet ID: çakışma KAYDI engellemez; uyarı çakışan PKL\'yi adlandırır',
+    $pbi() === (int)$pk1r['palet_bas'] + 2 && str_contains($r['html'], 'ile çakışıyor') && str_contains($r['html'], (string)$pk1r['belge_no']) && str_contains($r['html'], 'reddeder'));
+$PP(['islem' => 'kaydet', 'bloklar' => $blk, 'varsayilan' => ['M' => '800'], 'palet_bas_istenen' => (string)$sirada, 'palet_bas_varsayilan' => (string)$sirada]);
+ok('Palet ID: öneriye dönünce uyarı kalkar', !str_contains(sayfa('siparis_pkl.php', ['id' => $sid2])['html'], 'ile çakışıyor') && !str_contains(sayfa('siparis_pkl.php', ['id' => $sid2])['html'], 'numara boşta kalıyor'));
+$r = sayfa('siparis_pkl.php', ['id' => $ID['s1']]);
+ok('Palet ID (ayrılmış PKL): girdi YOK, aralık salt okunur + gerekçe notu, kilitli=1, ilk satır da <strong>', !str_contains($r['html'], 'name="palet_bas_istenen"') && str_contains($r['html'], 'data-sip-palet-kilitli="1"') && str_contains($r['html'], 'data-sip-palet-kilit-not') && str_contains($r['html'], 'Ayrıldı; yeniden üretimde korunur'));
+rol(['siparis.read'], false, 6);
+$r = sayfa('siparis_pkl.php', ['id' => $sid2]);
+ok('izleyici: yapıştır düğmesi/penceresi ve Palet ID girdisi YOK (toplamlar görünür)', !str_contains($r['html'], 'sipYapistirModal') && !str_contains($r['html'], 'name="palet_bas_istenen"') && str_contains($r['html'], 'data-sip-t-brut'));
+rol($ADMIN, true); $tok = csrf();
+// durum
 $x = $K(['islem' => 'durum', 'sid' => (string)$sid2, 'hedef' => 'hazirlik']);
 ok('durum: hazırlık', siparis_sevkiyat($db, $sid2)['durum'] === 'hazirlik' && ($x['flash']['type'] ?? '') === 'success');
 $x = $K(['islem' => 'durum', 'sid' => (string)$sid2, 'hedef' => 'iptal', 'gerekce' => '']);
@@ -533,6 +565,66 @@ ok('match var ama beyan.read yok → 403 (çift kapı)', $x['hata'] !== null && 
 rol($ADMIN, true);
 $g = sayfa('siparis_view.php', ['id' => $sid1, 'beyan_q' => '34TST']);
 ok('beyan arama sonucu listelenir', str_contains($g['html'], 'Beyan #1'));
+
+echo "\n=== 13b. Liste: navlun, ürün/Pal·PF, beyan parti no ===\n";
+$satir = function (string $html, int $sid): string {      // masaüstü tablo satırı
+    $h = 'data-href="siparis_view\.php\?id=' . $sid . '">';   // ana satır + (varsa) hemen altındaki ürün alt satırı
+    return preg_match('#<tr class="row-link[^"]*" ' . $h . '(.*?)</tr>(\s*<tr class="row-link sip-urun-tr[^"]*" ' . $h . '(.*?)</tr>)?#s', $html, $m) ? $m[1] . ($m[3] ?? '') : '';
+};
+$kart = function (string $html, int $sid): string {       // mobil kart
+    return preg_match('#<article class="sip-card[^"]*">(?:(?!</article>).)*?siparis_view\.php\?id=' . $sid . '"(.*?)</article>#s', $html, $m) ? $m[1] : '';
+};
+$db->exec("INSERT INTO customs_declarations (status, party_no, created_at, deleted_at) VALUES ('taslak', 'SILINMIS-9', '2026-12-02 11:00:00', '2026-12-03 00:00:00')");
+$silinmisId = (int)$db->lastInsertId();
+$bagEkle = function (int $sid, int $beyan, string $durum = 'aktif') use ($db): void {
+    $db->prepare("INSERT INTO siparis_beyan (sevkiyat_id, beyan_id, tur, durum, created_by, created_at) VALUES (?, ?, 'elle', ?, 1, '2026-12-04 10:00:00')")->execute([$sid, $beyan, $durum]);
+};
+$bagEkle($ID['s1'], 1); $bagEkle($ID['s1'], 2);                 // iki aktif bağ → "Parti … +1"
+$bagEkle($ID['s11'], $silinmisId);                             // silinmiş beyan → Tur no'ya düşer
+$bagEkle($ID['s31'], 2, 'kaldirildi');                          // kaldırılmış bağ → Tur no
+foreach ([16, 18] as $i => $kal) {                             // s12: 3 → 5 kalem (üst sınır 3 satır + "+2 daha")
+    $db->prepare("INSERT INTO siparis_kalemler (sevkiyat_id, ian, kalibre, sira, urun, aciklama, cesit, koli_icerik, pf, po_palet, etkin_palet, etkin_koli) VALUES (?, '', ?, ?, 'Testfruit', ?, 'TESTVAR', '3,5 KG', 200, 2, 2, 400)")
+        ->execute([$ID['s12'], (string)$kal, 3 + $i, "Testfruit $kal PC LOSE (TR)"]);
+}
+rol($ADMIN, true);
+$r = sayfa('siparisler.php');
+ok('liste temiz + dengeli (yeni sütun)', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . (string)html_dengeli($r['html']));
+ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="8"><div class="sip-urunler">'));
+$t1 = $satir($r['html'], $ID['s1']); $t2 = $satir($r['html'], $ID['s31']); $t3 = $satir($r['html'], $ID['s11']); $t4 = $satir($r['html'], $ID['s12']);
+ok('navlun no plakanın altında (tablo)', str_contains($t1, 'Navlun 6100000001') && str_contains($t1, 'class="sip-navlun') && strpos($t1, '34TST777') < strpos($t1, 'Navlun 6100000001'), substr($t1, 0, 300));
+ok('navlun yoksa satır yok', !str_contains($t2, 'Navlun') && !str_contains($t4, 'Navlun'));
+ok('navlun mobil kartta da', str_contains($kart($r['html'], $ID['s1']), 'Navlun 6100000001') && !str_contains($kart($r['html'], $ID['s31']), 'Navlun'));
+ok('Article specification + Pal. + PF (tablo)', str_contains($t1, 'Testfruit 14 PC LOSE (TR) · TESTVAR · 3,5 KG') && str_contains($t1, 'Pal. 20 · PF 160'), substr($t1, 0, 400));
+ok('etkin palet öncelikli (po 4 → etkin 12) + PF 200', str_contains($t3, 'Pal. 12 · PF 200') && str_contains($t3, 'Pal. 15 · PF 200') && !str_contains($t3, 'Pal. 4 '));
+ok('gönderilmeyecek kalem (etkin palet 0, koli 0) satırı yok', substr_count($t3, 'class="sip-urun"') === 2);
+ok('PO palet yedeği (etkin boşsa po_palet) + palet/PF yoksa meta satırı yok', str_contains(sipui_kalem_html([['aciklama' => 'X 1 PC', 'po_palet' => 7, 'etkin_palet' => null, 'pf' => null]]), 'Pal. 7') && !str_contains(sipui_kalem_html([['aciklama' => 'X 1 PC']]), 'sip-urun-meta'));
+ok('5 kalem: en çok 3 satır + "+2 daha"', substr_count($t4, 'class="sip-urun"') === 3 && str_contains($t4, '+2 daha'));
+ok('ürün bölümü mobil kartta', str_contains($kart($r['html'], $ID['s1']), 'sip-card-urun') && str_contains($kart($r['html'], $ID['s1']), 'Pal. 20 · PF 160'));
+ok('kalem metni kaçırılıyor (XSS yok)', !str_contains(sipui_kalem_html([['aciklama' => '<script>x</script>', 'po_palet' => 1]]), '<script>'));
+ok('yönetici: bağlı beyanın parti no\'su Tur no yerine ("+1" ile)', str_contains($t1, 'Parti TC900001.10-A +1') && !str_contains($t1, 'Tur 9000000001'), substr($t1, 0, 300));
+ok('parti no mobil kartta da', str_contains($kart($r['html'], $ID['s1']), 'Parti TC900001.10-A +1'));
+ok('bağı olmayan / kaldırılmış / silinmiş beyan: Tur no', str_contains($t2, 'Tur 9000000031') && str_contains($t3, 'Tur 9000000011') && !str_contains($t3, 'SILINMIS') && !str_contains($t3, 'Parti'));
+rol($OPER, false, 5);          // siparis.read + beyan.read
+$r = sayfa('siparisler.php');
+ok('beyan.read olan operatör parti no\'yu görür', temiz($r) && str_contains($satir($r['html'], $ID['s1']), 'Parti TC900001.10-A +1'));
+rol($VIEW, false, 6);          // yalnız siparis.read
+$r = sayfa('siparisler.php');
+$v1 = $satir($r['html'], $ID['s1']);
+ok('beyan.read yok: parti no görünmez, Tur no gösterilir', temiz($r) && str_contains($v1, 'Tur 9000000001') && !str_contains($v1, 'Parti') && !str_contains($r['html'], 'TC900001.10-A'), substr($v1, 0, 300));
+ok('beyan.read yok: navlun + ürün satırları yine görünür', str_contains($v1, 'Navlun 6100000001') && str_contains($v1, 'Pal. 20 · PF 160'));
+ok('parti haritası: yetkisizde boş, yetkilide dolu', siparis_beyan_parti_haritasi($db, [$ID['s1']]) === [] && (rol($ADMIN, true) || true) && siparis_beyan_parti_haritasi($db, [$ID['s1'], $ID['s2'], $ID['s11']]) === [$ID['s1'] => ['parti' => 'TC900001.10-A', 'fazla' => 1]]);
+$db->exec('ALTER TABLE customs_declarations RENAME TO cd_yedek');   // beyan tablosu yok → sayfa yine çizilir
+rol($ADMIN, true);
+$r = sayfa('siparisler.php');
+ok('customs_declarations yokken liste temiz + Tur no\'ya düşer', temiz($r) && str_contains($satir($r['html'], $ID['s1']), 'Tur 9000000001') && html_dengeli($r['html']) === null, (string)$r['hata']);
+ok('parti haritası: tablo yoksa boş (istisna yutulur)', siparis_beyan_parti_haritasi($db, [$ID['s1']]) === []);
+$db->exec('ALTER TABLE cd_yedek RENAME TO customs_declarations');
+ok('liste sorguları sabit: kalemler + parti tek sorgu (N+1 yok)', substr_count(file_get_contents($ROOT . '/siparisler.php'), 'FROM siparis_kalemler') === 1 && substr_count(file_get_contents($ROOT . '/_siparis_liste.php'), '->prepare(') === 0 && substr_count(file_get_contents($ROOT . '/_siparis_liste.php'), 'query(') === 0);
+// temizlik: sonraki bölümlerin durumu değişmesin
+$db->exec("DELETE FROM siparis_beyan WHERE sevkiyat_id IN (" . (int)$ID['s1'] . ',' . (int)$ID['s11'] . ',' . (int)$ID['s31'] . ')');
+$db->exec("DELETE FROM customs_declarations WHERE id = " . $silinmisId);
+$db->exec("DELETE FROM siparis_kalemler WHERE sevkiyat_id = " . (int)$ID['s12'] . " AND kalibre IN ('16','18')");
+rol($ADMIN, true);
 
 echo "\n=== 14. CSRF reddi (alt süreç) ===\n";
 foreach (['siparis_kaydet.php', 'siparis_yukle.php', 'siparis_pkl.php', 'siparis_beyan_bagla.php', 'siparis_ayarlar.php'] as $f) {
