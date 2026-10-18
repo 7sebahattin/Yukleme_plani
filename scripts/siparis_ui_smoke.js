@@ -7,6 +7,9 @@
 // yükleme / durum / mail onay / alan düzenleme pencereleri: alt çubuk ekranda, gövde kayar, son denetim tıklanabilir ·
 // yükleme ön denetimi (15 MB üstü dosya engellenir) · PKL satır ızgarası KENDİ içinde kayar, sayfa kaymaz ·
 // yapışkan PKL çubuğu alt çubuğun üstünde · koyu tema yüzeyleri (--card) · Esc penceri kapatır · konsol hatası yok.
+// v378 "📧 Mailden al": düğmeler yalnız kapıyla · ayarsızda pasif + not · 1280/820/390/360 yatay taşma yok, <768'de 3 sütun, <390'da alt alta ·
+// page.route('**/siparis_mail.php') sahte yanıtlarla baslat → devam → bitti: kilit/ilerleme/sonuç, ağ kopunca "Devam et" (aynı tarama_id), 409/HTML yanıt ·
+// sonuç tablo/kart + "Daha önce alınmış" aç/kapa · yarım tarama şeridi · ayar kartı · koyu tema.
 // Playwright yoksa kendini ATLAR (hata değil). Ekran görüntüleri: <OUT>/screens/.
 // =========================================================
 'use strict';
@@ -28,7 +31,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
 (async () => {
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => fs.existsSync(p));
     const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
-    async function ac(sayfa, w, h, koyu) {
+    async function ac(sayfa, w, h, koyu, hazirla) {
         const mobil = w < 768;
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobil, hasTouch: mobil, reducedMotion: 'reduce', colorScheme: koyu ? 'dark' : 'light' });
         const page = await ctx.newPage();
@@ -36,6 +39,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         page.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|file:\/\/|Failed to load resource|ERR_NAME_NOT_RESOLVED|ERR_INTERNET|ERR_TUNNEL|CORS/.test(m.text())) hatalar.push(m.text()); });
         page.on('pageerror', e => hatalar.push('pageerror: ' + e.message));
         if (koyu) await page.addInitScript(() => { try { localStorage.setItem('asya_tema', 'dark'); } catch (e) {} });
+        if (hazirla) await hazirla(page);      // page.route() sayfa AÇILMADAN kurulmalı (file:// isteklerinde sonradan kurulan yönlendirme devreye girmez)
         await page.goto('file://' + path.join(OUT, sayfa + '.html'));
         if (koyu) await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
         await page.waitForTimeout(400);
@@ -386,6 +390,200 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ({ ctx, page } = await ac('ayarlar', w, h));
         ok(`[${w}] ayarlar: yatay taşma yok`, (await tasma(page)) <= 0);
         await ctx.close();
+    }
+
+    // ═══════════════════ v378: Mailden al ═══════════════════
+    const MANIFEST = JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.json'), 'utf8'));
+    const varSayfa = ad => MANIFEST.sayfalar.includes(ad);
+    const bekle = ms => new Promise(r => setTimeout(r, ms));
+    const lumOf = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+    const JSONY = (obj, status) => ({ status: status || 200, contentType: 'application/json', body: JSON.stringify(obj) });
+    const SAYAC0 = { mail: 2, pdf: 2, alindi: 0, zaten: 0, onceden: 0, atlandi: 0, hata: 0 };
+    const SONUC_HTML = '<section class="card sip-mail-sonuc-kart" data-sip-mail-sonuc-kart><div class="card-head"><h2>Mail sorgusu — Lojistik · sahte</h2></div><p id="sahteSonuc">tamam</p></section>';
+    if (varSayfa('mail_ayarsiz')) {
+        // ── ayarsız / yetkisiz ──
+        for (const [w, h] of [[1280, 900], [390, 844]]) {
+            let { ctx, page, hatalar } = await ac('mail_ayarsiz', w, h);
+            const d = await page.evaluate(() => ({ n: document.querySelectorAll('[data-sip-mail]').length, pasif: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => b.disabled),
+                not: (document.querySelector('.sip-mail-not') || {}).textContent || '', link: !!document.querySelector('.sip-mail-not a[href="siparis_ayarlar.php#mail"]') }));
+            ok(`[${w}] mail ayarsız: 3 düğme, hepsi pasif`, d.n === 3 && d.pasif, JSON.stringify(d));
+            ok(`[${w}] mail ayarsız (yönetici): ayar bağlantısı görünür`, d.link && /Mail sorgu ayarları/.test(d.not), d.not);
+            ok(`[${w}] mail ayarsız: yatay taşma yok`, (await tasma(page)) <= 0);
+            ok(`[${w}] mail ayarsız: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
+        let { ctx, page } = await ac('mail_ayarsiz_operator', 390, 844);
+        ok('mail ayarsız (yönetici olmayan): bağlantı YOK, "henüz ayarlanmadı (yönetici)"', await page.evaluate(() => { const n = document.querySelector('.sip-mail-not'); return !!n && !n.querySelector('a') && /henüz ayarlanmadı \(yönetici\)/.test(n.textContent); }));
+        await ctx.close();
+        ({ ctx, page } = await ac('mail_yetkisiz', 1280, 900));
+        ok('mail.read yetkisi yoksa "Mailden al" bölümü ve düğmeler HİÇ çizilmez', await page.evaluate(() => !document.querySelector('[data-sip-mail-kap]') && !document.querySelector('[data-sip-mail]') && !document.querySelector('#mail')) && await gorunur(page, 'form[data-sip-upload]'));
+        await ctx.close();
+        ({ ctx, page } = await ac('mail_ayar_yetkisiz', 1280, 900));
+        ok('ayar yetkisi (mail.admin) yoksa "Mail sorgu ayarları" kartı çizilmez', await page.evaluate(() => !document.querySelector('#sipMailAyarBas')));
+        await ctx.close();
+    }
+    if (varSayfa('mail_ayarli')) {
+        // ── düzen: 1280/820/390/360 ──
+        for (const [w, h] of [[1280, 900], [820, 1024], [390, 844], [360, 740]]) {
+            const { ctx, page, hatalar } = await ac('mail_ayarli', w, h);
+            ok(`[${w}] mail: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
+            const r = await page.evaluate(() => {
+                const bs = Array.from(document.querySelectorAll('[data-sip-mail]')), kap = document.querySelector('.sip-mail-dugmeler');
+                const rc = bs.map(b => b.getBoundingClientRect()), kr = kap.getBoundingClientRect(), cs = getComputedStyle(kap);
+                return { n: bs.length, hepsiAktif: bs.every(b => !b.disabled), tops: rc.map(x => Math.round(x.top)), w: rc.map(x => Math.round(x.width)), h: rc.map(x => x.height), kapW: kr.width,
+                    sutun: cs.display === 'grid' ? cs.gridTemplateColumns.split(' ').length : 0, tasar: rc.some(x => x.right > kr.right + 1 || x.left < kr.left - 1) };
+            });
+            ok(`[${w}] mail: üç düğme etkin ve kapsayıcıdan taşmıyor`, r.n === 3 && r.hepsiAktif && !r.tasar, JSON.stringify(r));
+            if (w < 390) ok(`[${w}] mail: <390px düğmeler alt alta, tam genişlik`, r.sutun === 1 && r.tops[0] < r.tops[1] && r.tops[1] < r.tops[2] && r.w.every(x => x >= r.kapW - 2), JSON.stringify(r));
+            else if (w < 768) ok(`[${w}] mail: <768px 3 eşit sütun, aynı satır`, r.sutun === 3 && r.tops[0] === r.tops[1] && r.tops[1] === r.tops[2] && Math.max(...r.w) - Math.min(...r.w) <= 2, JSON.stringify(r));
+            else ok(`[${w}] mail: masaüstü/tablet düğmeler aynı satırda`, r.tops[0] === r.tops[1] && r.tops[1] === r.tops[2], JSON.stringify(r));
+            if (w < 768) ok(`[${w}] mail: dokunma hedefleri ≥ 44px`, r.h.every(x => x >= 43.5), JSON.stringify(r.h));
+            ok(`[${w}] mail: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            if (w === 390) await page.screenshot({ path: path.join(SHOTS, '390_mail_ayarli.png'), fullPage: true });
+            await ctx.close();
+        }
+        // ── akış: baslat → devam → bitti (sahte uç) ──
+        for (const [w, h] of [[1280, 900], [390, 844]]) {
+            const istekler = []; let devamNo = 0;
+            const { ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, p => p.route('**/siparis_mail.php', async route => {
+                const g = JSON.parse(route.request().postData() || '{}'); istekler.push(g);
+                if (g.islem === 'baslat') return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: g.tur, i: 0, toplam: 2, sayac: SAYAC0, uyarilar: [], bitti: false }));
+                devamNo++; await bekle(450);
+                if (devamNo === 1) return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: 'lojistik', i: 1, toplam: 2, sayac: { ...SAYAC0, alindi: 1 }, uyarilar: [], bitti: false }));
+                return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: 'lojistik', i: 2, toplam: 2, sayac: { ...SAYAC0, alindi: 1, zaten: 1 }, uyarilar: [], bitti: true, html: SONUC_HTML }));
+            }));
+            await page.click('[data-sip-mail="lojistik"]');
+            await page.waitForFunction(() => /1 \/ 2 ek/.test((document.querySelector('[data-sip-mail-ilerleme-metin]') || {}).textContent || ''), null, { timeout: 5000 });
+            const ara = await page.evaluate(() => ({ hepsiKilitli: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => b.disabled), busy: document.querySelector('[data-sip-mail-kap]').getAttribute('aria-busy'),
+                ilerleme: !document.querySelector('[data-sip-mail-ilerleme]').hidden, metin: document.querySelector('[data-sip-mail-ilerleme-metin]').textContent, bar: document.querySelector('[data-sip-mail-ilerleme] progress').value }));
+            ok(`[${w}] mail akış: çalışırken TÜM düğmeler kilitli + aria-busy`, ara.hepsiKilitli && ara.busy === 'true', JSON.stringify(ara));
+            ok(`[${w}] mail akış: ilerleme metni güncellenir ("Mailler taranıyor… 1 / 2 ek · 1 alındı")`, ara.ilerleme && /Mailler taranıyor… 1 \/ 2 ek · 1 alındı · 0 zaten vardı/.test(ara.metin) && ara.bar === 1, JSON.stringify(ara));
+            await page.waitForSelector('#sahteSonuc', { timeout: 5000 });
+            const son = await page.evaluate(() => ({ hepsiAcik: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => !b.disabled), busy: document.querySelector('[data-sip-mail-kap]').getAttribute('aria-busy'),
+                ilerlemeGizli: document.querySelector('[data-sip-mail-ilerleme]').hidden, sonuc: document.querySelector('[data-sip-mail-sonuc]').textContent }));
+            ok(`[${w}] mail akış: sonuç HTML'i basıldı, düğmeler açıldı, ilerleme gizlendi`, son.hepsiAcik && son.busy === 'false' && son.ilerlemeGizli && /tamam/.test(son.sonuc), JSON.stringify(son));
+            ok(`[${w}] mail akış: istekler baslat(tur+csrf) → devam(tarama_id) → devam`, istekler.length === 3 && istekler[0].islem === 'baslat' && istekler[0].tur === 'lojistik' && istekler[0].csrf && istekler[0].csrf.length > 8
+                && istekler[1].islem === 'devam' && istekler[1].tarama_id === 'abcdef0123456789' && istekler[2].tarama_id === 'abcdef0123456789', JSON.stringify(istekler));
+            ok(`[${w}] mail akış: yatay taşma yok`, (await tasma(page)) <= 0);
+            ok(`[${w}] mail akış: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
+        // ── ağ kopması → Devam et (aynı tarama_id) ──
+        {
+            const istekler = []; let devamNo = 0;
+            const { ctx, page } = await ac('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', async route => {
+                const g = JSON.parse(route.request().postData() || '{}'); istekler.push(g);
+                if (g.islem === 'baslat') return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: g.tur, i: 0, toplam: 2, sayac: SAYAC0, uyarilar: [], bitti: false }));
+                devamNo++;
+                if (devamNo === 1) return route.abort('failed');
+                return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: 'fiyat', i: 2, toplam: 2, sayac: { ...SAYAC0, alindi: 2 }, uyarilar: [], bitti: true, html: SONUC_HTML }));
+            }));
+            await page.click('[data-sip-mail="fiyat"]');
+            await page.waitForFunction(() => { const e = document.querySelector('[data-sip-mail-hata]'); return e && !e.hidden && /Bağlantı kesildi/.test(e.textContent); }, null, { timeout: 5000 });
+            const k = await page.evaluate(() => { const b = document.querySelector('[data-sip-mail-ilerleme] [data-sip-mail-devam-et]'); const r = b.getBoundingClientRect();
+                return { hata: document.querySelector('[data-sip-mail-hata]').textContent, devamGorunur: !b.hidden && r.width > 0 && r.height >= 43.5, dugmelerAcik: Array.from(document.querySelectorAll('[data-sip-mail]')).every(x => !x.disabled) }; });
+            ok('mail ağ kopması: "Bağlantı kesildi — kaldığı yerden devam edebilirsiniz." + görünür "Devam et" (≥44px)', k.hata === 'Bağlantı kesildi — kaldığı yerden devam edebilirsiniz.' && k.devamGorunur, JSON.stringify(k));
+            await page.click('[data-sip-mail-ilerleme] [data-sip-mail-devam-et]');
+            await page.waitForSelector('#sahteSonuc', { timeout: 5000 });
+            ok('mail ağ kopması: "Devam et" AYNI tarama_id ile devam isteği yollar ve tamamlar', istekler.length === 3 && istekler[2].islem === 'devam' && istekler[2].tarama_id === 'abcdef0123456789', JSON.stringify(istekler));
+            await ctx.close();
+        }
+        // ── 409 meşgul + HTML yanıt (oturum süresi) ──
+        {
+            let yanit409 = true;
+            const { ctx, page } = await ac('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', route => yanit409 ? route.fulfill(JSONY({ ok: false, kod: 'mesgul', mesaj: 'Başka bir mail sorgusu şu an çalışıyor (Kullanıcı 2, 40 sn önce). Bitince yeniden deneyin.' }, 409)) : route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Giriş yapın</html>' })));
+            await page.click('[data-sip-mail="siparis"]');
+            await page.waitForFunction(() => { const e = document.querySelector('[data-sip-mail-hata]'); return e && !e.hidden; }, null, { timeout: 5000 });
+            const k = await page.evaluate(() => ({ hata: document.querySelector('[data-sip-mail-hata]').textContent, acik: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => !b.disabled), ilerlemeGizli: document.querySelector('[data-sip-mail-ilerleme]').hidden }));
+            ok('mail 409 meşgul: sunucu mesajı görünür, düğmeler açılır, ilerleme gizli', /Başka bir mail sorgusu şu an çalışıyor/.test(k.hata) && k.acik && k.ilerlemeGizli, JSON.stringify(k));
+            yanit409 = false;
+            await page.click('[data-sip-mail="siparis"]');
+            await page.waitForFunction(() => /beklenmeyen yanıt/.test(document.querySelector('[data-sip-mail-hata]').textContent), null, { timeout: 5000 });
+            ok('mail: JSON olmayan yanıt (oturum süresi) → anlaşılır mesaj, düğmeler açık', await page.evaluate(() => Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => !b.disabled)));
+            await ctx.close();
+        }
+    }
+    if (varSayfa('mail_son')) {
+        for (const [w, h] of [[1280, 900], [820, 1024], [390, 844]]) {
+            const masaustu = w >= 1024;
+            const { ctx, page, hatalar } = await ac('mail_son', w, h);
+            ok(`[${w}] mail sonuç: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
+            ok(`[${w}] mail sonuç: ${masaustu ? 'tablo görünür, kartlar gizli' : 'kartlar görünür, tablo gizli'}`,
+                masaustu ? (await gorunur(page, '.sip-mail-tablo')) && !(await gorunur(page, '.sip-mail-kartlar')) : !(await gorunur(page, '.sip-mail-tablo')) && (await gorunur(page, '.sip-mail-kartlar')));
+            const o = await page.evaluate(() => {
+                const kartlar = Array.from(document.querySelectorAll('[data-sip-mail-sonuc-kart]'));
+                return { baslik: (kartlar[0].querySelector('h2') || {}).textContent, kartSay: kartlar.length, onceki: !!document.querySelector('details.sip-mail-onceki'), oncekiAcik: !!(document.querySelector('details.sip-mail-onceki') || {}).open,
+                    cipler: Array.from(kartlar[0].querySelectorAll('.sip-mail-chip')).map(c => c.textContent.replace(/\s+/g, ' ').trim()) };
+            });
+            ok(`[${w}] mail sonuç: en yeni sorgu üstte ("Mail sorgusu — Fiyat · son 15 gün · …"), önceki sorgu kapalı <details>`, /^Mail sorgusu — Fiyat · son 15 gün · \d{2}\.\d{2}\.\d{4} \d{2}:\d{2} · /.test(o.baslik) && o.onceki && !o.oncekiAcik, JSON.stringify(o));
+            ok(`[${w}] mail sonuç: özet çipleri (Bulunan mail / PDF / Alındı …)`, ['Bulunan mail', 'PDF', 'Alındı', 'Zaten vardı', 'Daha önce alınmış', 'Atlandı', 'Hata'].every((e, i) => o.cipler[i] && o.cipler[i].startsWith(e)), JSON.stringify(o.cipler));
+            // önceki sorgu (Lojistik): "Daha önce alınmış" satırları gizli → düğme açar
+            await page.click('details.sip-mail-onceki > summary'); await page.waitForTimeout(100);
+            const gizli = await page.evaluate(() => { const k = document.querySelector('details.sip-mail-onceki [data-sip-mail-sonuc-kart]'); const vis = e => { const r = e.getBoundingClientRect(); return getComputedStyle(e).display !== 'none' && r.height > 0; };
+                const sat = Array.from(k.querySelectorAll('.sip-mail-onceden')).filter(e => e.offsetParent !== null || vis(e)); const b = k.querySelector('[data-sip-mail-onceden]');
+                return { gorunenOnceden: sat.length, dugme: b ? b.textContent.trim() : null, pressed: b ? b.getAttribute('aria-pressed') : null, toplamOnceden: k.querySelectorAll('.sip-mail-onceden').length }; });
+            ok(`[${w}] mail sonuç: "Daha önce alınmış" satırları varsayılan GİZLİ, düğme "…göster"`, gizli.gorunenOnceden === 0 && gizli.toplamOnceden >= 2 && /göster$/.test(gizli.dugme || '') && gizli.pressed === 'false', JSON.stringify(gizli));
+            await page.click('details.sip-mail-onceki [data-sip-mail-onceden]'); await page.waitForTimeout(100);
+            const acik = await page.evaluate(() => { const k = document.querySelector('details.sip-mail-onceki [data-sip-mail-sonuc-kart]'); const b = k.querySelector('[data-sip-mail-onceden]');
+                const gor = Array.from(k.querySelectorAll('.sip-mail-onceden')).filter(e => { const r = e.getBoundingClientRect(); return getComputedStyle(e).display !== 'none' && r.height > 0; });
+                return { gor: gor.length, dugme: b.textContent.trim(), pressed: b.getAttribute('aria-pressed') }; });
+            ok(`[${w}] mail sonuç: düğme satırları gösterir, metin "…gizle", aria-pressed=true`, acik.gor >= 1 && /gizle$/.test(acik.dugme) && acik.pressed === 'true', JSON.stringify(acik));
+            ok(`[${w}] mail sonuç: satırlar açılınca da yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
+            ok(`[${w}] mail sonuç: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            if (w === 1280 || w === 390) await page.screenshot({ path: path.join(SHOTS, `${w}_mail_son.png`), fullPage: true });
+            await ctx.close();
+        }
+        {   // koyu tema: çipler + sonuç kartı
+            const { ctx, page } = await ac('mail_son', 390, 844, true);
+            const r = await page.evaluate(() => { const cs = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e) : null; };
+                const k = cs('[data-sip-mail-sonuc-kart]'), ok_ = cs('.sip-mail-chip--ok'), uy = cs('.sip-mail-chip--uyari'), ht = cs('.sip-mail-chip--hata'), btn = cs('.sip-mail-btn');
+                const kok = getComputedStyle(document.documentElement).getPropertyValue('--card').trim(); const tmp = document.createElement('div'); tmp.style.background = kok; document.body.appendChild(tmp); const bg = getComputedStyle(tmp).backgroundColor; tmp.remove();
+                return { kartBg: k.backgroundColor, beklenen: bg, okBg: ok_ && ok_.backgroundColor, okFg: ok_ && ok_.color, uyBg: uy && uy.backgroundColor, uyFg: uy && uy.color, htBg: ht && ht.backgroundColor, htFg: ht && ht.color, btnBg: btn.backgroundColor, btnFg: btn.color }; });
+            ok('koyu tema mail: sonuç kartı --card zemini', r.kartBg === r.beklenen, JSON.stringify(r));
+            ok('koyu tema mail: çipler koyu zeminde açık yazı (Alındı)', lumOf(r.okBg) < 0.35 && lumOf(r.okFg) > lumOf(r.okBg) + 0.25, JSON.stringify(r));
+            ok('koyu tema mail: Atlandı / Hata çipleri de okunur', (!r.uyBg || lumOf(r.uyFg) > lumOf(r.uyBg) + 0.25) && (!r.htBg || lumOf(r.htFg) > lumOf(r.htBg) + 0.25), JSON.stringify(r));
+            ok('koyu tema mail: düğme zemini koyu, yazı açık', lumOf(r.btnFg) > lumOf(r.btnBg) + 0.2, JSON.stringify(r));
+            await page.screenshot({ path: path.join(SHOTS, '390_mail_son_koyu.png'), fullPage: true });
+            await ctx.close();
+        }
+    }
+    if (varSayfa('mail_yarim')) {
+        const tid = MANIFEST.yarim_tid;
+        for (const [w, h] of [[1280, 900], [390, 844]]) {
+            const istekler = [];
+            const { ctx, page, hatalar } = await ac('mail_yarim', w, h, false, p => p.route('**/siparis_mail.php', async route => { const g = JSON.parse(route.request().postData() || '{}'); istekler.push(g);
+                route.fulfill(JSONY({ ok: true, tarama_id: tid, tur: 'siparis', i: 2, toplam: 2, sayac: { ...SAYAC0, alindi: 2 }, uyarilar: [], bitti: true, html: SONUC_HTML })); }));
+            const sr = await page.evaluate(() => { const e = document.querySelector('.sip-mail-yarim'); return e ? { metin: e.textContent.replace(/\s+/g, ' ').trim(), tid: e.getAttribute('data-sip-mail-devam') } : null; });
+            ok(`[${w}] yarım tarama şeridi: "Yarım kalan mail sorgusu (Sipariş, 0/2) — Devam et Vazgeç"`, sr && /^Yarım kalan mail sorgusu \(Sipariş, 0\/2\) — Devam et Vazgeç$/.test(sr.metin) && sr.tid === tid, JSON.stringify(sr));
+            ok(`[${w}] yarım tarama: yatay taşma yok`, (await tasma(page)) <= 0);
+            await page.click('.sip-mail-yarim [data-sip-mail-devam-et]');
+            await page.waitForSelector('#sahteSonuc', { timeout: 5000 });
+            ok(`[${w}] yarım tarama: "Devam et" şeritteki tarama_id ile devam ister; şerit kaldırılır`, istekler.length === 1 && istekler[0].islem === 'devam' && istekler[0].tarama_id === tid && !(await page.$('.sip-mail-yarim')), JSON.stringify(istekler));
+            ok(`[${w}] yarım tarama: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
+        const istekler = [];
+        const { ctx, page } = await ac('mail_yarim', 390, 844, false, p => p.route('**/siparis_mail.php', route => { istekler.push(JSON.parse(route.request().postData() || '{}')); route.fulfill(JSONY({ ok: true, tarama_id: tid, tur: 'siparis', i: 0, toplam: 2, sayac: SAYAC0, uyarilar: ['Sorgu yarıda bırakıldı'], bitti: true, html: SONUC_HTML })); }));
+        await page.click('.sip-mail-yarim [data-sip-mail-vazgec]');
+        await page.waitForSelector('#sahteSonuc', { timeout: 5000 });
+        ok('yarım tarama: "Vazgeç" islem=vazgec + tarama_id yollar', istekler.length === 1 && istekler[0].islem === 'vazgec' && istekler[0].tarama_id === tid, JSON.stringify(istekler));
+        await ctx.close();
+    }
+    if (varSayfa('mail_ayar_sayfa')) {
+        for (const [w, h] of [[1280, 900], [390, 844]]) {
+            const { ctx, page, hatalar } = await ac('mail_ayar_sayfa', w, h);
+            const k = await page.evaluate(() => { const f = document.querySelector('#mail form'); const ta = Array.from(f.querySelectorAll('textarea'));
+                return { baslik: document.querySelector('#sipMailAyarBas').textContent, kutu: f.querySelectorAll('input[name="hesaplar[]"]').length, isaretli: f.querySelectorAll('input[name="hesaplar[]"]:checked').length, ta: ta.map(t => t.name), taFont: ta.map(t => parseFloat(getComputedStyle(t).fontSize)),
+                    yonlendirme: /Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin\./.test(document.querySelector('#mail').textContent), csrf: !!f.querySelector('input[name=csrf]'), islem: (f.querySelector('input[name=islem]') || {}).value,
+                    degerler: ta.map(t => t.value), btn: f.querySelector('button[type=submit]').getBoundingClientRect().height }; });
+            ok(`[${w}] mail ayar kartı: başlık, posta kutusu onay kutuları, 3 gönderen alanı, CSRF, islem=mail_ayar`, /Mail sorgu ayarları/.test(k.baslik) && k.kutu >= 1 && k.isaretli >= 1 && k.ta.join() === 'g_siparis,g_lojistik,g_fiyat' && k.csrf && k.islem === 'mail_ayar', JSON.stringify(k));
+            ok(`[${w}] mail ayar kartı: "X adına Y" yönlendirmesi görünür`, k.yonlendirme);
+            ok(`[${w}] mail ayar kartı: kayıtlı adresler alanlara dolu`, k.degerler[0] === 'po@ornek.test' && k.degerler[1] === 'log@ornek.test\nkisi@ornek.test' && k.degerler[2] === 'po@ornek.test', JSON.stringify(k.degerler));
+            if (w < 768) ok(`[${w}] mail ayar kartı: mobil girdi 16px + düğme ≥44px`, k.taFont.every(x => x >= 16) && k.btn >= 43.5, JSON.stringify([k.taFont, k.btn]));
+            ok(`[${w}] mail ayar kartı: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
+            ok(`[${w}] mail ayar kartı: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
     }
 
     // ── koyu tema (yalnız yüzeyler; tek ekran) ──

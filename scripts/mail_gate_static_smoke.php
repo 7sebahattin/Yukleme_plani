@@ -137,5 +137,20 @@ ok('APP_SURUM == sw.js CACHE_NAME', ($a[1] ?? 'x') === ($b[1] ?? 'y'), ($a[1] ??
 ok('mail.svg dosyası var', is_file($ROOT . '/assets/nav-icons/mail.svg'));
 ok('HTTP\'den çalıştırılabilen mail sayfası oturum olmadan açılmaz (require_login)', str_contains(oku('mail.php'), 'require_login()') && str_contains(oku('mail_hesaplar.php'), 'require_login()'));
 
+echo "\n=== v378: posta kutusundan ek çeken çağıranlar KAYITLI (yeni çağıran bilinçli eklenir) ===\n";
+$ekCagiran = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, FilesystemIterator::SKIP_DOTS)) as $f) {
+    $yol = (string)$f;
+    if (!str_ends_with($yol, '.php') || str_contains($yol, '/vendor/') || str_contains($yol, '/scripts/') || str_contains($yol, '/.git/')) continue;
+    $rel = substr($yol, strlen($ROOT) + 1);
+    if (preg_match('/\bmail_ek_hazirla\s*\(/', php_strip_whitespace($yol))) $ekCagiran[] = $rel;
+}
+sort($ekCagiran);
+ok('mail_ek_hazirla( yalnız tanım (mail_attach) + mail_ek.php (GET indirme) + config/siparis_mail.php (Siparişler "mailden al")', $ekCagiran === ['config/mail_attach.php', 'config/siparis_mail.php', 'mail_ek.php'], implode(',', $ekCagiran));
+$uidParcaCagiran = [];
+foreach (glob($ROOT . '/{,config/}*.php', GLOB_BRACE) as $f) if (preg_match('/->uidParca\(/', php_strip_whitespace($f))) $uidParcaCagiran[] = substr($f, strlen($ROOT) + 1);
+sort($uidParcaCagiran);
+ok('IMAP ek parçası (->uidParca) yalnız mail_attach.php\'de çağrılıyor', $uidParcaCagiran === ['config/mail_attach.php'], implode(',', $uidParcaCagiran));
+
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

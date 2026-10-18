@@ -360,6 +360,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                     <?= sipui_tur_rozeti((string)$b['tur']) ?>
                     <?php if ($eski): ?><span class="sip-eski-rozet">eski sürüm</span><?php endif; ?>
                     <?php if ($b['kaynak'] === 'uretim'): ?><span class="sip-uretim-rozet">sistemde üretildi</span><?php endif; ?>
+                    <?php if ($b['kaynak'] === 'mail'): ?><span class="sip-mail-rozet" title="Mail Merkezi'nden alındı">📧 mailden</span><?php endif; ?>
                     <?php if ((int)$b['uyari_sayisi'] > 0): ?><span class="sip-uy-say" title="Belgede <?= (int)$b['uyari_sayisi'] ?> uyarı var">⚠ <?= (int)$b['uyari_sayisi'] ?></span><?php endif; ?>
                     <span class="sip-soluk"><?= h(sipui_zaman((string)($b['belge_tarihi'] ?: $b['created_at']))) ?> · <?= h(sipui_boyut((int)$b['boyut'])) ?></span>
                   </span>

@@ -503,3 +503,62 @@ html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
     .sip-card-urun .sip-urun { padding: 5px 8px; }
 }
 /* ==== /LİSTE v376 ==== */
+/* ==== MAİLDEN AL v378 ==== */
+/* "📧 Mailden al": Sipariş / Lojistik / Fiyat sorgula düğmeleri + ilerleme + sonuç (siparis_mail.php). Renkler mevcut tokenlardan;
+   ok/uyarı/hata tonları rozet paletinden (--sip-*-bg/fg: açık + koyu tema zaten tanımlı). Hedefler mobilde 44px, yatay taşma YOK. */
+.sip-mail { margin: 0 0 14px; padding: 0 0 14px; border-bottom: 1px solid var(--border); min-width: 0; }
+.sip-mail-baslik h2 { margin: 0 0 2px; font-size: 1.05rem; }
+.sip-mail-baslik p { margin: 0 0 10px; }
+.sip-mail-dugmeler { display: flex; flex-wrap: wrap; gap: 8px; }
+.sip-mail-btn { min-height: 40px; }
+.sip-mail-btn:disabled { opacity: .55; cursor: not-allowed; }
+.sip-mail[aria-busy="true"] .sip-mail-btn { cursor: progress; }
+.sip-mail-not, .sip-mail-kurulmadi { margin: 8px 0 0; }
+.sip-mail-yarim { margin: 10px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sip-mail-ilerleme { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.sip-mail-ilerleme progress { flex: 1 1 160px; min-width: 120px; height: 10px; accent-color: var(--primary); }
+.sip-mail-ilerleme [data-sip-mail-ilerleme-metin] { flex: 1 1 100%; font-size: .88rem; overflow-wrap: anywhere; }
+.sip-mail-ilerleme-dugme { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sip-mail-sonuc { margin-top: 12px; min-width: 0; }
+.sip-mail-sonuc:empty { display: none; }
+.sip-mail-sonuc-kart { margin: 0 0 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-width: 0; }
+.sip-mail-sonuc-kart .card-head h2 { font-size: .98rem; overflow-wrap: anywhere; }
+.sip-mail-onceki { margin: 0 0 10px; }
+.sip-mail-onceki > summary { cursor: pointer; padding: 6px 2px; color: var(--muted); font-size: .88rem; }
+.sip-mail-ozet { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.sip-mail-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: .8rem; line-height: 1.5; }
+.sip-mail-chip b { font-variant-numeric: tabular-nums; }
+.sip-mail-chip--ok { background: var(--sip-mail-bg); color: var(--sip-mail-fg); border-color: transparent; }
+.sip-mail-chip--uyari { background: var(--sip-hazirlik-bg); color: var(--sip-hazirlik-fg); border-color: transparent; }
+.sip-mail-chip--hata { background: var(--sip-iptal-bg); color: var(--sip-iptal-fg); border-color: transparent; }
+.sip-mail-ok { color: var(--sip-mail-fg); }
+/* "Daha önce alınmış" satırları varsayılan GİZLİ (düğme açar) */
+.sip-mail-sonuc-kart tr.sip-mail-onceden, .sip-mail-sonuc-kart .sip-mini-kart.sip-mail-onceden { display: none; }
+.sip-mail-sonuc-kart.sip-mail-onceden-acik tr.sip-mail-onceden { display: table-row; }
+.sip-mail-sonuc-kart.sip-mail-onceden-acik .sip-mini-kart.sip-mail-onceden { display: flex; }
+.sip-mail-tablo td { vertical-align: top; }
+.sip-mail-tablo td .sip-kes { max-width: 170px; }
+.sip-mail-tablo th:nth-child(1), .sip-mail-tablo td:nth-child(1) { width: 112px; }
+.sip-mail-tablo th:nth-child(5), .sip-mail-tablo td:nth-child(5) { min-width: 260px; }
+.sip-mail-tablo th.num, .sip-mail-tablo td.num { width: 64px; text-align: center; }
+.sip-mail-kartlar .sip-mini-kart { overflow-wrap: anywhere; }
+.sip-mail-rozet { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--sip-mail-bg); color: var(--sip-mail-fg); font-size: .78rem; font-weight: 600; white-space: nowrap; }
+/* ayar kartı (siparis_ayarlar.php #mail) */
+.sip-mail-ayar fieldset { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; }
+.sip-mail-ayar legend { padding: 0 6px; font-weight: 600; font-size: .9rem; }
+.sip-mail-ayar .sip-onay-satir { margin-bottom: 6px; overflow-wrap: anywhere; }
+.sip-mail-gonderenler { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 14px; }
+.sip-mail-gonderenler textarea { min-height: 84px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (max-width: 767px) {
+    /* mobil: üç düğme 3 eşit sütun; metin sığmazsa sarar (yatay taşma yok) */
+    .sip-mail-dugmeler { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .sip-mail-btn { white-space: normal; line-height: 1.25; padding: 8px 4px; font-size: .82rem; text-align: center; min-height: 56px; }
+    .sip-mail-ilerleme-dugme { width: 100%; }
+    .sip-mail-ilerleme-dugme .btn { flex: 1 1 auto; }
+    .sip-mail-sonuc-kart { padding: 10px; }
+}
+@media (max-width: 389px) {
+    .sip-mail-dugmeler { grid-template-columns: 1fr; }
+    .sip-mail-btn { min-height: 48px; font-size: .9rem; }
+}
+/* ==== /MAİLDEN AL v378 ==== */

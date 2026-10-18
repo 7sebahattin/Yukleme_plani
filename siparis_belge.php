@@ -133,7 +133,7 @@ render_flash();
         <div class="sip-dl-satir"><dt>Tür</dt><dd><?= sipui_tur_rozeti((string)$b['tur']) ?></dd></div>
         <div class="sip-dl-satir"><dt>Dosya adı</dt><dd class="sip-kes"><?= h((string)$b['orijinal_ad']) ?></dd></div>
         <div class="sip-dl-satir"><dt>Boyut</dt><dd><?= h(sipui_boyut((int)$b['boyut'])) ?></dd></div>
-        <div class="sip-dl-satir"><dt>Yüklenme</dt><dd><?= h(sipui_zaman((string)$b['created_at'])) ?><?= $yukleyen !== '' ? ' · ' . h($yukleyen) : '' ?><?= $b['kaynak'] === 'uretim' ? ' · sistemde üretildi' : '' ?></dd></div>
+        <div class="sip-dl-satir"><dt>Yüklenme</dt><dd><?= h(sipui_zaman((string)$b['created_at'])) ?><?= $yukleyen !== '' ? ' · ' . h($yukleyen) : '' ?><?= $b['kaynak'] === 'uretim' ? ' · sistemde üretildi' : '' ?><?= $b['kaynak'] === 'mail' ? ' · <span class="sip-mail-rozet">📧 mailden alındı</span>' : '' ?></dd></div>
         <div class="sip-dl-satir"><dt>Belge tarihi</dt><dd><?= h(sipui_zaman((string)$b['belge_tarihi'])) ?></dd></div>
         <?php if ($b['cw_hafta'] !== null): ?><div class="sip-dl-satir"><dt>Hafta</dt><dd>CW<?= (int)$b['cw_hafta'] ?>/<?= (int)$b['cw_yil'] ?></dd></div><?php endif; ?>
         <div class="sip-dl-satir"><dt>Ayrıştırıcı</dt><dd><?= h((string)($b['parser_surum'] ?? '—')) ?><?= siparis_belge_surum_eski($b) ? ' <span class="sip-soluk">(eski — ↻ Yeniden işle)</span>' : '' ?></dd></div>

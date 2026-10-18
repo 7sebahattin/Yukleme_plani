@@ -251,33 +251,40 @@ function sipui_uyari_kodu_etiketi(string $kod): ?string
     return null;
 }
 
+/**
+ * Yükleme sonucu hücre metni (HTML; kullanıcı verisi h() ile kaçırılır). siparis_yukle.php oturum satırı ve
+ * mailden alma (sipui_mail_sonuc_html) AYNI metni kullanır — v378'de closure'dan çıkarıldı, davranış aynı.
+ */
+function sipui_sonuc_metni(array $r): string
+{
+    if (($r['durum'] ?? '') === 'hata') return '<span class="sip-hata-metin">Hata: ' . h((string)($r['hata'] ?? 'işlenemedi')) . '</span>';
+    if (($r['durum'] ?? '') === 'zaten') {
+        $l = [];
+        foreach ((array)($r['sevkiyatlar'] ?? []) as $s) $l[] = '<a href="siparis_view.php?id=' . (int)$s['id'] . '">' . h((string)$s['order_ref']) . '</a>';
+        return 'Zaten yüklü' . ($l ? ' · ' . implode(', ', $l) : '');
+    }
+    $parca = [];
+    foreach ((array)($r['sevkiyatlar'] ?? []) as $s) {
+        $a = '<a href="siparis_view.php?id=' . (int)$s['id'] . '">' . h((string)$s['order_ref']) . '</a>';
+        if (!empty($s['yeni'])) $parca[] = 'Yeni sevkiyat ' . $a . (in_array($r['tur'] ?? '', ['ll', 'pc'], true) ? ' <span class="sip-soluk">(taslak: PO bekleniyor)</span>' : '');
+        else $parca[] = 'Eşleşti ' . $a;
+    }
+    $o = $parca ? implode('<br>', $parca) : 'İşlendi — sevkiyata bağlanmadı';
+    if (!empty($r['yeniden'])) {   // v375: aynı dosya eski okuyucuyla okunmuştu
+        $o = '<div class="sip-soluk">Zaten yüklüydü — yeni okuyucuyla (' . h((string)($r['eski_surum'] ?? '?')) . ' → ' . h(SIPARIS_PDF_SURUM) . ') yeniden okundu, sevkiyat değerleri güncellendi.</div>' . $o;
+    }
+    foreach ((array)($r['mesajlar'] ?? []) as $m) {
+        $kirmizi = str_contains((string)$m, 'içeriyor; o sevkiyata bağlandı');
+        $o .= '<div class="' . ($kirmizi ? 'sip-hata-metin' : 'sip-soluk') . ' sip-sonuc-mesaj">' . h((string)$m) . '</div>';
+    }
+    return $o;
+}
+
 /** Yükleme sonuç özeti — satır başına [dosya, tür, sonuç, çatışma, uyarı] (siparis_yukle.php oturuma yazar). */
 function sipui_yukleme_sonuc_html(array $sonuclar): string
 {
     if (!$sonuclar) return '';
-    $sonucMetni = function (array $r): string {
-        if (($r['durum'] ?? '') === 'hata') return '<span class="sip-hata-metin">Hata: ' . h((string)($r['hata'] ?? 'işlenemedi')) . '</span>';
-        if (($r['durum'] ?? '') === 'zaten') {
-            $l = [];
-            foreach ((array)($r['sevkiyatlar'] ?? []) as $s) $l[] = '<a href="siparis_view.php?id=' . (int)$s['id'] . '">' . h((string)$s['order_ref']) . '</a>';
-            return 'Zaten yüklü' . ($l ? ' · ' . implode(', ', $l) : '');
-        }
-        $parca = [];
-        foreach ((array)($r['sevkiyatlar'] ?? []) as $s) {
-            $a = '<a href="siparis_view.php?id=' . (int)$s['id'] . '">' . h((string)$s['order_ref']) . '</a>';
-            if (!empty($s['yeni'])) $parca[] = 'Yeni sevkiyat ' . $a . (in_array($r['tur'] ?? '', ['ll', 'pc'], true) ? ' <span class="sip-soluk">(taslak: PO bekleniyor)</span>' : '');
-            else $parca[] = 'Eşleşti ' . $a;
-        }
-        $o = $parca ? implode('<br>', $parca) : 'İşlendi — sevkiyata bağlanmadı';
-        if (!empty($r['yeniden'])) {   // v375: aynı dosya eski okuyucuyla okunmuştu
-            $o = '<div class="sip-soluk">Zaten yüklüydü — yeni okuyucuyla (' . h((string)($r['eski_surum'] ?? '?')) . ' → ' . h(SIPARIS_PDF_SURUM) . ') yeniden okundu, sevkiyat değerleri güncellendi.</div>' . $o;
-        }
-        foreach ((array)($r['mesajlar'] ?? []) as $m) {
-            $kirmizi = str_contains((string)$m, 'içeriyor; o sevkiyata bağlandı');
-            $o .= '<div class="' . ($kirmizi ? 'sip-hata-metin' : 'sip-soluk') . ' sip-sonuc-mesaj">' . h((string)$m) . '</div>';
-        }
-        return $o;
-    };
+    $sonucMetni = 'sipui_sonuc_metni';
     $o = '<section class="card sip-sonuc" id="sonuc" aria-label="Yükleme sonucu"><div class="card-head"><h2>Yükleme sonucu</h2></div>';
     $o .= '<div class="table-wrap pc-only"><table class="data-table sip-table"><thead><tr><th>Dosya</th><th>Tür</th><th>Sonuç</th><th class="num">Çatışma</th><th class="num">Uyarı</th></tr></thead><tbody>';
     foreach ($sonuclar as $r) {
@@ -355,4 +362,173 @@ function sipui_onizle_modal_html(): string
         . '<div class="pm-body sip-onizle-govde" data-sip-onizle-govde></div>'
         . '<div class="pm-footer"><a class="btn" href="#" data-sip-onizle-sayfa>Belge sayfasını aç</a><a class="btn btn-primary" href="#" data-sip-onizle-indir>İndir</a></div>'
         . '</div></div>';
+}
+
+// ── MAİLDEN AL (v378): düğmeler + sonuç — veri config/siparis_mail.php'den gelir; burada yalnız biçimleme ──
+
+/** Sonuç durumu → Türkçe kısa ad (sayaç/rozet). */
+function sipui_mail_durum_adi(string $durum): string
+{
+    return ['alindi' => 'Alındı', 'zaten' => 'Zaten vardı', 'onceden' => 'Daha önce alınmış', 'baska_tur' => 'Başka tür', 'taninmadi' => 'Tanınmadı',
+            'gecersiz' => 'Geçersiz', 'silinmis' => 'Silinmiş', 'cok_buyuk' => 'Çok büyük', 'iletilmis' => 'İletilmiş', 'ek_eksik' => 'Ek eksik', 'hata' => 'Hata'][$durum] ?? $durum;
+}
+
+/**
+ * Mail sonuç satırının "Sonuç" hücresi (HTML). $belgeGorunur: belge_id → bu kullanıcıya görünür mü (görünmeyene bağlantı verilmez).
+ * Alındı / Zaten metni elle yüklemeyle AYNI (sipui_sonuc_metni).
+ */
+function sipui_mail_durum_html(array $s, array $belgeGorunur = []): string
+{
+    $durum = (string)($s['durum'] ?? '');
+    $belge = (int)($s['belge_id'] ?? 0);
+    $belgeBag = $belge > 0 && !empty($belgeGorunur[$belge]) ? '<a href="siparis_belge.php?id=' . $belge . '">Belge #' . $belge . '</a>' : ($belge > 0 ? 'Belge #' . $belge : '');
+    $kopya = (int)($s['kopya'] ?? 1) > 1 ? '<div class="sip-soluk">(' . (int)$s['kopya'] . ' posta kutusunda; bir kez alındı)</div>' : '';
+    switch ($durum) {
+        case 'alindi':
+            return '<strong class="sip-mail-ok">Alındı</strong><div>' . sipui_sonuc_metni(['durum' => 'islendi'] + $s) . '</div>' . $kopya;
+        case 'zaten':
+            $l = [];
+            foreach ((array)($s['sevkiyatlar'] ?? []) as $sv) $l[] = '<a href="siparis_view.php?id=' . (int)$sv['id'] . '">' . h((string)$sv['order_ref']) . '</a>';
+            return 'Zaten vardı (daha önce yüklenmiş)' . ($l ? ' · ' . implode(', ', $l) : '') . $kopya;
+        case 'onceden':
+            return 'Daha önce mailden alındı' . ($belgeBag !== '' ? ' · ' . $belgeBag : '') . $kopya;
+        case 'baska_tur':
+            $t = (string)($s['tur'] ?? '');
+            $bu = siparis_mail_belge_turu($t);
+            return 'Başka tür: ' . h(siparis_belge_tur_etiketleri()[$t] ?? $t) . ($bu !== null ? ' — «' . h(siparis_mail_turleri()[$bu]['etiket']) . ' sorgula» ile alınır.' : '.');
+        case 'taninmadi':
+            return 'Belge türü tanınmadı — alınmadı. Gerekirse elle yükleyin.';
+        case 'gecersiz':
+            $n = trim((string)($s['hata'] ?? ''));
+            return 'Geçerli bir PDF değil / PDF okunamadı (bozuk ya da şifreli) — alınmadı.' . ($n !== '' ? '<div class="sip-soluk">' . h($n) . '</div>' : '');
+        case 'silinmis':
+            return 'Bu belge daha önce silinmiş — mailden geri getirilmedi. Gerekirse elle yükleyin.';
+        case 'cok_buyuk':
+            return 'Ek çok büyük (en çok ' . (int)(SIPARIS_MAX_DOSYA / 1048576) . ' MB) — posta kutusundan indirip elle yükleyin.';
+        case 'iletilmis':
+            return 'Ek olarak iletilmiş mail — bu sürümde açılmıyor; PDF\'i elle yükleyin.';
+        case 'ek_eksik':
+            return 'Mail tam okunamadı (çok büyük ya da bozuk); ek listesi eksik — posta kutusundan indirip elle yükleyin.';
+        default:
+            return '<span class="sip-hata-metin">Hata: ' . h((string)($s['hata'] ?? 'işlenemedi')) . '</span><div class="sip-soluk">Sonraki sorguda yeniden denenir.</div>';
+    }
+}
+
+/**
+ * Mail sorgusu sonuç kartı (SUNUCUDA, tek render: ilk açılış ve JS 'bitti' yanıtı aynı HTML'i kullanır).
+ * Gönderen / konu / mail tarihi mail_messages'tan YALNIZ $hesapIds (izleyenin görünür hesapları) içindeki mailler için okunur;
+ * görünmüyorsa "—". Kullanıcı verisinin tamamı h() ile kaçırılır.
+ * @param array $son siparis_mail_son() / siparis_mail_bitir() kaydı  @param list<int> $hesapIds
+ */
+function sipui_mail_sonuc_html(PDO $pdo, array $son, array $hesapIds): string
+{
+    $turler = siparis_mail_turleri();
+    $tur = (string)($son['tur'] ?? '');
+    $etiket = $turler[$tur]['etiket'] ?? $tur;
+    $satirlar = array_values(array_filter((array)($son['satirlar'] ?? []), 'is_array'));
+    $mailIds = array_values(array_unique(array_map(static fn(array $s): int => (int)$s['m'], $satirlar)));
+    $mailler = [];
+    $hesapIds = array_values(array_map('intval', $hesapIds));
+    if ($mailIds && $hesapIds) {
+        foreach (array_chunk($mailIds, 300) as $parca) {
+            $st = $pdo->prepare('SELECT id, account_id, from_name, from_addr, subject, received_at FROM mail_messages WHERE id IN (' . implode(',', array_fill(0, count($parca), '?')) . ') AND account_id IN (' . implode(',', array_fill(0, count($hesapIds), '?')) . ')');
+            $st->execute(array_merge($parca, $hesapIds));
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $m) $mailler[(int)$m['id']] = mail_gorunum_charset_duzelt($m, ['subject', 'from_name']);
+        }
+    }
+    $belgeGorunur = [];
+    foreach ($satirlar as $s) {
+        $b = (int)($s['belge_id'] ?? 0);
+        if ($b <= 0 || isset($belgeGorunur[$b])) continue;
+        $q = $pdo->prepare('SELECT id, depo, deleted_at FROM siparis_belgeler WHERE id = ?');
+        $q->execute([$b]);
+        $bs = $q->fetch(PDO::FETCH_ASSOC);
+        $belgeGorunur[$b] = $bs && $bs['deleted_at'] === null && siparis_belge_gorunur($pdo, $bs);
+    }
+    $sy = (array)($son['sayac'] ?? []);
+    $bitis = (int)($son['bitis'] ?? 0);
+    $baslik = 'Mail sorgusu — ' . $etiket . ' · son ' . SIPARIS_MAIL_GUN . ' gün' . ($bitis > 0 ? ' · ' . date('d.m.Y H:i', $bitis) : '') . ' · ' . siparis_mail_kullanici_adi($pdo, (int)($son['uid'] ?? 0));
+    $chip = static fn(string $et, int $say, string $sinif = ''): string => '<span class="sip-mail-chip' . ($sinif !== '' ? ' sip-mail-chip--' . $sinif : '') . '"><span class="sip-mail-chip-et">' . h($et) . '</span> <b>' . $say . '</b></span>';
+    $o = '<section class="card sip-mail-sonuc-kart" data-sip-mail-sonuc-kart aria-label="Mail sorgusu sonucu"><div class="card-head"><h2>' . h($baslik) . '</h2></div>';
+    $o .= '<div class="sip-mail-ozet">' . $chip('Bulunan mail', (int)($sy['mail'] ?? 0)) . $chip('PDF', (int)($sy['pdf'] ?? 0)) . $chip('Alındı', (int)($sy['alindi'] ?? 0), 'ok')
+        . $chip('Zaten vardı', (int)($sy['zaten'] ?? 0)) . $chip('Daha önce alınmış', (int)($sy['onceden'] ?? 0)) . $chip('Atlandı', (int)($sy['atlandi'] ?? 0), ((int)($sy['atlandi'] ?? 0)) > 0 ? 'uyari' : '')
+        . $chip('Hata', (int)($sy['hata'] ?? 0), ((int)($sy['hata'] ?? 0)) > 0 ? 'hata' : '') . '</div>';
+    if ((int)($son['pdfsiz'] ?? 0) > 0) $o .= '<p class="sip-soluk">PDF eki olmayan ' . (int)$son['pdfsiz'] . ' mail</p>';
+    foreach ((array)($son['uyarilar'] ?? []) as $u) $o .= '<p class="sip-bilgi" role="note">' . h((string)$u) . '</p>';
+    if (!$satirlar) return $o . '<p class="muted">Bu pencerede işlenecek ek bulunamadı.</p></section>';
+
+    $onceden = count(array_filter($satirlar, static fn(array $s): bool => ($s['durum'] ?? '') === 'onceden'));
+    if ($onceden > 0) {
+        $o .= '<p><button type="button" class="btn btn-sm" data-sip-mail-onceden aria-pressed="false">Daha önce alınmış ' . $onceden . ' satırı göster</button></p>';
+    }
+    $mailBilgi = static function (int $mid) use ($mailler): array {
+        $m = $mailler[$mid] ?? null;
+        if ($m === null) return ['ad' => '—', 'konu' => '', 'tarih' => '—', 'kisa' => '—', 'link' => false];
+        $t = strtotime((string)$m['received_at']);
+        return ['ad' => mail_gonderen_adi($m), 'konu' => trim((string)($m['subject'] ?? '')), 'tarih' => $t !== false ? date('d.m.Y H:i', $t) : '—', 'kisa' => $t !== false ? date('d.m H:i', $t) : '—', 'link' => true];
+    };
+    $sat = static fn(array $s): string => ((string)($s['durum'] ?? '') === 'onceden' ? ' sip-mail-onceden' : '');
+    $o .= '<div class="table-wrap pc-only sip-mail-tablo-kap"><table class="data-table sip-table sip-mail-tablo"><thead><tr><th>Mail tarihi</th><th>Gönderen</th><th>Dosya</th><th>Tür</th><th>Sonuç</th><th class="num">Çatışma</th><th class="num">Uyarı</th></tr></thead><tbody>';
+    foreach ($satirlar as $s) {
+        $mi = $mailBilgi((int)$s['m']);
+        $konu = $mi['konu'] !== '' ? '<div class="sip-soluk sip-kes" title="' . h($mi['konu']) . '">' . h(siparis_kirp($mi['konu'], 80)) . '</div>' : '';
+        $o .= '<tr class="sip-ms-satir' . $sat($s) . '" data-durum="' . h((string)$s['durum']) . '"><td class="nowrap">' . h($mi['tarih']) . '</td><td><span class="sip-kes">' . h($mi['ad']) . '</span>' . $konu . '</td>'
+            . '<td><span class="sip-kes" title="' . h((string)$s['dosya']) . '">' . h((string)$s['dosya']) . '</span>'
+            . ($mi['link'] ? '<div class="sip-soluk"><a href="mail.php?m=' . (int)$s['m'] . '">Maili aç</a></div>' : '') . '</td>'
+            . '<td>' . (empty($s['tur']) ? '—' : sipui_tur_rozeti((string)$s['tur'])) . '</td><td>' . sipui_mail_durum_html($s, $belgeGorunur) . '</td>'
+            . '<td class="num">' . (int)($s['catisma'] ?? 0) . '</td><td class="num">' . (int)($s['uyari'] ?? 0) . '</td></tr>';
+    }
+    $o .= '</tbody></table></div><div class="card-list mobile-only sip-mail-kartlar">';
+    foreach ($satirlar as $s) {
+        $mi = $mailBilgi((int)$s['m']);
+        $o .= '<div class="sip-mini-kart sip-ms-satir' . $sat($s) . '" data-durum="' . h((string)$s['durum']) . '"><div class="sip-mini-ust"><strong class="sip-kes" title="' . h((string)$s['dosya']) . '">' . h((string)$s['dosya']) . '</strong>'
+            . (empty($s['tur']) ? '' : sipui_tur_rozeti((string)$s['tur'])) . '</div><div class="sip-soluk">' . h($mi['kisa']) . ' · ' . h($mi['ad']) . '</div><div>' . sipui_mail_durum_html($s, $belgeGorunur) . '</div>';
+        if ((int)($s['catisma'] ?? 0) > 0 || (int)($s['uyari'] ?? 0) > 0) $o .= '<div class="sip-soluk">Çatışma: ' . (int)($s['catisma'] ?? 0) . ' · Uyarı: ' . (int)($s['uyari'] ?? 0) . '</div>';
+        $o .= ($mi['link'] ? '<div class="sip-soluk"><a href="mail.php?m=' . (int)$s['m'] . '">Maili aç</a></div>' : '') . '</div>';
+    }
+    return $o . '</div></section>';
+}
+
+/**
+ * "📧 Mailden al" bölümü (siparisler.php #yukle kartının üstü). $d:
+ *  hazir (bool: kurulu), ayarli (tur → bool), ayar_link (bool: ayar sayfasına bağlantı verilebilir), mail_admin (bool),
+ *  yarim (?array siparis_mail_yarim), son (list<array{tur,bitis,html}> yeniden eskiye).
+ * Mail şeması kurulu değilse düğmeler HİÇ çizilmez; yalnız mail yöneticisine kısa not.
+ */
+function sipui_mail_blok_html(array $d): string
+{
+    if (empty($d['hazir'])) {
+        return !empty($d['mail_admin']) ? '<p class="sip-soluk sip-mail-kurulmadi">📧 Mailden al: Mail Merkezi / hks_kv kurulu değil (yönetici).</p>' : '';
+    }
+    $turler = siparis_mail_turleri();
+    $herhangiAyarsiz = false;
+    $dugmeler = '';
+    foreach ($turler as $t => $m) {
+        $ayarli = !empty($d['ayarli'][$t]);
+        if (!$ayarli) $herhangiAyarsiz = true;
+        $dugmeler .= '<button type="button" class="btn sip-mail-btn sip-mail-btn--' . h($t) . '" data-sip-mail="' . h($t) . '"' . ($ayarli ? '' : ' disabled title="Bu sorgu için gönderen adresi ayarlanmadı"') . '>' . h($m['dugme']) . '</button>';
+    }
+    $o = '<div class="sip-mail" id="mail" data-sip-mail-kap data-sip-mail-url="siparis_mail.php" data-sip-mail-csrf="' . h(csrf_token()) . '">';
+    $o .= '<div class="sip-mail-baslik"><h2>📧 Mailden al</h2><p class="sip-soluk">Son ' . SIPARIS_MAIL_GUN . ' günün mailleri taranır; belge türü içerikten anlaşılır.</p></div>';
+    $o .= '<div class="sip-mail-dugmeler" role="group" aria-label="Mailden belge al">' . $dugmeler . '</div>';
+    if ($herhangiAyarsiz) {
+        $o .= !empty($d['ayar_link'])
+            ? '<p class="sip-soluk sip-mail-not">Ayarlanmamış sorgular için <a href="siparis_ayarlar.php#mail">Ayarlar › 📧 Mail sorgu ayarları</a>.</p>'
+            : '<p class="sip-soluk sip-mail-not">Mail sorgusu henüz ayarlanmadı (yönetici).</p>';
+    }
+    if (!empty($d['yarim']) && is_array($d['yarim'])) {
+        $y = $d['yarim'];
+        $o .= '<div class="sip-bilgi sip-mail-yarim" data-sip-mail-devam="' . h((string)$y['tarama_id']) . '" data-sip-mail-tur="' . h((string)$y['tur']) . '" role="note">Yarım kalan mail sorgusu ('
+            . h($turler[$y['tur']]['etiket'] ?? (string)$y['tur']) . ', ' . (int)$y['i'] . '/' . (int)$y['toplam'] . ') — '
+            . '<button type="button" class="btn btn-sm" data-sip-mail-devam-et>Devam et</button> <button type="button" class="btn btn-sm btn-ghost" data-sip-mail-vazgec>Vazgeç</button></div>';
+    }
+    $o .= '<div class="sip-mail-ilerleme" data-sip-mail-ilerleme hidden aria-live="polite"><progress max="1" value="0" aria-label="Mail sorgusu ilerlemesi"></progress><span data-sip-mail-ilerleme-metin></span>'
+        . '<span class="sip-mail-ilerleme-dugme"><button type="button" class="btn btn-sm" data-sip-mail-devam-et hidden>Devam et</button> <button type="button" class="btn btn-sm btn-ghost" data-sip-mail-vazgec hidden>Vazgeç</button></span></div>';
+    $o .= '<p class="sip-hata-metin" data-sip-mail-hata hidden role="alert"></p>';
+    $o .= '<div class="sip-mail-sonuc" data-sip-mail-sonuc aria-live="polite">';
+    foreach ((array)($d['son'] ?? []) as $i => $s) {
+        if ($i === 0) $o .= (string)$s['html'];
+        else $o .= '<details class="sip-mail-onceki"><summary>Önceki sorgu: ' . h($turler[$s['tur']]['etiket'] ?? (string)$s['tur']) . ($s['bitis'] > 0 ? ' · ' . h(date('d.m H:i', (int)$s['bitis'])) : '') . '</summary>' . (string)$s['html'] . '</details>';
+    }
+    return $o . '</div></div>';
 }
