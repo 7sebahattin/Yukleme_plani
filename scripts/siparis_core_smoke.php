@@ -710,4 +710,42 @@ ok('bayat_sil: yalnız aynı belge+kaynak, açık ve farklı değerli satır sil
 siparis_catisma_bayat_sil($db, $bid94, null, 'kdv_no', 'll', 0, 'X');
 ok('bayat_sil: belge id 0 → hiçbir şey silmez', siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND alan = 'kdv_no'", [$bid94]) === 3);
 
+echo "\n=== 17. Şoför adı + telefonu (v377: yalnız-elle alanlar, ekleyici migrasyon) ===\n";
+$sofS = siparis_test_sev($db, 'TC900001.10');
+ok('şoför: kolonlar yokken hazır=false (sayfalar çalışır, alanlar gizli)', siparis_sofor_hazir($db) === false);
+ok('şoför: alan tanımı yalnız-elle (otorite yok), telefon tipi', siparis_alan_tanimlari()['sevkiyat']['sofor_adi']['otorite'] === [] && siparis_alan_tanimlari()['sevkiyat']['sofor_telefon']['tip'] === 'telefon'
+    && siparis_alan_tanimlari()['sevkiyat']['sofor_adi']['elle'] === true);
+$m1 = siparis_sofor_migrate($db);
+ok('şoför migrasyonu: iki kolon eklendi (yalnız ADD COLUMN), hazır=true', count($m1) === 2 && array_column($m1, 'durum') === ['eklendi', 'eklendi'] && siparis_sofor_hazir($db) === true, json_encode($m1));
+$m2 = siparis_sofor_migrate($db);
+ok('şoför migrasyonu idempotent (ikinci çalıştırma "var")', array_column($m2, 'durum') === ['var', 'var']);
+ok('şoför kolonları kaynak DDL\'e ve siparis_migrate\'e KARIŞMAZ ("ALTER yok" değişmezi)', !str_contains(implode("\n", siparis_tablolar()), 'sofor_') && stripos(implode("\n", siparis_tablolar()), 'ALTER') === false);
+$r = siparis_alan_elle($db, 'sevkiyat', (int)$sofS['id'], 'sofor_adi', '  Test   Sürücü ', 1);
+$t = siparis_alan_elle($db, 'sevkiyat', (int)$sofS['id'], 'sofor_telefon', '+90 (532) 000-00-00 dahili', 1);
+$s2 = siparis_sevkiyat($db, (int)$sofS['id']);
+ok('şoför adı + telefon elle kaydedildi (boşluk teklenir, telefondan harf atılır), elle kilitli', $r['ok'] && $t['ok'] && $s2['sofor_adi'] === 'Test Sürücü' && $s2['sofor_telefon'] === '+90 (532) 000-00-00'
+    && isset($s2['_elle']['sofor_adi']) && isset($s2['_elle']['sofor_telefon']), json_encode([$r, $t, $s2['sofor_telefon']]));
+foreach (['abc', '12345', '1234567890123456', '+++'] as $bad) {
+    $x = siparis_alan_elle($db, 'sevkiyat', (int)$sofS['id'], 'sofor_telefon', $bad, 1);
+    if ($x['ok'] || ($x['hata'] ?? '') !== 'Telefon 7–15 haneli olmalı.') { ok('şoför: geçersiz telefon reddedilir (' . $bad . ')', false, json_encode($x)); }
+}
+ok('şoför: geçersiz telefonlar (harf / <7 / >15 hane) reddedildi, eski değer korunur', siparis_sevkiyat($db, (int)$sofS['id'])['sofor_telefon'] === '+90 (532) 000-00-00');
+$x = siparis_alan_elle($db, 'sevkiyat', (int)$sofS['id'], 'sofor_adi', str_repeat('A', 101), 1);
+ok('şoför adı ≤ 100 karakter', !$x['ok'] && str_contains((string)$x['hata'], 'çok uzun'));
+// belge yeniden okununca şoför bilgisi ASLA silinmez / değişmez (belge kaynağı yok; boş gelen veri silmez)
+$GLOBALS['_siparis_parse_override'] = fn(string $yol): array => siparis_test_fixture('ll_plakali');
+try { siparis_belge_isle($db, $llBelge, 1, null); } finally { unset($GLOBALS['_siparis_parse_override']); }
+$s3 = siparis_sevkiyat($db, (int)$sofS['id']);
+ok('şoför: LL yeniden işlenince değişmez, çatışma açılmaz', $s3['sofor_adi'] === 'Test Sürücü' && $s3['sofor_telefon'] === '+90 (532) 000-00-00');
+$cat = siparis_test_say($db, 'siparis_catismalar', "sevkiyat_id = ? AND alan IN ('sofor_adi','sofor_telefon') AND durum = 'acik'", [(int)$sofS['id']]);
+ok('şoför: belge kaynaklı çatışma yok', $cat === 0);
+// belgeden ileride şoför bilgisi gelirse (otorite yok → 'saklandi'): elle değer korunur, kaynak kaydı tutulur
+$ar = siparis_alan_uygula($db, 'sevkiyat', (int)$sofS['id'], 'sofor_adi', 'BELGEDEN GELEN', 'll', $llBelge, '2099-01-01');
+$s4 = siparis_sevkiyat($db, (int)$sofS['id']);
+ok('şoför: belgeden gelen değer elle değeri ezmez, kaynaklar altında saklanır', $ar === 'saklandi' && $s4['sofor_adi'] === 'Test Sürücü' && ($s4['_kaynak']['sofor_adi']['ll']['v'] ?? null) === 'BELGEDEN GELEN', $ar);
+$x = siparis_alan_elle($db, 'sevkiyat', (int)$sofS['id'], 'sofor_telefon', '', 1);
+ok('şoför: boş değer girilerek temizlenebilir', $x['ok'] && siparis_sevkiyat($db, (int)$sofS['id'])['sofor_telefon'] === null);
+$tumA = implode("\n", array_map(fn($a) => $a['old_values'] . ' ' . $a['new_values'], siparis_test_audit($db)));
+ok('şoför: audit kaydına ad / telefon yazılmaz (yalnız alan adı)', !str_contains($tumA, 'Test Sürücü') && !str_contains($tumA, '532'));
+
 siparis_test_bitir();

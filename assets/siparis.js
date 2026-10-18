@@ -76,6 +76,7 @@
             g.hidden = !bu; g.disabled = !bu;
             if (bu) g.value = v.deger || '';
             if (g.getAttribute('data-sip-girdi') === 'metin') g.setAttribute('autocapitalize', v.tip === 'plaka' ? 'characters' : 'none');
+            if (g.getAttribute('data-sip-girdi') === 'metin') g.setAttribute('inputmode', v.tip === 'telefon' ? 'tel' : 'text');
         });
         var ip = q('[data-sip-yazi="ipucu"]', modal); if (ip) { ip.textContent = v.ipucu || ''; ip.hidden = !v.ipucu; }
         var kn = q('[data-sip-kilit-not]', modal), kb = q('[data-sip-kilit-btn]', modal);
