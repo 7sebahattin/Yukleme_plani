@@ -609,6 +609,16 @@ rol($ADMIN, true);
 $r = sayfa('siparisler.php');
 ok('liste temiz + dengeli (yeni sütun)', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . (string)html_dengeli($r['html']));
 ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="8"><div class="sip-urunler">'));
+// v376 — sütun başlıkları + bugüne göre renkli tarih
+ok('başlıklar: "Lojistik" ve "Palet/Kasa" (eski "Araç" / "Palet / Koli" yok)', str_contains($r['html'], '<th>Lojistik</th>') && str_contains($r['html'], '<th class="num">Palet/Kasa</th>')
+    && !str_contains($r['html'], '<th>Araç</th>') && !str_contains($r['html'], 'Palet / Koli') && str_contains($r['html'], ' kasa</span>') && !str_contains($r['html'], ' koli</span>'));
+$__gun = fn(int $n): string => date('Y-m-d', strtotime(($n >= 0 ? '+' : '') . $n . ' day'));
+ok('tarih: geçmiş → yeşil sınıf (sip-tar--gecmis)', str_contains(sipui_tarih_html($__gun(-1)), 'sip-tar--gecmis') && str_contains(sipui_tarih_html($__gun(-400)), 'sip-tar--gecmis'));
+ok('tarih: bugün → turuncu sınıf (sip-tar--bugun)', str_contains(sipui_tarih_html($__gun(0)), 'sip-tar--bugun') && str_contains(sipui_tarih_html(date('d.m.Y')), 'sip-tar--bugun'));
+ok('tarih: henüz gelmemiş → sip-tar--gelecek', str_contains(sipui_tarih_html($__gun(1)), 'sip-tar--gelecek') && str_contains(sipui_tarih_html($__gun(90)), 'sip-tar--gelecek'));
+ok('tarih: metin gg.aa.yyyy + durum title; boş / geçersiz düz "—"', str_contains(sipui_tarih_html('2026-12-03'), '>03.12.2026<') && str_contains(sipui_tarih_html($__gun(0)), 'title="Bugün"')
+    && sipui_tarih_html(null) === '—' && sipui_tarih_html('') === '—' && sipui_tarih_html('abc') === '—');
+ok('liste: yükleme tarihi renk sınıfı ile basılır (tablo + mobil kart)', substr_count($r['html'], 'class="sip-tar sip-tar--') >= 2);
 $t1 = $satir($r['html'], $ID['s1']); $t2 = $satir($r['html'], $ID['s31']); $t3 = $satir($r['html'], $ID['s11']); $t4 = $satir($r['html'], $ID['s12']);
 ok('navlun no plakanın altında (tablo)', str_contains($t1, 'Navlun 6100000001') && str_contains($t1, 'class="sip-navlun') && strpos($t1, '34TST777') < strpos($t1, 'Navlun 6100000001'), substr($t1, 0, 300));
 ok('navlun yoksa satır yok', !str_contains($t2, 'Navlun') && !str_contains($t4, 'Navlun'));

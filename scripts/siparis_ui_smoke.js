@@ -85,7 +85,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             ok(`[${w}] liste: mobil girdiler 16px`, fs16);
             ok(`[${w}] liste: filtre paneli kapalı → "Filtre" ile açılır`, !(await gorunur(page, '#sipFiltrePanel')) && (await (async () => { await page.click('[data-sip-filtre-toggle]'); await page.waitForTimeout(100); return gorunur(page, '#sipFiltrePanel'); })()));
             const kart = await page.evaluate(() => { const a = document.querySelector('.sip-card-link'); const r = document.querySelector('.sip-card').getBoundingClientRect(); const l = a.getBoundingClientRect(); return { kartH: r.height }; });
-            ok(`[${w}] liste: kart yüksekliği makul (ürün bölümü dahil ≤ 280px)`, kart.kartH <= 280, String(kart.kartH));
+            ok(`[${w}] liste: kart yüksekliği makul (ürün alt kartı dahil ≤ 300px; v376)`, kart.kartH <= 300, String(kart.kartH));
         }
         // v372: navlun no + ürün / Pal · PF + parti no (görünür, taşmadan)
         const v372 = await page.evaluate(() => {

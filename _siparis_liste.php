@@ -14,8 +14,8 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
   <table class="data-table sip-table">
     <thead>
       <tr>
-        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Araç</th>
-        <th class="num">Palet / Koli</th><th>Belgeler</th><th>Durum ve ilerleme</th><th class="actions-col"><span class="sip-sr">İşlemler</span></th>
+        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Lojistik</th>
+        <th class="num">Palet/Kasa</th><th>Belgeler</th><th>Durum ve ilerleme</th><th class="actions-col"><span class="sip-sr">İşlemler</span></th>
       </tr>
     </thead>
     <tbody>
@@ -39,7 +39,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
             <a class="sip-po" href="<?= h(siparis_url(['po' => (int)$r['po_belge_id'], 'durum' => null, 'acik_page' => null, 'kapali_page' => null])) ?>" title="Aynı PO'daki sevkiyatları göster"><?= h($__poEt) ?></a>
           <?php else: ?><span class="sip-po sip-po--yok" title="Bu sevkiyat için PO yüklenmedi">PO yok</span><?php endif; ?>
         </td>
-        <td class="nowrap"><?= h(sipui_tarih($r['yukleme_tarihi'])) ?></td>
+        <td class="nowrap"><?= sipui_tarih_html($r['yukleme_tarihi']) ?></td>
         <td>
           <?= sipui_arac($r) ?>
           <?= sipui_navlun_html($r) ?>
@@ -84,7 +84,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
         <?php
           $__parca = [];
           if ((string)$r['alici_adi'] !== '') $__parca[] = h((string)$r['alici_adi']);
-          if ($r['yukleme_tarihi']) $__parca[] = h(sipui_tarih($r['yukleme_tarihi']));
+          if ($r['yukleme_tarihi']) $__parca[] = sipui_tarih_html($r['yukleme_tarihi']);
           $__arac = sipui_arac($r);
           if ($__arac !== '—') $__parca[] = $__arac;
           echo $__parca ? implode(' · ', $__parca) : '<span class="sip-soluk">Alıcı / tarih / araç bilgisi bekleniyor</span>';
@@ -95,7 +95,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
       <?php $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []); if ($__ur !== ''): ?><div class="sip-card-urun"><?= $__ur ?></div><?php endif; ?>
       <div class="sip-card-alt">
         <?= sipui_dok_rozetleri($r) ?>
-        <span class="sip-card-miktar"><?= h(sipui_sayi($r['toplam_palet'])) ?> palet · <?= h(sipui_sayi($r['toplam_koli'])) ?> koli</span>
+        <span class="sip-card-miktar"><?= h(sipui_sayi($r['toplam_palet'])) ?> palet · <?= h(sipui_sayi($r['toplam_koli'])) ?> kasa</span>
         <?php if ($__uy > 0): ?><span class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>">⚠ <?= $__uy ?></span><?php endif; ?>
       </div>
       <?= sipui_ilerleme_html($r) ?>

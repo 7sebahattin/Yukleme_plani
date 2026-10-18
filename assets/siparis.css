@@ -472,3 +472,34 @@ td.sip-hucre-bos { background: var(--warn-soft); }
 /* v373: birden çok bağlı beyan → her parti no ayrı satırda */
 .sip-turparti-coklu { display: block; }
 .sip-turparti-coklu .sip-parti-satir { display: block; white-space: nowrap; }
+
+/* ==== LİSTE v376 ==== */
+/* Tarih: geçmiş → yeşil + kalın, bugün → turuncu + kalın, henüz gelmemiş → normal metin rengi (koyu temada açık tonlar) */
+.sip-tar { font-variant-numeric: tabular-nums; }
+.sip-tar--gecmis { color: #15803d; font-weight: 700; }
+.sip-tar--bugun { color: #c2410c; font-weight: 700; }
+.sip-tar--gelecek { color: var(--text); font-weight: 400; }
+html[data-theme="dark"] .sip-tar--gecmis { color: #4ade80; }
+html[data-theme="dark"] .sip-tar--bugun { color: #fb923c; }
+/* Tablo başlığı + sevkiyat grupları (satır + ürün alt kartı) net ayrılır */
+.sip-table thead th { background: var(--surface-2); color: var(--muted); font-size: .76rem; font-weight: 700; letter-spacing: .02em; border-bottom: 2px solid var(--border-strong); }
+.sip-table .sip-ref { font-size: 1rem; }
+.sip-table tbody > tr:not(.sip-ust) > td { border-bottom: 1px solid var(--border-strong); }
+.sip-table tbody > tr:last-child > td { border-bottom: 0; }
+/* Ürün bilgileri: ana satırın altında kendi alt kartı — başlıklı, vurgu şeritli, her ürün ayrı küçük kutu */
+.sip-urunler { padding: 8px 12px 10px; border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; background: var(--surface-2); gap: 8px 12px; }
+.sip-table tr.sip-urun-tr > td { padding: 0 14px 12px; }
+.sip-table tr.sip-urun-tr .sip-urunler { padding: 8px 12px 10px; border-left: 4px solid var(--primary); }
+.sip-urunler::before { content: "Ürün bilgileri"; grid-column: 1 / -1; font-size: .7rem; font-weight: 700; letter-spacing: .03em; color: var(--muted); }
+.sip-urun { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: .8rem; }
+.sip-urun-ad { font-weight: 600; }
+.sip-urun-meta { display: inline-block; margin-top: 4px; padding: 1px 9px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: .72rem; font-weight: 600; }
+html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
+.sip-urun-fazla { padding: 0 2px; }
+.sip-card-urun { padding: 0; border: 0; background: none; border-radius: 0; }
+@media (max-width: 767px) {   /* mobil kart: ürün alt kartı sıkı (başlık satırı yok, kenar boşlukları küçük) */
+    .sip-card-urun .sip-urunler { padding: 6px 8px; gap: 6px; }
+    .sip-card-urun .sip-urunler::before { display: none; }
+    .sip-card-urun .sip-urun { padding: 5px 8px; }
+}
+/* ==== /LİSTE v376 ==== */
