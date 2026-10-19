@@ -4,13 +4,15 @@
 //   php scripts/siparis_yazdir_smoke.php                  testler
 //   php scripts/siparis_yazdir_smoke.php --json           tarayıcı testi için küçük JSON fixture'ı (stdout)
 //   php scripts/siparis_yazdir_smoke.php --json-buyuk     300 satırlık JSON fixture'ı (stdout)
+//   php scripts/siparis_yazdir_smoke.php --json-wp        WP Paylaş kartı (v394) JSON fixture'ı (stdout)
 // Bellek içi SQLite + stub auth + SENTETİK veri (34TST…, TC9000…, @ornek.test; kişisel veri YOK). Canlı DB'ye HİÇ dokunmaz.
 // =========================================================
 require_once __DIR__ . '/_siparis_test_lib.php';
 require_once $ROOT . '/_siparis_ortak.php';
 require_once $ROOT . '/config/siparis_yazdir.php';
+require_once $ROOT . '/config/siparis_wp.php';
 
-$MOD = in_array('--json', $argv ?? [], true) ? 'json' : (in_array('--json-buyuk', $argv ?? [], true) ? 'buyuk' : 'test');
+$MOD = in_array('--json', $argv ?? [], true) ? 'json' : (in_array('--json-buyuk', $argv ?? [], true) ? 'buyuk' : (in_array('--json-wp', $argv ?? [], true) ? 'wp' : 'test'));
 $db = db();
 siparis_test_diger_tablolar($db);
 siparis_test_sema_kur($db);
@@ -96,6 +98,12 @@ if ($MOD !== 'test') {   // ── tarayıcı fixture'ı ──
     siparis_sofor_migrate($db);
     $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü Bir', sofor_telefon = '+90 532 000 00 01' WHERE id = {$ID['gecmis']}");
     $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü İki' WHERE id = {$ID['bugun']}");
+    if ($MOD === 'wp') {
+        siparis_yurtici_gumruk_migrate($db);
+        $db->exec("UPDATE siparis_sevkiyatlar SET yurtici_gumruk = 'Test Gümrük İdaresi' WHERE id = {$ID['gecmis']}");
+        echo json_encode(siparis_wp_veri(siparis_wp_oku($db, $ID['gecmis']), ['parti_yetki' => true]), JSON_UNESCAPED_UNICODE);
+        exit(0);
+    }
     if ($MOD === 'buyuk') {
         for ($i = 0; $i < 300; $i++) {
             $sid = sev($db, ['order_ref' => sprintf('TC9100%02d.10', $i % 100) . $i, 'yukleme_tarihi' => date('Y-m-d', strtotime('+' . ($i % 20 - 10) . ' day')), 'alici_kodu' => '1038529', 'alici_adi' => 'LIDL RS', 'navlun_no' => '61000' . (1000 + $i),
@@ -159,6 +167,15 @@ foreach ([[0, 0, 0], [0, null, 0], [0, null, 5], [3, null, 0], [null, 0, 0], [nu
 $ayni = true;
 foreach ($kal as $k1) $ayni = $ayni && ((sipui_kalem_satirlari([$k1], 10)['satirlar'] !== []) === (siparis_yazdir_gramaj([$k1]) !== ''));
 ok('gramaj süzgeci = sipui_kalem_satirlari süzgeci (10 kombinasyon)', $ayni);
+$ayni2 = true;
+foreach ($kal as $k1) $ayni2 = $ayni2 && ((sipui_kalem_satirlari([$k1], 10)['satirlar'] !== []) === (sipui_kalem_coz($k1) !== null));
+ok('sipui_kalem_coz = liste süzgeci (10 kombinasyon)', $ayni2);
+$kc = sipui_kalem_coz(['kalibre' => '14', 'aciklama' => 'Pomegranate 14 PC LOSE (TR)', 'cesit' => 'HICAZ', 'koli_icerik' => '3,5 KG', 'pf' => 160, 'po_palet' => 23, 'etkin_palet' => 23, 'etkin_koli' => 3680]);
+ok('sipui_kalem_coz: urun/kalibre/palet/koli/meta', $kc !== null && $kc['urun'] === 'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG' && $kc['kalibre'] === '14' && $kc['palet'] == 23 && $kc['koli'] == 3680 && $kc['meta'] === 'Pal. 23 · PF 160'
+    && $kc['ad'] === 'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG', json_encode($kc, JSON_UNESCAPED_UNICODE));
+$kc2 = sipui_kalem_coz(['kalibre' => '12', 'urun' => 'Nar', 'po_palet' => 1]);
+ok('sipui_kalem_coz: açıklama yoksa urun (kalibre ürüne EKLENMEZ, liste metninde eklenir)', $kc2 !== null && $kc2['urun'] === 'Nar' && $kc2['ad'] === 'Nar 12' && $kc2['kalibre'] === '12');
+ok('sipui_kalem_coz: tamamen boş kalem → null; etkin_palet boşsa po_palet', sipui_kalem_coz([]) === null && (sipui_kalem_coz(['aciklama' => 'X', 'etkin_palet' => '', 'po_palet' => 2])['palet'] ?? null) == 2);
 
 echo "\n=== 4. Okuma + veri (yetkili, şoför kolonları YOK) ===\n";
 rol($ADMIN, true);
@@ -218,6 +235,50 @@ $vp = siparis_yazdir_veri($op, array_merge($ctx, ['parti_yetki' => function_exis
 ok('beyan.read yok: parti sütunu BOŞ + not', $vp['satirlar'][0]['h'][1] === '' && in_array('Parti no için beyan okuma yetkisi gerekir.', $vp['notlar'], true));
 rol($ADMIN, true);
 
+echo "\n=== 6b. WP Paylaş — şoför / gümrük kolonları YOK (v394) ===\n";
+rol($ADMIN, true);
+$w = siparis_wp_oku($db, $ID['gecmis']);
+ok('siparis_wp_oku: dizi, sofor=false, gumruk=false (kolonsuz SQL hatası yok)', is_array($w) && $w['sofor'] === false && $w['gumruk'] === false);
+$v = siparis_wp_veri($w, ['parti_yetki' => true]);
+ok('9 alan: anahtarlar ve etiketler sahibin sırasında', array_column($v['alanlar'], 'k') === ['parti', 'tarih', 'siparis', 'navlun', 'nakliyeci', 'plaka', 'sofor', 'tel', 'gumruk']
+    && array_column($v['alanlar'], 'etiket') === ['Parti No', 'Yükleme tarihi', 'Sipariş No', 'Navlun No', 'Nakliyeci', 'Plakalar', 'Şoför adı', 'Şoför telefonu', 'Yurt içi gümrük']);
+$dv = array_column($v['alanlar'], 'deger', 'k');
+ok('değerler: parti, tarih (✓ YOK), sipariş, navlun, gerçek nakliyeci/plaka (planlı DEĞİL), şoför/tel/gümrük "—"', $dv === ['parti' => 'P-61/225 / P-61/226', 'tarih' => sipui_tarih($dun), 'siparis' => 'TC900101.10', 'navlun' => '6100000101', 'nakliyeci' => 'Test Lojistik A',
+    'plaka' => '34TST101-34TST201', 'sofor' => '—', 'tel' => '—', 'gumruk' => '—'], json_encode($dv, JSON_UNESCAPED_UNICODE));
+ok('kalem tablosu + toplam', $v['kalem_basliklar'] === ['Ürün', 'Kalibre', 'Palet/Koli'] && $v['kalemler'] === [['urun' => 'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG', 'kalibre' => '14', 'palet_koli' => '23 / 3.680']]
+    && $v['kalem_say'] === 1 && $v['toplam'] === ['etiket' => 'Toplam', 'palet_koli' => '23 / 3.680'], json_encode($v['kalemler'], JSON_UNESCAPED_UNICODE));
+ok('notlar: şoför + gümrük kurulmadı, parti notu YOK; dosya adı / id', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && in_array('Yurt içi gümrük alanı kurulmadı.', $v['notlar'], true) && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true)
+    && $v['dosya'] === 'WP-TC900101.10' && $v['id'] === $ID['gecmis'] && $v['ok'] === true);
+$vb = siparis_wp_veri(siparis_wp_oku($db, $ID['bugun']), ['parti_yetki' => true]);
+ok('bugun: kalemler sira sırasında (10, 12), sıfır palet+koli kalemi (14) ATLANDI, toplam sevkiyattan', $vb['kalemler'] === [['urun' => 'Testfruit 10 PC · TESTVAR · 3,5 KG', 'kalibre' => '10', 'palet_koli' => '4 / 550'], ['urun' => 'Testfruit 12 PC · TESTVAR · 3,5 KG', 'kalibre' => '12', 'palet_koli' => '3 / 450']]
+    && $vb['toplam']['palet_koli'] === '7 / 1.000', json_encode($vb['kalemler'], JSON_UNESCAPED_UNICODE));
+$esit = true;
+foreach (['yarin', 'bugun', 'gecmis', 'eski', 'bos_tarih', 'kapali'] as $ad) {
+    $wk = siparis_wp_oku($db, $ID[$ad]);
+    $kq = $db->prepare('SELECT * FROM siparis_kalemler WHERE sevkiyat_id = ? ORDER BY sira, id'); $kq->execute([$ID[$ad]]);
+    $esit = $esit && siparis_wp_veri($wk, ['parti_yetki' => true])['kalem_say'] === count(sipui_kalem_satirlari($kq->fetchAll(PDO::FETCH_ASSOC), 1000)['satirlar']);
+}
+ok('WP kalem sayısı = liste süzgeci (tüm tohum sevkiyatları)', $esit);
+$vbt = siparis_wp_veri(siparis_wp_oku($db, $ID['bos_tarih']), ['parti_yetki' => true]);
+$dbt = array_column($vbt['alanlar'], 'deger', 'k');
+ok('bos_tarih: tarih/nakliyeci/plaka/parti/navlun "—" (planlı değerler basılmaz); kalem yok → tek "—" satırı, toplam "—"', $dbt['tarih'] === '—' && $dbt['nakliyeci'] === '—' && $dbt['plaka'] === '—' && $dbt['parti'] === '—' && $dbt['navlun'] === '—'
+    && $vbt['kalemler'] === [['urun' => '—', 'kalibre' => '—', 'palet_koli' => '—']] && $vbt['kalem_say'] === 0 && $vbt['toplam']['palet_koli'] === '—' && !str_contains(json_encode($vbt, JSON_UNESCAPED_UNICODE), 'PLN'));
+$trn = sev($db, ['order_ref' => 'TC900109.10', 'tur_no' => '9009009', 'yukleme_tarihi' => $yarin]);
+$vtr = siparis_wp_veri(siparis_wp_oku($db, $trn), ['parti_yetki' => true]);
+ok('parti yoksa Tur no\'ya DÜŞÜLMEZ', array_column($vtr['alanlar'], 'deger', 'k')['parti'] === '—' && !str_contains(json_encode($vtr, JSON_UNESCAPED_UNICODE), '9009009'));
+ok('kapalı (mail_gonderildi) sevkiyat paylaşılabilir; silinmiş / olmayan / 0 / negatif id → null', is_array(siparis_wp_oku($db, $ID['kapali'])) && siparis_wp_oku($db, $ID['silinmis']) === null && siparis_wp_oku($db, 999999) === null && siparis_wp_oku($db, 0) === null && siparis_wp_oku($db, -3) === null);
+rol($ADMIN, false, 1, ['DEPO1']);
+ok('depo kapısı (DEPO1): DEPO2 sevkiyatı null, boş depolu + DEPO1 dizi', siparis_wp_oku($db, $ID['depo2']) === null && is_array(siparis_wp_oku($db, $ID['bos_tarih'])) && is_array(siparis_wp_oku($db, $ID['gecmis'])));
+rol($ADMIN, false, 1, ['DEPO2']);
+ok('depo kapısı (DEPO2): DEPO2 sevkiyatı dizi, DEPO1 sevkiyatı null', is_array(siparis_wp_oku($db, $ID['depo2'])) && siparis_wp_oku($db, $ID['gecmis']) === null);
+rol(['siparis.read'], false);
+$vy = siparis_wp_veri(siparis_wp_oku($db, $ID['gecmis']), ['parti_yetki' => function_exists('can_beyan') && can_beyan('read')]);
+ok('beyan.read yok: parti "—" + not', array_column($vy['alanlar'], 'deger', 'k')['parti'] === '—' && in_array('Parti no için beyan okuma yetkisi gerekir.', $vy['notlar'], true));
+rol($ADMIN, true);
+ok('siparis_wp_palet_koli biçimleri', siparis_wp_palet_koli(3, 450) === '3 / 450' && siparis_wp_palet_koli(null, null) === '—' && siparis_wp_palet_koli('', '') === '—' && siparis_wp_palet_koli(3, null) === '3 / —'
+    && siparis_wp_palet_koli(null, 40) === '— / 40' && siparis_wp_palet_koli(1234, 56789) === '1.234 / 56.789' && siparis_wp_palet_koli(0, 0) === '0 / 0');
+ok('siparis_wp_dosya_adi: yalnız güvenli karakter, boş / noktalama → sevkiyat-<id>', preg_match('/^WP-[A-Za-z0-9._-]+$/', siparis_wp_dosya_adi('TC 9/01..10 ', 5)) === 1 && siparis_wp_dosya_adi('', 5) === 'WP-sevkiyat-5' && siparis_wp_dosya_adi('///', 7) === 'WP-sevkiyat-7');
+
 echo "\n=== 7. Şoför kolonları kuruldu ===\n";
 siparis_sofor_migrate($db);
 $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü Bir', sofor_telefon = '+90 532 000 00 01' WHERE id = {$ID['gecmis']}");
@@ -238,6 +299,13 @@ $__kos = function (string $script) use ($ROOT): string {
 };
 ok('uç (kök siparis_yazdir.php) çalışırken config/siparis_yazdir.php YÜKLENİR (404/exit yok)', str_contains($__kos($ROOT . '/siparis_yazdir.php'), 'YUKLENDI'));
 ok('config/siparis_yazdir.php doğrudan istenirse yine durur', !str_contains($__kos($ROOT . '/config/siparis_yazdir.php'), 'YUKLENDI'));
+$__kosWp = function (string $script) use ($ROOT): string {
+    $kod = '$_SERVER["SCRIPT_FILENAME"] = ' . var_export($script, true) . '; function h($s){return htmlspecialchars((string)$s);}'
+         . ' require ' . var_export($ROOT . '/config/siparis_core.php', true) . '; require ' . var_export($ROOT . '/_siparis_ortak.php', true) . ';'
+         . ' require ' . var_export($ROOT . '/config/siparis_beyan.php', true) . '; require ' . var_export($ROOT . '/config/siparis_wp.php', true) . '; echo "YUKLENDI";';
+    return (string)shell_exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($kod) . ' 2>&1');
+};
+ok('v394: uç (kök siparis_paylas.php) çalışırken config/siparis_wp.php YÜKLENİR; doğrudan istenirse durur', str_contains($__kosWp($ROOT . '/siparis_paylas.php'), 'YUKLENDI') && !str_contains($__kosWp($ROOT . '/config/siparis_wp.php'), 'YUKLENDI'));
 $__cak = [];
 foreach (array_merge(glob($ROOT . '/*.php') ?: [], glob($ROOT . '/config/*.php') ?: [], glob($ROOT . '/halkayit/*.php') ?: []) as $__f) {
     if (!str_contains((string)file_get_contents($__f), "basename((string)(\$_SERVER['SCRIPT_FILENAME']")) continue;
@@ -289,6 +357,51 @@ ok('limit: 501+ satırda 500 satır + kesildi + not', count($ol['rows']) === 500
 ok('SIPARIS_YAZDIR_LIMIT = 500', SIPARIS_YAZDIR_LIMIT === 500);
 rol($ADMIN, true);
 
+echo "\n=== 11. WP Paylaş ucu (siparis_paylas.php, v394) ===\n";
+siparis_yurtici_gumruk_migrate($db);
+$db->exec("UPDATE siparis_sevkiyatlar SET yurtici_gumruk = 'Test Gümrük İdaresi' WHERE id = {$ID['gecmis']}");
+$wpAud = fn() => $db->query("SELECT record_id, new_values FROM audit_log WHERE action = 'siparis_wp_paylas' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+rol(['siparis.read'], false, 5);   // izleyici
+$r = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']]);
+$j = $r['json'] ?? []; $jd = array_column($j['alanlar'] ?? [], 'deger', 'k');
+ok('izleyici: 200 + JSON + 9 alan; şoför, telefon, gümrük dolu; parti "—" + not; kurulum notları YOK', $r['hata'] === null && $r['kod'] === 200 && ($j['ok'] ?? false) === true && count($j['alanlar'] ?? []) === 9 && ($jd['sofor'] ?? '') === 'Test Sürücü Bir' && ($jd['tel'] ?? '') === '+90 532 000 00 01'
+    && ($jd['gumruk'] ?? '') === 'Test Gümrük İdaresi' && ($jd['parti'] ?? '') === '—' && in_array('Parti no için beyan okuma yetkisi gerekir.', $j['notlar'] ?? [], true) && !in_array('Şoför alanları kurulmadı.', $j['notlar'] ?? [], true)
+    && !in_array('Yurt içi gümrük alanı kurulmadı.', $j['notlar'] ?? [], true), (string)$r['hata'] . substr($r['govde'], 0, 300));
+ok('başlıklar: JSON utf-8 + nosniff', str_contains(strtolower($r['h']['content-type'] ?? ''), 'application/json') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff');
+$wa = $wpAud();
+ok('audit: 1 satır, record_id = sevkiyat, yeni = {"kalem":1}; ad / telefon / plaka / firma / gümrük YOK', count($wa) === 1 && (int)$wa[0]['record_id'] === $ID['gecmis'] && json_decode($wa[0]['new_values'], true) === ['kalem' => 1]
+    && !preg_match('/Sürücü|532|34TST|Lojistik|Gümrük/u', $wa[0]['new_values']), json_encode($wa));
+rol($ADMIN, true);
+$r = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']]);
+ok('yönetici (beyan.read): parti no dolu', (array_column($r['json']['alanlar'] ?? [], 'deger', 'k')['parti'] ?? '') === 'P-61/225 / P-61/226');
+$n0 = count($wpAud());
+$r = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']], 'POST');
+ok('POST → 405 JSON (Allow: GET), audit yazılmadı', $r['kod'] === 405 && ($r['json']['ok'] ?? null) === false && ($r['h']['allow'] ?? '') === 'GET' && count($wpAud()) === $n0);
+$yok = uc('siparis_paylas.php', ['id' => '999999']);
+$kotu = true;
+foreach ([[], ['id' => '0'], ['id' => 'abc'], ['id' => '12abc'], ['id' => '999999'], ['id' => (string)$ID['silinmis']]] as $q) {
+    $x = uc('siparis_paylas.php', $q);
+    $kotu = $kotu && $x['kod'] === 404 && $x['json'] === ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.'];
+}
+ok('id yok / 0 / abc / 12abc / olmayan / silinmiş → 404 + sabit gövde', $kotu && count($wpAud()) === $n0);
+$r = uc('siparis_paylas.php', ['id' => (string)$ID['kapali']]);
+ok('kapalı sevkiyat: 200 (audit +1)', $r['kod'] === 200 && ($r['json']['ok'] ?? false) === true && count($wpAud()) === $n0 + 1);
+rol($ADMIN, false, 9, ['DEPO2']);
+$g404 = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']]);
+ok('depo izolasyonu: başka depo = olmayan id ile BİREBİR aynı 404 gövdesi; DEPO2 + boş depolu 200', $g404['kod'] === 404 && $g404['govde'] === $yok['govde'] && uc('siparis_paylas.php', ['id' => (string)$ID['depo2']])['kod'] === 200
+    && uc('siparis_paylas.php', ['id' => (string)$ID['bos_tarih']])['kod'] === 200);
+rol($ADMIN, true);
+rol([], false, 7);
+$r = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']]);
+ok('yetkisiz (siparis.read yok): forbidden, JSON dönmez', $r['hata'] !== null && str_contains($r['hata'], 'siparis.read') && $r['json'] === null);
+rol(['beyan.read', 'records.write'], false, 7);
+ok('köprü yok: beyan.read / records.write kapıyı açmaz', uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']])['hata'] !== null);
+rol($ADMIN, true);
+$r = uc('siparis_paylas.php', ['id' => (string)$xs]);
+$dx = array_column($r['json']['alanlar'] ?? [], 'deger', 'k');
+ok('ham metin: HTML / script aynen JSON\'da (kaçış istemcide), Content-Type JSON', ($dx['nakliyeci'] ?? '') === '<b>X</b> & "Y"' && str_contains($dx['plaka'] ?? '', '<script>alert(1)</script>') && str_contains(strtolower($r['h']['content-type'] ?? ''), 'application/json')
+    && str_contains($r['json']['kalemler'][0]['urun'] ?? '', '<script>alert(2)</script>'));
+
 echo "\n=== 10. Statik ===\n";
 $u = (string)file_get_contents($ROOT . '/siparis_yazdir.php'); $cfg = (string)file_get_contents($ROOT . '/config/siparis_yazdir.php');
 ok('uç: GET dışı 405, require_siparis(read), no-store, session_write_close, yazan SQL yok', str_contains($u, "require_siparis('read');") && str_contains($u, 'siparis_no_store();') && str_contains($u, 'session_write_close();') && str_contains($u, '405') && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $u));
@@ -296,5 +409,18 @@ ok('config: yalnız SELECT (INSERT/UPDATE/DELETE/ALTER/CREATE yok), çıktı/exi
 ok('uç + config e-posta literali yok', !preg_match('/[\w.+-]+@[\w-]+\.[\w.]+/', $u . $cfg));
 ok('şoför kolonları yalnız siparis_sofor_hazir() ile SELECT\'e girer', str_contains($cfg, 'siparis_sofor_hazir($pdo)') && substr_count($cfg, 's.sofor_adi') === 1);
 ok('audit\'e kişisel veri / arama metni yazan kod yok (q yalnız `!== \'\'` karşılaştırması)', !preg_match('/siparis_audit\([^;]*(sofor|telefon)/i', $u) && !preg_match('/siparis_audit\([^;]*\$F\[.q.\](?!\s*!==)/', $u) && str_contains($u, "'arama' => \$F['q'] !== ''"));
+$pu = (string)file_get_contents($ROOT . '/siparis_paylas.php'); $pc = (string)file_get_contents($ROOT . '/config/siparis_wp.php'); $kod = static function (string $src): string {
+    $o = ''; foreach (token_get_all($src) as $t) { if (is_array($t)) { if ($t[0] === T_COMMENT || $t[0] === T_DOC_COMMENT) continue; $o .= $t[1]; } else $o .= $t; } return $o;
+};
+$pcK = $kod($pc); $pcK2 = str_replace("if (realpath((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }", '', $pcK);
+ok('v394 uç: require_siparis(read), no-store, session_write_close, 405, yazan SQL yok, csrf_check yok (yalnız GET)', str_contains($pu, "require_siparis('read');") && str_contains($pu, 'siparis_no_store();') && str_contains($pu, 'session_write_close();') && str_contains($pu, '405')
+    && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $pu) && !str_contains($pu, 'csrf_check('));
+ok('v394 uç audit: yalnız kalem sayısı; kişisel alan adı geçen siparis_audit argümanı yok', str_contains($pu, "siparis_audit('siparis_wp_paylas', \$sid, null, ['kalem' => ") && !preg_match('/siparis_audit\([^;]*(sofor|telefon|plaka|nakliyeci|gumruk)/i', $pu));
+ok('v394 config: yalnız SELECT; çıktı/exit/die yok (doğrudan-istek koruma satırı hariç); planlanan_, tur no, beyan driver_*, s.gumruk YOK', !preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\s/', $pc) && !preg_match('/\b(echo|print|exit|die)\b/', $pcK2)
+    && !str_contains($pcK, 'planlanan_') && !str_contains($pcK, 'tur_no') && !str_contains($pcK, 'driver_') && !preg_match('/\bs\.gumruk\b/', $pcK));
+ok('v394 config: şoför + gümrük kolonları yalnız *_hazir() ile SELECT\'e girer; v385 tam yol koruması; e-posta literali yok', str_contains($pc, 'siparis_sofor_hazir($pdo)') && str_contains($pc, 'siparis_yurtici_gumruk_hazir($pdo)') && substr_count($pc, 's.sofor_adi') === 1
+    && str_contains($pc, "realpath((string)(\$_SERVER['SCRIPT_FILENAME']") && !preg_match('/[\w.+-]+@[\w-]+\.[\w.]+/', $pu . $pc));
+$__ort = (string)file_get_contents($ROOT . '/_siparis_ortak.php');
+ok('v394: kalem süzgeci TEK yerde ("(int)$pal === 0" yalnız _siparis_ortak.php); yazdırma + WP sipui_kalem_coz çağırır', substr_count($__ort . $cfg . $pc, '(int)$pal === 0') === 1 && substr_count($__ort, '(int)$pal === 0') === 1 && str_contains($cfg, 'sipui_kalem_coz(') && str_contains($pc, 'sipui_kalem_coz('));
 
 siparis_test_bitir();

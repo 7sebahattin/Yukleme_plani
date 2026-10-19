@@ -31,7 +31,7 @@ $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
 $BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_dosya.php', 'siparis_kaydet.php',
-             'siparis_mail.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
+             'siparis_mail.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
 ok('helpers.php can_siparis() tanımlı', str_contains($helpers, 'function can_siparis(string $perm): bool'));
@@ -82,7 +82,7 @@ foreach ($sayfalar as $f) {
     ok("$f: mutasyon POST'a bağlı", (bool)preg_match("/REQUEST_METHOD'\]\s*(!==|===)\s*'POST'/", $k));
     ok("$f: yazma kapısı require_siparis('write'|'delete'|'match') içeriyor", (bool)preg_match("/require_siparis\('(write|delete|match)'\)|can_siparis\('(write|delete|match)'\)/", $k));
 }
-foreach (['siparis_dosya.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php'] as $f) {
+foreach (['siparis_dosya.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php'] as $f) {
     $k = kod_oku($f);
     if ($k === '') continue;
     // GET-only görünüm sayfaları (POST'u siparis_kaydet/… uçlarına gider): ayarlar sayfası profil/sayaç formu içerebilir → muaf.
@@ -166,7 +166,8 @@ $swPcre = $swKural !== '' ? '#' . str_replace('\\/', '/', trim($swKural, '/')) .
 ok('sw.js bypass regex\'i siparis_mail.php\'yi KAPSIYOR (uç adı tek alt çizgili ek olmalı)', $swKural !== '' && preg_match($swPcre, '/siparis_mail.php') === 1 && preg_match($swPcre, '/siparis_mail_tara.php') === 0, $swPcre);
 $epostaRe = '/[a-z0-9._%+-]+@(?!ornek\.test\b)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/i';
 foreach (['config/siparis_mail.php', 'siparis_mail.php', 'siparisler.php', 'siparis_ayarlar.php', '_siparis_ortak.php', 'assets/siparis.js', 'assets/siparis.css', 'scripts/siparis_mail_smoke.php', 'scripts/_siparis_mail_test_lib.php', 'scripts/siparis_ui_render.php',
-    'siparis_yazdir.php', 'config/siparis_yazdir.php', 'assets/siparis_yazdir.js', 'scripts/siparis_yazdir_smoke.php', 'scripts/siparis_yazdir_smoke.js'] as $f) {
+    'siparis_yazdir.php', 'config/siparis_yazdir.php', 'assets/siparis_yazdir.js', 'scripts/siparis_yazdir_smoke.php', 'scripts/siparis_yazdir_smoke.js',
+    'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js'] as $f) {
     $t = str_ends_with($f, '.php') ? kod_oku($f) : oku($f);
     ok("$f: gerçek e-posta adresi YOK (yalnız @ornek.test)", $t !== '' && preg_match($epostaRe, $t, $em2) === 0, $em2[0] ?? '');
 }
@@ -197,9 +198,30 @@ ok('siparis_yazdir.js: toplam satırı tbody sonunda (tfoot yok), @page A4 yatay
 ok('siparisler.php: yazdırma düğmeleri data-sip-yazdir ile (satır içi onclick yok), script defer', str_contains(oku('siparisler.php'), 'data-sip-yazdir="yazdir"') && str_contains(oku('siparisler.php'), 'siparis_yazdir.js?v=') && !preg_match('/onclick=.*sip-yazdir|data-sip-yazdir[^>]*onclick/', oku('siparisler.php')));
 ok('yükleme kartı native <details> (v382); eski <section class="card sip-yukle"> YOK', str_contains(oku('siparisler.php'), '<details class="card sip-yukle" id="yukle" data-sip-yukle') && !str_contains(oku('siparisler.php'), '<section class="card sip-yukle"'));
 
+echo "\n=== v394: WP Paylaş ===\n";
+$wpUc = kod_oku('siparis_paylas.php'); $wpCfg = kod_oku('config/siparis_wp.php'); $wpJs = oku('assets/siparis_wp.js'); $lst = oku('_siparis_liste.php');
+ok('uç: require_siparis(\'read\') + siparis_no_store() + session_write_close() + GET dışı 405', str_contains($wpUc, "require_siparis('read');") && str_contains($wpUc, 'siparis_no_store();') && str_contains($wpUc, 'session_write_close();')
+    && (bool)preg_match("/REQUEST_METHOD'\] \?\? 'GET'\) !== 'GET'/", $wpUc) && str_contains($wpUc, '405'));
+ok('uç: JSON + nosniff; yalnız GET (csrf_check yok); doğrudan veri değiştiren çekirdek çağrısı yok', str_contains($wpUc, 'application/json') && str_contains($wpUc, 'nosniff') && !str_contains($wpUc, 'csrf_check(') && preg_match($mutRe, $wpUc) === 0);
+ok('uç adı TEK alt çizgili: siparis_paylas.php; sw.js bypass regex\'i kapsar', is_file($ROOT . '/siparis_paylas.php') && !glob($ROOT . '/siparis_*_*_*.php') && $swKural !== '' && preg_match($swPcre, '/siparis_paylas.php') === 1, $swPcre);
+ok('siparis_wp.js / siparis_paylas sw SHELL\'de DEĞİL', !str_contains($sw, 'siparis_wp') && !str_contains($sw, 'siparis_paylas'));
+ok('config/siparis_wp.php: yalnız SELECT; çıktı/DDL yok; kapıyı can(\'siparis.*\') ile kopyalamıyor; depo + görünürlük kapısı', $wpCfg !== '' && !preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\s/', $wpCfg) && !preg_match('/\b(echo|print|die)\b/', $wpCfg)
+    && preg_match("/\bcan\('siparis\./", $wpCfg) === 0 && str_contains($wpCfg, 'depo_sql_column(') && str_contains($wpCfg, 'siparis_gorunur('));
+ok('config/siparis_wp.php: planlanan_* okunmaz, tur no\'ya düşülmez', !str_contains($wpCfg, 'planlanan_') && !str_contains($wpCfg, 'tur_no'));
+ok('audit: siparis_wp_paylas, ad/telefon/plaka/nakliyeci YAZILMAZ (yalnız kalem sayısı)', str_contains($wpUc, "siparis_audit('siparis_wp_paylas',") && !preg_match('/siparis_audit\([^;]*(sofor|telefon|plaka|nakliyeci)/i', $wpUc));
+ok('liste: her iki menüde (masaüstü + mobil) PKL\'den SONRA data-sip-wp düğmesi; kişisel veri / data-sip-yazdir YOK', substr_count($lst, 'data-sip-wp="') === 2
+    && preg_match_all('~siparis_pkl\.php\?id=<\?= \$__id \?>">📄 PKL</a>\s*<button type="button" data-sip-wp="<\?= \$__id \?>"~', $lst) === 2
+    && !preg_match('/sofor|telefon/i', $lst) && !str_contains($lst, 'data-sip-yazdir'));
+ok('siparisler.php: siparis_wp.js defer yüklenir; şoför kolonu sayfa sorgusuna girmez', str_contains(oku('siparisler.php'), 'assets/siparis_wp.js?v=') && str_contains(oku('siparisler.php'), 'defer></script>') && !str_contains(kod_oku('siparisler.php'), 'sofor'));
+ok('siparis_wp.js: esc(), same-origin + no-store, ClipboardItem + Web Share + NotAllowedError, html2canvas tembel, PNG; jsPDF/eval/localStorage/onclick YOK',
+    str_contains($wpJs, 'function esc(') && str_contains($wpJs, "credentials: 'same-origin'") && str_contains($wpJs, "cache: 'no-store'") && str_contains($wpJs, "'siparis_paylas.php?id='")
+    && str_contains($wpJs, 'ClipboardItem') && str_contains($wpJs, 'navigator.share') && str_contains($wpJs, 'NotAllowedError') && str_contains($wpJs, "'halkayit/html2canvas.min.js'")
+    && str_contains($wpJs, 'toBlob(') && str_contains($wpJs, "'image/png'") && !str_contains($wpJs, 'jspdf') && !preg_match('/eval\s*\(|new Function\(/', $wpJs)
+    && !str_contains($wpJs, 'localStorage') && !preg_match('/\sonclick=/', $wpJs));
+
 echo "\n=== Audit eylem adları ≤ 40 karakter ===\n";
 $uzun = []; $sayi = 0;
-$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
+$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
 foreach ($dosyalar as $f) {
     $k = kod_oku($f);
     if (preg_match_all("/\b(?:siparis_audit|audit_log_event)\(\s*'([^']+)'/", $k, $mm)) {

@@ -3,7 +3,7 @@
 // config/siparis_yazdir.php — "Açık Sevkiyatlar" YAZDIRMA / PDF verisi (v382; include-only)
 //
 // siparis_yazdir.php (GET JSON ucu) bunu çağırır; çıktı/exit/yazma YOK (audit uçta). _siparis_ortak.php YÜKLÜ varsayılır
-// (sipui_kalem_satirlari / sipui_tarih / sipui_sayi). Filtre, ekranla AYNI fonksiyondan: siparis_liste_filtre().
+// (sipui_kalem_coz / sipui_kalem_satirlari / sipui_tarih / sipui_sayi). Filtre, ekranla AYNI fonksiyondan: siparis_liste_filtre().
 // Tüm hücreler HAM METİN döner (HTML yok); kaçış istemcide (assets/siparis_yazdir.js). Sütun sırası/başlıkları sahibindir.
 // YENİ SÜTUN = yalnız siparis_yazdir_veri() (ve siparis_yazdir_kolonlari()); ülke = siparis_yazdir_ulke_haritasi().
 // =========================================================
@@ -56,16 +56,14 @@ function siparis_yazdir_ulke(?string $aliciKodu, ?string $aliciAdi): string
 /**
  * GRAMAJ hücresi: sipui_kalem_satirlari() ile AYNI süzgeçten geçen kalemlerin kalibreleri — boş olmayan, tekil, sayısal artan
  * (sayısal değilse doğal sıra), "--" ile birleşik ("10--12--14"); yok → ''. SQLite/MySQL sıralama farkı burada PHP'de çözülür.
- * Süzgeç koşulu sipui_kalem_satirlari()'ndakinin tek satırlık kopyasıdır (smoke: ikisi aynı kalemleri atar) — birini değiştirirsen ötekini de değiştir.
+ * Süzgeç TEK yerde: sipui_kalem_coz() (_siparis_ortak.php) — liste ve WP kartıyla aynı kalemler.
  * @param list<array<string,mixed>> $kalemler
  */
 function siparis_yazdir_gramaj(array $kalemler): string
 {
     $set = [];
     foreach ($kalemler as $k) {
-        $pal = ($k['etkin_palet'] ?? null) !== null && $k['etkin_palet'] !== '' ? $k['etkin_palet'] : ($k['po_palet'] ?? null);
-        $koli = $k['etkin_koli'] ?? null;
-        if ($pal !== null && is_numeric($pal) && (int)$pal === 0 && ($koli === null || $koli === '' || (int)$koli === 0)) continue;
+        if (sipui_kalem_coz($k) === null) continue;
         $kal = trim((string)($k['kalibre'] ?? ''));
         if ($kal !== '') $set[$kal] = true;
     }

@@ -4,6 +4,7 @@
 //
 // Masaüstü tablosu + mobil kart satır biçimi TEK yerde. Bu partial fonksiyon TANIMLAMAZ.
 // Beklenen: $sec_rows (siparis_sevkiyatlar satırları; siparisler.php'nin $cols kolon kümesi)
+// v394: ⋮ menüsünde 💬 WP Paylaş — kart verisi tıkta siparis_paylas.php'den gelir; bu partial'a ek kolon/veri GİRMEZ.
 // =========================================================
 if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; }
 // $sec_kalem: sevkiyat id → siparis_kalemler satırları; $sec_parti: sevkiyat id → ['parti','fazla'] (ikisi de isteğe bağlı)
@@ -59,6 +60,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
               <a href="siparis_view.php?id=<?= $__id ?>">📂 Aç</a>
               <a href="siparis_zip.php?id=<?= $__id ?>">🗜 Evrak ZIP</a>
               <a href="siparis_pkl.php?id=<?= $__id ?>">📄 PKL</a>
+              <button type="button" data-sip-wp="<?= $__id ?>" title="WhatsApp için sevkiyat kartı (görsel)">💬 WP Paylaş</button>
             </div>
           </div>
         </td>
@@ -111,6 +113,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
           <a href="siparis_view.php?id=<?= $__id ?>">📂 Aç</a>
           <a href="siparis_zip.php?id=<?= $__id ?>">🗜 Evrak ZIP</a>
           <a href="siparis_pkl.php?id=<?= $__id ?>">📄 PKL</a>
+          <button type="button" data-sip-wp="<?= $__id ?>" title="WhatsApp için sevkiyat kartı (görsel)">💬 WP Paylaş</button>
         </div>
       </div>
     </article>

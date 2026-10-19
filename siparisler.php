@@ -413,4 +413,5 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
 <?php
 siparis_scripts();
 echo '<script src="assets/siparis_yazdir.js?v=' . (int)@filemtime(__DIR__ . '/assets/siparis_yazdir.js') . '" defer></script>' . "\n";
+echo '<script src="assets/siparis_wp.js?v=' . (int)@filemtime(__DIR__ . '/assets/siparis_wp.js') . '" defer></script>' . "\n";
 render_footer();

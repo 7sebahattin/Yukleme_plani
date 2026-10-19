@@ -2,6 +2,7 @@
 // "Açık Sevkiyatlar" — Yazdır / PDF Gönder (v382). Gerçek PHP render (siparis_ui_render.php) + gerçek tarayıcı (Playwright + Chromium).
 // Canlı DB / ağ YOK: sayfalar bellek içi SQLite fixture'ından gelir; siparis_yazdir.php yanıtı page.route() ile SENTETİK JSON'dan
 // (php scripts/siparis_yazdir_smoke.php --json / --json-buyuk) döner; jsPDF + html2canvas yerel halkayit/ dosyalarından sunulur.
+// v394: ⋮ menüsü › 💬 WP Paylaş (siparis_paylas.php yanıtı page.route() ile, php scripts/siparis_yazdir_smoke.php --json-wp).
 //   node scripts/siparis_yazdir_smoke.js          (Playwright yoksa kendini ATLAR)
 const fs = require('fs'), os = require('os'), path = require('path');
 const { spawnSync } = require('child_process');
@@ -26,6 +27,7 @@ const SERVE = {
     jspdf: path.join(root, 'halkayit/jspdf.umd.min.js'),
 };
 const pdfSayfa = buf => (buf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g) || []).length;
+let WP = null;   // --json-wp fixture'ı (hazırlıkta doldurulur)
 const JSONY = (obj, status) => ({ status: status || 200, contentType: 'application/json; charset=utf-8', body: JSON.stringify(obj) });
 
 (async () => {
@@ -33,6 +35,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     php(['scripts/siparis_ui_render.php'], { SIPARIS_UI_OUT: OUT, SIPARIS_UI_MAIL: 'x' });
     const KUCUK = JSON.parse(php(['scripts/siparis_yazdir_smoke.php', '--json']));
     const BUYUK = JSON.parse(php(['scripts/siparis_yazdir_smoke.php', '--json-buyuk']));
+    WP = JSON.parse(php(['scripts/siparis_yazdir_smoke.php', '--json-wp']));
     ok('fixture: küçük JSON 13 sütun, satır var; büyük JSON ≥ 300 satır', KUCUK.ok && KUCUK.kolonlar.length === 13 && KUCUK.satirlar.length >= 4 && BUYUK.satirlar.length >= 300, KUCUK.adet + '/' + BUYUK.adet);
 
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => fs.existsSync(p));
@@ -43,9 +46,10 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         const mobil = w < 768;
         const ctx = await browser.newContext(Object.assign({ viewport: { width: w, height: h }, isMobile: mobil, hasTouch: mobil, reducedMotion: 'reduce', acceptDownloads: true }, opts.ctx || {}));
         await ctx.addInitScript(() => { window.__print = 0; window.print = () => { window.__print++; }; window.__alert = []; window.alert = m => { window.__alert.push(String(m)); }; });
-        if (opts.init) await ctx.addInitScript(opts.init);
+        for (const i of [].concat(opts.init || [])) await ctx.addInitScript(i);
         const istekler = [];
         await ctx.route('**/siparis_yazdir.php*', route => { istekler.push(route.request().url()); return yanit(route); });
+        await ctx.route('**/siparis_paylas.php*', route => { istekler.push(route.request().url()); return (opts.wp || (r => r.fulfill(JSONY(WP))))(route); });
         await ctx.route('**/halkayit/html2canvas.min.js', route => route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(SERVE.html2canvas) }));
         await ctx.route('**/halkayit/jspdf.umd.min.js', route => route.fulfill({ contentType: 'application/javascript', body: fs.readFileSync(SERVE.jspdf) }));
         const page = await ctx.newPage();
@@ -229,6 +233,206 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
             await pdf.click(); await page.waitForTimeout(3500);
             return (await page.evaluate(() => window.__alert.length)) === 0 && !(await pdf.isDisabled());
         })());
+        ok('telefon: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+
+    // ══ v394 — ⋮ menüsü › 💬 WP Paylaş ══
+    ok('fixture (WP): 9 alan, tek kalem, toplam "23 / 3.680"', WP.ok && WP.alanlar.length === 9 && WP.kalemler.length === 1 && WP.toplam.palet_koli === '23 / 3.680' && WP.alanlar[6].deger === 'Test Sürücü Bir');
+    const PNG_IMZA = [137, 80, 78, 71, 13, 10, 26, 10];
+    // html2canvas casusu: kart çizilmeden hemen önce yakalanır (gerçek kütüphane yine çağrılır)
+    const WP_SPY = () => {
+        window.__kart = []; window.__pano = [];
+        let gercek = null;
+        Object.defineProperty(window, 'html2canvas', { configurable: true,
+            get() { return gercek ? function (el, o) {
+                const cs = x => getComputedStyle(x);
+                window.__kart.push({ w: el.getBoundingClientRect().width, bg: cs(el).backgroundColor,
+                    th: [...el.querySelectorAll('th')].map(x => x.textContent.trim()).filter(Boolean),
+                    thW: [...el.querySelectorAll('th')].map(x => +cs(x).fontWeight), tdW: [...el.querySelectorAll('td')].map(x => +cs(x).fontWeight),
+                    tdRenk: cs(el.querySelector('td')).color, alan: [...el.querySelectorAll('.swp-alan tr')].map(t => [t.dataset.k, t.querySelector('td').textContent]),
+                    html: el.outerHTML, olcek: o && o.scale });
+                return gercek(el, o); } : undefined; },
+            set(f) { gercek = f; } });
+    };
+    const PANO_STUB = () => {
+        Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+            write: async items => {
+                if (window.__panoRed) { window.__panoRed = false; const e = new Error('izin'); e.name = 'NotAllowedError'; throw e; }
+                for (const it of items) for (const t of it.types) {
+                    const b = await it.getType(t); const u8 = new Uint8Array(await b.arrayBuffer()); const bm = await createImageBitmap(b);
+                    window.__pano.push({ t, size: b.size, sig: [...u8.slice(0, 8)], w: bm.width, h: bm.height });
+                }
+            }, writeText: async () => {} } });
+    };
+    async function wpTikla(page, mobil, sira) {
+        const kebab = page.locator(mobil ? '.sip-card-kebab .pc-kebab' : 'tr.row-link .pc-kebab').nth(sira || 0);
+        await kebab.click();
+        const btn = kebab.locator('xpath=..').locator('[data-sip-wp]');
+        const id = await btn.getAttribute('data-sip-wp');
+        await btn.click();
+        return id;
+    }
+    const wpOpts = (extra) => Object.assign({ init: [WP_SPY, PANO_STUB] }, extra || {});
+
+    // 1) menü: sıra, ekran içi, taşma yok, Kapanan bölümde de var
+    for (const [w, h] of [[1280, 900], [390, 844]]) {
+        const mobil = w < 768;
+        const { ctx, page, hatalar } = await ac('liste', w, h, tamam(KUCUK), wpOpts());
+        const kebab = page.locator(mobil ? '.sip-card-kebab .pc-kebab' : 'tr.row-link .pc-kebab').first();
+        await kebab.click();
+        const m = await kebab.locator('xpath=..').locator('.pc-dropdown').evaluate(d => {
+            const r = d.getBoundingClientRect(), it = [...d.children];
+            return { metin: it.map(x => x.textContent.trim()), h: it.map(x => x.getBoundingClientRect().height), alt: r.bottom, ust: r.top, sag: r.right, sol: r.left, ih: innerHeight,
+                bn: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bn-h')) || 0 };
+        });
+        ok(`[${w}] WP menü: öğe sırası Aç / Evrak ZIP / PKL / WP Paylaş`, m.metin.join('|') === '📂 Aç|🗜 Evrak ZIP|📄 PKL|💬 WP Paylaş', m.metin.join('|'));
+        ok(`[${w}] WP menü: ekran içinde, WP düğmesi yüksekliği diğer öğelerle ±2px`, m.ust >= 0 && m.alt <= m.ih - (mobil ? m.bn : 0) + 1 && m.sol >= 0 && m.sag <= w + 1 && Math.abs(m.h[3] - m.h[2]) <= 2, JSON.stringify(m));
+        ok(`[${w}] WP menü: yatay taşma yok`, (await tasma(page)) <= 0);
+        const kapSay = await page.evaluate(() => { const k = document.querySelector('#sipKapali'); const kap = k ? k.parentElement : null; return kap ? kap.querySelectorAll('[data-sip-wp]').length : -1; });
+        ok(`[${w}] WP menü: Kapanan bölümde de düğme var`, kapSay > 0, String(kapSay));
+        ok(`[${w}] WP menü: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+
+    // 2) masaüstü: panoya PNG
+    {
+        const { ctx, page, istekler, hatalar } = await ac('liste', 1280, 900, tamam(KUCUK), wpOpts());
+        const id = await wpTikla(page, false, 0);
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
+        const p = await page.evaluate(() => window.__pano[0]);
+        ok('[1280] pano: image/png, PNG imzası, 880 px genişlik (×2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w === 880 && p.h > 400 && p.size > 5000, JSON.stringify(p));
+        const wpIst = istekler.filter(u => /siparis_paylas\.php/.test(u));
+        ok('[1280] tek istek: siparis_paylas.php?id=<satırın id\'si> (taze, tek)', wpIst.length === 1 && new RegExp('siparis_paylas\\.php\\?id=' + id + '$').test(wpIst[0]), wpIst.join(','));
+        const b = await page.locator('.sip-wp-durum').textContent();
+        ok('[1280] bildirim: "Panoya kopyalandı — WhatsApp\'ta yapıştırın", tutucu temizlendi', /Panoya kopyalandı — WhatsApp'ta yapıştırın/.test(b) && await page.evaluate(() => document.querySelector('.swp-tutucu') === null && !document.querySelector('.sip-wp-durum').hidden), b);
+        const k = await page.evaluate(() => window.__kart[0]);
+        ok('[1280] kart: 440px, ×2, beyaz zemin', k.w === 440 && k.olcek === 2 && k.bg === 'rgb(255, 255, 255)', JSON.stringify([k.w, k.olcek, k.bg]));
+        ok('[1280] kart: başlıklar sahibin sırasıyla (9 alan + Ürün/Kalibre/Palet-Koli + Toplam)', k.th.join('|') === 'Parti No|Yükleme tarihi|Sipariş No|Navlun No|Nakliyeci|Plakalar|Şoför adı|Şoför telefonu|Yurt içi gümrük|Ürün|Kalibre|Palet/Koli|Toplam', k.th.join('|'));
+        ok('[1280] kart: başlıklar kalın (≥700), veriler ince (≤400)', k.thW.every(x => x >= 700) && k.tdW.every(x => x <= 400), JSON.stringify([k.thW, k.tdW]));
+        ok('[1280] kart: değerler sunucu yanıtıyla aynı (şoför, telefon, gümrük dahil)', JSON.stringify(k.alan) === JSON.stringify(WP.alanlar.map(a => [a.k, a.deger])), JSON.stringify(k.alan));
+        ok('[1280] kart: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+        // 3) çift tıklama koruması: menü kapalıyken gizli düğmede iki ardışık click()
+        await page.waitForTimeout(200);
+        await page.evaluate(() => { window.__pano.length = 0; const b = document.querySelector('[data-sip-wp]'); b.click(); b.click(); });
+        await page.waitForFunction(() => window.__pano.length >= 1, null, { timeout: 30000 });
+        await page.waitForTimeout(600);
+        ok('[1280] çift tıklama: tek kart, tek pano yazımı, tek ek istek', (await page.evaluate(() => window.__pano.length)) === 1 && istekler.filter(u => /siparis_paylas\.php/.test(u)).length === 2);
+        // 4) koyu tema
+        await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; window.__pano.length = 0; });
+        await wpTikla(page, false, 0);
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
+        const kd = await page.evaluate(() => window.__kart[window.__kart.length - 1]);
+        const renk = kd.tdRenk.match(/\d+/g).map(Number);
+        ok('[1280] koyu tema: kart yine beyaz zeminli, koyu yazılı; bildirim görünür', kd.bg === 'rgb(255, 255, 255)' && renk.every(x => x < 120) && await page.locator('.sip-wp-durum').isVisible(), JSON.stringify([kd.bg, kd.tdRenk]));
+        await ctx.close();
+    }
+
+    // 5) XSS: HTML / script değerleri kartta ham metin
+    {
+        const x = JSON.parse(JSON.stringify(WP));
+        x.alanlar[4].deger = '<img src=x onerror="window.__xss=1">'; x.kalemler[0].urun = '<script>window.__xss=2</script>';
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(x), wpOpts({ wp: tamam(x) }));
+        await wpTikla(page, false, 0);
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
+        const k = await page.evaluate(() => ({ html: window.__kart[0].html, xss: window.__xss }));
+        ok('XSS: kartta &lt;img / &lt;script kaçışlı, hiçbir betik çalışmadı', k.html.includes('&lt;img') && k.html.includes('&lt;script') && !/<img/.test(k.html) && k.xss === undefined, k.html.slice(0, 200));
+        await ctx.close();
+    }
+
+    // 6) çok kalem / boş kalem
+    {
+        const x = JSON.parse(JSON.stringify(WP));
+        x.kalemler = [10, 12, 14, 16, 18, 20].map(n => ({ urun: 'Testfruit ' + n + ' PC · TESTVAR', kalibre: String(n), palet_koli: '4 / 550' }));
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(WP), wpOpts({ wp: tamam(x) }));
+        await wpTikla(page, false, 0);
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
+        const a = await page.evaluate(() => ({ th: window.__kart[0].th.length, h: window.__pano[0].h }));
+        await ctx.close();
+        const bos = JSON.parse(JSON.stringify(WP)); bos.kalemler = [{ urun: '—', kalibre: '—', palet_koli: '—' }];
+        const c2 = await ac('liste', 1280, 900, tamam(WP), wpOpts({ wp: tamam(bos) }));
+        await wpTikla(c2.page, false, 0);
+        await c2.page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
+        const b = await c2.page.evaluate(() => ({ html: window.__kart[0].html, h: window.__pano[0].h }));
+        ok('çok kalem: başlıklar yine 13, PNG yüksekliği tek kalemliden büyük; boş kalem "—" satırı', a.th === 13 && a.h > b.h && /<td>—<\/td>/.test(b.html), JSON.stringify([a, b.h]));
+        await c2.ctx.close();
+    }
+
+    // 7) pano yok → PNG indir
+    {
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(KUCUK), { init: [WP_SPY, () => { delete window.ClipboardItem; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }); }] });
+        const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), wpTikla(page, false, 0)]);
+        const buf = fs.readFileSync(await dl.path());
+        ok('pano yok: PNG iner (WP-<sipariş no>.png, PNG imzası), bildirim "PNG indirildi"', /^WP-TC900101\.10\.png$/.test(dl.suggestedFilename()) && JSON.stringify([...buf.slice(0, 8)]) === JSON.stringify(PNG_IMZA)
+            && /PNG indirildi/.test(await page.locator('.sip-wp-durum').textContent()), dl.suggestedFilename());
+        await ctx.close();
+    }
+
+    // 8) pano reddi → bildirimde "📋 Kopyala" + "⬇️ PNG İndir"
+    {
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(KUCUK), wpOpts({ init: [WP_SPY, PANO_STUB, () => { window.__panoRed = true; }] }));
+        await wpTikla(page, false, 0);
+        await page.waitForFunction(() => /panoya kopyalanamadı/.test(document.querySelector('.sip-wp-durum') ? document.querySelector('.sip-wp-durum').textContent : ''), null, { timeout: 30000 });
+        const dugmeler = await page.locator('.sip-wp-durum button:not(.sip-wp-durum-kapat)').allTextContents();
+        ok('pano reddi: bildirimde Kopyala + PNG İndir düğmeleri', dugmeler.join('|') === '📋 Kopyala|⬇️ PNG İndir', dugmeler.join('|'));
+        await page.locator('.sip-wp-durum button', { hasText: 'Kopyala' }).click();
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 10000 });
+        ok('pano reddi: "Kopyala" yeniden dener → panoya yazıldı + bildirim', /Panoya kopyalandı/.test(await page.locator('.sip-wp-durum').textContent()));
+        await ctx.close();
+    }
+
+    // 9) hata yanıtları: bildirimde (alert DEĞİL), sonraki tık yeniden çalışır
+    for (const [ad, yanit, beklenen] of [
+        ['404 JSON', route => route.fulfill(JSONY({ ok: false, hata: 'Sevkiyat bulunamadı.' }, 404)), /Sevkiyat bulunamadı/],
+        ['oturum (HTML 200)', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Giriş</html>' }), /Oturum sona ermiş olabilir/],
+        ['500 HTML', route => route.fulfill({ status: 500, contentType: 'text/html', body: '' }), /HTTP 500/],
+    ]) {
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(KUCUK), wpOpts({ wp: yanit }));
+        await wpTikla(page, false, 0);
+        await page.waitForFunction(() => document.querySelector('.sip-wp-durum--hata'), null, { timeout: 15000 });
+        const m = await page.locator('.sip-wp-durum').textContent();
+        ok(`WP hata (${ad}): bildirim hata metni, alert yok, pano yazılmadı`, beklenen.test(m) && (await page.evaluate(() => window.__alert.length === 0 && window.__pano.length === 0)), m);
+        await page.evaluate(() => { window.__tekrar = true; });
+        await wpTikla(page, false, 0);
+        await page.waitForTimeout(500);
+        ok(`WP hata (${ad}): sonraki tık yeniden çalışır (meşgul bayrağı sıfırlandı)`, await page.evaluate(() => !document.querySelector('.sip-wp-durum').hidden) );
+        await ctx.close();
+    }
+
+    // 10) telefon: Web Share
+    {
+        const { ctx, page, hatalar } = await ac('liste', 390, 844, tamam(KUCUK), wpOpts({
+            ctx: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+            init: [WP_SPY, PANO_STUB, () => {
+                window.__paylasimlar = []; window.__ilkRed = false;
+                navigator.canShare = d => !!(d && d.files && d.files.length);
+                navigator.share = async d => {
+                    if (window.__ilkRed) { window.__ilkRed = false; const e = new Error('izin'); e.name = 'NotAllowedError'; throw e; }
+                    const f = d.files[0];
+                    window.__paylasimlar.push({ ad: f.name, tur: f.type, boyut: f.size, baslik: d.title });
+                };
+            }] }));
+        await wpTikla(page, true, 0);
+        await page.waitForFunction(() => window.__paylasimlar.length === 1, null, { timeout: 30000 });
+        const p = await page.evaluate(() => ({ s: window.__paylasimlar[0], pano: window.__pano.length }));
+        ok('telefon: PNG dosyası paylaşıma verilir (image/png, WP-….png, başlık = dosya adı); pano HİÇ kullanılmadı', p.s.tur === 'image/png' && /^WP-.*\.png$/.test(p.s.ad) && p.s.boyut > 5000 && p.s.baslik + '.png' === p.s.ad && p.pano === 0, JSON.stringify(p));
+        await page.waitForTimeout(200);
+        ok('telefon: paylaşım sonrası bildirim gizli', await page.evaluate(() => { const d = document.querySelector('.sip-wp-durum'); return !d || d.hidden; }));
+        await page.evaluate(() => { window.__ilkRed = true; });
+        await wpTikla(page, true, 0);
+        await page.waitForFunction(() => { const d = document.querySelector('.sip-wp-durum'); return d && !d.hidden && /📤 Paylaş/.test(d.textContent); }, null, { timeout: 30000 });
+        const bn = await page.evaluate(() => { const d = document.querySelector('.sip-wp-durum'), r = d.getBoundingClientRect(); return { tasma: document.documentElement.scrollWidth - innerWidth, alt: r.bottom, ih: innerHeight, sag: r.right, sol: r.left,
+            btn: [...d.querySelectorAll('button')].map(b => b.getBoundingClientRect().height), sayi: window.__paylasimlar.length }; });
+        ok('telefon: izin reddi → "📤 Paylaş" bildirimi, paylaşılmadı; ekran içinde, alt çubuğun üstünde, düğmeler ≥ 44px, yatay taşma yok', bn.sayi === 1 && bn.tasma <= 0 && bn.alt <= bn.ih - 92 + 1 && bn.sol >= 0 && bn.sag <= 391 && bn.btn.every(x => x >= 43.5), JSON.stringify(bn));
+        await page.locator('.sip-wp-durum button', { hasText: 'Paylaş' }).click();
+        await page.waitForFunction(() => window.__paylasimlar.length === 2);
+        await page.waitForTimeout(200);
+        ok('telefon: hazır görsel ikinci dokunuşla paylaşıldı, bildirim gizlendi', await page.evaluate(() => document.querySelector('.sip-wp-durum').hidden));
+        await page.evaluate(() => { navigator.share = async () => { const e = new Error('iptal'); e.name = 'AbortError'; throw e; }; });
+        await wpTikla(page, true, 0);
+        await page.waitForTimeout(2500);
+        ok('telefon: AbortError sessiz — alert yok, hata bildirimi yok', await page.evaluate(() => window.__alert.length === 0 && !document.querySelector('.sip-wp-durum--hata')));
         ok('telefon: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
     }

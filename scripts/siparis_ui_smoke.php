@@ -165,6 +165,13 @@ $sonBas = preg_match('~<div class="sip-bolum-bas" id="sipSonuclar">.*?</div></di
 ok('v382: tek durum filtresinde "Sonuçlar" başlığında düğmeler (durum=arac_bekleyen taşınır)', str_contains($sonBas, 'data-sip-yazdir="pdf"') && str_contains($sonBas, 'durum=arac_bekleyen') && substr_count($yt['html'], 'data-sip-yazdir="yazdir"') === 1);
 ok('v382: siparisler.php siparis_yazdir.js\'i yükler (assets/siparis_yazdir.js, defer)', str_contains($yz['html'], 'assets/siparis_yazdir.js?v=') && preg_match('~<script src="assets/siparis_yazdir\.js\?v=\d+" defer>~', $yz['html']) === 1);
 ok('v382: yazdırma düğmelerinde kişisel veri YOK (veri uçtan, tıkta gelir)', !preg_match('/Test Sürücü|\+90 5/', $yz['html']));
+// v394 — ⋮ menüsünde 💬 WP Paylaş (veri ucu: siparis_paylas.php; liste HTML'inde kişisel veri YOK)
+ok('v394: masaüstü + mobil menüde PKL\'den SONRA WP Paylaş düğmesi (data-sip-wp = sevkiyat id)', preg_match_all('~href="siparis_pkl\.php\?id=' . $ID['s1'] . '">📄 PKL</a>\s*<button type="button" data-sip-wp="' . $ID['s1'] . '"[^>]*>💬 WP Paylaş</button>~', $yh) === 2);
+ok('v394: Kapanan bölümde de WP Paylaş var (mail_gonderildi sevkiyatı)', preg_match_all('~href="siparis_pkl\.php\?id=' . $ID['s11'] . '">📄 PKL</a>\s*<button type="button" data-sip-wp="' . $ID['s11'] . '"~', $yh) === 2
+    && strpos($yh, 'data-sip-wp="' . $ID['s11'] . '"') > strpos($yh, 'id="sipKapali"'));
+ok('v394: her kebab menüsünde bir WP Paylaş düğmesi', substr_count($yh, 'data-sip-wp="') > 0 && substr_count($yh, 'data-sip-wp="') === substr_count($yh, '<button class="pc-kebab"'));
+ok('v394: durum=kapali sayfasında WP düğmesi VAR, yazdırma düğmesi YOK', ($kapW = sayfa('siparisler.php', ['durum' => 'kapali'])['html']) && str_contains($kapW, 'data-sip-wp=') && strpos($kapW, 'data-sip-yazdir') === false);
+ok('v394: siparisler.php siparis_wp.js\'i yükler (defer)', preg_match('~<script src="assets/siparis_wp\.js\?v=\d+" defer>~', $yz['html']) === 1);
 ok('SQL param hatası yok (HY093/uyarı log)', !str_contains((string)@file_get_contents(ini_get('error_log')), 'HY093'));
 // çatışmalı sevkiyat uyarısı
 ok('çatışma rozeti (⚠ çatışma)', str_contains($r['html'], '1 çatışma') || str_contains($r['html'], '⚠ 1'));
@@ -265,6 +272,7 @@ ok('izleyici: beyan paneli yok (beyan.read ve match yok)', !str_contains($v['htm
 $l = sayfa('siparisler.php');
 ok('izleyici listesi: yükleme kartı yok, pasif düğme + açıklama', temiz($l) && !str_contains($l['html'], 'siparis_yukle.php') && str_contains($l['html'], 'Salt okunur yetkiniz var') && str_contains($l['html'], 'disabled aria-describedby="sipSaltOkunur"'));
 ok('v382: izleyici listesinde yazdırma düğmeleri VAR (siparis.read yeter; veri ucu aynı kapıda), yükleme kartı YOK', substr_count($l['html'], 'data-sip-yazdir=') === 2 && !str_contains($l['html'], 'sip-yukle-govde'));
+ok('v394: izleyici listesinde WP Paylaş düğmesi VAR (siparis.read yeter)', str_contains($l['html'], 'data-sip-wp="'));
 ok('izleyici: PKL salt okunur (fieldset disabled, çubuk yok)', str_contains(sayfa('siparis_pkl.php', ['id' => $ID['s1']])['html'], 'sip-fieldset" disabled') && !str_contains(sayfa('siparis_pkl.php', ['id' => $ID['s1']])['html'], 'class="sip-bar"'));
 rol([], false, 7);
 foreach (['siparisler.php' => [], 'siparis_view.php' => ['id' => $ID['s1']], 'siparis_pkl.php' => ['id' => $ID['s1']], 'siparis_belge.php' => ['id' => $ID['po1']], 'siparis_ayarlar.php' => [], 'siparis_dosya.php' => ['id' => $ID['po1']], 'siparis_zip.php' => ['id' => $ID['s1']]] as $f => $g) {
@@ -785,6 +793,7 @@ ok('şoför: izleyici değerleri görür, düzenleme bağlantısı yok', str_con
 rol($ADMIN, true);
 $gl = sayfa('siparisler.php')['html'];
 ok('şoför: liste sayfası etkilenmez', !str_contains($gl, 'Test Sürücü'));
+ok('v394: WP Paylaş düğmesi var, şoför adı/telefonu liste HTML\'inde YOK', str_contains($gl, 'data-sip-wp="' . $sidS . '"') && !str_contains($gl, 'Test Sürücü') && !str_contains($gl, '532 000') && html_dengeli($gl) === null);
 
 $css = file_get_contents($ROOT . '/assets/siparis.css');
 ok('CSS: [hidden] kuralı + 16px mobil input + --bn-h kullanımı + overflow-x:hidden YOK', str_contains($css, '.sip-mod [hidden]') && str_contains($css, 'font-size: 16px') && str_contains($css, 'var(--bn-h)') && !preg_match('/overflow-x:\s*hidden/', $css));
