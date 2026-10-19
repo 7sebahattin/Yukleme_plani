@@ -101,7 +101,7 @@ elseif (!beyan_hks_eslesme_tam($beyan))
 elseif ($hks_aktif)              $hks_engel = [
                                       'gonderildi' => 'Bu beyan için bildirim zaten gönderildi.',
                                       'silindi'    => 'Bu beyanın HKS taslağı Hal Kayıt ekranından silindi — bildirim yapılmış sayılır. '
-                                                    . 'Yeniden bildirim için Düzenle → "Hal Bildirim Durumu" → Tekrar Aktif Et.',
+                                                    . 'HKS\'e gönderilmediyse aşağıdaki "Tekrar Aktif Et" ile yeniden bildirime açın.',
                                     ][$hks_aktif['durum']] ?? 'Bu beyan için bekleyen bir HKS taslağı var.';
 $hks_acik = ($hks_engel === null);
 
@@ -219,6 +219,14 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         <?php else: ?>
         <button type="button" class="btn" disabled>🏛 HKS Taslağı Oluştur</button>
         <span class="bk-engel"><?= h((string)$hks_engel) ?></span>
+        <?php if (($hks_aktif['durum'] ?? '') === 'silindi' && can_beyan('notify') && can_beyan('hks.write')): ?>
+        <?php /* Elle bağ düzeltmesi: beyan_edit.php hks_bag_islem dalı (aynı kapı, CSRF, audit). */ ?>
+        <form method="post" action="beyan_edit.php?id=<?= (int)$id ?>">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <button type="submit" name="hks_bag_islem" value="tekrar_aktif" class="btn"
+                    onclick="return confirm('Beyan yeniden bildirime açılacak. HKS\'e gönderilmediğinden emin misiniz?')">↺ Tekrar Aktif Et</button>
+        </form>
+        <?php endif; ?>
         <?php endif; ?>
     </div>
     <?php endif; ?>
