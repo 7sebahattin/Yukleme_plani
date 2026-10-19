@@ -60,13 +60,7 @@ if ($sev['po_belge_id']) {
     $kardesler = $k->fetchAll(PDO::FETCH_ASSOC);
 }
 // PO'daki PKL e-postaları
-$poEpostalar = [];
-if ($sev['po_belge_id']) {
-    $p = $pdo->prepare('SELECT parse_json FROM siparis_belgeler WHERE id = ? AND deleted_at IS NULL');
-    $p->execute([(int)$sev['po_belge_id']]);
-    $pj = siparis_json_coz($p->fetchColumn() ?: '');
-    foreach ((array)($pj['packing_list_emails'] ?? []) as $em) if (is_string($em) && filter_var($em, FILTER_VALIDATE_EMAIL)) $poEpostalar[] = $em;
-}
+$poEpostalar = siparis_po_pkl_epostalar($pdo, $sev);
 // PKL üreten kullanıcı adı
 $pklKullanici = '';
 if ($pkl && $pkl['uretildi_by']) {
@@ -113,6 +107,8 @@ render_flash();
 $mailPklAd = $pkl && $pkl['dosya_adi'] ? (string)$pkl['dosya_adi'] : '';
 $mailPklBelge = $pkl && $pkl['dosya_belge_id'] ? (int)$pkl['dosya_belge_id'] : 0;
 $eksikHucre = $pkl ? (int)$pkl['eksik_hucre'] : 0;
+// v383: mail taslağı (Kime / Bilgi / konu / gövde) — mailto ve ekli .eml AYNI taslaktan
+$mailTaslak = siparis_pkl_mail_taslak($poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username']));
 $pklHazir = (int)$sev['var_pkl'] === 1;
 ?>
 <div class="sip-mod sip-view">
@@ -640,10 +636,18 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
             <div class="sip-mail-dosya">📎 <strong class="sip-kes"><?= h($mailPklAd) ?></strong>
               <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?></div>
           <?php endif; ?>
-          <?php if ($poEpostalar): ?>
+          <?php if ($mailTaslak['kime']): ?>
             <div class="sip-mail-alici"><span class="sip-soluk">PO'da yazan Packing List adresi:</span>
-              <?php foreach ($poEpostalar as $em): ?><div class="sip-mail-satir"><code><?= h($em) ?></code> <button type="button" class="btn btn-sm" data-sip-kopyala="<?= h($em) ?>">Kopyala</button></div><?php endforeach; ?>
-              <a class="btn btn-sm" href="mailto:<?= h(implode(',', $poEpostalar)) ?>?subject=<?= h(rawurlencode($mailPklAd !== '' ? $mailPklAd : (string)$sev['order_ref'])) ?>">✉ Mail programını aç</a></div>
+              <?php foreach (['Kime' => $mailTaslak['kime'], 'Bilgi' => $mailTaslak['bilgi']] as $etk => $liste): foreach ($liste as $em): ?>
+                <div class="sip-mail-satir"><span class="sip-mail-rol"><?= h($etk) ?></span> <code><?= h($em) ?></code> <button type="button" class="btn btn-sm" data-sip-kopyala="<?= h($em) ?>">Kopyala</button></div>
+              <?php endforeach; endforeach; ?>
+              <div class="sip-mail-konu"><span class="sip-soluk">Konu:</span> <?= h($mailTaslak['konu']) ?></div>
+              <div class="sip-mail-eylem">
+                <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm btn-primary" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;eml=1&amp;sid=<?= $id ?>" data-sip-eml>📎 Ekli mail taslağını indir</a><?php endif; ?>
+                <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($mailTaslak)) ?>">✉ Mail programını aç</a>
+              </div>
+              <p class="sip-soluk sip-mail-ipucu">"Ekli mail taslağı" PKL eki, Kime/Bilgi, konu ve metinle hazır bir taslak (.eml) indirir; açınca Outlook'ta gönderilmeye hazır gelir. "Mail programını aç" eki EKLEYEMEZ (tarayıcı kısıtı) — PKL'yi elle ekleyin.</p>
+            </div>
           <?php endif; ?>
           <label class="sip-onay-satir"><input type="checkbox" name="onay_gonderdim" value="1" required data-sip-mail-onay> PKL'yi müşteriye gönderdim</label>
           <?php if ($eksikHucre > 0): ?>

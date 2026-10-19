@@ -3,6 +3,7 @@
 // siparis_dosya.php — Belge dosyası sunumu (GET; siparis.read + depo görünürlüğü)
 //
 // Dosyalar storage/siparis/ altında web'e KAPALI; yalnız buradan akar. ?dl=1 → her tür indirilir (audit).
+// ?eml=1&sid=N (v383) → bu belge o sevkiyatın PKL'iyse PKL ekli, gönderilmemiş mail taslağı (.eml, X-Unsent) indirilir.
 // Başlıklar: nosniff, private+no-store, Content-Length, RFC 5987 dosya adı; PDF/görsel satır içi
 // (CSP ile kısıtlı), xlsx HER ZAMAN indirme. MIME finfo ile yeniden denetlenir.
 // =========================================================
@@ -10,6 +11,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
+require_once __DIR__ . '/config/siparis_pkl.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -34,6 +36,35 @@ if (!$b) $metinHata(404, 'Belge bulunamadı.');
 if (!siparis_belge_gorunur($pdo, $b)) forbidden('Bu belge aktif depoda görünmüyor.');
 $yol = siparis_dosya_yolu($b);
 if ($yol === null) $metinHata(404, 'Belge dosyası bulunamadı.');
+
+if (($_GET['eml'] ?? '') === '1') {
+    // Ekli mail taslağı: belge, istenen sevkiyatın GÜNCEL PKL dosyası olmalı (başka belgeyle taslak kurulamaz)
+    $sev = siparis_sevkiyat($pdo, (int)($_GET['sid'] ?? 0));
+    if ($sev === null) $metinHata(404, 'Sevkiyat bulunamadı.');
+    if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+    $pk = $pdo->prepare('SELECT dosya_belge_id, dosya_adi FROM siparis_pkl WHERE sevkiyat_id = ?');
+    $pk->execute([(int)$sev['id']]);
+    $pkl = $pk->fetch(PDO::FETCH_ASSOC) ?: null;
+    if (!$pkl || (int)$pkl['dosya_belge_id'] !== (int)$b['id']) $metinHata(404, 'Bu belge sevkiyatın güncel PKL dosyası değil.');
+    $pklAd = (string)($pkl['dosya_adi'] ?: $b['orijinal_ad']);
+    $taslak = siparis_pkl_mail_taslak(siparis_po_pkl_epostalar($pdo, $sev), $pklAd, (string)$sev['order_ref'],
+        (string)($auth_user['display_name'] ?: $auth_user['username']));
+    if (!$taslak['kime']) $metinHata(409, "PO'da Packing List e-posta adresi yok; taslak kurulamadı.");
+    $icerik = (string)file_get_contents($yol);
+    $eml = siparis_pkl_eml($taslak, $pklAd, $icerik);
+    audit_log_event('siparis_pkl_eml', 'siparis', (int)$sev['id'], null, ['belge_id' => (int)$b['id'], 'alici' => count($taslak['kime']) + count($taslak['bilgi'])]);
+    $emlAd = $taslak['konu'] . '.eml';
+    $emlAscii = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', $emlAd), '_') ?: 'packing-list.eml';
+    session_write_close();
+    header('Content-Type: message/rfc822');
+    header('Content-Disposition: attachment; filename="' . $emlAscii . '"; filename*=UTF-8\'\'' . rawurlencode($emlAd));
+    header('Content-Length: ' . strlen($eml));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    header("Content-Security-Policy: sandbox; default-src 'none'");
+    echo $eml;
+    exit;
+}
 
 $ext = strtolower(pathinfo((string)$b['disk_adi'], PATHINFO_EXTENSION));
 $cins = siparis_dosya_uzantilari()[$ext] ?? 'bilinmiyor';
