@@ -43,7 +43,8 @@ $tek = $F['tek']; $tekSql = $F['tekSql']; $bolumAcik = $F['bolumAcik']; $bolumKa
 $detayFiltre = $F['detayFiltre']; $filtreVar = $F['filtreVar']; $detayOzet = $F['detayOzet'];
 
 $cols = 's.id, s.order_ref, s.tur_no, s.navlun_no, s.po_belge_id, s.cw_hafta, s.cw_yil, s.alici_kodu, s.alici_adi, s.yukleme_tarihi, s.plakalar, s.planlanan_plakalar, '
-      . 's.nakliyeci, s.planlanan_nakliyeci, s.toplam_palet, s.toplam_koli, s.var_po, s.var_ll, s.var_pc, s.var_pkl, s.acik_catisma, s.uyari_sayisi, s.durum, s.depo, s.gumruk';
+      . 's.nakliyeci, s.planlanan_nakliyeci, s.toplam_palet, s.toplam_koli, s.var_po, s.var_ll, s.var_pc, s.var_pkl, s.acik_catisma, s.uyari_sayisi, s.durum, s.depo'
+      . (siparis_yurtici_gumruk_hazir($pdo) ? ', s.yurtici_gumruk' : '');   // v387: listede YALNIZ yurt içi gümrük (PO gümrüğü yurt dışıdır)
 $bolum = function (string $ekSql, string $siralama, int $sayfa, int $per) use ($pdo, $temelWhere, $temelPar, $cols): array {
     $w = $temelWhere . ($ekSql !== '' ? ' AND ' . $ekSql : '');
     $c = $pdo->prepare('SELECT COUNT(*) FROM siparis_sevkiyatlar s WHERE ' . $w);
