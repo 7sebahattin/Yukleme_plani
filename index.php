@@ -252,50 +252,10 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 <?php if ($_ops_show): ?>
 <div class="home-section-title">Operasyon</div>
 
-<?php if (can('records.read')): ?>
-    <a href="records.php" class="home-card">
-        <div class="home-card-icon" style="background:#eaf1ff">🚚</div>
-        <div class="home-card-title">Yüklemeler</div>
-        <?php if ($stats['toplam_kayit'] > 0): ?>
-        <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
-        <?php endif; ?>
-    </a>
-
-    <a href="cikmalar.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdecea">📋</div>
-        <div class="home-card-title">Çıkmalar</div>
-        <?php if ($stats['toplam_cikma'] > 0): ?>
-        <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (can('kantar.read')): ?>
-    <a href="kantar.php" class="home-card">
-        <div class="home-card-icon" style="background:#f0faf4">⚖️</div>
-        <div class="home-card-title">Kantar</div>
-    </a>
-<?php endif; ?>
-
-<?php
-// Faz 7 (Sprint Navigasyon-01): bu kart artık personel_takip.php'ye açılır
-// (kalıcı personel + günlük işçi + hakediş/cari + raporlama merkezi) ve
-// GÖRÜNÜRLÜĞÜ personel_takip.php'nin KENDİ kapı mantığıyla AYNI genişlikte
-// kontrol edilir — TEK kaynak nav_ptak_gorunur() (sidebar + bottomnav ile
-// aynı fonksiyon); kart görünüp sayfa 403 veremez.
-if (nav_ptak_gorunur()):
-?>
-    <a href="personel_takip.php" class="home-card">
-        <div class="home-card-icon home-card-icon-personel" aria-hidden="true">
-            <span class="personel-arrow personel-arrow-in"></span>
-            <span class="personel-arrow personel-arrow-out"></span>
-        </div>
-        <div class="home-card-title">Personel Takibi</div>
-        <?php if ($personel_eksik_cikis > 0): ?>
-        <div class="home-card-badge" style="background:var(--danger)"
-             title="Bugün eksik çıkışı olan mesai"><?= (int)$personel_eksik_cikis ?></div>
-        <?php endif; ?>
-        <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
+<?php if (can_siparis('read')): ?>
+    <a href="siparisler.php" class="home-card">
+        <div class="home-card-icon" style="background:#fdf0dc">📦</div>
+        <div class="home-card-title">OGL Siparişler</div>
     </a>
 <?php endif; ?>
 
@@ -320,6 +280,47 @@ if (nav_ptak_gorunur()):
     </a>
     <?php endif; ?>
 
+<?php if (can_mail('read')): ?>
+    <a href="mail.php" class="home-card">
+        <div class="home-card-icon" style="background:#e0f4f9">📧</div>
+        <div class="home-card-title">Mail Merkezi</div>
+        <?php if ($mail_okunmamis > 0): ?>
+        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$mail_okunmamis ?></div>
+        <div class="home-card-sub">Okunmamış: <?= (int)$mail_okunmamis ?></div>
+        <?php endif; ?>
+        <?php if ($mail_cevapsiz24 > 0): ?>
+        <div class="home-card-sub home-card-uyari" style="color:var(--danger);font-weight:600">24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail</div>
+        <?php endif; ?>
+    </a>
+<?php endif; ?>
+
+<?php if (can('records.read')): ?>
+    <a href="records.php" class="home-card">
+        <div class="home-card-icon" style="background:#eaf1ff">📋</div>
+        <div class="home-card-title">Yüklemeler Planı</div>
+        <?php if ($stats['toplam_kayit'] > 0): ?>
+        <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
+        <?php endif; ?>
+    </a>
+<?php endif; ?>
+
+<?php if (can('records.read')): ?>
+    <a href="cikmalar.php" class="home-card">
+        <div class="home-card-icon" style="background:#fdecea">🚚</div>
+        <div class="home-card-title">Paletleme</div>
+        <?php if ($stats['toplam_cikma'] > 0): ?>
+        <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>
+        <?php endif; ?>
+    </a>
+<?php endif; ?>
+
+<?php if (can('kantar.read')): ?>
+    <a href="kantar.php" class="home-card">
+        <div class="home-card-icon" style="background:#f0faf4">⚖️</div>
+        <div class="home-card-title">Mal Kabul</div>
+    </a>
+<?php endif; ?>
+
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
@@ -340,7 +341,7 @@ if (nav_ptak_gorunur()):
 <?php if (can('hesap.read') || is_admin()): ?>
     <a href="hesap.php" class="home-card">
         <div class="home-card-icon" style="background:#fff3e0">🏦</div>
-        <div class="home-card-title">Hesabım</div>
+        <div class="home-card-title">Hesap</div>
         <?php if ($hesap_bekleyen > 0): ?>
         <div class="home-card-badge" style="background:var(--warn)"><?= $hesap_bekleyen ?></div>
         <?php endif; ?>
@@ -353,24 +354,25 @@ if (nav_ptak_gorunur()):
     </a>
 <?php endif; ?>
 
-<?php if (can_mail('read')): ?>
-    <a href="mail.php" class="home-card">
-        <div class="home-card-icon" style="background:#e0f4f9">📧</div>
-        <div class="home-card-title">Mail Merkezi</div>
-        <?php if ($mail_okunmamis > 0): ?>
-        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$mail_okunmamis ?></div>
-        <div class="home-card-sub">Okunmamış: <?= (int)$mail_okunmamis ?></div>
+<?php
+// Faz 7 (Sprint Navigasyon-01): bu kart artık personel_takip.php'ye açılır
+// (kalıcı personel + günlük işçi + hakediş/cari + raporlama merkezi) ve
+// GÖRÜNÜRLÜĞÜ personel_takip.php'nin KENDİ kapı mantığıyla AYNI genişlikte
+// kontrol edilir — TEK kaynak nav_ptak_gorunur() (sidebar + bottomnav ile
+// aynı fonksiyon); kart görünüp sayfa 403 veremez.
+if (nav_ptak_gorunur()):
+?>
+    <a href="personel_takip.php" class="home-card">
+        <div class="home-card-icon home-card-icon-personel" aria-hidden="true">
+            <span class="personel-arrow personel-arrow-in"></span>
+            <span class="personel-arrow personel-arrow-out"></span>
+        </div>
+        <div class="home-card-title">Personel Takibi</div>
+        <?php if ($personel_eksik_cikis > 0): ?>
+        <div class="home-card-badge" style="background:var(--danger)"
+             title="Bugün eksik çıkışı olan mesai"><?= (int)$personel_eksik_cikis ?></div>
         <?php endif; ?>
-        <?php if ($mail_cevapsiz24 > 0): ?>
-        <div class="home-card-sub home-card-uyari" style="color:var(--danger);font-weight:600">24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail</div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (can_siparis('read')): ?>
-    <a href="siparisler.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdf0dc">📦</div>
-        <div class="home-card-title">Siparişler</div>
+        <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
     </a>
 <?php endif; ?>
 
