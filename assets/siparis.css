@@ -641,3 +641,27 @@ html[data-theme="dark"] .sip-parti-btn { color: #cfe0ff; background: linear-grad
 .sip-table th:first-child, .sip-table td:first-child { padding-left: 14px; }
 .sip-table .sip-doks { display: inline-grid; grid-template-columns: repeat(2, auto); gap: 3px 4px; }   /* PO/LL/PC/PKL 2×2 — tek satır sütunu ~180px yapıyordu */
 /* ==== /LİSTE v386 ==== */
+/* ==== v394 WP Paylaş bildirimi ==== */
+/* ⋮ menüsü tıkta kapandığı için ilerleme / "Panoya kopyalandı" / "📤 Paylaş" eylemi sayfa düzeyindeki bu kutuda (z ≥ 600). */
+.sip-wp-durum[hidden] { display: none !important; }
+.sip-wp-durum { position: fixed; left: 50%; transform: translateX(-50%); z-index: 650;
+    bottom: calc(var(--bn-h, 0px) + 16px + env(safe-area-inset-bottom, 0px));
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; box-sizing: border-box;
+    width: max-content; max-width: calc(100vw - 32px); padding: 10px 10px 10px 14px; border-radius: 12px;
+    background: var(--card); color: var(--text); border: 1px solid var(--border); border-left: 4px solid var(--primary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: .92rem; line-height: 1.35; }
+.sip-wp-durum--ok { border-left-color: #16a34a; }
+.sip-wp-durum--uyari { border-left-color: #d97706; }
+.sip-wp-durum--hata { border-left-color: var(--danger); }
+.sip-wp-durum-metin { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.sip-wp-durum-eylem { display: flex; gap: 6px; flex-wrap: wrap; }
+.sip-wp-durum .btn, .sip-wp-durum-kapat { min-height: 44px; }
+.sip-wp-durum-kapat { min-width: 44px; background: none; border: 0; color: var(--muted); font-size: 1.1rem; cursor: pointer; border-radius: 8px; }
+.sip-wp-durum-kapat:hover { background: var(--bg); color: var(--text); }
+html[data-theme="dark"] .sip-wp-durum { box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+html[data-theme="dark"] .sip-wp-durum--ok { border-left-color: #4ade80; }
+html[data-theme="dark"] .sip-wp-durum--uyari { border-left-color: #fbbf24; }
+@media print { .sip-wp-durum { display: none !important; } }
+/* menü düğmesi satır yüksekliğini komşu <a> öğeleriyle eşitler (button varsayılanı line-height: normal) */
+.pc-dropdown [data-sip-wp] { line-height: inherit; }
+/* ==== /v394 ==== */

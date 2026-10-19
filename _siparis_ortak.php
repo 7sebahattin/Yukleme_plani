@@ -166,26 +166,48 @@ function sipui_tur_html(array $sev, array $parti, bool $satir = true): string
 }
 
 /**
+ * v394 — TEK kalem süzgeci + parçaları. Liste ürün satırı (sipui_kalem_satirlari), yazdırma GRAMAJ'ı (siparis_yazdir_gramaj)
+ * ve WP kartı (siparis_wp_veri) AYNI kuralı buradan alır — süzgeci başka yere KOPYALAMA.
+ * null = kalem listede gösterilmez: (a) hiç gönderilmeyecek (palet sayısal 0 VE etkin koli 0/boş) ya da
+ * (b) metni (açıklama / ürün+kalibre / çeşit / koli içeriği) da sayısal palet/PF'si de yok.
+ * palet: etkin_palet doluysa o, yoksa po_palet (ham; null olabilir) · koli: etkin_koli (ham; po_koli YEDEĞİ YOK).
+ * ad/meta: liste metni (değişmedi) · urun: açıklama (yoksa ürün) · çeşit · koli içeriği — kalibre AYRI alanda.
+ * @return array{palet:mixed,koli:mixed,ad:string,meta:string,urun:string,kalibre:string}|null
+ */
+function sipui_kalem_coz(array $k): ?array
+{
+    $pal = ($k['etkin_palet'] ?? null) !== null && $k['etkin_palet'] !== '' ? $k['etkin_palet'] : ($k['po_palet'] ?? null);
+    $koli = $k['etkin_koli'] ?? null;
+    if ($pal !== null && is_numeric($pal) && (int)$pal === 0 && ($koli === null || $koli === '' || (int)$koli === 0)) return null;
+    $aciklama = trim((string)($k['aciklama'] ?? ''));
+    $urun     = trim((string)($k['urun'] ?? ''));
+    $kalibre  = trim((string)($k['kalibre'] ?? ''));
+    $cesit    = trim((string)($k['cesit'] ?? ''));
+    $icerik   = trim((string)($k['koli_icerik'] ?? ''));
+    $ad = $aciklama !== '' ? $aciklama : trim($urun . ' ' . $kalibre);
+    $parca = array_values(array_filter([$ad, $cesit, $icerik], fn($x) => $x !== ''));
+    $meta = [];
+    if ($pal !== null && is_numeric($pal)) $meta[] = 'Pal. ' . sipui_sayi($pal);
+    if (($k['pf'] ?? null) !== null && is_numeric($k['pf'])) $meta[] = 'PF ' . sipui_sayi($k['pf']);
+    if (!$parca && !$meta) return null;
+    $urunParca = array_values(array_filter([$aciklama !== '' ? $aciklama : $urun, $cesit, $icerik], fn($x) => $x !== ''));
+    return ['palet' => $pal, 'koli' => $koli, 'ad' => implode(' · ', $parca), 'meta' => implode(' · ', $meta),
+            'urun' => implode(' · ', $urunParca), 'kalibre' => $kalibre];
+}
+
+/**
  * Liste için ürün satırları (PO "Article specification" + palet + PF). $kalemler: siparis_kalemler satırları
  * (sira sırasıyla). Palet: etkin_palet varsa o, yoksa po_palet. Hiç gönderilmeyecek kalem (etkin palet 0 ve etkin koli 0/boş)
- * atlanır. En çok $max satır; kalanı "+N daha".
+ * atlanır. En çok $max satır; kalanı "+N daha". Süzgeç: sipui_kalem_coz().
  * @return array{satirlar:list<array{ad:string,meta:string}>,fazla:int}
  */
 function sipui_kalem_satirlari(array $kalemler, int $max = 3): array
 {
     $tum = [];
     foreach ($kalemler as $k) {
-        $pal = ($k['etkin_palet'] ?? null) !== null && $k['etkin_palet'] !== '' ? $k['etkin_palet'] : ($k['po_palet'] ?? null);
-        $koli = $k['etkin_koli'] ?? null;
-        if ($pal !== null && is_numeric($pal) && (int)$pal === 0 && ($koli === null || $koli === '' || (int)$koli === 0)) continue;
-        $ad = trim((string)($k['aciklama'] ?? ''));
-        if ($ad === '') $ad = trim(trim((string)($k['urun'] ?? '')) . ' ' . trim((string)($k['kalibre'] ?? '')));
-        $parca = array_values(array_filter([$ad, trim((string)($k['cesit'] ?? '')), trim((string)($k['koli_icerik'] ?? ''))], fn($x) => $x !== ''));
-        $meta = [];
-        if ($pal !== null && is_numeric($pal)) $meta[] = 'Pal. ' . sipui_sayi($pal);
-        if (($k['pf'] ?? null) !== null && is_numeric($k['pf'])) $meta[] = 'PF ' . sipui_sayi($k['pf']);
-        if (!$parca && !$meta) continue;
-        $tum[] = ['ad' => implode(' · ', $parca), 'meta' => implode(' · ', $meta)];
+        $c = sipui_kalem_coz($k);
+        if ($c === null) continue;
+        $tum[] = ['ad' => $c['ad'], 'meta' => $c['meta']];
     }
     return ['satirlar' => array_slice($tum, 0, max(1, $max)), 'fazla' => max(0, count($tum) - max(1, $max))];
 }
