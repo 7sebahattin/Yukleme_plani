@@ -96,7 +96,11 @@
     url += (url.indexOf('?') < 0 ? '?' : '&') + 'amac=' + encodeURIComponent(amac);
     return fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } }).then(function (res) {
       var ct = res.headers.get('Content-Type') || '';
-      if (ct.indexOf('json') < 0) throw new Error('Oturum sona ermiş olabilir — sayfayı yenileyin.');
+      if (ct.indexOf('json') < 0) {
+        // 200/yönlendirme + HTML = giriş sayfası (oturum düştü); başka kod = sunucu hatası — ikisini karıştırma
+        if (res.ok || res.redirected) throw new Error('Oturum sona ermiş olabilir — sayfayı yenileyin.');
+        throw new Error('Sunucu beklenmeyen bir yanıt verdi (HTTP ' + res.status + ') — sayfayı yenileyip tekrar deneyin.');
+      }
       return res.json().then(function (j) {
         if (!res.ok || !j || !j.ok) throw new Error((j && j.hata) || 'Liste okunamadı.');
         if (!j.satirlar || !j.satirlar.length) throw new Error('Yazdırılacak sevkiyat yok.');
