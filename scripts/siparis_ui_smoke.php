@@ -640,6 +640,16 @@ rol($ADMIN, true);
 $r = sayfa('siparisler.php');
 ok('liste temiz + dengeli (yeni sütun)', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . (string)html_dengeli($r['html']));
 ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="8"><div class="sip-urunler">'));
+// v384 — Excel gibi dönüşümlü bant: grup sınıfı sunucuda; ana satır + ürün alt satırı AYNI bant, ardışık gruplar farklı
+preg_match_all('#<tr class="row-link( sip-urun-tr)? sip-grup sip-z([01])[^"]*" data-href="siparis_view\.php\?id=(\d+)">#', $r['html'], $__zm, PREG_SET_ORDER);
+$__zg = []; $__zt = true;
+foreach ($__zm as $__m) { $__k = $__m[3]; if ($__m[1] !== '') { $__zt = $__zt && isset($__zg[$__k]) && $__zg[$__k] === $__m[2]; } else { $__zg[$__k] = $__m[2]; } }
+$__zs = array_values($__zg); $__zd = count($__zs) >= 3;
+ok('zebra: her tablo satırı sip-grup sip-z0|1 taşır, ürün alt satırı ana satırla aynı bant', $__zt && count($__zm) === substr_count($r['html'], '<tr class="row-link'), count($__zm) . '/' . substr_count($r['html'], '<tr class="row-link'));
+ok('zebra: bölüm içinde ardışık sevkiyatlar dönüşümlü (0,1,0,…)', $__zd && $__zs[0] === '0' && $__zs[1] === '1' && $__zs[2] === '0', implode(',', $__zs));
+ok('zebra: mobil kartlar da sip-z0/sip-z1', substr_count($r['html'], '<article class="sip-card sip-z0') >= 2 && substr_count($r['html'], '<article class="sip-card sip-z1') >= 1);
+$__css = (string)file_get_contents(__DIR__ . '/../assets/siparis.css');
+ok('zebra CSS: açık + koyu bant rengi, hover önceliği', str_contains($__css, '.sip-table tbody > tr.sip-z1 > td { background: var(--sip-zebra); }') && str_contains($__css, 'html[data-theme="dark"] .sip-mod { --sip-zebra:') && str_contains($__css, '.sip-table tbody > tr.sip-grup:hover > td'));
 // v376 — sütun başlıkları + bugüne göre renkli tarih
 ok('başlıklar: "Lojistik" ve "Palet/Kasa" (eski "Araç" / "Palet / Koli" yok)', str_contains($r['html'], '<th>Lojistik</th>') && str_contains($r['html'], '<th class="num">Palet/Kasa</th>')
     && !str_contains($r['html'], '<th>Araç</th>') && !str_contains($r['html'], 'Palet / Koli') && str_contains($r['html'], ' kasa</span>') && !str_contains($r['html'], ' koli</span>'));

@@ -94,6 +94,21 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             const kart = await page.evaluate(() => { const a = document.querySelector('.sip-card-link'); const r = document.querySelector('.sip-card').getBoundingClientRect(); const l = a.getBoundingClientRect(); return { kartH: r.height }; });
             ok(`[${w}] liste: kart yüksekliği makul (ürün alt kartı dahil ≤ 300px; v376)`, kart.kartH <= 300, String(kart.kartH));
         }
+        // v384: Excel gibi dönüşümlü bant — ardışık sevkiyat grupları farklı zemin, grup içi (ana + ürün alt satırı) aynı
+        const zb = await page.evaluate(() => {
+            const gor = e => { const r = e.getBoundingClientRect(); return getComputedStyle(e).display !== 'none' && r.width > 0 && r.height > 0; };
+            const bg = e => getComputedStyle(e).backgroundColor;
+            const tb = document.querySelector('.table-wrap.pc-only'), kl = document.querySelector('.sip-kartlar');
+            if (tb && gor(tb)) {
+                const ana = Array.from(tb.querySelectorAll('tbody > tr.sip-grup:not(.sip-urun-tr)'));
+                const r = ana.slice(0, 3).map(t => { const u = t.nextElementSibling && t.nextElementSibling.classList.contains('sip-urun-tr') ? t.nextElementSibling : null;
+                    return { a: bg(t.cells[1]), u: u ? bg(u.cells[0]) : null }; });
+                return { tur: 'tablo', farkli: r.length >= 2 && r[0].a !== r[1].a && (r.length < 3 || r[0].a === r[2].a), ayni: r.every(x => x.u === null || x.u === x.a), r };
+            }
+            const k = Array.from(kl.querySelectorAll('.sip-card')).filter(gor).slice(0, 3).map(bg);
+            return { tur: 'kart', farkli: k.length >= 2 && k[0] !== k[1] && (k.length < 3 || k[0] === k[2]), ayni: true, r: k };
+        });
+        ok(`[${w}] liste: dönüşümlü iki renk bant (${zb.tur}; v384)`, zb.farkli && zb.ayni, JSON.stringify(zb));
         // v372: navlun no + ürün / Pal · PF + parti no (görünür, taşmadan)
         const v372 = await page.evaluate(() => {
             const gor = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
