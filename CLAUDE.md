@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v391` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v393` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -111,7 +111,7 @@ yönetici onaylar. `hesap.admin`'i özel role vermek = o rol HERKESİ görür.
 `position: fixed; left:0; top:0; bottom:0;` — z-index 100.
 Gruplar: Operasyon / Stok / Raporlama / Yönetim.
 Permission'lar `can()` / `is_admin()` ile kontrol edilir.
-**Sıra + adlar (v391, sahip kararı):** Ana Sayfa · **OGL Siparişler** · Beyanlar · Hal Bildirimi · Mail Merkezi · **Yüklemeler Planı** (`records.php`) · **Paletleme** (`cikmalar.php`, eski "Çıkmalar") · **Mal Kabul** (`kantar.php`, eski "Kantar") · Raporlar · Malzeme Stok · Hesap · Personel Takibi; ardından Yönetim. Aynı sıra/adlar masaüstü sidebar, tablet üst menü (`topnav`) ve mobil alt çubuk + "Diğer" sayfasında (`nav_alt_sayfalar()` anahtar SIRASI = sidebar sırası; soğuk başlangıç `records, hks, ptak, rapor`'dan sonra bu sırayı izler) geçerlidir. Yalnız GEZİNME adları değişti — sayfa içi başlıkları, URL'ler, yetki anahtarları ve ana sayfa kartları aynı. Yeni sayfa eklerken sidebar + `nav_alt_sayfalar()` + `topnav` üçünü birlikte güncelle. Test: `bottomnav_render/smoke` (`$SOGUK` sırası `bottomnav_render.php`'de bu sıranın aynasıdır).
+**Sıra + adlar (v391, sahip kararı):** Ana Sayfa · **OGL Siparişler** · Beyanlar · Hal Bildirimi · Mail Merkezi · **Yükleme Planları** (`records.php`) · **Paletleme** (`cikmalar.php`, eski "Çıkmalar") · **Mal Kabul** (`kantar.php`, eski "Kantar") · Raporlar · Malzeme Stok · Hesap · Personel Takibi; ardından Yönetim. Aynı sıra/adlar masaüstü sidebar, tablet üst menü (`topnav`) ve mobil alt çubuk + "Diğer" sayfasında (`nav_alt_sayfalar()` anahtar SIRASI = sidebar sırası; soğuk başlangıç `records, hks, ptak, rapor`'dan sonra bu sırayı izler) geçerlidir. Yalnız GEZİNME adları değişti — sayfa içi başlıkları, URL'ler ve yetki anahtarları aynı. **v393: "Yükleme Planları" (eski "Yüklemeler Planı") 🚚 ve "Paletleme" 📋 — sidebar + ana sayfa kartı emojileri, mobil alt çubuk ikonu/rengi (`records` → `cikma.svg` turuncu, `cikma` → `records.svg` mavi; kısa ad "Yük. Planı") takas edildi.** **v392: ana sayfa kartları (`index.php`) da AYNI sıra ve adlarla** (OGL Siparişler · Beyanlar · Hal Bildirimi · Mail Merkezi · Yükleme Planları 📋 · Paletleme 🚚 · Mal Kabul · Raporlar · Malzeme Stok · Hesap · Personel Takibi; "Hesabım" kartı "Hesap" oldu). Yeni sayfa eklerken sidebar + `nav_alt_sayfalar()` + `topnav` + `index.php` kartlarını birlikte güncelle. Test: `bottomnav_render/smoke` (`$SOGUK` sırası `bottomnav_render.php`'de bu sıranın aynasıdır).
 
 ### Z-index Mimarisi
 

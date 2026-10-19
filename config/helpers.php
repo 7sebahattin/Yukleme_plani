@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v391');
+    define('APP_SURUM', 'v393');
 }
 
 // --- HTML kaçışı ---
@@ -534,8 +534,8 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
-        <?php if ($p_rec)  $lnk('records.php',   '📋', 'Yüklemeler Planı', $a_yuk);  ?>
-        <?php if ($p_rec)  $lnk('cikmalar.php',  '🚚', 'Paletleme',  $a_cik);   ?>
+        <?php if ($p_rec)  $lnk('records.php',   '🚚', 'Yükleme Planları', $a_yuk);  ?>
+        <?php if ($p_rec)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
         <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
@@ -659,8 +659,8 @@ function nav_alt_sayfalar(): array {
         'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
         'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
         'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
-        'records' => ['href' => 'records.php',          'etiket' => 'Yüklemeler Planı',    'kisa' => 'Yüklemeler', 'dar' => 'Yükleme', 'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
-        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Paletleme',   'dar' => null,      'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'records' => ['href' => 'records.php',          'etiket' => 'Yükleme Planları',    'kisa' => 'Yük. Planı', 'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Paletleme',   'dar' => null,      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
         'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',            'kisa' => 'Mal Kabul',  'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
         'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
@@ -1038,7 +1038,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?><?= $__tm > 0 ? ' aria-label="Mail, ' . $__tm . ' okunmamış"' : '' ?>>Mail<?= nav_rozet_html($__tm, false) ?></a>
             <?php endif; ?>
             <?php if ($_nav_rec): ?>
-            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yüklemeler Planı</a>
+            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yükleme Planları</a>
             <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Paletleme</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
