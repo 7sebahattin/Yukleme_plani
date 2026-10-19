@@ -139,27 +139,29 @@ function sipui_navlun_html(array $sev): string
 }
 
 /**
- * Sipariş sütunu alt satırı: aktif beyan bağı varsa "Parti 12345 (+N)", yoksa "Tur 9000…"; ikisi de yoksa ''.
- * $parti = siparis_beyan_parti_haritasi() sonucu (sevkiyat id → ['parti','fazla']). $sar: ön ek (mobilde " · ").
+ * v386 — bağlı beyanların parti no'ları: sipariş no'nun ÜSTÜNDE, 3B düğme görünümlü rozetler (her parti ayrı rozet,
+ * sayı sınırı yok, tekrar eden parti no tek). Parti yoksa ''. $parti = siparis_beyan_parti_haritasi() çıktısı
+ * (eski biçim 'liste' yoksa tek 'parti'). Kullanıcı verisi h() ile kaçırılır.
  */
-function sipui_tur_parti_html(array $sev, array $parti, bool $satir = true): string
+function sipui_parti_rozet_html(array $sev, array $parti): string
 {
     $sid = (int)($sev['id'] ?? 0);
+    if (!isset($parti[$sid]) || (string)($parti[$sid]['parti'] ?? '') === '') return '';
+    $liste = array_values(array_unique(array_filter(array_map('strval', (array)($parti[$sid]['liste'] ?? [$parti[$sid]['parti']])), fn($x) => $x !== '')));
+    if (!$liste) return '';
     $ic = '';
-    if (isset($parti[$sid]) && (string)$parti[$sid]['parti'] !== '') {
-        // Bağlı TÜM beyanların parti no'ları alt alta (sayı sınırı yok); eski biçim ('liste' yok) tek parti.
-        $liste = array_values(array_filter(array_map('strval', (array)($parti[$sid]['liste'] ?? [$parti[$sid]['parti']])), fn($x) => $x !== ''));
-        if (count($liste) > 1) {
-            $ic = '';
-            foreach ($liste as $p) $ic .= '<span class="sip-parti-satir" title="Bağlı beyanın parti numarası">Parti ' . h($p) . '</span>';
-            return $satir ? '<div class="sip-soluk sip-turparti sip-turparti-coklu">' . $ic . '</div>'
-                          : '<span class="sip-soluk sip-turparti sip-turparti-coklu">' . $ic . '</span>';
-        }
-        $ic = '<span title="Bağlı beyanın parti numarası">Parti ' . h($liste[0] ?? (string)$parti[$sid]['parti']) . '</span>';
-    } elseif (trim((string)($sev['tur_no'] ?? '')) !== '') {
-        $ic = '<span>Tur ' . h((string)$sev['tur_no']) . '</span>';
-    }
-    if ($ic === '') return '';
+    foreach ($liste as $p) $ic .= '<span class="sip-parti-btn" title="Bağlı beyanın parti numarası"><span class="sip-parti-et">Parti</span> ' . h($p) . '</span>';
+    return '<div class="sip-parti-rozetler">' . $ic . '</div>';
+}
+
+/** Tur no — YALNIZ bağlı beyan parti no'su yoksa (parti varsa rozetleri sipariş no'nun üstünde gösterilir). */
+function sipui_tur_html(array $sev, array $parti, bool $satir = true): string
+{
+    $sid = (int)($sev['id'] ?? 0);
+    if (isset($parti[$sid]) && (string)($parti[$sid]['parti'] ?? '') !== '') return '';
+    $tur = trim((string)($sev['tur_no'] ?? ''));
+    if ($tur === '') return '';
+    $ic = '<span>Tur ' . h($tur) . '</span>';
     return $satir ? '<div class="sip-soluk nowrap sip-turparti">' . $ic . '</div>' : '<span class="sip-soluk sip-turparti"> · ' . $ic . '</span>';
 }
 

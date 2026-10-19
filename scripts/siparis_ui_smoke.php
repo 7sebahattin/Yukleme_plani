@@ -622,7 +622,7 @@ $satir = function (string $html, int $sid): string {      // masaüstü tablo sa
     return preg_match('#<tr class="row-link[^"]*" ' . $h . '(.*?)</tr>(\s*<tr class="row-link sip-urun-tr[^"]*" ' . $h . '(.*?)</tr>)?#s', $html, $m) ? $m[1] . ($m[3] ?? '') : '';
 };
 $kart = function (string $html, int $sid): string {       // mobil kart
-    return preg_match('#<article class="sip-card[^"]*">(?:(?!</article>).)*?siparis_view\.php\?id=' . $sid . '"(.*?)</article>#s', $html, $m) ? $m[1] : '';
+    return preg_match('#<article class="sip-card[^"]*">((?:(?!</article>).)*?siparis_view\.php\?id=' . $sid . '".*?)</article>#s', $html, $m) ? $m[1] : '';   // v386: parti rozetleri linkin ÜSTÜNDE — tüm kart
 };
 $db->exec("INSERT INTO customs_declarations (status, party_no, created_at, deleted_at) VALUES ('taslak', 'SILINMIS-9', '2026-12-02 11:00:00', '2026-12-03 00:00:00')");
 $silinmisId = (int)$db->lastInsertId();
@@ -639,7 +639,7 @@ foreach ([16, 18] as $i => $kal) {                             // s12: 3 → 5 k
 rol($ADMIN, true);
 $r = sayfa('siparisler.php');
 ok('liste temiz + dengeli (yeni sütun)', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . (string)html_dengeli($r['html']));
-ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="8"><div class="sip-urunler">'));
+ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="9"><div class="sip-urunler">'));
 // v384 — Excel gibi dönüşümlü bant: grup sınıfı sunucuda; ana satır + ürün alt satırı AYNI bant, ardışık gruplar farklı
 preg_match_all('#<tr class="row-link( sip-urun-tr)? sip-grup sip-z([01])[^"]*" data-href="siparis_view\.php\?id=(\d+)">#', $r['html'], $__zm, PREG_SET_ORDER);
 $__zg = []; $__zt = true;
@@ -650,6 +650,16 @@ ok('zebra: bölüm içinde ardışık sevkiyatlar dönüşümlü (0,1,0,…)', $
 ok('zebra: mobil kartlar da sip-z0/sip-z1', substr_count($r['html'], '<article class="sip-card sip-z0') >= 2 && substr_count($r['html'], '<article class="sip-card sip-z1') >= 1);
 $__css = (string)file_get_contents(__DIR__ . '/../assets/siparis.css');
 ok('zebra CSS: açık + koyu bant rengi, hover önceliği', str_contains($__css, '.sip-table tbody > tr.sip-z1 > td { background: var(--sip-zebra); }') && str_contains($__css, 'html[data-theme="dark"] .sip-mod { --sip-zebra:') && str_contains($__css, '.sip-table tbody > tr.sip-grup:hover > td'));
+// v386 — Gümrük sütunu: yazılıysa görünür (kaçırılmış, title'da tam metin), boşsa hücre boş; mobil kartta "Gümrük: …"
+$__gEski = $db->query('SELECT gumruk FROM siparis_sevkiyatlar WHERE id = ' . (int)$ID['s1'])->fetchColumn();
+$db->prepare('UPDATE siparis_sevkiyatlar SET gumruk = ? WHERE id = ?')->execute(['TESTPORT <b>Y</b>', $ID['s1']]);
+$db->exec("UPDATE siparis_sevkiyatlar SET gumruk = NULL WHERE id = " . (int)$ID['s31']);
+$__rg = sayfa('siparisler.php');
+ok('gümrük: başlık + colspan 9', str_contains($__rg['html'], '<th>Lojistik</th><th>Gümrük</th>') && !str_contains($__rg['html'], '<td colspan="8">'));
+ok('gümrük: yazılıysa hücrede (kaçırılmış), boşsa hücre boş', str_contains($satir($__rg['html'], $ID['s1']), '<span class="sip-gumruk" title="TESTPORT &lt;b&gt;Y&lt;/b&gt;">TESTPORT &lt;b&gt;Y&lt;/b&gt;</span>')
+    && str_contains($satir($__rg['html'], $ID['s31']), '<td class="sip-gumruk-hucre"></td>') && !str_contains($__rg['html'], '<b>Y</b>'));
+ok('gümrük: mobil kartta yalnız yazılıysa', str_contains($kart($__rg['html'], $ID['s1']), 'Gümrük: TESTPORT &lt;b&gt;Y&lt;/b&gt;') && !str_contains($kart($__rg['html'], $ID['s31']), 'Gümrük:'));
+$db->prepare('UPDATE siparis_sevkiyatlar SET gumruk = ? WHERE id = ?')->execute([$__gEski === false ? null : $__gEski, $ID['s1']]);
 // v376 — sütun başlıkları + bugüne göre renkli tarih
 ok('başlıklar: "Lojistik" ve "Palet/Kasa" (eski "Araç" / "Palet / Koli" yok)', str_contains($r['html'], '<th>Lojistik</th>') && str_contains($r['html'], '<th class="num">Palet/Kasa</th>')
     && !str_contains($r['html'], '<th>Araç</th>') && !str_contains($r['html'], 'Palet / Koli') && str_contains($r['html'], ' kasa</span>') && !str_contains($r['html'], ' koli</span>'));
@@ -671,23 +681,24 @@ ok('PO palet yedeği (etkin boşsa po_palet) + palet/PF yoksa meta satırı yok'
 ok('5 kalem: en çok 3 satır + "+2 daha"', substr_count($t4, 'class="sip-urun"') === 3 && str_contains($t4, '+2 daha'));
 ok('ürün bölümü mobil kartta', str_contains($kart($r['html'], $ID['s1']), 'sip-card-urun') && str_contains($kart($r['html'], $ID['s1']), 'Pal. 20 · PF 160'));
 ok('kalem metni kaçırılıyor (XSS yok)', !str_contains(sipui_kalem_html([['aciklama' => '<script>x</script>', 'po_palet' => 1]]), '<script>'));
-ok('yönetici: bağlı beyanların parti no\'ları Tur no yerine, ALT ALTA (her biri ayrı satır)', str_contains($t1, '<span class="sip-parti-satir" title="Bağlı beyanın parti numarası">Parti TC900001.10-A</span>') && substr_count($t1, 'class="sip-parti-satir"') === 2 && !str_contains($t1, 'Tur 9000000001') && !str_contains($t1, ' +1'), substr($t1, 0, 400));
-ok('parti no mobil kartta da (alt alta)', substr_count($kart($r['html'], $ID['s1']), 'class="sip-parti-satir"') === 2 && str_contains($kart($r['html'], $ID['s1']), 'Parti TC900001.10-A'));
+ok('yönetici: bağlı beyanların parti no\'ları Tur no yerine, her biri ayrı 3B rozet (v386)', str_contains($t1, '<span class="sip-parti-btn" title="Bağlı beyanın parti numarası"><span class="sip-parti-et">Parti</span> TC900001.10-A</span>') && substr_count($t1, 'class="sip-parti-btn"') === 2 && !str_contains($t1, 'Tur 9000000001') && !str_contains($t1, ' +1'), substr($t1, 0, 400));
+ok('parti no mobil kartta da (rozet)', substr_count($kart($r['html'], $ID['s1']), 'class="sip-parti-btn"') === 2 && str_contains($kart($r['html'], $ID['s1']), '</span> TC900001.10-A</span>'));
+ok('v386: parti rozetleri sipariş no\'nun ÜSTÜNDE (tablo + kart)', strpos($t1, 'sip-parti-rozetler') !== false && strpos($t1, 'sip-parti-rozetler') < strpos($t1, 'class="sip-ref"') && strpos($kart($r['html'], $ID['s1']), 'sip-parti-rozetler') < strpos($kart($r['html'], $ID['s1']), 'sip-card-link'));
 // kaç tane olursa olsun: aynı parti no iki beyanda geçerse TEK satır, farklı olanların hepsi ayrı satır, "+N" kısaltması YOK
 $db->exec("INSERT INTO customs_declarations (status, party_no, created_at) VALUES ('taslak', 'EK-3', '2026-12-02 12:00:00'), ('taslak', 'EK-4', '2026-12-02 12:00:00'), ('taslak', 'TC900001.10-A', '2026-12-02 12:00:00')");
 $__ek = (int)$db->lastInsertId();                                   // son eklenen = 'TC900001.10-A' kopyası
 $bagEkle($ID['s12'], $__ek - 2); $bagEkle($ID['s12'], $__ek - 1); $bagEkle($ID['s12'], $__ek); $bagEkle($ID['s12'], 1);   // beyan 1 de 'TC900001.10-A' → tekrar
 $r2 = sayfa('siparisler.php'); $ta = $satir($r2['html'], $ID['s12']);
-ok('4 bağ (3 farklı + 1 tekrar parti no) → tekrarsız 3 satır alt alta, "+N" yok', substr_count($ta, 'class="sip-parti-satir"') === 3 && str_contains($ta, 'Parti EK-3') && str_contains($ta, 'Parti EK-4') && str_contains($ta, 'Parti TC900001.10-A') && !str_contains($ta, ' +'), substr($ta, 0, 400));
+ok('4 bağ (3 farklı + 1 tekrar parti no) → tekrarsız 3 satır alt alta, "+N" yok', substr_count($ta, 'class="sip-parti-btn"') === 3 && str_contains($ta, '</span> EK-3<') && str_contains($ta, '</span> EK-4<') && str_contains($ta, '</span> TC900001.10-A<') && !str_contains($ta, ' +'), substr($ta, 0, 400));
 $bagEkle($ID['s12'], 2);                                             // beyan 2 (başka parti no) → 4 satır
 $r2 = sayfa('siparisler.php'); $ta = $satir($r2['html'], $ID['s12']);
-ok('4 farklı parti no → 4 ayrı satır (mobil kartta da)', substr_count($ta, 'class="sip-parti-satir"') === 4 && substr_count($kart($r2['html'], $ID['s12']), 'class="sip-parti-satir"') === 4, substr($ta, 0, 400));
+ok('4 farklı parti no → 4 ayrı satır (mobil kartta da)', substr_count($ta, 'class="sip-parti-btn"') === 4 && substr_count($kart($r2['html'], $ID['s12']), 'class="sip-parti-btn"') === 4, substr($ta, 0, 400));
 $db->exec("DELETE FROM siparis_beyan WHERE sevkiyat_id = " . (int)$ID['s12']);
 $db->exec("DELETE FROM customs_declarations WHERE id > " . ($__ek - 3));
 ok('bağı olmayan / kaldırılmış / silinmiş beyan: Tur no', str_contains($t2, 'Tur 9000000031') && str_contains($t3, 'Tur 9000000011') && !str_contains($t3, 'SILINMIS') && !str_contains($t3, 'Parti'));
 rol($OPER, false, 5);          // siparis.read + beyan.read
 $r = sayfa('siparisler.php');
-ok('beyan.read olan operatör parti no\'yu görür', temiz($r) && substr_count($satir($r['html'], $ID['s1']), 'class="sip-parti-satir"') === 2 && str_contains($satir($r['html'], $ID['s1']), 'Parti TC900001.10-A'));
+ok('beyan.read olan operatör parti no\'yu görür', temiz($r) && substr_count($satir($r['html'], $ID['s1']), 'class="sip-parti-btn"') === 2 && str_contains($satir($r['html'], $ID['s1']), '</span> TC900001.10-A</span>'));
 rol($VIEW, false, 6);          // yalnız siparis.read
 $r = sayfa('siparisler.php');
 $v1 = $satir($r['html'], $ID['s1']);
