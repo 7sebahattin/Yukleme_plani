@@ -227,6 +227,24 @@ $g2 = null; foreach ($v2['satirlar'] as $s) if ($s['h'][3] === 'TC900101.10') $g
 ok('şoför adı + telefonu dolu sütunlarda', $o2['sofor'] === true && $g2['h'][4] === 'Test Sürücü Bir' && $g2['h'][5] === '+90 532 000 00 01');
 ok('şoför kurulu: "kurulmadı" notu yok', !in_array('Şoför alanları kurulmadı.', $v2['notlar'], true));
 
+echo "\n=== 7b. Doğrudan istek koruması uçla çakışmaz (v385) ===\n";
+// Uç kökte, yardımcı config/ altında AYNI ADI taşır. Eski basename koruması ucu 404 + boş gövdeyle bitiriyordu (canlıda
+// "Oturum sona ermiş olabilir"). Harness SCRIPT_FILENAME'i ayarlamadığı için bu AYRI süreçte sınanır.
+$__kos = function (string $script) use ($ROOT): string {
+    $kod = '$_SERVER["SCRIPT_FILENAME"] = ' . var_export($script, true) . '; function h($s){return htmlspecialchars((string)$s);}'
+         . ' require ' . var_export($ROOT . '/config/siparis_core.php', true) . '; require ' . var_export($ROOT . '/_siparis_ortak.php', true) . ';'
+         . ' require ' . var_export($ROOT . '/config/siparis_yazdir.php', true) . '; echo "YUKLENDI";';
+    return (string)shell_exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($kod) . ' 2>&1');
+};
+ok('uç (kök siparis_yazdir.php) çalışırken config/siparis_yazdir.php YÜKLENİR (404/exit yok)', str_contains($__kos($ROOT . '/siparis_yazdir.php'), 'YUKLENDI'));
+ok('config/siparis_yazdir.php doğrudan istenirse yine durur', !str_contains($__kos($ROOT . '/config/siparis_yazdir.php'), 'YUKLENDI'));
+$__cak = [];
+foreach (array_merge(glob($ROOT . '/*.php') ?: [], glob($ROOT . '/config/*.php') ?: [], glob($ROOT . '/halkayit/*.php') ?: []) as $__f) {
+    if (!str_contains((string)file_get_contents($__f), "basename((string)(\$_SERVER['SCRIPT_FILENAME']")) continue;
+    foreach ([$ROOT, $ROOT . '/config', $ROOT . '/halkayit'] as $__d) if (realpath($__d . '/' . basename($__f)) !== false && realpath($__d . '/' . basename($__f)) !== realpath($__f)) $__cak[] = basename($__f);
+}
+ok('basename korumalı include-only dosyanın adı başka bir sayfayla çakışmıyor', $__cak === [], implode(', ', $__cak));
+
 echo "\n=== 8. Uç (siparis_yazdir.php) ===\n";
 rol(['siparis.read'], false, 5);   // izleyici
 $r = uc('siparis_yazdir.php', ['amac' => 'pdf', 'q' => 'TC900101']);

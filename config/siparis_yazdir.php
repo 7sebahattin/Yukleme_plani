@@ -8,7 +8,9 @@
 // YENİ SÜTUN = yalnız siparis_yazdir_veri() (ve siparis_yazdir_kolonlari()); ülke = siparis_yazdir_ulke_haritasi().
 // =========================================================
 declare(strict_types=1);
-if (basename((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === basename(__FILE__)) { http_response_code(404); exit; }
+// Doğrudan istek → 404. TAM YOL karşılaştırılır: uç dosyası kökte AYNI ADI taşır (siparis_yazdir.php); basename karşılaştırması
+// ucu da 404'e düşürüyordu (v385 — yazdırma "Oturum sona ermiş olabilir" diyordu).
+if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 
 if (!defined('SIPARIS_YAZDIR_LIMIT')) define('SIPARIS_YAZDIR_LIMIT', 500);
 

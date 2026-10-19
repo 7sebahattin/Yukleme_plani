@@ -157,6 +157,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     for (const [ad, yanit, beklenen] of [
         ['500 JSON', route => route.fulfill(JSONY({ ok: false, hata: 'Liste okunamadı.' }, 500)), /Liste okunamadı/],
         ['oturum süresi (HTML yanıt)', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Giriş yapın</html>' }), /Oturum sona ermiş olabilir/],
+        ['boş 404 (sunucu hatası, oturum DEĞİL; v385)', route => route.fulfill({ status: 404, contentType: 'text/html', body: '' }), /HTTP 404/],
         ['boş küme', route => route.fulfill(JSONY({ ok: true, satirlar: [], kolonlar: [], adet: 0 })), /Yazdırılacak sevkiyat yok/],
         ['ağ hatası', route => route.abort('failed'), /./],
     ]) {
