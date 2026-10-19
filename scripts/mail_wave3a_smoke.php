@@ -135,7 +135,8 @@ $db->exec('DELETE FROM mail_messages WHERE id > ' . $sinirId);
 $db->exec('UPDATE mail_messages SET is_read = 0 WHERE id IN (1,2,3)');
 
 // "Diğer": çok sayfa izinli → Mail slotlara sığmaz → "Diğer" sayfasındaki karoda rozet; güncel öğe Mail ise Diğer düğmesinde
-$BOL = ['dashboard.read', 'records.read', 'reports.read', 'beyan.read', 'kantar.read', 'stok.read', 'hesap.read', 'mail.read'];
+// v391: soğuk başlangıç sırası değişti (Sipariş/Beyan/Mail öne geldi) → Mail'in slot dışında kalması için siparis.read de verilir.
+$BOL = ['dashboard.read', 'records.read', 'reports.read', 'siparis.read', 'beyan.read', 'kantar.read', 'stok.read', 'hesap.read', 'mail.read'];
 $hd = sayfa_ciz('/index.php', $BOL);
 $bnd = parca($hd, '<nav class="bottomnav"', '</nav>');
 $sheet = parca($hd, 'id="bnSheetOvl"', '</section>');

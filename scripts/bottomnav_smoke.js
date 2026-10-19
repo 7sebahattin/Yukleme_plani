@@ -122,8 +122,8 @@ let bag_ctx = {};
 
 const r1 = (n) => Math.round(n * 10) / 10;
 // Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
-const SAYFA_ADI = { records: 'Yüklemeler', cikma: 'Çıkmalar', beyan: 'Beyanlar', kantar: 'Kantar', hks: 'Hal Bildirimi',
-    rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
+const SAYFA_ADI = { records: 'Yüklemeler Planı', cikma: 'Paletleme', beyan: 'Beyanlar', kantar: 'Mal Kabul', hks: 'Hal Bildirimi',
+    rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
     users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
 // Göreli href'i uygulama köküne göre yola çevir (base_url '../' dahil)
@@ -877,7 +877,7 @@ function guvenliAlanKurallari(barSel) {
         }, TASARIM);
         let d = await oku();
         ok('B', bag + '@360', '4. slot gizli, "Diğer" Kantar\'ı taşıyor (ikon + rozet + etiket + aria-current)',
-            d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Kantar' && !d.kantarGor, JSON.stringify(d));
+            d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Mal Kabul' && !d.kantarGor, JSON.stringify(d));
         await page.setViewportSize({ width: 430, height: 932 }); await page.waitForTimeout(250);
         d = await oku();
         ok('B', bag + '@430', 'genişleyince "Diğer" gizlenir, Kantar slotu aktif', !d.diger && d.kantarGor && d.kantarCur === 'page' && d.digerCur === null, JSON.stringify(d));
