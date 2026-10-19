@@ -840,6 +840,25 @@ ok('[bag] duzenlemede bag yeni taslaga tasiniyor', ($bag($B1)['taslak_id'] ?? ''
    && ($bag($B1)['durum'] ?? '') === 'taslak', json_encode($bag($B1)));
 beyan_hks_taslak_isaretle('yeni1', 'gonderildi', ['gonderim_id' => 'g1']);
 ok('[bag] duzenlenen taslagin gonderimi beyana yansiyor', ($bag($B1)['durum'] ?? '') === 'gonderildi');
+$durum_of = function (int $b): string {
+    $q = db()->prepare("SELECT status FROM customs_declarations WHERE id = ?"); $q->execute([$b]);
+    return (string)$q->fetchColumn();
+};
+ok('[yüklendi] HKS gönderildi → beyan otomatik YÜKLENDİ', $durum_of($B1) === 'yuklendi', $durum_of($B1));
+// Silinen/iptal edilen taslak beyanı yüklendi YAPMAZ; kapalı (iptal/red) beyan gönderimle ezilmez.
+$BY1 = beyan_ekle($TAM + ['status' => 'temiz']); $yeni_bag($BY1, 'sil-y');
+beyan_hks_taslak_isaretle('sil-y', 'silindi', ['hata_metni' => 'x']);
+ok('[yüklendi] taslak silindi → durum DEĞİŞMEZ', $durum_of($BY1) === 'temiz', $durum_of($BY1));
+$BY2 = beyan_ekle($TAM + ['status' => 'iptal']); $yeni_bag($BY2, 'gon-iptal');
+beyan_hks_taslak_isaretle('gon-iptal', 'gonderildi', ['gonderim_id' => 'gy2']);
+ok('[yüklendi] iptal beyan HKS gönderimiyle ezilmez', $durum_of($BY2) === 'iptal', $durum_of($BY2));
+$BY3 = beyan_ekle($TAM + ['status' => 'numune_bekliyor']);
+ok('[yüklendi] Gönderildi Olarak İşaretle → YÜKLENDİ',
+   beyan_hks_bag_duzelt($BY3, 'gonderildi_isaretle', 1) === null && $durum_of($BY3) === 'yuklendi', $durum_of($BY3));
+$BY4 = beyan_ekle($TAM + ['status' => 'temiz']); $yeni_bag($BY4, 'sil-y4');
+beyan_hks_taslak_isaretle('sil-y4', 'silindi', ['hata_metni' => 'x']);
+beyan_hks_bag_duzelt($BY4, 'tekrar_aktif', 1);
+ok('[yüklendi] Tekrar Aktif Et durumu değiştirmez', $durum_of($BY4) === 'temiz', $durum_of($BY4));
 
 // 2) Silinen taslak beyanı yeniden AÇMAZ ('silindi' aktif sayılır).
 $B2 = beyan_ekle($TAM); $yeni_bag($B2, 'sil2');

@@ -220,7 +220,7 @@ $ANAHTAR_SAYFA = [
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'cikma', 'beyan', 'kantar', 'mstok', 'hesap', 'mail', 'siparis', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'beyan', 'mail', 'cikma', 'kantar', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }

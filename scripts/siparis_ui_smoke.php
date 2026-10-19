@@ -125,6 +125,10 @@ foreach (['TC900001.10', 'TC900002.10', 'TC900011.10', 'TC900012.10', 'TC900099.
 ok('liste: ikinci depo sevkiyatı (admin kısıtsız) görünür', str_contains($r['html'], 'TC900031.10'));
 ok('KPI çipleri 7 adet', preg_match_all('/class="sip-chip[ "]/', $r['html']) === 7 && str_contains($r['html'], 'PKL bekleyen') && str_contains($r['html'], 'Mail bekleyen'));
 ok('açık + kapanan bölümler', str_contains($r['html'], 'id="sipAcik"') && str_contains($r['html'], 'id="sipKapali"'));
+ok('v390: Açık ve Kapanan AYRI kartlar (İşlem Bekleyen ⏳ / Kapanan ✅, Beyanlar gibi)',
+   str_contains($r['html'], 'class="sip-bolum sip-bolum-acik"') && str_contains($r['html'], 'class="sip-bolum sip-bolum-kapali"')
+   && str_contains($r['html'], 'İşlem Bekleyen Sevkiyatlar') && str_contains($r['html'], 'Kapanan Sevkiyatlar')
+   && !str_contains($r['html'], 'Açık sevkiyatlar</h2>') && str_contains($r['html'], '⏳') && str_contains($r['html'], '✅'));
 ok('masaüstü tablo + mobil kart + satır bağlantısı', str_contains($r['html'], 'table-wrap pc-only') && str_contains($r['html'], 'card-list mobile-only sip-kartlar') && str_contains($r['html'], 'class="row-link'));
 ok('belge rozetleri ✓/– ve durum rozetleri', str_contains($r['html'], 'sip-dok--var') && str_contains($r['html'], 'sip-dok--yok') && str_contains($r['html'], 'sip-badge--pkl') && str_contains($r['html'], 'sip-badge--mail') && str_contains($r['html'], 'sip-badge--iptal'));
 ok('PO yok rozeti (PC ile açılan taslak)', str_contains($r['html'], 'sip-po--yok'));

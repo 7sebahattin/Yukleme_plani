@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v389');
+    define('APP_SURUM', 'v391');
 }
 
 // --- HTML kaçışı ---
@@ -530,17 +530,16 @@ function render_desktop_sidebar(string $base): void {
     <nav class="sidebar-nav">
         <div class="sidebar-section">Operasyon</div>
         <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
-        <?php if ($p_rec)  $lnk('records.php',   '📋', 'Yüklemeler',    $a_yuk);  ?>
-        <?php if ($p_rec)   $lnk('cikmalar.php',  '🚚', 'Çıkmalar',  $a_cik);   ?>
+        <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
-        <?php if ($p_kant)  $lnk('kantar.php',   '⚖️', 'Kantar',    $a_kant);  ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
-
+        <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
+        <?php if ($p_rec)  $lnk('records.php',   '📋', 'Yüklemeler Planı', $a_yuk);  ?>
+        <?php if ($p_rec)  $lnk('cikmalar.php',  '🚚', 'Paletleme',  $a_cik);   ?>
+        <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
-        <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
-        <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'Siparişler', $a_sip); ?>
 <?php   // ⚠ Maliyet girişi BİLEREK burada YOK (Sprint Navigasyon-03, kullanıcı
         // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
         // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
@@ -656,16 +655,16 @@ function nav_rozet_html(int $n, bool $okunur = true, string $ekSinif = '', bool 
 function nav_alt_sayfalar(): array {
     return [
         'home'    => ['href' => 'index.php',            'etiket' => 'Ana Sayfa',            'kisa' => 'Ana Sayfa',  'dar' => '',        'renk' => '#232d3e', 'grup' => '',          'ikon' => 'assets/nav-icons/home.svg'],
-        'records' => ['href' => 'records.php',          'etiket' => 'Yüklemeler',           'kisa' => 'Yüklemeler', 'dar' => 'Yükleme', 'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
-        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Çıkmalar',             'kisa' => 'Çıkmalar',   'dar' => null,      'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'siparis' => ['href' => 'siparisler.php',       'etiket' => 'OGL Siparişler',       'kisa' => 'OGL Sipariş','dar' => 'Sipariş',       'renk' => '#b45309', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/siparis.svg'],
         'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
-        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Kantar',               'kisa' => 'Kantar',     'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
         'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
+        'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
+        'records' => ['href' => 'records.php',          'etiket' => 'Yüklemeler Planı',    'kisa' => 'Yüklemeler', 'dar' => 'Yükleme', 'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
+        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Paletleme',   'dar' => null,      'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',            'kisa' => 'Mal Kabul',  'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
         'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
         'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
-        'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
-        'siparis' => ['href' => 'siparisler.php',       'etiket' => 'Siparişler',           'kisa' => 'Sipariş',    'dar' => null,      'renk' => '#b45309', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/siparis.svg'],
         'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
         'defs'    => ['href' => 'definitions.php',      'etiket' => 'Tanımlar',             'kisa' => 'Tanımlar',   'dar' => null,      'renk' => '#c77d08', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/defs.svg'],
         'users'   => ['href' => 'users.php',            'etiket' => 'Kullanıcılar',         'kisa' => 'Kullanıcı',  'dar' => null,      'renk' => '#3d49b5', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/users.svg'],
@@ -1028,9 +1027,8 @@ function render_header(string $title, bool $print_mode = false): void {
         $_nav_users = function_exists('is_admin') && is_admin();
         ?>
         <nav class="topnav">
-            <?php if ($_nav_rec): ?>
-            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yüklemeler</a>
-            <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
+            <?php if (can_siparis('read')): ?>
+            <a href="<?= $base ?>siparisler.php" <?= nav_aktif_anahtar() === 'siparis' ? 'class="active"' : '' ?>>OGL Siparişler</a>
             <?php endif; ?>
             <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
             <a href="<?= $base ?>beyanlar.php" <?= in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php'], true) ? 'class="active"' : '' ?>>Beyanlar</a>
@@ -1039,8 +1037,9 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php $__tm = nav_mail_okunmamis(); ?>
             <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?><?= $__tm > 0 ? ' aria-label="Mail, ' . $__tm . ' okunmamış"' : '' ?>>Mail<?= nav_rozet_html($__tm, false) ?></a>
             <?php endif; ?>
-            <?php if (can_siparis('read')): ?>
-            <a href="<?= $base ?>siparisler.php" <?= nav_aktif_anahtar() === 'siparis' ? 'class="active"' : '' ?>>Siparişler</a>
+            <?php if ($_nav_rec): ?>
+            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yüklemeler Planı</a>
+            <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Paletleme</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
             <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
@@ -2923,6 +2922,30 @@ function beyan_hks_durum_tazele(int $beyan_id): void {
     } catch (PDOException $e) {}
 }
 
+// "HKS GÖNDERİLDİ" olan beyan otomatik "YÜKLENDİ" olur (v390, sahip kararı): bildirim
+// HKS'e gitti = sevkiyat yapıldı. Yalnız bekleyen durumlar taşınır; zaten kapalı
+// (yüklendi/iptal/red) beyana DOKUNULMAZ — iptal/red'i sessizce ezmek yanlış olur.
+// Hata yutar (HKS gönderim akışını asla kesmez); tek kaynak, iki çağıran:
+// beyan_hks_taslak_isaretle('gonderildi') ve beyan_hks_bag_duzelt('gonderildi_isaretle').
+function beyan_hks_gonderildi_yuklendi(int $beyan_id): void {
+    if ($beyan_id <= 0) return;
+    try {
+        $st = db()->prepare("SELECT status FROM customs_declarations WHERE id = ? AND deleted_at IS NULL");
+        $st->execute([$beyan_id]);
+        $eski = $st->fetchColumn();
+        if ($eski === false || in_array((string)$eski, beyan_kapali_durumlar(), true)) return;
+        $user = function_exists('current_user') ? current_user() : null;
+        $uid  = (int)($user['id'] ?? 0);
+        db()->prepare("UPDATE customs_declarations SET status = 'yuklendi', updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ? AND deleted_at IS NULL")
+            ->execute([$uid > 0 ? $uid : null, $beyan_id]);
+        audit_log_event('beyan_status_change', 'declarations', $beyan_id,
+            ['status' => (string)$eski], ['status' => 'yuklendi', 'otomatik' => 'hks_gonderildi']);
+    } catch (Throwable $e) {
+        error_log('[beyan-hks] otomatik yuklendi yapilamadi: ' . $e->getMessage());
+    }
+}
+
 function beyan_hks_durum_etiket(?string $durum): string {
     return [
         'taslak'     => 'HKS TASLAK',
@@ -3011,6 +3034,7 @@ function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek =
                              WHERE id = ?");
         $up->execute([$durum, $ek['gonderim_id'] ?? null, $ek['hata_metni'] ?? null, (int)$row['id']]);
         beyan_hks_durum_tazele((int)$row['beyan_id']);
+        if ($durum === 'gonderildi') beyan_hks_gonderildi_yuklendi((int)$row['beyan_id']);
     } catch (PDOException $e) {
         error_log('[beyan-hks] bag guncellenemedi: ' . $e->getMessage());
     }
@@ -3079,6 +3103,7 @@ function beyan_hks_bag_duzelt(int $beyan_id, string $islem, int $user_id): ?stri
         return 'Bildirim bağı güncellenemedi.';
     }
     beyan_hks_durum_tazele($beyan_id);
+    if ($islem === 'gonderildi_isaretle') beyan_hks_gonderildi_yuklendi($beyan_id);
     return null;
 }
 
