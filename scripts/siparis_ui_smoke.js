@@ -114,7 +114,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             const gor = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
             const kaplar = Array.from(document.querySelectorAll('.table-wrap.pc-only, .sip-kartlar')).filter(gor);   // açık + kapanan bölüm
             const gors = sel => kaplar.flatMap(k => Array.from(k.querySelectorAll(sel))).filter(gor);
-            const nv = gors('.sip-navlun'), ur = gors('.sip-urun'), pt = gors('.sip-turparti');
+            const nv = gors('.sip-navlun'), ur = gors('.sip-urun'), pt = gors('.sip-turparti, .sip-parti-btn');   // v386: parti no ayrı 3B rozet
             const sag = gors('.sip-navlun, .sip-urun, .sip-urun-fazla').map(e => e.getBoundingClientRect().right);
             const wrap = kaplar.find(k => k.classList.contains('table-wrap'));
             return { nv: nv.length, nvMetin: nv.some(e => /^Navlun \d{6,}/.test(e.textContent.trim())), ur: ur.length, meta: gors('.sip-urun-meta').some(e => /Pal\. \d+ · PF \d+/.test(e.textContent)),

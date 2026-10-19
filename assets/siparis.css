@@ -474,9 +474,6 @@ td.sip-hucre-bos { background: var(--warn-soft); }
 .sip-card-urun { padding: 6px 8px; border-left: 3px solid var(--border-strong); background: var(--surface-2); border-radius: 0 6px 6px 0; }
 .sip-card-urun .sip-urunler { grid-template-columns: 1fr; }
 
-/* v373: birden çok bağlı beyan → her parti no ayrı satırda */
-.sip-turparti-coklu { display: block; }
-.sip-turparti-coklu .sip-parti-satir { display: block; white-space: nowrap; }
 
 /* ==== LİSTE v376 ==== */
 /* Tarih: geçmiş → yeşil + kalın, bugün → turuncu + kalın, henüz gelmemiş → normal metin rengi (koyu temada açık tonlar) */
@@ -609,3 +606,25 @@ html[data-theme="dark"] .sip-mod { --sip-zebra: #1f2938; --sip-grup-cizgi: #3642
 .sip-card.sip-z1 { background: var(--sip-zebra); }
 .sip-card.sip-z1 .sip-urunler { background: var(--card); }
 /* ==== /LİSTE v384 ==== */
+/* ==== LİSTE v386 ==== */
+/* Parti no: sipariş no'nun ÜSTÜNDE, 3B düğme görünümlü rozet (yalnız görünüm — tıklanmaz; satır bağlantısı aynen çalışır).
+   Birden çok bağlı beyan → yan yana, sığmazsa alt satıra sarar. */
+.sip-parti-rozetler { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.sip-parti-btn { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 9px 3px; border-radius: 7px; white-space: nowrap;
+    font-size: .74rem; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; color: #0b3d91;
+    background: linear-gradient(180deg, #f2f7ff 0%, #d6e5ff 100%); border: 1px solid #9dbcf0;
+    box-shadow: 0 2px 0 #7fa3e0, 0 3px 5px rgba(22, 80, 184, .18), inset 0 1px 0 rgba(255, 255, 255, .9); }
+.sip-parti-et { font-size: .64rem; font-weight: 600; opacity: .75; }
+html[data-theme="dark"] .sip-parti-btn { color: #cfe0ff; background: linear-gradient(180deg, #24406f 0%, #18305a 100%); border-color: #345a96;
+    box-shadow: 0 2px 0 #0e1f3d, 0 3px 6px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .12); }
+.sip-iptal .sip-parti-btn { opacity: .6; }
+.sip-card > .sip-parti-rozetler { margin-bottom: -2px; padding-right: 44px; }   /* sağ üstteki ⋮ düğmesine binmesin */
+/* Gümrük (PO "Customs"): yazılıysa görünür, uzunsa kısaltılır (tam metin title'da) */
+.sip-table td.sip-gumruk-hucre { max-width: 170px; }
+.sip-gumruk { display: block; font-size: .8rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sip-gumruk--kart { font-size: .8rem; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+/* Gümrük sütunu yer açsın diye hücre yan boşluğu daraltıldı (1280'de tablo kendi içinde kaymasın) */
+.sip-table th, .sip-table td { padding-left: 9px; padding-right: 9px; }
+.sip-table th:first-child, .sip-table td:first-child { padding-left: 14px; }
+.sip-table .sip-doks { display: inline-grid; grid-template-columns: repeat(2, auto); gap: 3px 4px; }   /* PO/LL/PC/PKL 2×2 — tek satır sütunu ~180px yapıyordu */
+/* ==== /LİSTE v386 ==== */

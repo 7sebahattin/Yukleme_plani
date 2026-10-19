@@ -14,7 +14,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
   <table class="data-table sip-table">
     <thead>
       <tr>
-        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Lojistik</th>
+        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Lojistik</th><th>Gümrük</th>
         <th class="num">Palet/Kasa</th><th>Belgeler</th><th>Durum ve ilerleme</th><th class="actions-col"><span class="sip-sr">İşlemler</span></th>
       </tr>
     </thead>
@@ -28,8 +28,9 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
     ?>
       <tr class="row-link<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?><?= $__ur !== '' ? ' sip-ust' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
         <td>
+          <?= sipui_parti_rozet_html($r, $sec_parti) ?>
           <a class="sip-ref" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?></a>
-          <?= sipui_tur_parti_html($r, $sec_parti) ?>
+          <?= sipui_tur_html($r, $sec_parti) ?>
           <?php if ($__uy > 0): ?>
             <a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>"
                title="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a>
@@ -47,6 +48,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
           <?php if ((string)$r['nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes"><?= h((string)$r['nakliyeci']) ?></div>
           <?php elseif ((string)$r['planlanan_nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes" title="Planlanan nakliyeci"><?= h((string)$r['planlanan_nakliyeci']) ?></div><?php endif; ?>
         </td>
+        <td class="sip-gumruk-hucre"><?php $__gm = trim((string)($r['gumruk'] ?? '')); if ($__gm !== ''): ?><span class="sip-gumruk" title="<?= h($__gm) ?>"><?= h($__gm) ?></span><?php endif; ?></td>
         <td class="num nowrap"><?= h(sipui_sayi($r['toplam_palet'])) ?> / <?= h(sipui_sayi($r['toplam_koli'])) ?></td>
         <td><?= sipui_dok_rozetleri($r) ?></td>
         <td class="sip-durum-hucre"><?= siparis_durum_badge((string)$r['durum']) ?><?= sipui_ilerleme_html($r) ?></td>
@@ -63,7 +65,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
       </tr>
       <?php if ($__ur !== ''): ?>
       <tr class="row-link sip-urun-tr<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
-        <td colspan="8"><?= $__ur ?></td>
+        <td colspan="9"><?= $__ur ?></td>
       </tr>
       <?php endif; ?>
     <?php endforeach; ?>
@@ -78,6 +80,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
       $__uy = (int)$r['acik_catisma'] + (int)$r['uyari_sayisi'];
   ?>
     <article class="sip-card<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>">
+      <?= sipui_parti_rozet_html($r, $sec_parti) ?>
       <div class="sip-card-ust">
         <a class="sip-ref sip-card-link" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?><span class="sip-sr"> sevkiyatını aç</span></a>
         <?= siparis_durum_badge((string)$r['durum']) ?>
@@ -91,8 +94,9 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
           if ($__arac !== '—') $__parca[] = $__arac;
           echo $__parca ? implode(' · ', $__parca) : '<span class="sip-soluk">Alıcı / tarih / araç bilgisi bekleniyor</span>';
         ?>
-        <?= sipui_tur_parti_html($r, $sec_parti, false) ?>
+        <?= sipui_tur_html($r, $sec_parti, false) ?>
         <?= sipui_navlun_html($r) ?>
+        <?php $__gm = trim((string)($r['gumruk'] ?? '')); if ($__gm !== ''): ?><div class="sip-gumruk sip-gumruk--kart">Gümrük: <?= h($__gm) ?></div><?php endif; ?>
       </div>
       <?php $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []); if ($__ur !== ''): ?><div class="sip-card-urun"><?= $__ur ?></div><?php endif; ?>
       <div class="sip-card-alt">
