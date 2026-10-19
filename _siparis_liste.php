@@ -19,13 +19,14 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
       </tr>
     </thead>
     <tbody>
-    <?php foreach ($sec_rows as $r):
+    <?php $__sira = 0; foreach ($sec_rows as $r):
         $__id = (int)$r['id'];
+        $__z  = ' sip-grup sip-z' . ($__sira++ % 2);   // Excel gibi dönüşümlü bant: sevkiyat satırı + ürün alt satırı AYNI renk
         $__uy = (int)$r['acik_catisma'] + (int)$r['uyari_sayisi'];
         $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []);   // ürün / palet / PF — satırın altında tam genişlikte alt satır (sütun 1280px'e sığmıyor)
         $__poEt = $r['cw_hafta'] !== null ? 'CW' . (int)$r['cw_hafta'] . ' · ' . ((string)$r['alici_adi'] !== '' ? (string)$r['alici_adi'] : 'PO #' . (int)$r['po_belge_id']) : 'PO #' . (int)$r['po_belge_id'];
     ?>
-      <tr class="row-link<?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?><?= $__ur !== '' ? ' sip-ust' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
+      <tr class="row-link<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?><?= $__ur !== '' ? ' sip-ust' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
         <td>
           <a class="sip-ref" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?></a>
           <?= sipui_tur_parti_html($r, $sec_parti) ?>
@@ -61,7 +62,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
         </td>
       </tr>
       <?php if ($__ur !== ''): ?>
-      <tr class="row-link sip-urun-tr<?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
+      <tr class="row-link sip-urun-tr<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
         <td colspan="8"><?= $__ur ?></td>
       </tr>
       <?php endif; ?>
@@ -71,11 +72,12 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
 </div>
 
 <div class="card-list mobile-only sip-kartlar">
-  <?php foreach ($sec_rows as $r):
+  <?php $__sira = 0; foreach ($sec_rows as $r):
       $__id = (int)$r['id'];
+      $__z  = ' sip-z' . ($__sira++ % 2);
       $__uy = (int)$r['acik_catisma'] + (int)$r['uyari_sayisi'];
   ?>
-    <article class="sip-card<?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>">
+    <article class="sip-card<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>">
       <div class="sip-card-ust">
         <a class="sip-ref sip-card-link" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?><span class="sip-sr"> sevkiyatını aç</span></a>
         <?= siparis_durum_badge((string)$r['durum']) ?>

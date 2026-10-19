@@ -593,3 +593,19 @@ details[open] > .sip-yukle-ozet .sip-yukle-ok { transform: rotate(90deg); }
 .sip-yukle-govde { padding: 0 14px 14px; }
 .sip-bolum-eylem { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 /* ==== /v382 ==== */
+/* ==== LİSTE v384 ==== */
+/* Excel gibi dönüşümlü satır bandı: her sevkiyat (ana satır + ürün alt satırı) TEK grup; çift/tek gruplar iki renk.
+   Sınıf sunucuda verilir (sip-z0/sip-z1) — iki <tr>'li grupta nth-child çalışmaz. Gruplar arasında belirgin çizgi. */
+.sip-mod { --sip-zebra: #e9eef6; --sip-grup-cizgi: #b7c0cf; }
+html[data-theme="dark"] .sip-mod { --sip-zebra: #1f2938; --sip-grup-cizgi: #364257; }
+.sip-table tbody > tr.sip-z0 > td { background: var(--card); }
+.sip-table tbody > tr.sip-z1 > td { background: var(--sip-zebra); }
+.sip-table tbody > tr.sip-grup:not(.sip-ust) > td { border-bottom: 1px solid var(--sip-grup-cizgi); }
+.sip-table tbody > tr.sip-grup:last-child > td { border-bottom: 0; }
+.sip-table tbody > tr.sip-grup:hover > td,
+.sip-table tbody > tr.sip-grup.sip-ust:hover + tr.sip-urun-tr > td,
+.sip-table tbody > tr.sip-grup.sip-ust:has(+ tr.sip-urun-tr:hover) > td { background: var(--primary-soft); }
+.sip-table tbody > tr.sip-z1 .sip-urunler { background: var(--card); }   /* koyu bantta ürün alt kartı zeminle karışmasın */
+.sip-card.sip-z1 { background: var(--sip-zebra); }
+.sip-card.sip-z1 .sip-urunler { background: var(--card); }
+/* ==== /LİSTE v384 ==== */
