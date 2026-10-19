@@ -114,6 +114,7 @@ $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatler
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
+$siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
@@ -263,6 +264,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     $siparis_sofor_ran     = true;
     $siparis_sofor_results = siparis_sofor_migrate($pdo);
     foreach ($siparis_sofor_results as $sr) {
+        if ($sr['durum'] === 'eklendi') {
+            audit_log_event('migrate', 'siparis', null, null,
+                ['operation' => 'add_column', 'column' => $sr['adim']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_yurtici_gumruk') {
+    csrf_check($_POST['csrf'] ?? null);
+    $siparis_yig_ran     = true;
+    $siparis_yig_results = siparis_yurtici_gumruk_migrate($pdo);
+    foreach ($siparis_yig_results as $sr) {
         if ($sr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'siparis', null, null,
                 ['operation' => 'add_column', 'column' => $sr['adim']]);
@@ -621,6 +632,35 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">ALTER SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (siparis_sofor_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" id="siparis-yurtici-gumruk" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Siparişler — Yurt içi gümrük</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>siparis_sevkiyatlar</code> tablosuna bir boş (NULL) kolon ekler —
+      <code>yurtici_gumruk</code> (VARCHAR 150). Mevcut veriye dokunmaz, yabancı anahtar YOK.
+      Sevkiyat sayfasında elle girilen yurt içi gümrük için kullanılır ve Siparişler listesinde bu gösterilir
+      (PO'daki gümrük yurt dışı gümrüğüdür). Çalıştırılmazsa alan gizli kalır, Siparişler aynen çalışır.
+      <?php if ($siparis_yig_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($siparis_yig_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['adim']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $sipyg = siparis_tablo_var($pdo, 'siparis_sevkiyatlar') && siparis_yurtici_gumruk_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $sipyg ? '#1f9d55' : '#c0392b' ?>;"><?= $sipyg ? '✓ Kolon var' : '✗ Kolon eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="siparis_yurtici_gumruk">
+      <button type="submit" class="btn btn-primary">Yurt İçi Gümrük Alanını Ekle</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">ALTER SQL'ini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (siparis_yurtici_gumruk_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
   </div>

@@ -53,7 +53,8 @@ function siparis_alan_tanimlari(): array
             'alici_kodu'          => $a('Alıcı kodu', 'metin', 20, ['po' => 1]),
             'alici_adi'           => $a('Alıcı', 'metin', 100, ['po' => 1]),
             'sold_to'             => $a('Satış yapılan (sold-to)', 'metin', 150, ['po' => 1, 'pc' => 2]),
-            'gumruk'              => $a('Gümrük', 'metin', 150, ['po' => 1]),
+            'gumruk'              => $a('Yurt dışı gümrük', 'metin', 150, ['po' => 1]),     // v387: PO "Customs" = yurt dışı (sınır) gümrüğü
+            'yurtici_gumruk'      => $a('Yurt içi gümrük', 'metin', 150, []),          // v387: yalnız elle; kolon migrate.php kartından
             'kdv_no'              => $a('KDV no', 'metin', 40, ['po' => 1]),
             'incoterm'            => $a('Incoterm', 'metin', 10, ['po' => 1]),
             'planlanan_nakliyeci' => $a('Planlanan nakliyeci', 'metin', 150, ['po' => 1]),

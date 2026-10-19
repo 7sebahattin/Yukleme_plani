@@ -14,7 +14,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
   <table class="data-table sip-table">
     <thead>
       <tr>
-        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Lojistik</th><th>Gümrük</th>
+        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Lojistik</th><th>Yurt içi gümrük</th>
         <th class="num">Palet/Kasa</th><th>Belgeler</th><th>Durum ve ilerleme</th><th class="actions-col"><span class="sip-sr">İşlemler</span></th>
       </tr>
     </thead>
@@ -48,7 +48,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
           <?php if ((string)$r['nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes"><?= h((string)$r['nakliyeci']) ?></div>
           <?php elseif ((string)$r['planlanan_nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes" title="Planlanan nakliyeci"><?= h((string)$r['planlanan_nakliyeci']) ?></div><?php endif; ?>
         </td>
-        <td class="sip-gumruk-hucre"><?php $__gm = trim((string)($r['gumruk'] ?? '')); if ($__gm !== ''): ?><span class="sip-gumruk" title="<?= h($__gm) ?>"><?= h($__gm) ?></span><?php endif; ?></td>
+        <td class="sip-gumruk-hucre"><?php $__gm = trim((string)($r['yurtici_gumruk'] ?? '')); if ($__gm !== ''): ?><span class="sip-gumruk" title="<?= h($__gm) ?>"><?= h($__gm) ?></span><?php endif; ?></td>
         <td class="num nowrap"><?= h(sipui_sayi($r['toplam_palet'])) ?> / <?= h(sipui_sayi($r['toplam_koli'])) ?></td>
         <td><?= sipui_dok_rozetleri($r) ?></td>
         <td class="sip-durum-hucre"><?= siparis_durum_badge((string)$r['durum']) ?><?= sipui_ilerleme_html($r) ?></td>
@@ -96,7 +96,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
         ?>
         <?= sipui_tur_html($r, $sec_parti, false) ?>
         <?= sipui_navlun_html($r) ?>
-        <?php $__gm = trim((string)($r['gumruk'] ?? '')); if ($__gm !== ''): ?><div class="sip-gumruk sip-gumruk--kart">Gümrük: <?= h($__gm) ?></div><?php endif; ?>
+        <?php $__gm = trim((string)($r['yurtici_gumruk'] ?? '')); if ($__gm !== ''): ?><div class="sip-gumruk sip-gumruk--kart">Yurt içi gümrük: <?= h($__gm) ?></div><?php endif; ?>
       </div>
       <?php $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []); if ($__ur !== ''): ?><div class="sip-card-urun"><?= $__ur ?></div><?php endif; ?>
       <div class="sip-card-alt">

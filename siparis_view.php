@@ -49,7 +49,8 @@ $olaylar   = siparis_olaylar($pdo, $id, $tumGecmis ? 1000 : 30);
 $pklD      = siparis_pkl_durum($pdo, $id);
 $pkl       = $pklD['pkl'];
 $tanimlar  = siparis_alan_tanimlari();
-$soforHazir = siparis_sofor_hazir($pdo);      // v377: şoför adı/telefon kolonları (migrate.php kartı) — yoksa alanlar gizli
+$soforHazir = siparis_sofor_hazir($pdo);
+$yiHazir = siparis_yurtici_gumruk_hazir($pdo);   // v387: yurt içi gümrük kolonu (migrate.php kartı) — yoksa alan gizli      // v377: şoför adı/telefon kolonları (migrate.php kartı) — yoksa alanlar gizli
 
 // Aynı PO'daki diğer sevkiyatlar
 $kardesler = [];
@@ -93,7 +94,8 @@ $goster = function (string $tip, mixed $v): string {
 };
 $duzenleAlan = (string)($_GET['duzenle'] ?? '');                       // JS yoksa sunucu tarafı düzenleme formu
 $alanIpuclari = ['plakalar' => 'Çekici-Dorse, örn. 33AHU899-33AHU910', 'planlanan_plakalar' => 'Çekici-Dorse', 'navlun_no' => 'Loading List "Transport" numarası (PKL C9)',
-    'tur_no' => 'PO / Loading List tur numarası', 'sofor_adi' => 'Elle girilen not; belgeler bu alanı değiştirmez.', 'sofor_telefon' => 'Elle girilen not (7–15 hane); belgeler bu alanı değiştirmez.'];
+    'tur_no' => 'PO / Loading List tur numarası', 'sofor_adi' => 'Elle girilen not; belgeler bu alanı değiştirmez.', 'sofor_telefon' => 'Elle girilen not (7–15 hane); belgeler bu alanı değiştirmez.',
+    'gumruk' => 'PO “Customs” — yurt dışı (sınır) gümrüğü', 'yurtici_gumruk' => 'Elle girilir; Siparişler listesinde bu gümrük gösterilir.'];
 $alanDuzenleVeri = function (string $alan) use ($sev, $tanimlar, $id, $alanIpuclari): array {
     $t = $tanimlar['sevkiyat'][$alan];
     $ham = $sev[$alan] ?? null;
@@ -198,7 +200,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       <!-- 5) Sevkiyat bilgileri -->
       <section class="card sip-o4" id="bilgi" aria-labelledby="sipBilgiBas">
         <div class="card-head"><h2 id="sipBilgiBas">Sevkiyat bilgileri</h2><span class="sip-soluk">Elle girilen değer kilitlenir; belgeler onu ezmez.</span></div>
-        <?php if ($yaz && $duzenleAlan !== '' && isset($tanimlar['sevkiyat'][$duzenleAlan]) && ($soforHazir || !in_array($duzenleAlan, siparis_sofor_alanlari(), true))): $dv = $alanDuzenleVeri($duzenleAlan); ?>
+        <?php if ($yaz && $duzenleAlan !== '' && isset($tanimlar['sevkiyat'][$duzenleAlan]) && ($soforHazir || !in_array($duzenleAlan, siparis_sofor_alanlari(), true)) && ($yiHazir || $duzenleAlan !== 'yurtici_gumruk')): $dv = $alanDuzenleVeri($duzenleAlan); ?>
           <form method="post" action="siparis_kaydet.php" class="sip-edit-inline" data-sip-tek>
             <?= sipui_csrf() ?><input type="hidden" name="islem" value="alan"><input type="hidden" name="varlik" value="sevkiyat"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="alan" value="<?= h($duzenleAlan) ?>"><input type="hidden" name="donus" value="bilgi">
             <label><?= h($dv['etiket']) ?>
@@ -209,7 +211,8 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           </form>
         <?php endif; ?>
         <?php if (!$soforHazir && is_admin()): ?><p class="sip-bilgi" role="note">Şoför adı / telefonu alanları için <a href="migrate.php#siparis-sofor">Şema Güncelleme</a> sayfasındaki “Siparişler — Şoför alanları” kartını bir kez çalıştırın.</p><?php endif; ?>
-        <?php foreach (sipui_alan_gruplari($soforHazir) as $grup => $alanlar): ?>
+        <?php if (!$yiHazir && is_admin()): ?><p class="sip-bilgi" role="note">Yurt içi gümrük alanı için <a href="migrate.php#siparis-yurtici-gumruk">Şema Güncelleme</a> sayfasındaki “Siparişler — Yurt içi gümrük” kartını bir kez çalıştırın.</p><?php endif; ?>
+        <?php foreach (sipui_alan_gruplari($soforHazir, $yiHazir) as $grup => $alanlar): ?>
           <h3 class="sip-grup-bas"><?= h($grup) ?></h3>
           <dl class="sip-dl">
             <?php foreach ($alanlar as $alan): $t = $tanimlar['sevkiyat'][$alan]; $yalnizElle = $t['otorite'] === [];   // şoför: belge kaynağı yok → "Elle"/kilit rozeti ve "Kilidi kaldır" gösterilmez

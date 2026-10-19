@@ -1162,3 +1162,5 @@ function siparis_tarih_coz(mixed $v): ?string
 
 // v377: şoför alanları (ekleyici migrasyon) — kendi dosyasında; bu dosyada ALTER YOK değişmezi korunur
 require_once __DIR__ . '/siparis_sofor.php';
+// v387: yurt içi gümrük (ekleyici migrasyon) — kendi dosyasında
+require_once __DIR__ . '/siparis_yurtici_gumruk.php';

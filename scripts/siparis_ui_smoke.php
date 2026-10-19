@@ -299,6 +299,8 @@ echo "\n=== 8. POST akışları (CSRF'li) ===\n";
 $tok = csrf();
 $K = fn(array $p) => sayfa('siparis_kaydet.php', [], ['csrf' => $tok] + $p);
 $sid1 = $ID['s1'];
+$x = $K(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$sid1, 'alan' => 'yurtici_gumruk', 'deger' => 'MERSIN']);
+ok('v387: yurt içi gümrük kolon yokken yazılamaz (şema notu)', ($x['flash']['type'] ?? '') === 'error' && str_contains((string)($x['flash']['msg'] ?? $x['flash']['message'] ?? json_encode($x['flash'])), 'Yurt içi gümrük'), json_encode($x['flash']));
 $x = $K(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$sid1, 'alan' => 'gumruk', 'deger' => 'TESTPORT-X', 'donus' => 'bilgi']);
 $s = siparis_sevkiyat($db, $sid1);
 ok('alan: değer yazıldı, kilitlendi, PRG #bilgi', $s['gumruk'] === 'TESTPORT-X' && isset($s['_elle']['gumruk']) && str_contains((string)$x['git'], 'siparis_view.php?id=' . $sid1 . '#bilgi') && ($x['flash']['type'] ?? '') === 'success', json_encode([$x['hata'], $x['git'], $x['flash']]));
@@ -650,15 +652,24 @@ ok('zebra: bölüm içinde ardışık sevkiyatlar dönüşümlü (0,1,0,…)', $
 ok('zebra: mobil kartlar da sip-z0/sip-z1', substr_count($r['html'], '<article class="sip-card sip-z0') >= 2 && substr_count($r['html'], '<article class="sip-card sip-z1') >= 1);
 $__css = (string)file_get_contents(__DIR__ . '/../assets/siparis.css');
 ok('zebra CSS: açık + koyu bant rengi, hover önceliği', str_contains($__css, '.sip-table tbody > tr.sip-z1 > td { background: var(--sip-zebra); }') && str_contains($__css, 'html[data-theme="dark"] .sip-mod { --sip-zebra:') && str_contains($__css, '.sip-table tbody > tr.sip-grup:hover > td'));
-// v386 — Gümrük sütunu: yazılıysa görünür (kaçırılmış, title'da tam metin), boşsa hücre boş; mobil kartta "Gümrük: …"
+// v387 — listede YALNIZ yurt içi gümrük (elle; kolon migrate kartından). PO gümrüğü (yurt dışı) listede GÖRÜNMEZ.
+$__rg0 = sayfa('siparisler.php');
+ok('yurt içi gümrük: kolon yokken liste çizilir, sütun boş', temiz($__rg0) && str_contains($__rg0['html'], '<th>Lojistik</th><th>Yurt içi gümrük</th>') && str_contains($__rg0['html'], '<td class="sip-gumruk-hucre"></td>'));
+ok('yurt içi gümrük: migrasyon tek kolon ekler, idempotent', siparis_yurtici_gumruk_hazir($db) === false && array_column(siparis_yurtici_gumruk_migrate($db), 'durum') === ['eklendi'] && siparis_yurtici_gumruk_hazir($db) && array_column(siparis_yurtici_gumruk_migrate($db), 'durum') === ['var']);
+$tok = csrf(); $K = fn(array $p) => sayfa('siparis_kaydet.php', [], ['csrf' => $tok] + $p);
+$x = $K(['islem' => 'alan', 'varlik' => 'sevkiyat', 'id' => (string)$ID['s12'], 'alan' => 'yurtici_gumruk', 'deger' => 'TEST GUMRUK MUD.']);
+ok('v387: kolon varken elle yazılır (sevkiyat sayfası yolu)', ($x['flash']['type'] ?? '') === 'success' && siparis_sevkiyat($db, $ID['s12'])['yurtici_gumruk'] === 'TEST GUMRUK MUD.', json_encode([$x['hata'], $x['flash']]));
 $__gEski = $db->query('SELECT gumruk FROM siparis_sevkiyatlar WHERE id = ' . (int)$ID['s1'])->fetchColumn();
-$db->prepare('UPDATE siparis_sevkiyatlar SET gumruk = ? WHERE id = ?')->execute(['TESTPORT <b>Y</b>', $ID['s1']]);
-$db->exec("UPDATE siparis_sevkiyatlar SET gumruk = NULL WHERE id = " . (int)$ID['s31']);
+$db->prepare('UPDATE siparis_sevkiyatlar SET gumruk = ?, yurtici_gumruk = ? WHERE id = ?')->execute(['YURTDISI-SINIR', 'TESTPORT <b>Y</b>', $ID['s1']]);
+$db->exec("UPDATE siparis_sevkiyatlar SET gumruk = 'YURTDISI-2', yurtici_gumruk = NULL WHERE id = " . (int)$ID['s31']);
 $__rg = sayfa('siparisler.php');
-ok('gümrük: başlık + colspan 9', str_contains($__rg['html'], '<th>Lojistik</th><th>Gümrük</th>') && !str_contains($__rg['html'], '<td colspan="8">'));
-ok('gümrük: yazılıysa hücrede (kaçırılmış), boşsa hücre boş', str_contains($satir($__rg['html'], $ID['s1']), '<span class="sip-gumruk" title="TESTPORT &lt;b&gt;Y&lt;/b&gt;">TESTPORT &lt;b&gt;Y&lt;/b&gt;</span>')
+ok('gümrük: başlık + colspan 9', str_contains($__rg['html'], '<th>Lojistik</th><th>Yurt içi gümrük</th>') && !str_contains($__rg['html'], '<td colspan="8">'));
+ok('yurt içi gümrük: yazılıysa hücrede (kaçırılmış), boşsa hücre boş', str_contains($satir($__rg['html'], $ID['s1']), '<span class="sip-gumruk" title="TESTPORT &lt;b&gt;Y&lt;/b&gt;">TESTPORT &lt;b&gt;Y&lt;/b&gt;</span>')
     && str_contains($satir($__rg['html'], $ID['s31']), '<td class="sip-gumruk-hucre"></td>') && !str_contains($__rg['html'], '<b>Y</b>'));
-ok('gümrük: mobil kartta yalnız yazılıysa', str_contains($kart($__rg['html'], $ID['s1']), 'Gümrük: TESTPORT &lt;b&gt;Y&lt;/b&gt;') && !str_contains($kart($__rg['html'], $ID['s31']), 'Gümrük:'));
+ok('yurt dışı (PO) gümrük listede GÖRÜNMEZ', !str_contains($__rg['html'], 'YURTDISI-SINIR') && !str_contains($__rg['html'], 'YURTDISI-2'));
+ok('yurt içi gümrük: mobil kartta yalnız yazılıysa', str_contains($kart($__rg['html'], $ID['s1']), 'Yurt içi gümrük: TESTPORT &lt;b&gt;Y&lt;/b&gt;') && !str_contains($kart($__rg['html'], $ID['s31']), 'Yurt içi gümrük:'));
+$__vg = sayfa('siparis_view.php', ['id' => $ID['s1']]);
+ok('sevkiyat sayfası: Gümrük grubunda "Yurt içi gümrük" + "Yurt dışı gümrük" ayrı alanlar', temiz($__vg) && str_contains($__vg['html'], 'Yurt içi gümrük') && str_contains($__vg['html'], 'Yurt dışı gümrük') && str_contains($__vg['html'], 'YURTDISI-SINIR'));
 $db->prepare('UPDATE siparis_sevkiyatlar SET gumruk = ? WHERE id = ?')->execute([$__gEski === false ? null : $__gEski, $ID['s1']]);
 // v376 — sütun başlıkları + bugüne göre renkli tarih
 ok('başlıklar: "Lojistik" ve "Palet/Kasa" (eski "Araç" / "Palet / Koli" yok)', str_contains($r['html'], '<th>Lojistik</th>') && str_contains($r['html'], '<th class="num">Palet/Kasa</th>')

@@ -82,6 +82,7 @@ if ($islem === 'alan' || $islem === 'not' || $islem === 'kilit_ac') {
         $alan = (string)$alan;
         if (!isset($tanimlar[$alan]) || empty($tanimlar[$alan]['elle'])) { $hatalar[] = 'Bu alan düzenlenemez.'; continue; }
         if ($varlik === 'sevkiyat' && in_array($alan, siparis_sofor_alanlari(), true) && !siparis_sofor_hazir($pdo)) { $hatalar[] = 'Şoför alanları için şema güncellemesi gerekli (yönetici: Şema Güncelleme › Siparişler — Şoför alanları).'; continue; }
+        if ($varlik === 'sevkiyat' && $alan === 'yurtici_gumruk' && !siparis_yurtici_gumruk_hazir($pdo)) { $hatalar[] = 'Yurt içi gümrük için şema güncellemesi gerekli (yönetici: Şema Güncelleme › Siparişler — Yurt içi gümrük).'; continue; }
         $tip = (string)$tanimlar[$alan]['tip'];
         $yeni = is_scalar($deger) ? siparis_deger_normalize(trim((string)$deger), $tip) : null;
         $mevcut = siparis_deger_normalize($v['row'][$alan] ?? null, $tip);
