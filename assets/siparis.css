@@ -140,6 +140,19 @@ html[data-theme="dark"] .sip-mod .sip-uretim-rozet { color: var(--primary); }
 .sip-bolum { margin-bottom: 22px; }
 .sip-bolum-bas { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
 .sip-bolum-bas h2 { margin: 0; }
+/* v390 — Açık / Kapanan ayrı kartlar (Beyanlar'daki İşlem Bekleyen / Kapanan gibi). */
+.sip-bolum-baslik { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; min-width: 0; }
+.sip-bolum-ikon { font-size: 1.35rem; line-height: 1; flex: none; }
+.sip-bolum-not { font-size: .78rem; flex-basis: 100%; }
+.sip-bolum-acik, .sip-bolum-kapali { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.sip-bolum-acik { border-left: 4px solid var(--warn); }
+.sip-bolum-kapali { border-left: 4px solid var(--success); }
+.sip-bolum-acik > .sip-bolum-bas, .sip-bolum-kapali > .sip-bolum-bas { margin-top: 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.sip-bolum-acik .sip-say { background: var(--warn); color: #1c1917; }
+.sip-bolum-kapali .sip-say { background: var(--success); color: #fff; }
+.sip-bolum-kapali { margin-top: 28px; }
+html[data-theme="dark"] .sip-mod .sip-bolum-acik .sip-say { color: #1c2230; }
+html[data-theme="dark"] .sip-mod .sip-bolum-kapali .sip-say { color: #052e16; }
 .sip-table td, .sip-table th { vertical-align: middle; }
 .sip-table .nowrap, .nowrap { white-space: nowrap; }
 .sip-ref { font-weight: 700; color: var(--text); }

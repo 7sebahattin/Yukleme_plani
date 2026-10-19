@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v389');
+    define('APP_SURUM', 'v390');
 }
 
 // --- HTML kaçışı ---
@@ -2923,6 +2923,30 @@ function beyan_hks_durum_tazele(int $beyan_id): void {
     } catch (PDOException $e) {}
 }
 
+// "HKS GÖNDERİLDİ" olan beyan otomatik "YÜKLENDİ" olur (v390, sahip kararı): bildirim
+// HKS'e gitti = sevkiyat yapıldı. Yalnız bekleyen durumlar taşınır; zaten kapalı
+// (yüklendi/iptal/red) beyana DOKUNULMAZ — iptal/red'i sessizce ezmek yanlış olur.
+// Hata yutar (HKS gönderim akışını asla kesmez); tek kaynak, iki çağıran:
+// beyan_hks_taslak_isaretle('gonderildi') ve beyan_hks_bag_duzelt('gonderildi_isaretle').
+function beyan_hks_gonderildi_yuklendi(int $beyan_id): void {
+    if ($beyan_id <= 0) return;
+    try {
+        $st = db()->prepare("SELECT status FROM customs_declarations WHERE id = ? AND deleted_at IS NULL");
+        $st->execute([$beyan_id]);
+        $eski = $st->fetchColumn();
+        if ($eski === false || in_array((string)$eski, beyan_kapali_durumlar(), true)) return;
+        $user = function_exists('current_user') ? current_user() : null;
+        $uid  = (int)($user['id'] ?? 0);
+        db()->prepare("UPDATE customs_declarations SET status = 'yuklendi', updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ? AND deleted_at IS NULL")
+            ->execute([$uid > 0 ? $uid : null, $beyan_id]);
+        audit_log_event('beyan_status_change', 'declarations', $beyan_id,
+            ['status' => (string)$eski], ['status' => 'yuklendi', 'otomatik' => 'hks_gonderildi']);
+    } catch (Throwable $e) {
+        error_log('[beyan-hks] otomatik yuklendi yapilamadi: ' . $e->getMessage());
+    }
+}
+
 function beyan_hks_durum_etiket(?string $durum): string {
     return [
         'taslak'     => 'HKS TASLAK',
@@ -3011,6 +3035,7 @@ function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek =
                              WHERE id = ?");
         $up->execute([$durum, $ek['gonderim_id'] ?? null, $ek['hata_metni'] ?? null, (int)$row['id']]);
         beyan_hks_durum_tazele((int)$row['beyan_id']);
+        if ($durum === 'gonderildi') beyan_hks_gonderildi_yuklendi((int)$row['beyan_id']);
     } catch (PDOException $e) {
         error_log('[beyan-hks] bag guncellenemedi: ' . $e->getMessage());
     }
@@ -3079,6 +3104,7 @@ function beyan_hks_bag_duzelt(int $beyan_id, string $islem, int $user_id): ?stri
         return 'Bildirim bağı güncellenemedi.';
     }
     beyan_hks_durum_tazele($beyan_id);
+    if ($islem === 'gonderildi_isaretle') beyan_hks_gonderildi_yuklendi($beyan_id);
     return null;
 }
 

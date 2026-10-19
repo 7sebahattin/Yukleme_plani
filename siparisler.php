@@ -202,8 +202,14 @@ $sayfalama = function (array $b, string $param): string {
     $o .= $b['sayfa'] < $b['sayfa_say'] ? '<a class="btn btn-sm" href="' . h(siparis_url([$param => $b['sayfa'] + 1])) . '">Sonraki ›</a>' : '<span class="btn btn-sm" aria-disabled="true" style="opacity:.45">Sonraki ›</span>';
     return $o . '</nav>';
 };
-$bolumBas = function (string $baslik, int $say, string $id, string $ek = ''): string {
-    return '<div class="sip-bolum-bas" id="' . h($id) . '"><h2>' . h($baslik) . '</h2><span class="sip-say">' . (int)$say . '</span>' . $ek . '</div>';
+// v390 — Açık ve Kapanan bölümler birbirine benziyordu: Beyanlar'daki gibi iki AYRI kart
+// (⏳ İşlem Bekleyen / ✅ Kapanan; sol şerit + ikon + not). Başlık div'i (id) ve içindeki
+// düğme düzeni DEĞİŞMEDİ — yazdırma düğmeleri yalnız bekleyen kartın başlığında.
+$bolumBas = function (string $baslik, int $say, string $id, string $ek = '', string $ikon = '', string $not = ''): string {
+    return '<div class="sip-bolum-bas" id="' . h($id) . '">'
+        . ($ikon !== '' ? '<span class="sip-bolum-ikon" aria-hidden="true">' . $ikon . '</span>' : '')
+        . '<div class="sip-bolum-baslik"><h2>' . h($baslik) . '</h2><span class="sip-say">' . (int)$say . '</span>'
+        . ($not !== '' ? '<span class="muted sip-bolum-not">' . h($not) . '</span>' : '') . '</div>' . $ek . '</div>';
 };
 // v382 — "Açık Sevkiyatlar" yazdırma / PDF düğmeleri (yalnız Açık bölüm ve tek durum "Sonuçlar" bölümü; bölümde satır varsa; Kapananda YOK).
 // Veri siparis_yazdir.php'den (GET JSON) her tıkta taze gelir; aynı filtre anahtarları, sayfa numaraları HARİÇ. İzleyiciye de açık (siparis.read).
@@ -313,9 +319,10 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
   </form>
 
   <?php
-  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos) use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $yazdirEk): void {
+  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $yazdirEk): void {
       $ek = in_array($id, ['sipAcik', 'sipSonuclar'], true) && $b['rows'] ? $yazdirEk : '';
-      echo '<section class="sip-bolum" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id, $ek);
+      $ton = ['sipAcik' => ' sip-bolum-acik', 'sipKapali' => ' sip-bolum-kapali'][$id] ?? '';
+      echo '<section class="sip-bolum' . $ton . '" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id, $ek, $ikon, $not);
       if (!$b['rows']) {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
       } else {
@@ -326,8 +333,8 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
       echo '</section>';
   };
   if ($tek) $bolumCiz($B_tek, 'Sonuçlar', 'sipSonuclar', 'acik_page', 'Bu filtreyle eşleşen sevkiyat yok.');
-  if ($B_acik !== null) $bolumCiz($B_acik, 'Açık sevkiyatlar', 'sipAcik', 'acik_page', $filtreVar ? 'Bu filtreyle eşleşen açık sevkiyat yok.' : ($yaz ? 'Henüz açık sevkiyat yok. Yukarıdan PO, Loading List ya da Price Confirmation PDF\'i yükleyin.' : 'Henüz açık sevkiyat yok.'));
-  if ($B_kapali !== null) $bolumCiz($B_kapali, 'Kapanan sevkiyatlar', 'sipKapali', 'kapali_page', 'Kapanan sevkiyat yok.');
+  if ($B_acik !== null) $bolumCiz($B_acik, 'İşlem Bekleyen Sevkiyatlar', 'sipAcik', 'acik_page', $filtreVar ? 'Bu filtreyle eşleşen açık sevkiyat yok.' : ($yaz ? 'Henüz açık sevkiyat yok. Yukarıdan PO, Loading List ya da Price Confirmation PDF\'i yükleyin.' : 'Henüz açık sevkiyat yok.'), '⏳', 'Araç, belge, PKL ya da mail bekleyen açık işler');
+  if ($B_kapali !== null) $bolumCiz($B_kapali, 'Kapanan Sevkiyatlar', 'sipKapali', 'kapali_page', 'Kapanan sevkiyat yok.', '✅', 'Tamamlanan kayıtlar (mail gönderildi · iptal)');
   ?>
 
   <?php if ($yetim): ?>
