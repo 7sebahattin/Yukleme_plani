@@ -240,11 +240,11 @@ rol($ADMIN, true);
 $w = siparis_wp_oku($db, $ID['gecmis']);
 ok('siparis_wp_oku: dizi, sofor=false, gumruk=false (kolonsuz SQL hatası yok)', is_array($w) && $w['sofor'] === false && $w['gumruk'] === false);
 $v = siparis_wp_veri($w, ['parti_yetki' => true]);
-ok('9 alan: anahtarlar ve etiketler sahibin sırasında', array_column($v['alanlar'], 'k') === ['parti', 'tarih', 'siparis', 'navlun', 'nakliyeci', 'plaka', 'sofor', 'tel', 'gumruk']
-    && array_column($v['alanlar'], 'etiket') === ['Parti No', 'Yükleme tarihi', 'Sipariş No', 'Navlun No', 'Nakliyeci', 'Plakalar', 'Şoför adı', 'Şoför telefonu', 'Yurt içi gümrük']);
+ok('10 alan: anahtarlar ve etiketler sahibin sırasında', array_column($v['alanlar'], 'k') === ['parti', 'tarih', 'siparis', 'navlun', 'nakliyeci', 'plaka', 'sofor', 'tel', 'gumruk', 'ulke']
+    && array_column($v['alanlar'], 'etiket') === ['Parti No', 'Yükleme tarihi', 'Sipariş No', 'Navlun No', 'Nakliyeci', 'Plakalar', 'Şoför adı', 'Şoför telefonu', 'Yurt içi gümrük', 'Alıcı Ülke']);
 $dv = array_column($v['alanlar'], 'deger', 'k');
 ok('değerler: parti, tarih (✓ YOK), sipariş, navlun, gerçek nakliyeci/plaka (planlı DEĞİL), şoför/tel/gümrük "—"', $dv === ['parti' => 'P-61/225 / P-61/226', 'tarih' => sipui_tarih($dun), 'siparis' => 'TC900101.10', 'navlun' => '6100000101', 'nakliyeci' => 'Test Lojistik A',
-    'plaka' => '34TST101-34TST201', 'sofor' => '—', 'tel' => '—', 'gumruk' => '—'], json_encode($dv, JSON_UNESCAPED_UNICODE));
+    'plaka' => '34TST101-34TST201', 'sofor' => '—', 'tel' => '—', 'gumruk' => '—', 'ulke' => 'SIRBİSTAN'], json_encode($dv, JSON_UNESCAPED_UNICODE));
 ok('kalem tablosu + toplam', $v['kalem_basliklar'] === ['Ürün', 'Kalibre', 'Palet/Koli'] && $v['kalemler'] === [['urun' => 'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG', 'kalibre' => '14', 'palet_koli' => '23 / 3.680']]
     && $v['kalem_say'] === 1 && $v['toplam'] === ['etiket' => 'Toplam', 'palet_koli' => '23 / 3.680'], json_encode($v['kalemler'], JSON_UNESCAPED_UNICODE));
 ok('notlar: şoför + gümrük kurulmadı, parti notu YOK; dosya adı / id', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && in_array('Yurt içi gümrük alanı kurulmadı.', $v['notlar'], true) && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true)
@@ -364,7 +364,7 @@ $wpAud = fn() => $db->query("SELECT record_id, new_values FROM audit_log WHERE a
 rol(['siparis.read'], false, 5);   // izleyici
 $r = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']]);
 $j = $r['json'] ?? []; $jd = array_column($j['alanlar'] ?? [], 'deger', 'k');
-ok('izleyici: 200 + JSON + 9 alan; şoför, telefon, gümrük dolu; parti "—" + not; kurulum notları YOK', $r['hata'] === null && $r['kod'] === 200 && ($j['ok'] ?? false) === true && count($j['alanlar'] ?? []) === 9 && ($jd['sofor'] ?? '') === 'Test Sürücü Bir' && ($jd['tel'] ?? '') === '+90 532 000 00 01'
+ok('izleyici: 200 + JSON + 10 alan; şoför, telefon, gümrük dolu; parti "—" + not; kurulum notları YOK', $r['hata'] === null && $r['kod'] === 200 && ($j['ok'] ?? false) === true && count($j['alanlar'] ?? []) === 10 && ($jd['sofor'] ?? '') === 'Test Sürücü Bir' && ($jd['tel'] ?? '') === '+90 532 000 00 01'
     && ($jd['gumruk'] ?? '') === 'Test Gümrük İdaresi' && ($jd['parti'] ?? '') === '—' && in_array('Parti no için beyan okuma yetkisi gerekir.', $j['notlar'] ?? [], true) && !in_array('Şoför alanları kurulmadı.', $j['notlar'] ?? [], true)
     && !in_array('Yurt içi gümrük alanı kurulmadı.', $j['notlar'] ?? [], true), (string)$r['hata'] . substr($r['govde'], 0, 300));
 ok('başlıklar: JSON utf-8 + nosniff', str_contains(strtolower($r['h']['content-type'] ?? ''), 'application/json') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff');

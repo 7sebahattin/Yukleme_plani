@@ -4,6 +4,7 @@
 //
 // Masaüstü tablosu + mobil kart satır biçimi TEK yerde. Bu partial fonksiyon TANIMLAMAZ.
 // Beklenen: $sec_rows (siparis_sevkiyatlar satırları; siparisler.php'nin $cols kolon kümesi)
+// v395: Alıcı ülke sütunu (PO grubu ile Yükleme arası) — siparis_yazdir_ulke() siparisler.php'de yüklü (fonksiyon TANIMLANMAZ).
 // v394: ⋮ menüsünde 💬 WP Paylaş — kart verisi tıkta siparis_paylas.php'den gelir; bu partial'a ek kolon/veri GİRMEZ.
 // =========================================================
 if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; }
@@ -15,7 +16,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
   <table class="data-table sip-table">
     <thead>
       <tr>
-        <th>Sipariş</th><th>PO grubu</th><th>Yükleme</th><th>Lojistik</th><th>Yurt içi gümrük</th>
+        <th>Sipariş</th><th>PO grubu</th><th>Alıcı ülke</th><th>Yükleme</th><th>Lojistik</th><th>Yurt içi gümrük</th>
         <th class="num">Palet/Kasa</th><th>Belgeler</th><th>Durum ve ilerleme</th><th class="actions-col"><span class="sip-sr">İşlemler</span></th>
       </tr>
     </thead>
@@ -42,6 +43,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
             <a class="sip-po" href="<?= h(siparis_url(['po' => (int)$r['po_belge_id'], 'durum' => null, 'acik_page' => null, 'kapali_page' => null])) ?>" title="Aynı PO'daki sevkiyatları göster"><?= h($__poEt) ?></a>
           <?php else: ?><span class="sip-po sip-po--yok" title="Bu sevkiyat için PO yüklenmedi">PO yok</span><?php endif; ?>
         </td>
+        <td class="sip-ulke-hucre"><?php $__ul = siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null); if ($__ul !== ''): ?><span class="sip-ulke"><?= h($__ul) ?></span><?php endif; ?></td>
         <td class="nowrap"><?= sipui_tarih_html($r['yukleme_tarihi']) ?></td>
         <td>
           <?= sipui_arac($r) ?>
@@ -67,7 +69,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
       </tr>
       <?php if ($__ur !== ''): ?>
       <tr class="row-link sip-urun-tr<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
-        <td colspan="9"><?= $__ur ?></td>
+        <td colspan="10"><?= $__ur ?></td>
       </tr>
       <?php endif; ?>
     <?php endforeach; ?>
@@ -98,6 +100,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
         ?>
         <?= sipui_tur_html($r, $sec_parti, false) ?>
         <?= sipui_navlun_html($r) ?>
+        <?php $__ul = siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null); if ($__ul !== ''): ?><div class="sip-ulke sip-ulke--kart">Alıcı ülke: <?= h($__ul) ?></div><?php endif; ?>
         <?php $__gm = trim((string)($r['yurtici_gumruk'] ?? '')); if ($__gm !== ''): ?><div class="sip-gumruk sip-gumruk--kart">Yurt içi gümrük: <?= h($__gm) ?></div><?php endif; ?>
       </div>
       <?php $__ur = sipui_kalem_html($sec_kalem[$__id] ?? []); if ($__ur !== ''): ?><div class="sip-card-urun"><?= $__ur ?></div><?php endif; ?>

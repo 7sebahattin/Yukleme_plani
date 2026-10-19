@@ -9,6 +9,7 @@
 // =========================================================
 declare(strict_types=1);
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
+require_once __DIR__ . '/siparis_yazdir.php';   // v395: Alıcı Ülke = siparis_yazdir_ulke() (OGL Excel eşlemesi, TEK kaynak)
 
 /** Kart alanları — sıra ve etiketler sahibindir (DEĞİŞTİRME). @return list<array{k:string,etiket:string}> */
 function siparis_wp_alanlari(): array
@@ -23,6 +24,7 @@ function siparis_wp_alanlari(): array
         ['k' => 'sofor',     'etiket' => 'Şoför adı'],
         ['k' => 'tel',       'etiket' => 'Şoför telefonu'],
         ['k' => 'gumruk',    'etiket' => 'Yurt içi gümrük'],
+        ['k' => 'ulke',      'etiket' => 'Alıcı Ülke'],
     ];
 }
 
@@ -58,7 +60,7 @@ function siparis_wp_oku(PDO $pdo, int $sid): ?array
     if ($sid <= 0) return null;
     $sofor  = siparis_sofor_hazir($pdo);
     $gumruk = siparis_yurtici_gumruk_hazir($pdo);
-    $cols = 's.id, s.depo, s.order_ref, s.navlun_no, s.yukleme_tarihi, s.plakalar, s.nakliyeci, s.toplam_palet, s.toplam_koli'
+    $cols = 's.id, s.depo, s.order_ref, s.alici_kodu, s.alici_adi, s.navlun_no, s.yukleme_tarihi, s.plakalar, s.nakliyeci, s.toplam_palet, s.toplam_koli'
           . ($sofor ? ', s.sofor_adi, s.sofor_telefon' : '') . ($gumruk ? ', s.yurtici_gumruk' : '');
     [$dsql, $dprm] = depo_sql_column('s.depo', ':udm');
     $st = $pdo->prepare('SELECT ' . $cols . ' FROM siparis_sevkiyatlar s WHERE s.id = :wpid AND s.deleted_at IS NULL' . $dsql . ' LIMIT 1');
@@ -95,6 +97,7 @@ function siparis_wp_veri(array $okunan, array $ctx): array
         'sofor'     => !empty($okunan['sofor']) ? siparis_wp_deger($r['sofor_adi'] ?? null) : '—',
         'tel'       => !empty($okunan['sofor']) ? siparis_wp_deger($r['sofor_telefon'] ?? null) : '—',
         'gumruk'    => !empty($okunan['gumruk']) ? siparis_wp_deger($r['yurtici_gumruk'] ?? null) : '—',
+        'ulke'      => siparis_wp_deger(siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null)),
     ];
     $alanlar = [];
     foreach (siparis_wp_alanlari() as $a) $alanlar[] = ['k' => $a['k'], 'etiket' => $a['etiket'], 'deger' => $deger[$a['k']]];
