@@ -296,8 +296,8 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 
 <?php if (can('records.read')): ?>
     <a href="records.php" class="home-card">
-        <div class="home-card-icon" style="background:#eaf1ff">📋</div>
-        <div class="home-card-title">Yüklemeler Planı</div>
+        <div class="home-card-icon" style="background:#eaf1ff">🚚</div>
+        <div class="home-card-title">Yükleme Planları</div>
         <?php if ($stats['toplam_kayit'] > 0): ?>
         <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
         <?php endif; ?>
@@ -306,7 +306,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 
 <?php if (can('records.read')): ?>
     <a href="cikmalar.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdecea">🚚</div>
+        <div class="home-card-icon" style="background:#fdecea">📋</div>
         <div class="home-card-title">Paletleme</div>
         <?php if ($stats['toplam_cikma'] > 0): ?>
         <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>

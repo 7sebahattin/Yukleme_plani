@@ -122,7 +122,7 @@ let bag_ctx = {};
 
 const r1 = (n) => Math.round(n * 10) / 10;
 // Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
-const SAYFA_ADI = { records: 'Yüklemeler Planı', cikma: 'Paletleme', beyan: 'Beyanlar', kantar: 'Mal Kabul', hks: 'Hal Bildirimi',
+const SAYFA_ADI = { records: 'Yükleme Planları', cikma: 'Paletleme', beyan: 'Beyanlar', kantar: 'Mal Kabul', hks: 'Hal Bildirimi',
     rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
     users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
