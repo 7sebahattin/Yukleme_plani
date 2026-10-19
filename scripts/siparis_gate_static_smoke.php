@@ -111,8 +111,8 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, Fil
 }
 sort($cagiran);
 ok('siparis_migrate() yalnız tanım + migrate.php', $cagiran === ['config/siparis_core.php', 'migrate.php'], implode(',', $cagiran));
-ok('migrate.php sipariş kartı: CSRF + audit + id="siparis"',
-    str_contains($migrate, "'ne'] ?? '') === 'siparis'") && str_contains($migrate, "audit_log_event('migrate', 'siparis'") && str_contains($migrate, 'id="siparis"'));
+ok('migrate.php sipariş kartı: CSRF + audit + id="siparis" (v388: kart mg_kart_ac(\'siparis\') ile açılır, render çıktısı migrate_panel_smoke.php\'de)',
+    str_contains($migrate, "'ne'] ?? '') === 'siparis'") && str_contains($migrate, "audit_log_event('migrate', 'siparis'") && str_contains($migrate, "mg_kart_ac('siparis')"));
 ok('migrate.php kartı ne=siparis formu + 10 tabloyu siparis_tablolar() ile listeler', str_contains($migrate, 'name="ne" value="siparis"') && str_contains($migrate, 'siparis_tablolar()'));
 ok('db.php siparis_ tablosunu auto-migration\'a eklemiyor', !str_contains(oku('config/db.php'), 'siparis_'));
 ok('helpers.php siparis_tablolar içermiyor (IIFE migrasyonuna eklenmedi)', !str_contains($helpers, 'siparis_tablolar'));

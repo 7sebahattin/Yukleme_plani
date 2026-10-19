@@ -75,15 +75,17 @@ $migrations = [
     ['account_transactions', 'depo',         "ALTER TABLE `account_transactions` ADD COLUMN `depo` VARCHAR(150) NOT NULL DEFAULT ''"],
 ];
 
-function mig_table_exists(PDO $pdo, string $t): bool {
-    try { $pdo->query("SELECT 1 FROM `$t` LIMIT 0"); return true; }
-    catch (PDOException $e) { return false; }
-}
-function mig_col_exists(PDO $pdo, string $t, string $c): bool {
-    try {
-        $cols = $pdo->query("SHOW COLUMNS FROM `$t`")->fetchAll(PDO::FETCH_COLUMN);
-        return in_array($c, $cols, true);
-    } catch (PDOException $e) { return false; }
+if (!function_exists('mig_table_exists')) {   // sayfa betiği test harness'inde iki kez include edilebilir
+    function mig_table_exists(PDO $pdo, string $t): bool {
+        try { $pdo->query("SELECT 1 FROM `$t` LIMIT 0"); return true; }
+        catch (PDOException $e) { return false; }
+    }
+    function mig_col_exists(PDO $pdo, string $t, string $c): bool {
+        try {
+            $cols = $pdo->query("SHOW COLUMNS FROM `$t`")->fetchAll(PDO::FETCH_COLUMN);
+            return in_array($c, $cols, true);
+        } catch (PDOException $e) { return false; }
+    }
 }
 
 $results = [];   // her migrasyon için sonuç
@@ -325,7 +327,49 @@ foreach ($migrations as [$tbl, $col, $sql]) {
     $status[] = ['tbl' => $tbl, 'col' => $col, 'exists' => $exists, 'sql' => $sql];
 }
 
+// ── Panel görünümü: hazır (hepsi ✓, hiç ✗ yok) kartlar kapalı tek satıra iner; eksik olan açık kalır ──
+// Kartların KENDİ çıktısı karar verir (her kart eksikse ✗, tamsa ✓ basar) — kartlara ayrı "hazır mı" mantığı eklenmez.
+// POST sonrası (bir migrasyon çalıştırıldıktan sonra) hiçbir kart kapatılmaz: "Son çalıştırma sonucu" satırları görünür kalsın.
+// Hiçbir kart/POST dalı KALDIRILMADI: ayrı bir veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur.
+if (!function_exists('mg_durum')) {
+    /** Kart sayacı (sayfa betiği test harness'inde iki kez include edilebilir → durum global değil, static). */
+    function &mg_durum(bool $sifirla = false): array
+    {
+        static $d = ['toplam' => 0, 'hazir' => 0, 'id' => ''];
+        if ($sifirla) $d = ['toplam' => 0, 'hazir' => 0, 'id' => ''];
+        return $d;
+    }
+    function mg_kart_ac(string $id = ''): void
+    {
+        $d = &mg_durum();
+        $d['id'] = $id;
+        ob_start();
+    }
+    function mg_kart_kapat(): void
+    {
+        $d = &mg_durum();
+        $html = (string)ob_get_clean();
+        $baslik = '';
+        if (preg_match('#<h2[^>]*>(.*?)</h2>#s', $html, $m)) {
+            $baslik = $m[1];
+            $html = (string)preg_replace('#<h2[^>]*>.*?</h2>#s', '', $html, 1);
+        }
+        $post = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
+        $hazir = str_contains($html, '✓') && !str_contains($html, '✗');
+        $d['toplam']++;
+        if ($hazir) $d['hazir']++;
+        $id = (string)$d['id'];
+        echo '<details class="card mg-kart ' . ($hazir ? 'mg-hazir' : 'mg-eksik') . '"' . ($id !== '' ? ' id="' . h($id) . '"' : '')
+            . ($hazir && !$post ? '' : ' open') . ' style="margin:16px 0;padding:0;">'
+            . '<summary class="mg-ozet"><span class="mg-baslik">' . $baslik . '</span>'
+            . '<span class="mg-rozet ' . ($hazir ? 'mg-rozet-ok' : 'mg-rozet-eksik') . '">' . ($hazir ? '✓ Hazır' : '✗ Eksik') . '</span></summary>'
+            . '<div class="mg-govde">' . $html . '</div></details>';
+    }
+}
+mg_durum(true);
+
 render_header('Şema Migrasyon');
+ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
 ?>
 <div class="container">
   <h1 style="margin:16px 0 8px;">Şema Migrasyon Paneli</h1>
@@ -335,6 +379,8 @@ render_header('Şema Migrasyon');
     sayfa size tam hata mesajını gösterir; o durumda aşağıdaki SQL'i
     phpMyAdmin'den çalıştırın.
   </p>
+
+  <!--MG-OZET-->
 
   <?php if ($ran): ?>
     <div class="card" style="margin:16px 0;padding:16px;">
@@ -396,7 +442,7 @@ render_header('Şema Migrasyon');
     </div>
   <?php endif; ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">PDKS (Personel) Tabloları</h2>
     <p style="color:#555;max-width:760px;margin-top:0;">
       Personel giriş/çıkış modülünün Faz 1 tabloları. <b>Yalnız yeni tablo oluşturur;
@@ -431,16 +477,16 @@ render_header('Şema Migrasyon');
         echo h(pdks_users_fk_sql()) . ";\n";
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Faz 8J — Puantaj Düzeltme / İptal</h2>
     <p>Yalnız ekleyici migrasyon: çalışma dönemlerine iptal metadatası ekler; ham NFC/USB olaylarını değiştirmez veya silmez.</p>
     <p><strong><?= pdks_faz8j_sema_hazir($pdo) ? '✓ Hazır' : '✗ Henüz çalıştırılmadı' ?></strong><?php if ($pdks_faz8j_ran): foreach($pdks_faz8j_results as $r): ?><br><?=h($r['adim'])?>: <?=h($r['durum'])?><?php endforeach; endif; ?></p>
     <form method="post"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="ne" value="pdks_gunluk_faz8j"><button class="btn btn-primary">Faz 8J Migrasyonunu Çalıştır</button></form>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Tanımlı Giriş — Kart Tanım Tablosu (v298)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>worker_card_assignments</code> tablosunu ekler (mevcut tablolara ALTER YOK).
@@ -481,9 +527,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_gunluk_kart_tanim_tablolar() as $pksql) { echo h($pksql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Giriş Tanımlı — Tablolar (v354)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: 4 YENİ tablo (<code>ters_havuz_kart</code>, <code>ters_cavus_ayar</code>, <code>ters_sayim</code>,
@@ -522,9 +568,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_ters_tablolar() as $ptsql) { echo h($ptsql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Mail Merkezi — Tablolar</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>mail_accounts</code>, <code>mail_account_users</code>, <code>mail_threads</code>,
@@ -564,9 +610,9 @@ render_header('Şema Migrasyon');
         foreach (mail_tablolar() as $msql) { echo h($msql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" id="siparis" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac('siparis'); ?>
     <h2 style="margin-top:0;">Siparişler — Tablolar</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>siparis_sevkiyatlar</code>, <code>siparis_kalemler</code>, <code>siparis_belgeler</code>,
@@ -605,9 +651,9 @@ render_header('Şema Migrasyon');
         foreach (siparis_tablolar() as $ssql) { echo h($ssql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" id="siparis-sofor" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac('siparis-sofor'); ?>
     <h2 style="margin-top:0;">Siparişler — Şoför alanları</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>siparis_sevkiyatlar</code> tablosuna iki boş (NULL) kolon ekler —
@@ -634,9 +680,9 @@ render_header('Şema Migrasyon');
         foreach (siparis_sofor_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" id="siparis-yurtici-gumruk" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac('siparis-yurtici-gumruk'); ?>
     <h2 style="margin-top:0;">Siparişler — Yurt içi gümrük</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>siparis_sevkiyatlar</code> tablosuna bir boş (NULL) kolon ekler —
@@ -663,9 +709,9 @@ render_header('Şema Migrasyon');
         foreach (siparis_yurtici_gumruk_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Faz 9D — Hakediş Düzeltme / Mahsup</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_entitlement_adjustments</code> tablosunu ekler.
@@ -706,9 +752,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_faz9d_tablolar() as $p9sql) { echo h($p9sql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Çavuş Ücreti — Günlük Ücret Tablosu (Faz 8B eki)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_daily_rates</code> tablosunu ekler.
@@ -749,9 +795,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_faz8b_cavus_ucret_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Servis Ücreti (v299)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_service_rates</code> (çavuş bazında Büyük/Küçük servis
@@ -791,9 +837,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_servis_tablolar() as $pssql) { echo h($pssql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Fiyat Dönemi Saatleri + Çift Yevmiye (v299)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_worker_rates</code>'e 5 nullable kolon ekler
@@ -835,9 +881,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_faz8b_saat_kolonlari() as [$psk, $pstanim]) { echo h("ALTER TABLE `foreman_worker_rates` ADD COLUMN `{$psk}` {$pstanim};") . "\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Çavuş Ücreti Yöntem B — Dönem Kapanış Tabloları (N kişi-gün = 1 hakediş)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_rate_method_log</code>, <code>foreman_period_closures</code>,
@@ -886,9 +932,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_faz8b_cavus_ucret_b_tablolar() as $pbsql) { echo h($pbsql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Günlük İşçi Tabloları (Çavuş / İşçi Kart Havuzu — Faz 1)</h2>
     <p style="color:#555;font-size:.9em;">
       Kalıcı personel PDKS'inden AYRI: <code>foremen</code>, <code>worker_types</code>, <code>worker_cards</code>.
@@ -927,9 +973,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_gunluk_tablolar() as $pgsql) { echo h($pgsql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Hakediş Tabloları (Çavuş Fiyatları / Hakediş — Faz 4)</h2>
     <p style="color:#555;font-size:.9em;">
       <code>foreman_worker_rates</code>, <code>foreman_daily_entitlements</code>,
@@ -970,9 +1016,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_hakedis_tablolar() as $phsql) { echo h($phsql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Cari Hesap Tabloları (Çavuş Ödeme / Cari — Faz 5)</h2>
     <p style="color:#555;font-size:.9em;">
       <code>foreman_payments</code>. Additive-only — Faz 1-4 tablolarına
@@ -1013,9 +1059,9 @@ render_header('Şema Migrasyon');
         foreach (pdks_cari_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
       ?></pre>
     </details>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Faz 8A — Nötr İşçi Kartı / Mesai Dönemi</h2>
     <p style="color:#555;font-size:.9em;">
       Dört adım tek çağrıda: ① <code>daily_worker_work_periods</code> tablosunu oluşturur
@@ -1060,9 +1106,9 @@ render_header('Şema Migrasyon');
       <input type="hidden" name="ne" value="pdks_gunluk_faz8a">
       <button type="submit" class="btn btn-primary">Faz 8A Migrasyonunu Çalıştır</button>
     </form>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Faz 8B — Mesai Değerlendirme / Ücretlendirme</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_worker_rates</code>'a Yarım/Fazla Mesai
@@ -1093,9 +1139,9 @@ render_header('Şema Migrasyon');
       <input type="hidden" name="ne" value="pdks_faz8b">
       <button type="submit" class="btn btn-primary">Faz 8B Migrasyonunu Çalıştır</button>
     </form>
-  </div>
+  <?php mg_kart_kapat(); ?>
 
-  <div class="card" style="margin:16px 0;padding:16px;">
+  <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Mevcut Durum</h2>
     <div class="table-wrap">
       <table class="table">
@@ -1118,6 +1164,46 @@ render_header('Şema Migrasyon');
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <button type="submit" class="btn btn-primary">Eksik Kolonları Ekle</button>
     </form>
-  </div>
+  <?php mg_kart_kapat(); ?>
 </div>
+<?php
+$mgHtml = (string)ob_get_clean();
+$mg = mg_durum();
+$mgOzet = '<p class="mg-ozet-satir">' . ($mg['hazir'] === $mg['toplam']
+        ? '✓ Tüm kartlar hazır (' . $mg['toplam'] . '/' . $mg['toplam'] . ').'
+        : $mg['hazir'] . ' / ' . $mg['toplam'] . ' kart hazır; eksik olanlar açık.')
+    . ' Hazır olanlar kapalı gelir — başlığa tıklayarak açın. <button type="button" class="btn btn-ghost" id="mgTumu">Tümünü aç</button></p>';
+echo str_replace('<!--MG-OZET-->', $mgOzet, $mgHtml);
+?>
+<style>
+  .mg-kart > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+  .mg-kart > summary::-webkit-details-marker { display: none; }
+  .mg-kart > summary::before { content: "▸"; color: var(--muted, #777); transition: transform .15s; }
+  .mg-kart[open] > summary::before { transform: rotate(90deg); }
+  .mg-baslik { font-weight: 700; flex: 1; min-width: 0; }
+  .mg-rozet { font-size: .8rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+  .mg-rozet-ok { color: #1f9d55; background: rgba(31, 157, 85, .12); }
+  .mg-rozet-eksik { color: #c0392b; background: rgba(192, 57, 43, .12); }
+  .mg-govde { padding: 0 16px 16px; }
+  .mg-ozet-satir { margin: 12px 0; }
+  .mg-kart > summary:focus-visible { outline: 2px solid var(--primary, #2563eb); outline-offset: 2px; }
+</style>
+<script>
+(function () {
+  var kartlar = function () { return Array.prototype.slice.call(document.querySelectorAll('details.mg-kart')); };
+  var dugme = document.getElementById('mgTumu');
+  if (dugme) dugme.addEventListener('click', function () {
+    var ac = kartlar().some(function (k) { return !k.open; });
+    kartlar().forEach(function (k) { k.open = ac; });
+    dugme.textContent = ac ? 'Tümünü kapat' : 'Tümünü aç';
+  });
+  // migrate.php#siparis-sofor gibi bağlantılar kapalı kartı açar
+  function hashAc() {
+    var id = decodeURIComponent((location.hash || '').slice(1));
+    var k = id && document.getElementById(id);
+    if (k && k.tagName === 'DETAILS') { k.open = true; k.scrollIntoView(); }
+  }
+  hashAc(); window.addEventListener('hashchange', hashAc);
+})();
+</script>
 <?php render_footer(); ?>
