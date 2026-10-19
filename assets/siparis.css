@@ -313,6 +313,11 @@ tr.row-link { cursor: pointer; }
 .sip-mail-alici { padding: 8px 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .sip-mail-satir { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .sip-mail-satir code { overflow-wrap: anywhere; }
+/* v383: mail taslağı — Kime/Bilgi etiketi, konu, eylem düğmeleri */
+.sip-mail-rol { display: inline-block; min-width: 3.2em; font-size: .78rem; font-weight: 600; color: var(--muted); }
+.sip-mail-konu { font-size: .88rem; overflow-wrap: anywhere; }
+.sip-mail-eylem { display: flex; gap: 6px; flex-wrap: wrap; }
+.sip-mail-ipucu { margin: 0; font-size: .8rem; }
 .sip-alan-footer { display: flex; }
 .sip-sira-ilk { order: 1; } .sip-sira-orta { order: 2; } .sip-sira-son { order: 3; }
 .sip-alan-footer .sip-sira-ilk { margin-right: auto; }

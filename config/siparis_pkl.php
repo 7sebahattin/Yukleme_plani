@@ -942,3 +942,90 @@ function siparis_xlsx_onizleme(string $xlsxYolu, int $maxSatir = 120): array
     }
     return $out;
 }
+
+// ── PKL MAİL TASLAĞI (v383) ─────────────────────────────────────────────
+// Uygulama mail GÖNDERMEZ: yalnız kullanıcının mail programına taslak verir. İki yol: (1) mailto: bağlantısı — Kime/Bilgi/
+// konu/gövde dolar ama mailto standardı EK TAŞIYAMAZ; (2) .eml taslağı (X-Unsent: 1) — PKL ekiyle birlikte; Outlook
+// (klasik) bunu gönderilmeye hazır taslak olarak açar. İkisi de AYNI siparis_pkl_mail_taslak() çıktısından kurulur.
+
+/** PO'daki "Packing List per E-Mail to:" adresleri (geçerli e-postalar, PO sırasıyla). @return list<string> */
+function siparis_po_pkl_epostalar(PDO $pdo, array $sev): array
+{
+    if (empty($sev['po_belge_id'])) return [];
+    $p = $pdo->prepare('SELECT parse_json FROM siparis_belgeler WHERE id = ? AND deleted_at IS NULL');
+    $p->execute([(int)$sev['po_belge_id']]);
+    $pj = siparis_json_coz($p->fetchColumn() ?: '');
+    $out = [];
+    foreach ((array)($pj['packing_list_emails'] ?? []) as $em) if (is_string($em) && filter_var($em, FILTER_VALIDATE_EMAIL)) $out[] = $em;
+    return $out;
+}
+
+/**
+ * Mail taslağı (saf, DB yok). "packinglist…" ile başlayan adres(ler) Bilgi (CC), diğerleri Kime; Kime boş kalırsa hepsi Kime.
+ * Konu = PKL dosya adı uzantısız (yoksa order ref). Gövde sabit İngilizce kalıp + imza ("Asya Fresh" + gönderenin adı).
+ * Konu/imzadaki satır sonu ve denetim karakterleri atılır (başlık enjeksiyonu yok).
+ * @param list<string> $epostalar @return array{kime:list<string>,bilgi:list<string>,konu:string,govde:string}
+ */
+function siparis_pkl_mail_taslak(array $epostalar, string $pklAd, string $orderRef, string $imzaAd): array
+{
+    $temiz = static fn(string $s): string => trim((string)preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $s));
+    $kime = []; $bilgi = []; $gor = [];
+    foreach ($epostalar as $e) {
+        $e = trim((string)$e);
+        if ($e === '' || filter_var($e, FILTER_VALIDATE_EMAIL) === false) continue;
+        $k = strtolower($e);
+        if (isset($gor[$k])) continue;
+        $gor[$k] = true;
+        if (str_starts_with($k, 'packinglist')) $bilgi[] = $e; else $kime[] = $e;
+    }
+    if (!$kime) { $kime = $bilgi; $bilgi = []; }
+    $konu = $temiz($pklAd !== '' ? (string)preg_replace('/\.xlsx?$/i', '', $pklAd) : $orderRef);
+    $ad = $temiz($imzaAd);
+    $govde = "Hi,\nPlease find attached the packing list.\n\nBest regards,\nAsya Fresh" . ($ad !== '' ? "\n" . $ad : '');
+    return ['kime' => $kime, 'bilgi' => $bilgi, 'konu' => $konu, 'govde' => $govde];
+}
+
+/** mailto: bağlantısı (ek YOK — mailto standardı ek taşıyamaz). Çıktıyı HTML'e h() ile bas. */
+function siparis_pkl_mailto(array $t): string
+{
+    $q = [];
+    if ($t['bilgi']) $q[] = 'cc=' . implode(',', $t['bilgi']);
+    $q[] = 'subject=' . rawurlencode((string)$t['konu']);
+    $q[] = 'body=' . rawurlencode(str_replace("\n", "\r\n", (string)$t['govde']));
+    return 'mailto:' . implode(',', $t['kime']) . '?' . implode('&', $q);
+}
+
+/**
+ * Ekli .eml taslağı (RFC 5322 + MIME). `X-Unsent: 1` → Outlook dosyayı GÖNDERİLMEMİŞ taslak olarak açar (Kimden = kullanıcının
+ * varsayılan hesabı; From başlığı bilerek YOK). Gövde ve ek base64; ASCII dışı konu/dosya adı RFC 2047 / RFC 2231 ile.
+ */
+function siparis_pkl_eml(array $t, string $ekAd, string $ekIcerik, ?int $zaman = null): string
+{
+    $sinir = '=_asya_' . bin2hex(random_bytes(12));
+    $kodla = static fn(string $s): string => preg_match('/[^\x20-\x7E]/', $s) ? '=?UTF-8?B?' . base64_encode($s) . '?=' : $s;
+    $ascii = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', $ekAd), '_') ?: 'packing-list.xlsx';
+    $b = [];
+    $b[] = 'X-Unsent: 1';
+    $b[] = 'To: ' . implode(', ', $t['kime']);
+    if ($t['bilgi']) $b[] = 'Cc: ' . implode(', ', $t['bilgi']);
+    $b[] = 'Subject: ' . $kodla((string)$t['konu']);
+    $b[] = 'Date: ' . date(DATE_RFC2822, $zaman ?? time());
+    $b[] = 'MIME-Version: 1.0';
+    $b[] = 'Content-Type: multipart/mixed; boundary="' . $sinir . '"';
+    $b[] = '';
+    $b[] = 'This is a multi-part message in MIME format.';
+    $b[] = '--' . $sinir;
+    $b[] = 'Content-Type: text/plain; charset=UTF-8';
+    $b[] = 'Content-Transfer-Encoding: base64';
+    $b[] = '';
+    $b[] = rtrim(chunk_split(base64_encode(str_replace("\n", "\r\n", (string)$t['govde'])), 76, "\r\n"));
+    $b[] = '--' . $sinir;
+    $b[] = 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="' . $ascii . '"';
+    $b[] = 'Content-Transfer-Encoding: base64';
+    $b[] = 'Content-Disposition: attachment; filename="' . $ascii . '"' . ($ascii !== $ekAd ? "; filename*=UTF-8''" . rawurlencode($ekAd) : '');
+    $b[] = '';
+    $b[] = rtrim(chunk_split(base64_encode($ekIcerik), 76, "\r\n"));
+    $b[] = '--' . $sinir . '--';
+    $b[] = '';
+    return implode("\r\n", $b);
+}
