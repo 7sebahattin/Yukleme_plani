@@ -653,7 +653,7 @@ foreach ([16, 18] as $i => $kal) {                             // s12: 3 → 5 k
 rol($ADMIN, true);
 $r = sayfa('siparisler.php');
 ok('liste temiz + dengeli (yeni sütun)', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . (string)html_dengeli($r['html']));
-ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="9"><div class="sip-urunler">'));
+ok('ürün alt satırı: sütun sayısı kadar colspan, satır bağlantılı', str_contains($r['html'], 'class="row-link sip-urun-tr') && str_contains($r['html'], '<td colspan="10"><div class="sip-urunler">'));
 // v384 — Excel gibi dönüşümlü bant: grup sınıfı sunucuda; ana satır + ürün alt satırı AYNI bant, ardışık gruplar farklı
 preg_match_all('#<tr class="row-link( sip-urun-tr)? sip-grup sip-z([01])[^"]*" data-href="siparis_view\.php\?id=(\d+)">#', $r['html'], $__zm, PREG_SET_ORDER);
 $__zg = []; $__zt = true;
@@ -675,7 +675,8 @@ $__gEski = $db->query('SELECT gumruk FROM siparis_sevkiyatlar WHERE id = ' . (in
 $db->prepare('UPDATE siparis_sevkiyatlar SET gumruk = ?, yurtici_gumruk = ? WHERE id = ?')->execute(['YURTDISI-SINIR', 'TESTPORT <b>Y</b>', $ID['s1']]);
 $db->exec("UPDATE siparis_sevkiyatlar SET gumruk = 'YURTDISI-2', yurtici_gumruk = NULL WHERE id = " . (int)$ID['s31']);
 $__rg = sayfa('siparisler.php');
-ok('gümrük: başlık + colspan 9', str_contains($__rg['html'], '<th>Lojistik</th><th>Yurt içi gümrük</th>') && !str_contains($__rg['html'], '<td colspan="8">'));
+ok('gümrük: başlık + colspan 10', str_contains($__rg['html'], '<th>Lojistik</th><th>Yurt içi gümrük</th>') && !str_contains($__rg['html'], '<td colspan="8">') && !str_contains($__rg['html'], '<td colspan="9">'));
+ok('v395: Alıcı ülke sütunu PO grubu ile Yükleme arasında', str_contains($__rg['html'], '<th>PO grubu</th><th>Alıcı ülke</th><th>Yükleme</th>') && str_contains($__rg['html'], '<td class="sip-ulke-hucre">'));
 ok('yurt içi gümrük: yazılıysa hücrede (kaçırılmış), boşsa hücre boş', str_contains($satir($__rg['html'], $ID['s1']), '<span class="sip-gumruk" title="TESTPORT &lt;b&gt;Y&lt;/b&gt;">TESTPORT &lt;b&gt;Y&lt;/b&gt;</span>')
     && str_contains($satir($__rg['html'], $ID['s31']), '<td class="sip-gumruk-hucre"></td>') && !str_contains($__rg['html'], '<b>Y</b>'));
 ok('yurt dışı (PO) gümrük listede GÖRÜNMEZ', !str_contains($__rg['html'], 'YURTDISI-SINIR') && !str_contains($__rg['html'], 'YURTDISI-2'));

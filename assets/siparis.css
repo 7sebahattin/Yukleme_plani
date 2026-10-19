@@ -665,3 +665,13 @@ html[data-theme="dark"] .sip-wp-durum--uyari { border-left-color: #fbbf24; }
 /* menü düğmesi satır yüksekliğini komşu <a> öğeleriyle eşitler (button varsayılanı line-height: normal) */
 .pc-dropdown [data-sip-wp] { line-height: inherit; }
 /* ==== /v394 ==== */
+/* ==== v395 Alıcı ülke (PO alıcı ID → Türkçe ülke; siparis_yazdir_ulke) ==== */
+.sip-table td.sip-ulke-hucre { white-space: nowrap; }
+/* Alıcı ülke sütunu yer açsın diye hücre yan boşluğu 9px → 6px (1280'de tablo kendi içinde kaymasın — siparis_ui_smoke.js ölçer) */
+.sip-table th, .sip-table td { padding-left: 6px; padding-right: 6px; }
+.sip-table th:first-child, .sip-table td:first-child { padding-left: 12px; }
+.sip-ulke { font-size: .78rem; font-weight: 600; color: var(--text); }
+/* PO grubu rozeti 1280'de iki satıra inebilir ("CW43 ·" / "LIDL RO") — ülke sütununa yer açar */
+.sip-table td .sip-po { white-space: normal; max-width: 104px; text-align: center; line-height: 1.25; }
+.sip-ulke--kart { font-size: .8rem; font-weight: 400; color: var(--muted); }
+/* ==== /v395 ==== */

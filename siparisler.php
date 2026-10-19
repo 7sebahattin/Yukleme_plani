@@ -10,6 +10,7 @@ require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/siparis_beyan.php';
 require_once __DIR__ . '/config/siparis_mail.php';
+require_once __DIR__ . '/config/siparis_yazdir.php';   // v395: listede Alıcı ülke = siparis_yazdir_ulke()
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
