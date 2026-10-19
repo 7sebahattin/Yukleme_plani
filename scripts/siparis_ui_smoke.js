@@ -31,7 +31,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
 (async () => {
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => fs.existsSync(p));
     const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
-    async function ac(sayfa, w, h, koyu, hazirla) {
+    async function ac(sayfa, w, h, koyu, hazirla, opts) {
         const mobil = w < 768;
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobil, hasTouch: mobil, reducedMotion: 'reduce', colorScheme: koyu ? 'dark' : 'light' });
         const page = await ctx.newPage();
@@ -39,14 +39,17 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         page.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|file:\/\/|Failed to load resource|ERR_NAME_NOT_RESOLVED|ERR_INTERNET|ERR_TUNNEL|CORS/.test(m.text())) hatalar.push(m.text()); });
         page.on('pageerror', e => hatalar.push('pageerror: ' + e.message));
         if (koyu) await page.addInitScript(() => { try { localStorage.setItem('asya_tema', 'dark'); } catch (e) {} });
+        // v382: "Belge yükle" kartı varsayılan KAPALI → kartın içini sınayan senaryolar kullanıcı tercihini (localStorage '1', uid fixture = 1) önceden yazar
+        if (opts && opts.yukleAcik) await page.addInitScript(() => { try { localStorage.setItem('asya_sip_yukle_1', '1'); } catch (e) {} });
         if (hazirla) await hazirla(page);      // page.route() sayfa AÇILMADAN kurulmalı (file:// isteklerinde sonradan kurulan yönlendirme devreye girmez)
         await page.goto('file://' + path.join(OUT, sayfa + '.html'));
         if (koyu) await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
         await page.waitForTimeout(400);
         return { ctx, page, hatalar };
     }
+    const acA = (sayfa, w, h, koyu, hazirla) => ac(sayfa, w, h, koyu, hazirla, { yukleAcik: true });   // v382: yükleme kartı açık
     const tasma = page => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    const gorunur = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); if (!e) return false; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0; }, sel);
+    const gorunur = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); if (!e) return false; const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0 && (!e.checkVisibility || e.checkVisibility()); }, sel);   // checkVisibility: kapalı <details> içeriği (content-visibility) görünmez sayılır
     const rect = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right, b: r.bottom }; }, sel);
 
     /** Pencereyi açar; alt çubuk ekranda, gövde kayar, son denetim tıklanabilir. */
@@ -109,6 +112,25 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ok(`[${w}] liste: bağlı beyanın parti no'su görünür`, v372.parti, JSON.stringify(v372));
         ok(`[${w}] liste: yeni hücreler ekrana sığar`, v372.sigar);
         if (w === 1280) ok(`[${w}] liste: tablo kendi içinde yatay kaymıyor (yeni alt satır sütun eklemez)`, v372.tabloKayiyor <= 1, String(v372.tabloKayiyor));
+        // v382: "Belge yükle" kartı native <details>: varsayılan KAPALI, summary ile açılır/kapanır, tercih localStorage'da
+        const YK = 'details[data-sip-yukle]', YS = 'details[data-sip-yukle] > summary.sip-yukle-ozet';
+        ok(`[${w}] yükleme kartı: varsayılan kapalı (summary görünür, form ve açık özniteliği yok)`, (await gorunur(page, YS)) && !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(s => !document.querySelector(s).open, YK));
+        const ys = await rect(page, YS);
+        ok(`[${w}] yükleme kartı: summary dokunma hedefi ≥ 44px, tam genişlik, taşma yok`, ys && ys.h >= 43.5 && (await tasma(page)) <= 0, JSON.stringify(ys));
+        await page.click(YS); await page.waitForTimeout(150);
+        ok(`[${w}] yükleme kartı: summary tıkı açar (form görünür)`, (await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(s => document.querySelector(s).open, YK));
+        ok(`[${w}] yükleme kartı: açıkken yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
+        ok(`[${w}] yükleme kartı: tercih localStorage'a '1' yazıldı`, await page.evaluate(() => { try { return localStorage.getItem('asya_sip_yukle_1'); } catch (e) { return 'x'; } }) === '1');
+        await page.reload(); await page.waitForTimeout(300);
+        ok(`[${w}] yükleme kartı: yeniden yüklemede tercih korunur (açık)`, await page.evaluate(s => document.querySelector(s).open, YK));
+        await page.click(YS); await page.waitForTimeout(150);
+        ok(`[${w}] yükleme kartı: ikinci tık kapatır (form görünmez), tercih '0'`, !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(() => localStorage.getItem('asya_sip_yukle_1')) === '0');
+        await page.reload(); await page.waitForTimeout(300);
+        ok(`[${w}] yükleme kartı: kapalı tercih de korunur`, await page.evaluate(s => !document.querySelector(s).open, YK));
+        await page.goto(page.url().split('#')[0] + '#yukle'); await page.waitForTimeout(300);
+        ok(`[${w}] yükleme kartı: #yukle bağlantısı kartı açar (tercih '0' olsa bile)`, (await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(s => document.querySelector(s).open, YK));
+        ok(`[${w}] yükleme kartı: hash açılışı tercihi ezmez (hâlâ '0')`, await page.evaluate(() => localStorage.getItem('asya_sip_yukle_1')) === '0');
+        ok(`[${w}] yükleme kartı: ok simgesi + iç içe seçici güvenliği (summary yalnız bir tane doğrudan çocuk)`, await page.evaluate(s => document.querySelectorAll(s).length === 1, YS));
         // yükleme ön denetimi
         const dosyaGirdi = await page.$('form[data-sip-upload] input[type=file]');
         await dosyaGirdi.setInputFiles([{ name: 'buyuk.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(16 * 1024 * 1024, 1) }]);
@@ -415,7 +437,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         let { ctx, page } = await ac('mail_ayarsiz_operator', 390, 844);
         ok('mail ayarsız (yönetici olmayan): bağlantı YOK, "henüz ayarlanmadı (yönetici)"', await page.evaluate(() => { const n = document.querySelector('.sip-mail-not'); return !!n && !n.querySelector('a') && /henüz ayarlanmadı \(yönetici\)/.test(n.textContent); }));
         await ctx.close();
-        ({ ctx, page } = await ac('mail_yetkisiz', 1280, 900));
+        ({ ctx, page } = await ac('mail_yetkisiz', 1280, 900, false, null, { yukleAcik: true }));
         ok('mail.read yetkisi yoksa "Mailden al" bölümü ve düğmeler HİÇ çizilmez', await page.evaluate(() => !document.querySelector('[data-sip-mail-kap]') && !document.querySelector('[data-sip-mail]') && !document.querySelector('#mail')) && await gorunur(page, 'form[data-sip-upload]'));
         await ctx.close();
         ({ ctx, page } = await ac('mail_ayar_yetkisiz', 1280, 900));
@@ -425,7 +447,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
     if (varSayfa('mail_ayarli')) {
         // ── düzen: 1280/820/390/360 ──
         for (const [w, h] of [[1280, 900], [820, 1024], [390, 844], [360, 740]]) {
-            const { ctx, page, hatalar } = await ac('mail_ayarli', w, h);
+            const { ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, null, { yukleAcik: true });
             ok(`[${w}] mail: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
             const r = await page.evaluate(() => {
                 const bs = Array.from(document.querySelectorAll('[data-sip-mail]')), kap = document.querySelector('.sip-mail-dugmeler');
@@ -445,7 +467,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         // ── akış: baslat → devam → bitti (sahte uç) ──
         for (const [w, h] of [[1280, 900], [390, 844]]) {
             const istekler = []; let devamNo = 0;
-            const { ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, p => p.route('**/siparis_mail.php', async route => {
+            const { ctx, page, hatalar } = await acA('mail_ayarli', w, h, false, p => p.route('**/siparis_mail.php', async route => {
                 const g = JSON.parse(route.request().postData() || '{}'); istekler.push(g);
                 if (g.islem === 'baslat') return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: g.tur, i: 0, toplam: 2, sayac: SAYAC0, uyarilar: [], bitti: false }));
                 devamNo++; await bekle(450);
@@ -468,10 +490,27 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             ok(`[${w}] mail akış: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
             await ctx.close();
         }
+        // ── v382: tarama sürerken summary tıkı kartı KAPATMAZ ──
+        {
+            const { ctx, page, hatalar } = await acA('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', async route => {
+                const g = JSON.parse(route.request().postData() || '{}');
+                if (g.islem === 'baslat') { await bekle(2000); return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: g.tur, i: 2, toplam: 2, sayac: SAYAC0, uyarilar: [], bitti: true, html: SONUC_HTML })); }
+                return route.fulfill(JSONY({ ok: false, mesaj: 'beklenmeyen' }, 400));
+            }));
+            await page.click('[data-sip-mail="lojistik"]'); await page.waitForTimeout(250);
+            await page.click('details[data-sip-yukle] > summary.sip-yukle-ozet'); await page.waitForTimeout(150);
+            const m = await page.evaluate(() => { const d = document.querySelector('details[data-sip-yukle]'); const n = d.querySelector('[data-sip-yukle-mesgul]'); return { acik: d.open, not: !n.hidden && getComputedStyle(n).display !== 'none', metin: n.textContent }; });
+            ok('yükleme kartı: tarama sürerken summary tıkı kartı kapatmaz, "Tarama sürüyor" notu görünür', m.acik && m.not && /Tarama sürüyor/.test(m.metin), JSON.stringify(m));
+            await page.waitForSelector('#sahteSonuc', { timeout: 6000 });
+            await page.click('details[data-sip-yukle] > summary.sip-yukle-ozet'); await page.waitForTimeout(150);
+            ok('yükleme kartı: tarama bitince summary tıkı kartı kapatır', await page.evaluate(() => !document.querySelector('details[data-sip-yukle]').open));
+            ok('yükleme kartı (tarama): konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+            await ctx.close();
+        }
         // ── ağ kopması → Devam et (aynı tarama_id) ──
         {
             const istekler = []; let devamNo = 0;
-            const { ctx, page } = await ac('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', async route => {
+            const { ctx, page } = await acA('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', async route => {
                 const g = JSON.parse(route.request().postData() || '{}'); istekler.push(g);
                 if (g.islem === 'baslat') return route.fulfill(JSONY({ ok: true, tarama_id: 'abcdef0123456789', tur: g.tur, i: 0, toplam: 2, sayac: SAYAC0, uyarilar: [], bitti: false }));
                 devamNo++;
@@ -491,7 +530,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         // ── 409 meşgul + HTML yanıt (oturum süresi) ──
         {
             let yanit409 = true;
-            const { ctx, page } = await ac('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', route => yanit409 ? route.fulfill(JSONY({ ok: false, kod: 'mesgul', mesaj: 'Başka bir mail sorgusu şu an çalışıyor (Kullanıcı 2, 40 sn önce). Bitince yeniden deneyin.' }, 409)) : route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Giriş yapın</html>' })));
+            const { ctx, page } = await acA('mail_ayarli', 390, 844, false, p => p.route('**/siparis_mail.php', route => yanit409 ? route.fulfill(JSONY({ ok: false, kod: 'mesgul', mesaj: 'Başka bir mail sorgusu şu an çalışıyor (Kullanıcı 2, 40 sn önce). Bitince yeniden deneyin.' }, 409)) : route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Giriş yapın</html>' })));
             await page.click('[data-sip-mail="siparis"]');
             await page.waitForFunction(() => { const e = document.querySelector('[data-sip-mail-hata]'); return e && !e.hidden; }, null, { timeout: 5000 });
             const k = await page.evaluate(() => ({ hata: document.querySelector('[data-sip-mail-hata]').textContent, acik: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => !b.disabled), ilerlemeGizli: document.querySelector('[data-sip-mail-ilerleme]').hidden }));
@@ -504,9 +543,17 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         }
     }
     if (varSayfa('mail_son')) {
+        for (const [w, h] of [[1280, 900], [390, 844]]) {   // v382: kapalı kartın summary'sinde son sorgu özeti (kartı otomatik AÇMAZ)
+            const { ctx, page } = await ac('mail_son', w, h);
+            const o = await page.evaluate(() => { const d = document.querySelector('details[data-sip-yukle]'); const sm = d.querySelector(':scope > summary.sip-yukle-ozet');
+                return { acik: d.open, metin: sm.textContent.replace(/\s+/g, ' ').trim(), hata: !!sm.querySelector('.sip-yukle-son--hata') }; });
+            ok(`[${w}] yükleme kartı özeti: "Son sorgu: Sipariş · gg.aa ss:dd · N alındı" kapalıyken görünür, kartı açmaz`, !o.acik && /Belge yükle · 📧 Mailden al/.test(o.metin) && /Son sorgu: (Sipariş|Lojistik) · \d{2}\.\d{2} \d{2}:\d{2}( · \d+ alındı)?/.test(o.metin), JSON.stringify(o));
+            ok(`[${w}] yükleme kartı özeti: taşma yok`, (await tasma(page)) <= 0);
+            await ctx.close();
+        }
         for (const [w, h] of [[1280, 900], [820, 1024], [390, 844]]) {
             const masaustu = w >= 1024;
-            const { ctx, page, hatalar } = await ac('mail_son', w, h);
+            const { ctx, page, hatalar } = await ac('mail_son', w, h, false, null, { yukleAcik: true });
             ok(`[${w}] mail sonuç: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
             ok(`[${w}] mail sonuç: ${masaustu ? 'tablo görünür, kartlar gizli' : 'kartlar görünür, tablo gizli'}`,
                 masaustu ? (await gorunur(page, '.sip-mail-tablo')) && !(await gorunur(page, '.sip-mail-kartlar')) : !(await gorunur(page, '.sip-mail-tablo')) && (await gorunur(page, '.sip-mail-kartlar')));
@@ -534,7 +581,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             await ctx.close();
         }
         {   // koyu tema: çipler + sonuç kartı
-            const { ctx, page } = await ac('mail_son', 390, 844, true);
+            const { ctx, page } = await ac('mail_son', 390, 844, true, null, { yukleAcik: true });
             const r = await page.evaluate(() => { const cs = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e) : null; };
                 const k = cs('[data-sip-mail-sonuc-kart]'), ok_ = cs('.sip-mail-chip--ok'), uy = cs('.sip-mail-chip--uyari'), ht = cs('.sip-mail-chip--hata'), btn = cs('.sip-mail-btn');
                 const kok = getComputedStyle(document.documentElement).getPropertyValue('--card').trim(); const tmp = document.createElement('div'); tmp.style.background = kok; document.body.appendChild(tmp); const bg = getComputedStyle(tmp).backgroundColor; tmp.remove();
@@ -549,6 +596,12 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
     }
     if (varSayfa('mail_yarim')) {
         const tid = MANIFEST.yarim_tid;
+        {   // v382: yarım tarama → sunucu kartı AÇIK yazar ve özette "Yarım tarama var" görünür
+            const { ctx, page } = await ac('mail_yarim', 390, 844);
+            const o = await page.evaluate(() => { const d = document.querySelector('details[data-sip-yukle]'); return { acik: d.open, attr: d.hasAttribute('open'), ozet: d.querySelector(':scope > summary').textContent, serit: !!d.querySelector('.sip-mail-yarim') }; });
+            ok('yükleme kartı: yarım kalan mail taramasında sunucu kartı açık yazar, şerit görünür', o.acik && o.attr && o.serit && /Yarım tarama var/.test(o.ozet), JSON.stringify(o));
+            await ctx.close();
+        }
         for (const [w, h] of [[1280, 900], [390, 844]]) {
             const istekler = [];
             const { ctx, page, hatalar } = await ac('mail_yarim', w, h, false, p => p.route('**/siparis_mail.php', async route => { const g = JSON.parse(route.request().postData() || '{}'); istekler.push(g);

@@ -966,8 +966,83 @@ function siparis_plaka_normalize(?string $s): array
 
 // ── URL ─────────────────────────────────────────────────────────────────
 
-/** Liste URL'i: geçerli GET filtreleri (beyaz liste) + $override; boş değerler atılır. */
-function siparis_url(array $override): string
+/**
+ * v382 — Liste / yazdırma ORTAK filtresi (siparisler.php + siparis_yazdir.php AYNI fonksiyonu çağırır; kopya YOK).
+ * Saf: yalnız doğrulanmış filtre değerleri + SQL parçası + parametre üretir (DB'ye dokunmaz; aktif depo süzgeci depo_sql_column()'dan).
+ * Parametre adları: :q1..:q6 · :cwh/:cwy · :alici · :po · :tb · :tt · :udm (named — pozisyonel ? ile KARIŞTIRMA, HY093).
+ * `acik_page` / `kapali_page` burada DEĞİL (yalnız sayfada).
+ * @return array{q:string,f_durum:string,f_cw:string,f_alici:string,f_eksik:string,f_catisma:bool,f_po:int,t_bas:string,t_bit:string,
+ *   kapaliSql:string,acikSql:string,temelWhere:string,temelPar:array,dprm:array,dsql:string,
+ *   tek:bool,tekSql:string,bolumAcik:bool,bolumKapali:bool,detayFiltre:bool,filtreVar:bool,detayOzet:list<string>}
+ */
+function siparis_liste_filtre(array $get): array
+{
+    $q          = trim((string)($get['q'] ?? ''));
+    $f_durum    = trim((string)($get['durum'] ?? ''));
+    $f_cw       = trim((string)($get['cw'] ?? ''));
+    $f_alici    = trim((string)($get['alici'] ?? ''));
+    $f_eksik    = trim((string)($get['eksik'] ?? ''));
+    $f_catisma  = (string)($get['catisma'] ?? '') === '1';
+    $f_po       = (int)($get['po'] ?? 0);
+    $t_bas      = trim((string)($get['tarih_bas'] ?? ''));
+    $t_bit      = trim((string)($get['tarih_bit'] ?? ''));
+    $durumlar   = siparis_durumlar();
+    $kapaliDur  = siparis_kapali_durumlar();
+    $gecerliDurum = array_merge(['', 'acik', 'kapali', 'arac_bekleyen'], array_keys($durumlar));
+    if (!in_array($f_durum, $gecerliDurum, true)) $f_durum = '';
+    if (!in_array($f_eksik, ['', 'po', 'll', 'pc', 'pkl'], true)) $f_eksik = '';
+    if ($f_cw !== '' && !preg_match('/^\d{1,2}\.\d{4}$/', $f_cw)) $f_cw = '';
+    if ($t_bas !== '' && siparis_tarih_coz($t_bas) === null) $t_bas = '';
+    if ($t_bit !== '' && siparis_tarih_coz($t_bit) === null) $t_bit = '';
+
+    $where = ['s.deleted_at IS NULL']; $par = [];
+    [$dsql, $dprm] = depo_sql_column('s.depo', ':udm');
+    if ($q !== '') {
+        $kolonlar = ['s.order_ref', 's.tur_no', 's.navlun_no', 's.plakalar', 's.alici_adi', 's.nakliyeci'];
+        $parca = [];
+        foreach ($kolonlar as $i => $k) { $parca[] = $k . ' LIKE :q' . ($i + 1); $par[':q' . ($i + 1)] = '%' . $q . '%'; }
+        $where[] = '(' . implode(' OR ', $parca) . ')';
+    }
+    if ($f_cw !== '') { [$cwh, $cwy] = explode('.', $f_cw); $where[] = 's.cw_hafta = :cwh AND s.cw_yil = :cwy'; $par[':cwh'] = (int)$cwh; $par[':cwy'] = (int)$cwy; }
+    if ($f_alici !== '') { $where[] = 's.alici_kodu = :alici'; $par[':alici'] = $f_alici; }
+    if ($f_eksik !== '') $where[] = 's.var_' . $f_eksik . ' = 0';   // beyaz listeden geldi
+    if ($f_catisma) $where[] = 's.acik_catisma > 0';
+    if ($f_po > 0) { $where[] = 's.po_belge_id = :po'; $par[':po'] = $f_po; }
+    if ($t_bas !== '') { $where[] = 's.yukleme_tarihi >= :tb'; $par[':tb'] = $t_bas; }
+    if ($t_bit !== '') { $where[] = 's.yukleme_tarihi <= :tt'; $par[':tt'] = $t_bit; }
+    $kapaliSql = "s.durum IN ('" . implode("','", $kapaliDur) . "')";
+    $acikSql   = "s.durum NOT IN ('" . implode("','", $kapaliDur) . "')";
+    $temelWhere = implode(' AND ', $where) . $dsql;
+    $temelPar   = $par + $dprm;
+
+    $tek = false;             // belirli durum filtresi: tek "Sonuçlar" bölümü
+    $bolumAcik = true; $bolumKapali = true; $tekSql = '';
+    if ($f_durum === 'acik') { $bolumKapali = false; }
+    elseif ($f_durum === 'kapali') { $bolumAcik = false; }
+    elseif ($f_durum === 'arac_bekleyen') { $tek = true; $tekSql = "s.durum IN ('siparis_alindi','hazirlik')"; }
+    elseif ($f_durum !== '') { $tek = true; $tekSql = "s.durum = '" . $f_durum . "'"; }   // f_durum beyaz listeden
+
+    $detayFiltre = $f_cw !== '' || $f_alici !== '' || $f_eksik !== '' || $f_catisma || $f_po > 0 || $t_bas !== '' || $t_bit !== '' || ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true));
+    $filtreVar = $detayFiltre || $q !== '' || in_array($f_durum, ['acik', 'kapali'], true);
+    $detayOzet = [];
+    if ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true)) $detayOzet[] = $f_durum === 'arac_bekleyen' ? 'Araç bekleyen' : ($durumlar[$f_durum]['etiket'] ?? $f_durum);
+    if ($f_cw !== '') $detayOzet[] = 'CW ' . $f_cw;
+    if ($f_eksik !== '') $detayOzet[] = strtoupper($f_eksik) . ' eksik';
+    if ($f_catisma) $detayOzet[] = 'Çatışmalı';
+    if ($f_po > 0) $detayOzet[] = 'PO #' . $f_po;
+    if ($f_alici !== '') $detayOzet[] = 'Alıcı ' . $f_alici;
+    if ($t_bas !== '' || $t_bit !== '') $detayOzet[] = 'Tarih aralığı';
+
+    return ['q' => $q, 'f_durum' => $f_durum, 'f_cw' => $f_cw, 'f_alici' => $f_alici, 'f_eksik' => $f_eksik, 'f_catisma' => $f_catisma, 'f_po' => $f_po, 't_bas' => $t_bas, 't_bit' => $t_bit,
+        'kapaliSql' => $kapaliSql, 'acikSql' => $acikSql, 'temelWhere' => $temelWhere, 'temelPar' => $temelPar, 'dprm' => $dprm, 'dsql' => $dsql,
+        'tek' => $tek, 'tekSql' => $tekSql, 'bolumAcik' => $bolumAcik, 'bolumKapali' => $bolumKapali, 'detayFiltre' => $detayFiltre, 'filtreVar' => $filtreVar, 'detayOzet' => $detayOzet];
+}
+
+/**
+ * Liste URL'i: geçerli GET filtreleri (beyaz liste) + $override; boş değerler atılır.
+ * v382: $sayfa ile aynı filtre anahtarları başka bir uca taşınabilir (siparis_yazdir.php) — anahtar beyaz listesi TEK yerde.
+ */
+function siparis_url(array $override, string $sayfa = 'siparisler.php'): string
 {
     $anahtarlar = ['q', 'durum', 'cw', 'alici', 'eksik', 'catisma', 'po', 'tarih_bas', 'tarih_bit', 'acik_page', 'kapali_page'];
     $p = [];
@@ -978,7 +1053,7 @@ function siparis_url(array $override): string
     foreach ($override as $k => $v) $p[(string)$k] = $v === null ? '' : (string)$v;
     $p = array_filter($p, fn($v) => $v !== '');
     $qs = http_build_query($p);
-    return 'siparisler.php' . ($qs !== '' ? '?' . $qs : '');
+    return $sayfa . ($qs !== '' ? '?' . $qs : '');
 }
 
 // ── PROFİLLER (PKL V..AB) ───────────────────────────────────────────────

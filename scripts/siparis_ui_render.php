@@ -108,6 +108,8 @@ $sayfalar = [
     'liste'          => ['siparisler.php', []],
     'liste_filtre'   => ['siparisler.php', ['durum' => 'yola_cikti', 'eksik' => 'pkl', 'catisma' => '1']],
     'liste_bos'      => ['siparisler.php', ['q' => 'yok-boyle-bir-sevkiyat']],
+    'liste_tek'      => ['siparisler.php', ['durum' => 'arac_bekleyen']],                       // v382: tek durum filtresi → "Sonuçlar" bölümünde yazdırma düğmesi
+    'liste_kapali'   => ['siparisler.php', ['durum' => 'kapali']],                              // v382: yazdırma düğmesi YOK (kapanan bölüm)
     'liste_viewer'   => ['siparisler.php', [], ['siparis.read'], false],
     'detay'          => ['siparis_view.php', ['id' => $ID['s1']]],                              // çatışma + PKL + beyan önerisi
     'detay_kapali'   => ['siparis_view.php', ['id' => $ID['s11']]],                             // mail gönderildi, 3 kaynak, bölüm farkı
