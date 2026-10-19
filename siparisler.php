@@ -28,53 +28,19 @@ if (!$hazir) {
 $yaz = can_siparis('write');
 $sil = can_siparis('delete');
 
-// ── filtreler ───────────────────────────────────────────
-$q          = trim((string)($_GET['q'] ?? ''));
-$f_durum    = trim((string)($_GET['durum'] ?? ''));
-$f_cw       = trim((string)($_GET['cw'] ?? ''));
-$f_alici    = trim((string)($_GET['alici'] ?? ''));
-$f_eksik    = trim((string)($_GET['eksik'] ?? ''));
-$f_catisma  = (string)($_GET['catisma'] ?? '') === '1';
-$f_po       = (int)($_GET['po'] ?? 0);
-$t_bas      = trim((string)($_GET['tarih_bas'] ?? ''));
-$t_bit      = trim((string)($_GET['tarih_bit'] ?? ''));
+// ── filtreler (v382: liste + yazdırma ORTAK — config/siparis_core.php siparis_liste_filtre) ──
+$F = siparis_liste_filtre($_GET);
+$q = $F['q']; $f_durum = $F['f_durum']; $f_cw = $F['f_cw']; $f_alici = $F['f_alici']; $f_eksik = $F['f_eksik']; $f_catisma = $F['f_catisma']; $f_po = $F['f_po'];
+$t_bas = $F['t_bas']; $t_bit = $F['t_bit'];
 $acik_page  = max(1, (int)($_GET['acik_page'] ?? 1));
 $kapali_page = max(1, (int)($_GET['kapali_page'] ?? 1));
 $durumlar   = siparis_durumlar();
 $kapaliDur  = siparis_kapali_durumlar();
-$gecerliDurum = array_merge(['', 'acik', 'kapali', 'arac_bekleyen'], array_keys($durumlar));
-if (!in_array($f_durum, $gecerliDurum, true)) $f_durum = '';
-if (!in_array($f_eksik, ['', 'po', 'll', 'pc', 'pkl'], true)) $f_eksik = '';
-if ($f_cw !== '' && !preg_match('/^\d{1,2}\.\d{4}$/', $f_cw)) $f_cw = '';
-if ($t_bas !== '' && siparis_tarih_coz($t_bas) === null) $t_bas = '';
-if ($t_bit !== '' && siparis_tarih_coz($t_bit) === null) $t_bit = '';
-
-$where = ['s.deleted_at IS NULL']; $par = [];
-[$dsql, $dprm] = depo_sql_column('s.depo', ':udm');
-if ($q !== '') {
-    $kolonlar = ['s.order_ref', 's.tur_no', 's.navlun_no', 's.plakalar', 's.alici_adi', 's.nakliyeci'];
-    $parca = [];
-    foreach ($kolonlar as $i => $k) { $parca[] = $k . ' LIKE :q' . ($i + 1); $par[':q' . ($i + 1)] = '%' . $q . '%'; }
-    $where[] = '(' . implode(' OR ', $parca) . ')';
-}
-if ($f_cw !== '') { [$cwh, $cwy] = explode('.', $f_cw); $where[] = 's.cw_hafta = :cwh AND s.cw_yil = :cwy'; $par[':cwh'] = (int)$cwh; $par[':cwy'] = (int)$cwy; }
-if ($f_alici !== '') { $where[] = 's.alici_kodu = :alici'; $par[':alici'] = $f_alici; }
-if ($f_eksik !== '') $where[] = 's.var_' . $f_eksik . ' = 0';   // beyaz listeden geldi
-if ($f_catisma) $where[] = 's.acik_catisma > 0';
-if ($f_po > 0) { $where[] = 's.po_belge_id = :po'; $par[':po'] = $f_po; }
-if ($t_bas !== '') { $where[] = 's.yukleme_tarihi >= :tb'; $par[':tb'] = $t_bas; }
-if ($t_bit !== '') { $where[] = 's.yukleme_tarihi <= :tt'; $par[':tt'] = $t_bit; }
-$kapaliSql = "s.durum IN ('" . implode("','", $kapaliDur) . "')";
-$acikSql   = "s.durum NOT IN ('" . implode("','", $kapaliDur) . "')";
-$temelWhere = implode(' AND ', $where) . $dsql;
-$temelPar   = $par + $dprm;
-
-$tek = false;             // belirli durum filtresi: tek "Sonuçlar" bölümü
-$bolumAcik = true; $bolumKapali = true; $tekSql = '';
-if ($f_durum === 'acik') { $bolumKapali = false; }
-elseif ($f_durum === 'kapali') { $bolumAcik = false; }
-elseif ($f_durum === 'arac_bekleyen') { $tek = true; $tekSql = "s.durum IN ('siparis_alindi','hazirlik')"; }
-elseif ($f_durum !== '') { $tek = true; $tekSql = "s.durum = '" . $f_durum . "'"; }   // f_durum beyaz listeden
+$dsql = $F['dsql']; $dprm = $F['dprm'];
+$kapaliSql = $F['kapaliSql']; $acikSql = $F['acikSql'];
+$temelWhere = $F['temelWhere']; $temelPar = $F['temelPar'];
+$tek = $F['tek']; $tekSql = $F['tekSql']; $bolumAcik = $F['bolumAcik']; $bolumKapali = $F['bolumKapali'];
+$detayFiltre = $F['detayFiltre']; $filtreVar = $F['filtreVar']; $detayOzet = $F['detayOzet'];
 
 $cols = 's.id, s.order_ref, s.tur_no, s.navlun_no, s.po_belge_id, s.cw_hafta, s.cw_yil, s.alici_kodu, s.alici_adi, s.yukleme_tarihi, s.plakalar, s.planlanan_plakalar, '
       . 's.nakliyeci, s.planlanan_nakliyeci, s.toplam_palet, s.toplam_koli, s.var_po, s.var_ll, s.var_pc, s.var_pkl, s.acik_catisma, s.uyari_sayisi, s.durum, s.depo';
@@ -183,6 +149,7 @@ if (isset($_SESSION['siparis_yukleme']) && is_array($_SESSION['siparis_yukleme']
 // v378 — "📧 Mailden al": yalnız siparis.write + mail.read olana; kurulu değilse düğme HİÇ çizilmez. Salt okunur (yazan uç: siparis_mail.php).
 // Son sonuçlar yalnız AKTİF DEPODA yapılmış sorgulardan gösterilir; gönderen / konu yalnız izleyenin görünür posta kutularından okunur.
 $mailBlok = '';
+$mD = []; $mSon = [];
 if ($yaz && siparis_mail_yetkisi()) {
     $mUid = (int)$auth_user['id']; $mDepo = (string)(active_depot() ?? '');
     $mHazir = siparis_mail_hazir($pdo);
@@ -198,24 +165,15 @@ if ($yaz && siparis_mail_yetkisi()) {
         $mSon = [];
         foreach (array_keys(siparis_mail_turleri()) as $mt) {
             $mx = siparis_mail_son($pdo, $mt);
-            if ($mx !== null && (string)($mx['depo'] ?? '') === $mDepo) $mSon[] = ['tur' => $mt, 'bitis' => (int)($mx['bitis'] ?? 0), 'html' => sipui_mail_sonuc_html($pdo, $mx, $mGor)];
+            if ($mx !== null && (string)($mx['depo'] ?? '') === $mDepo) $mSon[] = ['tur' => $mt, 'bitis' => (int)($mx['bitis'] ?? 0), 'sayac' => (array)($mx['sayac'] ?? []), 'html' => sipui_mail_sonuc_html($pdo, $mx, $mGor)];
         }
         usort($mSon, static fn(array $a, array $b): int => $b['bitis'] <=> $a['bitis']);
         $mD['son'] = $mSon;
     }
     $mailBlok = sipui_mail_blok_html($mD);
 }
-
-$detayFiltre = $f_cw !== '' || $f_alici !== '' || $f_eksik !== '' || $f_catisma || $f_po > 0 || $t_bas !== '' || $t_bit !== '' || ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true));
-$filtreVar = $detayFiltre || $q !== '' || in_array($f_durum, ['acik', 'kapali'], true);
-$detayOzet = [];
-if ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true)) $detayOzet[] = $f_durum === 'arac_bekleyen' ? 'Araç bekleyen' : ($durumlar[$f_durum]['etiket'] ?? $f_durum);
-if ($f_cw !== '') $detayOzet[] = 'CW ' . $f_cw;
-if ($f_eksik !== '') $detayOzet[] = strtoupper($f_eksik) . ' eksik';
-if ($f_catisma) $detayOzet[] = 'Çatışmalı';
-if ($f_po > 0) $detayOzet[] = 'PO #' . $f_po;
-if ($f_alici !== '') $detayOzet[] = 'Alıcı ' . $f_alici;
-if ($t_bas !== '' || $t_bit !== '') $detayOzet[] = 'Tarih aralığı';
+// v382 — yükleme kartı native <details>: varsayılan KAPALI; yalnız yarım kalan mail taraması varsa sunucu açık yazar ("Devam et" şeridi gizlenmesin).
+$yukleAcik = !empty($mD['yarim']);
 
 // KPI çipi: etkin mi?
 $chipler = [
@@ -243,9 +201,15 @@ $sayfalama = function (array $b, string $param): string {
     $o .= $b['sayfa'] < $b['sayfa_say'] ? '<a class="btn btn-sm" href="' . h(siparis_url([$param => $b['sayfa'] + 1])) . '">Sonraki ›</a>' : '<span class="btn btn-sm" aria-disabled="true" style="opacity:.45">Sonraki ›</span>';
     return $o . '</nav>';
 };
-$bolumBas = function (string $baslik, int $say, string $id): string {
-    return '<div class="sip-bolum-bas" id="' . h($id) . '"><h2>' . h($baslik) . '</h2><span class="sip-say">' . (int)$say . '</span></div>';
+$bolumBas = function (string $baslik, int $say, string $id, string $ek = ''): string {
+    return '<div class="sip-bolum-bas" id="' . h($id) . '"><h2>' . h($baslik) . '</h2><span class="sip-say">' . (int)$say . '</span>' . $ek . '</div>';
 };
+// v382 — "Açık Sevkiyatlar" yazdırma / PDF düğmeleri (yalnız Açık bölüm ve tek durum "Sonuçlar" bölümü; bölümde satır varsa; Kapananda YOK).
+// Veri siparis_yazdir.php'den (GET JSON) her tıkta taze gelir; aynı filtre anahtarları, sayfa numaraları HARİÇ. İzleyiciye de açık (siparis.read).
+$yazdirUrl = siparis_url(['acik_page' => null, 'kapali_page' => null], 'siparis_yazdir.php');
+$yazdirEk = '<div class="sip-bolum-eylem no-print">'
+    . '<button type="button" class="btn btn-sm" data-sip-yazdir="yazdir" data-sip-yazdir-url="' . h($yazdirUrl) . '">🖨️ Yazdır</button>'
+    . '<button type="button" class="btn btn-sm" data-sip-yazdir="pdf" data-sip-yazdir-url="' . h($yazdirUrl) . '">📤 PDF Gönder</button></div>';
 ?>
 <div class="sip-mod">
   <div class="page-head">
@@ -275,17 +239,20 @@ $bolumBas = function (string $baslik, int $say, string $id): string {
   <?= sipui_yukleme_sonuc_html($yuklemeSonuc) ?>
 
   <?php if ($yaz): ?>
-  <section class="card sip-yukle" id="yukle" aria-label="Belge yükle">
-    <?= $mailBlok ?>
-    <form method="post" action="siparis_yukle.php" enctype="multipart/form-data" <?= sipui_yukleme_ozellikleri() ?>>
-      <?= sipui_csrf() ?>
-      <?= sipui_dropzone_html('sipDosyaListe', false) ?>
-      <div class="sip-yukle-alt">
-        <button type="submit" class="btn btn-primary" data-sip-gonder>Yükle ve eşleştir</button>
-        <span class="muted">Belge türü dosya adından değil, içeriğinden anlaşılır.</span>
-      </div>
-    </form>
-  </section>
+  <details class="card sip-yukle" id="yukle" data-sip-yukle data-sip-yukle-uid="<?= (int)$auth_user['id'] ?>"<?= $yukleAcik ? ' open' : '' ?>>
+    <summary class="sip-yukle-ozet"><?= sipui_yukle_ozet_html($mSon, $mD['yarim'] ?? null, !empty($mD['hazir'])) ?></summary>
+    <div class="sip-yukle-govde">
+      <?= $mailBlok ?>
+      <form method="post" action="siparis_yukle.php" enctype="multipart/form-data" <?= sipui_yukleme_ozellikleri() ?>>
+        <?= sipui_csrf() ?>
+        <?= sipui_dropzone_html('sipDosyaListe', false) ?>
+        <div class="sip-yukle-alt">
+          <button type="submit" class="btn btn-primary" data-sip-gonder>Yükle ve eşleştir</button>
+          <span class="muted">Belge türü dosya adından değil, içeriğinden anlaşılır.</span>
+        </div>
+      </form>
+    </div>
+  </details>
   <?php endif; ?>
 
   <div class="sip-kpi-kap" aria-label="Hızlı filtreler"><div class="sip-kpi">
@@ -345,8 +312,9 @@ $bolumBas = function (string $baslik, int $say, string $id): string {
   </form>
 
   <?php
-  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos) use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita): void {
-      echo '<section class="sip-bolum" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id);
+  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos) use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $yazdirEk): void {
+      $ek = in_array($id, ['sipAcik', 'sipSonuclar'], true) && $b['rows'] ? $yazdirEk : '';
+      echo '<section class="sip-bolum" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id, $ek);
       if (!$b['rows']) {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
       } else {
@@ -436,4 +404,5 @@ $bolumBas = function (string $baslik, int $say, string $id): string {
 </div>
 <?php
 siparis_scripts();
+echo '<script src="assets/siparis_yazdir.js?v=' . (int)@filemtime(__DIR__ . '/assets/siparis_yazdir.js') . '" defer></script>' . "\n";
 render_footer();

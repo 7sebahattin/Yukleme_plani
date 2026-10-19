@@ -1,6 +1,6 @@
 # OGL siparişleri — ülke bazlı belge rehberi
 
-Kaynak: sahibin hazırladığı Excel tablosu (OGL / Lidl zinciri siparişleri). Siparişler modülünde mailden gelen sipariş dosyası adındaki **ülke kodu** (`2026_KW43_Order_RS_ASYA_FRESH…` → `RS`) bu tabloyu seçer. **Şu an yalnız başvuru belgesidir; uygulamada otomatik kullanılmıyor.** Operasyonel bilgi — kişisel veri içermez.
+Kaynak: sahibin hazırladığı Excel tablosu (OGL / Lidl zinciri siparişleri). Siparişler modülünde mailden gelen sipariş dosyası adındaki **ülke kodu** (`2026_KW43_Order_RS_ASYA_FRESH…` → `RS`) bu tabloyu seçer. **Mal alıcı ID → ülke eşlemesi v382'den beri Açık Sevkiyatlar yazdırmasında kullanılır (`siparis_yazdir_ulke_haritasi()`); belge/PKL üretimi bu tabloyu hâlâ otomatik kullanmaz (başvuru belgesi).** Operasyonel bilgi — kişisel veri içermez.
 
 - Tedarikçi (Asya Fresh) numarası: **1102720**
 - Nar (pomegranate) ürün kodu (Article No): **80646** (yalnız PL için **80645**).

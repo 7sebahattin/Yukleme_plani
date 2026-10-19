@@ -569,3 +569,26 @@ function sipui_mail_blok_html(array $d): string
     }
     return $o . '</div></div>';
 }
+
+/**
+ * v382 — "Belge yükle" kartı (native <details>) özet satırı. Kapalıyken de son mail sorgusunu / yarım taramayı gösterir.
+ * @param list<array{tur:string,bitis:int,sayac?:array}> $son yeniden eskiye (siparisler.php $mSon)  @param ?array $yarim siparis_mail_yarim()
+ * Saf: DB/çıktı yok; kullanıcı verisi h() ile kaçırılır (burada yalnız sabit etiket + sayılar).
+ */
+function sipui_yukle_ozet_html(array $son, ?array $yarim, bool $mailVar): string
+{
+    $etiket = ['siparis' => 'Sipariş', 'lojistik' => 'Lojistik'];
+    $o = '<span class="sip-yukle-baslik">📥 Belge yükle' . ($mailVar ? ' · 📧 Mailden al' : '') . '</span>';
+    if ($yarim !== null) $o .= '<span class="sip-yukle-son sip-yukle-son--hata">⏸ Yarım tarama var</span>';
+    if ($mailVar && $son) {
+        $s = $son[0];
+        $sy = (array)($s['sayac'] ?? []);
+        $parca = ['Son sorgu: ' . ($etiket[(string)($s['tur'] ?? '')] ?? (string)($s['tur'] ?? ''))];
+        if ((int)($s['bitis'] ?? 0) > 0) $parca[] = date('d.m H:i', (int)$s['bitis']);
+        if (isset($sy['alindi'])) $parca[] = (int)$sy['alindi'] . ' alındı';
+        $hata = (int)($sy['hata'] ?? 0);
+        if ($hata > 0) $parca[] = $hata . ' hata';
+        $o .= '<span class="sip-yukle-son' . ($hata > 0 ? ' sip-yukle-son--hata' : '') . '">' . h(implode(' · ', $parca)) . '</span>';
+    }
+    return $o . '<span class="sip-yukle-mesgul" data-sip-yukle-mesgul hidden role="status">Tarama sürüyor</span><span class="sip-yukle-ok" aria-hidden="true">▸</span>';
+}

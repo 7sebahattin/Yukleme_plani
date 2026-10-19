@@ -628,7 +628,39 @@
         });
     }
 
+    /* ── v382: "Belge yükle" kartı (native <details>) ─────────────────────────────
+       Öncelik: sunucu `open` > URL hash (#yukle / #mail) > localStorage '1' > kapalı. localStorage YALNIZ kullanıcı summary'ye
+       tıkladığında yazılır (sunucu açılışı / hash tercihi ezmez). Tarama sürerken (aria-busy) summary tıkı kartı KAPATMAZ.
+       Seçici YALNIZ details[data-sip-yukle] > summary.sip-yukle-ozet (içte başka details/summary var). */
+    function yukleKart(det) {
+        var anahtar = 'asya_sip_yukle_' + (det.getAttribute('data-sip-yukle-uid') || '0');
+        var ozet = q('summary.sip-yukle-ozet', det);
+        if (!ozet || ozet.parentNode !== det) return;
+        function oku() { try { return window.localStorage.getItem(anahtar); } catch (e) { return null; } }
+        function yaz(v) { try { window.localStorage.setItem(anahtar, v); } catch (e) { /* erişilemez: varsayılan kapalı */ } }
+        function hashUygun() { return location.hash === '#yukle' || location.hash === '#mail'; }
+        function hashAc() {
+            if (!hashUygun()) return;
+            det.open = true;
+            try { det.scrollIntoView({ block: 'start' }); } catch (e) { det.scrollIntoView(); }
+        }
+        if (!det.open) { if (hashUygun()) hashAc(); else if (oku() === '1') det.open = true; }
+        window.addEventListener('hashchange', hashAc);
+        qa('a[href="#yukle"], a[href="#mail"]').forEach(function (a) { a.addEventListener('click', function () { det.open = true; }); });
+        var mesgulZaman = null;
+        ozet.addEventListener('click', function (e) {
+            if (det.open && q('[data-sip-mail-kap][aria-busy="true"]', det)) {
+                e.preventDefault();
+                var n = q('[data-sip-yukle-mesgul]', ozet);
+                if (n) { n.hidden = false; clearTimeout(mesgulZaman); mesgulZaman = setTimeout(function () { n.hidden = true; }, 2000); }
+                return;
+            }
+            setTimeout(function () { yaz(det.open ? '1' : '0'); }, 0);
+        });
+    }
+
     function basla() {
+        qa('details[data-sip-yukle]').forEach(yukleKart);
         qa('form[data-sip-upload]').forEach(yukleme);
         qa('[data-sip-mail-kap]').forEach(mailAl);
         var p = q('form[data-sip-pkl]'); if (p) { pkl(p); pklIzgara(p); }

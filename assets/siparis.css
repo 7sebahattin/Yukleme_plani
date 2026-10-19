@@ -568,3 +568,23 @@ html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
 .sip-ms-uyari li { margin: 2px 0; line-height: 1.35; overflow-wrap: anywhere; }
 html[data-theme="dark"] .sip-ms-uyari > summary { color: #fbbf24; }
 /* ==== /MAİLDEN AL v378 ==== */
+
+/* ==== v382: "Belge yükle" kartı native <details> (açılır/kapanır) + bölüm başlığı eylemleri ==== */
+.sip-yukle { padding: 0; }
+.sip-yukle-ozet { display: flex; align-items: center; gap: 6px 10px; min-height: 48px; padding: 12px 14px; cursor: pointer; list-style: none; flex-wrap: wrap; }
+.sip-yukle-ozet::-webkit-details-marker { display: none; }
+.sip-yukle-ozet::marker { content: ''; }
+.sip-yukle-baslik { font-weight: 700; font-size: 1.05rem; }
+.sip-yukle-son { color: var(--muted); font-size: .85rem; min-width: 0; overflow-wrap: anywhere; }
+.sip-yukle-son--hata { color: #b45309; }
+html[data-theme="dark"] .sip-yukle-son--hata { color: #fbbf24; }
+.sip-yukle-mesgul { font-size: .85rem; font-weight: 600; color: #b45309; }
+.sip-yukle-mesgul[hidden] { display: none; }
+html[data-theme="dark"] .sip-yukle-mesgul { color: #fbbf24; }
+.sip-yukle-ok { margin-left: auto; transition: transform .15s; color: var(--muted); }
+details[open] > .sip-yukle-ozet .sip-yukle-ok { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .sip-yukle-ok { transition: none; } }
+.sip-yukle-ozet:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.sip-yukle-govde { padding: 0 14px 14px; }
+.sip-bolum-eylem { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+/* ==== /v382 ==== */
