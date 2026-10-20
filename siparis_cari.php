@@ -15,6 +15,7 @@ $auth_user = require_login();
 require_siparis('read');
 if (!siparis_cari_yetkili()) forbidden('Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: reports.export)');
 siparis_no_store();
+$flash = function_exists('get_flash') ? get_flash() : null;
 session_write_close();
 
 $pdo = db();
@@ -26,7 +27,11 @@ if (!siparis_sema_hazir($pdo)) {
     exit;
 }
 $f = siparis_cari_filtre($_GET, $bugun);
-$v = siparis_cari_veri(siparis_cari_oku($pdo, $f), ['bugun' => $bugun, 'tahsilat' => siparis_cari_tahsilat_toplam($pdo, $f)]);
+$odemeler = siparis_odeme_oku($pdo, $f);
+$odemeYaz = siparis_odeme_yetkili();
+$odemeHazir = siparis_odeme_hazir($pdo);
+$qs = http_build_query(array_filter(['bas' => $f['bas'], 'bit' => $f['bit'], 'alici' => $f['alici']], static fn($x) => $x !== ''));
+$v = siparis_cari_veri(siparis_cari_oku($pdo, $f), ['bugun' => $bugun, 'tahsilat' => siparis_odeme_toplam($odemeler)]);
 siparis_audit('siparis_cari_goruntule', null, null, ['yuklenmemis' => count($v['yuklenmemis']), 'yuklenen' => count($v['yuklenen']), 'fiyatli' => count($v['fiyatli']), 'kesildi' => $v['kesildi'] ? 1 : 0], (int)$auth_user['id']);
 $depo = (string)(active_depot() ?? '');
 $harita = siparis_yazdir_ulke_haritasi();
@@ -194,6 +199,35 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
     <?php endif; ?>
   </table></div>
   <p class="pr-note">Kalın fiyat belgedeki fiyattır; diğeri koli ağırlığından türetilmiştir. Satır tutarı kuruşa yuvarlanır; toplamlar yuvarlanmış satırların toplamıdır.</p>
+
+  <!-- Ödemeler (tahsilat) -->
+  <h3 class="pr-section">Ödemeler (OGL'den gelen tahsilatlar)</h3>
+  <?php if ($flash): ?><p class="pr-note no-print sc-uyari"><?= h((string)$flash['msg']) ?></p><?php endif; ?>
+  <div class="sc-kaydir"><table class="print-table sc-tablo">
+    <thead><tr><th>Tarih</th><th>Açıklama</th><th>Dekont no</th><th class="num">Tutar</th><th class="no-print"></th></tr></thead>
+    <tbody>
+    <?php if (!$odemeler): ?><tr><td colspan="5" class="pr-empty">Bu dönemde ödeme yok.</td></tr><?php endif; ?>
+    <?php foreach ($odemeler as $o): ?>
+      <tr><td><?= h($tarih((string)$o['odeme_tarihi'])) ?></td><td><?= h($bos((string)$o['aciklama'])) ?></td><td><?= h($bos((string)$o['dekont_no'])) ?></td>
+        <td class="num"><?= h(siparis_cari_para((int)$o['tutar_kurus']) . ' ' . $o['para_birimi']) ?></td>
+        <td class="no-print"><?php if ($odemeYaz): ?><form method="post" action="siparis_odeme.php" class="sc-filtre">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="islem" value="iptal"><input type="hidden" name="id" value="<?= (int)$o['id'] ?>"><input type="hidden" name="qs" value="<?= h($qs) ?>">
+          <input type="text" name="neden" placeholder="İptal gerekçesi" required maxlength="255"><button type="submit" class="pr-btn">İptal et</button></form><?php endif; ?></td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php if ($odemeYaz && $odemeHazir): ?>
+  <form method="post" action="siparis_odeme.php" class="sc-filtre no-print" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="islem" value="ekle"><input type="hidden" name="qs" value="<?= h($qs) ?>">
+    <input type="hidden" name="istek_id" value="<?= h(bin2hex(random_bytes(10))) ?>">
+    <label>Tarih <input type="date" name="tarih" value="<?= h($bugun) ?>" max="<?= h($bugun) ?>" required></label>
+    <label>Tutar <input type="text" name="tutar" inputmode="decimal" placeholder="1.234,56" required></label>
+    <label>Para birimi <select name="para_birimi"><?php foreach (siparis_odeme_para_birimleri() as $pb): ?><option><?= h($pb) ?></option><?php endforeach; ?></select></label>
+    <label>Açıklama <input type="text" name="aciklama" maxlength="255"></label>
+    <label>Dekont no <input type="text" name="dekont_no" maxlength="60"></label>
+    <button type="submit" class="pr-btn pr-btn-primary">Ödeme ekle</button>
+  </form>
+  <?php elseif ($odemeYaz): ?><p class="pr-note no-print">Ödeme tablosu kurulmadı — yönetici migrate.php'den "Sipariş ödemeleri" kartını çalıştırmalı.</p><?php endif; ?>
 
   <!-- D) Cari özet -->
   <section class="sc-cari">

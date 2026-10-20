@@ -173,10 +173,10 @@ function siparis_cari_oku(PDO $pdo, array $f): array
     return ['rows' => $rows, 'kalem' => $kalem, 'kesildi' => $kesildi];
 }
 
-/** 2. etap kancası (OGL ödeme girişi): para birimi → tahsil edilen kuruş. Şimdilik tablo yok → []. İmza SABİT. */
+/** 2. etap kancası (OGL ödeme girişi): para birimi → tahsil edilen kuruş. Tablo yoksa []. İmza SABİT. */
 function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array
 {
-    return [];
+    return function_exists('siparis_odeme_oku') ? siparis_odeme_toplam(siparis_odeme_oku($pdo, $f)) : [];
 }
 
 /**

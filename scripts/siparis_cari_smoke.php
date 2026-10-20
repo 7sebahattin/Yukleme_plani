@@ -24,7 +24,7 @@ function sipt_header(string $h, bool $replace = true, int $code = 0): void
 function sipt_code(?int $c = null) { global $SIPT; if ($c !== null) $SIPT['kod'] = $c; return $SIPT['kod']; }
 function sip_calistir(string $tmp): void { include $tmp; }
 /** Uç dosyasını çalıştırır (header/exit yakalanır). @return array{govde:string,json:?array,kod:int,h:array,hata:?string} */
-function uc(string $dosya, array $get = [], string $yontem = 'GET'): array
+function uc(string $dosya, array $get = [], string $yontem = 'GET', array $post = []): array
 {
     global $ROOT, $SIPT;
     $src = (string)file_get_contents($ROOT . '/' . $dosya);
@@ -36,7 +36,7 @@ function uc(string $dosya, array $get = [], string $yontem = 'GET'): array
     $tmp = sys_get_temp_dir() . '/sip_cari_' . getmypid() . '_' . basename($dosya);
     file_put_contents($tmp, $src);
     $SIPT = ['h' => [], 'kod' => 200];
-    $_GET = $get; $_POST = []; $_SERVER['REQUEST_METHOD'] = $yontem; $_SERVER['PHP_SELF'] = '/' . $dosya;
+    $_GET = $get; $_POST = $post; $_SERVER['REQUEST_METHOD'] = $yontem; $_SERVER['PHP_SELF'] = '/' . $dosya;
     ob_start();
     $hata = null;
     try { sip_calistir($tmp); }
@@ -216,5 +216,31 @@ $cfgHam = (string)file_get_contents($ROOT . '/config/siparis_cari.php');
 $sayfa = (string)file_get_contents($ROOT . '/siparis_cari.php');
 ok('config: yalnız SELECT (yazan SQL yok)', !preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\s/', $cfgHam));
 ok('sayfa: fonksiyon tanımlamaz, csrf_check yok', !preg_match('/^\s*function\s/m', $sayfa) && !str_contains($sayfa, 'csrf_check('));
+
+echo "\n=== 6. OGL ödemeleri (v399) ===\n";
+ok('tutar_coz biçimleri', siparis_odeme_tutar_coz('1.234,56') === 123456 && siparis_odeme_tutar_coz('1234.5') === 123450 && siparis_odeme_tutar_coz('1.234.567') === 123456700 && siparis_odeme_tutar_coz('0') === null && siparis_odeme_tutar_coz('abc') === null && siparis_odeme_tutar_coz('-5') === null);
+rol(['siparis.read', 'reports.export', 'hesap.pay'], false, 3, ['DEPO1']);
+ok('tablo yokken hazır değil; ekleme reddedilir', !siparis_odeme_hazir($db) && siparis_odeme_ekle($db, ['tutar' => '10', 'tarih' => $bugun, 'para_birimi' => 'EUR'], 3)['ok'] === false);
+foreach (siparis_odeme_tablolar() as $ddl) { [$cr, $ix] = siparis_ddl_sqlite($ddl); $db->exec($cr); foreach ($ix as $x) $db->exec($x); }
+ok('tablo kurulunca hazır', siparis_odeme_hazir($db));
+$r1 = siparis_odeme_ekle($db, ['tutar' => '10.000,50', 'tarih' => $dun, 'para_birimi' => 'eur', 'aciklama' => 'Test <b>', 'dekont_no' => 'D1', 'istek_id' => 'abcdefgh12345'], 3);
+$r2 = siparis_odeme_ekle($db, ['tutar' => '10.000,50', 'tarih' => $dun, 'para_birimi' => 'EUR', 'istek_id' => 'abcdefgh12345'], 3);
+ok('ekle + tekrar gönderim çift kayıt açmaz', $r1['ok'] && $r2['ok'] && $r2['id'] === null && (int)$db->query('SELECT COUNT(*) FROM siparis_odemeler')->fetchColumn() === 1);
+ok('geçersiz: gelecek tarih / para birimi / tutar', !siparis_odeme_ekle($db, ['tutar' => '5', 'tarih' => $yarin, 'para_birimi' => 'EUR'], 3)['ok'] && !siparis_odeme_ekle($db, ['tutar' => '5', 'tarih' => $dun, 'para_birimi' => 'XXX'], 3)['ok'] && !siparis_odeme_ekle($db, ['tutar' => '', 'tarih' => $dun, 'para_birimi' => 'EUR'], 3)['ok']);
+siparis_odeme_ekle($db, ['tutar' => '100', 'tarih' => $dun, 'para_birimi' => 'USD'], 3);
+$f6 = siparis_cari_filtre([], $bugun);
+ok('tahsilat para birimi başına toplanır', siparis_cari_tahsilat_toplam($db, $f6) === ['EUR' => 1000050, 'USD' => 10000]);
+$v6 = siparis_cari_veri(siparis_cari_oku($db, $f6), ['bugun' => $bugun, 'tahsilat' => siparis_cari_tahsilat_toplam($db, $f6)]);
+ok('cari bakiye = faturalanan − tahsilat', $v6['cari']['EUR']['tahsilat'] === 1000050 && $v6['cari']['EUR']['bakiye'] === $v6['cari']['EUR']['faturalanan'] - 1000050);
+$r = uc('siparis_cari.php');
+ok('sayfa: ödeme listesi + form (yetkili), XSS kaçışlı', str_contains($r['govde'], 'D1') && str_contains($r['govde'], '10.000,50 EUR') && str_contains($r['govde'], 'name="islem" value="ekle"') && str_contains($r['govde'], 'Test &lt;b&gt;'));
+rol(['siparis.read', 'reports.export'], false, 4, ['DEPO1']);
+$r = uc('siparis_cari.php');
+ok('sayfa: hesap.pay yoksa liste var, form/iptal yok', str_contains($r['govde'], '10.000,50 EUR') && !str_contains($r['govde'], 'name="islem" value="ekle"') && !str_contains($r['govde'], 'value="iptal"'));
+$od = (string)file_get_contents($ROOT . '/siparis_odeme.php');
+ok('uç: POST + csrf_check + yetki kapısı yazmadan önce', str_contains($od, 'csrf_check(') && str_contains($od, "REQUEST_METHOD'] !== 'POST'") && strpos($od, 'siparis_odeme_yetkili()') < strpos($od, 'siparis_odeme_ekle('));
+$id1 = (int)$r1['id'];
+ok('iptal: gerekçesiz reddedilir', !siparis_odeme_iptal($db, $id1, ' ', 3)['ok']);
+ok('iptal: gerekçeyle soft iptal; tahsilattan düşer; tekrar iptal reddedilir', siparis_odeme_iptal($db, $id1, 'yanlış giriş', 3)['ok'] && !siparis_odeme_iptal($db, $id1, 'x', 3)['ok'] && siparis_cari_tahsilat_toplam($db, $f6) === ['USD' => 10000] && (int)$db->query('SELECT COUNT(*) FROM siparis_odemeler')->fetchColumn() === 2);
 
 siparis_test_bitir();
