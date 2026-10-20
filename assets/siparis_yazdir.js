@@ -1,12 +1,19 @@
-/* siparis_yazdir.js — Siparişler › "Açık Sevkiyatlar" bölümü: Yazdır + PDF Gönder (v382).
+/* siparis_yazdir.js — Siparişler › bölüm başlıkları: Yazdır + PDF Gönder (v382) + WP Resim.
  *
  * Yalnız siparisler.php'de yüklenir (beyan_yazdir.js emsali: app.js / siparis.js'e dokunmaz). Çalışma biçimi
  * beyan_yazdir.js ile AYNIDIR; fark: veri sayfaya gömülü DEĞİL, her tıkta siparis_yazdir.php'den TAZE çekilir
- * (şoför adı/telefonu HTML listeye girmez; sayfalamasız tüm küme; ekrandaki filtre/arama aynen).
+ * (şoför telefonu HTML listeye girmez; sayfalamasız tüm küme; ekrandaki filtre/arama aynen). Düğmeler birden çok bölüm
+ * başlığında durur (İşlem Bekleyen / Evrak Takımı Bekleyen / Kapanan / tek-durum "Sonuçlar"); her biri kendi
+ * data-sip-yazdir-url'ünü (…&bolum=acik|evrak|kapali) taşır, isteğe amac=yazdir|pdf|resim eklenir.
  *   • Yazdır     → yeni pencerede rapor (A4 YATAY) + yazdırma penceresi. Pencere fetch'ten ÖNCE, eşzamanlı açılır (popup engelleyici).
  *   • PDF Gönder → html2canvas + jsPDF (halkayit/ dosyaları) YALNIZ ilk basışta yüklenir; telefonda Web Share ile dosya
  *                  paylaşılır (WhatsApp), masaüstünde PDF iner.
+ *   • WP Resim   → aynı rapor (başlık + meta + tablo + toplam + notlar) ekran dışı BEYAZ tutucuda html2canvas ile tek PNG;
+ *                  telefonda Web Share, masaüstünde panoya PNG ("WhatsApp'ta yapıştırın"), pano yoksa / reddedilirse PNG iner.
+ *                  Davranış siparis_wp.js ile aynı desendir (iOS NotAllowedError → "Resim hazır — Paylaş", AbortError hata değil).
+ * Sütunlar SUNUCUDAN gelir (kolonlar[] — kalibre sütunlarının sayısı değişkendir); burada indeks/sütun sayısı varsayılmaz.
  * Hücreler sunucudan HAM METİN gelir; kaçışlama burada yapılır (esc → "\n" → <br>).
+ * "Hazır" (izin reddi sonrası bekleyen dosya) DÜĞME BAŞINA ve tür başına ayrı tutulur (WeakMap).
  * UYARI: pdfUret() dilimleme algoritması beyan_yazdir.js ile aynıdır — birinde hata düzeltirsen ötekinde de düzelt.
  */
 (function () {
@@ -31,6 +38,8 @@
   }
   var mobil = mobilMi();
   var ETIKET_PDF = mobil ? '📤 PDF Gönder' : '⬇️ PDF İndir';
+  var ETIKET_RESIM = '🖼️ WP Resim';
+  var HAZIR_PDF = '📤 PDF hazır — Paylaş', HAZIR_RESIM = '🖼️ Resim hazır — Paylaş';
   dugmeler.forEach(function (b) { if (b.getAttribute('data-sip-yazdir') === 'pdf') b.textContent = ETIKET_PDF; });
 
   var CSS =
@@ -38,56 +47,60 @@
     '.syz h2{font-size:16px;margin:0 0 4px}.syz-meta,.syz-anahtar,.syz-not{font-size:10.5px;color:#333;margin:0 0 6px}' +
     '.syz table{width:100%;border-collapse:collapse;table-layout:fixed}' +
     '.syz th,.syz td{border:1px solid #999;padding:3px 4px;text-align:left;vertical-align:top;overflow-wrap:anywhere}' +
-    '.syz thead th{background:#eee;font-size:9px;padding:3px 3px;overflow-wrap:normal;word-break:normal}.syz thead{display:table-header-group}' +
+    '.syz thead th{background:#eee;font-size:9px;padding:3px 3px;text-align:center;vertical-align:middle;white-space:normal;overflow-wrap:normal;word-break:normal;hyphens:none}.syz thead{display:table-header-group}' +
     '.syz tr{page-break-inside:avoid;break-inside:avoid}' +
     '.syz .syz-s{text-align:right}.syz .syz-nw{white-space:nowrap;overflow-wrap:normal}' +
     '.syz tr.syz-gecmis>td{background:#fff3b0}.syz tr.syz-bugun>td:first-child{font-weight:700}' +
     '.syz tr.syz-gun>td{border-top:2px solid #333}.syz tr.syz-toplam>td{font-weight:700;background:#f2f2f2}' +
     '.syz-kutu{display:inline-block;width:12px;height:10px;background:#fff3b0;border:1px solid #999;vertical-align:-1px;margin-right:4px}' +
     '.syz td,.syz th,.syz-kutu{-webkit-print-color-adjust:exact;print-color-adjust:exact}';
-  var NOWRAP = { tarih: 1, navlun: 1, siparis: 1, tel: 1 };
+  var NOWRAP = { tarih: 1, siparis: 1, tel: 1, plaka: 1 };
 
-  // Rapor gövdesi (başlık + meta + anahtar + tablo + notlar) — hem yazdırma penceresi hem PDF yakalama kullanır.
+  // Rapor gövdesi (başlık + meta + anahtar + tablo + notlar) — yazdırma penceresi, PDF ve WP Resim yakalaması kullanır.
+  // Sütunlar v.kolonlar'dan (değişken sayıda kalibre sütunu); toplam satırı her 'sayi' sütunu için v.toplam[k.k].
   function raporHtml(v) {
-    var kol = v.kolonlar;
+    var kol = v.kolonlar || [];
+    var top = v.toplam || {};
+    var dolu = function (x) { return x != null && x !== ''; };
     var meta = 'Basım: <b>' + esc(v.basim) + '</b>';
     if (v.depo) meta += ' &nbsp;|&nbsp; Depo: <b>' + esc(v.depo) + '</b>';
     meta += ' &nbsp;|&nbsp; <b>' + esc(v.adet) + '</b> sevkiyat';
-    if (v.toplam && v.toplam.palet !== '') meta += ' &nbsp;|&nbsp; <b>' + esc(v.toplam.palet) + '</b> palet';
-    if (v.toplam && v.toplam.kasa !== '') meta += ' &nbsp;|&nbsp; <b>' + esc(v.toplam.kasa) + '</b> kasa';
-    meta += ' &nbsp;|&nbsp; Geçmiş: <b>' + esc(v.gecmis_say) + '</b>';
+    if (dolu(top.palet)) meta += ' &nbsp;|&nbsp; <b>' + esc(top.palet) + '</b> palet';
+    if (dolu(top.kasa)) meta += ' &nbsp;|&nbsp; <b>' + esc(top.kasa) + '</b> kasa';
+    // "Geçmiş" yalnız açık iş listesinde anlamlı (kapanan/evrak bölümünde hepsi geçmiştir).
+    if (!v.kapsam || v.kapsam === 'acik' || v.kapsam === 'tek') meta += ' &nbsp;|&nbsp; Geçmiş: <b>' + esc(v.gecmis_say) + '</b>';
     if (v.filtre) meta += ' &nbsp;|&nbsp; Filtre: <b>' + esc(v.filtre) + '</b>';
-    var cg = kol.map(function (k) { return '<col style="width:' + Number(k.w) + '%">'; }).join('');
-    var th = kol.map(function (k) { return '<th class="' + (k.t === 'sayi' ? 'syz-s' : '') + '">' + esc(k.l) + '</th>'; }).join('');
+    var sinifi = function (k) { return k.t === 'sayi' ? 'syz-s' : (NOWRAP[k.k] ? 'syz-nw' : ''); };
+    var cg = kol.map(function (k) { var w = Number(k.w); return w > 0 ? '<col style="width:' + w + '%">' : '<col>'; }).join('');
+    var th = kol.map(function (k) { return '<th>' + esc(k.l) + '</th>'; }).join('');
     var onceki = null;
-    var tr = v.satirlar.map(function (s, ri) {
+    var tr = (v.satirlar || []).map(function (s, ri) {
       var sinif = [];
       if (s.gecmis) sinif.push('syz-gecmis');
       if (s.bugun) sinif.push('syz-bugun');
       if (ri > 0 && s.gun !== onceki) sinif.push('syz-gun');
       onceki = s.gun;
-      return '<tr class="' + sinif.join(' ') + '">' + s.h.map(function (h, i) {
-        var k = kol[i];
-        var cls = k.t === 'sayi' ? 'syz-s' : (NOWRAP[k.k] ? 'syz-nw' : '');
-        return '<td class="' + cls + '">' + hucre(h) + '</td>';
+      return '<tr class="' + sinif.join(' ') + '">' + kol.map(function (k, i) {
+        var h = s.h ? s.h[i] : '';
+        return '<td class="' + sinifi(k) + '">' + hucre(h) + '</td>';
       }).join('') + '</tr>';
     }).join('');
     // Toplam satırı tbody'nin SONUNDA (tfoot tarayıcı baskısında her sayfada tekrar eder).
-    var top = '<tr class="syz-toplam">' + kol.map(function (k, i) {
-      var t = i === 0 ? 'TOPLAM' : (k.k === 'palet' ? v.toplam.palet : (k.k === 'kasa' ? v.toplam.kasa : ''));
-      return '<td class="' + (k.t === 'sayi' ? 'syz-s' : '') + '">' + esc(t) + '</td>';
+    var toplamTr = '<tr class="syz-toplam">' + kol.map(function (k, i) {
+      var t = i === 0 ? 'TOPLAM' : (k.t === 'sayi' && dolu(top[k.k]) ? top[k.k] : '');
+      return '<td class="' + sinifi(k) + '">' + esc(t) + '</td>';
     }).join('') + '</tr>';
     var notlar = (v.notlar || []).map(function (n) { return '<div class="syz-not">' + esc(n) + '</div>'; }).join('');
+    var anahtar = Number(v.gecmis_say) > 0 ? '<div class="syz-anahtar"><span class="syz-kutu"></span>Sarı zemin ve ✓ = çıkış tarihi geçmiş</div>' : '';
     return '<div class="syz" id="pdfIcerik">' +
       '<h2>' + esc(v.baslik) + '</h2>' +
-      '<div class="syz-meta">' + meta + '</div>' +
-      '<div class="syz-anahtar"><span class="syz-kutu"></span>Sarı zemin ve ✓ = çıkış tarihi geçmiş</div>' +
-      '<table><colgroup>' + cg + '</colgroup><thead><tr>' + th + '</tr></thead><tbody>' + tr + top + '</tbody></table>' +
+      '<div class="syz-meta">' + meta + '</div>' + anahtar +
+      '<table><colgroup>' + cg + '</colgroup><thead><tr>' + th + '</tr></thead><tbody>' + tr + toplamTr + '</tbody></table>' +
       notlar + '</div>';
   }
 
   function dosyaAdiOlustur(v) {
-    return String(v.dosya || 'Acik Sevkiyatlar').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(v.dosya || 'Sevkiyatlar').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   // Taze veri: her tıkta sunucudan (istemcide önbellek YOK).
@@ -232,17 +245,18 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
   }
 
-  var hazir = null;   // { dosya, ad, metin } — paylaşım hareketi reddedilirse (iOS) hazır PDF bir sonraki dokunuşta paylaşılır
-  function paylas(h) { return navigator.share({ files: [h.dosya], title: h.ad, text: h.metin }); }
+  // İzin reddi (iOS) sonrası hazır dosya: DÜĞME BAŞINA (birden çok bölümde düğme var; PDF ve resim düğmeleri ayrı öğedir).
+  var hazirlar = new WeakMap();   // btn → { dosya, ad, metin }
+  function paylas(h) { return navigator.share(h.metin ? { files: [h.dosya], title: h.ad, text: h.metin } : { files: [h.dosya], title: h.ad }); }
 
   async function pdfGonder(btn) {
     if (btn.disabled) return;
     btn.disabled = true;
     try {
-      if (hazir) {   // önceki denemede hazırlanıp paylaşılamayan PDF: yeni dokunuşla paylaş
-        var h0 = hazir;
+      if (hazirlar.has(btn)) {   // önceki denemede hazırlanıp paylaşılamayan PDF: yeni dokunuşla paylaş
+        var h0 = hazirlar.get(btn);
         await paylas(h0);
-        hazir = null; btn.textContent = ETIKET_PDF;
+        hazirlar.delete(btn); btn.textContent = ETIKET_PDF;
         return;
       }
       btn.textContent = '⏳ PDF hazırlanıyor...';
@@ -258,8 +272,8 @@
         } catch (e) {
           if (e && e.name === 'NotAllowedError') {
             // Hazırlık sırasında dokunma izni zaman aşımına uğradı (özellikle iOS) — PDF hazır, bir dokunuş yeter.
-            hazir = { dosya: dosya, ad: ad, metin: metin };
-            btn.textContent = '📤 PDF hazır — Paylaş';
+            hazirlar.set(btn, { dosya: dosya, ad: ad, metin: metin });
+            btn.textContent = HAZIR_PDF;
           } else { throw e; }
         }
       } else {
@@ -267,9 +281,138 @@
         btn.textContent = ETIKET_PDF;
       }
     } catch (e) {
-      btn.textContent = hazir ? '📤 PDF hazır — Paylaş' : ETIKET_PDF;
+      btn.textContent = hazirlar.has(btn) ? HAZIR_PDF : ETIKET_PDF;
       // Kullanıcı paylaşım sayfasını kapatırsa (AbortError) hata değildir.
       if (!e || e.name !== 'AbortError') alert('PDF hazırlanamadı: ' + (e && e.message ? e.message : e));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── WP Resim ───────────────────────────────────────────────────────────────
+  var RESIM_W = 1160, RESIM_OLCEK = 2, RESIM_MAX_Y = 16000;
+  async function resimUret(v) {
+    if (!window.html2canvas) await betikYukle('halkayit/html2canvas.min.js');
+    var tutucu = document.createElement('div');
+    tutucu.className = 'syz-resim-tutucu';
+    tutucu.setAttribute('aria-hidden', 'true');
+    // Temadan bağımsız beyaz zemin; iç boşluk resmin kenarında nefes payı bırakır.
+    tutucu.style.cssText = 'position:fixed;left:-100000px;top:0;width:' + RESIM_W + 'px;background:#fff;z-index:-1;pointer-events:none';
+    tutucu.innerHTML = '<style>' + CSS + '.syz-resim-tutucu .syz{padding:16px;box-sizing:border-box;width:' + RESIM_W + 'px}</style>' + raporHtml(v);
+    document.body.appendChild(tutucu);
+    try {
+      if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* yok say */ } }
+      var el = tutucu.querySelector('#pdfIcerik');
+      var yuk = el.getBoundingClientRect().height || 1;
+      // Uzun listede kanvas yüksekliği sınırı aşmasın: ölçek düşer (en az 1).
+      var olcek = Math.max(1, Math.min(RESIM_OLCEK, RESIM_MAX_Y / yuk));
+      var kanvas = await window.html2canvas(el, { scale: olcek, backgroundColor: '#ffffff', logging: false });
+      return await new Promise(function (ok, hata) {
+        kanvas.toBlob(function (b) { if (b) ok(b); else hata(new Error('Görsel oluşturulamadı.')); }, 'image/png');
+      });
+    } finally { tutucu.remove(); }
+  }
+
+  // Bildirim (siparis_wp.js deseninin küçük hâli; sınıf AYRI — WP kartının #sipWpDurum'una karışmaz). z-index 650.
+  var bildirim = null, bildirimMetin = null, bildirimZaman = null;
+  function bildir(metin, tur) {
+    if (!bildirim) {
+      bildirim = document.createElement('div');
+      bildirim.className = 'sip-yz-durum no-print';
+      bildirim.setAttribute('role', 'status');
+      bildirim.setAttribute('aria-live', 'polite');
+      bildirim.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);z-index:650;' +
+        'bottom:calc(var(--bn-h, 0px) + 16px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;gap:10px;' +
+        'box-sizing:border-box;width:max-content;max-width:calc(100vw - 32px);padding:10px 8px 10px 14px;border-radius:12px;' +
+        'background:var(--card,#fff);color:var(--text,#111);border:1px solid var(--border,#ddd);border-left:4px solid var(--primary,#1c4a6e);' +
+        'box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:.92rem;line-height:1.35';
+      bildirimMetin = document.createElement('span');
+      bildirimMetin.style.cssText = 'flex:1 1 auto;min-width:0;overflow-wrap:anywhere';
+      var kapat = document.createElement('button');
+      kapat.type = 'button';
+      kapat.setAttribute('aria-label', 'Kapat');
+      kapat.textContent = '✕';
+      kapat.style.cssText = 'min-width:44px;min-height:44px;background:none;border:0;color:inherit;font-size:1.1rem;cursor:pointer;border-radius:8px';
+      kapat.addEventListener('click', bildirimGizle);
+      bildirim.appendChild(bildirimMetin);
+      bildirim.appendChild(kapat);
+      document.body.appendChild(bildirim);
+    }
+    if (bildirimZaman) clearTimeout(bildirimZaman);
+    bildirim.style.borderLeftColor = tur === 'hata' ? 'var(--danger,#dc2626)' : (tur === 'ok' ? '#16a34a' : 'var(--primary,#1c4a6e)');
+    bildirim.setAttribute('data-tur', tur || 'bilgi');
+    bildirimMetin.textContent = metin;
+    bildirim.hidden = false;
+    bildirim.style.display = 'flex';
+    bildirimZaman = setTimeout(bildirimGizle, tur === 'hata' ? 7000 : 4500);
+  }
+  function bildirimGizle() {
+    if (bildirimZaman) { clearTimeout(bildirimZaman); bildirimZaman = null; }
+    if (bildirim) { bildirim.hidden = true; bildirim.style.display = 'none'; }
+  }
+
+  function pngIndir(blob, ad) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = ad + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  function panoVar() { return !!(window.isSecureContext && navigator.clipboard && navigator.clipboard.write && window.ClipboardItem); }
+  function panoyaYaz(deger) { return navigator.clipboard.write([new window.ClipboardItem({ 'image/png': deger })]); }
+  var PANO_OK = "✅ Resim panoya kopyalandı — WhatsApp'ta yapıştırın (Ctrl+V)";
+  var PNG_INDI = "⬇️ Resim (PNG) indirildi — WhatsApp'a ekleyin.";
+
+  async function resimGonder(btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      if (hazirlar.has(btn)) {   // izin reddinden kalan hazır resim: bu dokunuşla paylaş
+        await paylas(hazirlar.get(btn));
+        hazirlar.delete(btn); btn.textContent = ETIKET_RESIM;
+        return;
+      }
+      btn.textContent = '⏳ Resim hazırlanıyor...';
+      var uretim = getir(btn, 'resim').then(function (v) { return resimUret(v).then(function (blob) { return { v: v, blob: blob, ad: dosyaAdiOlustur(v) }; }); });
+      uretim.catch(function () { /* aşağıda işlenir */ });
+      if (!mobil && panoVar()) {
+        // Pano yazımı kullanıcı hareketinin İÇİNDE, eşzamanlı başlatılır (Safari şartı); değer Promise<Blob>.
+        var panoSoz = null;
+        try { panoSoz = panoyaYaz(uretim.then(function (r) { return r.blob; })); panoSoz.catch(function () {}); }
+        catch (e) { panoSoz = null; }      // Promise değeri kabul etmeyen motor → blob hazır olunca yeniden denenir
+        var r = await uretim;
+        try {
+          if (panoSoz) await panoSoz; else await panoyaYaz(r.blob);
+          bildir(PANO_OK, 'ok');
+        } catch (e) {
+          pngIndir(r.blob, r.ad);   // pano reddedildi → PNG iner
+          bildir(PNG_INDI, 'ok');
+        }
+        btn.textContent = ETIKET_RESIM;
+        return;
+      }
+      var r2 = await uretim;
+      var h = { dosya: new File([r2.blob], r2.ad + '.png', { type: 'image/png' }), ad: r2.ad };
+      if (mobil && navigator.share && navigator.canShare && navigator.canShare({ files: [h.dosya] })) {
+        try {
+          await paylas(h);
+          btn.textContent = ETIKET_RESIM;
+        } catch (e) {
+          if (e && e.name === 'NotAllowedError') {
+            // Hazırlık sırasında dokunma izni zaman aşımına uğradı (iOS) — resim hazır, bir dokunuş yeter.
+            hazirlar.set(btn, h);
+            btn.textContent = HAZIR_RESIM;
+          } else { throw e; }
+        }
+        return;
+      }
+      pngIndir(r2.blob, r2.ad);
+      bildir(PNG_INDI, 'ok');
+      btn.textContent = ETIKET_RESIM;
+    } catch (e) {
+      btn.textContent = hazirlar.has(btn) ? HAZIR_RESIM : ETIKET_RESIM;
+      // Kullanıcı paylaşım sayfasını kapatırsa (AbortError) hata değildir.
+      if (!e || e.name !== 'AbortError') bildir('Resim hazırlanamadı: ' + (e && e.message ? e.message : e), 'hata');
     } finally {
       btn.disabled = false;
     }
@@ -278,6 +421,7 @@
   document.addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('[data-sip-yazdir]') : null;
     if (!b || b.disabled) return;
-    if (b.getAttribute('data-sip-yazdir') === 'pdf') pdfGonder(b); else yazdir(b);
+    var tur = b.getAttribute('data-sip-yazdir');
+    if (tur === 'pdf') pdfGonder(b); else if (tur === 'resim') resimGonder(b); else yazdir(b);
   });
 })();

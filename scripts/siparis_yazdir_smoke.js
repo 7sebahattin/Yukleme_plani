@@ -1,5 +1,5 @@
 'use strict';
-// "Açık Sevkiyatlar" — Yazdır / PDF Gönder (v382). Gerçek PHP render (siparis_ui_render.php) + gerçek tarayıcı (Playwright + Chromium).
+// Siparişler bölüm başlıkları — Yazdır / PDF Gönder (v382) + WP Resim (3 bölüm: İşlem Bekleyen / Evrak / Kapanan). Gerçek PHP render (siparis_ui_render.php) + gerçek tarayıcı (Playwright + Chromium).
 // Canlı DB / ağ YOK: sayfalar bellek içi SQLite fixture'ından gelir; siparis_yazdir.php yanıtı page.route() ile SENTETİK JSON'dan
 // (php scripts/siparis_yazdir_smoke.php --json / --json-buyuk) döner; jsPDF + html2canvas yerel halkayit/ dosyalarından sunulur.
 // v394: ⋮ menüsü › 💬 WP Paylaş (siparis_paylas.php yanıtı page.route() ile, php scripts/siparis_yazdir_smoke.php --json-wp).
@@ -36,7 +36,20 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     const KUCUK = JSON.parse(php(['scripts/siparis_yazdir_smoke.php', '--json']));
     const BUYUK = JSON.parse(php(['scripts/siparis_yazdir_smoke.php', '--json-buyuk']));
     WP = JSON.parse(php(['scripts/siparis_yazdir_smoke.php', '--json-wp']));
-    ok('fixture: küçük JSON 13 sütun, satır var; büyük JSON ≥ 300 satır', KUCUK.ok && KUCUK.kolonlar.length === 13 && KUCUK.satirlar.length >= 4 && BUYUK.satirlar.length >= 300, KUCUK.adet + '/' + BUYUK.adet);
+    // Sözleşme: 8 sabit sütun + DEĞİŞKEN sayıda "Kalibre N adet" (kal_*) + Toplam palet + Toplam kasa.
+    const SABIT = 'tarih:Yükleme tarihi|parti:Parti no|siparis:Sipariş no|ulke:Alıcı ülke|tel:Şoför Tel|plaka:Plaka|gumruk:Gümrük|urun:Ürün bilgileri';
+    const kolSozlesme = j => {
+        const k = j.kolonlar, n = k.length;
+        const kal = k.slice(8, n - 2);
+        return k.slice(0, 8).map(x => x.k + ':' + x.l).join('|') === SABIT && kal.length >= 1 && kal.every(x => /^kal_/.test(x.k) && /^Kalibre \S+ adet$/.test(x.l) && x.t === 'sayi')
+            && k[n - 2].k === 'palet' && k[n - 2].l === 'Toplam palet' && k[n - 2].t === 'sayi' && k[n - 1].k === 'kasa' && k[n - 1].l === 'Toplam kasa' && k[n - 1].t === 'sayi'
+            && j.satirlar.every(r => r.h.length === n);
+    };
+    const KI = (j, k) => j.kolonlar.findIndex(x => x.k === k);
+    const KALS = KUCUK.kolonlar.filter(x => /^kal_/.test(x.k));
+    ok('fixture: sözleşme sütunları (8 sabit + ' + KALS.length + ' kalibre + palet/kasa), satır var; büyük JSON ≥ 300 satır', KUCUK.ok && kolSozlesme(KUCUK) && kolSozlesme(BUYUK) && KUCUK.satirlar.length >= 4 && BUYUK.satirlar.length >= 300,
+        KUCUK.kolonlar.map(x => x.k + ':' + x.l).join('|'));
+    ok('fixture: boş kalibre hücresi "-", toplam nesnesi kal_* anahtarlarını taşır', KUCUK.satirlar.some(r => KALS.some(c => r.h[KI(KUCUK, c.k)] === '-')) && KALS.every(c => c.k in KUCUK.toplam), JSON.stringify(KUCUK.toplam));
 
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => fs.existsSync(p));
     const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
@@ -62,25 +75,44 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     }
     const tasma = page => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     const tamam = veri => route => route.fulfill(JSONY(veri));
-    const BTN_Y = '[data-sip-yazdir="yazdir"]', BTN_P = '[data-sip-yazdir="pdf"]';
+    // Sayfada birden çok bölümde düğme var: DOM'daki İLK (İşlem Bekleyen) kullanılır.
+    const BTN_Y = '[data-sip-yazdir="yazdir"] >> nth=0', BTN_P = '[data-sip-yazdir="pdf"] >> nth=0', BTN_R = '[data-sip-yazdir="resim"] >> nth=0';
+    const BOLUMLER = [['#sipAcik', 'acik'], ['#sipEvrak', 'evrak'], ['#sipKapali', 'kapali']];
+    /** Her bölüm başlığındaki düğmeler: { id: {n, etiket[], url[], tur[]} } */
+    const bolumDugmeleri = (page, ids) => page.evaluate(ids => {
+        const o = {};
+        for (const id of ids) {
+            const b = document.querySelector(id);
+            if (!b) { o[id] = null; continue; }
+            const d = Array.from(b.querySelectorAll('[data-sip-yazdir]'));
+            o[id] = { n: d.length, tur: d.map(x => x.getAttribute('data-sip-yazdir')), etiket: d.map(x => x.textContent.trim()), url: d.map(x => x.getAttribute('data-sip-yazdir-url')) };
+        }
+        return o;
+    }, ids);
 
     for (const [w, h] of [[1280, 900], [390, 844]]) {
         const mobil = w < 768;
         // ── düğmeler ──
         let { ctx, page, hatalar } = await ac('liste', w, h, tamam(KUCUK));
+        const bd = await bolumDugmeleri(page, BOLUMLER.map(x => x[0]));
         const d = await page.evaluate(() => {
             const b = Array.from(document.querySelectorAll('[data-sip-yazdir]'));
-            const bas = document.querySelector('#sipAcik'), kap = document.querySelector('#sipKapali');
-            return { n: b.length, hepsiAcikBasligi: b.every(x => bas.contains(x)), kapaliyaGirmis: !!kap && b.some(x => kap.contains(x)), kapaliBasKapsam: !!kap && !!kap.parentElement.querySelector('[data-sip-yazdir]'),
-                etiketler: b.map(x => x.textContent.trim()), url: b[0].getAttribute('data-sip-yazdir-url'),
-                r: b.map(x => { const r = x.getBoundingClientRect(); return { x: r.x, r: r.right, h: r.height, w: r.width }; }), noPrint: !!bas.querySelector('.sip-bolum-eylem.no-print') };
+            const bas = document.querySelector('#sipAcik');
+            return { n: b.length, etiketler: b.slice(0, 3).map(x => x.textContent.trim()), url: b[0].getAttribute('data-sip-yazdir-url'),
+                r: b.map(x => { const r = x.getBoundingClientRect(); return { x: r.x, r: r.right, h: r.height, w: r.width }; }), noPrint: !!bas.querySelector('.sip-bolum-eylem.no-print'),
+                hepsiNoPrint: b.every(x => !!x.closest('.no-print')) };
         });
-        ok(`[${w}] düğmeler: Açık başlığında 2 düğme (🖨️ Yazdır + PDF), Kapanan bölümde YOK`, d.n === 2 && d.hepsiAcikBasligi && !d.kapaliBasKapsam && /Yazdır/.test(d.etiketler[0]) && /PDF/.test(d.etiketler[1]), JSON.stringify(d));
+        for (const [id, bolum] of BOLUMLER) {
+            const x = bd[id];
+            ok(`[${w}] düğmeler: ${id} başlığında 3 düğme (Yazdır / PDF / WP Resim), URL bolum=${bolum}`, !!x && x.n === 3 && x.tur.join('|') === 'yazdir|pdf|resim' && /Yazdır/.test(x.etiket[0]) && /PDF/.test(x.etiket[1]) && x.etiket[2] === '🖼️ WP Resim'
+                && x.url.every(u => new RegExp('[?&]bolum=' + bolum + '(&|$)').test(u)), JSON.stringify(x));
+        }
+        ok(`[${w}] düğmeler: toplam 9 (3 bölüm × 3)`, d.n === 9, String(d.n));
         ok(`[${w}] düğmeler: PDF etiketi masaüstü tarayıcıda "PDF İndir" (telefon UA'sında "PDF Gönder": aşağıda)`, d.etiketler[1].includes('PDF İndir'), d.etiketler[1]);
         ok(`[${w}] düğmeler: ekrana sığar, yatay taşma yok`, d.r.every(x => x.x >= 0 && x.r <= w + 1) && (await tasma(page)) <= 0, JSON.stringify(d.r) + ' / ' + (await tasma(page)));
         if (mobil) ok(`[${w}] düğmeler: dokunma hedefi ≥ 44px`, d.r.every(x => x.h >= 43.5), JSON.stringify(d.r));
         ok(`[${w}] düğme URL'i: siparis_yazdir.php, sayfa numaraları YOK`, /^siparis_yazdir\.php/.test(d.url) && !/acik_page|kapali_page|evrak_page/.test(d.url), d.url);
-        ok(`[${w}] düğmeler: yazdırmada gizlenen kapta (no-print)`, d.noPrint);
+        ok(`[${w}] düğmeler: yazdırmada gizlenen kapta (no-print)`, d.noPrint && d.hepsiNoPrint);
         ok(`[${w}] liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
 
@@ -91,27 +123,36 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         await popup.waitForSelector('#pdfIcerik', { timeout: 8000 });
         await popup.waitForTimeout(500);
         const baslik = await popup.locator('.syz thead th').allTextContents();
-        ok(`[${w}] yazdırma: 13 sütun SAHİBİN sırasıyla`, baslik.join('|') === 'ÇIKIŞ TARİHİ|PARTİ NO|NAVLUN NO|SİPARİŞ NO|ŞOFÖR ADI|TEL|PLAKA|LOJİSTİK FİRMA|ÜLKE|ÜRÜN BİLGİSİ|PALET SAYISI|KASA SAYISI|GRAMAJ', baslik.join('|'));
-        const tbl = await popup.evaluate(() => {
+        ok(`[${w}] yazdırma: sütunlar sunucu sırasıyla (8 sabit + kalibre + Toplam palet/kasa)`, baslik.join('|') === KUCUK.kolonlar.map(k => k.l).join('|') && baslik[0] === 'Yükleme tarihi' && baslik[baslik.length - 1] === 'Toplam kasa', baslik.join('|'));
+        const IX = { urun: KI(KUCUK, 'urun'), palet: KI(KUCUK, 'palet'), kasa: KI(KUCUK, 'kasa'), kal: KALS.map(c => KI(KUCUK, c.k)), nw: ['tarih', 'siparis', 'tel', 'plaka'].map(k => KI(KUCUK, k)), sayi: KUCUK.kolonlar.map((k, i) => k.t === 'sayi' ? i : -1).filter(i => i >= 0) };
+        const tbl = await popup.evaluate(IX => {
             const rows = Array.from(document.querySelectorAll('.syz tbody tr'));
             const sari = rows.filter(r => r.classList.contains('syz-gecmis'));
             const cs = e => getComputedStyle(e);
-            return { n: rows.length, tfoot: document.querySelectorAll('.syz tfoot').length, sonToplam: rows[rows.length - 1].classList.contains('syz-toplam'), sonIlk: rows[rows.length - 1].children[0].textContent,
+            const son = rows[rows.length - 1];
+            const veri = rows.filter(r => !r.classList.contains('syz-toplam'));
+            const ths = Array.from(document.querySelectorAll('.syz thead th'));
+            return { n: rows.length, tfoot: document.querySelectorAll('.syz tfoot').length, sonToplam: son.classList.contains('syz-toplam'), sonIlk: son.children[0].textContent,
                 sariSay: sari.length, sariBg: sari.length ? cs(sari[0].children[3]).backgroundColor : '', sariIlk: sari.length ? sari[0].children[0].textContent : '', tumSariTik: sari.every(r => /✓$/.test(r.children[0].textContent)),
                 duzBg: (() => { const d = rows.find(r => !r.classList.contains('syz-gecmis') && !r.classList.contains('syz-toplam')); return d ? cs(d.children[3]).backgroundColor : ''; })(),
                 bugunKalin: (() => { const b = document.querySelector('.syz tr.syz-bugun > td:first-child'); return b ? cs(b).fontWeight : null; })(),
                 gunCizgi: document.querySelectorAll('.syz tr.syz-gun').length, tikOlmayan: rows.filter(r => !r.classList.contains('syz-gecmis') && !r.classList.contains('syz-toplam')).every(r => !/✓/.test(r.children[0].textContent)),
-                colgroup: document.querySelectorAll('.syz col').length, urunBr: !!document.querySelector('.syz tbody td br'), anahtar: document.querySelector('.syz-anahtar').textContent, meta: document.querySelector('.syz-meta').textContent,
-                notlar: Array.from(document.querySelectorAll('.syz-not')).map(e => e.textContent), toplamPalet: rows[rows.length - 1].children[10].textContent, toplamKasa: rows[rows.length - 1].children[11].textContent,
-                st: document.head.textContent, tasma: document.documentElement.scrollWidth - window.innerWidth, baslikH2: document.querySelector('.syz h2').textContent, title: document.title,
-                parti: rows[0].children[1].textContent };
-        });
+                colgroup: document.querySelectorAll('.syz col').length, urunBr: !!document.querySelector('.syz tbody td br'), anahtar: (document.querySelector('.syz-anahtar') || { textContent: '' }).textContent, meta: document.querySelector('.syz-meta').textContent,
+                notlar: Array.from(document.querySelectorAll('.syz-not')).map(e => e.textContent), toplamPalet: son.children[IX.palet].textContent, toplamKasa: son.children[IX.kasa].textContent,
+                toplamKal: IX.kal.map(i => son.children[i].textContent), kalTire: veri.some(r => IX.kal.some(i => r.children[i].textContent === '-')),
+                nowrap: veri.every(r => IX.nw.every(i => cs(r.children[i]).whiteSpace === 'nowrap')), sag: veri.concat([son]).every(r => IX.sayi.every(i => cs(r.children[i]).textAlign === 'right')),
+                thOrta: ths.every(t => cs(t).textAlign === 'center'), thKirilir: ths.every(t => cs(t).whiteSpace !== 'nowrap'),
+                kalBaslikSatir: IX.kal.length ? Math.round(ths[IX.kal[0]].getBoundingClientRect().height / parseFloat(cs(ths[IX.kal[0]]).lineHeight || 12)) : 0,
+                st: document.head.textContent, tasma: document.documentElement.scrollWidth - window.innerWidth, baslikH2: document.querySelector('.syz h2').textContent, title: document.title };
+        }, IX);
         ok(`[${w}] yazdırma: satır sayısı = adet + TOPLAM; toplam satırı tbody SONUNDA, tfoot YOK`, tbl.n === KUCUK.adet + 1 && tbl.sonToplam && tbl.sonIlk === 'TOPLAM' && tbl.tfoot === 0, JSON.stringify(tbl));
         ok(`[${w}] yazdırma: geçmiş tarihli satırlar sarı (rgb(255, 243, 176)) + tarihte ✓; diğerlerinde sarı/✓ yok`, tbl.sariSay === KUCUK.gecmis_say && tbl.sariSay >= 3 && tbl.sariBg === 'rgb(255, 243, 176)' && tbl.tumSariTik && tbl.duzBg !== 'rgb(255, 243, 176)' && tbl.tikOlmayan, JSON.stringify(tbl));
-        ok(`[${w}] yazdırma: bugünün tarihi kalın, gün değişiminde üst çizgi, çok satırlı ürün hücresi <br>`, tbl.bugunKalin === '700' && tbl.gunCizgi >= 2 && tbl.urunBr, JSON.stringify([tbl.bugunKalin, tbl.gunCizgi, tbl.urunBr]));
+        ok(`[${w}] yazdırma: bugünün tarihi kalın, gün değişiminde üst çizgi, çok satırlı hücre <br>`, tbl.bugunKalin === '700' && tbl.gunCizgi >= 2 && (tbl.urunBr || !KUCUK.satirlar.some(r => r.h.some(h => /\n/.test(h)))), JSON.stringify([tbl.bugunKalin, tbl.gunCizgi, tbl.urunBr]));
+        ok(`[${w}] yazdırma: tarih/sipariş/tel/plaka nowrap; sayı sütunları (kalibre/palet/kasa) sağa; başlıklar ortalı ve kırılabilir`, tbl.nowrap && tbl.sag && tbl.thOrta && tbl.thKirilir, JSON.stringify([tbl.nowrap, tbl.sag, tbl.thOrta, tbl.thKirilir]));
+        ok(`[${w}] yazdırma: boş kalibre hücresi "-"; TOPLAM satırında her kalibre sütununun toplamı`, tbl.kalTire && JSON.stringify(tbl.toplamKal) === JSON.stringify(KALS.map(c => String(KUCUK.toplam[c.k] == null ? '' : KUCUK.toplam[c.k]))), JSON.stringify([tbl.toplamKal, KUCUK.toplam]));
         ok(`[${w}] yazdırma: toplam palet/kasa satırı + meta + anahtar + kişisel veri notu`, tbl.toplamPalet === KUCUK.toplam.palet && tbl.toplamKasa === KUCUK.toplam.kasa && /Sarı zemin ve ✓ = çıkış tarihi geçmiş/.test(tbl.anahtar) && /sevkiyat/.test(tbl.meta) && /Basım:/.test(tbl.meta)
-            && tbl.notlar.some(n => /Kişisel veri içerir/.test(n)) && tbl.colgroup === 13, JSON.stringify([tbl.toplamPalet, tbl.toplamKasa, tbl.anahtar, tbl.meta, tbl.notlar]));
-        ok(`[${w}] yazdırma: @page A4 yatay + print-color-adjust + başlık`, /@page\{size:A4 landscape/.test(tbl.st) && /print-color-adjust:exact/.test(tbl.st) && tbl.baslikH2 === 'Açık Sevkiyatlar' && /^Acik-Sevkiyatlar-\d{2}\.\d{2}\.\d{4}$/.test(tbl.title), tbl.baslikH2 + ' / ' + tbl.title);
+            && /Geçmiş: /.test(tbl.meta) && tbl.notlar.length === (KUCUK.notlar || []).length && tbl.colgroup === KUCUK.kolonlar.length, JSON.stringify([tbl.toplamPalet, tbl.toplamKasa, tbl.anahtar, tbl.meta, tbl.notlar]));
+        ok(`[${w}] yazdırma: @page A4 yatay + print-color-adjust + başlık`, /@page\{size:A4 landscape/.test(tbl.st) && /print-color-adjust:exact/.test(tbl.st) && tbl.baslikH2 === KUCUK.baslik && tbl.title === KUCUK.dosya && /-\d{2}\.\d{2}\.\d{4}$/.test(tbl.title), tbl.baslikH2 + ' / ' + tbl.title);
         ok(`[${w}] yazdırma: popup'ta yatay taşma yok (küçük veri)`, tbl.tasma <= 0, String(tbl.tasma));
         ok(`[${w}] yazdırma: print() kendiliğinden çağrıldı`, (await popup.evaluate(() => window.__print)) >= 1);
         ok(`[${w}] yazdırma: sunucu isteği amac=yazdir, taze fetch (istemcide önbellek yok)`, istekler.length === 1 && /amac=yazdir/.test(istekler[0]) && !/acik_page|kapali_page|evrak_page/.test(istekler[0]), istekler.join(','));
@@ -128,39 +169,55 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     // ── filtreli (tek durum) sayfa: Sonuçlar bölümünde düğme + filtre anahtarları isteğe taşınır ──
     {
         const { ctx, page, istekler } = await ac('liste_tek', 1280, 900, tamam(KUCUK));
-        const n = await page.evaluate(() => { const b = Array.from(document.querySelectorAll('[data-sip-yazdir]')); const s = document.querySelector('#sipSonuclar'); return { n: b.length, hepsi: b.length > 0 && b.every(x => s.contains(x)), url: b[0] && b[0].getAttribute('data-sip-yazdir-url') }; });
-        ok('filtreli liste (tek durum): düğmeler "Sonuçlar" başlığında; URL durum filtresini taşır', n.n === 2 && n.hepsi && /durum=arac_bekleyen/.test(n.url), JSON.stringify(n));
+        const n = await page.evaluate(() => { const b = Array.from(document.querySelectorAll('[data-sip-yazdir]')); const s = document.querySelector('#sipSonuclar'); return { n: b.length, hepsi: b.length > 0 && b.every(x => s.contains(x)), url: b[0] && b[0].getAttribute('data-sip-yazdir-url'), tur: b.map(x => x.getAttribute('data-sip-yazdir')).join('|') }; });
+        ok('filtreli liste (tek durum): 3 düğme "Sonuçlar" başlığında; URL durum filtresini taşır, bolum YOK', n.n === 3 && n.hepsi && n.tur === 'yazdir|pdf|resim' && /durum=arac_bekleyen/.test(n.url) && !/bolum=/.test(n.url), JSON.stringify(n));
         const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click(BTN_Y)]);
         await popup.waitForSelector('#pdfIcerik', { timeout: 8000 });
         ok('filtreli liste: istek filtre anahtarını + amac taşır', /durum=arac_bekleyen/.test(istekler[0]) && /amac=yazdir/.test(istekler[0]), istekler[0]);
         await ctx.close();
     }
-    {   // v400: evrak bekleyen bölümü — yazdırma düğmesi YOK
-        let { ctx, page } = await ac('liste', 1280, 900, tamam(KUCUK));
-        ok('v400: #sipEvrak var, içinde yazdırma düğmesi YOK; düğmeler yalnız Açık başlığında', await page.evaluate(() => { const e = document.querySelector('#sipEvrak'); return !!e && !e.parentElement.querySelector('[data-sip-yazdir]') && !e.querySelector('[data-sip-yazdir]'); }));
+    {   // v403: Evrak ve Kapanan bölümlerinde de 3 düğme; her bölümün düğmesi kendi bolum=…'unu ister
+        let { ctx, page, istekler } = await ac('liste', 1280, 900, tamam(KUCUK));
+        for (const [id, bolum] of BOLUMLER) {
+            const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click(id + ' [data-sip-yazdir="yazdir"]')]);
+            await popup.waitForSelector('#pdfIcerik', { timeout: 8000 });
+            await popup.close();
+            ok(`bölüm ${id}: Yazdır isteği bolum=${bolum} + amac=yazdir`, new RegExp('[?&]bolum=' + bolum + '(&|$)').test(istekler[istekler.length - 1]) && /amac=yazdir/.test(istekler[istekler.length - 1]), istekler[istekler.length - 1]);
+        }
         await ctx.close();
-        ({ ctx, page } = await ac('liste_evrak', 1280, 900, tamam(KUCUK)));
-        ok('v400: durum=evrak_bekleyen listesinde yazdırma düğmesi YOK, #sipEvrak var', await page.evaluate(() => document.querySelectorAll('[data-sip-yazdir]').length === 0 && !!document.querySelector('#sipEvrak')));
+        for (const [sayfa, id, bolum] of [['liste_evrak', '#sipEvrak', 'evrak'], ['liste_kapali', '#sipKapali', 'kapali']]) {
+            ({ ctx, page } = await ac(sayfa, 1280, 900, tamam(KUCUK)));
+            const x = (await bolumDugmeleri(page, [id]))[id];
+            ok(`${sayfa}: ${id} başlığında 3 düğme, bolum=${bolum}`, !!x && x.n === 3 && x.url.every(u => new RegExp('[?&]bolum=' + bolum + '(&|$)').test(u)), JSON.stringify(x));
+            await ctx.close();
+        }
+        ({ ctx, page } = await ac('liste_viewer', 1280, 900, tamam(KUCUK)));
+        ok('izleyici (yalnız siparis.read): düğmeler VAR (veri ucu aynı kapıda)', await page.evaluate(() => document.querySelectorAll('#sipAcik [data-sip-yazdir]').length === 3));
         await ctx.close();
     }
-    {   // kapanan filtre: düğme YOK; izleyici: VAR
-        let { ctx, page } = await ac('liste_kapali', 1280, 900, tamam(KUCUK));
-        ok('durum=kapali listesinde yazdırma düğmesi YOK', await page.evaluate(() => document.querySelectorAll('[data-sip-yazdir]').length === 0 && !!document.querySelector('#sipKapali')));
-        await ctx.close();
-        ({ ctx, page } = await ac('liste_viewer', 1280, 900, tamam(KUCUK)));
-        ok('izleyici (yalnız siparis.read): düğmeler VAR (veri ucu aynı kapıda)', await page.evaluate(() => document.querySelectorAll('[data-sip-yazdir]').length === 2));
+
+    // ── meta / anahtar: geçmiş yoksa anahtar notu yok; Kapanan/Evrak kapsamında "Geçmiş: N" yok ──
+    for (const [kapsam, gs, anahtarVar, gecmisVar] of [['kapali', 0, false, false], ['evrak', 2, true, false], ['acik', 0, false, true], ['tek', 1, true, true]]) {
+        const k = JSON.parse(JSON.stringify(KUCUK));
+        k.kapsam = kapsam; k.gecmis_say = gs;
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(k));
+        const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click(BTN_Y)]);
+        await popup.waitForSelector('#pdfIcerik', { timeout: 8000 });
+        const m = await popup.evaluate(() => ({ anahtar: !!document.querySelector('.syz-anahtar'), meta: document.querySelector('.syz-meta').textContent }));
+        ok(`meta (kapsam=${kapsam}, gecmis_say=${gs}): anahtar ${anahtarVar ? 'VAR' : 'YOK'}, "Geçmiş:" ${gecmisVar ? 'VAR' : 'YOK'}`, m.anahtar === anahtarVar && /Geçmiş:/.test(m.meta) === gecmisVar, JSON.stringify(m));
         await ctx.close();
     }
 
     // ── kullanıcı verisi kaçışlanır (XSS) ──
     {
         const k = JSON.parse(JSON.stringify(KUCUK));
-        k.satirlar[0].h[7] = '<img src=x onerror="window.__xss=1">&amp;'; k.satirlar[0].h[9] = 'a<script>window.__xss=2</script>b\nikinci satır'; k.filtre = '<b>F</b>'; k.notlar.push('<i>not</i>');
+        const iG = KI(k, 'gumruk'), iU = KI(k, 'urun');
+        k.satirlar[0].h[iG] = '<img src=x onerror="window.__xss=1">&amp;'; k.satirlar[0].h[iU] = 'a<script>window.__xss=2</script>b\nikinci satır'; k.filtre = '<b>F</b>'; k.notlar.push('<i>not</i>');
         const { ctx, page } = await ac('liste', 1280, 900, tamam(k));
         const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click(BTN_Y)]);
         await popup.waitForSelector('#pdfIcerik', { timeout: 8000 });
-        const x = await popup.evaluate(() => ({ img: document.querySelectorAll('.syz img').length, xss: window.__xss || 0, scr: document.querySelectorAll('.syz script').length, b: document.querySelectorAll('.syz-meta b').length,
-            hucre: document.querySelectorAll('.syz tbody tr')[0].children[7].textContent, urun: document.querySelectorAll('.syz tbody tr')[0].children[9].innerHTML }));
+        const x = await popup.evaluate(([iG, iU]) => ({ img: document.querySelectorAll('.syz img').length, xss: window.__xss || 0, scr: document.querySelectorAll('.syz script').length, b: document.querySelectorAll('.syz-meta b').length,
+            hucre: document.querySelectorAll('.syz tbody tr')[0].children[iG].textContent, urun: document.querySelectorAll('.syz tbody tr')[0].children[iU].innerHTML }), [iG, iU]);
         ok('kaçış: <img onerror>, <script>, <b> hücre/filtre/notta ham metin; "&amp;" olduğu gibi görünür; \\n → <br>', x.img === 0 && x.xss === 0 && x.scr === 0 && x.hucre === '<img src=x onerror="window.__xss=1">&amp;' && /<br>ikinci satır/.test(x.urun) && !/<script/.test(x.urun), JSON.stringify(x));
         await ctx.close();
     }
@@ -187,7 +244,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     {
         const { ctx, page, istekler, hatalar } = await ac('liste', 1280, 900, tamam(BUYUK));
         const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click(BTN_P)]);
-        ok('PDF indir: dosya adı Acik-Sevkiyatlar-gg.aa.yyyy.pdf', /^Acik-Sevkiyatlar-\d{2}\.\d{2}\.\d{4}\.pdf$/.test(dl.suggestedFilename()), dl.suggestedFilename());
+        ok('PDF indir: dosya adı = sunucunun dosya adı (…-gg.aa.yyyy) + .pdf', dl.suggestedFilename() === BUYUK.dosya + '.pdf' && /-\d{2}\.\d{2}\.\d{4}\.pdf$/.test(dl.suggestedFilename()), dl.suggestedFilename());
         const buf = fs.readFileSync(await dl.path());
         ok('PDF indir: gerçek PDF, yatay A4 (841×595)', buf.slice(0, 5).toString() === '%PDF-' && buf.length > 20000 && /\/MediaBox\s*\[\s*0\s+0\s+841\.\d+\s+595\.\d+\s*\]/.test(buf.toString('latin1')), String(buf.length));
         const sy = pdfSayfa(buf);
@@ -227,11 +284,11 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         await pdf.click();
         await page.waitForFunction(() => window.__paylasimlar.length === 1, null, { timeout: 60000 });
         const p = await page.evaluate(() => window.__paylasimlar[0]);
-        ok('telefon: PDF dosyası paylaşım sayfasına verilir (application/pdf, ad + metin)', p.tur === 'application/pdf' && /^Acik-Sevkiyatlar-.*\.pdf$/.test(p.ad) && p.boyut > 5000 && /Açık Sevkiyatlar · \d+ sevkiyat/.test(p.metin), JSON.stringify(p));
+        ok('telefon: PDF dosyası paylaşım sayfasına verilir (application/pdf, ad + metin)', p.tur === 'application/pdf' && p.ad === KUCUK.dosya + '.pdf' && p.boyut > 5000 && p.metin.indexOf(KUCUK.baslik + ' · ' + KUCUK.adet + ' sevkiyat') === 0, JSON.stringify(p));
         ok('telefon: paylaşımdan sonra düğme normale döner', !(await pdf.isDisabled()) && (await pdf.textContent()).includes('PDF Gönder'));
         await page.evaluate(() => { window.__ilkRed = true; });
         await pdf.click();
-        await page.waitForFunction(() => document.querySelector('[data-sip-yazdir="pdf"]').textContent.includes('PDF hazır'), null, { timeout: 60000 });
+        await page.waitForFunction(() => document.querySelector('[data-sip-yazdir="pdf"]').textContent.includes('PDF hazır —'), null, { timeout: 60000 });
         ok('telefon: izin reddinde PDF paylaşılmadı, "PDF hazır — Paylaş" çıktı', (await page.evaluate(() => window.__paylasimlar.length)) === 1);
         await pdf.click();
         await page.waitForFunction(() => window.__paylasimlar.length === 2);
@@ -442,6 +499,99 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         await page.waitForTimeout(2500);
         ok('telefon: AbortError sessiz — alert yok, hata bildirimi yok', await page.evaluate(() => window.__alert.length === 0 && !document.querySelector('.sip-wp-durum--hata')));
         ok('telefon: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+    // ══ v403 — bölüm başlığı › 🖼️ WP Resim (aynı rapor tablosu → tek PNG) ══
+    const PNG_DOSYA = KUCUK.dosya + '.png';
+    const PANO_BOS = () => { window.__pano = []; };
+    // R1) masaüstü: panoya PNG + bildirim; R2) Kapanan bölümün düğmesi kendi bolum'unu ister
+    {
+        const { ctx, page, istekler, hatalar } = await ac('liste', 1280, 900, tamam(KUCUK), { init: [PANO_BOS, PANO_STUB] });
+        const r = page.locator(BTN_R);
+        ok('[1280] resim: düğme etiketi "🖼️ WP Resim"', (await r.textContent()).trim() === '🖼️ WP Resim');
+        await r.click();
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 60000 });
+        const p = await page.evaluate(() => window.__pano[0]);
+        ok('[1280] resim: panoya image/png, PNG imzası, ≥ 2300 px genişlik (1160 × 2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w >= 2300 && p.h > 300 && p.size > 5000, JSON.stringify(p));
+        ok('[1280] resim: tek istek amac=resim + bolum=acik', istekler.length === 1 && /amac=resim/.test(istekler[0]) && /bolum=acik/.test(istekler[0]), istekler.join(','));
+        await page.waitForFunction(() => { const d = document.querySelector('.sip-yz-durum'); return d && !d.hidden; }, null, { timeout: 5000 });
+        const b = await page.evaluate(() => { const d = document.querySelector('.sip-yz-durum'); return { t: d.textContent, z: +getComputedStyle(d).zIndex, wp: !!document.querySelector('.sip-wp-durum'),
+            tutucu: document.querySelectorAll('.syz-resim-tutucu, body > div[aria-hidden="true"]').length, btn: document.querySelector('[data-sip-yazdir="resim"]').textContent, dis: document.querySelector('[data-sip-yazdir="resim"]').disabled }; });
+        ok('[1280] resim: bildirim "Resim panoya kopyalandı — WhatsApp\'ta yapıştırın" (z ≥ 600, alert yok); tutucu temizlendi; düğme normale döndü', /Resim panoya kopyalandı — WhatsApp'ta yapıştırın/.test(b.t) && b.z >= 600 && !b.wp && b.tutucu === 0 && b.btn === '🖼️ WP Resim' && !b.dis
+            && (await page.evaluate(() => window.__alert.length)) === 0, JSON.stringify(b));
+        await page.evaluate(() => { window.__pano.length = 0; });
+        await page.click('#sipKapali [data-sip-yazdir="resim"]');
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 60000 });
+        ok('[1280] resim: Kapanan bölüm düğmesi bolum=kapali + amac=resim ister', /bolum=kapali/.test(istekler[1]) && /amac=resim/.test(istekler[1]), istekler.join(','));
+        ok('[1280] resim: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+    // R3) büyük veri: kanvas yüksekliği sınırı (16000 px) aşılmaz, ölçek ≥ 1
+    {
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(BUYUK), { init: [PANO_BOS, PANO_STUB] });
+        await page.click(BTN_R);
+        await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 120000 });
+        const p = await page.evaluate(() => window.__pano[0]);
+        ok('300 satır resim: PNG yüksekliği ≤ 16000 px, genişlik ≥ 1160 px (ölçek ≥ 1)', p.t === 'image/png' && p.h <= 16000 && p.h > 3000 && p.w >= 1160, JSON.stringify(p));
+        await ctx.close();
+    }
+    // R4) pano yok → PNG iner; R5) pano reddi → PNG iner
+    for (const [ad, init] of [
+        ['pano yok', () => { delete window.ClipboardItem; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }); }],
+        ['pano reddi', [PANO_BOS, PANO_STUB, () => { window.__panoRed = true; }]],
+    ]) {
+        const { ctx, page } = await ac('liste', 1280, 900, tamam(KUCUK), { init });
+        const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.click(BTN_R)]);
+        const buf = fs.readFileSync(await dl.path());
+        await page.waitForFunction(() => { const d = document.querySelector('.sip-yz-durum'); return d && !d.hidden; }, null, { timeout: 5000 });
+        ok(`resim (${ad}): PNG iner (${PNG_DOSYA}, PNG imzası), bildirim "indirildi"`, dl.suggestedFilename() === PNG_DOSYA && JSON.stringify([...buf.slice(0, 8)]) === JSON.stringify(PNG_IMZA)
+            && /indirildi/.test(await page.locator('.sip-yz-durum').textContent()), dl.suggestedFilename());
+        await ctx.close();
+    }
+    // R6) hata yanıtı: bildirimde (alert DEĞİL), düğme tekrar açık
+    {
+        const { ctx, page } = await ac('liste', 1280, 900, route => route.fulfill(JSONY({ ok: false, hata: 'Liste okunamadı.' }, 500)), { init: [PANO_BOS, PANO_STUB] });
+        await page.click(BTN_R);
+        await page.waitForFunction(() => { const d = document.querySelector('.sip-yz-durum'); return d && !d.hidden && d.getAttribute('data-tur') === 'hata'; }, null, { timeout: 15000 });
+        ok('resim hata: bildirimde "Liste okunamadı", alert yok, pano yazılmadı, düğme açık', /Liste okunamadı/.test(await page.locator('.sip-yz-durum').textContent())
+            && (await page.evaluate(() => window.__alert.length === 0 && window.__pano.length === 0)) && !(await page.locator(BTN_R).isDisabled()) && (await page.locator(BTN_R).textContent()) === '🖼️ WP Resim');
+        await ctx.close();
+    }
+    // R7) telefon: Web Share + izin reddi → "Resim hazır — Paylaş" (yalnız o düğmede) → ikinci dokunuş
+    {
+        const { ctx, page, hatalar } = await ac('liste', 390, 844, tamam(KUCUK), {
+            ctx: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+            init: [PANO_BOS, PANO_STUB, () => {
+                window.__paylasimlar = []; window.__ilkRed = false;
+                navigator.canShare = d => !!(d && d.files && d.files.length);
+                navigator.share = async d => {
+                    if (window.__ilkRed) { window.__ilkRed = false; const e = new Error('izin'); e.name = 'NotAllowedError'; throw e; }
+                    const f = d.files[0];
+                    window.__paylasimlar.push({ ad: f.name, tur: f.type, boyut: f.size, baslik: d.title });
+                };
+            }] });
+        const r = page.locator(BTN_R);
+        await r.click();
+        await page.waitForFunction(() => window.__paylasimlar.length === 1, null, { timeout: 60000 });
+        const p = await page.evaluate(() => ({ s: window.__paylasimlar[0], pano: window.__pano.length }));
+        ok('telefon resim: PNG paylaşıma verilir (image/png, ' + PNG_DOSYA + '); pano kullanılmadı', p.s.tur === 'image/png' && p.s.ad === PNG_DOSYA && p.s.boyut > 5000 && p.pano === 0, JSON.stringify(p));
+        await page.waitForFunction(() => !document.querySelector('[data-sip-yazdir="resim"]').disabled);
+        ok('telefon resim: paylaşım sonrası düğme normale döndü', (await r.textContent()) === '🖼️ WP Resim');
+        await page.evaluate(() => { window.__ilkRed = true; });
+        await r.click();
+        await page.waitForFunction(() => document.querySelector('[data-sip-yazdir="resim"]').textContent.includes('Resim hazır —'), null, { timeout: 60000 });
+        const durum = await page.evaluate(() => ({ n: window.__paylasimlar.length, bu: document.querySelector('[data-sip-yazdir="resim"]').textContent, diger: Array.from(document.querySelectorAll('[data-sip-yazdir="resim"]')).slice(1).map(b => b.textContent),
+            pdf: Array.from(document.querySelectorAll('[data-sip-yazdir="pdf"]')).map(b => b.textContent) }));
+        ok('telefon resim: izin reddi → yalnız bu düğme "🖼️ Resim hazır — Paylaş"; diğer bölümlerin resim/PDF düğmeleri etkilenmedi; paylaşılmadı',
+            durum.n === 1 && durum.bu === '🖼️ Resim hazır — Paylaş' && durum.diger.every(t => t === '🖼️ WP Resim') && durum.pdf.every(t => t === '📤 PDF Gönder'), JSON.stringify(durum));
+        const istekOnce = await page.evaluate(() => window.__paylasimlar.length);
+        await r.click();
+        await page.waitForFunction(() => window.__paylasimlar.length === 2, null, { timeout: 10000 });
+        ok('telefon resim: hazır PNG ikinci dokunuşla paylaşıldı (yeniden üretmeden), düğme sıfırlandı', istekOnce === 1 && (await page.evaluate(() => window.__paylasimlar[1].tur)) === 'image/png' && (await r.textContent()) === '🖼️ WP Resim');
+        await page.evaluate(() => { navigator.share = async () => { const e = new Error('iptal'); e.name = 'AbortError'; throw e; }; });
+        await r.click(); await page.waitForTimeout(3500);
+        ok('telefon resim: AbortError sessiz — alert yok, hata bildirimi yok, düğme açık', await page.evaluate(() => window.__alert.length === 0 && !document.querySelector('.sip-yz-durum[data-tur="hata"]:not([hidden])') && !document.querySelector('[data-sip-yazdir="resim"]').disabled));
+        ok('telefon resim: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
     }
     await browser.close();
