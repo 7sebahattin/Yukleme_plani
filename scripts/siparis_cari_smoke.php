@@ -9,6 +9,7 @@ require_once $ROOT . '/_siparis_ortak.php';
 require_once $ROOT . '/config/print_helpers.php';
 require_once $ROOT . '/config/siparis_cari.php';
 
+ini_set('session.save_path', sys_get_temp_dir()); ini_set('session.use_cookies', '0'); ini_set('session.cache_limiter', ''); session_start();
 $db = db();
 siparis_test_diger_tablolar($db);
 siparis_test_sema_kur($db);
@@ -221,6 +222,8 @@ echo "\n=== 6. OGL ödemeleri (v399) ===\n";
 ok('tutar_coz biçimleri', siparis_odeme_tutar_coz('1.234,56') === 123456 && siparis_odeme_tutar_coz('1234.5') === 123450 && siparis_odeme_tutar_coz('1.234.567') === 123456700 && siparis_odeme_tutar_coz('0') === null && siparis_odeme_tutar_coz('abc') === null && siparis_odeme_tutar_coz('-5') === null);
 rol(['siparis.read', 'reports.export', 'hesap.pay'], false, 3, ['DEPO1']);
 ok('tablo yokken hazır değil; ekleme reddedilir', !siparis_odeme_hazir($db) && siparis_odeme_ekle($db, ['tutar' => '10', 'tarih' => $bugun, 'para_birimi' => 'EUR'], 3)['ok'] === false);
+$r = uc('siparis_odemeler.php');
+ok('v401 ödemeler: tablo yokken 200 + kurulum notu, pencere yok', $r['hata'] === null && str_contains($r['govde'], 'Ödeme tablosu kurulmadı') && !str_contains($r['govde'], 'id="odEkleDlg"'), (string)$r['hata']);
 foreach (siparis_odeme_tablolar() as $ddl) { [$cr, $ix] = siparis_ddl_sqlite($ddl); $db->exec($cr); foreach ($ix as $x) $db->exec($x); }
 ok('tablo kurulunca hazır', siparis_odeme_hazir($db));
 $r1 = siparis_odeme_ekle($db, ['tutar' => '10.000,50', 'tarih' => $dun, 'para_birimi' => 'eur', 'aciklama' => 'Test <b>', 'dekont_no' => 'D1', 'istek_id' => 'abcdefgh12345'], 3);
@@ -233,12 +236,29 @@ ok('tahsilat para birimi başına toplanır', siparis_cari_tahsilat_toplam($db, 
 $v6 = siparis_cari_veri(siparis_cari_oku($db, $f6), ['bugun' => $bugun, 'tahsilat' => siparis_cari_tahsilat_toplam($db, $f6)]);
 ok('cari bakiye = faturalanan − tahsilat', $v6['cari']['EUR']['tahsilat'] === 1000050 && $v6['cari']['EUR']['bakiye'] === $v6['cari']['EUR']['faturalanan'] - 1000050);
 $r = uc('siparis_cari.php');
-ok('sayfa: ödeme listesi + form (yetkili), XSS kaçışlı', str_contains($r['govde'], 'D1') && str_contains($r['govde'], '10.000,50 EUR') && str_contains($r['govde'], 'name="islem" value="ekle"') && str_contains($r['govde'], 'Test &lt;b&gt;'));
+ok('Cari: ödeme listesi + XSS kaçışı; form/iptal/POST YOK (v401)', $r['hata'] === null && str_contains($r['govde'], '10.000,50 EUR') && str_contains($r['govde'], 'Test &lt;b&gt;')
+    && !str_contains($r['govde'], 'siparis_odeme.php') && !str_contains($r['govde'], 'method="post"') && !str_contains($r['govde'], 'name="islem"'), (string)$r['hata']);
+$r = uc('siparis_odemeler.php'); $g = $r['govde'];
+ok('ödemeler (yetkili): liste + toplam + 2 pencere', $r['hata'] === null && str_contains($g, 'D1') && str_contains($g, '10.000,50 EUR') && str_contains($g, '100,00 USD')
+    && str_contains($g, '<dialog id="odEkleDlg"') && str_contains($g, '<dialog id="odIptalDlg"') && str_contains($g, 'name="islem" value="ekle"') && str_contains($g, 'name="islem" value="iptal"')
+    && substr_count($g, 'action="siparis_odeme.php"') === 2 && str_contains($g, 'data-od-iptal="' . (int)$r1['id'] . '"'), (string)$r['hata']);
+ok('ödemeler: XSS kaçışlı, satır içi olay yok, yazdırma alanı/tablo kimliği', str_contains($g, 'Test &lt;b&gt;') && !str_contains($g, 'Test <b>') && !preg_match('/\son(click|submit|change)=/i', substr($g, (int)strpos($g, 'class="sip-mod')))
+    && str_contains($g, 'id="odYazdirAlan"') && str_contains($g, 'id="odTablo"') && str_contains($g, 'data-od-yazdir') && str_contains($g, 'assets/siparis.js'));
+$r = uc('siparis_odemeler.php', ['bas' => $bugun]);
+ok('ödemeler: bas filtresi + qs gizli alanı', $r['hata'] === null && !str_contains($r['govde'], '10.000,50 EUR') && str_contains($r['govde'], 'Bu aralıkta ödeme yok') && str_contains($r['govde'], 'name="qs" value="bas=' . $bugun . '"'));
 rol(['siparis.read', 'reports.export'], false, 4, ['DEPO1']);
-$r = uc('siparis_cari.php');
-ok('sayfa: hesap.pay yoksa liste var, form/iptal yok', str_contains($r['govde'], '10.000,50 EUR') && !str_contains($r['govde'], 'name="islem" value="ekle"') && !str_contains($r['govde'], 'value="iptal"'));
+$r = uc('siparis_odemeler.php');
+ok('ödemeler (hesap.pay yok): liste var; dialog/POST/düğme yok', $r['hata'] === null && str_contains($r['govde'], '10.000,50 EUR') && !str_contains($r['govde'], '<dialog')
+    && !str_contains($r['govde'], 'siparis_odeme.php') && !str_contains($r['govde'], 'data-od-iptal=') && !str_contains($r['govde'], 'data-od-ac='));
+rol(['dashboard.read', 'reports.read', 'siparis.read'], false, 5, ['DEPO1']);
+$r = uc('siparis_odemeler.php');
+ok('ödemeler: izleyici (reports.export yok) 403, gövde boş', $r['hata'] !== null && str_contains($r['hata'], 'forbidden') && $r['govde'] === '', (string)$r['hata']);
+rol(['reports.export'], false, 6, ['DEPO1']);
+$r = uc('siparis_odemeler.php');
+ok('ödemeler: siparis.read yoksa 403', $r['hata'] !== null && str_contains($r['hata'], 'siparis.read'), (string)$r['hata']);
 $od = (string)file_get_contents($ROOT . '/siparis_odeme.php');
 ok('uç: POST + csrf_check + yetki kapısı yazmadan önce', str_contains($od, 'csrf_check(') && str_contains($od, "REQUEST_METHOD'] !== 'POST'") && strpos($od, 'siparis_odeme_yetkili()') < strpos($od, 'siparis_odeme_ekle('));
+ok('uç: PRG → siparis_odemeler.php (qs korunur), Cari\'ye dönmez', substr_count($od, 'Location: siparis_odemeler.php') === 2 && !str_contains($od, 'Location: siparis_cari.php') && str_contains($od, "'?' . \$_POST['qs']"));
 $id1 = (int)$r1['id'];
 ok('iptal: gerekçesiz reddedilir', !siparis_odeme_iptal($db, $id1, ' ', 3)['ok']);
 ok('iptal: gerekçeyle soft iptal; tahsilattan düşer; tekrar iptal reddedilir', siparis_odeme_iptal($db, $id1, 'yanlış giriş', 3)['ok'] && !siparis_odeme_iptal($db, $id1, 'x', 3)['ok'] && siparis_cari_tahsilat_toplam($db, $f6) === ['USD' => 10000] && (int)$db->query('SELECT COUNT(*) FROM siparis_odemeler')->fetchColumn() === 2);

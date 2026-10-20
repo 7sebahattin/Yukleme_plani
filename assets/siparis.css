@@ -702,3 +702,21 @@ html[data-theme="dark"] .sip-mod { --sip-evrak-bg: #10322d; --sip-evrak-fg: #74d
 .sip-bolum-evrak .sip-say { background: var(--primary); color: #fff; }
 html[data-theme="dark"] .sip-mod .sip-bolum-evrak .sip-say { color: #0b1530; }
 /* ==== /v400 ==== */
+
+/* ==== ÖDEMELER v401 ==== */
+.sip-mod dialog.od-dialog { padding: 0; border: 0; width: min(560px, 96vw); max-width: 96vw; border-radius: var(--radius); color: inherit; }
+.sip-mod dialog.od-dialog::backdrop { background: rgba(0,0,0,.55); }
+.od-filtre { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0 0 12px; }
+.od-filtre label { display: flex; flex-direction: column; gap: 2px; font-size: .78rem; font-weight: 600; }
+.od-toplam { margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+.od-tablo .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.od-tablo tbody.od-toplam-satir td { border-top: 2px solid var(--border); }
+.od-yazdir-baslik { display: none; }
+@media print {
+  body.od-yazdir-modu * { visibility: hidden !important; }
+  body.od-yazdir-modu #odYazdirAlan, body.od-yazdir-modu #odYazdirAlan * { visibility: visible !important; }
+  body.od-yazdir-modu #odYazdirAlan { position: absolute; left: 0; top: 0; width: 100%; }
+  body.od-yazdir-modu .od-yazdir-baslik { display: block; }
+  body.od-yazdir-modu .od-eylem, body.od-yazdir-modu dialog, body.od-yazdir-modu .od-toplam { display: none !important; }
+  body.od-yazdir-modu .table-wrap { overflow: visible; box-shadow: none; }
+}

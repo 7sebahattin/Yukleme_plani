@@ -301,7 +301,7 @@ ok('izleyici: sayfa açılır, YAZAN form yok', temiz($v) && !str_contains($v['h
 ok('izleyici: pasif düğmeler nedenini söylüyor', str_contains($v['html'], 'title="Gerekli yetki: siparis.write"') && str_contains($v['html'], 'siparis.write yetkisi gerekir'));
 ok('izleyici: beyan paneli yok (beyan.read ve match yok)', !str_contains($v['html'], 'id="beyan"'));
 $l = sayfa('siparisler.php');
-ok('izleyici listesi: yükleme kartı yok, pasif düğme + açıklama', temiz($l) && !str_contains($l['html'], 'siparis_yukle.php') && str_contains($l['html'], 'Salt okunur yetkiniz var') && str_contains($l['html'], 'disabled aria-describedby="sipSaltOkunur"'));
+ok('izleyici listesi: yükleme kartı yok, pasif düğme + açıklama', temiz($l) && !str_contains($l['html'], 'siparis_yukle.php') && str_contains($l['html'], 'Salt okunur yetkiniz var') && !str_contains($l['html'], 'siparis_odemeler.php'));
 ok('v382: izleyici listesinde yazdırma düğmeleri VAR (siparis.read yeter; veri ucu aynı kapıda), yükleme kartı YOK', substr_count($l['html'], 'data-sip-yazdir=') === 2 && !str_contains($l['html'], 'sip-yukle-govde'));
 ok('v394: izleyici listesinde WP Paylaş düğmesi VAR (siparis.read yeter)', str_contains($l['html'], 'data-sip-wp="'));
 ok('izleyici: PKL salt okunur (fieldset disabled, çubuk yok)', str_contains(sayfa('siparis_pkl.php', ['id' => $ID['s1']])['html'], 'sip-fieldset" disabled') && !str_contains(sayfa('siparis_pkl.php', ['id' => $ID['s1']])['html'], 'class="sip-bar"'));

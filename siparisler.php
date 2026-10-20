@@ -245,10 +245,8 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
       <p class="muted"><?= (int)$kpi['acik'] ?> açık · <?= (int)$evrakSay ?> evrak bekleyen · <?= (int)$kapaliSay ?> kapanan sevkiyat</p>
     </div>
     <div class="page-head-actions">
-      <?php if ($yaz): ?>
-        <a class="btn btn-primary btn-lg" href="#yukle">+ Belge yükle</a>
-      <?php else: ?>
-        <button type="button" class="btn btn-lg" disabled aria-describedby="sipSaltOkunur">+ Belge yükle</button>
+      <?php if (siparis_cari_yetkili()): ?>
+        <a class="btn btn-primary btn-lg" href="siparis_odemeler.php"><?= siparis_odeme_yetkili() ? '💳 Ödeme ekle' : '💳 Ödemeler' ?></a>
       <?php endif; ?>
       <?php if (siparis_cari_yetkili()): ?>
         <a class="btn btn-lg" href="siparis_cari.php">📒 Cari Döküm</a>
