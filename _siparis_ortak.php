@@ -198,7 +198,7 @@ function sipui_tur_html(array $sev, array $parti, bool $satir = true): string
 }
 
 /**
- * v394 — TEK kalem süzgeci + parçaları. Liste ürün satırı (sipui_kalem_satirlari), yazdırma GRAMAJ'ı (siparis_yazdir_gramaj)
+ * v394 — TEK kalem süzgeci + parçaları. Liste ürün satırı (sipui_kalem_satirlari), yazdırma kalibre sütunları + ürün adları (siparis_yazdir_kalibreler / _kalibre_palet / _urunler; v403)
  * ve WP kartı (siparis_wp_veri) AYNI kuralı buradan alır — süzgeci başka yere KOPYALAMA.
  * null = kalem listede gösterilmez: (a) hiç gönderilmeyecek (palet sayısal 0 VE etkin koli 0/boş) ya da
  * (b) metni (açıklama / ürün+kalibre / çeşit / koli içeriği) da sayısal palet/PF'si de yok.

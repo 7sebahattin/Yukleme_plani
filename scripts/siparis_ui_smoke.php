@@ -157,22 +157,32 @@ ok('v382: sipui_yukle_ozet_html: yarım + son sorgu + hata turuncu, mail yoksa y
 // v382 — "Açık Sevkiyatlar" yazdırma / PDF düğmeleri (veri ucu: siparis_yazdir.php)
 $yz = sayfa('siparisler.php', ['q' => 'TC90000', 'durum' => 'acik', 'acik_page' => '2', 'kapali_page' => '3']);
 $acikBas = preg_match('~<div class="sip-bolum-bas" id="sipAcik">.*?</div></div>~s', $yz['html'], $mb) === 1 ? $mb[0] : '';
-ok('v382: Açık başlığında 🖨️ Yazdır + 📤 PDF Gönder (data-sip-yazdir="yazdir" / "pdf"), no-print kapta', str_contains($acikBas, 'data-sip-yazdir="yazdir"') && str_contains($acikBas, 'data-sip-yazdir="pdf"') && str_contains($acikBas, 'class="sip-bolum-eylem no-print"') && str_contains($acikBas, '🖨️ Yazdır') && str_contains($acikBas, '📤 PDF Gönder'), $acikBas);
+ok('v382/v403: Açık başlığında 🖨️ Yazdır + 📤 PDF Gönder + 🖼️ WP Resim (data-sip-yazdir="yazdir" / "pdf" / "resim", bu sırayla), no-print kapta', str_contains($acikBas, 'class="sip-bolum-eylem no-print"') && str_contains($acikBas, '🖨️ Yazdır') && str_contains($acikBas, '📤 PDF Gönder') && str_contains($acikBas, '🖼️ WP Resim')
+    && preg_match('~data-sip-yazdir="yazdir".*data-sip-yazdir="pdf".*data-sip-yazdir="resim"~s', $acikBas) === 1, $acikBas);
 preg_match('/data-sip-yazdir-url="([^"]+)"/', $acikBas, $mu); $yu = html_entity_decode($mu[1] ?? '');
-ok('v382: yazdırma URL\'i siparis_yazdir.php + filtre anahtarları (q, durum); sayfa numaraları (acik_page/kapali_page) YOK', str_starts_with($yu, 'siparis_yazdir.php?') && str_contains($yu, 'q=TC90000') && str_contains($yu, 'durum=acik') && !str_contains($yu, 'acik_page') && !str_contains($yu, 'kapali_page'), $yu);
-$yh = sayfa('siparisler.php')['html']; $kp = strpos($yh, 'id="sipKapali"');
-ok('v382/v400: Kapanan + Evrak bölümlerinde yazdırma düğmesi YOK (düğme yalnız Açık başlığında, TEK)', $kp !== false && substr_count($yh, 'data-sip-yazdir="yazdir"') === 1 && strpos($yh, 'data-sip-yazdir') < strpos($yh, 'id="sipEvrak"') && strpos(substr($yh, strpos($yh, 'id="sipEvrak"')), 'data-sip-yazdir') === false);
+ok('v382/v403: yazdırma URL\'i siparis_yazdir.php + filtre anahtarları (q, durum) + bolum=acik; sayfa numaraları YOK; üç düğme aynı URL', str_starts_with($yu, 'siparis_yazdir.php?') && str_contains($yu, 'q=TC90000') && str_contains($yu, 'durum=acik') && str_contains($yu, 'bolum=acik') && !str_contains($yu, 'acik_page') && !str_contains($yu, 'kapali_page')
+    && preg_match_all('/data-sip-yazdir-url="([^"]+)"/', $acikBas, $mu3) === 3 && count(array_unique($mu3[1])) === 1, $yu);
+$yh = sayfa('siparisler.php')['html']; $kp = strpos($yh, 'id="sipKapali"'); $pev = strpos($yh, 'id="sipEvrak"');
+$basOf = function (string $html, string $id): string { return preg_match('~<div class="sip-bolum-bas" id="' . $id . '">.*?</div></div>~s', $html, $m) === 1 ? $m[0] : ''; };
+$evBas = $basOf($yh, 'sipEvrak'); $kpBas = $basOf($yh, 'sipKapali');
+$urlOf = fn(string $bas): string => preg_match('/data-sip-yazdir-url="([^"]+)"/', $bas, $m) === 1 ? html_entity_decode($m[1]) : '';
+ok('v403: Açık + Evrak + Kapanan başlıklarının HER BİRİNDE 3 düğme (toplam 3 × 3); bolum=acik / evrak / kapali', $kp !== false && $pev !== false && substr_count($yh, 'data-sip-yazdir="yazdir"') === 3 && substr_count($yh, 'data-sip-yazdir="resim"') === 3
+    && substr_count($evBas, 'data-sip-yazdir=') === 3 && substr_count($kpBas, 'data-sip-yazdir=') === 3 && str_contains($urlOf($evBas), 'bolum=evrak') && str_contains($urlOf($kpBas), 'bolum=kapali') && str_contains($urlOf($basOf($yh, 'sipAcik')), 'bolum=acik')
+    && !str_contains($urlOf($kpBas), 'page='), $urlOf($evBas) . ' | ' . $urlOf($kpBas));
 $gSakla = $_GET; $_GET = [];
 ok('v382: siparis_url() geriye uyumlu (varsayılan siparisler.php) + 2. parametre ile başka uca', siparis_url([]) === 'siparisler.php' && siparis_url(['q' => 'a']) === 'siparisler.php?q=a' && siparis_url(['q' => 'a'], 'siparis_yazdir.php') === 'siparis_yazdir.php?q=a');
+$_GET = ['bolum' => 'kapali'];
+ok('v403: bolum filtre anahtarı DEĞİL (GET\'teki bolum liste bağlantılarına taşınmaz); yalnız override ile eklenir', siparis_url([]) === 'siparisler.php' && siparis_url(['bolum' => 'evrak'], 'siparis_yazdir.php') === 'siparis_yazdir.php?bolum=evrak');
 $_GET = $gSakla;
-ok('v382: durum=kapali → yazdırma düğmesi YOK', strpos(sayfa('siparisler.php', ['durum' => 'kapali'])['html'], 'data-sip-yazdir') === false);
+$yk = sayfa('siparisler.php', ['durum' => 'kapali'])['html'];
+ok('v403: durum=kapali → Kapanan başlığında 3 düğme, URL durum=kapali + bolum=kapali', substr_count($yk, 'data-sip-yazdir=') === 3 && str_contains($urlOf($basOf($yk, 'sipKapali')), 'durum=kapali') && str_contains($urlOf($basOf($yk, 'sipKapali')), 'bolum=kapali'));
 $ye = sayfa('siparisler.php', ['durum' => 'evrak_bekleyen'])['html'];
-ok('v400: durum=evrak_bekleyen → yazdırma düğmesi YOK, yalnız sipEvrak bölümü', strpos($ye, 'data-sip-yazdir') === false && str_contains($ye, 'id="sipEvrak"') && !str_contains($ye, 'id="sipAcik"') && !str_contains($ye, 'id="sipKapali"') && !str_contains($ye, 'id="sipSonuclar"'));
+ok('v403: durum=evrak_bekleyen → yalnız sipEvrak bölümü, başlığında 3 düğme (bolum=evrak)', substr_count($ye, 'data-sip-yazdir=') === 3 && str_contains($urlOf($basOf($ye, 'sipEvrak')), 'bolum=evrak') && str_contains($ye, 'id="sipEvrak"') && !str_contains($ye, 'id="sipAcik"') && !str_contains($ye, 'id="sipKapali"') && !str_contains($ye, 'id="sipSonuclar"'));
 ok('v394/v400: Evrak bölümünde de WP Paylaş var (TC900041)', strpos($yh, 'data-sip-wp="' . $ID['s41'] . '"') > strpos($yh, 'id="sipEvrak"') && strpos($yh, 'data-sip-wp="' . $ID['s41'] . '"') < strpos($yh, 'id="sipKapali"'));
 ok('v382: boş sonuç (eşleşen açık sevkiyat yok) → düğme YOK', strpos(sayfa('siparisler.php', ['q' => 'yok-boyle-bir-sevkiyat'])['html'], 'data-sip-yazdir') === false);
 $yt = sayfa('siparisler.php', ['durum' => 'arac_bekleyen']);
 $sonBas = preg_match('~<div class="sip-bolum-bas" id="sipSonuclar">.*?</div></div>~s', $yt['html'], $mt) === 1 ? $mt[0] : '';
-ok('v382: tek durum filtresinde "Sonuçlar" başlığında düğmeler (durum=arac_bekleyen taşınır)', str_contains($sonBas, 'data-sip-yazdir="pdf"') && str_contains($sonBas, 'durum=arac_bekleyen') && substr_count($yt['html'], 'data-sip-yazdir="yazdir"') === 1);
+ok('v382/v403: tek durum filtresinde "Sonuçlar" başlığında 3 düğme (durum=arac_bekleyen taşınır, bolum YOK)', str_contains($sonBas, 'data-sip-yazdir="pdf"') && str_contains($sonBas, 'data-sip-yazdir="resim"') && str_contains($sonBas, 'durum=arac_bekleyen') && !str_contains($sonBas, 'bolum=') && substr_count($yt['html'], 'data-sip-yazdir="yazdir"') === 1);
 ok('v382: siparisler.php siparis_yazdir.js\'i yükler (assets/siparis_yazdir.js, defer)', str_contains($yz['html'], 'assets/siparis_yazdir.js?v=') && preg_match('~<script src="assets/siparis_yazdir\.js\?v=\d+" defer>~', $yz['html']) === 1);
 ok('v382: yazdırma düğmelerinde kişisel veri YOK (veri uçtan, tıkta gelir)', !preg_match('/Test Sürücü|\+90 5/', $yz['html']));
 // v394 — ⋮ menüsünde 💬 WP Paylaş (veri ucu: siparis_paylas.php; liste HTML'inde kişisel veri YOK)
@@ -180,7 +190,7 @@ ok('v394: masaüstü + mobil menüde PKL\'den SONRA WP Paylaş düğmesi (data-s
 ok('v394: Kapanan bölümde de WP Paylaş var (mail_gonderildi sevkiyatı)', preg_match_all('~href="siparis_pkl\.php\?id=' . $ID['s11'] . '">📄 PKL</a>\s*<button type="button" data-sip-wp="' . $ID['s11'] . '"~', $yh) === 2
     && strpos($yh, 'data-sip-wp="' . $ID['s11'] . '"') > strpos($yh, 'id="sipKapali"'));
 ok('v394: her kebab menüsünde bir WP Paylaş düğmesi', substr_count($yh, 'data-sip-wp="') > 0 && substr_count($yh, 'data-sip-wp="') === substr_count($yh, '<button class="pc-kebab"'));
-ok('v394: durum=kapali sayfasında WP düğmesi VAR, yazdırma düğmesi YOK', ($kapW = sayfa('siparisler.php', ['durum' => 'kapali'])['html']) && str_contains($kapW, 'data-sip-wp=') && strpos($kapW, 'data-sip-yazdir') === false);
+ok('v394/v403: durum=kapali sayfasında WP düğmesi VAR, yazdırma düğmeleri de VAR', ($kapW = sayfa('siparisler.php', ['durum' => 'kapali'])['html']) && str_contains($kapW, 'data-sip-wp=') && str_contains($kapW, 'data-sip-yazdir="resim"'));
 ok('v394: siparisler.php siparis_wp.js\'i yükler (defer)', preg_match('~<script src="assets/siparis_wp\.js\?v=\d+" defer>~', $yz['html']) === 1);
 ok('SQL param hatası yok (HY093/uyarı log)', !str_contains((string)@file_get_contents(ini_get('error_log')), 'HY093'));
 // çatışmalı sevkiyat uyarısı
@@ -311,7 +321,7 @@ ok('izleyici: pasif düğmeler nedenini söylüyor', str_contains($v['html'], 't
 ok('izleyici: beyan paneli yok (beyan.read ve match yok)', !str_contains($v['html'], 'id="beyan"'));
 $l = sayfa('siparisler.php');
 ok('izleyici listesi: yükleme kartı yok, pasif düğme + açıklama', temiz($l) && !str_contains($l['html'], 'siparis_yukle.php') && str_contains($l['html'], 'Salt okunur yetkiniz var') && !str_contains($l['html'], 'siparis_odemeler.php'));
-ok('v382: izleyici listesinde yazdırma düğmeleri VAR (siparis.read yeter; veri ucu aynı kapıda), yükleme kartı YOK', substr_count($l['html'], 'data-sip-yazdir=') === 2 && !str_contains($l['html'], 'sip-yukle-govde'));
+ok('v382: izleyici listesinde yazdırma düğmeleri VAR (siparis.read yeter; veri ucu aynı kapıda), yükleme kartı YOK', ($nBl = substr_count($l['html'], 'class="sip-bolum-eylem no-print"')) >= 1 && substr_count($l['html'], 'data-sip-yazdir=') === 3 * $nBl && !str_contains($l['html'], 'sip-yukle-govde'));
 ok('v394: izleyici listesinde WP Paylaş düğmesi VAR (siparis.read yeter)', str_contains($l['html'], 'data-sip-wp="'));
 ok('izleyici: PKL salt okunur (fieldset disabled, çubuk yok)', str_contains(sayfa('siparis_pkl.php', ['id' => $ID['s1']])['html'], 'sip-fieldset" disabled') && !str_contains(sayfa('siparis_pkl.php', ['id' => $ID['s1']])['html'], 'class="sip-bar"'));
 rol([], false, 7);

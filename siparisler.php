@@ -225,19 +225,23 @@ $sayfalama = function (array $b, string $param): string {
 };
 // v390 — Açık ve Kapanan bölümler birbirine benziyordu: Beyanlar'daki gibi iki AYRI kart
 // (⏳ İşlem Bekleyen / ✅ Kapanan; sol şerit + ikon + not). Başlık div'i (id) ve içindeki
-// düğme düzeni DEĞİŞMEDİ — yazdırma düğmeleri yalnız bekleyen kartın başlığında.
+// düğme düzeni DEĞİŞMEDİ — yazdırma düğmeleri (v403) her bölümün başlığında (satır varsa).
 $bolumBas = function (string $baslik, int $say, string $id, string $ek = '', string $ikon = '', string $not = ''): string {
     return '<div class="sip-bolum-bas" id="' . h($id) . '">'
         . ($ikon !== '' ? '<span class="sip-bolum-ikon" aria-hidden="true">' . $ikon . '</span>' : '')
         . '<div class="sip-bolum-baslik"><h2>' . h($baslik) . '</h2><span class="sip-say">' . (int)$say . '</span>'
         . ($not !== '' ? '<span class="muted sip-bolum-not">' . h($not) . '</span>' : '') . '</div>' . $ek . '</div>';
 };
-// v382 — "Açık Sevkiyatlar" yazdırma / PDF düğmeleri (yalnız Açık bölüm ve tek durum "Sonuçlar" bölümü; bölümde satır varsa; Kapananda YOK).
-// Veri siparis_yazdir.php'den (GET JSON) her tıkta taze gelir; aynı filtre anahtarları, sayfa numaraları HARİÇ. İzleyiciye de açık (siparis.read).
-$yazdirUrl = siparis_url(['acik_page' => null, 'evrak_page' => null, 'kapali_page' => null], 'siparis_yazdir.php');
-$yazdirEk = '<div class="sip-bolum-eylem no-print">'
-    . '<button type="button" class="btn btn-sm" data-sip-yazdir="yazdir" data-sip-yazdir-url="' . h($yazdirUrl) . '">🖨️ Yazdır</button>'
-    . '<button type="button" class="btn btn-sm" data-sip-yazdir="pdf" data-sip-yazdir-url="' . h($yazdirUrl) . '">📤 PDF Gönder</button></div>';
+// v382/v403 — yazdırma / PDF / WP resmi düğmeleri: İşlem Bekleyen, Evrak Takımı Bekleyen, Kapanan ve tek durum "Sonuçlar" bölümlerinin
+// başlığında (yalnız bölümde satır varsa). Veri siparis_yazdir.php'den (GET JSON, ?bolum=acik|evrak|kapali; tek durumda bolum yok)
+// her tıkta taze gelir; aynı filtre anahtarları, sayfa numaraları HARİÇ. İzleyiciye de açık (siparis.read).
+$yazdirEk = function (?string $bolumAdi): string {
+    $url = h(siparis_url(['acik_page' => null, 'evrak_page' => null, 'kapali_page' => null, 'bolum' => $bolumAdi], 'siparis_yazdir.php'));
+    return '<div class="sip-bolum-eylem no-print">'
+        . '<button type="button" class="btn btn-sm" data-sip-yazdir="yazdir" data-sip-yazdir-url="' . $url . '">🖨️ Yazdır</button>'
+        . '<button type="button" class="btn btn-sm" data-sip-yazdir="pdf" data-sip-yazdir-url="' . $url . '">📤 PDF Gönder</button>'
+        . '<button type="button" class="btn btn-sm" data-sip-yazdir="resim" data-sip-yazdir-url="' . $url . '">🖼️ WP Resim</button></div>';
+};
 ?>
 <div class="sip-mod">
   <?= sipui_gorulen_meta((int)$auth_user['id']) ?>
@@ -344,7 +348,8 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
 
   <?php
   $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $pklHarita, $yazdirEk): void {
-      $ek = in_array($id, ['sipAcik', 'sipSonuclar'], true) && $b['rows'] ? $yazdirEk : '';
+      $yb = ['sipSonuclar' => null, 'sipAcik' => 'acik', 'sipEvrak' => 'evrak', 'sipKapali' => 'kapali'];
+      $ek = array_key_exists($id, $yb) && $b['rows'] ? $yazdirEk($yb[$id]) : '';
       $ton = ['sipAcik' => ' sip-bolum-acik', 'sipEvrak' => ' sip-bolum-evrak', 'sipKapali' => ' sip-bolum-kapali'][$id] ?? '';
       echo '<section class="sip-bolum' . $ton . '" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id, $ek, $ikon, $not);
       if (!$b['rows']) {
