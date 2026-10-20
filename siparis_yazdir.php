@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// siparis_yazdir.php — "Açık Sevkiyatlar" yazdırma / PDF verisi (GET JSON; siparis.read; v382)
+// siparis_yazdir.php — Sevkiyat yazdırma / PDF / WP resmi verisi (GET JSON; siparis.read; v382, v403: ?bolum=acik|evrak|kapali)
 //
 // Ekrandaki filtre/arama ile AYNI küme (siparis_liste_filtre), sayfalamasız, en çok 500 satır. Her tıkta taze okunur (istemcide
 // önbellek YOK): şoför adı/telefonu bu yanıtla yalnız o anda yetkili olana gider ve HTML listeye girmez. Salt okunur —
@@ -35,14 +35,16 @@ $pdo = db();
 if (!siparis_sema_hazir($pdo)) $yanit(409, ['ok' => false, 'hata' => 'Sipariş modülü henüz kurulmadı.']);
 
 $F = siparis_liste_filtre($_GET);
+$bolum = (string)($_GET['bolum'] ?? 'acik');
+if (!isset(siparis_yazdir_bolumler()[$bolum])) $bolum = 'acik';
 try {
-    $okunan = siparis_yazdir_oku($pdo, $F);
-} catch (RuntimeException $e) {
-    if ($e->getMessage() === 'kapsam_yok') $yanit(400, ['ok' => false, 'hata' => 'Kapanan sevkiyatlar yazdırılamaz.', 'kod' => 'kapsam_yok']);
-    throw $e;
-} catch (PDOException $e) {
+    $okunan = siparis_yazdir_oku($pdo, $F, $bolum);
+} catch (PDOException $e) {   // PDOException RuntimeException'ın alt sınıfıdır — ÖNCE gelmeli
     error_log('[siparis_yazdir] ' . $e->getMessage());   // kullanıcı verisi mesaja girmez (bağlı parametre)
     $yanit(500, ['ok' => false, 'hata' => 'Liste okunamadı.']);
+} catch (RuntimeException $e) {
+    if ($e->getMessage() === 'kapsam_yok') $yanit(400, ['ok' => false, 'kod' => 'kapsam_yok', 'hata' => 'Bu bölüm bu filtreyle yazdırılamaz.']);
+    throw $e;
 }
 
 $ozet = $F['detayOzet'];
@@ -51,12 +53,12 @@ $veri = siparis_yazdir_veri($okunan, [
     'bugun' => date('Y-m-d'),
     'basim' => date('d.m.Y H:i'),
     'depo' => (string)(active_depot() ?? ''),
-    'baslik' => siparis_yazdir_baslik($F),
+    'baslik' => siparis_yazdir_baslik($F, $okunan['kapsam']),
     'filtre_ozet' => implode(' · ', $ozet),
     'parti_yetki' => function_exists('can_beyan') && can_beyan('read'),
 ]);
 
 $amac = (string)($_GET['amac'] ?? 'yazdir');
-if (!in_array($amac, ['yazdir', 'pdf'], true)) $amac = 'yazdir';
+if (!in_array($amac, ['yazdir', 'pdf', 'resim'], true)) $amac = 'yazdir';
 siparis_audit('siparis_yazdir', null, null, ['adet' => $veri['adet'], 'amac' => $amac, 'kapsam' => $okunan['kapsam'], 'kesildi' => $veri['kesildi'] ? 1 : 0, 'arama' => $F['q'] !== '' ? 1 : 0], (int)$auth_user['id']);
 $yanit(200, $veri);

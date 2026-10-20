@@ -1,8 +1,8 @@
 <?php
 // =========================================================
-// scripts/siparis_yazdir_smoke.php — "Açık Sevkiyatlar" yazdırma (v382): ortak filtre, sütun verisi, uç (GET JSON)
+// scripts/siparis_yazdir_smoke.php — sevkiyat yazdırma (v382, v403: üç bölüm + kalibre sütunları): ortak filtre, sütun verisi, uç (GET JSON)
 //   php scripts/siparis_yazdir_smoke.php                  testler
-//   php scripts/siparis_yazdir_smoke.php --json           tarayıcı testi için küçük JSON fixture'ı (stdout)
+//   php scripts/siparis_yazdir_smoke.php --json           tarayıcı testi için küçük JSON fixture'ı (stdout; --bolum=evrak|kapali ile o bölüm)
 //   php scripts/siparis_yazdir_smoke.php --json-buyuk     300 satırlık JSON fixture'ı (stdout)
 //   php scripts/siparis_yazdir_smoke.php --json-wp        WP Paylaş kartı (v394) JSON fixture'ı (stdout)
 // Bellek içi SQLite + stub auth + SENTETİK veri (34TST…, TC9000…, @ornek.test; kişisel veri YOK). Canlı DB'ye HİÇ dokunmaz.
@@ -99,9 +99,14 @@ if ($MOD !== 'test') {   // ── tarayıcı fixture'ı ──
     siparis_sofor_migrate($db);
     $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü Bir', sofor_telefon = '+90 532 000 00 01' WHERE id = {$ID['gecmis']}");
     $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü İki' WHERE id = {$ID['bugun']}");
+    siparis_yurtici_gumruk_migrate($db);
+    $db->exec("UPDATE siparis_sevkiyatlar SET yurtici_gumruk = 'Test Gümrük İdaresi' WHERE id = {$ID['gecmis']}");
+    // v403: üç kalibresi dolu satır (sahibin örneği: 14=10, 12=4, 10=4, toplam 18); 'bugun' satırında 14 eksik → "-"
+    $uc3 = sev($db, ['order_ref' => 'TC900111.10', 'yukleme_tarihi' => $yarin, 'alici_kodu' => '1038500', 'alici_adi' => 'LIDL DE', 'plakalar' => '34TST111', 'toplam_palet' => 18, 'toplam_koli' => 3280, 'sofor_telefon' => '+90 532 000 00 11', 'yurtici_gumruk' => 'Test Gümrük İki']);
+    kalem($db, $uc3, ['kalibre' => '14', 'sira' => 1, 'urun' => 'Nar', 'aciklama' => 'Pomegranate 14 PC', 'po_palet' => 10, 'etkin_palet' => 10, 'etkin_koli' => 1800]);
+    kalem($db, $uc3, ['kalibre' => '12', 'sira' => 2, 'urun' => 'Nar', 'aciklama' => 'Pomegranate 12 PC', 'po_palet' => 4, 'etkin_palet' => 4, 'etkin_koli' => 740]);
+    kalem($db, $uc3, ['kalibre' => '10', 'sira' => 3, 'urun' => 'NAR', 'aciklama' => 'Pomegranate 10 PC', 'po_palet' => 4, 'etkin_palet' => 4, 'etkin_koli' => 740]);
     if ($MOD === 'wp') {
-        siparis_yurtici_gumruk_migrate($db);
-        $db->exec("UPDATE siparis_sevkiyatlar SET yurtici_gumruk = 'Test Gümrük İdaresi' WHERE id = {$ID['gecmis']}");
         echo json_encode(siparis_wp_veri(siparis_wp_oku($db, $ID['gecmis']), ['parti_yetki' => true]), JSON_UNESCAPED_UNICODE);
         exit(0);
     }
@@ -112,8 +117,10 @@ if ($MOD !== 'test') {   // ── tarayıcı fixture'ı ──
             kalem($db, $sid, ['kalibre' => (string)(10 + $i % 3 * 2), 'aciklama' => 'Testfruit ' . (10 + $i % 3 * 2) . ' PC LOSE (TR)', 'cesit' => 'TESTVAR', 'koli_icerik' => '3,5 KG', 'pf' => 160, 'po_palet' => 20, 'etkin_palet' => 20, 'etkin_koli' => 3000]);
         }
     }
-    $o = siparis_yazdir_oku($db, $F());
-    $v = siparis_yazdir_veri($o, ['bugun' => $bugun, 'basim' => date('d.m.Y H:i'), 'depo' => 'DEPO1', 'baslik' => 'Açık Sevkiyatlar', 'filtre_ozet' => '', 'parti_yetki' => true]);
+    $fxBolum = 'acik';
+    foreach ($argv ?? [] as $__a) if (preg_match('/^--bolum=(acik|evrak|kapali)$/', $__a, $__m)) $fxBolum = $__m[1];
+    $o = siparis_yazdir_oku($db, $F(), $fxBolum);
+    $v = siparis_yazdir_veri($o, ['bugun' => $bugun, 'basim' => date('d.m.Y H:i'), 'depo' => 'DEPO1', 'baslik' => siparis_yazdir_baslik($F(), $o['kapsam']), 'filtre_ozet' => '', 'parti_yetki' => true]);
     echo json_encode($v, JSON_UNESCAPED_UNICODE);
     exit(0);
 }
@@ -157,21 +164,29 @@ ok('bilinen kod adı yedeğe baskındır', siparis_yazdir_ulke('1038500', 'LIDL 
 ok('bilinmeyen kod + ISO değil → boş', siparis_yazdir_ulke('999999', 'LIDL SRBIJA KD') === '' && siparis_yazdir_ulke(null, null) === '' && siparis_yazdir_ulke('999999', 'LIDL XX') === '' && siparis_yazdir_ulke(null, 'lidl rs') === '');
 ok('ISO kodu kelime sonunda olmalı ("LIDL RSX" tutmaz)', siparis_yazdir_ulke(null, 'LIDL RSX') === '');
 
-echo "\n=== 3. Gramaj + süzgeç ortaklığı ===\n";
-ok('[14,10,12] → "10--12--14" (sayısal artan)', siparis_yazdir_gramaj([['kalibre' => '14', 'po_palet' => 1], ['kalibre' => '10', 'po_palet' => 1], ['kalibre' => '12', 'po_palet' => 1]]) === '10--12--14');
-ok('sayısal sıra metin sırası değil ("9","10","100")', siparis_yazdir_gramaj([['kalibre' => '100', 'po_palet' => 1], ['kalibre' => '9', 'po_palet' => 1], ['kalibre' => '10', 'po_palet' => 1]]) === '9--10--100');
-ok('tekil + boş kalibre atlanır', siparis_yazdir_gramaj([['kalibre' => '12', 'po_palet' => 1], ['kalibre' => '12', 'po_palet' => 2], ['kalibre' => '', 'po_palet' => 1], ['kalibre' => ' 14 ', 'po_palet' => 1]]) === '12--14');
-ok('sıfır palet + sıfır/boş koli atlanır; etkin_palet baskın; palet bilinmiyorsa (null) atlanmaz', siparis_yazdir_gramaj([['kalibre' => '10', 'po_palet' => 0, 'etkin_palet' => 0, 'etkin_koli' => 0], ['kalibre' => '12', 'po_palet' => 0, 'etkin_palet' => 3], ['kalibre' => '14', 'po_palet' => 0, 'etkin_koli' => 40], ['kalibre' => '16']]) === '12--14--16');
-ok('kalem yoksa boş', siparis_yazdir_gramaj([]) === '');
-ok('sayısal olmayan kalibre doğal sırayla (A2 < A10)', siparis_yazdir_gramaj([['kalibre' => 'A10', 'po_palet' => 1], ['kalibre' => 'A2', 'po_palet' => 1]]) === 'A2--A10');
+echo "\n=== 3. Kalibre sütunları + ürün adları + süzgeç ortaklığı (v403) ===\n";
+$kk = fn(array $harita) => array_map('strval', array_keys(siparis_yazdir_kalibreler($harita)));
+ok('kalibre kümesi: kalem yokken de HER ZAMAN 14, 12, 10 (azalan)', $kk([]) === ['14', '12', '10'] && array_values(siparis_yazdir_kalibreler([])) === ['kal_14', 'kal_12', 'kal_10']);
+ok('ekstra 16 + 8 gelince sayısal AZALAN sıra (16, 14, 12, 10, 8)', $kk([1 => [['kalibre' => '8', 'po_palet' => 1]], 2 => [['kalibre' => '16', 'po_palet' => 2]]]) === ['16', '14', '12', '10', '8']);
+ok('sayısal olmayanlar sonda doğal sıra (A2 < A10); boş kalibre atlanır; süzgeçte düşen kalem kalibre eklemez', $kk([1 => [['kalibre' => 'A10', 'po_palet' => 1], ['kalibre' => 'A2', 'po_palet' => 1], ['kalibre' => '', 'po_palet' => 1], ['kalibre' => '18', 'po_palet' => 0, 'etkin_koli' => 0]]]) === ['14', '12', '10', 'A2', 'A10']);
+ok('sayısal sıra metin sırası değil ("9","100")', $kk([1 => [['kalibre' => '9', 'po_palet' => 1], ['kalibre' => '100', 'po_palet' => 1]]]) === ['100', '14', '12', '10', '9']);
+ok('anahtar güvenli: "4/5" → kal_45, "-" → kal_x…, çakışma _2 eki alır', siparis_yazdir_kalibre_anahtar('4/5') === 'kal_45' && preg_match('/^kal_x[0-9a-f]{8}$/', siparis_yazdir_kalibre_anahtar('-')) === 1
+    && array_values(siparis_yazdir_kalibreler([1 => [['kalibre' => '1/4', 'po_palet' => 1], ['kalibre' => '14', 'po_palet' => 1]]])) === ['kal_14', 'kal_12', 'kal_10', 'kal_14_2']);
+ok('kalibre paleti: aynı kalibrede iki kalem TOPLANIR, etkin_palet baskın, palet bilinmiyorsa (null) yok, sıfır kalem atlanır', siparis_yazdir_kalibre_palet([['kalibre' => '12', 'po_palet' => 3], ['kalibre' => '12', 'po_palet' => 9, 'etkin_palet' => 2], ['kalibre' => '14', 'aciklama' => 'X'], ['kalibre' => '10', 'po_palet' => 0, 'etkin_koli' => 0]]) === ['12' => 5.0]);
+ok('ürün adları: önce urun, boşsa aciklama; büyük/küçük harf duyarsız TEKİL; ilk yazım korunur; ", " ile tek satır', siparis_yazdir_urunler([['urun' => 'Nar', 'aciklama' => 'P 14', 'po_palet' => 1], ['urun' => 'NAR', 'po_palet' => 1], ['urun' => '', 'aciklama' => 'Testfruit 10 PC', 'po_palet' => 1], ['urun' => 'nar', 'po_palet' => 2], ['urun' => 'Elma', 'po_palet' => 0, 'etkin_koli' => 0]]) === 'Nar, Testfruit 10 PC' && siparis_yazdir_urunler([]) === '');
+$kolo = siparis_yazdir_kolonlari(siparis_yazdir_kalibreler([1 => [['kalibre' => '16', 'po_palet' => 1]]]));
+ok('kolonlar: kalibreler Ürün ile Toplam palet ARASINDA, "Kalibre <X> adet", tür sayi; genişlik toplamı 100', array_column($kolo, 'k') === ['tarih', 'parti', 'siparis', 'ulke', 'tel', 'plaka', 'gumruk', 'urun', 'kal_16', 'kal_14', 'kal_12', 'kal_10', 'palet', 'kasa']
+    && $kolo[8]['l'] === 'Kalibre 16 adet' && $kolo[8]['t'] === 'sayi' && abs(array_sum(array_column($kolo, 'w')) - 100) < 0.05 && $kolo[7]['w'] >= 10);
+$kolC = siparis_yazdir_kolonlari(siparis_yazdir_kalibreler([1 => array_map(fn($i) => ['kalibre' => (string)(20 + $i), 'po_palet' => 1], range(0, 9))]));
+ok('çok kalibrede (13) toplam yine 100, kalibre sütunu ≥ %2,5, Ürün kalibre sütunundan geniş', abs(array_sum(array_column($kolC, 'w')) - 100) < 0.05 && $kolC[8]['w'] >= 2.5 && $kolC[7]['w'] > $kolC[8]['w'] * 2, json_encode(array_column($kolC, 'w')));
 // ⑭ aynı kalem dizisinde iki süzgeç aynı kalemleri atar
 $kal = [];
 foreach ([[0, 0, 0], [0, null, 0], [0, null, 5], [3, null, 0], [null, 0, 0], [null, null, null], ['0', '', ''], [0, 0, ''], [2, 0, 0], [0, 4, 0]] as $i => [$po, $et, $ek]) {
     $kal[] = ['kalibre' => (string)(10 + $i), 'aciklama' => 'K' . $i, 'po_palet' => $po, 'etkin_palet' => $et, 'etkin_koli' => $ek];
 }
 $ayni = true;
-foreach ($kal as $k1) $ayni = $ayni && ((sipui_kalem_satirlari([$k1], 10)['satirlar'] !== []) === (siparis_yazdir_gramaj([$k1]) !== ''));
-ok('gramaj süzgeci = sipui_kalem_satirlari süzgeci (10 kombinasyon)', $ayni);
+foreach ($kal as $k1) $ayni = $ayni && ((sipui_kalem_satirlari([$k1], 10)['satirlar'] !== []) === (siparis_yazdir_urunler([$k1]) !== ''));
+ok('yazdırma ürün süzgeci = sipui_kalem_satirlari süzgeci (10 kombinasyon)', $ayni);
 $ayni2 = true;
 foreach ($kal as $k1) $ayni2 = $ayni2 && ((sipui_kalem_satirlari([$k1], 10)['satirlar'] !== []) === (sipui_kalem_coz($k1) !== null));
 ok('sipui_kalem_coz = liste süzgeci (10 kombinasyon)', $ayni2);
@@ -189,47 +204,77 @@ ok('kapsam açık; kapalı + silinmiş çıkmaz; depo kısıtsız admin DEPO2 sa
 ok('şoför kolonları kurulu değil: sofor=false, SQL hata vermedi', $o['sofor'] === false && !array_key_exists('sofor_adi', $o['rows'][0]));
 $sira = array_map('intval', array_column($o['rows'], 'id'));
 ok('sıra = ekran sırası: tarih artan, NULL tarih SONDA, aynı tarihte id', $sira === [$ID['eski'], $ID['gecmis'], $ID['depo2'], $ID['bugun'], $ID['yarin'], $ID['bos_tarih']] || $sira === [$ID['eski'], $ID['depo2'], $ID['gecmis'], $ID['bugun'], $ID['yarin'], $ID['bos_tarih']], json_encode($sira));
-$ctx = ['bugun' => $bugun, 'basim' => '19.10.2026 14:32', 'depo' => 'DEPO1', 'baslik' => 'Açık Sevkiyatlar', 'filtre_ozet' => '', 'parti_yetki' => true];
+$ctx = ['bugun' => $bugun, 'basim' => '19.10.2026 14:32', 'depo' => 'DEPO1', 'baslik' => 'İşlem Bekleyen Sevkiyatlar', 'filtre_ozet' => '', 'parti_yetki' => true];
 $v = siparis_yazdir_veri($o, $ctx);
-$satir = []; foreach ($v['satirlar'] as $s) $satir[$s['h'][3]] = $s;
+$satir = []; foreach ($v['satirlar'] as $s) $satir[$s['h'][2]] = $s;
 $gec = $satir['TC900101.10']; $bug = $satir['TC900102.10']; $yar = $satir['TC900103.10']; $bos = $satir['TC900104.10']; $esk = $satir['TC900100.10'];
-ok('13 sütun, sahibin sırası ve başlıkları', array_column($v['kolonlar'], 'l') === ['ÇIKIŞ TARİHİ', 'PARTİ NO', 'NAVLUN NO', 'SİPARİŞ NO', 'ŞOFÖR ADI', 'TEL', 'PLAKA', 'LOJİSTİK FİRMA', 'ÜLKE', 'ÜRÜN BİLGİSİ', 'PALET SAYISI', 'KASA SAYISI', 'GRAMAJ']
-    && array_column($v['kolonlar'], 'k') === ['tarih', 'parti', 'navlun', 'siparis', 'sofor', 'tel', 'plaka', 'lojistik', 'ulke', 'urun', 'palet', 'kasa', 'gramaj'] && abs(array_sum(array_column($v['kolonlar'], 'w')) - 100) < 0.001);
-ok('her satırda 13 hücre', count(array_unique(array_map(fn($s) => count($s['h']), $v['satirlar']))) === 1 && count($gec['h']) === 13);
-ok('sahibin örnek satırı: tarih+✓, parti, navlun, sipariş, plaka, firma, ülke, ürün, palet, kasa, gramaj', $gec['h'] === [sipui_tarih($dun) . ' ✓', 'P-61/225/P-61/226', '6100000101', 'TC900101.10', '', '', '34TST101-34TST201', 'Test Lojistik A', 'SIRBİSTAN',
-    'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG · Pal. 23 · PF 160', '23', '3.680', '14'], json_encode($gec['h'], JSON_UNESCAPED_UNICODE));
+ok('v403 sütunlar: sahibin sırası ve başlıkları (14/12/10 kalibre sütunları Ürün ile Toplam palet arasında)', array_column($v['kolonlar'], 'l') === ['Yükleme tarihi', 'Parti no', 'Sipariş no', 'Alıcı ülke', 'Şoför Tel', 'Plaka', 'Gümrük', 'Ürün bilgileri', 'Kalibre 14 adet', 'Kalibre 12 adet', 'Kalibre 10 adet', 'Toplam palet', 'Toplam kasa']
+    && array_column($v['kolonlar'], 'k') === ['tarih', 'parti', 'siparis', 'ulke', 'tel', 'plaka', 'gumruk', 'urun', 'kal_14', 'kal_12', 'kal_10', 'palet', 'kasa'] && abs(array_sum(array_column($v['kolonlar'], 'w')) - 100) < 0.05
+    && array_column($v['kolonlar'], 't') === ['metin', 'metin', 'metin', 'metin', 'metin', 'metin', 'metin', 'metin', 'sayi', 'sayi', 'sayi', 'sayi', 'sayi'], json_encode(array_column($v['kolonlar'], 'l'), JSON_UNESCAPED_UNICODE));
+ok('v403: şoför ADI, navlun, lojistik firma, gramaj sütunları YOK', !array_intersect(['sofor', 'navlun', 'lojistik', 'gramaj'], array_column($v['kolonlar'], 'k')));
+ok('her satırda kolon sayısı kadar hücre', count(array_unique(array_map(fn($s) => count($s['h']), $v['satirlar']))) === 1 && count($gec['h']) === count($v['kolonlar']));
+ok('örnek satır: tarih+✓, parti, sipariş, ülke, tel (kurulmadı → boş), plaka, gümrük (kurulmadı → boş), ürün, kalibreler (yalnız 14), palet, kasa', $gec['h'] === [sipui_tarih($dun) . ' ✓', 'P-61/225/P-61/226', 'TC900101.10', 'SIRBİSTAN', '', '34TST101-34TST201', '', 'Pomegranate 14 PC LOSE (TR)', '23', '-', '-', '23', '3.680'], json_encode($gec['h'], JSON_UNESCAPED_UNICODE));
 ok('birden çok beyan parti no "/" ile birleşir', $gec['h'][1] === 'P-61/225/P-61/226' && $bug['h'][1] === '');
-ok('boş hücre BOŞ (tire YOK): şoför, tel, parti', $gec['h'][4] === '' && $gec['h'][5] === '' && !in_array('—', $bos['h'], true) && !in_array('-', $bos['h'], true));
-ok('planlanan plaka / planlanan nakliyeci BASILMAZ', $bos['h'][6] === '' && $bos['h'][7] === '' && !str_contains(json_encode($v, JSON_UNESCAPED_UNICODE), 'SADECE PLAN') && !str_contains(json_encode($v, JSON_UNESCAPED_UNICODE), 'PLAN LOJISTIK') && !str_contains(json_encode($v, JSON_UNESCAPED_UNICODE), '06PLN'));
+ok('kalibre dışı boş hücre BOŞ (tire YOK); kalibre hücresi değer yoksa "-"', $gec['h'][4] === '' && $gec['h'][6] === '' && !in_array('—', $bos['h'], true) && array_slice($bos['h'], 0, 8) === ['', '', 'TC900104.10', 'FRANSA', '', '', '', ''] && array_slice($bos['h'], 8, 3) === ['-', '-', '-']);
+ok('planlanan plaka / planlanan nakliyeci BASILMAZ', $bos['h'][5] === '' && !str_contains(json_encode($v, JSON_UNESCAPED_UNICODE), 'SADECE PLAN') && !str_contains(json_encode($v, JSON_UNESCAPED_UNICODE), 'PLAN LOJISTIK') && !str_contains(json_encode($v, JSON_UNESCAPED_UNICODE), '06PLN'));
 ok('sarı: dün → gecmis + "✓" son eki; bugün → bugun (✓ yok); yarın / boş → düz', $gec['gecmis'] && str_ends_with($gec['h'][0], ' ✓') && !$gec['bugun'] && $esk['gecmis'] && $bug['bugun'] && !$bug['gecmis'] && $bug['h'][0] === sipui_tarih($bugun) && !$yar['gecmis'] && !$yar['bugun'] && $yar['h'][0] === sipui_tarih($yarin)
     && !$bos['gecmis'] && !$bos['bugun'] && $bos['h'][0] === '' && $bos['gun'] === null && $gec['gun'] === $dun);
 ok('gecmis_say = geçmiş tarihli satır sayısı', $v['gecmis_say'] === count(array_filter($v['satirlar'], fn($s) => $s['gecmis'])) && $v['gecmis_say'] >= 3);
-ok('ülke: kod → ad, kod yoksa alici_adi sonu, bilinmeyen boş', $bug['h'][8] === 'İNGİLTERE' && $yar['h'][8] === 'ALMANYA' && $esk['h'][8] === '' && $bos['h'][8] === 'FRANSA');
-ok('ürün: çok kalibre çok satır (sıra: kalibre 10, 12), sıfır palet kalemi (14) YOK', $bug['h'][9] === "Testfruit 10 PC · TESTVAR · 3,5 KG · Pal. 4 · PF 100\nTestfruit 12 PC · TESTVAR · 3,5 KG · Pal. 3 · PF 100", json_encode($bug['h'][9], JSON_UNESCAPED_UNICODE));
-ok('gramaj: "10--12" (14 sıfır palet atlandı)', $bug['h'][12] === '10--12' && $yar['h'][12] === '12' && $bos['h'][12] === '' && $bos['h'][9] === '');
-ok('palet/kasa: NULL → boş, 0 → "0"', $bos['h'][10] === '' && $bos['h'][11] === '' && $esk['h'][10] === '2' && $esk['h'][11] === '0');
+ok('ülke: kod → ad, kod yoksa alici_adi sonu, bilinmeyen boş', $bug['h'][3] === 'İNGİLTERE' && $yar['h'][3] === 'ALMANYA' && $esk['h'][3] === '' && $bos['h'][3] === 'FRANSA');
+ok('ürün: adlar tekil, ", " ile TEK satır (sıfır palet kalemi 14 YOK)', $bug['h'][7] === 'Testfruit 10 PC, Testfruit 12 PC' && !str_contains($bug['h'][7], "\n") && $bos['h'][7] === '', json_encode($bug['h'][7], JSON_UNESCAPED_UNICODE));
+ok('kalibre hücreleri: bugün 14 "-" (sıfır palet kalemi atlandı), 12 = 3, 10 = 4; yarın yalnız 12 = 5', array_slice($bug['h'], 8, 3) === ['-', '3', '4'] && array_slice($yar['h'], 8, 3) === ['-', '5', '-']);
+ok('palet/kasa: NULL → boş, 0 → "0"', $bos['h'][11] === '' && $bos['h'][12] === '' && $esk['h'][11] === '2' && $esk['h'][12] === '0');
 $tp = 0; $tk = 0; foreach ($o['rows'] as $r) { $tp += (int)$r['toplam_palet']; $tk += (int)$r['toplam_koli']; }
-ok('toplam = Σ palet / kasa (NULL hariç, string biçimli)', $v['toplam'] === ['palet' => sipui_sayi($tp), 'kasa' => sipui_sayi($tk)] && $tp === 2 + 23 + 88 + 7 + 5 && $v['adet'] === 6);
+ok('toplam = Σ palet / kasa + her kal_* toplamı (değer yoksa boş)', $v['toplam'] === ['palet' => sipui_sayi($tp), 'kasa' => sipui_sayi($tk), 'kal_14' => '23', 'kal_12' => '8', 'kal_10' => '4'] && $tp === 2 + 23 + 88 + 7 + 5 && $v['adet'] === 6, json_encode($v['toplam']));
 $ob = siparis_yazdir_oku($db, $F(['q' => 'TC900104']));
 $vb = siparis_yazdir_veri($ob, $ctx);
-ok('hiç palet/kasa değeri yoksa toplam boş', $vb['adet'] === 1 && $vb['toplam'] === ['palet' => '', 'kasa' => '']);
-ok('başlık / dosya / meta / limit', $v['baslik'] === 'Açık Sevkiyatlar' && $v['dosya'] === 'Acik-Sevkiyatlar-19.10.2026' && $v['basim'] === '19.10.2026 14:32' && $v['depo'] === 'DEPO1' && $v['limit'] === 500 && $v['kesildi'] === false && $v['ok'] === true);
-ok('notlar: şoför kurulmadı + kişisel veri uyarısı (SON)', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && str_contains(end($v['notlar']), 'Kişisel veri içerir') && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true));
+ok('hiç palet/kasa/kalibre değeri yoksa toplam boş', $vb['adet'] === 1 && $vb['toplam'] === ['palet' => '', 'kasa' => '', 'kal_14' => '', 'kal_12' => '', 'kal_10' => '']);
+ok('başlık / dosya / kapsam / meta / limit', $v['baslik'] === 'İşlem Bekleyen Sevkiyatlar' && $v['dosya'] === 'Islem-Bekleyen-Sevkiyatlar-19.10.2026' && $v['kapsam'] === 'acik' && $v['basim'] === '19.10.2026 14:32' && $v['depo'] === 'DEPO1' && $v['limit'] === 500 && $v['kesildi'] === false && $v['ok'] === true);
+ok('notlar: şoför + gümrük kurulmadı + kişisel veri uyarısı (SON, "şoför telefonu")', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && in_array('Gümrük alanı kurulmadı.', $v['notlar'], true) && end($v['notlar']) === 'Kişisel veri içerir (şoför telefonu) — yalnız ilgili kişilerle paylaşın.' && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true));
 ok('sevkiyatlar arası gün değişimi için gun alanı her satırda (yoksa null)', count(array_filter($v['satirlar'], fn($s) => array_key_exists('gun', $s))) === count($v['satirlar']));
+// v403: iki kalemli kalibre toplamı + ekstra kalibre (16) sütunu satır verisinde
+$vs = siparis_yazdir_veri(['kapsam' => 'acik', 'kesildi' => false, 'sofor' => true, 'gumruk' => true, 'parti' => [],
+    'rows' => [['id' => 1, 'order_ref' => 'X1', 'yukleme_tarihi' => $yarin, 'plakalar' => '', 'toplam_palet' => 18, 'toplam_koli' => 3280, 'sofor_telefon' => ' +90 5 ', 'yurtici_gumruk' => ' G1 '],
+               ['id' => 2, 'order_ref' => 'X2', 'yukleme_tarihi' => $yarin, 'plakalar' => '', 'toplam_palet' => 6, 'toplam_koli' => 100]],
+    'kalem' => [1 => [['kalibre' => '14', 'urun' => 'Nar', 'po_palet' => 10], ['kalibre' => '12', 'urun' => 'nar', 'po_palet' => 1], ['kalibre' => '12', 'urun' => 'Nar', 'po_palet' => 3], ['kalibre' => '10', 'aciklama' => 'Elma', 'po_palet' => 4]],
+                2 => [['kalibre' => '16', 'urun' => 'Nar', 'po_palet' => 6]]]], $ctx);
+ok('aynı kalibrede iki kalem toplanır (12 = 1+3 = 4); sahibin örneği 14=10, 12=4, 10=4, toplam 18', $vs['satirlar'][0]['h'] === ['', '', 'X1', '', '+90 5', '', 'G1', 'Nar, Elma', '-', '10', '4', '4', '18', '3.280'] || $vs['satirlar'][0]['h'] === [sipui_tarih($yarin), '', 'X1', '', '+90 5', '', 'G1', 'Nar, Elma', '-', '10', '4', '4', '18', '3.280'], json_encode($vs['satirlar'][0]['h'], JSON_UNESCAPED_UNICODE));
+ok('ekstra kalibre 16 ilk kalibre sütunu (azalan); 16 olmayan satırda "-"; toplam kal_16/14/12/10', array_column($vs['kolonlar'], 'k') === ['tarih', 'parti', 'siparis', 'ulke', 'tel', 'plaka', 'gumruk', 'urun', 'kal_16', 'kal_14', 'kal_12', 'kal_10', 'palet', 'kasa']
+    && array_slice($vs['satirlar'][1]['h'], 8, 4) === ['6', '-', '-', '-'] && $vs['toplam'] === ['palet' => '24', 'kasa' => '3.380', 'kal_16' => '6', 'kal_14' => '10', 'kal_12' => '4', 'kal_10' => '4'] && !in_array('Gümrük alanı kurulmadı.', $vs['notlar'], true), json_encode($vs['toplam']));
 
-echo "\n=== 5. Kapsam ===\n";
+echo "\n=== 5. Kapsam (v403: bolum = acik | evrak | kapali) ===\n";
 $thr = false; try { siparis_yazdir_oku($db, $F(['durum' => 'kapali'])); } catch (RuntimeException $e) { $thr = $e->getMessage() === 'kapsam_yok'; }
-ok('durum=kapali → kapsam_yok', $thr);
+ok('durum=kapali + bolum=acik (varsayılan) → kapsam_yok (açık bölüm görünmüyor)', $thr);
+$thr = false; try { siparis_yazdir_oku($db, $F(['durum' => 'acik']), 'kapali'); } catch (RuntimeException $e) { $thr = $e->getMessage() === 'kapsam_yok'; }
+ok('durum=acik + bolum=kapali → kapsam_yok', $thr);
 $thr = false; try { siparis_yazdir_oku($db, $F(['durum' => 'evrak_bekleyen'])); } catch (RuntimeException $e) { $thr = $e->getMessage() === 'kapsam_yok'; }
-ok('v400 durum=evrak_bekleyen → kapsam_yok (evrak bölümünde yazdırma yok)', $thr);
-$om = siparis_yazdir_oku($db, $F(['durum' => 'mail_gonderildi']));
-ok('v400 durum=mail_gonderildi → tek kapsam, yalnız o satır; başlık "Sevkiyatlar — Mail gönderildi"', $om['kapsam'] === 'tek' && array_column($om['rows'], 'id') === [$ID['evrak']] && siparis_yazdir_baslik($F(['durum' => 'mail_gonderildi'])) === 'Sevkiyatlar — Mail gönderildi');
+ok('durum=evrak_bekleyen + bolum=acik → kapsam_yok', $thr);
+$oe = siparis_yazdir_oku($db, $F(), 'evrak');
+ok('bolum=evrak → yalnız evrak bekleyen (mail_gonderildi) satır, kapsam evrak', $oe['kapsam'] === 'evrak' && array_map('intval', array_column($oe['rows'], 'id')) === [$ID['evrak']]);
+ok('durum=evrak_bekleyen + bolum=evrak → aynı küme', array_column(siparis_yazdir_oku($db, $F(['durum' => 'evrak_bekleyen']), 'evrak')['rows'], 'id') === array_column($oe['rows'], 'id'));
+$ve = siparis_yazdir_veri($oe, array_merge($ctx, ['baslik' => siparis_yazdir_baslik($F(), 'evrak')]));
+ok('evrak: geçmiş tarih olsa da gecmis=false, ✓ YOK; başlık / dosya', $ve['satirlar'][0]['gecmis'] === false && !str_contains($ve['satirlar'][0]['h'][0], '✓') && $ve['satirlar'][0]['h'][0] === sipui_tarih($dun) && $ve['gecmis_say'] === 0
+    && $ve['baslik'] === 'Evrak Takımı Bekleyen Sevkiyatlar' && $ve['dosya'] === 'Evrak-Bekleyen-Sevkiyatlar-19.10.2026' && $ve['kapsam'] === 'evrak');
+$kap2 = sev($db, ['order_ref' => 'TC900112.10', 'yukleme_tarihi' => $eski, 'durum' => 'iptal', 'toplam_palet' => 1]);
+$kap3 = sev($db, ['order_ref' => 'TC900113.10', 'yukleme_tarihi' => $dun, 'durum' => 'evrak_gonderildi', 'toplam_palet' => 2]);
+$ok3 = siparis_yazdir_oku($db, $F(), 'kapali');
+ok('bolum=kapali → kapanan (evrak_gonderildi + iptal), sıra tarih AZALAN, aynı tarihte id AZALAN', $ok3['kapsam'] === 'kapali' && array_map('intval', array_column($ok3['rows'], 'id')) === [$kap3, $ID['kapali'], $kap2], json_encode(array_column($ok3['rows'], 'id')));
+ok('durum=kapali + bolum=kapali → aynı küme', array_column(siparis_yazdir_oku($db, $F(['durum' => 'kapali']), 'kapali')['rows'], 'id') === array_column($ok3['rows'], 'id'));
+$vk = siparis_yazdir_veri($ok3, array_merge($ctx, ['baslik' => siparis_yazdir_baslik($F(), 'kapali')]));
+ok('kapali: gecmis=false, ✓ YOK; başlık / dosya', $vk['gecmis_say'] === 0 && !array_filter($vk['satirlar'], fn($s) => $s['gecmis'] || str_contains($s['h'][0], '✓')) && $vk['baslik'] === 'Kapanan Sevkiyatlar' && $vk['dosya'] === 'Kapanan-Sevkiyatlar-19.10.2026');
+$db->exec("UPDATE siparis_sevkiyatlar SET deleted_at = '2026-10-01 10:00:00' WHERE id IN ($kap2, $kap3)");   // sonraki bölümlerin kümelerini bozmasın
+ok('bilinmeyen bolum → acik', siparis_yazdir_oku($db, $F(), 'zzz')['kapsam'] === 'acik');
+$om = siparis_yazdir_oku($db, $F(['durum' => 'mail_gonderildi']), 'kapali');
+ok('tek durum filtresi varsa bolum YOK SAYILIR: durum=mail_gonderildi + bolum=kapali → tek kapsam; başlık "Sevkiyatlar — Mail gönderildi"', $om['kapsam'] === 'tek' && array_column($om['rows'], 'id') === [$ID['evrak']] && siparis_yazdir_baslik($F(['durum' => 'mail_gonderildi']), 'tek') === 'Sevkiyatlar — Mail gönderildi');
+$vom = siparis_yazdir_veri($om, $ctx);
+ok('tek kapsamda geçmiş tarih ✓ alır', $vom['satirlar'][0]['gecmis'] === true && str_ends_with($vom['satirlar'][0]['h'][0], ' ✓'));
 $ot = siparis_yazdir_oku($db, $F(['durum' => 'yola_cikti']));
 ok('durum=yola_cikti → tek kapsam, yalnız yola_cikti satırları', $ot['kapsam'] === 'tek' && count($ot['rows']) > 0 && !in_array($ID['eski'], array_column($ot['rows'], 'id')) && !in_array($ID['bos_tarih'], array_column($ot['rows'], 'id')));
 $oa = siparis_yazdir_oku($db, $F(['durum' => 'arac_bekleyen']));
 ok('durum=arac_bekleyen → siparis_alindi + hazirlik', $oa['kapsam'] === 'tek' && array_map('intval', array_column($oa['rows'], 'id')) === [$ID['eski'], $ID['bos_tarih']]);
 $vt = siparis_yazdir_veri($ot, array_merge($ctx, ['baslik' => siparis_yazdir_baslik($F(['durum' => 'yola_cikti']))]));
-ok('tek kapsam başlığı "Sevkiyatlar — <etiket>", dosya adı Acik- ile başlamaz', $vt['baslik'] === 'Sevkiyatlar — ' . siparis_durumlar()['yola_cikti']['etiket'] && str_starts_with($vt['dosya'], 'Sevkiyatlar-') && siparis_yazdir_baslik($F(['durum' => 'arac_bekleyen'])) === 'Sevkiyatlar — Araç bekleyen' && siparis_yazdir_baslik($F()) === 'Açık Sevkiyatlar');
+ok('tek kapsam başlığı "Sevkiyatlar — <etiket>", dosya "Sevkiyatlar-"; bölüm başlıkları', $vt['baslik'] === 'Sevkiyatlar — ' . siparis_durumlar()['yola_cikti']['etiket'] && str_starts_with($vt['dosya'], 'Sevkiyatlar-') && $vt['kapsam'] === 'tek' && siparis_yazdir_baslik($F(['durum' => 'arac_bekleyen'])) === 'Sevkiyatlar — Araç bekleyen'
+    && siparis_yazdir_baslik($F()) === 'İşlem Bekleyen Sevkiyatlar' && siparis_yazdir_baslik($F(), 'evrak') === 'Evrak Takımı Bekleyen Sevkiyatlar' && siparis_yazdir_baslik($F(), 'kapali') === 'Kapanan Sevkiyatlar');
 $oq = siparis_yazdir_oku($db, $F(['q' => 'TC9001', 'tarih_bas' => $dun, 'alici' => '1038529']));
 ok('arama + tarih + alıcı filtresi ekranla aynı süzer', array_map('intval', array_column($oq['rows'], 'id')) === [$ID['gecmis']]);
 rol($ADMIN, false, 1, ['DEPO1']);
@@ -293,8 +338,8 @@ siparis_sofor_migrate($db);
 $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü Bir', sofor_telefon = '+90 532 000 00 01' WHERE id = {$ID['gecmis']}");
 $o2 = siparis_yazdir_oku($db, $F());
 $v2 = siparis_yazdir_veri($o2, $ctx);
-$g2 = null; foreach ($v2['satirlar'] as $s) if ($s['h'][3] === 'TC900101.10') $g2 = $s;
-ok('şoför adı + telefonu dolu sütunlarda', $o2['sofor'] === true && $g2['h'][4] === 'Test Sürücü Bir' && $g2['h'][5] === '+90 532 000 00 01');
+$g2 = null; foreach ($v2['satirlar'] as $s) if ($s['h'][2] === 'TC900101.10') $g2 = $s;
+ok('şoför telefonu dolu sütunda; şoför ADI çıktıda YOK (v403)', $o2['sofor'] === true && $g2['h'][4] === '+90 532 000 00 01' && !str_contains(json_encode($v2, JSON_UNESCAPED_UNICODE), 'Test Sürücü Bir') && !array_key_exists('sofor_adi', $o2['rows'][0]));
 ok('şoför kurulu: "kurulmadı" notu yok', !in_array('Şoför alanları kurulmadı.', $v2['notlar'], true));
 
 echo "\n=== 7b. Doğrudan istek koruması uçla çakışmaz (v385) ===\n";
@@ -325,9 +370,9 @@ ok('basename korumalı include-only dosyanın adı başka bir sayfayla çakışm
 echo "\n=== 8. Uç (siparis_yazdir.php) ===\n";
 rol(['siparis.read'], false, 5);   // izleyici
 $r = uc('siparis_yazdir.php', ['amac' => 'pdf', 'q' => 'TC900101']);
-ok('izleyici (yalnız siparis.read) açar: 200 + geçerli JSON + 13 sütun', $r['hata'] === null && $r['kod'] === 200 && $r['json'] !== null && ($r['json']['ok'] ?? false) === true && count($r['json']['kolonlar']) === 13, (string)$r['hata'] . substr($r['govde'], 0, 200));
+ok('izleyici (yalnız siparis.read) açar: 200 + geçerli JSON + 13 sütun (3 kalibre) + kapsam acik', $r['hata'] === null && $r['kod'] === 200 && $r['json'] !== null && ($r['json']['ok'] ?? false) === true && count($r['json']['kolonlar']) === 13 && ($r['json']['kapsam'] ?? '') === 'acik' && $r['json']['baslik'] === 'İşlem Bekleyen Sevkiyatlar', (string)$r['hata'] . substr($r['govde'], 0, 200));
 ok('başlıklar: JSON utf-8 + nosniff (no-store: statik bölümde; CLI\'de headers_sent() sonrası siparis_no_store() atlanır)', str_contains(strtolower($r['h']['content-type'] ?? ''), 'application/json') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff');
-ok('izleyici: şoför adı/telefonu siparis.read ile görünür (siparis_view ile aynı kural), parti no yok', $r['json']['satirlar'][0]['h'][4] === 'Test Sürücü Bir' && $r['json']['satirlar'][0]['h'][1] === '' && in_array('Parti no için beyan okuma yetkisi gerekir.', $r['json']['notlar'], true));
+ok('izleyici: şoför telefonu siparis.read ile görünür (siparis_view ile aynı kural), şoför adı YOK, parti no yok', $r['json']['satirlar'][0]['h'][4] === '+90 532 000 00 01' && !str_contains($r['govde'], 'Sürücü') && $r['json']['satirlar'][0]['h'][1] === '' && in_array('Parti no için beyan okuma yetkisi gerekir.', $r['json']['notlar'], true));
 ok('filtre özeti: arama metni çıktıda', $r['json']['filtre'] === 'Arama: TC900101' && $r['json']['adet'] === 1);
 $aud = $db->query("SELECT action, record_id, new_values FROM audit_log WHERE action = 'siparis_yazdir'")->fetchAll(PDO::FETCH_ASSOC);
 ok('audit: 1 satır siparis_yazdir, yeni = adet/amac/kapsam/kesildi/arama', count($aud) === 1 && json_decode($aud[0]['new_values'], true) === ['adet' => 1, 'amac' => 'pdf', 'kapsam' => 'acik', 'kesildi' => 0, 'arama' => 1], json_encode($aud));
@@ -336,10 +381,22 @@ $r = uc('siparis_yazdir.php', ['amac' => 'saçma']);
 ok('amac beyaz liste: bilinmeyen → yazdir', json_decode($db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_yazdir' ORDER BY id DESC LIMIT 1")->fetchColumn(), true)['amac'] === 'yazdir');
 $r = uc('siparis_yazdir.php', [], 'POST');
 ok('POST → 405 JSON (Allow: GET), audit yazılmadı', $r['kod'] === 405 && ($r['json']['ok'] ?? null) === false && ($r['h']['allow'] ?? '') === 'GET' && (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_yazdir'")->fetchColumn() === 2);
+$n1 = (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_yazdir'")->fetchColumn();
 $r = uc('siparis_yazdir.php', ['durum' => 'kapali']);
-ok('durum=kapali → 400 + kapsam_yok', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok');
+ok('durum=kapali (bolum yok = acik) → 400 + kapsam_yok + sabit mesaj', $r['kod'] === 400 && $r['json'] === ['ok' => false, 'kod' => 'kapsam_yok', 'hata' => 'Bu bölüm bu filtreyle yazdırılamaz.']);
+$r = uc('siparis_yazdir.php', ['durum' => 'acik', 'bolum' => 'kapali']);
+ok('v403 bolum=kapali + durum=acik → 400 + kapsam_yok', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok');
 $r = uc('siparis_yazdir.php', ['durum' => 'evrak_bekleyen']);
-ok('v400 durum=evrak_bekleyen → 400 + kapsam_yok', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok');
+ok('durum=evrak_bekleyen (bolum=acik) → 400 + kapsam_yok; 400\'lerde audit yazılmadı', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok' && (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_yazdir'")->fetchColumn() === $n1);
+$r = uc('siparis_yazdir.php', ['durum' => 'evrak_bekleyen', 'bolum' => 'evrak', 'amac' => 'resim']);
+$sonAud = fn() => json_decode((string)$db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_yazdir' ORDER BY id DESC LIMIT 1")->fetchColumn(), true);
+ok('v403 bolum=evrak → 200, kapsam evrak, yalnız TC900110; amac=resim kabul (audit amac resim, kapsam evrak)', $r['kod'] === 200 && ($r['json']['kapsam'] ?? '') === 'evrak' && array_column(array_column($r['json']['satirlar'], 'h'), 2) === ['TC900110.10'] && $r['json']['baslik'] === 'Evrak Takımı Bekleyen Sevkiyatlar'
+    && $sonAud() === ['adet' => 1, 'amac' => 'resim', 'kapsam' => 'evrak', 'kesildi' => 0, 'arama' => 0]);
+$r = uc('siparis_yazdir.php', ['bolum' => 'kapali']);
+ok('v403 bolum=kapali → 200, kapsam kapali, TC900105 var, açık satır yok, ✓ yok', $r['kod'] === 200 && ($r['json']['kapsam'] ?? '') === 'kapali' && in_array('TC900105.10', array_column(array_column($r['json']['satirlar'], 'h'), 2), true) && !in_array('TC900101.10', array_column(array_column($r['json']['satirlar'], 'h'), 2), true)
+    && !str_contains($r['govde'], '✓') && $sonAud()['kapsam'] === 'kapali');
+$r = uc('siparis_yazdir.php', ['durum' => 'mail_gonderildi', 'bolum' => 'kapali']);
+ok('v403 tek durum + bolum=kapali → bolum yok sayılır, kapsam tek', $r['kod'] === 200 && ($r['json']['kapsam'] ?? '') === 'tek' && $sonAud()['kapsam'] === 'tek');
 rol([], false, 7);
 $r = uc('siparis_yazdir.php');
 ok('yetkisiz (siparis.read yok): forbidden, JSON verisi dönmez', $r['hata'] !== null && str_contains($r['hata'], 'siparis.read') && $r['json'] === null);
@@ -347,7 +404,7 @@ rol(['beyan.read', 'records.write'], false, 7);
 ok('köprü yok: beyan.read / records.write kapıyı açmaz', uc('siparis_yazdir.php')['hata'] !== null);
 rol($ADMIN, false, 9, ['DEPO2']);
 $r = uc('siparis_yazdir.php');
-$refs = array_column(array_column($r['json']['satirlar'], 'h'), 3);
+$refs = array_column(array_column($r['json']['satirlar'], 'h'), 2);
 ok('uç depo izolasyonu: DEPO2 kullanıcısı yalnız DEPO2 + boş depolu satırları görür', in_array('TC900106.10', $refs, true) && !in_array('TC900101.10', $refs, true) && !in_array('TC900102.10', $refs, true) && in_array('TC900104.10', $refs, true));
 rol($ADMIN, true);
 
@@ -355,7 +412,7 @@ echo "\n=== 9. Ham metin + limit ===\n";
 $xs = sev($db, ['order_ref' => 'TC900108.10', 'yukleme_tarihi' => $yarin, 'nakliyeci' => '<b>X</b> & "Y"', 'plakalar' => "34TST<script>alert(1)</script>"]);
 kalem($db, $xs, ['kalibre' => '10', 'aciklama' => '<script>alert(2)</script> 10 PC', 'po_palet' => 1]);
 $r = uc('siparis_yazdir.php', ['q' => 'TC900108']);
-ok('JSON hücreleri HAM kalır (kaçış istemcide): <script, <b>, & aynen (JSON çözülünce)', $r['json'] !== null && str_contains($r['json']['satirlar'][0]['h'][6], '<script>alert(1)</script>') && $r['json']['satirlar'][0]['h'][7] === '<b>X</b> & "Y"' && str_contains($r['json']['satirlar'][0]['h'][9], '<script>alert(2)</script>'));
+ok('JSON hücreleri HAM kalır (kaçış istemcide): <script aynen (JSON çözülünce)', $r['json'] !== null && str_contains($r['json']['satirlar'][0]['h'][5], '<script>alert(1)</script>') && str_contains($r['json']['satirlar'][0]['h'][7], '<script>alert(2)</script>'));
 ok('Content-Type JSON (HTML olarak yorumlanamaz) + JSON_INVALID_UTF8_SUBSTITUTE ile bozuk bayt uçtan taşmaz', str_contains(strtolower($r['h']['content-type'] ?? ''), 'application/json'));
 $db->beginTransaction();
 $ins = $db->prepare("INSERT INTO siparis_sevkiyatlar (tedarikci_no, order_ref, yukleme_tarihi, durum, depo) VALUES ('', ?, ?, 'hazirlik', 'DEPOL')");
@@ -371,6 +428,10 @@ rol($ADMIN, true);
 echo "\n=== 11. WP Paylaş ucu (siparis_paylas.php, v394) ===\n";
 siparis_yurtici_gumruk_migrate($db);
 $db->exec("UPDATE siparis_sevkiyatlar SET yurtici_gumruk = 'Test Gümrük İdaresi' WHERE id = {$ID['gecmis']}");
+rol($ADMIN, true);
+$og = siparis_yazdir_oku($db, $F(['q' => 'TC900101']));
+$vg = siparis_yazdir_veri($og, $ctx);
+ok('v403 yazdırma: yurt içi gümrük kurulunca Gümrük sütunu dolu, "kurulmadı" notu yok', $og['gumruk'] === true && $vg['satirlar'][0]['h'][6] === 'Test Gümrük İdaresi' && !in_array('Gümrük alanı kurulmadı.', $vg['notlar'], true));
 $wpAud = fn() => $db->query("SELECT record_id, new_values FROM audit_log WHERE action = 'siparis_wp_paylas' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 rol(['siparis.read'], false, 5);   // izleyici
 $r = uc('siparis_paylas.php', ['id' => (string)$ID['gecmis']]);
@@ -418,7 +479,9 @@ $u = (string)file_get_contents($ROOT . '/siparis_yazdir.php'); $cfg = (string)fi
 ok('uç: GET dışı 405, require_siparis(read), no-store, session_write_close, yazan SQL yok', str_contains($u, "require_siparis('read');") && str_contains($u, 'siparis_no_store();') && str_contains($u, 'session_write_close();') && str_contains($u, '405') && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $u));
 ok('config: yalnız SELECT (INSERT/UPDATE/DELETE/ALTER/CREATE yok), çıktı/exit yok', !preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|CREATE)\s/', $cfg) && !preg_match('/\b(echo|print|exit|die)\b/', preg_replace('~//.*|/\*.*?\*/~s', '', $cfg)));
 ok('uç + config e-posta literali yok', !preg_match('/[\w.+-]+@[\w-]+\.[\w.]+/', $u . $cfg));
-ok('şoför kolonları yalnız siparis_sofor_hazir() ile SELECT\'e girer', str_contains($cfg, 'siparis_sofor_hazir($pdo)') && substr_count($cfg, 's.sofor_adi') === 1);
+ok('şoför telefonu + yurt içi gümrük yalnız *_hazir() ile SELECT\'e girer; şoför adı / navlun / nakliyeci / PO gümrüğü SELECT\'te YOK (v403)', str_contains($cfg, 'siparis_sofor_hazir($pdo)') && str_contains($cfg, 'siparis_yurtici_gumruk_hazir($pdo)') && substr_count($cfg, 's.sofor_telefon') === 1 && substr_count($cfg, 's.yurtici_gumruk') === 1
+    && !str_contains($cfg, 's.sofor_adi') && !str_contains($cfg, 's.navlun_no') && !str_contains($cfg, 's.nakliyeci') && !preg_match('/\bs\.gumruk\b/', $cfg) && !str_contains($cfg, 'planlanan_'));
+ok('v403 uç: bolum beyaz listesi siparis_yazdir_bolumler(), amac beyaz listesi yazdir|pdf|resim, PDOException RuntimeException\'dan ÖNCE yakalanır', str_contains($u, 'siparis_yazdir_bolumler()[$bolum]') && str_contains($u, "['yazdir', 'pdf', 'resim']") && strpos($u, 'catch (PDOException') < strpos($u, 'catch (RuntimeException'));
 ok('audit\'e kişisel veri / arama metni yazan kod yok (q yalnız `!== \'\'` karşılaştırması)', !preg_match('/siparis_audit\([^;]*(sofor|telefon)/i', $u) && !preg_match('/siparis_audit\([^;]*\$F\[.q.\](?!\s*!==)/', $u) && str_contains($u, "'arama' => \$F['q'] !== ''"));
 $pu = (string)file_get_contents($ROOT . '/siparis_paylas.php'); $pc = (string)file_get_contents($ROOT . '/config/siparis_wp.php'); $kod = static function (string $src): string {
     $o = ''; foreach (token_get_all($src) as $t) { if (is_array($t)) { if ($t[0] === T_COMMENT || $t[0] === T_DOC_COMMENT) continue; $o .= $t[1]; } else $o .= $t; } return $o;
