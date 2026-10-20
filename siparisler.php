@@ -11,6 +11,7 @@ require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/siparis_beyan.php';
 require_once __DIR__ . '/config/siparis_mail.php';
 require_once __DIR__ . '/config/siparis_yazdir.php';   // v395: listede Alıcı ülke = siparis_yazdir_ulke()
+require_once __DIR__ . '/config/siparis_cari.php';   // v397: Cari Döküm düğme kapısı siparis_cari_yetkili()
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -242,6 +243,9 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
         <a class="btn btn-primary btn-lg" href="#yukle">+ Belge yükle</a>
       <?php else: ?>
         <button type="button" class="btn btn-lg" disabled aria-describedby="sipSaltOkunur">+ Belge yükle</button>
+      <?php endif; ?>
+      <?php if (siparis_cari_yetkili()): ?>
+        <a class="btn btn-lg" href="siparis_cari.php">📒 Cari Döküm</a>
       <?php endif; ?>
       <div class="pc-kebab-wrap">
         <button class="btn pc-kebab" type="button" title="Diğer işlemler" aria-label="Diğer işlemler">⋮</button>
