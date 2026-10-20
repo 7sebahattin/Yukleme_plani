@@ -92,7 +92,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             ok(`[${w}] liste: mobil girdiler 16px`, fs16);
             ok(`[${w}] liste: filtre paneli kapalı → "Filtre" ile açılır`, !(await gorunur(page, '#sipFiltrePanel')) && (await (async () => { await page.click('[data-sip-filtre-toggle]'); await page.waitForTimeout(100); return gorunur(page, '#sipFiltrePanel'); })()));
             const kart = await page.evaluate(() => { const a = document.querySelector('.sip-card-link'); const r = document.querySelector('.sip-card').getBoundingClientRect(); const l = a.getBoundingClientRect(); return { kartH: r.height }; });
-            ok(`[${w}] liste: kart yüksekliği makul (ürün alt kartı dahil ≤ 300px; v376)`, kart.kartH <= 300, String(kart.kartH));
+            ok(`[${w}] liste: kart yüksekliği makul (ürün alt kartı + v396 PKL adı satırı dahil ≤ 340px; v376)`, kart.kartH <= 340, String(kart.kartH));   // ilk kart: PKL adı + 2 parti rozeti
         }
         // v384: Excel gibi dönüşümlü bant — ardışık sevkiyat grupları farklı zemin, grup içi (ana + ürün alt satırı) aynı
         const zb = await page.evaluate(() => {
@@ -127,6 +127,18 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ok(`[${w}] liste: bağlı beyanın parti no'su görünür`, v372.parti, JSON.stringify(v372));
         ok(`[${w}] liste: yeni hücreler ekrana sığar`, v372.sigar);
         if (w === 1280) ok(`[${w}] liste: tablo kendi içinde yatay kaymıyor (yeni alt satır sütun eklemez)`, v372.tabloKayiyor <= 1, String(v372.tabloKayiyor));
+        // v396: güncel PKL dosya adı parti rozetinin ÜSTÜNDE, kendi hücresinde / kartında kalır (⋮ düğmesine binmez)
+        const v396 = await page.evaluate(() => {
+            const gor = e => e && e.offsetParent !== null && e.getBoundingClientRect().width > 0;
+            const pk = Array.from(document.querySelectorAll('.sip-pkl-ad')).filter(gor);
+            if (!pk.length) return { n: 0 };
+            const a = pk[0], r = a.getBoundingClientRect(), kap = a.closest('td, .sip-card'), kr = kap.getBoundingClientRect();
+            const pr = kap.querySelector('.sip-parti-rozetler'), keb = kap.querySelector('.sip-card-kebab .pc-kebab');
+            return { n: pk.length, metin: /^PKL-.*\.xlsx$/.test(a.textContent.replace(/[\u{1F4C4}\s]/gu, '')), icinde: r.left >= kr.left - 1 && r.right <= kr.right + 1,
+                ustte: !pr || r.top <= pr.getBoundingClientRect().top + 1, kebab: !keb || r.right <= keb.getBoundingClientRect().left + 1 || r.top >= keb.getBoundingClientRect().bottom - 1,
+                href: /siparis_dosya\.php\?id=\d+&dl=1$/.test(a.getAttribute('href') || '') };
+        });
+        ok(`[${w}] liste: PKL dosya adı görünür, parti no'nun üstünde, hücre/kart içinde (v396)`, v396.n >= 1 && v396.metin && v396.icinde && v396.ustte && v396.kebab && v396.href, JSON.stringify(v396));
         // v382: "Belge yükle" kartı native <details>: varsayılan KAPALI, summary ile açılır/kapanır, tercih localStorage'da
         const YK = 'details[data-sip-yukle]', YS = 'details[data-sip-yukle] > summary.sip-yukle-ozet';
         ok(`[${w}] yükleme kartı: varsayılan kapalı (summary görünür, form ve açık özniteliği yok)`, (await gorunur(page, YS)) && !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(s => !document.querySelector(s).open, YK));

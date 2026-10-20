@@ -154,6 +154,20 @@ function sipui_parti_rozet_html(array $sev, array $parti): string
     return '<div class="sip-parti-rozetler">' . $ic . '</div>';
 }
 
+/** v396 — sevkiyatın güncel PKL dosya adı (oluşturulan/yüklenen); parti no'nun ÜSTÜNDE. PKL yoksa boş. */
+function sipui_pkl_ad_html(array $sev, array $pkl): string
+{
+    $sid = (int)($sev['id'] ?? 0);
+    $ad  = trim((string)($pkl[$sid]['ad'] ?? ''));
+    if ($ad === '') return '';
+    $bid = (int)($pkl[$sid]['belge_id'] ?? 0);
+    // tire/alt çizgi sonrası <wbr>: dar sütunda ad "PKL-…-" / "AsyaDocNNN-" / "tarih.xlsx" parçalarından kırılır, tabloyu genişletmez
+    $ic  = '<span class="sip-pkl-ik" aria-hidden="true">📄</span><span class="sip-pkl-metin">' . preg_replace('~([-_])~', '$1<wbr>', h($ad)) . '</span>';
+    return $bid > 0
+        ? '<a class="sip-pkl-ad" href="siparis_dosya.php?id=' . $bid . '&amp;dl=1" title="Oluşturulan PKL: ' . h($ad) . ' (indir)">' . $ic . '</a>'
+        : '<div class="sip-pkl-ad" title="Oluşturulan PKL: ' . h($ad) . '">' . $ic . '</div>';
+}
+
 /** Tur no — YALNIZ bağlı beyan parti no'su yoksa (parti varsa rozetleri sipariş no'nun üstünde gösterilir). */
 function sipui_tur_html(array $sev, array $parti, bool $satir = true): string
 {

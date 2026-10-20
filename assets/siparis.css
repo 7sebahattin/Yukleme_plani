@@ -675,3 +675,20 @@ html[data-theme="dark"] .sip-wp-durum--uyari { border-left-color: #fbbf24; }
 .sip-table td .sip-po { white-space: normal; max-width: 104px; text-align: center; line-height: 1.25; }
 .sip-ulke--kart { font-size: .8rem; font-weight: 400; color: var(--muted); }
 /* ==== /v395 ==== */
+/* ==== LİSTE v396 ==== */
+/* Güncel PKL dosya adı: parti no'nun ÜSTÜNDE (oluşanı takip için). Tıklayınca indirir; uzun ad hücrede kısaltılır, tam ad title'da. */
+.sip-pkl-ad { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-bottom: 4px; padding: 1px 7px; border-radius: 6px;
+    font-size: .7rem; font-weight: 600; line-height: 1.35; color: #14532d; background: #e7f6ec; border: 1px solid #a7dcb8;
+    text-decoration: none; vertical-align: top; }
+.sip-pkl-ad:hover, .sip-pkl-ad:focus-visible { background: #d3efdd; text-decoration: none; }
+.sip-pkl-ik { flex: 0 0 auto; font-size: .72rem; }
+.sip-pkl-metin { min-width: 0; }
+.sip-table .sip-pkl-ad { align-items: flex-start; }   /* masaüstü: <wbr> noktalarından satır kırar, sütunu genişletmez */
+/* mobil kart: PKL adı + parti rozetleri TEK sarmalı şeritte (kart uzamasın); sağ üstteki ⋮ düğmesine binmesin */
+.sip-card > .sip-card-etiket { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-right: 44px; margin-bottom: -2px; min-width: 0; }
+.sip-card-etiket > .sip-pkl-ad, .sip-card-etiket > .sip-parti-rozetler { margin-bottom: 0; }
+.sip-card-etiket > .sip-pkl-ad { min-width: 0; align-items: flex-start; }   /* ad kısaltılmaz: <wbr> noktalarından kırılır */
+html[data-theme="dark"] .sip-pkl-ad { color: #bff0cf; background: #133524; border-color: #2c6b45; }
+html[data-theme="dark"] .sip-pkl-ad:hover, html[data-theme="dark"] .sip-pkl-ad:focus-visible { background: #1a4630; }
+.sip-iptal .sip-pkl-ad { opacity: .6; }
+/* ==== /LİSTE v396 ==== */
