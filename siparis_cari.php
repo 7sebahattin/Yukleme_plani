@@ -42,7 +42,8 @@ $oY = $v['ozet']['yuklenmemis']; $oL = $v['ozet']['yuklenen']; $oB = $v['ozet'][
 render_print_page_start('Sipariş Cari Dökümü', 'siparis', 'summary', 'landscape', ['print_pdks.css']);
 ?>
 <style>
-@page { size: A4 landscape; margin: 10mm; }
+@page { size: A4 landscape; margin: 0; }
+@media print { body { padding: 10mm; } }
 body.print-siparis .print-sheet { max-width: 1240px; }
 .sc-filtre { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0; }
 .sc-filtre label { display: flex; flex-direction: column; gap: 2px; font-size: .72rem; font-weight: 700; color: var(--pr-muted); }
@@ -64,8 +65,6 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
 .sc-yildiz { font-weight: 800; margin-left: 1px; }
 .sc-cari { break-inside: avoid; page-break-inside: avoid; }
 .sc-cari table.sc-tablo { max-width: 720px; }
-.sc-imza { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 26px; }
-.sc-imza div { border-top: 1px solid #555; padding-top: 4px; min-height: 52px; font-size: .75rem; text-align: center; }
 @media screen and (max-width: 900px) { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
 @media print {
   html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -131,13 +130,13 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
   <!-- B) Yüklenen sevkiyatlar -->
   <h3 class="pr-section">B) Yüklenen Sevkiyatlar</h3>
   <div class="sc-kaydir"><table class="print-table sc-tablo">
-    <thead><tr><th>Yükleme tarihi</th><th>Sipariş no</th><th>Plaka</th><th>Nakliyeci</th><th>Kalibre</th><th class="num">Koli</th><th class="num">Kg</th><th>Fiyat durumu</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><th>Sipariş no</th><th>Plaka</th><th>Nakliyeci</th><th>Kalibre</th><th class="num">Koli</th><th class="num">Kg</th><th class="num">Fiyat / kg</th></tr></thead>
     <?php if (!$v['yuklenen']): ?>
     <tbody><tr><td colspan="8" class="pr-empty">Yüklenen sevkiyat yok.</td></tr></tbody>
     <?php else: ?>
     <?php foreach ($v['yuklenen'] as $s): ?>
     <tbody class="sc-grup">
-      <?php $durum = $s['fiyatli'] ? '✓ Fiyatlı' : 'Fiyat bekleniyor'; ?>
+      <?php $durum = $s['fiyatli'] ? '' : 'Fiyat bekleniyor'; ?>
       <?php if (!$s['satirlar']): ?>
       <tr><td><?= h($tarih($s['tarih'])) ?></td><td><?= h($s['order_ref']) ?></td><td><?= h($bos($s['plaka'])) ?></td><td><?= h($bos($s['nakliyeci'])) ?></td><td colspan="3" class="sc-bos">Kalem yok</td><td><?= h($durum) ?></td></tr>
       <?php endif; ?>
@@ -147,7 +146,7 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
         <td><?= h($bos($l['kalibre'])) ?></td>
         <td class="num"><?= h(sipui_sayi($l['koli'])) ?></td>
         <td class="num"><?= h(siparis_cari_kg($l['gram'])) ?><?= $yildiz($l['kg_varsayilan']) ?></td>
-        <td><?= h($i === 0 ? $durum : '') ?></td>
+        <td class="num"><?= $l['fiyatli'] ? h(siparis_cari_para(intdiv((int)$l['fiyat_kg'], 100)) . ' ' . $l['pb'] . ' / kg') : h($durum) ?></td>
       </tr>
       <?php endforeach; ?>
       <?php if (count($s['satirlar']) > 1): ?>
@@ -177,7 +176,7 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
         <td class="num"><?= h(siparis_cari_kg($l['gram'])) ?></td>
         <?php if ($l['fiyatli']): ?>
         <td class="num<?= $l['baz'] === 'koli' ? ' sc-esas' : '' ?>"><?= h(siparis_cari_fiyat4((int)$l['fiyat_koli']) . ' ' . $l['pb'] . ' / koli (' . siparis_cari_kg_metin($l['koli_kg']) . ' kg)') ?></td>
-        <td class="num<?= $l['baz'] === 'kg' ? ' sc-esas' : '' ?>"><?= h(siparis_cari_fiyat4((int)$l['fiyat_kg']) . ' ' . $l['pb'] . ' / kg') ?></td>
+        <td class="num<?= $l['baz'] === 'kg' ? ' sc-esas' : '' ?>"><?= h(siparis_cari_para(intdiv((int)$l['fiyat_kg'], 100)) . ' ' . $l['pb'] . ' / kg') ?></td>
         <td class="num"><?= h(siparis_cari_para((int)$l['tutar']) . ' ' . $l['pb']) ?></td>
         <?php else: ?>
         <td colspan="3" class="sc-bos">Fiyat yok — tutara dahil değil</td>
@@ -208,10 +207,8 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
       <?php if (!$v['cari']): ?><tr><td colspan="4" class="pr-empty">Fiyatlandırılmış sevkiyat yok.</td></tr><?php endif; ?>
       </tbody>
     </table></div>
-    <p class="pr-note">Tahsilat: Ödeme girişi 2. etapta eklenecek (şimdilik 0,00).</p>
     <p class="pr-note">Fiyat bekleyen yüklenmiş: <?= (int)$oB['sevkiyat'] ?> sevkiyat · <?= h(sipui_sayi($oB['koli'])) ?> koli / <?= h(siparis_cari_kg($oB['gram'])) ?> kg (tutara dahil değil).</p>
     <?php if ($v['varsayilan_kg']): ?><p class="pr-note">* koli ağırlığı belgeden okunamadı, 3,5 kg varsayıldı.</p><?php endif; ?>
-    <div class="sc-imza"><div>Hazırlayan<br>Asya Fresh</div><div>Kontrol eden</div><div>Müşteri onayı (mutabakat)</div></div>
   </section>
 </div>
 <script>

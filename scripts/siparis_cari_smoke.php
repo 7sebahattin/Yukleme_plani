@@ -68,14 +68,14 @@ $ADMIN = ['siparis.read', 'reports.export', 'beyan.read'];
 
 // ── tohum (sentetik) ──
 $ID = [];
-$ID['s1'] = sev($db, ['order_ref' => 'TC800001.10', 'yukleme_tarihi' => $dun, 'alici_kodu' => '1038529', 'alici_adi' => 'LIDL RS', 'plakalar' => '34TST001', 'nakliyeci' => 'Test Lojistik A']);
+$ID['s1'] = sev($db, ['order_ref' => 'TC800001.10', 'durum' => 'mail_gonderildi', 'yukleme_tarihi' => $dun, 'alici_kodu' => '1038529', 'alici_adi' => 'LIDL RS', 'plakalar' => '34TST001', 'nakliyeci' => 'Test Lojistik A']);
 kalem($db, $ID['s1'], ['kalibre' => '14', 'sira' => 1, 'aciklama' => 'Testfruit 14 PC', 'koli_icerik' => '3,5 KG', 'po_palet' => 23, 'etkin_palet' => 23, 'etkin_koli' => 3680, 'pc_koli' => 3680, 'fiyat' => 4.11, 'para_birimi' => 'EUR', 'fiyat_birim' => 'CAR', 'fiyat_tarihi' => $dun]);
 kalem($db, $ID['s1'], ['kalibre' => '10', 'sira' => 2, 'aciklama' => 'Testfruit 10 PC', 'koli_icerik' => '3.5kg', 'po_palet' => 1, 'etkin_palet' => 1, 'etkin_koli' => 170, 'pc_koli' => 160, 'fiyat' => 4.5, 'para_birimi' => 'EUR', 'fiyat_birim' => 'CAR', 'fiyat_tarihi' => $bugun]);
 $ID['s2'] = sev($db, ['order_ref' => 'TC800002.10', 'durum' => 'arac_atandi', 'yukleme_tarihi' => $yarin, 'alici_kodu' => '1038512', 'alici_adi' => 'LIDL GB']);
 kalem($db, $ID['s2'], ['kalibre' => '12', 'aciklama' => 'Testfruit 12 PC', 'po_palet' => 1, 'etkin_palet' => 1, 'etkin_koli' => 100]);
-$ID['s3'] = sev($db, ['order_ref' => 'TC800003.10', 'durum' => 'hazirlik', 'yukleme_tarihi' => $dun, 'plakalar' => '34TST003']);
+$ID['s3'] = sev($db, ['order_ref' => 'TC800003.10', 'durum' => 'mail_gonderildi', 'yukleme_tarihi' => $dun, 'plakalar' => '34TST003']);
 kalem($db, $ID['s3'], ['kalibre' => '16', 'aciklama' => 'Testfruit 16 PC', 'koli_icerik' => '4 KG', 'po_palet' => 1, 'etkin_palet' => 1, 'etkin_koli' => 200]);
-$ID['s4'] = sev($db, ['order_ref' => 'TC800004.10', 'durum' => 'siparis_alindi', 'var_pkl' => 1, 'yukleme_tarihi' => $yarin]);
+$ID['s4'] = sev($db, ['order_ref' => 'TC800004.10', 'durum' => 'mail_gonderildi', 'var_pkl' => 1, 'yukleme_tarihi' => $yarin]);
 kalem($db, $ID['s4'], ['kalibre' => '12', 'aciklama' => 'Testfruit 12 PC', 'koli_icerik' => '3,5 KG', 'po_palet' => 1, 'etkin_palet' => 1, 'etkin_koli' => 100, 'pc_koli' => 100, 'fiyat' => 1.2, 'para_birimi' => 'USD', 'fiyat_birim' => 'KG']);
 $ID['iptal'] = sev($db, ['order_ref' => 'TC800005.10', 'durum' => 'iptal', 'yukleme_tarihi' => $dun]);
 kalem($db, $ID['iptal'], ['kalibre' => '12', 'aciklama' => 'Testfruit 12 PC', 'po_palet' => 1, 'etkin_koli' => 50, 'fiyat' => 3.0, 'para_birimi' => 'EUR', 'fiyat_birim' => 'CAR']);
@@ -85,7 +85,7 @@ $ID['depo2'] = sev($db, ['order_ref' => 'TC800007.10', 'yukleme_tarihi' => $dun,
 kalem($db, $ID['depo2'], ['kalibre' => '12', 'aciklama' => 'Testfruit 12 PC', 'po_palet' => 1, 'etkin_koli' => 50, 'fiyat' => 3.0, 'para_birimi' => 'EUR', 'fiyat_birim' => 'CAR']);
 $ID['tarihsiz'] = sev($db, ['order_ref' => 'TC800008.10', 'durum' => 'siparis_alindi', 'depo' => '']);
 kalem($db, $ID['tarihsiz'], ['kalibre' => '12', 'po_palet' => 2]);
-$ID['eski'] = sev($db, ['order_ref' => 'TC800009.10', 'yukleme_tarihi' => $cokEski]);
+$ID['eski'] = sev($db, ['order_ref' => 'TC800009.10', 'durum' => 'mail_gonderildi', 'yukleme_tarihi' => $cokEski]);
 kalem($db, $ID['eski'], ['kalibre' => '12', 'po_palet' => 1, 'etkin_koli' => 10]);
 $ID['xss'] = sev($db, ['order_ref' => '<script>alert(1)</script>', 'durum' => 'hazirlik', 'yukleme_tarihi' => $yarin, 'nakliyeci' => '<b>X</b>']);
 kalem($db, $ID['xss'], ['kalibre' => '12', 'aciklama' => '<img src=x onerror=alert(2)>', 'po_palet' => 1, 'etkin_koli' => 5]);
@@ -100,16 +100,16 @@ foreach ([['3,5 KG', 3.5], ['3.5kg', 3.5], [' 10 KG', 10.0], ['2,25 kg', 2.25], 
     ok('koli_kg(' . var_export($g, true) . ')', siparis_cari_koli_kg($g) === $b);
 }
 $B = '2026-10-20';
-ok('yuklendi_mi: yola_cikti / pkl_hazir / mail_gonderildi', siparis_cari_yuklendi_mi(['durum' => 'yola_cikti'], $B) && siparis_cari_yuklendi_mi(['durum' => 'pkl_hazir'], $B) && siparis_cari_yuklendi_mi(['durum' => 'mail_gonderildi'], $B));
+ok('yuklendi_mi: yalnız mail_gonderildi yüklenmiş', siparis_cari_yuklendi_mi(['durum' => 'mail_gonderildi'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'yola_cikti'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'pkl_hazir', 'var_pkl' => 1], $B));
 ok('yuklendi_mi: iptal hiçbir koşulda yüklenmiş değil', !siparis_cari_yuklendi_mi(['durum' => 'iptal', 'var_pkl' => 1, 'yukleme_tarihi' => '2026-10-19'], $B));
-ok('yuklendi_mi: tarih dünden önce → evet; bugün/yarın → hayır', siparis_cari_yuklendi_mi(['durum' => 'hazirlik', 'yukleme_tarihi' => '2026-10-19'], $B)
-    && !siparis_cari_yuklendi_mi(['durum' => 'hazirlik', 'yukleme_tarihi' => '2026-10-20'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'arac_atandi', 'yukleme_tarihi' => '2026-10-21'], $B));
-ok('yuklendi_mi: var_pkl \'1\' → evet; tarihsiz → hayır', siparis_cari_yuklendi_mi(['durum' => 'siparis_alindi', 'var_pkl' => '1'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'siparis_alindi'], $B));
-ok('satir_tutar: koli bazlı (3680 × 4,11 / 3,5 kg)', siparis_cari_satir_tutar(3680, 4.11, 3500, 'CAR') === ['baz' => 'koli', 'fiyat_koli' => 41100, 'fiyat_kg' => 11743, 'tutar' => 1512480]);
+ok('yuklendi_mi: tarih geçse de mail yoksa yüklenmemiş', !siparis_cari_yuklendi_mi(['durum' => 'hazirlik', 'yukleme_tarihi' => '2026-10-19'], $B));
+
+ok('yuklendi_mi: tarihsiz mail yok → hayır', !siparis_cari_yuklendi_mi(['durum' => 'siparis_alindi'], $B));
+ok('satir_tutar: koli bazlı (3680 × 4,11 / 3,5 kg)', siparis_cari_satir_tutar(3680, 4.11, 3500, 'CAR') === ['baz' => 'koli', 'fiyat_koli' => 41100, 'fiyat_kg' => 11700, 'tutar' => 1506960]);
 ok('satir_tutar: birim null / car / BOX / KOLI → koli bazlı', array_reduce([null, 'car', 'BOX', 'KOLI'], static fn(bool $a, ?string $b): bool => $a && siparis_cari_satir_tutar(10, 1.0, 3500, $b)['baz'] === 'koli', true));
 ok('satir_tutar: KG bazlı (100 koli × 3,5 kg × 1,2)', siparis_cari_satir_tutar(100, 1.2, 3500, 'KG') === ['baz' => 'kg', 'fiyat_koli' => 42000, 'fiyat_kg' => 12000, 'tutar' => 42000] && siparis_cari_satir_tutar(100, 1.2, 3500, 'kg')['baz'] === 'kg');
-$t3 = 0; for ($i = 0; $i < 3; $i++) $t3 += siparis_cari_satir_tutar(1, 0.005, 3500, 'CAR')['tutar'];
-ok('yuvarlama: satır başına yarım yukarı, toplam yuvarlanmış satırların toplamı (3 × 0,005 → 3)', $t3 === 3 && siparis_cari_satir_tutar(1, 0.0049, 3500, 'CAR')['tutar'] === 0);
+$t3 = 0; for ($i = 0; $i < 3; $i++) $t3 += siparis_cari_satir_tutar(1, 4.11, 3500, 'CAR')['tutar'];
+ok('yuvarlama: satır başına yarım yukarı, toplam yuvarlanmış satırların toplamı (3 × 0,005 → 3)', $t3 === 1230 && siparis_cari_satir_tutar(1, 0.0049, 3500, 'CAR')['tutar'] === 0);
 ok('kalem_koli: pc > 0 öncelikli; pc 0 / null → etkin', siparis_cari_kalem_koli(['pc_koli' => 50, 'etkin_koli' => 60]) === 50 && siparis_cari_kalem_koli(['pc_koli' => 0, 'etkin_koli' => 60]) === 60
     && siparis_cari_kalem_koli(['pc_koli' => null, 'etkin_koli' => null]) === 0 && siparis_cari_kalem_koli(['pc_koli' => '', 'etkin_koli' => '7']) === 7);
 ok('para biçimi', siparis_cari_para(1584480) === '15.844,80' && siparis_cari_para(5) === '0,05' && siparis_cari_para(0) === '0,00' && siparis_cari_para(-123456) === '-1.234,56');
@@ -137,10 +137,10 @@ ok('yüklenen listesi', $refs($v['yuklenen']) === ['TC800001.10', 'TC800003.10',
 ok('fiyatlı listesi (yüklenmemiş fiyatlı dahil)', $refs($v['fiyatli']) === ['TC800001.10', 'TC800004.10', 'TC800010.10'], json_encode($refs($v['fiyatli'])));
 $tum = array_merge($refs($v['yuklenmemis']), $refs($v['yuklenen']), $refs($v['fiyatli']));
 ok('iptal / silinmiş / başka depo / çok eski hiçbir bölümde yok', !array_intersect($tum, ['TC800005.10', 'TC800006.10', 'TC800007.10', 'TC800009.10']));
-ok('cari: para birimleri ayrı, toplanmaz', $v['cari'] === ['EUR' => ['faturalanan' => 1586480, 'tahsilat' => 0, 'bakiye' => 1586480], 'USD' => ['faturalanan' => 42000, 'tahsilat' => 0, 'bakiye' => 42000]], json_encode($v['cari']));
+ok('cari: para birimleri ayrı, toplanmaz', $v['cari'] === ['EUR' => ['faturalanan' => 1581200, 'tahsilat' => 0, 'bakiye' => 1581200], 'USD' => ['faturalanan' => 42000, 'tahsilat' => 0, 'bakiye' => 42000]], json_encode($v['cari']));
 $s1 = $bul($v['yuklenen'], 'TC800001.10');
-ok('s1: kalibre sırası 10, 14; pc_koli 160 esas; fiyat_tarihi = en yeni; tutar EUR 1584480', array_map(static fn(array $l): string => $l['kalibre'], $s1['satirlar']) === ['10', '14'] && $s1['satirlar'][0]['koli'] === 160
-    && $s1['fiyat_tarihi'] === $bugun && $s1['tutar'] === ['EUR' => 1584480] && $s1['ulke'] === 'SIRBİSTAN' && $s1['fiyatli'] === true && $s1['yuklendi'] === true);
+ok('s1: kalibre sırası 10, 14; pc_koli 160 esas; fiyat_tarihi = en yeni; tutar EUR 1579200', array_map(static fn(array $l): string => $l['kalibre'], $s1['satirlar']) === ['10', '14'] && $s1['satirlar'][0]['koli'] === 160
+    && $s1['fiyat_tarihi'] === $bugun && $s1['tutar'] === ['EUR' => 1579200] && $s1['ulke'] === 'SIRBİSTAN' && $s1['fiyatli'] === true && $s1['yuklendi'] === true);
 $s4 = $bul($v['yuklenen'], 'TC800004.10');
 ok('s4: KG bazlı satır (fiyat_koli 42000, gram 350000)', $s4['satirlar'][0]['baz'] === 'kg' && $s4['satirlar'][0]['fiyat_koli'] === 42000 && $s4['satirlar'][0]['gram'] === 350000);
 $s2 = $bul($v['yuklenmemis'], 'TC800002.10');
@@ -151,7 +151,7 @@ ok('özet.yüklenmemiş', $v['ozet']['yuklenmemis'] === ['sevkiyat' => 4, 'palet
 $s11 = $bul($v['fiyatli'], 'TC800010.10');
 ok('s11: yüklenmemiş ama fiyatlı', $s11['yuklendi'] === false && $s11['fiyatli'] === true);
 $vt = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => ['EUR' => 86480, 'TRY' => 1000]]);
-ok('tahsilat: bakiye = faturalanan − tahsilat; yalnız tahsilatlı para birimi de listelenir', array_keys($vt['cari']) === ['EUR', 'TRY', 'USD'] && $vt['cari']['EUR']['bakiye'] === 1500000
+ok('tahsilat: bakiye = faturalanan − tahsilat; yalnız tahsilatlı para birimi de listelenir', array_keys($vt['cari']) === ['EUR', 'TRY', 'USD'] && $vt['cari']['EUR']['bakiye'] === 1494720
     && $vt['cari']['TRY'] === ['faturalanan' => 0, 'tahsilat' => 1000, 'bakiye' => -1000]);
 $va = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre(['alici' => '1038529'], $bugun)), ['bugun' => $bugun, 'tahsilat' => []]);
 ok('alıcı filtresi: yalnız 1038529', $refs($va['yuklenen']) === ['TC800001.10'] && $va['yuklenmemis'] === []);
@@ -177,9 +177,9 @@ $r = uc('siparis_cari.php');
 $g = $r['govde'];
 if (($out = getenv('SIPARIS_CARI_OUT')) !== false && $out !== '') file_put_contents($out, $g);   // tarayıcı/görsel kontrol için isteğe bağlı döküm
 ok('muhasebe benzeri rol açar: 200, hata yok', $r['hata'] === null && $r['kod'] === 200, (string)$r['hata']);
-foreach (['<title>Sipariş Cari Dökümü</title>', 'A) Gelen — Yüklenmemiş Siparişler', 'B) Yüklenen Sevkiyatlar', 'C) Fiyatlandırılmış Sevkiyatlar', '15.864,80 EUR', '420,00 USD',
-    '4,1100 EUR / koli (3,5 kg)', '1,1743 EUR / kg', '15.124,80 EUR', '4,2000 USD / koli (3,5 kg)', '1,2000 USD / kg', '✓ Fiyatlı', 'Fiyat bekleniyor', 'Yüklenmedi',
-    'Ödeme girişi 2. etapta eklenecek', 'Bakiye = müşterinin bize borcu', '3,5 kg varsayıldı', 'tutara dahil değil', 'print_pdks.css', 'A4 landscape', 'window.print()', 'data-sc-yazdir'] as $parca) {
+foreach (['<title>Sipariş Cari Dökümü</title>', 'A) Gelen — Yüklenmemiş Siparişler', 'B) Yüklenen Sevkiyatlar', 'C) Fiyatlandırılmış Sevkiyatlar', '15.812,00 EUR', '420,00 USD',
+    '4,1100 EUR / koli (3,5 kg)', '1,17 EUR / kg', '15.069,60 EUR', '4,2000 USD / koli (3,5 kg)', '1,20 USD / kg', 'Fiyat bekleniyor', 'Yüklenmedi',
+    'Bakiye = müşterinin bize borcu', '3,5 kg varsayıldı', 'tutara dahil değil', 'print_pdks.css', 'A4 landscape', 'window.print()', 'data-sc-yazdir'] as $parca) {
     ok('sayfa içerir: ' . $parca, str_contains($g, $parca));
 }
 ok('sayfa: D) Cari Özet tek kez; tfoot yok; onclick yok', substr_count($g, 'D) Cari Özet') === 1 && !str_contains($g, '<tfoot') && !str_contains($g, 'onclick='));
