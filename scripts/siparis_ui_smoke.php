@@ -198,6 +198,15 @@ $r = $f(['durum' => 'kapali']);
 ok('durum=kapali: yalnız kapananlar (evrak bekleyen TC900041 ve sipEvrak DEĞİL)', str_contains($r['html'], 'TC900011.10') && str_contains($r['html'], 'TC900012.10') && !str_contains($r['html'], 'TC900002.10') && !str_contains($r['html'], 'id="sipAcik"')
     && !str_contains($r['html'], 'TC900041.10') && !str_contains($r['html'], 'id="sipEvrak"'));
 $r = $f(['durum' => 'evrak_bekleyen']);
+// v402 — görülme işareti: liste sayfa-düzeyi meta + satır/kart başına gizli id/zaman; sevkiyat sayfasında "görüldü" işareti
+$__g = sayfa('siparisler.php');
+ok('v402: listede meta (uid + sunucu şimdi) ve her satır + kart için gizli değişme işareti', temiz($__g) && preg_match('~<span hidden data-sip-gor-uid="\d+" data-sip-gor-now="\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"></span>~', $__g['html']) === 1
+    && substr_count($__g['html'], 'data-sip-gor-id="' . $ID['s1'] . '"') === 2 && preg_match('~data-sip-gor-id="' . $ID['s1'] . '" data-sip-gor-upd="\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"~', $__g['html']) === 1);
+$__gv = sayfa('siparis_view.php', ['id' => $ID['s1']]);
+ok('v402: sevkiyat sayfasında meta sevkiyat id + değişme zamanını taşır', preg_match('~data-sip-gor-uid="\d+" data-sip-gor-now="[^"]+" data-sip-gor-id="' . $ID['s1'] . '" data-sip-gor-upd="[^"]+"~', $__gv['html']) === 1);
+$__css402 = (string)file_get_contents(__DIR__ . '/../assets/siparis.css'); $__js402 = (string)file_get_contents(__DIR__ . '/../assets/siparis.js');
+ok('v402: CSS (Evrak açık mavi zemin + değişti çerçevesi, açık + koyu) ve JS görülme kaydı', str_contains($__css402, '.sip-bolum-evrak { --sip-evrak-zemin: #eef5ff;') && str_contains($__css402, 'html[data-theme="dark"] .sip-mod .sip-bolum-evrak {')
+    && str_contains($__css402, 'tr.sip-degisti') && str_contains($__css402, '.sip-card.sip-degisti') && str_contains($__js402, 'asya_sip_gorulen_'));
 ok('durum=evrak_bekleyen: yalnız TC900041 (sipEvrak), diğer bölümler yok', str_contains($r['html'], 'TC900041.10') && !str_contains($r['html'], 'TC900011.10') && !str_contains($r['html'], 'TC900002.10') && !str_contains($r['html'], 'id="sipAcik"') && !str_contains($r['html'], 'id="sipKapali"') && temiz($r));
 $r = $f(['durum' => 'acik']);
 ok('durum=acik: Evrak ve Kapanan bölümü yok, TC900041 yok', !str_contains($r['html'], 'id="sipEvrak"') && !str_contains($r['html'], 'id="sipKapali"') && !str_contains($r['html'], 'TC900041.10') && str_contains($r['html'], 'TC900002.10'));

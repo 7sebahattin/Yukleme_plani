@@ -114,6 +114,7 @@ $mailTaslak = siparis_pkl_mail_taslak($poEpostalar, $mailPklAd, (string)$sev['or
 $pklHazir = (int)$sev['var_pkl'] === 1;
 ?>
 <div class="sip-mod sip-view">
+  <?= sipui_gorulen_meta((int)$auth_user['id'], $sev) ?>
   <div class="page-head sip-head">
     <div class="sip-head-sol">
       <a class="btn btn-geri" href="siparisler.php">← Siparişler</a>

@@ -40,6 +40,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
             <a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>"
                title="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a>
           <?php endif; ?>
+          <?= sipui_gorulen_satir($r) ?>
         </td>
         <td>
           <?php if ($r['po_belge_id']): ?>
@@ -113,6 +114,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
         <?php if ($__uy > 0): ?><span class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>">⚠ <?= $__uy ?></span><?php endif; ?>
       </div>
       <?= sipui_ilerleme_html($r) ?>
+      <?= sipui_gorulen_satir($r) ?>
       <div class="pc-kebab-wrap sip-card-kebab">
         <button class="pc-kebab" type="button" title="İşlemler" aria-label="<?= h((string)$r['order_ref']) ?> işlemleri">⋮</button>
         <div class="pc-dropdown" hidden>

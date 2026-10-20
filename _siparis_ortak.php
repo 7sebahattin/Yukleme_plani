@@ -154,6 +154,24 @@ function sipui_parti_rozet_html(array $sev, array $parti): string
     return '<div class="sip-parti-rozetler">' . $ic . '</div>';
 }
 
+/**
+ * v402 — "Son bakışınızdan sonra değişti" işareti. Görülme kaydı YALNIZ cihazda (localStorage `asya_sip_gorulen_<uid>`, şema YOK):
+ * ilk ziyarette taban zaman = sunucu "şimdi" (öncesi "yeni" sayılmaz); sevkiyat sayfası açılınca o sevkiyatın değişme zamanı "görüldü"
+ * yazılır. Liste satırı/kartı: taban < değişme zamanı VE değişme zamanı > görüldü ise çerçevelenir (assets/siparis.js `gorulen()`).
+ */
+function sipui_gorulen_meta(int $uid, ?array $sev = null): string
+{
+    $a = ' data-sip-gor-uid="' . $uid . '" data-sip-gor-now="' . h(siparis_simdi()) . '"';
+    if ($sev !== null) $a .= ' data-sip-gor-id="' . (int)$sev['id'] . '" data-sip-gor-upd="' . h((string)($sev['updated_at'] ?? $sev['created_at'] ?? '')) . '"';
+    return '<span hidden' . $a . '></span>';
+}
+
+/** v402 — liste satırı/kartı için gizli değişme işareti (id + son değişme zamanı). */
+function sipui_gorulen_satir(array $sev): string
+{
+    return '<span hidden data-sip-gor-id="' . (int)($sev['id'] ?? 0) . '" data-sip-gor-upd="' . h((string)($sev['degisti_at'] ?? '')) . '"></span>';
+}
+
 /** v396 — sevkiyatın güncel PKL dosya adı (oluşturulan/yüklenen); parti no'nun ÜSTÜNDE. PKL yoksa boş. */
 function sipui_pkl_ad_html(array $sev, array $pkl): string
 {

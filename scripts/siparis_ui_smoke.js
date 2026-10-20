@@ -683,6 +683,45 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ok(`[${w}] v400 liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
 
+        // v402 — Evrak kartı açık mavi (diğer iki karttan farklı zemin) + "son bakışınızdan sonra değişti" çerçevesi (görülme kaydı cihazda)
+        const taban = t => async pg => { await pg.addInitScript(x => { try { if (!localStorage.getItem('asya_sip_gorulen_1')) localStorage.setItem('asya_sip_gorulen_1', JSON.stringify({ t: x, s: {} })); } catch (e) {} }, t); };
+        ({ ctx, page, hatalar } = await ac('liste', w, h, false, taban('2000-01-01 00:00:00')));
+        const dg = await page.evaluate(() => {
+            const bg = id => { const e = document.getElementById(id); return e ? getComputedStyle(e.closest('section')).backgroundColor : null; };
+            const bir = document.querySelector('tr.sip-degisti:not(.sip-urun-tr) > td:first-child') || document.querySelector('.sip-card.sip-degisti');
+            return { say: document.querySelectorAll('tr.sip-degisti:not(.sip-urun-tr), .sip-card.sip-degisti').length, bg: [bg('sipAcik'), bg('sipEvrak'), bg('sipKapali')],
+                cerceve: bir ? (getComputedStyle(bir).boxShadow !== 'none' || getComputedStyle(bir).borderColor) : null, tasma: document.documentElement.scrollWidth - window.innerWidth };
+        });
+        ok(`[${w}] v402 liste: taban eski → değişmiş sevkiyatlar çerçeveli`, dg.say >= 3 && !!dg.cerceve, JSON.stringify(dg));
+        ok(`[${w}] v402 liste: Evrak kartı zemini Açık ve Kapanan'dan farklı (açık mavi)`, !!dg.bg[1] && dg.bg[1] !== dg.bg[0] && dg.bg[1] !== dg.bg[2] && /^rgb\(2[34]\d, 2[34]\d, 25\d\)$/.test(dg.bg[1]), JSON.stringify(dg.bg));
+        ok(`[${w}] v402 liste: çerçeve yatay taşma yaratmaz`, dg.tasma <= 0, String(dg.tasma));
+        ok(`[${w}] v402 liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+
+        ({ ctx, page, hatalar } = await ac('liste', w, h, false, taban('2099-01-01 00:00:00')));
+        ok(`[${w}] v402 liste: taban gelecekte → çerçeve yok (ilk ziyarette eski kayıtlar "yeni" sayılmaz)`, await page.evaluate(() => document.querySelectorAll('.sip-degisti').length === 0));
+        await ctx.close();
+
+        ({ ctx, page, hatalar } = await ac('liste', w, h));   // kayıt yok → ilk ziyaret: taban = sunucu şimdisi
+        ok(`[${w}] v402 liste: ilk ziyaret (kayıt yok) → çerçeve yok, taban yazıldı`, await page.evaluate(() => document.querySelectorAll('.sip-degisti').length === 0 && !!JSON.parse(localStorage.getItem('asya_sip_gorulen_1') || 'null')));
+        await ctx.close();
+
+        ({ ctx, page, hatalar } = await ac('detay', w, h, false, taban('2000-01-01 00:00:00')));   // sevkiyat sayfası açıldı → görüldü
+        const gid = await page.evaluate(() => { const m = document.querySelector('[data-sip-gor-id]'); const d = JSON.parse(localStorage.getItem('asya_sip_gorulen_1') || 'null'); return { id: m ? m.getAttribute('data-sip-gor-id') : null, yazildi: !!(d && m && d.s[m.getAttribute('data-sip-gor-id')]) }; });
+        ok(`[${w}] v402 detay: sevkiyat sayfası açılınca görülme kaydı yazılır`, !!gid.id && gid.yazildi, JSON.stringify(gid));
+        await page.goto('file://' + path.join(OUT, 'liste.html'));
+        await page.waitForTimeout(300);
+        const gl = await page.evaluate(id => {
+            const e0 = document.querySelector('[data-sip-gor-id="' + id + '"]'); const e = e0 ? (e0.closest('tr') || e0.closest('.sip-card')) : null;
+            const d = JSON.parse(localStorage.getItem('asya_sip_gorulen_1') || 'null') || { s: {} };
+            const lu = e0 ? e0.getAttribute('data-sip-gor-upd') : '', du = d.s[id] || '';
+            // render sırasında sevkiyat sayfasından SONRA değişmiş olabilir (fixture sıralı) → çerçeve ⇔ liste zamanı görülenden yeni
+            return { var: !!e, lu, du, cerceveli: !!(e && e.classList.contains('sip-degisti')), beklenen: lu > du, digerleri: document.querySelectorAll('.sip-degisti').length };
+        }, gid.id);
+        ok(`[${w}] v402 liste: sevkiyat sayfası açılınca çerçeve görülen zamana göre kalkar (değişme zamanı görülenden yeniyse kalır)`, gl.var && gl.du !== '' && gl.cerceveli === gl.beklenen, JSON.stringify(gl));
+        ok(`[${w}] v402 liste: açılmayan diğer sevkiyatların çerçevesi durur`, gl.digerleri >= 1, JSON.stringify(gl));
+        await ctx.close();
+
         ({ ctx, page, hatalar } = await ac('liste_evrak', w, h));
         ok(`[${w}] v400 durum=evrak_bekleyen: yalnız Evrak bölümü, yatay taşma yok`, await page.evaluate(() => !!document.getElementById('sipEvrak') && !document.getElementById('sipAcik') && !document.getElementById('sipKapali') && document.documentElement.scrollWidth <= window.innerWidth));
         await ctx.close();
