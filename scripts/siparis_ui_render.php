@@ -39,7 +39,12 @@ function siparis_ui_tohum(PDO $db): array
     $id['s99'] = (int)siparis_test_sev($db, 'TC900099.10')['id'];
     siparis_alan_elle($db, 'sevkiyat', $id['s11'], 'plakalar', '34 TST 111 / 34 TST 112', 1);
     siparis_pkl_uret($db, $id['s11'], 1, true);                             // kısmi PKL (M/N boş)
-    siparis_durum_degistir($db, $id['s11'], 'mail_gonderildi', 1, '', true);    // kapanan
+    siparis_durum_degistir($db, $id['s11'], 'mail_gonderildi', 1, '', true);
+    siparis_durum_degistir($db, $id['s11'], 'evrak_gonderildi', 1);             // kapanan (v400: son adım evrak takımı)
+    // v400: evrak takımı bekleyen sevkiyat (PKL maili gitti, evrak takımı henüz gönderilmedi)
+    $id['s41'] = (int)siparis_sevkiyat_elle_ac($db, 'TC900041.10', '9000000041', '2026-12-10', 1)['id'];
+    $db->exec('UPDATE siparis_sevkiyatlar SET var_pkl = 1 WHERE id = ' . $id['s41']);   // test kısayolu (PKL dosyası olmadan)
+    siparis_durum_degistir($db, $id['s41'], 'mail_gonderildi', 1);
     siparis_durum_degistir($db, $id['s12'], 'iptal', 1, 'müşteri iptal etti');
     siparis_pkl_uret($db, $id['s1'], 1, true);                              // PKL hazır (açık, çatışmalı)
     // ikinci depo: başka depoda görünmeyecek sevkiyat
@@ -110,9 +115,11 @@ $sayfalar = [
     'liste_bos'      => ['siparisler.php', ['q' => 'yok-boyle-bir-sevkiyat']],
     'liste_tek'      => ['siparisler.php', ['durum' => 'arac_bekleyen']],                       // v382: tek durum filtresi → "Sonuçlar" bölümünde yazdırma düğmesi
     'liste_kapali'   => ['siparisler.php', ['durum' => 'kapali']],                              // v382: yazdırma düğmesi YOK (kapanan bölüm)
+    'liste_evrak'    => ['siparisler.php', ['durum' => 'evrak_bekleyen']],                     // v400: yalnız Evrak Takımı Bekleyen bölümü (yazdırma YOK)
     'liste_viewer'   => ['siparisler.php', [], ['siparis.read'], false],
     'detay'          => ['siparis_view.php', ['id' => $ID['s1']]],                              // çatışma + PKL + beyan önerisi
-    'detay_kapali'   => ['siparis_view.php', ['id' => $ID['s11']]],                             // mail gönderildi, 3 kaynak, bölüm farkı
+    'detay_kapali'   => ['siparis_view.php', ['id' => $ID['s11']]],                             // evrak takımı gönderildi (kapalı), 3 kaynak, bölüm farkı
+    'detay_evrak'    => ['siparis_view.php', ['id' => $ID['s41']]],                             // v400: mail gönderildi, evrak takımı bekliyor
     'detay_stub'     => ['siparis_view.php', ['id' => $ID['s99']]],                             // PC ile açılan taslak
     'detay_iptal'    => ['siparis_view.php', ['id' => $ID['s12']]],
     'detay_viewer'   => ['siparis_view.php', ['id' => $ID['s1']], ['siparis.read'], false],

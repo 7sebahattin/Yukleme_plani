@@ -666,6 +666,57 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         }
     }
 
+    // ── v400: Evrak takımı bekleyen bölüm + son adım ──
+    for (const [w, h] of EKRANLAR) {
+        const mobil = w < 768;
+        let { ctx, page, hatalar } = await ac('liste', w, h);
+        const b = await page.evaluate(() => {
+            const sec = id => { const e = document.getElementById(id); return e ? e.closest('section') : null; };
+            const a = sec('sipAcik'), e = sec('sipEvrak'), k = sec('sipKapali');
+            const sol = el => getComputedStyle(el).borderLeftColor;
+            return { var: !!(a && e && k), sira: !!(a && e && k) && !!(a.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(e.compareDocumentPosition(k) & Node.DOCUMENT_POSITION_FOLLOWING),
+                renk: a && e && k ? [sol(a), sol(e), sol(k)] : [], genislik: e ? Math.round(e.getBoundingClientRect().width) : 0, tasma: document.documentElement.scrollWidth - window.innerWidth };
+        });
+        ok(`[${w}] v400 liste: Açık < Evrak < Kapanan sırası`, b.var && b.sira, JSON.stringify(b));
+        ok(`[${w}] v400 liste: Evrak kartının sol şerit rengi Açık ve Kapanan'dan farklı`, b.renk.length === 3 && b.renk[1] !== b.renk[0] && b.renk[1] !== b.renk[2], JSON.stringify(b.renk));
+        ok(`[${w}] v400 liste: yatay taşma yok (üç bölüm)`, b.tasma <= 0, String(b.tasma));
+        ok(`[${w}] v400 liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+
+        ({ ctx, page, hatalar } = await ac('liste_evrak', w, h));
+        ok(`[${w}] v400 durum=evrak_bekleyen: yalnız Evrak bölümü, yatay taşma yok`, await page.evaluate(() => !!document.getElementById('sipEvrak') && !document.getElementById('sipAcik') && !document.getElementById('sipKapali') && document.documentElement.scrollWidth <= window.innerWidth));
+        await ctx.close();
+
+        ({ ctx, page, hatalar } = await ac('detay_evrak', w, h));
+        ok(`[${w}] v400 detay (evrak bekleyen): yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
+        if (mobil) {
+            const kucuk = await page.evaluate(() => Array.from(document.querySelectorAll('.sip-hizli .btn')).filter(e => e.offsetParent !== null).map(e => ({ t: (e.textContent || '').trim().slice(0, 24), h: e.getBoundingClientRect().height })).filter(x => x.h < 43.5));
+            ok(`[${w}] v400 detay: hızlı eylem düğmeleri ≥ 44px`, kucuk.length === 0, JSON.stringify(kucuk));
+        }
+        await page.click('.sip-hizli [data-sip-ac=sipEvrakModal]');
+        await page.waitForTimeout(400);
+        const ev0 = await page.evaluate(() => { const m = document.getElementById('sipEvrakModal'); return { acik: !m.hidden, pasif: m.querySelector('[data-sip-evrak-gonder]').disabled }; });
+        ok(`[${w}] v400 evrak penceresi: açılır, gönder düğmesi pasif`, ev0.acik && ev0.pasif, JSON.stringify(ev0));
+        await page.check('#sipEvrakModal [data-sip-evrak-onay]');
+        await page.waitForTimeout(100);
+        ok(`[${w}] v400 evrak penceresi: onay kutusu işaretlenince gönder düğmesi etkinleşir`, await page.evaluate(() => !document.querySelector('#sipEvrakModal [data-sip-evrak-gonder]').disabled));
+        await page.uncheck('#sipEvrakModal [data-sip-evrak-onay]');
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(100);
+        await pencereDene(page, `[${w}] v400 evrak penceresi`, '.sip-hizli [data-sip-ac=sipEvrakModal]', '#sipEvrakModal', h);
+        ok(`[${w}] v400 detay: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+
+        ({ ctx, page, hatalar } = await ac('detay_kapali', w, h));
+        ok(`[${w}] v400 detay (kapalı): 7. adım ✓ ve "su-an"; Mail/Evrak düğmesi yok`, await page.evaluate(() => {
+            const l = Array.from(document.querySelectorAll('.sip-steps li'));
+            const son = l[l.length - 1];
+            return l.length === 7 && son.classList.contains('sip-step--su-an') && son.querySelector('.sip-step-nokta').textContent.trim() === '✓' && !document.querySelector('[data-sip-ac=sipMailModal], [data-sip-ac=sipEvrakModal]');
+        }));
+        ok(`[${w}] v400 detay (kapalı): yatay taşma yok, konsol hatası yok`, (await tasma(page)) <= 0 && hatalar.length === 0, hatalar.join(' | '));
+        await ctx.close();
+    }
+
     // ── koyu tema (yalnız yüzeyler; tek ekran) ──
     for (const [sayfa, sel] of [['liste', '.sip-card'], ['detay', '.sip-mod .card']]) {
         const { ctx, page } = await ac(sayfa, 390, 844, true);

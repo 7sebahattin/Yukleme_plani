@@ -21,12 +21,12 @@ function siparis_cari_yetkili(): bool
     return function_exists('can') && can('reports.export');
 }
 
-/** Yüklendi: iptal değil VE (yola_cikti/pkl_hazir/mail_gonderildi VEYA var_pkl=1 VEYA yukleme_tarihi < bugün). */
+/** Yüklendi: iptal değil VE durum `mail_gonderildi` ya da `evrak_gonderildi` (v400: evrak takımı mail'den SONRA gelir; mail gönderilmiş sevkiyat evrak adımında da yüklenmiş sayılır). */
 function siparis_cari_yuklendi_mi(array $s, string $bugun): bool
 {
     $d = (string)($s['durum'] ?? '');
     if ($d === 'iptal') return false;
-    return $d === 'mail_gonderildi';   // yükleme tarihi geçse de mail gönderilmedikçe yüklenmemiş sayılır
+    return in_array($d, ['mail_gonderildi', 'evrak_gonderildi'], true);   // yükleme tarihi geçse de mail gönderilmedikçe yüklenmemiş sayılır
 }
 
 /** "3,5 KG" / "3.5kg" → 3.5; ilk sayı, 0 < x < 100; okunamazsa null. */

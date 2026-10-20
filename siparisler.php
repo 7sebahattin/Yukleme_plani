@@ -35,13 +35,14 @@ $F = siparis_liste_filtre($_GET);
 $q = $F['q']; $f_durum = $F['f_durum']; $f_cw = $F['f_cw']; $f_alici = $F['f_alici']; $f_eksik = $F['f_eksik']; $f_catisma = $F['f_catisma']; $f_po = $F['f_po'];
 $t_bas = $F['t_bas']; $t_bit = $F['t_bit'];
 $acik_page  = max(1, (int)($_GET['acik_page'] ?? 1));
+$evrak_page = max(1, (int)($_GET['evrak_page'] ?? 1));
 $kapali_page = max(1, (int)($_GET['kapali_page'] ?? 1));
 $durumlar   = siparis_durumlar();
 $kapaliDur  = siparis_kapali_durumlar();
 $dsql = $F['dsql']; $dprm = $F['dprm'];
-$kapaliSql = $F['kapaliSql']; $acikSql = $F['acikSql'];
+$kapaliSql = $F['kapaliSql']; $acikSql = $F['acikSql']; $evrakSql = $F['evrakSql'];
 $temelWhere = $F['temelWhere']; $temelPar = $F['temelPar'];
-$tek = $F['tek']; $tekSql = $F['tekSql']; $bolumAcik = $F['bolumAcik']; $bolumKapali = $F['bolumKapali'];
+$tek = $F['tek']; $tekSql = $F['tekSql']; $bolumAcik = $F['bolumAcik']; $bolumEvrak = $F['bolumEvrak']; $bolumKapali = $F['bolumKapali'];
 $detayFiltre = $F['detayFiltre']; $filtreVar = $F['filtreVar']; $detayOzet = $F['detayOzet'];
 
 $cols = 's.id, s.order_ref, s.tur_no, s.navlun_no, s.po_belge_id, s.cw_hafta, s.cw_yil, s.alici_kodu, s.alici_adi, s.yukleme_tarihi, s.plakalar, s.planlanan_plakalar, '
@@ -59,17 +60,18 @@ $bolum = function (string $ekSql, string $siralama, int $sayfa, int $per) use ($
     return ['rows' => $st->fetchAll(PDO::FETCH_ASSOC), 'toplam' => $toplam, 'sayfa' => $sayfa, 'sayfa_say' => $sayfaSay];
 };
 $acikSira = 's.yukleme_tarihi IS NULL, s.yukleme_tarihi, s.id';
-$B_acik = $B_kapali = $B_tek = null;
+$B_acik = $B_evrak = $B_kapali = $B_tek = null;
 if ($tek) $B_tek = $bolum($tekSql, $acikSira, $acik_page, 100);
 else {
     if ($bolumAcik)   $B_acik   = $bolum($acikSql, $acikSira, $acik_page, 100);
+    if ($bolumEvrak)  $B_evrak  = $bolum($evrakSql, $acikSira, $evrak_page, 100);   // v400: PKL maili gitti, evrak takımı bekliyor
     if ($bolumKapali) $B_kapali = $bolum($kapaliSql, 's.yukleme_tarihi DESC, s.id DESC', $kapali_page, SIPARIS_PER_PAGE);
 }
 
 // ── Liste zenginleştirme: listelenen TÜM sevkiyatlar için 2 ek sorgu (N+1 yok) ──
 //    ürün kalemleri (Article specification / palet / PF) + aktif bağlı beyanın parti no'su
 $listeIds = [];
-foreach ([$B_acik, $B_kapali, $B_tek] as $__b) { if ($__b !== null) foreach ($__b['rows'] as $__r) $listeIds[] = (int)$__r['id']; }
+foreach ([$B_acik, $B_evrak, $B_kapali, $B_tek] as $__b) { if ($__b !== null) foreach ($__b['rows'] as $__r) $listeIds[] = (int)$__r['id']; }
 $kalemHarita = [];
 if ($listeIds) {
     try {
@@ -111,13 +113,15 @@ try {
 } catch (PDOException $e) {
     error_log('[siparisler] kpi: ' . $e->getMessage());
 }
-$kapaliSay = 0;
+$kapaliSay = 0; $evrakSay = 0;
 try {
-    $c = $pdo->prepare('SELECT COUNT(*) FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND ' . $kapaliSql . $dsql);
+    $c = $pdo->prepare('SELECT COALESCE(SUM(CASE WHEN ' . $kapaliSql . ' THEN 1 ELSE 0 END),0) AS kapali, COALESCE(SUM(CASE WHEN ' . $evrakSql . ' THEN 1 ELSE 0 END),0) AS evrak
+        FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL ' . $dsql);
     $c->execute($dprm);
-    $kapaliSay = (int)$c->fetchColumn();
+    $__say = $c->fetch(PDO::FETCH_ASSOC) ?: [];
+    $kapaliSay = (int)($__say['kapali'] ?? 0); $evrakSay = (int)($__say['evrak'] ?? 0);
 } catch (PDOException $e) {
-    error_log('[siparisler] kapali say: ' . $e->getMessage());
+    error_log('[siparisler] kapali/evrak say: ' . $e->getMessage());
 }
 
 // alıcı listesi
@@ -146,7 +150,7 @@ try {
 $acikListe = [];
 if ($yaz && $yetim) {
     try {
-        $z = $pdo->prepare('SELECT s.id, s.order_ref, s.alici_adi FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND ' . $acikSql . $dsql . ' ORDER BY s.order_ref LIMIT 300');
+        $z = $pdo->prepare('SELECT s.id, s.order_ref, s.alici_adi FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND ' . siparis_kapanmamis_sql() . $dsql . ' ORDER BY s.order_ref LIMIT 300');
         $z->execute($dprm);
         $acikListe = $z->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
@@ -192,19 +196,21 @@ $yukleAcik = !empty($mD['yarim']);
 
 // KPI çipi: etkin mi?
 $chipler = [
-    ['k' => 'acik',    'et' => 'Açık',          'say' => $kpi['acik'],    'url' => siparis_url(['durum' => 'acik', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'acik',    'et' => 'Açık',          'say' => $kpi['acik'],    'url' => siparis_url(['durum' => 'acik', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_durum === 'acik' && $f_eksik === '' && !$f_catisma],
-    ['k' => 'arac',    'et' => 'Araç bekleyen', 'say' => $kpi['arac'],    'url' => siparis_url(['durum' => 'arac_bekleyen', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'arac',    'et' => 'Araç bekleyen', 'say' => $kpi['arac'],    'url' => siparis_url(['durum' => 'arac_bekleyen', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_durum === 'arac_bekleyen'],
-    ['k' => 'yolda',   'et' => 'Yolda',         'say' => $kpi['yolda'],   'url' => siparis_url(['durum' => 'yola_cikti', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'yolda',   'et' => 'Yolda',         'say' => $kpi['yolda'],   'url' => siparis_url(['durum' => 'yola_cikti', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_durum === 'yola_cikti' && $f_eksik === ''],
-    ['k' => 'pkl',     'et' => 'PKL bekleyen',  'say' => $kpi['pkl'],     'url' => siparis_url(['durum' => 'yola_cikti', 'eksik' => 'pkl', 'catisma' => null, 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'pkl',     'et' => 'PKL bekleyen',  'say' => $kpi['pkl'],     'url' => siparis_url(['durum' => 'yola_cikti', 'eksik' => 'pkl', 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_durum === 'yola_cikti' && $f_eksik === 'pkl'],
-    ['k' => 'mail',    'et' => 'Mail bekleyen', 'say' => $kpi['mail'],    'url' => siparis_url(['durum' => 'pkl_hazir', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'mail',    'et' => 'Mail bekleyen', 'say' => $kpi['mail'],    'url' => siparis_url(['durum' => 'pkl_hazir', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_durum === 'pkl_hazir'],
-    ['k' => 'catisma', 'et' => 'Çatışmalı',     'say' => $kpi['catisma'], 'url' => siparis_url(['durum' => null, 'eksik' => null, 'catisma' => '1', 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'evrak',   'et' => 'Evrak bekleyen', 'say' => $evrakSay,     'url' => siparis_url(['durum' => 'evrak_bekleyen', 'eksik' => null, 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
+        'aktif' => $f_durum === 'evrak_bekleyen'],
+    ['k' => 'catisma', 'et' => 'Çatışmalı',     'say' => $kpi['catisma'], 'url' => siparis_url(['durum' => null, 'eksik' => null, 'catisma' => '1', 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_catisma],
-    ['k' => 'po',      'et' => 'PO bekleyen',   'say' => $kpi['po'],      'url' => siparis_url(['durum' => 'acik', 'eksik' => 'po', 'catisma' => null, 'po' => null, 'acik_page' => null, 'kapali_page' => null]),
+    ['k' => 'po',      'et' => 'PO bekleyen',   'say' => $kpi['po'],      'url' => siparis_url(['durum' => 'acik', 'eksik' => 'po', 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_eksik === 'po'],
 ];
 
@@ -227,7 +233,7 @@ $bolumBas = function (string $baslik, int $say, string $id, string $ek = '', str
 };
 // v382 — "Açık Sevkiyatlar" yazdırma / PDF düğmeleri (yalnız Açık bölüm ve tek durum "Sonuçlar" bölümü; bölümde satır varsa; Kapananda YOK).
 // Veri siparis_yazdir.php'den (GET JSON) her tıkta taze gelir; aynı filtre anahtarları, sayfa numaraları HARİÇ. İzleyiciye de açık (siparis.read).
-$yazdirUrl = siparis_url(['acik_page' => null, 'kapali_page' => null], 'siparis_yazdir.php');
+$yazdirUrl = siparis_url(['acik_page' => null, 'evrak_page' => null, 'kapali_page' => null], 'siparis_yazdir.php');
 $yazdirEk = '<div class="sip-bolum-eylem no-print">'
     . '<button type="button" class="btn btn-sm" data-sip-yazdir="yazdir" data-sip-yazdir-url="' . h($yazdirUrl) . '">🖨️ Yazdır</button>'
     . '<button type="button" class="btn btn-sm" data-sip-yazdir="pdf" data-sip-yazdir-url="' . h($yazdirUrl) . '">📤 PDF Gönder</button></div>';
@@ -236,7 +242,7 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
   <div class="page-head">
     <div>
       <h1>📦 Siparişler</h1>
-      <p class="muted"><?= (int)$kpi['acik'] ?> açık · <?= (int)$kapaliSay ?> kapanan sevkiyat</p>
+      <p class="muted"><?= (int)$kpi['acik'] ?> açık · <?= (int)$evrakSay ?> evrak bekleyen · <?= (int)$kapaliSay ?> kapanan sevkiyat</p>
     </div>
     <div class="page-head-actions">
       <?php if ($yaz): ?>
@@ -300,7 +306,8 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
       <label>Durum
         <select name="durum">
           <option value="">Tümü</option>
-          <option value="acik"<?= $f_durum === 'acik' ? ' selected' : '' ?>>Açık olanlar</option>
+          <option value="acik"<?= $f_durum === 'acik' ? ' selected' : '' ?>>Açık olanlar (işlem bekleyen)</option>
+          <option value="evrak_bekleyen"<?= $f_durum === 'evrak_bekleyen' ? ' selected' : '' ?>>Evrak takımı bekleyen</option>
           <option value="kapali"<?= $f_durum === 'kapali' ? ' selected' : '' ?>>Kapananlar</option>
           <option value="arac_bekleyen"<?= $f_durum === 'arac_bekleyen' ? ' selected' : '' ?>>Araç bekleyen</option>
           <?php foreach ($durumlar as $dk => $dv): ?>
@@ -338,7 +345,7 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
   <?php
   $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $pklHarita, $yazdirEk): void {
       $ek = in_array($id, ['sipAcik', 'sipSonuclar'], true) && $b['rows'] ? $yazdirEk : '';
-      $ton = ['sipAcik' => ' sip-bolum-acik', 'sipKapali' => ' sip-bolum-kapali'][$id] ?? '';
+      $ton = ['sipAcik' => ' sip-bolum-acik', 'sipEvrak' => ' sip-bolum-evrak', 'sipKapali' => ' sip-bolum-kapali'][$id] ?? '';
       echo '<section class="sip-bolum' . $ton . '" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id, $ek, $ikon, $not);
       if (!$b['rows']) {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
@@ -351,7 +358,10 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
   };
   if ($tek) $bolumCiz($B_tek, 'Sonuçlar', 'sipSonuclar', 'acik_page', 'Bu filtreyle eşleşen sevkiyat yok.');
   if ($B_acik !== null) $bolumCiz($B_acik, 'İşlem Bekleyen Sevkiyatlar', 'sipAcik', 'acik_page', $filtreVar ? 'Bu filtreyle eşleşen açık sevkiyat yok.' : ($yaz ? 'Henüz açık sevkiyat yok. Yukarıdan PO, Loading List ya da Price Confirmation PDF\'i yükleyin.' : 'Henüz açık sevkiyat yok.'), '⏳', 'Araç, belge, PKL ya da mail bekleyen açık işler');
-  if ($B_kapali !== null) $bolumCiz($B_kapali, 'Kapanan Sevkiyatlar', 'sipKapali', 'kapali_page', 'Kapanan sevkiyat yok.', '✅', 'Tamamlanan kayıtlar (mail gönderildi · iptal)');
+  if ($B_evrak !== null) $bolumCiz($B_evrak, 'Evrak Takımı Bekleyen Sevkiyatlar', 'sipEvrak', 'evrak_page',
+      $filtreVar ? 'Bu filtreyle eşleşen evrak bekleyen sevkiyat yok.' : 'Evrak takımı bekleyen sevkiyat yok.',
+      '📦', 'Yüklendi, PKL Excel maili gönderildi — evrak takımı gönderilince sevkiyatta “📦 Evrak takımı” adımını işaretleyin');
+  if ($B_kapali !== null) $bolumCiz($B_kapali, 'Kapanan Sevkiyatlar', 'sipKapali', 'kapali_page', 'Kapanan sevkiyat yok.', '✅', 'Tamamlanan kayıtlar (evrak takımı gönderildi · iptal)');
   ?>
 
   <?php if ($yetim): ?>

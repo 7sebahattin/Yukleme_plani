@@ -37,7 +37,7 @@ const SIPARIS_DEPO_HTACCESS = "Options -Indexes\nRequire all denied\n<IfModule !
 /** Olay (zaman çizelgesi) türleri — siparis_olay() yalnız bunları kabul eder. */
 const SIPARIS_OLAY_TURLERI = ['olusturuldu', 'belge_eklendi', 'belge_eski_surum', 'belge_silindi', 'alan_guncellendi',
     'alan_elle', 'kilit_kaldirildi', 'catisma', 'catisma_kabul', 'catisma_red', 'durum', 'pkl_taslak', 'pkl_uretildi',
-    'pkl_yuklendi', 'mail_gonderildi', 'beyan_baglandi', 'beyan_kaldirildi', 'geri_getirildi', 'silindi', 'uyari'];
+    'pkl_yuklendi', 'mail_gonderildi', 'evrak_gonderildi', 'beyan_baglandi', 'beyan_kaldirildi', 'geri_getirildi', 'silindi', 'uyari'];
 
 // ── ŞEMA ────────────────────────────────────────────────────────────────
 
@@ -475,12 +475,25 @@ function siparis_durumlar(): array
         'yola_cikti'      => ['etiket' => 'Yola çıktı',      'ikon' => '🛣', 'css' => 'yolda',    'sira' => 4],
         'pkl_hazir'       => ['etiket' => 'PKL hazır',       'ikon' => '📄', 'css' => 'pkl',      'sira' => 5],
         'mail_gonderildi' => ['etiket' => 'Mail gönderildi', 'ikon' => '✅', 'css' => 'mail',     'sira' => 6],
+        'evrak_gonderildi' => ['etiket' => 'Evrak takımı',   'ikon' => '📦', 'css' => 'evrak',    'sira' => 7],
         'iptal'           => ['etiket' => 'İptal',           'ikon' => '✖',  'css' => 'iptal',    'sira' => 0],
     ];
 }
 
-/** @return list<string> süreci kapatan durumlar */
-function siparis_kapali_durumlar(): array { return ['mail_gonderildi', 'iptal']; }
+/**
+ * @return list<string> süreci kapatan durumlar (v400: "Mail gönderildi" artık kapatmaz — son adım "Evrak takımı").
+ * Kapalı/kapanmamış ayrımı YALNIZ buradan ve siparis_kapanmamis_sql()'den okunur; durum adlarını başka yere sabit yazma.
+ */
+function siparis_kapali_durumlar(): array { return ['evrak_gonderildi', 'iptal']; }
+
+/** @return list<string> v400 — PKL maili gönderilmiş, evrak takımı bekleyen durumlar (açık değil, kapanmış da değil). */
+function siparis_evrak_bekleyen_durumlar(): array { return ['mail_gonderildi']; }
+
+/** v400 — "süreci kapanmamış" SQL koşulu ($kolon beyaz liste/sabit olmalı; kullanıcı girdisi DEĞİL). */
+function siparis_kapanmamis_sql(string $kolon = 's.durum'): string
+{
+    return $kolon . " NOT IN ('" . implode("','", siparis_kapali_durumlar()) . "')";
+}
 
 /** Durum rozeti — HER ZAMAN ikon + metin (renge tek başına güvenilmez). */
 function siparis_durum_badge(string $durum): string
@@ -494,7 +507,8 @@ function siparis_durum_badge(string $durum): string
 function siparis_ilerleme(array $sev): array
 {
     $sira = siparis_durumlar()[(string)($sev['durum'] ?? '')]['sira'] ?? 0;
-    return ['adim' => $sira, 'toplam' => 6, 'yuzde' => (int)round($sira / 6 * 100)];
+    $toplam = max(array_column(siparis_durumlar(), 'sira'));
+    return ['adim' => $sira, 'toplam' => $toplam, 'yuzde' => (int)round($sira / $toplam * 100)];
 }
 
 /** @return list<'po'|'ll'|'pc'|'pkl'> var_* bayrağı 0 olan belgeler */
@@ -512,7 +526,7 @@ function siparis_eksik_belgeler(array $sev): array
 function siparis_durum_ilerlet(PDO $pdo, int $sid, string $hedef, ?int $uid, string $neden, ?int $belgeId = null): bool
 {
     $tum = siparis_durumlar();
-    if (!isset($tum[$hedef]) || $hedef === 'iptal') return false;
+    if (!isset($tum[$hedef]) || in_array($hedef, ['iptal', 'mail_gonderildi', 'evrak_gonderildi'], true)) return false;   // bu üçü yalnız ELLE
     $st = $pdo->prepare('SELECT durum FROM siparis_sevkiyatlar WHERE id = ? AND deleted_at IS NULL');
     $st->execute([$sid]);
     $mevcut = $st->fetchColumn();
@@ -531,6 +545,9 @@ function siparis_durum_ilerlet(PDO $pdo, int $sid, string $hedef, ?int $uid, str
  * ELLE durum değişikliği (beyaz liste). iptal ve kapalı durumdan çıkış gerekçe (≥3) ister;
  * yola_cikti → yola_cikis_at; mail_gonderildi → var_pkl=1 şart, kısmi PKL'de ($eksik_hucre>0)
  * ayrıca $kismiOnay; iptal → iptal_nedeni. Olay + audit yazar.
+ * v400: evrak_gonderildi YALNIZ mail_gonderildi'den işaretlenir (mail_gonderildi_at'e dokunmaz); evrak → mail_gonderildi
+ * geri alma (gerekçeli) PKL kontrolü yapmaz ve mail_gonderildi_at/_by'yi DEĞİŞTİRMEZ. "Mail gönderildi" audit'i
+ * new_values'ta `evrak_akisi:1` taşır — migrate.php toplu geçiş kartı v400 ÖNCESİ kapanmışları bu işaretten ayırır.
  * @return array{ok:bool,hata?:string}
  */
 function siparis_durum_degistir(PDO $pdo, int $sid, string $hedef, int $uid, string $gerekce = '', bool $kismiOnay = false): array
@@ -546,6 +563,10 @@ function siparis_durum_degistir(PDO $pdo, int $sid, string $hedef, int $uid, str
             if (!$s) return ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.'];
             $eski = (string)$s['durum'];
             if ($eski === $hedef) return ['ok' => false, 'hata' => 'Sevkiyat zaten bu durumda.'];
+            if ($hedef === 'evrak_gonderildi' && $eski !== 'mail_gonderildi') {
+                return ['ok' => false, 'hata' => 'Evrak takımı yalnız "Mail gönderildi" adımındaki sevkiyatta işaretlenebilir.'];
+            }
+            $geriAl = $hedef === 'mail_gonderildi' && $eski === 'evrak_gonderildi';   // evrak takımını geri al
             $kapalidan = in_array($eski, siparis_kapali_durumlar(), true);
             if (($hedef === 'iptal' || $kapalidan) && mb_strlen($gerekce, 'UTF-8') < 3) {
                 return ['ok' => false, 'hata' => $hedef === 'iptal'
@@ -555,7 +576,7 @@ function siparis_durum_degistir(PDO $pdo, int $sid, string $hedef, int $uid, str
             $simdi = siparis_simdi();
             $set = ['durum = ?', 'durum_at = ?', 'updated_at = ?', 'updated_by = ?'];
             $par = [$hedef, $simdi, $simdi, $uid];
-            if ($hedef === 'mail_gonderildi') {
+            if ($hedef === 'mail_gonderildi' && !$geriAl) {
                 if ((int)$s['var_pkl'] !== 1) return ['ok' => false, 'hata' => 'Önce PKL oluşturun ya da yükleyin.'];
                 $pk = $pdo->prepare('SELECT eksik_hucre FROM siparis_pkl WHERE sevkiyat_id = ?');
                 $pk->execute([$sid]);
@@ -571,9 +592,12 @@ function siparis_durum_degistir(PDO $pdo, int $sid, string $hedef, int $uid, str
             elseif ($eski === 'iptal') { $set[] = 'iptal_nedeni = NULL'; }
             $par[] = $sid;
             $pdo->prepare('UPDATE siparis_sevkiyatlar SET ' . implode(', ', $set) . ' WHERE id = ?')->execute($par);
-            if ($hedef === 'mail_gonderildi') {
+            if ($hedef === 'mail_gonderildi' && !$geriAl) {
                 siparis_olay($pdo, $sid, 'mail_gonderildi', $eski, $hedef, $gerekce !== '' ? $gerekce : 'PKL müşteriye gönderildi (elle işaret)', null, $uid);
-                siparis_audit('siparis_mail_gonderildi', $sid, ['durum' => $eski], ['durum' => $hedef, 'order_ref' => $s['order_ref'], 'kismi' => $kismiOnay ? 1 : 0], $uid);
+                siparis_audit('siparis_mail_gonderildi', $sid, ['durum' => $eski], ['durum' => $hedef, 'order_ref' => $s['order_ref'], 'kismi' => $kismiOnay ? 1 : 0, 'evrak_akisi' => 1], $uid);
+            } elseif ($hedef === 'evrak_gonderildi') {
+                siparis_olay($pdo, $sid, 'evrak_gonderildi', $eski, $hedef, $gerekce !== '' ? $gerekce : 'Evrak takımı müşteriye gönderildi (elle işaret)', null, $uid);
+                siparis_audit('siparis_evrak_gonderildi', $sid, ['durum' => $eski], ['durum' => $hedef, 'order_ref' => $s['order_ref']], $uid);
             } else {
                 siparis_olay($pdo, $sid, 'durum', $eski, $hedef, $gerekce !== '' ? $gerekce : 'Elle değiştirildi', null, $uid);
                 siparis_audit('siparis_durum', $sid, ['durum' => $eski], ['durum' => $hedef, 'order_ref' => $s['order_ref']], $uid);
@@ -970,10 +994,11 @@ function siparis_plaka_normalize(?string $s): array
  * v382 — Liste / yazdırma ORTAK filtresi (siparisler.php + siparis_yazdir.php AYNI fonksiyonu çağırır; kopya YOK).
  * Saf: yalnız doğrulanmış filtre değerleri + SQL parçası + parametre üretir (DB'ye dokunmaz; aktif depo süzgeci depo_sql_column()'dan).
  * Parametre adları: :q1..:q6 · :cwh/:cwy · :alici · :po · :tb · :tt · :udm (named — pozisyonel ? ile KARIŞTIRMA, HY093).
- * `acik_page` / `kapali_page` burada DEĞİL (yalnız sayfada).
+ * `acik_page` / `evrak_page` / `kapali_page` burada DEĞİL (yalnız sayfada).
+ * v400: üç bölüm — açık (acikSql) · evrak bekleyen (evrakSql) · kapalı (kapaliSql); durum=evrak_bekleyen yalnız evrak bölümünü gösterir.
  * @return array{q:string,f_durum:string,f_cw:string,f_alici:string,f_eksik:string,f_catisma:bool,f_po:int,t_bas:string,t_bit:string,
- *   kapaliSql:string,acikSql:string,temelWhere:string,temelPar:array,dprm:array,dsql:string,
- *   tek:bool,tekSql:string,bolumAcik:bool,bolumKapali:bool,detayFiltre:bool,filtreVar:bool,detayOzet:list<string>}
+ *   kapaliSql:string,acikSql:string,evrakSql:string,temelWhere:string,temelPar:array,dprm:array,dsql:string,
+ *   tek:bool,tekSql:string,bolumAcik:bool,bolumEvrak:bool,bolumKapali:bool,detayFiltre:bool,filtreVar:bool,detayOzet:list<string>}
  */
 function siparis_liste_filtre(array $get): array
 {
@@ -988,7 +1013,8 @@ function siparis_liste_filtre(array $get): array
     $t_bit      = trim((string)($get['tarih_bit'] ?? ''));
     $durumlar   = siparis_durumlar();
     $kapaliDur  = siparis_kapali_durumlar();
-    $gecerliDurum = array_merge(['', 'acik', 'kapali', 'arac_bekleyen'], array_keys($durumlar));
+    $evrakDur   = siparis_evrak_bekleyen_durumlar();
+    $gecerliDurum = array_merge(['', 'acik', 'evrak_bekleyen', 'kapali', 'arac_bekleyen'], array_keys($durumlar));
     if (!in_array($f_durum, $gecerliDurum, true)) $f_durum = '';
     if (!in_array($f_eksik, ['', 'po', 'll', 'pc', 'pkl'], true)) $f_eksik = '';
     if ($f_cw !== '' && !preg_match('/^\d{1,2}\.\d{4}$/', $f_cw)) $f_cw = '';
@@ -1011,21 +1037,23 @@ function siparis_liste_filtre(array $get): array
     if ($t_bas !== '') { $where[] = 's.yukleme_tarihi >= :tb'; $par[':tb'] = $t_bas; }
     if ($t_bit !== '') { $where[] = 's.yukleme_tarihi <= :tt'; $par[':tt'] = $t_bit; }
     $kapaliSql = "s.durum IN ('" . implode("','", $kapaliDur) . "')";
-    $acikSql   = "s.durum NOT IN ('" . implode("','", $kapaliDur) . "')";
+    $evrakSql  = "s.durum IN ('" . implode("','", $evrakDur) . "')";
+    $acikSql   = "s.durum NOT IN ('" . implode("','", array_merge($kapaliDur, $evrakDur)) . "')";
     $temelWhere = implode(' AND ', $where) . $dsql;
     $temelPar   = $par + $dprm;
 
     $tek = false;             // belirli durum filtresi: tek "Sonuçlar" bölümü
-    $bolumAcik = true; $bolumKapali = true; $tekSql = '';
-    if ($f_durum === 'acik') { $bolumKapali = false; }
-    elseif ($f_durum === 'kapali') { $bolumAcik = false; }
+    $bolumAcik = true; $bolumEvrak = true; $bolumKapali = true; $tekSql = '';
+    if ($f_durum === 'acik') { $bolumEvrak = false; $bolumKapali = false; }
+    elseif ($f_durum === 'evrak_bekleyen') { $bolumAcik = false; $bolumKapali = false; }
+    elseif ($f_durum === 'kapali') { $bolumAcik = false; $bolumEvrak = false; }
     elseif ($f_durum === 'arac_bekleyen') { $tek = true; $tekSql = "s.durum IN ('siparis_alindi','hazirlik')"; }
     elseif ($f_durum !== '') { $tek = true; $tekSql = "s.durum = '" . $f_durum . "'"; }   // f_durum beyaz listeden
 
-    $detayFiltre = $f_cw !== '' || $f_alici !== '' || $f_eksik !== '' || $f_catisma || $f_po > 0 || $t_bas !== '' || $t_bit !== '' || ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true));
-    $filtreVar = $detayFiltre || $q !== '' || in_array($f_durum, ['acik', 'kapali'], true);
+    $detayFiltre = $f_cw !== '' || $f_alici !== '' || $f_eksik !== '' || $f_catisma || $f_po > 0 || $t_bas !== '' || $t_bit !== '' || ($f_durum !== '' && !in_array($f_durum, ['acik', 'evrak_bekleyen', 'kapali'], true));
+    $filtreVar = $detayFiltre || $q !== '' || in_array($f_durum, ['acik', 'evrak_bekleyen', 'kapali'], true);
     $detayOzet = [];
-    if ($f_durum !== '' && !in_array($f_durum, ['acik', 'kapali'], true)) $detayOzet[] = $f_durum === 'arac_bekleyen' ? 'Araç bekleyen' : ($durumlar[$f_durum]['etiket'] ?? $f_durum);
+    if ($f_durum !== '' && !in_array($f_durum, ['acik', 'evrak_bekleyen', 'kapali'], true)) $detayOzet[] = $f_durum === 'arac_bekleyen' ? 'Araç bekleyen' : ($durumlar[$f_durum]['etiket'] ?? $f_durum);
     if ($f_cw !== '') $detayOzet[] = 'CW ' . $f_cw;
     if ($f_eksik !== '') $detayOzet[] = strtoupper($f_eksik) . ' eksik';
     if ($f_catisma) $detayOzet[] = 'Çatışmalı';
@@ -1034,8 +1062,8 @@ function siparis_liste_filtre(array $get): array
     if ($t_bas !== '' || $t_bit !== '') $detayOzet[] = 'Tarih aralığı';
 
     return ['q' => $q, 'f_durum' => $f_durum, 'f_cw' => $f_cw, 'f_alici' => $f_alici, 'f_eksik' => $f_eksik, 'f_catisma' => $f_catisma, 'f_po' => $f_po, 't_bas' => $t_bas, 't_bit' => $t_bit,
-        'kapaliSql' => $kapaliSql, 'acikSql' => $acikSql, 'temelWhere' => $temelWhere, 'temelPar' => $temelPar, 'dprm' => $dprm, 'dsql' => $dsql,
-        'tek' => $tek, 'tekSql' => $tekSql, 'bolumAcik' => $bolumAcik, 'bolumKapali' => $bolumKapali, 'detayFiltre' => $detayFiltre, 'filtreVar' => $filtreVar, 'detayOzet' => $detayOzet];
+        'kapaliSql' => $kapaliSql, 'acikSql' => $acikSql, 'evrakSql' => $evrakSql, 'temelWhere' => $temelWhere, 'temelPar' => $temelPar, 'dprm' => $dprm, 'dsql' => $dsql,
+        'tek' => $tek, 'tekSql' => $tekSql, 'bolumAcik' => $bolumAcik, 'bolumEvrak' => $bolumEvrak, 'bolumKapali' => $bolumKapali, 'detayFiltre' => $detayFiltre, 'filtreVar' => $filtreVar, 'detayOzet' => $detayOzet];
 }
 
 /**
@@ -1044,7 +1072,7 @@ function siparis_liste_filtre(array $get): array
  */
 function siparis_url(array $override, string $sayfa = 'siparisler.php'): string
 {
-    $anahtarlar = ['q', 'durum', 'cw', 'alici', 'eksik', 'catisma', 'po', 'tarih_bas', 'tarih_bit', 'acik_page', 'kapali_page'];
+    $anahtarlar = ['q', 'durum', 'cw', 'alici', 'eksik', 'catisma', 'po', 'tarih_bas', 'tarih_bit', 'acik_page', 'evrak_page', 'kapali_page'];
     $p = [];
     foreach ($anahtarlar as $k) {
         $v = $_GET[$k] ?? '';
@@ -1164,4 +1192,6 @@ function siparis_tarih_coz(mixed $v): ?string
 require_once __DIR__ . '/siparis_sofor.php';
 // v387: yurt içi gümrük (ekleyici migrasyon) — kendi dosyasında
 require_once __DIR__ . '/siparis_yurtici_gumruk.php';
+// v400: evrak takımı adımı — tek seferlik veri geçişi (şema DEĞİŞMEZ) kendi dosyasında
+require_once __DIR__ . '/siparis_evrak.php';
 require_once __DIR__ . '/siparis_odeme.php';

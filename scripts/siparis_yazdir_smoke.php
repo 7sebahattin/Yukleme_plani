@@ -82,7 +82,8 @@ $ID['gecmis'] = sev($db, ['order_ref' => 'TC900101.10', 'yukleme_tarihi' => $dun
 kalem($db, $ID['gecmis'], ['kalibre' => '14', 'aciklama' => 'Pomegranate 14 PC LOSE (TR)', 'cesit' => 'HICAZ', 'koli_icerik' => '3,5 KG', 'pf' => 160, 'po_palet' => 23, 'etkin_palet' => 23, 'etkin_koli' => 3680]);
 $ID['eski'] = sev($db, ['order_ref' => 'TC900100.10', 'yukleme_tarihi' => $eski, 'alici_kodu' => '999999', 'alici_adi' => 'BILINMEYEN ALICI', 'toplam_palet' => 2, 'toplam_koli' => 0, 'durum' => 'hazirlik']);
 $ID['bos_tarih'] = sev($db, ['order_ref' => 'TC900104.10', 'alici_adi' => 'LIDL FR', 'planlanan_nakliyeci' => 'SADECE PLAN', 'planlanan_plakalar' => '06PLN002', 'durum' => 'siparis_alindi', 'var_po' => 0, 'depo' => '']);
-$ID['kapali'] = sev($db, ['order_ref' => 'TC900105.10', 'yukleme_tarihi' => $dun, 'durum' => 'mail_gonderildi', 'toplam_palet' => 99]);
+$ID['kapali'] = sev($db, ['order_ref' => 'TC900105.10', 'yukleme_tarihi' => $dun, 'durum' => 'evrak_gonderildi', 'toplam_palet' => 99]);   // v400: kapanan = evrak takımı gönderildi
+$ID['evrak'] = sev($db, ['order_ref' => 'TC900110.10', 'yukleme_tarihi' => $dun, 'durum' => 'mail_gonderildi', 'toplam_palet' => 55]);      // v400: PKL maili gitti, evrak takımı bekliyor
 $ID['depo2'] = sev($db, ['order_ref' => 'TC900106.10', 'yukleme_tarihi' => $dun, 'depo' => 'DEPO2', 'toplam_palet' => 88]);
 $ID['silinmis'] = sev($db, ['order_ref' => 'TC900107.10', 'yukleme_tarihi' => $dun, 'deleted_at' => '2026-10-01 10:00:00', 'toplam_palet' => 77]);
 // beyan: iki aktif bağ (parti no "/" ile birleşir), biri silinmiş beyan (atlanır)
@@ -121,7 +122,7 @@ echo "=== 1. siparis_liste_filtre (siparisler.php'nin ESKİ WHERE/param dizgiler
 rol($ADMIN, true);
 $a = $F([]);
 ok('boş GET: WHERE yalnız silinmemiş, param yok, iki bölüm açık', $a['temelWhere'] === 's.deleted_at IS NULL' && $a['temelPar'] === [] && $a['bolumAcik'] && $a['bolumKapali'] && !$a['tek'] && !$a['filtreVar'] && !$a['detayFiltre'] && $a['detayOzet'] === []);
-ok('acikSql / kapaliSql sabit', $a['acikSql'] === "s.durum NOT IN ('mail_gonderildi','iptal')" && $a['kapaliSql'] === "s.durum IN ('mail_gonderildi','iptal')", $a['acikSql']);
+ok('v400: üç bölüm açık; acikSql / evrakSql / kapaliSql sabit', $a['bolumEvrak'] && $a['acikSql'] === "s.durum NOT IN ('evrak_gonderildi','iptal','mail_gonderildi')" && $a['evrakSql'] === "s.durum IN ('mail_gonderildi')" && $a['kapaliSql'] === "s.durum IN ('evrak_gonderildi','iptal')", $a['acikSql'] . ' | ' . $a['evrakSql'] . ' | ' . $a['kapaliSql']);
 $b = $F(['q' => ' ab ']);
 ok('q: 6 kolon LIKE :q1..:q6, değerler %ab%', $b['temelWhere'] === 's.deleted_at IS NULL AND (s.order_ref LIKE :q1 OR s.tur_no LIKE :q2 OR s.navlun_no LIKE :q3 OR s.plakalar LIKE :q4 OR s.alici_adi LIKE :q5 OR s.nakliyeci LIKE :q6)'
     && $b['temelPar'] === [':q1' => '%ab%', ':q2' => '%ab%', ':q3' => '%ab%', ':q4' => '%ab%', ':q5' => '%ab%', ':q6' => '%ab%'] && $b['q'] === 'ab' && $b['filtreVar'] && !$b['detayFiltre']);
@@ -132,8 +133,12 @@ ok('detayOzet metinleri', $c['detayOzet'] === ['CW 43.2026', 'PKL eksik', 'Çat�
 $d = $F(['durum' => 'zzz', 'eksik' => 'xx', 'cw' => '43', 'tarih_bas' => 'dün', 'tarih_bit' => '31.31.2026']);
 ok('geçersiz değerler elenir (durum/eksik/cw/tarih)', $d['f_durum'] === '' && $d['f_eksik'] === '' && $d['f_cw'] === '' && $d['t_bas'] === '' && $d['t_bit'] === '' && $d['temelWhere'] === 's.deleted_at IS NULL' && !$d['filtreVar']);
 $e = $F(['durum' => 'acik']); $k = $F(['durum' => 'kapali']); $ab = $F(['durum' => 'arac_bekleyen']); $yc = $F(['durum' => 'yola_cikti']);
-ok('durum=acik: yalnız açık bölüm, tek değil, filtreVar (detay değil)', $e['bolumAcik'] && !$e['bolumKapali'] && !$e['tek'] && $e['filtreVar'] && !$e['detayFiltre']);
-ok('durum=kapali: yalnız kapanan bölüm', !$k['bolumAcik'] && $k['bolumKapali'] && !$k['tek']);
+ok('durum=acik: yalnız açık bölüm, tek değil, filtreVar (detay değil)', $e['bolumAcik'] && !$e['bolumKapali'] && !$e['bolumEvrak'] && !$e['tek'] && $e['filtreVar'] && !$e['detayFiltre']);
+ok('durum=kapali: yalnız kapanan bölüm', !$k['bolumAcik'] && !$k['bolumEvrak'] && $k['bolumKapali'] && !$k['tek']);
+$ev = $F(['durum' => 'evrak_bekleyen']);
+ok('v400 durum=evrak_bekleyen: yalnız evrak bölümü, tek değil, filtreVar, detay filtre değil, özet boş', $ev['bolumEvrak'] && !$ev['bolumAcik'] && !$ev['bolumKapali'] && !$ev['tek'] && $ev['filtreVar'] && !$ev['detayFiltre'] && $ev['detayOzet'] === [] && $ev['f_durum'] === 'evrak_bekleyen');
+$mg = $F(['durum' => 'mail_gonderildi']);
+ok('v400 durum=mail_gonderildi: tek durum (Sonuçlar), etiket özeti', $mg['tek'] && $mg['tekSql'] === "s.durum = 'mail_gonderildi'" && $mg['detayOzet'] === ['Mail gönderildi']);
 ok('durum=arac_bekleyen: tek + IN (siparis_alindi, hazirlik) + özet "Araç bekleyen"', $ab['tek'] && $ab['tekSql'] === "s.durum IN ('siparis_alindi','hazirlik')" && $ab['detayOzet'] === ['Araç bekleyen'] && $ab['detayFiltre']);
 ok('durum=yola_cikti: tek + durum = ... + etiket özeti', $yc['tek'] && $yc['tekSql'] === "s.durum = 'yola_cikti'" && $yc['detayOzet'] === [siparis_durumlar()['yola_cikti']['etiket']]);
 rol($ADMIN, false, 1, ['DEPO1']);
@@ -180,7 +185,7 @@ ok('sipui_kalem_coz: tamamen boş kalem → null; etkin_palet boşsa po_palet', 
 echo "\n=== 4. Okuma + veri (yetkili, şoför kolonları YOK) ===\n";
 rol($ADMIN, true);
 $o = siparis_yazdir_oku($db, $F());
-ok('kapsam açık; kapalı + silinmiş çıkmaz; depo kısıtsız admin DEPO2 satırını da görür', $o['kapsam'] === 'acik' && !$o['kesildi'] && !in_array($ID['kapali'], array_column($o['rows'], 'id')) && !in_array($ID['silinmis'], array_column($o['rows'], 'id')) && in_array($ID['depo2'], array_column($o['rows'], 'id')));
+ok('kapsam açık; kapalı + silinmiş çıkmaz; depo kısıtsız admin DEPO2 satırını da görür', $o['kapsam'] === 'acik' && !$o['kesildi'] && !in_array($ID['kapali'], array_column($o['rows'], 'id')) && !in_array($ID['evrak'], array_column($o['rows'], 'id')) && !in_array($ID['silinmis'], array_column($o['rows'], 'id')) && in_array($ID['depo2'], array_column($o['rows'], 'id')));
 ok('şoför kolonları kurulu değil: sofor=false, SQL hata vermedi', $o['sofor'] === false && !array_key_exists('sofor_adi', $o['rows'][0]));
 $sira = array_map('intval', array_column($o['rows'], 'id'));
 ok('sıra = ekran sırası: tarih artan, NULL tarih SONDA, aynı tarihte id', $sira === [$ID['eski'], $ID['gecmis'], $ID['depo2'], $ID['bugun'], $ID['yarin'], $ID['bos_tarih']] || $sira === [$ID['eski'], $ID['depo2'], $ID['gecmis'], $ID['bugun'], $ID['yarin'], $ID['bos_tarih']], json_encode($sira));
@@ -215,6 +220,10 @@ ok('sevkiyatlar arası gün değişimi için gun alanı her satırda (yoksa null
 echo "\n=== 5. Kapsam ===\n";
 $thr = false; try { siparis_yazdir_oku($db, $F(['durum' => 'kapali'])); } catch (RuntimeException $e) { $thr = $e->getMessage() === 'kapsam_yok'; }
 ok('durum=kapali → kapsam_yok', $thr);
+$thr = false; try { siparis_yazdir_oku($db, $F(['durum' => 'evrak_bekleyen'])); } catch (RuntimeException $e) { $thr = $e->getMessage() === 'kapsam_yok'; }
+ok('v400 durum=evrak_bekleyen → kapsam_yok (evrak bölümünde yazdırma yok)', $thr);
+$om = siparis_yazdir_oku($db, $F(['durum' => 'mail_gonderildi']));
+ok('v400 durum=mail_gonderildi → tek kapsam, yalnız o satır; başlık "Sevkiyatlar — Mail gönderildi"', $om['kapsam'] === 'tek' && array_column($om['rows'], 'id') === [$ID['evrak']] && siparis_yazdir_baslik($F(['durum' => 'mail_gonderildi'])) === 'Sevkiyatlar — Mail gönderildi');
 $ot = siparis_yazdir_oku($db, $F(['durum' => 'yola_cikti']));
 ok('durum=yola_cikti → tek kapsam, yalnız yola_cikti satırları', $ot['kapsam'] === 'tek' && count($ot['rows']) > 0 && !in_array($ID['eski'], array_column($ot['rows'], 'id')) && !in_array($ID['bos_tarih'], array_column($ot['rows'], 'id')));
 $oa = siparis_yazdir_oku($db, $F(['durum' => 'arac_bekleyen']));
@@ -266,7 +275,7 @@ ok('bos_tarih: tarih/nakliyeci/plaka/parti/navlun "—" (planlı değerler bası
 $trn = sev($db, ['order_ref' => 'TC900109.10', 'tur_no' => '9009009', 'yukleme_tarihi' => $yarin]);
 $vtr = siparis_wp_veri(siparis_wp_oku($db, $trn), ['parti_yetki' => true]);
 ok('parti yoksa Tur no\'ya DÜŞÜLMEZ', array_column($vtr['alanlar'], 'deger', 'k')['parti'] === '—' && !str_contains(json_encode($vtr, JSON_UNESCAPED_UNICODE), '9009009'));
-ok('kapalı (mail_gonderildi) sevkiyat paylaşılabilir; silinmiş / olmayan / 0 / negatif id → null', is_array(siparis_wp_oku($db, $ID['kapali'])) && siparis_wp_oku($db, $ID['silinmis']) === null && siparis_wp_oku($db, 999999) === null && siparis_wp_oku($db, 0) === null && siparis_wp_oku($db, -3) === null);
+ok('kapalı (evrak_gonderildi) + evrak bekleyen (mail_gonderildi) sevkiyat paylaşılabilir; silinmiş / olmayan / 0 / negatif id → null', is_array(siparis_wp_oku($db, $ID['kapali'])) && is_array(siparis_wp_oku($db, $ID['evrak'])) && siparis_wp_oku($db, $ID['silinmis']) === null && siparis_wp_oku($db, 999999) === null && siparis_wp_oku($db, 0) === null && siparis_wp_oku($db, -3) === null);
 rol($ADMIN, false, 1, ['DEPO1']);
 ok('depo kapısı (DEPO1): DEPO2 sevkiyatı null, boş depolu + DEPO1 dizi', siparis_wp_oku($db, $ID['depo2']) === null && is_array(siparis_wp_oku($db, $ID['bos_tarih'])) && is_array(siparis_wp_oku($db, $ID['gecmis'])));
 rol($ADMIN, false, 1, ['DEPO2']);
@@ -329,6 +338,8 @@ $r = uc('siparis_yazdir.php', [], 'POST');
 ok('POST → 405 JSON (Allow: GET), audit yazılmadı', $r['kod'] === 405 && ($r['json']['ok'] ?? null) === false && ($r['h']['allow'] ?? '') === 'GET' && (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_yazdir'")->fetchColumn() === 2);
 $r = uc('siparis_yazdir.php', ['durum' => 'kapali']);
 ok('durum=kapali → 400 + kapsam_yok', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok');
+$r = uc('siparis_yazdir.php', ['durum' => 'evrak_bekleyen']);
+ok('v400 durum=evrak_bekleyen → 400 + kapsam_yok', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok');
 rol([], false, 7);
 $r = uc('siparis_yazdir.php');
 ok('yetkisiz (siparis.read yok): forbidden, JSON verisi dönmez', $r['hata'] !== null && str_contains($r['hata'], 'siparis.read') && $r['json'] === null);

@@ -110,11 +110,18 @@ if ($islem === 'durum') {
     $hedef = (string)($_POST['hedef'] ?? '');
     $gerekce = trim((string)($_POST['gerekce'] ?? ''));
     $url = $sevUrl($sid);
-    if ($hedef === 'mail_gonderildi' && ($_POST['onay_gonderdim'] ?? '') !== '1') {
+    // Mail onayı yalnız İLERİ işarette istenir; evrak takımından mail'e geri alma (gerekçeli) onay istemez (v400)
+    if ($hedef === 'mail_gonderildi' && (string)$sev['durum'] !== 'evrak_gonderildi' && ($_POST['onay_gonderdim'] ?? '') !== '1') {
         $hata("PKL'yi müşteriye gönderdiğinizi onaylayın.", $url);
     }
+    if ($hedef === 'evrak_gonderildi' && ($_POST['onay_evrak'] ?? '') !== '1') {
+        $hata('Evrak takımını müşteriye gönderdiğinizi onaylayın.', $url);
+    }
     $r = siparis_durum_degistir($pdo, $sid, $hedef, $uid, $gerekce, ($_POST['onay_eksik'] ?? '') === '1');
-    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Durum güncellendi: ' . (siparis_durumlar()[$hedef]['etiket'] ?? $hedef) . '.' : (string)($r['hata'] ?? 'Durum değiştirilemedi.'));
+    $mesaj = 'Durum güncellendi: ' . (siparis_durumlar()[$hedef]['etiket'] ?? $hedef) . '.';
+    if ($hedef === 'mail_gonderildi') $mesaj = 'Mail gönderildi işaretlendi — sevkiyat evrak takımı bekliyor.';
+    elseif ($hedef === 'evrak_gonderildi') $mesaj = 'Evrak takımı gönderildi işaretlendi; sevkiyat kapandı.';
+    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? $mesaj : (string)($r['hata'] ?? 'Durum değiştirilemedi.'));
     $git($url);
 }
 

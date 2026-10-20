@@ -79,7 +79,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         ok(`[${w}] düğmeler: PDF etiketi masaüstü tarayıcıda "PDF İndir" (telefon UA'sında "PDF Gönder": aşağıda)`, d.etiketler[1].includes('PDF İndir'), d.etiketler[1]);
         ok(`[${w}] düğmeler: ekrana sığar, yatay taşma yok`, d.r.every(x => x.x >= 0 && x.r <= w + 1) && (await tasma(page)) <= 0, JSON.stringify(d.r) + ' / ' + (await tasma(page)));
         if (mobil) ok(`[${w}] düğmeler: dokunma hedefi ≥ 44px`, d.r.every(x => x.h >= 43.5), JSON.stringify(d.r));
-        ok(`[${w}] düğme URL'i: siparis_yazdir.php, sayfa numaraları YOK`, /^siparis_yazdir\.php/.test(d.url) && !/acik_page|kapali_page/.test(d.url), d.url);
+        ok(`[${w}] düğme URL'i: siparis_yazdir.php, sayfa numaraları YOK`, /^siparis_yazdir\.php/.test(d.url) && !/acik_page|kapali_page|evrak_page/.test(d.url), d.url);
         ok(`[${w}] düğmeler: yazdırmada gizlenen kapta (no-print)`, d.noPrint);
         ok(`[${w}] liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
@@ -114,7 +114,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         ok(`[${w}] yazdırma: @page A4 yatay + print-color-adjust + başlık`, /@page\{size:A4 landscape/.test(tbl.st) && /print-color-adjust:exact/.test(tbl.st) && tbl.baslikH2 === 'Açık Sevkiyatlar' && /^Acik-Sevkiyatlar-\d{2}\.\d{2}\.\d{4}$/.test(tbl.title), tbl.baslikH2 + ' / ' + tbl.title);
         ok(`[${w}] yazdırma: popup'ta yatay taşma yok (küçük veri)`, tbl.tasma <= 0, String(tbl.tasma));
         ok(`[${w}] yazdırma: print() kendiliğinden çağrıldı`, (await popup.evaluate(() => window.__print)) >= 1);
-        ok(`[${w}] yazdırma: sunucu isteği amac=yazdir, taze fetch (istemcide önbellek yok)`, istekler.length === 1 && /amac=yazdir/.test(istekler[0]) && !/acik_page|kapali_page/.test(istekler[0]), istekler.join(','));
+        ok(`[${w}] yazdırma: sunucu isteği amac=yazdir, taze fetch (istemcide önbellek yok)`, istekler.length === 1 && /amac=yazdir/.test(istekler[0]) && !/acik_page|kapali_page|evrak_page/.test(istekler[0]), istekler.join(','));
         await popup.close();
         await page.waitForTimeout(100);
         const [popup2] = await Promise.all([ctx.waitForEvent('page'), page.click(BTN_Y)]);
@@ -133,6 +133,14 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         const [popup] = await Promise.all([ctx.waitForEvent('page'), page.click(BTN_Y)]);
         await popup.waitForSelector('#pdfIcerik', { timeout: 8000 });
         ok('filtreli liste: istek filtre anahtarını + amac taşır', /durum=arac_bekleyen/.test(istekler[0]) && /amac=yazdir/.test(istekler[0]), istekler[0]);
+        await ctx.close();
+    }
+    {   // v400: evrak bekleyen bölümü — yazdırma düğmesi YOK
+        let { ctx, page } = await ac('liste', 1280, 900, tamam(KUCUK));
+        ok('v400: #sipEvrak var, içinde yazdırma düğmesi YOK; düğmeler yalnız Açık başlığında', await page.evaluate(() => { const e = document.querySelector('#sipEvrak'); return !!e && !e.parentElement.querySelector('[data-sip-yazdir]') && !e.querySelector('[data-sip-yazdir]'); }));
+        await ctx.close();
+        ({ ctx, page } = await ac('liste_evrak', 1280, 900, tamam(KUCUK)));
+        ok('v400: durum=evrak_bekleyen listesinde yazdırma düğmesi YOK, #sipEvrak var', await page.evaluate(() => document.querySelectorAll('[data-sip-yazdir]').length === 0 && !!document.querySelector('#sipEvrak')));
         await ctx.close();
     }
     {   // kapanan filtre: düğme YOK; izleyici: VAR
