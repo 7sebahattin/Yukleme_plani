@@ -26,10 +26,7 @@ function siparis_cari_yuklendi_mi(array $s, string $bugun): bool
 {
     $d = (string)($s['durum'] ?? '');
     if ($d === 'iptal') return false;
-    if (in_array($d, ['yola_cikti', 'pkl_hazir', 'mail_gonderildi'], true)) return true;
-    if ((int)($s['var_pkl'] ?? 0) === 1) return true;
-    $t = ($s['yukleme_tarihi'] ?? null) !== null ? siparis_tarih_coz((string)$s['yukleme_tarihi']) : null;
-    return $t !== null && $t < $bugun;
+    return $d === 'mail_gonderildi';   // yükleme tarihi geçse de mail gönderilmedikçe yüklenmemiş sayılır
 }
 
 /** "3,5 KG" / "3.5kg" → 3.5; ilk sayı, 0 < x < 100; okunamazsa null. */
@@ -66,9 +63,12 @@ function siparis_cari_satir_tutar(int $koli, float $fiyat, int $koliGram, ?strin
     $f = (int)round($fiyat * 10000);
     $g = max(1, $koliGram);
     if (siparis_cari_kg_bazli($fiyatBirim)) {
-        return ['baz' => 'kg', 'fiyat_koli' => intdiv($f * $g + 500, 1000), 'fiyat_kg' => $f, 'tutar' => intdiv($koli * $g * $f + 50000, 100000)];
+        $k = intdiv($f + 50, 100);   // kg fiyatı kuruşa (2 ondalık) yarım yukarı
+        return ['baz' => 'kg', 'fiyat_koli' => intdiv($f * $g + 500, 1000), 'fiyat_kg' => $k * 100, 'tutar' => intdiv($koli * $g * $k + 500, 1000)];
     }
-    return ['baz' => 'koli', 'fiyat_koli' => $f, 'fiyat_kg' => intdiv($f * 1000 + intdiv($g, 2), $g), 'tutar' => intdiv($koli * $f + 50, 100)];
+    // kg fiyatı = koli fiyatı / koli kg, 2 ondalığa yuvarlanır; tutar yuvarlanmış kg fiyatıyla hesaplanır
+    $k = intdiv(intdiv($f * 1000 + intdiv($g, 2), $g) + 50, 100);
+    return ['baz' => 'koli', 'fiyat_koli' => $f, 'fiyat_kg' => $k * 100, 'tutar' => intdiv($koli * $g * $k + 500, 1000)];
 }
 
 /** Kuruş → "15.844,80" (negatif "-1.234,56"). */
