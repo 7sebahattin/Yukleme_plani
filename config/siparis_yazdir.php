@@ -283,7 +283,6 @@ function siparis_yazdir_veri(array $okunan, array $ctx): array
     if (empty($ctx['parti_yetki'])) $notlar[] = 'Parti no için beyan okuma yetkisi gerekir.';
     if (empty($okunan['sofor'])) $notlar[] = 'Şoför alanları kurulmadı.';
     if (empty($okunan['gumruk'])) $notlar[] = 'Gümrük alanı kurulmadı.';
-    $notlar[] = 'Kişisel veri içerir (şoför telefonu) — yalnız ilgili kişilerle paylaşın.';
     $bolumler = siparis_yazdir_bolumler();
     $baslik = (string)($ctx['baslik'] ?? ($tek ? 'Sevkiyatlar' : ($bolumler[$kapsam]['baslik'] ?? 'İşlem Bekleyen Sevkiyatlar')));
     $tarihEk = substr($basim, 0, 10);
