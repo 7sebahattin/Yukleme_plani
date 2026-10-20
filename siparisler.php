@@ -81,6 +81,18 @@ if ($listeIds) {
     }
 }
 $partiHarita = siparis_beyan_parti_haritasi($pdo, $listeIds);
+// v396 — sevkiyatın güncel PKL dosya adı (liste parti no'nun üstünde gösterir; TEK sorgu, partial sorgu çalıştırmaz)
+$pklHarita = [];
+if ($listeIds) {
+    try {
+        $pq = $pdo->prepare("SELECT sevkiyat_id, dosya_belge_id, dosya_adi FROM siparis_pkl
+            WHERE dosya_belge_id IS NOT NULL AND dosya_adi IS NOT NULL AND dosya_adi <> '' AND sevkiyat_id IN (" . implode(',', array_fill(0, count($listeIds), '?')) . ')');
+        $pq->execute($listeIds);
+        foreach ($pq->fetchAll(PDO::FETCH_ASSOC) as $__p) $pklHarita[(int)$__p['sevkiyat_id']] = ['ad' => (string)$__p['dosya_adi'], 'belge_id' => (int)$__p['dosya_belge_id']];
+    } catch (PDOException $e) {
+        error_log('[siparisler] pkl: ' . $e->getMessage());
+    }
+}
 
 // ── KPI (yalnız depo süzgeci; açık sevkiyatlar) ─────────
 $kpi = ['acik' => 0, 'arac' => 0, 'yolda' => 0, 'pkl' => 0, 'mail' => 0, 'catisma' => 0, 'po' => 0];
@@ -320,14 +332,14 @@ $yazdirEk = '<div class="sip-bolum-eylem no-print">'
   </form>
 
   <?php
-  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $yazdirEk): void {
+  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $pklHarita, $yazdirEk): void {
       $ek = in_array($id, ['sipAcik', 'sipSonuclar'], true) && $b['rows'] ? $yazdirEk : '';
       $ton = ['sipAcik' => ' sip-bolum-acik', 'sipKapali' => ' sip-bolum-kapali'][$id] ?? '';
       echo '<section class="sip-bolum' . $ton . '" aria-labelledby="' . h($id) . '">' . $bolumBas($baslik, $b['toplam'], $id, $ek, $ikon, $not);
       if (!$b['rows']) {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
       } else {
-          $sec_rows = $b['rows']; $sec_kalem = $kalemHarita; $sec_parti = $partiHarita;
+          $sec_rows = $b['rows']; $sec_kalem = $kalemHarita; $sec_parti = $partiHarita; $sec_pkl = $pklHarita;
           include __DIR__ . '/_siparis_liste.php';
           echo $sayfalama($b, $param);
       }

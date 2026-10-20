@@ -708,6 +708,19 @@ ok('kalem metni kaçırılıyor (XSS yok)', !str_contains(sipui_kalem_html([['ac
 ok('yönetici: bağlı beyanların parti no\'ları Tur no yerine, her biri ayrı 3B rozet (v386)', str_contains($t1, '<span class="sip-parti-btn" title="Bağlı beyanın parti numarası"><span class="sip-parti-et">Parti</span> TC900001.10-A</span>') && substr_count($t1, 'class="sip-parti-btn"') === 2 && !str_contains($t1, 'Tur 9000000001') && !str_contains($t1, ' +1'), substr($t1, 0, 400));
 ok('parti no mobil kartta da (rozet)', substr_count($kart($r['html'], $ID['s1']), 'class="sip-parti-btn"') === 2 && str_contains($kart($r['html'], $ID['s1']), '</span> TC900001.10-A</span>'));
 ok('v386: parti rozetleri sipariş no\'nun ÜSTÜNDE (tablo + kart)', strpos($t1, 'sip-parti-rozetler') !== false && strpos($t1, 'sip-parti-rozetler') < strpos($t1, 'class="sip-ref"') && strpos($kart($r['html'], $ID['s1']), 'sip-parti-rozetler') < strpos($kart($r['html'], $ID['s1']), 'sip-card-link'));
+// v396 — güncel PKL dosya adı parti no'nun ÜSTÜNDE (tablo + kart); PKL yoksa hiç yok; ad kaçırılır
+$__pklVar = $db->query("SELECT sevkiyat_id FROM siparis_pkl WHERE dosya_belge_id IS NOT NULL AND dosya_adi IS NOT NULL AND dosya_adi <> ''")->fetchAll(PDO::FETCH_COLUMN);
+$db->prepare("DELETE FROM siparis_pkl WHERE sevkiyat_id = ?")->execute([$ID['s31']]);
+$db->prepare("INSERT INTO siparis_pkl (sevkiyat_id, durum, sezon, dosya_belge_id, dosya_adi) VALUES (?, 'uretildi', '2026', ?, ?)")->execute([$ID['s31'], $ID['po1'], 'PKL-T<b>X</b>-AsyaDoc001-01.12.2026.xlsx']);
+$r3 = sayfa('siparisler.php'); $tp = $satir($r3['html'], $ID['s31']); $kp = $kart($r3['html'], $ID['s31']);
+ok('v396: PKL dosya adı satırda, indirme bağlantılı, kaçırılmış', temiz($r3) && str_contains($tp, '<a class="sip-pkl-ad" href="siparis_dosya.php?id=' . $ID['po1'] . '&amp;dl=1"') && str_contains($tp, 'PKL-T&lt;b&gt;X&lt;/b&gt;-AsyaDoc001-01.12.2026.xlsx') && !str_contains($r3['html'], 'T<b>X</b>'), substr($tp, 0, 300));
+ok('v396: PKL adı sipariş no + parti rozetinin ÜSTÜNDE (tablo + kart)', strpos($tp, 'sip-pkl-ad') < strpos($tp, 'class="sip-ref"') && strpos($kp, 'sip-pkl-ad') !== false && strpos($kp, 'sip-pkl-ad') < strpos($kp, 'sip-card-link')
+    && strpos($t1 = $satir($r3['html'], $ID['s1']), 'sip-parti-rozetler') !== false && (!in_array((string)$ID['s1'], array_map('strval', $__pklVar), true) || strpos($t1, 'sip-pkl-ad') < strpos($t1, 'sip-parti-rozetler')));
+$__yok = array_values(array_diff([$ID['s12'], $ID['s2'] ?? 0], array_map('intval', $__pklVar)));
+ok('v396: PKL dosyası olmayan sevkiyatta ad yok', $__yok !== [] && !str_contains($satir($r3['html'], $__yok[0]), 'sip-pkl-ad') && !str_contains($kart($r3['html'], $__yok[0]), 'sip-pkl-ad'));
+$db->prepare("UPDATE siparis_pkl SET dosya_belge_id = NULL, dosya_adi = NULL, durum = 'taslak' WHERE sevkiyat_id = ?")->execute([$ID['s31']]);
+ok('v396: taslak (dosyasız) PKL → ad yok', !str_contains($satir(sayfa('siparisler.php')['html'], $ID['s31']), 'sip-pkl-ad'));
+ok('v396: CSS açık + koyu', str_contains($__css, '.sip-pkl-ad {') && str_contains($__css, 'html[data-theme="dark"] .sip-pkl-ad {'));
 // kaç tane olursa olsun: aynı parti no iki beyanda geçerse TEK satır, farklı olanların hepsi ayrı satır, "+N" kısaltması YOK
 $db->exec("INSERT INTO customs_declarations (status, party_no, created_at) VALUES ('taslak', 'EK-3', '2026-12-02 12:00:00'), ('taslak', 'EK-4', '2026-12-02 12:00:00'), ('taslak', 'TC900001.10-A', '2026-12-02 12:00:00')");
 $__ek = (int)$db->lastInsertId();                                   // son eklenen = 'TC900001.10-A' kopyası
@@ -726,7 +739,7 @@ ok('beyan.read olan operatör parti no\'yu görür', temiz($r) && substr_count($
 rol($VIEW, false, 6);          // yalnız siparis.read
 $r = sayfa('siparisler.php');
 $v1 = $satir($r['html'], $ID['s1']);
-ok('beyan.read yok: parti no görünmez, Tur no gösterilir', temiz($r) && str_contains($v1, 'Tur 9000000001') && !str_contains($v1, 'Parti') && !str_contains($r['html'], 'TC900001.10-A'), substr($v1, 0, 300));
+ok('beyan.read yok: parti no görünmez, Tur no gösterilir', temiz($r) && str_contains($v1, 'Tur 9000000001') && !str_contains($v1, 'Parti') && !str_contains($r['html'], '</span> TC900001.10-A<'), substr($v1, 0, 300));
 ok('beyan.read yok: navlun + ürün satırları yine görünür', str_contains($v1, 'Navlun 6100000001') && str_contains($v1, 'Pal. 20 · PF 160'));
 ok('parti haritası: yetkisizde boş, yetkilide dolu', siparis_beyan_parti_haritasi($db, [$ID['s1']]) === [] && (rol($ADMIN, true) || true) && siparis_beyan_parti_haritasi($db, [$ID['s1'], $ID['s2'], $ID['s11']]) === [$ID['s1'] => ['parti' => 'TC900001.10-A', 'fazla' => 1, 'liste' => ['TC900001.10-A', (string)$db->query('SELECT party_no FROM customs_declarations WHERE id = 2')->fetchColumn()]]]);
 $db->exec('ALTER TABLE customs_declarations RENAME TO cd_yedek');   // beyan tablosu yok → sayfa yine çizilir

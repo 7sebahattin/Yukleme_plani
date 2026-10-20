@@ -11,6 +11,8 @@ if (!isset($sec_rows) || !is_array($sec_rows)) { http_response_code(404); exit; 
 // $sec_kalem: sevkiyat id → siparis_kalemler satırları; $sec_parti: sevkiyat id → ['parti','fazla'] (ikisi de isteğe bağlı)
 $sec_kalem = isset($sec_kalem) && is_array($sec_kalem) ? $sec_kalem : [];
 $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
+// $sec_pkl (v396): sevkiyat id → ['ad','belge_id'] — güncel PKL dosya adı, parti no'nun ÜSTÜNDE (isteğe bağlı)
+$sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
 ?>
 <div class="table-wrap pc-only">
   <table class="data-table sip-table">
@@ -30,6 +32,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
     ?>
       <tr class="row-link<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?><?= $__ur !== '' ? ' sip-ust' : '' ?>" data-href="siparis_view.php?id=<?= $__id ?>">
         <td>
+          <?= sipui_pkl_ad_html($r, $sec_pkl) ?>
           <?= sipui_parti_rozet_html($r, $sec_parti) ?>
           <a class="sip-ref" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?></a>
           <?= sipui_tur_html($r, $sec_parti) ?>
@@ -84,7 +87,7 @@ $sec_parti = isset($sec_parti) && is_array($sec_parti) ? $sec_parti : [];
       $__uy = (int)$r['acik_catisma'] + (int)$r['uyari_sayisi'];
   ?>
     <article class="sip-card<?= $__z ?><?= $r['durum'] === 'iptal' ? ' sip-iptal' : '' ?>">
-      <?= sipui_parti_rozet_html($r, $sec_parti) ?>
+      <?php $__et = sipui_pkl_ad_html($r, $sec_pkl) . sipui_parti_rozet_html($r, $sec_parti); if ($__et !== ''): ?><div class="sip-card-etiket"><?= $__et ?></div><?php endif; ?>
       <div class="sip-card-ust">
         <a class="sip-ref sip-card-link" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?><span class="sip-sr"> sevkiyatını aç</span></a>
         <?= siparis_durum_badge((string)$r['durum']) ?>
