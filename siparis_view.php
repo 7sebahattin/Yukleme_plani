@@ -612,7 +612,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           <?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="donus" value="durum">
           <fieldset class="sip-radyo-grup"><legend>Yeni durum</legend>
             <?php foreach ($durumlar as $dk => $dv):
-                // v397: mail yalnız evrak takımından geri alma hedefi; evrak takımı yalnız kendi düğmesiyle (onay ister)
+                // v400: mail yalnız evrak takımından geri alma hedefi; evrak takımı yalnız kendi düğmesiyle (onay ister)
                 if ($dk === 'evrak_gonderildi' || $dk === (string)$sev['durum'] || ($dk === 'mail_gonderildi' && (string)$sev['durum'] !== 'evrak_gonderildi')) continue;
                 $dEt = $dk === 'mail_gonderildi' ? '✅ Mail gönderildi (evrak takımını geri al)' : $dv['ikon'] . ' ' . $dv['etiket']; ?>
               <label class="sip-radyo"><input type="radio" name="hedef" value="<?= h($dk) ?>" required> <?= h($dEt) ?></label>
@@ -641,6 +641,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
     </div>
   </div>
 
+  <?php if (!$kapali && (string)$sev['durum'] !== 'mail_gonderildi'): ?>
   <!-- Mail gönderildi -->
   <div class="pm-overlay" id="sipMailModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipMailBas">
     <div class="pm-dialog">
@@ -676,8 +677,10 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
     </div>
   </div>
 
+  <?php endif; ?>
+
   <?php if ((string)$sev['durum'] === 'mail_gonderildi'): ?>
-  <!-- Evrak takımı gönderildi (v397: son adım, süreci kapatır) -->
+  <!-- Evrak takımı gönderildi (v400: son adım, süreci kapatır) -->
   <div class="pm-overlay" id="sipEvrakModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipEvrakBas">
     <div class="pm-dialog">
       <form method="post" action="siparis_kaydet.php" data-sip-tek data-sip-evrak-form>

@@ -71,7 +71,9 @@ $MUT = ['siparis_alan_elle', 'siparis_alan_kilidi_kaldir', 'siparis_catisma_coz'
         'siparis_pkl_kaydet_taslak', 'siparis_pkl_uret', 'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sayac_ayarla',
         'siparis_beyan_bagla', 'siparis_beyan_bag_kaldir', 'siparis_sevkiyat_yenile',
         // v378: siparis_yukle.php döngüsü ortak fonksiyona taşındı (dosyada siparis_dosya_kaydet( artık geçmez → bu ad olmadan CSRF denetimi sessizce düşerdi)
-        'siparis_dosya_yukle_isle', 'siparis_mail_baslat', 'siparis_mail_adim', 'siparis_mail_vazgec', 'siparis_mail_ayar_kaydet'];
+        'siparis_dosya_yukle_isle', 'siparis_mail_baslat', 'siparis_mail_adim', 'siparis_mail_vazgec', 'siparis_mail_ayar_kaydet',
+        // v400: tek seferlik veri geçişi (UPDATE yazar) — yalnız config/siparis_evrak.php + migrate.php çağırır
+        'siparis_evrak_gecis_uygula'];
 $mutRe = '/\b(' . implode('|', $MUT) . ')\s*\(/';
 foreach ($sayfalar as $f) {
     $k = kod_oku($f);
@@ -235,6 +237,30 @@ ok('v397 config: yalnız SELECT; tam yol koruması; çıktı yok; can(siparis.*)
 ok('v397 config: tahsilat kancası siparis_cari_tahsilat_toplam()', str_contains($caCfg, 'function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array'));
 ok('v397 siparisler.php: Cari Döküm bağlantısı siparis_cari_yetkili() kapılı', (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\)\): \?>\s*<a class="btn btn-lg" href="siparis_cari\.php">📒 Cari Döküm<\/a>/u', oku('siparisler.php')));
 ok('v397 nav_aktif_anahtar $a_sip siparis_cari.php içerir', (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_cari\.php'/", $helpers));
+
+echo "\n=== v400: Evrak takımı adımı (tek seferlik veri geçişi) ===\n";
+$evCfg = kod_oku('config/siparis_evrak.php');
+$evKod = '';
+foreach (token_get_all('<?php ' . $evCfg) as $__t) if (!is_array($__t) || !in_array($__t[0], [T_COMMENT, T_DOC_COMMENT], true)) $evKod .= is_array($__t) ? $__t[1] : $__t;
+$evCag = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, FilesystemIterator::SKIP_DOTS)) as $__f) {
+    $yol = (string)$__f;
+    if (!str_ends_with($yol, '.php') || str_contains($yol, '/vendor/') || str_contains($yol, '/scripts/') || str_contains($yol, '/.git/')) continue;
+    if (preg_match('/\bsiparis_evrak_gecis_uygula\s*\(/', kod_oku(substr($yol, strlen($ROOT) + 1)))) $evCag[] = substr($yol, strlen($ROOT) + 1);
+}
+sort($evCag);
+ok('siparis_evrak_gecis_uygula() yalnız tanım (config/siparis_evrak.php) + migrate.php\'de geçer', $evCag === ['config/siparis_evrak.php', 'migrate.php'], implode(',', $evCag));
+ok('migrate.php: ne=siparis_evrak_gecis POST dalı (csrf_check) + kart mg_kart_ac(\'siparis-evrak-gecis\') + form alanı',
+    (bool)preg_match("/'ne'\] \?\? ''\) === 'siparis_evrak_gecis'\) \{\s*csrf_check\(/", $migrate) && str_contains($migrate, "mg_kart_ac('siparis-evrak-gecis')") && str_contains($migrate, 'name="ne" value="siparis_evrak_gecis"'));
+ok('siparis_core.php siparis_evrak.php\'yi yükler', str_contains($core, "require_once __DIR__ . '/siparis_evrak.php'"));
+ok('siparis_evrak.php şema değiştirmez (ALTER / CREATE TABLE / DROP yok)', $evKod !== '' && !preg_match('/\b(ALTER|CREATE|DROP)\s+TABLE\b/i', $evKod));
+$sabitler = [];
+foreach (array_merge(glob($ROOT . '/*.php') ?: [], glob($ROOT . '/config/*.php') ?: []) as $__y) {
+    if (basename($__y) === 'siparis_core.php') continue;
+    if (str_contains((string)@file_get_contents($__y), "'mail_gonderildi','iptal'")) $sabitler[] = basename($__y);
+}
+ok("kapalı durum listesi sabit yazılmaz: kök/config PHP'de 'mail_gonderildi','iptal' YOK (siparis_kapali_durumlar()/siparis_kapanmamis_sql())", $sabitler === [], implode(',', $sabitler));
+ok('siparis_belge.php açık sevkiyat sorgusu siparis_kapanmamis_sql() kullanır', str_contains(kod_oku('siparis_belge.php'), 'siparis_kapanmamis_sql()'));
 
 echo "\n=== Audit eylem adları ≤ 40 karakter ===\n";
 $uzun = []; $sayi = 0;

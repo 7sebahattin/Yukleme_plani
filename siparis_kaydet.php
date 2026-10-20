@@ -110,7 +110,7 @@ if ($islem === 'durum') {
     $hedef = (string)($_POST['hedef'] ?? '');
     $gerekce = trim((string)($_POST['gerekce'] ?? ''));
     $url = $sevUrl($sid);
-    // Mail onayı yalnız İLERİ işarette istenir; evrak takımından mail'e geri alma (gerekçeli) onay istemez (v397)
+    // Mail onayı yalnız İLERİ işarette istenir; evrak takımından mail'e geri alma (gerekçeli) onay istemez (v400)
     if ($hedef === 'mail_gonderildi' && (string)$sev['durum'] !== 'evrak_gonderildi' && ($_POST['onay_gonderdim'] ?? '') !== '1') {
         $hata("PKL'yi müşteriye gönderdiğinizi onaylayın.", $url);
     }

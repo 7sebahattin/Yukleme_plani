@@ -749,7 +749,7 @@ ok('şoför: boş değer girilerek temizlenebilir', $x['ok'] && siparis_sevkiyat
 $tumA = implode("\n", array_map(fn($a) => $a['old_values'] . ' ' . $a['new_values'], siparis_test_audit($db)));
 ok('şoför: audit kaydına ad / telefon yazılmaz (yalnız alan adı)', !str_contains($tumA, 'Test Sürücü') && !str_contains($tumA, '532'));
 
-echo "\n=== 7b. Evrak takımı (v397) ===\n";
+echo "\n=== 7b. Evrak takımı (v400) ===\n";
 $dur = siparis_durumlar();
 ok('durumlar: evrak_gonderildi sıra 7, mail ile iptal arasında, css evrak (VARCHAR(20) sığar)', ($dur['evrak_gonderildi']['sira'] ?? 0) === 7 && ($dur['evrak_gonderildi']['css'] ?? '') === 'evrak'
     && array_keys($dur) === ['siparis_alindi', 'hazirlik', 'arac_atandi', 'yola_cikti', 'pkl_hazir', 'mail_gonderildi', 'evrak_gonderildi', 'iptal'] && strlen('evrak_gonderildi') <= 20);
@@ -794,7 +794,7 @@ $db->exec("UPDATE siparis_sevkiyatlar SET var_pkl = 1, durum = 'mail_gonderildi'
 $x = siparis_durum_degistir($db, $evId, 'iptal', 1);
 ok('mail_gonderildi → iptal gerekçe ister', !$x['ok'] && str_contains((string)$x['hata'], 'gerekçe'));
 
-echo "\n=== 7c. Tek seferlik geçiş (v397) ===\n";
+echo "\n=== 7c. Tek seferlik geçiş (v400) ===\n";
 $gSev = function (string $ref, string $durum, ?string $mailAt, bool $silinmis = false) use ($db): int {
     $r = siparis_sevkiyat_elle_ac($db, $ref, null, null, 1);
     $id = (int)$r['id'];
@@ -808,7 +808,7 @@ $gD = $gSev('TC900714.10', 'mail_gonderildi', '2026-01-03 09:00:00', true);   //
 $gC = (int)siparis_sevkiyat_elle_ac($db, 'TC900713.10', null, null, 1)['id'];   // yeni akış: işaretli
 $db->exec("UPDATE siparis_sevkiyatlar SET var_pkl = 1, durum = 'pkl_hazir' WHERE id = $gC");
 siparis_durum_degistir($db, $gC, 'mail_gonderildi', 1);
-ok('say: eski işaretsiz 3 (tarihli + tarihsiz + silinmiş); v397 akışıyla işaretlenenler sayılmaz', siparis_evrak_gecis_say($db) === 3, (string)siparis_evrak_gecis_say($db));
+ok('say: eski işaretsiz 3 (tarihli + tarihsiz + silinmiş); v400 akışıyla işaretlenenler sayılmaz', siparis_evrak_gecis_say($db) === 3, (string)siparis_evrak_gecis_say($db));
 $ad = siparis_evrak_gecis_adaylar($db, 50);
 ok('adaylar id sırasıyla, silinmiş de listede', array_column($ad, 'id') === [$gA, $gB, $gD] && $ad[2]['deleted_at'] !== null);
 $olay0 = siparis_test_say($db, 'siparis_olaylar', "tur = 'evrak_gonderildi'");

@@ -100,7 +100,7 @@ foreach ([['3,5 KG', 3.5], ['3.5kg', 3.5], [' 10 KG', 10.0], ['2,25 kg', 2.25], 
     ok('koli_kg(' . var_export($g, true) . ')', siparis_cari_koli_kg($g) === $b);
 }
 $B = '2026-10-20';
-ok('yuklendi_mi: yalnız mail_gonderildi yüklenmiş', siparis_cari_yuklendi_mi(['durum' => 'mail_gonderildi'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'yola_cikti'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'pkl_hazir', 'var_pkl' => 1], $B));
+ok('yuklendi_mi: yalnız mail_gonderildi / evrak_gonderildi yüklenmiş', siparis_cari_yuklendi_mi(['durum' => 'mail_gonderildi'], $B) && siparis_cari_yuklendi_mi(['durum' => 'evrak_gonderildi'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'yola_cikti'], $B) && !siparis_cari_yuklendi_mi(['durum' => 'pkl_hazir', 'var_pkl' => 1], $B));
 ok('yuklendi_mi: iptal hiçbir koşulda yüklenmiş değil', !siparis_cari_yuklendi_mi(['durum' => 'iptal', 'var_pkl' => 1, 'yukleme_tarihi' => '2026-10-19'], $B));
 ok('yuklendi_mi: tarih geçse de mail yoksa yüklenmemiş', !siparis_cari_yuklendi_mi(['durum' => 'hazirlik', 'yukleme_tarihi' => '2026-10-19'], $B));
 

@@ -158,7 +158,7 @@
     document.addEventListener('change', function (e) {
         var f = e.target.closest ? e.target.closest('[data-sip-durum-form]') : null;
         if (f) gerekceGuncelle(f);
-        // Mail gönderildi + (v397) Evrak takımı pencereleri: tüm onay kutuları işaretlenmeden gönder düğmesi pasif
+        // Mail gönderildi + (v400) Evrak takımı pencereleri: tüm onay kutuları işaretlenmeden gönder düğmesi pasif
         var m = e.target.closest ? e.target.closest('[data-sip-mail-form],[data-sip-evrak-form]') : null;
         if (m) {
             var p = m.hasAttribute('data-sip-evrak-form') ? 'evrak' : 'mail';

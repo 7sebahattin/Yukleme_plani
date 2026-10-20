@@ -123,8 +123,15 @@ ok('liste temiz çalıştı (PHP uyarısı yok)', temiz($r), (string)$r['hata'] 
 ok('HTML etiketleri dengeli', html_dengeli($r['html']) === null, (string)html_dengeli($r['html']));
 foreach (['TC900001.10', 'TC900002.10', 'TC900011.10', 'TC900012.10', 'TC900099.10'] as $ref) ok("liste: $ref var", str_contains($r['html'], $ref));
 ok('liste: ikinci depo sevkiyatı (admin kısıtsız) görünür', str_contains($r['html'], 'TC900031.10'));
-ok('KPI çipleri 7 adet', preg_match_all('/class="sip-chip[ "]/', $r['html']) === 7 && str_contains($r['html'], 'PKL bekleyen') && str_contains($r['html'], 'Mail bekleyen'));
-ok('açık + kapanan bölümler', str_contains($r['html'], 'id="sipAcik"') && str_contains($r['html'], 'id="sipKapali"'));
+ok('KPI çipleri 8 adet (v400: + Evrak bekleyen, Mail bekleyen\'den sonra)', preg_match_all('/class="sip-chip[ "]/', $r['html']) === 8 && str_contains($r['html'], 'PKL bekleyen') && str_contains($r['html'], 'Mail bekleyen')
+    && strpos($r['html'], 'Evrak bekleyen') > strpos($r['html'], 'Mail bekleyen') && str_contains($r['html'], 'durum=evrak_bekleyen'));
+ok('açık + evrak bekleyen + kapanan bölümler', str_contains($r['html'], 'id="sipAcik"') && str_contains($r['html'], 'id="sipEvrak"') && str_contains($r['html'], 'id="sipKapali"'));
+$pa = strpos($r['html'], 'id="sipAcik"'); $pe = strpos($r['html'], 'id="sipEvrak"'); $pk = strpos($r['html'], 'id="sipKapali"'); $p41 = strpos($r['html'], 'TC900041.10');
+ok('v400: bölüm sırası açık < evrak < kapanan; TC900041 (mail gönderildi) evrak bölümünde, TC900011 (evrak takımı) kapananda', $pa < $pe && $pe < $pk && $p41 > $pe && $p41 < $pk && strpos($r['html'], 'TC900011.10') > $pk);
+ok('v400: Evrak bölümü kartı (sip-bolum-evrak) + başlık 📦 Evrak Takımı Bekleyen Sevkiyatlar', str_contains($r['html'], 'class="sip-bolum sip-bolum-evrak"') && str_contains($r['html'], 'Evrak Takımı Bekleyen Sevkiyatlar') && str_contains($r['html'], '📦')
+    && str_contains($r['html'], 'Tamamlanan kayıtlar (evrak takımı gönderildi · iptal)'));
+ok('v400: başlıkta "N evrak bekleyen" sayacı', preg_match('/\d+ açık · \d+ evrak bekleyen · \d+ kapanan sevkiyat/', $r['html']) === 1);
+ok('v400: durum filtresi seçenekleri (Evrak takımı bekleyen, Açık olanlar (işlem bekleyen))', str_contains($r['html'], 'value="evrak_bekleyen"') && str_contains($r['html'], 'Açık olanlar (işlem bekleyen)'));
 ok('v390: Açık ve Kapanan AYRI kartlar (İşlem Bekleyen ⏳ / Kapanan ✅, Beyanlar gibi)',
    str_contains($r['html'], 'class="sip-bolum sip-bolum-acik"') && str_contains($r['html'], 'class="sip-bolum sip-bolum-kapali"')
    && str_contains($r['html'], 'İşlem Bekleyen Sevkiyatlar') && str_contains($r['html'], 'Kapanan Sevkiyatlar')
@@ -154,11 +161,14 @@ ok('v382: Açık başlığında 🖨️ Yazdır + 📤 PDF Gönder (data-sip-yaz
 preg_match('/data-sip-yazdir-url="([^"]+)"/', $acikBas, $mu); $yu = html_entity_decode($mu[1] ?? '');
 ok('v382: yazdırma URL\'i siparis_yazdir.php + filtre anahtarları (q, durum); sayfa numaraları (acik_page/kapali_page) YOK', str_starts_with($yu, 'siparis_yazdir.php?') && str_contains($yu, 'q=TC90000') && str_contains($yu, 'durum=acik') && !str_contains($yu, 'acik_page') && !str_contains($yu, 'kapali_page'), $yu);
 $yh = sayfa('siparisler.php')['html']; $kp = strpos($yh, 'id="sipKapali"');
-ok('v382: Kapanan bölümde yazdırma düğmesi YOK (iki bölümlü listede düğme yalnız Açık başlığında)', $kp !== false && substr_count($yh, 'data-sip-yazdir="yazdir"') === 1 && strpos($yh, 'data-sip-yazdir') < $kp && strpos(substr($yh, $kp), 'data-sip-yazdir') === false);
+ok('v382/v400: Kapanan + Evrak bölümlerinde yazdırma düğmesi YOK (düğme yalnız Açık başlığında, TEK)', $kp !== false && substr_count($yh, 'data-sip-yazdir="yazdir"') === 1 && strpos($yh, 'data-sip-yazdir') < strpos($yh, 'id="sipEvrak"') && strpos(substr($yh, strpos($yh, 'id="sipEvrak"')), 'data-sip-yazdir') === false);
 $gSakla = $_GET; $_GET = [];
 ok('v382: siparis_url() geriye uyumlu (varsayılan siparisler.php) + 2. parametre ile başka uca', siparis_url([]) === 'siparisler.php' && siparis_url(['q' => 'a']) === 'siparisler.php?q=a' && siparis_url(['q' => 'a'], 'siparis_yazdir.php') === 'siparis_yazdir.php?q=a');
 $_GET = $gSakla;
 ok('v382: durum=kapali → yazdırma düğmesi YOK', strpos(sayfa('siparisler.php', ['durum' => 'kapali'])['html'], 'data-sip-yazdir') === false);
+$ye = sayfa('siparisler.php', ['durum' => 'evrak_bekleyen'])['html'];
+ok('v400: durum=evrak_bekleyen → yazdırma düğmesi YOK, yalnız sipEvrak bölümü', strpos($ye, 'data-sip-yazdir') === false && str_contains($ye, 'id="sipEvrak"') && !str_contains($ye, 'id="sipAcik"') && !str_contains($ye, 'id="sipKapali"') && !str_contains($ye, 'id="sipSonuclar"'));
+ok('v394/v400: Evrak bölümünde de WP Paylaş var (TC900041)', strpos($yh, 'data-sip-wp="' . $ID['s41'] . '"') > strpos($yh, 'id="sipEvrak"') && strpos($yh, 'data-sip-wp="' . $ID['s41'] . '"') < strpos($yh, 'id="sipKapali"'));
 ok('v382: boş sonuç (eşleşen açık sevkiyat yok) → düğme YOK', strpos(sayfa('siparisler.php', ['q' => 'yok-boyle-bir-sevkiyat'])['html'], 'data-sip-yazdir') === false);
 $yt = sayfa('siparisler.php', ['durum' => 'arac_bekleyen']);
 $sonBas = preg_match('~<div class="sip-bolum-bas" id="sipSonuclar">.*?</div></div>~s', $yt['html'], $mt) === 1 ? $mt[0] : '';
@@ -185,7 +195,17 @@ ok('q: plakaya göre', str_contains($r['html'], 'TC900011.10') && !str_contains(
 $r = $f(['q' => "x' OR 1=1 --"]);
 ok('q: SQL enjeksiyonu etkisiz (sonuç yok, hata yok)', temiz($r) && !str_contains($r['html'], 'TC900002.10'));
 $r = $f(['durum' => 'kapali']);
-ok('durum=kapali: yalnız kapananlar', str_contains($r['html'], 'TC900011.10') && str_contains($r['html'], 'TC900012.10') && !str_contains($r['html'], 'TC900002.10') && !str_contains($r['html'], 'id="sipAcik"'));
+ok('durum=kapali: yalnız kapananlar (evrak bekleyen TC900041 ve sipEvrak DEĞİL)', str_contains($r['html'], 'TC900011.10') && str_contains($r['html'], 'TC900012.10') && !str_contains($r['html'], 'TC900002.10') && !str_contains($r['html'], 'id="sipAcik"')
+    && !str_contains($r['html'], 'TC900041.10') && !str_contains($r['html'], 'id="sipEvrak"'));
+$r = $f(['durum' => 'evrak_bekleyen']);
+ok('durum=evrak_bekleyen: yalnız TC900041 (sipEvrak), diğer bölümler yok', str_contains($r['html'], 'TC900041.10') && !str_contains($r['html'], 'TC900011.10') && !str_contains($r['html'], 'TC900002.10') && !str_contains($r['html'], 'id="sipAcik"') && !str_contains($r['html'], 'id="sipKapali"') && temiz($r));
+$r = $f(['durum' => 'acik']);
+ok('durum=acik: Evrak ve Kapanan bölümü yok, TC900041 yok', !str_contains($r['html'], 'id="sipEvrak"') && !str_contains($r['html'], 'id="sipKapali"') && !str_contains($r['html'], 'TC900041.10') && str_contains($r['html'], 'TC900002.10'));
+$r = $f(['durum' => 'mail_gonderildi']);
+ok('durum=mail_gonderildi: tek "Sonuçlar" bölümü (TC900041) + yazdırma düğmeleri', str_contains($r['html'], 'id="sipSonuclar"') && str_contains($r['html'], 'TC900041.10') && !str_contains($r['html'], 'TC900011.10') && substr_count($r['html'], 'data-sip-yazdir="yazdir"') === 1);
+$gSakla2 = $_GET; $_GET = ['evrak_page' => '2', 'q' => 'a'];
+ok('v400: siparis_url() evrak_page\'i taşır; liste ucu (yazdırma) URL\'inde sayfa anahtarları yok', siparis_url([]) === 'siparisler.php?q=a&evrak_page=2' && siparis_url(['evrak_page' => null]) === 'siparisler.php?q=a');
+$_GET = $gSakla2;
 $r = $f(['durum' => 'pkl_hazir']);
 ok('durum=pkl_hazir: tek "Sonuçlar" bölümü, yalnız TC900001.10', str_contains($r['html'], 'id="sipSonuclar"') && str_contains($r['html'], 'TC900001.10') && !str_contains($r['html'], 'TC900002.10'));
 $r = $f(['durum' => 'arac_bekleyen']);
@@ -209,7 +229,7 @@ echo "\n=== 4. Detay sayfası ===\n";
 $r = sayfa('siparis_view.php', ['id' => $ID['s1']]);
 ok('detay temiz + dengeli', temiz($r) && html_dengeli($r['html']) === null, (string)$r['hata'] . ' ' . (string)html_dengeli($r['html']));
 foreach (['id="durum"', 'id="bilgi"', 'id="kalemler"', 'id="belgeler"', 'id="pkl"', 'id="beyan"', 'id="gecmis"', 'id="catismalar"'] as $a) ok("detay: $a", str_contains($r['html'], $a));
-ok('durum adımları: 6 adım, tek aria-current=step, sıradaki kesik çerçeve', preg_match_all('/<li class="sip-step[ "]/', $r['html']) === 6 && substr_count($r['html'], 'aria-current="step"') === 1 && str_contains($r['html'], 'sip-step--sonraki'));
+ok('durum adımları: 7 adım, tek aria-current=step, sıradaki kesik çerçeve', preg_match_all('/<li class="sip-step[ "]/', $r['html']) === 7 && substr_count($r['html'], 'aria-current="step"') === 1 && str_contains($r['html'], 'sip-step--sonraki'));
 ok('kaynak rozetleri + elle kilit + kilidi kaldır', str_contains($r['html'], 'sip-src--ll') && str_contains($r['html'], 'sip-src--po') && str_contains($r['html'], 'Kilidi kaldır') && str_contains($r['html'], '🔒'));
 ok('planlanan plaka altı satır', str_contains($r['html'], 'Planlanan:'));
 ok('çatışma: geleni kabul et / mevcudu koru', str_contains($r['html'], 'Geleni kabul et') && str_contains($r['html'], 'Mevcudu koru'));
@@ -226,7 +246,18 @@ ok('JS\'siz düzenleme formu (?duzenle=)', str_contains($r['html'], 'class="sip-
 $r = sayfa('siparis_view.php', ['id' => $ID['s1'], 'gecmis' => 'tum']);
 ok('geçmişin tamamı', temiz($r));
 $r = sayfa('siparis_view.php', ['id' => $ID['s11']]);
-ok('kapanan sevkiyat: tüm adımlar, Mail gönderildi düğmesi yok', temiz($r) && !str_contains($r['html'], 'data-sip-ac="sipMailModal"') && str_contains($r['html'], 'Mail gönderildi'));
+ok('kapanan (evrak takımı gönderildi) sevkiyat: Mail + Evrak düğmesi YOK, 7. adım ✓ + aria-current, "Adım 7/7"', temiz($r) && !str_contains($r['html'], 'data-sip-ac="sipMailModal"') && !str_contains($r['html'], 'data-sip-ac="sipEvrakModal"') && !str_contains($r['html'], 'id="sipEvrakModal"')
+    && str_contains($r['html'], 'Mail gönderildi') && preg_match('~<li class="sip-step sip-step--su-an" aria-current="step">\s*<span class="sip-step-nokta" aria-hidden="true">✓</span>\s*<span class="sip-step-et">📦 Evrak takımı~', $r['html']) === 1 && str_contains($r['html'], 'Adım 7/7'));
+ok('kapanan: durum penceresi radyosunda mail_gonderildi (geri al) VAR, evrak_gonderildi YOK; data-sip-kapali', preg_match('~name="hedef" value="mail_gonderildi" required~', $r['html']) === 1 && !str_contains($r['html'], 'name="hedef" value="evrak_gonderildi" required') && str_contains($r['html'], 'data-sip-kapali="1"'));
+$r = sayfa('siparis_view.php', ['id' => $ID['s41']]);
+ok('v400 evrak bekleyen (mail gönderildi): Evrak düğmesi VAR, Mail düğmesi YOK, "Adım 6/7", 7. adım sıradaki', temiz($r) && html_dengeli($r['html']) === null && str_contains($r['html'], 'data-sip-ac="sipEvrakModal">📦 Evrak takımı gönderildi</button>') && !str_contains($r['html'], 'data-sip-ac="sipMailModal"')
+    && str_contains($r['html'], 'Adım 6/7') && preg_match('~<li class="sip-step sip-step--sonraki">\s*<span class="sip-step-nokta" aria-hidden="true">7</span>\s*<span class="sip-step-et">📦 Evrak takımı~', $r['html']) === 1);
+ok('v400 evrak penceresi: onay_evrak (required) + gönder pasif + CSRF + hedef/islem alanları', str_contains($r['html'], 'id="sipEvrakModal"') && preg_match('~name="onay_evrak" value="1" required data-sip-evrak-onay~', $r['html']) === 1 && str_contains($r['html'], 'data-sip-evrak-gonder disabled>📦 Süreci kapat')
+    && preg_match('~<form method="post" action="siparis_kaydet.php" data-sip-tek data-sip-evrak-form>.*?name="hedef" value="evrak_gonderildi".*?name="csrf"~s', $r['html']) === 1);
+ok('v400 evrak bekleyen: durum radyosunda ne mail_gonderildi ne evrak_gonderildi; mail penceresi yok', !str_contains($r['html'], 'name="hedef" value="mail_gonderildi" required') && !str_contains($r['html'], 'name="hedef" value="evrak_gonderildi" required') && !str_contains($r['html'], 'id="sipMailModal"'));
+$r = sayfa('siparis_view.php', ['id' => $ID['s1']]);
+ok('v400 pkl_hazir (s1): Mail düğmesi VAR, Evrak düğmesi/penceresi YOK, "Adım 5/7", Mail penceresi gönder metni', str_contains($r['html'], 'data-sip-ac="sipMailModal"') && !str_contains($r['html'], 'sipEvrakModal') && str_contains($r['html'], 'Adım 5/7') && str_contains($r['html'], 'data-sip-mail-gonder disabled>✅ Mail gönderildi</button>'));
+$r = sayfa('siparis_view.php', ['id' => $ID['s11']]);
 ok('3 kaynaklı kalem: bölüm farklı rozeti + uyarı', str_contains($r['html'], 'Bölüm farklı') && str_contains($r['html'], 'class="sip-uyari'));
 $r = sayfa('siparis_view.php', ['id' => $ID['s12']]);
 ok('iptal edilen: iptal bandı + gerekçe', str_contains($r['html'], 'sip-iptal-bant') && str_contains($r['html'], 'müşteri iptal etti'));

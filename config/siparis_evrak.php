@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// config/siparis_evrak.php — "Evrak takımı" adımı için TEK SEFERLİK veri geçişi (v397)
+// config/siparis_evrak.php — "Evrak takımı" adımı için TEK SEFERLİK veri geçişi (v400)
 // siparis_core.php sonunda yüklenir. Şema DEĞİŞMEZ (yalnız veri UPDATE); çalıştırma yalnız migrate.php kartından.
 // =========================================================
 declare(strict_types=1);
@@ -9,13 +9,13 @@ declare(strict_types=1);
 const SIPARIS_EVRAK_GECIS_PARTI = 1000;
 
 /**
- * v397 öncesi/sonrası ayrımı için işaret: `siparis_durum_degistir()` v397'den itibaren "Mail gönderildi" audit'inin
+ * v400 öncesi/sonrası ayrımı için işaret: `siparis_durum_degistir()` v400'den itibaren "Mail gönderildi" audit'inin
  * new_values'una `evrak_akisi:1` yazar (audit_log_event JSON_UNESCAPED_* ile kodlar → bu alt dize aynen görünür).
  */
 const SIPARIS_EVRAK_GECIS_ISARET = '"evrak_akisi":1';
 
 /**
- * Geçiş adayı koşulu: durum `mail_gonderildi` VE v397 akışında işaretlendiğini gösteren audit satırı YOK
+ * Geçiş adayı koşulu: durum `mail_gonderildi` VE v400 akışında işaretlendiğini gösteren audit satırı YOK
  * (eski mail → eskiden süreci kapatıyordu; yeni mail → evrak takımı bekliyor, DOKUNULMAZ). Tarih kıyaslanmaz.
  * Pozisyonel parametre kullanır (named tekrarı HY093 verirdi); audit_log tablosu yoksa işaret koşulu atlanır.
  * @return array{0:string,1:list<string>}
@@ -84,7 +84,7 @@ function siparis_evrak_gecis_uygula(PDO $pdo, int $uid): array
                 $up->execute([$simdi, $uid, $id]);
                 if ($up->rowCount() !== 1) continue;   // arada değişmiş → atla
                 siparis_olay($pdo, $id, 'evrak_gonderildi', 'mail_gonderildi', 'evrak_gonderildi',
-                    'Toplu geçiş (v397): evrak takımı adımı eklenmeden önce kapanmış sevkiyat', null, $uid);
+                    'Toplu geçiş (v400): evrak takımı adımı eklenmeden önce kapanmış sevkiyat', null, $uid);
                 $tasinan[] = $id;
             }
             if ($tasinan) {

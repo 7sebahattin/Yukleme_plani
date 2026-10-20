@@ -481,15 +481,15 @@ function siparis_durumlar(): array
 }
 
 /**
- * @return list<string> süreci kapatan durumlar (v397: "Mail gönderildi" artık kapatmaz — son adım "Evrak takımı").
+ * @return list<string> süreci kapatan durumlar (v400: "Mail gönderildi" artık kapatmaz — son adım "Evrak takımı").
  * Kapalı/kapanmamış ayrımı YALNIZ buradan ve siparis_kapanmamis_sql()'den okunur; durum adlarını başka yere sabit yazma.
  */
 function siparis_kapali_durumlar(): array { return ['evrak_gonderildi', 'iptal']; }
 
-/** @return list<string> v397 — PKL maili gönderilmiş, evrak takımı bekleyen durumlar (açık değil, kapanmış da değil). */
+/** @return list<string> v400 — PKL maili gönderilmiş, evrak takımı bekleyen durumlar (açık değil, kapanmış da değil). */
 function siparis_evrak_bekleyen_durumlar(): array { return ['mail_gonderildi']; }
 
-/** v397 — "süreci kapanmamış" SQL koşulu ($kolon beyaz liste/sabit olmalı; kullanıcı girdisi DEĞİL). */
+/** v400 — "süreci kapanmamış" SQL koşulu ($kolon beyaz liste/sabit olmalı; kullanıcı girdisi DEĞİL). */
 function siparis_kapanmamis_sql(string $kolon = 's.durum'): string
 {
     return $kolon . " NOT IN ('" . implode("','", siparis_kapali_durumlar()) . "')";
@@ -545,9 +545,9 @@ function siparis_durum_ilerlet(PDO $pdo, int $sid, string $hedef, ?int $uid, str
  * ELLE durum değişikliği (beyaz liste). iptal ve kapalı durumdan çıkış gerekçe (≥3) ister;
  * yola_cikti → yola_cikis_at; mail_gonderildi → var_pkl=1 şart, kısmi PKL'de ($eksik_hucre>0)
  * ayrıca $kismiOnay; iptal → iptal_nedeni. Olay + audit yazar.
- * v397: evrak_gonderildi YALNIZ mail_gonderildi'den işaretlenir (mail_gonderildi_at'e dokunmaz); evrak → mail_gonderildi
+ * v400: evrak_gonderildi YALNIZ mail_gonderildi'den işaretlenir (mail_gonderildi_at'e dokunmaz); evrak → mail_gonderildi
  * geri alma (gerekçeli) PKL kontrolü yapmaz ve mail_gonderildi_at/_by'yi DEĞİŞTİRMEZ. "Mail gönderildi" audit'i
- * new_values'ta `evrak_akisi:1` taşır — migrate.php toplu geçiş kartı v397 ÖNCESİ kapanmışları bu işaretten ayırır.
+ * new_values'ta `evrak_akisi:1` taşır — migrate.php toplu geçiş kartı v400 ÖNCESİ kapanmışları bu işaretten ayırır.
  * @return array{ok:bool,hata?:string}
  */
 function siparis_durum_degistir(PDO $pdo, int $sid, string $hedef, int $uid, string $gerekce = '', bool $kismiOnay = false): array
@@ -995,7 +995,7 @@ function siparis_plaka_normalize(?string $s): array
  * Saf: yalnız doğrulanmış filtre değerleri + SQL parçası + parametre üretir (DB'ye dokunmaz; aktif depo süzgeci depo_sql_column()'dan).
  * Parametre adları: :q1..:q6 · :cwh/:cwy · :alici · :po · :tb · :tt · :udm (named — pozisyonel ? ile KARIŞTIRMA, HY093).
  * `acik_page` / `evrak_page` / `kapali_page` burada DEĞİL (yalnız sayfada).
- * v397: üç bölüm — açık (acikSql) · evrak bekleyen (evrakSql) · kapalı (kapaliSql); durum=evrak_bekleyen yalnız evrak bölümünü gösterir.
+ * v400: üç bölüm — açık (acikSql) · evrak bekleyen (evrakSql) · kapalı (kapaliSql); durum=evrak_bekleyen yalnız evrak bölümünü gösterir.
  * @return array{q:string,f_durum:string,f_cw:string,f_alici:string,f_eksik:string,f_catisma:bool,f_po:int,t_bas:string,t_bit:string,
  *   kapaliSql:string,acikSql:string,evrakSql:string,temelWhere:string,temelPar:array,dprm:array,dsql:string,
  *   tek:bool,tekSql:string,bolumAcik:bool,bolumEvrak:bool,bolumKapali:bool,detayFiltre:bool,filtreVar:bool,detayOzet:list<string>}
@@ -1192,6 +1192,6 @@ function siparis_tarih_coz(mixed $v): ?string
 require_once __DIR__ . '/siparis_sofor.php';
 // v387: yurt içi gümrük (ekleyici migrasyon) — kendi dosyasında
 require_once __DIR__ . '/siparis_yurtici_gumruk.php';
-// v397: evrak takımı adımı — tek seferlik veri geçişi (şema DEĞİŞMEZ) kendi dosyasında
+// v400: evrak takımı adımı — tek seferlik veri geçişi (şema DEĞİŞMEZ) kendi dosyasında
 require_once __DIR__ . '/siparis_evrak.php';
 require_once __DIR__ . '/siparis_odeme.php';

@@ -110,7 +110,7 @@ function siparis_yazdir_baslik(array $F): string
 /**
  * Yazdırılacak sevkiyatlar + kalemleri + parti no'ları (SALT OKUNUR). $F = siparis_liste_filtre() sonucu.
  * Kapsam: durum boş/acik → açık küme; arac_bekleyen / tekil durum → `tek`; durum=kapali → RuntimeException('kapsam_yok')
- * v397: açık küme (acikSql) artık "Mail gönderildi"yi İÇERMEZ (evrak bekleyen ayrı bölüm); durum=evrak_bekleyen de 'kapsam_yok'
+ * v400: açık küme (acikSql) artık "Mail gönderildi"yi İÇERMEZ (evrak bekleyen ayrı bölüm); durum=evrak_bekleyen de 'kapsam_yok'
  * (evrak bölümünde yazdırma yok); durum=mail_gonderildi tekil durumdur (`tek`) ve yazdırılır.
  * Sıra ekranla aynı (yükleme tarihi, boşlar sonda, id). En çok SIPARIS_YAZDIR_LIMIT satır (LIMIT +1 ile `kesildi`).
  * Şoför kolonları YALNIZ siparis_sofor_hazir() ise SELECT'e girer (kolon yokken SQL hatası olmasın).

@@ -64,7 +64,7 @@ $B_acik = $B_evrak = $B_kapali = $B_tek = null;
 if ($tek) $B_tek = $bolum($tekSql, $acikSira, $acik_page, 100);
 else {
     if ($bolumAcik)   $B_acik   = $bolum($acikSql, $acikSira, $acik_page, 100);
-    if ($bolumEvrak)  $B_evrak  = $bolum($evrakSql, $acikSira, $evrak_page, 100);   // v397: PKL maili gitti, evrak takımı bekliyor
+    if ($bolumEvrak)  $B_evrak  = $bolum($evrakSql, $acikSira, $evrak_page, 100);   // v400: PKL maili gitti, evrak takımı bekliyor
     if ($bolumKapali) $B_kapali = $bolum($kapaliSql, 's.yukleme_tarihi DESC, s.id DESC', $kapali_page, SIPARIS_PER_PAGE);
 }
 
@@ -116,7 +116,7 @@ try {
 $kapaliSay = 0; $evrakSay = 0;
 try {
     $c = $pdo->prepare('SELECT COALESCE(SUM(CASE WHEN ' . $kapaliSql . ' THEN 1 ELSE 0 END),0) AS kapali, COALESCE(SUM(CASE WHEN ' . $evrakSql . ' THEN 1 ELSE 0 END),0) AS evrak
-        FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL' . $dsql);
+        FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL ' . $dsql);
     $c->execute($dprm);
     $__say = $c->fetch(PDO::FETCH_ASSOC) ?: [];
     $kapaliSay = (int)($__say['kapali'] ?? 0); $evrakSay = (int)($__say['evrak'] ?? 0);
