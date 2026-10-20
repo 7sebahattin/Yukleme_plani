@@ -230,7 +230,7 @@ $ob = siparis_yazdir_oku($db, $F(['q' => 'TC900104']));
 $vb = siparis_yazdir_veri($ob, $ctx);
 ok('hiç palet/kasa/kalibre değeri yoksa toplam boş', $vb['adet'] === 1 && $vb['toplam'] === ['palet' => '', 'kasa' => '', 'kal_14' => '', 'kal_12' => '', 'kal_10' => '']);
 ok('başlık / dosya / kapsam / meta / limit', $v['baslik'] === 'İşlem Bekleyen Sevkiyatlar' && $v['dosya'] === 'Islem-Bekleyen-Sevkiyatlar-19.10.2026' && $v['kapsam'] === 'acik' && $v['basim'] === '19.10.2026 14:32' && $v['depo'] === 'DEPO1' && $v['limit'] === 500 && $v['kesildi'] === false && $v['ok'] === true);
-ok('notlar: şoför + gümrük kurulmadı + kişisel veri uyarısı (SON, "şoför telefonu")', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && in_array('Gümrük alanı kurulmadı.', $v['notlar'], true) && end($v['notlar']) === 'Kişisel veri içerir (şoför telefonu) — yalnız ilgili kişilerle paylaşın.' && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true));
+ok('notlar: şoför + gümrük kurulmadı, kişisel veri notu YOK', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && in_array('Gümrük alanı kurulmadı.', $v['notlar'], true) && !in_array('Kişisel veri içerir (şoför telefonu) — yalnız ilgili kişilerle paylaşın.', $v['notlar'], true) && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true));
 ok('sevkiyatlar arası gün değişimi için gun alanı her satırda (yoksa null)', count(array_filter($v['satirlar'], fn($s) => array_key_exists('gun', $s))) === count($v['satirlar']));
 // v403: iki kalemli kalibre toplamı + ekstra kalibre (16) sütunu satır verisinde
 $vs = siparis_yazdir_veri(['kapsam' => 'acik', 'kesildi' => false, 'sofor' => true, 'gumruk' => true, 'parti' => [],
