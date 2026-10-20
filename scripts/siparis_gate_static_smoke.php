@@ -31,7 +31,7 @@ $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
 $BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_kaydet.php',
-             'siparis_mail.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
+             'siparis_mail.php', 'siparis_odeme.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
 ok('helpers.php can_siparis() tanımlı', str_contains($helpers, 'function can_siparis(string $perm): bool'));

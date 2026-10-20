@@ -117,6 +117,7 @@ $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
 $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
+$siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
@@ -269,6 +270,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($sr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'siparis', null, null,
                 ['operation' => 'add_column', 'column' => $sr['adim']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
+    csrf_check($_POST['csrf'] ?? null);
+    $siparis_od_ran     = true;
+    $siparis_od_results = siparis_odeme_migrate($pdo);
+    foreach ($siparis_od_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'siparis', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_yurtici_gumruk') {
@@ -680,6 +690,27 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
         foreach (siparis_sofor_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('siparis-odeme'); ?>
+    <h2 style="margin-top:0;">Siparişler — OGL ödemeleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>siparis_odemeler</code> tablosunu ekler (yabancı anahtar YOK, mevcut veriye dokunmaz).
+      Cari Döküm'deki Tahsilat bu tablodan beslenir. Çalıştırılmazsa ödeme girişi gizli kalır, Cari Döküm Tahsilat'ı 0 gösterir.
+      <?php if ($siparis_od_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($siparis_od_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $sipod = siparis_odeme_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $sipod ? '#1f9d55' : '#c0392b' ?>;"><?= $sipod ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="siparis_odeme">
+      <button type="submit" class="btn btn-primary">Ödeme Tablosunu Oluştur</button>
+    </form>
   <?php mg_kart_kapat(); ?>
 
   <?php mg_kart_ac('siparis-yurtici-gumruk'); ?>

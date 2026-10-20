@@ -1164,3 +1164,4 @@ function siparis_tarih_coz(mixed $v): ?string
 require_once __DIR__ . '/siparis_sofor.php';
 // v387: yurt içi gümrük (ekleyici migrasyon) — kendi dosyasında
 require_once __DIR__ . '/siparis_yurtici_gumruk.php';
+require_once __DIR__ . '/siparis_odeme.php';
