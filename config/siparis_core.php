@@ -1194,3 +1194,4 @@ require_once __DIR__ . '/siparis_sofor.php';
 require_once __DIR__ . '/siparis_yurtici_gumruk.php';
 // v397: evrak takımı adımı — tek seferlik veri geçişi (şema DEĞİŞMEZ) kendi dosyasında
 require_once __DIR__ . '/siparis_evrak.php';
+require_once __DIR__ . '/siparis_odeme.php';

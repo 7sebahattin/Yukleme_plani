@@ -30,8 +30,8 @@ $core = oku('config/siparis_core.php'); $migrate = oku('migrate.php'); $auth = o
 $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
-$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_dosya.php', 'siparis_kaydet.php',
-             'siparis_mail.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
+$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_kaydet.php',
+             'siparis_mail.php', 'siparis_odeme.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
 ok('helpers.php can_siparis() tanımlı', str_contains($helpers, 'function can_siparis(string $perm): bool'));
@@ -82,7 +82,7 @@ foreach ($sayfalar as $f) {
     ok("$f: mutasyon POST'a bağlı", (bool)preg_match("/REQUEST_METHOD'\]\s*(!==|===)\s*'POST'/", $k));
     ok("$f: yazma kapısı require_siparis('write'|'delete'|'match') içeriyor", (bool)preg_match("/require_siparis\('(write|delete|match)'\)|can_siparis\('(write|delete|match)'\)/", $k));
 }
-foreach (['siparis_dosya.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php'] as $f) {
+foreach (['siparis_dosya.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php'] as $f) {
     $k = kod_oku($f);
     if ($k === '') continue;
     // GET-only görünüm sayfaları (POST'u siparis_kaydet/… uçlarına gider): ayarlar sayfası profil/sayaç formu içerebilir → muaf.
@@ -167,7 +167,8 @@ ok('sw.js bypass regex\'i siparis_mail.php\'yi KAPSIYOR (uç adı tek alt çizgi
 $epostaRe = '/[a-z0-9._%+-]+@(?!ornek\.test\b)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/i';
 foreach (['config/siparis_mail.php', 'siparis_mail.php', 'siparisler.php', 'siparis_ayarlar.php', '_siparis_ortak.php', 'assets/siparis.js', 'assets/siparis.css', 'scripts/siparis_mail_smoke.php', 'scripts/_siparis_mail_test_lib.php', 'scripts/siparis_ui_render.php',
     'siparis_yazdir.php', 'config/siparis_yazdir.php', 'assets/siparis_yazdir.js', 'scripts/siparis_yazdir_smoke.php', 'scripts/siparis_yazdir_smoke.js',
-    'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js'] as $f) {
+    'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js',
+    'siparis_cari.php', 'config/siparis_cari.php', 'scripts/siparis_cari_smoke.php'] as $f) {
     $t = str_ends_with($f, '.php') ? kod_oku($f) : oku($f);
     ok("$f: gerçek e-posta adresi YOK (yalnız @ornek.test)", $t !== '' && preg_match($epostaRe, $t, $em2) === 0, $em2[0] ?? '');
 }
@@ -219,9 +220,25 @@ ok('siparis_wp.js: esc(), same-origin + no-store, ClipboardItem + Web Share + No
     && str_contains($wpJs, 'toBlob(') && str_contains($wpJs, "'image/png'") && !str_contains($wpJs, 'jspdf') && !preg_match('/eval\s*\(|new Function\(/', $wpJs)
     && !str_contains($wpJs, 'localStorage') && !preg_match('/\sonclick=/', $wpJs));
 
+echo "\n=== v397: Sipariş Cari Dökümü ===\n";
+$caUc = kod_oku('siparis_cari.php'); $caCfg = kod_oku('config/siparis_cari.php'); $caHam = oku('config/siparis_cari.php');
+ok('v397 sayfa: require_siparis(read) + siparis_cari_yetkili() kapısı forbidden ile + no-store; csrf yok; mutasyon yok',
+    str_contains($caUc, "require_siparis('read');") && str_contains($caUc, 'if (!siparis_cari_yetkili()) forbidden(') && str_contains($caUc, 'siparis_no_store();')
+    && !str_contains($caUc, 'csrf_check(') && preg_match($mutRe, $caUc) === 0);
+ok('v397 sayfa: kapı çıktıdan ÖNCE', strpos($caUc, 'siparis_cari_yetkili()') !== false && strpos($caUc, 'siparis_cari_yetkili()') < strpos($caUc, 'render_print_page_start('));
+ok('v397 sayfa: fonksiyon tanımlamaz; satır içi onclick yok; tfoot yok', !preg_match('/^\s*function\s+\w+/m', $caUc) && !preg_match('/\sonclick=/i', $caUc) && !str_contains($caUc, '<tfoot'));
+ok('v397 sw.js bypass /siparis_cari.php\'yi kapsar', $swKural !== '' && preg_match($swPcre, '/siparis_cari.php') === 1, $swPcre);
+ok('v397 config: yalnız SELECT; tam yol koruması; çıktı yok; can(siparis.*) yok; kapı TEK yerde can(\'reports.export\')',
+    $caHam !== '' && !preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\s/', $caHam)
+    && str_contains($caHam, "if (realpath((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }")
+    && !preg_match('/\b(echo|print|die)\b/', $caCfg) && preg_match("/\bcan\('siparis\./", $caCfg) === 0 && substr_count($caCfg, "can('reports.export')") === 1);
+ok('v397 config: tahsilat kancası siparis_cari_tahsilat_toplam()', str_contains($caCfg, 'function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array'));
+ok('v397 siparisler.php: Cari Döküm bağlantısı siparis_cari_yetkili() kapılı', (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\)\): \?>\s*<a class="btn btn-lg" href="siparis_cari\.php">📒 Cari Döküm<\/a>/u', oku('siparisler.php')));
+ok('v397 nav_aktif_anahtar $a_sip siparis_cari.php içerir', (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_cari\.php'/", $helpers));
+
 echo "\n=== Audit eylem adları ≤ 40 karakter ===\n";
 $uzun = []; $sayi = 0;
-$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
+$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
 foreach ($dosyalar as $f) {
     $k = kod_oku($f);
     if (preg_match_all("/\b(?:siparis_audit|audit_log_event)\(\s*'([^']+)'/", $k, $mm)) {
