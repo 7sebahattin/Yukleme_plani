@@ -661,6 +661,33 @@
         });
     }
 
+    /* ── v401: Ödemeler sayfası (native <dialog>; öğe yoksa etkisiz) ── */
+    function odAc(d) {
+        if (!d) return;
+        if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+        var i = q('input:not([type=hidden]), select', d);
+        if (i && window.matchMedia('(min-width: 768px)').matches) { try { i.focus({ preventScroll: true }); } catch (x) { /* yok say */ } }
+    }
+    function odKapat(d) { if (!d) return; if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
+    document.addEventListener('click', function (e) {
+        var t = e.target.closest ? e.target.closest('[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir]') : null;
+        if (!t || !t.closest('.sip-mod')) return;
+        e.preventDefault();
+        if (t.hasAttribute('data-od-ac')) { odAc(document.getElementById(t.getAttribute('data-od-ac'))); return; }
+        if (t.hasAttribute('data-od-kapat')) { odKapat(t.closest('dialog')); return; }
+        if (t.hasAttribute('data-od-iptal')) {
+            var d = document.getElementById('odIptalDlg'); if (!d) return;
+            var f = q('form', d);
+            f.elements['id'].value = t.getAttribute('data-od-iptal'); f.elements['neden'].value = '';
+            var o = q('[data-od-ozet-yazi]', d); if (o) o.textContent = t.getAttribute('data-od-ozet') || '';
+            odAc(d); return;
+        }
+        document.body.classList.add('od-yazdir-modu');
+        var temizle = function () { document.body.classList.remove('od-yazdir-modu'); window.removeEventListener('afterprint', temizle); };
+        window.addEventListener('afterprint', temizle);
+        window.print();
+    });
+
     function basla() {
         qa('details[data-sip-yukle]').forEach(yukleKart);
         qa('form[data-sip-upload]').forEach(yukleme);
