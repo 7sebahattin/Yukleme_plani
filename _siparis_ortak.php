@@ -249,6 +249,7 @@ function sipui_olay_etiketleri(): array
         'kilit_kaldirildi' => ['🔓', 'Elle kilit kaldırıldı'], 'catisma' => ['⚠', 'Belgeler arasında çatışma'], 'catisma_kabul' => ['✔', 'Çatışma: gelen değer kabul edildi'],
         'catisma_red' => ['✖', 'Çatışma: mevcut değer korundu'], 'durum' => ['🔄', 'Durum değişti'], 'pkl_taslak' => ['📝', 'PKL taslağı kaydedildi'],
         'pkl_uretildi' => ['📄', 'PKL üretildi'], 'pkl_yuklendi' => ['📤', 'PKL yüklendi'], 'mail_gonderildi' => ['✅', 'Mail gönderildi olarak işaretlendi'],
+        'evrak_gonderildi' => ['📦', 'Evrak takımı gönderildi olarak işaretlendi'],
         'beyan_baglandi' => ['🏛', 'Beyan bağlandı'], 'beyan_kaldirildi' => ['🏛', 'Beyan bağı kaldırıldı'], 'geri_getirildi' => ['♻', 'Sevkiyat geri getirildi'],
         'silindi' => ['🗑', 'Sevkiyat silindi'], 'uyari' => ['⚠', 'Uyarı'],
     ];
@@ -260,7 +261,7 @@ function sipui_olay_cumle(array $o): string
     $et = sipui_olay_etiketleri()[(string)$o['tur']] ?? ['•', (string)$o['tur']];
     $dd = siparis_durumlar();
     $eski = (string)($o['eski'] ?? ''); $yeni = (string)($o['yeni'] ?? '');
-    if ($o['tur'] === 'durum' || $o['tur'] === 'mail_gonderildi') {
+    if (in_array($o['tur'], ['durum', 'mail_gonderildi', 'evrak_gonderildi'], true)) {
         $eski = $dd[$eski]['etiket'] ?? $eski; $yeni = $dd[$yeni]['etiket'] ?? $yeni;
         $s = $et[1] . ($eski !== '' || $yeni !== '' ? ': ' . ($eski !== '' ? $eski . ' → ' : '') . $yeni : '');
     } else {
@@ -268,7 +269,7 @@ function sipui_olay_cumle(array $o): string
         if (($o['aciklama'] ?? '') === '' && ($eski !== '' || $yeni !== '')) $s .= ': ' . ($eski !== '' ? $eski . ' → ' : '') . $yeni;
     }
     $ac = trim((string)($o['aciklama'] ?? ''));
-    return $ac !== '' ? $s . ($o['tur'] === 'durum' || $o['tur'] === 'mail_gonderildi' ? ' · ' : ' — ') . $ac : $s;
+    return $ac !== '' ? $s . (in_array($o['tur'], ['durum', 'mail_gonderildi', 'evrak_gonderildi'], true) ? ' · ' : ' — ') . $ac : $s;
 }
 
 /** Ayrıştırıcı uyarı kodları → Türkçe. Bilinmeyen kod: ham mesaj. */

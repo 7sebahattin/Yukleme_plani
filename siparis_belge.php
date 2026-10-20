@@ -97,7 +97,7 @@ if ($b['yukleyen']) {
 $acikSevler = [];
 if ($yaz && $bagSayisi === 0) {
     [$ds, $dp] = depo_sql_column('s.depo', ':udm');
-    $q = $pdo->prepare("SELECT s.id, s.order_ref, s.alici_adi FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND s.durum NOT IN ('mail_gonderildi','iptal')" . $ds . ' ORDER BY s.order_ref LIMIT 300');
+    $q = $pdo->prepare("SELECT s.id, s.order_ref, s.alici_adi FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND " . siparis_kapanmamis_sql() . $ds . ' ORDER BY s.order_ref LIMIT 300');
     $q->execute($dp);
     $acikSevler = $q->fetchAll(PDO::FETCH_ASSOC);
 }

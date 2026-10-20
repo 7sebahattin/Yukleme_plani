@@ -118,6 +118,7 @@ $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
 $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
+$siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v397 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -281,6 +282,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
                 ['operation' => 'add_column', 'column' => $sr['adim']]);
         }
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_evrak_gecis') {
+    csrf_check($_POST['csrf'] ?? null);
+    $siparis_eg_ran    = true;
+    $siparis_eg_result = siparis_evrak_gecis_uygula($pdo, (int)$auth_user['id']);   // olay + tek özet audit kendi içinde
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cavus_b') {
     csrf_check($_POST['csrf'] ?? null);
     $pdks_cavus_b_ran     = true;
@@ -709,6 +714,51 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
         foreach (siparis_yurtici_gumruk_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('siparis-evrak-gecis'); ?>
+    <h2 style="margin-top:0;">Siparişler — Evrak takımı adımı (tek seferlik veri geçişi)</h2>
+    <p style="color:#555;font-size:.9em;">
+      v397 öncesinde "Mail gönderildi" ile kapanmış sevkiyatlar, yeni "📦 Evrak takımı" adımı gelince kapalı sayılmaz,
+      "Evrak takımı bekleyen" bölümüne düşerdi. Bu işlem onları Kapanan Sevkiyatlar'a ("📦 Evrak takımı") taşır.
+      v397'den sonra "Mail gönderildi" işaretlenenlere DOKUNMAZ (ayrım tarihten değil, mail kaydındaki işaretten yapılır).
+      Şema değişmez; her sevkiyata zaman çizelgesi satırı, topluca tek özet audit yazılır. Geri alma: sevkiyat sayfasında
+      "⇄ Durumu değiştir" (gerekçeyle). Test ve canlı sitede ayrı ayrı basılır.
+      <?php if ($siparis_eg_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php if (!empty($siparis_eg_result['ok'])): ?>
+          <?= (int)$siparis_eg_result['adet'] ?> sevkiyat taşındı, kalan <?= (int)$siparis_eg_result['kalan'] ?>
+        <?php else: ?>
+          <?= h((string)($siparis_eg_result['hata'] ?? 'Geçiş yapılamadı.')) ?>
+        <?php endif; ?>
+      <?php endif; ?>
+    </p>
+    <?php
+      $sipegTablo = siparis_tablo_var($pdo, 'siparis_sevkiyatlar') && siparis_tablo_var($pdo, 'siparis_olaylar');
+      $sipegSay   = $sipegTablo ? siparis_evrak_gecis_say($pdo) : 0;
+    ?>
+    <?php if (!$sipegTablo): ?>
+      <p style="font-weight:600;color:#c0392b;">✗ Önce Sipariş tablolarını oluşturun</p>
+    <?php elseif ($sipegSay < 0): ?>
+      <p style="font-weight:600;color:#c0392b;">✗ Aday listesi okunamadı</p>
+    <?php elseif ($sipegSay === 0): ?>
+      <p style="font-weight:600;color:#1f9d55;">✓ Taşınacak sevkiyat yok</p>
+    <?php else: ?>
+      <p style="font-weight:600;color:#c0392b;">✗ <?= (int)$sipegSay ?> sevkiyat taşınmayı bekliyor</p>
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;color:#555;">İlk 50 aday</summary>
+        <ul style="margin:8px 0 0 18px;">
+          <?php foreach (siparis_evrak_gecis_adaylar($pdo, 50) as $sipegA): ?>
+            <li><?= h((string)$sipegA['order_ref']) ?> · <?= (string)$sipegA['mail_gonderildi_at'] !== '' ? h((string)$sipegA['mail_gonderildi_at']) : 'tarih yok' ?><?= (string)$sipegA['deleted_at'] !== '' ? ' (silinmiş)' : '' ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </details>
+      <form method="post" style="margin-top:12px;">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="ne" value="siparis_evrak_gecis">
+        <button type="submit" class="btn btn-primary"><?= (int)$sipegSay ?> sevkiyatı Kapanan'a taşı</button>
+      </form>
+    <?php endif; ?>
   <?php mg_kart_kapat(); ?>
 
   <?php mg_kart_ac(''); ?>

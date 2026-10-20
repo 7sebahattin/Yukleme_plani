@@ -692,3 +692,13 @@ html[data-theme="dark"] .sip-pkl-ad { color: #bff0cf; background: #133524; borde
 html[data-theme="dark"] .sip-pkl-ad:hover, html[data-theme="dark"] .sip-pkl-ad:focus-visible { background: #1a4630; }
 .sip-iptal .sip-pkl-ad { opacity: .6; }
 /* ==== /LİSTE v396 ==== */
+
+/* ==== v397 — Evrak takımı (PKL maili gitti, evrak takımı bekliyor) ==== */
+.sip-mod { --sip-evrak-bg: #dcf3ef; --sip-evrak-fg: #0d6457; }
+html[data-theme="dark"] .sip-mod { --sip-evrak-bg: #10322d; --sip-evrak-fg: #74dccb; }
+.sip-badge--evrak { background: var(--sip-evrak-bg); color: var(--sip-evrak-fg); }
+.sip-bolum-evrak { padding: 12px 14px; border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: var(--radius); background: var(--card); margin-top: 28px; }
+.sip-bolum-evrak > .sip-bolum-bas { margin-top: 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.sip-bolum-evrak .sip-say { background: var(--primary); color: #fff; }
+html[data-theme="dark"] .sip-mod .sip-bolum-evrak .sip-say { color: #0b1530; }
+/* ==== /v397 ==== */

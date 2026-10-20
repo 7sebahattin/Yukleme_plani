@@ -43,7 +43,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
         </td>
         <td>
           <?php if ($r['po_belge_id']): ?>
-            <a class="sip-po" href="<?= h(siparis_url(['po' => (int)$r['po_belge_id'], 'durum' => null, 'acik_page' => null, 'kapali_page' => null])) ?>" title="Aynı PO'daki sevkiyatları göster"><?= h($__poEt) ?></a>
+            <a class="sip-po" href="<?= h(siparis_url(['po' => (int)$r['po_belge_id'], 'durum' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null])) ?>" title="Aynı PO'daki sevkiyatları göster"><?= h($__poEt) ?></a>
           <?php else: ?><span class="sip-po sip-po--yok" title="Bu sevkiyat için PO yüklenmedi">PO yok</span><?php endif; ?>
         </td>
         <td class="sip-ulke-hucre"><?php $__ul = siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null); if ($__ul !== ''): ?><span class="sip-ulke"><?= h($__ul) ?></span><?php endif; ?></td>

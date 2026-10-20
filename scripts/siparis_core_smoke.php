@@ -88,7 +88,8 @@ ok('deger_normalize: metin boşluk teklenir, boş → null', siparis_deger_norma
 ok('deger_esit: büyük/küçük harf duyarsız', siparis_deger_esit('Nakliye', 'NAKLIYE', 'metin') && !siparis_deger_esit('A', null, 'metin'));
 ok('durum badge ikon + metin', str_contains(siparis_durum_badge('arac_atandi'), '🚚') && str_contains(siparis_durum_badge('arac_atandi'), 'Araç atandı'));
 ok('durum badge bilinmeyen kaçışlı', str_contains(siparis_durum_badge('<x>'), '&lt;x&gt;'));
-ok('ilerleme: iptal → 0, pkl_hazir → 5/6', siparis_ilerleme(['durum' => 'iptal'])['adim'] === 0 && siparis_ilerleme(['durum' => 'pkl_hazir']) === ['adim' => 5, 'toplam' => 6, 'yuzde' => 83]);
+ok('ilerleme: iptal → 0, pkl_hazir → 5/7, mail → 6/7, evrak → 7/7', siparis_ilerleme(['durum' => 'iptal'])['adim'] === 0 && siparis_ilerleme(['durum' => 'pkl_hazir']) === ['adim' => 5, 'toplam' => 7, 'yuzde' => 71]
+    && siparis_ilerleme(['durum' => 'mail_gonderildi']) === ['adim' => 6, 'toplam' => 7, 'yuzde' => 86] && siparis_ilerleme(['durum' => 'evrak_gonderildi']) === ['adim' => 7, 'toplam' => 7, 'yuzde' => 100]);
 ok('eksik belgeler', siparis_eksik_belgeler(['var_po' => 1, 'var_ll' => 0, 'var_pc' => 0, 'var_pkl' => 1]) === ['ll', 'pc']);
 $_GET = ['q' => 'TC', 'durum' => 'acik', 'zararli' => 'x'];
 $u = siparis_url(['acik_page' => 2, 'q' => '']);
@@ -456,7 +457,7 @@ $x = siparis_durum_degistir($db, $sid1, 'mail_gonderildi', 1, '', true);
 $s1 = siparis_sevkiyat($db, $sid1);
 ok('kısmi onayla mail_gonderildi: at/by + audit', $x['ok'] && $s1['durum'] === 'mail_gonderildi' && $s1['mail_gonderildi_at'] !== null && (int)$s1['mail_gonderildi_by'] === 1
     && siparis_test_say($db, 'audit_log', "action = 'siparis_mail_gonderildi'") === 1);
-ok('kapalı (mail gönderildi) → otomatik ilerleme yok', siparis_durum_ilerlet($db, $sid1, 'pkl_hazir', null, 'x') === false);
+ok('mail_gonderildi → otomatik ilerleme yok (evrak bekleyen; mail/evrak yalnız ELLE)', siparis_durum_ilerlet($db, $sid1, 'pkl_hazir', null, 'x') === false);
 
 echo "\n=== 9. Yüklenen müşteri PKL'i ===\n";
 $sid12 = (int)siparis_test_sev($db, 'TC900012.10')['id'];
@@ -578,12 +579,12 @@ $uzun = array_filter($aud, fn($a) => strlen((string)$a['action']) > 40);
 ok('tüm audit eylem adları ≤ 40 karakter', $uzun === [] && count($aud) > 10);
 $izinli = ['siparis_belge_yukle', 'siparis_belge_sil', 'siparis_alan_duzenle', 'siparis_kilit_kaldir', 'siparis_catisma_coz', 'siparis_durum', 'siparis_mail_gonderildi',
     'siparis_pkl_taslak', 'siparis_pkl_uret', 'siparis_dosya_indir', 'siparis_zip_indir', 'siparis_beyan_bagla', 'siparis_beyan_kaldir', 'siparis_sayac_duzelt',
-    'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sevkiyat_sil', 'siparis_sevkiyat_ac'];
+    'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sevkiyat_sil', 'siparis_sevkiyat_ac', 'siparis_evrak_gonderildi', 'siparis_evrak_gecis'];
 ok('yalnız planlanmış eylem adları', array_diff(array_unique(array_column($aud, 'action')), $izinli) === []);
 $tum = implode("\n", array_map(fn($a) => $a['old_values'] . ' ' . $a['new_values'], $aud));
 ok('audit kişisel veri / ayrıştırma içeriği taşımıyor', !preg_match('/URETICI|LAB TEST|4000000000006|example\.invalid|CLERK|Şoför|Müşteri iptal/u', $tum));
 $src = '';
-foreach (['siparis_core', 'siparis_eslestir', 'siparis_pkl', 'siparis_beyan'] as $f) $src .= file_get_contents($ROOT . '/config/' . $f . '.php');
+foreach (['siparis_core', 'siparis_eslestir', 'siparis_pkl', 'siparis_beyan', 'siparis_evrak'] as $f) $src .= file_get_contents($ROOT . '/config/' . $f . '.php');
 preg_match_all("/siparis_audit\('([a-z_]+)'/", $src, $mm);
 ok('kaynaktaki tüm audit eylem adları ≤ 40 ve planlı', $mm[1] !== [] && array_filter($mm[1], fn($a) => strlen($a) > 40 || !in_array($a, $izinli, true)) === []);
 $kod = '';
@@ -747,5 +748,85 @@ $x = siparis_alan_elle($db, 'sevkiyat', (int)$sofS['id'], 'sofor_telefon', '', 1
 ok('şoför: boş değer girilerek temizlenebilir', $x['ok'] && siparis_sevkiyat($db, (int)$sofS['id'])['sofor_telefon'] === null);
 $tumA = implode("\n", array_map(fn($a) => $a['old_values'] . ' ' . $a['new_values'], siparis_test_audit($db)));
 ok('şoför: audit kaydına ad / telefon yazılmaz (yalnız alan adı)', !str_contains($tumA, 'Test Sürücü') && !str_contains($tumA, '532'));
+
+echo "\n=== 7b. Evrak takımı (v397) ===\n";
+$dur = siparis_durumlar();
+ok('durumlar: evrak_gonderildi sıra 7, mail ile iptal arasında, css evrak (VARCHAR(20) sığar)', ($dur['evrak_gonderildi']['sira'] ?? 0) === 7 && ($dur['evrak_gonderildi']['css'] ?? '') === 'evrak'
+    && array_keys($dur) === ['siparis_alindi', 'hazirlik', 'arac_atandi', 'yola_cikti', 'pkl_hazir', 'mail_gonderildi', 'evrak_gonderildi', 'iptal'] && strlen('evrak_gonderildi') <= 20);
+ok('kapalı = evrak_gonderildi + iptal; evrak bekleyen = mail_gonderildi', siparis_kapali_durumlar() === ['evrak_gonderildi', 'iptal'] && siparis_evrak_bekleyen_durumlar() === ['mail_gonderildi']);
+ok('kapanmamış SQL (sabit yazılmaz, listeden türer)', siparis_kapanmamis_sql() === "s.durum NOT IN ('evrak_gonderildi','iptal')" && siparis_kapanmamis_sql('x.durum') === "x.durum NOT IN ('evrak_gonderildi','iptal')");
+ok('olay türü evrak_gonderildi tanımlı', in_array('evrak_gonderildi', SIPARIS_OLAY_TURLERI, true));
+$ev = siparis_sevkiyat_elle_ac($db, 'TC900701.10', null, null, 1);
+$evId = (int)$ev['id'];
+$db->exec("UPDATE siparis_sevkiyatlar SET var_pkl = 1, durum = 'pkl_hazir' WHERE id = $evId");   // test kısayolu: PKL hazır (eksik hücre 0)
+ok('otomatik ilerleme mail/evrak\'a ASLA geçmez', siparis_durum_ilerlet($db, $evId, 'mail_gonderildi', null, 't') === false && siparis_durum_ilerlet($db, $evId, 'evrak_gonderildi', null, 't') === false
+    && siparis_sevkiyat($db, $evId)['durum'] === 'pkl_hazir');
+$x = siparis_durum_degistir($db, $evId, 'evrak_gonderildi', 1);
+ok('pkl_hazir → evrak_gonderildi reddedilir (yalnız mail adımından)', !$x['ok'] && $x['hata'] === 'Evrak takımı yalnız "Mail gönderildi" adımındaki sevkiyatta işaretlenebilir.', json_encode($x));
+$x = siparis_durum_degistir($db, $evId, 'mail_gonderildi', 1);
+$sm = siparis_sevkiyat($db, $evId);
+$maAt = $sm['mail_gonderildi_at'];
+$maAud = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_mail_gonderildi' AND record_id = $evId")->fetchColumn();
+ok('pkl_hazir → mail_gonderildi: at/by yazılır, audit new_values "evrak_akisi":1 işaretini taşır', $x['ok'] && $sm['durum'] === 'mail_gonderildi' && $maAt !== null && is_string($maAud) && str_contains($maAud, SIPARIS_EVRAK_GECIS_ISARET), (string)$maAud);
+ok('mail_gonderildi artık kapalı DEĞİL: kapalı kümede yok, evrak bekleyende var', !in_array($sm['durum'], siparis_kapali_durumlar(), true) && in_array($sm['durum'], siparis_evrak_bekleyen_durumlar(), true));
+usleep(1100000);   // durum_at / updated_at farkı görünsün
+$x = siparis_durum_degistir($db, $evId, 'evrak_gonderildi', 1);
+$se = siparis_sevkiyat($db, $evId);
+ok('mail → evrak ok: durum_at yenilenir, mail_gonderildi_at/by DEĞİŞMEZ', $x['ok'] && $se['durum'] === 'evrak_gonderildi' && $se['durum_at'] > $sm['durum_at'] && $se['mail_gonderildi_at'] === $maAt && (int)$se['mail_gonderildi_by'] === 1, json_encode($x));
+ok('evrak: tek "evrak_gonderildi" olayı + tek siparis_evrak_gonderildi audit', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND tur = 'evrak_gonderildi'", [$evId]) === 1
+    && siparis_test_say($db, 'audit_log', "action = 'siparis_evrak_gonderildi' AND record_id = ?", [$evId]) === 1);
+ok('evrak_gonderildi kapalıdır → otomatik ilerleme yok', siparis_durum_ilerlet($db, $evId, 'pkl_hazir', null, 'x') === false);
+$x = siparis_durum_degistir($db, $evId, 'pkl_hazir', 1);
+ok('evrak → pkl_hazir gerekçesiz reddedilir (kapalıdan çıkış)', !$x['ok'] && str_contains((string)$x['hata'], 'gerekçe'));
+$x = siparis_durum_degistir($db, $evId, 'mail_gonderildi', 1, 'Evrak yanlışlıkla işaretlendi');
+$sg = siparis_sevkiyat($db, $evId);
+ok('evrak → mail_gonderildi (geri al) gerekçeyle ok: PKL kontrolü yok, at/by değişmez, olay "durum"', $x['ok'] && $sg['durum'] === 'mail_gonderildi' && $sg['mail_gonderildi_at'] === $maAt && (int)$sg['mail_gonderildi_by'] === 1
+    && siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND tur = 'durum' AND yeni = 'mail_gonderildi'", [$evId]) === 1
+    && siparis_test_say($db, 'audit_log', "action = 'siparis_mail_gonderildi' AND record_id = ?", [$evId]) === 1, json_encode($x));
+$x = siparis_durum_degistir($db, $evId, 'evrak_gonderildi', 1);
+ok('geri alınan sevkiyat yeniden evrak\'a işaretlenebilir', $x['ok']);
+siparis_durum_degistir($db, $evId, 'mail_gonderildi', 1, 'Tekrar mail aşamasına');
+$db->exec("UPDATE siparis_sevkiyatlar SET var_pkl = 0 WHERE id = $evId");
+ok('geri alma var_pkl=0 iken de çalışır (PKL kontrolü yalnız ileri işarette)', siparis_sevkiyat($db, $evId)['durum'] === 'mail_gonderildi');
+$x = siparis_durum_degistir($db, $evId, 'pkl_hazir', 1);
+ok('mail_gonderildi → pkl_hazir gerekçesiz geçer (mail artık kapalı değil)', $x['ok'] && siparis_sevkiyat($db, $evId)['durum'] === 'pkl_hazir', json_encode($x));
+$db->exec("UPDATE siparis_sevkiyatlar SET var_pkl = 1, durum = 'mail_gonderildi' WHERE id = $evId");
+$x = siparis_durum_degistir($db, $evId, 'iptal', 1);
+ok('mail_gonderildi → iptal gerekçe ister', !$x['ok'] && str_contains((string)$x['hata'], 'gerekçe'));
+
+echo "\n=== 7c. Tek seferlik geçiş (v397) ===\n";
+$gSev = function (string $ref, string $durum, ?string $mailAt, bool $silinmis = false) use ($db): int {
+    $r = siparis_sevkiyat_elle_ac($db, $ref, null, null, 1);
+    $id = (int)$r['id'];
+    $st = $db->prepare('UPDATE siparis_sevkiyatlar SET durum = ?, mail_gonderildi_at = ?, durum_at = ?, deleted_at = ? WHERE id = ?');
+    $st->execute([$durum, $mailAt, '2026-01-02 10:00:00', $silinmis ? '2026-02-01 00:00:00' : null, $id]);
+    return $id;
+};
+$gA = $gSev('TC900711.10', 'mail_gonderildi', '2026-01-02 09:00:00');         // eski (işaretsiz), tarihli
+$gB = $gSev('TC900712.10', 'mail_gonderildi', null);                          // eski, tarih yok
+$gD = $gSev('TC900714.10', 'mail_gonderildi', '2026-01-03 09:00:00', true);   // eski, silinmiş
+$gC = (int)siparis_sevkiyat_elle_ac($db, 'TC900713.10', null, null, 1)['id'];   // yeni akış: işaretli
+$db->exec("UPDATE siparis_sevkiyatlar SET var_pkl = 1, durum = 'pkl_hazir' WHERE id = $gC");
+siparis_durum_degistir($db, $gC, 'mail_gonderildi', 1);
+ok('say: eski işaretsiz 3 (tarihli + tarihsiz + silinmiş); v397 akışıyla işaretlenenler sayılmaz', siparis_evrak_gecis_say($db) === 3, (string)siparis_evrak_gecis_say($db));
+$ad = siparis_evrak_gecis_adaylar($db, 50);
+ok('adaylar id sırasıyla, silinmiş de listede', array_column($ad, 'id') === [$gA, $gB, $gD] && $ad[2]['deleted_at'] !== null);
+$olay0 = siparis_test_say($db, 'siparis_olaylar', "tur = 'evrak_gonderildi'");
+$r = siparis_evrak_gecis_uygula($db, 1);
+ok('uygula: 3 taşındı, kalan 0', $r['ok'] && $r['adet'] === 3 && $r['kalan'] === 0, json_encode($r));
+$gDurum = fn(int $i): array => $db->query("SELECT durum, durum_at FROM siparis_sevkiyatlar WHERE id = $i")->fetch(PDO::FETCH_ASSOC);
+ok('A, B, D evrak_gonderildi oldu; durum_at DEĞİŞMEDİ; C hâlâ mail_gonderildi', $gDurum($gA)['durum'] === 'evrak_gonderildi' && $gDurum($gB)['durum'] === 'evrak_gonderildi' && $gDurum($gD)['durum'] === 'evrak_gonderildi'
+    && $gDurum($gA)['durum_at'] === '2026-01-02 10:00:00' && $gDurum($gD)['durum_at'] === '2026-01-02 10:00:00' && $gDurum($gC)['durum'] === 'mail_gonderildi');
+ok('3 "Toplu geçiş" zaman çizelgesi satırı', siparis_test_say($db, 'siparis_olaylar', "tur = 'evrak_gonderildi'") - $olay0 === 3
+    && siparis_test_say($db, 'siparis_olaylar', "tur = 'evrak_gonderildi' AND aciklama LIKE 'Toplu geçiş%'") === 3);
+$ga = $db->query("SELECT new_values, record_id FROM audit_log WHERE action = 'siparis_evrak_gecis'")->fetchAll(PDO::FETCH_ASSOC);
+ok('tam bir özet audit (adet 3, idler), kayıt id\'si NULL', count($ga) === 1 && $ga[0]['record_id'] === null && str_contains($ga[0]['new_values'], '"adet":3'), json_encode($ga));
+$r2 = siparis_evrak_gecis_uygula($db, 1);
+ok('ikinci çalıştırma idempotent: adet 0, yeni audit/olay yok', $r2['ok'] && $r2['adet'] === 0 && siparis_test_say($db, 'audit_log', "action = 'siparis_evrak_gecis'") === 1
+    && siparis_test_say($db, 'siparis_olaylar', "tur = 'evrak_gonderildi'") - $olay0 === 3);
+$ek = file_get_contents($ROOT . '/config/siparis_evrak.php');
+$ekKod = '';
+foreach (token_get_all($ek) as $t) if (!is_array($t) || !in_array($t[0], [T_COMMENT, T_DOC_COMMENT], true)) $ekKod .= is_array($t) ? $t[1] : $t;
+ok('siparis_evrak.php şema değiştirmez (ALTER / CREATE / DROP TABLE yok)', !preg_match('/\b(ALTER|CREATE|DROP)\s+TABLE\b/i', $ekKod));
 
 siparis_test_bitir();

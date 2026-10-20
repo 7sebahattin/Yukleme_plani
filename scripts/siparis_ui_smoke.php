@@ -390,12 +390,26 @@ $x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'mail_gonderildi
 ok('durum: kısmi PKL ikinci onay olmadan reddedilir', siparis_sevkiyat($db, $sid1)['durum'] === 'pkl_hazir' && str_contains((string)($x['flash']['msg'] ?? ''), 'boş hücre'));
 $x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'mail_gonderildi', 'onay_gonderdim' => '1', 'onay_eksik' => '1']);
 $s = siparis_sevkiyat($db, $sid1);
-ok('durum: mail gönderildi → kapandı, mail_gonderildi_at/by', $s['durum'] === 'mail_gonderildi' && $s['mail_gonderildi_at'] !== null && (int)$s['mail_gonderildi_by'] === 1
-    && say($db, 'audit_log', "action = 'siparis_mail_gonderildi' AND record_id = ?", [$sid1]) === 1);
+ok('durum: mail gönderildi → evrak takımı bekler (kapanmaz), mail_gonderildi_at/by, flash metni', $s['durum'] === 'mail_gonderildi' && $s['mail_gonderildi_at'] !== null && (int)$s['mail_gonderildi_by'] === 1
+    && say($db, 'audit_log', "action = 'siparis_mail_gonderildi' AND record_id = ?", [$sid1]) === 1 && ($x['flash']['type'] ?? '') === 'success'
+    && ($x['flash']['msg'] ?? '') === 'Mail gönderildi işaretlendi — sevkiyat evrak takımı bekliyor.' && !in_array($s['durum'], siparis_kapali_durumlar(), true), json_encode($x['flash'] ?? null));
+$maAt1 = $s['mail_gonderildi_at'];
+$x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'evrak_gonderildi']);
+ok('durum: onay_evrak olmadan evrak takımı reddedilir', siparis_sevkiyat($db, $sid1)['durum'] === 'mail_gonderildi' && ($x['flash']['type'] ?? '') === 'error' && str_contains((string)($x['flash']['msg'] ?? ''), 'Evrak takımını müşteriye gönderdiğinizi onaylayın'));
+$x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'evrak_gonderildi', 'onay_evrak' => '1']);
+$s = siparis_sevkiyat($db, $sid1);
+ok('durum: evrak takımı gönderildi → kapandı + flash + audit; mail_gonderildi_at değişmez', $s['durum'] === 'evrak_gonderildi' && in_array($s['durum'], siparis_kapali_durumlar(), true) && ($x['flash']['type'] ?? '') === 'success'
+    && ($x['flash']['msg'] ?? '') === 'Evrak takımı gönderildi işaretlendi; sevkiyat kapandı.' && $s['mail_gonderildi_at'] === $maAt1
+    && say($db, 'audit_log', "action = 'siparis_evrak_gonderildi' AND record_id = ?", [$sid1]) === 1, json_encode($x['flash'] ?? null));
 $x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'hazirlik', 'gerekce' => '']);
-ok('durum: kapanmış sevkiyatı gerekçesiz yeniden açma reddedilir', siparis_sevkiyat($db, $sid1)['durum'] === 'mail_gonderildi');
-$x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'pkl_hazir', 'gerekce' => 'müşteri düzeltme istedi']);
-ok('durum: gerekçeyle yeniden açılır', siparis_sevkiyat($db, $sid1)['durum'] === 'pkl_hazir');
+ok('durum: kapanmış (evrak) sevkiyatı gerekçesiz yeniden açma reddedilir', siparis_sevkiyat($db, $sid1)['durum'] === 'evrak_gonderildi');
+$x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'mail_gonderildi', 'gerekce' => 'evrak yanlışlıkla işaretlendi']);
+$s = siparis_sevkiyat($db, $sid1);
+ok('durum: evrak → mail geri alma: gerekçeyle, onay_gonderdim İSTENMEZ, mail_gonderildi_at değişmez', $s['durum'] === 'mail_gonderildi' && $s['mail_gonderildi_at'] === $maAt1 && ($x['flash']['type'] ?? '') === 'success', json_encode($x['flash'] ?? null));
+$x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'pkl_hazir', 'gerekce' => '']);
+ok('durum: mail_gonderildi artık kapalı değil → gerekçesiz pkl_hazir\'a dönülebilir', siparis_sevkiyat($db, $sid1)['durum'] === 'pkl_hazir' && ($x['flash']['type'] ?? '') === 'success', json_encode($x['flash'] ?? null));
+$x = $K(['islem' => 'durum', 'sid' => (string)$sid1, 'hedef' => 'evrak_gonderildi', 'onay_evrak' => '1']);
+ok('durum: pkl_hazir → evrak_gonderildi onaylı bile olsa reddedilir (yalnız mail adımından)', siparis_sevkiyat($db, $sid1)['durum'] === 'pkl_hazir' && ($x['flash']['type'] ?? '') === 'error' && str_contains((string)($x['flash']['msg'] ?? ''), 'Mail gönderildi'));
 // belge bağla / yeniden işle / sil
 $bos = siparis_test_dosya(siparis_test_pdf('yetim1'), 'yetim.pdf');
 $kk = siparis_dosya_kaydet($db, $bos, 1, 'DEPO1', siparis_test_mover());

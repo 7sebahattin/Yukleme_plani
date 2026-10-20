@@ -158,10 +158,12 @@
     document.addEventListener('change', function (e) {
         var f = e.target.closest ? e.target.closest('[data-sip-durum-form]') : null;
         if (f) gerekceGuncelle(f);
-        var m = e.target.closest ? e.target.closest('[data-sip-mail-form]') : null;
+        // Mail gönderildi + (v397) Evrak takımı pencereleri: tüm onay kutuları işaretlenmeden gönder düğmesi pasif
+        var m = e.target.closest ? e.target.closest('[data-sip-mail-form],[data-sip-evrak-form]') : null;
         if (m) {
-            var hepsi = qa('[data-sip-mail-onay]', m).every(function (c) { return c.checked; });
-            var b = q('[data-sip-mail-gonder]', m); if (b) b.disabled = !hepsi;
+            var p = m.hasAttribute('data-sip-evrak-form') ? 'evrak' : 'mail';
+            var hepsi = qa('[data-sip-' + p + '-onay]', m).every(function (c) { return c.checked; });
+            var b = q('[data-sip-' + p + '-gonder]', m); if (b) b.disabled = !hepsi;
         }
     });
 

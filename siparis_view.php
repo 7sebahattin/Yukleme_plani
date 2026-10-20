@@ -154,17 +154,23 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
     <ol class="sip-steps<?= $iptal ? ' sip-steps--iptal' : '' ?>">
       <?php foreach ($durumlar as $dk => $dv): if ($dk === 'iptal') continue;
           $bitti = !$iptal && $dv['sira'] < $sira; $suAn = !$iptal && $dv['sira'] === $sira; $sonraki = !$iptal && !$kapali && $dv['sira'] === $sira + 1;
-          $zaman = $dk === 'yola_cikti' ? $sev['yola_cikis_at'] : ($dk === 'mail_gonderildi' ? $sev['mail_gonderildi_at'] : null);
+          $zaman = match ($dk) {
+              'yola_cikti' => $sev['yola_cikis_at'],
+              'mail_gonderildi' => $sev['mail_gonderildi_at'],
+              'evrak_gonderildi' => (string)$sev['durum'] === 'evrak_gonderildi' ? $sev['durum_at'] : null,   // ayrı kolon yok: durum_at
+              default => null,
+          };
       ?>
         <li class="sip-step<?= $bitti ? ' sip-step--bitti' : '' ?><?= $suAn ? ' sip-step--su-an' : '' ?><?= $sonraki ? ' sip-step--sonraki' : '' ?>"<?= $suAn ? ' aria-current="step"' : '' ?>>
-          <span class="sip-step-nokta" aria-hidden="true"><?= $bitti || ($suAn && $kapali && $dk === 'mail_gonderildi') ? '✓' : (int)$dv['sira'] ?></span>
+          <span class="sip-step-nokta" aria-hidden="true"><?= $bitti || ($suAn && $kapali) ? '✓' : (int)$dv['sira'] ?></span>
           <span class="sip-step-et"><?= h($dv['ikon'] . ' ' . $dv['etiket']) ?></span>
           <span class="sip-sr"><?= $bitti ? ' (tamamlandı)' : ($suAn ? ' (şu anki adım)' : ($sonraki ? ' (sıradaki adım)' : '')) ?></span>
           <?php if ($zaman): ?><span class="sip-step-zaman"><?= h(sipui_zaman((string)$zaman)) ?></span><?php endif; ?>
         </li>
       <?php endforeach; ?>
     </ol>
-    <p class="sip-adim-mobil"><?= $iptal ? 'İptal' : 'Adım ' . $sira . '/6 · ' . h($durumlar[(string)$sev['durum']]['etiket'] ?? '') ?></p>
+    <?php $ilr = siparis_ilerleme($sev); ?>
+    <p class="sip-adim-mobil"><?= $iptal ? 'İptal' : 'Adım ' . $sira . '/' . (int)$ilr['toplam'] . ' · ' . h($durumlar[(string)$sev['durum']]['etiket'] ?? '') ?></p>
     <?php if ($yaz): ?>
     <div class="sip-hizli">
       <?php if (!$kapali && (string)$sev['durum'] === 'siparis_alindi'): ?>
@@ -175,9 +181,14 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek data-sip-onay="Araç yola çıktı olarak işaretlensin mi?"><?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="hedef" value="yola_cikti"><input type="hidden" name="donus" value="durum">
           <button type="submit" class="btn">🛣 Yola çıktı ✓</button></form>
       <?php endif; ?>
-      <?php if (!$kapali): ?>
+      <?php if (!$kapali && (string)$sev['durum'] !== 'mail_gonderildi'): ?>
         <?php if ($pklHazir): ?><button type="button" class="btn btn-secondary" data-sip-ac="sipMailModal">✅ Mail gönderildi</button>
         <?php else: ?><span class="sip-pasif-grup"><button type="button" class="btn" disabled aria-describedby="sipMailNeden">✅ Mail gönderildi</button><span class="sip-pasif-neden" id="sipMailNeden">Önce PKL oluşturun ya da yükleyin.</span></span><?php endif; ?>
+      <?php endif; ?>
+      <?php if ((string)$sev['durum'] === 'mail_gonderildi'): ?>
+        <button type="button" class="btn btn-secondary" data-sip-ac="sipEvrakModal">📦 Evrak takımı gönderildi</button>
+      <?php endif; ?>
+      <?php if (!$kapali): ?>
         <button type="button" class="btn btn-danger" data-sip-ac="sipIptalModal">✖ İptal</button>
       <?php endif; ?>
       <button type="button" class="btn btn-ghost" data-sip-ac="sipDurumModal">⇄ Durumu değiştir</button>
@@ -600,11 +611,14 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <div class="pm-body sip-form">
           <?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="donus" value="durum">
           <fieldset class="sip-radyo-grup"><legend>Yeni durum</legend>
-            <?php foreach ($durumlar as $dk => $dv): if ($dk === 'mail_gonderildi' || $dk === (string)$sev['durum']) continue; ?>
-              <label class="sip-radyo"><input type="radio" name="hedef" value="<?= h($dk) ?>" required> <?= h($dv['ikon'] . ' ' . $dv['etiket']) ?></label>
+            <?php foreach ($durumlar as $dk => $dv):
+                // v397: mail yalnız evrak takımından geri alma hedefi; evrak takımı yalnız kendi düğmesiyle (onay ister)
+                if ($dk === 'evrak_gonderildi' || $dk === (string)$sev['durum'] || ($dk === 'mail_gonderildi' && (string)$sev['durum'] !== 'evrak_gonderildi')) continue;
+                $dEt = $dk === 'mail_gonderildi' ? '✅ Mail gönderildi (evrak takımını geri al)' : $dv['ikon'] . ' ' . $dv['etiket']; ?>
+              <label class="sip-radyo"><input type="radio" name="hedef" value="<?= h($dk) ?>" required> <?= h($dEt) ?></label>
             <?php endforeach; ?>
           </fieldset>
-          <p class="muted">"Mail gönderildi" için ayrı düğmeyi kullanın (PKL onayı ister).</p>
+          <p class="muted">"Mail gönderildi" ve "Evrak takımı" için ayrı düğmeleri kullanın (onay isterler).</p>
           <label data-sip-gerekce-kap hidden>Gerekçe <span class="muted">(iptal ya da kapanmış sevkiyatı yeniden açmak için zorunlu)</span>
             <textarea name="gerekce" rows="3" maxlength="255" data-sip-gerekce></textarea></label>
         </div>
@@ -634,7 +648,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <div class="pm-header"><h2 class="pm-title" id="sipMailBas">Mail gönderildi olarak işaretle</h2><button type="button" class="pm-close" data-sip-kapat aria-label="Kapat">✕</button></div>
         <div class="pm-body sip-form">
           <?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="hedef" value="mail_gonderildi"><input type="hidden" name="donus" value="durum">
-          <p>Uygulama mail göndermez: PKL'yi kendi mail programınızdan müşteriye gönderin, sonra burada süreci kapatın.</p>
+          <p>Uygulama mail göndermez: PKL'yi kendi mail programınızdan müşteriye gönderin, sonra burada işaretleyin. Sevkiyat “📦 Evrak takımı bekleyen” bölümüne geçer.</p>
           <?php if ($mailPklAd !== ''): ?>
             <div class="sip-mail-dosya">📎 <strong class="sip-kes"><?= h($mailPklAd) ?></strong>
               <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?></div>
@@ -657,10 +671,29 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
             <label class="sip-onay-satir"><input type="checkbox" name="onay_eksik" value="1" required data-sip-mail-onay> PKL'de <?= $eksikHucre ?> boş hücre vardı; eksik alanları Excel'de tamamladım</label>
           <?php endif; ?>
         </div>
-        <div class="pm-footer"><button type="button" class="btn" data-sip-kapat>Vazgeç</button><button type="submit" class="btn btn-secondary" data-sip-mail-gonder disabled>✅ Süreci kapat</button></div>
+        <div class="pm-footer"><button type="button" class="btn" data-sip-kapat>Vazgeç</button><button type="submit" class="btn btn-secondary" data-sip-mail-gonder disabled>✅ Mail gönderildi</button></div>
       </form>
     </div>
   </div>
+
+  <?php if ((string)$sev['durum'] === 'mail_gonderildi'): ?>
+  <!-- Evrak takımı gönderildi (v397: son adım, süreci kapatır) -->
+  <div class="pm-overlay" id="sipEvrakModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipEvrakBas">
+    <div class="pm-dialog">
+      <form method="post" action="siparis_kaydet.php" data-sip-tek data-sip-evrak-form>
+        <div class="pm-header"><h2 class="pm-title" id="sipEvrakBas">Evrak takımı gönderildi olarak işaretle</h2><button type="button" class="pm-close" data-sip-kapat aria-label="Kapat">✕</button></div>
+        <div class="pm-body sip-form">
+          <?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="hedef" value="evrak_gonderildi"><input type="hidden" name="donus" value="durum">
+          <p>Uygulama evrak göndermez: evrak takımını (Excel + belgeler) müşteriye kendiniz gönderin, sonra burada süreci kapatın.</p>
+          <?php if ((string)$sev['mail_gonderildi_at'] !== ''): ?><p class="sip-soluk">Mail gönderildi: <?= h(sipui_zaman((string)$sev['mail_gonderildi_at'])) ?></p><?php endif; ?>
+          <?php if ($belgeler): ?><div class="sip-mail-eylem"><a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a></div><?php endif; ?>
+          <label class="sip-onay-satir"><input type="checkbox" name="onay_evrak" value="1" required data-sip-evrak-onay> Evrak takımını müşteriye gönderdim</label>
+        </div>
+        <div class="pm-footer"><button type="button" class="btn" data-sip-kapat>Vazgeç</button><button type="submit" class="btn btn-secondary" data-sip-evrak-gonder disabled>📦 Süreci kapat</button></div>
+      </form>
+    </div>
+  </div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <?php if ($sil): ?>
