@@ -720,3 +720,27 @@ html[data-theme="dark"] .sip-mod .sip-bolum-evrak .sip-say { color: #0b1530; }
   body.od-yazdir-modu .od-eylem, body.od-yazdir-modu dialog, body.od-yazdir-modu .od-toplam { display: none !important; }
   body.od-yazdir-modu .table-wrap { overflow: visible; box-shadow: none; }
 }
+
+/* ==== v402 — Evrak kartı açık mavi + "değişti" çerçevesi ==== */
+/* Evrak Takımı Bekleyen kartı: diğer iki karttan (turuncu/yeşil şeritli, beyaz zemin) hafif farklı açık mavi zemin; içteki satır bandı da mavi tonda. */
+.sip-mod { --sip-degisti: #7c3aed; }
+html[data-theme="dark"] .sip-mod { --sip-degisti: #a78bfa; }
+.sip-bolum-evrak { --sip-evrak-zemin: #eef5ff; --sip-zebra: #e0ebfc; --sip-grup-cizgi: #b4c9ea; background: var(--sip-evrak-zemin); border-color: #c8dbf6; }
+html[data-theme="dark"] .sip-mod .sip-bolum-evrak { --sip-evrak-zemin: #16233b; --sip-zebra: #1c2c4a; --sip-grup-cizgi: #2d4066; border-color: #2a3d60; }
+.sip-bolum-evrak > .sip-bolum-bas { border-bottom-color: #c8dbf6; }
+html[data-theme="dark"] .sip-mod .sip-bolum-evrak > .sip-bolum-bas { border-bottom-color: #2a3d60; }
+.sip-bolum-evrak .sip-table tbody > tr.sip-z0 > td { background: var(--sip-evrak-zemin); }
+.sip-bolum-evrak .sip-card.sip-z0 { background: var(--sip-evrak-zemin); }
+/* Son bakışınızdan sonra değişen / yeni gelen sevkiyat: sevkiyat sayfası açılana kadar çerçeve (ana satır + ürün alt satırı tek çerçeve). */
+.sip-table tbody > tr.sip-degisti > td { box-shadow: inset 0 2px 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-ust > td { box-shadow: inset 0 2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-urun-tr > td { box-shadow: inset 0 -2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti > td:first-child { box-shadow: inset 2px 0 0 var(--sip-degisti), inset 0 2px 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-ust > td:first-child { box-shadow: inset 2px 0 0 var(--sip-degisti), inset 0 2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-urun-tr > td:first-child { box-shadow: inset 2px 0 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti > td:last-child { box-shadow: inset -2px 0 0 var(--sip-degisti), inset 0 2px 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-ust > td:last-child { box-shadow: inset -2px 0 0 var(--sip-degisti), inset 0 2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-urun-tr > td:last-child { box-shadow: inset -2px 0 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
+.sip-table tbody > tr.sip-degisti.sip-urun-tr > td:only-child { box-shadow: inset 2px 0 0 var(--sip-degisti), inset -2px 0 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
+.sip-card.sip-degisti { border-color: var(--sip-degisti); box-shadow: 0 0 0 2px var(--sip-degisti); }
+/* ==== /v402 ==== */

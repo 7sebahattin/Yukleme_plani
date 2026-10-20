@@ -688,7 +688,34 @@
         window.print();
     });
 
+    // v402 — "Son bakışınızdan sonra değişti" çerçevesi. Görülme kaydı YALNIZ bu cihazda (localStorage; şema yok):
+    // { t: taban zaman (ilk ziyaret, sunucu saati), s: { sevkiyat id: görülen değişme zamanı } }. Zamanlar "YYYY-AA-GG SS:DD:SS" → dizgi kıyaslanır.
+    function gorulen() {
+        var m = q('[data-sip-gor-uid]'); if (!m) return;
+        var k = 'asya_sip_gorulen_' + m.getAttribute('data-sip-gor-uid'), now = m.getAttribute('data-sip-gor-now') || '', d = null;
+        try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
+        if (!d || typeof d !== 'object' || typeof d.t !== 'string' || !d.s || typeof d.s !== 'object') d = { t: now, s: {} };
+        var yaz = function () {
+            Object.keys(d.s).forEach(function (i) { if (d.s[i] <= d.t) delete d.s[i]; });   // tabanın altı zaten "eski" → kayıt gereksiz
+            try { localStorage.setItem(k, JSON.stringify(d)); } catch (e) { /* depolama kapalı: işaret çıkmaz, sayfa bozulmaz */ }
+        };
+        var vid = m.getAttribute('data-sip-gor-id');
+        if (vid) { d.s[vid] = m.getAttribute('data-sip-gor-upd') || now; yaz(); return; }   // sevkiyat sayfası açıldı = görüldü
+        yaz();
+        qa('[data-sip-gor-id]').forEach(function (e) {
+            var id = e.getAttribute('data-sip-gor-id'), upd = e.getAttribute('data-sip-gor-upd') || '';
+            if (!upd || upd <= d.t || upd <= (d.s[id] || '')) return;
+            var tr = e.closest ? e.closest('tr') : null, kart = e.closest ? e.closest('.sip-card') : null;
+            if (tr) {
+                tr.classList.add('sip-degisti'); tr.title = 'Son bakışınızdan sonra değişti';
+                var sn = tr.nextElementSibling;
+                if (sn && sn.classList.contains('sip-urun-tr') && sn.getAttribute('data-href') === tr.getAttribute('data-href')) sn.classList.add('sip-degisti');
+            } else if (kart) { kart.classList.add('sip-degisti'); kart.title = 'Son bakışınızdan sonra değişti'; }
+        });
+    }
+
     function basla() {
+        gorulen();
         qa('details[data-sip-yukle]').forEach(yukleKart);
         qa('form[data-sip-upload]').forEach(yukleme);
         qa('[data-sip-mail-kap]').forEach(mailAl);
