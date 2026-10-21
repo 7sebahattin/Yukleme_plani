@@ -206,6 +206,9 @@ tr.row-link { cursor: pointer; }
 .sip-step-et { font-size: .82rem; line-height: 1.25; color: var(--muted); }
 .sip-step--su-an .sip-step-et { color: var(--text); font-weight: 700; }
 .sip-step-zaman { font-size: .72rem; color: var(--muted); }
+.sip-step-et--pkl { overflow-wrap: anywhere; word-break: break-word; }
+.sip-step-parti { font-size: .72rem; font-weight: 700; color: var(--primary); }
+.sip-evrak-ad { margin: 8px 0; overflow-wrap: anywhere; }
 .sip-steps--iptal { opacity: .45; filter: grayscale(1); }
 .sip-adim-mobil { display: none; margin: 4px 0 10px; font-weight: 700; }
 .sip-hizli { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
