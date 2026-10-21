@@ -271,6 +271,12 @@
     align-items:center; gap:7px; flex-shrink:0; }
   .tk-satir .d { font-weight:700; text-align:right; word-break:break-word; }
   .tk-satir.tk-kilo .d { color:var(--teal); }
+  .tk-satir.tk-kilo .d { display:flex; flex-direction:column; align-items:flex-end; }
+  .tk-satir .tk-uyari { font-size:11px; font-weight:700; color:#b45309; background:#fef3c7;
+    border:1px solid #f59e0b; border-radius:6px; padding:1px 6px; margin-top:3px; }
+  .onay-satir.tk-uyari-onay b { color:#b45309; }
+  html[data-theme="dark"] .tk-satir .tk-uyari { color:#fcd34d; background:#78350f; border-color:#b45309; }
+  html[data-theme="dark"] .onay-satir.tk-uyari-onay b { color:#fcd34d; }
   .tk-satir.tk-plaka .d { color:var(--plaka); letter-spacing:.3px; }
   /* Taslak kartında plaka 2 punto büyük, kilo 1 punto büyük (istenen vurgu).
      Gönderilenler kartında ölçüler NORMAL kalır — yalnız renkler ortaktır. */
@@ -4332,6 +4338,12 @@ function planTaslagiMi(t) {
   return (!t.satirlar || t.satirlar.length === 0) && Number((t.ortak || {}).planKg) > 0;
 }
 
+// Düşük tonaj uyarısı (v412): tır yüklemesi normalde ≥ 5.000 KG'dır; 2.199 gibi eksik
+// basamaklı girişleri (20.199 KG'lık bildirimde olduğu gibi) göndermeden önce yakalar.
+// Engel DEĞİL, yalnız uyarı. 0 / geçersiz kilo uyarılmaz (plan taslağında kilo yoksa).
+const DUSUK_TONAJ_KG = 5000;
+function dusukTonajMu(kg) { const n = Number(kg); return n > 0 && n < DUSUK_TONAJ_KG; }
+
 async function taslakEkraniAc() {
   ekranGoster('ekranTaslaklar');
   const kap = $('taslakListe');
@@ -4368,7 +4380,9 @@ async function taslakEkraniAc() {
         _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—')) +
         _satir('', (t.ortak.yurtIci ? '🏠' : '🌍') + ' Ülke', _ulke) +
         _satir('', (_urunAd ? urunIkonu(_urunAd) : '🍎') + ' Ürün', eHtml(_urunAd || '—')) +
-        _satir('tk-kilo', '⚖️ Kilo', `${fmt(toplam)} KG`) +
+        _satir('tk-kilo' + (dusukTonajMu(toplam) ? ' tk-dusuk' : ''), '⚖️ Kilo',
+          `${fmt(toplam)} KG` + (dusukTonajMu(toplam)
+            ? `<span class="tk-uyari">⚠ ${fmt(DUSUK_TONAJ_KG)} KG altı — kilo eksik girilmiş olabilir</span>` : '')) +
         _satir('', '📦 Künye', plan
           ? 'gönderimde stoktan seçilir'
           : `${t.satirlar.length} adet`) +
@@ -4587,6 +4601,9 @@ function taslakOnayAc(t) {
     }).join('');
   }
   html += `<div class="onay-satir"><span>TOPLAM</span><b>${fmt(toplam)} KG</b></div>`;
+  if (dusukTonajMu(toplam)) {
+    html += `<div class="onay-satir tk-uyari-onay"><span>⚠ Uyarı</span><b>${fmt(DUSUK_TONAJ_KG)} KG altı — kiloyu kontrol edin</b></div>`;
+  }
   if (t.ortak.yurtIci) {
     const turEtiket = t.ortak.turAd || (t.ortak.fiyatGonder ? 'Satış (yurt içi)' : 'Sevk Etme');
     html += `<div class="onay-satir"><span>Tür</span><b>${eHtml(turEtiket)} (yurt içi)</b></div>`;
