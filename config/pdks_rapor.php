@@ -1346,6 +1346,20 @@ function pdks_rapor_cavus_toplu_dokum(
     }
     unset($r);
 
+    // v407: Fazla mesai (FM) — hesap YALNIZ sınıflandırıcıda; tek sorgu (N+1 yok).
+    // Finansal kapıya bağlı DEĞİL (saat bilgisidir, tutar değil).
+    $fmMap = [];
+    if ($satirlar && function_exists('pdks_faz8b_ay_fm_dagilimi') && pdks_faz8b_sema_hazir($pdo)) {
+        $fmMap = pdks_faz8b_ay_fm_dagilimi($start, $end, $depo, $foremanId, $pdo);
+    }
+    foreach ($satirlar as &$r) {
+        $fm = $fmMap[$r['session_id']] ?? null;
+        $r['fm_saat']    = $fm ? (int)$fm['saat'] : 0;
+        $r['fm_kisi']    = $fm ? (int)$fm['kisi'] : 0;
+        $r['fm_dagilim'] = $fm ? $fm['dagilim'] : [];
+    }
+    unset($r);
+
     if (!$finansal || !$satirlar) {
         return $satirlar;
     }

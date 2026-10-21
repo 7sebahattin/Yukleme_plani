@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v404` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v407` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -816,6 +816,13 @@ DEĞİL, sıralama ve testleri `cells[0]` = Kart No'ya bağlı; mobil: kart baş
 - **FM kuralı:** (v315 saat başı toleransıyla etkin süre) çavuşun mesai süresi (ör. 9 sa; fiyat döneminde FM başlangıcı varsa o) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı — 10:11 → Tam + 1 sa, 12:00 → 3 sa, 9:15 → 0. Reddedilen FM sayılmaz; Çift günde çift eşiğinden sonraki onaylı saat. Tam/Yarım/Çift sınıfı hakedişle AYNI kuraldır (Tam ≥ mesai süresi; alttan tolerans YOK).
 - **Hesap TEK yerde:** `pdks_faz8b_gun_mesai_ozeti()` (config/pdks_faz8b.php) her dönemi `pdks_faz8b_donem_siniflandir()`'dan geçirir — sayfada kendi süre/FM hesabı YAZMA. Servis: `pdks_servis_toplamlar_toplu()`. Faz 8B şeması yoksa özet gizli. Çıkışsız (içeride) ve atanmamış Karışık süre/FM'ye KATILMAZ.
 - CSV/XLSX'e eklenmedi. Test: `php scripts/pdks_mesai_ozeti_smoke.php` · `PUANTAJ_FAZ8B=1 PUANTAJ_SERVIS=1 php scripts/pdks_puantaj_dialog_render.php`.
+
+### Çavuş Toplu Döküm — Fazla Mesai + XLSX (v407)
+`cavus_toplu_dokum.php` (+ `_yazdir.php`) her çavuş-gün satırında **Fazla Mesai** sütunu (N sa + "1 sa: 15 kişi · 2 sa: 3 kişi"), ay özetinde **Toplam FM (saat)** kutusu, yazdırmada aynısı (tfoot toplam FM). Migration YOK, yeni yetki YOK.
+- **FM hesabı YALNIZ sınıflandırıcıda:** gösterim kuralı `pdks_faz8b_fm_goster($f)` (reddedilen 0; Çift günde `odenecek_fm_saat`) — `pdks_faz8b_gun_mesai_ozeti` de bunu çağırır. Ay verisi `pdks_faz8b_ay_fm_dagilimi($start,$end,$depo,$foremanId)` = TEK `pdks_faz8b_donem_sorgu` çağrısı (N+1 YOK; oturum başına `gun_mesai_ozeti` ÇAĞIRMA). Karışık/sistem dışı tip ve çıkışsız dönem atlanır. `pdks_rapor_cavus_toplu_dokum()` satırlara `fm_saat/fm_kisi/fm_dagilim` ekler (finansal kapıya BAĞLI DEĞİL); sayfalar/pdks_rapor.php'de FM hesabı YAZMA (test denetler).
+- **XLSX kolu** (`?xlsx=1`, `render_header`'dan ÖNCE; `require_perm('reports.export')`, audit `export_audit`): düz `<a class="btn">📊 XLSX İndir</a>` Yazdır'ın yanında, `can('reports.export')` kapılı. **CSV EKLEME.** Hakediş/Para Birimi/Durum sütunları yalnız finansal yetkide; topla yalnız sayı sütunlarında (hakediş tutarı TOPLANMAZ). Renkler: koyu başlık, Kadın pembe / Erkek mavi / Rampacı turuncu, FM yeşil, gün bandı `#e2ecfa` (ekrandaki `$gNo/$gYeni` mantığı), gün başı üst çizgi.
+- **`xlsx_olustur()` opsiyonel renk anahtarları** (verilmezse çıktı eskisiyle aynı): sütun `baslik_dolgu/baslik_yazi/dolgu`, blok `satir_bant/bant_dolgu/satir_ust_cizgi/ust_cizgi_renk/toplam_dolgu`; `xlsx_veri_stili()` önbellek anahtarı tip|dolgu|üst çizgi (satır başına `getStyle(range)` YOK).
+- Test: `php scripts/pdks_toplu_dokum_fm_smoke.php` · `php scripts/pdks_toplu_dokum_xlsx_smoke.php` (gerçek sayfa alt süreçte).
 
 ### Saat Başı Toleransı (v315 → v317)
 Sahip kararı (v317 kesin kural): `pdks_faz8b_sure_karari()` süreyi ham değil **etkin** saatlerle hesaplar

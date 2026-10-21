@@ -607,6 +607,65 @@ function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
     ];
 }
 
+/**
+ * v407: bir dönemin GÖSTERİLEN fazla mesai saati (sınıflandırıcı çıktısı $f).
+ * Reddedilen FM sayılmaz; Çift günde çift eşiğinden sonraki onaylı saat.
+ * FM gösterim kuralının TEK yeri (Mesai Özeti + Çavuş Toplu Döküm).
+ */
+function pdks_faz8b_fm_goster(array $f): int
+{
+    $fm = (int)($f['fazla_mesai_saat'] ?? 0);
+    if (($f['etkin_sinif'] ?? null) === 'cift') return (int)($f['odenecek_fm_saat'] ?? 0);
+    return ($f['fazla_mesai_durum'] ?? '') === 'reddedildi' ? 0 : $fm;
+}
+
+/**
+ * v407: ay aralığındaki oturumların FM dağılımı — TEK sınıflandırıcı sorgusu (N+1 yok).
+ * Dönüş: [session_id => ['saat' => toplam FM saati, 'kisi' => FM'li işçi sayısı, 'dagilim' => [saat => kişi] (artan)]].
+ * Yalnız FM'si olan oturum anahtar taşır. Karışık / sistem dışı tip ve çıkışsız (toplam_dk null) dönem atlanır.
+ * Şema hazır değilse boş dizi. SALT OKUNUR.
+ */
+function pdks_faz8b_ay_fm_dagilimi(string $start, string $end, ?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_sema_hazir($pdo)) return [];
+    $kosul = 's.work_date BETWEEN ? AND ?';
+    $param = [$start, $end];
+    if ($depo !== null && $depo !== '') { $kosul .= ' AND s.depo = ?'; $param[] = $depo; }
+    if ($foremanId !== null) { $kosul .= ' AND s.foreman_id = ?'; $param[] = $foremanId; }
+
+    $sistem = [];
+    foreach (pdks_gunluk_tip_sistem_sutunlari() as $tc) $sistem[$tc['ad']] = true;
+
+    $out = [];
+    foreach (pdks_faz8b_donem_sorgu($pdo, $kosul, $param) as $d) {
+        $ad = (string)($d['worker_type_name_snapshot'] ?? '');
+        if ($ad === PDKS_GUNLUK_KARISIK_AD || !isset($sistem[$ad])) continue;
+        $f = $d['faz8b'];
+        if ($f['toplam_dk'] === null) continue;
+        $saat = pdks_faz8b_fm_goster($f);
+        if ($saat <= 0) continue;
+        $sid = (int)$d['session_id'];
+        $out[$sid] ??= ['saat' => 0, 'kisi' => 0, 'dagilim' => []];
+        $out[$sid]['saat'] += $saat;
+        $out[$sid]['kisi']++;
+        $out[$sid]['dagilim'][$saat] = ($out[$sid]['dagilim'][$saat] ?? 0) + 1;
+    }
+    foreach ($out as &$o) ksort($o['dagilim']);
+    unset($o);
+    return $out;
+}
+
+/** v407: [saat => kişi] → "1 sa: 15 kişi · 2 sa: 3 kişi"; boşsa "—". */
+function pdks_faz8b_fm_dagilim_metni(array $dagilim): string
+{
+    if (!$dagilim) return '—';
+    ksort($dagilim);
+    $p = [];
+    foreach ($dagilim as $saat => $kisi) $p[] = (int)$saat . ' sa: ' . (int)$kisi . ' kişi';
+    return implode(' · ', $p);
+}
+
 if (!defined('PDKS_FAZ8B_OZET_FM_SUTUN')) define('PDKS_FAZ8B_OZET_FM_SUTUN', 5);   // son sütun = 5 ve üzeri
 
 /**
@@ -663,8 +722,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
         if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++; else $t['bekliyor']++;
 
         $fm = (int)$f['fazla_mesai_saat'];
-        // Gösterilen FM: reddedilen sayılmaz; Çift günde çift eşiğinden sonraki onaylı saat.
-        $fmGoster = $sinif === 'cift' ? (int)$f['odenecek_fm_saat'] : ($f['fazla_mesai_durum'] === 'reddedildi' ? 0 : $fm);
+        $fmGoster = pdks_faz8b_fm_goster($f);
         if ($fmGoster > 0) $t['fm'][min($fmGoster, PDKS_FAZ8B_OZET_FM_SUTUN)]++;
         unset($t);
 

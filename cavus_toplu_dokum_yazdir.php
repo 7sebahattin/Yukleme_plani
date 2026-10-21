@@ -63,17 +63,19 @@ $toplamIsci = 0;
 $toplamTip = [];       // v299: tip kayıt defterinden — sutun anahtarı => toplam
 foreach (pdks_gunluk_tip_sutunlari() as $tc) $toplamTip[$tc['sutun']] = 0;
 $toplamEksik = 0;
+$toplamFm = 0;   // v407: toplam fazla mesai saati
 foreach ($satirlar as $r) {
     $toplamIsci  += (int)$r['toplam_isci'];
     foreach ($toplamTip as $sk => $_) $toplamTip[$sk] += (int)($r[$sk] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
+    $toplamFm    += (int)($r['fm_saat'] ?? 0);
 }
 
 // Hakediş kolonu yalnız yetkiliye çizilir; yetkisizde kolon hiç AÇILMAZ
 // (bir kolon dolusu "—" basmak kâğıtta yer kaybıdır).
 // Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
 $tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
-$kolonSayisi = ($finansalGosterilebilir ? 7 : 6) + count($tipSut);
+$kolonSayisi = ($finansalGosterilebilir ? 8 : 7) + count($tipSut);
 $mode = 'summary';
 $orientation = print_orientation($mode, $kolonSayisi);
 
@@ -107,6 +109,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
         <?php foreach ($tipSut as $tc): ?><div class="print-summary-box"><div class="psb-label"><?= h($tc['sayac']) ?></div><div class="psb-value"><?= (int)$toplamTip[$tc['sutun']] ?></div></div><?php endforeach; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $toplamIsci ?></div></div>
         <div class="print-summary-box<?= $toplamEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $toplamEksik ?></div></div>
+        <div class="print-summary-box"><div class="psb-label">Toplam FM (saat)</div><div class="psb-value"><?= $toplamFm ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Mesai Günü</div><div class="psb-value"><?= count($satirlar) ?></div></div>
     </div>
 
@@ -122,6 +125,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <th>İlk Giriş</th>
             <th>Son Çıkış</th>
             <th>Eksik Çıkış</th>
+            <th>Fazla Mesai</th>
         </tr>
         </thead>
         <tbody>
@@ -138,6 +142,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= $r['ilk_giris'] ? h(date('H:i', strtotime($r['ilk_giris']))) : '—' ?></td>
             <td><?= $r['son_cikis'] ? h(date('H:i', strtotime($r['son_cikis']))) : '—' ?></td>
             <td class="num"><?= (int)$r['eksik_cikis'] ?></td>
+            <td><?php if ((int)($r['fm_saat'] ?? 0) > 0): ?><strong><?= (int)$r['fm_saat'] ?> sa</strong> <small><?= h(pdks_faz8b_fm_dagilim_metni((array)($r['fm_dagilim'] ?? []))) ?></small><?php else: ?>—<?php endif; ?></td>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($satirlar)): ?>
@@ -154,6 +159,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td>—</td>
             <td>—</td>
             <td class="num"><?= $toplamEksik ?></td>
+            <td class="num"><?= $toplamFm ?> sa</td>
         </tr>
         </tfoot>
         <?php endif; ?>
