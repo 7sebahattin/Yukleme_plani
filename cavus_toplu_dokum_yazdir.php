@@ -75,7 +75,7 @@ foreach ($satirlar as $r) {
 // (bir kolon dolusu "—" basmak kâğıtta yer kaybıdır).
 // Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
 $tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
-$kolonSayisi = ($finansalGosterilebilir ? 8 : 7) + count($tipSut);
+$kolonSayisi = ($finansalGosterilebilir ? 7 : 6) + PDKS_FAZ8B_OZET_FM_SUTUN + count($tipSut);
 $mode = 'summary';
 $orientation = print_orientation($mode, $kolonSayisi);
 
@@ -125,7 +125,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <th>İlk Giriş</th>
             <th>Son Çıkış</th>
             <th>Eksik Çıkış</th>
-            <th>Fazla Mesai</th>
+            <?php for ($fs = 1; $fs <= PDKS_FAZ8B_OZET_FM_SUTUN; $fs++): ?><th><?= $fs ?><?= $fs === PDKS_FAZ8B_OZET_FM_SUTUN ? '+' : '.' ?> Saat</th><?php endfor; ?>
         </tr>
         </thead>
         <tbody>
@@ -142,7 +142,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= $r['ilk_giris'] ? h(date('H:i', strtotime($r['ilk_giris']))) : '—' ?></td>
             <td><?= $r['son_cikis'] ? h(date('H:i', strtotime($r['son_cikis']))) : '—' ?></td>
             <td class="num"><?= (int)$r['eksik_cikis'] ?></td>
-            <td><?php if ((int)($r['fm_saat'] ?? 0) > 0): ?><strong><?= (int)$r['fm_saat'] ?> sa</strong> <small><?= h(pdks_faz8b_fm_dagilim_metni((array)($r['fm_dagilim'] ?? []))) ?></small><?php else: ?>—<?php endif; ?></td>
+            <?php foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kv): ?><td class="num"><?= $kv > 0 ? (int)$kv : '·' ?></td><?php endforeach; ?>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($satirlar)): ?>
@@ -159,7 +159,9 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td>—</td>
             <td>—</td>
             <td class="num"><?= $toplamEksik ?></td>
-            <td class="num"><?= $toplamFm ?> sa</td>
+            <?php $kvTop = array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0);
+            foreach ($satirlar as $r) foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kn => $kv) $kvTop[$kn] += $kv;
+            foreach ($kvTop as $kv): ?><td class="num"><?= (int)$kv ?></td><?php endforeach; ?>
         </tr>
         </tfoot>
         <?php endif; ?>

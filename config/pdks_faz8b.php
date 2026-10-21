@@ -656,6 +656,17 @@ function pdks_faz8b_ay_fm_dagilimi(string $start, string $end, ?string $depo = n
     return $out;
 }
 
+/** v408: [saat => kişi] → sütun kovaları [1..N] (N = PDKS_FAZ8B_OZET_FM_SUTUN, son kova "N ve üzeri"); Mesai Özeti ile aynı kural. */
+function pdks_faz8b_fm_kovalari(array $dagilim): array
+{
+    $n = PDKS_FAZ8B_OZET_FM_SUTUN;
+    $k = array_fill(1, $n, 0);
+    foreach ($dagilim as $saat => $kisi) {
+        if ((int)$saat >= 1) $k[min((int)$saat, $n)] += (int)$kisi;
+    }
+    return $k;
+}
+
 /** v407: [saat => kişi] → "1 sa: 15 kişi · 2 sa: 3 kişi"; boşsa "—". */
 function pdks_faz8b_fm_dagilim_metni(array $dagilim): string
 {
