@@ -31,7 +31,7 @@
   }
 
   // Kart stili: sayfa temasından BAĞIMSIZ, her renk açık değer (koyu temada global th/td kuralları sızmasın).
-  // Başlık = th (700), veri = td (600). gap / inset / grid YOK (html2canvas).
+  // Etiket = th (700, turuncu #b45309), veri = td (500, #111827) — v410. gap / inset / grid YOK (html2canvas).
   var CSS =
     '.swp-kart{box-sizing:border-box;width:440px;margin:0;padding:18px 20px 16px;background:#ffffff;color:#111827;' +
     'font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.35;' +
@@ -39,15 +39,16 @@
     '.swp-kart table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0;background:#ffffff}' +
     '.swp-kart th,.swp-kart td{box-sizing:border-box;padding:6px 0;border:0;border-bottom:1px solid #e5e7eb;background:#ffffff;' +
     'text-align:left;vertical-align:top;text-transform:none;letter-spacing:normal;overflow-wrap:anywhere;word-break:break-word;white-space:normal}' +
-    '.swp-kart th{font-weight:700;color:#111827;font-size:15px}' +
-    '.swp-kart td{font-weight:600;color:#111827;font-size:16px}' +
+    '.swp-kart th{font-weight:700;color:#b45309;font-size:15px}' +
+    '.swp-kart td{font-weight:500;color:#111827;font-size:16px}' +
     '.swp-alan th{width:150px;padding-right:12px}' +
     '.swp-kalem{margin-top:14px!important}' +
     '.swp-kalem th,.swp-kalem td{padding-right:8px}' +
-    '.swp-kalem thead th{border-bottom:2px solid #111827}' +
+    '.swp-kalem thead th{color:#b45309;border-bottom:2px solid #b45309}' +
     '.swp-kalem .swp-k2{width:70px}' +
     '.swp-kalem .swp-k3{width:104px;text-align:right;padding-right:0;white-space:nowrap}' +
-    '.swp-kalem tr.swp-toplam th,.swp-kalem tr.swp-toplam td{border-top:2px solid #111827;border-bottom:0}';
+    '.swp-kalem tr.swp-toplam th,.swp-kalem tr.swp-toplam td{border-top:2px solid #b45309;border-bottom:0}' +
+    '.swp-kalem tr.swp-toplam th{color:#b45309}.swp-kalem tr.swp-toplam td{font-weight:700;color:#111827}';
 
   // Her değer esc() ile HTML'e girer (sunucu ham metin döner).
   function kartHtml(v) {

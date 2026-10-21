@@ -315,7 +315,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
                 window.__kart.push({ w: el.getBoundingClientRect().width, bg: cs(el).backgroundColor,
                     th: [...el.querySelectorAll('th')].map(x => x.textContent.trim()).filter(Boolean),
                     thW: [...el.querySelectorAll('th')].map(x => +cs(x).fontWeight), tdW: [...el.querySelectorAll('td')].map(x => +cs(x).fontWeight),
-                    tdRenk: cs(el.querySelector('td')).color, alan: [...el.querySelectorAll('.swp-alan tr')].map(t => [t.dataset.k, t.querySelector('td').textContent]),
+                    tdRenk: cs(el.querySelector('td')).color, thRenk: [...el.querySelectorAll('th')].map(x => cs(x).color), alan: [...el.querySelectorAll('.swp-alan tr')].map(t => [t.dataset.k, t.querySelector('td').textContent]),
                     html: el.outerHTML, olcek: o && o.scale });
                 return gercek(el, o); } : undefined; },
             set(f) { gercek = f; } });
@@ -375,7 +375,8 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         const k = await page.evaluate(() => window.__kart[0]);
         ok('[1280] kart: 440px, ×2, beyaz zemin', k.w === 440 && k.olcek === 2 && k.bg === 'rgb(255, 255, 255)', JSON.stringify([k.w, k.olcek, k.bg]));
         ok('[1280] kart: başlıklar sahibin sırasıyla (10 alan + Ürün/Kalibre/Palet-Koli + Toplam)', k.th.join('|') === 'Parti No|Yükleme tarihi|Sipariş No|Navlun No|Nakliyeci|Plakalar|Şoför adı|Şoför telefonu|Yurt içi gümrük|Alıcı Ülke|Ürün|Kalibre|Palet/Koli|Toplam', k.th.join('|'));
-        ok('[1280] kart: başlıklar kalın (≥700), veriler belirgin (≥600)', k.thW.every(x => x >= 700) && k.tdW.every(x => x >= 600), JSON.stringify([k.thW, k.tdW]));
+        ok('[1280] kart (v410): başlıklar kalın (≥700) ve turuncu (rgb(180, 83, 9)); veriler 500 (400–550, toplam satırı hariç)', k.thW.every(x => x >= 700) && k.thRenk.every(x => x === 'rgb(180, 83, 9)')
+            && k.tdW.slice(0, -2).every(x => x >= 400 && x <= 550), JSON.stringify([k.thW, k.thRenk, k.tdW]));
         ok('[1280] kart: değerler sunucu yanıtıyla aynı (şoför, telefon, gümrük dahil)', JSON.stringify(k.alan) === JSON.stringify(WP.alanlar.map(a => [a.k, a.deger])), JSON.stringify(k.alan));
         ok('[1280] kart: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
         // 3) çift tıklama koruması: menü kapalıyken gizli düğmede iki ardışık click()
@@ -504,15 +505,40 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
     // ══ v403 — bölüm başlığı › 🖼️ WP Resim (aynı rapor tablosu → tek PNG) ══
     const PNG_DOSYA = KUCUK.dosya + '.png';
     const PANO_BOS = () => { window.__pano = []; };
+    // v410 — resim tutucusu html2canvas'a verilmeden hemen önce ölçülür (tutucu sonra silinir)
+    const RESIM_SPY = () => {
+        window.__resim = [];
+        let gercek = null;
+        Object.defineProperty(window, 'html2canvas', { configurable: true,
+            get() { return gercek ? function (el, o) {
+                const cs = x => getComputedStyle(x);
+                if (el.closest('.syz-resim-tutucu')) window.__resim.push({
+                    thBg: [...el.querySelectorAll('thead th:not(.syz-ts)')].map(x => cs(x).backgroundColor),
+                    thRenk: [...el.querySelectorAll('thead th')].map(x => cs(x).color),
+                    tsBg: [...el.querySelectorAll('thead th.syz-ts')].map(x => cs(x).backgroundColor),
+                    tdW: [...el.querySelectorAll('tbody tr:not(.syz-toplam) td')].map(x => ({ w: +cs(x).fontWeight, ilk: x.parentNode.classList.contains('syz-bugun') && x === x.parentNode.firstElementChild })),
+                    tdRenk: cs(el.querySelector('tbody tr:not(.syz-toplam) td')).color,
+                    gecmisBg: [...el.querySelectorAll('tr.syz-gecmis>td')].map(x => cs(x).backgroundColor),
+                    top: (() => { const t = el.querySelector('tr.syz-toplam>td'); return t ? [cs(t).backgroundColor, cs(t).color, +cs(t).fontWeight] : null; })() });
+                return gercek(el, o); } : undefined; },
+            set(f) { gercek = f; } });
+    };
     // R1) masaüstü: panoya PNG + bildirim; R2) Kapanan bölümün düğmesi kendi bolum'unu ister
     {
-        const { ctx, page, istekler, hatalar } = await ac('liste', 1280, 900, tamam(KUCUK), { init: [PANO_BOS, PANO_STUB] });
+        const { ctx, page, istekler, hatalar } = await ac('liste', 1280, 900, tamam(KUCUK), { init: [PANO_BOS, PANO_STUB, RESIM_SPY] });
         const r = page.locator(BTN_R);
         ok('[1280] resim: düğme etiketi "🖼️ WP Resim"', (await r.textContent()).trim() === '🖼️ WP Resim');
         await r.click();
         await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 60000 });
         const p = await page.evaluate(() => window.__pano[0]);
         ok('[1280] resim: panoya image/png, PNG imzası, ≥ 2700 px genişlik (1400 × 2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w >= 2700 && p.h > 300 && p.size > 5000, JSON.stringify(p));
+        const rs = await page.evaluate(() => window.__resim[0]);
+        ok('[1280] resim (v410): başlık lacivert zemin + beyaz yazı, sayısal başlık turuncu, veri 500 #1f2937 (bugün tarihi 700), geçmiş sarı, toplam açık mavi 800',
+            rs && rs.thBg.length > 0 && rs.thBg.every(x => x === 'rgb(30, 58, 95)') && rs.thRenk.every(x => x === 'rgb(255, 255, 255)')
+            && rs.tsBg.length > 0 && rs.tsBg.every(x => x === 'rgb(180, 83, 9)')
+            && rs.tdW.every(x => x.ilk ? x.w === 700 : x.w === 500) && rs.tdRenk === 'rgb(31, 41, 55)'
+            && rs.gecmisBg.every(x => x === 'rgb(255, 243, 176)')
+            && JSON.stringify(rs.top) === JSON.stringify(['rgb(219, 231, 245)', 'rgb(30, 58, 95)', 800]), JSON.stringify(rs));
         ok('[1280] resim: tek istek amac=resim + bolum=acik', istekler.length === 1 && /amac=resim/.test(istekler[0]) && /bolum=acik/.test(istekler[0]), istekler.join(','));
         await page.waitForFunction(() => { const d = document.querySelector('.sip-yz-durum'); return d && !d.hidden; }, null, { timeout: 5000 });
         const b = await page.evaluate(() => { const d = document.querySelector('.sip-yz-durum'); return { t: d.textContent, z: +getComputedStyle(d).zIndex, wp: !!document.querySelector('.sip-wp-durum'),
