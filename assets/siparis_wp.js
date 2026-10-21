@@ -31,7 +31,7 @@
   }
 
   // Kart stili: sayfa temasından BAĞIMSIZ, her renk açık değer (koyu temada global th/td kuralları sızmasın).
-  // Başlık = th (700), veri = td (300). gap / inset / grid YOK (html2canvas).
+  // Başlık = th (700), veri = td (600). gap / inset / grid YOK (html2canvas).
   var CSS =
     '.swp-kart{box-sizing:border-box;width:440px;margin:0;padding:18px 20px 16px;background:#ffffff;color:#111827;' +
     'font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.35;' +
@@ -40,7 +40,7 @@
     '.swp-kart th,.swp-kart td{box-sizing:border-box;padding:6px 0;border:0;border-bottom:1px solid #e5e7eb;background:#ffffff;' +
     'text-align:left;vertical-align:top;text-transform:none;letter-spacing:normal;overflow-wrap:anywhere;word-break:break-word;white-space:normal}' +
     '.swp-kart th{font-weight:700;color:#111827;font-size:15px}' +
-    '.swp-kart td{font-weight:300;color:#374151;font-size:16px}' +
+    '.swp-kart td{font-weight:600;color:#111827;font-size:16px}' +
     '.swp-alan th{width:150px;padding-right:12px}' +
     '.swp-kalem{margin-top:14px!important}' +
     '.swp-kalem th,.swp-kalem td{padding-right:8px}' +

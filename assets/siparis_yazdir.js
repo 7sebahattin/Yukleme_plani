@@ -54,7 +54,7 @@
     '.syz tr.syz-gun>td{border-top:2px solid #333}.syz tr.syz-toplam>td{font-weight:700;background:#f2f2f2}' +
     '.syz-kutu{display:inline-block;width:12px;height:10px;background:#fff3b0;border:1px solid #999;vertical-align:-1px;margin-right:4px}' +
     '.syz td,.syz th,.syz-kutu{-webkit-print-color-adjust:exact;print-color-adjust:exact}';
-  var NOWRAP = { tarih: 1, siparis: 1, tel: 1, plaka: 1 };
+  var NOWRAP = { tarih: 1, siparis: 1, tel: 1 };   // plaka KIRILIR ("07BEV611-07BCD361" nowrap iken yan sütuna taşıp kesiliyordu)
 
   // Rapor gövdesi (başlık + meta + anahtar + tablo + notlar) — yazdırma penceresi, PDF ve WP Resim yakalaması kullanır.
   // Sütunlar v.kolonlar'dan (değişken sayıda kalibre sütunu); toplam satırı her 'sayi' sütunu için v.toplam[k.k].
