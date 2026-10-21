@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v408';
+const CACHE_NAME = 'yukleme-plani-v409';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -67,6 +67,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır
   // Siparişler: sayfa, belge/PDF/XLSX ve ZIP uçları HİÇ önbelleğe alınmaz (kişisel/ticari veri; PATH_INFO da atlanır)
   if (/\/siparis(ler|_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
+  if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   e.respondWith(
     fetch(e.request).then(function(response) {
       // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.

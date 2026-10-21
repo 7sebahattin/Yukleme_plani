@@ -292,6 +292,7 @@ ok("audit eylem sabitleri bulundu ($sayi) ve hepsi ≤ 40 karakter", $sayi > 0 &
 
 echo "\n=== Service Worker + sürüm ===\n";
 ok('sw.js siparis bypass kuralı', str_contains($sw, "/\\/siparis(ler|_[a-z]+)?\\.php(\\/|\$)/.test(u.pathname)"));
+ok('sw.js urun_siparis bypass kuralı (v409)', str_contains($sw, "/\\/urun_siparis(_[a-z]+)?\\.php(\\/|\$)/.test(u.pathname)"));
 ok('sw.js SHELL siparis.svg', str_contains($sw, "'./assets/nav-icons/siparis.svg'"));
 ok('siparis.css/js SHELL\'de DEĞİL (mail emsali)', !str_contains($sw, 'siparis.css') && !str_contains($sw, 'siparis.js'));
 ok('assets/nav-icons/siparis.svg mevcut + geçerli SVG', is_file($ROOT . '/assets/nav-icons/siparis.svg') && str_contains(oku('assets/nav-icons/siparis.svg'), '<svg') && str_contains(oku('assets/nav-icons/siparis.svg'), 'viewBox="0 0 64 64"'));
