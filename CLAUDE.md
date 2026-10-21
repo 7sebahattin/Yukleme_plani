@@ -1609,9 +1609,32 @@ Test: `php scripts/siparis_core_smoke.php` · `siparis_pkl_smoke.php` · `sipari
 (`SIPARIS_ORNEK_DIR=…` ile gerçek örnekler) · `siparis_gate_static_smoke.php` ·
 `SIPARIS_UI_OUT=/tmp/sip php scripts/siparis_ui_render.php && node scripts/siparis_ui_smoke.js`.
 
+### Ürün Siparişleri (v409)
+
+OGL "Siparişler"den BAĞIMSIZ, firma + ürün + çoklu kalibre/palet siparişi; her sipariş **tek satır**. Sayfa `urun_siparis.php`
+(OGL Siparişler başlığındaki "🛒 Ürün Siparişleri" düğmesinden girilir; sidebar/bottomnav sırasına DOKUNULMADI, `nav_aktif_anahtar()`
+`$a_sip` listesinde → "OGL Siparişler" vurgulu kalır). Kapı: `can_siparis()` (siparis.read / write / delete) — yeni yetki YOK.
+- **Dosyalar:** `config/urun_siparis.php` (şema + TÜM mantık) · `urun_siparis.php` (liste + pencere) · `urun_siparis_islem.php`
+  (GET `?id=` getir · POST JSON `kaydet`/`sil`, CSRF) · `urun_siparis_yazdir.php` (GET JSON) · `assets/usip.css` + `assets/usip.js`.
+  Adlar TEK alt çizgili ek içerir; sw.js `/urun_siparis(_[a-z]+)?\.php/` bypass kuralı bunları önbelleğe almaz.
+- **Şema** (sahip GO — 2 yeni tablo, ALTER yok): `urun_siparisleri` + `urun_siparis_kalibreler`, yalnız migrate.php `#urun-siparis`
+  kartından (`usip_migrate`). Tablo yoksa sayfa "kurulmadı" der. Silme SOFT (`deleted_at`); depo = aktif depo damgası, liste `depo_sql_column`.
+- **Hesap TEK yerde `usip_hesap()`:** kasa = toplam palet × palet kasa · kg = kasa × birim ağırlık · tutar = kg × birim fiyat. Sunucu her
+  kayıtta yeniden hesaplar; JS özeti yalnız önizlemedir (`sayi()` = `usip_num()` aynası — ikisini birlikte değiştir). KG ekranda tam sayı.
+  Kalibre numarası siparişte tekil; liste yazımı `9 PLT 8` (`usip_kalibre_metin`).
+- **Öneri kutuları** (Firma · Ürün · Palet cinsi · Kasa cinsi; `usip_referanslar`): HKS kataloğu (`bb_katalog`) > Tanımlar
+  (`firma`/`urun`/`palet_tipi`/`kasa_cinsi`) > önceki siparişler; listede yoksa "+ ekle" ve tam ad yazılıp kaydedilebilir
+  (Tanımlar'a YAZILMAZ — `kasa_cinsi` dara kaydı yükleme hesabını etkiler; yeni ad sonraki girişlerde "Kayıtlı" gelir).
+- **Pencere:** Ambalaj (palet/kasa cinsi, palet kasa, birim ağırlık) · Lojistik (nakliyeci, plakalar, şoför, gümrük, navlun) · **Fiyat**
+  açılır bölümleri; Yeni/Temizle düğmeleri YOK; Sil yalnız düzeltme penceresinde (siparis.delete, iki adımlı onay). Satır/kart tıklanır.
+  Şoför adı/telefonu liste HTML'ine girmez (tıklayınca taze çekilir); audit'e YAZILMAZ.
+- **Yazdır / PDF Gönder / WP Resim:** OGL ile AYNI betik `assets/siparis_yazdir.js` + aynı JSON sözleşmesi (`usip_yazdir_veri`:
+  kolonlar/satirlar/toplam); ekrandaki aramayla aynı küme (`usip_filtre`), en çok 500 satır. Betiğin sözleşmesini bozma.
+- Test: `php scripts/urun_siparis_smoke.php` (bellek içi SQLite; hesap, doğrulama, kaydet/düzelt/sil, depo izolasyonu, uçlar, sayfa render).
+
 ### Şema Migrasyon Paneli görünümü (v388)
 
-`migrate.php` kartları (21 adet) `mg_kart_ac('<id>')` / `mg_kart_kapat()` ile sarılır: kartın KENDİ çıktısında `✓` var ve `✗` yoksa kart **hazır** sayılır → kapalı `<details>` tek satıra iner (başlık + "✓ Hazır" rozeti); eksik olan AÇIK kalır. Üstte "N / 21 kart hazır" özeti + "Tümünü aç" düğmesi; `migrate.php#siparis-sofor` gibi bağlantılar kapalı kartı açar. **POST sonrası hiçbir kart kapanmaz** (migrasyon sonuç satırları görünsün). **Hiçbir kart / POST dalı / migrasyon fonksiyonu KALDIRILMADI** — ayrı veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur; birçok statik smoke (`ne=` dalları, tek çağıran = migrate.php) bunu sabitler. Yeni kart eklerken `<div class="card" …>` yerine `<?php mg_kart_ac('id'); ?>` … `<?php mg_kart_kapat(); ?>` kullan ve kartın çıktısına durum için `✓`/`✗` bas (hazırsa yalnız `✓`). Test: `php scripts/migrate_panel_smoke.php` (migrate.php'yi bellek içi SQLite'ta gerçekten çalıştırır).
+`migrate.php` kartları (22 adet) `mg_kart_ac('<id>')` / `mg_kart_kapat()` ile sarılır: kartın KENDİ çıktısında `✓` var ve `✗` yoksa kart **hazır** sayılır → kapalı `<details>` tek satıra iner (başlık + "✓ Hazır" rozeti); eksik olan AÇIK kalır. Üstte "N / 21 kart hazır" özeti + "Tümünü aç" düğmesi; `migrate.php#siparis-sofor` gibi bağlantılar kapalı kartı açar. **POST sonrası hiçbir kart kapanmaz** (migrasyon sonuç satırları görünsün). **Hiçbir kart / POST dalı / migrasyon fonksiyonu KALDIRILMADI** — ayrı veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur; birçok statik smoke (`ne=` dalları, tek çağıran = migrate.php) bunu sabitler. Yeni kart eklerken `<div class="card" …>` yerine `<?php mg_kart_ac('id'); ?>` … `<?php mg_kart_kapat(); ?>` kullan ve kartın çıktısına durum için `✓`/`✗` bas (hazırsa yalnız `✓`). Test: `php scripts/migrate_panel_smoke.php` (migrate.php'yi bellek içi SQLite'ta gerçekten çalıştırır).
 
 ## Excel İndir — CSV + XLSX (Sprint Excel-01)
 
