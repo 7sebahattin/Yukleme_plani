@@ -72,7 +72,8 @@
     if (v.filtre) meta += ' &nbsp;|&nbsp; Filtre: <b>' + esc(v.filtre) + '</b>';
     var sinifi = function (k) { return k.t === 'sayi' ? 'syz-s' : (NOWRAP[k.k] ? 'syz-nw' : ''); };
     var cg = kol.map(function (k) { var w = Number(k.w); return w > 0 ? '<col style="width:' + w + '%">' : '<col>'; }).join('');
-    var th = kol.map(function (k) { return '<th>' + esc(k.l) + '</th>'; }).join('');
+    // Sayısal sütun başlığı (kalibre + toplam palet/kasa) ayrı sınıf taşır; CSS'i YALNIZ WP Resim'de (RESIM_YAZI) — PDF/Yazdır görünümü aynı.
+    var th = kol.map(function (k) { return (k.t === 'sayi' ? '<th class="syz-ts">' : '<th>') + esc(k.l) + '</th>'; }).join('');
     var onceki = null;
     var tr = (v.satirlar || []).map(function (s, ri) {
       var sinif = [];
@@ -292,10 +293,15 @@
   // ── WP Resim ───────────────────────────────────────────────────────────────
   var RESIM_W = 1400, RESIM_OLCEK = 2, RESIM_MAX_Y = 16000;
   // WP resmi telefonda küçülerek açılır: yazı PDF/yazdırmadan belirgin büyük ve kalın (ince yazı okunmuyordu).
+  // v410: veri 500 (#1f2937), başlıklar renkli — lacivert zemin + beyaz; sayısal başlıklar koyu turuncu; toplam açık mavi.
   var RESIM_YAZI =
     '.syz-resim-tutucu .syz h2{font-size:22px}.syz-resim-tutucu .syz-meta,.syz-resim-tutucu .syz-anahtar,.syz-resim-tutucu .syz-not{font-size:14px;color:#000}' +
-    '.syz-resim-tutucu .syz th,.syz-resim-tutucu .syz td{font-size:14px;font-weight:600;padding:5px 4px;border-color:#555}.syz-resim-tutucu .syz .syz-nw{white-space:normal;overflow-wrap:anywhere}' +
-    '.syz-resim-tutucu .syz thead th{font-size:12.5px;font-weight:800;padding:5px 3px}.syz-resim-tutucu .syz tr.syz-toplam>td{font-weight:800}';
+    '.syz-resim-tutucu .syz th,.syz-resim-tutucu .syz td{font-size:14px;padding:5px 4px;border-color:#555}.syz-resim-tutucu .syz .syz-nw{white-space:normal;overflow-wrap:anywhere}' +
+    '.syz-resim-tutucu .syz td{font-weight:500;color:#1f2937}' +
+    '.syz-resim-tutucu .syz tr.syz-bugun>td:first-child{font-weight:700}' +
+    '.syz-resim-tutucu .syz thead th{font-size:12.5px;font-weight:700;padding:5px 3px;background:#1e3a5f;color:#ffffff;border-color:#1e3a5f}' +
+    '.syz-resim-tutucu .syz thead th.syz-ts{background:#b45309;color:#ffffff}' +
+    '.syz-resim-tutucu .syz tr.syz-toplam>td{font-weight:800;background:#dbe7f5;color:#1e3a5f}';
   async function resimUret(v) {
     if (!window.html2canvas) await betikYukle('halkayit/html2canvas.min.js');
     var tutucu = document.createElement('div');
