@@ -579,7 +579,8 @@ $uzun = array_filter($aud, fn($a) => strlen((string)$a['action']) > 40);
 ok('tüm audit eylem adları ≤ 40 karakter', $uzun === [] && count($aud) > 10);
 $izinli = ['siparis_belge_yukle', 'siparis_belge_sil', 'siparis_alan_duzenle', 'siparis_kilit_kaldir', 'siparis_catisma_coz', 'siparis_durum', 'siparis_mail_gonderildi',
     'siparis_pkl_taslak', 'siparis_pkl_uret', 'siparis_dosya_indir', 'siparis_zip_indir', 'siparis_beyan_bagla', 'siparis_beyan_kaldir', 'siparis_sayac_duzelt',
-    'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sevkiyat_sil', 'siparis_sevkiyat_ac', 'siparis_evrak_gonderildi', 'siparis_evrak_gecis'];
+    'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sevkiyat_sil', 'siparis_sevkiyat_ac', 'siparis_evrak_gonderildi', 'siparis_evrak_gecis',
+    'siparis_evrak_mail_ayar'];   // v411: evrak takımı mail alıcıları (hks_kv; yalnız adres SAYISI)
 ok('yalnız planlanmış eylem adları', array_diff(array_unique(array_column($aud, 'action')), $izinli) === []);
 $tum = implode("\n", array_map(fn($a) => $a['old_values'] . ' ' . $a['new_values'], $aud));
 ok('audit kişisel veri / ayrıştırma içeriği taşımıyor', !preg_match('/URETICI|LAB TEST|4000000000006|example\.invalid|CLERK|Şoför|Müşteri iptal/u', $tum));

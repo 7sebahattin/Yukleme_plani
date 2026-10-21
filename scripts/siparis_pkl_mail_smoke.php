@@ -1,6 +1,7 @@
 <?php
 // =========================================================
 // scripts/siparis_pkl_mail_smoke.php — PKL mail taslağı (v383): Kime/Bilgi ayrımı, mailto, ekli .eml (X-Unsent), uç
+//   + v411 evrak takımı mail taslağı (ek YOK): taslak kuralları, hks_kv ayarı, .eml, siparis_eml.php ucu, ekran
 //   php scripts/siparis_pkl_mail_smoke.php
 // Bellek içi SQLite + stub auth + SENTETİK veri (@ornek.test; kişisel veri YOK). Canlı DB'ye / storage'a dokunmaz.
 // =========================================================
@@ -60,10 +61,10 @@ function sipt_header(string $h, bool $replace = true, int $code = 0): void
 }
 function sipt_code(?int $c = null) { global $SIPT; if ($c !== null) $SIPT['kod'] = $c; return $SIPT['kod']; }
 function sip_calistir(string $tmp): void { include $tmp; }
-function uc(array $get): array
+function uc(array $get, string $dosya = 'siparis_dosya.php', string $yontem = 'GET'): array
 {
     global $ROOT, $SIPT;
-    $src = (string)file_get_contents($ROOT . '/siparis_dosya.php');
+    $src = (string)file_get_contents($ROOT . '/' . $dosya);
     $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
     $src = str_replace('__DIR__', var_export($ROOT, true), $src);
     $src = preg_replace('/\bheader\(/', 'sipt_header(', $src);
@@ -73,7 +74,7 @@ function uc(array $get): array
     $tmp = sys_get_temp_dir() . '/sip_eml_' . getmypid() . '.php';
     file_put_contents($tmp, $src);
     $SIPT = ['h' => [], 'kod' => 200];
-    $_GET = $get; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+    $_GET = $get; $_POST = []; $_SERVER['REQUEST_METHOD'] = $yontem;
     ob_start();
     $hata = null;
     try { sip_calistir($tmp); } catch (SipExit $e) {} catch (Throwable $e) { $hata = $e->getMessage(); }
@@ -127,5 +128,106 @@ $v = (string)file_get_contents($ROOT . '/siparis_view.php');
 ok('modal: mailto ve .eml AYNI taslaktan (siparis_pkl_mail_taslak + siparis_pkl_mailto)', str_contains($v, 'siparis_pkl_mail_taslak(') && str_contains($v, 'siparis_pkl_mailto($mailTaslak)'));
 ok('modal: ekli taslak bağlantısı eml=1&sid', str_contains($v, '&amp;eml=1&amp;sid=<?= $id ?>'));
 ok('modal: eski "tüm adresler Kime" mailto kalıbı YOK', !str_contains($v, "mailto:<?= h(implode(',', \$poEpostalar))"));
+
+echo "\n=== 6. v411 evrak taslağı (saf) ===\n";
+$po2 = ['log@ornek.test', 'packinglist-FS-EU@ornek.test'];
+$e = siparis_evrak_mail_taslak(['customs@ornek.test'], $po2, 'PKL-TC900001.10-AsyaDoc005-17.10.2026.xlsx', 'TC900001.10', 'Kullanıcı 1');
+ok('Kime = ayar önce + PO packinglist OLMAYAN; Bilgi boş', $e['kime'] === ['customs@ornek.test', 'log@ornek.test'] && $e['bilgi'] === [], json_encode($e));
+ok('konu PKL taslağının konusuyla AYNI', $e['konu'] === siparis_pkl_mail_taslak($po2, 'PKL-TC900001.10-AsyaDoc005-17.10.2026.xlsx', 'TC900001.10', 'x')['konu'] && $e['konu'] === 'PKL-TC900001.10-AsyaDoc005-17.10.2026');
+ok('gövde birebir (DOCs + Best Regards + Asya Fresh + ad)', $e['govde'] === "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh\nKullanıcı 1", $e['govde']);
+$e2 = siparis_evrak_mail_taslak([], ['PackingList-x@ornek.test'], '', 'TC900002.10', '');
+ok('yalnız packinglist adresi varsa Kime BOŞ (PKL kuralının aksine Kime\'ye geçmez); PKL yoksa konu = order ref; adsız imza Asya Fresh ile biter',
+    $e2['kime'] === [] && $e2['bilgi'] === [] && $e2['konu'] === 'TC900002.10' && str_ends_with($e2['govde'], "Best Regards,\n\nAsya Fresh"), json_encode($e2));
+$e3 = siparis_evrak_mail_taslak(['Customs@ornek.test', 'gecersiz', ''], ['CUSTOMS@ORNEK.TEST', 'log@ornek.test', 'LOG@ornek.test', 'packinglist@ornek.test'], "X\r\nBcc: k@ornek.test.xlsx", 'TC9', "Ad\r\nBcc: k@ornek.test");
+ok('büyük/küçük harf duyarsız tekil, geçersiz atlanır, ayarın yazımı korunur', $e3['kime'] === ['Customs@ornek.test', 'log@ornek.test'], json_encode($e3['kime']));
+ok('konu/imzada satır sonu YOK (başlık enjeksiyonu)', !preg_match('/[\r\n]/', $e3['konu']) && !str_contains($e3['govde'], "\r") && substr_count($e3['govde'], "\n") === 6, json_encode($e3));
+ok('ayar + PO boş → Kime boş', siparis_evrak_mail_taslak([], [], 'a.xlsx', 'TC', 'x')['kime'] === []);
+
+echo "\n=== 7. v411 ayar (hks_kv) ===\n";
+ok('hks_kv yokken: kv_hazir false, oku boş, kaydet reddedilir', !siparis_evrak_mail_kv_hazir($db) && siparis_evrak_mail_ayar_oku($db) === ['kime' => []]
+    && siparis_evrak_mail_ayar_kaydet($db, 'customs@ornek.test', 1)['ok'] === false);
+$db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+ok('hks_kv varken kv_hazir true, ayar yok → boş', siparis_evrak_mail_kv_hazir($db) && siparis_evrak_mail_ayar_oku($db) === ['kime' => []]);
+$k = siparis_evrak_mail_ayar_kaydet($db, "customs@ornek.test\nLog2@Ornek.test; customs@ornek.test,  \n", 1);
+ok('kaydet: satır/virgül/noktalı virgül ayrımı, küçük harf, sıra korunarak tekil', $k['ok'] && siparis_evrak_mail_ayar_oku($db)['kime'] === ['customs@ornek.test', 'log2@ornek.test'], json_encode([$k, siparis_evrak_mail_ayar_oku($db)]));
+$k = siparis_evrak_mail_ayar_kaydet($db, "customs@ornek.test\ngecersiz-adres", 1);
+ok('geçersiz e-posta reddedilir, eski ayar korunur', !$k['ok'] && str_contains((string)($k['hata'] ?? ''), 'Geçersiz e-posta') && siparis_evrak_mail_ayar_oku($db)['kime'] === ['customs@ornek.test', 'log2@ornek.test'], json_encode($k));
+$on1 = implode("\n", array_map(fn($i) => "a$i@ornek.test", range(1, 11)));
+$k = siparis_evrak_mail_ayar_kaydet($db, $on1, 1);
+ok('10\'dan fazla adres reddedilir', !$k['ok'] && str_contains((string)($k['hata'] ?? ''), '10'), json_encode($k));
+ok('dizi girdisi de kabul edilir', siparis_evrak_mail_ayar_kaydet($db, ['x@ornek.test'], 1)['ok'] && siparis_evrak_mail_ayar_oku($db)['kime'] === ['x@ornek.test']);
+$k = siparis_evrak_mail_ayar_kaydet($db, '', 1);
+ok('boş liste = temizle', $k['ok'] && siparis_evrak_mail_ayar_oku($db)['kime'] === []);
+$auds = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_evrak_mail_ayar'")->fetchAll(PDO::FETCH_COLUMN);
+ok('audit siparis_evrak_mail_ayar yalnız adres SAYISI (adres YAZILMAZ); başarısız kayıt audit yazmaz', count($auds) === 3 && str_contains((string)$auds[0], '"adres_sayisi":2') && !array_filter($auds, fn($a) => str_contains((string)$a, '@')), json_encode($auds));
+$db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['siparis_evrak_mail_ayar', '{bozuk']);
+ok('bozuk JSON → boş (fail soft)', siparis_evrak_mail_ayar_oku($db) === ['kime' => []]);
+
+echo "\n=== 8. v411 .eml (ek YOK) + mailto ===\n";
+$eml = siparis_evrak_eml($e, 1760000000);
+[$bas, $gv] = explode("\r\n\r\n", $eml, 2);
+ok('ilk başlık X-Unsent: 1; To iki adres; Cc / From YOK', str_starts_with($eml, "X-Unsent: 1\r\n") && str_contains($bas, "\r\nTo: customs@ornek.test, log@ornek.test\r\n") && !preg_match('/^(Cc|From):/mi', $bas));
+ok('tek parça text/plain UTF-8 base64; multipart / ek / Content-Disposition YOK', str_contains($bas, "Content-Type: text/plain; charset=UTF-8") && str_contains($bas, 'Content-Transfer-Encoding: base64')
+    && !str_contains($eml, 'multipart') && !str_contains($eml, 'Content-Disposition') && !str_contains($eml, 'attachment'));
+ok('Subject = konu; gövde base64 çözülünce kalıp (CRLF)', str_contains($bas, "\r\nSubject: PKL-TC900001.10-AsyaDoc005-17.10.2026\r\n") && base64_decode((string)preg_replace('/\s+/', '', $gv)) === str_replace("\n", "\r\n", $e['govde']));
+ok('satırlar ≤ 998', max(array_map('strlen', explode("\r\n", $eml))) <= 998);
+$emlTr = siparis_evrak_eml(['kime' => [], 'bilgi' => [], 'konu' => 'Çeki evrakı', 'govde' => 'x']);
+ok('Kime boşsa To başlığı yok; ASCII dışı konu RFC 2047', !preg_match('/^To:/mi', $emlTr) && str_contains($emlTr, 'Subject: =?UTF-8?B?' . base64_encode('Çeki evrakı') . '?='));
+$m = siparis_pkl_mailto($e);
+ok('mailto: iki Kime, cc YOK, konu + gövde kodlu', str_starts_with($m, 'mailto:customs@ornek.test,log@ornek.test?subject=PKL-TC900001.10-AsyaDoc005-17.10.2026&body=') && !str_contains($m, 'cc=') && str_contains($m, 'DOCs%20are%20attached'), $m);
+ok('mailto: Kime boşken de geçerli (mailto:?subject=…)', str_starts_with(siparis_pkl_mailto($e2), 'mailto:?subject=TC900002.10&body='), siparis_pkl_mailto($e2));
+
+echo "\n=== 9. v411 uç (siparis_eml.php) ===\n";
+$db->prepare('UPDATE siparis_belgeler SET parse_json = ? WHERE id = ?')->execute([json_encode(['packing_list_emails' => $po2]), $po['belge_id']]);
+siparis_evrak_mail_ayar_kaydet($db, 'customs@ornek.test', 1);
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'pkl_hazir' WHERE id = $sid");
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+ok('uç: mail gönderilmemiş sevkiyatta 409, taslak yok', $r['kod'] === 409 && !str_contains($r['govde'], 'X-Unsent'), $r['kod'] . ' ' . $r['govde'] . ' ' . $r['hata']);
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'mail_gonderildi' WHERE id = $sid");
+$audOnce = (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_evrak_eml'")->fetchColumn();
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+ok('uç: message/rfc822 indirme, .eml adı = konu, nosniff + no-store + CSP sandbox', $r['hata'] === null && ($r['h']['content-type'] ?? '') === 'message/rfc822'
+    && str_contains($r['h']['content-disposition'] ?? '', 'attachment; filename="PKL-TC900001.10-AsyaDoc005-17.10.2026.eml"') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff'
+    && str_contains($r['h']['cache-control'] ?? '', 'no-store') && str_contains($r['h']['content-security-policy'] ?? '', 'sandbox'), json_encode([$r['hata'], $r['h'], $r['kod']]));
+[$ub, $ug] = array_pad(explode("\r\n\r\n", $r['govde'], 2), 2, '');
+ok('uç: X-Unsent; To = ayar + PO (packinglist YOK); Cc YOK; ek YOK; imza = oturumdaki kullanıcı', str_starts_with($r['govde'], 'X-Unsent: 1') && str_contains($ub, "To: customs@ornek.test, log@ornek.test\r\n")
+    && !str_contains($r['govde'], 'packinglist') && !preg_match('/^Cc:/mi', $ub) && !str_contains($r['govde'], 'multipart')
+    && str_ends_with((string)base64_decode((string)preg_replace('/\s+/', '', $ug)), "Asya Fresh\r\nKullanıcı 1"), $r['govde']);
+$aud = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_evrak_eml' ORDER BY id DESC")->fetchColumn();
+ok('uç: audit siparis_evrak_eml yalnız alıcı SAYISI (adres YAZILMAZ)', (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_evrak_eml'")->fetchColumn() === $audOnce + 1
+    && str_contains((string)$aud, '"alici":2') && !str_contains((string)$aud, '@'), (string)$aud);
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'evrak_gonderildi' WHERE id = $sid");
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+ok('uç: evrak takımı gönderilmiş (kapalı) sevkiyatta da indirilir', $r['hata'] === null && str_starts_with($r['govde'], 'X-Unsent: 1'));
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'iptal' WHERE id = $sid");
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+ok('uç: iptal sevkiyatta 409', $r['kod'] === 409, (string)$r['kod']);
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'mail_gonderildi' WHERE id = $sid");
+$r = uc(['sid' => $sid], 'siparis_eml.php', 'POST');
+ok('uç: GET dışı 405', $r['kod'] === 405 && !str_contains($r['govde'], 'X-Unsent'), (string)$r['kod']);
+$r = uc(['sid' => 999999], 'siparis_eml.php');
+ok('uç: olmayan sevkiyat 404', $r['kod'] === 404);
+$db->prepare("INSERT INTO siparis_sevkiyatlar (order_ref, tedarikci_no, durum, depo) VALUES ('TC900003.10', '', 'mail_gonderildi', 'DEPO1')")->execute();
+$sid3 = (int)$db->lastInsertId();
+$r = uc(['sid' => $sid3], 'siparis_eml.php');
+ok('uç: PKL / PO yoksa konu = order ref, Kime yalnız ayar', $r['hata'] === null && str_contains($r['h']['content-disposition'] ?? '', 'filename="TC900003.10.eml"') && str_contains($r['govde'], "To: customs@ornek.test\r\n"), json_encode([$r['hata'], $r['h']]));
+$DEPOLAR = ['DEPO2'];
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+ok('uç: başka depodaki sevkiyatın taslağı verilmez (forbidden)', $r['hata'] !== null && str_contains($r['hata'], 'forbidden') && !str_contains($r['govde'], 'X-Unsent'), (string)$r['hata']);
+$DEPOLAR = null;
+$PERMS = [];
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+ok('uç: siparis.read yoksa açılmaz', $r['hata'] !== null && !str_contains($r['govde'], 'X-Unsent'));
+$PERMS = ['siparis.read'];
+
+echo "\n=== 10. v411 ekran (siparis_view.php / siparis_ayarlar.php kaynağı) ===\n";
+$v = (string)file_get_contents($ROOT . '/siparis_view.php');
+$evB = (string)substr($v, (int)strpos($v, 'id="sipEvrakModal"'));
+ok('evrak penceresi: taslak siparis_evrak_mail_taslak() + ayar okuma', str_contains($v, 'siparis_evrak_mail_taslak($evrakAyar, $poEpostalar') && str_contains($v, 'siparis_evrak_mail_ayar_oku($pdo)'));
+ok('evrak penceresi: Outlook taslağı (siparis_eml.php?sid) + mailto + Kopyala + ZIP korunur', str_contains($evB, 'href="siparis_eml.php?sid=<?= $id ?>"') && str_contains($evB, 'siparis_pkl_mailto($evrakTaslak)')
+    && str_contains($evB, 'data-sip-kopyala') && str_contains($evB, 'siparis_zip.php?id=<?= $id ?>') && str_contains($evB, 'Taslak ek İÇERMEZ'));
+ok('evrak penceresi: ayar boşsa "Customs adresi tanımlı değil" + ayar bağlantısı yalnız siparis.delete ile', str_contains($evB, 'Customs adresi tanımlı değil') && str_contains($evB, "can_siparis('delete')") && str_contains($evB, 'siparis_ayarlar.php#evrak-mail'));
+$ay = (string)file_get_contents($ROOT . '/siparis_ayarlar.php');
+ok('ayarlar: #evrak-mail kartı, evrak_kime alanı, islem=evrak_mail_ayar', str_contains($ay, 'id="evrak-mail"') && str_contains($ay, 'name="evrak_kime"') && str_contains($ay, 'value="evrak_mail_ayar"'));
 
 siparis_test_bitir();
