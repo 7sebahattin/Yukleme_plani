@@ -124,7 +124,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         await popup.waitForTimeout(500);
         const baslik = await popup.locator('.syz thead th').allTextContents();
         ok(`[${w}] yazdırma: sütunlar sunucu sırasıyla (8 sabit + kalibre + Toplam palet/kasa)`, baslik.join('|') === KUCUK.kolonlar.map(k => k.l).join('|') && baslik[0] === 'Yükleme tarihi' && baslik[baslik.length - 1] === 'Toplam kasa', baslik.join('|'));
-        const IX = { urun: KI(KUCUK, 'urun'), palet: KI(KUCUK, 'palet'), kasa: KI(KUCUK, 'kasa'), kal: KALS.map(c => KI(KUCUK, c.k)), nw: ['tarih', 'siparis', 'tel', 'plaka'].map(k => KI(KUCUK, k)), sayi: KUCUK.kolonlar.map((k, i) => k.t === 'sayi' ? i : -1).filter(i => i >= 0) };
+        const IX = { urun: KI(KUCUK, 'urun'), palet: KI(KUCUK, 'palet'), kasa: KI(KUCUK, 'kasa'), kal: KALS.map(c => KI(KUCUK, c.k)), nw: ['tarih', 'siparis', 'tel'].map(k => KI(KUCUK, k)), sayi: KUCUK.kolonlar.map((k, i) => k.t === 'sayi' ? i : -1).filter(i => i >= 0) };
         const tbl = await popup.evaluate(IX => {
             const rows = Array.from(document.querySelectorAll('.syz tbody tr'));
             const sari = rows.filter(r => r.classList.contains('syz-gecmis'));
@@ -148,7 +148,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         ok(`[${w}] yazdırma: satır sayısı = adet + TOPLAM; toplam satırı tbody SONUNDA, tfoot YOK`, tbl.n === KUCUK.adet + 1 && tbl.sonToplam && tbl.sonIlk === 'TOPLAM' && tbl.tfoot === 0, JSON.stringify(tbl));
         ok(`[${w}] yazdırma: geçmiş tarihli satırlar sarı (rgb(255, 243, 176)) + tarihte ✓; diğerlerinde sarı/✓ yok`, tbl.sariSay === KUCUK.gecmis_say && tbl.sariSay >= 3 && tbl.sariBg === 'rgb(255, 243, 176)' && tbl.tumSariTik && tbl.duzBg !== 'rgb(255, 243, 176)' && tbl.tikOlmayan, JSON.stringify(tbl));
         ok(`[${w}] yazdırma: bugünün tarihi kalın, gün değişiminde üst çizgi, çok satırlı hücre <br>`, tbl.bugunKalin === '700' && tbl.gunCizgi >= 2 && (tbl.urunBr || !KUCUK.satirlar.some(r => r.h.some(h => /\n/.test(h)))), JSON.stringify([tbl.bugunKalin, tbl.gunCizgi, tbl.urunBr]));
-        ok(`[${w}] yazdırma: tarih/sipariş/tel/plaka nowrap; sayı sütunları (kalibre/palet/kasa) sağa; başlıklar ortalı ve kırılabilir`, tbl.nowrap && tbl.sag && tbl.thOrta && tbl.thKirilir, JSON.stringify([tbl.nowrap, tbl.sag, tbl.thOrta, tbl.thKirilir]));
+        ok(`[${w}] yazdırma: tarih/sipariş/tel nowrap (plaka kırılır); sayı sütunları (kalibre/palet/kasa) sağa; başlıklar ortalı ve kırılabilir`, tbl.nowrap && tbl.sag && tbl.thOrta && tbl.thKirilir, JSON.stringify([tbl.nowrap, tbl.sag, tbl.thOrta, tbl.thKirilir]));
         ok(`[${w}] yazdırma: boş kalibre hücresi "-"; TOPLAM satırında her kalibre sütununun toplamı`, tbl.kalTire && JSON.stringify(tbl.toplamKal) === JSON.stringify(KALS.map(c => String(KUCUK.toplam[c.k] == null ? '' : KUCUK.toplam[c.k]))), JSON.stringify([tbl.toplamKal, KUCUK.toplam]));
         ok(`[${w}] yazdırma: toplam palet/kasa satırı + meta + anahtar + kişisel veri notu`, tbl.toplamPalet === KUCUK.toplam.palet && tbl.toplamKasa === KUCUK.toplam.kasa && /Sarı zemin ve ✓ = çıkış tarihi geçmiş/.test(tbl.anahtar) && /sevkiyat/.test(tbl.meta) && /Basım:/.test(tbl.meta)
             && /Geçmiş: /.test(tbl.meta) && tbl.notlar.length === (KUCUK.notlar || []).length && tbl.colgroup === KUCUK.kolonlar.length, JSON.stringify([tbl.toplamPalet, tbl.toplamKasa, tbl.anahtar, tbl.meta, tbl.notlar]));
@@ -375,7 +375,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         const k = await page.evaluate(() => window.__kart[0]);
         ok('[1280] kart: 440px, ×2, beyaz zemin', k.w === 440 && k.olcek === 2 && k.bg === 'rgb(255, 255, 255)', JSON.stringify([k.w, k.olcek, k.bg]));
         ok('[1280] kart: başlıklar sahibin sırasıyla (10 alan + Ürün/Kalibre/Palet-Koli + Toplam)', k.th.join('|') === 'Parti No|Yükleme tarihi|Sipariş No|Navlun No|Nakliyeci|Plakalar|Şoför adı|Şoför telefonu|Yurt içi gümrük|Alıcı Ülke|Ürün|Kalibre|Palet/Koli|Toplam', k.th.join('|'));
-        ok('[1280] kart: başlıklar kalın (≥700), veriler ince (≤400)', k.thW.every(x => x >= 700) && k.tdW.every(x => x <= 400), JSON.stringify([k.thW, k.tdW]));
+        ok('[1280] kart: başlıklar kalın (≥700), veriler belirgin (≥600)', k.thW.every(x => x >= 700) && k.tdW.every(x => x >= 600), JSON.stringify([k.thW, k.tdW]));
         ok('[1280] kart: değerler sunucu yanıtıyla aynı (şoför, telefon, gümrük dahil)', JSON.stringify(k.alan) === JSON.stringify(WP.alanlar.map(a => [a.k, a.deger])), JSON.stringify(k.alan));
         ok('[1280] kart: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
         // 3) çift tıklama koruması: menü kapalıyken gizli düğmede iki ardışık click()
