@@ -114,6 +114,11 @@ $mailPartiler = (array)((siparis_beyan_parti_haritasi($pdo, [$id])[$id] ?? [])['
 $asyaDoc = preg_match('~AsyaDoc\d+~i', $mailPklAd, $mm) ? $mm[0] : '';
 // v383: mail taslağı (Kime / Bilgi / konu / gövde) — mailto ve ekli .eml AYNI taslaktan
 $mailTaslak = siparis_pkl_mail_taslak($poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username']));
+// v411: evrak takımı mail taslağı (EK YOK) — Kime = ayar (hks_kv) + PO'daki packinglist… olmayan adres; yalnız evrak penceresi için
+$evrakAyar = (string)$sev['durum'] === 'mail_gonderildi' ? siparis_evrak_mail_ayar_oku($pdo)['kime'] : [];
+$evrakTaslak = (string)$sev['durum'] === 'mail_gonderildi'
+    ? siparis_evrak_mail_taslak($evrakAyar, $poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username'])) : null;
+$evrakAyarBos = $evrakTaslak !== null && $evrakAyar === [];
 $pklHazir = (int)$sev['var_pkl'] === 1;
 ?>
 <div class="sip-mod sip-view">
@@ -697,6 +702,20 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           <?php if ((string)$sev['mail_gonderildi_at'] !== ''): ?><p class="sip-soluk">Mail gönderildi: <?= h(sipui_zaman((string)$sev['mail_gonderildi_at'])) ?></p><?php endif; ?>
           <?php if ($mailPklAd !== ''): ?><p class="sip-evrak-ad"><span class="sip-soluk">Evrak takımı dosya adı:</span> <strong><?= h($asyaDoc !== '' ? $asyaDoc : $mailPklAd) ?></strong><?php if ($asyaDoc !== ''): ?><br><span class="sip-soluk"><?= h($mailPklAd) ?></span><?php endif; ?></p><?php endif; ?>
           <?php if ($mailPartiler): ?><p class="sip-soluk">Parti: <?= h(implode(' / ', array_map('strval', $mailPartiler))) ?></p><?php endif; ?>
+          <?php if ($evrakTaslak !== null): ?>
+            <div class="sip-mail-alici"><span class="sip-soluk">Evrak takımı mail adresi:</span>
+              <?php foreach ($evrakTaslak['kime'] as $em): ?>
+                <div class="sip-mail-satir"><span class="sip-mail-rol">Kime</span> <code><?= h($em) ?></code> <button type="button" class="btn btn-sm" data-sip-kopyala="<?= h($em) ?>">Kopyala</button></div>
+              <?php endforeach; ?>
+              <?php if ($evrakAyarBos): ?><p class="sip-soluk sip-mail-ipucu">Customs adresi tanımlı değil — <?php if (can_siparis('delete')): ?><a href="siparis_ayarlar.php#evrak-mail">Sipariş ayarları › Evrak takımı mail alıcıları</a><?php else: ?>Sipariş ayarları › Evrak takımı mail alıcıları<?php endif; ?></p><?php endif; ?>
+              <div class="sip-mail-konu"><span class="sip-soluk">Konu:</span> <?= h($evrakTaslak['konu']) ?></div>
+              <div class="sip-mail-eylem">
+                <a class="btn btn-sm btn-primary" href="siparis_eml.php?sid=<?= $id ?>" data-sip-evrak-eml>📧 Outlook taslağını indir</a>
+                <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($evrakTaslak)) ?>">✉ Mail programını aç</a>
+              </div>
+              <p class="sip-soluk sip-mail-ipucu">Taslak ek İÇERMEZ — evrak takımını (ZIP / belgeler) Outlook'ta kendiniz ekleyin. "Outlook taslağını indir" Kime, konu ve metinle hazır bir taslak (.eml) indirir.</p>
+            </div>
+          <?php endif; ?>
           <?php if ($belgeler): ?><div class="sip-mail-eylem"><a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a></div><?php endif; ?>
           <label class="sip-onay-satir"><input type="checkbox" name="onay_evrak" value="1" required data-sip-evrak-onay> Evrak takımını müşteriye gönderdim</label>
         </div>

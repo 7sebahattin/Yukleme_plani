@@ -1029,3 +1029,118 @@ function siparis_pkl_eml(array $t, string $ekAd, string $ekIcerik, ?int $zaman =
     $b[] = '';
     return implode("\r\n", $b);
 }
+
+// ── EVRAK TAKIMI MAİL TASLAĞI (v411) ────────────────────────────────────
+// "Evrak takımı gönderildi" penceresi için PKL taslağının (v383) eşi — EK YOK: evrak takımını (ZIP / belgeler) kullanıcı
+// Outlook'ta kendisi ekler. Kime = ayardaki sabit adres(ler) (ör. customs) + PO'daki "packinglist…" OLMAYAN adres(ler); Bilgi YOK.
+// Sabit adresler repoya GİRMEZ (siparis_gate_static_smoke e-posta literali arar): hks_kv 'siparis_evrak_mail_ayar' (şemasız).
+// Mail modülüne (MAIL_MASTER_KEY) bağlı DEĞİL; hks_kv yoksa/okunamazsa ayar boş sayılır (fail soft).
+
+const SIPARIS_EVRAK_MAIL_KV = 'siparis_evrak_mail_ayar';
+const SIPARIS_EVRAK_MAIL_MAX = 10;
+
+/** KV tablo adı — siparis_mail_kv_tablo() emsali (HKS_TABLO_ON önekli). */
+function siparis_evrak_mail_kv_tablo(): string
+{
+    $on = defined('HKS_TABLO_ON') ? (string)HKS_TABLO_ON : 'hks_';
+    if (!preg_match('/^[a-zA-Z0-9_]+$/D', $on)) throw new RuntimeException('Geçersiz KV tablo adı.');
+    return $on . 'kv';
+}
+
+/** hks_kv tablosu var mı (ayar kartı yalnız o zaman çizilir). */
+function siparis_evrak_mail_kv_hazir(PDO $pdo): bool
+{
+    try {
+        $pdo->query('SELECT 1 FROM `' . siparis_evrak_mail_kv_tablo() . '` LIMIT 0');
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** @return array{kime:list<string>} — tablo yok / bozuk JSON / hata → boş liste. */
+function siparis_evrak_mail_ayar_oku(PDO $pdo): array
+{
+    try {
+        $st = $pdo->prepare('SELECT deger FROM `' . siparis_evrak_mail_kv_tablo() . '` WHERE anahtar = ?');
+        $st->execute([SIPARIS_EVRAK_MAIL_KV]);
+        $j = json_decode((string)($st->fetchColumn() ?: ''), true);
+    } catch (Throwable $e) {
+        return ['kime' => []];
+    }
+    $l = [];
+    foreach ((array)(is_array($j) ? ($j['kime'] ?? []) : []) as $a) {
+        $a = strtolower(trim((string)$a));
+        if ($a !== '' && filter_var($a, FILTER_VALIDATE_EMAIL) !== false) $l[$a] = true;
+    }
+    return ['kime' => array_slice(array_keys($l), 0, SIPARIS_EVRAK_MAIL_MAX)];
+}
+
+/**
+ * Ayarı doğrular ve yazar (satır / virgül / noktalı virgül / boşluk ayrımlı metin ya da dizi). Küçük harf, sıra korunarak
+ * tekilleştirilir, ≤ 10; geçersiz e-posta REDDEDİLİR; boş liste = temizle. Audit yalnız SAYI yazar (adres YAZILMAZ).
+ * @return array{ok:bool,hata?:string}
+ */
+function siparis_evrak_mail_ayar_kaydet(PDO $pdo, string|array $girdi, int $uid): array
+{
+    if (!siparis_evrak_mail_kv_hazir($pdo)) return ['ok' => false, 'hata' => 'Ayar tablosu (hks_kv) yok; evrak takımı mail alıcıları kaydedilemedi.'];
+    $parca = is_array($girdi) ? array_map('strval', $girdi) : (preg_split('/[\s,;]+/u', $girdi) ?: []);
+    $l = [];
+    foreach ($parca as $a) {
+        $a = strtolower(trim($a));
+        if ($a === '') continue;
+        if (strlen($a) > 255 || filter_var($a, FILTER_VALIDATE_EMAIL) === false) return ['ok' => false, 'hata' => 'Geçersiz e-posta adresi: ' . siparis_kirp($a, 60)];
+        $l[$a] = true;
+    }
+    if (count($l) > SIPARIS_EVRAK_MAIL_MAX) return ['ok' => false, 'hata' => 'En çok ' . SIPARIS_EVRAK_MAIL_MAX . ' adres girilebilir.'];
+    try {
+        $pdo->prepare('REPLACE INTO `' . siparis_evrak_mail_kv_tablo() . '` (anahtar, deger) VALUES (?, ?)')
+            ->execute([SIPARIS_EVRAK_MAIL_KV, siparis_json(['kime' => array_keys($l)])]);
+    } catch (Throwable $e) {
+        error_log('[siparis_pkl] evrak mail ayarı yazılamadı: ' . get_class($e));
+        return ['ok' => false, 'hata' => 'Ayar kaydedilemedi (hks_kv tablosu yazılamadı).'];
+    }
+    siparis_audit('siparis_evrak_mail_ayar', null, null, ['adres_sayisi' => count($l)], $uid);
+    return ['ok' => true];
+}
+
+/**
+ * Evrak takımı mail taslağı (saf, DB yok). Kime = ayar adresleri önce, sonra PO'daki "packinglist…" OLMAYAN adresler
+ * (packinglist adresi HİÇ girmez — PKL taslağındaki "Kime boşsa CC Kime'ye geçer" kuralı burada YOK); büyük/küçük harf
+ * duyarsız tekil; geçersiz atlanır. Konu = PKL taslağıyla AYNI (siparis_pkl_mail_taslak). Bilgi her zaman boş.
+ * @return array{kime:list<string>,bilgi:list<string>,konu:string,govde:string}
+ */
+function siparis_evrak_mail_taslak(array $ayarKime, array $poEpostalar, string $pklAd, string $orderRef, string $imzaAd): array
+{
+    $kime = []; $gor = [];
+    foreach (array_merge(array_values($ayarKime), array_values($poEpostalar)) as $i => $e) {
+        $e = trim((string)$e);
+        if ($e === '' || filter_var($e, FILTER_VALIDATE_EMAIL) === false) continue;
+        $k = strtolower($e);
+        if (isset($gor[$k]) || ($i >= count($ayarKime) && str_starts_with($k, 'packinglist'))) continue;
+        $gor[$k] = true;
+        $kime[] = $e;
+    }
+    $konu = siparis_pkl_mail_taslak([], $pklAd, $orderRef, '')['konu'];
+    $ad = trim((string)preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $imzaAd));
+    $govde = "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh" . ($ad !== '' ? "\n" . $ad : '');
+    return ['kime' => $kime, 'bilgi' => [], 'konu' => $konu, 'govde' => $govde];
+}
+
+/** EK'SİZ .eml taslağı (tek parça text/plain, base64). X-Unsent: 1; From YOK; Kime boşsa To başlığı da yok. */
+function siparis_evrak_eml(array $t, ?int $zaman = null): string
+{
+    $konu = (string)$t['konu'];
+    $b = ['X-Unsent: 1'];
+    if ($t['kime']) $b[] = 'To: ' . implode(', ', $t['kime']);
+    if ($t['bilgi']) $b[] = 'Cc: ' . implode(', ', $t['bilgi']);
+    $b[] = 'Subject: ' . (preg_match('/[^\x20-\x7E]/', $konu) ? '=?UTF-8?B?' . base64_encode($konu) . '?=' : $konu);
+    $b[] = 'Date: ' . date(DATE_RFC2822, $zaman ?? time());
+    $b[] = 'MIME-Version: 1.0';
+    $b[] = 'Content-Type: text/plain; charset=UTF-8';
+    $b[] = 'Content-Transfer-Encoding: base64';
+    $b[] = '';
+    $b[] = rtrim(chunk_split(base64_encode(str_replace("\n", "\r\n", (string)$t['govde'])), 76, "\r\n"));
+    $b[] = '';
+    return implode("\r\n", $b);
+}

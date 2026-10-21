@@ -7,12 +7,15 @@
 // Audit'e profil DEĞERLERİ (üretici adı, GGN, laboratuvar) yazılmaz — kütüphane yalnız id + alan adları yazar.
 // v378: "📧 Mail sorgu ayarları" (#mail) — posta kutuları + tür başına gönderen adresleri (hks_kv; adresler repoya GİRMEZ).
 //        Kapı: siparis.delete + Mail Merkezi yönetimi (siparis_mail_ayar_yetkisi()); audit yalnız SAYILAR yazar.
+// v411: "📦 Evrak takımı mail alıcıları" (#evrak-mail) — evrak taslağında Kime'nin ilk adresleri (hks_kv; adresler repoya GİRMEZ).
+//        Görüntüleme siparis.read, kaydetme siparis.delete; audit yalnız adres SAYISI.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_mail.php';
+require_once __DIR__ . '/config/siparis_pkl.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -63,6 +66,12 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Mail sorgu ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayarlar kaydedilemedi.'));
         $git('#mail');
     }
+    if ($islem === 'evrak_mail_ayar') {
+        require_siparis('delete');
+        $r = siparis_evrak_mail_ayar_kaydet($pdo, (string)($_POST['evrak_kime'] ?? ''), $uid);
+        set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Evrak takımı mail alıcıları kaydedildi.' : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
+        $git('#evrak-mail');
+    }
     if ($islem === 'profil_sil') {
         require_siparis('delete');
         $ok = siparis_profil_sil($pdo, (int)($_POST['profil_id'] ?? 0), $uid);
@@ -99,6 +108,9 @@ $mailAyarYetki = siparis_mail_ayar_yetkisi();
 $mailHazir = $mailAyarYetki && siparis_mail_hazir($pdo);
 $mailAyar = $mailHazir ? siparis_mail_ayar_oku($pdo) : [];
 $mailHesaplar = $mailHazir ? siparis_mail_hesaplar($pdo) : [];
+// v411 evrak takımı mail alıcıları (hks_kv yoksa kart çizilmez)
+$evrakKvHazir = siparis_evrak_mail_kv_hazir($pdo);
+$evrakKime = $evrakKvHazir ? siparis_evrak_mail_ayar_oku($pdo)['kime'] : [];
 $profilVeri = function (array $p): array {
     $v = ['profil_id' => (int)$p['id'], '_yazi:profil_baslik' => 'Profili düzenle'];
     foreach (array_keys(siparis_profil_alanlari()) as $k) $v[$k] = (string)($p[$k] ?? '');
@@ -161,6 +173,27 @@ $profilVeri = function (array $p): array {
         <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
       </form>
     <?php endif; ?>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($evrakKvHazir): ?>
+  <section class="card" id="evrak-mail" aria-labelledby="sipEvrakMailBas">
+    <div class="card-head"><h2 id="sipEvrakMailBas">📦 Evrak takımı mail alıcıları</h2><span class="sip-soluk">En çok <?= (int)SIPARIS_EVRAK_MAIL_MAX ?></span></div>
+    <p class="muted">Evrak takımı mail taslağında Kime'ye ilk sırada eklenir (ör. gümrük/customs adresi). PO'daki Packing List adresi (packinglist… hariç) ayrıca eklenir. En çok <?= (int)SIPARIS_EVRAK_MAIL_MAX ?>.</p>
+    <?php if ($sil): ?>
+      <form method="post" action="siparis_ayarlar.php#evrak-mail" class="sip-form" data-sip-tek>
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="evrak_mail_ayar">
+        <label>Kime adresleri (satır başına bir adres)
+          <textarea name="evrak_kime" rows="3" maxlength="2600" autocomplete="off" spellcheck="false"><?= h(implode("\n", $evrakKime)) ?></textarea>
+        </label>
+        <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
+      </form>
+    <?php elseif ($evrakKime): ?>
+      <ul class="sip-evrak-mail-liste"><?php foreach ($evrakKime as $em): ?><li><code><?= h($em) ?></code></li><?php endforeach; ?></ul>
+    <?php else: ?>
+      <p class="sip-soluk">Tanımlı adres yok.</p>
+    <?php endif; ?>
+    <?php if (!$sil): ?><p class="sip-bilgi" role="note">Adresleri değiştirmek için siparis.delete yetkisi gerekir.</p><?php endif; ?>
   </section>
   <?php endif; ?>
 

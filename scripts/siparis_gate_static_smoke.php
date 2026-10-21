@@ -30,7 +30,7 @@ $core = oku('config/siparis_core.php'); $migrate = oku('migrate.php'); $auth = o
 $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
-$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_kaydet.php',
+$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_kaydet.php',
              'siparis_mail.php', 'siparis_odeme.php', 'siparis_odemeler.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
@@ -73,7 +73,9 @@ $MUT = ['siparis_alan_elle', 'siparis_alan_kilidi_kaldir', 'siparis_catisma_coz'
         // v378: siparis_yukle.php döngüsü ortak fonksiyona taşındı (dosyada siparis_dosya_kaydet( artık geçmez → bu ad olmadan CSRF denetimi sessizce düşerdi)
         'siparis_dosya_yukle_isle', 'siparis_mail_baslat', 'siparis_mail_adim', 'siparis_mail_vazgec', 'siparis_mail_ayar_kaydet',
         // v400: tek seferlik veri geçişi (UPDATE yazar) — yalnız config/siparis_evrak.php + migrate.php çağırır
-        'siparis_evrak_gecis_uygula'];
+        'siparis_evrak_gecis_uygula',
+        // v411: evrak takımı mail alıcıları (hks_kv) — yalnız siparis_ayarlar.php POST'u
+        'siparis_evrak_mail_ayar_kaydet'];
 $mutRe = '/\b(' . implode('|', $MUT) . ')\s*\(/';
 foreach ($sayfalar as $f) {
     $k = kod_oku($f);
@@ -84,7 +86,7 @@ foreach ($sayfalar as $f) {
     ok("$f: mutasyon POST'a bağlı", (bool)preg_match("/REQUEST_METHOD'\]\s*(!==|===)\s*'POST'/", $k));
     ok("$f: yazma kapısı require_siparis('write'|'delete'|'match') içeriyor", (bool)preg_match("/require_siparis\('(write|delete|match)'\)|can_siparis\('(write|delete|match)'\)/", $k));
 }
-foreach (['siparis_dosya.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php', 'siparis_odemeler.php'] as $f) {
+foreach (['siparis_dosya.php', 'siparis_eml.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php', 'siparis_odemeler.php'] as $f) {
     $k = kod_oku($f);
     if ($k === '') continue;
     // GET-only görünüm sayfaları (POST'u siparis_kaydet/… uçlarına gider): ayarlar sayfası profil/sayaç formu içerebilir → muaf.
@@ -170,13 +172,24 @@ $epostaRe = '/[a-z0-9._%+-]+@(?!ornek\.test\b)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]
 foreach (['config/siparis_mail.php', 'siparis_mail.php', 'siparisler.php', 'siparis_ayarlar.php', '_siparis_ortak.php', 'assets/siparis.js', 'assets/siparis.css', 'scripts/siparis_mail_smoke.php', 'scripts/_siparis_mail_test_lib.php', 'scripts/siparis_ui_render.php',
     'siparis_yazdir.php', 'config/siparis_yazdir.php', 'assets/siparis_yazdir.js', 'scripts/siparis_yazdir_smoke.php', 'scripts/siparis_yazdir_smoke.js',
     'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js',
-    'siparis_cari.php', 'siparis_odemeler.php', 'config/siparis_cari.php', 'scripts/siparis_cari_smoke.php'] as $f) {
+    'siparis_cari.php', 'siparis_odemeler.php', 'config/siparis_cari.php', 'scripts/siparis_cari_smoke.php',
+    'siparis_eml.php', 'config/siparis_pkl.php', 'siparis_view.php', 'scripts/siparis_pkl_mail_smoke.php'] as $f) {
     $t = str_ends_with($f, '.php') ? kod_oku($f) : oku($f);
     ok("$f: gerçek e-posta adresi YOK (yalnız @ornek.test)", $t !== '' && preg_match($epostaRe, $t, $em2) === 0, $em2[0] ?? '');
 }
 ok('siparis_ayarlar.php: "X adına Y" yönlendirmesi + mail_ayar POST (siparis.delete kapısı)', str_contains(oku('siparis_ayarlar.php'), "Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin.") && str_contains(oku('siparis_ayarlar.php'), "\$islem === 'mail_ayar'") && (bool)preg_match("/'mail_ayar'\) \{\s*require_siparis\('delete'\)/", oku('siparis_ayarlar.php')));
 ok('belge kökeni rozeti: siparis_view.php + siparis_belge.php kaynak=mail', str_contains(oku('siparis_view.php'), "\$b['kaynak'] === 'mail'") && str_contains(oku('siparis_belge.php'), "\$b['kaynak'] === 'mail'"));
 ok('siparis_bag_yaz olay metni "(mailden)"', str_contains($esl, "' (mailden)'"));
+
+echo "\n=== v411: Evrak takımı mail taslağı (siparis_eml.php) ===\n";
+$emlUc = kod_oku('siparis_eml.php'); $ayr = kod_oku('siparis_ayarlar.php');
+ok('uç adı TEK alt çizgili: siparis_eml.php; sw.js bypass regex\'i kapsar; config/ altında aynı ad YOK (v385 basename kuralı)', is_file($ROOT . '/siparis_eml.php') && !is_file($ROOT . '/config/siparis_eml.php') && $swKural !== '' && preg_match($swPcre, '/siparis_eml.php') === 1, $swPcre);
+ok('uç: require_siparis(\'read\') + siparis_no_store() + session_write_close() + GET dışı 405 + depo kapısı', str_contains($emlUc, "require_siparis('read');") && str_contains($emlUc, 'siparis_no_store();') && str_contains($emlUc, 'session_write_close();')
+    && (bool)preg_match("/REQUEST_METHOD'\] \?\? 'GET'\) !== 'GET'/", $emlUc) && str_contains($emlUc, '405') && str_contains($emlUc, 'siparis_gorunur($sev)'));
+ok('uç: nosniff + no-store + CSP sandbox + message/rfc822; CSRF/mutasyon yok', str_contains($emlUc, 'nosniff') && str_contains($emlUc, 'private, no-store') && str_contains($emlUc, "sandbox; default-src 'none'") && str_contains($emlUc, 'message/rfc822') && !str_contains($emlUc, 'csrf_check(') && preg_match($mutRe, $emlUc) === 0);
+ok('uç: audit siparis_evrak_eml yalnız alıcı SAYISI', (bool)preg_match("/audit_log_event\('siparis_evrak_eml', 'siparis', \(int\)\\\$sev\['id'\], null, \['alici' => count\(\\\$taslak\['kime'\]\)\]\)/", $emlUc));
+ok('siparis_ayarlar.php: evrak_mail_ayar POST require_siparis(\'delete\') ile', (bool)preg_match("/'evrak_mail_ayar'\) \{\s*require_siparis\('delete'\)/", $ayr));
+ok('evrak taslağı ayarı şemasız (config/siparis_pkl.php CREATE/ALTER TABLE yok; anahtar siparis_evrak_mail_ayar)', !preg_match('/\b(CREATE|ALTER|DROP)\s+TABLE\b/i', $pkl) && str_contains($pkl, "'siparis_evrak_mail_ayar'"));
 
 echo "\n=== v382: Açık Sevkiyatlar yazdırma ===\n";
 $yzUc = kod_oku('siparis_yazdir.php'); $yzCfg = kod_oku('config/siparis_yazdir.php'); $yzJs = oku('assets/siparis_yazdir.js');

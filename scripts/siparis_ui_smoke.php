@@ -273,6 +273,10 @@ ok('v400 evrak bekleyen (mail gönderildi): Evrak düğmesi VAR, Mail düğmesi 
     && str_contains($r['html'], 'Adım 6/7') && preg_match('~<li class="sip-step sip-step--sonraki">\s*<span class="sip-step-nokta" aria-hidden="true">7</span>\s*<span class="sip-step-et">📦 Evrak takımı~', $r['html']) === 1);
 ok('v400 evrak penceresi: onay_evrak (required) + gönder pasif + CSRF + hedef/islem alanları', str_contains($r['html'], 'id="sipEvrakModal"') && preg_match('~name="onay_evrak" value="1" required data-sip-evrak-onay~', $r['html']) === 1 && str_contains($r['html'], 'data-sip-evrak-gonder disabled>📦 Süreci kapat')
     && preg_match('~<form method="post" action="siparis_kaydet.php" data-sip-tek data-sip-evrak-form>.*?name="hedef" value="evrak_gonderildi".*?name="csrf"~s', $r['html']) === 1);
+$evM = (string)substr($r['html'], (int)strpos($r['html'], 'id="sipEvrakModal"'), 6000);
+ok('v411 evrak penceresi: Outlook taslağı (siparis_eml.php?sid) + mailto (Kime boş: mailto:?subject=order ref) + ek YOK ipucu + onay kutusu korunur', str_contains($evM, 'href="siparis_eml.php?sid=' . $ID['s41'] . '" data-sip-evrak-eml>📧 Outlook taslağını indir</a>')
+    && str_contains($evM, 'href="mailto:?subject=TC900041.10&amp;body=Hi%2C%0D%0ADOCs%20are%20attached.') && str_contains($evM, 'Taslak ek İÇERMEZ') && str_contains($evM, 'name="onay_evrak"'), $evM);
+ok('v411 evrak penceresi: ayar (hks_kv) yokken "Customs adresi tanımlı değil" notu, Kime satırı yok', str_contains($evM, 'Customs adresi tanımlı değil') && !str_contains($evM, '<span class="sip-mail-rol">Kime</span>'));
 ok('v400 evrak bekleyen: durum radyosunda ne mail_gonderildi ne evrak_gonderildi; mail penceresi yok', !str_contains($r['html'], 'name="hedef" value="mail_gonderildi" required') && !str_contains($r['html'], 'name="hedef" value="evrak_gonderildi" required') && !str_contains($r['html'], 'id="sipMailModal"'));
 $r = sayfa('siparis_view.php', ['id' => $ID['s1']]);
 ok('v400 pkl_hazir (s1): Mail düğmesi VAR, Evrak düğmesi/penceresi YOK, "Adım 5/7", Mail penceresi gönder metni', str_contains($r['html'], 'data-sip-ac="sipMailModal"') && !str_contains($r['html'], 'sipEvrakModal') && str_contains($r['html'], 'Adım 5/7') && str_contains($r['html'], 'data-sip-mail-gonder disabled>✅ Mail gönderildi</button>'));
@@ -536,6 +540,26 @@ rol($OPER, false, 5); $tok = csrf();
 $x = $A(['islem' => 'sayac', 'ad' => 'palet_2026', 'deger' => '5', 'anladim' => '1']);
 ok('operatör sayaç düzeltemez', $x['hata'] !== null && siparis_sayac_oku($db, 'palet_2026') === 100);
 rol($ADMIN, true); $tok = csrf();
+// v411: evrak takımı mail alıcıları (hks_kv) — kart yalnız tablo varken; kaydetme siparis.delete
+ok('v411 ayarlar: hks_kv yokken #evrak-mail kartı çizilmez', !str_contains(sayfa('siparis_ayarlar.php')['html'], 'id="evrak-mail"'));
+$db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+$x = $A(['islem' => 'evrak_mail_ayar', 'evrak_kime' => "customs@ornek.test\ngecersiz"]);
+ok('v411 ayarlar: geçersiz adres reddedilir (flash hata, #evrak-mail)', ($x['flash']['type'] ?? '') === 'error' && str_contains((string)$x['git'], '#evrak-mail') && siparis_evrak_mail_ayar_oku($db)['kime'] === [], json_encode([$x['flash'], $x['git']]));
+$x = $A(['islem' => 'evrak_mail_ayar', 'evrak_kime' => "Customs@ornek.test\n"]);
+ok('v411 ayarlar: kaydedildi + audit yalnız sayı', ($x['flash']['type'] ?? '') === 'success' && siparis_evrak_mail_ayar_oku($db)['kime'] === ['customs@ornek.test']
+    && say($db, 'audit_log', "action = 'siparis_evrak_mail_ayar' AND new_values NOT LIKE '%@%'") === 1, json_encode($x['flash']));
+$x = sayfa('siparis_ayarlar.php');
+ok('v411 ayarlar: kart + textarea kayıtlı adresle', temiz($x) && html_dengeli($x['html']) === null && str_contains($x['html'], 'id="evrak-mail"') && (bool)preg_match('~name="evrak_kime"[^>]*>customs@ornek\.test</textarea>~', $x['html']));
+$x = sayfa('siparis_view.php', ['id' => $ID['s41']]);
+$evM = (string)substr($x['html'], (int)strpos($x['html'], 'id="sipEvrakModal"'), 6000);
+ok('v411 evrak penceresi: ayardaki adres Kime satırı + Kopyala, mailto Kime\'de; "tanımlı değil" notu yok', temiz($x) && str_contains($evM, '<span class="sip-mail-rol">Kime</span> <code>customs@ornek.test</code> <button type="button" class="btn btn-sm" data-sip-kopyala="customs@ornek.test">')
+    && str_contains($evM, 'href="mailto:customs@ornek.test?subject=TC900041.10') && !str_contains($evM, 'Customs adresi tanımlı değil'), $evM);
+rol($OPER, false, 5); $tok = csrf();
+$x = $A(['islem' => 'evrak_mail_ayar', 'evrak_kime' => '']);
+ok('v411 operatör evrak mail alıcılarını değiştiremez (siparis.delete), kart salt okunur', $x['hata'] !== null && siparis_evrak_mail_ayar_oku($db)['kime'] === ['customs@ornek.test']
+    && !str_contains(sayfa('siparis_ayarlar.php')['html'], 'name="evrak_kime"') && str_contains(sayfa('siparis_ayarlar.php')['html'], '<code>customs@ornek.test</code>'));
+rol($ADMIN, true); $tok = csrf();
+$db->exec('DROP TABLE hks_kv');
 
 echo "\n=== 11. Yükleme ucu ===\n";
 $tmp = sys_get_temp_dir() . '/sip_up_' . getmypid(); @mkdir($tmp);
