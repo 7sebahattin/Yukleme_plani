@@ -121,7 +121,9 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
   <div class="page-head sip-head">
     <div class="sip-head-sol">
       <a class="btn btn-geri" href="siparisler.php">← Siparişler</a>
-      <h1 class="sip-h1"><?= h((string)$sev['order_ref']) ?> <?= siparis_durum_badge((string)$sev['durum']) ?></h1>
+      <h1 class="sip-h1"><?= h((string)$sev['order_ref']) ?> <?php if ((string)$sev['durum'] === 'mail_gonderildi' && $mailPklAd !== ''): ?>
+        <span class="sip-badge sip-badge--<?= h(siparis_durumlar()['mail_gonderildi']['css']) ?> sip-badge--pkl" title="Mail gönderildi"><?= siparis_durumlar()['mail_gonderildi']['ikon'] ?> <?= preg_replace('~([-_])~', '$1<wbr>', h($mailPklAd)) ?><?php foreach ($mailPartiler as $mp): ?> · Parti <?= h((string)$mp) ?><?php endforeach; ?></span>
+      <?php else: ?><?= siparis_durum_badge((string)$sev['durum']) ?><?php endif; ?></h1>
       <p class="sip-alt-satir muted">
         <?php if ((string)$sev['tur_no'] !== ''): ?>Tur <?= h((string)$sev['tur_no']) ?> · <?php endif; ?>
         <?php if ($sev['cw_hafta'] !== null): ?>CW<?= (int)$sev['cw_hafta'] ?><?= $sev['cw_yil'] !== null ? '/' . (int)$sev['cw_yil'] : '' ?> · <?php endif; ?>
@@ -167,13 +169,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       ?>
         <li class="sip-step<?= $bitti ? ' sip-step--bitti' : '' ?><?= $suAn ? ' sip-step--su-an' : '' ?><?= $sonraki ? ' sip-step--sonraki' : '' ?>"<?= $suAn ? ' aria-current="step"' : '' ?>>
           <span class="sip-step-nokta" aria-hidden="true"><?= $bitti || ($suAn && $kapali) ? '✓' : (int)$dv['sira'] ?></span>
-          <?php $pklAdim = $dk === 'mail_gonderildi' && ($bitti || $suAn) && $mailPklAd !== ''; ?>
-          <?php if ($pklAdim): ?>
-            <span class="sip-step-et sip-step-et--pkl"><?= h($dv['ikon']) ?> <?= preg_replace('~([-_])~', '$1<wbr>', h($mailPklAd)) ?></span>
-            <?php foreach ($mailPartiler as $mp): ?><span class="sip-step-parti">Parti <?= h((string)$mp) ?></span><?php endforeach; ?>
-          <?php else: ?>
           <span class="sip-step-et"><?= h($dv['ikon'] . ' ' . $dv['etiket']) ?></span>
-          <?php endif; ?>
           <span class="sip-sr"><?= $bitti ? ' (tamamlandı)' : ($suAn ? ' (şu anki adım)' : ($sonraki ? ' (sıradaki adım)' : '')) ?></span>
           <?php if ($zaman): ?><span class="sip-step-zaman"><?= h(sipui_zaman((string)$zaman)) ?></span><?php endif; ?>
         </li>
