@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v410');
+    define('APP_SURUM', 'v411');
 }
 
 // --- HTML kaçışı ---
@@ -400,7 +400,8 @@ function nav_aktif_anahtar(): ?string {
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
                                'hesap_personel.php'], true);
     $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true);
-    $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'urun_siparis.php'], true);
+    $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php'], true);
+    $a_usip  = $cur === 'urun_siparis.php';   // v411: Ürün Siparişleri kendi bölümü ("Siparişler")
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
@@ -437,7 +438,7 @@ function nav_aktif_anahtar(): ?string {
     foreach ([
         'home' => $a_home, 'records' => $a_yuk, 'cikma' => $a_cik, 'beyan' => $a_beyan,
         'kantar' => $a_kant, 'hks' => $a_hks, 'rapor' => $a_rep, 'mstok' => $a_mstok,
-        'hesap' => $a_hes, 'mail' => $a_mail, 'siparis' => $a_sip, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
+        'hesap' => $a_hes, 'mail' => $a_mail, 'siparis' => $a_sip, 'usip' => $a_usip, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
         'roles' => $a_rol, 'audit' => $a_aud, 'backup' => $a_bkp,
     ] as $anahtar => $aktif) {
         if ($aktif) return $anahtar;
@@ -488,6 +489,7 @@ function render_desktop_sidebar(string $base): void {
     $a_hes   = $ak === 'hesap';
     $a_mail  = $ak === 'mail';
     $a_sip   = $ak === 'siparis';
+    $a_usip  = $ak === 'usip';
     $a_rep   = $ak === 'rapor';
     $a_ptak  = $ak === 'ptak';
     $a_def   = $ak === 'defs';
@@ -531,6 +533,7 @@ function render_desktop_sidebar(string $base): void {
         <div class="sidebar-section">Operasyon</div>
         <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
         <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
+        <?php if ($p_sip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
@@ -656,6 +659,7 @@ function nav_alt_sayfalar(): array {
     return [
         'home'    => ['href' => 'index.php',            'etiket' => 'Ana Sayfa',            'kisa' => 'Ana Sayfa',  'dar' => '',        'renk' => '#232d3e', 'grup' => '',          'ikon' => 'assets/nav-icons/home.svg'],
         'siparis' => ['href' => 'siparisler.php',       'etiket' => 'OGL Siparişler',       'kisa' => 'OGL Sipariş','dar' => 'Sipariş',       'renk' => '#b45309', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/siparis.svg'],
+        'usip'    => ['href' => 'urun_siparis.php',     'etiket' => 'Siparişler',           'kisa' => 'Siparişler', 'dar' => null,      'renk' => '#c2410c', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/siparis.svg'],
         'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
         'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
         'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
@@ -709,6 +713,7 @@ function nav_alt_izinler(): array {
         'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
         'mail'    => $fn && can_mail('read'),       // mail.php: can_mail('read') — TEK kaynak
         'siparis' => $fn && can_siparis('read'),    // siparisler.php: require_siparis('read') — TEK kaynak
+        'usip'    => $fn && can_siparis('read'),    // urun_siparis.php: require_siparis('read') — aynı kapı
         'ptak'    => $fn && nav_ptak_gorunur(),     // personel_takip.php — TEK kaynak
         'defs'    => $c('defs.read'),               // definitions.php: require_perm('defs.read')
         'users'   => $c('users.admin'),             // users.php: require_perm('users.admin')
@@ -1029,6 +1034,7 @@ function render_header(string $title, bool $print_mode = false): void {
         <nav class="topnav">
             <?php if (can_siparis('read')): ?>
             <a href="<?= $base ?>siparisler.php" <?= nav_aktif_anahtar() === 'siparis' ? 'class="active"' : '' ?>>OGL Siparişler</a>
+            <a href="<?= $base ?>urun_siparis.php" <?= nav_aktif_anahtar() === 'usip' ? 'class="active"' : '' ?>>Siparişler</a>
             <?php endif; ?>
             <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
             <a href="<?= $base ?>beyanlar.php" <?= in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php'], true) ? 'class="active"' : '' ?>>Beyanlar</a>
