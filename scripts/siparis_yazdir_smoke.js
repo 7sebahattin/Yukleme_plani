@@ -512,7 +512,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         await r.click();
         await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 60000 });
         const p = await page.evaluate(() => window.__pano[0]);
-        ok('[1280] resim: panoya image/png, PNG imzası, ≥ 2300 px genişlik (1160 × 2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w >= 2300 && p.h > 300 && p.size > 5000, JSON.stringify(p));
+        ok('[1280] resim: panoya image/png, PNG imzası, ≥ 2700 px genişlik (1400 × 2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w >= 2700 && p.h > 300 && p.size > 5000, JSON.stringify(p));
         ok('[1280] resim: tek istek amac=resim + bolum=acik', istekler.length === 1 && /amac=resim/.test(istekler[0]) && /bolum=acik/.test(istekler[0]), istekler.join(','));
         await page.waitForFunction(() => { const d = document.querySelector('.sip-yz-durum'); return d && !d.hidden; }, null, { timeout: 5000 });
         const b = await page.evaluate(() => { const d = document.querySelector('.sip-yz-durum'); return { t: d.textContent, z: +getComputedStyle(d).zIndex, wp: !!document.querySelector('.sip-wp-durum'),

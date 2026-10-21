@@ -290,7 +290,12 @@
   }
 
   // ── WP Resim ───────────────────────────────────────────────────────────────
-  var RESIM_W = 1160, RESIM_OLCEK = 2, RESIM_MAX_Y = 16000;
+  var RESIM_W = 1400, RESIM_OLCEK = 2, RESIM_MAX_Y = 16000;
+  // WP resmi telefonda küçülerek açılır: yazı PDF/yazdırmadan belirgin büyük ve kalın (ince yazı okunmuyordu).
+  var RESIM_YAZI =
+    '.syz-resim-tutucu .syz h2{font-size:22px}.syz-resim-tutucu .syz-meta,.syz-resim-tutucu .syz-anahtar,.syz-resim-tutucu .syz-not{font-size:14px;color:#000}' +
+    '.syz-resim-tutucu .syz th,.syz-resim-tutucu .syz td{font-size:14px;font-weight:600;padding:5px 4px;border-color:#555}.syz-resim-tutucu .syz .syz-nw{white-space:normal;overflow-wrap:anywhere}' +
+    '.syz-resim-tutucu .syz thead th{font-size:12.5px;font-weight:800;padding:5px 3px}.syz-resim-tutucu .syz tr.syz-toplam>td{font-weight:800}';
   async function resimUret(v) {
     if (!window.html2canvas) await betikYukle('halkayit/html2canvas.min.js');
     var tutucu = document.createElement('div');
@@ -298,7 +303,7 @@
     tutucu.setAttribute('aria-hidden', 'true');
     // Temadan bağımsız beyaz zemin; iç boşluk resmin kenarında nefes payı bırakır.
     tutucu.style.cssText = 'position:fixed;left:-100000px;top:0;width:' + RESIM_W + 'px;background:#fff;z-index:-1;pointer-events:none';
-    tutucu.innerHTML = '<style>' + CSS + '.syz-resim-tutucu .syz{padding:16px;box-sizing:border-box;width:' + RESIM_W + 'px}</style>' + raporHtml(v);
+    tutucu.innerHTML = '<style>' + CSS + '.syz-resim-tutucu .syz{padding:16px;box-sizing:border-box;width:' + RESIM_W + 'px;font-size:14px;line-height:1.35;color:#000}' + RESIM_YAZI + '</style>' + raporHtml(v);
     document.body.appendChild(tutucu);
     try {
       if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* yok say */ } }
