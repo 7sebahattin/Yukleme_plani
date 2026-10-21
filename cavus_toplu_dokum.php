@@ -108,10 +108,11 @@ if (isset($_GET['xlsx'])) {
     array_push($sutunlar, $kol('İlk Giriş'), $kol('Son Çıkış'), $kol('Eksik Çıkış', 'tamsayi', true));
     $fmAc = 'FFE8F5E9'; $fmKoyu = 'FFB7DFB9';
     array_push($sutunlar,
-        $kol('FM Toplam Saat', 'tamsayi', true, $fmAc, $fmKoyu),
-        $kol('FM Kişi', 'tamsayi', true, $fmAc, $fmKoyu),
-        $kol('FM Dağılımı', 'metin', false, 'FFFFF8E1', 'FFFFE082')
+        $kol('FM Toplam Saat', 'tamsayi', true, $fmAc, $fmKoyu)
     );
+    for ($fs = 1; $fs <= PDKS_FAZ8B_OZET_FM_SUTUN; $fs++) {
+        $sutunlar[] = $kol($fs . ($fs === PDKS_FAZ8B_OZET_FM_SUTUN ? '+' : '.') . ' Saat', 'tamsayi', true, 'FFFFF8E1', 'FFFFE082');
+    }
 
     $xs = []; $bant = []; $ust = [];
     $gSonX = null; $gNoX = 1;
@@ -133,8 +134,7 @@ if (isset($_GET['xlsx'])) {
         $sat[] = (int)$r['eksik_cikis'];
         $fmSaat = (int)($r['fm_saat'] ?? 0);
         $sat[] = $fmSaat;
-        $sat[] = (int)($r['fm_kisi'] ?? 0);
-        $sat[] = $fmSaat > 0 ? pdks_faz8b_fm_dagilim_metni((array)($r['fm_dagilim'] ?? [])) : '';
+        foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kv) $sat[] = $kv;
         $xs[] = $sat;
     }
     $sayfa = [
@@ -254,7 +254,7 @@ render_flash();
         <th>İlk Giriş</th>
         <th>Son Çıkış</th>
         <th>Eksik Çıkış</th>
-        <th>Fazla Mesai</th>
+        <?php for ($fs = 1; $fs <= PDKS_FAZ8B_OZET_FM_SUTUN; $fs++): ?><th class="num ctd-fm-th"><?= $fs ?><?= $fs === PDKS_FAZ8B_OZET_FM_SUTUN ? '+' : '.' ?> Saat</th><?php endfor; ?>
     </tr>
     </thead>
     <tbody>
@@ -323,14 +323,9 @@ render_flash();
             <?php endif; ?>
         </td>
 
-        <td>
-            <?php if ((int)($r['fm_saat'] ?? 0) > 0): ?>
-                <strong><?= (int)$r['fm_saat'] ?> sa</strong>
-                <div class="muted" style="font-size:.78rem"><?= h(pdks_faz8b_fm_dagilim_metni((array)($r['fm_dagilim'] ?? []))) ?></div>
-            <?php else: ?>
-                <span class="muted">—</span>
-            <?php endif; ?>
-        </td>
+        <?php foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kv): ?>
+        <td class="num ctd-fm"><?= $kv > 0 ? '<strong>' . (int)$kv . '</strong>' : '<span class="muted">0</span>' ?></td>
+        <?php endforeach; ?>
     </tr>
     <?php endforeach; ?>
     </tbody>

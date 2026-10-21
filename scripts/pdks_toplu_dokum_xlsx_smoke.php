@@ -131,16 +131,16 @@ okx('1a) geçerli zip (PK) ve Fatal/Warning yok', $r[0] === 0 && str_starts_with
 $k = tdKitap($r); $sh = $k->getActiveSheet();
 $bs = xlsx_satir_bul($sh, 'Tarih');
 $basliklar = []; foreach ($sh->getRowIterator($bs, $bs) as $row) foreach ($row->getCellIterator() as $c) $basliklar[] = (string)$c->getValue();
-okx('1b) sütun sırası', $basliklar === ['Tarih', 'Çavuş', 'Çavuş Kodu', 'Kadın', 'Erkek', 'Rampacı', 'Toplam İşçi', 'Hakediş', 'Para Birimi', 'Durum', 'İlk Giriş', 'Son Çıkış', 'Eksik Çıkış', 'FM Toplam Saat', 'FM Kişi', 'FM Dağılımı'] || count($basliklar) >= 15, json_encode($basliklar, JSON_UNESCAPED_UNICODE));
+okx('1b) sütun sırası', array_slice($basliklar, -6) === ['FM Toplam Saat', '1. Saat', '2. Saat', '3. Saat', '4. Saat', '5+ Saat'] && array_slice($basliklar, 0, 6) === ['Tarih', 'Çavuş', 'Çavuş Kodu', 'Kadın', 'Erkek', 'Rampacı'], json_encode($basliklar, JSON_UNESCAPED_UNICODE));
 $kol = fn(string $b) => xlsx_sutun_bul($sh, $bs, $b);
 okx('1c) Hakediş/Para Birimi/Durum sütunları var', $kol('Hakediş') !== '' && $kol('Para Birimi') !== '' && $kol('Durum') !== '');
 $ilk = $bs + 1;
 // satırlar ekranla aynı sıra (tarih azalan): 31 Mart (C), 10 Mart (A, B)
 $tarihler = []; $r2 = $ilk; while ($sh->getCell('A' . $r2)->getValue() !== null && $sh->getCell('A' . $r2)->getValue() !== 'TOPLAM') { $tarihler[] = $r2; $r2++; }
 okx('1d) 3 veri satırı + TOPLAM', count($tarihler) === 3 && $sh->getCell('A' . $r2)->getValue() === 'TOPLAM', (string)count($tarihler));
-$fmS = $kol('FM Toplam Saat'); $fmK = $kol('FM Kişi'); $fmD = $kol('FM Dağılımı'); $hk = $kol('Hakediş');
+$fmS = $kol('FM Toplam Saat'); $fmK = $kol('1. Saat'); $fmD = $kol('2. Saat'); $hk = $kol('Hakediş');
 $satirA = 0; foreach ($tarihler as $t) if ($sh->getCell($kol('Çavuş Kodu') . $t)->getValue() === 'C1' && $sh->getCell($fmS . $t)->getValue() == 6) $satirA = $t;
-okx('1e) A satırı: FM 6 sa, FM kişi 4, dağılım metni', $satirA > 0 && (int)$sh->getCell($fmK . $satirA)->getValue() === 4 && $sh->getCell($fmD . $satirA)->getValue() === '1 sa: 2 kişi · 2 sa: 2 kişi', (string)$satirA);
+okx('1e) A satırı: FM 6 sa, 1. Saat 2 kişi, 2. Saat 2 kişi', $satirA > 0 && (int)$sh->getCell($fmK . $satirA)->getValue() === 2 && (int)$sh->getCell($fmD . $satirA)->getValue() === 2, (string)$satirA);
 $c = $sh->getCell($hk . $satirA);
 okx('1f) Hakediş SAYI hücresi 1500', $c->getDataType() === 'n' && abs((float)$c->getValue() - 1500) < 0.001);
 okx('1g) Durum/Para birimi', $sh->getCell($kol('Durum') . $satirA)->getValue() === 'Taslak' && $sh->getCell($kol('Para Birimi') . $satirA)->getValue() === 'TRY');
