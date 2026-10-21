@@ -22,6 +22,12 @@
 // Sütun: ['baslik' => 'Net KG', 'tip' => 'kg', 'topla' => true]
 // Tipler: metin · tamsayi · kg · ondalik · tutar · sayi (biçimsiz sayı) · tarih · tarihsaat
 //
+// v407 — İSTEĞE BAĞLI renk anahtarları (verilmezse çıktı eskisiyle AYNIDIR):
+//   sütun: 'baslik_dolgu' (ARGB, başlık hücresi zemini) · 'baslik_yazi' (ARGB, başlık yazı rengi) ·
+//          'dolgu' (ARGB, o sütunun veri hücreleri zemini; gün bandından önceliklidir)
+//   blok : 'satir_bant' [satır idx => 0|1] (1 olan satırlar 'bant_dolgu' zeminiyle) · 'bant_dolgu' (ARGB) ·
+//          'satir_ust_cizgi' [satır idx, …] (o satırın üstüne çizgi; renk 'ust_cizgi_renk') · 'toplam_dolgu' (ARGB)
+//
 // GÜVENLİK: metin hücreleri setCellValueExplicit(TYPE_STRING) ile yazılır —
 // "=" ile başlayan kullanıcı verisi (firma adı, not…) formül olarak
 // ÇALIŞMAZ (formül enjeksiyonu). Formül yalnız toplam satırında, bizim
@@ -178,18 +184,27 @@ function xlsx_hucre_yaz(Worksheet $sh, string $adr, $v, string $tip): void
  * kaydedilir, hücrelere yalnız indeksi verilir. getStyle('A5:J30004') aralık
  * çağrısı her hücreyi tek tek dolaşıyordu: 300 bin hücrede ~14 sn (ölçüldü).
  */
-function xlsx_veri_stili(Spreadsheet $ss, string $tip, array &$onbellek): int
+function xlsx_veri_stili(Spreadsheet $ss, string $tip, array &$onbellek, string $dolgu = '', string $ust = ''): int
 {
-    if (isset($onbellek[$tip])) return $onbellek[$tip];
+    // v407: önbellek anahtarı tip|dolgu|üst çizgi — renk verilmezse eski stille aynı.
+    $anahtar = $tip . '|' . $dolgu . '|' . $ust;
+    if (isset($onbellek[$anahtar])) return $onbellek[$anahtar];
     $st = new \PhpOffice\PhpSpreadsheet\Style\Style();
     $dizi = [
         'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_HAIR, 'color' => ['argb' => XLSX_RENK_KENAR]]],
         'alignment' => ['vertical' => Alignment::VERTICAL_TOP],
     ];
+    if ($ust !== '') {
+        // allBorders yan kenarları üzerine yazar → dört kenar açık yazılır
+        $hair = ['borderStyle' => Border::BORDER_HAIR, 'color' => ['argb' => XLSX_RENK_KENAR]];
+        $dizi['borders'] = ['top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['argb' => $ust]],
+                            'bottom' => $hair, 'left' => $hair, 'right' => $hair];
+    }
+    if ($dolgu !== '') $dizi['fill'] = ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => $dolgu]];
     if ($kod = xlsx_bicim_kodu($tip)) $dizi['numberFormat'] = ['formatCode' => $kod];
     $st->applyFromArray($dizi);
     $ss->addCellXf($st);
-    return $onbellek[$tip] = $st->getIndex();
+    return $onbellek[$anahtar] = $st->getIndex();
 }
 
 /** Görünen metin uzunluğu — sütun genişliği tahmini için. */
@@ -284,6 +299,13 @@ function xlsx_olustur(array $sayfalar, array $ozellik = []): Spreadsheet
             $st->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_CENTER)->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $st->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB(XLSX_RENK_KENAR);
             $sh->getRowDimension($r)->setRowHeight(30);
+            // v407: sütun bazlı başlık rengi (isteğe bağlı)
+            foreach ($sutunlar as $i => $s) {
+                if (empty($s['baslik_dolgu']) && empty($s['baslik_yazi'])) continue;
+                $hs = $sh->getStyle(Coordinate::stringFromColumnIndex($i + 1) . $r);
+                if (!empty($s['baslik_dolgu'])) $hs->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB((string)$s['baslik_dolgu']);
+                if (!empty($s['baslik_yazi'])) $hs->getFont()->getColor()->setARGB((string)$s['baslik_yazi']);
+            }
             $baslikSatiri = $r;
             $r++;
 
@@ -300,15 +322,28 @@ function xlsx_olustur(array $sayfalar, array $ozellik = []): Spreadsheet
             $sira = 0;
             $xf = [];
             foreach ($tipler as $i => $tip) $xf[$i] = xlsx_veri_stili($ss, $tip, $stilOnbellek);
-            foreach ($b['satirlar'] as $satir) {
+            $bant    = $b['satir_bant'] ?? null;
+            $bantRenk = (string)($b['bant_dolgu'] ?? '');
+            $ustSet  = !empty($b['satir_ust_cizgi']) ? array_flip(array_map('intval', $b['satir_ust_cizgi'])) : [];
+            $ustRenk = (string)($b['ust_cizgi_renk'] ?? XLSX_RENK_KENAR);
+            $renkli  = ($bant !== null && $bantRenk !== '') || $ustSet;
+            foreach ($sutunlar as $i => $s) if (!empty($s['dolgu'])) $renkli = true;
+            foreach ($b['satirlar'] as $satirNo => $satir) {
                 $satir  = array_values($satir);
                 $olcume = $sira++ < XLSX_GENISLIK_ORNEK;
+                $satirBant = ($bant !== null && $bantRenk !== '' && !empty($bant[$satirNo])) ? $bantRenk : '';
+                $satirUst  = isset($ustSet[$satirNo]) ? $ustRenk : '';
                 foreach ($harfler as $i => $harf) {
                     $v    = $satir[$i] ?? null;
                     $d    = xlsx_hucre_degeri($v, $tipler[$i]);
                     $cell = $sh->getCell($harf . $r);
                     if ($d !== null) $cell->setValueExplicit($d[0], $d[1]);
-                    $cell->setXfIndex($xf[$i]);
+                    if ($renkli) {
+                        $dolgu = !empty($sutunlar[$i]['dolgu']) ? (string)$sutunlar[$i]['dolgu'] : $satirBant;
+                        $cell->setXfIndex(xlsx_veri_stili($ss, $tipler[$i], $stilOnbellek, $dolgu, $satirUst));
+                    } else {
+                        $cell->setXfIndex($xf[$i]);
+                    }
                     if ($olcume) $genislik[$i + 1] = max($genislik[$i + 1], xlsx_gorunen_uzunluk($v, $tipler[$i]));
                 }
                 $r++;
@@ -327,7 +362,7 @@ function xlsx_olustur(array $sayfalar, array $ozellik = []): Spreadsheet
                 }
                 $ts = $sh->getStyle("A{$r}:{$son}{$r}");
                 $ts->getFont()->setBold(true);
-                $ts->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(XLSX_RENK_TOPLAM);
+                $ts->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB((string)($b['toplam_dolgu'] ?? XLSX_RENK_TOPLAM));
                 $ts->getBorders()->getTop()->setBorderStyle(Border::BORDER_MEDIUM)->getColor()->setARGB(XLSX_RENK_KENAR);
                 $r++;
             }

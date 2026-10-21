@@ -8,9 +8,11 @@ require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/pdks_rapor.php';
 require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 
 $auth_user = require_login();
 require_pdks_rapor();
+if (isset($_GET['xlsx'])) { require_perm('reports.export'); }
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
@@ -64,15 +66,89 @@ $toplamIsci = 0;
 $toplamTip = [];       // v299: tip kayıt defterinden — sutun anahtarı => toplam (kadin/erkek/rampaci/karisik)
 foreach (pdks_gunluk_tip_sutunlari() as $tc) $toplamTip[$tc['sutun']] = 0;
 $toplamEksik = 0;
+$toplamFm = 0;   // v407: toplam fazla mesai saati
 
 foreach ($satirlar as $r) {
     $toplamIsci += (int)$r['toplam_isci'];
     foreach ($toplamTip as $sk => $_) $toplamTip[$sk] += (int)($r[$sk] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
+    $toplamFm    += (int)($r['fm_saat'] ?? 0);
 }
 
 // Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
 $tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
+
+// v407 — renkli XLSX (yalnız XLSX kolu). Ekranla AYNI veri/yetki: Hakediş sütunları yalnız finansal yetkide.
+// Gün bandı / gün başı çizgisi ekrandaki $gNo/$gYeni mantığıyla aynıdır. Kapı: reports.export.
+if (isset($_GET['xlsx'])) {
+    $tipRenk = [
+        'kadin'   => ['ac' => 'FFFCE4EC', 'koyu' => 'FFF4B6C8'],
+        'erkek'   => ['ac' => 'FFE3F0FD', 'koyu' => 'FFAFCDEE'],
+        'rampaci' => ['ac' => 'FFFFEDD5', 'koyu' => 'FFF8C998'],
+        'karisik' => ['ac' => 'FFEDE7F6', 'koyu' => 'FFCBBCE6'],
+    ];
+    $baslikKoyu = 'FF1F3A5F';
+    $kol = function (string $baslik, string $tip = 'metin', bool $topla = false, ?string $dolgu = null, ?string $baslikDolgu = null) use ($baslikKoyu): array {
+        $k = ['baslik' => $baslik, 'tip' => $tip, 'topla' => $topla,
+              'baslik_dolgu' => $baslikDolgu ?? $baslikKoyu, 'baslik_yazi' => $baslikDolgu === null ? 'FFFFFFFF' : 'FF1F2937'];
+        if ($dolgu !== null) $k['dolgu'] = $dolgu;
+        return $k;
+    };
+    $sutunlar = [$kol('Tarih', 'tarih'), $kol('Çavuş'), $kol('Çavuş Kodu')];
+    foreach ($tipSut as $tc) {
+        $rn = $tipRenk[$tc['sutun']] ?? ['ac' => 'FFF3F4F6', 'koyu' => 'FFD1D5DB'];
+        $sutunlar[] = $kol((string)$tc['kisa'], 'tamsayi', true, $rn['ac'], $rn['koyu']);
+    }
+    $sutunlar[] = $kol('Toplam İşçi', 'tamsayi', true);
+    if ($finansalGosterilebilir) {
+        $sutunlar[] = $kol('Hakediş', 'tutar');          // para birimleri/tutarlar ASLA toplanmaz
+        $sutunlar[] = $kol('Para Birimi');
+        $sutunlar[] = $kol('Durum');
+    }
+    array_push($sutunlar, $kol('İlk Giriş'), $kol('Son Çıkış'), $kol('Eksik Çıkış', 'tamsayi', true));
+    $fmAc = 'FFE8F5E9'; $fmKoyu = 'FFB7DFB9';
+    array_push($sutunlar,
+        $kol('FM Toplam Saat', 'tamsayi', true, $fmAc, $fmKoyu),
+        $kol('FM Kişi', 'tamsayi', true, $fmAc, $fmKoyu),
+        $kol('FM Dağılımı', 'metin', false, 'FFFFF8E1', 'FFFFE082')
+    );
+
+    $xs = []; $bant = []; $ust = [];
+    $gSonX = null; $gNoX = 1;
+    foreach ($satirlar as $i => $r) {
+        $yeni = ($gSonX !== $r['tarih']);
+        if ($yeni) { $gNoX = 1 - $gNoX; $gSonX = $r['tarih']; if ($i > 0) $ust[] = $i; }
+        $bant[$i] = $gNoX;
+        $h = $r['hakedis'] ?? null;
+        $sat = [$r['tarih'], (string)$r['cavus_adi'], (string)$r['cavus_kodu']];
+        foreach ($tipSut as $tc) $sat[] = (int)($r[$tc['sutun']] ?? 0);
+        $sat[] = (int)$r['toplam_isci'];
+        if ($finansalGosterilebilir) {
+            $sat[] = $h === null ? null : (float)$h['total_amount'];
+            $sat[] = $h === null ? '' : (string)$h['currency'];
+            $sat[] = $h === null ? 'Hesaplanmadı' : ($h['status'] === 'final' ? 'Kesin' : 'Taslak');
+        }
+        $sat[] = $r['ilk_giris'] ? date('H:i', strtotime($r['ilk_giris'])) : '';
+        $sat[] = $r['son_cikis'] ? date('H:i', strtotime($r['son_cikis'])) : '';
+        $sat[] = (int)$r['eksik_cikis'];
+        $fmSaat = (int)($r['fm_saat'] ?? 0);
+        $sat[] = $fmSaat;
+        $sat[] = (int)($r['fm_kisi'] ?? 0);
+        $sat[] = $fmSaat > 0 ? pdks_faz8b_fm_dagilim_metni((array)($r['fm_dagilim'] ?? [])) : '';
+        $xs[] = $sat;
+    }
+    $sayfa = [
+        'ad' => 'Toplu Döküm', 'baslik' => 'Çavuş Toplu Döküm — ' . date('m/Y', strtotime($start)),
+        'aciklama' => ($depo !== '' ? $depo : 'Tüm depolar') . ' · ' . ($cavusId !== null
+            ? (string)(current(array_filter($cavuslar, fn($c) => (int)$c['id'] === $cavusId))['name'] ?? 'Çavuş') : 'Tüm çavuşlar'),
+        'bloklar' => [[
+            'baslik' => null, 'sutunlar' => $sutunlar, 'satirlar' => $xs, 'toplam' => true,
+            'satir_bant' => $bant, 'bant_dolgu' => 'FFE2ECFA', 'satir_ust_cizgi' => $ust, 'ust_cizgi_renk' => 'FF9DB4D3',
+        ]],
+    ];
+    export_audit('pdks', 'cavus_toplu_dokum', 'xlsx', count($xs), ['ay' => $ay, 'cavus' => $cavusId, 'depo' => $depo]);
+    xlsx_indir('cavus_toplu_dokum_' . $ay . '.xlsx', [$sayfa]);
+}
 
 render_header('Çavuş Toplu Döküm');
 $base = base_url();
@@ -90,6 +166,7 @@ render_flash();
     </div>
     <div class="page-head-actions">
         <a href="<?= h('cavus_toplu_dokum_yazdir.php?' . http_build_query(array_filter(['ay' => $ay, 'cavus' => $cavusId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
+        <?php if (can('reports.export')): ?><a href="<?= h('cavus_toplu_dokum.php?' . http_build_query(array_filter(['ay' => $ay, 'cavus' => $cavusId, 'xlsx' => '1'], fn($v) => $v !== null && $v !== ''))) ?>" class="btn">📊 XLSX İndir</a><?php endif; ?>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
@@ -147,6 +224,10 @@ render_flash();
             <div class="lbl">Toplam İşçi</div>
             <div class="val"><?= $toplamIsci ?></div>
         </div>
+        <div class="pdks-kiosk-counter-box">
+            <div class="lbl">Toplam FM (saat)</div>
+            <div class="val"><?= $toplamFm ?></div>
+        </div>
         <div class="pdks-kiosk-counter-box eksik">
             <div class="lbl">Eksik Çıkış</div>
             <div class="val"><?= $toplamEksik ?></div>
@@ -173,6 +254,7 @@ render_flash();
         <th>İlk Giriş</th>
         <th>Son Çıkış</th>
         <th>Eksik Çıkış</th>
+        <th>Fazla Mesai</th>
     </tr>
     </thead>
     <tbody>
@@ -238,6 +320,15 @@ render_flash();
                 </span>
             <?php else: ?>
                 <span class="pdks-badge pdks-badge-tamamlandi">0</span>
+            <?php endif; ?>
+        </td>
+
+        <td>
+            <?php if ((int)($r['fm_saat'] ?? 0) > 0): ?>
+                <strong><?= (int)$r['fm_saat'] ?> sa</strong>
+                <div class="muted" style="font-size:.78rem"><?= h(pdks_faz8b_fm_dagilim_metni((array)($r['fm_dagilim'] ?? []))) ?></div>
+            <?php else: ?>
+                <span class="muted">—</span>
             <?php endif; ?>
         </td>
     </tr>
