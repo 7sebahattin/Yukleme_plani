@@ -109,6 +109,9 @@ render_flash();
 $mailPklAd = $pkl && $pkl['dosya_adi'] ? (string)$pkl['dosya_adi'] : '';
 $mailPklBelge = $pkl && $pkl['dosya_belge_id'] ? (int)$pkl['dosya_belge_id'] : 0;
 $eksikHucre = $pkl ? (int)$pkl['eksik_hucre'] : 0;
+// v405: adım çizgisinde / evrak penceresinde PKL dosya adı (AsyaDocNNN = evrak takımı adı) + bağlı beyan parti no'ları
+$mailPartiler = (array)((siparis_beyan_parti_haritasi($pdo, [$id])[$id] ?? [])['liste'] ?? []);
+$asyaDoc = preg_match('~AsyaDoc\d+~i', $mailPklAd, $mm) ? $mm[0] : '';
 // v383: mail taslağı (Kime / Bilgi / konu / gövde) — mailto ve ekli .eml AYNI taslaktan
 $mailTaslak = siparis_pkl_mail_taslak($poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username']));
 $pklHazir = (int)$sev['var_pkl'] === 1;
@@ -164,7 +167,13 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       ?>
         <li class="sip-step<?= $bitti ? ' sip-step--bitti' : '' ?><?= $suAn ? ' sip-step--su-an' : '' ?><?= $sonraki ? ' sip-step--sonraki' : '' ?>"<?= $suAn ? ' aria-current="step"' : '' ?>>
           <span class="sip-step-nokta" aria-hidden="true"><?= $bitti || ($suAn && $kapali) ? '✓' : (int)$dv['sira'] ?></span>
+          <?php $pklAdim = $dk === 'mail_gonderildi' && ($bitti || $suAn) && $mailPklAd !== ''; ?>
+          <?php if ($pklAdim): ?>
+            <span class="sip-step-et sip-step-et--pkl"><?= h($dv['ikon']) ?> <?= preg_replace('~([-_])~', '$1<wbr>', h($mailPklAd)) ?></span>
+            <?php foreach ($mailPartiler as $mp): ?><span class="sip-step-parti">Parti <?= h((string)$mp) ?></span><?php endforeach; ?>
+          <?php else: ?>
           <span class="sip-step-et"><?= h($dv['ikon'] . ' ' . $dv['etiket']) ?></span>
+          <?php endif; ?>
           <span class="sip-sr"><?= $bitti ? ' (tamamlandı)' : ($suAn ? ' (şu anki adım)' : ($sonraki ? ' (sıradaki adım)' : '')) ?></span>
           <?php if ($zaman): ?><span class="sip-step-zaman"><?= h(sipui_zaman((string)$zaman)) ?></span><?php endif; ?>
         </li>
@@ -690,6 +699,8 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           <?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="hedef" value="evrak_gonderildi"><input type="hidden" name="donus" value="durum">
           <p>Uygulama evrak göndermez: evrak takımını (Excel + belgeler) müşteriye kendiniz gönderin, sonra burada süreci kapatın.</p>
           <?php if ((string)$sev['mail_gonderildi_at'] !== ''): ?><p class="sip-soluk">Mail gönderildi: <?= h(sipui_zaman((string)$sev['mail_gonderildi_at'])) ?></p><?php endif; ?>
+          <?php if ($mailPklAd !== ''): ?><p class="sip-evrak-ad"><span class="sip-soluk">Evrak takımı dosya adı:</span> <strong><?= h($asyaDoc !== '' ? $asyaDoc : $mailPklAd) ?></strong><?php if ($asyaDoc !== ''): ?><br><span class="sip-soluk"><?= h($mailPklAd) ?></span><?php endif; ?></p><?php endif; ?>
+          <?php if ($mailPartiler): ?><p class="sip-soluk">Parti: <?= h(implode(' / ', array_map('strval', $mailPartiler))) ?></p><?php endif; ?>
           <?php if ($belgeler): ?><div class="sip-mail-eylem"><a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a></div><?php endif; ?>
           <label class="sip-onay-satir"><input type="checkbox" name="onay_evrak" value="1" required data-sip-evrak-onay> Evrak takımını müşteriye gönderdim</label>
         </div>
