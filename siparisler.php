@@ -251,7 +251,6 @@ $yazdirEk = function (?string $bolumAdi): string {
       <p class="muted"><?= (int)$kpi['acik'] ?> açık · <?= (int)$evrakSay ?> evrak bekleyen · <?= (int)$kapaliSay ?> kapanan sevkiyat</p>
     </div>
     <div class="page-head-actions">
-      <a class="btn btn-lg" href="urun_siparis.php">🛒 Ürün Siparişleri</a>
       <?php if (siparis_cari_yetkili()): ?>
         <a class="btn btn-primary btn-lg" href="siparis_odemeler.php"><?= siparis_odeme_yetkili() ? '💳 Ödeme ekle' : '💳 Ödemeler' ?></a>
       <?php endif; ?>

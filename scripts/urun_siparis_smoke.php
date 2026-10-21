@@ -212,7 +212,9 @@ ok('statik: yeni sayfa/uç adları sw.js bypass regex\'ine uyar', (function () u
     foreach (['/urun_siparis.php', '/urun_siparis_islem.php', '/urun_siparis_yazdir.php', '/x/urun_siparis.php/p'] as $p) if (!preg_match($re, $p)) return false;
     return !preg_match($re, '/siparisler.php') && !preg_match($re, '/urun.php');
 })());
-ok('statik: OGL Siparişler başlığında Ürün Siparişleri bağlantısı + nav aktif listesinde', str_contains((string)file_get_contents($ROOT . '/siparisler.php'), 'href="urun_siparis.php"') && str_contains((string)file_get_contents($ROOT . '/config/helpers.php'), "'urun_siparis.php'"));
+$hlp = (string)file_get_contents($ROOT . '/config/helpers.php');
+ok('statik: OGL Siparişler başlığında düğme YOK (v411); sidebar + üst menü + alt çubukta "Siparişler" var', !str_contains((string)file_get_contents($ROOT . '/siparisler.php'), 'urun_siparis.php')
+    && str_contains($hlp, "\$lnk('urun_siparis.php', '🛒', 'Siparişler'") && str_contains($hlp, "'usip'    => ['href' => 'urun_siparis.php'") && str_contains($hlp, '$a_usip  = $cur === \'urun_siparis.php\'') && str_contains($hlp, '>Siparişler</a>'));
 ok('statik: migrate.php kartı + POST dalı', str_contains((string)file_get_contents($ROOT . '/migrate.php'), "mg_kart_ac('urun-siparis')") && str_contains((string)file_get_contents($ROOT . '/migrate.php'), "=== 'urun_siparis'"));
 
 siparis_test_bitir();
