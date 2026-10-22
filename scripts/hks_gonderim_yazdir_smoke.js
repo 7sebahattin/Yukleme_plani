@@ -145,7 +145,7 @@ const sunucu = http.createServer((q, s) => {
   ok('(A) toplam yalnız süzülen künyeler (22.000 KG)', /TOPLAM\s*22\.000 KG/.test(await p.innerText('.kunye-tablo tfoot')), await p.innerText('.kunye-tablo tfoot'));
   ok('(A) başlık: firma + plaka + tarih', /Test Firma A/.test(await p.innerText('h2')) && /33NCN99/.test(await p.innerText('.meta')) && /2026-10-21/.test(await p.innerText('.meta')));
   await p.waitForTimeout(600);
-  ok('(A) yazdırma penceresi KENDİLİĞİNDEN açıldı (print 1 kez)', (await basildi(p)) === 1, String(await basildi(p)));
+  ok('(A) yazdırma penceresi KENDİLİĞİNDEN açılmaz (kullanıcı Yazdır/PDF düğmesine basar)', (await basildi(p)) === 0, String(await basildi(p)));
   ok('(A) Yazdır + PDF/Paylaş düğmeleri pencerede', await p.locator('.btnlar .yzbtn').count() === 2);
   ok('(A) eksik uyarısı yok', await p.locator('#yzUyari').count() === 0);
   ok('(A) Çoklu Künye ekranı AÇILMADI, Gönderilenler yerinde', !(await sayfa.isVisible('#ekranToplu')) && await sayfa.isVisible('#ekranGonderilen'));
@@ -252,7 +252,7 @@ const sunucu = http.createServer((q, s) => {
   });
   ok('(T) baskıda her gönderim YENİ SAYFADAN başlar (break-before: page)', sayfaSonu);
   await p.waitForTimeout(600);
-  ok('(T) sorunsuz → yazdırma kendiliğinden açıldı (1 kez), uyarı yok', (await basildi(p)) === 1 && await p.locator('#yzUyari').count() === 0);
+  ok('(T) sorunsuz → yazdırma kendiliğinden AÇILMAZ, uyarı yok', (await basildi(p)) === 0 && await p.locator('#yzUyari').count() === 0);
   ok('(T) pencere başlığı/dosya adı "Kunyeler 3 gonderim-Test Firma A"', (await p.title()) === 'Kunyeler 3 gonderim-Test Firma A', await p.title());
   // PDF: her gönderim yeni PDF sayfasından başlar
   const [ind] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnPaylas')]);
@@ -390,7 +390,7 @@ const sunucu = http.createServer((q, s) => {
   ok('(G) sonuçtan Yazdır → gönderimin plaka/günü ile sorgu, yalnız gönderilen künye',
      tk.govde.plaka === '33NCN99' && tk.govde.tarih === '2026-10-21' && JSON.stringify(await kunyeNolar(p)) === '["3601000000000003"]', JSON.stringify(tk.govde));
   await p.waitForTimeout(600);
-  ok('(G) yazdırma kendiliğinden açıldı', (await basildi(p)) === 1);
+  ok('(G) yazdırma kendiliğinden AÇILMAZ', (await basildi(p)) === 0);
   ok('(G) Gönderim Sonucu penceresi AÇIK kaldı', await sayfa.isVisible('#modalOnayKutu') && await sayfa.isVisible('#btnSonucYazdir'));
   await p.close();
   await sayfa.click('#btnModalX');
