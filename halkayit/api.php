@@ -828,7 +828,10 @@ try {
       // şekilde gönderildi → geri konmaz. Kısmi başarısızlıkta da geri konmaz:
       // aynı taslağı tekrar göndermek BAŞARILI satırları MÜKERRER gönderirdi.
       // Hangi satırların başarısız olduğu $sonuc.sonuclar içinde döner.
-      hks_json_cikti($sonuc);
+      // 'gonderim': Gönderim Sonucu penceresindeki "🖨️ Yazdır" için (yalnız yanıt; Gönderilenler
+      // satırıyla AYNI plaka/belge/gün/künyeler — yazdırma HKS'e yine canlı sorgu atar).
+      hks_json_cikti($sonuc + ['gonderim' => ['id' => $gid, 'plaka' => (string)($ortak['plaka'] ?? ''),
+        'belgeNo' => (string)($ortak['belgeNo'] ?? ''), 'tarih' => date('Y-m-d'), 'kunyeler' => $yeniKunyeler]]);
     }
 
     // ---- GÖNDERİLENLER (yalnızca seçili firma) ----

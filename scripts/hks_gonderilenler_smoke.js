@@ -234,17 +234,17 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   ok('satırlar bağımsız (3. satır açıldı, 1. kapalı)', await sayfa.locator('tr.g-detay-tr:visible').count() === 1 && !(await detay0.isVisible()));
   await sayfa.locator('tr.g-satir').nth(2).click();
 
-  // --- Yazdır: toplu_kunye akışı, satırı açıp kapatmaz ---
+  // --- Yazdır (v414): Çoklu Künye ekranına uğramadan yazdırma penceresi; satırı açıp kapatmaz ---
   D.istekler.length = 0;
-  await satir0.locator('.g-yazdir-btn-ust').click();
+  const [yzP] = await Promise.all([sayfa.waitForEvent('popup'), satir0.locator('.g-yazdir-btn-ust').click()]);
   await sayfa.waitForTimeout(250);
   const tk = D.istekler.find(i => i.action === 'toplu_kunye');
-  ok('Yazdır → Çoklu Künye ekranı + toplu_kunye isteği (plaka, tarih, aktif firma)',
-     !!tk && tk.govde.plaka === '31AJE915' && tk.govde.tarih === '2026-10-05' && String(tk.govde.firmaId) === '7' && await gor(sayfa, '#ekranToplu'), JSON.stringify(tk && tk.govde));
-  await sayfa.click('#btnTopluGeri');
-  await gonderilenleriAc(sayfa);
-  ok('Yazdır satırı AÇMADI (detay yok, aria-expanded=false)',
-     await sayfa.locator('tr.g-detay-tr').count() === 0 && (await sayfa.locator('tr.g-satir').first().getAttribute('aria-expanded')) === 'false');
+  ok('Yazdır → yazdırma penceresi + toplu_kunye isteği (plaka, tarih, aktif firma); Çoklu Künye ekranı AÇILMADI',
+     !!tk && tk.govde.plaka === '31AJE915' && tk.govde.tarih === '2026-10-05' && String(tk.govde.firmaId) === '7' &&
+     !(await gor(sayfa, '#ekranToplu')) && await gor(sayfa, '#ekranGonderilen'), JSON.stringify(tk && tk.govde));
+  await yzP.close();
+  ok('Yazdır satırı AÇMADI (görünür detay yok, aria-expanded=false)',
+     await sayfa.locator('tr.g-detay-tr:visible').count() === 0 && (await sayfa.locator('tr.g-satir').first().getAttribute('aria-expanded')) === 'false');
 
   // --- Tekrar gönder menüsü ---
   const tekrar0 = sayfa.locator('tr.g-satir').first().locator('.g-btn-tekrar');
@@ -256,7 +256,7 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   let mk = await menuKutu();
   ok('menü açıldı: position:fixed, z ≥ 600, ekran içinde',
      mk.gorunur && mk.konum === 'fixed' && mk.z >= 600 && mk.l >= 0 && mk.r <= mk.vw && mk.t >= 0 && mk.b <= mk.vh, JSON.stringify(mk));
-  ok('menü satırın aç/kapa durumunu DEĞİŞTİRMEDİ', await sayfa.locator('tr.g-detay-tr').count() === 0 && (await tekrar0.getAttribute('aria-expanded')) === 'true');
+  ok('menü satırın aç/kapa durumunu DEĞİŞTİRMEDİ', await sayfa.locator('tr.g-detay-tr:visible').count() === 0 && (await tekrar0.getAttribute('aria-expanded')) === 'true');
   const menuMetin = (await sayfa.locator('#gTekrarMenu').innerText());
   ok('menü: "Aynı firma ile taslağa al" (+ firma adı) ve "Firma değiştir…"', menuMetin.includes('Aynı firma ile taslağa al') && menuMetin.includes('Test Firma A') && menuMetin.includes('Firma değiştir…'), menuMetin);
   await foto(sayfa, '03_menu');
@@ -592,11 +592,12 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
     ok(et + ' filtre: süzülmüş satırın data-i ÖZGÜN indeks (3), sıra 0 değil', JSON.stringify(await idler()) === '["3"]' && JSON.stringify(await plakalar()) === '["33XYZ99"]', JSON.stringify(await idler()));
     ok(et + ' filtre: butonlar da özgün indeksi taşır', await p.$$eval('#gonderilenListe .g-yazdir-btn-ust, #gonderilenListe .g-btn-tekrar', a => a.length > 0 && a.every(e => e.dataset.i === '3')));
     DF.istekler.length = 0;
-    await tik(birim + ' .g-yazdir-btn-ust');
+    const [yzF] = await Promise.all([p.waitForEvent('popup'), tik(birim + ' .g-yazdir-btn-ust')]);
     await p.waitForTimeout(300);
     const tkF = DF.istekler.find(i => i.action === 'toplu_kunye');
     ok(et + ' filtre: filtreliyken Yazdır → g1004 (plaka 33XYZ99, 2026-10-02)', !!tkF && tkF.govde.plaka === '33XYZ99' && tkF.govde.tarih === '2026-10-02', JSON.stringify(tkF && tkF.govde));
-    await tik('#btnTopluGeri');
+    await yzF.close();
+    await tik('#btnGonderilenGeri');
     await tik('#btnGonderilenler');
     await p.waitForSelector(birim);
     await p.waitForTimeout(150);
