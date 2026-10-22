@@ -344,7 +344,8 @@ if (preg_match('/^function hks_csrf_girdi\(.*?^\}/ms', $api, $m)) {
 ok("api.php 'csrf' ucu csrf_token() döner", (bool)preg_match("/case 'csrf':\s*\{[^}]*hks_json_cikti\(\['csrf' => csrf_token\(\)\]\)/s", $api));
 ok("'csrf' ucu records.write kapısından SONRA", strpos($api, "can('records.write')") !== false
     && strpos($api, "can('records.write')") < strpos($api, "case 'csrf':"));
-ok('kisi_kaydet + kisi_sil hks_csrf_girdi() ile denetler', substr_count($api, 'csrf_check(hks_csrf_girdi($g))') === 2
+// 3 = kisi_kaydet + kisi_sil + hks_firma_yonetici_kapisi() (firma_kaydet/firma_sil, v417)
+ok('kisi_kaydet + kisi_sil hks_csrf_girdi() ile denetler', substr_count($api, 'csrf_check(hks_csrf_girdi($g))') === 3
     && strpos($api, "csrf_check(\$_SERVER['HTTP_X_CSRF_TOKEN']") === false);
 ok('havuza işleme sıfat kararını hks_uret_sevk_mi() ile verir',
     strpos($api, 'hks_kisi_ortaktan((array)$ortak, hks_uret_sevk_mi($ortak))') !== false);

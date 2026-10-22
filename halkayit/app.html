@@ -144,6 +144,7 @@
   .logo h1 { font-size:28px; font-weight:800; color:var(--navy); }
   .logo p { font-size:13px; color:var(--soluk); margin-top:4px; }
   .firma-izgara { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .firma-ipucu { grid-column:1 / -1; margin:0; padding:14px; text-align:center; color:var(--soluk, #6b7280); font-size:14px; }
   .firma-kart {
     border:none; border-radius:var(--radius); padding:20px 14px; cursor:pointer;
     color:#fff; text-align:left; box-shadow:var(--golge); position:relative;
@@ -1587,6 +1588,7 @@
 const URETICI_SEVK_GIZLE = true;
 
 let firmalar = [];
+let firmaYonetici = false;   // /api/firmalar yanıtındaki `yonetici` (yalnız arayüz; sunucu kapısı asıl koruma)
 let aktifFirma = null;
 let listeler = null;
 let kunyeler = [];
@@ -1862,7 +1864,9 @@ async function firmalariYukle() {
   try {
     const j = await api('/api/firmalar');
     firmalar = j.firmalar;
-  } catch (e) { firmalar = []; }
+    // Firma ekle/düzenle/sil yalnız yönetici (sunucu da is_admin() ister). Alan yoksa → yönetici DEĞİL.
+    firmaYonetici = j.yonetici === true;
+  } catch (e) { firmalar = []; firmaYonetici = false; }
   firmaIzgaraCiz();
 }
 
@@ -1872,19 +1876,26 @@ function firmaIzgaraCiz() {
   firmalar.forEach(f => {
     const div = document.createElement('button');
     div.className = 'firma-kart r-' + (f.renk || 'teal');
-    div.innerHTML = `<button class="duzenle" data-id="${f.id}" title="Düzenle">✎</button>` +
-      `<div class="ad">${f.ad}</div><div class="no">${f.vergiNo || ''}</div>`;
+    div.innerHTML = (firmaYonetici ? `<button class="duzenle" data-id="${eHtml(f.id)}" title="Düzenle">✎</button>` : '') +
+      `<div class="ad">${eHtml(f.ad)}</div><div class="no">${eHtml(f.vergiNo || '')}</div>`;
     div.onclick = (e) => {
       if (e.target.classList.contains('duzenle')) { firmaFormAc(f.id); return; }
       firmaSec(f);
     };
     kap.appendChild(div);
   });
-  const ekle = document.createElement('button');
-  ekle.className = 'firma-kart firma-ekle';
-  ekle.innerHTML = '<span>＋</span><span>Yeni Firma</span>';
-  ekle.onclick = () => firmaFormAc(null);
-  kap.appendChild(ekle);
+  if (firmaYonetici) {
+    const ekle = document.createElement('button');
+    ekle.className = 'firma-kart firma-ekle';
+    ekle.innerHTML = '<span>＋</span><span>Yeni Firma</span>';
+    ekle.onclick = () => firmaFormAc(null);
+    kap.appendChild(ekle);
+  } else if (!firmalar.length) {
+    const ipucu = document.createElement('p');
+    ipucu.className = 'firma-ipucu';
+    ipucu.textContent = 'Firma tanımı için yönetici ile iletişime geçin.';
+    kap.appendChild(ipucu);
+  }
 }
 
 // DERİN BAĞLANTI (Beyan ekranından "Taslakları aç"): app.php#taslaklar.
@@ -1920,6 +1931,7 @@ $('btnFirmaDegis').onclick = () => {
 };
 
 function firmaFormAc(id) {
+  if (!firmaYonetici) return;   // savunma: düğmeler zaten çizilmez, sunucu da reddeder
   duzenlenenFirmaId = id;
   const f = id ? firmalar.find(x => x.id === id) : null;
   $('firmaFormBaslik').textContent = f ? 'Firmayı Düzenle' : 'Yeni Firma';
@@ -1961,9 +1973,11 @@ $('btnFirmaKaydet').onclick = async () => {
 
 $('btnFirmaSil').onclick = async () => {
   if (!confirm('Bu firma silinsin mi?')) return;
-  await api('/api/firmalar/sil', 'POST', { id: duzenlenenFirmaId });
-  $('modal').classList.remove('acik');
-  await firmalariYukle();
+  try {
+    await api('/api/firmalar/sil', 'POST', { id: duzenlenenFirmaId });
+    $('modal').classList.remove('acik');
+    await firmalariYukle();
+  } catch (e) { mesajGoster('firmaFormMesaj', e.message, 'hata'); }
 };
 
 $('btnFirmaVazgec').onclick = () => $('modal').classList.remove('acik');

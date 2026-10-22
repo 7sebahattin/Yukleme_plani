@@ -64,6 +64,8 @@ require_once __DIR__ . '/tekrar_gonder_lib.php';
 // Referans künye SEÇİM kuralları (fiyat yakınlığı → eski tarih → küçük kalan) +
 // künye/sıfat uyumsuzluğu kaydı. Gönderim yolu değişmez (hks_bildirim_kaydet tek yol).
 require_once __DIR__ . '/kunye_secim_lib.php';
+// Firma ekle/düzenle/sil: DB + audit mantığı (yetki/CSRF kapısı aşağıda, burada).
+require_once __DIR__ . '/firma_yonetim_lib.php';
 
 
 // =============================================================================
@@ -195,6 +197,17 @@ function hks_kisi_havuzuna_isle(PDO $db, $ortak, $kullaniciId) {
 // yapılandırmaları özel başlığı düşürebildiği için gövde yedeği kisi_kaydet /
 // kisi_sil'de istemci tarafından da gönderilir. csrf_check() paylaşılan
 // fonksiyondur (config/helpers.php) — burada yalnız girdisi seçilir.
+// Firma yönetimi (HKS kullanıcı adı/şifre/web servis şifresi dahil) YALNIZ yönetici:
+// is_admin() ('admin' slug'ı — dogum_deney.php / tani.php ile aynı kapı; özel role
+// devredilemez, bilinçli) + CSRF. 403 gövdesinde `code` alanı YOK: app.html api() yalnız
+// code===403 görünce CSRF tazeleyip tekrar dener, yetki hatasında gereksiz istek olmasın.
+function hks_firma_yonetici_kapisi(array $g): void {
+  if (!(function_exists('is_admin') && is_admin())) {
+    hks_json_cikti(['hata' => 'Firma yönetimi yalnız yöneticiye açıktır.'], 403);
+  }
+  csrf_check(hks_csrf_girdi($g));
+}
+
 function hks_csrf_girdi(array $g): ?string {
   $baslik = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
   if (is_string($baslik) && $baslik !== '') return $baslik;
@@ -218,41 +231,22 @@ try {
         'id' => $f['id'], 'ad' => $f['ad'], 'vergiNo' => $f['vergi_no'],
         'renk' => $f['renk'] ?: 'teal', 'userName' => $f['user_name'],
       ], $rows);
-      hks_json_cikti(['firmalar' => $firmalar]);
+      // `yonetici`: arayüz ekle/düzenle/sil düğmelerini gösterir. Asıl koruma firma_kaydet/firma_sil'de.
+      hks_json_cikti(['firmalar' => $firmalar, 'yonetici' => (function_exists('is_admin') && is_admin())]);
     }
 
     case 'firma_kaydet': {
-      if (empty($g['ad']) || empty($g['vergiNo'])) hks_json_cikti(['hata' => 'Firma adı ve vergi no zorunludur.'], 400);
-      if (!empty($g['id'])) {
-        // Güncelle
-        $mevcut = hks_firma_bul($g['id']);
-        if (!$mevcut) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
-        $pass = !empty($g['password']) ? $g['password'] : $mevcut['password'];
-        $srv  = !empty($g['servicePassword']) ? $g['servicePassword'] : $mevcut['servicePassword'];
-        $user = !empty($g['userName']) ? trim($g['userName']) : $mevcut['userName'];
-        $st = $db->prepare('UPDATE ' . hks_tablo('firmalar') . '
-          SET ad=?, renk=?, user_name=?, password_enc=?, service_password_enc=?, vergi_no=? WHERE id=?');
-        $st->execute([trim($g['ad']), $g['renk'] ?? $mevcut['renk'], $user,
-          hks_sifrele($pass), hks_sifrele($srv), trim($g['vergiNo']), $g['id']]);
-      } else {
-        // Yeni
-        if (empty($g['userName']) || empty($g['password']) || empty($g['servicePassword'])) {
-          hks_json_cikti(['hata' => 'Yeni firma için kullanıcı adı ve şifreler zorunludur.'], 400);
-        }
-        $id = 'f' . round(microtime(true) * 1000);
-        $st = $db->prepare('INSERT INTO ' . hks_tablo('firmalar') . '
-          (id, ad, renk, user_name, password_enc, service_password_enc, vergi_no)
-          VALUES (?,?,?,?,?,?,?)');
-        $st->execute([$id, trim($g['ad']), $g['renk'] ?? 'teal', trim($g['userName']),
-          hks_sifrele($g['password']), hks_sifrele($g['servicePassword']), trim($g['vergiNo'])]);
-      }
-      hks_json_cikti(['tamam' => true]);
+      hks_firma_yonetici_kapisi($g);
+      [$kod, $yanit] = hks_firma_kaydet_uygula($db, hks_tablo('firmalar'), $g, 'hks_firma_bul', 'hks_sifrele',
+        fn($a, $o, $n) => audit_log_event($a, 'hks_firma', null, $o, $n));
+      hks_json_cikti($yanit, $kod);
     }
 
     case 'firma_sil': {
-      $st = $db->prepare('DELETE FROM ' . hks_tablo('firmalar') . ' WHERE id = ?');
-      $st->execute([$g['id'] ?? '']);
-      hks_json_cikti(['tamam' => true]);
+      hks_firma_yonetici_kapisi($g);
+      [$kod, $yanit] = hks_firma_sil_uygula($db, hks_tablo('firmalar'), $g, 'hks_firma_bul',
+        fn($a, $o, $n) => audit_log_event($a, 'hks_firma', null, $o, $n));
+      hks_json_cikti($yanit, $kod);
     }
 
     // ---- SON KULLANILANLAR (firma bazlı) ----
