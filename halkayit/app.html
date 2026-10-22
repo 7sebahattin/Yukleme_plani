@@ -577,6 +577,9 @@
   #modal .modal-x { position:absolute; top:8px; right:8px; width:34px; height:34px; border-radius:50%; border:1px solid var(--cizgi, #d1d5db); background:var(--kart); color:inherit; font-size:16px; line-height:1; cursor:pointer; z-index:1; }
   #modal .modal-x.gizli { display:none; }
   #modal #modalOnayKutu h3 { padding-right:36px; }
+  /* Gönderim Sonucu: "🖨️ Yazdır" ile "Gönderilenlere Git" yan yana (Yazdır gizliyken Vazgeç tam genişlik) */
+  #modal .modal-eylem { display:flex; gap:8px; }
+  #modal .modal-eylem .btn { flex:1 1 0; min-width:0; }
   #modal .kutu { position:relative; background:var(--kart); border-radius:20px; padding:20px; max-width:440px; width:100%; max-height:82vh; overflow-y:auto; }
   #modal h3 { color:var(--navy); font-size:16px; margin-bottom:12px; }
   .onay-satir { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
@@ -1471,7 +1474,10 @@
     <h3 id="modalBaslik">⚠️ Gönderim Onayı — CANLI SİSTEM</h3>
     <div id="modalIcerik"></div>
     <button class="btn btn-amber" id="btnOnay">Evet, Gönder</button>
-    <button class="btn btn-soluk" id="btnVazgec">Vazgeç</button>
+    <div class="modal-eylem">
+      <button class="btn btn-ana gizli" id="btnSonucYazdir" type="button">🖨️ Yazdır</button>
+      <button class="btn btn-soluk" id="btnVazgec">Vazgeç</button>
+    </div>
   </div>
   <div class="kutu gizli" id="modalFirmaKutu">
     <h3 id="firmaFormBaslik">Yeni Firma</h3>
@@ -2003,9 +2009,9 @@ if ($('btnTopluKunye')) $('btnTopluKunye').onclick = () => topluKunyeEkraniAc();
 if ($('btnTopluKunyeAna')) $('btnTopluKunyeAna').onclick = () => topluKunyeEkraniAc();
 $('btnTopluGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
 
-// Çoklu Künye sorgusu — hem manuel "Sorgula" butonundan hem Gönderilenler
-// kartındaki "Yazdır" butonundan (otomatik doldurma sonrası) çağrılır.
-// firmaIdOverride verilirse (Gönderilenler'den geldiğinde) o firma kullanılır;
+// Çoklu Künye sorgusu — "Sorgula" butonundan çağrılır (Gönderilenler'deki "Yazdır"
+// v414'ten beri bu ekrana uğramaz: gonderimYazdir()).
+// firmaIdOverride verilirse o firma kullanılır;
 // yoksa ekranda seçili aktif firma sorgulanır.
 async function topluSorgulaCalistir(firmaIdOverride) {
   const firmaId = firmaIdOverride || (aktifFirma ? aktifFirma.id : '');
@@ -2211,8 +2217,11 @@ function kunyeQrDataUrl(text) {
 }
 
 // Ortak yazdırma penceresi — hem Çoklu Künye ekranından hem Gönderilenler kartından çağrılır.
-function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
+// hedef (isteğe bağlı, v414 doğrudan yazdırma): { pencere: önceden açılmış pencere, uyari: ekranda
+// gösterilecek, BASILMAYAN not }. Verilmezse davranış eskisiyle aynıdır (yeni pencere açar).
+function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler, hedef) {
   if (!kunyeler || !kunyeler.length) return;
+  hedef = hedef || {};
   const toplam = kunyeler.reduce((t, s) => t + Number(s.miktar || 0), 0);
   const rows = kunyeler.map(s => {
     const qr = kunyeQrDataUrl(s.kunyeNo);
@@ -2232,8 +2241,9 @@ function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
   const dosyaAdi = ((plaka || belge || 'kunye') + '-' + (firmaAdi || ''))
     .replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const w = window.open('', '_blank');
+  const w = hedef.pencere || window.open('', '_blank');
   if (!w) { toast('Yazdırma penceresi engellendi. Açılır pencere izni verin.'); return; }
+  if (hedef.pencere) w.document.open();
   w.document.write(
     '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>' + eHtml(dosyaAdi) + '</title>' +
     '<style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px;color:#111;background:#fff}' +
@@ -2245,7 +2255,9 @@ function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
     '.yzbtn{padding:9px 18px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid #1c4a6e;background:#1c4a6e;color:#fff;border-radius:8px;white-space:nowrap}' +
     '.pybtn{background:#25D366;border-color:#1da851}' +
     '.yzbtn:disabled{opacity:.6;cursor:wait}' +
-    '@media print{.btnlar{display:none}}</style></head><body>' +
+    '.yzuyari{background:#fff4d6;border:1px solid #e0a800;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}' +
+    '@media print{.btnlar,.yzuyari{display:none}}</style></head><body>' +
+    (hedef.uyari ? '<div class="yzuyari" id="yzUyari">' + eHtml(hedef.uyari) + '</div>' : '') +
     // Buton çubuğu: sağa hizalı, tek yerde. pdfIcerik'in DIŞINDA — PDF/paylaşıma
     // hiç girmez (yakalanan görüntü yalnızca pdfIcerik'tir).
     '<div class="btnlar">' +
@@ -2372,6 +2384,76 @@ $('btnTopluYazdir').onclick = () => {
   const belge = $('tkBelge').value.trim();
   topluYazdirPenceresiAc(aktifFirma ? aktifFirma.ad : '', tarih, plaka, belge, topluSonuc);
 };
+
+// ── Gönderimi DOĞRUDAN yazdır (v414) ──
+// Gönderilenler'deki "🖨️ Yazdır" ve Gönderim Sonucu penceresindeki "🖨️ Yazdır" buradan geçer;
+// Çoklu Künye Basım ekranına uğramaz (o ekran aynen kalır). Pencere TIKLAMA ANINDA açılır —
+// sorgu beklenip sonra açılsa açılır pencere engelleyicisine takılır. Künyeler HKS'ten CANLI
+// sorgulanır (toplu_kunye; önbellek YOK — çıktı, gönderimin HKS'e gerçekten gittiğinin kanıtıdır)
+// ve yalnız BU gönderimin künyelerine süzülür: aynı gün aynı plakaya başka gönderim de olabilir.
+// o = { firmaId, firmaAd, plaka, belgeNo, tarih:'YYYY-MM-DD', kunyeler:[künye no] }
+function kunyeNoNorm(n) { return String(n == null ? '' : n).replace(/\D/g, ''); }
+function gonderimYazdir(o) {
+  const w = window.open('', '_blank');
+  if (!w) { toast('Yazdırma penceresi engellendi. Açılır pencere izni verin.'); return; }
+  const etiket = (o.plaka || o.belgeNo || '') + (o.tarih ? ' · ' + o.tarih : '');
+  // Bekleme / hata sayfası (aynı pencere; sonuç gelince yazdırma sayfası üstüne yazılır)
+  const durum = (metin, hata) => {
+    if (w.closed) return;
+    w.document.open();
+    w.document.write('<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Künye Yazdırma</title>' +
+      '<style>body{font-family:Arial,sans-serif;padding:32px 20px;color:#111;background:#fff;text-align:center}' +
+      'h2{font-size:17px;margin:0 0 6px}.alt{color:#555;font-size:13px;margin-bottom:16px}' +
+      '.msj{display:inline-block;max-width:560px;padding:12px 16px;border-radius:10px;font-size:14px;line-height:1.45;' +
+      (hata ? 'background:#fde8e8;border:1px solid #e5a3a3;color:#7a1414' : 'background:#eef5fb;border:1px solid #b9d3ea') + '}' +
+      '.btnlar{margin-top:18px;display:flex;gap:8px;justify-content:center}' +
+      'button{padding:10px 18px;font-size:14px;font-weight:700;border-radius:8px;cursor:pointer;border:1px solid #1c4a6e;background:#1c4a6e;color:#fff}' +
+      'button.ikincil{background:#fff;color:#1c4a6e}</style></head><body>' +
+      '<h2>🖨️ Künye Yazdırma</h2><div class="alt">' + eHtml(etiket) + '</div>' +
+      '<div class="msj" id="yzDurum">' + eHtml(metin) + '</div>' +
+      (hata ? '<div class="btnlar"><button id="yzTekrar">↻ Tekrar dene</button>' +
+              '<button class="ikincil" id="yzKapat">Kapat</button></div>' : '') +
+      '</body></html>');
+    w.document.close();
+    if (hata) {
+      w.document.getElementById('yzTekrar').onclick = calistir;
+      w.document.getElementById('yzKapat').onclick = () => w.close();
+    }
+  };
+  async function calistir() {
+    if (!o.plaka && !o.belgeNo) { durum('Bu gönderimde plaka ve belge no yok — HKS sorgusu yapılamaz.', true); return; }
+    durum('⏳ Künyeler HKS\'ten alınıyor…');
+    let j;
+    try {
+      j = await api('/api/toplu_kunye', 'POST', { firmaId: o.firmaId, plaka: o.plaka || '', belgeNo: o.belgeNo || '', tarih: o.tarih });
+    } catch (e) {
+      let msg = (e && e.message) || 'Hata';
+      if (/GTBGLB00000001/.test(msg)) msg += ' — Bu plaka/tarih için seçili firmaya ait künye bulunamadı olabilir.';
+      durum('HKS sorgusu başarısız: ' + msg, true);
+      return;
+    }
+    if (w.closed) return;
+    let liste = j.kunyeler || [];
+    const beklenen = [...new Set((o.kunyeler || []).map(kunyeNoNorm).filter(Boolean))];
+    if (beklenen.length) liste = liste.filter(k => beklenen.includes(kunyeNoNorm(k.kunyeNo)));
+    if (!liste.length) {
+      durum(beklenen.length
+        ? 'Bu gönderimin künyeleri HKS sorgusunda bulunamadı (' + beklenen.length + ' künye bekleniyordu). ' +
+          'HKS\'e yeni yansımamış olabilir — birkaç saniye sonra tekrar deneyin.'
+        : 'Bu plaka/belge ve tarih için HKS\'te künye bulunamadı.', true);
+      return;
+    }
+    const eksik = beklenen.length - liste.length;
+    const uyari = (beklenen.length && eksik > 0)
+      ? '⚠ ' + beklenen.length + ' künyeden ' + eksik + ' tanesi HKS sorgusunda görünmedi; yalnız bulunan ' +
+        liste.length + ' künye listelendi. Birkaç saniye sonra pencereyi kapatıp tekrar yazdırabilirsiniz.'
+      : '';
+    topluYazdirPenceresiAc(o.firmaAd || '', o.tarih, o.plaka || '', o.belgeNo || '', liste, { pencere: w, uyari });
+    // Eksik varsa yazdırma penceresi uyarının üstünü örtmesin — kullanıcı kendisi basar.
+    if (!uyari) setTimeout(() => { try { if (!w.closed) { w.focus(); w.print(); } } catch (e) {} }, 400);
+  }
+  calistir();
+}
 
 $('btnMenuyeDon').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
 $('btnTaslaklar').onclick = () => taslakEkraniAc();
@@ -4638,6 +4720,7 @@ function taslakOnayAc(t) {
   $('modalIcerik').innerHTML = html;
   $('btnOnay').classList.remove('gizli');
   $('btnVazgec').textContent = 'Vazgeç';
+  $('btnSonucYazdir').classList.add('gizli');
   delete $('modal').dataset.sonuc;
   $('btnModalX').classList.add('gizli');
   $('modalFirmaKutu').classList.add('gizli');
@@ -4650,6 +4733,7 @@ $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
 // Gönderilenlere git / Taslağa dön yalnız alttaki düğmeyle. CANLI onay penceresinde geçerli DEĞİL.
 function sonucKapat() {
   $('modal').classList.remove('acik');
+  $('btnSonucYazdir').classList.add('gizli');
   delete $('modal').dataset.sonuc;
   $('btnModalX').classList.add('gizli');
   $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
@@ -4789,6 +4873,14 @@ $('btnOnay').onclick = async () => {
     $('modal').dataset.sonuc = '1'; // ✕ / boşluk tıklaması yalnız sonuç ekranında kapatır
     $('btnModalX').classList.remove('gizli');
     $('btnVazgec').textContent = herhangiBasarili ? 'Gönderilenlere Git' : (j.taslakKorundu ? 'Taslağa Dön' : 'Kapat');
+    // v414: Gönderilenler'e gitmeden bu gönderimin künyelerini doğrudan yazdır (pencere açık kalır).
+    const _gy = herhangiBasarili && j.gonderim ? j.gonderim : null;
+    const _gyFirma = aktifFirma ? { id: aktifFirma.id, ad: aktifFirma.ad } : { id: '', ad: '' };
+    $('btnSonucYazdir').classList.toggle('gizli', !_gy);
+    $('btnSonucYazdir').onclick = _gy ? () => gonderimYazdir({
+      firmaId: _gyFirma.id, firmaAd: _gyFirma.ad, plaka: _gy.plaka || '', belgeNo: _gy.belgeNo || '',
+      tarih: _gy.tarih, kunyeler: _gy.kunyeler || [],
+    }) : null;
     $('btnVazgec').onclick = () => {
       $('modal').classList.remove('acik');
       $('btnVazgec').onclick = () => $('modal').classList.remove('acik'); // sonraki kullanım için varsayılana dön
@@ -4803,6 +4895,7 @@ $('btnOnay').onclick = async () => {
   } catch (e) {
     alert('HATA: ' + e.message);
     $('modal').classList.remove('acik');
+    $('btnSonucYazdir').classList.add('gizli');
   }
   $('btnOnay').disabled = false;
   $('btnOnay').textContent = 'Evet, Gönder';
@@ -4866,7 +4959,7 @@ function gonderilenKartIcerik(g, i, gomulu) {
     `</div>` +
     (gomulu ? '' :
       `<div class="g-kart-head-sag">` +
-      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula">🖨️ Yazdır</button>` +
+      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Künyeleri HKS'ten sorgulayıp yazdır">🖨️ Yazdır</button>` +
       `<span class="g-kart-ok">▾</span>` +
       `</div>`) +
     `</div>` +
@@ -4954,7 +5047,7 @@ function gonderilenSatirHtml(g, i) {
     `<td class="g-c-kisa g-kilo">${G_SVG.agirlik}${kilo}</td>` +
     `<td class="g-c-kisa g-ucret">${G_SVG.para}${ucret}</td>` +
     `<td class="g-c-kisa g-c-eylem"><div class="g-eylem-kap">` +
-      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula" aria-label="Yazdır">${G_SVG.yazici}<span class="g-btn-yazi">Yazdır</span></button>` +
+      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Künyeleri HKS'ten sorgulayıp yazdır" aria-label="Yazdır">${G_SVG.yazici}<span class="g-btn-yazi">Yazdır</span></button>` +
       `<button type="button" class="g-btn-tekrar" data-i="${i}" title="Tekrar gönder" aria-label="Tekrar gönder" aria-haspopup="menu" aria-expanded="false">` +
         `<span class="g-tk-ana">${G_SVG.gonder}<span class="g-btn-yazi">Tekrar gönder</span></span><span class="g-tk-ok" aria-hidden="true">▾</span></button>` +
     `</div></td>` +
@@ -5063,13 +5156,15 @@ async function gonderilenEkraniAc() {
   }
 }
 
-// Yalnızca yönlendirme: Çoklu Künye ekranını aç, alanları doldur, Sorgula'ya bas.
+// v414: Çoklu Künye ekranına UĞRAMADAN doğrudan yazdırma penceresi (gonderimYazdir).
 // Liste zaten aktif firmaya filtreli olduğu için sorgu aktif firmayla yapılır.
 // g.zaman ISO-8601 offset'li ('c' formatı) — baştaki 10 karakter YYYY-MM-DD.
 function gonderilenYazdir(g) {
-  const tarihStr = String(g.zaman).slice(0, 10);
-  topluKunyeEkraniAc(g.plaka || '', g.belgeNo || '', tarihStr);
-  $('btnTopluSorgula').click();
+  gonderimYazdir({
+    firmaId: aktifFirma ? aktifFirma.id : '', firmaAd: aktifFirma ? aktifFirma.ad : (g.firmaAd || ''),
+    plaka: g.plaka || '', belgeNo: g.belgeNo || '', tarih: String(g.zaman).slice(0, 10),
+    kunyeler: g.yeniKunyeler || [],
+  });
 }
 
 // Masaüstü satırı: altında bugünkü kartı aç/kapat. Detay satırı İLK açılışta kurulur
