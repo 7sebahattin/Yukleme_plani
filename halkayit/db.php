@@ -103,6 +103,25 @@ function hks_kv_yaz($anahtar, $veri) {
   $st->execute([$anahtar, json_encode($veri, JSON_UNESCAPED_UNICODE)]);
 }
 
+// Silme + önek listesi (v417 belirsiz gönderim işaretleri: anahtar-başına-kayıt).
+// $onek yalnız kod sabitidir (kullanıcı verisi DEĞİL). LIKE'ta '_' tek karakter jokeridir;
+// bu yüzden sonuç PHP'de gerçek önek denetimiyle süzülür (ESCAPE sözdizimi MySQL/SQLite arasında taşınmaz).
+function hks_kv_sil($anahtar) {
+  $st = hks_db()->prepare('DELETE FROM ' . hks_tablo('kv') . ' WHERE anahtar = ?');
+  $st->execute([$anahtar]);
+}
+function hks_kv_onekli($onek) {
+  $onek = (string)$onek;
+  $st = hks_db()->prepare('SELECT anahtar, deger FROM ' . hks_tablo('kv') . ' WHERE anahtar LIKE ?');
+  $st->execute([$onek . '%']);
+  $out = [];
+  foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    if (strncmp((string)$r['anahtar'], $onek, strlen($onek)) !== 0) continue;
+    $out[$r['anahtar']] = json_decode($r['deger'], true);
+  }
+  return $out;
+}
+
 // --- Şifreleme (AES-256-CBC) ---
 function hks_sifrele($duz) {
   $anahtar = hash('sha256', HKS_SIFRELEME_ANAHTARI, true);

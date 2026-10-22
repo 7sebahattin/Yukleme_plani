@@ -59,9 +59,9 @@ Tüm istekler **POST**, gövde JSON, cevap JSON. Hata olursa `{ "hata": "..." }`
 
 | action | Gövde | Döner |
 |---|---|---|
-| `firmalar` | — | `{firmalar:[{id,ad,vergiNo,renk,userName}]}` (şifre DÖNMEZ) |
-| `firma_kaydet` | `{id?,ad,userName,password,servicePassword,vergiNo,renk}` | `{tamam:true}` |
-| `firma_sil` | `{id}` | `{tamam:true}` |
+| `firmalar` | — | `{firmalar:[{id,ad,vergiNo,renk,userName}], yonetici:bool}` (şifre DÖNMEZ; `yonetici` yalnız arayüz ipucu) |
+| `firma_kaydet` | `{id?,ad,userName,password,servicePassword,vergiNo,renk}` | `{tamam:true}` — **yalnız yönetici (`is_admin()`) + CSRF**, audit modül `hks_firma` (şifre/kullanıcı adı değeri yazılmaz) |
+| `firma_sil` | `{id}` | `{tamam:true}` — **yalnız yönetici + CSRF**, audit; olmayan id → 400 |
 | `sonlar` | — | `{plakalar,ulkeler,urunler,karsiTaraflar}` (son kullanılanlar) |
 | `listeler` | — | önbellekten referans listeleri veya `{bos:true}` |
 | `listeler_yenile` | `{firmaId}` | HKS'ten çekip önbelleğe yazar |

@@ -255,7 +255,8 @@ const sunucu = http.createServer((q, s) => {
   ok('403 → /api/csrf → tekrar → başarılı', JSON.stringify(ak.filter(a => a !== 'kisiler')) === JSON.stringify(['kisi_kaydet', 'csrf', 'kisi_kaydet']) && !(await sayfa.isVisible('#kisiForm')), ak.join(','));
   const son2 = istekler.filter(i => i.action === 'kisi_kaydet')[1];
   ok('tekrarda taze token başlıkta + gövdede', son2.csrf === 'taze456' && son2.govde.csrf === 'taze456', JSON.stringify([son2.csrf, son2.govde.csrf]));
-  ok('gövdeye csrf yalnız kisi uçlarında', istekler.filter(i => !['kisi_kaydet', 'kisi_sil'].includes(i.action)).every(i => !('csrf' in i.govde)));
+  ok('gövdeye csrf yalnız yazan uçlarda (okuma uçlarında yok)', istekler.filter(i => !['kisi_kaydet', 'kisi_sil', 'firma_kaydet', 'firma_sil',
+    'listeler_yenile', 'taslak_kaydet', 'taslak_sil', 'taslak_gonder', 'belirsiz_isaret_kapat'].includes(i.action)).every(i => !('csrf' in i.govde)));
   // ikinci 403'te döngü yok
   await sayfa.click('#btnKisiYeni'); await bekle();
   await sayfa.fill('#kfTc', TC_OK); await sayfa.fill('#kfAd', 'CSRF-DENEME');

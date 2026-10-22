@@ -459,7 +459,7 @@ $pTaslakLib = strpos($api, "require_once __DIR__ . '/taslak_lib.php';");
 $pLib = strpos($api, "require_once __DIR__ . '/tekrar_gonder_lib.php';");
 ok('api.php tekrar_gonder_lib.php\'yi taslak_lib\'ten SONRA yükler', $pTaslakLib !== false && $pLib !== false && $pLib > $pTaslakLib);
 ok("INSERT veri JSON'u kopyayı taşır", strpos($api,
-    "json_encode(['yeniKunyeler' => \$yeniKunyeler, 'sonuclar' => \$sonuc['sonuclar'], 'kopya' => \$__kopya], JSON_UNESCAPED_UNICODE)") !== false);
+    "json_encode(['yeniKunyeler' => \$yeniKunyeler, 'sonuclar' => \$sonuc['sonuclar'], 'kopya' => \$__kopya, 'gonderen' => hks_gonderim_gonderen(\$__hks_user)], JSON_UNESCAPED_UNICODE)") !== false);
 $pCase = strpos($api, "case 'taslak_gonder':");
 $pVeri = strpos($api, "\$veri = json_decode(\$t['veri'], true);", (int)$pCase);
 $pKopya = strpos($api, '$__kopya = hks_gonderim_kopyasi(is_array($veri) ? $veri : []);', (int)$pCase);
@@ -480,6 +480,7 @@ $pListeSon = strpos($api, "case 'gonderilen_tohum':");
 $liste = ($pListe !== false && $pListeSon !== false) ? substr($api, $pListe, $pListeSon - $pListe) : '';
 ok("liste ucu satır başına 'kopyaVar' döner", strpos($liste, "'kopyaVar' => !empty(\$veri['kopya'])") !== false);
 ok('liste ucu kopyanın kendisini DÖNMEZ', !preg_match("/'kopya'\s*=>/", $liste));
+ok("liste ucu 'gonderen' (ad) döner (v417)", strpos($liste, "'gonderen' => is_string(\$veri['gonderen']['ad'] ?? null)") !== false);
 
 $pTohum = strpos($api, "case 'gonderilen_tohum':");
 $pTohumSon = $pTohum !== false ? strpos($api, "\n    case '", $pTohum + 10) : false;

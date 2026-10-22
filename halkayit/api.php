@@ -58,12 +58,15 @@ function hks_govde() {
 // Bu fonksiyonlar halkayit/taslak_lib.php'ye TAŞINDI; Beyan ekranındaki
 // "Bildirim Yap" akışı da aynı doğrulamayı kullansın diye. Davranış aynıdır.
 require_once __DIR__ . '/taslak_lib.php';
+require_once __DIR__ . '/belirsiz_gonderim_lib.php';   // v417: belirsiz gönderim işareti + HKS kontrolü
 // "Tekrar gönder": gönderimde taslağın beyaz listeli kopyası + Gönderilenler'den
 // forma dolu tohum (salt okunur; taslak yazmanın tek yolu yine hks_taslak_olustur).
 require_once __DIR__ . '/tekrar_gonder_lib.php';
 // Referans künye SEÇİM kuralları (fiyat yakınlığı → eski tarih → küçük kalan) +
 // künye/sıfat uyumsuzluğu kaydı. Gönderim yolu değişmez (hks_bildirim_kaydet tek yol).
 require_once __DIR__ . '/kunye_secim_lib.php';
+// Firma ekle/düzenle/sil: DB + audit mantığı (yetki/CSRF kapısı aşağıda, burada).
+require_once __DIR__ . '/firma_yonetim_lib.php';
 
 
 // =============================================================================
@@ -192,9 +195,36 @@ function hks_kisi_havuzuna_isle(PDO $db, $ortak, $kullaniciId) {
 // CSRF token'ı: önce X-CSRF-Token başlığı, yoksa JSON gövdedeki 'csrf' alanı
 // (sözleşme sırası). BOŞ başlık "yok" sayılır — meta yer tutucusu boş token
 // üretirse gövdedeki geçerli token yine okunabilsin. Bazı proxy/sunucu
-// yapılandırmaları özel başlığı düşürebildiği için gövde yedeği kisi_kaydet /
-// kisi_sil'de istemci tarafından da gönderilir. csrf_check() paylaşılan
-// fonksiyondur (config/helpers.php) — burada yalnız girdisi seçilir.
+// yapılandırmaları özel başlığı düşürebildiği için gövde yedeği, durum değiştiren
+// uçlarda (app.html API_GOVDE_CSRF) istemci tarafından da gönderilir. csrf_check()
+// paylaşılan fonksiyondur (config/helpers.php) — burada yalnız girdisi seçilir.
+//
+// v418 — MERKEZİ CSRF KAPISI: aşağıdaki `switch`'ten ÖNCE, SALT OKUNUR eylemlerin
+// (bu liste) dışındaki HER eylem geçerli CSRF token ister (fail-closed:
+// yeni eklenen ya da bilinmeyen eylem kendiliğinden korunur). Listeye YALNIZ gerçekten
+// salt okunur (DB'ye yazmayan, HKS'e geri alınamaz gönderim yapmayan) eylem eklenir;
+// `kisiler` tek bilinçli istisnadır (idempotent tek seferlik eski-veri içe aktarma).
+// tani.php (admin teşhis) token yollamaz — kullandığı eylemlerin hepsi bu listededir.
+function hks_csrf_muaf_eylemler(): array {
+  return [
+    'firmalar', 'sonlar', 'kisiler', 'csrf', 'listeler', 'kunyeler', 'stok', 'kunye_detay',
+    'toplu_kunye', 'taslaklar', 'gonderilenler', 'gonderilen_tohum', 'urun_listeleri',
+    'urun_cinsleri', 'sorgu', 'etiket', 'bildirim_onizle', 'iller', 'ilceler', 'beldeler',
+    'isyerleri', 'ayni_plaka_bugun', 'kayitli_kisi',
+  ];
+}
+// Firma yönetimi (HKS kullanıcı adı/şifre/web servis şifresi dahil) YALNIZ yönetici:
+// is_admin() ('admin' slug'ı — dogum_deney.php / tani.php ile aynı kapı; özel role
+// devredilemez, bilinçli). CSRF merkezi kapıda (switch öncesi, v418) denetlenir — burada
+// TEKRARLANMAZ: kapı session_write_close() yaptığı için ikinci csrf_check oturumu yeniden
+// açıp kilitlerdi. 403 gövdesinde `code` alanı YOK: app.html api() yalnız code===403
+// görünce CSRF tazeleyip tekrar dener, yetki hatasında gereksiz istek olmasın.
+function hks_firma_yonetici_kapisi(array $g): void {
+  if (!(function_exists('is_admin') && is_admin())) {
+    hks_json_cikti(['hata' => 'Firma yönetimi yalnız yöneticiye açıktır.'], 403);
+  }
+}
+
 function hks_csrf_girdi(array $g): ?string {
   $baslik = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
   if (is_string($baslik) && $baslik !== '') return $baslik;
@@ -204,9 +234,23 @@ function hks_csrf_girdi(array $g): ?string {
 
 // =============================================================================
 try {
-  hks_tablolari_hazirla();
   $action = $_GET['action'] ?? '';
   $g = hks_govde();
+
+  // ---- MERKEZİ CSRF KAPISI (v418) ----
+  // Salt okunur eylemler dışındaki her şey (durum değiştiren, HKS'e gönderen, bilinmeyen
+  // dahil) geçerli token ister. Hiçbir case çalışmadan ve taslak_gonder'in atomik
+  // DELETE sahiplenmesinden ÖNCE: 403 sonrası istemci tekrarında taslak kaybolmaz.
+  // csrf_check() session_start() açar; dosya oturumunda kilit betik bitene kadar tutulur
+  // ve taslak_gonder/stok 300-600 sn sürebilir → doğrulamadan hemen sonra oturum KAPATILIR
+  // (bu uçta $_SESSION'a yazan kod yoktur). Gövdedeki 'csrf' yedek alanı case'lere sızmasın.
+  if (!in_array($action, hks_csrf_muaf_eylemler(), true)) {
+    csrf_check(hks_csrf_girdi($g));
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+  }
+  unset($g['csrf']);
+
+  hks_tablolari_hazirla();
   $db = hks_db();
 
   switch ($action) {
@@ -218,41 +262,22 @@ try {
         'id' => $f['id'], 'ad' => $f['ad'], 'vergiNo' => $f['vergi_no'],
         'renk' => $f['renk'] ?: 'teal', 'userName' => $f['user_name'],
       ], $rows);
-      hks_json_cikti(['firmalar' => $firmalar]);
+      // `yonetici`: arayüz ekle/düzenle/sil düğmelerini gösterir. Asıl koruma firma_kaydet/firma_sil'de.
+      hks_json_cikti(['firmalar' => $firmalar, 'yonetici' => (function_exists('is_admin') && is_admin())]);
     }
 
     case 'firma_kaydet': {
-      if (empty($g['ad']) || empty($g['vergiNo'])) hks_json_cikti(['hata' => 'Firma adı ve vergi no zorunludur.'], 400);
-      if (!empty($g['id'])) {
-        // Güncelle
-        $mevcut = hks_firma_bul($g['id']);
-        if (!$mevcut) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
-        $pass = !empty($g['password']) ? $g['password'] : $mevcut['password'];
-        $srv  = !empty($g['servicePassword']) ? $g['servicePassword'] : $mevcut['servicePassword'];
-        $user = !empty($g['userName']) ? trim($g['userName']) : $mevcut['userName'];
-        $st = $db->prepare('UPDATE ' . hks_tablo('firmalar') . '
-          SET ad=?, renk=?, user_name=?, password_enc=?, service_password_enc=?, vergi_no=? WHERE id=?');
-        $st->execute([trim($g['ad']), $g['renk'] ?? $mevcut['renk'], $user,
-          hks_sifrele($pass), hks_sifrele($srv), trim($g['vergiNo']), $g['id']]);
-      } else {
-        // Yeni
-        if (empty($g['userName']) || empty($g['password']) || empty($g['servicePassword'])) {
-          hks_json_cikti(['hata' => 'Yeni firma için kullanıcı adı ve şifreler zorunludur.'], 400);
-        }
-        $id = 'f' . round(microtime(true) * 1000);
-        $st = $db->prepare('INSERT INTO ' . hks_tablo('firmalar') . '
-          (id, ad, renk, user_name, password_enc, service_password_enc, vergi_no)
-          VALUES (?,?,?,?,?,?,?)');
-        $st->execute([$id, trim($g['ad']), $g['renk'] ?? 'teal', trim($g['userName']),
-          hks_sifrele($g['password']), hks_sifrele($g['servicePassword']), trim($g['vergiNo'])]);
-      }
-      hks_json_cikti(['tamam' => true]);
+      hks_firma_yonetici_kapisi($g);
+      [$kod, $yanit] = hks_firma_kaydet_uygula($db, hks_tablo('firmalar'), $g, 'hks_firma_bul', 'hks_sifrele',
+        fn($a, $o, $n) => audit_log_event($a, 'hks_firma', null, $o, $n));
+      hks_json_cikti($yanit, $kod);
     }
 
     case 'firma_sil': {
-      $st = $db->prepare('DELETE FROM ' . hks_tablo('firmalar') . ' WHERE id = ?');
-      $st->execute([$g['id'] ?? '']);
-      hks_json_cikti(['tamam' => true]);
+      hks_firma_yonetici_kapisi($g);
+      [$kod, $yanit] = hks_firma_sil_uygula($db, hks_tablo('firmalar'), $g, 'hks_firma_bul',
+        fn($a, $o, $n) => audit_log_event($a, 'hks_firma', null, $o, $n));
+      hks_json_cikti($yanit, $kod);
     }
 
     // ---- SON KULLANILANLAR (firma bazlı) ----
@@ -287,9 +312,7 @@ try {
     }
 
     case 'kisi_kaydet': {
-      // Yeni yazma uçları CSRF ister (JSON-aware: 403 + JSON). Token başlıkta
-      // (X-CSRF-Token), yoksa gövdede ('csrf') — bkz. hks_csrf_girdi().
-      csrf_check(hks_csrf_girdi($g));
+      // CSRF: merkezi kapıda (switch öncesi) — bkz. hks_csrf_muaf_eylemler().
       $sonuc = hks_kisi_kaydet($db, $g, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
       if ($sonuc['kod'] !== 200) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod']);
       audit_log_event($sonuc['islem'], 'hks_kisi', (int)$sonuc['satir']['id'],
@@ -299,7 +322,6 @@ try {
     }
 
     case 'kisi_sil': {
-      csrf_check(hks_csrf_girdi($g));
       $sonuc = hks_kisi_sil($db, (int)($g['id'] ?? 0));
       if ($sonuc['kod'] !== 200) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod']);
       audit_log_event('delete', 'hks_kisi', (int)$sonuc['eski']['id'], hks_kisi_audit_degerleri($sonuc['eski']), null);
@@ -418,7 +440,11 @@ try {
         }
         return $__plakaSay[$k];
       };
-      $taslaklar = array_map(function ($r) use ($__adlar, $__ayniPlaka) {
+      // v417: belirsiz kalan gönderim işaretleri (plaka+gün anahtarlı; salt okunur, hata yutulur).
+      $__belirsizListe = [];
+      try { $__belirsizListe = hks_belirsiz_liste_firma($fid, date('Y-m-d')); }
+      catch (Throwable $e) { error_log('[hks] belirsiz işaret listesi okunamadı: ' . get_class($e)); }
+      $taslaklar = array_map(function ($r) use ($__adlar, $__ayniPlaka, $__belirsizListe) {
         $veri = json_decode($r['veri'], true);
         $__plakaBugun = $__ayniPlaka((array)($veri['ortak'] ?? []), (string)$r['firma_ad']);
         if (isset($veri['ortak']['ulkeAd'])) {
@@ -429,6 +455,8 @@ try {
           'firmaId' => $r['firma_id'], 'firmaAd' => $r['firma_ad'],
           'satirlar' => $veri['satirlar'], 'ortak' => $veri['ortak'],
           'ayniPlakaBugun' => $__plakaBugun,
+          'belirsizGonderim' => hks_belirsiz_taslak_icin($__belirsizListe,
+            $veri['ortak']['plaka'] ?? '', $veri['ortak']['belgeNo'] ?? ''),
         ];
       }, $rows);
       hks_json_cikti(['taslaklar' => $taslaklar]);
@@ -474,9 +502,23 @@ try {
       }
       hks_json_cikti(['tamam' => true]);
     }
+    // v417: kullanıcı HKS'te (hks.hal.gov.tr / Bildirim Sorgulama) kontrol edip belirsiz
+    // gönderim işaretini kapatır. Gönderim YAPMAZ, taslağa dokunmaz. CSRF + firma izolasyonu
+    // (işaret yalnız bu firmanın listesinde aranır) + audit (kişisel veri yok).
+    case 'belirsiz_isaret_kapat': {
+      $fid = trim($g['firmaId'] ?? '');
+      if ($fid === '') hks_json_cikti(['hata' => 'Firma seçilmedi.'], 400);
+      $__sonucTur = in_array(($g['sonuc'] ?? ''), ['kunye_yok', 'gonderilmis'], true) ? $g['sonuc'] : 'kunye_yok';
+      $__is = hks_belirsiz_id_ile(hks_belirsiz_liste_firma($fid, date('Y-m-d')), trim((string)($g['isaretId'] ?? '')));
+      if (!$__is) hks_json_cikti(['hata' => 'İşaret bulunamadı (süresi dolmuş ya da zaten kapatılmış olabilir).'], 404);
+      hks_belirsiz_temizle_anahtar((string)$__is['anahtar']);
+      hks_belirsiz_audit('update', $fid, [$__is], ['sonuc' => $__sonucTur]);
+      hks_json_cikti(['tamam' => true]);
+    }
     case 'taslak_gonder': {
       // Yalnızca seçili firmanın taslağı gönderilebilir (firma-izolasyonu).
       $fid = trim($g['firmaId'] ?? '');
+      // CSRF: merkezi kapıda (switch öncesi, taslak SAHİPLENİLMEDEN önce) — v418.
       $st = $db->prepare('SELECT * FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
       $st->execute([$g['id'] ?? '', $fid]);
       $t = $st->fetch();
@@ -512,6 +554,24 @@ try {
              ->execute([$t['id'], $t['zaman'], $t['firma_id'], $t['firma_ad'], $t['veri']]);
         } catch (Throwable $e) { error_log('[hks] taslak geri yazilamadi: ' . $e->getMessage()); }
       };
+
+      // v417 — SAHİPLENME SONRASI GÜVENCE. Sahiplenme ile geri koyma arasında yakalanmayan
+      // istisna, PHP fatal'ı ya da max_execution_time süreci öldürürse hiçbir catch çalışmaz
+      // ve taslak SESSİZCE yok olurdu (HKS çağrısı başladıysa ayrıca belirsiz kalırdı).
+      // Kapanışta: gönderim tamamlanmadıysa ($__bitti = en az bir künye oluştu) ve taslak
+      // tabloda yoksa geri konur; HKS çağrısına girilmişse ayrıca BELİRSİZ işaretlenir.
+      // SIGKILL / proxy'nin süreci öldürmesinde çalışmaz (bilinen sınır).
+      $__bitti = false; $__hksBasladi = false; $__hksGun = date('Y-m-d');
+      register_shutdown_function(function () use ($db, $t, $taslagiGeriKoy, &$__bitti, &$__hksBasladi, &$__hksGun) {
+        if ($__bitti) return;
+        try {
+          $__v = $db->prepare('SELECT 1 FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+          $__v->execute([$t['id'], $t['firma_id']]);
+          if ($__v->fetchColumn()) return;   // zaten geri konmuş
+          if ($__hksBasladi) hks_belirsiz_isaretle_taslaktan($t, 'sonlandi', 'İstek tamamlanmadan sonlandı.', $__hksGun);
+          $taslagiGeriKoy();
+        } catch (Throwable $e) { error_log('[hks] kapanış güvencesi: ' . get_class($e)); }
+      });
 
       $cfg = hks_firma_bul($t['firma_id']);
       if (!$cfg) {
@@ -654,6 +714,67 @@ try {
         }
       }
 
+      // ── v417: BELİRSİZ GÖNDERİM KONTROLÜ ────────────────────────────────────────
+      // Bu plaka/belge için daha önce bağlantı kopması vb. nedenle HKS'in bildirimi ALIP
+      // ALMADIĞI bilinmeyen bir gönderim işaretlendiyse, GERÇEK gönderimden ÖNCE HKS'e
+      // SALT OKUNUR sorulur (hks_toplu_kunye): Gönderilenler'de kaydı olmayan künye varsa
+      // gönderim 409 ile DURUR; sorgu yapılamazsa da DURUR (fail-closed). Sıra önemli: bu blok
+      // doğum-deneyi token'ının tüketildiği bloktan ÖNCE olmalı (409 tek kullanımlık deneyi
+      // harcamasın). İşaret yoksa hiçbir ek çağrı yapılmaz. Bilinçli geçiş: istemci
+      // `belirsizOnay` = kayıtlı işaret id'si (sunucuda birebir doğrulanır) + künye
+      // bulunduysa ayrıca `belirsizKunyeOnay`; audit'e yazılır. Gönderim yine TEK yoldan gider.
+      $__bgIsaretler = [];
+      try {
+        $__bgIsaretler = hks_belirsiz_oku_gunler($t['firma_id'], $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', date('Y-m-d'));
+      } catch (Throwable $__bge) { error_log('[hks] belirsiz işaret okunamadı: ' . get_class($__bge)); }
+      $__belirsizKontrol = '';
+      if ($__bgIsaretler) {
+        @set_time_limit(300);   // salt okunur SOAP (en çok 2 gün × 60 sn); taslak sahiplenilmiş halde
+        $__bgId = (string)($__bgIsaretler[0]['id'] ?? '');
+        $__bgOnay = hks_belirsiz_onay_gecerli($__bgIsaretler, $g['belirsizOnay'] ?? '');
+        try {
+          $__bgBilinen = [];
+          foreach ([date('Y-m-d'), hks_belirsiz_gun_oncesi(date('Y-m-d'))] as $__bgGun) {
+            $__bgBilinen = array_merge($__bgBilinen,
+              hks_belirsiz_bilinen_kunyeler($db, hks_tablo('gonderilenler'), (string)$t['firma_id'], (string)$t['firma_ad'], $__bgGun));
+          }
+          $__bgKontrol = hks_belirsiz_kontrol($__bgIsaretler,
+            fn($gun, $pl, $bel) => hks_toplu_kunye($cfg, $gun, $pl, $bel), $__bgBilinen, date('Y-m-d'));
+        } catch (Throwable $__bge) {
+          $__bgKontrol = ['durum' => 'kontrol_edilemedi', 'bulunan' => [], 'hata' => 'Beklenmeyen hata (' . get_class($__bge) . ').'];
+        }
+        $__belirsizKontrol = $__bgKontrol['durum'];
+        if ($__bgKontrol['durum'] === 'kunye_var') {
+          if ($__bgOnay && !empty($g['belirsizKunyeOnay'])) {
+            hks_belirsiz_audit('update', (string)$t['firma_id'], $__bgIsaretler,
+              ['bulunan_sayisi' => count($__bgKontrol['bulunan']), 'kontrol' => 'kunye_var']);
+          } else {
+            $taslagiGeriKoy();
+            hks_json_cikti([
+              'hata' => 'DURDURULDU: bu plaka için önceki gönderim belirsiz kalmıştı ve HKS\'te Gönderilenler\'de ' .
+                'kaydı olmayan ' . count($__bgKontrol['bulunan']) . ' künye bulundu. Bildirim gönderilmedi, taslak silinmedi.',
+              'kod' => 'belirsiz_gonderim_kunye_var', 'belirsiz' => true, 'taslakKorundu' => true,
+              'isaretId' => $__bgId, 'bulunan' => $__bgKontrol['bulunan'],
+            ], 409);
+          }
+        } elseif ($__bgKontrol['durum'] === 'kontrol_edilemedi') {
+          if ($__bgOnay) {
+            hks_belirsiz_audit('update', (string)$t['firma_id'], $__bgIsaretler, ['kontrol' => 'kontrol_edilemedi']);
+          } else {
+            $taslagiGeriKoy();
+            hks_json_cikti([
+              'hata' => 'DURDURULDU: bu plaka için önceki gönderim belirsiz kalmıştı ve HKS\'te künye olup olmadığı ŞU AN ' .
+                'kontrol edilemedi (' . ($__bgKontrol['hata'] !== '' ? $__bgKontrol['hata'] : 'bilinmeyen neden') . '). ' .
+                'Bildirim gönderilmedi, taslak silinmedi.',
+              'kod' => 'belirsiz_gonderim_kontrol_edilemedi', 'belirsiz' => true, 'taslakKorundu' => true,
+              'isaretId' => $__bgId, 'bulunan' => [],
+            ], 409);
+          }
+        }
+        // 'temiz': HKS taramasında Gönderilenler dışında künye görünmedi — bu KESİN kanıt değildir
+        // (işaret silinmez, yalnız başarılı gönderimde silinir); gönderim sürer, yanıtta bildirilir.
+      }
+
       // Bu çağrı GERİ ALINAMAZ. İstisna fırlatırsa (SOAP zaman aşımı, ağ kopması)
       // HKS'in isteği ALIP ALMADIĞINI BİLEMEYİZ. Taslak sahiplenme sırasında
       // silindiği için burada geri konmazsa kullanıcının emeği kaybolur ve
@@ -715,6 +836,18 @@ try {
         ];
       }
 
+      // GÖNDERİM AUDIT'İ (v417): niyet kaydı — süreç fatal/zaman aşımıyla ölürse
+      // 'basla' var 'sonuc' yok = belirsiz. Kullanıcıyı audit_log_event ekler;
+      // kişisel veri YOK (bkz. hks_gonderim_audit_payload). Hata yutulur.
+      $__actx = [];
+      try {
+        $__aref = bin2hex(random_bytes(8));
+        $__actx = hks_gonderim_audit_ctx($t, $ortak, (array)$satirlar, $planMi, $__aref, hks_bildirim_turu_kodu($ortak));
+      } catch (Throwable $__ae) { error_log('[hks_gonderim_audit] ctx ' . get_class($__ae)); }
+      hks_gonderim_audit_yaz('hks_gonderim_basla', 'basla', $__actx);
+
+      $__hksGun = date('Y-m-d');   // belirsiz kalırsa işaretin günü = denemenin BAŞLADIĞI gün
+      $__hksBasladi = true;
       try {
         $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak, $__secenek);
         // HKS'e GERÇEKTEN giden ikinci kişi kimliği — hata ekranında gösterilir.
@@ -743,17 +876,35 @@ try {
       } catch (Throwable $__e) {
         $taslagiGeriKoy();
         error_log('[hks] bildirim_kaydet istisna: ' . $__e->getMessage());
+        // Belirsiz sonuç: yalnız istisna SINIFI (mesaj kişisel veri taşıyabilir).
+        hks_gonderim_audit_yaz('hks_gonderim_sonuc', 'belirsiz', $__actx + ['exception_sinifi' => get_class($__e)]);
         if ($__dogumKaydi !== null) {
           hks_dogum_deneme_kaydet($__dogumKaydi + ['bicim' => hks_dogum_varyant_coz(isset($__secenek['bicim']) ? ['bicim' => $__secenek['bicim']] : null)['bicim'],
             'sonuc' => 'belirsiz', 'hataKodu' => 0, 'ogrenildi' => false]);
         }
+        $__hksBasladi = false;   // sonuç burada işlendi; kapanış güvencesi tekrar işaretlemesin
+        // v417: yalnız isteğin HKS'e HİÇ ulaşmadığı kesin bağlantı hataları (DNS / bağlanamadı /
+        // TLS) işaretsizdir. Zaman aşımı, kesilen yanıt, HTTP 5xx ve bilinmeyen her şey BELİRSİZDİR:
+        // kalıcı işaret yazılır, tekrar gönderimde HKS önce kontrol edilir.
+        if (hks_belirsiz_kesin_gitmedi($__e)) {
+          hks_json_cikti([
+            'hata' => 'HKS\'e bağlanılamadı: ' . $__e->getMessage() . ' — istek HKS\'e ULAŞMADI, bildirim ' .
+              'oluşmadı. Taslak silinmedi; bağlantı düzelince tekrar gönderebilirsiniz.',
+            'taslakKorundu' => true,
+          ], 502);
+        }
+        $__isaret = null;
+        try { $__isaret = hks_belirsiz_isaretle_taslaktan($t, 'istisna', $__e->getMessage(), $__hksGun); }
+        catch (Throwable $__ie) { error_log('[hks] belirsiz işaret yazılamadı: ' . get_class($__ie)); }
+        // 502 yerine 409: ters vekil/CDN 502'yi HTML sayfasıyla değiştirip uyarıyı yutabiliyordu.
         hks_json_cikti([
           'hata' => 'Bildirim gönderilirken bağlantı kesildi: ' . $__e->getMessage() .
-            ' — HKS\'in bildirimi ALIP ALMADIĞI BİLİNMİYOR. Taslak silinmedi. ' .
-            'TEKRAR GÖNDERMEDEN ÖNCE hks.hal.gov.tr üzerinden veya "Bildirim Sorgulama" ' .
-            'ekranından künyenin oluşup oluşmadığını KONTROL EDİN; oluştuysa taslağı silin.',
-          'taslakKorundu' => true,
-        ], 502);
+            ' — HKS\'in bildirimi ALIP ALMADIĞI BİLİNMİYOR. Taslak silinmedi ve "önceki gönderim belirsiz" ' .
+            'olarak işaretlendi: tekrar gönderirken HKS önce otomatik kontrol edilir. İsterseniz hks.hal.gov.tr ' .
+            'veya "Bildirim Sorgulama" ekranından künyenin oluşup oluşmadığını kendiniz de kontrol edin.',
+          'kod' => 'belirsiz_gonderim', 'belirsiz' => true, 'taslakKorundu' => true,
+          'isaretId' => $__isaret['id'] ?? '',
+        ], 409);
       }
 
       // KÜNYE / SIFAT UYUMSUZLUĞU KAYDI — başarı/başarısızlık fark etmez, tam
@@ -809,27 +960,60 @@ try {
       // taslağa geri döner, hatalı alanı (ör. karşı taraf sıfatı) "Düzenle" ile
       // değiştirip AYNI taslağı tekrar gönderebilir — formu baştan doldurmaz.
       if (count($basarili) === 0) {
+        // Audit taslak geri konmadan ÖNCE; 'yanit_bos' = sonuç satırı ve genel hata yok
+        // (yanıt ayrıştırılamadı — HKS isteği almış olabilir). Davranış DEĞİŞMEZ.
+        hks_gonderim_audit_yaz('hks_gonderim_sonuc', hks_gonderim_sonuc_turu($sonuc), $__actx, $sonuc);
+        // v417: yanıt ayrıştırılamadı (sonuç satırı da genel hata da yok) → HKS isteği almış olabilir:
+        // belirsiz işaretlenir (taslak aşağıda geri konur). Diğer tam başarısızlıklar HKS'in net
+        // reddidir (hata kodu/mesaj var) — işaret YOK.
+        if (hks_gonderim_sonuc_turu($sonuc) === 'yanit_bos') {
+          try { hks_belirsiz_isaretle_taslaktan($t, 'yanit_bos', 'HKS yanıtı ayrıştırılamadı.', $__hksGun); }
+          catch (Throwable $__ie) { error_log('[hks] belirsiz işaret yazılamadı: ' . get_class($__ie)); }
+        }
+        $__hksBasladi = false;
         $taslagiGeriKoy();
         hks_json_cikti($sonuc + ['taslakKorundu' => true]);
       }
 
+      $__bitti = true;   // v417: künye oluştu — kapanış güvencesi taslağı geri KOYMAZ
+
       // En az bir künye gerçekten oluştu → bu GERİ ALINAMAZ, kayıt tutulmalı.
-      hks_son_guncelle($ortak, $t['firma_id']);
-      hks_kisi_havuzuna_isle($db, $ortak, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
+      // Audit, aşağıdaki yazmalardan (kv / havuz / Gönderilenler INSERT) ÖNCE: bunlardan
+      // biri istisna atsa bile "künye oluştu" izi kalır. $gid bu yüzden burada üretilir.
       $gid = 'g' . round(microtime(true) * 1000);
+      hks_gonderim_audit_yaz('hks_gonderim_sonuc', hks_gonderim_sonuc_turu($sonuc), $__actx + ['gonderim_id' => $gid], $sonuc);
+      // v417: künye zaten oluştu — buradaki yan kayıtların (son kullanılanlar / havuz /
+      // Gönderilenler) hatası 500 ile taslağı ve sonucu YOK etmesin; yanıtta `kayitUyari` döner.
+      $kayitUyari = '';
+      try { hks_son_guncelle($ortak, $t['firma_id']); }
+      catch (Throwable $__ke) { error_log('[hks] son kullanilanlar yazilamadi: ' . get_class($__ke)); $kayitUyari = 'Son kullanılanlar güncellenemedi.'; }
+      hks_kisi_havuzuna_isle($db, $ortak, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
       // Toplam kg / adet YALNIZ başarılı satırlardan (hatalı satır "gönderildi" sayılmaz).
       [$__bkg, $__badet] = hks_basarili_ozet($sonuc['sonuclar'], $satirlar);
       $toplamKg = $__bkg ?? array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));
       $yeniKunyeler = array_values(array_map(fn($s) => $s['yeniKunyeNo'], $basarili));
-      $st = $db->prepare('INSERT INTO ' . hks_tablo('gonderilenler') . '
-        (id, zaman, firma_id, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, bildirim_turu, veri)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-      $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_id'], $t['firma_ad'],
-        $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
-        $__badet > 0 ? $__badet : count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
-        count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
-        json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya], JSON_UNESCAPED_UNICODE)]);
+      try {
+        $st = $db->prepare('INSERT INTO ' . hks_tablo('gonderilenler') . '
+          (id, zaman, firma_id, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, bildirim_turu, veri)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_id'], $t['firma_ad'],
+          $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
+          $__badet > 0 ? $__badet : count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
+          count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
+          json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya, 'gonderen' => hks_gonderim_gonderen($__hks_user)], JSON_UNESCAPED_UNICODE)]);
+      } catch (Throwable $__ke) {
+        // Künye HKS'te oluştu; Gönderilenler kaydı yazılamadı (audit'te izi var). 500 vermek sonucu
+        // gizler, kullanıcı veriyi yeniden girip MÜKERRER gönderirdi → sonuç yine döner, uyarıyla.
+        error_log('[hks] Gönderilenler kaydı yazılamadı: ' . get_class($__ke));
+        $kayitUyari = trim($kayitUyari . ' Gönderilenler kaydı yazılamadı — künyeler HKS\'te oluştu; Bildirim Sorgulama\'dan doğrulayın, AYNI taslağı tekrar göndermeyin.');
+      }
+      // v417: künye oluştuysa bu plakanın "önceki gönderim belirsiz" işareti artık anlamsız — temizlenir.
+      try {
+        hks_belirsiz_temizle_plaka($t['firma_id'], $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', date('Y-m-d'));
+        hks_belirsiz_temizle_eskiler($t['firma_id'], date('Y-m-d'));   // süresi dolan yetim işaretler
+      }
+      catch (Throwable $__ke) { error_log('[hks] belirsiz işaret temizlenemedi: ' . get_class($__ke)); }
 
       // BEYAN KÖPRÜSÜ: taslak Beyan ekranından açıldıysa bağ kaydını sonuçlandır.
       // Hata yutan yardımcıdır — köprü sorunu bu geri alınamaz akışı kesmez.
@@ -847,7 +1031,8 @@ try {
       // 'gonderim': Gönderim Sonucu penceresindeki "🖨️ Yazdır" için (yalnız yanıt; Gönderilenler
       // satırıyla AYNI plaka/belge/gün/künyeler — yazdırma HKS'e yine canlı sorgu atar).
       hks_json_cikti($sonuc + ['gonderim' => ['id' => $gid, 'plaka' => (string)($ortak['plaka'] ?? ''),
-        'belgeNo' => (string)($ortak['belgeNo'] ?? ''), 'tarih' => date('Y-m-d'), 'kunyeler' => $yeniKunyeler]]);
+        'belgeNo' => (string)($ortak['belgeNo'] ?? ''), 'tarih' => date('Y-m-d'), 'kunyeler' => $yeniKunyeler],
+        'belirsizKontrol' => $__belirsizKontrol, 'kayitUyari' => $kayitUyari]);
     }
 
     // ---- GÖNDERİLENLER (yalnızca seçili firma) ----
@@ -880,6 +1065,8 @@ try {
           // Kopyanın KENDİSİ listede dönmez (500 satır şişmesin) — yalnız var mı.
           // Tohum ayrıca 'gonderilen_tohum' ucundan istenir.
           'kopyaVar' => !empty($veri['kopya']),
+          // v417: gönderen kullanıcının ad anlık görüntüsü (eski kayıtlarda boş).
+          'gonderen' => is_string($veri['gonderen']['ad'] ?? null) ? $veri['gonderen']['ad'] : '',
         ];
       }, $rows);
       hks_json_cikti(['gonderilenler' => $liste]);

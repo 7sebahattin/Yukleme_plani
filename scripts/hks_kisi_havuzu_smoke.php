@@ -344,8 +344,12 @@ if (preg_match('/^function hks_csrf_girdi\(.*?^\}/ms', $api, $m)) {
 ok("api.php 'csrf' ucu csrf_token() döner", (bool)preg_match("/case 'csrf':\s*\{[^}]*hks_json_cikti\(\['csrf' => csrf_token\(\)\]\)/s", $api));
 ok("'csrf' ucu records.write kapısından SONRA", strpos($api, "can('records.write')") !== false
     && strpos($api, "can('records.write')") < strpos($api, "case 'csrf':"));
-ok('kisi_kaydet + kisi_sil hks_csrf_girdi() ile denetler', substr_count($api, 'csrf_check(hks_csrf_girdi($g))') === 2
-    && strpos($api, "csrf_check(\$_SERVER['HTTP_X_CSRF_TOKEN']") === false);
+// v418: CSRF TEK merkezi kapıda (switch öncesi) — case içinde tekrar csrf_check YOK.
+// kisi_kaydet / kisi_sil muaf listede DEĞİL, dolayısıyla kapıya tabidir (ayrıntı: hks_csrf_kapsam_smoke.php).
+ok('kisi_kaydet + kisi_sil merkezi kapıda hks_csrf_girdi() ile denetlenir', substr_count($api, 'csrf_check(hks_csrf_girdi($g))') === 1
+    && strpos($api, "csrf_check(\$_SERVER['HTTP_X_CSRF_TOKEN']") === false
+    && preg_match('/function hks_csrf_muaf_eylemler\(\): array \{(.*?)\n\}/s', $api, $__mm)
+    && strpos($__mm[1], "'kisi_kaydet'") === false && strpos($__mm[1], "'kisi_sil'") === false);
 ok('havuza işleme sıfat kararını hks_uret_sevk_mi() ile verir',
     strpos($api, 'hks_kisi_ortaktan((array)$ortak, hks_uret_sevk_mi($ortak))') !== false);
 $lib = (string)file_get_contents(__DIR__ . '/../halkayit/kisi_havuzu_lib.php');

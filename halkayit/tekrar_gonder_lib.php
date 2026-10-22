@@ -504,3 +504,126 @@ function hks_bugun_ayni_plaka(PDO $db, string $tablo, string $firmaId, string $f
   }
   return $out;
 }
+
+// ── Gönderim audit'i (v417) ─────────────────────────────────────────────────
+// taslak_gonder'in her sonuç türü (başarılı / kısmi / tam başarısız / belirsiz) ve
+// gönderimden ÖNCEKİ niyet kaydı audit_log'a yazılır (module 'hks_gonderim').
+// Kullanıcıyı audit_log_event kendisi ekler (current_user → audit_log.user_id).
+//
+// KİŞİSEL VERİ YAZILMAZ: payload BEYAZ LİSTEYLE kurulur. $sonuc / $ortak ASLA
+// doğrudan audit'e geçmez (_audit_sanitize iç içe dizileri süzmez). Dışarıda
+// kalanlar: ham / hamIstek (istek XML'i: TC, doğum, cep, ad), sonuclar[].mesaj ve
+// genelHata metni (HKS mesajları TC içerir), gonderilenKimlik, ulkeAd (kayıtlı
+// karşı tarafta TC/VKN), ikinci* alanlar. Hata için yalnız int hata kodları ve
+// "genel hata var mı" bayrağı yazılır.
+// HİÇBİR YAZMA YOLU DEĞİLDİR: HKS'e göndermez, tablo yazmaz; tek yazan audit_log_event
+// ve o da Throwable'a karşı sarılıdır — HKS akışını ASLA kesmez.
+
+const HKS_GONDERIM_AUDIT_MODUL = 'hks_gonderim';
+const HKS_GONDERIM_AUDIT_KUNYE_LIMIT = 100;
+
+// UTF-8'e temizler ve kısaltır (json_encode geçersiz UTF-8'de false döner).
+function hks_gonderim_audit_metin($v, int $uzunluk = 150): string {
+  $s = is_scalar($v) ? (string)$v : '';
+  if (function_exists('mb_scrub')) $s = mb_scrub($s, 'UTF-8');
+  return function_exists('mb_substr') ? mb_substr($s, 0, $uzunluk, 'UTF-8') : substr($s, 0, $uzunluk);
+}
+
+// Sonuç türü (saf): hiç künye yok + sonuç satırı da genel hata da yok = yanıt
+// ayrıştırılamadı ("yanit_bos" — HKS isteği almış olabilir); hiç künye yok = tam_basarisiz;
+// hepsi başarılı = basarili; aksi kismi.
+function hks_gonderim_sonuc_turu(array $sonuc): string {
+  $sonuclar = is_array($sonuc['sonuclar'] ?? null) ? $sonuc['sonuclar'] : [];
+  $basarili = 0;
+  foreach ($sonuclar as $s) if (hks_sonuc_basarili_mi($s)) $basarili++;
+  if ($basarili === 0) {
+    return (!$sonuclar && empty($sonuc['genelHata'])) ? 'yanit_bos' : 'tam_basarisiz';
+  }
+  return $basarili === count($sonuclar) ? 'basarili' : 'kismi';
+}
+
+// Gönderen kullanıcının anlık görüntüsü (hks_gonderilenler.veri.gonderen).
+function hks_gonderim_gonderen($user): array {
+  $u = is_array($user) ? $user : [];
+  $ad = $u['display_name'] ?? '';
+  if (!is_string($ad) || trim($ad) === '') $ad = $u['username'] ?? '';
+  return ['id' => (int)($u['id'] ?? 0), 'ad' => hks_gonderim_audit_metin($ad, 150)];
+}
+
+// Gönderimden önce kurulan bağlam (kişisel veri içermeyen alanlar). Saf.
+function hks_gonderim_audit_ctx(array $t, array $ortak, array $satirlar, bool $planMi, string $ref, string $bildirimTuru): array {
+  $kg = 0.0;
+  foreach ($satirlar as $s) $kg += (float)($s['miktar'] ?? 0);
+  if ($kg <= 0) $kg = (float)($ortak['planKg'] ?? 0);
+  $kaynak = $ortak['kaynak'] ?? null;
+  return [
+    'ref' => $ref,
+    'firma_id' => (string)($t['firma_id'] ?? ''),
+    'firma_ad' => (string)($t['firma_ad'] ?? ''),
+    'plaka' => (string)($ortak['plaka'] ?? ''),
+    'belge_no' => (string)($ortak['belgeNo'] ?? ''),
+    'bildirim_turu' => $bildirimTuru,
+    'plan' => $planMi,
+    'satir_sayisi' => count($satirlar),
+    'istenen_kg' => round($kg, 3),
+    'beyan_id' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyan') ? (int)($kaynak['beyanId'] ?? 0) : 0,
+    'satirlar' => $satirlar,   // yalnız başarılı kg hesabı için okunur, payload'a girmez
+  ];
+}
+
+// Beyaz listeli payload. $tur: basla | basarili | kismi | tam_basarisiz | belirsiz | yanit_bos.
+function hks_gonderim_audit_payload(string $tur, array $ctx, ?array $sonuc = null): array {
+  $p = [
+    'gonderim_ref' => hks_gonderim_audit_metin($ctx['ref'] ?? '', 40),
+    'sonuc_turu' => hks_gonderim_audit_metin($tur, 20),
+    'firma_id' => hks_gonderim_audit_metin($ctx['firma_id'] ?? '', 60),
+    'firma_ad' => hks_gonderim_audit_metin($ctx['firma_ad'] ?? '', 150),
+    'plaka' => hks_gonderim_audit_metin($ctx['plaka'] ?? '', 30),
+    'belge_no' => hks_gonderim_audit_metin($ctx['belge_no'] ?? '', 60),
+    'bildirim_turu' => hks_gonderim_audit_metin($ctx['bildirim_turu'] ?? '', 30),
+    'plan' => !empty($ctx['plan']),
+    'satir_sayisi' => (int)($ctx['satir_sayisi'] ?? 0),
+    'istenen_kg' => (float)($ctx['istenen_kg'] ?? 0),
+  ];
+  if (!empty($ctx['beyan_id'])) $p['beyan_id'] = (int)$ctx['beyan_id'];
+  if ($tur === 'basla' || $sonuc === null) {
+    if ($tur === 'belirsiz' && !empty($ctx['exception_sinifi'])) {
+      $p['exception_sinifi'] = hks_gonderim_audit_metin($ctx['exception_sinifi'], 80);
+    }
+    return $p;
+  }
+  $sonuclar = is_array($sonuc['sonuclar'] ?? null) ? array_values($sonuc['sonuclar']) : [];
+  $satirlar = is_array($ctx['satirlar'] ?? null) ? $ctx['satirlar'] : [];
+  $kunyeler = []; $kodlar = []; $rusum = 0.0; $basarili = 0;
+  foreach ($sonuclar as $s) {
+    if (!is_array($s)) continue;
+    $rusum += (float)($s['rusum'] ?? 0);
+    if (hks_sonuc_basarili_mi($s)) {
+      $basarili++;
+      $kunyeler[] = hks_gonderim_audit_metin($s['yeniKunyeNo'] ?? '', 40);
+    } elseif (!empty($s['hataKodu'])) {
+      $kodlar[(int)$s['hataKodu']] = true;
+    }
+  }
+  [$bkg, $badet] = hks_basarili_ozet($sonuclar, $satirlar);
+  $p['basarili_kg'] = $bkg ?? 0.0;
+  $p['basarili_adet'] = $badet;
+  $p['kunye_sayisi'] = $basarili;
+  $p['kunyeler'] = array_slice($kunyeler, 0, HKS_GONDERIM_AUDIT_KUNYE_LIMIT);
+  $p['hata_sayisi'] = count($sonuclar) - $basarili;
+  $p['hata_kodlari'] = array_keys($kodlar);
+  $p['genel_hata_var'] = !empty($sonuc['genelHata']);
+  $p['rusum'] = round($rusum, 2);
+  if (!empty($ctx['gonderim_id'])) $p['gonderim_id'] = hks_gonderim_audit_metin($ctx['gonderim_id'], 40);
+  return $p;
+}
+
+// Audit yazar; ASLA fırlatmaz (Throwable yutulur, yalnız sınıf adı loglanır).
+function hks_gonderim_audit_yaz(string $action, string $tur, array $ctx, ?array $sonuc = null): void {
+  try {
+    if (!function_exists('audit_log_event')) return;
+    audit_log_event($action, HKS_GONDERIM_AUDIT_MODUL, null, null, hks_gonderim_audit_payload($tur, $ctx, $sonuc));
+  } catch (Throwable $e) {
+    error_log('[hks_gonderim_audit] ' . get_class($e));
+  }
+}

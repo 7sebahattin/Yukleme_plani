@@ -192,6 +192,15 @@ function hks_istek_maskele($xml) {
   return preg_replace('/\s+/', ' ', substr($s, 0, 4000));
 }
 
+// Bağlantı/HTTP hatası. Mesaj metni eskisiyle AYNI; yalnız cURL hata numarası
+// ($errno) taşınır: belirsiz_gonderim_lib.php 6/7/35/60'ı "istek HKS'e hiç ulaşmadı"
+// sayar, geri kalan her şey (28 zaman aşımı, 52/56, HTTP 5xx) BELİRSİZDİR.
+if (!class_exists('HksAgHatasi', false)) {
+  class HksAgHatasi extends Exception {
+    public $errno = 0;
+  }
+}
+
 // SOAP zarfını gönder, cevap gövdesini döndür
 function hks_soap_cagir($servis, $metod, $icerikXml) {
   $zarf =
@@ -216,14 +225,17 @@ function hks_soap_cagir($servis, $metod, $icerikXml) {
   $cevap = curl_exec($ch);
   if ($cevap === false) {
     $hata = curl_error($ch);
+    $__errno = curl_errno($ch);
     curl_close($ch);
-    throw new Exception('Bağlantı hatası: ' . $hata);
+    $__ex = new HksAgHatasi('Bağlantı hatası: ' . $hata);
+    $__ex->errno = (int)$__errno;
+    throw $__ex;
   }
   $GLOBALS['HKS_SON_HAM'] = is_string($cevap) ? $cevap : '';  // teşhis: son ham (namespace'li) yanıt
   $kod = curl_getinfo($ch, CURLINFO_HTTP_CODE);
   curl_close($ch);
   if ($kod !== 200) {
-    throw new Exception('HTTP ' . $kod . ': ' . substr($cevap, 0, 800));
+    throw new HksAgHatasi('HTTP ' . $kod . ': ' . substr($cevap, 0, 800), (int)$kod);
   }
   return $cevap;
 }
