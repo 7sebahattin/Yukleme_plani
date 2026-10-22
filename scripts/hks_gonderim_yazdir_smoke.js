@@ -56,7 +56,12 @@ async function apiYanit(action, g) {
     case 'firmalar': return [200, { firmalar: FIRMALAR }];
     case 'sonlar': return [200, { ulkeler: [], urunler: [] }];
     case 'listeler': return [200, LISTELER];
-    case 'taslaklar': return [200, { taslaklar: [] }];
+    case 'taslaklar': return [200, { taslaklar: D.taslaklar || [] }];
+    case 'ayni_plaka_bugun': {
+      if (D.plakaGecikme) await new Promise(r2 => setTimeout(r2, D.plakaGecikme));
+      const y = D.plakaYanit ? D.plakaYanit(g) : { gonderimler: [] };
+      return [y.hata ? 400 : 200, y];
+    }
     case 'gonderilenler': return [200, { gonderilenler: D.cok ? cokGonderim() : gonderilenler() }];
     case 'stok': return [200, { stok: [], toplam: 0 }];
     case 'csrf': return [200, { csrf: 'taze456' }];
@@ -294,6 +299,73 @@ const sunucu = http.createServer((q, s) => {
      !(await sayfa.locator('tr.g-satir .g-sec-kutu').nth(30).isChecked()) && /en çok 30/.test(await sayfa.innerText('body')));
   D.cok = false;
   await sayfa.click('#btnGonderilenGeri');
+  await gonderilenleriAc(sayfa);
+
+  // ================= Aynı gün aynı plaka uyarısı (v416) =================
+  const TASLAK = (id, plaka, belgeNo, ayni) => ({ id, zaman: '2026-10-21T16:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A',
+    satirlar: [{ kunyeNo: '3601000000000001', miktar: 22000 }], ortak: { plaka, belgeNo, urunAd: 'Nar', ulkeAd: 'Rusya', fiyat: 25 },
+    ayniPlakaBugun: ayni });
+  D.taslaklar = [TASLAK('t1', '33NCN99', '', 2), TASLAK('t2', '07ABC12', '', 0), TASLAK('t3', '', '', 0)];
+  D.plakaYanit = (g) => g.plaka === '33NCN99' ? { gonderimler: [
+    { id: 'g2', zaman: '2026-10-21 15:40:00', plaka: '33NCN99', ulkeAd: 'Satın Alım ← Aslı <img src=x onerror="window.__xss2=1">', urunAd: 'Nar', toplamKg: 22000 },
+    { id: 'g1', zaman: '2026-10-21 08:10:00', plaka: '33NCN99', ulkeAd: 'Satın Alım ← Mehmet', urunAd: 'Nar', toplamKg: 21500.4 },
+  ] } : { gonderimler: [] };
+  await sayfa.click('#btnGonderilenGeri');
+  await sayfa.click('#btnTaslaklar');
+  await sayfa.waitForSelector('.taslak-kart');
+  const kartlar = sayfa.locator('.taslak-kart');
+  ok('(P) taslak kartı: bugün aynı plakaya gönderim varsa plaka satırında uyarı',
+     /Bugün bu plakaya 2 gönderim yapıldı/.test(await kartlar.nth(0).locator('.tk-plaka').innerText()) &&
+     await kartlar.nth(1).locator('.tk-plaka .tk-uyari').count() === 0);
+  const onayAc = async (i) => { await kartlar.nth(i).locator('[data-gonder]').click(); await sayfa.waitForSelector('#modalOnayKutu:not(.gizli)'); };
+  D.plakaGecikme = 400; D.istekler.length = 0;
+  await onayAc(0);
+  ok('(P) onay açılınca kontrol sürerken düğme KİLİTLİ', await sayfa.isDisabled('#btnOnay') && /kontrol/.test(await sayfa.innerText('#btnOnay')));
+  await sayfa.waitForSelector('.onay-plaka-uyari');
+  const pk = D.istekler.find(i => i.action === 'ayni_plaka_bugun');
+  ok('(P) istek: aktif firma + plaka', !!pk && String(pk.govde.firmaId) === '7' && pk.govde.plaka === '33NCN99', JSON.stringify(pk && pk.govde));
+  const uyM = await sayfa.innerText('.onay-plaka-uyari');
+  ok('(P) uyarı: "Bugün bu plakaya (33NCN99) 2 gönderim" + saat · karşı taraf · ürün · kg',
+     /Bugün bu plakaya \(33NCN99\) 2 gönderim yapıldı/.test(uyM) && /15:40 · Satın Alım ← Aslı/.test(uyM) && /08:10 · Satın Alım ← Mehmet · Nar · 21\.500 KG/.test(uyM), uyM);
+  ok('(P) uyarı engel DEĞİL: düğme açık, "Yine de Gönder"', !(await sayfa.isDisabled('#btnOnay')) && (await sayfa.innerText('#btnOnay')).trim() === 'Yine de Gönder');
+  ok('(P) kullanıcı verisi HTML olarak yorumlanmaz', await sayfa.locator('.onay-plaka-uyari img').count() === 0 && !(await sayfa.evaluate(() => window.__xss2)));
+  D.gonderYanit = { sonuclar: [{ yeniKunyeNo: '3601000000000009', miktar: 22000 }] };
+  D.istekler.length = 0;
+  await sayfa.click('#btnOnay');
+  await sayfa.waitForFunction(() => document.getElementById('modalBaslik').textContent.includes('Gönderim Sonucu'));
+  ok('(P) "Yine de Gönder" gönderir', D.istekler.some(i => i.action === 'taslak_gonder' && i.govde.id === 't1'));
+  await sayfa.click('#btnModalX');
+  await sayfa.waitForSelector('.taslak-kart');
+  // eşleşme yok
+  await onayAc(1);
+  await sayfa.waitForFunction(() => !document.getElementById('btnOnay').disabled);
+  ok('(P) eşleşme yoksa uyarı yok, düğme "Evet, Gönder"', await sayfa.locator('.onay-plaka-uyari').count() === 0 && (await sayfa.innerText('#btnOnay')).trim() === 'Evet, Gönder');
+  await sayfa.click('#btnVazgec');
+  // plaka + belge yok → istek yok
+  D.istekler.length = 0;
+  await onayAc(2);
+  ok('(P) plaka/belge yoksa kontrol isteği atılmaz, düğme açık', !D.istekler.some(i => i.action === 'ayni_plaka_bugun') && !(await sayfa.isDisabled('#btnOnay')));
+  await sayfa.click('#btnVazgec');
+  // uç hatası → küçük not, gönderim serbest
+  D.plakaYanit = () => ({ hata: 'veritabanı meşgul' });
+  await onayAc(0);
+  await sayfa.waitForSelector('.onay-plaka-kontrol-yok');
+  ok('(P) kontrol yapılamazsa not + düğme açık "Evet, Gönder"', !(await sayfa.isDisabled('#btnOnay')) && (await sayfa.innerText('#btnOnay')).trim() === 'Evet, Gönder');
+  await sayfa.click('#btnVazgec');
+  // yavaş yanıt: 6 sn sonra düğme açılır; eski yanıt sonradan gelse de başka taslağın onayını bozmaz
+  D.plakaYanit = (g) => g.plaka === '33NCN99' ? { gonderimler: [{ id: 'g1', zaman: '2026-10-21 08:10:00', ulkeAd: 'X', urunAd: 'Nar', toplamKg: 1 }] } : { gonderimler: [] };
+  D.plakaGecikme = 7500;
+  await onayAc(0);
+  await sayfa.waitForFunction(() => !document.getElementById('btnOnay').disabled, null, { timeout: 9000 });
+  ok('(P) yanıt 6 sn içinde gelmezse düğme açılır (kontrol yapılamadı notu)', await sayfa.locator('.onay-plaka-kontrol-yok').count() === 1);
+  await sayfa.click('#btnVazgec');
+  D.plakaGecikme = 0;
+  await onayAc(1);
+  await sayfa.waitForTimeout(2200);   // t1'in geç yanıtı bu arada gelir
+  ok('(P) geç gelen eski yanıt başka taslağın onayına uyarı YAZMAZ', await sayfa.locator('.onay-plaka-uyari').count() === 0 && (await sayfa.innerText('#btnOnay')).trim() === 'Evet, Gönder');
+  await sayfa.click('#btnVazgec');
+  D.plakaYanit = null;
+  await sayfa.click('#btnTaslakGeri');
   await gonderilenleriAc(sayfa);
 
   // ================= Gönderim Sonucu → Yazdır =================

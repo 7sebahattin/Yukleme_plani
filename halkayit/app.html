@@ -278,6 +278,18 @@
   html[data-theme="dark"] .tk-satir .tk-uyari { color:#fcd34d; background:#78350f; border-color:#b45309; }
   html[data-theme="dark"] .onay-satir.tk-uyari-onay b { color:#fcd34d; }
   .tk-satir.tk-plaka .d { color:var(--plaka); letter-spacing:.3px; }
+  /* v416: aynı gün aynı plaka — kartta plaka satırının altında, onayda uyarı kutusu */
+  .tk-satir.tk-plaka .d { display:flex; flex-direction:column; align-items:flex-end; }
+  .tk-satir.tk-plaka .tk-uyari { letter-spacing:0; }
+  .onay-plaka-uyari { margin-top:10px; padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.45;
+    background:#fef3c7; border:1px solid #f59e0b; color:#78350f; }
+  .onay-plaka-uyari b { color:#92400e; }
+  .onay-plaka-uyari ul { margin:6px 0 6px 18px; padding:0; }
+  .onay-plaka-uyari li { margin:2px 0; }
+  .onay-plaka-uyari .opu-not { font-size:12px; }
+  .onay-plaka-kontrol-yok { margin-top:8px; font-size:12px; color:var(--soluk); }
+  html[data-theme="dark"] .onay-plaka-uyari { background:#3b2a0a; border-color:#b45309; color:#fde68a; }
+  html[data-theme="dark"] .onay-plaka-uyari b { color:#fcd34d; }
   /* Taslak kartında plaka 2 punto büyük, kilo 1 punto büyük (istenen vurgu).
      Gönderilenler kartında ölçüler NORMAL kalır — yalnız renkler ortaktır. */
   .taslak-kart .tk-satir.tk-plaka .d { font-size:16px; }
@@ -1755,6 +1767,8 @@ const API_ROTA = {
   'POST /api/taslaklar/sil': 'taslak_sil',
   'POST /api/taslaklar/gonder': 'taslak_gonder',
   'GET /api/gonderilenler': 'gonderilenler',
+  // Aynı gün aynı plaka uyarısı (SALT OKUNUR — Gönderim Onayı'nda)
+  'POST /api/ayni_plaka': 'ayni_plaka_bugun',
   // "Tekrar gönder": önceki gönderimden form tohumu (SALT OKUNUR — hiçbir şey yazmaz)
   'GET /api/gonderilen_tohum': 'gonderilen_tohum',
   // Yurt içi (Sevk Etme) referans/doğrulama
@@ -4605,7 +4619,8 @@ async function taslakEkraniAc() {
         `<span class="tk-etiket">${plan ? '📝 PLAN TASLAĞI' : 'TASLAK'}</span>` +
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
         _satir('', '🏢 Firma', eHtml(t.firmaAd)) +
-        _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—')) +
+        _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—') + (t.ayniPlakaBugun > 0
+          ? `<span class="tk-uyari">⚠ Bugün bu plakaya ${Number(t.ayniPlakaBugun)} gönderim yapıldı</span>` : '')) +
         _satir('', (t.ortak.yurtIci ? '🏠' : '🌍') + ' Ülke', _ulke) +
         _satir('', (_urunAd ? urunIkonu(_urunAd) : '🍎') + ' Ürün', eHtml(_urunAd || '—')) +
         _satir('tk-kilo' + (dusukTonajMu(toplam) ? ' tk-dusuk' : ''), '⚖️ Kilo',
@@ -4861,6 +4876,7 @@ function taslakOnayAc(t) {
     html += `<div class="onay-satir"><span>Ülke</span><b>${t.ortak.ulkeAd || '—'}</b></div>`;
   }
   html += `<div class="onay-satir"><span>Plaka/Belge</span><b>${t.ortak.plaka || t.ortak.belgeNo || '—'}</b></div>`;
+  html += `<div id="onayPlakaUyari"></div>`;
   html += `<p style="font-size:12px;color:var(--hata-tx);margin-top:10px">Bu işlem GERÇEK bildirim oluşturur ve geri alınamaz!</p>`;
   $('modalBaslik').textContent = '⚠️ Gönderim Onayı — CANLI SİSTEM';
   $('modalIcerik').innerHTML = html;
@@ -4872,6 +4888,49 @@ function taslakOnayAc(t) {
   $('modalFirmaKutu').classList.add('gizli');
   $('modalOnayKutu').classList.remove('gizli');
   $('modal').classList.add('acik');
+  ayniPlakaKontrol(t);
+}
+
+// ── Aynı gün aynı plaka uyarısı (v416) ──
+// Onay penceresi açılınca bugün bu firmadan aynı plakaya (plaka yoksa aynı belge no'ya)
+// yapılmış gönderimler sunucudan sorulur (SALT OKUNUR). ENGEL DEĞİL: varsa uyarı kutusu
+// çıkar ve düğme "Yine de Gönder" olur. Kontrol sürerken düğme kilitli (en çok 6 sn);
+// kontrol yapılamazsa gönderime izin verilir ve bu küçük bir notla söylenir.
+let ayniPlakaSorguNo = 0;
+async function ayniPlakaKontrol(t) {
+  const no = ++ayniPlakaSorguNo;
+  const btn = $('btnOnay');
+  btn.disabled = false; btn.textContent = 'Evet, Gönder';
+  const kutu = $('onayPlakaUyari');
+  const plaka = String(t.ortak.plaka || '').trim();
+  const belge = String(t.ortak.belgeNo || '').trim();
+  if (!kutu || (!plaka && !belge)) return;
+  btn.disabled = true; btn.textContent = '⏳ Aynı plaka kontrol ediliyor…';
+  let j = null, hata = false;
+  try {
+    j = await Promise.race([
+      api('/api/ayni_plaka', 'POST', { firmaId: aktifFirma ? aktifFirma.id : '', firmaAd: aktifFirma ? aktifFirma.ad : '', plaka, belgeNo: belge }),
+      new Promise((_, red) => setTimeout(() => red(new Error('zaman aşımı')), 6000)),
+    ]);
+  } catch (e) { hata = true; }
+  // Bu arada pencere kapandıysa / başka taslak açıldıysa sonucu atla
+  if (no !== ayniPlakaSorguNo || gonderilecekTaslakId !== t.id || !$('modal').classList.contains('acik') ||
+      $('modal').dataset.sonuc === '1' || !document.body.contains(kutu)) return;
+  btn.disabled = false; btn.textContent = 'Evet, Gönder';
+  if (hata) {
+    kutu.innerHTML = '<div class="onay-plaka-kontrol-yok">Aynı plaka kontrolü yapılamadı — plakayı kendiniz kontrol edin.</div>';
+    return;
+  }
+  const liste = (j && j.gonderimler) || [];
+  if (!liste.length) return;
+  const etiket = plaka || ('belge no ' + belge);
+  kutu.innerHTML = '<div class="onay-plaka-uyari" role="alert">' +
+    `⚠ <b>Bugün bu ${plaka ? 'plakaya' : 'belge no\'ya'} (${eHtml(etiket)}) ${liste.length} gönderim yapıldı:</b>` +
+    '<ul>' + liste.map(g => '<li>' + [String(g.zaman || '').slice(11, 16), g.ulkeAd, g.urunAd,
+      fmt(Math.round(Number(g.toplamKg) || 0)) + ' KG'].filter(Boolean).map(eHtml).join(' · ') + '</li>').join('') + '</ul>' +
+    '<div class="opu-not">Aynı gün aynı plaka, Çoklu Künye Basım\'da (plaka + gün sorgusu) iki gönderimin künyelerini ' +
+    'birlikte getirir. Plaka doğruysa gönderebilirsiniz.</div></div>';
+  btn.textContent = 'Yine de Gönder';
 }
 
 $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
