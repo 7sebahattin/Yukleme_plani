@@ -458,3 +458,49 @@ function hks_eski_tohum_kur(PDO $db, array $row): array {
   $notlar[] = 'Eski kayıt: ürün cinsi, üretim yeri, işyeri gibi alanları kontrol edip seçin.';
   return [$ortak, $satirlar, $plana, $notlar];
 }
+
+// =============================================================================
+// AYNI GÜN AYNI PLAKA UYARISI (v416) — SALT OKUNUR
+// =============================================================================
+// Aynı gün aynı plakaya (plaka yoksa aynı belge no'ya) ikinci bir gönderim, HKS'in
+// "plaka + gün" ile çalışan Çoklu Künye / toplu künye sorgularında iki gönderimin
+// künyelerini KARIŞTIRIR. Gönderim ENGELLENMEZ (aynı tırla iki müstahsilden alım
+// gibi meşru durumlar var); Gönderim Onayı ve Taslaklar kartında uyarı gösterilir.
+// Kapsam = AYNI FİRMA (Gönderilenler listesiyle birebir firma izolasyonu) + o gün
+// (sunucu saati; gönderilenler.zaman da sunucu saatiyle yazılır).
+
+// Plaka karşılaştırması: büyük harf, yalnız harf/rakam ("33 ncn-99" = "33NCN99").
+function hks_plaka_norm($p): string {
+  return preg_replace('/[^0-9A-Z]/', '', strtoupper(trim((string)$p)));
+}
+
+// $gun 'YYYY-MM-DD' (null = bugün). Döner: o gün aynı plaka/belge no ile yapılmış
+// gönderimler, en yeni önce: [{id, zaman, plaka, belgeNo, ulkeAd, urunAd, toplamKg}].
+// Plaka doluysa plaka, boşsa belge no karşılaştırılır; ikisi de boşsa [] döner.
+function hks_bugun_ayni_plaka(PDO $db, string $tablo, string $firmaId, string $firmaAd,
+                              string $plaka, string $belgeNo, ?string $gun = null): array {
+  $p = hks_plaka_norm($plaka);
+  $b = trim($belgeNo);
+  if ($p === '' && $b === '') return [];
+  $gun = $gun ?: date('Y-m-d');
+  $bas = $gun . ' 00:00:00';
+  $son = date('Y-m-d', strtotime($gun . ' +1 day')) . ' 00:00:00';
+  $st = $db->prepare('SELECT id, zaman, plaka, belge_no, ulke_ad, urun_ad, toplam_kg FROM ' . $tablo . '
+    WHERE (firma_id = ? OR (COALESCE(firma_id, \'\') = \'\' AND firma_ad = ?))
+      AND zaman >= ? AND zaman < ? ORDER BY zaman DESC');
+  $st->execute([$firmaId, $firmaAd, $bas, $son]);
+  $out = [];
+  foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    $esit = $p !== ''
+      ? hks_plaka_norm($r['plaka'] ?? '') === $p
+      : (hks_plaka_norm($r['plaka'] ?? '') === '' && trim((string)($r['belge_no'] ?? '')) === $b);
+    if (!$esit) continue;
+    $out[] = [
+      'id' => (string)$r['id'], 'zaman' => (string)$r['zaman'],
+      'plaka' => (string)($r['plaka'] ?? ''), 'belgeNo' => (string)($r['belge_no'] ?? ''),
+      'ulkeAd' => (string)($r['ulke_ad'] ?? ''), 'urunAd' => (string)($r['urun_ad'] ?? ''),
+      'toplamKg' => (float)($r['toplam_kg'] ?? 0),
+    ];
+  }
+  return $out;
+}

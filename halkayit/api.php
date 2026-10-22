@@ -404,8 +404,23 @@ try {
       // (taslak_gonder DB'den okur) bu çıktıyı kullanmaz.
       $__adlar = hks_gonderilen_adlari($db, array_map(
         fn($r) => (json_decode($r['veri'], true)['ortak']['ulkeAd'] ?? ''), $rows));
-      $taslaklar = array_map(function ($r) use ($__adlar) {
+      // v416: bugün aynı plakaya (plaka yoksa belge no'ya) yapılmış gönderim sayısı —
+      // kartta uyarı için (salt okunur; aynı plaka bir kez sorgulanır, hata yutulur → 0).
+      $__plakaSay = [];
+      $__ayniPlaka = function (array $o, string $firmaAd) use ($db, $fid, &$__plakaSay): int {
+        $k = hks_plaka_norm($o['plaka'] ?? '') . '|' . trim((string)($o['belgeNo'] ?? ''));
+        if ($k === '|') return 0;
+        if (!array_key_exists($k, $__plakaSay)) {
+          try {
+            $__plakaSay[$k] = count(hks_bugun_ayni_plaka($db, hks_tablo('gonderilenler'), $fid, $firmaAd,
+              (string)($o['plaka'] ?? ''), (string)($o['belgeNo'] ?? '')));
+          } catch (Throwable $e) { $__plakaSay[$k] = 0; }
+        }
+        return $__plakaSay[$k];
+      };
+      $taslaklar = array_map(function ($r) use ($__adlar, $__ayniPlaka) {
         $veri = json_decode($r['veri'], true);
+        $__plakaBugun = $__ayniPlaka((array)($veri['ortak'] ?? []), (string)$r['firma_ad']);
         if (isset($veri['ortak']['ulkeAd'])) {
           $veri['ortak']['ulkeAd'] = hks_gonderilen_ulke_isimle($veri['ortak']['ulkeAd'], $__adlar);
         }
@@ -413,6 +428,7 @@ try {
           'id' => $r['id'], 'zaman' => (new DateTime($r['zaman']))->format('c'),
           'firmaId' => $r['firma_id'], 'firmaAd' => $r['firma_ad'],
           'satirlar' => $veri['satirlar'], 'ortak' => $veri['ortak'],
+          'ayniPlakaBugun' => $__plakaBugun,
         ];
       }, $rows);
       hks_json_cikti(['taslaklar' => $taslaklar]);
@@ -997,6 +1013,21 @@ try {
       if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
       hks_json_cikti($out);
     }
+
+    // ---- AYNI GÜN AYNI PLAKA (v416) — Gönderim Onayı uyarısı. SALT OKUNUR ----
+    // Gönderim ENGELLENMEZ; yalnız bugün bu firmadan aynı plakaya (plaka yoksa aynı
+    // belge no'ya) yapılmış gönderimler listelenir. Firma izolasyonu 'gonderilenler' ile aynı.
+    case 'ayni_plaka_bugun': {
+      $fid = trim($g['firmaId'] ?? '');
+      if ($fid === '') hks_json_cikti(['hata' => 'Firma seçilmedi.'], 400);
+      $liste = hks_bugun_ayni_plaka($db, hks_tablo('gonderilenler'), $fid, trim($g['firmaAd'] ?? ''),
+        (string)($g['plaka'] ?? ''), (string)($g['belgeNo'] ?? ''));
+      $__adlar = hks_gonderilen_adlari($db, array_column($liste, 'ulkeAd'));
+      foreach ($liste as &$__r) { $__r['ulkeAd'] = hks_gonderilen_ulke_isimle($__r['ulkeAd'], $__adlar); }
+      unset($__r);
+      hks_json_cikti(['gonderimler' => $liste, 'gun' => date('Y-m-d')]);
+    }
+
     case 'kayitli_kisi': {
       // P0 (kılavuz 0.1.14 uyum düzeltmesi): dönüş artık HER ZAMAN tri-state
       // "durum" alanı taşır — REGISTERED | NOT_REGISTERED | UNKNOWN. Eskiden
