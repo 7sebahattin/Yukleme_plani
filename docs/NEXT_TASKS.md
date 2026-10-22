@@ -29,3 +29,4 @@
 |---|---|
 | Git history SQL dump tarama | `git log --all --name-only \| grep -i '\.sql'` ile kontrol edilebilir — hassas ise history rewrite |
 | HKS API credentials güvenliği | `HksConfig.php` incelenmedi |
+| HKS belirsiz gönderim — artçı işler (v417 sonrası) | (1) Beyan köprüsü: belirsiz kalan gönderimde HKS'te künye bulununca "gönderildi say" (Gönderilenler kaydı + `beyan_hks_taslak_isaretle('gonderildi')`) ayrı eylem olarak yok; (2) SIGKILL / proxy'nin süreci öldürmesinde kapanış güvencesi (`register_shutdown_function`) çalışmaz — write-ahead "gönderim niyeti" kv kaydı düşünülebilir; (3) TopluKunye'nin referanssız Satın Alım künyelerini listelediği canlıda kanıtlanmadı — boş sonuç kesin kanıt değil, `hks_yaptigim_penceresi` ikinci kaynak olabilir. |

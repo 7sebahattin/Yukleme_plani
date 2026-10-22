@@ -121,13 +121,14 @@ function kapi_dene(bool $admin, array $g): ?KapiCikis {
 $e = kapi_dene(false, ['csrf' => 'dogru']);
 ok('yönetici değil (records.write sahibi operatör) → 403', $e && $e->kod === 403);
 ok('403 gövdesinde `code` alanı YOK (istemci CSRF döngüsüne girmesin)', $e && !array_key_exists('code', $e->govde) && isset($e->govde['hata']));
-ok('yönetici değilken CSRF bile sorulmaz (önce yetki)', $GLOBALS['__csrf_cagri'] === 0);
+ok('yönetici değilken CSRF sorulmaz', $GLOBALS['__csrf_cagri'] === 0);
+// v418: CSRF merkezi kapıya (switch öncesi) taşındı; bu fonksiyon yalnız yönetici kapısıdır
+// (ikinci csrf_check, merkezi kapının kapattığı oturumu yeniden açıp kilitlerdi).
 $e = kapi_dene(true, ['csrf' => 'yanlis']);
-ok('yönetici + yanlış CSRF → 403 (csrf_check)', $e && $e->kod === 403 && ($e->govde['code'] ?? null) === 403 && $GLOBALS['__csrf_cagri'] === 1);
-$e = kapi_dene(true, []);
-ok('yönetici + CSRF yok → 403', $e && $e->kod === 403);
-$e = kapi_dene(true, ['csrf' => 'dogru']);
-ok('yönetici + doğru CSRF → geçer', $e === null);
+ok('yönetici → geçer; CSRF burada TEKRAR denetlenmez (merkezi kapıda)', $e === null && $GLOBALS['__csrf_cagri'] === 0);
+ok('firma_kaydet/firma_sil muaf listede DEĞİL (merkezi kapı CSRF ister)',
+    preg_match('/function hks_csrf_muaf_eylemler\(\): array \{(.*?)\n\}/s', $api, $__mm)
+    && strpos($__mm[1], "'firma_kaydet'") === false && strpos($__mm[1], "'firma_sil'") === false);
 
 echo "── api.php uç gövdeleri (statik) ──\n";
 foreach (['firma_kaydet', 'firma_sil'] as $uc) {

@@ -291,6 +291,28 @@
   .onay-plaka-kontrol-yok { margin-top:8px; font-size:12px; color:var(--soluk); }
   html[data-theme="dark"] .onay-plaka-uyari { background:#3b2a0a; border-color:#b45309; color:#fde68a; }
   html[data-theme="dark"] .onay-plaka-uyari b { color:#fcd34d; }
+  /* v417: önceki gönderim BELİRSİZ — kartta plaka satırında rozet, onayda/409'da kalıcı kutu */
+  .tk-satir .tk-uyari.tk-belirsiz { color:#991b1b; background:#fee2e2; border-color:#ef4444; letter-spacing:0;
+    display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; justify-content:flex-end; max-width:100%; }
+  .tk-belirsiz-kapat { font:inherit; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; cursor:pointer;
+    border:1px solid #ef4444; background:#fff; color:#991b1b; }
+  html[data-theme="dark"] .tk-satir .tk-uyari.tk-belirsiz { color:#fecaca; background:#7f1d1d; border-color:#ef4444; }
+  html[data-theme="dark"] .tk-belirsiz-kapat { background:#450a0a; color:#fecaca; border-color:#ef4444; }
+  .belirsiz-kutu { margin-top:10px; padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.45;
+    background:#fee2e2; border:1px solid #ef4444; color:#7f1d1d; overflow-wrap:anywhere; }
+  .belirsiz-kutu b { color:#991b1b; }
+  .belirsiz-kutu table { width:100%; border-collapse:collapse; margin:8px 0; font-size:12px; }
+  .belirsiz-kutu th, .belirsiz-kutu td { text-align:left; padding:4px 6px; border-bottom:1px solid #fca5a5; vertical-align:top; }
+  .belirsiz-kutu .bg-tablo { overflow-x:auto; }
+  .belirsiz-kutu label.bg-onay { display:flex; gap:8px; align-items:flex-start; margin-top:8px; font-weight:600; cursor:pointer; }
+  .belirsiz-kutu label.bg-onay input { margin-top:3px; flex:0 0 auto; }
+  .belirsiz-kutu .bg-not { font-size:12px; margin-top:6px; }
+  .belirsiz-kutu .bg-git { margin-top:8px; }
+  html[data-theme="dark"] .belirsiz-kutu { background:#450a0a; border-color:#b91c1c; color:#fecaca; }
+  html[data-theme="dark"] .belirsiz-kutu b { color:#fca5a5; }
+  html[data-theme="dark"] .belirsiz-kutu th, html[data-theme="dark"] .belirsiz-kutu td { border-bottom-color:#7f1d1d; }
+  .onay-satir.tk-belirsiz-onay b { color:#991b1b; }
+  html[data-theme="dark"] .onay-satir.tk-belirsiz-onay b { color:#fca5a5; }
   /* Taslak kartında plaka 2 punto büyük, kilo 1 punto büyük (istenen vurgu).
      Gönderilenler kartında ölçüler NORMAL kalır — yalnız renkler ortaktır. */
   .taslak-kart .tk-satir.tk-plaka .d { font-size:16px; }
@@ -1773,6 +1795,8 @@ const API_ROTA = {
   'GET /api/gonderilenler': 'gonderilenler',
   // Aynı gün aynı plaka uyarısı (SALT OKUNUR — Gönderim Onayı'nda)
   'POST /api/ayni_plaka': 'ayni_plaka_bugun',
+  // v417: belirsiz gönderim işaretini kapat (kullanıcı HKS'te kontrol etti; gönderim YAPMAZ)
+  'POST /api/belirsiz_isaret_kapat': 'belirsiz_isaret_kapat',
   // "Tekrar gönder": önceki gönderimden form tohumu (SALT OKUNUR — hiçbir şey yazmaz)
   'GET /api/gonderilen_tohum': 'gonderilen_tohum',
   // Yurt içi (Sevk Etme) referans/doğrulama
@@ -1811,8 +1835,14 @@ async function csrfTazele() {
   csrfBellek = String(j.csrf);
   return csrfBellek;
 }
-// Gövdeye 'csrf' YALNIZ bu uçlarda eklenir (başka uçta taslak verisine sızabilir).
-const API_GOVDE_CSRF = { kisi_kaydet: 1, kisi_sil: 1 };
+// Gövdeye 'csrf' yedeği YALNIZ durum değiştiren uçlarda eklenir (bazı proxy'ler özel
+// başlığı düşürür); okuma uçlarında gönderilmez. Sunucu merkezi kapıda (api.php,
+// hks_csrf_muaf_eylemler) token'ı doğrular ve gövdeden siler — taslak verisine sızmaz.
+// Yeni yazan uç eklenirse BURAYA da ekle (statik test: hks_csrf_kapsam_smoke.php).
+const API_GOVDE_CSRF = {
+  kisi_kaydet: 1, kisi_sil: 1, firma_kaydet: 1, firma_sil: 1, listeler_yenile: 1,
+  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1,
+};
 async function api(yol, metod, govde, tekrar) {
   metod = metod || 'GET';
   const action = API_ROTA[metod + ' ' + yol];
@@ -1826,14 +1856,30 @@ async function api(yol, metod, govde, tekrar) {
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': tok },
     body: JSON.stringify(g),
   });
-  const j = await r.json();
+  // v417: ters vekil/CDN hata sayfasını HTML döndürürse (ör. 502) JSON ayrıştırma hatası
+  // ("Unexpected token <") kullanıcıya sızmasın; anlaşılır mesaj verilir.
+  let j;
+  try { j = await r.json(); }
+  catch (e) {
+    const hx = new Error('Sunucu beklenmeyen bir yanıt verdi (HTTP ' + r.status + '). İşlemin sonucu bilinmiyor — ' +
+      'taslak/gönderilenler listesini kontrol edin.');
+    hx.durum = r.status; hx.govde = {};
+    throw hx;
+  }
   // csrf_check() biçimi ({ok:false,error,code:403}): token'ı tazele, BİR KEZ tekrarla.
   if (r.status === 403 && j.code === 403 && !tekrar && action !== 'csrf') {
     try { await csrfTazele(); return await api(yol, metod, govde, true); } catch (e) { if (e && e.message && e.message !== 'Güvenlik anahtarı alınamadı') throw e; }
   }
   // csrf_check() (config/helpers.php) 403'te 'hata' değil 'error' döner — onu da göster,
   // yoksa oturum/token sorunu kullanıcıya yalnız "HTTP 403" diye görünürdü.
-  if (!r.ok || j.hata) throw new Error(j.hata || j.error || ('HTTP ' + r.status));
+  if (!r.ok || j.hata) {
+    // e.govde / e.durum: ek alanlar (ör. v417 belirsiz gönderim bulguları) çağırana ulaşsın.
+    // Kalıcı CSRF reddi (tazeleme + tek tekrardan sonra bile 403): kullanıcıya çıkış yolu söylenir.
+    const csrfRed = r.status === 403 && j.code === 403;
+    const hx = new Error((j.hata || j.error || ('HTTP ' + r.status)) + (csrfRed ? ' Sayfayı yenileyip tekrar deneyin.' : ''));
+    hx.durum = r.status; hx.govde = j || {};
+    throw hx;
+  }
   return j;
 }
 
@@ -4636,7 +4682,11 @@ async function taslakEkraniAc() {
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
         _satir('', '🏢 Firma', eHtml(t.firmaAd)) +
         _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—') + (t.ayniPlakaBugun > 0
-          ? `<span class="tk-uyari">⚠ Bugün bu plakaya ${Number(t.ayniPlakaBugun)} gönderim yapıldı</span>` : '')) +
+          ? `<span class="tk-uyari">⚠ Bugün bu plakaya ${Number(t.ayniPlakaBugun)} gönderim yapıldı</span>` : '') +
+          (t.belirsizGonderim
+            ? `<span class="tk-uyari tk-belirsiz" role="alert">⚠ Önceki gönderim belirsiz — HKS'te kontrol edilecek ` +
+              `<button type="button" class="tk-belirsiz-kapat" data-belirsiz-kapat="${eHtml(t.belirsizGonderim.isaretId)}" ` +
+              `title="HKS'te kontrol ettiniz mi? İşareti kaldırır; gönderim yapmaz">HKS'te kontrol ettim</button></span>` : '')) +
         _satir('', (t.ortak.yurtIci ? '🏠' : '🌍') + ' Ülke', _ulke) +
         _satir('', (_urunAd ? urunIkonu(_urunAd) : '🍎') + ' Ürün', eHtml(_urunAd || '—')) +
         _satir('tk-kilo' + (dusukTonajMu(toplam) ? ' tk-dusuk' : ''), '⚖️ Kilo',
@@ -4668,9 +4718,26 @@ async function taslakEkraniAc() {
       b.onclick = () => taslakDuzenle(taslaklar.find(t => t.id === b.dataset.kopyala),
         { kopya: true, toast: TASLAK_KOPYA_TOAST });
     });
+    // v417: belirsiz gönderim işaretini kapat — kullanıcı HKS'te (hks.hal.gov.tr / Bildirim Sorgulama)
+    // kontrol etti. Gönderim YAPMAZ; yalnız işareti kaldırır (sunucuda audit).
+    kap.querySelectorAll('[data-belirsiz-kapat]').forEach(b => {
+      b.onclick = async (ev) => {
+        ev.stopPropagation();
+        if (!confirm('HKS\'te (hks.hal.gov.tr veya Bildirim Sorgulama) bu plakanın künyesini kontrol ettiniz mi?\n\n' +
+          'İşareti kaldırırsanız bu plaka için tekrar gönderimde otomatik HKS kontrolü YAPILMAZ.')) return;
+        try {
+          await api('/api/belirsiz_isaret_kapat', 'POST', { isaretId: b.dataset.belirsizKapat, sonuc: 'kunye_yok',
+            firmaId: aktifFirma ? aktifFirma.id : '' });
+        } catch (e) { alert('HATA: ' + e.message); }
+        taslakEkraniAc();
+      };
+    });
     kap.querySelectorAll('[data-sil]').forEach(b => {
       b.onclick = async () => {
-        if (!confirm('Bu taslak silinsin mi?')) return;
+        const _tSil = taslaklar.find(t => t.id === b.dataset.sil);
+        if (!confirm('Bu taslak silinsin mi?' + (_tSil && _tSil.belirsizGonderim
+          ? '\n\n⚠ Bu plaka için önceki gönderim BELİRSİZ. Taslağı silip aynı plakayı yeniden oluşturursanız da ' +
+            'tekrar gönderimde HKS kontrolü yapılır (işaret plaka + güne bağlıdır, taslağa değil).' : ''))) return;
         await api('/api/taslaklar/sil', 'POST', { id: b.dataset.sil, firmaId: aktifFirma ? aktifFirma.id : '' });
         taslakEkraniAc();
       };
@@ -4841,8 +4908,19 @@ function kopyaNotlariniGoster(notlar) {
   kutu.classList.remove('gizli');
 }
 
+// v417: belirsiz gönderim durumu. `belirsizIsaret` = bu taslağın kartındaki işaret (varsa);
+// `belirsizOnay` = sunucu 409 ile durdurduktan sonra kullanıcının bilinçli geçiş onayı için
+// beklediği durum ({isaretId, kunyeGerek}). Her yeni onay penceresinde sıfırlanır.
+let belirsizIsaret = null;
+let belirsizOnay = null;
+function onayDugmeEtiketi() {
+  if (belirsizOnay) return "HKS'te kontrol ettim — yine de gönder";
+  return belirsizIsaret ? "HKS'te kontrol et ve gönder" : 'Evet, Gönder';
+}
 function taslakOnayAc(t) {
   gonderilecekTaslakId = t.id;
+  belirsizIsaret = t.belirsizGonderim || null;
+  belirsizOnay = null;
   const plan = planTaslagiMi(t);
   const toplam = plan ? Number(t.ortak.planKg) : t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
   let html = `<div class="onay-satir"><span>Firma</span><b>${t.firmaAd}</b></div>`;
@@ -4892,6 +4970,11 @@ function taslakOnayAc(t) {
     html += `<div class="onay-satir"><span>Ülke</span><b>${t.ortak.ulkeAd || '—'}</b></div>`;
   }
   html += `<div class="onay-satir"><span>Plaka/Belge</span><b>${t.ortak.plaka || t.ortak.belgeNo || '—'}</b></div>`;
+  if (belirsizIsaret) {
+    html += `<div class="belirsiz-kutu" id="onayBelirsizUyari" role="alert">⚠ <b>Bu plaka için önceki gönderim BELİRSİZ kaldı</b> ` +
+      `(bağlantı koptu; HKS bildirimi alıp almadığı bilinmiyor). "Gönder"e basınca önce HKS'te bu plakanın künyeleri ` +
+      `<b>otomatik kontrol edilir</b> (bir dakikaya kadar sürebilir); künye bulunursa gönderim durdurulur.</div>`;
+  }
   html += `<div id="onayPlakaUyari"></div>`;
   html += `<p style="font-size:12px;color:var(--hata-tx);margin-top:10px">Bu işlem GERÇEK bildirim oluşturur ve geri alınamaz!</p>`;
   $('modalBaslik').textContent = '⚠️ Gönderim Onayı — CANLI SİSTEM';
@@ -4916,7 +4999,7 @@ let ayniPlakaSorguNo = 0;
 async function ayniPlakaKontrol(t) {
   const no = ++ayniPlakaSorguNo;
   const btn = $('btnOnay');
-  btn.disabled = false; btn.textContent = 'Evet, Gönder';
+  btn.disabled = false; btn.textContent = onayDugmeEtiketi();
   const kutu = $('onayPlakaUyari');
   const plaka = String(t.ortak.plaka || '').trim();
   const belge = String(t.ortak.belgeNo || '').trim();
@@ -4932,7 +5015,7 @@ async function ayniPlakaKontrol(t) {
   // Bu arada pencere kapandıysa / başka taslak açıldıysa sonucu atla
   if (no !== ayniPlakaSorguNo || gonderilecekTaslakId !== t.id || !$('modal').classList.contains('acik') ||
       $('modal').dataset.sonuc === '1' || !document.body.contains(kutu)) return;
-  btn.disabled = false; btn.textContent = 'Evet, Gönder';
+  btn.disabled = false; btn.textContent = onayDugmeEtiketi();
   if (hata) {
     kutu.innerHTML = '<div class="onay-plaka-kontrol-yok">Aynı plaka kontrolü yapılamadı — plakayı kendiniz kontrol edin.</div>';
     return;
@@ -4946,13 +5029,14 @@ async function ayniPlakaKontrol(t) {
       fmt(Math.round(Number(g.toplamKg) || 0)) + ' KG'].filter(Boolean).map(eHtml).join(' · ') + '</li>').join('') + '</ul>' +
     '<div class="opu-not">Aynı gün aynı plaka, Çoklu Künye Basım\'da (plaka + gün sorgusu) iki gönderimin künyelerini ' +
     'birlikte getirir. Plaka doğruysa gönderebilirsiniz.</div></div>';
-  btn.textContent = 'Yine de Gönder';
+  btn.textContent = belirsizIsaret ? onayDugmeEtiketi() : 'Yine de Gönder';
 }
 
 $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
 // Gönderim Sonucu penceresi: köşedeki ✕ ve boşluğa tıklamak YALNIZ kapatır (bulunulan ekranda kalınır);
 // Gönderilenlere git / Taslağa dön yalnız alttaki düğmeyle. CANLI onay penceresinde geçerli DEĞİL.
 function sonucKapat() {
+  belirsizOnay = null; belirsizIsaret = null;
   $('modal').classList.remove('acik');
   $('btnSonucYazdir').classList.add('gizli');
   delete $('modal').dataset.sonuc;
@@ -4966,14 +5050,76 @@ $('modal').addEventListener('click', (e) => {
   if (e.target === $('modal') && $('modal').dataset.sonuc === '1') sonucKapat();
 });
 
+// v417: sunucu belirsiz gönderim nedeniyle 409 ile durdurdu → kalıcı kutu (alert DEĞİL).
+// Kullanıcı HKS'te kontrol ettiğini onaylamadan düğme pasif; künye bulunduysa ikinci ayrı onay.
+// Kullanıcı/HKS verisi yalnız eHtml ile basılır. Taslak sunucuda korunmuştur.
+function belirsizDurduruldu(g) {
+  const bulunan = Array.isArray(g.bulunan) ? g.bulunan : [];
+  const kunyeGerek = g.kod === 'belirsiz_gonderim_kunye_var';
+  belirsizOnay = { isaretId: String(g.isaretId || ''), kunyeGerek };
+  let h = '<div class="belirsiz-kutu" id="belirsizKutu" role="alert">⚠ <b>' +
+    (kunyeGerek ? 'Gönderim DURDURULDU — HKS\'te bu plaka için Gönderilenler\'de görünmeyen künye var'
+      : 'Gönderim DURDURULDU — HKS kontrol edilemedi') + '</b><div class="bg-not">' + eHtml(g.hata || '') + '</div>';
+  if (bulunan.length) {
+    h += '<div class="bg-tablo"><table><thead><tr><th>Künye</th><th>Ürün</th><th>Miktar</th><th>Tarih</th><th>Bildirimci</th></tr></thead><tbody>' +
+      bulunan.map(x => '<tr><td>' + eHtml(x.kunyeNo) + '</td><td>' + eHtml(x.urun) + '</td><td>' +
+        eHtml(fmt(Math.round(Number(x.miktar) || 0)) + ' ' + (x.birim || 'Kg')) + '</td><td>' + eHtml(x.tarih) +
+        '</td><td>' + eHtml(x.bildirimci) + '</td></tr>').join('') + '</tbody></table></div>' +
+      '<div class="bg-not">Bu künyeler önceki (bağlantısı kopan) gönderime ait olabilir. Kesin değildir: aynı plakaya elle ' +
+      'ya da başka yoldan yapılmış bildirimler de burada görünür. Taslağı silmeyin; Gönderilenler\'i / HKS\'i kontrol edin.</div>';
+  } else {
+    h += '<div class="bg-not">HKS sorgusu yapılamadığı için önceki gönderimin sonucu doğrulanamadı. ' +
+      'hks.hal.gov.tr veya Bildirim Sorgulama ekranından bu plakanın künyesini kontrol edin.</div>';
+  }
+  h += '<label class="bg-onay"><input type="checkbox" id="bgOnay1"> <span>HKS\'te (hks.hal.gov.tr / Bildirim Sorgulama) ' +
+    'kontrol ettim; önceki gönderimin künyesi OLUŞMADI.</span></label>';
+  if (kunyeGerek) {
+    h += '<label class="bg-onay"><input type="checkbox" id="bgOnay2"> <span>Yukarıdaki künyelerin bu taslakla ilgisi OLMADIĞINI ' +
+      'biliyorum; yeni bildirim mükerrer olmayacak.</span></label>';
+  }
+  h += '<div class="bg-git"><button type="button" class="btn btn-soluk" id="bgGonderilenler">📋 Gönderilenler\'e git</button></div></div>';
+  $('modalBaslik').textContent = '⚠️ Önceki Gönderim Belirsiz';
+  $('modalIcerik').innerHTML = h;
+  const btn = $('btnOnay');
+  btn.classList.remove('gizli');
+  btn.textContent = onayDugmeEtiketi();
+  btn.disabled = true;
+  const guncelle = () => {
+    btn.disabled = !($('bgOnay1').checked && (!kunyeGerek || $('bgOnay2').checked));
+  };
+  $('bgOnay1').onchange = guncelle;
+  if ($('bgOnay2')) $('bgOnay2').onchange = guncelle;
+  $('bgGonderilenler').onclick = () => { sonucKapat(); gonderilenEkraniAc(); };
+  $('btnVazgec').textContent = 'Taslağa Dön';
+  $('btnVazgec').onclick = sonucKapat;   // Taslaklar açıksa sonucKapat listeyi tazeler
+  delete $('modal').dataset.sonuc;
+  $('btnModalX').classList.add('gizli');
+  $('btnSonucYazdir').classList.add('gizli');
+  $('modal').classList.add('acik');
+}
+
 $('btnOnay').onclick = async () => {
   $('btnOnay').disabled = true;
-  $('btnOnay').textContent = '⏳ Gönderiliyor...';
+  $('btnOnay').textContent = (belirsizIsaret || belirsizOnay) ? '⏳ HKS kontrol ediliyor…' : '⏳ Gönderiliyor...';
+  let belirsizDurdu = false;
   try {
-    const j = await api('/api/taslaklar/gonder', 'POST', { id: gonderilecekTaslakId, firmaId: aktifFirma ? aktifFirma.id : '' });
+    const _govde = { id: gonderilecekTaslakId, firmaId: aktifFirma ? aktifFirma.id : '' };
+    // Bilinçli geçiş: yalnız sunucu 409 ile durdurup kullanıcı onay kutularını işaretlediyse.
+    // Sunucu isaretId'yi kayıtlı işaretle birebir yeniden doğrular (istemci bayrağına güvenmez).
+    if (belirsizOnay && belirsizOnay.isaretId) {
+      _govde.belirsizOnay = belirsizOnay.isaretId;
+      if (belirsizOnay.kunyeGerek) _govde.belirsizKunyeOnay = true;
+    }
+    const j = await api('/api/taslaklar/gonder', 'POST', _govde);
+    belirsizOnay = null; belirsizIsaret = null;
     // Sonuçları aynı pencerede göster
     let html = '';
     let herhangiBasarili = false;
+    if (j.belirsizKontrol === 'temiz') {
+      html += '<div class="mesaj tamam" style="display:block">ℹ️ Önceki gönderim belirsizdi: gönderimden önce HKS tarandı, ' +
+        'Gönderilenler dışında künye görünmedi. (Bu kesin kanıt değildir — Bildirim Sorgulama\'dan da kontrol edin.)</div>';
+    }
+    if (j.kayitUyari) html += `<div class="mesaj hata" style="display:block">${eHtml(j.kayitUyari)}</div>`;
     if (j.taslakKorundu) {
       html += '<div class="mesaj tamam" style="display:block">💾 Hiçbir künye gönderilmedi — ' +
         '<b>taslağınız SİLİNMEDİ</b>. Aşağıdaki hatayı düzeltip (örn. karşı taraf sıfatı) ' +
@@ -5114,10 +5260,37 @@ $('btnOnay').onclick = async () => {
     // bildirimde güncel olsun.
     if (herhangiBasarili) sonlariYukle();
   } catch (e) {
-    alert('HATA: ' + e.message);
-    $('modal').classList.remove('acik');
-    $('btnSonucYazdir').classList.add('gizli');
+    const _g = (e && e.govde) || {};
+    if (_g.belirsiz && (_g.kod === 'belirsiz_gonderim' || _g.kod === 'belirsiz_gonderim_kunye_var' ||
+        _g.kod === 'belirsiz_gonderim_kontrol_edilemedi')) {
+      // Kalıcı kutu (alert DEĞİL). İlk belirsizlikte (bağlantı koptu) işaret kartta görünür; liste tazelenir.
+      belirsizIsaret = { isaretId: String(_g.isaretId || '') };
+      if (_g.kod === 'belirsiz_gonderim') {
+        belirsizOnay = null;
+        $('modalBaslik').textContent = '⚠️ Gönderim Belirsiz';
+        $('modalIcerik').innerHTML = '<div class="belirsiz-kutu" id="belirsizKutu" role="alert">⚠ <b>Bağlantı koptu — HKS bildirimi ' +
+          'alıp almadığı BİLİNMİYOR.</b><div class="bg-not">' + eHtml(_g.hata || '') + '</div>' +
+          '<div class="bg-not">Taslağınız silinmedi ve kartında "Önceki gönderim belirsiz" işareti var. Tekrar "Gönder" dediğinizde ' +
+          'önce HKS otomatik kontrol edilir; künye bulunursa gönderim durdurulur.</div></div>';
+        $('btnOnay').classList.add('gizli');
+        $('btnVazgec').textContent = 'Taslağa Dön';
+        $('btnVazgec').onclick = sonucKapat;   // Taslaklar açıksa sonucKapat listeyi tazeler
+        delete $('modal').dataset.sonuc;
+        $('btnModalX').classList.add('gizli');
+        $('btnSonucYazdir').classList.add('gizli');
+        $('modal').classList.add('acik');
+      } else {
+        belirsizDurduruldu(_g);
+      }
+      belirsizDurdu = true;
+      if (!$('ekranTaslaklar').classList.contains('gizli')) taslakEkraniAc();
+    } else {
+      alert('HATA: ' + e.message);
+      $('modal').classList.remove('acik');
+      $('btnSonucYazdir').classList.add('gizli');
+    }
   }
+  if (belirsizDurdu) return;
   $('btnOnay').disabled = false;
   $('btnOnay').textContent = 'Evet, Gönder';
 };
