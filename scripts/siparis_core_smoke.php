@@ -559,9 +559,11 @@ ok('kaldırılmış bağ tekrar kaldırılamaz', !siparis_beyan_bag_kaldir($db, 
 ok('kaldırınca başka sevkiyata bağlanabilir', siparis_beyan_bagla($db, $sid11, $b1id, 1, 'elle', '')['ok']);
 ok('beyan olayları + audit', siparis_test_say($db, 'siparis_olaylar', "tur IN ('beyan_baglandi', 'beyan_kaldirildi')") === 3
     && siparis_test_say($db, 'audit_log', "action = 'siparis_beyan_bagla'") === 2 && siparis_test_say($db, 'audit_log', "action = 'siparis_beyan_kaldir'") === 1);
-ok('customs_declarations DEĞİŞMEDİ', $db->query('SELECT * FROM customs_declarations ORDER BY id')->fetchAll() === $cdOnce);
-$IS_ADMIN = false;
-
+// v413 — bağ sırasında sevkiyat plakası/şoförü beyana aktarılır; yalnız ilgili beyan + yalnız araç/şoför alanları değişir
+$cdSon = $db->query('SELECT * FROM customs_declarations ORDER BY id')->fetchAll();
+$degisenId = [];
+foreach ($cdSon as $i => $r) if ($r != $cdOnce[$i]) $degisenId[] = (int)$r['id'];
+ok('v413: bağ yalnız bağlanan beyanı değiştirir', $degisenId === [$b1id] || $degisenId === [], json_encode($degisenId));
 echo "\n=== 13. Olay / okuma yardımcıları ===\n";
 $ol = siparis_olaylar($db, $sid1, 5);
 ok('olaylar en yeni önce, kullanıcı adı', count($ol) === 5 && (int)$ol[0]['id'] > (int)$ol[4]['id'] && $ol[0]['kullanici_adi'] !== null);
@@ -578,7 +580,7 @@ $aud = siparis_test_audit($db);
 $uzun = array_filter($aud, fn($a) => strlen((string)$a['action']) > 40);
 ok('tüm audit eylem adları ≤ 40 karakter', $uzun === [] && count($aud) > 10);
 $izinli = ['siparis_belge_yukle', 'siparis_belge_sil', 'siparis_alan_duzenle', 'siparis_kilit_kaldir', 'siparis_catisma_coz', 'siparis_durum', 'siparis_mail_gonderildi',
-    'siparis_pkl_taslak', 'siparis_pkl_uret', 'siparis_dosya_indir', 'siparis_zip_indir', 'siparis_beyan_bagla', 'siparis_beyan_kaldir', 'siparis_sayac_duzelt',
+    'siparis_pkl_taslak', 'siparis_pkl_uret', 'siparis_dosya_indir', 'siparis_zip_indir', 'siparis_beyan_bagla', 'siparis_beyan_kaldir', 'siparis_beyan_arac_aktar', 'siparis_sayac_duzelt',
     'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sevkiyat_sil', 'siparis_sevkiyat_ac', 'siparis_evrak_gonderildi', 'siparis_evrak_gecis',
     'siparis_evrak_mail_ayar'];   // v411: evrak takımı mail alıcıları (hks_kv; yalnız adres SAYISI)
 ok('yalnız planlanmış eylem adları', array_diff(array_unique(array_column($aud, 'action')), $izinli) === []);
@@ -830,4 +832,37 @@ $ekKod = '';
 foreach (token_get_all($ek) as $t) if (!is_array($t) || !in_array($t[0], [T_COMMENT, T_DOC_COMMENT], true)) $ekKod .= is_array($t) ? $t[1] : $t;
 ok('siparis_evrak.php şema değiştirmez (ALTER / CREATE / DROP TABLE yok)', !preg_match('/\b(ALTER|CREATE|DROP)\s+TABLE\b/i', $ekKod));
 
+echo "\n=== 12b. Plaka/şoför aktarımı + yüklendi gizleme (v413) ===\n";
+ok('plaka ayırma: 1.=çekici 2.=dorse', siparis_beyan_plaka_ayir('34 ABC 123-06XYZ45') === ['cekici' => '34ABC123', 'dorse' => '06XYZ45']
+    && siparis_beyan_plaka_ayir('34ABC123') === ['cekici' => '34ABC123', 'dorse' => ''] && siparis_beyan_plaka_ayir('') === ['cekici' => '', 'dorse' => '']);
+$ins->execute(['beyan_acildi', 'AKTAR-1', 'ESKIDORSE', 'ESKICEKICI', 1000, 1, 'NAR', '2026-12-03 10:00:00']);
+$bA = (int)$db->lastInsertId();
+$ins->execute(['yuklendi', 'GIDEN-1', '34TST003', '34TST004', 1000, (int)$s1['toplam_palet'], 'NAR', '2026-12-03 10:00:00']);
+$bY = (int)$db->lastInsertId();
+$ins->execute(['beyan_acildi', 'AKTAR-2', 'KALSIN', 'KALSIN2', 1000, 1, 'NAR', '2026-12-03 10:00:00']);
+$bB = (int)$db->lastInsertId();
+$ins->execute(['beyan_acildi', 'AKTAR-3', null, null, 1000, 1, 'NAR', '2026-12-03 10:00:00']);
+$bC = (int)$db->lastInsertId();
+$db->prepare("UPDATE siparis_sevkiyatlar SET plakalar = ?, sofor_adi = ?, sofor_telefon = ? WHERE id = ?")->execute(['33AHS305-34DOR111', 'Test Şoför', '+90 539 000 00 00', $sid11]);
+$db->prepare("UPDATE siparis_sevkiyatlar SET plakalar = NULL, sofor_adi = NULL, sofor_telefon = NULL WHERE id = ?")->execute([$sid1]);
+$oy = siparis_beyan_oneriler($db, siparis_sevkiyat($db, $sid1), 50);
+ok('yüklendi beyan önerilerde YOK', !in_array($bY, array_column($oy, 'beyan_id'), true));
+ok('yüklendi beyan aramada YOK', !in_array($bY, array_column(siparis_beyan_ara($db, '34TST003'), 'id'), true) && in_array($b1id, array_column(siparis_beyan_ara($db, '34TST003'), 'id'), true));
+$r = siparis_beyan_bagla($db, $sid1, $bY, 1, 'elle', '');
+ok('yüklendi beyan bağlanamaz', !$r['ok'] && str_contains((string)$r['hata'], 'Yüklendi'));
+$IS_ADMIN = true;
+$r = siparis_beyan_bagla($db, $sid11, $bA, 1, 'elle', '');
+$bayiSql = $db->prepare('SELECT tractor_plate, vehicle_plate, driver_name, driver_phone, updated_by FROM customs_declarations WHERE id = ?');
+$bayiSql->execute([$bA]); $a = $bayiSql->fetch(PDO::FETCH_ASSOC);
+ok('bağlanınca çekici/dorse/şoför beyana yazıldı (sipariş doğru kabul)', $r['ok'] && $a['tractor_plate'] === '33AHS305' && $a['vehicle_plate'] === '34DOR111'
+    && $a['driver_name'] === 'Test Şoför' && $a['driver_phone'] === '+90 539 000 00 00' && (int)$a['updated_by'] === 1, json_encode([$r, $a]));
+ok('aktarılan alan listesi döner', count($r['aktarilan'] ?? []) === 4);
+$au = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_beyan_arac_aktar'")->fetchAll(PDO::FETCH_COLUMN);
+ok('audit: aktarım yazıldı, şoför adı/telefonu audit\'e YOK', count($au) >= 1 && !str_contains(implode('', $au), 'Test Şoför') && !str_contains(implode('', $au), '539'));
+// sipariş tarafı boşsa beyan korunur; tek plaka yalnız çekiciyi yazar
+$db->prepare("UPDATE siparis_sevkiyatlar SET plakalar = ?, sofor_adi = NULL, sofor_telefon = NULL WHERE id = ?")->execute(['06ONE111', $sid1]);
+$r = siparis_beyan_bagla($db, $sid1, $bB, 1, 'elle', '');
+$bayiSql->execute([$bB]); $a = $bayiSql->fetch(PDO::FETCH_ASSOC);
+ok('tek plaka: yalnız çekici yazılır, dorse/şoför beyandaki korunur', $r['ok'] && $a['tractor_plate'] === '06ONE111' && $a['vehicle_plate'] === 'KALSIN' && $a['driver_name'] === null, json_encode($a));
+$IS_ADMIN = false;
 siparis_test_bitir();
