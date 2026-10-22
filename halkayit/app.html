@@ -2582,12 +2582,6 @@ async function gonderimKunyeleriAl(o, sorgu) {
   return { kunyeler: liste, beklenen: beklenen.length, eksik: beklenen.length ? beklenen.length - liste.length : 0 };
 }
 
-// Yazdırma sayfası kurulduktan sonra: uyarı yoksa yazdırma penceresi kendiliğinden açılır.
-// Uyarı varsa açılmaz — yazdırma penceresi uyarının üstünü örtmesin, kullanıcı kendisi basar.
-function yzOtomatikBas(w, uyariVar) {
-  if (!uyariVar) setTimeout(() => { try { if (!w.closed) { w.focus(); w.print(); } } catch (e) {} }, 400);
-}
-
 function gonderimYazdir(o) {
   const w = window.open('', '_blank');
   if (!w) { toast('Yazdırma penceresi engellendi. Açılır pencere izni verin.'); return; }
@@ -2602,7 +2596,6 @@ function gonderimYazdir(o) {
         r.kunyeler.length + ' künye listelendi. Birkaç saniye sonra pencereyi kapatıp tekrar yazdırabilirsiniz.'
       : '';
     topluYazdirPenceresiAc(o.firmaAd || '', o.tarih, o.plaka || '', o.belgeNo || '', r.kunyeler, { pencere: w, uyari });
-    yzOtomatikBas(w, !!uyari);
   }
   calistir();
 }
@@ -2672,7 +2665,6 @@ function gonderimTopluYazdir(liste) {
       dosyaAdi: yzDosyaAdi('Kunyeler ' + bolumler.length + ' gonderim-' + firma),
       metin: `${firma}\n${bolumler.length} gönderim · ${kunyeSay} künye · Toplam ${fmt(toplamKg)} KG`,
     });
-    yzOtomatikBas(w, uyarilar.length > 0);
   }
   calistir();
 }
