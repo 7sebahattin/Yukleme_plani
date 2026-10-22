@@ -709,6 +709,16 @@ try {
         ];
       }
 
+      // GÖNDERİM AUDIT'İ (v417): niyet kaydı — süreç fatal/zaman aşımıyla ölürse
+      // 'basla' var 'sonuc' yok = belirsiz. Kullanıcıyı audit_log_event ekler;
+      // kişisel veri YOK (bkz. hks_gonderim_audit_payload). Hata yutulur.
+      $__actx = [];
+      try {
+        $__aref = bin2hex(random_bytes(8));
+        $__actx = hks_gonderim_audit_ctx($t, $ortak, (array)$satirlar, $planMi, $__aref, hks_bildirim_turu_kodu($ortak));
+      } catch (Throwable $__ae) { error_log('[hks_gonderim_audit] ctx ' . get_class($__ae)); }
+      hks_gonderim_audit_yaz('hks_gonderim_basla', 'basla', $__actx);
+
       try {
         $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak, $__secenek);
         // HKS'e GERÇEKTEN giden ikinci kişi kimliği — hata ekranında gösterilir.
@@ -737,6 +747,8 @@ try {
       } catch (Throwable $__e) {
         $taslagiGeriKoy();
         error_log('[hks] bildirim_kaydet istisna: ' . $__e->getMessage());
+        // Belirsiz sonuç: yalnız istisna SINIFI (mesaj kişisel veri taşıyabilir).
+        hks_gonderim_audit_yaz('hks_gonderim_sonuc', 'belirsiz', $__actx + ['exception_sinifi' => get_class($__e)]);
         if ($__dogumKaydi !== null) {
           hks_dogum_deneme_kaydet($__dogumKaydi + ['bicim' => hks_dogum_varyant_coz(isset($__secenek['bicim']) ? ['bicim' => $__secenek['bicim']] : null)['bicim'],
             'sonuc' => 'belirsiz', 'hataKodu' => 0, 'ogrenildi' => false]);
@@ -803,14 +815,20 @@ try {
       // taslağa geri döner, hatalı alanı (ör. karşı taraf sıfatı) "Düzenle" ile
       // değiştirip AYNI taslağı tekrar gönderebilir — formu baştan doldurmaz.
       if (count($basarili) === 0) {
+        // Audit taslak geri konmadan ÖNCE; 'yanit_bos' = sonuç satırı ve genel hata yok
+        // (yanıt ayrıştırılamadı — HKS isteği almış olabilir). Davranış DEĞİŞMEZ.
+        hks_gonderim_audit_yaz('hks_gonderim_sonuc', hks_gonderim_sonuc_turu($sonuc), $__actx, $sonuc);
         $taslagiGeriKoy();
         hks_json_cikti($sonuc + ['taslakKorundu' => true]);
       }
 
       // En az bir künye gerçekten oluştu → bu GERİ ALINAMAZ, kayıt tutulmalı.
+      // Audit, aşağıdaki yazmalardan (kv / havuz / Gönderilenler INSERT) ÖNCE: bunlardan
+      // biri istisna atsa bile "künye oluştu" izi kalır. $gid bu yüzden burada üretilir.
+      $gid = 'g' . round(microtime(true) * 1000);
+      hks_gonderim_audit_yaz('hks_gonderim_sonuc', hks_gonderim_sonuc_turu($sonuc), $__actx + ['gonderim_id' => $gid], $sonuc);
       hks_son_guncelle($ortak, $t['firma_id']);
       hks_kisi_havuzuna_isle($db, $ortak, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
-      $gid = 'g' . round(microtime(true) * 1000);
       // Toplam kg / adet YALNIZ başarılı satırlardan (hatalı satır "gönderildi" sayılmaz).
       [$__bkg, $__badet] = hks_basarili_ozet($sonuc['sonuclar'], $satirlar);
       $toplamKg = $__bkg ?? array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
@@ -823,7 +841,7 @@ try {
         $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
         $__badet > 0 ? $__badet : count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
-        json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya], JSON_UNESCAPED_UNICODE)]);
+        json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya, 'gonderen' => hks_gonderim_gonderen($__hks_user)], JSON_UNESCAPED_UNICODE)]);
 
       // BEYAN KÖPRÜSÜ: taslak Beyan ekranından açıldıysa bağ kaydını sonuçlandır.
       // Hata yutan yardımcıdır — köprü sorunu bu geri alınamaz akışı kesmez.
@@ -874,6 +892,8 @@ try {
           // Kopyanın KENDİSİ listede dönmez (500 satır şişmesin) — yalnız var mı.
           // Tohum ayrıca 'gonderilen_tohum' ucundan istenir.
           'kopyaVar' => !empty($veri['kopya']),
+          // v417: gönderen kullanıcının ad anlık görüntüsü (eski kayıtlarda boş).
+          'gonderen' => is_string($veri['gonderen']['ad'] ?? null) ? $veri['gonderen']['ad'] : '',
         ];
       }, $rows);
       hks_json_cikti(['gonderilenler' => $liste]);

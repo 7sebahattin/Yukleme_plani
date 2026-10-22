@@ -353,6 +353,8 @@
   }
   .g-kart.acik .g-kart-detay { display:block; }
   .g-detay-baslik { font-size:11px; font-weight:700; color:var(--soluk); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+  .g-gonderen-baslik { margin-top:12px; }
+  .g-gonderen { font-size:13px; overflow-wrap:anywhere; }
   .g-kunye-cip {
     display:inline-block; background:var(--cip-bg); color:var(--navy); border:1.5px solid var(--cip-kenar);
     padding:5px 10px; border-radius:16px; font-size:11.5px; font-weight:700; margin:0 6px 6px 0;
@@ -5205,6 +5207,7 @@ function gonderilenKartIcerik(g, i, gomulu) {
     `<div class="g-kart-detay">` +
     `<div class="g-detay-baslik">Künye Numaraları</div>` +
     `<div class="cipler">${kunyeChips}</div>` +
+    (g.gonderen ? `<div class="g-detay-baslik g-gonderen-baslik">Gönderen</div><div class="g-gonderen">${eHtml(g.gonderen)}</div>` : '') +
     `</div>`;
 }
 

@@ -37,7 +37,7 @@ function gonderilenler() {
   return [
     { id: 'g1001', zaman: '2026-10-05T14:32:10+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '31AJE915', belgeNo: '',
       ulkeAd: 'Rusya', urunAd: 'Kayısı', adet: 3, toplamKg: 24500.4, fiyat: 25, rusum: 123.45, hataSayisi: 0, genelHata: '',
-      bildirimTuru: 'SATIS', yeniKunyeler: KUNYELER },
+      bildirimTuru: 'SATIS', yeniKunyeler: KUNYELER, gonderen: 'Örnek <b>Kullanıcı</b><img src=x onerror=window.__gx=1>' },
     { id: 'g1002', zaman: '2026-10-04T09:05:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '', belgeNo: 'B-77',
       ulkeAd: 'Satın Alım ← Örnek Müstahsil', urunAd: 'Kiraz', adet: 1, toplamKg: 1200, fiyat: 18.5, rusum: 0, hataSayisi: 2, genelHata: '',
       bildirimTuru: 'SATIN_ALIM', yeniKunyeler: [] },
@@ -217,6 +217,11 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   ok('kartta bugünkü içerik: Firma/Plaka/Ülke/Ürün/Kilo/Künye/Fiyat/Rüsum + künye çipleri',
      ['Firma', 'Plaka', 'Ülke', 'Ürün', 'Kilo', 'Künye', 'Fiyat', 'Rüsum', 'Künye Numaraları'].every(w => kartMetin.includes(w)) &&
      await detay0.locator('.g-kunye-cip').count() === 3 && kartMetin.includes('3601234567890123'), kartMetin.slice(0, 120));
+  ok('v417 masaüstü: kart detayında "Gönderen" satırı, ad metin olarak (HTML çalışmaz)',
+     kartMetin.includes('Gönderen') && await detay0.locator('.g-gonderen').count() === 1 &&
+     (await detay0.locator('.g-gonderen').textContent()).includes('<b>Kullanıcı</b>') && await detay0.locator('.g-gonderen b, .g-gonderen img').count() === 0 &&
+     !(await sayfa.evaluate(() => window.__gx === 1)));
+  ok('v417 masaüstü: masaüstü tablosuna Gönderen SÜTUNU eklenmedi', !(await sayfa.locator('thead').first().textContent()).includes('Gönderen'));
   ok('kart satırın HEMEN altında (kardeş sıra)', await sayfa.evaluate(() => { const t = document.querySelector('tr.g-satir'); return t.nextElementSibling && t.nextElementSibling.classList.contains('g-detay-tr'); }));
   ok('açık kartta Yazdır / Tekrar gönder tekrarlanmaz', await detay0.locator('.g-yazdir-btn-ust, .g-btn-tekrar, .g-detay-eylem').count() === 0);
   ok('açıkken yatay taşma yok', !(await yatayTasma(sayfa)));
@@ -512,6 +517,8 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   ok('mobil: yatay taşma yok', !(await yatayTasma(sayfaM)));
   await sayfaM.locator('.g-kart').first().locator('.g-kart-head-sol').tap();
   ok('mobil: kart başlığına dokununca detay açılır (künye çipleri)', await sayfaM.locator('.g-kart').first().evaluate(e => e.classList.contains('acik')) && await sayfaM.locator('.g-kart').first().locator('.g-kunye-cip').first().isVisible());
+  ok('v417 mobil: açık kartta Gönderen satırı görünür, taşma yok', await sayfaM.locator('.g-kart').first().locator('.g-gonderen').isVisible() && !(await yatayTasma(sayfaM)));
+  ok('v417 mobil: gönderen alanı olmayan (eski) kayıtta satır çizilmez', await sayfaM.locator('.g-kart').nth(1).locator('.g-gonderen').count() === 0);
   ok('mobil: detay açıkken de düğme aynı yerde görünür', await mtekrar.isVisible());
   await foto(sayfaM, '09_mobil_acik');
   await mtekrar.tap();
