@@ -1,7 +1,7 @@
 <?php
 // =========================================================
 // siparis_beyan_bagla.php — Sevkiyat ↔ gümrük beyanı bağı kur / kaldır (POST)
-// Kapı: siparis.match VE can_beyan('read') (beyan görmeyen biri bağ kuramaz). customs_declarations'a YAZMAZ.
+// Kapı: siparis.match VE can_beyan('read') (beyan görmeyen biri bağ kuramaz). Plaka/şoför beyana aktarılır (can_beyan('write') varsa).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -29,7 +29,8 @@ if ($islem === 'bagla') {
     if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
     $tur = ($_POST['tur'] ?? '') === 'oneri' ? 'oneri' : 'elle';
     $r = siparis_beyan_bagla($pdo, $sid, (int)($_POST['beyan_id'] ?? 0), $uid, $tur, (string)($_POST['gerekce'] ?? ''));
-    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Beyan sevkiyata bağlandı.' : (string)($r['hata'] ?? 'Bağ kurulamadı.'));
+    $not = !empty($r['aktarilan']) ? ' Araç/şoför bilgisi beyana aktarıldı (' . implode(', ', array_map(fn($k) => ['tractor_plate' => 'çekici', 'vehicle_plate' => 'dorse', 'driver_name' => 'şoför adı', 'driver_phone' => 'şoför tel.'][$k] ?? $k, $r['aktarilan'])) . ').' : '';
+    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Beyan sevkiyata bağlandı.' . $not : (string)($r['hata'] ?? 'Bağ kurulamadı.'));
     $git('siparis_view.php?id=' . $sid . '#beyan');
 }
 if ($islem === 'kaldir') {

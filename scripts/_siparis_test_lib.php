@@ -154,11 +154,11 @@ function siparis_test_diger_tablolar(PDO $db): void
         foreach (['audit_log', 'users', 'customs_declarations'] as $t) $db->exec("DROP TABLE IF EXISTS `$t`");
         $db->exec("CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(100), display_name VARCHAR(150), is_active TINYINT(1) DEFAULT 1) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         $db->exec("CREATE TABLE audit_log (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, action VARCHAR(100), module VARCHAR(100), record_id INT, old_values MEDIUMTEXT, new_values MEDIUMTEXT, ip VARCHAR(64), user_agent VARCHAR(255), created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        $db->exec("CREATE TABLE customs_declarations (id INT AUTO_INCREMENT PRIMARY KEY, status VARCHAR(50), party_no VARCHAR(100), vehicle_plate VARCHAR(30), tractor_plate VARCHAR(20), net_kg DECIMAL(12,3), pallet_count INT, product_name VARCHAR(150), buyer_name VARCHAR(150), contact_person VARCHAR(150), created_at DATETIME, deleted_at DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("CREATE TABLE customs_declarations (id INT AUTO_INCREMENT PRIMARY KEY, status VARCHAR(50), party_no VARCHAR(100), vehicle_plate VARCHAR(30), tractor_plate VARCHAR(20), net_kg DECIMAL(12,3), pallet_count INT, product_name VARCHAR(150), buyer_name VARCHAR(150), contact_person VARCHAR(150), driver_name VARCHAR(150), driver_phone VARCHAR(40), created_at DATETIME, updated_by INT NULL, updated_at DATETIME NULL, deleted_at DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } else {
         $db->exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, display_name TEXT, is_active INT DEFAULT 1)");
         $db->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INT, action TEXT, module TEXT, record_id INT, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
-        $db->exec("CREATE TABLE customs_declarations (id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT, party_no TEXT, vehicle_plate TEXT, tractor_plate TEXT, net_kg REAL, pallet_count INT, product_name TEXT, buyer_name TEXT, contact_person TEXT, created_at TEXT, deleted_at TEXT NULL)");
+        $db->exec("CREATE TABLE customs_declarations (id INTEGER PRIMARY KEY AUTOINCREMENT, status TEXT, party_no TEXT, vehicle_plate TEXT, tractor_plate TEXT, net_kg REAL, pallet_count INT, product_name TEXT, buyer_name TEXT, contact_person TEXT, driver_name TEXT, driver_phone TEXT, created_at TEXT, updated_by INT NULL, updated_at TEXT NULL, deleted_at TEXT NULL)");
     }
     $db->exec("INSERT INTO users (username, display_name) VALUES ('u1','Kullanıcı 1'),('u2','Kullanıcı 2'),('u3','Kullanıcı 3')");
 }
