@@ -153,7 +153,7 @@ ok('olusturuldu olayı "PO ile"', siparis_test_say($db, 'siparis_olaylar', "sevk
 ok('belge_eklendi olayı', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND tur = 'belge_eklendi'", [(int)$s1['id']]) === 1);
 $bel = $db->query("SELECT * FROM siparis_belgeler WHERE id = $poBelge")->fetch();
 ok('belge: tur po, islendi, belge_tarihi = başlık tarih+saat, cw, tedarikçi, parser v3', $bel['tur'] === 'po' && $bel['durum'] === 'islendi' && $bel['belge_tarihi'] === '2026-12-01 10:00:00'
-    && (int)$bel['cw_hafta'] === 50 && $bel['tedarikci_no'] === '1102720' && $bel['parser_surum'] === 'v3' && str_contains((string)$bel['parse_json'], 'TC900001.10'));
+    && (int)$bel['cw_hafta'] === 50 && $bel['tedarikci_no'] === '1102720' && $bel['parser_surum'] === SIPARIS_PDF_SURUM && str_contains((string)$bel['parse_json'], 'TC900001.10'));
 ok('siparis_belgeler(): bağlı belge + gecerli', count(siparis_belgeler($db, (int)$s1['id'])) === 1 && (int)siparis_belgeler($db, (int)$s1['id'])[0]['gecerli'] === 1);
 
 echo "\n=== 5c. LL (plakalı) → araç atandı ===\n";
@@ -582,7 +582,7 @@ ok('tüm audit eylem adları ≤ 40 karakter', $uzun === [] && count($aud) > 10)
 $izinli = ['siparis_belge_yukle', 'siparis_belge_sil', 'siparis_alan_duzenle', 'siparis_kilit_kaldir', 'siparis_catisma_coz', 'siparis_durum', 'siparis_mail_gonderildi',
     'siparis_pkl_taslak', 'siparis_pkl_uret', 'siparis_dosya_indir', 'siparis_zip_indir', 'siparis_beyan_bagla', 'siparis_beyan_kaldir', 'siparis_beyan_arac_aktar', 'siparis_sayac_duzelt',
     'siparis_profil_kaydet', 'siparis_profil_sil', 'siparis_sevkiyat_sil', 'siparis_sevkiyat_ac', 'siparis_evrak_gonderildi', 'siparis_evrak_gecis',
-    'siparis_evrak_mail_ayar'];   // v411: evrak takımı mail alıcıları (hks_kv; yalnız adres SAYISI)
+    'siparis_evrak_mail_ayar', 'siparis_kalem_ekle', 'siparis_kalem_yetim_ekle', 'siparis_eksik_okuma_onay'];   // v411: evrak takımı mail alıcıları (hks_kv; yalnız adres SAYISI)
 ok('yalnız planlanmış eylem adları', array_diff(array_unique(array_column($aud, 'action')), $izinli) === []);
 $tum = implode("\n", array_map(fn($a) => $a['old_values'] . ' ' . $a['new_values'], $aud));
 ok('audit kişisel veri / ayrıştırma içeriği taşımıyor', !preg_match('/URETICI|LAB TEST|4000000000006|example\.invalid|CLERK|Şoför|Müşteri iptal/u', $tum));
@@ -864,5 +864,72 @@ $db->prepare("UPDATE siparis_sevkiyatlar SET plakalar = ?, sofor_adi = NULL, sof
 $r = siparis_beyan_bagla($db, $sid1, $bB, 1, 'elle', '');
 $bayiSql->execute([$bB]); $a = $bayiSql->fetch(PDO::FETCH_ASSOC);
 ok('tek plaka: yalnız çekici yazılır, dorse/şoför beyandaki korunur', $r['ok'] && $a['tractor_plate'] === '06ONE111' && $a['vehicle_plate'] === 'KALSIN' && $a['driver_name'] === null, json_encode($a));
+echo "\n=== v421. PO eksik okuma uyarısı + Kalem ekle (elle) + bağlanamayan kalem ===\n";
+ok('eksik_okuma: temiz PO → null', siparis_po_eksik_okuma(['checks' => [['id' => 'sum_blocks_pallets', 'ok' => true]], 'orphan_items' => []]) === null);
+$__chk = [['id' => 'sum_blocks_pallets', 'scope' => 'item 2', 'ok' => false, 'expected' => 15, 'actual' => 0]];
+ok('eksik_okuma: sum_blocks başarısız → mesaj (beklenen/bulunan yazar)', str_contains((string)siparis_po_eksik_okuma(['checks' => $__chk]), 'beklenen 15') && str_contains((string)siparis_po_eksik_okuma(['checks' => $__chk]), 'bulunan 0'));
+ok('eksik_okuma: başka denetimler (palet × PF vb.) tek başına tetiklemez', siparis_po_eksik_okuma(['checks' => [['id' => 'block_pallets_x_pf', 'ok' => false]]]) === null);
+$__or = [['loading_date' => '2026-12-05', 'item' => ['pcs_per_box' => 16, 'pallets' => 15]]];
+ok('eksik_okuma: bağlanamayan satır yalnız AYNI tarihli sevkiyata', str_contains((string)siparis_po_eksik_okuma(['orphan_items' => $__or], '2026-12-05'), '16 PC') && siparis_po_eksik_okuma(['orphan_items' => $__or], '2026-12-09') === null);
+
+$__d = siparis_test_fixture('po_iki_sevkiyat');
+$__l = $__d['loadings'][1]; $__l['order_ref'] = 'TC977701.10'; $__l['tour'] = '9777000001';
+$__d['loadings'] = [$__l]; $__d['items'][0]['pallets'] = 10 + 15; $__d['items'][0]['quantity'] = 1600 + 2400;
+$__d['orphan_items'] = [['loading_date' => '2026-12-05', 'logistics' => 'OGL', 'incoterm' => 'EXW', 'page' => 3, 'item' => [
+    'ian' => '90001', 'description' => 'Testfruit 16 PC LOSE (TR)', 'product' => 'Testfruit', 'pcs_per_box' => 16, 'pack_mode' => 'LOSE', 'origin' => 'TR', 'pallets' => 15, 'pallet_type' => 'EV', 'pf' => 160, 'quantity' => 2400,
+    'locations' => [['name' => 'LIDL XX A', 'role' => 'location', 'code' => null, 'pallets' => 15, 'pf' => 160, 'cartons' => 2400]]]]];
+$__d['checks'] = [['id' => 'sum_blocks_pallets', 'scope' => 'item 1', 'ok' => false, 'expected' => 25, 'actual' => 10]];
+$r = siparis_test_isle($db, $__d, 'po_yetim');
+$__sv = siparis_test_sev($db, 'TC977701.10'); $__sid = (int)$__sv['id']; $__bid = (int)$r['kayit']['belge_id'];
+$__u = array_values(array_filter($__sv['_uyarilar'], fn($u) => $u['kod'] === 'po_eksik_okuma'));
+ok('PO eksik okunmuş → sevkiyatta po_eksik_okuma uyarısı (seviye hata)', $r['isle']['ok'] && count($__u) === 1 && $__u[0]['seviye'] === 'hata' && str_contains($__u[0]['mesaj'], '16 PC'), json_encode($__sv['_uyarilar']));
+ok('liste rozeti sorgusu (uyarilar_json LIKE) bu sevkiyatı yakalar', (int)$db->query("SELECT CASE WHEN uyarilar_json LIKE '%po_eksik_okuma%' THEN 1 ELSE 0 END FROM siparis_sevkiyatlar WHERE id = $__sid")->fetchColumn() === 1);
+ok('tarih eşleşmeyen diğer sevkiyatlarda (po1: TC900001.10) uyarı YOK', !array_filter(siparis_test_sev($db, 'TC900001.10')['_uyarilar'], fn($u) => $u['kod'] === 'po_eksik_okuma'));
+
+$x = siparis_po_yetim_ekle($db, $__bid, 0, $__sid, 1);
+$__k = array_values(array_filter(siparis_kalemler($db, $__sid), fn($k) => (string)$k['kalibre'] === '16'));
+ok('yetim_ekle: 16 PC kalemi PO miktarıyla eklendi (15 palet / 2400 koli, etkin po)', $x['ok'] && count($__k) === 1 && (int)$__k[0]['po_palet'] === 15 && (int)$__k[0]['po_koli'] === 2400 && (int)$__k[0]['etkin_palet'] === 15 && $__k[0]['etkin_kaynak'] === 'po', json_encode([$x, $__k]));
+ok('yetim_ekle: kalem alanları (ürün/açıklama/pf) PO satırından', $__k && $__k[0]['urun'] === 'Testfruit' && (int)$__k[0]['pf'] === 160);
+ok('yetim_ekle: sevkiyat toplamı güncellendi (25 palet)', (int)siparis_sevkiyat($db, $__sid)['toplam_palet'] === 25);
+ok('yetim_ekle: onay yazıldı → po_eksik_okuma uyarısı kalktı', !array_filter(siparis_sevkiyat($db, $__sid)['_uyarilar'], fn($u) => $u['kod'] === 'po_eksik_okuma'));
+ok('yetim_ekle: ikinci kez reddedilir (çift ekleme yok)', !siparis_po_yetim_ekle($db, $__bid, 0, $__sid, 1)['ok']);
+ok('yetim_ekle: belgeye bağlı olmayan sevkiyat reddedilir', !siparis_po_yetim_ekle($db, $__bid, 0, (int)siparis_test_sev($db, 'TC900001.10')['id'], 1)['ok']);
+ok('yetim_ekle: olmayan satır reddedilir', !siparis_po_yetim_ekle($db, $__bid, 5, $__sid, 1)['ok']);
+ok('yetim_ekle: olay + audit', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND aciklama LIKE 'Kalibre 16 kalemi PO%'", [$__sid]) === 1 && siparis_test_say($db, 'audit_log', "action = 'siparis_kalem_yetim_ekle'") === 1);
+
+// elle kalem ekleme
+$s1 = siparis_test_sev($db, 'TC900001.10'); $sid1 = (int)$s1['id'];
+$x = siparis_kalem_elle_ekle($db, $sid1, '12', '', '5', '', '160', 1);
+$__k = array_values(array_filter(siparis_kalemler($db, $sid1), fn($k) => (string)$k['kalibre'] === '12'));
+ok('kalem_ekle: kalibre 12, 5 palet, koli = palet × PF (800), elle kilitli', $x['ok'] && count($__k) === 1 && (int)$__k[0]['etkin_palet'] === 5 && (int)$__k[0]['etkin_koli'] === 800 && (int)$__k[0]['pf'] === 160
+    && isset($__k[0]['_elle']['etkin_palet']) && $__k[0]['etkin_kaynak'] === 'elle', json_encode([$x, $__k ? $__k[0]['etkin_kaynak'] : null]));
+ok('kalem_ekle: sevkiyat toplamı arttı (20 + 5 palet)', (int)siparis_sevkiyat($db, $sid1)['toplam_palet'] === 25);
+ok('kalem_ekle: aynı kalibre ikinci kez reddedilir', !siparis_kalem_elle_ekle($db, $sid1, '12', '', '1', '', '', 1)['ok'] && !siparis_kalem_elle_ekle($db, $sid1, '14', '', '1', '', '', 1)['ok']);
+ok('kalem_ekle: kalibre boş / palet+koli boş / negatif / harfli reddedilir', !siparis_kalem_elle_ekle($db, $sid1, '', '', '1', '', '', 1)['ok'] && !siparis_kalem_elle_ekle($db, $sid1, '9', '', '', '', '', 1)['ok']
+    && !siparis_kalem_elle_ekle($db, $sid1, '9', '', '-3', '', '', 1)['ok'] && !siparis_kalem_elle_ekle($db, $sid1, '9', '', 'abc', '', '', 1)['ok'] && !siparis_kalem_elle_ekle($db, $sid1, '9 7', '', '1', '', '', 1)['ok']);
+ok('kalem_ekle: yalnız koli verilirse palet PF\'ten türer', siparis_kalem_elle_ekle($db, $sid1, '10', '', '', '1600', '160', 1)['ok'] && (int)array_values(array_filter(siparis_kalemler($db, $sid1), fn($k) => (string)$k['kalibre'] === '10'))[0]['etkin_palet'] === 10);
+ok('kalem_ekle: olmayan sevkiyat reddedilir', !siparis_kalem_elle_ekle($db, 999999, '8', '', '1', '', '', 1)['ok']);
+ok('kalem_ekle: olay + audit (kişisel veri yok)', siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND aciklama LIKE 'Kalibre 12 kalemi elle eklendi%'", [$sid1]) === 1 && siparis_test_say($db, 'audit_log', "action = 'siparis_kalem_ekle'") >= 2);
+// elle onay (kontrol ettim)
+$__d2 = $__d; $__d2['loadings'][0]['order_ref'] = 'TC977702.10'; $__d2['loadings'][0]['tour'] = '9777000002'; $__d2['orphan_items'] = [];
+$r2 = siparis_test_isle($db, $__d2, 'po_yetim_onay2');
+$__s12 = siparis_test_sev($db, 'TC977702.10');
+ok('denetim hatası (orphan yok): uyarı çıkar', count(array_filter($__s12['_uyarilar'], fn($u) => $u['kod'] === 'po_eksik_okuma')) === 1);
+$o = siparis_eksik_okuma_onayla($db, (int)$__s12['id'], 1);
+ok('"kontrol ettim" onayı uyarıyı kaldırır + olay + audit', $o['ok'] && !array_filter(siparis_sevkiyat($db, (int)$__s12['id'])['_uyarilar'], fn($u) => $u['kod'] === 'po_eksik_okuma')
+    && siparis_test_say($db, 'siparis_olaylar', "sevkiyat_id = ? AND aciklama LIKE 'PO eksik okuma uyarısı kontrol%'", [(int)$__s12['id']]) === 1 && siparis_test_say($db, 'audit_log', "action = 'siparis_eksik_okuma_onay'") === 1);
+
+// uçtan uca: sayfa devamlı gerçek PO düzeni (arındırılmış fixture) → ayrıştır → uygula → TC…924.10 İKİ kalem, 25 palet, uyarı yok
+require_once $ROOT . '/config/siparis_pdf.php';
+$__px = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/po_sayfa_devami_pages.json'), true)['pages'];
+$__pp = []; foreach ($__px as $pn => $sg) $__pp[(int)$pn] = $sg;
+$__pd = siparis_pdf_parse_order($__pp);
+$r = siparis_test_isle($db, $__pd, 'po_devam_gercek');
+$__s = siparis_test_sev($db, 'TC432924.10');
+$__kk = $__s ? siparis_kalemler($db, (int)$__s['id']) : [];
+ok('uçtan uca: TC432924.10 iki kalem (14 PC 10 pal + 16 PC 15 pal), toplam 25 palet / 4.000 koli', $r['isle']['ok'] && count($__kk) === 2 && (int)$__s['toplam_palet'] === 25 && (int)$__s['toplam_koli'] === 4000
+    && array_sum(array_map(fn($k) => (int)$k['po_palet'], $__kk)) === 25, json_encode([$r['isle'], count($__kk), $__s['toplam_palet'] ?? null]));
+ok('uçtan uca: po_eksik_okuma uyarısı YOK (PO tam okundu)', $__s && !array_filter($__s['_uyarilar'], fn($u) => $u['kod'] === 'po_eksik_okuma'));
+
 $IS_ADMIN = false;
 siparis_test_bitir();

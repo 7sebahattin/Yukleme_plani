@@ -149,6 +149,27 @@ render_flash();
       <?php endif; ?>
     </section>
 
+    <?php $yetimler = array_values(array_filter((array)($pj['orphan_items'] ?? []), 'is_array')); if ($yetimler): ?>
+    <section class="card sip-yetim-kart" id="sipBYetim" aria-labelledby="sipBYetimBas">
+      <div class="card-head"><h2 id="sipBYetimBas">⛔ Siparişe bağlanamayan kalemler <span class="sip-say"><?= count($yetimler) ?></span></h2></div>
+      <p class="muted">PO'da sipariş numarası olmadan basılmış ve hiçbir tıra bağlanamamış satırlar. Sevkiyatlarda bu kalemler EKSİK görünür — doğru tırı seçip ekleyin.</p>
+      <div class="table-wrap"><table class="data-table small sip-table"><thead><tr><th>Yükleme</th><th>Kalem</th><th class="num">Palet / koli</th><th>Sayfa</th><th><span class="sip-sr">İşlem</span></th></tr></thead><tbody>
+        <?php foreach ($yetimler as $yi => $yx): $yit = (array)($yx['item'] ?? []); ?>
+          <tr><td class="nowrap"><?= h(sipui_tarih((string)($yx['loading_date'] ?? ''))) ?></td>
+            <td><?= h((string)($yit['description'] ?? '')) ?></td>
+            <td class="num nowrap"><?= h(sipui_sayi($yit['pallets'] ?? null)) ?> / <?= h(sipui_sayi($yit['quantity'] ?? null)) ?></td>
+            <td><?= (int)($yx['page'] ?? 0) ?></td>
+            <td><?php if ($yaz && $sevler): ?>
+              <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek>
+                <?= sipui_csrf() ?><input type="hidden" name="islem" value="yetim_ekle"><input type="hidden" name="belge_id" value="<?= (int)$b['id'] ?>"><input type="hidden" name="idx" value="<?= (int)$yi ?>">
+                <select name="sid" required aria-label="Eklenecek sevkiyat"><?php foreach ($sevler as $sv): ?><option value="<?= (int)$sv['id'] ?>"><?= h((string)$sv['order_ref']) ?></option><?php endforeach; ?></select>
+                <button type="submit" class="btn btn-sm btn-primary">Sevkiyata ekle</button>
+              </form>
+            <?php else: ?><span class="sip-soluk">—</span><?php endif; ?></td></tr>
+        <?php endforeach; ?></tbody></table></div>
+    </section>
+    <?php endif; ?>
+
     <section class="card" aria-labelledby="sipBKontrol">
       <div class="card-head"><h2 id="sipBKontrol">Denetimler ve uyarılar</h2><?php if ($checks): ?><span class="sip-soluk"><?= $gecen ?> / <?= count($checks) ?> denetim geçti</span><?php endif; ?></div>
       <?php if (!$uyarilar && !$checks): ?><p class="muted">Bu belge için kayıtlı denetim ya da uyarı yok.</p><?php endif; ?>

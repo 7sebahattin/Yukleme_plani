@@ -1,0 +1,1560 @@
+{
+    "pages": {
+        "1": [
+            {
+                "x": 56.7,
+                "y": 712.3,
+                "size": 10,
+                "text": "ASYA FRESH SEBZA MEYVE NAKLIYE "
+            },
+            {
+                "x": 368.9,
+                "y": 711.3,
+                "size": 12,
+                "text": "OGL Food Trade "
+            },
+            {
+                "x": 56.7,
+                "y": 700.9,
+                "size": 10,
+                "text": "ASYA FRESH - SAMSUN "
+            },
+            {
+                "x": 368.9,
+                "y": 697.6,
+                "size": 12,
+                "text": "Purchase order for "
+            },
+            {
+                "x": 56.7,
+                "y": 689.5,
+                "size": 10,
+                "text": "ORNEK ADRES"
+            },
+            {
+                "x": 368.9,
+                "y": 684,
+                "size": 12,
+                "text": "CW 45.2026"
+            },
+            {
+                "x": 56.7,
+                "y": 678.1,
+                "size": 10,
+                "text": "ORNEK ADRES"
+            },
+            {
+                "x": 368.9,
+                "y": 672.8,
+                "size": 8,
+                "text": "Date"
+            },
+            {
+                "x": 455.4,
+                "y": 671.5,
+                "size": 8,
+                "text": "23.10.2026"
+            },
+            {
+                "x": 498.2,
+                "y": 672,
+                "size": 6,
+                "text": "10:21:07"
+            },
+            {
+                "x": 56.7,
+                "y": 665.6,
+                "size": 10,
+                "text": "Tax number:"
+            },
+            {
+                "x": 368.9,
+                "y": 659.9,
+                "size": 8,
+                "text": "Supplier no."
+            },
+            {
+                "x": 455.4,
+                "y": 658.7,
+                "size": 8,
+                "text": "1000001"
+            },
+            {
+                "x": 368.9,
+                "y": 647.1,
+                "size": 8,
+                "text": "Clerk"
+            },
+            {
+                "x": 455.4,
+                "y": 645.9,
+                "size": 8,
+                "text": "Ornek Yetkili"
+            },
+            {
+                "x": 368.9,
+                "y": 633,
+                "size": 8,
+                "text": "Telephone"
+            },
+            {
+                "x": 368.9,
+                "y": 621.4,
+                "size": 8,
+                "text": "Email"
+            },
+            {
+                "x": 448.8,
+                "y": 620.2,
+                "size": 8,
+                "text": "ornek@ornek.test"
+            },
+            {
+                "x": 368.9,
+                "y": 608.6,
+                "size": 8,
+                "text": "Page"
+            },
+            {
+                "x": 455.4,
+                "y": 608.5,
+                "size": 8,
+                "text": "1 \/ 4"
+            },
+            {
+                "x": 59.5,
+                "y": 530.7,
+                "size": 12,
+                "text": "Summery purchase orders with destination: "
+            },
+            {
+                "x": 315.9,
+                "y": 530.7,
+                "size": 12,
+                "text": "1038529"
+            },
+            {
+                "x": 368.3,
+                "y": 530.7,
+                "size": 12,
+                "text": "LIDL RS"
+            },
+            {
+                "x": 58.1,
+                "y": 513.6,
+                "size": 9,
+                "text": "Item"
+            },
+            {
+                "x": 86.5,
+                "y": 513.6,
+                "size": 9,
+                "text": "IAN"
+            },
+            {
+                "x": 143.1,
+                "y": 513.6,
+                "size": 9,
+                "text": "Article descr., (origin), pack. units p. box, class, own brand"
+            },
+            {
+                "x": 362.8,
+                "y": 513.6,
+                "size": 9,
+                "text": "Pal"
+            },
+            {
+                "x": 405.4,
+                "y": 513.6,
+                "size": 9,
+                "text": "PF"
+            },
+            {
+                "x": 447.5,
+                "y": 513.6,
+                "size": 9,
+                "text": "Quantity"
+            },
+            {
+                "x": 483.3,
+                "y": 513.6,
+                "size": 9,
+                "text": "Unit"
+            },
+            {
+                "x": 511.6,
+                "y": 513.6,
+                "size": 9,
+                "text": "Incoterm"
+            },
+            {
+                "x": 86.5,
+                "y": 502.3,
+                "size": 9,
+                "text": "Art.no."
+            },
+            {
+                "x": 143.1,
+                "y": 502.2,
+                "size": 9,
+                "text": "calibre, variety, alternative calibre"
+            },
+            {
+                "x": 143.1,
+                "y": 490.2,
+                "size": 8,
+                "text": "EAN, certification, packaging, air freight, licence"
+            },
+            {
+                "x": 143.1,
+                "y": 480.7,
+                "size": 8,
+                "text": "Add. Info."
+            },
+            {
+                "x": 143.1,
+                "y": 471.1,
+                "size": 8,
+                "text": "Add. Text"
+            },
+            {
+                "x": 143.1,
+                "y": 461.6,
+                "size": 8,
+                "text": "Quality"
+            },
+            {
+                "x": 58.1,
+                "y": 442.8,
+                "size": 9,
+                "text": "1"
+            },
+            {
+                "x": 86.5,
+                "y": 442.8,
+                "size": 9,
+                "text": "80646"
+            },
+            {
+                "x": 143.1,
+                "y": 442.8,
+                "size": 9,
+                "text": "Pomegranate 14 PC LOSE (TR)"
+            },
+            {
+                "x": 362.8,
+                "y": 442.8,
+                "size": 9,
+                "text": "16"
+            },
+            {
+                "x": 405.4,
+                "y": 442.8,
+                "size": 9,
+                "text": "160"
+            },
+            {
+                "x": 460,
+                "y": 442.8,
+                "size": 9,
+                "text": "2,560"
+            },
+            {
+                "x": 483.4,
+                "y": 442.8,
+                "size": 9,
+                "text": "CAR"
+            },
+            {
+                "x": 511.8,
+                "y": 442.8,
+                "size": 9,
+                "text": "EXW"
+            },
+            {
+                "x": 102.4,
+                "y": 431.4,
+                "size": 9,
+                "text": "10005958"
+            },
+            {
+                "x": 143.1,
+                "y": 431.4,
+                "size": 9,
+                "text": "-, 3,5 KG, HICAZ"
+            },
+            {
+                "x": 143.1,
+                "y": 420.8,
+                "size": 8,
+                "text": "-"
+            },
+            {
+                "x": 143.1,
+                "y": 409.5,
+                "size": 8,
+                "text": "Carton, 40 x 30 x 11 CM"
+            },
+            {
+                "x": 143.1,
+                "y": 398.2,
+                "size": 8,
+                "text": "Brix min:            15.0; Color Scale: 90"
+            },
+            {
+                "x": 58.1,
+                "y": 379,
+                "size": 9,
+                "text": "2"
+            },
+            {
+                "x": 86.5,
+                "y": 379,
+                "size": 9,
+                "text": "80646"
+            },
+            {
+                "x": 143.1,
+                "y": 379,
+                "size": 9,
+                "text": "Pomegranate 16 PC LOSE (TR)"
+            },
+            {
+                "x": 362.8,
+                "y": 379,
+                "size": 9,
+                "text": "15"
+            },
+            {
+                "x": 405.4,
+                "y": 379,
+                "size": 9,
+                "text": "160"
+            },
+            {
+                "x": 460,
+                "y": 379,
+                "size": 9,
+                "text": "2,400"
+            },
+            {
+                "x": 483.4,
+                "y": 379,
+                "size": 9,
+                "text": "CAR"
+            },
+            {
+                "x": 511.8,
+                "y": 379,
+                "size": 9,
+                "text": "EXW"
+            },
+            {
+                "x": 102.4,
+                "y": 367.6,
+                "size": 9,
+                "text": "10005959"
+            },
+            {
+                "x": 143.1,
+                "y": 367.6,
+                "size": 9,
+                "text": "-, 3,5 KG, HICAZ"
+            },
+            {
+                "x": 143.1,
+                "y": 357.1,
+                "size": 8,
+                "text": "-"
+            },
+            {
+                "x": 143.1,
+                "y": 345.7,
+                "size": 8,
+                "text": "Carton, 40 x 30 x 11 CM"
+            },
+            {
+                "x": 143.1,
+                "y": 334.4,
+                "size": 8,
+                "text": "Brix min:            15.0; Color Scale: 90"
+            },
+            {
+                "x": 56.7,
+                "y": 319,
+                "size": 8,
+                "text": "* For detailed delivery locations see table overview"
+            },
+            {
+                "x": 56.7,
+                "y": 297.4,
+                "size": 10,
+                "text": "Note: New order form – please note the changes regarding order reference, article reference, goods "
+            },
+            {
+                "x": 56.7,
+                "y": 285.4,
+                "size": 10,
+                "text": "supplier ID, and goods recipient  ID!  "
+            },
+            {
+                "x": 56.7,
+                "y": 222.5,
+                "size": 7,
+                "text": "We refer in particular on compliance with regulations for food safety. The residues have to comply with the current MRL (see Plant Protection Program\/Product "
+            },
+            {
+                "x": 56.7,
+                "y": 210.5,
+                "size": 7,
+                "text": "Passport). "
+            },
+            {
+                "x": 56.7,
+                "y": 186.5,
+                "size": 7,
+                "text": "Fresh, clean and sound fruit - free of any damage - has to be packed on original Euro-Pallets. "
+            },
+            {
+                "x": 56.7,
+                "y": 174.5,
+                "size": 7,
+                "text": "Using of cornerboards, pallet caps and strips is obligatory. "
+            },
+            {
+                "x": 56.7,
+                "y": 150.5,
+                "size": 7,
+                "text": "ATTENTION: "
+            },
+            {
+                "x": 56.7,
+                "y": 138.5,
+                "size": 7,
+                "text": "Goods have to be precooled. "
+            },
+            {
+                "x": 56.7,
+                "y": 126.5,
+                "size": 7,
+                "text": "Take care for the transport temperature! "
+            },
+            {
+                "x": 56.7,
+                "y": 114.5,
+                "size": 7,
+                "text": "On each pallet you have to put the pallet number - the pallet number is a number that starts at the beginning of the season and that goes ahead! "
+            },
+            {
+                "x": 56.7,
+                "y": 102.6,
+                "size": 7,
+                "text": "e.g. the first truck has the numbers from 1-33, and the second truck has the number from 34-67. "
+            }
+        ],
+        "2": [
+            {
+                "x": 56.7,
+                "y": 726.5,
+                "size": 7,
+                "text": "Please also fill out our Packing List and Loading scheme and send them, immediately after loading, per EMail to: ornek@ornek.test; packinglist-x@ornek."
+            },
+            {
+                "x": 56.7,
+                "y": 714.5,
+                "size": 7,
+                "text": "test"
+            }
+        ],
+        "3": [
+            {
+                "x": 29.8,
+                "y": 470.8,
+                "size": 10,
+                "text": "Loading date"
+            },
+            {
+                "x": 95,
+                "y": 470.8,
+                "size": 10,
+                "text": "25.10.2026"
+            },
+            {
+                "x": 151.7,
+                "y": 470.8,
+                "size": 10,
+                "text": "Logistics OGL"
+            },
+            {
+                "x": 230,
+                "y": 470.8,
+                "size": 10,
+                "text": "INC: EXW"
+            },
+            {
+                "x": 29.8,
+                "y": 457.7,
+                "size": 6,
+                "text": "Order ref."
+            },
+            {
+                "x": 92.7,
+                "y": 457.7,
+                "size": 6,
+                "text": "Tour"
+            },
+            {
+                "x": 149.4,
+                "y": 457.7,
+                "size": 6,
+                "text": "Loading point"
+            },
+            {
+                "x": 191.9,
+                "y": 457.7,
+                "size": 6,
+                "text": "Customs"
+            },
+            {
+                "x": 231.6,
+                "y": 457.7,
+                "size": 6,
+                "text": "Article specification"
+            },
+            {
+                "x": 346.1,
+                "y": 457.7,
+                "size": 6,
+                "text": "Price "
+            },
+            {
+                "x": 380.1,
+                "y": 457.7,
+                "size": 6,
+                "text": "BPM"
+            },
+            {
+                "x": 398.6,
+                "y": 457.7,
+                "size": 6,
+                "text": "Pal."
+            },
+            {
+                "x": 417,
+                "y": 457.7,
+                "size": 6,
+                "text": "P.ART."
+            },
+            {
+                "x": 439.7,
+                "y": 457.7,
+                "size": 6,
+                "text": "PF"
+            },
+            {
+                "x": 453.8,
+                "y": 457.7,
+                "size": 6,
+                "text": "Quantity"
+            },
+            {
+                "x": 516.2,
+                "y": 456,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 346.1,
+                "y": 450.9,
+                "size": 6,
+                "text": "EUR"
+            },
+            {
+                "x": 546.4,
+                "y": 452.6,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 92.7,
+                "y": 447.8,
+                "size": 6,
+                "text": "Truck"
+            },
+            {
+                "x": 516.2,
+                "y": 449.2,
+                "size": 6,
+                "text": "NOVA "
+            },
+            {
+                "x": 546.4,
+                "y": 445.7,
+                "size": 6,
+                "text": "LAPOVO"
+            },
+            {
+                "x": 516.2,
+                "y": 442.3,
+                "size": 6,
+                "text": "PAZOVA"
+            },
+            {
+                "x": 29.8,
+                "y": 437.8,
+                "size": 6,
+                "text": "VAT no."
+            },
+            {
+                "x": 92.7,
+                "y": 437.8,
+                "size": 6,
+                "text": "Time"
+            },
+            {
+                "x": 482.2,
+                "y": 439.8,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 482.2,
+                "y": 433,
+                "size": 6,
+                "text": "SRBIJA KD"
+            },
+            {
+                "x": 30.5,
+                "y": 405.2,
+                "size": 6,
+                "text": "TC432691.10"
+            },
+            {
+                "x": 92.7,
+                "y": 405.2,
+                "size": 6,
+                "text": "9000171095"
+            },
+            {
+                "x": 149.4,
+                "y": 405.2,
+                "size": 6,
+                "text": "ASYA FRESH "
+            },
+            {
+                "x": 232.2,
+                "y": 405,
+                "size": 6,
+                "text": "80646, Pomegranate 14 PC LOSE (TR)"
+            },
+            {
+                "x": 346.1,
+                "y": 405.2,
+                "size": 6,
+                "text": "0.01"
+            },
+            {
+                "x": 380.1,
+                "y": 405.2,
+                "size": 6,
+                "text": "CAR"
+            },
+            {
+                "x": 398.6,
+                "y": 405.2,
+                "size": 6,
+                "text": "4"
+            },
+            {
+                "x": 417,
+                "y": 405.2,
+                "size": 6,
+                "text": "EV"
+            },
+            {
+                "x": 439.7,
+                "y": 405.2,
+                "size": 6,
+                "text": "160"
+            },
+            {
+                "x": 453.8,
+                "y": 405.2,
+                "size": 6,
+                "text": "640 CAR"
+            },
+            {
+                "x": 518,
+                "y": 405,
+                "size": 6,
+                "text": "2 x (160) "
+            },
+            {
+                "x": 548.2,
+                "y": 403.6,
+                "size": 6,
+                "text": "2 x (160) "
+            },
+            {
+                "x": 149.4,
+                "y": 398.4,
+                "size": 6,
+                "text": "- FINIKE"
+            },
+            {
+                "x": 524.9,
+                "y": 398.2,
+                "size": 6,
+                "text": "320"
+            },
+            {
+                "x": 555.1,
+                "y": 396.7,
+                "size": 6,
+                "text": "320"
+            },
+            {
+                "x": 92.7,
+                "y": 394.7,
+                "size": 6,
+                "text": "ÖZ LIDERTRANS"
+            },
+            {
+                "x": 232.2,
+                "y": 395.3,
+                "size": 6,
+                "text": "-, 3,5 KG, HICAZ"
+            },
+            {
+                "x": 30.5,
+                "y": 385.4,
+                "size": 6,
+                "text": "DE000000000"
+            },
+            {
+                "x": 92.7,
+                "y": 375.5,
+                "size": 6,
+                "text": "12:00:00 AM"
+            },
+            {
+                "x": 29.8,
+                "y": 358.6,
+                "size": 8,
+                "text": "Pallet types:"
+            },
+            {
+                "x": 30.2,
+                "y": 336.1,
+                "size": 10,
+                "text": "Loading date"
+            },
+            {
+                "x": 95.4,
+                "y": 336.1,
+                "size": 10,
+                "text": "26.10.2026"
+            },
+            {
+                "x": 152.1,
+                "y": 336.1,
+                "size": 10,
+                "text": "Logistics OGL"
+            },
+            {
+                "x": 230.5,
+                "y": 336.1,
+                "size": 10,
+                "text": "INC: EXW"
+            },
+            {
+                "x": 29.8,
+                "y": 323,
+                "size": 6,
+                "text": "Order ref."
+            },
+            {
+                "x": 92.4,
+                "y": 323,
+                "size": 6,
+                "text": "Tour"
+            },
+            {
+                "x": 149.4,
+                "y": 323,
+                "size": 6,
+                "text": "Loading point"
+            },
+            {
+                "x": 191.9,
+                "y": 323,
+                "size": 6,
+                "text": "Customs"
+            },
+            {
+                "x": 231.6,
+                "y": 323,
+                "size": 6,
+                "text": "Article specification"
+            },
+            {
+                "x": 346.1,
+                "y": 323,
+                "size": 6,
+                "text": "Price "
+            },
+            {
+                "x": 380.1,
+                "y": 323,
+                "size": 6,
+                "text": "BPM"
+            },
+            {
+                "x": 398.6,
+                "y": 323,
+                "size": 6,
+                "text": "Pal."
+            },
+            {
+                "x": 417,
+                "y": 323,
+                "size": 6,
+                "text": "P.ART."
+            },
+            {
+                "x": 439.7,
+                "y": 323,
+                "size": 6,
+                "text": "PF"
+            },
+            {
+                "x": 453.8,
+                "y": 323,
+                "size": 6,
+                "text": "Quantity"
+            },
+            {
+                "x": 516.2,
+                "y": 321.3,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 546.4,
+                "y": 317.8,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 92.4,
+                "y": 313,
+                "size": 6,
+                "text": "Truck"
+            },
+            {
+                "x": 516.2,
+                "y": 314.4,
+                "size": 6,
+                "text": "NOVA "
+            },
+            {
+                "x": 546.4,
+                "y": 311,
+                "size": 6,
+                "text": "LAPOVO"
+            },
+            {
+                "x": 516.2,
+                "y": 307.6,
+                "size": 6,
+                "text": "PAZOVA"
+            },
+            {
+                "x": 29.8,
+                "y": 303.1,
+                "size": 6,
+                "text": "VAT no."
+            },
+            {
+                "x": 92.4,
+                "y": 303.1,
+                "size": 6,
+                "text": "Time"
+            },
+            {
+                "x": 482.2,
+                "y": 305.1,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 482.2,
+                "y": 298.3,
+                "size": 6,
+                "text": "SRBIJA KD"
+            },
+            {
+                "x": 30.5,
+                "y": 270.5,
+                "size": 6,
+                "text": "TC432734.10"
+            },
+            {
+                "x": 92.7,
+                "y": 270.5,
+                "size": 6,
+                "text": "9000171133"
+            },
+            {
+                "x": 149.4,
+                "y": 270.5,
+                "size": 6,
+                "text": "ASYA FRESH "
+            },
+            {
+                "x": 232.2,
+                "y": 270.3,
+                "size": 6,
+                "text": "80646, Pomegranate 14 PC LOSE (TR)"
+            },
+            {
+                "x": 346.1,
+                "y": 270.5,
+                "size": 6,
+                "text": "0.01"
+            },
+            {
+                "x": 380.1,
+                "y": 270.5,
+                "size": 6,
+                "text": "CAR"
+            },
+            {
+                "x": 398.6,
+                "y": 270.5,
+                "size": 6,
+                "text": "2"
+            },
+            {
+                "x": 417,
+                "y": 270.5,
+                "size": 6,
+                "text": "EV"
+            },
+            {
+                "x": 439.7,
+                "y": 270.5,
+                "size": 6,
+                "text": "160"
+            },
+            {
+                "x": 453.8,
+                "y": 270.5,
+                "size": 6,
+                "text": "320 CAR"
+            },
+            {
+                "x": 518,
+                "y": 270.3,
+                "size": 6,
+                "text": "1 x (160) "
+            },
+            {
+                "x": 548.2,
+                "y": 268.8,
+                "size": 6,
+                "text": "1 x (160) "
+            },
+            {
+                "x": 149.4,
+                "y": 263.7,
+                "size": 6,
+                "text": "- FINIKE"
+            },
+            {
+                "x": 524.9,
+                "y": 263.5,
+                "size": 6,
+                "text": "160"
+            },
+            {
+                "x": 555.1,
+                "y": 262,
+                "size": 6,
+                "text": "160"
+            },
+            {
+                "x": 92.7,
+                "y": 260.6,
+                "size": 6,
+                "text": "RAM SER "
+            },
+            {
+                "x": 232.2,
+                "y": 260.6,
+                "size": 6,
+                "text": "-, 3,5 KG, HICAZ"
+            },
+            {
+                "x": 92.7,
+                "y": 253.8,
+                "size": 6,
+                "text": "LOGISTICS"
+            },
+            {
+                "x": 30.5,
+                "y": 250.7,
+                "size": 6,
+                "text": "DE000000000"
+            },
+            {
+                "x": 92.7,
+                "y": 235.4,
+                "size": 6,
+                "text": "12:00:00 AM"
+            },
+            {
+                "x": 29.8,
+                "y": 218.5,
+                "size": 8,
+                "text": "Pallet types:"
+            },
+            {
+                "x": 30.2,
+                "y": 196,
+                "size": 10,
+                "text": "Loading date"
+            },
+            {
+                "x": 95.4,
+                "y": 196,
+                "size": 10,
+                "text": "29.10.2026"
+            },
+            {
+                "x": 152.1,
+                "y": 196,
+                "size": 10,
+                "text": "Logistics OGL"
+            },
+            {
+                "x": 230.5,
+                "y": 196,
+                "size": 10,
+                "text": "INC: EXW"
+            },
+            {
+                "x": 29.8,
+                "y": 182.9,
+                "size": 6,
+                "text": "Order ref."
+            },
+            {
+                "x": 92.4,
+                "y": 182.9,
+                "size": 6,
+                "text": "Tour"
+            },
+            {
+                "x": 149.4,
+                "y": 182.9,
+                "size": 6,
+                "text": "Loading point"
+            },
+            {
+                "x": 191.9,
+                "y": 182.9,
+                "size": 6,
+                "text": "Customs"
+            },
+            {
+                "x": 231.6,
+                "y": 182.9,
+                "size": 6,
+                "text": "Article specification"
+            },
+            {
+                "x": 346.1,
+                "y": 182.9,
+                "size": 6,
+                "text": "Price "
+            },
+            {
+                "x": 380.1,
+                "y": 182.9,
+                "size": 6,
+                "text": "BPM"
+            },
+            {
+                "x": 398.6,
+                "y": 182.9,
+                "size": 6,
+                "text": "Pal."
+            },
+            {
+                "x": 417,
+                "y": 182.9,
+                "size": 6,
+                "text": "P.ART."
+            },
+            {
+                "x": 439.7,
+                "y": 182.9,
+                "size": 6,
+                "text": "PF"
+            },
+            {
+                "x": 453.8,
+                "y": 182.9,
+                "size": 6,
+                "text": "Quantity"
+            },
+            {
+                "x": 516.2,
+                "y": 181.2,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 546.4,
+                "y": 177.7,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 92.4,
+                "y": 172.9,
+                "size": 6,
+                "text": "Truck"
+            },
+            {
+                "x": 516.2,
+                "y": 174.3,
+                "size": 6,
+                "text": "NOVA "
+            },
+            {
+                "x": 546.4,
+                "y": 170.9,
+                "size": 6,
+                "text": "LAPOVO"
+            },
+            {
+                "x": 516.2,
+                "y": 167.5,
+                "size": 6,
+                "text": "PAZOVA"
+            },
+            {
+                "x": 29.8,
+                "y": 163,
+                "size": 6,
+                "text": "VAT no."
+            },
+            {
+                "x": 92.4,
+                "y": 163,
+                "size": 6,
+                "text": "Time"
+            },
+            {
+                "x": 482.2,
+                "y": 165,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 482.2,
+                "y": 158.2,
+                "size": 6,
+                "text": "SRBIJA KD"
+            },
+            {
+                "x": 30.5,
+                "y": 130.4,
+                "size": 6,
+                "text": "TC432924.10"
+            },
+            {
+                "x": 92.7,
+                "y": 130.4,
+                "size": 6,
+                "text": "9000171307"
+            },
+            {
+                "x": 149.4,
+                "y": 130.4,
+                "size": 6,
+                "text": "ASYA FRESH "
+            },
+            {
+                "x": 232.2,
+                "y": 130.2,
+                "size": 6,
+                "text": "80646, Pomegranate 14 PC LOSE (TR)"
+            },
+            {
+                "x": 346.1,
+                "y": 130.4,
+                "size": 6,
+                "text": "0.01"
+            },
+            {
+                "x": 380.1,
+                "y": 130.4,
+                "size": 6,
+                "text": "CAR"
+            },
+            {
+                "x": 398.6,
+                "y": 130.4,
+                "size": 6,
+                "text": "10"
+            },
+            {
+                "x": 417,
+                "y": 130.4,
+                "size": 6,
+                "text": "EV"
+            },
+            {
+                "x": 439.7,
+                "y": 130.4,
+                "size": 6,
+                "text": "160"
+            },
+            {
+                "x": 453.8,
+                "y": 130.4,
+                "size": 6,
+                "text": "1,600 "
+            },
+            {
+                "x": 516.4,
+                "y": 130.2,
+                "size": 6,
+                "text": "10 x (160) "
+            },
+            {
+                "x": 149.4,
+                "y": 123.6,
+                "size": 6,
+                "text": "- FINIKE"
+            },
+            {
+                "x": 453.8,
+                "y": 123.6,
+                "size": 6,
+                "text": "CAR"
+            },
+            {
+                "x": 522.4,
+                "y": 123.4,
+                "size": 6,
+                "text": "1,600"
+            },
+            {
+                "x": 232.2,
+                "y": 120.5,
+                "size": 6,
+                "text": "-, 3,5 KG, HICAZ"
+            },
+            {
+                "x": 30.5,
+                "y": 110.6,
+                "size": 6,
+                "text": "DE000000000"
+            },
+            {
+                "x": 92.7,
+                "y": 110.6,
+                "size": 6,
+                "text": "12:00:00 AM"
+            }
+        ],
+        "4": [
+            {
+                "x": 30.2,
+                "y": 470.8,
+                "size": 10,
+                "text": "Loading date"
+            },
+            {
+                "x": 95.4,
+                "y": 470.8,
+                "size": 10,
+                "text": "29.10.2026"
+            },
+            {
+                "x": 152.1,
+                "y": 470.8,
+                "size": 10,
+                "text": "Logistics OGL"
+            },
+            {
+                "x": 230.5,
+                "y": 470.8,
+                "size": 10,
+                "text": "INC: EXW"
+            },
+            {
+                "x": 29.8,
+                "y": 457.7,
+                "size": 6,
+                "text": "Order ref."
+            },
+            {
+                "x": 92.4,
+                "y": 457.7,
+                "size": 6,
+                "text": "Tour"
+            },
+            {
+                "x": 149.4,
+                "y": 457.7,
+                "size": 6,
+                "text": "Loading point"
+            },
+            {
+                "x": 191.9,
+                "y": 457.7,
+                "size": 6,
+                "text": "Customs"
+            },
+            {
+                "x": 231.6,
+                "y": 457.7,
+                "size": 6,
+                "text": "Article specification"
+            },
+            {
+                "x": 346.1,
+                "y": 457.7,
+                "size": 6,
+                "text": "Price "
+            },
+            {
+                "x": 380.1,
+                "y": 457.7,
+                "size": 6,
+                "text": "BPM"
+            },
+            {
+                "x": 398.6,
+                "y": 457.7,
+                "size": 6,
+                "text": "Pal."
+            },
+            {
+                "x": 417,
+                "y": 457.7,
+                "size": 6,
+                "text": "P.ART."
+            },
+            {
+                "x": 439.7,
+                "y": 457.7,
+                "size": 6,
+                "text": "PF"
+            },
+            {
+                "x": 453.8,
+                "y": 457.7,
+                "size": 6,
+                "text": "Quantity"
+            },
+            {
+                "x": 516.2,
+                "y": 456,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 546.4,
+                "y": 452.6,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 92.4,
+                "y": 447.8,
+                "size": 6,
+                "text": "Truck"
+            },
+            {
+                "x": 516.2,
+                "y": 449.2,
+                "size": 6,
+                "text": "NOVA "
+            },
+            {
+                "x": 546.4,
+                "y": 445.7,
+                "size": 6,
+                "text": "LAPOVO"
+            },
+            {
+                "x": 516.2,
+                "y": 442.3,
+                "size": 6,
+                "text": "PAZOVA"
+            },
+            {
+                "x": 29.8,
+                "y": 437.8,
+                "size": 6,
+                "text": "VAT no."
+            },
+            {
+                "x": 92.4,
+                "y": 437.8,
+                "size": 6,
+                "text": "Time"
+            },
+            {
+                "x": 482.2,
+                "y": 439.8,
+                "size": 6,
+                "text": "LIDL "
+            },
+            {
+                "x": 482.2,
+                "y": 433,
+                "size": 6,
+                "text": "SRBIJA KD"
+            },
+            {
+                "x": 232.2,
+                "y": 405,
+                "size": 6,
+                "text": "80646, Pomegranate 16 PC LOSE (TR)"
+            },
+            {
+                "x": 346.1,
+                "y": 405.2,
+                "size": 6,
+                "text": "0.01"
+            },
+            {
+                "x": 380.1,
+                "y": 405.2,
+                "size": 6,
+                "text": "CAR"
+            },
+            {
+                "x": 398.6,
+                "y": 405.2,
+                "size": 6,
+                "text": "15"
+            },
+            {
+                "x": 417,
+                "y": 405.2,
+                "size": 6,
+                "text": "EV"
+            },
+            {
+                "x": 439.7,
+                "y": 405.2,
+                "size": 6,
+                "text": "160"
+            },
+            {
+                "x": 453.8,
+                "y": 405.2,
+                "size": 6,
+                "text": "2,400 "
+            },
+            {
+                "x": 546.6,
+                "y": 403.6,
+                "size": 6,
+                "text": "15 x (160) "
+            },
+            {
+                "x": 453.8,
+                "y": 398.4,
+                "size": 6,
+                "text": "CAR"
+            },
+            {
+                "x": 552.6,
+                "y": 396.7,
+                "size": 6,
+                "text": "2,400"
+            },
+            {
+                "x": 232.2,
+                "y": 395.3,
+                "size": 6,
+                "text": "-, 3,5 KG, HICAZ"
+            },
+            {
+                "x": 29.8,
+                "y": 361.3,
+                "size": 8,
+                "text": "Unloading addresses and receiving times:"
+            },
+            {
+                "x": 29.8,
+                "y": 349.7,
+                "size": 8,
+                "text": "LIDL NOVA PAZOVA:"
+            },
+            {
+                "x": 111.3,
+                "y": 349.7,
+                "size": 8,
+                "text": "1038670"
+            },
+            {
+                "x": 145.1,
+                "y": 349.2,
+                "size": 10,
+                "text": "-"
+            },
+            {
+                "x": 153.8,
+                "y": 349.7,
+                "size": 8,
+                "text": "PRVA JUZNA RADNA 3, 22330 NOVA PAZOVA, SERBIEN"
+            },
+            {
+                "x": 29.8,
+                "y": 336.8,
+                "size": 8,
+                "text": "LIDL LAPOVO:"
+            },
+            {
+                "x": 86.8,
+                "y": 336.8,
+                "size": 8,
+                "text": "1038705"
+            },
+            {
+                "x": 120.6,
+                "y": 336.3,
+                "size": 10,
+                "text": "-"
+            },
+            {
+                "x": 129.4,
+                "y": 336.6,
+                "size": 8,
+                "text": "KRALJA ALEKSANDRA OBRENOVIĆA 4, 34220 LAPOVO, SERBIEN"
+            },
+            {
+                "x": 29.8,
+                "y": 318.3,
+                "size": 8,
+                "text": "Pallet types:"
+            },
+            {
+                "x": 29.8,
+                "y": 305.5,
+                "size": 8,
+                "text": "EV - EV Euro Loss Pallet"
+            }
+        ]
+    }
+}

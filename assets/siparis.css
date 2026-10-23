@@ -787,3 +787,13 @@ html[data-theme="dark"] .sip-mod { --sip-ayrac: #55688a; --sip-sorgu-bg: #3b2410
 .sip-dosya-ac[open] > .sip-dosya-ozet { margin-bottom: 10px; }
 details[open] > .sip-dosya-ozet .sip-yukle-ok { transform: rotate(90deg); }
 /* ==== /v420 ==== */
+
+/* ==== v421: PO eksik okuma rozeti + bağlanamayan kalemler ==== */
+.sip-eksik { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: .75rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+a.sip-eksik:hover { background: #fecaca; }
+html[data-theme="dark"] .sip-eksik { background: #451a1a; color: #fca5a5; border-color: #7f1d1d; }
+.sip-uyari-hata { color: #991b1b; font-weight: 700; }
+html[data-theme="dark"] .sip-uyari-hata { color: #fca5a5; }
+.sip-yetim-kart { border-left: 4px solid #dc2626; }
+.sip-satir-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* ==== /v421 ==== */

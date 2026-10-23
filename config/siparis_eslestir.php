@@ -693,29 +693,192 @@ function siparis_po_uygula(PDO $pdo, int $sid, array $belge, array $doc, array $
     }
     $gorulen = [];
     foreach ($grup as $g) {
-        $it = $g['it'];
-        $sum = [];
-        foreach ((array)($doc['items'] ?? []) as $x) {
-            if ((string)($x['ian'] ?? '') === (string)($it['ian'] ?? '') && (string)($x['pcs_per_box'] ?? '') === (string)($it['pcs_per_box'] ?? '')) { $sum = $x; break; }
-        }
-        $kid = siparis_kalem_hazirla($pdo, $sid, (string)($it['ian'] ?? ''), (string)($it['pcs_per_box'] ?? ''), $g['idx'], true);
+        [$kid, $kr] = siparis_po_kalem_uygula($pdo, $sid, $bid, $sira, $doc, $g);
         $gorulen[] = $kid;
-        siparis_kalem_miktar($pdo, $kid, 'po', ['po_palet' => $g['palet'], 'po_koli' => $g['koli']], $g['yer'], $bid, $sira);
-        $amb = trim((string)($sum['packaging'] ?? ''));
-        if ($amb !== '' && !empty($sum['box_dims'])) $amb .= ', ' . $sum['box_dims'];
-        $k = fn(string $alan, mixed $v): string => siparis_alan_uygula($pdo, 'kalem', $kid, $alan, $v, 'po', $bid, $sira);
-        array_push($r,
-            $k('urun', $it['product'] ?? ($sum['product'] ?? null)),
-            $k('aciklama', $it['description'] ?? ($sum['description'] ?? null)),
-            $k('cesit', $sum['variety'] ?? ($it['variety'] ?? null)),
-            $k('artikel_no', $sum['article_no'] ?? null),
-            $k('koli_icerik', $sum['box_weight'] ?? ($it['box_weight'] ?? null)),
-            $k('ambalaj', $amb !== '' ? $amb : null),
-            $k('palet_tipi', $it['pallet_type'] ?? null),
-            $k('pf', $it['pf'] ?? ($sum['pf'] ?? null)));
+        array_push($r, ...$kr);
     }
     siparis_yok_isaretle($pdo, $sid, 'po', $gorulen);
     return siparis_uygula_sayi($r);
+}
+
+/**
+ * PO'daki TEK kalem grubunu (ian|kalibre) sevkiyata yazar: kalem + po miktarı + kalem alanları (urun, açıklama, çeşit…).
+ * siparis_po_uygula() ve siparis_po_yetim_ekle() ortak kullanır (kopya YOK). $g = ['it' => satır, 'idx' => sıra, 'palet', 'koli', 'yer' => []].
+ * @return array{0:int,1:list<string>} [kalem id, alan uygulama sonuçları]
+ */
+function siparis_po_kalem_uygula(PDO $pdo, int $sid, int $bid, string $sira, array $doc, array $g): array
+{
+    $it = $g['it'];
+    $sum = [];
+    foreach ((array)($doc['items'] ?? []) as $x) {
+        if ((string)($x['ian'] ?? '') === (string)($it['ian'] ?? '') && (string)($x['pcs_per_box'] ?? '') === (string)($it['pcs_per_box'] ?? '')) { $sum = $x; break; }
+    }
+    $kid = siparis_kalem_hazirla($pdo, $sid, (string)($it['ian'] ?? ''), (string)($it['pcs_per_box'] ?? ''), (int)$g['idx'], true);
+    siparis_kalem_miktar($pdo, $kid, 'po', ['po_palet' => $g['palet'], 'po_koli' => $g['koli']], $g['yer'], $bid, $sira);
+    $amb = trim((string)($sum['packaging'] ?? ''));
+    if ($amb !== '' && !empty($sum['box_dims'])) $amb .= ', ' . $sum['box_dims'];
+    $k = fn(string $alan, mixed $v): string => siparis_alan_uygula($pdo, 'kalem', $kid, $alan, $v, 'po', $bid, $sira);
+    return [$kid, [
+        $k('urun', $it['product'] ?? ($sum['product'] ?? null)),
+        $k('aciklama', $it['description'] ?? ($sum['description'] ?? null)),
+        $k('cesit', $sum['variety'] ?? ($it['variety'] ?? null)),
+        $k('artikel_no', $sum['article_no'] ?? null),
+        $k('koli_icerik', $sum['box_weight'] ?? ($it['box_weight'] ?? null)),
+        $k('ambalaj', $amb !== '' ? $amb : null),
+        $k('palet_tipi', $it['pallet_type'] ?? null),
+        $k('pf', $it['pf'] ?? ($sum['pf'] ?? null))]];
+}
+
+/** Bir PO ayrıştırma satırını kalem grubuna çevirir (palet/koli/yerler). */
+function siparis_po_kalem_grubu(array $it, int $idx): array
+{
+    $g = ['it' => $it, 'idx' => $idx, 'palet' => (int)($it['pallets'] ?? 0), 'koli' => (int)($it['quantity'] ?? 0), 'yer' => []];
+    foreach ((array)($it['locations'] ?? []) as $l) $g['yer'][] = ['ad' => (string)($l['name'] ?? ''), 'kod' => $l['code'] ?? null, 'palet' => (int)($l['pallets'] ?? 0), 'koli' => (int)($l['cartons'] ?? 0)];
+    return $g;
+}
+
+/**
+ * PO "eksik okunmuş" mu? (v420+) Ayrıştırıcının kaydettiği bağlanamayan satırlar ya da özet ↔ yükleme blokları toplam denetiminin
+ * başarısızlığı. $yuklemeTarihi verilirse bağlanamayan satır yalnız AYNI tarihli sevkiyata yazılır; denetim hatası PO'nun tüm sevkiyatlarına.
+ * Saf (DB yok). @return ?string kullanıcıya gösterilecek mesaj; sorun yoksa null.
+ */
+function siparis_po_eksik_okuma(array $doc, ?string $yuklemeTarihi = null): ?string
+{
+    $y = [];
+    foreach ((array)($doc['orphan_items'] ?? []) as $x) {
+        if (!is_array($x)) continue;
+        if ($yuklemeTarihi !== null && (string)($x['loading_date'] ?? '') !== $yuklemeTarihi) continue;
+        $it = (array)($x['item'] ?? []);
+        $y[] = ($it['pcs_per_box'] ?? '?') . ' PC · ' . (int)($it['pallets'] ?? 0) . ' palet';
+    }
+    if ($y) return 'PO\'da bu siparişe bağlanamayan kalem var (' . implode('; ', array_unique($y)) . ') — kalemler eksik olabilir. Belge sayfasından kalemi ekleyin ya da "Kalem ekle" ile tamamlayın.';
+    foreach ((array)($doc['checks'] ?? []) as $c) {
+        if (!is_array($c) || !empty($c['ok']) || !in_array((string)($c['id'] ?? ''), ['sum_blocks_pallets', 'sum_blocks_quantity'], true)) continue;
+        return 'PO eksik okunmuş olabilir: özet toplamı ile yükleme blokları tutmuyor (' . (string)($c['scope'] ?? '') . ' — beklenen ' . json_encode($c['expected'] ?? null) . ', bulunan ' . json_encode($c['actual'] ?? null)
+            . '). Kalemleri PO ile karşılaştırın; eksik kalemi "Kalem ekle" ile tamamlayın.';
+    }
+    return null;
+}
+
+/**
+ * "PO eksik okunmuş" uyarısını bu sevkiyat için onaylar (kaynaklar._eksik_okuma_onay = {b: PO belge id}). Onay YALNIZ o PO belgesi için
+ * geçerlidir — PO yeniden yüklenirse (yeni belge id) uyarı, sorun sürüyorsa yeniden çıkar. Kalem eklenince de otomatik yazılır.
+ */
+function siparis_eksik_okuma_onay_yaz(PDO $pdo, int $sid): void
+{
+    $st = $pdo->prepare('SELECT kaynaklar, po_belge_id FROM siparis_sevkiyatlar WHERE id = ?');
+    $st->execute([$sid]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$r || empty($r['po_belge_id'])) return;
+    $kay = siparis_json_coz($r['kaynaklar']);
+    $kay['_eksik_okuma_onay'] = ['b' => (int)$r['po_belge_id'], 't' => siparis_simdi()];
+    $pdo->prepare('UPDATE siparis_sevkiyatlar SET kaynaklar = ? WHERE id = ?')->execute([siparis_json($kay), $sid]);
+}
+
+/** Kullanıcı kalemleri PO ile karşılaştırıp sorun olmadığını onaylar. @return array{ok:bool,hata?:string} */
+function siparis_eksik_okuma_onayla(PDO $pdo, int $sid, int $uid): array
+{
+    $sev = siparis_sevkiyat($pdo, $sid);
+    if ($sev === null) return ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.'];
+    siparis_tx($pdo, function () use ($pdo, $sid, $uid, $sev): void {
+        siparis_eksik_okuma_onay_yaz($pdo, $sid);
+        siparis_olay($pdo, $sid, 'uyari', null, 'onaylandi', 'PO eksik okuma uyarısı kontrol edildi, sorun yok olarak işaretlendi', null, $uid);
+        siparis_audit('siparis_eksik_okuma_onay', $sid, null, ['order_ref' => $sev['order_ref']], $uid);
+        siparis_sevkiyat_yenile($pdo, $sid);
+    });
+    return ['ok' => true];
+}
+
+/**
+ * Belgenin ayrıştırıcıda bağlanamayan (orphan_items[$idx]) kalemini seçilen sevkiyata PO kalemi olarak ekler.
+ * Yalnız o belgeye BAĞLI sevkiyata; aynı (ian, kalibre) kalemi PO miktarıyla zaten varsa reddeder (çift ekleme yok).
+ * @return array{ok:bool,hata?:string,kalibre?:string}
+ */
+function siparis_po_yetim_ekle(PDO $pdo, int $belgeId, int $idx, int $sid, int $uid): array
+{
+    $st = $pdo->prepare('SELECT * FROM siparis_belgeler WHERE id = ? AND deleted_at IS NULL');
+    $st->execute([$belgeId]);
+    $belge = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$belge || (string)$belge['tur'] !== 'po') return ['ok' => false, 'hata' => 'PO belgesi bulunamadı.'];
+    $doc = siparis_json_coz($belge['parse_json'] ?? null);
+    $yetim = array_values((array)($doc['orphan_items'] ?? []));
+    $it = isset($yetim[$idx]) && is_array($yetim[$idx]) ? (array)($yetim[$idx]['item'] ?? []) : [];
+    if (!$it) return ['ok' => false, 'hata' => 'Bağlanamayan kalem bulunamadı.'];
+    $bg = $pdo->prepare('SELECT 1 FROM siparis_belge_bag WHERE belge_id = ? AND sevkiyat_id = ? AND gecerli = 1');
+    $bg->execute([$belgeId, $sid]);
+    if (!$bg->fetchColumn()) return ['ok' => false, 'hata' => 'Seçilen sevkiyat bu PO\'ya bağlı değil.'];
+    $sev = siparis_sevkiyat($pdo, $sid);
+    if ($sev === null) return ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.'];
+    $kal = (string)($it['pcs_per_box'] ?? ''); $ian = (string)($it['ian'] ?? '');
+    $var = $pdo->prepare('SELECT id, po_palet FROM siparis_kalemler WHERE sevkiyat_id = ? AND kalibre = ? AND ian = ?');
+    $var->execute([$sid, $kal, $ian]);
+    $r = $var->fetch(PDO::FETCH_ASSOC);
+    if ($r && $r['po_palet'] !== null && (int)$r['po_palet'] > 0) return ['ok' => false, 'hata' => 'Kalibre ' . $kal . ' bu sevkiyatta PO miktarıyla zaten var.'];
+    $sira = (int)$pdo->query('SELECT COALESCE(MAX(sira), 0) + 1 FROM siparis_kalemler WHERE sevkiyat_id = ' . (int)$sid)->fetchColumn();
+    try {
+        siparis_tx($pdo, function () use ($pdo, $sid, $belge, $doc, $it, $sira, $uid, $kal, $sev): void {
+            $g = siparis_po_kalem_grubu($it, $sira);
+            siparis_po_kalem_uygula($pdo, $sid, (int)$belge['id'], siparis_belge_sira($belge), $doc, $g);
+            siparis_olay($pdo, $sid, 'alan_elle', null, $kal, 'Kalibre ' . $kal . ' kalemi PO\'daki bağlanamayan satırdan eklendi (' . (int)$g['palet'] . ' palet)', (int)$belge['id'], $uid);
+            siparis_eksik_okuma_onay_yaz($pdo, $sid);
+            siparis_audit('siparis_kalem_yetim_ekle', $sid, null, ['belge_id' => (int)$belge['id'], 'kalibre' => $kal, 'palet' => (int)$g['palet'], 'order_ref' => $sev['order_ref']], $uid);
+            siparis_sevkiyat_yenile($pdo, $sid);
+        });
+    } catch (PDOException $e) {
+        error_log('[siparis_po_yetim_ekle] ' . $e->getMessage());
+        return ['ok' => false, 'hata' => 'Kalem eklenemedi.'];
+    }
+    return ['ok' => true, 'kalibre' => $kal];
+}
+
+/**
+ * Sevkiyata ELLE kalem ekler (ayrıştırıcı bir kalemi kaçırdığında çıkış yolu). Palet/koli/PF "elle" kilitli yazılır — belge yeniden
+ * okunsa da ezilmez. Aynı kalibre (ve IAN çakışmıyorsa) zaten varsa reddeder → ✎ Düzenle kullanılır.
+ * @return array{ok:bool,hata?:string}
+ */
+function siparis_kalem_elle_ekle(PDO $pdo, int $sid, string $kalibre, string $ian, string $palet, string $koli, string $pf, int $uid): array
+{
+    $sev = siparis_sevkiyat($pdo, $sid);
+    if ($sev === null) return ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.'];
+    $kalibre = trim($kalibre); $ian = trim($ian);
+    if ($kalibre === '' || !preg_match('/^[0-9A-Za-z]{1,10}$/', $kalibre)) return ['ok' => false, 'hata' => 'Kalibre gerekli (en çok 10 harf/rakam, örn. 14).'];
+    if ($ian !== '' && !preg_match('/^\d{1,20}$/', $ian)) return ['ok' => false, 'hata' => 'IAN yalnız rakam olmalı.'];
+    $sayi = function (string $v): array {
+        $v = trim($v);
+        if ($v === '') return [true, null];
+        $n = siparis_deger_normalize($v, 'sayi');
+        return $n === null || (int)$n < 0 ? [false, null] : [true, (int)$n];
+    };
+    [$o1, $p] = $sayi($palet); [$o2, $k] = $sayi($koli); [$o3, $f] = $sayi($pf);
+    if (!$o1 || !$o2 || !$o3) return ['ok' => false, 'hata' => 'Palet, koli ve PF tam sayı olmalı.'];
+    if ($k === null && $p !== null && $f !== null) $k = $p * $f;
+    if ($p === null && $k !== null && $f !== null && $f > 0 && $k % $f === 0) $p = intdiv($k, $f);
+    if ($p === null && $k === null) return ['ok' => false, 'hata' => 'En az palet ya da koli girin.'];
+    $var = $pdo->prepare('SELECT ian FROM siparis_kalemler WHERE sevkiyat_id = ? AND kalibre = ?');
+    $var->execute([$sid, $kalibre]);
+    foreach ($var->fetchAll(PDO::FETCH_COLUMN) as $x) if ($ian === '' || (string)$x === '' || (string)$x === $ian) return ['ok' => false, 'hata' => 'Kalibre ' . $kalibre . ' için kalem zaten var — satırdaki ✎ Düzenle ile değiştirin.'];
+    $sira = (int)$pdo->query('SELECT COALESCE(MAX(sira), 0) + 1 FROM siparis_kalemler WHERE sevkiyat_id = ' . (int)$sid)->fetchColumn();
+    try {
+        $sonuc = siparis_tx($pdo, function () use ($pdo, $sid, $kalibre, $ian, $p, $k, $f, $sira, $uid, $sev): array {
+            $kid = siparis_kalem_hazirla($pdo, $sid, $ian, $kalibre, $sira, true);
+            foreach (['etkin_palet' => $p, 'etkin_koli' => $k, 'pf' => $f] as $alan => $v) {
+                if ($v === null) continue;
+                $r = siparis_alan_elle($pdo, 'kalem', $kid, $alan, (string)$v, $uid);
+                if (!$r['ok']) throw new RuntimeException((string)($r['hata'] ?? 'Değer kaydedilemedi.'));
+            }
+            siparis_olay($pdo, $sid, 'alan_elle', null, $kalibre, 'Kalibre ' . $kalibre . ' kalemi elle eklendi (' . ($p ?? '?') . ' palet / ' . ($k ?? '?') . ' koli)', null, $uid);
+            siparis_eksik_okuma_onay_yaz($pdo, $sid);
+            siparis_audit('siparis_kalem_ekle', $sid, null, ['kalibre' => $kalibre, 'palet' => $p, 'koli' => $k, 'order_ref' => $sev['order_ref']], $uid);
+            siparis_sevkiyat_yenile($pdo, $sid);
+            return ['ok' => true];
+        });
+    } catch (RuntimeException $e) {
+        return ['ok' => false, 'hata' => $e->getMessage()];
+    } catch (PDOException $e) {
+        error_log('[siparis_kalem_elle_ekle] ' . $e->getMessage());
+        return ['ok' => false, 'hata' => 'Kalem eklenemedi.'];
+    }
+    return $sonuc;
 }
 
 /** LL shipment → sevkiyat + kalemler. @return int çatışma sayısı */
@@ -1273,8 +1436,8 @@ function siparis_sevkiyat_yenile(PDO $pdo, int $sid): void
     $var['pkl'] = in_array((string)$pk->fetchColumn(), ['uretildi', 'yuklendi'], true) ? 1 : 0;
 
     $uy = [];
-    $uyari = function (string $kod, string $mesaj, ?string $kalibre = null) use (&$uy): void {
-        $u = ['kod' => $kod, 'seviye' => 'uyari', 'mesaj' => $mesaj];
+    $uyari = function (string $kod, string $mesaj, ?string $kalibre = null, string $seviye = 'uyari') use (&$uy): void {
+        $u = ['kod' => $kod, 'seviye' => $seviye, 'mesaj' => $mesaj];
         if ($kalibre !== null) $u['kalibre'] = $kalibre;
         $uy[] = $u;
     };
@@ -1342,6 +1505,13 @@ function siparis_sevkiyat_yenile(PDO $pdo, int $sid): void
             foreach ($vals as $src => $v) $parca[] = strtoupper($src) . ' ' . $v;
             $uyari($kod, $et . ' belgeler arasında farklı: ' . implode(' · ', $parca) . '.');
         }
+    }
+    // v421: PO eksik okunmuş (bağlanamayan satır / özet ↔ blok toplamı tutmuyor) → listede kırmızı "PO eksik okunmuş" rozeti
+    if ($var['po'] === 1 && !empty($sev['po_belge_id'])) {
+        $pj = $pdo->prepare('SELECT parse_json FROM siparis_belgeler WHERE id = ? AND deleted_at IS NULL');
+        $pj->execute([(int)$sev['po_belge_id']]);
+        $eksik = siparis_po_eksik_okuma(siparis_json_coz($pj->fetchColumn() ?: null), $sev['yukleme_tarihi'] !== null ? (string)$sev['yukleme_tarihi'] : null);
+        if ($eksik !== null && (int)($sev['_kaynak']['_eksik_okuma_onay']['b'] ?? 0) !== (int)$sev['po_belge_id']) $uyari('po_eksik_okuma', $eksik, null, 'hata');
     }
     if ($var['po'] !== 1) $uyari('po_yok', 'PO henüz yüklenmedi — bu sevkiyat ' . ($var['ll'] || $var['pc'] ? 'LL/PC ile' : 'elle') . ' açıldı.');
     if ($sev['tur_no'] !== null && $sev['tur_no'] !== '') {

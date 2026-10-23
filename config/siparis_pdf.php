@@ -22,7 +22,7 @@
 // =========================================================
 
 /** Ayrıştırıcı sürümü — siparis_belgeler.parser_surum'a yazılır. */
-const SIPARIS_PDF_SURUM = 'v3';
+const SIPARIS_PDF_SURUM = 'v4';   // v4: sayfa devamı (siparişsiz) PO bloğu önceki siparişe bağlanır, bağlanamayan satırlar orphan_items'a yazılır
 
 /**
  * Minimal pure-PHP PDF text-run extractor (no binaries, only zlib).
@@ -364,7 +364,8 @@ function sipdf_warn(array &$w, string $level, string $code, string $msg, array $
 function sipdf_check(array &$checks, array &$w, string $id, string $scope, bool $ok, $expected, $actual, string $msg): void
 {
     $checks[] = ['id' => $id, 'scope' => $scope, 'ok' => $ok, 'expected' => $expected, 'actual' => $actual];
-    if (!$ok) sipdf_warn($w, 'warn', 'check_' . $id, $msg . " [$scope] expected=" . json_encode($expected) . ' actual=' . json_encode($actual), ['scope' => $scope]);
+    // v4: özet ↔ yükleme blokları toplamı tutmuyorsa PO EKSİK OKUNMUŞ demektir → hata seviyesi (diğer denetimler uyarı kalır)
+    if (!$ok) sipdf_warn($w, in_array($id, ['sum_blocks_pallets', 'sum_blocks_quantity'], true) ? 'error' : 'warn', 'check_' . $id, $msg . " [$scope] expected=" . json_encode($expected) . ' actual=' . json_encode($actual), ['scope' => $scope]);
 }
 /** "Pomegranate 14 PC LOSE (TR)" -> product, pcs_per_box (=calibre label used in the PKL), pack_mode, origin. */
 function sipdf_parse_article(?string $d): array
@@ -516,7 +517,7 @@ function siparis_pdf_parse_order(array $pages, array $meta = []): array
 {
     $w = []; $checks = [];
     $out = ['doc_type' => 'purchase_order', 'header' => sipdf_ogl_header($pages), 'destination' => null, 'items' => [], 'loadings' => [],
-            'unloading_locations' => [], 'pallet_types' => [], 'instruction_lines' => [], 'packing_list_emails' => [], 'checks' => [], 'warnings' => [], 'meta' => $meta];
+            'unloading_locations' => [], 'pallet_types' => [], 'instruction_lines' => [], 'packing_list_emails' => [], 'orphan_items' => [], 'checks' => [], 'warnings' => [], 'meta' => $meta];
     $L = sipdf_body_lines($pages);
     $n = count($L);
 
@@ -564,6 +565,25 @@ function siparis_pdf_parse_order(array $pages, array $meta = []): array
 
     // ---- 4. loading blocks -> one loading per order ref ----
     foreach ($blocks as $b) foreach (sipdf_po_parse_block($b, $w) as $o) {
+        // v4: sayfa devamı — aynı tırın kalemleri sonraki sayfada "Loading date" başlığı tekrarlanarak, Order ref hücresi BOŞ basılır.
+        // Aynı yükleme tarihli bir önceki siparişin devamıdır; kalemleri ona eklenir. Bağlanamazsa SESSİZCE ATILMAZ (orphan_items + hata).
+        if ($o['order_ref'] === null && !empty($o['continuation'])) {
+            $pi = count($out['loadings']) - 1;
+            $P = $pi >= 0 ? $out['loadings'][$pi] : null;
+            if ($P !== null && $P['loading_date'] === $o['loading_date'] && $P['logistics'] === $o['logistics'] && $P['incoterm'] === $o['incoterm']) {
+                foreach ($o['items'] as $it) $out['loadings'][$pi]['items'][] = $it;
+                foreach ($o['columns'] as $c) { $var = false; foreach ($out['loadings'][$pi]['columns'] as $pc) if ($pc['name'] === $c['name']) $var = true; if (!$var) $out['loadings'][$pi]['columns'][] = $c; }
+                foreach (['tour', 'loading_point', 'customs_raw', 'customs_office', 'vat_no', 'carrier_text', 'carrier_name', 'planned_time'] as $f) if (($out['loadings'][$pi][$f] ?? null) === null && ($o[$f] ?? null) !== null) $out['loadings'][$pi][$f] = $o[$f];
+                $out['loadings'][$pi]['planned_plates'] = array_values(array_unique(array_merge($out['loadings'][$pi]['planned_plates'], $o['planned_plates'])));
+                $out['loadings'][$pi]['totals']['pallets'] = array_sum(array_map(fn($i) => (int)$i['pallets'], $out['loadings'][$pi]['items']));
+                $out['loadings'][$pi]['totals']['quantity'] = array_sum(array_map(fn($i) => (int)$i['quantity'], $out['loadings'][$pi]['items']));
+                sipdf_warn($w, 'info', 'continuation_merged', count($o['items']) . ' item row(s) on page ' . $o['page'] . ' had no order ref (page continuation) - attached to ' . $P['order_ref'] . '.', ['order_ref' => $P['order_ref']]);
+                continue;
+            }
+            foreach ($o['items'] as $it) $out['orphan_items'][] = ['loading_date' => $o['loading_date'], 'logistics' => $o['logistics'], 'incoterm' => $o['incoterm'], 'page' => $o['page'], 'item' => $it];
+            sipdf_warn($w, 'error', 'orphan_rows', count($o['items']) . ' item row(s) on page ' . $o['page'] . ' (loading date ' . $o['loading_date'] . ') have no order ref and could not be attached to an order - add them manually.', ['page' => $o['page']]);
+            continue;
+        }
         $key = $o['loading_date'] . '|' . $o['order_ref'];
         foreach ($out['loadings'] as $ex) if ($ex['loading_date'] . '|' . $ex['order_ref'] === $key) sipdf_warn($w, 'warn', 'duplicate_order_in_po', 'Same loading date + order ref appears twice in one PO.', ['order_ref' => $o['order_ref']]);
         $out['loadings'][] = $o;
@@ -700,9 +720,10 @@ function sipdf_po_parse_block(array $b, array &$w): array
                 $hdrZone = false;                                                                                         // anything else is data (e.g. carrier text) of the continued order
             } else $hdrZone = false;
         }
-        if ($hasRef) {                                                                              // new order (truck) inside the block
+        $yeniSiparis = $hasRef || (!$o && $hasItem);                                              // v4: siparişsiz ilk kalem satırı = önceki sayfadan devam eden sipariş
+        if ($yeniSiparis) {                                                                         // new order (truck) inside the block
             if ($o) $orders[] = $o;
-            $o = $ctx + ['order_ref' => null, 'tour' => null, 'loading_point' => null, 'customs_raw' => null, 'customs_office' => null, 'vat_no' => null, 'carrier_text' => null, 'carrier_name' => null,
+            $o = $ctx + ($hasRef ? [] : ['continuation' => true]) + ['order_ref' => null, 'tour' => null, 'loading_point' => null, 'customs_raw' => null, 'customs_office' => null, 'vat_no' => null, 'carrier_text' => null, 'carrier_name' => null,
                          'planned_plates' => [], 'planned_time' => null, 'sold_to' => null, 'columns' => [], 'items' => [], 'totals' => ['pallets' => 0, 'quantity' => 0, 'by_location' => []],
                          '_lp' => [], '_cu' => [], '_ca' => []];
             $iCur = null;
@@ -775,7 +796,7 @@ function sipdf_po_parse_block(array $b, array &$w): array
         $o['totals']['pallets'] = array_sum(array_map(fn($i) => (int)$i['pallets'], $o['items']));
         $o['totals']['quantity'] = array_sum(array_map(fn($i) => (int)$i['quantity'], $o['items']));
         unset($o['_lp'], $o['_cu'], $o['_ca']);
-        if ($o['order_ref'] === null) sipdf_warn($w, 'error', 'order_ref_missing', 'Order row without order ref.');
+        if ($o['order_ref'] === null && empty($o['continuation'])) sipdf_warn($w, 'error', 'order_ref_missing', 'Order row without order ref.');
         if (!$o['items']) sipdf_warn($w, 'warn', 'order_without_items', 'Order has no item rows.', ['order_ref' => $o['order_ref']]);
     }
     unset($o);

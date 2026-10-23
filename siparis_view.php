@@ -215,7 +215,11 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       <?php if ($sev['_uyarilar']): ?>
       <section class="sip-uyari sip-o2" id="uyarilar" aria-label="Uyarılar">
         <h2>⚠ Uyarılar <span class="sip-say"><?= count($sev['_uyarilar']) ?></span></h2>
-        <ul><?php foreach ($sev['_uyarilar'] as $u): ?><li><?= h((string)($u['mesaj'] ?? '')) ?></li><?php endforeach; ?></ul>
+        <ul><?php foreach ($sev['_uyarilar'] as $u): ?><li<?= ($u['seviye'] ?? '') === 'hata' ? ' class="sip-uyari-hata"' : '' ?>><?= ($u['seviye'] ?? '') === 'hata' ? '⛔ ' : '' ?><?= h((string)($u['mesaj'] ?? '')) ?></li><?php endforeach; ?></ul>
+        <?php if ($yaz && array_filter($sev['_uyarilar'], fn($u) => ($u['kod'] ?? '') === 'po_eksik_okuma')): ?>
+          <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="eksik_okuma_tamam"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="donus" value="uyarilar">
+            <button type="submit" class="btn btn-sm">✓ Kalemleri kontrol ettim, sorun yok</button></form>
+        <?php endif; ?>
       </section>
       <?php endif; ?>
 
@@ -269,7 +273,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
 
       <!-- 6) Kalemler -->
       <section class="card sip-o5" id="kalemler" aria-labelledby="sipKalemBas">
-        <div class="card-head"><h2 id="sipKalemBas">Kalemler (kalibre bazında)</h2><span class="sip-soluk">Etkin = elle &gt; PC &gt; LL &gt; PO</span></div>
+        <div class="card-head"><h2 id="sipKalemBas">Kalemler (kalibre bazında)</h2><span class="sip-soluk">Etkin = elle &gt; PC &gt; LL &gt; PO</span><?php if ($yaz): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemEkleModal" title="Ayrıştırıcının kaçırdığı kalemi elle ekle">➕ Kalem ekle</button><?php endif; ?></div>
         <?php if (!$kalemler): ?>
           <div class="empty sip-bos-kutu"><p>Henüz kalem yok. PO ya da Loading List yüklenince kalemler oluşur.</p></div>
         <?php else:
@@ -613,6 +617,30 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       </form>
     </div>
   </div>
+
+  <!-- Kalem ekle (elle) -->
+  <?php if ($yaz): ?>
+  <div class="pm-overlay" id="sipKalemEkleModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipKalemEkleBas">
+    <div class="pm-dialog">
+      <form method="post" action="siparis_kaydet.php" data-sip-tek>
+        <div class="pm-header"><h2 class="pm-title" id="sipKalemEkleBas">Kalem ekle (elle)</h2><button type="button" class="pm-close" data-sip-kapat aria-label="Kapat">✕</button></div>
+        <div class="pm-body sip-form">
+          <?= sipui_csrf() ?><input type="hidden" name="islem" value="kalem_ekle"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="donus" value="kalemler">
+          <p class="muted">PO / Loading List'in kaçırdığı kalemi tamamlamak içindir. Girilen değerler elle kilitlenir; belge yeniden okunsa da ezilmez.</p>
+          <div class="sip-iki-kolon">
+            <label>Kalibre <span class="muted">(zorunlu)</span><input type="text" name="kalibre" required maxlength="10" autocomplete="off" placeholder="örn. 16"></label>
+            <label>IAN <span class="muted">(isteğe bağlı)</span><input type="text" inputmode="numeric" name="ian" maxlength="20" autocomplete="off"></label>
+            <label>Palet<input type="text" inputmode="numeric" name="palet" autocomplete="off"></label>
+            <label>Koli<input type="text" inputmode="numeric" name="koli" autocomplete="off"></label>
+            <label>Palet başına koli (PF)<input type="text" inputmode="numeric" name="pf" autocomplete="off"></label>
+          </div>
+          <p class="muted">Koli boşsa palet × PF hesaplanır. En az palet ya da koli girin.</p>
+        </div>
+        <div class="pm-footer"><button type="button" class="btn" data-sip-kapat>Vazgeç</button><button type="submit" class="btn btn-primary">Kalemi ekle</button></div>
+      </form>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <!-- Durumu değiştir -->
   <div class="pm-overlay" id="sipDurumModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipDurumBas">
