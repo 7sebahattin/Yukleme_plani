@@ -50,7 +50,10 @@
     '.swp-kalem .swp-kpf{width:52px;text-align:center;padding-right:0;white-space:nowrap}' +
     '.swp-kalem .swp-k3{width:104px;text-align:right;padding-right:0;white-space:nowrap}' +
     '.swp-kalem tr.swp-toplam th,.swp-kalem tr.swp-toplam td{border-top:2px solid #b45309;border-bottom:0}' +
-    '.swp-kalem tr.swp-toplam th{color:#b45309}.swp-kalem tr.swp-toplam td{font-weight:700;color:#111827}';
+    '.swp-kalem tr.swp-toplam th{color:#b45309}.swp-kalem tr.swp-toplam td{font-weight:700;color:#111827}' +
+    '.swp-adres{margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb}' +
+    '.swp-adres-b{font-size:12px;font-weight:700;color:#b45309;margin:0 0 3px}' +
+    '.swp-adres-s{font-size:12px;font-weight:500;color:#374151;line-height:1.35;margin:0 0 3px}';
 
   // Her değer esc() ile HTML'e girer (sunucu ham metin döner).
   function kartHtml(v) {
@@ -64,7 +67,16 @@
       o += '<tr><td>' + esc(k.urun) + '</td><td class="swp-k2">' + esc(k.kalibre) + '</td><td class="swp-kpf">' + esc(k.pf) + '</td><td class="swp-k3">' + esc(k.palet_koli) + '</td></tr>';
     });
     o += '<tr class="swp-toplam"><th>' + esc(v.toplam.etiket) + '</th><td class="swp-k2"></td><td class="swp-kpf"></td><td class="swp-k3">' + esc(v.toplam.palet_koli) + '</td></tr>';
-    o += '</tbody></table></div>';
+    o += '</tbody></table>';
+    if (v.adresler && v.adresler.length) {
+      o += '<div class="swp-adres"><p class="swp-adres-b">' + esc(v.adres_baslik || 'Boşaltma adresi') + '</p>';
+      v.adresler.forEach(function (a) {
+        var ad = [a.ad, a.kod].filter(Boolean).join(' ');
+        o += '<p class="swp-adres-s">' + esc(a.adres ? ad + ' — ' + a.adres : ad) + '</p>';
+      });
+      o += '</div>';
+    }
+    o += '</div>';
     return o;
   }
 
