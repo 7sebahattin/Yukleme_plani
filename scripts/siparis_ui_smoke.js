@@ -39,11 +39,13 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         page.on('console', m => { if (m.type() === 'error' && !/ERR_FILE|file:\/\/|Failed to load resource|ERR_NAME_NOT_RESOLVED|ERR_INTERNET|ERR_TUNNEL|CORS/.test(m.text())) hatalar.push(m.text()); });
         page.on('pageerror', e => hatalar.push('pageerror: ' + e.message));
         if (koyu) await page.addInitScript(() => { try { localStorage.setItem('asya_tema', 'dark'); } catch (e) {} });
-        // v382: "Belge yükle" kartı varsayılan KAPALI → kartın içini sınayan senaryolar kullanıcı tercihini (localStorage '1', uid fixture = 1) önceden yazar
-        if (opts && opts.yukleAcik) await page.addInitScript(() => { try { localStorage.setItem('asya_sip_yukle_1', '1'); } catch (e) {} });
+        // v420: "Belge yükle" kartı 5 sn sonra kendiliğinden kapanır → testlerde kapalı (0); otomatik kapanmayı sınayan senaryo süreyi opts.otoKapat ile verir
+        await page.addInitScript(ms => { window.SIP_OTO_KAPAT_MS = ms; }, (opts && opts.otoKapat) || 0);
         if (hazirla) await hazirla(page);      // page.route() sayfa AÇILMADAN kurulmalı (file:// isteklerinde sonradan kurulan yönlendirme devreye girmez)
         await page.goto('file://' + path.join(OUT, sayfa + '.html'));
         if (koyu) await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+        // v420: kart + içindeki "Dosyadan yükle" bölümü varsayılan KAPALI → içini sınayan senaryolar ikisini de açar
+        if (opts && opts.yukleAcik) await page.evaluate(() => { document.querySelectorAll('details[data-sip-yukle], details.sip-dosya-ac').forEach(d => { d.open = true; }); });
         await page.waitForTimeout(400);
         return { ctx, page, hatalar };
     }
@@ -145,18 +147,20 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         const ys = await rect(page, YS);
         ok(`[${w}] yükleme kartı: summary dokunma hedefi ≥ 44px, tam genişlik, taşma yok`, ys && ys.h >= 43.5 && (await tasma(page)) <= 0, JSON.stringify(ys));
         await page.click(YS); await page.waitForTimeout(150);
-        ok(`[${w}] yükleme kartı: summary tıkı açar (form görünür)`, (await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(s => document.querySelector(s).open, YK));
+        ok(`[${w}] yükleme kartı: summary tıkı açar (mail sorgu alanı görünür, manuel yükleme alanı hâlâ KAPALI)`, await page.evaluate(s => document.querySelector(s).open, YK) && !(await gorunur(page, 'form[data-sip-upload]')) && (await gorunur(page, 'summary.sip-dosya-ozet')));
         ok(`[${w}] yükleme kartı: açıkken yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
-        ok(`[${w}] yükleme kartı: tercih localStorage'a '1' yazıldı`, await page.evaluate(() => { try { return localStorage.getItem('asya_sip_yukle_1'); } catch (e) { return 'x'; } }) === '1');
+        await page.click('summary.sip-dosya-ozet'); await page.waitForTimeout(150);
+        ok(`[${w}] yükleme kartı: "Dosyadan yükle" tıklayınca açılır (form + dosya alanı görünür)`, (await gorunur(page, 'form[data-sip-upload]')) && (await gorunur(page, '[data-sip-drop]')));
+        await page.click('summary.sip-dosya-ozet'); await page.waitForTimeout(150);
+        ok(`[${w}] yükleme kartı: "Dosyadan yükle" ikinci tıkta kapanır`, !(await gorunur(page, 'form[data-sip-upload]')));
         await page.reload(); await page.waitForTimeout(300);
-        ok(`[${w}] yükleme kartı: yeniden yüklemede tercih korunur (açık)`, await page.evaluate(s => document.querySelector(s).open, YK));
+        ok(`[${w}] yükleme kartı: yeniden yüklemede KAPALI başlar (tercih hatırlanmaz)`, await page.evaluate(s => !document.querySelector(s).open, YK));
         await page.click(YS); await page.waitForTimeout(150);
-        ok(`[${w}] yükleme kartı: ikinci tık kapatır (form görünmez), tercih '0'`, !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(() => localStorage.getItem('asya_sip_yukle_1')) === '0');
-        await page.reload(); await page.waitForTimeout(300);
-        ok(`[${w}] yükleme kartı: kapalı tercih de korunur`, await page.evaluate(s => !document.querySelector(s).open, YK));
+        await page.click(YS); await page.waitForTimeout(150);
+        ok(`[${w}] yükleme kartı: ikinci tık kapatır`, await page.evaluate(s => !document.querySelector(s).open, YK));
         await page.goto(page.url().split('#')[0] + '#yukle'); await page.waitForTimeout(300);
-        ok(`[${w}] yükleme kartı: #yukle bağlantısı kartı açar (tercih '0' olsa bile)`, (await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(s => document.querySelector(s).open, YK));
-        ok(`[${w}] yükleme kartı: hash açılışı tercihi ezmez (hâlâ '0')`, await page.evaluate(() => localStorage.getItem('asya_sip_yukle_1')) === '0');
+        ok(`[${w}] yükleme kartı: #yukle bağlantısı kartı açar`, await page.evaluate(s => document.querySelector(s).open, YK));
+        await page.click('summary.sip-dosya-ozet'); await page.waitForTimeout(150);
         ok(`[${w}] yükleme kartı: ok simgesi + iç içe seçici güvenliği (summary yalnız bir tane doğrudan çocuk)`, await page.evaluate(s => document.querySelectorAll(s).length === 1, YS));
         // yükleme ön denetimi
         const dosyaGirdi = await page.$('form[data-sip-upload] input[type=file]');
@@ -613,7 +617,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 const k = cs('[data-sip-mail-sonuc-kart]'), ok_ = cs('.sip-mail-chip--ok'), uy = cs('.sip-mail-chip--uyari'), ht = cs('.sip-mail-chip--hata'), btn = cs('.sip-mail-btn');
                 const kok = getComputedStyle(document.documentElement).getPropertyValue('--card').trim(); const tmp = document.createElement('div'); tmp.style.background = kok; document.body.appendChild(tmp); const bg = getComputedStyle(tmp).backgroundColor; tmp.remove();
                 return { kartBg: k.backgroundColor, beklenen: bg, okBg: ok_ && ok_.backgroundColor, okFg: ok_ && ok_.color, uyBg: uy && uy.backgroundColor, uyFg: uy && uy.color, htBg: ht && ht.backgroundColor, htFg: ht && ht.color, btnBg: btn.backgroundColor, btnFg: btn.color }; });
-            ok('koyu tema mail: sonuç kartı --card zemini', r.kartBg === r.beklenen, JSON.stringify(r));
+            ok('koyu tema mail: sonuç kartı koyu turuncu zemin (v420: --sip-sorgu-kart), açık tema rengi sızmaz', r.kartBg === 'rgb(74, 46, 20)', JSON.stringify(r));
             ok('koyu tema mail: çipler koyu zeminde açık yazı (Alındı)', lumOf(r.okBg) < 0.35 && lumOf(r.okFg) > lumOf(r.okBg) + 0.25, JSON.stringify(r));
             ok('koyu tema mail: Atlandı / Hata çipleri de okunur', (!r.uyBg || lumOf(r.uyFg) > lumOf(r.uyBg) + 0.25) && (!r.htBg || lumOf(r.htFg) > lumOf(r.htBg) + 0.25), JSON.stringify(r));
             ok('koyu tema mail: düğme zemini koyu, yazı açık', lumOf(r.btnFg) > lumOf(r.btnBg) + 0.2, JSON.stringify(r));
@@ -695,11 +699,26 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ok(`[${w}] v402 liste: taban eski → değişmiş sevkiyatlar çerçeveli`, dg.say >= 3 && !!dg.cerceve, JSON.stringify(dg));
         ok(`[${w}] v402 liste: Evrak kartı zemini Açık ve Kapanan'dan farklı (açık mavi)`, !!dg.bg[1] && dg.bg[1] !== dg.bg[0] && dg.bg[1] !== dg.bg[2] && /^rgb\(2[34]\d, 2[34]\d, 25\d\)$/.test(dg.bg[1]), JSON.stringify(dg.bg));
         ok(`[${w}] v402 liste: çerçeve yatay taşma yaratmaz`, dg.tasma <= 0, String(dg.tasma));
+        // v420 — yeni gelen sevkiyatın yanında neon YENİ rozeti; iki sevkiyat arasında belirgin ayraç
+        const yn = await page.evaluate(() => {
+            const r = document.querySelector('tr.sip-grup .sip-yeni, .sip-card .sip-yeni'); if (!r) return { say: document.querySelectorAll('.sip-yeni').length };
+            const cs = getComputedStyle(r), kap = r.closest('tr, .sip-card');
+            return { say: document.querySelectorAll('.sip-yeni').length, metin: r.textContent, golge: cs.textShadow !== 'none', sinirli: cs.borderTopColor, referansYaninda: !!kap.querySelector('.sip-ref'), tasma: document.documentElement.scrollWidth - window.innerWidth };
+        });
+        ok(`[${w}] v420 liste: yeni gelen sevkiyatta neon "YENİ" rozeti (referansın yanında, glow gölgeli, taşma yok)`, yn.say >= 1 && yn.metin === 'YENİ' && yn.golge && yn.referansYaninda && yn.tasma <= 0, JSON.stringify(yn));
+        const ay = await page.evaluate(() => {
+            const urunler = Array.from(document.querySelectorAll('.sip-table tbody > tr.sip-grup'));
+            const son = urunler.filter(t => t.nextElementSibling && !(t.classList.contains('sip-ust'))).map(t => getComputedStyle(t.querySelector('td')).borderBottomWidth);
+            const kart = document.querySelector('.sip-kartlar');
+            return { genis: son.length ? son.every(x => parseFloat(x) >= 3) : null, gap: kart ? getComputedStyle(kart).rowGap : null };
+        });
+        ok(`[${w}] v420 liste: sevkiyatlar arasında belirgin çizgi (≥3px) ve kartlar arası boşluk 14px`, (ay.genis === true || ay.genis === null) && ay.gap === '14px', JSON.stringify(ay));
         ok(`[${w}] v402 liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
 
         ({ ctx, page, hatalar } = await ac('liste', w, h, false, taban('2099-01-01 00:00:00')));
-        ok(`[${w}] v402 liste: taban gelecekte → çerçeve yok (ilk ziyarette eski kayıtlar "yeni" sayılmaz)`, await page.evaluate(() => document.querySelectorAll('.sip-degisti').length === 0));
+        ok(`[${w}] v402 liste: taban gelecekte → çerçeve yok (ilk ziyarette eski kayıtlar "yeni" sayılmaz)`, await page.evaluate(() => document.querySelectorAll('.sip-degisti').length === 0 && document.querySelectorAll('.sip-yeni').length === 0));
+
         await ctx.close();
 
         ({ ctx, page, hatalar } = await ac('liste', w, h));   // kayıt yok → ilk ziyaret: taban = sunucu şimdisi
@@ -720,6 +739,32 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         }, gid.id);
         ok(`[${w}] v402 liste: sevkiyat sayfası açılınca çerçeve görülen zamana göre kalkar (değişme zamanı görülenden yeniyse kalır)`, gl.var && gl.du !== '' && gl.cerceveli === gl.beklenen, JSON.stringify(gl));
         ok(`[${w}] v402 liste: açılmayan diğer sevkiyatların çerçevesi durur`, gl.digerleri >= 1, JSON.stringify(gl));
+        await ctx.close();
+
+        // v420 — sorgu alanı turuncu, sorgu düğmeleri renkli; yükleme kartı 5 sn (testte 700 ms) etkinlik olmazsa kendiliğinden kapanır
+        ({ ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, null, { yukleAcik: true }));
+        const tr = await page.evaluate(() => {
+            const rgb = e => (getComputedStyle(e).backgroundColor.match(/\d+/g) || []).map(Number);
+            const m = document.querySelector('.sip-yukle .sip-mail'), b1 = document.querySelector('[data-sip-mail="siparis"]'), b2 = document.querySelector('[data-sip-mail="lojistik"]');
+            return { mail: m ? rgb(m) : null, b1: b1 ? getComputedStyle(b1).backgroundColor : null, b2: b2 ? getComputedStyle(b2).backgroundColor : null };
+        });
+        ok(`[${w}] v420 mail sorgu alanı: turuncu zemin (R > G > B, R ≥ 240)`, !!tr.mail && tr.mail[0] >= 240 && tr.mail[0] > tr.mail[1] && tr.mail[1] > tr.mail[2] && tr.mail[0] - tr.mail[2] >= 40, JSON.stringify(tr));
+        ok(`[${w}] v420 sorgu düğmeleri renkli (Sipariş mavi, Lojistik yeşil)`, tr.b1 === 'rgb(37, 99, 235)' && tr.b2 === 'rgb(21, 128, 61)', JSON.stringify(tr));
+        await ctx.close();
+        const YK0 = 'details[data-sip-yukle]', YS0 = 'details[data-sip-yukle] > summary.sip-yukle-ozet';
+        ({ ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, null, { otoKapat: 700 }));
+        await page.click(YS0); await page.waitForTimeout(250);
+        ok(`[${w}] v420 yükleme kartı: açılınca hemen kapanmaz`, await page.evaluate(s => document.querySelector(s).open, YK0));
+        await page.click('.sip-mail-baslik h2'); await page.waitForTimeout(500);   // etkinlik süreyi yeniler (açılıştan ≈ 750 ms > 700 ama son etkinlikten 500 ms)
+        ok(`[${w}] v420 yükleme kartı: etkinlik süreyi yeniler (hâlâ açık)`, await page.evaluate(s => document.querySelector(s).open, YK0));
+        await page.waitForTimeout(1100);
+        ok(`[${w}] v420 yükleme kartı: etkinlik yoksa kendiliğinden kapanır`, await page.evaluate(s => !document.querySelector(s).open, YK0));
+        await page.click(YS0); await page.waitForTimeout(150);
+        await page.click('summary.sip-dosya-ozet'); await page.waitForTimeout(100);
+        await (await page.$('form[data-sip-upload] input[type=file]')).setInputFiles([{ name: 'a.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(2048, 1) }]);
+        await page.waitForTimeout(1500);
+        ok(`[${w}] v420 yükleme kartı: dosya seçiliyken kapanmaz`, await page.evaluate(s => document.querySelector(s).open, YK0));
+        ok(`[${w}] v420 yükleme kartı: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
 
         ({ ctx, page, hatalar } = await ac('liste_evrak', w, h));

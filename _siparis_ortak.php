@@ -169,7 +169,7 @@ function sipui_gorulen_meta(int $uid, ?array $sev = null): string
 /** v402 — liste satırı/kartı için gizli değişme işareti (id + son değişme zamanı). */
 function sipui_gorulen_satir(array $sev): string
 {
-    return '<span hidden data-sip-gor-id="' . (int)($sev['id'] ?? 0) . '" data-sip-gor-upd="' . h((string)($sev['degisti_at'] ?? '')) . '"></span>';
+    return '<span hidden data-sip-gor-id="' . (int)($sev['id'] ?? 0) . '" data-sip-gor-upd="' . h((string)($sev['degisti_at'] ?? '')) . '" data-sip-gor-yeni="' . h((string)($sev['olusturma_at'] ?? '')) . '"></span>';
 }
 
 /** v396 — sevkiyatın güncel PKL dosya adı (oluşturulan/yüklenen); parti no'nun ÜSTÜNDE. PKL yoksa boş. */
