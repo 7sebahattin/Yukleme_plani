@@ -107,6 +107,11 @@ if ($MOD !== 'test') {   // ── tarayıcı fixture'ı ──
     kalem($db, $uc3, ['kalibre' => '12', 'sira' => 2, 'urun' => 'Nar', 'aciklama' => 'Pomegranate 12 PC', 'po_palet' => 4, 'etkin_palet' => 4, 'etkin_koli' => 740]);
     kalem($db, $uc3, ['kalibre' => '10', 'sira' => 3, 'urun' => 'NAR', 'aciklama' => 'Pomegranate 10 PC', 'po_palet' => 4, 'etkin_palet' => 4, 'etkin_koli' => 740]);
     if ($MOD === 'wp') {
+        // v425: kartın "Boşaltma adresi" notu için PO bağı (sentetik)
+        $poW = ['loadings' => [['order_ref' => 'TC900101.10', 'items' => [['pcs_per_box' => '14', 'locations' => [['name' => 'LIDL TESTSTADT', 'code' => '1001', 'role' => 'location', 'pallets' => 3]]]]]],
+                'unloading_locations' => [['name' => 'LIDL TESTSTADT', 'code' => '1001', 'address' => 'Teststrasse 1 12345 Teststadt']]];
+        $db->exec("INSERT INTO siparis_belgeler (tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime, boyut, parse_json) VALUES ('po','yukleme','islendi','" . str_repeat('d', 64) . "','x425w','po.pdf','application/pdf',1," . $db->quote(json_encode($poW)) . ")");
+        $db->exec('UPDATE siparis_sevkiyatlar SET po_belge_id = ' . (int)$db->lastInsertId() . " WHERE id = {$ID['gecmis']}");
         echo json_encode(siparis_wp_veri(siparis_wp_oku($db, $ID['gecmis']), ['parti_yetki' => true]), JSON_UNESCAPED_UNICODE);
         exit(0);
     }
@@ -254,7 +259,7 @@ ok('bolum=evrak → yalnız evrak bekleyen (mail_gonderildi) satır, kapsam evra
 ok('durum=evrak_bekleyen + bolum=evrak → aynı küme', array_column(siparis_yazdir_oku($db, $F(['durum' => 'evrak_bekleyen']), 'evrak')['rows'], 'id') === array_column($oe['rows'], 'id'));
 $ve = siparis_yazdir_veri($oe, array_merge($ctx, ['baslik' => siparis_yazdir_baslik($F(), 'evrak')]));
 ok('evrak: geçmiş tarih olsa da gecmis=false, ✓ YOK; başlık / dosya', $ve['satirlar'][0]['gecmis'] === false && !str_contains($ve['satirlar'][0]['h'][0], '✓') && $ve['satirlar'][0]['h'][0] === sipui_tarih($dun) && $ve['gecmis_say'] === 0
-    && $ve['baslik'] === 'Evrak Takımı Bekleyen Sevkiyatlar' && $ve['dosya'] === 'Evrak-Bekleyen-Sevkiyatlar-19.10.2026' && $ve['kapsam'] === 'evrak');
+    && $ve['baslik'] === 'Gümrük Yapılmamış Sevkiyat Bilgileri' && $ve['dosya'] === 'Gumruk-Yapilmamis-Sevkiyatlar-19.10.2026' && $ve['kapsam'] === 'evrak');
 $kap2 = sev($db, ['order_ref' => 'TC900112.10', 'yukleme_tarihi' => $eski, 'durum' => 'iptal', 'toplam_palet' => 1]);
 $kap3 = sev($db, ['order_ref' => 'TC900113.10', 'yukleme_tarihi' => $dun, 'durum' => 'evrak_gonderildi', 'toplam_palet' => 2]);
 $ok3 = siparis_yazdir_oku($db, $F(), 'kapali');
@@ -274,7 +279,7 @@ $oa = siparis_yazdir_oku($db, $F(['durum' => 'arac_bekleyen']));
 ok('durum=arac_bekleyen → siparis_alindi + hazirlik', $oa['kapsam'] === 'tek' && array_map('intval', array_column($oa['rows'], 'id')) === [$ID['eski'], $ID['bos_tarih']]);
 $vt = siparis_yazdir_veri($ot, array_merge($ctx, ['baslik' => siparis_yazdir_baslik($F(['durum' => 'yola_cikti']))]));
 ok('tek kapsam başlığı "Sevkiyatlar — <etiket>", dosya "Sevkiyatlar-"; bölüm başlıkları', $vt['baslik'] === 'Sevkiyatlar — ' . siparis_durumlar()['yola_cikti']['etiket'] && str_starts_with($vt['dosya'], 'Sevkiyatlar-') && $vt['kapsam'] === 'tek' && siparis_yazdir_baslik($F(['durum' => 'arac_bekleyen'])) === 'Sevkiyatlar — Araç bekleyen'
-    && siparis_yazdir_baslik($F()) === 'İşlem Bekleyen Sevkiyatlar' && siparis_yazdir_baslik($F(), 'evrak') === 'Evrak Takımı Bekleyen Sevkiyatlar' && siparis_yazdir_baslik($F(), 'kapali') === 'Kapanan Sevkiyatlar');
+    && siparis_yazdir_baslik($F()) === 'İşlem Bekleyen Sevkiyatlar' && siparis_yazdir_baslik($F(), 'evrak') === 'Gümrük Yapılmamış Sevkiyat Bilgileri' && siparis_yazdir_baslik($F(), 'kapali') === 'Kapanan Sevkiyatlar');
 $oq = siparis_yazdir_oku($db, $F(['q' => 'TC9001', 'tarih_bas' => $dun, 'alici' => '1038529']));
 ok('arama + tarih + alıcı filtresi ekranla aynı süzer', array_map('intval', array_column($oq['rows'], 'id')) === [$ID['gecmis']]);
 rol($ADMIN, false, 1, ['DEPO1']);
@@ -333,6 +338,37 @@ ok('siparis_wp_palet_koli biçimleri', siparis_wp_palet_koli(3, 450) === '3 / 45
     && siparis_wp_palet_koli(null, 40) === '— / 40' && siparis_wp_palet_koli(1234, 56789) === '1.234 / 56.789' && siparis_wp_palet_koli(0, 0) === '0 / 0');
 ok('siparis_wp_dosya_adi: yalnız güvenli karakter, boş / noktalama → sevkiyat-<id>', preg_match('/^WP-[A-Za-z0-9._-]+$/', siparis_wp_dosya_adi('TC 9/01..10 ', 5)) === 1 && siparis_wp_dosya_adi('', 5) === 'WP-sevkiyat-5' && siparis_wp_dosya_adi('///', 7) === 'WP-sevkiyat-7');
 
+echo "\n=== 6c. WP Paylaş — Boşaltma adresi notu (v425) ===\n";
+$poF = ['loadings' => [[
+    'order_ref' => 'TC900101.10',
+    'items' => [
+        ['pcs_per_box' => '14', 'locations' => [
+            ['name' => 'LIDL TESTSTADT', 'code' => '1001', 'role' => 'location', 'pallets' => 3],
+            ['name' => 'LIDL BEISPIEL', 'code' => '1002', 'role' => 'location', 'pallets' => 0],
+            ['name' => 'TOTAL', 'code' => '', 'role' => 'total', 'pallets' => 3]]],
+        ['pcs_per_box' => '12', 'locations' => [['name' => 'LIDL DIGER', 'code' => '1003', 'role' => 'location', 'pallets' => 2]]],
+    ]], [
+    'order_ref' => 'TC900999.10',
+    'items' => [['pcs_per_box' => '14', 'locations' => [['name' => 'LIDL BASKA', 'code' => '1004', 'role' => 'location', 'pallets' => 5]]]],
+]], 'unloading_locations' => [
+    ['name' => 'LIDL TESTSTADT', 'code' => '1001', 'address' => "Teststrasse 1\n  12345 Teststadt"],
+    ['name' => 'LIDL BASKA', 'code' => '1004', 'address' => 'Baska Weg 9'],
+    ['name' => 'LIDL ALAKASIZ', 'code' => '1005', 'address' => 'Alakasiz Weg 3']]];
+$kal14 = [['kalibre' => '14', 'urun' => 'Test', 'etkin_palet' => 3, 'etkin_koli' => 100]];
+$ad = siparis_wp_adres_coz($poF, 'TC900101.10', $kal14);
+ok('yalnız bu siparişin, palet>0, görünen kalibredeki nokta; numara + tam adres (boşluklar tekleşir)', $ad === [['ad' => 'LIDL TESTSTADT', 'kod' => '1001', 'adres' => 'Teststrasse 1 12345 Teststadt']], json_encode($ad, JSON_UNESCAPED_UNICODE));
+$ad2 = siparis_wp_adres_coz($poF, 'TC900101.10', [['kalibre' => '14', 'etkin_palet' => 3], ['kalibre' => '12', 'etkin_palet' => 2]]);
+ok('iki kalibre: PO sırasıyla iki nokta; adresi listede olmayan noktada yalnız ad+kod; başka sipariş / alakasız adres YOK', array_column($ad2, 'ad') === ['LIDL TESTSTADT', 'LIDL DIGER'] && $ad2[1]['adres'] === ''
+    && !str_contains(json_encode($ad2), 'BASKA') && !str_contains(json_encode($ad2), 'ALAKASIZ'));
+ok('eşleşmeyen order ref / loadings yok → boş', siparis_wp_adres_coz($poF, 'TC000.10', $kal14) === [] && siparis_wp_adres_coz([], 'TC900101.10', $kal14) === [] && siparis_wp_adres_coz($poF, '', $kal14) === []);
+$db->exec("INSERT INTO siparis_belgeler (tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime, boyut, parse_json) VALUES ('po','yukleme','islendi','" . str_repeat('c', 64) . "','x425','po.pdf','application/pdf',1," . $db->quote(json_encode($poF)) . ")");
+$poBid = (int)$db->lastInsertId();
+$db->exec("UPDATE siparis_sevkiyatlar SET po_belge_id = {$poBid} WHERE id = {$ID['gecmis']}");
+$vA = siparis_wp_veri(siparis_wp_oku($db, $ID['gecmis']), ['parti_yetki' => true]);
+ok('uçtan uca: sevkiyat → po_belge_id → kart verisi "Boşaltma adresi" + adresler', $vA['adres_baslik'] === 'Boşaltma adresi' && $vA['adresler'] === [['ad' => 'LIDL TESTSTADT', 'kod' => '1001', 'adres' => 'Teststrasse 1 12345 Teststadt']], json_encode($vA['adresler'], JSON_UNESCAPED_UNICODE));
+ok('PO bağı olmayan sevkiyatta adresler boş', siparis_wp_veri(siparis_wp_oku($db, $ID['bugun']), ['parti_yetki' => true])['adresler'] === []);
+$db->exec("UPDATE siparis_sevkiyatlar SET po_belge_id = NULL WHERE id = {$ID['gecmis']}");
+
 echo "\n=== 7. Şoför kolonları kuruldu ===\n";
 siparis_sofor_migrate($db);
 $db->exec("UPDATE siparis_sevkiyatlar SET sofor_adi = 'Test Sürücü Bir', sofor_telefon = '+90 532 000 00 01' WHERE id = {$ID['gecmis']}");
@@ -390,7 +426,7 @@ $r = uc('siparis_yazdir.php', ['durum' => 'evrak_bekleyen']);
 ok('durum=evrak_bekleyen (bolum=acik) → 400 + kapsam_yok; 400\'lerde audit yazılmadı', $r['kod'] === 400 && ($r['json']['kod'] ?? '') === 'kapsam_yok' && (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_yazdir'")->fetchColumn() === $n1);
 $r = uc('siparis_yazdir.php', ['durum' => 'evrak_bekleyen', 'bolum' => 'evrak', 'amac' => 'resim']);
 $sonAud = fn() => json_decode((string)$db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_yazdir' ORDER BY id DESC LIMIT 1")->fetchColumn(), true);
-ok('v403 bolum=evrak → 200, kapsam evrak, yalnız TC900110; amac=resim kabul (audit amac resim, kapsam evrak)', $r['kod'] === 200 && ($r['json']['kapsam'] ?? '') === 'evrak' && array_column(array_column($r['json']['satirlar'], 'h'), 2) === ['TC900110.10'] && $r['json']['baslik'] === 'Evrak Takımı Bekleyen Sevkiyatlar'
+ok('v403 bolum=evrak → 200, kapsam evrak, yalnız TC900110; amac=resim kabul (audit amac resim, kapsam evrak)', $r['kod'] === 200 && ($r['json']['kapsam'] ?? '') === 'evrak' && array_column(array_column($r['json']['satirlar'], 'h'), 2) === ['TC900110.10'] && $r['json']['baslik'] === 'Gümrük Yapılmamış Sevkiyat Bilgileri'
     && $sonAud() === ['adet' => 1, 'amac' => 'resim', 'kapsam' => 'evrak', 'kesildi' => 0, 'arama' => 0]);
 $r = uc('siparis_yazdir.php', ['bolum' => 'kapali']);
 ok('v403 bolum=kapali → 200, kapsam kapali, TC900105 var, açık satır yok, ✓ yok', $r['kod'] === 200 && ($r['json']['kapsam'] ?? '') === 'kapali' && in_array('TC900105.10', array_column(array_column($r['json']['satirlar'], 'h'), 2), true) && !in_array('TC900101.10', array_column(array_column($r['json']['satirlar'], 'h'), 2), true)

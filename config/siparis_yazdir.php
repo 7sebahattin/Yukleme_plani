@@ -147,7 +147,7 @@ function siparis_yazdir_bolumler(): array
     $artan = 's.yukleme_tarihi IS NULL, s.yukleme_tarihi, s.id';
     return [
         'acik'   => ['baslik' => 'İşlem Bekleyen Sevkiyatlar',        'dosya' => 'Islem-Bekleyen-Sevkiyatlar-', 'bayrak' => 'bolumAcik',   'sql' => 'acikSql',   'sira' => $artan],
-        'evrak'  => ['baslik' => 'Evrak Takımı Bekleyen Sevkiyatlar', 'dosya' => 'Evrak-Bekleyen-Sevkiyatlar-', 'bayrak' => 'bolumEvrak',  'sql' => 'evrakSql',  'sira' => $artan],
+        'evrak'  => ['baslik' => 'Gümrük Yapılmamış Sevkiyat Bilgileri', 'dosya' => 'Gumruk-Yapilmamis-Sevkiyatlar-', 'bayrak' => 'bolumEvrak',  'sql' => 'evrakSql',  'sira' => $artan],
         'kapali' => ['baslik' => 'Kapanan Sevkiyatlar',               'dosya' => 'Kapanan-Sevkiyatlar-',        'bayrak' => 'bolumKapali', 'sql' => 'kapaliSql', 'sira' => 's.yukleme_tarihi DESC, s.id DESC'],
     ];
 }
