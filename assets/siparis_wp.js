@@ -42,10 +42,11 @@
     '.swp-kart th{font-weight:700;color:#b45309;font-size:15px}' +
     '.swp-kart td{font-weight:500;color:#111827;font-size:16px}' +
     '.swp-alan th{width:150px;padding-right:12px}' +
+    '.swp-alan tr[data-k="parti"] td{font-weight:700}' +
     '.swp-kalem{margin-top:14px!important}' +
     '.swp-kalem th,.swp-kalem td{padding-right:8px}' +
     '.swp-kalem thead th{color:#b45309;border-bottom:2px solid #b45309}' +
-    '.swp-kalem .swp-k2{width:70px}' +
+    '.swp-kalem .swp-k2{width:92px;padding-left:18px}' +
     '.swp-kalem .swp-k3{width:104px;text-align:right;padding-right:0;white-space:nowrap}' +
     '.swp-kalem tr.swp-toplam th,.swp-kalem tr.swp-toplam td{border-top:2px solid #b45309;border-bottom:0}' +
     '.swp-kalem tr.swp-toplam th{color:#b45309}.swp-kalem tr.swp-toplam td{font-weight:700;color:#111827}';
