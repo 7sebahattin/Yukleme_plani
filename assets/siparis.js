@@ -216,6 +216,35 @@
         else { var t = document.createElement('textarea'); t.value = m; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); bitti(); } catch (x) { /* yok say */ } document.body.removeChild(t); }
     });
 
+    /* ── mail metni düzenleme (v422) ────────────────────────
+       Penceredeki "Mail metni" kutusu mailto: bağlantısının body'sine ve .eml indirme bağlantısının ?govde= parametresine
+       yansır. JS kapalıysa sunucunun kurduğu varsayılan metin aynen gider. Kutu boşsa/ilk haline dönerse parametre eklenmez. */
+    document.addEventListener('input', function (e) {
+        var t = e.target.closest ? e.target.closest('textarea[data-sip-govde]') : null;
+        if (!t) return;
+        var kap = t.closest('.sip-mail-alici');
+        if (!kap) return;
+        var metin = t.value, ilk = t.getAttribute('data-sip-govde-ilk') || '', degisti = metin.trim() !== '' && metin !== ilk;
+        qa('a[data-sip-govde-mailto]', kap).forEach(function (a) {
+            var h = a.getAttribute('data-sip-mailto-baz');
+            if (h === null) { h = a.getAttribute('href').replace(/([?&])body=[^&]*$/, ''); a.setAttribute('data-sip-mailto-baz', h); }
+            a.setAttribute('href', h + (h.indexOf('?') < 0 ? '?' : '&') + 'body=' + encodeURIComponent((metin.trim() === '' ? ilk : metin).replace(/\r?\n/g, '\r\n')));
+        });
+        qa('a[data-sip-govde-eml]', kap).forEach(function (a) {
+            var h = a.getAttribute('data-sip-eml-baz');
+            if (h === null) { h = a.getAttribute('href'); a.setAttribute('data-sip-eml-baz', h); }
+            a.setAttribute('href', degisti ? h + '&govde=' + encodeURIComponent(metin) : h);
+        });
+    });
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-sip-govde-sifirla]') : null;
+        if (!b) return;
+        var kap = b.closest('.sip-mail-alici'), t = kap && q('textarea[data-sip-govde]', kap);
+        if (!t) return;
+        t.value = t.getAttribute('data-sip-govde-ilk') || '';
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
     /* ── PKL düzenleyici ────────────────────────────────── */
     function profilKopyala(modal) {
         var ana = document.getElementById('sipPklForm');

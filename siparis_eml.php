@@ -37,7 +37,8 @@ $pk = $pdo->prepare('SELECT dosya_adi FROM siparis_pkl WHERE sevkiyat_id = ?');
 $pk->execute([(int)$sev['id']]);
 $pklAd = (string)($pk->fetchColumn() ?: '');
 $taslak = siparis_evrak_mail_taslak(siparis_evrak_mail_ayar_oku($pdo)['kime'], siparis_po_pkl_epostalar($pdo, $sev), $pklAd, (string)$sev['order_ref'],
-    (string)($auth_user['display_name'] ?: $auth_user['username']));
+    (string)($auth_user['display_name'] ?: $auth_user['username']), siparis_pkl_mail_ayar_oku($pdo)['evrak_govde']);
+$taslak = siparis_mail_govde_uygula($taslak, isset($_GET['govde']) ? (string)$_GET['govde'] : null);   // v422: penceredeki düzenlenmiş metin
 $eml = siparis_evrak_eml($taslak);
 audit_log_event('siparis_evrak_eml', 'siparis', (int)$sev['id'], null, ['alici' => count($taslak['kime'])]);
 $emlAd = ($taslak['konu'] !== '' ? $taslak['konu'] : 'evrak-takimi') . '.eml';

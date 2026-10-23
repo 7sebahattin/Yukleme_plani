@@ -48,7 +48,8 @@ if (($_GET['eml'] ?? '') === '1') {
     if (!$pkl || (int)$pkl['dosya_belge_id'] !== (int)$b['id']) $metinHata(404, 'Bu belge sevkiyatın güncel PKL dosyası değil.');
     $pklAd = (string)($pkl['dosya_adi'] ?: $b['orijinal_ad']);
     $taslak = siparis_pkl_mail_taslak(siparis_po_pkl_epostalar($pdo, $sev), $pklAd, (string)$sev['order_ref'],
-        (string)($auth_user['display_name'] ?: $auth_user['username']));
+        (string)($auth_user['display_name'] ?: $auth_user['username']), siparis_pkl_mail_ayar_oku($pdo));
+    $taslak = siparis_mail_govde_uygula($taslak, isset($_GET['govde']) ? (string)$_GET['govde'] : null);   // v422: penceredeki düzenlenmiş metin
     if (!$taslak['kime']) $metinHata(409, "PO'da Packing List e-posta adresi yok; taslak kurulamadı.");
     $icerik = (string)file_get_contents($yol);
     $eml = siparis_pkl_eml($taslak, $pklAd, $icerik);

@@ -960,13 +960,49 @@ function siparis_po_pkl_epostalar(PDO $pdo, array $sev): array
     return $out;
 }
 
+/** Varsayılan mail metin şablonları ({ad} = gönderenin adı; boş ayar → bunlar). v422: Sipariş ayarlarından değiştirilebilir. */
+const SIPARIS_PKL_GOVDE_VARSAYILAN = "Hi,\nPlease find attached the packing list.\n\nBest regards,\nAsya Fresh\n{ad}";
+const SIPARIS_EVRAK_GOVDE_VARSAYILAN = "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh\n{ad}";
+const SIPARIS_MAIL_GOVDE_MAX = 2000;
+
+/**
+ * Serbest mail metnini temizler (saf): CR/CRLF → LF, denetim karakterleri (LF ve sekme hariç) atılır, sondaki boşluk kırpılır,
+ * en çok SIPARIS_MAIL_GOVDE_MAX karakter. Hem ayar şablonu hem kullanıcının penceredeki düzenlemesi (?govde=) buradan geçer.
+ */
+function siparis_mail_govde_temizle(string $s): string
+{
+    $s = str_replace(["\r\n", "\r"], "\n", $s);
+    $s = (string)preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/u', '', $s);
+    $s = rtrim($s);
+    return mb_strlen($s) > SIPARIS_MAIL_GOVDE_MAX ? rtrim(mb_substr($s, 0, SIPARIS_MAIL_GOVDE_MAX)) : $s;
+}
+
+/** Şablondan gövde: {ad} gönderenin adıyla dolar (satır sonu/denetim karakteri atılır); sondaki boş satırlar kırpılır. */
+function siparis_mail_govde_olustur(string $sablon, string $varsayilan, string $imzaAd): string
+{
+    $sablon = siparis_mail_govde_temizle($sablon);
+    if (trim($sablon) === '') $sablon = $varsayilan;
+    $ad = trim((string)preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $imzaAd));
+    return rtrim(str_replace('{ad}', $ad, $sablon));
+}
+
+/** Kullanıcının penceredeki düzenlemesi (ham ?govde=) varsa taslağın gövdesini onunla değiştirir; boş/yoksa taslak aynen kalır. */
+function siparis_mail_govde_uygula(array $t, ?string $ham): array
+{
+    $g = siparis_mail_govde_temizle((string)$ham);
+    if (trim($g) !== '') $t['govde'] = $g;
+    return $t;
+}
+
 /**
  * Mail taslağı (saf, DB yok). "packinglist…" ile başlayan adres(ler) Bilgi (CC), diğerleri Kime; Kime boş kalırsa hepsi Kime.
- * Konu = PKL dosya adı uzantısız (yoksa order ref). Gövde sabit İngilizce kalıp + imza ("Asya Fresh" + gönderenin adı).
+ * Konu = PKL dosya adı uzantısız (yoksa order ref). Gövde şablondan (varsayılan: sabit İngilizce kalıp + "Asya Fresh" + gönderenin adı).
+ * $ayar (v422, Sipariş ayarları): kime / bilgi = PO adreslerine EKLENEN sabit adresler (PO adresi korunur, tekil), govde = şablon.
  * Konu/imzadaki satır sonu ve denetim karakterleri atılır (başlık enjeksiyonu yok).
- * @param list<string> $epostalar @return array{kime:list<string>,bilgi:list<string>,konu:string,govde:string}
+ * @param list<string> $epostalar @param array{kime?:list<string>,bilgi?:list<string>,govde?:string} $ayar
+ * @return array{kime:list<string>,bilgi:list<string>,konu:string,govde:string}
  */
-function siparis_pkl_mail_taslak(array $epostalar, string $pklAd, string $orderRef, string $imzaAd): array
+function siparis_pkl_mail_taslak(array $epostalar, string $pklAd, string $orderRef, string $imzaAd, array $ayar = []): array
 {
     $temiz = static fn(string $s): string => trim((string)preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $s));
     $kime = []; $bilgi = []; $gor = [];
@@ -978,10 +1014,22 @@ function siparis_pkl_mail_taslak(array $epostalar, string $pklAd, string $orderR
         $gor[$k] = true;
         if (str_starts_with($k, 'packinglist')) $bilgi[] = $e; else $kime[] = $e;
     }
+    $ek = ['kime' => [], 'bilgi' => []];
+    foreach (['kime', 'bilgi'] as $rol) {
+        foreach ((array)($ayar[$rol] ?? []) as $e) {
+            $e = trim((string)$e);
+            if ($e === '' || filter_var($e, FILTER_VALIDATE_EMAIL) === false) continue;
+            $k = strtolower($e);
+            if (isset($gor[$k])) continue;
+            $gor[$k] = true;
+            $ek[$rol][] = $e;
+        }
+    }
+    $kime = array_merge($kime, $ek['kime']);
+    $bilgi = array_merge($bilgi, $ek['bilgi']);
     if (!$kime) { $kime = $bilgi; $bilgi = []; }
     $konu = $temiz($pklAd !== '' ? (string)preg_replace('/\.xlsx?$/i', '', $pklAd) : $orderRef);
-    $ad = $temiz($imzaAd);
-    $govde = "Hi,\nPlease find attached the packing list.\n\nBest regards,\nAsya Fresh" . ($ad !== '' ? "\n" . $ad : '');
+    $govde = siparis_mail_govde_olustur((string)($ayar['govde'] ?? ''), SIPARIS_PKL_GOVDE_VARSAYILAN, $imzaAd);
     return ['kime' => $kime, 'bilgi' => $bilgi, 'konu' => $konu, 'govde' => $govde];
 }
 
@@ -1108,9 +1156,10 @@ function siparis_evrak_mail_ayar_kaydet(PDO $pdo, string|array $girdi, int $uid)
  * Evrak takımı mail taslağı (saf, DB yok). Kime = ayar adresleri önce, sonra PO'daki "packinglist…" OLMAYAN adresler
  * (packinglist adresi HİÇ girmez — PKL taslağındaki "Kime boşsa CC Kime'ye geçer" kuralı burada YOK); büyük/küçük harf
  * duyarsız tekil; geçersiz atlanır. Konu = PKL taslağıyla AYNI (siparis_pkl_mail_taslak). Bilgi her zaman boş.
+ * $govdeSablon (v422, Sipariş ayarları): boşsa varsayılan metin.
  * @return array{kime:list<string>,bilgi:list<string>,konu:string,govde:string}
  */
-function siparis_evrak_mail_taslak(array $ayarKime, array $poEpostalar, string $pklAd, string $orderRef, string $imzaAd): array
+function siparis_evrak_mail_taslak(array $ayarKime, array $poEpostalar, string $pklAd, string $orderRef, string $imzaAd, string $govdeSablon = ''): array
 {
     $kime = []; $gor = [];
     foreach (array_merge(array_values($ayarKime), array_values($poEpostalar)) as $i => $e) {
@@ -1122,8 +1171,7 @@ function siparis_evrak_mail_taslak(array $ayarKime, array $poEpostalar, string $
         $kime[] = $e;
     }
     $konu = siparis_pkl_mail_taslak([], $pklAd, $orderRef, '')['konu'];
-    $ad = trim((string)preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $imzaAd));
-    $govde = "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh" . ($ad !== '' ? "\n" . $ad : '');
+    $govde = siparis_mail_govde_olustur($govdeSablon, SIPARIS_EVRAK_GOVDE_VARSAYILAN, $imzaAd);
     return ['kime' => $kime, 'bilgi' => [], 'konu' => $konu, 'govde' => $govde];
 }
 
@@ -1143,4 +1191,77 @@ function siparis_evrak_eml(array $t, ?int $zaman = null): string
     $b[] = rtrim(chunk_split(base64_encode(str_replace("\n", "\r\n", (string)$t['govde'])), 76, "\r\n"));
     $b[] = '';
     return implode("\r\n", $b);
+}
+
+// ── PKL MAİL AYARI + MAİL METİNLERİ (v422) ──────────────────────────────
+// Sipariş ayarları › "PKL mail ayarları": PKL taslağında PO adreslerine EKLENEN sabit Kime / Bilgi (CC) adresleri ve iki mail
+// metni şablonu (PKL + evrak takımı; {ad} = gönderenin adı, boş = varsayılan). hks_kv 'siparis_pkl_mail_ayar' (şemasız); adresler
+// repoya GİRMEZ; audit yalnız SAYI/bayrak yazar. Evrak Kime ayarı (siparis_evrak_mail_ayar) AYRI kalır.
+
+const SIPARIS_PKL_MAIL_KV = 'siparis_pkl_mail_ayar';
+
+/** @return list<string> küçük harf, sıra korunarak tekil, geçerli e-postalar (en çok SIPARIS_EVRAK_MAIL_MAX) */
+function siparis_mail_adres_oku(mixed $liste): array
+{
+    $l = [];
+    foreach ((array)$liste as $a) {
+        $a = strtolower(trim((string)$a));
+        if ($a !== '' && filter_var($a, FILTER_VALIDATE_EMAIL) !== false) $l[$a] = true;
+    }
+    return array_slice(array_keys($l), 0, SIPARIS_EVRAK_MAIL_MAX);
+}
+
+/** @return array{kime:list<string>,bilgi:list<string>,govde:string,evrak_govde:string} — tablo yok / bozuk JSON → boş (fail soft). */
+function siparis_pkl_mail_ayar_oku(PDO $pdo): array
+{
+    $bos = ['kime' => [], 'bilgi' => [], 'govde' => '', 'evrak_govde' => ''];
+    try {
+        $st = $pdo->prepare('SELECT deger FROM `' . siparis_evrak_mail_kv_tablo() . '` WHERE anahtar = ?');
+        $st->execute([SIPARIS_PKL_MAIL_KV]);
+        $j = json_decode((string)($st->fetchColumn() ?: ''), true);
+    } catch (Throwable $e) {
+        return $bos;
+    }
+    if (!is_array($j)) return $bos;
+    return ['kime' => siparis_mail_adres_oku($j['kime'] ?? []), 'bilgi' => siparis_mail_adres_oku($j['bilgi'] ?? []),
+            'govde' => siparis_mail_govde_temizle((string)($j['govde'] ?? '')), 'evrak_govde' => siparis_mail_govde_temizle((string)($j['evrak_govde'] ?? ''))];
+}
+
+/**
+ * Doğrular ve yazar. Adresler: satır / virgül / noktalı virgül / boşluk ayrımlı metin ya da dizi; geçersiz e-posta ve
+ * her listede > 10 adres REDDEDİLİR; metin şablonu > SIPARIS_MAIL_GOVDE_MAX karakter REDDEDİLİR; boş = temizle (varsayılan).
+ * @param array{kime?:string|array,bilgi?:string|array,govde?:string,evrak_govde?:string} $girdi @return array{ok:bool,hata?:string}
+ */
+function siparis_pkl_mail_ayar_kaydet(PDO $pdo, array $girdi, int $uid): array
+{
+    if (!siparis_evrak_mail_kv_hazir($pdo)) return ['ok' => false, 'hata' => 'Ayar tablosu (hks_kv) yok; PKL mail ayarları kaydedilemedi.'];
+    $ayar = [];
+    foreach (['kime' => 'Kime', 'bilgi' => 'Bilgi (CC)'] as $k => $etk) {
+        $g = $girdi[$k] ?? '';
+        $parca = is_array($g) ? array_map('strval', $g) : (preg_split('/[\s,;]+/u', (string)$g) ?: []);
+        $l = [];
+        foreach ($parca as $a) {
+            $a = strtolower(trim($a));
+            if ($a === '') continue;
+            if (strlen($a) > 255 || filter_var($a, FILTER_VALIDATE_EMAIL) === false) return ['ok' => false, 'hata' => 'Geçersiz e-posta adresi (' . $etk . '): ' . siparis_kirp($a, 60)];
+            $l[$a] = true;
+        }
+        if (count($l) > SIPARIS_EVRAK_MAIL_MAX) return ['ok' => false, 'hata' => $etk . ' için en çok ' . SIPARIS_EVRAK_MAIL_MAX . ' adres girilebilir.'];
+        $ayar[$k] = array_keys($l);
+    }
+    foreach (['govde' => 'PKL mail metni', 'evrak_govde' => 'Evrak takımı mail metni'] as $k => $etk) {
+        $ham = str_replace(["\r\n", "\r"], "\n", (string)($girdi[$k] ?? ''));
+        if (mb_strlen(rtrim($ham)) > SIPARIS_MAIL_GOVDE_MAX) return ['ok' => false, 'hata' => $etk . ' en çok ' . SIPARIS_MAIL_GOVDE_MAX . ' karakter olabilir.'];
+        $ayar[$k] = siparis_mail_govde_temizle($ham);
+    }
+    try {
+        $pdo->prepare('REPLACE INTO `' . siparis_evrak_mail_kv_tablo() . '` (anahtar, deger) VALUES (?, ?)')
+            ->execute([SIPARIS_PKL_MAIL_KV, siparis_json($ayar)]);
+    } catch (Throwable $e) {
+        error_log('[siparis_pkl] PKL mail ayarı yazılamadı: ' . get_class($e));
+        return ['ok' => false, 'hata' => 'Ayar kaydedilemedi (hks_kv tablosu yazılamadı).'];
+    }
+    siparis_audit('siparis_pkl_mail_ayar', null, null, ['kime_sayisi' => count($ayar['kime']), 'bilgi_sayisi' => count($ayar['bilgi']),
+        'pkl_metin' => $ayar['govde'] !== '', 'evrak_metin' => $ayar['evrak_govde'] !== ''], $uid);
+    return ['ok' => true];
 }

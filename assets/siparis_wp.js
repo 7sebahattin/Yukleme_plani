@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var KART_W = 440, OLCEK = 2;
+  var KART_W = 480, OLCEK = 2;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -33,7 +33,7 @@
   // Kart stili: sayfa temasından BAĞIMSIZ, her renk açık değer (koyu temada global th/td kuralları sızmasın).
   // Etiket = th (700, turuncu #b45309), veri = td (500, #111827) — v410. gap / inset / grid YOK (html2canvas).
   var CSS =
-    '.swp-kart{box-sizing:border-box;width:440px;margin:0;padding:18px 20px 16px;background:#ffffff;color:#111827;' +
+    '.swp-kart{box-sizing:border-box;width:480px;margin:0;padding:18px 20px 16px;background:#ffffff;color:#111827;' +
     'font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.35;' +
     'border-top:6px solid #b45309;text-align:left;-webkit-font-smoothing:antialiased}' +
     '.swp-kart table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0;background:#ffffff}' +
@@ -47,6 +47,7 @@
     '.swp-kalem th,.swp-kalem td{padding-right:8px}' +
     '.swp-kalem thead th{color:#b45309;border-bottom:2px solid #b45309}' +
     '.swp-kalem .swp-k2{width:92px;padding-left:18px}' +
+    '.swp-kalem .swp-kpf{width:52px;text-align:center;padding-right:0;white-space:nowrap}' +
     '.swp-kalem .swp-k3{width:104px;text-align:right;padding-right:0;white-space:nowrap}' +
     '.swp-kalem tr.swp-toplam th,.swp-kalem tr.swp-toplam td{border-top:2px solid #b45309;border-bottom:0}' +
     '.swp-kalem tr.swp-toplam th{color:#b45309}.swp-kalem tr.swp-toplam td{font-weight:700;color:#111827}';
@@ -58,11 +59,11 @@
       o += '<tr data-k="' + esc(f.k) + '"><th>' + esc(f.etiket) + '</th><td>' + esc(f.deger) + '</td></tr>';
     });
     o += '</tbody></table><table class="swp-kalem"><thead><tr><th>' + esc(v.kalem_basliklar[0]) + '</th><th class="swp-k2">' +
-      esc(v.kalem_basliklar[1]) + '</th><th class="swp-k3">' + esc(v.kalem_basliklar[2]) + '</th></tr></thead><tbody>';
+      esc(v.kalem_basliklar[1]) + '</th><th class="swp-kpf">' + esc(v.kalem_basliklar[2]) + '</th><th class="swp-k3">' + esc(v.kalem_basliklar[3]) + '</th></tr></thead><tbody>';
     v.kalemler.forEach(function (k) {
-      o += '<tr><td>' + esc(k.urun) + '</td><td class="swp-k2">' + esc(k.kalibre) + '</td><td class="swp-k3">' + esc(k.palet_koli) + '</td></tr>';
+      o += '<tr><td>' + esc(k.urun) + '</td><td class="swp-k2">' + esc(k.kalibre) + '</td><td class="swp-kpf">' + esc(k.pf) + '</td><td class="swp-k3">' + esc(k.palet_koli) + '</td></tr>';
     });
-    o += '<tr class="swp-toplam"><th>' + esc(v.toplam.etiket) + '</th><td class="swp-k2"></td><td class="swp-k3">' + esc(v.toplam.palet_koli) + '</td></tr>';
+    o += '<tr class="swp-toplam"><th>' + esc(v.toplam.etiket) + '</th><td class="swp-k2"></td><td class="swp-kpf"></td><td class="swp-k3">' + esc(v.toplam.palet_koli) + '</td></tr>';
     o += '</tbody></table></div>';
     return o;
   }

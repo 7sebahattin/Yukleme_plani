@@ -333,6 +333,8 @@ tr.row-link { cursor: pointer; }
 .sip-mail-konu { font-size: .88rem; overflow-wrap: anywhere; }
 .sip-mail-eylem { display: flex; gap: 6px; flex-wrap: wrap; }
 .sip-mail-ipucu { margin: 0; font-size: .8rem; }
+.sip-mail-metin { display: block; font-size: .85rem; }
+.sip-mail-metin textarea { width: 100%; margin-top: 4px; font: inherit; font-size: .9rem; line-height: 1.4; resize: vertical; min-height: 7em; }
 .sip-alan-footer { display: flex; }
 .sip-sira-ilk { order: 1; } .sip-sira-orta { order: 2; } .sip-sira-son { order: 3; }
 .sip-alan-footer .sip-sira-ilk { margin-right: auto; }
