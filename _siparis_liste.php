@@ -37,8 +37,8 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
           <a class="sip-ref" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?></a>
           <?= sipui_tur_html($r, $sec_parti) ?>
           <?php if ($__uy > 0): ?>
-            <a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>"
-               title="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a>
+            <span class="sip-uy-kap"><a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>" data-sip-balon
+               aria-label="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a><?= sipui_uyari_balon_html($r, $sec_uy ?? []) ?></span>
           <?php endif; ?>
           <?php if (!empty($r['eksik_okuma'])): ?><a class="sip-eksik" href="siparis_view.php?id=<?= $__id ?>#uyarilar" title="PO eksik okunmuş olabilir — kalemleri kontrol edin">⛔ PO eksik okunmuş</a><?php endif; ?>
           <?= sipui_gorulen_satir($r) ?>

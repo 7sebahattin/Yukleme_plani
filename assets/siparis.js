@@ -216,6 +216,53 @@
         else { var t = document.createElement('textarea'); t.value = m; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); bitti(); } catch (x) { /* yok say */ } document.body.removeChild(t); }
     });
 
+    /* ── uyarı / çatışma baloncuğu (v424) ───────────────────
+       Listede "⚠ N uyarı/çatışma" rozetinin üzerinde fare bekleyince (yalnız fareli cihaz) metinler baloncukta açılır; içeri girmeye
+       gerek kalmaz. Veri rozetin yanındaki gizli .sip-balon-veri'de (sunucu h() ile kaçırır), baloncuğa textContent ile basılır.
+       position:fixed → .table-wrap taşma kırpması etkilemez. Tıklama eskisi gibi sevkiyat sayfasına götürür. */
+    (function () {
+      var fareli = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      if (!fareli) return;
+      var balon = null, zaman = null, hedef = null;
+      function kapat() { clearTimeout(zaman); zaman = null; hedef = null; if (balon) balon.hidden = true; }
+      function ac(a) {
+        var v = a.nextElementSibling;
+        if (!v || !v.classList.contains('sip-balon-veri')) return;
+        if (!balon) {
+          balon = document.createElement('div');
+          balon.className = 'sip-balon'; balon.setAttribute('role', 'tooltip'); balon.hidden = true;
+          document.body.appendChild(balon);
+        }
+        balon.textContent = '';
+        qa('[data-baslik]', v).forEach(function (g) {
+          var b = document.createElement('div'); b.className = 'sip-balon-baslik'; b.textContent = g.getAttribute('data-baslik'); balon.appendChild(b);
+          var ul = document.createElement('ul');
+          qa('[data-satir]', g).forEach(function (sa) { var li = document.createElement('li'); li.textContent = sa.textContent; ul.appendChild(li); });
+          balon.appendChild(ul);
+        });
+        balon.hidden = false;
+        var r = a.getBoundingClientRect(), bw = balon.offsetWidth, bh = balon.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
+        var sol = Math.max(8, Math.min(r.left, vw - bw - 8));
+        var ust = r.bottom + 6; if (ust + bh > vh - 8 && r.top - bh - 6 > 8) ust = r.top - bh - 6;
+        balon.style.left = sol + 'px'; balon.style.top = Math.max(8, ust) + 'px';
+      }
+      document.addEventListener('mouseover', function (e) {
+        var a = e.target.closest ? e.target.closest('[data-sip-balon]') : null;
+        if (!a || a === hedef) return;
+        kapat(); hedef = a;
+        zaman = setTimeout(function () { if (hedef === a) ac(a); }, window.SIP_BALON_MS != null ? window.SIP_BALON_MS : 250);
+      });
+      document.addEventListener('mouseout', function (e) {
+        var a = e.target.closest ? e.target.closest('[data-sip-balon]') : null;
+        if (a && (!e.relatedTarget || !a.contains(e.relatedTarget))) kapat();
+      });
+      document.addEventListener('focusin', function (e) { var a = e.target.closest ? e.target.closest('[data-sip-balon]') : null; if (a) { kapat(); hedef = a; ac(a); } });
+      document.addEventListener('focusout', kapat);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') kapat(); });
+      window.addEventListener('scroll', kapat, true);
+      window.addEventListener('resize', kapat);
+    })();
+
     /* ── mail metni düzenleme (v422) ────────────────────────
        Penceredeki "Mail metni" kutusu mailto: bağlantısının body'sine ve .eml indirme bağlantısının ?govde= parametresine
        yansır. JS kapalıysa sunucunun kurduğu varsayılan metin aynen gider. Kutu boşsa/ilk haline dönerse parametre eklenmez. */
