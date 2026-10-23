@@ -746,3 +746,44 @@ html[data-theme="dark"] .sip-mod .sip-bolum-evrak > .sip-bolum-bas { border-bott
 .sip-table tbody > tr.sip-degisti.sip-urun-tr > td:only-child { box-shadow: inset 2px 0 0 var(--sip-degisti), inset -2px 0 0 var(--sip-degisti), inset 0 -2px 0 var(--sip-degisti); }
 .sip-card.sip-degisti { border-color: var(--sip-degisti); box-shadow: 0 0 0 2px var(--sip-degisti); }
 /* ==== /v402 ==== */
+
+/* ==== v420: ayraç çizgisi, neon YENİ rozeti, turuncu sorgu alanı, kapalı manuel yükleme ==== */
+.sip-mod { --sip-ayrac: #7d8ba3; --sip-sorgu-bg: #ffe2bd; --sip-sorgu-kart: #fff3e2; --sip-sorgu-kenar: #f0a04b; }
+html[data-theme="dark"] .sip-mod { --sip-ayrac: #55688a; --sip-sorgu-bg: #3b2410; --sip-sorgu-kart: #4a2e14; --sip-sorgu-kenar: #9a5f24; }
+/* iki sevkiyat arasında belirgin çizgi (ana satır + ürün alt satırı tek grup; çizgi grubun SON satırında) */
+.sip-table tbody > tr.sip-grup:not(.sip-ust) > td { border-bottom: 4px solid var(--sip-ayrac); }
+.sip-table tbody > tr.sip-grup:last-child > td { border-bottom: 0; }
+.sip-kartlar { gap: 14px; }
+.sip-mod .sip-card:not(.sip-degisti) { border-color: var(--sip-ayrac); }
+/* yeni gelen sevkiyat: yanıp sönen 3B neon "YENİ" (koyu hap üstünde → açık ve koyu temada okunur) */
+.sip-yeni { display: inline-block; margin-left: 8px; padding: 1px 9px 2px; border-radius: 6px; vertical-align: middle; background: #06180d; border: 1px solid #39ff14;
+  font-size: .8rem; font-weight: 900; letter-spacing: .14em; line-height: 1.3; text-decoration: none; color: #b8ffc9; white-space: nowrap;
+  text-shadow: 0 0 3px #39ff14, 0 0 8px #39ff14, 0 0 16px #00e676, 1px 1px 0 #0a8f33, 2px 2px 0 #066b25, 3px 3px 2px rgba(0, 0, 0, .55);
+  box-shadow: 0 0 6px #39ff14, 0 0 14px rgba(57, 255, 20, .55), inset 0 0 6px rgba(57, 255, 20, .35); animation: sipYeniNeon 1.1s ease-in-out infinite; }
+.sip-card-link .sip-yeni { position: relative; z-index: 1; }
+@keyframes sipYeniNeon {
+  0%, 100% { opacity: 1; filter: brightness(1.25); }
+  50% { opacity: .35; filter: brightness(.8); box-shadow: 0 0 2px #39ff14; }
+}
+@media (prefers-reduced-motion: reduce) { .sip-yeni { animation: none; } }
+/* "Mailden al" sorgu alanı: turuncu zemin; sonuç kartı da turuncu tonda; sorgu düğmeleri renkli */
+.sip-yukle .sip-mail { background: var(--sip-sorgu-bg); border: 1px solid var(--sip-sorgu-kenar); border-radius: var(--radius); padding: 14px; margin: 0 0 14px; }
+.sip-yukle .sip-mail-sonuc-kart { background: var(--sip-sorgu-kart); border-color: var(--sip-sorgu-kenar); }
+.sip-yukle .sip-mail-chip { background: var(--card); }
+.sip-yukle .sip-mail-ilerleme { background: var(--sip-sorgu-kart); border-color: var(--sip-sorgu-kenar); }
+.sip-mail-btn--siparis, .sip-mail-btn--lojistik { color: #fff; border-color: transparent; font-weight: 700; }
+.sip-mail-btn--siparis { background: #2563eb; }
+.sip-mail-btn--siparis:hover:not(:disabled) { background: #1d4ed8; }
+.sip-mail-btn--lojistik { background: #15803d; }
+.sip-mail-btn--lojistik:hover:not(:disabled) { background: #166534; }
+/* manuel dosya yükleme: kapalı başlar, tıklayınca açılır */
+.sip-dosya-ac { margin: 0; }
+.sip-dosya-ozet { display: flex; align-items: center; gap: 6px 12px; min-height: 48px; padding: 10px 14px; cursor: pointer; list-style: none; flex-wrap: wrap;
+  border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-2); }
+.sip-dosya-ozet::-webkit-details-marker { display: none; }
+.sip-dosya-ozet::marker { content: ''; }
+.sip-dosya-baslik { font-weight: 700; }
+.sip-dosya-ipucu { color: var(--muted); font-size: .85rem; min-width: 0; overflow-wrap: anywhere; }
+.sip-dosya-ac[open] > .sip-dosya-ozet { margin-bottom: 10px; }
+details[open] > .sip-dosya-ozet .sip-yukle-ok { transform: rotate(90deg); }
+/* ==== /v420 ==== */

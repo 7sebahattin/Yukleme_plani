@@ -23,7 +23,7 @@ function siparis_wp_alanlari(): array
         ['k' => 'plaka',     'etiket' => 'Plakalar'],
         ['k' => 'sofor',     'etiket' => 'Şoför adı'],
         ['k' => 'tel',       'etiket' => 'Şoför telefonu'],
-        ['k' => 'gumruk',    'etiket' => 'Yurt içi gümrük'],
+        ['k' => 'gumruk',    'etiket' => 'Gümrük'],
         ['k' => 'ulke',      'etiket' => 'Alıcı Ülke'],
     ];
 }

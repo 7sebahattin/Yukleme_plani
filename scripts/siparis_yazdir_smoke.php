@@ -295,7 +295,7 @@ $w = siparis_wp_oku($db, $ID['gecmis']);
 ok('siparis_wp_oku: dizi, sofor=false, gumruk=false (kolonsuz SQL hatası yok)', is_array($w) && $w['sofor'] === false && $w['gumruk'] === false);
 $v = siparis_wp_veri($w, ['parti_yetki' => true]);
 ok('10 alan: anahtarlar ve etiketler sahibin sırasında', array_column($v['alanlar'], 'k') === ['parti', 'tarih', 'siparis', 'navlun', 'nakliyeci', 'plaka', 'sofor', 'tel', 'gumruk', 'ulke']
-    && array_column($v['alanlar'], 'etiket') === ['Parti No', 'Yükleme tarihi', 'Sipariş No', 'Navlun No', 'Nakliyeci', 'Plakalar', 'Şoför adı', 'Şoför telefonu', 'Yurt içi gümrük', 'Alıcı Ülke']);
+    && array_column($v['alanlar'], 'etiket') === ['Parti No', 'Yükleme tarihi', 'Sipariş No', 'Navlun No', 'Nakliyeci', 'Plakalar', 'Şoför adı', 'Şoför telefonu', 'Gümrük', 'Alıcı Ülke']);
 $dv = array_column($v['alanlar'], 'deger', 'k');
 ok('değerler: parti, tarih (✓ YOK), sipariş, navlun, gerçek nakliyeci/plaka (planlı DEĞİL), şoför/tel/gümrük "—"', $dv === ['parti' => 'P-61/225 / P-61/226', 'tarih' => sipui_tarih($dun), 'siparis' => 'TC900101.10', 'navlun' => '6100000101', 'nakliyeci' => 'Test Lojistik A',
     'plaka' => '34TST101-34TST201', 'sofor' => '—', 'tel' => '—', 'gumruk' => '—', 'ulke' => 'SIRBİSTAN'], json_encode($dv, JSON_UNESCAPED_UNICODE));

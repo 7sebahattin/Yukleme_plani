@@ -58,7 +58,8 @@
 
   // Rapor gövdesi (başlık + meta + anahtar + tablo + notlar) — yazdırma penceresi, PDF ve WP Resim yakalaması kullanır.
   // Sütunlar v.kolonlar'dan (değişken sayıda kalibre sütunu); toplam satırı her 'sayi' sütunu için v.toplam[k.k].
-  function raporHtml(v) {
+  // opt.adetsiz (WP Resim): kalibre başlıklarındaki " adet" eki atılır ("Kalibre 14 adet" → "Kalibre 14"); PDF/Yazdır aynı.
+  function raporHtml(v, opt) {
     var kol = v.kolonlar || [];
     var top = v.toplam || {};
     var dolu = function (x) { return x != null && x !== ''; };
@@ -73,7 +74,7 @@
     var sinifi = function (k) { return k.t === 'sayi' ? 'syz-s' : (NOWRAP[k.k] ? 'syz-nw' : ''); };
     var cg = kol.map(function (k) { var w = Number(k.w); return w > 0 ? '<col style="width:' + w + '%">' : '<col>'; }).join('');
     // Sayısal sütun başlığı (kalibre + toplam palet/kasa) ayrı sınıf taşır; CSS'i YALNIZ WP Resim'de (RESIM_YAZI) — PDF/Yazdır görünümü aynı.
-    var th = kol.map(function (k) { return (k.t === 'sayi' ? '<th class="syz-ts">' : '<th>') + esc(k.l) + '</th>'; }).join('');
+    var th = kol.map(function (k) { return (k.t === 'sayi' ? '<th class="syz-ts">' : '<th>') + esc(opt && opt.adetsiz ? String(k.l).replace(/\s+adet$/i, '') : k.l) + '</th>'; }).join('');
     var onceki = null;
     var tr = (v.satirlar || []).map(function (s, ri) {
       var sinif = [];
@@ -293,11 +294,12 @@
   // ── WP Resim ───────────────────────────────────────────────────────────────
   var RESIM_W = 1400, RESIM_OLCEK = 2, RESIM_MAX_Y = 16000;
   // WP resmi telefonda küçülerek açılır: yazı PDF/yazdırmadan belirgin büyük ve kalın (ince yazı okunmuyordu).
+  // v419: hücre içi veriler ortalı, kalibre başlığında "adet" yok.
   // v410: veri 500 (#1f2937), başlıklar renkli — lacivert zemin + beyaz; sayısal başlıklar koyu turuncu; toplam açık mavi.
   var RESIM_YAZI =
     '.syz-resim-tutucu .syz h2{font-size:22px}.syz-resim-tutucu .syz-meta,.syz-resim-tutucu .syz-anahtar,.syz-resim-tutucu .syz-not{font-size:14px;color:#000}' +
     '.syz-resim-tutucu .syz th,.syz-resim-tutucu .syz td{font-size:14px;padding:5px 4px;border-color:#555}.syz-resim-tutucu .syz .syz-nw{white-space:normal;overflow-wrap:anywhere}' +
-    '.syz-resim-tutucu .syz td{font-weight:500;color:#1f2937}' +
+    '.syz-resim-tutucu .syz td{font-weight:500;color:#1f2937;text-align:center;vertical-align:middle}' +
     '.syz-resim-tutucu .syz tr.syz-bugun>td:first-child{font-weight:700}' +
     '.syz-resim-tutucu .syz thead th{font-size:12.5px;font-weight:700;padding:5px 3px;background:#1e3a5f;color:#ffffff;border-color:#1e3a5f}' +
     '.syz-resim-tutucu .syz thead th.syz-ts{background:#b45309;color:#ffffff}' +
@@ -309,7 +311,7 @@
     tutucu.setAttribute('aria-hidden', 'true');
     // Temadan bağımsız beyaz zemin; iç boşluk resmin kenarında nefes payı bırakır.
     tutucu.style.cssText = 'position:fixed;left:-100000px;top:0;width:' + RESIM_W + 'px;background:#fff;z-index:-1;pointer-events:none';
-    tutucu.innerHTML = '<style>' + CSS + '.syz-resim-tutucu .syz{padding:16px;box-sizing:border-box;width:' + RESIM_W + 'px;font-size:14px;line-height:1.35;color:#000}' + RESIM_YAZI + '</style>' + raporHtml(v);
+    tutucu.innerHTML = '<style>' + CSS + '.syz-resim-tutucu .syz{padding:16px;box-sizing:border-box;width:' + RESIM_W + 'px;font-size:14px;line-height:1.35;color:#000}' + RESIM_YAZI + '</style>' + raporHtml(v, { adetsiz: true });
     document.body.appendChild(tutucu);
     try {
       if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* yok say */ } }
