@@ -713,6 +713,23 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             return { genis: son.length ? son.every(x => parseFloat(x) >= 3) : null, gap: kart ? getComputedStyle(kart).rowGap : null };
         });
         ok(`[${w}] v420 liste: sevkiyatlar arasında belirgin çizgi (≥3px) ve kartlar arası boşluk 14px`, (ay.genis === true || ay.genis === null) && ay.gap === '14px', JSON.stringify(ay));
+        // v424 — uyarı / çatışma rozetinin üzerinde fare bekleyince baloncuk (yalnız fareli masaüstü; mobilde açılmaz)
+        const rozet = page.locator('tr.sip-grup a[data-sip-balon]:visible').first();
+        if (!mobil && await rozet.count()) {
+            const dahaOnce = await page.evaluate(() => !!document.querySelector('.sip-balon:not([hidden])'));
+            await rozet.hover();
+            await page.waitForTimeout(700);
+            const bl = await page.evaluate(() => {
+                const b = document.querySelector('.sip-balon'); if (!b || b.hidden) return null;
+                const r = b.getBoundingClientRect(), a = Array.from(document.querySelectorAll('tr.sip-grup a[data-sip-balon]')).find(x => x.offsetParent !== null).getBoundingClientRect();
+                return { metin: b.textContent, li: b.querySelectorAll('li').length, baslik: b.querySelectorAll('.sip-balon-baslik').length, ekranIci: r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight,
+                    konum: getComputedStyle(b).position, altinda: r.top >= a.bottom - 1 || r.bottom <= a.top + 1, html: b.innerHTML.indexOf('<script') };
+            });
+            ok(`[${w}] v424 liste: rozet üzerinde fare bekleyince baloncuk açılır (fixed, ekran içinde, rozete binmez, ≥1 satır)`, !dahaOnce && bl && bl.konum === 'fixed' && bl.li >= 1 && bl.baslik >= 1 && bl.ekranIci && bl.altinda && bl.html === -1, JSON.stringify(bl));
+            await page.mouse.move(5, 5);
+            await page.waitForTimeout(200);
+            ok(`[${w}] v424 liste: fare ayrılınca baloncuk kapanır`, await page.evaluate(() => { const b = document.querySelector('.sip-balon'); return !b || b.hidden; }));
+        }
         ok(`[${w}] v402 liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
 

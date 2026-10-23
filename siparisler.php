@@ -86,6 +86,8 @@ if ($listeIds) {
     }
 }
 $partiHarita = siparis_beyan_parti_haritasi($pdo, $listeIds);
+// v424 — uyarı/çatışma rozetinin üzerine gelince açılan baloncuk metinleri (TEK sorgu ikisi; partial sorgu çalıştırmaz)
+$uyHarita = sipui_uyari_haritasi($pdo, $listeIds);
 // v396 — sevkiyatın güncel PKL dosya adı (liste parti no'nun üstünde gösterir; TEK sorgu, partial sorgu çalıştırmaz)
 $pklHarita = [];
 if ($listeIds) {
@@ -351,7 +353,7 @@ $yazdirEk = function (?string $bolumAdi): string {
   </form>
 
   <?php
-  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $pklHarita, $yazdirEk): void {
+  $bolumCiz = function (array $b, string $baslik, string $id, string $param, string $bos, string $ikon = '', string $not = '') use ($bolumBas, $sayfalama, $yaz, $sil, $kalemHarita, $partiHarita, $pklHarita, $uyHarita, $yazdirEk): void {
       $yb = ['sipSonuclar' => null, 'sipAcik' => 'acik', 'sipEvrak' => 'evrak', 'sipKapali' => 'kapali'];
       $ek = array_key_exists($id, $yb) && $b['rows'] ? $yazdirEk($yb[$id]) : '';
       $ton = ['sipAcik' => ' sip-bolum-acik', 'sipEvrak' => ' sip-bolum-evrak', 'sipKapali' => ' sip-bolum-kapali'][$id] ?? '';
@@ -359,7 +361,7 @@ $yazdirEk = function (?string $bolumAdi): string {
       if (!$b['rows']) {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
       } else {
-          $sec_rows = $b['rows']; $sec_kalem = $kalemHarita; $sec_parti = $partiHarita; $sec_pkl = $pklHarita;
+          $sec_rows = $b['rows']; $sec_kalem = $kalemHarita; $sec_parti = $partiHarita; $sec_pkl = $pklHarita; $sec_uy = $uyHarita;
           include __DIR__ . '/_siparis_liste.php';
           echo $sayfalama($b, $param);
       }

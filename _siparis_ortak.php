@@ -172,6 +172,63 @@ function sipui_gorulen_satir(array $sev): string
     return '<span hidden data-sip-gor-id="' . (int)($sev['id'] ?? 0) . '" data-sip-gor-upd="' . h((string)($sev['degisti_at'] ?? '')) . '" data-sip-gor-yeni="' . h((string)($sev['olusturma_at'] ?? '')) . '"></span>';
 }
 
+/**
+ * v424 — liste rozetinde "⚠ N uyarı/çatışma"nın üzerine gelince açılan baloncuğun metinleri: sevkiyat id → ['c' => çatışma satırları,
+ * 'u' => uyarı satırları]. TEK sorgu çifti (N+1 yok); hata → boş harita (rozet yine çalışır, yalnız baloncuk açılmaz).
+ * Çatışma satırı "Alan: mevcut → gelen"; değerler 60 karaktere kırpılır. Her listede en çok 6 satır + "… +N daha".
+ * @param list<int> $ids @return array<int,array{c:list<string>,u:list<string>}>
+ */
+function sipui_uyari_haritasi(PDO $pdo, array $ids): array
+{
+    $out = [];
+    if (!$ids) return $out;
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $kes = static fn(string $s): string => mb_strlen($s) > 60 ? mb_substr($s, 0, 59) . '…' : $s;
+    try {
+        $q = $pdo->prepare("SELECT id, uyarilar_json FROM siparis_sevkiyatlar WHERE uyarilar_json IS NOT NULL AND uyarilar_json <> '' AND id IN ($in)");
+        $q->execute($ids);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            foreach ((array)siparis_json_coz((string)$r['uyarilar_json']) as $u) {
+                $m = trim((string)($u['mesaj'] ?? ''));
+                if ($m !== '') $out[(int)$r['id']]['u'][] = (($u['seviye'] ?? '') === 'hata' ? '⛔ ' : '') . $m;
+            }
+        }
+        $q = $pdo->prepare("SELECT sevkiyat_id, kalem_id, alan, mevcut_deger, gelen_deger FROM siparis_catismalar WHERE durum = 'acik' AND sevkiyat_id IN ($in) ORDER BY id DESC");
+        $q->execute($ids);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $et = siparis_alan_etiketi($r['kalem_id'] !== null ? 'kalem' : 'sevkiyat', (string)$r['alan']);
+            $v = static fn($x): string => ($x === null || $x === '') ? '—' : (string)$x;
+            $out[(int)$r['sevkiyat_id']]['c'][] = $et . ': ' . $kes($v($r['mevcut_deger'])) . ' → ' . $kes($v($r['gelen_deger']));
+        }
+    } catch (Throwable $e) {
+        error_log('[siparis_ui] uyari haritasi: ' . get_class($e));
+        return [];
+    }
+    foreach ($out as $id => $g) {
+        foreach (['c', 'u'] as $k) {
+            $l = $g[$k] ?? [];
+            if (count($l) > 6) { $fazla = count($l) - 6; $l = array_slice($l, 0, 6); $l[] = '… +' . $fazla . ' daha'; }
+            $out[$id][$k] = $l;
+        }
+    }
+    return $out;
+}
+
+/** v424 — rozetin yanındaki gizli baloncuk verisi (JS metni textContent ile gösterir). Veri yoksa ''. */
+function sipui_uyari_balon_html(array $r, array $harita): string
+{
+    $g = $harita[(int)$r['id']] ?? null;
+    if (!$g || (empty($g['c']) && empty($g['u']))) return '';
+    $o = '<span class="sip-balon-veri" hidden>';
+    foreach (['c' => 'Çatışmalar', 'u' => 'Uyarılar'] as $k => $baslik) {
+        if (empty($g[$k])) continue;
+        $o .= '<span data-baslik="' . h($baslik) . '">';
+        foreach ($g[$k] as $satir) $o .= '<span data-satir>' . h($satir) . '</span>';
+        $o .= '</span>';
+    }
+    return $o . '</span>';
+}
+
 /** v396 — sevkiyatın güncel PKL dosya adı (oluşturulan/yüklenen); parti no'nun ÜSTÜNDE. PKL yoksa boş. */
 function sipui_pkl_ad_html(array $sev, array $pkl): string
 {

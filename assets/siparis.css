@@ -799,3 +799,13 @@ html[data-theme="dark"] .sip-uyari-hata { color: #fca5a5; }
 .sip-yetim-kart { border-left: 4px solid #dc2626; }
 .sip-satir-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* ==== /v421 ==== */
+
+/* ── v424: uyarı / çatışma baloncuğu (rozet üzerinde fare beklerken; JS konumlar, fixed) ── */
+.sip-uy-kap { display: inline-block; }
+.sip-balon[hidden] { display: none; }
+.sip-balon { position: fixed; z-index: 700; max-width: 380px; min-width: 220px; padding: 10px 12px; border-radius: 10px; background: #1f2937; color: #f9fafb;
+  font-size: .84rem; line-height: 1.4; box-shadow: 0 8px 24px rgba(0, 0, 0, .28); pointer-events: none; overflow-wrap: anywhere; }
+.sip-balon-baslik { font-weight: 700; color: #fcd34d; margin: 0 0 4px; }
+.sip-balon-baslik:not(:first-child) { margin-top: 8px; }
+.sip-balon ul { margin: 0; padding: 0 0 0 16px; }
+.sip-balon li { margin: 2px 0; }

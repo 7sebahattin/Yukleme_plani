@@ -932,4 +932,22 @@ ok('v421 izleyici (siparis.write yok): Kalem ekle / onay / yetim formu YOK', !st
 $__css = (string)file_get_contents($ROOT . '/assets/siparis.css');
 ok('v421 CSS: .sip-eksik + .sip-uyari-hata + .sip-yetim-kart, koyu tema karşılığı', str_contains($__css, '.sip-eksik {') && str_contains($__css, 'html[data-theme="dark"] .sip-eksik') && str_contains($__css, '.sip-yetim-kart'));
 
+// ── v424: uyarı / çatışma baloncuğu (rozetin üzerinde fare beklerken) ──
+echo "\n=== v424 ===\n";
+$db->prepare('UPDATE siparis_sevkiyatlar SET uyarilar_json = ?, uyari_sayisi = 2 WHERE id = ?')->execute([json_encode([
+    ['kod' => 'po_eksik_okuma', 'seviye' => 'hata', 'mesaj' => 'PO eksik okunmuş olabilir'], ['kod' => 'bosaltma', 'seviye' => 'uyari', 'mesaj' => 'Boşaltma tarihi belgeler arasında farklı: LL 2026-10-27 · PC <b>2026-10-28</b>.'],
+], JSON_UNESCAPED_UNICODE), (int)$ID['s1']]);
+$db->prepare("INSERT INTO siparis_catismalar (sevkiyat_id, kalem_id, alan, mevcut_deger, mevcut_kaynak, gelen_deger, gelen_kaynak, belge_id, durum) VALUES (?, NULL, 'navlun_no', '6100000001', 'll', '6100000002', 'pc', NULL, 'acik')")->execute([(int)$ID['s1']]);
+$db->prepare('UPDATE siparis_sevkiyatlar SET acik_catisma = 1 WHERE id = ?')->execute([(int)$ID['s1']]);
+rol($ADMIN, true);
+$__l = sayfa('siparisler.php')['html'];
+ok('v424 liste: rozet data-sip-balon taşır, native title YOK, aria-label var', str_contains($__l, 'data-sip-balon') && !preg_match('~class="sip-uy-say[^"]*"[^>]*title=~', $__l) && str_contains($__l, 'aria-label="1 açık çatışma, 2 uyarı"'));
+ok('v424 liste: gizli baloncuk verisi rozetin hemen yanında (Çatışmalar + Uyarılar başlıkları, satırlar)', preg_match('~data-sip-balon[^>]*>[^<]*</a><span class="sip-balon-veri" hidden><span data-baslik="Çatışmalar"><span data-satir>[^<]*→[^<]*</span></span><span data-baslik="Uyarılar">~u', $__l) === 1
+    && str_contains($__l, '⛔ PO eksik okunmuş olabilir') && str_contains($__l, 'Boşaltma tarihi belgeler arasında farklı'));
+ok('v424 liste: kullanıcı verisi kaçırılır (ham <b> yok)', !str_contains($__l, '<b>2026-10-28</b>') && str_contains($__l, '&lt;b&gt;2026-10-28&lt;/b&gt;'));
+ok('v424 liste: baloncuk verisi yalnız rozetli (uyarı/çatışma metni olan) satırlarda; rozetsiz satırda yok', ($__n = substr_count($__l, 'class="sip-balon-veri"')) >= 1 && $__n <= substr_count($__l, 'data-sip-balon'));
+ok('v424: hatalı JSON / boş harita → rozet yine çalışır, baloncuk verisi yok', sipui_uyari_haritasi($db, []) === [] && sipui_uyari_balon_html(['id' => 999999], []) === '');
+$__js = (string)file_get_contents($ROOT . '/assets/siparis.js'); $__css = (string)file_get_contents($ROOT . '/assets/siparis.css');
+ok('v424 JS: yalnız fareli cihaz, textContent, fixed konum; CSS .sip-balon z ≥ 600', str_contains($__js, "(hover: hover) and (pointer: fine)") && str_contains($__js, 'li.textContent') && !preg_match('~balon\.innerHTML~', $__js) && preg_match('~\.sip-balon \{ position: fixed; z-index: (\d+)~', $__css, $__zm) === 1 && (int)$__zm[1] >= 600);
+
 siparis_test_bitir();
