@@ -7,6 +7,7 @@
 // Audit'e profil DEĞERLERİ (üretici adı, GGN, laboratuvar) yazılmaz — kütüphane yalnız id + alan adları yazar.
 // v378: "📧 Mail sorgu ayarları" (#mail) — posta kutuları + tür başına gönderen adresleri (hks_kv; adresler repoya GİRMEZ).
 //        Kapı: siparis.delete + Mail Merkezi yönetimi (siparis_mail_ayar_yetkisi()); audit yalnız SAYILAR yazar.
+// v422: "📄 PKL mail ayarları" (#pkl-mail) — PKL'ye ek Kime/Bilgi + PKL/evrak mail metni şablonları (hks_kv siparis_pkl_mail_ayar).
 // v411: "📦 Evrak takımı mail alıcıları" (#evrak-mail) — evrak taslağında Kime'nin ilk adresleri (hks_kv; adresler repoya GİRMEZ).
 //        Görüntüleme siparis.read, kaydetme siparis.delete; audit yalnız adres SAYISI.
 // =========================================================
@@ -72,6 +73,15 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Evrak takımı mail alıcıları kaydedildi.' : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
         $git('#evrak-mail');
     }
+    if ($islem === 'pkl_mail_ayar') {
+        require_siparis('delete');
+        $r = siparis_pkl_mail_ayar_kaydet($pdo, [
+            'kime' => (string)($_POST['pkl_kime'] ?? ''), 'bilgi' => (string)($_POST['pkl_bilgi'] ?? ''),
+            'govde' => (string)($_POST['pkl_govde'] ?? ''), 'evrak_govde' => (string)($_POST['evrak_govde'] ?? ''),
+        ], $uid);
+        set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'PKL mail ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
+        $git('#pkl-mail');
+    }
     if ($islem === 'profil_sil') {
         require_siparis('delete');
         $ok = siparis_profil_sil($pdo, (int)($_POST['profil_id'] ?? 0), $uid);
@@ -111,6 +121,8 @@ $mailHesaplar = $mailHazir ? siparis_mail_hesaplar($pdo) : [];
 // v411 evrak takımı mail alıcıları (hks_kv yoksa kart çizilmez)
 $evrakKvHazir = siparis_evrak_mail_kv_hazir($pdo);
 $evrakKime = $evrakKvHazir ? siparis_evrak_mail_ayar_oku($pdo)['kime'] : [];
+// v422 PKL mail ayarları + mail metni şablonları (aynı hks_kv)
+$pklMail = $evrakKvHazir ? siparis_pkl_mail_ayar_oku($pdo) : ['kime' => [], 'bilgi' => [], 'govde' => '', 'evrak_govde' => ''];
 $profilVeri = function (array $p): array {
     $v = ['profil_id' => (int)$p['id'], '_yazi:profil_baslik' => 'Profili düzenle'];
     foreach (array_keys(siparis_profil_alanlari()) as $k) $v[$k] = (string)($p[$k] ?? '');
@@ -194,6 +206,34 @@ $profilVeri = function (array $p): array {
       <p class="sip-soluk">Tanımlı adres yok.</p>
     <?php endif; ?>
     <?php if (!$sil): ?><p class="sip-bilgi" role="note">Adresleri değiştirmek için siparis.delete yetkisi gerekir.</p><?php endif; ?>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($evrakKvHazir): ?>
+  <section class="card" id="pkl-mail" aria-labelledby="sipPklMailBas">
+    <div class="card-head"><h2 id="sipPklMailBas">📄 PKL mail ayarları</h2><span class="sip-soluk">Alıcılar ve mail metinleri</span></div>
+    <p class="muted">PKL mail taslağında PO'daki Packing List adresine EK olarak her zaman Kime / Bilgi (CC)'ye eklenir; her listede en çok <?= (int)SIPARIS_EVRAK_MAIL_MAX ?> adres. Mail metinleri sevkiyat penceresinde açılan taslağın başlangıç metnidir (orada her seferinde ayrıca düzenlenebilir). Boş bırakırsanız varsayılan metin kullanılır; <code>{ad}</code> yerine gönderenin adı yazılır.</p>
+    <?php if ($sil): ?>
+      <form method="post" action="siparis_ayarlar.php#pkl-mail" class="sip-form" data-sip-tek>
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="pkl_mail_ayar">
+        <label>PKL — ek Kime adresleri (satır başına bir adres)
+          <textarea name="pkl_kime" rows="3" maxlength="2600" autocomplete="off" spellcheck="false"><?= h(implode("\n", $pklMail['kime'])) ?></textarea>
+        </label>
+        <label>PKL — ek Bilgi (CC) adresleri (satır başına bir adres)
+          <textarea name="pkl_bilgi" rows="3" maxlength="2600" autocomplete="off" spellcheck="false"><?= h(implode("\n", $pklMail['bilgi'])) ?></textarea>
+        </label>
+        <label>PKL mail metni
+          <textarea name="pkl_govde" rows="7" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" placeholder="<?= h(SIPARIS_PKL_GOVDE_VARSAYILAN) ?>" spellcheck="false"><?= h($pklMail['govde']) ?></textarea>
+        </label>
+        <label>Evrak takımı mail metni
+          <textarea name="evrak_govde" rows="7" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" placeholder="<?= h(SIPARIS_EVRAK_GOVDE_VARSAYILAN) ?>" spellcheck="false"><?= h($pklMail['evrak_govde']) ?></textarea>
+        </label>
+        <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
+      </form>
+    <?php else: ?>
+      <p class="sip-soluk">Ek Kime: <?= $pklMail['kime'] ? h(implode(', ', $pklMail['kime'])) : '—' ?> · ek Bilgi: <?= $pklMail['bilgi'] ? h(implode(', ', $pklMail['bilgi'])) : '—' ?></p>
+      <p class="sip-bilgi" role="note">Ayarları değiştirmek için siparis.delete yetkisi gerekir.</p>
+    <?php endif; ?>
   </section>
   <?php endif; ?>
 

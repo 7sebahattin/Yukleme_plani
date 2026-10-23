@@ -2,6 +2,7 @@
 // =========================================================
 // scripts/siparis_pkl_mail_smoke.php — PKL mail taslağı (v383): Kime/Bilgi ayrımı, mailto, ekli .eml (X-Unsent), uç
 //   + v411 evrak takımı mail taslağı (ek YOK): taslak kuralları, hks_kv ayarı, .eml, siparis_eml.php ucu, ekran
+//   + v422 düzenlenebilir mail metni + PKL mail ayarları (ek Kime/Bilgi, metin şablonları, ?govde=)
 //   php scripts/siparis_pkl_mail_smoke.php
 // Bellek içi SQLite + stub auth + SENTETİK veri (@ornek.test; kişisel veri YOK). Canlı DB'ye / storage'a dokunmaz.
 // =========================================================
@@ -229,5 +230,78 @@ ok('evrak penceresi: Outlook taslağı (siparis_eml.php?sid) + mailto + Kopyala 
 ok('evrak penceresi: ayar boşsa "Customs adresi tanımlı değil" + ayar bağlantısı yalnız siparis.delete ile', str_contains($evB, 'Customs adresi tanımlı değil') && str_contains($evB, "can_siparis('delete')") && str_contains($evB, 'siparis_ayarlar.php#evrak-mail'));
 $ay = (string)file_get_contents($ROOT . '/siparis_ayarlar.php');
 ok('ayarlar: #evrak-mail kartı, evrak_kime alanı, islem=evrak_mail_ayar', str_contains($ay, 'id="evrak-mail"') && str_contains($ay, 'name="evrak_kime"') && str_contains($ay, 'value="evrak_mail_ayar"'));
+
+echo "\n=== 11. v422 mail metni + PKL mail ayarları ===\n";
+// saf: temizleme / şablon
+ok('govde_temizle: CRLF→LF, denetim karakteri atılır, sonda boşluk kırpılır, sekme/LF korunur', siparis_mail_govde_temizle("A\r\nB\x00\x07\tC\r\n\r\n  ") === "A\nB\tC");
+ok('govde_temizle: üst sınır', mb_strlen(siparis_mail_govde_temizle(str_repeat('ş', SIPARIS_MAIL_GOVDE_MAX + 50))) === SIPARIS_MAIL_GOVDE_MAX);
+ok('govde_olustur: {ad} dolar, boş şablon → varsayılan, boş ad → sondaki satır kırpılır',
+    siparis_mail_govde_olustur("Selam\n{ad}", 'x', 'Kullanıcı 1') === "Selam\nKullanıcı 1" && siparis_mail_govde_olustur('  ', SIPARIS_PKL_GOVDE_VARSAYILAN, '') === "Hi,\nPlease find attached the packing list.\n\nBest regards,\nAsya Fresh"
+    && siparis_mail_govde_olustur("Selam\n{ad}", 'x', "Ad\r\nBcc: k@ornek.test") === "Selam\nAd Bcc: k@ornek.test");
+$g = siparis_pkl_mail_taslak(['log@ornek.test'], 'a.xlsx', 'TC', 'Kullanıcı 1', ['govde' => "Merhaba,\nPKL ektedir.\n{ad}"]);
+ok('PKL taslağı: ayardaki şablon kullanılır', $g['govde'] === "Merhaba,\nPKL ektedir.\nKullanıcı 1", $g['govde']);
+$ev = siparis_evrak_mail_taslak([], ['log@ornek.test'], 'a.xlsx', 'TC', 'Kullanıcı 1', "Evrak ektedir.\n{ad}");
+ok('evrak taslağı: ayardaki şablon kullanılır; verilmezse varsayılan', $ev['govde'] === "Evrak ektedir.\nKullanıcı 1"
+    && siparis_evrak_mail_taslak([], [], 'a.xlsx', 'TC', 'K')['govde'] === "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh\nK");
+ok('uygula: dolu düzenleme gövdeyi değiştirir; boş/null taslağı korur; satır sonları temizlenir',
+    siparis_mail_govde_uygula($ev, "Yeni\r\nmetin")['govde'] === "Yeni\nmetin" && siparis_mail_govde_uygula($ev, '  ')['govde'] === $ev['govde'] && siparis_mail_govde_uygula($ev, null)['govde'] === $ev['govde']);
+// saf: ek Kime / Bilgi
+$a = siparis_pkl_mail_taslak(['log@ornek.test', 'packinglist-x@ornek.test'], 'a.xlsx', 'TC', 'K', ['kime' => ['ek@ornek.test', 'LOG@ornek.test', 'gecersiz'], 'bilgi' => ['cc@ornek.test', 'ek@ornek.test']]);
+ok('ayar adresleri PO adreslerine EKLENİR (tekil, geçersiz atılır, PO korunur)', $a['kime'] === ['log@ornek.test', 'ek@ornek.test'] && $a['bilgi'] === ['packinglist-x@ornek.test', 'cc@ornek.test'], json_encode($a));
+$a = siparis_pkl_mail_taslak([], 'a.xlsx', 'TC', 'K', ['bilgi' => ['cc@ornek.test']]);
+ok('yalnız ayar Bilgi varsa Kime\'ye geçer', $a['kime'] === ['cc@ornek.test'] && $a['bilgi'] === []);
+$a = siparis_pkl_mail_taslak(['packinglist-x@ornek.test'], 'a.xlsx', 'TC', 'K', ['kime' => ['ek@ornek.test']]);
+ok('ayardan Kime gelince PO\'daki packinglist adresi CC\'de kalır', $a['kime'] === ['ek@ornek.test'] && $a['bilgi'] === ['packinglist-x@ornek.test'], json_encode($a));
+// KV ayarı
+$db->exec('DROP TABLE hks_kv');
+ok('hks_kv yokken ayar oku boş, kaydet reddedilir', siparis_pkl_mail_ayar_oku($db) === ['kime' => [], 'bilgi' => [], 'govde' => '', 'evrak_govde' => ''] && siparis_pkl_mail_ayar_kaydet($db, ['kime' => 'a@ornek.test'], 1)['ok'] === false);
+$db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(100) PRIMARY KEY, deger TEXT)');
+$k = siparis_pkl_mail_ayar_kaydet($db, ['kime' => "Ek@Ornek.test\nek@ornek.test; ek2@ornek.test", 'bilgi' => 'cc@ornek.test', 'govde' => "Merhaba\r\n{ad}", 'evrak_govde' => "Evrak\n{ad}"], 1);
+$o = siparis_pkl_mail_ayar_oku($db);
+ok('kaydet/oku: küçük harf + tekil, CRLF→LF', $k['ok'] && $o === ['kime' => ['ek@ornek.test', 'ek2@ornek.test'], 'bilgi' => ['cc@ornek.test'], 'govde' => "Merhaba\n{ad}", 'evrak_govde' => "Evrak\n{ad}"], json_encode([$k, $o]));
+$k = siparis_pkl_mail_ayar_kaydet($db, ['kime' => 'gecersiz-adres'], 1);
+ok('geçersiz e-posta reddedilir, eski ayar korunur', !$k['ok'] && str_contains((string)$k['hata'], 'Geçersiz e-posta') && siparis_pkl_mail_ayar_oku($db)['kime'] === ['ek@ornek.test', 'ek2@ornek.test']);
+$k = siparis_pkl_mail_ayar_kaydet($db, ['bilgi' => implode("\n", array_map(fn($i) => "u$i@ornek.test", range(1, SIPARIS_EVRAK_MAIL_MAX + 1)))], 1);
+ok('listede 10\'dan fazla adres reddedilir', !$k['ok'] && str_contains((string)$k['hata'], 'en çok'));
+$k = siparis_pkl_mail_ayar_kaydet($db, ['govde' => str_repeat('x', SIPARIS_MAIL_GOVDE_MAX + 1)], 1);
+ok('çok uzun metin şablonu reddedilir', !$k['ok'] && str_contains((string)$k['hata'], 'karakter'));
+$auds = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_pkl_mail_ayar'")->fetchAll(PDO::FETCH_COLUMN);
+ok('audit yalnız sayı/bayrak (adres ve metin YAZILMAZ); başarısız kayıt audit yazmaz', count($auds) === 1 && str_contains((string)$auds[0], '"kime_sayisi":2') && str_contains((string)$auds[0], '"pkl_metin":true')
+    && !str_contains((string)$auds[0], '@') && !str_contains((string)$auds[0], 'Merhaba'), json_encode($auds));
+$db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['siparis_pkl_mail_ayar', '{bozuk']);
+ok('bozuk JSON → boş (fail soft)', siparis_pkl_mail_ayar_oku($db)['kime'] === []);
+siparis_pkl_mail_ayar_kaydet($db, ['kime' => 'ek@ornek.test', 'evrak_govde' => "Evrak ayar metni\n{ad}"], 1);
+
+// uç: evrak .eml — ayar şablonu ve ?govde= düzenlemesi
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'mail_gonderildi' WHERE id = $sid");
+$r = uc(['sid' => $sid], 'siparis_eml.php');
+[$ub, $ug] = array_pad(explode("\r\n\r\n", $r['govde'], 2), 2, '');
+ok('uç: evrak .eml gövdesi ayardaki şablondan', str_ends_with((string)base64_decode((string)preg_replace('/\s+/', '', $ug)), "Evrak ayar metni\r\nKullanıcı 1"), $r['govde']);
+$r = uc(['sid' => $sid, 'govde' => "Düzenlenmiş\r\nmetin"], 'siparis_eml.php');
+[$ub, $ug] = array_pad(explode("\r\n\r\n", $r['govde'], 2), 2, '');
+ok('uç: ?govde= penceredeki düzenlemeyi gövdeye yazar (başlıklar etkilenmez)', trim((string)base64_decode((string)preg_replace('/\s+/', '', $ug))) === "Düzenlenmiş\r\nmetin" && str_starts_with($r['govde'], 'X-Unsent: 1') && !preg_match('/^Bcc:/mi', $ub), $r['govde']);
+$r = uc(['sid' => $sid, 'govde' => "x\r\nBcc: kotu@ornek.test"], 'siparis_eml.php');
+[$ub, $ug] = array_pad(explode("\r\n\r\n", $r['govde'], 2), 2, '');
+ok('uç: ?govde= içindeki "Bcc:" başlığa SIZMAZ (gövde base64)', !preg_match('/^Bcc:/mi', $ub) && !str_contains($r['govde'], 'kotu@'), $ub);
+$r = uc(['sid' => $sid, 'govde' => ''], 'siparis_eml.php');
+[$ub, $ug] = array_pad(explode("\r\n\r\n", $r['govde'], 2), 2, '');
+ok('uç: boş ?govde= → ayar şablonu', str_ends_with((string)base64_decode((string)preg_replace('/\s+/', '', $ug)), "Evrak ayar metni\r\nKullanıcı 1"));
+
+echo "\n=== 12. v422 ekran kaynağı ===\n";
+$v = (string)file_get_contents($ROOT . '/siparis_view.php');
+$pkB = (string)substr($v, 0, (int)strpos($v, 'id="sipEvrakModal"'));
+$evB = (string)substr($v, (int)strpos($v, 'id="sipEvrakModal"'));
+ok('PKL penceresi: ayar okunur, taslağa verilir, düzenlenebilir metin kutusu + mailto/eml/sıfırla işaretleri',
+    str_contains($v, 'siparis_pkl_mail_ayar_oku($pdo)') && str_contains($v, "(string)\$sev['order_ref'], (string)(\$auth_user['display_name'] ?: \$auth_user['username']), \$pklMailAyar)")
+    && str_contains($pkB, 'textarea rows="6"') && str_contains($pkB, 'data-sip-govde') && str_contains($pkB, 'data-sip-govde-mailto') && str_contains($pkB, 'data-sip-govde-eml') && str_contains($pkB, 'data-sip-govde-sifirla'));
+ok('evrak penceresi: ayardaki evrak metni taslağa verilir; metin kutusu + işaretler', str_contains($v, "\$pklMailAyar['evrak_govde']") && str_contains($evB, 'data-sip-govde-ilk') && str_contains($evB, 'data-sip-govde-mailto')
+    && str_contains($evB, 'data-sip-govde-eml') && str_contains($evB, 'data-sip-govde-sifirla'));
+$d = (string)file_get_contents($ROOT . '/siparis_dosya.php');
+ok('siparis_dosya.php (PKL .eml): ayar + ?govde= uygulanır', str_contains($d, 'siparis_pkl_mail_ayar_oku($pdo)') && str_contains($d, "siparis_mail_govde_uygula(\$taslak, isset(\$_GET['govde'])"));
+$ay = (string)file_get_contents($ROOT . '/siparis_ayarlar.php');
+ok('ayarlar: #pkl-mail kartı, alanlar, islem=pkl_mail_ayar, siparis.delete kapısı', str_contains($ay, 'id="pkl-mail"') && str_contains($ay, 'name="pkl_kime"') && str_contains($ay, 'name="pkl_bilgi"')
+    && str_contains($ay, 'name="pkl_govde"') && str_contains($ay, 'name="evrak_govde"') && str_contains($ay, 'value="pkl_mail_ayar"')
+    && preg_match("/islem === 'pkl_mail_ayar'\)\s*\{\s*require_siparis\('delete'\)/", $ay) === 1);
+ok('JS: input → mailto body / eml govde parametresi; sıfırla', str_contains((string)file_get_contents($ROOT . '/assets/siparis.js'), 'textarea[data-sip-govde]') && str_contains((string)file_get_contents($ROOT . '/assets/siparis.js'), 'data-sip-govde-sifirla'));
 
 siparis_test_bitir();

@@ -113,11 +113,12 @@ $eksikHucre = $pkl ? (int)$pkl['eksik_hucre'] : 0;
 $mailPartiler = (array)((siparis_beyan_parti_haritasi($pdo, [$id])[$id] ?? [])['liste'] ?? []);
 $asyaDoc = preg_match('~AsyaDoc\d+~i', $mailPklAd, $mm) ? $mm[0] : '';
 // v383: mail taslağı (Kime / Bilgi / konu / gövde) — mailto ve ekli .eml AYNI taslaktan
-$mailTaslak = siparis_pkl_mail_taslak($poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username']));
+$pklMailAyar = siparis_pkl_mail_ayar_oku($pdo);   // v422: Sipariş ayarları › PKL mail ayarları (ek Kime/Bilgi + metin şablonları)
+$mailTaslak = siparis_pkl_mail_taslak($poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username']), $pklMailAyar);
 // v411: evrak takımı mail taslağı (EK YOK) — Kime = ayar (hks_kv) + PO'daki packinglist… olmayan adres; yalnız evrak penceresi için
 $evrakAyar = (string)$sev['durum'] === 'mail_gonderildi' ? siparis_evrak_mail_ayar_oku($pdo)['kime'] : [];
 $evrakTaslak = (string)$sev['durum'] === 'mail_gonderildi'
-    ? siparis_evrak_mail_taslak($evrakAyar, $poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username'])) : null;
+    ? siparis_evrak_mail_taslak($evrakAyar, $poEpostalar, $mailPklAd, (string)$sev['order_ref'], (string)($auth_user['display_name'] ?: $auth_user['username']), $pklMailAyar['evrak_govde']) : null;
 $evrakAyarBos = $evrakTaslak !== null && $evrakAyar === [];
 $pklHazir = (int)$sev['var_pkl'] === 1;
 ?>
@@ -699,9 +700,13 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                 <div class="sip-mail-satir"><span class="sip-mail-rol"><?= h($etk) ?></span> <code><?= h($em) ?></code> <button type="button" class="btn btn-sm" data-sip-kopyala="<?= h($em) ?>">Kopyala</button></div>
               <?php endforeach; endforeach; ?>
               <div class="sip-mail-konu"><span class="sip-soluk">Konu:</span> <?= h($mailTaslak['konu']) ?></div>
+              <label class="sip-mail-metin">Mail metni <span class="sip-soluk">(düzenleyebilirsiniz)</span>
+                <textarea rows="6" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" data-sip-govde data-sip-govde-ilk="<?= h($mailTaslak['govde']) ?>" spellcheck="false"><?= h($mailTaslak['govde']) ?></textarea>
+              </label>
               <div class="sip-mail-eylem">
-                <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm btn-primary" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;eml=1&amp;sid=<?= $id ?>" data-sip-eml>📎 Ekli mail taslağını indir</a><?php endif; ?>
-                <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($mailTaslak)) ?>">✉ Mail programını aç</a>
+                <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm btn-primary" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;eml=1&amp;sid=<?= $id ?>" data-sip-eml data-sip-govde-eml>📎 Ekli mail taslağını indir</a><?php endif; ?>
+                <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($mailTaslak)) ?>" data-sip-govde-mailto>✉ Mail programını aç</a>
+                <button type="button" class="btn btn-sm btn-ghost" data-sip-govde-sifirla>↺ Metni sıfırla</button>
               </div>
               <p class="sip-soluk sip-mail-ipucu">"Ekli mail taslağı" PKL eki, Kime/Bilgi, konu ve metinle hazır bir taslak (.eml) indirir; açınca Outlook'ta gönderilmeye hazır gelir. "Mail programını aç" eki EKLEYEMEZ (tarayıcı kısıtı) — PKL'yi elle ekleyin.</p>
             </div>
@@ -737,9 +742,13 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
               <?php endforeach; ?>
               <?php if ($evrakAyarBos): ?><p class="sip-soluk sip-mail-ipucu">Customs adresi tanımlı değil — <?php if (can_siparis('delete')): ?><a href="siparis_ayarlar.php#evrak-mail">Sipariş ayarları › Evrak takımı mail alıcıları</a><?php else: ?>Sipariş ayarları › Evrak takımı mail alıcıları<?php endif; ?></p><?php endif; ?>
               <div class="sip-mail-konu"><span class="sip-soluk">Konu:</span> <?= h($evrakTaslak['konu']) ?></div>
+              <label class="sip-mail-metin">Mail metni <span class="sip-soluk">(düzenleyebilirsiniz)</span>
+                <textarea rows="6" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" data-sip-govde data-sip-govde-ilk="<?= h($evrakTaslak['govde']) ?>" spellcheck="false"><?= h($evrakTaslak['govde']) ?></textarea>
+              </label>
               <div class="sip-mail-eylem">
-                <a class="btn btn-sm btn-primary" href="siparis_eml.php?sid=<?= $id ?>" data-sip-evrak-eml>📧 Outlook taslağını indir</a>
-                <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($evrakTaslak)) ?>">✉ Mail programını aç</a>
+                <a class="btn btn-sm btn-primary" href="siparis_eml.php?sid=<?= $id ?>" data-sip-evrak-eml data-sip-govde-eml>📧 Outlook taslağını indir</a>
+                <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($evrakTaslak)) ?>" data-sip-govde-mailto>✉ Mail programını aç</a>
+                <button type="button" class="btn btn-sm btn-ghost" data-sip-govde-sifirla>↺ Metni sıfırla</button>
               </div>
               <p class="sip-soluk sip-mail-ipucu">Taslak ek İÇERMEZ — evrak takımını (ZIP / belgeler) Outlook'ta kendiniz ekleyin. "Outlook taslağını indir" Kime, konu ve metinle hazır bir taslak (.eml) indirir.</p>
             </div>

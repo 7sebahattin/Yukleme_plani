@@ -784,6 +784,22 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         await page.check('#sipEvrakModal [data-sip-evrak-onay]');
         await page.waitForTimeout(100);
         ok(`[${w}] v400 evrak penceresi: onay kutusu işaretlenince gönder düğmesi etkinleşir`, await page.evaluate(() => !document.querySelector('#sipEvrakModal [data-sip-evrak-gonder]').disabled));
+        // v422: penceredeki mail metni düzenlenince mailto body'si ve eml ?govde= parametresi güncellenir; sıfırla ilk haline döner
+        const gv = await page.evaluate(() => {
+            const k = document.querySelector('#sipEvrakModal .sip-mail-alici'), t = k.querySelector('textarea[data-sip-govde]');
+            const mt = k.querySelector('a[data-sip-govde-mailto]'), em = k.querySelector('a[data-sip-govde-eml]');
+            const ilkMt = mt.getAttribute('href'), ilkEm = em.getAttribute('href');
+            t.value = 'Yeni metin\nikinci satır'; t.dispatchEvent(new Event('input', { bubbles: true }));
+            const d1 = { mt: mt.getAttribute('href'), em: em.getAttribute('href') };
+            t.value = '  '; t.dispatchEvent(new Event('input', { bubbles: true }));
+            const d2 = { mt: mt.getAttribute('href'), em: em.getAttribute('href') };
+            t.value = 'Başka'; t.dispatchEvent(new Event('input', { bubbles: true }));
+            k.querySelector('[data-sip-govde-sifirla]').click();
+            return { ilkMt, ilkEm, d1, d2, sifirlaDeger: t.value === t.getAttribute('data-sip-govde-ilk'), sifirlaEm: em.getAttribute('href'), sifirlaMt: mt.getAttribute('href') };
+        });
+        ok(`[${w}] v422 evrak metni: düzenleme mailto body'sine yansır (CRLF kodlu), eml ?govde= eklenir`, gv.d1.mt.includes('body=' + encodeURIComponent('Yeni metin\r\nikinci satır')) && gv.d1.mt.startsWith(gv.ilkMt.replace(/([?&])body=[^&]*$/, '')) && gv.d1.em === gv.ilkEm + '&govde=' + encodeURIComponent('Yeni metin\nikinci satır'), JSON.stringify(gv.d1));
+        ok(`[${w}] v422 evrak metni: kutu boşaltılırsa varsayılan metne döner, eml parametresi kalkar`, gv.d2.mt === gv.ilkMt && gv.d2.em === gv.ilkEm, JSON.stringify(gv.d2));
+        ok(`[${w}] v422 evrak metni: "Metni sıfırla" ilk metni ve bağlantıları geri getirir`, gv.sifirlaDeger && gv.sifirlaEm === gv.ilkEm && gv.sifirlaMt === gv.ilkMt, JSON.stringify(gv));
         await page.uncheck('#sipEvrakModal [data-sip-evrak-onay]');
         await page.keyboard.press('Escape');
         await page.waitForTimeout(100);
