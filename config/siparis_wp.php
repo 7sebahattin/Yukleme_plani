@@ -78,7 +78,7 @@ function siparis_wp_oku(PDO $pdo, int $sid): ?array
 /**
  * Saf (DB/oturum yok): kart JSON'u. $ctx: parti_yetki (bool).
  * @return array{ok:bool,id:int,dosya:string,alanlar:list<array{k:string,etiket:string,deger:string}>,kalem_basliklar:list<string>,
- *   kalemler:list<array{urun:string,kalibre:string,palet_koli:string}>,kalem_say:int,toplam:array{etiket:string,palet_koli:string},notlar:list<string>}
+ *   kalemler:list<array{urun:string,kalibre:string,pf:string,palet_koli:string}>,kalem_say:int,toplam:array{etiket:string,palet_koli:string},notlar:list<string>}
  */
 function siparis_wp_veri(array $okunan, array $ctx): array
 {
@@ -106,10 +106,11 @@ function siparis_wp_veri(array $okunan, array $ctx): array
         $c = sipui_kalem_coz($k);
         if ($c === null) continue;
         $kalemler[] = ['urun' => $c['urun'] !== '' ? $c['urun'] : '—', 'kalibre' => $c['kalibre'] !== '' ? $c['kalibre'] : '—',
+                       'pf' => (($k['pf'] ?? null) !== null && is_numeric($k['pf'])) ? sipui_sayi($k['pf']) : '—',   // palet başına koli
                        'palet_koli' => siparis_wp_palet_koli($c['palet'], $c['koli'])];
     }
     $say = count($kalemler);
-    if (!$kalemler) $kalemler[] = ['urun' => '—', 'kalibre' => '—', 'palet_koli' => '—'];   // başlıklar her zaman görünür
+    if (!$kalemler) $kalemler[] = ['urun' => '—', 'kalibre' => '—', 'pf' => '—', 'palet_koli' => '—'];   // başlıklar her zaman görünür
     $notlar = [];
     if (!$partiYetki) $notlar[] = 'Parti no için beyan okuma yetkisi gerekir.';
     if (empty($okunan['sofor'])) $notlar[] = 'Şoför alanları kurulmadı.';
@@ -119,7 +120,7 @@ function siparis_wp_veri(array $okunan, array $ctx): array
         'id' => $sid,
         'dosya' => siparis_wp_dosya_adi((string)($r['order_ref'] ?? ''), $sid),
         'alanlar' => $alanlar,
-        'kalem_basliklar' => ['Ürün', 'Kalibre', 'Palet/Koli'],
+        'kalem_basliklar' => ['Ürün', 'Kalibre', 'PF', 'Palet/Koli'],
         'kalemler' => $kalemler,
         'kalem_say' => $say,
         'toplam' => ['etiket' => 'Toplam', 'palet_koli' => siparis_wp_palet_koli($r['toplam_palet'] ?? null, $r['toplam_koli'] ?? null)],

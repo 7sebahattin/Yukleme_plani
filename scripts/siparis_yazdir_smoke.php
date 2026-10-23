@@ -299,12 +299,12 @@ ok('10 alan: anahtarlar ve etiketler sahibin sırasında', array_column($v['alan
 $dv = array_column($v['alanlar'], 'deger', 'k');
 ok('değerler: parti, tarih (✓ YOK), sipariş, navlun, gerçek nakliyeci/plaka (planlı DEĞİL), şoför/tel/gümrük "—"', $dv === ['parti' => 'P-61/225 / P-61/226', 'tarih' => sipui_tarih($dun), 'siparis' => 'TC900101.10', 'navlun' => '6100000101', 'nakliyeci' => 'Test Lojistik A',
     'plaka' => '34TST101-34TST201', 'sofor' => '—', 'tel' => '—', 'gumruk' => '—', 'ulke' => 'SIRBİSTAN'], json_encode($dv, JSON_UNESCAPED_UNICODE));
-ok('kalem tablosu + toplam', $v['kalem_basliklar'] === ['Ürün', 'Kalibre', 'Palet/Koli'] && $v['kalemler'] === [['urun' => 'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG', 'kalibre' => '14', 'palet_koli' => '23 / 3.680']]
+ok('kalem tablosu + toplam', $v['kalem_basliklar'] === ['Ürün', 'Kalibre', 'PF', 'Palet/Koli'] && $v['kalemler'] === [['urun' => 'Pomegranate 14 PC LOSE (TR) · HICAZ · 3,5 KG', 'kalibre' => '14', 'pf' => '160', 'palet_koli' => '23 / 3.680']]
     && $v['kalem_say'] === 1 && $v['toplam'] === ['etiket' => 'Toplam', 'palet_koli' => '23 / 3.680'], json_encode($v['kalemler'], JSON_UNESCAPED_UNICODE));
 ok('notlar: şoför + gümrük kurulmadı, parti notu YOK; dosya adı / id', in_array('Şoför alanları kurulmadı.', $v['notlar'], true) && in_array('Yurt içi gümrük alanı kurulmadı.', $v['notlar'], true) && !in_array('Parti no için beyan okuma yetkisi gerekir.', $v['notlar'], true)
     && $v['dosya'] === 'WP-TC900101.10' && $v['id'] === $ID['gecmis'] && $v['ok'] === true);
 $vb = siparis_wp_veri(siparis_wp_oku($db, $ID['bugun']), ['parti_yetki' => true]);
-ok('bugun: kalemler sira sırasında (10, 12), sıfır palet+koli kalemi (14) ATLANDI, toplam sevkiyattan', $vb['kalemler'] === [['urun' => 'Testfruit 10 PC · TESTVAR · 3,5 KG', 'kalibre' => '10', 'palet_koli' => '4 / 550'], ['urun' => 'Testfruit 12 PC · TESTVAR · 3,5 KG', 'kalibre' => '12', 'palet_koli' => '3 / 450']]
+ok('bugun: kalemler sira sırasında (10, 12), sıfır palet+koli kalemi (14) ATLANDI, toplam sevkiyattan', $vb['kalemler'] === [['urun' => 'Testfruit 10 PC · TESTVAR · 3,5 KG', 'kalibre' => '10', 'pf' => '100', 'palet_koli' => '4 / 550'], ['urun' => 'Testfruit 12 PC · TESTVAR · 3,5 KG', 'kalibre' => '12', 'pf' => '100', 'palet_koli' => '3 / 450']]
     && $vb['toplam']['palet_koli'] === '7 / 1.000', json_encode($vb['kalemler'], JSON_UNESCAPED_UNICODE));
 $esit = true;
 foreach (['yarin', 'bugun', 'gecmis', 'eski', 'bos_tarih', 'kapali'] as $ad) {
@@ -316,7 +316,7 @@ ok('WP kalem sayısı = liste süzgeci (tüm tohum sevkiyatları)', $esit);
 $vbt = siparis_wp_veri(siparis_wp_oku($db, $ID['bos_tarih']), ['parti_yetki' => true]);
 $dbt = array_column($vbt['alanlar'], 'deger', 'k');
 ok('bos_tarih: tarih/nakliyeci/plaka/parti/navlun "—" (planlı değerler basılmaz); kalem yok → tek "—" satırı, toplam "—"', $dbt['tarih'] === '—' && $dbt['nakliyeci'] === '—' && $dbt['plaka'] === '—' && $dbt['parti'] === '—' && $dbt['navlun'] === '—'
-    && $vbt['kalemler'] === [['urun' => '—', 'kalibre' => '—', 'palet_koli' => '—']] && $vbt['kalem_say'] === 0 && $vbt['toplam']['palet_koli'] === '—' && !str_contains(json_encode($vbt, JSON_UNESCAPED_UNICODE), 'PLN'));
+    && $vbt['kalemler'] === [['urun' => '—', 'kalibre' => '—', 'pf' => '—', 'palet_koli' => '—']] && $vbt['kalem_say'] === 0 && $vbt['toplam']['palet_koli'] === '—' && !str_contains(json_encode($vbt, JSON_UNESCAPED_UNICODE), 'PLN'));
 $trn = sev($db, ['order_ref' => 'TC900109.10', 'tur_no' => '9009009', 'yukleme_tarihi' => $yarin]);
 $vtr = siparis_wp_veri(siparis_wp_oku($db, $trn), ['parti_yetki' => true]);
 ok('parti yoksa Tur no\'ya DÜŞÜLMEZ', array_column($vtr['alanlar'], 'deger', 'k')['parti'] === '—' && !str_contains(json_encode($vtr, JSON_UNESCAPED_UNICODE), '9009009'));

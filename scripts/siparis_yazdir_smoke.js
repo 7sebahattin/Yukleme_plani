@@ -368,16 +368,16 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         const id = await wpTikla(page, false, 0);
         await page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
         const p = await page.evaluate(() => window.__pano[0]);
-        ok('[1280] pano: image/png, PNG imzası, 880 px genişlik (×2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w === 880 && p.h > 400 && p.size > 5000, JSON.stringify(p));
+        ok('[1280] pano: image/png, PNG imzası, 960 px genişlik (×2), anlamlı boyut', p.t === 'image/png' && JSON.stringify(p.sig) === JSON.stringify(PNG_IMZA) && p.w === 960 && p.h > 400 && p.size > 5000, JSON.stringify(p));
         const wpIst = istekler.filter(u => /siparis_paylas\.php/.test(u));
         ok('[1280] tek istek: siparis_paylas.php?id=<satırın id\'si> (taze, tek)', wpIst.length === 1 && new RegExp('siparis_paylas\\.php\\?id=' + id + '$').test(wpIst[0]), wpIst.join(','));
         const b = await page.locator('.sip-wp-durum').textContent();
         ok('[1280] bildirim: "Panoya kopyalandı — WhatsApp\'ta yapıştırın", tutucu temizlendi', /Panoya kopyalandı — WhatsApp'ta yapıştırın/.test(b) && await page.evaluate(() => document.querySelector('.swp-tutucu') === null && !document.querySelector('.sip-wp-durum').hidden), b);
         const k = await page.evaluate(() => window.__kart[0]);
-        ok('[1280] kart: 440px, ×2, beyaz zemin', k.w === 440 && k.olcek === 2 && k.bg === 'rgb(255, 255, 255)', JSON.stringify([k.w, k.olcek, k.bg]));
-        ok('[1280] kart: başlıklar sahibin sırasıyla (10 alan + Ürün/Kalibre/Palet-Koli + Toplam)', k.th.join('|') === 'Parti No|Yükleme tarihi|Sipariş No|Navlun No|Nakliyeci|Plakalar|Şoför adı|Şoför telefonu|Gümrük|Alıcı Ülke|Ürün|Kalibre|Palet/Koli|Toplam', k.th.join('|'));
+        ok('[1280] kart: 480px, ×2, beyaz zemin', k.w === 480 && k.olcek === 2 && k.bg === 'rgb(255, 255, 255)', JSON.stringify([k.w, k.olcek, k.bg]));
+        ok('[1280] kart: başlıklar sahibin sırasıyla (10 alan + Ürün/Kalibre/PF/Palet-Koli + Toplam)', k.th.join('|') === 'Parti No|Yükleme tarihi|Sipariş No|Navlun No|Nakliyeci|Plakalar|Şoför adı|Şoför telefonu|Gümrük|Alıcı Ülke|Ürün|Kalibre|PF|Palet/Koli|Toplam', k.th.join('|'));
         ok('[1280] kart (v410): başlıklar kalın (≥700) ve turuncu (rgb(180, 83, 9)); veriler 500 (400–550; Parti No v419: 700, toplam satırı hariç)', k.thW.every(x => x >= 700) && k.thRenk.every(x => x === 'rgb(180, 83, 9)')
-            && k.tdW.slice(1, -2).every(x => x >= 400 && x <= 550), JSON.stringify([k.thW, k.thRenk, k.tdW]));
+            && k.tdW.slice(1, -3).every(x => x >= 400 && x <= 550), JSON.stringify([k.thW, k.thRenk, k.tdW]));
         ok('[1280] kart (v419): Parti No değeri kalın (700); Kalibre sütunu sağa kaydırıldı (sol boşluk ≥ 16px)', k.partiW === 700 && k.k2Sol >= 16, JSON.stringify([k.partiW, k.k2Sol]));
         ok('[1280] kart: değerler sunucu yanıtıyla aynı (şoför, telefon, gümrük dahil)', JSON.stringify(k.alan) === JSON.stringify(WP.alanlar.map(a => [a.k, a.deger])), JSON.stringify(k.alan));
         ok('[1280] kart: konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
@@ -423,7 +423,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         await wpTikla(c2.page, false, 0);
         await c2.page.waitForFunction(() => window.__pano.length === 1, null, { timeout: 30000 });
         const b = await c2.page.evaluate(() => ({ html: window.__kart[0].html, h: window.__pano[0].h }));
-        ok('çok kalem: başlıklar yine 14 (v395: + Alıcı Ülke), PNG yüksekliği tek kalemliden büyük; boş kalem "—" satırı', a.th === 14 && a.h > b.h && /<td>—<\/td>/.test(b.html), JSON.stringify([a, b.h]));
+        ok('çok kalem: başlıklar yine 15 (v395: + Alıcı Ülke, v423: + PF), PNG yüksekliği tek kalemliden büyük; boş kalem "—" satırı', a.th === 15 && a.h > b.h && /<td>—<\/td>/.test(b.html), JSON.stringify([a, b.h]));
         await c2.ctx.close();
     }
 
