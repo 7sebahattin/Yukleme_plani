@@ -906,4 +906,29 @@ $aud = [];
 foreach (glob($ROOT . '/siparis*.php') as $f) if (preg_match_all("/audit_log_event\('([a-z_]+)'/", file_get_contents($f), $m)) foreach ($m[1] as $a) $aud[] = $a;
 ok('sayfa audit eylem adları ≤ 40 karakter', $aud !== [] && max(array_map('strlen', $aud)) <= 40, implode(',', array_unique($aud)));
 
+// ── v421: PO eksik okuma rozeti, "Kalem ekle" penceresi, bağlanamayan kalem kartı ──
+echo "\n=== v421 ===\n";
+$__pj = json_decode((string)$db->query("SELECT parse_json FROM siparis_belgeler WHERE id = " . (int)$ID['po1'])->fetchColumn(), true) ?: [];
+$__pj['orphan_items'] = [['loading_date' => '2026-12-03', 'logistics' => 'OGL', 'incoterm' => 'EXW', 'page' => 3, 'item' => ['description' => 'Testfruit 16 PC LOSE (TR)', 'pcs_per_box' => 16, 'pallets' => 15, 'quantity' => 2400]]];
+$db->prepare('UPDATE siparis_belgeler SET parse_json = ? WHERE id = ?')->execute([json_encode($__pj, JSON_UNESCAPED_UNICODE), (int)$ID['po1']]);
+$db->prepare('UPDATE siparis_sevkiyatlar SET uyarilar_json = ?, uyari_sayisi = 1 WHERE id = ?')->execute([json_encode([['kod' => 'po_eksik_okuma', 'seviye' => 'hata', 'mesaj' => 'PO eksik okunmuş olabilir']], JSON_UNESCAPED_UNICODE), (int)$ID['s1']]);
+rol($ADMIN, true);
+$__l = sayfa('siparisler.php')['html'];
+ok('v421 liste: eksik okunan sevkiyatta kırmızı "PO eksik okunmuş" rozeti (tablo + kart)', substr_count($__l, 'PO eksik okunmuş') >= 2 && str_contains($__l, 'class="sip-eksik"') && str_contains($__l, 'siparis_view.php?id=' . $ID['s1'] . '#uyarilar'));
+ok('v421 liste: rozet yalnız işaretli sevkiyatta (diğerlerinde yok)', substr_count($__l, 'class="sip-eksik"') === 2 && substr_count($__l, '<span class="sip-eksik">') === 1 && substr_count($__l, '<a class="sip-eksik"') === 1);
+$__v = sayfa('siparis_view.php', ['id' => $ID['s1']])['html'];
+ok('v421 detay: "➕ Kalem ekle" düğmesi + pencere (islem=kalem_ekle, kalibre/palet/koli/pf alanları, csrf)', str_contains($__v, 'data-sip-ac="sipKalemEkleModal"') && str_contains($__v, 'id="sipKalemEkleModal"') && str_contains($__v, 'value="kalem_ekle"')
+    && preg_match('~name="kalibre" required~', $__v) === 1 && str_contains($__v, 'name="palet"') && str_contains($__v, 'name="koli"') && str_contains($__v, 'name="pf"'));
+ok('v421 detay: hata seviyeli uyarı vurgulanır + "Kalemleri kontrol ettim" onay formu', str_contains($__v, 'class="sip-uyari-hata"') && str_contains($__v, 'value="eksik_okuma_tamam"') && str_contains($__v, '✓ Kalemleri kontrol ettim'));
+$__b = sayfa('siparis_belge.php', ['id' => $ID['po1']])['html'];
+ok('v421 belge: "Siparişe bağlanamayan kalemler" kartı + sevkiyat seçici + yetim_ekle formu', str_contains($__b, 'id="sipBYetim"') && str_contains($__b, 'value="yetim_ekle"') && str_contains($__b, 'name="sid"') && str_contains($__b, 'Sevkiyata ekle') && str_contains($__b, 'Testfruit 16 PC LOSE (TR)'));
+$__nb = sayfa('siparis_belge.php', ['id' => $ID['pkl1']])['html'];
+ok('v421 belge: bağlanamayan kalem yoksa kart çizilmez', !str_contains($__nb, 'sipBYetim'));
+rol($VIEW, false, 6);
+$__iz = sayfa('siparis_view.php', ['id' => $ID['s1']])['html'];
+$__izb = sayfa('siparis_belge.php', ['id' => $ID['po1']])['html'];
+ok('v421 izleyici (siparis.write yok): Kalem ekle / onay / yetim formu YOK', !str_contains($__iz, 'sipKalemEkleModal') && !str_contains($__iz, 'eksik_okuma_tamam') && !str_contains($__izb, 'value="yetim_ekle"'));
+$__css = (string)file_get_contents($ROOT . '/assets/siparis.css');
+ok('v421 CSS: .sip-eksik + .sip-uyari-hata + .sip-yetim-kart, koyu tema karşılığı', str_contains($__css, '.sip-eksik {') && str_contains($__css, 'html[data-theme="dark"] .sip-eksik') && str_contains($__css, '.sip-yetim-kart'));
+
 siparis_test_bitir();

@@ -14,7 +14,7 @@ ok('strict_types YOK (gevşek tip dönüşümüne dayanır)', !preg_match('/^\s*
 ok('iç önek sipdf_, eski sp_ öneki kalmadı', !preg_match('/\bsp_[a-z]/', preg_replace('#//[^\n]*#', '', $src)) && str_contains($src, 'function sipdf_lines('));
 ok('genel API adları duruyor', function_exists('siparis_pdf_oku') && function_exists('siparis_pdf_belge_turu') && function_exists('siparis_pdf_parse_order')
     && function_exists('siparis_pdf_parse_price_confirmation') && function_exists('siparis_pdf_parse_loading_list') && function_exists('siparis_pdf_isle') && function_exists('siparis_pdf_capraz_kontrol'));
-ok('SIPARIS_PDF_SURUM = v3', SIPARIS_PDF_SURUM === 'v3');
+ok('SIPARIS_PDF_SURUM = v4 (v4: PO sayfa devamı)', SIPARIS_PDF_SURUM === 'v4');
 ok('exec/shell/eval yok, CLI bloğu yok', !preg_match('/\b(shell_exec|passthru|proc_open|popen|eval)\s*\(|(?<!->)\bexec\s*\(|PHP_SAPI|\$argv/', $src));
 ok('XML okumada LIBXML_NOENT / DTDLOAD yok', !preg_match('/LIBXML_NOENT|LIBXML_DTDLOAD/', $src));
 
@@ -175,5 +175,40 @@ if ($orn === null) {
     echo "   fuzz: $runs çalıştırma, $fail hata\n";
     ok('fuzz: sayfa bölme denemeleri (≥ 250) 0 hata', $runs >= 250 && $fail === 0, "runs=$runs fail=$fail");
 }
+
+echo "=== v4. PO sayfa devamı (siparişsiz blok) ===\n";
+// Fixture: gerçek bir PO'nun kişisel veriden arındırılmış metin parçaları. TC…924.10 tırı iki kalem taşır (14 PC: 10 palet, 16 PC: 15 palet);
+// 16 PC satırı 2. sayfada, "Loading date" başlığı tekrarlanarak ve Order ref hücresi BOŞ basılmıştır.
+$__fx = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/po_sayfa_devami_pages.json'), true)['pages'];
+$__pg = function (array $fx): array { $o = []; foreach ($fx as $pn => $sg) $o[(int)$pn] = $sg; return $o; };
+$__d = siparis_pdf_parse_order($__pg($__fx));
+$__tr = null; foreach ($__d['loadings'] as $o) if ($o['order_ref'] === 'TC432924.10') $__tr = $o;
+ok('v4 devam: 3 sipariş (TC…924.10 ikiye bölünmedi, orphan yok)', count($__d['loadings']) === 3 && $__tr !== null && !$__d['orphan_items']);
+ok('v4 devam: TC…924.10 iki kalem — 14 PC 10 palet/1.600 + 16 PC 15 palet/2.400 (toplam 25 / 4.000)',
+    $__tr && count($__tr['items']) === 2 && $__tr['items'][0]['pcs_per_box'] === 14 && $__tr['items'][0]['pallets'] === 10 && $__tr['items'][1]['pcs_per_box'] === 16
+    && $__tr['items'][1]['pallets'] === 15 && $__tr['items'][1]['quantity'] === 2400 && $__tr['totals']['pallets'] === 25 && $__tr['totals']['quantity'] === 4000);
+ok('v4 devam: 16 PC kalemi özet kalemiyle eşleşti ve boşaltma yeri (LAPOVO) okundu', $__tr && $__tr['items'][1]['summary_item_no'] === 2 && ($__tr['items'][1]['locations'][0]['name'] ?? '') === 'LIDL LAPOVO' && $__tr['items'][1]['locations'][0]['pallets'] === 15);
+ok('v4 devam: tüm tutarlılık denetimleri geçer, hata/uyarı yok (yalnız bilgi: continuation_merged)',
+    !array_filter($__d['checks'], fn($c) => !$c['ok']) && array_column($__d['warnings'], 'code') === ['continuation_merged'] && $__d['warnings'][0]['level'] === 'info');
+ok('v4 devam: ayrıştırıcı sürümü v4', SIPARIS_PDF_SURUM === 'v4');
+
+// (b) devam bloğu BAŞKA tarihli → bağlanamaz: sessizce atılmaz — orphan_items + hata, sum_blocks denetimleri hata seviyesinde
+$__f2 = $__fx;
+foreach ($__f2[4] as &$x) if ($x['text'] === '29.10.2026') $x['text'] = '30.10.2026';          // sayfa 4'teki tekrarlanan "Loading date" başlığı
+unset($x);
+$__d2 = siparis_pdf_parse_order($__pg($__f2));
+$__kod = array_column($__d2['warnings'], 'level', 'code');
+ok('v4 yetim: farklı tarihli siparişsiz satır → orphan_items (1 kalem, 16 PC, 15 palet) + orphan_rows HATA', count($__d2['orphan_items']) === 1 && ($__d2['orphan_items'][0]['item']['pallets'] ?? null) === 15 && ($__kod['orphan_rows'] ?? '') === 'error', json_encode($__kod));
+ok('v4 yetim: sum_blocks_pallets / sum_blocks_quantity başarısız ve HATA seviyesinde (diğer denetimler uyarı kalır)', ($__kod['check_sum_blocks_pallets'] ?? '') === 'error' && ($__kod['check_sum_blocks_quantity'] ?? '') === 'error', json_encode($__kod));
+ok('v4 yetim: TC…924.10 yalnız 14 PC ile kalır (yanlış sipariş uydurulmaz)', (function () use ($__d2) { foreach ($__d2['loadings'] as $o) if ($o['order_ref'] === 'TC432924.10') return count($o['items']) === 1 && $o['totals']['pallets'] === 10; return false; })());
+
+// (c) aynı tarihte İKİ gerçek tır: devam satırına sipariş no yazılırsa birleştirilmez
+$__f3 = $__fx; $__refX = null; $__y = null;
+foreach ($__f3[3] as $x) if ($x['text'] === 'TC432924.10') $__refX = $x['x'];                    // Order ref sütununun x'i (1. sayfadaki sipariş no)
+foreach ($__f3[4] as $x) if (preg_match('/^80646, Pomegranate 16 PC/', $x['text'])) $__y = $x['y'];   // devam satırının y'si
+$__f3[4][] = ['x' => $__refX, 'y' => $__y, 'size' => 6, 'text' => 'TC999999.10'];
+$__d3 = siparis_pdf_parse_order($__pg($__f3));
+$__r3 = array_column($__d3['loadings'], 'order_ref');
+ok('v4 iki tır: devam satırı kendi sipariş no ile gelirse AYRI sipariş olur, birleştirilmez', in_array('TC999999.10', $__r3, true) && in_array('TC432924.10', $__r3, true) && !$__d3['orphan_items'] && !in_array('continuation_merged', array_column($__d3['warnings'], 'code'), true), json_encode($__r3));
 
 siparis_test_bitir();

@@ -301,7 +301,7 @@ function sipui_uyari_kodu_etiketi(string $kod): ?string
         'order_without_items' => 'Kalemi olmayan sipariş', 'orphan_row' => 'Hiçbir siparişe bağlanamayan satır', 'page_count' => 'Sayfa sayısı beklenenden farklı',
         'cell_missing' => 'Tabloda okunamayan hücre', 'item_not_in_summary' => 'Kalem özet tablosunda yok', 'unknown_doc' => 'Belge türü tanınmadı',
         'loading_date_missing' => 'Yükleme tarihi okunamadı', 'no_loadings' => 'Yükleme bloğu bulunamadı', 'no_rows' => 'Satır bulunamadı',
-        'order_ref_missing' => 'Sipariş numarası okunamadı', 'ignored_line' => 'Yok sayılan satır', 'exception' => 'Ayrıştırma hatası',
+        'order_ref_missing' => 'Sipariş numarası okunamadı', 'orphan_rows' => "PO'da siparişe bağlanamayan kalem satırı", 'continuation_merged' => 'Sayfa devamı önceki siparişe eklendi', 'ignored_line' => 'Yok sayılan satır', 'exception' => 'Ayrıştırma hatası',
     ];
     if (isset($m[$kod])) return $m[$kod];
     if (str_starts_with($kod, 'check_')) return 'Tutarlılık denetimi tutmadı';

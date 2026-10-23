@@ -2,7 +2,7 @@
 // =========================================================
 // siparis_kaydet.php — Sevkiyat / belge değişikliklerinin TEK POST ucu (PRG)
 //
-// islem (beyaz liste): alan · kilit_ac · durum · catisma · not · belge_bagla · yeniden_isle · yeni   → siparis.write
+// islem (beyaz liste): alan · kilit_ac · durum · catisma · not · belge_bagla · yeniden_isle · yeni · kalem_ekle · yetim_ekle · eksik_okuma_tamam   → siparis.write
 //                      belge_sil · sil                                                                → siparis.delete
 // Sıra: csrf_check → kapı → kaydı yükle + görünürlük (depo) → kütüphane çağrısı → flash + yönlendirme.
 // Mutasyonu ve audit'i kütüphane yapar (iki kez audit yazılmaz); burada yalnız belge bağlama/yeniden işleme audit'lenir.
@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: siparisler.php');
 csrf_check($_POST['csrf'] ?? null);
 
 $islem = (string)($_POST['islem'] ?? '');
-$yazIslemleri = ['alan', 'kilit_ac', 'durum', 'catisma', 'not', 'belge_bagla', 'yeniden_isle', 'yeni'];
+$yazIslemleri = ['alan', 'kilit_ac', 'durum', 'catisma', 'not', 'belge_bagla', 'yeniden_isle', 'yeni', 'kalem_ekle', 'yetim_ekle', 'eksik_okuma_tamam'];
 $silIslemleri = ['belge_sil', 'sil'];
 if (in_array($islem, $silIslemleri, true)) require_siparis('delete');
 else require_siparis('write');
@@ -182,6 +182,32 @@ if ($islem === 'sil') {
 }
 
 // ── elle sevkiyat aç ────────────────────────────────────
+// ── kalem_ekle / yetim_ekle (v421) ──────────────────────
+// kalem_ekle: ayrıştırıcının kaçırdığı kalemi ELLE ekler (palet/koli/PF elle kilitli). yetim_ekle: PO'da hiçbir siparişe bağlanamayan satırı sevkiyata ekler.
+if ($islem === 'kalem_ekle') {
+    $sid = (int)($_POST['sid'] ?? 0);
+    $sev = $sevYukle($sid);
+    $url = $sevUrl($sid);
+    $r = siparis_kalem_elle_ekle($pdo, $sid, (string)($_POST['kalibre'] ?? ''), (string)($_POST['ian'] ?? ''), (string)($_POST['palet'] ?? ''), (string)($_POST['koli'] ?? ''), (string)($_POST['pf'] ?? ''), $uid);
+    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Kalem eklendi (elle girildi, kilitli).' : (string)($r['hata'] ?? 'Kalem eklenemedi.'));
+    $git($url);
+}
+if ($islem === 'eksik_okuma_tamam') {
+    $sid = (int)($_POST['sid'] ?? 0);
+    $sevYukle($sid);
+    $r = siparis_eksik_okuma_onayla($pdo, $sid, $uid);
+    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'PO eksik okuma uyarısı onaylandı.' : (string)($r['hata'] ?? 'İşlem tamamlanamadı.'));
+    $git($sevUrl($sid));
+}
+if ($islem === 'yetim_ekle') {
+    $b = $belgeYukle((int)($_POST['belge_id'] ?? 0));
+    $sid = (int)($_POST['sid'] ?? 0);
+    $sevYukle($sid);
+    $r = siparis_po_yetim_ekle($pdo, (int)$b['id'], (int)($_POST['idx'] ?? -1), $sid, $uid);
+    set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Kalibre ' . (string)$r['kalibre'] . ' kalemi sevkiyata eklendi.' : (string)($r['hata'] ?? 'Kalem eklenemedi.'));
+    $git('siparis_belge.php?id=' . (int)$b['id'] . '#sipBYetim');
+}
+
 if ($islem === 'yeni') {
     $r = siparis_sevkiyat_elle_ac($pdo, (string)($_POST['order_ref'] ?? ''), (string)($_POST['tur_no'] ?? ''), (string)($_POST['yukleme_tarihi'] ?? ''), $uid);
     if (!$r['ok']) $hata((string)($r['hata'] ?? 'Sevkiyat açılamadı.'));

@@ -47,7 +47,8 @@ $detayFiltre = $F['detayFiltre']; $filtreVar = $F['filtreVar']; $detayOzet = $F[
 
 $cols = 's.id, s.order_ref, s.tur_no, s.navlun_no, s.po_belge_id, s.cw_hafta, s.cw_yil, s.alici_kodu, s.alici_adi, s.yukleme_tarihi, s.plakalar, s.planlanan_plakalar, '
       . 's.nakliyeci, s.planlanan_nakliyeci, s.toplam_palet, s.toplam_koli, s.var_po, s.var_ll, s.var_pc, s.var_pkl, s.acik_catisma, s.uyari_sayisi, s.durum, s.depo'
-      . ', COALESCE(s.updated_at, s.created_at) AS degisti_at, s.created_at AS olusturma_at'   // v402: "son bakışınızdan sonra değişti" çerçevesi (cihazda tutulan görülme kaydıyla karşılaştırılır)
+      . ', COALESCE(s.updated_at, s.created_at) AS degisti_at, s.created_at AS olusturma_at'   // v402/v420: "son bakışınızdan sonra değişti / yeni" (cihazda tutulan görülme kaydıyla karşılaştırılır)
+      . ", CASE WHEN s.uyarilar_json LIKE '%po_eksik_okuma%' THEN 1 ELSE 0 END AS eksik_okuma"   // v421: PO eksik okunmuş rozeti
       . (siparis_yurtici_gumruk_hazir($pdo) ? ', s.yurtici_gumruk' : '');   // v387: listede YALNIZ yurt içi gümrük (PO gümrüğü yurt dışıdır)
 $bolum = function (string $ekSql, string $siralama, int $sayfa, int $per) use ($pdo, $temelWhere, $temelPar, $cols): array {
     $w = $temelWhere . ($ekSql !== '' ? ' AND ' . $ekSql : '');

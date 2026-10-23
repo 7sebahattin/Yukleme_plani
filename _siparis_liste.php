@@ -40,6 +40,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
             <a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>"
                title="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a>
           <?php endif; ?>
+          <?php if (!empty($r['eksik_okuma'])): ?><a class="sip-eksik" href="siparis_view.php?id=<?= $__id ?>#uyarilar" title="PO eksik okunmuş olabilir — kalemleri kontrol edin">⛔ PO eksik okunmuş</a><?php endif; ?>
           <?= sipui_gorulen_satir($r) ?>
         </td>
         <td>
@@ -112,6 +113,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
         <?= sipui_dok_rozetleri($r) ?>
         <span class="sip-card-miktar"><?= h(sipui_sayi($r['toplam_palet'])) ?> palet · <?= h(sipui_sayi($r['toplam_koli'])) ?> kasa</span>
         <?php if ($__uy > 0): ?><span class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>">⚠ <?= $__uy ?></span><?php endif; ?>
+        <?php if (!empty($r['eksik_okuma'])): ?><span class="sip-eksik">⛔ PO eksik okunmuş</span><?php endif; ?>
       </div>
       <?= sipui_ilerleme_html($r) ?>
       <?= sipui_gorulen_satir($r) ?>
