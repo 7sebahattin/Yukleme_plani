@@ -745,6 +745,8 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         if (!mobil) {
             ok(`[${w}] v426 liste: masaüstünde native title YOK (çift baloncuk olmasın)`, dgv.title === '');
             const dn = page.locator('.sip-dg-kap:not([hidden]) .sip-dg:visible').first();
+            await dn.scrollIntoViewIfNeeded();   // kaydırma olayı baloncuğu kapatır (gerçek kullanıcı da önce kaydırır, sonra bekler)
+            await page.waitForTimeout(300);
             await dn.hover();
             await page.waitForTimeout(700);
             const dbl = await page.evaluate(() => { const b = document.querySelector('.sip-balon'); if (!b || b.hidden) return null; return { baslik: b.querySelector('.sip-balon-baslik').textContent, li: Array.from(b.querySelectorAll('li')).map(x => x.textContent), ekranIci: b.getBoundingClientRect().right <= window.innerWidth && b.getBoundingClientRect().bottom <= window.innerHeight }; });
