@@ -950,4 +950,33 @@ ok('v424: hatalı JSON / boş harita → rozet yine çalışır, baloncuk verisi
 $__js = (string)file_get_contents($ROOT . '/assets/siparis.js'); $__css = (string)file_get_contents($ROOT . '/assets/siparis.css');
 ok('v424 JS: yalnız fareli cihaz, textContent, fixed konum; CSS .sip-balon z ≥ 600', str_contains($__js, "(hover: hover) and (pointer: fine)") && str_contains($__js, 'li.textContent') && !preg_match('~balon\.innerHTML~', $__js) && preg_match('~\.sip-balon \{ position: fixed; z-index: (\d+)~', $__css, $__zm) === 1 && (int)$__zm[1] >= 600);
 
+// ── v426: "ne değişti" bildirimi (sipariş no'nun solunda nokta + sayı; hover özeti) ──
+echo "\n=== v426 ===\n";
+rol($ADMIN, true);
+$__l = sayfa('siparisler.php')['html'];
+ok('v426 liste: değişimi olan sevkiyatta gizli .sip-dg-kap (tablo + mobil kart = 2), noktası data-sip-balon taşır, balon verisi hemen yanında',
+    substr_count($__l, 'class="sip-dg-kap" hidden') === 2 && preg_match('~<span class="sip-dg" data-sip-balon tabindex="0" role="status"></span><span class="sip-balon-veri" hidden><span data-baslik="">~u', $__l) === 1);
+ok('v426 liste: üç özet satırı, en yeni ilk — belge (mailden) · çatışma · alan değişimi (tarih gg.aa.yyyy)',
+    preg_match('~<span data-satir data-t="[^"]+">📄 Yeni belge: Loading List: ll_yeni.pdf \(mailden\)</span><span data-satir data-t="[^"]+">⚠ Plakalar çatışması: 34TST1 ≠ 34TST9</span><span data-satir data-t="[^"]+">Yükleme tarihi: 10\.12\.2026 → 11\.12\.2026</span>~u', $__l) === 1);
+ok('v426 liste: oluşturulurken ilk dolum ve kullanıcının kendi elle düzeltmesi SAYILMAZ', !str_contains($__l, 'ILK-DOLUM') && !str_contains($__l, 'Nakliyeci elle'));
+ok('v426 liste: değişimi olmayan sevkiyatta nokta/balon verisi yok (yalnız s41 satırı)', substr_count($__l, 'sip-dg-kap') === 2);
+$__h = sipui_degisim_haritasi($db, [(int)$ID['s41'], (int)$ID['s1']]);
+ok('v426 harita: yalnız s41, en yeni önce, her satır zaman damgalı', array_keys($__h) === [(int)$ID['s41']] && count($__h[(int)$ID['s41']]) === 3
+    && $__h[(int)$ID['s41']][0]['t'] > $__h[(int)$ID['s41']][2]['t'] && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $__h[(int)$ID['s41']][0]['t']) === 1);
+ok('v426 harita: boş liste → boş; 30 günden eski olay alınmaz', sipui_degisim_haritasi($db, []) === [] && sipui_degisim_haritasi($db, [(int)$ID['s41']], 1) === []);
+ok('v426 satır özeti: eklendi / değişti / çatışma / belge / silindi / geri geldi; sayılmayan tür → boş',
+    sipui_degisim_satiri(['tur' => 'alan_guncellendi', 'eski' => null, 'yeni' => '6100000001', 'aciklama' => 'Navlun no — Loading List']) === 'Navlun no eklendi: 6100000001'
+    && sipui_degisim_satiri(['tur' => 'alan_guncellendi', 'eski' => '2026-10-22', 'yeni' => '2026-10-23 00:00:00', 'aciklama' => 'Yükleme tarihi — PO']) === 'Yükleme tarihi: 22.10.2026 → 23.10.2026'
+    && sipui_degisim_satiri(['tur' => 'catisma', 'eski' => 'A', 'yeni' => 'B', 'aciklama' => 'Gümrük: PO ≠ LL']) === '⚠ Gümrük çatışması: A ≠ B'
+    && sipui_degisim_satiri(['tur' => 'belge_silindi', 'eski' => 'x.pdf', 'yeni' => null, 'aciklama' => '']) === '🗑 Belge silindi: x.pdf'
+    && sipui_degisim_satiri(['tur' => 'geri_getirildi', 'eski' => null, 'yeni' => null, 'aciklama' => '']) !== ''
+    && sipui_degisim_satiri(['tur' => 'durum', 'eski' => 'a', 'yeni' => 'b', 'aciklama' => '']) === '' && sipui_degisim_satiri(['tur' => 'alan_elle', 'eski' => 'a', 'yeni' => 'b', 'aciklama' => 'X']) === '');
+ok('v426 satır özeti: uzun değer 40 karaktere kırpılır', mb_strlen(explode(': ', sipui_degisim_satiri(['tur' => 'alan_guncellendi', 'eski' => 'a', 'yeni' => str_repeat('z', 90), 'aciklama' => 'Alan — PO']), 2)[1]) <= 46);
+$__x = sipui_degisim_html(['id' => 7], [7 => [['t' => '2026-10-20 10:00:00', 'm' => '<b>x</b> & "y"']]]);
+ok('v426 html: kullanıcı verisi kaçırılır; veri yoksa boş', !str_contains($__x, '<b>x</b>') && str_contains($__x, '&lt;b&gt;x&lt;/b&gt;') && sipui_degisim_html(['id' => 8], [7 => [['t' => 'a', 'm' => 'b']]]) === '');
+$__js = (string)file_get_contents($ROOT . '/assets/siparis.js'); $__css = (string)file_get_contents($ROOT . '/assets/siparis.css'); $__pt = (string)file_get_contents($ROOT . '/_siparis_liste.php');
+ok('v426 JS/CSS/partial: dgGoster textContent (innerHTML yok), son bakıştan eskiyi atar, partial sorgu ÇALIŞTIRMAZ, .sip-dg kırmızı nokta',
+    str_contains($__js, 'function dgGoster') && str_contains($__js, "t > taban && t > gor") && !preg_match('~dgGoster[\s\S]{0,1800}innerHTML~', $__js) && !str_contains($__pt, 'sipui_degisim_haritasi')
+    && str_contains($__css, '.sip-dg {') && str_contains($__css, '.sip-dg-kap[hidden]'));
+
 siparis_test_bitir();

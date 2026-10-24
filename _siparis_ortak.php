@@ -229,6 +229,82 @@ function sipui_uyari_balon_html(array $r, array $harita): string
     return $o . '</span>';
 }
 
+/**
+ * v426 — "Ne değişti" bildirimi: listede sipariş no'nun solundaki nokta + değişiklik sayısı ve üzerine gelince açılan özet.
+ * Kaynak zaman çizelgesi (siparis_olaylar): belge/mail ile gelen alan değişiklikleri, çatışmalar, yeni/silinen belge. Elle düzeltme,
+ * durum, PKL/mail/evrak adımları SAYILMAZ (bunlar kullanıcının kendi işlemi); sevkiyatın oluşturulduğu ilk dakikadaki dolum da sayılmaz
+ * (onu "YENİ" rozeti söyler). Hangi satırın "görülmemiş" olduğuna İSTEMCİ karar verir (görülme kaydı cihazda — v402): her satır kendi
+ * zaman damgasıyla gelir, JS son bakış zamanından eskileri atar. TEK sorgu (N+1 yok); hata → boş harita.
+ * @param list<int> $ids @return array<int,list<array{t:string,m:string}>> sevkiyat id → en yeni önce, en çok 20 satır
+ */
+function sipui_degisim_haritasi(PDO $pdo, array $ids, int $gun = 30): array
+{
+    $out = [];
+    if (!$ids) return $out;
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $turler = "'alan_guncellendi','catisma','belge_eklendi','belge_silindi','geri_getirildi'";
+    try {
+        $q = $pdo->prepare("SELECT o.sevkiyat_id, o.tur, o.eski, o.yeni, o.aciklama, o.created_at, s.created_at AS s_created
+            FROM siparis_olaylar o JOIN siparis_sevkiyatlar s ON s.id = o.sevkiyat_id
+            WHERE o.sevkiyat_id IN ($in) AND o.tur IN ($turler) AND o.created_at >= ? ORDER BY o.id DESC LIMIT 1500");
+        $q->execute(array_merge($ids, [date('Y-m-d H:i:s', time() - $gun * 86400)]));
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $o) {
+            $sid = (int)$o['sevkiyat_id'];
+            if (count($out[$sid] ?? []) >= 20) continue;
+            $ilk = strtotime((string)$o['s_created']);
+            if ($ilk !== false && strtotime((string)$o['created_at']) <= $ilk + 60) continue;   // oluşturulurken ilk dolum
+            $m = sipui_degisim_satiri($o);
+            if ($m !== '') $out[$sid][] = ['t' => (string)$o['created_at'], 'm' => $m];
+        }
+    } catch (Throwable $e) {
+        error_log('[siparis_ui] degisim haritasi: ' . get_class($e));
+        return [];
+    }
+    return $out;
+}
+
+/** v426 — tek olayı kısa Türkçe özet satırına çevirir ("Yükleme tarihi: 22.10.2026 → 23.10.2026"). Sayılmayan olay → ''. */
+function sipui_degisim_satiri(array $o): string
+{
+    $kes = static fn(string $s): string => mb_strlen($s) > 40 ? mb_substr($s, 0, 39) . '…' : $s;
+    $v = static function ($x) use ($kes): string {
+        $x = trim((string)$x);
+        if ($x === '') return '—';
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/', $x, $m)) return $m[3] . '.' . $m[2] . '.' . $m[1];
+        return $kes($x);
+    };
+    $ac = trim((string)($o['aciklama'] ?? ''));
+    switch ((string)$o['tur']) {
+        case 'alan_guncellendi':
+            $et = trim(explode(' — ', $ac)[0]);
+            if ($et === '') $et = 'Alan';
+            return trim((string)($o['eski'] ?? '')) === '' ? $et . ' eklendi: ' . $v($o['yeni']) : $et . ': ' . $v($o['eski']) . ' → ' . $v($o['yeni']);
+        case 'catisma':
+            $et = trim(explode(':', $ac)[0]);
+            return '⚠ ' . ($et !== '' ? $et : 'Alan') . ' çatışması: ' . $v($o['eski']) . ' ≠ ' . $v($o['yeni']);
+        case 'belge_eklendi':
+            return '📄 Yeni belge' . ($ac !== '' ? ': ' . $kes($ac) : '');
+        case 'belge_silindi':
+            return '🗑 Belge silindi' . (trim((string)($o['eski'] ?? '')) !== '' ? ': ' . $kes((string)$o['eski']) : '');
+        case 'geri_getirildi':
+            return '↺ Silinmiş sevkiyat yeni belgeyle geri geldi';
+    }
+    return '';
+}
+
+/**
+ * v426 — satır/kart için gizli değişim verisi: JS son bakıştan eski satırları atar, kalan varsa rozeti ("●N") sipariş no'nun soluna taşır.
+ * Veri yoksa ''. Metin h() ile kaçırılır; JS textContent ile basar.
+ */
+function sipui_degisim_html(array $sev, array $harita): string
+{
+    $l = $harita[(int)($sev['id'] ?? 0)] ?? [];
+    if (!$l) return '';
+    $o = '<span class="sip-dg-kap" hidden><span class="sip-dg" data-sip-balon tabindex="0" role="status"></span><span class="sip-balon-veri" hidden><span data-baslik="">';
+    foreach ($l as $x) $o .= '<span data-satir data-t="' . h($x['t']) . '">' . h($x['m']) . '</span>';
+    return $o . '</span></span></span>';
+}
+
 /** v396 — sevkiyatın güncel PKL dosya adı (oluşturulan/yüklenen); parti no'nun ÜSTÜNDE. PKL yoksa boş. */
 function sipui_pkl_ad_html(array $sev, array $pkl): string
 {

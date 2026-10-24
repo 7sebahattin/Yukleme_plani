@@ -782,6 +782,26 @@
         window.print();
     });
 
+    // v426 — "ne değişti" bildirimi: sunucu satırın değişim özetini gizli verir (her satır kendi zamanıyla); son bakış (taban / görülen) öncesi atılır,
+    // kalan varsa kırmızı nokta + sayı sipariş no'nun soluna taşınır; üzerine gelince v424 baloncuğu özeti açar (dokunmatikte title).
+    function dgGoster(kap, taban, gor) {
+        var dk = kap ? q('.sip-dg-kap', kap) : null, ref = kap ? q('.sip-ref', kap) : null;
+        if (!dk || !ref || !dk.hasAttribute('hidden')) return;
+        var tum = qa('[data-satir]', dk), sat = tum.filter(function (x) { var t = x.getAttribute('data-t') || ''; return t > taban && t > gor; });
+        tum.forEach(function (x) { if (sat.indexOf(x) < 0) x.parentNode.removeChild(x); });
+        if (!sat.length) return;
+        var n = sat.length, grup = q('[data-baslik]', dk), nokta = q('.sip-dg', dk);
+        sat.slice(8).forEach(function (x) { x.parentNode.removeChild(x); });
+        if (n > 8) { var fz = document.createElement('span'); fz.setAttribute('data-satir', ''); fz.textContent = '… +' + (n - 8) + ' daha'; grup.appendChild(fz); }
+        var metin = n + ' güncelleme — son bakışınızdan sonra';
+        grup.setAttribute('data-baslik', metin);
+        nokta.textContent = n > 99 ? '99+' : String(n);
+        nokta.setAttribute('aria-label', metin);
+        if (!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches)) nokta.title = metin + ':\n' + qa('[data-satir]', dk).map(function (x) { return x.textContent; }).join('\n');
+        dk.hidden = false;
+        ref.parentNode.insertBefore(dk, ref);
+    }
+
     // v402 — "Son bakışınızdan sonra değişti" çerçevesi. Görülme kaydı YALNIZ bu cihazda (localStorage; şema yok):
     // { t: taban zaman (ilk ziyaret, sunucu saati), s: { sevkiyat id: görülen değişme zamanı } }. Zamanlar "YYYY-AA-GG SS:DD:SS" → dizgi kıyaslanır.
     function gorulen() {
@@ -800,6 +820,7 @@
             var id = e.getAttribute('data-sip-gor-id'), upd = e.getAttribute('data-sip-gor-upd') || '', cre = e.getAttribute('data-sip-gor-yeni') || '';
             if (!upd || upd <= d.t || upd <= (d.s[id] || '')) return;
             var tr = e.closest ? e.closest('tr') : null, kart = e.closest ? e.closest('.sip-card') : null;
+            dgGoster(tr || kart, d.t, d.s[id] || '');
             // v420: son bakışınızdan sonra OLUŞAN sevkiyat → referansın yanında yanıp sönen neon "YENİ" (açılınca görüldü sayılır, rozet kalkar)
             if (cre && cre > d.t && cre > (d.s[id] || '')) {
                 var kap = tr || kart, ref = kap ? q('.sip-ref', kap) : null;
