@@ -45,6 +45,17 @@ function siparis_ui_tohum(PDO $db): array
     $id['s41'] = (int)siparis_sevkiyat_elle_ac($db, 'TC900041.10', '9000000041', '2026-12-10', 1)['id'];
     $db->exec('UPDATE siparis_sevkiyatlar SET var_pkl = 1 WHERE id = ' . $id['s41']);   // test kısayolu (PKL dosyası olmadan)
     siparis_durum_degistir($db, $id['s41'], 'mail_gonderildi', 1);
+    // v426: "ne değişti" bildirimi — s41'in zaman çizelgesine geçmiş günlerden sentetik güncellemeler (belge/mail kaynaklı); sevkiyat 4 gün önce açılmış gibi
+    $__b = time() - 3 * 86400; $__z = static fn(int $sn): string => date('Y-m-d H:i:s', $__b + $sn);
+    $db->prepare('UPDATE siparis_sevkiyatlar SET created_at = ?, updated_at = ? WHERE id = ?')->execute([date('Y-m-d H:i:s', $__b - 86400), $__z(7200), $id['s41']]);
+    $__o = $db->prepare('INSERT INTO siparis_olaylar (sevkiyat_id, tur, eski, yeni, aciklama, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+    foreach ([
+        ['alan_guncellendi', null, 'ILK-DOLUM', 'Navlun no — Loading List', $__b - 86400 + 30],            // oluşturulurken ilk dolum → SAYILMAZ
+        ['alan_guncellendi', '2026-12-10', '2026-12-11', 'Yükleme tarihi — Loading List', 0],
+        ['catisma', '34TST1', '34TST9', 'Plakalar: Loading List ≠ Price Confirmation', 3600],
+        ['alan_elle', 'A', 'B', 'Nakliyeci elle düzeltildi', 5400],                                          // kullanıcının kendi işlemi → SAYILMAZ
+        ['belge_eklendi', null, 'll', 'Loading List: ll_yeni.pdf (mailden)', 7200],
+    ] as [$__t, $__e, $__y, $__a, $__sn]) $__o->execute([$id['s41'], $__t, $__e, $__y, $__a, date('Y-m-d H:i:s', $__sn > 100000 ? $__sn : $__b + $__sn)]);
     siparis_durum_degistir($db, $id['s12'], 'iptal', 1, 'müşteri iptal etti');
     siparis_pkl_uret($db, $id['s1'], 1, true);                              // PKL hazır (açık, çatışmalı)
     // ikinci depo: başka depoda görünmeyecek sevkiyat

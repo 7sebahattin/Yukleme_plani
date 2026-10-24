@@ -809,3 +809,12 @@ html[data-theme="dark"] .sip-uyari-hata { color: #fca5a5; }
 .sip-balon-baslik:not(:first-child) { margin-top: 8px; }
 .sip-balon ul { margin: 0; padding: 0 0 0 16px; }
 .sip-balon li { margin: 2px 0; }
+
+/* ── v426: "ne değişti" bildirimi — sipariş no'nun solunda kırmızı nokta + sayı; üzerine gelince v424 baloncuğu özeti açar ── */
+.sip-dg-kap[hidden] { display: none; }
+.sip-dg-kap { display: inline-block; margin-right: 7px; vertical-align: middle; }
+.sip-card .sip-dg-kap { position: relative; z-index: 2; }   /* kartta .sip-card-link tüm kartı kaplar: nokta üstte kalmalı ki hover / odak ona gelsin */
+.sip-dg { display: inline-block; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: #dc2626; color: #fff;
+  font-size: 11px; font-weight: 800; line-height: 20px; text-align: center; cursor: help; box-shadow: 0 0 0 2px rgba(220, 38, 38, .25); }
+.sip-dg:focus-visible { outline: 2px solid #fcd34d; outline-offset: 2px; }
+html[data-theme="dark"] .sip-dg { box-shadow: 0 0 0 2px rgba(248, 113, 113, .35); }

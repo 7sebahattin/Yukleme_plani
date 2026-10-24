@@ -730,6 +730,39 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             await page.waitForTimeout(200);
             ok(`[${w}] v424 liste: fare ayrılınca baloncuk kapanır`, await page.evaluate(() => { const b = document.querySelector('.sip-balon'); return !b || b.hidden; }));
         }
+        // v426 — "ne değişti": sipariş no'nun solunda kırmızı nokta + sayı; hover'da özet (masaüstü), dokunmatikte title
+        const dgv = await page.evaluate(() => {
+            const k = Array.from(document.querySelectorAll('.sip-dg-kap')).filter(x => !x.hidden && x.offsetParent !== null);
+            if (!k.length) return { say: 0, tum: document.querySelectorAll('.sip-dg-kap').length };
+            const n = k[0].querySelector('.sip-dg'), kap = k[0].closest('tr, .sip-card'), ref = kap.querySelector('.sip-ref'), rn = n.getBoundingClientRect(), rr = ref.getBoundingClientRect();
+            const cs = getComputedStyle(n), sat = Array.from(k[0].querySelectorAll('[data-satir]'));
+            return { say: k.length, metin: n.textContent, aria: n.getAttribute('aria-label'), solda: rn.right <= rr.left + 1 && Math.abs((rn.top + rn.bottom) / 2 - (rr.top + rr.bottom) / 2) < 14, kirmizi: cs.backgroundColor,
+                yuvarlak: cs.borderTopLeftRadius, sat: sat.map(x => x.textContent), t: sat.map(x => x.getAttribute('data-t')), id: kap.querySelector('[data-sip-gor-id]').getAttribute('data-sip-gor-id'),
+                title: n.title, tasma: document.documentElement.scrollWidth - window.innerWidth, baslik: k[0].querySelector('[data-baslik]').getAttribute('data-baslik') };
+        });
+        ok(`[${w}] v426 liste: değişimi olan sevkiyatta kırmızı nokta + sayı "3", sipariş no'nun SOLUNDA (aynı satırda), taşma yok`, dgv.say === 1 && dgv.metin === '3' && dgv.solda && dgv.kirmizi === 'rgb(220, 38, 38)' && dgv.tasma <= 0 && /3 güncelleme/.test(dgv.aria), JSON.stringify(dgv));
+        ok(`[${w}] v426 liste: özet satırları (en yeni önce) — belge · çatışma · alan değişimi; sayılmayanlar yok`, dgv.sat && dgv.sat.length === 3 && /Yeni belge: Loading List: ll_yeni\.pdf/.test(dgv.sat[0]) && /Plakalar çatışması: 34TST1 ≠ 34TST9/.test(dgv.sat[1]) && dgv.sat[2] === 'Yükleme tarihi: 10.12.2026 → 11.12.2026' && !dgv.sat.join('|').includes('ILK-DOLUM'), JSON.stringify(dgv.sat));
+        if (!mobil) {
+            ok(`[${w}] v426 liste: masaüstünde native title YOK (çift baloncuk olmasın)`, dgv.title === '');
+            const dn = page.locator('.sip-dg-kap:not([hidden]) .sip-dg:visible').first();
+            await dn.hover();
+            await page.waitForTimeout(700);
+            const dbl = await page.evaluate(() => { const b = document.querySelector('.sip-balon'); if (!b || b.hidden) return null; return { baslik: b.querySelector('.sip-balon-baslik').textContent, li: Array.from(b.querySelectorAll('li')).map(x => x.textContent), ekranIci: b.getBoundingClientRect().right <= window.innerWidth && b.getBoundingClientRect().bottom <= window.innerHeight }; });
+            ok(`[${w}] v426 liste: noktanın üzerinde fare bekleyince özet baloncuğu açılır (başlık "3 güncelleme…", 3 satır, ekran içinde)`, dbl && /^3 güncelleme/.test(dbl.baslik) && dbl.li.length === 3 && dbl.li[2].startsWith('Yükleme tarihi:') && dbl.ekranIci, JSON.stringify(dbl));
+            await page.mouse.move(5, 5);
+            await page.waitForTimeout(200);
+        } else {
+            ok(`[${w}] v426 liste: dokunmatikte özet title'da (satırlar alt alta)`, dgv.title.includes('Yükleme tarihi: 10.12.2026 → 11.12.2026') && dgv.title.split('\n').length >= 3, dgv.title);
+        }
+        // son bakış ortada: yalnız o andan SONRAKİ güncelleme sayılır
+        const orta = dgv.t[1] || '';
+        const a2 = await ac('liste', w, h, false, async pg => { await pg.addInitScript(x => { try { localStorage.setItem('asya_sip_gorulen_1', JSON.stringify({ t: '2000-01-01 00:00:00', s: { [x.id]: x.t } })); } catch (e) {} }, { id: dgv.id, t: orta }); });
+        const dg2 = await a2.page.evaluate(() => { const k = Array.from(document.querySelectorAll('.sip-dg-kap')).filter(x => !x.hidden && x.offsetParent !== null); return { say: k.length, metin: k[0] ? k[0].querySelector('.sip-dg').textContent : null, sat: k[0] ? Array.from(k[0].querySelectorAll('[data-satir]')).map(x => x.textContent) : [] }; });
+        ok(`[${w}] v426 liste: görülen zamanından sonrası sayılır (3 → 1 güncelleme, yalnız yeni belge)`, dg2.say === 1 && dg2.metin === '1' && dg2.sat.length === 1 && /Yeni belge/.test(dg2.sat[0]), JSON.stringify(dg2));
+        await a2.ctx.close();
+        const a3 = await ac('liste', w, h, false, async pg => { await pg.addInitScript(x => { try { localStorage.setItem('asya_sip_gorulen_1', JSON.stringify({ t: '2000-01-01 00:00:00', s: { [x.id]: '2099-01-01 00:00:00' } })); } catch (e) {} }, { id: dgv.id }); });
+        ok(`[${w}] v426 liste: sevkiyat açılıp görülmüşse nokta çıkmaz`, await a3.page.evaluate(() => Array.from(document.querySelectorAll('.sip-dg-kap')).every(x => x.hidden)));
+        await a3.ctx.close();
         ok(`[${w}] v402 liste: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
         await ctx.close();
 
