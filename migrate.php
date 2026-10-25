@@ -724,10 +724,10 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <?php endif; ?>
     </p>
     <p style="color:#555;font-size:.9em;">
-      Ek alanlar (v427): <code>siparis_no</code>, <code>siparis_firma</code>, <code>tasima_sekli</code>, <code>lot_no</code> —
+      Ek alanlar (v427): <code>siparis_no</code>, <code>siparis_firma</code>, <code>tasima_sekli</code>, <code>lot_no</code>; (v428): <code>teslim_yeri</code>, <code>teslim_sekli</code> —
       yalnız nullable <code>ADD COLUMN</code>; aynı düğme eksik kolonları da ekler. Eklenmezse bu dört alan formda gizli kalır.
     </p>
-    <?php $usipHazir = usip_hazir($pdo); $usipEk = $usipHazir && usip_ek_hazir($pdo); ?>
+    <?php $usipHazir = usip_hazir($pdo); $usipEk = $usipHazir && usip_ek_hazir($pdo) && usip_ek_hazir($pdo, 'b'); ?>
     <p style="font-weight:600;color:<?= $usipEk ? '#1f9d55' : '#c0392b' ?>;"><?= $usipEk ? '✓ Tablolar ve ek alanlar var' : ($usipHazir ? '✗ Ek alan kolonları eksik' : '✗ Tablolar eksik') ?></p>
     <form method="post" style="margin-top:12px;">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">

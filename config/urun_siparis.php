@@ -43,6 +43,8 @@ function usip_tablolar(): array
             `siparis_firma`   VARCHAR(150)  NULL DEFAULT NULL,
             `tasima_sekli`    VARCHAR(40)   NULL DEFAULT NULL,
             `lot_no`          VARCHAR(60)   NULL DEFAULT NULL,
+            `teslim_yeri`     VARCHAR(150)  NULL DEFAULT NULL,
+            `teslim_sekli`    VARCHAR(10)   NULL DEFAULT NULL,
             `aciklama`        VARCHAR(1000) NULL DEFAULT NULL,
             `depo`            VARCHAR(100)  NOT NULL DEFAULT '',
             `created_by`      INT           NULL DEFAULT NULL,
@@ -87,7 +89,22 @@ function usip_ek_kolonlar(): array
         ['siparis_firma', 'VARCHAR(150) NULL DEFAULT NULL'],
         ['tasima_sekli', 'VARCHAR(40) NULL DEFAULT NULL'],
         ['lot_no', 'VARCHAR(60) NULL DEFAULT NULL'],
+        ['teslim_yeri', 'VARCHAR(150) NULL DEFAULT NULL', 'b'],
+        ['teslim_sekli', 'VARCHAR(10) NULL DEFAULT NULL', 'b'],
     ];
+}
+
+/** Teslim şekli (Incoterms) kod önerileri; alan serbest koddur, liste yalnız öneridir. @return list<string> */
+function usip_teslim_kodlari(): array
+{
+    return ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'];
+}
+
+/** Teslim şekli kodu: büyük harf, yalnız harf/rakam, en çok 10. */
+function usip_kod(string $s): ?string
+{
+    $s = mb_substr((string)preg_replace('/[^A-Z0-9]/', '', tr_upper($s)), 0, 10, 'UTF-8');
+    return $s === '' ? null : $s;
 }
 
 /** Taşıma şekli beyaz listesi (select seçenekleri; sunucu da yalnız bunları kabul eder). @return list<string> */
@@ -97,13 +114,14 @@ function usip_tasima_sekilleri(): array
 }
 
 /** Ek alan kolonları kurulu mu? Değilse sayfa bu alanları gizler ve kayıt onları yazmaz. */
-function usip_ek_hazir(PDO $pdo): bool
+function usip_ek_hazir(PDO $pdo, string $grup = 'a'): bool
 {
     static $var = [];
-    $k = spl_object_id($pdo);
+    $k = spl_object_id($pdo) . $grup;
     if (isset($var[$k])) return true;
     try {
-        $pdo->query('SELECT ' . implode(',', array_map(static fn($c) => '`' . $c[0] . '`', usip_ek_kolonlar())) . ' FROM urun_siparisleri LIMIT 0');
+        $kol = array_values(array_filter(usip_ek_kolonlar(), static fn($c) => ($c[2] ?? 'a') === $grup));
+        $pdo->query('SELECT ' . implode(',', array_map(static fn($c) => '`' . $c[0] . '`', $kol)) . ' FROM urun_siparisleri LIMIT 0');
         return $var[$k] = true;
     } catch (PDOException $e) {
         return false;
@@ -130,7 +148,7 @@ function usip_migrate(PDO $pdo): array
     $anaVar = true;
     try { $pdo->query('SELECT 1 FROM urun_siparisleri LIMIT 0'); } catch (PDOException $e) { $anaVar = false; }
     if ($anaVar) {
-        foreach (usip_ek_kolonlar() as [$kol, $tan]) {
+        foreach (usip_ek_kolonlar() as [$kol, $tan]) {   // üçüncü öğe (grup) yok sayılır
             $ad = 'urun_siparisleri.' . $kol;
             try { $pdo->query("SELECT `$kol` FROM urun_siparisleri LIMIT 0"); $rapor[] = ['tablo' => $ad, 'durum' => 'var', 'mesaj' => 'Kolon zaten mevcut.']; continue; }
             catch (PDOException $e) { /* yok → ekle */ }
@@ -283,6 +301,7 @@ function usip_dogrula(array $in): array
         'yurtici_gumruk' => $bos($in['yurtici_gumruk'] ?? '', 150), 'navlun_no' => $bos($in['navlun_no'] ?? '', 60),
         'siparis_no' => $bos($in['siparis_no'] ?? '', 60), 'siparis_firma' => $bos($in['siparis_firma'] ?? '', 150),
         'tasima_sekli' => $tasima, 'lot_no' => $bos($in['lot_no'] ?? '', 60),
+        'teslim_yeri' => $bos($in['teslim_yeri'] ?? '', 150), 'teslim_sekli' => usip_kod((string)($in['teslim_sekli'] ?? '')),
         'aciklama' => $bos($in['aciklama'] ?? '', 1000),
     ];
     return [$temiz, $h];
@@ -356,8 +375,9 @@ function usip_kaydet(PDO $pdo, array $t, int $userId, ?int $id = null, string $d
         'nakliyeci' => $t['nakliyeci'], 'cekici_plaka' => $t['cekici_plaka'], 'dorse_plaka' => $t['dorse_plaka'],
         'sofor_adi' => $t['sofor_adi'], 'sofor_telefon' => $t['sofor_telefon'],
         'yurtici_gumruk' => $t['yurtici_gumruk'], 'navlun_no' => $t['navlun_no'], 'aciklama' => $t['aciklama']];
-    if (usip_ek_hazir($pdo)) {   // kolonlar kurulmadıysa yeni alanlar yazılmaz (migrate.php kartı)
-        foreach (usip_ek_kolonlar() as [$kol]) $kolonlar[$kol] = $t[$kol] ?? null;
+    foreach (['a', 'b'] as $grup) {   // kolonlar kurulmadıysa o grubun alanları yazılmaz (migrate.php kartı)
+        if (!usip_ek_hazir($pdo, $grup)) continue;
+        foreach (usip_ek_kolonlar() as $c) if (($c[2] ?? 'a') === $grup) $kolonlar[$c[0]] = $t[$c[0]] ?? null;
     }
 
     $sahip = !$pdo->inTransaction();
@@ -423,6 +443,7 @@ function usip_filtre(array $get, ?PDO $pdo = null): array
         $like = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%';
         $alanlar = ['s.firma', 's.urun', 's.nakliyeci', 's.cekici_plaka', 's.dorse_plaka', 's.navlun_no', 's.sofor_adi', 's.palet_cinsi', 's.kasa_cinsi'];
         if ($pdo !== null && usip_ek_hazir($pdo)) array_push($alanlar, 's.siparis_no', 's.siparis_firma', 's.lot_no');
+        if ($pdo !== null && usip_ek_hazir($pdo, 'b')) array_push($alanlar, 's.teslim_yeri', 's.teslim_sekli');
         $parcalar = [];
         foreach ($alanlar as $i => $a) { $parcalar[] = "$a LIKE :uq$i ESCAPE '!'"; $par[":uq$i"] = $like; }
         $parcalar[] = "EXISTS (SELECT 1 FROM urun_siparis_kalibreler k WHERE k.siparis_id = s.id AND k.kalibre LIKE :uqk ESCAPE '!')";
@@ -443,7 +464,8 @@ function usip_liste(PDO $pdo, array $F, int $sayfa): array
     $adet = (int)$top['n'];
     $sayfaSay = max(1, (int)ceil($adet / USIP_SAYFA_ADEDI));
     $sayfa = max(1, min($sayfa, $sayfaSay));
-    $ek = usip_ek_hazir($pdo) ? ', s.siparis_no, s.siparis_firma, s.tasima_sekli, s.lot_no' : '';
+    $ek = (usip_ek_hazir($pdo) ? ', s.siparis_no, s.siparis_firma, s.tasima_sekli, s.lot_no' : '')
+        . (usip_ek_hazir($pdo, 'b') ? ', s.teslim_yeri, s.teslim_sekli' : '');
     $st = $pdo->prepare('SELECT s.id, s.firma, s.urun, s.teslimat_tarihi, s.palet_cinsi, s.kasa_cinsi, s.birim_fiyat, s.toplam_palet, s.toplam_kasa,
                                 s.toplam_kg, s.tutar, s.nakliyeci, s.cekici_plaka, s.dorse_plaka, s.navlun_no' . $ek . '
                          FROM urun_siparisleri s WHERE ' . $F['where'] . '

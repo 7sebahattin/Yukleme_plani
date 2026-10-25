@@ -9,6 +9,7 @@
   var CSRF = kok.getAttribute('data-csrf') || '';
   var YAZMA = kok.getAttribute('data-yazma') === '1';
   var SILME = kok.getAttribute('data-silme') === '1';
+  var EK2 = kok.getAttribute('data-ek2') === '1';   // teslim yeri / teslim şekli kolonları kurulu
   var EK = kok.getAttribute('data-ek') === '1';   // sipariş no / gelen firma / taşıma şekli / lot no kolonları kurulu
   var UC = 'urun_siparis_islem.php';
   var REF = { firma: [], urun: [], palet: [], kasa: [], gelen: [] };
@@ -73,6 +74,9 @@
   combo('f_urun', REF.urun, function (a) { return '+ “' + a + '” ürün olarak ekle'; });
   combo('f_pcins', REF.palet, function (a) { return '+ “' + a + '” palet cinsi olarak ekle'; });
   combo('f_kcins', REF.kasa, function (a) { return '+ “' + a + '” kasa cinsi olarak ekle'; });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-kod]'), function (i) {
+    i.addEventListener('input', function () { i.value = i.value.replace(/[^A-Za-z0-9İıŞşĞğÜüÖöÇç]/g, '').toLocaleUpperCase('tr').replace(/[^A-Z0-9]/g, ''); });
+  });
   Array.prototype.forEach.call(document.querySelectorAll('[data-plaka]'), function (i) {
     i.addEventListener('input', function () { i.value = i.value.replace(/\s/g, '').toLocaleUpperCase('tr'); });
   });
@@ -103,6 +107,7 @@
       o.siparis_no = $('f_sipno').value.trim(); o.siparis_firma = $('f_sipfirma').value.trim();
       o.lot_no = $('f_lot').value.trim(); o.tasima_sekli = $('l_tasima').value;
     }
+    if (EK2) { o.teslim_yeri = $('f_tyeri').value.trim(); o.teslim_sekli = $('f_tsekli').value.trim(); }
     return o;
   }
   function doldur(s) {
@@ -115,6 +120,7 @@
     $('l_nakliyeci').value = s.nakliyeci || ''; $('l_cekici').value = s.cekici_plaka || ''; $('l_dorse').value = s.dorse_plaka || '';
     $('l_sofor').value = s.sofor_adi || ''; $('l_tel').value = s.sofor_telefon || ''; $('l_gumruk').value = s.yurtici_gumruk || ''; $('l_navlun').value = s.navlun_no || '';
     $('f_aciklama').value = s.aciklama || '';
+    if (EK2) { $('f_tyeri').value = s.teslim_yeri || ''; $('f_tsekli').value = s.teslim_sekli || ''; }
     if (EK) { $('f_sipno').value = s.siparis_no || ''; $('f_sipfirma').value = s.siparis_firma || ''; $('f_lot').value = s.lot_no || ''; $('l_tasima').value = s.tasima_sekli || ''; }
     $('usipKal').innerHTML = '';
     (s.kalibreler && s.kalibreler.length ? s.kalibreler : [{ kalibre: '', palet: '' }]).forEach(function (k) { kalSatir(k.kalibre, k.palet); });
