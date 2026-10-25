@@ -97,6 +97,8 @@ foreach ([
 ok('doğrulama: fiyat/telefon/nakliyeci isteğe bağlı', !$e3 && $t3['birim_fiyat'] === null && $t3['sofor_telefon'] === null && $t3['nakliyeci'] === null);
 [$te, $ee] = usip_dogrula(govde(['siparis_no' => ' PO  123 ', 'siparis_firma' => 'Müşteri A.Ş.', 'tasima_sekli' => 'karayolu', 'lot_no' => 'L-77']));
 ok('doğrulama v427: sipariş no / gelen firma / lot temizlenir, taşıma şekli kanonik yazılır', $ee === [] && $te['siparis_no'] === 'PO 123' && $te['siparis_firma'] === 'Müşteri A.Ş.' && $te['tasima_sekli'] === 'Karayolu' && $te['lot_no'] === 'L-77');
+[$tk, $ek3] = usip_dogrula(govde(['teslim_sekli' => ' fca-x ', 'teslim_yeri' => ' Moskova  depo ']));
+ok('doğrulama v428: teslim şekli kod (büyük harf, yalnız harf/rakam), teslim yeri temizlenir', $ek3 === [] && $tk['teslim_sekli'] === 'FCAX' && $tk['teslim_yeri'] === 'Moskova depo' && usip_dogrula(govde(['teslim_sekli' => '']))[0]['teslim_sekli'] === null);
 ok('doğrulama v427: listede olmayan taşıma şekli reddedilir, boşsa null', usip_dogrula(govde(['tasima_sekli' => 'Uçan halı']))[1] !== [] && usip_dogrula(govde(['tasima_sekli' => '']))[0]['tasima_sekli'] === null);
 ok('doğrulama: 31 kalibre reddedilir', usip_dogrula(govde(['kalibreler' => array_map(fn($i) => ['kalibre' => (string)$i, 'palet' => '1'], range(1, 31))]))[1] !== []);
 

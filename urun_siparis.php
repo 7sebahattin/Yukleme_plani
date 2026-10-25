@@ -34,6 +34,7 @@ $F = usip_filtre($_GET, $pdo);
 $q = $F['q'];
 $L = usip_liste($pdo, $F, max(1, (int)($_GET['sayfa'] ?? 1)));
 $ref = usip_referanslar($pdo);
+$ek2 = usip_ek_hazir($pdo, 'b');   // v428: teslim yeri / teslim şekli kolonları kurulu mu
 $ek = usip_ek_hazir($pdo);   // v427: sipariş no / gelen firma / taşıma şekli / lot no kolonları kurulu mu
 $bugun = date('Y-m-d');
 
@@ -56,7 +57,7 @@ $sayfaUrl = function (int $s) use ($q): string {
 $yazdirUrl = h('urun_siparis_yazdir.php' . ($q !== '' ? '?' . http_build_query(['q' => $q]) : ''));
 $T = $L['toplam'];
 ?>
-<div class="usip" id="usip" data-csrf="<?= h(csrf_token()) ?>" data-yazma="<?= $yaz ? '1' : '0' ?>" data-silme="<?= $sil ? '1' : '0' ?>" data-ek="<?= $ek ? '1' : '0' ?>">
+<div class="usip" id="usip" data-csrf="<?= h(csrf_token()) ?>" data-yazma="<?= $yaz ? '1' : '0' ?>" data-silme="<?= $sil ? '1' : '0' ?>" data-ek="<?= $ek ? '1' : '0' ?>" data-ek2="<?= $ek2 ? '1' : '0' ?>">
   <div class="page-head">
     <div>
       <h1>🛒 Ürün Siparişleri</h1>
@@ -170,6 +171,11 @@ $T = $L['toplam'];
             <div class="usip-f"><label for="f_sipno">Sipariş No</label><input id="f_sipno" maxlength="60" autocomplete="off"></div>
             <div class="usip-f"><label for="f_sipfirma">Siparişin Geldiği Firma</label><div class="usip-combo"><input id="f_sipfirma" maxlength="150" placeholder="Seçin veya yeni firma yazın" autocomplete="off" role="combobox" aria-expanded="false"><div class="usip-list" hidden></div></div></div>
             <div class="usip-f"><label for="f_lot">Lot No</label><input id="f_lot" maxlength="60" autocomplete="off"></div>
+<?php endif; ?>
+<?php if ($ek2): ?>
+            <div class="usip-f"><label for="f_tsekli">Teslim Şekli <span class="u">(kod)</span></label><input id="f_tsekli" list="usipTeslimKodlari" maxlength="10" placeholder="örn. FCA" autocomplete="off" data-kod>
+              <datalist id="usipTeslimKodlari"><?php foreach (usip_teslim_kodlari() as $tk): ?><option value="<?= h($tk) ?>"><?php endforeach; ?></datalist></div>
+            <div class="usip-f"><label for="f_tyeri">Teslim Yeri</label><input id="f_tyeri" maxlength="150" placeholder="Teslim yeri / adresi" autocomplete="off"></div>
 <?php endif; ?>
           </div>
 
