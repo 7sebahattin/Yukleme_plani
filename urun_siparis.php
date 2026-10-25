@@ -168,7 +168,7 @@ $T = $L['toplam'];
             <div class="usip-f"><label for="f_tarih">Teslimat Tarihi</label><input id="f_tarih" type="date"></div>
 <?php if ($ek): ?>
             <div class="usip-f"><label for="f_sipno">Sipariş No</label><input id="f_sipno" maxlength="60" autocomplete="off"></div>
-            <div class="usip-f"><label for="f_sipfirma">Siparişin Geldiği Firma</label><input id="f_sipfirma" maxlength="150" autocomplete="off"></div>
+            <div class="usip-f"><label for="f_sipfirma">Siparişin Geldiği Firma</label><div class="usip-combo"><input id="f_sipfirma" maxlength="150" placeholder="Seçin veya yeni firma yazın" autocomplete="off" role="combobox" aria-expanded="false"><div class="usip-list" hidden></div></div></div>
             <div class="usip-f"><label for="f_lot">Lot No</label><input id="f_lot" maxlength="60" autocomplete="off"></div>
 <?php endif; ?>
           </div>
@@ -176,7 +176,7 @@ $T = $L['toplam'];
           <p class="usip-bt usip-bt-kal"><span>Kalibre ve Palet</span><button type="button" class="btn btn-sm" id="usipKalEkle">+ Kalibre Ekle</button></p>
           <div class="usip-kal" id="usipKal"></div>
 
-          <details class="usip-acc" id="accAmb" open>
+          <details class="usip-acc" id="accAmb">
             <summary><span class="t">Ambalaj</span><span class="o" id="o_amb"></span><span class="cv"></span></summary>
             <div class="usip-acc-b"><div class="usip-grid">
               <div class="usip-f"><label for="f_pcins">Palet Cinsi</label>
@@ -209,7 +209,7 @@ $T = $L['toplam'];
             </div></div>
           </details>
 
-          <details class="usip-acc" id="accFiyat" open>
+          <details class="usip-acc" id="accFiyat">
             <summary><span class="t">Fiyat</span><span class="o" id="o_fiyat"></span><span class="cv"></span></summary>
             <div class="usip-acc-b"><div class="usip-grid">
               <div class="usip-f"><label for="f_fiyat">Birim Fiyat <span class="u">(TL / kg)</span></label><input id="f_fiyat" inputmode="decimal" placeholder="28,50"></div>

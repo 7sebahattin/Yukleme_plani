@@ -294,11 +294,11 @@ function usip_dogrula(array $in): array
  * Firma · Ürün · Palet cinsi · Kasa cinsi öneri kaynakları.
  *  etiket: hks (HKS ürün kataloğu) · tanim (Tanımlar sayfası) · kayit (önceki siparişlerde kullanılmış)
  * Aynı ad (TR-duyarsız) tek satırdır; öncelik hks > tanim > kayit.
- * @return array{firma:list<array{ad:string,t:string}>,urun:list<array{ad:string,t:string}>,palet:list<array{ad:string,t:string}>,kasa:list<array{ad:string,t:string}>}
+ * @return array{gelen:list<array{ad:string,t:string}>,firma:list<array{ad:string,t:string}>,urun:list<array{ad:string,t:string}>,palet:list<array{ad:string,t:string}>,kasa:list<array{ad:string,t:string}>}
  */
 function usip_referanslar(PDO $pdo): array
 {
-    $liste = ['firma' => [], 'urun' => [], 'palet' => [], 'kasa' => []];
+    $liste = ['firma' => [], 'urun' => [], 'palet' => [], 'kasa' => [], 'gelen' => []];
     $ekle = static function (string $alan, string $ad, string $t) use (&$liste): void {
         $ad = usip_ad($ad, 150);
         if ($ad === '') return;
@@ -307,11 +307,13 @@ function usip_referanslar(PDO $pdo): array
     };
     try { foreach ((function_exists('bb_katalog') ? (bb_katalog()['urunler'] ?? []) : []) as $u) $ekle('urun', (string)($u['ad'] ?? ''), 'hks'); }
     catch (Throwable $e) { /* katalog yoksa serbest metin çalışır */ }
-    foreach (['firma' => 'firma', 'urun' => 'urun', 'palet' => 'palet_tipi', 'kasa' => 'kasa_cinsi'] as $alan => $tip) {
+    foreach (['firma' => 'firma', 'urun' => 'urun', 'palet' => 'palet_tipi', 'kasa' => 'kasa_cinsi', 'gelen' => 'firma'] as $alan => $tip) {
         try { foreach (get_definitions_by_type($tip) as $r) $ekle($alan, (string)$r['name'], 'tanim'); }
         catch (Throwable $e) { /* tanım tablosu okunamazsa sipariş geçmişi yeter */ }
     }
-    foreach (['firma' => 'firma', 'urun' => 'urun', 'palet' => 'palet_cinsi', 'kasa' => 'kasa_cinsi'] as $alan => $kol) {
+    $kayitKol = ['firma' => 'firma', 'urun' => 'urun', 'palet' => 'palet_cinsi', 'kasa' => 'kasa_cinsi'];
+    if (usip_ek_hazir($pdo)) $kayitKol['gelen'] = 'siparis_firma';   // siparişin geldiği firma: önceki girişlerden öğrenir
+    foreach ($kayitKol as $alan => $kol) {
         try {
             $st = $pdo->query("SELECT DISTINCT `$kol` FROM urun_siparisleri WHERE deleted_at IS NULL AND `$kol` IS NOT NULL AND `$kol` <> '' LIMIT 1000");
             foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $ad) $ekle($alan, (string)$ad, 'kayit');
@@ -344,6 +346,7 @@ function usip_kaydet(PDO $pdo, array $t, int $userId, ?int $id = null, string $d
     $t['urun']  = (string)usip_kanonik($ref['urun'], $t['urun']);
     $t['palet_cinsi'] = usip_kanonik($ref['palet'], $t['palet_cinsi']);
     $t['kasa_cinsi']  = usip_kanonik($ref['kasa'], $t['kasa_cinsi']);
+    $t['siparis_firma'] = usip_kanonik($ref['gelen'], $t['siparis_firma'] ?? null);
     $hs = usip_hesap($t['kalibreler'], $t['palet_kasa'], $t['birim_agirlik'], $t['birim_fiyat']);
 
     $kolonlar = ['firma' => $t['firma'], 'urun' => $t['urun'], 'teslimat_tarihi' => $t['teslimat_tarihi'],
