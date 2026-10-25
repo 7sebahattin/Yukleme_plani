@@ -921,6 +921,11 @@
   .tk-tablo tbody tr:nth-child(even) { background:var(--satir-cift); }
   .tk-tablo .sag { text-align:right; font-variant-numeric:tabular-nums; }
   .tk-tablo tbody b { color:var(--navy); }
+  /* ── Bana yapılan bildirimler (v432) ── */
+  .gl-cipler { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; }
+  .gl-cip { border:1.5px solid var(--cizgi); background:var(--kart); color:var(--metin); border-radius:999px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .gl-cip:hover { border-color:var(--navy); }
+  .gl-ad-tc { color:var(--soluk); font-size:11.5px; display:block; }
 
   /* ── Koyu tema bileşen düzeltmeleri ──
      --navy koyu temada AÇIK mürekkebe döner (başlıklar için doğru); bu yüzden
@@ -994,6 +999,7 @@
       <div class="grup-liste">
         <button type="button" id="btnStok">📦 Stok Sorgulama</button>
         <button type="button" id="btnTopluKunye">🖨️ Bildirim Çoklu Künye Basım</button>
+        <button type="button" id="btnGelen">📥 Bana Yapılan Bildirimler</button>
         <!-- Geçmiş Dönem Borçları / Borç / Bordro / Rüsum Sorgulama: HKS web
              servislerinde karşılığı YOK — menüden kaldırıldı. Rüsum, gönderim
              cevabında döner ve Gönderilenler kartlarında gösterilir. -->
@@ -1450,6 +1456,42 @@
   </main>
 </div>
 
+<!-- ============ EKRAN: BANA YAPILAN BİLDİRİMLER ============ -->
+<div id="ekranGelen" class="gizli">
+  <div class="ustbar">
+    <button class="geri" id="btnGelenGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
+    <div class="baslik">📥 Bana Yapılan Bildirimler</div>
+  </div>
+  <main>
+    <div class="tk-form">
+      <div class="satir2">
+        <div>
+          <label for="glBas">Başlangıç</label>
+          <input id="glBas" type="date">
+        </div>
+        <div>
+          <label for="glBit">Bitiş</label>
+          <input id="glBit" type="date">
+        </div>
+      </div>
+      <div class="gl-cipler">
+        <button type="button" class="gl-cip" data-gl-cip="bugun">Bugün</button>
+        <button type="button" class="gl-cip" data-gl-cip="dun">Dün</button>
+        <button type="button" class="gl-cip" data-gl-cip="7">Son 7 gün</button>
+        <button type="button" class="gl-cip" data-gl-cip="30">Son 30 gün</button>
+      </div>
+      <button class="btn btn-teal" id="btnGelenSorgula" style="margin-top:12px">🔍 Sorgula</button>
+      <div class="mesaj" id="glMesaj"></div>
+      <p style="font-size:11.5px;color:var(--soluk);margin-top:8px">
+        Firmaya yapılan (gelen) bildirimlerin tümü listelenir; kalanı sıfır olanlar da dahildir.
+        En çok 6 ay sorgulanabilir. Gönderen adı HKS'te yoktur; Kişi Havuzu'nda kayıtlıysa ad gösterilir.
+      </p>
+    </div>
+    <div class="stok-ozet" id="glOzet"></div>
+    <div id="glSonucSarma"></div>
+  </main>
+</div>
+
 <!-- ============ EKRAN: BİLDİRİM ETİKET BASIM ============ -->
 <div id="ekranEtiket" class="gizli">
   <div class="ustbar">
@@ -1812,6 +1854,7 @@ const API_ROTA = {
   'POST /api/beldeler': 'beldeler',
   'POST /api/bildirim_onizle': 'bildirim_onizle',
   'POST /api/sorgu': 'sorgu',
+  'POST /api/gelen_sorgu': 'gelen_sorgu',
   'POST /api/etiket': 'etiket',
   // Referanssız (Satın Alım) mal bilgileri referansları
   'POST /api/urun_listeleri': 'urun_listeleri',
@@ -1900,7 +1943,7 @@ function toast(metin) {
 }
 
 function ekranGoster(ad) {
-  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranToplu', 'ekranSorgu', 'ekranEtiket']
+  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranToplu', 'ekranSorgu', 'ekranGelen', 'ekranEtiket']
     .forEach(e => $(e).classList.add('gizli'));
   $(ad).classList.remove('gizli');
   if (ad !== 'ekranBildirim') $('ozet').classList.add('gizli');
@@ -2211,6 +2254,73 @@ $('btnSorgula').onclick = async () => {
     $('sgSonucSarma').innerHTML = '';
   }
   $('btnSorgula').disabled = false; $('btnSorgula').textContent = '🔍 Sorgula';
+};
+
+// ================= BANA YAPILAN BİLDİRİMLER (gelen; v432) =================
+const glTarih = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function glAralikYaz(gunGeri, bitisGunGeri) {
+  const b = new Date(); b.setDate(b.getDate() - gunGeri);
+  const e = new Date(); e.setDate(e.getDate() - bitisGunGeri);
+  $('glBas').value = glTarih(b); $('glBit').value = glTarih(e);
+}
+$('btnGelen').onclick = () => {
+  ekranGoster('ekranGelen');
+  glAralikYaz(0, 0);
+  $('glMesaj').className = 'mesaj'; $('glOzet').textContent = ''; $('glSonucSarma').innerHTML = '';
+};
+$('btnGelenGeri').onclick = () => ekranGoster('ekranMenu');
+document.querySelectorAll('[data-gl-cip]').forEach(b => {
+  b.onclick = () => {
+    const k = b.getAttribute('data-gl-cip');
+    if (k === 'bugun') glAralikYaz(0, 0);
+    else if (k === 'dun') glAralikYaz(1, 1);
+    else glAralikYaz(parseInt(k, 10), 0);
+  };
+});
+$('btnGelenSorgula').onclick = async () => {
+  if (!aktifFirma) return;
+  const bas = $('glBas').value, bit = $('glBit').value;
+  $('glMesaj').className = 'mesaj';
+  if (!bas || !bit) { mesajGoster('glMesaj', 'Başlangıç ve bitiş tarihini seçin.', 'hata'); return; }
+  if (bas > bit) { mesajGoster('glMesaj', 'Başlangıç tarihi bitişten sonra olamaz.', 'hata'); return; }
+  const btn = $('btnGelenSorgula');
+  btn.disabled = true; btn.textContent = '⏳ Sorgulanıyor...';
+  $('glOzet').textContent = '';
+  $('glSonucSarma').innerHTML = '<div class="yukleniyor">Sorgulanıyor... (geniş aralıklarda bir dakika sürebilir)</div>';
+  try {
+    const j = await api('/api/gelen_sorgu', 'POST', { firmaId: aktifFirma.id, baslangic: bas, bitis: bit });
+    const liste = j.bildirimler || [];
+    const uyari = j.kismiHata ? ` · ⚠ ${j.kismiHata} tarih parçası alınamadı, liste eksik olabilir` : '';
+    if (!liste.length) {
+      $('glSonucSarma').innerHTML = '<div class="yukleniyor">Bu aralıkta size yapılmış bildirim bulunamadı.' + eHtml(uyari) + '</div>';
+    } else {
+      const topKg = liste.reduce((t, s) => t + Number(s.miktar || 0), 0);
+      $('glOzet').innerHTML = `<b>${liste.length}</b> bildirim · Toplam <b>${fmt(Math.round(topKg))} KG</b>${eHtml(uyari)}`;
+      let h = '<div class="tk-tablo-sarma"><table class="tk-tablo" id="glTablo"><thead><tr>' +
+        '<th>Tarih</th><th>Künye No</th><th>Ürün</th><th class="sag">Miktar</th>' +
+        '<th class="sag">Kalan</th><th>Gönderen</th><th>Plaka/Belge</th></tr></thead><tbody>';
+      liste.forEach(s => {
+        const gonderen = s.gonderenAd
+          ? `${eHtml(s.gonderenAd)}<span class="gl-ad-tc">${eHtml(s.bildirimciTc)}</span>`
+          : eHtml(s.bildirimciTc || '—');
+        h += '<tr>' +
+          `<td>${eHtml(s.tarih)}${s.saat ? ' ' + eHtml(s.saat) : ''}</td>` +
+          `<td><b>${eHtml(s.kunyeNo)}</b></td>` +
+          `<td>${urunIkonu(s.urun)} ${eHtml(s.urun)}${s.cins ? ' · ' + eHtml(s.cins) : ''}</td>` +
+          `<td class="sag">${fmt(Math.round(Number(s.miktar || 0)))} ${eHtml(s.birim)}</td>` +
+          `<td class="sag">${fmt(Math.round(Number(s.kalan || 0)))}</td>` +
+          `<td>${gonderen}</td>` +
+          `<td>${eHtml(s.plaka || s.belgeNo || '—')}</td>` +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      $('glSonucSarma').innerHTML = h;
+    }
+  } catch (e) {
+    mesajGoster('glMesaj', e.message, 'hata');
+    $('glSonucSarma').innerHTML = '';
+  }
+  btn.disabled = false; btn.textContent = '🔍 Sorgula';
 };
 
 // ================= BİLDİRİM ETİKET BASIM =================

@@ -47,6 +47,12 @@ body.hk-page .container {
        düğmeler görünmüyordu). auto = kalan genişlik. */
     width: auto;
     min-width: 0;
+    /* Body flex-kolon + global .container{margin:0 auto}: auto yan marjlar öğeyi stretch etmez, içeriğe
+       (iframe'in 300px varsayılanına) daraltır → mobilde ortada dar sütun. stretch + sıfır marj şart;
+       masaüstündeki margin-left 220/260px !important kuralı soldaki marjı yine ezer. */
+    align-self: stretch;
+    margin-left: 0;
+    margin-right: 0;
 }
 body.hk-page .hk-frame {
     display: block;

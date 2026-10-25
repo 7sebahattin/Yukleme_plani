@@ -1029,6 +1029,135 @@ function hks_yaptigim_bildirimler($cfg, $aySayisi = 1, &$ham = null) {
   return $sonuc;
 }
 
+// ── Bana Yapılan Bildirimler (GELEN; v432) ────────────────────────────────
+// BildirimServisBildirimciyeYapilanBildirimListesi — firmaya (bildirimciye)
+// YAPILAN bildirimler. hks_kunye_detay_penceresi ile AYNI metod, ama o yalnız
+// kalanı >0 olanları ister; burada KalanMiktariSifirdanBuyukOlanlar=false: kalanı
+// 0 olanlar da gelir (gelen bildirimlerin TÜMÜ). HKS "en fazla 1 ay" kuralı →
+// ≤27 günlük pencereler. Gönderen ADI yanıtta YOK (yalnız TC/VKN) — ad, Kişi
+// Havuzu'ndan api.php'de eşlenir.
+const HKS_GELEN_MAX_GUN = 186;     // ~6 ay (7 pencere)
+const HKS_GELEN_PENCERE_GUN = 27;
+
+// Saf: tarih aralığını doğrular. Hata → InvalidArgumentException (Türkçe mesaj).
+// Bitiş bugünden ilerideyse bugüne kırpılır. Dönüş: [başlangıç 00:00, bitiş 00:00] (DateTime).
+function hks_gelen_aralik_dogrula($bas, $bit, ?DateTime $bugun = null): array {
+  $bugun = $bugun ? (clone $bugun) : new DateTime('today');
+  $bugun->setTime(0, 0, 0);
+  $coz = function ($v, $ad) {
+    $v = trim((string)$v);
+    $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) ? DateTime::createFromFormat('!Y-m-d', $v) : false;
+    if (!$d || $d->format('Y-m-d') !== $v) throw new InvalidArgumentException($ad . ' tarihi geçersiz (YYYY-AA-GG).');
+    return $d;
+  };
+  $b = $coz($bas, 'Başlangıç');
+  $e = $coz($bit, 'Bitiş');
+  if ($e > $bugun) $e = clone $bugun;
+  if ($b > $e) throw new InvalidArgumentException('Başlangıç tarihi bitiş tarihinden sonra olamaz.');
+  $gun = (int)$b->diff($e)->days + 1;
+  if ($gun > HKS_GELEN_MAX_GUN) {
+    throw new InvalidArgumentException('Tarih aralığı en çok ' . HKS_GELEN_MAX_GUN . ' gün (yaklaşık 6 ay) olabilir.');
+  }
+  return [$b, $e];
+}
+
+// Saf: [bas, bit] günlerini ≤27 günlük [başlangıç 00:00:00, bitiş 23:59:59] pencerelerine böler
+// (bitiş günü bugünse bitiş = şimdi). Eski → yeni sıralı.
+function hks_gelen_pencereler(DateTime $bas, DateTime $bit, ?DateTime $simdi = null): array {
+  $simdi = $simdi ? (clone $simdi) : new DateTime();
+  $son = (clone $bit)->setTime(23, 59, 59);
+  if ($son > $simdi) $son = clone $simdi;
+  $pen = [];
+  $s = (clone $bas)->setTime(0, 0, 0);
+  while ($s <= $son) {
+    $e = (clone $s)->modify('+' . (HKS_GELEN_PENCERE_GUN - 1) . ' days')->setTime(23, 59, 59);
+    if ($e > $son) $e = clone $son;
+    $pen[] = [clone $s, $e];
+    $s = (clone $e)->modify('+1 day')->setTime(0, 0, 0);
+  }
+  return $pen;
+}
+
+// İstek gövdesi (Istek elemanı; alan sırası alfabetik — DataContract).
+function hks_gelen_istek_xml(DateTime $baslangic, DateTime $bitis): string {
+  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+  $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
+  $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>false</a:KalanMiktariSifirdanBuyukOlanlar>';
+  $p[] = '<a:KunyeNo>0</a:KunyeNo>';
+  $p[] = '<a:KunyeTuru>1</a:KunyeTuru>';
+  $p[] = '</Istek>';
+  return implode('', $p);
+}
+
+// Saf: sadeleştirilmiş yanıttan satırlar. Hata modeli → Exception.
+function hks_gelen_yanit_ayikla(string $duz): array {
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($hata);
+  $rows = [];
+  foreach (hks_bloklar($duz, 'BildirimSorguDTO') as $b) {
+    $d = hks_bildirimsorgu_dto_ayikla($b);
+    if ($d['kunyeNo'] === '') continue;
+    $ts = $d['tarihSaat'] !== '' ? $d['tarihSaat'] : (string)hks_deger($b, 'KayitTarihi');
+    $rows[] = [
+      'kunyeNo'       => $d['kunyeNo'],
+      'tarihSaat'     => $ts,
+      'tarih'         => substr($ts, 0, 10),
+      'saat'          => (strlen($ts) >= 16 && $ts[10] === 'T') ? substr($ts, 11, 5) : '',
+      'urun'          => trim((string)hks_deger($b, 'MalinAdi')),
+      'cins'          => trim((string)hks_deger($b, 'MalinCinsi')),
+      'miktar'        => (float)hks_deger($b, 'MalinMiktari'),
+      'kalan'         => (float)hks_deger($b, 'KalanMiktar'),
+      'birim'         => trim((string)hks_deger($b, 'MiktarBirimiAd')) ?: 'Kg',
+      'plaka'         => $d['aracPlaka'],
+      'belgeNo'       => $d['belgeNo'],
+      'bildirimciTc'  => $d['bildirimciTc'],
+      'malinSahibiTc' => $d['malinSahibiTc'],
+    ];
+  }
+  return $rows;
+}
+
+function hks_gelen_bildirim_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimciyeYapilanBildirimListesi',
+    hks_taban_istek('BaseRequestMessageOf_BildirimSorguIstek', hks_gelen_istek_xml($baslangic, $bitis), $cfg));
+  return hks_gelen_yanit_ayikla(hks_sadelestir($xml));
+}
+
+// Saf: künyeNo ile tekilleştirir, yeni → eski sıralar.
+function hks_gelen_birlestir(array $satirlar): array {
+  $h = [];
+  foreach ($satirlar as $r) $h[$r['kunyeNo']] = $r;
+  $liste = array_values($h);
+  usort($liste, function ($a, $b) {
+    $c = strcmp($b['tarihSaat'], $a['tarihSaat']);
+    return $c !== 0 ? $c : strcmp($b['kunyeNo'], $a['kunyeNo']);
+  });
+  return $liste;
+}
+
+// $cagir (opsiyonel, testte ağsız): function(DateTime,DateTime): array satırlar.
+// Pencere hatası tüm işlemi durdurmaz → kismiHata sayacı; HİÇ pencere başarılı
+// değilse son hata fırlatılır.
+function hks_gelen_bildirimler($cfg, DateTime $bas, DateTime $bit, &$ham = null, ?callable $cagir = null): array {
+  $pen = hks_gelen_pencereler($bas, $bit);
+  if (count($pen) > 8) throw new Exception('Tarih aralığı çok geniş.');
+  $cagir = $cagir ?: function ($b, $e) use ($cfg) { return hks_gelen_bildirim_penceresi($cfg, $b, $e); };
+  $tum = [];
+  $basarili = 0; $kismiHata = 0; $sonHata = null;
+  foreach ($pen as [$b, $e]) {
+    try {
+      foreach ($cagir($b, $e) as $r) $tum[] = $r;
+      $basarili++;
+    } catch (Throwable $ex) {
+      $kismiHata++; $sonHata = $ex;
+    }
+  }
+  if ($pen && $basarili === 0 && $sonHata) throw new Exception($sonHata->getMessage());
+  $ham = $tum ? null : (function_exists('hks_son_ham') ? hks_son_ham(1200) : null);
+  return ['bildirimler' => hks_gelen_birlestir($tum), 'kismiHata' => $kismiHata, 'pencere' => count($pen)];
+}
+
 // ── Bildirim Etiket (2'li künye etiketleri) ───────────────────────────────
 // BildirimServisBildirimEtiket — daha önce girilmiş 2'li künyeleri etiket
 // formunda toplu basım için sorgular. Kural (docx): MalinSahibiTcKimlikVergiNo

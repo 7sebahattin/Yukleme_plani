@@ -241,6 +241,29 @@ function hks_gonderilen_adlari(PDO $db, array $ulkeAdlari): array {
   return $harita;
 }
 
+// Gelen bildirimler (v432): TC/VKN listesi için Kişi Havuzu'ndan [tc => ad]
+// (adı boş olanlar yok). TEK sorgu (parça parça), hata YUTULUR.
+function hks_gelen_kisi_adlari(PDO $db, array $tcler): array {
+  $liste = [];
+  foreach ($tcler as $tc) {
+    $tc = trim((string)$tc);
+    if ($tc !== '') $liste[$tc] = true;
+  }
+  if (!$liste) return [];
+  $harita = [];
+  try {
+    foreach (array_chunk(array_map('strval', array_keys($liste)), 200) as $parca) {
+      $yer = implode(',', array_fill(0, count($parca), '?'));
+      $st = $db->prepare('SELECT tc, ad FROM ' . hks_kisi_tablo() . " WHERE ad <> '' AND tc IN ($yer)");
+      $st->execute($parca);
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $harita[(string)$r['tc']] = (string)$r['ad'];
+    }
+  } catch (Throwable $e) {
+    return [];
+  }
+  return $harita;
+}
+
 // ── Gönderilen toplamı: yalnız BAŞARILI satırlar (v308) ─────────────────────
 
 // Bir sonuç satırı başarılı mı? api.php taslak_gonder'deki ölçütle AYNI:
