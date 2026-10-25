@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v426` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v427` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -1650,6 +1650,7 @@ OGL "Siparişler"den BAĞIMSIZ, firma + ürün + çoklu kalibre/palet siparişi;
   Şoför adı/telefonu liste HTML'ine girmez (tıklayınca taze çekilir); audit'e YAZILMAZ.
 - **Yazdır / PDF Gönder / WP Resim:** OGL ile AYNI betik `assets/siparis_yazdir.js` + aynı JSON sözleşmesi (`usip_yazdir_veri`:
   kolonlar/satirlar/toplam); ekrandaki aramayla aynı küme (`usip_filtre`), en çok 500 satır. Betiğin sözleşmesini bozma.
+- **v427 — ek alanlar (sahip isteği; 4 nullable ADD COLUMN, kurulum migrate.php `#urun-siparis` düğmesi — GO'suz basma):** `siparis_no` · `siparis_firma` (siparişin geldiği firma; "Firma" HKS/bizim firmadır) · `tasima_sekli` (beyaz liste `usip_tasima_sekilleri()`) · `lot_no`. Sipariş bölümünde Sipariş No / Siparişin Geldiği Firma / Lot No, Lojistik'te Taşıma Şekli. Kolonlar yoksa (`usip_ek_hazir()`) alanlar GİZLİ, kayıt onları yazmaz, arama/liste SELECT'e girmez; `usip_migrate()` eski kurulumda eksik kolonları ekler. Yazdırma/PDF sütunları DEĞİŞMEDİ.
 - Test: `php scripts/urun_siparis_smoke.php` (bellek içi SQLite; hesap, doğrulama, kaydet/düzelt/sil, depo izolasyonu, uçlar, sayfa render).
 
 ### Şema Migrasyon Paneli görünümü (v388)

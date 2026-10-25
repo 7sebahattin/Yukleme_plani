@@ -282,6 +282,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($usip_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        } elseif ($sr['durum'] === 'eklendi') {
+            audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'add_column', 'column' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -721,8 +723,12 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
         <?php endforeach; ?>
       <?php endif; ?>
     </p>
-    <?php $usipHazir = usip_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $usipHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $usipHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <p style="color:#555;font-size:.9em;">
+      Ek alanlar (v427): <code>siparis_no</code>, <code>siparis_firma</code>, <code>tasima_sekli</code>, <code>lot_no</code> —
+      yalnız nullable <code>ADD COLUMN</code>; aynı düğme eksik kolonları da ekler. Eklenmezse bu dört alan formda gizli kalır.
+    </p>
+    <?php $usipHazir = usip_hazir($pdo); $usipEk = $usipHazir && usip_ek_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $usipEk ? '#1f9d55' : '#c0392b' ?>;"><?= $usipEk ? '✓ Tablolar ve ek alanlar var' : ($usipHazir ? '✗ Ek alan kolonları eksik' : '✗ Tablolar eksik') ?></p>
     <form method="post" style="margin-top:12px;">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="urun_siparis">

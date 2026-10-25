@@ -39,6 +39,10 @@ function usip_tablolar(): array
             `sofor_telefon`   VARCHAR(40)   NULL DEFAULT NULL,
             `yurtici_gumruk`  VARCHAR(150)  NULL DEFAULT NULL,
             `navlun_no`       VARCHAR(60)   NULL DEFAULT NULL,
+            `siparis_no`      VARCHAR(60)   NULL DEFAULT NULL,
+            `siparis_firma`   VARCHAR(150)  NULL DEFAULT NULL,
+            `tasima_sekli`    VARCHAR(40)   NULL DEFAULT NULL,
+            `lot_no`          VARCHAR(60)   NULL DEFAULT NULL,
             `aciklama`        VARCHAR(1000) NULL DEFAULT NULL,
             `depo`            VARCHAR(100)  NOT NULL DEFAULT '',
             `created_by`      INT           NULL DEFAULT NULL,
@@ -75,7 +79,38 @@ function usip_hazir(PDO $pdo): bool
     }
 }
 
-/** @return list<array{tablo:string,durum:string,mesaj:string}> durum: var|olusturuldu|hata */
+/** v427 ek alanlar (yalnız nullable ADD COLUMN): [kolon, tanım]. Eski kurulumlarda usip_migrate() ekler. */
+function usip_ek_kolonlar(): array
+{
+    return [
+        ['siparis_no', 'VARCHAR(60) NULL DEFAULT NULL'],
+        ['siparis_firma', 'VARCHAR(150) NULL DEFAULT NULL'],
+        ['tasima_sekli', 'VARCHAR(40) NULL DEFAULT NULL'],
+        ['lot_no', 'VARCHAR(60) NULL DEFAULT NULL'],
+    ];
+}
+
+/** Taşıma şekli beyaz listesi (select seçenekleri; sunucu da yalnız bunları kabul eder). @return list<string> */
+function usip_tasima_sekilleri(): array
+{
+    return ['Karayolu', 'Denizyolu', 'Havayolu', 'Demiryolu', 'Konteyner', 'Diğer'];
+}
+
+/** Ek alan kolonları kurulu mu? Değilse sayfa bu alanları gizler ve kayıt onları yazmaz. */
+function usip_ek_hazir(PDO $pdo): bool
+{
+    static $var = [];
+    $k = spl_object_id($pdo);
+    if (isset($var[$k])) return true;
+    try {
+        $pdo->query('SELECT ' . implode(',', array_map(static fn($c) => '`' . $c[0] . '`', usip_ek_kolonlar())) . ' FROM urun_siparisleri LIMIT 0');
+        return $var[$k] = true;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+/** @return list<array{tablo:string,durum:string,mesaj:string}> durum: var|olusturuldu|eklendi|hata */
 function usip_migrate(PDO $pdo): array
 {
     $rapor = [];
@@ -89,6 +124,23 @@ function usip_migrate(PDO $pdo): array
         } catch (PDOException $e) {
             error_log('[usip_migrate] ' . $ad . ': ' . $e->getMessage());
             $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => 'Tablo oluşturulamadı (ayrıntı sunucu günlüğünde).'];
+        }
+    }
+    // v427: eski kurulumda yeni alanlar yoksa tek tek ADD COLUMN (yalnız nullable, mevcut veriye dokunmaz)
+    $anaVar = true;
+    try { $pdo->query('SELECT 1 FROM urun_siparisleri LIMIT 0'); } catch (PDOException $e) { $anaVar = false; }
+    if ($anaVar) {
+        foreach (usip_ek_kolonlar() as [$kol, $tan]) {
+            $ad = 'urun_siparisleri.' . $kol;
+            try { $pdo->query("SELECT `$kol` FROM urun_siparisleri LIMIT 0"); $rapor[] = ['tablo' => $ad, 'durum' => 'var', 'mesaj' => 'Kolon zaten mevcut.']; continue; }
+            catch (PDOException $e) { /* yok → ekle */ }
+            try {
+                $pdo->exec("ALTER TABLE urun_siparisleri ADD COLUMN `$kol` $tan");
+                $rapor[] = ['tablo' => $ad, 'durum' => 'eklendi', 'mesaj' => 'Kolon eklendi.'];
+            } catch (PDOException $e) {
+                error_log('[usip_migrate] ' . $ad . ': ' . $e->getMessage());
+                $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => 'Kolon eklenemedi (ayrıntı sunucu günlüğünde).'];
+            }
         }
     }
     return $rapor;
@@ -212,6 +264,13 @@ function usip_dogrula(array $in): array
     }
 
     $bos = static fn($v, int $m): ?string => ($s = usip_ad($v, $m)) === '' ? null : $s;
+    $tasima = $bos($in['tasima_sekli'] ?? '', 40);
+    if ($tasima !== null) {
+        $eslesen = null;
+        foreach (usip_tasima_sekilleri() as $ts) if (usip_fold($ts) === usip_fold($tasima)) $eslesen = $ts;
+        if ($eslesen === null) $h[] = 'Taşıma şekli listeden seçilmeli.';
+        $tasima = $eslesen;
+    }
     $temiz = [
         'firma' => $firma, 'urun' => $urun, 'teslimat_tarihi' => $tarih,
         'kalibreler' => $kal,
@@ -222,6 +281,8 @@ function usip_dogrula(array $in): array
         'dorse_plaka' => ($p = usip_plaka((string)($in['dorse_plaka'] ?? ''))) === '' ? null : $p,
         'sofor_adi' => $bos($in['sofor_adi'] ?? '', 150), 'sofor_telefon' => $tel,
         'yurtici_gumruk' => $bos($in['yurtici_gumruk'] ?? '', 150), 'navlun_no' => $bos($in['navlun_no'] ?? '', 60),
+        'siparis_no' => $bos($in['siparis_no'] ?? '', 60), 'siparis_firma' => $bos($in['siparis_firma'] ?? '', 150),
+        'tasima_sekli' => $tasima, 'lot_no' => $bos($in['lot_no'] ?? '', 60),
         'aciklama' => $bos($in['aciklama'] ?? '', 1000),
     ];
     return [$temiz, $h];
@@ -292,6 +353,9 @@ function usip_kaydet(PDO $pdo, array $t, int $userId, ?int $id = null, string $d
         'nakliyeci' => $t['nakliyeci'], 'cekici_plaka' => $t['cekici_plaka'], 'dorse_plaka' => $t['dorse_plaka'],
         'sofor_adi' => $t['sofor_adi'], 'sofor_telefon' => $t['sofor_telefon'],
         'yurtici_gumruk' => $t['yurtici_gumruk'], 'navlun_no' => $t['navlun_no'], 'aciklama' => $t['aciklama']];
+    if (usip_ek_hazir($pdo)) {   // kolonlar kurulmadıysa yeni alanlar yazılmaz (migrate.php kartı)
+        foreach (usip_ek_kolonlar() as [$kol]) $kolonlar[$kol] = $t[$kol] ?? null;
+    }
 
     $sahip = !$pdo->inTransaction();
     if ($sahip) $pdo->beginTransaction();
@@ -346,7 +410,7 @@ function usip_getir(PDO $pdo, int $id): ?array
  * Liste filtresi (liste + yazdırma ORTAK). GET: q (arama).
  * @return array{where:string,par:array<string,mixed>,q:string}
  */
-function usip_filtre(array $get): array
+function usip_filtre(array $get, ?PDO $pdo = null): array
 {
     $q = usip_ad($get['q'] ?? '', 80);
     [$dSql, $dPar] = depo_sql_column('s.depo');
@@ -355,6 +419,7 @@ function usip_filtre(array $get): array
     if ($q !== '') {
         $like = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%';
         $alanlar = ['s.firma', 's.urun', 's.nakliyeci', 's.cekici_plaka', 's.dorse_plaka', 's.navlun_no', 's.sofor_adi', 's.palet_cinsi', 's.kasa_cinsi'];
+        if ($pdo !== null && usip_ek_hazir($pdo)) array_push($alanlar, 's.siparis_no', 's.siparis_firma', 's.lot_no');
         $parcalar = [];
         foreach ($alanlar as $i => $a) { $parcalar[] = "$a LIKE :uq$i ESCAPE '!'"; $par[":uq$i"] = $like; }
         $parcalar[] = "EXISTS (SELECT 1 FROM urun_siparis_kalibreler k WHERE k.siparis_id = s.id AND k.kalibre LIKE :uqk ESCAPE '!')";
@@ -375,8 +440,9 @@ function usip_liste(PDO $pdo, array $F, int $sayfa): array
     $adet = (int)$top['n'];
     $sayfaSay = max(1, (int)ceil($adet / USIP_SAYFA_ADEDI));
     $sayfa = max(1, min($sayfa, $sayfaSay));
+    $ek = usip_ek_hazir($pdo) ? ', s.siparis_no, s.siparis_firma, s.tasima_sekli, s.lot_no' : '';
     $st = $pdo->prepare('SELECT s.id, s.firma, s.urun, s.teslimat_tarihi, s.palet_cinsi, s.kasa_cinsi, s.birim_fiyat, s.toplam_palet, s.toplam_kasa,
-                                s.toplam_kg, s.tutar, s.nakliyeci, s.cekici_plaka, s.dorse_plaka, s.navlun_no
+                                s.toplam_kg, s.tutar, s.nakliyeci, s.cekici_plaka, s.dorse_plaka, s.navlun_no' . $ek . '
                          FROM urun_siparisleri s WHERE ' . $F['where'] . '
                          ORDER BY s.teslimat_tarihi DESC, s.id DESC LIMIT ' . USIP_SAYFA_ADEDI . ' OFFSET ' . (($sayfa - 1) * USIP_SAYFA_ADEDI));
     $st->execute($F['par']);
