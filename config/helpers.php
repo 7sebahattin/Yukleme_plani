@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v435');
+    define('APP_SURUM', 'v436');
 }
 
 // --- HTML kaçışı ---
@@ -394,6 +394,13 @@ function nav_muhasebe_gruplari(): array {
             'alis_faturalari.php' => ['Alış Faturaları', '📑'], 'satis_faturalari.php' => ['Satış Faturaları', '🧾'],
             'sevk_irsaliyeleri.php' => ['Sevk İrsaliyeleri', '🚚'], 'alinan_siparis_fisleri.php' => ['Alınan Sipariş Fişleri', '📦'],
             'fatura_tanimlari.php' => ['Fatura Tanımları', '🗂️']]],
+        'ihracat' => ['İhracat Programı', '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>', [
+            'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'ihracat_faturasi_maliyeti.php' => ['İhracat Faturası ve Maliyeti', '💲'],
+            'palet_fisleri.php' => ['Palet Fişleri', '🧱'], 'mal_kabul_fisleri.php' => ['Mal Kabul Fişleri', '📋'],
+            'beyanname_siparis_proforma.php' => ['Beyanname-Sipariş-Proforma', '🗒️'], 'dovizli_cari_fis.php' => ['Dövizli Cari Fiş', '💱'],
+            'ihracat_tanimlari.php' => ['İhracat Tanımları', '🗂️']]],
+        'raporlar_grup' => ['Raporlar', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', [
+            'raporlar_listeler.php' => ['Raporlar-Listeler', '📊'], 'rapor_tanimlari.php' => ['Rapor Tanımları', '🗂️']]],
     ];
 }
 
