@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v432');
+    define('APP_SURUM', 'v433');
 }
 
 // --- HTML kaçışı ---
@@ -497,6 +497,8 @@ function render_desktop_sidebar(string $base): void {
     $a_rol   = $ak === 'roles';
     $a_aud   = $ak === 'audit';
     $a_bkp   = $ak === 'backup';
+    // Etkin sayfanın grubu (Yönetim ya da Operasyon) sunucuda AÇIK basılır.
+    $a_ynt   = $a_def || $a_usr || $a_rol || $a_aud || $a_bkp;
 
     $lnk = function (string $href, string $icon, string $label, bool $active, int $rozet = 0) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '"'
@@ -530,7 +532,8 @@ function render_desktop_sidebar(string $base): void {
     <?php unset($__sdp); endif; ?>
 
     <nav class="sidebar-nav">
-        <div class="sidebar-section">Operasyon</div>
+        <details class="sidebar-grup" data-sb-grup="operasyon"<?= $a_ynt ? '' : ' open' ?>>
+        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="sidebar-section-ad">Operasyon</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
         <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
         <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
         <?php if ($p_sip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
@@ -558,14 +561,17 @@ function render_desktop_sidebar(string $base): void {
             '<span class="sbi-personel" aria-hidden="true"><span class="sbi-personel-arrow sbi-personel-arrow-in"></span><span class="sbi-personel-arrow sbi-personel-arrow-out"></span></span>',
             'Personel Takibi', $a_ptak);
         ?>
+        </details>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
-        <div class="sidebar-section">Yönetim</div>
+        <details class="sidebar-grup" data-sb-grup="yonetim"<?= $a_ynt ? ' open' : '' ?>>
+        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="sidebar-section-ad">Yönetim</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
         <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
         <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
+        </details>
         <?php endif; ?>
         <!-- Şema Migrasyon: menüden kaldırıldı — doğrudan URL (migrate.php) ile
              admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
