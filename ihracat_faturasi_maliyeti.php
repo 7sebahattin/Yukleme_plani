@@ -1,11 +1,9 @@
 <?php
-// İhracat Faturası ve Maliyeti — yer tutucu sayfa (içerik sonra eklenecek). Yalnız yönetici.
+// İhracat Faturası ve Maliyeti — mevcut sayfaya yönlendirme (v439). Yalnız yönetici; hedef kendi yetki kapısını uygular.
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
-render_header('İhracat Faturası ve Maliyeti');
-?>
-<div class="card"><h2>İhracat Faturası ve Maliyeti</h2><p>Bu bölüm hazırlanıyor.</p></div>
-<?php render_footer();
+header('Location: maliyet.php', true, 302);
+exit;

@@ -1,11 +1,9 @@
 <?php
-// Palet Fişleri — yer tutucu sayfa (içerik sonra eklenecek). Yalnız yönetici.
+// Palet Fişleri — mevcut sayfaya yönlendirme (v439). Yalnız yönetici; hedef kendi yetki kapısını uygular.
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
-render_header('Palet Fişleri');
-?>
-<div class="card"><h2>Palet Fişleri</h2><p>Bu bölüm hazırlanıyor.</p></div>
-<?php render_footer();
+header('Location: cikmalar.php', true, 302);
+exit;

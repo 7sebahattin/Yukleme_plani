@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v438');
+    define('APP_SURUM', 'v439');
 }
 
 // --- HTML kaçışı ---
@@ -423,6 +423,8 @@ function nav_muhasebe_gruplari(): array {
  * çubuk (render_footer) AYNI fonksiyonu okur; iki ayrı kopya ayrışıyordu.
  * Dönen anahtar nav_alt_sayfalar() kaydındaki anahtarlardan biridir ('home'
  * dahil) ya da null (bölümü olmayan sayfa: stok.php, kantar_raporu.php …).
+ * İSTİSNA: nav_muhasebe_gruplari() sayfalarında dönen değer dosya slug'ıdır
+ * (ör. 'cari_kartlari'; .php'siz) — nav_alt_sayfalar() anahtarı DEĞİL.
  *
  * ⚠ Hal Kayıt klasöründeki index.php'nin basename'i de 'index.php'dir —
  * $a_home'daki '&& !$in_hks' bu yüzden ŞART (yoksa Ana Sayfa + Bildirim
