@@ -209,7 +209,7 @@ function hks_csrf_muaf_eylemler(): array {
   return [
     'firmalar', 'sonlar', 'kisiler', 'csrf', 'listeler', 'kunyeler', 'stok', 'kunye_detay',
     'toplu_kunye', 'taslaklar', 'gonderilenler', 'gonderilen_tohum', 'urun_listeleri',
-    'urun_cinsleri', 'sorgu', 'etiket', 'bildirim_onizle', 'iller', 'ilceler', 'beldeler',
+    'urun_cinsleri', 'sorgu', 'gelen_sorgu', 'etiket', 'bildirim_onizle', 'iller', 'ilceler', 'beldeler',
     'isyerleri', 'ayni_plaka_bugun', 'kayitli_kisi',
   ];
 }
@@ -1127,6 +1127,27 @@ try {
       $ham = null;
       $liste = hks_yaptigim_bildirimler($cfg, $ay, $ham);
       $out = ['bildirimler' => $liste, 'zaman' => date('c')];
+      if (!count($liste)) $out['ham'] = $ham;
+      hks_json_cikti($out);
+    }
+
+    // ---- BANA YAPILAN (GELEN) BİLDİRİMLER (v432) — salt okunur SOAP sorgusu ----
+    case 'gelen_sorgu': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      try {
+        [$bas, $bit] = hks_gelen_aralik_dogrula($g['baslangic'] ?? '', $g['bitis'] ?? '');
+      } catch (InvalidArgumentException $e) {
+        hks_json_cikti(['hata' => $e->getMessage()], 400);
+      }
+      @set_time_limit(180);
+      $ham = null;
+      $s = hks_gelen_bildirimler($cfg, $bas, $bit, $ham);
+      $liste = $s['bildirimler'];
+      $adlar = hks_gelen_kisi_adlari($db, array_column($liste, 'bildirimciTc'));
+      foreach ($liste as &$r) { $r['gonderenAd'] = $adlar[$r['bildirimciTc']] ?? ''; }
+      unset($r);
+      $out = ['bildirimler' => $liste, 'zaman' => date('c'), 'kismiHata' => $s['kismiHata']];
       if (!count($liste)) $out['ham'] = $ham;
       hks_json_cikti($out);
     }
