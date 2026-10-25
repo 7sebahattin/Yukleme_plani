@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v433');
+    define('APP_SURUM', 'v434');
 }
 
 // --- HTML kaçışı ---
@@ -432,6 +432,9 @@ function nav_aktif_anahtar(): ?string {
     $a_rol   = $cur === 'roles.php';
     $a_aud   = $cur === 'audit.php';
     $a_bkp   = $cur === 'admin_db_backups.php';
+    // Cari İşlemler (v434, yer tutucu sayfalar — kendi sidebar grubu)
+    $a_cari  = ['cari_kartlari.php' => 'cari_kart', 'cari_dekontlar.php' => 'cari_dekont',
+                'cari_fisler.php' => 'cari_fis', 'cari_tanimlari.php' => 'cari_tanim'][$cur] ?? null;
 
     // Sıra önemli değil: bayraklar birbirini dışlar ($a_yuk '!$cikma' taşır,
     // $a_home '!$in_hks' taşır).
@@ -443,7 +446,7 @@ function nav_aktif_anahtar(): ?string {
     ] as $anahtar => $aktif) {
         if ($aktif) return $anahtar;
     }
-    return null;
+    return $a_cari;
 }
 
 function render_desktop_sidebar(string $base): void {
@@ -498,6 +501,7 @@ function render_desktop_sidebar(string $base): void {
     $a_aud   = $ak === 'audit';
     $a_bkp   = $ak === 'backup';
     // Etkin sayfanın grubu (Yönetim ya da Operasyon) sunucuda AÇIK basılır.
+    $a_cr    = in_array($ak, ['cari_kart', 'cari_dekont', 'cari_fis', 'cari_tanim'], true);
     $a_ynt   = $a_def || $a_usr || $a_rol || $a_aud || $a_bkp;
 
     $lnk = function (string $href, string $icon, string $label, bool $active, int $rozet = 0) use ($base) {
@@ -571,6 +575,15 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
+        </details>
+        <?php endif; ?>
+        <?php if ($p_adm): ?>
+        <details class="sidebar-grup" data-sb-grup="cari"<?= $a_cr ? ' open' : '' ?>>
+        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 5.4-1.6 6 0M14 10h4M14 14h4"/></svg></span><span class="sidebar-section-ad">Cari İşlemler</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
+        <?php $lnk('cari_kartlari.php',  '🪪', 'Cari Kayıt Kartları', $ak === 'cari_kart'); ?>
+        <?php $lnk('cari_dekontlar.php', '🧮', 'Cari Dekontlar',      $ak === 'cari_dekont'); ?>
+        <?php $lnk('cari_fisler.php',    '🧾', 'Cari Fişler',         $ak === 'cari_fis'); ?>
+        <?php $lnk('cari_tanimlari.php', '🗂️', 'Cari Tanımları',      $ak === 'cari_tanim'); ?>
         </details>
         <?php endif; ?>
         <!-- Şema Migrasyon: menüden kaldırıldı — doğrudan URL (migrate.php) ile
