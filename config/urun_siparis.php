@@ -265,10 +265,17 @@ function usip_dogrula(array $in): array
         }
     }
 
-    $pk = usip_num($in['palet_kasa'] ?? '');
-    if ($pk === null || $pk < 1 || $pk > 100000 || floor($pk) != $pk) { $h[] = 'Palet kasa adedi 1–100000 arasında tam sayı olmalı.'; $pk = 0; }
-    $ba = usip_num($in['birim_agirlik'] ?? '');
-    if ($ba === null || $ba <= 0 || $ba > 100000) { $h[] = 'Birim ağırlık (kg) sıfırdan büyük olmalı.'; $ba = 0.0; }
+    // Palet kasa ve birim ağırlık ZORUNLU DEĞİL (sonradan güncellenir; boşken kasa/kg/tutar 0 hesaplanır) — girildiyse geçerli olmalı
+    $pk = 0;
+    if (trim((string)($in['palet_kasa'] ?? '')) !== '') {
+        $pk = usip_num($in['palet_kasa']);
+        if ($pk === null || $pk < 1 || $pk > 100000 || floor($pk) != $pk) { $h[] = 'Palet kasa adedi 1–100000 arasında tam sayı olmalı.'; $pk = 0; }
+    }
+    $ba = 0.0;
+    if (trim((string)($in['birim_agirlik'] ?? '')) !== '') {
+        $ba = usip_num($in['birim_agirlik']);
+        if ($ba === null || $ba <= 0 || $ba > 100000) { $h[] = 'Birim ağırlık (kg) sıfırdan büyük olmalı.'; $ba = 0.0; }
+    }
     $bf = null;
     if (trim((string)($in['birim_fiyat'] ?? '')) !== '') {
         $bf = usip_num($in['birim_fiyat']);

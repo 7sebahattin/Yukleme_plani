@@ -179,7 +179,8 @@
     var o = oku(), eksik = [];
     function isaret(id, kosul) { $(id).classList.toggle('bad', kosul); if (kosul) eksik.push(id); }
     isaret('f_firma', !o.firma); isaret('f_urun', !o.urun); isaret('f_tarih', !o.teslimat_tarihi);
-    isaret('f_pkasa', !(sayi(o.palet_kasa) > 0)); isaret('f_birim', !(sayi(o.birim_agirlik) > 0));
+    // palet kasa / birim ağırlık zorunlu değil: boşsa geçer, doluysa geçerli olmalı
+    isaret('f_pkasa', o.palet_kasa !== '' && !(sayi(o.palet_kasa) > 0)); isaret('f_birim', o.birim_agirlik !== '' && !(sayi(o.birim_agirlik) > 0));
     var kalHata = false;
     Array.prototype.forEach.call($('usipKal').children, function (r) {
       var no = r.querySelector('.k-no'), p = r.querySelector('.k-palet'), a = !no.value.trim(), b = !(sayi(p.value) >= 1);
