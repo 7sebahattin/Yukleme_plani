@@ -2937,3 +2937,21 @@ function ekranAlti() {
     if (url) window.open(url, '_blank');
   });
 })();
+
+
+/* Sidebar grup başlıkları: kullanıcı tercihi yalnız cihazda; etkin sayfanın grubu hep açık. */
+(function () {
+    var anahtar = 'asya_sb_grup';
+    var kayit = {};
+    try { kayit = JSON.parse(localStorage.getItem(anahtar) || '{}') || {}; } catch (e) { kayit = {}; }
+    document.querySelectorAll('details.sidebar-grup[data-sb-grup]').forEach(function (d) {
+        var ad = d.getAttribute('data-sb-grup');
+        var aktif = !!d.querySelector('.sidebar-link.active');
+        if (aktif) d.open = true;
+        else if (ad in kayit) d.open = !!kayit[ad];
+        d.addEventListener('toggle', function () {
+            kayit[ad] = d.open ? 1 : 0;
+            try { localStorage.setItem(anahtar, JSON.stringify(kayit)); } catch (e) {}
+        });
+    });
+})();

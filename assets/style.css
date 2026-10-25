@@ -6811,3 +6811,23 @@ html[data-theme="dark"] .bn-parti.bn-g { color: var(--g-bg); background: linear-
 }
 .bn-tile .nav-rozet-tile { position: absolute; top: 2px; right: calc(50% + 14px); box-shadow: 0 0 0 2px var(--card); pointer-events: none; }
 html[data-theme="dark"] .nav-rozet { background: #ef4444; color: #1a0606; }
+
+/* Sidebar açılır/kapanır grup başlıkları (v433) */
+.sidebar-grup > summary.sidebar-section {
+    display: flex; align-items: center; gap: 9px; cursor: pointer; list-style: none;
+    font-size: .82rem; font-weight: 800; letter-spacing: .09em;
+    color: rgba(255,255,255,.88); padding: 10px 10px; margin: 8px 0 4px;
+    border-radius: 9px; background: rgba(255,255,255,.05);
+    border-left: 3px solid var(--depot-accent, #3b82f6);
+    user-select: none; -webkit-user-select: none;
+}
+.sidebar-grup > summary.sidebar-section::-webkit-details-marker { display: none; }
+.sidebar-grup > summary.sidebar-section:hover { background: rgba(255,255,255,.09); color: #fff; }
+.sidebar-grup > summary.sidebar-section:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.sidebar-section-ikon { display: inline-flex; color: var(--depot-accent, #60a5fa); flex-shrink: 0; }
+.sidebar-section-ad { flex: 1; text-transform: uppercase; }
+.sidebar-section-ok {
+    width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); margin-top: -3px; transition: transform .18s ease; opacity: .8;
+}
+.sidebar-grup:not([open]) > summary .sidebar-section-ok { transform: rotate(-45deg); margin-top: 0; }
