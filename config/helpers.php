@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v436');
+    define('APP_SURUM', 'v437');
 }
 
 // --- HTML kaçışı ---
@@ -401,6 +401,20 @@ function nav_muhasebe_gruplari(): array {
             'ihracat_tanimlari.php' => ['İhracat Tanımları', '🗂️']]],
         'raporlar_grup' => ['Raporlar', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', [
             'raporlar_listeler.php' => ['Raporlar-Listeler', '📊'], 'rapor_tanimlari.php' => ['Rapor Tanımları', '🗂️']]],
+        'kullanici_konsolu' => ['Kullanıcı Konsolu', '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 15-5 16 0"/>', [
+            'sifre_degistirme.php' => ['Şifre Değiştirme', '🔒'], 'sube_degistirme.php' => ['Şube Değiştirme', '🏬'],
+            'ajanda.php' => ['Ajanda', '📅'], 'mesajlar.php' => ['Mesajlar', '✉️'],
+            'sirket_degistirme.php' => ['Şirket Değiştirme', '🔄'], 'kullanici_tercihleri.php' => ['Kullanıcı Tercihleri', '🎛️']]],
+        'genel_uygulamalar' => ['Genel Uygulamalar', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>', [
+            'gunluk_kurlar.php' => ['Günlük Kurlar', '💹'], 'doviz_tanimlari.php' => ['Döviz Tanımları', '💱'],
+            'kayit_bilgisi.php' => ['Kayıt Bilgisi', 'ℹ️'], 'waap_mesaj.php' => ['WAAP Mesaj', '💬'],
+            'genel_duyurular.php' => ['Genel Duyurular', '📢'], 'guncelleme_bilgisi.php' => ['Güncelleme Bilgisi', '⬆️'],
+            'program_hakkinda.php' => ['Program Hakkında', '❓']]],
+        'admin_konsolu' => ['Admin Konsolu', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', [
+            'kullanici_tanimlari.php' => ['Kullanıcı Tanımları', '👥'], 'program_tanimlari.php' => ['Program Tanımları', '🛠️'],
+            'sube_tanimlari.php' => ['Şube Tanımları', '🏢'], 'depo_tanimlari.php' => ['Depo Tanımları', '🏭'],
+            'diger_uygulama_tanimlari.php' => ['Diğer Uygulama Tanımları', '📂'], 'guncellemeyi_calistir.php' => ['Güncellemeyi Çalıştır', '⬇️'],
+            'lisans_kayit_islemleri.php' => ['Lisans & Kayıt İşlemleri', '🔑'], 'veritabani_islemleri.php' => ['Veritabanı İşlemleri', '🗄️']]],
     ];
 }
 
