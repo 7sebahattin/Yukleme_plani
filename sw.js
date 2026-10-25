@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v438';
+const CACHE_NAME = 'yukleme-plani-v439';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -56,6 +56,9 @@ self.addEventListener('activate', function(e) {
   self.clients.claim();
 });
 
+// Muhasebe sayfa adları (stok.php, kantar.php, malzeme_stok*.php, records.php vb. KAPSANMAZ: ön ek + '_' ya da tam ad)
+var SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|alis_fat|satis_fat|sevk_irs|dovizli|transfer_fis|ihracat_|stok_(kartlari|giris|cikis|donusum|tanimlari)|kantar_fisleri|palet_fisleri|mal_kabul_fisleri|arac_yukleme|alinan_siparis|beyanname_siparis|rapor_tanimlari|raporlar_listeler|sifre_deg|sube_|sirket_deg|kullanici_(tanimlari|tercihleri)|depo_tanimlari|veritabani_islemleri|ajanda|mesajlar|gunluk_kurlar|doviz_tanimlari|kayit_bilgisi|waap_|genel_duyurular|guncelleme|program_|diger_uygulama|lisans_)[a-z_]*\.php(\/|$)/;
+
 // Network-first: önce ağ dene, başarısız olursa önbellekten sun
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
@@ -69,6 +72,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/siparis(ler|_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
+  if (SW_MUHASEBE_RE.test(u.pathname)) return;
   e.respondWith(
     fetch(e.request).then(function(response) {
       // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.
