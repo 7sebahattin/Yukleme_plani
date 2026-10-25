@@ -42,7 +42,11 @@ body.hk-page .container {
     min-height: 0;
     padding: 0 !important;
     max-width: none !important;
-    width: 100%;
+    /* width:100% DEĞİL: masaüstünde sidebar için margin-left (220/260px) verilir; %100 genişlik + o boşluk
+       iframe'i sağdan sidebar kadar taşırıp body'de (overflow:hidden) KESİYORDU (Gönderilenler'de sağdaki
+       düğmeler görünmüyordu). auto = kalan genişlik. */
+    width: auto;
+    min-width: 0;
 }
 body.hk-page .hk-frame {
     display: block;
