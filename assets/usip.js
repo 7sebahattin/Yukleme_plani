@@ -11,7 +11,7 @@
   var SILME = kok.getAttribute('data-silme') === '1';
   var EK = kok.getAttribute('data-ek') === '1';   // sipariş no / gelen firma / taşıma şekli / lot no kolonları kurulu
   var UC = 'urun_siparis_islem.php';
-  var REF = { firma: [], urun: [], palet: [], kasa: [] };
+  var REF = { firma: [], urun: [], palet: [], kasa: [], gelen: [] };
   try { REF = JSON.parse($('usipRef').textContent) || REF; } catch (e) { /* öneriler boş kalır */ }
 
   var nf0 = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
@@ -69,6 +69,7 @@
     inp.addEventListener('blur', function () { setTimeout(kapat, 120); });
   }
   combo('f_firma', REF.firma, function (a) { return '+ “' + a + '” yeni firma olarak kaydet'; });
+  if (EK) combo('f_sipfirma', REF.gelen || [], function (a) { return '+ “' + a + '” sipariş veren firma olarak ekle'; });
   combo('f_urun', REF.urun, function (a) { return '+ “' + a + '” ürün olarak ekle'; });
   combo('f_pcins', REF.palet, function (a) { return '+ “' + a + '” palet cinsi olarak ekle'; });
   combo('f_kcins', REF.kasa, function (a) { return '+ “' + a + '” kasa cinsi olarak ekle'; });
@@ -152,7 +153,7 @@
     $('usipAlanlar').disabled = !YAZMA; $('usipKaydet').hidden = !YAZMA; $('usipKalEkle').hidden = !YAZMA; rmDurum();
     $('usipSil').hidden = !(s && SILME); silOnayKapat();
     $('usipOvl').hidden = false;
-    if (!s) { $('accAmb').open = true; $('accFiyat').open = true; }
+    ['accAmb', 'accLoj', 'accFiyat'].forEach(function (id) { $(id).open = false; });   // açılır bölümler hep kapalı başlar
     if (YAZMA && !s) $('f_firma').focus();
   }
   function kapat() { $('usipOvl').hidden = true; }
