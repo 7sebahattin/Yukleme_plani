@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v437');
+    define('APP_SURUM', 'v438');
 }
 
 // --- HTML kaçışı ---
@@ -615,12 +615,12 @@ function render_desktop_sidebar(string $base): void {
         ?>
         </details>
 
-        <?php if ($p_def || $p_usr || $p_adm): ?>
+        <?php if ($p_adm): ?>
         <details class="sidebar-grup" data-sb-grup="yonetim"<?= $a_ynt ? ' open' : '' ?>>
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="sidebar-section-ad">Yönetim</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
-        <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
-        <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
+        <?php if ($p_adm) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
+        <?php if ($p_adm) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
+        <?php if ($p_adm) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         </details>
@@ -1118,10 +1118,10 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
             <a href="<?= $base ?>malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
             <?php endif; ?>
-            <?php if ($_nav_def): ?>
+            <?php if ($_nav_def && function_exists('is_admin') && is_admin()): ?>
             <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
             <?php endif; ?>
-            <?php if ($_nav_users): ?>
+            <?php if ($_nav_users && function_exists('is_admin') && is_admin()): ?>
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
             <a href="<?= $base ?>roles.php" <?= $cur === 'roles.php' ? 'class="active"' : '' ?>>Roller</a>
             <?php endif; ?>
