@@ -30,10 +30,11 @@ if (!$hazir) {
 
 $yaz = can_siparis('write');
 $sil = can_siparis('delete');
-$F = usip_filtre($_GET);
+$F = usip_filtre($_GET, $pdo);
 $q = $F['q'];
 $L = usip_liste($pdo, $F, max(1, (int)($_GET['sayfa'] ?? 1)));
 $ref = usip_referanslar($pdo);
+$ek = usip_ek_hazir($pdo);   // v427: sipariş no / gelen firma / taşıma şekli / lot no kolonları kurulu mu
 $bugun = date('Y-m-d');
 
 $tarihHtml = function (string $t) use ($bugun): string {
@@ -55,7 +56,7 @@ $sayfaUrl = function (int $s) use ($q): string {
 $yazdirUrl = h('urun_siparis_yazdir.php' . ($q !== '' ? '?' . http_build_query(['q' => $q]) : ''));
 $T = $L['toplam'];
 ?>
-<div class="usip" id="usip" data-csrf="<?= h(csrf_token()) ?>" data-yazma="<?= $yaz ? '1' : '0' ?>" data-silme="<?= $sil ? '1' : '0' ?>">
+<div class="usip" id="usip" data-csrf="<?= h(csrf_token()) ?>" data-yazma="<?= $yaz ? '1' : '0' ?>" data-silme="<?= $sil ? '1' : '0' ?>" data-ek="<?= $ek ? '1' : '0' ?>">
   <div class="page-head">
     <div>
       <h1>🛒 Ürün Siparişleri</h1>
@@ -70,7 +71,7 @@ $T = $L['toplam'];
   <div class="card usip-kart">
     <div class="usip-bas">
       <form method="get" action="urun_siparis.php" class="usip-ara no-print" role="search">
-        <input type="search" name="q" value="<?= h($q) ?>" placeholder="Firma, ürün, kalibre, plaka, nakliyeci ara…" aria-label="Sipariş ara">
+        <input type="search" name="q" value="<?= h($q) ?>" placeholder="Firma, sipariş no, ürün, kalibre, plaka, lot ara…" aria-label="Sipariş ara">
         <button type="submit" class="btn">Ara</button>
         <?php if ($q !== ''): ?><a class="btn btn-ghost" href="urun_siparis.php">Temizle</a><?php endif; ?>
       </form>
@@ -99,7 +100,7 @@ $T = $L['toplam'];
           <?php foreach ($L['satirlar'] as $r): ?>
             <tr class="usip-satir" data-id="<?= (int)$r['id'] ?>" tabindex="0" role="button" aria-label="<?= h($r['firma'] . ' siparişini aç') ?>">
               <td><?= $tarihHtml((string)$r['teslimat_tarihi']) ?></td>
-              <td class="usip-firma"><?= h($r['firma']) ?></td>
+              <td class="usip-firma"><?= h($r['firma']) ?><?php if ($ek && ((string)($r['siparis_no'] ?? '') !== '' || (string)($r['siparis_firma'] ?? '') !== '')): ?><small class="muted" style="display:block;font-weight:400"><?= h(trim(((string)$r['siparis_no'] !== '' ? 'Sip. ' . $r['siparis_no'] : '') . ((string)$r['siparis_firma'] !== '' ? ' · ' . $r['siparis_firma'] : ''), ' ·')) ?></small><?php endif; ?></td>
               <td><?= h($r['urun']) ?></td>
               <td><?= $kalHtml($r['kalibreler']) ?></td>
               <td class="num"><?= h(usip_tam($r['toplam_palet'])) ?></td>
@@ -123,7 +124,7 @@ $T = $L['toplam'];
       <?php foreach ($L['satirlar'] as $r): ?>
         <div class="usip-kt" data-id="<?= (int)$r['id'] ?>" tabindex="0" role="button" aria-label="<?= h($r['firma'] . ' siparişini aç') ?>">
           <div class="usip-kt-ust"><strong><?= h($r['firma']) ?></strong><?= $tarihHtml((string)$r['teslimat_tarihi']) ?></div>
-          <div class="usip-kt-urun"><?= h($r['urun']) ?></div>
+          <div class="usip-kt-urun"><?= h($r['urun']) ?><?php if ($ek && (string)($r['siparis_no'] ?? '') !== ''): ?> · Sip. <?= h($r['siparis_no']) ?><?php endif; ?></div>
           <div class="usip-kt-kal"><?= $kalHtml($r['kalibreler']) ?></div>
           <div class="usip-kt-alt">
             <span><?= h(usip_tam($r['toplam_palet'])) ?> palet · <?= h(usip_tam($r['toplam_kasa'])) ?> kasa · <?= h(usip_tam($r['toplam_kg'])) ?> kg</span>
@@ -165,6 +166,11 @@ $T = $L['toplam'];
               <div class="usip-combo"><input id="f_urun" maxlength="150" placeholder="Ürün ara (HKS) veya ekle" autocomplete="off" role="combobox" aria-expanded="false"><div class="usip-list" hidden></div></div>
               <div class="usip-not" id="n_urun"></div></div>
             <div class="usip-f"><label for="f_tarih">Teslimat Tarihi</label><input id="f_tarih" type="date"></div>
+<?php if ($ek): ?>
+            <div class="usip-f"><label for="f_sipno">Sipariş No</label><input id="f_sipno" maxlength="60" autocomplete="off"></div>
+            <div class="usip-f"><label for="f_sipfirma">Siparişin Geldiği Firma</label><input id="f_sipfirma" maxlength="150" autocomplete="off"></div>
+            <div class="usip-f"><label for="f_lot">Lot No</label><input id="f_lot" maxlength="60" autocomplete="off"></div>
+<?php endif; ?>
           </div>
 
           <p class="usip-bt usip-bt-kal"><span>Kalibre ve Palet</span><button type="button" class="btn btn-sm" id="usipKalEkle">+ Kalibre Ekle</button></p>
@@ -186,6 +192,13 @@ $T = $L['toplam'];
           <details class="usip-acc" id="accLoj">
             <summary><span class="t">Lojistik</span><span class="o" id="o_loj"></span><span class="cv"></span></summary>
             <div class="usip-acc-b"><div class="usip-grid">
+<?php if ($ek): ?>
+              <div class="usip-f"><label for="l_tasima">Taşıma Şekli</label><select id="l_tasima"><option value="">Seçin</option>
+<?php foreach (usip_tasima_sekilleri() as $ts): ?>
+                <option value="<?= h($ts) ?>"><?= h($ts) ?></option>
+<?php endforeach; ?>
+              </select></div>
+<?php endif; ?>
               <div class="usip-f usip-tam"><label for="l_nakliyeci">Nakliyeci</label><input id="l_nakliyeci" maxlength="150" placeholder="Nakliye firması" autocomplete="off"></div>
               <div class="usip-f"><label for="l_cekici">Çekici Plaka</label><input id="l_cekici" data-plaka maxlength="20" placeholder="Boşluksuz, büyük harf" autocomplete="off"></div>
               <div class="usip-f"><label for="l_dorse">Dorse Plaka</label><input id="l_dorse" data-plaka maxlength="20" placeholder="Boşluksuz, büyük harf" autocomplete="off"></div>

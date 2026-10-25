@@ -95,6 +95,9 @@ foreach ([
 }
 [$t3, $e3] = usip_dogrula(govde(['birim_fiyat' => '', 'sofor_telefon' => '', 'nakliyeci' => '']));
 ok('doğrulama: fiyat/telefon/nakliyeci isteğe bağlı', !$e3 && $t3['birim_fiyat'] === null && $t3['sofor_telefon'] === null && $t3['nakliyeci'] === null);
+[$te, $ee] = usip_dogrula(govde(['siparis_no' => ' PO  123 ', 'siparis_firma' => 'Müşteri A.Ş.', 'tasima_sekli' => 'karayolu', 'lot_no' => 'L-77']));
+ok('doğrulama v427: sipariş no / gelen firma / lot temizlenir, taşıma şekli kanonik yazılır', $ee === [] && $te['siparis_no'] === 'PO 123' && $te['siparis_firma'] === 'Müşteri A.Ş.' && $te['tasima_sekli'] === 'Karayolu' && $te['lot_no'] === 'L-77');
+ok('doğrulama v427: listede olmayan taşıma şekli reddedilir, boşsa null', usip_dogrula(govde(['tasima_sekli' => 'Uçan halı']))[1] !== [] && usip_dogrula(govde(['tasima_sekli' => '']))[0]['tasima_sekli'] === null);
 ok('doğrulama: 31 kalibre reddedilir', usip_dogrula(govde(['kalibreler' => array_map(fn($i) => ['kalibre' => (string)$i, 'palet' => '1'], range(1, 31))]))[1] !== []);
 
 // ── 3. uç: yetki, CSRF, kaydet, getir, düzelt, sil ──
@@ -198,7 +201,7 @@ $js = (string)file_get_contents($ROOT . '/assets/usip.js');
 $islem = (string)file_get_contents($ROOT . '/urun_siparis_islem.php');
 $yz = (string)file_get_contents($ROOT . '/urun_siparis_yazdir.php');
 $sayfa = (string)file_get_contents($ROOT . '/urun_siparis.php');
-ok('statik: şema yalnız CREATE TABLE IF NOT EXISTS (ALTER yok)', !preg_match('/\bALTER\s+TABLE\b/i', $cfg) && substr_count($cfg, 'CREATE TABLE IF NOT EXISTS') === 2);
+ok('statik: şema CREATE TABLE IF NOT EXISTS + yalnız ADD COLUMN (v427 ek alanlar; DROP/MODIFY/CHANGE yok)', !preg_match('/\bALTER\s+TABLE\b(?!\s+urun_siparisleri\s+ADD\s+COLUMN)/i', $cfg) && !preg_match('/\b(DROP|MODIFY|CHANGE)\s+COLUMN\b/i', $cfg) && substr_count($cfg, 'CREATE TABLE IF NOT EXISTS') === 2);
 ok('statik: uç POST\'ta CSRF + yetki kapıları', str_contains($islem, 'csrf_check(') && str_contains($islem, "can_siparis('write')") && str_contains($islem, "can_siparis('delete')") && str_contains($islem, "can_siparis('read')"));
 ok('statik: audit\'e şoför/telefon yazılmaz', !preg_match("/audit_log_event\([^;]*sofor/s", $islem . $yz));
 ok('statik: yazdırma ucu yalnız GET + siparis.read + no-store', str_contains($yz, "require_siparis('read')") && str_contains($yz, 'siparis_no_store()') && str_contains($yz, "!== 'GET'"));

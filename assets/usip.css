@@ -52,11 +52,11 @@
 .usip-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .usip-f label { font-size: .85rem; font-weight: 600; }
 .usip-f .u { font-weight: 400; color: var(--muted); }
-.usip-f input, .usip-f textarea { font: inherit; width: 100%; min-width: 0; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+.usip-f input, .usip-f select, .usip-f textarea { font: inherit; width: 100%; min-width: 0; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
 .usip-f textarea { resize: vertical; min-height: 64px; }
 .usip-f input[readonly] { background: var(--surface-2); color: var(--muted); }
 .usip-f input.bad { border-color: var(--danger); background: var(--danger-soft); }
-.usip-f input:focus-visible, .usip-f textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.usip-f input:focus-visible, .usip-f select:focus-visible, .usip-f textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .usip-not { font-size: .8rem; color: var(--muted); min-height: 1.1em; }
 .usip-not.ok { color: var(--success); }
 .usip-not.warn { color: var(--warn); }

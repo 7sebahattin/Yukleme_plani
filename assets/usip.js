@@ -9,6 +9,7 @@
   var CSRF = kok.getAttribute('data-csrf') || '';
   var YAZMA = kok.getAttribute('data-yazma') === '1';
   var SILME = kok.getAttribute('data-silme') === '1';
+  var EK = kok.getAttribute('data-ek') === '1';   // sipariş no / gelen firma / taşıma şekli / lot no kolonları kurulu
   var UC = 'urun_siparis_islem.php';
   var REF = { firma: [], urun: [], palet: [], kasa: [] };
   try { REF = JSON.parse($('usipRef').textContent) || REF; } catch (e) { /* öneriler boş kalır */ }
@@ -88,7 +89,7 @@
 
   /* ---- form <-> veri ---- */
   function oku() {
-    return {
+    var o = {
       firma: $('f_firma').value.trim(), urun: $('f_urun').value.trim(), teslimat_tarihi: $('f_tarih').value,
       kalibreler: Array.prototype.map.call($('usipKal').children, function (r) { return { kalibre: r.querySelector('.k-no').value.trim(), palet: r.querySelector('.k-palet').value.trim() }; }),
       palet_cinsi: $('f_pcins').value.trim(), kasa_cinsi: $('f_kcins').value.trim(),
@@ -97,6 +98,11 @@
       sofor_adi: $('l_sofor').value.trim(), sofor_telefon: $('l_tel').value.trim(), yurtici_gumruk: $('l_gumruk').value.trim(), navlun_no: $('l_navlun').value.trim(),
       aciklama: $('f_aciklama').value.trim()
     };
+    if (EK) {
+      o.siparis_no = $('f_sipno').value.trim(); o.siparis_firma = $('f_sipfirma').value.trim();
+      o.lot_no = $('f_lot').value.trim(); o.tasima_sekli = $('l_tasima').value;
+    }
+    return o;
   }
   function doldur(s) {
     s = s || {};
@@ -108,6 +114,7 @@
     $('l_nakliyeci').value = s.nakliyeci || ''; $('l_cekici').value = s.cekici_plaka || ''; $('l_dorse').value = s.dorse_plaka || '';
     $('l_sofor').value = s.sofor_adi || ''; $('l_tel').value = s.sofor_telefon || ''; $('l_gumruk').value = s.yurtici_gumruk || ''; $('l_navlun').value = s.navlun_no || '';
     $('f_aciklama').value = s.aciklama || '';
+    if (EK) { $('f_sipno').value = s.siparis_no || ''; $('f_sipfirma').value = s.siparis_firma || ''; $('f_lot').value = s.lot_no || ''; $('l_tasima').value = s.tasima_sekli || ''; }
     $('usipKal').innerHTML = '';
     (s.kalibreler && s.kalibreler.length ? s.kalibreler : [{ kalibre: '', palet: '' }]).forEach(function (k) { kalSatir(k.kalibre, k.palet); });
     Array.prototype.forEach.call(document.querySelectorAll('#usipOvl .bad'), function (e) { e.classList.remove('bad'); });
@@ -125,7 +132,7 @@
     if (o.palet_cinsi) a.push(o.palet_cinsi); if (o.kasa_cinsi) a.push(o.kasa_cinsi);
     if (pk) a.push(nf0.format(pk) + ' kasa/palet'); if (ba) a.push(String(ba).replace('.', ',') + ' kg');
     oz('o_amb', a.join(' · '));
-    var l = [o.nakliyeci, o.cekici_plaka, o.dorse_plaka, o.sofor_adi].filter(Boolean); oz('o_loj', l.join(' · '));
+    var l = [o.tasima_sekli, o.nakliyeci, o.cekici_plaka, o.dorse_plaka, o.sofor_adi].filter(Boolean); oz('o_loj', l.join(' · '));
     oz('o_fiyat', bf !== null ? nf2.format(bf) + ' TL/kg · ' + nf2.format(tutar) + ' TL' : '');
     var fk = o.firma && REF.firma.some(function (x) { return norm(x.ad) === norm(o.firma); });
     var nf = $('n_firma'); nf.textContent = !o.firma ? '' : (fk ? '✓ Kayıtlı firma' : 'Kayıtta yok: tam adıyla yeni firma olarak kaydedilir'); nf.className = 'usip-not ' + (!o.firma ? '' : fk ? 'ok' : 'warn');

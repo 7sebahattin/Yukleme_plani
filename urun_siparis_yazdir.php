@@ -30,7 +30,7 @@ session_write_close();
 $pdo = db();
 if (!usip_hazir($pdo)) $yanit(409, ['ok' => false, 'hata' => 'Ürün siparişleri henüz kurulmadı.']);
 
-$F = usip_filtre($_GET);
+$F = usip_filtre($_GET, $pdo);
 try {
     $veri = usip_yazdir_veri($pdo, $F, [
         'bugun' => date('Y-m-d'),
