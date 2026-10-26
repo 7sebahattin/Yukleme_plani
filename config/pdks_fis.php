@@ -1458,3 +1458,229 @@ function pdks_fis_onizle(PDO $pdo, array $fisler, array $secenek, int $user): ar
     }
     return ['fisler' => $sonuc, 'ozet' => $oz];
 }
+
+// =========================================================
+// G. YAZMA (orkestratör) — ikinci yazma yolu YOK
+// =========================================================
+
+/**
+ * pdks_faz8j_toplu_ekle'nin `yazdiktan_sonra` geri çağrısı (AYNI transaction, commit'ten ÖNCE):
+ *  (i) period_ids ↔ plan grupları eşlemesi + HER dönem gerçek sınıflandırıcıdan doğrulanır
+ *      (tip/giriş/çıkış + Tam/FM/Yarım beklentisi) — uyuşmazlık RuntimeException = tüm tx geri alınır;
+ *  (ii) onay_yarim → Yarım grup dönemlerine 'yarim' kararı; (iii) onay_fm → FM-k grup dönemlerine k saat onayı
+ *       (YALNIZ pdks_faz8b_degerlendirme_kaydet; Tam dönemlere onay çağrılmaz — otomatik Tam).
+ * $sayac (ArrayObject): yazılan onay sayıları dışarıya taşınır.
+ */
+function pdks_fis_onay_geri_cagrisi(array $zamanliPlan, array $secenek, ArrayObject $sayac): callable
+{
+    $gruplar = $zamanliPlan['gruplar'];
+    return function (PDO $pdo, int $sid, array $pids, array $specs, array $oturum, int $user) use ($gruplar, $secenek, $sayac): void {
+        $pids = array_values($pids); $specs = array_values($specs);
+        if (count($pids) !== count($specs)) throw new RuntimeException('İç tutarsızlık: dönem sayısı satır sayısına uymuyor — hiçbir şey yazılmadı.');
+        $say = [];
+        foreach ($specs as $i => $s) $say[(int)$s['grup']] = ($say[(int)$s['grup']] ?? 0) + 1;
+        foreach ($gruplar as $gi => $g) {
+            if (($say[$gi] ?? 0) !== (int)$g['adet']) throw new RuntimeException('İç tutarsızlık: ' . pdks_fis_grup_etiketi($g) . ' grubunun kayıt sayısı plana uymuyor — hiçbir şey yazılmadı.');
+        }
+        $tarih = (string)$oturum['work_date'];
+        foreach ($pids as $i => $pid) {
+            $g = $gruplar[(int)$specs[$i]['grup']] ?? null;
+            if ($g === null) throw new RuntimeException('İç tutarsızlık: dönem bir plan grubuna bağlanamadı — hiçbir şey yazılmadı.');
+            $d = pdks_faz8b_donem_getir((int)$pid, $pdo, $sid);
+            if (!$d) throw new RuntimeException('Yazılan dönem doğrulanamadı — hiçbir şey yazılmadı.');
+            if ((int)$d['worker_type_id_snapshot'] !== (int)$g['tip_id'] || (string)$d['entry_time'] !== $tarih . ' ' . $g['entry_clock'] . ':00' || (string)$d['exit_time'] !== $g['exit_date'] . ' ' . $g['exit_clock'] . ':00') {
+                throw new RuntimeException('İç tutarsızlık: ' . pdks_fis_grup_etiketi($g) . ' dönemi plandaki tip/saatlerle uyuşmuyor — hiçbir şey yazılmadı.');
+            }
+            if ($h = pdks_fis_sinif_beklenti_hatasi($d['faz8b'], $g)) throw new RuntimeException($h . ' Hiçbir şey yazılmadı.');
+            if ($g['profil'] === 'yarim' && !empty($secenek['onay_yarim'])) {
+                $r = pdks_faz8b_degerlendirme_kaydet((int)$pid, 'yarim', null, $user, $pdo);
+                if (empty($r['ok'])) throw new RuntimeException('Yarım gün kararı yazılamadı: ' . ($r['hata'] ?? '?') . ' Hiçbir şey yazılmadı.');
+                $sayac['yarim'] = (int)$sayac['yarim'] + 1;
+            } elseif ($g['profil'] === 'fm' && !empty($secenek['onay_fm'])) {
+                $r = pdks_faz8b_degerlendirme_kaydet((int)$pid, null, (int)$g['fm_saat'], $user, $pdo);
+                if (empty($r['ok'])) throw new RuntimeException('Fazla mesai onayı yazılamadı: ' . ($r['hata'] ?? '?') . ' Hiçbir şey yazılmadı.');
+                $sayac['fm_onayli'] = (int)$sayac['fm_onayli'] + 1;
+                $sayac['fm_saat'] = (int)$sayac['fm_saat'] + (int)$g['fm_saat'];
+            }
+        }
+    };
+}
+
+/**
+ * Servisi YALNIZ pdks_servis_ekle ile yazar (kendi transaction'ı var — işçi tx'inin dışında çağrılır).
+ * Yazılacak fark pdks_fis_servis_fark kuralıyla. `tekrar` yanıtı BAŞARI sayılır.
+ * @return array{ok:bool, hata?:string, yazilan:array{buyuk:int,kucuk:int}, fiyatsiz?:string[]}
+ */
+function pdks_fis_servis_yaz(PDO $pdo, array $fis, int $sid, array $mevcut, array $secenek, string $servisIstek, int $user): array
+{
+    $hedef = ['buyuk' => (int)($fis['servis']['buyuk'] ?? 0), 'kucuk' => (int)($fis['servis']['kucuk'] ?? 0)];
+    $sifir = ['buyuk' => 0, 'kucuk' => 0];
+    if ($hedef['buyuk'] + $hedef['kucuk'] < 1) return ['ok' => true, 'yazilan' => $sifir];
+    $fark = pdks_fis_servis_fark($hedef, $mevcut, !empty($secenek['ek_yaz']))['yazilacak'];
+    if ($fark['buyuk'] + $fark['kucuk'] < 1) return ['ok' => true, 'yazilan' => $sifir];
+    $not = PDKS_FIS_ETIKET . $fis['fis_no'] . '] Fiş Excel';
+    $palet = trim((string)($fis['not'] ?? ''));
+    if ($palet !== '') $not .= ' · ' . $palet;
+    $not = mb_substr($not, 0, 500);
+    $r = pdks_servis_ekle($sid, $fark['buyuk'], $fark['kucuk'], $not, $servisIstek, $user, $pdo);
+    if (!empty($r['ok'])) return ['ok' => true, 'yazilan' => $fark, 'fiyatsiz' => $r['fiyatsiz'] ?? []];
+    // `tekrar` (istek_id / UNIQUE) yalnız servis GERÇEKTEN kayıtlıysa başarıdır: pdks_servis_ekle her 23000'i "tekrar" diye
+    // döndürür, başka bir kısıt ihlali servisi yazılmış gibi göstermesin.
+    if (!empty($r['tekrar']) && pdks_servis_istek_kayitli($pdo, $servisIstek)) return ['ok' => true, 'yazilan' => $fark, 'fiyatsiz' => []];
+    return ['ok' => false, 'hata' => (string)($r['hata'] ?? 'Servis yazılamadı.'), 'yazilan' => $sifir];
+}
+
+/**
+ * Tek fişi yazar: kapı → (yeniden) değerlendirme → hash karşılaştırması → işçi kayıtları (Faz 8J, tek tx, onaylar dahil) →
+ * servis → `fis_yukle` tamamlanma izi. İstemci verisine/önizleme sonucuna GÜVENİLMEZ; her şey güncel DB'ye göre yeniden değerlendirilir.
+ * @return array{durum:string, mesaj:string, session_id?:int, toplu_id?:string, yazilan?:array, uyarilar?:string[]}
+ */
+function pdks_fis_yaz_fis(PDO $pdo, array $fis, array $secenek, int $user, string $dosyaSha, ?string $beklenenHash): array
+{
+    $secenek = pdks_fis_secenek($secenek);
+    $depo = (string)(function_exists('active_depot') ? active_depot() : '');
+    $no = (string)($fis['fis_no'] ?? '');
+    if ($e = pdks_faz8j_toplu_kapi($pdo, $depo)) return ['durum' => 'hata', 'mesaj' => $e];
+    $m = pdks_fis_degerlendir($pdo, $fis, $secenek, $user);
+    if ($m['durum'] === 'zaten') {
+        return ['durum' => 'zaten_yuklu', 'mesaj' => !empty($m['yazma']['geri_alindi']) ? 'Daha önce yazılmış ve geri alınmış — yeniden yazmak için Revizyon\'u artırın.' : 'Daha önce yazılmış — atlandı.',
+                'session_id' => $m['yazma']['session_id'] ?? null, 'toplu_id' => $m['yazma']['toplu_id'] ?? null];
+    }
+    if ($m['durum'] === 'hata') return ['durum' => 'hata', 'mesaj' => implode(' ', $m['hatalar'])];
+    if ($beklenenHash !== null && $beklenenHash !== '' && !hash_equals($beklenenHash, (string)$m['hash'])) {
+        return ['durum' => 'degisti', 'mesaj' => 'Önizlemeden sonra durum değişti (mesai/ayar/fiyat); yeniden önizleyin.'];
+    }
+    if ($m['durum'] === 'engel') return ['durum' => 'hata', 'mesaj' => implode(' ', $m['engeller'])];
+    if ($m['durum'] === 'onay') return ['durum' => 'hata', 'mesaj' => 'İşletme/depo uyuşmazlığı onaylanmadı — «İşletme uyuşmazlığı olan fişleri de yaz» kutusunu işaretleyin.'];
+
+    $plan = $m['plan']; $ist = $m['istek']; $cid = (int)$fis['cavus']['id']; $tarih = (string)$fis['tarih'];
+    $sayac = new ArrayObject(['fm_onayli' => 0, 'yarim' => 0, 'fm_saat' => 0]);
+    $sid = (int)($m['yazma']['session_id'] ?? 0); $topluId = (string)($m['yazma']['toplu_id'] ?? '');
+    $devam = $m['durum'] === 'devam';
+    $uyarilar = $m['uyarilar'];
+
+    if (!$devam) {
+        $girdi = pdks_fis_toplu_girdisi($fis, $plan, $secenek, $ist['fis'], $dosyaSha);
+        $girdi['yazdiktan_sonra'] = pdks_fis_onay_geri_cagrisi($plan, $secenek, $sayac);
+        $r = pdks_faz8j_toplu_ekle($girdi, $user, $pdo);
+        if (empty($r['ok'])) {
+            if (!empty($r['tekrar'])) {
+                // Eşzamanlı çift tıklama: diğer istek işçi kayıtlarını yazdı → servis aşamasına geç.
+                $d = pdks_fis_durum($pdo, $ist['fis']);
+                if ($d['durum'] === 'tamam') return ['durum' => 'zaten_yuklu', 'mesaj' => 'Eşzamanlı istek fişi zaten yazdı.', 'session_id' => $d['session_id'] ?? null, 'toplu_id' => $d['toplu_id'] ?? null];
+                if ($d['durum'] !== 'yarim') return ['durum' => 'hata', 'mesaj' => implode(' ', $r['hatalar'] ?? ['Fiş yazılamadı.'])];
+                $sid = (int)$d['session_id']; $topluId = (string)$d['toplu_id']; $devam = true;
+            } else {
+                return ['durum' => 'hata', 'mesaj' => implode(' ', $r['hatalar'] ?? ['Fiş yazılamadı.'])];
+            }
+        } else {
+            $sid = (int)$r['session_id']; $topluId = (string)$r['toplu_id'];
+        }
+    }
+    if ($sid < 1) return ['durum' => 'hata', 'mesaj' => 'İşçi kayıtları için mesai bulunamadı.'];
+
+    // Servis (işçi tx'inden BAĞIMSIZ transaction)
+    $yazilanSv = ['buyuk' => 0, 'kucuk' => 0]; $fiyatsiz = [];
+    try {
+        $mev = pdks_fis_mevcut($pdo, $cid, $tarih, $depo, $no);
+        $sv = pdks_fis_servis_yaz($pdo, $fis, $sid, $mev, $secenek, $ist['servis'], $user);
+    } catch (Throwable $x) {
+        error_log('[pdks_fis_yaz_fis servis] ' . $x->getMessage());
+        $sv = ['ok' => false, 'hata' => 'Servis yazılırken teknik bir hata oluştu.', 'yazilan' => $yazilanSv];
+    }
+    if (empty($sv['ok'])) {
+        return ['durum' => 'hata', 'session_id' => $sid, 'toplu_id' => $topluId,
+                'mesaj' => 'İşçi kayıtları yazıldı (toplu işlem ' . $topluId . '), servis yazılamadı: ' . $sv['hata'] . ' — aynı dosyayı yeniden yükleyerek tamamlayın.'];
+    }
+    $yazilanSv = $sv['yazilan']; $fiyatsiz = $sv['fiyatsiz'] ?? [];
+    if ($fiyatsiz) $uyarilar[] = implode(' ve ', $fiyatsiz) . ' servis fiyatı tanımlı değil — hakediş fiyat girilene dek hesaplanamaz.';
+
+    // Tamamlanma izi
+    $yaz = ['kisi' => (int)$plan['kisi_toplam'], 'fm_onayli' => (int)$sayac['fm_onayli'], 'fm_saat' => (int)$sayac['fm_saat'], 'yarim' => (int)$sayac['yarim'], 'servis' => $yazilanSv, 'servis_fiyatsiz' => $fiyatsiz];
+    try {
+        pdks_faz8j_audit($pdo, $user, 'fis_yukle', $sid, [], [
+            'fis_no' => $no, 'rev' => (int)$fis['rev'], 'tarih' => $tarih, 'depo' => $depo, 'foreman_id' => $cid, 'session_id' => $sid, 'toplu_id' => $topluId,
+            'istek_id' => $ist['fis'], 'servis_istek_id' => $ist['servis'], 'dosya_sha256' => $dosyaSha, 'plan_hash' => (string)$plan['hash'],
+            'kisi' => (int)$plan['kisi_toplam'], 'fm_modu' => (string)$plan['fm']['mod'], 'fm_saat' => (int)($plan['fm']['toplam_saat'] ?? 0),
+            'yarim' => array_sum(array_map(fn($g) => $g['profil'] === 'yarim' ? (int)$g['adet'] : 0, $plan['gruplar'])),
+            'servis_yazilan' => $yazilanSv, 'onaylar' => ['fm' => !empty($secenek['onay_fm']), 'yarim' => !empty($secenek['onay_yarim'])],
+            'ek_yaz' => !empty($secenek['ek_yaz']), 'durum' => 'tamam',
+        ], 'daily_work_sessions');
+    } catch (Throwable $x) {
+        error_log('[pdks_fis_yaz_fis fis_yukle] ' . $x->getMessage());
+        $uyarilar[] = 'Tamamlanma izi yazılamadı; aynı dosyayı yeniden yüklerseniz fiş "tamamlandı" olarak işaretlenir (kayıtlar çiftlenmez).';
+    }
+    return ['durum' => $devam ? 'devam_tamamlandi' : 'yazildi', 'session_id' => $sid, 'toplu_id' => $topluId, 'yazilan' => $yaz, 'uyarilar' => array_values(array_unique($uyarilar)),
+            'mesaj' => ($devam ? 'Eksik kalan kısım tamamlandı' : 'Yazıldı') . ' — ' . $plan['kisi_toplam'] . ' kişi kaydı'];
+}
+
+/**
+ * Seçilen fişleri dosya sırasıyla, HER BİRİ bağımsız transaction'larla yazar (biri hatalıysa diğerleri yazılır).
+ * @param int[] $secilen fiş satır numaraları · @param array<int,string> $hashler satır → önizleme plan hash'i
+ * @return array{sonuclar:list<array>, ozet:array}
+ */
+function pdks_fis_yaz(PDO $pdo, array $fisler, array $secenek, int $user, string $dosyaSha, array $secilen, array $hashler): array
+{
+    $secili = array_flip(array_map('intval', $secilen));
+    $sonuclar = []; $oz = ['islenen' => 0, 'yazildi' => 0, 'devam_tamamlandi' => 0, 'zaten_yuklu' => 0, 'degisti' => 0, 'hata' => 0, 'kisi' => 0, 'fm_onayli' => 0, 'servis' => ['buyuk' => 0, 'kucuk' => 0]];
+    foreach ($fisler as $f) {
+        $satir = (int)($f['satir'] ?? 0);
+        if (!isset($secili[$satir])) continue;
+        try {
+            $r = pdks_fis_yaz_fis($pdo, $f, $secenek, $user, $dosyaSha, isset($hashler[$satir]) ? (string)$hashler[$satir] : null);
+        } catch (Throwable $x) {
+            error_log('[pdks_fis_yaz] ' . $x->getMessage());
+            $r = ['durum' => 'hata', 'mesaj' => 'Teknik bir hata oluştu; bu fiş yazılmadı. Tekrar deneyin.'];
+        }
+        $r += ['satir' => $satir, 'fis_no' => (string)($f['fis_no'] ?? ''), 'rev' => (int)($f['rev'] ?? 0)];
+        $sonuclar[] = $r;
+        $oz['islenen']++;
+        $oz[$r['durum']] = ($oz[$r['durum']] ?? 0) + 1;
+        if (in_array($r['durum'], ['yazildi', 'devam_tamamlandi'], true)) {
+            $oz['kisi'] += (int)($r['yazilan']['kisi'] ?? 0); $oz['fm_onayli'] += (int)($r['yazilan']['fm_onayli'] ?? 0);
+            $oz['servis']['buyuk'] += (int)($r['yazilan']['servis']['buyuk'] ?? 0); $oz['servis']['kucuk'] += (int)($r['yazilan']['servis']['kucuk'] ?? 0);
+        }
+    }
+    return ['sonuclar' => $sonuclar, 'ozet' => $oz];
+}
+
+// =========================================================
+// I. OTURUM TOKEN'I (önizleme = yazma taşıyıcısı)
+// =========================================================
+
+/** Oturumdaki mevcut kullanıcı kimliği (0 = yok). */
+function pdks_fis_kullanici_id(): int
+{
+    $u = function_exists('current_user') ? current_user() : null;
+    return (int)($u['id'] ?? 0);
+}
+
+/**
+ * Normalize fiş verisini (DOSYA DEĞİL) oturuma koyar; HTML'e yalnız token gider. Kullanıcıya ve aktif depoya bağlı,
+ * 30 dk geçerli, oturumda en çok 3 token. @param array $yuk ['sha','dosya_ad','fisler','secenek','hashler']
+ */
+function pdks_fis_token_olustur(array $yuk): string
+{
+    if (session_status() === PHP_SESSION_NONE && !headers_sent()) @session_start();
+    $t = bin2hex(random_bytes(16));
+    $_SESSION['fis_yukle'] ??= [];
+    $_SESSION['fis_yukle'][$t] = $yuk + ['t' => time(), 'uid' => pdks_fis_kullanici_id(), 'depo' => (string)(function_exists('active_depot') ? active_depot() : '')];
+    while (count($_SESSION['fis_yukle']) > 3) { reset($_SESSION['fis_yukle']); unset($_SESSION['fis_yukle'][key($_SESSION['fis_yukle'])]); }
+    return $t;
+}
+
+/** Token'ı çözer (biçim, TTL, kullanıcı + depo eşleşmesi); yoksa null. */
+function pdks_fis_token_al(string $token): ?array
+{
+    if (!preg_match('/^[a-f0-9]{32}$/D', $token)) return null;
+    $v = $_SESSION['fis_yukle'][$token] ?? null;
+    if (!is_array($v)) return null;
+    if (time() - (int)($v['t'] ?? 0) > PDKS_FIS_TOKEN_TTL) { unset($_SESSION['fis_yukle'][$token]); return null; }
+    if ((int)($v['uid'] ?? -1) !== pdks_fis_kullanici_id() || (string)($v['depo'] ?? '') !== (string)(function_exists('active_depot') ? active_depot() : '')) return null;
+    return $v;
+}
+
+function pdks_fis_token_sil(string $token): void
+{
+    unset($_SESSION['fis_yukle'][$token]);
+}
