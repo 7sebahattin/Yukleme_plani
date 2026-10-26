@@ -140,9 +140,9 @@ const sunucu = http.createServer((q, s) => {
   await tabloBekle(p);
   let tk = sonTk();
   ok('(A) toplu_kunye: plaka + gün + aktif firma', !!tk && tk.govde.plaka === '33NCN99' && tk.govde.tarih === '2026-10-21' && String(tk.govde.firmaId) === '7', JSON.stringify(tk && tk.govde));
-  ok('(A) yalnız BU gönderimin künyeleri (aynı plakadaki başka gönderimin künyesi YOK)',
-     JSON.stringify(await kunyeNolar(p)) === JSON.stringify(['3601000000000001', '3601000000000002']), JSON.stringify(await kunyeNolar(p)));
-  ok('(A) toplam yalnız süzülen künyeler (22.000 KG)', /TOPLAM\s*22\.000 KG/.test(await p.innerText('.kunye-tablo tfoot')), await p.innerText('.kunye-tablo tfoot'));
+  ok('(A) o gün aynı plakaya yapılmış TÜM bildirimler listelenir (Çoklu Künye gibi, süzme yok)',
+     JSON.stringify(await kunyeNolar(p)) === JSON.stringify(['3601000000000001', '3601000000000002', '3601000000000003']), JSON.stringify(await kunyeNolar(p)));
+  ok('(A) toplam tüm künyeler (44.000 KG)', /TOPLAM\s*44\.000 KG/.test(await p.innerText('.kunye-tablo tfoot')), await p.innerText('.kunye-tablo tfoot'));
   ok('(A) başlık: firma + plaka + tarih', /Test Firma A/.test(await p.innerText('h2')) && /33NCN99/.test(await p.innerText('.meta')) && /2026-10-21/.test(await p.innerText('.meta')));
   await p.waitForTimeout(600);
   ok('(A) yazdırma penceresi KENDİLİĞİNDEN açılmaz (kullanıcı Yazdır/PDF düğmesine basar)', (await basildi(p)) === 0, String(await basildi(p)));
@@ -151,10 +151,10 @@ const sunucu = http.createServer((q, s) => {
   ok('(A) Çoklu Künye ekranı AÇILMADI, Gönderilenler yerinde', !(await sayfa.isVisible('#ekranToplu')) && await sayfa.isVisible('#ekranGonderilen'));
   await p.close();
 
-  // (A2) ikinci satır (g2) aynı plakadan yalnız kendi künyesini basar
+  // (A2) ikinci satır (g2) de aynı günün tüm bildirimlerini listeler
   p = await yazdirBas(sayfa, () => satir(1).locator('.g-yazdir-btn-ust').click());
   await tabloBekle(p);
-  ok('(A2) g2 → yalnız 3601000000000003', JSON.stringify(await kunyeNolar(p)) === '["3601000000000003"]', JSON.stringify(await kunyeNolar(p)));
+  ok('(A2) g2 → aynı gün tüm künyeler', JSON.stringify(await kunyeNolar(p)) === JSON.stringify(['3601000000000001', '3601000000000002', '3601000000000003']), JSON.stringify(await kunyeNolar(p)));
   await p.close();
 
   // (B) kısmi: beklenen 2 künyeden 1'i HKS'te yok → uyarı, otomatik yazdırma YOK
@@ -162,21 +162,21 @@ const sunucu = http.createServer((q, s) => {
   p = await yazdirBas(sayfa, () => satir(0).locator('.g-yazdir-btn-ust').click());
   await tabloBekle(p);
   await p.waitForTimeout(600);
-  ok('(B) kısmi: bulunan 1 künye listelenir', JSON.stringify(await kunyeNolar(p)) === '["3601000000000001"]');
-  ok('(B) kısmi: "2 künyeden 1 tanesi görünmedi" uyarısı', /2 künyeden 1 tanesi/.test(await p.innerText('#yzUyari')));
+  ok('(B) kısmi: HKS\'in döndürdüğü künyeler listelenir', JSON.stringify(await kunyeNolar(p)) === '["3601000000000001","3601000000000003"]');
+  ok('(B) kısmi: "2 künyesinden 1 tanesi görünmedi" uyarısı', /2 künyesinden 1 tanesi/.test(await p.innerText('#yzUyari')));
   ok('(B) kısmi: uyarı baskıda gizli', await p.evaluate(() => { const st = [...document.styleSheets[0].cssRules].map(r => r.cssText).join(' '); return /\.yzuyari/.test(st) && /@media print/.test(st); }));
   ok('(B) kısmi: yazdırma kendiliğinden AÇILMADI', (await basildi(p)) === 0);
   await p.close();
 
   // (C) hiç bulunamadı → hata sayfası + Tekrar dene ile düzelir
-  D.topluYanit = () => ({ kunyeler: [HKS_HEPSI[2]], toplam: 0 });
+  D.topluYanit = () => ({ kunyeler: [], toplam: 0 });
   p = await yazdirBas(sayfa, () => satir(0).locator('.g-yazdir-btn-ust').click());
   await p.waitForSelector('#yzTekrar');
   ok('(C) bulunamadı: açıklama + Tekrar dene + Kapat', /bulunamadı/.test(await p.innerText('#yzDurum')) && /2 künye bekleniyordu/.test(await p.innerText('#yzDurum')) && await p.locator('#yzKapat').count() === 1);
   D.topluYanit = () => ({ kunyeler: HKS_HEPSI, toplam: 0 });
   await p.click('#yzTekrar');
   await tabloBekle(p);
-  ok('(C) Tekrar dene → yeniden sorgu, tablo geldi', (await kunyeNolar(p)).length === 2);
+  ok('(C) Tekrar dene → yeniden sorgu, tablo geldi', (await kunyeNolar(p)).length === 3);
   await p.close();
 
   // (D) HKS hatası
@@ -387,8 +387,8 @@ const sunucu = http.createServer((q, s) => {
   p = await yazdirBas(sayfa, () => sayfa.click('#btnSonucYazdir'));
   await tabloBekle(p);
   tk = sonTk();
-  ok('(G) sonuçtan Yazdır → gönderimin plaka/günü ile sorgu, yalnız gönderilen künye',
-     tk.govde.plaka === '33NCN99' && tk.govde.tarih === '2026-10-21' && JSON.stringify(await kunyeNolar(p)) === '["3601000000000003"]', JSON.stringify(tk.govde));
+  ok('(G) sonuçtan Yazdır → gönderimin plaka/günü ile sorgu, o günün tüm künyeleri',
+     tk.govde.plaka === '33NCN99' && tk.govde.tarih === '2026-10-21' && JSON.stringify(await kunyeNolar(p)) === JSON.stringify(['3601000000000001', '3601000000000002', '3601000000000003']), JSON.stringify(tk.govde));
   await p.waitForTimeout(600);
   ok('(G) yazdırma kendiliğinden AÇILMAZ', (await basildi(p)) === 0);
   ok('(G) Gönderim Sonucu penceresi AÇIK kaldı', await sayfa.isVisible('#modalOnayKutu') && await sayfa.isVisible('#btnSonucYazdir'));
