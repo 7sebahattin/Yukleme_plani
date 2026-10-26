@@ -626,9 +626,15 @@ function pdks_faz8j_gecmis_ekle(array $v, int $user, ?PDO $pdo = null): array {
 // her satır audit'inde `toplu_id`, ayrıca mesai (daily_work_sessions) modülünde
 // TEK özet audit `puantaj_toplu_ekle`. Geri alma `puantaj_toplu_geri_al`.
 
-/** Toplu girdiyi ayrıştırır/doğrular (yalnız okuma). Satır spesifikasyonları + genel hatalar. */
+/**
+ * Toplu girdiyi ayrıştırır/doğrular (yalnız okuma). Satır spesifikasyonları + genel hatalar.
+ * Opt-in (yalnız kod; HTTP ucu geçirmez): `coklu_grup` (bool) — aynı işçi tipi için birden çok grup
+ * (farklı giriş/çıkış) kabul eder, grubun isteğe bağlı `etiket`i hata metinlerinde görünür.
+ * Varsayılan DAVRANIŞ DEĞİŞMEZ (v446, Fiş Excel'i).
+ */
 function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
     $m = 'pdks_faz8j_metin';
+    $coklu = !empty($v['coklu_grup']);
     $h = [
         'foreman_id' => (int)$m($v['foreman_id'] ?? 0), 'work_date' => $m($v['work_date'] ?? ''),
         'depo' => $m($v['depo'] ?? ''), 'reason' => $m($v['reason'] ?? ''),
@@ -669,9 +675,10 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
         $g = is_array($g) ? $g : [];
         $tip = pdks_faz8j_desteklenen_tip($pdo, (int)$m($g['worker_type_id'] ?? 0));
         $etiket = $tip ? (string)$tip['name'] : (($i + 1) . '. grup');
+        if ($coklu && is_string($g['etiket'] ?? null) && $g['etiket'] !== '') $etiket = mb_substr($g['etiket'], 0, 80);
         $grupHata = null;
         if (!$tip) $grupHata = 'İşçi tipi bulunamadı, pasif veya desteklenmiyor (yalnız KADIN/ERKEK/RAMPACI).';
-        elseif (isset($tipGoruldu[(int)$tip['id']])) $grupHata = 'Aynı işçi tipi için birden fazla grup girilemez.';
+        elseif (!$coklu && isset($tipGoruldu[(int)$tip['id']])) $grupHata = 'Aynı işçi tipi için birden fazla grup girilemez.';
         if ($tip) $tipGoruldu[(int)$tip['id']] = true;
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
         $cikis = pdks_faz8j_cikis_zamani($g);
@@ -848,7 +855,10 @@ function pdks_faz8j_tanim_uyarilari(PDO $pdo, int $foremanId, string $depo, arra
 }
 
 /**
- * Toplu ekleme — hep-ya-hiç. `istek_id` ZORUNLU (tekrar gönderim koruması). Başarıda:
+ * Toplu ekleme — hep-ya-hiç. `istek_id` ZORUNLU (tekrar gönderim koruması).
+ * Opt-in iç parametreler (v446, yalnız kod; HTTP ucu geçirmez): `coklu_grup` (bkz. toplu_hazirla),
+ * `yazdiktan_sonra` (callable($pdo,$sid,$pids,$specs,$oturum,$user) — satırlar yazıldıktan sonra, commit'ten
+ * ÖNCE, aynı tx), `audit_ek` (özet audit'e ek alanlar; çekirdek anahtarlar KAZANIR). Başarıda:
  * @return array{ok:true, session_id:int, toplu_id:string, period_ids:int[], eklenen:int, yeni_mesai:bool, satirlar:array, ozet:array, hatalar:array}
  * Hatada önizlemeyle aynı biçim (ok=false, satirlar/hatalar/ozet).
  */
@@ -893,13 +903,18 @@ function pdks_faz8j_toplu_ekle(array $v, int $user, ?PDO $pdo = null): array {
             $pids[] = pdks_faz8j_satir_yaz($pdo, $oturum, $s, $user,
                 ['reason' => $h['reason'], 'note' => $h['note'], 'yeni_mesai' => $oc['yeni'], 'simdi' => $simdi, 'toplu_id' => $topluId, 'istek_id' => $istekId]);
         }
+        // v446 (Fiş Excel'i): opt-in, commit'ten ÖNCE ve AYNI transaction'da. Yalnız kod parametresidir
+        // (HTTP ucu geçirmez). RuntimeException atarsa aşağıdaki catch tüm yazımı geri alır.
+        if (isset($v['yazdiktan_sonra']) && is_callable($v['yazdiktan_sonra'])) {
+            ($v['yazdiktan_sonra'])($pdo, $sid, $pids, $tekrar['_specs'], $oturum, $user);
+        }
         pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);
         pdks_faz8j_audit($pdo, $user, 'puantaj_toplu_ekle', $sid, [], [
             'session_id' => $sid, 'toplu_id' => $topluId, 'period_ids' => $pids, 'eklenen' => count($pids),
             'kartli' => $kartli, 'kartsiz' => $kartsiz, 'ozet' => $tekrar['ozet'], 'work_date' => (string)$oturum['work_date'],
             'yeni_mesai' => $oc['yeni'], 'reason' => $h['reason'], 'note' => $h['note'], 'added_at' => $simdi, 'user_id' => $user,
             'istek_id' => $istekId,
-        ], 'daily_work_sessions');
+        ] + (is_array($v['audit_ek'] ?? null) ? $v['audit_ek'] : []), 'daily_work_sessions');
         $pdo->commit();
         unset($tekrar['_specs']);
         return ['ok' => true, 'session_id' => $sid, 'toplu_id' => $topluId, 'period_ids' => $pids, 'eklenen' => count($pids),
