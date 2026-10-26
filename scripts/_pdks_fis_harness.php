@@ -16,7 +16,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT = dirname(__DIR__);
-$PDO_TEST = new PDO('sqlite::memory:');
+$PDO_TEST = new PDO(getenv('PDKS_FIS_HARNESS_DB') ? 'sqlite:' . getenv('PDKS_FIS_HARNESS_DB') : 'sqlite::memory:');   // e2e: dosya tabanlı SQLite
 $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $AKTIF_DEPO = 'Depo A';

@@ -106,8 +106,9 @@ $fy_grup = static function (array $g, string $tarih): string {
             $f = $m['plan']['fm'] ?? null;
             if (!$f || ($f['mod'] ?? 'yok') === 'yok') return 'FM yok';
             $mod = $f['mod'] === 'kova' ? 'Kova (kişi × saat)' : 'Toplam saat → dağıtım';
-            $dag = [];
-            foreach ($f['tip_dagilim'] as $kod => $sk) { $p = []; foreach ($sk as $sa => $n) $p[] = $n . '×' . $sa . ' sa'; $dag[] = h(ucfirst(mb_strtolower((string)$kod, 'UTF-8'))) . ': ' . h(implode(' + ', $p)); }
+            $dag = []; $adlar = [];
+            foreach (($m['plan']['gruplar'] ?? []) as $g) $adlar[(string)$g['kod']] = (string)$g['tip_ad'];
+            foreach ($f['tip_dagilim'] as $kod => $sk) { $p = []; foreach ($sk as $sa => $n) $p[] = $n . '×' . $sa . ' sa'; $dag[] = h($adlar[(string)$kod] ?? (string)$kod) . ': ' . h(implode(' + ', $p)); }
             $notr = $f['notr'] === true ? '<span class="fy-rozet fy-b-hazir">Ücret nötr ✓</span>' : ($f['notr'] === false ? '<span class="fy-rozet fy-b-hata">Nötr değil ✗</span>' : '<span class="fy-rozet fy-b-uyari">Fiyat bilinmiyor ⚠</span>');
             return '<b>' . h($mod) . '</b><br>' . h((string)$f['aciklama']) . '<br>' . implode('<br>', $dag) . '<br>' . $notr;
         };

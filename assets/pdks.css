@@ -2735,6 +2735,9 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 .fy-tablo th { text-align: left; padding: 8px 10px; background: var(--surface-2); border-bottom: 2px solid var(--border-strong); white-space: nowrap; }
 .fy-tablo td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .fy-tablo small { color: var(--muted); }
+.fy-tablo td:nth-child(2) { white-space: nowrap; }
+.fy-tablo td:nth-child(5) { min-width: 240px; }
+.fy-tablo td:nth-child(6) { min-width: 170px; }
 .fy-tablo tr.fy-s-hata td { background: var(--danger-soft); }
 .fy-tablo tr.fy-s-engel td, .fy-tablo tr.fy-s-onay td { background: var(--warn-soft); }
 .fy-tablo tr.fy-s-zaten td { opacity: .65; }
