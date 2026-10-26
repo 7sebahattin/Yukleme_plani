@@ -147,7 +147,7 @@ $yetim = [];
 try {
     [$bds, $bdp] = depo_sql_column('b.depo', ':udb');
     $y = $pdo->prepare("SELECT b.id, b.tur, b.durum, b.orijinal_ad, b.hata_mesaj, b.boyut, b.created_at, b.disk_adi FROM siparis_belgeler b
-        WHERE b.deleted_at IS NULL AND (b.durum = 'hata' OR NOT EXISTS (SELECT 1 FROM siparis_belge_bag bb WHERE bb.belge_id = b.id))" . $bds . ' ORDER BY b.id DESC LIMIT 20');
+        WHERE b.deleted_at IS NULL AND b.tur NOT IN ('invoice', 'efatura') AND (b.durum = 'hata' OR NOT EXISTS (SELECT 1 FROM siparis_belge_bag bb WHERE bb.belge_id = b.id))" . $bds . ' ORDER BY b.id DESC LIMIT 20');
     $y->execute($bdp);
     $yetim = $y->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {

@@ -40,7 +40,7 @@ foreach (siparis_belgeler($pdo, $sid, $eskiDahil) as $b) {
     if ($yol === null) continue;
     $ext = strtolower(pathinfo((string)$b['disk_adi'], PATHINFO_EXTENSION));
     $kok = $temizle(pathinfo((string)$b['orijinal_ad'], PATHINFO_FILENAME));
-    $uretilmisPkl = (string)$b['tur'] === 'pkl' && (string)$b['kaynak'] === 'uretim';
+    $uretilmisPkl = in_array((string)$b['tur'], ['pkl', 'invoice'], true) && (string)$b['kaynak'] === 'uretim';   // v442: üretilen PKL / invoice dosya adı zaten öneklidir
     $on = $uretilmisPkl ? '' : strtoupper((string)$b['tur']) . '-';
     $ad = substr($on . $kok, 0, 90);
     $klasor = (int)$b['gecerli'] === 0 ? 'eski/' : '';

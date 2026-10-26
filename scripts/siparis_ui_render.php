@@ -148,11 +148,33 @@ foreach ($sayfalar as $ad => $s) {
     file_put_contents("$OUT/$ad.html", $html);
 }
 
+// ── v442: OGL Invoice sayfaları (siparis_invoice.php + #invoice kartı + Invoice ayarları) ──
+require_once $ROOT . '/config/siparis_invoice.php';
+$db->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+$__d = siparis_pkl_durum($db, $ID['s1']); $__v = $__d['veri'];
+$__v['varsayilan']['M'] = '812'; $__v['varsayilan']['N'] = '722';
+siparis_pkl_kaydet_taslak($db, $ID['s1'], $__v, [], 1);
+siparis_pkl_uret($db, $ID['s1'], 1, true);                              // net dolu PKL (s11'in PKL'i kısmi: net 0 → engel senaryosu)
+$invYaz = function (string $ad, string $dosya, array $get, array $perms, bool $yonetici = true) use ($OUT, &$manifest): void {
+    file_put_contents("$OUT/$ad.html", basla_sayfa($dosya, $get, $ad, $perms, $yonetici));
+    $manifest['sayfalar'][] = $ad;
+};
+$invYaz('inv_bos', 'siparis_invoice.php', ['id' => $ID['s1']], $yaz + ['siparis.delete']);          // ayar eksik: REX uyarısı + eksik izni
+$invYaz('inv_engel', 'siparis_invoice.php', ['id' => $ID['s11']], $yaz + ['siparis.delete']);       // net 0: Oluştur pasif + sebep
+$invYaz('inv_viewer', 'siparis_invoice.php', ['id' => $ID['s1']], ['siparis.read'], false);
+siparis_inv_ayar_kaydet($db, ['rex_no' => 'TRREX0000SYN', 'banka_ad' => 'SENTETIK BANKASI', 'banka_adres' => 'Ornek Cad. 1', 'sube' => 'MERKEZ', 'swift' => 'SYNTTRIS', 'iban_eur' => 'TR000000000000000000000000', 'iskonto_varsayilan' => '4'], 1);
+siparis_inv_uret($db, $ID['s1'], 1, ['no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '1,37', 'iskonto' => '4', 'efatura_toplam' => '19000,00'], false);
+$invYaz('inv_hazir', 'siparis_invoice.php', ['id' => $ID['s1']], $yaz + ['siparis.delete']);
+$invYaz('detay_invoice', 'siparis_view.php', ['id' => $ID['s1']], $yaz + ['siparis.delete']);
+$invYaz('detay_invoice_viewer', 'siparis_view.php', ['id' => $ID['s1']], ['siparis.read'], false);
+$invYaz('detay_invoice_pklsiz', 'siparis_view.php', ['id' => $ID['s99']], $yaz + ['siparis.delete']);
+$invYaz('inv_ayar', 'siparis_ayarlar.php', [], $yaz + ['siparis.delete']);
+
 // ── v378: "📧 Mailden al" senaryoları (mail şeması bu noktadan sonra kurulur: yukarıdaki sayfalar şemasız = "kurulu değil" notu) ──
 $mailSenaryo = array_filter(array_map('trim', explode(',', (string)(getenv('SIPARIS_UI_MAIL') ?: 'ayarsiz,ayarli,yetkisiz,son,yarim'))));
 if ($mailSenaryo) {
     mail_test_sema_kur($db); mail_test_anahtar_kur();
-    $db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+    $db->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
     $mA = smt_hesap('export@ornek.test');
     $mYaz = function (string $ad, string $dosya, array $get = [], array $perms = ['siparis.read', 'siparis.write', 'mail.read'], bool $yonetici = true) use ($OUT, &$manifest): void {
         file_put_contents("$OUT/$ad.html", basla_sayfa($dosya, $get, $ad, $perms, $yonetici));
