@@ -48,7 +48,7 @@ function kaydet(Spreadsheet $ss, ?string $yol = null): string { $yol ??= tmpdosy
 
 // Çavuş tablosu (şablonun "Çavuşlar" sayfası + eşleştirme)
 db()->exec("CREATE TABLE foremen (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT, normal_work_minutes INTEGER DEFAULT 540, is_active INTEGER DEFAULT 1)");
-db()->exec("INSERT INTO foremen (code, name, is_active) VALUES ('C006','Pasif Çavuş',0), ('C005','Biçer - ŞENGÜL',1), ('C001','Ali Veli',1), ('C002','=HYPERLINK(\"http://x\")',1)");
+db()->exec("INSERT INTO foremen (code, name, is_active) VALUES ('C006','Pasif Çavuş',0), ('C005','Test - ÇAVUŞ',1), ('C001','Ali Veli',1), ('C002','=HYPERLINK(\"http://x\")',1)");
 $cavuslar = pdks_fis_cavuslar(db());
 $gec3 = date('Y-m-d', strtotime('-3 day'));
 
@@ -136,7 +136,7 @@ $serial = XDate::PHPToExcel(new DateTimeImmutable($gec3));
 
 echo "\n=== 2. TUR: karışık tipli AI çıktısı → doğrula → oku → normalize ===\n";
 $yol = doluDosya($B, [
-    satir(['fis_no' => '01410', 'tarih' => ['t' => 'tarih', 'v' => $serial], 'isletme' => 'Depo A', 'cavus_kodu' => 'C005', 'cavus_adi' => 'ŞENGÜL', 'kadin_tam' => 8, 'erkek_tam' => '12,0', 'erkek_yarim' => '1',
+    satir(['fis_no' => '01410', 'tarih' => ['t' => 'tarih', 'v' => $serial], 'isletme' => 'Depo A', 'cavus_kodu' => 'C005', 'cavus_adi' => 'ÇAVUŞ', 'kadin_tam' => 8, 'erkek_tam' => '12,0', 'erkek_yarim' => '1',
            'fm2' => 5, 'fm_tipi' => 'Erkek', 'giris' => 0.3333333, 'servis_kucuk' => 1, 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1 | Toplam Mesai: 5 kişi 2 saat', 'kontrol' => 'Erkek 12 mi 17 mi?']),
     satir(['fis_no' => 1411, 'tarih' => date('d.m.Y', strtotime('-3 day')), 'cavus_adi' => 'Ali Veli', 'erkek_tam' => '12 + 1', 'kadin_tam' => ['t' => 'formul', 'f' => '=1+1'], 'not' => '=HYPERLINK("http://x","y")']),
     satir(['fis_no' => 'A-7', 'tarih' => $gec3, 'cavus_kodu' => 'C001', 'rampaci_tam' => 3, 'fm_toplam' => '25', 'servis_buyuk' => 2, 'giris' => '09:00']),

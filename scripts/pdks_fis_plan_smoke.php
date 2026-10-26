@@ -101,15 +101,15 @@ echo "\n=== 6. pdks_fis_yarim_dk ===\n";
 foreach ([[540, 270], [480, 240], [600, 300], [90, 30], [60, 30], [570, 270]] as [$t, $y]) ok("6) yarım($t) = $y", pdks_fis_yarim_dk($t) === $y, (string)pdks_fis_yarim_dk($t));
 
 echo "\n=== 7. pdks_fis_istek_idleri ===\n";
-$a = pdks_fis_istek_idleri('Biçer', '01410', 0);
+$a = pdks_fis_istek_idleri('İzmir', '01410', 0);
 ok('7) 32 küçük hex (fiş + servis)', (bool)preg_match('/^[a-f0-9]{32}$/D', $a['fis']) && (bool)preg_match('/^[a-f0-9]{32}$/D', $a['servis']), j($a));
-ok('7) deterministik', pdks_fis_istek_idleri('Biçer', '01410', 0) === $a);
+ok('7) deterministik', pdks_fis_istek_idleri('İzmir', '01410', 0) === $a);
 ok('7) servis ≠ fiş', $a['fis'] !== $a['servis']);
-ok('7) depo katlı ("Biçer" ≡ "BİÇER" ≡ " biçer ")', pdks_fis_istek_idleri('BİÇER', '01410', 0) === $a && pdks_fis_istek_idleri(' biçer ', '01410', 0) === $a);
-ok('7) fiş no boşluk/büyük-küçük duyarsız', pdks_fis_istek_idleri('Biçer', ' 01410', 0) === $a && pdks_fis_istek_idleri('Biçer', 'a1', 0) === pdks_fis_istek_idleri('Biçer', 'A1', 0));
-ok('7) revizyon değişince değişir', pdks_fis_istek_idleri('Biçer', '01410', 1)['fis'] !== $a['fis'] && pdks_fis_istek_idleri('Biçer', '01410', 1)['servis'] !== $a['servis']);
+ok('7) depo katlı ("İzmir" ≡ "İZMİR" ≡ " izmir ")', pdks_fis_istek_idleri('İZMİR', '01410', 0) === $a && pdks_fis_istek_idleri(' izmir ', '01410', 0) === $a);
+ok('7) fiş no boşluk/büyük-küçük duyarsız', pdks_fis_istek_idleri('İzmir', ' 01410', 0) === $a && pdks_fis_istek_idleri('İzmir', 'a1', 0) === pdks_fis_istek_idleri('İzmir', 'A1', 0));
+ok('7) revizyon değişince değişir', pdks_fis_istek_idleri('İzmir', '01410', 1)['fis'] !== $a['fis'] && pdks_fis_istek_idleri('İzmir', '01410', 1)['servis'] !== $a['servis']);
 ok('7) depo değişince değişir', pdks_fis_istek_idleri('Başka', '01410', 0)['fis'] !== $a['fis']);
-ok('7) baştaki sıfır ayırt edilir (01410 ≠ 1410)', pdks_fis_istek_idleri('Biçer', '1410', 0)['fis'] !== $a['fis']);
+ok('7) baştaki sıfır ayırt edilir (01410 ≠ 1410)', pdks_fis_istek_idleri('İzmir', '1410', 0)['fis'] !== $a['fis']);
 ok('7) pdks_faz8j_istek_id() kabul eder', pdks_faz8j_istek_id($a['fis'])['ok'] === true && pdks_faz8j_istek_id($a['servis'])['istek_id'] === $a['servis']);
 $kaynak = file_get_contents($ROOT . '/config/pdks_fis.php');
 preg_match('/function pdks_fis_istek_idleri.*?\n\}/s', $kaynak, $mi);
@@ -168,7 +168,7 @@ ok('9) girdi sırasından bağımsız (azalan sıralanır)', $r['dagilim'] === [
 
 echo "\n=== 10. pdks_fis_cavus_coz ===\n";
 $cvs = [
-    ['id' => 1, 'code' => 'C005', 'name' => 'Biçer - ŞENGÜL', 'is_active' => 1],
+    ['id' => 1, 'code' => 'C005', 'name' => 'Test - ÇAVUŞ', 'is_active' => 1],
     ['id' => 2, 'code' => 'C006', 'name' => 'Ali Veli', 'is_active' => 1],
     ['id' => 3, 'code' => 'C007', 'name' => 'Ayşe Çelik', 'is_active' => 0],
     ['id' => 4, 'code' => 'C008', 'name' => 'Depo - Ali Veli', 'is_active' => 1],
@@ -182,14 +182,14 @@ $r = pdks_fis_cavus_coz($cvs, 'C099', 'Ali Veli');
 ok('10) kod bulunamaz → HATA (ada düşmez)', !$r['ok'] && str_contains($r['hata'], 'C099'), j($r));
 $r = pdks_fis_cavus_coz($cvs, 'C006', 'Başka Biri');
 ok('10) kod + uyuşmayan ad → uyarı, kod esas', $r['ok'] && $r['id'] === 2 && str_contains($r['uyari'], 'kod esas'), j($r));
-$r = pdks_fis_cavus_coz($cvs, 'C005', 'şengül');
+$r = pdks_fis_cavus_coz($cvs, 'C005', 'çavuş');
 ok('10) kod + ad sistem adının parçası → uyarı yok', $r['ok'] && !isset($r['uyari']), j($r));
 $r = pdks_fis_cavus_coz($cvs, '', 'ali veli');
 ok('10) yalnız ad tam eşleşme (başka "Depo - Ali Veli" aday olsa da tam eşleşen kazanır)', $r['ok'] && $r['id'] === 2 && $r['yontem'] === 'ad', j($r));
-$r = pdks_fis_cavus_coz($cvs, '', 'ŞENGÜL');
-ok('10) " - " sonrası parça eşleşmesi (Biçer - ŞENGÜL)', $r['ok'] && $r['id'] === 1, j($r));
-$cvs2 = array_merge($cvs, [['id' => 9, 'code' => 'C009', 'name' => 'Başka - Şengül', 'is_active' => 1]]);
-$r = pdks_fis_cavus_coz($cvs2, '', 'şengül');
+$r = pdks_fis_cavus_coz($cvs, '', 'ÇAVUŞ');
+ok('10) " - " sonrası parça eşleşmesi (Test - ÇAVUŞ)', $r['ok'] && $r['id'] === 1, j($r));
+$cvs2 = array_merge($cvs, [['id' => 9, 'code' => 'C009', 'name' => 'Başka - Çavuş', 'is_active' => 1]]);
+$r = pdks_fis_cavus_coz($cvs2, '', 'çavuş');
 ok('10) 2 aday → hata + aday listesi', !$r['ok'] && str_contains($r['hata'], 'C005') && str_contains($r['hata'], 'C009'), j($r));
 $r = pdks_fis_cavus_coz($cvs, '', 'Hiç Yok');
 ok('10) 0 aday → bulunamadı', !$r['ok'] && str_contains($r['hata'], 'bulunamadı'), j($r));
@@ -355,7 +355,7 @@ echo "\n=== 11b. pdks_fis_normalize ===\n";
 function H(array $kv): array { $o = []; foreach ($kv as $k => $v) $o[$k] = ['v' => $v, 't' => is_string($v) ? 's' : (is_null($v) ? 'e' : 'n')]; return $o; }
 function nor(array $satirlar, array $cv = null): array { global $cvs; return pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => $satirlar, 'bilinmeyen' => []], $cv ?? $cvs); }
 $gec = date('d.m.Y', strtotime('-3 day')); $gecIso = date('Y-m-d', strtotime('-3 day'));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => '01410', 'tarih' => $gec, 'isletme' => 'Depo A', 'cavus_kodu' => 'C005', 'cavus_adi' => 'ŞENGÜL', 'kadin_tam' => '8', 'erkek_tam' => 12.0, 'erkek_yarim' => '1', 'fm2' => '5', 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '8:30', 'rev' => '1', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1'])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => '01410', 'tarih' => $gec, 'isletme' => 'Depo A', 'cavus_kodu' => 'C005', 'cavus_adi' => 'ÇAVUŞ', 'kadin_tam' => '8', 'erkek_tam' => 12.0, 'erkek_yarim' => '1', 'fm2' => '5', 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '8:30', 'rev' => '1', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1'])]]);
 $f = $r['fisler'][0] ?? [];
 ok('11b) geçerli satır: hata yok', ($f['hatalar'] ?? ['x']) === [] && $r['genel_hatalar'] === [], j([$f['hatalar'] ?? null, $r['genel_hatalar']]));
 ok('11b) alanlar: fiş no/tarih/çavuş/sayılar/FM/servis/giriş/rev', ($f['fis_no'] ?? '') === '01410' && $f['tarih'] === $gecIso && $f['cavus']['id'] === 1 && $f['say']['KADIN'] === ['tam' => 8, 'yarim' => 0] && $f['say']['ERKEK'] === ['tam' => 12, 'yarim' => 1]
