@@ -37,7 +37,7 @@ const SIPARIS_DEPO_HTACCESS = "Options -Indexes\nRequire all denied\n<IfModule !
 /** Olay (zaman çizelgesi) türleri — siparis_olay() yalnız bunları kabul eder. */
 const SIPARIS_OLAY_TURLERI = ['olusturuldu', 'belge_eklendi', 'belge_eski_surum', 'belge_silindi', 'alan_guncellendi',
     'alan_elle', 'kilit_kaldirildi', 'catisma', 'catisma_kabul', 'catisma_red', 'durum', 'pkl_taslak', 'pkl_uretildi',
-    'pkl_yuklendi', 'mail_gonderildi', 'evrak_gonderildi', 'beyan_baglandi', 'beyan_kaldirildi', 'geri_getirildi', 'silindi', 'uyari'];
+    'pkl_yuklendi', 'mail_gonderildi', 'evrak_gonderildi', 'beyan_baglandi', 'beyan_kaldirildi', 'geri_getirildi', 'silindi', 'uyari', 'invoice_uretildi'];
 
 // ── ŞEMA ────────────────────────────────────────────────────────────────
 

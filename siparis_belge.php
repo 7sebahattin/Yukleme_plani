@@ -115,7 +115,7 @@ render_flash();
     </div>
     <div class="page-head-actions">
       <a class="btn btn-primary" href="<?= h($dosyaUrl) ?>&amp;dl=1">⬇ İndir</a>
-      <?php if ($yaz): ?>
+      <?php if ($yaz && !in_array((string)$b['tur'], ['invoice', 'efatura'], true)): ?>   <?php /* v442: sistemde üretilen invoice / yüklenen e-fatura içerikten sınıflanmaz → yeniden işlenmez */ ?>
         <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="yeniden_isle"><input type="hidden" name="belge_id" value="<?= $id ?>"><input type="hidden" name="donus_belge" value="<?= $id ?>"><button type="submit" class="btn">↻ Yeniden işle</button></form>
       <?php endif; ?>
       <?php if ($sil): ?>

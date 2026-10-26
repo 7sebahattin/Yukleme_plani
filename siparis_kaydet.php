@@ -142,6 +142,8 @@ if ($islem === 'catisma') {
 // ── belge bağla / yeniden işle ──────────────────────────
 if ($islem === 'belge_bagla' || $islem === 'yeniden_isle') {
     $b = $belgeYukle((int)($_POST['belge_id'] ?? 0));
+    // v442: invoice (sistemde üretilir) ve e-fatura (Invoice sayfasından yüklenir) içerikten sınıflanmaz; yeniden işleme / başka sevkiyata bağlama bu belgeleri bozardı
+    if (in_array((string)$b['tur'], ['invoice', 'efatura'], true)) $hata('Invoice / e-fatura belgeleri yeniden işlenmez ya da başka sevkiyata bağlanmaz (Invoice sayfasından yönetilir).', (int)($_POST['donus_belge'] ?? 0) > 0 ? 'siparis_belge.php?id=' . (int)$_POST['donus_belge'] : 'siparisler.php#yetim');
     $hedefSid = null;
     if ($islem === 'belge_bagla') {
         $hedefSid = (int)($_POST['sevkiyat_id'] ?? 0);

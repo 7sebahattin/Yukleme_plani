@@ -12,6 +12,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/siparis_beyan.php';
+require_once __DIR__ . '/config/siparis_invoice.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -69,6 +70,12 @@ if ($pkl && $pkl['uretildi_by']) {
     $u->execute([(int)$pkl['uretildi_by']]);
     $pklKullanici = (string)($u->fetchColumn() ?: '');
 }
+// v442: Invoice (OGL) durumu — kart yalnız okur; hata sevkiyat sayfasını bozmaz
+$invD = ['var' => false];
+try { $invD = siparis_inv_durum($pdo, $id); } catch (Throwable $e) { error_log('[siparis_view] invoice: ' . get_class($e)); }
+$invVar = !empty($invD['var']);
+$invBelge = (int)($invD['belge_id'] ?? 0);
+$invGirdi = is_array($invD['girdi'] ?? null) ? $invD['girdi'] : [];
 // Beyan
 $beyanBaglar = []; $beyanOneri = []; $beyanAra = []; $beyanHata = false;
 $beyanQ = trim((string)($_GET['beyan_q'] ?? ''));
@@ -371,9 +378,9 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <?php else:
             $gruplu = [];
             foreach ($belgeler as $b) $gruplu[(string)$b['tur']][] = $b;
-            $tSira = ['po', 'll', 'pc', 'pkl', 'diger', 'bilinmiyor'];
+            $tSira = ['po', 'll', 'pc', 'pkl', 'invoice', 'efatura', 'diger', 'bilinmiyor'];
             foreach ($tSira as $tur): if (empty($gruplu[$tur])) continue; ?>
-          <h3 class="sip-grup-bas"><?= h(siparis_belge_tur_etiketleri()[$tur]) ?></h3>
+          <h3 class="sip-grup-bas"><?= h(siparis_belge_tur_etiketleri()[$tur] ?? ['invoice' => 'Invoice (OGL)', 'efatura' => 'e-Fatura'][$tur] ?? $tur) ?></h3>
           <ul class="sip-belgeler">
             <?php foreach ($gruplu[$tur] as $b):
                 $eski = (int)$b['gecerli'] === 0; $ext = strtolower(pathinfo((string)$b['disk_adi'], PATHINFO_EXTENSION)); ?>
@@ -446,6 +453,30 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
               <tbody><?php foreach ($pklOn['satirlar'] as $row): ?><tr><?php foreach ($pklOn['sutunlar'] as $c): ?><td><?= h((string)($row[$c] ?? '')) ?></td><?php endforeach; ?></tr><?php endforeach; ?></tbody></table></div>
           </details>
         <?php endif; ?>
+      </section>
+
+      <!-- 8b) Invoice (OGL) — v442 -->
+      <section class="card sip-o7" id="invoice" aria-labelledby="sipInvBas">
+        <div class="card-head"><h2 id="sipInvBas">Invoice (OGL)</h2>
+          <span class="sip-pkl-durum sip-inv-durum--<?= $invVar ? 'hazir' : 'yok' ?>"><?= $invVar ? 'Hazır' : 'Yok' ?></span>
+        </div>
+        <?php if ($invVar): ?>
+          <dl class="sip-dl sip-dl--kisa">
+            <div class="sip-dl-satir"><dt>Invoice no</dt><dd><?= h((string)($invGirdi['no'] ?? '') !== '' ? (string)$invGirdi['no'] : '—') ?></dd></div>
+            <?php if ((string)($invD['dosya_adi'] ?? '') !== ''): ?><div class="sip-dl-satir"><dt>Dosya</dt><dd class="sip-kes"><?= h((string)$invD['dosya_adi']) ?></dd></div><?php endif; ?>
+            <div class="sip-dl-satir"><dt>Son üretim</dt><dd><?= h(sipui_zaman((string)($invD['uretildi_at'] ?? ''))) ?><?= (int)($invD['uretim_sayisi'] ?? 0) > 1 ? ' · ' . (int)$invD['uretim_sayisi'] . '. üretim' : '' ?></dd></div>
+          </dl>
+        <?php else: ?>
+          <p class="muted"><?= $pklHazir ? 'Henüz invoice hazırlanmadı.' : 'Invoice PKL’deki palet, koli ve ağırlık toplamlarından kurulur.' ?></p>
+        <?php endif; ?>
+        <div class="sip-pkl-eylem">
+          <?php if ($yaz): ?>
+            <?php if ($pklHazir): ?><a class="btn btn-primary" href="siparis_invoice.php?id=<?= $id ?>"><?= $invVar ? '🧾 Invoice düzenle / yeniden oluştur' : '🧾 Invoice hazırla' ?></a>
+            <?php else: ?><span class="sip-pasif-grup"><button type="button" class="btn btn-primary" disabled aria-describedby="sipInvNeden">🧾 Invoice hazırla</button><span class="sip-pasif-neden" id="sipInvNeden">Önce PKL oluşturun ya da yükleyin.</span></span><?php endif; ?>
+          <?php elseif ($invVar): ?><a class="btn" href="siparis_invoice.php?id=<?= $id ?>">🧾 Invoice’u görüntüle</a><?php endif; ?>
+          <?php if ($invVar && $invBelge > 0): ?><a class="btn" href="siparis_dosya.php?id=<?= $invBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?>
+        </div>
+        <?php if (!$yaz && !$invVar): ?><p class="sip-bilgi" role="note">Invoice hazırlamak için siparis.write yetkisi gerekir.</p><?php endif; ?>
       </section>
     </div>
 
