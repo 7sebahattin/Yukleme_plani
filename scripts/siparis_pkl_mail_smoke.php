@@ -135,13 +135,13 @@ $po2 = ['log@ornek.test', 'packinglist-FS-EU@ornek.test'];
 $e = siparis_evrak_mail_taslak(['customs@ornek.test'], $po2, 'PKL-TC900001.10-AsyaDoc005-17.10.2026.xlsx', 'TC900001.10', 'Kullanıcı 1');
 ok('Kime = ayar önce + PO packinglist OLMAYAN; Bilgi boş', $e['kime'] === ['customs@ornek.test', 'log@ornek.test'] && $e['bilgi'] === [], json_encode($e));
 ok('konu PKL taslağının konusuyla AYNI', $e['konu'] === siparis_pkl_mail_taslak($po2, 'PKL-TC900001.10-AsyaDoc005-17.10.2026.xlsx', 'TC900001.10', 'x')['konu'] && $e['konu'] === 'PKL-TC900001.10-AsyaDoc005-17.10.2026');
-ok('gövde birebir (DOCs + Best Regards + Asya Fresh + ad)', $e['govde'] === "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh\nKullanıcı 1", $e['govde']);
+ok('gövde birebir (DOCs + Best Regards; imza Outlook\'ta, v441)', $e['govde'] === "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,", $e['govde']);
 $e2 = siparis_evrak_mail_taslak([], ['PackingList-x@ornek.test'], '', 'TC900002.10', '');
-ok('yalnız packinglist adresi varsa Kime BOŞ (PKL kuralının aksine Kime\'ye geçmez); PKL yoksa konu = order ref; adsız imza Asya Fresh ile biter',
-    $e2['kime'] === [] && $e2['bilgi'] === [] && $e2['konu'] === 'TC900002.10' && str_ends_with($e2['govde'], "Best Regards,\n\nAsya Fresh"), json_encode($e2));
+ok('yalnız packinglist adresi varsa Kime BOŞ (PKL kuralının aksine Kime\'ye geçmez); PKL yoksa konu = order ref; imza satırı yok',
+    $e2['kime'] === [] && $e2['bilgi'] === [] && $e2['konu'] === 'TC900002.10' && str_ends_with($e2['govde'], "Best Regards,"), json_encode($e2));
 $e3 = siparis_evrak_mail_taslak(['Customs@ornek.test', 'gecersiz', ''], ['CUSTOMS@ORNEK.TEST', 'log@ornek.test', 'LOG@ornek.test', 'packinglist@ornek.test'], "X\r\nBcc: k@ornek.test.xlsx", 'TC9', "Ad\r\nBcc: k@ornek.test");
 ok('büyük/küçük harf duyarsız tekil, geçersiz atlanır, ayarın yazımı korunur', $e3['kime'] === ['Customs@ornek.test', 'log@ornek.test'], json_encode($e3['kime']));
-ok('konu/imzada satır sonu YOK (başlık enjeksiyonu)', !preg_match('/[\r\n]/', $e3['konu']) && !str_contains($e3['govde'], "\r") && substr_count($e3['govde'], "\n") === 6, json_encode($e3));
+ok('konu/imzada satır sonu YOK (başlık enjeksiyonu)', !preg_match('/[\r\n]/', $e3['konu']) && !str_contains($e3['govde'], "\r") && substr_count($e3['govde'], "\n") === 3, json_encode($e3));
 ok('ayar + PO boş → Kime boş', siparis_evrak_mail_taslak([], [], 'a.xlsx', 'TC', 'x')['kime'] === []);
 
 echo "\n=== 7. v411 ayar (hks_kv) ===\n";
@@ -191,9 +191,9 @@ ok('uç: message/rfc822 indirme, .eml adı = konu, nosniff + no-store + CSP sand
     && str_contains($r['h']['content-disposition'] ?? '', 'attachment; filename="PKL-TC900001.10-AsyaDoc005-17.10.2026.eml"') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff'
     && str_contains($r['h']['cache-control'] ?? '', 'no-store') && str_contains($r['h']['content-security-policy'] ?? '', 'sandbox'), json_encode([$r['hata'], $r['h'], $r['kod']]));
 [$ub, $ug] = array_pad(explode("\r\n\r\n", $r['govde'], 2), 2, '');
-ok('uç: X-Unsent; To = ayar + PO (packinglist YOK); Cc YOK; ek YOK; imza = oturumdaki kullanıcı', str_starts_with($r['govde'], 'X-Unsent: 1') && str_contains($ub, "To: customs@ornek.test, log@ornek.test\r\n")
+ok('uç: X-Unsent; To = ayar + PO (packinglist YOK); Cc YOK; ek YOK; imza yok (v441)', str_starts_with($r['govde'], 'X-Unsent: 1') && str_contains($ub, "To: customs@ornek.test, log@ornek.test\r\n")
     && !str_contains($r['govde'], 'packinglist') && !preg_match('/^Cc:/mi', $ub) && !str_contains($r['govde'], 'multipart')
-    && str_ends_with((string)base64_decode((string)preg_replace('/\s+/', '', $ug)), "Asya Fresh\r\nKullanıcı 1"), $r['govde']);
+    && str_ends_with((string)base64_decode((string)preg_replace('/\s+/', '', $ug)), "Best Regards,"), $r['govde']);
 $aud = $db->query("SELECT new_values FROM audit_log WHERE action = 'siparis_evrak_eml' ORDER BY id DESC")->fetchColumn();
 ok('uç: audit siparis_evrak_eml yalnız alıcı SAYISI (adres YAZILMAZ)', (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'siparis_evrak_eml'")->fetchColumn() === $audOnce + 1
     && str_contains((string)$aud, '"alici":2') && !str_contains((string)$aud, '@'), (string)$aud);
@@ -242,7 +242,7 @@ $g = siparis_pkl_mail_taslak(['log@ornek.test'], 'a.xlsx', 'TC', 'Kullanıcı 1'
 ok('PKL taslağı: ayardaki şablon kullanılır', $g['govde'] === "Merhaba,\nPKL ektedir.\nKullanıcı 1", $g['govde']);
 $ev = siparis_evrak_mail_taslak([], ['log@ornek.test'], 'a.xlsx', 'TC', 'Kullanıcı 1', "Evrak ektedir.\n{ad}");
 ok('evrak taslağı: ayardaki şablon kullanılır; verilmezse varsayılan', $ev['govde'] === "Evrak ektedir.\nKullanıcı 1"
-    && siparis_evrak_mail_taslak([], [], 'a.xlsx', 'TC', 'K')['govde'] === "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh\nK");
+    && siparis_evrak_mail_taslak([], [], 'a.xlsx', 'TC', 'K')['govde'] === "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,");
 ok('uygula: dolu düzenleme gövdeyi değiştirir; boş/null taslağı korur; satır sonları temizlenir',
     siparis_mail_govde_uygula($ev, "Yeni\r\nmetin")['govde'] === "Yeni\nmetin" && siparis_mail_govde_uygula($ev, '  ')['govde'] === $ev['govde'] && siparis_mail_govde_uygula($ev, null)['govde'] === $ev['govde']);
 // saf: ek Kime / Bilgi
