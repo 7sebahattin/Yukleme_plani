@@ -20,9 +20,18 @@ declare(strict_types=1);
 //  - Şema/migration YOK, yeni yetki YOK (kapı: pdks_faz8j_yetki() = is_admin()).
 // =========================================================
 
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+
 require_once __DIR__ . '/pdks_faz8j.php';
 require_once __DIR__ . '/pdks_faz8b.php';
 require_once __DIR__ . '/pdks_servis.php';
+require_once __DIR__ . '/xlsx_export.php';
 
 if (!defined('PDKS_FIS_MAX_BAYT'))        define('PDKS_FIS_MAX_BAYT', 2097152);      // 2 MB
 if (!defined('PDKS_FIS_MAX_FIS'))         define('PDKS_FIS_MAX_FIS', 150);
@@ -746,4 +755,389 @@ function pdks_fis_zamanla(array $plan, string $tarih, string $giris): array
     }
     unset($gr);
     return $plan;
+}
+
+// =========================================================
+// B. DOSYA DOĞRULAMA + OKUMA
+// =========================================================
+
+/**
+ * Yüklenen dosyayı PhpSpreadsheet'e GİRMEDEN doğrular (siparis_dosya_dogrula örüntüsü; kopya değil, aynı denetimler):
+ * UPLOAD_ERR eşleme · yükleme denetimi (varsayılan is_uploaded_file) · boyut 1..2 MB · uzantı YALNIZ .xlsx · PK imzası ·
+ * finfo MIME · zip: ≤100 parça, ".." / mutlak yol yok, [Content_Types].xml + xl/workbook.xml var, makro/dış bağlantı/
+ * gömülü nesne/ActiveX RED, parça ≤20 MB, toplam ≤50 MB, sıkıştırma oranı ≤200 (zip bombası). Dosya diske KALICI yazılmaz
+ * (tmp_name'den okunur); yalnız sha256 audit'e girer.
+ * @param callable|null $yuklemeDenetimi tmp yolunu alır, gerçek HTTP yüklemesi mi? (testler `fn() => true` verir)
+ * @return array{ok:bool, hata?:string, yol?:string, sha256?:string, bayt?:int}
+ */
+function pdks_fis_dosya_dogrula(array $dosya, ?callable $yuklemeDenetimi = null): array
+{
+    $err = (int)($dosya['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($err !== UPLOAD_ERR_OK) {
+        $m = match ($err) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Dosya çok büyük (en çok ' . (int)(PDKS_FIS_MAX_BAYT / 1048576) . ' MB).',
+            UPLOAD_ERR_PARTIAL => 'Dosya yarım yüklendi — yeniden deneyin.',
+            UPLOAD_ERR_NO_FILE => 'Dosya seçilmedi.',
+            UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE => 'Sunucu dosyayı geçici olarak kaydedemedi.',
+            UPLOAD_ERR_EXTENSION => 'Dosya sunucu tarafından engellendi.',
+            default => 'Dosya yüklenemedi.',
+        };
+        return ['ok' => false, 'hata' => $m];
+    }
+    $tmp = (string)($dosya['tmp_name'] ?? '');
+    $denetim = $yuklemeDenetimi ?? 'is_uploaded_file';
+    if ($tmp === '' || !is_file($tmp) || !$denetim($tmp)) return ['ok' => false, 'hata' => 'Dosya yükleme isteğiyle gelmedi ya da okunamadı — yeniden yükleyin.'];
+    $bayt = (int)@filesize($tmp);
+    if ($bayt < 1) return ['ok' => false, 'hata' => 'Dosya boş.'];
+    if ($bayt > PDKS_FIS_MAX_BAYT) return ['ok' => false, 'hata' => 'Dosya çok büyük (en çok ' . (int)(PDKS_FIS_MAX_BAYT / 1048576) . ' MB).'];
+    $ext = strtolower(pathinfo((string)($dosya['name'] ?? ''), PATHINFO_EXTENSION));
+    if ($ext !== 'xlsx') return ['ok' => false, 'hata' => 'Yalnız .xlsx kabul edilir (.xls/.xlsm/.csv değil). Excel\'de Farklı Kaydet › Excel Çalışma Kitabı (.xlsx) seçin.'];
+    $bas = (string)@file_get_contents($tmp, false, null, 0, 4);
+    if (strncmp($bas, "PK\x03\x04", 4) !== 0 || !class_exists('ZipArchive')) return ['ok' => false, 'hata' => 'Geçerli bir Excel (xlsx) dosyası değil.'];
+    if (class_exists('finfo')) {
+        $mime = (string)(new finfo(FILEINFO_MIME_TYPE))->file($tmp);
+        if (!in_array($mime, ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/octet-stream', 'application/x-zip-compressed'], true)) {
+            return ['ok' => false, 'hata' => 'Dosya içeriği Excel (xlsx) ile uyuşmuyor.'];
+        }
+    }
+    $z = new ZipArchive();
+    if ($z->open($tmp, ZipArchive::RDONLY) !== true) return ['ok' => false, 'hata' => 'Excel dosyası açılamadı (bozuk olabilir).'];
+    $sorun = null;
+    if ($z->numFiles > 100) $sorun = 'Excel dosyası beklenmedik sayıda parça içeriyor.';
+    else {
+        $toplam = 0;
+        for ($i = 0; $i < $z->numFiles && $sorun === null; $i++) {
+            $st = $z->statIndex($i);
+            if ($st === false) { $sorun = 'Excel dosyası okunamadı (bozuk olabilir).'; break; }
+            $ad = (string)$st['name'];
+            $kucuk = strtolower($ad);
+            if (str_contains($ad, '..') || str_starts_with($ad, '/') || str_contains($ad, '\\')) { $sorun = 'Excel dosyası geçersiz parça yolu içeriyor.'; break; }
+            if ($kucuk === 'xl/vbaproject.bin' || str_starts_with($kucuk, 'xl/externallinks/') || str_starts_with($kucuk, 'xl/embeddings/') || str_starts_with($kucuk, 'xl/activex/')) {
+                $sorun = 'Makro, dış bağlantı ya da gömülü nesne içeren dosya kabul edilmez — değerleri yapıştırıp temiz bir .xlsx olarak kaydedin.'; break;
+            }
+            $boy = (int)$st['size']; $sik = (int)$st['comp_size'];
+            if ($boy > 20 * 1048576) { $sorun = 'Excel dosyasındaki bir parça çok büyük.'; break; }
+            if ($sik > 0 && $boy / $sik > 200 && $boy > 1048576) { $sorun = 'Excel dosyası olağandışı sıkıştırılmış (zip bombası şüphesi).'; break; }
+            $toplam += $boy;
+        }
+        if ($sorun === null && $toplam > 50 * 1048576) $sorun = 'Excel dosyası açıldığında çok büyük.';
+        if ($sorun === null && ($z->locateName('[Content_Types].xml') === false || $z->locateName('xl/workbook.xml') === false)) $sorun = 'Geçerli bir Excel (xlsx) dosyası değil.';
+    }
+    $z->close();
+    if ($sorun !== null) return ['ok' => false, 'hata' => $sorun];
+    return ['ok' => true, 'yol' => $tmp, 'sha256' => (string)hash_file('sha256', $tmp), 'bayt' => $bayt];
+}
+
+/**
+ * "Fişler" sayfasını güvenle okur: ReadDataOnly, yalnız bu sayfa, satır/sütun okuma filtresi, formül HESAPLANMAZ
+ * (getCalculatedValue ASLA çağrılmaz). Başlıkları ada göre (TR-katlı, takma adlarla) eşler — sıra bağımsız.
+ * Hücre: anahtar → ['v' => ham değer, 't' => s|n|b|e|x|f|fc]; f = değeri olmayan formül, fc = önbellekli formül.
+ * @return array{ok:bool, hata?:string, uyarilar:string[], satirlar:list<array{satir:int,hucreler:array<string,array{v:mixed,t:string}>}>, bilinmeyen:string[]}
+ */
+function pdks_fis_oku(string $yol): array
+{
+    $son = ['ok' => false, 'uyarilar' => [], 'satirlar' => [], 'bilinmeyen' => []];
+    xlsx_motor_yukle();
+    $lim = ini_get('memory_limit');
+    if ($lim !== false && $lim !== '-1' && xlsx_bayt((string)$lim) < 256 * 1048576) @ini_set('memory_limit', '256M');
+    @set_time_limit(60);
+    $ss = null;
+    try {
+        $r = IOFactory::createReader('Xlsx');
+        $r->setReadDataOnly(true);
+        $r->setReadEmptyCells(false);
+        $ad = null;
+        foreach ($r->listWorksheetNames($yol) as $sn) if (pdks_fis_fold((string)$sn) === pdks_fis_fold(PDKS_FIS_SAYFA)) { $ad = (string)$sn; break; }
+        if ($ad === null) return ['hata' => '«' . PDKS_FIS_SAYFA . '» sayfası bulunamadı — şablonu indirip aynı sayfayı doldurun.'] + $son;
+        $r->setLoadSheetsOnly([$ad]);
+        $enSatir = 5 + PDKS_FIS_MAX_FIS + 2;     // başlık araması (5) + fiş + 1 taşma tespiti + başlık
+        $r->setReadFilter(new class($enSatir) implements IReadFilter {
+            public function __construct(private int $enSatir) {}
+            public function readCell(string $columnAddress, int $row, string $worksheetName = ''): bool
+            {
+                return $row <= $this->enSatir && \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($columnAddress) <= 30;
+            }
+        });
+        $ss = $r->load($yol);
+        $ws = $ss->getSheetByName($ad) ?? $ss->getActiveSheet();
+        $hucre = [];   // [satır][sütun idx] = [v, t]
+        foreach ($ws->getCoordinates() as $koor) {
+            $c = $ws->getCell($koor);
+            [$sutunHarf, $satir] = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::coordinateFromString($koor);
+            $sutun = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sutunHarf);
+            $tip = $c->getDataType();
+            if ($tip === DataType::TYPE_FORMULA) {
+                $onbellek = $c->getOldCalculatedValue();
+                $hucre[(int)$satir][$sutun] = ($onbellek !== null && $onbellek !== '' && is_scalar($onbellek)) ? [$onbellek, 'fc'] : [null, 'f'];
+                continue;
+            }
+            $v = $c->getValue();
+            if (is_object($v)) $v = method_exists($v, 'getPlainText') ? $v->getPlainText() : (string)$v;
+            if ($tip === DataType::TYPE_ERROR) { $hucre[(int)$satir][$sutun] = [null, 'x']; continue; }
+            if ($v === null || $v === '') { continue; }
+            $hucre[(int)$satir][$sutun] = [$v, is_bool($v) ? 'b' : (is_int($v) || is_float($v) ? 'n' : 's')];
+        }
+        ksort($hucre);
+        // Başlık satırı: ilk 5 satırda Fiş No ve Tarih başlıkları
+        $eslesme = [];   // katlanmış başlık → anahtar
+        foreach (pdks_fis_sutunlar() as $c) {
+            $eslesme[pdks_fis_fold($c['baslik'])] = $c['anahtar'];
+            foreach ($c['takma'] as $t) $eslesme[pdks_fis_fold($t)] = $c['anahtar'];
+        }
+        $baslikSatir = null; $harita = [];
+        for ($sr = 1; $sr <= 5; $sr++) {
+            $bulunan = [];
+            foreach ($hucre[$sr] ?? [] as $sutun => [$v, $t]) {
+                $f = is_string($v) ? pdks_fis_fold($v) : '';
+                if ($f !== '' && isset($eslesme[$f])) $bulunan[$eslesme[$f]] = true;
+            }
+            if (isset($bulunan['fis_no'], $bulunan['tarih'])) { $baslikSatir = $sr; break; }
+        }
+        if ($baslikSatir === null) return ['hata' => 'Başlık satırı bulunamadı (ilk 5 satırda «Fiş No» ve «Tarih» sütun başlıkları olmalı).'] + $son;
+        $uyarilar = []; $bilinmeyen = []; $gorulen = [];
+        foreach ($hucre[$baslikSatir] as $sutun => [$v, $t]) {
+            $metin = pdks_fis_metin_duz($v, 80);
+            if ($metin === '') continue;
+            $a = $eslesme[pdks_fis_fold($metin)] ?? null;
+            if ($a === null) { $bilinmeyen[] = $metin; $uyarilar[] = 'Tanınmayan sütun yok sayıldı: «' . $metin . '».'; continue; }
+            if (isset($gorulen[$a])) return ['hata' => '«' . pdks_fis_sutun($a)['baslik'] . '» başlığı iki kez var — sütunları tekilleştirin.'] + $son;
+            $gorulen[$a] = true; $harita[$sutun] = $a;
+        }
+        if (!isset($gorulen['cavus_kodu']) && !isset($gorulen['cavus_adi'])) return ['hata' => 'Zorunlu sütun yok: «Çavuş Kodu» ya da «Çavuş Adı».'] + $son;
+        $satirlar = [];
+        foreach ($hucre as $sr => $sutunlar) {
+            if ($sr <= $baslikSatir) continue;
+            $hu = []; $dolu = false;
+            foreach ($harita as $sutun => $a) {
+                if (!isset($sutunlar[$sutun])) continue;
+                [$v, $t] = $sutunlar[$sutun];
+                if (is_string($v) && trim($v) === '' && $t === 's') continue;
+                $hu[$a] = ['v' => $v, 't' => $t]; $dolu = true;
+            }
+            if ($dolu) $satirlar[] = ['satir' => (int)$sr, 'hucreler' => $hu];
+        }
+        return ['ok' => true, 'uyarilar' => $uyarilar, 'satirlar' => $satirlar, 'bilinmeyen' => $bilinmeyen];
+    } catch (Throwable $e) {
+        error_log('[pdks_fis_oku] ' . $e->getMessage());
+        return ['hata' => 'Dosya okunamadı: bozuk ya da desteklenmeyen Excel dosyası.'] + $son;
+    } finally {
+        if ($ss instanceof Spreadsheet) $ss->disconnectWorksheets();
+    }
+}
+
+// =========================================================
+// H. OCR KOMUTU + ŞABLON ÜRETİMİ
+// =========================================================
+
+/**
+ * Kullanıcının fotoğraflarla birlikte dış yapay zekâya verdiği komut metni (TEK yer: Açıklama sayfası ve
+ * yükleme sayfasındaki kutu bunu kullanır). "YORUM KURALLARI" bölümü sahibin cevaplarına göre güncellenecek
+ * TEK yerdir (özellikle "12 + 1" ve "N kişi : M yarım"); kod mantığı bundan bağımsızdır.
+ */
+function pdks_fis_ocr_komutu(): string
+{
+    return <<<'KOMUT_SONU'
+GÖREV: Ekteki fotoğraflarda kâğıt "İŞLETME İŞÇİ FİŞİ" belgeleri var (her biri ayrı bir fiş; bir fotoğrafta birden çok fiş olabilir, aynı fiş iki fotoğrafta da çıkabilir). Sana verdiğim "Fis_Excel_Sablonu" dosyasının "Fişler" sayfasını doldur ve DOLU XLSX DOSYASINI indirilebilir olarak ver. Dosya üretemiyorsan, ilk satırı şablon başlıklarıyla BİREBİR aynı olan, TAB ile ayrılmış bir tablo ver.
+
+BİÇİM KURALLARI
+1. Her fiş = "Fişler" sayfasında TEK satır. 1. satırdaki başlıkları değiştirme; sütun ekleme, silme, sıra değiştirme yapma; başka sayfaya dokunma. Aynı fiş iki fotoğraftaysa tek satır yaz ve Kontrol Notu'na "iki fotoğraf" yaz.
+2. HİÇBİR ŞEY UYDURMA. Okuyamadığın ya da emin olmadığın hücreyi BOŞ bırak ve "Kontrol Notu" sütununa neyin neden belirsiz olduğunu yaz (örn. "Erkek: 12 mi 17 mi okunamadı"). Üstü çizilmiş, silinmiş ya da ikinci kalemle düzeltilmiş yazı varsa onu da Kontrol Notu'na yaz.
+3. "Fiş No": METİN olarak yaz, baştaki sıfırları koru (örn. 01410). Sayıya çevirme.
+4. "Tarih": GG.AA.YYYY biçiminde.
+5. "İşletme" ve "Çavuş Adı": fişte yazdığı gibi yaz, düzeltme yapma. "Çavuş Kodu": "Çavuşlar" sayfasında, fişteki çavuş adıyla AYNI kişiyi gösteren satırın kodunu yaz; tereddüt varsa boş bırak.
+6. Sayı sütunlarına (Kadın/Erkek/Rampacı Tam-Yarım, FM..., Servis...) yalnız TAM SAYI yaz. "kişi" gibi sözcük, "+" işareti ya da formül KULLANMA. Sıfır ise boş bırakabilirsin.
+7. Hiçbir hücrede formül kullanma; yalnız değer yaz.
+8. "Ham Metin": fişteki alanları AYNEN ve etiketleriyle yaz. Örnek: Bayan: 8 | Erkek: 12 + 1 | Toplam Mesai: 5 kişi 2 saat | Servis: 1 küçük | Palet: Rampa
+9. "Palet / Not": "İşlenen Palet Adedi" alanındaki yazıyı aynen yaz ("Rampa", "Döküme araba" gibi).
+10. "Giriş Saati" ve "Revizyon": fişte yoksa BOŞ bırak.
+
+YORUM KURALLARI
+A. Bayan sayısı -> "Kadın Tam". Erkek sayısı -> "Erkek Tam". Alanda "A + B" yazıyorsa A -> Tam, B -> Yarım ("Erkek Yarım").
+B. Rampacı için fişte ayrı bir sayı yoksa Rampacı sütunlarını BOŞ bırak ve Kontrol Notu'na "Rampacı belirtilmemiş" yaz.
+C. "Toplam Mesai" (fazla mesai) alanı:
+   - Yalnız toplam saat varsa ("25 saat mesai tır çıktı") -> "Toplam FM Saati" = 25. Kişi sayısı yazılmamışsa "FM Kişi Sayısı" boş.
+   - "N kişi X saat" ise (örn. "5 kişi 2 saat") -> "FM X Sa (Kişi)" sütununa N.
+   - "3 kişi : 1 yarım", "2 kişi : 2 yarım" gibi anlamı belirsiz yazımlarda HİÇBİR FM/Yarım sütununu doldurma; ham metne aynen yaz ve Kontrol Notu'na "Toplam Mesai yorumlanamadı" yaz.
+   - Fişte fazla mesai yoksa FM sütunları boş.
+D. "Servis": "1 küçük" -> Servis Küçük = 1; "2 büyük" -> Servis Büyük = 2.
+E. FM için iki yöntemden YALNIZ BİRİNİ kullan: "FM n Sa (Kişi)" kovaları ya da "Toplam FM Saati". Aynı bilgiyi ikisine birden yazma.
+
+BİTİŞ: Kaç fiş okuduğunu ve kaç satıra Kontrol Notu yazdığını tek cümleyle bildir.
+KOMUT_SONU;
+}
+
+/**
+ * Şablon çalışma kitabı: Fişler (başlık + biçimli/doğrulamalı 150 satır) · Çavuşlar (güncel liste) · Açıklama ·
+ * Örnek. Tüm metin hücreleri setCellValueExplicit(TYPE_STRING) — formül YOK. Doğrulamalar yardımcıdır; asıl güvenlik
+ * sunucu okumasındadır (doğrulama yapıştırmayla atlanabilir).
+ */
+function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
+{
+    xlsx_motor_yukle();
+    $sut = pdks_fis_sutunlar();
+    $son = PDKS_FIS_MAX_FIS + 1;
+    $metin = static fn($ws, $hucre, $v) => $ws->setCellValueExplicit($hucre, (string)$v, DataType::TYPE_STRING);
+
+    $ss = new Spreadsheet();
+    $ws = $ss->getActiveSheet();
+    $ws->setTitle(PDKS_FIS_SAYFA);
+    $ws->getTabColor()->setARGB('FF1F4E78');
+
+    // ---- başlık + biçimler ----
+    $sonHarf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($sut));
+    foreach ($sut as $i => $c) {
+        $harf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+        $metin($ws, $harf . '1', $c['baslik']);
+        $ws->getColumnDimension($harf)->setWidth((float)$c['genislik']);
+        $biçim = match ($c['tip']) { 'metin', 'liste' => '@', 'tarih' => 'dd.mm.yyyy', 'saat' => 'hh:mm', default => '0' };
+        $ws->getStyle("{$harf}2:{$harf}{$son}")->getNumberFormat()->setFormatCode($biçim);
+    }
+    $ws->getStyle("A1:{$sonHarf}1")->applyFromArray([
+        'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => XLSX_RENK_BLOK]],
+        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+    ]);
+    $ws->getRowDimension(1)->setRowHeight(34);
+    $ws->freezePane('B2');
+
+    // ---- çavuş listesi (Çavuşlar sayfası) ----
+    $cavuslar = pdks_fis_cavuslar($pdo);
+    $aktif = array_values(array_filter($cavuslar, fn($c) => !empty($c['is_active'])));
+    $pasif = array_values(array_filter($cavuslar, fn($c) => empty($c['is_active'])));
+    $kodSira = fn($a, $b) => strcmp($a['code'], $b['code']);
+    usort($aktif, $kodSira); usort($pasif, $kodSira);
+    $cv = $ss->createSheet();
+    $cv->setTitle('Çavuşlar');
+    $cv->getTabColor()->setARGB('FF666666');
+    foreach (['Kod', 'Ad', 'Durum'] as $i => $b) $metin($cv, \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1) . '1', $b);
+    $cv->getStyle('A1:C1')->getFont()->setBold(true);
+    $r = 2;
+    foreach ([[$aktif, 'Aktif'], [$pasif, 'Pasif']] as [$liste, $durum]) {
+        foreach ($liste as $c) {
+            $metin($cv, "A$r", pdks_fis_metin($c['code'], 40)); $metin($cv, "B$r", pdks_fis_metin($c['name'], 150)); $metin($cv, "C$r", $durum);
+            $r++;
+        }
+    }
+    $cv->getColumnDimension('A')->setWidth(14); $cv->getColumnDimension('B')->setWidth(34); $cv->getColumnDimension('C')->setWidth(10);
+    $cv->freezePane('A2');
+    $aktifSon = 1 + count($aktif);
+
+    // ---- veri doğrulamaları ----
+    $dvKur = function (string $harf, DataValidation $dv) use ($ws, $son): void { $ws->setDataValidation("{$harf}2:{$harf}{$son}", $dv); };
+    foreach ($sut as $i => $c) {
+        $harf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+        $dv = new DataValidation();
+        if ($c['tip'] === 'tam' && $c['maks'] !== null) {
+            $dv->setType(DataValidation::TYPE_WHOLE)->setOperator(DataValidation::OPERATOR_BETWEEN)->setFormula1('0')->setFormula2((string)$c['maks'])
+               ->setAllowBlank(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_STOP)
+               ->setErrorTitle('Geçersiz sayı')->setError('0 ile ' . $c['maks'] . ' arasında bir tam sayı girin.');
+            $dvKur($harf, $dv);
+        } elseif ($c['anahtar'] === 'tarih') {
+            $dv->setType(DataValidation::TYPE_DATE)->setOperator(DataValidation::OPERATOR_GREATERTHANOREQUAL)->setFormula1('43831')
+               ->setAllowBlank(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_STOP)
+               ->setErrorTitle('Geçersiz tarih')->setError('01.01.2020 veya sonrası bir tarih girin (GG.AA.YYYY; bugünden önce olmalı).');
+            $dvKur($harf, $dv);
+        } elseif ($c['anahtar'] === 'cavus_kodu' && $aktifSon > 1) {
+            $dv->setType(DataValidation::TYPE_LIST)->setFormula1("'Çavuşlar'!\$A\$2:\$A\${$aktifSon}")
+               ->setAllowBlank(true)->setShowDropDown(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_WARNING)
+               ->setErrorTitle('Çavuş listede yok')->setError('Bu kod «Çavuşlar» sayfasında yok (pasif ya da yeni çavuş olabilir). Yine de devam edilsin mi?');
+            $dvKur($harf, $dv);
+        } elseif ($c['anahtar'] === 'fm_tipi') {
+            $dv->setType(DataValidation::TYPE_LIST)->setFormula1('"' . implode(',', $c['liste']) . '"')
+               ->setAllowBlank(true)->setShowDropDown(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_STOP)
+               ->setErrorTitle('FM Tipi')->setError('Listeden seçin: ' . implode(', ', $c['liste']) . '.');
+            $dvKur($harf, $dv);
+        } elseif (in_array($c['anahtar'], ['giris', 'fis_no'], true)) {
+            $dv->setType(DataValidation::TYPE_NONE)->setShowInputMessage(true)->setPromptTitle($c['baslik'])->setPrompt($c['ipucu']);
+            $dvKur($harf, $dv);
+        }
+    }
+
+    // ---- Açıklama ----
+    $ac = $ss->createSheet();
+    $ac->setTitle('Açıklama');
+    $ac->getTabColor()->setARGB('FFB45309');
+    $ac->getColumnDimension('A')->setWidth(26); $ac->getColumnDimension('B')->setWidth(11); $ac->getColumnDimension('C')->setWidth(110);
+    $ar = 1;
+    $satirYaz = function (string $t, bool $kalin = false, ?float $yukseklik = null) use ($ac, &$ar, $metin): void {
+        $metin($ac, "A$ar", $t);
+        $ac->mergeCells("A$ar:C$ar");
+        $ac->getStyle("A$ar")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+        if ($kalin) $ac->getStyle("A$ar")->getFont()->setBold(true)->setSize(12);
+        $ac->getRowDimension($ar)->setRowHeight($yukseklik ?? max(16.0, 15.0 * (int)ceil(mb_strlen($t, 'UTF-8') / 150) + 2));
+        $ar++;
+    };
+    $satirYaz('Fiş Excel\'i — şablon açıklaması', true);
+    $satirYaz('1) Fişlerin fotoğraflarını yapay zekâya verin (aşağıdaki KOMUT metniyle) ve bu dosyanın «Fişler» sayfasını doldurmasını isteyin.');
+    $satirYaz('2) Dolu dosyayı Günlük Puantaj › «📥 Fiş Excel\'i Yükle» sayfasında yükleyin, önizlemeyi kontrol edin, ardından «Yaz» deyin.');
+    $satirYaz('3) Hata çıkan satırları Excel\'de düzeltip AYNI dosyayı yeniden yükleyin: yazılmış fişler «zaten yüklü» diye atlanır, çiftlenmez.');
+    $ar++;
+    $satirYaz('Sütunlar', true);
+    foreach (['Başlık', 'Zorunlu', 'Ne yazılır'] as $i => $b) { $h = ['A', 'B', 'C'][$i] . $ar; $metin($ac, $h, $b); }
+    $ac->getStyle("A$ar:C$ar")->getFont()->setBold(true);
+    $ar++;
+    foreach ($sut as $c) {
+        $zorunlu = $c['anahtar'] === 'cavus_kodu' ? 'Kod ya da Ad' : ($c['anahtar'] === 'cavus_adi' ? 'Kod ya da Ad' : ($c['zorunlu'] ? 'Evet' : 'Hayır'));
+        $metin($ac, "A$ar", $c['baslik']); $metin($ac, "B$ar", $zorunlu); $metin($ac, "C$ar", $c['ipucu']);
+        $ac->getStyle("C$ar")->getAlignment()->setWrapText(true);
+        $ar++;
+    }
+    $ar++;
+    $satirYaz('Sistem ne yapar', true);
+    foreach ([
+        'Giriş saati boşsa 08:00 alınır. Tam gün çıkışı = giriş + çavuşun normal süresi (genelde 9 sa → 17:00). N saat fazla mesai = Tam çıkışından N saat sonra. Yarım gün = Tam süresinin yarısı (9 sa → 4 sa 30 dk).',
+        'FM'.'\'ye giren kişiler Tam kişilerden sayılır: Erkek Tam 12, «FM 2 Sa (Kişi)» 5 → 7 kişi Tam, 5 kişi Tam + 2 saat fazla mesai. Yarım gün çalışanlara FM verilmez.',
+        'Fazla mesai iki biçimde girilir (YALNIZ BİRİNİ seçin): «FM n Sa (Kişi)» sütunları (o kadar saat yapan kişi sayısı) ya da «Toplam FM Saati» (+ isteğe bağlı «FM Kişi Sayısı»): sistem saatleri kişilere belirli bir kuralla (rastgele değil) dağıtır. FM fiyatları tipler arasında farklıysa toplam saat yolu KAPALIDIR (kova sütunlarını doldurun).',
+        'Yarım gün kayıtları «Yarım» olarak yazılır (önizlemedeki onay kutusu ile). Fazla mesai önizlemedeki onay kutusuyla onaylı yazılır.',
+        'Servis Büyük/Küçük adetleri mesaiye yazılır; mesaide daha önce girilmiş servis varsa yalnız eksik fark eklenir.',
+        'Aynı Fiş No + Revizyon ikinci kez yazılmaz. Yazılmış fişi düzeltmek için: Mesai Detayı › Toplu İşlemler › Geri Al, sonra bu fişin Revizyon\'unu 1 artırıp yeniden yükleyin.',
+        'Yalnız bugünden ÖNCEKİ günlerin fişleri yazılır; en çok ' . PDKS_FIS_MAX_FIS . ' fiş, en çok 2 MB, yalnız .xlsx. Mesaide aktif kayıt varsa fiş durur («Mevcut kayıtlara EK yaz» kutusuyla eklenebilir).',
+        'Ham Metin ve Kontrol Notu yalnız önizlemede gösterilir; veritabanına yazılmaz.',
+    ] as $kural) $satirYaz('• ' . $kural);
+    $ar++;
+    $satirYaz('Yapay zekâya verilecek KOMUT (metni hücreye tıklayıp formül çubuğundan ya da yükleme sayfasındaki «Kopyala» düğmesiyle alın):', true);
+    $metin($ac, "A$ar", pdks_fis_ocr_komutu());
+    $ac->mergeCells("A$ar:C$ar");
+    $ac->getStyle("A$ar")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+    $ac->getRowDimension($ar)->setRowHeight(409);
+    $ar += 2;
+    $satirYaz('Şablon sürümü: ' . PDKS_FIS_SABLON_SURUMU);
+
+    // ---- Örnek ----
+    $ork = $ss->createSheet();
+    $ork->setTitle('Örnek');
+    $ork->getTabColor()->setARGB('FF7A8794');
+    foreach ($sut as $i => $c) {
+        $harf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+        $metin($ork, $harf . '1', $c['baslik']);
+        $ork->getColumnDimension($harf)->setWidth((float)$c['genislik']);
+    }
+    $ork->getStyle("A1:{$sonHarf}1")->applyFromArray([
+        'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => XLSX_RENK_BLOK]],
+        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+    ]);
+    $ork->getRowDimension(1)->setRowHeight(34);
+    $ornek = [
+        ['fis_no' => 'ORNEK-1', 'tarih' => '01.10.2026', 'isletme' => 'Örnek İşletme', 'cavus_kodu' => 'C001', 'cavus_adi' => 'Örnek Çavuş A', 'kadin_tam' => 8, 'erkek_tam' => 12, 'erkek_yarim' => 1,
+         'fm2' => 5, 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '08:00', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1 | Toplam Mesai: 5 kişi 2 saat | Servis: 1 küçük | Palet: Rampa'],
+        ['fis_no' => 'ORNEK-2', 'tarih' => '01.10.2026', 'isletme' => 'Örnek İşletme', 'cavus_kodu' => 'C002', 'cavus_adi' => 'Örnek Çavuş B', 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'rampaci_yarim' => 1,
+         'fm_toplam' => 25, 'servis_buyuk' => 1, 'ham' => 'Bayan 8 | Erkek 12 | Rampacı 2 + 1 | Toplam Mesai: 25 saat mesai tır çıktı | Servis: 1 büyük', 'kontrol' => 'Rampacı sayısı fişte yok, kullanıcı ekledi'],
+        ['fis_no' => 'ORNEK-3', 'tarih' => '01.10.2026', 'isletme' => 'Örnek İşletme', 'cavus_kodu' => 'C003', 'cavus_adi' => 'Örnek Çavuş C', 'kadin_tam' => 5, 'giris' => '09:00'],
+    ];
+    foreach ($ornek as $ri => $o) {
+        $satir = 2 + $ri;
+        foreach ($sut as $i => $c) {
+            if (!array_key_exists($c['anahtar'], $o)) continue;
+            $v = $o[$c['anahtar']];
+            $h = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1) . $satir;
+            if (is_int($v)) $ork->setCellValue($h, $v);
+            else $metin($ork, $h, $v);
+        }
+    }
+    $metin($ork, 'A6', 'Bu satırlar yalnız örnektir; «Fişler» sayfasına KOPYALAMAYIN (ORNEK- ile başlayan Fiş No reddedilir).');
+    $ork->getStyle('A6')->getFont()->setItalic(true)->getColor()->setARGB(XLSX_RENK_SOLUK);
+
+    $ss->setActiveSheetIndex(0);
+    return $ss;
 }
