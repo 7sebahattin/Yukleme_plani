@@ -1141,3 +1141,320 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     $ss->setActiveSheetIndex(0);
     return $ss;
 }
+
+// =========================================================
+// F. DB'Lİ DEĞERLENDİRME (YAN ETKİSİZ)
+// =========================================================
+
+/** Sayfa seçeneklerini normalize eder (bilinmeyen anahtar atılır; bool'lar bool). */
+function pdks_fis_secenek(array $in): array
+{
+    $fmTip = (string)($in['fm_tip'] ?? 'tumu');
+    if (!in_array($fmTip, ['tumu', 'erkek', 'erkek_rampaci'], true)) $fmTip = 'tumu';
+    return [
+        'fm_tip' => $fmTip,
+        'onay_yarim' => !empty($in['onay_yarim']),
+        'onay_fm' => !empty($in['onay_fm']),
+        'ek_yaz' => !empty($in['ek_yaz']),
+        'isletme_onay' => !empty($in['isletme_onay']),
+    ];
+}
+
+/**
+ * Çavuşun o gün için her destekli tipin eşikleri + FM fiyat bilgisi — HEPSİ sınıflandırıcıdan (sentetik prob
+ * satırı; kopya mantık YOK). Dönüş pdks_fis_plan()'ın $baglam'ıdır.
+ */
+function pdks_fis_baglam(PDO $pdo, int $foremanId, string $tarih, int $normalDk, string $fmTipSecenegi): array
+{
+    $tipler = [];
+    $saatHazir = pdks_faz8b_saat_kolonlari_hazir($pdo);
+    foreach (pdks_gunluk_desteklenen_tip_listele($pdo) as $t) {
+        $kod = (string)$t['code'];
+        if (!in_array($kod, pdks_fis_tip_kodlari(), true)) continue;
+        $prob = ['entry_time' => $tarih . ' 08:00:00', 'exit_time' => $tarih . ' 08:01:00', 'worker_type_id_snapshot' => (int)$t['id'],
+                 '_s_foreman_id' => $foremanId, '_s_work_date' => $tarih, 'normal_work_minutes_snapshot' => $normalDk];
+        $r = pdks_faz8b_donemleri_siniflandir([$prob], $pdo)[0];
+        $f = $r['faz8b'];
+        $o = $r['_faz8b_oran'];
+        // Saat kolonları kurulu değilse sınıflandırıcı fiyat dönemini SORGULAMAZ; FM nötrlüğü için yine de oku.
+        if ($o === null && !$saatHazir) $o = pdks_hakedis_oran_gecerli($foremanId, (int)$t['id'], $tarih, $pdo);
+        $tipler[$kod] = [
+            'id' => (int)$t['id'], 'ad' => (string)$t['name'],
+            'tam_dk' => (int)$f['tam_dk'], 'fm_bas_dk' => (int)$f['fm_bas_dk'],
+            'cift_dk' => $f['cift_dk'] !== null ? (int)$f['cift_dk'] : null,
+            'oran' => ['var' => $o !== null, 'fm_modu' => $o !== null ? trim((string)($o['overtime_mode'] ?? '')) : null,
+                       'fm_birim' => $o !== null ? (string)($o['overtime_rate'] ?? '') : null, 'para' => $o !== null ? (string)($o['currency'] ?? '') : null],
+        ];
+    }
+    return ['tipler' => $tipler, 'fm_tip_secenegi' => $fmTipSecenegi];
+}
+
+/** Mesai varsa onun donmuş normal süresi; yoksa çavuşun o gün geçerli normal süresi. */
+function pdks_fis_normal_dk(PDO $pdo, int $foremanId, string $tarih, ?array $oturum): int
+{
+    $snap = (int)($oturum['normal_work_minutes_snapshot'] ?? 0);
+    return $snap > 0 ? $snap : pdks_cavus_sure_dk($foremanId, $tarih, $pdo);
+}
+
+/**
+ * Çavuş + gün + depo mesaisinin mevcut durumu (salt okunur): aktif (iptal edilmemiş) dönem sayısı, servis toplamları
+ * (hepsi ve bu fişe etiketli), kesinleşmiş hakediş. Etiket karşılaştırması PHP'de (LIKE'sız).
+ * @return array{oturum:?array, aktif_donem:int, servis_toplam:array, servis_fis:array, kesin:bool}
+ */
+function pdks_fis_mevcut(PDO $pdo, int $foremanId, string $tarih, string $depo, string $fisNo): array
+{
+    $sifir = array_fill_keys(array_keys(pdks_servis_turleri()), 0);
+    $st = $pdo->prepare('SELECT * FROM daily_work_sessions WHERE foreman_id = ? AND work_date = ? AND depo = ?');
+    $st->execute([$foremanId, $tarih, $depo]);
+    $o = $st->fetch() ?: null;
+    $r = ['oturum' => $o, 'aktif_donem' => 0, 'servis_toplam' => $sifir, 'servis_fis' => $sifir, 'kesin' => false];
+    if (!$o) return $r;
+    $sid = (int)$o['id'];
+    $q = $pdo->prepare('SELECT COUNT(*) FROM daily_worker_work_periods p WHERE p.session_id = ? AND ' . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p'));
+    $q->execute([$sid]);
+    $r['aktif_donem'] = (int)$q->fetchColumn();
+    $r['servis_toplam'] = pdks_servis_toplamlar($sid, $pdo);
+    $onek = PDKS_FIS_ETIKET . $fisNo . '] ';
+    foreach (pdks_servis_listele($sid, $pdo) as $s) {
+        if ((int)($s['is_voided'] ?? 0) === 1) continue;
+        if (str_starts_with((string)($s['note'] ?? ''), $onek) && isset($r['servis_fis'][(string)$s['service_type']])) {
+            $r['servis_fis'][(string)$s['service_type']] += (int)$s['quantity'];
+        }
+    }
+    $r['kesin'] = pdks_faz8j_entitlement($pdo, $sid) === 'final';
+    return $r;
+}
+
+/**
+ * Fişin yazılma durumu (audit'ten): 'tamam' (fis_yukle izi), 'yarim' (işçi kayıtları yazıldı, tamamlanma izi yok),
+ * 'yeni'. geri_alindi = ilgili toplu işlem Toplu Geri Al ile geri alınmış.
+ * @return array{durum:string, session_id?:int, toplu_id?:string, geri_alindi?:bool}
+ */
+function pdks_fis_durum(PDO $pdo, string $istekId): array
+{
+    $kalip = '%"istek_id":"' . $istekId . '"%';
+    $st = $pdo->prepare("SELECT record_id, new_values FROM audit_log WHERE action = 'fis_yukle' AND new_values LIKE ? ORDER BY id DESC LIMIT 1");
+    $st->execute([$kalip]);
+    $tamam = $st->fetch();
+    $sonuc = ['durum' => 'yeni'];
+    if ($tamam) {
+        $nv = json_decode((string)$tamam['new_values'], true) ?: [];
+        $sonuc = ['durum' => 'tamam', 'session_id' => (int)$tamam['record_id'], 'toplu_id' => (string)($nv['toplu_id'] ?? '')];
+    } else {
+        $st = $pdo->prepare("SELECT record_id, new_values FROM audit_log WHERE module = 'daily_work_sessions' AND action = 'puantaj_toplu_ekle' AND new_values LIKE ? ORDER BY id DESC LIMIT 1");
+        $st->execute([$kalip]);
+        $yarim = $st->fetch();
+        if (!$yarim) return $sonuc;
+        $nv = json_decode((string)$yarim['new_values'], true) ?: [];
+        $sonuc = ['durum' => 'yarim', 'session_id' => (int)$yarim['record_id'], 'toplu_id' => (string)($nv['toplu_id'] ?? '')];
+    }
+    $sonuc['geri_alindi'] = false;
+    if ($sonuc['toplu_id'] !== '' && $sonuc['session_id'] > 0) {
+        foreach (pdks_faz8j_toplu_listele($sonuc['session_id'], $pdo) as $t) {
+            if ($t['toplu_id'] === $sonuc['toplu_id']) { $sonuc['geri_alindi'] = (bool)$t['geri_alindi']; break; }
+        }
+    }
+    return $sonuc;
+}
+
+/**
+ * Bir grubun sınıflandırıcı çıktısı ($faz8b) beklenenle uyuşuyor mu? Hata metni ya da null.
+ * tam → otomatik Tam ∧ FM 0 · fm k → otomatik Tam ∧ FM k · yarım → onay bekliyor (sınıf null).
+ */
+function pdks_fis_sinif_beklenti_hatasi(array $faz8b, array $grup): ?string
+{
+    $et = pdks_fis_grup_etiketi($grup);
+    $sinif = $faz8b['otomatik_sinif'] ?? null; $fm = (int)($faz8b['fazla_mesai_saat'] ?? 0);
+    if ($grup['profil'] === 'tam' && ($sinif !== 'tam' || $fm !== 0)) return "$et: sınıflandırıcı otomatik Tam / FM 0 beklerken " . ($sinif ?? 'Bekliyor') . " / FM $fm buldu — çavuşun süre ve fiyat ayarlarını kontrol edin.";
+    if ($grup['profil'] === 'fm' && ($sinif !== 'tam' || $fm !== (int)$grup['fm_saat'])) return "$et: sınıflandırıcı otomatik Tam / FM " . (int)$grup['fm_saat'] . " beklerken " . ($sinif ?? 'Bekliyor') . " / FM $fm buldu — çavuşun süre ve fiyat ayarlarını kontrol edin.";
+    if ($grup['profil'] === 'yarim' && (empty($faz8b['sinif_onayi_gerekli']) || ($faz8b['etkin_sinif'] ?? null) !== null)) return "$et: yarım gün süresi Tam eşiğinin altında kalmıyor (sınıflandırıcı " . ($faz8b['etkin_sinif'] ?? $sinif ?? '?') . " buldu) — çavuşun süre ayarını kontrol edin.";
+    return null;
+}
+
+/**
+ * Zamanlanmış grupları sentetik dönem satırlarıyla sınıflandırıcıdan geçirir ("önizleme = yazma" sigortasının
+ * önizleme yarısı; yazma yarısı gerçek satırlarla aynı kuralı pdks_fis_sinif_beklenti_hatasi ile uygular).
+ */
+function pdks_fis_siniflari_dogrula(PDO $pdo, int $foremanId, string $tarih, int $normalDk, array $zamanliGruplar, array $baglam): ?string
+{
+    $rows = [];
+    foreach ($zamanliGruplar as $g) {
+        $rows[] = ['entry_time' => $tarih . ' ' . $g['entry_clock'] . ':00', 'exit_time' => $g['exit_date'] . ' ' . $g['exit_clock'] . ':00',
+                   'worker_type_id_snapshot' => (int)$g['tip_id'], '_s_foreman_id' => $foremanId, '_s_work_date' => $tarih, 'normal_work_minutes_snapshot' => $normalDk];
+    }
+    if (!$rows) return null;
+    $sin = pdks_faz8b_donemleri_siniflandir($rows, $pdo);
+    foreach ($zamanliGruplar as $i => $g) {
+        if ($h = pdks_fis_sinif_beklenti_hatasi($sin[$i]['faz8b'], $g)) return $h;
+    }
+    return null;
+}
+
+/** Servis hedefinden yazılacak farkı hesaplar (D1): EK kapalı → hedef − tüm servis; EK açık → hedef − bu fişe etiketli. */
+function pdks_fis_servis_fark(array $hedef, array $mevcut, bool $ekYaz): array
+{
+    $yaz = ['buyuk' => 0, 'kucuk' => 0]; $uy = [];
+    foreach (['buyuk' => 'BUYUK', 'kucuk' => 'KUCUK'] as $k => $tur) {
+        $h = (int)($hedef[$k] ?? 0);
+        if ($h <= 0) continue;
+        $m = (int)($ekYaz ? ($mevcut['servis_fis'][$tur] ?? 0) : ($mevcut['servis_toplam'][$tur] ?? 0));
+        $yaz[$k] = max(0, $h - $m);
+        $ad = $k === 'buyuk' ? 'Büyük' : 'Küçük';
+        if ($m > $h) $uy[] = "Mesaide fişten fazla $ad servis var ($m > $h); dokunulmadı.";
+        elseif ($m > 0) $uy[] = "Mesaide zaten $m $ad servis var; yalnız fark ({$yaz[$k]}) eklenecek.";
+    }
+    return ['yazilacak' => $yaz, 'uyarilar' => $uy];
+}
+
+/** İşletme alanı aktif depoyla uyumlu mu? (boş = uyumlu; eşit ya da biri diğerini içerir). */
+function pdks_fis_isletme_uyumlu(string $isletme, string $depo): bool
+{
+    $a = pdks_fis_fold($isletme); $b = pdks_fis_fold($depo);
+    return $a === '' || $b === '' || $a === $b || str_contains($a, $b) || str_contains($b, $a);
+}
+
+/**
+ * toplu_onizle/toplu_ekle girdisi. `yazdiktan_sonra` yalnız yazma yolunda eklenir (pdks_fis_yaz_fis).
+ * audit_ek'te `istek_id` ANAHTARI KULLANILMAZ (özet audit'te çekirdek zaten yazıyor).
+ */
+function pdks_fis_toplu_girdisi(array $fis, array $plan, array $secenek, string $istekId, string $dosyaSha): array
+{
+    $gruplar = [];
+    foreach ($plan['gruplar'] as $g) {
+        $gruplar[] = ['worker_type_id' => (int)$g['tip_id'], 'entry_clock' => $g['entry_clock'], 'exit_date' => $g['exit_date'], 'exit_clock' => $g['exit_clock'],
+                      'kartsiz_adet' => (int)$g['adet'], 'etiket' => pdks_fis_grup_etiketi($g)];
+    }
+    return [
+        'foreman_id' => (int)$fis['cavus']['id'], 'work_date' => (string)$fis['tarih'], 'depo' => (string)(function_exists('active_depot') ? active_depot() : ''),
+        'reason' => 'Fiş girişi — Fiş No ' . $fis['fis_no'] . ' (Excel)', 'note' => pdks_fis_metin((string)($fis['not'] ?? ''), 500),
+        'gruplar' => $gruplar, 'istek_id' => $istekId, 'coklu_grup' => true,
+        'audit_ek' => [
+            'kaynak' => 'fis_excel', 'fis_no' => (string)$fis['fis_no'], 'fis_rev' => (int)$fis['rev'], 'dosya_sha256' => $dosyaSha,
+            'plan_hash' => (string)$plan['hash'], 'fm_modu' => (string)$plan['fm']['mod'], 'ek_yaz' => !empty($secenek['ek_yaz']),
+            'onaylar' => ['fm' => !empty($secenek['onay_fm']), 'yarim' => !empty($secenek['onay_yarim'])],
+        ],
+    ];
+}
+
+/**
+ * Tek fişin önizleme modeli — YAN ETKİSİZ (yazma/oturum açma/audit YOK). Yazma anında AYNI fonksiyon yeniden çağrılır
+ * (istemci verisine/önizleme sonucuna güvenilmez). durum: hazir · uyari · onay · engel · hata · zaten · devam.
+ */
+function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): array
+{
+    $secenek = pdks_fis_secenek($secenek);
+    $depo = (string)(function_exists('active_depot') ? active_depot() : '');
+    $m = ['satir' => (int)($fis['satir'] ?? 0), 'fis_no' => (string)($fis['fis_no'] ?? ''), 'rev' => (int)($fis['rev'] ?? 0), 'tarih' => $fis['tarih'] ?? null,
+          'cavus' => $fis['cavus'] ?? [], 'isletme' => (string)($fis['isletme'] ?? ''), 'giris' => (string)($fis['giris'] ?? ''), 'not' => (string)($fis['not'] ?? ''),
+          'ham' => (string)($fis['ham'] ?? ''), 'kontrol' => (string)($fis['kontrol'] ?? ''), 'durum' => 'hata', 'hatalar' => [], 'uyarilar' => array_values($fis['uyarilar'] ?? []),
+          'engeller' => [], 'plan' => null, 'mevcut' => null, 'servis' => ['hedef' => ['buyuk' => 0, 'kucuk' => 0], 'yazilacak' => ['buyuk' => 0, 'kucuk' => 0]],
+          'kisi' => 0, 'hash' => '', 'istek' => null, 'secilebilir' => false, 'varsayilan_secili' => false, 'isletme_uyusmaz' => false, 'yazma' => null];
+    $bitir = function (string $durum) use (&$m): array {
+        $m['durum'] = $durum;
+        $m['secilebilir'] = !in_array($durum, ['hata', 'zaten'], true);
+        $m['varsayilan_secili'] = in_array($durum, ['hazir', 'uyari', 'devam'], true);
+        $m['uyarilar'] = array_values(array_unique($m['uyarilar']));
+        return $m;
+    };
+    if (!empty($fis['hatalar'])) { $m['hatalar'] = array_values($fis['hatalar']); return $bitir('hata'); }
+    $cid = (int)($fis['cavus']['id'] ?? 0);
+    $tarih = (string)($fis['tarih'] ?? '');
+    if ($cid < 1 || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $tarih)) { $m['hatalar'][] = 'Çavuş ya da tarih çözülemedi.'; return $bitir('hata'); }
+    if ($tarih >= date('Y-m-d')) { $m['hatalar'][] = 'Bugün veya gelecek tarihli fişler desteklenmez.'; return $bitir('hata'); }
+    if ($depo === '') { $m['hatalar'][] = 'Önce bir depo seçmelisiniz.'; return $bitir('hata'); }
+    $m['servis']['hedef'] = ['buyuk' => (int)($fis['servis']['buyuk'] ?? 0), 'kucuk' => (int)($fis['servis']['kucuk'] ?? 0)];
+    $ist = pdks_fis_istek_idleri($depo, (string)$fis['fis_no'], (int)$fis['rev']);
+    $m['istek'] = $ist;
+    $d = pdks_fis_durum($pdo, $ist['fis']);
+    $m['yazma'] = $d;
+    if ($d['durum'] === 'tamam') {
+        $m['uyarilar'][] = !empty($d['geri_alindi'])
+            ? 'Bu fiş daha önce yazılmış ve GERİ ALINMIŞ — yeniden yazmak için Revizyon\'u artırın.'
+            : 'Bu fiş (Fiş No + Revizyon) daha önce yazılmış — atlanır.';
+        return $bitir('zaten');
+    }
+    $devam = $d['durum'] === 'yarim';
+
+    $mevcut = pdks_fis_mevcut($pdo, $cid, $tarih, $depo, (string)$fis['fis_no']);
+    if ($devam && (int)($d['session_id'] ?? 0) > 0 && $mevcut['oturum'] === null) {
+        $m['hatalar'][] = 'Fişin işçi kayıtları yazılmış ama mesai bulunamadı — Mesai Detayı\'nı kontrol edin.'; return $bitir('hata');
+    }
+    $m['mevcut'] = ['mesai' => $mevcut['oturum'] !== null, 'session_id' => $mevcut['oturum'] ? (int)$mevcut['oturum']['id'] : null, 'aktif_donem' => $mevcut['aktif_donem'],
+                    'servis' => $mevcut['servis_toplam'], 'kesin' => $mevcut['kesin']];
+    if ($mevcut['kesin']) { $m['hatalar'][] = 'Bu mesainin kesinleşmiş hakedişi var — önce hakedişi yeniden açın.'; return $bitir('hata'); }
+
+    $normalDk = pdks_fis_normal_dk($pdo, $cid, $tarih, $mevcut['oturum']);
+    $baglam = pdks_fis_baglam($pdo, $cid, $tarih, $normalDk, $secenek['fm_tip']);
+    $plan = pdks_fis_zamanla(pdks_fis_plan($fis, $baglam), $tarih, (string)$fis['giris']);
+    $m['plan'] = $plan; $m['hash'] = (string)$plan['hash']; $m['kisi'] = (int)$plan['kisi_toplam'];
+    $m['uyarilar'] = array_merge($m['uyarilar'], $plan['uyarilar']);
+    if (!$plan['ok']) { $m['hatalar'] = $plan['hatalar']; return $bitir('hata'); }
+    if ($h = pdks_fis_siniflari_dogrula($pdo, $cid, $tarih, $normalDk, $plan['gruplar'], $baglam)) { $m['hatalar'][] = $h; return $bitir('hata'); }
+
+    // Servis
+    $hedefSv = $m['servis']['hedef'];
+    if ($hedefSv['buyuk'] + $hedefSv['kucuk'] > 0) {
+        if (!pdks_servis_sema_hazir($pdo)) { $m['hatalar'][] = 'Fişte servis var ama Servis Ücreti tabloları kurulmamış (migrate.php) — fiş yazılamaz.'; return $bitir('hata'); }
+        $fark = pdks_fis_servis_fark($hedefSv, $mevcut, $secenek['ek_yaz']);
+        $m['servis']['yazilacak'] = $fark['yazilacak'];
+        $m['uyarilar'] = array_merge($m['uyarilar'], $fark['uyarilar']);
+        if ($fark['yazilacak']['buyuk'] + $fark['yazilacak']['kucuk'] > 0) {
+            $ucret = pdks_servis_ucret_gecerli($cid, $tarih, $pdo);
+            $fs = [];
+            foreach (pdks_servis_turleri() as $tur => $tn) {
+                $k = $tur === 'BUYUK' ? 'buyuk' : 'kucuk';
+                if ($fark['yazilacak'][$k] > 0 && pdks_servis_birim_kurus($ucret, $tur) === null) $fs[] = $tn['ad'];
+            }
+            if ($fs) $m['uyarilar'][] = implode(' ve ', $fs) . ' servis fiyatı tanımlı değil — kayıt yazılır, fiyat girilene dek hakediş hesaplanamaz.';
+        }
+    }
+
+    if ($devam) {
+        $m['uyarilar'][] = 'İşçi kayıtları daha önce yazılmış; bu yükleme eksik kalan servisi/izi tamamlayacak.';
+        return $bitir('devam');
+    }
+
+    // İşçi yazımı: Faz 8J önizlemesi (kapılar, mesai çözümü, kesin hakediş, pasif çavuş…)
+    $girdi = pdks_fis_toplu_girdisi($fis, $plan, $secenek, $ist['fis'], '');
+    $on = pdks_faz8j_toplu_onizle($girdi, $user, $pdo);
+    $m['uyarilar'] = array_merge($m['uyarilar'], $on['uyarilar'] ?? []);
+    if (empty($on['ok'])) {
+        $m['hatalar'] = $on['hatalar'] ?: ['Önizleme başarısız.'];
+        return $bitir('hata');
+    }
+    if ($mevcut['aktif_donem'] > 0) {
+        if (!$secenek['ek_yaz']) $m['engeller'][] = 'Bu mesaide ' . $mevcut['aktif_donem'] . ' aktif kayıt var — önce Toplu Geri Al / Kaydı İptal Et ya da «Mevcut kayıtlara EK yaz» seçeneğini işaretleyin.';
+        else $m['uyarilar'][] = 'Mesaide ' . $mevcut['aktif_donem'] . ' mevcut kayıt korunuyor; fişin kayıtları üzerine EKLENECEK.';
+    }
+    if (!empty($fis['cakisma_dosya']) && (int)($fis['cakisma_sira'] ?? 0) > 0 && !$secenek['ek_yaz']) {
+        $m['engeller'][] = 'Aynı dosyada aynı çavuş + gün için başka fiş var — bu fiş aynı mesaiye eklenir; «Mevcut kayıtlara EK yaz» gerekli.';
+    }
+    if ($m['engeller']) return $bitir('engel');
+    if (!pdks_fis_isletme_uyumlu($m['isletme'], $depo)) {
+        $m['isletme_uyusmaz'] = true;
+        $m['uyarilar'][] = 'İşletme «' . pdks_fis_metin_duz($m['isletme'], 60) . '» aktif depo «' . $depo . '» ile uyuşmuyor.';
+        if (!$secenek['isletme_onay']) return $bitir('onay');
+    }
+    return $bitir($m['uyarilar'] ? 'uyari' : 'hazir');
+}
+
+/**
+ * Fişlerin önizlemesi + özet. @return array{fisler:list<array>, ozet:array}
+ */
+function pdks_fis_onizle(PDO $pdo, array $fisler, array $secenek, int $user): array
+{
+    $sonuc = []; $oz = ['fis' => count($fisler), 'durum' => [], 'kisi' => 0, 'fm_saat' => 0, 'servis' => ['buyuk' => 0, 'kucuk' => 0]];
+    foreach ($fisler as $f) {
+        $m = pdks_fis_degerlendir($pdo, $f, $secenek, $user);
+        $sonuc[] = $m;
+        $oz['durum'][$m['durum']] = ($oz['durum'][$m['durum']] ?? 0) + 1;
+        if (in_array($m['durum'], ['hazir', 'uyari', 'onay', 'engel'], true)) {
+            $oz['kisi'] += $m['kisi'];
+            $oz['fm_saat'] += (int)($m['plan']['fm']['toplam_saat'] ?? 0);
+        }
+        if (in_array($m['durum'], ['hazir', 'uyari', 'onay', 'engel', 'devam'], true)) {
+            $oz['servis']['buyuk'] += $m['servis']['yazilacak']['buyuk']; $oz['servis']['kucuk'] += $m['servis']['yazilacak']['kucuk'];
+        }
+    }
+    return ['fisler' => $sonuc, 'ozet' => $oz];
+}
