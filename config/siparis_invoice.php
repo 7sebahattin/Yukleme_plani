@@ -800,6 +800,7 @@ function siparis_inv_pdf_metin(string $yol): string
  */
 function siparis_inv_efatura_alanlar(string $metin): array
 {
+    $metin = mb_strcut($metin, 0, 300000, 'UTF-8');     // gerçek e-fatura ~3 KB; kötü niyetli dev metinde regex süresi sınırlı kalsın
     $out = [];
     $tek = function (array $adaylar): ?string {
         $adaylar = array_values(array_unique(array_filter($adaylar, fn($x) => $x !== null && $x !== '')));
@@ -855,7 +856,7 @@ function siparis_inv_efatura_alanlar(string $metin): array
             if ($aday > 0 && $aday < 100 && abs(round($t[0] * $aday / 100, 2) - $i[0]) < 0.005) $out['iskonto'] = (string)$aday;
         }
     }
-    if (preg_match_all('/(?:[ÖO]denecek\s*Tutar|Vergiler\s*Dahil\s*Toplam(?:\s*Tutar)?|Genel\s*Toplam|Total(?!\s*Pallet))[^0-9]{0,25}' . $say . '(?![\d.,]*\d)(?!\s*(?:TL|TRY|₺))/iu', $metin, $m)) {   // TL karşılığı (aynı etiket) dışlanır
+    if (preg_match_all('/(?:[ÖO]denecek\s*Tutar|Vergiler\s*Dahil\s*Toplam(?:\s*Tutar)?|Genel\s*Toplam|Total(?!\s*Pallet))[^0-9]{0,25}((?>\d[\d.,]*\d|\d))(?!\s*(?:TL|TRY|₺))/iu', $metin, $m)) {   // TL karşılığı (aynı etiket) dışlanır
         $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, true); return $x !== null ? number_format($x, 2, '.', '') : null; }, $m[1]);
         $x = $tek($adaylar); if ($x !== null) $out['efatura_toplam'] = $x;
     }

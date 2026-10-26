@@ -483,6 +483,10 @@ ok('iskonto oranı yazmıyorsa tutarlardan türetilir: 997,36 / 24.934,00 = %4',
 ok('türetme YALNIZ temiz oranda: 1.000,00 üzerinden 123,45 = %12,345 → ön-doldurulmaz; TL tutarlardan türetilmez',
     !isset(siparis_inv_efatura_alanlar('Mal / Hizmet Toplam Tutarı 1.000,00 EUR Toplam İskonto 123,45 EUR')['iskonto'])
     && !isset(siparis_inv_efatura_alanlar('Mal / Hizmet Toplam Tutarı 1.000,00 TL Toplam İskonto 40,00 TL')['iskonto']));
+$zt = microtime(true);
+$zEf = siparis_inv_efatura_alanlar('Ödenecek Tutar ' . str_repeat('9', 50000) . ' TL ' . str_repeat('1.', 25000) . ' Vergiler Dahil Toplam Tutar ' . str_repeat('9', 50000));
+ok('patolojik dev rakam dizisinde regex süresi sınırlı (< 1 sn) ve çökmez', (microtime(true) - $zt) < 1.0 && is_array($zEf), sprintf('%.0f ms', (microtime(true) - $zt) * 1000));
+ok('"1.318.493,03 TL" atomik yakalanır: TL tutarı geri sarıp kısaltılarak toplama SOKULMAZ', !isset(siparis_inv_efatura_alanlar('Ödenecek Tutar 1.318.493,03 TL')['efatura_toplam']));
 ok('net_kg ondalıklı miktar (18.200,5 KG) ön-doldurulmaz (tam sayı kg kuralı)', !isset(siparis_inv_efatura_alanlar('18.200,5 KG 1,3700 EUR')['net_kg']));
 ok('formda kullanılan alan listesi net_kg / brut_kg anahtarlarını taşır (siparis_invoice.php $FORM_ALANLARI)', str_contains((string)file_get_contents($ROOT . '/siparis_invoice.php'), "'net_kg', 'brut_kg'"));
 // (4) aynı baytlı belge daha önce normal yüklemeyle kaydedilmiş
