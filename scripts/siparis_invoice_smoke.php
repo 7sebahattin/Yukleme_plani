@@ -467,6 +467,24 @@ ok('iskonto: "%4,00" / "4,00 %" / "Oranı 4,00" → 4', ($ea('İskonto Oranı %4
 ok('iskonto: belirsiz "0,04" (oran mı yüzde mi) ÖN-DOLDURULMAZ; tutar etiketi / %101 / etiketsiz sayı da değil', !isset($ea('İskonto Oranı 0,04')['iskonto']) && !isset($ea('İskonto 0,04')['iskonto'])
     && !isset($ea('İskonto Tutarı 997,36')['iskonto']) && !isset($ea('İskonto %101')['iskonto']) && !isset($ea('İskonto 4')['iskonto']));
 ok('birim fiyat tam sayı yakalanır: "1,37" ve "1.234,56" (≥1000 → boş)', ($ea('Birim Fiyat 1,37 EUR')['fiyat'] ?? '') === '1.37' && !isset($ea('Birim Fiyat 1.234,56')['fiyat']));
+// (3b) v445: tarayıcıdan "PDF olarak yazdır" e-fatura düzeni (SENTETİK metin; gerçek fatura repoya girmez) — tarih "03- 10- 2026", kalem satırı
+//      "<miktar> KG <fiyat> EUR", TL karşılığı aynı etiketle ikinci kez, notlarda "Total Pallets", iskonto ORANI yok (yalnız tutar)
+$efTarayici = 'e-FATURA Fatura No: IHR2026000000999 Fatura Tarihi: 03- 10- 2026 11:25:04 ETTN: AAAA '
+    . 'Sıra No Malzeme / Hizmet Kodu Birim Fiyat KDV Oranı KDV Tutarı Vergi Muafiyet Sebebi '
+    . '1 TAZE NAR (FRESH POMEGRANATE) HİCAZ BRÜT 21300 KG. 5200 C.BOXES 18.200 KG 1,3700 EUR % 0,00 0,00 EUR 301- 11/1-a Mal İhracatı 23.936,64 EUR EXW FC 26 '
+    . 'Mal / Hizmet Toplam Tutarı 24.934,00 EUR Toplam İskonto 997,36 EUR Hesaplanan KDV (% 0,00 ) Vergiler Dahil Toplam Tutar 23.936,64 EUR Ödenecek Tutar 23.936,64 EUR '
+    . 'Döviz Kuru (TRY) 55,0826 TL Mal / Hizmet Toplam Tutarı 1.373.430,24 TL Toplam İskonto 54.937,21 TL Hesaplanan KDV (% 0,00 ) Vergiler Dahil Toplam Tutar 1.318.493,03 TL Ödenecek Tutar 1.318.493,03 TL '
+    . 'Genel Açıklamalar 26 Total Pallets,5200 C.BOXES BANKA : TESTBANK Country of origin -TURKEY';
+$efT = siparis_inv_efatura_alanlar($efTarayici);
+ok('tarayıcı e-fatura düzeni: no, tarih (boşluklu), fiyat, net, brüt', ($efT['no'] ?? '') === 'IHR2026000000999' && ($efT['tarih'] ?? '') === '2026-10-03' && ($efT['fiyat'] ?? '') === '1.37'
+    && ($efT['net_kg'] ?? '') === '18200' && ($efT['brut_kg'] ?? '') === '21300', json_encode($efT));
+ok('tarayıcı e-fatura düzeni: toplam yalnız EUR (TL karşılığı ve "Total Pallets" 5200 karışmaz) = 23936.64', ($efT['efatura_toplam'] ?? '') === '23936.64', json_encode($efT));
+ok('iskonto oranı yazmıyorsa tutarlardan türetilir: 997,36 / 24.934,00 = %4', ($efT['iskonto'] ?? '') === '4', json_encode($efT));
+ok('türetme YALNIZ temiz oranda: 1.000,00 üzerinden 123,45 = %12,345 → ön-doldurulmaz; TL tutarlardan türetilmez',
+    !isset(siparis_inv_efatura_alanlar('Mal / Hizmet Toplam Tutarı 1.000,00 EUR Toplam İskonto 123,45 EUR')['iskonto'])
+    && !isset(siparis_inv_efatura_alanlar('Mal / Hizmet Toplam Tutarı 1.000,00 TL Toplam İskonto 40,00 TL')['iskonto']));
+ok('net_kg ondalıklı miktar (18.200,5 KG) ön-doldurulmaz (tam sayı kg kuralı)', !isset(siparis_inv_efatura_alanlar('18.200,5 KG 1,3700 EUR')['net_kg']));
+ok('formda kullanılan alan listesi net_kg / brut_kg anahtarlarını taşır (siparis_invoice.php $FORM_ALANLARI)', str_contains((string)file_get_contents($ROOT . '/siparis_invoice.php'), "'net_kg', 'brut_kg'"));
 // (4) aynı baytlı belge daha önce normal yüklemeyle kaydedilmiş
 $pdfA = siparis_inv_pdf('<html><body>' . 'diger-belge-A</body></html>');
 $kA = siparis_dosya_kaydet($db, siparis_test_dosya($pdfA, 'a.pdf'), 1, 'DEPO1', siparis_test_mover());
