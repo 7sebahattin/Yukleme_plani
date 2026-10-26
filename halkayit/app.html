@@ -2670,7 +2670,7 @@ function yzDurumSayfasi(w, altBaslik, metin, tekrar) {
 
 // TEK gönderimin künyelerini HKS'ten al ve süz. Döner: { kunyeler, beklenen, eksik } ya da { hata }.
 // sorgu (isteğe bağlı): aynı plaka+gün sorgusunun Promise'i (toplu yazdırmada paylaşılır).
-async function gonderimKunyeleriAl(o, sorgu) {
+async function gonderimKunyeleriAl(o, sorgu, tumu) {
   if (!o.plaka && !o.belgeNo) return { hata: 'Plaka ve belge no yok — HKS sorgusu yapılamaz.' };
   let j;
   try {
@@ -2682,14 +2682,22 @@ async function gonderimKunyeleriAl(o, sorgu) {
   }
   let liste = j.kunyeler || [];
   const beklenen = [...new Set((o.kunyeler || []).map(kunyeNoNorm).filter(Boolean))];
-  if (beklenen.length) liste = liste.filter(k => beklenen.includes(kunyeNoNorm(k.kunyeNo)));
+  // tumu (tekli Yazdır, v444): plaka+gün için HKS'in döndürdüğü HEPSİ listelenir (Çoklu Künye gibi);
+  // yalnız toplu yazdırmada (her gönderim ayrı sayfa) gönderimin kendi künyelerine süzülür.
+  let eksik = 0;
+  if (beklenen.length) {
+    if (tumu) {
+      const var_ = new Set(liste.map(k => kunyeNoNorm(k.kunyeNo)));
+      eksik = beklenen.filter(b => !var_.has(b)).length;
+    } else liste = liste.filter(k => beklenen.includes(kunyeNoNorm(k.kunyeNo)));
+  }
   if (!liste.length) {
     return { hata: beklenen.length
       ? 'Bu gönderimin künyeleri HKS sorgusunda bulunamadı (' + beklenen.length + ' künye bekleniyordu). ' +
         'HKS\'e yeni yansımamış olabilir — birkaç saniye sonra tekrar deneyin.'
       : 'Bu plaka/belge ve tarih için HKS\'te künye bulunamadı.', bulunamadi: true };
   }
-  return { kunyeler: liste, beklenen: beklenen.length, eksik: beklenen.length ? beklenen.length - liste.length : 0 };
+  return { kunyeler: liste, beklenen: beklenen.length, eksik: tumu ? eksik : (beklenen.length ? beklenen.length - liste.length : 0) };
 }
 
 function gonderimYazdir(o) {
@@ -2698,12 +2706,12 @@ function gonderimYazdir(o) {
   const etiket = (o.plaka || o.belgeNo || '') + (o.tarih ? ' · ' + o.tarih : '');
   async function calistir() {
     yzDurumSayfasi(w, etiket, '⏳ Künyeler HKS\'ten alınıyor…');
-    const r = await gonderimKunyeleriAl(o);
+    const r = await gonderimKunyeleriAl(o, null, true);
     if (w.closed) return;
     if (r.hata) { yzDurumSayfasi(w, etiket, r.hata, calistir); return; }
     const uyari = r.eksik > 0
-      ? '⚠ ' + r.beklenen + ' künyeden ' + r.eksik + ' tanesi HKS sorgusunda görünmedi; yalnız bulunan ' +
-        r.kunyeler.length + ' künye listelendi. Birkaç saniye sonra pencereyi kapatıp tekrar yazdırabilirsiniz.'
+      ? '⚠ Bu gönderimin ' + r.beklenen + ' künyesinden ' + r.eksik + ' tanesi HKS sorgusunda görünmedi; ' +
+        'o gün bu araç için HKS\'te bulunan ' + r.kunyeler.length + ' künye listelendi. Birkaç saniye sonra pencereyi kapatıp tekrar yazdırabilirsiniz.'
       : '';
     topluYazdirPenceresiAc(o.firmaAd || '', o.tarih, o.plaka || '', o.belgeNo || '', r.kunyeler, { pencere: w, uyari });
   }
