@@ -257,6 +257,8 @@ function nav_ptak_sayfalari(): array {
         'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
         'mesai_degerlendirme.php', 'manuel_cikis.php',
         'cavus_donem_raporu.php',
+        // v446 Fiş Excel'i Yükle
+        'gunluk_fis_yukle.php',
         // v354 Ters Kart Takip
         'ters_kart.php', 'ters_kart_havuz.php', 'ters_kart_sayim.php', 'ters_kart_cikis.php', 'ters_kart_mutabakat.php',
     ];

@@ -2309,7 +2309,7 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         $par = $ids;
     }
     if ($sessionId !== null) {
-        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al', 'karisik_ata', 'karisik_geri_al', 'servis_ekle', 'servis_iptal'))";
+        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al', 'karisik_ata', 'karisik_geri_al', 'servis_ekle', 'servis_iptal', 'fis_yukle'))";
         $par[] = $sessionId;
     }
     try {
@@ -2335,6 +2335,7 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         'karisik_geri_al'       => '↩️ Karışık ataması geri alındı',
         'servis_ekle'           => '🚌 Servis eklendi',
         'servis_iptal'          => '🚌 Servis iptal edildi',
+        'fis_yukle'             => '📥 Fiş Excel\'i yüklendi',
         'update'                => '🧮 Mesai değerlendirmesi kaydedildi',
     ];
     foreach ($satirlar as &$r) {
@@ -2352,6 +2353,9 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
             $karisikOzet = trim(((int)($yeni['buyuk'] ?? 0) > 0 ? (int)$yeni['buyuk'] . ' Büyük ' : '') . ((int)($yeni['kucuk'] ?? 0) > 0 ? (int)$yeni['kucuk'] . ' Küçük' : ''));
         } elseif ($r['action'] === 'servis_iptal') {
             $karisikOzet = (int)($yeni['quantity'] ?? 0) . ' ' . (($yeni['service_type'] ?? '') === 'KUCUK' ? 'Küçük' : 'Büyük');
+        } elseif ($r['action'] === 'fis_yukle') {
+            // v446: fiş tamamlandı izi — fiş no + revizyon + kişi sayısı (dosya özeti/ham metin YOK)
+            $karisikOzet = 'Fiş No ' . (string)($yeni['fis_no'] ?? '') . ((int)($yeni['rev'] ?? 0) > 0 ? ' (rev ' . (int)$yeni['rev'] . ')' : '') . ', ' . (int)($yeni['kisi'] ?? 0) . ' kişi';
         }
         $parcalar = array_filter([$karisikOzet, $sayi > 0 ? $sayi . ' kayıt' : '', trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
         $r['detay'] = $parcalar ? implode(' — ', $parcalar) : null;
