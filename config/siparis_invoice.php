@@ -134,6 +134,7 @@ function siparis_inv_ayar_kaydet(PDO $pdo, array $girdi, int $uid): array
     $yeni = $eski;
     $hata = function (string $m) use ($eski): array { return ['ok' => false, 'hata' => $m, 'ayar' => $eski]; };
     if (!siparis_evrak_mail_kv_hazir($pdo)) return $hata('Ayar tablosu (hks_kv) yok; invoice ayarları kaydedilemedi.');
+    foreach ($girdi as $v) if (!is_scalar($v) && $v !== null) return $hata('Ayar değerleri metin olmalıdır.');
     foreach (['banka_ad' => ['Banka adı', 100], 'banka_adres' => ['Banka adresi', 200], 'sube' => ['Şube', 100], 'teslim' => ['Teslim şekli', 60]] as $k => [$et, $n]) {
         if (!array_key_exists($k, $girdi)) continue;
         $s = siparis_inv_metin($girdi[$k], 1000);
@@ -153,7 +154,7 @@ function siparis_inv_ayar_kaydet(PDO $pdo, array $girdi, int $uid): array
     }
     if (array_key_exists('rex_no', $girdi)) {
         $s = strtoupper((string)preg_replace('/\s+/u', '', (string)$girdi['rex_no']));
-        if ($s !== '' && !preg_match('/^[A-Z0-9]{1,30}$/', $s)) return $hata('REX no yalnız harf ve rakam içerebilir (en çok 30 karakter).');
+        if ($s !== '' && !preg_match('#^[A-Z0-9/\-]{1,30}$#', $s)) return $hata('REX no yalnız harf, rakam, "-" ve "/" içerebilir (en çok 30 karakter).');
         $yeni['rex_no'] = $s;
     }
     if (array_key_exists('iskonto_varsayilan', $girdi)) {
@@ -188,6 +189,7 @@ function siparis_inv_fiyat_metin(float $f): string
  */
 function siparis_inv_girdi_temizle(array $post): array
 {
+    foreach ($post as $k => $v) if (!is_scalar($v) && $v !== null) $post[$k] = '';          // dizi / nesne değerleri boş sayılır (uyarı üretmez)
     $hata = [];
     $no = siparis_inv_metin($post['no'] ?? '', 60);
     if ($no === '') $hata['no'] = 'Invoice numarası gerekli.';
@@ -231,7 +233,7 @@ function siparis_inv_girdi_temizle(array $post): array
 function siparis_inv_net_kullanilan(array $veri, array $ozet): float
 {
     $o = $veri['net_kg'] ?? '';
-    return $o !== '' && $o !== null && is_numeric($o) ? (float)$o : (float)($ozet['net_kg'] ?? 0);
+    return round($o !== '' && $o !== null && is_numeric($o) ? (float)$o : (float)($ozet['net_kg'] ?? 0));   // TAM sayı kg (PDF = hesap = kayıt)
 }
 
 /**
@@ -240,11 +242,11 @@ function siparis_inv_net_kullanilan(array $veri, array $ozet): float
  */
 function siparis_inv_ozet_etkin(array $veri, array $ozet): array
 {
-    $ozet['net_pkl_kg'] = (float)($ozet['net_pkl_kg'] ?? $ozet['net_kg'] ?? 0);
-    $ozet['brut_pkl_kg'] = (float)($ozet['brut_pkl_kg'] ?? $ozet['brut_kg'] ?? 0);
+    $ozet['net_pkl_kg'] = round((float)($ozet['net_pkl_kg'] ?? $ozet['net_kg'] ?? 0));          // v442c: tam sayı kg'a yuvarlanır;
+    $ozet['brut_pkl_kg'] = round((float)($ozet['brut_pkl_kg'] ?? $ozet['brut_kg'] ?? 0));      // hesap, PDF ve kayıt AYNI değeri kullanır
     $ozet['net_kg'] = siparis_inv_net_kullanilan($veri, ['net_kg' => $ozet['net_pkl_kg']]);
     $b = $veri['brut_kg'] ?? '';
-    $ozet['brut_kg'] = $b !== '' && $b !== null && is_numeric($b) ? (float)$b : $ozet['brut_pkl_kg'];
+    $ozet['brut_kg'] = $b !== '' && $b !== null && is_numeric($b) ? round((float)$b) : $ozet['brut_pkl_kg'];
     return $ozet;
 }
 
@@ -326,14 +328,18 @@ function siparis_inv_pkl_oku(PDO $pdo, int $sid): ?array
     $h = siparis_pkl_hucreler($a['sheet'], $a['sst']);
     $o = ['palet' => 0, 'koli' => 0, 'brut' => 0.0, 'net' => 0.0, 'kalibreler' => [], 'urun' => '', 'cesit' => '', 'paket' => '', 'harvest' => '',
           'incoterms' => trim((string)($h['C6']['v'] ?? '')), 'plaka' => trim((string)($h['C8']['v'] ?? '')),
-          'belge_no' => trim((string)($h['C4']['v'] ?? '')) !== '' ? trim((string)$h['C4']['v']) : (string)($pkl['belge_no'] ?? '')];
+          'belge_no' => trim((string)($h['C4']['v'] ?? '')) !== '' ? trim((string)$h['C4']['v']) : (string)($pkl['belge_no'] ?? ''),
+          'bos_net' => 0, 'bos_brut' => 0, 'eksik_hucre' => (int)($pkl['eksik_hucre'] ?? 0)];
     $kal = [];
     for ($r = SIPARIS_PKL_ILK_SATIR; $r < 10000; $r++) {
         if (trim((string)($h['B' . $r]['v'] ?? '')) === '') break;
         $o['palet']++;
         $o['koli'] += (int)round(siparis_inv_hucre_sayi($h['T' . $r] ?? null));
-        $o['brut'] += siparis_inv_hucre_sayi($h['M' . $r] ?? null);
-        $o['net'] += siparis_inv_hucre_sayi($h['N' . $r] ?? null);
+        $m = siparis_inv_hucre_sayi($h['M' . $r] ?? null); $n = siparis_inv_hucre_sayi($h['N' . $r] ?? null);
+        if ($m <= 0) $o['bos_brut']++;                                      // M (brüt) / N (net) boş ya da 0 → toplam güvenilmez
+        if ($n <= 0) $o['bos_net']++;
+        $o['brut'] += $m;
+        $o['net'] += $n;
         $g = trim((string)($h['G' . $r]['v'] ?? ''));
         if ($g !== '') $kal[$g] = true;
         foreach (['urun' => 'E', 'cesit' => 'F', 'paket' => 'I', 'harvest' => 'K'] as $k => $c) {
@@ -391,10 +397,10 @@ function siparis_inv_varsayilan(PDO $pdo, array $sev): array
         $ozet = [
             'order_ref' => (string)($sev['order_ref'] ?? ''), 'belge_no' => $pkl['belge_no'], 'palet' => $pkl['palet'], 'koli' => $pkl['koli'],
             'brut_kg' => $pkl['brut'], 'net_kg' => $pkl['net'], 'kalibreler' => $pkl['kalibreler'],
-            'aciklama' => trim(siparis_inv_urun_ad($pkl['urun'] !== '' ? $pkl['urun'] : $kt['urun']) . ' ' . siparis_inv_kalibre_aralik($pkl['kalibreler'])),
-            'harvest' => $pkl['harvest'], 'incoterms_pkl' => $pkl['incoterms'], 'plaka' => $pkl['plaka'] !== '' ? $pkl['plaka'] : $plakaSev,
+            'aciklama' => (string)siparis_kirp(trim(siparis_inv_urun_ad($pkl['urun'] !== '' ? $pkl['urun'] : $kt['urun']) . ' ' . siparis_inv_kalibre_aralik($pkl['kalibreler'])), 120),
+            'harvest' => $pkl['harvest'], 'incoterms_pkl' => $pkl['incoterms'], 'plaka' => (string)siparis_kirp($pkl['plaka'] !== '' ? $pkl['plaka'] : $plakaSev, 80),
             'paket' => $pkl['paket'] !== '' ? strtoupper($pkl['paket']) : 'CARTON BOXES', 'kaynak' => 'pkl',
-            'net_nominal_kg' => (float)($kt['net'] ?? 0),
+            'net_nominal_kg' => (float)($kt['net'] ?? 0), 'bos_net' => $pkl['bos_net'], 'bos_brut' => $pkl['bos_brut'], 'pkl_eksik_hucre' => $pkl['eksik_hucre'],
         ];
     } else {
         $pr = $sid > 0 ? $pdo->prepare('SELECT belge_no, sezon FROM siparis_pkl WHERE sevkiyat_id = ?') : null;
@@ -404,9 +410,9 @@ function siparis_inv_varsayilan(PDO $pdo, array $sev): array
         $ozet = [
             'order_ref' => (string)($sev['order_ref'] ?? ''), 'belge_no' => (string)($pk['belge_no'] ?? ''), 'palet' => $kt['palet'], 'koli' => $kt['koli'],
             'brut_kg' => 0.0, 'net_kg' => (float)($kt['net'] ?? 0), 'kalibreler' => $kt['kalibreler'],
-            'aciklama' => trim(siparis_inv_urun_ad($kt['urun']) . ' ' . siparis_inv_kalibre_aralik($kt['kalibreler'])),
+            'aciklama' => (string)siparis_kirp(trim(siparis_inv_urun_ad($kt['urun']) . ' ' . siparis_inv_kalibre_aralik($kt['kalibreler'])), 120),
             'harvest' => (string)($pk['sezon'] ?? '') !== '' ? (string)$pk['sezon'] : siparis_sezon($sev['yukleme_tarihi'] ?? null),
-            'incoterms_pkl' => (string)($sev['incoterm'] ?? ''), 'plaka' => $plakaSev, 'paket' => 'CARTON BOXES', 'kaynak' => 'kalem',
+            'incoterms_pkl' => (string)($sev['incoterm'] ?? ''), 'plaka' => (string)siparis_kirp($plakaSev, 80), 'paket' => 'CARTON BOXES', 'kaynak' => 'kalem',
             'net_nominal_kg' => (float)($kt['net'] ?? 0),
         ];
     }
@@ -441,6 +447,27 @@ function siparis_inv_kontrol(PDO $pdo, array $sev, array $veri, array $ozet, arr
     if (($ozet['kaynak'] ?? '') !== 'pkl') $ekle('uyari', 'pkl_yok', 'PKL yok: palet / koli / kalibre sevkiyat kalemlerinden, net kg tahmini alındı; brüt kg bilinmiyor. Önce PKL üretin.');
     if ((float)$e['brut_kg'] > 0 && (float)$e['brut_kg'] < $netKul) {
         $ekle('hata', 'brut_net', (($ozet['kaynak'] ?? '') === 'pkl' && $t['veri']['net_kg'] === '' && $t['veri']['brut_kg'] === '' ? 'PKL brüt ağırlığı net ağırlıktan küçük — PKL\'i kontrol edin.' : 'Brüt ağırlık (' . $kg((float)$e['brut_kg']) . ' kg) net ağırlıktan (' . $kg($netKul) . ' kg) küçük olamaz.'));
+    }
+    // PKL'de brüt/net ağırlığı boş ya da 0 palet satırı: toplam güvenilmez → override yoksa HATA, varsa belirgin UYARI
+    foreach (['net' => ['bos_net', 'net_kg', 'net'], 'brut' => ['bos_brut', 'brut_kg', 'brüt']] as [$sayK, $ovK, $ad]) {
+        $bos = (int)($ozet[$sayK] ?? 0);
+        if ($bos > 0 && ($ozet['kaynak'] ?? '') === 'pkl') {
+            $var = $t['veri'][$ovK] !== '';
+            $ekle($var ? 'uyari' : 'hata', 'pkl_bos_agirlik', 'PKL\'de ' . $bos . ' palet satırının ' . $ad . ' ağırlığı boş ya da 0 — ' . $ad . ' toplamı güvenilmez'
+                . ($var ? '; elle girilen ' . $ad . ' kg kullanılıyor.' : '. PKL\'i tamamlayın ya da ' . $ad . ' kg\'ı elle girin.'));
+        }
+    }
+    if (($ozet['kaynak'] ?? '') === 'pkl' && (int)($ozet['pkl_eksik_hucre'] ?? 0) > 0 && (int)($ozet['bos_net'] ?? 0) === 0 && (int)($ozet['bos_brut'] ?? 0) === 0) {
+        $ekle('bilgi', 'pkl_eksik_hucre', 'PKL kısmi üretilmiş (' . (int)$ozet['pkl_eksik_hucre'] . ' boş hücre); ağırlıklar dolu.');
+    }
+    if ($t['veri']['net_kg'] !== '') {                                      // yazım hatası koruması: PKL / nominalden > %50 sapma
+        $ref = $netPkl > 0 ? $netPkl : (float)($ozet['net_nominal_kg'] ?? 0);
+        if ($ref > 0 && abs($netKul - $ref) / $ref > 0.5) {
+            $ekle('uyari', 'net_sapma', 'Elle girilen net ağırlık (' . $kg($netKul) . ' kg) ' . ($netPkl > 0 ? 'PKL' : 'nominal') . ' değerinden (' . $kg($ref) . ' kg) %50\'den fazla sapıyor — yazım hatası olabilir.');
+        }
+    }
+    if ($t['ok'] && (float)$t['veri']['fiyat'] > 50) {
+        $ekle('uyari', 'fiyat_yuksek', 'Birim fiyat (' . siparis_inv_fiyat_goster($t['veri']['fiyat']) . ' €/kg) 50 €/kg\'ın üstünde — doğru girildiğinden emin olun.');
     }
     if ($t['veri']['net_kg'] !== '' && abs($netKul - $netPkl) > 0.0005) {
         $ekle('bilgi', 'net_elle', 'Net ağırlık PKL\'den farklı: elle girildi (' . $kg($netKul) . ' kg; PKL ' . $kg($netPkl) . ' kg).');
@@ -504,7 +531,7 @@ function siparis_inv_durum(PDO $pdo, int $sid): array
     };
     $inv = $son('invoice');
     $ef = $son('efatura');
-    $n = $pdo->prepare("SELECT COUNT(*) FROM siparis_belge_bag bb JOIN siparis_belgeler b ON b.id = bb.belge_id WHERE bb.sevkiyat_id = ? AND b.tur = 'invoice'");
+    $n = $pdo->prepare("SELECT COUNT(*) FROM siparis_belge_bag bb JOIN siparis_belgeler b ON b.id = bb.belge_id WHERE bb.sevkiyat_id = ? AND b.tur = 'invoice' AND b.deleted_at IS NULL");
     $n->execute([$sid]);
     return ['var' => $inv !== null, 'belge_id' => $inv ? (int)$inv['id'] : null, 'dosya_adi' => $inv ? (string)$inv['orijinal_ad'] : null,
             'uretildi_at' => $inv ? (string)$inv['created_at'] : null, 'uretim_sayisi' => (int)$n->fetchColumn(),
@@ -535,6 +562,8 @@ function siparis_inv_tarih_goster(string $ymd): string
 function siparis_inv_html(array $veri, array $ozet, array $ayar, array $hesap): string
 {
     $ozet = siparis_inv_ozet_etkin($veri, $ozet);                     // girdideki net / brüt override'ı
+    $ozet['aciklama'] = (string)siparis_kirp((string)($ozet['aciklama'] ?? ''), 120);   // tek sayfa kalsın
+    $ozet['plaka'] = (string)siparis_kirp((string)($ozet['plaka'] ?? ''), 80);
     $rex = trim((string)($ayar['rex_no'] ?? ''));
     $rexGoster = $rex !== '' ? h($rex) : '______';
     $kgG = fn($v): string => (float)$v > 0 ? number_format((float)$v, 0, ',', '.') . ' KG' : '—';
@@ -672,7 +701,9 @@ function siparis_inv_uret(PDO $pdo, int $sid, int $uid, array $veri, bool $eksik
     $sahip = !$pdo->inTransaction();
     if ($sahip) $pdo->beginTransaction();
     try {
-        $sev = siparis_sevkiyat($pdo, $sid);
+        $kilit = $pdo->prepare('SELECT id FROM siparis_sevkiyatlar WHERE id = ? AND deleted_at IS NULL' . siparis_kilit_sql($pdo));   // MySQL: eşzamanlı üretim sırayla (PKL emsali)
+        $kilit->execute([$sid]);
+        $sev = $kilit->fetchColumn() !== false ? siparis_sevkiyat($pdo, $sid) : null;
         if (!$sev) throw new RuntimeException('Sevkiyat bulunamadı.');
         $t = siparis_inv_girdi_temizle($veri);
         if (!$t['ok']) throw new RuntimeException(implode(' ', $t['hata']));
@@ -710,7 +741,8 @@ function siparis_inv_uret(PDO $pdo, int $sid, int $uid, array $veri, bool $eksik
             $pdo->prepare('INSERT INTO siparis_belgeler (tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime, boyut, belge_tarihi, tedarikci_no, ozet, parse_json, uyari_sayisi, depo, yukleyen, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
                 ->execute(['invoice', 'uretim', 'islendi', $sha, $diskAdi, $dosyaAdi, 'application/pdf', (int)filesize($dosya), $simdi, $sev['tedarikci_no'], $ozetM,
-                           siparis_json(['invoice_no' => $veri['no'], 'tarih' => $veri['tarih'], 'toplam_kurus' => $hesap['toplam_kurus'], 'para_birimi' => 'EUR', 'order_refs' => [$sev['order_ref']]]),
+                           siparis_json(['invoice_no' => $veri['no'], 'tarih' => $veri['tarih'], 'toplam_kurus' => $hesap['toplam_kurus'], 'para_birimi' => 'EUR', 'order_refs' => [$sev['order_ref']],
+                                         'warnings' => array_map(fn($x) => ['level' => ['hata' => 'error', 'uyari' => 'warn'][$x['seviye']] ?? 'info', 'code' => $x['kod'], 'message' => $x['mesaj']], $kontrol)]),
                            count(array_filter($kontrol, fn($x) => $x['seviye'] === 'uyari')), (string)$sev['depo'], $uid, $simdi]);
             $belgeId = (int)$pdo->lastInsertId();
         }
@@ -778,15 +810,24 @@ function siparis_inv_efatura_alanlar(string $metin): array
         $adaylar = array_map(fn($d) => siparis_tarih_coz(str_replace('-', '.', $d)), $m[1]);
         $x = $tek($adaylar); if ($x !== null) $out['tarih'] = $x;
     }
-    if (preg_match_all('/Birim\s*Fiyat[ıi]?[^0-9]{0,25}(\d+(?:[.,]\d{1,4})?)/iu', $metin, $m)) {
+    $say = '(\d[\d.,]*\d|\d)';                                   // sayı AYRAÇLARIYLA BÜTÜN yakalanır (kesilmez), sonra ondalik_coz ile çözülür
+    if (preg_match_all('/Birim\s*Fiyat[ıi]?[^0-9]{0,25}' . $say . '/iu', $metin, $m)) {
         $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, false); return $x !== null && $x > 0 && $x < 1000 ? siparis_inv_fiyat_metin($x) : null; }, $m[1]);
         $x = $tek($adaylar); if ($x !== null) $out['fiyat'] = $x;
     }
-    if (preg_match_all('/(?:[İI]skonto|Discount)(?:\s*Oran[ıi])?[^0-9]{0,15}(\d{1,3}(?:[.,]\d{1,2})?)\s*%?/iu', $metin, $m)) {
-        $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, false); return $x !== null && $x >= 0 && $x <= 100 ? (string)round($x, 2) : null; }, $m[1]);
+    // İskonto: YALNIZ "%" işaretli ya da "Oran" etiketli ve 0–100 aralığında net değer. "0,04" gibi belirsiz (oran mı yüzde mi) değer ÖN-DOLDURULMAZ.
+    $isk = [];
+    $et = '(?:[İI]skonto|Discount)';
+    if (preg_match_all('/' . $et . '[^0-9%]{0,20}%\s*' . $say . '/iu', $metin, $m)) array_push($isk, ...$m[1]);                      // %4,00
+    if (preg_match_all('/' . $et . '[^0-9%]{0,20}' . $say . '\s*%/iu', $metin, $m)) array_push($isk, ...$m[1]);                      // 4,00 %
+    if (preg_match_all('/' . $et . '\s*Oran[ıi]?[^0-9%]{0,15}' . $say . '(?![\d.,]*\s*%)/iu', $metin, $m)) {                         // "İskonto Oranı 4,00" (% yok): yalnız ≥ 1
+        foreach ($m[1] as $v) { $f = siparis_inv_ondalik_coz($v, false); if ($f !== null && $f >= 1) $isk[] = $v; }
+    }
+    if ($isk) {
+        $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, false); return $x !== null && $x >= 0 && $x <= 100 ? (string)round($x, 2) : null; }, $isk);
         $x = $tek($adaylar); if ($x !== null) $out['iskonto'] = $x;
     }
-    if (preg_match_all('/(?:[ÖO]denecek\s*Tutar|Vergiler\s*Dahil\s*Toplam(?:\s*Tutar)?|Genel\s*Toplam|Total)[^0-9]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:\.\d{1,2})?)/iu', $metin, $m)) {
+    if (preg_match_all('/(?:[ÖO]denecek\s*Tutar|Vergiler\s*Dahil\s*Toplam(?:\s*Tutar)?|Genel\s*Toplam|Total)[^0-9]{0,25}' . $say . '/iu', $metin, $m)) {
         $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, true); return $x !== null ? number_format($x, 2, '.', '') : null; }, $m[1]);
         $x = $tek($adaylar); if ($x !== null) $out['efatura_toplam'] = $x;
     }
@@ -807,15 +848,22 @@ function siparis_inv_efatura_yukle(PDO $pdo, int $sid, array $file, int $uid, ?c
     $d = siparis_dosya_dogrula($file);
     if (!$d['ok']) return $bos + ['hata' => (string)($d['hata'] ?? 'Dosya geçersiz.')];
     if (($d['cins'] ?? '') !== 'pdf') return $bos + ['hata' => 'E-fatura PDF olmalıdır.'];
+    // Aynı baytlı belge zaten varsa TÜRÜ kaydetmeden ÖNCE denetlenir: siparis_dosya_kaydet silinmiş belgeyi sessizce geri getirir —
+    // başka türde ise reddedilmeli ve hiçbir yan etki (deleted_at geri alma) kalmamalı.
+    $sha = (string)hash_file('sha256', (string)$file['tmp_name']);
+    $var = $pdo->prepare('SELECT id, tur FROM siparis_belgeler WHERE sha256 = ?');
+    $var->execute([$sha]);
+    $ev = $var->fetch(PDO::FETCH_ASSOC);
+    if ($ev && !in_array((string)$ev['tur'], ['bilinmiyor', 'diger', 'efatura'], true)) {
+        return $bos + ['hata' => 'Bu dosya sistemde zaten başka bir belge olarak kayıtlı (' . (siparis_belge_tur_etiketleri()[(string)$ev['tur']] ?? 'belge') . ') — e-fatura olarak yüklenemez.'];
+    }
     $k = siparis_dosya_kaydet($pdo, $file, $uid, (string)$sev['depo'], $mover);
     if (!$k['ok']) return $bos + ['hata' => (string)($k['hata'] ?? 'Dosya kaydedilemedi.')];
     $belgeId = (int)$k['belge_id'];
     $b = $pdo->prepare('SELECT * FROM siparis_belgeler WHERE id = ?');
     $b->execute([$belgeId]);
     $belge = $b->fetch(PDO::FETCH_ASSOC);
-    if (!$belge || !in_array((string)$belge['tur'], ['bilinmiyor', 'efatura'], true)) {
-        return $bos + ['hata' => 'Bu dosya sistemde zaten başka bir belge olarak kayıtlı (' . (siparis_belge_tur_etiketleri()[(string)($belge['tur'] ?? '')] ?? 'belge') . ').'];
-    }
+    if (!$belge || !in_array((string)$belge['tur'], ['bilinmiyor', 'diger', 'efatura'], true)) return $bos + ['hata' => 'Belge kaydedilemedi.'];
     $yol = siparis_dosya_yolu($belge);
     $metin = $yol !== null ? siparis_inv_pdf_metin($yol) : '';
     $metinVar = mb_strlen($metin) >= 20;

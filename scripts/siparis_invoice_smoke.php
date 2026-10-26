@@ -40,7 +40,7 @@ ok('iskonto %4 = 997,36; toplam 23.936,64', $h['iskonto_kurus'] === 99736 && $h[
 $h = siparis_inv_hesapla(['fiyat' => '0.335', 'iskonto' => 0], ['net_kg' => 3]);
 ok('kuruşa yarım yukarı: 3 kg × 0,335 = 1,005 → 1,01', $h['tutar_kurus'] === 101 && $h['toplam_kurus'] === 101);
 $h = siparis_inv_hesapla(['fiyat' => '1.37', 'iskonto' => 0], ['net_kg' => 18200.5]);
-ok('ondalıklı net kg (g duyarlığı): 18.200,5 × 1,37 = 24.934,685 → 24.934,69', $h['tutar_kurus'] === 2493469, (string)$h['tutar_kurus']);
+ok('ondalıklı PKL net TAM sayı kg\'a yuvarlanır: 18.200,5 → 18.201 × 1,37 = 24.935,37', $h['tutar_kurus'] === 2493537, (string)$h['tutar_kurus']);
 $h = siparis_inv_hesapla(['fiyat' => '1.37', 'iskonto' => 4.5], ['net_kg' => 18200]);
 ok('iskonto %4,5 = 1.122,03 (yarım yukarı)', $h['iskonto_kurus'] === 112203 && $h['toplam_kurus'] === 2493400 - 112203, (string)$h['iskonto_kurus']);
 $h = siparis_inv_hesapla(['fiyat' => '1.37', 'iskonto' => 100], ['net_kg' => 18200]);
@@ -94,14 +94,23 @@ $x = siparis_inv_ayar_kaydet($db, ['rex_no' => T_REX], 1);
 ok('hks_kv yokken kaydetme reddedilir (hata, ayar varsayılan)', !$x['ok'] && str_contains((string)$x['hata'], 'hks_kv') && $x['ayar'] === $v);
 $db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
 ok('hks_kv varken ayar yok → varsayılan', siparis_inv_ayar_oku($db) === $v);
-foreach ([['iban_eur' => 'TR12'], ['iban_eur' => 'XX'], ['swift' => 'ABC'], ['swift' => 'TESTTRXXXXXX'], ['rex_no' => 'AB-12'], ['rex_no' => str_repeat('A', 31)],
+foreach ([['iban_eur' => 'TR12'], ['iban_eur' => 'XX'], ['swift' => 'ABC'], ['swift' => 'TESTTRXXXXXX'], ['rex_no' => 'AB@12'], ['rex_no' => str_repeat('A', 31)],
           ['iskonto_varsayilan' => '101'], ['iskonto_varsayilan' => 'x'], ['banka_ad' => str_repeat('b', 101)]] as $kotu) {
     $x = siparis_inv_ayar_kaydet($db, $kotu, 1);
     ok('ayar reddedilir: ' . json_encode($kotu), !$x['ok'] && !empty($x['hata']));
 }
 ok('reddedilen ayar hiçbir şey yazmaz', siparis_inv_ayar_oku($db) === $v && siparis_test_say($db, 'hks_kv') === 0);
-$x = siparis_inv_ayar_kaydet($db, ['rex_no' => ' trrex test-ish ', 'banka_ad' => 'TEST BANKASI A.S.'], 1);
-ok('REX boşluk/tire içeriyorsa reddedilir (alfasayısal)', !$x['ok']);
+$x = siparis_inv_ayar_kaydet($db, ['rex_no' => ' trrex@test ', 'banka_ad' => 'TEST BANKASI A.S.'], 1);
+ok('REX alfasayısal / - / dışı karakter reddedilir', !$x['ok']);
+$x = siparis_inv_ayar_kaydet($db, ['rex_no' => ' tr/rex-1 '], 1);
+ok('REX "-" ve "/" kabul edilir (TR/REX-1, boşluk atılır)', $x['ok'] && $x['ayar']['rex_no'] === 'TR/REX-1');
+siparis_inv_ayar_kaydet($db, ['rex_no' => ''], 1);
+set_error_handler(function ($no, $str) use (&$uyariSay) { $uyariSay++; return true; });
+$uyariSay = 0;
+$xa = siparis_inv_ayar_kaydet($db, ['iban_eur' => ['x'], 'rex_no' => ['y']], 1);
+$ta = siparis_inv_girdi_temizle(['no' => ['a'], 'tarih' => ['b'], 'fiyat' => ['1'], 'iskonto' => [4], 'efatura_toplam' => [[]], 'net_kg' => ['1'], 'brut_kg' => new stdClass()]);
+restore_error_handler();
+ok('dizi / nesne POST değerleri uyarı (warning) ÜRETMEZ; ayar reddedilir, girdi hatalı', $uyariSay === 0 && !$xa['ok'] && !$ta['ok'] && isset($ta['hata']['no'], $ta['hata']['fiyat'], $ta['hata']['tarih']) && $ta['veri']['net_kg'] === '', (string)$uyariSay);
 $x = siparis_inv_ayar_kaydet($db, ['rex_no' => ' trrextest000001 ', 'banka_ad' => 'TEST BANKASI A.S.', 'banka_adres' => 'Test Mah. Test Bulv. No:1, Samsun / TURKEY', 'sube' => 'TEST ŞUBESİ',
     'swift' => ' testtrxx ', 'iban_eur' => strtolower(substr(T_IBAN, 0, 4)) . ' ' . substr(T_IBAN, 4, 4) . ' ' . substr(T_IBAN, 8), 'teslim' => '', 'iskonto_varsayilan' => '4'], 7);
 ok('ayar kaydedildi: REX/IBAN/SWIFT büyük harf + boşluksuz, teslim boşsa varsayılan', $x['ok'] && $x['ayar']['rex_no'] === T_REX && $x['ayar']['iban_eur'] === T_IBAN && $x['ayar']['swift'] === T_SWIFT
@@ -113,9 +122,9 @@ ok('gönderilmeyen anahtar mevcut değerini korur', $x['ok'] && $x['ayar']['rex_
 siparis_inv_ayar_kaydet($db, ['sube' => 'TEST ŞUBESİ'], 7);
 siparis_inv_ayar_kaydet($db, ['sube' => 'TEST ŞUBESİ'], 7);          // değişiklik yok → audit yok
 $aud = array_values(array_filter(siparis_test_audit($db), fn($a) => $a['action'] === 'siparis_invoice_ayar'));
-ok('audit: yalnız değişen alan ADLARI (ilk kayıt 8 alan, sonra sube, sube; değişmeyen çağrı yazmaz)', count($aud) === 3
-    && json_decode($aud[0]['new_values'], true)['degisen_alanlar'] === ['rex_no', 'banka_ad', 'banka_adres', 'sube', 'swift', 'iban_eur', 'iskonto_varsayilan']
-    && json_decode($aud[1]['new_values'], true)['degisen_alanlar'] === ['sube'], json_encode(array_column($aud, 'new_values')));
+ok('audit: yalnız değişen alan ADLARI (REX dene/geri al 2 kayıt, ilk tam kayıt, sube, sube; değişmeyen çağrı yazmaz)', count($aud) === 5
+    && json_decode($aud[2]['new_values'], true)['degisen_alanlar'] === ['rex_no', 'banka_ad', 'banka_adres', 'sube', 'swift', 'iban_eur', 'iskonto_varsayilan']
+    && json_decode($aud[3]['new_values'], true)['degisen_alanlar'] === ['sube'], json_encode(array_column($aud, 'new_values')));
 $tumAudit = json_encode($db->query('SELECT * FROM audit_log')->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
 ok('audit\'te IBAN / REX / SWIFT / banka DEĞERİ YOK', !str_contains($tumAudit, T_IBAN) && !str_contains($tumAudit, T_REX) && !str_contains($tumAudit, T_SWIFT) && !str_contains($tumAudit, 'TEST BANKASI') && !str_contains($tumAudit, 'Test Mah'));
 $ham = (string)$db->query("SELECT deger FROM hks_kv WHERE anahtar = 'siparis_invoice_ayar'")->fetchColumn();
@@ -164,6 +173,7 @@ $kod = fn(array $k): array => array_column($k, 'seviye', 'kod');
 $k = siparis_inv_kontrol($db, $sevP, $gv, $o, $ayar);
 ok('tam ve tutarlı girdi: hata YOK, e-fatura farkı YOK, PKL yok uyarısı YOK', !array_filter($k, fn($x) => $x['seviye'] === 'hata') && !isset($kod($k)['efatura_fark']) && !isset($kod($k)['pkl_yok']), json_encode($k));
 ok('Incoterms uyuşmazlığı (PKL EXW ≠ ayar DAP) → bilgi', ($kod($k)['incoterms'] ?? '') === 'bilgi');
+ok('PKL kısmi üretilmiş (eksik hücre, ağırlıklar dolu) → bilgi pkl_eksik_hucre', ($kod($k)['pkl_eksik_hucre'] ?? '') === 'bilgi' && !isset($kod($k)['pkl_bos_agirlik']));
 ok('seviye anahtarları yalnız hata|uyari|bilgi; her satırda mesaj', !array_filter($k, fn($x) => !in_array($x['seviye'], ['hata', 'uyari', 'bilgi'], true) || $x['mesaj'] === ''));
 $k = siparis_inv_kontrol($db, $sevP, ['efatura_toplam' => '23936.00'] + $gv, $o, $ayar);
 ok('e-fatura toplamı ≠ hesaplanan → uyarı (engel değil)', ($kod($k)['efatura_fark'] ?? '') === 'uyari' && !array_filter($k, fn($x) => $x['seviye'] === 'hata'));
@@ -392,6 +402,95 @@ $er = siparis_inv_efatura_yukle($db, 99999, siparis_test_dosya($goruntuPdf, 'a.p
 ok('olmayan sevkiyat reddedilir', !$er['ok'] && $er['hata'] === 'Sevkiyat bulunamadı.');
 $hepsi = json_encode($db->query('SELECT * FROM audit_log')->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
 ok('tüm audit satırlarında IBAN / REX / banka değeri YOK (üretim + ayar + e-fatura)', !str_contains($hepsi, T_IBAN) && !str_contains($hepsi, T_REX) && !str_contains($hepsi, 'TEST BANKASI'));
+
+
+echo "\n=== 12b. v442c inceleme düzeltmeleri ===\n";
+// (1) yuvarlama: PDF = hesap = kayıt
+$oR = ['net_kg' => 18486.4, 'brut_kg' => 20826.4] + $o;
+$gvR = ['net_kg' => '', 'brut_kg' => ''] + $gv;
+$hR = siparis_inv_hesapla($gvR, $oR);
+ok('PKL net 18.486,4 → hesap 18.486 × 1,37 = 25.325,82 (ondalık kg kullanılmaz)', $hR['tutar_kurus'] === 2532582, (string)$hR['tutar_kurus']);
+$htR = siparis_inv_html($gvR, $oR, $ayar, $hR);
+ok('PDF/HTML aynı yuvarlanmış kg\'ı basar (18.486 KG / 20.826 KG) ve tutar hesapla tutarlı', str_contains($htR, '18.486 KG') && str_contains($htR, '20.826 KG') && str_contains($htR, '€ 25.325,82') && !str_contains($htR, '18.486,4'));
+ok('ozet_etkin: .5 yukarı (18.486,5 → 18.487); idempotent', (float)siparis_inv_ozet_etkin($gvR, ['net_kg' => 18486.5, 'brut_kg' => 1.0])['net_kg'] === 18487.0
+    && siparis_inv_ozet_etkin($gvR, siparis_inv_ozet_etkin($gvR, $oR)) === siparis_inv_ozet_etkin($gvR, $oR));
+// (5) fiyat / net sapma
+$kf = siparis_inv_kontrol($db, $sevP, ['fiyat' => '60'] + $gvR, $o, $ayar);
+ok('birim fiyat > 50 €/kg → uyarı fiyat_yuksek (50 → yok)', ($kod($kf)['fiyat_yuksek'] ?? '') === 'uyari' && !isset($kod(siparis_inv_kontrol($db, $sevP, ['fiyat' => '50'] + $gvR, $o, $ayar))['fiyat_yuksek']));
+$kn = siparis_inv_kontrol($db, $sevP, ['net_kg' => '5000'] + $gvR, $o, $ayar);
+ok('net override PKL\'den > %50 sapıyor → uyarı net_sapma; %10 sapma → yok', ($kod($kn)['net_sapma'] ?? '') === 'uyari' && !isset($kod(siparis_inv_kontrol($db, $sevP, ['net_kg' => '17000'] + $gvR, $o, $ayar))['net_sapma']));
+// (7) kırpma
+$uzun = str_repeat('A', 300);
+$htU = siparis_inv_html($gvR, ['aciklama' => $uzun, 'plaka' => $uzun] + $o, $ayar, $hR);
+ok('açıklama ≤ 120, plaka ≤ 80 karakter (PDF tek sayfa kalır)', str_contains($htU, str_repeat('A', 120)) && !str_contains($htU, str_repeat('A', 121)) );
+$pdfU = siparis_inv_pdf($htU);
+preg_match_all('#/Type\s*/Page\b#', $pdfU, $mmU);
+ok('kırpılmış uzun veriyle PDF hâlâ tek sayfa', count($mmU[0]) === 1);
+$db->exec("UPDATE siparis_sevkiyatlar SET plakalar = '" . str_repeat('B', 60) . "' WHERE id = $sidYok");
+ok('varsayılan(): plaka ≤ 80 (sevkiyat plaka kolonu 60; kırpma güvenli)', mb_strlen(siparis_inv_varsayilan($db, siparis_sevkiyat($db, $sidYok))['ozet']['plaka']) <= 80);
+// (2) PKL'de boş ağırlık
+$db->exec("UPDATE siparis_sevkiyatlar SET plakalar = '34TST009', navlun_no = '6100000009' WHERE id = $sidYok");
+$dY = siparis_pkl_durum($db, $sidYok)['veri'];
+foreach ($dY['bloklar'] as $i => &$bl) { $bl['M'] = $i === 0 ? null : 820; $bl['N'] = $i === 0 ? null : 700; } unset($bl);
+siparis_pkl_kaydet_taslak($db, $sidYok, $dY, [], 1);
+$xY = siparis_pkl_uret($db, $sidYok, 1, true);
+$vY = siparis_inv_varsayilan($db, siparis_sevkiyat($db, $sidYok));
+ok('PKL: ilk blok (4 palet) M/N boş → ozet bos_net = bos_brut = 4, kaynak pkl', $xY['ok'] && $vY['ozet']['kaynak'] === 'pkl' && $vY['ozet']['bos_net'] === 4 && $vY['ozet']['bos_brut'] === 4 && (float)$vY['ozet']['net_kg'] === 22 * 700.0, json_encode($vY['ozet']));
+$sevY = siparis_sevkiyat($db, $sidYok);
+$gvY = ['net_kg' => '', 'brut_kg' => ''] + $gv;
+$kY = siparis_inv_kontrol($db, $sevY, $gvY, $vY['ozet'], $ayar);
+ok('override yok + boş ağırlık hücresi → HATA pkl_bos_agirlik (üretilmez)', ($kod($kY)['pkl_bos_agirlik'] ?? '') === 'hata'
+    && !siparis_inv_uret($db, $sidYok, 1, $gvY, true)['ok'] && !isset($kod($kY)['pkl_eksik_hucre']));
+$kY = siparis_inv_kontrol($db, $sevY, ['net_kg' => '18200', 'brut_kg' => '21300'] + $gvY, $vY['ozet'], $ayar);
+ok('net + brüt override varsa pkl_bos_agirlik yalnız UYARI; hata yok', ($kod($kY)['pkl_bos_agirlik'] ?? '') === 'uyari' && !array_filter($kY, fn($x) => $x['seviye'] === 'hata'), json_encode($kY));
+$kY = siparis_inv_kontrol($db, $sevY, ['net_kg' => '18200'] + $gvY, $vY['ozet'], $ayar);
+ok('yalnız net override, brüt hücreleri boş → brüt için HATA sürer', (bool)array_filter($kY, fn($x) => $x['seviye'] === 'hata' && $x['kod'] === 'pkl_bos_agirlik' && str_contains($x['mesaj'], 'brüt')));
+$xY2 = siparis_inv_uret($db, $sidYok, 1, ['net_kg' => '18200', 'brut_kg' => '21300'] + $gvY, true);
+ok('override\'larla üretilir; PDF override\'ı basar', $xY2['ok'] && str_contains(siparis_inv_pdf_metin((string)siparis_dosya_yolu($db->query("SELECT * FROM siparis_belgeler WHERE id = " . (int)$xY2['belge_id'])->fetch())), '18.200 KG'));
+// (8) uyarılar parse_json.warnings
+$pj = json_decode((string)$db->query("SELECT parse_json FROM siparis_belgeler WHERE id = " . (int)$xY2['belge_id'])->fetchColumn(), true);
+ok('uyarılar belge parse_json.warnings\'e yazıldı (level / code / message; pdf ayrıştırıcı biçimi)', is_array($pj['warnings'] ?? null) && count($pj['warnings']) === count($xY2['uyarilar'])
+    && !array_filter($pj['warnings'], fn($w) => !in_array($w['level'], ['info', 'warn', 'error'], true) || $w['code'] === '' || $w['message'] === '')
+    && in_array('pkl_bos_agirlik', array_column($pj['warnings'], 'code'), true));
+// (6) uretim_sayisi silinmişleri saymaz + kilit
+$once = siparis_inv_durum($db, $sidPkl)['uretim_sayisi'];
+$ilk = (int)$db->query("SELECT MIN(b.id) FROM siparis_belge_bag bb JOIN siparis_belgeler b ON b.id = bb.belge_id WHERE bb.sevkiyat_id = $sidPkl AND b.tur = 'invoice'")->fetchColumn();
+$db->exec("UPDATE siparis_belgeler SET deleted_at = '2026-10-01 00:00:00' WHERE id = $ilk");
+ok('uretim_sayisi silinmiş invoice belgesini saymaz', siparis_inv_durum($db, $sidPkl)['uretim_sayisi'] === $once - 1);
+ok('üretimde sevkiyat satırı kilidi (MySQL FOR UPDATE; PKL emsali)', str_contains($kaynak, "siparis_kilit_sql(\$pdo)") && preg_match('/function siparis_inv_uret.*siparis_kilit_sql/s', $kaynak) === 1);
+// (3) e-fatura metin ayrıştırma
+$ea = fn(string $m): array => siparis_inv_efatura_alanlar($m);
+ok('toplam "23936,64" (binliksiz virgüllü) → 23936.64', ($ea('Ödenecek Tutar 23936,64 EUR')['efatura_toplam'] ?? '') === '23936.64');
+ok('toplam "12.500" tutarda binlik → 12500.00; "1.234,56" → 1234.56; cümle sonu noktası kesmez', ($ea('Genel Toplam 12.500')['efatura_toplam'] ?? '') === '12500.00' && ($ea('Total 1.234,56')['efatura_toplam'] ?? '') === '1234.56'
+    && ($ea('Ödenecek Tutar 23.936,64. Teşekkürler')['efatura_toplam'] ?? '') === '23936.64');
+ok('iskonto: "%4,00" / "4,00 %" / "Oranı 4,00" → 4', ($ea('İskonto Oranı %4,00')['iskonto'] ?? '') === '4' && ($ea('Discount 4,00 %')['iskonto'] ?? '') === '4' && ($ea('İskonto Oranı 4,00')['iskonto'] ?? '') === '4');
+ok('iskonto: belirsiz "0,04" (oran mı yüzde mi) ÖN-DOLDURULMAZ; tutar etiketi / %101 / etiketsiz sayı da değil', !isset($ea('İskonto Oranı 0,04')['iskonto']) && !isset($ea('İskonto 0,04')['iskonto'])
+    && !isset($ea('İskonto Tutarı 997,36')['iskonto']) && !isset($ea('İskonto %101')['iskonto']) && !isset($ea('İskonto 4')['iskonto']));
+ok('birim fiyat tam sayı yakalanır: "1,37" ve "1.234,56" (≥1000 → boş)', ($ea('Birim Fiyat 1,37 EUR')['fiyat'] ?? '') === '1.37' && !isset($ea('Birim Fiyat 1.234,56')['fiyat']));
+// (4) aynı baytlı belge daha önce normal yüklemeyle kaydedilmiş
+$pdfA = siparis_inv_pdf('<html><body>' . 'diger-belge-A</body></html>');
+$kA = siparis_dosya_kaydet($db, siparis_test_dosya($pdfA, 'a.pdf'), 1, 'DEPO1', siparis_test_mover());
+$db->exec("UPDATE siparis_belgeler SET tur = 'diger', durum = 'islendi' WHERE id = " . (int)$kA['belge_id']);
+$eA = siparis_inv_efatura_yukle($db, $sidPkl, siparis_test_dosya($pdfA, 'a2.pdf'), 1, siparis_test_mover());
+ok('daha önce "diger" yüklenmiş aynı PDF → reddedilmez, tur efatura\'ya çevrilir ve bağlanır', $eA['ok'] && $eA['belge_id'] === (int)$kA['belge_id']
+    && $db->query("SELECT tur FROM siparis_belgeler WHERE id = " . (int)$kA['belge_id'])->fetchColumn() === 'efatura' && siparis_test_say($db, 'siparis_belge_bag', 'belge_id = ? AND sevkiyat_id = ? AND gecerli = 1', [(int)$kA['belge_id'], $sidPkl]) === 1, json_encode($eA));
+$pdfB = siparis_inv_pdf('<html><body>silinmis-bilinmiyor-B</body></html>');
+$kB = siparis_dosya_kaydet($db, siparis_test_dosya($pdfB, 'b.pdf'), 1, 'DEPO1', siparis_test_mover());
+$db->exec("UPDATE siparis_belgeler SET deleted_at = '2026-10-01 00:00:00' WHERE id = " . (int)$kB['belge_id']);
+$eB = siparis_inv_efatura_yukle($db, $sidPkl, siparis_test_dosya($pdfB, 'b2.pdf'), 1, siparis_test_mover());
+ok('silinmiş "bilinmiyor" aynı PDF → geri getirilir (deleted_at NULL), efatura, bağlı', $eB['ok'] && $db->query("SELECT deleted_at, tur FROM siparis_belgeler WHERE id = " . (int)$kB['belge_id'])->fetch() === ['deleted_at' => null, 'tur' => 'efatura']);
+$pdfC = siparis_inv_pdf('<html><body>silinmis-po-C</body></html>');
+$kC = siparis_dosya_kaydet($db, siparis_test_dosya($pdfC, 'c.pdf'), 1, 'DEPO1', siparis_test_mover());
+$db->exec("UPDATE siparis_belgeler SET tur = 'po', deleted_at = '2026-10-01 00:00:00' WHERE id = " . (int)$kC['belge_id']);
+$eC = siparis_inv_efatura_yukle($db, $sidPkl, siparis_test_dosya($pdfC, 'c2.pdf'), 1, siparis_test_mover());
+$rowC = $db->query("SELECT deleted_at, tur FROM siparis_belgeler WHERE id = " . (int)$kC['belge_id'])->fetch();
+ok('silinmiş PO aynı PDF → net hata (PO), YAN ETKİ YOK: hâlâ silinmiş, tur po, bağ yok', !$eC['ok'] && str_contains((string)$eC['hata'], 'PO') && $rowC['deleted_at'] !== null && $rowC['tur'] === 'po'
+    && siparis_test_say($db, 'siparis_belge_bag', 'belge_id = ?', [(int)$kC['belge_id']]) === 0, json_encode([$eC, $rowC]));
+$pdfD = siparis_inv_pdf('<html><body>pkl-D</body></html>');
+$kD = siparis_dosya_kaydet($db, siparis_test_dosya($pdfD, 'd.pdf'), 1, 'DEPO1', siparis_test_mover());
+$db->exec("UPDATE siparis_belgeler SET tur = 'll' WHERE id = " . (int)$kD['belge_id']);
+$eD = siparis_inv_efatura_yukle($db, $sidPkl, siparis_test_dosya($pdfD, 'd2.pdf'), 1, siparis_test_mover());
+ok('başka tür (ll) aynı PDF → hata, tur korunur', !$eD['ok'] && $db->query("SELECT tur FROM siparis_belgeler WHERE id = " . (int)$kD['belge_id'])->fetchColumn() === 'll');
 
 echo "\n=== 13. Gerçek PKL ile elle doğrulama (isteğe bağlı: INVOICE_ORNEK_PKL=<xlsx>) ===\n";
 $ornek = (string)(getenv('INVOICE_ORNEK_PKL') ?: '');

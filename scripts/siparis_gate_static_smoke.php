@@ -293,6 +293,11 @@ ok('v442 config: menşe beyanı metni şablonda koşulsuz (Customs Authorisation
 ok('v442 view: Invoice kartı (#invoice) PKL kartından SONRA; yalnız siparis_inv_durum okunur (mutasyon çağrısı yok)', str_contains($ivView, 'id="invoice"') && strpos($ivView, 'id="invoice"') > strpos($ivView, 'id="pkl"') && str_contains($ivView, 'siparis_inv_durum(') && preg_match($mutRe, $ivView) === 0);
 ok('v442 view: PKL yoksa Invoice düğmesi pasif + sebep; yalnız-okuma kullanıcıda hazırla düğmesi yok', str_contains($ivView, 'aria-describedby="sipInvNeden"') && (bool)preg_match("/if \(\\\$yaz\): \?>\s*<\?php if \(\\\$pklHazir\)/", $ivView));
 ok('v442 view: belge türü sırasında invoice + efatura', str_contains($ivView, "'pkl', 'invoice', 'efatura', 'diger'"));
+ok('v442 siparis_belge.php: "Yeniden işle" invoice/efatura için gizli; siparis_kaydet.php belge_bagla/yeniden_isle bu türleri reddeder; yetim kutusu hariç tutar',
+    (bool)preg_match("/if \(\\\$yaz && !in_array\(\(string\)\\\$b\['tur'\], \['invoice', 'efatura'\], true\)\)/", oku('siparis_belge.php'))
+    && (bool)preg_match("/in_array\(\(string\)\\\$b\['tur'\], \['invoice', 'efatura'\], true\)\) \\\$hata\(/", oku('siparis_kaydet.php'))
+    && str_contains(oku('siparisler.php'), "b.tur NOT IN ('invoice', 'efatura')"));
+ok('v442 siparis.js invCoz: binlik-grup doğrulaması (PHP siparis_inv_ondalik_coz aynası)', substr_count($ivJs, '\\d{3}$/.test(') >= 2);
 $ay442 = kod_oku('siparis_ayarlar.php');
 ok('v442 ayarlar: invoice_ayar POST require_siparis(delete) ile; REX/IBAN değeri set_flash/audit\'e yazılmaz', (bool)preg_match("/'invoice_ayar'\) \{\s*require_siparis\('delete'\)/", $ay442) && !preg_match('/set_flash\([^;]*(rex_no|iban)/i', $ay442));
 ok('v442 ayarlar: salt okunur kullanıcıya IBAN/REX değeri basılmaz (yalnız tanımlı/eksik durumu)', str_contains($ay442, 'sip-inv-ayar-durum') && str_contains($ay442, 'siparis.delete yetkisi gerekir'));

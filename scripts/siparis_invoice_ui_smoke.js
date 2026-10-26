@@ -63,6 +63,12 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             ok(`net override@${tag}: 10.000 × 1,37 − %4 = 13.152,00`, (await metin(page, '[data-inv-tutar]')) === '13.700,00' && (await metin(page, '[data-inv-toplam]')) === '13.152,00', [await metin(page, '[data-inv-tutar]'), await metin(page, '[data-inv-toplam]')].join(' / '));
             await page.fill('input[name="net_kg"]', '');
             ok(`net boş@${tag}: PKL net'e döner`, (await metin(page, '[data-inv-tutar]')) === '19.782,80');
+            await page.fill('input[name="fiyat"]', '1,2.5');
+            ok(`geçersiz binlik grubu "1,2.5"@${tag}: sonuç "—" (PHP ayrıştırıcıyla aynı)`, (await metin(page, '[data-inv-toplam]')) === '—');
+            await page.fill('input[name="net_kg"]', '1.2.3');
+            ok(`net "1.2.3"@${tag}: geçersiz → "—"`, (await metin(page, '[data-inv-toplam]')) === '—');
+            await page.fill('input[name="net_kg"]', '');
+            await page.fill('input[name="fiyat"]', '1,37');
             await page.fill('input[name="fiyat"]', 'abc');
             ok(`geçersiz fiyat@${tag}: sonuç "—"`, (await metin(page, '[data-inv-toplam]')) === '—');
             await page.fill('input[name="fiyat"]', '1,37');

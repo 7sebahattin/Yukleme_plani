@@ -285,5 +285,39 @@ $xss = sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => 'k
 $g = sayfa('siparis_invoice.php', ['id' => $S]);
 ok('kullanıcı girdisi kaçırılır (script/etiket enjeksiyonu yok)', temiz($g) && !str_contains($g['html'], '<script>alert(1)') && !str_contains($g['html'], '1,37<b>') && str_contains($g['html'], '&quot;&gt;&lt;script&gt;'));
 
+echo "\n=== 10b. Kontrol listesi genel (A'nın yeni kodları sayfada görünür) ===\n";
+sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => 'kontrol', 'no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '150', 'iskonto' => '4', 'net_kg' => '5000']);
+$g = sayfa('siparis_invoice.php', ['id' => $S]);
+$kodlar = array_column(siparis_inv_kontrol($db, siparis_sevkiyat($db, $S), ['no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '150', 'iskonto' => '4', 'net_kg' => '5000'], siparis_inv_varsayilan($db, siparis_sevkiyat($db, $S))['ozet'], siparis_inv_ayar_oku($db)), 'mesaj', 'kod');
+$gorulmeyen = [];
+foreach (['fiyat_yuksek', 'net_sapma', 'net_elle'] as $kod) if (isset($kodlar[$kod]) && !str_contains($g['html'], htmlspecialchars((string)$kodlar[$kod], ENT_QUOTES, 'UTF-8'))) $gorulmeyen[] = $kod;
+ok('fiyat_yuksek / net_sapma / net_elle (A kodları) sayfada kod bazlı özel durum olmadan listelenir', isset($kodlar['fiyat_yuksek']) && isset($kodlar['net_sapma']) && $gorulmeyen === [], json_encode([array_keys($kodlar), $gorulmeyen]));
+ok('sayfada yalnız girdi_* için özel kod dalı var (diğer kodlar genel liste)', substr_count((string)file_get_contents($ROOT . '/siparis_invoice.php'), "'girdi_'") === 2 && !preg_match("/\['kod'\]\s*===\s*'(?!girdi)/", (string)file_get_contents($ROOT . '/siparis_invoice.php')));
+
+echo "\n=== 11. Belge sayfası / yeniden işle / bağla — invoice + e-fatura korunur ===\n";
+$invB = (int)$db->query("SELECT id FROM siparis_belgeler WHERE tur = 'invoice' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$efB = (int)$db->query("SELECT id FROM siparis_belgeler WHERE tur = 'efatura' ORDER BY id DESC LIMIT 1")->fetchColumn();
+$poB = (int)$ID['po1'];
+$bi = sayfa('siparis_belge.php', ['id' => $invB]);
+ok('invoice belge sayfası: açılır, "Yeniden işle" düğmesi YOK, İndir var, tür rozeti (sip-tur--invoice)', temiz($bi) && !str_contains($bi['html'], 'value="yeniden_isle"') && !str_contains($bi['html'], '↻ Yeniden işle') && str_contains($bi['html'], 'dl=1') && str_contains($bi['html'], 'sip-tur--invoice'), (string)$bi['hata']);
+$be = sayfa('siparis_belge.php', ['id' => $efB]);
+ok('e-fatura belge sayfası: "Yeniden işle" YOK, rozet sip-tur--efatura', temiz($be) && !str_contains($be['html'], 'value="yeniden_isle"') && str_contains($be['html'], 'sip-tur--efatura'));
+$bp = sayfa('siparis_belge.php', ['id' => $poB]);
+ok('PO belge sayfası: "Yeniden işle" düğmesi KALIR (gerileme yok)', str_contains($bp['html'], 'value="yeniden_isle"'));
+$turOnce = $db->query("SELECT id, tur, durum FROM siparis_belgeler WHERE id IN ($invB, $efB) ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+$bagOnce = say($db, 'siparis_belge_bag');
+foreach ([[$invB, 'yeniden_isle'], [$efB, 'yeniden_isle'], [$invB, 'belge_bagla'], [$efB, 'belge_bagla']] as [$bidx, $isl]) {
+    $r = sayfa('siparis_kaydet.php', [], ['csrf' => $tok, 'islem' => $isl, 'belge_id' => (string)$bidx, 'sevkiyat_id' => (string)$ID['s2']]);
+    ok("$isl belge #$bidx: reddedilir (hata flash, açık mesaj)", ($r['flash']['type'] ?? '') === 'error' && str_contains(json_encode($r['flash'], JSON_UNESCAPED_UNICODE), 'yeniden işlenmez'), json_encode($r['flash'], JSON_UNESCAPED_UNICODE));
+}
+$turSonra = $db->query("SELECT id, tur, durum FROM siparis_belgeler WHERE id IN ($invB, $efB) ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+ok('red sonrası belge türü/durumu ve bağlar DEĞİŞMEDİ (invoice hâlâ invoice, e-fatura hâlâ efatura)', $turOnce === $turSonra && say($db, 'siparis_belge_bag') === $bagOnce);
+$db->exec("UPDATE siparis_belgeler SET durum = 'hata' WHERE id = $efB");
+$ls = sayfa('siparisler.php');
+ok('"Eşleşmemiş / hatalı belgeler" kutusu invoice / e-fatura belgesini LİSTELEMEZ (durum hata olsa bile)', !str_contains($ls['html'], 'efatura_resim.pdf') && !str_contains($ls['html'], 'INV-TC900001.10'));
+$db->exec("UPDATE siparis_belgeler SET durum = 'islendi' WHERE id = $efB");
+$vw = sayfa('siparis_view.php', ['id' => $S]);
+ok('sevkiyat belge listesi: Invoice + e-Fatura grup başlıkları, rozetler, "⚠ N" uyarı rozeti bozulmadı', temiz($vw) && str_contains($vw['html'], '>Invoice</h3>') && str_contains($vw['html'], '>e-Fatura</h3>') && str_contains($vw['html'], 'sip-uy-say') && str_contains($vw['html'], 'sistemde üretildi'));
+
 echo "\n";
 siparis_test_bitir();

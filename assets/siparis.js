@@ -849,10 +849,17 @@
             var pos = Math.max(s.lastIndexOf('.'), s.lastIndexOf(',')), dec = s.charAt(pos), bin = dec === '.' ? ',' : '.';
             var ic = s.slice(0, pos), kuyruk = s.slice(pos + 1);
             if (ic.indexOf(dec) >= 0 || (kuyruk !== '' && !/^\d+$/.test(kuyruk))) return null;
-            return parseFloat(ic.split(bin).join('') + '.' + (kuyruk === '' ? '0' : kuyruk));
+            var gr = ic.split(bin);                                 // PHP ile aynı binlik-grup doğrulaması: ilk grup 1-3 hane, diğerleri tam 3 hane ("1,2.5" geçersiz)
+            if (!/^\d{1,3}$/.test(gr[0])) return null;
+            for (var gi2 = 1; gi2 < gr.length; gi2++) if (!/^\d{3}$/.test(gr[gi2])) return null;
+            return parseFloat(gr.join('') + '.' + (kuyruk === '' ? '0' : kuyruk));
         }
         var p = s.split(nd > 0 ? '.' : ',');
-        if (p.length > 2) return tutar ? parseFloat(p.join('')) : null;
+        if (p.length > 2) {                                         // yalnız binlik gruplanabilir ("1.234.567"); gruplar geçerli olmalı
+            if (!/^\d{1,3}$/.test(p[0])) return null;
+            for (var pi = 1; pi < p.length; pi++) if (!/^\d{3}$/.test(p[pi])) return null;
+            return tutar ? parseFloat(p.join('')) : null;
+        }
         if (tutar && p[1].length === 3 && /^[1-9]\d{0,2}$/.test(p[0])) return parseFloat(p[0] + p[1]);
         return parseFloat((p[0] === '' ? '0' : p[0]) + '.' + (p[1] === '' ? '0' : p[1]));
     }
