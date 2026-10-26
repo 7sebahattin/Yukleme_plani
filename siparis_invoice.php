@@ -54,7 +54,7 @@ $alanYaz = function (string $k, mixed $v) use ($sayiYaz): string {
         default => trim((string)($v ?? '')),
     };
 };
-$FORM_ALANLARI = ['no', 'tarih', 'fiyat', 'iskonto', 'efatura_toplam'];
+$FORM_ALANLARI = ['no', 'tarih', 'fiyat', 'iskonto', 'efatura_toplam', 'net_kg', 'brut_kg'];   // net_kg / brut_kg: isteğe bağlı tam sayı override (boş = PKL toplamı)
 
 // ── POST: e-fatura yükle · kontrol · PDF üret (hepsi PRG) ────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -154,7 +154,8 @@ $izinOnceki = is_array($form) && !empty($form['izin']);
 
 $tK = siparis_inv_girdi_temizle($deger);
 $veriK = is_array($tK['veri'] ?? null) && $tK['veri'] ? (array)$tK['veri'] : $girdi;
-$kontrol = siparis_inv_kontrol($pdo, $sev, $veriK, $ozet, $ayar);
+$kontrol = siparis_inv_kontrol($pdo, $sev, $deger, $ozet, $ayar);       // HAM form değerleri: kontrol girdiyi kendisi doğrular (temizlenmiş veri alan hatalarını gizlerdi)
+if (is_array($form)) $hataMap += (array)($tK['hata'] ?? []);             // kontrol/yükleme sonrası alan altı hata metinleri
 $hataTum  = array_values(array_filter($kontrol, static fn($x) => ($x['seviye'] ?? '') === 'hata'));
 // 'girdi_*' = formdaki eksik/hatalı alan (kullanıcı doldurur; zorunlu alanlar ve sunucu doğrulaması korur) → Oluştur'u KİLİTLEMEZ; geri kalanı gerçek engeldir (net 0, brüt<net, palet/koli yok…)
 $girdiHata = array_values(array_filter($hataTum, static fn($x) => str_starts_with((string)($x['kod'] ?? ''), 'girdi_')));
@@ -162,6 +163,7 @@ $hatalar  = array_values(array_filter($hataTum, static fn($x) => !str_starts_wit
 $uyarilar = array_values(array_filter($kontrol, static fn($x) => ($x['seviye'] ?? '') === 'uyari'));
 $bilgiler = array_values(array_filter($kontrol, static fn($x) => !in_array(($x['seviye'] ?? ''), ['hata', 'uyari'], true)));
 $hes = !empty($tK['ok']) ? siparis_inv_hesapla((array)$tK['veri'], $ozet) : null;
+$ozetE = siparis_inv_ozet_etkin($veriK, $ozet);        // girdideki net/brüt override'ıyla efektif özet (ekranda gösterilen)
 
 $ayarEksikler = siparis_inv_ayar_eksikler($ayar);     // REX no + banka adı/adresi/şube/SWIFT/IBAN
 $rexBos   = trim((string)($ayar['rex_no'] ?? '')) === '';
@@ -182,7 +184,7 @@ $ozetMetin = static function (mixed $v): string {
     return trim((string)($v ?? ''));
 };
 $para = static fn(int $kurus): string => number_format($kurus / 100, 2, ',', '.');
-$netKg = (float)($ozet['net_kg'] ?? 0);
+$netKg = (float)($ozet['net_pkl_kg'] ?? $ozet['net_kg'] ?? 0);   // PKL net (override JS'te net_kg alanından)
 $kaynakEt = (string)($ozet['kaynak'] ?? '') === 'pkl' ? 'Güncel PKL (Packing List)' : ((string)($ozet['kaynak'] ?? '') === 'kalem' ? 'Sevkiyat kalemleri (PKL yok)' : '—');
 $seviyeIkon = ['hata' => '⛔', 'uyari' => '⚠', 'bilgi' => 'ℹ'];
 
@@ -230,16 +232,22 @@ render_flash();
         <div class="card-head"><h2 id="sipInvBilBas">2. Invoice bilgileri</h2></div>
         <div class="sip-izgara">
           <?php
+          $pklNetG = sipui_sayi($ozet['net_pkl_kg'] ?? $ozet['net_kg'] ?? null);
+          $pklBrutG = sipui_sayi($ozet['brut_pkl_kg'] ?? $ozet['brut_kg'] ?? null);
+          $nomG = sipui_sayi($ozet['net_nominal_kg'] ?? null);
           $alanlar = [
-              'no' => ['Invoice no', 'text', 'IHR…', ' autocomplete="off" maxlength="40" required'],
-              'tarih' => ['Invoice tarihi', 'date', '', ' required'],
-              'fiyat' => ['Birim fiyat (€ / kg)', 'text', '1,37', ' inputmode="decimal" autocomplete="off" maxlength="14" data-sip-inv-giris="fiyat" required'],
-              'iskonto' => ['İskonto (%)', 'text', '0', ' inputmode="decimal" autocomplete="off" maxlength="8" data-sip-inv-giris="iskonto"'],
-              'efatura_toplam' => ['e-fatura toplamı (€) · çapraz kontrol', 'text', '', ' inputmode="decimal" autocomplete="off" maxlength="16" data-sip-inv-giris="efatura"'],
+              'no' => ['Invoice no', 'text', 'IHR…', ' autocomplete="off" maxlength="40" required', ''],
+              'tarih' => ['Invoice tarihi', 'date', '', ' required', ''],
+              'fiyat' => ['Birim fiyat (€ / kg)', 'text', '1,37', ' inputmode="decimal" autocomplete="off" maxlength="14" data-sip-inv-giris="fiyat" required', ''],
+              'iskonto' => ['İskonto (%)', 'text', '0', ' inputmode="decimal" autocomplete="off" maxlength="8" data-sip-inv-giris="iskonto"', ''],
+              'net_kg' => ['Net ağırlık (kg)', 'text', $pklNetG, ' inputmode="numeric" autocomplete="off" maxlength="12" data-sip-inv-giris="net"', 'PKL: ' . $pklNetG . ($nomG !== '—' ? ' · nominal: ' . $nomG : '') . ' — e-fatura / beyanname farklıysa onu yazın; boş = PKL'],
+              'brut_kg' => ['Brüt ağırlık (kg)', 'text', $pklBrutG, ' inputmode="numeric" autocomplete="off" maxlength="12" data-sip-inv-giris="brut"', 'PKL: ' . $pklBrutG . ' — boş = PKL'],
+              'efatura_toplam' => ['e-fatura toplamı (€) · çapraz kontrol', 'text', '', ' inputmode="decimal" autocomplete="off" maxlength="16" data-sip-inv-giris="efatura"', ''],
           ];
-          foreach ($alanlar as $k => [$et, $tip, $ph, $ek]): ?>
+          foreach ($alanlar as $k => [$et, $tip, $ph, $ek, $ipucu]): ?>
             <label><?= h($et) ?>
               <input type="<?= $tip ?>" name="<?= $k ?>" value="<?= h($deger[$k]) ?>"<?= $ph !== '' ? ' placeholder="' . h($ph) . '"' : '' ?><?= $ek ?><?= isset($hataMap[$k]) ? ' aria-invalid="true"' : '' ?>>
+              <?php if ($ipucu !== ''): ?><span class="sip-ipucu"><?= h($ipucu) ?></span><?php endif; ?>
               <?php if (in_array($k, $okundu, true)): ?><span class="sip-inv-okundu">e-faturadan okundu — kontrol edin</span><?php endif; ?>
               <?php if (isset($hataMap[$k])): ?><span class="sip-hata-metin" role="alert"><?= h(is_string($hataMap[$k]) ? $hataMap[$k] : 'Geçersiz değer') ?></span><?php endif; ?>
             </label>
@@ -248,7 +256,7 @@ render_flash();
         <p class="sip-ipucu">Ondalık ayırıcı virgüldür (1,37). Tutarlar sunucuda yeniden hesaplanır; aşağıdaki sonuç yalnız önizlemedir.</p>
 
         <div class="sip-inv-sonuc" data-sip-inv-sonuc aria-live="polite">
-          <div><span class="sip-soluk">Tutar (net × fiyat)</span><span class="sip-inv-deger"><strong data-inv-tutar><?= $hes ? h($para((int)$hes['tutar_kurus'])) : '—' ?></strong> €</span></div>
+          <div><span class="sip-soluk">Tutar (net kg × fiyat)</span><span class="sip-inv-deger"><strong data-inv-tutar><?= $hes ? h($para((int)$hes['tutar_kurus'])) : '—' ?></strong> €</span></div>
           <div><span class="sip-soluk">İskonto <span data-inv-iskonto-yuzde></span></span><span class="sip-inv-deger"><strong data-inv-iskonto><?= $hes ? h($para((int)$hes['iskonto_kurus'])) : '—' ?></strong> €</span></div>
           <div class="sip-inv-toplam"><span class="sip-soluk">Toplam</span><span class="sip-inv-deger"><strong data-inv-toplam><?= $hes ? h($para((int)$hes['toplam_kurus'])) : '—' ?></strong> €</span></div>
           <div class="sip-inv-fark" data-inv-fark hidden></div>
@@ -262,8 +270,8 @@ render_flash();
               'PKL belge no' => $ozetMetin($ozet['belge_no'] ?? ''),
               'Palet' => sipui_sayi($ozet['palet'] ?? null),
               'Koli' => sipui_sayi($ozet['koli'] ?? null),
-              'Brüt (kg)' => sipui_sayi($ozet['brut_kg'] ?? null),
-              'Net (kg)' => sipui_sayi($ozet['net_kg'] ?? null),
+              'Brüt (kg)' => sipui_sayi($ozetE['brut_kg'] ?? null) . ((float)($ozetE['brut_kg'] ?? 0) !== (float)($ozetE['brut_pkl_kg'] ?? 0) ? ' (elle; PKL ' . sipui_sayi($ozetE['brut_pkl_kg']) . ')' : ''),
+              'Net (kg)' => sipui_sayi($ozetE['net_kg'] ?? null) . ((float)($ozetE['net_kg'] ?? 0) !== (float)($ozetE['net_pkl_kg'] ?? 0) ? ' (elle; PKL ' . sipui_sayi($ozetE['net_pkl_kg']) . ')' : ''),
               'Kalibre' => $ozetMetin($ozet['kalibreler'] ?? ''),
               'Mal tanımı' => $ozetMetin($ozet['aciklama'] ?? ''),
               'Hasat' => $ozetMetin($ozet['harvest'] ?? ''),
@@ -303,7 +311,7 @@ render_flash();
           <p class="muted">Henüz invoice oluşturulmadı.</p>
         <?php endif; ?>
         <?php if ($yaz && $eksikAyar): ?>
-          <label class="sip-onay-satir"><input type="checkbox" name="eksik_izin" value="1" required<?= $izinOnceki ? ' checked' : '' ?>> Invoice ayarında eksik alan var (<?= h(implode(', ', $ayarEksikler)) ?>); invoice’ı <strong>eksik bilgiyle</strong> oluştur</label>
+          <label class="sip-onay-satir"><input type="checkbox" name="eksik_izin" value="1" required<?= $izinOnceki ? ' checked' : '' ?>> <span>Invoice ayarında eksik alan var (<?= h(implode(', ', $ayarEksikler)) ?>); invoice’ı <strong>eksik bilgiyle</strong> oluştur</span></label>
         <?php endif; ?>
         <div class="sip-pkl-eylem sip-inv-eylem">
           <?php if ($yaz): ?>

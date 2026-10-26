@@ -143,7 +143,8 @@ ok('form: multipart + csrf + 5 alan + e-fatura girdisi', str_contains($h, 'encty
 ok('menşe beyanı (REX) bilgi satırı HER durumda + REX boş → kırmızı uyarı', str_contains($h, 'Menşe beyanı (REX) her invoice') && str_contains($h, 'REX numarası ayarlı değil') && str_contains($h, '______'));
 ok('ayar eksik → "eksik bilgiyle oluştur" onay kutusu (zorunlu)', (bool)preg_match('/<input type="checkbox" name="eksik_izin" value="1" required/', $h));
 ok('özet: PO, palet, koli, net kg tam sayı biçimli (binlik noktalı), kalibre, plaka, teslim şekli', str_contains($h, 'TC900001.10') && str_contains($h, $NETS) && str_contains($h, '14') && str_contains($h, '34TST777') && str_contains($h, 'INCOTERMS 2020 DAP'));
-ok('JS önizleme kancaları: data-sip-inv + net + giriş kancaları', str_contains($h, 'data-sip-inv ') && preg_match('/data-sip-inv-net="[0-9.]+"/', $h) && substr_count($h, 'data-sip-inv-giris=') === 3);
+ok('JS önizleme kancaları: data-sip-inv + net + giriş kancaları (fiyat/iskonto/net/brüt/e-fatura)', str_contains($h, 'data-sip-inv ') && preg_match('/data-sip-inv-net="[0-9.]+"/', $h) && substr_count($h, 'data-sip-inv-giris=') === 5);
+ok('Net / Brüt ağırlık alanları: placeholder = PKL toplamı, ipucu "PKL: … · nominal: …"', str_contains($h, 'name="net_kg"') && str_contains($h, 'name="brut_kg"') && str_contains($h, 'placeholder="' . $NETS . '"') && str_contains($h, 'PKL: ' . $NETS) && str_contains($h, 'nominal:') && str_contains($h, 'boş = PKL'));
 ok('kontrol: eksik alanlar "✎ Doldurun" (Oluştur\'u kilitlemez), Oluştur etkin, pasif-neden yok', str_contains($h, '✎ Doldurun') && str_contains($h, 'name="islem" value="uret"') && !str_contains($h, 'sipInvNeden'));
 $govde = substr($h, (int)strpos($h, 'class="sip-mod sip-inv-sayfa"'));   // sayfa gövdesi (üst çubuk/layout hariç)
 ok('sayfa gövdesinde satır içi olay (onclick…) yok; e-fatura + kontrol düğmesi formnovalidate', !preg_match('/\son(click|submit|change|input)=/i', $govde) && substr_count($govde, 'formnovalidate') >= 2);
@@ -185,6 +186,18 @@ $kotu = sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => '
 ok('uret: fiyat eksik → #bilgiler\'e dön, hata bayrağı, belge YOK', str_contains((string)$kotu['git'], '#bilgiler') && ($kotu['flash']['type'] ?? '') === 'error' && say($db, 'siparis_belgeler', "tur = 'invoice'") === 0);
 $g = sayfa('siparis_invoice.php', ['id' => $S]);
 ok('alan hatası fiyat alanının altında (role=alert) + aria-invalid', str_contains($g['html'], 'Birim fiyat (€/kg) gerekli') && str_contains($g['html'], 'aria-invalid="true"'));
+
+echo "\n=== 5b. Net / Brüt override (e-fatura nominal net) ===\n";
+$ov = sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => 'kontrol', 'no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '1,37', 'iskonto' => '4', 'net_kg' => '10.000', 'brut_kg' => '11.000']);
+$g = sayfa('siparis_invoice.php', ['id' => $S]);
+ok('net 10.000 × 1,37 = 13.700,00; %4 = 548,00; toplam 13.152,00 (sunucu hesabı override\'ı kullanır)', temiz($g) && str_contains($g['html'], '13.700,00') && str_contains($g['html'], '548,00') && str_contains($g['html'], '13.152,00'), (string)$g['hata']);
+ok('özet efektif net/brüt "(elle; PKL …)" + net_elle bilgi satırı', str_contains($g['html'], '10.000 (elle; PKL ' . $NETS . ')') && str_contains($g['html'], '11.000 (elle; PKL ') && str_contains($g['html'], 'elle girildi (10.000 kg'));
+sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => 'kontrol', 'no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '1,37', 'net_kg' => '12.5', 'brut_kg' => '']);
+$g = sayfa('siparis_invoice.php', ['id' => $S]);
+ok('net tam sayı değilse alan hatası (Oluştur\'u kilitlemez, ✎ Doldurun)', str_contains($g['html'], 'tam sayı kg olmalıdır') && str_contains($g['html'], '✎ Doldurun'));
+sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => 'kontrol', 'no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '1,37', 'net_kg' => '20000', 'brut_kg' => '15000']);
+$g = sayfa('siparis_invoice.php', ['id' => $S]);
+ok('brüt < net → kırmızı engel + Oluştur PASİF (sebep yazılı)', str_contains($g['html'], 'net ağırlıktan') && str_contains($g['html'], 'aria-describedby="sipInvNeden"') && !str_contains($g['html'], 'name="islem" value="uret"'));
 
 echo "\n=== 6. PDF üretimi ===\n";
 $uret = ['csrf' => $tok, 'islem' => 'uret', 'no' => 'IHR2026000000999', 'tarih' => '2026-10-20', 'fiyat' => '1,37', 'iskonto' => '4'];

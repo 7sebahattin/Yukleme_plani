@@ -860,6 +860,7 @@
     function invoice(form) {
         var net = parseFloat(form.getAttribute('data-sip-inv-net') || '0') || 0;
         var gf = q('[data-sip-inv-giris="fiyat"]', form), gi = q('[data-sip-inv-giris="iskonto"]', form), ge = q('[data-sip-inv-giris="efatura"]', form);
+        var gn = q('[data-sip-inv-giris="net"]', form);      // net kg override (tam sayı; boş = PKL net)
         var kap = q('[data-sip-inv-sonuc]', form);
         if (!gf || !gi || !kap) return;
         var eT = q('[data-inv-tutar]', kap), eI = q('[data-inv-iskonto]', kap), eS = q('[data-inv-toplam]', kap), eY = q('[data-inv-iskonto-yuzde]', kap), eF = q('[data-inv-fark]', kap);
@@ -868,7 +869,9 @@
             if (f === null || f <= 0 || pct === null || pct < 0 || pct > 100) {
                 eT.textContent = eI.textContent = eS.textContent = '—'; eY.textContent = ''; eF.hidden = true; return;
             }
-            var netMg = Math.round(net * 1000), f1e4 = Math.round(f * 10000);
+            var netUsed = net;
+            if (gn && gn.value.trim() !== '') { var nv = invCoz(gn.value, true); if (nv === null || nv < 1) { eT.textContent = eI.textContent = eS.textContent = '—'; eY.textContent = ''; eF.hidden = true; return; } netUsed = nv; }
+            var netMg = Math.round(netUsed * 1000), f1e4 = Math.round(f * 10000);
             var tutarK = Math.floor((netMg * f1e4 + 50000) / 100000);
             var iskK = Math.floor((tutarK * Math.round(pct * 100) + 5000) / 10000);
             var topK = tutarK - iskK;
@@ -881,7 +884,7 @@
             eF.className = 'sip-inv-fark ' + (efK === topK ? 'sip-inv-fark--uyumlu' : 'sip-inv-fark--fark');
             eF.textContent = efK === topK ? '✓ e-fatura toplamıyla uyumlu' : '⚠ e-fatura toplamı € ' + invPara(efK) + ' — hesaplanan € ' + invPara(topK) + ' (fark € ' + invPara(Math.abs(efK - topK)) + ')';
         }
-        [gf, gi, ge].forEach(function (e) { if (e) e.addEventListener('input', hesapla); });
+        [gf, gi, ge, gn].forEach(function (e) { if (e) e.addEventListener('input', hesapla); });
         hesapla();
     }
     function invOnizle(d) {

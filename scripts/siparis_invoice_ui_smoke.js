@@ -51,7 +51,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         // — form: canlı hesap, fark uyarısı, mobil ölçüler —
         {
             const { ctx, page } = await ac('inv_bos', w, h, false);
-            ok(`form@${tag}: 5 alan görünür`, (await Promise.all(['no', 'tarih', 'fiyat', 'iskonto', 'efatura_toplam'].map(n => gorunur(page, `input[name="${n}"]`)))).every(Boolean));
+            ok(`form@${tag}: 7 alan görünür`, (await Promise.all(['no', 'tarih', 'fiyat', 'iskonto', 'net_kg', 'brut_kg', 'efatura_toplam'].map(n => gorunur(page, `input[name="${n}"]`)))).every(Boolean));
             await page.fill('input[name="fiyat"]', '1,37'); await page.fill('input[name="iskonto"]', '4');
             ok(`canlı hesap@${tag}: tutar 19.782,80 · iskonto 791,31 · toplam 18.991,49`, (await metin(page, '[data-inv-tutar]')) === '19.782,80' && (await metin(page, '[data-inv-iskonto]')) === '791,31' && (await metin(page, '[data-inv-toplam]')) === '18.991,49',
                 [await metin(page, '[data-inv-tutar]'), await metin(page, '[data-inv-iskonto]'), await metin(page, '[data-inv-toplam]')].join(' / '));
@@ -59,6 +59,10 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             ok(`e-fatura uyumlu@${tag}`, /uyumlu/.test(await metin(page, '[data-inv-fark]') || '') && await gorunur(page, '[data-inv-fark]'));
             await page.fill('input[name="efatura_toplam"]', '19000,00');
             ok(`e-fatura farklı@${tag}: uyarı + fark`, /fark/.test(await metin(page, '[data-inv-fark]') || ''), await metin(page, '[data-inv-fark]'));
+            await page.fill('input[name="net_kg"]', '10.000');
+            ok(`net override@${tag}: 10.000 × 1,37 − %4 = 13.152,00`, (await metin(page, '[data-inv-tutar]')) === '13.700,00' && (await metin(page, '[data-inv-toplam]')) === '13.152,00', [await metin(page, '[data-inv-tutar]'), await metin(page, '[data-inv-toplam]')].join(' / '));
+            await page.fill('input[name="net_kg"]', '');
+            ok(`net boş@${tag}: PKL net'e döner`, (await metin(page, '[data-inv-tutar]')) === '19.782,80');
             await page.fill('input[name="fiyat"]', 'abc');
             ok(`geçersiz fiyat@${tag}: sonuç "—"`, (await metin(page, '[data-inv-toplam]')) === '—');
             await page.fill('input[name="fiyat"]', '1,37');
