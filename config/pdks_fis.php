@@ -109,18 +109,27 @@ function pdks_fis_fold(string $s): string
 // =========================================================
 
 /**
- * Serbest metni DB/audit/ekran için temizler: skaler değilse '', denetim karakterleri atılır (satır sonu/sekme
- * kalır), trim, formül/CSV enjeksiyonuna karşı ilk karakter = + - @ ise başına ' eklenir, $maks karaktere kırpılır.
+ * Serbest metni eşleştirme için temizler (formül öneki EKLEMEZ): skaler değilse '', denetim karakterleri atılır
+ * (satır sonu/sekme kalır), trim, $maks karaktere kırpılır.
  */
-function pdks_fis_metin($x, int $maks = 500): string
+function pdks_fis_metin_duz($x, int $maks = 500): string
 {
     if (!is_scalar($x) || is_bool($x)) return '';
     $s = is_float($x) ? rtrim(rtrim(sprintf('%.10F', $x), '0'), '.') : (string)$x;
     $t = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $s);
     if ($t === null) return '';   // geçersiz UTF-8
-    $t = trim($t);
-    if ($t !== '' && strpbrk($t[0], '=+-@') !== false) $t = "'" . $t;
-    return mb_substr($t, 0, max(0, $maks), 'UTF-8');
+    return mb_substr(trim($t), 0, max(0, $maks), 'UTF-8');
+}
+
+/**
+ * Serbest metni DB/audit/ekran için temizler: pdks_fis_metin_duz + formül/CSV enjeksiyonuna karşı ilk karakter
+ * = + - @ ise başına ' eklenir (toplam $maks karakteri geçmez).
+ */
+function pdks_fis_metin($x, int $maks = 500): string
+{
+    $t = pdks_fis_metin_duz($x, $maks);
+    if ($t !== '' && strpbrk($t[0], '=+-@') !== false) $t = mb_substr("'" . $t, 0, max(0, $maks), 'UTF-8');
+    return $t;
 }
 
 /**
@@ -324,4 +333,417 @@ function pdks_fis_fm_tip_dagit(array $saatler, array $havuz): array
     unset($d);
     $dagilim = array_filter($dagilim, fn($d) => $d !== []);
     return ['kota' => $kota, 'dagilim' => $dagilim, 'saat' => $atanan];
+}
+
+// =========================================================
+// D. ÇAVUŞ EŞLEŞTİRME + NORMALİZASYON
+// =========================================================
+
+/** foremen tümü (tek sorgu), aktifler önce. @return list<array{id:int,code:string,name:string,is_active:int}> */
+function pdks_fis_cavuslar(PDO $pdo): array
+{
+    $out = [];
+    foreach ($pdo->query('SELECT id, code, name, is_active FROM foremen ORDER BY is_active DESC, name') as $r) {
+        $out[] = ['id' => (int)$r['id'], 'code' => (string)$r['code'], 'name' => (string)$r['name'], 'is_active' => (int)$r['is_active']];
+    }
+    return $out;
+}
+
+/**
+ * Çavuşu kod (birincil) ya da ada göre çözer. Kod doluysa YALNIZ kod aranır (bulunamazsa HATA, ada düşülmez);
+ * kod+ad ikisi de varsa ad sistemdekiyle uyuşmuyorsa UYARI (kod esas alınır). Kod boşsa: ad TAM eşleşmesi →
+ * yoksa " - " ile bölünmüş parça eşleşmesi → TAM 1 aday kabul; 0 → "bulunamadı", ≥2 → hata + aday listesi.
+ * Pasif çavuş: ok kalır + uyarı (gerçek ret toplu_onizle'den gelir).
+ * @return array{ok:bool,id?:int,kod?:string,ad?:string,yontem?:string,hata?:string,uyari?:string}
+ */
+function pdks_fis_cavus_coz(array $cavuslar, string $kod, string $ad): array
+{
+    $kodF = pdks_fis_fold($kod); $adF = pdks_fis_fold($ad);
+    if ($kodF === '' && $adF === '') return ['ok' => false, 'hata' => 'Çavuş Kodu ya da Çavuş Adı gerekli.'];
+    $adaylar = []; $yontem = 'kod'; $uyari = null;
+    if ($kodF !== '') {
+        foreach ($cavuslar as $c) if (pdks_fis_fold((string)$c['code']) === $kodF) $adaylar[] = $c;
+        if (!$adaylar) return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($kod, 40) . '" kodlu çavuş bulunamadı.'];
+        if (count($adaylar) > 1) return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($kod, 40) . '" kodu birden çok çavuşa ait.'];
+        if ($adF !== '') {
+            $sis = pdks_fis_fold((string)$adaylar[0]['name']);
+            if (!str_contains($sis, $adF) && !str_contains($adF, $sis)) {
+                $uyari = 'Fişteki ad «' . pdks_fis_metin_duz($ad, 60) . '» sistemdeki «' . pdks_fis_metin_duz((string)$adaylar[0]['name'], 60) . '» ile uyuşmuyor; kod esas alındı.';
+            }
+        }
+    } else {
+        $yontem = 'ad';
+        foreach ($cavuslar as $c) if (pdks_fis_fold((string)$c['name']) === $adF) $adaylar[] = $c;
+        if (!$adaylar) {
+            foreach ($cavuslar as $c) {
+                foreach (preg_split('/\s+[-–—]\s+/u', (string)$c['name']) ?: [] as $parca) {
+                    if (pdks_fis_fold($parca) === $adF) { $adaylar[] = $c; break; }
+                }
+            }
+        }
+        if (!$adaylar) return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($ad, 60) . '" adlı çavuş bulunamadı (Çavuş Kodunu yazın).'];
+        if (count($adaylar) > 1) {
+            $liste = array_map(fn($c) => $c['code'] . ' · ' . $c['name'], array_slice($adaylar, 0, 5));
+            return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($ad, 60) . '" birden çok çavuşla eşleşiyor — Çavuş Kodunu yazın: ' . implode('; ', $liste)];
+        }
+    }
+    $c = $adaylar[0];
+    if (empty($c['is_active'])) {
+        $u = 'Çavuş pasif — yeni mesai açılamaz, mesai varsa eklenir.';
+        $uyari = $uyari === null ? $u : $uyari . ' ' . $u;
+    }
+    $r = ['ok' => true, 'id' => (int)$c['id'], 'kod' => (string)$c['code'], 'ad' => (string)$c['name'], 'yontem' => $yontem];
+    if ($uyari !== null) $r['uyari'] = $uyari;
+    return $r;
+}
+
+/** Sistem işçi tipi kodları (sıra SABİT: dağıtım ve grup sırası bunu izler). */
+function pdks_fis_tip_kodlari(): array { return ['KADIN', 'ERKEK', 'RAMPACI']; }
+
+/** FM tipi hücresi → kod listesi (null = boş). Tanınmazsa false. */
+function pdks_fis_fm_tipi_coz($v)
+{
+    $f = pdks_fis_fold(pdks_fis_metin_duz($v, 60));
+    if ($f === '') return null;
+    $harita = ['tumu' => ['KADIN', 'ERKEK', 'RAMPACI'], 'hepsi' => ['KADIN', 'ERKEK', 'RAMPACI'], 'tum' => ['KADIN', 'ERKEK', 'RAMPACI'],
+               'kadin' => ['KADIN'], 'bayan' => ['KADIN'], 'erkek' => ['ERKEK'], 'rampaci' => ['RAMPACI'],
+               'erkek rampaci' => ['ERKEK', 'RAMPACI'], 'erkek ve rampaci' => ['ERKEK', 'RAMPACI'], 'rampaci erkek' => ['ERKEK', 'RAMPACI']];
+    return $harita[$f] ?? false;
+}
+
+/**
+ * pdks_fis_oku() çıktısını fiş modellerine çevirir (SAF). Hata biçimi: "Satır {n}, «{Başlık}»: {mesaj}".
+ * Hücre tipleri: s (metin) · n (sayı) · b · e (boş) · f (değeri olmayan formül → hata) · fc (önbellekli formül → uyarı).
+ * @return array{fisler:list<array>, genel_hatalar:string[]}
+ */
+function pdks_fis_normalize(array $oku, array $cavuslar): array
+{
+    $satirlar = array_values($oku['satirlar'] ?? []);
+    if (!$satirlar) return ['fisler' => [], 'genel_hatalar' => ['Dosyada okunacak fiş satırı bulunamadı.']];
+    if (count($satirlar) > PDKS_FIS_MAX_FIS) {
+        return ['fisler' => [], 'genel_hatalar' => ['En çok ' . PDKS_FIS_MAX_FIS . ' fiş yüklenebilir (dosyada ' . count($satirlar) . ' satır var); dosyayı bölün.']];
+    }
+    $bugun = date('Y-m-d');
+    $baslik = [];
+    foreach (pdks_fis_sutunlar() as $c) $baslik[$c['anahtar']] = $c['baslik'];
+    $fisler = [];
+    foreach ($satirlar as $sat) {
+        $n = (int)($sat['satir'] ?? 0);
+        $hu = is_array($sat['hucreler'] ?? null) ? $sat['hucreler'] : [];
+        $dolu = false;
+        foreach ($hu as $c) { $v = $c['v'] ?? null; if ($v !== null && trim((string)(is_scalar($v) ? $v : 'x')) !== '') { $dolu = true; break; } }
+        if (!$dolu) continue;
+        $hatalar = []; $uyarilar = [];
+        $H = fn(string $a, string $m) => "Satır $n, «" . ($baslik[$a] ?? $a) . "»: $m";
+        // Hücre değeri (formül kuralı burada)
+        $al = function (string $a) use ($hu, &$hatalar, &$uyarilar, $H) {
+            $c = $hu[$a] ?? null;
+            if (!is_array($c)) return null;
+            $t = (string)($c['t'] ?? 's');
+            if ($t === 'f') { $hatalar[] = $H($a, 'Formül yerine değer yazın.'); return null; }
+            if ($t === 'fc') $uyarilar[] = $H($a, 'formül önbellek değeriyle okundu — kontrol edin.');
+            return $c['v'] ?? null;
+        };
+        $say = function (string $a, int $maks) use ($al, &$hatalar, $H): ?int {
+            $v = $al($a);
+            $h = null; $r = pdks_fis_say($v, $maks, $h);
+            if ($h !== null) $hatalar[] = $H($a, $h);
+            return $r;
+        };
+
+        // Fiş No
+        $ham = $hu['fis_no'] ?? null; $fisNo = '';
+        $fisNoHamSayi = false;
+        $fv = $al('fis_no');
+        if (is_int($fv) || is_float($fv)) {
+            $fisNoHamSayi = true;
+            $fisNo = (string)(is_float($fv) && floor($fv) === $fv ? (int)$fv : $fv);
+            $uyarilar[] = $H('fis_no', 'sayı olarak gelmiş; baştaki sıfır kaybolmuş olabilir (örn. 01410) — METİN olarak yazın.');
+        } else {
+            $fisNo = pdks_fis_metin_duz($fv, 60);
+        }
+        $fisNoN = null;
+        if ($fisNo === '') $hatalar[] = $H('fis_no', 'Fiş No boş.');
+        else {
+            $fisNoN = pdks_fis_fisno_norm($fisNo);
+            if ($fisNoN === null) $hatalar[] = $H('fis_no', '"' . pdks_fis_metin_duz($fisNo, 40) . '" geçersiz (harf, rakam ve . _ / - ; en çok 30 karakter).');
+            elseif (str_starts_with($fisNoN, 'ORNEK-')) $hatalar[] = $H('fis_no', 'Örnek satırı silinmemiş (ORNEK- ile başlayan Fiş No).');
+        }
+
+        // Tarih
+        $tarih = null; $th = null;
+        $tv = $al('tarih');
+        $tarih = pdks_fis_tarih($tv, $th);
+        if ($th !== null) $hatalar[] = $H('tarih', $th);
+        elseif ($tarih === null) $hatalar[] = $H('tarih', 'Tarih boş.');
+        elseif ($tarih >= $bugun) $hatalar[] = $H('tarih', 'bugün veya gelecek tarihli fişler desteklenmez.');
+
+        $isletme = pdks_fis_metin($al('isletme'), 150);
+
+        // Çavuş
+        $kod = pdks_fis_metin_duz($al('cavus_kodu'), 40); $ad = pdks_fis_metin_duz($al('cavus_adi'), 150);
+        $cr = pdks_fis_cavus_coz($cavuslar, $kod, $ad);
+        $cavus = ['id' => null, 'kod' => $kod, 'ad' => $ad, 'yontem' => null];
+        if (!$cr['ok']) $hatalar[] = $H($kod !== '' ? 'cavus_kodu' : 'cavus_adi', (string)$cr['hata']);
+        else {
+            $cavus = ['id' => $cr['id'], 'kod' => $cr['kod'], 'ad' => $cr['ad'], 'yontem' => $cr['yontem']];
+            if (!empty($cr['uyari'])) { $cavus['uyari'] = $cr['uyari']; $uyarilar[] = $H($kod !== '' ? 'cavus_kodu' : 'cavus_adi', $cr['uyari']); }
+        }
+
+        // Sayılar
+        $sy = [];
+        foreach (['KADIN' => 'kadin', 'ERKEK' => 'erkek', 'RAMPACI' => 'rampaci'] as $KOD => $on) {
+            $sy[$KOD] = ['tam' => $say($on . '_tam', 250) ?? 0, 'yarim' => $say($on . '_yarim', 250) ?? 0];
+        }
+        $kova = [];
+        for ($k = 1; $k <= PDKS_FIS_FM_KOVA_MAX; $k++) $kova[$k] = $say('fm' . $k, 250) ?? 0;
+        $fmToplam = $say('fm_toplam', 1000);
+        $fmKisi = $say('fm_kisi', 250);
+        $ft = pdks_fis_fm_tipi_coz($al('fm_tipi'));
+        if ($ft === false) { $hatalar[] = $H('fm_tipi', '"' . pdks_fis_metin_duz($hu['fm_tipi']['v'] ?? '', 40) . '" tanınmadı (Tümü, Kadın, Erkek, Rampacı, Erkek+Rampacı).'); $ft = null; }
+        $maksSv = defined('PDKS_SERVIS_MAX_ADET') ? (int)PDKS_SERVIS_MAX_ADET : 99;
+        $servis = ['buyuk' => $say('servis_buyuk', $maksSv) ?? 0, 'kucuk' => $say('servis_kucuk', $maksSv) ?? 0];
+
+        // Giriş + revizyon
+        $gh = null; $giris = pdks_fis_saat($al('giris'), $gh);
+        if ($gh !== null) $hatalar[] = $H('giris', $gh);
+        $girisVars = $giris === null;
+        if ($giris === null) $giris = PDKS_FIS_VARSAYILAN_GIRIS;
+        $rev = $say('rev', 9) ?? 0;
+
+        $fisler[] = [
+            'satir' => $n, 'fis_no' => $fisNoN ?? $fisNo, 'fis_no_ham_sayi' => $fisNoHamSayi, 'tarih' => $tarih, 'isletme' => $isletme,
+            'cavus' => $cavus, 'say' => $sy, 'fm_kova' => $kova, 'fm_toplam' => $fmToplam, 'fm_kisi' => $fmKisi, 'fm_tipi' => $ft,
+            'servis' => $servis, 'giris' => $giris, 'giris_varsayilan' => $girisVars, 'rev' => $rev,
+            'not' => pdks_fis_metin($al('not'), 500), 'ham' => pdks_fis_metin($al('ham'), 500), 'kontrol' => pdks_fis_metin($al('kontrol'), 500),
+            'cakisma_dosya' => false, 'cakisma_sira' => 0, 'hatalar' => $hatalar, 'uyarilar' => $uyarilar,
+        ];
+    }
+    // Dosya düzeyi: aynı Fiş No
+    $noSatirlar = [];
+    foreach ($fisler as $i => $f) if ($f['fis_no'] !== '') $noSatirlar[$f['fis_no']][] = $i;
+    foreach ($noSatirlar as $no => $idx) {
+        if (count($idx) < 2) continue;
+        $satirNolari = implode(', ', array_map(fn($i) => $fisler[$i]['satir'], $idx));
+        foreach ($idx as $i) $fisler[$i]['hatalar'][] = "Fiş $no: aynı Fiş No dosyada birden çok satırda (satır $satirNolari).";
+    }
+    // Aynı çavuş + gün birden çok fiş
+    $cg = [];
+    foreach ($fisler as $i => $f) if ($f['cavus']['id'] !== null && $f['tarih'] !== null) $cg[$f['cavus']['id'] . '|' . $f['tarih']][] = $i;
+    foreach ($cg as $idx) {
+        if (count($idx) < 2) continue;
+        $satirNolari = implode(', ', array_map(fn($i) => $fisler[$i]['satir'], $idx));
+        foreach ($idx as $sira => $i) {
+            $fisler[$i]['cakisma_dosya'] = true; $fisler[$i]['cakisma_sira'] = $sira;
+            $fisler[$i]['uyarilar'][] = "Aynı dosyada aynı çavuş + gün için " . count($idx) . " fiş var (satır $satirNolari); birden çok fiş aynı mesaiye eklenir.";
+        }
+    }
+    return ['fisler' => $fisler, 'genel_hatalar' => []];
+}
+
+// =========================================================
+// E. FM ÜCRET NÖTRLÜĞÜ + SAF PLAN + ZAMANLAMA
+// =========================================================
+
+/**
+ * FM dağılımının tutarı etkileyip etkilemediği. $tipler[KOD]['oran'] = [var, fm_modu, fm_birim, para].
+ * ≤1 tip → true. Hepsinin oranı var, mod aynı ∈ {hourly,fixed}, birim ve para eşitse true; oranı olmayan varsa
+ * null (bilinmiyor); diğer durumda false.
+ * @return array{notr:?bool, mod:?string, neden:string}
+ */
+function pdks_fis_fm_notr(array $baglamTipler, array $izinliKodlar): array
+{
+    $izinli = array_values(array_unique($izinliKodlar));
+    $mod0 = isset($izinli[0]) ? ($baglamTipler[$izinli[0]]['oran']['fm_modu'] ?? null) : null;
+    if (count($izinli) <= 1) return ['notr' => true, 'mod' => $mod0, 'neden' => 'Tek tip — dağılım tutarı değiştirmez.'];
+    $modlar = []; $birimler = []; $paralar = [];
+    foreach ($izinli as $kod) {
+        $o = $baglamTipler[$kod]['oran'] ?? null;
+        if (!is_array($o) || empty($o['var'])) return ['notr' => null, 'mod' => null, 'neden' => 'Fiyat tanımı eksik/belirsiz (' . $kod . ').'];
+        $modlar[(string)($o['fm_modu'] ?? '')] = true;
+        $birimler[sprintf('%.4F', (float)($o['fm_birim'] ?? 0))] = true;
+        $paralar[(string)($o['para'] ?? '')] = true;
+    }
+    $mod = (string)array_key_first($modlar);
+    if (count($modlar) === 1 && in_array($mod, ['hourly', 'fixed'], true) && count($birimler) === 1 && count($paralar) === 1) {
+        return ['notr' => true, 'mod' => $mod, 'neden' => 'FM modu ve birim tutarı tüm tiplerde aynı.'];
+    }
+    return ['notr' => false, 'mod' => null, 'neden' => 'FM modu/birimi/para birimi tipler arasında farklı.'];
+}
+
+/** Grup etiketi: "Erkek · FM 2 sa". */
+function pdks_fis_grup_etiketi(array $g): string
+{
+    $p = $g['profil'] === 'fm' ? 'FM ' . (int)$g['fm_saat'] . ' sa' : ($g['profil'] === 'yarim' ? 'Yarım' : 'Tam');
+    return (string)($g['tip_ad'] ?? $g['kod']) . ' · ' . $p;
+}
+
+/** FM'ye giren tiplerin izinli kümesi: fişin FM Tipi, yoksa sayfa seçeneği. */
+function pdks_fis_fm_izinli_kodlar(?array $fisTipi, string $secenek): array
+{
+    if ($fisTipi) return array_values(array_intersect(pdks_fis_tip_kodlari(), $fisTipi));
+    if ($secenek === 'erkek') return ['ERKEK'];
+    if ($secenek === 'erkek_rampaci') return ['ERKEK', 'RAMPACI'];
+    return pdks_fis_tip_kodlari();
+}
+
+/**
+ * Fişten kayıt planı (SAF — DB yok; eşikler $baglam'dan, o da sınıflandırıcıdan gelir). Grup sırası SABİT:
+ * tip (KADIN, ERKEK, RAMPACI) × profil (tam, fm 1..n artan, yarim). FM kişileri Tam kişilerden düşülür; Yarım'a
+ * FM verilmez. $baglam = ['tipler'=>[KOD=>['id','ad','tam_dk','fm_bas_dk','cift_dk','oran'=>[var,fm_modu,fm_birim,para]]],
+ * 'fm_tip_secenegi'=>'tumu'|'erkek'|'erkek_rampaci'].
+ * @return array{ok:bool,hatalar:string[],uyarilar:string[],gruplar:list<array>,fm:array,servis:array,kisi_toplam:int,hash:string}
+ */
+function pdks_fis_plan(array $fis, array $baglam): array
+{
+    $hatalar = []; $uyarilar = [];
+    $tipler = is_array($baglam['tipler'] ?? null) ? $baglam['tipler'] : [];
+    $secenek = (string)($baglam['fm_tip_secenegi'] ?? 'tumu');
+    $fmYok = ['mod' => 'yok', 'saatler' => [], 'tip_dagilim' => [], 'toplam_saat' => 0, 'kisi' => 0, 'notr' => null, 'aciklama' => ''];
+    $servis = ['buyuk' => (int)($fis['servis']['buyuk'] ?? 0), 'kucuk' => (int)($fis['servis']['kucuk'] ?? 0)];
+    $sonuc = function () use (&$hatalar, &$uyarilar, &$gruplar, &$fm, &$servis, &$kisiToplam, $fis, $secenek) {
+        $kanon = ['g' => (string)($fis['giris'] ?? ''), 'sv' => [$servis['buyuk'], $servis['kucuk']], 'fmt' => $secenek,
+                  'gr' => array_map(fn($g) => [$g['kod'], $g['profil'], $g['fm_saat'], $g['adet'], $g['sure_dk']], $gruplar),
+                  'fm' => $fm['saatler'] ?? []];
+        return ['ok' => $hatalar === [], 'hatalar' => $hatalar, 'uyarilar' => $uyarilar, 'gruplar' => $gruplar, 'fm' => $fm, 'servis' => $servis,
+                'kisi_toplam' => $kisiToplam, 'hash' => substr(hash('sha256', json_encode($kanon, JSON_UNESCAPED_UNICODE)), 0, 16)];
+    };
+    $gruplar = []; $fm = $fmYok; $kisiToplam = 0;
+
+    // 1) kişi sayıları + bağlamda tip var mı
+    $sayi = [];
+    foreach (pdks_fis_tip_kodlari() as $kod) {
+        $t = (int)($fis['say'][$kod]['tam'] ?? 0); $y = (int)($fis['say'][$kod]['yarim'] ?? 0);
+        $sayi[$kod] = ['tam' => $t, 'yarim' => $y];
+        $kisiToplam += $t + $y;
+        if (($t + $y) > 0 && !isset($tipler[$kod])) $hatalar[] = ucfirst(mb_strtolower($kod, 'UTF-8')) . ' işçi tipi sistemde bulunamadı ya da pasif (tip tanımı yok).';
+    }
+    if ($kisiToplam === 0) {
+        $hatalar[] = ($servis['buyuk'] + $servis['kucuk']) > 0
+            ? 'Yalnız servisli fiş desteklenmez — mesaide en az bir işçi kaydı olmalı (servisi Mesai Detayı\'ndan girin).'
+            : 'Boş fiş: hiç işçi sayısı girilmemiş.';
+        return $sonuc();
+    }
+    if ($kisiToplam > PDKS_FAZ8J_TOPLU_LIMIT) {
+        $hatalar[] = 'Bir fişte en çok ' . PDKS_FAZ8J_TOPLU_LIMIT . ' kişi kaydı yazılabilir (fişte: ' . $kisiToplam . ').';
+        return $sonuc();
+    }
+    if ($hatalar) return $sonuc();
+
+    // 2) FM biçimi
+    $kova = []; $kovaKisi = 0; $kovaSaat = 0;
+    for ($k = 1; $k <= PDKS_FIS_FM_KOVA_MAX; $k++) {
+        $nk = (int)($fis['fm_kova'][$k] ?? 0);
+        $kova[$k] = $nk; $kovaKisi += $nk; $kovaSaat += $nk * $k;
+    }
+    $H = isset($fis['fm_toplam']) ? (int)$fis['fm_toplam'] : null;
+    $K = isset($fis['fm_kisi']) ? (int)$fis['fm_kisi'] : null;
+    $mod = 'yok';
+    if ($kovaKisi > 0) {
+        $mod = 'kova';
+        if ($H !== null && $H > 0 && $H !== $kovaSaat) $hatalar[] = "«Toplam FM Saati» ($H) FM kova sütunlarının toplamıyla ($kovaSaat sa) uyuşmuyor — yalnız birini doldurun.";
+        elseif ($H !== null && $H > 0) $uyarilar[] = "«Toplam FM Saati» ($H) kova toplamıyla tutarlı; yok sayıldı.";
+        if ($K !== null && $K > 0 && $K !== $kovaKisi) $hatalar[] = "«FM Kişi Sayısı» ($K) FM kova sütunlarındaki kişi toplamıyla ($kovaKisi) uyuşmuyor.";
+    } elseif ($H !== null && $H > 0) {
+        $mod = 'toplam';
+    } elseif ($K !== null && $K > 0) {
+        $hatalar[] = '«FM Kişi Sayısı» dolu ama «Toplam FM Saati» ve FM kova sütunları boş.';
+    }
+
+    $dagilim = []; $saatler = [];
+    if ($mod !== 'yok' && !$hatalar) {
+        $izinli = pdks_fis_fm_izinli_kodlar(is_array($fis['fm_tipi'] ?? null) ? $fis['fm_tipi'] : null, $secenek);
+        $havuz = [];
+        foreach ($izinli as $kod) if ($sayi[$kod]['tam'] > 0) $havuz[$kod] = $sayi[$kod]['tam'];
+        $W = array_sum($havuz);
+        if ($W < 1) {
+            $adlar = implode('/', array_map(fn($c) => ucfirst(mb_strtolower($c, 'UTF-8')), $izinli));
+            $hatalar[] = "FM için izinli tiplerde ($adlar) Tam kişi yok — «FM Tipi» sütununu kontrol edin.";
+        } else {
+            $nt = pdks_fis_fm_notr($tipler, array_keys($havuz));
+            if ($mod === 'kova') {
+                foreach ($kova as $k => $nk) for ($i = 0; $i < $nk; $i++) $saatler[] = $k;
+                rsort($saatler, SORT_NUMERIC);
+                if (count($saatler) > $W) $hatalar[] = 'FM\'ye giren kişi sayısı (' . count($saatler) . ') Tam kişi sayısını (' . $W . ') aşıyor.';
+                elseif ($nt['notr'] === false) $hatalar[] = 'FM fiyatları tipler arasında farklı (' . $nt['neden'] . '): «FM Tipi» sütununda tek tip seçin.';
+                elseif ($nt['notr'] === null) $uyarilar[] = 'FM fiyat tanımı eksik/belirsiz; tipler arası dağılım tutarı etkileyebilir (' . $nt['neden'] . ')';
+            } else {
+                if ($nt['notr'] !== true) {
+                    $hatalar[] = 'Toplam FM dağıtımı yapılamaz: ' . $nt['neden'] . ' FM kova sütunlarını doldurun.';
+                } elseif ($nt['mod'] === 'fixed' && ($K === null || $K < 1)) {
+                    $hatalar[] = 'Sabit tutarlı (kişi başı) FM fiyatında «FM Kişi Sayısı» zorunludur — kişi sayısı ödemeyi değiştirir.';
+                } else {
+                    $kmax = 15;
+                    foreach (array_keys($havuz) as $kod) {
+                        $fb = (int)$tipler[$kod]['fm_bas_dk'];
+                        $kmax = min($kmax, intdiv(1440 - $fb, 60));
+                        if (($tipler[$kod]['cift_dk'] ?? null) !== null) $kmax = min($kmax, intdiv((int)$tipler[$kod]['cift_dk'] - $fb - 1, 60));
+                    }
+                    $d = pdks_fis_fm_toplam_dagit((int)$H, $K, PDKS_FIS_FM_KISI_UST_SAAT, $kmax, $W);
+                    if (!$d['ok']) $hatalar[] = 'Toplam FM dağıtımı: ' . $d['hata'];
+                    else $saatler = $d['saatler'];
+                }
+            }
+            if (!$hatalar && $saatler) {
+                $dd = pdks_fis_fm_tip_dagit($saatler, $havuz);
+                $dagilim = $dd['dagilim'];
+                foreach ($dagilim as $kod => $sk) {
+                    foreach ($sk as $saat => $nKisi) {
+                        $ct = $tipler[$kod]['cift_dk'] ?? null;
+                        if ($ct !== null && (int)$tipler[$kod]['fm_bas_dk'] + 60 * (int)$saat >= (int)$ct) {
+                            $uyarilar[] = 'Çift yevmiye eşiğine girer: ' . ($tipler[$kod]['ad'] ?? $kod) . ' · FM ' . $saat . ' sa (' . $nKisi . ' kişi) — bu kişiler çift yevmiye sayılabilir.';
+                        }
+                    }
+                }
+                $kisi = count($saatler); $topS = array_sum($saatler);
+                $parcalar = [];
+                $say2 = array_count_values($saatler); krsort($say2, SORT_NUMERIC);
+                foreach ($say2 as $saat => $nKisi) $parcalar[] = $nKisi . '×' . $saat . ' sa';
+                $fm = ['mod' => $mod, 'saatler' => $saatler, 'tip_dagilim' => $dagilim, 'toplam_saat' => $topS, 'kisi' => $kisi, 'notr' => $nt['notr'],
+                       'aciklama' => $topS . ' sa → ' . $kisi . ' kişi: ' . implode(' + ', $parcalar)];
+            }
+        }
+    }
+    if ($hatalar) return $sonuc();
+
+    // 3) gruplar (sıra sabit)
+    foreach (pdks_fis_tip_kodlari() as $kod) {
+        $t = $tipler[$kod] ?? null;
+        if (!$t) continue;
+        $fmT = array_sum($dagilim[$kod] ?? []);
+        $tamSaf = $sayi[$kod]['tam'] - $fmT;
+        if ($tamSaf < 0) { $hatalar[] = 'İç tutarsızlık: ' . $kod . ' FM kişisi Tam kişiyi aşıyor.'; continue; }
+        $mk = static fn(string $profil, int $fmSaat, int $adet, int $sure) => ['kod' => $kod, 'tip_id' => (int)$t['id'], 'tip_ad' => (string)$t['ad'],
+            'profil' => $profil, 'fm_saat' => $fmSaat, 'adet' => $adet, 'sure_dk' => $sure];
+        if ($tamSaf > 0) $gruplar[] = $mk('tam', 0, $tamSaf, (int)$t['tam_dk']);
+        $sk = $dagilim[$kod] ?? []; ksort($sk, SORT_NUMERIC);
+        foreach ($sk as $saat => $nKisi) $gruplar[] = $mk('fm', (int)$saat, (int)$nKisi, (int)$t['fm_bas_dk'] + 60 * (int)$saat);
+        if ($sayi[$kod]['yarim'] > 0) $gruplar[] = $mk('yarim', 0, $sayi[$kod]['yarim'], pdks_fis_yarim_dk((int)$t['tam_dk']));
+    }
+    return $sonuc();
+}
+
+/**
+ * Plana her grup için entry_clock / exit_date / exit_clock ekler (giriş + sure_dk; gece taşması ertesi gün).
+ * Geçersiz giriş saati ya da 24 saati aşan süre plan hatasıdır.
+ */
+function pdks_fis_zamanla(array $plan, string $tarih, string $giris): array
+{
+    $gh = null; $g = pdks_fis_saat($giris, $gh);
+    $t0 = $g !== null ? DateTimeImmutable::createFromFormat('!Y-m-d H:i', $tarih . ' ' . $g) : false;
+    if ($g === null || !$t0) {
+        $plan['ok'] = false;
+        $plan['hatalar'][] = 'Geçersiz giriş saati ya da tarih.';
+        return $plan;
+    }
+    foreach ($plan['gruplar'] as &$gr) {
+        $c = $t0->modify('+' . (int)$gr['sure_dk'] . ' minutes');
+        $gr['entry_clock'] = $g; $gr['exit_date'] = $c->format('Y-m-d'); $gr['exit_clock'] = $c->format('H:i');
+        if ((int)$gr['sure_dk'] > 1440) {
+            $plan['ok'] = false;
+            $plan['hatalar'][] = pdks_fis_grup_etiketi($gr) . ': süre 24 saati aşıyor (' . intdiv((int)$gr['sure_dk'], 60) . ' sa ' . ((int)$gr['sure_dk'] % 60) . ' dk).';
+        }
+    }
+    unset($gr);
+    return $plan;
 }
