@@ -838,12 +838,67 @@
         });
     }
 
+
+    /* ── v442: Invoice (OGL) — canlı tutar önizlemesi (sunucu her zaman yeniden hesaplar; bu yalnız önizleme) + PDF önizleme ── */
+    function invCoz(v, tutar) {     // config/siparis_invoice.php siparis_inv_ondalik_coz() aynası (birim fiyatta tek ayraç HEP ondalık; tutarda "12.500" binlik)
+        var s = String(v == null ? '' : v).replace(/[\s  ]+/g, '').replace(/€|EUR/gi, '');
+        if (s === '' || !/^[0-9.,]+$/.test(s) || !/[0-9]/.test(s)) return null;
+        var nd = (s.match(/\./g) || []).length, nc = (s.match(/,/g) || []).length;
+        if (nd === 0 && nc === 0) return parseFloat(s);
+        if (nd > 0 && nc > 0) {
+            var pos = Math.max(s.lastIndexOf('.'), s.lastIndexOf(',')), dec = s.charAt(pos), bin = dec === '.' ? ',' : '.';
+            var ic = s.slice(0, pos), kuyruk = s.slice(pos + 1);
+            if (ic.indexOf(dec) >= 0 || (kuyruk !== '' && !/^\d+$/.test(kuyruk))) return null;
+            return parseFloat(ic.split(bin).join('') + '.' + (kuyruk === '' ? '0' : kuyruk));
+        }
+        var p = s.split(nd > 0 ? '.' : ',');
+        if (p.length > 2) return tutar ? parseFloat(p.join('')) : null;
+        if (tutar && p[1].length === 3 && /^[1-9]\d{0,2}$/.test(p[0])) return parseFloat(p[0] + p[1]);
+        return parseFloat((p[0] === '' ? '0' : p[0]) + '.' + (p[1] === '' ? '0' : p[1]));
+    }
+    function invPara(kurus) { return (kurus / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function invoice(form) {
+        var net = parseFloat(form.getAttribute('data-sip-inv-net') || '0') || 0;
+        var gf = q('[data-sip-inv-giris="fiyat"]', form), gi = q('[data-sip-inv-giris="iskonto"]', form), ge = q('[data-sip-inv-giris="efatura"]', form);
+        var kap = q('[data-sip-inv-sonuc]', form);
+        if (!gf || !gi || !kap) return;
+        var eT = q('[data-inv-tutar]', kap), eI = q('[data-inv-iskonto]', kap), eS = q('[data-inv-toplam]', kap), eY = q('[data-inv-iskonto-yuzde]', kap), eF = q('[data-inv-fark]', kap);
+        function hesapla() {
+            var f = invCoz(gf.value, false), pct = gi.value.trim() === '' ? 0 : invCoz(gi.value, false);
+            if (f === null || f <= 0 || pct === null || pct < 0 || pct > 100) {
+                eT.textContent = eI.textContent = eS.textContent = '—'; eY.textContent = ''; eF.hidden = true; return;
+            }
+            var netMg = Math.round(net * 1000), f1e4 = Math.round(f * 10000);
+            var tutarK = Math.floor((netMg * f1e4 + 50000) / 100000);
+            var iskK = Math.floor((tutarK * Math.round(pct * 100) + 5000) / 10000);
+            var topK = tutarK - iskK;
+            eT.textContent = invPara(tutarK); eI.textContent = invPara(iskK); eS.textContent = invPara(topK);
+            eY.textContent = '(%' + String(pct).replace('.', ',') + ')';
+            var ef = ge && ge.value.trim() !== '' ? invCoz(ge.value, true) : null;
+            if (ef === null) { eF.hidden = true; return; }
+            var efK = Math.round(ef * 100);
+            eF.hidden = false;
+            eF.className = 'sip-inv-fark ' + (efK === topK ? 'sip-inv-fark--uyumlu' : 'sip-inv-fark--fark');
+            eF.textContent = efK === topK ? '✓ e-fatura toplamıyla uyumlu' : '⚠ e-fatura toplamı € ' + invPara(efK) + ' — hesaplanan € ' + invPara(topK) + ' (fark € ' + invPara(Math.abs(efK - topK)) + ')';
+        }
+        [gf, gi, ge].forEach(function (e) { if (e) e.addEventListener('input', hesapla); });
+        hesapla();
+    }
+    function invOnizle(d) {
+        d.addEventListener('toggle', function () {
+            var fr = q('iframe', d);
+            if (d.open && fr && !fr.getAttribute('src')) fr.setAttribute('src', d.getAttribute('data-src') || 'about:blank');
+        });
+    }
+
     function basla() {
         gorulen();
         qa('details[data-sip-yukle]').forEach(yukleKart);
         qa('form[data-sip-upload]').forEach(yukleme);
         qa('[data-sip-mail-kap]').forEach(mailAl);
         var p = q('form[data-sip-pkl]'); if (p) { pkl(p); pklIzgara(p); }
+        qa('form[data-sip-inv]').forEach(invoice);
+        qa('details[data-sip-inv-onizle]').forEach(invOnizle);
         zipGuncelle();
         qa('[data-sip-durum-form]').forEach(gerekceGuncelle);
     }

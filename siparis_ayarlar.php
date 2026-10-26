@@ -8,6 +8,8 @@
 // v378: "📧 Mail sorgu ayarları" (#mail) — posta kutuları + tür başına gönderen adresleri (hks_kv; adresler repoya GİRMEZ).
 //        Kapı: siparis.delete + Mail Merkezi yönetimi (siparis_mail_ayar_yetkisi()); audit yalnız SAYILAR yazar.
 // v422: "📄 PKL mail ayarları" (#pkl-mail) — PKL'ye ek Kime/Bilgi + PKL/evrak mail metni şablonları (hks_kv siparis_pkl_mail_ayar).
+// v442: "🧾 Invoice ayarları" (#invoice-ayar) — OGL invoice REX no / banka / teslim şekli / varsayılan iskonto (hks_kv siparis_invoice_ayar).
+//        Kaydetme siparis.delete; audit yalnız bayrak/sayı (REX ve IBAN değeri YAZILMAZ); salt okunur kullanıcı yalnız dolu/eksik durumunu görür.
 // v411: "📦 Evrak takımı mail alıcıları" (#evrak-mail) — evrak taslağında Kime'nin ilk adresleri (hks_kv; adresler repoya GİRMEZ).
 //        Görüntüleme siparis.read, kaydetme siparis.delete; audit yalnız adres SAYISI.
 // =========================================================
@@ -17,6 +19,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_mail.php';
 require_once __DIR__ . '/config/siparis_pkl.php';
+require_once __DIR__ . '/config/siparis_invoice.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -82,6 +85,16 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'PKL mail ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
         $git('#pkl-mail');
     }
+    if ($islem === 'invoice_ayar') {
+        require_siparis('delete');
+        $r = siparis_inv_ayar_kaydet($pdo, [
+            'rex_no' => (string)($_POST['inv_rex_no'] ?? ''), 'banka_ad' => (string)($_POST['inv_banka_ad'] ?? ''), 'banka_adres' => (string)($_POST['inv_banka_adres'] ?? ''),
+            'sube' => (string)($_POST['inv_sube'] ?? ''), 'swift' => (string)($_POST['inv_swift'] ?? ''), 'iban_eur' => (string)($_POST['inv_iban_eur'] ?? ''),
+            'teslim' => (string)($_POST['inv_teslim'] ?? ''), 'iskonto_varsayilan' => (string)($_POST['inv_iskonto'] ?? ''),
+        ], $uid);
+        set_flash(!empty($r['ok']) ? 'success' : 'error', !empty($r['ok']) ? 'Invoice ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
+        $git('#invoice-ayar');
+    }
     if ($islem === 'profil_sil') {
         require_siparis('delete');
         $ok = siparis_profil_sil($pdo, (int)($_POST['profil_id'] ?? 0), $uid);
@@ -123,6 +136,12 @@ $evrakKvHazir = siparis_evrak_mail_kv_hazir($pdo);
 $evrakKime = $evrakKvHazir ? siparis_evrak_mail_ayar_oku($pdo)['kime'] : [];
 // v422 PKL mail ayarları + mail metni şablonları (aynı hks_kv)
 $pklMail = $evrakKvHazir ? siparis_pkl_mail_ayar_oku($pdo) : ['kime' => [], 'bilgi' => [], 'govde' => '', 'evrak_govde' => ''];
+// v442 Invoice ayarları (aynı hks_kv)
+$invAyar = $evrakKvHazir ? siparis_inv_ayar_oku($pdo) : [];
+$invDeger = function (string $k) use ($invAyar): string { return trim((string)($invAyar[$k] ?? '')); };
+$invIskonto = '';
+if (($invAyar['iskonto_varsayilan'] ?? '') !== '' && is_numeric($invAyar['iskonto_varsayilan'])) $invIskonto = rtrim(rtrim(number_format((float)$invAyar['iskonto_varsayilan'], 2, ',', ''), '0'), ',');
+elseif (($invAyar['iskonto_varsayilan'] ?? '') !== '') $invIskonto = trim((string)$invAyar['iskonto_varsayilan']);
 $profilVeri = function (array $p): array {
     $v = ['profil_id' => (int)$p['id'], '_yazi:profil_baslik' => 'Profili düzenle'];
     foreach (array_keys(siparis_profil_alanlari()) as $k) $v[$k] = (string)($p[$k] ?? '');
@@ -233,6 +252,38 @@ $profilVeri = function (array $p): array {
     <?php else: ?>
       <p class="sip-soluk">Ek Kime: <?= $pklMail['kime'] ? h(implode(', ', $pklMail['kime'])) : '—' ?> · ek Bilgi: <?= $pklMail['bilgi'] ? h(implode(', ', $pklMail['bilgi'])) : '—' ?></p>
       <p class="sip-bilgi" role="note">Ayarları değiştirmek için siparis.delete yetkisi gerekir.</p>
+    <?php endif; ?>
+  </section>
+  <?php endif; ?>
+
+  <?php if ($evrakKvHazir): ?>
+  <section class="card" id="invoice-ayar" aria-labelledby="sipInvAyarBas">
+    <div class="card-head"><h2 id="sipInvAyarBas">🧾 Invoice ayarları</h2><span class="sip-soluk">OGL invoice</span></div>
+    <p class="muted">OGL (İngiltere) invoice PDF’inde kullanılan sabit bilgiler. <strong>Menşe beyanı (REX numarası)</strong> her invoice’ta zorunludur; REX numarası boşsa PDF’te “Customs Authorisation No. ______” boş basılır ve oluştururken ayrıca onay istenir. Değerler denetim kaydına yazılmaz.</p>
+    <?php if ($sil): ?>
+      <form method="post" action="siparis_ayarlar.php#invoice-ayar" class="sip-form" data-sip-tek>
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="invoice_ayar">
+        <div class="sip-iki-kolon">
+          <label>REX numarası (Customs Authorisation No.)<input type="text" name="inv_rex_no" value="<?= h($invDeger('rex_no')) ?>" maxlength="60" autocomplete="off" spellcheck="false"></label>
+          <label>Varsayılan iskonto (%)<input type="text" name="inv_iskonto" value="<?= h($invIskonto) ?>" inputmode="decimal" maxlength="8" autocomplete="off" placeholder="4"></label>
+        </div>
+        <label>Banka adı<input type="text" name="inv_banka_ad" value="<?= h($invDeger('banka_ad')) ?>" maxlength="150" autocomplete="off"></label>
+        <label>Banka adresi<input type="text" name="inv_banka_adres" value="<?= h($invDeger('banka_adres')) ?>" maxlength="250" autocomplete="off"></label>
+        <div class="sip-iki-kolon">
+          <label>Şube<input type="text" name="inv_sube" value="<?= h($invDeger('sube')) ?>" maxlength="150" autocomplete="off"></label>
+          <label>SWIFT<input type="text" name="inv_swift" value="<?= h($invDeger('swift')) ?>" maxlength="20" autocomplete="off" spellcheck="false" autocapitalize="characters"></label>
+        </div>
+        <label>IBAN (EUR hesabı)<input type="text" name="inv_iban_eur" value="<?= h($invDeger('iban_eur')) ?>" maxlength="45" autocomplete="off" spellcheck="false" autocapitalize="characters"></label>
+        <label>Varsayılan teslim şekli<input type="text" name="inv_teslim" value="<?= h($invDeger('teslim')) ?>" maxlength="100" autocomplete="off" placeholder="INCOTERMS 2020 DAP"></label>
+        <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
+      </form>
+    <?php else: ?>
+      <ul class="sip-inv-ayar-durum">
+        <?php foreach (['rex_no' => 'REX numarası', 'banka_ad' => 'Banka adı', 'iban_eur' => 'IBAN (EUR)', 'swift' => 'SWIFT', 'teslim' => 'Teslim şekli'] as $k => $et): ?>
+          <li><?= $invDeger($k) !== '' ? '✓' : '✗' ?> <?= h($et) ?> <span class="sip-soluk"><?= $invDeger($k) !== '' ? 'tanımlı' : 'eksik' ?></span></li>
+        <?php endforeach; ?>
+      </ul>
+      <p class="sip-bilgi" role="note">Ayarları görmek ve değiştirmek için siparis.delete yetkisi gerekir.</p>
     <?php endif; ?>
   </section>
   <?php endif; ?>

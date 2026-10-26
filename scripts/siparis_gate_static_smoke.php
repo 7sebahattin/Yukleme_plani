@@ -30,7 +30,7 @@ $core = oku('config/siparis_core.php'); $migrate = oku('migrate.php'); $auth = o
 $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
-$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_kaydet.php',
+$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_invoice.php', 'siparis_kaydet.php',
              'siparis_mail.php', 'siparis_odeme.php', 'siparis_odemeler.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
@@ -75,7 +75,9 @@ $MUT = ['siparis_alan_elle', 'siparis_alan_kilidi_kaldir', 'siparis_catisma_coz'
         // v400: tek seferlik veri geçişi (UPDATE yazar) — yalnız config/siparis_evrak.php + migrate.php çağırır
         'siparis_evrak_gecis_uygula',
         // v411: evrak takımı mail alıcıları (hks_kv) — yalnız siparis_ayarlar.php POST'u
-        'siparis_evrak_mail_ayar_kaydet'];
+        'siparis_evrak_mail_ayar_kaydet',
+        // v442: OGL invoice — PDF üretimi / e-fatura yükleme (belge + dosya yazar) / ayar (hks_kv) — yalnız siparis_invoice.php + siparis_ayarlar.php POST'u
+        'siparis_inv_uret', 'siparis_inv_efatura_yukle', 'siparis_inv_ayar_kaydet'];
 $mutRe = '/\b(' . implode('|', $MUT) . ')\s*\(/';
 foreach ($sayfalar as $f) {
     $k = kod_oku($f);
@@ -173,7 +175,8 @@ foreach (['config/siparis_mail.php', 'siparis_mail.php', 'siparisler.php', 'sipa
     'siparis_yazdir.php', 'config/siparis_yazdir.php', 'assets/siparis_yazdir.js', 'scripts/siparis_yazdir_smoke.php', 'scripts/siparis_yazdir_smoke.js',
     'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js',
     'siparis_cari.php', 'siparis_odemeler.php', 'config/siparis_cari.php', 'scripts/siparis_cari_smoke.php',
-    'siparis_eml.php', 'config/siparis_pkl.php', 'siparis_view.php', 'scripts/siparis_pkl_mail_smoke.php'] as $f) {
+    'siparis_eml.php', 'config/siparis_pkl.php', 'siparis_view.php', 'scripts/siparis_pkl_mail_smoke.php',
+    'siparis_invoice.php', 'config/siparis_invoice.php', 'scripts/siparis_invoice_ui_smoke.php'] as $f) {
     $t = str_ends_with($f, '.php') ? kod_oku($f) : oku($f);
     ok("$f: gerçek e-posta adresi YOK (yalnız @ornek.test)", $t !== '' && preg_match($epostaRe, $t, $em2) === 0, $em2[0] ?? '');
 }
@@ -269,6 +272,33 @@ ok('v401 sw bypass + $a_sip', preg_match($swPcre, '/siparis_odemeler.php') === 1
 ok('v401 siparis.js data-od-* delege + afterprint; css od-yazdir-modu', str_contains(oku('assets/siparis.js'), "'[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir]'") && str_contains(oku('assets/siparis.js'), 'afterprint')
     && str_contains(oku('assets/siparis.css'), 'body.od-yazdir-modu #odYazdirAlan'));
 
+echo "\n=== v442: OGL Invoice (siparis_invoice.php) ===\n";
+$ivUc = kod_oku('siparis_invoice.php'); $ivCfg = kod_oku('config/siparis_invoice.php'); $ivHam = oku('config/siparis_invoice.php'); $ivJs = oku('assets/siparis.js'); $ivCss = oku('assets/siparis.css');
+$ivView = kod_oku('siparis_view.php');
+ok('v442 sayfa adı TEK alt çizgili (siparis_invoice.php): sw.js bypass regex\'i kapsar; iki ekli ad yok', is_file($ROOT . '/siparis_invoice.php') && $swKural !== '' && preg_match($swPcre, '/siparis_invoice.php') === 1 && !glob($ROOT . '/siparis_*_*_*.php'), $swPcre);
+ok('v442 sayfa: require_login + require_siparis(read) birebir + siparis_no_store() + depo kapısı siparis_gorunur()', str_contains($ivUc, 'require_login()') && str_contains($ivUc, "require_siparis('read');") && str_contains($ivUc, 'siparis_no_store();') && str_contains($ivUc, 'siparis_gorunur($sev)'));
+ok('v442 sayfa: POST dalı csrf_check → require_siparis(write) sırasıyla, mutasyondan önce', (bool)preg_match("/REQUEST_METHOD'\]\s*===\s*'POST'\)\s*\{\s*csrf_check\([^;]*;\s*require_siparis\('write'\);/", $ivUc)
+    && strpos($ivUc, 'csrf_check(') < strpos($ivUc, 'siparis_inv_uret(') && strpos($ivUc, 'csrf_check(') < strpos($ivUc, 'siparis_inv_efatura_yukle('));
+ok('v442 sayfa: PRG (üç işlem de Location ile döner), fonksiyon tanımlamaz, satır içi olay yok', str_contains($ivUc, "header('Location: '") && !preg_match('/^\s*function\s+\w+/m', $ivUc) && !preg_match('/\son(click|submit|change|input)=/i', $ivUc));
+ok('v442 sayfa: kullanıcı çıktısı h() ile (ham echo $_GET/$_POST yok)', !preg_match('/<\?=\s*\$_(GET|POST|REQUEST)\b/', $ivUc));
+ok('v442 sayfa: tutar hesabı sunucuda siparis_inv_hesapla() (sayfada kendi çarpma/yuvarlama yok)', str_contains($ivUc, 'siparis_inv_hesapla(') && !preg_match('/\*\s*\$netKg|\$netKg\s*\*/', $ivUc));
+ok('v442 sayfa: menşe beyanı bilgi satırı + REX boşsa kırmızı uyarı + eksik izni onay kutusu (name=eksik_izin)', str_contains($ivUc, 'Menşe beyanı (REX)') && str_contains($ivUc, 'name="eksik_izin"') && str_contains($ivUc, 'siparis_inv_ayar_eksikler('));
+ok('v442 sayfa: Oluştur engel varken pasif + sip-pasif-neden (aria-describedby)', str_contains($ivUc, 'aria-describedby="sipInvNeden"') && str_contains($ivUc, 'class="sip-pasif-neden"'));
+ok('v442 sayfa: "Kontrol et" ve e-fatura düğmeleri formnovalidate (required alanlar engellemez)', substr_count($ivUc, 'formnovalidate') >= 2);
+ok('v442 nav_aktif_anahtar $a_sip siparis_invoice.php içerir', (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_invoice\.php'/", $helpers));
+ok('v442 config/siparis_invoice.php: tam yol koruması (basename DEĞİL — kökte aynı adlı sayfa var, v385 kuralı)', $ivHam !== '' && !str_contains($ivHam, 'basename(') );
+ok('v442 config: sayfa kapısını can(\'siparis.*\') ile KOPYALAMIYOR; çıktı basmaz', $ivCfg !== '' && preg_match("/\bcan\('siparis\./", $ivCfg) === 0 && !preg_match('/\b(echo|print|die)\b/', $ivCfg));
+ok('v442 config: şemasız (CREATE/ALTER/DROP TABLE yok) + dompdf uzak kaynak/PHP kapalı', $ivCfg !== '' && !preg_match('/\b(CREATE|ALTER|DROP)\s+TABLE\b/i', $ivCfg) && str_contains($ivCfg, 'isRemoteEnabled') && str_contains($ivCfg, 'isPhpEnabled'));
+ok('v442 config: menşe beyanı metni şablonda koşulsuz (Customs Authorisation No.)', str_contains($ivHam, 'Customs Authorisation No.'));
+ok('v442 view: Invoice kartı (#invoice) PKL kartından SONRA; yalnız siparis_inv_durum okunur (mutasyon çağrısı yok)', str_contains($ivView, 'id="invoice"') && strpos($ivView, 'id="invoice"') > strpos($ivView, 'id="pkl"') && str_contains($ivView, 'siparis_inv_durum(') && preg_match($mutRe, $ivView) === 0);
+ok('v442 view: PKL yoksa Invoice düğmesi pasif + sebep; yalnız-okuma kullanıcıda hazırla düğmesi yok', str_contains($ivView, 'aria-describedby="sipInvNeden"') && (bool)preg_match("/if \(\\\$yaz\): \?>\s*<\?php if \(\\\$pklHazir\)/", $ivView));
+ok('v442 view: belge türü sırasında invoice + efatura', str_contains($ivView, "'pkl', 'invoice', 'efatura', 'diger'"));
+$ay442 = kod_oku('siparis_ayarlar.php');
+ok('v442 ayarlar: invoice_ayar POST require_siparis(delete) ile; REX/IBAN değeri set_flash/audit\'e yazılmaz', (bool)preg_match("/'invoice_ayar'\) \{\s*require_siparis\('delete'\)/", $ay442) && !preg_match('/set_flash\([^;]*(rex_no|iban)/i', $ay442));
+ok('v442 ayarlar: salt okunur kullanıcıya IBAN/REX değeri basılmaz (yalnız tanımlı/eksik durumu)', str_contains($ay442, 'sip-inv-ayar-durum') && str_contains($ay442, 'siparis.delete yetkisi gerekir'));
+ok('v442 siparis.js: invoice önizleme data-* kancaları (satır içi onclick yok), sunucu aynası uyarısı', str_contains($ivJs, 'form[data-sip-inv]') && str_contains($ivJs, 'data-sip-inv-onizle') && str_contains($ivJs, 'siparis_inv_ondalik_coz'));
+ok('v442 siparis.css: v442 bloğu + mobilde PDF iframe gizli', str_contains($ivCss, 'v442: Invoice (OGL)') && (bool)preg_match('/@media \(max-width: 767px\) \{\s*\.sip-inv-onizle \{ display: none; \}/', $ivCss));
+
 echo "\n=== v400: Evrak takımı adımı (tek seferlik veri geçişi) ===\n";
 $evCfg = kod_oku('config/siparis_evrak.php');
 $evKod = '';
@@ -295,7 +325,7 @@ ok('siparis_belge.php açık sevkiyat sorgusu siparis_kapanmamis_sql() kullanır
 
 echo "\n=== Audit eylem adları ≤ 40 karakter ===\n";
 $uzun = []; $sayi = 0;
-$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
+$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'config/siparis_invoice.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
 foreach ($dosyalar as $f) {
     $k = kod_oku($f);
     if (preg_match_all("/\b(?:siparis_audit|audit_log_event)\(\s*'([^']+)'/", $k, $mm)) {
