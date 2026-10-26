@@ -896,7 +896,7 @@ ok('şoför: izleyici değerleri görür, düzenleme bağlantısı yok', str_con
 rol($ADMIN, true);
 $gl = sayfa('siparisler.php')['html'];
 ok('şoför: liste sayfası etkilenmez', !str_contains($gl, 'Test Sürücü'));
-ok('v394: WP Paylaş düğmesi var, şoför adı/telefonu liste HTML\'inde YOK', str_contains($gl, 'data-sip-wp="' . $sidS . '"') && !str_contains($gl, 'Test Sürücü') && !str_contains($gl, '532 000') && html_dengeli($gl) === null);
+ok('v394: WP Paylaş düğmesi var, şoför ADI liste HTML\'inde YOK (telefon v440 Lojistik hücresinde)', str_contains($gl, 'data-sip-wp="' . $sidS . '"') && !str_contains($gl, 'Test Sürücü') && html_dengeli($gl) === null);
 
 $css = file_get_contents($ROOT . '/assets/siparis.css');
 ok('CSS: [hidden] kuralı + 16px mobil input + --bn-h kullanımı + overflow-x:hidden YOK', str_contains($css, '.sip-mod [hidden]') && str_contains($css, 'font-size: 16px') && str_contains($css, 'var(--bn-h)') && !preg_match('/overflow-x:\s*hidden/', $css));

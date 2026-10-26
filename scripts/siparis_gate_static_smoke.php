@@ -228,8 +228,9 @@ ok('config/siparis_wp.php: planlanan_* okunmaz, tur no\'ya düşülmez', !str_co
 ok('audit: siparis_wp_paylas, ad/telefon/plaka/nakliyeci YAZILMAZ (yalnız kalem sayısı)', str_contains($wpUc, "siparis_audit('siparis_wp_paylas',") && !preg_match('/siparis_audit\([^;]*(sofor|telefon|plaka|nakliyeci)/i', $wpUc));
 ok('liste: her iki menüde (masaüstü + mobil) PKL\'den SONRA data-sip-wp düğmesi; kişisel veri / data-sip-yazdir YOK', substr_count($lst, 'data-sip-wp="') === 2
     && preg_match_all('~siparis_pkl\.php\?id=<\?= \$__id \?>">📄 PKL</a>\s*<button type="button" data-sip-wp="<\?= \$__id \?>"~', $lst) === 2
-    && !preg_match('/sofor|telefon/i', $lst) && !str_contains($lst, 'data-sip-yazdir'));
-ok('siparisler.php: siparis_wp.js defer yüklenir; şoför kolonu sayfa sorgusuna girmez', str_contains(oku('siparisler.php'), 'assets/siparis_wp.js?v=') && str_contains(oku('siparisler.php'), 'defer></script>') && !str_contains(kod_oku('siparisler.php'), 'sofor'));
+    && !preg_match('/sofor_adi/i', $lst) && !str_contains($lst, 'data-sip-yazdir')
+    && !preg_match('/data-[a-z-]*\s*=\s*"<\?=[^"]*sofor/i', $lst));   // v440: yalnız şoför TELEFONU görünür metin olarak (Lojistik hücresi); ad / data-* yok
+ok('siparisler.php: siparis_wp.js defer yüklenir; şoför kolonu sayfa sorgusuna girmez', str_contains(oku('siparisler.php'), 'assets/siparis_wp.js?v=') && str_contains(oku('siparisler.php'), 'defer></script>') && !str_contains(kod_oku('siparisler.php'), 'sofor_adi'));   // v440: listeye yalnız sofor_telefon (Lojistik hücresi)
 ok('siparis_wp.js: esc(), same-origin + no-store, ClipboardItem + Web Share + NotAllowedError, html2canvas tembel, PNG; jsPDF/eval/localStorage/onclick YOK',
     str_contains($wpJs, 'function esc(') && str_contains($wpJs, "credentials: 'same-origin'") && str_contains($wpJs, "cache: 'no-store'") && str_contains($wpJs, "'siparis_paylas.php?id='")
     && str_contains($wpJs, 'ClipboardItem') && str_contains($wpJs, 'navigator.share') && str_contains($wpJs, 'NotAllowedError') && str_contains($wpJs, "'halkayit/html2canvas.min.js'")
