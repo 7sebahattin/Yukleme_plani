@@ -800,20 +800,37 @@ function siparis_inv_pdf_metin(string $yol): string
  */
 function siparis_inv_efatura_alanlar(string $metin): array
 {
+    $metin = mb_strcut($metin, 0, 300000, 'UTF-8');     // gerçek e-fatura ~3 KB; kötü niyetli dev metinde regex süresi sınırlı kalsın
     $out = [];
     $tek = function (array $adaylar): ?string {
         $adaylar = array_values(array_unique(array_filter($adaylar, fn($x) => $x !== null && $x !== '')));
         return count($adaylar) === 1 ? $adaylar[0] : null;
     };
     if (preg_match_all('/\bIHR\d{13}\b/', $metin, $m)) { $x = $tek($m[0]); if ($x !== null) $out['no'] = $x; }
-    if (preg_match_all('/(?:Fatura\s*Tarihi|D[üu]zenlenme\s*Tarihi|Invoice\s*Date)[^0-9]{0,12}(\d{1,2}[.\/\-]\d{1,2}[.\/\-]\d{4})/iu', $metin, $m)) {
-        $adaylar = array_map(fn($d) => siparis_tarih_coz(str_replace('-', '.', $d)), $m[1]);
+    if (preg_match_all('/(?:Fatura\s*Tarihi|D[üu]zenlenme\s*Tarihi|Invoice\s*Date)[^0-9]{0,12}(\d{1,2}\s*[.\/\-]\s*\d{1,2}\s*[.\/\-]\s*\d{4})/iu', $metin, $m)) {   // tarayıcı çıktısında "03- 10- 2026"
+        $adaylar = array_map(fn($d) => siparis_tarih_coz(str_replace('-', '.', (string)preg_replace('/\s+/', '', $d))), $m[1]);
         $x = $tek($adaylar); if ($x !== null) $out['tarih'] = $x;
     }
     $say = '(\d[\d.,]*\d|\d)';                                   // sayı AYRAÇLARIYLA BÜTÜN yakalanır (kesilmez), sonra ondalik_coz ile çözülür
-    if (preg_match_all('/Birim\s*Fiyat[ıi]?[^0-9]{0,25}' . $say . '/iu', $metin, $m)) {
-        $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, false); return $x !== null && $x > 0 && $x < 1000 ? siparis_inv_fiyat_metin($x) : null; }, $m[1]);
+    $fiyatAd = [];
+    $fiyatNet = [];
+    if (preg_match_all('/Birim\s*Fiyat[ıi]?[^0-9]{0,25}' . $say . '/iu', $metin, $m)) array_push($fiyatAd, ...$m[1]);
+    // e-fatura kalem satırı: "<miktar> KG <birim fiyat> EUR" (tarayıcı çıktısında etiketle sayı birbirinden uzak olabilir)
+    if (preg_match_all('/(\d[\d.,]*)\s*KG\s+(\d+[.,]\d{2,4})\s*(?:EUR|USD|GBP|€)/iu', $metin, $m, PREG_SET_ORDER)) {
+        foreach ($m as $r) { $fiyatNet[] = $r[1]; $fiyatAd[] = $r[2]; }
+    }
+    if ($fiyatAd) {
+        $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, false); return $x !== null && $x > 0 && $x < 1000 ? siparis_inv_fiyat_metin($x) : null; }, $fiyatAd);
         $x = $tek($adaylar); if ($x !== null) $out['fiyat'] = $x;
+    }
+    // Ağırlıklar: net = kalem miktarı (KG), brüt = "BRÜT 21300 KG" — invoice e-fatura/beyannameyle TUTMALI (PKL toplamından farklı olabilir)
+    if ($fiyatNet) {
+        $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, true); return $x !== null && $x > 0 && $x < 1e7 && abs($x - round($x)) < 1e-9 ? (string)(int)round($x) : null; }, $fiyatNet);
+        $x = $tek($adaylar); if ($x !== null) $out['net_kg'] = $x;
+    }
+    if (preg_match_all('/BR[ÜU]T\s*(\d[\d.,]*)\s*KG/iu', $metin, $m)) {
+        $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, true); return $x !== null && $x > 0 && $x < 1e7 && abs($x - round($x)) < 1e-9 ? (string)(int)round($x) : null; }, $m[1]);
+        $x = $tek($adaylar); if ($x !== null) $out['brut_kg'] = $x;
     }
     // İskonto: YALNIZ "%" işaretli ya da "Oran" etiketli ve 0–100 aralığında net değer. "0,04" gibi belirsiz (oran mı yüzde mi) değer ÖN-DOLDURULMAZ.
     $isk = [];
@@ -827,7 +844,19 @@ function siparis_inv_efatura_alanlar(string $metin): array
         $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, false); return $x !== null && $x >= 0 && $x <= 100 ? (string)round($x, 2) : null; }, $isk);
         $x = $tek($adaylar); if ($x !== null) $out['iskonto'] = $x;
     }
-    if (preg_match_all('/(?:[ÖO]denecek\s*Tutar|Vergiler\s*Dahil\s*Toplam(?:\s*Tutar)?|Genel\s*Toplam|Total)[^0-9]{0,25}' . $say . '/iu', $metin, $m)) {
+    // Oran yazmıyorsa (e-faturada yalnız "Toplam İskonto 997,36 EUR" tutarı var): oran = iskonto / mal tutarı — YALNIZ döviz (TL değil) tutarlardan ve sonuç
+    // temiz (en çok 2 ondalıkta tam) çıkıyorsa; aksi hâlde ÖN-DOLDURULMAZ.
+    if (!isset($out['iskonto'])
+        && preg_match_all('/Mal\s*\/\s*Hizmet\s*Toplam\s*Tutar[ıi]\s*' . $say . '\s*(?:EUR|USD|GBP|€)/iu', $metin, $mt)
+        && preg_match_all('/Toplam\s*[İI]skonto\s*' . $say . '\s*(?:EUR|USD|GBP|€)/iu', $metin, $mi)) {
+        $t = array_values(array_unique(array_map(fn($f) => siparis_inv_ondalik_coz($f, true), $mt[1]), SORT_REGULAR));
+        $i = array_values(array_unique(array_map(fn($f) => siparis_inv_ondalik_coz($f, true), $mi[1]), SORT_REGULAR));
+        if (count($t) === 1 && count($i) === 1 && $t[0] > 0 && $i[0] > 0 && $i[0] < $t[0]) {
+            $aday = round($i[0] / $t[0] * 100, 2);                                        // sonuç, iskonto TUTARINI kuruşu kuruşuna yeniden üretmeli
+            if ($aday > 0 && $aday < 100 && abs(round($t[0] * $aday / 100, 2) - $i[0]) < 0.005) $out['iskonto'] = (string)$aday;
+        }
+    }
+    if (preg_match_all('/(?:[ÖO]denecek\s*Tutar|Vergiler\s*Dahil\s*Toplam(?:\s*Tutar)?|Genel\s*Toplam|Total(?!\s*Pallet))[^0-9]{0,25}((?>\d[\d.,]*\d|\d))(?!\s*(?:TL|TRY|₺))/iu', $metin, $m)) {   // TL karşılığı (aynı etiket) dışlanır
         $adaylar = array_map(function ($f) { $x = siparis_inv_ondalik_coz($f, true); return $x !== null ? number_format($x, 2, '.', '') : null; }, $m[1]);
         $x = $tek($adaylar); if ($x !== null) $out['efatura_toplam'] = $x;
     }

@@ -209,14 +209,14 @@ render_flash();
 
       <section class="card" id="efatura" aria-labelledby="sipInvEfBas">
         <div class="card-head"><h2 id="sipInvEfBas">1. e-Fatura (isteğe bağlı)</h2></div>
-        <p class="muted">Türk e-faturası PDF’ini yüklerseniz fatura no, tarih, birim fiyat, iskonto ve toplam (metin katmanı varsa) forma yazılır; her değeri siz onaylarsınız. Görüntü hâlindeki PDF okunamaz — değerleri elle girin.</p>
+        <p class="muted">Türk e-faturası PDF’ini yüklerseniz fatura no, tarih, birim fiyat, iskonto, toplam, net ve brüt kg (metin katmanı varsa) forma yazılır; her değeri siz onaylarsınız. Faturayı portalda “Yazdır → PDF olarak kaydet” ile alırsanız metin okunur; taranmış / görüntü hâlindeki PDF okunamaz — değerleri elle girin.</p>
         <?php if ($efBelgeId > 0): ?>
           <p class="sip-inv-yuklu">Yüklü e-fatura: <a href="siparis_belge.php?id=<?= $efBelgeId ?>"><?= h($efAd) ?></a> · <a href="siparis_dosya.php?id=<?= $efBelgeId ?>&amp;dl=1">İndir</a></p>
         <?php endif; ?>
         <?php if ($metinVar === false): ?>
           <div class="sip-ok-uyari" role="status">Bu PDF görüntü olduğundan değerler okunamadı; aşağıya elle girin.</div>
         <?php elseif ($metinVar === true && $okundu): ?>
-          <div class="sip-bilgi" role="status">e-faturadan okundu — kontrol edin: <?= h(implode(', ', array_map(static fn($k) => ['no' => 'invoice no', 'tarih' => 'tarih', 'fiyat' => 'birim fiyat', 'iskonto' => 'iskonto', 'efatura_toplam' => 'toplam'][$k] ?? $k, $okundu))) ?>.</div>
+          <div class="sip-bilgi" role="status">e-faturadan okundu — kontrol edin: <?= h(implode(', ', array_map(static fn($k) => ['no' => 'invoice no', 'tarih' => 'tarih', 'fiyat' => 'birim fiyat', 'iskonto' => 'iskonto', 'efatura_toplam' => 'toplam', 'net_kg' => 'net kg', 'brut_kg' => 'brüt kg'][$k] ?? $k, $okundu))) ?>.</div>
         <?php elseif ($metinVar === true): ?>
           <div class="sip-ok-uyari" role="status">PDF’te metin var ama tanınan alan bulunamadı; değerleri elle girin.</div>
         <?php endif; ?>
