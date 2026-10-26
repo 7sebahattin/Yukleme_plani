@@ -1,0 +1,9 @@
+# GitHub Actions yapılandırması — web'den erişim tamamen kapalı (depo web köküne deploy edilir)
+Options -Indexes
+Require all denied
+
+# Apache 2.2 geriye dönük uyumluluk
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

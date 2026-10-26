@@ -155,7 +155,15 @@ ok('app.js rozeti yalnız hidden ile açıp kapatır (yeni işaretleme üretmez)
 echo "\n=== 4. Stil: açık/koyu tema, indirgenmiş hareket, mobil ===\n";
 $css = (string)file_get_contents($ROOT . '/assets/style.css');
 ok('.nav-rozet tanımlı; koyu tema karşılığı var', str_contains($css, '.nav-rozet {') && str_contains($css, 'html[data-theme="dark"] .nav-rozet'));
-$blok = substr($css, (int)strrpos($css, '/* v370: Mail Merkezi okunmamış rozeti'));
+// Yalnız v370 rozet bloğu: başlangıç yorumundan bir sonraki üst düzey bölüm yorumuna ("\n/*") kadar.
+// Dosya sonuna kadar okumak, sonraki sürümlerin geçiş/animasyon kurallarını bu bloğa sayıyordu.
+$blokBas = strrpos($css, '/* v370: Mail Merkezi okunmamış rozeti');
+$blok = '';
+if ($blokBas !== false) {
+    $blokSon = strpos($css, "\n/*", $blokBas + 1);
+    $blok = $blokSon === false ? substr($css, $blokBas) : substr($css, $blokBas, $blokSon - $blokBas);
+}
+ok('v370 rozet bloğu bulundu ve sınırlı (.nav-rozet tanımını içerir)', $blok !== '' && str_contains($blok, '.nav-rozet {') && strlen($blok) < 4000);
 ok('rozet bloğunda animasyon/geçiş yok (prefers-reduced-motion\'a ek kural gerekmez)', !str_contains($blok, 'transition') && !str_contains($blok, 'animation') && !str_contains($blok, '@keyframes'));
 ok('alt çubuk rozeti dokun halkasını --bn-dock ile çizer (koyu temada otomatik)', str_contains($blok, 'box-shadow: 0 0 0 2px var(--bn-dock)'));
 

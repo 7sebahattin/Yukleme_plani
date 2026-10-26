@@ -23,7 +23,10 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
 
 (async () => {
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => fs.existsSync(p));
-    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
+    // file:// sayfadaki fetch'i page.route() ile yakalamak TAM Chromium (yeni headless) ister: Playwright'ın
+    // varsayılanı chromium-headless-shell file:// fetch'ini route'a uğramadan reddeder ("URL scheme file is not supported").
+    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : { channel: 'chromium' })
+        .catch(() => chromium.launch({}));
     async function ac(sayfa, w, h, koyu) {
         const mobil = w < 768;
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobil, hasTouch: mobil, reducedMotion: 'reduce', colorScheme: koyu ? 'dark' : 'light' });
@@ -79,7 +82,8 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         const sira = await page.evaluate(() => [...document.querySelectorAll('#usipOvl details.usip-acc')].map(d => d.id));
         ok(tag + 'bölümler Ambalaj, Lojistik, Fiyat sırasında', sira.join(',') === 'accAmb,accLoj,accFiyat', sira.join(','));
         ok(tag + 'birim fiyat Fiyat bölümünde, Ambalaj\'da değil', await page.evaluate(() => !!document.querySelector('#accFiyat #f_fiyat') && !document.querySelector('#accAmb #f_fiyat')));
-        ok(tag + 'varsayılan: Ambalaj açık, Lojistik kapalı, Fiyat açık', await page.evaluate(() => document.getElementById('accAmb').open && !document.getElementById('accLoj').open && document.getElementById('accFiyat').open));
+        // v428 (sahip kararı): açılır bölümler HEP KAPALI başlar (assets/usip.js)
+        ok(tag + 'varsayılan: Ambalaj, Lojistik, Fiyat kapalı', await page.evaluate(() => !document.getElementById('accAmb').open && !document.getElementById('accLoj').open && !document.getElementById('accFiyat').open));
         // pm-dialog düzen kuralı: alt çubuk ekranda, gövde kayar, en alttaki alan tıklanır
         const duzen = await page.evaluate(() => {
             const d = document.querySelector('.usip-dialog').getBoundingClientRect(), f = document.querySelector('#usipFoot').getBoundingClientRect(), b = document.querySelector('.usip-dialog .pm-body');
@@ -90,7 +94,8 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         await page.locator('#l_navlun').scrollIntoViewIfNeeded();
         const tik = await page.evaluate(() => { const e = document.getElementById('l_navlun'), r = e.getBoundingClientRect(), x = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return x === e; });
         ok(tag + 'Lojistik açılınca en alttaki alan görünür+tıklanır', tik);
-        // canlı özet + kalibre ekle/çıkar
+        // canlı özet + kalibre ekle/çıkar (Ambalaj/Fiyat kapalı başlar — alanları doldurmak için aç)
+        await page.evaluate(() => { document.getElementById('accAmb').open = true; document.getElementById('accFiyat').open = true; });
         await page.fill('#f_pkasa', '60');
         ok(tag + 'palet kasa değişince özet güncellenir (540 kasa)', (await page.textContent('#s_kasa')) === '540');
         await page.click('#usipKalEkle');
@@ -117,8 +122,8 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ok(tag + 'palet cinsi: Tanımlar listesinden gelir', (await page.locator('#f_pcins ~ .usip-list .usip-opt').allTextContents()).some(t => t.includes('100x120 EPAL Palet')));
         await page.keyboard.press('Escape');
         ok(tag + 'Esc önce öneri listesini kapatır, pencere açık kalır', await gorunur(page, '#usipOvl'));
-        // eksik alan → hata, uç çağrılmaz
-        await page.fill('#f_birim', '');
+        // geçersiz alan → hata, uç çağrılmaz (v430: birim ağırlık boş bırakılabilir; doluysa > 0 olmalı)
+        await page.fill('#f_birim', '0');
         await page.click('#usipKaydet');
         ok(tag + 'eksik alanla kaydet: hata mesajı, istek gitmez', (await gorunur(page, '#usipHata')) && istekler.length === 0, JSON.stringify(istekler));
         await page.fill('#f_birim', '10,5');

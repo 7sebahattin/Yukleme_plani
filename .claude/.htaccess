@@ -1,0 +1,10 @@
+# Claude Code proje ayarları (settings.json, hooks/, skills/, agents/) — web'den erişim tamamen kapalı.
+# Depo main'e merge edilince web köküne otomatik deploy edilir; bu klasör hiçbir zaman sunulmamalı.
+Options -Indexes
+Require all denied
+
+# Apache 2.2 geriye dönük uyumluluk
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

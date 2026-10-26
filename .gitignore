@@ -1,5 +1,12 @@
 backups/
-.claude/
+# Claude Code — paylaşılan proje ayarları DEPOYA GİRER (.claude/settings.json, .claude/hooks/,
+# .claude/skills/, .claude/agents/, .claude/.htaccess). Yalnız kişisel/yerel dosyalar dışarıda kalır.
+# (.claude/ web kökünde deploy edilir; .claude/.htaccess web erişimini tamamen kapatır.)
+.claude/settings.local.json
+.claude/*.local.json
+.claude/worktrees/
+.claude/agent-memory-local/
+CLAUDE.local.md
 
 # Migration / analiz çıktıları — tek seferlik, runtime'da gerekmez
 scripts/*.sql

@@ -30,7 +30,10 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
 
 (async () => {
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => fs.existsSync(p));
-    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
+    // file:// sayfadaki fetch'i page.route() ile yakalamak TAM Chromium (yeni headless) ister: Playwright'ın
+    // varsayılanı chromium-headless-shell file:// fetch'ini route'a uğramadan reddeder ("URL scheme file is not supported").
+    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : { channel: 'chromium' })
+        .catch(() => chromium.launch({}));
     async function ac(sayfa, w, h, koyu, hazirla, opts) {
         const mobil = w < 768;
         const ctx = await browser.newContext({ viewport: { width: w, height: h }, isMobile: mobil, hasTouch: mobil, reducedMotion: 'reduce', colorScheme: koyu ? 'dark' : 'light' });
