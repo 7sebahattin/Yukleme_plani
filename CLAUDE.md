@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v445` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v446` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -32,7 +32,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `dogum_deney_lib.php` + `dogum_deney.php` (doğum tarihi biçim deneyi, admin) · `tekrar_gonder_lib.php` (Gönderilenler → Tekrar gönder, salt okunur) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_dogum_deney_smoke` · `hks_tekrar_gonder_smoke` · `hks_kisi_pencere_smoke.js` · `hks_gonderilenler_smoke.js` |
 | Hesap | `hesap` · `hesap_liste/kayit/durum/muhasebe/personel/yazdir/export/sil/dosya/dosya_sil` · `hesap_muhasebe_fis_pdf` · `hesap_config` | `hesap_calc` · `hesap_pdf` | `hesap.css` · `hesap.js` | `hesap_smoke` · `hesap_ui_smoke` · `hesap_izolasyon_smoke` · `hesap_pdf_smoke` |
 | Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
-| PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` · `ters_kart*` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`, `pdks_ters`) | `pdks.css` · `pdks.js` · `print_pdks.css` · `ters_kart.js` | `pdks_*_smoke` |
+| PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` (+ `gunluk_fis_yukle` · `_fis_onizle`) · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` · `ters_kart*` | `pdks*.php` (`pdks`, `pdks_fis` (v446), `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`, `pdks_ters`) | `pdks.css` · `pdks.js` · `print_pdks.css` · `ters_kart.js` | `pdks_*_smoke` |
 | Raporlar | `reports` · `raporlar` · `rapor_malzeme` · `rapor_yazdir` · `kantar_raporu` | `xlsx_export` | — | `rapor_malzeme_xlsx_smoke` |
 | Siparişler | `siparisler` · `siparis_view/yukle/kaydet/pkl/belge/dosya/zip/beyan_bagla/ayarlar/yazdir/cari` · `_siparis_liste` | `siparis_core` · `siparis_pdf` · `siparis_eslestir` · `siparis_pkl` · `siparis_beyan` · `siparis_yazdir` · `siparis_cari` · `siparis_evrak` | `siparis.css` · `siparis.js` · `siparis_yazdir.js` · `nav-icons/siparis.svg` · `templates/excel/pkl_v14_blank.xlsx` | `siparis_core_smoke` · `siparis_pdf_smoke` · `siparis_pkl_smoke` · `siparis_ui_smoke`(`.js`) · `siparis_gate_static_smoke` · `siparis_yazdir_smoke`(`.js`) · `siparis_pkl_mail_smoke` · `siparis_cari_smoke` |
 | Yönetim | `definitions` · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
@@ -549,6 +549,39 @@ YALNIZ admin, CSRF, audit. Migration YOK.
   `php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html` →
   `node scripts/pdks_puantaj_dialog_smoke.js` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
   `node scripts/pdks_toplu_ekle_smoke.js`.
+
+### Fiş Excel'i Yükle (v446)
+Kâğıt "İŞLETME İŞÇİ FİŞİ"nin DIŞ bir yapay zekâyla şablona dökülmüş Excel'inden fiş başına kartsız mesai kayıtları (Tam / FM-k / Yarım) + servis
+yazar. Sayfa `gunluk_fis_yukle.php` (Günlük Puantaj üst çubuğundaki "📥 Fiş Excel'i Yükle"; `nav_ptak_sayfalari()`'nda). YALNIZ admin
+(`pdks_faz8j_yetki()`), aktif depo, her POST CSRF, audit; migration/yeni yetki YOK. OCR/AI uygulamanın İÇİNDE YOK; dosya diske KAYDEDİLMEZ
+(yalnız sha256 audit'te). Ayrıntı + kullanıcı kılavuzu: `docs/FIS_EXCEL.md`.
+- **Dosyalar:** `config/pdks_fis.php` (TÜM mantık: `pdks_fis_sutunlar()` TEK sütun kaynağı · ayrıştırıcılar `say/tarih/saat/fisno_norm/metin` · `dosya_dogrula` · `oku` ·
+  `normalize` · `cavus_coz` · saf `plan/zamanla/fm_toplam_dagit/fm_tip_dagit/fm_notr` · DB'li `baglam/mevcut/durum/degerlendir/onizle` · yazma `yaz_fis/yaz` · token ·
+  `sablon_uret` · `ocr_komutu`) · `gunluk_fis_yukle.php` (sayfa) · `_fis_onizle.php` (partial, fonksiyon tanımlamaz, doğrudan 404) · `assets/pdks.css` "v446" `.fy-*`.
+- **İkinci yazma yolu YOK:** fiş = TEK `pdks_faz8j_toplu_ekle()` çağrısı; ona EKLENEN opt-in iç parametreler (yalnız kod, HTTP ucu GEÇİRMEZ — test denetler):
+  `coklu_grup` (aynı tipte çok grup; varsayılan davranış DEĞİŞMEDİ) · `yazdiktan_sonra` (callable, commit'ten ÖNCE, AYNI tx) · `audit_ek` (çekirdek anahtarlar KAZANIR;
+  `istek_id` anahtarı KULLANMA). Geri çağrı: period_ids↔plan eşlemesi + HER dönem `pdks_faz8b_donem_getir` ile sınıf doğrulaması + Yarım kararı / FM onayı
+  (`pdks_faz8b_degerlendirme_kaydet`, Tam dönemlere çağrı YOK) — uyuşmazlık = RuntimeException = tüm tx geri. Servis YALNIZ `pdks_servis_ekle` (kendi tx'i → commit SONRASI).
+  Tam/FM/Yarım hesabı kopyalanmaz: eşikler sentetik "prob" satırının sınıflandırıcıdan (`pdks_faz8b_donemleri_siniflandir`) çıktısı (`pdks_fis_baglam`).
+- **Kurallar:** giriş boşsa 08:00; Tam çıkış = giriş + `tam_dk`, FM k = giriş + `fm_bas_dk` + 60k, Yarım = Tam'ın yarısı (30 dk'ya aşağı, ≥30). FM kişileri Tam'dan düşülür,
+  Yarım'a FM yok. FM iki biçim: (a) kova sütunları 1–6 sa (kişi sayısı) · (b) "Toplam FM Saati" → `pdks_fis_fm_toplam_dagit` + `pdks_fis_fm_tip_dagit` (tamsayı aritmetiği,
+  `random_int/mt_rand/shuffle` YOK, test denetler; V1–V5 test vektörleri). (b) yalnız FM fiyatı tipler arasında NÖTR ise (`pdks_fis_fm_notr`; fixed modda "FM Kişi Sayısı" şart,
+  bilinmiyorsa fail-closed); (a)'da nötr değilse "FM Tipi" tek tip olmalı. Çift yevmiye: (b) eşiğin altında kalır (kmax), (a) uyarı. Çavuş eşleştirme: kod birincil (bulunamazsa
+  HATA, ada düşülmez), kod boşsa ad tam → " - " parçası → tam 1 aday.
+- **Tekillik/idempotency:** `istek_id = sha256('fis|'+katlanmış depo+fiş no+'|r'+rev)[0:32]` (tarih/çavuş HARİÇ); işçi yazımı `puantaj_toplu_ekle` izi, TAMAMLANMA izi audit `fis_yukle`
+  (fiş no, rev, toplu_id, istek_id TEK kez, servis_istek_id, sha256). Durumlar yeni / yarım (servis eksik → aynı dosya yeniden = `devam_tamamlandi`) / tamam (`zaten_yuklu`).
+  Düzeltme: Mesai Detayı Toplu Geri Al → Revizyon+1. Mesaide aktif dönem varsa ENGEL ("Mevcut kayıtlara EK yaz"); servis yalnız FARK (EK kapalı: hedef−tüm servis; EK açık:
+  hedef−bu fişe `[FIS no]` etiketli). Kesin hakediş her zaman hata (EK aşamaz). Yalnız geçmiş günler, ≤150 fiş, ≤2 MB, yalnız .xlsx.
+- **Önizleme = yazma:** normalize fişler oturumda 32 hex token (30 dk, kullanıcı+depo bağlı, ≤3) ile taşınır; kova/saat/sayı istemciden GELMEZ; yazarken HER ŞEY güncel DB'ye göre yeniden
+  değerlendirilir, plan hash'i önizlemedekinden farklıysa fiş YAZILMAZ ("degisti"). Seçim = masaüstü tablo ∩ mobil kart kutuları (biri ayrışırsa yazılmaz).
+- **Güvenlik:** `dosya_dogrula` PhpSpreadsheet'e girmeden: uzantı, PK, MIME, ≤100 parça, makro/externalLinks/embeddings/activeX RED, zip bombası; okuma `ReadDataOnly`, yalnız «Fişler»,
+  satır/sütun filtresi, `getCalculatedValue` YOK (formül hücresi önbellek değeri + uyarı, yoksa hata); serbest metin `pdks_fis_metin()` (denetim karakteri atılır, ilk karakter `= + - @` ise `'` önek);
+  Ham Metin / Kontrol Notu DB/audit'e YAZILMAZ; kullanıcı verisi `h()`.
+- **Şablon** (`?sablon=1`, `pdks_fis_sablon_uret`): Fişler (27 sütun, başlık adıyla eşlenir — sıra bağımsız, takma adlar) · Çavuşlar · Açıklama (OCR komutu TEK hücrede) · Örnek (okunmaz; `ORNEK-` fiş no reddedilir).
+  OCR komutundaki "YORUM KURALLARI" ("12 + 1", "N kişi : M yarım") sahibin cevabına göre güncellenecek TEK yer `pdks_fis_ocr_komutu()`.
+- **Test:** `php scripts/pdks_fis_plan_smoke.php` (saf) · `pdks_fis_xlsx_smoke.php` (gerçek xlsx turu + güvenlik) · `pdks_fis_yaz_smoke.php` (SQLite, `_pdks_fis_harness.php`; A: Faz 8J opt-in … M) ·
+  `pdks_fis_static_smoke.php` (statik + partial render) · `node scripts/pdks_fis_ui_smoke.js` (php -S + gerçek yükleme; `pdks_fis_e2e_setup/router/say.php`; `FIS_SHOT=<klasör>` ekran görüntüsü).
+  Faz 8J'ye dokunduysan `pdks_toplu_ekle/gecmis_ekle/toplu_duzelt/karisik/ters_kart/faz8j/servis_smoke` da çalıştır.
 
 ### Karışık Giriş + Otomatik Ata (v295)
 
@@ -2016,6 +2049,8 @@ canlı DB'ye ve `storage/backups/`'a dokunmaz). Yedeğe dokunduysan çalıştır
 ---
 
 ## Önemli Desenler
+
+> **Fiş Excel'i (v446):** yüklenen dosyayı diske kaydetme; okuma `ReadDataOnly`, `getCalculatedValue` YOK; Excel'den gelen serbest metni `pdks_fis_metin()` ile temizle; fiş yazmak için `pdks_faz8j_toplu_ekle` dışında yol açma.
 
 ```php
 // Tür-aware yönlendirme

@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v445');
+    define('APP_SURUM', 'v446');
 }
 
 // --- HTML kaçışı ---
@@ -257,6 +257,8 @@ function nav_ptak_sayfalari(): array {
         'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
         'mesai_degerlendirme.php', 'manuel_cikis.php',
         'cavus_donem_raporu.php',
+        // v446 Fiş Excel'i Yükle
+        'gunluk_fis_yukle.php',
         // v354 Ters Kart Takip
         'ters_kart.php', 'ters_kart_havuz.php', 'ters_kart_sayim.php', 'ters_kart_cikis.php', 'ters_kart_mutabakat.php',
     ];

@@ -2699,3 +2699,73 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 @media (max-width: 767px) {
     .isk-kaldir .isk-kaldir-neden input, .isk-kaldir .pdks-scan-input { font-size: 16px; }
 }
+
+/* ── v446 — Fiş Excel'i Yükle (gunluk_fis_yukle.php + _fis_onizle.php) ─────────
+   Yalnız EKLEME; sınıflar fy- önekli. Renkler token — koyu tema hazır. <768px kuralları yalnız fy-* içindir. */
+.fy-sayfa { min-width: 0; }
+.fy-kart-adim { margin-bottom: 16px; }
+.fy-kart-adim h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.fy-form { max-width: 560px; }
+.fy-form .form-group { margin-bottom: 12px; }
+.fy-form input[type="file"], .fy-form select { width: 100%; max-width: 100%; box-sizing: border-box; }
+.fy-komut summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.fy-komut textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.45; resize: vertical; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; }
+.fy-yonerge { color: var(--muted); font-size: .88rem; margin: 10px 0; }
+.fy-kod { color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.fy-ozet { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-width: 0; }
+.fy-ozet > span { padding: 2px 10px; border-radius: 999px; background: var(--surface-2); font-size: .85rem; white-space: nowrap; }
+.fy-ozet > span b { font-variant-numeric: tabular-nums; }
+.fy-ozet > .fy-dosya { margin-left: auto; color: var(--muted); font-size: .78rem; white-space: normal; overflow-wrap: anywhere; }
+.fy-rozet { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; background: var(--surface-2); color: var(--muted); }
+.fy-b-hazir { background: var(--success-soft); color: var(--success); }
+.fy-b-uyari { background: var(--warn-soft); color: var(--text); }
+.fy-b-engel { background: var(--warn-soft); color: var(--danger); }
+.fy-b-hata { background: var(--danger-soft); color: var(--danger); }
+.fy-b-zaten { background: var(--surface-2); color: var(--muted); }
+.fy-b-devam { background: var(--primary-soft); color: var(--primary); }
+.fy-ozet > .fy-b-hazir { color: var(--success); }
+.fy-ozet > .fy-b-hata { color: var(--danger); }
+.fy-onay { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px 10px; margin: 0 0 12px; min-width: 0; }
+.fy-onay legend { font-weight: 700; padding: 0 6px; }
+.fy-onay label { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; line-height: 1.35; }
+.fy-onay input[type="checkbox"], .fy-secim-bar input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; }
+.fy-secim-bar { margin: 4px 0 8px; }
+.fy-secim-bar label { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.fy-tablo { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.fy-tablo th { text-align: left; padding: 8px 10px; background: var(--surface-2); border-bottom: 2px solid var(--border-strong); white-space: nowrap; }
+.fy-tablo td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.fy-tablo small { color: var(--muted); }
+.fy-tablo td:nth-child(2) { white-space: nowrap; }
+.fy-tablo td:nth-child(5) { min-width: 240px; }
+.fy-tablo td:nth-child(6) { min-width: 170px; }
+.fy-tablo tr.fy-s-hata td { background: var(--danger-soft); }
+.fy-tablo tr.fy-s-engel td, .fy-tablo tr.fy-s-onay td { background: var(--warn-soft); }
+.fy-tablo tr.fy-s-zaten td { opacity: .65; }
+.fy-grup { margin: 0 0 4px; padding-left: 16px; }
+.fy-grup li { margin: 1px 0; }
+.fy-not { margin-top: 5px; padding: 4px 8px; border-radius: var(--radius-sm); font-size: .82rem; line-height: 1.35; overflow-wrap: anywhere; }
+.fy-not-hata { background: var(--danger-soft); color: var(--danger); }
+.fy-not-engel { background: var(--warn-soft); color: var(--text); font-weight: 600; }
+.fy-not-uyari { background: var(--warn-soft); color: var(--text); }
+.fy-ham { margin-top: 5px; font-size: .82rem; }
+.fy-ham summary { cursor: pointer; color: var(--muted); }
+.fy-eylem { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 8px; }
+.fy-eylem .btn:disabled { opacity: .5; cursor: not-allowed; }
+.fy-vazgec { margin: 0 0 16px; }
+.fy-kartlar { display: grid; gap: 10px; }
+.fy-kart { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--card); min-width: 0; }
+.fy-kart.fy-s-hata { border-color: var(--danger); }
+.fy-kart.fy-s-engel, .fy-kart.fy-s-onay { border-color: var(--warn); }
+.fy-kart.fy-s-zaten { opacity: .7; }
+.fy-kart-ust { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fy-kart-ust .fy-rozet { margin-left: auto; }
+.fy-kart-sec { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -8px 0 -8px -8px; }
+.fy-kart-sec input { width: 22px; height: 22px; }
+.fy-dl { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 8px 0 0; font-size: .88rem; }
+.fy-dl dt { color: var(--muted); }
+.fy-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+    .fy-ozet > .fy-dosya { margin-left: 0; width: 100%; }
+    .fy-form input[type="file"], .fy-form select, .fy-komut textarea { font-size: 16px; }
+    .fy-eylem .btn { flex: 1 1 100%; min-height: 44px; }
+}

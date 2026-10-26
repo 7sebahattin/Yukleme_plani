@@ -94,6 +94,7 @@ declare -A PHP_HARIC=(
 #   mail_ui_smoke.js ................. MAIL_UI_OUT=<tmp> php scripts/mail_ui_render.php  (test de MAIL_UI_OUT ile)
 #   pdks_cavus_fiyat_smoke.js ........ CAVUS_FIYAT_SENARYO=dolu|bos pdks_cavus_fiyat_render.php > _test_cavus_fiyat[_bos].html
 #   pdks_cavus_sure_e2e.js ........... -  (kendi router'ı + dosya SQLite)
+#   pdks_fis_ui_smoke.js ............. -  (kendi router'ı + dosya SQLite: pdks_fis_e2e_setup/router/say.php)
 #   pdks_gecmis_ekle_smoke.js ........ -  (render'ı kendisi)
 #   pdks_geri_ptak_smoke.js .......... PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun ... > _test_puantaj_liste.html
 #   pdks_karisik_smoke.js ............ pdks_ortak_cikis_render.php > _test_ortak_cikis.html + pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html

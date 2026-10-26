@@ -183,6 +183,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <?php if ($ekleYetkili): ?>
         <button type="button" class="btn btn-primary" onclick="pdksPuantajDialogAc('ekle')"><?= $ekleGecmisGun ? '➕ Geçmişe Dönük Çalışma Ekle' : '➕ Çalışma Ekle' ?></button>
         <button type="button" class="btn" onclick="pdksPuantajDialogAc('toplu')">👥 Toplu İşlem</button>
+        <a href="gunluk_fis_yukle.php" class="btn">📥 Fiş Excel'i Yükle</a>
         <?php endif; ?>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
