@@ -55,6 +55,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
           <?= sipui_navlun_html($r) ?>
           <?php if ((string)$r['nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes"><?= h((string)$r['nakliyeci']) ?></div>
           <?php elseif ((string)$r['planlanan_nakliyeci'] !== ''): ?><div class="sip-soluk sip-kes" title="Planlanan nakliyeci"><?= h((string)$r['planlanan_nakliyeci']) ?></div><?php endif; ?>
+          <?php $__tel = trim((string)($r['sofor_telefon'] ?? '')); if ($__tel !== ''): ?><div class="sip-soluk sip-kes sip-sofor-tel" title="Şoför telefonu">📞 <?= h($__tel) ?></div><?php endif; ?>
         </td>
         <td class="sip-gumruk-hucre"><?php $__gm = trim((string)($r['yurtici_gumruk'] ?? '')); if ($__gm !== ''): ?><span class="sip-gumruk" title="<?= h($__gm) ?>"><?= h($__gm) ?></span><?php endif; ?></td>
         <td class="num nowrap"><?= h(sipui_sayi($r['toplam_palet'])) ?> / <?= h(sipui_sayi($r['toplam_koli'])) ?></td>
@@ -105,6 +106,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
         ?>
         <?= sipui_tur_html($r, $sec_parti, false) ?>
         <?= sipui_navlun_html($r) ?>
+        <?php $__tel = trim((string)($r['sofor_telefon'] ?? '')); if ($__tel !== ''): ?><div class="sip-soluk sip-sofor-tel">Şoför tel: <?= h($__tel) ?></div><?php endif; ?>
         <?php $__ul = siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null); if ($__ul !== ''): ?><div class="sip-ulke sip-ulke--kart">Alıcı ülke: <?= h($__ul) ?></div><?php endif; ?>
         <?php $__gm = trim((string)($r['yurtici_gumruk'] ?? '')); if ($__gm !== ''): ?><div class="sip-gumruk sip-gumruk--kart">Yurt içi gümrük: <?= h($__gm) ?></div><?php endif; ?>
       </div>
