@@ -403,6 +403,7 @@ function sipui_olay_etiketleri(): array
         'evrak_gonderildi' => ['📦', 'Evrak takımı gönderildi olarak işaretlendi'],
         'beyan_baglandi' => ['🏛', 'Beyan bağlandı'], 'beyan_kaldirildi' => ['🏛', 'Beyan bağı kaldırıldı'], 'geri_getirildi' => ['♻', 'Sevkiyat geri getirildi'],
         'silindi' => ['🗑', 'Sevkiyat silindi'], 'uyari' => ['⚠', 'Uyarı'],
+        'invoice_uretildi' => ['🧾', 'Invoice üretildi'],
     ];
 }
 

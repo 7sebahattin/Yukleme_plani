@@ -182,8 +182,9 @@ function siparis_inv_fiyat_metin(float $f): string
 /**
  * Formdan gelen girdiyi doğrular/normalleştirir. Tarih Y-m-d (gg.aa.yyyy de kabul); birim fiyat 0'dan büyük, < 1000, ≤ 4 ondalık
  * (TEK ayraç HEP ondalık — "1.370" 1,37 değil 1.370; çift ayraçta son ayraç ondalık); iskonto 0–100 (boş = 0); e-fatura toplamı
- * isteğe bağlı (tutar kuralı: "12.500" binlik). Hatalar alan anahtarlı.
- * @return array{ok:bool,veri:array{no:string,tarih:string,fiyat:string,iskonto:float,efatura_toplam:string},hata:array<string,string>}
+ * isteğe bağlı (tutar kuralı: "12.500" binlik). net_kg / brut_kg (v442b) isteğe bağlı TAM SAYI kg override'ıdır (boş = PKL toplamı;
+ * "18.200" = 18200); PKL toplamı e-fatura / beyannameden farklıysa kullanıcı fatura değerini girer. Hatalar alan anahtarlı.
+ * @return array{ok:bool,veri:array{no:string,tarih:string,fiyat:string,iskonto:float,efatura_toplam:string,net_kg:int|string,brut_kg:int|string},hata:array<string,string>}
  */
 function siparis_inv_girdi_temizle(array $post): array
 {
@@ -216,7 +217,35 @@ function siparis_inv_girdi_temizle(array $post): array
         if ($x === null || $x < 0 || $x >= 1e10) $hata['efatura_toplam'] = 'E-fatura toplamı geçersiz.';
         else $ef = number_format($x, 2, '.', '');
     }
-    return ['ok' => $hata === [], 'veri' => ['no' => $no, 'tarih' => $tarih ?? '', 'fiyat' => $fiyatS, 'iskonto' => $isk, 'efatura_toplam' => $ef], 'hata' => $hata];
+    $kg = ['net_kg' => '', 'brut_kg' => ''];
+    foreach (['net_kg' => 'Net ağırlık', 'brut_kg' => 'Brüt ağırlık'] as $a => $et) {
+        if (!isset($post[$a]) || trim((string)(is_scalar($post[$a]) ? $post[$a] : '')) === '') continue;
+        $x = siparis_inv_ondalik_coz($post[$a], true);
+        if ($x === null || $x < 1 || $x > 99999999 || abs($x - round($x)) > 1e-9) $hata[$a] = $et . ' tam sayı kg olmalıdır (boş bırakırsanız PKL toplamı kullanılır).';
+        else $kg[$a] = (int)round($x);
+    }
+    return ['ok' => $hata === [], 'veri' => ['no' => $no, 'tarih' => $tarih ?? '', 'fiyat' => $fiyatS, 'iskonto' => $isk, 'efatura_toplam' => $ef] + $kg, 'hata' => $hata];
+}
+
+/** Kullanılan net kg: girdideki override (varsa) yoksa özetteki (PKL) net. */
+function siparis_inv_net_kullanilan(array $veri, array $ozet): float
+{
+    $o = $veri['net_kg'] ?? '';
+    return $o !== '' && $o !== null && is_numeric($o) ? (float)$o : (float)($ozet['net_kg'] ?? 0);
+}
+
+/**
+ * Özeti girdideki net / brüt override'ıyla efektif hâle getirir (HTML + hesap bunu kullanır). Aslî PKL değerleri net_pkl_kg / brut_pkl_kg'de kalır.
+ * Idempotent: ikinci çağrı aynı sonucu verir.
+ */
+function siparis_inv_ozet_etkin(array $veri, array $ozet): array
+{
+    $ozet['net_pkl_kg'] = (float)($ozet['net_pkl_kg'] ?? $ozet['net_kg'] ?? 0);
+    $ozet['brut_pkl_kg'] = (float)($ozet['brut_pkl_kg'] ?? $ozet['brut_kg'] ?? 0);
+    $ozet['net_kg'] = siparis_inv_net_kullanilan($veri, ['net_kg' => $ozet['net_pkl_kg']]);
+    $b = $veri['brut_kg'] ?? '';
+    $ozet['brut_kg'] = $b !== '' && $b !== null && is_numeric($b) ? (float)$b : $ozet['brut_pkl_kg'];
+    return $ozet;
 }
 
 /**
@@ -226,7 +255,7 @@ function siparis_inv_girdi_temizle(array $post): array
  */
 function siparis_inv_hesapla(array $veri, array $ozet): array
 {
-    $netMg = (int)round((float)($ozet['net_kg'] ?? 0) * 1000);                      // gram
+    $netMg = (int)round(siparis_inv_net_kullanilan($veri, $ozet) * 1000);           // gram (girdideki net_kg override'ı varsa o)
     $fiyat = siparis_inv_ondalik_coz($veri['fiyat'] ?? 0, false) ?? 0.0;
     $fiyat1e4 = (int)round($fiyat * 10000);
     $tutarK = intdiv($netMg * $fiyat1e4 + 50000, 100000);                           // gram × (€/kg ×1e4) = €×1e7 → kuruş (÷1e5)
@@ -350,7 +379,7 @@ function siparis_inv_varsayilan(PDO $pdo, array $sev): array
 {
     $sid = (int)($sev['id'] ?? 0);
     $ayar = siparis_inv_ayar_oku($pdo);
-    $girdi = ['no' => '', 'tarih' => date('Y-m-d'), 'fiyat' => '', 'iskonto' => $ayar['iskonto_varsayilan'], 'efatura_toplam' => ''];
+    $girdi = ['no' => '', 'tarih' => date('Y-m-d'), 'fiyat' => '', 'iskonto' => $ayar['iskonto_varsayilan'], 'efatura_toplam' => '', 'net_kg' => '', 'brut_kg' => ''];
     $kayitli = $sid > 0 ? siparis_inv_girdi_oku($pdo, $sid) : [];
     foreach (array_keys($girdi) as $k) if (isset($kayitli[$k]) && is_scalar($kayitli[$k])) $girdi[$k] = $kayitli[$k];
     $notlar = [];
@@ -365,6 +394,7 @@ function siparis_inv_varsayilan(PDO $pdo, array $sev): array
             'aciklama' => trim(siparis_inv_urun_ad($pkl['urun'] !== '' ? $pkl['urun'] : $kt['urun']) . ' ' . siparis_inv_kalibre_aralik($pkl['kalibreler'])),
             'harvest' => $pkl['harvest'], 'incoterms_pkl' => $pkl['incoterms'], 'plaka' => $pkl['plaka'] !== '' ? $pkl['plaka'] : $plakaSev,
             'paket' => $pkl['paket'] !== '' ? strtoupper($pkl['paket']) : 'CARTON BOXES', 'kaynak' => 'pkl',
+            'net_nominal_kg' => (float)($kt['net'] ?? 0),
         ];
     } else {
         $pr = $sid > 0 ? $pdo->prepare('SELECT belge_no, sezon FROM siparis_pkl WHERE sevkiyat_id = ?') : null;
@@ -377,6 +407,7 @@ function siparis_inv_varsayilan(PDO $pdo, array $sev): array
             'aciklama' => trim(siparis_inv_urun_ad($kt['urun']) . ' ' . siparis_inv_kalibre_aralik($kt['kalibreler'])),
             'harvest' => (string)($pk['sezon'] ?? '') !== '' ? (string)$pk['sezon'] : siparis_sezon($sev['yukleme_tarihi'] ?? null),
             'incoterms_pkl' => (string)($sev['incoterm'] ?? ''), 'plaka' => $plakaSev, 'paket' => 'CARTON BOXES', 'kaynak' => 'kalem',
+            'net_nominal_kg' => (float)($kt['net'] ?? 0),
         ];
     }
     return ['girdi' => $girdi, 'ozet' => $ozet, 'notlar' => $notlar];
@@ -403,9 +434,20 @@ function siparis_inv_kontrol(PDO $pdo, array $sev, array $veri, array $ozet, arr
     if (!isset($t['hata']['no']) && $t['veri']['no'] !== '' && !preg_match('/^IHR\d{13}$/', $t['veri']['no'])) {
         $ekle('uyari', 'no_bicim', 'Invoice numarası e-fatura biçiminde değil (IHR + 13 rakam bekleniyor) — doğru yazıldığından emin olun.');
     }
-    if ((float)($ozet['net_kg'] ?? 0) <= 0) $ekle('hata', 'net_yok', 'Net kg 0 — PKL\'de net ağırlık (N sütunu) doldurulmuş olmalıdır.');
+    $e = siparis_inv_ozet_etkin($t['veri'], $ozet);                      // $ozet = PKL özeti; e = girdideki override'larla efektif
+    $netPkl = (float)$e['net_pkl_kg']; $netKul = (float)$e['net_kg'];
+    $kg = fn(float $x): string => number_format($x, 0, ',', '.');
+    if ($netKul <= 0) $ekle('hata', 'net_yok', 'Net kg 0 — PKL\'de net ağırlık (N sütunu) doldurulmuş olmalıdır ya da net kg elle girilmelidir.');
     if (($ozet['kaynak'] ?? '') !== 'pkl') $ekle('uyari', 'pkl_yok', 'PKL yok: palet / koli / kalibre sevkiyat kalemlerinden, net kg tahmini alındı; brüt kg bilinmiyor. Önce PKL üretin.');
-    elseif ((float)($ozet['brut_kg'] ?? 0) < (float)($ozet['net_kg'] ?? 0)) $ekle('hata', 'brut_net', 'PKL brüt ağırlığı net ağırlıktan küçük — PKL\'i kontrol edin.');
+    if ((float)$e['brut_kg'] > 0 && (float)$e['brut_kg'] < $netKul) {
+        $ekle('hata', 'brut_net', (($ozet['kaynak'] ?? '') === 'pkl' && $t['veri']['net_kg'] === '' && $t['veri']['brut_kg'] === '' ? 'PKL brüt ağırlığı net ağırlıktan küçük — PKL\'i kontrol edin.' : 'Brüt ağırlık (' . $kg((float)$e['brut_kg']) . ' kg) net ağırlıktan (' . $kg($netKul) . ' kg) küçük olamaz.'));
+    }
+    if ($t['veri']['net_kg'] !== '' && abs($netKul - $netPkl) > 0.0005) {
+        $ekle('bilgi', 'net_elle', 'Net ağırlık PKL\'den farklı: elle girildi (' . $kg($netKul) . ' kg; PKL ' . $kg($netPkl) . ' kg).');
+    }
+    if ($t['veri']['brut_kg'] !== '' && abs((float)$e['brut_kg'] - (float)$e['brut_pkl_kg']) > 0.0005) {
+        $ekle('bilgi', 'brut_elle', 'Brüt ağırlık PKL\'den farklı: elle girildi (' . $kg((float)$e['brut_kg']) . ' kg; PKL ' . $kg((float)$e['brut_pkl_kg']) . ' kg).');
+    }
     if ((int)($ozet['palet'] ?? 0) <= 0 || (int)($ozet['koli'] ?? 0) <= 0) $ekle('hata', 'palet_koli', 'Palet / koli sayısı bulunamadı.');
     if (trim((string)($ozet['aciklama'] ?? '')) === '') $ekle('uyari', 'aciklama_bos', 'Ürün açıklaması boş — PKL\'de Product sütunu dolu olmalıdır.');
 
@@ -414,13 +456,16 @@ function siparis_inv_kontrol(PDO $pdo, array $sev, array $veri, array $ozet, arr
         $kt = siparis_inv_kalem_toplam(siparis_kalemler($pdo, (int)$sev['id']));
         if ($kt['palet'] > 0 && $kt['palet'] !== (int)$ozet['palet']) $ekle('uyari', 'palet_fark', 'PKL palet sayısı (' . (int)$ozet['palet'] . ') sevkiyat kalemlerindeki toplamdan (' . $kt['palet'] . ') farklı.');
         if ($kt['koli'] > 0 && $kt['koli'] !== (int)$ozet['koli']) $ekle('uyari', 'koli_fark', 'PKL koli sayısı (' . (int)$ozet['koli'] . ') sevkiyat kalemlerindeki toplamdan (' . $kt['koli'] . ') farklı.');
-        if ($kt['net'] !== null && $kt['net'] > 0 && abs($kt['net'] - (float)$ozet['net_kg']) / $kt['net'] > 0.01) {
-            $ekle('uyari', 'net_fark', 'PKL net kg (' . number_format((float)$ozet['net_kg'], 0, ',', '.') . ') koli × koli içeriğinden beklenenden (' . number_format($kt['net'], 0, ',', '.') . ') %1\'den fazla farklı.');
+        // PKL net ↔ nominal net (koli × koli içeriği): e-fatura / beyanname çoğu zaman nominali kullanır; fark > %0,5 ise uyar.
+        // Kullanılan net zaten nominale (±%0,5) eşitse (kullanıcı bilinçli override etti) uyarılmaz.
+        $nom = (float)($ozet['net_nominal_kg'] ?? ($kt['net'] ?? 0));
+        if ($nom > 0 && $netPkl > 0 && abs($netPkl - $nom) / $nom > 0.005 && abs($netKul - $nom) / $nom > 0.005) {
+            $ekle('uyari', 'net_nominal', 'PKL net ' . $kg($netPkl) . ' kg, nominal ' . $kg($nom) . ' kg (koli × koli içeriği); e-fatura/beyanname hangisini kullanıyorsa onu girin.');
         }
     }
     // e-fatura toplamı çapraz kontrolü
     if ($t['ok'] || (isset($t['veri']['fiyat']) && $t['veri']['fiyat'] !== '')) {
-        $h = siparis_inv_hesapla($t['veri'], $ozet);
+        $h = siparis_inv_hesapla($t['veri'], $ozet);                 // net override'ı veride
         if ($t['veri']['efatura_toplam'] !== '') {
             $ef = (int)round((float)$t['veri']['efatura_toplam'] * 100);
             if ($ef !== $h['toplam_kurus']) {
@@ -489,6 +534,7 @@ function siparis_inv_tarih_goster(string $ymd): string
  */
 function siparis_inv_html(array $veri, array $ozet, array $ayar, array $hesap): string
 {
+    $ozet = siparis_inv_ozet_etkin($veri, $ozet);                     // girdideki net / brüt override'ı
     $rex = trim((string)($ayar['rex_no'] ?? ''));
     $rexGoster = $rex !== '' ? h($rex) : '______';
     $kgG = fn($v): string => (float)$v > 0 ? number_format((float)$v, 0, ',', '.') . ' KG' : '—';
@@ -633,7 +679,7 @@ function siparis_inv_uret(PDO $pdo, int $sid, int $uid, array $veri, bool $eksik
         $veri = $t['veri'];
         $ayar = siparis_inv_ayar_oku($pdo);
         $v = siparis_inv_varsayilan($pdo, $sev);
-        $ozet = $v['ozet'];
+        $ozet = $v['ozet'];                                          // PKL özeti (kontrol karşılaştırır)
         $kontrol = siparis_inv_kontrol($pdo, $sev, $veri, $ozet, $ayar);
         $sonuc['uyarilar'] = $kontrol;
         $hatalar = array_values(array_filter($kontrol, fn($x) => $x['seviye'] === 'hata'));
@@ -641,6 +687,7 @@ function siparis_inv_uret(PDO $pdo, int $sid, int $uid, array $veri, bool $eksik
         $eksik = siparis_inv_ayar_eksikler($ayar);
         if ($eksik && !$eksikIzin) throw new RuntimeException('Invoice ayarında eksik alan var (' . implode(', ', $eksik) . ') — ayarı tamamlayın ya da "eksik alanlarla oluştur"u onaylayın.');
 
+        $ozet = siparis_inv_ozet_etkin($veri, $ozet);                 // net / brüt override'ı uygulanmış
         $hesap = siparis_inv_hesapla($veri, $ozet);
         $pdf = siparis_inv_pdf(siparis_inv_html($veri, $ozet, $ayar, $hesap));
         if (strncmp($pdf, '%PDF', 4) !== 0) throw new RuntimeException('PDF üretilemedi.');

@@ -139,7 +139,7 @@ $sev0 = siparis_sevkiyat($db, $sidPkl);
 $v0 = siparis_inv_varsayilan($db, $sev0);
 ok('PKL yokken: kaynak "kalem", brüt 0, uyarı notu, palet 26 / koli 5200 / net 18.200 (koli × 3,5)', $v0['ozet']['kaynak'] === 'kalem' && $v0['ozet']['palet'] === 26 && $v0['ozet']['koli'] === 5200
     && (float)$v0['ozet']['brut_kg'] === 0.0 && (float)$v0['ozet']['net_kg'] === 18200.0 && count($v0['notlar']) === 1 && str_contains($v0['notlar'][0], 'PKL yok'), json_encode($v0));
-ok('varsayılan girdi: tarih bugün, iskonto ayar varsayılanı (4), no/fiyat boş', $v0['girdi'] === ['no' => '', 'tarih' => date('Y-m-d'), 'fiyat' => '', 'iskonto' => 4.0, 'efatura_toplam' => '']);
+ok('varsayılan girdi: tarih bugün, iskonto ayar varsayılanı (4), no/fiyat boş', $v0['girdi'] === ['no' => '', 'tarih' => date('Y-m-d'), 'fiyat' => '', 'iskonto' => 4.0, 'efatura_toplam' => '', 'net_kg' => '', 'brut_kg' => '']);
 $d = siparis_pkl_durum($db, $sidPkl)['veri'];
 foreach ($d['bloklar'] as &$bl) { $bl['M'] = 820; $bl['N'] = 700; } unset($bl);
 ok('PKL taslağı (brüt 820 / net 700 palet başına) kaydedildi', siparis_pkl_kaydet_taslak($db, $sidPkl, $d, [], 1)['ok']);
@@ -182,13 +182,53 @@ ok('net kg 0 → HATA', ($kod($k)['net_yok'] ?? '') === 'hata');
 $k = siparis_inv_kontrol($db, $sevP, $gv, ['brut_kg' => 100.0] + $o, $ayar);
 ok('brüt < net → HATA', ($kod($k)['brut_net'] ?? '') === 'hata');
 $k = siparis_inv_kontrol($db, $sevP, $gv, ['net_kg' => 15000.0] + $o, $ayar);
-ok('PKL net ≠ koli × içerik (> %1) → uyarı', ($kod($k)['net_fark'] ?? '') === 'uyari');
+ok('PKL net ≠ nominal (koli × içerik, > %0,5) → uyarı net_nominal (net_fark kalktı)', ($kod($k)['net_nominal'] ?? '') === 'uyari' && !isset($kod($k)['net_fark']));
 $k = siparis_inv_kontrol($db, $sevP, $gv, ['palet' => 25] + $o, $ayar);
 ok('PKL palet ≠ kalem toplamı → uyarı', ($kod($k)['palet_fark'] ?? '') === 'uyari');
 $k = siparis_inv_kontrol($db, siparis_sevkiyat($db, $sidYok), $gv, $v0['ozet'], $ayar);
 ok('PKL yok → uyarı (pkl_yok), net tahmini var → engel değil', ($kod($k)['pkl_yok'] ?? '') === 'uyari' && !array_filter($k, fn($x) => $x['seviye'] === 'hata'));
 $k = siparis_inv_kontrol($db, $sevP, $gv, $o, ['teslim' => 'INCOTERMS 2020 EXW'] + $ayar);
 ok('Incoterms aynıysa bilgi YOK', !isset($kod($k)['incoterms']));
+
+
+echo "\n=== 7b. Net / brüt override (PKL toplamı ≠ nominal) ===\n";
+// PKL: net 18.200 (= nominal); gerçek veride PKL 18.486 / brüt 20.826 iken e-fatura 18.200 / 21.300 kullanır.
+$oG = ['net_kg' => 18486.0, 'brut_kg' => 20826.0, 'net_nominal_kg' => 18200.0] + $o;
+$gvG = ['net_kg' => '', 'brut_kg' => ''] + $gv;
+unset($gvG['efatura_toplam']);
+ok('özet: net_nominal_kg = koli × koli içeriği (5.200 × 3,5 = 18.200)', (float)$o['net_nominal_kg'] === 18200.0 && (float)$v1['ozet']['net_nominal_kg'] === 18200.0 && (float)$v0['ozet']['net_nominal_kg'] === 18200.0);
+$k = siparis_inv_kontrol($db, $sevP, $gvG, $oG, $ayar);
+ok('override yok, PKL net 18.486 ≠ nominal 18.200 → net_nominal UYARI (mesaj iki rakamı da söyler)', ($kod($k)['net_nominal'] ?? '') === 'uyari'
+    && (bool)array_filter($k, fn($x) => $x['kod'] === 'net_nominal' && str_contains($x['mesaj'], '18.486') && str_contains($x['mesaj'], '18.200') && str_contains($x['mesaj'], 'hangisini kullanıyorsa')) && !isset($kod($k)['net_elle']));
+$gvO = ['net_kg' => '18.200', 'brut_kg' => '21300'] + $gvG;
+$tO = siparis_inv_girdi_temizle($gvO);
+ok('girdi: net_kg "18.200" → 18200, brüt "21300" → 21300 (tam sayı)', $tO['ok'] && $tO['veri']['net_kg'] === 18200 && $tO['veri']['brut_kg'] === 21300, json_encode($tO));
+ok('girdi: boş net/brüt → "" (PKL toplamı); ondalık / 0 / negatif / harf reddedilir', siparis_inv_girdi_temizle(['net_kg' => '', 'brut_kg' => ' '] + $gvG)['veri']['net_kg'] === ''
+    && isset(siparis_inv_girdi_temizle(['net_kg' => '18200,5'] + $gvG)['hata']['net_kg']) && isset(siparis_inv_girdi_temizle(['net_kg' => '0'] + $gvG)['hata']['net_kg'])
+    && isset(siparis_inv_girdi_temizle(['brut_kg' => '-5'] + $gvG)['hata']['brut_kg']) && isset(siparis_inv_girdi_temizle(['net_kg' => 'abc'] + $gvG)['hata']['net_kg']));
+$hO = siparis_inv_hesapla($tO['veri'], $oG);
+ok('override ile hesap: 18.200 × 1,37 = 24.934,00; %4 → 23.936,64 (PKL 18.486 DEĞİL)', $hO['tutar_kurus'] === 2493400 && $hO['toplam_kurus'] === 2393664, json_encode($hO));
+ok('override yoksa hesap PKL net\'iyle: 18.486 × 1,37 = 25.325,82', siparis_inv_hesapla($gvG, $oG)['tutar_kurus'] === 2532582);
+$k = siparis_inv_kontrol($db, $sevP, $gvO, $oG, $ayar);
+ok('override nominale eşit: net_nominal UYARI YOK; net_elle + brut_elle BİLGİ', !isset($kod($k)['net_nominal']) && ($kod($k)['net_elle'] ?? '') === 'bilgi' && ($kod($k)['brut_elle'] ?? '') === 'bilgi'
+    && !array_filter($k, fn($x) => $x['seviye'] === 'hata'), json_encode($k));
+ok('net_elle mesajı "Net ağırlık PKL\'den farklı: elle girildi"', (bool)array_filter($k, fn($x) => $x['kod'] === 'net_elle' && str_starts_with($x['mesaj'], "Net ağırlık PKL'den farklı: elle girildi")));
+$k = siparis_inv_kontrol($db, $sevP, ['net_kg' => '18486'] + $gvG, $oG, $ayar);
+ok('override = PKL net: net_elle YOK, net_nominal uyarısı sürer', !isset($kod($k)['net_elle']) && ($kod($k)['net_nominal'] ?? '') === 'uyari');
+$k = siparis_inv_kontrol($db, $sevP, ['net_kg' => '30000'] + $gvG, $oG, $ayar);
+ok('elle net, PKL brütünden büyükse HATA (brut_net)', ($kod($k)['brut_net'] ?? '') === 'hata');
+$k = siparis_inv_kontrol($db, $sevP, ['net_kg' => '18200', 'brut_kg' => '18000'] + $gvG, $oG, $ayar);
+ok('elle brüt < net → HATA', ($kod($k)['brut_net'] ?? '') === 'hata');
+$k = siparis_inv_kontrol($db, $sevP, ['net_kg' => '18200', 'efatura_toplam' => '23.936,64'] + $gvG, $oG, $ayar);
+ok('e-fatura toplamı override\'lı net ile eşleşir (efatura_fark yok)', !isset($kod($k)['efatura_fark']));
+$k = siparis_inv_kontrol($db, $sevP, ['efatura_toplam' => '23.936,64'] + $gvG, $oG, $ayar);
+ok('override yokken e-fatura toplamı PKL net\'iyle uyuşmaz → efatura_fark', ($kod($k)['efatura_fark'] ?? '') === 'uyari');
+$ozE = siparis_inv_ozet_etkin($tO['veri'], $oG);
+ok('ozet_etkin: net / brüt override, PKL değerleri net_pkl_kg / brut_pkl_kg\'de; idempotent', (float)$ozE['net_kg'] === 18200.0 && (float)$ozE['brut_kg'] === 21300.0 && (float)$ozE['net_pkl_kg'] === 18486.0
+    && (float)$ozE['brut_pkl_kg'] === 20826.0 && siparis_inv_ozet_etkin($tO['veri'], $ozE) === $ozE);
+$htmlO = siparis_inv_html($tO['veri'], $oG, $ayar, $hO);
+ok('HTML override\'ı basar: 18.200 KG / 21.300 KG / € 24.934,00 / € 23.936,64 (PKL 18.486 YOK)', str_contains($htmlO, '18.200 KG') && str_contains($htmlO, '21.300 KG') && str_contains($htmlO, '€ 24.934,00')
+    && str_contains($htmlO, '€ 23.936,64') && !str_contains($htmlO, '18.486') && !str_contains($htmlO, '20.826'));
 
 echo "\n=== 8. HTML şablonu ===\n";
 $hes = siparis_inv_hesapla($gv, $o);
@@ -291,6 +331,15 @@ ok('transaction içinde çağrılırsa istisna dışarı atılır (çağıranın
     if ($db->inTransaction()) $db->rollBack();
     return $ok;
 })());
+// net / brüt override'lı üretim: PDF override'ı basar, kayıtlı girdi taşır
+$xo = siparis_inv_uret($db, $sidPkl, 1, ['net_kg' => '15.000', 'brut_kg' => '17000', 'fiyat' => '2'] + $girdi, false);
+$po = $xo['ok'] ? siparis_inv_pdf_metin((string)siparis_dosya_yolu($db->query("SELECT * FROM siparis_belgeler WHERE id = " . (int)$xo['belge_id'])->fetch())) : '';
+ok('override\'lı üretim: PDF 15.000 KG / 17.000 KG / € 30.000,00 basar; net_elle bilgisi uyarılarda', $xo['ok'] && str_contains($po, '15.000 KG') && str_contains($po, '17.000 KG') && str_contains($po, '30.000,00')
+    && in_array('net_elle', array_column($xo['uyarilar'], 'kod'), true), json_encode($xo));
+ok('kayıtlı girdi net_kg / brut_kg taşır; varsayılan() formu doldurur', siparis_inv_durum($db, $sidPkl)['girdi']['net_kg'] === 15000 && siparis_inv_varsayilan($db, siparis_sevkiyat($db, $sidPkl))['girdi']['brut_kg'] === 17000);
+$xo2 = siparis_inv_uret($db, $sidPkl, 1, ['net_kg' => '16000', 'brut_kg' => '15000'] + $girdi, false);
+ok('elle brüt < net → üretilmez', !$xo2['ok'] && str_contains((string)$xo2['hata'], 'Brüt ağırlık'));
+siparis_inv_uret($db, $sidPkl, 1, ['fiyat' => '1,40'] + $girdi, false);          // override'sız son üretim (sonraki testler 1,40 bekler)
 // PKL'siz sevkiyat: kalem yedeğiyle üretilir (uyarı), belge no yok → dosya adında atlanır
 $xk = siparis_inv_uret($db, $sidYok, 1, $girdi, true);
 ok('PKL\'siz sevkiyat: uyarıyla üretilir; dosya adı belge no\'suz', $xk['ok'] && $xk['dosya_adi'] === 'INV-TC900011.10-05.10.2026.pdf' && in_array('pkl_yok', array_column($xk['uyarilar'], 'kod'), true), json_encode($xk));
