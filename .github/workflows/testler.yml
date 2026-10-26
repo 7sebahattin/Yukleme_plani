@@ -1,0 +1,80 @@
+# Test takımı — her PR'da ve main'e her push'ta çalışır.
+# Tek kaynak: scripts/tum_testler.sh (yerelde de aynı komut).
+# Testler bellek içi SQLite kullanır; canlı DB'ye / HKS'e / posta sunucusuna bağlanmaz.
+# vendor/ depoda commit'li olduğu için composer install YOK.
+# Depo köküne package.json EKLENMEZ (main web köküne deploy edilir) — Playwright yalnız
+# bu iş akışında, depo DIŞINDAKİ geçici bir klasöre kurulur ve NODE_PATH ile bulunur.
+name: Testler
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: testler-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    name: PHP testleri
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3, gd, mbstring, zip, intl, curl, dom, xml, xmlwriter, fileinfo, iconv, pcntl, posix
+          ini-values: memory_limit=-1, date.timezone=UTC, display_errors=Off
+          coverage: none
+          tools: none
+
+      - name: PHP testleri
+        run: bash scripts/tum_testler.sh -v
+
+  js:
+    name: Tarayıcı testleri (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PLAYWRIGHT_SURUM: '1.63.0'
+      # Tarayıcı testi "Playwright/Chromium yok — ATLANDI" derse CI'da başarısız say
+      TEST_ATLAMA_HATA: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3, gd, mbstring, zip, intl, curl, dom, xml, xmlwriter, fileinfo, iconv, pcntl, posix
+          ini-values: memory_limit=-1, date.timezone=UTC, display_errors=Off
+          coverage: none
+          tools: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Playwright kur (depo dışına)
+        run: |
+          PW_DIR="$RUNNER_TEMP/pw"
+          mkdir -p "$PW_DIR"
+          npm install --prefix "$PW_DIR" --no-save --no-audit --no-fund "playwright@${PLAYWRIGHT_SURUM}"
+          echo "NODE_PATH=$PW_DIR/node_modules" >> "$GITHUB_ENV"
+          echo "PATH=$PW_DIR/node_modules/.bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: Chromium kur
+        run: playwright install --with-deps chromium
+
+      - name: Playwright çözümlenebiliyor mu
+        working-directory: scripts
+        run: node -e "console.log('playwright', require('playwright/package.json').version)"
+
+      - name: Tarayıcı testleri
+        run: bash scripts/tum_testler.sh --yalniz-js -v
