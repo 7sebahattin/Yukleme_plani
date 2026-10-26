@@ -962,7 +962,7 @@ function siparis_po_pkl_epostalar(PDO $pdo, array $sev): array
 
 /** Varsayılan mail metin şablonları ({ad} = gönderenin adı; boş ayar → bunlar). v422: Sipariş ayarlarından değiştirilebilir. */
 const SIPARIS_PKL_GOVDE_VARSAYILAN = "Hi,\nPlease find attached the packing list.\n\nBest regards,\nAsya Fresh\n{ad}";
-const SIPARIS_EVRAK_GOVDE_VARSAYILAN = "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,\n\nAsya Fresh\n{ad}";
+const SIPARIS_EVRAK_GOVDE_VARSAYILAN = "Hi,\nDOCs are attached. Thank you.\n\nBest Regards,";
 const SIPARIS_MAIL_GOVDE_MAX = 2000;
 
 /**
