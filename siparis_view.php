@@ -254,7 +254,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
               <div class="sip-dl-satir" data-alan="<?= h($alan) ?>">
                 <dt><?= h($t['etiket']) ?></dt>
                 <dd>
-                  <span class="sip-dd-deger<?= $sev[$alan] === null || $sev[$alan] === '' ? ' sip-bos' : '' ?>"><?= h($goster($t['tip'], $sev[$alan])) ?></span>
+                  <span class="sip-dd-deger<?= $sev[$alan] === null || $sev[$alan] === '' ? ' sip-bos' : '' ?>"><?php $tel = $t['tip'] === 'telefon' ? preg_replace('~[^0-9+]~', '', (string)$sev[$alan]) : ''; ?><?php if ($tel !== '' && strlen(ltrim($tel, '+')) >= 7): ?><a class="sip-tel" href="tel:<?= h($tel) ?>"><?= h($goster($t['tip'], $sev[$alan])) ?></a><?php else: ?><?= h($goster($t['tip'], $sev[$alan])) ?><?php endif; ?></span>
                   <?= sipui_kaynak_chip($kaynak, $kilit) ?>
                   <?php if ($yaz): ?>
                     <a class="sip-edit" href="siparis_view.php?id=<?= $id ?>&amp;duzenle=<?= h($alan) ?>#bilgi" data-sip-alan="<?= sipui_json_attr($alanDuzenleVeri($alan)) ?>" title="<?= h($t['etiket']) ?> alanını düzenle">✎<span class="sip-sr"> Düzenle</span></a>

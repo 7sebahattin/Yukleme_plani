@@ -856,3 +856,6 @@ html[data-theme="dark"] .sip-dg { box-shadow: 0 0 0 2px rgba(248, 113, 113, .35)
     .sip-inv-yukle .btn { width: 100%; }
 }
 /* ==== /v442 ==== */
+
+/* v443: şoför telefonu — dokununca arama */
+.sip-dl dd .sip-tel { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
