@@ -59,6 +59,9 @@ EOF"
         'grep -n "git push origin main" docs/x.md # git push origin main'
         'mv yeni.php eski.php'
         'cp fix_brand.php /tmp/'
+        'git push --repo origin claude/x'
+        'git push --repo=origin HEAD:claude/x'
+        'mv -t /tmp yeni.php'
     )
     for k in "${izinli[@]}"; do
         GIRDI="$(json_bash "$k" "$KOK")"; calis 0 "izinli: $k" bash_koruma.sh "${E[@]}"
@@ -91,6 +94,11 @@ EOF"
         'git mv firma_eslestirme.php arsiv/firma.php'
         'mv admin_db_backup_download.php /tmp/'
         'cd scripts && git rm ../fix_brand.php'
+        'git push --repo origin HEAD:main'
+        'git push --repo=origin main'
+        'mv -t /tmp fix_brand.php'
+        'mv --target-directory=/tmp fix_brand.php'
+        'mv -t/tmp yeni.php fix_brand.php'
     )
     for k in "${engelli[@]}"; do
         GIRDI="$(json_bash "$k" "$KOK")"; calis 2 "engelli: $k" bash_koruma.sh "${E[@]}"

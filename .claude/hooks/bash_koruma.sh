@@ -134,17 +134,21 @@ gecerli_dal() { git -C "$1" symbolic-ref --short -q HEAD 2>/dev/null; }
 
 incele_push() { # $1 = git dizini, kalan = push argümanları
     local gd="$1"; shift
-    local konum=() a
+    local konum=() a repo_secenek=0
     while [ $# -gt 0 ]; do
         a="$1"; shift
         case "$a" in
             --all|--mirror) engelle "git push $a tüm dalları (main dahil) gönderir. main'e doğrudan push YASAK — PR açıp merge edin." ;;
-            --repo|-o|--push-option|--receive-pack|--exec) shift ;;
+            # --repo depoyu seçenekle verir: kalan konumsal argümanların HEPSİ refspec'tir.
+            --repo) shift; repo_secenek=1 ;;
+            --repo=*) repo_secenek=1 ;;
+            -o|--push-option|--receive-pack|--exec) shift ;;
             --) konum+=("$@"); break ;;
             -*) ;;
             *) konum+=("$a") ;;
         esac
     done
+    [ $repo_secenek -eq 1 ] && konum=("(--repo)" "${konum[@]+"${konum[@]}"}")
     local dal
     if [ ${#konum[@]} -le 1 ]; then
         dal="$(gecerli_dal "$gd")"
@@ -165,15 +169,23 @@ incele_push() { # $1 = git dizini, kalan = push argümanları
 
 incele_silme() { # $1 = komut adı, $2 = taban, kalan = argümanlar (son=mv hedefi dahil)
     local ad="$1" b="$2"; shift 2
-    local konum=() a secenek_bitti=0
-    for a in "$@"; do
+    local konum=() a secenek_bitti=0 hedef_dizin=0
+    while [ $# -gt 0 ]; do
+        a="$1"; shift
         if [ $secenek_bitti -eq 0 ]; then
-            case "$a" in --) secenek_bitti=1; continue ;; -*) continue ;; esac
+            case "$a" in
+                --) secenek_bitti=1; continue ;;
+                # mv -t DİZİN KAYNAK…: hedef seçenekle verilir, konumsalların hepsi kaynaktır.
+                -t|--target-directory) [ "$ad" = mv ] && { hedef_dizin=1; shift; }; continue ;;
+                --target-directory=*) [ "$ad" = mv ] && hedef_dizin=1; continue ;;
+                -t?*) [ "$ad" = mv ] && hedef_dizin=1; continue ;;
+                -*) continue ;;
+            esac
         fi
         konum+=("$a")
     done
-    # mv / git mv: son argüman hedeftir, kaynak değil.
-    case "$ad" in mv|"git mv") [ ${#konum[@]} -ge 2 ] && unset 'konum[${#konum[@]}-1]' ;; esac
+    # mv / git mv: (-t yoksa) son argüman hedeftir, kaynak değil.
+    case "$ad" in mv|"git mv") [ $hedef_dizin -eq 0 ] && [ ${#konum[@]} -ge 2 ] && unset 'konum[${#konum[@]}-1]' ;; esac
     for a in "${konum[@]+"${konum[@]}"}"; do
         ESLESEN=""
         if tombstone_mu "$a" "$b"; then
