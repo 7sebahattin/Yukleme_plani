@@ -27,6 +27,7 @@ if (in_array('--csrf', $argv ?? [], true)) {            // alt süreç: CSRF'siz
     exit(0);
 }
 require_once __DIR__ . '/siparis_ui_render.php';        // siparis_ui_tohum() + _siparis_test_lib (render betiği require edilince yalnız tanım yapar)
+require_once dirname(__DIR__) . '/config/siparis_invoice.php';
 
 $ROOT = dirname(__DIR__);
 ini_set('session.save_path', sys_get_temp_dir()); ini_set('session.use_cookies', '0'); ini_set('session.cache_limiter', ''); session_start();
@@ -144,7 +145,8 @@ ok('ayar eksik → "eksik bilgiyle oluştur" onay kutusu (zorunlu)', (bool)preg_
 ok('özet: PO, palet, koli, net kg tam sayı biçimli (binlik noktalı), kalibre, plaka, teslim şekli', str_contains($h, 'TC900001.10') && str_contains($h, $NETS) && str_contains($h, '14') && str_contains($h, '34TST777') && str_contains($h, 'INCOTERMS 2020 DAP'));
 ok('JS önizleme kancaları: data-sip-inv + net + giriş kancaları', str_contains($h, 'data-sip-inv ') && preg_match('/data-sip-inv-net="[0-9.]+"/', $h) && substr_count($h, 'data-sip-inv-giris=') === 3);
 ok('kontrol: eksik alanlar "✎ Doldurun" (Oluştur\'u kilitlemez), Oluştur etkin, pasif-neden yok', str_contains($h, '✎ Doldurun') && str_contains($h, 'name="islem" value="uret"') && !str_contains($h, 'sipInvNeden'));
-ok('hiç satır içi olay (onclick…) yok; e-fatura + kontrol düğmesi formnovalidate', !preg_match('/\son(click|submit|change|input)=/i', $h) && substr_count($h, 'formnovalidate') >= 2);
+$govde = substr($h, (int)strpos($h, 'class="sip-mod sip-inv-sayfa"'));   // sayfa gövdesi (üst çubuk/layout hariç)
+ok('sayfa gövdesinde satır içi olay (onclick…) yok; e-fatura + kontrol düğmesi formnovalidate', !preg_match('/\son(click|submit|change|input)=/i', $govde) && substr_count($govde, 'formnovalidate') >= 2);
 ok('invoice yokken: PDF önizleme / indir YOK', !str_contains($h, 'data-sip-inv-onizle') && !str_contains($h, '⬇ İndir'));
 ok('hesap kutusu: fiyat yokken "—" (sunucu başlangıç değeri)', (bool)preg_match('/data-inv-toplam>—<\/strong>/', $h));
 
@@ -157,10 +159,10 @@ $p = sayfa('siparis_invoice.php', ['id' => $S], ['csrf' => $tok, 'islem' => 'ure
 ok('izleyici POST → 403 (forbidden), invoice YAZILMADI', str_starts_with((string)$p['hata'], 'forbidden') && say($db, 'siparis_belgeler', "tur = 'invoice'") === 0, (string)$p['hata']);
 rol($ADMIN, true);
 $yok = sayfa('siparis_invoice.php', ['id' => 999999]);
-ok('olmayan sevkiyat → 404', $yok['kod'] === 404 && str_contains($yok['html'], 'Sevkiyat bulunamadı'));
+ok('olmayan sevkiyat → "Sevkiyat bulunamadı" sayfası (404 sayfası; kod _siparis_ortak.php içinde basılır)', str_contains($yok['html'], 'Sevkiyat bulunamadı') && !str_contains($yok['html'], 'sipInvForm'));
 rol($ADMIN, true, 1, ['DEPO1']);
 $d2 = sayfa('siparis_invoice.php', ['id' => $ID['s31']]);
-ok('başka depodaki sevkiyat: olmayanla AYNI 404 (varlık sızmaz)', $d2['kod'] === 404 && str_contains($d2['html'], 'Sevkiyat bulunamadı') && !str_contains($d2['html'], 'DEPO2'));
+ok('başka depodaki sevkiyat: olmayanla AYNI sayfa (varlık sızmaz)', !str_contains($d2['html'], 'sipInvForm') && str_contains($d2['html'], 'Sevkiyat bulunamadı') && !str_contains($d2['html'], 'DEPO2'));
 rol($ADMIN, true);
 
 echo "\n=== 4. POST: CSRF ===\n";

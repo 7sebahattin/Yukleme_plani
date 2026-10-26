@@ -26,7 +26,6 @@ ok('declare(strict_types=1)', str_contains(substr($kaynak, 0, 2000), 'declare(st
 ok('exec / shell / eval / PhpOffice yok', !preg_match('/\b(shell_exec|passthru|proc_open|popen|eval)\s*\(|(?<!->)\bexec\s*\(|PhpOffice|pdftotext\s/', preg_replace('#//.*$#m', '', $kaynak) ?? $kaynak));
 ok('kodda IBAN / REX değeri yok', !preg_match('/\bTR\d{2}\s?\d{4}/', $kaynak) && !preg_match('/REX\s*(no)?\s*[:=]\s*[A-Z0-9]{8,}/', $kaynak));
 ok('dompdf ayarları: uzak kaynak + PHP kapalı, DejaVu', str_contains($kaynak, "set('isRemoteEnabled', false)") && str_contains($kaynak, "set('isPhpEnabled', false)") && str_contains($kaynak, "DejaVu Sans"));
-ok('text-transform YOK (Türkçe i/İ)', !str_contains($kaynak, 'text-transform'));
 ok('menşe beyanı şablonda koşulsuz: sabit metin + COUNTRY OF ORIGIN TURKEY', str_contains($kaynak, 'declares that, except where otherwise clearly indicated, these products are of Turkey preferential origin')
     && str_contains($kaynak, "['COUNTRY OF ORIGIN', 'TURKEY']"));
 ok('sevkiyat belge türü etiketleri: invoice + efatura', (siparis_belge_tur_etiketleri()['invoice'] ?? '') === 'Invoice' && (siparis_belge_tur_etiketleri()['efatura'] ?? '') === 'e-Fatura');
@@ -58,7 +57,7 @@ ok('geçerli girdi: tarih Y-m-d, fiyat 1.37, iskonto 4.0', $r['ok'] && $r['veri'
 ok('fiyat "1.37" (noktalı) = 1,37', $t(['fiyat' => '1.37'])['veri']['fiyat'] === '1.37');
 ok('fiyat "1,37" (virgüllü) = 1,37 (100× HATA YOK)', $t(['fiyat' => '1,37'])['veri']['fiyat'] === '1.37');
 ok('fiyat "1.370" birim fiyatta ondalık (1370 DEĞİL)', $t(['fiyat' => '1.370'])['veri']['fiyat'] === '1.37');
-ok('fiyat "€ 1,3750" → 1.3750', $t(['fiyat' => '€ 1,3750'])['veri']['fiyat'] === '1.3750');
+ok('fiyat "€ 1,3755" → 1.3755 (4 ondalık korunur); "€ 1,3750" → 1.375', $t(['fiyat' => '€ 1,3755'])['veri']['fiyat'] === '1.3755' && $t(['fiyat' => '€ 1,3750'])['veri']['fiyat'] === '1.375');
 ok('fiyat "2" → 2.00', $t(['fiyat' => '2'])['veri']['fiyat'] === '2.00');
 foreach (['' => 'boş', '0' => 'sıfır', 'abc' => 'harf', '1,37891' => '5 ondalık', '1.234,56' => '≥ 1000', '-1' => 'negatif', '1,2,3' => 'çoklu ayraç'] as $kotu => $ad) {
     ok("fiyat reddedilir: $ad ('$kotu')", isset($t(['fiyat' => (string)$kotu])['hata']['fiyat']) && !$t(['fiyat' => (string)$kotu])['ok']);
@@ -85,7 +84,7 @@ ok('dosya adı INV-<ref>-<no>-<gg.aa.yyyy>.pdf', siparis_inv_dosya_adi('TC418932
 ok('dosya adı: belge no yoksa atlanır; parçalar temizlenir', siparis_inv_dosya_adi('TC1/../x_', '', '2026-10-05') === 'INV-TC1..x-05.10.2026.pdf');
 ok('Incoterms kodu çıkarımı', siparis_inv_incoterm_kodu('INCOTERMS 2020 DAP') === 'DAP' && siparis_inv_incoterm_kodu('exw') === 'EXW' && siparis_inv_incoterm_kodu('serbest') === '');
 ok('gösterim: tutar 1.234,56; fiyat 1,37 / 1,3750; tarih gg.aa.yyyy', siparis_inv_tutar_goster(1234.56) === '1.234,56' && siparis_inv_fiyat_goster('1.37') === '1,37'
-    && siparis_inv_fiyat_goster('1.3750') === '1,3750' && siparis_inv_tarih_goster('2026-10-05') === '05.10.2026');
+    && siparis_inv_fiyat_goster('1.3755') === '1,3755' && siparis_inv_tarih_goster('2026-10-05') === '05.10.2026');
 
 echo "\n=== 5. Ayar (hks_kv) + audit ===\n";
 $v = siparis_inv_ayar_varsayilan();
@@ -209,7 +208,8 @@ ok('alt liste: PO, HARVEST, HS CODE 8109075, TRADE MARK, DELIVERY TERMS (ayar), 
 ok('sabit firma bilgileri + önemli notlar (alıcı ithalatçı yükümlülük metni)', str_contains($html, 'Gaziler Vergi Dairesi VAT: 8330514103') && str_contains($html, 'OGL FOOD TRADE LEBENSMİTTEL VERTRIEB GMBH.')
     && str_contains($html, 'The Importer shall discharge the goods immediately upon arrival'));
 $htmlK = siparis_inv_html($gv, ['brut_kg' => 0.0] + $o, $ayar, $hes);
-ok('brüt bilinmiyorsa "—" basılır (0 KG DEĞİL)', str_contains($htmlK, '>—<') && !str_contains($htmlK, '0 KG<'));
+ok('brüt bilinmiyorsa "—" basılır (0 KG DEĞİL)', str_contains($htmlK, '>—<') && !str_contains($htmlK, '>0 KG<'));
+ok('HTML\'de text-transform YOK (Türkçe i/İ)', !str_contains($html, 'text-transform'));
 $xss = '<script>alert(1)</script>';
 $htmlX = siparis_inv_html(['no' => $xss, 'tarih' => '2026-10-05', 'fiyat' => '1.37', 'iskonto' => 4.0] , ['order_ref' => $xss, 'harvest' => $xss, 'plaka' => $xss, 'aciklama' => '<img src=x onerror=alert(1)>', 'paket' => $xss, 'palet' => 1, 'koli' => 1, 'brut_kg' => 1.0, 'net_kg' => 1.0],
     ['rex_no' => $xss, 'banka_ad' => $xss, 'banka_adres' => '<b>x</b>', 'sube' => $xss, 'swift' => $xss, 'iban_eur' => $xss, 'teslim' => $xss], $hes);
@@ -282,7 +282,7 @@ $pdfYeni = siparis_inv_pdf_metin((string)siparis_dosya_yolu($db->query("SELECT *
 ok('yeni PDF REX no\'yu basar ve toplamı yeni fiyatla hesaplar (18.200 × 1,40 = 25.480 − %4 = 24.460,80)', str_contains($pdfYeni, T_REX) && str_contains($pdfYeni, '24.460,80'), substr($pdfYeni, 0, 300));
 $kk = siparis_inv_uret($db, $sidPkl, 1, ['fiyat' => '1,40'] + $girdi, false);
 ok('AYNI girdiyle tekrar üretim çökmez (aynı bayt → mevcut belge yeniden kullanılır ya da yeni belge)', $kk['ok'] === true);
-ok('her zaman TEK geçerli invoice bağı', siparis_test_say($db, 'siparis_belge_bag bb JOIN siparis_belgeler b ON b.id = bb.belge_id', "bb.sevkiyat_id = ? AND bb.gecerli = 1 AND b.tur = 'invoice'", [$sidPkl]) === 1);
+ok('her zaman TEK geçerli invoice bağı', (int)$db->query("SELECT COUNT(*) FROM siparis_belge_bag bb JOIN siparis_belgeler b ON b.id = bb.belge_id WHERE bb.sevkiyat_id = $sidPkl AND bb.gecerli = 1 AND b.tur = 'invoice'")->fetchColumn() === 1);
 $x3 = siparis_inv_uret($db, 99999, 1, $girdi, true);
 ok('olmayan sevkiyat → hata, belge yok', !$x3['ok'] && $x3['hata'] === 'Sevkiyat bulunamadı.');
 ok('transaction içinde çağrılırsa istisna dışarı atılır (çağıranın tx\'i)', (function () use ($db, $sidPkl, $girdi): bool {
@@ -356,10 +356,10 @@ if ($ornek !== '' && is_file($ornek)) {
     $bid = (int)$db->lastInsertId();
     $db->exec("INSERT INTO siparis_pkl (sevkiyat_id, durum, sezon, dosya_belge_id, belge_no) VALUES ($sidO, 'yuklendi', '2026', $bid, 'AsyaDoc003')");
     $oz = siparis_inv_varsayilan($db, siparis_sevkiyat($db, $sidO))['ozet'];
-    ok('gerçek PKL: 26 palet, 5.200 koli, brüt 21.300, net 18.200, kalibre 10 + 12, açıklama FRESH POMEGRANATE 10-12 PC.', $oz['palet'] === 26 && $oz['koli'] === 5200 && (float)$oz['brut_kg'] === 21300.0 && (float)$oz['net_kg'] === 18200.0
+    ok('gerçek PKL (xlsx\'in gerçek toplamları; elle hazırlanmış invoice nominal 21.300/18.200 kullanmıştı): 26 palet, 5.200 koli, brüt 20.826, net 18.486, kalibre 10 + 12, açıklama FRESH POMEGRANATE 10-12 PC.', $oz['palet'] === 26 && $oz['koli'] === 5200 && (float)$oz['brut_kg'] === 20826.0 && (float)$oz['net_kg'] === 18486.0
         && $oz['kalibreler'] === ['10', '12'] && $oz['aciklama'] === 'FRESH POMEGRANATE 10-12 PC.' && $oz['plaka'] === '31AFJ082-31ACF204' && $oz['harvest'] === '2026' && $oz['incoterms_pkl'] === 'EXW', json_encode($oz));
     $hh = siparis_inv_hesapla(['fiyat' => '1.37', 'iskonto' => 4.0], $oz);
-    ok('gerçek PKL net × 1,37 = 24.934,00; %4 → 23.936,64', $hh['tutar_kurus'] === 2493400 && $hh['toplam_kurus'] === 2393664);
+    ok('gerçek PKL net 18.486 × 1,37 = 25.325,82; %4 → 24.312,79', $hh['tutar_kurus'] === 2532582 && $hh['iskonto_kurus'] === 101303 && $hh['toplam_kurus'] === 2431279, json_encode($hh));
 } else {
     echo "ATLANDI (INVOICE_ORNEK_PKL verilmedi)\n";
 }

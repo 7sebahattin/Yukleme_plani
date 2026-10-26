@@ -234,7 +234,7 @@ function siparis_inv_hesapla(array $veri, array $ozet): array
     $iskK = intdiv($tutarK * $isk100 + 5000, 10000);
     $topK = $tutarK - $iskK;
     return ['tutar_kurus' => $tutarK, 'iskonto_kurus' => $iskK, 'toplam_kurus' => $topK,
-            'tutar' => $tutarK / 100, 'iskonto' => $iskK / 100, 'toplam' => $topK / 100];
+            'tutar' => $tutarK / 100.0, 'iskonto' => $iskK / 100.0, 'toplam' => $topK / 100.0];
 }
 
 // ── PKL'DEN ÖZET ────────────────────────────────────────────────────────
