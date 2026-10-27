@@ -104,8 +104,8 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
       <form method="get" action="siparis_denge.php" class="sc-filtre" id="sdParam">
         <input type="hidden" name="bas" value="<?= h($f['bas']) ?>"><input type="hidden" name="bit" value="<?= h($f['bit']) ?>"><input type="hidden" name="alici" value="<?= h($f['alici']) ?>">
         <label>Fatura sayısı (1–12) <input type="number" name="n" min="1" max="12" step="1" value="<?= h($ham('n')) ?>" placeholder="<?= (int)$param['n'] ?>"></label>
-        <label>Fatura başına net kg <input type="text" name="kg" inputmode="numeric" class="sd-kisa" value="<?= h($ham('kg')) ?>" placeholder="<?= h($kgTam((int)$param['kg'])) ?>"></label>
-        <label>Beklenen PC fiyatı (€/kg) <input type="text" name="hedef" inputmode="decimal" class="sd-kisa" value="<?= h($ham('hedef')) ?>" placeholder="<?= h($fiyat((int)$param['hedef'])) ?>"></label>
+        <label>Fatura başına net kg (boş = ortalama) <input type="text" name="kg" inputmode="numeric" class="sd-kisa" value="<?= h($ham('kg')) ?>" placeholder="<?= h($kgTam((int)$param['kg'])) ?>"></label>
+        <label>Beklenen PC fiyatı €/kg (boş = son sevkiyat) <input type="text" name="hedef" inputmode="decimal" class="sd-kisa" value="<?= h($ham('hedef')) ?>" placeholder="<?= h($fiyat((int)$param['hedef'])) ?>"></label>
         <label>Fatura fiyatı hassasiyeti <select name="hane">
           <?php foreach ([2, 3, 4] as $hh): ?><option value="<?= $hh ?>"<?= $hane === $hh ? ' selected' : '' ?>><?= $hh ?> ondalık</option><?php endforeach; ?>
         </select></label>
