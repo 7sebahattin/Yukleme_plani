@@ -136,6 +136,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
 
   <!-- 2) Sevkiyat bazında karşılaştırma -->
   <h3 class="pr-section">Sevkiyat bazında karşılaştırma</h3>
+  <?php if (!function_exists('can_beyan') || !can_beyan('read')): ?><p class="pr-note">Parti no görmek için beyan okuma yetkisi gerekir (sütun "—" gösterilir).</p><?php endif; ?>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="sdKarsi">
     <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">PC fiyat / kg</th><th class="num">Fatura fiyat / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">Kümülatif fark (EUR)</th></tr></thead>
     <?php if (!$d['sevkiyatlar']): ?>

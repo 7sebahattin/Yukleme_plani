@@ -297,6 +297,9 @@ $r = uc('siparis_denge.php'); $g3 = $r['govde'];
 if ($cikti !== '') file_put_contents($cikti . '/denge_parti.html', $g3);
 ok('denge: karşılaştırma tablosunda kimlik bloğu + S1 parti no', temiz($r) && str_contains($g3, $KB) && (bool)preg_match('~<td>P-810/1<br>P-810/2</td><td>TC810001\.10</td><td>[^<]+</td><td>34TST001</td>~u', $g3));
 $kh = siparis_cari_kimlik_html(['parti' => ['P<1>'], 'order_ref' => '<b>X</b>', 'ulke' => '', 'plaka' => '33ABC123-33DEF456']);
+rol($OKU, false, 3, ['DEPO1']);
+$r = uc('siparis_denge.php');
+ok('denge: beyan.read YOK → parti sızmaz + açıklayıcı not', temiz($r) && !str_contains($r['govde'], 'P-810/') && str_contains($r['govde'], 'Parti no görmek için beyan okuma yetkisi gerekir'));
 ok('siparis_cari_kimlik_html: XSS kaçışı, boş ülke "—", bitişik plakalar ayrı satır', str_contains($kh, 'P&lt;1&gt;') && str_contains($kh, '&lt;b&gt;X&lt;/b&gt;') && str_contains($kh, '<td>—</td>') && str_contains($kh, '33ABC123<br>33DEF456') && !str_contains($kh, '<b>'));
 ok('boş parti + boş plaka → "—"', siparis_cari_kimlik_html(['order_ref' => 'T']) === '<td>—</td><td>T</td><td>—</td><td>—</td>');
 
