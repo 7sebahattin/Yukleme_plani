@@ -635,7 +635,7 @@ html[data-theme="dark"] .sip-mod { --sip-zebra: #1f2938; --sip-grup-cizgi: #3642
 html[data-theme="dark"] .sip-parti-btn { color: #cfe0ff; background: linear-gradient(180deg, #24406f 0%, #18305a 100%); border-color: #345a96;
     box-shadow: 0 2px 0 #0e1f3d, 0 3px 6px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .12); }
 .sip-iptal .sip-parti-btn { opacity: .6; }
-/* v450: sevkiyat sayfası başlığında (sipariş no ile durum rozeti arası) parti rozeti başlığa orantılı */
+/* v452: sevkiyat sayfası başlığında (sipariş no ile durum rozeti arası) parti rozeti başlığa orantılı */
 .sip-h1 .sip-parti-btn { font-size: .88rem; }
 .sip-h1 .sip-parti-btn .sip-parti-et { font-size: .72rem; }
 .sip-card > .sip-parti-rozetler { margin-bottom: -2px; padding-right: 44px; }   /* sağ üstteki ⋮ düğmesine binmesin */
