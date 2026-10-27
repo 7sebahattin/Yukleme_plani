@@ -134,8 +134,8 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
   <div class="page-head sip-head">
     <div class="sip-head-sol">
       <a class="btn btn-geri" href="siparisler.php">← Siparişler</a>
-      <h1 class="sip-h1"><?= h((string)$sev['order_ref']) ?> <?php if ((string)$sev['durum'] === 'mail_gonderildi' && $mailPklAd !== ''): ?>
-        <span class="sip-badge sip-badge--<?= h(siparis_durumlar()['mail_gonderildi']['css']) ?> sip-badge--pkl" title="Mail gönderildi"><?= siparis_durumlar()['mail_gonderildi']['ikon'] ?> <?= preg_replace('~([-_])~', '$1<wbr>', h($mailPklAd)) ?><?php foreach ($mailPartiler as $mp): ?> · Parti <?= h((string)$mp) ?><?php endforeach; ?></span>
+      <h1 class="sip-h1"><?= h((string)$sev['order_ref']) ?> <?php foreach ($mailPartiler as $mp): ?><span class="sip-parti-btn" title="Bağlı beyanın parti numarası"><span class="sip-parti-et">Parti</span> <?= h((string)$mp) ?></span> <?php endforeach; ?><?php if ((string)$sev['durum'] === 'mail_gonderildi' && $mailPklAd !== ''): ?>
+        <span class="sip-badge sip-badge--<?= h(siparis_durumlar()['mail_gonderildi']['css']) ?> sip-badge--pkl" title="Mail gönderildi"><?= siparis_durumlar()['mail_gonderildi']['ikon'] ?> <?= preg_replace('~([-_])~', '$1<wbr>', h($mailPklAd)) ?></span>
       <?php else: ?><?= siparis_durum_badge((string)$sev['durum']) ?><?php endif; ?></h1>
       <p class="sip-alt-satir muted">
         <?php if ((string)$sev['tur_no'] !== ''): ?>Tur <?= h((string)$sev['tur_no']) ?> · <?php endif; ?>
@@ -533,7 +533,8 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
             <?php endif; ?>
           </div>
         <?php endforeach; ?>
-        <?php if ($esle && !$kapali): ?>
+        <?php if ($esle): ?>
+          <?php if (!$beyanBaglar): ?><p class="sip-bilgi" role="note">Beyan otomatik eşleşmediyse parti no, beyan no ya da plaka ile arayıp elle bağlayabilirsiniz<?= can_beyan('create') ? '; beyan henüz yoksa <a href="beyan_create.php">yeni beyan oluşturun</a>' : '' ?>.</p><?php endif; ?>
           <?php if ($beyanOneri): ?>
             <h3 class="sip-grup-bas">Öneriler</h3>
             <?php foreach ($beyanOneri as $o): $b = $o['beyan']; ?>
