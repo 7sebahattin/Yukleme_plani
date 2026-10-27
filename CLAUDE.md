@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v450` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v451` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -550,7 +550,7 @@ YALNIZ admin, CSRF, audit. Migration YOK.
   `node scripts/pdks_puantaj_dialog_smoke.js` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
   `node scripts/pdks_toplu_ekle_smoke.js`.
 
-### Fiş Excel'i Yükle (v446 → v450)
+### Fiş Excel'i Yükle (v446 → v451)
 Kâğıt "İŞLETME İŞÇİ FİŞİ"nin DIŞ bir yapay zekâyla şablona dökülmüş Excel'inden fiş başına kartsız mesai kayıtları (Tam / FM-k / Yarım) + servis
 yazar. Sayfa `gunluk_fis_yukle.php` (Günlük Puantaj üst çubuğundaki "📥 Fiş Excel'i Yükle"; `nav_ptak_sayfalari()`'nda). YALNIZ admin
 (`pdks_faz8j_yetki()`), aktif depo, her POST CSRF, audit; migration/yeni yetki YOK. OCR/AI uygulamanın İÇİNDE YOK; dosya diske KAYDEDİLMEZ
@@ -566,8 +566,7 @@ yazar. Sayfa `gunluk_fis_yukle.php` (Günlük Puantaj üst çubuğundaki "📥 F
 - **Kurallar:** giriş boşsa 08:00; Tam çıkış = giriş + `tam_dk`, FM k = giriş + `fm_bas_dk` + 60k, Yarım = Tam'ın yarısı (30 dk'ya aşağı, ≥30). FM kişileri Tam'dan düşülür,
   Yarım'a FM yok. FM iki biçim: (a) kova sütunları 1–6 sa (kişi sayısı) · (b) "Toplam FM Saati" → `pdks_fis_fm_toplam_dagit` + `pdks_fis_fm_tip_dagit` (tamsayı aritmetiği,
   `random_int/mt_rand/shuffle` YOK, test denetler; V1–V5 test vektörleri). (b) yalnız FM fiyatı tipler arasında NÖTR ise (`pdks_fis_fm_notr`; fixed modda "FM Kişi Sayısı" şart,
-  bilinmiyorsa fail-closed); (a)'da nötr değilse "FM Tipi" tek tip olmalı. Çift yevmiye: (b) eşiğin altında kalır (kmax), (a) uyarı. Çavuş eşleştirme: kod birincil (bulunamazsa
-  HATA, ada düşülmez), kod boşsa ad tam → " - " parçası → tam 1 aday.
+  bilinmiyorsa fail-closed); (a)'da nötr değilse "FM Tipi" tek tip olmalı. Çift yevmiye: (b) eşiğin altında kalır (kmax), (a) uyarı. Çavuş: Excel'de DEĞİL, yükleme formunda seçilir (v451, aşağıda).
 - **Tekillik/idempotency:** `istek_id = sha256('fis|'+katlanmış depo+fiş no+'|r'+rev)[0:32]` (tarih/çavuş HARİÇ); işçi yazımı `puantaj_toplu_ekle` izi, TAMAMLANMA izi audit `fis_yukle`
   (fiş no, rev, toplu_id, istek_id TEK kez, servis_istek_id, sha256). Durumlar yeni / yarım (servis eksik → aynı dosya yeniden = `devam_tamamlandi`) / tamam (`zaten_yuklu`).
   Düzeltme: Mesai Detayı Toplu Geri Al → Revizyon+1. Mesaide aktif dönem varsa ENGEL ("Mevcut kayıtlara EK yaz"); servis yalnız FARK (EK kapalı: hedef−tüm servis; EK açık:
@@ -575,10 +574,11 @@ yazar. Sayfa `gunluk_fis_yukle.php` (Günlük Puantaj üst çubuğundaki "📥 F
 - **Önizleme = yazma:** normalize fişler oturumda 32 hex token (30 dk, kullanıcı+depo bağlı, ≤3) ile taşınır; kova/saat/sayı istemciden GELMEZ; yazarken HER ŞEY güncel DB'ye göre yeniden
   değerlendirilir, plan hash'i önizlemedekinden farklıysa fiş YAZILMAZ ("degisti"). Seçim = masaüstü tablo ∩ mobil kart kutuları (biri ayrışırsa yazılmaz).
 - **v450 — "Önizleme süresi doldu ya da bu oturuma ait değil" hatası (canlı):** önizleme yükü yalnız PHP oturumundaydı; bazı sunucu oturum yapılandırmalarında yönlendirmeden sonraki GET oturum yazımını görmeden başlıyordu. Artık oturum BİRİNCİL, `hks_kv` YEDEK (`fis_yk_<token>` önizleme · `fis_sk_<token>` sonuç; JSON'da `t` İLK anahtar, 2 saatten eskisi `pdks_fis_kv_temizle()` ile silinir; tablo yoksa sessizce yalnız oturum). Yedekten okuma AYNI kural: kullanıcı + aktif depo + 30 dk TTL, token 128 bit rastgele. POST'ta yönlendirmeden ÖNCE `session_write_close()`. `pdks_fis_token_al($t, &$neden)` nedeni döner (bicim/yok/sure/kullanici/depo) → `pdks_fis_token_hata_metni()` Türkçe, ayrıca `error_log`. Hash'ler `pdks_fis_token_hashler()` ile iki yere yazılır — `$_SESSION['fis_yukle']`'ya doğrudan yazma. Sonuç ekranı da yedekten okunur (kayıt yazılmışken "Sonuç süresi doldu" demesin). Test: `pdks_fis_yaz_smoke.php` K10–K18 · `pdks_fis_ui_smoke.js` 2b (PHPSESSID çerezi silinse de önizleme + yazma).
+- **v451 — İşletme · Depo · Çavuş Excel'den KALKTI, yükleme formunda seçilir (sahip kararı):** şablonda `İşletme`/`Çavuş Kodu`/`Çavuş Adı` sütunu ve «Çavuşlar» sayfası YOK (24 sütun, `pdks_fis_sutunlar()`); `pdks_fis_cavus_coz()` silindi. Form (`gunluk_fis_yukle.php`): **İşletme** (`depot_options()`) · **Depo** (`depot_options()`, varsayılan aktif depo) · **Çavuş** (`pdks_fis_cavuslar()`, "kod · ad", pasif işaretli); bir dosya TEK çavuşa aittir, başka çavuşun fişleri için ayrı dosya. `pdks_fis_normalize($oku, $cavusSatiri, $isletme)` seçilen çavuşu/işletmeyi her fişe yazar (`cavus.yontem='secim'`; pasif çavuş → uyarı; `id<1` → «Çavuş seçilmedi.» genel hata). Depo seçimi değişince **ayrı mini POST** `eylem=depo_degistir` (CSRF; `depo_sec.php` kuralı: `depot_options()` + `set_active_depot()` + audit `depot_switch`) ve işletme/çavuş seçimi `?isletme=&cavus=` ile taşınır; `onizle` POST'u formdaki `depo` aktif depodan farklıysa (eski sekme) REDDEDER. İşletme ≠ Depo ise mevcut «uyuşmazlık» onayı çalışır (`pdks_fis_isletme_uyumlu`). Önizlemede `.fy-ust` özeti (token'daki `ust`). Eski şablon (İşletme/Çavuş sütunlu) hâlâ okunur: o sütunlar «tanınmayan sütun» uyarısıyla yok sayılır. OCR komutu madde 5 buna göre. Aynı çavuş+gün iki fiş uyarısı ve `istek_id` (depo + fiş no + rev) DEĞİŞMEDİ. Test: `pdks_fis_*` + `node scripts/pdks_fis_ui_smoke.js` (1b bölümü).
 - **Güvenlik:** `dosya_dogrula` PhpSpreadsheet'e girmeden: uzantı, PK, MIME, ≤100 parça, makro/externalLinks/embeddings/activeX RED, zip bombası; okuma `ReadDataOnly`, yalnız «Fişler»,
   satır/sütun filtresi, `getCalculatedValue` YOK (formül hücresi önbellek değeri + uyarı, yoksa hata); serbest metin `pdks_fis_metin()` (denetim karakteri atılır, ilk karakter `= + - @` ise `'` önek);
   Ham Metin / Kontrol Notu DB/audit'e YAZILMAZ; kullanıcı verisi `h()`.
-- **Şablon** (`?sablon=1`, `pdks_fis_sablon_uret`): Fişler (27 sütun, başlık adıyla eşlenir — sıra bağımsız, takma adlar) · Çavuşlar · Açıklama (OCR komutu TEK hücrede) · Örnek (okunmaz; `ORNEK-` fiş no reddedilir).
+- **Şablon** (`?sablon=1`, `pdks_fis_sablon_uret`): Fişler (24 sütun, başlık adıyla eşlenir — sıra bağımsız, takma adlar) · Açıklama (OCR komutu TEK hücrede) · Örnek (okunmaz; `ORNEK-` fiş no reddedilir).
   OCR komutundaki "YORUM KURALLARI" ("12 + 1", "N kişi : M yarım") sahibin cevabına göre güncellenecek TEK yer `pdks_fis_ocr_komutu()`.
 - **Test:** `php scripts/pdks_fis_plan_smoke.php` (saf) · `pdks_fis_xlsx_smoke.php` (gerçek xlsx turu + güvenlik) · `pdks_fis_yaz_smoke.php` (SQLite, `_pdks_fis_harness.php`; A: Faz 8J opt-in … M) ·
   `pdks_fis_static_smoke.php` (statik + partial render) · `node scripts/pdks_fis_ui_smoke.js` (php -S + gerçek yükleme; `pdks_fis_e2e_setup/router/say.php`; `FIS_SHOT=<klasör>` ekran görüntüsü).

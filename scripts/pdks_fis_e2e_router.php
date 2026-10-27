@@ -24,7 +24,9 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test Yönetici']; }
 function can(string $p): bool { return true; }
 function is_admin(): bool { global $ADMIN; return $ADMIN; }
-function active_depot(): ?string { return 'Depo A'; }
+function depot_options(): array { return ['Depo A', 'Depo B']; }
+function active_depot(): ?string { return $_SESSION['e2e_depo'] ?? 'Depo A'; }
+function set_active_depot(string $d): void { $_SESSION['e2e_depo'] = $d; }
 function audit_log_event(...$a): void {}
 function h($v): string { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8'); }
 function csrf_token(): string { return $_SESSION['csrf'] ??= bin2hex(random_bytes(16)); }

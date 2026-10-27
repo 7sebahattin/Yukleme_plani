@@ -63,9 +63,6 @@ function pdks_fis_sutunlar(): array
     $s = [
         $k('fis_no', 'Fiş No', 'metin', true, 12, 30, null, 'Fişteki numara; METİN olarak yazın, baştaki sıfırı koruyun (01410).', ['Fis No', 'Fiş Numarası', 'Fis Numarasi', 'Fiş No.']),
         $k('tarih', 'Tarih', 'tarih', true, 12, null, null, 'GG.AA.YYYY. Bugünden ÖNCE olmalı (bugünün fişi desteklenmez).', ['Fiş Tarihi', 'Fis Tarihi']),
-        $k('isletme', 'İşletme', 'metin', false, 16, 150, null, 'Fişte yazdığı gibi; yalnız kontrol amaçlı (aktif depoyla karşılaştırılır).', ['Isletme']),
-        $k('cavus_kodu', 'Çavuş Kodu', 'liste', false, 12, 40, null, 'Çavuşlar sayfasındaki kod (birincil eşleştirme).', ['Cavus Kodu', 'Çavuş Kod']),
-        $k('cavus_adi', 'Çavuş Adı', 'metin', false, 20, 150, null, 'Fişteki çavuş; Çavuş Kodu boşsa eşleştirme için kullanılır.', ['Cavus Adi', 'Çavuş', 'Cavus']),
         $k('kadin_tam', 'Kadın Tam', 'tam', false, 9, 250, null, 'Bayan sayısı (Tam gün).', ['Kadin Tam', 'Bayan Tam']),
         $k('kadin_yarim', 'Kadın Yarım', 'tam', false, 9, 250, null, 'Yarım gün çalışan kadın sayısı.', ['Kadin Yarim', 'Bayan Yarım', 'Bayan Yarim']),
         $k('erkek_tam', 'Erkek Tam', 'tam', false, 9, 250, null, 'Erkek sayısı (Tam gün).', []),
@@ -358,54 +355,6 @@ function pdks_fis_cavuslar(PDO $pdo): array
     return $out;
 }
 
-/**
- * Çavuşu kod (birincil) ya da ada göre çözer. Kod doluysa YALNIZ kod aranır (bulunamazsa HATA, ada düşülmez);
- * kod+ad ikisi de varsa ad sistemdekiyle uyuşmuyorsa UYARI (kod esas alınır). Kod boşsa: ad TAM eşleşmesi →
- * yoksa " - " ile bölünmüş parça eşleşmesi → TAM 1 aday kabul; 0 → "bulunamadı", ≥2 → hata + aday listesi.
- * Pasif çavuş: ok kalır + uyarı (gerçek ret toplu_onizle'den gelir).
- * @return array{ok:bool,id?:int,kod?:string,ad?:string,yontem?:string,hata?:string,uyari?:string}
- */
-function pdks_fis_cavus_coz(array $cavuslar, string $kod, string $ad): array
-{
-    $kodF = pdks_fis_fold($kod); $adF = pdks_fis_fold($ad);
-    if ($kodF === '' && $adF === '') return ['ok' => false, 'hata' => 'Çavuş Kodu ya da Çavuş Adı gerekli.'];
-    $adaylar = []; $yontem = 'kod'; $uyari = null;
-    if ($kodF !== '') {
-        foreach ($cavuslar as $c) if (pdks_fis_fold((string)$c['code']) === $kodF) $adaylar[] = $c;
-        if (!$adaylar) return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($kod, 40) . '" kodlu çavuş bulunamadı.'];
-        if (count($adaylar) > 1) return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($kod, 40) . '" kodu birden çok çavuşa ait.'];
-        if ($adF !== '') {
-            $sis = pdks_fis_fold((string)$adaylar[0]['name']);
-            if (!str_contains($sis, $adF) && !str_contains($adF, $sis)) {
-                $uyari = 'Fişteki ad «' . pdks_fis_metin_duz($ad, 60) . '» sistemdeki «' . pdks_fis_metin_duz((string)$adaylar[0]['name'], 60) . '» ile uyuşmuyor; kod esas alındı.';
-            }
-        }
-    } else {
-        $yontem = 'ad';
-        foreach ($cavuslar as $c) if (pdks_fis_fold((string)$c['name']) === $adF) $adaylar[] = $c;
-        if (!$adaylar) {
-            foreach ($cavuslar as $c) {
-                foreach (preg_split('/\s+[-–—]\s+/u', (string)$c['name']) ?: [] as $parca) {
-                    if (pdks_fis_fold($parca) === $adF) { $adaylar[] = $c; break; }
-                }
-            }
-        }
-        if (!$adaylar) return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($ad, 60) . '" adlı çavuş bulunamadı (Çavuş Kodunu yazın).'];
-        if (count($adaylar) > 1) {
-            $liste = array_map(fn($c) => $c['code'] . ' · ' . $c['name'], array_slice($adaylar, 0, 5));
-            return ['ok' => false, 'hata' => '"' . pdks_fis_metin_duz($ad, 60) . '" birden çok çavuşla eşleşiyor — Çavuş Kodunu yazın: ' . implode('; ', $liste)];
-        }
-    }
-    $c = $adaylar[0];
-    if (empty($c['is_active'])) {
-        $u = 'Çavuş pasif — yeni mesai açılamaz, mesai varsa eklenir.';
-        $uyari = $uyari === null ? $u : $uyari . ' ' . $u;
-    }
-    $r = ['ok' => true, 'id' => (int)$c['id'], 'kod' => (string)$c['code'], 'ad' => (string)$c['name'], 'yontem' => $yontem];
-    if ($uyari !== null) $r['uyari'] = $uyari;
-    return $r;
-}
-
 /** Sistem işçi tipi kodları (sıra SABİT: dağıtım ve grup sırası bunu izler). */
 function pdks_fis_tip_kodlari(): array { return ['KADIN', 'ERKEK', 'RAMPACI']; }
 
@@ -425,8 +374,13 @@ function pdks_fis_fm_tipi_coz($v)
  * Hücre tipleri: s (metin) · n (sayı) · b · e (boş) · f (değeri olmayan formül → hata) · fc (önbellekli formül → uyarı).
  * @return array{fisler:list<array>, genel_hatalar:string[]}
  */
-function pdks_fis_normalize(array $oku, array $cavuslar): array
+function pdks_fis_normalize(array $oku, array $cavus, string $isletme = ''): array
 {
+    // İşletme / Depo / Çavuş dosyada DEĞİL, yükleme ekranında seçilir: $cavus = seçilen çavuş satırı (pdks_fis_cavuslar()),
+    // $isletme = seçilen işletme. Dosyadaki TÜM fişler bu çavuşa aittir.
+    $cavusSabit = ['id' => (int)($cavus['id'] ?? 0), 'kod' => (string)($cavus['code'] ?? ''), 'ad' => (string)($cavus['name'] ?? ''), 'yontem' => 'secim'];
+    $isletme = pdks_fis_metin($isletme, 150);
+    if ($cavusSabit['id'] < 1) return ['fisler' => [], 'genel_hatalar' => ['Çavuş seçilmedi.']];
     $satirlar = array_values($oku['satirlar'] ?? []);
     if (!$satirlar) return ['fisler' => [], 'genel_hatalar' => ['Dosyada okunacak fiş satırı bulunamadı.']];
     if (count($satirlar) > PDKS_FIS_MAX_FIS) {
@@ -487,16 +441,11 @@ function pdks_fis_normalize(array $oku, array $cavuslar): array
         elseif ($tarih === null) $hatalar[] = $H('tarih', 'Tarih boş.');
         elseif ($tarih >= $bugun) $hatalar[] = $H('tarih', 'bugün veya gelecek tarihli fişler desteklenmez.');
 
-        $isletme = pdks_fis_metin($al('isletme'), 150);
-
-        // Çavuş
-        $kod = pdks_fis_metin_duz($al('cavus_kodu'), 40); $ad = pdks_fis_metin_duz($al('cavus_adi'), 150);
-        $cr = pdks_fis_cavus_coz($cavuslar, $kod, $ad);
-        $cavus = ['id' => null, 'kod' => $kod, 'ad' => $ad, 'yontem' => null];
-        if (!$cr['ok']) $hatalar[] = $H($kod !== '' ? 'cavus_kodu' : 'cavus_adi', (string)$cr['hata']);
-        else {
-            $cavus = ['id' => $cr['id'], 'kod' => $cr['kod'], 'ad' => $cr['ad'], 'yontem' => $cr['yontem']];
-            if (!empty($cr['uyari'])) { $cavus['uyari'] = $cr['uyari']; $uyarilar[] = $H($kod !== '' ? 'cavus_kodu' : 'cavus_adi', $cr['uyari']); }
+        // Çavuş: seçilen çavuş (pasifse uyarı; gerçek ret toplu_onizle'den gelir)
+        $cv = $cavusSabit;
+        if (empty($cavus['is_active'])) {
+            $cv['uyari'] = 'Çavuş pasif — yeni mesai açılamaz, mesai varsa eklenir.';
+            $uyarilar[] = "Satır $n: " . $cv['uyari'];
         }
 
         // Sayılar
@@ -522,7 +471,7 @@ function pdks_fis_normalize(array $oku, array $cavuslar): array
 
         $fisler[] = [
             'satir' => $n, 'fis_no' => $fisNoN ?? $fisNo, 'fis_no_ham_sayi' => $fisNoHamSayi, 'tarih' => $tarih, 'isletme' => $isletme,
-            'cavus' => $cavus, 'say' => $sy, 'fm_kova' => $kova, 'fm_toplam' => $fmToplam, 'fm_kisi' => $fmKisi, 'fm_tipi' => $ft,
+            'cavus' => $cv, 'say' => $sy, 'fm_kova' => $kova, 'fm_toplam' => $fmToplam, 'fm_kisi' => $fmKisi, 'fm_tipi' => $ft,
             'servis' => $servis, 'giris' => $giris, 'giris_varsayilan' => $girisVars, 'rev' => $rev,
             'not' => pdks_fis_metin($al('not'), 500), 'ham' => pdks_fis_metin($al('ham'), 500), 'kontrol' => pdks_fis_metin($al('kontrol'), 500),
             'cakisma_dosya' => false, 'cakisma_sira' => 0, 'hatalar' => $hatalar, 'uyarilar' => $uyarilar,
@@ -903,7 +852,6 @@ function pdks_fis_oku(string $yol): array
             if (isset($gorulen[$a])) return ['hata' => '«' . pdks_fis_sutun($a)['baslik'] . '» başlığı iki kez var — sütunları tekilleştirin.'] + $son;
             $gorulen[$a] = true; $harita[$sutun] = $a;
         }
-        if (!isset($gorulen['cavus_kodu']) && !isset($gorulen['cavus_adi'])) return ['hata' => 'Zorunlu sütun yok: «Çavuş Kodu» ya da «Çavuş Adı».'] + $son;
         $satirlar = [];
         foreach ($hucre as $sr => $sutunlar) {
             if ($sr <= $baslikSatir) continue;
@@ -944,7 +892,7 @@ BİÇİM KURALLARI
 2. HİÇBİR ŞEY UYDURMA. Okuyamadığın ya da emin olmadığın hücreyi BOŞ bırak ve "Kontrol Notu" sütununa neyin neden belirsiz olduğunu yaz (örn. "Erkek: 12 mi 17 mi okunamadı"). Üstü çizilmiş, silinmiş ya da ikinci kalemle düzeltilmiş yazı varsa onu da Kontrol Notu'na yaz.
 3. "Fiş No": METİN olarak yaz, baştaki sıfırları koru (örn. 01410). Sayıya çevirme.
 4. "Tarih": GG.AA.YYYY biçiminde.
-5. "İşletme" ve "Çavuş Adı": fişte yazdığı gibi yaz, düzeltme yapma. "Çavuş Kodu": "Çavuşlar" sayfasında, fişteki çavuş adıyla AYNI kişiyi gösteren satırın kodunu yaz; tereddüt varsa boş bırak.
+5. Şablonda İşletme, Depo ve Çavuş sütunu YOKTUR (bunlar yükleme ekranında seçilir); bu bilgileri Excel'e yazma. Her dosyada yalnız TEK çavuşun fişleri olduğunu varsay; fotoğraflarda başka bir çavuşun fişi çıkarsa o satırın Kontrol Notu'na "farklı çavuş: <fişteki ad>" yaz.
 6. Sayı sütunlarına (Kadın/Erkek/Rampacı Tam-Yarım, FM..., Servis...) yalnız TAM SAYI yaz. "kişi" gibi sözcük, "+" işareti ya da formül KULLANMA. Sıfır ise boş bırakabilirsin.
 7. Hiçbir hücrede formül kullanma; yalnız değer yaz.
 8. "Ham Metin": fişteki alanları AYNEN ve etiketleriyle yaz. Örnek: Bayan: 8 | Erkek: 12 + 1 | Toplam Mesai: 5 kişi 2 saat | Servis: 1 küçük | Palet: Rampa
@@ -967,7 +915,7 @@ KOMUT_SONU;
 }
 
 /**
- * Şablon çalışma kitabı: Fişler (başlık + biçimli/doğrulamalı 150 satır) · Çavuşlar (güncel liste) · Açıklama ·
+ * Şablon çalışma kitabı: Fişler (başlık + biçimli/doğrulamalı 150 satır) · Açıklama ·
  * Örnek. Tüm metin hücreleri setCellValueExplicit(TYPE_STRING) — formül YOK. Doğrulamalar yardımcıdır; asıl güvenlik
  * sunucu okumasındadır (doğrulama yapıştırmayla atlanabilir).
  */
@@ -1000,28 +948,6 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     $ws->getRowDimension(1)->setRowHeight(34);
     $ws->freezePane('B2');
 
-    // ---- çavuş listesi (Çavuşlar sayfası) ----
-    $cavuslar = pdks_fis_cavuslar($pdo);
-    $aktif = array_values(array_filter($cavuslar, fn($c) => !empty($c['is_active'])));
-    $pasif = array_values(array_filter($cavuslar, fn($c) => empty($c['is_active'])));
-    $kodSira = fn($a, $b) => strcmp($a['code'], $b['code']);
-    usort($aktif, $kodSira); usort($pasif, $kodSira);
-    $cv = $ss->createSheet();
-    $cv->setTitle('Çavuşlar');
-    $cv->getTabColor()->setARGB('FF666666');
-    foreach (['Kod', 'Ad', 'Durum'] as $i => $b) $metin($cv, \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1) . '1', $b);
-    $cv->getStyle('A1:C1')->getFont()->setBold(true);
-    $r = 2;
-    foreach ([[$aktif, 'Aktif'], [$pasif, 'Pasif']] as [$liste, $durum]) {
-        foreach ($liste as $c) {
-            $metin($cv, "A$r", pdks_fis_metin($c['code'], 40)); $metin($cv, "B$r", pdks_fis_metin($c['name'], 150)); $metin($cv, "C$r", $durum);
-            $r++;
-        }
-    }
-    $cv->getColumnDimension('A')->setWidth(14); $cv->getColumnDimension('B')->setWidth(34); $cv->getColumnDimension('C')->setWidth(10);
-    $cv->freezePane('A2');
-    $aktifSon = 1 + count($aktif);
-
     // ---- veri doğrulamaları ----
     $dvKur = function (string $harf, DataValidation $dv) use ($ws, $son): void { $ws->setDataValidation("{$harf}2:{$harf}{$son}", $dv); };
     foreach ($sut as $i => $c) {
@@ -1036,11 +962,6 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
             $dv->setType(DataValidation::TYPE_DATE)->setOperator(DataValidation::OPERATOR_GREATERTHANOREQUAL)->setFormula1('43831')
                ->setAllowBlank(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_STOP)
                ->setErrorTitle('Geçersiz tarih')->setError('01.01.2020 veya sonrası bir tarih girin (GG.AA.YYYY; bugünden önce olmalı).');
-            $dvKur($harf, $dv);
-        } elseif ($c['anahtar'] === 'cavus_kodu' && $aktifSon > 1) {
-            $dv->setType(DataValidation::TYPE_LIST)->setFormula1("'Çavuşlar'!\$A\$2:\$A\${$aktifSon}")
-               ->setAllowBlank(true)->setShowDropDown(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_WARNING)
-               ->setErrorTitle('Çavuş listede yok')->setError('Bu kod «Çavuşlar» sayfasında yok (pasif ya da yeni çavuş olabilir). Yine de devam edilsin mi?');
             $dvKur($harf, $dv);
         } elseif ($c['anahtar'] === 'fm_tipi') {
             $dv->setType(DataValidation::TYPE_LIST)->setFormula1('"' . implode(',', $c['liste']) . '"')
@@ -1070,6 +991,7 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     $satirYaz('Fiş Excel\'i — şablon açıklaması', true);
     $satirYaz('1) Fişlerin fotoğraflarını yapay zekâya verin (aşağıdaki KOMUT metniyle) ve bu dosyanın «Fişler» sayfasını doldurmasını isteyin.');
     $satirYaz('2) Dolu dosyayı Günlük Puantaj › «📥 Fiş Excel\'i Yükle» sayfasında yükleyin, önizlemeyi kontrol edin, ardından «Yaz» deyin.');
+    $satirYaz('   İşletme, Depo ve Çavuş bu dosyada YOKTUR: yükleme sayfasında seçilir. Bir dosyaya yalnız TEK çavuşun fişlerini yazın; başka çavuşun fişleri için ayrı dosya hazırlayıp o çavuşu seçerek yükleyin.');
     $satirYaz('3) Hata çıkan satırları Excel\'de düzeltip AYNI dosyayı yeniden yükleyin: yazılmış fişler «zaten yüklü» diye atlanır, çiftlenmez.');
     $ar++;
     $satirYaz('Sütunlar', true);
@@ -1077,7 +999,7 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     $ac->getStyle("A$ar:C$ar")->getFont()->setBold(true);
     $ar++;
     foreach ($sut as $c) {
-        $zorunlu = $c['anahtar'] === 'cavus_kodu' ? 'Kod ya da Ad' : ($c['anahtar'] === 'cavus_adi' ? 'Kod ya da Ad' : ($c['zorunlu'] ? 'Evet' : 'Hayır'));
+        $zorunlu = $c['zorunlu'] ? 'Evet' : 'Hayır';
         $metin($ac, "A$ar", $c['baslik']); $metin($ac, "B$ar", $zorunlu); $metin($ac, "C$ar", $c['ipucu']);
         $ac->getStyle("C$ar")->getAlignment()->setWrapText(true);
         $ar++;
@@ -1119,11 +1041,11 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     ]);
     $ork->getRowDimension(1)->setRowHeight(34);
     $ornek = [
-        ['fis_no' => 'ORNEK-1', 'tarih' => '01.10.2026', 'isletme' => 'Örnek İşletme', 'cavus_kodu' => 'C001', 'cavus_adi' => 'Örnek Çavuş A', 'kadin_tam' => 8, 'erkek_tam' => 12, 'erkek_yarim' => 1,
+        ['fis_no' => 'ORNEK-1', 'tarih' => '01.10.2026', 'kadin_tam' => 8, 'erkek_tam' => 12, 'erkek_yarim' => 1,
          'fm2' => 5, 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '08:00', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1 | Toplam Mesai: 5 kişi 2 saat | Servis: 1 küçük | Palet: Rampa'],
-        ['fis_no' => 'ORNEK-2', 'tarih' => '01.10.2026', 'isletme' => 'Örnek İşletme', 'cavus_kodu' => 'C002', 'cavus_adi' => 'Örnek Çavuş B', 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'rampaci_yarim' => 1,
+        ['fis_no' => 'ORNEK-2', 'tarih' => '01.10.2026', 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'rampaci_yarim' => 1,
          'fm_toplam' => 25, 'servis_buyuk' => 1, 'ham' => 'Bayan 8 | Erkek 12 | Rampacı 2 + 1 | Toplam Mesai: 25 saat mesai tır çıktı | Servis: 1 büyük', 'kontrol' => 'Rampacı sayısı fişte yok, kullanıcı ekledi'],
-        ['fis_no' => 'ORNEK-3', 'tarih' => '01.10.2026', 'isletme' => 'Örnek İşletme', 'cavus_kodu' => 'C003', 'cavus_adi' => 'Örnek Çavuş C', 'kadin_tam' => 5, 'giris' => '09:00'],
+        ['fis_no' => 'ORNEK-3', 'tarih' => '01.10.2026', 'kadin_tam' => 5, 'giris' => '09:00'],
     ];
     foreach ($ornek as $ri => $o) {
         $satir = 2 + $ri;

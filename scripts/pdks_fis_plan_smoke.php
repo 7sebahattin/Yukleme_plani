@@ -166,7 +166,7 @@ ok('9) aynı girdi 100 kez AYNI sonuç', $ayni);
 $r = pdks_fis_fm_tip_dagit([1, 3, 2], ['ERKEK' => 3]);
 ok('9) girdi sırasından bağımsız (azalan sıralanır)', $r['dagilim'] === ['ERKEK' => [3 => 1, 2 => 1, 1 => 1]], j($r['dagilim']));
 
-echo "\n=== 10. pdks_fis_cavus_coz ===\n";
+echo "\n=== 10. (çavuş artık yükleme ekranında seçilir — çözümleme yok) ===\n";
 $cvs = [
     ['id' => 1, 'code' => 'C005', 'name' => 'Test - ÇAVUŞ', 'is_active' => 1],
     ['id' => 2, 'code' => 'C006', 'name' => 'Ali Veli', 'is_active' => 1],
@@ -174,31 +174,6 @@ $cvs = [
     ['id' => 4, 'code' => 'C008', 'name' => 'Depo - Ali Veli', 'is_active' => 1],
     ['id' => 5, 'code' => 'CS1', 'name' => 'Şeker Bey', 'is_active' => 1],
 ];
-$r = pdks_fis_cavus_coz($cvs, 'c005', '');
-ok('10) kod eşleşmesi (küçük harf)', $r['ok'] && $r['id'] === 1 && $r['yontem'] === 'kod' && !isset($r['uyari']), j($r));
-$r = pdks_fis_cavus_coz($cvs, 'çş1', '');
-ok('10) kod ç/ş katlama (çş1 ≡ CS1)', $r['ok'] && $r['id'] === 5, j($r));
-$r = pdks_fis_cavus_coz($cvs, 'C099', 'Ali Veli');
-ok('10) kod bulunamaz → HATA (ada düşmez)', !$r['ok'] && str_contains($r['hata'], 'C099'), j($r));
-$r = pdks_fis_cavus_coz($cvs, 'C006', 'Başka Biri');
-ok('10) kod + uyuşmayan ad → uyarı, kod esas', $r['ok'] && $r['id'] === 2 && str_contains($r['uyari'], 'kod esas'), j($r));
-$r = pdks_fis_cavus_coz($cvs, 'C005', 'çavuş');
-ok('10) kod + ad sistem adının parçası → uyarı yok', $r['ok'] && !isset($r['uyari']), j($r));
-$r = pdks_fis_cavus_coz($cvs, '', 'ali veli');
-ok('10) yalnız ad tam eşleşme (başka "Depo - Ali Veli" aday olsa da tam eşleşen kazanır)', $r['ok'] && $r['id'] === 2 && $r['yontem'] === 'ad', j($r));
-$r = pdks_fis_cavus_coz($cvs, '', 'ÇAVUŞ');
-ok('10) " - " sonrası parça eşleşmesi (Test - ÇAVUŞ)', $r['ok'] && $r['id'] === 1, j($r));
-$cvs2 = array_merge($cvs, [['id' => 9, 'code' => 'C009', 'name' => 'Başka - Çavuş', 'is_active' => 1]]);
-$r = pdks_fis_cavus_coz($cvs2, '', 'çavuş');
-ok('10) 2 aday → hata + aday listesi', !$r['ok'] && str_contains($r['hata'], 'C005') && str_contains($r['hata'], 'C009'), j($r));
-$r = pdks_fis_cavus_coz($cvs, '', 'Hiç Yok');
-ok('10) 0 aday → bulunamadı', !$r['ok'] && str_contains($r['hata'], 'bulunamadı'), j($r));
-$r = pdks_fis_cavus_coz($cvs, '', '');
-ok('10) kod + ad ikisi de boş → hata', !$r['ok'], j($r));
-$r = pdks_fis_cavus_coz($cvs, 'C007', '');
-ok('10) pasif çavuş → ok + uyarı', $r['ok'] && $r['id'] === 3 && str_contains($r['uyari'], 'pasif'), j($r));
-$r = pdks_fis_cavus_coz($cvs, '', 'Ayşe Çelik');
-ok('10) pasif çavuş (ad) → ok + uyarı', $r['ok'] && $r['id'] === 3 && str_contains($r['uyari'], 'pasif'), j($r));
 
 echo "\n=== 11. pdks_fis_fm_notr ===\n";
 $orn = fn(bool $var, ?string $mod, ?string $birim, ?string $para = 'TRY') => ['oran' => ['var' => $var, 'fm_modu' => $mod, 'fm_birim' => $birim, 'para' => $para]];
@@ -353,41 +328,45 @@ ok('14) zamanla girdi planı DEĞİŞTİRMEZ (saf)', (function () { $p = pdks_fi
 
 echo "\n=== 11b. pdks_fis_normalize ===\n";
 function H(array $kv): array { $o = []; foreach ($kv as $k => $v) $o[$k] = ['v' => $v, 't' => is_string($v) ? 's' : (is_null($v) ? 'e' : 'n')]; return $o; }
-function nor(array $satirlar, array $cv = null): array { global $cvs; return pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => $satirlar, 'bilinmeyen' => []], $cv ?? $cvs); }
+function nor(array $satirlar, array $cv = null, string $isl = 'Depo A'): array { global $cvs; return pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => $satirlar, 'bilinmeyen' => []], $cv ?? $cvs[0], $isl); }
 $gec = date('d.m.Y', strtotime('-3 day')); $gecIso = date('Y-m-d', strtotime('-3 day'));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => '01410', 'tarih' => $gec, 'isletme' => 'Depo A', 'cavus_kodu' => 'C005', 'cavus_adi' => 'ÇAVUŞ', 'kadin_tam' => '8', 'erkek_tam' => 12.0, 'erkek_yarim' => '1', 'fm2' => '5', 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '8:30', 'rev' => '1', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1'])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => '01410', 'tarih' => $gec, 'kadin_tam' => '8', 'erkek_tam' => 12.0, 'erkek_yarim' => '1', 'fm2' => '5', 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '8:30', 'rev' => '1', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1'])]]);
 $f = $r['fisler'][0] ?? [];
 ok('11b) geçerli satır: hata yok', ($f['hatalar'] ?? ['x']) === [] && $r['genel_hatalar'] === [], j([$f['hatalar'] ?? null, $r['genel_hatalar']]));
 ok('11b) alanlar: fiş no/tarih/çavuş/sayılar/FM/servis/giriş/rev', ($f['fis_no'] ?? '') === '01410' && $f['tarih'] === $gecIso && $f['cavus']['id'] === 1 && $f['say']['KADIN'] === ['tam' => 8, 'yarim' => 0] && $f['say']['ERKEK'] === ['tam' => 12, 'yarim' => 1]
     && $f['fm_kova'][2] === 5 && $f['fm_tipi'] === ['ERKEK'] && $f['servis'] === ['buyuk' => 0, 'kucuk' => 1] && $f['giris'] === '08:30' && $f['rev'] === 1 && $f['not'] === 'Rampa', j($f));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => '12 + 1'])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => '12 + 1'])]]);
 ok('11b) "12 + 1" → hücre hatası Satır n, «Başlık»', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 2, «Erkek Tam»:') && str_contains($x, 'ayrı sütunlara')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 3, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => date('d.m.Y'), 'cavus_kodu' => 'C006', 'erkek_tam' => 1])]]);
+$r = nor([['satir' => 3, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => date('d.m.Y'), 'erkek_tam' => 1])]]);
 ok('11b) bugünün tarihi → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'bugün') && str_starts_with($x, 'Satır 3, «Tarih»')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 3, 'hucreler' => H(['fis_no' => 'ORNEK-1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])]]);
+$r = nor([['satir' => 3, 'hucreler' => H(['fis_no' => 'ORNEK-1', 'tarih' => $gec, 'erkek_tam' => 1])]]);
 ok('11b) ORNEK- fiş no → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'Örnek')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])], ['satir' => 3, 'hucreler' => H(['fis_no' => 'a1', 'tarih' => $gec, 'cavus_kodu' => 'C005', 'erkek_tam' => 1])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])], ['satir' => 3, 'hucreler' => H(['fis_no' => 'a1', 'tarih' => $gec, 'erkek_tam' => 1])]]);
 ok('11b) aynı fiş no iki satırda → İKİ satıra da hata', count(array_filter($r['fisler'], fn($f) => (bool)array_filter($f['hatalar'], fn($x) => str_contains($x, 'aynı Fiş No')))) === 2, j(array_column($r['fisler'], 'hatalar')));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])], ['satir' => 3, 'hucreler' => H(['fis_no' => 'A2', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])], ['satir' => 3, 'hucreler' => H(['fis_no' => 'A2', 'tarih' => $gec, 'erkek_tam' => 1])]]);
 ok('11b) aynı çavuş+gün iki fiş → uyarı + cakisma_dosya (hata değil)', $r['fisler'][0]['hatalar'] === [] && !empty($r['fisler'][0]['cakisma_dosya']) && !empty($r['fisler'][1]['cakisma_dosya']) && $r['fisler'][0]['cakisma_sira'] === 0 && $r['fisler'][1]['cakisma_sira'] === 1 && $r['fisler'][1]['uyarilar'] !== [], j(array_column($r['fisler'], 'uyarilar')));
 $r = nor([]);
 ok('11b) 0 fiş → genel hata', $r['genel_hatalar'] !== [], j($r));
-$cok = []; for ($i = 1; $i <= 151; $i++) $cok[] = ['satir' => $i + 1, 'hucreler' => H(['fis_no' => 'N' . $i, 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])];
+$cok = []; for ($i = 1; $i <= 151; $i++) $cok[] = ['satir' => $i + 1, 'hucreler' => H(['fis_no' => 'N' . $i, 'tarih' => $gec, 'erkek_tam' => 1])];
 $r = nor($cok);
 ok('11b) 151 fiş → genel hata', $r['genel_hatalar'] !== [] && str_contains($r['genel_hatalar'][0], '150'), j($r['genel_hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['tarih' => $gec, 'erkek_tam' => 1])]]);
 ok('11b) Fiş No boş (başka alan dolu) → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'Fiş No')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => ['fis_no' => ['v' => 1411, 't' => 'n']] + H(['tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1])]]);
+$r = nor([['satir' => 2, 'hucreler' => ['fis_no' => ['v' => 1411, 't' => 'n']] + H(['tarih' => $gec, 'erkek_tam' => 1])]]);
 ok('11b) sayı olarak gelen Fiş No → uyarı (baştaki sıfır)', $r['fisler'][0]['fis_no'] === '1411' && !empty($r['fisler'][0]['fis_no_ham_sayi']) && (bool)array_filter($r['fisler'][0]['uyarilar'], fn($x) => str_contains($x, 'sıfır')), j($r['fisler'][0]['uyarilar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C099', 'erkek_tam' => 1])]]);
-ok('11b) bilinmeyen çavuş kodu → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 2, «Çavuş Kodu»')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1, 'fm_tipi' => 'Kuş'])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], $cvs[2]);
+ok('11b) pasif çavuş seçimi → uyarı (hata değil)', $r['fisler'][0]['hatalar'] === [] && (bool)array_filter($r['fisler'][0]['uyarilar'], fn($x) => str_contains($x, 'pasif')) && $r['fisler'][0]['cavus']['id'] === 3, j($r['fisler'][0]));
+$r = pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => [['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], 'bilinmeyen' => []], ['id' => 0], 'Depo A');
+ok('11b) çavuş seçilmemiş → genel hata, fiş yok', $r['fisler'] === [] && $r['genel_hatalar'] === ['Çavuş seçilmedi.'], j($r));
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], $cvs[1], 'Depo B');
+ok('11b) fişler seçilen çavuş + işletmeyi taşır (dosyadan DEĞİL)', $r['fisler'][0]['cavus'] === ['id' => 2, 'kod' => 'C006', 'ad' => 'Ali Veli', 'yontem' => 'secim'] && $r['fisler'][0]['isletme'] === 'Depo B', j($r['fisler'][0]));
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'fm_tipi' => 'Kuş'])]]);
 ok('11b) bilinmeyen FM Tipi → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'FM Tipi')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1, 'servis_buyuk' => 100])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'servis_buyuk' => 100])]]);
 ok('11b) servis > 99 → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'Servis Büyük')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006', 'erkek_tam' => 1, 'not' => '=HYPERLINK("http://x")', 'ham' => '+1', 'isletme' => '@x'])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'not' => '=HYPERLINK("http://x")', 'ham' => '+1'])]], null, '@x');
 ok('11b) serbest metin alanları enjeksiyona karşı \' önekli', str_starts_with($r['fisler'][0]['not'], "'=") && str_starts_with($r['fisler'][0]['ham'], "'+") && str_starts_with($r['fisler'][0]['isletme'], "'@"), j([$r['fisler'][0]['not'], $r['fisler'][0]['ham']]));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'cavus_kodu' => 'C006'])]]);
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec])]]);
 ok('11b) boş sayılar → say 0 (hata değil, plan karar verir)', $r['fisler'][0]['say']['ERKEK'] === ['tam' => 0, 'yarim' => 0] && $r['fisler'][0]['fm_toplam'] === null && $r['fisler'][0]['giris'] === '08:00' && $r['fisler'][0]['rev'] === 0, j($r['fisler'][0]));
 
 echo "\n=== 15. Statik (kaynak taraması) ===\n";

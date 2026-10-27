@@ -48,6 +48,10 @@ ok('1) seçim: tablo ∩ kart kesişimi + token\'daki bilinen satırlarla kesiş
 ok('1) onay kutuları POST\'tan (onay_yarim/onay_fm/ek_yaz/isletme_onay), fm_tip token\'dan', str_contains($sayfa, "!empty(\$_POST['onay_yarim'])") && str_contains($sayfa, "\$yuk['secenek']['fm_tip']"));
 ok('1) kullanıcı verisi h(); ham $_POST/$_GET echo YOK', say_alt($sayfa, 'h(') >= 8 && !preg_match('/echo\s+\$_(POST|GET|REQUEST)|<\?=\s*\$_(POST|GET|REQUEST)/', $sayfa . $partial));
 ok('1) onayda confirm (onsubmit) — partial', str_contains($partial, 'onsubmit="return confirm('));
+ok('1) v451: İşletme/Depo/Çavuş formdan seçilir — onizle dalı çavuşu pdks_fis_cavuslar() listesinden doğrular, isletmeyi depot_options() ile', str_contains($sayfa, "\$_POST['cavus_id']") && str_contains($sayfa, 'pdks_fis_cavuslar($pdo)') && str_contains($sayfa, "in_array(\$isletme, depot_options(), true)"));
+ok('1) v451: depo değişimi depo_sec.php kuralıyla (depot_options + set_active_depot + audit depot_switch), onizle formdaki depo aktif depodan farklıysa REDDEDER', str_contains($sayfa, "'depo_degistir'") && str_contains($sayfa, 'set_active_depot($yeni)') && str_contains($sayfa, "'depot_switch'") && str_contains($sayfa, 'aktif depodan farklı'));
+ok('1) v451: normalize seçilen çavuş + işletmeyle çağrılır (dosyadan çavuş/işletme OKUNMAZ)', str_contains($sayfa, 'pdks_fis_normalize($o, $cavusSec, $isletme)') && !preg_match("/'(isletme|cavus_kodu|cavus_adi)'\\s*,/", $lib . '') );
+ok('1) v451: sütun tanımında işletme / çavuş yok', !array_intersect(array_column(pdks_fis_sutunlar(), 'anahtar'), ['isletme', 'cavus_kodu', 'cavus_adi']));
 ok('1) <dialog> / modal YOK', !str_contains($sayfa . $partial, '<dialog') && !str_contains($sayfa . $partial, 'pm-dialog'));
 ok('1) geri bağlantısı "← Günlük Puantaj" btn-geri (btn-geri-ptak YOK)', str_contains($sayfa, '<a href="gunluk_isci_puantaj.php" class="btn btn-geri">← Günlük Puantaj</a>') && !str_contains($sayfa, 'btn-geri-ptak'));
 ok('1) token biçimi: 32 hex (sonuç + önizleme)', str_contains($sayfa, '/^[a-f0-9]{32}$/D') && str_contains($lib, "'/^[a-f0-9]{32}\$/D'"));

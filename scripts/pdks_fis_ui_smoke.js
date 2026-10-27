@@ -76,10 +76,37 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     }
     if (SHOT) { await page.setViewportSize({ width: 1280, height: 900 }); await page.screenshot({ path: path.join(SHOT, 'fis_form_1280.png'), fullPage: true }); }
 
+    console.log('\n=== 1b. İşletme · Depo · Çavuş seçimi (Excel\'de değil, formda) ===');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(URL);
+    ok('1b) üç seçim alanı: İşletme, Depo, Çavuş (hepsi zorunlu)', await page.locator('#fyIsletme[required]').count() === 1 && await page.locator('#fyDepo[required]').count() === 1 && await page.locator('#fyCavus[required]').count() === 1);
+    ok('1b) varsayılan: İşletme = Depo = aktif depo (Depo A); çavuş seçilmedi', (await page.locator('#fyIsletme').inputValue()) === 'Depo A' && (await page.locator('#fyDepo').inputValue()) === 'Depo A' && (await page.locator('#fyCavus').inputValue()) === '');
+    ok('1b) çavuş listesi "kod · ad" biçiminde ve seçeneklerde çavuş var', await page.locator('#fyCavus option', { hasText: 'C001 · Çavuş A' }).count() === 1);
+    await page.setInputFiles('#fyDosya', XLSX);
+    ok('1b) çavuş seçilmeden Önizle engellenir (HTML zorunlu alan)', await page.locator('#fyCavus').evaluate(e => e.validity.valueMissing));
+    await page.selectOption('#fyCavus', { label: 'C002 · Çavuş B' });
+    await page.selectOption('#fyDepo', 'Depo B');
+    await page.waitForURL(/gunluk_fis_yukle\.php\?/);
+    ok('1b) depo değişince aktif depo değişir; çavuş/işletme seçimi sorgu dizgesiyle korunur', (await page.locator('#fyDepo').inputValue()) === 'Depo B' && (await page.locator('#fyCavus option:checked').innerText()).includes('Çavuş B') && (await page.locator('#fyIsletme').inputValue()) === 'Depo A', page.url());
+    const farkliDepo = await page.evaluate(async (u) => { const t = document.body.innerHTML.match(/name="csrf" value="([a-f0-9]+)"/); const r = await fetch(u, { method: 'POST', body: new URLSearchParams({ csrf: t ? t[1] : '', eylem: 'onizle', depo: 'Depo A', isletme: 'Depo A', cavus_id: '1' }) }); return await r.text(); }, URL);
+    ok('1b) formdaki depo aktif depodan farklıysa (eski sekme) önizleme REDDEDİLİR', farkliDepo.includes('aktif depodan farklı'), farkliDepo.slice(0, 200));
+    await page.selectOption('#fyDepo', 'Depo A');
+    await page.waitForURL(/gunluk_fis_yukle\.php\?/);
+    ok('1b) depoya geri dönüldü (Depo A)', (await page.locator('#fyDepo').inputValue()) === 'Depo A');
+    // İşletme ≠ Depo → uyuşmazlık onayı; dosyada işletme sütunu yok
+    await page.goto(URL);
+    await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' });
+    await page.selectOption('#fyIsletme', 'Depo B');
+    await page.setInputFiles('#fyDosya', XLSX);
+    await Promise.all([page.waitForURL(/\?onizle=[a-f0-9]{32}/), page.locator('button:has-text("Önizle")').click()]);
+    ok('1b) önizleme üstünde İşletme / Depo / Çavuş özeti', await page.locator('.fy-ust').innerText().then(t => t.includes('Depo B') && t.includes('Depo A') && t.includes('C001') && t.includes('Çavuş A')));
+    ok('1b) seçilen işletme ≠ depo → "uyuşmuyor" uyarısı (yazmak için onay kutusu)', (await page.locator('#fisYukle').innerText()).includes('uyuşmuyor'));
+    await Promise.all([page.waitForURL(url => !/onizle=/.test(url.toString())), page.locator('.fy-vazgec button').click()]);
+
     console.log('\n=== 2. Yükle → önizleme ===');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(URL);
-    await page.setInputFiles('#fyDosya', XLSX);
+    await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' }); await page.setInputFiles('#fyDosya', XLSX);
     await Promise.all([page.waitForURL(/\?onizle=[a-f0-9]{32}/), page.locator('button:has-text("Önizle")').click()]);
     ok('2) önizleme sayfası: 3 fiş, 2 hazır, 1 hatalı', await page.locator('.fy-ozet').innerText().then(t => /3\s*fiş/.test(t) && /2\s*hazır/.test(t) && /1\s*hatalı/.test(t)));
     ok('2) masaüstü (1280): tablo görünür, mobil kartlar gizli', await page.locator('.fy-tablo').first().isVisible() && !(await page.locator('.fy-kartlar').isVisible()));
@@ -132,7 +159,7 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
 
     console.log('\n=== 4. Aynı dosya tekrar ===');
     await page.goto(URL);
-    await page.setInputFiles('#fyDosya', XLSX);
+    await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' }); await page.setInputFiles('#fyDosya', XLSX);
     await Promise.all([page.waitForURL(/\?onizle=/), page.locator('button:has-text("Önizle")').click()]);
     ok('4) önizleme: 2 fiş "zaten yüklü" (disabled) + 1 hatalı', (await page.locator('.pc-only tr.fy-s-zaten').count()) === 2 && (await page.locator('.pc-only tr.fy-s-hata').count()) === 1 && await page.locator('#fyYazBtn').isDisabled());
     ok('4) "Vazgeç" önizlemeyi kapatır, kayıt yazılmaz', await (async () => { await Promise.all([page.waitForURL(url => !/onizle=/.test(url.toString())), page.locator('.fy-vazgec button').click()]); return sayilar().donem === 44 && (await page.locator('[data-flash]').count()) === 1; })());
@@ -143,7 +170,7 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     const kotuToken = await page.evaluate(async (u) => { const t = document.body.innerHTML.match(/name="csrf" value="([a-f0-9]+)"/); const csrf = t ? t[1] : ''; const r = await fetch(u, { method: 'POST', redirect: 'manual', body: new URLSearchParams({ csrf, eylem: 'yaz', token: '../../etc/passwd' }) }); return r.type + ':' + r.status; }, URL);
     ok('5) geçersiz token ile yaz → yönlendirme (hiçbir şey yazılmaz)', kotuToken.startsWith('opaqueredirect') && sayilar().donem === 44, kotuToken);
     const xlsDosya = path.join(TMP, 'kotu.xls'); fs.writeFileSync(xlsDosya, 'PK\x03\x04bozuk');
-    await page.goto(URL); await page.setInputFiles('#fyDosya', xlsDosya);
+    await page.goto(URL); await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' }); await page.setInputFiles('#fyDosya', xlsDosya);
     await page.evaluate(() => document.getElementById('fyDosya').removeAttribute('accept'));
     await Promise.all([page.waitForNavigation(), page.locator('button:has-text("Önizle")').click()]);
     ok('5) .xls adlı dosya → Türkçe hata (flash), önizleme açılmaz', (await page.locator('[data-flash="error"]').innerText()).includes('.xlsx') && !page.url().includes('onizle='));
