@@ -25,9 +25,17 @@ function kalem(PDO $db, int $sid, array $a): void
     $v = $a + ['sevkiyat_id' => $sid, 'ian' => '', 'sira' => 1, 'koli_icerik' => '3,5 KG', 'para_birimi' => 'EUR', 'fiyat_birim' => 'KG'];
     $db->prepare('INSERT INTO siparis_kalemler (' . implode(',', array_keys($v)) . ') VALUES (' . implode(',', array_fill(0, count($v), '?')) . ')')->execute(array_values($v));
 }
+/** Geçerli invoice belgesi + bağ (girdideki belge_id ile; v448: silinmiş/bağsız belgenin girdisi sayılmaz). */
+function inv_belge(PDO $db, int $bid, int $sid, bool $gecerli = true, ?string $silindi = null): void
+{
+    $db->prepare("INSERT OR IGNORE INTO siparis_belgeler (id, tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime, deleted_at) VALUES (?, 'invoice', 'uretim', 'islendi', ?, ?, ?, 'application/pdf', ?)")
+        ->execute([$bid, str_pad((string)$bid, 64, '0', STR_PAD_LEFT), 'd' . $bid . '.pdf', 'INV-' . $bid . '.pdf', $silindi]);
+    $db->prepare('INSERT OR IGNORE INTO siparis_belge_bag (belge_id, sevkiyat_id, gecerli) VALUES (?, ?, ?)')->execute([$bid, $sid, $gecerli ? 1 : 0]);
+}
 function inv(PDO $db, int $sid, array|string $girdi): void
 {
     $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['siparis_invoice_' . $sid, is_string($girdi) ? $girdi : json_encode($girdi)]);
+    if (is_array($girdi) && !empty($girdi['uretildi_at']) && (int)($girdi['belge_id'] ?? 0) > 0) inv_belge($db, (int)$girdi['belge_id'], $sid);
 }
 $uretildi = static fn(string $fiyat, array $ek = []): array => $ek + ['no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'fiyat' => $fiyat, 'iskonto' => '0', 'uretildi_at' => '2026-10-21 10:00:00', 'belge_id' => 77];
 
@@ -94,6 +102,28 @@ inv($db, $ID['s4'], $uretildi('999.9999'));
 ok('sınır: 999,9999 geçerli (9999999)', (siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]['fiyat'] ?? 0) === 9999999);
 inv($db, $ID['s4'], $uretildi('1.37255'));
 ok('4 ondalıktan fazlası yuvarlanır (1.37255 → 13726)', (siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]['fiyat'] ?? 0) === 13726);
+// — v448: belge silinince / bağı geçersizleşince / eski sürüm olunca hks_kv girdisi KALIR; fatura fiyatı olarak SAYILMAMALI —
+$db->exec('DELETE FROM siparis_belge_bag WHERE sevkiyat_id = ' . $ID['s4']);
+inv($db, $ID['s4'], $uretildi('1.20', ['belge_id' => 500]));
+ok('geçerli belge + bağ → sayılır', isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+$db->exec('UPDATE siparis_belgeler SET deleted_at = ' . $db->quote('2026-10-22 10:00:00') . ' WHERE id = 500');
+ok('belge SOFT SİLİNMİŞ (hks_kv girdisi kalmış) → sayılmaz', !isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+$db->exec('UPDATE siparis_belgeler SET deleted_at = NULL WHERE id = 500');
+$db->exec('UPDATE siparis_belge_bag SET gecerli = 0 WHERE belge_id = 500 AND sevkiyat_id = ' . $ID['s4']);
+ok('bağ gecerli=0 (eski sürüm) → sayılmaz', !isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+$db->exec('UPDATE siparis_belge_bag SET gecerli = 1 WHERE belge_id = 500 AND sevkiyat_id = ' . $ID['s4']);
+inv_belge($db, 501, $ID['s4'], true);   // başka (güncel) invoice belgesi; kv hâlâ 500'ü gösteriyor
+$db->exec('UPDATE siparis_belge_bag SET gecerli = 0 WHERE belge_id = 500 AND sevkiyat_id = ' . $ID['s4']);
+ok('kv belge_id ile geçerli belge FARKLIYSA → sayılmaz', !isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+$db->exec("UPDATE siparis_belgeler SET tur = 'pkl' WHERE id = 501");
+$db->exec('UPDATE siparis_belge_bag SET gecerli = 1 WHERE belge_id = 500 AND sevkiyat_id = ' . $ID['s4']);
+$db->exec("UPDATE siparis_belgeler SET tur = 'pkl' WHERE id = 500");
+ok('belge türü invoice değilse → sayılmaz', !isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+$db->exec("UPDATE siparis_belgeler SET tur = 'invoice' WHERE id IN (500, 501)");
+ok('tür invoice\'a dönünce yeniden sayılır', isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+inv($db, $ID['s4'], $uretildi('1.20', ['uretildi_at' => ['x']]));
+ok('uretildi_at dizi (bozuk girdi) → uyarı yok, sayılmaz', !isset(siparis_cari_fatura_fiyatlari($db, $tumId)[$ID['s4']]));
+inv($db, $ID['s4'], $uretildi('1.37255'));   // sonraki testler için eski durum
 $db->exec("DELETE FROM hks_kv WHERE anahtar = 'siparis_invoice_" . $ID['s4'] . "'");
 $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['siparis_invoice_ayar', json_encode(['rex_no' => 'x'])]);
 ok('siparis_invoice_ayar anahtarı haritaya karışmaz', count(siparis_cari_fatura_fiyatlari($db, $tumId)) === 6);

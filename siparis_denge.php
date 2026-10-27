@@ -81,6 +81,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
 .sd-uyari-liste li.sd-u-uyari { font-weight: 700; color: var(--pr-warn); }
 .sc-cari { break-inside: avoid; page-break-inside: avoid; }
 @media screen and (max-width: 900px) { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+@media screen and (max-width: 767px) { .sc-filtre input, .sc-filtre select { font-size: 16px; } }
 @media print {
   html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table.print-table.sc-tablo { font-size: 7.8pt; }
@@ -209,6 +210,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
     <ul class="sd-notlar">
       <li>Ortalama fiyatlar kg ağırlıklıdır (Σ tutar ÷ Σ kg); sevkiyat fiyatlarının basit ortalaması DEĞİLDİR.</li>
       <li>Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat; PC fiyatı = Cari Döküm'deki satır fiyatı. İkisi de iskonto ÖNCESİDİR, iskonto % karşılaştırmaya katılmaz (iki tarafta aynı oranla uygulandığı varsayılır).</li>
+      <li>Kg tabanı Cari Döküm'deki koli × koli kg'dır; invoice'ta elle farklı bir net kg girildiyse (ör. PKL toplamından farklı) gerçek fatura tutarı bundan az farklı olabilir.</li>
       <li>PC fiyatı geldikçe sayfayı yenileyin — plan her seferinde güncel farktan yeniden hesaplanır.</li>
     </ul>
   </section>

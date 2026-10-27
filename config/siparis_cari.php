@@ -197,13 +197,13 @@ function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array
 
 /**
  * SALT OKUNUR, fail soft (v448). Sevkiyat → ÜRETİLMİŞ invoice'ın birim fiyatı (Invoice (OGL) girdisi, hks_kv `siparis_invoice_<id>`).
- * Yalnız `uretildi_at` + `belge_id` dolu ve 0 < fiyat < 1000 olan girdi sayılır. Tablo yok / bozuk JSON / hata → o kayıt (ya da tümü) yok sayılır.
+ * Yalnız `uretildi_at` + `belge_id` dolu, 0 < fiyat < 1000 VE `belge_id` hâlâ geçerli invoice (siparis_belgeler tur='invoice', silinmemiş, siparis_belge_bag gecerli=1) olan girdi sayılır — belge silinince hks_kv girdisi kalır. Tablo yok / bozuk JSON / hata → o kayıt (ya da tümü) yok sayılır.
  * @param list<int|string> $sevIds
  * @return array<int,array{fiyat:int,no:string,tarih:?string,iskonto:float}>  fiyat = on-binde (4 ondalık tam sayı)
  */
 function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array
 {
-    $out = [];
+    $out = []; $aday = [];
     try {
         $tablo = siparis_evrak_mail_kv_tablo();
         $ids = array_values(array_unique(array_filter(array_map('intval', $sevIds), static fn(int $i): bool => $i > 0)));
@@ -215,18 +215,28 @@ function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array
                 $sid = (int)substr((string)$r['anahtar'], strlen(SIPARIS_INV_GIRDI_KV_ON));
                 $j = json_decode((string)($r['deger'] ?? ''), true);
                 if ($sid <= 0 || !is_array($j)) continue;
-                if (trim((string)($j['uretildi_at'] ?? '')) === '' || (int)($j['belge_id'] ?? 0) <= 0) continue;   // gerçekten üretilmiş invoice
+                if (!is_string($j['uretildi_at'] ?? null) || trim($j['uretildi_at']) === '' || (int)($j['belge_id'] ?? 0) <= 0) continue;   // gerçekten üretilmiş invoice
                 $f = siparis_inv_ondalik_coz($j['fiyat'] ?? null, false);
                 if ($f === null || !($f > 0.0 && $f < 1000.0)) continue;
                 $f1e4 = (int)round($f * 10000);
                 if ($f1e4 <= 0 || $f1e4 >= 10000000) continue;
                 $t = is_string($j['tarih'] ?? null) ? siparis_tarih_coz($j['tarih']) : null;
                 $isk = siparis_inv_ondalik_coz($j['iskonto'] ?? 0, false);
-                $out[$sid] = ['fiyat' => $f1e4, 'no' => siparis_inv_metin($j['no'] ?? '', 60), 'tarih' => $t, 'iskonto' => $isk !== null ? (float)$isk : 0.0];
+                $aday[$sid] = ['fiyat' => $f1e4, 'no' => siparis_inv_metin($j['no'] ?? '', 60), 'tarih' => $t, 'iskonto' => $isk !== null ? (float)$isk : 0.0, '_belge' => (int)$j['belge_id']];
+            }
+            // hks_kv girdisi belge silinince kalır → yalnız HÂLÂ GEÇERLİ (silinmemiş + bağı gecerli=1) invoice'a ait girdi sayılır
+            $adaySid = array_values(array_filter($parca, static fn(int $i): bool => isset($aday[$i])));
+            if ($adaySid === []) continue;
+            $gq = $pdo->prepare("SELECT bb.sevkiyat_id, bb.belge_id FROM siparis_belge_bag bb JOIN siparis_belgeler b ON b.id = bb.belge_id"
+                . " WHERE bb.gecerli = 1 AND b.tur = 'invoice' AND b.deleted_at IS NULL AND bb.sevkiyat_id IN (" . implode(',', array_fill(0, count($adaySid), '?')) . ')');
+            $gq->execute($adaySid);
+            foreach ($gq->fetchAll(PDO::FETCH_ASSOC) as $g) {
+                $sid = (int)$g['sevkiyat_id'];
+                if (isset($aday[$sid]) && $aday[$sid]['_belge'] === (int)$g['belge_id'] && !isset($out[$sid])) { $e = $aday[$sid]; unset($e['_belge']); $out[$sid] = $e; }
             }
         }
     } catch (Throwable $e) {
-        return $out;   // tablo yok / sorgu hatası: kalan kayıtlar yok sayılır, sayfa çalışmaya devam eder
+        return $out;   // tablo yok / sorgu hatası: doğrulanamayan kayıtlar yok sayılır (fail-closed), sayfa çalışmaya devam eder
     }
     return $out;
 }

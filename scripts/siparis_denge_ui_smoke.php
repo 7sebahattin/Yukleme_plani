@@ -69,7 +69,12 @@ function kalem(PDO $db, int $sid, array $a): void
 function invoice(PDO $db, int $sid, string $fiyat, bool $uretildi = true): void
 {
     $j = ['no' => 'IHR2026000000' . str_pad((string)$sid, 3, '0', STR_PAD_LEFT), 'tarih' => '2026-10-20', 'fiyat' => $fiyat, 'iskonto' => '4'];
-    if ($uretildi) $j += ['uretildi_at' => '2026-10-21 10:00:00', 'belge_id' => 900 + $sid];
+    if ($uretildi) {
+        $j += ['uretildi_at' => '2026-10-21 10:00:00', 'belge_id' => 900 + $sid];
+        $db->prepare("INSERT INTO siparis_belgeler (id, tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime) VALUES (?, 'invoice', 'uretim', 'islendi', ?, ?, ?, 'application/pdf')")
+            ->execute([900 + $sid, str_pad((string)(900 + $sid), 64, '0', STR_PAD_LEFT), 'd' . $sid . '.pdf', 'INV-' . $sid . '.pdf']);
+        $db->prepare('INSERT INTO siparis_belge_bag (belge_id, sevkiyat_id, gecerli) VALUES (?, ?, 1)')->execute([900 + $sid, $sid]);
+    }
     $db->prepare('INSERT INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['siparis_invoice_' . $sid, json_encode($j)]);
 }
 /** DOM'a benzer dengeli-etiket denetimi (script/style/textarea ve yorumlar atlanır). */
