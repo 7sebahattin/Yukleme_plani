@@ -293,6 +293,14 @@ ok('v448 Cari Döküm: Fiyat dengeleme bağlantısı no-print eylem çubuğunda,
     && str_contains($caUc, 'Fatura fiyatı / kg') && str_contains($caUc, 'Fark / kg') && str_contains($caUc, 'sc-fark-eksi') && str_contains($caUc, 'sc-fark-arti') && str_contains($caUc, "Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi); fark = fatura − PC."));
 ok('v448 Cari Döküm: veri siparis_cari_fatura_fiyatlari() ile bağlanır; kapı/CSRF/mutasyon değişmedi (v397/v401 denetimleri yukarıda)', str_contains($caUc, "'fatura' => \$faturaFiyat") && str_contains($caUc, 'siparis_cari_fatura_fiyatlari('));
 ok('v448 config/siparis_cari.php: fatura okuma yalnız SELECT (hks_kv), 500\'lük parça, fail soft', str_contains($caHam, 'function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array') && str_contains($caHam, 'array_chunk($ids, 500)') && str_contains($caHam, 'catch (Throwable'));
+$deUc = kod_oku('siparis_denge.php');
+ok('v449 config/siparis_cari.php: kimlik bloğu yardımcıları (parti/plaka/kimlik/başlık) + parti haritası TEK kaynak siparis_beyan_parti_haritasi (ikinci SQL yok)',
+    str_contains($caHam, 'function siparis_cari_kimlik_html(array $s): string') && str_contains($caHam, 'function siparis_cari_kimlik_baslik(): string') && str_contains($caHam, 'function siparis_cari_plaka_html(string $p): string')
+    && str_contains($caHam, 'function siparis_cari_parti_haritasi(PDO $pdo, array $sevIds): array') && str_contains($caHam, 'siparis_beyan_parti_haritasi($pdo, $sevIds)') && !str_contains($caHam, 'FROM siparis_beyan'));
+ok('v449 Cari Döküm: A, B tabloları başlığında kimlik bloğu (Parti no · Sipariş no · Alıcı ülke · Plaka); satırlar siparis_cari_kimlik_html; C grup başlığında dört etiketli alan; veri parti haritasıyla bağlanır',
+    substr_count($caUc, '<?= $kimlikBas ?>') === 2 && str_contains($caUc, 'siparis_cari_kimlik_html($s)') && str_contains($caUc, "'parti' => \$partiHarita") && str_contains($caUc, 'siparis_cari_parti_haritasi(')
+    && str_contains($caUc, '<strong>Parti no:</strong>') && str_contains($caUc, '<strong>Alıcı ülke:</strong>') && str_contains($caUc, '<strong>Plaka:</strong>'));
+ok('v449 Fiyat Dengeleme: karşılaştırma tablosunda aynı kimlik bloğu (siparis_cari_kimlik_baslik / _html) + parti haritası', str_contains($deUc, 'siparis_cari_kimlik_baslik()') && str_contains($deUc, 'siparis_cari_kimlik_html($s)') && str_contains($deUc, 'siparis_cari_parti_haritasi('));
 
 echo "\n=== v442: OGL Invoice (siparis_invoice.php) ===\n";
 $ivUc = kod_oku('siparis_invoice.php'); $ivCfg = kod_oku('config/siparis_invoice.php'); $ivHam = oku('config/siparis_invoice.php'); $ivJs = oku('assets/siparis.js'); $ivCss = oku('assets/siparis.css');

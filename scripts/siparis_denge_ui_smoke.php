@@ -172,9 +172,9 @@ ok('B: USD sevkiyat (S4): PC "1,20 USD / kg", fatura/fark "—" (invoice EUR; ka
 ok('B: PC bekleyen (S5, invoice var): "Fiyat bekleniyor" KALIR, fatura 1,40 görünür, fark "—"', (bool)preg_match('~Fiyat bekleniyor</td>\s*<td class="num">1,40 EUR / kg</td>\s*<td class="num">—</td>~u', $B));
 ok('B: fark 0 → işaretsiz "0,00 EUR", renk sınıfı yok (S6)', (bool)preg_match('~1,50 EUR / kg</td>\s*<td class="num">1,50 EUR / kg</td>\s*<td class="num ">0,00 EUR</td>~u', $B));
 $gen = satir_genislikleri($B);
-ok('B: tüm satırlar 10 hücre genişliğinde (colspan\'lar bozulmadı) — ' . count($gen) . ' satır', $gen !== [] && count(array_unique($gen)) === 1 && $gen[0] === 10, json_encode(array_count_values($gen)));
-ok('A ve C bölümleri DEĞİŞMEDİ: fatura sütunu/başlığı/sınıfı yok; A 8, C 8 hücre', !str_contains($A, 'Fatura fiyatı') && !str_contains($C, 'Fatura fiyatı') && !str_contains($A . $C, 'sc-fark')
-    && count(array_unique(satir_genislikleri($A))) === 1 && satir_genislikleri($A)[0] === 8 && count(array_unique(satir_genislikleri($C))) === 1 && satir_genislikleri($C)[0] === 8);
+ok('B: tüm satırlar 12 hücre genişliğinde (Parti/Sipariş/Ülke/Plaka bloğu dahil) (colspan\'lar bozulmadı) — ' . count($gen) . ' satır', $gen !== [] && count(array_unique($gen)) === 1 && $gen[0] === 12, json_encode(array_count_values($gen)));
+ok('A ve C bölümleri DEĞİŞMEDİ: fatura sütunu/başlığı/sınıfı yok; A 10, C 8 hücre', !str_contains($A, 'Fatura fiyatı') && !str_contains($C, 'Fatura fiyatı') && !str_contains($A . $C, 'sc-fark')
+    && count(array_unique(satir_genislikleri($A))) === 1 && satir_genislikleri($A)[0] === 10 && count(array_unique(satir_genislikleri($C))) === 1 && satir_genislikleri($C)[0] === 8);
 ok('dipnot: "Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice\'taki birim fiyat (iskonto öncesi); fark = fatura − PC."', str_contains($g, "Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi); fark = fatura − PC."));
 ok('cari özet (D) etkilenmez: fatura sütunu içermez', str_contains($g, 'D) Cari Özet') && !str_contains(kesit($g, 'D) Cari Özet', '</html>'), 'Fatura fiyatı'));
 ok('XSS: S5 sipariş no kaçırılır; hiçbir yerde çıplak <script>alert', !str_contains($g, '<script>alert(1)') && str_contains($g, '&lt;script&gt;alert(1)&lt;/script&gt;'));
@@ -194,15 +194,15 @@ $K = kesit($g, 'id="sdKarsi"', 'Sonraki 5 fatura planı');
 foreach (['TC810001.10', 'TC810002.10', 'TC810006.10'] as $ref) ok("karşılaştırma tablosunda $ref var", str_contains($K, $ref));
 foreach (['TC810003.10', 'TC810004.10', 'alert(1)'] as $ref) ok("karşılaştırma tablosunda $ref YOK (invoice yok / USD / PC yok)", !str_contains($K, $ref));
 // Elle doğrulanmış sayılar: S1 18.200 kg PC 1,45 / fatura 1,37 → -1.456,00 ; S2 10.500 kg PC 14.666,67→1,4667 / fatura 1,42 → -490,00 ; S6 1.000×3,5=3.500 kg fark 0
-ok('S1 satırı: 18.200 kg · 1,45 · 1,37 · -0,08 · -1.456,00 · kümülatif -1.456,00', (bool)preg_match('~TC810001\.10</td>\s*<td class="num">18\.200</td>\s*<td class="num">1,45</td>\s*<td class="num">1,37</td>\s*<td class="num sc-fark-eksi">-0,08</td>\s*<td class="num sc-fark-eksi">-1\.456,00</td>\s*<td class="num sc-fark-eksi">-1\.456,00</td>~u', $K));
-ok('S2 satırı: 10.500 kg · PC ağırlıklı 1,4667 · fatura 1,42 · fark -0,0467 · -490,00 · kümülatif -1.946,00', (bool)preg_match('~TC810002\.10</td>\s*<td class="num">10\.500</td>\s*<td class="num">1,4667</td>\s*<td class="num">1,42</td>\s*<td class="num sc-fark-eksi">-0,0467</td>\s*<td class="num sc-fark-eksi">-490,00</td>\s*<td class="num sc-fark-eksi">-1\.946,00</td>~u', $K));
-ok('S6 satırı (fark 0): 0,00 · kümülatif -1.946,00', (bool)preg_match('~TC810006\.10</td>\s*<td class="num">3\.500</td>\s*<td class="num">1,50</td>\s*<td class="num">1,50</td>\s*<td class="num">0,00</td>\s*<td class="num">0,00</td>\s*<td class="num sc-fark-eksi">-1\.946,00</td>~u', $K));
+ok('S1 satırı: 18.200 kg · 1,45 · 1,37 · -0,08 · -1.456,00 · kümülatif -1.456,00', (bool)preg_match('~TC810001\.10</td>\s*<td>.*?</td>\s*<td>.*?</td>\s*<td class="num">18\.200</td>\s*<td class="num">1,45</td>\s*<td class="num">1,37</td>\s*<td class="num sc-fark-eksi">-0,08</td>\s*<td class="num sc-fark-eksi">-1\.456,00</td>\s*<td class="num sc-fark-eksi">-1\.456,00</td>~us', $K));
+ok('S2 satırı: 10.500 kg · PC ağırlıklı 1,4667 · fatura 1,42 · fark -0,0467 · -490,00 · kümülatif -1.946,00', (bool)preg_match('~TC810002\.10</td>\s*<td>.*?</td>\s*<td>.*?</td>\s*<td class="num">10\.500</td>\s*<td class="num">1,4667</td>\s*<td class="num">1,42</td>\s*<td class="num sc-fark-eksi">-0,0467</td>\s*<td class="num sc-fark-eksi">-490,00</td>\s*<td class="num sc-fark-eksi">-1\.946,00</td>~us', $K));
+ok('S6 satırı (fark 0): 0,00 · kümülatif -1.946,00', (bool)preg_match('~TC810006\.10</td>\s*<td>.*?</td>\s*<td>.*?</td>\s*<td class="num">3\.500</td>\s*<td class="num">1,50</td>\s*<td class="num">1,50</td>\s*<td class="num">0,00</td>\s*<td class="num">0,00</td>\s*<td class="num sc-fark-eksi">-1\.946,00</td>~us', $K));
 ok('TOPLAM: 3 sevkiyat, 32.200 kg, ağırlıklı PC 1,4609 / fatura 1,4004 (basit ortalama 1,4722 / 1,4400 DEĞİL), fark -1.946,00', str_contains($K, 'TOPLAM — 3 sevkiyat') && str_contains($K, '32.200') && preg_match('~<tbody class="sc-toplam">.*?1,4609</td>\s*<td class="num">1,4004</td>~su', $K) === 1 && substr_count($K, '-1.946,00') >= 3, '');
 ok('özet kutusu: Kapatılacak tutar "+1.946,00 EUR" (işaret açıklamalı)', str_contains($g, '+1.946,00 EUR') && str_contains($g, 'Fark / kg (fatura − PC)'));
 $ap = kesit($g, '<ul class="sd-uyari-liste"', '</ul>');
 ok('uyarı: 1 sevkiyat invoice\'suz (S3 üretilmemiş) + 1 EUR dışı (S4) + 1 PC bekleyen (S5) — yalnız bilgi satırları', str_contains($ap, '1 sevkiyat için üretilmiş invoice yok') && str_contains($ap, '1 sevkiyat EUR dışı') && str_contains($ap, 'henüz gelmemiş'), $ap);
 $gen = satir_genislikleri($K);
-ok('karşılaştırma tablosu: tüm satırlar 8 hücre (toplam dahil)', $gen !== [] && count(array_unique($gen)) === 1 && $gen[0] === 8, json_encode($gen));
+ok('karşılaştırma tablosu: tüm satırlar 11 hücre (kimlik bloğu + toplam dahil)', $gen !== [] && count(array_unique($gen)) === 1 && $gen[0] === 11, json_encode($gen));
 $P = kesit($g, 'id="sdPlan"', 'Uyarılar ve notlar');
 $planSatir = preg_match_all('~<tr>\s*<td class="num">(\d+)</td>~', $P, $pm);
 ok('plan: 5 satır, sıra 1..5', $planSatir === 5 && $pm[1] === ['1', '2', '3', '4', '5'], json_encode($pm[1] ?? []));
@@ -271,5 +271,36 @@ $__kos = function (string $script) use ($ROOT): string {
 };
 ok('sayfa (kök siparis_denge.php) çalışırken config/siparis_denge.php YÜKLENİR', str_contains($__kos($ROOT . '/siparis_denge.php'), 'YUKLENDI'));
 ok('config/siparis_denge.php doğrudan istenirse durur', !str_contains($__kos($ROOT . '/config/siparis_denge.php'), 'YUKLENDI'));
+
+echo "\n=== 4. Kimlik bloğu (v449): Parti no · Sipariş no · Alıcı ülke · Plaka — TÜM sevkiyat tablolarında ===\n";
+$db->exec("INSERT INTO customs_declarations (status, party_no, created_at) VALUES ('taslak', 'P-810/1', '2026-10-01 10:00:00'), ('taslak', 'P-810/2', '2026-10-01 10:00:00')");
+$cdSon = (int)$db->lastInsertId();
+foreach ([$cdSon - 1, $cdSon] as $bid) $db->exec("INSERT INTO siparis_beyan (sevkiyat_id, beyan_id, tur, durum, created_by, created_at) VALUES ($S1, $bid, 'elle', 'aktif', 1, '2026-10-02 10:00:00')");
+$KB = '<th>Parti no</th><th>Sipariş no</th><th>Alıcı ülke</th><th>Plaka</th>';
+rol(array_merge($OKU, ['beyan.read']), false, 3, ['DEPO1']);
+$r = uc('siparis_cari.php'); $g = $r['govde'];
+if ($cikti !== '') file_put_contents($cikti . '/cari_parti.html', $g);
+ok('cari (beyan.read var): 200, uyarı yok', temiz($r) && $r['kod'] === 200, (string)$r['hata']);
+ok('A ve B tablolarının başlığında kimlik bloğu SIRAYLA (Parti no · Sipariş no · Alıcı ülke · Plaka)', substr_count($g, $KB) === 2, (string)substr_count($g, $KB));
+ok('C bölümü grup başlığında dört alan etiketli: Parti no / Sipariş no / Alıcı ülke / Plaka', str_contains($g, '<strong>Parti no:</strong>') && str_contains($g, '<strong>Sipariş no:</strong>') && str_contains($g, '<strong>Alıcı ülke:</strong>') && str_contains($g, '<strong>Plaka:</strong>'));
+$Bk = kesit($g, $KESIT_B[0], $KESIT_B[1]);
+ok('S1: iki bağlı beyanın parti no\'su AYRI satırda ve sipariş no\'nun HEMEN solunda; ardından ülke + plaka (B)', (bool)preg_match('~<td>P-810/1<br>P-810/2</td><td>TC810001\.10</td><td>[^<]+</td><td>34TST001</td>~u', $Bk));
+ok('C grup başlığında S1: "Parti no: P-810/1 / P-810/2 · Sipariş no: TC810001.10"', str_contains($g, '<strong>Parti no:</strong> P-810/1 / P-810/2 · <strong>Sipariş no:</strong> TC810001.10'));
+ok('bağı olmayan sevkiyatta parti no "—" (uydurma YOK)', (bool)preg_match('~<td>—</td><td>TC810002\.10</td>~u', $g));
+$gen = satir_genislikleri($Bk);
+ok('B tablosu tüm satırlar 12 hücre', $gen !== [] && count(array_unique($gen)) === 1 && $gen[0] === 12);
+rol($OKU, false, 3, ['DEPO1']);
+$r = uc('siparis_cari.php'); $g2 = $r['govde'];
+ok('beyan.read YOK: hiçbir parti no sızmaz, sütun yine var, açıklayıcı not', temiz($r) && !str_contains($g2, 'P-810/') && substr_count($g2, $KB) === 2 && str_contains($g2, 'parti no görmek için beyan okuma yetkisi gerekir'));
+rol(array_merge($OKU, ['beyan.read']), false, 3, ['DEPO1']);
+$r = uc('siparis_denge.php'); $g3 = $r['govde'];
+if ($cikti !== '') file_put_contents($cikti . '/denge_parti.html', $g3);
+ok('denge: karşılaştırma tablosunda kimlik bloğu + S1 parti no', temiz($r) && str_contains($g3, $KB) && (bool)preg_match('~<td>P-810/1<br>P-810/2</td><td>TC810001\.10</td><td>[^<]+</td><td>34TST001</td>~u', $g3));
+$kh = siparis_cari_kimlik_html(['parti' => ['P<1>'], 'order_ref' => '<b>X</b>', 'ulke' => '', 'plaka' => '33ABC123-33DEF456']);
+rol($OKU, false, 3, ['DEPO1']);
+$r = uc('siparis_denge.php');
+ok('denge: beyan.read YOK → parti sızmaz + açıklayıcı not', temiz($r) && !str_contains($r['govde'], 'P-810/') && str_contains($r['govde'], 'Parti no görmek için beyan okuma yetkisi gerekir'));
+ok('siparis_cari_kimlik_html: XSS kaçışı, boş ülke "—", bitişik plakalar ayrı satır', str_contains($kh, 'P&lt;1&gt;') && str_contains($kh, '&lt;b&gt;X&lt;/b&gt;') && str_contains($kh, '<td>—</td>') && str_contains($kh, '33ABC123<br>33DEF456') && !str_contains($kh, '<b>'));
+ok('boş parti + boş plaka → "—"', siparis_cari_kimlik_html(['order_ref' => 'T']) === '<td>—</td><td>T</td><td>—</td><td>—</td>');
 
 siparis_test_bitir();

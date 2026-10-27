@@ -44,6 +44,7 @@ function siparis_denge_satirlar(array $cariVeri): array
         $pcF = siparis_denge_bol($pc * 100000, $gram);
         $faF = (int)$s['fatura']['fiyat'];
         $liste[] = ['id' => (int)($s['id'] ?? 0), 'tarih' => ($s['tarih'] ?? null) !== null ? (string)$s['tarih'] : null, 'order_ref' => (string)($s['order_ref'] ?? ''),
+            'parti' => array_values((array)($s['parti'] ?? [])), 'ulke' => (string)($s['ulke'] ?? ''), 'plaka' => (string)($s['plaka'] ?? ''),
             'gram' => $gram, 'pc_kurus' => $pc, 'fatura_kurus' => $fa, 'fark_kurus' => $fa - $pc,
             'pc_fiyat' => $pcF, 'fatura_fiyat' => $faF, 'fark_fiyat' => $faF - $pcF, 'kumulatif_fark_kurus' => 0];
     }
