@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v449` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v450` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -550,7 +550,7 @@ YALNIZ admin, CSRF, audit. Migration YOK.
   `node scripts/pdks_puantaj_dialog_smoke.js` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
   `node scripts/pdks_toplu_ekle_smoke.js`.
 
-### Fiş Excel'i Yükle (v446)
+### Fiş Excel'i Yükle (v446 → v450)
 Kâğıt "İŞLETME İŞÇİ FİŞİ"nin DIŞ bir yapay zekâyla şablona dökülmüş Excel'inden fiş başına kartsız mesai kayıtları (Tam / FM-k / Yarım) + servis
 yazar. Sayfa `gunluk_fis_yukle.php` (Günlük Puantaj üst çubuğundaki "📥 Fiş Excel'i Yükle"; `nav_ptak_sayfalari()`'nda). YALNIZ admin
 (`pdks_faz8j_yetki()`), aktif depo, her POST CSRF, audit; migration/yeni yetki YOK. OCR/AI uygulamanın İÇİNDE YOK; dosya diske KAYDEDİLMEZ
@@ -574,6 +574,7 @@ yazar. Sayfa `gunluk_fis_yukle.php` (Günlük Puantaj üst çubuğundaki "📥 F
   hedef−bu fişe `[FIS no]` etiketli). Kesin hakediş her zaman hata (EK aşamaz). Yalnız geçmiş günler, ≤150 fiş, ≤2 MB, yalnız .xlsx.
 - **Önizleme = yazma:** normalize fişler oturumda 32 hex token (30 dk, kullanıcı+depo bağlı, ≤3) ile taşınır; kova/saat/sayı istemciden GELMEZ; yazarken HER ŞEY güncel DB'ye göre yeniden
   değerlendirilir, plan hash'i önizlemedekinden farklıysa fiş YAZILMAZ ("degisti"). Seçim = masaüstü tablo ∩ mobil kart kutuları (biri ayrışırsa yazılmaz).
+- **v450 — "Önizleme süresi doldu ya da bu oturuma ait değil" hatası (canlı):** önizleme yükü yalnız PHP oturumundaydı; bazı sunucu oturum yapılandırmalarında yönlendirmeden sonraki GET oturum yazımını görmeden başlıyordu. Artık oturum BİRİNCİL, `hks_kv` YEDEK (`fis_yk_<token>` önizleme · `fis_sk_<token>` sonuç; JSON'da `t` İLK anahtar, 2 saatten eskisi `pdks_fis_kv_temizle()` ile silinir; tablo yoksa sessizce yalnız oturum). Yedekten okuma AYNI kural: kullanıcı + aktif depo + 30 dk TTL, token 128 bit rastgele. POST'ta yönlendirmeden ÖNCE `session_write_close()`. `pdks_fis_token_al($t, &$neden)` nedeni döner (bicim/yok/sure/kullanici/depo) → `pdks_fis_token_hata_metni()` Türkçe, ayrıca `error_log`. Hash'ler `pdks_fis_token_hashler()` ile iki yere yazılır — `$_SESSION['fis_yukle']`'ya doğrudan yazma. Sonuç ekranı da yedekten okunur (kayıt yazılmışken "Sonuç süresi doldu" demesin). Test: `pdks_fis_yaz_smoke.php` K10–K18 · `pdks_fis_ui_smoke.js` 2b (PHPSESSID çerezi silinse de önizleme + yazma).
 - **Güvenlik:** `dosya_dogrula` PhpSpreadsheet'e girmeden: uzantı, PK, MIME, ≤100 parça, makro/externalLinks/embeddings/activeX RED, zip bombası; okuma `ReadDataOnly`, yalnız «Fişler»,
   satır/sütun filtresi, `getCalculatedValue` YOK (formül hücresi önbellek değeri + uyarı, yoksa hata); serbest metin `pdks_fis_metin()` (denetim karakteri atılır, ilk karakter `= + - @` ise `'` önek);
   Ham Metin / Kontrol Notu DB/audit'e YAZILMAZ; kullanıcı verisi `h()`.

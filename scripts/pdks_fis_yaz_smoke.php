@@ -474,7 +474,8 @@ $AKTIF_DEPO = 'Depo B';
 $mkB = pdks_fis_degerlendir(db(), $fK, $sec, 1);
 ok('K3) aktif depo B: mevcut A mesaisi/dönemleri görülmez (depo kapsamlı), yeni B mesaisi yazılacak', $mkB['mevcut']['mesai'] === false, j($mkB['mevcut']));
 $AKTIF_DEPO = 'Depo A';
-// token
+// token (v447: oturum birincil + hks_kv yedek)
+db()->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
 $_SESSION = [];
 $t = pdks_fis_token_olustur(['sha' => 'x', 'fisler' => [1], 'secenek' => [], 'hashler' => []]);
 ok('K4) token 32 hex; geri alınır; kullanıcı + depo bağlı', preg_match('/^[a-f0-9]{32}$/D', $t) === 1 && (pdks_fis_token_al($t)['sha'] ?? '') === 'x');
@@ -486,9 +487,45 @@ $_SESSION['fis_yukle'][$t]['t'] = time() - PDKS_FIS_TOKEN_TTL - 5;
 ok('K7) TTL (30 dk) dolunca token geçersiz ve silinir', pdks_fis_token_al($t) === null && !isset($_SESSION['fis_yukle'][$t]));
 $_SESSION = []; $ts = [];
 for ($i = 0; $i < 5; $i++) $ts[] = pdks_fis_token_olustur(['sha' => (string)$i]);
-ok('K8) oturumda en çok 3 token (en eskiler atılır)', count($_SESSION['fis_yukle']) === 3 && pdks_fis_token_al($ts[0]) === null && pdks_fis_token_al($ts[4]) !== null);
+ok('K8) oturumda en çok 3 token (en eskiler oturumdan atılır)', count($_SESSION['fis_yukle']) === 3 && !isset($_SESSION['fis_yukle'][$ts[0]]) && pdks_fis_token_al($ts[4]) !== null);
 pdks_fis_token_sil($ts[4]);
-ok('K9) token_sil', pdks_fis_token_al($ts[4]) === null);
+ok('K9) token_sil (oturum + yedek)', pdks_fis_token_al($ts[4]) === null && pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $ts[4]) === null);
+
+// v447 — oturum kaybı: önizleme GET'i oturumu göremese de yedekten çözülür
+$_SESSION = [];
+$t2 = pdks_fis_token_olustur(['sha' => 'yedek', 'fisler' => [['satir' => 2]], 'secenek' => ['fm_tip' => 'tumu'], 'hashler' => []]);
+$_SESSION = [];   // oturum yazımı kaçırıldı / yeni oturum
+$g = pdks_fis_token_al($t2, $neden);
+ok('K10) oturum boşken token hks_kv yedeğinden çözülür (kullanıcı + depo + TTL aynı kurallar)', $g !== null && ($g['sha'] ?? '') === 'yedek' && $neden === null, j($g));
+pdks_fis_token_hashler($t2, [2 => 'abc']);
+$_SESSION = [];
+ok('K11) hash\'ler yedeğe de yazılır (yazma anında karşılaştırma oturumsuz da çalışır)', (pdks_fis_token_al($t2)['hashler'][2] ?? '') === 'abc');
+$AKTIF_DEPO = 'Depo B';
+$_SESSION = [];
+$gb = pdks_fis_token_al($t2, $nedenB);
+ok('K12) yedekten gelen token da depoya bağlı (neden=depo)', $gb === null && $nedenB === 'depo');
+$AKTIF_DEPO = 'Depo A';
+$kv = pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $t2); $kv['uid'] = 99999;
+pdks_fis_kv_yaz(PDKS_FIS_KV_ONIZLE, $t2, $kv); $_SESSION = [];
+$gu = pdks_fis_token_al($t2, $nedenU);
+ok('K13) yedekten gelen token başka kullanıcıya ait → null (neden=kullanici)', $gu === null && $nedenU === 'kullanici');
+$kv['uid'] = pdks_fis_kullanici_id(); $kv['t'] = time() - PDKS_FIS_TOKEN_TTL - 5;
+pdks_fis_kv_yaz(PDKS_FIS_KV_ONIZLE, $t2, $kv); $_SESSION = [];
+$gs = pdks_fis_token_al($t2, $nedenS);
+ok('K14) yedekte TTL dolunca null (neden=sure) ve yedek silinir', $gs === null && $nedenS === 'sure' && pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $t2) === null);
+pdks_fis_token_al(str_repeat('b', 32), $nedenY);
+ok('K15) hiçbir yerde yok → neden=yok; bozuk biçim → neden=bicim', $nedenY === 'yok' && (pdks_fis_token_al('zz', $nedenZ) === null) && $nedenZ === 'bicim');
+ok('K16) hata metinleri nedene göre ayrışır', pdks_fis_token_hata_metni('sure') !== pdks_fis_token_hata_metni('yok') && str_contains(pdks_fis_token_hata_metni('yok'), 'bulunamadı') && str_contains(pdks_fis_token_hata_metni('depo'), 'depo'));
+// 2 saatten eski yedek kayıtları temizlenir; taze olanlara dokunulmaz
+$eskiTok = bin2hex(random_bytes(16)); $tazeTok = bin2hex(random_bytes(16));
+db()->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute([PDKS_FIS_KV_ONIZLE . $eskiTok, json_encode(['t' => time() - 8000, 'x' => 1])]);
+pdks_fis_kv_yaz(PDKS_FIS_KV_ONIZLE, $tazeTok, ['t' => time(), 'uid' => 1, 'depo' => 'x']);
+ok('K17) eski (>2 sa) yedek temizlenir, taze kalır', pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $eskiTok) === null && pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $tazeTok) !== null);
+// hks_kv tablosu yoksa özellik oturumla çalışmaya devam eder (fail soft)
+db()->exec('DROP TABLE hks_kv'); $_SESSION = [];
+$t3 = pdks_fis_token_olustur(['sha' => 'tabloyok']);
+ok('K18) hks_kv yokken token yalnız oturumla çalışır (hata/istisna yok)', (pdks_fis_token_al($t3)['sha'] ?? '') === 'tabloyok');
+db()->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
 
 echo "\n=== L. Gerçek sınıflandırıcı — yazma sonrası (çavuş süresi / fiyat dönemi / çift yevmiye) ===\n";
 // Çavuş B: tarihli süre 480 (B bölümünde kaydedildi); fiyatı yok → servis/FM nötrlüğü (a) uyarı ile yazılır

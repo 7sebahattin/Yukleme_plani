@@ -112,6 +112,12 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     await page.setViewportSize({ width: 1280, height: 900 });
     ok('2) önizleme sırasında DB\'de HİÇBİR kayıt yok', JSON.stringify(sayilar()).includes('"mesai":0') && sayilar().donem === 0);
 
+    console.log('\n=== 2b. Oturum kaybı (v447): PHP oturum çerezi silinse de önizleme + yazma çalışır ===');
+    await ctx.clearCookies({ name: 'PHPSESSID' });
+    await page.reload();
+    ok('2b) çerez silindikten sonra önizleme yeniden açılır (hks_kv yedeği)', (await page.locator('.pc-only tr.fy-s-hazir').count()) === 2 && (await page.locator('[data-flash].err, [data-flash][class*=error], .flash-error').count()) === 0 && /onizle=[a-f0-9]{32}/.test(page.url()));
+    ok('2b) yedekten gelen önizlemede seçimler ve yazma düğmesi sağlam', (await page.locator('[data-fy-sayi]').innerText()) === '2' && await page.locator('#fyYazBtn').isEnabled());
+
     console.log('\n=== 3. Yaz → sonuç ===');
     await Promise.all([page.waitForURL(/\?sonuc=[a-f0-9]{32}/), page.locator('#fyYazBtn').click()]);
     const sonucMetin = await page.locator('#fisYukle').innerText();

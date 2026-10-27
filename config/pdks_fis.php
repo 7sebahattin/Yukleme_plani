@@ -1658,29 +1658,123 @@ function pdks_fis_kullanici_id(): int
 /**
  * Normalize fiş verisini (DOSYA DEĞİL) oturuma koyar; HTML'e yalnız token gider. Kullanıcıya ve aktif depoya bağlı,
  * 30 dk geçerli, oturumda en çok 3 token. @param array $yuk ['sha','dosya_ad','fisler','secenek','hashler']
+ *
+ * v447: oturum BİRİNCİL, hks_kv YEDEK. Bazı sunucu oturum yapılandırmalarında yönlendirmeden hemen sonraki GET, POST'un
+ * oturum yazımı bitmeden başlayıp token'ı göremiyordu ("Önizleme süresi doldu"). Yedek kayıt oturumdan bağımsızdır;
+ * okuma yine kullanıcı + depo + TTL'e bağlıdır (token 128 bit rastgele, tahmin edilemez).
  */
 function pdks_fis_token_olustur(array $yuk): string
 {
     if (session_status() === PHP_SESSION_NONE && !headers_sent()) @session_start();
     $t = bin2hex(random_bytes(16));
     $_SESSION['fis_yukle'] ??= [];
-    $_SESSION['fis_yukle'][$t] = $yuk + ['t' => time(), 'uid' => pdks_fis_kullanici_id(), 'depo' => (string)(function_exists('active_depot') ? active_depot() : '')];
+    $kayit = ['t' => time(), 'uid' => pdks_fis_kullanici_id(), 'depo' => (string)(function_exists('active_depot') ? active_depot() : '')] + $yuk;
+    $_SESSION['fis_yukle'][$t] = $kayit;
     while (count($_SESSION['fis_yukle']) > 3) { reset($_SESSION['fis_yukle']); unset($_SESSION['fis_yukle'][key($_SESSION['fis_yukle'])]); }
+    pdks_fis_kv_yaz(PDKS_FIS_KV_ONIZLE, $t, $kayit);
     return $t;
 }
 
-/** Token'ı çözer (biçim, TTL, kullanıcı + depo eşleşmesi); yoksa null. */
-function pdks_fis_token_al(string $token): ?array
+const PDKS_FIS_KV_ONIZLE = 'fis_yk_';   // önizleme yükü (hks_kv anahtarı = önek + 32 hex; ≤ 60 karakter)
+const PDKS_FIS_KV_SONUC  = 'fis_sk_';   // yazma sonucu
+
+/** Oturumdan bağımsız yedek (hks_kv). Her hata sessiz geçilir (tablo yok / yazılamadı → yalnız oturum). */
+function pdks_fis_kv_yaz(string $onek, string $token, array $kayit): bool
 {
-    if (!preg_match('/^[a-f0-9]{32}$/D', $token)) return null;
+    try {
+        if (!preg_match('/^[a-f0-9]{32}$/D', $token) || !function_exists('db')) return false;
+        // "t" İLK anahtar: temizlik yalnız SUBSTR(deger,1,30) ile zamanı okur (büyük yükü çekmeden).
+        $kayit = ['t' => (int)($kayit['t'] ?? time())] + $kayit;
+        $j = json_encode($kayit, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($j)) return false;
+        db()->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute([$onek . $token, $j]);
+        pdks_fis_kv_temizle($onek);
+        return true;
+    } catch (Throwable $e) {
+        error_log('[pdks_fis] yedek yazılamadı: ' . get_class($e));
+        return false;
+    }
+}
+
+function pdks_fis_kv_oku(string $onek, string $token): ?array
+{
+    try {
+        if (!preg_match('/^[a-f0-9]{32}$/D', $token) || !function_exists('db')) return null;
+        $st = db()->prepare('SELECT deger FROM hks_kv WHERE anahtar = ?');
+        $st->execute([$onek . $token]);
+        $j = $st->fetchColumn();
+        $v = is_string($j) ? json_decode($j, true) : null;
+        return is_array($v) ? $v : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function pdks_fis_kv_sil(string $onek, string $token): void
+{
+    try {
+        if (!preg_match('/^[a-f0-9]{32}$/D', $token) || !function_exists('db')) return;
+        db()->prepare('DELETE FROM hks_kv WHERE anahtar = ?')->execute([$onek . $token]);
+    } catch (Throwable $e) {
+    }
+}
+
+/** 2 saatten eski yedek kayıtları siler (anahtarlar önek + token; zaman JSON başındaki "t"). */
+function pdks_fis_kv_temizle(string $onek): void
+{
+    try {
+        $st = db()->prepare('SELECT anahtar, SUBSTR(deger, 1, 30) FROM hks_kv WHERE anahtar LIKE ?');
+        $st->execute([$onek . '%']);
+        $eski = [];
+        foreach ($st->fetchAll(PDO::FETCH_NUM) as $r) {
+            if (strncmp((string)$r[0], $onek, strlen($onek)) !== 0) continue;
+            if (!preg_match('/"t":(\d+)/', (string)$r[1], $m) || time() - (int)$m[1] > 7200) $eski[] = (string)$r[0];
+        }
+        foreach ($eski as $k) db()->prepare('DELETE FROM hks_kv WHERE anahtar = ?')->execute([$k]);
+    } catch (Throwable $e) {
+    }
+}
+
+/**
+ * Token'ı çözer (biçim, TTL, kullanıcı + depo eşleşmesi); yoksa null. $neden (yalnız tanı): bicim | yok | sure | kullanici | depo.
+ * Önce oturum, yoksa hks_kv yedeği.
+ */
+function pdks_fis_token_al(string $token, ?string &$neden = null): ?array
+{
+    $neden = null;
+    if (!preg_match('/^[a-f0-9]{32}$/D', $token)) { $neden = 'bicim'; return null; }
     $v = $_SESSION['fis_yukle'][$token] ?? null;
-    if (!is_array($v)) return null;
-    if (time() - (int)($v['t'] ?? 0) > PDKS_FIS_TOKEN_TTL) { unset($_SESSION['fis_yukle'][$token]); return null; }
-    if ((int)($v['uid'] ?? -1) !== pdks_fis_kullanici_id() || (string)($v['depo'] ?? '') !== (string)(function_exists('active_depot') ? active_depot() : '')) return null;
+    if (!is_array($v)) {
+        $v = pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $token);
+        if ($v === null) { $neden = 'yok'; return null; }
+    }
+    if (time() - (int)($v['t'] ?? 0) > PDKS_FIS_TOKEN_TTL) { pdks_fis_token_sil($token); $neden = 'sure'; return null; }
+    if ((int)($v['uid'] ?? -1) !== pdks_fis_kullanici_id()) { $neden = 'kullanici'; return null; }
+    if ((string)($v['depo'] ?? '') !== (string)(function_exists('active_depot') ? active_depot() : '')) { $neden = 'depo'; return null; }
     return $v;
+}
+
+/** Kullanıcıya gösterilen önizlemenin plan hash'lerini her iki yerde de saklar (yazma anında karşılaştırılır). */
+function pdks_fis_token_hashler(string $token, array $hashler): void
+{
+    if (isset($_SESSION['fis_yukle'][$token])) $_SESSION['fis_yukle'][$token]['hashler'] = $hashler;
+    $v = pdks_fis_kv_oku(PDKS_FIS_KV_ONIZLE, $token);
+    if ($v !== null) { $v['hashler'] = $hashler; pdks_fis_kv_yaz(PDKS_FIS_KV_ONIZLE, $token, $v); }
+}
+
+/** Hata nedenini kullanıcıya Türkçe söyler (kişisel veri yok). */
+function pdks_fis_token_hata_metni(?string $neden): string
+{
+    return match ($neden) {
+        'sure' => 'Önizleme süresi doldu (30 dk) — dosyayı yeniden yükleyin.',
+        'kullanici', 'depo' => 'Bu önizleme başka bir kullanıcı ya da depoya ait — dosyayı aktif depoda yeniden yükleyin.',
+        'bicim' => 'Önizleme bağlantısı geçersiz — dosyayı yeniden yükleyin.',
+        default => 'Önizleme verisi sunucuda bulunamadı (oturum kaybolmuş olabilir) — dosyayı yeniden yükleyin.',
+    };
 }
 
 function pdks_fis_token_sil(string $token): void
 {
     unset($_SESSION['fis_yukle'][$token]);
+    pdks_fis_kv_sil(PDKS_FIS_KV_ONIZLE, $token);
 }
