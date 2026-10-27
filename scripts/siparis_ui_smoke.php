@@ -791,7 +791,10 @@ ok('Article specification + Pal. + PF (tablo)', str_contains($t1, 'Testfruit 14 
 ok('etkin palet öncelikli (po 4 → etkin 12) + PF 200', str_contains($t3, 'Pal. 12 · PF 200') && str_contains($t3, 'Pal. 15 · PF 200') && !str_contains($t3, 'Pal. 4 '));
 ok('gönderilmeyecek kalem (etkin palet 0, koli 0) satırı yok', substr_count($t3, 'class="sip-urun"') === 2);
 ok('PO palet yedeği (etkin boşsa po_palet) + palet/PF yoksa meta satırı yok', str_contains(sipui_kalem_html([['aciklama' => 'X 1 PC', 'po_palet' => 7, 'etkin_palet' => null, 'pf' => null]]), 'Pal. 7') && !str_contains(sipui_kalem_html([['aciklama' => 'X 1 PC']]), 'sip-urun-meta'));
-ok('5 kalem: en çok 3 satır + "+2 daha"', substr_count($t4, 'class="sip-urun"') === 3 && str_contains($t4, '+2 daha'));
+ok('5 kalem: hepsi görünür, "+N daha" YOK (v452: en çok 5 ürün)', substr_count($t4, 'class="sip-urun"') === 5 && !str_contains($t4, 'sip-urun-fazla'));
+$__k6 = []; for ($i = 1; $i <= 6; $i++) $__k6[] = ['aciklama' => 'Urun ' . $i . ' PC', 'po_palet' => $i];
+$__h6 = sipui_kalem_html($__k6); $__h7 = sipui_kalem_html(array_merge($__k6, [['aciklama' => 'Urun 7 PC', 'po_palet' => 7]]));
+ok('6 kalem: 5 ürün + "+1 daha"; 7 kalem: 5 ürün + "+2 daha" (v452)', substr_count($__h6, 'class="sip-urun"') === 5 && str_contains($__h6, '+1 daha') && !str_contains($__h6, 'Urun 6 PC</span>') && substr_count($__h7, 'class="sip-urun"') === 5 && str_contains($__h7, '+2 daha'));
 ok('ürün bölümü mobil kartta', str_contains($kart($r['html'], $ID['s1']), 'sip-card-urun') && str_contains($kart($r['html'], $ID['s1']), 'Pal. 20 · PF 160'));
 ok('kalem metni kaçırılıyor (XSS yok)', !str_contains(sipui_kalem_html([['aciklama' => '<script>x</script>', 'po_palet' => 1]]), '<script>'));
 ok('yönetici: bağlı beyanların parti no\'ları Tur no yerine, her biri ayrı 3B rozet (v386)', str_contains($t1, '<span class="sip-parti-btn" title="Bağlı beyanın parti numarası"><span class="sip-parti-et">Parti</span> TC900001.10-A</span>') && substr_count($t1, 'class="sip-parti-btn"') === 2 && !str_contains($t1, 'Tur 9000000001') && !str_contains($t1, ' +1'), substr($t1, 0, 400));
@@ -831,6 +834,22 @@ $v1 = $satir($r['html'], $ID['s1']);
 ok('beyan.read yok: parti no görünmez, Tur no gösterilir', temiz($r) && str_contains($v1, 'Tur 9000000001') && !str_contains($v1, 'Parti') && !str_contains($r['html'], '</span> TC900001.10-A<'), substr($v1, 0, 300));
 ok('beyan.read yok: navlun + ürün satırları yine görünür', str_contains($v1, 'Navlun 6100000001') && str_contains($v1, 'Pal. 20 · PF 160'));
 ok('parti haritası: yetkisizde boş, yetkilide dolu', siparis_beyan_parti_haritasi($db, [$ID['s1']]) === [] && (rol($ADMIN, true) || true) && siparis_beyan_parti_haritasi($db, [$ID['s1'], $ID['s2'], $ID['s11']]) === [$ID['s1'] => ['parti' => 'TC900001.10-A', 'fazla' => 1, 'liste' => ['TC900001.10-A', (string)$db->query('SELECT party_no FROM customs_declarations WHERE id = 2')->fetchColumn()]]]);
+// — v452: sevkiyat sayfası başlığında parti no (sipariş no ile durum rozeti arası) + KAPALI sevkiyatta da elle beyan bağlama —
+rol($ADMIN, true);
+$__v = sayfa('siparis_view.php', ['id' => $ID['s1']]);
+ok('v452 başlık: sipariş no ile durum rozeti ARASINDA her bağlı beyanın parti no rozeti', preg_match('~<h1 class="sip-h1">TC900001\.10 <span class="sip-parti-btn"[^>]*><span class="sip-parti-et">Parti</span> TC900001\.10-A</span> <span class="sip-parti-btn"[^>]*>.*?</span> <span class="sip-badge~s', $__v['html']) === 1, substr($__v['html'], (int)strpos($__v['html'], '<h1'), 500));
+$__d0 = (string)$db->query('SELECT durum FROM siparis_sevkiyatlar WHERE id = ' . (int)$ID['s31'])->fetchColumn();
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = 'evrak_gonderildi' WHERE id = " . (int)$ID['s31']);
+$__k = sayfa('siparis_view.php', ['id' => $ID['s31']]);
+ok('v452 beyan kartı: kapalı sevkiyat + bağ yok → arama/Bağla formu VAR (elle bağlama) + yönlendirme notu', temiz($__k) && str_contains($__k['html'], 'id="sipBeyanQ"') && str_contains($__k['html'], 'Beyan otomatik eşleşmediyse') && !str_contains($__k['html'], '<h1 class="sip-h1">TC900031.10 <span class="sip-parti-btn"'));
+$__ka = sayfa('siparis_view.php', ['id' => $ID['s31'], 'beyan_q' => 'TC900001']);
+ok('v452 kapalı sevkiyatta arama sonucu "Bağla" düğmesi (tur=elle)', str_contains($__ka['html'], 'name="tur" value="elle"'));
+$db->exec("UPDATE siparis_sevkiyatlar SET durum = " . $db->quote($__d0) . " WHERE id = " . (int)$ID['s31']);
+rol($ADMIN, false);
+$__y = sayfa('siparis_view.php', ['id' => $ID['s31']]);
+ok('v452 beyan kartı: siparis.match + beyan.read yoksa elle bağlama formu YOK (yetki kapısı)', !str_contains($__y['html'], 'id="sipBeyanQ"'));
+rol($ADMIN, true);
+
 $db->exec('ALTER TABLE customs_declarations RENAME TO cd_yedek');   // beyan tablosu yok → sayfa yine çizilir
 rol($ADMIN, true);
 $r = sayfa('siparisler.php');

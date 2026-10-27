@@ -363,10 +363,10 @@ function sipui_kalem_coz(array $k): ?array
 /**
  * Liste için ürün satırları (PO "Article specification" + palet + PF). $kalemler: siparis_kalemler satırları
  * (sira sırasıyla). Palet: etkin_palet varsa o, yoksa po_palet. Hiç gönderilmeyecek kalem (etkin palet 0 ve etkin koli 0/boş)
- * atlanır. En çok $max satır; kalanı "+N daha". Süzgeç: sipui_kalem_coz().
+ * atlanır. En çok $max (varsayılan 5, v452) satır; 6. ve sonrası "+N daha". Süzgeç: sipui_kalem_coz().
  * @return array{satirlar:list<array{ad:string,meta:string}>,fazla:int}
  */
-function sipui_kalem_satirlari(array $kalemler, int $max = 3): array
+function sipui_kalem_satirlari(array $kalemler, int $max = 5): array
 {
     $tum = [];
     foreach ($kalemler as $k) {
