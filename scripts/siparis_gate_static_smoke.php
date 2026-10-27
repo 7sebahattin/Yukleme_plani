@@ -30,7 +30,7 @@ $core = oku('config/siparis_core.php'); $migrate = oku('migrate.php'); $auth = o
 $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
-$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_invoice.php', 'siparis_kaydet.php',
+$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_denge.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_invoice.php', 'siparis_kaydet.php',
              'siparis_mail.php', 'siparis_odeme.php', 'siparis_odemeler.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
@@ -88,7 +88,7 @@ foreach ($sayfalar as $f) {
     ok("$f: mutasyon POST'a bağlı", (bool)preg_match("/REQUEST_METHOD'\]\s*(!==|===)\s*'POST'/", $k));
     ok("$f: yazma kapısı require_siparis('write'|'delete'|'match') içeriyor", (bool)preg_match("/require_siparis\('(write|delete|match)'\)|can_siparis\('(write|delete|match)'\)/", $k));
 }
-foreach (['siparis_dosya.php', 'siparis_eml.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php', 'siparis_odemeler.php'] as $f) {
+foreach (['siparis_dosya.php', 'siparis_eml.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_denge.php'] as $f) {
     $k = kod_oku($f);
     if ($k === '') continue;
     // GET-only görünüm sayfaları (POST'u siparis_kaydet/… uçlarına gider): ayarlar sayfası profil/sayaç formu içerebilir → muaf.
@@ -174,7 +174,7 @@ $epostaRe = '/[a-z0-9._%+-]+@(?!ornek\.test\b)[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]
 foreach (['config/siparis_mail.php', 'siparis_mail.php', 'siparisler.php', 'siparis_ayarlar.php', '_siparis_ortak.php', 'assets/siparis.js', 'assets/siparis.css', 'scripts/siparis_mail_smoke.php', 'scripts/_siparis_mail_test_lib.php', 'scripts/siparis_ui_render.php',
     'siparis_yazdir.php', 'config/siparis_yazdir.php', 'assets/siparis_yazdir.js', 'scripts/siparis_yazdir_smoke.php', 'scripts/siparis_yazdir_smoke.js',
     'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js',
-    'siparis_cari.php', 'siparis_odemeler.php', 'config/siparis_cari.php', 'scripts/siparis_cari_smoke.php',
+    'siparis_cari.php', 'siparis_odemeler.php', 'siparis_denge.php', 'config/siparis_cari.php', 'config/siparis_denge.php', 'scripts/siparis_cari_smoke.php', 'scripts/siparis_denge_ui_smoke.php',
     'siparis_eml.php', 'config/siparis_pkl.php', 'siparis_view.php', 'scripts/siparis_pkl_mail_smoke.php',
     'siparis_invoice.php', 'config/siparis_invoice.php', 'scripts/siparis_invoice_ui_smoke.php'] as $f) {
     $t = str_ends_with($f, '.php') ? kod_oku($f) : oku($f);
@@ -272,6 +272,36 @@ ok('v401 sw bypass + $a_sip', preg_match($swPcre, '/siparis_odemeler.php') === 1
 ok('v401 siparis.js data-od-* delege + afterprint; css od-yazdir-modu', str_contains(oku('assets/siparis.js'), "'[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir]'") && str_contains(oku('assets/siparis.js'), 'afterprint')
     && str_contains(oku('assets/siparis.css'), 'body.od-yazdir-modu #odYazdirAlan'));
 
+echo "\n=== v448: Fiyat Dengeleme (siparis_denge.php) + Cari Döküm fatura sütunları ===\n";
+$dnUc = kod_oku('siparis_denge.php'); $dnCfg = kod_oku('config/siparis_denge.php'); $dnHam = oku('config/siparis_denge.php');
+ok('v448 sayfa adı TEK alt çizgili (siparis_denge.php): sw.js bypass regex\'i kapsar; iki ekli ad yok; config/ altındaki aynı adlı dosya tam yol korumalı', is_file($ROOT . '/siparis_denge.php') && $swKural !== '' && preg_match($swPcre, '/siparis_denge.php') === 1 && !glob($ROOT . '/siparis_*_*_*.php'), $swPcre);
+ok('v448 sayfa: require_siparis(read) + siparis_cari_yetkili() forbidden + no-store + session_write_close; csrf yok; mutasyon yok',
+    str_contains($dnUc, "require_siparis('read');") && str_contains($dnUc, 'if (!siparis_cari_yetkili()) forbidden(') && str_contains($dnUc, 'siparis_no_store();') && str_contains($dnUc, 'session_write_close();')
+    && !str_contains($dnUc, 'csrf_check(') && preg_match($mutRe, $dnUc) === 0 && !str_contains($dnUc, 'method="post"') && !preg_match('/\$_POST\b/', $dnUc));
+ok('v448 sayfa: kapı çıktıdan ÖNCE (render_print_page_start öncesi)', strpos($dnUc, 'siparis_cari_yetkili()') !== false && strpos($dnUc, 'siparis_cari_yetkili()') < strpos($dnUc, 'render_print_page_start('));
+ok('v448 sayfa: fonksiyon tanımlamaz; satır içi olay yok; tfoot yok; A4 yatay; yazdır data-sc-yazdir', !preg_match('/^\s*function\s+\w+/m', $dnUc) && !preg_match('/\son(click|submit|change|input)=/i', $dnUc) && !str_contains($dnUc, '<tfoot')
+    && str_contains($dnUc, 'size: A4 landscape') && str_contains($dnUc, 'data-sc-yazdir'));
+ok('v448 sayfa: kullanıcı çıktısı h() ile (ham echo $_GET yok); GET formları (method="get")', !preg_match('/<\?=\s*\$_(GET|POST|REQUEST)\b/', $dnUc) && substr_count($dnUc, 'method="get" action="siparis_denge.php"') === 2);
+ok('v448 sayfa: audit siparis_denge_goruntule yalnız SAYILAR (sevkiyat/n/kesildi)', str_contains($dnUc, "siparis_audit('siparis_denge_goruntule', null, null, ['sevkiyat' => (int)\$o['adet'], 'n' => (int)\$param['n'], 'kesildi' => ") && !preg_match('/siparis_audit\(\'siparis_denge_goruntule\'[^;]*(kurus|fiyat|tutar|hedef|\bkg\b)/', $dnUc));
+ok('v448 sayfa: hesap yalnız config fonksiyonlarında (sayfada kendi çarpma/yuvarlama yok)', str_contains($dnUc, 'siparis_denge_hesapla(') && str_contains($dnUc, 'siparis_denge_param(') && str_contains($dnUc, 'siparis_cari_fatura_fiyatlari(') && !preg_match('/\bround\(|\bfloor\(|\bceil\(|intdiv\([^)]*\*/', $dnUc));
+ok('v448 config: SAF — DB/çıktı/DDL/h() yok; tam yol koruması; kapıyı can() ile kopyalamıyor', $dnHam !== ''
+    && str_contains($dnHam, "if (realpath((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }")
+    && !preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|SELECT)\s/', $dnCfg) && !preg_match('/\b(echo|print|die)\b/', $dnCfg) && !preg_match('/\bh\(/', $dnCfg) && !preg_match('/\bcan\(/', $dnCfg) && !str_contains($dnCfg, '$pdo') && !str_contains($dnCfg, 'PDO'));
+ok('v448 nav_aktif_anahtar $a_sip siparis_denge.php içerir', (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_denge\.php'/", $helpers));
+ok('v448 siparisler.php\'ye Fiyat dengeleme bağlantısı EKLENMEDİ (döküm içinden girilir)', !str_contains(oku('siparisler.php'), 'siparis_denge.php'));
+ok('v448 Cari Döküm: Fiyat dengeleme bağlantısı no-print eylem çubuğunda, target=_blank rel=noopener; B tablosu iki yeni sütun + dipnot', (bool)preg_match('~<div class="pr-actions no-print">.*?href="siparis_denge\.php\?[^"]*" target="_blank" rel="noopener">📊 Fiyat dengeleme</a>~su', $caUc)
+    && str_contains($caUc, 'Fatura fiyatı / kg') && str_contains($caUc, 'Fark / kg') && str_contains($caUc, 'sc-fark-eksi') && str_contains($caUc, 'sc-fark-arti') && str_contains($caUc, "Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi); fark = fatura − PC."));
+ok('v448 Cari Döküm: veri siparis_cari_fatura_fiyatlari() ile bağlanır; kapı/CSRF/mutasyon değişmedi (v397/v401 denetimleri yukarıda)', str_contains($caUc, "'fatura' => \$faturaFiyat") && str_contains($caUc, 'siparis_cari_fatura_fiyatlari('));
+ok('v448 config/siparis_cari.php: fatura okuma yalnız SELECT (hks_kv), 500\'lük parça, fail soft', str_contains($caHam, 'function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array') && str_contains($caHam, 'array_chunk($ids, 500)') && str_contains($caHam, 'catch (Throwable'));
+$deUc = kod_oku('siparis_denge.php');
+ok('v449 config/siparis_cari.php: kimlik bloğu yardımcıları (parti/plaka/kimlik/başlık) + parti haritası TEK kaynak siparis_beyan_parti_haritasi (ikinci SQL yok)',
+    str_contains($caHam, 'function siparis_cari_kimlik_html(array $s): string') && str_contains($caHam, 'function siparis_cari_kimlik_baslik(): string') && str_contains($caHam, 'function siparis_cari_plaka_html(string $p): string')
+    && str_contains($caHam, 'function siparis_cari_parti_haritasi(PDO $pdo, array $sevIds): array') && str_contains($caHam, 'siparis_beyan_parti_haritasi($pdo, $sevIds)') && !str_contains($caHam, 'FROM siparis_beyan'));
+ok('v449 Cari Döküm: A, B tabloları başlığında kimlik bloğu (Parti no · Sipariş no · Alıcı ülke · Plaka); satırlar siparis_cari_kimlik_html; C grup başlığında dört etiketli alan; veri parti haritasıyla bağlanır',
+    substr_count($caUc, '<?= $kimlikBas ?>') === 2 && str_contains($caUc, 'siparis_cari_kimlik_html($s)') && str_contains($caUc, "'parti' => \$partiHarita") && str_contains($caUc, 'siparis_cari_parti_haritasi(')
+    && str_contains($caUc, '<strong>Parti no:</strong>') && str_contains($caUc, '<strong>Alıcı ülke:</strong>') && str_contains($caUc, '<strong>Plaka:</strong>'));
+ok('v449 Fiyat Dengeleme: karşılaştırma tablosunda aynı kimlik bloğu (siparis_cari_kimlik_baslik / _html) + parti haritası', str_contains($deUc, 'siparis_cari_kimlik_baslik()') && str_contains($deUc, 'siparis_cari_kimlik_html($s)') && str_contains($deUc, 'siparis_cari_parti_haritasi('));
+
 echo "\n=== v442: OGL Invoice (siparis_invoice.php) ===\n";
 $ivUc = kod_oku('siparis_invoice.php'); $ivCfg = kod_oku('config/siparis_invoice.php'); $ivHam = oku('config/siparis_invoice.php'); $ivJs = oku('assets/siparis.js'); $ivCss = oku('assets/siparis.css');
 $ivView = kod_oku('siparis_view.php');
@@ -330,7 +360,7 @@ ok('siparis_belge.php açık sevkiyat sorgusu siparis_kapanmamis_sql() kullanır
 
 echo "\n=== Audit eylem adları ≤ 40 karakter ===\n";
 $uzun = []; $sayi = 0;
-$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'config/siparis_invoice.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
+$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'config/siparis_denge.php', 'config/siparis_invoice.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
 foreach ($dosyalar as $f) {
     $k = kod_oku($f);
     if (preg_match_all("/\b(?:siparis_audit|audit_log_event)\(\s*'([^']+)'/", $k, $mm)) {

@@ -263,4 +263,17 @@ $id1 = (int)$r1['id'];
 ok('iptal: gerekçesiz reddedilir', !siparis_odeme_iptal($db, $id1, ' ', 3)['ok']);
 ok('iptal: gerekçeyle soft iptal; tahsilattan düşer; tekrar iptal reddedilir', siparis_odeme_iptal($db, $id1, 'yanlış giriş', 3)['ok'] && !siparis_odeme_iptal($db, $id1, 'x', 3)['ok'] && siparis_cari_tahsilat_toplam($db, $f6) === ['USD' => 10000] && (int)$db->query('SELECT COUNT(*) FROM siparis_odemeler')->fetchColumn() === 2);
 
+echo "\n=== 7. Fatura fiyatı alanları (v448) ===\n";
+ok('fark_metin: işaretli, 2–4 ondalık, sıfır işaretsiz', siparis_cari_fark_metin(800) === '+0,08' && siparis_cari_fark_metin(-1250) === '-0,125' && siparis_cari_fark_metin(-13725) === '-1,3725' && siparis_cari_fark_metin(0) === '0,00');
+ok('fiyat_kisa: en az 2, en çok 4 ondalık', siparis_cari_fiyat_kisa(13700) === '1,37' && siparis_cari_fiyat_kisa(13725) === '1,3725' && siparis_cari_fiyat_kisa(14000) === '1,40');
+ok('fatura haritası: hks_kv yokken [] (fail soft, sayfa kırılmaz)', siparis_cari_fatura_fiyatlari($db, [1, 2, 3]) === []);
+$v7 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => [$ID['s1'] => ['fiyat' => 11000, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 0.0]]]);
+$a7 = $bul($v7['yuklenen'], 'TC800001.10');
+ok('s1 (EUR; kalibre 10 → 1,29 €/kg, 14 → 1,17 €/kg): fatura 1,10 her satırda; fark_kg −1900 / −700; karşılaştırma = Σ EUR satırı',
+    $a7['fatura']['fiyat'] === 11000 && $a7['satirlar'][0]['fatura_kg'] === 11000 && $a7['satirlar'][1]['fatura_kg'] === 11000 && $a7['satirlar'][0]['fark_kg'] === -1900 && $a7['satirlar'][1]['fark_kg'] === -700
+    && $a7['karsilastirma']['gram'] === 3840 * 3500 && $a7['karsilastirma']['pc_kurus'] === 1579200 && $a7['karsilastirma']['fatura_kurus'] === intdiv(13440000 * 11000 + 50000, 100000)
+    && $a7['karsilastirma']['fark_kurus'] === $a7['karsilastirma']['fatura_kurus'] - 1579200, json_encode($a7['karsilastirma']));
+ok('fatura olmayan sevkiyatta fatura/karsilastirma null, satırda fatura_kg/fark_kg null', $bul($v7['yuklenen'], 'TC800003.10')['fatura'] === null && $bul($v7['yuklenen'], 'TC800003.10')['karsilastirma'] === null && $a7['satirlar'][0]['fiyat_kg'] !== null);
+ok('USD satırı (s4) karşılaştırılmaz, özet/cari haritasız ile aynı', $bul($v7['yuklenen'], 'TC800004.10')['karsilastirma'] === null && $v7['cari'] === $v['cari'] && $v7['ozet'] === $v['ozet']);
+
 siparis_test_bitir();
