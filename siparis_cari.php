@@ -3,6 +3,7 @@
 // siparis_cari.php — "Sipariş Cari Dökümü" (yazdırılabilir A4 yatay; GET; siparis.read + siparis_cari_yetkili(); v397)
 // Ad TEK alt çizgili: sw.js bypass regex'i /siparis(ler|_[a-z]+)?\.php/ kapsar (ticari veri SW önbelleğine yazılmaz).
 // Mantık config/siparis_cari.php'de; bu dosya FONKSİYON TANIMLAMAZ. Satır içi onclick YOK (siparis_ui_smoke).
+// v448: B bölümünde "Fatura fiyatı / kg" + "Fark / kg" (invoice birim fiyatı − PC); "📊 Fiyat dengeleme" → siparis_denge.php.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -27,7 +28,9 @@ if (!siparis_sema_hazir($pdo)) {
 }
 $f = siparis_cari_filtre($_GET, $bugun);
 $odemeler = siparis_odeme_oku($pdo, $f);
-$v = siparis_cari_veri(siparis_cari_oku($pdo, $f), ['bugun' => $bugun, 'tahsilat' => siparis_odeme_toplam($odemeler)]);
+$okunan = siparis_cari_oku($pdo, $f);
+$faturaFiyat = siparis_cari_fatura_fiyatlari($pdo, array_map(static fn(array $r): int => (int)$r['id'], $okunan['rows']));
+$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => siparis_odeme_toplam($odemeler), 'fatura' => $faturaFiyat]);
 siparis_audit('siparis_cari_goruntule', null, null, ['yuklenmemis' => count($v['yuklenmemis']), 'yuklenen' => count($v['yuklenen']), 'fiyatli' => count($v['fiyatli']), 'kesildi' => $v['kesildi'] ? 1 : 0], (int)$auth_user['id']);
 $depo = (string)(active_depot() ?? '');
 $harita = siparis_yazdir_ulke_haritasi();
@@ -64,6 +67,8 @@ table.print-table.sc-tablo tbody.sc-toplam td { background: var(--pr-total-bg); 
 table.print-table.sc-tablo .sc-esas { font-weight: 800; }
 table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic; }
 .sc-yildiz { font-weight: 800; margin-left: 1px; }
+table.print-table.sc-tablo .sc-fark-eksi { color: #b3261e; font-weight: 700; }
+table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
 .sc-cari { break-inside: avoid; page-break-inside: avoid; }
 .sc-cari table.sc-tablo { max-width: 720px; }
 @media screen and (max-width: 900px) { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
@@ -86,6 +91,7 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
       <button type="submit" class="pr-btn">Uygula</button>
     </form>
     <button type="button" class="pr-btn pr-btn-primary" data-sc-yazdir>🖨 Yazdır</button>
+    <a class="pr-btn" href="siparis_denge.php?<?= h(http_build_query(['bas' => $f['bas'], 'bit' => $f['bit'], 'alici' => $f['alici']])) ?>" target="_blank" rel="noopener">📊 Fiyat dengeleme</a>
     <a class="pr-btn" href="siparisler.php">← Siparişler</a>
   </div>
   <?= render_print_header_html('Sipariş Cari Dökümü', implode(' · ', $f['ozet']) . ($depo !== '' ? ' · Depo: ' . $depo : ''), 'Oluşturma: ' . date('d.m.Y H:i')) ?>
@@ -131,15 +137,15 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
   <!-- B) Yüklenen sevkiyatlar -->
   <h3 class="pr-section">B) Yüklenen Sevkiyatlar</h3>
   <div class="sc-kaydir"><table class="print-table sc-tablo">
-    <thead><tr><th>Yükleme tarihi</th><th>Sipariş no</th><th>Plaka</th><th>Nakliyeci</th><th>Kalibre</th><th class="num">Koli</th><th class="num">Kg</th><th class="num">Fiyat / kg</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><th>Sipariş no</th><th>Plaka</th><th>Nakliyeci</th><th>Kalibre</th><th class="num">Koli</th><th class="num">Kg</th><th class="num">Fiyat / kg</th><th class="num">Fatura fiyatı / kg <span class="sc-baslik-not">fatura − PC</span></th><th class="num">Fark / kg</th></tr></thead>
     <?php if (!$v['yuklenen']): ?>
-    <tbody><tr><td colspan="8" class="pr-empty">Yüklenen sevkiyat yok.</td></tr></tbody>
+    <tbody><tr><td colspan="10" class="pr-empty">Yüklenen sevkiyat yok.</td></tr></tbody>
     <?php else: ?>
     <?php foreach ($v['yuklenen'] as $s): ?>
     <tbody class="sc-grup">
       <?php $durum = $s['fiyatli'] ? '' : 'Fiyat bekleniyor'; ?>
       <?php if (!$s['satirlar']): ?>
-      <tr><td><?= h($tarih($s['tarih'])) ?></td><td><?= h($s['order_ref']) ?></td><td><?= h($bos($s['plaka'])) ?></td><td><?= h($bos($s['nakliyeci'])) ?></td><td colspan="3" class="sc-bos">Kalem yok</td><td><?= h($durum) ?></td></tr>
+      <tr><td><?= h($tarih($s['tarih'])) ?></td><td><?= h($s['order_ref']) ?></td><td><?= h($bos($s['plaka'])) ?></td><td><?= h($bos($s['nakliyeci'])) ?></td><td colspan="3" class="sc-bos">Kalem yok</td><td><?= h($durum) ?></td><td class="num">—</td><td class="num">—</td></tr>
       <?php endif; ?>
       <?php foreach ($s['satirlar'] as $i => $l): ?>
       <tr>
@@ -148,16 +154,21 @@ table.print-table.sc-tablo .sc-bos { color: var(--pr-muted); font-style: italic;
         <td class="num"><?= h(sipui_sayi($l['koli'])) ?></td>
         <td class="num"><?= h(siparis_cari_kg($l['gram'])) ?><?= $yildiz($l['kg_varsayilan']) ?></td>
         <td class="num"><?= $l['fiyatli'] ? h(siparis_cari_para(intdiv((int)$l['fiyat_kg'], 100)) . ' ' . $l['pb'] . ' / kg') : h($durum) ?></td>
+        <td class="num"><?= ($l['fatura_kg'] ?? null) !== null ? h(siparis_cari_fiyat_kisa((int)$l['fatura_kg']) . ' EUR / kg') : '—' ?></td>
+        <?php if (($l['fark_kg'] ?? null) !== null): $fk = (int)$l['fark_kg']; ?>
+        <td class="num <?= $fk < 0 ? 'sc-fark-eksi' : ($fk > 0 ? 'sc-fark-arti' : '') ?>"><?= h(siparis_cari_fark_metin($fk) . ' EUR') ?></td>
+        <?php else: ?><td class="num">—</td><?php endif; ?>
       </tr>
       <?php endforeach; ?>
       <?php if (count($s['satirlar']) > 1): ?>
-      <tr class="sc-ara"><td colspan="5">Sevkiyat toplamı</td><td class="num"><?= h(sipui_sayi($s['toplam']['koli'])) ?></td><td class="num"><?= h(siparis_cari_kg($s['toplam']['gram'])) ?></td><td></td></tr>
+      <tr class="sc-ara"><td colspan="5">Sevkiyat toplamı</td><td class="num"><?= h(sipui_sayi($s['toplam']['koli'])) ?></td><td class="num"><?= h(siparis_cari_kg($s['toplam']['gram'])) ?></td><td></td><td></td><td></td></tr>
       <?php endif; ?>
     </tbody>
     <?php endforeach; ?>
-    <tbody class="sc-toplam"><tr><td colspan="5">TOPLAM — <?= (int)$oL['sevkiyat'] ?> sevkiyat · fiyat bekleyen: <?= (int)$oB['sevkiyat'] ?></td><td class="num"><?= h(sipui_sayi($oL['koli'])) ?></td><td class="num"><?= h(siparis_cari_kg($oL['gram'])) ?></td><td></td></tr></tbody>
+    <tbody class="sc-toplam"><tr><td colspan="5">TOPLAM — <?= (int)$oL['sevkiyat'] ?> sevkiyat · fiyat bekleyen: <?= (int)$oB['sevkiyat'] ?></td><td class="num"><?= h(sipui_sayi($oL['koli'])) ?></td><td class="num"><?= h(siparis_cari_kg($oL['gram'])) ?></td><td></td><td></td><td></td></tr></tbody>
     <?php endif; ?>
   </table></div>
+  <p class="pr-note">Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi); fark = fatura − PC. Fatura yoksa ya da para birimi EUR değilse "—".</p>
 
   <!-- C) Fiyatlandırılmış sevkiyatlar -->
   <h3 class="pr-section">C) Fiyatlandırılmış Sevkiyatlar <span class="sc-baslik-not">(yüklenmemiş fiyatlı sevkiyatlar dahil — "Yüklenmedi" ile işaretli)</span></h3>
