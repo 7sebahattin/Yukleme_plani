@@ -110,7 +110,7 @@ function siparis_yazdir_kolonlari(array $kalibreler = ['14' => 'kal_14', '12' =>
     $urunW = max(10.0, 100 - 66 - $kalW * $n);
     $bas = [
         ['k' => 'tarih',   'l' => 'Yükleme tarihi', 't' => 'metin', 'w' => 7.0],
-        ['k' => 'parti',   'l' => 'Parti no',       't' => 'metin', 'w' => 7.0],
+        ['k' => 'parti',   'l' => 'Parti no',       't' => 'metin', 'w' => 8.0],
         ['k' => 'siparis', 'l' => 'Sipariş no',     't' => 'metin', 'w' => 8.0],
         ['k' => 'ulke',    'l' => 'Alıcı ülke',     't' => 'metin', 'w' => 7.0],
         ['k' => 'tel',     'l' => 'Şoför Tel',      't' => 'metin', 'w' => 9.0],
@@ -232,6 +232,21 @@ function siparis_yazdir_kalibre_palet(array $kalemler): array
 }
 
 /**
+ * v427 — yazdırma/PDF/WP-Resim "Plaka" hücresi: iki plaka tire / eğik çizgi / virgül / noktalı virgülle bitişik yazılmışsa ("34TST101-34TST201")
+ * her plaka AYRI satıra konur (dar sütunda tireden kırılıp "33ALG770-" / "33AHK928" diye yarım kalmasın). Yalnız her parça ≥ 5 harf/rakam/boşluktan
+ * oluşuyorsa bölünür — yabancı tek plaka ("AB-123-CD") ve kullanıcı metni olduğu gibi kalır. Boş → ''.
+ */
+function siparis_yazdir_plakalar(string $ham): string
+{
+    $ham = trim($ham);
+    if ($ham === '') return '';
+    $p = preg_split('/\s*[-\/,;]\s*/', $ham) ?: [$ham];
+    if (count($p) < 2) return $ham;
+    foreach ($p as $x) if (preg_match('/^[0-9A-Za-z ]{5,}$/', trim($x)) !== 1) return $ham;
+    return implode("\n", array_map('trim', $p));
+}
+
+/**
  * Saf: okunan veriyi yazdırma JSON sözleşmesine çevirir (DB/oturum yok).
  * $ctx: bugun (Y-m-d), basim (d.m.Y H:i), depo, baslik, filtre_ozet, parti_yetki (bool).
  * Sarı zemin + " ✓" YALNIZ acik/tek kapsamında (yukleme_tarihi < bugün); evrak/kapali'de gecmis hep false. bugun → kalın.
@@ -254,7 +269,7 @@ function siparis_yazdir_veri(array $okunan, array $ctx): array
         if ($gecmis) $gecmisSay++;
         $tarih = $gun !== null ? sipui_tarih($gun) . ($gecmis ? ' ✓' : '') : '';
         $kalemler = (array)($okunan['kalem'][$sid] ?? []);
-        $parti = implode('/', array_map('strval', (array)($okunan['parti'][$sid]['liste'] ?? [])));
+        $parti = implode("\n", array_map('strval', (array)($okunan['parti'][$sid]['liste'] ?? [])));   // v427: her parti no ayrı satır ("61/236/61/235" hücrede ortadan kırılıyordu)
         $palet = ($r['toplam_palet'] ?? null) !== null && $r['toplam_palet'] !== '' ? (int)$r['toplam_palet'] : null;
         $kasa = ($r['toplam_koli'] ?? null) !== null && $r['toplam_koli'] !== '' ? (int)$r['toplam_koli'] : null;
         if ($palet !== null) $topPalet = ($topPalet ?? 0) + $palet;
@@ -266,7 +281,7 @@ function siparis_yazdir_veri(array $okunan, array $ctx): array
             trim((string)($r['order_ref'] ?? '')),
             siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null),
             !empty($okunan['sofor']) ? trim((string)($r['sofor_telefon'] ?? '')) : '',
-            trim((string)($r['plakalar'] ?? '')),
+            siparis_yazdir_plakalar((string)($r['plakalar'] ?? '')),
             !empty($okunan['gumruk']) ? trim((string)($r['yurtici_gumruk'] ?? '')) : '',
             siparis_yazdir_urunler($kalemler),
         ];

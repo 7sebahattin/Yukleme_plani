@@ -152,6 +152,15 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         ok(`[${w}] yazdırma: geçmiş tarihli satırlar sarı (rgb(255, 243, 176)) + tarihte ✓; diğerlerinde sarı/✓ yok`, tbl.sariSay === KUCUK.gecmis_say && tbl.sariSay >= 3 && tbl.sariBg === 'rgb(255, 243, 176)' && tbl.tumSariTik && tbl.duzBg !== 'rgb(255, 243, 176)' && tbl.tikOlmayan, JSON.stringify(tbl));
         ok(`[${w}] yazdırma: bugünün tarihi kalın, gün değişiminde üst çizgi, çok satırlı hücre <br>`, tbl.bugunKalin === '700' && tbl.gunCizgi >= 2 && (tbl.urunBr || !KUCUK.satirlar.some(r => r.h.some(h => /\n/.test(h)))), JSON.stringify([tbl.bugunKalin, tbl.gunCizgi, tbl.urunBr]));
         ok(`[${w}] yazdırma: tarih/sipariş/tel nowrap (plaka kırılır); sayı sütunları (kalibre/palet/kasa) sağa; başlıklar ortalı ve kırılabilir`, tbl.nowrap && tbl.sag && tbl.thOrta && tbl.thKirilir, JSON.stringify([tbl.nowrap, tbl.sag, tbl.thOrta, tbl.thKirilir]));
+        // v427 — parti no / plaka hücresinde her değer AYRI satır ve hiçbiri ortadan kırılmaz (görüntülenen satır sayısı = veri satır sayısı)
+        const ppb = await popup.evaluate(IXP => {
+            const veri = Array.from(document.querySelectorAll('.syz tbody tr')).filter(r => !r.classList.contains('syz-toplam'));
+            const say = (td) => { const lh = parseFloat(getComputedStyle(td).lineHeight) || 13; return Math.round((td.getBoundingClientRect().height - 6) / lh); };
+            return veri.map((r, i) => IXP.map(x => ({ i, k: x, h: r.children[x].innerHTML, satir: say(r.children[x]) })));
+        }, [KI(KUCUK, 'parti'), KI(KUCUK, 'plaka')]);
+        const ppHatali = [];
+        ppb.forEach((satir, i) => satir.forEach((c, j) => { const beklenen = (KUCUK.satirlar[i].h[c.k] || '').split('\n').length; if (c.h !== '' && c.satir > beklenen) ppHatali.push([i, c.k, c.h, c.satir, beklenen]); }));
+        ok(`[${w}] yazdırma: parti no / plaka hücrelerinde değerler ayrı satırda, ortadan kırılmaz (v427)`, ppHatali.length === 0 && KUCUK.satirlar.some(r => /\n/.test(r.h[KI(KUCUK, 'plaka')])), JSON.stringify(ppHatali.slice(0, 3)));
         ok(`[${w}] yazdırma: boş kalibre hücresi "-"; TOPLAM satırında her kalibre sütununun toplamı`, tbl.kalTire && JSON.stringify(tbl.toplamKal) === JSON.stringify(KALS.map(c => String(KUCUK.toplam[c.k] == null ? '' : KUCUK.toplam[c.k]))), JSON.stringify([tbl.toplamKal, KUCUK.toplam]));
         ok(`[${w}] yazdırma: toplam palet/kasa satırı + meta + anahtar + kişisel veri notu`, tbl.toplamPalet === KUCUK.toplam.palet && tbl.toplamKasa === KUCUK.toplam.kasa && /Sarı zemin ve ✓ = çıkış tarihi geçmiş/.test(tbl.anahtar) && /sevkiyat/.test(tbl.meta) && /Basım:/.test(tbl.meta)
             && /Geçmiş: /.test(tbl.meta) && tbl.notlar.length === (KUCUK.notlar || []).length && tbl.colgroup === KUCUK.kolonlar.length, JSON.stringify([tbl.toplamPalet, tbl.toplamKasa, tbl.anahtar, tbl.meta, tbl.notlar]));
