@@ -43,3 +43,6 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 
 ## Test
 `php scripts/pdks_fis_plan_smoke.php` · `pdks_fis_xlsx_smoke.php` · `pdks_fis_yaz_smoke.php` · `pdks_fis_static_smoke.php` · `node scripts/pdks_fis_ui_smoke.js`.
+
+## v448 — Oturum kaybı dayanıklılığı
+Önizleme/sonuç verisi oturumdan bağımsız olarak `hks_kv`'de de tutulur (2 saat sonra silinir; kullanıcı + depo + 30 dk kuralı aynı). Hata mesajı nedeni söyler: süre doldu / başka kullanıcı-depo / sunucuda bulunamadı. Ayrıntı: CLAUDE.md "Fiş Excel'i Yükle".

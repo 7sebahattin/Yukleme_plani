@@ -15,6 +15,7 @@ require __DIR__ . '/_pdks_fis_harness.php';
 require_once $ROOT . '/config/pdks_fis.php';
 ob_end_clean();
 
+db()->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');   // v447: önizleme yedeği
 foreach (['A', 'B', 'C', 'D'] as $h) {
     foreach ([$kadin, $erkek, $rampaci] as $tid) {
         $r = pdks_faz8b_oran_ekle($cavus[$h], $tid, '1500', '900', 'hourly', '200', '2020-01-01', 'TRY', 1, db());

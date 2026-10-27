@@ -60,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $fmTip], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
         ]);
         export_audit('gunluk_fis_yukle', 'Fiş Excel önizleme', 'xlsx', count($n['fisler']), ['sha256' => substr((string)$d['sha256'], 0, 16)]);
+        session_write_close();   // yönlendirmeden ÖNCE: sonraki GET oturum yazımını beklemeden token'ı görsün
         header('Location: ' . $self . '?onizle=' . $token);
         exit;
     }
@@ -73,8 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($eylem === 'yaz') {
         $token = (string)($_POST['token'] ?? '');
-        $yuk = pdks_fis_token_al($token);
-        if ($yuk === null) { set_flash('error', 'Önizleme süresi doldu ya da bu oturuma ait değil — dosyayı yeniden yükleyin.'); header('Location: ' . $self); exit; }
+        $yuk = pdks_fis_token_al($token, $tokenNeden);
+        if ($yuk === null) { error_log('[fis_yukle] yaz: token ' . ($tokenNeden ?? '?')); set_flash('error', pdks_fis_token_hata_metni($tokenNeden)); header('Location: ' . $self); exit; }
         $secenek = pdks_fis_secenek([
             'fm_tip' => $yuk['secenek']['fm_tip'] ?? 'tumu', 'onay_yarim' => !empty($_POST['onay_yarim']), 'onay_fm' => !empty($_POST['onay_fm']),
             'ek_yaz' => !empty($_POST['ek_yaz']), 'isletme_onay' => !empty($_POST['isletme_onay']),
@@ -87,7 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sonuc = pdks_fis_yaz($pdo, $yuk['fisler'], $secenek, $uid, (string)$yuk['sha'], $secilen, (array)($yuk['hashler'] ?? []));
         pdks_fis_token_sil($token);
         $sk = bin2hex(random_bytes(16));
-        $_SESSION['fis_sonuc'] = [$sk => ['t' => time(), 'uid' => $uid, 'depo' => $depo, 'sonuc' => $sonuc, 'dosya_ad' => (string)$yuk['dosya_ad'], 'sha' => (string)$yuk['sha']]];
+        $skKayit = ['t' => time(), 'uid' => $uid, 'depo' => $depo, 'sonuc' => $sonuc, 'dosya_ad' => (string)$yuk['dosya_ad'], 'sha' => (string)$yuk['sha']];
+        $_SESSION['fis_sonuc'] = [$sk => $skKayit];
+        pdks_fis_kv_yaz(PDKS_FIS_KV_SONUC, $sk, $skKayit);   // kayıtlar YAZILDI; sonuç ekranı oturum kaybında da gösterilsin
+        session_write_close();
         header('Location: ' . $self . '?sonuc=' . $sk);
         exit;
     }
@@ -102,17 +106,17 @@ $onizleToken = (string)($_GET['onizle'] ?? '');
 $sonucToken = (string)($_GET['sonuc'] ?? '');
 $varsayilan = ['onay_yarim' => true, 'onay_fm' => true, 'ek_yaz' => false, 'isletme_onay' => false];
 if ($onizleToken !== '') {
-    $yuk = pdks_fis_token_al($onizleToken);
-    if ($yuk === null) { set_flash('error', 'Önizleme süresi doldu ya da bu oturuma ait değil — dosyayı yeniden yükleyin.'); header('Location: ' . $self); exit; }
+    $yuk = pdks_fis_token_al($onizleToken, $tokenNeden);
+    if ($yuk === null) { error_log('[fis_yukle] onizle: token ' . ($tokenNeden ?? '?')); set_flash('error', pdks_fis_token_hata_metni($tokenNeden)); header('Location: ' . $self); exit; }
     $sec = pdks_fis_secenek($yuk['secenek'] + $varsayilan);
     $on = pdks_fis_onizle($pdo, $yuk['fisler'], $sec, $uid);
     // Yazma anında karşılaştırılacak plan hash'i = kullanıcının ŞU AN gördüğü önizleme
     $hashler = [];
     foreach ($on['fisler'] as $m) if ($m['hash'] !== '') $hashler[(int)$m['satir']] = $m['hash'];
-    $_SESSION['fis_yukle'][$onizleToken]['hashler'] = $hashler;
+    pdks_fis_token_hashler($onizleToken, $hashler);
     $model = ['mod' => 'onizle', 'token' => $onizleToken, 'onizle' => $on, 'dosya_ad' => $yuk['dosya_ad'], 'sha' => $yuk['sha'], 'dosya_uyarilar' => $yuk['dosya_uyarilar'] ?? [], 'varsayilan' => $varsayilan];
 } elseif ($sonucToken !== '') {
-    $sk = $_SESSION['fis_sonuc'][$sonucToken] ?? null;
+    $sk = $_SESSION['fis_sonuc'][$sonucToken] ?? pdks_fis_kv_oku(PDKS_FIS_KV_SONUC, $sonucToken);
     if (!preg_match('/^[a-f0-9]{32}$/D', $sonucToken) || !is_array($sk) || (int)$sk['uid'] !== $uid || (string)$sk['depo'] !== $depo || time() - (int)$sk['t'] > PDKS_FIS_TOKEN_TTL) {
         set_flash('error', 'Sonuç süresi doldu.'); header('Location: ' . $self); exit;
     }
