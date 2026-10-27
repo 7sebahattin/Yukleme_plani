@@ -11,6 +11,7 @@ declare(strict_types=1);
 // Doğrudan istek → 404. TAM YOL karşılaştırılır (basename değil — bkz. config/siparis_yazdir.php, v385).
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 require_once __DIR__ . '/siparis_yazdir.php';   // alıcı ülke = siparis_yazdir_ulke() (TEK kaynak)
+require_once __DIR__ . '/siparis_beyan.php';    // parti no = siparis_beyan_parti_haritasi() (v449)
 require_once __DIR__ . '/siparis_invoice.php';  // fatura fiyatı = siparis_inv_ondalik_coz() + hks_kv girdisi (v448; yalnız fonksiyon tanımlar, dompdf YÜKLEMEZ)
 
 if (!defined('SIPARIS_CARI_LIMIT')) define('SIPARIS_CARI_LIMIT', 1000);
@@ -195,6 +196,52 @@ function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array
     return function_exists('siparis_odeme_oku') ? siparis_odeme_toplam(siparis_odeme_oku($pdo, $f)) : [];
 }
 
+/** v449: kimlik bloğu parçaları (cari + denge sayfaları AYNI çıktıyı basar). Çıktı HTML'dir; kullanıcı verisi h() ile kaçırılır. */
+function siparis_cari_parti_html(array $l): string
+{
+    return $l === [] ? '—' : implode('<br>', array_map(static fn($x): string => h((string)$x), $l));
+}
+
+/** Plaka: bitişik plakalar (siparis_yazdir_plakalar kuralı) ayrı satırda; boş → "—". */
+function siparis_cari_plaka_html(string $p): string
+{
+    $p = siparis_yazdir_plakalar($p);
+    return $p === '' ? '—' : implode('<br>', array_map(static fn(string $x): string => h($x), explode("\n", $p)));
+}
+
+/** Parti no · Sipariş no · Alıcı ülke · Plaka — 4 `<td>` (her sevkiyat tablosunda aynı sıra). Boş değer "—". */
+function siparis_cari_kimlik_html(array $s): string
+{
+    $ulke = trim((string)($s['ulke'] ?? ''));
+    return '<td>' . siparis_cari_parti_html((array)($s['parti'] ?? [])) . '</td><td>' . h((string)($s['order_ref'] ?? '')) . '</td><td>'
+        . h($ulke !== '' ? $ulke : '—') . '</td><td>' . siparis_cari_plaka_html((string)($s['plaka'] ?? '')) . '</td>';
+}
+
+/** Kimlik bloğunun 4 başlık hücresi. */
+function siparis_cari_kimlik_baslik(): string
+{
+    return '<th>Parti no</th><th>Sipariş no</th><th>Alıcı ülke</th><th>Plaka</th>';
+}
+
+/**
+ * SALT OKUNUR, fail soft (v449). Sevkiyat → bağlı beyan(lar)ın parti no listesi: Siparişler listesiyle AYNI kaynak
+ * `siparis_beyan_parti_haritasi()` (aktif bağ + `can_beyan('read')` + beyan_redact_fields; yetki yoksa/bağ yoksa boş).
+ * Tur no'ya DÜŞÜLMEZ (parti yoksa "—"). @param list<int|string> $sevIds  @return array<int,list<string>>
+ */
+function siparis_cari_parti_haritasi(PDO $pdo, array $sevIds): array
+{
+    $out = [];
+    try {
+        foreach (siparis_beyan_parti_haritasi($pdo, $sevIds) as $sid => $h) {
+            $l = array_values(array_filter(array_map(static fn($x): string => trim((string)$x), (array)($h['liste'] ?? [])), static fn(string $x): bool => $x !== ''));
+            if ($l !== []) $out[(int)$sid] = $l;
+        }
+    } catch (Throwable $e) {
+        return [];
+    }
+    return $out;
+}
+
 /**
  * SALT OKUNUR, fail soft (v448). Sevkiyat → ÜRETİLMİŞ invoice'ın birim fiyatı (Invoice (OGL) girdisi, hks_kv `siparis_invoice_<id>`).
  * Yalnız `uretildi_at` + `belge_id` dolu, 0 < fiyat < 1000 VE `belge_id` hâlâ geçerli invoice (siparis_belgeler tur='invoice', silinmemiş, siparis_belge_bag gecerli=1) olan girdi sayılır — belge silinince hks_kv girdisi kalır. Tablo yok / bozuk JSON / hata → o kayıt (ya da tümü) yok sayılır.
@@ -243,7 +290,7 @@ function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array
 
 /**
  * Saf: sınıflama + hesap. $ctx: bugun (Y-m-d), tahsilat (array<string,int>), fatura (siparis_cari_fatura_fiyatlari() haritası; yoksa []).
- * Dönüş: yuklenmemis / yuklenen / fiyatli (sevkiyat listeleri, SQL sırası), ozet, cari (para birimi → faturalanan/tahsilat/bakiye),
+ * Her sevkiyatta `parti` (list<string>, v449) + `ulke` + `plaka` (tüm tablolarda Parti no · Sipariş no · Ülke · Plaka bloğu). Dönüş: yuklenmemis / yuklenen / fiyatli (sevkiyat listeleri, SQL sırası), ozet, cari (para birimi → faturalanan/tahsilat/bakiye),
  * varsayilan_kg, kesildi. Her DB değeri açıkça çevrilir (SQLite/MySQL tip farkı + strict_types).
  */
 function siparis_cari_veri(array $okunan, array $ctx): array
@@ -251,6 +298,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
     $bugun = (string)($ctx['bugun'] ?? date('Y-m-d'));
     $tahsilat = is_array($ctx['tahsilat'] ?? null) ? $ctx['tahsilat'] : [];
     $faturaH = is_array($ctx['fatura'] ?? null) ? $ctx['fatura'] : [];
+    $partiH = is_array($ctx['parti'] ?? null) ? $ctx['parti'] : [];   // sid → list<string> (siparis_cari_parti_haritasi)
     $out = ['yuklenmemis' => [], 'yuklenen' => [], 'fiyatli' => [], 'ozet' => [
         'yuklenmemis' => ['sevkiyat' => 0, 'palet' => 0, 'koli' => 0, 'gram' => 0],
         'yuklenen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
@@ -264,6 +312,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
         $sev = ['id' => $id, 'order_ref' => (string)($r['order_ref'] ?? ''), 'tarih' => $tarih,
             'ulke' => siparis_yazdir_ulke(($r['alici_kodu'] ?? null) !== null ? (string)$r['alici_kodu'] : null, ($r['alici_adi'] ?? null) !== null ? (string)$r['alici_adi'] : null),
             'plaka' => (string)($r['plakalar'] ?? ''), 'nakliyeci' => (string)($r['nakliyeci'] ?? ''),
+            'parti' => array_values(array_filter(array_map(static fn($x): string => trim((string)$x), (array)($partiH[$id] ?? [])), static fn(string $x): bool => $x !== '')),
             'yuklendi' => $yuklendi, 'fiyatli' => false, 'fiyat_tarihi' => null,
             'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => [], 'fatura' => null, 'karsilastirma' => null];
         $fat = (isset($faturaH[$id]) && is_array($faturaH[$id]) && (int)($faturaH[$id]['fiyat'] ?? 0) > 0)

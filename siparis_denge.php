@@ -30,8 +30,9 @@ if (!siparis_sema_hazir($pdo)) {
 }
 $f = siparis_cari_filtre($_GET, $bugun);
 $okunan = siparis_cari_oku($pdo, $f);
-$faturaFiyat = siparis_cari_fatura_fiyatlari($pdo, array_map(static fn(array $r): int => (int)$r['id'], $okunan['rows']));
-$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => $faturaFiyat]);
+$sevIdler = array_map(static fn(array $r): int => (int)$r['id'], $okunan['rows']);
+$faturaFiyat = siparis_cari_fatura_fiyatlari($pdo, $sevIdler);
+$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => $faturaFiyat, 'parti' => siparis_cari_parti_haritasi($pdo, $sevIdler)]);
 $param = siparis_denge_param($_GET, $v);   // varsayılanlar (kg boş → ortalama kg, hedef boş → son sevkiyat PC fiyatı) cari verisinden
 $d = siparis_denge_hesapla($v, $param);
 $o = $d['ozet'];
@@ -136,14 +137,14 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
   <!-- 2) Sevkiyat bazında karşılaştırma -->
   <h3 class="pr-section">Sevkiyat bazında karşılaştırma</h3>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="sdKarsi">
-    <thead><tr><th>Yükleme tarihi</th><th>Sipariş no</th><th class="num">Kg</th><th class="num">PC fiyat / kg</th><th class="num">Fatura fiyat / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">Kümülatif fark (EUR)</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">PC fiyat / kg</th><th class="num">Fatura fiyat / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">Kümülatif fark (EUR)</th></tr></thead>
     <?php if (!$d['sevkiyatlar']): ?>
-    <tbody><tr><td colspan="8" class="pr-empty">Karşılaştırılacak sevkiyat yok (fiyatlı + invoice kesilmiş EUR sevkiyat gerekir).</td></tr></tbody>
+    <tbody><tr><td colspan="11" class="pr-empty">Karşılaştırılacak sevkiyat yok (fiyatlı + invoice kesilmiş EUR sevkiyat gerekir).</td></tr></tbody>
     <?php else: ?>
     <tbody>
       <?php foreach ($d['sevkiyatlar'] as $s): ?>
       <tr>
-        <td><?= h($tarih($s['tarih'])) ?></td><td><?= h((string)$s['order_ref']) ?></td>
+        <td><?= h($tarih($s['tarih'])) ?></td><?= siparis_cari_kimlik_html($s) ?>
         <td class="num"><?= h(siparis_cari_kg((int)$s['gram'])) ?></td>
         <td class="num"><?= h($fiyat((int)$s['pc_fiyat'])) ?></td>
         <td class="num"><?= h($fiyat((int)$s['fatura_fiyat'])) ?></td>
@@ -154,7 +155,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
       <?php endforeach; ?>
     </tbody>
     <tbody class="sc-toplam"><tr>
-      <td colspan="2">TOPLAM — <?= (int)$o['adet'] ?> sevkiyat (ağırlıklı ortalama)</td>
+      <td colspan="5">TOPLAM — <?= (int)$o['adet'] ?> sevkiyat (ağırlıklı ortalama)</td>
       <td class="num"><?= h(siparis_cari_kg((int)$o['gram'])) ?></td>
       <td class="num"><?= h($fiyat((int)$o['pc_ort'])) ?></td>
       <td class="num"><?= h($fiyat((int)$o['fatura_ort'])) ?></td>
