@@ -17,7 +17,7 @@ Servis geri alınmaz; yeniden yüklemede servis çiftlenmez (yalnız eksik fark 
 
 ## Sütunlar
 Tek kaynak `pdks_fis_sutunlar()` (config/pdks_fis.php); şablonun Açıklama sayfası ve başlık eşleme ondan üretilir. Başlıklar ada göre (TR-katlı, takma adlarla) eşlenir —
-sütun sırası bozulsa da çalışır. Zorunlu: Fiş No, Tarih, Çavuş Kodu ya da Çavuş Adı. Şablon sürümü: `PDKS_FIS_SABLON_SURUMU` (değişirse okuyucu başlık-ada-göre olduğundan geriye uyumludur).
+sütun sırası bozulsa da çalışır. Zorunlu: Fiş No, Tarih. **İşletme, Depo ve Çavuş Excel'de yoktur — yükleme sayfasında seçilir (bir dosya = tek çavuş).** Şablon sürümü: `PDKS_FIS_SABLON_SURUMU` (değişirse okuyucu başlık-ada-göre olduğundan geriye uyumludur).
 
 ## Kurallar (özet)
 - Yalnız bugünden **önceki** günler · ≤150 fiş · ≤2 MB · yalnız .xlsx (makro / dış bağlantı içeren dosya reddedilir).
@@ -35,7 +35,7 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 | Mesaj | Anlamı |
 |---|---|
 | `Satır n, «Başlık»: "12 + 1" tek sayı değil` | Tam ve Yarım sayılarını ayrı sütunlara yazın |
-| `Çavuş kodu bulunamadı` | Kod Çavuşlar sayfasında yok (ada düşülmez) |
+| `Çavuş seçilmedi` | Yükleme sayfasında «Çavuş» alanını seçin |
 | `bugün veya gelecek tarihli fişler desteklenmez` | Yalnız geçmiş günler |
 | `Toplam FM dağıtımı yapılamaz` | FM fiyatı nötr değil/bilinmiyor → kova sütunları |
 | `Mesaide N aktif kayıt var` | Önce Toplu Geri Al ya da «EK yaz» |

@@ -6,6 +6,9 @@
 // kartsız mesai kayıtlarını (+ servis) yazar. YALNIZ yönetici. OCR/AI uygulamanın İÇİNDE YOK; dosya diske KAYDEDİLMEZ.
 // Tüm mantık config/pdks_fis.php'de; yazma yolu Faz 8J toplu_ekle (ikinci yazma yolu YOK).
 //
+// İşletme · Depo · Çavuş Excel'de DEĞİL, yükleme formunda SEÇİLİR (dosyadaki tüm fişler seçilen çavuşundur). Depo değişimi
+// depo_sec.php ile AYNI kural: yalnız kullanıcıya atanmış depolar (depot_options), cookie + audit depot_switch.
+//
 // Akış (PRG): GET ?sablon=1 (indir) · POST eylem=onizle (dosya → normalize → oturum token'ı → ?onizle=TOKEN) ·
 // GET ?onizle=TOKEN (güncel DB'ye göre önizleme) · POST eylem=yaz (token + onay kutuları → ?sonuc=TOKEN) ·
 // POST eylem=iptal. Kova/saat/sayı verisi İSTEMCİDEN GELMEZ; yazarken fişler oturumdan alınır ve yeniden değerlendirilir.
@@ -27,6 +30,11 @@ pdks_faz8b_sayfa_kapisi($pdo);
 $uid = (int)$auth_user['id'];
 $depo = function_exists('active_depot') ? (string)(active_depot() ?? '') : '';
 $self = 'gunluk_fis_yukle.php';
+// Form seçenekleri (depo değişiminde seçimler sorgu dizgesiyle taşınır)
+$isletmeler = depot_options();
+$isletmeSec = trim((string)($_GET['isletme'] ?? '')); if (!in_array($isletmeSec, $isletmeler, true)) $isletmeSec = $depo;
+$cavusOnsec = (int)($_GET['cavus'] ?? 0);
+$cavuslar = pdks_fis_cavuslar($pdo);
 
 // ── Şablon indirme (GET; çıktıdan ÖNCE) ─────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['sablon'] ?? '') === '1') {
@@ -46,20 +54,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $eylem = (string)($_POST['eylem'] ?? '');
 
+    if ($eylem === 'depo_degistir') {
+        $yeni = trim((string)($_POST['depo'] ?? ''));
+        $qs = array_filter(['isletme' => trim((string)($_POST['isletme'] ?? '')), 'cavus' => (int)($_POST['cavus_id'] ?? 0) ?: ''], fn($v) => $v !== '');
+        if ($yeni === '' || !in_array($yeni, depot_options(), true)) { set_flash('error', 'Geçersiz depo seçimi.'); header('Location: ' . $self); exit; }
+        if ($yeni !== $depo) {
+            set_active_depot($yeni);
+            audit_log_event('depot_switch', 'auth', null, $depo !== '' ? ['depo' => $depo] : null, ['depo' => $yeni]);
+        }
+        header('Location: ' . $self . ($qs ? '?' . http_build_query($qs) : ''));
+        exit;
+    }
+
     if ($eylem === 'onizle') {
         if ($depo === '') { set_flash('error', 'Önce bir depo seçmelisiniz.'); header('Location: ' . $self); exit; }
+        if (trim((string)($_POST['depo'] ?? '')) !== $depo) { set_flash('error', 'Seçilen depo, aktif depodan farklı — depoyu seçip sayfanın yenilenmesini bekleyin.'); header('Location: ' . $self); exit; }
+        $isletme = trim((string)($_POST['isletme'] ?? ''));
+        if ($isletme === '' || !in_array($isletme, depot_options(), true)) { set_flash('error', 'İşletme seçin.'); header('Location: ' . $self); exit; }
+        $cavusSec = null;
+        foreach (pdks_fis_cavuslar($pdo) as $c) if ((int)$c['id'] === (int)($_POST['cavus_id'] ?? 0)) { $cavusSec = $c; break; }
+        if ($cavusSec === null) { set_flash('error', 'Çavuş seçin.'); header('Location: ' . $self); exit; }
         $d = pdks_fis_dosya_dogrula($_FILES['dosya'] ?? []);
         if (!$d['ok']) { set_flash('error', (string)$d['hata']); header('Location: ' . $self); exit; }
         $o = pdks_fis_oku((string)$d['yol']);
         if (empty($o['ok'])) { set_flash('error', (string)($o['hata'] ?? 'Dosya okunamadı.')); header('Location: ' . $self); exit; }
-        $n = pdks_fis_normalize($o, pdks_fis_cavuslar($pdo));
+        $n = pdks_fis_normalize($o, $cavusSec, $isletme);
         if (!$n['fisler']) { set_flash('error', implode(' ', $n['genel_hatalar'] ?: ['Dosyada fiş bulunamadı.'])); header('Location: ' . $self); exit; }
         $fmTip = pdks_fis_secenek(['fm_tip' => $_POST['fm_tip'] ?? 'tumu'])['fm_tip'];
         $token = pdks_fis_token_olustur([
             'sha' => (string)$d['sha256'], 'dosya_ad' => pdks_fis_metin_duz(basename(str_replace('\\', '/', (string)($_FILES['dosya']['name'] ?? 'dosya.xlsx'))), 120),
-            'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $fmTip], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
+            'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $fmTip], 'ust' => ['isletme' => $isletme, 'depo' => $depo, 'cavus' => $cavusSec['code'] . ' · ' . $cavusSec['name']], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
         ]);
-        export_audit('gunluk_fis_yukle', 'Fiş Excel önizleme', 'xlsx', count($n['fisler']), ['sha256' => substr((string)$d['sha256'], 0, 16)]);
+        export_audit('gunluk_fis_yukle', 'Fiş Excel önizleme', 'xlsx', count($n['fisler']), ['sha256' => substr((string)$d['sha256'], 0, 16), 'cavus_id' => (int)$cavusSec['id']]);
         session_write_close();   // yönlendirmeden ÖNCE: sonraki GET oturum yazımını beklemeden token'ı görsün
         header('Location: ' . $self . '?onizle=' . $token);
         exit;
@@ -114,7 +140,7 @@ if ($onizleToken !== '') {
     $hashler = [];
     foreach ($on['fisler'] as $m) if ($m['hash'] !== '') $hashler[(int)$m['satir']] = $m['hash'];
     pdks_fis_token_hashler($onizleToken, $hashler);
-    $model = ['mod' => 'onizle', 'token' => $onizleToken, 'onizle' => $on, 'dosya_ad' => $yuk['dosya_ad'], 'sha' => $yuk['sha'], 'dosya_uyarilar' => $yuk['dosya_uyarilar'] ?? [], 'varsayilan' => $varsayilan];
+    $model = ['mod' => 'onizle', 'token' => $onizleToken, 'onizle' => $on, 'ust' => $yuk['ust'] ?? null, 'dosya_ad' => $yuk['dosya_ad'], 'sha' => $yuk['sha'], 'dosya_uyarilar' => $yuk['dosya_uyarilar'] ?? [], 'varsayilan' => $varsayilan];
 } elseif ($sonucToken !== '') {
     $sk = $_SESSION['fis_sonuc'][$sonucToken] ?? pdks_fis_kv_oku(PDKS_FIS_KV_SONUC, $sonucToken);
     if (!preg_match('/^[a-f0-9]{32}$/D', $sonucToken) || !is_array($sk) || (int)$sk['uid'] !== $uid || (string)$sk['depo'] !== $depo || time() - (int)$sk['t'] > PDKS_FIS_TOKEN_TTL) {
@@ -144,7 +170,7 @@ render_flash();
 else: ?>
     <div class="card fy-kart-adim">
         <h2>1 · Şablon</h2>
-        <p>Şablonu indirin, fiş fotoğraflarıyla birlikte yapay zekâya verin (aşağıdaki komutla) ve «Fişler» sayfasını doldurtun. Aktif depo: <b><?= h($depo) ?></b> · yalnız <b>geçmiş günlerin</b> fişleri · en çok <?= (int)PDKS_FIS_MAX_FIS ?> fiş · en çok <?= (int)(PDKS_FIS_MAX_BAYT / 1048576) ?> MB.</p>
+        <p>Şablonu indirin, fiş fotoğraflarıyla birlikte yapay zekâya verin (aşağıdaki komutla) ve «Fişler» sayfasını doldurtun. İşletme, depo ve çavuşu Excel'e yazmayın — aşağıdaki 2. adımda seçersiniz; bir dosya tek çavuşa aittir. Yalnız <b>geçmiş günlerin</b> fişleri · en çok <?= (int)PDKS_FIS_MAX_FIS ?> fiş · en çok <?= (int)(PDKS_FIS_MAX_BAYT / 1048576) ?> MB.</p>
         <p><a class="btn btn-primary" href="<?= h($self) ?>?sablon=1">📄 Şablonu indir (.xlsx)</a></p>
         <details class="fy-komut">
             <summary>Yapay zekâya verilecek komut</summary>
@@ -154,9 +180,38 @@ else: ?>
     </div>
     <div class="card fy-kart-adim">
         <h2>2 · Dolu dosyayı yükle</h2>
-        <form method="post" action="<?= h($self) ?>" enctype="multipart/form-data" class="fy-form">
+        <form method="post" action="<?= h($self) ?>" id="fyDepoForm" class="fy-depo-form">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="eylem" value="depo_degistir">
+            <input type="hidden" name="isletme" value="" id="fyDepoIsletme">
+            <input type="hidden" name="cavus_id" value="" id="fyDepoCavus">
+            <noscript><button type="submit" class="btn">Depoyu değiştir</button></noscript>
+        </form>
+        <form method="post" action="<?= h($self) ?>" enctype="multipart/form-data" class="fy-form" id="fyYukleForm">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="eylem" value="onizle">
+            <div class="fy-secimler">
+                <div class="form-group">
+                    <label for="fyIsletme">İşletme</label>
+                    <select id="fyIsletme" name="isletme" required>
+                        <?php foreach ($isletmeler as $x): ?><option value="<?= h($x) ?>"<?= $x === $isletmeSec ? ' selected' : '' ?>><?= h($x) ?></option><?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="fyDepo">Depo</label>
+                    <select id="fyDepo" name="depo" form="fyDepoForm" required>
+                        <?php foreach ($isletmeler as $x): ?><option value="<?= h($x) ?>"<?= $x === $depo ? ' selected' : '' ?>><?= h($x) ?></option><?php endforeach; ?>
+                    </select>
+                    <input type="hidden" name="depo" value="<?= h($depo) ?>">
+                </div>
+                <div class="form-group">
+                    <label for="fyCavus">Çavuş</label>
+                    <select id="fyCavus" name="cavus_id" required>
+                        <option value="">— Çavuş seçin —</option>
+                        <?php foreach ($cavuslar as $c): ?><option value="<?= (int)$c['id'] ?>"<?= (int)$c['id'] === $cavusOnsec ? ' selected' : '' ?>><?= h($c['code'] . ' · ' . $c['name']) ?><?= $c['is_active'] ? '' : ' (pasif)' ?></option><?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
             <div class="form-group">
                 <label for="fyDosya">Fiş Excel dosyası (.xlsx)</label>
                 <input type="file" id="fyDosya" name="dosya" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
@@ -186,6 +241,14 @@ else: ?>
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(kutu.value).then(function () { bitti('Kopyalandı'); }, function () { kutu.select(); bitti(document.execCommand('copy') ? 'Kopyalandı' : 'Kopyalanamadı — metni seçip kopyalayın'); });
         } else { kutu.select(); bitti(document.execCommand('copy') ? 'Kopyalandı' : 'Kopyalanamadı — metni seçip kopyalayın'); }
+    });
+    var depoSec = document.getElementById('fyDepo'), depoForm = document.getElementById('fyDepoForm');
+    if (depoSec && depoForm) depoSec.addEventListener('change', function () {
+        // depo değişince aktif depo sunucuda değişir; işletme/çavuş seçimi sorgu dizgesiyle taşınır
+        var i = document.getElementById('fyIsletme'), c = document.getElementById('fyCavus');
+        document.getElementById('fyDepoIsletme').value = i ? i.value : '';
+        document.getElementById('fyDepoCavus').value = c ? c.value : '';
+        depoForm.submit();
     });
     var form = document.getElementById('fyYazForm');
     if (!form) return;

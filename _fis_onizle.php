@@ -26,6 +26,13 @@ $fy_grup = static function (array $g, string $tarih): string {
 };
 ?>
 <div class="fy-kap" id="fisYukle" data-fy-mod="<?= h((string)$model['mod']) ?>">
+<?php if (($model['mod'] ?? '') === 'onizle' && !empty($model['ust'])): $u = $model['ust']; ?>
+    <div class="fy-ust" role="note">
+        <span>İşletme: <b><?= h((string)($u['isletme'] ?? '')) ?></b></span>
+        <span>Depo: <b><?= h((string)($u['depo'] ?? '')) ?></b></span>
+        <span>Çavuş: <b><?= h((string)($u['cavus'] ?? '')) ?></b></span>
+    </div>
+<?php endif; ?>
 <?php if (($model['mod'] ?? '') === 'sonuc'): $s = $model['sonuc']; $oz = $s['ozet']; ?>
     <div class="fy-ozet" role="status">
         <span><b><?= (int)$oz['islenen'] ?></b> fiş işlendi</span>
@@ -139,7 +146,7 @@ $fy_grup = static function (array $g, string $tarih): string {
         };
         $fy_cavus = static function (array $m): string {
             $c = $m['cavus'] ?? [];
-            return h((string)($c['kod'] ?? '')) . ' · ' . h((string)($c['ad'] ?? '')) . (!empty($c['yontem']) ? ' <small>(' . ($c['yontem'] === 'kod' ? 'kod' : 'ad') . ')</small>' : '');
+            return h((string)($c['kod'] ?? '')) . ' · ' . h((string)($c['ad'] ?? '')) . '';
         };
         ?>
         <div class="fy-secim-bar"><label><input type="checkbox" data-fy-hepsi> Tümünü seç / kaldır</label></div>
