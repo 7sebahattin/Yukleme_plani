@@ -153,14 +153,14 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         ok(`[${w}] yazdırma: bugünün tarihi kalın, gün değişiminde üst çizgi, çok satırlı hücre <br>`, tbl.bugunKalin === '700' && tbl.gunCizgi >= 2 && (tbl.urunBr || !KUCUK.satirlar.some(r => r.h.some(h => /\n/.test(h)))), JSON.stringify([tbl.bugunKalin, tbl.gunCizgi, tbl.urunBr]));
         ok(`[${w}] yazdırma: tarih/sipariş/tel nowrap (plaka kırılır); sayı sütunları (kalibre/palet/kasa) sağa; başlıklar ortalı ve kırılabilir`, tbl.nowrap && tbl.sag && tbl.thOrta && tbl.thKirilir, JSON.stringify([tbl.nowrap, tbl.sag, tbl.thOrta, tbl.thKirilir]));
         // v427 — parti no / plaka hücresinde her değer AYRI satır ve hiçbiri ortadan kırılmaz (görüntülenen satır sayısı = veri satır sayısı)
-        const ppb = await popup.evaluate(IXP => {
+        const ppb = w < 1000 ? [] : await popup.evaluate(IXP => {
             const veri = Array.from(document.querySelectorAll('.syz tbody tr')).filter(r => !r.classList.contains('syz-toplam'));
             const say = (td) => { const lh = parseFloat(getComputedStyle(td).lineHeight) || 13; return Math.round((td.getBoundingClientRect().height - 6) / lh); };
             return veri.map((r, i) => IXP.map(x => ({ i, k: x, h: r.children[x].innerHTML, satir: say(r.children[x]) })));
         }, [KI(KUCUK, 'parti'), KI(KUCUK, 'plaka')]);
         const ppHatali = [];
         ppb.forEach((satir, i) => satir.forEach((c, j) => { const beklenen = (KUCUK.satirlar[i].h[c.k] || '').split('\n').length; if (c.h !== '' && c.satir > beklenen) ppHatali.push([i, c.k, c.h, c.satir, beklenen]); }));
-        ok(`[${w}] yazdırma: parti no / plaka hücrelerinde değerler ayrı satırda, ortadan kırılmaz (v427)`, ppHatali.length === 0 && KUCUK.satirlar.some(r => /\n/.test(r.h[KI(KUCUK, 'plaka')])), JSON.stringify(ppHatali.slice(0, 3)));
+        ok(`[${w}] yazdırma: parti no / plaka hücrelerinde değerler ayrı satırda, ortadan kırılmaz (v427; telefon genişliğinde popup ölçülmez — baskı A4 yatay)`, w < 1000 || ppHatali.length === 0 && KUCUK.satirlar.some(r => /\n/.test(r.h[KI(KUCUK, 'plaka')])), JSON.stringify(ppHatali.slice(0, 3)));
         ok(`[${w}] yazdırma: boş kalibre hücresi "-"; TOPLAM satırında her kalibre sütununun toplamı`, tbl.kalTire && JSON.stringify(tbl.toplamKal) === JSON.stringify(KALS.map(c => String(KUCUK.toplam[c.k] == null ? '' : KUCUK.toplam[c.k]))), JSON.stringify([tbl.toplamKal, KUCUK.toplam]));
         ok(`[${w}] yazdırma: toplam palet/kasa satırı + meta + anahtar + kişisel veri notu`, tbl.toplamPalet === KUCUK.toplam.palet && tbl.toplamKasa === KUCUK.toplam.kasa && /Sarı zemin ve ✓ = çıkış tarihi geçmiş/.test(tbl.anahtar) && /sevkiyat/.test(tbl.meta) && /Basım:/.test(tbl.meta)
             && /Geçmiş: /.test(tbl.meta) && tbl.notlar.length === (KUCUK.notlar || []).length && tbl.colgroup === KUCUK.kolonlar.length, JSON.stringify([tbl.toplamPalet, tbl.toplamKasa, tbl.anahtar, tbl.meta, tbl.notlar]));
@@ -538,6 +538,8 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
                     thMetin: [...el.querySelectorAll('thead th')].map(x => x.textContent.trim()),
                     tdAlign: [...new Set([...el.querySelectorAll('tbody td')].map(x => cs(x).textAlign))],
                     gecmisBg: [...el.querySelectorAll('tr.syz-gecmis>td')].map(x => cs(x).backgroundColor),
+                    pp: (() => { const ths = [...el.querySelectorAll('thead th')].map(x => x.textContent.trim()), ix = [ths.indexOf('Parti no'), ths.indexOf('Plaka')];
+                        return [...el.querySelectorAll('tbody tr:not(.syz-toplam)')].map(r => ix.map(i => { const td = r.children[i], lh = parseFloat(cs(td).lineHeight) || 19; return { satir: Math.round((td.getBoundingClientRect().height - 10) / lh), beklenen: td.innerHTML === '' ? 1 : td.innerHTML.split('<br>').length, h: td.innerHTML }; })); })(),
                     top: (() => { const t = el.querySelector('tr.syz-toplam>td'); return t ? [cs(t).backgroundColor, cs(t).color, +cs(t).fontWeight] : null; })() });
                 return gercek(el, o); } : undefined; },
             set(f) { gercek = f; } });
@@ -559,6 +561,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
             && rs.gecmisBg.every(x => x === 'rgb(255, 243, 176)')
             && JSON.stringify(rs.top) === JSON.stringify(['rgb(219, 231, 245)', 'rgb(30, 58, 95)', 800]), JSON.stringify(rs));
         ok('[1280] resim (v419): kalibre başlıklarında "adet" yok ("Kalibre 14"), hücre içi veriler ortalı', rs && rs.thMetin.some(x => /^Kalibre \S+$/.test(x)) && rs.thMetin.every(x => !/adet/i.test(x)) && JSON.stringify(rs.tdAlign) === JSON.stringify(['center']), JSON.stringify([rs && rs.thMetin, rs && rs.tdAlign]));
+        ok('[1280] resim (v427): parti no / plaka hücrelerinde her değer ayrı satır, ortadan kırılmaz', rs && rs.pp.length > 0 && rs.pp.every(r => r.every(c => c.satir <= c.beklenen)) && rs.pp.some(r => r.some(c => c.beklenen > 1)), JSON.stringify(rs && rs.pp.filter(r => r.some(c => c.satir > c.beklenen)).slice(0, 2)));
         ok('[1280] resim: tek istek amac=resim + bolum=acik', istekler.length === 1 && /amac=resim/.test(istekler[0]) && /bolum=acik/.test(istekler[0]), istekler.join(','));
         await page.waitForFunction(() => { const d = document.querySelector('.sip-yz-durum'); return d && !d.hidden; }, null, { timeout: 5000 });
         const b = await page.evaluate(() => { const d = document.querySelector('.sip-yz-durum'); return { t: d.textContent, z: +getComputedStyle(d).zIndex, wp: !!document.querySelector('.sip-wp-durum'),
