@@ -11,6 +11,7 @@ declare(strict_types=1);
 // Doğrudan istek → 404. TAM YOL karşılaştırılır (basename değil — bkz. config/siparis_yazdir.php, v385).
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 require_once __DIR__ . '/siparis_yazdir.php';   // alıcı ülke = siparis_yazdir_ulke() (TEK kaynak)
+require_once __DIR__ . '/siparis_invoice.php';  // fatura fiyatı = siparis_inv_ondalik_coz() + hks_kv girdisi (v448; yalnız fonksiyon tanımlar, dompdf YÜKLEMEZ)
 
 if (!defined('SIPARIS_CARI_LIMIT')) define('SIPARIS_CARI_LIMIT', 1000);
 if (!defined('SIPARIS_CARI_KOLI_KG_VARSAYILAN')) define('SIPARIS_CARI_KOLI_KG_VARSAYILAN', 3.5);
@@ -83,6 +84,21 @@ function siparis_cari_fiyat4(int $onbinde): string
 {
     $a = abs($onbinde);
     return ($onbinde < 0 ? '-' : '') . number_format(intdiv($a, 10000), 0, ',', '.') . ',' . str_pad((string)($a % 10000), 4, '0', STR_PAD_LEFT);
+}
+
+/** On-binde → en az 2, en çok 4 ondalık (sondaki sıfırlar atılır): 13700 → "1,37", 13725 → "1,3725" (negatif "-"). */
+function siparis_cari_fiyat_kisa(int $onbinde): string
+{
+    $a = abs($onbinde);
+    $kes = rtrim(str_pad((string)($a % 10000), 4, '0', STR_PAD_LEFT), '0');
+    return ($onbinde < 0 ? '-' : '') . number_format(intdiv($a, 10000), 0, ',', '.') . ',' . str_pad($kes, 2, '0', STR_PAD_RIGHT);
+}
+
+/** Fark metni (fatura − PC, on-binde): işaretli, en az 2 en çok 4 ondalık — "+0,08", "-0,125"; sıfır işaretsiz "0,00". */
+function siparis_cari_fark_metin(int $onbinde): string
+{
+    if ($onbinde === 0) return '0,00';
+    return ($onbinde > 0 ? '+' : '') . siparis_cari_fiyat_kisa($onbinde);
 }
 
 /** Gram → ekranda tam kg ("12.880"; KG ekranda tam sayı kuralı). */
@@ -180,7 +196,43 @@ function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array
 }
 
 /**
- * Saf: sınıflama + hesap. $ctx: bugun (Y-m-d), tahsilat (array<string,int>).
+ * SALT OKUNUR, fail soft (v448). Sevkiyat → ÜRETİLMİŞ invoice'ın birim fiyatı (Invoice (OGL) girdisi, hks_kv `siparis_invoice_<id>`).
+ * Yalnız `uretildi_at` + `belge_id` dolu ve 0 < fiyat < 1000 olan girdi sayılır. Tablo yok / bozuk JSON / hata → o kayıt (ya da tümü) yok sayılır.
+ * @param list<int|string> $sevIds
+ * @return array<int,array{fiyat:int,no:string,tarih:?string,iskonto:float}>  fiyat = on-binde (4 ondalık tam sayı)
+ */
+function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array
+{
+    $out = [];
+    try {
+        $tablo = siparis_evrak_mail_kv_tablo();
+        $ids = array_values(array_unique(array_filter(array_map('intval', $sevIds), static fn(int $i): bool => $i > 0)));
+        foreach (array_chunk($ids, 500) as $parca) {
+            $anahtarlar = array_map(static fn(int $i): string => SIPARIS_INV_GIRDI_KV_ON . $i, $parca);
+            $st = $pdo->prepare('SELECT anahtar, deger FROM `' . $tablo . '` WHERE anahtar IN (' . implode(',', array_fill(0, count($anahtarlar), '?')) . ')');
+            $st->execute($anahtarlar);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $sid = (int)substr((string)$r['anahtar'], strlen(SIPARIS_INV_GIRDI_KV_ON));
+                $j = json_decode((string)($r['deger'] ?? ''), true);
+                if ($sid <= 0 || !is_array($j)) continue;
+                if (trim((string)($j['uretildi_at'] ?? '')) === '' || (int)($j['belge_id'] ?? 0) <= 0) continue;   // gerçekten üretilmiş invoice
+                $f = siparis_inv_ondalik_coz($j['fiyat'] ?? null, false);
+                if ($f === null || !($f > 0.0 && $f < 1000.0)) continue;
+                $f1e4 = (int)round($f * 10000);
+                if ($f1e4 <= 0 || $f1e4 >= 10000000) continue;
+                $t = is_string($j['tarih'] ?? null) ? siparis_tarih_coz($j['tarih']) : null;
+                $isk = siparis_inv_ondalik_coz($j['iskonto'] ?? 0, false);
+                $out[$sid] = ['fiyat' => $f1e4, 'no' => siparis_inv_metin($j['no'] ?? '', 60), 'tarih' => $t, 'iskonto' => $isk !== null ? (float)$isk : 0.0];
+            }
+        }
+    } catch (Throwable $e) {
+        return $out;   // tablo yok / sorgu hatası: kalan kayıtlar yok sayılır, sayfa çalışmaya devam eder
+    }
+    return $out;
+}
+
+/**
+ * Saf: sınıflama + hesap. $ctx: bugun (Y-m-d), tahsilat (array<string,int>), fatura (siparis_cari_fatura_fiyatlari() haritası; yoksa []).
  * Dönüş: yuklenmemis / yuklenen / fiyatli (sevkiyat listeleri, SQL sırası), ozet, cari (para birimi → faturalanan/tahsilat/bakiye),
  * varsayilan_kg, kesildi. Her DB değeri açıkça çevrilir (SQLite/MySQL tip farkı + strict_types).
  */
@@ -188,6 +240,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
 {
     $bugun = (string)($ctx['bugun'] ?? date('Y-m-d'));
     $tahsilat = is_array($ctx['tahsilat'] ?? null) ? $ctx['tahsilat'] : [];
+    $faturaH = is_array($ctx['fatura'] ?? null) ? $ctx['fatura'] : [];
     $out = ['yuklenmemis' => [], 'yuklenen' => [], 'fiyatli' => [], 'ozet' => [
         'yuklenmemis' => ['sevkiyat' => 0, 'palet' => 0, 'koli' => 0, 'gram' => 0],
         'yuklenen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
@@ -202,7 +255,11 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             'ulke' => siparis_yazdir_ulke(($r['alici_kodu'] ?? null) !== null ? (string)$r['alici_kodu'] : null, ($r['alici_adi'] ?? null) !== null ? (string)$r['alici_adi'] : null),
             'plaka' => (string)($r['plakalar'] ?? ''), 'nakliyeci' => (string)($r['nakliyeci'] ?? ''),
             'yuklendi' => $yuklendi, 'fiyatli' => false, 'fiyat_tarihi' => null,
-            'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => []];
+            'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => [], 'fatura' => null, 'karsilastirma' => null];
+        $fat = (isset($faturaH[$id]) && is_array($faturaH[$id]) && (int)($faturaH[$id]['fiyat'] ?? 0) > 0)
+            ? ['fiyat' => (int)$faturaH[$id]['fiyat'], 'no' => (string)($faturaH[$id]['no'] ?? ''), 'tarih' => ($faturaH[$id]['tarih'] ?? null) !== null ? (string)$faturaH[$id]['tarih'] : null]
+            : null;
+        $sev['fatura'] = $fat;
         $fiyatTarihi = null;
         foreach (siparis_cari_kalem_sirala((array)($okunan['kalem'][$id] ?? [])) as $k) {
             $c = sipui_kalem_coz($k);
@@ -216,13 +273,15 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             $fiyat = is_numeric($k['fiyat'] ?? null) ? (float)$k['fiyat'] : 0.0;
             $sat = ['kalibre' => $c['kalibre'], 'urun' => $c['urun'], 'palet' => $palet, 'koli' => $koli, 'koli_kg' => $koliKg,
                 'kg_varsayilan' => $kgOk === null, 'gram' => $gram, 'fiyatli' => false, 'pb' => '', 'baz' => '',
-                'fiyat_koli' => null, 'fiyat_kg' => null, 'tutar' => null];
+                'fiyat_koli' => null, 'fiyat_kg' => null, 'tutar' => null, 'fatura_kg' => $fat['fiyat'] ?? null, 'fark_kg' => null];
             if ($kgOk === null) $out['varsayilan_kg'] = true;
             if ($fiyat > 0) {
                 $t = siparis_cari_satir_tutar($koli, $fiyat, $koliGram, ($k['fiyat_birim'] ?? null) !== null ? (string)$k['fiyat_birim'] : null);
                 $pb = siparis_cari_pb(($k['para_birimi'] ?? null) !== null ? (string)$k['para_birimi'] : null);
                 $sat['fiyatli'] = true; $sat['pb'] = $pb; $sat['baz'] = $t['baz'];
                 $sat['fiyat_koli'] = $t['fiyat_koli']; $sat['fiyat_kg'] = $t['fiyat_kg']; $sat['tutar'] = $t['tutar'];
+                if ($fat !== null && $pb === 'EUR') $sat['fark_kg'] = $fat['fiyat'] - $t['fiyat_kg'];   // fatura − PC (on-binde)
+                elseif ($fat !== null) $sat['fatura_kg'] = null;                                       // invoice daima EUR: başka para birimi karşılaştırılmaz
                 $sev['tutar'][$pb] = ($sev['tutar'][$pb] ?? 0) + $t['tutar'];
                 $ft = ($k['fiyat_tarihi'] ?? null) !== null ? siparis_tarih_coz((string)$k['fiyat_tarihi']) : null;
                 if ($ft !== null && ($fiyatTarihi === null || $ft > $fiyatTarihi)) $fiyatTarihi = $ft;
@@ -232,6 +291,17 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             $sev['satirlar'][] = $sat;
         }
         ksort($sev['tutar']);
+        if ($fat !== null) {   // karşılaştırma: yalnız EUR fiyatlı satırlar; fatura tutarı = toplam gram × fatura fiyatı (siparis_inv_hesapla ile aynı formül)
+            $gr = 0; $pcK = 0; $n = 0;
+            foreach ($sev['satirlar'] as $sa) {
+                if (!$sa['fiyatli'] || $sa['pb'] !== 'EUR') continue;
+                $gr += $sa['gram']; $pcK += (int)$sa['tutar']; $n++;
+            }
+            if ($n > 0 && $gr > 0) {
+                $faK = intdiv($gr * $fat['fiyat'] + 50000, 100000);
+                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $faK - $pcK];
+            }
+        }
         $sev['fiyatli'] = $sev['tutar'] !== [];
         $sev['fiyat_tarihi'] = $fiyatTarihi;
         if ($yuklendi) {

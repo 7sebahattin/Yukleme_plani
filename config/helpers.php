@@ -451,7 +451,7 @@ function nav_aktif_anahtar(): ?string {
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
                                'hesap_personel.php'], true);
     $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true);
-    $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_invoice.php'], true);
+    $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_invoice.php', 'siparis_denge.php'], true);
     $a_usip  = $cur === 'urun_siparis.php';   // v411: Ürün Siparişleri kendi bölümü ("Siparişler")
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
