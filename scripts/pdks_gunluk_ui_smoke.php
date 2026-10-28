@@ -244,7 +244,7 @@ $sIt = renderPage('isci_tipleri.php');
 ok('hata sızmadı', !str_starts_with($sIt, '__ERROR__'), $sIt);
 ok('Kadın tipi listede', str_contains($sIt, 'Kadın'));
 ok('Erkek tipi listede', str_contains($sIt, 'Erkek'));
-ok('v299: Rampacı tipi listede (tembel garanti) ve "Sistem Tipi (sabit)"', str_contains($sIt, 'Rampacı') && str_contains($sIt, 'RAMPACI') && str_contains($sIt, 'üç sabit sistem tipi'));
+ok('v299/v455: Rampacı ve Şeritçi tipi listede (tembel garanti) ve "Sistem Tipi (sabit)"', str_contains($sIt, 'Rampacı') && str_contains($sIt, 'RAMPACI') && str_contains($sIt, 'Şeritçi') && str_contains($sIt, 'SERITCI') && str_contains($sIt, 'dört sabit sistem tipi'));
 ok('sabit sistem tipi modeli AÇIKÇA anlatılıyor', str_contains($sIt, 'Sabit Sistem Tipleri') && str_contains($sIt, 'sabit'));
 ok('rastgele yeni tip oluşturma FORMU artık YOK', !str_contains($sIt, 'name="action" value="ekle"') && !str_contains($sIt, 'ör. FORKLIFT'));
 ok('pdks_gunluk_tip_olustur() sayfadan HİÇ ÇAĞRILMIYOR (rastgele tip oluşturma yolu YOK — yorumdaki isim-anma boş parantezle "()" ayrılır, GERÇEK çağrı DEĞİLDİR)',

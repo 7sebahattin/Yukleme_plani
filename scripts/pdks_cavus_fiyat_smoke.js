@@ -124,6 +124,31 @@ const ALANLAR = {
                     ok('v299: kolonlar yokken saat alanları YOK, kurulum notu görünür', saatDurum.var === 0 && saatDurum.kurulum, JSON.stringify(saatDurum));
                 }
 
+                // v455: «⏪ Başlangıcı geriye çek» — yalnız her çavuş+tipin EN ESKİ dönemi (yönetici); yeni pencere (cfGeriCek)
+                if (senaryo === 'dolu') {
+                    const gb = await page.evaluate(() => Array.from(document.querySelectorAll('[data-cf-geri-cek]')).filter(b => b.getBoundingClientRect().height > 0).length);
+                    ok('v455: geriye çek düğmesi her tipin en eski döneminde görünür (Kadın + Erkek = 2)', gb === 2, String(gb));
+                    const yonerge = await page.evaluate(() => (document.getElementById('cfYeniDonem') || document.body).innerText);
+                    ok('v455: kullanıcı yönergesi (önce EN ESKİ fiyatı geçmiş tarihle girin) formda', /EN ESKİ fiyatı geçmiş tarihle/.test(await page.content()), yonerge.slice(0, 80));
+                    await page.locator('[data-cf-geri-cek]:visible').first().click();
+                    await page.waitForTimeout(250);
+                    const dlg = await page.evaluate(() => {
+                        const d = document.getElementById('cfGeriCek'); const f = d.querySelector('form'); const r = d.getBoundingClientRect();
+                        const tarih = f.elements.yeni_baslangic; const gerekce = f.elements.gerekce; const kaydet = d.querySelector('button[type=submit]').getBoundingClientRect();
+                        return { acik: d.open, rate: f.elements.rate_id.value, form: f.elements.form.value, max: tarih.max, min: tarih.min, tarihReq: tarih.required, gerekceReq: gerekce.required, csrf: !!f.elements.csrf.value,
+                                 solda: r.left >= 0, sagda: r.right <= window.innerWidth + 1, kaydetGorunur: kaydet.height > 0 && kaydet.bottom <= window.innerHeight + 1, tasma: document.documentElement.scrollWidth > window.innerWidth + 1,
+                                 font: parseFloat(getComputedStyle(tarih).fontSize) };
+                    });
+                    ok('v455: pencere açılır, rate_id dolu, form=baslangic_geri, CSRF var', dlg.acik && Number(dlg.rate) > 0 && dlg.form === 'baslangic_geri' && dlg.csrf, JSON.stringify(dlg));
+                    ok('v455: tarih zorunlu, min 2020-01-01, max = mevcut başlangıçtan ÖNCEKİ gün (2025-12-31); gerekçe zorunlu', dlg.tarihReq && dlg.gerekceReq && dlg.min === '2020-01-01' && dlg.max === '2025-12-31', JSON.stringify(dlg));
+                    ok('v455: pencere ekran içinde, Geriye Çek düğmesi görünür, yatay taşma yok', dlg.solda && dlg.sagda && dlg.kaydetGorunur && !dlg.tasma, JSON.stringify(dlg));
+                    if (ekran.kisa === 'mob') ok('v455: mobilde girdi ≥16px (iOS zoom yok)', dlg.font >= 16, String(dlg.font));
+                    await page.locator('[data-cf-gc-kapat]').click();
+                    ok('v455: Vazgeç pencereyi kapatır', await page.evaluate(() => !document.getElementById('cfGeriCek').open));
+                } else {
+                    ok('v455: fiyat yokken geriye çek düğmesi/penceresi YOK', await page.locator('[data-cf-geri-cek]').count() === 0 && await page.locator('#cfGeriCek').count() === 0);
+                }
+
                 // v299: Servis Ücreti kartı (seçili çavuşun altında) + geçmiş
                 const servis = await page.evaluate(() => {
                     const k = document.getElementById('cfServisUcreti');

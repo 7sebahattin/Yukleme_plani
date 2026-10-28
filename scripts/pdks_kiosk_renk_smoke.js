@@ -49,7 +49,7 @@ const rgb = s => (String(s).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
 // baskın kanal: 'p' pembe (R yüksek, G düşük, B orta), 'm' mavi (B baskın, R düşük), 'y' yeşil (G baskın), 'k' kırmızı, 'mor' (R ve B yüksek, G düşük, B > R)
 function ton(c) {
     const [r, g, b] = rgb(c);
-    if (g > r && g > b) return 'yesil';
+    if (g > r && g > b) return (b >= g - 45) ? 'teal' : 'yesil';   // v455: teal = yeşil kanal baskın AMA mavi de yakın (Şeritçi)
     if (r > b && r > g) return (b > g + 30) ? 'pembe' : ((g > b + 40) ? 'turuncu' : 'kirmizi');
     if (b > r && b > g) return (r >= g + 10) ? 'mor' : 'mavi';
     return '?';
@@ -118,6 +118,15 @@ function ton(c) {
             ok('RAMPACI girişi: sınıf pdks-tip-rampaci, halka + kart TURUNCU; dört renk farklı', gR.sinif === 'pdks-tip-rampaci' && ton(gR.halka) === 'turuncu' && ton(gR.parilti) === 'turuncu' && new Set([gK.halka, gE.halka, gM.halka, gR.halka]).size === 4, JSON.stringify(gR));
             ok('RAMPACI girişinde Kadın⇄Erkek hızlı geçiş düğmesi GİZLİ', await page.evaluate(() => document.getElementById('giTipGecis').hidden));
             ok('tip rozeti Rampacı: pdks-kiosk-type-badge-rampaci', await page.evaluate(() => { const b = document.getElementById('giTipBadge') || document.querySelector('.pdks-kiosk-type-badge'); return !!b && b.classList.contains('pdks-kiosk-type-badge-rampaci') && b.textContent.trim() === 'Rampacı'; }));
+            // v455: ŞERİTÇİ — teal; beş renk birbirinden farklı (Karışık mor, Rampacı turuncu ile karışmaz)
+            await page.click('#giModDegistir'); await page.waitForTimeout(250);
+            await page.click('[data-gi-mode="GIRIS"]'); await page.waitForTimeout(150);
+            await page.click('[data-gi-tip-kod="SERITCI"]'); await page.waitForTimeout(350);
+            const gS = await gorsel();
+            if (SHOT && tema === 'dark' && ekran.k === 'pc') await page.screenshot({ path: path.join(SHOT, 'v455_kiosk_seritci.png') });
+            ok('SERITCI girişi: sınıf pdks-tip-seritci, halka + kart TEAL; beş renk farklı', gS.sinif === 'pdks-tip-seritci' && ton(gS.halka) === 'teal' && ton(gS.parilti) === 'teal' && new Set([gK.halka, gE.halka, gM.halka, gR.halka, gS.halka]).size === 5, JSON.stringify(gS));
+            ok('SERITCI girişinde Kadın⇄Erkek hızlı geçiş düğmesi GİZLİ', await page.evaluate(() => document.getElementById('giTipGecis').hidden));
+            ok('tip rozeti Şeritçi: pdks-kiosk-type-badge-seritci', await page.evaluate(() => { const b = document.getElementById('giTipBadge') || document.querySelector('.pdks-kiosk-type-badge'); return !!b && b.classList.contains('pdks-kiosk-type-badge-seritci') && b.textContent.trim() === 'Şeritçi'; }));
             // ÇIKIŞ: sınıf yok, yeşil
             await page.click('#giModDegistir'); await page.waitForTimeout(250);
             await page.click('[data-gi-mode="CIKIS"]'); await page.waitForTimeout(350);
@@ -166,6 +175,9 @@ function ton(c) {
             const sR = await sonuc('GIRIS', 'Rampacı');
             ok('GİRİŞ sonucu Rampacı kartı: pdks-sonuc-rampaci, panel + ikon TURUNCU', /pdks-sonuc-rampaci/.test(sR.sinif) && ton(sR.renk) === 'turuncu' && ton(sR.zemin) === 'turuncu', JSON.stringify(sR));
             await bekle();
+            const sS = await sonuc('GIRIS', 'Şeritçi');
+            ok('GİRİŞ sonucu Şeritçi kartı: pdks-sonuc-seritci, panel + ikon TEAL', /pdks-sonuc-seritci/.test(sS.sinif) && ton(sS.renk) === 'teal' && ton(sS.zemin) === 'teal', JSON.stringify(sS));
+            await bekle();
             const cK = await sonuc('CIKIS', 'Kadın');
             ok('ÇIKIŞ sonucu Kadın kartı da PEMBE', /pdks-sonuc-kadin/.test(cK.sinif) && ton(cK.renk) === 'pembe', JSON.stringify(cK));
             await bekle();
@@ -173,7 +185,7 @@ function ton(c) {
             ok('ÇIKIŞ sonucu Erkek kartı da MAVİ', /pdks-sonuc-erkek/.test(cE.sinif) && ton(cE.renk) === 'mavi', JSON.stringify(cE));
             await bekle();
             const sB = await sonuc('GIRIS', 'Bilinmeyen');
-            ok('tanınmayan tip: YEŞİL (eski görünüm)', !/pdks-sonuc-(kadin|erkek|karisik|rampaci)/.test(sB.sinif) && ton(sB.renk) === 'yesil', JSON.stringify(sB));
+            ok('tanınmayan tip: YEŞİL (eski görünüm)', !/pdks-sonuc-(kadin|erkek|karisik|rampaci|seritci)/.test(sB.sinif) && ton(sB.renk) === 'yesil', JSON.stringify(sB));
             await bekle();
             kaydetYanit = null;
             await page.focus('#giScanInput'); await page.keyboard.type('100000009'); await page.keyboard.press('Enter');

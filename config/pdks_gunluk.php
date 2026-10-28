@@ -435,12 +435,13 @@ function pdks_gunluk_migrate(?PDO $pdo = null): array
             // pdks_gunluk_giris_tip_kodlari()). Fiyatlanmaz, düzeltme hedefi değildir.
             // v299: RAMPACI (Rampacı) — 3. sabit sistem tipi (sort_order 4; mevcut satırların
             // sırasına DOKUNULMAZ, görüntü sırası kodda: pdks_gunluk_tip_kayit()).
-            foreach ([['KADIN', 'Kadın', 1], ['ERKEK', 'Erkek', 2], [PDKS_GUNLUK_KARISIK_KOD, PDKS_GUNLUK_KARISIK_AD, 3], [PDKS_GUNLUK_RAMPACI_KOD, PDKS_GUNLUK_RAMPACI_AD, 4]] as [$kod, $ad2, $sira]) {
+            // v455: SERITCI (Şeritçi) — 4. sabit sistem tipi (sort_order 5; Rampacı emsali).
+            foreach ([['KADIN', 'Kadın', 1], ['ERKEK', 'Erkek', 2], [PDKS_GUNLUK_KARISIK_KOD, PDKS_GUNLUK_KARISIK_AD, 3], [PDKS_GUNLUK_RAMPACI_KOD, PDKS_GUNLUK_RAMPACI_AD, 4], [PDKS_GUNLUK_SERITCI_KOD, PDKS_GUNLUK_SERITCI_AD, 5]] as [$kod, $ad2, $sira]) {
                 $var->execute([$kod]);
                 if ($var->fetchColumn()) continue;
                 try { $ins->execute([$kod, $ad2, $sira]); } catch (PDOException $e) { /* yarış koşulu — zaten var */ }
             }
-            $rapor[] = ['tablo' => 'worker_types.seed', 'durum' => 'var', 'mesaj' => 'Başlangıç tipleri (Kadın/Erkek/Karışık/Rampacı) garanti edildi.'];
+            $rapor[] = ['tablo' => 'worker_types.seed', 'durum' => 'var', 'mesaj' => 'Başlangıç tipleri (Kadın/Erkek/Karışık/Rampacı/Şeritçi) garanti edildi.'];
         } catch (PDOException $e) {
             error_log('[pdks_gunluk_migrate] worker_types.seed: ' . $e->getMessage());
             $rapor[] = ['tablo' => 'worker_types.seed', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
@@ -761,7 +762,7 @@ function pdks_gunluk_tip_aktiflik(int $id, bool $aktif, ?PDO $pdo = null): array
 /** @return string[] Günlük işçi operasyonel akışlarında desteklenen KOD listesi. */
 function pdks_gunluk_desteklenen_tip_kodlari(): array
 {
-    return ['KADIN', 'ERKEK', PDKS_GUNLUK_RAMPACI_KOD];
+    return ['KADIN', 'ERKEK', PDKS_GUNLUK_RAMPACI_KOD, PDKS_GUNLUK_SERITCI_KOD];
 }
 
 /** Bu KOD (worker_types.code), günlük işçi operasyonel akışlarında desteklenir mi? */
@@ -785,12 +786,13 @@ function pdks_gunluk_desteklenen_tip_listele(?PDO $pdo = null): array
     if (!isset($garantili[$pdo])) {
         $garantili[$pdo] = true;
         pdks_gunluk_rampaci_tip_garanti($pdo);
+        pdks_gunluk_seritci_tip_garanti($pdo);   // v455: Şeritçi (aynı kural)
     }
     $kodlar = pdks_gunluk_desteklenen_tip_kodlari();
     $ph = implode(',', array_fill(0, count($kodlar), '?'));
     $st = $pdo->prepare("SELECT * FROM worker_types WHERE is_active = 1 AND code IN ($ph) ORDER BY sort_order ASC, name ASC");
     $st->execute($kodlar);
-    // v299: görüntü sırası kodda (Kadın, Erkek, Rampacı) — satırların sort_order'ı UPDATE edilmez.
+    // v299: görüntü sırası kodda (Kadın, Erkek, Rampacı, Şeritçi) — satırların sort_order'ı UPDATE edilmez.
     $sira = array_flip($kodlar);
     $liste = $st->fetchAll();
     usort($liste, static fn($a, $b) => ($sira[$a['code']] ?? 99) <=> ($sira[$b['code']] ?? 99));
@@ -830,10 +832,14 @@ const PDKS_GUNLUK_KARISIK_AD  = 'Karışık';
 // ya da pdks_gunluk_rampaci_tip_garanti() ile (tembel, idempotent) oluşur.
 const PDKS_GUNLUK_RAMPACI_KOD = 'RAMPACI';
 const PDKS_GUNLUK_RAMPACI_AD  = 'Rampacı';
+// v455: SERITCI — 4. sabit sistem tipi (Rampacı emsali; politika listesine GİRER). Satır migrate seed'iyle
+// ya da pdks_gunluk_seritci_tip_garanti() ile (tembel, idempotent) oluşur. Yalnız VERİ satırı, şema YOK.
+const PDKS_GUNLUK_SERITCI_KOD = 'SERITCI';
+const PDKS_GUNLUK_SERITCI_AD  = 'Şeritçi';
 
 /**
  * v299 — TİP GÖRÜNÜM KAYDI (registry; TEK kaynak). Görüntü sırası = dizi sırası:
- * Kadın, Erkek, Rampacı, Karışık. Rapor sütunları/kutuları ve kiosk renkleri bu kayıttan
+ * Kadın, Erkek, Rampacı, Şeritçi, Karışık. Rapor sütunları/kutuları ve kiosk renkleri bu kayıttan
  * DÖNGÜYLE üretilir — elle 'Kadın'/'Erkek' sütunu YAZMA. `ad` = worker_types.name
  * (snapshot/giris[] anahtarı), `renk` = CSS sınıf son eki (pdks-tip-<renk>, pdks-sonuc-<renk>,
  * pdks-kiosk-type-badge-<renk>), `sutun` = pdks_rapor_aylik_cavus_toplu() satır anahtarı,
@@ -847,6 +853,7 @@ function pdks_gunluk_tip_kayit(): array
         'KADIN'                    => ['ad' => 'Kadın',                    'kisa' => 'Kadın',   'sayac' => 'Kadın İşçi',   'renk' => 'kadin',   'sutun' => 'kadin',   'sistem' => true],
         'ERKEK'                    => ['ad' => 'Erkek',                    'kisa' => 'Erkek',   'sayac' => 'Erkek İşçi',   'renk' => 'erkek',   'sutun' => 'erkek',   'sistem' => true],
         PDKS_GUNLUK_RAMPACI_KOD    => ['ad' => PDKS_GUNLUK_RAMPACI_AD,     'kisa' => 'Rampacı', 'sayac' => 'Rampacı',      'renk' => 'rampaci', 'sutun' => 'rampaci', 'sistem' => true],
+        PDKS_GUNLUK_SERITCI_KOD    => ['ad' => PDKS_GUNLUK_SERITCI_AD,     'kisa' => 'Şeritçi', 'sayac' => 'Şeritçi',      'renk' => 'seritci', 'sutun' => 'seritci', 'sistem' => true],
         PDKS_GUNLUK_KARISIK_KOD    => ['ad' => PDKS_GUNLUK_KARISIK_AD,     'kisa' => 'Karışık', 'sayac' => 'Karışık (atanmamış)', 'renk' => 'karisik', 'sutun' => 'karisik', 'sistem' => false],
     ];
 }
@@ -858,7 +865,7 @@ function pdks_gunluk_tip_kayit_ad(?string $kod): ?string
     return $kod !== null && isset($k[$kod]) ? $k[$kod]['ad'] : null;
 }
 
-/** Tip koduna göre renk sınıfı son eki ('kadin'/'erkek'/'rampaci'/'karisik'); bilinmeyen → ''. */
+/** Tip koduna göre renk sınıfı son eki ('kadin'/'erkek'/'rampaci'/'seritci'/'karisik'); bilinmeyen → ''. */
 function pdks_gunluk_tip_renk(?string $kod): string
 {
     $k = pdks_gunluk_tip_kayit();
@@ -884,7 +891,7 @@ function pdks_gunluk_tip_kod_adindan(?string $ad): ?string
 
 /**
  * Rapor sütun/kutu listesi (görüntü sırası): her biri ['kod','ad','kisa','sayac','renk','sutun'].
- * Ekran + yazdırma Kadın+Erkek+Rampacı+Karışık = Toplam sütunlarını BUNDAN üretir.
+ * Ekran + yazdırma Kadın+Erkek+Rampacı+Şeritçi+Karışık = Toplam sütunlarını BUNDAN üretir.
  * Tüm tipler HER ZAMAN listelenir (sayısı 0 olsa da — tutarlılık). CSV/XLSX bunu KULLANMAZ.
  */
 function pdks_gunluk_tip_sutunlari(): array
@@ -894,7 +901,7 @@ function pdks_gunluk_tip_sutunlari(): array
     return $out;
 }
 
-/** Yalnız sistem (politika) tipleri — Kadın, Erkek, Rampacı; Karışık (geçici/atanmamış) hariç. */
+/** Yalnız sistem (politika) tipleri — Kadın, Erkek, Rampacı, Şeritçi; Karışık (geçici/atanmamış) hariç. */
 function pdks_gunluk_tip_sistem_sutunlari(): array
 {
     return array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem']));
@@ -921,6 +928,30 @@ function pdks_gunluk_rampaci_tip_garanti(?PDO $pdo = null): ?array
         return $st->fetch() ?: null;
     } catch (PDOException $e) {
         error_log('[pdks_gunluk_rampaci_tip_garanti] ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * v455 — SERITCI worker_types satırını garanti eder (Rampacı emsali: ucuz SELECT → yoksa INSERT,
+ * taşınabilir desen). Var olan satırın aktifliğine DOKUNMAZ (pasifse yeniden AÇMAZ). Tablo yoksa null.
+ */
+function pdks_gunluk_seritci_tip_garanti(?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    try {
+        $st = $pdo->prepare('SELECT * FROM worker_types WHERE code = ?');
+        $st->execute([PDKS_GUNLUK_SERITCI_KOD]);
+        $r = $st->fetch();
+        if ($r) return $r;
+        try {
+            $pdo->prepare('INSERT INTO worker_types (code, name, sort_order) VALUES (?, ?, ?)')
+                ->execute([PDKS_GUNLUK_SERITCI_KOD, PDKS_GUNLUK_SERITCI_AD, 5]);
+        } catch (PDOException $e) { /* yarış koşulu — zaten var */ }
+        $st->execute([PDKS_GUNLUK_SERITCI_KOD]);
+        return $st->fetch() ?: null;
+    } catch (PDOException $e) {
+        error_log('[pdks_gunluk_seritci_tip_garanti] ' . $e->getMessage());
         return null;
     }
 }
@@ -976,7 +1007,7 @@ function pdks_gunluk_giris_tip_kodlari(): array
 
 /**
  * Kiosk GİRİŞ tip düğmeleri: desteklenen liste (pdks_gunluk_desteklenen_tip_listele())
- * + aktif KARISIK satırı (gerekirse tembel oluşturulur). Sıra: Kadın, Erkek, Rampacı, Karışık.
+ * + aktif KARISIK satırı (gerekirse tembel oluşturulur). Sıra: Kadın, Erkek, Rampacı, Şeritçi, Karışık.
  */
 function pdks_gunluk_giris_tip_listele(?PDO $pdo = null): array
 {
@@ -3857,7 +3888,7 @@ function pdks_gunluk_kart_tanim_kaydet(int $kartId, int $foremanId, int $tipId, 
     if (!$cavus) return ['ok' => false, 'kod' => 'cavus_yok', 'hata' => 'Çavuş bulunamadı.'];
     if (!(int)$cavus['is_active']) return ['ok' => false, 'kod' => 'cavus_pasif', 'hata' => 'Pasif çavuşa kart tanımlanamaz.'];
     $tip = pdks_gunluk_desteklenen_tip_coz($tipId, $pdo);
-    if (!$tip) return ['ok' => false, 'kod' => 'tip_desteklenmiyor', 'hata' => 'Tanım için yalnız Kadın / Erkek / Rampacı seçilebilir.'];
+    if (!$tip) return ['ok' => false, 'kod' => 'tip_desteklenmiyor', 'hata' => 'Tanım için yalnız Kadın / Erkek / Rampacı / Şeritçi seçilebilir.'];
 
     $simdi = date('Y-m-d H:i:s');
     $eski = null; $yeniId = 0;

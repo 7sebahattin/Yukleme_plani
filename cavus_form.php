@@ -234,7 +234,7 @@ render_flash();
 <div class="card" style="padding:18px 20px;margin-bottom:20px">
     <h2 style="margin-top:0;font-size:1rem">Tarihli normal çalışma süresi</h2>
     <?php if ($bugunDk !== null): ?><p style="margin-top:0"><strong>Bugün geçerli:</strong> <?= h(pdks_faz8b_dakika_etiket((int)$bugunDk)) ?></p><?php endif; ?>
-    <p class="muted" style="font-size:.86rem">Seçilen tarihler dahil olmak üzere geçmişe dönük uygulanır ve KADIN/ERKEK/RAMPACI dahil tüm işçi türlerini etkiler. Bu süre, seçilen günlerde fiyat dönemindeki Tam mesai ve fazla mesai başlangıç saatlerinin önüne geçer; ücretler değişmez. Normal sürenin üstündeki 15 dakika tolerans kuralı geçerlidir. Çakışan tanımlarda en son kaydedilen tanım geçerlidir. Etkilenen günlerin mesai onayları yeniden verilmelidir. Kesinleşmiş hakediş bulunan dönemlerde kaydetmeden önce ilgili hakedişleri yeniden açın.</p>
+    <p class="muted" style="font-size:.86rem">Seçilen tarihler dahil olmak üzere geçmişe dönük uygulanır ve KADIN/ERKEK/RAMPACI/SERITCI dahil tüm işçi türlerini etkiler. Bu süre, seçilen günlerde fiyat dönemindeki Tam mesai ve fazla mesai başlangıç saatlerinin önüne geçer; ücretler değişmez. Normal sürenin üstündeki 15 dakika tolerans kuralı geçerlidir. Çakışan tanımlarda en son kaydedilen tanım geçerlidir. Etkilenen günlerin mesai onayları yeniden verilmelidir. Kesinleşmiş hakediş bulunan dönemlerde kaydetmeden önce ilgili hakedişleri yeniden açın.</p>
     <form method="post">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="action" value="sure_kaydet">

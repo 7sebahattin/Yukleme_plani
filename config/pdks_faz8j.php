@@ -141,7 +141,7 @@ function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int
         if(!$sr) throw new RuntimeException('Mesai bulunamadı.');
         if($e=pdks_faz8j_tanim_kart_engeli($pdo,$card,(int)$sr['foreman_id'],(string)$sr['depo'])) throw new RuntimeException($e);
     } elseif($exit===null && pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesai kaydında çıkış zamanı zorunludur.');
-    if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI\'ya yeniden atanarak düzeltilebilir.');
+    if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI/SERITCI\'ya yeniden atanarak düzeltilebilir.');
     $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
     $ov->execute([$card,$pid,$exit,$entry]); if($ov->fetchColumn()) throw new RuntimeException('Seçilen kartın çakışan aktif bir çalışma dönemi var.');
     $eventId=$p['exit_event_id'];
@@ -677,7 +677,7 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
         $etiket = $tip ? (string)$tip['name'] : (($i + 1) . '. grup');
         if ($coklu && is_string($g['etiket'] ?? null) && $g['etiket'] !== '') $etiket = mb_substr($g['etiket'], 0, 80);
         $grupHata = null;
-        if (!$tip) $grupHata = 'İşçi tipi bulunamadı, pasif veya desteklenmiyor (yalnız KADIN/ERKEK/RAMPACI).';
+        if (!$tip) $grupHata = 'İşçi tipi bulunamadı, pasif veya desteklenmiyor (yalnız KADIN/ERKEK/RAMPACI/SERITCI).';
         elseif (!$coklu && isset($tipGoruldu[(int)$tip['id']])) $grupHata = 'Aynı işçi tipi için birden fazla grup girilemez.';
         if ($tip) $tipGoruldu[(int)$tip['id']] = true;
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
@@ -792,7 +792,8 @@ function pdks_faz8j_toplu_degerlendir(PDO $pdo, array $h, ?array $oturum, ?bool 
         'hatalar' => array_values(array_unique($hatalar)),
         'uyarilar' => array_merge(
             $sid !== null ? pdks_faz8j_kartsiz_tekrar_uyarilari($pdo, $sid, $specs) : [],
-            pdks_faz8j_tanim_uyarilari($pdo, (int)$h['foreman_id'], (string)$h['depo'], $specs)
+            pdks_faz8j_tanim_uyarilari($pdo, (int)$h['foreman_id'], (string)$h['depo'], $specs),
+            pdks_faz8j_fiyatsiz_tip_uyarilari($pdo, (int)$h['foreman_id'], (string)$h['work_date'], $specs)
         ),
         'yeni_mesai' => $yeniMesai, 'session_id' => $sid,
         '_specs' => $specs,
@@ -852,6 +853,29 @@ function pdks_faz8j_tanim_uyarilari(PDO $pdo, int $foremanId, string $depo, arra
                    . pdks_gunluk_kart_tanim_kime($t) . ' tanımlı — kayıt yine de eklenir.';
     }
     return array_values($out);
+}
+
+/**
+ * v455 — Önizleme uyarısı (ENGEL DEĞİL): satırlardaki bir tipin iş tarihinde geçerli fiyat dönemi yoksa kayıt YİNE DE
+ * yazılır ama fiyat girilene dek hakediş hesaplanamaz (fail-closed). Geçmiş tarihli fiyat sonradan girilebildiği için
+ * (Çavuş Ücretleri › «Başlangıcı geriye çek») kullanıcı bunu yazmadan önce görsün. Tip başına TEK sorgu. Metin,
+ * fiş önizlemesindeki uyarıyla BİREBİR aynıdır (ikisi birleşince array_unique tekilleştirir).
+ * @return string[]
+ */
+function pdks_faz8j_fiyatsiz_tip_uyarilari(PDO $pdo, int $foremanId, string $workDate, array $specs): array {
+    if ($foremanId < 1 || !function_exists('pdks_hakedis_oran_gecerli') || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $workDate)) return [];
+    $tipler = [];
+    foreach ($specs as $s) {
+        $id = (int)($s['tip']['id'] ?? 0);
+        if ($id > 0 && !isset($tipler[$id])) $tipler[$id] = (string)($s['tip']['name'] ?? '');
+    }
+    $out = [];
+    foreach ($tipler as $id => $ad) {
+        try { $oran = pdks_hakedis_oran_gecerli($foremanId, $id, $workDate, $pdo); }
+        catch (Throwable $e) { continue; }   // fiyat tabloları yoksa uyarı üretme (hata yutulur)
+        if ($oran === null) $out[] = '«' . $ad . '» için ' . date('d.m.Y', (int)strtotime($workDate)) . ' tarihinde geçerli fiyat YOK — kayıt yazılır, fiyat girilene dek hakediş hesaplanamaz.';
+    }
+    return $out;
 }
 
 /**

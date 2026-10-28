@@ -245,7 +245,7 @@ render_flash();
         <?php if (isset($kpi['fiziksel_kart_kullanimi'])): ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Fiziksel Kart Kullanımı</div><div class="val"><?= (int)$kpi['fiziksel_kart_kullanimi'] ?></div></div>
         <?php endif; ?>
-        <?php foreach ($tipDagilim as $t): if ($t['adet'] === 0 && $t['ad'] !== 'Kadın' && $t['ad'] !== 'Erkek') continue; ?>
+        <?php $sistemTipAdlari = array_column(pdks_gunluk_tip_sistem_sutunlari(), 'ad'); /* v455: sistem tipleri kayıt defterinden */ foreach ($tipDagilim as $t): if ($t['adet'] === 0 && !in_array($t['ad'], $sistemTipAdlari, true)) continue; ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl"><?= h($t['ad']) ?></div><div class="val"><?= (int)$t['adet'] ?></div></div>
         <?php endforeach; ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Aktif Çavuş</div><div class="val"><?= (int)$kpi['aktif_cavus'] ?></div></div>

@@ -1268,7 +1268,7 @@ function pdks_rapor_cavus_toplu_dokum(
     // v295: KARISIK (atanmamış Karışık giriş) AYRI sayılır — Kadın+Erkek+Karışık = toplam
     // (Karışık eskiden hiçbir cinsiyet sütununa düşmüyordu, sessizce kayboluyordu).
     // v299: sütunlar TİP KAYIT DEFTERİNDEN (pdks_gunluk_tip_kayit — Kadın, Erkek, Rampacı, Karışık)
-    // döngüyle üretilir; satır anahtarı = kayıttaki 'sutun' (kadin/erkek/rampaci/karisik).
+    // döngüyle üretilir; satır anahtarı = kayıttaki 'sutun' (kadin/erkek/rampaci/seritci/karisik).
     $tipKayit = function_exists('pdks_gunluk_tip_kayit') ? pdks_gunluk_tip_kayit() : [];
     $tipIds = array_fill_keys(array_keys($tipKayit), 0);
     if ($tipKayit) {

@@ -24,7 +24,7 @@ require_pdks_gunluk('worker_cards');
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 $faz8aHazir = pdks_gunluk_faz8a_sema_hazir($pdo);
-// v298 — Tanımlı Giriş: kart → çavuş + tip (Kadın/Erkek/Rampacı) + depo. Tablo OPSİYONELDİR
+// v298 — Tanımlı Giriş: kart → çavuş + tip (Kadın/Erkek/Rampacı/Şeritçi) + depo. Tablo OPSİYONELDİR
 // (worker_card_assignments, yalnız migrate.php'den kurulur); yoksa tanım arayüzü gizlenir.
 $tanimHazir = pdks_gunluk_kart_tanim_sema_hazir($pdo);
 $aktifDepo  = trim((string)(function_exists('active_depot') ? (active_depot() ?? '') : ''));
@@ -289,7 +289,7 @@ try {
     set_flash('error', 'Günlük İşçi tabloları henüz hazır değil. Bir yöneticinin migrate.php sayfasından "Günlük İşçi Tablolarını Oluştur" demesi gerekiyor.');
 }
 
-// v298: listedeki kartların aktif tanımları + tanım formu seçenekleri (yalnız AKTİF çavuşlar, KADIN/ERKEK/RAMPACI).
+// v298: listedeki kartların aktif tanımları + tanım formu seçenekleri (yalnız AKTİF çavuşlar, KADIN/ERKEK/RAMPACI/SERITCI).
 $tanimlar = $tanimHazir ? pdks_gunluk_kart_tanim_listesi($pdo, array_column($kartlar, 'id')) : [];
 $tanimCavuslar = []; $tanimTipler = [];
 if ($tanimHazir) {
@@ -658,7 +658,7 @@ if ($basari !== ''): ?>
 </div>
 
 <?php if ($tanimHazir): ?>
-<!-- ── v298: Tanımlı Giriş tanım modalı — karta çavuş + tip (Kadın/Erkek/Rampacı) + AKTİF depo.
+<!-- ── v298: Tanımlı Giriş tanım modalı — karta çavuş + tip (Kadın/Erkek/Rampacı/Şeritçi) + AKTİF depo.
      Ayrı küçük modal (düzenleme modalına dokunulmadı); form .isk-card-modal-body İÇİNDE
      (gövde kayar — .pm-dialog > form zinciri kırılmaz). -->
 <div class="pm-overlay" id="iskTanimModal" hidden>

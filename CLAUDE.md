@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v454` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v455` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
@@ -814,6 +814,14 @@ Kadın/Erkek yanında 3. SABİT sistem tipi: `worker_types` RAMPACI/"Rampacı" (
 - Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa. CSV/XLSX'e sütun EKLENMEZ (sahip kararı).
 - Kiosk: turuncu RAMPACI düğmesi/çember/sonuç/rozet; Kadın⇄Erkek hızlı geçiş Rampacı'da gizli; ÇIKIŞ "kalan" dairesi Karışık hariç tüm sistem tipleri için.
 - Test: `php scripts/pdks_rampaci_smoke.php` · `node scripts/pdks_kiosk_renk_smoke.js` (render: `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html`).
+
+### Şeritçi İşçi Tipi + Geçmişe Dönük Fiyat (v455, W1)
+Rampacı emsali 4. SABİT sistem tipi: `worker_types` SERITCI/"Şeritçi" (sahip GO verdi — yalnız veri satırı, şema YOK; migrate.php'ye dokunulmadı).
+- `pdks_gunluk_desteklenen_tip_kodlari()` = KADIN, ERKEK, RAMPACI, SERITCI (Karışık YİNE politikada değil). Satır: migrate seed (sort_order 5) + tembel idempotent `pdks_gunluk_seritci_tip_garanti()` (pasifse yeniden AÇMAZ; `desteklenen_tip_listele()` ve `isci_tipleri.php` çağırır). `pdks_gunluk_tip_kayit()` sırası Kadın, Erkek, Rampacı, **Şeritçi**, Karışık (renk son eki `seritci`, TEAL); rapor sütunları/Toplu Döküm/Mesai Özeti/kiosk `TIP_KAYIT` döngüyle gelir — elle sütun YAZMA. Fiş Excel'de Şeritçi sütunu YOK (W2); `pdks_fis_tip_kodlari()` artık kayıt defterinden, FM «Tümü» havuzu Şeritçi'yi KAPSAMAZ (`pdks_fis_fm_varsayilan_kodlar()`).
+- **Kiosk tip ekranı 5 düğme:** `#giTipSec` popup'ı `max-height + overflow-y:auto`; `(max-height:820px),(max-width:767px)` altında sistem tipleri 2 kolon grid (Karışık + Vazgeç tam satır, markup değişmedi). YALNIZ bu popup — `<768px` genel kiosk kurallarına dokunma. Ölçüm: `pdks_kiosk_v293_smoke.js` (390×700 / 768×900 / 1280×720).
+- **Geçmişe dönük fiyat:** `oran_ekle` kronolojik kuralı (yeni dönem mevcut en son başlangıçtan SONRA) DEĞİŞMEDİ. Yeni `pdks_faz8b_oran_baslangic_geriye_cek($rateId,$yeni,$gerekce,$user)` (Çavuş Ücretleri › Fiyat Geçmişi › «⏪ Başlangıcı geriye çek», `form=baslangic_geri`): YALNIZ `is_admin()`, gerekçe zorunlu, tarih ≥2020-01-01 ve ≤bugün, dönem çavuş+tipin EN ESKİ aktif dönemi olmalı; eklenen aralıkta BU TİPE ait kesin hakediş satırı varsa RED (başka tipin final'i engel DEĞİL); yalnız `valid_from` değişir; aralıktaki TASLAK hakedişler `needs_recalculation` (`pdks_faz8b_oran_taslak_isaretle()`); audit `rate_baslangic_geri`. `oran_ekle` de geçmiş tarihli başlangıçta taslakları işaretler (yanıtta `isaretlenen`). `pdks_hakedis.php`'ye SATIR SİLME eklenmez (cari static smoke korur).
+- **Önizleme uyarısı (engel değil):** bir tipin iş tarihinde geçerli fiyatı yoksa fiş önizlemesi + Toplu İşlem önizlemesi "«Tip» için gg.aa.yyyy tarihinde geçerli fiyat YOK" der (`pdks_faz8j_fiyatsiz_tip_uyarilari()`); hakediş yine fail-closed durur.
+- Test: `php scripts/pdks_seritci_smoke.php` · `pdks_oran_geri_cek_smoke.php` · `pdks_rampaci_smoke.php` · `pdks_fis_plan_smoke.php` (14b) · `pdks_fis_yaz_smoke.php` (N) · `node scripts/pdks_kiosk_v293_smoke.js` · `pdks_kiosk_renk_smoke.js`.
 
 ### Görünüm (v301)
 

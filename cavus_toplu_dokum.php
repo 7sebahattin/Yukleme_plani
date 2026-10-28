@@ -85,6 +85,7 @@ if (isset($_GET['xlsx'])) {
         'kadin'   => ['ac' => 'FFFCE4EC', 'koyu' => 'FFF4B6C8'],
         'erkek'   => ['ac' => 'FFE3F0FD', 'koyu' => 'FFAFCDEE'],
         'rampaci' => ['ac' => 'FFFFEDD5', 'koyu' => 'FFF8C998'],
+        'seritci' => ['ac' => 'FFCCFBF1', 'koyu' => 'FF8EDBC9'],
         'karisik' => ['ac' => 'FFEDE7F6', 'koyu' => 'FFCBBCE6'],
     ];
     $baslikKoyu = 'FF1F3A5F';

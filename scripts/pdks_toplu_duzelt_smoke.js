@@ -203,7 +203,7 @@ async function duzenOlc(page, dlgId, sonAlanSec) {
         ok('kartsız satırda "Kartsız" rozeti', S[kartsiz].kartsiz && !S.K001.kartsiz);
         ok('açılışta hiçbir satır "değişti" değil, özet "0 / 4"', ac1.satirlar.every(s => !s.degisti) && /^0 \/ 4/.test(ac1.ozet), ac1.ozet);
         const erkek = (ac1.tipler.find(t => /Erkek/i.test(t.t)) || {}).v;
-        ok('"Hepsine uygula" tip listesi: "— Değiştirme —" + Kadın/Erkek/Rampacı (Karışık YOK)', ac1.tipler[0].v === '' && ac1.tipler.length === 4 && !!erkek && !ac1.tipler.some(t => /Karışık/.test(t.t)), JSON.stringify(ac1.tipler));
+        ok('"Hepsine uygula" tip listesi: "— Değiştirme —" + Kadın/Erkek/Rampacı/Şeritçi (Karışık YOK)', ac1.tipler[0].v === '' && ac1.tipler.length === 5 && ac1.tipler.some(t => /Şeritçi/.test(t.t)) && !!erkek && !ac1.tipler.some(t => /Karışık/.test(t.t)), JSON.stringify(ac1.tipler));
 
         // Hepsine uygula
         await page.selectOption('#tdHepTip', erkek);

@@ -114,9 +114,11 @@ function fis_audit_say(string $action): int {
 }
 
 pdks_gunluk_rampaci_tip_garanti(db());
+pdks_gunluk_seritci_tip_garanti(db());   // v455: 4. sabit sistem tipi
 $kadin = (int)db()->query("SELECT id FROM worker_types WHERE code='KADIN'")->fetchColumn();
 $erkek = (int)db()->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fetchColumn();
 $rampaci = (int)db()->query("SELECT id FROM worker_types WHERE code='RAMPACI'")->fetchColumn();
+$seritci = (int)db()->query("SELECT id FROM worker_types WHERE code='SERITCI'")->fetchColumn();
 $cavus = [];
 foreach (['A','B','C','D','E','F','G','H'] as $i => $h) {
     $cavus[$h] = (int)pdks_gunluk_cavus_olustur(['code' => 'C00' . ($i + 1), 'name' => 'Çavuş ' . $h], 1, db())['id'];

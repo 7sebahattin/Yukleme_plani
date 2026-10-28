@@ -39,9 +39,9 @@ $base = base_url();
 // davranışını sergiler — kod deploy'u ile migrasyon arasında tarama BOZULMAZ.
 $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
 // ⚠ Faz 9B / H-01 kapanışı: tek paylaşılan politikadan (config/pdks_gunluk.php)
-// gelir — bu artık zaten YALNIZ KADIN/ERKEK/RAMPACI döner, aşağıdaki düğme döngüsünde
+// gelir — bu artık zaten YALNIZ KADIN/ERKEK/RAMPACI/SERITCI döner, aşağıdaki düğme döngüsünde
 // ayrıca bir "code IN (...)" filtresi TEKRARLANMAZ.
-// v295: kiosk GİRİŞ düğmeleri = pdks_gunluk_desteklenen_tip_listele() (KADIN/ERKEK/RAMPACI)
+// v295: kiosk GİRİŞ düğmeleri = pdks_gunluk_desteklenen_tip_listele() (KADIN/ERKEK/RAMPACI/SERITCI)
 // + KARISIK — pdks_gunluk_giris_tip_listele() o listeyi SARAR ve KARISIK satırını
 // gerekirse tembel oluşturur. KARISIK yalnız BURADA (ve kaydet ucunun GİRİŞ kapısında) seçilir.
 $isciTipleri = $faz8aHazir ? pdks_gunluk_giris_tip_listele($pdo) : [];
@@ -460,7 +460,7 @@ render_flash();
         </div>
         <h2 id="giTipBaslik">İşçi Tipi Seçin</h2>
         <?php // ⚠ Faz 9B: $isciTipleri zaten pdks_gunluk_desteklenen_tip_listele()'den
-              // (yalnız KADIN/ERKEK/RAMPACI) geliyor — burada İKİNCİ bir "code IN (...)"
+              // (yalnız KADIN/ERKEK/RAMPACI/SERITCI) geliyor — burada İKİNCİ bir "code IN (...)"
               // filtresi TEKRARLANMAZ; politika TEK yerde yaşar. ?>
         <?php foreach ($isciTipleri as $t): ?>
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?php /* v299: renk sınıfı tip kayıt defterinden (pdks_gunluk_tip_renk) */ $tRenk = pdks_gunluk_tip_renk((string)$t['code']); ?><?= $tRenk !== '' ? ' pdks-kiosk-typebtn-' . h($tRenk) : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-kod="<?= h($t['code']) ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
@@ -1247,7 +1247,7 @@ render_flash();
         // içindeki RAKAM değişir: okutulan kartın cinsiyetinden o mesaide hâlâ İÇERİDE
         // kalan kişi sayısı. Ayrı başlık/kutu YOK (kullanıcı kararı). Kaynak
         // ozet.eksik_tip (tipe göre açık dönem); yoksa giris - cikis (negatife düşmez).
-        // Tip sistem tipi (Kadın/Erkek/Rampacı) değilse (Karışık, tanınmayan) eski davranış (toplam giriş)
+        // Tip sistem tipi (Kadın/Erkek/Rampacı/Şeritçi) değilse (Karışık, tanınmayan) eski davranış (toplam giriş)
         // korunur. GİRİŞ DEĞİŞMEDİ.
         if (d.event_type === 'CIKIS') {
             // ⚠ Hedef BÜYÜK harfle karşılaştırılır: 'kadin'.toLocaleUpperCase('tr-TR')
@@ -1358,7 +1358,7 @@ render_flash();
         // GİRİŞ taraması, işçi tipi seçilmeden başlamaz; sunucu da doğrular.
         if (tipSec && currentMode === 'GIRIS' && !tanimliMod && !seciliTipId) {
             nfcDebugYaz('kaydet atlandı: işçi tipi seçili değil');
-            hataGoster('Önce İşçi Tipi (Kadın/Erkek/Rampacı/Karışık) seçin.');
+            hataGoster('Önce İşçi Tipi (Kadın/Erkek/Rampacı/Şeritçi/Karışık) seçin.');
             return;
         }
         // v298: Tanımlı modda aynı kartın ~3 sn içinde tekrar okunması (NFC/USB
