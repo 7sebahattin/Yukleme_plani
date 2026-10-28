@@ -37,6 +37,11 @@ function fiyatKur(int $cid, string $mod = 'hourly', $birim = '200', ?array $saat
         if (!$r['ok']) throw new RuntimeException('fiyatKur: ' . j($r));
     }
 }
+/** Tek tip için fiyat dönemi (2020-01-01'den; FM saatlik 200). */
+function fiyatKur_tek(int $cid, int $tipId, string $ucret): void {
+    $r = pdks_faz8b_oran_ekle($cid, $tipId, $ucret, '500', 'hourly', '200', '2020-01-01', 'TRY', 1, db());
+    if (!$r['ok']) throw new RuntimeException('fiyatKur_tek: ' . j($r));
+}
 function onizle1(array $fis, array $sec = []): array {
     return pdks_fis_degerlendir(db(), $fis, $sec, 1);
 }
@@ -556,6 +561,27 @@ ok('L5) yazma-içi doğrulama: sınıflandırıcı farklı çıkarsa tx geri al�
     $r = pdks_faz8j_toplu_ekle($girdi, 1, db());
     return $r['ok'] === false && $once === sayimlar() && (str_contains(implode(' ', $r['hatalar']), 'Hiçbir şey yazılmadı') || str_contains(implode(' ', $r['hatalar']), 'uyuşm'));
 })());
+
+echo "\n=== N. v455 Şeritçi (fiyatsız uyarı · yazma · fail-closed hakediş · fiyat sonrası) ===\n";
+$cN = yeniCavus('Çavuş N1', false);   // fiyatsız çavuş: Kadın fiyatı aşağıda, Şeritçi fiyatı N4'te
+$fN = fisYap(['KADIN' => [2, 0], 'SERITCI' => [3, 0]], ['cavus' => $cN, 'fis_no' => 'N-001', 'tarih' => $dun2]);
+fiyatKur_tek($cN, $kadin, '1000');
+$mN = onizle1($fN, $sec);
+ok('N1) Şeritçi fiyatı YOK: önizleme UYARI (engel değil), yazılabilir', in_array($mN['durum'], ['uyari', 'hazir'], true) && $mN['secilebilir'] && $mN['hatalar'] === [] && hVar($mN, '«Şeritçi» için') && hVar($mN, 'geçerli fiyat YOK'), j([$mN['durum'], $mN['hatalar'], $mN['uyarilar']]));
+ok('N1b) Kadın (fiyatı var) için fiyat uyarısı YOK', !hVar($mN, '«Kadın» için'), j($mN['uyarilar']));
+ok('N1c) plan Şeritçi grubunu içerir (tam×3)', in_array('SERITCItam3', array_map(fn($g) => $g['kod'] . $g['profil'] . $g['adet'], $mN['plan']['gruplar']), true), j(array_map(fn($g) => $g['kod'] . $g['profil'] . $g['adet'], $mN['plan']['gruplar'])));
+$rN = yaz1($fN, $sec);
+ok('N2) fiş yazılır (kayıt fiyatsız da yazılır)', $rN['durum'] === 'yazildi', j($rN));
+$sidN = (int)($rN['session_id'] ?? 0);
+ok('N2b) Şeritçi dönemleri snapshot ile yazıldı (3 adet)', (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=$sidN AND worker_type_id_snapshot=$seritci AND is_voided=0")->fetchColumn() === 3);
+$hN = pdks_faz8b_hakedis_hesapla($sidN, 1, db());
+ok('N3) fiyatsız Şeritçi → hakediş DURUR (fail-closed)', empty($hN['ok']) && str_contains(j($hN), 'geçerli fiyat yok'), j($hN));
+$ro = pdks_faz8b_oran_ekle($cN, $seritci, '1800', '900', 'hourly', '200', '2020-01-01', 'TRY', 1, db());
+ok('N4) Şeritçi fiyatı (geçmiş tarihli en eski dönem) girilir', !empty($ro['ok']), j($ro));
+$hN = pdks_faz8b_hakedis_hesapla($sidN, 1, db());
+ok('N4b) hakediş hesaplanır: 2×1000 + 3×1800 = 7400.00', !empty($hN['ok']) && $hN['total_amount'] === '7400.00', j($hN));
+$mN2 = onizle1(fisYap(['SERITCI' => [1, 0]], ['cavus' => $cN, 'fis_no' => 'N-002', 'tarih' => $dun3]), $sec);
+ok('N5) fiyat tanımlıyken uyarı YOK', !hVar($mN2, 'geçerli fiyat YOK'), j($mN2['uyarilar']));
 
 echo "\n=== M. Statik güvenceler ===\n";
 $fk = file_get_contents($ROOT . '/config/pdks_fis.php');

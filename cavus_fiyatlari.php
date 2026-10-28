@@ -153,6 +153,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
         }
         $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'baslangic_geri') {
+    // v455: bir çavuş+tipin EN ESKİ fiyat döneminin başlangıcını GEÇMİŞE çeker (ör. Şeritçi'nin ilk fiyatı geçmiş tarihle).
+    // Ücretlere dokunmaz; yalnız yönetici, gerekçe zorunlu, kesin hakedişli satırı olan aralıkta RED, taslaklar yeniden hesaba.
+    csrf_check($_POST['csrf'] ?? null);
+    require_pdks_hakedis('rates');
+    $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+    $rateId = filter_var($_POST['rate_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+    $stR = $pdo->prepare("SELECT foreman_id FROM foreman_worker_rates WHERE id = ?");
+    $stR->execute([(int)$rateId]);
+    $rateCavus = $stR->fetchColumn();
+    if (!$cavusId || !$rateId || $rateCavus === false || (int)$rateCavus !== $cavusId) {
+        $errors[] = 'Fiyat dönemi bulunamadı.';
+    } else {
+        $sonuc = pdks_faz8b_oran_baslangic_geriye_cek($rateId, (string)($_POST['yeni_baslangic'] ?? ''), (string)($_POST['gerekce'] ?? ''), (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            $msg = 'Fiyat döneminin başlangıcı geriye çekildi.';
+            if ((int)($sonuc['isaretlenen'] ?? 0) > 0) $msg .= ' ' . (int)$sonuc['isaretlenen'] . ' taslak hakediş yeniden hesaplanmak üzere işaretlendi.';
+            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode($msg) . '#cfFiyatGecmisi');
+            exit;
+        }
+        $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_hakedis('rates');
@@ -205,7 +227,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
         }
 
         if ($sonuc['ok']) {
-            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode('Yeni fiyat dönemi eklendi.'));
+            // v455: Faz 4 yolu (saat kolonları/8B hazır değil) isaretlenen döndürmez; geçmiş tarihli dönem için taslakları burada işaretle.
+            if (!$faz8bHazir && $validFrom < date('Y-m-d') && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $validFrom)) {
+                $sonuc['isaretlenen'] = pdks_faz8b_oran_taslak_isaretle((int)$cavusId, (int)$workerTypeId, $validFrom, null, $pdo);
+            }
+            $msg = 'Yeni fiyat dönemi eklendi.';
+            if ((int)($sonuc['isaretlenen'] ?? 0) > 0) $msg .= ' ' . (int)$sonuc['isaretlenen'] . ' taslak hakediş yeniden hesaplanmak üzere işaretlendi.';
+            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode($msg));
             exit;
         }
         $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
@@ -448,7 +476,7 @@ render_flash();
                 <input type="date" name="valid_from" required value="<?= h(date('Y-m-d')) ?>"></span>
             </label>
         </div>
-        <p class="cf2-bilgi cf2-bilgi--mor"><?= $cfIk('bilgi') ?><span>Yeni dönem eklenince önceki açık fiyat dönemi bir gün öncesinde kapanır. Eski fiyatlar silinmez.</span></p>
+        <p class="cf2-bilgi cf2-bilgi--mor"><?= $cfIk('bilgi') ?><span>Yeni dönem eklenince önceki açık fiyat dönemi bir gün öncesinde kapanır. Eski fiyatlar silinmez. Yeni bir işçi tipi (ör. Şeritçi) için önce EN ESKİ fiyatı geçmiş tarihle girin, sonra güncel fiyatı yeni tarihle ekleyin (kronolojik sıra); yanlış tarihle açılmış ilk dönemi Fiyat Geçmişi'nden geriye çekebilirsiniz.</span></p>
         <div class="cf2-eylem">
             <button type="submit" class="btn btn-primary cf2-btn">+ Fiyat Dönemi Ekle</button>
         </div>
@@ -456,6 +484,28 @@ render_flash();
 </section>
 
 <?php
+// v455: «⏪ Başlangıcı geriye çek» — YALNIZ yöneticide ve her çavuş+tipin EN ESKİ aktif döneminde (sunucu yine denetler).
+$cfGeriAcik = function_exists('is_admin') && is_admin();
+$cfEnEski = [];   // worker_type_id => rate id (en eski valid_from; beraberlikte en küçük id)
+if ($cfGeriAcik) {
+    $cfEnEskiTarih = [];
+    foreach ($oranlar as $o) {
+        if (empty($o['is_active'])) continue;
+        $tid = (int)$o['worker_type_id'];
+        if (!isset($cfEnEskiTarih[$tid]) || (string)$o['valid_from'] < $cfEnEskiTarih[$tid] || ((string)$o['valid_from'] === $cfEnEskiTarih[$tid] && (int)$o['id'] < $cfEnEski[$tid])) {
+            $cfEnEskiTarih[$tid] = (string)$o['valid_from']; $cfEnEski[$tid] = (int)$o['id'];
+        }
+    }
+}
+$cfGeriBtn = static function (array $o) use ($cfEnEski): string {
+    if (empty($cfEnEski[(int)$o['worker_type_id']]) || $cfEnEski[(int)$o['worker_type_id']] !== (int)$o['id']) return '';
+    return '<button type="button" class="btn btn-sm" data-cf-geri-cek'
+        . ' data-rate="' . (int)$o['id'] . '"'
+        . ' data-baslik="' . h($o['worker_type_name'] . ' · ' . date('d.m.Y', strtotime((string)$o['valid_from'])) . ' başlangıçlı en eski dönem') . '"'
+        . ' data-mevcut="' . h((string)$o['valid_from']) . '"'
+        . '>⏪ Başlangıcı geriye çek</button>';
+};
+$cfIslemSutunu = $saatHazir || $cfEnEski !== [];
 // v320: geçmiş fiyat döneminin saatlerini düzeltme düğmesi (ücretlere dokunmaz).
 $cfSaatDuzeltBtn = static function (array $o): string {
     $dkG = static fn($v) => ($v === null || $v === '' || (int)$v <= 0) ? '' : pdks_faz8b_dk_girdi((int)$v);
@@ -486,7 +536,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
 <?php if (!empty($oranlar)): ?>
 <div class="table-wrap pc-only">
 <table class="data-table">
-<thead><tr><th>İşçi Tipi</th><th><?= $faz8bHazir ? 'Tam' : 'Günlük Ücret' ?></th><?php if ($faz8bHazir): ?><th>Yarım</th><th>Fazla Mesai</th><?php endif; ?><?php if ($saatHazir): ?><th>Saatler</th><th>Çift Yevmiye</th><?php endif; ?><th>Geçerlilik</th><th>Durum</th><?php if ($saatHazir): ?><th></th><?php endif; ?></tr></thead>
+<thead><tr><th>İşçi Tipi</th><th><?= $faz8bHazir ? 'Tam' : 'Günlük Ücret' ?></th><?php if ($faz8bHazir): ?><th>Yarım</th><th>Fazla Mesai</th><?php endif; ?><?php if ($saatHazir): ?><th>Saatler</th><th>Çift Yevmiye</th><?php endif; ?><th>Geçerlilik</th><th>Durum</th><?php if ($cfIslemSutunu): ?><th></th><?php endif; ?></tr></thead>
 <tbody>
 <?php foreach ($oranlar as $o): ?>
 <tr>
@@ -502,7 +552,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
     <?php endif; ?>
     <td class="muted"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></td>
     <td><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
-    <?php if ($saatHazir): ?><td><?= $cfSaatDuzeltBtn($o) ?></td><?php endif; ?>
+    <?php if ($cfIslemSutunu): ?><td><?= $saatHazir ? $cfSaatDuzeltBtn($o) : '' ?> <?= $cfGeriBtn($o) ?></td><?php endif; ?>
 </tr>
 <?php endforeach; ?>
 </tbody></table></div>
@@ -513,7 +563,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
     <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($o['worker_type_name']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></div></div><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></div>
     <div class="pdks-row-sub"><?= $faz8bHazir ? 'Tam' : 'Günlük' ?>: <strong><?= h(number_format((float)$o['daily_rate'],2,',','.')) ?> <?= h($o['currency']) ?></strong></div>
     <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Yarım: <?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'],2,',','.') . ' ' . $o['currency']) : '—' ?></div><div class="pdks-row-sub">FM: <?= ($o['overtime_rate'] ?? null) !== null ? h(number_format((float)$o['overtime_rate'],2,',','.') . ' ' . $o['currency'] . ' · ' . (($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik')) : '—' ?></div><?php endif; ?>
-    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= h($oSaat['cift']) ?></div><?php endif; ?><div class="cf-sd-mobil"><?= $cfSaatDuzeltBtn($o) ?></div><?php endif; ?>
+    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= h($oSaat['cift']) ?></div><?php endif; ?><div class="cf-sd-mobil"><?= $cfSaatDuzeltBtn($o) ?></div><?php endif; ?><?php if (($gb = $cfGeriBtn($o)) !== ''): ?><div class="cf-sd-mobil"><?= $gb ?></div><?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>
@@ -569,6 +619,51 @@ $cfSaatDuzeltBtn = static function (array $o): string {
         f.elements.full_day_saat.focus();
     });
     dlg.querySelector('[data-cf-sd-kapat]').addEventListener('click', function () { dlg.close(); });
+})();
+</script>
+<?php endif; ?>
+
+<?php if ($cfEnEski !== []): ?>
+<dialog id="cfGeriCek" class="cf-sd" aria-labelledby="cfGcBaslik">
+    <form method="post" action="cavus_fiyatlari.php?cavus=<?= (int)$cavusId ?>">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="form" value="baslangic_geri">
+        <input type="hidden" name="foreman_id" value="<?= (int)$cavusId ?>">
+        <input type="hidden" name="rate_id" value="">
+        <header class="cf-sd-bas">
+            <h2 id="cfGcBaslik">Başlangıcı Geriye Çek</h2>
+            <p class="cf-sd-alt" data-cf-gc-baslik></p>
+        </header>
+        <div class="cf-sd-govde">
+            <p class="cf2-bilgi cf2-bilgi--mavi"><span>Yalnız bu dönemin başlangıç tarihi daha ESKİ bir güne çekilir; ücretler ve saatler değişmez. Eklenen günlerde bu işçi tipi için kesinleşmiş hakediş varsa işlem yapılmaz; taslak hakedişler yeniden hesaplanır.</span></p>
+            <label class="cf2-alan"><span class="cf2-etiket">Yeni Başlangıç Tarihi <b class="cf2-zorunlu">*</b></span>
+                <input type="date" name="yeni_baslangic" required min="2020-01-01" max="<?= h(date('Y-m-d')) ?>"></label>
+            <label class="cf2-alan"><span class="cf2-etiket">Gerekçe <b class="cf2-zorunlu">*</b></span>
+                <textarea name="gerekce" required maxlength="500" rows="2" placeholder="ör. Şeritçi fiyatı geçmiş mesailer için sonradan girildi"></textarea></label>
+        </div>
+        <footer class="cf-sd-alt-cubuk">
+            <button type="button" class="btn" data-cf-gc-kapat>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Geriye Çek</button>
+        </footer>
+    </form>
+</dialog>
+<script>
+(function () {
+    var dlg = document.getElementById('cfGeriCek');
+    if (!dlg || typeof dlg.showModal !== 'function') return;
+    var f = dlg.querySelector('form');
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-cf-geri-cek]');
+        if (!b) return;
+        f.elements.rate_id.value = b.dataset.rate || '';
+        f.elements.yeni_baslangic.value = '';
+        if (b.dataset.mevcut) f.elements.yeni_baslangic.max = (function (d) { d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })(new Date(b.dataset.mevcut + 'T12:00:00'));
+        f.elements.gerekce.value = '';
+        dlg.querySelector('[data-cf-gc-baslik]').textContent = b.dataset.baslik || '';
+        dlg.showModal();
+        f.elements.yeni_baslangic.focus();
+    });
+    dlg.querySelector('[data-cf-gc-kapat]').addEventListener('click', function () { dlg.close(); });
 })();
 </script>
 <?php endif; ?>

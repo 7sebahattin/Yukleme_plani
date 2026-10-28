@@ -46,3 +46,10 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 
 ## v450 — Oturum kaybı dayanıklılığı
 Önizleme/sonuç verisi oturumdan bağımsız olarak `hks_kv`'de de tutulur (2 saat sonra silinir; kullanıcı + depo + 30 dk kuralı aynı). Hata mesajı nedeni söyler: süre doldu / başka kullanıcı-depo / sunucuda bulunamadı. Ayrıntı: CLAUDE.md "Fiş Excel'i Yükle".
+
+## v455 — Şeritçi tipi (W1)
+- Dördüncü sabit sistem işçi tipi: **Şeritçi** (`SERITCI`; Rampacı emsali, yalnız `worker_types` veri satırı — şema yok). Kiosk, Toplu İşlem, Çavuş Ücretleri ve raporlar tip kayıt defterinden (`pdks_gunluk_tip_kayit()`) gelir.
+- Fiş Excel'inde Şeritçi için **sütun yoktur** (W2'de gelecek); sert-kodlu tip listesi artık kayıt defterine bağlıdır (`pdks_fis_tip_kodlari()`).
+- **FM havuzu:** «Tümü» / boş FM Tipi Şeritçi'yi **kapsamaz** (`pdks_fis_fm_varsayilan_kodlar()`); Şeritçi FM'ye yalnız «FM Tipi» hücresinde `Şeritçi` / `Erkek Şeritçi` yazılırsa girer.
+- **Fiyatsız tip uyarısı:** önizlemede bir tipin o tarihte geçerli fiyatı yoksa ««Şeritçi» için gg.aa.yyyy tarihinde geçerli fiyat YOK — kayıt yazılır, fiyat girilene dek hakediş hesaplanamaz.» uyarısı çıkar (engel değil; hakediş fail-closed durur).
+- **Geçmiş tarihli fiyat:** Şeritçi için önce en eski fiyatı geçmiş tarihle girin, sonra güncel fiyatı yeni tarihle ekleyin. Yanlış tarihle açılmış ilk dönem Çavuş Ücretleri › Fiyat Geçmişi › «⏪ Başlangıcı geriye çek» ile (yalnız yönetici, gerekçeli, kesin hakedişli satırı olan aralıkta reddedilir) düzeltilir; etkilenen taslak hakedişler yeniden hesaba işaretlenir.

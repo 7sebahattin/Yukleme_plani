@@ -121,19 +121,19 @@ $rampaci = (int)$g['id'];
 db()->exec("UPDATE worker_types SET is_active=0 WHERE id=$rampaci");
 $g3 = pdks_gunluk_rampaci_tip_garanti(db());
 ok('pasif Rampacı yeniden AÇILMAZ', (int)$g3['is_active'] === 0 && say("SELECT is_active FROM worker_types WHERE id=$rampaci") === 0);
-ok('pasif Rampacı politika listesinde yok', array_column(pdks_gunluk_desteklenen_tip_listele(db()), 'code') === ['KADIN', 'ERKEK']);
+ok('pasif Rampacı politika listesinde yok', array_column(pdks_gunluk_desteklenen_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'SERITCI']);   // v455: Şeritçi (4. tip) pasif Rampacı'dan etkilenmez
 db()->exec("UPDATE worker_types SET is_active=1 WHERE id=$rampaci");
-ok('politika kodları = KADIN, ERKEK, RAMPACI (Karışık hariç)', pdks_gunluk_desteklenen_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI']);
-ok('politika listesi sırası Kadın, Erkek, Rampacı', array_column(pdks_gunluk_desteklenen_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'RAMPACI']);
-ok('kiosk giriş listesi Kadın, Erkek, Rampacı, Karışık', array_column(pdks_gunluk_giris_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'RAMPACI', 'KARISIK']);
+ok('politika kodları = KADIN, ERKEK, RAMPACI, SERITCI (Karışık hariç)', pdks_gunluk_desteklenen_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI']);   // v455: Şeritçi eklendi
+ok('politika listesi sırası Kadın, Erkek, Rampacı, Şeritçi', array_column(pdks_gunluk_desteklenen_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI']);
+ok('kiosk giriş listesi Kadın, Erkek, Rampacı, Şeritçi, Karışık', array_column(pdks_gunluk_giris_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI', 'KARISIK']);
 ok('giriş kapısı Rampacı\'yı kabul eder', (pdks_gunluk_giris_tip_coz($rampaci, db())['code'] ?? '') === 'RAMPACI' && (pdks_gunluk_desteklenen_tip_coz($rampaci, db())['code'] ?? '') === 'RAMPACI');
 $kayit = pdks_gunluk_tip_kayit();
-ok('kayıt defteri sırası KADIN, ERKEK, RAMPACI, KARISIK', array_keys($kayit) === ['KADIN', 'ERKEK', 'RAMPACI', 'KARISIK'], j(array_keys($kayit)));
-ok('renkler kadin/erkek/rampaci/karisik', array_column($kayit, 'renk') === ['kadin', 'erkek', 'rampaci', 'karisik']);
+ok('kayıt defteri sırası KADIN, ERKEK, RAMPACI, SERITCI, KARISIK', array_keys($kayit) === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI', 'KARISIK'], j(array_keys($kayit)));
+ok('renkler kadin/erkek/rampaci/seritci/karisik', array_column($kayit, 'renk') === ['kadin', 'erkek', 'rampaci', 'seritci', 'karisik']);
 ok('ad → kod: Rampacı / RAMPACI / rampaci → RAMPACI; Karışık → KARISIK; bilinmeyen null',
     pdks_gunluk_tip_kod_adindan('Rampacı') === 'RAMPACI' && pdks_gunluk_tip_kod_adindan('RAMPACI') === 'RAMPACI' && pdks_gunluk_tip_kod_adindan('rampaci') === 'RAMPACI'
     && pdks_gunluk_tip_kod_adindan('Karışık') === 'KARISIK' && pdks_gunluk_tip_kod_adindan('Kadın') === 'KADIN' && pdks_gunluk_tip_kod_adindan('Forklift') === null);
-ok('rapor sistem sütunları = Kadın, Erkek, Rampacı', array_column(pdks_gunluk_tip_sistem_sutunlari(), 'kisa') === ['Kadın', 'Erkek', 'Rampacı']);
+ok('rapor sistem sütunları = Kadın, Erkek, Rampacı, Şeritçi', array_column(pdks_gunluk_tip_sistem_sutunlari(), 'kisa') === ['Kadın', 'Erkek', 'Rampacı', 'Şeritçi']);
 
 echo "\n=== 2. Kiosk giriş + ortak çıkış ===\n";
 $cavus = [];
@@ -203,7 +203,7 @@ $insP->execute([$sidD, $kidK, $karisik, 'Karışık', $e1, $e2, "$dun 08:00:00",
 $td = pdks_rapor_cavus_toplu_dokum(substr($dun, 0, 7), 'Depo A', $cavus['A'], false, db());
 $satir = null; foreach ($td as $r) if ($r['session_id'] === $sidD) $satir = $r;
 ok('toplu döküm satırı: kadin 2, erkek 0, rampaci 3, karisik 1', $satir && $satir['kadin'] === 2 && $satir['erkek'] === 0 && $satir['rampaci'] === 3 && $satir['karisik'] === 1, j($satir));
-ok('Kadın + Erkek + Rampacı + Karışık = Toplam (6)', $satir && $satir['kadin'] + $satir['erkek'] + $satir['rampaci'] + $satir['karisik'] === $satir['toplam_isci'] && $satir['toplam_isci'] === 6, j($satir));
+ok('Kadın + Erkek + Rampacı + Şeritçi + Karışık = Toplam (6)', $satir && $satir['kadin'] + $satir['erkek'] + $satir['rampaci'] + $satir['seritci'] + $satir['karisik'] === $satir['toplam_isci'] && $satir['toplam_isci'] === 6, j($satir));
 $gl = pdks_gunluk_gun_listesi($dun, 'Depo A', null, null, db());
 $gs = null; foreach ($gl as $r) if ((int)$r['session']['id'] === $sidD) $gs = $r;
 ok('gün listesi: giris[Rampacı]=3, Kadın=2, Karışık=1, toplam=6', $gs && ($gs['giris']['Rampacı'] ?? 0) === 3 && ($gs['giris']['Kadın'] ?? 0) === 2 && ($gs['giris']['Karışık'] ?? 0) === 1 && $gs['giris_toplam'] === 6, j($gs['giris'] ?? null));

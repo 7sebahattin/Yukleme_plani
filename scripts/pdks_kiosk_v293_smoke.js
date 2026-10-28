@@ -180,8 +180,36 @@ const OZET = { giris: { 'Kadın': 4, 'Erkek': 2 }, cikis: { 'Kadın': 1 }, giris
 
         // ── v299: RAMPACI düğmesi tip ekranında Erkek'ten sonra, Karışık'tan önce; hızlı geçiş gizli ──
         const sira = await page.evaluate(() => [...document.querySelectorAll('#giTipSec [data-gi-tip-kod]')].map(b => b.getAttribute('data-gi-tip-kod')));
-        ok('tip düğmesi sırası KADIN, ERKEK, RAMPACI, KARISIK', JSON.stringify(sira) === JSON.stringify(['KADIN', 'ERKEK', 'RAMPACI', 'KARISIK']), JSON.stringify(sira));
+        ok('tip düğmesi sırası KADIN, ERKEK, RAMPACI, SERITCI, KARISIK', JSON.stringify(sira) === JSON.stringify(['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI', 'KARISIK']), JSON.stringify(sira));
         ok('RAMPACI düğmesi turuncu sınıfı taşır', await page.evaluate(() => document.querySelector('[data-gi-tip-kod="RAMPACI"]').classList.contains('pdks-kiosk-typebtn-rampaci')));
+        ok('SERITCI düğmesi teal sınıfı taşır', await page.evaluate(() => document.querySelector('[data-gi-tip-kod="SERITCI"]').classList.contains('pdks-kiosk-typebtn-seritci')));
+
+        // ── v455: 5 tip düğmesi + "Mod Seçimine Dön" — dar/kısa ekranlarda da erişilebilir (taşma/kesilme YOK) ──
+        await page.click('[data-gi-mode="GIRIS"]'); await page.waitForTimeout(450);
+        for (const vp of [{ w: 390, h: 700 }, { w: 768, h: 900 }, { w: 1280, h: 720 }, { w: ekran.width, h: ekran.height }]) {
+            await page.setViewportSize({ width: vp.w, height: vp.h });
+            await page.waitForTimeout(250);
+            const olcum = await page.evaluate(async () => {
+                const idler = [...document.querySelectorAll('#giTipSec [data-gi-tip-kod]')].map(b => b);
+                idler.push(document.getElementById('giTipVazgec'));
+                const sonuc = [];
+                for (const b of idler) {
+                    b.scrollIntoView({ block: 'center' });
+                    await new Promise(r => setTimeout(r, 60));
+                    const r = b.getBoundingClientRect();
+                    const nx = r.left + r.width / 2, ny = r.top + r.height / 2;
+                    const hit = document.elementFromPoint(nx, ny);
+                    sonuc.push({ ad: b.getAttribute('data-gi-tip-kod') || 'VAZGEC', gorunur: r.width > 0 && r.height > 0, ekranda: r.top >= 0 && r.bottom <= window.innerHeight + 1 && r.left >= 0 && r.right <= window.innerWidth + 1, tiklanir: !!hit && (b === hit || b.contains(hit)) });
+                }
+                const pop = document.getElementById('giTipSec');
+                return { sonuc, yatayTasma: document.documentElement.scrollWidth > window.innerWidth + 1, popYatay: pop.scrollWidth > pop.clientWidth + 1 };
+            });
+            const kotu = olcum.sonuc.filter(x => !(x.gorunur && x.ekranda && x.tiklanir));
+            ok(`5 tip düğmesi + Vazgeç ${vp.w}×${vp.h}: hepsi görünür/ekranda/tıklanabilir, yatay taşma yok`, kotu.length === 0 && !olcum.yatayTasma && !olcum.popYatay, JSON.stringify(olcum));
+        }
+        await page.setViewportSize({ width: ekran.width, height: ekran.height });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.click('#giTipVazgec'); await page.waitForTimeout(400);
         // ── ÇIKIŞ modunda geçiş düğmesi YOK (mod ekranındayız) ──
         await page.click('[data-gi-mode="CIKIS"]'); await page.waitForTimeout(400);
         ok('ÇIKIŞ modunda tip geçiş düğmesi gizli', await page.evaluate(() => document.getElementById('giTipGecis').hidden));

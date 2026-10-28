@@ -2055,6 +2055,71 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-scan.pdks-tip-rampac
 .toplu-v2 .tv-grup-rampaci { --tv-ink: #c2620a; --tv-bant: #fff1e0; --tv-kenar: #f6cfa0; }
 html[data-theme="dark"] .toplu-v2 .tv-grup-rampaci { --tv-ink: #ffb067; --tv-bant: #3a2410; --tv-kenar: #6e4519; }
 
+/* ── v455: ŞERİTÇİ — 4. sabit sistem tipi (TEAL; Karışık mor, Rampacı turuncu ile karışmasın) ──
+   Rampacı bloğunun aynısı; sınıf son eki tip kayıt defterinden (pdks_gunluk_tip_kayit()['renk']). */
+.pdks-daily-kiosk .pdks-kiosk-typebtn-seritci {
+    border-color: #9fe9de;
+    background: linear-gradient(160deg, #2dd4bf 0%, #0d9488 48%, #115e59 100%);
+    box-shadow: inset 0 2px #ffffff77, inset 0 -4px #0b4a4699, 0 11px 0 #0c504b, 0 18px 26px #04302d77;
+    text-shadow: 0 2px 2px #0a4743;
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn-seritci:hover,
+.pdks-daily-kiosk .pdks-kiosk-typebtn-seritci:focus-visible {
+    background: linear-gradient(160deg, #4be0cd 0%, #14a99c 48%, #167068 100%);
+    box-shadow: inset 0 2px #ffffff99, inset 0 -4px #0b4a4699, 0 14px 0 #0c504b, 0 24px 30px #04302d77;
+}
+.pdks-kiosk-type-badge.pdks-kiosk-type-badge-seritci {
+    color: #0f766e;
+    background: color-mix(in srgb, #0d9488 14%, transparent);
+}
+html[data-theme="dark"] .pdks-kiosk-type-badge.pdks-kiosk-type-badge-seritci { color: #5eead4; }
+.pdks-result-gender.is-seritci {
+    color: #fff;
+    background: linear-gradient(160deg, #2dd4bf 0%, #0d9488 48%, #115e59 100%);
+    border-color: #c4f3ec;
+    box-shadow: inset 0 3px 4px #ffffffa0, inset 0 -8px 12px #0b4a4688, 0 7px 0 #0c504b, 0 13px 25px #04302d55, 0 0 28px #2dd4bf70;
+    --gender-ikon: #e0fbf7;
+}
+.pdks-daily-kiosk .pdks-kiosk-scan.pdks-tip-seritci { --tp-a: #14b8a6; --tp-b: #5eead4; --tp-c: #0f766e; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-scan.pdks-tip-seritci { --tp-a: #0d9488; --tp-b: #14b8a6; --tp-c: #115e59; }
+.pdks-daily-kiosk .pdks-kiosk-result-ok.pdks-sonuc-seritci {
+    color: #5eead4;
+    background: radial-gradient(circle at 50% 32%, #0f5f59 0, #0b403c 36%, #06201e 76%);
+}
+.pdks-daily-kiosk #giResult.pdks-sonuc-seritci .pdks-kiosk-result-msg.is-giris { text-shadow: 0 0 5px #8ff0e3, 0 0 12px #2dd4bf, 0 0 24px #0d9488, 0 0 38px #0b524c; }
+.toplu-v2 .tv-grup-seritci { --tv-ink: #0f766e; --tv-bant: #e0f7f4; --tv-kenar: #9fe0d6; }
+html[data-theme="dark"] .toplu-v2 .tv-grup-seritci { --tv-ink: #5eead4; --tv-bant: #10302d; --tv-kenar: #1f6b63; }
+
+/* v455 — 5 düğmeli tip seçimi (Kadın, Erkek, Rampacı, Şeritçi, Karışık + Vazgeç): popup'a sığmazsa
+   kendi içinde kayar; dar/kısa ekranda sistem tipleri 2 kolon (Karışık + Vazgeç + başlıklar tam satır).
+   YALNIZ #giTipSec popup'ı — <768px genel kiosk kurallarına dokunulmaz. Düğmelerin 3B gölgesi
+   (≈11-18px) satır boşluğunda hesaba katılır. */
+.pdks-daily-kiosk .pdks-kiosk-type-popup {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+@media (max-height: 820px), (max-width: 767px) {
+    .pdks-daily-kiosk .pdks-kiosk-type-popup {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px 12px;
+        align-items: stretch;
+        padding: 20px 14px 22px;
+    }
+    .pdks-daily-kiosk .pdks-kiosk-type-popup > .pdks-kiosk-selected,
+    .pdks-daily-kiosk .pdks-kiosk-type-popup > #giTipBaslik,
+    .pdks-daily-kiosk .pdks-kiosk-type-popup > .pdks-kiosk-typebtn-karisik,
+    .pdks-daily-kiosk .pdks-kiosk-type-popup > #giTipVazgec { grid-column: 1 / -1; }
+    .pdks-daily-kiosk .pdks-kiosk-type-popup > #giTipBaslik { text-align: center; }
+    .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-typebtn {
+        min-height: 64px;
+        padding: 14px 10px;
+        max-width: none;
+        font-size: 1.1rem;
+    }
+}
+
 /* =========================================================
    v299 — Servis Ücreti (Mesai Detayı: dialog#servis + Servisler listesi)
    Native <dialog class="pm-dialog">: form doğrudan dialog'un çocuğu
@@ -2483,7 +2548,7 @@ dialog.cf-sd[open] > form { display: flex; flex-direction: column; max-height: 9
 .tk-sayac-kirmizi { border-top-color: var(--danger); } .tk-sayac-kirmizi .tk-sayac-n { color: var(--danger); }
 .tk-sayac-turuncu { border-top-color: var(--warn); } .tk-sayac-turuncu .tk-sayac-n { color: var(--warn); }
 .tk-sayac-soluk .tk-sayac-n { color: var(--muted); }
-/* v362 — tip bazında aktif sayaç kartları (Kadın pembe · Erkek mavi · Rampacı turuncu) */
+/* v362 — tip bazında aktif sayaç kartları (Kadın pembe · Erkek mavi · Rampacı turuncu · Şeritçi teal) */
 @media (min-width: 1024px) { .tk-sayaclar { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); } }
 .tk-sayac-tip-kadin { border-top-color: #db2777; } .tk-sayac-tip-kadin .tk-sayac-n { color: #db2777; }
 .tk-sayac-tip-erkek { border-top-color: #2563eb; } .tk-sayac-tip-erkek .tk-sayac-n { color: #2563eb; }
@@ -2491,6 +2556,8 @@ dialog.cf-sd[open] > form { display: flex; flex-direction: column; max-height: 9
 html[data-theme="dark"] .tk-sayac-tip-kadin .tk-sayac-n { color: #f472b6; }
 html[data-theme="dark"] .tk-sayac-tip-erkek .tk-sayac-n { color: #60a5fa; }
 html[data-theme="dark"] .tk-sayac-tip-rampaci .tk-sayac-n { color: #fb923c; }
+.tk-sayac-tip-seritci { border-top-color: #0d9488; } .tk-sayac-tip-seritci .tk-sayac-n { color: #0d9488; }
+html[data-theme="dark"] .tk-sayac-tip-seritci .tk-sayac-n { color: #2dd4bf; }
 
 /* Okutma alanı */
 .tk-tara { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 18px; border: 2px dashed var(--primary); border-radius: 14px; background: var(--primary-soft); margin: 12px 0; min-width: 0; }

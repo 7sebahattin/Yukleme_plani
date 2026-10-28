@@ -111,17 +111,17 @@ ok('tembel garanti: satır yoksa oluşturur', $g !== null && $g['code'] === 'KAR
 $g2 = pdks_gunluk_karisik_tip_garanti(db());
 ok('tembel garanti idempotent (aynı id)', (int)$g2['id'] === (int)$g['id'] && (int)db()->query("SELECT COUNT(*) FROM worker_types WHERE code='KARISIK'")->fetchColumn() === 1);
 $karisik = (int)$g['id'];
-ok('politika listesi DEĞİŞMEDİ: desteklenen = KADIN, ERKEK, RAMPACI (Karışık EKLENMEZ)', pdks_gunluk_desteklenen_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI']);
+ok('politika listesi DEĞİŞMEDİ: desteklenen = KADIN, ERKEK, RAMPACI, SERITCI (Karışık EKLENMEZ)', pdks_gunluk_desteklenen_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI']);
 ok('desteklenen liste KARISIK içermez', !in_array('KARISIK', array_column(pdks_gunluk_desteklenen_tip_listele(db()), 'code'), true));
 ok('desteklenen çözüm KARISIK\'ı reddeder', pdks_gunluk_desteklenen_tip_coz($karisik, db()) === null);
-ok('giriş kodları = KADIN, ERKEK, RAMPACI, KARISIK', pdks_gunluk_giris_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'KARISIK']);
-ok('giriş tip listesi Kadın, Erkek, Rampacı, Karışık sırasıyla', array_column(pdks_gunluk_giris_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'RAMPACI', 'KARISIK'], j(array_column(pdks_gunluk_giris_tip_listele(db()), 'code')));
+ok('giriş kodları = KADIN, ERKEK, RAMPACI, SERITCI, KARISIK', pdks_gunluk_giris_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI', 'KARISIK']);
+ok('giriş tip listesi Kadın, Erkek, Rampacı, Şeritçi, Karışık sırasıyla', array_column(pdks_gunluk_giris_tip_listele(db()), 'code') === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI', 'KARISIK'], j(array_column(pdks_gunluk_giris_tip_listele(db()), 'code')));
 ok('giriş çözümü KARISIK\'ı kabul eder', (pdks_gunluk_giris_tip_coz($karisik, db())['code'] ?? '') === 'KARISIK');
 db()->exec("INSERT INTO worker_types (code, name, sort_order) VALUES ('FORKLIFT', 'Forklift', 9)");
 $fork = (int)db()->lastInsertId();
 ok('giriş çözümü desteklenmeyen FORKLIFT\'i yine reddeder', pdks_gunluk_giris_tip_coz($fork, db()) === null);
 db()->exec("UPDATE worker_types SET is_active=0 WHERE id=$karisik");
-ok('pasif KARISIK girişte reddedilir ve listede yok', pdks_gunluk_giris_tip_coz($karisik, db()) === null && count(pdks_gunluk_giris_tip_listele(db())) === 3);
+ok('pasif KARISIK girişte reddedilir ve listede yok', pdks_gunluk_giris_tip_coz($karisik, db()) === null && count(pdks_gunluk_giris_tip_listele(db())) === 4);   // v455: Kadın, Erkek, Rampacı, Şeritçi
 db()->exec("UPDATE worker_types SET is_active=1 WHERE id=$karisik");
 
 $cavus = [];

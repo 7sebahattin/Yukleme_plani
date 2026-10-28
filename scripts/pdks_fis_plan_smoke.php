@@ -369,6 +369,25 @@ ok('11b) serbest metin alanları enjeksiyona karşı \' önekli', str_starts_wit
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec])]]);
 ok('11b) boş sayılar → say 0 (hata değil, plan karar verir)', $r['fisler'][0]['say']['ERKEK'] === ['tam' => 0, 'yarim' => 0] && $r['fisler'][0]['fm_toplam'] === null && $r['fisler'][0]['giris'] === '08:00' && $r['fisler'][0]['rev'] === 0, j($r['fisler'][0]));
 
+echo "\n=== 14b. v455 Şeritçi (tip kaydı ile bağlama; FM varsayılan havuzu) ===\n";
+ok('14b) pdks_fis_tip_kodlari() = tip kayıt defteri politikası (KADIN, ERKEK, RAMPACI, SERITCI)', pdks_fis_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI'] && pdks_fis_tip_kodlari() === pdks_gunluk_desteklenen_tip_kodlari(), j(pdks_fis_tip_kodlari()));
+ok('14b) FM varsayılan havuzu Şeritçi\'yi KAPSAMAZ', pdks_fis_fm_varsayilan_kodlar() === ['KADIN', 'ERKEK', 'RAMPACI']);
+ok('14b) FM Tipi «Tümü/Hepsi/Tüm» Şeritçi\'siz', pdks_fis_fm_tipi_coz('Tümü') === ['KADIN', 'ERKEK', 'RAMPACI'] && pdks_fis_fm_tipi_coz('hepsi') === ['KADIN', 'ERKEK', 'RAMPACI'] && pdks_fis_fm_tipi_coz('TÜM') === ['KADIN', 'ERKEK', 'RAMPACI']);
+ok('14b) FM Tipi «Şeritçi» / «Erkek+Şeritçi» (ve ve/ters sıra) çözülür', pdks_fis_fm_tipi_coz('Şeritçi') === ['SERITCI'] && pdks_fis_fm_tipi_coz('SERİTÇİ') === ['SERITCI'] && pdks_fis_fm_tipi_coz('Erkek Şeritçi') === ['ERKEK', 'SERITCI'] && pdks_fis_fm_tipi_coz('erkek ve şeritçi') === ['ERKEK', 'SERITCI'] && pdks_fis_fm_tipi_coz('Şeritçi Erkek') === ['ERKEK', 'SERITCI'], j([pdks_fis_fm_tipi_coz('Erkek Şeritçi')]));
+ok('14b) FM Tipi Rampacı girişleri DEĞİŞMEDİ', pdks_fis_fm_tipi_coz('Rampacı') === ['RAMPACI'] && pdks_fis_fm_tipi_coz('Erkek Rampacı') === ['ERKEK', 'RAMPACI'] && pdks_fis_fm_tipi_coz('rampacı erkek') === ['ERKEK', 'RAMPACI']);
+ok('14b) fm_izinli_kodlar: fişte tip yok + sayfa «tumu» → Şeritçi HARİÇ; fişte «Şeritçi» yazıyorsa dahil',
+    pdks_fis_fm_izinli_kodlar(null, 'tumu') === ['KADIN', 'ERKEK', 'RAMPACI'] && pdks_fis_fm_izinli_kodlar(['ERKEK', 'SERITCI'], 'tumu') === ['ERKEK', 'SERITCI'] && pdks_fis_fm_izinli_kodlar(null, 'erkek') === ['ERKEK']);
+$r = pdks_fis_fm_tip_dagit([3, 2], ['KADIN' => 2, 'SERITCI' => 2]);
+ok('14b) fm_tip_dagit: eşitlikte sıra KADIN < ... < SERITCI (Şeritçi sona), V1–V5 vektörleri aynı', $r['dagilim'] === ['KADIN' => [3 => 1], 'SERITCI' => [2 => 1]], j($r['dagilim']));
+$bS = bg(); $bS['tipler']['SERITCI'] = ['id' => 4, 'ad' => 'Şeritçi', 'tam_dk' => 540, 'fm_bas_dk' => 540, 'cift_dk' => null, 'oran' => ['var' => true, 'fm_modu' => 'hourly', 'fm_birim' => '200', 'para' => 'TRY']];
+$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'SERITCI' => [3, 1]], ['fm_kova' => [1 => 2]]), $bS);
+ok('14b) plan: «Tümü» FM Şeritçi\'ye DÜŞMEZ (FM Kadın\'a); Şeritçi tam×3 + yarım×1 grupları (sıra KADIN, …, SERITCI)', $p['ok'] && G($p) === ['KADIN:tam×2', 'KADIN:fm1×2', 'SERITCI:tam×3', 'SERITCI:yarim×1'], j([$p['hatalar'], G($p)]));
+$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'SERITCI' => [3, 0]], ['fm_kova' => [1 => 2], 'fm_tipi' => ['SERITCI']]), $bS);
+ok('14b) plan: fişin «FM Tipi = Şeritçi» ise FM Şeritçi\'de', $p['ok'] && G($p) === ['KADIN:tam×4', 'SERITCI:tam×1', 'SERITCI:fm1×2'], j([$p['hatalar'], G($p)]));
+$bSY = $bS; unset($bSY['tipler']['SERITCI']);
+$p = pdks_fis_plan(F(['SERITCI' => [2, 0]]), $bSY);
+ok('14b) plan: sistemde (bağlamda) Şeritçi tipi yoksa HATA (yazılmaz)', !$p['ok'] && hatalarda($p, 'sistemde bulunamadı'), j($p['hatalar']));
+
 echo "\n=== 15. Statik (kaynak taraması) ===\n";
 $kaynak = file_get_contents($ROOT . '/config/pdks_fis.php');
 ok('15) rastgelelik / hesaplamalı formül okuması YOK (random_int|mt_rand|rand(|shuffle|array_rand|getCalculatedValue)', !preg_match('/\b(random_int|mt_rand|shuffle|array_rand|getCalculatedValue)\b|[^a-z_]rand\(/', preg_replace('#//[^\n]*|/\*.*?\*/|^\s*\*[^\n]*#sm', '', $kaynak)));

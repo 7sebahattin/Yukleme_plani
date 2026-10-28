@@ -495,7 +495,7 @@ function pdks_ters_havuz_ekle(string $ham, string $kaynak, int $foremanId, int $
     if (!$c) return pdks_ters_red('cavus_yok', 'Çavuş seçin.');
     if (!(int)$c['is_active']) return pdks_ters_red('cavus_pasif', 'Pasif çavuşun havuzuna kart eklenemez.');
     $tip = pdks_gunluk_desteklenen_tip_coz($tipId, $pdo);
-    if (!$tip) return pdks_ters_red('tip_desteklenmiyor', 'İşçi tipi seçin (Kadın / Erkek / Rampacı).');
+    if (!$tip) return pdks_ters_red('tip_desteklenmiyor', 'İşçi tipi seçin (Kadın / Erkek / Rampacı / Şeritçi).');
 
     $u = pdks_ters_uid_coz($pdo, $ham, $kaynak);
     if (!$u['ok']) return $u;

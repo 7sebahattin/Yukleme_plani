@@ -301,14 +301,14 @@ function pdks_fis_fm_toplam_dagit(int $h, ?int $k, int $kisiUstSaat, int $kmaxSi
 
 /**
  * FM'ye giren kişileri (saat listesi) tip havuzlarına (Tam kişi sayısı ağırlıklı) dağıtır — tamsayı aritmetiği,
- * en büyük kalan yöntemi, eşitlikte sabit tip sırası KADIN < ERKEK < RAMPACI; kişi→tip: kalan kotası en büyük,
+ * en büyük kalan yöntemi, eşitlikte sabit tip sırası KADIN < ERKEK < RAMPACI < SERITCI; kişi→tip: kalan kotası en büyük,
  * eşitlikte o ana kadar atanan saat toplamı küçük, sonra tip sırası.
  * @param int[] $saatler kişi başı saat; @param array<string,int> $havuz KOD → Tam kişi sayısı
  * @return array{kota:array<string,int>, dagilim:array<string,array<int,int>>, saat:array<string,int>}
  */
 function pdks_fis_fm_tip_dagit(array $saatler, array $havuz): array
 {
-    $sira = ['KADIN' => 0, 'ERKEK' => 1, 'RAMPACI' => 2];
+    $sira = ['KADIN' => 0, 'ERKEK' => 1, 'RAMPACI' => 2, 'SERITCI' => 3];
     $havuz = array_filter(array_map('intval', $havuz), fn($w) => $w > 0);
     $tipler = array_keys($havuz);
     usort($tipler, fn($a, $b) => ($sira[$a] ?? 99) <=> ($sira[$b] ?? 99) ?: strcmp($a, $b));
@@ -355,17 +355,33 @@ function pdks_fis_cavuslar(PDO $pdo): array
     return $out;
 }
 
-/** Sistem işçi tipi kodları (sıra SABİT: dağıtım ve grup sırası bunu izler). */
-function pdks_fis_tip_kodlari(): array { return ['KADIN', 'ERKEK', 'RAMPACI']; }
+/**
+ * Sistem işçi tipi kodları (sıra SABİT: dağıtım ve grup sırası bunu izler). v455: sert-kodlu liste yerine tip kayıt
+ * defterinin politika listesi (KADIN, ERKEK, RAMPACI, SERITCI) — yeni sistem tipi eklenince burası ayrışmaz.
+ */
+function pdks_fis_tip_kodlari(): array { return pdks_gunluk_desteklenen_tip_kodlari(); }
+
+/**
+ * v455 — FM havuzunun VARSAYILANI («Tümü» / FM Tipi boş): Şeritçi HARİÇ. Şeritçi'nin FM fiyatı diğer tiplerden
+ * farklı olabilir; varsayılan havuza girse fiyat-nötr denetimi kullanıcıyı gereksiz hataya düşürürdü. Şeritçi FM'ye
+ * yalnız «FM Tipi» hücresinde açıkça yazılırsa girer.
+ * @return string[]
+ */
+function pdks_fis_fm_varsayilan_kodlar(): array
+{
+    return array_values(array_diff(pdks_fis_tip_kodlari(), [PDKS_GUNLUK_SERITCI_KOD]));
+}
 
 /** FM tipi hücresi → kod listesi (null = boş). Tanınmazsa false. */
 function pdks_fis_fm_tipi_coz($v)
 {
     $f = pdks_fis_fold(pdks_fis_metin_duz($v, 60));
     if ($f === '') return null;
-    $harita = ['tumu' => ['KADIN', 'ERKEK', 'RAMPACI'], 'hepsi' => ['KADIN', 'ERKEK', 'RAMPACI'], 'tum' => ['KADIN', 'ERKEK', 'RAMPACI'],
-               'kadin' => ['KADIN'], 'bayan' => ['KADIN'], 'erkek' => ['ERKEK'], 'rampaci' => ['RAMPACI'],
-               'erkek rampaci' => ['ERKEK', 'RAMPACI'], 'erkek ve rampaci' => ['ERKEK', 'RAMPACI'], 'rampaci erkek' => ['ERKEK', 'RAMPACI']];
+    $varsayilan = pdks_fis_fm_varsayilan_kodlar();   // v455: «Tümü» Şeritçi'yi KAPSAMAZ
+    $harita = ['tumu' => $varsayilan, 'hepsi' => $varsayilan, 'tum' => $varsayilan,
+               'kadin' => ['KADIN'], 'bayan' => ['KADIN'], 'erkek' => ['ERKEK'], 'rampaci' => ['RAMPACI'], 'seritci' => ['SERITCI'],
+               'erkek rampaci' => ['ERKEK', 'RAMPACI'], 'erkek ve rampaci' => ['ERKEK', 'RAMPACI'], 'rampaci erkek' => ['ERKEK', 'RAMPACI'],
+               'erkek seritci' => ['ERKEK', 'SERITCI'], 'erkek ve seritci' => ['ERKEK', 'SERITCI'], 'seritci erkek' => ['ERKEK', 'SERITCI']];
     return $harita[$f] ?? false;
 }
 
@@ -542,12 +558,12 @@ function pdks_fis_fm_izinli_kodlar(?array $fisTipi, string $secenek): array
     if ($fisTipi) return array_values(array_intersect(pdks_fis_tip_kodlari(), $fisTipi));
     if ($secenek === 'erkek') return ['ERKEK'];
     if ($secenek === 'erkek_rampaci') return ['ERKEK', 'RAMPACI'];
-    return pdks_fis_tip_kodlari();
+    return pdks_fis_fm_varsayilan_kodlar();   // v455: Şeritçi varsayılan havuza GİRMEZ
 }
 
 /**
  * Fişten kayıt planı (SAF — DB yok; eşikler $baglam'dan, o da sınıflandırıcıdan gelir). Grup sırası SABİT:
- * tip (KADIN, ERKEK, RAMPACI) × profil (tam, fm 1..n artan, yarim). FM kişileri Tam kişilerden düşülür; Yarım'a
+ * tip (KADIN, ERKEK, RAMPACI, SERITCI) × profil (tam, fm 1..n artan, yarim). FM kişileri Tam kişilerden düşülür; Yarım'a
  * FM verilmez. $baglam = ['tipler'=>[KOD=>['id','ad','tam_dk','fm_bas_dk','cift_dk','oran'=>[var,fm_modu,fm_birim,para]]],
  * 'fm_tip_secenegi'=>'tumu'|'erkek'|'erkek_rampaci'].
  * @return array{ok:bool,hatalar:string[],uyarilar:string[],gruplar:list<array>,fm:array,servis:array,kisi_toplam:int,hash:string}
@@ -1312,6 +1328,16 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
     $m['uyarilar'] = array_merge($m['uyarilar'], $plan['uyarilar']);
     if (!$plan['ok']) { $m['hatalar'] = $plan['hatalar']; return $bitir('hata'); }
     if ($h = pdks_fis_siniflari_dogrula($pdo, $cid, $tarih, $normalDk, $plan['gruplar'], $baglam)) { $m['hatalar'][] = $h; return $bitir('hata'); }
+    // v455 (W1.5): planda yer alan tipin o tarihte geçerli fiyatı yoksa kayıt YAZILIR ama hakediş hesaplanamaz — ENGEL DEĞİL, uyarı
+    // (servis `fiyatsız` emsali). Yeni sistem tiplerinin (Şeritçi) fiyatı geçmiş tarihle sonradan girilebildiği için önceden haber verir.
+    $fiyatsizTip = [];
+    foreach ($plan['gruplar'] as $gr) {
+        $kodG = (string)($gr['kod'] ?? '');
+        if ($kodG !== '' && isset($baglam['tipler'][$kodG]) && empty($baglam['tipler'][$kodG]['oran']['var'])) $fiyatsizTip[$kodG] = (string)($baglam['tipler'][$kodG]['ad'] ?? $kodG);
+    }
+    foreach ($fiyatsizTip as $adG) {
+        $m['uyarilar'][] = '«' . $adG . '» için ' . date('d.m.Y', (int)strtotime($tarih)) . ' tarihinde geçerli fiyat YOK — kayıt yazılır, fiyat girilene dek hakediş hesaplanamaz.';
+    }
 
     // Servis
     $hedefSv = $m['servis']['hedef'];

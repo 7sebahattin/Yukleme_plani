@@ -49,6 +49,7 @@ $db->exec("INSERT INTO worker_types (code,name) VALUES ('KADIN','Kadın'),('ERKE
 $kadinId = (int)$db->query("SELECT id FROM worker_types WHERE code='KADIN'")->fetchColumn();
 $erkekId = (int)$db->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fetchColumn();
 $rampaciId = (int)(pdks_gunluk_rampaci_tip_garanti($db)['id'] ?? 0);   // v299: 3. sabit sistem tipi
+$seritciId = (int)(pdks_gunluk_seritci_tip_garanti($db)['id'] ?? 0);   // v455: 4. sabit sistem tipi
 $db->exec("CREATE TABLE foremen (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT, is_active INTEGER DEFAULT 1)");
 $db->exec("INSERT INTO foremen (code,name) VALUES ('C1','Ayşe Çavuş')");
 $foremanId = (int)$db->lastInsertId();
@@ -68,7 +69,7 @@ $day = date('Y-m-d', strtotime('-1 day'));
 // § A — CENTRAL POLICY (madde 1-5)
 // =========================================================
 echo "=== A. TEK POLİTİKA — pdks_gunluk_desteklenen_tip_*() ===\n";
-ok9b('1) desteklenen kod listesi TAM OLARAK KADIN/ERKEK/RAMPACI (v299 bilinçli)', pdks_gunluk_desteklenen_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI']);
+ok9b('1) desteklenen kod listesi TAM OLARAK KADIN/ERKEK/RAMPACI/SERITCI (v299, v455 bilinçli)', pdks_gunluk_desteklenen_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI']);
 ok9b('2) aktif KADIN kabul edilir', pdks_gunluk_desteklenen_tip_coz($kadinId, $db) !== null);
 ok9b('3) aktif ERKEK kabul edilir', pdks_gunluk_desteklenen_tip_coz($erkekId, $db) !== null);
 
@@ -144,15 +145,15 @@ $rawEventCountSonra = (int)$db->query('SELECT COUNT(*) FROM daily_worker_card_ev
 ok9b('16) ham olay geçmişi (daily_worker_card_events) reddedilen FORKLIFT düzeltmesiyle DEĞİŞMEDİ', $rawEventCountSonra === $rawEventCountOnce, "önce=$rawEventCountOnce sonra=$rawEventCountSonra");
 
 ok9b('14) düzeltme UI listesi (pdks_gunluk_desteklenen_tip_listele) backend\'in (pdks_faz8j_desteklenen_tip) kabul ettiğiyle BİREBİR AYNI küme',
-    (function () use ($db, $kadinId, $erkekId, $rampaciId, $forkliftId) {
+    (function () use ($db, $kadinId, $erkekId, $rampaciId, $seritciId, $forkliftId) {
         $uiListe = array_column(pdks_gunluk_desteklenen_tip_listele($db), 'id');
         sort($uiListe);
         $backendKabul = [];
-        foreach ([$kadinId, $erkekId, $rampaciId, $forkliftId] as $tid) {
+        foreach ([$kadinId, $erkekId, $rampaciId, $seritciId, $forkliftId] as $tid) {
             if (pdks_faz8j_desteklenen_tip($db, $tid) !== null) $backendKabul[] = $tid;
         }
         sort($backendKabul);
-        $beklenen = [$kadinId, $erkekId, $rampaciId]; sort($beklenen);
+        $beklenen = [$kadinId, $erkekId, $rampaciId, $seritciId]; sort($beklenen);
         return $uiListe === $beklenen && $backendKabul === $beklenen && $uiListe === $backendKabul;
     })());
 
@@ -183,7 +184,8 @@ pdks_gunluk_tip_aktiflik($erkekId, false, $db);   // KADIN hâlâ aktif — izin
 $dbAktifKontrol = $db->query("SELECT is_active FROM worker_types WHERE id=$erkekId")->fetchColumn();
 ok9b('21a) diğeri aktifken bir tipi pasifleştirmek SERBEST (kısıtlama YALNIZ son tip içindir)', (int)$dbAktifKontrol === 0);
 pdks_gunluk_tip_aktiflik($erkekId, true, $db);    // geri aç
-pdks_gunluk_tip_aktiflik($rampaciId, false, $db);   // v299: üç sistem tipi var — Rampacı da pasif olmadan "son tip" olmaz
+pdks_gunluk_tip_aktiflik($rampaciId, false, $db);   // v299: dört sistem tipi var — Rampacı ve Şeritçi de pasif olmadan "son tip" olmaz
+pdks_gunluk_tip_aktiflik($seritciId, false, $db);   // v455
 $sonAktifEngeli = pdks_gunluk_tip_aktiflik($kadinId, false, $db);   // ERKEK az önce geri açıldı, hâlâ serbest olmalı — asıl test: HER İKİSİ de pasifken üçüncüsü yok, o yüzden ikisini de pasifleştirmeyi dene
 $ikinciPasif = null;
 if ($sonAktifEngeli['ok']) {
@@ -194,7 +196,8 @@ if ($sonAktifEngeli['ok']) {
     ok9b('21b) SON aktif desteklenen tip pasifleştirilemez (scan akışı boş kalırdı)', false, 'ön koşul (KADIN pasifleştirme) beklenmedik biçimde reddedildi: ' . json_encode($sonAktifEngeli));
 }
 pdks_gunluk_tip_aktiflik($rampaciId, true, $db);
-ok9b('21c) üç sistem tipi de testin SONUNDA yeniden AKTİF', pdks_gunluk_desteklenen_tip_coz($kadinId, $db) !== null && pdks_gunluk_desteklenen_tip_coz($erkekId, $db) !== null && pdks_gunluk_desteklenen_tip_coz($rampaciId, $db) !== null);
+pdks_gunluk_tip_aktiflik($seritciId, true, $db);
+ok9b('21c) dört sistem tipi de testin SONUNDA yeniden AKTİF', pdks_gunluk_desteklenen_tip_coz($kadinId, $db) !== null && pdks_gunluk_desteklenen_tip_coz($erkekId, $db) !== null && pdks_gunluk_desteklenen_tip_coz($rampaciId, $db) !== null && pdks_gunluk_desteklenen_tip_coz($seritciId, $db) !== null);
 
 ok9b('22) yanıltıcı "ör. FORKLIFT" placeholder metni SAYFADA ARTIK YOK', !str_contains($isciTipleriSrc, 'ör. FORKLIFT'));
 ok9b('22b) sabit KADIN/ERKEK modeli SAYFADA AÇIKÇA anlatılıyor', str_contains($isciTipleriSrc, 'KADIN') && str_contains($isciTipleriSrc, 'ERKEK') && str_contains($isciTipleriSrc, 'sabit'));
@@ -253,7 +256,7 @@ ok9b('7§b — reddedilen tarihsel düzeltme denemesi SONRASI satır YİNE DEĞ�
 // =========================================================
 echo "\n=== F. ORAN YÖNETİMİ ===\n";
 $yeniOranTipleri = pdks_gunluk_desteklenen_tip_listele($db);
-ok9b('26) cavus_fiyatlari.php\'nin kullandığı YENİ-oran tip kaynağı YALNIZ KADIN/ERKEK/RAMPACI döner (sırası kodda)', array_column($yeniOranTipleri, 'code') === ['KADIN', 'ERKEK', 'RAMPACI'], json_encode($yeniOranTipleri, JSON_UNESCAPED_UNICODE));
+ok9b('26) cavus_fiyatlari.php\'nin kullandığı YENİ-oran tip kaynağı YALNIZ KADIN/ERKEK/RAMPACI/SERITCI döner (sırası kodda)', array_column($yeniOranTipleri, 'code') === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI'], json_encode($yeniOranTipleri, JSON_UNESCAPED_UNICODE));
 ok9b('26b) cavus_fiyatlari.php GERÇEKTEN pdks_gunluk_desteklenen_tip_listele() ÇAĞIRIYOR (yeni oran açılır listesi)', str_contains((string)file_get_contents($root . '/cavus_fiyatlari.php'), 'pdks_gunluk_desteklenen_tip_listele('));
 
 // Tarihsel/desteklenmeyen bir oran satırı (başka kurulumdan/eski veriden
@@ -271,7 +274,7 @@ ok9b('27b) tarihsel oran satırının tutarı DEĞİŞMEDİ', ($forkliftOranSati
 echo "\n=== G. UI — KADIN pembe / ERKEK mavi, tutarlı liste ===\n";
 $scanSrc = (string)file_get_contents($root . '/gunluk_isci_giris_cikis.php');
 ok9b("28) kiosk tip düğmesi sınıfı tip kayıt defterinden (pdks_gunluk_tip_renk) — KADIN=kadin", str_contains($scanSrc, "pdks_gunluk_tip_renk((string)\$t['code'])") && pdks_gunluk_tip_renk('KADIN') === 'kadin');
-ok9b('29) ERKEK pembe sınıf ALMAZ (erkek), RAMPACI turuncu sınıf (rampaci)', pdks_gunluk_tip_renk('ERKEK') === 'erkek' && pdks_gunluk_tip_renk('RAMPACI') === 'rampaci' && pdks_gunluk_tip_renk('FORKLIFT') === '');
+ok9b('29) ERKEK pembe sınıf ALMAZ (erkek), RAMPACI turuncu sınıf (rampaci), SERITCI teal (seritci)', pdks_gunluk_tip_renk('ERKEK') === 'erkek' && pdks_gunluk_tip_renk('RAMPACI') === 'rampaci' && pdks_gunluk_tip_renk('SERITCI') === 'seritci' && pdks_gunluk_tip_renk('FORKLIFT') === '');
 $pdksCss = (string)file_get_contents($root . '/assets/pdks.css');
 ok9b('29b) pdks-kiosk-typebtn-kadin CSS TANIMI (pembe renk) hâlâ mevcut, DEĞİŞMEDİ', str_contains($pdksCss, '.pdks-kiosk-typebtn-kadin { background:#ec4899'));
 

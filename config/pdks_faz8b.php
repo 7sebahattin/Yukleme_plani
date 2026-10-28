@@ -685,7 +685,7 @@ if (!defined('PDKS_FAZ8B_OZET_FM_SUTUN')) define('PDKS_FAZ8B_OZET_FM_SUTUN', 5);
  * (pdks_faz8b_donem_siniflandir) kullanır. Servis adetleri pdks_servis_toplamlar_toplu().
  *
  *  tanim[tip adı] = [tam, yarim, cift, fm => [1..5], bekliyor (sınıf kararı yok), suruyor (çıkışsız, mesai AÇIK = içeride), eksik (çıkışsız, mesai KAPALI = eksik çıkış), toplam]
- *      — yalnız sistem tipleri (Kadın/Erkek/Rampacı); sıfır olsa da satır vardır.
+ *      — yalnız sistem tipleri (Kadın/Erkek/Rampacı/Şeritçi); sıfır olsa da satır vardır.
  *      fm[n] = fazla mesaisi n saat olan işçi sayısı (5 = 5 ve üzeri). Saat = çavuşun mesai
  *      süresi (ör. 9 sa) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı: 10:11 → 1,
  *      12:00 → 3. Reddedilen FM sayılmaz; Çift günde çift eşiğinden SONRAKİ onaylı saat.
@@ -1136,6 +1136,10 @@ function pdks_faz8b_oran_ekle(
         if ($pdo->inTransaction()) $pdo->rollBack();
         return ['ok' => false, 'hata' => 'Fiyat dönemi kaydedilemedi: ' . $e->getMessage()];
     }
+    // v455: GEÇMİŞ tarihli başlangıçla açılan dönem, o günlerin TASLAK hakedişlerini eskimiş bırakır — yeniden hesaba işaretle
+    // (best-effort; kesin hakedişe dokunmaz). `$isaretlenen` yanıta eklenir.
+    $isaretlenen = 0;
+    if ($validFrom < date('Y-m-d')) $isaretlenen = pdks_faz8b_oran_taslak_isaretle($foremanId, $workerTypeId, $validFrom, null, $pdo);
 
     if (function_exists('audit_log_event')) {
         audit_log_event('create', 'foreman_worker_rates', $id, null, [
@@ -1150,7 +1154,7 @@ function pdks_faz8b_oran_ekle(
         ] + $saatDeger);
     }
 
-    return ['ok' => true, 'id' => $id];
+    return ['ok' => true, 'id' => $id, 'isaretlenen' => $isaretlenen];
 }
 
 /**
@@ -1212,6 +1216,98 @@ function pdks_faz8b_oran_saat_duzelt(int $rateId, array $saatler, string $gerekc
     }
     if (function_exists('audit_log_event')) {
         audit_log_event('saat_duzelt', 'foreman_worker_rates', $rateId, $eski, $yeni + ['gerekce' => $gerekce, 'isaretlenen_taslak' => $isaret]);
+    }
+    return ['ok' => true, 'isaretlenen' => $isaret];
+}
+
+/**
+ * v455 — Bir çavuş+işçi tipi için fiyat dönemi değişince, o tarihten itibaren (ve $tarihe dek) bu tipin etkin
+ * dönemi bulunan oturumların TASLAK hakedişlerini `needs_recalculation=1` işaretler (kesin hakedişe DOKUNMAZ).
+ * Servis emsali: pdks_servis_taslaklari_isaretle(). Kolon/tablo yoksa 0 döner (best-effort, hata yutulur).
+ */
+function pdks_faz8b_oran_taslak_isaretle(int $foremanId, int $tipId, string $tarihtenBeri, ?string $tarihe, PDO $pdo): int
+{
+    try {
+        if (!pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'needs_recalculation')
+            || !pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'status')) return 0;
+        $kosul = 's.foreman_id = ? AND s.work_date >= ?' . ($tarihe !== null ? ' AND s.work_date <= ?' : '');
+        $par = array_merge([$foremanId, $tarihtenBeri], $tarihe !== null ? [$tarihe] : [], [$tipId]);
+        $st = $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation = 1
+                              WHERE status = 'draft' AND session_id IN (
+                                  SELECT s.id FROM daily_work_sessions s
+                                   WHERE $kosul AND EXISTS (
+                                       SELECT 1 FROM daily_worker_work_periods p
+                                        WHERE p.session_id = s.id AND p.worker_type_id_snapshot = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "))");
+        $st->execute($par);
+        return $st->rowCount();
+    } catch (Throwable $e) {
+        error_log('[pdks_faz8b_oran_taslak_isaretle] ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * v455 — Bir çavuş+tip için EN ESKİ fiyat döneminin başlangıcını GEÇMİŞE çeker. Amaç: yeni bir tipin (ör. Şeritçi)
+ * ilk fiyatı bugünün tarihiyle açıldıysa / yanlış tarihle girildiyse, geçmiş mesailer için fiyatı geriye dönük
+ * geçerli kılmak. oran_ekle'nin KRONOLOJİK kuralı (yeni dönem mevcut en son dönemden sonra) DEĞİŞMEZ; bu yol yalnız
+ * mevcut en eski dönemin `valid_from` değerini küçültür (ücretler/saatler/valid_to DEĞİŞMEZ → dönem çakışması yapısal olarak
+ * oluşamaz: öncesinde başka dönem yok).
+ * KAPILAR: yalnız is_admin() (geçmişe fiyat = finansal, yönetici işi) · tarih geçerli/≥2020-01-01/≤bugün ve ESKİ başlangıçtan
+ * önce · gerekçe zorunlu (≤500) · dönem aktif ve aynı çavuş+tipin EN ESKİ dönemi · eklenen aralıkta
+ * [yeni, eski başlangıç-1 gün] bu çavuşun KESİNLEŞMİŞ hakedişinde BU TİPE ait satır varsa RED (kesin hakediş sessizce
+ * değişmez; başka tiplerin final'i engel DEĞİL). Etki: tek UPDATE + aralıktaki TASLAK hakedişler `needs_recalculation`
+ * + audit `rate_baslangic_geri` (eski/yeni + gerekçe). Tek transaction.
+ * @return array{ok:bool, hata?:string, isaretlenen?:int}
+ */
+function pdks_faz8b_oran_baslangic_geriye_cek(int $rateId, string $yeniBaslangic, string $gerekce, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!function_exists('is_admin') || !is_admin()) return ['ok' => false, 'hata' => 'Bu işlem yalnızca sistem yöneticileri içindir.'];
+    $gerekce = trim($gerekce);
+    if ($gerekce === '' || mb_strlen($gerekce) > 500) return ['ok' => false, 'hata' => 'Gerekçe zorunludur (en fazla 500 karakter).'];
+    $yeniBaslangic = trim($yeniBaslangic);
+    $dt = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $yeniBaslangic) ? DateTimeImmutable::createFromFormat('!Y-m-d', $yeniBaslangic) : false;
+    if (!$dt || $dt->format('Y-m-d') !== $yeniBaslangic) return ['ok' => false, 'hata' => 'Yeni başlangıç tarihi geçersiz.'];
+    if ($yeniBaslangic < '2020-01-01') return ['ok' => false, 'hata' => 'Yeni başlangıç tarihi 01.01.2020\'den önce olamaz.'];
+    if ($yeniBaslangic > date('Y-m-d')) return ['ok' => false, 'hata' => 'Yeni başlangıç tarihi gelecekte olamaz.'];
+
+    try {
+        $pdo->beginTransaction();
+        $kilit = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+        $st = $pdo->prepare("SELECT * FROM foreman_worker_rates WHERE id = ? AND is_active = 1" . $kilit);
+        $st->execute([$rateId]);
+        $o = $st->fetch();
+        if (!$o) { $pdo->rollBack(); return ['ok' => false, 'hata' => 'Fiyat dönemi bulunamadı ya da aktif değil.']; }
+        $foremanId = (int)$o['foreman_id']; $tipId = (int)$o['worker_type_id']; $eskiBas = (string)$o['valid_from'];
+
+        $stE = $pdo->prepare("SELECT 1 FROM foreman_worker_rates WHERE foreman_id = ? AND worker_type_id = ? AND is_active = 1 AND id <> ? AND valid_from < ? LIMIT 1");
+        $stE->execute([$foremanId, $tipId, $rateId, $eskiBas]);
+        if ($stE->fetchColumn()) { $pdo->rollBack(); return ['ok' => false, 'hata' => 'Bu dönemin öncesinde başka fiyat dönemi var; yalnız en eski dönem geriye çekilebilir.']; }
+        if ($yeniBaslangic >= $eskiBas) { $pdo->rollBack(); return ['ok' => false, 'hata' => 'Yeni başlangıç, mevcut başlangıçtan (' . $eskiBas . ') ÖNCE olmalıdır.']; }
+
+        $aralikSon = date('Y-m-d', strtotime($eskiBas . ' -1 day'));
+        if (pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'status') && pdks_hakedis_tablo_var($pdo, 'foreman_daily_entitlement_lines')) {
+            $stF = $pdo->prepare("SELECT COUNT(*) FROM foreman_daily_entitlement_lines l
+                                    JOIN foreman_daily_entitlements e ON e.id = l.entitlement_id
+                                    JOIN daily_work_sessions s ON s.id = e.session_id
+                                   WHERE s.foreman_id = ? AND s.work_date >= ? AND s.work_date <= ? AND e.status = 'final' AND l.worker_type_id = ?");
+            $stF->execute([$foremanId, $yeniBaslangic, $aralikSon, $tipId]);
+            if ((int)$stF->fetchColumn() > 0) {
+                $pdo->rollBack();
+                return ['ok' => false, 'hata' => 'Eklenen tarih aralığında bu işçi tipi için kesinleşmiş hakediş satırı var — önce o günlerin hakedişini yeniden açın.'];
+            }
+        }
+        $pdo->prepare("UPDATE foreman_worker_rates SET valid_from = ? WHERE id = ?")->execute([$yeniBaslangic, $rateId]);
+        $isaret = pdks_faz8b_oran_taslak_isaretle($foremanId, $tipId, $yeniBaslangic, $aralikSon, $pdo);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'hata' => 'Başlangıç tarihi geriye çekilemedi: ' . $e->getMessage()];
+    }
+    if (function_exists('audit_log_event')) {
+        audit_log_event('rate_baslangic_geri', 'foreman_worker_rates', $rateId,
+            ['valid_from' => $eskiBas],
+            ['valid_from' => $yeniBaslangic, 'foreman_id' => $foremanId, 'worker_type_id' => $tipId, 'gerekce' => $gerekce, 'isaretlenen_taslak' => $isaret]);
     }
     return ['ok' => true, 'isaretlenen' => $isaret];
 }
