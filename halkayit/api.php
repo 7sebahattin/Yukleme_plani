@@ -109,7 +109,10 @@ function hks_plan_kunye_coz($cfg, $ortak, $firmaId = '') {
     fn(array $secenek) => hks_kunyeleri_getir($cfg, $secenek),
     fn(int $ay) => hks_kunye_detaylari_getir($cfg, $ay),
     $dislanan,
-    $kaynak
+    sifatliGetir: ((int)($ortak['sifatId'] ?? 0) > 0)
+      ? fn(array $s) => hks_kunyeleri_getir($cfg, $s + ['kisiSifat' => (int)$ortak['sifatId']])
+      : null,
+    kaynak: $kaynak
   );
 }
 
@@ -347,19 +350,27 @@ try {
       if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
       @set_time_limit(300);   // 5 yıllık taramada 60 ardışık SOAP çağrısı olabilir
       $liste = hks_kunyeleri_getir($cfg, $g);
-      // Opsiyonel 'sifatId': bu sıfatla uyumsuz kayıtlı künyelere sifatUyumsuz=true
+      // Opsiyonel 'sifatId': bu sıfatla uyumsuz künyelere sifatUyumsuz=true
       // (yalnız bilgi — liste süzülmez). sifatId yoksa alan HİÇ eklenmez.
+      $__sifatFiltre = false;
       if (isset($g['sifatId']) && (int)$g['sifatId'] > 0) {
         try { $__sm = hks_kunye_sifat_uyumsuz_oku($g['firmaId'] ?? ''); }
         catch (Throwable $e) { $__sm = []; error_log('[hks] künye sıfat kaydı okunamadı: ' . $e->getMessage()); }
         $liste = hks_kunyelere_sifat_bayragi($liste, $__sm, $g['sifatId']);
+        // HKS KisiSifat filtresi: uyumlu liste DOLUysa ona girmeyenler uyumsuz; boş/hata → eski davranış.
+        try {
+          $__uyumlu = hks_kunyeleri_getir($cfg, $g + ['kisiSifat' => (int)$g['sifatId']]);
+          if ($__uyumlu) { $liste = hks_kunyelere_sifat_filtre_bayragi($liste, $__uyumlu); $__sifatFiltre = true; }
+        } catch (Throwable $e) { error_log('[hks] sıfat filtreli künye listesi alınamadı: ' . $e->getMessage()); }
       }
       // Depo/Tasnif kaynak kuralı (v366): HKS'in 108 ile reddettiği karşı taraf
       // TC/sıfatları öğrenildiyse künyeye kaynakTc / kaynakRedSifatlar / kaynakRed
       // eklenir (yalnız bilgi — arayüz karşı taraf sıfatını buna göre ayarlar).
       try { $liste = hks_kunyelere_kaynak_bilgisi($liste, hks_kunye_kaynak_oku($g['firmaId'] ?? '')); }
       catch (Throwable $e) { error_log('[hks] künye kaynak kaydı okunamadı: ' . $e->getMessage()); }
-      hks_json_cikti(['kunyeler' => $liste]);
+      $__yanit = ['kunyeler' => $liste];
+      if (isset($g['sifatId']) && (int)$g['sifatId'] > 0) $__yanit['sifatFiltre'] = $__sifatFiltre;
+      hks_json_cikti($__yanit);
     }
 
     // ---- STOK ÖZETİ (referans künye kalanlarının ürün bazında toplamı) ----
@@ -922,6 +933,12 @@ try {
         } catch (Throwable $e) {
           error_log('[hks] künye sıfat kaydı yazılamadı: ' . $e->getMessage());
         }
+      }
+      // Plan çözümünde HKS KisiSifat filtresi bilgisi (yalnız bilgi; kişisel veri yok).
+      if ($planMi) {
+        $sonuc['sifatFiltreKullanildi'] = !empty($__plan['sifatFiltreKullanildi']);
+        if (isset($__plan['sifatFiltreBos'])) $sonuc['sifatFiltreBos'] = (bool)$__plan['sifatFiltreBos'];
+        if (isset($__plan['sifatFiltreHata'])) { $sonuc['sifatFiltreHata'] = true; error_log('[hks] sıfat filtreli künye listesi alınamadı: ' . (string)$__plan['sifatFiltreHata']); }
       }
       // DEPO/TASNİF KAYNAK KURALI (v366): HataKodu 108 alan künyeler için "bu TC +
       // bu sıfat kaynak değil" öğrenilir (60 gün). Yeniden deneme YOK. Hata yutulur.

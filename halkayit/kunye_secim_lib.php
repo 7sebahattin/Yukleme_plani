@@ -138,8 +138,12 @@ function hks_kunye_kg_metni(float $kg): string {
 // 'kendi' => firmanın VKN'si, 'ogrenilen' => {künye: kaynakTc}] — detay haritası
 // FİYATSIZ sevkte de istenir; kaynağı KESİN bilinen ve karşı taraftan farklı
 // künyeler denenmez ('atlananKaynakFarkli'). 'kokenHarita' yeniden kullanım içindir.
-function hks_plan_kunye_coz_cekirdek(array $ortak, callable $kunyeGetir, ?callable $detayGetir, array $dislanan = [], ?array $kaynak = null): array {
-  $ek = ['atlananSifatUyumsuz' => [], 'fiyatSiralamaKullanildi' => false, 'atlananKaynakFarkli' => [], 'kokenHarita' => []];
+// $sifatliGetir (v-sıfat filtresi): $kunyeGetir ile AYNI $secenek dizisini alır; HKS'e
+// KisiSifat filtresiyle gider (bildirimci sıfatıyla UYUMLU künyeler). ortak.sifatId>0
+// ise ÖNCE o çağrılır: dolu → liste odur ('sifatFiltreKullanildi'); boş → 'sifatFiltreBos',
+// istisna → 'sifatFiltreHata' (ikisinde de filtresiz eski yol, fail-open).
+function hks_plan_kunye_coz_cekirdek(array $ortak, callable $kunyeGetir, ?callable $detayGetir, array $dislanan = [], ?array $kaynak = null, ?callable $sifatliGetir = null): array {
+  $ek = ['atlananSifatUyumsuz' => [], 'fiyatSiralamaKullanildi' => false, 'atlananKaynakFarkli' => [], 'kokenHarita' => [], 'sifatFiltreKullanildi' => false];
 
   $hedef = round((float)($ortak['planKg'] ?? 0), 3);
   if ($hedef <= 0) return ['hata' => 'Plan taslağında toplam kilo yok.'] + $ek;
@@ -148,12 +152,23 @@ function hks_plan_kunye_coz_cekirdek(array $ortak, callable $kunyeGetir, ?callab
   if (empty($sorgu['urunId'])) return ['hata' => 'Plan taslağında ürün bilgisi yok.'] + $ek;
 
   $aySayisi = (int)($sorgu['aySayisi'] ?? 12);
-  $kunyeler = (array)$kunyeGetir([
+  $secenek = [
     'urunId'        => $sorgu['urunId'],
     'aySayisi'      => $aySayisi,
     'isletmeTuruId' => (int)($sorgu['isletmeTuruId'] ?? 0),
     'sirala'        => (string)($sorgu['sirala'] ?? 'azalan'),
-  ]);
+  ];
+  $kunyeler = null;
+  if ($sifatliGetir !== null && (int)($ortak['sifatId'] ?? 0) > 0) {
+    try {
+      $sl = (array)$sifatliGetir($secenek);
+      if ($sl) { $kunyeler = $sl; $ek['sifatFiltreKullanildi'] = true; }
+      else $ek['sifatFiltreBos'] = true;
+    } catch (Throwable $e) {
+      $ek['sifatFiltreHata'] = $e->getMessage();
+    }
+  }
+  if ($kunyeler === null) $kunyeler = (array)$kunyeGetir($secenek);
 
   // (2) Alış fiyatları — yalnız satış fiyatı girildiyse.
   $satisFiyat = hks_kunye_fiyat_sayi($ortak['fiyat'] ?? 0);
@@ -223,6 +238,22 @@ function hks_plan_kunye_coz_cekirdek(array $ortak, callable $kunyeGetir, ?callab
 
   // "Eğer stok varsa" kuralı: yetmiyorsa HİÇBİR ŞEY gönderilmez (kısmi gönderim yok).
   if ($toplamKalan < $hedef) {
+    // Filtre kullanıldıysa: filtrenin dışında kalan kalanlı künyeler (sıfat uyumsuz) bilgi notu.
+    if ($ek['sifatFiltreKullanildi']) {
+      try {
+        $var = [];
+        foreach ($kunyeler as $k) $var[hks_kunye_no_norm($k['kunyeNo'] ?? '')] = true;
+        $disN = 0; $disKg = 0.0;
+        foreach ((array)$kunyeGetir($secenek) as $k) {
+          $kl = (float)($k['kalan'] ?? 0);
+          if ($kl > 0 && !isset($var[hks_kunye_no_norm($k['kunyeNo'] ?? '')])) { $disN++; $disKg += $kl; }
+        }
+        if ($disN > 0) {
+          $atlanNot .= ' ' . $disN . ' künye (' . hks_kunye_kg_metni(round($disKg, 3)) .
+            ' KG) seçilen sıfatla uyumsuz olduğu için HKS listesinde yok.';
+        }
+      } catch (Throwable $e) { /* not atlanır */ }
+    }
     return ['hata' => 'Stok yetersiz: plan ' . hks_kunye_kg_metni($hedef) .
       ' KG istiyor, künyelerde toplam ' . hks_kunye_kg_metni($toplamKalan) .
       ' KG kalan var.' . $atlanNot . ' Hiçbir bildirim gönderilmedi, taslak silinmedi — stok girişi ' .
@@ -422,6 +453,21 @@ function hks_kunye_sifat_uyumsuz_ekle($firmaId, array $kunyeNolar, $sifatId, ?st
   }
   hks_kv_yaz(hks_kunye_sifat_kv_anahtari($firmaId), hks_kunye_sifat_map_ekle($map, $kunyeNolar, $sf, $bugun));
   return $yeni;
+}
+
+// 'kunyeler' ucu, KisiSifat-filtreli (uyumlu) liste DOLUysa: ona girmeyen künyeler
+// sifatUyumsuz=true olur (mevcut öğrenilmiş bayrak korunur — VEYA). Liste süzülmez.
+function hks_kunyelere_sifat_filtre_bayragi(array $kunyeler, array $uyumlu): array {
+  if (!$uyumlu) return $kunyeler;   // boş uyumlu liste = fail-open, hiçbir künye işaretlenmez
+  $ok = [];
+  foreach ($uyumlu as $u) { if (is_array($u)) $ok[hks_kunye_no_norm($u['kunyeNo'] ?? '')] = true; }
+  foreach ($kunyeler as &$k) {
+    if (!is_array($k)) continue;
+    $uyumsuz = !isset($ok[hks_kunye_no_norm($k['kunyeNo'] ?? '')]);
+    $k['sifatUyumsuz'] = $uyumsuz || !empty($k['sifatUyumsuz']);
+  }
+  unset($k);
+  return $kunyeler;
 }
 
 // 'kunyeler' ucu: sifatId verildiyse her künyeye sifatUyumsuz bayrağı ekler.

@@ -437,7 +437,11 @@ function hks_kunye_penceresi($cfg, $secenek, DateTime $baslangic, DateTime $biti
   $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
   $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
   $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
-  // KisiSifat BİLEREK gönderilmiyor: gönderilince bazı künyeler listeden düşüyor.
+  // KisiSifat YALNIZ $secenek['kisiSifat'] > 0 ise gider (alfabetik: KalanMiktari… < KisiSifat < KunyeNo).
+  // HKS bu filtreyle "kişi hangi sıfatla bildirim aldıysa o sıfatla referans künye kullanabilir"
+  // kuralını uygular; listeden düşen künyeler o sıfatla UYUMSUZDUR (istenen davranış).
+  // Anahtar yoksa/0 ise filtre gönderilmez (eski davranış, XML birebir aynı).
+  if ((int)($secenek['kisiSifat'] ?? 0) > 0) $p[] = '<a:KisiSifat>' . (int)$secenek['kisiSifat'] . '</a:KisiSifat>';
   $p[] = '<a:KunyeNo>0</a:KunyeNo>';
   $p[] = '<a:MalinSahibiTcKimlikVergiNo>' . hks_esc($cfg['vergiNo']) . '</a:MalinSahibiTcKimlikVergiNo>';
   if (!empty($secenek['urunId'])) $p[] = '<a:UrunId>' . (int)$secenek['urunId'] . '</a:UrunId>';
