@@ -4083,7 +4083,7 @@ function kunyeCiz() {
       `<input type="checkbox" data-i="${i}">` +
       `<div class="bilgi"><div class="no">${k.kunyeNo}</div>` +
       `<div class="detay">${eHtml(k.tarih)} · ${eHtml(k.urun || '')} ${k.cins ? '· ' + eHtml(k.cins) : ''}` +
-      (k.sifatUyumsuz === true ? '<span class="sifat-uyumsuz" title="Bu künye seçilen bildirimci sıfatıyla uyumsuz çıktı; otomatik dağıtıma girmez (elle seçebilirsiniz).">sıfat uyumsuz</span>' : '') +
+      (k.sifatUyumsuz === true ? '<span class="sifat-uyumsuz" title="HKS bu künyeyi seçilen sıfatla kullanılamaz gösterdi / uyumsuz çıktı; otomatik dağıtıma girmez (elle seçebilirsiniz).">sıfat uyumsuz</span>' : '') +
       `</div></div>` +
       `<div class="kalan-blok"><div class="kalan">${fmt(k.kalan)} ${k.birim || 'KG'}</div>${fiyatSatiri}</div>` +
       `<input class="miktar" data-i="${i}" inputmode="decimal" placeholder="miktar" disabled>`;

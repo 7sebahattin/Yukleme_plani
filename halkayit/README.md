@@ -97,8 +97,12 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
   (28 gün) bile altında kaldığından, HKS hangi kesin algoritmayı kullanırsa
   kullansın sınırı asla aşmaz.
 - **`UrunId` fiilen zorunludur** (şemada opsiyonel görünse de). Arayüz ürün seçtirir.
-- **`KisiSifat` filtresi bilerek gönderilmez** — gönderilince bazı künyeler (farklı
-  sıfatla bildirilmiş olanlar) listeden düşüyor.
+- **`KisiSifat` filtresi yalnız isteğe bağlı `kisiSifat` seçeneğiyle gönderilir** —
+  HKS "kişi hangi sıfatla bildirim aldıysa o sıfatla referans künye kullanabilir"
+  kuralını bununla uygular; listeden düşen künyeler o sıfatla uyumsuzdur. Plan
+  taslağı çözümü (`hks_plan_kunye_coz_cekirdek`) önce filtreli listeyi dener
+  (boş/hata → filtresiz eski yol, fail-open); `kunyeler` ucu `sifatId` ile
+  filtreye girmeyenleri `sifatUyumsuz` işaretler. `kisiSifat` yoksa XML eskisi gibidir.
 - **İhracat + Satış + YurtDisiMi=true** olduğunda ikinci kişi bilgisi gerekmez;
   referanslı satışta sadece `MalinMiktari` + `MalinSatisFiyat` yeterli.
 - **Bu CANLI sistemdir.** Her gönderim gerçek bildirimdir, geri alınamaz, rüsum
