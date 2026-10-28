@@ -6831,3 +6831,38 @@ html[data-theme="dark"] .nav-rozet { background: #ef4444; color: #1a0606; }
     transform: rotate(45deg); margin-top: -3px; transition: transform .18s ease; opacity: .8;
 }
 .sidebar-grup:not([open]) > summary .sidebar-section-ok { transform: rotate(-45deg); margin-top: 0; }
+
+/* =========================================================
+   EKRAN KİLİDİ (v454) — yalnız masaüstü (≥900px + fare). Mobilde kilit yok.
+   <dialog id="ekranKilit"> app.js ile showModal() edilir (üst katman: açık diğer
+   pencerelerin ÜSTÜNDE, arka plan etkileşimsiz). Sunucu kilitliyse body.ekran-kilitli
+   içeriği ilk çizimde gizler. Tokenlar temayla değişir (koyu için ayrı kural gerekmez).
+   ========================================================= */
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
+    body.ekran-kilitli > *:not(#ekranKilit) { visibility: hidden !important; }
+}
+dialog.ekran-kilit {
+    border: 0; padding: 0; background: transparent; color: var(--text);
+    max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh;
+}
+dialog.ekran-kilit::backdrop { background: var(--bg); }
+dialog.ekran-kilit[open] { display: flex; align-items: center; justify-content: center; }
+.ekran-kilit-kart {
+    width: 100%; max-width: 380px; box-sizing: border-box; margin: 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 28px 24px; text-align: center;
+    display: flex; flex-direction: column; gap: 12px;
+}
+.ekran-kilit-ikon { font-size: 36px; line-height: 1; }
+.ekran-kilit-kart h2 { margin: 0; font-size: 20px; }
+.ekran-kilit-not { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.ekran-kilit-girdi {
+    width: 100%; box-sizing: border-box; padding: 11px 14px; font-size: 16px;
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--card); color: var(--text); text-align: center;
+}
+.ekran-kilit-girdi:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.ekran-kilit-hata { color: var(--danger); background: var(--danger-soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.ekran-kilit-hata[hidden] { display: none; }
+.ekran-kilit-btn { width: 100%; justify-content: center; }
+.ekran-kilit-cikis { color: var(--muted); font-size: 13px; text-decoration: underline; }

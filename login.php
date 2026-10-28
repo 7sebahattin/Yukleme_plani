@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Kullanıcı adı veya şifre hatalı.';
     } else {
         $token = create_session((int)$user['id']);
+        if (function_exists('ekran_kilit_temizle')) ekran_kilit_temizle();   // v454: önceki oturumdan kilit kalıntısı
         setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
         audit_log_event('login_success', 'auth', null, null, null, (int)$user['id']);
 
