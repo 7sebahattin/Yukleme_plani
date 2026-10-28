@@ -2955,3 +2955,105 @@ function ekranAlti() {
         });
     });
 })();
+
+
+/* Ekran kilidi (v454): YALNIZ masaüstü (≥900px + fare). 5 dk hareketsizlikte şifre penceresi
+   açılır (sayfa yenilenmez → form/sekme durumu korunur); sunucu durumu oturumda tutar
+   (ekran_kilit.php), yenileme / yeni sekme kilitli gelir. Son hareket zamanı sekmeler arası
+   localStorage'da paylaşılır; kiosk ekranlarında (.pdks-kiosk) otomatik kilit YOK. */
+(function () {
+    var dlg = document.getElementById('ekranKilit');
+    if (!dlg || typeof dlg.showModal !== 'function') return;
+    var form = document.getElementById('ekranKilitForm');
+    var girdi = document.getElementById('ekranKilitSifre');
+    var hataEl = document.getElementById('ekranKilitHata');
+    var btn = document.getElementById('ekranKilitBtn');
+    var MQ = window.matchMedia ? window.matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)') : null;
+    var SURE = window.ASYA_KILIT_MS > 0 ? window.ASYA_KILIT_MS : 300000;   // test kancası
+    var HAREKET = 'asya_son_hareket', DURUM = 'asya_kilit_durum';
+    var yerel = Date.now(), sonYazim = 0, bekleZ = null;
+
+    function masaustu() { return !!(MQ && MQ.matches); }
+    function kiosk() { return !!document.querySelector('.pdks-kiosk'); }
+    function depoOku(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+    function depoYaz(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+    function son() { return Math.max(yerel, parseInt(depoOku(HAREKET), 10) || 0); }
+    function hareket() {
+        if (dlg.open) return;
+        var t = Date.now();
+        yerel = t;
+        if (t - sonYazim < 2000) return;
+        sonYazim = t;
+        depoYaz(HAREKET, String(t));
+    }
+    function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
+    function gonder(islem, sifre) {
+        return fetch(dlg.getAttribute('data-uc'), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ csrf: csrf(), islem: islem, sifre: sifre || '' })
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { j.durum = r.status; return j; }); });
+    }
+    function hataGoster(m) { hataEl.textContent = m || ''; hataEl.hidden = !m; }
+
+    function ac(yayinla) {
+        if (dlg.open) return;
+        document.body.classList.add('ekran-kilitli');
+        try { dlg.showModal(); } catch (e) { dlg.setAttribute('open', ''); }
+        girdi.value = ''; hataGoster('');
+        setTimeout(function () { try { girdi.focus(); } catch (e) {} }, 30);
+        if (yayinla) depoYaz(DURUM, 'k:' + Date.now());
+    }
+    function kapat(yayinla) {
+        if (!dlg.open) { document.body.classList.remove('ekran-kilitli'); return; }
+        dlg.close();
+        document.body.classList.remove('ekran-kilitli');
+        girdi.value = ''; hataGoster('');
+        yerel = Date.now(); sonYazim = 0; hareket();
+        if (yayinla) depoYaz(DURUM, 'a:' + Date.now());
+    }
+    function kilitle() {
+        ac(true);
+        gonder('kilitle').catch(function () {});   // sunucu da kilitli bilsin (yenilemeye dayanır); hata olsa pencere açık kalır
+    }
+    function kontrol() {
+        if (dlg.open || !masaustu() || kiosk()) return;
+        if (Date.now() - son() >= SURE) kilitle();
+    }
+
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); });   // Esc ile kapanmaz
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (btn.disabled) return;
+        if (!girdi.value) { hataGoster('Şifrenizi girin.'); girdi.focus(); return; }
+        btn.disabled = true;
+        gonder('ac', girdi.value).then(function (j) {
+            if (j.ok) { btn.disabled = false; kapat(true); return; }
+            if (j.durum === 401) { location.href = dlg.getAttribute('data-login') + '?next=' + encodeURIComponent(location.pathname + location.search); return; }
+            hataGoster(j.error || 'Kilit açılamadı. Tekrar deneyin.');
+            girdi.value = ''; girdi.focus();
+            var bekle = parseInt(j.bekle, 10) || 0;
+            if (bekle > 0) {
+                clearTimeout(bekleZ);
+                bekleZ = setTimeout(function () { btn.disabled = false; hataGoster(''); girdi.focus(); }, bekle * 1000);
+            } else btn.disabled = false;
+        }).catch(function () { btn.disabled = false; hataGoster('Bağlantı hatası. Tekrar deneyin.'); });
+    });
+
+    ['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart', 'pointerdown'].forEach(function (ad) {
+        document.addEventListener(ad, hareket, { passive: true, capture: true });
+    });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) kontrol(); });
+    window.addEventListener('focus', kontrol);
+    window.addEventListener('storage', function (e) {   // başka sekmede kilit / açma
+        if (e.key !== DURUM || !e.newValue) return;
+        if (e.newValue.charAt(0) === 'k') { if (masaustu() && !kiosk()) ac(false); }
+        else kapat(false);
+    });
+    setInterval(kontrol, 10000);
+    window.__ekranKilitKontrol = kontrol;   // test kancası
+
+    // Sayfa açılışı: sunucu kilitliyse (masaüstünde) pencereyi aç; değilse bu yükleme bir hareket sayılır.
+    if (dlg.hasAttribute('data-kilitli') && masaustu()) ac(false);
+    else { yerel = Date.now(); depoYaz(HAREKET, String(yerel)); sonYazim = yerel; }
+})();

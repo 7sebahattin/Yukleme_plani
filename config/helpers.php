@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v453');
+    define('APP_SURUM', 'v454');
 }
 
 // --- HTML kaçışı ---
@@ -1074,6 +1074,8 @@ function render_header(string $title, bool $print_mode = false): void {
     // body 'bn-yok' alır: --bn-h 0 olur, alt boşluk kalkar.
     $GLOBALS['_nav_alt_model'] = $print_mode ? null : nav_alt_model();
     $__body_cls = $print_mode ? 'print-mode' : ($GLOBALS['_nav_alt_model'] === null ? 'bn-yok' : '');
+    // v454: sunucu kilitliyse içerik ilk çizimde gizli gelir (kilit penceresi app.js ile açılır; yalnız masaüstü).
+    if (!$print_mode && function_exists('ekran_kilitli_mi') && current_user() !== null && ekran_kilitli_mi()) $__body_cls = trim($__body_cls . ' ekran-kilitli');
 ?>
 <body class="<?= $__body_cls ?>"<?= $__body_style ?>>
 <?php if (!$print_mode): ?>
@@ -1174,6 +1176,7 @@ function render_footer(bool $print_mode = false): void {
         // sözleşmesi nav_alt_sayfalar() / nav_alt_izinler() / nav_alt_model().
         if ($m !== null) nav_alt_ciz($m, $base);
 
+        if (function_exists('ekran_kilit_html')) echo ekran_kilit_html(current_user());
         echo '<script src="' . base_url() . 'assets/app.js?v=' . filemtime(__DIR__ . '/../assets/app.js') . '"></script></body></html>';
     } else {
         echo '</main></body></html>';
@@ -2685,6 +2688,7 @@ function beyan_next_statuses(string $current): array {
 }
 
 require_once __DIR__ . '/beyan_permissions.php';
+require_once __DIR__ . '/ekran_kilit.php';   // v454: masaüstü ekran kilidi (render_footer/header kullanır)
 function can_beyan(string $perm): bool {
     if (!function_exists('can')) return false;
     if (function_exists('is_admin') && is_admin()) return true;
