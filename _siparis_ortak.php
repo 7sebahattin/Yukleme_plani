@@ -320,10 +320,10 @@ function sipui_pkl_ad_html(array $sev, array $pkl): string
 }
 
 /** Tur no — YALNIZ bağlı beyan parti no'su yoksa (parti varsa rozetleri sipariş no'nun üstünde gösterilir). */
-function sipui_tur_html(array $sev, array $parti, bool $satir = true): string
+function sipui_tur_html(array $sev, array $parti, bool $satir = true, bool $hep = false): string
 {
     $sid = (int)($sev['id'] ?? 0);
-    if (isset($parti[$sid]) && (string)($parti[$sid]['parti'] ?? '') !== '') return '';
+    if (!$hep && isset($parti[$sid]) && (string)($parti[$sid]['parti'] ?? '') !== '') return '';
     $tur = trim((string)($sev['tur_no'] ?? ''));
     if ($tur === '') return '';
     $ic = '<span>Tur ' . h($tur) . '</span>';

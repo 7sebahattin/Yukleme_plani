@@ -35,7 +35,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
           <?= sipui_pkl_ad_html($r, $sec_pkl) ?>
           <?= sipui_parti_rozet_html($r, $sec_parti) ?>
           <a class="sip-ref" href="siparis_view.php?id=<?= $__id ?>"><?= h((string)$r['order_ref']) ?></a>
-          <?= sipui_tur_html($r, $sec_parti) ?>
+          <?= sipui_tur_html($r, $sec_parti, true, !empty($sec_tur_hep)) ?>
           <?php if ($__uy > 0): ?>
             <span class="sip-uy-kap"><a class="sip-uy-say<?= (int)$r['acik_catisma'] > 0 ? ' sip-uy-say--catisma' : '' ?>" href="siparis_view.php?id=<?= $__id ?>#<?= (int)$r['acik_catisma'] > 0 ? 'catismalar' : 'uyarilar' ?>" data-sip-balon
                aria-label="<?= (int)$r['acik_catisma'] ?> açık çatışma, <?= (int)$r['uyari_sayisi'] ?> uyarı">⚠ <?= $__uy ?> <?= (int)$r['acik_catisma'] > 0 ? 'çatışma' : 'uyarı' ?></a><?= sipui_uyari_balon_html($r, $sec_uy ?? []) ?></span>
@@ -104,7 +104,7 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
           if ($__arac !== '—') $__parca[] = $__arac;
           echo $__parca ? implode(' · ', $__parca) : '<span class="sip-soluk">Alıcı / tarih / araç bilgisi bekleniyor</span>';
         ?>
-        <?= sipui_tur_html($r, $sec_parti, false) ?>
+        <?= sipui_tur_html($r, $sec_parti, false, !empty($sec_tur_hep)) ?>
         <?= sipui_navlun_html($r) ?>
         <?php $__tel = trim((string)($r['sofor_telefon'] ?? '')); if ($__tel !== ''): ?><div class="sip-soluk sip-sofor-tel">Şoför tel: <?= h($__tel) ?></div><?php endif; ?>
         <?php $__ul = siparis_yazdir_ulke($r['alici_kodu'] ?? null, $r['alici_adi'] ?? null); if ($__ul !== ''): ?><div class="sip-ulke sip-ulke--kart">Alıcı ülke: <?= h($__ul) ?></div><?php endif; ?>
