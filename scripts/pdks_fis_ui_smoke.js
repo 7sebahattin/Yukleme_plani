@@ -108,20 +108,22 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     await page.goto(URL);
     await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' }); await page.setInputFiles('#fyDosya', XLSX);
     await Promise.all([page.waitForURL(/\?onizle=[a-f0-9]{32}/), page.locator('button:has-text("Önizle")').click()]);
-    ok('2) önizleme sayfası: 3 fiş, 2 hazır, 1 hatalı', await page.locator('.fy-ozet').innerText().then(t => /3\s*fiş/.test(t) && /2\s*hazır/.test(t) && /1\s*hatalı/.test(t)));
+    ok('2) önizleme sayfası: 4 fiş, 2 hazır, 1 uyarılı (E2E-4), 1 hatalı', await page.locator('.fy-ozet').innerText().then(t => /4\s*fiş/.test(t) && /2\s*hazır/.test(t) && /1\s*uyarılı/.test(t) && /1\s*hatalı/.test(t)));
     ok('2) masaüstü (1280): tablo görünür, mobil kartlar gizli', await page.locator('.fy-tablo').first().isVisible() && !(await page.locator('.fy-kartlar').isVisible()));
-    ok('2) 3 tablo satırı; E2E-1 ve E2E-2 "Hazır", E2E-3 "Hata"', (await page.locator('.pc-only tbody tr').count()) === 3 && (await page.locator('.pc-only tr.fy-s-hazir').count()) === 2 && (await page.locator('.pc-only tr.fy-s-hata').count()) === 1);
+    ok('2) 4 tablo satırı; E2E-1 ve E2E-2 "Hazır", E2E-3 "Hata", E2E-4 "Uyarı"', (await page.locator('.pc-only tbody tr').count()) === 4 && (await page.locator('.pc-only tr.fy-s-hazir').count()) === 2 && (await page.locator('.pc-only tr.fy-s-hata').count()) === 1 && (await page.locator('.pc-only tr.fy-s-uyari').count()) === 1);
+    ok('2) E2E-4 (v456): Kadın «33,5» → 33 Tam + Yarım 1; Erkek «12+1» → Erkek 12 + Şeritçi 1; yorum uyarıları görünür', await page.locator('.pc-only tr.fy-s-uyari').innerText().then(t => t.includes('Kadın · Tam · 33 kişi') && t.includes('Kadın · Yarım · 1 kişi') && t.includes('Erkek · Tam · 12 kişi') && t.includes('Şeritçi · Tam · 1 kişi') && t.includes('33 Tam + 1 Yarım yorumlandı') && t.includes('12 Erkek + 1 Şeritçi yorumlandı')));
+    ok('2) E2E-4: uyarılı fiş varsayılan SEÇİLİ (eski-yorum şüphesi yok)', await page.locator('.pc-only tr.fy-s-uyari input[name="secilen[]"]').isChecked());
     ok('2) E2E-1 grupları: Erkek FM 2 sa · 5 kişi · 08:00→19:00 ve Yarım 12:30', await page.locator('.pc-only tbody tr').first().innerText().then(t => t.includes('FM 2 sa · 5 kişi · 08:00→19:00') && t.includes('Yarım · 1 kişi · 08:00→12:30')));
     ok('2) E2E-2: Toplam FM dağıtımı (25 sa → 9 kişi) + "Ücret nötr ✓" + gerçek tip adları (Kadın/Rampacı)', await page.locator('.pc-only tbody tr').nth(1).innerText().then(t => t.includes('25 sa → 9 kişi') && t.includes('Ücret nötr ✓') && t.includes('Kadın:') && t.includes('Rampacı:')));
-    ok('2) hatalı satır: Türkçe hücre hatası (Satır 4, «Erkek Tam»)', await page.locator('.pc-only tr.fy-s-hata').innerText().then(t => t.includes('Satır 4, «Erkek Tam»') && t.includes('ayrı sütunlara')));
+    ok('2) hatalı satır: Türkçe hücre hatası (Satır 4, «Kadın Tam» — «+» yalnız Erkek alanında)', await page.locator('.pc-only tr.fy-s-hata').innerText().then(t => t.includes('Satır 4, «Kadın Tam»') && t.includes('yalnız Erkek alanında')));
     ok('2) XSS: <script>/<img onerror> çalışmadı, DOM\'a eklenmedi', (await page.evaluate(() => window.__xss === undefined && document.querySelectorAll('#fisYukle script, #fisYukle img[src="x"]').length === 0)) && (await page.locator('#fisYukle').textContent()).includes('<script>window.__xss=1</script>'));
     ok('2) onay kutuları varsayılan: Yarım ☑ FM ☑ EK ☐ İşletme ☐', await page.locator('[name=onay_yarim]').isChecked() && await page.locator('[name=onay_fm]').isChecked() && !(await page.locator('[name=ek_yaz]').isChecked()) && !(await page.locator('[name=isletme_onay]').isChecked()));
-    ok('2) seçim: hazır fişler işaretli, hatalı disabled; sayaç (2)', await page.locator('.pc-only input[name="secilen[]"]').evaluateAll(l => l.map(c => c.checked + ':' + c.disabled).join()) === 'true:false,true:false,false:true' && (await page.locator('[data-fy-sayi]').innerText()) === '2');
+    ok('2) seçim: hazır + uyarılı fişler işaretli, hatalı disabled; sayaç (3)', await page.locator('.pc-only input[name="secilen[]"]').evaluateAll(l => l.map(c => c.checked + ':' + c.disabled).join()) === 'true:false,true:false,false:true,true:false' && (await page.locator('[data-fy-sayi]').innerText()) === '3');
     // seçim eşitleme
     await page.locator('.pc-only input[name="secilen[]"]').nth(1).uncheck();
-    ok('2) tablodan işareti kaldırınca mobil kart kutusu da kalkar ve sayaç (1)', await page.locator('input[name="secilen_m[]"]').nth(1).evaluate(c => !c.checked) && (await page.locator('[data-fy-sayi]').innerText()) === '1');
+    ok('2) tablodan işareti kaldırınca mobil kart kutusu da kalkar ve sayaç (2)', await page.locator('input[name="secilen_m[]"]').nth(1).evaluate(c => !c.checked) && (await page.locator('[data-fy-sayi]').innerText()) === '2');
     await page.locator('[data-fy-hepsi]').check();
-    ok('2) "Tümünü seç": etkin olanlar işaretlenir, disabled kalır; sayaç (2)', (await page.locator('[data-fy-sayi]').innerText()) === '2' && await page.locator('.pc-only input[name="secilen[]"]').nth(2).evaluate(c => !c.checked && c.disabled));
+    ok('2) "Tümünü seç": etkin olanlar işaretlenir, disabled kalır; sayaç (3)', (await page.locator('[data-fy-sayi]').innerText()) === '3' && await page.locator('.pc-only input[name="secilen[]"]').nth(2).evaluate(c => !c.checked && c.disabled));
     await page.locator('[data-fy-hepsi]').uncheck();
     ok('2) hepsini kaldırınca "Seçilenleri yaz" düğmesi disabled', await page.locator('#fyYazBtn').isDisabled());
     await page.locator('[data-fy-hepsi]').check();
@@ -143,17 +145,17 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     await ctx.clearCookies({ name: 'PHPSESSID' });
     await page.reload();
     ok('2b) çerez silindikten sonra önizleme yeniden açılır (hks_kv yedeği)', (await page.locator('.pc-only tr.fy-s-hazir').count()) === 2 && (await page.locator('[data-flash].err, [data-flash][class*=error], .flash-error').count()) === 0 && /onizle=[a-f0-9]{32}/.test(page.url()));
-    ok('2b) yedekten gelen önizlemede seçimler ve yazma düğmesi sağlam', (await page.locator('[data-fy-sayi]').innerText()) === '2' && await page.locator('#fyYazBtn').isEnabled());
+    ok('2b) yedekten gelen önizlemede seçimler ve yazma düğmesi sağlam', (await page.locator('[data-fy-sayi]').innerText()) === '3' && await page.locator('#fyYazBtn').isEnabled());
 
     console.log('\n=== 3. Yaz → sonuç ===');
     await Promise.all([page.waitForURL(/\?sonuc=[a-f0-9]{32}/), page.locator('#fyYazBtn').click()]);
     const sonucMetin = await page.locator('#fisYukle').innerText();
-    ok('3) sonuç özeti: 2 yazıldı · 44 kişi kaydı · 14 FM onayı · servis 1 büyük 1 küçük', /2\s*yazıldı/.test(sonucMetin) && /44\s*kişi kaydı/.test(sonucMetin) && /14\s*FM onayı/.test(sonucMetin) && /1\s*büyük\s*·\s*1\s*küçük/.test(sonucMetin), sonucMetin.slice(0, 300));
-    ok('3) sonuç: Mesai Detayı bağlantıları + toplu işlem kimlikleri (TP…)', (await page.locator('a:has-text("Mesai Detayı")').count()) === 2 && (sonucMetin.match(/TP\d{8}[0-9a-f]{8}/g) || []).length === 2);
+    ok('3) sonuç özeti: 3 yazıldı · 91 kişi kaydı · 14 FM onayı · servis 1 büyük 1 küçük', /3\s*yazıldı/.test(sonucMetin) && /91\s*kişi kaydı/.test(sonucMetin) && /14\s*FM onayı/.test(sonucMetin) && /1\s*büyük\s*·\s*1\s*küçük/.test(sonucMetin), sonucMetin.slice(0, 300));
+    ok('3) sonuç: Mesai Detayı bağlantıları + toplu işlem kimlikleri (TP…)', (await page.locator('a:has-text("Mesai Detayı")').count()) === 3 && (sonucMetin.match(/TP\d{8}[0-9a-f]{8}/g) || []).length === 3);
     const s1 = sayilar();
-    ok('3) DB: 2 mesai · 44 aktif dönem · servis toplamı 2 · 2 fis_yukle · 2 toplu işlem', s1.mesai === 2 && s1.donem === 44 && s1.servis === 2 && s1.fis_yukle === 2 && s1.toplu === 2, JSON.stringify(s1));
-    ok('3) DB: 14 FM onaylı dönem · 2 Yarım kararı (hata veren fiş YAZILMADI)', s1.fm_onayli === 14 && s1.yarim_onayli === 2, JSON.stringify(s1));
-    ok('3) sonuç sayfası yenilenebilir (PRG): F5 yazmayı TEKRARLAMAZ', await (async () => { await page.reload(); return sayilar().donem === 44 && (await page.locator('#fisYukle').innerText()).includes('yazıldı'); })());
+    ok('3) DB: 3 mesai · 91 aktif dönem · servis toplamı 2 · 3 fis_yukle · 3 toplu işlem', s1.mesai === 3 && s1.donem === 91 && s1.servis === 2 && s1.fis_yukle === 3 && s1.toplu === 3, JSON.stringify(s1));
+    ok('3) DB: 14 FM onaylı dönem · 3 Yarım kararı (hata veren fiş YAZILMADI)', s1.fm_onayli === 14 && s1.yarim_onayli === 3, JSON.stringify(s1));
+    ok('3) sonuç sayfası yenilenebilir (PRG): F5 yazmayı TEKRARLAMAZ', await (async () => { await page.reload(); return sayilar().donem === 91 && (await page.locator('#fisYukle').innerText()).includes('yazıldı'); })());
     ok('3) sonuç 360px: yatay taşma yok', await (async () => { await page.setViewportSize({ width: 360, height: 900 }); const t = await tasma(page); await page.setViewportSize({ width: 1280, height: 900 }); return t <= 1; })());
     if (SHOT) await page.screenshot({ path: path.join(SHOT, 'fis_sonuc_1280.png'), fullPage: true });
 
@@ -161,14 +163,14 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     await page.goto(URL);
     await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' }); await page.setInputFiles('#fyDosya', XLSX);
     await Promise.all([page.waitForURL(/\?onizle=/), page.locator('button:has-text("Önizle")').click()]);
-    ok('4) önizleme: 2 fiş "zaten yüklü" (disabled) + 1 hatalı', (await page.locator('.pc-only tr.fy-s-zaten').count()) === 2 && (await page.locator('.pc-only tr.fy-s-hata').count()) === 1 && await page.locator('#fyYazBtn').isDisabled());
-    ok('4) "Vazgeç" önizlemeyi kapatır, kayıt yazılmaz', await (async () => { await Promise.all([page.waitForURL(url => !/onizle=/.test(url.toString())), page.locator('.fy-vazgec button').click()]); return sayilar().donem === 44 && (await page.locator('[data-flash]').count()) === 1; })());
+    ok('4) önizleme: 3 fiş "zaten yüklü" (disabled) + 1 hatalı', (await page.locator('.pc-only tr.fy-s-zaten').count()) === 3 && (await page.locator('.pc-only tr.fy-s-hata').count()) === 1 && await page.locator('#fyYazBtn').isDisabled());
+    ok('4) "Vazgeç" önizlemeyi kapatır, kayıt yazılmaz', await (async () => { await Promise.all([page.waitForURL(url => !/onizle=/.test(url.toString())), page.locator('.fy-vazgec button').click()]); return sayilar().donem === 91 && (await page.locator('[data-flash]').count()) === 1; })());
 
     console.log('\n=== 5. Güvenlik ===');
     const csrfsiz = await page.evaluate(async (u) => (await fetch(u, { method: 'POST', body: new URLSearchParams({ eylem: 'yaz', token: 'a'.repeat(32) }) })).status, URL);
     ok('5) CSRF\'siz POST → 403', csrfsiz === 403, String(csrfsiz));
     const kotuToken = await page.evaluate(async (u) => { const t = document.body.innerHTML.match(/name="csrf" value="([a-f0-9]+)"/); const csrf = t ? t[1] : ''; const r = await fetch(u, { method: 'POST', redirect: 'manual', body: new URLSearchParams({ csrf, eylem: 'yaz', token: '../../etc/passwd' }) }); return r.type + ':' + r.status; }, URL);
-    ok('5) geçersiz token ile yaz → yönlendirme (hiçbir şey yazılmaz)', kotuToken.startsWith('opaqueredirect') && sayilar().donem === 44, kotuToken);
+    ok('5) geçersiz token ile yaz → yönlendirme (hiçbir şey yazılmaz)', kotuToken.startsWith('opaqueredirect') && sayilar().donem === 91, kotuToken);
     const xlsDosya = path.join(TMP, 'kotu.xls'); fs.writeFileSync(xlsDosya, 'PK\x03\x04bozuk');
     await page.goto(URL); await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' }); await page.setInputFiles('#fyDosya', xlsDosya);
     await page.evaluate(() => document.getElementById('fyDosya').removeAttribute('accept'));
