@@ -32,7 +32,13 @@ function ekran_kilitle(): void {
     $_SESSION['ekran_kilitli'] = 1;
 }
 
-// Şifreyi doğrular, doğruysa kilidi açar. Dönüş: ['ok'=>bool, 'mesaj'=>string, 'bekle'=>int sn].
+// Giriş / çıkışta kilit kalıntısını temizler (kilitliyken çıkış yapılıp yeniden girilince pencere çıkmasın).
+function ekran_kilit_temizle(): void {
+    ekran_kilit_oturum();
+    unset($_SESSION['ekran_kilitli'], $_SESSION['ekran_kilit_hata'], $_SESSION['ekran_kilit_bekle']);
+}
+
+// Şifreyi doğrular, doğruysa kilidi açar. Dönüş: ['ok'=>bool, 'mesaj'=>string, 'bekle'=>int sn, 'engelli'=>bool (yalnız bekleme sürerken reddedildiyse)].
 function ekran_kilit_ac(PDO $pdo, int $userId, string $sifre, ?int $simdi = null): array {
     ekran_kilit_oturum();
     $simdi = $simdi ?? time();
@@ -40,7 +46,7 @@ function ekran_kilit_ac(PDO $pdo, int $userId, string $sifre, ?int $simdi = null
     $bekleBitis = (int)($_SESSION['ekran_kilit_bekle'] ?? 0);
     if ($bekleBitis > $simdi) {
         $kalan = $bekleBitis - $simdi;
-        return ['ok' => false, 'mesaj' => 'Çok fazla hatalı deneme. ' . $kalan . ' sn sonra tekrar deneyin.', 'bekle' => $kalan];
+        return ['ok' => false, 'mesaj' => 'Çok fazla hatalı deneme. ' . $kalan . ' sn sonra tekrar deneyin.', 'bekle' => $kalan, 'engelli' => true];
     }
     if ($userId <= 0 || $sifre === '') {
         return ['ok' => false, 'mesaj' => 'Şifrenizi girin.', 'bekle' => 0];

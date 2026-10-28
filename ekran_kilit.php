@@ -35,7 +35,7 @@ if ($islem === 'kilitle') {
 }
 if ($islem === 'ac') {
     $s = ekran_kilit_ac(db(), (int)$kullanici['id'], is_string($in['sifre'] ?? null) ? $in['sifre'] : '');
-    audit_log_event($s['ok'] ? 'ekran_kilit_ac' : 'ekran_kilit_basarisiz', 'auth');
+    if (empty($s['engelli'])) audit_log_event($s['ok'] ? 'ekran_kilit_ac' : 'ekran_kilit_basarisiz', 'auth');   // bekleme sırasındaki denemeler audit'i şişirmesin
     if ($s['ok']) ekran_kilit_json(['ok' => true]);
     ekran_kilit_json(['ok' => false, 'error' => $s['mesaj'], 'bekle' => $s['bekle']], $s['bekle'] > 0 ? 429 : 422);
 }

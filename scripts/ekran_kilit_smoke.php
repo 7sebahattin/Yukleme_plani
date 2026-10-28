@@ -53,6 +53,12 @@ ok('B3 bekleme sürerken DOĞRU şifre bile reddedilir', $r['ok'] === false && $
 $r = ekran_kilit_ac($db, 1, 'dogru-sifre', 2031);
 ok('B4 bekleme bitince doğru şifre açar', $r['ok'] === true && !ekran_kilitli_mi());
 
+$r = ekran_kilit_ac($db, 1, 'x', 2040); $_SESSION['ekran_kilit_bekle'] = 2100;
+$r = ekran_kilit_ac($db, 1, 'x', 2050);
+ok('B5 bekleme sırasında reddedilen deneme "engelli" işaretli (audit şişmez)', !empty($r['engelli']) && $r['bekle'] === 50);
+ekran_kilitle(); $_SESSION['ekran_kilit_hata'] = 3; ekran_kilit_temizle();
+ok('B6 ekran_kilit_temizle tüm kilit anahtarlarını siler', !ekran_kilitli_mi() && !isset($_SESSION['ekran_kilit_hata']) && !isset($_SESSION['ekran_kilit_bekle']));
+
 // ── C) Hesap durumları ───────────────────────────────────────
 $_SESSION = []; ekran_kilitle();
 ok('C1 pasif kullanıcı doğru şifreyle de açamaz', ekran_kilit_ac($db, 2, 'pasif-sifre', 3000)['ok'] === false);
@@ -83,6 +89,9 @@ $css = file_get_contents("$KOK/assets/style.css");
 $sw  = file_get_contents("$KOK/sw.js");
 ok('E1 uç: oturum + POST + CSRF kapısı', str_contains($uc, 'current_user()') && str_contains($uc, "!== 'POST'") && str_contains($uc, 'csrf_check('));
 ok('E2 şifre audit/log\'a yazılmaz', !preg_match('/audit_log_event\([^;]*sifre/i', $uc) && !preg_match('/(error_log|audit_log_event)\([^;]*\$sifre/', $cor));
+$lg = file_get_contents("$KOK/login.php"); $lo = file_get_contents("$KOK/logout.php");
+ok('E3b login + logout kilit kalıntısını temizler', str_contains($lg, 'ekran_kilit_temizle') && str_contains($lo, 'ekran_kilit_temizle'));
+ok('E3c bekleme denemesi audit\'e yazılmaz', str_contains($uc, "empty(\$s['engelli'])"));
 ok('E3 401 oturum yoksa', str_contains($uc, ", 401)"));
 ok('E4 helpers: require + footer + header sınıfı',
     str_contains($hlp, "require_once __DIR__ . '/ekran_kilit.php'") && str_contains($hlp, 'ekran_kilit_html(current_user())') && str_contains($hlp, 'ekran-kilitli'));
