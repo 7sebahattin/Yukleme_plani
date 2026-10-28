@@ -365,6 +365,7 @@ $yazdirEk = function (?string $bolumAdi): string {
           echo '<div class="empty sip-bos"><p>' . h($bos) . '</p></div>';
       } else {
           $sec_rows = $b['rows']; $sec_kalem = $kalemHarita; $sec_parti = $partiHarita; $sec_pkl = $pklHarita; $sec_uy = $uyHarita; $sec_dg = $dgHarita;
+          $sec_tur_hep = in_array($id, ['sipEvrak', 'sipKapali'], true);   // v442: Evrak/Kapanan bölümünde parti no olsa da Tur no görünür
           include __DIR__ . '/_siparis_liste.php';
           echo $sayfalama($b, $param);
       }
