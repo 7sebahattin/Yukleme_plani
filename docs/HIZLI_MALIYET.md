@@ -45,10 +45,15 @@ toplamlar, not, depo, oluşturan/güncelleyen kullanıcı, zamanlar ve sürüm
 kolonları vardır. `document_json` kanonik on satırı birim/miktar/fiyat/baz
 bilgileriyle saklar. Eski maliyet listesine veya satış önerisine katılmaz.
 
-Şema `docs/sql/quick_cost_sheets.sql` dosyasında **hazırlandı, mevcut veya canlı
-DB'ye uygulanmadı**. Runtime DDL veya otomatik migration yoktur. Tablo yokken
-hesaplama ekranı çalışır ve kaydetme kapalı görünür. Canlı kurulum için son açık
-onay sonrası bu tek yeni tablo kurulmalıdır; kullanıcı tablolarına ALTER/DML yoktur.
+Şema `docs/sql/quick_cost_sheets.sql` dosyasındadır. Otomatik migration yoktur.
+Tablo yokken hesaplama ekranı çalışır ve kaydetme kapalı görünür. Kullanıcı
+30 Ekim'de canlı yayın ve yalnız bu yeni tablonun kurulmasına açık onay verdi.
+Bu onaya uygun manuel kurulum, sayfadaki **Yeni maliyet tablosunu kur** düğmesiyle
+yalnız yönetici + maliyet yazma/okuma + aktif depo + POST/CSRF kapılarından geçer.
+`config/quick_cost_schema.php` sabit hash'i doğrulanmış SQL'den yalnız tek CREATE
+çalıştırır; kurulum GET/include/sayfa açılışında çalışmaz, hazır tabloda işlem yapmaz.
+Mevcut kullanıcı tablolarına ALTER/DML yoktur. Kurulum düğmesi SQL dosyasını PHP
+üzerinden yerel okur; dağıtımda `docs/sql/quick_cost_sheets.sql` bulunmalıdır.
 Yerel testler tamamen anonim bellek içi SQLite kullanır. MySQL/InnoDB kurulumu
 ve gerçek cihaz kabulü bu teslimde yapılmış sayılmaz.
 
@@ -67,6 +72,7 @@ yeniden kontrol edilmelidir.
 
 ```powershell
 php scripts/quick_cost_smoke.php
+php scripts/quick_cost_schema_smoke.php
 node scripts/quick_cost_ui_smoke.js
 php scripts/quick_cost_page_smoke.php
 $env:PW_PATH = '<kurulu playwright veya playwright-core paket yolu>'

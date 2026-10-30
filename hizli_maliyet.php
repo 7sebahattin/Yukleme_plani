@@ -4,6 +4,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cost_calc.php';
 require_once __DIR__ . '/config/quick_cost_store.php';
+require_once __DIR__ . '/config/quick_cost_schema.php';
 
 $auth_user = require_login();
 require_maliyet('read');
@@ -57,10 +58,19 @@ $page = max(1, min(100000, (int)(is_scalar($_GET['page'] ?? 1) ? ($_GET['page'] 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_maliyet('write');
     csrf_check(is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : null);
+    if (($_POST['action'] ?? '') === 'install_schema' && !is_admin()) {
+        forbidden('Kayıt altyapısını yalnız sistem yöneticisi kurabilir.');
+    }
 }
 
 try {
     $storage_ready = quick_cost_storage_ready(db());
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'install_schema') {
+        $installed = quick_cost_install(db());
+        set_flash('success', $installed['created'] ? 'Hızlı Maliyet kayıt altyapısı kuruldu.' : 'Hızlı Maliyet kayıt altyapısı zaten hazır.');
+        header('Location: hizli_maliyet.php');
+        exit;
+    }
     if ($storage_ready && $id > 0) {
         $record = quick_cost_find(db(), $id);
         if ($record === null) {
@@ -113,7 +123,9 @@ try {
     } else {
         error_log('[hizli_maliyet] ' . get_class($e));
         http_response_code(503);
-        $errors[] = 'Kayıt hizmetine şu anda ulaşılamıyor. Girdiğiniz değerler aşağıda korunuyor.';
+        $errors[] = ($_POST['action'] ?? '') === 'install_schema'
+            ? 'Tablo kurulumunun tamamlandığı doğrulanamadı. Sayfayı yeniden açıp kontrol edin.'
+            : 'Kayıt hizmetine şu anda ulaşılamıyor. Girdiğiniz değerler aşağıda korunuyor.';
     }
 } catch (JsonException $e) {
     http_response_code(503);
@@ -133,6 +145,17 @@ render_flash();
     <?php if ($record): ?>
     <p class="muted"><?= $is_copy ? 'Kopyalanan hesap' : 'Hesap' ?> #<?= (int)$record['id'] ?> · Oluşturan kullanıcı #<?= (int)$record['created_by'] ?> · <?= h($record['created_at']) ?><?= !empty($record['updated_at']) ? ' · Güncelleme: ' . h($record['updated_at']) : '' ?></p>
     <?php if (!$is_copy && $can_write): ?><p><a class="btn" href="hizli_maliyet.php?id=<?= $id ?>&amp;copy=1">Kopyalayarak yeni hesap</a></p><?php endif; ?>
+    <?php endif; ?>
+    <?php if (!$storage_ready && $can_write && is_admin()): ?>
+    <section class="qc-panel" style="margin-bottom:18px" aria-labelledby="qc-install-heading">
+        <h2 id="qc-install-heading">Hızlı Maliyet kayıt altyapısı</h2>
+        <p>Kaydetmeyi açmak için yalnız yeni Hızlı Maliyet tablosu oluşturulur. Mevcut maliyet kayıtları korunur.</p>
+        <form method="post" action="hizli_maliyet.php">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="install_schema">
+            <button class="btn btn-primary" type="submit">Yeni maliyet tablosunu kur</button>
+        </form>
+    </section>
     <?php endif; ?>
     <?php require __DIR__ . '/_hizli_maliyet_form.php'; ?>
     <section id="qc-records" class="qc-panel">

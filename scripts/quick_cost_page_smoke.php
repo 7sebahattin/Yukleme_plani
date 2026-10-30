@@ -4,6 +4,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit; }
 $root = dirname(__DIR__);
 require_once $root . '/config/quick_cost_store.php';
+require_once $root . '/config/quick_cost_schema.php';
 $testPdo = new PDO('sqlite::memory:');
 $testPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $testPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
@@ -11,6 +12,7 @@ $testPdo->exec('CREATE TABLE quick_cost_sheets (id INTEGER PRIMARY KEY AUTOINCRE
 $testPdo->exec('CREATE TABLE cost_sheets (id INTEGER PRIMARY KEY, marker TEXT)');
 $testPdo->exec("INSERT INTO cost_sheets VALUES (1,'untouched')");
 $testPermissions = ['read', 'write'];
+$testAdmin = true;
 $testDepot = 'DEMO';
 $testStatus = 200;
 $testHeaders = [];
@@ -19,6 +21,7 @@ function db(): PDO { return $GLOBALS['testPdo']; }
 function current_user(): array { return ['id' => 7]; }
 function active_depot(): string { return $GLOBALS['testDepot']; }
 function can_maliyet(string $permission): bool { return in_array($permission, $GLOBALS['testPermissions'], true); }
+function is_admin(): bool { return $GLOBALS['testAdmin']; }
 function require_maliyet(string $permission): void { if (!can_maliyet($permission)) forbidden('permission'); }
 function require_login(): array { return current_user(); }
 function forbidden(string $message): void { test_status(403); throw new QuickPageExit($message); }
@@ -91,6 +94,11 @@ if (($argv[1] ?? '') === '--render') {
 $result = page();
 check($result['status'] === 200 && str_contains($result['html'], 'qc-form'), 'new page renders');
 check(in_array('Cache-Control: no-store, private', $result['headers'], true), 'no-store header');
+check(in_array('Location: hizli_maliyet.php', page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'])['headers'], true), 'admin explicit setup is idempotent when ready');
+check(page([], ['action'=>'install_schema','csrf'=>'bad'])['status'] === 403, 'setup requires CSRF');
+$testAdmin = false;
+check(page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'])['status'] === 403, 'setup denies non-admin writer');
+$testAdmin = true;
 $testPermissions = [];
 check(page()['status'] === 403, 'read denied');
 $testPermissions = ['read'];
@@ -131,6 +139,11 @@ check(page(['id'=>'2'])['status'] === 503, 'corrupt JSON fails safely');
 db()->exec('DROP TABLE quick_cost_sheets');
 $missing = page();
 check($missing['status'] === 200 && str_contains($missing['html'], 'disabled'), 'missing schema renders disabled save');
+check(str_contains($missing['html'], 'Yeni maliyet tablosunu kur'), 'admin sees explicit setup form when missing');
+$testAdmin = false;
+check(!str_contains(page()['html'], 'Yeni maliyet tablosunu kur'), 'non-admin never sees setup form');
+$testAdmin = true;
+check(page(['action'=>'install_schema'])['status'] === 200 && !quick_cost_storage_ready(db()), 'GET cannot create schema');
 check(page([], postDocument($document))['status'] === 422, 'missing schema no runtime migration');
 check(db()->query('SELECT marker FROM cost_sheets WHERE id=1')->fetchColumn() === 'untouched', 'legacy record unchanged');
 // Execute the real navigation function without loading helpers' migration IIFE.
