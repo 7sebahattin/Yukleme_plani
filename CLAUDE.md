@@ -7,7 +7,9 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v455` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v456` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+
+**Hızlı Maliyet (v456):** `hizli_maliyet.php` bağımsız net kg hesabıdır; `config/quick_cost.php` saf motor, `config/quick_cost_store.php` depo/yetki/sürüm kontrollü kayıt, `_hizli_maliyet_form.php` ve `assets/hizli-maliyet.*` mobil arayüz. `quick_cost_sheets` eski `cost_sheets` ile karışmaz. Şema yalnız hazırlanmış `docs/sql/quick_cost_sheets.sql` dosyasındadır; otomatik migration YOK, mevcut DB'ye çalıştırmak son açık onay gerektirir. Test ve kurulum: `docs/HIZLI_MALIYET.md`.
 
 **Mail Merkezi çevirisi YALNIZ istek üzerine (v369, sahip kararı — token):** gelen mail cron ile çevrilmez; kullanıcı mailde "Türkçeye çevir"e basar (`mail_ceviri_simdi`). Cron kuyruğu (`mail_ceviri_isle`) yalnız `config/local.php`'de `MAIL_TRANSLATE_AUTO=true` ise çalışır (`mail_ceviri_otomatik_acik()`). Otomatik çeviriyi varsayılana geri ALMA. Test: `php scripts/mail_translate_smoke.php` · `php scripts/mail_ui_smoke.php`. Ayrıntı: `docs/MAIL_OPERATIONS.md` §7.
 
