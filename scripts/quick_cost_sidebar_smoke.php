@@ -27,6 +27,10 @@ $mobileStart = strpos($source, 'function nav_alt_sayfalar(): array {');
 $mobileEnd = strpos($source, 'function nav_alt_cerez_oku(', $mobileStart);
 if ($mobileStart === false || $mobileEnd === false) throw new RuntimeException('Mobile source not found.');
 eval(substr($source, $mobileStart, $mobileEnd - $mobileStart));
+$iconStart = strpos($source, 'function nav_alt_ikon_url(');
+$iconEnd = strpos($source, '/**', $iconStart);
+if ($iconStart === false || $iconEnd === false) throw new RuntimeException('Icon URL source not found.');
+eval(substr($source, $iconStart, $iconEnd - $iconStart));
 $checks = 0;
 function qc_sidebar_check(bool $value, string $label): void {
     if (!$value) throw new RuntimeException('FAIL: ' . $label);
@@ -49,8 +53,10 @@ qc_sidebar_check($xp->query('//a[@href="/app/reports.php" and contains(@class," 
 qc_sidebar_check($xp->query('//details[@data-sb-grup="operasyon" and @open]//a[@href="/app/hizli_maliyet.php"]')->length === 1, 'operation group open');
 qc_sidebar_check(nav_aktif_anahtar() === 'qcost', 'list and form share the dedicated mobile item');
 qc_sidebar_check(nav_alt_izinler()['qcost'] === true, 'admin mobile entry works without loading cost_calc');
+qc_sidebar_check($xp->query('//a[@href="/app/hizli_maliyet.php"]//img[starts-with(@src,"/app/assets/nav-icons/qcost.svg?v=") and @alt=""]')->length === 1, 'sidebar uses the shared decorative dollar asset with cache version');
 }
 qc_sidebar_check(nav_alt_sayfalar()['qcost']['href'] === 'hizli_maliyet.php' && nav_alt_sayfalar()['qcost']['etiket'] === 'Hızlı Maliyet', 'mobile button opens the record list with the requested name');
+qc_sidebar_check(nav_alt_sayfalar()['qcost']['ikon'] === 'assets/nav-icons/qcost.svg', 'mobile item uses the same dedicated dollar icon');
 foreach (['reports.php','maliyet.php','maliyet_form.php','maliyet_view.php'] as $page) {
     [, $xp] = sidebar($page);
     qc_sidebar_check($xp->query('//a[@href="/app/reports.php" and contains(@class," active")]')->length === 1, 'existing report/cost active route retained: ' . $page);
@@ -67,4 +73,5 @@ qc_sidebar_check($xp->query('//a[@href="/app/reports.php"]')->length === 1, 'non
 qc_sidebar_check(str_contains(file_get_contents(dirname(__DIR__) . '/sw.js'), 'yukleme-plani-' . APP_SURUM), 'PWA and app versions match');
 $sw = file_get_contents(dirname(__DIR__) . '/sw.js');
 qc_sidebar_check(str_contains($sw, '/\\/hizli_maliyet(?:_form)?\\.php(\\/|$)/'), 'list/form and PATH_INFO bypass share an anchored SW rule');
+qc_sidebar_check(str_contains($sw, "'./assets/nav-icons/qcost.svg'"), 'dollar icon included in the PWA shell');
 echo 'PASS ' . $checks . " sidebar permission/highlight checks.\n";

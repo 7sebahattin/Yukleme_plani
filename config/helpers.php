@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v460');
+    define('APP_SURUM', 'v461');
 }
 
 // --- HTML kaçışı ---
@@ -603,7 +603,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rec)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
         <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
-        <?php if ($p_adm)  $lnk('hizli_maliyet.php', '🧮', 'Hızlı Maliyet', $a_quick); ?>
+        <?php if ($p_adm)  $lnk('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
 <?php   // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03, kullanıcı
@@ -739,7 +739,7 @@ function nav_alt_sayfalar(): array {
         'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Paletleme',   'dar' => null,      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
         'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',            'kisa' => 'Mal Kabul',  'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
         'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
-        'qcost'   => ['href' => 'hizli_maliyet.php',     'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
+        'qcost'   => ['href' => 'hizli_maliyet.php',     'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/qcost.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
         'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
         'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
