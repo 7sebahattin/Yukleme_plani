@@ -15,7 +15,17 @@
         private_analysis: { label: 'Özel analiz', group: 'D' }, dts_taxi: { label: 'DTS taksi', group: 'D' },
         overhead: { label: 'İşletme gideri', group: 'D' }, casus: { label: 'CASUS', group: 'D' }
     };
+    var CUSTOM_CODE = /^custom_[a-z0-9_]{1,40}$(?![\s\S])/;
     function clone(value) { return JSON.parse(JSON.stringify(value)); }
+    function upperText(value) { return String(value == null ? '' : value).toLocaleUpperCase('tr-TR'); }
+    function validatedUpper(value, label, limit, required) {
+        if (typeof value !== 'string' || Array.from(value).length > limit || /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(value)) throw new Error(label + ': geçersiz veya çok uzun metin.');
+        var result = upperText(value.trim());
+        if (Array.from(result).length > limit || (required && !result)) throw new Error(label + ': ad girin ve metin sınırını aşmayın.');
+        return result;
+    }
+    function customCode(code) { return typeof code === 'string' && CUSTOM_CODE.test(code); }
+    function rowLabel(item) { return Object.prototype.hasOwnProperty.call(CATALOG, item.code) ? CATALOG[item.code].label : upperText(item.label || '').trim(); }
     function parseNumber(value) {
         var n;
         if (typeof value === 'number') n = value;
@@ -47,11 +57,17 @@
         return whole + (first * 1000 + last) / 1000000;
     }
     function calculate(document) {
-        var net = parseNumber(document.net_kg), cents = 0, groups = { A: 0, B: 0, D: 0 }, seen = {};
-        if (!Array.isArray(document.items) || document.items.length !== Object.keys(CATALOG).length) throw new Error('Maliyet kalemleri eksik.');
+        var net = parseNumber(document.net_kg), cents = 0, groups = { A: 0, B: 0, D: 0 }, seen = Object.create(null);
+        if (!Array.isArray(document.items) || document.items.length < 10 || document.items.length > 50) throw new Error('On temel kalem ve en fazla kırk yeni kalem kullanılabilir.');
         var items = document.items.map(function (item) {
-            var meta = CATALOG[item.code];
-            if (!meta || seen[item.code]) throw new Error('Maliyet kalemi geçersiz veya tekrarlı.');
+            if (!item || typeof item !== 'object' || seen[item.code]) throw new Error('Maliyet kalemi geçersiz veya tekrarlı.');
+            var builtin = Object.prototype.hasOwnProperty.call(CATALOG, item.code), meta;
+            if (builtin) meta = CATALOG[item.code];
+            else {
+                if (!customCode(item.code)) throw new Error('Yeni kalem kodu geçersiz.');
+                var label = validatedUpper(item.label, 'Yeni kalem adı', 150, true);
+                meta = { label: label, group: 'D' };
+            }
             seen[item.code] = true;
             if (!Object.prototype.hasOwnProperty.call(UNITS, item.unit)) throw new Error('Birim geçersiz.');
             if (['net_kg', 'manual', 'fixed'].indexOf(item.basis) === -1) throw new Error('Miktar yöntemi geçersiz.');
@@ -63,6 +79,7 @@
             cents += lineCents; groups[meta.group] += lineCents;
             return Object.assign({}, item, { qty: quantity, unit_price: price, amount: amount, group: meta.group, label: meta.label });
         });
+        if (!Object.keys(CATALOG).every(function (code) { return seen[code]; })) throw new Error('On temel maliyet kalemi korunmalıdır.');
         if (cents > Math.round(TOTAL_MAX * 100)) throw new Error('Toplam maliyet üst sınırı aşıyor.');
         Object.keys(groups).forEach(function (group) { groups[group] /= 100; });
         return { items: items, groups: groups, total: cents / 100, unit_cost: unitCost(cents, net), net_kg: net };
@@ -78,7 +95,11 @@
     }
     function updateRow(document, code, field, value) {
         var next = clone(document), item = next.items.find(function (row) { return row.code === code; });
-        if (!item || ['qty', 'unit_price', 'unit'].indexOf(field) === -1) throw new Error('Maliyet alanı geçersiz.');
+        if (!item || ['qty', 'unit_price', 'unit', 'label'].indexOf(field) === -1) throw new Error('Maliyet alanı geçersiz.');
+        if (field === 'label') {
+            if (!customCode(code)) throw new Error('Temel kalemlerin adı değiştirilemez.');
+            item.label = upperText(value); return next;
+        }
         if (field === 'unit') {
             if (!Object.prototype.hasOwnProperty.call(UNITS, value)) throw new Error('Birim geçersiz.');
             item.unit = value; item.basis = value === 'fixed' ? 'fixed' : 'manual';
@@ -89,34 +110,81 @@
         } else item.unit_price = value;
         return next;
     }
+    function addCustomRow(document, code) {
+        if (!customCode(code) || document.items.some(function (item) { return item.code === code; })) throw new Error('Yeni kalem kodu geçersiz veya tekrarlı.');
+        if (document.items.filter(function (item) { return customCode(item.code); }).length >= 40 || document.items.length >= 50) throw new Error('En fazla kırk yeni kalem eklenebilir.');
+        var next = clone(document);
+        next.items.push({ code: code, label: '', unit: 'fixed', basis: 'fixed', qty: 1, unit_price: 0 });
+        return next;
+    }
+    function removeCustomRow(document, code) {
+        if (!customCode(code) || !document.items.some(function (item) { return item.code === code; })) throw new Error('Yalnız eklenen kalemler kaldırılabilir.');
+        var next = clone(document); next.items = next.items.filter(function (item) { return item.code !== code; }); return next;
+    }
     function format(value, decimals) {
         return Number(value).toLocaleString('tr-TR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
     }
     function editFormat(value) {
         return typeof value === 'number' ? value.toLocaleString('tr-TR', { maximumFractionDigits: 4 }) : String(value == null ? '' : value);
     }
+    function isZeroInput(value) {
+        if (typeof value !== 'string' || value.trim() === '') return false;
+        try { return parseNumber(value) === 0; } catch (_) { return false; }
+    }
+    function normalizeInput(value) {
+        var text = String(value);
+        if (text.trim() === '') return '0';
+        try {
+            var number = parseNumber(text);
+            return /^0\d/.test(text.trim()) ? editFormat(number) : text;
+        } catch (_) { return text; }
+    }
+    // Explain the row's calculation in words, independently of numeric drafts.
+    function formulaText(item) {
+        if (item && item.basis === 'net_kg' && item.unit === 'kg') return 'Ürün KG × fiyat = toplam maliyet';
+        var explanations = {
+            kg: 'Kg miktarı × kg fiyatı = toplam maliyet',
+            ton: 'Ton miktarı × ton fiyatı = toplam maliyet',
+            piece: 'Adet × adet fiyatı = toplam maliyet',
+            box: 'Koli / kasa adedi × birim fiyat = toplam maliyet',
+            pallet: 'Palet adedi × palet fiyatı = toplam maliyet',
+            vehicle: 'Araç sayısı × araç fiyatı = toplam maliyet',
+            fixed: 'Sabit tutar = toplam maliyet'
+        };
+        return item && Object.prototype.hasOwnProperty.call(explanations, item.unit) ? explanations[item.unit] : 'Miktar × birim fiyat = toplam maliyet';
+    }
     function canonicalPayload(document) {
         var result = calculate(document);
         return {
-            product: document.product, sheet_date: document.sheet_date, operation_type: document.operation_type,
-            method: document.method, net_kg: result.net_kg, notes: document.notes,
-            items: result.items.map(function (item) { return { code: item.code, unit: item.unit, qty: item.qty, unit_price: item.unit_price, basis: item.basis }; })
+            product: validatedUpper(document.product, 'Ürün', 150, false), sheet_date: document.sheet_date, operation_type: document.operation_type,
+            method: document.method, net_kg: result.net_kg, notes: validatedUpper(document.notes, 'Açıklama', 2000, false),
+            items: result.items.map(function (item) {
+                var row = { code: item.code, unit: item.unit, qty: item.qty, unit_price: item.unit_price, basis: item.basis };
+                if (customCode(item.code)) row.label = item.label;
+                return row;
+            })
         };
     }
     function init(dom, config) {
         var form = dom.getElementById('qc-form');
         if (!form || !config || !config.document || form.dataset.qcReady === '1') return;
         form.dataset.qcReady = '1';
-        var state = clone(config.document), readOnly = !!config.readOnly, dirty = false, submitted = false, latest = null;
+        var state = clone(config.document), readOnly = !!config.readOnly, dirty = false, submitted = false, latest = null, zeroClearedInput = null;
+        var composingInputs = new Set(), customSequence = 0;
+        state.product = upperText(state.product); state.notes = upperText(state.notes);
+        state.items.forEach(function (item) { if (customCode(item.code)) item.label = upperText(item.label); });
         var validation = dom.getElementById('qc-validation'), save = dom.getElementById('qc-save'), announceTimer;
         var rowNodes = {};
         form.querySelectorAll('[data-qc-row]').forEach(function (node) { rowNodes[node.dataset.qcRow] = node; });
         function setText(id, value) { var node = dom.getElementById(id); if (node) node.textContent = value; }
         function findItem(code) { return state.items.find(function (item) { return item.code === code; }); }
         function showError(message) { validation.textContent = message; validation.hidden = !message; }
-        function syncValue(input, value, source) { if (input !== source && input.value !== value) input.value = value; }
+        function syncValue(input, value, source) {
+            if (composingInputs.has(input)) return;
+            if (input === zeroClearedInput && dom.activeElement === input && input.value === '') return;
+            if (input !== source && input.value !== value) input.value = value;
+        }
         function paintInputs(source) {
-            form.querySelectorAll('[data-qc-operation]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.qcOperation === state.operation_type)); });
             form.querySelectorAll('[data-qc-header]').forEach(function (input) { syncValue(input, editFormat(state[input.dataset.qcHeader]), source); });
             state.items.forEach(function (item) {
                 var node = rowNodes[item.code]; if (!node) return;
@@ -124,8 +192,9 @@
                 syncValue(node.querySelector('[data-qc-field="qty"]'), editFormat(item.basis === 'net_kg' ? state.net_kg : item.qty), source);
                 syncValue(node.querySelector('[data-qc-price="settings"]'), editFormat(item.unit_price), source);
                 if (item.basis !== 'manual') syncValue(node.querySelector('[data-qc-price="main"]'), editFormat(item.unit_price), source);
+                var labelInput = node.querySelector('[data-qc-field="label"]');
+                if (labelInput) syncValue(labelInput, item.label || '', source);
             });
-            setText('qc-operation-hint', state.operation_type === 'uretim' ? 'Üretim için Ürün KG üzerinden maliyet hesabı.' : 'Fason işlem için Ürün KG üzerinden maliyet hesabı.');
         }
         function validateInputs() {
             form.querySelectorAll('input[inputmode="decimal"]').forEach(function (input) {
@@ -133,11 +202,18 @@
                 try { parseNumber(input.value); input.removeAttribute('aria-invalid'); input.setCustomValidity(''); }
                 catch (error) { input.setAttribute('aria-invalid', 'true'); input.setCustomValidity(error.message); }
             });
+            form.querySelectorAll('[data-qc-header="product"], [data-qc-header="notes"], [data-qc-field="label"]').forEach(function (input) {
+                if (input.disabled || composingInputs.has(input)) { input.removeAttribute('aria-invalid'); input.setCustomValidity(''); return; }
+                try {
+                    validatedUpper(input.value, input.dataset.qcHeader === 'notes' ? 'Açıklama' : 'Ad', input.dataset.qcHeader === 'notes' ? 2000 : 150, input.dataset.qcField === 'label');
+                    input.removeAttribute('aria-invalid'); input.setCustomValidity('');
+                } catch (error) { input.setAttribute('aria-invalid', 'true'); input.setCustomValidity(error.message); }
+            });
             state.items.forEach(function (item) {
                 var node = rowNodes[item.code]; if (!node) return;
                 var settings = node.querySelector('[data-qc-settings]'), invalid = !!node.querySelector('[aria-invalid="true"]');
                 settings.classList.toggle('has-error', invalid);
-                settings.querySelector('summary').title = invalid ? 'Geçersiz değer var. Ayar bölümünü kontrol edin.' : '';
+                settings.querySelector('summary').title = invalid ? 'Kalemde geçersiz değer var.' : '';
             });
         }
         function paint(source) {
@@ -153,6 +229,8 @@
             state.items.forEach(function (item, index) {
                 var node = rowNodes[item.code]; if (!node) return;
                 var computed = latest && latest.items[index], manual = item.basis === 'manual';
+                var label = rowLabel(item) || 'Yeni kalem';
+                node.querySelector('[data-qc-row-title]').textContent = label;
                 var price = node.querySelector('[data-qc-price="main"]'), qty = node.querySelector('[data-qc-field="qty"]');
                 node.querySelector('[data-qc-amount]').textContent = computed ? format(computed.amount, 2) + ' TL' : '—';
                 qty.disabled = readOnly || item.basis === 'fixed';
@@ -162,26 +240,86 @@
                 rebind.hidden = readOnly || item.unit !== 'kg' || item.basis === 'net_kg';
                 var priceLabel = manual ? 'Eşdeğer fiyat (TL/Ürün KG)' : (item.basis === 'fixed' ? 'Sabit gider (TL)' : 'Birim fiyat (TL/kg)');
                 node.querySelector('[data-qc-price-label]').textContent = priceLabel;
-                price.setAttribute('aria-label', CATALOG[item.code].label + ': ' + priceLabel);
-                node.querySelector('[data-qc-basis]').textContent = item.basis === 'net_kg' ? 'Miktar Ürün KG ile birlikte güncellenir.' : item.basis === 'fixed' ? 'Sabit gider · miktar 1' : 'Miktar: ' + editFormat(item.qty) + ' ' + UNITS[item.unit] + ' · düzenlemek için Ayar bölümünü açın.';
+                price.setAttribute('aria-label', label + ': ' + priceLabel);
+                qty.setAttribute('aria-label', label + ' miktarı');
+                node.querySelector('[data-qc-field="unit"]').setAttribute('aria-label', label + ' birimi');
+                node.querySelector('[data-qc-price="settings"]').setAttribute('aria-label', label + ' Ayar birim fiyatı (TL)');
+                node.querySelector('summary').setAttribute('aria-label', label + ' ayarları');
+                node.querySelector('[data-qc-amount]').setAttribute('aria-label', label + ' tutarı');
+                var remove = node.querySelector('[data-qc-remove]');
+                if (remove) remove.setAttribute('aria-label', label + ' kalemini kaldır');
+                node.querySelector('[data-qc-basis]').textContent = formulaText(item);
             });
             validateInputs();
             showError(error);
-            if (save) save.disabled = form.dataset.saveAvailable !== '1' || !latest || readOnly;
+            if (save) save.disabled = form.dataset.saveAvailable !== '1' || !latest || readOnly || composingInputs.size > 0 || !!form.querySelector('[aria-invalid="true"]');
+            var addButton = dom.getElementById('qc-add-item'), limit = state.items.filter(function (item) { return customCode(item.code); }).length >= 40;
+            if (addButton) addButton.disabled = readOnly || limit;
+            var limitHint = dom.getElementById('qc-custom-limit'); if (limitHint) limitHint.hidden = !limit;
             clearTimeout(announceTimer);
             announceTimer = setTimeout(function () { setText('qc-live-total', latest ? 'Toplam ' + format(latest.total, 2) + ' TL, net kilogram maliyeti ' + format(latest.unit_cost, 2) + ' TL.' : 'Hesap için sayısal girişleri kontrol edin.'); }, 350);
         }
-        form.addEventListener('input', function (event) {
+        function editableNumber(input) {
+            return !readOnly && input && input.matches('input[inputmode="decimal"]') && !input.disabled && !input.readOnly;
+        }
+        form.addEventListener('focusin', function (event) {
+            var input = event.target;
+            if (editableNumber(input) && isZeroInput(input.value)) {
+                zeroClearedInput = input;
+                input.value = '';
+            }
+        });
+        form.addEventListener('focusout', function (event) {
+            var input = event.target;
+            if (!editableNumber(input)) return;
+            var normalized = normalizeInput(input.value);
+            if (input === zeroClearedInput) zeroClearedInput = null;
+            if (normalized === input.value) return;
+            input.value = normalized;
+            // Display-only normalization must not turn a linked quantity into
+            // an independent one or mark an untouched zero as an unsaved edit.
+            if (input.dataset.qcHeader === 'net_kg') state = setNetKg(state, normalized);
+            else {
+                var item = findItem(input.dataset.qcCode);
+                if (!item) return;
+                if (input.dataset.qcPrice) item.unit_price = normalized;
+                else if (input.dataset.qcField === 'qty') {
+                    if (item.basis === 'net_kg') state = setNetKg(state, normalized);
+                    else item.qty = normalized;
+                }
+            }
+            paint(input);
+        });
+        function uppercaseInput(input) {
+            if (!input.matches('[data-qc-header="product"], [data-qc-header="notes"], [data-qc-field="label"]')) return;
+            var before = input.value, upper = upperText(before);
+            if (upper === before) return;
+            var start = input.selectionStart, end = input.selectionEnd, direction = input.selectionDirection;
+            input.value = upper;
+            if (start !== null && end !== null) input.setSelectionRange(upperText(before.slice(0, start)).length, upperText(before.slice(0, end)).length, direction || 'none');
+        }
+        function handleInput(event) {
             var input = event.target; if (readOnly) return;
+            var composing = event.isComposing || composingInputs.has(input);
+            if (!composing) uppercaseInput(input);
+            if (input === zeroClearedInput) zeroClearedInput = null;
             if (input.dataset.qcHeader) {
                 var field = input.dataset.qcHeader;
                 state = field === 'net_kg' ? setNetKg(state, input.value) : Object.assign({}, state, { [field]: input.value });
             } else if (input.dataset.qcCode && input.dataset.qcPrice === 'main' && !input.readOnly) {
                 state = updateRow(state, input.dataset.qcCode, 'unit_price', input.value);
             } else if (input.dataset.qcCode && input.dataset.qcField && input.dataset.qcField !== 'unit' && !input.readOnly) {
-                state = updateRow(state, input.dataset.qcCode, input.dataset.qcField, input.value);
+                if (input.dataset.qcField === 'label' && composing) findItem(input.dataset.qcCode).label = input.value;
+                else state = updateRow(state, input.dataset.qcCode, input.dataset.qcField, input.value);
             } else return;
             dirty = true; paint(input);
+        }
+        form.addEventListener('input', handleInput);
+        form.addEventListener('compositionstart', function (event) {
+            if (readOnly) return; composingInputs.add(event.target); if (save) save.disabled = true;
+        });
+        form.addEventListener('compositionend', function (event) {
+            if (readOnly) return; composingInputs.delete(event.target); handleInput({ target: event.target, isComposing: false });
         });
         form.addEventListener('change', function (event) {
             var input = event.target; if (readOnly || input.dataset.qcField !== 'unit') return;
@@ -189,8 +327,30 @@
         });
         form.addEventListener('click', function (event) {
             var button = event.target.closest('button'); if (!button) return;
-            if (button.dataset.qcOperation && !readOnly) { state.operation_type = button.dataset.qcOperation; dirty = true; paint(); }
-            else if (button.dataset.qcRebind && !readOnly) {
+            if (button.id === 'qc-add-item' && !readOnly) {
+                try {
+                    var win = dom.defaultView, suffix = win && win.crypto && typeof win.crypto.randomUUID === 'function' ? win.crypto.randomUUID().replace(/-/g, '') : Date.now().toString(36) + (++customSequence).toString(36);
+                    var code = 'custom_' + suffix;
+                    while (state.items.some(function (item) { return item.code === code; })) code = 'custom_' + Date.now().toString(36) + (++customSequence).toString(36);
+                    state = addCustomRow(state, code);
+                    var node = dom.getElementById('qc-custom-row-template').content.firstElementChild.cloneNode(true);
+                    node.dataset.qcRow = code;
+                    node.querySelectorAll('[id]').forEach(function (element) { element.id = element.id.replace(/custom_template$/, code); });
+                    node.querySelectorAll('label[for]').forEach(function (element) { element.htmlFor = element.htmlFor.replace(/custom_template$/, code); });
+                    node.querySelectorAll('[data-qc-code]').forEach(function (element) { element.dataset.qcCode = code; });
+                    ['qcAmount','qcPriceLabel','qcBasis','qcSettings','qcRebind','qcRemove'].forEach(function (key) {
+                        node.querySelectorAll('[data-' + key.replace(/[A-Z]/g, function (letter) { return '-' + letter.toLowerCase(); }) + ']').forEach(function (element) { element.dataset[key] = code; });
+                    });
+                    dom.getElementById('qc-rows').appendChild(node); rowNodes[code] = node;
+                    dirty = true; paint(); node.querySelector('[data-qc-field="label"]').focus();
+                } catch (failure) { showError(failure.message); }
+            } else if (button.dataset.qcRemove && !readOnly) {
+                var codeToRemove = button.dataset.qcRemove, removed = rowNodes[codeToRemove];
+                state = removeCustomRow(state, codeToRemove);
+                if (zeroClearedInput && removed.contains(zeroClearedInput)) zeroClearedInput = null;
+                composingInputs.forEach(function (input) { if (removed.contains(input)) composingInputs.delete(input); });
+                removed.remove(); delete rowNodes[codeToRemove]; dirty = true; paint();
+            } else if (button.dataset.qcRebind && !readOnly) {
                 var item = findItem(button.dataset.qcRebind);
                 if (item.unit === 'kg') { item.basis = 'net_kg'; item.qty = state.net_kg; dirty = true; paint(); }
             }
@@ -212,5 +372,5 @@
         paint();
         return { getDocument: function () { return clone(state); }, calculate: function () { return calculate(state); } };
     }
-    return { parseNumber: parseNumber, calculate: calculate, setMethod: setMethod, setNetKg: setNetKg, updateRow: updateRow, canonicalPayload: canonicalPayload, init: init, catalog: CATALOG };
+    return { parseNumber: parseNumber, calculate: calculate, setMethod: setMethod, setNetKg: setNetKg, updateRow: updateRow, addCustomRow: addCustomRow, removeCustomRow: removeCustomRow, upperText: upperText, canonicalPayload: canonicalPayload, isZeroInput: isZeroInput, normalizeInput: normalizeInput, formulaText: formulaText, init: init, catalog: CATALOG };
 }));

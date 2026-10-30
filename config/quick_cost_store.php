@@ -145,3 +145,33 @@ function quick_cost_save(PDO $pdo, array $input, int $id = 0, int $expectedVersi
         throw $e;
     }
 }
+
+/** Yalnız izole hızlı maliyet kaydı; şema ve diğer maliyet tabloları değişmez. */
+function quick_cost_delete(PDO $pdo, int $id, int $expectedVersion): void
+{
+    [, $depot] = quick_cost_access(true);
+    if (!can_maliyet('delete')) throw new QuickCostAccessException('Maliyet silme yetkisi gerekli.');
+    if ($id <= 0 || $expectedVersion <= 0) throw new InvalidArgumentException('Kayıt numarası ve sürümü geçersiz.');
+    if (!function_exists('audit_log_event')) throw new RuntimeException('Audit altyapısı kullanılamıyor.');
+    if ($pdo->inTransaction()) throw new LogicException('Hızlı Maliyet silme ayrı bir işlem gerektirir.');
+    [$scope, $params] = quick_cost_scope($depot);
+    $pdo->beginTransaction();
+    try {
+        // Silme, bozuk JSON'u hesaplamayı gerektirmez; audit için metadata yeterli.
+        $statement = $pdo->prepare('SELECT id, product, sheet_date, operation_type, method, net_kg,
+            total, unit_cost, depo, version FROM quick_cost_sheets WHERE id=? AND ' . $scope);
+        $statement->execute(array_merge([$id], $params));
+        $old = $statement->fetch(PDO::FETCH_ASSOC);
+        if (!$old) throw new QuickCostAccessException('Kayıt bulunamadı veya aktif depoda görünmüyor.');
+        if ((int)$old['version'] !== $expectedVersion) throw new QuickCostConflictException('Bu kayıt başka bir oturumda değişti. Listeyi yeniden açın.');
+        $statement = $pdo->prepare('DELETE FROM quick_cost_sheets WHERE id=? AND version=? AND ' . $scope);
+        $statement->execute(array_merge([$id, $expectedVersion], $params));
+        if ($statement->rowCount() !== 1) throw new QuickCostConflictException('Bu kayıt başka bir oturumda değişti. Listeyi yeniden açın.');
+        // Var olan helper best-effort hata politikasını korur; audit rollback garantisi yoktur.
+        audit_log_event('delete', 'quick_cost_sheets', $id, quick_cost_audit_summary($old), null);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}

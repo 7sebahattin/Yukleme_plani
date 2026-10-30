@@ -264,7 +264,7 @@ function guvenliAlanKurallari(barSel) {
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
                         '/opt/pw-browsers/chromium/chrome-linux/chrome']
                        .find(p => fs.existsSync(p));
-    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
+    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : (process.env.QUICK_COST_BROWSER_CHANNEL ? { channel: process.env.QUICK_COST_BROWSER_CHANNEL } : {}));
     if (!NO_SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
     const shots = [];
 
@@ -685,6 +685,7 @@ function guvenliAlanKurallari(barSel) {
             karolar: ovl ? [...ovl.querySelectorAll('.bn-tile')].map(t => t.getAttribute('data-nav')) : null,
             sabit: ovl ? [...ovl.querySelectorAll('.bn-tile.pinned')].map(t => t.getAttribute('data-nav')) : [],
             dataSabit: bar.getAttribute('data-sabit'),
+            navKeys: [...bar.querySelectorAll('[data-nav]'), ...(ovl ? ovl.querySelectorAll('[data-nav]') : [])].map(a => a.getAttribute('data-nav')),
             html: bar.outerHTML + (ovl ? ovl.outerHTML : ''),
         };
     };
@@ -713,7 +714,9 @@ function guvenliAlanKurallari(barSel) {
                 JSON.stringify(d.sabit) === JSON.stringify(k.senaryo.sabit) && d.dataSabit === k.senaryo.sabit.join(','),
                 `karo [${d.sabit}], data-sabit "${d.dataSabit}"`);
             if (k.senaryo.ad === 'cerez_sahte') {
-                const yasak = ['users.php', 'roles.php', 'audit.php', 'admin_db_backups.php', 'xyz', '../index'].filter(x => d.html.includes(x));
+                // Relative legitimate home links may be ../index.php in CLI fixtures.
+                // Check forbidden navigation identities, not href substrings.
+                const yasak = ['qcost', 'users', 'roles', 'audit', 'backup', 'xyz', '../index'].filter(x => d.navKeys.includes(x));
                 ok('B', bag, 'sahte çerezdeki yasak/bilinmeyen anahtarlar HİÇ çizilmedi', yasak.length === 0, yasak.join(', '));
             }
         }

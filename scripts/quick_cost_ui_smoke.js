@@ -28,5 +28,80 @@ test('Canonical payload strips totals and posts JSON numbers', () => { const d=e
 test('Operation type retained independently of calculation method', () => { const d=example(); d.operation_type='uretim'; assert.equal(quick.canonicalPayload(quick.setMethod(d,'detailed')).operation_type,'uretim'); });
 test('Duplicate or unknown row cannot inflate total', () => { const d=document(); d.items[1].code='product'; assert.throws(()=>quick.calculate(d)); });
 test('Invalid input survives UI transforms and is never silently changed to zero', () => { let d=example(); d=quick.updateRow(d,'product','unit_price','-5'); d=quick.setMethod(d,'detailed'); assert.equal(d.items[0].unit_price,'-5'); assert.throws(()=>quick.canonicalPayload(d)); });
+test('Focus clearing recognizes only valid complete zero strings', () => {
+    for (const value of ['0','0,00','0.000','0000,0000',' 0 ']) assert.equal(quick.isZeroInput(value),true,value);
+    for (const value of ['','0,25','25','025','-1','0,','1.2.3','0,00001','0.025']) assert.equal(quick.isZeroInput(value),false,value);
+});
+test('Blur normalization restores blank zero and removes only valid leading zeroes', () => {
+    assert.equal(quick.normalizeInput(''),'0'); assert.equal(quick.normalizeInput('  '),'0');
+    assert.equal(quick.normalizeInput('025'),'25'); assert.equal(quick.normalizeInput('020000'),'20.000');
+    assert.equal(quick.normalizeInput('000,25'),'0,25'); assert.equal(quick.normalizeInput('01.234,50'),'1.234,5');
+    for (const value of ['0,25','25','25,00','-1','1.2.3','0,']) assert.equal(quick.normalizeInput(value),value);
+});
+test('Word-only explanation follows kg binding without exposing numeric values', () => {
+    let d=example(); assert.equal(quick.formulaText(d.items[0]),'Ürün KG × fiyat = toplam maliyet');
+    d=quick.updateRow(d,'product','qty','020000');
+    assert.equal(quick.formulaText(d.items[0]),'Kg miktarı × kg fiyatı = toplam maliyet');
+    assert.equal(/\d/.test(quick.formulaText(d.items[0])),false);
+});
+test('Every manual unit and fixed expense has the corresponding word-only explanation', () => {
+    const explanations={kg:'Kg miktarı × kg fiyatı = toplam maliyet',ton:'Ton miktarı × ton fiyatı = toplam maliyet',piece:'Adet × adet fiyatı = toplam maliyet',box:'Koli / kasa adedi × birim fiyat = toplam maliyet',pallet:'Palet adedi × palet fiyatı = toplam maliyet',vehicle:'Araç sayısı × araç fiyatı = toplam maliyet',fixed:'Sabit tutar = toplam maliyet'};
+    for (const [unit,text] of Object.entries(explanations)) {
+        const row={unit,basis:unit==='fixed'?'fixed':'manual',qty:26,unit_price:380,amount:9880};
+        assert.equal(quick.formulaText(row),text); assert.equal(/\d/.test(quick.formulaText(row)),false);
+    }
+});
+test('Word explanation remains useful with invalid drafts and never changes calculation input', () => {
+    const row={unit:'pallet',basis:'manual',qty:'1.2.3',unit_price:'-5'}; const before=JSON.stringify(row);
+    assert.equal(quick.formulaText(row),'Palet adedi × palet fiyatı = toplam maliyet');
+    assert.equal(JSON.stringify(row),before); assert.equal(quick.formulaText(null),'Miktar × birim fiyat = toplam maliyet');
+});
+test('A new custom row is fixed zero by default and requires its own name', () => {
+    const original=example(), next=quick.addCustomRow(original,'custom_first');
+    assert.equal(original.items.length,10); assert.equal(next.items.length,11);
+    assert.deepEqual(next.items[10],{code:'custom_first',label:'',unit:'fixed',basis:'fixed',qty:1,unit_price:0});
+    assert.throws(()=>quick.calculate(next));
+});
+test('Custom fixed costs join group D exactly once with Turkish uppercase names', () => {
+    let d=quick.addCustomRow(example(),'custom_first'); d=quick.updateRow(d,'custom_first','label','ek taksi iıİI'); d=quick.updateRow(d,'custom_first','unit_price',500);
+    const result=quick.calculate(d), row=result.items[10];
+    assert.equal(row.label,'EK TAKSİ İIİI'); assert.equal(row.group,'D'); assert.equal(row.amount,500);
+    assert.equal(result.total,670500); assert.equal(result.groups.D,90500);
+});
+test('Custom units, manual quantities and kg binding use the existing exact engine', () => {
+    let d=quick.addCustomRow(example(),'custom_pallet'); d=quick.updateRow(d,'custom_pallet','label','ek palet');
+    d=quick.updateRow(d,'custom_pallet','unit','pallet'); d=quick.updateRow(d,'custom_pallet','qty',26); d=quick.updateRow(d,'custom_pallet','unit_price',380);
+    assert.equal(quick.calculate(d).items[10].amount,9880); assert.equal(quick.calculate(quick.setNetKg(d,10000)).items[10].amount,9880);
+    d=quick.updateRow(d,'custom_pallet','unit','kg'); d.items[10].basis='net_kg'; d=quick.updateRow(d,'custom_pallet','unit_price',1.25);
+    assert.equal(quick.calculate(quick.setNetKg(d,10000)).items[10].amount,12500);
+});
+test('Only custom rows can be removed and legacy metadata survives', () => {
+    let d=example(); d.operation_type='uretim'; d.method='detailed';
+    d=quick.addCustomRow(d,'custom_remove'); d=quick.updateRow(d,'custom_remove','label','ek');
+    assert.throws(()=>quick.removeCustomRow(d,'product')); assert.throws(()=>quick.updateRow(d,'product','label','changed'));
+    d=quick.removeCustomRow(d,'custom_remove'); assert.equal(quick.calculate(d).total,670000); assert.equal(d.operation_type,'uretim'); assert.equal(d.method,'detailed');
+});
+test('Custom codes, mandatory rows and forty-row maximum are enforced', () => {
+    let d=example();
+    for (const code of ['custom_bad\n','custom_','custom_a-b','unknown']) assert.throws(()=>quick.addCustomRow(d,code));
+    for(let i=0;i<40;i++){const code='custom_'+i; d=quick.addCustomRow(d,code); d=quick.updateRow(d,code,'label','kalem '+i);}
+    assert.equal(quick.calculate(d).items.length,50); assert.throws(()=>quick.addCustomRow(d,'custom_41'));
+    const missing=JSON.parse(JSON.stringify(d)); missing.items.splice(0,1); assert.throws(()=>quick.calculate(missing));
+    const duplicate=JSON.parse(JSON.stringify(d)); duplicate.items[11].code=duplicate.items[10].code; assert.throws(()=>quick.calculate(duplicate));
+});
+test('Custom labels survive serialization and amounts recalculate after reopening', () => {
+    let d=quick.addCustomRow(example(),'custom_saved'); d=quick.updateRow(d,'custom_saved','label','özel gider'); d=quick.updateRow(d,'custom_saved','unit_price','150,50');
+    d.product='iıİI'; d.notes='bilgi iı';
+    const payload=JSON.parse(JSON.stringify(quick.canonicalPayload(d)));
+    assert.equal(payload.product,'İIİI'); assert.equal(payload.notes,'BİLGİ İI'); assert.equal(payload.items[10].label,'ÖZEL GİDER');
+    assert.equal(quick.calculate(payload).total,670150.5); assert.equal(payload.items[0].label,undefined);
+});
+test('Turkish uppercase is actual data and post-conversion limits/control characters are checked', () => {
+    assert.equal(quick.upperText('iıİI'),'İIİI'); assert.equal(quick.upperText('straße'),'STRASSE');
+    let d=example(); d.product='ß'.repeat(76); assert.throws(()=>quick.canonicalPayload(d));
+    d=example(); d.notes='ß'.repeat(1001); assert.throws(()=>quick.canonicalPayload(d));
+    d=quick.addCustomRow(example(),'custom_long'); d.items[10].label='ß'.repeat(76); assert.throws(()=>quick.calculate(d));
+    d.items[10].label='BAD\u0000NAME'; assert.throws(()=>quick.calculate(d));
+});
 console.log('PASS '+passed+' pure quick-cost UI checks');
 

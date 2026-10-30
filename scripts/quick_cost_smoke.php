@@ -6,7 +6,7 @@ require_once __DIR__ . '/../config/quick_cost_store.php';
 
 $QC_USER = ['id' => 7];
 $QC_ADMIN = true;
-$QC_PERMS = ['read' => true, 'write' => true];
+$QC_PERMS = ['read' => true, 'write' => true, 'delete' => true];
 $QC_DEPOT = 'TEST DEPO A';
 $QC_DEPOT_CALLS = 0;
 $QC_UNRESTRICTED_SCOPE = false;
@@ -72,6 +72,9 @@ function qc_example(): array {
 function qc_item(array $document, string $code): array {
     foreach ($document['items'] as $item) if ($item['code'] === $code) return $item;
     throw new RuntimeException('Kalem bulunamadı.');
+}
+function qc_custom(string $code = 'custom_extra', string $label = 'özel gider'): array {
+    return ['code' => $code, 'label' => $label, 'unit' => 'pallet', 'basis' => 'manual', 'qty' => 26, 'unit_price' => 380];
 }
 
 qc_test('20.000 kg / 670.000 TL / 33,50 TL/kg örneği ve gruplar', function (): void {
@@ -183,6 +186,52 @@ qc_test('Hesaplanan toplam ve etiketler sunucuda yeniden oluşturulur', function
 qc_test('Tutar üst sınırı reddedilir', function (): void {
     $document = qc_example(); $document['net_kg'] = 1000000; $document['items'][0]['unit_price'] = 1000000;
     qc_throws(fn() => quick_cost_calculate($document));
+});
+qc_test('Ek maliyet özgün birim/miktar/fiyat ile bir kez toplanır, grup sunucuda D', function (): void {
+    $document = qc_example(); $extra = qc_custom(); $extra['group'] = 'A'; $extra['amount'] = 1;
+    $document['items'][] = $extra;
+    $result = quick_cost_calculate($document);
+    qc_equal(count($result['items']), 11); qc_equal($result['total'], 679880);
+    qc_equal(qc_item($result, 'custom_extra')['group'], 'D');
+    qc_equal(qc_item($result, 'custom_extra')['label'], 'ÖZEL GİDER');
+    qc_equal(qc_item($result, 'custom_extra')['amount'], 9880);
+    qc_equal($result['groups'], ['A' => 500000, 'B' => 80000, 'D' => 99880]);
+});
+qc_test('Ek kalem kod/ad/baz doğrulaması ve tekrarlanan kod reddi', function (): void {
+    foreach ([['code' => 'other'], ['code' => 'custom_'], ['code' => 'custom_UPPER'], ['code' => 'custom_' . str_repeat('a', 41)],
+        ['label' => ''], ['label' => '   '], ['label' => []], ['label' => str_repeat('a', 151)], ['label' => str_repeat('ß', 150)],
+        ['basis' => 'net_kg']] as $change) {
+        $document = qc_example(); $document['items'][] = array_merge(qc_custom(), $change);
+        qc_throws(fn() => quick_cost_calculate($document));
+    }
+    $document = qc_example(); $document['items'][] = qc_custom(); $document['items'][] = qc_custom();
+    qc_throws(fn() => quick_cost_calculate($document));
+});
+qc_test('Ek kalem temel on kalemden birinin yerine geçemez', function (): void {
+    $document = qc_example(); array_shift($document['items']); $document['items'][] = qc_custom();
+    qc_throws(fn() => quick_cost_calculate($document));
+});
+qc_test('Kırk ek kalem kabul, kırk bir reddedilir; Unicode payload bütçesi', function (): void {
+    $document = qc_example();
+    $document['product'] = str_repeat('🟢', 150); $document['notes'] = str_repeat('🟢', 2000);
+    for ($i = 0; $i < 40; $i++) $document['items'][] = qc_custom('custom_' . $i, str_repeat('🟢', 150));
+    $result = quick_cost_calculate($document);
+    qc_equal(count($result['items']), 50);
+    qc_equal($result['total'], 1065200);
+    qc_assert(strlen(json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) < 65536);
+    $document['items'][] = qc_custom('custom_over');
+    qc_throws(fn() => quick_cost_calculate($document));
+});
+qc_test('Türkçe ürün/not/ek kalem büyük harf dönüşümü ve son uzunluk sınırı', function (): void {
+    $document = qc_example(); $document['product'] = 'istanbul ışık çiftçi'; $document['notes'] = "çiğ ürün\nözel iş";
+    $document['items'][] = qc_custom('custom_' . str_repeat('a', 40), 'ilave işçilik');
+    $result = quick_cost_calculate($document);
+    qc_equal($result['product'], 'İSTANBUL IŞIK ÇİFTÇİ');
+    qc_equal($result['notes'], "ÇİĞ ÜRÜN\nÖZEL İŞ");
+    qc_equal($result['items'][10]['label'], 'İLAVE İŞÇİLİK');
+    foreach ([['product' => str_repeat('ß', 150)], ['notes' => str_repeat('ß', 2000)]] as $change) {
+        qc_throws(fn() => quick_cost_calculate(array_merge(qc_example(), $change)));
+    }
 });
 qc_test('Storage probe salt okunur ve yalnız eksik tabloda false', function () use ($QC_DB): void {
     qc_assert(quick_cost_storage_ready($QC_DB));
@@ -299,6 +348,101 @@ qc_test('Çağıranın açık işlemi sahiplenilmez', function () use ($QC_DB): 
         qc_throws(fn() => quick_cost_save($QC_DB, qc_example()), LogicException::class);
         qc_assert($QC_DB->inTransaction());
     } finally { $QC_DB->rollBack(); }
+});
+qc_test('Ek kalem kaydet/aç/düzenle/kopyala kimlik ve özgün fiyatı korur', function () use ($QC_DB): void {
+    $document = qc_example(); $document['product'] = 'kiraz'; $document['notes'] = 'özel iş';
+    $document['items'][] = qc_custom('custom_stable', 'ilave işçilik');
+    $source = quick_cost_save($QC_DB, $document);
+    qc_equal($source['product'], 'KİRAZ'); qc_equal($source['notes'], 'ÖZEL İŞ');
+    $opened = quick_cost_find($QC_DB, $source['id']);
+    qc_equal(qc_item($opened['document'], 'custom_stable')['label'], 'İLAVE İŞÇİLİK');
+    qc_equal(qc_item($opened['document'], 'custom_stable')['qty'], 26);
+    qc_equal(qc_item($opened['document'], 'custom_stable')['unit_price'], 380);
+    $changed = $opened['document']; $changed['items'][10]['unit_price'] = 400;
+    $updated = quick_cost_save($QC_DB, $changed, $opened['id'], $opened['version']);
+    qc_equal($updated['document']['total'], 680400);
+    $copy = quick_cost_save($QC_DB, $updated['document']);
+    qc_assert($copy['id'] !== $updated['id']); qc_equal($copy['document'], $updated['document']);
+    qc_equal(quick_cost_find($QC_DB, $source['id'])['version'], 2);
+});
+qc_test('Silme admin/okuma/yazma/silme kapıları PDO öncesi kapanır', function (): void {
+    $blockedPdo = new class extends PDO { public function __construct() {} };
+    $GLOBALS['QC_ADMIN'] = false;
+    try { qc_throws(fn() => quick_cost_delete($blockedPdo, 1, 1), QuickCostAccessException::class); }
+    finally { $GLOBALS['QC_ADMIN'] = true; }
+    foreach (['read', 'write', 'delete'] as $permission) {
+        $GLOBALS['QC_PERMS'][$permission] = false;
+        try { qc_throws(fn() => quick_cost_delete($blockedPdo, 1, 1), QuickCostAccessException::class); }
+        finally { $GLOBALS['QC_PERMS'][$permission] = true; }
+    }
+});
+qc_test('Silme geçersiz id/sürümü SQL öncesi reddeder', function (): void {
+    $blockedPdo = new class extends PDO { public function __construct() {} };
+    foreach ([[0, 1], [-1, 1], [1, 0], [1, -1]] as [$id, $version]) {
+        qc_throws(fn() => quick_cost_delete($blockedPdo, $id, $version));
+    }
+});
+qc_test('Silme eski sürümü ve bulunmayan kaydı reddeder', function () use ($QC_DB, &$saved): void {
+    $before = quick_cost_find($QC_DB, $saved['id']);
+    qc_throws(fn() => quick_cost_delete($QC_DB, $saved['id'], 1), QuickCostConflictException::class);
+    qc_throws(fn() => quick_cost_delete($QC_DB, 999999, 1), QuickCostAccessException::class);
+    qc_equal(quick_cost_find($QC_DB, $saved['id']), $before);
+    qc_assert(!$QC_DB->inTransaction());
+});
+qc_test('Silme aktif depo dışında kaydı etkilemez', function () use ($QC_DB, &$saved): void {
+    $GLOBALS['QC_DEPOT'] = 'TEST DEPO B';
+    try { qc_throws(fn() => quick_cost_delete($QC_DB, $saved['id'], $saved['version']), QuickCostAccessException::class); }
+    finally { $GLOBALS['QC_DEPOT'] = 'TEST DEPO A'; }
+    qc_assert(quick_cost_find($QC_DB, $saved['id']) !== null);
+});
+qc_test('Silme çağıranın açık transactionını sahiplenmez', function () use ($QC_DB, &$saved): void {
+    $QC_DB->beginTransaction();
+    try {
+        qc_throws(fn() => quick_cost_delete($QC_DB, $saved['id'], $saved['version']), LogicException::class);
+        qc_assert($QC_DB->inTransaction());
+    } finally { $QC_DB->rollBack(); }
+});
+qc_test('Yalnız hedef hızlı kayıt silinir ve eski özet audite gider', function () use ($QC_DB, &$saved): void {
+    $target = quick_cost_save($QC_DB, qc_example());
+    $beforeCount = (int)$QC_DB->query('SELECT COUNT(*) FROM quick_cost_sheets')->fetchColumn();
+    quick_cost_delete($QC_DB, $target['id'], $target['version']);
+    qc_equal($QC_DB->query('SELECT COUNT(*) FROM quick_cost_sheets')->fetchColumn(), $beforeCount - 1);
+    qc_equal(quick_cost_find($QC_DB, $target['id']), null);
+    qc_assert(quick_cost_find($QC_DB, $saved['id']) !== null);
+    $audit = $QC_DB->query('SELECT * FROM audit_log ORDER BY id DESC LIMIT 1')->fetch();
+    qc_equal($audit['action'], 'delete'); qc_equal($audit['module'], 'quick_cost_sheets');
+    qc_equal($audit['record_id'], $target['id']); qc_equal(json_decode($audit['new_values'], true), null);
+    $old = json_decode($audit['old_values'], true);
+    qc_equal($old['product'], $target['product']); qc_equal($old['version'], 1); qc_equal($old['total'], 670000);
+    qc_throws(fn() => quick_cost_delete($QC_DB, $target['id'], 1), QuickCostAccessException::class);
+});
+qc_test('Bozuk JSON kaydı metadata kontrollü silinebilir', function () use ($QC_DB): void {
+    $target = quick_cost_save($QC_DB, qc_example());
+    $QC_DB->prepare("UPDATE quick_cost_sheets SET document_json='broken' WHERE id=?")->execute([$target['id']]);
+    quick_cost_delete($QC_DB, $target['id'], $target['version']);
+    qc_equal(quick_cost_find($QC_DB, $target['id']), null);
+});
+qc_test('DELETE DB hatasında kayıt/audit korunur ve rollback tamamlanır', function () use ($QC_DB): void {
+    $target = quick_cost_save($QC_DB, qc_example());
+    $auditCount = $QC_DB->query('SELECT COUNT(*) FROM audit_log')->fetchColumn();
+    $QC_DB->exec('CREATE TRIGGER qc_delete_abort BEFORE DELETE ON quick_cost_sheets WHEN OLD.id=' . $target['id'] . " BEGIN SELECT RAISE(ABORT,'anonymous delete failure'); END");
+    try {
+        qc_throws(fn() => quick_cost_delete($QC_DB, $target['id'], $target['version']), PDOException::class);
+        qc_assert(quick_cost_find($QC_DB, $target['id']) !== null);
+        qc_equal($QC_DB->query('SELECT COUNT(*) FROM audit_log')->fetchColumn(), $auditCount);
+        qc_assert(!$QC_DB->inTransaction());
+    } finally { $QC_DB->exec('DROP TRIGGER qc_delete_abort'); }
+});
+qc_test('DELETE etkilenen satır sıfırsa sürüm çakışması ve rollback', function () use ($QC_DB): void {
+    $target = quick_cost_save($QC_DB, qc_example());
+    $auditCount = $QC_DB->query('SELECT COUNT(*) FROM audit_log')->fetchColumn();
+    $QC_DB->exec('CREATE TRIGGER qc_delete_ignore BEFORE DELETE ON quick_cost_sheets WHEN OLD.id=' . $target['id'] . ' BEGIN SELECT RAISE(IGNORE); END');
+    try {
+        qc_throws(fn() => quick_cost_delete($QC_DB, $target['id'], $target['version']), QuickCostConflictException::class);
+        qc_assert(quick_cost_find($QC_DB, $target['id']) !== null);
+        qc_equal($QC_DB->query('SELECT COUNT(*) FROM audit_log')->fetchColumn(), $auditCount);
+        qc_assert(!$QC_DB->inTransaction());
+    } finally { $QC_DB->exec('DROP TRIGGER qc_delete_ignore'); }
 });
 qc_test('Eski maliyet/yükleme tabloları değişmedi', function () use ($QC_DB, $legacyBefore): void {
     qc_equal(json_encode([$QC_DB->query('SELECT * FROM cost_sheets')->fetchAll(), $QC_DB->query('SELECT * FROM loading_records')->fetchAll()]), $legacyBefore);

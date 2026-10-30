@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v459';
+const CACHE_NAME = 'yukleme-plani-v460';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -68,7 +68,7 @@ self.addEventListener('fetch', function(e) {
   // aksi hâlde tam DB dökümü CacheStorage'a kalıcı yazılıyordu (DB-Backup-02).
   var u = new URL(e.request.url);
   // Saved quick costs are authenticated business data; never retain their HTML.
-  if (/\/hizli_maliyet\.php(\/|$)/.test(u.pathname)) return;
+  if (/\/hizli_maliyet(?:_form)?\.php(\/|$)/.test(u.pathname)) return;
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   // Mail Merkezi: posta içeriği (sayfa, JSON, ek) cihazın CacheStorage'ına HİÇ yazılmaz.
   if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır

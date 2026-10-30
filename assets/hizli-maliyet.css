@@ -12,13 +12,6 @@
 .qc-hero-secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px solid var(--border-strong); padding-top: 16px; }
 .qc-hero-secondary strong { margin-top: 6px; font-size: clamp(1.15rem, 5vw, 1.8rem); }
 .qc-panel { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); box-shadow: var(--shadow); min-width: 0; }
-.qc-choices { display: block; }
-.qc-choices fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-.qc-choices legend { font-weight: 650; font-size: .86rem; margin-bottom: 9px; }
-.qc-segments { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; }
-.qc-segments button { min-height: 46px; padding: 10px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: .9rem; font-weight: 650; cursor: pointer; }
-.qc-segments button[aria-pressed="true"] { background: var(--card); color: var(--primary); border-color: var(--border-strong); box-shadow: var(--shadow); }
-.qc-segments button:disabled { cursor: default; opacity: .75; }
 .qc-basics { display: grid; gap: 16px; min-width: 0; }
 .qc-form label { display: flex; flex-direction: column; gap: 7px; font-size: .86rem; font-weight: 600; min-width: 0; }
 .qc-form label small { font-weight: 400; color: var(--muted); }
@@ -38,7 +31,10 @@
 .qc-row { padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); min-width: 0; }
 .qc-row-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
 .qc-row h3 { display: flex; align-items: center; gap: 8px; font-size: .95rem; margin: 0; }
-.qc-group-badge { display: inline-grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; background: var(--primary-soft); color: var(--primary); border-radius: 7px; font-size: .75rem; }
+.qc-row h3 { overflow-wrap: anywhere; min-width: 0; }
+.qc-custom-label { margin-bottom: 14px; }
+.qc-remove-button { min-height: 44px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--danger); font: inherit; font-size: .8rem; cursor: pointer; }
+.qc-add-item { margin-top: 12px; min-height: 44px; font-size: .85rem; }
 .qc-row output { font-variant-numeric: tabular-nums; font-weight: 700; font-size: .95rem; white-space: nowrap; }
 .qc-row-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .qc-price-field { grid-column: 1 / -1; }
@@ -84,4 +80,4 @@
     .qc-hero { padding: 26px; }
 }
 @media (max-width: 359px) { .qc-panel { padding: 14px; } .qc-breakdown dl > div { flex-wrap: wrap; gap: 6px; } }
-@media print { .qc-save-bar, .qc-text-button, .qc-choices, .qc-row-settings summary { display: none !important; } .qc-hero { break-inside: avoid; } .qc-row { break-inside: avoid; } }
+@media print { .qc-save-bar, .qc-text-button, .qc-row-settings summary { display: none !important; } .qc-hero { break-inside: avoid; } .qc-row { break-inside: avoid; } }

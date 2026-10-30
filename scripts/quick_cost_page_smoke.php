@@ -11,7 +11,7 @@ $testPdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $testPdo->exec('CREATE TABLE quick_cost_sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, product TEXT, sheet_date TEXT, operation_type TEXT, method TEXT, net_kg NUMERIC, document_json TEXT, total NUMERIC, unit_cost NUMERIC, notes TEXT, depo TEXT, created_by INTEGER, updated_by INTEGER, created_at TEXT, updated_at TEXT, version INTEGER)');
 $testPdo->exec('CREATE TABLE cost_sheets (id INTEGER PRIMARY KEY, marker TEXT)');
 $testPdo->exec("INSERT INTO cost_sheets VALUES (1,'untouched')");
-$testPermissions = ['read', 'write'];
+$testPermissions = ['read', 'write', 'delete'];
 $testAdmin = true;
 $testDepot = 'DEMO';
 $testStatus = 200;
@@ -43,30 +43,39 @@ function render_footer(): void {
 }
 class QuickPageExit extends Exception {}
 
-// Apply the repository's established isolated-page harness technique: only bootstrap,
-// response headers and exit are intercepted; actual controller/partial/store run.
-$source = file_get_contents($root . '/hizli_maliyet.php');
-$source = preg_replace("/^require_once __DIR__ \\. '\/config\/[^']+\.php';\r?\n/m", '', $source);
-$source = preg_replace('/^declare\(strict_types=1\);\r?\n/m', '', $source);
-$source = str_replace('__DIR__', var_export($root, true), $source);
-$source = preg_replace('/(?<![\w>:])header\(/', 'test_header(', $source);
-$source = str_replace('http_response_code(', 'test_status(', $source);
-$source = str_replace('exit;', 'throw new QuickPageExit();', $source);
-$source = preg_replace('/\bexit\(([^;]+)\);/', 'throw new QuickPageExit($1);', $source);
-// First run declares the recovery helper; later runs use the same real function.
-$helperStart = strpos($source, '/** Recover ordinary');
-$helperEnd = strpos($source, '$id_raw =');
-$helper = substr($source, $helperStart, $helperEnd - $helperStart);
-eval($helper);
-$source = substr_replace($source, '', $helperStart, $helperEnd - $helperStart);
+// Only bootstrap, response headers, exit and the fixed internal form dispatch are
+// intercepted. Actual list/form controllers, partial and store run; no bootstrap
+// can be reached by a legacy POST include in this isolated harness.
+function quick_page_source(string $file): string {
+    global $root;
+    $source = file_get_contents($root . '/' . $file);
+    $source = preg_replace("/^require_once __DIR__ \\. '\/config\/[^']+\.php';\r?\n/m", '', $source);
+    $source = preg_replace('/^declare\(strict_types=1\);\r?\n/m', '', $source);
+    $source = str_replace("require __DIR__ . '/hizli_maliyet_form.php';", "quick_page_dispatch('form');", $source);
+    $source = str_replace('__DIR__', var_export($root, true), $source);
+    $source = preg_replace('/(?<![\w>:])header\(/', 'test_header(', $source);
+    $source = str_replace('http_response_code(', 'test_status(', $source);
+    $source = str_replace('exit;', 'throw new QuickPageExit();', $source);
+    return preg_replace('/\bexit\(([^;]+)\);/', 'throw new QuickPageExit($1);', $source);
+}
+$testSources = ['list' => quick_page_source('hizli_maliyet.php'), 'form' => quick_page_source('hizli_maliyet_form.php')];
+$helperStart = strpos($testSources['form'], '/** Recover ordinary');
+$helperEnd = strpos($testSources['form'], '$id_raw =');
+if ($helperStart === false || $helperEnd === false) throw new RuntimeException('Form helper extraction failed.');
+eval(substr($testSources['form'], $helperStart, $helperEnd - $helperStart));
+$testSources['form'] = substr_replace($testSources['form'], '', $helperStart, $helperEnd - $helperStart);
+function quick_page_dispatch(string $route): void {
+    global $testSources;
+    if (!isset($testSources[$route])) throw new RuntimeException('Unknown controller fixture.');
+    eval('?>' . $testSources[$route]);
+}
 
-function page(array $get = [], array $post = []): array {
-    global $source;
+function page(array $get = [], array $post = [], string $route = 'form'): array {
     $_GET = $get; $_POST = $post;
     $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET';
     $GLOBALS['testStatus'] = 200; $GLOBALS['testHeaders'] = [];
     ob_start();
-    try { eval('?>' . $source); } catch (QuickPageExit $e) {}
+    try { quick_page_dispatch($route); } catch (QuickPageExit $e) {}
     return ['status' => $GLOBALS['testStatus'], 'headers' => $GLOBALS['testHeaders'], 'html' => ob_get_clean()];
 }
 $checks = 0;
@@ -84,10 +93,10 @@ $prices = ['product'=>25,'material'=>4,'transport'=>1.6,'labor'=>2,'overhead'=>.
 foreach ($document['items'] as &$row) $row['unit_price'] = $prices[$row['code']] ?? 0;
 unset($row);
 
-if (($argv[1] ?? '') === '--render') {
+if (in_array(($argv[1] ?? ''), ['--render', '--render-list'], true)) {
     // Static anonymous HTML includes actual form, CSS and JS; no PHP web server.
     $variant = $argv[2] ?? '';
-    if (!in_array($variant, ['', 'readonly', 'legacy'], true)) throw new InvalidArgumentException('Unknown render fixture.');
+    if (!in_array($variant, ['', 'readonly', 'legacy', 'custom'], true)) throw new InvalidArgumentException('Unknown render fixture.');
     if ($variant === 'legacy') {
         $document['method'] = 'detailed';
         $document['operation_type'] = 'uretim';
@@ -99,19 +108,27 @@ if (($argv[1] ?? '') === '--render') {
         }
         unset($item);
     }
+    if ($variant === 'custom') {
+        $document['items'][] = ['code'=>'custom_fixture','label'=>'ek palet','unit'=>'pallet','basis'=>'manual','qty'=>26,'unit_price'=>380];
+    }
     $saved = quick_cost_save(db(), $document);
     if ($variant === 'readonly') $testPermissions = ['read'];
-    echo page(['id' => (string)$saved['id']])['html'];
+    echo ($argv[1] === '--render-list' ? page([], [], 'list') : page(['id' => (string)$saved['id']]))['html'];
     exit;
 }
 
 $result = page();
 check($result['status'] === 200 && str_contains($result['html'], 'qc-form'), 'new page renders');
 check(in_array('Cache-Control: no-store, private', $result['headers'], true), 'no-store header');
-check(in_array('Location: hizli_maliyet.php', page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'])['headers'], true), 'admin explicit setup is idempotent when ready');
-check(page([], ['action'=>'install_schema','csrf'=>'bad'])['status'] === 403, 'setup requires CSRF');
+check(!str_contains(page([], [], 'list')['html'], 'id="qc-form"') && str_contains(page([], [], 'list')['html'], 'href="hizli_maliyet_form.php"'), 'root is a list with a separate new-form action');
+check(!str_contains($result['html'], 'id="qc-records"'), 'new form does not contain saved list');
+check(in_array('Location: hizli_maliyet_form.php?id=1&copy=1', page(['id'=>'1','copy'=>'1'], [], 'list')['headers'], true), 'legacy GET copy redirects to fixed form route');
+check(page(['id'=>[]], [], 'list')['status'] === 400, 'legacy GET invalid id rejected');
+check(in_array('Location: hizli_maliyet.php', page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'], 'list')['headers'], true), 'admin explicit setup is idempotent when ready');
+check(page([], ['action'=>'install_schema','csrf'=>'bad'], 'list')['status'] === 403, 'setup requires CSRF');
 $testAdmin = false;
-check(page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'])['status'] === 403, 'setup denies non-admin writer');
+check(page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'], 'list')['status'] === 403, 'setup denies non-admin writer');
+check(page([], [], 'list')['status'] === 403, 'non-admin cannot open saved list');
 check(page()['status'] === 403, 'non-admin read/write user cannot open quick page');
 check(page([], postDocument($document))['status'] === 403, 'non-admin read/write user cannot create');
 $testAdmin = true;
@@ -120,11 +137,11 @@ check(page()['status'] === 403, 'read denied');
 $testPermissions = ['read'];
 check(page([], postDocument($document))['status'] === 403, 'read-only POST denied');
 check(page()['status'] === 200, 'read-only GET renders');
-$testPermissions = ['read','write'];
+$testPermissions = ['read','write','delete'];
 check(page([], postDocument($document, '0', 'bad'))['status'] === 403, 'CSRF denied');
 check((int)db()->query('SELECT COUNT(*) FROM quick_cost_sheets')->fetchColumn() === 0, 'denials no writes');
 $result = page([], postDocument($document));
-check(in_array('Location: hizli_maliyet.php?id=1', $result['headers'], true), 'create redirects to saved record');
+check(in_array('Location: hizli_maliyet.php', $result['headers'], true), 'create redirects to saved list');
 check((float)quick_cost_find(db(), 1)['document']['total'] === 670000.0, 'server stored requested example');
 check(str_contains(page(['id'=>'1'])['html'], '670.000,00'), 'reopen summary same total');
 $testAdmin = false;
@@ -135,10 +152,10 @@ $testAdmin = true;
 check(quick_cost_find(db(), 1)['version'] === 1, 'non-admin quick-record denials preserve saved version');
 $document['operation_type'] = 'uretim'; $document['method'] = 'detailed';
 page(['id'=>'1'], postDocument($document, '1'));
-check(quick_cost_find(db(), 1)['document']['operation_type'] === 'uretim', 'operation update');
+check(quick_cost_find(db(), 1)['document']['operation_type'] === 'fason' && quick_cost_find(db(), 1)['document']['method'] === 'quick', 'hidden operation and method pinned to original record');
 $document['notes'] = 'Korunan taslak';
 $conflict = page(['id'=>'1'], postDocument($document, '1'));
-check($conflict['status'] === 409 && str_contains($conflict['html'], 'Korunan taslak'), 'conflict preserves draft');
+check($conflict['status'] === 409 && str_contains($conflict['html'], 'KORUNAN TASLAK'), 'conflict preserves draft');
 page(['id'=>'1','copy'=>'1'], postDocument($document));
 check((int)db()->query('SELECT COUNT(*) FROM quick_cost_sheets')->fetchColumn() === 2, 'copy makes new row');
 check(quick_cost_find(db(), 1)['version'] === 2, 'copy source unchanged');
@@ -155,18 +172,86 @@ check($bad['status'] === 422 && str_contains($bad['html'], '-1,00'), 'invalid ty
 $document['items'][0]['unit_price'] = 25;
 $document['product'] = '</script><img src=x onerror=alert(1)>';
 $html = page([], postDocument($document, 'invalid'))['html'];
-check(!str_contains($html, '<img src=x'), 'product escaped in markup and inline config');
+check(stripos($html, '<img src=x') === false, 'product escaped in markup and inline config');
+$baseDocument = quick_cost_find(db(), 1)['document'];
+$legacyDocument = $baseDocument;
+$legacyDocument['product'] = 'eski adres'; $legacyDocument['operation_type'] = 'uretim'; $legacyDocument['method'] = 'detailed';
+$legacyCreate = page([], postDocument($legacyDocument), 'list');
+$legacyId = (int)db()->query('SELECT MAX(id) FROM quick_cost_sheets')->fetchColumn();
+check(in_array('Location: hizli_maliyet.php', $legacyCreate['headers'], true), 'legacy root POST saves same body without redirect loss');
+check(quick_cost_find(db(), $legacyId)['document']['operation_type'] === 'uretim' && quick_cost_find(db(), $legacyId)['document']['method'] === 'detailed', 'legacy new-record metadata accepted and persisted');
+$legacyDocument['operation_type'] = 'fason'; $legacyDocument['method'] = 'quick';
+page(['id'=>(string)$legacyId], postDocument($legacyDocument, '1'), 'list');
+check(quick_cost_find(db(), $legacyId)['version'] === 2 && quick_cost_find(db(), $legacyId)['document']['method'] === 'detailed', 'legacy root POST retains id/version and pins original hidden metadata');
+$legacyDocument['notes'] = 'eski adres çakışma taslağı';
+$legacyConflict = page(['id'=>(string)$legacyId], postDocument($legacyDocument, '1'), 'list');
+check($legacyConflict['status'] === 409 && str_contains($legacyConflict['html'], 'ESKİ ADRES ÇAKIŞMA TASLAĞI'), 'legacy root conflict preserves original draft on same request');
+page(['id'=>(string)$legacyId,'copy'=>'1'], postDocument($legacyDocument), 'list');
+$legacyCopyId = (int)db()->query('SELECT MAX(id) FROM quick_cost_sheets')->fetchColumn();
+check($legacyCopyId !== $legacyId && quick_cost_find(db(), $legacyId)['version'] === 2 && quick_cost_find(db(), $legacyCopyId)['document']['operation_type'] === 'uretim', 'legacy root copy preserves body/source metadata and leaves source unchanged');
+$legacyDocument['items'][0]['unit_price'] = '-9,00';
+$legacyBad = page(['id'=>(string)$legacyId], postDocument($legacyDocument, '2'), 'list');
+check($legacyBad['status'] === 422 && str_contains($legacyBad['html'], '-9,00') && !array_filter($legacyBad['headers'], static fn($header) => str_starts_with($header, 'Location:')), 'legacy root invalid price remains editable without HTTP redirect');
+check(page([], ['payload'=>[],'csrf'=>'anonymous-csrf','version'=>'0'], 'list')['status'] === 422, 'legacy array payload dispatches safely to form validation');
+check(page([], array_merge(postDocument($baseDocument), ['action'=>'unknown']), 'list')['status'] === 422, 'unknown list action never falls through to payload save');
+
+$customDocument = $baseDocument;
+$customDocument['product'] = 'kiraz'; $customDocument['notes'] = 'özel iş';
+$customDocument['items'][] = ['code'=>'custom_manual','label'=>'özel taşıma','unit'=>'pallet','basis'=>'manual','qty'=>26,'unit_price'=>380];
+$customSave = page([], postDocument($customDocument));
+$customId = (int)db()->query('SELECT MAX(id) FROM quick_cost_sheets')->fetchColumn();
+$customStored = quick_cost_find(db(), $customId);
+check(in_array('Location: hizli_maliyet.php', $customSave['headers'], true) && (float)$customStored['document']['total'] === 679880.0, 'controller saves custom row once with exact total');
+check($customStored['product'] === 'KİRAZ' && $customStored['notes'] === 'ÖZEL İŞ' && $customStored['document']['items'][10]['label'] === 'ÖZEL TAŞIMA', 'controller persists Turkish uppercase product notes and custom label');
+$customDocument['items'][10]['unit_price'] = '-1';
+$customBad = page(['id'=>(string)$customId], postDocument($customDocument, '1'));
+check($customBad['status'] === 422 && str_contains($customBad['html'], 'custom_manual') && str_contains($customBad['html'], '-1') && str_contains($customBad['html'], 'özel taşıma'), 'invalid custom price and original label survive form recovery');
+$customDocument['items'][10]['unit_price'] = 400;
+page(['id'=>(string)$customId], postDocument($customDocument, '1'));
+$customDocument['notes'] = 'ek kalem çakışma taslağı';
+$customConflict = page(['id'=>(string)$customId], postDocument($customDocument, '1'));
+check($customConflict['status'] === 409 && str_contains($customConflict['html'], 'custom_manual') && str_contains($customConflict['html'], 'EK KALEM ÇAKIŞMA TASLAĞI'), 'custom rows survive version-conflict draft recovery');
+$customDocument['items'][10]['label'] = '';
+check(page(['id'=>(string)$customId], postDocument($customDocument, '2'))['status'] === 422, 'blank custom label rejected by controller');
+
+$listView = page([], [], 'list');
+check(str_contains($listView['html'], 'hizli_maliyet_form.php?id=1') && str_contains($listView['html'], 'Düzenle') && str_contains($listView['html'], 'kalıcı olarak silinecek'), 'saved list has edit and record-specific permanent delete confirmation');
+check(!str_contains($listView['html'], '>Fason<') && !str_contains($listView['html'], '>Üretim<'), 'saved list does not display hidden operation type');
+$deletePost = ['action'=>'delete','id'=>'1','version'=>'2','csrf'=>'anonymous-csrf'];
+check(page(['action'=>'delete'], [], 'list')['status'] === 200 && quick_cost_find(db(), 1) !== null, 'GET delete action never deletes');
+check(page([], array_merge($deletePost, ['csrf'=>'bad']), 'list')['status'] === 403, 'delete requires valid CSRF');
+$testAdmin = false;
+check(page([], $deletePost, 'list')['status'] === 403, 'delete denies non-admin');
+$testAdmin = true;
+foreach ([['read'], ['read','write'], ['read','delete']] as $permissions) {
+    $testPermissions = $permissions;
+    check(page([], $deletePost, 'list')['status'] === 403, 'delete requires write and delete permissions');
+}
+$testPermissions = ['read','write','delete'];
+$testDepot = 'OTHER';
+check(page([], $deletePost, 'list')['status'] === 403, 'delete cannot cross active depot');
+$testDepot = 'DEMO';
+$staleDelete = page([], array_merge($deletePost, ['version'=>'1']), 'list');
+check($staleDelete['status'] === 409 && str_contains($staleDelete['html'], 'hizli_maliyet_form.php?id=1') && quick_cost_find(db(), 1)['version'] === 2, 'stale delete preserves record and returns current list');
+check(page([], array_merge($deletePost, ['version'=>'0']), 'list')['status'] === 422, 'delete rejects zero version');
+check(page([], array_merge($deletePost, ['id'=>[]]), 'list')['status'] === 422, 'delete rejects array id');
+check(page([], array_merge($deletePost, ['id'=>'999999']), 'list')['status'] === 403, 'delete missing target denied without leakage');
+
 db()->exec("UPDATE quick_cost_sheets SET document_json='broken' WHERE id=2");
 check(page(['id'=>'2'])['status'] === 503, 'corrupt JSON fails safely');
+check(page([], [], 'list')['status'] === 200, 'list reads metadata without parsing corrupt saved JSON');
+$deleteCorrupt = page([], ['action'=>'delete','id'=>'2','version'=>'1','csrf'=>'anonymous-csrf'], 'list');
+check(in_array('Location: hizli_maliyet.php', $deleteCorrupt['headers'], true) && quick_cost_find(db(), 2) === null && quick_cost_find(db(), 1) !== null, 'delete removes only target corrupt quick record');
+check(end($testAudit)[0] === 'delete' && end($testAudit)[1] === 'quick_cost_sheets', 'delete uses existing audit module');
 db()->exec('DROP TABLE quick_cost_sheets');
 $missing = page();
-check($missing['status'] === 200 && str_contains($missing['html'], 'disabled'), 'missing schema renders disabled save');
-check(str_contains($missing['html'], 'Yeni maliyet tablosunu kur'), 'admin sees explicit setup form when missing');
+check($missing['status'] === 200 && str_contains($missing['html'], 'disabled'), 'missing schema form renders disabled save');
+check(str_contains(page([], [], 'list')['html'], 'Yeni maliyet tablosunu kur'), 'admin sees explicit setup form on list when missing');
 $testAdmin = false;
-$nonAdminMissing = page();
+$nonAdminMissing = page([], [], 'list');
 check($nonAdminMissing['status'] === 403 && !str_contains($nonAdminMissing['html'], 'Yeni maliyet tablosunu kur'), 'non-admin missing-schema page is forbidden');
 $testAdmin = true;
-check(page(['action'=>'install_schema'])['status'] === 200 && !quick_cost_storage_ready(db()), 'GET cannot create schema');
+check(page(['action'=>'install_schema'], [], 'list')['status'] === 200 && !quick_cost_storage_ready(db()), 'GET cannot create schema');
 check(page([], postDocument($document))['status'] === 422, 'missing schema no runtime migration');
 check(db()->query('SELECT marker FROM cost_sheets WHERE id=1')->fetchColumn() === 'untouched', 'legacy record unchanged');
 // Execute the real navigation function without loading helpers' migration IIFE.
@@ -178,7 +263,9 @@ function nav_muhasebe_gruplari(): array { return []; }
 function nav_ptak_sayfalari(): array { return []; }
 eval(substr($helpers, $start, $end - $start));
 $_SERVER['PHP_SELF'] = '/hizli_maliyet.php';
-check(nav_aktif_anahtar() === 'rapor', 'quick page belongs to cost/report navigation');
+check(nav_aktif_anahtar() === 'qcost', 'quick list belongs to dedicated quick-cost navigation');
+$_SERVER['PHP_SELF'] = '/hizli_maliyet_form.php';
+check(nav_aktif_anahtar() === 'qcost', 'new form belongs to dedicated quick-cost navigation');
 foreach (['maliyet.php','maliyet_form.php','maliyet_view.php'] as $oldPage) {
     $_SERVER['PHP_SELF'] = '/' . $oldPage;
     check(nav_aktif_anahtar() === 'rapor', 'legacy cost page navigation unchanged');

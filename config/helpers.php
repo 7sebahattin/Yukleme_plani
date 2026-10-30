@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v459');
+    define('APP_SURUM', 'v460');
 }
 
 // --- HTML kaçışı ---
@@ -453,7 +453,8 @@ function nav_aktif_anahtar(): ?string {
     $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true);
     $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_invoice.php', 'siparis_denge.php'], true);
     $a_usip  = $cur === 'urun_siparis.php';   // v411: Ürün Siparişleri kendi bölümü ("Siparişler")
-    $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php','hizli_maliyet.php',
+    $a_quick = in_array($cur, ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);
+    $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
     // Raporlar sayfasındaki karttan girilir. Bu yüzden maliyet_* sayfalarında
@@ -493,7 +494,7 @@ function nav_aktif_anahtar(): ?string {
     // $a_home '!$in_hks' taşır).
     foreach ([
         'home' => $a_home, 'records' => $a_yuk, 'cikma' => $a_cik, 'beyan' => $a_beyan,
-        'kantar' => $a_kant, 'hks' => $a_hks, 'rapor' => $a_rep, 'mstok' => $a_mstok,
+        'kantar' => $a_kant, 'hks' => $a_hks, 'qcost' => $a_quick, 'rapor' => $a_rep, 'mstok' => $a_mstok,
         'hesap' => $a_hes, 'mail' => $a_mail, 'siparis' => $a_sip, 'usip' => $a_usip, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
         'roles' => $a_rol, 'audit' => $a_aud, 'backup' => $a_bkp,
     ] as $anahtar => $aktif) {
@@ -546,8 +547,8 @@ function render_desktop_sidebar(string $base): void {
     $a_mail  = $ak === 'mail';
     $a_sip   = $ak === 'siparis';
     $a_usip  = $ak === 'usip';
-    // Mobilde Raporlar ailesi korunur; masaüstünde bu sayfanın kendi bağlantısı var.
-    $a_quick = $p_adm && basename($_SERVER['PHP_SELF'] ?? '') === 'hizli_maliyet.php';
+    // Liste ve form masaüstünde aynı Hızlı Maliyet bağlantısını etkinleştirir.
+    $a_quick = $p_adm && in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);
     $a_rep   = $ak === 'rapor' && !$a_quick;
     $a_ptak  = $ak === 'ptak';
     $a_def   = $ak === 'defs';
@@ -738,6 +739,7 @@ function nav_alt_sayfalar(): array {
         'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Paletleme',   'dar' => null,      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
         'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',            'kisa' => 'Mal Kabul',  'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
         'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
+        'qcost'   => ['href' => 'hizli_maliyet.php',     'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
         'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
         'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
@@ -780,6 +782,7 @@ function nav_alt_izinler(): array {
         'kantar'  => $c('kantar.read'),             // kantar.php: require_perm('kantar.read')
         'hks'     => $c('records.write'),           // halkayit/index.php: require_perm('records.write')
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
+        'qcost'   => $fn && $adm,                   // can_maliyet(read) admini kabul eder; cost_calc yüklenmeyen sayfalarda da görünür
         'mstok'   => $c('stok.read'),               // malzeme_stok.php: require_perm('stok.read')
         'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
         'mail'    => $fn && can_mail('read'),       // mail.php: can_mail('read') — TEK kaynak
