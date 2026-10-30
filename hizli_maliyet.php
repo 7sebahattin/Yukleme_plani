@@ -141,7 +141,7 @@ render_flash();
 <div class="qc-page">
     <div class="page-head">
         <div><h1>Hızlı Maliyet</h1><p class="muted">Satılacak net kilogram üzerinden maliyet hesabı</p></div>
-        <div class="page-head-actions"><a class="btn" href="maliyet.php">Maliyet menüsü</a><a class="btn" href="hizli_maliyet.php">Yeni hesap</a><a class="btn" href="#qc-records">Kayıtlar</a></div>
+        <div class="page-head-actions"><a class="btn" href="hizli_maliyet.php">Yeni hesap</a><a class="btn" href="#qc-records">Kayıtlar</a></div>
     </div>
     <?php if ($record): ?>
     <p class="muted"><?= $is_copy ? 'Kopyalanan hesap' : 'Hesap' ?> #<?= (int)$record['id'] ?> · Oluşturan kullanıcı #<?= (int)$record['created_by'] ?> · <?= h($record['created_at']) ?><?= !empty($record['updated_at']) ? ' · Güncelleme: ' . h($record['updated_at']) : '' ?></p>
