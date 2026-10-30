@@ -27,11 +27,6 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
         <span class="qc-sr-only" id="qc-live-total" aria-live="polite" aria-atomic="true"></span>
     </section>
 
-    <section class="qc-panel qc-choices" aria-label="İşlem seçenekleri">
-        <fieldset><legend>İşlem türü</legend><div class="qc-segments" role="group" aria-label="İşlem türü"><button type="button" data-qc-operation="uretim" aria-pressed="<?= ($document['operation_type'] ?? '') === 'uretim' ? 'true' : 'false' ?>" <?= !$can_write ? 'disabled' : '' ?>>Üretim</button><button type="button" data-qc-operation="fason" aria-pressed="<?= ($document['operation_type'] ?? 'fason') === 'fason' ? 'true' : 'false' ?>" <?= !$can_write ? 'disabled' : '' ?>>Fason</button></div></fieldset>
-        <p class="qc-hint" id="qc-operation-hint">Kg bazlı maliyetlerde Ürün KG kullanılır.</p>
-    </section>
-
     <section class="qc-panel"><h2>Temel bilgiler</h2><div class="qc-basics">
         <label for="qc-product">Ürün adı<input id="qc-product" data-qc-header="product" type="text" maxlength="150" required value="<?= h((string)($document['product'] ?? '')) ?>" <?= !$can_write ? 'disabled' : '' ?> autocomplete="off"></label>
         <label class="qc-net-field" for="qc-net-kg">Ürün KG<input id="qc-net-kg" data-qc-header="net_kg" type="text" inputmode="decimal" required value="<?= h($qc_value($document['net_kg'] ?? 0)) ?>" <?= !$can_write ? 'disabled' : '' ?> autocomplete="off" aria-describedby="qc-number-help"></label>
@@ -41,13 +36,16 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
 
     <section class="qc-costs" aria-labelledby="qc-costs-heading"><div class="qc-section-heading"><h2 id="qc-costs-heading">Maliyet kalemleri</h2><span>TL</span></div><p class="qc-hint">Fiyatları girin. Birim, miktar veya birim fiyatı değiştirmek için kalemin Ayar bölümünü açın.</p>
         <div id="qc-rows" class="qc-rows">
-        <?php foreach (($document['items'] ?? []) as $qc_item):
+        <?php $qc_render_row = static function (array $qc_item) use ($qc_catalog, $qc_units, $qc_value, $can_write): void {
             $qc_code = (string)$qc_item['code'];
-            $qc_meta = $qc_catalog[$qc_code] ?? ['label'=>$qc_code, 'group'=>'D'];
+            $qc_custom = (bool)preg_match('/^custom_[a-z0-9_]{1,40}$/D', $qc_code);
+            $qc_meta = $qc_catalog[$qc_code] ?? ['label'=>(string)($qc_item['label'] ?? ''), 'group'=>'D'];
+            $qc_label = (string)$qc_meta['label'] ?: 'Yeni kalem';
             $qc_fixed = ($qc_item['basis'] ?? '') === 'fixed';
         ?>
         <article class="qc-row" data-qc-row="<?= h($qc_code) ?>">
-            <div class="qc-row-head"><h3><span class="qc-group-badge"><?= h((string)$qc_meta['group']) ?></span><?= h((string)$qc_meta['label']) ?></h3><output data-qc-amount="<?= h($qc_code) ?>" aria-label="<?= h((string)$qc_meta['label']) ?> tutarı">0,00 TL</output></div>
+            <div class="qc-row-head"><h3 data-qc-row-title><?= h($qc_label) ?></h3><output data-qc-amount="<?= h($qc_code) ?>" aria-label="<?= h($qc_label) ?> tutarı">0,00 TL</output><?php if ($qc_custom && $can_write): ?><button type="button" class="qc-remove-button" data-qc-remove="<?= h($qc_code) ?>" aria-label="<?= h($qc_label) ?> kalemini kaldır">Kaldır</button><?php endif; ?></div>
+            <?php if ($qc_custom): ?><label class="qc-custom-label" for="qc-label-<?= h($qc_code) ?>">Kalem adı<input id="qc-label-<?= h($qc_code) ?>" data-qc-code="<?= h($qc_code) ?>" data-qc-field="label" type="text" maxlength="150" required value="<?= h((string)($qc_item['label'] ?? '')) ?>" autocomplete="off" <?= !$can_write ? 'disabled' : '' ?>></label><?php endif; ?>
             <label class="qc-main-price" for="qc-price-<?= h($qc_code) ?>"><span data-qc-price-label="<?= h($qc_code) ?>"><?= $qc_fixed ? 'Sabit gider (TL)' : 'Birim fiyat (TL/kg)' ?></span><input id="qc-price-<?= h($qc_code) ?>" data-qc-code="<?= h($qc_code) ?>" data-qc-price="main" type="text" inputmode="decimal" aria-label="<?= h((string)$qc_meta['label']) ?> fiyatı" value="<?= h($qc_value($qc_item['unit_price'] ?? 0)) ?>" autocomplete="off" <?= !$can_write ? 'disabled' : '' ?>></label>
             <p data-qc-basis="<?= h($qc_code) ?>" class="qc-hint"></p>
             <details class="qc-row-settings" data-qc-settings="<?= h($qc_code) ?>">
@@ -60,15 +58,20 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
                 <button type="button" class="qc-text-button" data-qc-rebind="<?= h($qc_code) ?>" <?= !$can_write ? 'disabled' : '' ?>>Ürün KG kullan</button>
             </details>
         </article>
-        <?php endforeach; ?>
+        <?php }; foreach (($document['items'] ?? []) as $qc_item) $qc_render_row($qc_item); ?>
         </div>
+        <?php if ($can_write): ?>
+        <template id="qc-custom-row-template"><?php $qc_render_row(['code'=>'custom_template','label'=>'','unit'=>'fixed','basis'=>'fixed','qty'=>1,'unit_price'=>0]); ?></template>
+        <button id="qc-add-item" class="btn qc-add-item" type="button">Yeni kalem ekle</button>
+        <p id="qc-custom-limit" class="qc-hint" hidden>En fazla kırk yeni kalem eklenebilir.</p>
+        <?php endif; ?>
         <p class="qc-hint">Malzeme; kasa, viyol, koli, etiket, palet ve diğer ambalajların ortalama maliyetidir. İşçilik ve diğer giderler kendi satırlarında hesaplanır.</p>
     </section>
 
     <section class="qc-panel qc-breakdown" aria-labelledby="qc-summary-heading"><h2 id="qc-summary-heading">Maliyet özeti</h2><dl>
-        <div><dt>A — Ürün Maliyetleri</dt><dd id="qc-group-A"><?= h($qc_money($calculation['groups']['A'] ?? 0)) ?> TL</dd></div>
-        <div><dt>B — Malzeme Maliyetleri</dt><dd id="qc-group-B"><?= h($qc_money($calculation['groups']['B'] ?? 0)) ?> TL</dd></div>
-        <div><dt>D — Ortak / Diğer Maliyetler</dt><dd id="qc-group-D"><?= h($qc_money($calculation['groups']['D'] ?? 0)) ?> TL</dd></div>
+        <div><dt>Ürün Maliyetleri</dt><dd id="qc-group-A"><?= h($qc_money($calculation['groups']['A'] ?? 0)) ?> TL</dd></div>
+        <div><dt>Malzeme Maliyetleri</dt><dd id="qc-group-B"><?= h($qc_money($calculation['groups']['B'] ?? 0)) ?> TL</dd></div>
+        <div><dt>Ortak / Diğer Maliyetler</dt><dd id="qc-group-D"><?= h($qc_money($calculation['groups']['D'] ?? 0)) ?> TL</dd></div>
         <div class="qc-grand-total"><dt>Toplam maliyet</dt><dd id="qc-summary-total"><?= h($qc_money($qc_total)) ?> TL</dd></div>
         <div><dt>Net KG maliyeti</dt><dd id="qc-summary-unit"><?= h($qc_money($qc_unit)) ?> TL/kg</dd></div>
     </dl></section>

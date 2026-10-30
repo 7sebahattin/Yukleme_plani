@@ -9,146 +9,101 @@ require_once __DIR__ . '/config/quick_cost_schema.php';
 $auth_user = require_login();
 if (!is_admin()) forbidden('Hızlı Maliyet şu anda yalnız sistem yöneticisine açık.');
 require_maliyet('read');
-// No cost_migrate(): this screen never changes the existing cost schema/data.
 header('Cache-Control: no-store, private');
 header('X-Content-Type-Options: nosniff');
 
-/** Recover ordinary invalid form values without rendering arrays as text. */
-function quick_cost_form_input(array $input): array
-{
-    $safe = quick_cost_defaults();
-    foreach (['product', 'sheet_date', 'operation_type', 'method', 'net_kg', 'notes'] as $key) {
-        if (isset($input[$key]) && (is_string($input[$key]) || is_int($input[$key]) || is_float($input[$key]))) {
-            $safe[$key] = $input[$key];
-        }
+// Eski kayıt bağlantıları yeni forma gider; kullanıcı girdisi URL hedefi olamaz.
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && array_key_exists('id', $_GET)) {
+    $legacy_id = $_GET['id'];
+    if (!is_string($legacy_id) || !preg_match('/^\d{1,10}$/D', $legacy_id)) {
+        http_response_code(400); exit('Geçersiz kayıt numarası.');
     }
-    $rows = is_array($input['items'] ?? null) ? $input['items'] : [];
-    foreach ($safe['items'] as &$item) {
-        foreach ($rows as $row) {
-            if (!is_array($row) || ($row['code'] ?? null) !== $item['code']) continue;
-            foreach (['unit', 'qty', 'unit_price', 'basis'] as $key) {
-                if (isset($row[$key]) && (is_string($row[$key]) || is_int($row[$key]) || is_float($row[$key]))) {
-                    $item[$key] = $row[$key];
-                }
-            }
-            break;
-        }
+    $target = 'hizli_maliyet_form.php';
+    if ((int)$legacy_id > 0) {
+        $target .= '?id=' . (int)$legacy_id;
+        if (($_GET['copy'] ?? '') === '1') $target .= '&copy=1';
     }
-    unset($item);
-    return $safe;
+    header('Location: ' . $target);
+    exit;
+}
+$action = $_POST['action'] ?? '';
+// Eski açık form aynı adrese POST edebilir. Gövde/id/copy/version korunur;
+// redirect ile payload kaybedilmez. Bozuk payload da formda 422 olarak işlenir.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === '' && array_key_exists('payload', $_POST)) {
+    require __DIR__ . '/hizli_maliyet_form.php';
+    exit;
 }
 
-$id_raw = $_GET['id'] ?? '0';
-if (!is_string($id_raw) || !preg_match('/^\d{1,10}$/D', $id_raw)) {
-    http_response_code(400);
-    exit('Geçersiz kayıt numarası.');
-}
-$id = (int)$id_raw;
-$is_copy = ($_GET['copy'] ?? '') === '1';
 $can_write = can_maliyet('write');
-$errors = [];
-$record = null;
-$version = 0;
-$document = quick_cost_defaults();
-$calculation = quick_cost_calculate($document);
+$can_delete = $can_write && can_maliyet('delete');
 $storage_ready = false;
+$errors = [];
 $list = ['items' => [], 'total' => 0, 'page' => 1, 'pages' => 1];
 $query = is_string($_GET['q'] ?? null) ? mb_substr(trim($_GET['q']), 0, 150) : '';
 $page = max(1, min(100000, (int)(is_scalar($_GET['page'] ?? 1) ? ($_GET['page'] ?? 1) : 1)));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_maliyet('write');
+    if ($action === 'delete') require_maliyet('delete');
     csrf_check(is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : null);
-    if (($_POST['action'] ?? '') === 'install_schema' && !is_admin()) {
-        forbidden('Kayıt altyapısını yalnız sistem yöneticisi kurabilir.');
-    }
 }
 
 try {
     $storage_ready = quick_cost_storage_ready(db());
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'install_schema') {
-        $installed = quick_cost_install(db());
-        set_flash('success', $installed['created'] ? 'Hızlı Maliyet kayıt altyapısı kuruldu.' : 'Hızlı Maliyet kayıt altyapısı zaten hazır.');
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($action === 'install_schema') {
+            $installed = quick_cost_install(db());
+            set_flash('success', $installed['created'] ? 'Hızlı Maliyet kayıt altyapısı kuruldu.' : 'Hızlı Maliyet kayıt altyapısı zaten hazır.');
+        } elseif ($action === 'delete') {
+            $delete_id = $_POST['id'] ?? null;
+            $delete_version = $_POST['version'] ?? null;
+            if (!is_string($delete_id) || !preg_match('/^[1-9]\d{0,9}$/D', $delete_id)
+                || !is_string($delete_version) || !preg_match('/^[1-9]\d{0,9}$/D', $delete_version)) {
+                throw new InvalidArgumentException('Kayıt numarası ve sürümü geçersiz.');
+            }
+            if (!$storage_ready) throw new InvalidArgumentException('Kayıt altyapısı henüz kurulmadı.');
+            quick_cost_delete(db(), (int)$delete_id, (int)$delete_version);
+            set_flash('success', 'Hızlı maliyet hesabı silindi.');
+        } else {
+            throw new InvalidArgumentException('Geçersiz liste işlemi.');
+        }
         header('Location: hizli_maliyet.php');
         exit;
     }
-    if ($storage_ready && $id > 0) {
-        $record = quick_cost_find(db(), $id);
-        if ($record === null) {
-            http_response_code(404);
-            exit('Hızlı maliyet kaydı bulunamadı.');
-        }
-        $document = $record['document'];
-        $version = $is_copy ? 0 : (int)$record['version'];
-        if ($is_copy) $document['sheet_date'] = date('Y-m-d');
-        $calculation = quick_cost_calculate($document);
-    }
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $payload = $_POST['payload'] ?? null;
-        if (!is_string($payload) || strlen($payload) > 65536) {
-            throw new InvalidArgumentException('Hesap verisi geçersiz veya çok büyük.');
-        }
-        try {
-            $input = json_decode($payload, true, 16, JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
-            throw new InvalidArgumentException('Hesap verisi okunamadı.');
-        }
-        if (!is_array($input) || array_is_list($input)) {
-            throw new InvalidArgumentException('Hesap verisi geçersiz.');
-        }
-        $document = quick_cost_form_input($input);
-        $calculation = quick_cost_calculate($input);
-        $document = $calculation;
-        $posted_version = $_POST['version'] ?? '';
-        if (!is_string($posted_version) || !preg_match('/^\d{1,10}$/D', $posted_version)) {
-            throw new InvalidArgumentException('Kayıt sürümü geçersiz.');
-        }
-        $version = (int)$posted_version;
-        if (!$storage_ready) throw new InvalidArgumentException('Kayıt altyapısı henüz kurulmadı. Hesabınız kaydedilmedi.');
-        $saved = quick_cost_save(db(), $input, $is_copy ? 0 : $id, $version);
-        set_flash('success', $is_copy ? 'Hesap yeni bir kayıt olarak kopyalandı.' : 'Hızlı maliyet hesabı kaydedildi.');
-        header('Location: hizli_maliyet.php?id=' . (int)$saved['id']);
-        exit;
-    }
-    if ($storage_ready) $list = quick_cost_list(db(), $page, 20, $query);
 } catch (InvalidArgumentException $e) {
-    http_response_code(422);
-    $errors[] = $e->getMessage();
+    http_response_code(422); $errors[] = $e->getMessage();
 } catch (RuntimeException $e) {
-    // Store access/conflict errors are handled below using their typed classes.
     if ($e instanceof QuickCostAccessException) {
         forbidden('Bu kayda erişim yetkiniz yok.');
     } elseif ($e instanceof QuickCostConflictException) {
-        http_response_code(409);
-        $errors[] = 'Bu hesap başka bir oturumda değiştirildi. Girdiğiniz değerler aşağıda korunuyor. Güncel kaydı ayrı bir sekmede açıp karşılaştırın.';
+        http_response_code(409); $errors[] = 'Bu kayıt başka bir oturumda değiştirildi. Güncel liste aşağıda; kayıt silinmedi.';
     } else {
-        error_log('[hizli_maliyet] ' . get_class($e));
+        error_log('[hizli_maliyet_list] ' . get_class($e));
         http_response_code(503);
-        $errors[] = ($_POST['action'] ?? '') === 'install_schema'
-            ? 'Tablo kurulumunun tamamlandığı doğrulanamadı. Sayfayı yeniden açıp kontrol edin.'
-            : 'Kayıt hizmetine şu anda ulaşılamıyor. Girdiğiniz değerler aşağıda korunuyor.';
+        $errors[] = $action === 'install_schema' ? 'Tablo kurulumunun tamamlandığı doğrulanamadı. Sayfayı yeniden açıp kontrol edin.' : 'Kayıt hizmetine şu anda ulaşılamıyor.';
     }
-} catch (JsonException $e) {
-    http_response_code(503);
-    $errors[] = 'Kayıt verisi şu anda okunamıyor. Lütfen daha sonra tekrar deneyin.';
+}
+if ($storage_ready) {
+    try { $list = quick_cost_list(db(), $page, 20, $query); }
+    catch (InvalidArgumentException $e) { http_response_code(422); $errors[] = $e->getMessage(); }
+    catch (RuntimeException $e) {
+        error_log('[hizli_maliyet_list_read] ' . get_class($e));
+        http_response_code(503); $errors[] = 'Kayıt listesine şu anda ulaşılamıyor.';
+    }
 }
 
-$catalog = quick_cost_catalog();
 render_header('Hızlı Maliyet');
 render_flash();
 ?>
 <link rel="stylesheet" href="assets/hizli-maliyet.css?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.css') ?>">
 <div class="qc-page">
     <div class="page-head">
-        <div><h1>Hızlı Maliyet</h1><p class="muted">Ürün KG üzerinden maliyet hesabı</p></div>
-        <div class="page-head-actions"><a class="btn" href="hizli_maliyet.php">Yeni hesap</a><a class="btn" href="#qc-records">Kayıtlar</a></div>
+        <div><h1>Hızlı Maliyet</h1><p class="muted">Kaydedilen maliyet hesapları</p></div>
+        <?php if ($can_write): ?><div class="page-head-actions"><a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
     </div>
-    <?php if ($record): ?>
-    <p class="muted"><?= $is_copy ? 'Kopyalanan hesap' : 'Hesap' ?> #<?= (int)$record['id'] ?> · Oluşturan kullanıcı #<?= (int)$record['created_by'] ?> · <?= h($record['created_at']) ?><?= !empty($record['updated_at']) ? ' · Güncelleme: ' . h($record['updated_at']) : '' ?></p>
-    <?php if (!$is_copy && $can_write): ?><p><a class="btn" href="hizli_maliyet.php?id=<?= $id ?>&amp;copy=1">Kopyalayarak yeni hesap</a></p><?php endif; ?>
-    <?php endif; ?>
-    <?php if (!$storage_ready && $can_write && is_admin()): ?>
-    <section class="qc-panel" style="margin-bottom:18px" aria-labelledby="qc-install-heading">
+    <?php if ($errors): ?><div class="qc-error" role="alert"><ul><?php foreach ($errors as $error): ?><li><?= h($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+    <?php if (!$storage_ready && $can_write): ?>
+    <section class="qc-panel" aria-labelledby="qc-install-heading">
         <h2 id="qc-install-heading">Hızlı Maliyet kayıt altyapısı</h2>
         <p>Kaydetmeyi açmak için yalnız yeni Hızlı Maliyet tablosu oluşturulur. Mevcut maliyet kayıtları korunur.</p>
         <form method="post" action="hizli_maliyet.php">
@@ -158,28 +113,33 @@ render_flash();
         </form>
     </section>
     <?php endif; ?>
-    <?php require __DIR__ . '/_hizli_maliyet_form.php'; ?>
     <section id="qc-records" class="qc-panel">
         <h2>Hızlı maliyet kayıtları</h2>
         <p class="muted">Aktif depo: <?= h(active_depot() ?? '') ?> · <?= (int)$list['total'] ?> kayıt</p>
-        <form method="get" class="qc-record-search"><label for="qc-search">Ürün ara</label><input id="qc-search" name="q" type="search" maxlength="150" value="<?= h($query) ?>"><button class="btn" type="submit">Ara</button></form>
+        <form method="get" action="hizli_maliyet.php" class="qc-record-search"><label for="qc-search">Ürün ara</label><input id="qc-search" name="q" type="search" maxlength="150" value="<?= h($query) ?>"><button class="btn" type="submit">Ara</button></form>
         <?php if ($storage_ready && !$list['items']): ?><p>Henüz kayıt yok.</p><?php endif; ?>
         <div class="qc-record-list">
         <?php foreach ($list['items'] as $row): ?>
-            <a class="qc-record" href="hizli_maliyet.php?id=<?= (int)$row['id'] ?>">
-                <strong><?= h($row['product']) ?></strong>
-                <span><?= h($row['sheet_date']) ?> · <?= ($row['operation_type'] === 'uretim') ? 'Üretim' : 'Fason' ?></span>
+            <article class="qc-record">
+                <a href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a>
+                <span><?= h($row['sheet_date']) ?></span>
                 <span><?= number_format((float)$row['net_kg'], 4, ',', '.') ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 2, ',', '.') ?> TL/kg</span>
-            </a>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                    <a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
+                    <?php if ($can_write): ?><a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>
+                    <?php if ($can_delete): ?><form method="post" action="hizli_maliyet.php" data-confirm="<?= h('#' . (int)$row['id'] . ' – ' . $row['product'] . ' kalıcı olarak silinecek. Devam edilsin mi?') ?>" onsubmit="return confirm(this.dataset.confirm);">
+                        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="version" value="<?= (int)$row['version'] ?>">
+                        <button class="btn" type="submit">Sil</button>
+                    </form><?php endif; ?>
+                </div>
+            </article>
         <?php endforeach; ?>
         </div>
         <?php if ($list['pages'] > 1): ?><nav aria-label="Kayıt sayfaları" class="qc-record-search">
-            <?php if ($list['page'] > 1): ?><a class="btn" href="?<?= h(http_build_query(['q' => $query, 'page' => $list['page'] - 1])) ?>#qc-records">Önceki</a><?php endif; ?>
+            <?php if ($list['page'] > 1): ?><a class="btn" href="hizli_maliyet.php?<?= h(http_build_query(['q' => $query, 'page' => $list['page'] - 1])) ?>#qc-records">Önceki</a><?php endif; ?>
             <span><?= (int)$list['page'] ?> / <?= (int)$list['pages'] ?></span>
-            <?php if ($list['page'] < $list['pages']): ?><a class="btn" href="?<?= h(http_build_query(['q' => $query, 'page' => $list['page'] + 1])) ?>#qc-records">Sonraki</a><?php endif; ?>
+            <?php if ($list['page'] < $list['pages']): ?><a class="btn" href="hizli_maliyet.php?<?= h(http_build_query(['q' => $query, 'page' => $list['page'] + 1])) ?>#qc-records">Sonraki</a><?php endif; ?>
         </nav><?php endif; ?>
     </section>
 </div>
-<script>window.QUICK_COST_CONFIG = <?= json_encode(['document' => $document, 'catalog' => $catalog, 'readOnly' => !$can_write], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;</script>
-<script src="assets/hizli-maliyet.js?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.js') ?>" defer></script>
 <?php render_footer(); ?>

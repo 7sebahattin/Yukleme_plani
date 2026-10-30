@@ -121,6 +121,14 @@ function quick_cost_text($value, string $label, int $limit): string
     return trim($value);
 }
 
+/** Türkçe kullanıcı metni; dönüşüm uzunluğu artırırsa üst sınır yine uygulanır. */
+function quick_cost_upper_text($value, string $label, int $limit): string
+{
+    $text = quick_cost_text($value, $label, $limit);
+    $upper = mb_strtoupper(strtr($text, ['i' => 'İ', 'ı' => 'I']), 'UTF-8');
+    return quick_cost_text($upper, $label, $limit);
+}
+
 /**
  * Tek hesap modeli. Eski quick/detailed yöntemi yalnız uyumluluk metadatasıdır.
  * net_kg bağlı satırlar net kilogramı izler; manual satırlar kendi miktarını korur.
@@ -128,8 +136,8 @@ function quick_cost_text($value, string $label, int $limit): string
  */
 function quick_cost_calculate(array $input): array
 {
-    $product = quick_cost_text($input['product'] ?? '', 'Ürün', 150);
-    $notes = quick_cost_text($input['notes'] ?? '', 'Açıklama', 2000);
+    $product = quick_cost_upper_text($input['product'] ?? '', 'Ürün', 150);
+    $notes = quick_cost_upper_text($input['notes'] ?? '', 'Açıklama', 2000);
     $date = $input['sheet_date'] ?? '';
     if (!is_string($date) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $date, $parts)
         || !checkdate((int)$parts[2], (int)$parts[3], (int)$parts[1])) {
@@ -146,16 +154,25 @@ function quick_cost_calculate(array $input): array
     $net = quick_cost_number($input['net_kg'] ?? null, 'Ürün KG');
     $catalog = quick_cost_catalog();
     $rawItems = $input['items'] ?? null;
-    if (!is_array($rawItems) || count($rawItems) !== count($catalog) || !array_is_list($rawItems)) {
-        throw new InvalidArgumentException('On maliyet kaleminin tamamı bir kez gönderilmeli.');
+    if (!is_array($rawItems) || count($rawItems) < count($catalog) || count($rawItems) > 50 || !array_is_list($rawItems)) {
+        throw new InvalidArgumentException('On temel kalem bir kez, en fazla kırk ek kalemle gönderilmeli.');
     }
     $byCode = [];
     foreach ($rawItems as $item) {
         $code = is_array($item) ? ($item['code'] ?? null) : null;
-        if (!is_string($code) || !isset($catalog[$code]) || isset($byCode[$code])) {
+        if (!is_string($code) || (!isset($catalog[$code]) && !preg_match('/^custom_[a-z0-9_]{1,40}$/D', $code)) || isset($byCode[$code])) {
             throw new InvalidArgumentException('Eksik, tekrarlanan veya bilinmeyen maliyet kalemi.');
         }
         $byCode[$code] = $item;
+    }
+    foreach ($catalog as $code => $definition) {
+        if (!isset($byCode[$code])) throw new InvalidArgumentException('On temel maliyet kaleminin tamamı gerekli.');
+    }
+    foreach ($byCode as $code => $item) {
+        if (isset($catalog[$code])) continue;
+        $label = quick_cost_upper_text($item['label'] ?? null, 'Ek kalem adı', 150);
+        if ($label === '') throw new InvalidArgumentException('Ek maliyet kaleminin adı gerekli.');
+        $catalog[$code] = ['label' => $label, 'group' => 'D'];
     }
     $items = [];
     $groupCents = ['A' => 0, 'B' => 0, 'D' => 0];

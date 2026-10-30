@@ -23,6 +23,10 @@ function h($text): string { return htmlspecialchars((string)$text, ENT_QUOTES, '
 preg_match("/define\('APP_SURUM', '(v\d+)'\)/", $source, $version);
 define('APP_SURUM', $version[1]);
 eval(substr($source, $start, $end - $start));
+$mobileStart = strpos($source, 'function nav_alt_sayfalar(): array {');
+$mobileEnd = strpos($source, 'function nav_alt_cerez_oku(', $mobileStart);
+if ($mobileStart === false || $mobileEnd === false) throw new RuntimeException('Mobile source not found.');
+eval(substr($source, $mobileStart, $mobileEnd - $mobileStart));
 $checks = 0;
 function qc_sidebar_check(bool $value, string $label): void {
     if (!$value) throw new RuntimeException('FAIL: ' . $label);
@@ -35,14 +39,18 @@ function sidebar(string $page): array {
     @$dom->loadHTML('<meta charset="utf-8">' . $html);
     return [$html, new DOMXPath($dom)];
 }
-[$html, $xp] = sidebar('hizli_maliyet.php');
+foreach (['hizli_maliyet.php', 'hizli_maliyet_form.php'] as $quickPage) {
+[$html, $xp] = sidebar($quickPage);
 qc_sidebar_check($xp->query('//a[@href="/app/hizli_maliyet.php"]')->length === 1, 'admin sees exactly one quick link');
 qc_sidebar_check(str_contains($html, 'Hızlı Maliyet'), 'requested Turkish label');
 qc_sidebar_check($xp->query('//a[@href="/app/hizli_maliyet.php" and contains(@class," active")]')->length === 1, 'quick link highlighted');
 qc_sidebar_check($xp->query('//a[contains(@class,"sidebar-link") and contains(@class," active")]')->length === 1, 'exactly one active link');
 qc_sidebar_check($xp->query('//a[@href="/app/reports.php" and contains(@class," active")]')->length === 0, 'report link not double highlighted');
 qc_sidebar_check($xp->query('//details[@data-sb-grup="operasyon" and @open]//a[@href="/app/hizli_maliyet.php"]')->length === 1, 'operation group open');
-qc_sidebar_check(nav_aktif_anahtar() === 'rapor', 'mobile family retained');
+qc_sidebar_check(nav_aktif_anahtar() === 'qcost', 'list and form share the dedicated mobile item');
+qc_sidebar_check(nav_alt_izinler()['qcost'] === true, 'admin mobile entry works without loading cost_calc');
+}
+qc_sidebar_check(nav_alt_sayfalar()['qcost']['href'] === 'hizli_maliyet.php' && nav_alt_sayfalar()['qcost']['etiket'] === 'Hızlı Maliyet', 'mobile button opens the record list with the requested name');
 foreach (['reports.php','maliyet.php','maliyet_form.php','maliyet_view.php'] as $page) {
     [, $xp] = sidebar($page);
     qc_sidebar_check($xp->query('//a[@href="/app/reports.php" and contains(@class," active")]')->length === 1, 'existing report/cost active route retained: ' . $page);
@@ -54,6 +62,9 @@ qc_sidebar_check(str_contains($html, 'href="/app/hizli_maliyet.php"'), 'admin li
 $admin = false; $permissions = ['reports.read','maliyet.read','maliyet.write'];
 [$html, $xp] = sidebar('reports.php');
 qc_sidebar_check(!str_contains($html, 'hizli_maliyet.php') && !str_contains($html, 'Hızlı Maliyet'), 'cost reader/writer without admin cannot see link');
+qc_sidebar_check(nav_alt_izinler()['qcost'] === false, 'non-admin cannot gain a mobile item from a forged ordering cookie');
 qc_sidebar_check($xp->query('//a[@href="/app/reports.php"]')->length === 1, 'non-admin reports access preserved');
 qc_sidebar_check(str_contains(file_get_contents(dirname(__DIR__) . '/sw.js'), 'yukleme-plani-' . APP_SURUM), 'PWA and app versions match');
+$sw = file_get_contents(dirname(__DIR__) . '/sw.js');
+qc_sidebar_check(str_contains($sw, '/\\/hizli_maliyet(?:_form)?\\.php(\\/|$)/'), 'list/form and PATH_INFO bypass share an anchored SW rule');
 echo 'PASS ' . $checks . " sidebar permission/highlight checks.\n";

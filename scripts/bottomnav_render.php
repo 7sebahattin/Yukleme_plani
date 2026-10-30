@@ -192,6 +192,8 @@ $GATES = [
     'cavus_cari.php'        => ['cavus_cari.php', "require_pdks_cari('accounts');",
                                 fn() => is_admin() || can('attendance.foreman_accounts'), 'is_admin() || attendance.foreman_accounts (pdks_cari_can)'],
     'reports.php'           => ['reports.php', "else { require_perm('reports.read'); }", fn() => can('reports.read'), 'reports.read'],
+    'hizli_maliyet.php'     => ['hizli_maliyet.php', "if (!is_admin()) forbidden(", fn() => is_admin(), 'admin; can_maliyet(read) also accepts admin'],
+    'hizli_maliyet_form.php' => ['hizli_maliyet_form.php', "if (!is_admin()) forbidden(", fn() => is_admin(), 'admin; can_maliyet(read) also accepts admin'],
     'beyanlar.php'          => ['beyanlar.php', "if (!can_beyan('read')) forbidden();", fn() => can('beyan.read') || is_admin(), 'can_beyan(read) = beyan.read || is_admin()'],
     'kantar.php'            => ['kantar.php', "require_perm('kantar.read');", fn() => can('kantar.read'), 'kantar.read'],
     'malzeme_stok.php'      => ['malzeme_stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],
@@ -215,13 +217,13 @@ $GATES = [
 // karşılaştırılır: kayıt değişirse bu test fark eder.
 $ANAHTAR_SAYFA = [
     'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
-    'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php',
+    'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php', 'qcost' => 'hizli_maliyet.php',
     'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'usip' => 'urun_siparis.php', 'ptak' => 'personel_takip.php',
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }
@@ -257,6 +259,8 @@ $SAYFALAR = [
     'personel'    => ['self' => '/personel.php',       'kapi' => 'personel.php',       'bolum' => 'personel_takip.php', 'baslik' => 'Personel'],
     'reports'     => ['self' => '/reports.php',       'kapi' => 'reports.php',        'bolum' => 'reports.php',        'baslik' => 'Raporlar'],
     'maliyet'     => ['self' => '/maliyet.php',        'kapi' => 'maliyet.php',        'bolum' => 'reports.php',        'baslik' => 'Maliyet'],
+    'quick_list'  => ['self' => '/hizli_maliyet.php', 'kapi' => 'hizli_maliyet.php', 'bolum' => 'hizli_maliyet.php', 'baslik' => 'Hızlı Maliyet'],
+    'quick_form'  => ['self' => '/hizli_maliyet_form.php', 'kapi' => 'hizli_maliyet_form.php', 'bolum' => 'hizli_maliyet.php', 'baslik' => 'Yeni maliyet hesapla'],
     'hesap'       => ['self' => '/hesap.php',          'kapi' => 'hesap.php',          'bolum' => 'hesap.php',          'baslik' => 'Hesap'],
     'siparisler'  => ['self' => '/siparisler.php',     'kapi' => 'siparisler.php',     'bolum' => 'siparisler.php',     'baslik' => 'Siparişler'],
     'definitions' => ['self' => '/definitions.php',    'kapi' => 'definitions.php',    'bolum' => 'definitions.php',    'baslik' => 'Tanımlar'],
@@ -381,9 +385,25 @@ foreach ($PROFILLER as $pk => $pr) {
     // ── Çerez senaryoları ('asya_nav' — sunucu tarafı okuma) ──────────────
     // Yalnız operatör: sahte (yasak/bilinmeyen anahtar), geçerli (sabit +
     // sıra) ve BAŞKA kullanıcının çerezi. Beklenen slotlar elle yazılır.
+    if ($pk === 'admin') {
+        foreach (['quick_list', 'quick_form'] as $quickPage) {
+            $s = $SAYFALAR[$quickPage];
+            $_COOKIE['asya_nav'] = 'u:1;s:records,hks,ptak;p:qcost';
+            $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
+            unset($_COOKIE['asya_nav']);
+            $dosya = "admin__{$quickPage}__pinned.html";
+            file_put_contents($OUT . '/' . $dosya, $html);
+            $manifest['sayfalar'][] = [
+                'profil' => $pk, 'sayfa' => $quickPage . '+pinned', 'dosya' => $dosya,
+                'yol' => ltrim($s['self'], '/'), 'bolum' => 'hizli_maliyet.php', 'anahtar' => 'qcost',
+                'depo_rengi' => depot_color($pr['depo']),
+                'senaryo' => ['ad' => 'qcost_pinned', 'cerez' => 'u:1;s:records,hks,ptak;p:qcost', 'slotlar' => ['qcost', 'records', 'hks', 'ptak'], 'sabit' => ['qcost']],
+            ];
+        }
+    }
     if ($pk === 'operator') {
         $senaryolar = [
-            'cerez_sahte'  => ['u:1;s:users,xyz,kantar,audit;p:roles,backup,home,more,../index', ['kantar', 'records', 'hks', 'ptak'], []],
+            'cerez_sahte'  => ['u:1;s:users,qcost,xyz,kantar,audit;p:qcost,roles,backup,home,more,../index', ['kantar', 'records', 'hks', 'ptak'], []],
             'cerez_gecerli'=> ['u:1;s:beyan,kantar,records,mstok;p:hesap', ['hesap', 'beyan', 'kantar', 'records'], ['hesap']],
             'cerez_baska'  => ['u:2;s:beyan,kantar,records,mstok;p:hesap', $soguk, []],
             'cerez_bozuk'  => [str_repeat('s:records,', 60), $soguk, []],
