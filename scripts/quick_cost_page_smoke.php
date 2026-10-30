@@ -86,7 +86,21 @@ unset($row);
 
 if (($argv[1] ?? '') === '--render') {
     // Static anonymous HTML includes actual form, CSS and JS; no PHP web server.
+    $variant = $argv[2] ?? '';
+    if (!in_array($variant, ['', 'readonly', 'legacy'], true)) throw new InvalidArgumentException('Unknown render fixture.');
+    if ($variant === 'legacy') {
+        $document['method'] = 'detailed';
+        $document['operation_type'] = 'uretim';
+        foreach ($document['items'] as &$item) {
+            if ($item['code'] === 'transport') {
+                $item['unit'] = 'pallet'; $item['basis'] = 'manual';
+                $item['qty'] = 26; $item['unit_price'] = 380;
+            }
+        }
+        unset($item);
+    }
     $saved = quick_cost_save(db(), $document);
+    if ($variant === 'readonly') $testPermissions = ['read'];
     echo page(['id' => (string)$saved['id']])['html'];
     exit;
 }

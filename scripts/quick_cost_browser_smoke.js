@@ -16,9 +16,13 @@ for (const candidate of [process.env.PW_PATH, 'playwright', 'playwright-core']) 
 if (!playwright) throw new Error('Playwright gerekli. PW_PATH ile kurulu paket yolunu belirtin.');
 const output = process.env.QUICK_COST_QA_OUT || fs.mkdtempSync(path.join(os.tmpdir(), 'quick-cost-qa-'));
 fs.mkdirSync(output, { recursive: true });
-const rendered = execFileSync(process.env.PHP_BINARY || 'php', [path.join(__dirname, 'quick_cost_page_smoke.php'), '--render'], { cwd: root, encoding: 'utf8' });
-const fixture = path.join(output, 'anonymous.html');
-fs.writeFileSync(fixture, rendered.replace('<head>', '<head><base href="' + pathToFileURL(root + path.sep).href + '">'));
+function renderFixture(variant = '') {
+    const rendered = execFileSync(process.env.PHP_BINARY || 'php', [path.join(__dirname, 'quick_cost_page_smoke.php'), '--render', variant], { cwd: root, encoding: 'utf8' });
+    const target = path.join(output, 'anonymous' + (variant ? '-' + variant : '') + '.html');
+    fs.writeFileSync(target, rendered.replace('<head>', '<head><base href="' + pathToFileURL(root + path.sep).href + '">'));
+    return target;
+}
+const fixture = renderFixture(), legacyFixture = renderFixture('legacy'), readOnlyFixture = renderFixture('readonly');
 let checks = 0;
 const proof = { anonymous: true, liveApplication: false, nativeMobileDevice: false, views: [], checks: 0 };
 function check(value, label) { assert.ok(value, label); checks++; }
@@ -46,8 +50,18 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             const errors = [];
             page.on('pageerror', error => errors.push(error.message));
             page.on('dialog', dialog => dialog.accept());
-            await page.goto(pathToFileURL(fixture).href);
-            await page.waitForSelector('#qc-form[data-qc-ready="1"]');
+            const settings = code => page.locator('[data-qc-settings="' + code + '"]');
+            async function toggle(code) { await settings(code).locator('summary').click(); }
+            async function load(target = fixture) {
+                await page.goto(pathToFileURL(target).href);
+                await page.waitForSelector('#qc-form[data-qc-ready="1"]');
+            }
+            async function submitPayload() {
+                await page.evaluate(() => document.getElementById('qc-form').addEventListener('submit', event => event.preventDefault()));
+                await page.locator('#qc-save').click();
+                return JSON.parse(await page.locator('#qc-payload').inputValue());
+            }
+            await load();
             check(await page.evaluate(() => scrollY === 0), name + ' initialization keeps the top of the form visible');
             check(await page.locator('#qc-total').textContent() === '670.000,00', name + ' initial total');
             check(await page.locator('#qc-unit-cost').textContent() === '33,50', name + ' initial unit');
@@ -56,77 +70,108 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             check(await page.locator('[data-qc-operation="fason"]').getAttribute('aria-pressed') === 'true', name + ' fason default selection retained');
             check(await page.locator('#qc-product').getAttribute('placeholder') === null, name + ' product has no example placeholder');
             check(await page.getByRole('button', { name: 'Maliyet menüsü', exact: true }).count() === 0 && await page.getByRole('link', { name: 'Maliyet menüsü', exact: true }).count() === 0, name + ' removed header menu action');
-            check(await page.getByRole('button', { name: 'Hızlı Hesap', exact: true }).getAttribute('aria-describedby') === 'qc-quick-description', name + ' quick button retains its accessible name');
-            check(await page.locator('#qc-quick-description').textContent() === 'Yalnız fiyat' && await page.locator('#qc-detailed-description').textContent() === 'Birim, miktar ve fiyat', name + ' method differences described on buttons');
+            check(await page.locator('[data-qc-method], #qc-form[data-method]').count() === 0 && await page.getByRole('button', { name: 'Hızlı Hesap', exact: true }).count() === 0 && await page.getByRole('button', { name: 'Detaylı Hesap', exact: true }).count() === 0, name + ' no global mode controls or mode-dependent layout');
+            check(await page.getByLabel('Ürün KG', { exact: true }).count() === 1 && await page.locator('.qc-hero-secondary').textContent().then(text => text.includes('Ürün KG')), name + ' quantity caption and input use Ürün KG');
+            check(await page.locator('details[data-qc-settings]').count() === 10 && await page.locator('details[data-qc-settings][open]').count() === 0, name + ' ten independent settings panels start collapsed');
+            check(await page.locator('[data-qc-settings] summary').evaluateAll(nodes => nodes.every(node => node.textContent.trim() === 'Ayar') && new Set(nodes.map(node => node.getAttribute('aria-label'))).size === 10), name + ' native Ayar summaries have unique accessible names');
+            check(await page.locator('#qc-unit-product').isHidden() && await page.locator('#qc-qty-product').isHidden() && await page.locator('#qc-settings-price-product').isHidden(), name + ' collapsed settings hide their advanced fields');
             check(await page.evaluate(() => {
                 const before = scrollY;
                 document.querySelector('[data-qc-operation="uretim"]').click();
                 const unchanged = scrollY === before;
                 document.querySelector('[data-qc-operation="fason"]').click();
                 return unchanged && scrollY === before;
-            }), name + ' operation changes do not scroll to cost fields');
-            for (const method of ['quick','detailed']) {
-                await page.getByRole('button', { name: method === 'quick' ? 'Hızlı Hesap' : 'Detaylı Hesap', exact: true }).click();
-                check(await page.locator('#qc-unit-product').isVisible() === (method === 'detailed') && await page.locator('#qc-qty-product').isVisible() === (method === 'detailed'), name + ' ' + method + ' exposes the correct input fields');
-                check(await page.locator('#qc-costs-heading').textContent() === (method === 'quick' ? 'Hızlı Hesap — Fiyatlar' : 'Detaylı Hesap — Birim, miktar ve fiyat'), name + ' ' + method + ' cost section names active method');
-                check((await page.locator('#qc-method-hint').textContent()).includes(method === 'quick' ? 'Kg başına fiyatları ve sabit giderleri' : 'birimini, miktarını ve fiyatını'), name + ' ' + method + ' chooser explains active method');
-                check(await page.evaluate(() => {
-                    const heading = document.getElementById('qc-costs-heading');
-                    const row = document.querySelector('[data-qc-row="product"]');
-                    const box = row.getBoundingClientRect();
-                    const obstacles = [document.querySelector('.qc-save-bar'), document.querySelector('.bottomnav')].filter(Boolean).map(node => node.getBoundingClientRect()).filter(rect => rect.height > 0 && rect.top > 0 && rect.top < innerHeight);
-                    const bottom = Math.min(innerHeight, ...obstacles.map(rect => rect.top));
-                    return document.activeElement === heading && heading.getBoundingClientRect().top >= 70 && box.top >= 0 && box.bottom <= bottom + 1;
-                }), name + ' ' + method + ' focuses the heading and reveals first row above save/navigation');
-                check(await page.locator('#qc-total').textContent() === '670.000,00' && await page.locator('[data-qc-operation="fason"]').getAttribute('aria-pressed') === 'true', name + ' ' + method + ' preserves values and operation');
-                check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' ' + method + ' no horizontal overflow');
-                const min = await page.locator('#qc-form input:not([type=hidden]):visible, #qc-form select:visible, #qc-form button:visible').evaluateAll(nodes => Math.min(...nodes.map(node => node.getBoundingClientRect().height)));
-                check(min >= 44, name + ' ' + method + ' touch targets');
-            }
+            }), name + ' operation changes do not auto-scroll');
+            await toggle('product');
+            check(await page.locator('details[data-qc-settings][open]').count() === 1 && await page.locator('#qc-unit-product').isVisible() && await page.locator('#qc-qty-product').isVisible(), name + ' Ayar opens only its row');
+            check(await page.locator('#qc-total').textContent() === '670.000,00', name + ' opening settings never changes amounts');
+            await page.locator('#qc-price-product').fill('26');
+            check(await page.locator('#qc-settings-price-product').inputValue() === '26' && await page.locator('#qc-total').textContent() === '690.000,00', name + ' main price updates the one canonical settings price');
+            check(await page.locator('#qc-price-product').evaluate(input => { input.focus(); input.setSelectionRange(1,1); input.dispatchEvent(new Event('input',{bubbles:true})); return input.selectionStart === 1; }), name + ' main price repaint preserves caret');
+            await page.locator('#qc-settings-price-product').fill('25');
+            check(await page.locator('#qc-price-product').inputValue() === '25' && await page.locator('#qc-total').textContent() === '670.000,00', name + ' settings price mirrors main without double charging');
+            check(await page.locator('#qc-settings-price-product').evaluate(input => { input.focus(); input.setSelectionRange(1,1); input.dispatchEvent(new Event('input',{bubbles:true})); return input.selectionStart === 1; }), name + ' settings price repaint preserves caret');
+            await toggle('transport');
+            check(await settings('product').getAttribute('open') !== null && await settings('transport').getAttribute('open') !== null && await page.locator('details[data-qc-settings][open]').count() === 2, name + ' opening another row preserves existing open state');
+            await toggle('product');
+            check(await settings('transport').getAttribute('open') !== null && await settings('product').getAttribute('open') === null, name + ' closing one row leaves others unchanged');
+            await toggle('labor');
+            await page.locator('#qc-qty-labor').fill('100');
+            check(await page.locator('#qc-price-labor').getAttribute('readonly') !== null && await page.locator('[data-qc-amount="labor"]').textContent() === '200,00 TL', name + ' manual kg quantity uses equivalent main price');
+            await page.locator('[data-qc-rebind="labor"]').click();
+            check(await page.locator('#qc-qty-labor').inputValue() === '20.000' && await page.locator('#qc-price-labor').getAttribute('readonly') === null && await page.locator('#qc-total').textContent() === '670.000,00', name + ' Ürün KG kullan restores kg binding explicitly');
+            await toggle('labor');
             await page.locator('#qc-unit-transport').selectOption('pallet');
             await page.locator('#qc-qty-transport').fill('26');
-            await page.locator('#qc-price-transport').fill('380');
+            await page.locator('#qc-settings-price-transport').fill('380');
             check(await page.locator('[data-qc-amount="transport"]').textContent() === '9.880,00 TL', name + ' pallet amount');
-            await page.locator('[data-qc-method="quick"]').click();
             check(await page.locator('#qc-price-transport').getAttribute('readonly') !== null, name + ' manual equivalent readonly');
+            check(await page.locator('#qc-price-transport').inputValue() === '0,4940', name + ' manual main price is amount divided by Ürün KG');
+            await toggle('transport'); await toggle('transport');
+            check(await page.locator('#qc-qty-transport').inputValue() === '26' && await page.locator('#qc-settings-price-transport').inputValue() === '380', name + ' closing/reopening retains original manual quantity and price');
             await page.locator('#qc-net-kg').fill('10.000');
             check(await page.locator('[data-qc-amount="transport"]').textContent() === '9.880,00 TL', name + ' manual qty preserved net change');
             check(await page.locator('#qc-total').textContent() === '332.880,00', name + ' bound kg follows net');
-            await page.locator('[data-qc-method="detailed"]').click();
-            check(await page.locator('#qc-qty-transport').inputValue() === '26', name + ' mode retains qty');
-            check(await page.locator('#qc-price-transport').inputValue() === '380', name + ' mode retains original price');
+            check(await settings('transport').getAttribute('open') !== null && await page.locator('#qc-qty-transport').inputValue() === '26' && await page.locator('#qc-settings-price-transport').inputValue() === '380', name + ' Ürün KG edit preserves open state and original manual price');
+            check(await page.locator('#qc-qty-product').inputValue() === '10.000' && await page.locator('#qc-price-transport').inputValue() === '0,9880', name + ' bound quantity and manual equivalent follow Ürün KG');
+            await page.locator('#qc-net-kg').fill('0');
+            check(await page.locator('#qc-unit-cost').textContent() === '0,00' && await page.locator('#qc-price-transport').inputValue() === '—', name + ' zero Ürün KG avoids division and preserves manual row');
+            await page.locator('#qc-net-kg').fill('20.000');
+            await toggle('customs');
+            check(await page.locator('#qc-qty-customs').isDisabled() && await page.locator('#qc-qty-customs').inputValue() === '1', name + ' fixed settings keep quantity one');
+            await page.locator('#qc-price-customs').fill('4600');
+            check(await page.locator('#qc-settings-price-customs').inputValue() === '4600' && await page.locator('[data-qc-amount="customs"]').textContent() === '4.600,00 TL', name + ' fixed main price synchronizes once');
+            await page.locator('#qc-settings-price-customs').fill('4500');
+            check(await page.locator('#qc-price-customs').inputValue() === '4500', name + ' fixed settings price synchronizes main');
+            await page.locator('#qc-settings-price-transport').fill('-1'); await toggle('transport');
+            check(await page.locator('#qc-save').isDisabled() && await settings('transport').getAttribute('class').then(value => value.includes('has-error')) && await page.locator('#qc-validation').isVisible(), name + ' closed invalid settings price blocks save with row indicator');
+            await page.locator('[data-qc-operation="uretim"]').click();
+            check(await settings('transport').getAttribute('open') === null && await settings('customs').getAttribute('open') !== null, name + ' operation edit retains each settings open state');
+            await toggle('transport');
+            check(await page.locator('#qc-settings-price-transport').inputValue() === '-1', name + ' invalid original price survives close and type change');
+            await page.locator('#qc-settings-price-transport').fill('380');
+            await page.locator('#qc-qty-transport').fill('1.2.3'); await toggle('transport');
+            check(await page.locator('#qc-save').isDisabled(), name + ' invalid closed quantity cannot be silently coerced');
+            await toggle('transport');
+            check(await page.locator('#qc-qty-transport').inputValue() === '1.2.3', name + ' invalid quantity draft retained');
+            await page.locator('#qc-qty-transport').fill('26');
+            check(await page.locator('#qc-total').textContent() === '647.880,00', name + ' correction restores exact canonical total');
             await page.locator('[data-qc-operation="uretim"]').click();
             // Intercept submission after the actual handler has generated canonical payload.
-            await page.evaluate(() => document.getElementById('qc-form').addEventListener('submit', event => event.preventDefault()));
-            await page.locator('#qc-save').click();
-            const payload = await page.locator('#qc-payload').inputValue();
-            const data = JSON.parse(payload);
-            check(data.operation_type === 'uretim' && data.method === 'detailed', name + ' metadata in payload');
+            const data = await submitPayload();
+            check(data.operation_type === 'uretim' && data.method === 'quick', name + ' operation and legacy method metadata retained');
             check(data.items.find(row => row.code === 'transport').qty === 26, name + ' detailed qty payload');
-            await page.locator('#qc-price-product').fill('-1');
-            check(await page.locator('#qc-save').isDisabled(), name + ' invalid input save disabled');
-            await page.locator('#qc-price-product').fill('25');
-            await page.locator('#qc-net-kg').fill('0');
-            check(await page.locator('#qc-unit-cost').textContent() === '0,00', name + ' zero net safe');
-            await page.locator('#qc-net-kg').fill('20.000');
-            await page.locator('[data-qc-method="quick"]').click();
+            check(data.items.length === 10 && data.items.find(row => row.code === 'transport').unit_price === 380 && !Object.prototype.hasOwnProperty.call(data,'total'), name + ' dual price inputs serialize only one trusted row price');
+            await load(legacyFixture);
+            check(await page.locator('[data-qc-method]').count() === 0 && await page.locator('details[open]').count() === 0 && await page.locator('#qc-total').textContent() === '647.880,00', name + ' legacy detailed record uses same collapsed unified screen');
+            await toggle('transport');
+            check(await page.locator('#qc-settings-price-transport').inputValue() === '380' && await page.locator('#qc-price-transport').getAttribute('readonly') !== null, name + ' legacy detailed manual price remains original in Ayar');
+            check((await submitPayload()).method === 'detailed', name + ' editing legacy record preserves its internal method');
+            await load(readOnlyFixture);
+            await toggle('transport');
+            check(await page.locator('#qc-unit-transport').isDisabled() && await page.locator('#qc-qty-transport').isDisabled() && await page.locator('#qc-settings-price-transport').isDisabled() && await page.locator('#qc-price-transport').isDisabled(), name + ' read-only users inspect Ayar with controls disabled');
+            check(await page.locator('#qc-save').count() === 0 && await page.locator('[data-qc-method]').count() === 0, name + ' read-only screen has no save or mode controls');
             // Capture a fresh sample; the intercepted save above intentionally
             // has no navigation response and would otherwise show "Kaydediliyor".
-            await page.goto(pathToFileURL(fixture).href);
-            await page.waitForSelector('#qc-form[data-qc-ready="1"]');
+            await load();
             for (const theme of ['light','dark']) {
                 await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-top.png') });
-                await page.locator('[data-qc-method="detailed"]').click();
+                await page.locator('[data-qc-row="product"]').scrollIntoViewIfNeeded();
+                await page.screenshot({ path: path.join(output, name + '-' + theme + '-collapsed.png') });
+                await toggle('transport');
                 await page.locator('[data-qc-row="transport"]').scrollIntoViewIfNeeded();
-                await page.screenshot({ path: path.join(output, name + '-' + theme + '-detailed.png') });
+                check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' ' + theme + ' settings no horizontal overflow');
+                const min = await page.locator('#qc-form input:not([type=hidden]):visible, #qc-form select:visible, #qc-form button:visible, #qc-form summary:visible').evaluateAll(nodes => Math.min(...nodes.map(node => node.getBoundingClientRect().height)));
+                check(min >= 44, name + ' ' + theme + ' settings touch targets');
+                await page.screenshot({ path: path.join(output, name + '-' + theme + '-settings.png') });
                 await page.locator('.qc-breakdown').scrollIntoViewIfNeeded();
                 const saveBox = await page.locator('#qc-save').boundingBox();
                 const navBox = await page.locator('.bottomnav').boundingBox();
                 check(saveBox && saveBox.y >= 0 && saveBox.y + saveBox.height <= (navBox && width < 768 ? navBox.y : height) + 1, name + ' ' + theme + ' save clear of nav');
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-save.png') });
-                await page.locator('[data-qc-method="quick"]').click();
-                await page.evaluate(() => scrollTo(0,0));
+                await toggle('transport');
+                await page.evaluate(() => scrollTo({ top:0, behavior:'instant' }));
             }
             check(errors.length === 0, name + ' no browser exceptions: ' + errors.join(','));
             proof.views.push({ name, width, height, themes: ['light','dark'], browserErrors: errors });
