@@ -1,6 +1,11 @@
 # Hızlı Maliyet
 
-Adres: `hizli_maliyet.php`. Mevcut **Maliyet → Hızlı Maliyet** bağlantısından açılır.
+Adres: `hizli_maliyet.php`. Admin için sol **Operasyon → Hızlı Maliyet**
+bağlantısından veya **Maliyet → Hızlı Maliyet** düğmesinden açılır.
+30 Ekim kullanıcı kararıyla bu özellik şimdilik yalnız sistem yöneticisine
+(`is_admin()`) açıktır. Admin olmayan bir kullanıcıda maliyet okuma/yazma
+yetkileri bulunsa bile menü görünmez; doğrudan GET/POST ve store erişimi reddedilir.
+Eski detaylı maliyet modülünün yetkileri bu kısıttan etkilenmez.
 Bu ekran doğrudan satılacak net kg üzerinden çalışır. Eski `maliyet_form.php`,
 `cost_sheets`, formül motoru ve yükleme bağlantısı değiştirilmez.
 
@@ -57,7 +62,7 @@ Mevcut kullanıcı tablolarına ALTER/DML yoktur. Kurulum düğmesi SQL dosyası
 Yerel testler tamamen anonim bellek içi SQLite kullanır. MySQL/InnoDB kurulumu
 ve gerçek cihaz kabulü bu teslimde yapılmış sayılmaz.
 
-Oturum, `maliyet.read` ve `maliyet.write` kapıları, aktif depo, POST CSRF,
+Oturum, zorunlu admin rolü, `maliyet.read` ve `maliyet.write` kapıları, aktif depo, POST CSRF,
 sunucu doğrulaması ve mevcut `audit_log_event` kullanılır. Kimlik/depo client'tan
 alınmaz. Güncelleme `id + version + aktif depo` koşullu tek işlemde yapılır;
 çakışmada 409 döner ve gönderilmiş girişler korunur. Audit helper'ın mevcut
@@ -65,7 +70,7 @@ politikası gereği audit yazım hatası loglanabilir; audit hata verirse mutlak
 kaydın da geri alınacağı iddia edilmez.
 
 Yeni sayfa HTML'i Service Worker önbelleğine girmez. JS/CSS kabuğa eklenmiştir;
-SW ve APP_SURUM birlikte v456'dır. Yayına almadan önce uzak ana daldaki sürüm
+SW ve APP_SURUM birlikte v457'dir. Yayına almadan önce uzak ana daldaki sürüm
 yeniden kontrol edilmelidir.
 
 ## Doğrulama
@@ -73,6 +78,7 @@ yeniden kontrol edilmelidir.
 ```powershell
 php scripts/quick_cost_smoke.php
 php scripts/quick_cost_schema_smoke.php
+php scripts/quick_cost_sidebar_smoke.php
 node scripts/quick_cost_ui_smoke.js
 php scripts/quick_cost_page_smoke.php
 $env:PW_PATH = '<kurulu playwright veya playwright-core paket yolu>'

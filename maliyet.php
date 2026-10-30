@@ -124,7 +124,9 @@ render_flash();
 </div>
 
 <div class="mly-nav-links no-print">
+    <?php if (is_admin()): ?>
     <a href="hizli_maliyet.php" class="btn btn-primary">Hızlı Maliyet</a>
+    <?php endif; ?>
     <a href="maliyet_ambalaj.php" class="btn btn-ghost">🏷️ Ambalaj Fiyatları</a>
     <?php if (can_maliyet('admin')): ?>
     <a href="maliyet_sablon.php" class="btn btn-ghost">📑 Şablonlar</a>

@@ -5,15 +5,18 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Yalnız CLI.'); }
 require_once __DIR__ . '/../config/quick_cost_store.php';
 
 $QC_USER = ['id' => 7];
+$QC_ADMIN = true;
 $QC_PERMS = ['read' => true, 'write' => true];
 $QC_DEPOT = 'TEST DEPO A';
+$QC_DEPOT_CALLS = 0;
 $QC_UNRESTRICTED_SCOPE = false;
 $QC_DB = new PDO('sqlite::memory:');
 $QC_DB->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $QC_DB->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function current_user(): ?array { return $GLOBALS['QC_USER']; }
+function is_admin(): bool { return $GLOBALS['QC_ADMIN']; }
 function can_maliyet(string $perm): bool { return $GLOBALS['QC_PERMS'][$perm] ?? false; }
-function active_depot(): ?string { return $GLOBALS['QC_DEPOT']; }
+function active_depot(): ?string { $GLOBALS['QC_DEPOT_CALLS']++; return $GLOBALS['QC_DEPOT']; }
 function depot_visible_to_user(?string $depot): bool { return $depot === $GLOBALS['QC_DEPOT']; }
 function depo_sql_in(string $column): array {
     return $GLOBALS['QC_UNRESTRICTED_SCOPE'] ? ['', []] : [$column . ' IN (?)', [$GLOBALS['QC_DEPOT']]];
@@ -227,6 +230,20 @@ qc_test('Yazma yetkisi olmayan kullanıcı kayıt oluşturamaz/değiştiremez', 
         qc_throws(fn() => quick_cost_save($QC_DB, qc_example(), $saved['id'], 2), QuickCostAccessException::class);
         qc_assert(quick_cost_find($QC_DB, $saved['id']) !== null);
     } finally { $GLOBALS['QC_PERMS']['write'] = true; }
+});
+qc_test('Maliyet okuma/yazma yetkili yönetici olmayan kullanıcıda store kapalı', function () use ($QC_DB, &$saved): void {
+    $GLOBALS['QC_ADMIN'] = false;
+    $depotCallsBefore = $GLOBALS['QC_DEPOT_CALLS'];
+    // Constructor bağlantı kurmaz. Yanlışlıkla PDO'ya ulaşılırsa erişim
+    // exception'ı yerine uninitialized PDO hatası oluşur ve test başarısız olur.
+    $blockedPdo = new class extends PDO { public function __construct() {} };
+    try {
+        qc_throws(fn() => quick_cost_list($blockedPdo), QuickCostAccessException::class);
+        qc_throws(fn() => quick_cost_find($blockedPdo, $saved['id']), QuickCostAccessException::class);
+        qc_throws(fn() => quick_cost_save($blockedPdo, qc_example()), QuickCostAccessException::class);
+        qc_throws(fn() => quick_cost_save($blockedPdo, qc_example(), $saved['id'], $saved['version']), QuickCostAccessException::class);
+        qc_equal($GLOBALS['QC_DEPOT_CALLS'], $depotCallsBefore);
+    } finally { $GLOBALS['QC_ADMIN'] = true; }
 });
 qc_test('Okuma yetkisi yoksa liste/görüntüleme/yazma kapalı', function () use ($QC_DB, &$saved): void {
     $GLOBALS['QC_PERMS']['read'] = false;

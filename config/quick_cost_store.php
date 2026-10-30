@@ -20,16 +20,20 @@ function quick_cost_storage_ready(PDO $pdo): bool
     }
 }
 
-/** Her çağrıda yetki ve aktif depo: doğrudan store kullanımı da fail-closed. */
+/** İlk sürüm yalnız yöneticiye açık; yetki ve aktif depo ayrıca korunur. */
 function quick_cost_access(bool $write = false): array
 {
     $user = function_exists('current_user') ? current_user() : null;
+    // Depo yardımcıları tanım tablolarını okuyabilir: yönetici kapısı önce.
+    if (!$user || (int)($user['id'] ?? 0) <= 0 || !function_exists('is_admin') || !is_admin()) {
+        throw new QuickCostAccessException('Hızlı Maliyet şu anda yalnız sistem yöneticisine açık.');
+    }
     $depot = function_exists('active_depot') ? active_depot() : null;
-    if (!$user || (int)($user['id'] ?? 0) <= 0 || !function_exists('can_maliyet')
+    if (!function_exists('can_maliyet')
         || !can_maliyet('read') || ($write && !can_maliyet('write'))
         || !is_string($depot) || trim($depot) === '' || mb_strlen($depot) > 150
         || !function_exists('depot_visible_to_user') || !depot_visible_to_user($depot)) {
-        throw new QuickCostAccessException('Hızlı Maliyet için yetki ve aktif depo gerekli.');
+        throw new QuickCostAccessException('Hızlı Maliyet için yönetici, maliyet yetkisi ve aktif depo gerekli.');
     }
     return [(int)$user['id'], $depot];
 }

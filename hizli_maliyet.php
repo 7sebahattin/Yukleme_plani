@@ -7,6 +7,7 @@ require_once __DIR__ . '/config/quick_cost_store.php';
 require_once __DIR__ . '/config/quick_cost_schema.php';
 
 $auth_user = require_login();
+if (!is_admin()) forbidden('Hızlı Maliyet şu anda yalnız sistem yöneticisine açık.');
 require_maliyet('read');
 // No cost_migrate(): this screen never changes the existing cost schema/data.
 header('Cache-Control: no-store, private');

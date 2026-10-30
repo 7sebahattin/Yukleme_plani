@@ -7,7 +7,9 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v456` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v457` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+
+**Hızlı Maliyet erişimi (v457, sahip kararı):** Şimdilik yalnız `is_admin()` kullanıcıları sol Operasyon menüsündeki **Hızlı Maliyet** bağlantısını ve ekranı görebilir. Maliyet okuma/yazma yetkisi verilmiş admin olmayan kullanıcı da controller ve store katmanlarında reddedilir; eski detaylı maliyet izinleri değişmedi. Masaüstünde yalnız Hızlı Maliyet bağlantısı aktif olur, mobilde Raporlar ailesi korunur. Test: `quick_cost_sidebar_smoke.php`, güncellenmiş `quick_cost_smoke.php` / `quick_cost_page_smoke.php`.
 
 **Hızlı Maliyet (v456):** `hizli_maliyet.php` bağımsız net kg hesabıdır; `config/quick_cost.php` saf motor, `config/quick_cost_store.php` depo/yetki/sürüm kontrollü kayıt, `_hizli_maliyet_form.php` ve `assets/hizli-maliyet.*` mobil arayüz. `quick_cost_sheets` eski `cost_sheets` ile karışmaz. Otomatik migration YOK. 30 Ekim kullanıcı canlı yayın ve yalnız yeni tablo kurulumunu onayladı; admin POST/CSRF düğmesi `config/quick_cost_schema.php` ile sabit hash doğrulanmış `docs/sql/quick_cost_sheets.sql` tek CREATE'ini çalıştırır. Kurulum sayfa açılışında çalışmaz. Test ve kurulum: `docs/HIZLI_MALIYET.md`.
 
