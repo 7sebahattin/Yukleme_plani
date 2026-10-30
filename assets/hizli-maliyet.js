@@ -126,7 +126,15 @@
                 node.querySelector('[data-qc-field="unit_price"]').value = editFormat(item.unit_price);
             });
             setText('qc-operation-hint', state.operation_type === 'uretim' ? 'Üretim için net kilogram üzerinden maliyet hesabı.' : 'Fason işlem için net kilogram üzerinden maliyet hesabı.');
+            setText('qc-method-hint', state.method === 'quick' ? 'Hızlı Hesap: Kg başına fiyatları ve sabit giderleri girin.' : 'Detaylı Hesap: Her kalemin birimini, miktarını ve fiyatını ayrı düzenleyin.');
+            setText('qc-costs-heading', state.method === 'quick' ? 'Hızlı Hesap — Fiyatlar' : 'Detaylı Hesap — Birim, miktar ve fiyat');
             setText('qc-mode-help', state.method === 'quick' ? 'Ortalama TL/net kg fiyatlarını ve sabit giderleri girin. Detaylı miktarlar korunur.' : 'Her giderin birimini, miktarını ve fiyatını ayrı düzenleyin.');
+        }
+        function revealMethodRows() {
+            var heading = dom.getElementById('qc-costs-heading');
+            if (!heading) return;
+            heading.focus({ preventScroll: true });
+            heading.scrollIntoView({ block: 'start', behavior: 'instant' });
         }
         function validateInputs() {
             form.querySelectorAll('input[inputmode="decimal"]').forEach(function (input) {
@@ -181,7 +189,7 @@
         });
         form.addEventListener('click', function (event) {
             var button = event.target.closest('button'); if (!button) return;
-            if (button.dataset.qcMethod) { if (!readOnly && state.method !== button.dataset.qcMethod) dirty = true; state = setMethod(state, button.dataset.qcMethod); paintInputs(); paint(); }
+            if (button.dataset.qcMethod) { if (!readOnly && state.method !== button.dataset.qcMethod) dirty = true; state = setMethod(state, button.dataset.qcMethod); paintInputs(); paint(); revealMethodRows(); }
             else if (button.dataset.qcOperation && !readOnly) { state.operation_type = button.dataset.qcOperation; dirty = true; paintInputs(); paint(); }
             else if (button.dataset.qcDetail) { state = setMethod(state, 'detailed'); paintInputs(); paint(); var input = rowNodes[button.dataset.qcDetail].querySelector('[data-qc-field="qty"]'); input.focus(); }
             else if (button.dataset.qcRebind && !readOnly) {

@@ -48,11 +48,37 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             page.on('dialog', dialog => dialog.accept());
             await page.goto(pathToFileURL(fixture).href);
             await page.waitForSelector('#qc-form[data-qc-ready="1"]');
+            check(await page.evaluate(() => scrollY === 0), name + ' initialization keeps the top of the form visible');
             check(await page.locator('#qc-total').textContent() === '670.000,00', name + ' initial total');
             check(await page.locator('#qc-unit-cost').textContent() === '33,50', name + ' initial unit');
             check(await page.locator('[data-qc-row]').count() === 10, name + ' ten rows');
+            check(await page.locator('[data-qc-operation]').evaluateAll(nodes => nodes.map(node => node.dataset.qcOperation).join(',')) === 'uretim,fason', name + ' production precedes fason');
+            check(await page.locator('[data-qc-operation="fason"]').getAttribute('aria-pressed') === 'true', name + ' fason default selection retained');
+            check(await page.locator('#qc-product').getAttribute('placeholder') === null, name + ' product has no example placeholder');
+            check(await page.getByRole('button', { name: 'Maliyet menüsü', exact: true }).count() === 0 && await page.getByRole('link', { name: 'Maliyet menüsü', exact: true }).count() === 0, name + ' removed header menu action');
+            check(await page.getByRole('button', { name: 'Hızlı Hesap', exact: true }).getAttribute('aria-describedby') === 'qc-quick-description', name + ' quick button retains its accessible name');
+            check(await page.locator('#qc-quick-description').textContent() === 'Yalnız fiyat' && await page.locator('#qc-detailed-description').textContent() === 'Birim, miktar ve fiyat', name + ' method differences described on buttons');
+            check(await page.evaluate(() => {
+                const before = scrollY;
+                document.querySelector('[data-qc-operation="uretim"]').click();
+                const unchanged = scrollY === before;
+                document.querySelector('[data-qc-operation="fason"]').click();
+                return unchanged && scrollY === before;
+            }), name + ' operation changes do not scroll to cost fields');
             for (const method of ['quick','detailed']) {
-                await page.locator('[data-qc-method="' + method + '"]').click();
+                await page.getByRole('button', { name: method === 'quick' ? 'Hızlı Hesap' : 'Detaylı Hesap', exact: true }).click();
+                check(await page.locator('#qc-unit-product').isVisible() === (method === 'detailed') && await page.locator('#qc-qty-product').isVisible() === (method === 'detailed'), name + ' ' + method + ' exposes the correct input fields');
+                check(await page.locator('#qc-costs-heading').textContent() === (method === 'quick' ? 'Hızlı Hesap — Fiyatlar' : 'Detaylı Hesap — Birim, miktar ve fiyat'), name + ' ' + method + ' cost section names active method');
+                check((await page.locator('#qc-method-hint').textContent()).includes(method === 'quick' ? 'Kg başına fiyatları ve sabit giderleri' : 'birimini, miktarını ve fiyatını'), name + ' ' + method + ' chooser explains active method');
+                check(await page.evaluate(() => {
+                    const heading = document.getElementById('qc-costs-heading');
+                    const row = document.querySelector('[data-qc-row="product"]');
+                    const box = row.getBoundingClientRect();
+                    const obstacles = [document.querySelector('.qc-save-bar'), document.querySelector('.bottomnav')].filter(Boolean).map(node => node.getBoundingClientRect()).filter(rect => rect.height > 0 && rect.top > 0 && rect.top < innerHeight);
+                    const bottom = Math.min(innerHeight, ...obstacles.map(rect => rect.top));
+                    return document.activeElement === heading && heading.getBoundingClientRect().top >= 70 && box.top >= 0 && box.bottom <= bottom + 1;
+                }), name + ' ' + method + ' focuses the heading and reveals first row above save/navigation');
+                check(await page.locator('#qc-total').textContent() === '670.000,00' && await page.locator('[data-qc-operation="fason"]').getAttribute('aria-pressed') === 'true', name + ' ' + method + ' preserves values and operation');
                 check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' ' + method + ' no horizontal overflow');
                 const min = await page.locator('#qc-form input:not([type=hidden]):visible, #qc-form select:visible, #qc-form button:visible').evaluateAll(nodes => Math.min(...nodes.map(node => node.getBoundingClientRect().height)));
                 check(min >= 44, name + ' ' + method + ' touch targets');

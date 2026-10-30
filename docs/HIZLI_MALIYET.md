@@ -12,9 +12,12 @@ Bu ekran doğrudan satılacak net kg üzerinden çalışır. Eski `maliyet_form.
 ## Kullanım
 
 1. Ürün, satılacak net kilogram ve işlem tarihini girin.
-2. Fason veya Üretim seçin. Seçim kaydedilir; ilk sürümde matematik aynıdır.
+2. Üretim veya Fason seçin. Görsel sıra Üretim/Fason'dur; kayıtlı veya varsayılan
+   seçim kendiliğinden değiştirilmez. İlk sürümde matematik aynıdır.
 3. Hızlı görünümde ortalama TL/net kg fiyatlarını ve sabit giderleri girin.
 4. İhtiyaç varsa Detaylı görünümde aynı satırların birim, miktar ve fiyatını değiştirin.
+   Yöntem düğmelerinin açıklamaları farkı gösterir; düğmeye bastığınızda ilgili
+   maliyet kalemleri ekrana gelir. Yöntem geçişi girilen verileri silmez.
 5. Kaydedilen hesabı aşağıdaki aktif depo kapsamlı kayıt listesinden açın.
    Aynı sayfada düzenleyebilir veya **Kopyalayarak yeni hesap** seçebilirsiniz.
 
@@ -70,7 +73,7 @@ politikası gereği audit yazım hatası loglanabilir; audit hata verirse mutlak
 kaydın da geri alınacağı iddia edilmez.
 
 Yeni sayfa HTML'i Service Worker önbelleğine girmez. JS/CSS kabuğa eklenmiştir;
-SW ve APP_SURUM birlikte v457'dir. Yayına almadan önce uzak ana daldaki sürüm
+SW ve APP_SURUM birlikte v458'dir. Yayına almadan önce uzak ana daldaki sürüm
 yeniden kontrol edilmelidir.
 
 ## Doğrulama
