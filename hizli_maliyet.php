@@ -140,7 +140,7 @@ render_flash();
 <link rel="stylesheet" href="assets/hizli-maliyet.css?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.css') ?>">
 <div class="qc-page">
     <div class="page-head">
-        <div><h1>Hızlı Maliyet</h1><p class="muted">Satılacak net kilogram üzerinden maliyet hesabı</p></div>
+        <div><h1>Hızlı Maliyet</h1><p class="muted">Ürün KG üzerinden maliyet hesabı</p></div>
         <div class="page-head-actions"><a class="btn" href="hizli_maliyet.php">Yeni hesap</a><a class="btn" href="#qc-records">Kayıtlar</a></div>
     </div>
     <?php if ($record): ?>
@@ -168,7 +168,7 @@ render_flash();
         <?php foreach ($list['items'] as $row): ?>
             <a class="qc-record" href="hizli_maliyet.php?id=<?= (int)$row['id'] ?>">
                 <strong><?= h($row['product']) ?></strong>
-                <span><?= h($row['sheet_date']) ?> · <?= ($row['operation_type'] === 'uretim') ? 'Üretim' : 'Fason' ?> · <?= ($row['method'] === 'detailed') ? 'Detaylı' : 'Hızlı' ?></span>
+                <span><?= h($row['sheet_date']) ?> · <?= ($row['operation_type'] === 'uretim') ? 'Üretim' : 'Fason' ?></span>
                 <span><?= number_format((float)$row['net_kg'], 4, ',', '.') ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 2, ',', '.') ?> TL/kg</span>
             </a>
         <?php endforeach; ?>

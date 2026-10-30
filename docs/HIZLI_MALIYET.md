@@ -11,13 +11,14 @@ Bu ekran doğrudan satılacak net kg üzerinden çalışır. Eski `maliyet_form.
 
 ## Kullanım
 
-1. Ürün, satılacak net kilogram ve işlem tarihini girin.
+1. Ürün adı, **Ürün KG** ve işlem tarihini girin. Ürün KG, hesabın doğrudan
+   kullanacağı satılacak net ürün kilogramıdır; ham ürün/randıman hesabı yoktur.
 2. Üretim veya Fason seçin. Görsel sıra Üretim/Fason'dur; kayıtlı veya varsayılan
    seçim kendiliğinden değiştirilmez. İlk sürümde matematik aynıdır.
-3. Hızlı görünümde ortalama TL/net kg fiyatlarını ve sabit giderleri girin.
-4. İhtiyaç varsa Detaylı görünümde aynı satırların birim, miktar ve fiyatını değiştirin.
-   Yöntem düğmelerinin açıklamaları farkı gösterir; düğmeye bastığınızda ilgili
-   maliyet kalemleri ekrana gelir. Yöntem geçişi girilen verileri silmez.
+3. Maliyet kartlarındaki ortalama TL/kg fiyatlarını ve sabit giderleri girin.
+4. Özel birim veya miktar için yalnız ilgili kartın altındaki **Ayar** bölümünü
+   açın. Birim, miktar ve özgün birim fiyat burada düzenlenir. Her kart bağımsız
+   açılır; açmak/kapatmak verileri, toplamı veya diğer kartların durumunu değiştirmez.
 5. Kaydedilen hesabı aşağıdaki aktif depo kapsamlı kayıt listesinden açın.
    Aynı sayfada düzenleyebilir veya **Kopyalayarak yeni hesap** seçebilirsiniz.
 
@@ -26,14 +27,17 @@ kalemleri, ham kg, randıman, fire, stok, KDV, cari, satış ve kâr bu ekranda 
 
 ## Tek hesap modeli
 
-Hızlı/Detaylı seçimi yalnız görünümü değiştirir. Kaydedilen on satır her zaman
-bir kez toplanır. `basis=net_kg` satırlarının miktarı net kg ile değişir;
+Tek bir hesap ekranı vardır; ayrı Hızlı/Detaylı seçimi yoktur. Kaydedilen on satır
+her zaman bir kez toplanır. `basis=net_kg` satırlarının miktarı Ürün KG ile değişir;
 `manual` satırlar kendi miktarını korur; `fixed` satırlarda miktar birdir.
-Detaylı görünümde miktar veya birim düzenlemek satırı bağımsız yapar.
-Kg birimindeki bağımsız satır **Net kg kullan** ile yeniden bağlanabilir.
+Ayar bölümünde miktar veya birim düzenlemek satırı bağımsız yapar.
+Kg birimindeki bağımsız satır **Ürün KG kullan** ile yeniden bağlanabilir.
 
-Hızlı görünümde bağımsız satırın **eşdeğer TL/net kg** değeri salt okunur;
-orijinal miktar/fiyat korunur, düzenleme Detaylı görünümde yapılır.
+Bağımsız satırın ana fiyat alanında **eşdeğer TL/kg** değeri salt okunur;
+orijinal miktar/fiyat korunur, düzenleme aynı kartın Ayar bölümünde yapılır.
+Ana fiyat ve Ayar fiyatı tek kanonik satırı besler; iki kez toplanmaz.
+Önceki kayıtların `method=quick/detailed` alanı yalnız geriye dönük uyumluluk
+için korunur; görünümü yönetmez ve kullanıcıya hesap yöntemi olarak sunulmaz.
 Net kg sıfırken bölme yapılmaz; önizleme sıfır birim maliyet gösterir ve kayıt
 sunucuda reddedilir. Metin girişinde Türkçe binlik nokta ve ondalık virgül
 kullanılır: `20.000`, `1,60`. JSON'da sayılar sayısal tipte gönderilir.
@@ -73,7 +77,7 @@ politikası gereği audit yazım hatası loglanabilir; audit hata verirse mutlak
 kaydın da geri alınacağı iddia edilmez.
 
 Yeni sayfa HTML'i Service Worker önbelleğine girmez. JS/CSS kabuğa eklenmiştir;
-SW ve APP_SURUM birlikte v458'dir. Yayına almadan önce uzak ana daldaki sürüm
+SW ve APP_SURUM birlikte v459'dur. Yayına almadan önce uzak ana daldaki sürüm
 yeniden kontrol edilmelidir.
 
 ## Doğrulama

@@ -7,7 +7,9 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v458` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v459` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+
+**Hızlı Maliyet tek ekran (v459):** Global Hızlı/Detaylı seçimi kaldırıldı. Her maliyet kartında fiyat ve bağımsız açılan **Ayar** bölümü (birim/miktar/fiyat) var. Ürün kilogramı etiketi **Ürün KG**. Eski `method=quick/detailed` yalnız kayıt uyumluluğu için korunur, UI'ı yönetmez ve listede yöntem gösterilmez. Manuel kalem ana fiyatı salt okunur eşdeğer, Ayar fiyatı özgün fiyattır; tek kanonik satırla hesaplanır.
 
 **Hızlı Maliyet arayüzü (v458):** Üstte Maliyet menüsü düğmesi ve ürün alanındaki örnek metin kaldırıldı. İşlem düğmesi sırası Üretim/Fason; kayıtlı/varsayılan seçim değiştirilmez. Hesap yöntemleri yalnız fiyat ve birim/miktar/fiyat açıklamalarıyla ayrılır; açık yöntem tıklaması ilgili kalemlere odaklanır/kaydırır, girişler korunur. Admin kısıtı ve hesap motoru aynı kalır.
 

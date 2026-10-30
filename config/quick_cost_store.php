@@ -106,7 +106,7 @@ function quick_cost_save(PDO $pdo, array $input, int $id = 0, int $expectedVersi
     if ($id < 0 || ($id > 0 && $expectedVersion < 1)) throw new InvalidArgumentException('Kayıt sürümü geçersiz.');
     $document = quick_cost_calculate($input);
     if ($document['product'] === '') throw new InvalidArgumentException('Ürün adı gerekli.');
-    if ($document['net_kg'] <= 0) throw new InvalidArgumentException('Satılacak net kilogram sıfırdan büyük olmalı.');
+    if ($document['net_kg'] <= 0) throw new InvalidArgumentException('Ürün KG sıfırdan büyük olmalı.');
     if (!function_exists('audit_log_event')) throw new RuntimeException('Audit altyapısı kullanılamıyor.');
     if ($pdo->inTransaction()) throw new LogicException('Hızlı Maliyet ayrı bir işlem gerektirir.');
     $now = date('Y-m-d H:i:s');

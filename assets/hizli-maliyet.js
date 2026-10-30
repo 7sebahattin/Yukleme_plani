@@ -114,27 +114,18 @@
         function setText(id, value) { var node = dom.getElementById(id); if (node) node.textContent = value; }
         function findItem(code) { return state.items.find(function (item) { return item.code === code; }); }
         function showError(message) { validation.textContent = message; validation.hidden = !message; }
-        function paintInputs() {
-            form.dataset.method = state.method;
-            form.querySelectorAll('[data-qc-method]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.qcMethod === state.method)); });
+        function syncValue(input, value, source) { if (input !== source && input.value !== value) input.value = value; }
+        function paintInputs(source) {
             form.querySelectorAll('[data-qc-operation]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.qcOperation === state.operation_type)); });
-            form.querySelectorAll('[data-qc-header]').forEach(function (input) { input.value = editFormat(state[input.dataset.qcHeader]); });
+            form.querySelectorAll('[data-qc-header]').forEach(function (input) { syncValue(input, editFormat(state[input.dataset.qcHeader]), source); });
             state.items.forEach(function (item) {
                 var node = rowNodes[item.code]; if (!node) return;
-                node.querySelector('[data-qc-field="unit"]').value = item.unit;
-                node.querySelector('[data-qc-field="qty"]').value = editFormat(item.basis === 'net_kg' ? state.net_kg : item.qty);
-                node.querySelector('[data-qc-field="unit_price"]').value = editFormat(item.unit_price);
+                syncValue(node.querySelector('[data-qc-field="unit"]'), item.unit, source);
+                syncValue(node.querySelector('[data-qc-field="qty"]'), editFormat(item.basis === 'net_kg' ? state.net_kg : item.qty), source);
+                syncValue(node.querySelector('[data-qc-price="settings"]'), editFormat(item.unit_price), source);
+                if (item.basis !== 'manual') syncValue(node.querySelector('[data-qc-price="main"]'), editFormat(item.unit_price), source);
             });
-            setText('qc-operation-hint', state.operation_type === 'uretim' ? 'Üretim için net kilogram üzerinden maliyet hesabı.' : 'Fason işlem için net kilogram üzerinden maliyet hesabı.');
-            setText('qc-method-hint', state.method === 'quick' ? 'Hızlı Hesap: Kg başına fiyatları ve sabit giderleri girin.' : 'Detaylı Hesap: Her kalemin birimini, miktarını ve fiyatını ayrı düzenleyin.');
-            setText('qc-costs-heading', state.method === 'quick' ? 'Hızlı Hesap — Fiyatlar' : 'Detaylı Hesap — Birim, miktar ve fiyat');
-            setText('qc-mode-help', state.method === 'quick' ? 'Ortalama TL/net kg fiyatlarını ve sabit giderleri girin. Detaylı miktarlar korunur.' : 'Her giderin birimini, miktarını ve fiyatını ayrı düzenleyin.');
-        }
-        function revealMethodRows() {
-            var heading = dom.getElementById('qc-costs-heading');
-            if (!heading) return;
-            heading.focus({ preventScroll: true });
-            heading.scrollIntoView({ block: 'start', behavior: 'instant' });
+            setText('qc-operation-hint', state.operation_type === 'uretim' ? 'Üretim için Ürün KG üzerinden maliyet hesabı.' : 'Fason işlem için Ürün KG üzerinden maliyet hesabı.');
         }
         function validateInputs() {
             form.querySelectorAll('input[inputmode="decimal"]').forEach(function (input) {
@@ -142,8 +133,14 @@
                 try { parseNumber(input.value); input.removeAttribute('aria-invalid'); input.setCustomValidity(''); }
                 catch (error) { input.setAttribute('aria-invalid', 'true'); input.setCustomValidity(error.message); }
             });
+            state.items.forEach(function (item) {
+                var node = rowNodes[item.code]; if (!node) return;
+                var settings = node.querySelector('[data-qc-settings]'), invalid = !!node.querySelector('[aria-invalid="true"]');
+                settings.classList.toggle('has-error', invalid);
+                settings.querySelector('summary').title = invalid ? 'Geçersiz değer var. Ayar bölümünü kontrol edin.' : '';
+            });
         }
-        function paint() {
+        function paint(source) {
             var error = '';
             try { latest = calculate(state); } catch (failure) { latest = null; error = failure.message; }
             setText('qc-total', latest ? format(latest.total, 2) : '—');
@@ -152,20 +149,21 @@
             setText('qc-summary-total', latest ? format(latest.total, 2) + ' TL' : '—');
             setText('qc-summary-unit', latest ? format(latest.unit_cost, 2) + ' TL/kg' : '—');
             ['A', 'B', 'D'].forEach(function (group) { setText('qc-group-' + group, latest ? format(latest.groups[group], 2) + ' TL' : '—'); });
+            paintInputs(source);
             state.items.forEach(function (item, index) {
                 var node = rowNodes[item.code]; if (!node) return;
-                var computed = latest && latest.items[index], quick = state.method === 'quick', manual = item.basis === 'manual';
-                var price = node.querySelector('[data-qc-field="unit_price"]'), qty = node.querySelector('[data-qc-field="qty"]');
+                var computed = latest && latest.items[index], manual = item.basis === 'manual';
+                var price = node.querySelector('[data-qc-price="main"]'), qty = node.querySelector('[data-qc-field="qty"]');
                 node.querySelector('[data-qc-amount]').textContent = computed ? format(computed.amount, 2) + ' TL' : '—';
                 qty.disabled = readOnly || item.basis === 'fixed';
-                if (item.basis === 'net_kg') qty.value = editFormat(state.net_kg);
-                price.readOnly = quick && manual;
-                if (quick && manual) price.value = computed && latest.net_kg > 0 ? format(computed.amount / latest.net_kg, 4) : '—';
-                node.querySelector('[data-qc-detail]').hidden = !(quick && manual);
+                price.readOnly = manual;
+                if (manual) price.value = computed && latest.net_kg > 0 ? format(computed.amount / latest.net_kg, 4) : '—';
                 var rebind = node.querySelector('[data-qc-rebind]');
                 rebind.hidden = readOnly || item.unit !== 'kg' || item.basis === 'net_kg';
-                node.querySelector('[data-qc-price-label]').textContent = quick ? (manual ? 'Eşdeğer TL/net kg (detaylı miktar)' : (item.basis === 'fixed' ? 'Sabit gider (TL)' : 'Birim fiyat (TL/net kg)')) : 'Birim fiyat (TL)';
-                node.querySelector('[data-qc-basis]').textContent = item.basis === 'net_kg' ? 'Miktar net kg ile birlikte güncellenir.' : item.basis === 'fixed' ? 'Sabit gider · miktar 1' : 'Detaylı miktar: ' + editFormat(item.qty) + ' ' + UNITS[item.unit] + (quick ? ' · düzenlemek için Detaylı Hesap' : ' · net kg değişse de korunur');
+                var priceLabel = manual ? 'Eşdeğer fiyat (TL/Ürün KG)' : (item.basis === 'fixed' ? 'Sabit gider (TL)' : 'Birim fiyat (TL/kg)');
+                node.querySelector('[data-qc-price-label]').textContent = priceLabel;
+                price.setAttribute('aria-label', CATALOG[item.code].label + ': ' + priceLabel);
+                node.querySelector('[data-qc-basis]').textContent = item.basis === 'net_kg' ? 'Miktar Ürün KG ile birlikte güncellenir.' : item.basis === 'fixed' ? 'Sabit gider · miktar 1' : 'Miktar: ' + editFormat(item.qty) + ' ' + UNITS[item.unit] + ' · düzenlemek için Ayar bölümünü açın.';
             });
             validateInputs();
             showError(error);
@@ -178,30 +176,30 @@
             if (input.dataset.qcHeader) {
                 var field = input.dataset.qcHeader;
                 state = field === 'net_kg' ? setNetKg(state, input.value) : Object.assign({}, state, { [field]: input.value });
+            } else if (input.dataset.qcCode && input.dataset.qcPrice === 'main' && !input.readOnly) {
+                state = updateRow(state, input.dataset.qcCode, 'unit_price', input.value);
             } else if (input.dataset.qcCode && input.dataset.qcField && input.dataset.qcField !== 'unit' && !input.readOnly) {
                 state = updateRow(state, input.dataset.qcCode, input.dataset.qcField, input.value);
             } else return;
-            dirty = true; paint();
+            dirty = true; paint(input);
         });
         form.addEventListener('change', function (event) {
             var input = event.target; if (readOnly || input.dataset.qcField !== 'unit') return;
-            state = updateRow(state, input.dataset.qcCode, 'unit', input.value); dirty = true; paintInputs(); paint();
+            state = updateRow(state, input.dataset.qcCode, 'unit', input.value); dirty = true; paint(input);
         });
         form.addEventListener('click', function (event) {
             var button = event.target.closest('button'); if (!button) return;
-            if (button.dataset.qcMethod) { if (!readOnly && state.method !== button.dataset.qcMethod) dirty = true; state = setMethod(state, button.dataset.qcMethod); paintInputs(); paint(); revealMethodRows(); }
-            else if (button.dataset.qcOperation && !readOnly) { state.operation_type = button.dataset.qcOperation; dirty = true; paintInputs(); paint(); }
-            else if (button.dataset.qcDetail) { state = setMethod(state, 'detailed'); paintInputs(); paint(); var input = rowNodes[button.dataset.qcDetail].querySelector('[data-qc-field="qty"]'); input.focus(); }
+            if (button.dataset.qcOperation && !readOnly) { state.operation_type = button.dataset.qcOperation; dirty = true; paint(); }
             else if (button.dataset.qcRebind && !readOnly) {
                 var item = findItem(button.dataset.qcRebind);
-                if (item.unit === 'kg') { item.basis = 'net_kg'; item.qty = state.net_kg; dirty = true; paintInputs(); paint(); }
+                if (item.unit === 'kg') { item.basis = 'net_kg'; item.qty = state.net_kg; dirty = true; paint(); }
             }
         });
         form.addEventListener('submit', function (event) {
             try {
                 if (readOnly || form.dataset.saveAvailable !== '1') throw new Error('Bu hesabı kaydetme yetkiniz veya kullanılabilir kayıt alanı yok.');
                 var payload = canonicalPayload(state);
-                if (payload.net_kg <= 0) throw new Error('Kaydetmek için satılacak net kilogram sıfırdan büyük olmalıdır.');
+                if (payload.net_kg <= 0) throw new Error('Kaydetmek için Ürün KG sıfırdan büyük olmalıdır.');
                 if (!String(payload.product || '').trim()) throw new Error('Ürün adı girin.');
                 if (!form.checkValidity()) { event.preventDefault(); form.reportValidity(); return; }
                 dom.getElementById('qc-payload').value = JSON.stringify(payload);
@@ -211,7 +209,7 @@
         if (!readOnly && dom.defaultView) dom.defaultView.addEventListener('beforeunload', function (event) {
             if (!dirty || submitted) return; event.preventDefault(); event.returnValue = '';
         });
-        paintInputs(); paint();
+        paint();
         return { getDocument: function () { return clone(state); }, calculate: function () { return calculate(state); } };
     }
     return { parseNumber: parseNumber, calculate: calculate, setMethod: setMethod, setNetKg: setNetKg, updateRow: updateRow, canonicalPayload: canonicalPayload, init: init, catalog: CATALOG };

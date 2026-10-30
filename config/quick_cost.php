@@ -31,8 +31,8 @@ function quick_cost_units(): array
 function quick_cost_operation_profiles(): array
 {
     return [
-        'fason' => ['label' => 'Fason', 'description' => 'Satılacak net kilogram üzerinden fason maliyeti.', 'prices' => []],
-        'uretim' => ['label' => 'Üretim', 'description' => 'Satılacak net kilogram üzerinden üretim maliyeti.', 'prices' => []],
+        'fason' => ['label' => 'Fason', 'description' => 'Ürün KG üzerinden fason maliyeti.', 'prices' => []],
+        'uretim' => ['label' => 'Üretim', 'description' => 'Ürün KG üzerinden üretim maliyeti.', 'prices' => []],
     ];
 }
 
@@ -122,7 +122,7 @@ function quick_cost_text($value, string $label, int $limit): string
 }
 
 /**
- * Tek hesap modeli. Hızlı/Detaylı seçimi yalnız görünüm metadatasıdır.
+ * Tek hesap modeli. Eski quick/detailed yöntemi yalnız uyumluluk metadatasıdır.
  * net_kg bağlı satırlar net kilogramı izler; manual satırlar kendi miktarını korur.
  * İstemcinin amount/total/group/label alanları kullanılmaz.
  */
@@ -143,7 +143,7 @@ function quick_cost_calculate(array $input): array
     if (!in_array($method, ['quick', 'detailed'], true)) {
         throw new InvalidArgumentException('Hesaplama yöntemi geçersiz.');
     }
-    $net = quick_cost_number($input['net_kg'] ?? null, 'Satılacak net kilogram');
+    $net = quick_cost_number($input['net_kg'] ?? null, 'Ürün KG');
     $catalog = quick_cost_catalog();
     $rawItems = $input['items'] ?? null;
     if (!is_array($rawItems) || count($rawItems) !== count($catalog) || !array_is_list($rawItems)) {
