@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v456');
+    define('APP_SURUM', 'v457');
 }
 
 // --- HTML kaçışı ---
@@ -546,7 +546,9 @@ function render_desktop_sidebar(string $base): void {
     $a_mail  = $ak === 'mail';
     $a_sip   = $ak === 'siparis';
     $a_usip  = $ak === 'usip';
-    $a_rep   = $ak === 'rapor';
+    // Mobilde Raporlar ailesi korunur; masaüstünde bu sayfanın kendi bağlantısı var.
+    $a_quick = $p_adm && basename($_SERVER['PHP_SELF'] ?? '') === 'hizli_maliyet.php';
+    $a_rep   = $ak === 'rapor' && !$a_quick;
     $a_ptak  = $ak === 'ptak';
     $a_def   = $ak === 'defs';
     $a_usr   = $ak === 'users';
@@ -600,9 +602,10 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rec)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
         <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
+        <?php if ($p_adm)  $lnk('hizli_maliyet.php', '🧮', 'Hızlı Maliyet', $a_quick); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
-<?php   // ⚠ Maliyet girişi BİLEREK burada YOK (Sprint Navigasyon-03, kullanıcı
+<?php   // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03, kullanıcı
         // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
         // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
         // maliyet_* sayfalarındayken sidebar'da yönünü kaybetmesin. ?>
