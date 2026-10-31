@@ -33,17 +33,25 @@
 .qc-section-heading > span { color: var(--muted); font-weight: 600; font-size: .85rem; }
 .qc-costs > .qc-hint { margin: 6px 0 14px; }
 .qc-rows { display: grid; align-items: start; gap: 11px; min-width: 0; }
-.qc-row { padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); min-width: 0; }
+.qc-row { padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); min-width: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; }
+/* Başlık / ad / fiyat tam satır; açıklama ile Ayar düğmesi aynı satırı paylaşır (mobil sayfa kısalır). */
+.qc-row > .qc-row-head, .qc-row > .qc-custom-label, .qc-row > .qc-main-price { flex: 1 0 100%; }
+.qc-row > .qc-hint { flex: 1 1 140px; margin: 8px 0 0; }
+.qc-row > .qc-row-settings { flex: 0 0 auto; margin-top: 4px; }
+.qc-row > .qc-row-settings[open] { flex: 1 0 100%; }
 .qc-row-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
 .qc-row h3 { display: flex; align-items: center; gap: 8px; font-size: .95rem; margin: 0; }
 .qc-row h3 { overflow-wrap: anywhere; min-width: 0; }
 .qc-custom-label { margin-bottom: 14px; }
 .qc-remove-button { min-height: 44px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--danger); font: inherit; font-size: .8rem; cursor: pointer; }
 .qc-add-item { margin-top: 12px; min-height: 44px; font-size: .85rem; }
+/* Dokunma hedefi >= 44px (liste, başlık ve form köprü bağlantıları). */
+.qc-page .btn, .qc-workspace .btn { min-height: 44px; }
+.qc-record-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .qc-row output { font-variant-numeric: tabular-nums; font-weight: 700; font-size: .95rem; white-space: nowrap; }
 .qc-row-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .qc-price-field { grid-column: 1 / -1; }
-.qc-row-settings { margin-top: 8px; }
+.qc-row-settings { margin-top: 4px; }
 .qc-row-settings summary { width: max-content; min-width: 74px; min-height: 44px; margin-left: auto; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--primary); font-size: .8rem; font-weight: 650; line-height: 20px; list-style-position: inside; cursor: pointer; }
 .qc-row-settings summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .qc-row-settings[open] .qc-row-fields { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -82,6 +90,8 @@
     .qc-row-fields { grid-template-columns: 1fr 1fr 1.3fr; }
     .qc-price-field { grid-column: auto; }
     .qc-rows { grid-template-columns: 1fr 1fr; }
+    /* Ayar açılan kart tam genişliğe geçer; komşu kartta boşluk kalmaz. */
+    .qc-row:has(> .qc-row-settings[open]) { grid-column: 1 / -1; }
     .qc-hero { padding: 26px; }
 }
 @media (max-width: 767px) {
@@ -100,5 +110,10 @@
 }
 .qc-read-note, .qc-unit-note { font-weight: 500; color: var(--text); background: var(--surface-2); border-left: 3px solid var(--primary); border-radius: 6px; padding: 6px 9px; line-height: 1.45; }
 .qc-unit-note { margin: 10px 0 0; }
+@media (min-width: 1024px) {
+    /* Masaüstü liste: ad / tarih / sayılar / eylemler tek satırda, taranabilir. */
+    .qc-record { grid-template-columns: minmax(180px, 1.4fr) 110px minmax(240px, 2fr) auto; align-items: center; gap: 12px; }
+}
+@media (max-width: 767px) { .qc-record-search label { flex: 1 0 100%; } .qc-record-search input { flex: 1 1 0; } }
 @media (max-width: 359px) { .qc-panel { padding: 14px; } .qc-breakdown dl > div { flex-wrap: wrap; gap: 6px; } }
 @media print { .qc-save-bar, .qc-text-button, .qc-row-settings summary { display: none !important; } .qc-hero { break-inside: avoid; } .qc-row { break-inside: avoid; } }

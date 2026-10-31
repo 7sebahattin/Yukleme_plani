@@ -128,7 +128,7 @@ render_flash();
                 <a href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a>
                 <span><?= h($row['sheet_date']) ?></span>
                 <span><?= h(rtrim(rtrim(number_format((float)$row['net_kg'], 4, ',', '.'), '0'), ',')) ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 4, ',', '.') ?> TL/kg</span>
-                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <div class="qc-record-actions">
                     <a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
                     <?php if ($can_write): ?><a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>
                     <?php if ($can_delete): ?><form method="post" action="hizli_maliyet.php" data-confirm="<?= h('#' . (int)$row['id'] . ' – ' . $row['product'] . ' kalıcı olarak silinecek. Devam edilsin mi?') ?>" onsubmit="return confirm(this.dataset.confirm);">

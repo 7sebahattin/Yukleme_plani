@@ -11,7 +11,8 @@ $QCS_DEPOT = 'ANONİM TEST DEPO';
 $QCS_AUDIT = [];
 function current_user(): ?array { return $GLOBALS['QCS_USER']; }
 function is_admin(): bool { return $GLOBALS['QCS_ADMIN']; }
-function can_maliyet(string $perm): bool { return $GLOBALS['QCS_PERMS'][$perm] ?? false; }
+// Gerçek kapıyla aynı kural: yönetici her zaman geçer; yoksa izin satırı gerekir.
+function can_hizli_maliyet(string $perm): bool { return $GLOBALS['QCS_ADMIN'] || ($GLOBALS['QCS_PERMS'][$perm] ?? false); }
 function active_depot(): ?string { return $GLOBALS['QCS_DEPOT']; }
 function depot_visible_to_user(?string $depot): bool { return $depot === $GLOBALS['QCS_DEPOT']; }
 function audit_log_event(string $action, string $module, ?int $id = null, ?array $old = null, ?array $new = null): void {
@@ -103,13 +104,12 @@ qcs_test('Oturumsuz/sıfır id kullanıcısı hiçbir PDO işlemine ulaşamaz', 
         qcs_assert($pdo->calls === [] && $GLOBALS['QCS_AUDIT'] === []);
     }
 });
-qcs_test('Okuma veya yazma yetkisi olmayan yöneticide PDO yok', function (): void {
-    foreach (['read', 'write'] as $permission) {
-        $GLOBALS['QCS_PERMS'][$permission] = false; $pdo = new QuickCostSchemaSpy();
-        try { qcs_throws(fn() => quick_cost_install($pdo), QuickCostAccessException::class); }
-        finally { $GLOBALS['QCS_PERMS'][$permission] = true; }
-        qcs_assert($pdo->calls === [] && $GLOBALS['QCS_AUDIT'] === []);
-    }
+qcs_test('Hızlı Maliyet izinleri olsa da yönetici olmayan kullanıcı tabloyu kuramaz', function (): void {
+    $GLOBALS['QCS_ADMIN'] = false; $GLOBALS['QCS_PERMS'] = ['read' => true, 'write' => true, 'delete' => true];
+    $pdo = new QuickCostSchemaSpy();
+    try { qcs_throws(fn() => quick_cost_install($pdo), QuickCostAccessException::class); }
+    finally { $GLOBALS['QCS_ADMIN'] = true; }
+    qcs_assert($pdo->calls === [] && $GLOBALS['QCS_AUDIT'] === []);
 });
 qcs_test('Aktif deposuz yönetici PDO işlemine ulaşamaz', function (): void {
     $GLOBALS['QCS_DEPOT'] = null; $pdo = new QuickCostSchemaSpy();
