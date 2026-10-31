@@ -94,6 +94,9 @@ cases.push(example());
 for (const [cur, rate, price, m] of [['TL', 1, 40, 20], ['USD', '34,25', '1,1', ''], ['EUR', '36,8', '0,95', 10], ['EUR', 0, 1, null], ['TL', 1, 1, 100]]) {
     const d = example(); d.sale = { price, currency: cur, rate, target_margin: m }; cases.push(d);
 }
+{ const d = example(); for (let i = 0; i < 40; i++) d.items.push({ code: 'custom_k' + i, label: 'k' + i, basis: 'fixed', unit: 'fixed', qty: 0, qty2: 0, unit_price: 1 });
+  d.items.push({ code: 'custom_eski_fason', label: 'FASON İŞLEME HİZMETİ (ESKİ)', basis: 'fixed', unit: 'fixed', qty: 0, qty2: 0, unit_price: 500 }); cases.push(d);
+  const e = JSON.parse(JSON.stringify(d)); e.items.push({ code: 'custom_k41', label: 'fazla', basis: 'fixed', unit: 'fixed', qty: 0, qty2: 0, unit_price: 1 }); cases.push(e); }
 { const d = example(); d.quantities.waste_kg = 2001; cases.push(d); }
 { const d = example(); d.items.push({ code: 'custom_x', label: 'ilaçlama', basis: 'manual', unit: 'worker_day', qty: 3, qty2: '1,5', unit_price: 900 }); cases.push(d); }
 for (let i = 0; i < 160; i++) {

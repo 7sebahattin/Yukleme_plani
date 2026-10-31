@@ -250,6 +250,19 @@ t('Eski (v472) belge: kaldırılan kalemler korunur, toplam DEĞİŞMEZ, fason d
     $old['operation_type'] = 'uretim'; $r = quick_cost_calculate($old); // üretimde seçim uygulanmazdı
     eq($r['total'], 663000 + 50000 + 20000 + 75000 + 1000);
 });
+t('Eski kayıt 40 ek kalemle doluysa taşınan "(ESKİ)" kalemleri sınırı aşmaz; 41. kullanıcı kalemi yine reddedilir', function (): void {
+    $old = v2_example();
+    $old['items'] = array_values(array_filter($old['items'], fn($i) => $i['code'] !== 'factory_cost'));
+    $old['items'][] = ['code' => 'loading', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 1000];
+    $old['items'][] = ['code' => 'fason_service', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 500];
+    for ($i = 0; $i < 40; $i++) $old['items'][] = ['code' => 'custom_k' . $i, 'label' => 'k' . $i, 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 1];
+    $r = quick_cost_calculate($old);
+    eq($r['total'], 713000 + 1000 + 500 + 40); eq(count($r['items']), 13 + 40 + 2);
+    eq(quick_cost_calculate($r), $r); // taşınmış belge tekrar hesaplanabilir (kayıt açılır, düzenlenir, kopyalanır)
+    $f = quick_cost_v2_form_input($r); eq(count($f['items']), 13 + 40 + 2); // 422 sonrası taslak da kırpılmaz
+    $r['items'][] = ['code' => 'custom_k41', 'label' => 'fazla', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 1];
+    throws(fn() => quick_cost_calculate($r), 'kırk');
+});
 t('Satış karşılaştırması TL / USD / EUR', function (): void {
     $d = v2_example(); $d['sale'] = ['price' => 40, 'currency' => 'TL', 'rate' => 99, 'target_margin' => 20];
     $s = quick_cost_calculate($d)['sale_result'];

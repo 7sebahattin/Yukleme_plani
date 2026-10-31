@@ -10,6 +10,8 @@ const QUICK_COST_V2_MODEL = 2;
 const QUICK_COST_V2_CUSTOM_MAX = 40;
 const QUICK_COST_V2_RATE_MAX = 1000;
 const QUICK_COST_V2_MAT_CUSTOM_MAX = 20;
+/** v472'den taşınan "(ESKİ)" kalemleri kullanıcının 40 ek kalem hakkından DÜŞMEZ (kayıt açılabilir kalsın). */
+const QUICK_COST_V2_LEGACY_CODES = ['custom_eski_ayiklama', 'custom_eski_boylama', 'custom_eski_yukleme', 'custom_eski_soguk_hava', 'custom_eski_fason'];
 const QUICK_COST_V2_PER_PALLET_MAX_CENTS = 100000000; // 1.000.000 TL
 
 function quick_cost_is_v2($document): bool
@@ -333,8 +335,12 @@ function quick_cost_v2_calculate(array $input): array
     $catalog = quick_cost_v2_catalog();
     $units = quick_cost_v2_units();
     $rawItems = $input['items'] ?? null;
+    $legacyExtra = 0;
+    if (is_array($rawItems)) foreach ($rawItems as $legacyRow) {
+        if (is_array($legacyRow) && in_array($legacyRow['code'] ?? null, QUICK_COST_V2_LEGACY_CODES, true)) $legacyExtra++;
+    }
     if (!is_array($rawItems) || !array_is_list($rawItems) || count($rawItems) < count($catalog)
-        || count($rawItems) > count($catalog) + QUICK_COST_V2_CUSTOM_MAX) {
+        || count($rawItems) > count($catalog) + QUICK_COST_V2_CUSTOM_MAX + $legacyExtra) {
         throw new InvalidArgumentException('Temel maliyet kalemleri bir kez, en fazla kırk ek kalemle gönderilmeli.');
     }
     $byCode = [];
@@ -528,14 +534,14 @@ function quick_cost_v2_form_input(array $input): array
     $custom = 0;
     foreach ($rows as $row) {
         $code = is_array($row) ? ($row['code'] ?? null) : null;
-        if (!is_string($code) || !preg_match('/^custom_[a-z0-9_]{1,40}$/D', $code) || isset($seen[$code]) || $custom >= QUICK_COST_V2_CUSTOM_MAX) continue;
+        if (!is_string($code) || !preg_match('/^custom_[a-z0-9_]{1,40}$/D', $code) || isset($seen[$code]) || ($custom >= QUICK_COST_V2_CUSTOM_MAX && !in_array($code, QUICK_COST_V2_LEGACY_CODES, true))) continue;
         $extra = ['code' => $code, 'label' => '', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 0];
         foreach (['label', 'basis', 'unit', 'qty', 'qty2', 'unit_price'] as $key) {
             if (isset($row[$key]) && $scalar($row[$key])) $extra[$key] = $row[$key];
         }
         $safe['items'][] = $extra;
         $seen[$code] = true;
-        $custom++;
+        if (!in_array($code, QUICK_COST_V2_LEGACY_CODES, true)) $custom++;
     }
     return $safe;
 }

@@ -27,6 +27,8 @@
     var MAT_LINES = { mat_pallet: 'PALET', mat_hat: 'ŞAPKA', mat_corner: 'KÖŞEBENT', mat_crate: 'KASA', mat_divider: 'VİYOL',
         mat_edge: 'KENAR KARTONU', mat_base: 'TABAN KAĞIDI', mat_strap: 'ŞERİT', mat_net: 'FİLE' };
     var MAT_CUSTOM_MAX = 20, PER_PALLET_MAX_CENTS = 100000000;
+    var LEGACY_CODES = ['custom_eski_ayiklama', 'custom_eski_boylama', 'custom_eski_yukleme', 'custom_eski_soguk_hava', 'custom_eski_fason'];
+    function userCustomCount(items) { return items.filter(function (x) { return customCode(x.code) && LEGACY_CODES.indexOf(x.code) < 0; }).length; }
     var MAT_CUSTOM_CODE = /^mat_custom_[a-z0-9_]{1,30}$(?![\s\S])/;
     var UNITS = {
         kg: { label: 'Kg', price: 'TL/kg' }, ton: { label: 'Ton', price: 'TL/ton' },
@@ -168,7 +170,8 @@
         var linked = { raw_kg: raw4 / 10000, processed_kg: proc4 / 10000, export_kg: exp };
 
         var catalog = clone(CATALOG), codes = Object.keys(CATALOG), rows = input.items, byCode = Object.create(null);
-        if (!Array.isArray(rows) || rows.length < codes.length || rows.length > codes.length + CUSTOM_MAX) fail('Temel maliyet kalemleri bir kez, en fazla kırk ek kalemle gönderilmeli.');
+        var legacyExtra = Array.isArray(rows) ? rows.filter(function (x) { return x && LEGACY_CODES.indexOf(x.code) >= 0; }).length : 0;
+        if (!Array.isArray(rows) || rows.length < codes.length || rows.length > codes.length + CUSTOM_MAX + legacyExtra) fail('Temel maliyet kalemleri bir kez, en fazla kırk ek kalemle gönderilmeli.');
         rows.forEach(function (it) {
             var c = it && typeof it === 'object' ? it.code : null;
             if (typeof c !== 'string' || (!has(CATALOG, c) && !customCode(c)) || byCode[c]) fail('Eksik, tekrarlanan veya bilinmeyen maliyet kalemi.');
@@ -436,7 +439,7 @@
             paintInputs(source);
             validateInputs();
             validation.textContent = error; validation.hidden = !error;
-            var customs = state.items.filter(function (x) { return customCode(x.code); }).length;
+            var customs = userCustomCount(state.items);
             var add = dom.getElementById('qc2-add-item'); if (add) add.disabled = readOnly || customs >= CUSTOM_MAX;
             var lim = dom.getElementById('qc2-custom-limit'); if (lim) lim.hidden = customs < CUSTOM_MAX;
             if (save) save.disabled = readOnly || form.dataset.saveAvailable !== '1' || !r || !!form.querySelector('[aria-invalid="true"]');
@@ -575,7 +578,7 @@
                 paint();
             } else if (b.id === 'qc2-add-item') {
                 var win = dom.defaultView, code = 'custom_' + (win && win.crypto && win.crypto.randomUUID ? win.crypto.randomUUID().replace(/-/g, '').slice(0, 24) : Date.now().toString(36) + (++seq).toString(36));
-                if (state.items.filter(function (x) { return customCode(x.code); }).length >= CUSTOM_MAX) return;
+                if (userCustomCount(state.items) >= CUSTOM_MAX) return;
                 state.items.push({ code: code, label: '', basis: 'fixed', unit: 'fixed', qty: 0, qty2: 0, unit_price: 0 });
                 var node = dom.getElementById('qc2-custom-template').content.firstElementChild.cloneNode(true);
                 node.dataset.qc2Row = code; dom.getElementById('qc-rows').appendChild(node);
