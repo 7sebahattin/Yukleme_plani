@@ -156,3 +156,10 @@ Sipariş statik297, gerçekExcel22, Personelstatik231/UI125, Faz8C19, Faz8D20,
 Faz9E69, günlük Faz2statik102/Faz3statik94, PDKSlink91 geçti. Bağımsız Codex
 son kaynak incelemesinde açıkP1/P2yok. Tam CI sonuçları takip PR’ının
 kaydında belirtilir; yerel seçili test sonucu tüm CI yeşil demek değildir.
+
+### v466 — günlük veri rozeti
+PR840 merge761dad1 ile özgün kart düzeni ve ikonlar canlı v465 olarak doğrulandı.
+CI günlük eksik çıkış rozetinin genişleyen hub erişiminden ayrılması gerektiğini yakaladı.
+Rozet yalnız daily_scan veya daily_reports Gör izniyle hesaplanır; personel/kart
+izinleri hub erişimini korur, günlük veri sayısını açmaz. Anonim SQLite testi
+eski ve ayrıntılı izinlerle 16 kontrol, statik test231 kontrol geçti.

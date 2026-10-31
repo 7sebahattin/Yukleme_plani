@@ -96,8 +96,8 @@ ok("index.php: 'Personel' ana sayfa kartı ARTIK personel_takip.php'ye açılıy
 // Artık sidebar/bottomnav ile AYNI tek kaynak: nav_ptak_gorunur().
 ok("index.php: kart görünürlüğü TEK kaynak nav_ptak_gorunur() ile (sidebar/bottomnav ile aynı)",
     (bool)preg_match('/if \(nav_ptak_gorunur\(\)\):\s*\?>\s*<a href="personel_takip\.php" class="home-card"/s', $indexSrc));
-ok("index.php: eksik-çıkış rozet sorgusu da AYNI kapıdan (nav_ptak_gorunur)",
-    (bool)preg_match('/\$personel_eksik_cikis = 0;\s*if \(nav_ptak_gorunur\(\)\) \{/', $indexSrc));
+ok("index.php: eksik-çıkış rozeti günlük giriş/çıkış veya puantaj Gör izniyle sınırlı",
+    str_contains($indexSrc, "if (role_pdks_can('daily_scan') || role_pdks_can('daily_reports')) {"));
 ok("index.php: kalıcı PDKS izinleri (employees/cards/scan) Personel Takibi kartını AÇMIYOR (personel_takip.php onları saymaz → 403 olurdu)",
     !preg_match('/can\(.attendance\.(employees|cards|scan).\)/', $indexSrc));
 ok("index.php: Operasyon bölümü nav_ptak_gorunur()'ü de sayıyor (yalnız PDKS izinli kullanıcı kartı görebilsin)",
