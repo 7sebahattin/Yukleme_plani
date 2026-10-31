@@ -121,3 +121,12 @@ asya.scai.tr/hosting ve mevcut iş veritabanına bağlantı/yazım,
 push/merge/deploy yapılmadı. Gerçek kayıtlar testlere veya görsellere taşınmadı.
 Native MySQL, finansal kabul ve fiziksel telefon kabulü iddia edilmez.
 Bu teslim yalnız mevcut Asya Fresh rol ve yetkilendirme geliştirmesidir.
+
+## 31 Ekim son kullanıcı onayı ve güncel ana dal
+
+Kullanıcı somut teslim sonrası “merge et canlıda test edeyim” talimatını verdi.
+Dal, daha sonra gelen Asya Fresh Rampacı değişikliği `14112ba` korunarak
+güncel main üzerine rebase edildi. Yayın sürümü v464 olarak ayrıldı. Ortak
+PHP dosyalarında yalnız yeni yetki kapıları bulunur; Rampacı hesapları korunur.
+Önceki yerel teslim/push bekliyor ifadeleri tarihsel durumdur; güncel merge
+ve yayın sonucu PR kaydında ve bu bölümün devamında belirtilecektir.
