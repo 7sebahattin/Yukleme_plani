@@ -5,6 +5,10 @@
 // Canlı DB'ye HİÇ dokunmaz: bellek içi SQLite + stub auth/helper.
 // =========================================================
 declare(strict_types=1);
+// Pure gate definitions only: no auth/bootstrap, connection or migration side effects.
+require_once dirname(__DIR__) . '/config/role_data_scope.php';
+function current_user(): ?array { return ['id'=>1]; }
+function forbidden(string $message = ''): void { throw new RuntimeException($message); }
 
 $GLOBALS['PDO_TEST'] = null;
 
@@ -41,6 +45,10 @@ function smoke_env_kur(string $root, array $sizes): void {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $GLOBALS['PDO_TEST'] = $pdo;
+
+    // Anonymous unrestricted role fixture for the real record-access gate.
+    $pdo->exec('CREATE TABLE user_roles (user_id INTEGER, role_id INTEGER)');
+    $pdo->exec('CREATE TABLE role_permissions (role_id INTEGER, permission TEXT)');
 
     // Kolonlar record_excel_template.php'nin GERÇEKTEN okuduğu alanlarla birebir
     // (grep ile çıkarıldı) — eksik kolon "Undefined array key" uyarısı üretir ve

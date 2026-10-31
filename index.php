@@ -85,15 +85,13 @@ if (can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is
 
 // Personel Takibi kartı için: BUGÜNÜN eksik çıkışları (Günlük İşçi modülü) —
 // aktif depo kapsamında (uygulamanın "zorunlu tek depo" kuralıyla AYNI).
-// İzin kontrolü kart görünürlüğü, sidebar ve bottomnav ile AYNI TEK kaynaktan
-// gelir: nav_ptak_gorunur() (config/helpers.php) — personel_takip.php'nin
-// kendi kapısıyla birebir. Eskiden burada elle yazılmış bir liste vardı ve
-// kalıcı PDKS izinlerini (employees/cards/scan) de sayıyordu: kart görünüyor,
-// tıklanınca 403 veriyordu. Listeyi buraya GERİ KOPYALAMA. pdks_gunluk_eksik_cikislar() KENDİ SQL'i YAZILMAZ,
+// Hub erişimi personel/kart sayfalarını da kapsar. Günlük işçi sayısı ise
+// yalnız günlük giriş/çıkış veya puantaj sayfasını görebilenlere gösterilir.
+// pdks_gunluk_eksik_cikislar() KENDİ SQL'i YAZILMAZ,
 // config/pdks_gunluk.php'nin tek paylaşılan fonksiyonu (gunluk_isci_puantaj.php
 // İLE AYNI kaynak) çağrılır.
 $personel_eksik_cikis = 0;
-if (nav_ptak_gorunur()) {
+if (role_pdks_can('daily_scan') || role_pdks_can('daily_reports')) {
     try {
         require_once __DIR__ . '/config/pdks_gunluk.php';
         if (pdks_gunluk_sema_hazir(db())) {

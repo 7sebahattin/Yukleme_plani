@@ -69,8 +69,8 @@ ok("helpers.php: 'muhasebe' rolüne attendance.daily_reports verildi",
 ok('helpers.php: sidebar\'da (konsolide $a_ptak listesi üzerinden) gunluk_isci_puantaj.php geçiyor', str_contains($helpersSrc, 'gunluk_isci_puantaj.php'));
 $ptakSrc3 = oku('personel_takip.php');
 ok('personel_takip.php: gunluk_isci_puantaj.php kartı var', str_contains($ptakSrc3, 'gunluk_isci_puantaj.php'));
-ok('personel_takip.php: bu kart attendance.daily_reports iznine bağlı',
-    (bool)preg_match("/can\('attendance\.daily_reports'\)[\s\S]{0,60}gunluk_isci_puantaj\.php/", $ptakSrc3));
+ok('personel_takip.php: bu kart bağımsız daily_reports Gör iznine bağlı',
+    (bool)preg_match("/role_pdks_can\('daily_reports'\)[\s\S]{0,60}gunluk_isci_puantaj\.php/", $ptakSrc3));
 
 echo "\n=== 3. OPERATOR'A GENİŞ RAPOR İZNİ VERİLMEDİ (görev madde 17, kullanıcının açık talimatı) ===\n";
 preg_match("/'operator'\s*=>\s*\[([^\]]*)\]/s", $helpersSrc, $opM);
@@ -229,7 +229,7 @@ ok("helpers.php: \$p_gunluk artık attendance.daily_reports'u da kapsıyor (aksi
     (bool)preg_match('/\$p_gunluk\s*=\s*nav_ptak_gorunur\(\);/', $helpersSrc)
     && (function () use ($helpersSrc) {
         if (!preg_match('/function nav_ptak_gorunur\(\): bool\s*\{(.*?)^\}/ms', $helpersSrc, $m)) return false;
-        return str_contains($m[1], 'attendance.daily_reports');
+        return str_contains($m[1], "role_pdks_can('hub')");
     })());
 
 echo "\n";

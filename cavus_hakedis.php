@@ -149,7 +149,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     <td><span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span></td>
     <td><?php if ((int)$p['eksik_toplam'] > 0): ?><span class="pdks-badge pdks-badge-eksik_cikis">⚠️ Eksik Çıkış</span><?php endif; ?></td>
     <td>
-        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
+        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('mesai','read')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
         <?php if ($hk): ?><a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>
         <?php else: ?>
         <form method="post" style="display:inline">
@@ -173,7 +173,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     <div class="pdks-row-sub" style="color:var(--warn);font-weight:600">⚠️ Yeniden hesaplama gerekli — puantaj/mesai değerlendirmesi taslaktan sonra değişti.</div>
     <?php endif; ?>
     <div style="margin-top:8px">
-        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
+        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('mesai','read')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
         <?php if ($hk): ?><a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>
         <?php else: ?><form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="hesapla"><input type="hidden" name="session_id" value="<?= (int)$sess['id'] ?>"><button class="btn btn-sm btn-primary">Hesapla</button></form><?php endif; ?>
     </div>

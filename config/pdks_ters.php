@@ -2015,6 +2015,8 @@ function pdks_ters_yetkiler(): array
     return [
         'havuz'      => role_pdks_can('ters_pool'),
         'tarama'     => role_pdks_can('daily_scan') || role_pdks_can('ters_count'),
+        'sayim'      => role_pdks_can('ters_count','read'),
+        'cikis'      => role_pdks_can('daily_scan','read'),
         'mutabakat'  => role_pdks_can('ters_report'),
         'yonetici'   => function_exists('is_admin') && is_admin(),
     ];
@@ -2063,14 +2065,23 @@ function pdks_ters_json_govde(): array
 }
 
 /** Üst sekme şeridi (yetkiye göre). $aktif: hub|havuz|sayim|cikis|mutabakat */
+/** A foreman card must only link to a page this profile can open. */
+function pdks_ters_hub_hedef(array $permissions, int $foremanId): string {
+    if (!empty($permissions['sayim'])) return 'ters_kart_sayim.php?cavus='.$foremanId;
+    if (!empty($permissions['mutabakat'])) return 'ters_kart_mutabakat.php';
+    if (!empty($permissions['havuz'])) return 'ters_kart_havuz.php?cavus='.$foremanId;
+    if (!empty($permissions['cikis'])) return 'gunluk_isci_giris_cikis.php?mod=ortak';
+    return 'ters_kart.php';
+}
+
 function pdks_ters_sekmeler(string $aktif, array $y): void
 {
     $s = [
         'hub'       => ['ters_kart.php', '↩ Özet', true],
         'havuz'     => ['ters_kart_havuz.php', '🗂 Kart Havuzu', $y['havuz']],
-        'sayim'     => ['ters_kart_sayim.php', '🌅 Sabah Sayımı', $y['tarama']],
+        'sayim'     => ['ters_kart_sayim.php', '🌅 Sabah Sayımı', $y['sayim']],
         // v355: çıkış TEK noktadan — Ortak Çıkış (ters + normal girişler; kaynak sonuçta görünür).
-        'cikis'     => ['gunluk_isci_giris_cikis.php?mod=ortak', '🚪 Ortak Çıkış', $y['tarama']],
+        'cikis'     => ['gunluk_isci_giris_cikis.php?mod=ortak', '🚪 Ortak Çıkış', $y['cikis']],
         'mutabakat' => ['ters_kart_mutabakat.php', '📋 Mutabakat', $y['mutabakat']],
     ];
     echo '<nav class="tk-sekmeler" aria-label="Giriş Tanımlı">';

@@ -197,7 +197,7 @@ foreach ($dashboardProfiles as $name => $profile) {
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');
     if ($name === 'dashboard_only') dashboard_check(count($home) === 0, 'yalnız dashboard yetkisinde ilgisiz kart yok');
     foreach (['attendance.employees', 'attendance.cards', 'attendance.scan'] as $legacy) {
-        if ($name === 'only_' . str_replace('.', '_', $legacy)) dashboard_check(!isset($homeLabels['personel_takip.php']), 'eski PDKS izni personel merkezini açmaz: ' . $legacy);
+        if ($name === 'only_' . str_replace('.', '_', $legacy)) dashboard_check(isset($homeLabels['personel_takip.php']), 'yetkili personel alt sayfasının merkez girişi görünür: ' . $legacy);
     }
 }
 $badgeXpath = dashboard_dom(dashboard_render($dashboardProfiles['admin'], true));
