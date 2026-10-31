@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v466';
+const CACHE_NAME = 'yukleme-plani-v467';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -75,6 +75,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır
   // Siparişler: sayfa, belge/PDF/XLSX ve ZIP uçları HİÇ önbelleğe alınmaz (kişisel/ticari veri; PATH_INFO da atlanır)
   if (/\/siparis(ler|_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // Fiş düzeltme (v464): cavus_fis_geri_al.php / cavus_fis_rapor.php çavuş + fiş + hakediş verisi taşır — HİÇ önbelleğe alınmaz
+  if (/\/cavus_fis_[a-z_]+\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz

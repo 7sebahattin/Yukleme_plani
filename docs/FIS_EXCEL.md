@@ -12,8 +12,8 @@ Migration yok (tek istisna v463: Rampacı yevmiye kolonu — aşağıdaki «v463
 5. Hatalı satırları Excel'de düzeltip **aynı dosyayı** yeniden yükleyin: yazılmış fişler «zaten yüklü» atlanır, çiftlenmez.
 
 ## Düzeltme (yazılmış fiş)
-Mesai Detayı › Toplu İşlemler › **Geri Al** (sonuç ekranı toplu işlem kimliğini gösterir) → Excel'de o fişin **Revizyon** değerini 1 artır → yeniden yükle.
-Servis geri alınmaz; yeniden yüklemede servis çiftlenmez (yalnız eksik fark eklenir). Servisi düzeltmek için Mesai Detayı'ndaki servis iptali.
+**En kolay yol (v464): «Üstüne yaz»** — aşağıdaki «v464 — Fiş düzeltme» bölümü. Elle yol: Mesai Detayı › Toplu İşlemler › **Geri Al** (sonuç ekranı toplu işlem kimliğini gösterir) → Excel'de o fişin **Revizyon** değerini 1 artır → yeniden yükle.
+Servis Mesai Detayı'ndan geri alınmaz; yeniden yüklemede servis çiftlenmez (yalnız eksik fark eklenir). Servisi düzeltmek için Mesai Detayı'ndaki servis iptali (Üstüne yaz ve «Fiş yüklemelerini geri al» fiş etiketli servisleri de iptal eder).
 
 ## Sütunlar
 Tek kaynak `pdks_fis_sutunlar()` (config/pdks_fis.php); şablonun Açıklama sayfası ve başlık eşleme ondan üretilir. Başlıklar ada göre (TR-katlı, takma adlarla) eşlenir —
@@ -74,3 +74,28 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 - **Kurulum (açık GO):** `daily_worker_work_periods.yevmiye_adedi` (tek nullable kolon). Yönetici **Şema Migrasyon › «Rampacı yevmiye alanı»** kartını test sitesinde ve canlıda ayrı ayrı bir kez basar. Basılmadan yevmiyeli Rampacı fişi önizlemede «Rampacı yevmiye alanı kurulmadı» hatası verir ve o fiş için hiçbir şey yazılmaz; yevmiyesiz fişler, kiosk ve Toplu İşlem/Çalışma Ekle'deki saat bazlı Rampacı etkilenmez.
 - **Toplu İşlem / Çalışma Ekle** ekranlarında yevmiye alanı YOKTUR (yalnız Fiş Excel kod yolu); Mesai Detayı'nda yevmiyeli dönem «↻ N yevmiye» rozeti ve Mesai Özeti'nde «Rampacı yevmiye: Σ» notu görünür.
 - **Test:** `php scripts/pdks_yevmiye_smoke.php` (kolonsuz senaryo dahil) · `pdks_fis_plan_smoke` (12b) · `pdks_fis_xlsx_smoke` (2c) · `pdks_fis_yaz_smoke` (P) · `node scripts/pdks_fis_ui_smoke.js`.
+
+## v464 — Fiş düzeltme: üstüne yaz · fiş yüklemelerini geri al · etkilenen fişler (W4)
+Eski kuralla yanlış yorumlanmış fişleri (ör. «12+1» → 12 Erkek + 1 Erkek Yarım) düzeltmek içindir. **Hiçbir kayıt SİLİNMEZ**: eski kayıtlar iptal edilir (Mesai Detayı'nda «iptal», gerekçe + kullanıcı audit'te).
+Yalnız **Fiş Excel'i ile yazılmış** kayıtlar değişir; kiosk / elle / ters / tanımlı girişler korunur. **Kesinleşmiş hakedişli günler hiçbir yoldan değişmez** (çavuşun geçerli ödemesi varsa kesin hakediş zaten yeniden açılamaz); «ek hakediş / düzeltme» akışı bu sürümde yok.
+
+### 1) Üstüne yaz (önerilen)
+1. Excel'i yeni komutla yeniden üretin (fiş numarası aynı kalabilir; Revizyon girmeniz gerekmez).
+2. **Fiş Excel'i Yükle** › 2. adımda dosyayı seçin, **«Düzeltme» kutusunda «Mevcut fiş kayıtlarının ÜSTÜNE YAZ»**'ı işaretleyin ve **gerekçe** yazın (zorunlu).
+3. Önizlemede fişin altında **ESKİ (iptal edilecek) → YENİ** özeti çıkar (örn. «Erkek: 13 kişi (12 Tam, 1 Yarım)» → «Erkek: 12 kişi, Şeritçi: 1 kişi»), eski fiş servisi iptali ve yeni revizyon (otomatik: eski + 1) gösterilir. Satır varsayılan **seçili gelmez**; bilerek seçip yazın.
+4. Yazma tek işlemdir: yeni kayıtlar + eski kayıtların iptali birlikte ya da hiç. Servis eski kayıtları iptal edilip yenisi yazılır (servis ayrı işlemdir: yarıda kesilirse aynı dosyayı «Üstüne yaz» ile yeniden yükleyin, kalan kısım tamamlanır).
+- Mesaide **fiş dışı** aktif kayıt varsa (kiosk/elle/ters) önizleme ENGEL verir; fiş kayıtlarının üstüne yazmak için «Mevcut kayıtlara EK yaz»ı da işaretleyin — fiş dışı kayıtlar yine korunur.
+- Aynı dosyada aynı çavuş + gün için birden çok fiş varsa «Üstüne yaz» yalnız İLK fişte çalışır (diğerleri EK ister).
+- Önizleme ile yazma arasında mesaideki fiş kayıtları değişirse ya da önizlemeyi aynı yükle ikinci kez yazarsanız fiş «Değişti» der ve yazılmaz (çift yazım olmaz).
+
+### 2) Çavuşun fiş yüklemelerini geri al (toplu · şifreli)
+**Çavuşlar** listesinde satırdaki «↩ Fiş yüklemelerini geri al» (ya da Fiş Excel'i Yükle üst çubuğu) → çavuş + tarih aralığı (en çok 366 gün, yalnız geçmiş) + gerekçe → **döküm** (hiçbir şey değişmez): kaç mesai/dönem/servis iptal edilecek, hangi mesailer atlanacak (kesin hakediş / başka depo) ve nedeni.
+Uygulamak için **çavuş kodunu yazın + giriş şifrenizi girin** (ekran kilidi PIN'i değil). Yanlış şifre/kod = hiçbir şey olmaz; 5 yanlış denemede 60 sn beklenir. İşlem mesai/batch başına ayrı yapılır: yarım kalırsa aynı işlemi tekrar çalıştırın, kalan kısım tamamlanır. Sonra yeniden yüklemek için Revizyon+1 ya da «Üstüne yaz».
+
+### 3) Etkilenen fişler raporu
+**Çavuşlar** › «📋 Etkilenen fişler» (ya da Fiş Excel'i Yükle üst çubuğu): yazılmış fişlerden **Yarım gün içerenleri** (tarih/çavuş süzgeci) tip kırılımıyla listeler. **✱** = Yarım kararı **Erkek** işçiye ait → eski «12+1 = Tam + Yarım» yorumundan kalmış olabilir. Salt okunur; düzeltme için yukarıdaki «Üstüne yaz».
+
+### Teknik
+- Mantık `config/pdks_fis.php` «J. DÜZELTME»; şifre doğrulaması `config/sifre_onay.php` (giriş şifresi; ekran kilidi/PIN'den bağımsız). İptal yalnız `pdks_faz8j_void_uygula` / `pdks_faz8j_toplu_geri_al` / `pdks_servis_iptal`.
+- Fiş kaynaklı kayıt = Faz 8J özet audit'inde `kaynak:fis_excel`; üstüne yazılan toplu işlem `puantaj_toplu_geri_al` audit'iyle «geri alındı» görünür; yeni `fis_yukle` izinde `ustune_yaz`, `onceki_rev`, `degisen_toplu_idler`.
+- Test: `php scripts/pdks_fis_ustune_yaz_smoke.php` · `pdks_fis_sifirla_smoke.php` · `sifre_onay_smoke.php` · `node scripts/pdks_fis_duzelt_smoke.js` (fixture: `pdks_fis_duzelt_render.php`).

@@ -16,6 +16,7 @@ $fy_url = (string)($model['url'] ?? 'gunluk_fis_yukle.php');
 $fy_rozet = [
     'hazir' => ['✅ Hazır', 'fy-b-hazir'], 'uyari' => ['⚠ Uyarı', 'fy-b-uyari'], 'onay' => ['❓ Onay gerekli', 'fy-b-uyari'],
     'engel' => ['⛔ Engel', 'fy-b-engel'], 'hata' => ['❌ Hata', 'fy-b-hata'], 'zaten' => ['⏭ Zaten yüklü', 'fy-b-zaten'], 'devam' => ['🔁 Tamamlanacak', 'fy-b-devam'],
+    'ustune' => ['🔄 Üstüne yazılacak', 'fy-b-devam'],
     'yazildi' => ['✅ Yazıldı', 'fy-b-hazir'], 'devam_tamamlandi' => ['✅ Tamamlandı', 'fy-b-hazir'], 'zaten_yuklu' => ['⏭ Zaten yüklü', 'fy-b-zaten'], 'degisti' => ['⚠ Değişti', 'fy-b-uyari'],
 ];
 $fy_tarih = static fn($t) => $t ? date('d.m.Y', strtotime((string)$t)) : '—';
@@ -60,6 +61,7 @@ $fy_grup = static function (array $g, string $tarih): string {
                     <?php if ($y): ?>
                         <?= (int)$y['kisi'] ?> kişi<?= (int)($y['yevmiye'] ?? 0) > 0 ? ' · ' . (int)$y['yevmiye'] . ' yevmiye' : '' ?><?= (int)$y['fm_onayli'] > 0 ? ' · ' . (int)$y['fm_onayli'] . ' FM (' . (int)$y['fm_saat'] . ' sa) onaylı' : '' ?><?= (int)$y['yarim'] > 0 ? ' · ' . (int)$y['yarim'] . ' yarım' : '' ?>
                         <?php if ((int)$y['servis']['buyuk'] + (int)$y['servis']['kucuk'] > 0): ?><br>Servis: <?= (int)$y['servis']['buyuk'] ?> büyük · <?= (int)$y['servis']['kucuk'] ?> küçük<?php endif; ?>
+                        <?php if ((int)($y['ustune_iptal'] ?? 0) > 0 || (int)($y['servis_iptal'] ?? 0) > 0): ?><br><span class="fd-iptal">🔄 Üstüne yazıldı: <?= (int)($y['ustune_iptal'] ?? 0) ?> eski kayıt<?= (int)($y['servis_iptal'] ?? 0) > 0 ? ' · ' . (int)$y['servis_iptal'] . ' eski servis' : '' ?> iptal edildi</span><?php endif; ?>
                     <?php else: ?>—<?php endif; ?>
                 </td>
                 <td>
@@ -72,14 +74,14 @@ $fy_grup = static function (array $g, string $tarih): string {
     </table>
     </div>
     <?php if ((int)$oz['hata'] + (int)$oz['degisti'] > 0): ?>
-    <p class="fy-yonerge">Hatalı fişleri Excel'de düzeltip <b>aynı dosyayı</b> yeniden yükleyin: yazılmış fişler «zaten yüklü» diye atlanır, çiftlenmez. Yazılmış bir fişi düzeltmek için Mesai Detayı › Toplu İşlemler › <b>Geri Al</b>, sonra o fişin <b>Revizyon</b> sütununu 1 artırın.</p>
+    <p class="fy-yonerge">Hatalı fişleri Excel'de düzeltip <b>aynı dosyayı</b> yeniden yükleyin: yazılmış fişler «zaten yüklü» diye atlanır, çiftlenmez. Yazılmış bir fişi düzeltmek için dosyayı <b>«Üstüne yaz»</b> seçeneğiyle yeniden yükleyin (eski kayıtlar iptal edilir, revizyon otomatik artar) ya da Mesai Detayı › Toplu İşlemler › <b>Geri Al</b> yapıp o fişin <b>Revizyon</b> sütununu 1 artırın. Toplu geri alma için: <a href="cavus_fis_geri_al.php">↩ Fiş yüklemelerini geri al</a>.</p>
     <?php endif; ?>
     <p><a class="btn btn-primary" href="<?= h($fy_url) ?>">📥 Yeni dosya yükle</a></p>
 
 <?php else: $on = $model['onizle']; $oz = $on['ozet']; $fisler = $on['fisler']; $v = $model['varsayilan']; ?>
     <div class="fy-ozet" role="status">
         <span><b><?= (int)$oz['fis'] ?></b> fiş</span>
-        <?php foreach (['hazir' => 'hazır', 'uyari' => 'uyarılı', 'onay' => 'onay bekliyor', 'engel' => 'engelli', 'hata' => 'hatalı', 'zaten' => 'zaten yüklü', 'devam' => 'tamamlanacak'] as $k => $e): if (empty($oz['durum'][$k])) continue; ?>
+        <?php foreach (['hazir' => 'hazır', 'ustune' => 'üstüne yazılacak', 'uyari' => 'uyarılı', 'onay' => 'onay bekliyor', 'engel' => 'engelli', 'hata' => 'hatalı', 'zaten' => 'zaten yüklü', 'devam' => 'tamamlanacak'] as $k => $e): if (empty($oz['durum'][$k])) continue; ?>
         <span class="<?= h($fy_rozet[$k][1]) ?>"><b><?= (int)$oz['durum'][$k] ?></b> <?= h($e) ?></span>
         <?php endforeach; ?>
         <span><b><?= (int)$oz['kisi'] ?></b> kişi kaydı</span>
@@ -99,6 +101,9 @@ $fy_grup = static function (array $g, string $tarih): string {
             <label><input type="checkbox" name="onay_fm" value="1" <?= !empty($v['onay_fm']) ? 'checked' : '' ?>> Fazla mesai adaylarını onayla (fiş = çavuş beyanı)</label>
             <label><input type="checkbox" name="ek_yaz" value="1" <?= !empty($v['ek_yaz']) ? 'checked' : '' ?>> Mevcut kayıtlara EK yaz (mesaide kayıt varsa üzerine eklenir)</label>
             <label><input type="checkbox" name="isletme_onay" value="1" <?= !empty($v['isletme_onay']) ? 'checked' : '' ?>> İşletme / depo uyuşmazlığı olan fişleri de yaz</label>
+            <?php if (!empty($model['secenek']['ustune_yaz'])): ?>
+            <p class="fy-yonerge fd-ustune-not" role="note">🔄 <b>Üstüne yaz AÇIK</b> (yükleme sırasında seçildi) — gerekçe: <b><?= h((string)($model['secenek']['ustune_gerekce'] ?? '')) ?></b>. Yalnız Fiş Excel'i ile yazılmış eski kayıtlar iptal edilir (silinmez); fiş dışı kayıtlar korunur. Vazgeçmek için «Vazgeç» deyip dosyayı seçeneksiz yeniden yükleyin.</p>
+            <?php endif; ?>
         </fieldset>
 
         <?php
@@ -135,6 +140,17 @@ $fy_grup = static function (array $g, string $tarih): string {
             if (!$me) return '—';
             if (!$me['mesai']) return 'Mesai yok (yeni açılır)';
             return 'Mesai var · ' . (int)$me['aktif_donem'] . ' aktif kayıt' . (!empty($me['kesin']) ? ' · <b>kesin hakediş</b>' : '');
+        };
+        // v464: ÜSTÜNE YAZ — ESKİ (iptal edilecek) → YENİ özeti. Dar «Mevcut» hücresine DEĞİL, fişin altında tam genişlikli blok olarak basılır.
+        $fy_ustune = static function (array $m): string {
+            if (empty($m['ustune'])) return '';
+            $u = $m['ustune'];
+            $li = static fn(array $oz): string => $oz ? '<ul>' . implode('', array_map(static fn($x) => '<li>' . h($x) . '</li>', pdks_fis_ozet_satirlari($oz))) . '</ul>' : '<ul><li>—</li></ul>';
+            $sv = (int)($u['servis_eski']['BUYUK'] ?? 0) + (int)($u['servis_eski']['KUCUK'] ?? 0) > 0
+                ? '<div class="fd-servis">Eski fiş servisi iptal: ' . (int)$u['servis_eski']['BUYUK'] . 'B/' . (int)$u['servis_eski']['KUCUK'] . 'K</div>' : '';
+            return '<div class="fd-ustune-blok"><div class="fd-fark"><div class="fd-eski"><small>ESKİ — iptal edilecek (' . (int)$u['fis_aktif'] . ' kayıt, fiş ' . h(implode(', ', $u['eski_fisler'])) . ')</small>' . $li($u['eski']) . '</div>'
+                . '<div class="fd-yeni"><small>YENİ (rev ' . (int)$u['hedef_rev'] . ')</small>' . $li($u['yeni']) . '</div></div>' . $sv
+                . ((int)$u['fis_disi'] > 0 ? '<div class="fd-servis">Fiş dışı ' . (int)$u['fis_disi'] . ' kayıt korunur.</div>' : '') . '</div>';
         };
         $fy_mesaj = static function (array $m): string {
             $o = '';
@@ -173,6 +189,9 @@ $fy_grup = static function (array $g, string $tarih): string {
                     <td><?= $fy_mevcut($m) ?></td>
                     <td><span class="fy-rozet <?= h($rz[1]) ?>"><?= h($rz[0]) ?></span><?= $fy_mesaj($m) ?></td>
                 </tr>
+                <?php if (!empty($m['ustune'])): ?>
+                <tr class="fy-ustune-satir"><td></td><td colspan="8"><?= $fy_ustune($m) ?></td></tr>
+                <?php endif; ?>
             <?php endforeach; ?>
             </tbody>
         </table>
@@ -194,6 +213,7 @@ $fy_grup = static function (array $g, string $tarih): string {
                     <dt>Servis</dt><dd><?= $fy_servis($m) ?></dd>
                     <dt>Mevcut</dt><dd><?= $fy_mevcut($m) ?></dd>
                 </dl>
+                <?= $fy_ustune($m) ?>
                 <?= $fy_mesaj($m) ?>
             </div>
             <?php endforeach; ?>

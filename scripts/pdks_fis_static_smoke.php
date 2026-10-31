@@ -68,12 +68,12 @@ $phpRe = $swRe !== '' ? '~' . str_replace('~', '\~', substr($swRe, 1, -1)) . '~'
 ok('2) SW_MUHASEBE_RE "gunluk_fis_yukle.php" ile EŞLEŞMİYOR (gunluk_kurlar çakışmaz)', preg_match($phpRe, '/gunluk_fis_yukle.php') === 0 && preg_match($phpRe, '/gunluk_kurlar.php') === 1);
 ok('2) pdks.css "v446" Fiş Excel\'i bloğu var', str_contains(oku('assets/pdks.css'), 'v446 — Fiş Excel\'i Yükle'));
 ok('2) tek CSS/JS kuralı: fy- stilleri / fisYukle YALNIZ pdks.css + sayfada (style.css, app.js, pdks.js temiz)', !str_contains(oku('assets/style.css'), '.fy-') && !str_contains(oku('assets/app.js'), 'fisYukle') && !str_contains(oku('assets/pdks.js'), 'fisYukle') && !str_contains(oku('assets/app.js'), 'gunluk_fis_yukle'));
-ok('2) pdks.css fy- stilleri: <768px kuralı yalnız fy-* sınıfları', (function () use ($ROOT) {
+ok('2) pdks.css fy-/fd- stilleri: <768px kuralı yalnız fy-* / fd-* (v464 düzeltme sayfaları) sınıfları', (function () use ($ROOT) {
     $css = oku('assets/pdks.css'); $i = strpos($css, 'v446 — Fiş Excel');
     if ($i === false) return false;
     $blok = substr($css, $i);
     preg_match_all('/@media \(max-width: 767px\) \{(.*?)\n\}/s', $blok, $m);
-    foreach ($m[1] as $icerik) foreach (explode('}', $icerik) as $kural) { $sel = trim(explode('{', $kural)[0] ?? ''); if ($sel !== '' && !str_contains($sel, '.fy-')) return false; }
+    foreach ($m[1] as $icerik) foreach (explode('}', $icerik) as $kural) { $sel = trim(explode('{', $kural)[0] ?? ''); if ($sel !== '' && !str_contains($sel, '.fy-') && !str_contains($sel, '.fd-')) return false; }
     return true;
 })());
 $ajax = oku('_puantaj_toplu_ajax.php');

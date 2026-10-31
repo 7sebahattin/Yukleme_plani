@@ -10,7 +10,9 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli-server') { http_response_code(403); exit; }
 $ROOT = dirname(__DIR__);
 $yol = parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
-if ($yol !== '/gunluk_fis_yukle.php') return false;       // assets/ vb. statik dosyaları sunucu kendisi sunar
+// v464: Fiş düzeltme sayfaları da aynı sahte kimlik/şablon yardımcılarıyla çalışır (pdks_fis_duzelt_smoke.js)
+$SAYFALAR = ['/gunluk_fis_yukle.php', '/cavus_fis_geri_al.php', '/cavus_fis_rapor.php'];
+if (!in_array($yol, $SAYFALAR, true)) return false;       // assets/ vb. statik dosyaları sunucu kendisi sunar
 
 error_reporting(E_ALL & ~E_DEPRECATED);
 ini_set('display_errors', '1');
@@ -50,7 +52,7 @@ require_once $ROOT . '/config/pdks_faz8b.php';
 require_once $ROOT . '/config/pdks_faz8j.php';
 require_once $ROOT . '/config/pdks_fis.php';
 
-$src = file_get_contents($ROOT . '/gunluk_fis_yukle.php');
+$src = file_get_contents($ROOT . $yol);
 $src = preg_replace('/^\s*require_once __DIR__ \. \'\/config\/(db|auth|pdks_gunluk|pdks_hakedis|pdks_faz8b|pdks_faz8j|pdks_fis)\.php\';.*$/m', '', $src);
 $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
 $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
