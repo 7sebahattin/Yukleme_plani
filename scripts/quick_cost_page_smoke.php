@@ -100,10 +100,28 @@ $prices = ['product'=>25,'material'=>4,'transport'=>1.6,'labor'=>2,'overhead'=>.
 foreach ($document['items'] as &$row) $row['unit_price'] = $prices[$row['code']] ?? 0;
 unset($row);
 
+function quick_page_v2_example(): array {
+    $v2 = quick_cost_v2_defaults('2026-10-31');
+    $v2['product'] = 'nar';
+    $v2['quantities'] = ['raw_kg' => 25000, 'processed_kg' => 25000, 'export_kg' => 20000, 'domestic_kg' => 3000, 'industry_kg' => 0, 'waste_kg' => 2000];
+    $prices = ['raw_purchase' => 20, 'sorting_labor' => 2, 'material' => 4, 'field_transport' => 15000, 'export_freight' => 60000, 'customs' => 5000, 'official_analysis' => 3000];
+    foreach ($v2['items'] as &$item) $item['unit_price'] = $prices[$item['code']] ?? 0;
+    unset($item);
+    return $v2;
+}
+
 if (in_array(($argv[1] ?? ''), ['--render', '--render-list'], true)) {
     // Static anonymous HTML includes actual form, CSS and JS; no PHP web server.
     $variant = $argv[2] ?? '';
-    if (!in_array($variant, ['', 'readonly', 'legacy', 'custom'], true)) throw new InvalidArgumentException('Unknown render fixture.');
+    if (!in_array($variant, ['', 'readonly', 'legacy', 'custom', 'v2', 'v2new', 'v2readonly'], true)) throw new InvalidArgumentException('Unknown render fixture.');
+    if (str_starts_with($variant, 'v2')) {
+        // v2 örnek: 25.000 ham / 20.000 ihracat / 3.000 iç piyasa / 2.000 fire → 713.000 TL.
+        if ($variant === 'v2new') { echo page()['html']; exit; }
+        $saved = quick_cost_save(db(), quick_page_v2_example());
+        if ($variant === 'v2readonly') $testPermissions = ['read'];
+        echo page(['id' => (string)$saved['id']])['html'];
+        exit;
+    }
     if ($variant === 'legacy') {
         $document['method'] = 'detailed';
         $document['operation_type'] = 'uretim';
@@ -261,6 +279,45 @@ check($staleDelete['status'] === 409 && str_contains($staleDelete['html'], 'hizl
 check(page([], array_merge($deletePost, ['version'=>'0']), 'list')['status'] === 422, 'delete rejects zero version');
 check(page([], array_merge($deletePost, ['id'=>[]]), 'list')['status'] === 422, 'delete rejects array id');
 check(page([], array_merge($deletePost, ['id'=>'999999']), 'list')['status'] === 403, 'delete missing target denied without leakage');
+
+// ---- v2 (ham mal / randıman) controller akışı ----
+$newForm = page();
+check(str_contains($newForm['html'], 'data-model="2"') && str_contains($newForm['html'], 'assets/hizli-maliyet-v2.js') && str_contains($newForm['html'], '>Hızlı Hesap<') && str_contains($newForm['html'], '>Detaylı Hesap<'), 'new form opens v2 model with Hızlı/Detaylı switch');
+check(str_contains($newForm['html'], '"model":2') && !str_contains($newForm['html'], 'assets/hizli-maliyet.js?'), 'new form config carries v2 document only');
+$v2Doc = quick_page_v2_example();
+$v2Save = page([], postDocument($v2Doc));
+$v2Id = (int)db()->query('SELECT MAX(id) FROM quick_cost_sheets')->fetchColumn();
+$v2Stored = quick_cost_find(db(), $v2Id);
+check(in_array('Location: hizli_maliyet.php', $v2Save['headers'], true) && quick_cost_is_v2($v2Stored['document']) && (float)$v2Stored['document']['total'] === 713000.0 && (float)$v2Stored['unit_cost'] === 35.65 && (float)$v2Stored['net_kg'] === 20000.0, 'v2 POST saves 713.000 TL / 35,65 TL/kg with export net kg column');
+$v2Open = page(['id' => (string)$v2Id]);
+check(str_contains($v2Open['html'], 'data-model="2"') && str_contains($v2Open['html'], '713.000,00') && str_contains($v2Open['html'], '35,6500'), 'v2 record reopens in v2 form with server totals');
+$legacyOpen = page(['id' => '1']);
+check(!str_contains($legacyOpen['html'], 'data-model="2"') && str_contains($legacyOpen['html'], 'assets/hizli-maliyet.js?') && str_contains($legacyOpen['html'], 'Eski hesap modeli'), 'legacy record keeps v1 form and engine');
+$legacyBefore = quick_cost_find(db(), 1);
+check(page(['id' => '1'], postDocument($v2Doc, (string)$legacyBefore['version']))['status'] === 422 && quick_cost_find(db(), 1) == $legacyBefore, 'v2 body cannot silently convert a legacy record');
+check(page(['id' => (string)$v2Id], postDocument($baseDocument, '1'))['status'] === 422 && quick_cost_find(db(), $v2Id)['version'] === 1, 'v1 body cannot downgrade a v2 record');
+$v2Bad = $v2Doc; $v2Bad['quantities']['waste_kg'] = '9.999'; $v2Bad['items'][0]['unit_price'] = '-7,5';
+$v2BadResult = page(['id' => (string)$v2Id], postDocument($v2Bad, '1'));
+check($v2BadResult['status'] === 422 && str_contains($v2BadResult['html'], 'data-model="2"') && str_contains($v2BadResult['html'], '-7,5') && quick_cost_find(db(), $v2Id)['version'] === 1, 'invalid v2 draft is kept in v2 form without saving');
+$v2Doc['operation_type'] = 'uretim'; $v2Doc['method'] = 'detailed';
+page(['id' => (string)$v2Id], postDocument($v2Doc, '1'));
+check(quick_cost_find(db(), $v2Id)['document']['operation_type'] === 'uretim' && quick_cost_find(db(), $v2Id)['document']['method'] === 'detailed', 'v2 operation type and view are user-editable and persisted');
+check(page(['id' => (string)$v2Id], postDocument($v2Doc, '1'))['status'] === 409, 'v2 stale version conflict');
+page(['id' => (string)$v2Id, 'copy' => '1'], postDocument($v2Doc));
+$v2CopyId = (int)db()->query('SELECT MAX(id) FROM quick_cost_sheets')->fetchColumn();
+check($v2CopyId !== $v2Id && quick_cost_is_v2(quick_cost_find(db(), $v2CopyId)['document']) && quick_cost_find(db(), $v2Id)['version'] === 2, 'v2 copy stays v2 and leaves source unchanged');
+$testPermissions = ['read'];
+$v2Ro = page(['id' => (string)$v2Id]);
+check($v2Ro['status'] === 200 && str_contains($v2Ro['html'], '"readOnly":true') && !str_contains($v2Ro['html'], 'id="qc-save"') && str_contains($v2Ro['html'], 'data-qc2="quantities.raw_kg" type="text" inputmode="decimal" autocomplete="off" value="25.000" disabled'), 'v2 read-only renders disabled inputs without save');
+check(page(['id' => (string)$v2Id], postDocument($v2Doc, '2'))['status'] === 403, 'v2 read-only POST denied');
+$testPermissions = ['read','write','delete'];
+check(page(['id' => (string)$v2Id], array_merge(postDocument($v2Doc, '2'), ['csrf' => 'bad']))['status'] === 403, 'v2 CSRF denied');
+$testDepot = 'OTHER';
+check(page(['id' => (string)$v2Id])['status'] === 404, 'v2 record hidden in other depot');
+$testDepot = 'DEMO';
+$v2Xss = quick_page_v2_example(); $v2Xss['product'] = '</script><img src=x onerror=alert(1)>';
+check(stripos(page([], postDocument($v2Xss, 'invalid'))['html'], '<img src=x') === false, 'v2 product escaped in markup and config');
+foreach ([$v2Id, $v2CopyId] as $v2Cleanup) quick_cost_delete(db(), $v2Cleanup, quick_cost_find(db(), $v2Cleanup)['version']);
 
 db()->exec("UPDATE quick_cost_sheets SET document_json='broken' WHERE id=2");
 check(page(['id'=>'2'])['status'] === 503, 'corrupt JSON fails safely');

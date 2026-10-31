@@ -117,3 +117,77 @@
 @media (max-width: 767px) { .qc-record-search label { flex: 1 0 100%; } .qc-record-search input { flex: 1 1 0; } }
 @media (max-width: 359px) { .qc-panel { padding: 14px; } .qc-breakdown dl > div { flex-wrap: wrap; gap: 6px; } }
 @media print { .qc-save-bar, .qc-text-button, .qc-row-settings summary { display: none !important; } .qc-hero { break-inside: avoid; } .qc-row { break-inside: avoid; } }
+
+/* ===== Hızlı Maliyet v2 (ham mal / randıman / ihracat) — yalnız form.qc2 kapsamı ===== */
+.qc2-hero .qc-hero-total strong { margin-bottom: 16px; }
+.qc2-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; border-top: 1px solid var(--border-strong); padding-top: 14px; }
+.qc2-kpis strong { margin-top: 5px; font-size: clamp(1.1rem, 4.6vw, 1.6rem); }
+.qc2-kpis .qc2-kpi-main { grid-column: 1 / -1; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--primary); }
+.qc2-kpis .qc2-kpi-main strong { color: var(--primary); font-size: clamp(1.5rem, 7vw, 2.2rem); }
+.qc2-method { margin: 12px 0 0; font-size: .8rem; line-height: 1.5; color: var(--text); }
+.qc2-more { margin-top: 12px; border-top: 1px solid var(--border-strong); padding-top: 10px; }
+.qc2-more > summary, .qc2-sale > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; font-size: .88rem; color: var(--primary); }
+.qc2-more dl, .qc2-sale-results { margin: 6px 0 0; display: grid; }
+.qc2-more dl > div, .qc2-sale-results > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.qc2-more dt, .qc2-sale-results dt { font-size: .84rem; }
+.qc2-more dd, .qc2-sale-results dd { margin: 0; font-weight: 700; font-size: .88rem; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.qc2-switches { display: grid; gap: 10px; }
+.qc2-seg { display: flex; padding: 4px; gap: 4px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.qc2-seg button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; font-weight: 650; font-size: .9rem; cursor: pointer; }
+.qc2-seg button[aria-pressed="true"] { background: var(--primary); color: #fff; box-shadow: var(--shadow); }
+.qc2-seg button:disabled { cursor: default; opacity: .7; }
+.qc2-seg-small { margin-bottom: 14px; }
+.qc2-seg-small button { font-size: .8rem; }
+.qc2-qty-grid { display: grid; gap: 14px; min-width: 0; }
+.qc2-readout { display: flex; flex-direction: column; gap: 7px; justify-content: center; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 9px; background: var(--surface-2); min-height: 48px; }
+.qc2-readout span { font-size: .86rem; font-weight: 600; }
+.qc2-readout strong { font-size: 1.1rem; font-variant-numeric: tabular-nums; color: var(--primary); }
+.qc2-detail-block { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.qc2-detail-block h3 { font-size: .95rem; margin: 0 0 12px; }
+.qc2 .qc2-check { flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 500; line-height: 1.45; margin-top: 12px; min-height: 44px; }
+.qc2 .qc2-check input { width: 22px; min-width: 22px; height: 22px; min-height: 22px; margin: 1px 0 0; padding: 0; }
+.qc2[data-view="quick"] [data-qc2-detail], .qc2[data-view="detailed"] .qc2-quick-only { display: none !important; }
+.qc2[data-op="uretim"] [data-qc2-fason-only] { display: none !important; }
+.qc2[data-yield-mode="actual"] .qc2-when-target, .qc2[data-yield-mode="target"] .qc2-when-actual { display: none !important; }
+.qc2 .qc2-row-hidden { display: none !important; }
+.qc2 .qc2-excluded { opacity: .62; border-style: dashed; }
+.qc2 .qc2-excluded output { text-decoration: line-through; }
+.qc2-row-fields { grid-template-columns: 1fr 1fr; }
+.qc2-row-fields .qc2-basis-field { grid-column: 1 / -1; }
+.qc2-table-head { display: none; }
+.qc2-warnings { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.qc2-warnings:empty { display: none; }
+.qc2-warnings li { padding: 10px 12px; border-left: 3px solid var(--warning, #d97706); border-radius: 8px; background: var(--surface-2); font-size: .84rem; line-height: 1.5; }
+.qc2-sale > summary h2 { margin: 0; font-size: 1.02rem; color: var(--text); }
+.qc2-sale > summary h2 small { font-weight: 400; color: var(--muted); font-size: .8rem; }
+.qc2-sale[open] > summary { margin-bottom: 12px; }
+.qc2-sale.qc2-loss [data-qc2-out="sale.profit"] { color: var(--danger); }
+@media (min-width: 600px) {
+    .qc2-switches { grid-template-columns: 1fr 1fr; }
+    .qc2-qty-grid { grid-template-columns: 1fr 1fr; }
+    .qc2-kpis { grid-template-columns: 1fr 1fr 1.4fr; }
+    .qc2-kpis .qc2-kpi-main { grid-column: auto; }
+    .qc2-row-fields { grid-template-columns: 2fr 1fr 1fr; }
+    .qc2-row-fields .qc2-basis-field { grid-column: auto; }
+}
+@media (min-width: 1024px) {
+    .qc2-qty-grid { grid-template-columns: repeat(3, 1fr); }
+    /* Masaüstü: kalemler taranabilir tablo satırı. */
+    .qc2 .qc2-rows { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .qc2 .qc2-table-head { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(190px, 1fr) minmax(130px, .7fr) 92px; column-gap: 14px; padding: 8px 14px; font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: none; }
+    .qc2 .qc2-table-head span:nth-child(3) { text-align: right; }
+    .qc2 .qc2-row { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(190px, 1fr) minmax(130px, .7fr) 92px; column-gap: 14px; row-gap: 2px; align-items: center; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 14px; }
+    .qc2 .qc2-row:last-child { border-bottom: 0; }
+    .qc2 .qc2-row .qc-row-head { display: contents; }
+    .qc2 .qc2-row h3 { grid-column: 1; grid-row: 1; }
+    .qc2 .qc2-row output { grid-column: 3; grid-row: 1; text-align: right; }
+    .qc2 .qc2-row .qc-remove-button { grid-column: 3; grid-row: 2; justify-self: end; }
+    .qc2 .qc2-row .qc-custom-label { grid-column: 1; grid-row: 2; margin: 4px 0; }
+    .qc2 .qc2-row > .qc-main-price { grid-column: 2; grid-row: 1 / span 2; }
+    .qc2 .qc2-row > .qc-hint { grid-column: 1; grid-row: 2; margin: 0; }
+    .qc2 .qc2-row:has(> .qc-custom-label) > .qc-hint { grid-row: 3; }
+    .qc2 .qc2-row > .qc-row-settings { grid-column: 4; grid-row: 1; margin: 0; justify-self: end; }
+    .qc2 .qc2-row > .qc-row-settings[open] { grid-column: 1 / -1; grid-row: 4; justify-self: stretch; }
+    .qc2 .qc2-row > .qc-row-settings[open] summary { margin-left: 0; }
+}
+@media print { .qc2-switches, .qc2-seg { display: none !important; } }

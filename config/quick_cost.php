@@ -129,6 +129,8 @@ function quick_cost_upper_text($value, string $label, int $limit): string
  */
 function quick_cost_calculate(array $input): array
 {
+    // v2 (ham mal/randıman) belgesi kendi motoruna gider; model taşımayan eski belge aşağıdaki v1 kuralıyla.
+    if (quick_cost_is_v2($input)) return quick_cost_v2_calculate($input);
     $product = quick_cost_upper_text($input['product'] ?? '', 'Ürün', 150);
     $notes = quick_cost_upper_text($input['notes'] ?? '', 'Açıklama', 2000);
     $date = $input['sheet_date'] ?? '';
@@ -199,3 +201,5 @@ function quick_cost_calculate(array $input): array
         'groups' => array_map(static fn($cents) => $cents / 100, $groupCents),
         'total' => $total, 'unit_cost' => quick_cost_unit_cost(array_sum($groupCents), $net)];
 }
+
+require_once __DIR__ . '/quick_cost_v2.php';

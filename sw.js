@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v471';
+const CACHE_NAME = 'yukleme-plani-v472';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -10,6 +10,7 @@ const SHELL = [
   './assets/maliyet.js',
   './assets/hizli-maliyet.css',
   './assets/hizli-maliyet.js',
+  './assets/hizli-maliyet-v2.js',
   './assets/hesap.css',
   './assets/hesap.js',
   './assets/icon.svg',

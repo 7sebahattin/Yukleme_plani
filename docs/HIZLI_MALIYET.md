@@ -1,5 +1,8 @@
 # Hızlı Maliyet
 
+> **v472:** yeni hesaplar ham mal / randıman / ihracat modeliyle (v2) açılır — bkz. `docs/HIZLI_MALIYET_V2.md`.
+> Aşağıdaki "Ürün KG" modeli eski (v1) kayıtlar için aynen geçerlidir.
+
 Sürüm v461. `hizli_maliyet.php` aktif depo kapsamındaki kayıt listesidir.
 **Yeni maliyet hesapla** düğmesi `hizli_maliyet_form.php` adresini açar.
 Sol Operasyon → Hızlı Maliyet ve mobil Diğer → Hızlı Maliyet bağlantıları yalnız yöneticide ya da Roller ekranından `hizli_maliyet.read` izni verilen rollerde görünür (eski `maliyet.*` izinleri açmaz; yazma `hizli_maliyet.write`, silme `hizli_maliyet.delete`). Mobil menüde Sabitle ile alt çubuğa alınabilir; kullanıcı sıralaması korunur.
