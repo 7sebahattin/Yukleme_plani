@@ -83,13 +83,13 @@ ini_set('session.use_cookies', '0');
 session_start();
 $db = db();
 $ID = siparis_ui_tohum($db);
-// liste görünümü (v372): aktif beyan bağı (parti no) + 5 kalemli sevkiyat ("+N daha")
+// liste görünümü (v372 → v452): aktif beyan bağı (parti no) + 6 kalemli sevkiyat (liste en çok 5 gösterir → "+1 daha")
 $db->exec("INSERT INTO siparis_beyan (sevkiyat_id, beyan_id, tur, durum, created_by, created_at) VALUES (" . (int)$ID['s2'] . ", 2, 'elle', 'aktif', 1, '2026-12-04 10:00:00')");
 // s1: birden çok bağlı beyan → parti no'lar alt alta (görsel doğrulama)
 $db->exec("INSERT INTO customs_declarations (status, party_no, created_at) VALUES ('taslak', '61/225', '2026-12-02 12:00:00'), ('taslak', '61/226', '2026-12-02 12:00:00'), ('taslak', '61/227', '2026-12-02 12:00:00')");
 $__pk = (int)$db->lastInsertId();
 foreach ([$__pk - 2, $__pk - 1, $__pk] as $__b) $db->exec("INSERT INTO siparis_beyan (sevkiyat_id, beyan_id, tur, durum, created_by, created_at) VALUES (" . (int)$ID['s1'] . ", " . (int)$__b . ", 'elle', 'aktif', 1, '2026-12-04 10:00:00')");
-foreach ([16, 18] as $i => $kal) {
+foreach ([16, 18, 20] as $i => $kal) {
     $db->prepare("INSERT INTO siparis_kalemler (sevkiyat_id, ian, kalibre, sira, urun, aciklama, cesit, koli_icerik, pf, po_palet, etkin_palet, etkin_koli) VALUES (?, '', ?, ?, 'Testfruit', ?, 'TESTVAR', '3,5 KG', 200, 2, 2, 400)")
         ->execute([$ID['s12'], (string)$kal, 3 + $i, "Testfruit $kal PC LOSE (TR)"]);
 }

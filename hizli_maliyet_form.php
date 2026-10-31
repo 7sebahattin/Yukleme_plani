@@ -58,7 +58,8 @@ $can_write = can_hizli_maliyet('write');
 $errors = [];
 $record = null;
 $version = 0;
-$document = quick_cost_defaults();
+// Yeni hesap v2 (ham mal / randıman) modeliyle açılır; eski (model taşımayan) kayıt kendi v1 ekranında kalır.
+$document = quick_cost_v2_defaults();
 $calculation = quick_cost_calculate($document);
 $storage_ready = false;
 
@@ -90,11 +91,18 @@ try {
         catch (JsonException $e) { throw new InvalidArgumentException('Hesap verisi okunamadı.'); }
         if (!is_array($input) || array_is_list($input)) throw new InvalidArgumentException('Hesap verisi geçersiz.');
         if ($record !== null) {
-            // Görünmeyen eski metadata düzenlemede/kopyalamada değiştirilmez.
-            $input['operation_type'] = $record['document']['operation_type'];
-            $input['method'] = $record['document']['method'];
+            // Kayıt modeli sabittir: eski kayıt v1, v2 kayıt v2 kalır (sessiz dönüşüm yok).
+            if (quick_cost_is_v2($record['document'])) {
+                $input['model'] = QUICK_COST_V2_MODEL;
+            } else {
+                unset($input['model']);
+                // Görünmeyen eski metadata düzenlemede/kopyalamada değiştirilmez.
+                $input['operation_type'] = $record['document']['operation_type'];
+                $input['method'] = $record['document']['method'];
+            }
         }
-        $document = quick_cost_form_input($input);
+        // Yeni kayıtta model gövdeden gelir: eski açık sekmenin v1 gövdesi v1 olarak işlenir.
+        $document = quick_cost_is_v2($input) ? quick_cost_v2_form_input($input) : quick_cost_form_input($input);
         $calculation = quick_cost_calculate($input);
         $document = $calculation;
         $posted_version = $_POST['version'] ?? '';
@@ -126,13 +134,14 @@ try {
 }
 
 $catalog = quick_cost_catalog();
+$is_v2 = quick_cost_is_v2($document);
 render_header('Hızlı Maliyet');
 render_flash();
 ?>
 <link rel="stylesheet" href="assets/hizli-maliyet.css?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.css') ?>">
 <div class="qc-page">
     <div class="page-head">
-        <div><h1><?= $record && !$is_copy ? 'Maliyeti düzenle' : 'Yeni maliyet hesapla' ?></h1><p class="muted">Ürün KG üzerinden maliyet hesabı</p></div>
+        <div><h1><?= $record && !$is_copy ? 'Maliyeti düzenle' : 'Yeni maliyet hesapla' ?></h1><p class="muted"><?= $is_v2 ? 'Ham mal, randıman ve ihracat maliyeti' : 'Eski hesap modeli: Ürün KG üzerinden maliyet' ?></p></div>
         <div class="page-head-actions"><a class="btn" href="hizli_maliyet.php">← Kayıtlar</a></div>
     </div>
     <?php if ($record): ?>
@@ -140,8 +149,9 @@ render_flash();
     <?php if (!$is_copy && $can_write): ?><p><a class="btn" href="hizli_maliyet_form.php?id=<?= $id ?>&amp;copy=1">Kopyalayarak yeni hesap</a></p><?php endif; ?>
     <?php endif; ?>
     <?php if (!$storage_ready): ?><p class="qc-error">Kayıt altyapısı henüz hazır değil. <?= is_admin() ? 'Kurulum için <a href="hizli_maliyet.php">kayıt listesine dönün</a>.' : 'Kurulum sistem yöneticisinden beklenir.' ?></p><?php endif; ?>
-    <?php require __DIR__ . '/_hizli_maliyet_form.php'; ?>
+    <?php require __DIR__ . ($is_v2 ? '/_hizli_maliyet_form_v2.php' : '/_hizli_maliyet_form.php'); ?>
 </div>
-<script>window.QUICK_COST_CONFIG = <?= json_encode(['document' => $document, 'catalog' => $catalog, 'readOnly' => !$can_write], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;</script>
-<script src="assets/hizli-maliyet.js?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.js') ?>" defer></script>
+<script>window.QUICK_COST_CONFIG = <?= json_encode(['document' => $document, 'catalog' => $is_v2 ? quick_cost_v2_catalog() : $catalog, 'readOnly' => !$can_write], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;</script>
+<?php $qc_js = $is_v2 ? 'assets/hizli-maliyet-v2.js' : 'assets/hizli-maliyet.js'; ?>
+<script src="<?= $qc_js ?>?v=<?= (int)filemtime(__DIR__ . '/' . $qc_js) ?>" defer></script>
 <?php render_footer(); ?>
