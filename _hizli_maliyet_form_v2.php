@@ -16,7 +16,8 @@ $qc2_money = static fn($value): string => number_format((float)$value, 2, ',', '
 $qc2_q = is_array($document['quantities'] ?? null) ? $document['quantities'] : [];
 $qc2_credit = is_array($document['credit'] ?? null) ? $document['credit'] : [];
 $qc2_sale = is_array($document['sale'] ?? null) ? $document['sale'] : [];
-$qc2_fi = is_array($document['fason_includes'] ?? null) ? $document['fason_includes'] : [];
+$qc2_md = is_array($document['material_detail'] ?? null) ? $document['material_detail'] : quick_cost_v2_material_defaults();
+$qc2_matlabels = quick_cost_v2_material_lines();
 $qc2_view = ($document['method'] ?? '') === 'detailed' ? 'detailed' : 'quick';
 $qc2_op = ($document['operation_type'] ?? '') === 'uretim' ? 'uretim' : 'fason';
 $qc2_yield = ($document['yield_mode'] ?? '') === 'target' ? 'target' : 'actual';
@@ -53,14 +54,12 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             <dl>
                 <div><dt>Ham mal alış toplamı</dt><dd data-qc2-out="group.raw">—</dd></div>
                 <div><dt>Hasat ve ön nakliye</dt><dd data-qc2-out="group.supply">—</dd></div>
-                <div><dt>Ayıklama maliyeti</dt><dd data-qc2-out="group.sorting">—</dd></div>
                 <div><dt>Paketleme maliyeti</dt><dd data-qc2-out="group.packing">—</dd></div>
                 <div><dt>Malzeme maliyeti</dt><dd data-qc2-out="group.material">—</dd></div>
-                <div><dt>Fason hizmet</dt><dd data-qc2-out="group.fason">—</dd></div>
+                <div><dt>Fabrika gideri</dt><dd data-qc2-out="group.factory">—</dd></div>
                 <div><dt>Nakliye ve ihracat giderleri</dt><dd data-qc2-out="group.export">—</dd></div>
                 <div><dt>Genel ve diğer giderler</dt><dd data-qc2-out="group.other">—</dd></div>
-                <div><dt>Fason bedeline dahil (toplama katılmayan)</dt><dd data-qc2-out="excluded_total">—</dd></div>
-                <div><dt>İç piyasa / sanayi net gelir kredisi</dt><dd data-qc2-out="credit_applied">—</dd></div>
+                <div><dt>Çıkma / suluk net gelir kredisi</dt><dd data-qc2-out="credit_applied">—</dd></div>
                 <div class="qc-grand-total"><dt>İhracata yüklenen tahmini maliyet</dt><dd data-qc2-out="export_cost">—</dd></div>
                 <div><dt>İhtiyatlı maliyet (kredi yok)</dt><dd data-qc2-out="unit_cost_prudent">—</dd></div>
             </dl>
@@ -99,33 +98,40 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             <div class="qc2-readout qc2-when-actual"><span>İhracat randımanı</span><?= $qc2_out('yield_readout') ?></div>
         </div>
         <p class="qc-hint qc-unit-note" data-qc2-yield-note role="status" hidden></p>
-        <p class="qc-hint qc2-when-actual">Randıman = ihracatlık net KG ÷ ham mal KG × 100. Ham mal KG: kasa ve palet darası hariç, ayıklanmamış ürün.</p>
-        <p class="qc-hint qc2-when-target">Gerekli ham mal KG = hedef ihracat KG ÷ (randıman ÷ 100). Randıman için sabit bir sektör değeri kullanılmaz; kendi tahmininizi girin.</p>
+        <p class="qc-hint qc2-when-actual"><strong>Randıman</strong> = 100 kg ham üründen kaç kg ihracatlık ürün çıktığı: ihracat KG ÷ ham mal KG × 100. Örnek: 25.000 kg ham → 20.000 kg ihracat = %80. Alım yapıldıysa iki miktarı da girin, randıman kendiliğinden çıkar. Ham mal KG: kasa ve palet darası hariç, ayıklanmamış ürün.</p>
+        <p class="qc-hint qc2-when-target"><strong>Teklif / alım planı için:</strong> kaç kg ihracat yapmak istediğinizi ve tahmini randımanı girin; kaç kg ham mal almanız gerektiği hesaplanır (hedef ihracat KG ÷ randıman). Sabit bir randıman varsayılmaz, kendi tahmininizi girin.</p>
         <div class="qc2-detail-block" data-qc2-detail>
             <h3>Ürün dağılımı</h3>
             <div class="qc2-qty-grid">
-                <?= $qc2_input('quantities.processed_kg', $qc2_q['processed_kg'] ?? null, 'İşlenen / ayıklanan ham KG', ['optional' => true, 'placeholder' => 'Boş = ham mal KG']) ?>
-                <?= $qc2_input('quantities.domestic_kg', $qc2_q['domestic_kg'] ?? 0, 'İç piyasaya ayrılan KG') ?>
-                <?= $qc2_input('quantities.industry_kg', $qc2_q['industry_kg'] ?? 0, 'Sanayi / meyve suyu KG') ?>
-                <?= $qc2_input('quantities.waste_kg', $qc2_q['waste_kg'] ?? 0, 'Kullanılamayan ürün / fire KG') ?>
+                <?= $qc2_input('quantities.processed_kg', $qc2_q['processed_kg'] ?? null, 'İşlenen ham KG', ['optional' => true, 'placeholder' => 'Boş = ham mal KG']) ?>
+                <?= $qc2_input('quantities.domestic_kg', $qc2_q['domestic_kg'] ?? 0, 'Çıkma KG') ?>
+                <?= $qc2_input('quantities.industry_kg', $qc2_q['industry_kg'] ?? 0, 'Suluk KG') ?>
+                <?= $qc2_input('quantities.waste_kg', $qc2_q['waste_kg'] ?? 0, 'Çöp KG') ?>
                 <div class="qc2-readout"><span>Henüz sınıflandırılmamış KG</span><?= $qc2_out('unclassified_kg') ?></div>
             </div>
-            <p class="qc-hint">İç piyasa ve sanayi ürünü fire sayılmaz; satılmamış ürünün değeri gelir sayılmaz.</p>
+            <p class="qc-hint">Çıkma ve suluk çöp sayılmaz; satılmamış ürünün değeri gelir sayılmaz. Çıkma + suluk + çöp + ihracat, ham mal KG'yi aşamaz. İşlenen ham KG boşsa ham mal KG alınır; yalnızca bir kalemi Ayar'dan "İşlenen ham KG" tabanına bağlarsanız etkisi olur.</p>
         </div>
-    </section>
-
-    <section class="qc-panel qc2-fason" data-qc2-detail data-qc2-fason-only aria-labelledby="qc2-fason-heading">
-        <h2 id="qc2-fason-heading">Fason hizmet kapsamı</h2>
-        <p class="qc-hint">Fason hizmet bedeline dahil olan gider ayrıca eklenmez: işaretlenen kalemler girilmiş olsa da toplama katılmaz.</p>
-        <label class="qc2-check"><input type="checkbox" data-qc2-bool="fason_includes.labor"<?= !empty($qc2_fi['labor']) ? ' checked' : '' ?><?= $qc2_dis ?>> İşçilik (ayıklama, boylama, paketleme) fason bedeline dahil</label>
-        <label class="qc2-check"><input type="checkbox" data-qc2-bool="fason_includes.material"<?= !empty($qc2_fi['material']) ? ' checked' : '' ?><?= $qc2_dis ?>> Ambalaj / malzeme fason bedeline dahil</label>
     </section>
 
     <section class="qc-costs" aria-labelledby="qc2-costs-heading"><div class="qc-section-heading"><h2 id="qc2-costs-heading">Maliyet kalemleri</h2><span>TL</span></div>
         <p class="qc-hint">Her kalem kendi tabanıyla hesaplanır. Taban, birim ve miktar için kalemin <strong>Ayar</strong> bölümünü açın.</p>
         <div class="qc2-table-head" aria-hidden="true"><span>Kalem</span><span>Birim fiyat</span><span>Tutar</span></div>
         <div id="qc-rows" class="qc-rows qc2-rows">
-        <?php $qc2_row = static function (array $item) use ($qc2_catalog, $qc2_units, $qc2_options, $qc2_num, $qc2_dis, $can_write, $qc2_calc, $qc2_view, $qc2_op): void {
+        <?php $qc2_mline = static function (array $ml) use ($qc2_matlabels, $qc2_num, $qc2_dis, $can_write): void {
+            $mcode = (string)($ml['code'] ?? '');
+            $mcustom = !isset($qc2_matlabels[$mcode]);
+            $mlabel = $qc2_matlabels[$mcode] ?? (string)($ml['label'] ?? '');
+        ?>
+        <div class="qc2-mat-line" data-qc2-mline="<?= h($mcode) ?>">
+            <?php if ($mcustom): ?><label class="qc2-mat-name"><span>Malzeme adı</span><input data-qc2-mat="label" type="text" maxlength="80" autocomplete="off" value="<?= h($mlabel) ?>"<?= $qc2_dis ?>></label>
+            <?php else: ?><strong class="qc2-mat-name"><?= h($mlabel) ?></strong><?php endif; ?>
+            <label><span>Palet başına adet</span><input data-qc2-mat="qty" type="text" inputmode="decimal" autocomplete="off" aria-label="<?= h($mlabel ?: 'Yeni malzeme') ?> palet başına adet" value="<?= h($qc2_num($ml['qty'] ?? 0)) ?>"<?= $qc2_dis ?>></label>
+            <label><span>Birim fiyat (TL)</span><input data-qc2-mat="price" type="text" inputmode="decimal" autocomplete="off" aria-label="<?= h($mlabel ?: 'Yeni malzeme') ?> birim fiyatı" value="<?= h($qc2_num($ml['price'] ?? 0)) ?>"<?= $qc2_dis ?>></label>
+            <output data-qc2-mat-out aria-label="Palet başı tutar">0,00 TL</output>
+            <?php if ($mcustom && $can_write): ?><button type="button" class="qc-remove-button" data-qc2-mat-remove>Kaldır</button><?php endif; ?>
+        </div>
+        <?php }; ?>
+        <?php $qc2_row = static function (array $item) use ($qc2_catalog, $qc2_units, $qc2_options, $qc2_num, $qc2_dis, $can_write, $qc2_calc, $qc2_view, &$qc2_mline, $qc2_md): void {
             $code = (string)($item['code'] ?? '');
             $custom = (bool)preg_match('/^custom_[a-z0-9_]{1,40}$/D', $code);
             $meta = $qc2_catalog[$code] ?? ['label' => (string)($item['label'] ?? ''), 'quick' => false];
@@ -134,7 +140,6 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             $amount = 0.0;
             foreach (($qc2_calc['items'] ?? []) as $calcRow) if (($calcRow['code'] ?? '') === $code) $amount = (float)$calcRow['amount'];
             $hidden = $qc2_view === 'quick' && !$custom && empty($meta['quick']) && $amount == 0.0;
-            if ($code === 'fason_service' && $qc2_op === 'uretim' && $qc2_view === 'quick' && $amount == 0.0) $hidden = true;
             $sel = $basis . '|' . $unit;
         ?>
         <article class="qc-row qc2-row<?= $hidden ? ' qc2-row-hidden' : '' ?>" data-qc2-row="<?= h($code) ?>">
@@ -150,6 +155,28 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
                     <label data-qc2-qty2-wrap><span>Gün</span><input data-qc2-item="qty2" type="text" inputmode="decimal" value="<?= h($qc2_num($item['qty2'] ?? 0)) ?>" autocomplete="off"<?= $qc2_dis ?>></label>
                 </div>
             </details>
+            <?php if (!empty($meta['detail'])): ?>
+            <button type="button" class="qc-text-button qc2-detail-btn" data-qc2-mat-toggle aria-expanded="false" aria-controls="qc2-mat-panel">Palet detayı</button>
+            <div class="qc2-mat" id="qc2-mat-panel" data-qc2-matpanel hidden>
+                <h4>Palet başına malzeme</h4>
+                <p class="qc-hint">Satılan palet sayısını ve bir palette kullanılan her malzemenin adedini + birim fiyatını girin: palet başı maliyet çıkar, malzeme toplamı = palet başı × palet sayısı. Girişi yapınca Malzeme tutarı bu detaydan hesaplanır.</p>
+                <div class="qc2-mat-top">
+                    <label for="qc2-mat-pallets"><span>Satılan palet sayısı</span><input id="qc2-mat-pallets" data-qc2="material_detail.pallets" type="text" inputmode="decimal" autocomplete="off" value="<?= h($qc2_num($qc2_md['pallets'] ?? 0)) ?>"<?= $qc2_dis ?>></label>
+                    <label class="qc2-check"><input type="checkbox" data-qc2-bool="material_detail.use"<?= !empty($qc2_md['use']) ? ' checked' : '' ?><?= $qc2_dis ?>> Malzeme maliyetini bu detaydan hesapla</label>
+                </div>
+                <div class="qc2-mat-lines" data-qc2-mat-lines>
+                    <?php foreach (($qc2_md['lines'] ?? []) as $qc2_ml) if (is_array($qc2_ml)) $qc2_mline($qc2_ml); ?>
+                </div>
+                <?php if ($can_write): ?>
+                <template id="qc2-mat-template"><?php $qc2_mline(['code' => 'mat_custom_template', 'label' => '', 'qty' => 0, 'price' => 0]); ?></template>
+                <button type="button" class="btn qc2-mat-add" data-qc2-mat-add>+ Malzeme ekle</button>
+                <?php endif; ?>
+                <dl class="qc2-mat-total">
+                    <div><dt>Palet başına malzeme</dt><dd data-qc2-out="mat.per_pallet">—</dd></div>
+                    <div><dt>Toplam (<span data-qc2-out="mat.pallets">0</span> palet)</dt><dd data-qc2-out="mat.total">—</dd></div>
+                </dl>
+            </div>
+            <?php endif; ?>
         </article>
         <?php }; foreach (($document['items'] ?? []) as $qc2_item) if (is_array($qc2_item)) $qc2_row($qc2_item); ?>
         </div>
@@ -157,7 +184,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
         <template id="qc2-custom-template"><?php $qc2_row(['code' => 'custom_template', 'label' => '', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 0]); ?></template>
         <button id="qc2-add-item" class="btn qc-add-item" type="button" data-qc2-detail>Yeni kalem ekle</button>
         <p id="qc2-custom-limit" class="qc-hint" hidden>En fazla kırk yeni kalem eklenebilir.</p>
-        <p class="qc-hint qc2-quick-only">Diğer kalemler (hasat, boylama, soğuk hava, yükleme, DTS, CASUS, ek giderler) Detaylı Hesapta; tutarı olan kalem her iki görünümde de gösterilir ve hesaba katılır.</p>
+        <p class="qc-hint qc2-quick-only">Diğer kalemler (hasat, DTS taksi, CASUS, ek giderler) Detaylı Hesapta; tutarı olan kalem her iki görünümde de gösterilir ve hesaba katılır.</p>
         <?php endif; ?>
     </section>
 
@@ -167,13 +194,13 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
     </dl></section>
 
     <section class="qc-panel qc2-credit" data-qc2-detail aria-labelledby="qc2-credit-heading">
-        <h2 id="qc2-credit-heading">İç piyasa / sanayi net geliri</h2>
+        <h2 id="qc2-credit-heading">Çıkma / suluk net geliri</h2>
         <p class="qc-hint">Yalnız gerçekleşmiş net satış gelirini girin. Satılmamış ürün gelir sayılmaz; otomatik gelir varsayımı yapılmaz.</p>
         <div class="qc2-qty-grid">
-            <?= $qc2_input('credit.domestic_sold_kg', $qc2_credit['domestic_sold_kg'] ?? 0, 'İç piyasada satılan KG') ?>
-            <?= $qc2_input('credit.domestic_price', $qc2_credit['domestic_price'] ?? 0, 'İç piyasa net fiyatı (TL/kg)') ?>
-            <?= $qc2_input('credit.industry_sold_kg', $qc2_credit['industry_sold_kg'] ?? 0, 'Sanayiye satılan KG') ?>
-            <?= $qc2_input('credit.industry_price', $qc2_credit['industry_price'] ?? 0, 'Sanayi net fiyatı (TL/kg)') ?>
+            <?= $qc2_input('credit.domestic_sold_kg', $qc2_credit['domestic_sold_kg'] ?? 0, 'Çıkma satılan KG') ?>
+            <?= $qc2_input('credit.domestic_price', $qc2_credit['domestic_price'] ?? 0, 'Çıkma net fiyatı (TL/kg)') ?>
+            <?= $qc2_input('credit.industry_sold_kg', $qc2_credit['industry_sold_kg'] ?? 0, 'Suluk satılan KG') ?>
+            <?= $qc2_input('credit.industry_price', $qc2_credit['industry_price'] ?? 0, 'Suluk net fiyatı (TL/kg)') ?>
             <div class="qc2-readout"><span>Toplam net yan ürün geliri</span><?= $qc2_out('credit_total') ?></div>
         </div>
         <label class="qc2-check"><input type="checkbox" data-qc2-bool="credit.apply"<?= !empty($qc2_credit['apply']) ? ' checked' : '' ?><?= $qc2_dis ?>> Net yan ürün gelirini toplam maliyetten düş (basitleştirilmiş yönetimsel yöntem — resmi muhasebe maliyeti değildir)</label>

@@ -9,6 +9,8 @@ require_once __DIR__ . '/quick_cost.php';
 const QUICK_COST_V2_MODEL = 2;
 const QUICK_COST_V2_CUSTOM_MAX = 40;
 const QUICK_COST_V2_RATE_MAX = 1000;
+const QUICK_COST_V2_MAT_CUSTOM_MAX = 20;
+const QUICK_COST_V2_PER_PALLET_MAX_CENTS = 100000000; // 1.000.000 TL
 
 function quick_cost_is_v2($document): bool
 {
@@ -17,7 +19,9 @@ function quick_cost_is_v2($document): bool
 
 /**
  * Varsayılan kalemler. basis: raw_kg | processed_kg | export_kg (bağlı miktar), manual, fixed.
- * quick: Hızlı Hesapta tutarı sıfır olsa da görünen satır. labor/material: fason dahil kapsamı.
+ * quick: Hızlı Hesapta tutarı sıfır olsa da görünen satır. detail: kalemin kendi ayrıntı paneli var.
+ * v473: ayıklama + boylama + paketleme aynı iş olduğundan yalnız "Paketleme işçiliği" kaldı;
+ * yükleme / soğuk hava / fason hizmet yerine tek "Fabrika gideri" geldi.
  */
 function quick_cost_v2_catalog(): array
 {
@@ -25,13 +29,9 @@ function quick_cost_v2_catalog(): array
         'raw_purchase' => ['label' => 'Ham mal alış bedeli', 'group' => 'raw', 'basis' => 'raw_kg', 'unit' => 'kg', 'quick' => true],
         'harvest' => ['label' => 'Hasat / toplama', 'group' => 'supply', 'basis' => 'raw_kg', 'unit' => 'kg', 'quick' => false],
         'field_transport' => ['label' => 'Tarladan fabrikaya nakliye', 'group' => 'supply', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
-        'sorting_labor' => ['label' => 'Ayıklama işçiliği', 'group' => 'sorting', 'basis' => 'processed_kg', 'unit' => 'kg', 'quick' => true, 'scope' => 'labor'],
-        'grading' => ['label' => 'Boylama / sınıflandırma', 'group' => 'sorting', 'basis' => 'processed_kg', 'unit' => 'kg', 'quick' => false, 'scope' => 'labor'],
-        'packing_labor' => ['label' => 'Paketleme işçiliği', 'group' => 'packing', 'basis' => 'export_kg', 'unit' => 'kg', 'quick' => true, 'scope' => 'labor'],
-        'material' => ['label' => 'Malzeme', 'group' => 'material', 'basis' => 'export_kg', 'unit' => 'kg', 'quick' => true, 'scope' => 'material'],
-        'fason_service' => ['label' => 'Fason işleme hizmeti', 'group' => 'fason', 'basis' => 'processed_kg', 'unit' => 'kg', 'quick' => true],
-        'cold_storage' => ['label' => 'Ön soğutma / soğuk hava', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => false],
-        'loading' => ['label' => 'Yükleme gideri', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => false],
+        'packing_labor' => ['label' => 'Paketleme işçiliği', 'group' => 'packing', 'basis' => 'export_kg', 'unit' => 'kg', 'quick' => true],
+        'material' => ['label' => 'Malzeme', 'group' => 'material', 'basis' => 'export_kg', 'unit' => 'kg', 'quick' => true, 'detail' => true],
+        'factory_cost' => ['label' => 'Fabrika gideri', 'group' => 'factory', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
         'export_freight' => ['label' => 'İhracat nakliyesi', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
         'customs' => ['label' => 'Gümrükleme', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
         'official_analysis' => ['label' => 'Resmi analiz', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
@@ -44,9 +44,17 @@ function quick_cost_v2_catalog(): array
 
 function quick_cost_v2_groups(): array
 {
-    return ['raw' => 'Ham mal alışı', 'supply' => 'Hasat ve ön nakliye', 'sorting' => 'Ayıklama ve boylama',
-        'packing' => 'Paketleme işçiliği', 'material' => 'Malzeme', 'fason' => 'Fason hizmet',
+    return ['raw' => 'Ham mal alışı', 'supply' => 'Hasat ve ön nakliye', 'packing' => 'Paketleme işçiliği',
+        'material' => 'Malzeme', 'factory' => 'Fabrika gideri',
         'export' => 'Nakliye ve ihracat giderleri', 'other' => 'Genel ve diğer giderler'];
+}
+
+/** Malzeme detay paneli: palet başına kullanılan malzeme satırları (sabit sıra). */
+function quick_cost_v2_material_lines(): array
+{
+    return ['mat_pallet' => 'PALET', 'mat_hat' => 'ŞAPKA', 'mat_corner' => 'KÖŞEBENT', 'mat_crate' => 'KASA',
+        'mat_divider' => 'VİYOL', 'mat_edge' => 'KENAR KARTONU', 'mat_base' => 'TABAN KAĞIDI',
+        'mat_strap' => 'ŞERİT', 'mat_net' => 'FİLE'];
 }
 
 /** Birimler. second: ikinci çarpan (gün) adı; qty × qty2 dört ondalığa yarım yukarı yuvarlanır. */
@@ -91,7 +99,7 @@ function quick_cost_v2_defaults(?string $date = null): array
         'yield_mode' => 'actual', 'target_yield' => 0,
         'quantities' => ['raw_kg' => 0, 'processed_kg' => null, 'export_kg' => 0,
             'domestic_kg' => 0, 'industry_kg' => 0, 'waste_kg' => 0],
-        'fason_includes' => ['labor' => false, 'material' => false],
+        'material_detail' => quick_cost_v2_material_defaults(),
         'credit' => ['apply' => false, 'domestic_sold_kg' => 0, 'domestic_price' => 0,
             'industry_sold_kg' => 0, 'industry_price' => 0],
         'sale' => ['price' => 0, 'currency' => 'TL', 'rate' => 1, 'target_margin' => null],
@@ -157,6 +165,106 @@ function quick_cost_v2_kg_text(int $i4): string
     return rtrim(rtrim(number_format($i4 / 10000, 4, ',', '.'), '0'), ',');
 }
 
+function quick_cost_v2_material_defaults(): array
+{
+    $lines = [];
+    foreach (quick_cost_v2_material_lines() as $code => $label) $lines[] = ['code' => $code, 'qty' => 0, 'price' => 0];
+    return ['use' => false, 'pallets' => 0, 'lines' => $lines];
+}
+
+/**
+ * Malzeme detayı: palet başına (adet × birim fiyat) satırları → palet başı maliyet → × satılan palet sayısı.
+ * Satır tutarı kuruşa yuvarlanır; toplam = palet sayısı × (kuruşlanmış palet başı maliyet).
+ * Eksik temel satırlar sıfırla tamamlanır (eski belge/eski sekme uyumu).
+ */
+function quick_cost_v2_material_detail($raw): array
+{
+    $base = quick_cost_v2_material_lines();
+    $d = is_array($raw) ? $raw : [];
+    $use = quick_cost_v2_bool($d['use'] ?? null, 'Malzeme detayı seçimi');
+    $pallets = quick_cost_number($d['pallets'] ?? 0, 'Satılan palet sayısı');
+    $rawLines = $d['lines'] ?? [];
+    if (!is_array($rawLines) || !array_is_list($rawLines) || count($rawLines) > count($base) + QUICK_COST_V2_MAT_CUSTOM_MAX) {
+        throw new InvalidArgumentException('Malzeme detayı satırları geçersiz ya da en fazla yirmi ek satır aşıldı.');
+    }
+    $by = [];
+    foreach ($rawLines as $line) {
+        $code = is_array($line) ? ($line['code'] ?? null) : null;
+        if (!is_string($code) || (!isset($base[$code]) && !preg_match('/^mat_custom_[a-z0-9_]{1,30}$/D', $code)) || isset($by[$code])) {
+            throw new InvalidArgumentException('Malzeme detayında bilinmeyen veya tekrarlanan satır var.');
+        }
+        $by[$code] = $line;
+    }
+    $order = array_keys($base);
+    foreach ($by as $code => $line) if (!isset($base[$code])) $order[] = $code;
+    $lines = []; $perPalletCents = 0;
+    foreach ($order as $code) {
+        $line = $by[$code] ?? [];
+        $label = $base[$code] ?? quick_cost_upper_text($line['label'] ?? '', 'Malzeme satırı adı', 80);
+        $qty = quick_cost_number($line['qty'] ?? 0, ($label ?: 'Ek malzeme') . ' palet başına adet');
+        $price = quick_cost_number($line['price'] ?? 0, ($label ?: 'Ek malzeme') . ' birim fiyatı');
+        if ($label === '') {
+            // Yeni eklenmiş, henüz adı ve değeri girilmemiş satır hesabı bozmaz; değer girildiyse ad zorunlu.
+            if ($qty == 0 && $price == 0) continue;
+            throw new InvalidArgumentException('Malzeme satırının adı gerekli.');
+        }
+        $cents = quick_cost_amount_cents($qty, $price);
+        $perPalletCents += $cents;
+        $lines[] = ['code' => $code, 'label' => $label, 'qty' => $qty, 'price' => $price, 'per_pallet' => $cents / 100];
+    }
+    if ($perPalletCents > QUICK_COST_V2_PER_PALLET_MAX_CENTS) {
+        throw new InvalidArgumentException('Palet başına malzeme maliyeti 1.000.000 TL sınırını aşıyor.');
+    }
+    $totalCents = quick_cost_amount_cents($pallets, $perPalletCents / 100);
+    if ($totalCents > 999999999999) throw new InvalidArgumentException('Malzeme detayı toplamı tutar sınırını aşıyor.');
+    return ['use' => $use, 'pallets' => $pallets, 'lines' => $lines, 'per_pallet' => $perPalletCents / 100,
+        'total' => $totalCents / 100, 'per_pallet_cents' => $perPalletCents, 'total_cents' => $totalCents];
+}
+
+function quick_cost_v2_price_is_zero($value): bool
+{
+    try { return quick_cost_number($value, 'Fiyat') == 0; } catch (InvalidArgumentException $e) { return false; }
+}
+
+/**
+ * v472 → v473 uyumu: kaldırılan kalemler (ayıklama, boylama, yükleme, soğuk hava, fason hizmet) tutarı varsa
+ * "(ESKİ)" ek kalemine dönüşür, böylece kayıtlı toplam DEĞİŞMEZ; sıfırsa düşer. Eski "fason dahil" seçimiyle
+ * toplamdan çıkarılmış satırlar yine çıkarılmış kalır (tutarsız bırakılmaz). `fason_includes` alanı artık yok.
+ */
+function quick_cost_v2_upgrade(array $input): array
+{
+    $legacy = ['sorting_labor' => ['custom_eski_ayiklama', 'AYIKLAMA İŞÇİLİĞİ (ESKİ)'],
+        'grading' => ['custom_eski_boylama', 'BOYLAMA / SINIFLANDIRMA (ESKİ)'],
+        'loading' => ['custom_eski_yukleme', 'YÜKLEME GİDERİ (ESKİ)'],
+        'cold_storage' => ['custom_eski_soguk_hava', 'ÖN SOĞUTMA / SOĞUK HAVA (ESKİ)'],
+        'fason_service' => ['custom_eski_fason', 'FASON İŞLEME HİZMETİ (ESKİ)']];
+    $items = $input['items'] ?? null;
+    if (!is_array($items) || !array_is_list($items)) return $input;
+    $fi = is_array($input['fason_includes'] ?? null) ? $input['fason_includes'] : [];
+    $fason = ($input['operation_type'] ?? '') === 'fason';
+    $excluded = [];
+    if ($fason && ($fi['labor'] ?? false) === true) array_push($excluded, 'sorting_labor', 'grading', 'packing_labor');
+    if ($fason && ($fi['material'] ?? false) === true) $excluded[] = 'material';
+    $out = []; $seen = [];
+    foreach ($items as $row) {
+        $code = is_array($row) ? ($row['code'] ?? null) : null;
+        if (is_string($code)) $seen[$code] = true;
+        if (is_string($code) && isset($legacy[$code])) {
+            if (in_array($code, $excluded, true) || quick_cost_v2_price_is_zero($row['unit_price'] ?? 0)) continue;
+            $row['code'] = $legacy[$code][0]; $row['label'] = $legacy[$code][1];
+            $out[] = $row; continue;
+        }
+        if (is_string($code) && in_array($code, $excluded, true)) $row['unit_price'] = 0;
+        $out[] = $row;
+    }
+    if (!isset($seen['factory_cost'])) {
+        $out[] = ['code' => 'factory_cost', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 0];
+    }
+    $input['items'] = $out;
+    unset($input['fason_includes']);
+    return $input;
+}
+
 /**
  * Tek otorite. İstemcinin amount/total/derived/warnings alanları kullanılmaz.
  * Dönen belge yeniden hesaplanabilir (idempotent).
@@ -164,6 +272,7 @@ function quick_cost_v2_kg_text(int $i4): string
 function quick_cost_v2_calculate(array $input): array
 {
     if (!quick_cost_is_v2($input)) throw new InvalidArgumentException('Hesap modeli geçersiz.');
+    $input = quick_cost_v2_upgrade($input);
     $product = quick_cost_upper_text($input['product'] ?? '', 'Ürün', 150);
     $notes = quick_cost_upper_text($input['notes'] ?? '', 'Açıklama', 2000);
     $date = $input['sheet_date'] ?? '';
@@ -182,9 +291,9 @@ function quick_cost_v2_calculate(array $input): array
     $q = $input['quantities'] ?? null;
     if (!is_array($q)) throw new InvalidArgumentException('Miktar bilgileri eksik.');
     $export = quick_cost_number($q['export_kg'] ?? null, 'İhracatlık net KG');
-    $domestic = quick_cost_number($q['domestic_kg'] ?? null, 'İç piyasa KG');
-    $industry = quick_cost_number($q['industry_kg'] ?? null, 'Sanayi / meyve suyu KG');
-    $waste = quick_cost_number($q['waste_kg'] ?? null, 'Fire KG');
+    $domestic = quick_cost_number($q['domestic_kg'] ?? null, 'Çıkma KG');
+    $industry = quick_cost_number($q['industry_kg'] ?? null, 'Suluk KG');
+    $waste = quick_cost_number($q['waste_kg'] ?? null, 'Çöp KG');
     $processedRaw = $q['processed_kg'] ?? null;
     $processedInput = ($processedRaw === null || $processedRaw === '') ? null : quick_cost_number($processedRaw, 'İşlenen KG');
     if ($processedInput !== null && $processedInput <= 0) $processedInput = null;
@@ -214,7 +323,7 @@ function quick_cost_v2_calculate(array $input): array
     if ($export4 > $processed4) throw new InvalidArgumentException('İhracatlık net KG, işlenen KG\'den büyük olamaz.');
     $classified4 = $export4 + quick_cost_v2_i4($domestic) + quick_cost_v2_i4($industry) + quick_cost_v2_i4($waste);
     if ($classified4 > $raw4) {
-        throw new InvalidArgumentException('Ürün dağılımı (ihracat + iç piyasa + sanayi + fire) ham mal KG\'yi aşıyor.');
+        throw new InvalidArgumentException('Ürün dağılımı (ihracat + çıkma + suluk + çöp) ham mal KG\'yi aşıyor.');
     }
     $unclassified4 = $raw4 - $classified4;
     $yield100 = $raw4 > 0 ? intdiv(2 * $export4 * 10000 + $raw4, 2 * $raw4) : 0;
@@ -245,13 +354,10 @@ function quick_cost_v2_calculate(array $input): array
         if ($label === '') throw new InvalidArgumentException('Ek maliyet kaleminin adı gerekli.');
         $catalog[$code] = ['label' => $label, 'group' => 'other', 'quick' => false];
     }
-    $fasonIncludes = is_array($input['fason_includes'] ?? null) ? $input['fason_includes'] : [];
-    $includesLabor = quick_cost_v2_bool($fasonIncludes['labor'] ?? null, 'Fason işçilik kapsamı');
-    $includesMaterial = quick_cost_v2_bool($fasonIncludes['material'] ?? null, 'Fason ambalaj kapsamı');
-    $isFason = $operation === 'fason';
+    $mat = quick_cost_v2_material_detail($input['material_detail'] ?? null);
     $groupCents = array_fill_keys(array_keys(quick_cost_v2_groups()), 0);
     $items = [];
-    $totalCents = 0; $excludedCents = 0; $excludedLabels = [];
+    $totalCents = 0;
     foreach ($catalog as $code => $definition) {
         $item = $byCode[$code];
         $label = $definition['label'];
@@ -281,31 +387,25 @@ function quick_cost_v2_calculate(array $input): array
             }
             $cents = quick_cost_amount_cents($effective, $price);
         }
+        $fromDetail = $code === 'material' && $mat['use'];
+        if ($fromDetail) $cents = $mat['total_cents']; // satır girdileri korunur ama tutarı palet detayı belirler
         if ($cents > 999999999999) throw new InvalidArgumentException($label . ': tutar sınırı aşıldı.');
-        $scope = $definition['scope'] ?? '';
-        $excluded = $isFason && (($scope === 'labor' && $includesLabor) || ($scope === 'material' && $includesMaterial));
-        if ($excluded) {
-            $excludedCents += $cents;
-            if ($cents > 0) $excludedLabels[] = $label;
-        } else {
-            $totalCents += $cents;
-            $groupCents[$definition['group']] += $cents;
-        }
-        $row = ['code' => $code, 'label' => $label, 'group' => $definition['group'], 'basis' => $basis, 'unit' => $unit,
-            'qty' => $qty, 'qty2' => $qty2, 'unit_price' => $price, 'amount' => $cents / 100, 'excluded' => $excluded];
-        $items[] = $row;
+        $totalCents += $cents;
+        $groupCents[$definition['group']] += $cents;
+        $items[] = ['code' => $code, 'label' => $label, 'group' => $definition['group'], 'basis' => $basis, 'unit' => $unit,
+            'qty' => $qty, 'qty2' => $qty2, 'unit_price' => $price, 'amount' => $cents / 100, 'from_detail' => $fromDetail];
     }
     if ($totalCents > (int)round(QUICK_COST_TOTAL_MAX * 100)) throw new InvalidArgumentException('Toplam maliyet sınırı aşıldı.');
 
     // --- Yan ürün geliri (yalnız açıkça seçilirse düşülür) ---
     $c = is_array($input['credit'] ?? null) ? $input['credit'] : [];
     $applyCredit = quick_cost_v2_bool($c['apply'] ?? null, 'Yan ürün kredisi');
-    $domSold = quick_cost_number($c['domestic_sold_kg'] ?? 0, 'İç piyasada satılan KG');
-    $domPrice = quick_cost_number($c['domestic_price'] ?? 0, 'İç piyasa net satış fiyatı');
-    $indSold = quick_cost_number($c['industry_sold_kg'] ?? 0, 'Sanayiye satılan KG');
-    $indPrice = quick_cost_number($c['industry_price'] ?? 0, 'Sanayi net satış fiyatı');
-    if (quick_cost_v2_i4($domSold) > quick_cost_v2_i4($domestic)) throw new InvalidArgumentException('İç piyasada satılan KG, iç piyasaya ayrılan KG\'yi aşamaz.');
-    if (quick_cost_v2_i4($indSold) > quick_cost_v2_i4($industry)) throw new InvalidArgumentException('Sanayiye satılan KG, sanayiye ayrılan KG\'yi aşamaz.');
+    $domSold = quick_cost_number($c['domestic_sold_kg'] ?? 0, 'Çıkma satılan KG');
+    $domPrice = quick_cost_number($c['domestic_price'] ?? 0, 'Çıkma net satış fiyatı');
+    $indSold = quick_cost_number($c['industry_sold_kg'] ?? 0, 'Suluk satılan KG');
+    $indPrice = quick_cost_number($c['industry_price'] ?? 0, 'Suluk net satış fiyatı');
+    if (quick_cost_v2_i4($domSold) > quick_cost_v2_i4($domestic)) throw new InvalidArgumentException('Çıkma satılan KG, Çıkma KG\'yi aşamaz.');
+    if (quick_cost_v2_i4($indSold) > quick_cost_v2_i4($industry)) throw new InvalidArgumentException('Suluk satılan KG, Suluk KG\'yi aşamaz.');
     $creditCents = quick_cost_amount_cents($domSold, $domPrice) + quick_cost_amount_cents($indSold, $indPrice);
     $appliedCents = $applyCredit ? $creditCents : 0;
     if ($appliedCents > $totalCents) throw new InvalidArgumentException('Yan ürün geliri toplam operasyon maliyetini aşamaz.');
@@ -344,12 +444,8 @@ function quick_cost_v2_calculate(array $input): array
     // --- Uyarılar (engel değil) ---
     $warnings = [];
     if ($processedAssumed && $raw4 > 0) $warnings[] = ['code' => 'processed_assumed', 'text' => 'İşlenen KG girilmedi; ham mal KG ile aynı kabul edildi (varsayım).'];
-    if ($unclassified4 > 0 && $export4 > 0) $warnings[] = ['code' => 'unclassified', 'text' => quick_cost_v2_kg_text($unclassified4) . ' KG ham ürün henüz sınıflandırılmamış (iç piyasa / sanayi / fire ayrımı Detaylı Hesapta).'];
-    if ($excludedLabels) $warnings[] = ['code' => 'fason_excluded', 'text' => 'Fason bedeline dahil seçildiği için toplama katılmadı: ' . implode(', ', $excludedLabels) . ' (' . number_format($excludedCents / 100, 2, ',', '.') . ' TL).'];
-    $fasonCents = 0;
-    foreach ($items as $row) if ($row['code'] === 'fason_service') $fasonCents = (int)round($row['amount'] * 100);
-    if ($isFason && ($includesLabor || $includesMaterial) && $fasonCents === 0) $warnings[] = ['code' => 'fason_service_zero', 'text' => 'İşçilik/ambalaj fason bedeline dahil seçildi fakat fason hizmet bedeli girilmedi.'];
-    if (!$isFason && $fasonCents > 0) $warnings[] = ['code' => 'uretim_fason_service', 'text' => 'Üretim seçili; girilen fason hizmet bedeli de toplama katıldı.'];
+    if ($unclassified4 > 0 && $export4 > 0) $warnings[] = ['code' => 'unclassified', 'text' => quick_cost_v2_kg_text($unclassified4) . ' KG ham ürün henüz sınıflandırılmamış (Çıkma / Suluk / Çöp ayrımı Detaylı Hesapta).'];
+    if ($mat['use'] && $mat['total_cents'] === 0) $warnings[] = ['code' => 'material_detail_empty', 'text' => 'Malzeme detayından hesaplama açık ama tutar 0: satılan palet sayısını ve malzeme satırlarını girin.'];
     if ($applyCredit && $creditCents > 0) $warnings[] = ['code' => 'credit_applied', 'text' => 'Yan ürün net geliri maliyetten düşüldü: yönetimsel tahmin, resmi muhasebe maliyeti değildir.'];
     if (!$applyCredit && $creditCents > 0) $warnings[] = ['code' => 'credit_not_applied', 'text' => 'Yan ürün geliri girildi fakat maliyetten düşülmedi (ihtiyatlı yöntem).'];
 
@@ -359,7 +455,8 @@ function quick_cost_v2_calculate(array $input): array
         'model' => QUICK_COST_V2_MODEL, 'product' => $product, 'sheet_date' => $date, 'operation_type' => $operation,
         'method' => $method, 'notes' => $notes, 'yield_mode' => $yieldMode, 'target_yield' => $targetYield,
         'quantities' => $quantities,
-        'fason_includes' => ['labor' => $includesLabor, 'material' => $includesMaterial],
+        'material_detail' => ['use' => $mat['use'], 'pallets' => $mat['pallets'], 'lines' => $mat['lines'],
+            'per_pallet' => $mat['per_pallet'], 'total' => $mat['total']],
         'credit' => ['apply' => $applyCredit, 'domestic_sold_kg' => $domSold, 'domestic_price' => $domPrice,
             'industry_sold_kg' => $indSold, 'industry_price' => $indPrice],
         'sale' => ['price' => $salePrice, 'currency' => $currency, 'rate' => $rate, 'target_margin' => $margin],
@@ -367,7 +464,7 @@ function quick_cost_v2_calculate(array $input): array
         'derived' => ['raw_kg' => $raw4 / 10000, 'processed_kg' => $processed4 / 10000, 'processed_assumed' => $processedAssumed,
             'unclassified_kg' => $unclassified4 / 10000, 'yield_pct' => $yield100 / 100],
         'groups' => array_map(static fn($cents) => $cents / 100, $groupCents),
-        'total' => $totalCents / 100, 'excluded_total' => $excludedCents / 100,
+        'total' => $totalCents / 100,
         'credit_total' => $creditCents / 100, 'credit_applied' => $appliedCents / 100,
         'export_cost' => $exportCostCents / 100,
         'unit_cost' => quick_cost_unit_cost($exportCostCents, $export),
@@ -386,13 +483,35 @@ function quick_cost_v2_form_input(array $input): array
     foreach (['product', 'sheet_date', 'operation_type', 'method', 'notes', 'yield_mode', 'target_yield'] as $key) {
         if (isset($input[$key]) && $scalar($input[$key])) $safe[$key] = $input[$key];
     }
-    foreach (['quantities', 'credit', 'sale', 'fason_includes'] as $section) {
+    foreach (['quantities', 'credit', 'sale'] as $section) {
         if (!is_array($input[$section] ?? null)) continue;
         foreach ($safe[$section] as $key => $default) {
             $value = $input[$section][$key] ?? null;
-            if (is_bool($default) || $section === 'fason_includes' || $key === 'apply') { if (is_bool($value)) $safe[$section][$key] = $value; }
+            if (is_bool($default) || $key === 'apply') { if (is_bool($value)) $safe[$section][$key] = $value; }
             elseif ($value !== null && $scalar($value)) $safe[$section][$key] = $value;
         }
+    }
+    $md = is_array($input['material_detail'] ?? null) ? $input['material_detail'] : [];
+    if (is_bool($md['use'] ?? null)) $safe['material_detail']['use'] = $md['use'];
+    if (isset($md['pallets']) && $scalar($md['pallets'])) $safe['material_detail']['pallets'] = $md['pallets'];
+    $mrows = is_array($md['lines'] ?? null) ? $md['lines'] : [];
+    foreach ($safe['material_detail']['lines'] as &$mline) {
+        foreach ($mrows as $mrow) {
+            if (!is_array($mrow) || ($mrow['code'] ?? null) !== $mline['code']) continue;
+            foreach (['qty', 'price'] as $key) if (isset($mrow[$key]) && $scalar($mrow[$key])) $mline[$key] = $mrow[$key];
+            break;
+        }
+    }
+    unset($mline);
+    $mseen = array_fill_keys(array_column($safe['material_detail']['lines'], 'code'), true);
+    $mcustom = 0;
+    foreach ($mrows as $mrow) {
+        $mcode = is_array($mrow) ? ($mrow['code'] ?? null) : null;
+        if (!is_string($mcode) || !preg_match('/^mat_custom_[a-z0-9_]{1,30}$/D', $mcode) || isset($mseen[$mcode]) || $mcustom >= QUICK_COST_V2_MAT_CUSTOM_MAX) continue;
+        $extra = ['code' => $mcode, 'label' => '', 'qty' => 0, 'price' => 0];
+        foreach (['label', 'qty', 'price'] as $key) if (isset($mrow[$key]) && $scalar($mrow[$key])) $extra[$key] = $mrow[$key];
+        $safe['material_detail']['lines'][] = $extra;
+        $mseen[$mcode] = true; $mcustom++;
     }
     $rows = is_array($input['items'] ?? null) ? $input['items'] : [];
     foreach ($safe['items'] as &$item) {

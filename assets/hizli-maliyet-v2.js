@@ -12,13 +12,9 @@
         raw_purchase: { label: 'Ham mal alış bedeli', group: 'raw', basis: 'raw_kg', unit: 'kg', quick: true },
         harvest: { label: 'Hasat / toplama', group: 'supply', basis: 'raw_kg', unit: 'kg', quick: false },
         field_transport: { label: 'Tarladan fabrikaya nakliye', group: 'supply', basis: 'fixed', unit: 'fixed', quick: true },
-        sorting_labor: { label: 'Ayıklama işçiliği', group: 'sorting', basis: 'processed_kg', unit: 'kg', quick: true, scope: 'labor' },
-        grading: { label: 'Boylama / sınıflandırma', group: 'sorting', basis: 'processed_kg', unit: 'kg', quick: false, scope: 'labor' },
-        packing_labor: { label: 'Paketleme işçiliği', group: 'packing', basis: 'export_kg', unit: 'kg', quick: true, scope: 'labor' },
-        material: { label: 'Malzeme', group: 'material', basis: 'export_kg', unit: 'kg', quick: true, scope: 'material' },
-        fason_service: { label: 'Fason işleme hizmeti', group: 'fason', basis: 'processed_kg', unit: 'kg', quick: true },
-        cold_storage: { label: 'Ön soğutma / soğuk hava', group: 'export', basis: 'fixed', unit: 'fixed', quick: false },
-        loading: { label: 'Yükleme gideri', group: 'export', basis: 'fixed', unit: 'fixed', quick: false },
+        packing_labor: { label: 'Paketleme işçiliği', group: 'packing', basis: 'export_kg', unit: 'kg', quick: true },
+        material: { label: 'Malzeme', group: 'material', basis: 'export_kg', unit: 'kg', quick: true, detail: true },
+        factory_cost: { label: 'Fabrika gideri', group: 'factory', basis: 'fixed', unit: 'fixed', quick: true },
         export_freight: { label: 'İhracat nakliyesi', group: 'export', basis: 'fixed', unit: 'fixed', quick: true },
         customs: { label: 'Gümrükleme', group: 'export', basis: 'fixed', unit: 'fixed', quick: true },
         official_analysis: { label: 'Resmi analiz', group: 'export', basis: 'fixed', unit: 'fixed', quick: true },
@@ -27,7 +23,11 @@
         overhead: { label: 'İşletme gideri', group: 'other', basis: 'export_kg', unit: 'kg', quick: true },
         casus: { label: 'CASUS', group: 'export', basis: 'fixed', unit: 'fixed', quick: false }
     };
-    var GROUPS = ['raw', 'supply', 'sorting', 'packing', 'material', 'fason', 'export', 'other'];
+    var GROUPS = ['raw', 'supply', 'packing', 'material', 'factory', 'export', 'other'];
+    var MAT_LINES = { mat_pallet: 'PALET', mat_hat: 'ŞAPKA', mat_corner: 'KÖŞEBENT', mat_crate: 'KASA', mat_divider: 'VİYOL',
+        mat_edge: 'KENAR KARTONU', mat_base: 'TABAN KAĞIDI', mat_strap: 'ŞERİT', mat_net: 'FİLE' };
+    var MAT_CUSTOM_MAX = 20, PER_PALLET_MAX_CENTS = 100000000;
+    var MAT_CUSTOM_CODE = /^mat_custom_[a-z0-9_]{1,30}$(?![\s\S])/;
     var UNITS = {
         kg: { label: 'Kg', price: 'TL/kg' }, ton: { label: 'Ton', price: 'TL/ton' },
         box: { label: 'Koli / kasa', price: 'TL/koli' }, pallet: { label: 'Palet', price: 'TL/palet' },
@@ -103,6 +103,33 @@
     function fmt(v, d) { return Number(v).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
     function fmtKg(v) { return Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 4 }); }
 
+    function materialDetail(raw) {
+        var d = raw && typeof raw === 'object' ? raw : {};
+        var use = bool(d.use, 'Malzeme detayı seçimi'), pallets = parseNumber(d.pallets == null ? 0 : d.pallets, 'Satılan palet sayısı');
+        var rawLines = d.lines == null ? [] : d.lines;
+        if (!Array.isArray(rawLines) || rawLines.length > Object.keys(MAT_LINES).length + MAT_CUSTOM_MAX) fail('Malzeme detayı satırları geçersiz ya da en fazla yirmi ek satır aşıldı.');
+        var by = Object.create(null), order = Object.keys(MAT_LINES);
+        rawLines.forEach(function (line) {
+            var c = line && typeof line === 'object' ? line.code : null;
+            if (typeof c !== 'string' || (!has(MAT_LINES, c) && !MAT_CUSTOM_CODE.test(c)) || by[c]) fail('Malzeme detayında bilinmeyen veya tekrarlanan satır var.');
+            by[c] = line; if (!has(MAT_LINES, c)) order.push(c);
+        });
+        var lines = [], perPallet = 0;
+        order.forEach(function (code) {
+            var line = by[code] || {};
+            var label = has(MAT_LINES, code) ? MAT_LINES[code] : text(line.label == null ? '' : line.label, 'Malzeme satırı adı', 80);
+            var qty = parseNumber(line.qty == null ? 0 : line.qty, (label || 'Ek malzeme') + ' palet başına adet');
+            var price = parseNumber(line.price == null ? 0 : line.price, (label || 'Ek malzeme') + ' birim fiyatı');
+            if (!label) { if (qty === 0 && price === 0) return; fail('Malzeme satırının adı gerekli.'); }
+            var cents = amountCents(qty, price); perPallet += cents;
+            lines.push({ code: code, label: label, qty: qty, price: price, per_pallet: cents / 100 });
+        });
+        if (perPallet > PER_PALLET_MAX_CENTS) fail('Palet başına malzeme maliyeti 1.000.000 TL sınırını aşıyor.');
+        var total = amountCents(pallets, perPallet / 100);
+        if (total > TOTAL_MAX_CENTS) fail('Malzeme detayı toplamı tutar sınırını aşıyor.');
+        return { use: use, pallets: pallets, lines: lines, per_pallet: perPallet / 100, total: total / 100, per_pallet_cents: perPallet, total_cents: total };
+    }
+
     function calculate(input) {
         if (!input || input.model !== 2) fail('Hesap modeli geçersiz.');
         var product = text(input.product == null ? '' : input.product, 'Ürün', 150);
@@ -115,8 +142,8 @@
         if (['quick', 'detailed'].indexOf(input.method) < 0) fail('Görünüm Hızlı veya Detaylı olmalı.');
         if (['actual', 'target'].indexOf(input.yield_mode) < 0) fail('Randıman yöntemi geçersiz.');
         var q = input.quantities; if (!q || typeof q !== 'object') fail('Miktar bilgileri eksik.');
-        var exp = parseNumber(q.export_kg, 'İhracatlık net KG'), dom = parseNumber(q.domestic_kg, 'İç piyasa KG');
-        var ind = parseNumber(q.industry_kg, 'Sanayi / meyve suyu KG'), waste = parseNumber(q.waste_kg, 'Fire KG');
+        var exp = parseNumber(q.export_kg, 'İhracatlık net KG'), dom = parseNumber(q.domestic_kg, 'Çıkma KG');
+        var ind = parseNumber(q.industry_kg, 'Suluk KG'), waste = parseNumber(q.waste_kg, 'Çöp KG');
         var procIn = (q.processed_kg == null || q.processed_kg === '') ? null : parseNumber(q.processed_kg, 'İşlenen KG');
         if (procIn !== null && procIn <= 0) procIn = null;
         var exp4 = i4(exp), raw4, raw, ty = 0;
@@ -136,7 +163,7 @@
         if (proc4 > raw4) fail("İşlenen KG, satın alınan ham mal KG'den büyük olamaz.");
         if (exp4 > proc4) fail("İhracatlık net KG, işlenen KG'den büyük olamaz.");
         var cls4 = exp4 + i4(dom) + i4(ind) + i4(waste);
-        if (cls4 > raw4) fail("Ürün dağılımı (ihracat + iç piyasa + sanayi + fire) ham mal KG'yi aşıyor.");
+        if (cls4 > raw4) fail("Ürün dağılımı (ihracat + çıkma + suluk + çöp) ham mal KG'yi aşıyor.");
         var uncls4 = raw4 - cls4, yield100 = raw4 > 0 ? intdiv(2 * exp4 * 10000 + raw4, 2 * raw4) : 0;
         var linked = { raw_kg: raw4 / 10000, processed_kg: proc4 / 10000, export_kg: exp };
 
@@ -154,9 +181,8 @@
             if (!l) fail('Ek maliyet kaleminin adı gerekli.');
             catalog[it.code] = { label: l, group: 'other', quick: false }; codes.push(it.code);
         });
-        var fi = input.fason_includes && typeof input.fason_includes === 'object' ? input.fason_includes : {};
-        var incLabor = bool(fi.labor, 'Fason işçilik kapsamı'), incMat = bool(fi.material, 'Fason ambalaj kapsamı');
-        var isFason = input.operation_type === 'fason', groups = {}, items = [], total = 0, excluded = 0, exLabels = [];
+        var mat = materialDetail(input.material_detail);
+        var groups = {}, items = [], total = 0;
         GROUPS.forEach(function (g) { groups[g] = 0; });
         codes.forEach(function (code) {
             var def = catalog[code], it = byCode[code], label = def.label, basis = it.basis, unit = it.unit;
@@ -172,20 +198,20 @@
                 if (UNITS[unit].second) { qty2 = postedQty2; eff = productQty(qty, qty2, label); }
                 cents = amountCents(eff, price);
             }
+            var fromDetail = code === 'material' && mat.use;
+            if (fromDetail) cents = mat.total_cents;
             if (cents > TOTAL_MAX_CENTS) fail(label + ': tutar sınırı aşıldı.');
-            var ex = isFason && ((def.scope === 'labor' && incLabor) || (def.scope === 'material' && incMat));
-            if (ex) { excluded += cents; if (cents > 0) exLabels.push(label); }
-            else { total += cents; groups[def.group] += cents; }
-            items.push({ code: code, label: label, group: def.group, basis: basis, unit: unit, qty: qty, qty2: qty2, unit_price: price, amount: cents / 100, excluded: ex });
+            total += cents; groups[def.group] += cents;
+            items.push({ code: code, label: label, group: def.group, basis: basis, unit: unit, qty: qty, qty2: qty2, unit_price: price, amount: cents / 100, from_detail: fromDetail });
         });
         if (total > TOTAL_MAX_CENTS) fail('Toplam maliyet sınırı aşıldı.');
 
         var c = input.credit && typeof input.credit === 'object' ? input.credit : {};
         var apply = bool(c.apply, 'Yan ürün kredisi');
-        var domSold = parseNumber(c.domestic_sold_kg == null ? 0 : c.domestic_sold_kg, 'İç piyasada satılan KG'), domPrice = parseNumber(c.domestic_price == null ? 0 : c.domestic_price, 'İç piyasa net satış fiyatı');
-        var indSold = parseNumber(c.industry_sold_kg == null ? 0 : c.industry_sold_kg, 'Sanayiye satılan KG'), indPrice = parseNumber(c.industry_price == null ? 0 : c.industry_price, 'Sanayi net satış fiyatı');
-        if (i4(domSold) > i4(dom)) fail("İç piyasada satılan KG, iç piyasaya ayrılan KG'yi aşamaz.");
-        if (i4(indSold) > i4(ind)) fail("Sanayiye satılan KG, sanayiye ayrılan KG'yi aşamaz.");
+        var domSold = parseNumber(c.domestic_sold_kg == null ? 0 : c.domestic_sold_kg, 'Çıkma satılan KG'), domPrice = parseNumber(c.domestic_price == null ? 0 : c.domestic_price, 'Çıkma net satış fiyatı');
+        var indSold = parseNumber(c.industry_sold_kg == null ? 0 : c.industry_sold_kg, 'Suluk satılan KG'), indPrice = parseNumber(c.industry_price == null ? 0 : c.industry_price, 'Suluk net satış fiyatı');
+        if (i4(domSold) > i4(dom)) fail("Çıkma satılan KG, Çıkma KG'yi aşamaz.");
+        if (i4(indSold) > i4(ind)) fail("Suluk satılan KG, Suluk KG'yi aşamaz.");
         var credit = amountCents(domSold, domPrice) + amountCents(indSold, indPrice), applied = apply ? credit : 0;
         if (applied > total) fail('Yan ürün geliri toplam operasyon maliyetini aşamaz.');
         var exportCost = total - applied;
@@ -211,13 +237,10 @@
                     target_price_fx: tp === null ? null : round(tp / rate, 4) };
             }
         }
-        var warnings = [], fasonCents = 0;
-        items.forEach(function (r) { if (r.code === 'fason_service') fasonCents = Math.round(r.amount * 100); });
+        var warnings = [];
         if (assumed && raw4 > 0) warnings.push({ code: 'processed_assumed', text: 'İşlenen KG girilmedi; ham mal KG ile aynı kabul edildi (varsayım).' });
-        if (uncls4 > 0 && exp4 > 0) warnings.push({ code: 'unclassified', text: fmtKg(uncls4 / 10000) + ' KG ham ürün henüz sınıflandırılmamış (iç piyasa / sanayi / fire ayrımı Detaylı Hesapta).' });
-        if (exLabels.length) warnings.push({ code: 'fason_excluded', text: 'Fason bedeline dahil seçildiği için toplama katılmadı: ' + exLabels.join(', ') + ' (' + fmt(excluded / 100, 2) + ' TL).' });
-        if (isFason && (incLabor || incMat) && fasonCents === 0) warnings.push({ code: 'fason_service_zero', text: 'İşçilik/ambalaj fason bedeline dahil seçildi fakat fason hizmet bedeli girilmedi.' });
-        if (!isFason && fasonCents > 0) warnings.push({ code: 'uretim_fason_service', text: 'Üretim seçili; girilen fason hizmet bedeli de toplama katıldı.' });
+        if (uncls4 > 0 && exp4 > 0) warnings.push({ code: 'unclassified', text: fmtKg(uncls4 / 10000) + ' KG ham ürün henüz sınıflandırılmamış (Çıkma / Suluk / Çöp ayrımı Detaylı Hesapta).' });
+        if (mat.use && mat.total_cents === 0) warnings.push({ code: 'material_detail_empty', text: 'Malzeme detayından hesaplama açık ama tutar 0: satılan palet sayısını ve malzeme satırlarını girin.' });
         if (apply && credit > 0) warnings.push({ code: 'credit_applied', text: 'Yan ürün net geliri maliyetten düşüldü: yönetimsel tahmin, resmi muhasebe maliyeti değildir.' });
         if (!apply && credit > 0) warnings.push({ code: 'credit_not_applied', text: 'Yan ürün geliri girildi fakat maliyetten düşülmedi (ihtiyatlı yöntem).' });
         var groupsTl = {}; GROUPS.forEach(function (g) { groupsTl[g] = groups[g] / 100; });
@@ -225,12 +248,12 @@
             model: 2, product: product, sheet_date: date, operation_type: input.operation_type, method: input.method, notes: notes,
             yield_mode: input.yield_mode, target_yield: ty,
             quantities: { raw_kg: raw4 / 10000, processed_kg: procIn, export_kg: exp, domestic_kg: dom, industry_kg: ind, waste_kg: waste },
-            fason_includes: { labor: incLabor, material: incMat },
+            material_detail: { use: mat.use, pallets: mat.pallets, lines: mat.lines, per_pallet: mat.per_pallet, total: mat.total },
             credit: { apply: apply, domestic_sold_kg: domSold, domestic_price: domPrice, industry_sold_kg: indSold, industry_price: indPrice },
             sale: { price: sp, currency: cur, rate: rate, target_margin: margin },
             items: items,
             derived: { raw_kg: raw4 / 10000, processed_kg: proc4 / 10000, processed_assumed: assumed, unclassified_kg: uncls4 / 10000, yield_pct: yield100 / 100 },
-            groups: groupsTl, total: total / 100, excluded_total: excluded / 100, credit_total: credit / 100, credit_applied: applied / 100,
+            groups: groupsTl, total: total / 100, credit_total: credit / 100, credit_applied: applied / 100,
             export_cost: exportCost / 100, unit_cost: unitCost(exportCost, exp), unit_cost_prudent: unitCost(total, exp), net_kg: exp,
             sale_result: sale, warnings: warnings
         };
@@ -241,7 +264,9 @@
         var r = calculate(doc);
         return {
             model: 2, product: r.product, sheet_date: r.sheet_date, operation_type: r.operation_type, method: r.method, notes: r.notes,
-            yield_mode: r.yield_mode, target_yield: r.target_yield, quantities: r.quantities, fason_includes: r.fason_includes,
+            yield_mode: r.yield_mode, target_yield: r.target_yield, quantities: r.quantities,
+            material_detail: { use: r.material_detail.use, pallets: r.material_detail.pallets, lines: r.material_detail.lines.map(function (l) {
+                var row = { code: l.code, qty: l.qty, price: l.price }; if (!has(MAT_LINES, l.code)) row.label = l.label; return row; }) },
             credit: r.credit, sale: r.sale,
             items: r.items.map(function (it) {
                 var row = { code: it.code, basis: it.basis, unit: it.unit, qty: it.qty, qty2: it.qty2, unit_price: it.unit_price };
@@ -274,17 +299,16 @@
         if (view === 'detailed') return true;
         if (amount !== 0) return true;
         if (customCode(code)) return true;
-        if (code === 'fason_service') return op === 'fason';
         return !!(CATALOG[code] && CATALOG[code].quick);
     }
-    function hintText(item, excluded) {
+    function hintText(item, fromDetail) {
         var t;
         if (has(LINKED, item.basis)) t = LINKED[item.basis] + (item.unit === 'ton' ? ' ÷ 1.000 × TL/ton' : ' × TL/kg') + ' = tutar';
         else if (item.basis === 'fixed') t = 'Sabit toplam tutar';
         else if (item.unit === 'worker_day') t = 'İşçi sayısı × gün × yevmiye = tutar';
         else if (has(UNITS, item.unit) && UNITS[item.unit].second) t = QTY_LABEL[item.unit] + ' × gün × ' + UNITS[item.unit].price + ' = tutar';
         else t = (QTY_LABEL[item.unit] || 'Miktar') + ' × ' + ((UNITS[item.unit] || {}).price || 'birim fiyat') + ' = tutar';
-        return excluded ? t + ' · Fason bedeline dahil: toplama katılmadı' : t;
+        return fromDetail ? 'Palet detayından hesaplanıyor (Palet detayı düğmesi)' : t;
     }
     function priceLabel(item) {
         if (item.basis === 'fixed') return 'Sabit tutar (TL)';
@@ -322,6 +346,14 @@
                 if (input.value !== shown) input.value = shown;
             });
             form.querySelectorAll('[data-qc2-bool]').forEach(function (input) { input.checked = !!getPath(state, input.dataset.qc2Bool); });
+            form.querySelectorAll('[data-qc2-mline]').forEach(function (ln) {
+                var ml = state.material_detail.lines.find(function (x) { return x.code === ln.dataset.qc2Mline; }); if (!ml) return;
+                ln.querySelectorAll('[data-qc2-mat]').forEach(function (input) {
+                    if (input === source || (input === cleared && dom.activeElement === input)) return;
+                    var f = input.dataset.qc2Mat, shown = f === 'label' ? (ml.label || '') : editFormat(ml[f]);
+                    if (input.value !== shown) input.value = shown;
+                });
+            });
             state.items.forEach(function (it) {
                 var node = rowNode(it.code); if (!node) return;
                 node.querySelectorAll('[data-qc2-item]').forEach(function (input) {
@@ -355,7 +387,14 @@
             out('unit_cost', r && r.net_kg > 0 ? fmt(r.unit_cost, 4) : '—');
             out('unit_cost_prudent', r && r.net_kg > 0 ? fmt(r.unit_cost_prudent, 4) + ' TL/kg' : '—');
             out('unclassified_kg', r ? fmtKg(r.derived.unclassified_kg) + ' KG' : '—');
-            out('excluded_total', r ? tl(r.excluded_total) : '—');
+            var md = r && r.material_detail;
+            out('mat.per_pallet', md ? tl(md.per_pallet) : '—'); out('mat.total', md ? tl(md.total) : '—');
+            out('mat.pallets', md ? fmtKg(md.pallets) : '—');
+            state.material_detail.lines.forEach(function (ml) {
+                var ln = form.querySelector('[data-qc2-mline="' + ml.code + '"]'); if (!ln) return;
+                var calcLine = md && md.lines.find(function (x) { return x.code === ml.code; });
+                ln.querySelector('[data-qc2-mat-out]').textContent = calcLine ? tl(calcLine.per_pallet) : (md ? tl(0) : '—');
+            });
             out('credit_applied', r ? (r.credit_applied > 0 ? '− ' + tl(r.credit_applied) : tl(0)) : '—');
             out('credit_total', r ? tl(r.credit_total) : '—');
             out('export_cost', r ? tl(r.export_cost) : '—');
@@ -378,8 +417,10 @@
                 var calc = r && r.items.find(function (x) { return x.code === it.code; }), label = has(CATALOG, it.code) ? CATALOG[it.code].label : (upperText(it.label || '').trim() || 'Yeni kalem');
                 node.querySelector('[data-qc2-title]').textContent = label;
                 node.querySelector('[data-qc2-amount]').textContent = calc ? tl(calc.amount) : '—';
-                node.classList.toggle('qc2-excluded', !!(calc && calc.excluded));
-                node.querySelector('[data-qc2-hint]').textContent = hintText(it, calc && calc.excluded);
+                var fd = !!(calc && calc.from_detail);
+                node.classList.toggle('qc2-from-detail', fd);
+                node.querySelector('[data-qc2-hint]').textContent = hintText(it, fd);
+                if (!readOnly) { var mainPrice = node.querySelector('[data-qc2-item="unit_price"]'); if (mainPrice) mainPrice.disabled = fd; }
                 node.querySelector('[data-qc2-price-label]').textContent = priceLabel(it);
                 var manual = it.basis === 'manual', second = manual && has(UNITS, it.unit) && !!UNITS[it.unit].second;
                 node.querySelector('[data-qc2-qty-wrap]').hidden = !manual;
@@ -427,9 +468,23 @@
             if (!note) { note = dom.createElement('p'); note.className = 'qc-hint qc-unit-note'; note.setAttribute('role', 'status'); host.appendChild(note); }
             note.textContent = t;
         }
+        var matAuto = false;
+        function matToggle(btn) {
+            var panel = form.querySelector('[data-qc2-matpanel]'); if (!panel) return;
+            var open = panel.hidden;
+            panel.hidden = !open; btn.setAttribute('aria-expanded', String(open));
+            paint();
+        }
+        // İlk anlamlı girişte "detaydan hesapla" kendiliğinden açılır (bir kez); kullanıcı sonra kapatabilir.
+        function matAutoUse() {
+            if (matAuto || state.material_detail.use) return;
+            var d = null; try { d = materialDetail(state.material_detail); } catch (_) { d = null; }
+            if (d && d.total_cents > 0) { state.material_detail.use = true; matAuto = true; }
+        }
         if (readOnly) {
             // Salt okunur: yalnız görünüm (Hızlı/Detaylı) değişir; belge değişmez, kaydedilmez.
             form.addEventListener('click', function (e) {
+                var t = e.target.closest('button[data-qc2-mat-toggle]'); if (t) { matToggle(t); return; }
                 var b = e.target.closest('button[data-qc2-set="method"]'); if (!b) return;
                 state.method = b.dataset.value; paint();
             });
@@ -447,8 +502,17 @@
                 }
                 if (input.dataset.qc2Optional && v.trim() === '') v = input.dataset.qc2 === 'quantities.processed_kg' ? null : '';
                 setPath(state, input.dataset.qc2, v);
+                if (input.dataset.qc2 === 'material_detail.pallets') matAutoUse();
             } else if (input.dataset.qc2Bool) {
                 setPath(state, input.dataset.qc2Bool, input.checked);
+                if (input.dataset.qc2Bool === 'material_detail.use') matAuto = true;
+            } else if (input.dataset.qc2Mat) {
+                var mline = input.closest('[data-qc2-mline]'), mcode = mline.dataset.qc2Mline, field = input.dataset.qc2Mat;
+                var ml = state.material_detail.lines.find(function (x) { return x.code === mcode; });
+                if (!ml) return;
+                ml[field] = field === 'label' ? upperText(input.value) : input.value;
+                if (field === 'label' && !event.isComposing && input.value !== ml.label) input.value = ml.label;
+                if (field !== 'label') matAutoUse();
             } else if (input.dataset.qc2Item) {
                 var node = input.closest('[data-qc2-row]'), code = node.dataset.qc2Row, f = input.dataset.qc2Item;
                 if (f === 'basis_unit') {
@@ -484,6 +548,22 @@
         });
         form.addEventListener('click', function (e) {
             var b = e.target.closest('button'); if (!b) return;
+            if (b.hasAttribute('data-qc2-mat-toggle')) { matToggle(b); return; }
+            if (b.hasAttribute('data-qc2-mat-add')) {
+                var mw = dom.defaultView, mcode2 = 'mat_custom_' + (mw && mw.crypto && mw.crypto.randomUUID ? mw.crypto.randomUUID().replace(/-/g, '').slice(0, 20) : Date.now().toString(36) + (++seq).toString(36));
+                if (state.material_detail.lines.filter(function (x) { return !has(MAT_LINES, x.code); }).length >= MAT_CUSTOM_MAX) return;
+                state.material_detail.lines.push({ code: mcode2, label: '', qty: 0, price: 0 });
+                var lnode = dom.getElementById('qc2-mat-template').content.firstElementChild.cloneNode(true);
+                lnode.dataset.qc2Mline = mcode2; form.querySelector('[data-qc2-mat-lines]').appendChild(lnode);
+                dirty = true; paint(); var ll = lnode.querySelector('[data-qc2-mat="label"]'); if (ll) ll.focus();
+                return;
+            }
+            if (b.hasAttribute('data-qc2-mat-remove')) {
+                var rl = b.closest('[data-qc2-mline]'), rcode = rl.dataset.qc2Mline;
+                if (has(MAT_LINES, rcode)) return;
+                state.material_detail.lines = state.material_detail.lines.filter(function (x) { return x.code !== rcode; });
+                rl.remove(); dirty = true; paint(); return;
+            }
             if (b.dataset.qc2Set) {
                 var key = b.dataset.qc2Set, val = b.dataset.value;
                 if (key === 'yield_mode') {
@@ -523,5 +603,5 @@
     }
     return { parseNumber: parseNumber, calculate: calculate, canonicalPayload: canonicalPayload, setBasis: setBasis, setYieldMode: setYieldMode,
         rowVisible: rowVisible, hintText: hintText, amountCents: amountCents, tonCents: tonCents, unitCost: unitCost, init: init,
-        catalog: CATALOG, units: UNITS, groups: GROUPS };
+        catalog: CATALOG, units: UNITS, groups: GROUPS, materialLines: MAT_LINES };
 }));

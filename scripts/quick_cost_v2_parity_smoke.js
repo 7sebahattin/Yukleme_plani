@@ -12,12 +12,12 @@ function base() {
     const items = Object.entries(v2.catalog).map(([code, d]) => ({ code, basis: d.basis, unit: d.unit, qty: 0, qty2: 0, unit_price: 0 }));
     return { model: 2, product: 'nar', sheet_date: '2026-10-31', operation_type: 'fason', method: 'quick', notes: '', yield_mode: 'actual', target_yield: 0,
         quantities: { raw_kg: 25000, processed_kg: 25000, export_kg: 20000, domestic_kg: 3000, industry_kg: 0, waste_kg: 2000 },
-        fason_includes: { labor: false, material: false },
+        material_detail: { use: false, pallets: 0, lines: Object.keys(v2.materialLines).map(code => ({ code, qty: 0, price: 0 })) },
         credit: { apply: false, domestic_sold_kg: 0, domestic_price: 0, industry_sold_kg: 0, industry_price: 0 },
         sale: { price: 0, currency: 'TL', rate: 1, target_margin: null }, items };
 }
 function example() {
-    const d = base(), p = { raw_purchase: 20, sorting_labor: 2, material: 4, field_transport: 15000, export_freight: 60000, customs: 5000, official_analysis: 3000 };
+    const d = base(), p = { raw_purchase: 20, packing_labor: 2.5, material: 4, field_transport: 15000, export_freight: 60000, customs: 5000, official_analysis: 3000 };
     d.items.forEach(r => { r.unit_price = p[r.code] || 0; }); return d;
 }
 function setRow(d, code, c) { d.items = d.items.map(r => r.code === code ? Object.assign({}, r, c) : r); return d; }
@@ -30,14 +30,14 @@ test('Zorunlu senaryo JS: 713.000 / %80 / 35,65; kredi ile 689.000 / 34,45', () 
     const c = v2.calculate(d); assert.equal(c.export_cost, 689000); assert.equal(c.unit_cost, 34.45);
 });
 test('Taban değişiminde eski miktar ve farklı birimin fiyatı taşınmaz', () => {
-    let d = setRow(example(), 'loading', { basis: 'manual', unit: 'kg', qty: 20000, unit_price: 2 });
-    d = v2.setBasis(d, 'loading', 'manual', 'pallet');
-    assert.deepEqual([row(d, 'loading').qty, row(d, 'loading').unit_price], [0, 0]);
-    d = v2.setBasis(example(), 'sorting_labor', 'raw_kg', 'kg');
-    assert.equal(row(d, 'sorting_labor').unit_price, 2); // aynı birim (TL/kg): fiyat korunur
-    assert.equal(row(v2.calculate(d), 'sorting_labor').amount, 50000);
-    d = v2.setBasis(example(), 'sorting_labor', 'processed_kg', 'ton');
-    assert.equal(row(d, 'sorting_labor').unit_price, 0); // kg → ton: 2 TL/kg asla 2 TL/ton olmaz
+    let d = setRow(example(), 'factory_cost', { basis: 'manual', unit: 'kg', qty: 20000, unit_price: 2 });
+    d = v2.setBasis(d, 'factory_cost', 'manual', 'pallet');
+    assert.deepEqual([row(d, 'factory_cost').qty, row(d, 'factory_cost').unit_price], [0, 0]);
+    d = v2.setBasis(example(), 'packing_labor', 'raw_kg', 'kg');
+    assert.equal(row(d, 'packing_labor').unit_price, 2.5); // aynı birim (TL/kg): fiyat korunur
+    assert.equal(row(v2.calculate(d), 'packing_labor').amount, 62500);
+    d = v2.setBasis(example(), 'packing_labor', 'processed_kg', 'ton');
+    assert.equal(row(d, 'packing_labor').unit_price, 0); // kg → ton: 2,5 TL/kg asla 2,5 TL/ton olmaz
 });
 test('Randıman yöntemi geçişi diğer girdiyi mevcut sonuçtan doldurur, veri kaybı yok', () => {
     let d = v2.setYieldMode(example(), 'target');
@@ -52,9 +52,24 @@ test('Geçersiz durumda yöntem geçişi mevcut girdiyi değiştirmez', () => {
 test('Hızlı görünüm: tutarlı satır hiçbir zaman gizlenmez', () => {
     assert.equal(v2.rowVisible('harvest', 'quick', 'fason', 0), false);
     assert.equal(v2.rowVisible('harvest', 'quick', 'fason', 10), true);
-    assert.equal(v2.rowVisible('fason_service', 'quick', 'uretim', 0), false);
-    assert.equal(v2.rowVisible('fason_service', 'quick', 'uretim', 5), true);
+    assert.equal(v2.rowVisible('factory_cost', 'quick', 'fason', 0), true);
+    assert.equal(v2.rowVisible('material', 'quick', 'uretim', 0), true);
     assert.equal(v2.rowVisible('casus', 'detailed', 'uretim', 0), true);
+});
+test('Kaldırılan kalemler katalogda yok; Fabrika gideri var', () => {
+    for (const c of ['sorting_labor', 'grading', 'loading', 'cold_storage', 'fason_service']) assert.equal(c in v2.catalog, false, c);
+    assert.equal(v2.catalog.factory_cost.label, 'Fabrika gideri'); assert.equal(v2.groups.includes('factory'), true);
+    assert.equal(v2.groups.includes('sorting') || v2.groups.includes('fason'), false);
+});
+test('Malzeme palet detayı JS: 26 palet × 1.790 TL = 46.540 TL', () => {
+    const d = example(); d.material_detail.use = true; d.material_detail.pallets = 26;
+    d.material_detail.lines.forEach(l => { if (l.code === 'mat_pallet') { l.qty = 1; l.price = 300; } if (l.code === 'mat_corner') { l.qty = 4; l.price = '12,5'; } if (l.code === 'mat_crate') { l.qty = 160; l.price = 9; } });
+    const r = v2.calculate(d);
+    assert.equal(r.material_detail.per_pallet, 1790); assert.equal(r.material_detail.total, 46540);
+    assert.equal(row(r, 'material').amount, 46540); assert.equal(row(r, 'material').from_detail, true); assert.equal(r.total, 633000 + 46540);
+    const payload = v2.canonicalPayload(d);
+    assert.equal(payload.material_detail.lines.length, 9); assert.equal('per_pallet' in payload.material_detail.lines[0], false);
+    assert.equal(v2.calculate(payload).total, r.total);
 });
 test('Açıklamalar rakam içermez', () => {
     for (const [b, u] of [['raw_kg', 'kg'], ['processed_kg', 'ton'], ['manual', 'worker_day'], ['manual', 'pallet'], ['fixed', 'fixed'], ['manual', 'ton_day']]) {
@@ -73,8 +88,9 @@ const cases = [];
 cases.push(example());
 { const d = example(); d.credit = { apply: true, domestic_sold_kg: 3000, domestic_price: 8, industry_sold_kg: 0, industry_price: 0 }; cases.push(d); }
 { const d = example(); d.yield_mode = 'target'; d.target_yield = '75,5'; d.quantities.processed_kg = null; d.quantities.domestic_kg = 0; d.quantities.waste_kg = 0; cases.push(d); }
-{ const d = example(); d.fason_includes = { labor: true, material: true }; setRow(d, 'fason_service', { unit: 'ton', unit_price: '1.234,5' }); cases.push(d); }
-{ const d = example(); d.operation_type = 'uretim'; setRow(d, 'fason_service', { unit_price: 1 }); cases.push(d); }
+{ const d = example(); setRow(d, 'factory_cost', { basis: 'raw_kg', unit: 'ton', unit_price: '1.234,5' }); cases.push(d); }
+{ const d = example(); d.material_detail.use = true; d.material_detail.pallets = '26,5'; d.material_detail.lines[0] = { code: 'mat_pallet', qty: 1, price: '300,99' }; d.material_detail.lines.push({ code: 'mat_custom_etiket', label: 'etiket', qty: '0,5', price: '0,333' }); cases.push(d); }
+{ const d = example(); d.material_detail.use = true; cases.push(d); }
 for (const [cur, rate, price, m] of [['TL', 1, 40, 20], ['USD', '34,25', '1,1', ''], ['EUR', '36,8', '0,95', 10], ['EUR', 0, 1, null], ['TL', 1, 1, 100]]) {
     const d = example(); d.sale = { price, currency: cur, rate, target_margin: m }; cases.push(d);
 }
@@ -88,7 +104,9 @@ for (let i = 0; i < 160; i++) {
     const rest = Math.max(0, raw - exp);
     d.quantities = { raw_kg: rnd() < .3 ? turkish(raw) : raw, processed_kg: rnd() < .4 ? null : Math.max(exp, Math.min(raw, num(raw, 1))), export_kg: exp,
         domestic_kg: num(rest / 3, 1), industry_kg: num(rest / 4, 0), waste_kg: num(rest / 4, 2) };
-    d.fason_includes = { labor: rnd() < .3, material: rnd() < .3 };
+    d.material_detail = { use: rnd() < .5, pallets: rnd() < .15 ? 0 : num(80, rnd() < .5 ? 0 : 2),
+        lines: Object.keys(v2.materialLines).map(code => ({ code, qty: rnd() < .4 ? 0 : num(rnd() < .1 ? 400 : 8, rnd() < .5 ? 0 : 4), price: rnd() < .4 ? 0 : num(rnd() < .05 ? 900000 : 400, 2) })) };
+    if (rnd() < .3) d.material_detail.lines.push({ code: 'mat_custom_' + i, label: rnd() < .15 ? ' ' : 'ek ' + i, qty: num(5, 2), price: num(50, 3) });
     d.items.forEach(r => {
         r.unit_price = rnd() < .4 ? 0 : (r.basis === 'fixed' ? num(90000, 2) : num(60, 4));
         if (rnd() < .3) {
@@ -112,10 +130,10 @@ test('PHP ve JS ' + cases.length + ' senaryoda aynı sonuç / aynı ret kararı'
         const p = php[i];
         assert.equal(!!jsErr, !!p.error, 'case ' + i + ' karar farklı: JS=' + jsErr + ' PHP=' + p.error);
         if (jsErr) { errCount++; return; }
-        const pick = r => ({ total: r.total, export_cost: r.export_cost, unit_cost: r.unit_cost, unit_cost_prudent: r.unit_cost_prudent, excluded_total: r.excluded_total,
+        const pick = r => ({ total: r.total, export_cost: r.export_cost, unit_cost: r.unit_cost, unit_cost_prudent: r.unit_cost_prudent, material_detail: r.material_detail,
             credit_total: r.credit_total, credit_applied: r.credit_applied, groups: r.groups, derived: r.derived, quantities: r.quantities, sale: r.sale,
             sale_result: r.sale_result, target_yield: r.target_yield, product: r.product,
-            items: r.items.map(x => [x.code, x.basis, x.unit, x.qty, x.qty2, x.unit_price, x.amount, x.excluded]),
+            items: r.items.map(x => [x.code, x.basis, x.unit, x.qty, x.qty2, x.unit_price, x.amount, x.from_detail]),
             warnings: r.warnings.map(w => w.code + ':' + w.text) });
         assert.deepEqual(pick(js), pick(p.ok), 'case ' + i);
         okCount++;

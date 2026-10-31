@@ -147,11 +147,9 @@
 .qc2 .qc2-check { flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 500; line-height: 1.45; margin-top: 12px; min-height: 44px; }
 .qc2 .qc2-check input { width: 22px; min-width: 22px; height: 22px; min-height: 22px; margin: 1px 0 0; padding: 0; }
 .qc2[data-view="quick"] [data-qc2-detail], .qc2[data-view="detailed"] .qc2-quick-only { display: none !important; }
-.qc2[data-op="uretim"] [data-qc2-fason-only] { display: none !important; }
 .qc2[data-yield-mode="actual"] .qc2-when-target, .qc2[data-yield-mode="target"] .qc2-when-actual { display: none !important; }
 .qc2 .qc2-row-hidden { display: none !important; }
-.qc2 .qc2-excluded { opacity: .62; border-style: dashed; }
-.qc2 .qc2-excluded output { text-decoration: line-through; }
+.qc2 .qc2-from-detail .qc-main-price { opacity: .55; }
 .qc2-row-fields { grid-template-columns: 1fr 1fr; }
 .qc2-row-fields .qc2-basis-field { grid-column: 1 / -1; }
 .qc2-table-head { display: none; }
@@ -174,9 +172,9 @@
     .qc2-qty-grid { grid-template-columns: repeat(3, 1fr); }
     /* Masaüstü: kalemler taranabilir tablo satırı. */
     .qc2 .qc2-rows { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .qc2 .qc2-table-head { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(190px, 1fr) minmax(130px, .7fr) 92px; column-gap: 14px; padding: 8px 14px; font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: none; }
+    .qc2 .qc2-table-head { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(190px, 1fr) minmax(130px, .7fr) 124px; column-gap: 14px; padding: 8px 14px; font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: none; }
     .qc2 .qc2-table-head span:nth-child(3) { text-align: right; }
-    .qc2 .qc2-row { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(190px, 1fr) minmax(130px, .7fr) 92px; column-gap: 14px; row-gap: 2px; align-items: center; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 14px; }
+    .qc2 .qc2-row { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(190px, 1fr) minmax(130px, .7fr) 124px; column-gap: 14px; row-gap: 2px; align-items: center; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 14px; }
     .qc2 .qc2-row:last-child { border-bottom: 0; }
     .qc2 .qc2-row .qc-row-head { display: contents; }
     .qc2 .qc2-row h3 { grid-column: 1; grid-row: 1; }
@@ -190,4 +188,35 @@
     .qc2 .qc2-row > .qc-row-settings[open] { grid-column: 1 / -1; grid-row: 4; justify-self: stretch; }
     .qc2 .qc2-row > .qc-row-settings[open] summary { margin-left: 0; }
 }
-@media print { .qc2-switches, .qc2-seg { display: none !important; } }
+/* Genişletilmiş sonuçlar: tıklanınca kalın siyah çerçeve yerine temaya uygun odak halkası. */
+.qc2-more > summary:focus { outline: none; }
+.qc2-more > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+/* Malzeme: Palet detayı düğmesi (Ayar'ın altında) + palet başına malzeme paneli */
+.qc2 .qc2-detail-btn { flex: 0 0 auto; white-space: nowrap; min-height: 44px; margin-top: 4px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--primary); font-size: .8rem; font-weight: 650; line-height: 20px; cursor: pointer; }
+.qc2 .qc2-detail-btn[aria-expanded="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
+.qc2 .qc2-detail-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.qc2-mat { flex: 1 0 100%; margin-top: 12px; padding: 14px; border: 1px solid var(--primary); border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.qc2-mat h4 { margin: 0 0 6px; font-size: .95rem; }
+.qc2-mat-top { display: grid; gap: 12px; margin-top: 10px; }
+.qc2-mat-lines { display: grid; gap: 10px; margin-top: 14px; }
+.qc2-mat-line { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; align-items: end; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); min-width: 0; }
+.qc2 .qc2-mat-line > .qc2-mat-name { grid-column: 1 / -1; font-size: .9rem; }
+/* .qc2-row içindeki genel output/Kaldır kuralları (masaüstü tablo düzeni) malzeme satırını bozmasın: özgüllük yüksek */
+.qc2 .qc2-row .qc2-mat-line output { grid-column: 1 / -1; grid-row: auto; text-align: right; font-weight: 700; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.qc2 .qc2-row .qc2-mat-line .qc-remove-button { grid-column: 1 / -1; grid-row: auto; justify-self: end; }
+.qc2-mat-add { margin-top: 12px; }
+.qc2-mat-total { margin: 14px 0 0; display: grid; border-top: 1px solid var(--border-strong); }
+.qc2-mat-total > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.qc2-mat-total dt { font-size: .86rem; }
+.qc2-mat-total dd { margin: 0; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--primary); }
+@media (min-width: 600px) {
+    .qc2-mat-top { grid-template-columns: 220px 1fr; align-items: end; }
+    .qc2-mat-line { grid-template-columns: minmax(130px, 1.3fr) 1fr 1fr 110px auto; }
+    .qc2 .qc2-mat-line > .qc2-mat-name, .qc2 .qc2-row .qc2-mat-line output, .qc2 .qc2-row .qc2-mat-line .qc-remove-button { grid-column: auto; }
+    .qc2 .qc2-row .qc2-mat-line output { align-self: center; }
+}
+@media (min-width: 1024px) {
+    .qc2 .qc2-row > .qc2-detail-btn { grid-column: 4; grid-row: 2; justify-self: end; margin: 0; }
+    .qc2 .qc2-row > .qc2-mat { grid-column: 1 / -1; grid-row: 5; margin-top: 8px; }
+}
+@media print { .qc2-switches, .qc2-seg, .qc2-detail-btn { display: none !important; } }
