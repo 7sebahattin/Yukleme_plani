@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v456';
+const CACHE_NAME = 'yukleme-plani-v462';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -8,6 +8,8 @@ const SHELL = [
   './assets/app.js',
   './assets/maliyet.css',
   './assets/maliyet.js',
+  './assets/hizli-maliyet.css',
+  './assets/hizli-maliyet.js',
   './assets/hesap.css',
   './assets/hesap.js',
   './assets/icon.svg',
@@ -22,6 +24,7 @@ const SHELL = [
   './assets/nav-icons/kantar.svg',
   './assets/nav-icons/hks.svg',
   './assets/nav-icons/rapor.svg',
+  './assets/nav-icons/qcost.svg',
   './assets/nav-icons/mstok.svg',
   './assets/nav-icons/hesap.svg',
   './assets/nav-icons/mail.svg',
@@ -65,6 +68,8 @@ self.addEventListener('fetch', function(e) {
   // Veritabanı yedeği ve her türlü indirme SW'ye HİÇ uğramaz (respondWith yok):
   // aksi hâlde tam DB dökümü CacheStorage'a kalıcı yazılıyordu (DB-Backup-02).
   var u = new URL(e.request.url);
+  // Saved quick costs are authenticated business data; never retain their HTML.
+  if (/\/hizli_maliyet(?:_form)?\.php(\/|$)/.test(u.pathname)) return;
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   // Mail Merkezi: posta içeriği (sayfa, JSON, ek) cihazın CacheStorage'ına HİÇ yazılmaz.
   if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır
