@@ -17,7 +17,7 @@ ob_end_clean();
 
 db()->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');   // v447: önizleme yedeği
 foreach (['A', 'B', 'C', 'D'] as $h) {
-    foreach ([$kadin, $erkek, $rampaci] as $tid) {
+    foreach ([$kadin, $erkek, $rampaci, $seritci] as $tid) {   // v456: Şeritçi fiyatı da tanımlı (Erkek «12+1» → Şeritçi)
         $r = pdks_faz8b_oran_ekle($cavus[$h], $tid, '1500', '900', 'hourly', '200', '2020-01-01', 'TRY', 1, db());
         if (!$r['ok']) { fwrite(STDERR, 'oran: ' . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
     }
@@ -28,12 +28,15 @@ $ws = $ss->getSheetByName('Fişler');
 $kol = [];
 foreach (pdks_fis_sutunlar() as $i => $c) $kol[$c['anahtar']] = $i + 1;
 // İşletme/Depo/Çavuş dosyada YOK (yükleme ekranında seçilir): üç fiş AYNI çavuşun üç ayrı gününe aittir.
-$gun = date('d.m.Y', strtotime('-3 day')); $gun2 = date('d.m.Y', strtotime('-4 day')); $gun3 = date('d.m.Y', strtotime('-5 day'));
+$gun = date('d.m.Y', strtotime('-3 day')); $gun2 = date('d.m.Y', strtotime('-4 day')); $gun3 = date('d.m.Y', strtotime('-5 day')); $gun4 = date('d.m.Y', strtotime('-6 day'));
 $satirlar = [
     ['fis_no' => 'E2E-1', 'tarih' => $gun, 'kadin_tam' => 8, 'erkek_tam' => 12, 'erkek_yarim' => 1, 'fm2' => 5, 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1,
-     'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1 | Toplam Mesai: 5 kişi 2 saat | <script>window.__xss=1</script>', 'kontrol' => '"><img src=x onerror="window.__xss=2">'],
+     'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 | Erkek yarım 1 | Toplam Mesai: 5 kişi 2 saat | <script>window.__xss=1</script>', 'kontrol' => '"><img src=x onerror="window.__xss=2">'],
     ['fis_no' => 'E2E-2', 'tarih' => $gun2, 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'rampaci_yarim' => 1, 'fm_toplam' => 25, 'servis_buyuk' => 1, 'giris' => '09:00'],
-    ['fis_no' => 'E2E-3', 'tarih' => $gun3, 'erkek_tam' => '12 + 1', 'not' => '=HYPERLINK("http://x","y")'],
+    // v456: Kadın alanında «+» belirsiz → hücre HATASI (tahmin yok); «+» yalnız Erkek Tam'da Şeritçi anlamına gelir
+    ['fis_no' => 'E2E-3', 'tarih' => $gun3, 'kadin_tam' => '12 + 1', 'not' => '=HYPERLINK("http://x","y")'],
+    // v456: yeni yorum kuralları — Kadın «33,5» = 33 Tam + 1 Yarım, Erkek «12+1» = 12 Erkek + 1 Şeritçi (uyarılı ama yazılabilir)
+    ['fis_no' => 'E2E-4', 'tarih' => $gun4, 'kadin_tam' => '33,5', 'erkek_tam' => '12+1', 'ham' => 'Bayan 33,5 | Erkek 12 + 1'],
 ];
 foreach ($satirlar as $ri => $sat) {
     foreach ($sat as $anahtar => $v) {

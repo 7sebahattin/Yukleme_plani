@@ -335,8 +335,12 @@ $f = $r['fisler'][0] ?? [];
 ok('11b) geçerli satır: hata yok', ($f['hatalar'] ?? ['x']) === [] && $r['genel_hatalar'] === [], j([$f['hatalar'] ?? null, $r['genel_hatalar']]));
 ok('11b) alanlar: fiş no/tarih/çavuş/sayılar/FM/servis/giriş/rev', ($f['fis_no'] ?? '') === '01410' && $f['tarih'] === $gecIso && $f['cavus']['id'] === 1 && $f['say']['KADIN'] === ['tam' => 8, 'yarim' => 0] && $f['say']['ERKEK'] === ['tam' => 12, 'yarim' => 1]
     && $f['fm_kova'][2] === 5 && $f['fm_tipi'] === ['ERKEK'] && $f['servis'] === ['buyuk' => 0, 'kucuk' => 1] && $f['giris'] === '08:30' && $f['rev'] === 1 && $f['not'] === 'Rampa', j($f));
+// v456: eski «12 + 1 = 12 Tam + 1 Yarım» kuralı İPTAL — Erkek Tam'da «A + B» artık A Erkek + B Şeritçi (sahip kararı); beklenti ters çevrildi.
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => '12 + 1'])]]);
-ok('11b) "12 + 1" → hücre hatası Satır n, «Başlık»', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 2, «Erkek Tam»:') && str_contains($x, 'ayrı sütunlara')), j($r['fisler'][0]['hatalar']));
+ok('11b) Erkek Tam "12 + 1" → HATA DEĞİL: 12 Erkek Tam + 1 Şeritçi Tam (ESKİ kural «+1 Yarım» İPTAL)', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['ERKEK'] === ['tam' => 12, 'yarim' => 0] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 1, 'yarim' => 0], j([$r['fisler'][0]['hatalar'], $r['fisler'][0]['say']]));
+ok('11b) "12 + 1" → uyarı satırı «Satır n, «Erkek Tam»: …12 Erkek + 1 Şeritçi yorumlandı»', (bool)array_filter($r['fisler'][0]['uyarilar'], fn($x) => str_starts_with($x, 'Satır 2, «Erkek Tam»:') && str_contains($x, '12 Erkek + 1 Şeritçi')), j($r['fisler'][0]['uyarilar']));
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'kadin_tam' => '12 + 1'])]]);
+ok('11b) Kadın Tam "12 + 1" → HATA (tahmin yok)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 2, «Kadın Tam»:') && str_contains($x, 'yalnız Erkek alanında')), j($r['fisler'][0]['hatalar']));
 $r = nor([['satir' => 3, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => date('d.m.Y'), 'erkek_tam' => 1])]]);
 ok('11b) bugünün tarihi → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'bugün') && str_starts_with($x, 'Satır 3, «Tarih»')), j($r['fisler'][0]['hatalar']));
 $r = nor([['satir' => 3, 'hucreler' => H(['fis_no' => 'ORNEK-1', 'tarih' => $gec, 'erkek_tam' => 1])]]);
@@ -368,6 +372,82 @@ $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'er
 ok('11b) serbest metin alanları enjeksiyona karşı \' önekli', str_starts_with($r['fisler'][0]['not'], "'=") && str_starts_with($r['fisler'][0]['ham'], "'+") && str_starts_with($r['fisler'][0]['isletme'], "'@"), j([$r['fisler'][0]['not'], $r['fisler'][0]['ham']]));
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec])]]);
 ok('11b) boş sayılar → say 0 (hata değil, plan karar verir)', $r['fisler'][0]['say']['ERKEK'] === ['tam' => 0, 'yarim' => 0] && $r['fisler'][0]['fm_toplam'] === null && $r['fisler'][0]['giris'] === '08:00' && $r['fisler'][0]['rev'] === 0, j($r['fisler'][0]));
+
+echo "\n=== 11c. v456 pdks_fis_say_parca (A+B yalnız Erkek · .5 · çakışma) ===\n";
+$sp = fn($x, string $kod, int $maks = 250) => pdks_fis_say_parca($x, $maks, $kod);
+$brm = fn(array $r) => [$r['tam'], $r['yarim'], $r['seritci'], $r['hata'] !== null, $r['uyari'] !== null];   // tam, yarım, şeritçi, hata?, uyarı?
+foreach ([['KADIN'], ['ERKEK'], ['SERITCI']] as [$kod]) {
+    foreach ([['"12"', '12'], ['int 12', 12], ['float 12.0', 12.0], ['"12,0"', '12,0'], ['"12.0"', '12.0'], ['" 12 "', ' 12 '], ['"3 kişi"', '3 kişi']] as [$ad, $g]) {
+        $r = $sp($g, $kod);
+        ok("11c) $kod $ad → tam sayı", $r['hata'] === null && $r['yarim'] === 0 && $r['seritci'] === 0 && $r['uyari'] === null && $r['tam'] === (int)(string)((float)preg_replace('/[^\d.]/', '', str_replace(',', '.', (string)$g))), j($r));
+    }
+    foreach ([['"33,5"', '33,5'], ['"33.5"', '33.5'], ['"33,50"', '33,50'], ['float 33.5', 33.5], ['"33,5 kişi"', '33,5 kişi']] as [$ad, $g]) {
+        $r = $sp($g, $kod);
+        ok("11c) $kod $ad → 33 Tam + 1 Yarım (+ uyarı)", $brm($r) === [33, 1, 0, false, true], j($r));
+    }
+    foreach ([['"33,3"', '33,3'], ['"33,7"', '33,7'], ['"33,05"', '33,05'], ['"33,500"', '33,500'], ['float 33.3', 33.3], ['"1/2"', '1/2'], ['"-3"', '-3'], ['"abc"', 'abc'], ['"3 kişi : 1 yarım"', '3 kişi : 1 yarım'], ['"12+1+1"', '12+1+1'], ['"12,5+1"', '12,5+1'], ['"12+1,5"', '12+1,5'], ['"12 + 1 yarım"', '12 + 1 yarım'], ['"251"', '251'], ['"250,5"', '250,5'], ['"++2"', '++2']] as [$ad, $g]) {
+        $r = $sp($g, $kod);
+        ok("11c) $kod $ad → HATA", $r['hata'] !== null && $r['hata'] !== '' && $r['tam'] === 0 && $r['yarim'] === 0 && $r['seritci'] === 0, j($r));
+    }
+    foreach ([['""', ''], ['"-"', '-'], ['"yok"', 'yok'], ['null', null]] as [$ad, $g]) {
+        $r = $sp($g, $kod);
+        ok("11c) $kod $ad → boş (hata yok)", $brm($r) === [0, 0, 0, false, false], j($r));
+    }
+}
+foreach ([['"12+1"', '12+1', [12, 1]], ['"12 + 1"', '12 + 1', [12, 1]], ['"12+ 1"', '12+ 1', [12, 1]], ['"12 +1"', '12 +1', [12, 1]], ['"＋" tam genişlik', '12＋1', [12, 1]], ['NBSP', "12\xC2\xA0+\xC2\xA01", [12, 1]], ['"+2"', '+2', [0, 2]], ['"+ 2"', '+ 2', [0, 2]], ['"12+1 kişi"', '12+1 kişi', [12, 1]], ['"7 + 15"', '7 + 15', [7, 15]]] as [$ad, $g, [$a, $b]]) {
+    $r = $sp($g, 'ERKEK');
+    ok("11c) ERKEK $ad → $a Erkek + $b Şeritçi (Yarım DEĞİL)", $r['hata'] === null && $r['tam'] === $a && $r['seritci'] === $b && $r['yarim'] === 0 && is_string($r['uyari']) && str_contains($r['uyari'], "$a Erkek + $b Şeritçi"), j($r));
+}
+foreach (['KADIN', 'SERITCI'] as $kod) foreach (['12+1', '12 + 1', '+2', '12＋1'] as $g) {
+    $r = $sp($g, $kod);
+    ok("11c) $kod \"$g\" → HATA (+ yalnız Erkek'te; Kontrol Notu uyarısı)", $r['hata'] !== null && str_contains($r['hata'], 'yalnız Erkek alanında') && str_contains($r['hata'], 'Kontrol Notu') && $r['tam'] === 0 && $r['seritci'] === 0, j($r));
+}
+$r = $sp('12+1', 'RAMPACI'); ok('11c) RAMPACI "12+1" → pdks_fis_say hatası (yorum YOK)', $r['hata'] !== null && str_contains($r['hata'], 'ayrı sütunlara') && $r['tam'] === 0 && $r['seritci'] === 0, j($r));
+$r = $sp('33,5', 'RAMPACI'); ok('11c) RAMPACI "33,5" → tam sayı hatası (.5 yorumu YOK)', $r['hata'] !== null && str_contains($r['hata'], 'tam sayı') && $r['yarim'] === 0, j($r));
+$r = $sp(33.5, 'RAMPACI'); ok('11c) RAMPACI float 33.5 → hata', $r['hata'] !== null && $r['yarim'] === 0, j($r));
+$r = $sp('9', 'RAMPACI'); ok('11c) RAMPACI "9" → 9', $brm($r) === [9, 0, 0, false, false]);
+$r = $sp('300+1', 'ERKEK'); ok('11c) ERKEK "300+1" → maks aşımı HATA', $r['hata'] !== null && str_contains($r['hata'], 'çok büyük') && $r['tam'] === 0, j($r));
+$r = $sp('12+300', 'ERKEK'); ok('11c) ERKEK "12+300" → maks aşımı HATA', $r['hata'] !== null, j($r));
+$r = $sp('250,5', 'KADIN', 250); ok('11c) KADIN "250,5": tam+yarım > maks → HATA', $r['hata'] !== null, j($r));
+$r = $sp('249,5', 'KADIN', 250); ok('11c) KADIN "249,5" → 249 + 1 (sınırda geçer)', $brm($r) === [249, 1, 0, false, true], j($r));
+$r = $sp('0,5', 'ERKEK'); ok('11c) ERKEK "0,5" → 0 Tam + 1 Yarım', $brm($r) === [0, 1, 0, false, true], j($r));
+$r = $sp('12+0', 'ERKEK'); ok('11c) ERKEK "12+0" → 12 Erkek, Şeritçi 0 (uyarısız)', $brm($r) === [12, 0, 0, false, false], j($r));
+ok('11c) say_parca SAF/deterministik: aynı girdi aynı sonuç; float 33.5 = "33,5" (uyarı metni biçimi dahil)', $sp('12+1', 'ERKEK') === $sp('12+1', 'ERKEK') && $sp(33.5, 'KADIN') === $sp('33,5', 'KADIN'), j([$sp(33.5, 'KADIN'), $sp('33,5', 'KADIN')]));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'kadin_tam' => '33,5'])]]);
+$f = $r['fisler'][0];
+ok('11c) normalize: Kadın "33,5" → 33 Tam + 1 Yarım, uyarı satırı', $f['hatalar'] === [] && $f['say']['KADIN'] === ['tam' => 33, 'yarim' => 1] && (bool)array_filter($f['uyarilar'], fn($x) => str_starts_with($x, 'Satır 4, «Kadın Tam»:') && str_contains($x, '33 Tam + 1 Yarım')), j([$f['hatalar'], $f['say']['KADIN'], $f['uyarilar']]));
+$r = nor([['satir' => 4, 'hucreler' => ['fis_no' => ['v' => 'B1', 't' => 's'], 'tarih' => ['v' => $gec, 't' => 's'], 'kadin_tam' => ['v' => 33.5, 't' => 'n']]]]);
+ok('11c) normalize: gerçek float 33.5 hücresi → 33 Tam + 1 Yarım', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['KADIN'] === ['tam' => 33, 'yarim' => 1], j($r['fisler'][0]));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'kadin_tam' => '33,5', 'kadin_yarim' => '2'])]]);
+ok('11c) normalize: Kadın "33,5" + Kadın Yarım dolu → HATA (aynı kişi iki yoldan sayılmaz)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'birlikte kullanılamaz')), j($r['fisler'][0]['hatalar']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'kadin_tam' => '33,5', 'kadin_yarim' => '0'])]]);
+ok('11c) normalize: "33,5" + Yarım = 0 → çakışma SAYILMAZ', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['KADIN'] === ['tam' => 33, 'yarim' => 1], j($r['fisler'][0]['hatalar']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '12+1', 'seritci_tam' => '2'])]]);
+ok('11c) normalize: Erkek "12+1" + Şeritçi Tam dolu → HATA (çift sayım)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'çift sayım')), j($r['fisler'][0]['hatalar']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '12+1', 'seritci_yarim' => '2'])]]);
+ok('11c) normalize: Erkek "12+1" + Şeritçi YARIM → çakışma değil: Şeritçi 1 Tam + 2 Yarım', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 1, 'yarim' => 2], j($r['fisler'][0]));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '10', 'erkek_yarim' => '1', 'seritci_tam' => '3', 'seritci_yarim' => '1', 'rampaci_tam' => '2', 'rampaci_yarim' => '1'])]]);
+ok('11c) normalize: Şeritçi Tam/Yarım sütunları + Rampacı (eski Tam/Yarım) okunur', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 3, 'yarim' => 1] && $r['fisler'][0]['say']['RAMPACI'] === ['tam' => 2, 'yarim' => 1] && $r['fisler'][0]['say']['ERKEK'] === ['tam' => 10, 'yarim' => 1], j($r['fisler'][0]['say']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'rampaci_tam' => '2+1'])]]);
+ok('11c) normalize: Rampacı "2+1" → HATA (Rampacı alanında + yorumu yok)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 4, «Rampacı Tam»:')), j($r['fisler'][0]['hatalar']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'seritci_tam' => '2+1'])]]);
+ok('11c) normalize: Şeritçi Tam "2+1" → HATA', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 4, «Şeritçi Tam»:')), j($r['fisler'][0]['hatalar']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '+2'])]]);
+ok('11c) normalize: Erkek "+2" → 0 Erkek + 2 Şeritçi', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['ERKEK'] === ['tam' => 0, 'yarim' => 0] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 2, 'yarim' => 0], j($r['fisler'][0]['say']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'fm_tipi' => 'Erkek+Şeritçi', 'erkek_tam' => 3])]]);
+ok('11c) normalize: FM Tipi «Erkek+Şeritçi» tanınır', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['fm_tipi'] === ['ERKEK', 'SERITCI'], j($r['fisler'][0]));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'fm_tipi' => 'Şeritçi', 'seritci_tam' => 3])]]);
+ok('11c) normalize: FM Tipi «Şeritçi» tanınır', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['fm_tipi'] === ['SERITCI'], j($r['fisler'][0]));
+// Ham Metin dedektörü (yalnız uyarı)
+$r = nor([['satir' => 5, 'hucreler' => H(['fis_no' => 'B2', 'tarih' => $gec, 'erkek_tam' => '12', 'erkek_yarim' => '1', 'ham' => 'Bayan 8 | Erkek: 12 + 1 | Servis: 1'])]]);
+$f = $r['fisler'][0];
+ok('11c) dedektör (+): Ham «Erkek 12 + 1» + Erkek Yarım dolu + Şeritçi 0 → UYARI (engel değil), bayrak', $f['hatalar'] === [] && !empty($f['eski_yorum_supheli']) && (bool)array_filter($f['uyarilar'], fn($x) => str_starts_with($x, 'Satır 5, «Ham Metin»:') && str_contains($x, 'Şeritçi')), j([$f['hatalar'], $f['uyarilar']]));
+$r = nor([['satir' => 5, 'hucreler' => H(['fis_no' => 'B2', 'tarih' => $gec, 'erkek_tam' => '12+1', 'ham' => 'Bayan 8 | Erkek: 12 + 1'])]]);
+ok('11c) dedektör (−): yeni stil «12+1» (Şeritçi 1) → uyarı YOK', empty($r['fisler'][0]['eski_yorum_supheli']) && !array_filter($r['fisler'][0]['uyarilar'], fn($x) => str_contains($x, 'Ham Metin')), j($r['fisler'][0]['uyarilar']));
+$r = nor([['satir' => 5, 'hucreler' => H(['fis_no' => 'B2', 'tarih' => $gec, 'erkek_tam' => '12', 'ham' => 'Bayan 8 | Erkek: 12 + 1'])]]);
+ok('11c) dedektör (−): Erkek Yarım BOŞ → uyarı yok', empty($r['fisler'][0]['eski_yorum_supheli']), j($r['fisler'][0]['uyarilar']));
+$r = nor([['satir' => 5, 'hucreler' => H(['fis_no' => 'B2', 'tarih' => $gec, 'erkek_tam' => '12', 'erkek_yarim' => '1', 'ham' => 'Bayan 8 | Erkek: 12 | Rampacı 2 + 1'])]]);
+ok('11c) dedektör (−): «+» Erkek etiketinde değil → uyarı yok', empty($r['fisler'][0]['eski_yorum_supheli']), j($r['fisler'][0]['uyarilar']));
 
 echo "\n=== 14b. v455 Şeritçi (tip kaydı ile bağlama; FM varsayılan havuzu) ===\n";
 ok('14b) pdks_fis_tip_kodlari() = tip kayıt defteri politikası (KADIN, ERKEK, RAMPACI, SERITCI)', pdks_fis_tip_kodlari() === ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI'] && pdks_fis_tip_kodlari() === pdks_gunluk_desteklenen_tip_kodlari(), j(pdks_fis_tip_kodlari()));

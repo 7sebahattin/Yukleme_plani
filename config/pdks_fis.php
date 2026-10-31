@@ -40,7 +40,7 @@ if (!defined('PDKS_FIS_VARSAYILAN_GIRIS')) define('PDKS_FIS_VARSAYILAN_GIRIS', '
 if (!defined('PDKS_FIS_FM_KOVA_MAX'))     define('PDKS_FIS_FM_KOVA_MAX', 6);
 if (!defined('PDKS_FIS_FM_KISI_UST_SAAT')) define('PDKS_FIS_FM_KISI_UST_SAAT', 3); // türetilen K için kişi başı üst
 if (!defined('PDKS_FIS_TOKEN_TTL'))       define('PDKS_FIS_TOKEN_TTL', 1800);
-if (!defined('PDKS_FIS_SABLON_SURUMU'))   define('PDKS_FIS_SABLON_SURUMU', 1);
+if (!defined('PDKS_FIS_SABLON_SURUMU'))   define('PDKS_FIS_SABLON_SURUMU', 2);
 if (!defined('PDKS_FIS_ETIKET'))          define('PDKS_FIS_ETIKET', '[FIS ');          // servis not öneki
 
 // =========================================================
@@ -50,7 +50,8 @@ if (!defined('PDKS_FIS_ETIKET'))          define('PDKS_FIS_ETIKET', '[FIS ');   
 /**
  * Şablonun "Fişler" sayfası sütunları (sıralı; harf = indeks + 1). Şablon üretimi, Açıklama sayfası,
  * başlık eşleme ve testler HEPSİ buradan beslenir.
- * tip: metin | tarih | tam | saat | liste.
+ * tip: metin | tarih | tam | tam_yorum | saat | liste. (tam_yorum = Kadın/Erkek/Şeritçi Tam: tam sayı ya da «33,5» / Erkek'te «A+B»
+ * — pdks_fis_say_parca(); Excel'de tam sayı doğrulaması KONMAZ.)
  * @return list<array{anahtar:string,baslik:string,tip:string,zorunlu:bool,genislik:int,maks:?int,liste:?array,ipucu:string,takma:list<string>}>
  */
 function pdks_fis_sutunlar(): array
@@ -63,12 +64,14 @@ function pdks_fis_sutunlar(): array
     $s = [
         $k('fis_no', 'Fiş No', 'metin', true, 12, 30, null, 'Fişteki numara; METİN olarak yazın, baştaki sıfırı koruyun (01410).', ['Fis No', 'Fiş Numarası', 'Fis Numarasi', 'Fiş No.']),
         $k('tarih', 'Tarih', 'tarih', true, 12, null, null, 'GG.AA.YYYY. Bugünden ÖNCE olmalı (bugünün fişi desteklenmez).', ['Fiş Tarihi', 'Fis Tarihi']),
-        $k('kadin_tam', 'Kadın Tam', 'tam', false, 9, 250, null, 'Bayan sayısı (Tam gün).', ['Kadin Tam', 'Bayan Tam']),
+        $k('kadin_tam', 'Kadın Tam', 'tam_yorum', false, 9, 250, null, 'Bayan sayısı. «33,5» yazılırsa 33 Tam + 1 Yarım sayılır.', ['Kadin Tam', 'Bayan Tam']),
         $k('kadin_yarim', 'Kadın Yarım', 'tam', false, 9, 250, null, 'Yarım gün çalışan kadın sayısı.', ['Kadin Yarim', 'Bayan Yarım', 'Bayan Yarim']),
-        $k('erkek_tam', 'Erkek Tam', 'tam', false, 9, 250, null, 'Erkek sayısı (Tam gün).', []),
+        $k('erkek_tam', 'Erkek Tam', 'tam_yorum', false, 9, 250, null, 'Erkek sayısı. «12+1» yazılırsa 12 Erkek + 1 Şeritçi sayılır; «33,5» yazılırsa 33 Tam + 1 Yarım.', []),
         $k('erkek_yarim', 'Erkek Yarım', 'tam', false, 9, 250, null, 'Yarım gün çalışan erkek sayısı.', ['Erkek Yarim']),
         $k('rampaci_tam', 'Rampacı Tam', 'tam', false, 9, 250, null, 'Rampacı sayısı (Tam gün).', ['Rampaci Tam']),
         $k('rampaci_yarim', 'Rampacı Yarım', 'tam', false, 9, 250, null, 'Yarım gün çalışan rampacı sayısı.', ['Rampaci Yarim']),
+        $k('seritci_tam', 'Şeritçi Tam', 'tam_yorum', false, 9, 250, null, 'Şeritçi sayısı (Tam gün). Erkek alanındaki «A+B» yazımından da doldurulur; «33,5» → 33 Tam + 1 Yarım.', ['Seritci Tam']),
+        $k('seritci_yarim', 'Şeritçi Yarım', 'tam', false, 9, 250, null, 'Yarım gün çalışan şeritçi sayısı.', ['Seritci Yarim']),
         $k('fm1', 'FM 1 Sa (Kişi)', 'tam', false, 9, 250, null, 'Tam 1 saat fazla mesai yapan KİŞİ sayısı.', ['FM 1 Saat', 'FM 1 Sa']),
         $k('fm2', 'FM 2 Sa (Kişi)', 'tam', false, 9, 250, null, 'Tam 2 saat fazla mesai yapan KİŞİ sayısı.', ['FM 2 Saat', 'FM 2 Sa']),
         $k('fm3', 'FM 3 Sa (Kişi)', 'tam', false, 9, 250, null, 'Tam 3 saat fazla mesai yapan KİŞİ sayısı.', ['FM 3 Saat', 'FM 3 Sa']),
@@ -77,7 +80,7 @@ function pdks_fis_sutunlar(): array
         $k('fm6', 'FM 6 Sa (Kişi)', 'tam', false, 9, 250, null, 'Tam 6 saat fazla mesai yapan KİŞİ sayısı (7+ saat desteklenmez).', ['FM 6 Saat', 'FM 6 Sa']),
         $k('fm_toplam', 'Toplam FM Saati', 'tam', false, 10, 1000, null, 'YALNIZ toplam saat biliniyorsa; sistem kişilere dağıtır. Kova sütunlarıyla birlikte doldurmayın.', ['Toplam Mesai (Saat)', 'Toplam FM', 'Toplam Mesai', 'Toplam Fazla Mesai']),
         $k('fm_kisi', 'FM Kişi Sayısı', 'tam', false, 9, 250, null, 'Toplam FM Saati için isteğe bağlı kişi sayısı (sabit FM fiyatında ZORUNLU).', ['FM Kisi Sayisi', 'FM Kişi']),
-        $k('fm_tipi', 'FM Tipi', 'liste', false, 14, 40, ['Tümü', 'Kadın', 'Erkek', 'Rampacı', 'Erkek+Rampacı'], 'FM yapanların tipi; boşsa yükleme sayfasındaki seçenek.', ['FM Tipi', 'Fm Tipi']),
+        $k('fm_tipi', 'FM Tipi', 'liste', false, 14, 40, ['Tümü', 'Kadın', 'Erkek', 'Rampacı', 'Şeritçi', 'Erkek+Rampacı', 'Erkek+Şeritçi'], 'FM yapanların tipi; boşsa yükleme sayfasındaki seçenek (Şeritçi «Tümü»ne girmez).', ['FM Tipi', 'Fm Tipi']),
         $k('servis_buyuk', 'Servis Büyük', 'tam', false, 9, 99, null, 'Büyük servis adedi.', ['Servis Buyuk']),
         $k('servis_kucuk', 'Servis Küçük', 'tam', false, 9, 99, null, 'Küçük servis adedi ("1 küçük" → 1).', ['Servis Kucuk']),
         $k('giris', 'Giriş Saati', 'saat', false, 9, null, null, 'SS:DD; boşsa 08:00.', ['Giris Saati', 'Giriş']),
@@ -169,6 +172,65 @@ function pdks_fis_say($x, int $maks, ?string &$hata): ?int
     if ($n < 0) { $hata = 'negatif olamaz.'; return null; }
     if ($n > $maks) { $hata = $n . ' çok büyük (en çok ' . $maks . ').'; return null; }
     return $n;
+}
+
+/**
+ * v456 — «Tam» sütunu hücresi (Kadın / Erkek / Şeritçi Tam): tam sayı, «.5» ondalığı ya da (YALNIZ Erkek Tam'da) «A+B».
+ * SAF, tamsayı aritmetiği, rastgelelik YOK. Tahmin YOK: tanınmayan her biçim HATA (belirsiz kalan kişi sayısı para yazar).
+ *  - «33,5» / «33.5» / gerçek 33.5 (KADIN, ERKEK, SERITCI) → tam=33, yarim=1 (+ uyarı). «.5» dışı ondalık → HATA.
+ *  - «12+1», «12 + 1», «+2» (YALNIZ ERKEK) → tam=A, seritci=B (+ uyarı). Başka kodda «+» → HATA (Kontrol Notu'na yazılmalı).
+ *  - Diğer her şey (boş, «-», «yok», «3 kişi», sayı dışı…) pdks_fis_say() davranışıdır (RAMPACI da buna girer).
+ * Eski «12+1 = 12 Tam + 1 Yarım» kuralı v456'da İPTAL EDİLDİ — geri ekleme.
+ * @param mixed  $x    ham hücre değeri
+ * @param string $kod  'KADIN'|'ERKEK'|'SERITCI' (başka kod: «+» ve «.5» yorumlanmaz, pdks_fis_say hatası döner)
+ * @return array{tam:int, yarim:int, seritci:int, hata:?string, uyari:?string}
+ */
+function pdks_fis_say_parca($x, int $maks, string $kod): array
+{
+    $son = ['tam' => 0, 'yarim' => 0, 'seritci' => 0, 'hata' => null, 'uyari' => null];
+    $yorumlu = in_array($kod, ['KADIN', 'ERKEK', 'SERITCI'], true);
+    $s = null;
+    if ($yorumlu) {
+        if (is_string($x)) {
+            $s = trim(str_replace(["\xC2\xA0", '＋'], [' ', '+'], $x));
+            $s = trim(preg_replace('/\s*(kişi|kisi|adet)\.?$/iu', '', $s) ?? $s);
+            $g = pdks_fis_metin($x, 40);
+            if (preg_match('/^(\d+)\s*\+\s*(\d+)$/D', $s, $m) || preg_match('/^()\+\s*(\d+)$/D', $s, $m)) {
+                if ($kod !== 'ERKEK') {
+                    $son['hata'] = '«' . $g . '» bu alanda belirsiz — «+» yalnız Erkek alanında Şeritçi anlamına gelir; Kontrol Notu\'na yazın.';
+                    return $son;
+                }
+                $a = $m[1] === '' ? 0 : (int)$m[1]; $b = (int)$m[2];
+                if (strlen($m[1]) > 6 || strlen($m[2]) > 6 || $a > $maks || $b > $maks) {
+                    $son['hata'] = '«' . $g . '» çok büyük (her sayı en çok ' . $maks . ').';
+                    return $son;
+                }
+                $son['tam'] = $a; $son['seritci'] = $b;
+                if ($b > 0) $son['uyari'] = '«' . $g . '» → ' . $a . ' Erkek + ' . $b . ' Şeritçi yorumlandı.';
+                return $son;
+            }
+            if (preg_match('/^(\d+)[.,]50?$/D', $s, $m)) {
+                return pdks_fis_say_yarimli((int)$m[1], strlen($m[1]), $g, $maks, $son);
+            }
+        } elseif (is_float($x) && !is_nan($x) && !is_infinite($x) && $x >= 0 && abs($x * 2 - round($x * 2)) < 1e-9 && ((int)round($x * 2)) % 2 === 1) {
+            return pdks_fis_say_yarimli((int)floor($x), 1, pdks_fis_metin(str_replace('.', ',', rtrim(rtrim(sprintf('%.4F', $x), '0'), '.')), 40), $maks, $son);
+        }
+    }
+    $h = null; $n = pdks_fis_say($x, $maks, $h);
+    $son['tam'] = $n ?? 0; $son['hata'] = $h;
+    return $son;
+}
+
+/** «N,5» → N Tam + 1 Yarım (pdks_fis_say_parca yardımcısı; $maks tam ve toplam için ayrı ayrı denetlenir). */
+function pdks_fis_say_yarimli(int $tam, int $hane, string $g, int $maks, array $son): array
+{
+    if ($hane > 6 || $tam > $maks || $tam + 1 > $maks) {
+        $son['hata'] = '«' . $g . '» çok büyük (en çok ' . $maks . ').';
+        return $son;
+    }
+    $son['tam'] = $tam; $son['yarim'] = 1;
+    $son['uyari'] = '«' . $g . '» → ' . $tam . ' Tam + 1 Yarım yorumlandı.';
+    return $son;
 }
 
 /** Excel seri numarası → Y-m-d (1900 sistemi; ≥61 için kesin). */
@@ -465,16 +527,42 @@ function pdks_fis_normalize(array $oku, array $cavus, string $isletme = ''): arr
         }
 
         // Sayılar
-        $sy = [];
-        foreach (['KADIN' => 'kadin', 'ERKEK' => 'erkek', 'RAMPACI' => 'rampaci'] as $KOD => $on) {
-            $sy[$KOD] = ['tam' => $say($on . '_tam', 250) ?? 0, 'yarim' => $say($on . '_yarim', 250) ?? 0];
+        // v456: KADIN / ERKEK / SERITCI «Tam» hücresi pdks_fis_say_parca() ile okunur («33,5» → 33 Tam + 1 Yarım; YALNIZ Erkek'te
+        // «A+B» → A Erkek + B Şeritçi). RAMPACI eski davranış (tam sayı). Aynı kişi iki yoldan SAYILMAZ: «.5» ile aynı tipin Yarım
+        // sütunu birlikte doluysa ya da Erkek «+B» ile «Şeritçi Tam» birlikte doluysa HATA (tahmin/toplama yok).
+        $sy = []; $parca = [];
+        $kayit = pdks_gunluk_tip_kayit();
+        foreach (pdks_fis_tip_kodlari() as $KOD) {
+            $on = (string)($kayit[$KOD]['sutun'] ?? '');
+            if ($on === '' || pdks_fis_sutun($on . '_tam') === null) { $sy[$KOD] = ['tam' => 0, 'yarim' => 0]; continue; }
+            $yarimSut = $say($on . '_yarim', 250) ?? 0;
+            if (in_array($KOD, ['KADIN', 'ERKEK', 'SERITCI'], true)) {
+                $r = pdks_fis_say_parca($al($on . '_tam'), 250, $KOD);
+                if ($r['hata'] !== null) $hatalar[] = $H($on . '_tam', $r['hata']);
+                elseif ($r['uyari'] !== null) $uyarilar[] = $H($on . '_tam', $r['uyari']);
+                if ($r['hata'] === null && $r['yarim'] > 0 && $yarimSut > 0) {
+                    $hatalar[] = $H($on . '_tam', 'Ondalık («.5») yazımı ile «' . $baslik[$on . '_yarim'] . '» sütunu birlikte kullanılamaz (aynı kişi iki kez sayılırdı); yalnız birini yazın.');
+                }
+            } else {
+                $r = ['tam' => $say($on . '_tam', 250) ?? 0, 'yarim' => 0, 'seritci' => 0, 'hata' => null, 'uyari' => null];
+            }
+            $parca[$KOD] = $r;
+            $sy[$KOD] = ['tam' => $r['tam'], 'yarim' => $r['yarim'] + $yarimSut];
+        }
+        // Erkek «+B» → Şeritçi Tam'a eklenir; «Şeritçi Tam» sütunu da doluysa çift sayım olur → HATA.
+        $erkekPlus = (int)($parca['ERKEK']['seritci'] ?? 0);
+        if ($erkekPlus > 0 && isset($sy['SERITCI'])) {
+            $sTamDolu = (int)($parca['SERITCI']['tam'] ?? 0) + (int)($parca['SERITCI']['yarim'] ?? 0) > 0;
+            if ($sTamDolu) $hatalar[] = $H('erkek_tam', 'Şeritçi hem «Erkek Tam» içindeki «+' . $erkekPlus . '» yazımından hem de «' . $baslik['seritci_tam'] . '» sütunundan geliyor (çift sayım); yalnız birini kullanın.');
+            $sy['SERITCI']['tam'] += $erkekPlus;
+            if ($sy['SERITCI']['tam'] > 250) $hatalar[] = $H('seritci_tam', $sy['SERITCI']['tam'] . ' çok büyük (en çok 250).');
         }
         $kova = [];
         for ($k = 1; $k <= PDKS_FIS_FM_KOVA_MAX; $k++) $kova[$k] = $say('fm' . $k, 250) ?? 0;
         $fmToplam = $say('fm_toplam', 1000);
         $fmKisi = $say('fm_kisi', 250);
         $ft = pdks_fis_fm_tipi_coz($al('fm_tipi'));
-        if ($ft === false) { $hatalar[] = $H('fm_tipi', '"' . pdks_fis_metin_duz($hu['fm_tipi']['v'] ?? '', 40) . '" tanınmadı (Tümü, Kadın, Erkek, Rampacı, Erkek+Rampacı).'); $ft = null; }
+        if ($ft === false) { $hatalar[] = $H('fm_tipi', '"' . pdks_fis_metin_duz($hu['fm_tipi']['v'] ?? '', 40) . '" tanınmadı (Tümü, Kadın, Erkek, Rampacı, Şeritçi, Erkek+Rampacı, Erkek+Şeritçi).'); $ft = null; }
         $maksSv = defined('PDKS_SERVIS_MAX_ADET') ? (int)PDKS_SERVIS_MAX_ADET : 99;
         $servis = ['buyuk' => $say('servis_buyuk', $maksSv) ?? 0, 'kucuk' => $say('servis_kucuk', $maksSv) ?? 0];
 
@@ -485,12 +573,22 @@ function pdks_fis_normalize(array $oku, array $cavus, string $isletme = ''): arr
         if ($giris === null) $giris = PDKS_FIS_VARSAYILAN_GIRIS;
         $rev = $say('rev', 9) ?? 0;
 
+        // v456 — Ham Metin dedektörü (YALNIZ uyarı, engel DEĞİL, hiçbir şey yazmaz/düzeltmez): Ham Metin «Erkek A + B» gösteriyor ama
+        // «Erkek Yarım» dolu ve Şeritçi boş → yapay zekâ ESKİ komutla («B = Yarım») doldurmuş olabilir; yeni kuralda «+B» Şeritçi'dir.
+        $ham500 = pdks_fis_metin($al('ham'), 500);
+        $eskiSupheli = false;
+        if ($ham500 !== '' && preg_match('/erkek[^|;\n]{0,40}?(\d+)\s*[+＋]\s*(\d+)/iu', $ham500) === 1
+            && (int)($sy['ERKEK']['yarim'] ?? 0) > 0 && (int)($sy['SERITCI']['tam'] ?? 0) === 0) {
+            $eskiSupheli = true;
+            $uyarilar[] = $H('ham', 'Ham Metin «Erkek A + B» gösteriyor ama «' . $baslik['erkek_yarim'] . '» dolu — yeni kuralda «+B» Şeritçi\'dir («Erkek Tam» hücresine «A+B» yazılmalı). Yapay zekâyı yeni komutla yeniden çalıştırın; kayıt varsayılan olarak SEÇİLİ gelmez.');
+        }
+
         $fisler[] = [
             'satir' => $n, 'fis_no' => $fisNoN ?? $fisNo, 'fis_no_ham_sayi' => $fisNoHamSayi, 'tarih' => $tarih, 'isletme' => $isletme,
             'cavus' => $cv, 'say' => $sy, 'fm_kova' => $kova, 'fm_toplam' => $fmToplam, 'fm_kisi' => $fmKisi, 'fm_tipi' => $ft,
             'servis' => $servis, 'giris' => $giris, 'giris_varsayilan' => $girisVars, 'rev' => $rev,
-            'not' => pdks_fis_metin($al('not'), 500), 'ham' => pdks_fis_metin($al('ham'), 500), 'kontrol' => pdks_fis_metin($al('kontrol'), 500),
-            'cakisma_dosya' => false, 'cakisma_sira' => 0, 'hatalar' => $hatalar, 'uyarilar' => $uyarilar,
+            'not' => pdks_fis_metin($al('not'), 500), 'ham' => $ham500, 'kontrol' => pdks_fis_metin($al('kontrol'), 500),
+            'cakisma_dosya' => false, 'cakisma_sira' => 0, 'eski_yorum_supheli' => $eskiSupheli, 'hatalar' => $hatalar, 'uyarilar' => $uyarilar,
         ];
     }
     // Dosya düzeyi: aynı Fiş No
@@ -896,7 +994,8 @@ function pdks_fis_oku(string $yol): array
 /**
  * Kullanıcının fotoğraflarla birlikte dış yapay zekâya verdiği komut metni (TEK yer: Açıklama sayfası ve
  * yükleme sayfasındaki kutu bunu kullanır). "YORUM KURALLARI" bölümü sahibin cevaplarına göre güncellenecek
- * TEK yerdir (özellikle "12 + 1" ve "N kişi : M yarım"); kod mantığı bundan bağımsızdır.
+ * TEK yerdir. v456: «A+B» yalnız Erkek Tam'da (A Erkek + B Şeritçi), «N,5» Tam sütunlarında (N Tam + 1 Yarım); eski «12+1 = 12 Tam + 1 Yarım»
+ * kuralı İPTAL. «N kişi : M yarım» yorumsuz kalır (Kontrol Notu). Kod mantığı bundan bağımsızdır (pdks_fis_say_parca).
  */
 function pdks_fis_ocr_komutu(): string
 {
@@ -909,17 +1008,22 @@ BİÇİM KURALLARI
 3. "Fiş No": METİN olarak yaz, baştaki sıfırları koru (örn. 01410). Sayıya çevirme.
 4. "Tarih": GG.AA.YYYY biçiminde.
 5. Şablonda İşletme, Depo ve Çavuş sütunu YOKTUR (bunlar yükleme ekranında seçilir); bu bilgileri Excel'e yazma. Her dosyada yalnız TEK çavuşun fişleri olduğunu varsay; fotoğraflarda başka bir çavuşun fişi çıkarsa o satırın Kontrol Notu'na "farklı çavuş: <fişteki ad>" yaz.
-6. Sayı sütunlarına (Kadın/Erkek/Rampacı Tam-Yarım, FM..., Servis...) yalnız TAM SAYI yaz. "kişi" gibi sözcük, "+" işareti ya da formül KULLANMA. Sıfır ise boş bırakabilirsin.
+6. Sayı sütunlarına (Kadın/Erkek/Rampacı/Şeritçi Tam-Yarım, FM..., Servis...) yalnız TAM SAYI yaz. "kişi" gibi sözcük ya da formül KULLANMA. TEK İSTİSNA: "Kadın Tam", "Erkek Tam" ve "Şeritçi Tam" hücreleri aşağıdaki YORUM KURALLARI'ndaki A maddesine göre "A+B" ya da "N,5" biçiminde olabilir. Sıfır ise boş bırakabilirsin.
 7. Hiçbir hücrede formül kullanma; yalnız değer yaz.
 8. "Ham Metin": fişteki alanları AYNEN ve etiketleriyle yaz. Örnek: Bayan: 8 | Erkek: 12 + 1 | Toplam Mesai: 5 kişi 2 saat | Servis: 1 küçük | Palet: Rampa
 9. "Palet / Not": "İşlenen Palet Adedi" alanındaki yazıyı aynen yaz ("Rampa", "Döküme araba" gibi).
 10. "Giriş Saati" ve "Revizyon": fişte yoksa BOŞ bırak.
 
 YORUM KURALLARI
-A. Bayan sayısı -> "Kadın Tam". Erkek sayısı -> "Erkek Tam". Alanda "A + B" yazıyorsa A -> Tam, B -> Yarım ("Erkek Yarım").
+A. Bayan sayısı -> "Kadın Tam". Erkek sayısı -> "Erkek Tam". İSTİSNALAR (başka hiçbir "+" ya da ondalığı yorumlama):
+   (1) Erkek alanında "A + B" ya da "+ B" yazıyorsa "Erkek Tam" hücresine OLDUĞU GİBİ yaz ("12+1" / "+2"; hücreyi kendin bölme, B'yi "Yarım" sütununa YAZMA) — sistem A'yı Erkek, B'yi Şeritçi sayar. Fişte Şeritçi için AYRI bir sayı yazıyorsa onu "Şeritçi Tam"a yaz (aynı fişte "Erkek Tam"daki "+B" ile "Şeritçi Tam"ı birlikte doldurma; çift sayılır).
+   (2) Bayan ya da Erkek alanında ondalık ".5" varsa (örn. "33,5") hücreye OLDUĞU GİBİ yaz — sistem 33 Tam + 1 Yarım sayar. Aynı kişiyi ayrıca "Yarım" sütununa yazma.
+   (3) Bayan alanında "+" ya da ".5" dışında bir ondalık varsa HÜCREYİ BOŞ BIRAK, Ham Metin'e aynen yaz ve Kontrol Notu'na yaz.
+   "Yarım" sütunlarını yalnız fişte AÇIKÇA "yarım" yazıyorsa doldur.
 B. Rampacı için fişte ayrı bir sayı yoksa Rampacı sütunlarını BOŞ bırak ve Kontrol Notu'na "Rampacı belirtilmemiş" yaz.
 C. "Toplam Mesai" (fazla mesai) alanı:
-   - Yalnız toplam saat varsa ("25 saat mesai tır çıktı") -> "Toplam FM Saati" = 25. Kişi sayısı yazılmamışsa "FM Kişi Sayısı" boş.
+   - Yalnız toplam saat varsa ("25 saat mesai tır çıktı") -> "Toplam FM Saati" = 25 ve FM kova sütunlarını (FM 1..6 Sa) BOŞ bırak. Fazla mesai ücretleri sabit olduğundan sistem saati kişilere kendisi dağıtır. Fişte fazla mesai yapan kişi sayısı da yazıyorsa "FM Kişi Sayısı"na yaz; yazmıyorsa boş bırak ve Kontrol Notu'na "FM kişi sayısı yok" yaz.
+   - Fazla mesaiyi yalnız Şeritçiler yapıyorsa "FM Tipi" = Şeritçi (Erkek ve Şeritçi birlikte yapıyorsa "Erkek+Şeritçi"); aksi hâlde "FM Tipi"ni boş bırak.
    - "N kişi X saat" ise (örn. "5 kişi 2 saat") -> "FM X Sa (Kişi)" sütununa N.
    - "3 kişi : 1 yarım", "2 kişi : 2 yarım" gibi anlamı belirsiz yazımlarda HİÇBİR FM/Yarım sütununu doldurma; ham metne aynen yaz ve Kontrol Notu'na "Toplam Mesai yorumlanamadı" yaz.
    - Fişte fazla mesai yoksa FM sütunları boş.
@@ -953,7 +1057,7 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
         $harf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
         $metin($ws, $harf . '1', $c['baslik']);
         $ws->getColumnDimension($harf)->setWidth((float)$c['genislik']);
-        $biçim = match ($c['tip']) { 'metin', 'liste' => '@', 'tarih' => 'dd.mm.yyyy', 'saat' => 'hh:mm', default => '0' };
+        $biçim = match ($c['tip']) { 'metin', 'liste' => '@', 'tarih' => 'dd.mm.yyyy', 'saat' => 'hh:mm', 'tam_yorum' => 'General', default => '0' };
         $ws->getStyle("{$harf}2:{$harf}{$son}")->getNumberFormat()->setFormatCode($biçim);
     }
     $ws->getStyle("A1:{$sonHarf}1")->applyFromArray([
@@ -984,7 +1088,8 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
                ->setAllowBlank(true)->setShowDropDown(true)->setShowErrorMessage(true)->setErrorStyle(DataValidation::STYLE_STOP)
                ->setErrorTitle('FM Tipi')->setError('Listeden seçin: ' . implode(', ', $c['liste']) . '.');
             $dvKur($harf, $dv);
-        } elseif (in_array($c['anahtar'], ['giris', 'fis_no'], true)) {
+        } elseif (in_array($c['anahtar'], ['giris', 'fis_no'], true) || $c['tip'] === 'tam_yorum') {
+            // tam_yorum («12+1», «33,5» metin olarak yazılabilsin): STOP doğrulama KONMAZ, yalnız bilgi balonu. Asıl güvenlik sunucu okumasıdır.
             $dv->setType(DataValidation::TYPE_NONE)->setShowInputMessage(true)->setPromptTitle($c['baslik'])->setPrompt($c['ipucu']);
             $dvKur($harf, $dv);
         }
@@ -1025,6 +1130,9 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     foreach ([
         'Giriş saati boşsa 08:00 alınır. Tam gün çıkışı = giriş + çavuşun normal süresi (genelde 9 sa → 17:00). N saat fazla mesai = Tam çıkışından N saat sonra. Yarım gün = Tam süresinin yarısı (9 sa → 4 sa 30 dk).',
         'FM'.'\'ye giren kişiler Tam kişilerden sayılır: Erkek Tam 12, «FM 2 Sa (Kişi)» 5 → 7 kişi Tam, 5 kişi Tam + 2 saat fazla mesai. Yarım gün çalışanlara FM verilmez.',
+        '«Erkek Tam» hücresine «12+1» yazılırsa 12 Erkek + 1 Şeritçi sayılır («+2» → 0 Erkek + 2 Şeritçi). «+» YALNIZ Erkek Tam\'da geçerlidir; Kadın, Rampacı ve Şeritçi alanında «+» hata verir (tahmin yapılmaz). Eski «12+1 = 12 Tam + 1 Yarım» kuralı KALKTI: fişte Erkek Yarım istiyorsanız «Erkek Yarım» sütununa yazın.',
+        '«Kadın Tam», «Erkek Tam» ve «Şeritçi Tam» hücresinde ondalık «.5» yazılırsa (örn. «33,5») 33 Tam + 1 Yarım sayılır. Başka ondalık hata verir; aynı kişiyi hem «33,5» hem «Yarım» sütununa yazmayın (hata). «Erkek Tam»daki «+B» ile «Şeritçi Tam» birlikte doluysa da hata verilir (çift sayım).',
+        'Şeritçi: «Şeritçi Tam» / «Şeritçi Yarım» sütunları ya da Erkek hücresindeki «A+B». Şeritçi, «FM Tipi» boş / «Tümü» iken fazla mesaiye GİRMEZ; fazla mesaiyi şeritçiler yapıyorsa «FM Tipi» = Şeritçi ya da Erkek+Şeritçi yazın. Fişte yalnız toplam fazla mesai saati varsa «Toplam FM Saati» sütununu kullanın (kova sütunları boş); FM fiyatı seçilen tipler arasında farklıysa toplam saat yolu kapalıdır.',
         'Fazla mesai iki biçimde girilir (YALNIZ BİRİNİ seçin): «FM n Sa (Kişi)» sütunları (o kadar saat yapan kişi sayısı) ya da «Toplam FM Saati» (+ isteğe bağlı «FM Kişi Sayısı»): sistem saatleri kişilere belirli bir kuralla (rastgele değil) dağıtır. FM fiyatları tipler arasında farklıysa toplam saat yolu KAPALIDIR (kova sütunlarını doldurun).',
         'Yarım gün kayıtları «Yarım» olarak yazılır (önizlemedeki onay kutusu ile). Fazla mesai önizlemedeki onay kutusuyla onaylı yazılır.',
         'Servis Büyük/Küçük adetleri mesaiye yazılır; mesaide daha önce girilmiş servis varsa yalnız eksik fark eklenir.',
@@ -1057,11 +1165,13 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
     ]);
     $ork->getRowDimension(1)->setRowHeight(34);
     $ornek = [
-        ['fis_no' => 'ORNEK-1', 'tarih' => '01.10.2026', 'kadin_tam' => 8, 'erkek_tam' => 12, 'erkek_yarim' => 1,
+        // «12+1» METİN olarak yazılır (Erkek Tam'da A Erkek + B Şeritçi); «33,5» → 33 Tam + 1 Yarım
+        ['fis_no' => 'ORNEK-1', 'tarih' => '01.10.2026', 'kadin_tam' => 8, 'erkek_tam' => '12+1',
          'fm2' => 5, 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '08:00', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1 | Toplam Mesai: 5 kişi 2 saat | Servis: 1 küçük | Palet: Rampa'],
-        ['fis_no' => 'ORNEK-2', 'tarih' => '01.10.2026', 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'rampaci_yarim' => 1,
-         'fm_toplam' => 25, 'servis_buyuk' => 1, 'ham' => 'Bayan 8 | Erkek 12 | Rampacı 2 + 1 | Toplam Mesai: 25 saat mesai tır çıktı | Servis: 1 büyük', 'kontrol' => 'Rampacı sayısı fişte yok, kullanıcı ekledi'],
+        ['fis_no' => 'ORNEK-2', 'tarih' => '01.10.2026', 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'seritci_tam' => 3, 'seritci_yarim' => 1,
+         'fm_toplam' => 25, 'fm_tipi' => 'Erkek', 'servis_buyuk' => 1, 'ham' => 'Bayan 8 | Erkek 12 | Rampacı 2 | Şeritçi 3 + 1 yarım | Toplam Mesai: 25 saat mesai tır çıktı | Servis: 1 büyük', 'kontrol' => 'FM kişi sayısı yok'],
         ['fis_no' => 'ORNEK-3', 'tarih' => '01.10.2026', 'kadin_tam' => 5, 'giris' => '09:00'],
+        ['fis_no' => 'ORNEK-4', 'tarih' => '01.10.2026', 'kadin_tam' => '33,5', 'erkek_tam' => 4, 'ham' => 'Bayan 33,5 | Erkek 4'],
     ];
     foreach ($ornek as $ri => $o) {
         $satir = 2 + $ri;
@@ -1073,8 +1183,8 @@ function pdks_fis_sablon_uret(PDO $pdo): Spreadsheet
             else $metin($ork, $h, $v);
         }
     }
-    $metin($ork, 'A6', 'Bu satırlar yalnız örnektir; «Fişler» sayfasına KOPYALAMAYIN (ORNEK- ile başlayan Fiş No reddedilir).');
-    $ork->getStyle('A6')->getFont()->setItalic(true)->getColor()->setARGB(XLSX_RENK_SOLUK);
+    $metin($ork, 'A7', 'Bu satırlar yalnız örnektir; «Fişler» sayfasına KOPYALAMAYIN (ORNEK- ile başlayan Fiş No reddedilir).');
+    $ork->getStyle('A7')->getFont()->setItalic(true)->getColor()->setARGB(XLSX_RENK_SOLUK);
 
     $ss->setActiveSheetIndex(0);
     return $ss;
@@ -1287,10 +1397,13 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
           'ham' => (string)($fis['ham'] ?? ''), 'kontrol' => (string)($fis['kontrol'] ?? ''), 'durum' => 'hata', 'hatalar' => [], 'uyarilar' => array_values($fis['uyarilar'] ?? []),
           'engeller' => [], 'plan' => null, 'mevcut' => null, 'servis' => ['hedef' => ['buyuk' => 0, 'kucuk' => 0], 'yazilacak' => ['buyuk' => 0, 'kucuk' => 0]],
           'kisi' => 0, 'hash' => '', 'istek' => null, 'secilebilir' => false, 'varsayilan_secili' => false, 'isletme_uyusmaz' => false, 'yazma' => null];
-    $bitir = function (string $durum) use (&$m): array {
+    $bitir = function (string $durum) use (&$m, $fis): array {
         $m['durum'] = $durum;
         $m['secilebilir'] = !in_array($durum, ['hata', 'zaten'], true);
         $m['varsayilan_secili'] = in_array($durum, ['hazir', 'uyari', 'devam'], true);
+        // v456: eski yorum şüphesi (Ham Metin «Erkek A + B» ama Yarım dolu) → kullanıcı bilinçli seçsin (uyarı normalize'da yazıldı).
+        $m['eski_yorum_supheli'] = !empty($fis['eski_yorum_supheli']);
+        if ($m['eski_yorum_supheli']) $m['varsayilan_secili'] = false;
         $m['uyarilar'] = array_values(array_unique($m['uyarilar']));
         return $m;
     };

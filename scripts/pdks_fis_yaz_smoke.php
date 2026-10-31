@@ -583,6 +583,60 @@ ok('N4b) hakediş hesaplanır: 2×1000 + 3×1800 = 7400.00', !empty($hN['ok']) &
 $mN2 = onizle1(fisYap(['SERITCI' => [1, 0]], ['cavus' => $cN, 'fis_no' => 'N-002', 'tarih' => $dun3]), $sec);
 ok('N5) fiyat tanımlıyken uyarı YOK', !hVar($mN2, 'geçerli fiyat YOK'), j($mN2['uyarilar']));
 
+echo "\n=== O. v456 Yeni yorum kuralları: normalize → önizleme → yaz → hakediş (Erkek «12+1» → Erkek + Şeritçi; «33,5» → Tam + Yarım) ===\n";
+function oku1(array $kv, int $cid, string $tarihIso): array {
+    $hu = ['tarih' => ['v' => date('d.m.Y', strtotime($tarihIso)), 't' => 's']];
+    foreach ($kv as $a => $v) $hu[$a] = ['v' => $v, 't' => is_int($v) ? 'n' : 's'];
+    $r = pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => [['satir' => 2, 'hucreler' => $hu]], 'bilinmeyen' => []], ['id' => $cid, 'code' => 'X', 'name' => 'X', 'is_active' => 1], 'Depo A');
+    return $r['fisler'][0];
+}
+$cO = yeniCavus('Çavuş O1');
+fiyatKur_tek($cO, $seritci, '1800');
+$fO = oku1(['fis_no' => 'O-001', 'erkek_tam' => '12+1'], $cO, $dun3);
+ok('O1) normalize: Erkek «12+1» → Erkek 12 Tam + Şeritçi 1 Tam, hata yok', $fO['hatalar'] === [] && $fO['say']['ERKEK'] === ['tam' => 12, 'yarim' => 0] && $fO['say']['SERITCI'] === ['tam' => 1, 'yarim' => 0], j([$fO['hatalar'], $fO['say']]));
+$mO = onizle1($fO, $sec);
+ok('O2) önizleme: yorum uyarısı ile "uyari", plan Erkek tam×12 + Şeritçi tam×1, yazılabilir', $mO['durum'] === 'uyari' && $mO['secilebilir'] && $mO['varsayilan_secili'] && !$mO['eski_yorum_supheli'] && hVar($mO, '12 Erkek + 1 Şeritçi')
+    && array_map(fn($g) => $g['kod'] . ':' . $g['profil'] . '×' . $g['adet'], $mO['plan']['gruplar']) === ['ERKEK:tam×12', 'SERITCI:tam×1'], j([$mO['durum'], $mO['uyarilar'], $mO['plan']['gruplar'] ?? null]));
+$rO = yaz1($fO, $sec);
+ok('O3) yazıldı: 13 kişi', $rO['durum'] === 'yazildi' && $rO['yazilan']['kisi'] === 13, j($rO));
+$sidO = (int)$rO['session_id'];
+$tipSay = db()->query("SELECT worker_type_name_snapshot AS n, COUNT(*) AS c FROM daily_worker_work_periods WHERE session_id=$sidO AND is_voided=0 GROUP BY worker_type_name_snapshot ORDER BY n")->fetchAll(PDO::FETCH_KEY_PAIR);
+ok('O4) DB: 12 Erkek + 1 Şeritçi dönemi (Yarım YOK)', $tipSay === ['Erkek' => 12, 'Şeritçi' => 1], j($tipSay));
+ok('O4b) Yarım onayı yazılmadı (eski kural «+1 Yarım» İPTAL)', (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=$sidO AND approved_attendance_class='yarim'")->fetchColumn() === 0);
+$hO = pdks_faz8b_hakedis_hesapla($sidO, 1, db());
+ok('O5) hakediş: 12×1500 (Erkek) + 1×1800 (Şeritçi) = 19800.00', !empty($hO['ok']) && $hO['total_amount'] === '19800.00', j($hO));
+
+$cO2 = yeniCavus('Çavuş O2');
+$fO2 = oku1(['fis_no' => 'O-002', 'kadin_tam' => '33,5'], $cO2, $dun3);
+$mO2 = onizle1($fO2, $sec);
+ok('O6) «33,5» Kadın → plan Kadın tam×33 + yarim×1 (toplam 34 kişi)', $mO2['hatalar'] === [] && array_map(fn($g) => $g['kod'] . ':' . $g['profil'] . '×' . $g['adet'], $mO2['plan']['gruplar']) === ['KADIN:tam×33', 'KADIN:yarim×1'] && $mO2['kisi'] === 34, j([$mO2['hatalar'], $mO2['plan']['gruplar'] ?? null]));
+$rO2 = yaz1($fO2, $sec);
+$sidO2 = (int)$rO2['session_id'];
+ok('O7) yazıldı: 34 Kadın dönemi, 1 Yarım kararı', $rO2['durum'] === 'yazildi' && $rO2['yazilan']['kisi'] === 34 && $rO2['yazilan']['yarim'] === 1 && (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=$sidO2 AND approved_attendance_class='yarim'")->fetchColumn() === 1, j($rO2));
+
+$fO3 = oku1(['fis_no' => 'O-003', 'kadin_tam' => '12+1'], $cO2, date('Y-m-d', strtotime($dun3 . ' -1 day')));
+$mO3 = onizle1($fO3, $sec);
+ok('O8) Kadın «12+1» → HATA, hiçbir şey yazılmaz (önizleme hata)', $mO3['durum'] === 'hata' && !$mO3['secilebilir'] && hVar($mO3, 'yalnız Erkek alanında'), j($mO3['hatalar']));
+
+// Eski yorum şüphesi: Ham Metin «Erkek 12 + 1» ama Erkek Yarım dolu → UYARI + varsayılan SEÇİLİ DEĞİL (engel değil, yazılabilir)
+$fO4 = oku1(['fis_no' => 'O-004', 'erkek_tam' => 12, 'erkek_yarim' => 1, 'ham' => 'Bayan - | Erkek 12 + 1'], $cO2, date('Y-m-d', strtotime($dun3 . ' -2 day')));
+$mO4 = onizle1($fO4, $sec);
+ok('O9) eski yorum şüphesi: durum uyari, secilebilir, varsayılan SEÇİLİ DEĞİL, uyarı Ham Metin\'i anar', in_array($mO4['durum'], ['uyari'], true) && $mO4['secilebilir'] && !$mO4['varsayilan_secili'] && $mO4['eski_yorum_supheli'] === true && hVar($mO4, 'Ham Metin'), j([$mO4['durum'], $mO4['varsayilan_secili'], $mO4['uyarilar']]));
+$fO5 = oku1(['fis_no' => 'O-005', 'erkek_tam' => 12, 'ham' => 'Erkek 12'], $cO2, date('Y-m-d', strtotime($dun3 . ' -3 day')));
+$mO5 = onizle1($fO5, $sec);
+ok('O10) şüphe yoksa varsayılan seçili ve bayrak false', $mO5['varsayilan_secili'] && $mO5['eski_yorum_supheli'] === false, j($mO5['uyarilar']));
+
+// Toplam FM saati yolu (fiyatlar nötr) Erkek + Şeritçi karışık fişte: Şeritçi FM'e varsayılan GİRMEZ
+$cO3 = yeniCavus('Çavuş O3');
+fiyatKur_tek($cO3, $seritci, '1500');
+$fO6 = oku1(['fis_no' => 'O-006', 'erkek_tam' => '12+3', 'fm_toplam' => 6, 'fm_kisi' => 3], $cO3, $dun3);
+$mO6 = onizle1($fO6, $sec);
+$fmD = $mO6['plan']['fm']['tip_dagilim'] ?? [];
+ok('O11) Toplam FM saati: «Tümü» havuzunda Şeritçi YOK → FM yalnız Erkek\'e dağılır (3 kişi, 6 sa)', $mO6['hatalar'] === [] && array_keys($fmD) === ['ERKEK'] && array_sum(array_map(fn($sk) => array_sum(array_keys($sk)) > 0 ? array_sum(array_map(fn($sa, $n) => $sa * $n, array_keys($sk), $sk)) : 0, $fmD)) === 6, j([$mO6['hatalar'], $fmD]));
+$fO7 = oku1(['fis_no' => 'O-007', 'erkek_tam' => '12+3', 'fm_toplam' => 6, 'fm_kisi' => 3, 'fm_tipi' => 'Şeritçi'], $cO3, date('Y-m-d', strtotime($dun3 . ' -1 day')));
+$mO7 = onizle1($fO7, $sec);
+ok('O12) «FM Tipi = Şeritçi» ise FM Şeritçi\'ye dağılır', $mO7['hatalar'] === [] && array_keys($mO7['plan']['fm']['tip_dagilim'] ?? []) === ['SERITCI'], j([$mO7['hatalar'], $mO7['plan']['fm']['tip_dagilim'] ?? null]));
+
 echo "\n=== M. Statik güvenceler ===\n";
 $fk = file_get_contents($ROOT . '/config/pdks_fis.php');
 ok('M1) pdks_fis.php toplu_ekle / servis_ekle / degerlendirme_kaydet / donemleri_siniflandir çağırır', str_contains($fk, 'pdks_faz8j_toplu_ekle(') && str_contains($fk, 'pdks_servis_ekle(') && str_contains($fk, 'pdks_faz8b_degerlendirme_kaydet(') && str_contains($fk, 'pdks_faz8b_donemleri_siniflandir('));

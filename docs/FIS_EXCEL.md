@@ -22,19 +22,27 @@ sütun sırası bozulsa da çalışır. Zorunlu: Fiş No, Tarih. **İşletme, De
 ## Kurallar (özet)
 - Yalnız bugünden **önceki** günler · ≤150 fiş · ≤2 MB · yalnız .xlsx (makro / dış bağlantı içeren dosya reddedilir).
 - Giriş boşsa 08:00. Tam çıkış = giriş + çavuşun o günkü normal süresi (tarihli süre dönemi / fiyat dönemi saatleri sınıflandırıcıdan çözülür); FM k saat = FM başlangıcı + k saat; Yarım = Tam'ın yarısı.
+- **Yorum kuralları (v456):** «Erkek Tam» hücresinde `A+B` / `+B` (örn. `12+1`, `+2`) = **A Erkek + B Şeritçi** (Şeritçi tam gün); «+» **yalnız Erkek Tam'da** geçerlidir — Kadın / Rampacı / Şeritçi alanında «+» HATA'dır (tahmin yok, Kontrol Notu'na yazılır). Kadın / Erkek / Şeritçi **Tam** hücresinde ondalık `.5` (örn. `33,5`) = **33 Tam + 1 Yarım**; `.5` dışı ondalık HATA, Yarım sütununa yazılan ondalık HATA, Rampacı'da ondalık HATA. Aynı kişi iki yoldan sayılmaz: `33,5` ile aynı tipin «Yarım» sütunu birlikte doluysa ya da Erkek `+B` ile «Şeritçi Tam» birlikte doluysa HATA.
+  **Eski «12 + 1 = 12 Tam + 1 Yarım» kuralı İPTAL EDİLDİ (v456, sahip kararı)** — fişte Erkek Yarım istiyorsanız «Erkek Yarım» sütununa yazın. Saf ayrıştırıcı: `pdks_fis_say_parca()`.
+- **Ham Metin uyarısı (v456):** Ham Metin «Erkek A + B» gösteriyor ama «Erkek Yarım» dolu ve Şeritçi 0 ise (yapay zekâ eski komutla doldurmuş olabilir) önizlemede UYARI çıkar ve fiş varsayılan olarak SEÇİLİ gelmez (engel değil; otomatik düzeltme YOK). Çözüm: yapay zekâyı yeni komutla yeniden çalıştırın.
+- **Şeritçi (v456):** «Şeritçi Tam» / «Şeritçi Yarım» sütunları (şablon sürümü 2; eski 24 sütunlu şablon hâlâ okunur). «FM Tipi» listesine `Şeritçi` ve `Erkek+Şeritçi` eklendi; Şeritçi «Tümü»/boş FM Tipi'ne GİRMEZ.
+- Fişte **yalnız toplam fazla mesai saati** varsa «Toplam FM Saati» yolu kullanılır (kova sütunları boş; OCR komutu bunu açıkça söyler); FM fiyatları seçilen tipler arasında farklıysa toplam saat yolu kapalıdır (fail-closed).
 - FM'ye girenler Tam kişilerden sayılır; Yarım'a FM verilmez. FM: kova sütunları (FM 1..6 Sa kişi) **ya da** «Toplam FM Saati» (+ ops. «FM Kişi Sayısı»; sabit tutarlı FM fiyatında zorunlu).
   Toplam saat dağıtımı deterministiktir (rastgele değil); FM fiyatları tipler arasında farklıysa kapalıdır → kova sütunları ya da tek «FM Tipi».
 - Mesaide aktif kayıt varsa fiş durur («Mevcut kayıtlara EK yaz»). Kesin hakedişte hiçbir şey yazılmaz.
 - Sözleşme: istek kimliği = depo + fiş no + revizyon (tarih/çavuş hariç).
 
 ## OCR komutu bakımı
-Komut metni `pdks_fis_ocr_komutu()` içindedir (Açıklama sayfası ve yükleme sayfasındaki kutu aynı dizeyi kullanır). "YORUM KURALLARI" bölümü ("12 + 1", "N kişi : M yarım" yorumu)
+Komut metni `pdks_fis_ocr_komutu()` içindedir (Açıklama sayfası ve yükleme sayfasındaki kutu aynı dizeyi kullanır). "YORUM KURALLARI" bölümü ("A+B" = Erkek + Şeritçi, ".5" = Tam + Yarım; "N kişi : M yarım" yorumsuz kalır → Kontrol Notu)
 sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağımsızdır.
 
 ## Hata mesajı sözlüğü (seçme)
 | Mesaj | Anlamı |
 |---|---|
-| `Satır n, «Başlık»: "12 + 1" tek sayı değil` | Tam ve Yarım sayılarını ayrı sütunlara yazın |
+| `Satır n, «Başlık»: "12 + 1" tek sayı değil` | Rampacı / Yarım sütununda birden çok sayı — ayrı sütunlara yazın |
+| `«12+1» bu alanda belirsiz — «+» yalnız Erkek alanında Şeritçi anlamına gelir` | Kadın / Şeritçi alanında «+» yorumlanmaz; Kontrol Notu'na yazın |
+| `Ondalık («.5») yazımı ile «… Yarım» sütunu birlikte kullanılamaz` | Aynı kişi iki kez sayılırdı — yalnız birini yazın |
+| `Şeritçi hem «Erkek Tam» içindeki «+N» … çift sayım` | «+N» ya da «Şeritçi Tam» — yalnız birini kullanın |
 | `Çavuş seçilmedi` | Yükleme sayfasında «Çavuş» alanını seçin |
 | `bugün veya gelecek tarihli fişler desteklenmez` | Yalnız geçmiş günler |
 | `Toplam FM dağıtımı yapılamaz` | FM fiyatı nötr değil/bilinmiyor → kova sütunları |
@@ -49,7 +57,7 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 
 ## v455 — Şeritçi tipi (W1)
 - Dördüncü sabit sistem işçi tipi: **Şeritçi** (`SERITCI`; Rampacı emsali, yalnız `worker_types` veri satırı — şema yok). Kiosk, Toplu İşlem, Çavuş Ücretleri ve raporlar tip kayıt defterinden (`pdks_gunluk_tip_kayit()`) gelir.
-- Fiş Excel'inde Şeritçi için **sütun yoktur** (W2'de gelecek); sert-kodlu tip listesi artık kayıt defterine bağlıdır (`pdks_fis_tip_kodlari()`).
+- (v455'te Fiş Excel'inde Şeritçi sütunu yoktu; v456'da eklendi, yukarıya bakın.) sert-kodlu tip listesi artık kayıt defterine bağlıdır (`pdks_fis_tip_kodlari()`).
 - **FM havuzu:** «Tümü» / boş FM Tipi Şeritçi'yi **kapsamaz** (`pdks_fis_fm_varsayilan_kodlar()`); Şeritçi FM'ye yalnız «FM Tipi» hücresinde `Şeritçi` / `Erkek Şeritçi` yazılırsa girer.
 - **Fiyatsız tip uyarısı:** önizlemede bir tipin o tarihte geçerli fiyatı yoksa ««Şeritçi» için gg.aa.yyyy tarihinde geçerli fiyat YOK — kayıt yazılır, fiyat girilene dek hakediş hesaplanamaz.» uyarısı çıkar (engel değil; hakediş fail-closed durur).
 - **Geçmiş tarihli fiyat:** Şeritçi için önce en eski fiyatı geçmiş tarihle girin, sonra güncel fiyatı yeni tarihle ekleyin. Yanlış tarihle açılmış ilk dönem Çavuş Ücretleri › Fiyat Geçmişi › «⏪ Başlangıcı geriye çek» ile (yalnız yönetici, gerekçeli, kesin hakedişli satırı olan aralıkta reddedilir) düzeltilir; etkilenen taslak hakedişler yeniden hesaba işaretlenir.
