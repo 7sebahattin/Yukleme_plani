@@ -51,7 +51,7 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
             <details class="qc-row-settings" data-qc-settings="<?= h($qc_code) ?>">
                 <summary aria-label="<?= h((string)$qc_meta['label']) ?> ayarları">Ayar</summary>
                 <div class="qc-row-fields">
-                    <label for="qc-unit-<?= h($qc_code) ?>">Birim<select id="qc-unit-<?= h($qc_code) ?>" data-qc-code="<?= h($qc_code) ?>" data-qc-field="unit" aria-label="<?= h((string)$qc_meta['label']) ?> birimi" <?= !$can_write ? 'disabled' : '' ?>><?php foreach ($qc_units as $qc_key=>$qc_label): ?><option value="<?= h($qc_key) ?>" <?= ($qc_item['unit'] ?? '') === $qc_key ? 'selected' : '' ?>><?= h($qc_label) ?></option><?php endforeach; ?></select></label>
+                    <label for="qc-unit-<?= h($qc_code) ?>">Birim<span class="qc-unit-select"><select id="qc-unit-<?= h($qc_code) ?>" data-qc-code="<?= h($qc_code) ?>" data-qc-field="unit" aria-label="<?= h((string)$qc_meta['label']) ?> birimi" <?= !$can_write ? 'disabled' : '' ?>><?php foreach ($qc_units as $qc_key=>$qc_label): ?><option value="<?= h($qc_key) ?>" <?= ($qc_item['unit'] ?? '') === $qc_key ? 'selected' : '' ?>><?= h($qc_label) ?></option><?php endforeach; ?></select></span></label>
                     <label for="qc-qty-<?= h($qc_code) ?>">Miktar<input id="qc-qty-<?= h($qc_code) ?>" data-qc-code="<?= h($qc_code) ?>" data-qc-field="qty" type="text" inputmode="decimal" aria-label="<?= h((string)$qc_meta['label']) ?> miktarı" value="<?= h($qc_value($qc_item['qty'] ?? 0)) ?>" autocomplete="off" <?= !$can_write || $qc_fixed ? 'disabled' : '' ?>></label>
                     <label class="qc-price-field" for="qc-settings-price-<?= h($qc_code) ?>">Birim fiyat (TL)<input id="qc-settings-price-<?= h($qc_code) ?>" data-qc-code="<?= h($qc_code) ?>" data-qc-field="unit_price" data-qc-price="settings" type="text" inputmode="decimal" aria-label="<?= h((string)$qc_meta['label']) ?> Ayar birim fiyatı (TL)" value="<?= h($qc_value($qc_item['unit_price'] ?? 0)) ?>" autocomplete="off" <?= !$can_write ? 'disabled' : '' ?>></label>
                 </div>
@@ -65,7 +65,6 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
         <button id="qc-add-item" class="btn qc-add-item" type="button">Yeni kalem ekle</button>
         <p id="qc-custom-limit" class="qc-hint" hidden>En fazla kırk yeni kalem eklenebilir.</p>
         <?php endif; ?>
-        <p class="qc-hint">Malzeme; kasa, viyol, koli, etiket, palet ve diğer ambalajların ortalama maliyetidir. İşçilik ve diğer giderler kendi satırlarında hesaplanır.</p>
     </section>
 
     <section class="qc-panel qc-breakdown" aria-labelledby="qc-summary-heading"><h2 id="qc-summary-heading">Maliyet özeti</h2><dl>

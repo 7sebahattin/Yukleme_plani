@@ -159,7 +159,9 @@ if (is_admin()) {
 // nav_ptak_gorunur(): Personel Takibi kartı bu bölümün içinde — yalnız PDKS
 // izni olan kullanıcı (ör. yalnız attendance.foremen) bölüm kapalı olduğu
 // için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
-$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read') || nav_ptak_gorunur() || can_siparis('read') || can_mail('read');
+$_ops_show  = is_admin() || can('records.read') || can('records.write') || can('beyan.read')
+    || can('kantar.read') || can('reports.read') || can('stok.read') || can('hesap.read')
+    || nav_ptak_gorunur() || can_siparis('read') || can_mail('read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -257,6 +259,10 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
         <div class="home-card-icon" style="background:#fdf0dc">📦</div>
         <div class="home-card-title">OGL Siparişler</div>
     </a>
+    <a href="urun_siparis.php" class="home-card">
+        <div class="home-card-icon" style="background:#fff0e2">🛒</div>
+        <div class="home-card-title">Siparişler</div>
+    </a>
 <?php endif; ?>
 
     <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
@@ -328,6 +334,13 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
+<?php if (is_admin()): ?>
+    <a href="hizli_maliyet.php" class="home-card">
+        <div class="home-card-icon" style="background:transparent"><img src="assets/nav-icons/qcost.svg?v=<?= (int)@filemtime(__DIR__ . '/assets/nav-icons/qcost.svg') ?>" width="64" height="64" alt="" aria-hidden="true"></div>
+        <div class="home-card-title">Hızlı Maliyet</div>
+    </a>
+<?php endif; ?>
+
 <?php if (can('stok.read')): ?>
     <a href="malzeme_stok.php" class="home-card">
         <div class="home-card-icon" style="background:#fdf2f8">📦</div>
@@ -381,7 +394,7 @@ if (nav_ptak_gorunur()):
 <?php if ($_ynt_show): ?>
 <div class="home-section-title">Yönetim</div>
 
-<?php if (can('defs.read')): ?>
+<?php if (can('defs.read') || is_admin()): ?>
     <a href="definitions.php" class="home-card">
         <div class="home-card-icon" style="background:#fcf2dc">⚙️</div>
         <div class="home-card-title">Tanımlar</div>
@@ -391,7 +404,7 @@ if (nav_ptak_gorunur()):
     </a>
 <?php endif; ?>
 
-<?php if (can('users.admin')): ?>
+<?php if (can('users.admin') || is_admin()): ?>
     <a href="users.php" class="home-card">
         <div class="home-card-icon" style="background:#e8eaf6">👥</div>
         <div class="home-card-title">Kullanıcılar</div>
@@ -402,6 +415,10 @@ if (nav_ptak_gorunur()):
 <?php endif; ?>
 
 <?php if (is_admin()): ?>
+    <a href="roles.php" class="home-card">
+        <div class="home-card-icon" style="background:#e7eefc">🛡️</div>
+        <div class="home-card-title">Roller</div>
+    </a>
     <a href="audit.php" class="home-card">
         <div class="home-card-icon" style="background:#fce4ec">🧾</div>
         <div class="home-card-title">İşlem Geçmişi</div>
@@ -420,6 +437,18 @@ if (nav_ptak_gorunur()):
          tombstone. -->
 <?php endif; ?>
 
+<?php endif; ?>
+
+<?php if (is_admin()): ?>
+<?php foreach (nav_muhasebe_gruplari() as $__home_group): ?>
+<div class="home-section-title"><?= h($__home_group[0]) ?></div>
+<?php foreach ($__home_group[2] as $__home_href => [$__home_label, $__home_icon]): ?>
+    <a href="<?= h($__home_href) ?>" class="home-card">
+        <div class="home-card-icon" style="background:var(--primary-soft)"><?= h($__home_icon) ?></div>
+        <div class="home-card-title"><?= h($__home_label) ?></div>
+    </a>
+<?php endforeach; ?>
+<?php endforeach; unset($__home_group, $__home_href, $__home_label, $__home_icon); ?>
 <?php endif; ?>
 
 </div>

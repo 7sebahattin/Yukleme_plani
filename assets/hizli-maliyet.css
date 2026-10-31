@@ -17,6 +17,11 @@
 .qc-form label small { font-weight: 400; color: var(--muted); }
 .qc-form input:not([type="hidden"]), .qc-form select, .qc-form textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 48px; padding: 11px 12px; font-family: inherit; font-size: 16px; line-height: 1.35; color: var(--text); background: var(--bg); border: 1px solid var(--border-strong); border-radius: 9px; }
 .qc-form input[inputmode="decimal"] { font-variant-numeric: tabular-nums; }
+/* The field background resets the global select arrow. A separate triangle
+   stays visible in both themes and never intercepts native select clicks. */
+.qc-unit-select { display: block; position: relative; width: 100%; min-width: 0; color: var(--muted); }
+.qc-form .qc-unit-select select { -webkit-appearance: none; appearance: none; padding-right: 38px; background-image: none; }
+.qc-unit-select::after { content: ''; position: absolute; right: 14px; top: 50%; width: 0; height: 0; border-style: solid; border-width: 6px 4px 0; border-color: currentColor transparent transparent; transform: translateY(-50%); pointer-events: none; }
 .qc-form input, .qc-form select, .qc-form textarea, .qc-row { scroll-margin-bottom: calc(var(--bn-h, 0px) + env(safe-area-inset-bottom, 0px) + 140px); }
 .qc-form input:focus, .qc-form select:focus, .qc-form textarea:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
 .qc-form [aria-invalid="true"] { border-color: var(--danger) !important; background: var(--danger-soft) !important; }

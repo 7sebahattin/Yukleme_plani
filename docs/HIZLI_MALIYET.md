@@ -1,6 +1,6 @@
 # Hızlı Maliyet
 
-Sürüm v460. `hizli_maliyet.php` aktif depo kapsamındaki kayıt listesidir.
+Sürüm v461. `hizli_maliyet.php` aktif depo kapsamındaki kayıt listesidir.
 **Yeni maliyet hesapla** düğmesi `hizli_maliyet_form.php` adresini açar.
 Sol Operasyon → Hızlı Maliyet ve mobil Diğer → Hızlı Maliyet bağlantıları yalnız yöneticide görünür. Mobil menüde Sabitle ile alt çubuğa alınabilir; kullanıcı sıralaması korunur.
 Admin olmayanlar doğrudan sayfa ve veri katmanı erişiminde de reddedilir.
@@ -33,6 +33,10 @@ Kartın küçük açıklaması rakamları tekrarlamaz; birime göre yazıyla aç
 `Ürün KG × fiyat = toplam maliyet`, `Palet adedi × palet fiyatı = toplam maliyet`
 veya `Sabit tutar = toplam maliyet`. Rakamlar giriş ve sonuç kutularında görünür.
 
+Birim seçicilerinin sağında aşağı üçgen bulunur. Hızlı Maliyet ana sayfa
+kartından da açılır; ana kart, sidebar ve mobil menü aynı kabartmalı dolar
+ikonunu kullanır. Ekleme düğmesi altındaki uzun malzeme açıklaması kaldırılmıştır.
+
 ## Hesap modeli
 
 `basis=net_kg` miktarı Ürün KG ile değişir; `manual` kendi miktarını korur;
@@ -64,7 +68,7 @@ loglayabildiğinden audit ile veri yazımının kesin atomik olduğu iddia edilm
 
 Eski `hizli_maliyet.php?id=N&copy=1` bağlantıları yeni forma gider. Eski POST
 gövdesi yönlendirmeyle kaybolmadan aynı istekte yeni controller'a aktarılır.
-Her iki sayfa ve PATH_INFO yolları SW iş önbelleğine girmez; APP_SURUM/SW v460.
+Her iki sayfa ve PATH_INFO yolları SW iş önbelleğine girmez; APP_SURUM/SW v461.
 
 ## Doğrulama
 

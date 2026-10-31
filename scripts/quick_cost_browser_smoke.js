@@ -26,6 +26,9 @@ const fixture = renderFixture(), legacyFixture = renderFixture('legacy'), readOn
 let checks = 0;
 const proof = { anonymous: true, liveApplication: false, nativeMobileDevice: false, views: [], checks: 0 };
 function check(value, label) { assert.ok(value, label); checks++; }
+const qcostIcon = fs.readFileSync(path.join(root, 'assets/nav-icons/qcost.svg'), 'utf8');
+check(qcostIcon.includes('viewBox="0 0 64 64"') && qcostIcon.includes('<linearGradient') && qcostIcon.includes('<feDropShadow'), 'dollar icon matches the native beveled SVG family');
+check(!/<(?:script|text|image|foreignObject)\b/i.test(qcostIcon) && !/\b(?:href|src)\s*=/i.test(qcostIcon), 'dollar icon uses paths without fonts or external content');
 // Real SW routing: business HTML bypasses CacheStorage, assets still use SW.
 const worker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8'), listeners = {};
 vm.runInNewContext(worker, { self: { addEventListener: (event, callback) => { listeners[event] = callback; } }, URL, fetch: () => Promise.resolve({ headers: { get: () => '' }, clone: () => ({}), type: 'basic', ok: true }), caches: { open: () => Promise.resolve({ put: () => {} }) } });
@@ -61,11 +64,32 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
                 await page.locator('#qc-save').click();
                 return JSON.parse(await page.locator('#qc-payload').inputValue());
             }
+            async function checkUnitArrows(label) {
+                check(await page.locator('[data-qc-field="unit"]').evaluateAll(selects => selects.length > 0 && selects.every(select => {
+                    const wrapper=select.parentElement, field=getComputedStyle(select), arrow=getComputedStyle(wrapper,'::after');
+                    return select.tagName==='SELECT' && wrapper.classList.contains('qc-unit-select') && select.options.length===7
+                        && field.appearance==='none' && parseFloat(field.paddingRight)>=36
+                        && arrow.content==='""' && arrow.pointerEvents==='none' && arrow.position==='absolute'
+                        && parseFloat(arrow.right)>=12 && parseFloat(arrow.borderTopWidth)>=5
+                        && parseFloat(arrow.borderLeftWidth)>=3 && parseFloat(arrow.borderRightWidth)>=3
+                        && arrow.borderTopColor===getComputedStyle(wrapper).color;
+                })), label + ' native unit selectors retain a visible theme-aware triangle and text padding');
+            }
             await load();
+            if(name==='small') {
+                check(await page.evaluate(async ({source,url}) => {
+                    const svg=new DOMParser().parseFromString(source,'image/svg+xml');
+                    if(svg.querySelector('parsererror') || svg.documentElement.getAttribute('viewBox')!=='0 0 64 64') return false;
+                    const icon=new Image(); icon.src=url; await icon.decode();
+                    return icon.naturalWidth===64 && icon.naturalHeight===64;
+                }, {source:qcostIcon,url:pathToFileURL(path.join(root,'assets/nav-icons/qcost.svg')).href}), 'dollar SVG parses and decodes at 64px without external dependencies');
+            }
+            await checkUnitArrows(name + ' built-in');
             check(await page.evaluate(() => scrollY === 0), name + ' initialization keeps the top of the form visible');
             check(await page.locator('#qc-total').textContent() === '670.000,00', name + ' initial total');
             check(await page.locator('#qc-unit-cost').textContent() === '33,50', name + ' initial unit');
             check(await page.locator('[data-qc-row]').count() === 10, name + ' ten rows');
+            check(!(await page.locator('.qc-costs').innerText()).includes('Malzeme; kasa, viyol') && await page.locator('[data-qc-row="material"] [data-qc-row-title]').textContent()==='Malzeme' && await page.locator('[data-qc-basis="material"]').textContent()==='Ürün KG × fiyat = toplam maliyet', name + ' lower material description removed while material row and calculation hint remain');
             check(await page.locator('[data-qc-operation], #qc-operation-hint').count() === 0 && !/Üretim|Fason|İşlem türü/.test(await page.locator('#qc-form').innerText()), name + ' operation metadata has no visible controls or captions');
             check(await page.locator('.qc-group-badge').count() === 0 && await page.locator('.qc-breakdown dt').evaluateAll(nodes => nodes.every(node => !/^[ABD]\s*[—-]/.test(node.textContent))), name + ' card badges and summary letter prefixes removed');
             check(await page.locator('#qc-group-A').textContent() === '500.000,00 TL' && await page.locator('#qc-group-B').textContent() === '80.000,00 TL' && await page.locator('#qc-group-D').textContent() === '90.000,00 TL', name + ' named subtotals preserved');
@@ -201,6 +225,7 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             }), name + ' IME draft is not rewritten during composition');
             check(await page.locator('#qc-notes').evaluate(input => { input.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'i'})); return input.value==='İ'; }), name + ' IME commit converts actual text to Turkish uppercase');
             await customRow.locator('summary').click();
+            await checkUnitArrows(name + ' custom');
             check(await customRow.locator('[data-qc-field="qty"]').inputValue() === '1' && await customRow.locator('[data-qc-field="qty"]').isDisabled(), name + ' custom row defaults to fixed quantity one');
             await customRow.locator('[data-qc-field="unit"]').selectOption('pallet');
             await customRow.locator('[data-qc-field="qty"]').fill('26');
@@ -235,6 +260,7 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             check(legacyData.method === 'detailed' && legacyData.operation_type === 'uretim', name + ' editing legacy record preserves its hidden internal metadata');
             await load(readOnlyFixture);
             await toggle('transport');
+            await checkUnitArrows(name + ' read-only');
             check(await page.locator('#qc-unit-transport').isDisabled() && await page.locator('#qc-qty-transport').isDisabled() && await page.locator('#qc-settings-price-transport').isDisabled() && await page.locator('#qc-price-transport').isDisabled(), name + ' read-only users inspect Ayar with controls disabled');
             check(await page.locator('#qc-save').count() === 0 && await page.locator('[data-qc-method]').count() === 0, name + ' read-only screen has no save or mode controls');
             check(await page.locator('#qc-add-item, [data-qc-remove]').count() === 0, name + ' read-only users cannot add or remove custom rows');
@@ -254,6 +280,12 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-collapsed.png') });
                 await toggle('transport');
                 await page.locator('[data-qc-row="transport"]').scrollIntoViewIfNeeded();
+                await checkUnitArrows(name + ' ' + theme);
+                check(await page.locator('#qc-unit-transport').evaluate(select => {
+                    const box=select.getBoundingClientRect(), y=box.top+box.height/2, x=box.right-18;
+                    if(y<0 || y>=innerHeight || x<0 || x>=innerWidth) return true;
+                    return document.elementFromPoint(x,y)===select;
+                }), name + ' ' + theme + ' triangle does not intercept native unit clicks');
                 check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' ' + theme + ' settings no horizontal overflow');
                 const min = await page.locator('#qc-form input:not([type=hidden]):visible, #qc-form select:visible, #qc-form button:visible, #qc-form summary:visible').evaluateAll(nodes => Math.min(...nodes.map(node => node.getBoundingClientRect().height)));
                 check(min >= 44, name + ' ' + theme + ' settings touch targets');

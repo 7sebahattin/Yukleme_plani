@@ -7,7 +7,9 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v460` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v461` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+
+**Ana menü ve Hızlı Maliyet görünümü (v461):** Ana sayfa, sidebar modül bağlantılarını aynı yetkilerle içerir: eksik Siparişler/Hızlı Maliyet/Roller kartları ve `nav_muhasebe_gruplari()` kaynağındaki51 admin alt kartı eklendi. Sayaç sorguları değişmez. Hızlı Maliyet ana kart/sidebar/mobilde ortak `assets/nav-icons/qcost.svg` kabartmalı dolar ikonunu kullanır; SW kabuğuna eklenir. Birim alanının sağ üçgeni `.qc-unit-select::after` ile tema uyumludur; native select davranışı ve tıklama korunur. Yalnız ekleme düğmesi altındaki uzun malzeme açıklaması kaldırıldı. Testler: `dashboard_sidebar_parity_smoke.php`, `dashboard_navigation_smoke.js`, `quick_cost_sidebar_smoke.php`, `quick_cost_browser_smoke.js`. SQL/kayıt/hesap motoru değişikliği yok.
 
 **Hızlı Maliyet kayıt akışı (v460):** `hizli_maliyet.php` yalnız kayıt listesi; **Yeni maliyet hesapla** yeni `hizli_maliyet_form.php` formunu açar. Aç/düzenle/kopyala formda, silme yalnız liste POST + CSRF + admin/okuma/yazma/silme + depo + sürüm koşuluyla izole quick tabloda yapılır. Gerçek kayıt ajan tarafından silinmez. Yalnız A/B/D harfleri ve işlem türü seçimi kaldırıldı; on kalem ve adlandırılmış grup toplamları korunur. En fazla40 manuel kalem JSON içinde eklenir; Türkçe büyük harf istemci ve sunucuda uygulanır. İç metadata korunur. Sıfır odakta temizlenir, boş blur0; satır altı hesabı rakam tekrarlamadan yazıyla açıklar. Liste/form masaüstü ve mobilde aynı Hızlı Maliyet öğesini etkinleştirir. Mobil Diğer menüsündeki yalnız admin bağlantısı sabitlenebilir. Her iki PHP yolunda SW cache istisnası vardır. Plan: `docs/HIZLI_MALIYET_KAYIT_AKISI_PLAN.md`.
 

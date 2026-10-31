@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v460';
+const CACHE_NAME = 'yukleme-plani-v461';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -24,6 +24,7 @@ const SHELL = [
   './assets/nav-icons/kantar.svg',
   './assets/nav-icons/hks.svg',
   './assets/nav-icons/rapor.svg',
+  './assets/nav-icons/qcost.svg',
   './assets/nav-icons/mstok.svg',
   './assets/nav-icons/hesap.svg',
   './assets/nav-icons/mail.svg',
