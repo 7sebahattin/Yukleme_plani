@@ -62,8 +62,8 @@ ok("helpers.php: 'ik' rolüne attendance.daily_scan verildi",
 ok('helpers.php: sidebar\'da (konsolide $a_ptak listesi üzerinden) gunluk_isci_giris_cikis.php geçiyor', str_contains($helpersSrc, 'gunluk_isci_giris_cikis.php'));
 $ptakSrc = oku('personel_takip.php');
 ok('personel_takip.php: gunluk_isci_giris_cikis.php kartı var', str_contains($ptakSrc, 'gunluk_isci_giris_cikis.php'));
-ok('personel_takip.php: bu kart attendance.daily_scan iznine bağlı',
-    (bool)preg_match("/can\('attendance\.daily_scan'\)[\s\S]{0,60}gunluk_isci_giris_cikis\.php/", $ptakSrc));
+ok('personel_takip.php: bu kart bağımsız daily_scan Gör iznine bağlı',
+    (bool)preg_match("/role_pdks_can\('daily_scan'\)[\s\S]{0,60}gunluk_isci_giris_cikis\.php/", $ptakSrc));
 ok('Yalnız TEK yeni izin eklendi (attendance.daily_scan) — hakediş/ödeme izni YOK',
     !preg_match('/attendance\.(pay|payment|hakedis|price|rate)/i', $helpersSrc));
 

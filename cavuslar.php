@@ -53,6 +53,9 @@ render_flash();
         <?php if (pdks_gunluk_can('foremen')): ?>
         <a href="cavus_form.php" class="btn btn-primary">+ Yeni Çavuş</a>
         <?php endif; ?>
+        <?php if (function_exists('is_admin') && is_admin()): ?>
+        <a href="cavus_fis_rapor.php" class="btn">📋 Etkilenen fişler</a>
+        <?php endif; ?>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
@@ -100,6 +103,9 @@ render_flash();
     <td><span class="pdks-badge <?= $c['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $c['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
     <td class="actions-col">
         <a href="cavus_form.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm">Görüntüle / Düzenle</a>
+        <?php if (function_exists('is_admin') && is_admin()): ?>
+        <a href="cavus_fis_geri_al.php?cavus=<?= (int)$c['id'] ?>" class="btn btn-sm" title="Bu çavuşun Fiş Excel'i ile yazılmış kayıtlarını (şifreyle) geri al">↩ Fiş yüklemelerini geri al</a>
+        <?php endif; ?>
     </td>
 </tr>
 <?php endforeach; ?>

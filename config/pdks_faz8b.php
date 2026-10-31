@@ -2041,6 +2041,9 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
     $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id = ?");
     $stE->execute([$sessionId]);
     $mevcut = $stE->fetch();
+    if (function_exists('can') && can('role.permissions.detailed') && !role_pdks_can('entitlements', $mevcut ? 'edit' : 'create')) {
+        return ['ok'=>false, 'kod'=>'yetki_yok', 'hata'=>'Hakediş oluşturma veya düzenleme yetkiniz yok.'];
+    }
     if ($mevcut && ($mevcut['status'] ?? '') === 'final') {
         return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ.'];
     }

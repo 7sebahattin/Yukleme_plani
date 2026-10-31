@@ -9,6 +9,7 @@ $auth_user = require_login();
 require_perm('kantar.read');
 
 $id = (int)($_GET['id'] ?? 0);
+role_require_kantar_scope($id);
 if ($id <= 0) {
     set_flash('error', 'Geçersiz fiş.');
     header('Location: kantar.php'); exit;

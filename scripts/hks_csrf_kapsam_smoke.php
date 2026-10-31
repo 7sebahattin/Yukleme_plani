@@ -97,7 +97,14 @@ ok('eski csrf_check($_SERVER[HTTP_X_CSRF_TOKEN]) biçimi yok', strpos($api, "csr
 $pGonder = strpos($kod, "case 'taslak_gonder': {");
 $pSahiplen = strpos($kod, '$__claim = $db->prepare(\'DELETE FROM');
 ok('taslak_gonder: CSRF kapısı atomik DELETE sahiplenmesinden ÖNCE', $pGonder !== false && $pSahiplen !== false && $pCk < $pGonder && $pGonder < $pSahiplen);
-ok('oturum/yetki kapısı (401/403) CSRF kapısından ÖNCE', strpos($kod, "can('records.write')") !== false && strpos($kod, "can('records.write')") < $pCk);
+ok('oturum/yetki kapısı (401/403) CSRF kapısından ÖNCE', strpos($kod, "can('hks.access')") !== false && strpos($kod, "can('hks.access')") < $pCk);
+
+// The independent HKS grant must reject before token issuance or mutations.
+$_hksGate = strpos($kod, "can('hks.access')");
+$_hksGateEnd = $_hksGate === false ? false : strpos($kod, 'exit;', $_hksGate);
+$_hks403 = $_hksGate === false ? false : strpos($kod, 'http_response_code(403)', $_hksGate);
+ok('bağımsız HKS kapısı 403 ve exit ile fail-closed', $_hksGate !== false && $_hksGateEnd !== false && $_hks403 !== false && $_hks403 < $_hksGateEnd);
+ok('geniş kayıt yazma izni doğrudan HKS kapısı değildir', !str_contains($kod, "can('records.write')"));
 ok('api.php\'de $_SESSION yazımı yok (session_write_close güvenli)', strpos($kod, '$_SESSION') === false && strpos($kod, 'set_flash') === false);
 ok('firma uçları: yönetici kapısı CSRF\'i tekrarlamaz', (bool)preg_match('/function hks_firma_yonetici_kapisi\(array \$g\): void \{[^}]*\}[^}]*\}/s', $kod, $fk) && strpos($fk[0], 'csrf_check') === false);
 

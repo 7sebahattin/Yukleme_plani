@@ -179,13 +179,13 @@ render_flash();
     <!-- ── Birincil eylem + ikincil menü ── -->
     <div class="hs-actions-col">
         <?php /* Başkası adına kayıt YOK — yönetici başkasına bakarken ekleme eylemleri gizli */ ?>
-        <?php if (hesap_can('write') && !$baskasi): ?>
+        <?php if (hesap_can('create') && !$baskasi): ?>
         <a href="hesap_kayit.php?hizli=gider" class="hs-cta">
             <span class="hs-cta-icon" aria-hidden="true">📷</span> Harcama Ekle
         </a>
         <?php endif; ?>
         <div class="hs-secondary">
-            <?php if (hesap_can('write') && !$baskasi): ?>
+            <?php if (hesap_can('create') && !$baskasi): ?>
             <button type="button" class="btn" data-hs-sheet="hsQuickSheet">⚡ Diğer Kayıt Türü</button>
             <?php endif; ?>
             <button type="button" class="btn" data-hs-sheet="hsMoreSheet">⋯ Daha Fazla</button>
@@ -239,7 +239,7 @@ render_flash();
 <div class="hs-empty">
     <span class="hs-empty-icon" aria-hidden="true">🧾</span>
     <p>Henüz kayıt yok. İlk fişinizi ekleyin.</p>
-    <?php if (hesap_can('write') && !$baskasi): ?>
+    <?php if (hesap_can('create') && !$baskasi): ?>
     <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
     <?php endif; ?>
 </div>
@@ -279,7 +279,7 @@ render_flash();
 <?php endif; ?>
 
 <!-- ── Alt sayfa: kayıt türleri ── -->
-<?php if (hesap_can('write') && !$baskasi): ?>
+<?php if (hesap_can('create') && !$baskasi): ?>
 <div class="hs-sheet-ovl" id="hsQuickSheet" hidden role="dialog" aria-modal="true" aria-label="Kayıt türü seç">
     <div class="hs-sheet">
         <div class="hs-sheet-grip" aria-hidden="true"></div>

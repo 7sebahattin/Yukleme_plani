@@ -11,7 +11,7 @@ $auth_user = require_login();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_da = $_POST['action'] ?? '';
     if (in_array($_da, ['delete', 'toggle'], true)) { require_perm('defs.admin'); }
-    else { require_perm('defs.write'); }
+    else { require_perm('defs.write'); require_perm($_da === 'create' ? 'defs.create' : 'defs.edit'); }
     unset($_da);
 } else {
     require_perm('defs.read');

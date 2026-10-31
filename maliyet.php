@@ -117,7 +117,7 @@ render_flash();
         <p class="muted">Parti bazlı maliyet · <?= number_format($total, 0, ',', '.') ?> hesap</p>
     </div>
     <div class="page-head-actions">
-        <?php if (can_maliyet('write')): ?>
+        <?php if (can_maliyet('create')): ?>
         <a href="maliyet_form.php" class="btn btn-primary btn-lg">+ Yeni Hesap</a>
         <?php endif; ?>
     </div>
@@ -175,7 +175,7 @@ render_flash();
 <?php if (!$rows): ?>
 <div class="empty">
     <p>Kayıtlı maliyet hesabı bulunamadı.</p>
-    <?php if (can_maliyet('write')): ?>
+    <?php if (can_maliyet('create')): ?>
     <a href="maliyet_form.php" class="btn btn-primary">İlk hesabı oluştur</a>
     <?php endif; ?>
 </div>
@@ -234,7 +234,7 @@ render_flash();
                 <td><span class="mly-badge mly-badge-<?= h($r['status']) ?>"><?= $r['status'] === 'kesin' ? 'Kesin' : 'Taslak' ?></span></td>
                 <td class="right">
                     <a href="maliyet_view.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm">Görüntüle</a>
-                    <?php if (can_maliyet('write')): ?>
+                    <?php if (can_maliyet('edit')): ?>
                     <a href="maliyet_form.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm">Düzenle</a>
                     <?php endif; ?>
                 </td>

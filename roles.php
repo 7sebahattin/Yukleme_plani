@@ -12,15 +12,25 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/role_permission_matrix.php';
+require_once __DIR__ . '/config/role_data_scope.php';
 $auth_user = require_login();
 require_perm('users.admin');
 
 $pdo = db();
+$scope_options = role_data_scope_options($pdo);
 
 $catalog = permission_catalog();
 $flat_permissions = [];
 foreach ($catalog as $group_perms) {
     foreach ($group_perms as $perm => $label) $flat_permissions[$perm] = $label;
+}
+// Existing extension grants remain visible and editable when absent from this version's catalogue.
+foreach ($pdo->query('SELECT DISTINCT permission FROM role_permissions')->fetchAll(PDO::FETCH_COLUMN) as $stored_permission) {
+    if (is_string($stored_permission) && !str_starts_with($stored_permission, 'scope.') && !isset($flat_permissions[$stored_permission])) {
+        $catalog['Ek yetkiler'][$stored_permission] = 'Ek yetki: ' . $stored_permission;
+        $flat_permissions[$stored_permission] = 'Ek yetki: ' . $stored_permission;
+    }
 }
 $protected_slugs = protected_role_slugs();
 
@@ -64,47 +74,85 @@ function role_slug_from_label(PDO $pdo, string $label): string {
     return $slug;
 }
 
-// Yetki checkbox grid'ini basar — hem Yeni Rol hem Düzenle modalinde kullanılır.
-function render_permission_grid(array $catalog, array $checked, string $prefix): void {
-    echo '<div class="rol-editor"><div class="rol-editor-tools"><label>Modül veya yetki ara<input type="search" class="form-control rol-search" placeholder="Ör. Beyan, iletişim, sil"></label><label class="rol-selected-filter"><input type="checkbox" class="rol-only-selected"> Yalnız seçilenler</label><strong class="rol-total" aria-live="polite"></strong></div>';
-    echo '<details class="rol-help"><summary>Yetkiler nasıl çalışır?</summary><p>Önce sayfayı açın, sonra işlemleri ve alanları seçin. Standart seçim; silme, gönderme, ödeme, kilit açma ve yönetici yetkilerini içermez. Birden fazla rolün izinleri birleşir.</p></details>';
-    if (isset($catalog['Beyanlar']['beyan.permissions.detailed'])) {
-        echo '<input type="hidden" name="permissions[]" value="beyan.permissions.detailed">';
-    }
-    foreach ($catalog as $group => $perms) {
-        echo '<div class="rol-perm-group">';
-        echo '<div class="rol-perm-group-head">';
-        echo '<span class="rol-perm-group-title">' . h($group) . ' <small class="rol-group-count"></small></span>';
-        echo '<span class="rol-perm-group-actions">'
-           . '<button type="button" class="rol-perm-toggle" data-mode="read">Görüntüleme</button>'
-           . '<button type="button" class="rol-perm-toggle" data-mode="all">Standart</button>'
-           . '<button type="button" class="rol-perm-toggle" data-mode="none">Hiçbiri</button>'
-           . '</span></div>';
-        if ($group === 'Beyanlar') echo '<details class="rol-help"><summary>Beyan alan izinleri hakkında</summary><p>Bölümü düzenlemek için görüntüleme iznini de seçin. Oluşturma/düzenleme yetkisi olmadan bölüm yazma izni tek başına kayıt değiştirmez.</p></details>';
-        echo '<div class="rol-perm-grid">';
-        $last_kind = '';
-        uksort($perms, static function ($a, $b) {
-            $rank = static fn($p) => substr_count($p, '.') > 1 ? 2 : (str_ends_with($p, '.read') ? 0 : 1);
-            return $rank($a) <=> $rank($b);
-        });
-        foreach ($perms as $perm => $label) {
-            if (in_array($perm, ['beyan.write', 'beyan.permissions.detailed'], true)) continue;
-            $is_field = substr_count($perm, '.') > 1;
-            $is_read = str_ends_with($perm, '.read');
-            $risk = (bool)preg_match('/\.(admin|delete|unlock|send|notify|pay|approve|foreman_payments)$/', $perm);
-            $kind = $is_field ? 'Alanlar ve bölümler' : ($is_read ? 'Sayfa erişimi' : 'İşlemler');
-            if ($kind !== $last_kind) echo '<div class="rol-perm-kind">' . h($kind) . '</div>';
-            $last_kind = $kind;
-            if (in_array($perm, ['users.read', 'users.write'], true)) $label .= ' — Uyumluluk: tek başına erişim vermez; kullanıcı yönetimi yetkisi gerekir';
-            $cid = $prefix . '_' . str_replace('.', '_', $perm);
-            $is_checked = in_array($perm, $checked, true) ? 'checked' : '';
-            echo '<label class="usr-role-check rol-permission' . ($risk ? ' rol-sensitive' : '') . '" for="' . h($cid) . '">'
-               . '<input type="checkbox" data-read="' . (int)$is_read . '" data-risk="' . (int)$risk . '" id="' . h($cid) . '" name="permissions[]" value="' . h($perm) . '" ' . $is_checked . '>'
-               . '<span>' . h($label) . ($risk ? '<small>Özel yetki · tek tek seçilir</small>' : '') . '</span></label>';
+// Sidebar sıralı matris; kontroller gerçek izin kodlarını gönderir.
+function render_matrix_control(array $action, array $checked, string $prefix, string $row, string $kind, array &$used): string {
+    $perm = $action['permission'] ?? $action['perm'] ?? null;
+    if (!is_string($perm) || $perm === '') return '<span class="rol-unavailable" aria-label="Bu işlem desteklenmiyor">—</span>';
+    $used[$perm] = true;
+    $label = (string)($action['label'] ?? '');
+    if ($label === '') $label = ['read'=>'Gör','create'=>'Ekle','edit'=>'Düzenle','delete'=>'Sil'][$kind] ?? $kind;
+    $id = $prefix . '_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $row . '_' . $kind . '_' . $perm);
+    return '<label class="rol-switch" for="' . h($id) . '" title="' . h($label) . '"><input type="checkbox" role="switch" id="' . h($id) . '" name="permissions[]" value="' . h($perm) . '" aria-label="' . h($row . ' — ' . $label) . '" ' . (in_array($perm, $checked, true) ? 'checked' : '') . '><span class="rol-switch-track" aria-hidden="true"></span><span class="rol-switch-label">' . h($label) . '</span></label>';
+}
+function render_matrix_rows(array $rows, array $checked, string $prefix, array &$used, string $parent = '', int $depth = 0): void {
+    $columns = ['read'=>'Gör', 'create'=>'Ekle', 'edit'=>'Düzenle', 'delete'=>'Sil'];
+    foreach ($rows as $index => $row) {
+        $key = (string)($row['key'] ?? $index);
+        $path = $parent === '' ? $key : $parent . '/' . $key;
+        $label = (string)($row['label'] ?? $key);
+        $actions = $row['actions'] ?? [];
+        $children = $row['children'] ?? [];
+        $extras = array_diff_key($actions, $columns);
+        $expandable = $children || $extras;
+        $adminOnly = !empty($row['admin_only']);
+        echo '<tr class="rol-matrix-row" data-path="' . h($path) . '" data-parent="' . h($parent) . '" data-label="' . h($label) . '" data-depth="' . $depth . '"><th scope="row"><div class="rol-row-heading" style="--rol-depth:' . $depth . '">';
+        if ($expandable) echo '<button type="button" class="rol-row-expand" aria-expanded="false" aria-label="' . h($label . ' alt başlıklarını aç') . '"><span aria-hidden="true">›</span></button>';
+        else echo '<span class="rol-row-spacer" aria-hidden="true"></span>';
+        echo '<div><span class="rol-row-title">' . h($label) . '</span>';
+        if ($adminOnly) echo '<small class="rol-admin-note">Yalnız sistem yöneticisi</small>';
+        elseif ($children) echo '<small class="rol-row-subtitle">' . count($children) . ' alt başlık</small>';
+        if (!empty($row['note'])) echo '<small class="rol-row-note">' . h((string)$row['note']) . '</small>';
+        echo '</div></div></th>';
+        foreach ($columns as $kind => $column) {
+            echo '<td data-column="' . h($column) . '">';
+            echo isset($actions[$kind]) && !$adminOnly ? render_matrix_control($actions[$kind], $checked, $prefix, $label, $kind, $used) : '<span class="rol-unavailable" aria-label="Bu işlem desteklenmiyor">—</span>';
+            echo '</td>';
         }
-        echo '</div></div>';
+        echo '</tr>';
+        if ($extras) {
+            echo '<tr class="rol-matrix-extra" data-path="' . h($path . '/_actions') . '" data-parent="' . h($path) . '" data-label="' . h($label . ' diğer yetkiler') . '"><td colspan="5"><div class="rol-extra-permissions"><strong>Diğer yetkiler</strong>';
+            foreach ($extras as $kind => $action) {
+                echo '<div class="rol-extra-item"><span>' . h((string)($action['label'] ?? $kind)) . '</span>' . render_matrix_control($action, $checked, $prefix, $label, (string)$kind, $used) . '</div>';
+            }
+            echo '</div></td></tr>';
+        }
+        if ($children) render_matrix_rows($children, $checked, $prefix, $used, $path, $depth + 1);
     }
-    echo '<p class="rol-empty" hidden>Aramayla eşleşen yetki bulunamadı.</p></div>';
+}
+function render_permission_grid(array $catalog, array $checked, string $prefix): void {
+    global $scope_options;
+    $checked = role_matrix_expand_permissions(beyan_expand_role_permissions($checked));
+    $matrix = role_permission_matrix();
+    $used = [];
+    echo '<div class="rol-editor"><div class="rol-editor-tools"><label>Sayfa veya yetki ara<input type="search" class="form-control rol-search" placeholder="Ör. Yükleme raporları"></label><label>Bölüm<select class="form-control rol-section-filter"><option value="">Tüm bölümler</option>';
+    foreach ($matrix as $group => $rows) echo '<option value="' . h($group) . '">' . h($group) . '</option>';
+    echo '<option value="Diğer yetkiler">Diğer yetkiler</option></select></label><label>Görünüm<select class="form-control rol-state-filter"><option value="all">Tüm yetkiler</option><option value="selected">Seçili olanlar</option><option value="unselected">Seçili olmayanlar</option></select></label><button type="button" class="rol-reset-filters btn btn-ghost btn-sm">Temizle</button><strong class="rol-total" aria-live="polite"></strong></div>';
+    echo '<p class="rol-matrix-intro">Sayfayı bulun, anahtarlarla yetki verin. Alt başlıkları ok düğmesiyle açın. Değişiklikler Kaydet ile uygulanır.</p><details class="rol-help"><summary>Yetkiler nasıl çalışır?</summary><p>Gör sayfaya erişimi, diğer sütunlar yapılabilen işlemleri belirler. — işareti bu satırda ilgili işlemin olmadığını gösterir. Alt başlıklar ayrı seçilir. İşlem yapabilmek için ilgili sayfanın Gör izni de gerekir. Raporlarda hem Raporlar hem ilgili alt raporun Gör iznini açın. Birden fazla rolün izinleri birleşir. Yöneticiye özel sayfalar bu ekrandan başka rollere açılamaz.</p></details>';
+    echo '<input type="hidden" name="permissions[]" value="role.permissions.detailed"><input type="hidden" name="permissions[]" value="beyan.permissions.detailed">';
+    $scope = role_data_scope_decode($checked);
+    echo '<details class="rol-data-scope"><summary>Veri kapsamı <span class="rol-scope-summary"></span></summary><p>Depo seçimi; yükleme, paletleme, mal kabul, stok, maliyet, raporlar ve depo filtresi bulunan personel bölümlerini sınırlar. Birden fazla roldeki depo sınırları ve kullanıcının depo atamaları kesişir. Sistem yöneticisi bu sınırdan muaftır.</p><p>Beyanlar şirket genelinde kalır. Mailde hesap atamaları, Hesap bölümünde kişinin kendi kayıtları ve hesap yöneticisi kuralları geçerlidir. Depo sınırı seçildiğinde, deposu doğrulanamayan eski günlük rapor arşivleri açılamaz; güncel günlük rapor kullanılabilir.</p><label>Kapsam<select name="scope_mode" class="form-control rol-scope-mode"><option value="all"' . ($scope['mode'] === 'all' ? ' selected' : '') . '>Atandığı tüm depolar</option><option value="selected"' . ($scope['mode'] === 'selected' ? ' selected' : '') . '>Yalnız seçilen depolar</option></select></label><fieldset class="rol-scope-depots"><legend>İzin verilen depolar</legend>';
+    foreach (($scope_options ?? []) as $depot) echo '<label><input type="checkbox" name="scope_depots[]" data-permission="' . h(role_data_scope_code($depot)) . '" value="' . h($depot) . '" ' . (in_array($depot, $scope['depots'], true) ? 'checked' : '') . '> ' . h($depot) . '</label>';
+    echo '<p class="rol-scope-empty">Hiç depo seçilmezse bu rol depo kayıtlarına erişim vermez.</p></fieldset></details>';
+    foreach ($matrix as $group => $rows) {
+        echo '<section class="rol-perm-group" data-group="' . h($group) . '"><div class="rol-perm-group-head"><h3 class="rol-perm-group-title">' . h($group) . ' <small class="rol-group-count"></small></h3><button type="button" class="rol-expand-group btn btn-ghost btn-sm">Alt başlıkları aç</button></div><table class="rol-matrix-table"><caption class="rol-sr-only">' . h($group) . ' sayfa yetkileri</caption><thead><tr><th scope="col">Sayfa / alt başlık</th><th scope="col">Gör</th><th scope="col">Ekle</th><th scope="col">Düzenle</th><th scope="col">Sil</th></tr></thead><tbody>';
+        render_matrix_rows($rows, $checked, $prefix, $used);
+        echo '</tbody></table></section>';
+    }
+    $legacy = ['beyan.write','beyan.permissions.detailed','role.permissions.detailed','records.read','records.create','records.edit','records.delete','records.write','kantar.write','stok.write','stok.edit','maliyet.write','hesap.write','defs.write','siparis.read','siparis.create','siparis.edit','siparis.delete','siparis.write'];
+    foreach (role_pdks_pages() as $policy) foreach ($policy['legacy'] as $legacy_pdks) $legacy[] = 'attendance.' . $legacy_pdks;
+    $legacy = array_merge($legacy, ['attendance.read']);
+    // Keep reserved legacy system privileges visible and revocable.
+    $legacy = array_diff($legacy, ['attendance.admin','attendance.devices','attendance.manual','attendance.correct','attendance.report']);
+    $remaining = [];
+    foreach ($catalog as $perms) foreach ($perms as $perm => $label) {
+        if (!isset($used[$perm]) && !in_array($perm, $legacy, true)) $remaining[] = ['key'=>$perm, 'label'=>$label, 'actions'=>['read'=>['permission'=>$perm, 'label'=>'Yetki ver']]];
+    }
+    if ($remaining) {
+        echo '<section class="rol-perm-group" data-group="Diğer yetkiler"><div class="rol-perm-group-head"><h3 class="rol-perm-group-title">Diğer yetkiler <small class="rol-group-count"></small></h3></div><p class="rol-row-note">Ek işlem ve uyumluluk izinleri</p><table class="rol-matrix-table"><thead><tr><th scope="col">Yetki</th><th scope="col">İzin</th><th scope="col">Ekle</th><th scope="col">Düzenle</th><th scope="col">Sil</th></tr></thead><tbody>';
+        render_matrix_rows($remaining, $checked, $prefix, $used);
+        echo '</tbody></table></section>';
+    }
+    echo '<p class="rol-empty" hidden>Filtrelerle eşleşen sayfa veya yetki bulunamadı.</p></div>';
 }
 
 // ── POST Handler ──────────────────────────────────────────────────────────
@@ -120,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ─── Yeni rol oluştur ────────────────────────────────────────────────
     if ($action === 'create_role') {
         $label      = trim($_POST['label'] ?? '');
-        $perms_post = clean_permissions($_POST['permissions'] ?? [], $flat_permissions);
+        $perms_post = array_merge(clean_permissions($_POST['permissions'] ?? [], $flat_permissions), role_data_scope_permissions($_POST, $scope_options));
 
         if (!valid_role_label($label)) {
             $error = 'Rol adı boş olamaz (en fazla 80 karakter).';
@@ -149,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'update_role') {
         $rid        = (int)($_POST['id'] ?? 0);
         $label      = trim($_POST['label'] ?? '');
-        $perms_post = clean_permissions($_POST['permissions'] ?? [], $flat_permissions);
+        $perms_post = array_merge(clean_permissions($_POST['permissions'] ?? [], $flat_permissions), role_data_scope_permissions($_POST, $scope_options));
 
         $st = $pdo->prepare("SELECT id, slug, label FROM roles WHERE id = ?");
         $st->execute([$rid]);
@@ -395,7 +443,7 @@ render_header('Roller');
 <?php
     $rid       = (int)$r['id'];
     $is_system = in_array($r['slug'], $protected_slugs, true);
-    $r_perms   = $role_perm_map[$rid] ?? [];
+    $r_perms   = role_matrix_expand_permissions($role_perm_map[$rid] ?? []);
     $ucount    = (int)$r['user_count'];
 ?>
 <tr>
@@ -405,7 +453,7 @@ render_header('Roller');
         <span class="rol-badge-slug"><?= h($r['slug']) ?></span>
         <?php if ($is_system): ?><span class="rol-badge-system">Sistem</span><?php endif; ?>
     </td>
-    <td class="rol-perm-count"><?= count($r_perms) ?> / <?= $total_perm_count ?></td>
+    <td class="rol-perm-count"><?= count(array_filter($r_perms, static fn($p) => !str_starts_with($p, 'scope.') && !str_ends_with($p, '.detailed'))) ?> / <?= $total_perm_count ?></td>
     <td class="rol-perm-count"><?= $ucount ?></td>
     <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -440,7 +488,7 @@ render_header('Roller');
 <?php
     $rid       = (int)$r['id'];
     $is_system = in_array($r['slug'], $protected_slugs, true);
-    $r_perms   = $role_perm_map[$rid] ?? [];
+    $r_perms   = role_matrix_expand_permissions($role_perm_map[$rid] ?? []);
     $ucount    = (int)$r['user_count'];
 ?>
 <div class="rol-card">
@@ -501,7 +549,7 @@ render_header('Roller');
         // Yeni rol VARSAYILANI: ana sayfa. POST hatasından sonra kullanıcının
         // kendi seçimi korunur (varsayılana geri dönmez).
         $c_perms_post = ($action === 'create_role')
-            ? clean_permissions($_POST['permissions'] ?? [], $flat_permissions)
+            ? array_merge(clean_permissions($_POST['permissions'] ?? [], $flat_permissions), role_data_scope_permissions($_POST, $scope_options))
             : ['dashboard.read'];
         render_permission_grid($catalog, $c_perms_post, 'c');
         ?>
@@ -579,44 +627,86 @@ render_header('Roller');
         });
     });
 
+    function inputsIn(editor) { return Array.from(editor.querySelectorAll('input[name="permissions[]"][type="checkbox"]')); }
     function refreshEditor(editor) {
         if (!editor) return;
         var query = editor.querySelector('.rol-search').value.toLocaleLowerCase('tr').trim();
-        var selectedOnly = editor.querySelector('.rol-only-selected').checked;
-        var total = 0, visibleGroups = 0;
+        var section = editor.querySelector('.rol-section-filter').value;
+        var state = editor.querySelector('.rol-state-filter').value;
+        var filtered = !!query || state !== 'all';
+        var total = new Set(inputsIn(editor).filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; })).size;
+        var visibleGroups = 0;
         editor.querySelectorAll('.rol-perm-group').forEach(function (group) {
-            var selected = 0, visible = 0;
-            var groupName = group.querySelector('.rol-perm-group-title').firstChild.textContent.toLocaleLowerCase('tr');
-            group.querySelectorAll('.rol-permission').forEach(function (label) {
-                var cb = label.querySelector('input');
-                if (cb.checked) selected++;
-                label.hidden = (selectedOnly && !cb.checked) || !(groupName + ' ' + label.textContent.toLocaleLowerCase('tr') + ' ' + cb.value).includes(query);
-                if (!label.hidden) visible++;
+            var groupName = group.dataset.group;
+            var rows = Array.from(group.querySelectorAll('tbody > tr'));
+            var matches = new Set(), selected = new Set();
+            var byPath = new Map(rows.map(function (row) { return [row.dataset.path, row]; }));
+            rows.forEach(function (row) {
+                var cbs = Array.from(row.querySelectorAll('input[type="checkbox"]'));
+                cbs.forEach(function (cb) { if (cb.checked) selected.add(cb.value); });
+                var haystack = groupName + ' ' + row.dataset.label + ' ' + row.textContent + ' ' + cbs.map(function (cb) { return cb.value; }).join(' ');
+                var matching = haystack.toLocaleLowerCase('tr').includes(query) && (state === 'all' || cbs.some(function (cb) { return state === 'selected' ? cb.checked : !cb.checked; }));
+                if (matching) {
+                    matches.add(row.dataset.path);
+                    var parent = row.dataset.parent;
+                    while (parent && byPath.has(parent)) { matches.add(parent); parent = byPath.get(parent).dataset.parent; }
+                }
             });
-            group.querySelector('.rol-group-count').textContent = selected + ' seçili';
+            var visible = 0;
+            rows.forEach(function (row) {
+                var show = (!section || section === groupName) && matches.has(row.dataset.path);
+                if (show && !filtered) {
+                    var parent = row.dataset.parent;
+                    while (parent && byPath.has(parent)) {
+                        var parentRow = byPath.get(parent), button = parentRow.querySelector('.rol-row-expand');
+                        if (button && button.getAttribute('aria-expanded') !== 'true') { show = false; break; }
+                        parent = parentRow.dataset.parent;
+                    }
+                }
+                row.hidden = !show;
+                if (show) visible++;
+            });
+            group.querySelector('.rol-group-count').textContent = selected.size + ' seçili';
             group.hidden = visible === 0;
             if (visible) visibleGroups++;
-            total += selected;
         });
         editor.querySelector('.rol-total').textContent = total + ' yetki seçili';
         editor.querySelector('.rol-empty').hidden = visibleGroups !== 0;
+        var scoped = editor.querySelector('.rol-scope-mode').value === 'selected';
+        editor.querySelector('.rol-scope-depots').hidden = !scoped;
+        editor.querySelector('.rol-scope-depots').disabled = !scoped;
+        editor.querySelector('.rol-scope-summary').textContent = scoped ? 'Seçili depolar' : 'Atandığı tüm depolar';
     }
     document.querySelectorAll('.rol-editor').forEach(function (editor) {
-        editor.addEventListener('input', function () { refreshEditor(editor); });
-        editor.addEventListener('change', function () { refreshEditor(editor); });
-        refreshEditor(editor);
-    });
-    // Grup kısayolları kritik yetkileri hiçbir zaman topluca vermez.
-    document.querySelectorAll('.rol-perm-toggle').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var group = btn.closest('.rol-perm-group');
-            if (!group) return;
-            group.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
-                cb.checked = btn.dataset.mode !== 'none' && cb.dataset.risk !== '1'
-                    && (btn.dataset.mode === 'all' || cb.dataset.read === '1');
-            });
-            refreshEditor(btn.closest('.rol-editor'));
+        editor.addEventListener('input', function (event) {
+            if (event.target.matches('input[name="permissions[]"][type="checkbox"]')) {
+                inputsIn(editor).forEach(function (cb) { if (cb.value === event.target.value) cb.checked = event.target.checked; });
+            }
+            refreshEditor(editor);
         });
+        editor.addEventListener('change', function () { refreshEditor(editor); });
+        editor.addEventListener('click', function (event) {
+            var expand = event.target.closest('.rol-row-expand');
+            if (expand) {
+                var expanded = expand.getAttribute('aria-expanded') === 'true';
+                expand.setAttribute('aria-expanded', String(!expanded));
+                expand.setAttribute('aria-label', expand.closest('tr').dataset.label + (expanded ? ' alt başlıklarını aç' : ' alt başlıklarını kapat'));
+            }
+            var groupButton = event.target.closest('.rol-expand-group');
+            if (groupButton) {
+                var buttons = Array.from(groupButton.closest('.rol-perm-group').querySelectorAll('.rol-row-expand'));
+                var open = buttons.some(function (button) { return button.getAttribute('aria-expanded') !== 'true'; });
+                buttons.forEach(function (button) { button.setAttribute('aria-expanded', String(open)); });
+                groupButton.textContent = open ? 'Alt başlıkları kapat' : 'Alt başlıkları aç';
+            }
+            if (event.target.closest('.rol-reset-filters')) {
+                editor.querySelector('.rol-search').value = '';
+                editor.querySelector('.rol-section-filter').value = '';
+                editor.querySelector('.rol-state-filter').value = 'all';
+            }
+            refreshEditor(editor);
+        });
+        refreshEditor(editor);
     });
 
     window.rolOpenCreate  = function () { openModal('rolCreateModal'); };
@@ -628,10 +718,13 @@ render_header('Roller');
         document.getElementById('e_role_slug').textContent = data.slug;
 
         var perms = data.permissions || [];
-        document.querySelectorAll('#e_perm_wrap input[type=checkbox]').forEach(function (cb) {
+        document.querySelectorAll('#e_perm_wrap input[name="permissions[]"][type=checkbox]').forEach(function (cb) {
             cb.checked = perms.indexOf(cb.value) !== -1;
         });
 
+        var editor = document.querySelector('#e_perm_wrap .rol-editor');
+        editor.querySelector('.rol-scope-mode').value = perms.indexOf('scope.depots.selected') !== -1 ? 'selected' : 'all';
+        editor.querySelectorAll('input[name="scope_depots[]"]').forEach(function (cb) { cb.checked = perms.indexOf(cb.dataset.permission) !== -1; });
         openModal('rolEditModal');
         document.getElementById('e_role_label').focus();
     };
@@ -649,7 +742,7 @@ render_header('Roller');
                             $st->execute([(int)($_POST['id'] ?? 0)]);
                             return (string)($st->fetchColumn() ?: '');
                         })()) ?>,
-        permissions: <?= json_encode(array_map('strval', (array)($_POST['permissions'] ?? []))) ?>,
+        permissions: <?= json_encode(array_merge(clean_permissions($_POST['permissions'] ?? [], $flat_permissions), role_data_scope_permissions($_POST, $scope_options))) ?>,
     });
     <?php endif; ?>
 })();

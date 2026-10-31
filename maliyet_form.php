@@ -12,12 +12,14 @@ require_once __DIR__ . '/config/cost_calc.php';
 require_once __DIR__ . '/config/cost_link.php';
 
 $auth_user = require_login();
-cost_migrate();
-require_maliyet('write');
+
+
 
 $id      = (int)($_GET['id'] ?? 0);
 $tpl_id  = (int)($_GET['tpl'] ?? 0);
 $is_edit = $id > 0;
+require_maliyet($is_edit ? 'edit' : 'create');
+cost_migrate();
 $uid     = (int)$auth_user['id'];
 
 $sheet    = null;
@@ -191,6 +193,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Bölüm “' . $ns['title'] . '” bazı: ' . $e;
         }
     }
+
+    $record_id_post = (int)($_POST['record_id'] ?? 0);
+    if (!$is_edit && $record_id_post > 0 && cost_link_record_summary($record_id_post) === null) $errors[] = 'Seçilen yükleme kaydına erişiminiz yok.';
 
     if (!$errors) {
         // Sunucu tarafı hesap — kaydedilen tutarların tek otoritesi

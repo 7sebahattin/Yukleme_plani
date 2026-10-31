@@ -77,12 +77,14 @@ foreach ($senaryolar as $ad => $sizes) {
     $tmpRun = tempnam(sys_get_temp_dir(), 'xlsmokerun') . '.php';
     file_put_contents($tmpRun, $kosucu);
 
-    $cmd = 'SMOKE_ROOT=' . escapeshellarg($ROOT)
-         . ' SMOKE_SIZES=' . escapeshellarg((string)json_encode($sizes))
-         . ' php ' . escapeshellarg($tmpRun)
-         . ' > ' . escapeshellarg($tmpOut)
-         . ' 2> ' . escapeshellarg($tmpErr);
-    exec($cmd, $_cikti, $rc);
+    // Array argv and explicit environment work without shell-specific assignment syntax.
+    $childEnv = getenv();
+    $childEnv['SMOKE_ROOT'] = $ROOT;
+    $childEnv['SMOKE_SIZES'] = (string)json_encode($sizes);
+    $child = proc_open([PHP_BINARY, $tmpRun], [0=>['pipe','r'], 1=>['file',$tmpOut,'w'], 2=>['file',$tmpErr,'w']], $pipes, $ROOT, $childEnv, ['bypass_shell'=>true]);
+    if (!is_resource($child)) throw new RuntimeException('Excel smoke child could not start');
+    fclose($pipes[0]);
+    $rc = proc_close($child);
 
     // header() CLI'da "Cannot modify header information" uyarısı VERMEZ (CLI SAPI'de
     // header çağrıları sessizce yok sayılır), o yüzden stderr gerçekten boş olmalı.

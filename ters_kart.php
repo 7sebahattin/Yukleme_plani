@@ -42,8 +42,10 @@ render_flash();
     <?php if ($y['havuz']): ?>
     <a class="tk-hub-kart" href="ters_kart_havuz.php"><span class="tk-hub-ikon" aria-hidden="true">🗂</span><span class="tk-hub-ad">A · Kart Havuzu ve Ayarlar</span><span class="tk-hub-alt">Çavuşa kalıcı kart tanımla, giriş saati, kayıp/bozuk kart</span></a>
     <?php endif; ?>
-    <?php if ($y['tarama']): ?>
+    <?php if ($y['sayim']): ?>
     <a class="tk-hub-kart tk-hub-ana" href="ters_kart_sayim.php"><span class="tk-hub-ikon" aria-hidden="true">🌅</span><span class="tk-hub-ad">B · Sabah Kalan Kart Sayımı</span><span class="tk-hub-alt">Elde kalan kartları okut, girişleri onayla</span></a>
+    <?php endif; ?>
+    <?php if ($y['cikis']): ?>
     <a class="tk-hub-kart" href="gunluk_isci_giris_cikis.php?mod=ortak"><span class="tk-hub-ikon" aria-hidden="true">🚪</span><span class="tk-hub-ad">C · Ortak Çıkış</span><span class="tk-hub-alt">Ters ve normal girişler tek ekrandan, çavuş seçmeden çıkar</span></a>
     <?php endif; ?>
     <?php if ($y['mutabakat']): ?>
@@ -57,7 +59,7 @@ render_flash();
 <?php else: ?>
 <div class="tk-cavus-grid">
     <?php foreach ($durumlar as $c): $sd = $c['sayim']['durum'] ?? null; ?>
-    <a class="tk-cavus-kart" href="<?= h($y['tarama'] ? 'ters_kart_sayim.php?cavus=' . (int)$c['foreman_id'] : ($y['mutabakat'] ? 'ters_kart_mutabakat.php' : 'ters_kart_havuz.php?cavus=' . (int)$c['foreman_id'])) ?>">
+    <a class="tk-cavus-kart" href="<?= h(pdks_ters_hub_hedef($y, (int)$c['foreman_id'])) ?>">
         <span class="tk-cavus-ad"><?= h($c['name']) ?></span>
         <span class="tk-cavus-alt">Havuz <?= (int)$c['havuz']['aktif'] ?> aktif<?= $c['havuz']['kayip'] ? ' · ' . (int)$c['havuz']['kayip'] . ' kayıp' : '' ?><?= $c['havuz']['bozuk'] ? ' · ' . (int)$c['havuz']['bozuk'] . ' bozuk' : '' ?></span>
         <?php if ($sd === 'onayli'): ?><span class="tk-rozet tk-rozet-ok">✓ <?= (int)$c['sayim']['dagitilan'] ?> kişi girdi</span>

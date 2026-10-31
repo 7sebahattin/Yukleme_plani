@@ -129,7 +129,7 @@ render_flash();
     <h1>🧾 <?= h($hakedis['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
         <a href="cavus_hakedis.php" class="btn btn-geri">← Hakediş Listesi</a>
-        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$hakedis['session_id'] ?>" class="btn">🧮 Mesai Değerlendir</a><?php endif; ?>
+        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('mesai','read')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$hakedis['session_id'] ?>" class="btn">🧮 Mesai Değerlendir</a><?php endif; ?>
         <a href="cavus_hakedis_yazdir.php?id=<?= (int)$id ?>" class="btn btn-ghost">🖨️ Yazdır</a>
     </div>
 </div>
@@ -226,7 +226,7 @@ render_flash();
         <p class="muted" style="margin-top:10px">Mesai AÇIK — hakediş yalnız KAPALI mesai için kesinleştirilebilir.</p>
     <?php elseif ($faz8bHazir && !$faz8bOzet['tam_hazir']): ?>
         <p style="color:var(--warn);font-weight:600">Mesai değerlendirmesi tamamlanmadan hakediş kesinleştirilemez.</p>
-        <a class="btn" href="mesai_degerlendirme.php?session_id=<?= (int)$hakedis['session_id'] ?>">🧮 Mesai Değerlendir</a>
+        <?php if (role_pdks_can('mesai','read')): ?><a class="btn" href="mesai_degerlendirme.php?session_id=<?= (int)$hakedis['session_id'] ?>">🧮 Mesai Değerlendir</a><?php endif; ?>
     <?php else: ?>
     <form method="post" style="margin-top:14px" onsubmit="return confirm('Bu hakedişi KESİNLEŞTİRMEK istediğinize emin misiniz?');">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="finalize">

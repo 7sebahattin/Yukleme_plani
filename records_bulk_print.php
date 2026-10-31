@@ -8,7 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.read');
+require_perm('records.loading.read');
 
 // ── Filtre parametreleri (reports.php yukleme ile aynı mantık) ──
 $f_from           = trim($_GET['date_from']     ?? '');

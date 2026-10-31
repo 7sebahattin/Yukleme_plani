@@ -208,8 +208,8 @@ $sayfa = (string)file_get_contents($ROOT . '/urun_siparis.php');
 ok('statik: şema CREATE TABLE IF NOT EXISTS + yalnız ADD COLUMN (v427 ek alanlar; DROP/MODIFY/CHANGE yok)', !preg_match('/\bALTER\s+TABLE\b(?!\s+urun_siparisleri\s+ADD\s+COLUMN)/i', $cfg) && !preg_match('/\b(DROP|MODIFY|CHANGE)\s+COLUMN\b/i', $cfg) && substr_count($cfg, 'CREATE TABLE IF NOT EXISTS') === 2);
 ok('statik: uç POST\'ta CSRF + yetki kapıları', str_contains($islem, 'csrf_check(') && str_contains($islem, "can_siparis('write')") && str_contains($islem, "can_siparis('delete')") && str_contains($islem, "can_siparis('read')"));
 ok('statik: audit\'e şoför/telefon yazılmaz', !preg_match("/audit_log_event\([^;]*sofor/s", $islem . $yz));
-ok('statik: yazdırma ucu yalnız GET + siparis.read + no-store', str_contains($yz, "require_siparis('read')") && str_contains($yz, 'siparis_no_store()') && str_contains($yz, "!== 'GET'"));
-ok('statik: sayfa kapısı require_siparis(\'read\') satırı', str_contains($sayfa, "require_siparis('read');"));
+ok('statik: yazdırma ucu yalnız GET + siparis.read + no-store', str_contains($yz, "require_siparis('read', 'urun')") && str_contains($yz, 'siparis_no_store()') && str_contains($yz, "!== 'GET'"));
+ok('statik: sayfa kapısı require_siparis(\'read\') satırı', str_contains($sayfa, "require_siparis('read', 'urun');"));
 ok('statik: JS eval/onclick/localStorage yok, esc() var, textContent ile hata', !preg_match('/\beval\(|\bonclick=|localStorage/', $js) && str_contains($js, 'function esc(') && str_contains($js, "textContent = m"));
 ok('statik: Yeni/Temizle düğmesi kodu kalktı', !str_contains($js, 'usipTemizle') && !str_contains($sayfa, 'Temizle</button>'));
 ok('statik: yeni sayfa/uç adları sw.js bypass regex\'ine uyar', (function () use ($ROOT) {

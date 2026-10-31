@@ -40,15 +40,20 @@ $a = strpos($helpers, 'function nav_ptak_sayfalari(): array {'); $b = strpos($he
 $c = strpos($helpers, 'function can_siparis(');
 ok('can_siparis nav_ptak_sayfalari ile render_desktop_sidebar ARASINDA (rol_kapilari_smoke eval bölgesi)',
     $a !== false && $b !== false && $c !== false && $a < $c && $c < $b);
-ok("sidebar \$p_sip = can_siparis('read')", str_contains($helpers, "\$p_sip   = can_siparis('read');"));
+ok("sidebar OGL sayfa izni", str_contains($helpers, "\$p_sip   = role_matrix_page_can('siparis','ogl');"));
 ok('sidebar sipariş bağlantısı $p_sip kapılı', str_contains($helpers, "if (\$p_sip)  \$lnk('siparisler.php'"));
-ok('topnav sipariş bağlantısı can_siparis kapılı', (bool)preg_match("/if \(can_siparis\('read'\)\): \?>\s*\n\s*<a href=\"<\?= \\\$base \?>siparisler\.php\"/", $helpers));
-ok("nav_alt_izinler siparis = can_siparis('read')", str_contains($helpers, "'siparis' => \$fn && can_siparis('read')"));
+$topnavStart = strpos($helpers, '<nav class="topnav">');
+$topnavGate = $topnavStart === false ? false : strpos($helpers, "<?php if (role_matrix_page_can('siparis','ogl')): ?>", $topnavStart);
+$topnavLink = $topnavStart === false ? false : strpos($helpers, 'siparisler.php', $topnavStart);
+ok('topnav OGL bağlantısı bağımsız sayfa kapılı', $topnavGate !== false && $topnavLink !== false && $topnavGate < $topnavLink);
+ok('Ürün Siparişler ayrı sayfa kapısı kullanır', str_contains($helpers, "role_matrix_page_can('siparis','urun')") && str_contains(oku('urun_siparis.php'), "require_siparis('read', 'urun');"));
+ok('OGL route kapısı açık sayfa parametresi ve gerçek read kontrolü içerir', str_contains($core, "string \$page = 'ogl'") && str_contains($core, "role_matrix_page_can('siparis',\$page,'read')"));
+ok("nav_alt_izinler OGL bağımsız sayfa izni", str_contains($helpers, "'siparis' => \$fn && role_matrix_page_can('siparis','ogl')"));
 ok('nav_alt_sayfalar siparis kaydı (siparisler.php, ikon, grup Operasyon)',
     (bool)preg_match("/'siparis' => \['href' => 'siparisler\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/siparis\.svg'\]/", $helpers));
-ok("first_allowed_page siparisler.php = can_siparis('read')", str_contains($helpers, "'siparisler.php'     => can_siparis('read')"));
+ok("first_allowed_page OGL bağımsız sayfa izni", str_contains($helpers, "'siparisler.php'     => role_matrix_page_can('siparis','ogl')"));
 ok('nav_aktif_anahtar siparis bölümü', str_contains($helpers, "'siparis' => \$a_sip") && str_contains($helpers, "\$a_sip   = in_array(\$cur, ['siparisler.php'"));
-ok('index.php kartı can_siparis kapılı', (bool)preg_match("/if \(can_siparis\('read'\)\): \?>\s*\n\s*<a href=\"siparisler\.php\"/", $index));
+ok('index.php OGL kartı bağımsız sayfa kapılı', str_contains($index, "<?php if (role_matrix_page_can('siparis','ogl')): ?>") && strpos($index, "<?php if (role_matrix_page_can('siparis','ogl')): ?>") < strpos($index, '<a href="siparisler.php"'));
 ok('index.php bölüm görünürlüğü can_siparis içeriyor', str_contains($index, "|| can_siparis('read') || can_mail('read');"));
 ok('siparis.* yetkileri helpers.php\'de YALNIZ can_siparis içinde okunuyor (4 çağrı)', substr_count($helpers, "can('siparis.") === 4,
     'sayım: ' . substr_count($helpers, "can('siparis."));
@@ -111,7 +116,7 @@ ok('sync_depot_name_in_data siparis_sevkiyatlar + siparis_belgeler', str_contain
 echo "\n=== Şema yalnız migrate.php'den ===\n";
 $cagiran = [];
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, FilesystemIterator::SKIP_DOTS)) as $f) {
-    $yol = (string)$f;
+    $yol = str_replace('\\', '/', (string)$f);
     if (!str_ends_with($yol, '.php') || str_contains($yol, '/vendor/') || str_contains($yol, '/scripts/') || str_contains($yol, '/.git/')) continue;
     if (preg_match('/\bsiparis_migrate\s*\(/', kod_oku(substr($yol, strlen($ROOT) + 1)))) $cagiran[] = substr($yol, strlen($ROOT) + 1);
 }
@@ -340,7 +345,7 @@ $evKod = '';
 foreach (token_get_all('<?php ' . $evCfg) as $__t) if (!is_array($__t) || !in_array($__t[0], [T_COMMENT, T_DOC_COMMENT], true)) $evKod .= is_array($__t) ? $__t[1] : $__t;
 $evCag = [];
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, FilesystemIterator::SKIP_DOTS)) as $__f) {
-    $yol = (string)$__f;
+    $yol = str_replace('\\', '/', (string)$__f);
     if (!str_ends_with($yol, '.php') || str_contains($yol, '/vendor/') || str_contains($yol, '/scripts/') || str_contains($yol, '/.git/')) continue;
     if (preg_match('/\bsiparis_evrak_gecis_uygula\s*\(/', kod_oku(substr($yol, strlen($ROOT) + 1)))) $evCag[] = substr($yol, strlen($ROOT) + 1);
 }

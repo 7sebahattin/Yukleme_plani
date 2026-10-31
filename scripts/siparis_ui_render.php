@@ -11,7 +11,10 @@
 require_once __DIR__ . '/_siparis_mail_test_lib.php';   // _siparis_test_lib + Mail Merkezi (v378 mail senaryoları)
 
 /** Ortak tohum: tam akış (PO → LL → çatışma → PKL → PC → mail) + ikinci depo + beyan. @return array<string,int> */
-function siparis_ui_tohum(PDO $db): array
+function siparis_ui_tohum(PDO $db): array {
+    return siparis_test_seed(fn()=>siparis_ui_tohum_seed_body($db));
+}
+function siparis_ui_tohum_seed_body(PDO $db): array
 {
     siparis_test_diger_tablolar($db);
     siparis_test_sema_kur($db);

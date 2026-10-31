@@ -28,6 +28,7 @@
 // =========================================================
 
 declare(strict_types=1);
+require_once __DIR__ . '/role_pdks_matrix.php';
 
 defined('PDKS_CARI_AKTIF') || define('PDKS_CARI_AKTIF', true);
 
@@ -160,6 +161,7 @@ function pdks_cari_can(string $eylem): bool
 
 function require_pdks_cari(string $eylem): void
 {
+    role_pdks_require_request();
     if (!PDKS_CARI_AKTIF) {
         if (function_exists('forbidden')) forbidden('Cari hesap modülü şu anda kapalıdır.');
         http_response_code(503);

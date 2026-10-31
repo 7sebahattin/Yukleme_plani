@@ -29,7 +29,7 @@ if (!$calisan) {
 // Aktif depo kapsamı (record_view.php/kantar_view.php İLE AYNI desen) —
 // başka deponun personelinin fotoğrafı, dosya adı bilinse bile açılamaz.
 $_pfo_depo = trim((string)($calisan['depo'] ?? ''));
-if ($_pfo_depo !== '' && function_exists('depot_visible_to_user') && !depot_visible_to_user($_pfo_depo)) {
+if (function_exists('depot_visible_to_user') && !depot_visible_to_user($_pfo_depo)) {
     http_response_code(403);
     exit('Bu personel başka depoya ait');
 }

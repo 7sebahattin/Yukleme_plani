@@ -25,7 +25,7 @@ if ($__hks_user === null) {
   echo json_encode(['hata' => 'Oturum gerekli. Lütfen tekrar giriş yapın.'], JSON_UNESCAPED_UNICODE);
   exit;
 }
-if (!(can('records.write') || (function_exists('is_admin') && is_admin()))) {
+if (!(can('hks.access') || (function_exists('is_admin') && is_admin()))) {
   http_response_code(403);
   echo json_encode(['hata' => 'Bu işlem için yetkiniz yok (records.write).'], JSON_UNESCAPED_UNICODE);
   exit;

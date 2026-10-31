@@ -67,7 +67,9 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
         const page = await context.newPage();
         for (const profile of ['operator', 'only_stok_read', 'only_users_admin', 'dashboard_only']) {
             await page.goto(fixtures[profile]);
-            check(await page.locator('.home-card[href="hizli_maliyet.php"], .home-card[href="roles.php"], .home-card[href="cari_kartlari.php"]').count() === 0, profile + ' no admin cards');
+            // users.admin izni Roller kartını bilerek gösterir; Hızlı Maliyet yalnız hizli_maliyet.read/yönetici ile görünür.
+            const adminOnlySel = profile === 'only_users_admin' ? '.home-card[href="hizli_maliyet.php"], .home-card[href="cari_kartlari.php"]' : '.home-card[href="hizli_maliyet.php"], .home-card[href="roles.php"], .home-card[href="cari_kartlari.php"]';
+            check(await page.locator(adminOnlySel).count() === 0, profile + ' no admin cards');
             check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), profile + ' narrow layout fits');
             if (profile === 'only_stok_read') check(await page.locator('.home-card[href="malzeme_stok.php"]').count() === 1, 'stock-only card remains visible');
             if (profile === 'only_users_admin') check(await page.locator('.home-card[href="users.php"]').count() === 1, 'legitimate non-admin users permission retained');

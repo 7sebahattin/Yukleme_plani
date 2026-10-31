@@ -7,6 +7,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $dashboardRoot = dirname(__DIR__);
+require_once $dashboardRoot . '/config/role_permission_matrix.php';
 $dashboardHelperSource = file_get_contents($dashboardRoot . '/config/helpers.php');
 $dashboardIndexSource = file_get_contents($dashboardRoot . '/index.php');
 
@@ -35,7 +36,7 @@ function dashboard_extract_function(string $source, string $name): string
 }
 
 $dashboardProfile = ['name' => 'anonymous', 'admin' => false, 'permissions' => []];
-function can(string $permission): bool { return in_array($permission, $GLOBALS['dashboardProfile']['permissions'], true); }
+function can(string $permission): bool { return in_array($permission, role_matrix_expand_permissions($GLOBALS['dashboardProfile']['permissions']), true); }
 function is_admin(): bool { return $GLOBALS['dashboardProfile']['admin']; }
 function h($value): string { return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function current_user(): ?array { return ['id' => 1, 'username' => 'anonymous', 'display_name' => 'ANONİM TEST']; }
@@ -88,10 +89,14 @@ $dashboardProfiles = [
     'accountant' => dashboard_profile('accountant', false, ['records.read', 'reports.read', 'stok.read', 'hesap.read', 'siparis.read', 'attendance.foreman_accounts']),
     'dashboard_only' => dashboard_profile('dashboard_only', false, []),
 ];
-$dashboardSinglePermissions = array_merge($dashboardAllPermissions, ['mail.admin', 'maliyet.read', 'maliyet.write', 'hizli_maliyet.read', 'hizli_maliyet.write', 'hizli_maliyet.delete', 'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports', 'attendance.employees', 'attendance.cards', 'attendance.scan']);
+$dashboardProfiles['loading_only']=dashboard_profile('loading_only',false,['role.permissions.detailed','records.loading.read']);
+$dashboardProfiles['pallet_only']=dashboard_profile('pallet_only',false,['role.permissions.detailed','records.pallet.read']);
+$dashboardProfiles['product_orders_only']=dashboard_profile('product_orders_only',false,['role.permissions.detailed','siparis.urun.read']);
+$dashboardProfiles['ogl_only']=dashboard_profile('ogl_only',false,['role.permissions.detailed','siparis.ogl.read']);
 // Eski maliyet.* izinleriyle operator/muhasebe benzeri profil: Hızlı Maliyet'i görmemeli.
 $dashboardProfiles['legacy_maliyet'] = dashboard_profile('legacy_maliyet', false, ['records.read', 'maliyet.read', 'maliyet.write', 'maliyet.delete']);
 $dashboardProfiles['hizli_rw'] = dashboard_profile('hizli_rw', false, ['hizli_maliyet.read', 'hizli_maliyet.write']);
+$dashboardSinglePermissions = array_merge($dashboardAllPermissions, ['mail.admin', 'maliyet.read', 'maliyet.write', 'hizli_maliyet.read', 'hizli_maliyet.write', 'hizli_maliyet.delete', 'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports', 'attendance.employees', 'attendance.cards', 'attendance.scan']);
 foreach ($dashboardSinglePermissions as $permission) {
     $key = 'only_' . str_replace('.', '_', $permission);
     $dashboardProfiles[$key] = dashboard_profile($key, false, [$permission]);
@@ -178,7 +183,7 @@ foreach ($dashboardProfiles as $name => $profile) {
             dashboard_check($matches === 1, $name . ': katalog grup başlığı bir kez ' . $heading);
         }
     } else {
-        foreach (array_merge(array_keys($dashboardCatalog), ['roles.php', 'audit.php', 'admin_db_backups.php']) as $adminOnly) {
+        foreach (array_merge(array_keys($dashboardCatalog), ['audit.php', 'admin_db_backups.php']) as $adminOnly) {
             dashboard_check(!in_array($adminOnly, $homeHrefs, true), $name . ': admin kartı görünmez ' . $adminOnly);
         }
     }
@@ -192,11 +197,15 @@ foreach ($dashboardProfiles as $name => $profile) {
     dashboard_check(in_array('hizli_maliyet.php', $homeHrefs, true) === $quickExpected, $name . ': Hızlı Maliyet kartı yalnız hizli_maliyet.read/yönetici');
     dashboard_check(in_array('hizli_maliyet.php', array_column($sidebar, 'href'), true) === $quickExpected, $name . ': Hızlı Maliyet sidebar bağlantısı kartla aynı kapı');
     if ($name === 'only_hizli_maliyet_read') dashboard_check(isset($homeLabels['hizli_maliyet.php']) && count($home) === 1, 'yalnız hizli_maliyet.read tek kart + bölüm görünür');
+    foreach (['loading_only'=>['records.php','cikmalar.php'],'pallet_only'=>['cikmalar.php','records.php'],'product_orders_only'=>['urun_siparis.php','siparisler.php'],'ogl_only'=>['siparisler.php','urun_siparis.php']] as $profileName=>[$yes,$no]) if ($name===$profileName) {
+        dashboard_check(in_array($yes,$homeHrefs,true),'Detailed page visible '.$yes);
+        dashboard_check(!in_array($no,$homeHrefs,true),'Sibling page denied '.$no);
+    }
     if ($name === 'only_defs_read') dashboard_check(isset($homeLabels['definitions.php']), 'admin olmayan tanım yetkili kartı korunur');
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');
     if ($name === 'dashboard_only') dashboard_check(count($home) === 0, 'yalnız dashboard yetkisinde ilgisiz kart yok');
     foreach (['attendance.employees', 'attendance.cards', 'attendance.scan'] as $legacy) {
-        if ($name === 'only_' . str_replace('.', '_', $legacy)) dashboard_check(!isset($homeLabels['personel_takip.php']), 'eski PDKS izni personel merkezini açmaz: ' . $legacy);
+        if ($name === 'only_' . str_replace('.', '_', $legacy)) dashboard_check(isset($homeLabels['personel_takip.php']), 'yetkili personel alt sayfasının merkez girişi görünür: ' . $legacy);
     }
 }
 $badgeXpath = dashboard_dom(dashboard_render($dashboardProfiles['admin'], true));

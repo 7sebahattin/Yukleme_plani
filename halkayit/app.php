@@ -10,7 +10,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 
 $auth_user = require_login();
-require_perm('records.write');
+require_perm('hks.access');
 
 header('Content-Type: text/html; charset=utf-8');
 // Sayfa CSRF token'ı taşır — tarayıcı/ara katman önbelleği eski token'ı sunmasın.
