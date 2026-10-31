@@ -281,7 +281,9 @@ t('Satış doğrulaması: kur, marj, satış fiyatsız kayıt', function (): voi
     $d = v2_example(); $d['sale'] = ['price' => 1, 'currency' => 'EUR', 'rate' => 0];
     throws(fn() => quick_cost_calculate($d), 'kuru');
     $d['sale']['rate'] = 1001; throws(fn() => quick_cost_calculate($d), 'kuru');
-    $d['sale'] = ['price' => 1, 'currency' => 'GBP', 'rate' => 40]; throws(fn() => quick_cost_calculate($d), 'Para birimi');
+    $d['sale'] = ['price' => 1, 'currency' => 'JPY', 'rate' => 40]; throws(fn() => quick_cost_calculate($d), 'Para birimi');
+    foreach (['RUB' => '0,4', 'GBP' => '43'] as $cur => $rt) { $d['sale'] = ['price' => 10, 'currency' => $cur, 'rate' => $rt]; ok(quick_cost_calculate($d)['sale_result'] !== null, $cur); }
+    $md = quick_cost_v2_defaults()['material_detail']['lines']; eq(array_column($md, 'qty'), [1, 1, 4, 0, 1, 2, 1, 1, 1]);
     $d['sale'] = ['price' => 1, 'currency' => 'TL', 'target_margin' => 100]; throws(fn() => quick_cost_calculate($d), 'marjı');
     $d['sale'] = ['price' => 1, 'currency' => 'TL', 'target_margin' => 150]; throws(fn() => quick_cost_calculate($d), 'marjı');
     $d['sale'] = ['price' => 0, 'currency' => 'EUR', 'rate' => 0]; eq(quick_cost_calculate($d)['sale_result'], null);

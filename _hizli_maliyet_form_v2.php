@@ -40,30 +40,6 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
     <input type="hidden" name="version" value="<?= (int)($version ?? 0) ?>">
     <input type="hidden" name="payload" id="qc-payload" value="">
 
-    <section class="qc-hero qc2-hero" aria-label="Canlı maliyet sonuçları">
-        <div class="qc2-kpis">
-            <div><span>İHRACATLIK NET KG</span><?= $qc2_out('export_kg', $qc2_calc ? $qc2_num($qc2_calc['quantities']['export_kg']) : '—') ?></div>
-            <div><span>İHRACAT VERİMLİLİĞİ</span><?= $qc2_out('yield_pct', $qc2_calc ? '%' . number_format($qc2_calc['derived']['yield_pct'], 2, ',', '.') : '—') ?></div>
-            <div class="qc2-kpi-main"><span>İHRACAT NET KG MALİYETİ (TL/kg)</span><?= $qc2_out('unit_cost', $qc2_calc ? number_format($qc2_calc['unit_cost'], 4, ',', '.') : '—') ?></div>
-        </div>
-        <p class="qc2-method" data-qc2-out="method_note">İhtiyatlı yöntem: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir.</p>
-        <details class="qc2-more">
-            <summary>Genişletilmiş sonuçlar</summary>
-            <dl>
-                <div><dt>Ham mal alış toplamı</dt><dd data-qc2-out="group.raw">—</dd></div>
-                <div><dt>Hasat ve ön nakliye</dt><dd data-qc2-out="group.supply">—</dd></div>
-                <div><dt>Paketleme maliyeti</dt><dd data-qc2-out="group.packing">—</dd></div>
-                <div><dt>Malzeme maliyeti</dt><dd data-qc2-out="group.material">—</dd></div>
-                <div><dt>Nakliye ve ihracat giderleri</dt><dd data-qc2-out="group.export">—</dd></div>
-                <div><dt>Genel ve diğer giderler</dt><dd data-qc2-out="group.other">—</dd></div>
-                <div><dt>Çıkma / suluk net gelir kredisi</dt><dd data-qc2-out="credit_applied">—</dd></div>
-                <div class="qc-grand-total"><dt>İhracata yüklenen tahmini maliyet</dt><dd data-qc2-out="export_cost">—</dd></div>
-                <div><dt>İhtiyatlı maliyet (kredi yok)</dt><dd data-qc2-out="unit_cost_prudent">—</dd></div>
-            </dl>
-        </details>
-        <span class="qc-sr-only" data-qc2-out="live" aria-live="polite" aria-atomic="true"></span>
-    </section>
-
     <div class="qc2-switches">
         <div class="qc2-seg" role="group" aria-label="Görünüm">
             <button type="button" data-qc2-set="method" data-value="quick" aria-pressed="<?= $qc2_view === 'quick' ? 'true' : 'false' ?>">Hızlı Hesap</button>
@@ -219,8 +195,30 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
         <p class="qc-hint">Kâr marjı satış tutarına göredir (maliyet üzerine ekleme oranı değildir). Kur elle girilir; otomatik kur kullanılmaz. Satış fiyatı girmeden de hesap kaydedilebilir.</p>
     </details>
 
-    <section class="qc-hero qc2-total-card" aria-label="Toplam operasyon maliyeti">
+
+    <section class="qc-hero qc2-hero qc2-hero-alt" aria-label="Canlı maliyet sonuçları">
         <div class="qc-hero-total"><span>TOPLAM OPERASYON MALİYETİ (TL)</span><?= $qc2_out('total', $qc2_calc ? $qc2_money($qc2_calc['total']) : '—') ?></div>
+        <div class="qc2-kpis">
+            <div><span>İHRACATLIK NET KG</span><?= $qc2_out('export_kg', $qc2_calc ? $qc2_num($qc2_calc['quantities']['export_kg']) : '—') ?></div>
+            <div><span>İHRACAT VERİMLİLİĞİ</span><?= $qc2_out('yield_pct', $qc2_calc ? '%' . number_format($qc2_calc['derived']['yield_pct'], 2, ',', '.') : '—') ?></div>
+            <div class="qc2-kpi-main"><span>İHRACAT NET KG MALİYETİ (TL/kg)</span><?= $qc2_out('unit_cost', $qc2_calc ? number_format($qc2_calc['unit_cost'], 4, ',', '.') : '—') ?></div>
+        </div>
+        <p class="qc2-method" data-qc2-out="method_note">İhtiyatlı yöntem: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir.</p>
+        <details class="qc2-more">
+            <summary>Genişletilmiş sonuçlar</summary>
+            <dl>
+                <div><dt>Ham mal alış toplamı</dt><dd data-qc2-out="group.raw">—</dd></div>
+                <div><dt>Hasat ve ön nakliye</dt><dd data-qc2-out="group.supply">—</dd></div>
+                <div><dt>Paketleme maliyeti</dt><dd data-qc2-out="group.packing">—</dd></div>
+                <div><dt>Malzeme maliyeti</dt><dd data-qc2-out="group.material">—</dd></div>
+                <div><dt>Nakliye ve ihracat giderleri</dt><dd data-qc2-out="group.export">—</dd></div>
+                <div><dt>Genel ve diğer giderler</dt><dd data-qc2-out="group.other">—</dd></div>
+                <div><dt>Çıkma / suluk net gelir kredisi</dt><dd data-qc2-out="credit_applied">—</dd></div>
+                <div class="qc-grand-total"><dt>İhracata yüklenen tahmini maliyet</dt><dd data-qc2-out="export_cost">—</dd></div>
+                <div><dt>İhtiyatlı maliyet (kredi yok)</dt><dd data-qc2-out="unit_cost_prudent">—</dd></div>
+            </dl>
+        </details>
+        <span class="qc-sr-only" data-qc2-out="live" aria-live="polite" aria-atomic="true"></span>
     </section>
 
     <ul class="qc2-warnings" data-qc2-out="warnings" aria-live="polite"><?php foreach (($qc2_calc['warnings'] ?? []) as $qc2_w): ?><li data-code="<?= h($qc2_w['code']) ?>"><?= h($qc2_w['text']) ?></li><?php endforeach; ?></ul>
