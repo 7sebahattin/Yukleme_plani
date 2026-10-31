@@ -74,13 +74,6 @@ function quick_cost_number($value, string $label = 'Değer'): float
     return round($number, 4);
 }
 
-/** PHP/JS aynı pozitif half-up politikası; satır tutarı kuruşa yuvarlanır. */
-function quick_cost_round(float $value, int $decimals = 2): float
-{
-    $scale = 10 ** $decimals;
-    return floor($value * $scale + 0.5000001) / $scale;
-}
-
 /**
  * Sabit dört ondalık üzerinden tam kuruş hesabı. Q×P doğrudan çarpılmaz:
  * o çarpım int64 sınırını aşabilir. Parçalanmış tüm ara değerler <= 10^14
