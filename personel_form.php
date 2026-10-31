@@ -49,7 +49,7 @@ if ($id > 0) {
     // kart_ata/kart_durum/kart_degistir). Deposu boş (atanmamış) personel
     // her depoda görünür kalır.
     $_pf_depo = trim((string)($eski['depo'] ?? ''));
-    if ($_pf_depo !== '' && function_exists('depot_visible_to_user') && !depot_visible_to_user($_pf_depo)) {
+    if (function_exists('depot_visible_to_user') && !depot_visible_to_user($_pf_depo)) {
         forbidden('Bu personel başka depoya ait (' . h($_pf_depo)
             . '). Görüntülemek için üstteki depo rozetinden o depoya geçin.');
     }
@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? 'save_employee');
 
     if ($action === 'save_employee') {
+        role_require_depot_value(is_string($_POST['depo'] ?? null) ? $_POST['depo'] : null);
         $record = [
             'personnel_no' => trim($_POST['personnel_no'] ?? ''),
             'full_name'    => trim($_POST['full_name'] ?? ''),

@@ -16,6 +16,7 @@ ini_set('display_errors', '1');
 date_default_timezone_set('Europe/Istanbul');   // config/db.php ile aynı
 
 $ROOT = dirname(__DIR__);
+require_once $ROOT . '/config/role_permission_matrix.php';
 ini_set('log_errors', '1');
 ini_set('error_log', sys_get_temp_dir() . '/siparis_test_' . getmypid() . '.log');
 
@@ -53,7 +54,7 @@ $PERMS = []; $IS_ADMIN = false; $UID = 1;
 $DEPOLAR = null;            // null = kısıtsız; dizi = izinli depolar (aktif depo kuralı)
 $AKTIF_DEPO = 'DEPO1';
 function current_user(): ?array { global $UID; return $UID ? ['id' => $UID, 'username' => 'u' . $UID, 'display_name' => 'Kullanıcı ' . $UID] : null; }
-function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
 function is_admin(): bool { global $IS_ADMIN; return $IS_ADMIN; }
 function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }
@@ -203,7 +204,19 @@ function siparis_test_fixture(string $ad): array
  * (copy mover), test kancası ($GLOBALS['_siparis_parse_override']) $doc'u döndürür, belge işlenir.
  * @return array{kayit:array, isle:array}
  */
-function siparis_test_isle(PDO $db, array $doc, string $etiket, int $uid = 1, ?int $hedef = null, string $depo = 'DEPO1'): array
+/** Fixture-only authenticated seed scope; restores denied-test state even on failure. */
+function siparis_test_seed(callable $seed): mixed {
+    global $PERMS,$IS_ADMIN,$DEPOLAR;
+    $saved=[$PERMS,$IS_ADMIN,$DEPOLAR];
+    $PERMS=['siparis.read','siparis.write']; $IS_ADMIN=false; $DEPOLAR=null;
+    try { return $seed(); }
+    finally { [$PERMS,$IS_ADMIN,$DEPOLAR]=$saved; }
+}
+function siparis_test_isle(PDO $db, array $doc, string $etiket, int $uid = 1, ?int $hedef = null, string $depo = 'DEPO1'): array {
+    return siparis_test_seed(fn()=>siparis_test_isle_seed_body($db,$doc,$etiket,$uid,$hedef,$depo));
+}
+
+function siparis_test_isle_seed_body(PDO $db, array $doc, string $etiket, int $uid = 1, ?int $hedef = null, string $depo = 'DEPO1'): array
 {
     $k = siparis_dosya_kaydet($db, siparis_test_dosya(siparis_test_pdf($etiket), $etiket . '.pdf'), $uid, $depo, siparis_test_mover());
     if (!$k['ok']) return ['kayit' => $k, 'isle' => ['ok' => false, 'hata' => $k['hata'] ?? '']];

@@ -21,6 +21,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 
 $id    = (int)($_GET['id'] ?? 0);
+role_require_record_access($id, 'read');
 $debug = !empty($_GET['debug']) && function_exists('is_admin') && is_admin();
 if ($id <= 0) { http_response_code(400); die('Geçersiz kayıt.'); }
 

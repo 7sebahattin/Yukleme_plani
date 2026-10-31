@@ -9,7 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_login();
-require_perm('records.write');
+require_perm('records.edit');
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -17,6 +17,7 @@ $body = json_decode(file_get_contents('php://input'), true) ?? [];
 csrf_check($body['csrf'] ?? null);
 
 $id = (int)($body['id'] ?? 0);
+role_require_record_access($id, 'edit');
 if ($id <= 0) { echo json_encode(['ok' => false, 'error' => 'Geçersiz kayıt']); exit; }
 
 if (!db_has_column('loading_records', 'etiket_foto')) {

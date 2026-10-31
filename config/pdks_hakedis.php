@@ -36,6 +36,7 @@
 // =========================================================
 
 declare(strict_types=1);
+require_once __DIR__ . '/role_pdks_matrix.php';
 
 defined('PDKS_HAKEDIS_AKTIF') || define('PDKS_HAKEDIS_AKTIF', true);
 
@@ -341,6 +342,7 @@ function pdks_hakedis_can(string $eylem): bool
 
 function require_pdks_hakedis(string $eylem): void
 {
+    role_pdks_require_request();
     if (!PDKS_HAKEDIS_AKTIF) {
         if (function_exists('forbidden')) forbidden('Hakediş modülü şu anda kapalıdır.');
         http_response_code(503);
@@ -549,6 +551,9 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
     $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id = ?");
     $stE->execute([$sessionId]);
     $mevcut = $stE->fetch();
+    if (function_exists('can') && can('role.permissions.detailed') && !role_pdks_can('entitlements', $mevcut ? 'edit' : 'create')) {
+        return ['ok'=>false, 'kod'=>'yetki_yok', 'hata'=>'Hakediş oluşturma veya düzenleme yetkiniz yok.'];
+    }
     if ($mevcut && $mevcut['status'] === 'final') {
         return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ — otomatik yeniden hesaplanamaz.'];
     }

@@ -40,7 +40,9 @@ verify(count($mixed) === count(array_unique($mixed)), 'Union should deduplicate'
 $viewer = user_permissions(14);
 verify(in_array('beyan.analysis.read', $viewer, true), 'Legacy read lost section access');
 verify(!in_array('beyan.edit', $viewer, true), 'Viewer gained edit');
-verify(user_permissions(15) === ['records.read', 'users.admin'], 'Other module permissions changed');
+$recordViewer = user_permissions(15);
+verify(in_array('users.admin', $recordViewer, true) && in_array('records.loading.read', $recordViewer, true) && in_array('records.pallet.read', $recordViewer, true), 'Legacy record reader expansion lost grants');
+verify(!in_array('records.loading.create', $recordViewer, true) && !in_array('records.pallet.edit', $recordViewer, true), 'Legacy record reader gained writes');
 verify(user_permissions(999) === [], 'Unassigned user gained permission');
 $detailedLegacy = user_permissions(16);
 verify(!in_array('beyan.notify', $detailedLegacy, true), 'Detailed role legacy write must not expand');

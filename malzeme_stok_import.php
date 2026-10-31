@@ -7,6 +7,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('stok.write');
+require_perm('stok.create');
 
 $pdo = db();
 
@@ -24,6 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_im
 
     $import_data = json_decode($_POST['import_data'] ?? '[]', true);
     if (!is_array($import_data)) $import_data = [];
+    // Validate the full batch before the first INSERT to avoid partial writes.
+    foreach ($import_data as $scopeRow) role_require_depot_value(is_array($scopeRow) && is_string($scopeRow['depo'] ?? null) ? $scopeRow['depo'] : null);
 
     $mat_lookup = [];
     foreach ($pdo->query(

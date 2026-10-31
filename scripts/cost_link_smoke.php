@@ -15,6 +15,13 @@ if (PHP_SAPI !== 'cli') {
     die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
 }
 
+// Validate the manual command before loading any configured DB/bootstrap.
+$cmd = $argv[1] ?? '';
+if (!in_array($cmd, ['search', 'record'], true)) {
+    fwrite(STDERR, "Elle DB tanılaması: search <metin> | record <id>. İzole test: role_data_scope_smoke.php\n");
+    exit(2);
+}
+
 require_once __DIR__ . '/../config/cost_link.php';
 
 cost_migrate(); // cost_sheets tablosu/kolonları yoksa oluşturur (idempotent)

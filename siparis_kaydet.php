@@ -22,7 +22,10 @@ $islem = (string)($_POST['islem'] ?? '');
 $yazIslemleri = ['alan', 'kilit_ac', 'durum', 'catisma', 'not', 'belge_bagla', 'yeniden_isle', 'yeni', 'kalem_ekle', 'yetim_ekle', 'eksik_okuma_tamam'];
 $silIslemleri = ['belge_sil', 'sil'];
 if (in_array($islem, $silIslemleri, true)) require_siparis('delete');
-else require_siparis('write');
+else {
+    require_siparis('write');
+    if (!role_matrix_page_can('siparis','ogl', in_array($islem, ['yeni','yetim_ekle'], true) ? 'create' : 'edit')) forbidden('Bu işlem için yetkiniz yok.');
+}
 
 $pdo = db();
 $uid = (int)$auth_user['id'];

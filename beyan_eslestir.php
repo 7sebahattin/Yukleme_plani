@@ -14,7 +14,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 
 $auth_user = require_login();
-if (!can_beyan('match') || !(can('records.write') || is_admin())) {
+if (!can_beyan('match') || !(can('records.loading.edit') || is_admin())) {
     forbidden('Eşleştirme için yetkiniz yok.');
 }
 
@@ -29,6 +29,7 @@ csrf_check($_POST['csrf'] ?? null);
 $action      = (string)($_POST['action'] ?? '');
 $beyan_id    = (int)($_POST['beyan_id'] ?? 0);
 $loading_id  = (int)($_POST['loading_record_id'] ?? 0);
+role_require_record_access($loading_id, 'edit');
 
 if ($action !== 'match_loading_record' || $beyan_id <= 0) {
     set_flash('error', 'Geçersiz istek.');

@@ -27,8 +27,8 @@ if (!$hazir) {
     exit;
 }
 
-$yaz = can_siparis('write');
-$sil = can_siparis('delete');
+$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','create'));
+$sil = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
 
 // ── filtreler (v382: liste + yazdırma ORTAK — config/siparis_core.php siparis_liste_filtre) ──
 $F = siparis_liste_filtre($_GET);

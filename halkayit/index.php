@@ -11,7 +11,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 
 $auth_user = require_login();
-require_perm('records.write');   // Eski "Hal Bildirimi" ile aynı yetki kapısı
+require_perm('hks.access');   // Eski "Hal Bildirimi" ile aynı yetki kapısı
 
 render_header('Hal Kayıt');
 ?>

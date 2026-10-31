@@ -1,166 +1,122 @@
-// =========================================================
-// scripts/roles_modal_smoke.js — Roller modalinin GERÇEK TARAYICI testi
-//
-// Neden gerekli: "Yeni Rol" modalinde 51 yetki kutusu var ve ekrana
-// sığmıyor. .pm-dialog max-height:90vh + .pm-body overflow:auto kuralları
-// kaynakta DOĞRU görünüyordu, ama araya giren <form> sarmalayıcı flex
-// zincirini kırıyordu: gövde hiç kaydırılamıyor, alt yetki grupları ve
-// Oluştur/İptal düğmeleri ekranın dışında kalıyordu. PHP/statik testler
-// bunu göremez — yalnız düzen (layout) motoru gösterir.
-//
-//   php scripts/roles_modal_render.php > _test_roles.html
-//   node scripts/roles_modal_smoke.js
-//
-// Playwright yoksa kendini ATLAR (beyan_js_smoke.js ile aynı kural).
-// =========================================================
 'use strict';
+// Anonymous, file-only browser verification. Generate ROLES_HTML_PATH with
+// roles_modal_render.php. No application bootstrap or network service is used.
 const fs = require('fs');
 const path = require('path');
-
-let chromium = null;
-for (const mod of [process.env.PW_PATH, 'playwright', 'playwright-core',
-                   '/opt/node22/lib/node_modules/playwright']) {
+const { pathToFileURL } = require('url');
+let chromium;
+for (const mod of [process.env.PW_PATH, 'playwright', 'playwright-core', '/opt/node22/lib/node_modules/playwright']) {
     if (!mod) continue;
-    try { chromium = require(mod).chromium; break; } catch (e) { /* sonrakini dene */ }
+    try { chromium = require(mod).chromium; break; } catch (_) { /* try next */ }
 }
-if (!chromium) {
-    console.log('Playwright bulunamadı — tarayıcı testi ATLANDI (hata değil).');
-    process.exit(0);
-}
-
-const ROOT = path.dirname(__dirname);
-const SAYFA = path.join(ROOT, '_test_roles.html');
-if (!fs.existsSync(SAYFA)) {
-    console.error('_test_roles.html yok. Önce: php scripts/roles_modal_render.php > _test_roles.html');
-    process.exit(1);
-}
-
-let hata = 0;
-function ok(ad, kosul, ipucu) {
-    if (!kosul) hata++;
-    console.log(`${ad.padEnd(62)} ${kosul ? 'OK' : '*** HATA'}${kosul ? '' : '\n    → ' + (ipucu || '')}`);
-}
-
+if (!chromium) { console.error('Playwright bulunamadı; tarayıcı kabulü çalıştırılamadı.'); process.exit(1); }
+const root = path.dirname(__dirname);
+const html = process.env.ROLES_HTML_PATH || path.join(root, '_test_roles.html');
+if (!fs.existsSync(html)) { console.error('Anonim HTML yok: ROLES_HTML_PATH belirtin.'); process.exit(1); }
+const proofDir = process.env.ROLES_QA_DIR;
+if (proofDir) fs.mkdirSync(proofDir, {recursive:true});
+const results = [];
+function ok(name, pass, detail) { results.push({name,pass:!!pass,detail}); console.log((pass ? 'OK ' : 'FAIL ') + name + (pass || !detail ? '' : ' — ' + detail)); }
 (async () => {
-    const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-                        '/opt/pw-browsers/chromium/chrome-linux/chrome']
-                       .find(p => fs.existsSync(p));
-    const browser = await chromium.launch(process.env.PW_CHANNEL ? { channel: process.env.PW_CHANNEL } : (chromePath ? { executablePath: chromePath } : {}));
-
-    for (const ekran of [{ ad: 'MASAÜSTÜ', width: 1280, height: 900 },
-                         { ad: 'TABLET',   width: 820,  height: 1024 },
-                         { ad: 'MOBİL',    width: 390,  height: 844 }]) {
-        console.log(`\n=== ${ekran.ad} (${ekran.width}×${ekran.height}) ===`);
-        const page = await browser.newPage({ viewport: { width: ekran.width, height: ekran.height } });
-        await page.goto('file://' + SAYFA);
-        await page.waitForTimeout(400);   // açılış animasyonu (220ms) bitsin — erken ölçüm yanıltır
-
-        const m = await page.evaluate(() => {
-            const dlg  = document.querySelector('#rolCreateModal .pm-dialog');
-            const body = document.querySelector('#rolCreateModal .pm-body');
-            const foot = document.querySelector('#rolCreateModal .pm-footer');
-            const r = el => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, height: b.height }; };
-            return {
-                vh: window.innerHeight,
-                dialog: r(dlg), body: r(body), footer: r(foot),
-                bodyScrollHeight: body.scrollHeight,
-                bodyClientHeight: body.clientHeight,
-            };
-        });
-
-        ok('modal ekranın dışına taşmıyor',
-            m.dialog.bottom <= m.vh + 1,
-            `dialog alt kenarı ${Math.round(m.dialog.bottom)}px, ekran ${m.vh}px`);
-
-        ok('Oluştur/İptal düğmeleri ekran İÇİNDE',
-            m.footer.bottom <= m.vh + 1 && m.footer.top >= -1 && m.footer.height > 0,
-            `footer ${Math.round(m.footer.top)}–${Math.round(m.footer.bottom)}px, ekran ${m.vh}px`);
-
-        ok('yetki gövdesi KAYDIRILABİLİR',
-            m.bodyScrollHeight > m.bodyClientHeight + 4,
-            `scrollHeight ${m.bodyScrollHeight} ≤ clientHeight ${m.bodyClientHeight} — gövde kısıtlanmamış`);
-
-        // Gerçekten en alta kaydırıp son kutuyu tıklayabiliyor muyuz?
-        await page.evaluate(() => {
-            const b = document.querySelector('#rolCreateModal .pm-body');
-            b.scrollTop = b.scrollHeight;
-        });
-        await page.waitForTimeout(80);
-
-        const son = '#rolCreateModal input[value="users.admin"]';
-        const gorunur = await page.evaluate((sel) => {
-            const el = document.querySelector(sel);
-            if (!el) return { bulundu: false };
-            const b = el.getBoundingClientRect();
-            const ust = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-            return {
-                bulundu: true,
-                ekranda: b.top >= 0 && b.bottom <= window.innerHeight,
-                tiklanabilir: ust === el || el.contains(ust),
-            };
-        }, son);
-
-        ok('son yetki kutusu (Kullanıcı ve rol yönetimi) görünür',
-            gorunur.bulundu && gorunur.ekranda,
-            'kaydırma sonrası hâlâ ekran dışında');
-        ok('son yetki kutusu tıklanabilir (üstünü kapatan yok)',
-            gorunur.tiklanabilir === true);
-
-        if (gorunur.bulundu && gorunur.ekranda) {
-            await page.check(son);
-            ok('son yetki kutusu işaretlenebildi', await page.isChecked(son));
-        } else {
-            ok('son yetki kutusu işaretlenebildi', false, 'kutuya erişilemedi');
+    const executablePath = process.env.PW_EXECUTABLE_PATH || [
+        'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+        'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+        '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    ].find(p=>fs.existsSync(p));
+    const browser = await chromium.launch(executablePath ? {executablePath} : (process.env.PW_CHANNEL ? {channel:process.env.PW_CHANNEL} : {}));
+    try {
+        for (const viewport of [{width:1440,height:1000},{width:820,height:1024},{width:390,height:844},{width:320,height:740}]) {
+            const page = await browser.newPage({viewport});
+            const errors = [];
+            page.on('pageerror', e=>errors.push(e.message));
+            await page.goto(pathToFileURL(html).href);
+            await page.evaluate(()=>window.rolOpenCreate());
+            const id = ' [' + viewport.width + ']';
+            const modal = page.locator('#rolCreateModal');
+            const editor = modal.locator('.rol-editor');
+            const search = editor.locator('.rol-search');
+            ok('Dört CRUD sütunu sabit' + id, JSON.stringify(await editor.locator('.rol-matrix-table').first().locator('thead th').allTextContents()) === JSON.stringify(['Sayfa / alt başlık','Gör','Ekle','Düzenle','Sil']));
+            ok('Varsayılan ana sayfa izni açık' + id, await modal.locator('input[value="dashboard.read"]').isChecked());
+            const initial = await modal.locator('form').evaluate(f=>new FormData(f).getAll('permissions[]'));
+            await search.fill('Yükleme Raporları');
+            ok('Arama alt satırı ve Raporlar atasını gösterir' + id, await editor.locator('tr[data-path="reports"]').isVisible() && await editor.locator('tr[data-label="Yükleme Raporları"]').isVisible());
+            ok('Arama görünmeyen seçimleri korur' + id, JSON.stringify(initial) === JSON.stringify(await modal.locator('form').evaluate(f=>new FormData(f).getAll('permissions[]'))));
+            await editor.locator('.rol-reset-filters').click();
+            const reports = editor.locator('tr[data-path="reports"]');
+            await reports.locator('.rol-row-expand').click();
+            ok('Ok alt rapor yetkilerini açar' + id, await editor.locator('tr[data-label="Yükleme Raporları"]').isVisible());
+            await modal.locator('input[value="reports.yukleme.read"]').check();
+            await editor.locator('.rol-state-filter').selectOption('selected');
+            ok('Seçili filtresi alt satırı görünür tutar' + id, await editor.locator('tr[data-label="Yükleme Raporları"]').isVisible());
+            await editor.locator('.rol-reset-filters').click();
+            await search.fill('Personel kartları');
+            const employeeRead=modal.locator('input[value="attendance.employees.read"]');
+            ok('Personel alt sayfasında dört bağımsız CRUD anahtarı var' + id, await employeeRead.isVisible() && await modal.locator('input[value="attendance.employees.create"]').isVisible() && await modal.locator('input[value="attendance.employees.edit"]').isVisible() && await modal.locator('input[value="attendance.employees.delete"]').isVisible());
+            await employeeRead.check();
+            ok('Personel Gör seçimi yazma izinlerini açmaz' + id, !await modal.locator('input[value="attendance.employees.create"]').isChecked() && !await modal.locator('input[value="attendance.employees.edit"]').isChecked() && !await modal.locator('input[value="attendance.employees.delete"]').isChecked());
+            await employeeRead.uncheck();
+            await editor.locator('.rol-reset-filters').click();
+            await search.fill('Kullanıcı ve rol yönetimi');
+            const shared = modal.locator('input[value="users.admin"]');
+            ok('Paylaşılan izin iki yerde temsil edilir' + id, await shared.count() >= 2);
+            await shared.first().check();
+            ok('Aynı izin anahtarları birlikte değişir' + id, (await shared.evaluateAll(nodes=>nodes.every(n=>n.checked))));
+            await shared.first().uncheck();
+            ok('Aynı izin kapatılınca tümü kapanır' + id, (await shared.evaluateAll(nodes=>nodes.every(n=>!n.checked))));
+            await editor.locator('.rol-reset-filters').click();
+            await editor.locator('.rol-section-filter').selectOption('Yönetim');
+            ok('Bölüm filtresi diğer bölümleri gizler' + id, await editor.locator('.rol-perm-group:visible').evaluateAll(nodes=>nodes.every(n=>n.dataset.group==='Yönetim')));
+            await search.fill('eşleşmeyen-arama-999');
+            ok('Boş filtre sonucu anlaşılır' + id, await editor.locator('.rol-empty').isVisible());
+            await editor.locator('.rol-reset-filters').click();
+            await editor.locator('.rol-data-scope summary').click();
+            await editor.locator('.rol-scope-mode').selectOption('selected');
+            await modal.locator('input[name="scope_depots[]"]').first().check();
+            const scoped = await modal.locator('form').evaluate(f=>({mode:new FormData(f).get('scope_mode'),depots:new FormData(f).getAll('scope_depots[]')}));
+            ok('Depo kapsamı forma aktarılır' + id, scoped.mode==='selected' && scoped.depots.length===1 && scoped.depots[0]==='Örnek Depo A');
+            ok('Kapsamların kesişimi açıklanır' + id, (await editor.locator('.rol-data-scope').textContent()).includes('kesişir'));
+            await editor.locator('.rol-data-scope summary').click();
+            const layout = await modal.evaluate(m=>{
+                const rect=el=>{const r=el.getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height}};
+                const b=m.querySelector('.pm-body');
+                return {dialog:rect(m.querySelector('.pm-dialog')),footer:rect(m.querySelector('.pm-footer')),bodyScroll:b.scrollHeight>b.clientHeight+4,vh:innerHeight,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1};
+            });
+            ok('Modal ve sabit alt düğmeler ekranda' + id, layout.dialog.bottom<=layout.vh+1 && layout.footer.bottom<=layout.vh+1 && layout.footer.top>=0 && layout.footer.height>0);
+            ok('Gövde kaydırılabilir; sayfa yatay taşmaz' + id, layout.bodyScroll && !layout.overflow);
+            await search.fill('Yükleme Raporları');
+            const reportToggle=modal.locator('input[value="reports.yukleme.read"]');
+            await reportToggle.focus();
+            const before=await reportToggle.isChecked();
+            await page.keyboard.press('Space');
+            ok('Klavye Space anahtarı değiştirir' + id, await reportToggle.isChecked()!==before);
+            await editor.locator('.rol-reset-filters').click();
+            if(proofDir) {
+                await modal.locator('.pm-body').evaluate(el=>el.scrollTop=0);
+                await page.screenshot({path:path.join(proofDir,'roles-'+viewport.width+'.png')});
+            }
+            await page.keyboard.press('Escape');
+            ok('Escape modali kapatır' + id, !await modal.isVisible());
+            await page.evaluate(()=>{
+                const b=Array.from(document.querySelectorAll('button[onclick]')).find(n=>n.getAttribute('onclick').includes('operator')&&n.getClientRects().length); b.focus(); b.click();
+            });
+            const edit=page.locator('#rolEditModal');
+            ok('Eski rolün beyan alt izinleri korunur' + id, await edit.locator('input[value="beyan.contact.read"]').isChecked() && await edit.locator('input[value="beyan.contact.write"]').isChecked());
+            ok('Eski rapor erişimi ayrıntılı izinlere açılır' + id, await edit.locator('input[value="reports.yukleme.read"]').isChecked());
+            ok('Eski rol depo kapsamı yeniden açılır' + id, await edit.locator('.rol-scope-mode').inputValue()==='selected' && await edit.locator('input[name="scope_depots[]"]').first().isChecked());
+            ok('Katalog dışı kayıtlı izin düzenlenebilir' + id, await edit.locator('input[value="extension.example"]').isChecked());
+            const submitted=await edit.locator('form').evaluate(f=>new FormData(f).getAll('permissions[]'));
+            ok('Ayrıntılı marker var, eski geniş beyan izni yok' + id, submitted.includes('role.permissions.detailed') && submitted.includes('beyan.permissions.detailed') && !submitted.includes('beyan.write'));
+            await edit.locator('.pm-footer button').last().focus();
+            await page.keyboard.press('Tab');
+            ok('Tab odak döngüsü dialogda kalır' + id, await page.evaluate(()=>document.activeElement===document.querySelector('#rolEditModal .pm-close')));
+            await page.keyboard.press('Escape');
+            ok('Kapatınca odak açan düğmeye döner' + id, await page.evaluate(()=>document.activeElement.matches('button[onclick]') && document.activeElement.getAttribute('onclick').includes('operator')));
+            ok('Tarayıcı JavaScript hatası yok' + id, errors.length===0,errors.join(';'));
+            await page.close();
         }
-
-        // Grup kısayolu ve varsayılan
-        ok('varsayılan: "Ana sayfayı görüntüle" işaretli',
-            await page.isChecked('#rolCreateModal input[value="dashboard.read"]'));
-
-        await page.click('#rolCreateModal .rol-perm-group .rol-perm-toggle[data-mode="all"] >> nth=0');
-        ok('standart seçim yazmayı verir, kilit açmayı vermez',
-            await page.isChecked('#rolCreateModal input[value="records.write"]') &&
-            !await page.isChecked('#rolCreateModal input[value="records.unlock"]'));
-        const search = page.locator('#rolCreateModal .rol-search');
-        await search.fill('Beyan');
-        // v371: "Siparişler" grubunun siparis.match açıklaması da "beyan" içerir — o grup da eşleşir.
-        const gorunenGruplar = await page.locator('#rolCreateModal .rol-perm-group:visible .rol-perm-group-title').allTextContents();
-        ok('arama yalnız Beyan modülünü gösterir',
-            gorunenGruplar.some(t => t.trim().startsWith('Beyan')) &&
-            gorunenGruplar.every(t => /^(Beyan|Sipari)/.test(t.trim())));
-        await page.click('#rolCreateModal .rol-perm-group:visible [data-mode="read"]');
-        ok('görüntüleme işlemleri açmaz', await page.isChecked('#rolCreateModal input[value="beyan.read"]') && !await page.isChecked('#rolCreateModal input[value="beyan.create"]'));
-        ok('bölüm görüntüleme açılır', await page.isChecked('#rolCreateModal input[value="beyan.contact.read"]'));
-        await page.click('#rolCreateModal .rol-perm-group:visible [data-mode="all"]');
-        ok('standart bildirim gönderme vermez', !await page.isChecked('#rolCreateModal input[value="beyan.notify"]'));
-        await search.fill('eşleşmeyen-arama');
-        ok('boş arama sonucu açıklanır', await page.locator('#rolCreateModal .rol-empty').isVisible());
-        await search.fill('');
-        await page.check('#rolCreateModal .rol-only-selected');
-        ok('yalnız seçilen filtre gizli izinleri değiştirmez', await page.isChecked('#rolCreateModal input[value="users.admin"]'));
-
-        // Yatay taşma olmamalı (mobil kuralı)
-        const yatay = await page.evaluate(() =>
-            document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-        ok('yatay kaydırma (taşma) YOK', !yatay);
-
-        await page.keyboard.press('Escape');
-        ok('Escape editörü kapatır', !await page.locator('#rolCreateModal').isVisible());
-        await page.locator('.rol-table-wrap button, .rol-cards button').filter({ hasText: 'Düzenle' }).evaluateAll(nodes => {
-            const button = nodes.find(n => n.getAttribute('onclick').includes('operator') && n.getClientRects().length);
-            button.click();
-        });
-        ok('eski rol düzenlenirken etkin bölüm izinleri korunur', await page.isChecked('#rolEditModal input[value="beyan.contact.read"]') && await page.isChecked('#rolEditModal input[value="beyan.contact.write"]'));
-        ok('eski rol düzenlenirken işlem izinleri korunur', await page.isChecked('#rolEditModal input[value="beyan.notify"]'));
-        ok('kaydetme ayrıntılı moda geçer', await page.locator('#rolEditModal input[type="hidden"][value="beyan.permissions.detailed"]').count() === 1);
-        await page.uncheck('#rolEditModal input[value="beyan.contact.read"]');
-        const posted = await page.locator('#rolEditModal form').evaluate(form => new FormData(form).getAll('permissions[]'));
-        ok('kapatılan alan ve eski toplu izin forma geri sızmaz', !posted.includes('beyan.contact.read') && !posted.includes('beyan.write'));
-
-        await page.close();
-    }
-
-    await browser.close();
-    console.log('\n' + (hata === 0 ? 'TÜMÜ GEÇTİ' : `${hata} TEST BAŞARISIZ`));
-    process.exit(hata === 0 ? 0 : 1);
-})().catch(e => { console.error('Test çalıştırılamadı:', e.message); process.exit(1); });
+    } finally { await browser.close(); }
+    const proof={checks:results.length,passed:results.filter(r=>r.pass).length,failed:results.filter(r=>!r.pass),results};
+    if(proofDir) fs.writeFileSync(path.join(proofDir,'proof.json'),JSON.stringify(proof,null,2));
+    console.log(JSON.stringify({checks:proof.checks,passed:proof.passed,failed:proof.failed.length}));
+    process.exit(proof.failed.length?1:0);
+})().catch(e=>{console.error(e.stack);process.exit(1)});

@@ -10,13 +10,14 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_perm('records.edit');
 
 header('Content-Type: application/json; charset=utf-8');
 
 // ── GET: Bu kayda eklenmiş malzemeleri malzeme bazlı grupla ────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $record_id = (int)($_GET['record_id'] ?? 0);
+role_require_record_access($record_id, ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' ? 'edit' : 'read');
     if ($record_id <= 0) { echo json_encode(['ok' => false, 'error' => 'Geçersiz kayıt']); exit; }
     $ck = db()->prepare("SELECT id FROM loading_records WHERE id=?");
     $ck->execute([$record_id]);
@@ -70,6 +71,7 @@ $body       = json_decode(file_get_contents('php://input'), true) ?? [];
 csrf_check($body['csrf'] ?? null);
 
 $record_id  = (int)($body['record_id'] ?? 0);
+role_require_record_access($record_id, ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' ? 'edit' : 'read');
 $pallet_ids = array_values(array_unique(array_map('intval', (array)($body['pallet_ids'] ?? []))));
 
 // Bir paletin dara/net değerlerini mevcut malzemelere göre yeniden hesaplar (dara = kasa+palet).

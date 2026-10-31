@@ -25,7 +25,7 @@ $yanit = function (int $kod, array $veri): void {
     exit;
 };
 $yontem = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-if (!can_siparis('read')) $yanit(403, ['ok' => false, 'hata' => 'Bu işlem için yetkiniz yok.']);
+if (!can_siparis('read') || !role_matrix_page_can('siparis','urun')) $yanit(403, ['ok' => false, 'hata' => 'Bu işlem için yetkiniz yok.']);
 try { enforce_active_depot(); } catch (Throwable $e) { $yanit(403, ['ok' => false, 'hata' => 'Aktif depo seçilmeli.']); }
 
 $pdo = db();
@@ -53,7 +53,7 @@ $uid = (int)$auth_user['id'];
 $id = isset($in['id']) ? (int)$in['id'] : 0;
 
 if ($islem === 'sil') {
-    if (!can_siparis('delete')) $yanit(403, ['ok' => false, 'hata' => 'Silme yetkiniz yok.']);
+    if (!can_siparis('delete') || !role_matrix_page_can('siparis','urun','delete')) $yanit(403, ['ok' => false, 'hata' => 'Silme yetkiniz yok.']);
     $eski = $goster($id > 0 ? usip_getir($pdo, $id) : null);
     if (!usip_sil($pdo, $id, $uid)) $yanit(404, ['ok' => false, 'hata' => 'Sipariş bulunamadı.']);
     audit_log_event('delete', 'urun_siparis', $id, ['firma' => $eski['firma'], 'urun' => $eski['urun'], 'teslimat_tarihi' => $eski['teslimat_tarihi'], 'toplam_palet' => (int)$eski['toplam_palet']], null);
@@ -62,6 +62,7 @@ if ($islem === 'sil') {
 
 if ($islem !== 'kaydet') $yanit(400, ['ok' => false, 'hata' => 'Geçersiz işlem.']);
 if (!can_siparis('write')) $yanit(403, ['ok' => false, 'hata' => 'Kayıt yetkiniz yok.']);
+if (!role_matrix_page_can('siparis','urun', $id > 0 ? 'edit' : 'create')) $yanit(403, ['ok'=>false,'hata'=>'Bu işlem için yetkiniz yok.']);
 $eski = null;
 if ($id > 0) $eski = $goster(usip_getir($pdo, $id));
 [$temiz, $hatalar] = usip_dogrula($in);

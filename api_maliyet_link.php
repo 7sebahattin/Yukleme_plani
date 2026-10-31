@@ -36,7 +36,7 @@ if (!can_maliyet('write')) {
     echo json_encode(['ok' => false, 'error' => 'maliyet.write yetkisi gereklidir'], JSON_UNESCAPED_UNICODE);
     exit;
 }
-if (!can('records.read')) {
+if (!can('records.loading.read')) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'records.read yetkisi gereklidir'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -64,6 +64,7 @@ switch ($action) {
     case 'detail':
         $record_id = (int)($_GET['record_id'] ?? 0);
         if ($record_id <= 0) err('record_id gerekli');
+        role_require_record_access($record_id);
 
         $summary = cost_link_record_summary($record_id);
         if ($summary === null) err('Yükleme kaydı bulunamadı', 404);

@@ -74,6 +74,7 @@ declare -A PHP_HARIC=(
     # Canlı HKS (ws.gtb.gov.tr) uç noktalarını firma kimliğiyle karşılaştıran elle betik;
     # yerelde DB bağlantı hatası basıp 0 ile çıkar → sahte "geçti".
     [hks_endpoint_test.php]="elle çalıştırılan canlı HKS ağ denetimi (test değil)"
+    [cost_link_smoke.php]="yapılandırılmış DB ve migration kullanan elle tanılama; izole regresyon role_data_scope_smoke.php içinde"
 )
 
 # ---------------------------------------------------------

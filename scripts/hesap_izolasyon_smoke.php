@@ -21,6 +21,7 @@
 // bunun SERBEST kaldığını sabitler.
 // =========================================================
 declare(strict_types=1);
+require_once dirname(__DIR__) . '/config/role_permission_matrix.php';
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
@@ -54,7 +55,7 @@ function current_user(): ?array {
     $r = $st->fetch();
     return $r ? ['id' => (int)$r['id'], 'username' => $r['username'], 'display_name' => $r['display_name']] : null;
 }
-function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
 function is_admin(): bool { global $ADMIN; return $ADMIN; }
 function depo_sql_in(string $c): array { return ["($c IN (?) OR $c='')", ['DEPO1']]; }
 function depot_visible_to_user(?string $d): bool { return $d === '' || $d === null || $d === 'DEPO1'; }

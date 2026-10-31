@@ -46,7 +46,7 @@ try {
     $rows = $st_kf->fetchAll();
 } catch (PDOException $e) {}
 
-$can_write = can('kantar.write');
+$can_write = can('kantar.edit');
 
 render_header('Kantar');
 render_flash();
@@ -61,7 +61,7 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <a href="kantar_raporu.php" class="btn btn-ghost btn-sm">📊 Rapor</a>
-        <a href="kantar_create.php" class="btn btn-primary btn-lg">+ Yeni Kantar Fişi</a>
+        <?php if (can('kantar.create')): ?><a href="kantar_create.php" class="btn btn-primary btn-lg">+ Yeni Kantar Fişi</a><?php endif; ?>
     </div>
 </div>
 
@@ -79,7 +79,7 @@ render_flash();
 <?php if (empty($rows)): ?>
 <div class="empty">
     <p>Bu filtreye göre kantar fişi bulunamadı.</p>
-    <a href="kantar_create.php" class="btn btn-primary">İlk fişi oluştur</a>
+    <?php if (can('kantar.create')): ?><a href="kantar_create.php" class="btn btn-primary">İlk fişi oluştur</a><?php endif; ?>
 </div>
 <?php else: ?>
 

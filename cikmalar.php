@@ -6,7 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.read');
+require_perm('records.pallet.read');
 
 $q            = trim((string)($_GET['q'] ?? ''));
 $rapor_filter = trim((string)($_GET['rapor_durumu'] ?? ''));
@@ -59,7 +59,7 @@ $st->execute($params);
 $rows = $st->fetchAll();
 
 $can_unlock = function_exists('can') && can('records.unlock');
-$can_write  = function_exists('can') && can('records.write');
+$can_write  = function_exists('can') && can('records.pallet.edit');
 
 render_header('Çıkmalar');
 ?>
@@ -70,7 +70,7 @@ render_header('Çıkmalar');
         <h1 style="color:#9b1c1c">Çıkmalar</h1>
         <p class="muted">Toplam <?= count($rows) ?> kayıt</p>
     </div>
-    <a href="cikma_create.php" class="btn btn-primary btn-lg">+ Yeni Çıkma</a>
+    <?php if (can('records.pallet.create')): ?><a href="cikma_create.php" class="btn btn-primary btn-lg">+ Yeni Çıkma</a><?php endif; ?>
 </div>
 
 <form method="get" class="search-row">
@@ -100,7 +100,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
 <?php if (empty($rows)): ?>
     <div class="empty">
         <p>Henüz çıkma kaydı yok.</p>
-        <a href="cikma_create.php" class="btn btn-primary">İlk kaydı oluştur</a>
+        <?php if (can('records.pallet.create')): ?><a href="cikma_create.php" class="btn btn-primary">İlk kaydı oluştur</a><?php endif; ?>
     </div>
 <?php else: ?>
 
@@ -168,9 +168,9 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                             <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                             <div class="pc-dropdown" hidden>
                                 <?php if (!$locked || $can_unlock): ?>
-                                <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
-                                <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
-                                   onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                                <?php if (can('records.pallet.edit')): ?><a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a><?php endif; ?>
+                                <?php if (can('records.pallet.delete')): ?><a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
+                                   onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a><?php endif; ?>
                                 <?php else: ?>
                                 <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
                                 <?php endif; ?>
@@ -204,9 +204,9 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                         <div class="pc-dropdown" hidden>
                             <?php if (!$locked || $can_unlock): ?>
-                            <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
-                            <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
-                               onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                            <?php if (can('records.pallet.edit')): ?><a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a><?php endif; ?>
+                            <?php if (can('records.pallet.delete')): ?><a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
+                               onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a><?php endif; ?>
                             <?php else: ?>
                             <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
                             <?php endif; ?>

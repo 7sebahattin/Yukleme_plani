@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $body   = json_decode(file_get_contents('php://input'), true) ?? [];
     csrf_check($body['csrf'] ?? null);
-    require_perm('records.write');   // şablon oluştur/güncelle/sil — viewer yapamaz
+    require_perm('records.templates');   // şablon oluştur/güncelle/sil — viewer yapamaz
     $action = $body['action'] ?? '';
 
     /* Kaydet */

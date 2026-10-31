@@ -6,7 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_perm('records.pallet.edit');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: cikmalar.php'); exit;
@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 csrf_check($_POST['csrf'] ?? null);
 
 $id     = (int)($_POST['id']    ?? 0);
+role_require_record_access($id, 'edit');
 $action = trim($_POST['action'] ?? '');
 
 if ($id <= 0 || !in_array($action, ['mark', 'unmark'], true)) {

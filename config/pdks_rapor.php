@@ -54,6 +54,7 @@
 // =========================================================
 
 declare(strict_types=1);
+require_once __DIR__ . '/role_pdks_matrix.php';
 
 // ⚠ Faz 9A / T-01 düzeltmesi: dosya başlığı bu üç modülü "hard-require eder"
 // diye belgeliyordu ama gerçek kodda hiç require_once YOKTU — yalnız
@@ -94,6 +95,7 @@ function pdks_rapor_can(string $eylem): bool
 
 function require_pdks_rapor(): void
 {
+    role_pdks_require_request();
     if (!PDKS_RAPOR_AKTIF) {
         if (function_exists('forbidden')) forbidden('Raporlama merkezi şu anda kapalıdır.');
         http_response_code(503);
