@@ -25,8 +25,8 @@ $auth_user = require_login();
 require_siparis('read');
 $pdo   = db();
 $hazir = siparis_sema_hazir($pdo);
-$yaz = can_siparis('write');
-$sil = can_siparis('delete');
+$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','edit'));
+$sil = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
 $uid = (int)$auth_user['id'];
 
 if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -50,6 +50,7 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($islem === 'profil_kaydet') {
         require_siparis('write');
+    if (!role_matrix_page_can('siparis','ogl', 'edit')) forbidden('Bu işlem için yetkiniz yok.');
         $pid = (int)($_POST['profil_id'] ?? 0);
         $r = siparis_profil_kaydet($pdo, $pid > 0 ? $pid : null, [
             'ad' => (string)($_POST['ad'] ?? ''), 'uretici_adi' => (string)($_POST['uretici_adi'] ?? ''), 'ggn' => (string)($_POST['ggn'] ?? ''),

@@ -29,6 +29,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT = dirname(__DIR__);
+require_once $ROOT . '/config/role_permission_matrix.php';
 $OUT  = getenv('BOTTOMNAV_OUT') ?: (sys_get_temp_dir() . '/bottomnav-test');
 foreach ($argv ?? [] as $a) {
     if (str_starts_with($a, '--out=')) $OUT = substr($a, 6);
@@ -55,7 +56,7 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PROFIL = ['perms' => [], 'admin' => false, 'depo' => null, 'rol' => null];
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test Kullanıcı']; }
-function can(string $p): bool { global $PROFIL; return in_array($p, $PROFIL['perms'], true); }
+function can(string $p): bool { global $PROFIL; return in_array($p, role_matrix_expand_permissions($PROFIL['perms']), true); }
 function is_admin(): bool { global $PROFIL; return (bool)$PROFIL['admin']; }
 function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }
@@ -155,6 +156,9 @@ $PROFILLER = [
         'perms' => ['hesap.read'],
     ],
 ];
+foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read'] as $key=>$permission) {
+    $PROFILLER[$key]=['ad'=>'Ayrıntılı sayfa '.$key,'admin'=>false,'depo'=>'ANONIM TEST DEPO','rol'=>['slug'=>$key,'label'=>$key],'perms'=>['dashboard.read','role.permissions.detailed',$permission]];
+}
 foreach ($PROFILLER as $pk => $pr) {
     $bilinmeyen = array_diff($pr['perms'], $KATALOG);
     if ($bilinmeyen) {
@@ -182,10 +186,10 @@ $GATES = [
     'index.php'             => ['index.php', "if (!can('dashboard.read')) {",
                                 fn() => can('dashboard.read') || first_allowed_page() !== null,
                                 "dashboard.read; yoksa first_allowed_page()'e YÖNLENDİRİR, o da null ise 403"],
-    'records.php'           => ['records.php', "require_perm('records.read');", fn() => can('records.read'), 'records.read'],
+    'records.php'           => ['records.php', "require_perm('records.loading.read');", fn() => role_matrix_page_can('records','loading'), 'records.loading.read'],
     'record_view.php'       => ['record_view.php', "require_perm('records.read');", fn() => can('records.read'), 'records.read'],
-    'cikmalar.php'          => ['cikmalar.php', "require_perm('records.read');", fn() => can('records.read'), 'records.read'],
-    'halkayit/index.php'    => ['halkayit/index.php', "require_perm('records.write');", fn() => can('records.write'), 'records.write'],
+    'cikmalar.php'          => ['cikmalar.php', "require_perm('records.pallet.read');", fn() => role_matrix_page_can('records','pallet'), 'records.pallet.read'],
+    'halkayit/index.php'    => ['halkayit/index.php', "require_perm('hks.access');", fn() => can('hks.access'), 'hks.access'],
     'personel_takip.php'    => ['personel_takip.php', 'if (!$p_gunluk && !$p_hakcari && !$p_rapor) {',
                                 fn() => is_admin() || $herhangi($PTAK_9),
                                 'is_admin() || 9 attendance.* izninden biri ($p_gunluk/$p_hakcari/$p_rapor)'],
@@ -200,8 +204,8 @@ $GATES = [
     'stok.php'              => ['stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],
     'hesap.php'             => ['hesap.php', "require_hesap('read');", fn() => can('hesap.read') || is_admin(), 'hesap_can(read) = is_admin() || hesap.read'],
     'mail.php'              => ['mail.php', "require_mail('read');", fn() => can('mail.read') || can('mail.admin') || is_admin(), 'can_mail(read) = mail.read || mail.admin || is_admin()'],
-    'siparisler.php'        => ['siparisler.php', "require_siparis('read');", fn() => can('siparis.read') || is_admin(), 'can_siparis(read) = siparis.read || is_admin()'],
-    'urun_siparis.php'      => ['urun_siparis.php', "require_siparis('read');", fn() => can('siparis.read') || is_admin(), 'can_siparis(read) = siparis.read || is_admin()'],
+    'siparisler.php'        => ['siparisler.php', "require_siparis('read');", fn() => role_matrix_page_can('siparis','ogl'), 'siparis.ogl.read or admin'],
+    'urun_siparis.php'      => ['urun_siparis.php', "require_siparis('read', 'urun');", fn() => role_matrix_page_can('siparis','urun'), 'siparis.urun.read or admin'],
     'maliyet.php'           => ['maliyet.php', "require_maliyet('read');", fn() => can('maliyet.read') || is_admin(), 'can_maliyet(read) = maliyet.read || is_admin()'],
     'definitions.php'       => ['definitions.php', "require_perm('defs.read');", fn() => can('defs.read'), 'defs.read'],
     'users.php'             => ['users.php', "require_perm('users.admin');", fn() => can('users.admin'), 'users.admin'],

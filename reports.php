@@ -7,7 +7,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
-if (($_GET['export'] ?? '') !== '') { require_perm('reports.export'); }
+if (($_GET['export'] ?? '') !== '') { require_perm('reports.read'); require_perm('reports.export'); }
 else { require_perm('reports.read'); }
 
 $type      = trim($_GET['type']      ?? '');
@@ -33,6 +33,12 @@ if (!in_array($f_casus, ['dolu','bos'], true)) $f_casus = '';
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar','gunluk'];
 if ($type !== '' && !in_array($type, $valid_types, true)) { $type = ''; }
+// Enforce the selected child before any report query or export work.
+if ($type !== '') {
+    require_perm('reports.' . $type . '.read');
+    if ($export !== '') require_perm('reports.' . $type . '.export');
+}
+
 
 $report_meta = [
     'yukleme'  => ['label'=>'Yüklemeler', 'icon'=>'🚚', 'bg'=>'#eaf1ff'],
@@ -288,6 +294,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_depo  !== '') { $sql .= " AND p.depo LIKE :depo";   $p[':depo']  = '%'.$f_depo.'%'; }
     if ($f_firma !== '') { $sql .= " AND r.firma LIKE :firma";  $p[':firma'] = '%'.$f_firma.'%'; }
     rpt_date_filter($sql, $p, 'r.tarih', $f_from, $f_to);
+    [$_rd, $_rdp] = depo_sql_column('p.depo', ':rdepot');
+    [$_rr, $_rrp] = depo_sql_records('r', ':rdepotrec');
+    $sql .= $_rd . $_rr; $p = array_merge($p, $_rdp, $_rrp);
     $sql .= " GROUP BY p.depo ORDER BY toplam_kasa DESC LIMIT 500";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -364,6 +373,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
     }
 
 } elseif ($type === 'malzeme') {
+    [$_rms, $_rmsp] = depo_sql_records('usage_record', ':rmatrecord');
+    [$_rmps, $_rmpsp] = depo_sql_column('usage_pallet.depo', ':rmatpallet');
+    [$_rmg, $_rmgp] = depo_sql_column('depo', ':rmatgiris');
+    [$_rmt, $_rmtp] = depo_sql_column('depo', ':rmatsevk');
     $sql = "SELECT md.type AS material_type, md.name AS material_name,
                    md.unit_dara_kg, md.is_active,
                    COALESCE(pm_s.kullanim_sayisi, 0)             AS kullanim_sayisi,
@@ -374,26 +387,30 @@ if ($type === 'yukleme' || $type === 'cikma') {
                    COALESCE(ms_g.stok_giris, 0) - COALESCE(ms_s.stok_sevk, 0) AS stok_mevcut
             FROM material_definitions md
             LEFT JOIN (
-                SELECT material_id,
-                       COUNT(id)          AS kullanim_sayisi,
-                       SUM(quantity)      AS toplam_adet,
-                       SUM(total_dara_kg) AS toplam_dara_kg
-                FROM pallet_materials WHERE material_id IS NOT NULL GROUP BY material_id
+                SELECT usage_pm.material_id,
+                       COUNT(usage_pm.id)          AS kullanim_sayisi,
+                       SUM(usage_pm.quantity)      AS toplam_adet,
+                       SUM(usage_pm.total_dara_kg) AS toplam_dara_kg
+                FROM pallet_materials usage_pm
+                JOIN loading_pallets usage_pallet ON usage_pallet.id = usage_pm.loading_pallet_id
+                JOIN loading_records usage_record ON usage_record.id = usage_pallet.loading_record_id
+                WHERE usage_pm.material_id IS NOT NULL {$_rms} {$_rmps} GROUP BY usage_pm.material_id
             ) pm_s ON pm_s.material_id = md.id
             LEFT JOIN (
                 SELECT material_id, SUM(quantity) AS stok_giris
                 FROM material_stock_movements
-                WHERE movement_type = 'giris' AND material_id IS NOT NULL
+                WHERE movement_type = 'giris' AND material_id IS NOT NULL {$_rmg}
                 GROUP BY material_id
             ) ms_g ON ms_g.material_id = md.id
             LEFT JOIN (
                 SELECT material_id, SUM(quantity) AS stok_sevk
                 FROM material_stock_movements
-                WHERE movement_type = 'sevk' AND material_id IS NOT NULL
+                WHERE movement_type = 'sevk' AND material_id IS NOT NULL {$_rmt}
                 GROUP BY material_id
             ) ms_s ON ms_s.material_id = md.id
             WHERE md.type NOT IN ('firma','tedarikci','depo','urun','cikis_nedeni')";
     $p = [];
+    $p = array_merge($p, $_rmsp, $_rmpsp, $_rmgp, $_rmtp);
     if ($f_mtype !== '') { $sql .= " AND md.type = :mtype"; $p[':mtype'] = $f_mtype; }
     if ($f_q     !== '') { $sql .= " AND md.name LIKE :q";  $p[':q']     = '%'.$f_q.'%'; }
     $sql .= " ORDER BY md.type, md.name LIMIT 1000";
@@ -627,6 +644,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
         // Aktif depo kapsamı
         [$_ds_hz, $_ds_hz_v] = depo_sql_in('lp.depo');
         if ($_ds_hz !== '') { $hw[] = $_ds_hz; $hp = array_merge($hp, $_ds_hz_v); }
+        [$_hzr, $_hzrp] = depo_sql_records_in('lr');
+        if ($_hzr !== '') { $hw[] = $_hzr; $hp = array_merge($hp, $_hzrp); }
         $st = db()->prepare("
             SELECT COUNT(DISTINCT lr.id) AS record_count,
                    COUNT(lp.id)          AS palet_count,
@@ -1091,14 +1110,35 @@ $xlsx_url         = 'reports.php?' . http_build_query(array_merge($csv_params, [
 $xlsx_summary_url = 'reports.php?' . http_build_query(array_merge($csv_params, ['export' => 'xlsx_summary']));
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ($type === 'gunluk' ? '' : ' Raporu') : 'Raporlar';
-$filter_firma_list = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+function rpt_scoped_record_options(string $column, int $limit = 200): array {
+    if (!in_array($column, ['firma','urun','bolge'], true)) throw new InvalidArgumentException('Invalid report filter');
+    [$scope,$params] = depo_sql_records('r', ':rfilter');
+    $st = db()->prepare("SELECT DISTINCT r.$column FROM loading_records r WHERE r.$column != '' $scope ORDER BY r.$column LIMIT ".max(1,min(300,$limit)));
+    $st->execute($params); return $st->fetchAll(PDO::FETCH_COLUMN);
+}
+function rpt_scoped_depot_options(): array {
+    [$scope,$params] = depo_sql_column('p.depo', ':rfilterdepo');
+    [$records,$recordParams] = depo_sql_records('r', ':rfilterrecord');
+    $st = db()->prepare("SELECT DISTINCT p.depo FROM loading_pallets p JOIN loading_records r ON r.id=p.loading_record_id WHERE p.depo != '' $scope $records ORDER BY p.depo LIMIT 200");
+    $st->execute(array_merge($params,$recordParams)); return $st->fetchAll(PDO::FETCH_COLUMN);
+}
+$filter_firma_list = rpt_scoped_record_options('firma',300);
+$filter_urun_list = rpt_scoped_record_options('urun');
+$filter_bolge_list = rpt_scoped_record_options('bolge');
+$filter_depo_list = rpt_scoped_depot_options();
 $filter_kantar_firma_list = [];
-try { $filter_kantar_firma_list = db()->query("SELECT DISTINCT grup_adi FROM kantar_gruplar WHERE grup_adi!='' ORDER BY grup_adi LIMIT 200")->fetchAll(PDO::FETCH_COLUMN); } catch (PDOException $_kfl) {}
-$filter_urun_list     = db()->query("SELECT DISTINCT urun  FROM loading_records WHERE urun !='' ORDER BY urun  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
-$filter_bolge_list    = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
-$filter_depo_list     = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
-$filter_urun_def_list = db()->query("SELECT name FROM material_definitions WHERE type='urun' AND is_active=1 ORDER BY name LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
-$filter_urun_sahibi_list = db()->query("SELECT id, name FROM material_definitions WHERE type='firma' AND is_active=1 ORDER BY name LIMIT 200")->fetchAll();
+try {
+    [$_kfs,$_kfp] = depo_sql_column('kf.depo', ':rfilterkantar');
+    $_kfst = db()->prepare("SELECT DISTINCT kg.grup_adi FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kf.id=kg.fis_id WHERE kg.grup_adi != '' $_kfs ORDER BY kg.grup_adi LIMIT 200");
+    $_kfst->execute($_kfp); $filter_kantar_firma_list = $_kfst->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $_kfl) {}
+$filter_urun_def_list = $filter_urun_list;
+$filter_urun_sahibi_list = [];
+try {
+    [$_ofs,$_ofp] = depo_sql_records('r', ':rfilterowner');
+    $_ofst = db()->prepare("SELECT DISTINCT md.id,md.name FROM material_definitions md JOIN loading_records r ON r.urun_sahibi_id=md.id WHERE md.type='firma' AND md.is_active=1 $_ofs ORDER BY md.name LIMIT 200");
+    $_ofst->execute($_ofp); $filter_urun_sahibi_list=$_ofst->fetchAll();
+} catch (PDOException $_ofe) {}
 render_header($page_title);
 render_flash();
 ?>
@@ -1209,7 +1249,7 @@ render_flash();
 </div>
 
 <div class="home-grid">
-<?php foreach ($report_meta as $rtype => $m): ?>
+<?php foreach ($report_meta as $rtype => $m): if (!can('reports.' . $rtype . '.read')) continue; ?>
     <a href="reports.php?type=<?= h($rtype) ?>" class="home-card">
         <div class="home-card-icon" style="background:<?= h($m['bg']) ?>"><?= $m['icon'] ?></div>
         <div class="home-card-title"><?= h($m['label']) ?></div>
@@ -1426,7 +1466,7 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
         <div class="pc-kebab-wrap">
             <button type="button" class="pc-kebab" aria-label="Daha fazla işlem" title="Daha fazla işlem">⋮</button>
             <div class="pc-dropdown" hidden>
-                <?php if (can('reports.export')): ?>
+                <?php if ((can('reports.export') && ($type === '' || can('reports.' . $type . '.export')))): ?>
                 <a href="<?= h($gl_csv_url) ?>">📄 CSV İndir</a>
                 <a href="<?= h($gl_xlsx_url) ?>">📊 XLSX İndir</a>
                 <?php endif; ?>
@@ -1769,8 +1809,8 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <div class="rpt-actions rpt-no-print">
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
-        <?= export_menu($csv_summary_url, $xlsx_summary_url, 'Özet Excel', 'btn btn-sm') ?>
-        <?= export_menu($csv_url, $xlsx_url, 'Detay Excel', 'btn btn-sm btn-primary') ?>
+        <?= can('reports.' . $type . '.export') ? export_menu($csv_summary_url, $xlsx_summary_url, 'Özet Excel', 'btn btn-sm') : '' ?>
+        <?= can('reports.' . $type . '.export') ? export_menu($csv_url, $xlsx_url, 'Detay Excel', 'btn btn-sm btn-primary') : '' ?>
         <?php if ($type === 'yukleme'): ?>
         <?php
         $_bulk_params = array_filter([
@@ -1792,7 +1832,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <a href="<?= h($_bulk_url) ?>" class="btn btn-sm" target="_blank" title="Filtreli tüm yüklemeleri tek PDF'te aç (max 50)">📄 Toplu PDF</a>
         <?php endif; ?>
         <?php else: ?>
-        <?= export_menu($csv_url, $xlsx_url, 'Excel İndir', 'btn btn-sm btn-primary') ?>
+        <?= can('reports.' . $type . '.export') ? export_menu($csv_url, $xlsx_url, 'Excel İndir', 'btn btn-sm btn-primary') : '' ?>
         <?php endif; ?>
     </div>
 </div>

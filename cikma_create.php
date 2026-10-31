@@ -7,7 +7,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_perm('records.pallet.create');
 
 $record = [
     'firma' => '', 'bolge' => '', 'urun' => '',
@@ -63,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     unset($p);
 
     $errors = array_merge($errors, validate_pallet_rows($computed));
+    role_require_pallet_depots($computed);
     if (empty($errors)) {
         ensure_definition('firma', $record['firma']);
         ensure_definition('urun',  $record['urun']);

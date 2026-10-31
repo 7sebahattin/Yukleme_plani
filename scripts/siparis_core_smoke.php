@@ -103,9 +103,9 @@ $b1 = $db->query('SELECT * FROM siparis_belgeler WHERE id = ' . (int)$k['belge_i
 ok('disk adı 32 hex + uzantı, tur=bilinmiyor, durum=yuklendi', (bool)preg_match('/^[a-f0-9]{32}\.pdf$/', $b1['disk_adi']) && $b1['tur'] === 'bilinmiyor' && $b1['durum'] === 'yuklendi');
 $yol = siparis_dosya_yolu($b1);
 clearstatcache();
-ok('dosya yolu klasör içinde, izin 0640', $yol !== null && (fileperms($yol) & 0777) === 0640);
+ok('dosya yolu klasör içinde, izin 0640', $yol !== null && (PHP_OS_FAMILY === 'Windows' ? is_readable($yol) : (fileperms($yol) & 0777) === 0640));
 ok('.htaccess oluşturuldu (Require all denied)', str_contains((string)@file_get_contents(SIPARIS_DEPO_DIR . '.htaccess'), 'Require all denied'));
-ok('klasör izni 0750', (fileperms(SIPARIS_DEPO_DIR) & 0777) === 0750);
+ok('klasör izni 0750', PHP_OS_FAMILY === 'Windows' ? is_readable(SIPARIS_DEPO_DIR) : (fileperms(SIPARIS_DEPO_DIR) & 0777) === 0750);
 @unlink(SIPARIS_DEPO_DIR . '.htaccess');
 siparis_depo_hazirla();
 ok('.htaccess silinirse yeniden yazılır', is_file(SIPARIS_DEPO_DIR . '.htaccess'));

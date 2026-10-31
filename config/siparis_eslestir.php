@@ -25,6 +25,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/siparis_core.php';
+require_once __DIR__ . '/role_permission_matrix.php';
 require_once __DIR__ . '/siparis_pdf.php';
 require_once __DIR__ . '/siparis_pkl.php';
 
@@ -462,7 +463,7 @@ function siparis_catisma_coz(PDO $pdo, int $catismaId, string $karar, int $uid):
  * da uyarı olayı (ASLA birleştirilmez). $belgeId 0 = belgesiz (elle).
  * @return array{id:int,yeni:bool,geri:bool,uyari?:string}
  */
-function siparis_sevkiyat_bul_olustur(PDO $pdo, string $tedarikciNo, string $orderRef, ?string $turNo, int $uid, string $depo, int $belgeId, string $kaynak): array
+function siparis_sevkiyat_bul_olustur(PDO $pdo, string $tedarikciNo, string $orderRef, ?string $turNo, int $uid, string $depo, int $belgeId, string $kaynak, ?callable $authorize = null): array
 {
     $bid = $belgeId > 0 ? $belgeId : null;
     $st = $pdo->prepare('SELECT id, deleted_at FROM siparis_sevkiyatlar WHERE tedarikci_no = ? AND order_ref = ?');
@@ -470,6 +471,7 @@ function siparis_sevkiyat_bul_olustur(PDO $pdo, string $tedarikciNo, string $ord
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if ($r) {
         $id = (int)$r['id'];
+        if ($authorize !== null) $authorize('edit', $id);
         if ($r['deleted_at'] === null) return ['id' => $id, 'yeni' => false, 'geri' => false];
         $pdo->prepare('UPDATE siparis_sevkiyatlar SET deleted_at = NULL, updated_at = ? WHERE id = ?')->execute([siparis_simdi(), $id]);
         siparis_olay($pdo, $id, 'geri_getirildi', null, null, 'Silinmiş sevkiyat yeni belgeyle geri getirildi', $bid, $uid);
@@ -477,6 +479,7 @@ function siparis_sevkiyat_bul_olustur(PDO $pdo, string $tedarikciNo, string $ord
     }
     $turNo = $turNo !== null && trim($turNo) !== '' ? siparis_kirp(trim($turNo), 30) : null;
     $yeni = true;
+    if ($authorize !== null) $authorize('create', null);
     try {
         $pdo->prepare('INSERT INTO siparis_sevkiyatlar (tedarikci_no, order_ref, tur_no, durum, durum_at, depo, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
             ->execute([$tedarikciNo, $orderRef, $turNo, 'siparis_alindi', siparis_simdi(), $depo, $uid, siparis_simdi()]);
@@ -487,7 +490,10 @@ function siparis_sevkiyat_bul_olustur(PDO $pdo, string $tedarikciNo, string $ord
         $id = (int)$st->fetchColumn();
         $yeni = false;
     }
-    if (!$yeni) return ['id' => $id, 'yeni' => false, 'geri' => false];
+    if (!$yeni) {
+        if ($authorize !== null) $authorize('edit', $id);
+        return ['id' => $id, 'yeni' => false, 'geri' => false];
+    }
     siparis_olay($pdo, $id, 'olusturuldu', null, $orderRef, match ($kaynak) {
         'po' => 'PO ile', 'elle' => 'Elle açıldı — PO bekleniyor', default => siparis_kaynak_etiket($kaynak) . ' ile — PO bekleniyor (taslak sevkiyat)' }, $bid, $uid);
     $sonuc = ['id' => $id, 'yeni' => true, 'geri' => false];
@@ -496,6 +502,7 @@ function siparis_sevkiyat_bul_olustur(PDO $pdo, string $tedarikciNo, string $ord
         $t->execute([$turNo, $id]);
         $diger = $t->fetchAll(PDO::FETCH_ASSOC);
         foreach ($diger as $d) {
+            if ($authorize !== null) $authorize('edit', (int)$d['id']);
             siparis_olay($pdo, $id, 'uyari', null, null, "Tur {$turNo} başka sevkiyatta da var: {$d['order_ref']} (birleştirilmedi)", $bid, null);
             siparis_olay($pdo, (int)$d['id'], 'uyari', null, null, "Tur {$turNo} başka sevkiyatta da var: {$orderRef} (birleştirilmedi)", $bid, null);
             siparis_sevkiyat_yenile($pdo, (int)$d['id']);
@@ -1126,6 +1133,17 @@ function siparis_pdf_tur_kodu(array $doc, bool $hedefVar = false): string
  * İdempotent. Hata → rollback + belge durum='hata' (ayrı ifade), ok=false.
  * @return array{ok:bool, tur:string, ozet:string, sevkiyatlar:list<array{id:int,order_ref:string,yeni:bool}>, catisma:int, uyari:int, mesajlar:list<string>, hata?:string}
  */
+/** Check the actual shipment mutation, after matching and before business writes. */
+function siparis_pipeline_authorize(PDO $pdo, string $action, ?int $shipmentId): void {
+    if (!role_matrix_page_can('siparis','ogl',$action)) throw new RuntimeException('Bu belge işlemi için OGL '.($action==='create'?'ekleme':'düzenleme').' yetkisi gerekir.');
+    if ($shipmentId !== null) {
+        $access = $pdo->prepare('SELECT id,depo FROM siparis_sevkiyatlar WHERE id = ?');
+        $access->execute([$shipmentId]);
+        $shipment = $access->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($shipment === null || !siparis_gorunur($shipment)) throw new RuntimeException('Bu sevkiyat erişim kapsamınızda değil.');
+    }
+}
+
 function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiyatId = null): array
 {
     $sonuc = ['ok' => false, 'tur' => 'bilinmiyor', 'ozet' => '', 'sevkiyatlar' => [], 'catisma' => 0, 'uyari' => 0, 'mesajlar' => []];
@@ -1221,7 +1239,7 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
         $catisma = 0;
         $refGecerli = fn($r): bool => is_string($r) && preg_match('/^[A-Z]{1,3}\d{5,}\.\d{1,3}$/', $r) === 1;
         $birim = function (string $ref, ?string $turNo, string $src) use ($pdo, $ted, $uid, $belge, $belgeId, &$sonuc, $ekle): array {
-            $r = siparis_sevkiyat_bul_olustur($pdo, $ted, $ref, $turNo, $uid, (string)$belge['depo'], $belgeId, $src);
+            $r = siparis_sevkiyat_bul_olustur($pdo, $ted, $ref, $turNo, $uid, (string)$belge['depo'], $belgeId, $src, fn(string $action, ?int $shipmentId) => siparis_pipeline_authorize($pdo,$action,$shipmentId));
             if (isset($r['uyari'])) $sonuc['mesajlar'][] = $r['uyari'];
             $ekle($r['id'], $ref, $r['yeni']);
             $yeniBag = siparis_bag_yaz($pdo, $belgeId, $r['id'], $uid);
@@ -1288,6 +1306,7 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
                 $sid = $f->fetchColumn();
                 if ($sid === false) { $sonuc['mesajlar'][] = "PKL'deki {$ref} için sevkiyat yok — önce PO ya da Loading List yükleyin."; continue; }
                 $sid = (int)$sid;
+                siparis_pipeline_authorize($pdo,'edit',$sid);
                 $ekle($sid, $ref, false);
                 $yeniBag = siparis_bag_yaz($pdo, $belgeId, $sid, $uid);
                 if (siparis_revizyon_isle($pdo, $belge, $sid, $uid)) {
@@ -1309,6 +1328,7 @@ function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiya
             $hid = (int)$hedef['id'];
             if (!isset($etkilenen[$hid])) {
                 if (in_array($tur, ['diger', 'bilinmiyor'], true) || $etkilenen === []) {
+                    siparis_pipeline_authorize($pdo,'edit',$hid);
                     siparis_bag_yaz($pdo, $belgeId, $hid, $uid);
                     $ekle($hid, (string)$hedef['order_ref'], false);
                 } else {
@@ -1601,7 +1621,7 @@ function siparis_sevkiyat_elle_ac(PDO $pdo, string $orderRef, ?string $turNo, ?s
             $st->execute([SIPARIS_VARSAYILAN_TEDARIKCI, $ref]);
             if ($st->fetchColumn() !== false) return ['ok' => false, 'hata' => "{$ref} zaten kayıtlı."];
             $depo = function_exists('active_depot') ? (string)(active_depot() ?? '') : '';
-            $r = siparis_sevkiyat_bul_olustur($pdo, SIPARIS_VARSAYILAN_TEDARIKCI, $ref, null, $uid, $depo, 0, 'elle');
+            $r = siparis_sevkiyat_bul_olustur($pdo, SIPARIS_VARSAYILAN_TEDARIKCI, $ref, null, $uid, $depo, 0, 'elle', fn(string $action, ?int $shipmentId) => siparis_pipeline_authorize($pdo,$action,$shipmentId));
             $id = $r['id'];
             if ($tur !== '') { $x = siparis_alan_elle($pdo, 'sevkiyat', $id, 'tur_no', $tur, $uid); if (!$x['ok']) throw new RuntimeException((string)$x['hata']); }
             if ($tarih !== null) { $x = siparis_alan_elle($pdo, 'sevkiyat', $id, 'yukleme_tarihi', $tarih, $uid); if (!$x['ok']) throw new RuntimeException((string)$x['hata']); }

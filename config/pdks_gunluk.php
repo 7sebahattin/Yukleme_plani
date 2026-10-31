@@ -38,6 +38,7 @@
 // =========================================================
 
 declare(strict_types=1);
+require_once __DIR__ . '/role_pdks_matrix.php';
 
 // v296: Personel Takibi liste ekranlarının ortak istemci davranışı (otomatik
 // filtre + tıklanabilir satır). Saf fonksiyon tanımları — DB/oturum/çıktı yok;
@@ -517,6 +518,7 @@ function pdks_gunluk_can(string $eylem): bool
 
 function require_pdks_gunluk(string $eylem): void
 {
+    role_pdks_require_request();
     if (!PDKS_GUNLUK_AKTIF) {
         if (function_exists('forbidden')) forbidden('Günlük işçi modülü şu anda kapalıdır.');
         http_response_code(503);
@@ -3906,6 +3908,10 @@ function pdks_gunluk_kart_tanim_kaydet(int $kartId, int $foremanId, int $tipId, 
             && pdks_gunluk_depo_fold((string)$eski['depo']) === pdks_gunluk_depo_fold($depo)) {
             if (!$disTx) $pdo->commit();
             return ['ok' => true, 'tanim_id' => (int)$eski['id'], 'degisiklik_yok' => true, 'uyari' => null];
+        }
+        if (function_exists('can') && can('role.permissions.detailed') && !role_pdks_can('worker_cards', $eski ? 'edit' : 'create')) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok'=>false, 'kod'=>'yetki_yok', 'hata'=>'Kart tanımı oluşturma veya düzenleme yetkiniz yok.'];
         }
         if ($eski) {
             $pdo->prepare("UPDATE worker_card_assignments SET valid_to = ?, aktif_kart_id = NULL, ended_by_user_id = ?, end_reason = ? WHERE id = ? AND aktif_kart_id = ?")

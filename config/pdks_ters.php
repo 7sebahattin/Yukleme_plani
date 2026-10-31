@@ -34,6 +34,7 @@
 // isteğe bağlı, fark uyarı · onay sonrası geri alma ilk çıkışa kadar operatör,
 // sonrası yalnız yönetici (Mesai Detayı) · sabit saat onaydan en fazla 2 sa ileride.
 declare(strict_types=1);
+require_once __DIR__ . '/role_pdks_matrix.php';
 require_once __DIR__ . '/pdks_gunluk.php';
 require_once __DIR__ . '/pdks_faz8j.php';
 
@@ -2012,9 +2013,9 @@ function pdks_ters_hub_durumlari(PDO $pdo, string $depo): array
 function pdks_ters_yetkiler(): array
 {
     return [
-        'havuz'      => pdks_gunluk_can('worker_cards'),
-        'tarama'     => pdks_gunluk_can('daily_scan'),
-        'mutabakat'  => pdks_gunluk_can('daily_scan') || pdks_gunluk_can('daily_reports'),
+        'havuz'      => role_pdks_can('ters_pool'),
+        'tarama'     => role_pdks_can('daily_scan') || role_pdks_can('ters_count'),
+        'mutabakat'  => role_pdks_can('ters_report'),
         'yonetici'   => function_exists('is_admin') && is_admin(),
     ];
 }
@@ -2025,6 +2026,7 @@ function pdks_ters_yetkiler(): array
  */
 function pdks_ters_require(array $gerekli): array
 {
+    role_pdks_require_request();
     if (!PDKS_GUNLUK_AKTIF) {
         if (function_exists('forbidden')) forbidden('Günlük işçi modülü şu anda kapalıdır.');
         http_response_code(503); exit('Günlük işçi modülü kapalı.');

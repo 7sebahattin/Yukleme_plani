@@ -6,13 +6,14 @@
 // =========================================================
 
 declare(strict_types=1);
+require_once __DIR__ . '/role_permission_matrix.php';
 
 // Uygulama sürüm damgası — sidebar altında gösterilir (Hal Bildirimi paneli
 // PANEL_SURUM'u ile aynı amaç: sunucudaki dosyanın güncel olup olmadığını
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v463');
+    define('APP_SURUM', 'v464');
 }
 
 // --- HTML kaçışı ---
@@ -351,15 +352,17 @@ function first_allowed_page(): ?string {
     $adm = function_exists('is_admin') && is_admin();
 
     $adaylar = [
-        'records.php'        => can('records.read'),                    // require_perm('records.read')
+        'records.php'        => role_matrix_page_can('records','loading'),                    // require_perm('records.read')
         'beyanlar.php'       => can('beyan.read') || $adm,              // can_beyan('read')
         'kantar.php'         => can('kantar.read'),                     // require_perm('kantar.read')
-        'halkayit/index.php' => can('records.write'),                   // require_perm('records.write')
+        'halkayit/index.php' => can('hks.access'),                   // require_perm('records.write')
         'reports.php'        => can('reports.read'),                    // require_perm('reports.read')
         'malzeme_stok.php'   => can('stok.read'),                       // require_perm('stok.read')
         'hesap.php'          => can('hesap.read') || $adm,              // hesap_can('read')
         'mail.php'           => can_mail('read'),                       // mail.php: can_mail('read')
-        'siparisler.php'     => can_siparis('read'),                    // siparisler.php: require_siparis('read')
+        'cikmalar.php'       => role_matrix_page_can('records','pallet'),
+        'urun_siparis.php'   => role_matrix_page_can('siparis','urun'),
+        'siparisler.php'     => role_matrix_page_can('siparis','ogl'),                    // siparisler.php: require_siparis('read')
         'maliyet.php'        => can('maliyet.read') || $adm,            // can_maliyet('read')
         // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
         // TEK yerde durur, üçüncü bir kopya ayrışma riski doğururdu.
@@ -506,8 +509,9 @@ function nav_aktif_anahtar(): ?string {
 function render_desktop_sidebar(string $base): void {
     $_fn   = function_exists('can');
     $p_dash  = !$_fn || can('dashboard.read');
-    $p_rec   = !$_fn || can('records.read');
-    $p_recw  = !$_fn || can('records.write');
+    $p_rec   = !$_fn || role_matrix_page_can('records','loading');
+    $p_cik = !$_fn || role_matrix_page_can('records','pallet');
+    $p_recw  = !$_fn || can('hks.access');
     $p_kant  = !$_fn || can('kantar.read');
     $p_stok  = !$_fn || can('stok.read');
     $p_rep   = !$_fn || can('reports.read');
@@ -520,7 +524,8 @@ function render_desktop_sidebar(string $base): void {
     // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
     $p_hes   = !$_fn || can('hesap.read') || $p_adm;
     $p_mail  = can_mail('read');   // TEK kaynak — mail.php'nin kapısıyla birebir
-    $p_sip   = can_siparis('read'); // TEK kaynak — siparisler.php'nin kapısıyla birebir
+    $p_sip   = role_matrix_page_can('siparis','ogl');
+    $p_usip = role_matrix_page_can('siparis','urun'); // TEK kaynak — siparisler.php'nin kapısıyla birebir
     // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
     // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
     // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
@@ -595,12 +600,12 @@ function render_desktop_sidebar(string $base): void {
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="sidebar-section-ad">Operasyon</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
         <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
         <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
-        <?php if ($p_sip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
+        <?php if ($p_usip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
         <?php if ($p_rec)  $lnk('records.php',   '🚚', 'Yükleme Planları', $a_yuk);  ?>
-        <?php if ($p_rec)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
+        <?php if ($p_cik)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
         <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_adm)  $lnk('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick); ?>
@@ -623,12 +628,12 @@ function render_desktop_sidebar(string $base): void {
         ?>
         </details>
 
-        <?php if ($p_adm): ?>
+        <?php if ($p_adm || $p_def || $p_usr): ?>
         <details class="sidebar-grup" data-sb-grup="yonetim"<?= $a_ynt ? ' open' : '' ?>>
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="sidebar-section-ad">Yönetim</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_adm) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
-        <?php if ($p_adm) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
-        <?php if ($p_adm) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
+        <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
+        <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
+        <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         </details>
@@ -777,18 +782,18 @@ function nav_alt_izinler(): array {
     $c   = fn(string $p): bool => $fn && can($p);
     $adm = function_exists('is_admin') && is_admin();
     return [
-        'records' => $c('records.read'),            // records.php: require_perm('records.read')
-        'cikma'   => $c('records.read'),            // cikmalar.php: require_perm('records.read')
+        'records' => role_matrix_page_can('records','loading'),            // records.php: require_perm('records.read')
+        'cikma'   => role_matrix_page_can('records','pallet'),            // cikmalar.php: require_perm('records.read')
         'beyan'   => $c('beyan.read') || $adm,      // beyanlar.php: can_beyan('read')
         'kantar'  => $c('kantar.read'),             // kantar.php: require_perm('kantar.read')
-        'hks'     => $c('records.write'),           // halkayit/index.php: require_perm('records.write')
+        'hks'     => $c('hks.access'),           // halkayit/index.php: require_perm('records.write')
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
         'qcost'   => $fn && $adm,                   // can_maliyet(read) admini kabul eder; cost_calc yüklenmeyen sayfalarda da görünür
         'mstok'   => $c('stok.read'),               // malzeme_stok.php: require_perm('stok.read')
         'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
         'mail'    => $fn && can_mail('read'),       // mail.php: can_mail('read') — TEK kaynak
-        'siparis' => $fn && can_siparis('read'),    // siparisler.php: require_siparis('read') — TEK kaynak
-        'usip'    => $fn && can_siparis('read'),    // urun_siparis.php: require_siparis('read') — aynı kapı
+        'siparis' => $fn && role_matrix_page_can('siparis','ogl'),    // siparisler.php: require_siparis('read') — TEK kaynak
+        'usip'    => $fn && role_matrix_page_can('siparis','urun'),    // urun_siparis.php: require_siparis('read') — aynı kapı
         'ptak'    => $fn && nav_ptak_gorunur(),     // personel_takip.php — TEK kaynak
         'defs'    => $c('defs.read'),               // definitions.php: require_perm('defs.read')
         'users'   => $c('users.admin'),             // users.php: require_perm('users.admin')
@@ -1108,11 +1113,13 @@ function render_header(string $title, bool $print_mode = false): void {
         $_nav_rep   = !function_exists('can') || can('reports.read');
         $_nav_stok  = !function_exists('can') || can('stok.read');
         $_nav_def   = !function_exists('can') || can('defs.read');
-        $_nav_users = function_exists('is_admin') && is_admin();
+        $_nav_users = function_exists('can') && can('users.admin');
         ?>
         <nav class="topnav">
-            <?php if (can_siparis('read')): ?>
+            <?php if (role_matrix_page_can('siparis','ogl')): ?>
             <a href="<?= $base ?>siparisler.php" <?= nav_aktif_anahtar() === 'siparis' ? 'class="active"' : '' ?>>OGL Siparişler</a>
+            <?php endif; ?>
+            <?php if (role_matrix_page_can('siparis','urun')): ?>
             <a href="<?= $base ?>urun_siparis.php" <?= nav_aktif_anahtar() === 'usip' ? 'class="active"' : '' ?>>Siparişler</a>
             <?php endif; ?>
             <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
@@ -1122,8 +1129,10 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php $__tm = nav_mail_okunmamis(); ?>
             <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?><?= $__tm > 0 ? ' aria-label="Mail, ' . $__tm . ' okunmamış"' : '' ?>>Mail<?= nav_rozet_html($__tm, false) ?></a>
             <?php endif; ?>
-            <?php if ($_nav_rec): ?>
+            <?php if (role_matrix_page_can('records','loading')): ?>
             <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yükleme Planları</a>
+            <?php endif; ?>
+            <?php if (role_matrix_page_can('records','pallet')): ?>
             <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Paletleme</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
@@ -1133,10 +1142,10 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
             <a href="<?= $base ?>malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
             <?php endif; ?>
-            <?php if ($_nav_def && function_exists('is_admin') && is_admin()): ?>
+            <?php if ($_nav_def): ?>
             <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
             <?php endif; ?>
-            <?php if ($_nav_users && function_exists('is_admin') && is_admin()): ?>
+            <?php if ($_nav_users): ?>
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
             <a href="<?= $base ?>roles.php" <?= $cur === 'roles.php' ? 'class="active"' : '' ?>>Roller</a>
             <?php endif; ?>

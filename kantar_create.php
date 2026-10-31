@@ -6,7 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('kantar.write');
+require_perm('kantar.create');
 
 if (!function_exists('_parse_kp_rows')) {
     function _parse_kp_rows(mixed $raw, array $kasa_list, array $palet_list): array {
@@ -60,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fis['firma_adi']   = normalize_firma($fis['firma_adi']);
     $fis['malin_cinsi'] = normalize_urun($fis['malin_cinsi']);
     $fis['depo']        = normalize_depo($fis['depo']);
+    role_require_depot_value($fis['depo']);
     foreach (['operator_adi', 'geldigi_yer', 'gittigi_yer', 'parti_no'] as $_tf) {
         if ($fis[$_tf] !== '') $fis[$_tf] = tr_upper($fis[$_tf]);
     }

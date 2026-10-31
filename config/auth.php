@@ -7,6 +7,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/beyan_permissions.php';
+require_once __DIR__ . '/role_permission_matrix.php';
+require_once __DIR__ . '/role_data_scope.php';
 
 const SESSION_DURATION_HOURS = 24;
 const AUTH_COOKIE_NAME       = 'asya_session';
@@ -162,7 +164,7 @@ function user_permissions(int $user_id): array {
         $roles = [];
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) $roles[(int)$row['role_id']][] = $row['permission'];
         $effective = [];
-        foreach ($roles as $permissions) $effective = array_merge($effective, beyan_expand_role_permissions($permissions));
+        foreach ($roles as $permissions) $effective = array_merge($effective, role_matrix_expand_permissions(beyan_expand_role_permissions($permissions)));
         $cache[$user_id] = array_values(array_unique($effective));
     } catch (PDOException $e) {
         $cache[$user_id] = [];
@@ -245,7 +247,7 @@ function user_primary_role(): ?array {
 // başlangıç değeri — burada olmayan bir yetki role_permissions'a elle
 // eklenebilir ve can() yine çalışır, ama roles.php'de GÖRÜNMEZ).
 function permission_catalog(): array {
-    return [
+    $catalog = [
         'Operasyon' => [
             'dashboard.read' => 'Ana sayfayı görüntüle',
             'records.read'   => 'Yüklemeleri / çıkmaları görüntüle',
@@ -344,6 +346,8 @@ function permission_catalog(): array {
             'users.admin' => 'Kullanıcı ve rol yönetimi (oluştur / sil / şifre sıfırla / yetkilendirme)',
         ],
     ];
+    $catalog['Sayfa ve işlem izinleri'] = role_matrix_catalog_additions();
+    return $catalog;
 }
 
 // Kuruluşta seed edilen 5 varsayılan rol. Kodun başka yerleri slug'a göre
@@ -439,6 +443,8 @@ function user_assigned_depots(?int $user_id = null): ?array {
     }
     if (array_key_exists($user_id, $cache)) return $cache[$user_id];
 
+    $roleScope = role_user_depot_scope($user_id);
+
     // Admin → kısıtsız
     try {
         $st = db()->prepare("
@@ -447,17 +453,17 @@ function user_assigned_depots(?int $user_id = null): ?array {
         ");
         $st->execute([$user_id]);
         if ($st->fetchColumn()) { return $cache[$user_id] = null; }
-    } catch (PDOException $e) { return $cache[$user_id] = null; }
+    } catch (PDOException $e) { return $cache[$user_id] = role_depot_scope_intersect(null, $roleScope); }
 
     try {
         $st = db()->prepare("SELECT depo FROM user_depolar WHERE user_id = ?");
         $st->execute([$user_id]);
         $rows = array_values(array_filter(array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN)), fn($d) => $d !== ''));
         // Atama yoksa kısıtsız (null); varsa o listeyle sınırlı
-        return $cache[$user_id] = (count($rows) === 0) ? null : $rows;
+        return $cache[$user_id] = role_depot_scope_intersect((count($rows) === 0) ? null : $rows, $roleScope);
     } catch (PDOException $e) {
-        // user_depolar henüz yoksa veya hata → fail-open
-        return $cache[$user_id] = null;
+        // Preserve explicit role scope even if legacy assignment lookup fails.
+        return $cache[$user_id] = role_depot_scope_intersect(null, $roleScope);
     }
 }
 
@@ -575,6 +581,8 @@ function depo_in_allowed(string $depo, array $allowed): bool {
 function depot_visible_to_user(?string $depo): bool {
     $allowed = user_allowed_depots();
     if ($allowed === null) return true;                 // kısıtsız
+    if ($allowed === []) return false;
+    if (role_current_depot_scope_restricted() && ($depo === null || trim($depo) === "")) return false;
     if ($depo === null || trim($depo) === '') return true; // atanmamış → her depoda
     return depo_in_allowed($depo, $allowed);
 }
@@ -590,7 +598,8 @@ function depot_visible_to_user(?string $depo): bool {
 // Dönen: [' AND (EXISTS(...) OR atanmamış) ', [':udp0'=>'Depo', ...]]  — kısıtsızsa ['', []].
 function depo_sql_records(string $records_alias = 'r', string $prefix = ':udp'): array {
     $allowed = user_allowed_depots();
-    if ($allowed === null || count($allowed) === 0) return ['', []];
+    if ($allowed === null) return ['', []];
+    if ($allowed === []) return [' AND 1=0 ', []];
     $names = []; $params = [];
     foreach (array_values($allowed) as $i => $d) { $k = $prefix . $i; $names[] = $k; $params[$k] = $d; }
     $sql = " AND (EXISTS (SELECT 1 FROM loading_pallets _udp
@@ -599,6 +608,9 @@ function depo_sql_records(string $records_alias = 'r', string $prefix = ':udp'):
                   OR NOT EXISTS (SELECT 1 FROM loading_pallets _udpu
                                  WHERE _udpu.loading_record_id = {$records_alias}.id
                                  AND TRIM(COALESCE(_udpu.depo,'')) <> '')) ";
+    if (role_current_depot_scope_restricted()) {
+        $sql = " AND EXISTS (SELECT 1 FROM loading_pallets _udp_any WHERE _udp_any.loading_record_id = {$records_alias}.id) AND NOT EXISTS (SELECT 1 FROM loading_pallets _udp WHERE _udp.loading_record_id = {$records_alias}.id AND (TRIM(COALESCE(_udp.depo,'')) = '' OR _udp.depo NOT IN (" . implode(',', $names) . "))) ";
+    }
     return [$sql, $params];
 }
 
@@ -607,8 +619,10 @@ function depo_sql_records(string $records_alias = 'r', string $prefix = ':udp'):
 // Dönen: ['(col IN (?,?) OR col boş)', ['Depo A','Depo B']] — kısıtsızsa ['', []].
 function depo_sql_in(string $col): array {
     $allowed = user_allowed_depots();
-    if ($allowed === null || count($allowed) === 0) return ['', []];
+    if ($allowed === null) return ['', []];
+    if ($allowed === []) return ['1=0', []];
     $ph = implode(',', array_fill(0, count($allowed), '?'));
+    if (role_current_depot_scope_restricted()) return ["$col IN ($ph)", array_values($allowed)];
     return ["($col IN ($ph) OR TRIM(COALESCE($col,'')) = '')", array_values($allowed)];
 }
 
@@ -617,8 +631,10 @@ function depo_sql_in(string $col): array {
 // Dönen: ['(EXISTS(...) OR atanmamış)', ['Depo A']] — kısıtsızsa ['', []].
 function depo_sql_records_in(string $records_ref = 'loading_records'): array {
     $allowed = user_allowed_depots();
-    if ($allowed === null || count($allowed) === 0) return ['', []];
+    if ($allowed === null) return ['', []];
+    if ($allowed === []) return ['1=0', []];
     $ph = implode(',', array_fill(0, count($allowed), '?'));
+    if (role_current_depot_scope_restricted()) return ["EXISTS (SELECT 1 FROM loading_pallets _udpi_any WHERE _udpi_any.loading_record_id = {$records_ref}.id) AND NOT EXISTS (SELECT 1 FROM loading_pallets _udpi WHERE _udpi.loading_record_id = {$records_ref}.id AND (TRIM(COALESCE(_udpi.depo,'')) = '' OR _udpi.depo NOT IN ($ph)))", array_values($allowed)];
     return ["(EXISTS (SELECT 1 FROM loading_pallets _udpi
               WHERE _udpi.loading_record_id = {$records_ref}.id
               AND _udpi.depo IN ($ph))
@@ -631,9 +647,11 @@ function depo_sql_records_in(string $records_ref = 'loading_records'): array {
 // Dönen: [' AND (col IN (...) OR col boş) ', [':udc0'=>'Depo', ...]]  — kısıtsızsa ['', []].
 function depo_sql_column(string $col, string $prefix = ':udc'): array {
     $allowed = user_allowed_depots();
-    if ($allowed === null || count($allowed) === 0) return ['', []];
+    if ($allowed === null) return ['', []];
+    if ($allowed === []) return [' AND 1=0 ', []];
     $names = []; $params = [];
     foreach (array_values($allowed) as $i => $d) { $k = $prefix . $i; $names[] = $k; $params[$k] = $d; }
+    if (role_current_depot_scope_restricted()) return [" AND $col IN (" . implode(',', $names) . ") ", $params];
     return [" AND ($col IN (" . implode(',', $names) . ") OR TRIM(COALESCE($col,'')) = '') ", $params];
 }
 

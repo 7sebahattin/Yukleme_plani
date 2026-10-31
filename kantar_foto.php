@@ -9,6 +9,7 @@ $auth_user = require_login();
 require_perm('kantar.read');
 
 $id = (int)($_GET['id'] ?? 0);
+role_require_kantar_scope($id);
 if ($id <= 0) { http_response_code(404); exit; }
 
 $st = db()->prepare("SELECT foto_data FROM kantar_fisleri WHERE id = ?");

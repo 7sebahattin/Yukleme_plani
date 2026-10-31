@@ -311,7 +311,7 @@ function hesap_can_transition(array $row, string $to): bool
     if ($rule === null) return false;
     if (hesap_can('admin')) return true;
     if ($rule['perm'] !== null && can($rule['perm'])) return true;
-    if ($rule['owner'] && hesap_is_owner($row) && hesap_can('write')) return true;
+    if ($rule['owner'] && hesap_is_owner($row) && hesap_can('edit')) return true;
     return false;
 }
 

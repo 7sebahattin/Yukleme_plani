@@ -254,11 +254,13 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 <?php if ($_ops_show): ?>
 <div class="home-section-title">Operasyon</div>
 
-<?php if (can_siparis('read')): ?>
+<?php if (role_matrix_page_can('siparis','ogl')): ?>
     <a href="siparisler.php" class="home-card">
         <div class="home-card-icon" style="background:#fdf0dc">📦</div>
         <div class="home-card-title">OGL Siparişler</div>
     </a>
+<?php endif; ?>
+<?php if (role_matrix_page_can('siparis','urun')): ?>
     <a href="urun_siparis.php" class="home-card">
         <div class="home-card-icon" style="background:#fff0e2">🛒</div>
         <div class="home-card-title">Siparişler</div>
@@ -276,7 +278,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
     <?php endif; ?>
 
-    <?php if (can('records.write')): ?>
+    <?php if (can('hks.access')): ?>
     <a href="halkayit/index.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f0fe">🏛</div>
         <div class="home-card-title">Hal Bildirimi</div>
@@ -300,7 +302,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
-<?php if (can('records.read')): ?>
+<?php if (role_matrix_page_can('records','loading')): ?>
     <a href="records.php" class="home-card">
         <div class="home-card-icon" style="background:#eaf1ff">🚚</div>
         <div class="home-card-title">Yükleme Planları</div>
@@ -310,7 +312,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
-<?php if (can('records.read')): ?>
+<?php if (role_matrix_page_can('records','pallet')): ?>
     <a href="cikmalar.php" class="home-card">
         <div class="home-card-icon" style="background:#fdecea">📋</div>
         <div class="home-card-title">Paletleme</div>
@@ -394,7 +396,7 @@ if (nav_ptak_gorunur()):
 <?php if ($_ynt_show): ?>
 <div class="home-section-title">Yönetim</div>
 
-<?php if (can('defs.read') || is_admin()): ?>
+<?php if (can('defs.read')): ?>
     <a href="definitions.php" class="home-card">
         <div class="home-card-icon" style="background:#fcf2dc">⚙️</div>
         <div class="home-card-title">Tanımlar</div>
@@ -404,7 +406,7 @@ if (nav_ptak_gorunur()):
     </a>
 <?php endif; ?>
 
-<?php if (can('users.admin') || is_admin()): ?>
+<?php if (can('users.admin')): ?>
     <a href="users.php" class="home-card">
         <div class="home-card-icon" style="background:#e8eaf6">👥</div>
         <div class="home-card-title">Kullanıcılar</div>
@@ -414,11 +416,13 @@ if (nav_ptak_gorunur()):
     </a>
 <?php endif; ?>
 
-<?php if (is_admin()): ?>
+<?php if (can('users.admin')): ?>
     <a href="roles.php" class="home-card">
         <div class="home-card-icon" style="background:#e7eefc">🛡️</div>
         <div class="home-card-title">Roller</div>
     </a>
+<?php endif; ?>
+<?php if (is_admin()): ?>
     <a href="audit.php" class="home-card">
         <div class="home-card-icon" style="background:#fce4ec">🧾</div>
         <div class="home-card-title">İşlem Geçmişi</div>

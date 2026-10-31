@@ -9,6 +9,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('reports.read');
+require_perm('reports.gunluk.read');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: reports.php?type=gunluk'); exit;
@@ -128,6 +129,8 @@ try {
     // Aktif depo kapsamı
     [$_ds_pw, $_ds_pw_v] = depo_sql_in('lp.depo');
     if ($_ds_pw !== '') { $pw[] = $_ds_pw; $pp = array_merge($pp, $_ds_pw_v); }
+    [$_pwrs,$_pwrp] = depo_sql_records_in('lr');
+    if ($_pwrs !== '') { $pw[] = $_pwrs; $pp = array_merge($pp,$_pwrp); }
     $st = db()->prepare("
         SELECT lp.id AS palet_id, lp.loading_record_id,
                lp.palet_no, lp.kasa_adeti, lp.brut_kg, lp.dara_kg, lp.net_kg,

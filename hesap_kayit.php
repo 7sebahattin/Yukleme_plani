@@ -5,10 +5,12 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_hesap('write');
-hesap_migrate();
+
+
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_POST['id']) ? (int)$_POST['id'] : 0);
+require_hesap($id > 0 ? 'edit' : 'create');
+hesap_migrate();
 $hizli = trim($_GET['hizli'] ?? '');
 
 $errors = [];

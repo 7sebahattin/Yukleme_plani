@@ -9,6 +9,7 @@ $auth_user = require_login();
 require_perm('records.delete');
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
+role_require_record_access($id, 'delete');
 if ($id <= 0) {
     set_flash('error', 'Geçersiz kayıt.');
     header('Location: records.php'); exit;

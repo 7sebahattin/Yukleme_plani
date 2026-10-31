@@ -14,7 +14,7 @@ $user = require_login();
 
 $error   = '';
 $next    = trim($_GET['next'] ?? $_POST['next'] ?? '');
-$is_admin_or_def = is_admin() || can('defs.write');
+$is_admin_or_def = is_admin() || can('defs.create');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);

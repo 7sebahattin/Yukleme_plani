@@ -9,6 +9,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/material_stock_helpers.php';
 $auth_user = require_login();
 require_perm('stok.write');
+require_perm('stok.create');
 
 $pdo = db();
 
@@ -87,12 +88,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && in_array($_POST['action'] ?? '', ['ms_giris', 'ms_sevk'], true)) {
     csrf_check($_POST['csrf'] ?? null);
     require_perm('stok.write');
+require_perm('stok.create');
 
     $mv_type     = ($_POST['action'] === 'ms_sevk') ? 'sevk' : 'giris';
     $mv_date     = trim($_POST['mv_date']    ?? '');
     $mv_mat_type = trim($_POST['mv_mat_type'] ?? '');
     $mv_mat_name = trim($_POST['mv_mat_name'] ?? '');
     $mv_depo     = trim($_POST['mv_depo']    ?? '');
+    role_require_depot_value($mv_depo);
     $mv_unit     = trim($_POST['mv_unit']    ?? 'adet');
     $mv_qty      = parse_stock_quantity(trim($_POST['mv_qty'] ?? ''), $mv_unit);
     $mv_belge    = trim($_POST['mv_belge']   ?? '');

@@ -7,7 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.read');
+require_perm('records.loading.read');
 
 function fmt_tarih_tr(?string $d): string {
     if (!$d) return '';
@@ -227,7 +227,7 @@ render_flash();
             <?php endif; ?>
         </p>
     </div>
-    <a href="record_create.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a>
+    <?php if (can('records.loading.create')): ?><a href="record_create.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a><?php endif; ?>
 </div>
 
 <!-- ── Hızlı tarih butonları ── -->
@@ -256,7 +256,7 @@ render_flash();
             <a href="records.php" class="btn btn-ghost">Filtreleri temizle</a>
         <?php else: ?>
             <p>Henüz kayıt yok.</p>
-            <a href="record_create.php" class="btn btn-primary">İlk kaydı oluştur</a>
+            <?php if (can('records.loading.create')): ?><a href="record_create.php" class="btn btn-primary">İlk kaydı oluştur</a><?php endif; ?>
         <?php endif; ?>
     </div>
 <?php else: ?>
@@ -344,9 +344,9 @@ render_flash();
                             <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                             <div class="pc-dropdown" hidden>
                                 <?php if (!$locked || $can_unlock): ?>
-                                <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
-                                <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
-                                   onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                                <?php if (can('records.loading.edit')): ?><a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a><?php endif; ?>
+                                <?php if (can('records.loading.delete')): ?><a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
+                                   onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a><?php endif; ?>
                                 <?php else: ?>
                                 <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
                                 <?php endif; ?>
@@ -458,9 +458,9 @@ render_flash();
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                         <div class="pc-dropdown" hidden>
                             <?php if (!$locked || $can_unlock): ?>
-                            <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
-                            <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
-                               onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                            <?php if (can('records.loading.edit')): ?><a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a><?php endif; ?>
+                            <?php if (can('records.loading.delete')): ?><a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
+                               onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a><?php endif; ?>
                             <?php else: ?>
                             <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
                             <?php endif; ?>

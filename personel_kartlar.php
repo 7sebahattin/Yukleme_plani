@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 forbidden('Personel bulunamadı.');
             }
             $kaEmpDepo = trim((string)$kaEmpDepo);
-            if ($kaEmpDepo !== '' && function_exists('depot_visible_to_user') && !depot_visible_to_user($kaEmpDepo)) {
+            if (function_exists('depot_visible_to_user') && !depot_visible_to_user($kaEmpDepo)) {
                 forbidden('Bu personel başka depoya ait (' . h($kaEmpDepo) . ').');
             }
             $sonuc = pdks_kart_ata($employeeId, $hamUid, $kaynak,

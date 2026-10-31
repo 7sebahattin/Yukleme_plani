@@ -9,6 +9,8 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/print_helpers.php';
 $auth_user = require_login();
 require_perm('reports.read');
+require_perm('reports.gunluk.read');
+if (role_current_depot_scope_restricted()) forbidden('Arşiv raporlarında depo kapsamı doğrulanamadığı için bu role erişim kapalıdır.');
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { header('Location: daily_report_archive.php'); exit; }

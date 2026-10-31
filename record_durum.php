@@ -9,12 +9,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_perm('records.edit');
 
 header('Content-Type: application/json');
 
 $id    = (int)($_POST['id']   ?? 0);
+role_require_record_access($id, 'edit');
 $durum = trim($_POST['durum'] ?? '');
+if ($durum === 'yuklendi' && !can('records.lock')) forbidden('Kaydı kilitleme yetkiniz yok.');
 $csrf  = $_POST['csrf'] ?? null;
 $tarih_new = trim($_POST['tarih'] ?? '');
 

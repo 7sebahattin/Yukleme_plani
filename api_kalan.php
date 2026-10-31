@@ -36,7 +36,7 @@ $action = $_GET['action'] ?? $_POST['action'] ?? '';
 // WRITE: save_target, save_crate, delete_crate         → records.write + CSRF
 static $WRITE_ACTIONS = ['save_target', 'save_crate', 'delete_crate'];
 if (in_array($action, $WRITE_ACTIONS, true)) {
-    if (!can('records.write')) {
+    if (!can('records.edit')) {
         http_response_code(403);
         echo json_encode(['ok' => false, 'error' => 'Bu işlem için records.write yetkisi gereklidir.']);
         exit;
@@ -54,6 +54,7 @@ switch ($action) {
     // ---- Mevcut durum ----
     case 'status':
         $rid = (int)($_GET['record_id'] ?? 0);
+        role_require_record_access($rid, $action === 'save_target' ? 'edit' : 'read');
         if (!$rid) err('record_id gerekli');
 
         $st = db()->prepare("SELECT COUNT(*) AS cnt, COALESCE(SUM(brut_kg),0) AS total_kg
@@ -75,6 +76,7 @@ switch ($action) {
     // ---- Hedef kaydet ----
     case 'save_target':
         $rid = (int)($_POST['record_id'] ?? 0);
+        role_require_record_access($rid, $action === 'save_target' ? 'edit' : 'read');
         $tkg = (float)($_POST['target_kg'] ?? 0);
         $tpc = (int)($_POST['target_pallet_count'] ?? 0);
         if (!$rid) err('record_id gerekli');
@@ -117,6 +119,7 @@ switch ($action) {
     case 'auto_avg':
         $cc  = (int)($_GET['crate_count'] ?? 0);
         $rid = (int)($_GET['record_id']   ?? 0);
+        role_require_record_access($rid, $action === 'save_target' ? 'edit' : 'read');
         if (!$cc) err('Kasa adedi gerekli');
         if (!$rid) err('record_id gerekli');
 
@@ -134,6 +137,7 @@ switch ($action) {
     // ---- Kombinasyon hesapla ----
     case 'calculate':
         $rid       = (int)($_POST['record_id'] ?? 0);
+        role_require_record_access($rid, $action === 'save_target' ? 'edit' : 'read');
         $target_kg = (float)str_replace(',', '.', (string)($_POST['target_kg'] ?? 0));
         $target_pc = (int)($_POST['target_pallet_count'] ?? 0);
         $types_raw = json_decode($_POST['crate_types'] ?? '[]', true);

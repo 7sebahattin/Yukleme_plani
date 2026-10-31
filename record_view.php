@@ -12,6 +12,7 @@ $auth_user = require_login();
 require_perm('records.read');
 
 $id = (int)($_GET['id'] ?? 0);
+role_require_record_access($id, 'read');
 $print = !empty($_GET['print']);
 if ($id <= 0) { set_flash('error', 'Geçersiz kayıt.'); header('Location: records.php'); exit; }
 
@@ -368,7 +369,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     <a href="<?= h($list_url) ?>" class="btn btn-geri rv-back"
        data-list-back="<?= $_lpage ?>" data-record-id="<?= (int)$id ?>">← Liste</a>
     <div class="rv-actions">
-        <?php if (!$_is_locked || $_can_unlock): ?>
+        <?php if ((!$_is_locked || $_can_unlock) && can('records.' . (($record['type'] ?? '') === 'cikma' ? 'pallet' : 'loading') . '.edit')): ?>
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
         <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
@@ -379,7 +380,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                 <a href="maliyet_view.php?id=<?= (int)$maliyet_links[0]['id'] ?>">
                     🧮 Maliyet<?= count($maliyet_links) > 1 ? ' (' . count($maliyet_links) . ')' : '' ?>
                 </a>
-                <?php elseif ($_is_maliyet_eligible && can_maliyet('write')): ?>
+                <?php elseif ($_is_maliyet_eligible && can_maliyet('create')): ?>
                 <a href="maliyet_form.php?record=<?= (int)$id ?>">🧮 Maliyet Oluştur</a>
                 <?php endif; ?>
                 <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>

@@ -7,6 +7,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('reports.read');
+require_perm('reports.gunluk.read');
+if (role_current_depot_scope_restricted()) forbidden('Eski günlük rapor arşivinde depo kapsamı doğrulanamadığı için erişim kapalıdır. Günlük Rapor ekranını kullanın.');
 
 $f_type = trim($_GET['tip']    ?? '');
 $f_from = trim($_GET['f_from'] ?? '');
