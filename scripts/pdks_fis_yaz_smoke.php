@@ -637,6 +637,93 @@ $fO7 = oku1(['fis_no' => 'O-007', 'erkek_tam' => '12+3', 'fm_toplam' => 6, 'fm_k
 $mO7 = onizle1($fO7, $sec);
 ok('O12) «FM Tipi = Şeritçi» ise FM Şeritçi\'ye dağılır', $mO7['hatalar'] === [] && array_keys($mO7['plan']['fm']['tip_dagilim'] ?? []) === ['SERITCI'], j([$mO7['hatalar'], $mO7['plan']['fm']['tip_dagilim'] ?? null]));
 
+echo "\n=== P. v463 Rampacı yevmiye (normalize → önizleme → yaz → hakediş; kolon kurulu) ===\n";
+ok('P0) harness: yevmiye_adedi kolonu kurulu (pdks_yevmiye_hazir)', pdks_yevmiye_hazir(db()) === true);
+$cP = yeniCavus('Çavuş P1');
+$fP = oku1(['fis_no' => 'P-001', 'kadin_tam' => 2, 'rampaci_kisi' => 3, 'rampaci_yevmiye' => 5], $cP, $dun3);
+ok('P1) normalize: Rampacı 3 kişi 5 yevmiye, hata yok', $fP['hatalar'] === [] && $fP['say']['RAMPACI'] === ['tam' => 0, 'yarim' => 0, 'kisi' => 3, 'yevmiye' => 5], j([$fP['hatalar'], $fP['say']['RAMPACI']]));
+$mP = onizle1($fP, $sec);
+ok('P2) önizleme: yazılabilir; gruplar Kadın tam×2 · Rampacı 2 yevmiye×2 · Rampacı 1 yevmiye×1; 5 kişi', $mP['hatalar'] === [] && $mP['secilebilir'] && $mP['kisi'] === 5
+    && array_map(fn($g) => $g['kod'] . ':' . $g['profil'] . ':' . $g['yevmiye'] . '×' . $g['adet'], $mP['plan']['gruplar']) === ['KADIN:tam:0×2', 'RAMPACI:yevmiye:2×2', 'RAMPACI:yevmiye:1×1'], j([$mP['durum'], $mP['hatalar'], $mP['uyarilar'], array_map(fn($g) => $g['profil'] . $g['yevmiye'] . '×' . $g['adet'], $mP['plan']['gruplar'] ?? [])]));
+$onceP = sayimlar();
+onizle1($fP, $sec);
+ok('P2b) önizleme YAN ETKİSİZ (sayımlar aynı)', $onceP === sayimlar());
+$rP = yaz1($fP, $sec);
+ok('P3) yazıldı: 5 kişi kaydı, 5 yevmiye', $rP['durum'] === 'yazildi' && $rP['yazilan']['kisi'] === 5 && $rP['yazilan']['yevmiye'] === 5, j($rP));
+$sidP = (int)$rP['session_id'];
+$yevler = array_map('intval', db()->query("SELECT yevmiye_adedi FROM daily_worker_work_periods WHERE session_id=$sidP AND worker_type_id_snapshot=$rampaci AND is_voided=0 ORDER BY yevmiye_adedi DESC")->fetchAll(PDO::FETCH_COLUMN));
+ok('P4) DB: 3 Rampacı dönemi, yevmiye_adedi = 2,2,1 (Σ=5); Kadın dönemlerinde yevmiye_adedi NULL', $yevler === [2, 2, 1] && (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=$sidP AND worker_type_id_snapshot=$kadin AND yevmiye_adedi IS NOT NULL")->fetchColumn() === 0, j($yevler));
+ok('P4b) yevmiyeli dönemler kartsız sanal kartla, Yarım/FM onayı YAZILMADI (approved_attendance_class NULL)', (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=$sidP AND worker_type_id_snapshot=$rampaci AND approved_attendance_class IS NOT NULL")->fetchColumn() === 0 && $rP['yazilan']['yarim'] === 0 && $rP['yazilan']['fm_onayli'] === 0);
+foreach (donemler($sidP) as $dP) {
+    if ((int)$dP['worker_type_id_snapshot'] !== $rampaci) continue;
+    $f = $dP['faz8b'];
+    ok('P5) sınıflandırıcı: Rampacı dönemi yevmiye=' . $dP['yevmiye_adedi'] . ' · etkin Tam · FM yok · finans_hazir · onay gerekmez', $f['yevmiye'] === (int)$dP['yevmiye_adedi'] && $f['etkin_sinif'] === 'tam' && $f['sinif_kaynak'] === 'yevmiye' && $f['fazla_mesai_saat'] === 0 && $f['odenecek_fm_saat'] === 0 && $f['finans_hazir'] === true && $f['sinif_onayi_gerekli'] === false, j($f));
+}
+$hP = pdks_faz8b_hakedis_hesapla($sidP, 1, db());
+// fiyatKur: Tam günlük 1500 (3 tip). Kadın 2×1500 + Rampacı 5 yevmiye × 1500 = 3000 + 7500 = 10500.00
+ok('P6) hakediş = 2×1500 (Kadın) + 5 yevmiye × 1500 (Rampacı Tam tarifesi) = 10500.00', !empty($hP['ok']) && $hP['total_amount'] === '10500.00', j($hP));
+$satirlarP = db()->query("SELECT worker_count, unit_rate, line_total, attendance_class_snapshot, overtime_hours FROM foreman_daily_entitlement_lines l JOIN foreman_daily_entitlements e ON e.id = l.entitlement_id WHERE e.session_id = $sidP AND l.worker_type_id = $rampaci ORDER BY l.worker_count DESC")->fetchAll();
+ok('P6b) Rampacı hakediş satırları: worker_count=y, unit_rate=1500.00, line_total=1500×y, Tam, FM 0', count($satirlarP) === 3
+    && array_map(fn($r) => [(int)$r['worker_count'], number_format((float)$r['unit_rate'], 2, '.', ''), number_format((float)$r['line_total'], 2, '.', ''), $r['attendance_class_snapshot'], (int)$r['overtime_hours']], $satirlarP) === [[2, '1500.00', '3000.00', 'tam', 0], [2, '1500.00', '3000.00', 'tam', 0], [1, '1500.00', '1500.00', 'tam', 0]], j($satirlarP));
+$ozP = pdks_faz8b_gun_mesai_ozeti([$sidP], db());
+ok('P7) Mesai Özeti: Rampacı Tam=3 kişi, yevmiye Σ=5; süre/FM/çalışma saatine KATILMAZ', $ozP['tanim']['Rampacı']['tam'] === 3 && $ozP['yevmiye'] === 5 && $ozP['tanim']['Rampacı']['toplam'] === 3
+    && array_sum($ozP['tanim']['Rampacı']['fm']) === 0, j($ozP['tanim']['Rampacı']));
+$d1 = array_values(array_filter(donemler($sidP), fn($d) => (int)$d['worker_type_id_snapshot'] === $rampaci))[0];
+ok('P8) Mesai Tanımı etiketi: «Yevmiye ×y»', str_starts_with(pdks_faz8b_mesai_tanimi_etiketi($d1['faz8b'], false, false), 'Yevmiye ×'), pdks_faz8b_mesai_tanimi_etiketi($d1['faz8b'], false, false));
+$rd = pdks_faz8b_degerlendirme_kaydet((int)$d1['id'], 'yarim', null, 1, db());
+ok('P9) yevmiyeli dönemde Yarım/FM değerlendirmesi REDDEDİLİR', empty($rd['ok']) && str_contains((string)$rd['hata'], 'Yevmiyeli kayıt'), j($rd));
+// Tip değişimi RED, saat düzeltmesi serbest
+$duz = pdks_faz8j_duzelt(['period_id' => (int)$d1['id'], 'session_id' => $sidP, 'depo' => $AKTIF_DEPO, 'reason' => 'test', 'note' => '', 'worker_card_id' => (int)$d1['worker_card_id'], 'worker_type_id' => $erkek,
+    'entry_date' => $dun3, 'entry_clock' => '08:00', 'exit_date' => $dun3, 'exit_clock' => '17:00'], 1, db());
+ok('P10) yevmiyeli kaydın TİPİ değiştirilemez (Rampacı → Erkek RED)', empty($duz['ok']) && str_contains((string)($duz['hata'] ?? ''), 'tipi değiştirilemez'), j($duz));
+$duz = pdks_faz8j_duzelt(['period_id' => (int)$d1['id'], 'session_id' => $sidP, 'depo' => $AKTIF_DEPO, 'reason' => 'test', 'note' => '', 'worker_card_id' => (int)$d1['worker_card_id'], 'worker_type_id' => $rampaci,
+    'entry_date' => $dun3, 'entry_clock' => '08:00', 'exit_date' => $dun3, 'exit_clock' => '16:00'], 1, db());
+$d1b = pdks_faz8b_donem_getir((int)$d1['id'], db());
+ok('P11) saat düzeltmesi serbest ve yevmiyeyi bozmaz (yevmiye aynı, hakediş etkilenmez)', !empty($duz['ok']) && (int)$d1b['yevmiye_adedi'] === (int)$d1['yevmiye_adedi'] && $d1b['faz8b']['yevmiye'] === (int)$d1['yevmiye_adedi'] && $d1b['faz8b']['etkin_sinif'] === 'tam', j($duz));
+$hP2 = pdks_faz8b_hakedis_hesapla($sidP, 1, db());
+ok('P11b) hakediş yeniden hesabı AYNI tutar (10500.00)', !empty($hP2['ok']) && $hP2['total_amount'] === '10500.00', j($hP2));
+// Faz 4 eski motoru yevmiyeli oturumu REDDEDER
+require_once $ROOT . '/config/pdks_hakedis.php';
+$h4 = pdks_hakedis_hesapla($sidP, 1, db());
+ok('P12) Faz 4 eski motoru yevmiyeli oturumu REDDEDER (kod yevmiye_faz8b_gerekli)', empty($h4['ok']) && ($h4['kod'] ?? '') === 'yevmiye_faz8b_gerekli', j($h4));
+// Geri alma (Toplu Geri Al) yevmiyeli dönemleri iptal eder; yeniden yükleme revizyonla
+$tg = pdks_faz8j_toplu_geri_al((string)$rP['toplu_id'], 'test geri alma', 1, db());
+ok('P13) Toplu Geri Al yevmiyeli dönemleri de iptal eder', !empty($tg['ok']) && (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=$sidP AND is_voided=0")->fetchColumn() === 0, j($tg));
+// 3 kişi 3 yevmiye → 3 dönem yevmiye=1
+$cP2 = yeniCavus('Çavuş P2');
+$fP2 = oku1(['fis_no' => 'P-002', 'rampaci_kisi' => 3, 'rampaci_yevmiye' => 3], $cP2, $dun3);
+$rP2 = yaz1($fP2, $sec);
+$sidP2 = (int)$rP2['session_id'];
+$yv2 = array_map('intval', db()->query("SELECT yevmiye_adedi FROM daily_worker_work_periods WHERE session_id=$sidP2 AND is_voided=0")->fetchAll(PDO::FETCH_COLUMN));
+$hP3 = pdks_faz8b_hakedis_hesapla($sidP2, 1, db());
+ok('P14) 3 kişi 3 yevmiye → 3 dönem yevmiye=1; hakediş 3×1500 = 4500.00', $rP2['durum'] === 'yazildi' && $yv2 === [1, 1, 1] && !empty($hP3['ok']) && $hP3['total_amount'] === '4500.00', j([$rP2['durum'] ?? null, $yv2, $hP3['total_amount'] ?? $hP3]));
+// Rampacı Tam tarifesi yoksa hakediş DURUR
+$cP3 = yeniCavus('Çavuş P3', false);
+$fP3 = oku1(['fis_no' => 'P-003', 'rampaci_kisi' => 2, 'rampaci_yevmiye' => 2], $cP3, $dun3);
+$mP3 = onizle1($fP3, $sec);
+ok('P15) fiyatsız Rampacı: önizleme UYARI (engel değil)', $mP3['secilebilir'] && hVar($mP3, '«Rampacı» için') && $mP3['hatalar'] === [], j([$mP3['durum'], $mP3['hatalar'], $mP3['uyarilar']]));
+$rP3 = yaz1($fP3, $sec);
+$hP4 = pdks_faz8b_hakedis_hesapla((int)$rP3['session_id'], 1, db());
+ok('P15b) fiyatsız Rampacı yevmiye → hakediş DURUR (geçerli fiyat yok, fail-closed)', $rP3['durum'] === 'yazildi' && empty($hP4['ok']) && str_contains(j($hP4), 'geçerli fiyat yok'), j($hP4));
+// Yarım/Çift/FM fiyatı OLMADAN (yalnız Tam tarife) yevmiye hesaplanır
+$cP4 = yeniCavus('Çavuş P4', false);
+db()->prepare("INSERT INTO foreman_worker_rates (is_active, foreman_id, worker_type_id, daily_rate, half_day_rate, overtime_mode, overtime_rate, currency, valid_from, created_by_user_id) VALUES (1,?,?,?,NULL,NULL,NULL,'TRY','2020-01-01',1)")->execute([$cP4, $rampaci, '1234.50']);
+$rP4 = yaz1(oku1(['fis_no' => 'P-004', 'rampaci_kisi' => 2, 'rampaci_yevmiye' => 3], $cP4, $dun3), $sec);
+$hP5 = pdks_faz8b_hakedis_hesapla((int)$rP4['session_id'], 1, db());
+ok('P16) yalnız Tam tarife (Yarım/FM/Çift fiyatı YOK): 3 yevmiye × 1234.50 = 3703.50 hesaplanır', $rP4['durum'] === 'yazildi' && !empty($hP5['ok']) && $hP5['total_amount'] === '3703.50', j([$rP4['durum'] ?? null, $hP5]));
+// Kartlı + yevmiye: toplu_hazirla/satir_kontrol kartlı yevmiyeyi REDDEDER (yalnız kartsız)
+$ydeneme = pdks_faz8j_toplu_onizle(['foreman_id' => $cP4, 'work_date' => $dun2, 'depo' => $AKTIF_DEPO, 'reason' => 't', 'coklu_grup' => true,
+    'gruplar' => [['worker_type_id' => $rampaci, 'entry_clock' => '08:00', 'exit_date' => $dun2, 'exit_clock' => '17:00', 'kartsiz_adet' => 1, 'kart_ids' => [999999], 'yevmiye' => 2]]], 1, db());
+ok('P17) Faz 8J: yevmiyeli grup kartlı olamaz', empty($ydeneme['ok']) && str_contains(j($ydeneme), 'yalnız kartsız'), j($ydeneme['hatalar'] ?? $ydeneme));
+$ydeneme = pdks_faz8j_toplu_onizle(['foreman_id' => $cP4, 'work_date' => $dun2, 'depo' => $AKTIF_DEPO, 'reason' => 't', 'coklu_grup' => true,
+    'gruplar' => [['worker_type_id' => $erkek, 'entry_clock' => '08:00', 'exit_date' => $dun2, 'exit_clock' => '17:00', 'kartsiz_adet' => 1, 'yevmiye' => 2]]], 1, db());
+ok('P18) Faz 8J: yevmiye YALNIZ Rampacı grubunda (Erkek + yevmiye RED)', empty($ydeneme['ok']) && str_contains(j($ydeneme), 'yalnız Rampacı'), j($ydeneme['hatalar'] ?? $ydeneme));
+$ydeneme = pdks_faz8j_toplu_onizle(['foreman_id' => $cP4, 'work_date' => $dun2, 'depo' => $AKTIF_DEPO, 'reason' => 't',
+    'gruplar' => [['worker_type_id' => $rampaci, 'entry_clock' => '08:00', 'exit_date' => $dun2, 'exit_clock' => '17:00', 'kartsiz_adet' => 1, 'yevmiye' => 2]]], 1, db());
+$yazilanYevmiye = pdks_faz8j_toplu_ekle(['foreman_id' => $cP4, 'work_date' => $dun2, 'depo' => $AKTIF_DEPO, 'reason' => 't', 'istek_id' => istek32(),
+    'gruplar' => [['worker_type_id' => $rampaci, 'entry_clock' => '08:00', 'exit_date' => $dun2, 'exit_clock' => '17:00', 'kartsiz_adet' => 1, 'yevmiye' => 2]]], 1, db());
+ok('P19) coklu_grup KAPALI (HTTP ucu yolu) iken `yevmiye` anahtarı YOK SAYILIR: dönem yevmiyesiz yazılır', !empty($yazilanYevmiye['ok']) && (int)db()->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id=" . (int)$yazilanYevmiye['session_id'] . " AND yevmiye_adedi IS NOT NULL")->fetchColumn() === 0, j($yazilanYevmiye['hatalar'] ?? $yazilanYevmiye));
+
 echo "\n=== M. Statik güvenceler ===\n";
 $fk = file_get_contents($ROOT . '/config/pdks_fis.php');
 ok('M1) pdks_fis.php toplu_ekle / servis_ekle / degerlendirme_kaydet / donemleri_siniflandir çağırır', str_contains($fk, 'pdks_faz8j_toplu_ekle(') && str_contains($fk, 'pdks_servis_ekle(') && str_contains($fk, 'pdks_faz8b_degerlendirme_kaydet(') && str_contains($fk, 'pdks_faz8b_donemleri_siniflandir('));
