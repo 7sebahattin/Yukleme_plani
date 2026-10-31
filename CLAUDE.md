@@ -7,7 +7,9 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v463` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v464` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+
+**Hızlı Maliyet güvenlik/okunabilirlik (v464):** Ayar'da birim değişince miktar 1'e sıfırlanır ve satırda not çıkar (eski miktar yeni birime taşınmaz: 20.000 kg → 20.000 ton hatası). `1.234` gibi noktalı binlik girişlerde alan altında "1234 olarak okunur; ondalık için virgül" notu (`numberReadNote`). Birim maliyet (TL/kg) ekran/özet/listede 4 ondalık; toplam 2 kalır. Mobilde Kaydet çubuğu ~64px (açıklama yalnız kayıt kullanılamıyorsa görünür), metin alanı odakta iken `.qc-kbd` ile çubuk akışa döner. Motor/SQL değişmedi.
 
 **Ana menü ve Hızlı Maliyet görünümü (v461):** Ana sayfa, sidebar modül bağlantılarını aynı yetkilerle içerir: eksik Siparişler/Hızlı Maliyet/Roller kartları ve `nav_muhasebe_gruplari()` kaynağındaki51 admin alt kartı eklendi. Sayaç sorguları değişmez. Hızlı Maliyet ana kart/sidebar/mobilde ortak `assets/nav-icons/qcost.svg` kabartmalı dolar ikonunu kullanır; SW kabuğuna eklenir. Birim alanının sağ üçgeni `.qc-unit-select::after` ile tema uyumludur; native select davranışı ve tıklama korunur. Yalnız ekleme düğmesi altındaki uzun malzeme açıklaması kaldırıldı. Testler: `dashboard_sidebar_parity_smoke.php`, `dashboard_navigation_smoke.js`, `quick_cost_sidebar_smoke.php`, `quick_cost_browser_smoke.js`. SQL/kayıt/hesap motoru değişikliği yok.
 
