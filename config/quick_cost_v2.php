@@ -86,7 +86,7 @@ function quick_cost_v2_bases(): array
 
 function quick_cost_v2_currencies(): array
 {
-    return ['TL' => 'TL', 'USD' => 'USD', 'EUR' => 'EUR'];
+    return ['TL' => 'TL', 'USD' => 'USD', 'EUR' => 'EUR', 'RUB' => 'Ruble (RUB)', 'GBP' => 'Sterlin (GBP)'];
 }
 
 function quick_cost_v2_defaults(?string $date = null): array
@@ -170,7 +170,10 @@ function quick_cost_v2_kg_text(int $i4): string
 function quick_cost_v2_material_defaults(): array
 {
     $lines = [];
-    foreach (quick_cost_v2_material_lines() as $code => $label) $lines[] = ['code' => $code, 'qty' => 0, 'price' => 0];
+    // Yeni hesapta palet başına adetler hazır gelir (kullanıcı değiştirebilir); fiyatlar boş.
+    $qty = ['mat_pallet' => 1, 'mat_hat' => 1, 'mat_corner' => 4, 'mat_crate' => 0, 'mat_divider' => 1,
+        'mat_edge' => 2, 'mat_base' => 1, 'mat_strap' => 1, 'mat_net' => 1];
+    foreach (quick_cost_v2_material_lines() as $code => $label) $lines[] = ['code' => $code, 'qty' => $qty[$code] ?? 0, 'price' => 0];
     return ['use' => false, 'pallets' => 0, 'lines' => $lines];
 }
 
@@ -418,7 +421,7 @@ function quick_cost_v2_calculate(array $input): array
     // --- Satış karşılaştırması (isteğe bağlı; fiyat > 0 ise hesaplanır) ---
     $s = is_array($input['sale'] ?? null) ? $input['sale'] : [];
     $currency = $s['currency'] ?? 'TL';
-    if (!is_string($currency) || !isset(quick_cost_v2_currencies()[$currency])) throw new InvalidArgumentException('Para birimi TL, USD veya EUR olmalı.');
+    if (!is_string($currency) || !isset(quick_cost_v2_currencies()[$currency])) throw new InvalidArgumentException('Para birimi TL, USD, EUR, RUB veya GBP olmalı.');
     $salePrice = quick_cost_number($s['price'] ?? 0, 'Satış fiyatı');
     $rate = $currency === 'TL' ? 1.0 : quick_cost_number($s['rate'] ?? 0, 'Döviz kuru');
     $marginRaw = $s['target_margin'] ?? null;

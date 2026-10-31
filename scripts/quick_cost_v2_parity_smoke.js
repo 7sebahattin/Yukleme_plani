@@ -121,7 +121,7 @@ for (let i = 0; i < 160; i++) {
         if (rnd() < .2) r.unit_price = turkish(Number(r.unit_price));
     });
     if (rnd() < .5) d.credit = { apply: rnd() < .6, domestic_sold_kg: num(Number(d.quantities.domestic_kg), 0), domestic_price: num(15, 2), industry_sold_kg: num(d.quantities.industry_kg, 0), industry_price: num(5, 2) };
-    if (rnd() < .6) d.sale = { price: num(3, 4) || 1, currency: pick(['TL', 'USD', 'EUR']), rate: pick([1, '34,25', '36,8', '0,5', 0]), target_margin: pick([null, '', 15, '22,5', 0]) };
+    if (rnd() < .6) d.sale = { price: num(3, 4) || 1, currency: pick(['TL', 'USD', 'EUR', 'RUB', 'GBP']), rate: pick([1, '34,25', '36,8', '0,5', 0]), target_margin: pick([null, '', 15, '22,5', 0]) };
     cases.push(d);
 }
 const php = JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', [path.join(__dirname, 'quick_cost_v2_smoke.php'), '--json'], { input: JSON.stringify(cases), encoding: 'utf8', maxBuffer: 64 << 20 }));

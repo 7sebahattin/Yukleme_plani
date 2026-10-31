@@ -220,7 +220,7 @@
 
         var s = input.sale && typeof input.sale === 'object' ? input.sale : {};
         var cur = s.currency == null ? 'TL' : s.currency;
-        if (['TL', 'USD', 'EUR'].indexOf(cur) < 0) fail('Para birimi TL, USD veya EUR olmalı.');
+        if (['TL', 'USD', 'EUR', 'RUB', 'GBP'].indexOf(cur) < 0) fail('Para birimi TL, USD, EUR, RUB veya GBP olmalı.');
         var sp = parseNumber(s.price == null ? 0 : s.price, 'Satış fiyatı');
         var rate = cur === 'TL' ? 1 : parseNumber(s.rate == null ? 0 : s.rate, 'Döviz kuru');
         var margin = (s.target_margin == null || s.target_margin === '') ? null : percent(s.target_margin, 'Hedef kâr marjı', false);

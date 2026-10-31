@@ -79,8 +79,8 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await page.locator('[data-qc2-set="operation_type"]').count() === 0 && !/Fason|Üretim/.test(bodyText.replace(/Fason işleme/g, '')), name + ' Fason/Üretim control removed');
             check(!/andıman/.test(bodyText) && /Verimlilik/.test(bodyText), name + ' Randıman renamed to Verimlilik');
             check(await rowEl('packing_labor').locator('[data-qc2-item="basis_unit"]').inputValue() === 'raw_kg|kg', name + ' packing labor defaults to raw KG base');
-            const totalBox = await page.locator('.qc2-total-card').boundingBox(), saleBox = await page.locator('.qc2-sale').boundingBox(), heroBox = await page.locator('.qc2-hero').boundingBox();
-            check(totalBox && saleBox && totalBox.y >= saleBox.y + saleBox.height - 1 && totalBox.y > heroBox.y + heroBox.height && await page.locator('.qc2-hero [data-qc2-out="total"]').count() === 0, name + ' total card sits below Satış karşılaştırması');
+            const heroBox = await page.locator('.qc2-hero').boundingBox(), saleBox = await page.locator('.qc2-sale').boundingBox();
+            check(heroBox && saleBox && heroBox.y >= saleBox.y + saleBox.height - 1 && await page.locator('.qc2-hero [data-qc2-out="total"]').count() === 1 && await page.locator('.qc2-hero [data-qc2-out="unit_cost"]').count() === 1, name + ' whole results card (total + KPIs) sits below Satış karşılaştırması');
 
             // Malzeme: Palet detayı düğmesi (Ayar'ın altında) + panel
             const matBtn = rowEl('material').locator('[data-qc2-mat-toggle]'), panel = page.locator('[data-qc2-matpanel]');
