@@ -176,10 +176,10 @@ foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'G
     ok("admin: '$kartAdi' kartı görünüyor", str_contains($s0, $kartAdi));
 }
 foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', 'İşçi Tipleri'] as $kartAdi) {
-    ok("admin: granular '$kartAdi' ek girişi görünür", str_contains($s0, $kartAdi));
+    ok("admin: granular '$kartAdi' ek girişi şimdilik GİZLİ (sahip kararı)", !str_contains($s0, $kartAdi));
 }
 ok('admin: Fiş Excel ek girişi korunur', str_contains($s0,'href="gunluk_fis_yukle.php"'));
-ok('admin: ek girişler kendi KARTLARI (home-card-ek), ana kartları değiştirmiyor; açıkta liste/düğme yok', str_contains($s0, 'home-card home-card-ek') && substr_count($s0, 'class="home-card"') === 11 && !str_contains($s0, 'pdks-secondary-links') && !str_contains($s0, 'pdks-context-links') && !str_contains($s0, 'KAYIT SEÇEREK'));
+ok('admin: Fiş Excel kartı (home-card-ek) var, ana kartlar değişmedi; açıkta liste/düğme yok', str_contains($s0, 'home-card home-card-ek') && substr_count($s0, 'class="home-card"') === 11 && !str_contains($s0, 'pdks-secondary-links') && !str_contains($s0, 'pdks-context-links') && !str_contains($s0, 'KAYIT SEÇEREK'));
 ok('admin: parametresiz kırık Ekstre bağlantısı yok', !str_contains($s0, 'href="cavus_ekstre.php"'));
 ok('admin: Kart Havuzu doğru hedefe ve istenen alt başlığa sahip',
     (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu.*?Nötr günlük işçi kartları ve kart yönetimi/s', $s0));
@@ -231,11 +231,11 @@ $PERMS = ['attendance.employees', 'attendance.cards', 'attendance.scan', 'attend
 $PERMS = ['role.permissions.detailed','attendance.employees.read'];
 $employeeOnly = renderPage('personel_takip.php');
 ok('yalnız employees.read genel ekrana ulaşır', !str_starts_with($employeeOnly, '__ERROR__'), $employeeOnly);
-ok('yalnız employees.read personel ek girişini gösterir', str_contains($employeeOnly, 'href="personel.php"') && str_contains($employeeOnly, 'Personeller'));
+ok('yalnız employees.read: personel ek girişi şimdilik gizli (genel ekran boş açıklama)', !str_contains($employeeOnly, 'href="personel.php"') && !str_contains($employeeOnly, 'DİĞER PERSONEL'));
 ok('yalnız employees.read işçi/finans kartlarını açmaz', !str_contains($employeeOnly, 'href="cavuslar.php"') && !str_contains($employeeOnly, 'href="cavus_hakedis.php"') && !str_contains($employeeOnly, 'href="personel_kartlar.php"'));
 $PERMS = ['role.permissions.detailed','attendance.worker_types.read'];
 $typeOnly = renderPage('personel_takip.php');
-ok('yalnız worker_types.read doğru sayfaya giriş verir', !str_starts_with($typeOnly, '__ERROR__') && str_contains($typeOnly, 'href="isci_tipleri.php"'));
+ok('yalnız worker_types.read: ek giriş şimdilik gizli, sayfa açılır', !str_starts_with($typeOnly, '__ERROR__') && !str_contains($typeOnly, 'href="isci_tipleri.php"'));
 ok('yalnız worker_types.read kart havuzuna izin vermez', !str_contains($typeOnly, 'href="isci_kartlari.php"'));
 $PERMS = ['role.permissions.detailed','attendance.hub.read'];
 $hubOnly = renderPage('personel_takip.php');
@@ -263,7 +263,7 @@ $beforeContextChanges=(int)db()->query('SELECT total_changes()')->fetchColumn();
 $beforeContextSchema=(int)db()->query('PRAGMA schema_version')->fetchColumn();
 $PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.mesai.read','attendance.foreman_rates.read']);
 $mesaiOnly=renderPage('personel_takip.php');
-ok('yalnız mesai Gör+fiyat Gör hubda Mesai Değerlendirme KARTINI alır (kayıt listesi hubda yok)', !str_starts_with($mesaiOnly,'__ERROR__') && str_contains($mesaiOnly,'href="personel_kayit_sec.php?tur=mesai"') && !str_contains($mesaiOnly,'session_id=90001') && !str_contains($mesaiOnly,'personel_kayit_sec.php?tur=cikis'),$mesaiOnly);
+ok('yalnız mesai Gör+fiyat Gör: hub açılır, kayıt listesi/kart şimdilik gizli', !str_starts_with($mesaiOnly,'__ERROR__') && !str_contains($mesaiOnly,'personel_kayit_sec.php') && !str_contains($mesaiOnly,'KAYIT SEÇEREK') && !str_contains($mesaiOnly,'session_id=90001') && !str_contains($mesaiOnly,'personel_kayit_sec.php?tur=cikis'),$mesaiOnly);
 $mesaiSec=renderPage('personel_kayit_sec.php',['tur'=>'mesai']);
 ok('seçici: geçerli kayıt seçilebilir', !str_starts_with($mesaiSec,'__ERROR__') && str_contains($mesaiSec,'mesai_degerlendirme.php?session_id=90001'),$mesaiSec);
 ok('mesai seçici yabancı depoyu göstermez', !str_contains($mesaiSec,'session_id=90002') && !str_contains($mesaiSec,'Yabancı Depo Örneği'));
@@ -282,7 +282,7 @@ $contextStart=0;
 $contextDependency=strpos($contextSource, "require_once __DIR__ . '/config/pdks_gunluk.php';", $contextStart);
 $contextFunction=strpos($contextSource, 'pdks_gunluk_faz8j_etkin_kosul', $contextStart);
 ok('seçici tarama izinlerine bağlı olmadan günlük yardımcılarını önce yükler', $contextStart!==false && $contextDependency!==false && $contextFunction!==false && $contextDependency<$contextFunction);
-ok('yalnız manuel çıkış hubda Manuel Çıkış KARTINI alır', !str_starts_with($exitOnly,'__ERROR__') && str_contains($exitOnly,'href="personel_kayit_sec.php?tur=cikis"') && !str_contains($exitOnly,'period_id=91001'),$exitOnly);
+ok('yalnız manuel çıkış: hub açılır, Manuel Çıkış kartı/listesi şimdilik gizli', !str_starts_with($exitOnly,'__ERROR__') && !str_contains($exitOnly,'personel_kayit_sec.php') && !str_contains($exitOnly,'period_id=91001'),$exitOnly);
 $exitSec=renderPage('personel_kayit_sec.php',['tur'=>'cikis']);
 ok('manuel çıkış seçici iki gerekli kimlikle link verir', !str_starts_with($exitSec,'__ERROR__') && str_contains($exitSec,'manuel_cikis.php?period_id=91001&amp;session_id=90001'),$exitSec);
 ok('manuel çıkış hem mesai hem dönem deposunu sınırlar', !str_contains($exitSec,'period_id=91002') && !str_contains($exitSec,'period_id=91003') && !str_contains($exitSec,'period_id=91004'));
@@ -297,7 +297,7 @@ ok('depo ataması boşsa seçici kayıt sızdırmaz', !str_contains($denyContext
 $CONTEXT_ALLOWED_DEPOTS=['Depo A'];
 $PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.manual_exit.read']);
 $missingRates=renderPage('personel_takip.php');
-ok('ikincil fiyat Gör yoksa kart da seçici listesi de verilmez', !str_contains($missingRates,'personel_kayit_sec.php') && str_starts_with(renderPage('personel_kayit_sec.php',['tur'=>'cikis']),'__ERROR__: forbidden'));
+ok('ikincil fiyat Gör yoksa seçici sayfa 403', !str_contains($missingRates,'personel_kayit_sec.php') && str_starts_with(renderPage('personel_kayit_sec.php',['tur'=>'cikis']),'__ERROR__: forbidden'));
 ok('bağlamsal seçimler SQL yazması yapmaz', (int)db()->query('SELECT total_changes()')->fetchColumn()===$beforeContextChanges);
 ok('bağlamsal seçimler şema değiştirmez', (int)db()->query('PRAGMA schema_version')->fetchColumn()===$beforeContextSchema);
 $PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.manual_exit.read','attendance.foreman_rates.read']);

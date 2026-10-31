@@ -126,6 +126,13 @@ render_flash();
     <div class="home-card-sub">Mesai özeti ve eksik çıkışlar</div>
 </a>
 <?php endif; ?>
+<?php if ($p_adm): ?>
+<a href="gunluk_fis_yukle.php" class="home-card home-card-ek">
+    <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
+    <div class="home-card-title">Fiş Excel Yükleme</div>
+    <div class="home-card-sub">Yönetici işlemi</div>
+</a>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php if ($p_hakcari): ?>
@@ -187,8 +194,11 @@ $personelEkSayfalar = [
     'scan'=>['giris_cikis.php','Personel Giriş / Çıkış','pdks-icon-scan','Kalıcı personel kart taraması'],
     'worker_types'=>['isci_tipleri.php','İşçi Tipleri','pdks-icon-rates','İşçi tipi tanımları'],
 ];
+// ŞİMDİLİK GİZLİ (sahip kararı): «Diğer personel sayfaları» ile «Mesai Değerlendirme / Manuel Çıkış»
+// kayıt-seçici kartları hub'da görünmez. Geri açmak için true yapın (sayfalar/seçici duruyor).
+$ptakEkBolumlerGoster = false;
 $personelEkGoster = false;
-foreach ($personelEkSayfalar as $ekKey=>$ekPage) if (role_pdks_can($ekKey)) $personelEkGoster = true;
+if ($ptakEkBolumlerGoster) foreach ($personelEkSayfalar as $ekKey=>$ekPage) if (role_pdks_can($ekKey)) $personelEkGoster = true;
 ?>
 <?php if ($personelEkGoster): ?>
 <div class="home-section-title">PERSONEL</div>
@@ -203,7 +213,7 @@ foreach ($personelEkSayfalar as $ekKey=>$ekPage) if (role_pdks_can($ekKey)) $per
 <?php endforeach; ?>
 <?php endif; ?>
 
-<?php if ($contextMesai || $contextExit || $p_adm): ?>
+<?php if ($ptakEkBolumlerGoster && ($contextMesai || $contextExit)): ?>
 <div class="home-section-title">MESAİ İŞLEMLERİ</div>
 <?php if ($contextMesai): ?>
 <a href="personel_kayit_sec.php?tur=mesai" class="home-card home-card-ek">
@@ -219,15 +229,8 @@ foreach ($personelEkSayfalar as $ekKey=>$ekPage) if (role_pdks_can($ekKey)) $per
     <div class="home-card-sub">Çıkışı bekleyen kayıttan seçerek açılır</div>
 </a>
 <?php endif; ?>
-<?php if ($p_adm): ?>
-<a href="gunluk_fis_yukle.php" class="home-card home-card-ek">
-    <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
-    <div class="home-card-title">Fiş Excel Yükleme</div>
-    <div class="home-card-sub">Yönetici işlemi</div>
-</a>
 <?php endif; ?>
-<?php endif; ?>
-<?php if (!$p_gunluk && !$p_hakcari && !$p_rapor && !$tersGoster && !$personelEkGoster && !$contextMesai && !$contextExit): ?>
+<?php if (!$p_gunluk && !$p_hakcari && !$p_rapor && !$tersGoster && !$personelEkGoster): ?>
 <p class="muted">Genel ekranı görüntülüyorsunuz. Alt sayfalar ayrıca yetkilendirilir. Mesai değerlendirme ve manuel çıkış, ilgili mesai kaydından açılır.</p>
 <?php endif; ?>
 
