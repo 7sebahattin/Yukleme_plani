@@ -138,13 +138,20 @@ $PERMS = ['attendance.daily_scan'];
 $v = pdks_idx_hesapla($hesaplaBlok);
 ok('izinli kullanıcı için rozet = 2 (iki açık/eksik çıkışlı kart)', $v === 2, (string)$v);
 
-// Kalıcı PDKS izinleri personel_takip.php'yi AÇMAZ (sayfa 403 verir) — kart
-// da rozet de o kullanıcıya gösterilmemeli. Eskiden index.php bu üç izni de
-// sayıyordu: kart + kırmızı rozet görünüyor, tıklanınca 403.
+// Kalıcı PDKS izinleri hub üzerinden kendi sayfalarını açar; günlük işçi
+// verisine erişim sağlamaz. Eksik çıkış rozeti bu kullanıcılara gösterilmez.
 foreach (['attendance.employees', 'attendance.cards', 'attendance.scan'] as $__kalici) {
     $PERMS = [$__kalici];
     $v = pdks_idx_hesapla($hesaplaBlok);
-    ok("yalnız $__kalici → rozet 0 (personel_takip.php bu izinle 403 verir)", $v === 0, (string)$v);
+    ok("yalnız $__kalici → rozet 0 (günlük işçi Gör izni yok)", $v === 0, (string)$v);
+}
+foreach (['attendance.hub.read', 'attendance.employees.read'] as $__pageRead) {
+    $PERMS = ['role.permissions.detailed', $__pageRead];
+    ok("ayrıntılı $__pageRead → günlük veri rozeti yok", pdks_idx_hesapla($hesaplaBlok) === 0);
+}
+foreach (['attendance.daily_scan.read', 'attendance.daily_reports.read'] as $__pageRead) {
+    $PERMS = ['role.permissions.detailed', $__pageRead];
+    ok("ayrıntılı $__pageRead → izinli günlük veri rozeti 2", pdks_idx_hesapla($hesaplaBlok) === 2);
 }
 $PERMS = ['attendance.daily_scan'];   // sonraki bölümler izinli kullanıcıyla devam eder
 
