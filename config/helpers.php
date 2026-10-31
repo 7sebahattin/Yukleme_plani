@@ -262,6 +262,8 @@ function nav_ptak_sayfalari(): array {
         'gunluk_fis_yukle.php',
         // v464 Fiş düzeltme: etkilenen fişler raporu + (şifreli) fiş yüklemelerini geri al
         'cavus_fis_geri_al.php', 'cavus_fis_rapor.php',
+        // v468 Mesai Değerlendirme / Manuel Çıkış kayıt seçici
+        'personel_kayit_sec.php',
         // v354 Ters Kart Takip
         'ters_kart.php', 'ters_kart_havuz.php', 'ters_kart_sayim.php', 'ters_kart_cikis.php', 'ters_kart_mutabakat.php',
     ];

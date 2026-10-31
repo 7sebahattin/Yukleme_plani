@@ -77,6 +77,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/siparis(ler|_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Fiş düzeltme (v464): cavus_fis_geri_al.php / cavus_fis_rapor.php çavuş + fiş + hakediş verisi taşır — HİÇ önbelleğe alınmaz
   if (/\/cavus_fis_[a-z_]+\.php(\/|$)/.test(u.pathname)) return;
+  // Kayıt seçici (v468): çavuş adı + mesai listesi taşır — HİÇ önbelleğe alınmaz
+  if (/\/personel_kayit_sec\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
