@@ -123,13 +123,10 @@ function get_material_stock_summary(PDO $pdo, array $filters = []): array {
         if ($f_tarih_bas !== '') { $agg_where[] = "movement_date >= ?"; $agg_params[] = $f_tarih_bas; }
         if ($f_tarih_bit !== '') { $agg_where[] = "movement_date <= ?"; $agg_params[] = $f_tarih_bit; }
         // Depo sorumluluğu: aktif depo + atanmamış (deposu boş) hareketler görünür
-        if (function_exists('user_allowed_depots')) {
-            $_ad = user_allowed_depots();
-            if (is_array($_ad) && count($_ad) > 0) {
-                $agg_where[] = "(depo IN (" . implode(',', array_fill(0, count($_ad), '?')) . ") OR TRIM(COALESCE(depo,'')) = '')";
-                foreach ($_ad as $_d) $agg_params[] = $_d;
-            }
-        }
+        if (function_exists('depo_sql_in')) {
+        [$scopeSql, $scopeParams] = depo_sql_in('depo');
+        if ($scopeSql !== '') { $agg_where[] = $scopeSql; $agg_params = array_merge($agg_params, $scopeParams); }
+    }
         $agg_where_sql = $agg_where ? 'WHERE ' . implode(' AND ', $agg_where) : '';
 
         $agg_st = $pdo->prepare("
@@ -305,12 +302,9 @@ function ms_movements_where(array $filters): array {
     if ($f_depo         !== '') { $where[] = "depo LIKE ?";       $params[] = '%' . $f_depo . '%'; }
     if ($f_hareket_tipi !== '') { $where[] = "movement_type = ?"; $params[] = $f_hareket_tipi; }
     // Depo sorumluluğu: aktif depo + atanmamış (deposu boş) hareketler görünür
-    if (function_exists('user_allowed_depots')) {
-        $_ad = user_allowed_depots();
-        if (is_array($_ad) && count($_ad) > 0) {
-            $where[] = "(depo IN (" . implode(',', array_fill(0, count($_ad), '?')) . ") OR TRIM(COALESCE(depo,'')) = '')";
-            foreach ($_ad as $_d) $params[] = $_d;
-        }
+    if (function_exists('depo_sql_in')) {
+        [$scopeSql, $scopeParams] = depo_sql_in('depo');
+        if ($scopeSql !== '') { $where[] = $scopeSql; $params = array_merge($params, $scopeParams); }
     }
     return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
 }
@@ -427,12 +421,9 @@ function ms_malzeme_bilgi(PDO $pdo, string $type, string $name, string $hareket_
         $where[] = "material_type = ? AND material_name = ?";
         $params[] = $type; $params[] = $name;
     }
-    if (function_exists('user_allowed_depots')) {
-        $ad = user_allowed_depots();
-        if (is_array($ad) && count($ad) > 0) {
-            $where[] = "(depo IN (" . implode(',', array_fill(0, count($ad), '?')) . ") OR TRIM(COALESCE(depo,'')) = '')";
-            foreach ($ad as $d) $params[] = $d;
-        }
+    if (function_exists('depo_sql_in')) {
+        [$scopeSql, $scopeParams] = depo_sql_in('depo');
+        if ($scopeSql !== '') { $where[] = $scopeSql; $params = array_merge($params, $scopeParams); }
     }
     $where_sql = 'WHERE ' . implode(' AND ', $where);
 

@@ -31,7 +31,7 @@ if (!$hazir) {
 $id  = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $sev = siparis_sevkiyat($pdo, $id);
 if ($sev === null || !siparis_gorunur($sev)) { sipui_yok_sayfasi('Sevkiyat bulunamadı'); exit; }   // başka depodaki kayıt 404 ile AYNI (varlığı sızdırmaz)
-$yaz = can_siparis('write');
+$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','edit'));
 $uid = (int)$auth_user['id'];
 $buSayfa = 'siparis_invoice.php?id=' . $id;
 $git = function (string $parca = '') use ($buSayfa): void { header('Location: ' . $buSayfa . $parca); exit; };
@@ -60,6 +60,7 @@ $FORM_ALANLARI = ['no', 'tarih', 'fiyat', 'iskonto', 'efatura_toplam', 'net_kg',
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_siparis('write');
+    if (!role_matrix_page_can('siparis','ogl', 'edit')) forbidden('Bu işlem için yetkiniz yok.');
     $islem = (string)($_POST['islem'] ?? '');
     $gonderilen = [];
     foreach ($FORM_ALANLARI as $k) $gonderilen[$k] = mb_substr(trim((string)($_POST[$k] ?? '')), 0, 60, 'UTF-8');
@@ -300,8 +301,8 @@ render_flash();
       <section class="card" id="uretim" aria-labelledby="sipInvUretBas">
         <div class="card-head"><h2 id="sipInvUretBas">4. Invoice PDF</h2></div>
         <p class="sip-inv-mensei">🛈 Menşe beyanı (REX) her invoice’a otomatik eklenir ve kaldırılamaz.</p>
-        <?php if ($rexBos): ?><div class="sip-ok-hata" role="alert">REX numarası ayarlı değil: PDF’te “Customs Authorisation No. ______” boş basılır.<?php if (can_siparis('delete')): ?> <a class="sip-link" href="siparis_ayarlar.php#invoice-ayar">Invoice ayarları</a><?php endif; ?></div><?php endif; ?>
-        <?php if ($bankaBos): ?><div class="sip-ok-uyari">Banka bilgisi eksik: <?= h(implode(', ', array_diff($ayarEksikler, ['REX no']))) ?>.<?php if (can_siparis('delete')): ?> <a class="sip-link" href="siparis_ayarlar.php#invoice-ayar">Invoice ayarları</a><?php endif; ?></div><?php endif; ?>
+        <?php if ($rexBos): ?><div class="sip-ok-hata" role="alert">REX numarası ayarlı değil: PDF’te “Customs Authorisation No. ______” boş basılır.<?php if ((can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'))): ?> <a class="sip-link" href="siparis_ayarlar.php#invoice-ayar">Invoice ayarları</a><?php endif; ?></div><?php endif; ?>
+        <?php if ($bankaBos): ?><div class="sip-ok-uyari">Banka bilgisi eksik: <?= h(implode(', ', array_diff($ayarEksikler, ['REX no']))) ?>.<?php if ((can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'))): ?> <a class="sip-link" href="siparis_ayarlar.php#invoice-ayar">Invoice ayarları</a><?php endif; ?></div><?php endif; ?>
         <?php if ($var): ?>
           <dl class="sip-dl sip-dl--kisa">
             <div class="sip-dl-satir"><dt>Dosya</dt><dd class="sip-kes"><?= h((string)($durum['dosya_adi'] ?? '')) ?></dd></div>

@@ -27,7 +27,7 @@ $id  = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $sev = siparis_sevkiyat($pdo, $id);
 if ($sev === null) { sipui_yok_sayfasi('Sevkiyat bulunamadı'); exit; }
 if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
-$yaz = can_siparis('write');
+$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','edit'));
 $uid = (int)$auth_user['id'];
 $kalemler = siparis_kalemler($pdo, $id);
 $profiller = siparis_profiller($pdo, true);
@@ -56,6 +56,7 @@ $profilUygula = function (array $post) use ($profilHaritasi): array {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_siparis('write');
+    if (!role_matrix_page_can('siparis','ogl', 'edit')) forbidden('Bu işlem için yetkiniz yok.');
     $islem = (string)($_POST['islem'] ?? '');
     $baslikG = is_array($_POST['baslik'] ?? null) ? $_POST['baslik'] : [];
     $post = $profilUygula($_POST);

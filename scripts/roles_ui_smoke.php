@@ -18,6 +18,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT = dirname(__DIR__);
+require_once $ROOT . '/config/role_permission_matrix.php';
+require_once $ROOT . '/config/role_data_scope.php';
+require_once $ROOT . '/config/beyan_permissions.php';
 $PDO_TEST = new PDO('sqlite::memory:');
 $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
@@ -39,20 +42,11 @@ function audit_log_event(string $action, string $module, ?int $id = null, ?array
     $AUDIT_LOG[] = compact('action', 'module', 'id', 'old', 'new');
 }
 
-// Test kataloğu — gerçek permission_catalog()'un küçültülmüş bir aynası,
-// yalnız grid render + gruplama davranışını sınamak için.
-function permission_catalog(): array {
-    return [
-        'Operasyon' => [
-            'records.read'  => 'Kayıtları görüntüle',
-            'records.write' => 'Kayıt oluştur / düzenle',
-        ],
-        'Personel Takibi' => [
-            'attendance.daily_scan'    => 'Günlük işçi giriş-çıkış taraması yap',
-            'attendance.daily_reports' => 'Günlük puantaj raporlarını görüntüle',
-        ],
-    ];
-}
+// Extract the real pure catalogue; do not include auth or bootstrap.
+$asrc = str_replace("\r\n", "\n", file_get_contents($ROOT . '/config/auth.php'));
+$a = strpos($asrc, 'function permission_catalog(): array {');
+$b = strpos($asrc, "\n}\n", $a);
+eval(substr($asrc, $a, $b - $a + 3));
 function protected_role_slugs(): array { return ['admin', 'operator']; }
 
 $ANY_ACTIVE_HAS_PERM = true;
@@ -65,6 +59,9 @@ function any_active_user_has_permission(string $permission): bool {
 db()->exec("CREATE TABLE roles (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE, label TEXT, created_at TEXT DEFAULT '2026-01-01')");
 db()->exec("CREATE TABLE role_permissions (role_id INT, permission TEXT, PRIMARY KEY(role_id, permission))");
 db()->exec("CREATE TABLE user_roles (user_id INT, role_id INT, PRIMARY KEY(user_id, role_id))");
+db()->exec("CREATE TABLE material_definitions (type TEXT, name TEXT)");
+db()->exec("CREATE TABLE user_depolar (user_id INT, depo TEXT)");
+db()->exec("INSERT INTO material_definitions VALUES ('depo','Örnek Depo A'), ('depo','Örnek Depo B')");
 
 $insR = db()->prepare("INSERT INTO roles (id, slug, label) VALUES (?, ?, ?)");
 $insR->execute([1, 'admin', 'Sistem Yöneticisi']);
@@ -76,12 +73,13 @@ $insP = db()->prepare("INSERT INTO role_permissions (role_id, permission) VALUES
 $insP->execute([1, 'records.read']);
 $insP->execute([1, 'records.write']);
 $insP->execute([3, 'attendance.daily_scan']);
+$insP->execute([3, 'extension.example']);
 
 db()->prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)")->execute([2, 4]);
 
 // ── roles.php'yi require/exit'lerden arındırıp render eden yardımcı ──────
 function renderPage(array $post = []): string {
-    global $ROOT;
+    global $ROOT, $scope_options;
     $_POST = $post;
     $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET';
     $_SERVER['REQUEST_URI'] = '/roles.php';
@@ -100,7 +98,7 @@ function renderPage(array $post = []): string {
              . "if (!function_exists('valid_role_label')) {\n" . $block . "\n}\n"
              . substr($src, $hEnd);
     }
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/config\/(db|auth)\.php\';\s*$/m', '', $src);
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/config\/(db|auth|role_permission_matrix|role_data_scope)\.php\';\s*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^\s*require_perm\([^)]*\);\s*$/m', '', $src);
     // Başarılı POST dallarındaki header()+exit çiftini kaldır: test aynı
@@ -118,7 +116,9 @@ function renderPage(array $post = []): string {
     file_put_contents($tmp, "<?php\n" . $src);
     ob_start();
     try { include $tmp; } catch (Throwable $e) { ob_end_clean(); return '__ERROR__: ' . $e->getMessage(); }
-    return ob_get_clean();
+    $out = ob_get_clean();
+    @unlink($tmp);
+    return $out;
 }
 
 $fail = 0;
@@ -146,7 +146,7 @@ ok('Eski Rol Sil PASİF (1 kullanıcı atanmış)', deleteFormDisabled($list, 4)
 ok('admin Sil PASİF (sistem rolü)', deleteFormDisabled($list, 1));
 ok('yetki grubu "Operasyon" görünüyor', str_contains($list, 'Operasyon'));
 ok('yetki grubu "Personel Takibi" görünüyor', str_contains($list, 'Personel Takibi'));
-ok('"Günlük işçi giriş-çıkış taraması yap" checkbox etiketi var', str_contains($list, 'Günlük işçi giriş-çıkış taraması yap'));
+ok('Günlük işçi sayfasının bağımsız Gör izni var', str_contains($list, 'value="attendance.daily_scan.read"'));
 
 // ── 2) Yeni rol oluştur ────────────────────────────────────────────────
 $created = renderPage(['csrf' => 'x', 'action' => 'create_role', 'label' => 'Depo Kontrol',
@@ -182,7 +182,7 @@ ok('rollback: admin yetkileri DEĞİŞMEDİ', $before === $after);
 // ── 5) Normal düzenleme: ad değişir, slug SABİT kalır ────────────────────
 $ANY_ACTIVE_HAS_PERM = true;
 $edited = renderPage(['csrf' => 'x', 'action' => 'update_role', 'id' => '3', 'label' => 'Depo Sorumlusu (Vardiya)',
-    'permissions' => ['records.read']]);
+    'permissions' => ['records.read','records.loading.create','role.permissions.detailed','extension.example','injected.unknown'], 'scope_mode'=>'selected', 'scope_depots'=>['Örnek Depo B','Bilinmeyen Depo']]);
 ok('düzenleme hatasız', !str_starts_with($edited, '__ERROR__'), $edited);
 ok('yeni ad listede', str_contains($edited, 'Depo Sorumlusu (Vardiya)'));
 $slugRow = db()->query("SELECT slug FROM roles WHERE id = 3")->fetch();
@@ -190,6 +190,18 @@ ok('slug değişmedi', $slugRow['slug'] === 'depo_sorumlusu');
 $newPerms = db()->prepare("SELECT permission FROM role_permissions WHERE role_id = 3");
 $newPerms->execute();
 ok('yetki seti değişti (records.read)', in_array('records.read', $newPerms->fetchAll(PDO::FETCH_COLUMN), true));
+
+// Matrix form and persisted authorization semantics.
+ok('Gör / Ekle / Düzenle / Sil sütunları var', str_contains($list, '<th scope="col">Gör</th><th scope="col">Ekle</th><th scope="col">Düzenle</th><th scope="col">Sil</th>'));
+ok('Raporlar altında yükleme raporu satırı var', str_contains($list, 'data-path="reports/reports_yukleme"'));
+ok('Arama / bölüm / seçim filtreleri var', str_contains($list, 'rol-search') && str_contains($list, 'rol-section-filter') && str_contains($list, 'rol-state-filter'));
+ok('Veri kapsamı ve kesişim açıklaması var', str_contains($list, 'scope_mode') && str_contains($list, 'kesişir'));
+ok('Saklı ek izin düzenlenebilir anahtar olarak var', str_contains($list, 'value="extension.example"'));
+$persisted = db()->query('SELECT permission FROM role_permissions WHERE role_id = 3')->fetchAll(PDO::FETCH_COLUMN);
+ok('Ek izin kayıtta korunur', in_array('extension.example', $persisted, true));
+ok('Yeni katalog dışı izin enjekte edilemez', !in_array('injected.unknown', $persisted, true));
+ok('Bağımsız ekle izni kaydedilir, düzenle türemez', in_array('records.loading.create', $persisted, true) && !in_array('records.loading.edit', $persisted, true));
+ok('Depo kapsamı yalnız doğrulanmış seçenekle kaydedilir', in_array('scope.depots.selected', $persisted, true) && in_array(role_data_scope_code('Örnek Depo B'), $persisted, true) && !in_array(role_data_scope_code('Bilinmeyen Depo'), $persisted, true));
 
 // ── 6) Silme kilitleri ────────────────────────────────────────────────
 $delSystem = renderPage(['csrf' => 'x', 'action' => 'delete_role', 'id' => '1']);

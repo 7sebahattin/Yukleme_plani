@@ -33,7 +33,7 @@ if (!empty($beyan['loading_record_id'])) {
 // ── Eşleştirme: yüklendi olmayan yükleme planları (modal için) ──
 // Buton yalnızca düzenleme yetkisi olan, silinmemiş ve henüz yüklenmemiş
 // beyanlarda aktif olur.
-$can_match     = !$is_deleted && can_beyan('match') && (can('records.write') || is_admin())
+$can_match     = !$is_deleted && can_beyan('match') && (can('records.loading.edit') || is_admin())
                  && empty($beyan['loading_record_id']);
 $match_records = [];
 $match_q = trim((string)($_GET['match_q'] ?? ''));

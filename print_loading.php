@@ -18,6 +18,7 @@ require_perm('records.read');
 
 // ── Parametreler ─────────────────────────────────────────
 $id   = (int)($_GET['id'] ?? 0);
+role_require_record_access($id, 'read');
 $mode = print_mode(); // 'summary' | 'detail'
 
 if ($id <= 0) { header('Location: records.php'); exit; }

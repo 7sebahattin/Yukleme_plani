@@ -82,7 +82,7 @@ if (!$print_mode) render_flash();
         <a href="record_view.php?id=<?= (int)$sheet['record_id'] ?>" class="btn no-print">📦 Kaynak Yükleme Planı</a>
         <?php endif; ?>
         <a href="maliyet_view.php?id=<?= $id ?>&print=1" class="btn" target="_blank">🖨️ Yazdır</a>
-        <?php if (can_maliyet('write')): ?>
+        <?php if (can_maliyet('edit')): ?>
         <a href="maliyet_form.php?id=<?= $id ?>" class="btn btn-primary">✏️ Düzenle</a>
         <?php endif; ?>
         <?php if (can_maliyet('admin')): ?>

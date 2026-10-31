@@ -13,7 +13,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/urun_siparis.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'urun');
 $pdo   = db();
 $hazir = usip_hazir($pdo);
 

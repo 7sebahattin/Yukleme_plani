@@ -416,7 +416,7 @@ function siparis_audit(string $eylem, ?int $kayitId, ?array $eski, ?array $yeni,
  * 403 (forbidden() AJAX-aware). Sidebar/bottomnav/index kartı AYNI can_siparis()'i
  * çağırdığı için "görünür ama 403" oluşmaz.
  */
-function require_siparis(string $perm): void
+function require_siparis(string $perm, string $page = 'ogl'): void
 {
     if (current_user() === null) {
         $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
@@ -424,7 +424,7 @@ function require_siparis(string $perm): void
         exit;
     }
     enforce_active_depot();
-    if (!can_siparis($perm)) {
+    if (!can_siparis($perm) || !role_matrix_page_can('siparis',$page,'read') || ($perm === 'delete' && !role_matrix_page_can('siparis',$page,'delete'))) {
         forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: siparis.{$perm})");
     }
 }
@@ -856,7 +856,7 @@ function siparis_dosya_yolu(array $belge): ?string
     if ($kok === false) return null;
     $yol = realpath($kok . '/' . $ad);
     if ($yol === false || !is_file($yol)) return null;
-    if (!str_starts_with($yol, rtrim($kok, '/') . '/')) return null;
+    if (!str_starts_with($yol, rtrim($kok, '/\\') . DIRECTORY_SEPARATOR)) return null;
     return $yol;
 }
 

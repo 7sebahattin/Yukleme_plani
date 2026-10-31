@@ -24,6 +24,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
+role_pdks_require_request();
 
 $_fn = function_exists('can');
 $p_adm = function_exists('is_admin') && is_admin();
@@ -31,11 +32,11 @@ $p_adm = function_exists('is_admin') && is_admin();
 // ── Bölüm görünürlüğü — "en az BİR aktif alt-fonksiyona erişim" ──────────
 // Kalıcı PDKS izinleri bu landing için yeterli değildir; ilgili eski sayfalar
 // kendi izin kapılarıyla yerinde kalır.
-$p_gunluk   = $p_adm || ($_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports')));
-$p_hakcari  = $p_adm || ($_fn && (can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments')));
-$p_rapor    = $p_adm || ($_fn && can('attendance.management_reports'));
+$p_gunluk   = $p_adm || ($_fn && (role_pdks_can('foremen') || role_pdks_can('worker_cards') || role_pdks_can('daily_scan') || role_pdks_can('daily_reports')));
+$p_hakcari  = $p_adm || ($_fn && (role_pdks_can('foreman_rates') || role_pdks_can('entitlements') || role_pdks_can('foreman_accounts') || role_pdks_can('foreman_payments')));
+$p_rapor    = $p_adm || ($_fn && role_pdks_can('management_reports'));
 
-if (!$p_gunluk && !$p_hakcari && !$p_rapor) {
+if (!role_pdks_can('hub')) {
     forbidden('Bu sayfaya erişim yetkiniz yok. (Günlük İşçi, Hakediş/Cari veya Yönetim Raporları modüllerinden en az birine yetkiniz olmalı.)');
 }
 
@@ -43,7 +44,7 @@ if (!$p_gunluk && !$p_hakcari && !$p_rapor) {
 // kartında. Yalnız tarama yetkisi olan görür (kapatma o ekrandadır). Hata
 // sayfayı ASLA bozmaz: modül/şema yoksa rozet çizilmez.
 $eskiAcikSayi = 0;
-if ($p_adm || can('attendance.daily_scan')) {
+if ($p_adm || role_pdks_can('daily_scan')) {
     try {
         require_once __DIR__ . '/config/pdks_gunluk.php';
         if (pdks_gunluk_sema_hazir()) $eskiAcikSayi = count(pdks_gunluk_eski_acik_oturumlar());
@@ -51,7 +52,7 @@ if ($p_adm || can('attendance.daily_scan')) {
 }
 // v354 Ters Kart Takip kartı: tablolar kurulmadıysa yalnız yönetici görür (kurulum uyarısı için). Hata sayfayı bozmaz.
 $tersGoster = $p_adm;
-if (!$tersGoster && $_fn && (can('attendance.daily_scan') || can('attendance.worker_cards') || can('attendance.daily_reports'))) {
+if (!$tersGoster && $_fn && (role_pdks_can('daily_scan') || role_pdks_can('worker_cards') || role_pdks_can('daily_reports'))) {
     try {
         require_once __DIR__ . '/config/pdks_gunluk.php';
         $tersGoster = pdks_gunluk_ters_havuz_sema_hazir(db());
@@ -69,105 +70,18 @@ render_flash();
 </div>
 
 <div class="home-grid pdks-dashboard-grid">
-
-<?php if ($p_gunluk): ?>
-<div class="home-section-title">GÜNLÜK İŞÇİ</div>
-
-<?php if ($p_adm || can('attendance.foremen')): ?>
-<a href="cavuslar.php" class="home-card">
-    <div class="home-card-icon pdks-icon-foreman" aria-hidden="true"></div>
-    <div class="home-card-title">Çavuşlar</div>
-    <div class="home-card-sub">Çavuş tanımları</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.worker_cards')): ?>
-<a href="isci_kartlari.php" class="home-card">
+<?php $visiblePdksPages=0; foreach (role_pdks_pages() as $pageKey=>$pagePolicy): ?>
+<?php if ($pageKey==='hub' || !role_pdks_can($pageKey)) continue; $visiblePdksPages++; ?>
+<a href="<?= h($pagePolicy['route']) ?>" class="home-card">
     <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
-    <div class="home-card-title">Kart Havuzu</div>
-    <div class="home-card-sub">Nötr günlük işçi kartları ve kart yönetimi</div>
+    <div class="home-card-title"><?= h($pagePolicy['label']) ?></div>
+    <div class="home-card-sub"><?= role_pdks_can($pageKey,'create') || role_pdks_can($pageKey,'edit') || role_pdks_can($pageKey,'delete') ? 'Yetkiniz olan işlemleri açın' : 'Görüntüleme' ?></div>
 </a>
+<?php endforeach; ?>
+<?php if ($p_adm): ?>
+<a href="gunluk_fis_yukle.php" class="home-card"><div class="home-card-icon pdks-icon-card" aria-hidden="true"></div><div class="home-card-title">Fiş Excel Yükleme</div><div class="home-card-sub">Yönetici işlemi</div></a>
 <?php endif; ?>
-
-<?php if ($p_adm || can('attendance.daily_scan')): ?>
-<a href="gunluk_isci_giris_cikis.php" class="home-card">
-    <div class="home-card-icon pdks-icon-scan" aria-hidden="true"></div>
-    <div class="home-card-title">Günlük İşçi Giriş / Çıkış</div>
-    <div class="home-card-sub">Mesai kart taraması</div>
-    <?php if ($eskiAcikSayi > 0): ?>
-    <div class="home-card-badge" style="background:var(--warn)" title="Önceki günden kapatılmamış mesai"><?= $eskiAcikSayi ?></div>
-    <?php endif; ?>
-</a>
-<?php endif; ?>
-
-<?php if ($tersGoster): ?>
-<a href="ters_kart.php" class="home-card">
-    <div class="home-card-icon pdks-icon-giris-tanimli" aria-hidden="true"></div>
-    <div class="home-card-title">↩ Giriş Tanımlı</div>
-    <div class="home-card-sub">Sabah kalan kart sayımı · hızlı çıkış · mutabakat</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.daily_reports')): ?>
-<a href="gunluk_isci_puantaj.php" class="home-card">
-    <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
-    <div class="home-card-title">Günlük Puantaj</div>
-    <div class="home-card-sub">Mesai özeti ve eksik çıkışlar</div>
-</a>
-<?php endif; ?>
-<?php endif; ?>
-
-<?php if ($p_hakcari): ?>
-<div class="home-section-title">HAKEDİŞ &amp; CARİ</div>
-
-<?php if ($p_adm || can('attendance.foreman_rates')): ?>
-<a href="cavus_fiyatlari.php" class="home-card">
-    <div class="home-card-icon pdks-icon-rates" aria-hidden="true"></div>
-    <div class="home-card-title">Çavuş Ücretleri</div>
-    <div class="home-card-sub">Tam / Yarım / Fazla mesai ücretleri</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.entitlements')): ?>
-<a href="cavus_hakedis.php" class="home-card">
-    <div class="home-card-icon pdks-icon-entitlements" aria-hidden="true"></div>
-    <div class="home-card-title">Hakedişler</div>
-    <div class="home-card-sub">Mesai değerlendirme + taslak / kesin hakediş</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.foreman_accounts')): ?>
-<a href="cavus_cari.php" class="home-card">
-    <div class="home-card-icon pdks-icon-accounts" aria-hidden="true"></div>
-    <div class="home-card-title">Çavuş Cari Hesapları</div>
-    <div class="home-card-sub">Güncel bakiye listesi</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.foreman_payments')): ?>
-<a href="cavus_odeme.php" class="home-card">
-    <div class="home-card-icon pdks-icon-payments" aria-hidden="true"></div>
-    <div class="home-card-title">Çavuş Ödemeleri</div>
-    <div class="home-card-sub">Ödeme kaydı ve geçmişi</div>
-</a>
-<?php endif; ?>
-<?php endif; ?>
-
-<?php if ($p_rapor): ?>
-<div class="home-section-title">RAPORLAR</div>
-
-<a href="raporlar.php" class="home-card">
-    <div class="home-card-icon pdks-icon-analytics" aria-hidden="true"></div>
-    <div class="home-card-title">Yönetim Raporları</div>
-    <div class="home-card-sub">Operasyonel ve finansal yönetim raporları</div>
-</a>
-<a href="cavus_toplu_dokum.php" class="home-card">
-    <div class="home-card-icon pdks-icon-report" aria-hidden="true"></div>
-    <div class="home-card-title">Çavuş Toplu Döküm</div>
-    <div class="home-card-sub">Aylık çavuş ve kart bazlı işçi dökümü</div>
-</a>
-<?php endif; ?>
-
+<?php if (!$visiblePdksPages && !$p_adm): ?><p class="muted">Bu rol genel ekranı görebilir. Alt sayfalar için ayrıca Gör yetkisi verilmelidir.</p><?php endif; ?>
 </div>
 </div>
 

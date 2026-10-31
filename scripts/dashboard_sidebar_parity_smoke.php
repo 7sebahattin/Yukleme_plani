@@ -7,6 +7,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $dashboardRoot = dirname(__DIR__);
+require_once $dashboardRoot . '/config/role_permission_matrix.php';
 $dashboardHelperSource = file_get_contents($dashboardRoot . '/config/helpers.php');
 $dashboardIndexSource = file_get_contents($dashboardRoot . '/index.php');
 
@@ -35,7 +36,7 @@ function dashboard_extract_function(string $source, string $name): string
 }
 
 $dashboardProfile = ['name' => 'anonymous', 'admin' => false, 'permissions' => []];
-function can(string $permission): bool { return in_array($permission, $GLOBALS['dashboardProfile']['permissions'], true); }
+function can(string $permission): bool { return in_array($permission, role_matrix_expand_permissions($GLOBALS['dashboardProfile']['permissions']), true); }
 function is_admin(): bool { return $GLOBALS['dashboardProfile']['admin']; }
 function h($value): string { return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function current_user(): ?array { return ['id' => 1, 'username' => 'anonymous', 'display_name' => 'ANONİM TEST']; }
@@ -88,6 +89,10 @@ $dashboardProfiles = [
     'accountant' => dashboard_profile('accountant', false, ['records.read', 'reports.read', 'stok.read', 'hesap.read', 'siparis.read', 'attendance.foreman_accounts']),
     'dashboard_only' => dashboard_profile('dashboard_only', false, []),
 ];
+$dashboardProfiles['loading_only']=dashboard_profile('loading_only',false,['role.permissions.detailed','records.loading.read']);
+$dashboardProfiles['pallet_only']=dashboard_profile('pallet_only',false,['role.permissions.detailed','records.pallet.read']);
+$dashboardProfiles['product_orders_only']=dashboard_profile('product_orders_only',false,['role.permissions.detailed','siparis.urun.read']);
+$dashboardProfiles['ogl_only']=dashboard_profile('ogl_only',false,['role.permissions.detailed','siparis.ogl.read']);
 $dashboardSinglePermissions = array_merge($dashboardAllPermissions, ['mail.admin', 'maliyet.read', 'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports', 'attendance.employees', 'attendance.cards', 'attendance.scan']);
 foreach ($dashboardSinglePermissions as $permission) {
     $key = 'only_' . str_replace('.', '_', $permission);
@@ -175,7 +180,7 @@ foreach ($dashboardProfiles as $name => $profile) {
             dashboard_check($matches === 1, $name . ': katalog grup başlığı bir kez ' . $heading);
         }
     } else {
-        foreach (array_merge(array_keys($dashboardCatalog), ['hizli_maliyet.php', 'roles.php', 'audit.php', 'admin_db_backups.php']) as $adminOnly) {
+        foreach (array_merge(array_keys($dashboardCatalog), ['hizli_maliyet.php', 'audit.php', 'admin_db_backups.php']) as $adminOnly) {
             dashboard_check(!in_array($adminOnly, $homeHrefs, true), $name . ': admin kartı görünmez ' . $adminOnly);
         }
     }
@@ -183,6 +188,10 @@ foreach ($dashboardProfiles as $name => $profile) {
         dashboard_check(count($home) === 69, 'admin: Ana Sayfa hariç 69 benzersiz kart');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
+    }
+    foreach (['loading_only'=>['records.php','cikmalar.php'],'pallet_only'=>['cikmalar.php','records.php'],'product_orders_only'=>['urun_siparis.php','siparisler.php'],'ogl_only'=>['siparisler.php','urun_siparis.php']] as $profileName=>[$yes,$no]) if ($name===$profileName) {
+        dashboard_check(in_array($yes,$homeHrefs,true),'Detailed page visible '.$yes);
+        dashboard_check(!in_array($no,$homeHrefs,true),'Sibling page denied '.$no);
     }
     if ($name === 'only_defs_read') dashboard_check(isset($homeLabels['definitions.php']), 'admin olmayan tanım yetkili kartı korunur');
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');

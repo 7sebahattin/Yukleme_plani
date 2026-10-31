@@ -1,6 +1,7 @@
 <?php
 // Real sidebar function, anonymous permissions; no DB/bootstrap/migration.
 declare(strict_types=1);
+require_once dirname(__DIR__) . '/config/role_permission_matrix.php';
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit; }
 $source = file_get_contents(dirname(__DIR__) . '/config/helpers.php');
 $start = strpos($source, 'function nav_aktif_anahtar(): ?string {');

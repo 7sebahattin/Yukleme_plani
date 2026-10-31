@@ -27,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hesap
     require_pdks_hakedis('entitlements_finalize');
     $sid = filter_var($_POST['session_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
     if ($sid) {
+        // Creating a draft must not silently authorize recalculating an existing one.
+        $existingEntitlement = $pdo->prepare('SELECT id FROM foreman_daily_entitlements WHERE session_id = ?');
+        $existingEntitlement->execute([$sid]);
+        if ($existingEntitlement->fetchColumn() !== false && !role_pdks_can('entitlements','edit')) forbidden('Mevcut hakedişi yeniden hesaplamak için Düzenle yetkisi gerekir.');
         // ⚠ Faz 9A / M-01 düzeltmesi: session_id istemciden geliyor — hesaplama
         // ÖNCESİ oturumun aktif depoya ait olduğu SUNUCU tarafında doğrulanır.
         $stSid = $pdo->prepare('SELECT depo FROM daily_work_sessions WHERE id=?');

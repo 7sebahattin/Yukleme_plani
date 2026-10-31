@@ -9,8 +9,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
-if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
-else { require_perm('reports.read'); }
+if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.read'); require_perm('reports.malzeme.read'); require_perm('reports.export'); require_perm('reports.malzeme.export'); }
+else { require_perm('reports.read'); require_perm('reports.malzeme.read'); }
 
 $pdo = db();
 
@@ -37,6 +37,8 @@ function rm_filters(array $f, bool $us_col_ok): array {
         [$_ds_rm, $_ds_rm_v] = depo_sql_in('p.depo');
         if ($_ds_rm !== '') { $where[] = $_ds_rm; foreach ($_ds_rm_v as $_dv) $params[] = $_dv; }
     }
+    [$_rmrs,$_rmrp] = depo_sql_records_in('r');
+    if ($_rmrs !== '') { $where[] = $_rmrs; $params = array_merge($params,$_rmrp); }
     if ($us_col_ok && $f['urun_sahibi'] !== '') {
         if ($f['urun_sahibi'] === '0') {
             $where[] = 'r.urun_sahibi_id IS NULL';
@@ -89,18 +91,26 @@ $uzun_aralik_uyarisi = $gun_sayisi > 90;
 $us_col_ok = db_has_column('loading_records', 'urun_sahibi_id');
 
 // ── Filtre seçenek listeleri ──────────────────────────────
-$filter_firma_list = $pdo->query(
-    "SELECT DISTINCT firma FROM loading_records WHERE type='yukleme' AND firma != '' ORDER BY firma LIMIT 300"
-)->fetchAll(PDO::FETCH_COLUMN);
-$filter_urun_list = $pdo->query(
-    "SELECT DISTINCT urun FROM loading_records WHERE type='yukleme' AND urun != '' ORDER BY urun LIMIT 200"
-)->fetchAll(PDO::FETCH_COLUMN);
-$filter_depo_list = $pdo->query(
-    "SELECT DISTINCT depo FROM loading_pallets WHERE depo != '' ORDER BY depo LIMIT 200"
-)->fetchAll(PDO::FETCH_COLUMN);
-$filter_urun_sahibi_list = $us_col_ok
-    ? $pdo->query("SELECT id, name FROM material_definitions WHERE type='firma' AND is_active=1 ORDER BY name LIMIT 200")->fetchAll()
-    : [];
+function rm_scoped_options(PDO $pdo, string $column): array {
+    if (!in_array($column,['firma','urun'],true)) throw new InvalidArgumentException('Invalid material report filter');
+    [$scope,$params] = depo_sql_records_in('r');
+    $scope = $scope === '' ? '' : ' AND '.$scope;
+    $st=$pdo->prepare("SELECT DISTINCT r.$column FROM loading_records r WHERE r.type='yukleme' AND r.$column != '' $scope ORDER BY r.$column LIMIT 300");
+    $st->execute($params); return $st->fetchAll(PDO::FETCH_COLUMN);
+}
+$filter_firma_list=rm_scoped_options($pdo,'firma');
+$filter_urun_list=rm_scoped_options($pdo,'urun');
+[$_rmds,$_rmdp]=depo_sql_in('p.depo');
+[$_rmrs,$_rmrp]=depo_sql_records_in('r');
+$_rmwhere="p.depo != ''".($_rmds!==''?' AND '.$_rmds:'').($_rmrs!==''?' AND '.$_rmrs:'');
+$_rmst=$pdo->prepare("SELECT DISTINCT p.depo FROM loading_pallets p JOIN loading_records r ON r.id=p.loading_record_id WHERE $_rmwhere ORDER BY p.depo LIMIT 200");
+$_rmst->execute(array_merge($_rmdp,$_rmrp)); $filter_depo_list=$_rmst->fetchAll(PDO::FETCH_COLUMN);
+$filter_urun_sahibi_list=[];
+if ($us_col_ok) {
+    [$_rmos,$_rmop]=depo_sql_records_in('r'); $_rmos=$_rmos!==''?' AND '.$_rmos:'';
+    $_rmost=$pdo->prepare("SELECT DISTINCT md.id,md.name FROM material_definitions md JOIN loading_records r ON r.urun_sahibi_id=md.id WHERE r.type='yukleme' AND md.type='firma' AND md.is_active=1 $_rmos ORDER BY md.name LIMIT 200");
+    $_rmost->execute($_rmop); $filter_urun_sahibi_list=$_rmost->fetchAll();
+}
 
 // ── Veri çekme: A) Kasa  B) Palet  C) Ek malzeme ──────────
 $f = [

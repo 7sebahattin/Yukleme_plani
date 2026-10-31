@@ -30,6 +30,7 @@ function cost_link_lookup_types(): array
  */
 function cost_link_search(string $q, int $limit = 20): array
 {
+    if (function_exists('can') && !can('records.loading.read')) return ['items'=>[], 'truncated'=>false];
     $q = trim($q);
     if (mb_strlen($q, 'UTF-8') < 2) return ['items' => [], 'truncated' => false];
 
@@ -102,7 +103,8 @@ function cost_link_search(string $q, int $limit = 20): array
  */
 function cost_link_record_summary(int $record_id): ?array
 {
-    if ($record_id <= 0) return null;
+    if ($record_id <= 0 || (function_exists('can') && !can('records.loading.read'))) return null;
+    [$scopeSql,$scopeParams] = depo_sql_records_in('r');
 
     try {
         $st = db()->prepare("SELECT r.*,
@@ -112,9 +114,9 @@ function cost_link_record_summary(int $record_id): ?array
                 COALESCE(SUM(p.net_kg),0)     AS toplam_net
             FROM loading_records r
             LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
-            WHERE r.id = ? AND r.type = 'yukleme'
+            WHERE r.id = ? AND r.type = 'yukleme'" . ($scopeSql !== '' ? ' AND ' . $scopeSql : '') . "
             GROUP BY r.id");
-        $st->execute([$record_id]);
+        $st->execute(array_merge([$record_id], $scopeParams));
         $r = $st->fetch();
     } catch (PDOException $e) {
         error_log('[cost_link_record_summary] ' . $e->getMessage());
@@ -261,6 +263,7 @@ function cost_link_code_candidates(array $material_def): array
  */
 function cost_link_materials(int $record_id): array
 {
+    if (cost_link_record_summary($record_id) === null) return [];
     if ($record_id <= 0) return [];
 
     $lookup_types = cost_link_lookup_types();
@@ -501,7 +504,7 @@ function cost_link_apply(array $sections, array $items, array $materials): array
  */
 function cost_link_stale_info(int $record_id, ?string $linked_at): ?array
 {
-    if ($record_id <= 0 || !$linked_at) return null;
+    if ($record_id <= 0 || !$linked_at || cost_link_record_summary($record_id) === null) return null;
 
     // NOT: fallback değeri lr.updated_at DEĞİL lr.created_at'tır — updated_at
     // hiç düzenlenmemiş kayıtlarda NULL kalır (migration DEFAULT NULL ekledi) ve

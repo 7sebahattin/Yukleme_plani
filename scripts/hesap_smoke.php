@@ -15,6 +15,7 @@
 // geri dolum (backfill) idempotanlığı, tutar/tarih/para birimi doğrulaması.
 // =========================================================
 declare(strict_types=1);
+require_once dirname(__DIR__) . '/config/role_permission_matrix.php';
 
 // ── Stub'lar: hesap_calc.php'nin dış bağımlılıkları ──
 $PDO_TEST = new PDO('sqlite::memory:');
@@ -26,7 +27,7 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 $CUR_USER = ['id' => 1, 'username' => 'personel'];
 $PERMS    = ['hesap.read', 'hesap.write'];
 function current_user(): ?array { global $CUR_USER; return $CUR_USER; }
-function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
 function is_admin(): bool { return can('users.admin'); }
 function depo_sql_in(string $col): array { return ['', []]; }
 function depot_visible_to_user(?string $d): bool { return true; }

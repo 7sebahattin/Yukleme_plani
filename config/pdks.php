@@ -17,6 +17,7 @@
 // =========================================================
 
 declare(strict_types=1);
+require_once __DIR__ . '/role_pdks_matrix.php';
 
 // ── Yapılandırma ──────────────────────────────────────────
 // defined() koruması: config/local.php (config/db.php'nin EN BAŞINDA yüklenir)
@@ -563,6 +564,7 @@ function pdks_can(string $eylem): bool
 /** Sayfa kapısı — require_perm() emsali; require_hesap() ile aynı desen. */
 function require_pdks(string $eylem): void
 {
+    role_pdks_require_request();
     if (!PDKS_AKTIF) {
         if (function_exists('forbidden')) forbidden('Personel modülü şu anda kapalıdır.');
         http_response_code(503);

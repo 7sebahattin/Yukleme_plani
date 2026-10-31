@@ -8,9 +8,10 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_perm('records.edit');
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (int)($_POST['id'] ?? 0);
+role_require_record_access($id, 'edit');
 if ($id <= 0) {
     set_flash('error', 'Geçersiz kayıt.');
     header('Location: records.php'); exit;
@@ -165,6 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     $errors = array_merge($errors, validate_pallet_rows($computed));
+    role_require_pallet_depots($computed);
 
     if (empty($errors)) {
         ensure_definition('firma', $record['firma']);

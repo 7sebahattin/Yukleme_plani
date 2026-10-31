@@ -104,7 +104,7 @@ render_flash();
 <div class="page-head">
     <div><h1><?= h($baslik) ?></h1><p class="muted">Toplam <?= $total ?> kayıt</p></div>
     <div class="hs-actions">
-        <?php if (hesap_can('write') && $kapsam['kendi']): ?>
+        <?php if (hesap_can('create') && $kapsam['kendi']): ?>
         <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
         <?php endif; ?>
         <?php $_hx_q = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f]) + $kq; ?>
@@ -270,7 +270,7 @@ render_flash();
         <?php if ($kilitli): ?>
         <span class="hs-kilit" title="<?= h(hesap_kilit_mesaji()) ?>">🔒 Onaylı</span>
         <?php else: ?>
-        <a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a>
+        <?php if (hesap_can('edit')): ?><a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a><?php endif; ?>
         <?php endif; ?>
         <?php if (hesap_can('delete') && !$kilitli): ?>
         <a href="hesap_sil.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Bu kayıt silinsin mi?')">Sil</a>
@@ -327,7 +327,7 @@ render_flash();
         <?php if ($kilitli): ?>
         <span class="hs-kilit" title="<?= h(hesap_kilit_mesaji()) ?>">🔒 Onaylı</span>
         <?php else: ?>
-        <a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a>
+        <?php if (hesap_can('edit')): ?><a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a><?php endif; ?>
         <?php endif; ?>
         <?php if (hesap_can('delete') && !$kilitli): ?>
         <a href="hesap_sil.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Bu kayıt silinsin mi?')">Sil</a>
