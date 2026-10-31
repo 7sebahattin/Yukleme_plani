@@ -15,6 +15,11 @@ if (current_user() !== null) {
 
 $error = '';
 $next  = trim($_GET['next'] ?? '');
+$mesajlar = [
+    'kilit_oturum' => 'Oturumunuz sona erdi, lütfen tekrar giriş yapın.',
+    'pin_cikis'    => 'Çok fazla hatalı PIN denemesi nedeniyle oturum kapatıldı.',
+];
+$bilgi = $mesajlar[(string)($_GET['mesaj'] ?? '')] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
@@ -31,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $token = create_session((int)$user['id']);
         if (function_exists('ekran_kilit_temizle')) ekran_kilit_temizle();   // v454: önceki oturumdan kilit kalıntısı
+        if (function_exists('ekran_pin_sayac_sifirla')) { try { ekran_pin_sayac_sifirla(db(), (int)$user['id']); } catch (Throwable $e) {} }   // v455: şifreyle girişte PIN deneme sayacı sıfırlanır
         setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
         audit_log_event('login_success', 'auth', null, null, null, (int)$user['id']);
 
@@ -280,6 +286,9 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
     <div class="lc-body">
         <?php if ($error !== ''): ?>
         <div class="lc-error"><?= h($error) ?></div>
+        <?php endif; ?>
+        <?php if ($error === '' && $bilgi !== ''): ?>
+        <div class="lc-error" role="status"><?= h($bilgi) ?></div>
         <?php endif; ?>
 
         <div class="lc-pill">

@@ -317,6 +317,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+    // ─── Ekran kilidi PIN sıfırlama (v455) ──────────────────────────────
+    } elseif ($action === 'pin_reset') {
+        $uid = (int)($_POST['id'] ?? 0);
+        $st = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+        $st->execute([$uid]);
+        $row = $st->fetch();
+        if (!$row) {
+            $error = 'Kullanıcı bulunamadı.';
+        } elseif (!ekran_pin_sifirla($pdo, $uid)) {
+            $error = 'PIN sıfırlanamadı (PIN deposu kullanılamıyor).';
+        } else {
+            audit_log_event('pin_reset', 'users', $uid, null, ['username' => $row['username']]);
+            header('Location: users.php?ok=' . urlencode('PIN sıfırlandı; kullanıcı bir sonraki sayfada yeni PIN belirleyecek.'));
+            exit;
+        }
+
     // ─── Şifre sıfırlama ────────────────────────────────────────────────
     } elseif ($action === 'reset_password') {
         $uid   = (int)($_POST['id']        ?? 0);
@@ -546,6 +562,12 @@ render_header('Kullanıcı Yönetimi');
                 ])) ?>)'>Düzenle</button>
             <button type="button" class="btn btn-sm btn-ghost"
                 onclick="usrOpenPwReset(<?= (int)$u['id'] ?>, <?= h(json_encode($u['username'])) ?>)">Şifre</button>
+            <form method="post" style="margin:0" onsubmit="return confirm('Bu kullanıcının ekran kilidi PIN\'i sıfırlansın mı? Bir sonraki sayfada yeni PIN belirleyecek.')">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="action" value="pin_reset">
+                <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+                <button type="submit" class="btn btn-sm btn-ghost" title="Ekran kilidi PIN'ini sıfırla">PIN Sıfırla</button>
+            </form>
             <form method="post" style="margin:0" onsubmit="return confirm('Durum değiştirilsin mi?')">
                 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                 <input type="hidden" name="action" value="toggle_active">
@@ -600,6 +622,12 @@ render_header('Kullanıcı Yönetimi');
             ])) ?>)'>Düzenle</button>
         <button type="button" class="btn btn-sm btn-ghost"
             onclick="usrOpenPwReset(<?= (int)$u['id'] ?>, <?= h(json_encode($u['username'])) ?>)">Şifre Sıfırla</button>
+        <form method="post" style="margin:0" onsubmit="return confirm('Bu kullanıcının ekran kilidi PIN\'i sıfırlansın mı? Bir sonraki sayfada yeni PIN belirleyecek.')">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="pin_reset">
+        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+        <button type="submit" class="btn btn-sm btn-ghost" title="Ekran kilidi PIN'ini sıfırla">PIN Sıfırla</button>
+        </form>
         <form method="post" style="margin:0" onsubmit="return confirm('Durum değiştirilsin mi?')">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="toggle_active">

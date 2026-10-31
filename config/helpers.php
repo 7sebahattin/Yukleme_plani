@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v461');
+    define('APP_SURUM', 'v462');
 }
 
 // --- HTML kaçışı ---
@@ -654,6 +654,7 @@ function render_desktop_sidebar(string $base): void {
             <span class="sidebar-user-role"><?= h($__sr['label']) ?></span>
             <?php unset($__sr); endif; ?>
         </div>
+        <?php if (function_exists('ekran_pin_sidebar_dugme_html')) echo ekran_pin_sidebar_dugme_html(); ?>
         <a href="<?= $base ?>logout.php" class="sidebar-user-logout" title="Çıkış Yap" aria-label="Çıkış Yap">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </a>
@@ -1082,6 +1083,8 @@ function render_header(string $title, bool $print_mode = false): void {
     $__body_cls = $print_mode ? 'print-mode' : ($GLOBALS['_nav_alt_model'] === null ? 'bn-yok' : '');
     // v454: sunucu kilitliyse içerik ilk çizimde gizli gelir (kilit penceresi app.js ile açılır; yalnız masaüstü).
     if (!$print_mode && function_exists('ekran_kilitli_mi') && current_user() !== null && ekran_kilitli_mi()) $__body_cls = trim($__body_cls . ' ekran-kilitli');
+    // v455: PIN artık yok/pasifse (ör. yönetici sıfırladı) pencere olmayacağı için içerik gizli KALMAZ
+    if (str_contains($__body_cls, 'ekran-kilitli') && ekran_pin_durum_otomatik(current_user()) !== 'var') $__body_cls = trim(str_replace('ekran-kilitli', '', $__body_cls));
 ?>
 <body class="<?= $__body_cls ?>"<?= $__body_style ?>>
 <?php if (!$print_mode): ?>
@@ -1961,6 +1964,10 @@ endif;
 
 function _audit_sanitize(array $data): array {
     static $blocked = ['password', 'password_hash', 'token', 'csrf', 'cookie', 'foto_data', 'session', 'asya_session', 'http_cookie'];
+    // v455 (yalnız ekleme): PIN/hash/şifre alanları da audit'e girmez
+    foreach (array_keys($data) as $__ak) {
+        if (in_array(strtolower((string)$__ak), ['pin', 'pin_hash', 'sifre'], true)) unset($data[$__ak]);
+    }
     $out = [];
     foreach ($data as $k => $v) {
         if (in_array(strtolower((string)$k), $blocked, true)) continue;
