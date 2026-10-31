@@ -5,7 +5,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Yalnız CLI.'); }
 require_once __DIR__ . '/../config/quick_cost_store.php';
 
 $QC_USER = ['id' => 7];
-$QC_ADMIN = true;
+$QC_ADMIN = false; // varsayılan: yönetici DEĞİL, hizli_maliyet.* izinleri tam
 $QC_PERMS = ['read' => true, 'write' => true, 'delete' => true];
 $QC_DEPOT = 'TEST DEPO A';
 $QC_DEPOT_CALLS = 0;
@@ -15,7 +15,19 @@ $QC_DB->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $QC_DB->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function current_user(): ?array { return $GLOBALS['QC_USER']; }
 function is_admin(): bool { return $GLOBALS['QC_ADMIN']; }
-function can_maliyet(string $perm): bool { return $GLOBALS['QC_PERMS'][$perm] ?? false; }
+// config/helpers.php can_hizli_maliyet() aynası: admin her zaman geçer; write/delete okumayı da ister.
+function can_hizli_maliyet(string $perm): bool {
+    if ($GLOBALS['QC_ADMIN']) return in_array($perm, ['read', 'write', 'delete'], true);
+    $p = $GLOBALS['QC_PERMS'];
+    return match ($perm) {
+        'read' => !empty($p['read']),
+        'write' => !empty($p['read']) && !empty($p['write']),
+        'delete' => !empty($p['read']) && !empty($p['delete']),
+        default => false,
+    };
+}
+// Eski maliyet.* izni: Hızlı Maliyet'i AÇMAMALI — bu çağrı olursa test düşsün.
+function can_maliyet(string $perm): bool { throw new LogicException('Hızlı Maliyet eski can_maliyet() kapısını kullanmamalı.'); }
 function active_depot(): ?string { $GLOBALS['QC_DEPOT_CALLS']++; return $GLOBALS['QC_DEPOT']; }
 function depot_visible_to_user(?string $depot): bool { return $depot === $GLOBALS['QC_DEPOT']; }
 function depo_sql_in(string $column): array {
@@ -280,8 +292,8 @@ qc_test('Yazma yetkisi olmayan kullanıcı kayıt oluşturamaz/değiştiremez', 
         qc_assert(quick_cost_find($QC_DB, $saved['id']) !== null);
     } finally { $GLOBALS['QC_PERMS']['write'] = true; }
 });
-qc_test('Maliyet okuma/yazma yetkili yönetici olmayan kullanıcıda store kapalı', function () use ($QC_DB, &$saved): void {
-    $GLOBALS['QC_ADMIN'] = false;
+qc_test('hizli_maliyet.* izni olmayan (eski maliyet.* izni olsa da) kullanıcıda store kapalı', function () use ($QC_DB, &$saved): void {
+    $GLOBALS['QC_PERMS'] = ['read' => false, 'write' => false, 'delete' => false];
     $depotCallsBefore = $GLOBALS['QC_DEPOT_CALLS'];
     // Constructor bağlantı kurmaz. Yanlışlıkla PDO'ya ulaşılırsa erişim
     // exception'ı yerine uninitialized PDO hatası oluşur ve test başarısız olur.
@@ -291,8 +303,26 @@ qc_test('Maliyet okuma/yazma yetkili yönetici olmayan kullanıcıda store kapal
         qc_throws(fn() => quick_cost_find($blockedPdo, $saved['id']), QuickCostAccessException::class);
         qc_throws(fn() => quick_cost_save($blockedPdo, qc_example()), QuickCostAccessException::class);
         qc_throws(fn() => quick_cost_save($blockedPdo, qc_example(), $saved['id'], $saved['version']), QuickCostAccessException::class);
+        qc_throws(fn() => quick_cost_delete($blockedPdo, $saved['id'], $saved['version']), QuickCostAccessException::class);
         qc_equal($GLOBALS['QC_DEPOT_CALLS'], $depotCallsBefore);
-    } finally { $GLOBALS['QC_ADMIN'] = true; }
+    } finally { $GLOBALS['QC_PERMS'] = ['read' => true, 'write' => true, 'delete' => true]; }
+});
+qc_test('Yönetici hizli_maliyet.* satırı olmadan da store kapısından geçer', function () use ($QC_DB, &$saved): void {
+    $GLOBALS['QC_ADMIN'] = true;
+    $GLOBALS['QC_PERMS'] = ['read' => false, 'write' => false, 'delete' => false];
+    try {
+        qc_assert(quick_cost_find($QC_DB, $saved['id']) !== null);
+        qc_equal(quick_cost_access(true, true)[0], 7);
+    } finally { $GLOBALS['QC_ADMIN'] = false; $GLOBALS['QC_PERMS'] = ['read' => true, 'write' => true, 'delete' => true]; }
+});
+qc_test('Yalnız okuma: listeler/açar, kaydetmez ve silmez', function () use ($QC_DB, &$saved): void {
+    $GLOBALS['QC_PERMS'] = ['read' => true, 'write' => false, 'delete' => false];
+    try {
+        qc_assert(quick_cost_find($QC_DB, $saved['id']) !== null);
+        qc_assert(quick_cost_list($QC_DB)['total'] >= 1);
+        qc_throws(fn() => quick_cost_save($QC_DB, qc_example()), QuickCostAccessException::class);
+        qc_throws(fn() => quick_cost_delete($QC_DB, $saved['id'], $saved['version']), QuickCostAccessException::class);
+    } finally { $GLOBALS['QC_PERMS'] = ['read' => true, 'write' => true, 'delete' => true]; }
 });
 qc_test('Okuma yetkisi yoksa liste/görüntüleme/yazma kapalı', function () use ($QC_DB, &$saved): void {
     $GLOBALS['QC_PERMS']['read'] = false;
@@ -365,16 +395,16 @@ qc_test('Ek kalem kaydet/aç/düzenle/kopyala kimlik ve özgün fiyatı korur', 
     qc_assert($copy['id'] !== $updated['id']); qc_equal($copy['document'], $updated['document']);
     qc_equal(quick_cost_find($QC_DB, $source['id'])['version'], 2);
 });
-qc_test('Silme admin/okuma/yazma/silme kapıları PDO öncesi kapanır', function (): void {
+qc_test('Silme okuma/silme kapıları PDO öncesi kapanır; yazma izni silme için gerekmez', function () use ($QC_DB): void {
     $blockedPdo = new class extends PDO { public function __construct() {} };
-    $GLOBALS['QC_ADMIN'] = false;
-    try { qc_throws(fn() => quick_cost_delete($blockedPdo, 1, 1), QuickCostAccessException::class); }
-    finally { $GLOBALS['QC_ADMIN'] = true; }
-    foreach (['read', 'write', 'delete'] as $permission) {
+    foreach (['read', 'delete'] as $permission) {
         $GLOBALS['QC_PERMS'][$permission] = false;
         try { qc_throws(fn() => quick_cost_delete($blockedPdo, 1, 1), QuickCostAccessException::class); }
         finally { $GLOBALS['QC_PERMS'][$permission] = true; }
     }
+    $GLOBALS['QC_PERMS']['write'] = false;
+    try { qc_equal(quick_cost_access(false, true)[0], 7); }
+    finally { $GLOBALS['QC_PERMS']['write'] = true; }
 });
 qc_test('Silme geçersiz id/sürümü SQL öncesi reddeder', function (): void {
     $blockedPdo = new class extends PDO { public function __construct() {} };

@@ -12,7 +12,7 @@ $testPdo->exec('CREATE TABLE quick_cost_sheets (id INTEGER PRIMARY KEY AUTOINCRE
 $testPdo->exec('CREATE TABLE cost_sheets (id INTEGER PRIMARY KEY, marker TEXT)');
 $testPdo->exec("INSERT INTO cost_sheets VALUES (1,'untouched')");
 $testPermissions = ['read', 'write', 'delete'];
-$testAdmin = true;
+$testAdmin = false; // varsayılan: yönetici DEĞİL; yetki yalnız hizli_maliyet.* izinlerinden
 $testDepot = 'DEMO';
 $testStatus = 200;
 $testHeaders = [];
@@ -20,9 +20,16 @@ $testAudit = [];
 function db(): PDO { return $GLOBALS['testPdo']; }
 function current_user(): array { return ['id' => 7]; }
 function active_depot(): string { return $GLOBALS['testDepot']; }
-function can_maliyet(string $permission): bool { return in_array($permission, $GLOBALS['testPermissions'], true); }
+// config/helpers.php can_hizli_maliyet() aynası: admin her zaman geçer; write/delete okumayı da ister.
+function can_hizli_maliyet(string $permission): bool {
+    if ($GLOBALS['testAdmin']) return in_array($permission, ['read', 'write', 'delete'], true);
+    $p = $GLOBALS['testPermissions'];
+    return in_array('read', $p, true) && in_array($permission, $p, true);
+}
+// Eski maliyet.* kapısı Hızlı Maliyet'te KULLANILMAMALI.
+function can_maliyet(string $permission): bool { throw new LogicException('Hızlı Maliyet can_maliyet() kullanmamalı.'); }
 function is_admin(): bool { return $GLOBALS['testAdmin']; }
-function require_maliyet(string $permission): void { if (!can_maliyet($permission)) forbidden('permission'); }
+function require_maliyet(string $permission): void { throw new LogicException('Hızlı Maliyet require_maliyet() kullanmamalı.'); }
 function require_login(): array { return current_user(); }
 function forbidden(string $message): void { test_status(403); throw new QuickPageExit($message); }
 function depo_sql_in(string $column): array { return ["$column IN (?)", [active_depot()]]; }
@@ -124,14 +131,18 @@ check(!str_contains(page([], [], 'list')['html'], 'id="qc-form"') && str_contain
 check(!str_contains($result['html'], 'id="qc-records"'), 'new form does not contain saved list');
 check(in_array('Location: hizli_maliyet_form.php?id=1&copy=1', page(['id'=>'1','copy'=>'1'], [], 'list')['headers'], true), 'legacy GET copy redirects to fixed form route');
 check(page(['id'=>[]], [], 'list')['status'] === 400, 'legacy GET invalid id rejected');
+$testAdmin = true;
 check(in_array('Location: hizli_maliyet.php', page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'], 'list')['headers'], true), 'admin explicit setup is idempotent when ready');
 check(page([], ['action'=>'install_schema','csrf'=>'bad'], 'list')['status'] === 403, 'setup requires CSRF');
 $testAdmin = false;
 check(page([], ['action'=>'install_schema','csrf'=>'anonymous-csrf'], 'list')['status'] === 403, 'setup denies non-admin writer');
-check(page([], [], 'list')['status'] === 403, 'non-admin cannot open saved list');
-check(page()['status'] === 403, 'non-admin read/write user cannot open quick page');
-check(page([], postDocument($document))['status'] === 403, 'non-admin read/write user cannot create');
-$testAdmin = true;
+check(page([], [], 'list')['status'] === 200 && page()['status'] === 200, 'non-admin with hizli_maliyet read/write/delete opens list and form');
+$testPermissions = []; // eski maliyet.* izni olsa bile hizli_maliyet.* yok
+check(page([], [], 'list')['status'] === 403, 'user without hizli_maliyet permission cannot open saved list');
+check(page()['status'] === 403, 'user without hizli_maliyet permission cannot open quick page');
+check(page([], postDocument($document))['status'] === 403, 'user without hizli_maliyet permission cannot create');
+$testPermissions = ['write','delete']; // okuma olmadan write/delete tek başına geçmez
+check(page()['status'] === 403 && page([], [], 'list')['status'] === 403, 'write/delete without read denied');
 $testPermissions = [];
 check(page()['status'] === 403, 'read denied');
 $testPermissions = ['read'];
@@ -144,12 +155,15 @@ $result = page([], postDocument($document));
 check(in_array('Location: hizli_maliyet.php', $result['headers'], true), 'create redirects to saved list');
 check((float)quick_cost_find(db(), 1)['document']['total'] === 670000.0, 'server stored requested example');
 check(str_contains(page(['id'=>'1'])['html'], '670.000,00'), 'reopen summary same total');
-$testAdmin = false;
-check(page(['id'=>'1'])['status'] === 403, 'non-admin cannot open saved quick record');
-check(page(['id'=>'1','copy'=>'1'])['status'] === 403, 'non-admin cannot copy saved quick record');
-check(page(['id'=>'1'], postDocument($document, '1'))['status'] === 403, 'non-admin cannot update saved quick record');
-$testAdmin = true;
-check(quick_cost_find(db(), 1)['version'] === 1, 'non-admin quick-record denials preserve saved version');
+$testPermissions = [];
+check(page(['id'=>'1'])['status'] === 403, 'user without permission cannot open saved quick record');
+check(page(['id'=>'1','copy'=>'1'])['status'] === 403, 'user without permission cannot copy saved quick record');
+check(page(['id'=>'1'], postDocument($document, '1'))['status'] === 403, 'user without permission cannot update saved quick record');
+$testPermissions = ['read'];
+check(page(['id'=>'1'])['status'] === 200 && str_contains(page(['id'=>'1'])['html'], '"readOnly":true'), 'read-only user opens saved record read-only');
+check(page(['id'=>'1','copy'=>'1'], postDocument($document))['status'] === 403 && page(['id'=>'1'], postDocument($document, '1'))['status'] === 403, 'read-only user cannot copy or update');
+$testPermissions = ['read','write','delete'];
+check(quick_cost_find(db(), 1)['version'] === 1, 'denials preserve saved version');
 $document['operation_type'] = 'uretim'; $document['method'] = 'detailed';
 page(['id'=>'1'], postDocument($document, '1'));
 check(quick_cost_find(db(), 1)['document']['operation_type'] === 'fason' && quick_cost_find(db(), 1)['document']['method'] === 'quick', 'hidden operation and method pinned to original record');
@@ -220,13 +234,24 @@ check(!str_contains($listView['html'], '>Fason<') && !str_contains($listView['ht
 $deletePost = ['action'=>'delete','id'=>'1','version'=>'2','csrf'=>'anonymous-csrf'];
 check(page(['action'=>'delete'], [], 'list')['status'] === 200 && quick_cost_find(db(), 1) !== null, 'GET delete action never deletes');
 check(page([], array_merge($deletePost, ['csrf'=>'bad']), 'list')['status'] === 403, 'delete requires valid CSRF');
-$testAdmin = false;
-check(page([], $deletePost, 'list')['status'] === 403, 'delete denies non-admin');
-$testAdmin = true;
-foreach ([['read'], ['read','write'], ['read','delete']] as $permissions) {
+$testPermissions = [];
+check(page([], $deletePost, 'list')['status'] === 403, 'delete denies user without hizli_maliyet permission');
+foreach ([['read'], ['read','write'], ['write','delete'], ['delete']] as $permissions) {
     $testPermissions = $permissions;
-    check(page([], $deletePost, 'list')['status'] === 403, 'delete requires write and delete permissions');
+    check(page([], $deletePost, 'list')['status'] === 403, 'delete requires read and delete permissions');
 }
+$testPermissions = ['read','write','delete'];
+// read+delete (yazma izni olmadan) silebilir; kayıt 1 korunur diye ayrı satır kullanılır.
+$tmpRow = quick_cost_save(db(), $baseDocument);
+$testPermissions = ['read','delete'];
+$tmpDelete = page([], ['action'=>'delete','id'=>(string)$tmpRow['id'],'version'=>(string)$tmpRow['version'],'csrf'=>'anonymous-csrf'], 'list');
+check(in_array('Location: hizli_maliyet.php', $tmpDelete['headers'], true) && quick_cost_find(db(), $tmpRow['id']) === null, 'read+delete (no write) can delete');
+$testPermissions = ['read'];
+$roList = page([], [], 'list');
+check(!str_contains($roList['html'], 'Yeni maliyet hesapla') && !str_contains($roList['html'], 'kalıcı olarak silinecek') && !str_contains($roList['html'], '>Kopyala<'), 'read-only list hides new/copy/delete');
+$testPermissions = ['read','write'];
+$rwList = page([], [], 'list');
+check(str_contains($rwList['html'], 'Yeni maliyet hesapla') && !str_contains($rwList['html'], 'kalıcı olarak silinecek'), 'read+write list has no delete');
 $testPermissions = ['read','write','delete'];
 $testDepot = 'OTHER';
 check(page([], $deletePost, 'list')['status'] === 403, 'delete cannot cross active depot');
@@ -246,10 +271,15 @@ check(end($testAudit)[0] === 'delete' && end($testAudit)[1] === 'quick_cost_shee
 db()->exec('DROP TABLE quick_cost_sheets');
 $missing = page();
 check($missing['status'] === 200 && str_contains($missing['html'], 'disabled'), 'missing schema form renders disabled save');
+$testAdmin = true;
 check(str_contains(page([], [], 'list')['html'], 'Yeni maliyet tablosunu kur'), 'admin sees explicit setup form on list when missing');
 $testAdmin = false;
 $nonAdminMissing = page([], [], 'list');
-check($nonAdminMissing['status'] === 403 && !str_contains($nonAdminMissing['html'], 'Yeni maliyet tablosunu kur'), 'non-admin missing-schema page is forbidden');
+check($nonAdminMissing['status'] === 200 && !str_contains($nonAdminMissing['html'], 'Yeni maliyet tablosunu kur') && str_contains($nonAdminMissing['html'], 'yöneticisinden beklenir'), 'permitted non-admin sees "setup awaited from admin" message, no install button');
+check(!str_contains(page()['html'], 'hizli_maliyet.php">kayıt listesine'), 'non-admin form missing-schema note has no setup link');
+$testPermissions = [];
+check(page([], [], 'list')['status'] === 403, 'no-permission user missing-schema page is forbidden');
+$testPermissions = ['read','write','delete'];
 $testAdmin = true;
 check(page(['action'=>'install_schema'], [], 'list')['status'] === 200 && !quick_cost_storage_ready(db()), 'GET cannot create schema');
 check(page([], postDocument($document))['status'] === 422, 'missing schema no runtime migration');

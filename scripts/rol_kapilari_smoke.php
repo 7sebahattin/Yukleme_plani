@@ -108,6 +108,39 @@ ok('can_siparis: bilinmeyen izin adı → false', !can_siparis('admin') && !can_
 $IS_ADMIN = true; $PERMS = [];
 ok('can_siparis: admin dört yetkiyi açar, bilinmeyeni açmaz',
     can_siparis('read') && can_siparis('write') && can_siparis('delete') && can_siparis('match') && !can_siparis('x'));
+
+// ── Hızlı Maliyet (hizli_maliyet.*) — maliyet.* ile KARIŞMAZ ───────────────
+$IS_ADMIN = false;
+$PERMS = ['maliyet.read', 'maliyet.write', 'maliyet.delete', 'maliyet.admin'];
+ok('eski maliyet.* izinleri Hızlı Maliyet\'i AÇMAZ (operator/muhasebe benzeri)',
+    !can_hizli_maliyet('read') && !can_hizli_maliyet('write') && !can_hizli_maliyet('delete')
+    && first_allowed_page() === 'maliyet.php');
+$PERMS = ['hizli_maliyet.read'];
+ok('can_hizli_maliyet: yalnız read → read açık, write/delete kapalı',
+    can_hizli_maliyet('read') && !can_hizli_maliyet('write') && !can_hizli_maliyet('delete'));
+ok('yalnız hizli_maliyet.read → hizli_maliyet.php', first_allowed_page() === 'hizli_maliyet.php');
+$PERMS = ['hizli_maliyet.read', 'hizli_maliyet.write'];
+ok('can_hizli_maliyet: read+write → silme kapalı', can_hizli_maliyet('write') && !can_hizli_maliyet('delete'));
+$PERMS = ['hizli_maliyet.read', 'hizli_maliyet.write', 'hizli_maliyet.delete'];
+ok('can_hizli_maliyet: üçü birden açık', can_hizli_maliyet('read') && can_hizli_maliyet('write') && can_hizli_maliyet('delete'));
+$PERMS = ['hizli_maliyet.write', 'hizli_maliyet.delete'];
+ok('hizli_maliyet.read olmadan write/delete hiçbir şey açmaz',
+    !can_hizli_maliyet('read') && !can_hizli_maliyet('write') && !can_hizli_maliyet('delete') && first_allowed_page() === null);
+$PERMS = ['hizli_maliyet.read'];
+ok('can_hizli_maliyet: bilinmeyen izin adı → false', !can_hizli_maliyet('admin') && !can_hizli_maliyet(''));
+$PERMS = []; $IS_ADMIN = true;
+ok('can_hizli_maliyet: yönetici satırsız da üç yetkiyi açar, bilinmeyeni açmaz',
+    can_hizli_maliyet('read') && can_hizli_maliyet('write') && can_hizli_maliyet('delete') && !can_hizli_maliyet('x'));
+$IS_ADMIN = false; $PERMS = [];
+// Katalog ↔ seed eşitliği: üç hizli_maliyet.* yetkisi katalogda ve admin seed'inde birlikte
+$asrc = file_get_contents($ROOT . '/config/auth.php');
+$ca = strpos($asrc, 'function permission_catalog(): array {');
+$cb = strpos($asrc, 'function protected_role_slugs()', $ca);
+if (!function_exists('permission_catalog')) eval(substr($asrc, $ca, $cb - $ca));
+ok('katalogda Hızlı Maliyet grubu 3 yetki', array_keys(permission_catalog()['Hızlı Maliyet'] ?? []) === ['hizli_maliyet.read', 'hizli_maliyet.write', 'hizli_maliyet.delete']);
+ok('admin seed ($all_p) üç hizli_maliyet.* yetkisini içerir; operator/muhasebe/viewer seed\'i içermez',
+    str_contains($hsrc, "'hizli_maliyet.read','hizli_maliyet.write','hizli_maliyet.delete'], \$pdks_p)")
+    && !preg_match("/'(operator|viewer|muhasebe|ik)'\s*=>\s*\[[^\]]*hizli_maliyet/", $hsrc));
 $IS_ADMIN = false;
 
 $IS_ADMIN = true; $PERMS = [];

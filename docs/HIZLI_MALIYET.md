@@ -2,8 +2,8 @@
 
 Sürüm v461. `hizli_maliyet.php` aktif depo kapsamındaki kayıt listesidir.
 **Yeni maliyet hesapla** düğmesi `hizli_maliyet_form.php` adresini açar.
-Sol Operasyon → Hızlı Maliyet ve mobil Diğer → Hızlı Maliyet bağlantıları yalnız yöneticide görünür. Mobil menüde Sabitle ile alt çubuğa alınabilir; kullanıcı sıralaması korunur.
-Admin olmayanlar doğrudan sayfa ve veri katmanı erişiminde de reddedilir.
+Sol Operasyon → Hızlı Maliyet ve mobil Diğer → Hızlı Maliyet bağlantıları yalnız yöneticide ya da Roller ekranından `hizli_maliyet.read` izni verilen rollerde görünür (eski `maliyet.*` izinleri açmaz; yazma `hizli_maliyet.write`, silme `hizli_maliyet.delete`). Mobil menüde Sabitle ile alt çubuğa alınabilir; kullanıcı sıralaması korunur.
+İzni olmayanlar doğrudan sayfa ve veri katmanı erişiminde de reddedilir. Tablo kurulum düğmesi yalnız yöneticidedir.
 Mevcut gelişmiş maliyet sayfaları ve `cost_sheets` değiştirilmez.
 
 ## Kullanım
@@ -60,8 +60,8 @@ kolonları korunur. Bu sürüm için SQL işlemi veya migration gerekmez.
 Mevcut ilk kurulum yolu yalnız eksik tabloda yönetici POST/CSRF ile çalışır;
 şema kaynağı `docs/sql/quick_cost_sheets.sql` dağıtımda bulunmalıdır.
 
-Okuma yönetici+maliyet okuma+aktif depo ister. Kaydetme yazma yetkisi ve CSRF
-ister. Silme ayrıca `maliyet.delete` ister. Silme/güncelleme id+sürüm+depo
+Okuma yönetici ya da `hizli_maliyet.read` + aktif depo ister. Kaydetme `hizli_maliyet.write` (okumayla birlikte) ve CSRF
+ister. Silme `hizli_maliyet.delete` (okumayla birlikte) ister; yazma izni gerekmez. Silme/güncelleme id+sürüm+depo
 koşuluyla yapılır; eski sürüm409 verir. Silme yalnız hızlı maliyet tablosunu
 hedefler ve hard delete kullanır; geri alma yoktur. Mevcut audit helper hata
 loglayabildiğinden audit ile veri yazımının kesin atomik olduğu iddia edilmez.

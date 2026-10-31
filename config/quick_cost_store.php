@@ -20,20 +20,43 @@ function quick_cost_storage_ready(PDO $pdo): bool
     }
 }
 
-/** İlk sürüm yalnız yöneticiye açık; yetki ve aktif depo ayrıca korunur. */
-function quick_cost_access(bool $write = false): array
+/**
+ * Sayfa kapısı (hizli_maliyet*.php): login → aktif depo → can_hizli_maliyet($perm).
+ * Eski maliyet.* izinleri Hızlı Maliyet'i AÇMAZ; yönetici (is_admin) her zaman geçer.
+ */
+function require_hizli_maliyet(string $perm): void
+{
+    if (function_exists('current_user') && current_user() === null) {
+        $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
+        header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
+        exit;
+    }
+    if (function_exists('enforce_active_depot')) enforce_active_depot();
+    if (!can_hizli_maliyet($perm)) {
+        forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: hizli_maliyet.{$perm})");
+        exit('Yetkisiz');
+    }
+}
+
+/**
+ * Depo katmanı kapısı: controller'dan bağımsız ikinci kontrol. Yetki can_hizli_maliyet()
+ * (read; $write → write; $delete → delete) + aktif depo. Yönetici olmak GEREKMEZ.
+ */
+function quick_cost_access(bool $write = false, bool $delete = false): array
 {
     $user = function_exists('current_user') ? current_user() : null;
-    // Depo yardımcıları tanım tablolarını okuyabilir: yönetici kapısı önce.
-    if (!$user || (int)($user['id'] ?? 0) <= 0 || !function_exists('is_admin') || !is_admin()) {
-        throw new QuickCostAccessException('Hızlı Maliyet şu anda yalnız sistem yöneticisine açık.');
+    // Depo yardımcıları tanım tablolarını okuyabilir: kimlik + yetki kapısı önce.
+    if (!$user || (int)($user['id'] ?? 0) <= 0
+        || !function_exists('can_hizli_maliyet')
+        || !can_hizli_maliyet('read')
+        || ($write && !can_hizli_maliyet('write'))
+        || ($delete && !can_hizli_maliyet('delete'))) {
+        throw new QuickCostAccessException('Hızlı Maliyet için gerekli yetki (hizli_maliyet) bulunmuyor.');
     }
     $depot = function_exists('active_depot') ? active_depot() : null;
-    if (!function_exists('can_maliyet')
-        || !can_maliyet('read') || ($write && !can_maliyet('write'))
-        || !is_string($depot) || trim($depot) === '' || mb_strlen($depot) > 150
+    if (!is_string($depot) || trim($depot) === '' || mb_strlen($depot) > 150
         || !function_exists('depot_visible_to_user') || !depot_visible_to_user($depot)) {
-        throw new QuickCostAccessException('Hızlı Maliyet için yönetici, maliyet yetkisi ve aktif depo gerekli.');
+        throw new QuickCostAccessException('Hızlı Maliyet için aktif depo gerekli.');
     }
     return [(int)$user['id'], $depot];
 }
@@ -149,8 +172,7 @@ function quick_cost_save(PDO $pdo, array $input, int $id = 0, int $expectedVersi
 /** Yalnız izole hızlı maliyet kaydı; şema ve diğer maliyet tabloları değişmez. */
 function quick_cost_delete(PDO $pdo, int $id, int $expectedVersion): void
 {
-    [, $depot] = quick_cost_access(true);
-    if (!can_maliyet('delete')) throw new QuickCostAccessException('Maliyet silme yetkisi gerekli.');
+    [, $depot] = quick_cost_access(false, true);
     if ($id <= 0 || $expectedVersion <= 0) throw new InvalidArgumentException('Kayıt numarası ve sürümü geçersiz.');
     if (!function_exists('audit_log_event')) throw new RuntimeException('Audit altyapısı kullanılamıyor.');
     if ($pdo->inTransaction()) throw new LogicException('Hızlı Maliyet silme ayrı bir işlem gerektirir.');

@@ -50,7 +50,7 @@ function render_flash(): void {}
 
 if (!preg_match("/define\('APP_SURUM',\s*'(v\d+)'\)/", $dashboardHelperSource, $version)) throw new RuntimeException('Sürüm bulunamadı.');
 define('APP_SURUM', $version[1]);
-foreach (['can_mail', 'can_siparis', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'render_desktop_sidebar'] as $functionName) {
+foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'render_desktop_sidebar'] as $functionName) {
     $functionSource = dashboard_extract_function($dashboardHelperSource, $functionName);
     eval(str_replace('__DIR__', var_export($dashboardRoot . '/config', true), $functionSource));
 }
@@ -93,7 +93,10 @@ $dashboardProfiles['loading_only']=dashboard_profile('loading_only',false,['role
 $dashboardProfiles['pallet_only']=dashboard_profile('pallet_only',false,['role.permissions.detailed','records.pallet.read']);
 $dashboardProfiles['product_orders_only']=dashboard_profile('product_orders_only',false,['role.permissions.detailed','siparis.urun.read']);
 $dashboardProfiles['ogl_only']=dashboard_profile('ogl_only',false,['role.permissions.detailed','siparis.ogl.read']);
-$dashboardSinglePermissions = array_merge($dashboardAllPermissions, ['mail.admin', 'maliyet.read', 'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports', 'attendance.employees', 'attendance.cards', 'attendance.scan']);
+// Eski maliyet.* izinleriyle operator/muhasebe benzeri profil: Hızlı Maliyet'i görmemeli.
+$dashboardProfiles['legacy_maliyet'] = dashboard_profile('legacy_maliyet', false, ['records.read', 'maliyet.read', 'maliyet.write', 'maliyet.delete']);
+$dashboardProfiles['hizli_rw'] = dashboard_profile('hizli_rw', false, ['hizli_maliyet.read', 'hizli_maliyet.write']);
+$dashboardSinglePermissions = array_merge($dashboardAllPermissions, ['mail.admin', 'maliyet.read', 'maliyet.write', 'hizli_maliyet.read', 'hizli_maliyet.write', 'hizli_maliyet.delete', 'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports', 'attendance.employees', 'attendance.cards', 'attendance.scan']);
 foreach ($dashboardSinglePermissions as $permission) {
     $key = 'only_' . str_replace('.', '_', $permission);
     $dashboardProfiles[$key] = dashboard_profile($key, false, [$permission]);
@@ -180,7 +183,7 @@ foreach ($dashboardProfiles as $name => $profile) {
             dashboard_check($matches === 1, $name . ': katalog grup başlığı bir kez ' . $heading);
         }
     } else {
-        foreach (array_merge(array_keys($dashboardCatalog), ['hizli_maliyet.php', 'audit.php', 'admin_db_backups.php']) as $adminOnly) {
+        foreach (array_merge(array_keys($dashboardCatalog), ['audit.php', 'admin_db_backups.php']) as $adminOnly) {
             dashboard_check(!in_array($adminOnly, $homeHrefs, true), $name . ': admin kartı görünmez ' . $adminOnly);
         }
     }
@@ -189,6 +192,11 @@ foreach ($dashboardProfiles as $name => $profile) {
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }
+    // Hızlı Maliyet kartı/sidebar bağlantısı YALNIZ yönetici ya da hizli_maliyet.read ile (maliyet.* AÇMAZ; write/delete okumasız AÇMAZ).
+    $quickExpected = $profile['admin'] || in_array('hizli_maliyet.read', $profile['permissions'], true);
+    dashboard_check(in_array('hizli_maliyet.php', $homeHrefs, true) === $quickExpected, $name . ': Hızlı Maliyet kartı yalnız hizli_maliyet.read/yönetici');
+    dashboard_check(in_array('hizli_maliyet.php', array_column($sidebar, 'href'), true) === $quickExpected, $name . ': Hızlı Maliyet sidebar bağlantısı kartla aynı kapı');
+    if ($name === 'only_hizli_maliyet_read') dashboard_check(isset($homeLabels['hizli_maliyet.php']) && count($home) === 1, 'yalnız hizli_maliyet.read tek kart + bölüm görünür');
     foreach (['loading_only'=>['records.php','cikmalar.php'],'pallet_only'=>['cikmalar.php','records.php'],'product_orders_only'=>['urun_siparis.php','siparisler.php'],'ogl_only'=>['siparisler.php','urun_siparis.php']] as $profileName=>[$yes,$no]) if ($name===$profileName) {
         dashboard_check(in_array($yes,$homeHrefs,true),'Detailed page visible '.$yes);
         dashboard_check(!in_array($no,$homeHrefs,true),'Sibling page denied '.$no);

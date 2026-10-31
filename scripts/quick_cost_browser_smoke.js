@@ -87,7 +87,7 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             await checkUnitArrows(name + ' built-in');
             check(await page.evaluate(() => scrollY === 0), name + ' initialization keeps the top of the form visible');
             check(await page.locator('#qc-total').textContent() === '670.000,00', name + ' initial total');
-            check(await page.locator('#qc-unit-cost').textContent() === '33,50', name + ' initial unit');
+            check(await page.locator('#qc-unit-cost').textContent() === '33,5000', name + ' initial unit');
             check(await page.locator('[data-qc-row]').count() === 10, name + ' ten rows');
             check(!(await page.locator('.qc-costs').innerText()).includes('Malzeme; kasa, viyol') && await page.locator('[data-qc-row="material"] [data-qc-row-title]').textContent()==='Malzeme' && await page.locator('[data-qc-basis="material"]').textContent()==='Ürün KG × fiyat = toplam maliyet', name + ' lower material description removed while material row and calculation hint remain');
             check(await page.locator('[data-qc-operation], #qc-operation-hint').count() === 0 && !/Üretim|Fason|İşlem türü/.test(await page.locator('#qc-form').innerText()), name + ' operation metadata has no visible controls or captions');
@@ -146,6 +146,13 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             check(await page.locator('#qc-qty-labor').inputValue() === '20.000' && await page.locator('#qc-price-labor').getAttribute('readonly') === null && await page.locator('#qc-total').textContent() === '670.000,00', name + ' Ürün KG kullan restores kg binding explicitly');
             await toggle('labor');
             await page.locator('#qc-unit-transport').selectOption('pallet');
+            check(await page.locator('#qc-qty-transport').inputValue() === '1' && await page.locator('[data-qc-settings="transport"] .qc-unit-note').count() === 1, name + ' unit change resets quantity to 1 and explains it');
+            await page.locator('#qc-qty-transport').fill('1.234');
+            check(/1234 olarak okunur/.test(await page.locator('#qc-qty-transport').locator('xpath=..').locator('.qc-read-note').textContent()) && await page.locator('[data-qc-settings="transport"] .qc-unit-note').count() === 0, name + ' dotted thousands input is explained and unit note clears on edit');
+            check(await page.locator('#qc-form').evaluate(form => form.classList.contains('qc-kbd')), name + ' focused text field marks keyboard state');
+            await page.locator('#qc-qty-transport').blur(); await page.waitForTimeout(250);
+            check(await page.locator('#qc-qty-transport').locator('xpath=..').locator('.qc-read-note').count() === 0 && await page.locator('#qc-form').evaluate(form => !form.classList.contains('qc-kbd')), name + ' note and keyboard state clear on blur');
+            if (width < 768) check(await page.locator('.qc-save-bar').evaluate(bar => bar.getBoundingClientRect().height <= 84), name + ' mobile save bar stays compact');
             await page.locator('#qc-qty-transport').fill('26');
             await page.locator('#qc-settings-price-transport').fill('380');
             check(await page.locator('[data-qc-amount="transport"]').textContent() === '9.880,00 TL', name + ' pallet amount');
@@ -160,7 +167,7 @@ check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("d
             check(await settings('transport').getAttribute('open') !== null && await page.locator('#qc-qty-transport').inputValue() === '26' && await page.locator('#qc-settings-price-transport').inputValue() === '380', name + ' Ürün KG edit preserves open state and original manual price');
             check(await page.locator('#qc-qty-product').inputValue() === '10.000' && await page.locator('#qc-price-transport').inputValue() === '0,9880', name + ' bound quantity and manual equivalent follow Ürün KG');
             await page.locator('#qc-net-kg').fill('0');
-            check(await page.locator('#qc-unit-cost').textContent() === '0,00' && await page.locator('#qc-price-transport').inputValue() === '—', name + ' zero Ürün KG avoids division and preserves manual row');
+            check(await page.locator('#qc-unit-cost').textContent() === '0,0000' && await page.locator('#qc-price-transport').inputValue() === '—', name + ' zero Ürün KG avoids division and preserves manual row');
             await toggle('product');
             await page.locator('#qc-qty-product').focus();
             check(await page.locator('#qc-qty-product').inputValue() === '', name + ' zero linked quantity clears on focus');

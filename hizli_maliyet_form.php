@@ -6,8 +6,7 @@ require_once __DIR__ . '/config/cost_calc.php';
 require_once __DIR__ . '/config/quick_cost_store.php';
 
 $auth_user = require_login();
-if (!is_admin()) forbidden('Hızlı Maliyet şu anda yalnız sistem yöneticisine açık.');
-require_maliyet('read');
+require_hizli_maliyet('read');   // aç = read; kaydet/kopyala = write (yönetici her zaman geçer; maliyet.* izni AÇMAZ)
 // Bu controller eski maliyet şemasını veya kayıtlarını değiştirmez.
 header('Cache-Control: no-store, private');
 header('X-Content-Type-Options: nosniff');
@@ -55,7 +54,7 @@ if (!is_string($id_raw) || !preg_match('/^\d{1,10}$/D', $id_raw)) {
 }
 $id = (int)$id_raw;
 $is_copy = ($_GET['copy'] ?? '') === '1';
-$can_write = can_maliyet('write');
+$can_write = can_hizli_maliyet('write');
 $errors = [];
 $record = null;
 $version = 0;
@@ -64,7 +63,7 @@ $calculation = quick_cost_calculate($document);
 $storage_ready = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_maliyet('write');
+    require_hizli_maliyet('write');
     csrf_check(is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : null);
 }
 
@@ -140,7 +139,7 @@ render_flash();
     <p class="muted"><?= $is_copy ? 'Kopyalanan hesap' : 'Hesap' ?> #<?= (int)$record['id'] ?> · Oluşturan kullanıcı #<?= (int)$record['created_by'] ?> · <?= h($record['created_at']) ?><?= !empty($record['updated_at']) ? ' · Güncelleme: ' . h($record['updated_at']) : '' ?></p>
     <?php if (!$is_copy && $can_write): ?><p><a class="btn" href="hizli_maliyet_form.php?id=<?= $id ?>&amp;copy=1">Kopyalayarak yeni hesap</a></p><?php endif; ?>
     <?php endif; ?>
-    <?php if (!$storage_ready): ?><p class="qc-error">Kayıt altyapısı henüz hazır değil. Kurulum için <a href="hizli_maliyet.php">kayıt listesine dönün</a>.</p><?php endif; ?>
+    <?php if (!$storage_ready): ?><p class="qc-error">Kayıt altyapısı henüz hazır değil. <?= is_admin() ? 'Kurulum için <a href="hizli_maliyet.php">kayıt listesine dönün</a>.' : 'Kurulum sistem yöneticisinden beklenir.' ?></p><?php endif; ?>
     <?php require __DIR__ . '/_hizli_maliyet_form.php'; ?>
 </div>
 <script>window.QUICK_COST_CONFIG = <?= json_encode(['document' => $document, 'catalog' => $catalog, 'readOnly' => !$can_write], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;</script>

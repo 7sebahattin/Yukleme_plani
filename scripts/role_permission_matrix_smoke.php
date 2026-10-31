@@ -36,7 +36,7 @@ $visit=function(array $row) use (&$visit,&$rows): void { $rows[]=$row; foreach (
 foreach ($schema as $group) foreach ($group as $row) $visit($row);
 foreach ($rows as $row) matrix_ok(is_file(dirname(__DIR__).'/'.explode('?',$row['route'])[0]),'Missing row route '.$row['route']);
 $adminRows=array_filter($rows,fn($r)=>$r['admin_only']);
-matrix_ok(count($adminRows)===55,'Admin-only sidebar inventory changed');
+matrix_ok(count($adminRows)===54,'Admin-only sidebar inventory changed');
 foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row invented permissions');
 $codes=[]; foreach ($rows as $row) foreach ($row['actions'] as $action) $codes[]=$action['permission'];
 matrix_ok(in_array('records.pallet.create',$codes,true),'Pallet create editor control absent');

@@ -84,5 +84,21 @@
     .qc-rows { grid-template-columns: 1fr 1fr; }
     .qc-hero { padding: 26px; }
 }
+@media (max-width: 767px) {
+    .qc-form { gap: 14px; }
+    .qc-hero { padding: 16px 14px; }
+    .qc-row { padding: 12px; }
+    .qc-row-head { margin-bottom: 10px; }
+    .qc-row .qc-hint { margin-top: 6px; }
+    .qc-form input, .qc-form select, .qc-form textarea, .qc-row { scroll-margin-bottom: calc(var(--bn-h, 0px) + env(safe-area-inset-bottom, 0px) + 96px); }
+    /* Kaydet çubuğu: ~100px → ~64px; açıklama yalnız kayıt kullanılamıyorsa görünür. */
+    .qc-save-bar { padding: 8px; }
+    .qc-save-bar .btn { min-height: 48px; }
+    .qc-save-bar[data-ready="1"] small { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+    /* Klavye açıkken (alan odakta) çubuk akışa döner; ekranı yemez. */
+    .qc-kbd .qc-save-bar { position: static; }
+}
+.qc-read-note, .qc-unit-note { font-weight: 500; color: var(--text); background: var(--surface-2); border-left: 3px solid var(--primary); border-radius: 6px; padding: 6px 9px; line-height: 1.45; }
+.qc-unit-note { margin: 10px 0 0; }
 @media (max-width: 359px) { .qc-panel { padding: 14px; } .qc-breakdown dl > div { flex-wrap: wrap; gap: 6px; } }
 @media print { .qc-save-bar, .qc-text-button, .qc-row-settings summary { display: none !important; } .qc-hero { break-inside: avoid; } .qc-row { break-inside: avoid; } }

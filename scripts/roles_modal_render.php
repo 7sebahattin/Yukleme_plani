@@ -41,7 +41,7 @@ function render_header(string $t, bool $p=false): void {
 }
 function render_footer(bool $p=false): void { echo "</main></body></html>"; }
 
-// GERÇEK yetki kataloğu + korumalı roller (auth.php'den al — 51 yetkinin
+// GERÇEK yetki kataloğu + korumalı roller (auth.php'den al — 54 yetkinin
 // tamamı basılmalı ki gerçek yükseklik ölçülsün)
 $asrc = str_replace("\r\n", "\n", file_get_contents($ROOT . '/config/auth.php'));
 require_once $ROOT . '/config/beyan_permissions.php';

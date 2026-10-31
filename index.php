@@ -159,7 +159,7 @@ if (is_admin()) {
 // için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
 $_ops_show  = is_admin() || can('records.read') || can('records.write') || can('beyan.read')
     || can('kantar.read') || can('reports.read') || can('stok.read') || can('hesap.read')
-    || nav_ptak_gorunur() || can_siparis('read') || can_mail('read');
+    || nav_ptak_gorunur() || can_hizli_maliyet('read') || can_siparis('read') || can_mail('read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -334,7 +334,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
-<?php if (is_admin()): ?>
+<?php if (can_hizli_maliyet('read')): ?>
     <a href="hizli_maliyet.php" class="home-card">
         <div class="home-card-icon" style="background:transparent"><img src="assets/nav-icons/qcost.svg?v=<?= (int)@filemtime(__DIR__ . '/assets/nav-icons/qcost.svg') ?>" width="64" height="64" alt="" aria-hidden="true"></div>
         <div class="home-card-title">Hızlı Maliyet</div>

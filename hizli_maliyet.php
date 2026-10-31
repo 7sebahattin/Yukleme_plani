@@ -7,8 +7,7 @@ require_once __DIR__ . '/config/quick_cost_store.php';
 require_once __DIR__ . '/config/quick_cost_schema.php';
 
 $auth_user = require_login();
-if (!is_admin()) forbidden('Hızlı Maliyet şu anda yalnız sistem yöneticisine açık.');
-require_maliyet('read');
+require_hizli_maliyet('read');   // liste/aç = read (yönetici her zaman geçer; maliyet.* izni AÇMAZ)
 header('Cache-Control: no-store, private');
 header('X-Content-Type-Options: nosniff');
 
@@ -34,8 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === '' && array_key_exists(
     exit;
 }
 
-$can_write = can_maliyet('write');
-$can_delete = $can_write && can_maliyet('delete');
+$can_write = can_hizli_maliyet('write');
+$can_delete = can_hizli_maliyet('delete');
+$is_admin_user = is_admin(); // tek seferlik tablo kurulumu yalnız yöneticide
 $storage_ready = false;
 $errors = [];
 $list = ['items' => [], 'total' => 0, 'page' => 1, 'pages' => 1];
@@ -43,8 +43,9 @@ $query = is_string($_GET['q'] ?? null) ? mb_substr(trim($_GET['q']), 0, 150) : '
 $page = max(1, min(100000, (int)(is_scalar($_GET['page'] ?? 1) ? ($_GET['page'] ?? 1) : 1)));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_maliyet('write');
-    if ($action === 'delete') require_maliyet('delete');
+    if ($action === 'delete') require_hizli_maliyet('delete');
+    elseif ($action === 'install_schema') { if (!is_admin()) forbidden('Hızlı Maliyet tablosunu yalnız sistem yöneticisi kurabilir.'); }
+    else require_hizli_maliyet('write');
     csrf_check(is_string($_POST['csrf'] ?? null) ? $_POST['csrf'] : null);
 }
 
@@ -102,7 +103,10 @@ render_flash();
         <?php if ($can_write): ?><div class="page-head-actions"><a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
     </div>
     <?php if ($errors): ?><div class="qc-error" role="alert"><ul><?php foreach ($errors as $error): ?><li><?= h($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
-    <?php if (!$storage_ready && $can_write): ?>
+    <?php if (!$storage_ready && !$is_admin_user): ?>
+    <p class="qc-error" role="status">Hızlı Maliyet kayıt altyapısı henüz kurulmadı. Kurulum sistem yöneticisinden beklenir.</p>
+    <?php endif; ?>
+    <?php if (!$storage_ready && $is_admin_user): ?>
     <section class="qc-panel" aria-labelledby="qc-install-heading">
         <h2 id="qc-install-heading">Hızlı Maliyet kayıt altyapısı</h2>
         <p>Kaydetmeyi açmak için yalnız yeni Hızlı Maliyet tablosu oluşturulur. Mevcut maliyet kayıtları korunur.</p>
@@ -123,7 +127,7 @@ render_flash();
             <article class="qc-record">
                 <a href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a>
                 <span><?= h($row['sheet_date']) ?></span>
-                <span><?= number_format((float)$row['net_kg'], 4, ',', '.') ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 2, ',', '.') ?> TL/kg</span>
+                <span><?= h(rtrim(rtrim(number_format((float)$row['net_kg'], 4, ',', '.'), '0'), ',')) ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 4, ',', '.') ?> TL/kg</span>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
                     <a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
                     <?php if ($can_write): ?><a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>

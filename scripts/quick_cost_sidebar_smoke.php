@@ -14,6 +14,11 @@ function is_admin(): bool { return $GLOBALS['admin']; }
 function can_mail(string $permission): bool { return false; }
 function can_siparis(string $permission): bool { return false; }
 function nav_ptak_gorunur(): bool { return false; }
+// GERÇEK can_hizli_maliyet() (config/helpers.php) kaynaktan alınır; kapı kopyası yok.
+$gateStart = strpos($source, 'function can_hizli_maliyet(string $perm): bool {');
+$gateEnd = strpos($source, '/**', $gateStart);
+if ($gateStart === false || $gateEnd === false) throw new RuntimeException('can_hizli_maliyet source not found.');
+eval(substr($source, $gateStart, $gateEnd - $gateStart));
 function nav_ptak_sayfalari(): array { return []; }
 function nav_muhasebe_gruplari(): array { return []; }
 function nav_rozet_html(int $count, bool $short): string { return ''; }
@@ -66,11 +71,31 @@ foreach (['reports.php','maliyet.php','maliyet_form.php','maliyet_view.php'] as 
 $permissions = [];
 [$html] = sidebar('hizli_maliyet.php');
 qc_sidebar_check(str_contains($html, 'href="/app/hizli_maliyet.php"'), 'admin link independent of reports permission');
-$admin = false; $permissions = ['reports.read','maliyet.read','maliyet.write'];
+// Eski maliyet.* izinleri Hızlı Maliyet'i AÇMAZ (operator/muhasebe kendiliğinden görmez).
+$admin = false; $permissions = ['reports.read','maliyet.read','maliyet.write','maliyet.delete','maliyet.admin'];
 [$html, $xp] = sidebar('reports.php');
-qc_sidebar_check(!str_contains($html, 'hizli_maliyet.php') && !str_contains($html, 'Hızlı Maliyet'), 'cost reader/writer without admin cannot see link');
-qc_sidebar_check(nav_alt_izinler()['qcost'] === false, 'non-admin cannot gain a mobile item from a forged ordering cookie');
+qc_sidebar_check(!str_contains($html, 'hizli_maliyet.php') && !str_contains($html, 'Hızlı Maliyet'), 'legacy maliyet.* user without hizli_maliyet.* cannot see link');
+qc_sidebar_check(nav_alt_izinler()['qcost'] === false, 'legacy maliyet.* user gains no mobile item');
 qc_sidebar_check($xp->query('//a[@href="/app/reports.php"]')->length === 1, 'non-admin reports access preserved');
+// Yetki matrisi: yalnız read / read+write / read+write+delete / yalnız write (okumasız) / hiçbiri.
+foreach ([
+    [['hizli_maliyet.read'], true, true, false, false],
+    [['hizli_maliyet.read', 'hizli_maliyet.write'], true, true, true, false],
+    [['hizli_maliyet.read', 'hizli_maliyet.write', 'hizli_maliyet.delete'], true, true, true, true],
+    [['hizli_maliyet.read', 'hizli_maliyet.delete'], true, true, false, true],
+    [['hizli_maliyet.write', 'hizli_maliyet.delete'], false, false, false, false],
+    [[], false, false, false, false],
+] as [$perms, $seeLink, $mobile, $write, $delete]) {
+    $permissions = $perms;
+    $label = json_encode($perms);
+    [$html, $xp] = sidebar('hizli_maliyet.php');
+    qc_sidebar_check(str_contains($html, 'href="/app/hizli_maliyet.php"') === $seeLink, 'sidebar link ' . $label);
+    qc_sidebar_check(($xp->query('//a[@href="/app/hizli_maliyet.php" and contains(@class," active")]')->length === 1) === $seeLink, 'active link ' . $label);
+    qc_sidebar_check(nav_alt_izinler()['qcost'] === $mobile, 'mobile gate ' . $label);
+    qc_sidebar_check(can_hizli_maliyet('read') === $seeLink && can_hizli_maliyet('write') === $write && can_hizli_maliyet('delete') === $delete, 'gate matrix ' . $label);
+}
+$admin = true; $permissions = [];
+qc_sidebar_check(can_hizli_maliyet('read') && can_hizli_maliyet('write') && can_hizli_maliyet('delete') && !can_hizli_maliyet('unknown'), 'admin passes without any hizli_maliyet row');
 qc_sidebar_check(str_contains(file_get_contents(dirname(__DIR__) . '/sw.js'), 'yukleme-plani-' . APP_SURUM), 'PWA and app versions match');
 $sw = file_get_contents(dirname(__DIR__) . '/sw.js');
 qc_sidebar_check(str_contains($sw, '/\\/hizli_maliyet(?:_form)?\\.php(\\/|$)/'), 'list/form and PATH_INFO bypass share an anchored SW rule');
