@@ -558,6 +558,21 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
         return $karisikEngel;
     }
 
+    // v463 — RAMPACI YEVMİYE guard'ı (savunma): yevmiyeli dönem (yevmiye_adedi > 0) YALNIZ Faz 8B motoruyla
+    // fiyatlanır (yevmiye × Tam tarife). Bu eski COUNT-tabanlı motor yevmiyeyi bilmez; yevmiyeli dönem varken
+    // hesap REDDEDİLİR. `function_exists()`'e GÜVENİLMEZ (pdks_faz8b.php yüklü olmayabilir): kolon doğrudan
+    // sorgulanır; kolon yoksa (PDOException) yevmiyeli dönem de yoktur.
+    try {
+        $stYev = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND yevmiye_adedi IS NOT NULL AND yevmiye_adedi > 0");
+        $stYev->execute([$sessionId]);
+        if ((int)$stYev->fetchColumn() > 0) {
+            return ['ok' => false, 'kod' => 'yevmiye_faz8b_gerekli',
+                     'hata' => 'Bu mesaide yevmiyeli (Rampacı) kayıt var. Hakediş yalnız Faz 8B motoruyla hesaplanabilir.'];
+        }
+    } catch (PDOException $e) {
+        // yevmiye_adedi kolonu kurulmamış → yevmiyeli dönem yok.
+    }
+
     // ⚠ FAZ 8A MALİ GÜVENLİK KAPISI (görev talimatı §23 — "Do NOT allow the
     // old Phase 4 entitlement engine to silently produce financially
     // incorrect results from NEW Phase 8A Tam/Yarım periods"): bu oturumun

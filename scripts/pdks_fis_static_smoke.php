@@ -112,6 +112,10 @@ $fisler = [
     fixture('hata', 6, ['hatalar' => ['Satır 6, «Erkek Tam»: "12 + 1" tek sayı değil'], 'cavus' => ['id' => null, 'kod' => $XSS, 'ad' => '<img src=x onerror=alert(1)>', 'yontem' => null]]),
     fixture('zaten', 7),
     fixture('devam', 8, ['kontrol' => $XSS, 'ham' => '"><svg onload=alert(2)>']),
+    fixture('hazir', 10, ['plan' => ['gruplar' => [
+        ['kod' => 'RAMPACI', 'tip_ad' => 'Rampacı', 'profil' => 'yevmiye', 'yevmiye' => 2, 'fm_saat' => 0, 'adet' => 2, 'entry_clock' => '08:00', 'exit_date' => '2026-10-21', 'exit_clock' => '17:00'],
+        ['kod' => 'RAMPACI', 'tip_ad' => 'Rampacı', 'profil' => 'yevmiye', 'yevmiye' => 1, 'fm_saat' => 0, 'adet' => 1, 'entry_clock' => '08:00', 'exit_date' => '2026-10-21', 'exit_clock' => '17:00']],
+        'fm' => ['mod' => 'yok', 'tip_dagilim' => [], 'notr' => null, 'aciklama' => '']]]),
     fixture('hazir', 9, ['plan' => ['gruplar' => [['kod' => 'ERKEK', 'tip_ad' => 'Erkek', 'profil' => 'fm', 'fm_saat' => 2, 'adet' => 5, 'entry_clock' => '08:00', 'exit_date' => '2026-10-21', 'exit_clock' => '01:00']],
         'fm' => ['mod' => 'toplam', 'tip_dagilim' => ['ERKEK' => [2 => 5]], 'notr' => true, 'aciklama' => '10 sa → 5 kişi: 5×2 sa']]]),
 ];
@@ -123,6 +127,7 @@ $model = [
 ];
 ob_start(); include $ROOT . '/_fis_onizle.php'; $html = (string)ob_get_clean();
 ok('3) önizleme render edildi (boş değil, #fisYukle kapsayıcı)', strlen($html) > 2000 && str_contains($html, 'id="fisYukle"'), (string)strlen($html));
+ok('3) v463: yevmiyeli Rampacı grupları «Rampacı · 2 yevmiye · 2 kişi» + özet «Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)»', str_contains($html, 'Rampacı · 2 yevmiye · 2 kişi') && str_contains($html, 'Rampacı · 1 yevmiye · 1 kişi') && str_contains($html, 'Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)'));
 ok('3) tüm rozet sınıfları: hazır/uyarı/engel/hata/zaten/devam', (bool)preg_match('/fy-b-hazir.*fy-b-uyari.*fy-b-engel.*fy-b-hata.*fy-b-zaten.*fy-b-devam/s', $html));
 ok('3) onay_yarim ve onay_fm varsayılan CHECKED; ek_yaz ve isletme_onay işaretsiz', (bool)preg_match('/name="onay_yarim" value="1" checked/', $html) && (bool)preg_match('/name="onay_fm" value="1" checked/', $html) && (bool)preg_match('/name="ek_yaz" value="1" >/', $html) && (bool)preg_match('/name="isletme_onay" value="1" >/', $html));
 ok('3) gizli alanlar: csrf (kaçışlı), eylem=yaz, token', str_contains($html, 'name="csrf" value="CSRF&quot;TOKEN"') && str_contains($html, 'name="eylem" value="yaz"') && str_contains($html, 'name="token" value="' . str_repeat('a', 32) . '"'));
@@ -138,7 +143,7 @@ foreach ([2, 3, 8, 9] as $s) {
 foreach ([4, 5] as $s) { $k = $kutu($html, 'secilen[]', $s); ok("3) satır $s (engel/onay): işaretsiz AMA etkinleştirilebilir", $k !== '' && !preg_match('/\schecked\b/', $k) && !preg_match('/\sdisabled\b/', $k), $k); }
 foreach ([6, 7] as $s) { $k = $kutu($html, 'secilen[]', $s); ok("3) satır $s (hata/zaten): disabled", $k !== '' && (bool)preg_match('/\sdisabled\b/', $k), $k); }
 foreach ([2, 6] as $s) { $k = $kutu($html, 'secilen_m[]', $s); ok("3) satır $s: mobil kart kutusu da aynı durumda", $k !== '' && ((bool)preg_match('/\sdisabled\b/', $k)) === ($s === 6), $k); }
-ok('3) mobil kart kutuları (secilen_m[]) aynı veri için de var', say_alt($html, 'name="secilen_m[]"') === 8 && say_alt($html, 'name="secilen[]"') === 8);
+ok('3) mobil kart kutuları (secilen_m[]) aynı veri için de var', say_alt($html, 'name="secilen_m[]"') === 9 && say_alt($html, 'name="secilen[]"') === 9);
 ok('3) .table-wrap.pc-only tablo + .mobile-only kartlar', str_contains($html, 'class="table-wrap pc-only"') && str_contains($html, 'class="mobile-only fy-kartlar"'));
 ok('3) gece taşması çıkışı "(+1 gün)" gösterilir', str_contains($html, '08:00→01:00 (+1 gün)') || str_contains($html, '08:00→01:00') && str_contains($html, '(+1 gün)'));
 ok('3) FM bölümü: toplam dağıtımı + "Ücret nötr ✓" rozeti', str_contains($html, 'Toplam saat → dağıtım') && str_contains($html, 'Ücret nötr ✓') && str_contains($html, '5×2 sa'));

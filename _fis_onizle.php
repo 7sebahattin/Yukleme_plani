@@ -58,7 +58,7 @@ $fy_grup = static function (array $g, string $tarih): string {
                 </td>
                 <td>
                     <?php if ($y): ?>
-                        <?= (int)$y['kisi'] ?> kişi<?= (int)$y['fm_onayli'] > 0 ? ' · ' . (int)$y['fm_onayli'] . ' FM (' . (int)$y['fm_saat'] . ' sa) onaylı' : '' ?><?= (int)$y['yarim'] > 0 ? ' · ' . (int)$y['yarim'] . ' yarım' : '' ?>
+                        <?= (int)$y['kisi'] ?> kişi<?= (int)($y['yevmiye'] ?? 0) > 0 ? ' · ' . (int)$y['yevmiye'] . ' yevmiye' : '' ?><?= (int)$y['fm_onayli'] > 0 ? ' · ' . (int)$y['fm_onayli'] . ' FM (' . (int)$y['fm_saat'] . ' sa) onaylı' : '' ?><?= (int)$y['yarim'] > 0 ? ' · ' . (int)$y['yarim'] . ' yarım' : '' ?>
                         <?php if ((int)$y['servis']['buyuk'] + (int)$y['servis']['kucuk'] > 0): ?><br>Servis: <?= (int)$y['servis']['buyuk'] ?> büyük · <?= (int)$y['servis']['kucuk'] ?> küçük<?php endif; ?>
                     <?php else: ?>—<?php endif; ?>
                 </td>
@@ -106,8 +106,14 @@ $fy_grup = static function (array $g, string $tarih): string {
         $fy_gruplar = static function (array $m) use ($fy_grup): string {
             if (empty($m['plan']['gruplar'])) return '—';
             $o = [];
-            foreach ($m['plan']['gruplar'] as $g) $o[] = '<li>' . $fy_grup($g, (string)$m['tarih']) . '</li>';
-            return '<ul class="fy-grup">' . implode('', $o) . '</ul>';
+            $yv = []; $yvTop = 0; $yvKisi = 0;
+            foreach ($m['plan']['gruplar'] as $g) {
+                $o[] = '<li>' . $fy_grup($g, (string)$m['tarih']) . '</li>';
+                if (($g['profil'] ?? '') === 'yevmiye') { $yv[] = (int)$g['adet'] . '×' . (int)$g['yevmiye']; $yvTop += (int)$g['adet'] * (int)$g['yevmiye']; $yvKisi += (int)$g['adet']; }
+            }
+            // v463: yevmiyeli Rampacı özeti — «Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)»
+            $ek = $yv ? '<small class="fy-yevmiye">Rampacı: ' . $yvKisi . ' kişi · ' . $yvTop . ' yevmiye (' . h(implode(' + ', $yv)) . ')</small>' : '';
+            return '<ul class="fy-grup">' . implode('', $o) . '</ul>' . $ek;
         };
         $fy_fm = static function (array $m): string {
             $f = $m['plan']['fm'] ?? null;

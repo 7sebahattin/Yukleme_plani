@@ -141,6 +141,9 @@ function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int
         if(!$sr) throw new RuntimeException('Mesai bulunamadı.');
         if($e=pdks_faz8j_tanim_kart_engeli($pdo,$card,(int)$sr['foreman_id'],(string)$sr['depo'])) throw new RuntimeException($e);
     } elseif($exit===null && pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesai kaydında çıkış zamanı zorunludur.');
+    // v463: yevmiyeli Rampacı kaydının TİPİ değiştirilemez (ödeme yevmiye × Tam tarife; tip değişince anlamı bozulur).
+    // Saat düzeltmesi serbesttir (hesabı etkilemez).
+    if((int)($p['yevmiye_adedi']??0)>0 && $type!==(int)$p['worker_type_id_snapshot']) throw new RuntimeException('Yevmiyeli Rampacı kaydının tipi değiştirilemez; kaydı iptal edip yeniden ekleyin.');
     if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI/SERITCI\'ya yeniden atanarak düzeltilebilir.');
     $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
     $ov->execute([$card,$pid,$exit,$entry]); if($ov->fetchColumn()) throw new RuntimeException('Seçilen kartın çakışan aktif bir çalışma dönemi var.');
@@ -421,6 +424,8 @@ function pdks_faz8j_oturum_coz(PDO $pdo, int $foremanId, string $workDate, strin
  */
 function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, array $satir, ?array $hedef = null, array $secenek = []): ?string {
     $entry = (string)$satir['entry']; $exit = $satir['exit'] ?? null;
+    // v463: yevmiyeli satır YALNIZ kartsız olabilir (kartlı kiosk/kart akışı yevmiye bilmez).
+    if (!empty($satir['yevmiye']) && empty($satir['kartsiz'])) return 'Yevmiyeli kayıt yalnız kartsız yazılabilir.';
     if (!empty($satir['kartsiz'])) {
         return $exit === null ? 'Kartsız mesaide çıkış tarihi ve saati zorunludur.' : null;
     }
@@ -522,8 +527,18 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     $cikisEv = null;
     if ($exit !== null) { $insE->execute($evPar('CIKIS', $exit)); $cikisEv = (int)$pdo->lastInsertId(); }
     $status = $exit !== null ? 'closed' : 'open';
-    $pdo->prepare("INSERT INTO daily_worker_work_periods (session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot, entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class, work_date_snapshot, depo_snapshot, status, source) VALUES (?,?,?,?,?,?,?,?,'auto',?,?,?,?)")
-        ->execute([$sid, $card, $type, $typeName, $girisEv, $cikisEv, $entry, $exit, $workDate, $depo, $status, $kaynak]);
+    // v463: yevmiyeli satır (yalnız Fiş Excel, kod yolu) → dönem INSERT'ü TEK yerde kalır (dinamik kolon listesi); kolon yoksa eski SQL aynen.
+    // Yevmiye istenip kolon yoksa YAZILMAZ (fail-closed): sessizce yevmiyesiz Tam kaydı oluşmaz.
+    $yevmiye = (int)($satir['yevmiye'] ?? 0);
+    $kolonlar = 'session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot, entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class, work_date_snapshot, depo_snapshot, status, source';
+    $isaret = "?,?,?,?,?,?,?,?,'auto',?,?,?,?";
+    $deger = [$sid, $card, $type, $typeName, $girisEv, $cikisEv, $entry, $exit, $workDate, $depo, $status, $kaynak];
+    if ($yevmiye > 0) {
+        if (!function_exists('pdks_yevmiye_hazir') || !pdks_yevmiye_hazir($pdo)) throw new RuntimeException('Rampacı yevmiye alanı kurulmamış (migrate.php › «Rampacı yevmiye alanı») — hiçbir şey yazılmadı.');
+        if ($yevmiye > PDKS_YEVMIYE_UST) throw new RuntimeException('Yevmiye adedi en çok ' . PDKS_YEVMIYE_UST . ' olabilir — hiçbir şey yazılmadı.');
+        $kolonlar .= ', yevmiye_adedi'; $isaret .= ',?'; $deger[] = $yevmiye;
+    }
+    $pdo->prepare("INSERT INTO daily_worker_work_periods ($kolonlar) VALUES ($isaret)")->execute($deger);
     $pid = (int)$pdo->lastInsertId();
     $kayit = [
         'session_id' => $sid, 'period_id' => $pid, 'worker_card_id' => $card, 'card_no' => (string)$kart['card_no'],
@@ -536,6 +551,7 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     if (!empty($meta['toplu_id'])) $kayit['toplu_id'] = (string)$meta['toplu_id'];
     if (!empty($meta['istek_id'])) $kayit['istek_id'] = (string)$meta['istek_id'];
     if ($kaynak !== 'manual') $kayit['kaynak'] = $kaynak;
+    if ($yevmiye > 0) $kayit['yevmiye'] = $yevmiye;
     pdks_faz8j_audit($pdo, $user, (string)($meta['audit_action'] ?? 'puantaj_ekle'), $pid, [], $kayit);
     return $pid;
 }
@@ -680,6 +696,21 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
         if (!$tip) $grupHata = 'İşçi tipi bulunamadı, pasif veya desteklenmiyor (yalnız KADIN/ERKEK/RAMPACI/SERITCI).';
         elseif (!$coklu && isset($tipGoruldu[(int)$tip['id']])) $grupHata = 'Aynı işçi tipi için birden fazla grup girilemez.';
         if ($tip) $tipGoruldu[(int)$tip['id']] = true;
+        // v463 — RAMPACI YEVMİYE (opt-in, YALNIZ kod: `coklu_grup` açıkken; HTTP ucu `yevmiye` anahtarını GEÇİRMEZ).
+        // Yevmiyeli grup: yalnız RAMPACI, yalnız kartsız, adet 1..PDKS_YEVMIYE_UST, kolon kuruluysa (fail-closed).
+        $yevmiye = 0;
+        if ($coklu && isset($g['yevmiye']) && (int)$m($g['yevmiye']) !== 0) {
+            $yevmiye = (int)$m($g['yevmiye']);
+            if ($grupHata === null) {
+                if (!$tip || (string)($tip['code'] ?? '') !== 'RAMPACI' || !function_exists('pdks_yevmiye_hazir') || !pdks_yevmiye_hazir($pdo)) {
+                    $grupHata = 'Yevmiye yalnız Rampacı grubunda ve kolon kuruluysa girilir (migrate.php › «Rampacı yevmiye alanı»).';
+                } elseif ($yevmiye < 1 || $yevmiye > PDKS_YEVMIYE_UST) {
+                    $grupHata = 'Yevmiye adedi 1–' . PDKS_YEVMIYE_UST . ' arasında olmalı.';
+                } elseif (count(is_array($g['kart_ids'] ?? null) ? $g['kart_ids'] : []) > 0) {
+                    $grupHata = 'Yevmiyeli grup yalnız kartsız olabilir.';
+                }
+            }
+        }
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
         $cikis = pdks_faz8j_cikis_zamani($g);
         $exit = $cikis['ok'] ? $cikis['exit'] : null;
@@ -706,11 +737,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
             }
             $grupKart[$k] = true; $kartGoruldu[$k] = true;
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => false, 'kart_id' => $k, 'kart' => $kart, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye];
         }
         for ($n = 0; $n < $kartsizAdet; $n++) {
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => true, 'kart_id' => 0, 'kart' => null, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye];
         }
     }
     $h['hatalar'] = array_values(array_unique($h['hatalar']));

@@ -297,6 +297,48 @@ ok('12) FM Tipi izinli tipte Tam kişi yok → hata', !$p['ok'], j($p['hatalar']
 $p = pdks_fis_plan(F(['ERKEK' => [3, 0]]), ['tipler' => ['KADIN' => bg()['tipler']['KADIN']], 'fm_tip_secenegi' => 'tumu']);
 ok('12) bağlamda tip yok + adet>0 → hata', !$p['ok'] && hatalarda($p, 'tip'), j($p['hatalar']));
 
+echo "\n=== 12b. v463 Rampacı yevmiye (pdks_fis_rampaci_dagit + plan) ===\n";
+// Saf dağıtım tablosu: M yevmiye, N kişi → M div N, kalan +1 (yevmiye azalan sıralı)
+foreach ([[3, 3, [[1, 3]]], [3, 5, [[2, 2], [1, 1]]], [1, 1, [[1, 1]]], [2, 7, [[4, 1], [3, 1]]], [4, 8, [[2, 4]]], [5, 6, [[2, 1], [1, 4]]], [10, 10, [[1, 10]]], [1, 10, [[10, 1]]]] as [$n, $m, $bek]) {
+    $d = pdks_fis_rampaci_dagit($n, $m);
+    ok("12b) rampaci_dagit N=$n M=$m → " . j($bek), $d['ok'] === true && array_map(fn($g) => [$g['yevmiye'], $g['adet']], $d['gruplar']) === $bek && array_sum(array_map(fn($g) => $g['yevmiye'] * $g['adet'], $d['gruplar'])) === $m && array_sum(array_column($d['gruplar'], 'adet')) === $n, j($d));
+}
+foreach ([[0, 0, 'en az 1'], [0, 3, 'en az 1'], [3, 2, 'az olamaz'], [1, 11, 'OCR hatası şüphesi'], [2, 21, 'OCR hatası şüphesi'], [3, 31, 'OCR hatası şüphesi']] as [$n, $m, $parca]) {
+    $d = pdks_fis_rampaci_dagit($n, $m);
+    ok("12b) rampaci_dagit N=$n M=$m → HATA ($parca)", $d['ok'] === false && str_contains((string)$d['hata'], $parca) && $d['gruplar'] === [], j($d));
+}
+$d = pdks_fis_rampaci_dagit(2, 20); $d2 = pdks_fis_rampaci_dagit(2, 21);
+ok('12b) sınır: tek kişiye 10 yevmiye KABUL, 11 RED', $d['ok'] === true && $d2['ok'] === false, j([$d, $d2]));
+// Plan: yevmiyeli Rampacı → yevmiye grupları; FM havuzuna girmez; Tam/Yarım değildir
+function FY(int $kisi, int $yev, array $o = [], array $say = []): array {
+    $f = F($say, $o);
+    $f['say']['RAMPACI'] = ['tam' => 0, 'yarim' => 0, 'kisi' => $kisi, 'yevmiye' => $yev];
+    return $f;
+}
+$py = pdks_fis_plan(FY(3, 5), bg(['yevmiye_hazir' => true]));
+ok('12b) 3 kişi 5 yevmiye → 2 grup: RAMPACI yevmiye(2)×2 + yevmiye(1)×1, kişi_toplam 3', $py['ok'] === true && array_map(fn($g) => $g['kod'] . ':' . $g['profil'] . ':' . $g['yevmiye'] . '×' . $g['adet'], $py['gruplar']) === ['RAMPACI:yevmiye:2×2', 'RAMPACI:yevmiye:1×1'] && $py['kisi_toplam'] === 3, j([$py['hatalar'], $py['gruplar']]));
+ok('12b) yevmiye grubu süresi = Tam süresi (540); etiket «Rampacı · 2 yevmiye»', $py['gruplar'][0]['sure_dk'] === 540 && pdks_fis_grup_etiketi($py['gruplar'][0]) === 'Rampacı · 2 yevmiye' && pdks_fis_grup_etiketi($py['gruplar'][1]) === 'Rampacı · 1 yevmiye', pdks_fis_grup_etiketi($py['gruplar'][0]));
+$py = pdks_fis_plan(FY(3, 3), bg(['yevmiye_hazir' => true]));
+ok('12b) 3 kişi 3 yevmiye → tek grup yevmiye(1)×3', $py['ok'] === true && count($py['gruplar']) === 1 && $py['gruplar'][0]['yevmiye'] === 1 && $py['gruplar'][0]['adet'] === 3, j($py['gruplar']));
+$py = pdks_fis_plan(FY(3, 5), bg());
+ok('12b) yevmiye_hazir YOK (kolon kurulmamış) → FAIL-CLOSED hata, grup yok', $py['ok'] === false && hatalarda($py, 'Rampacı yevmiye alanı kurulmadı') && $py['gruplar'] === [], j($py));
+$py = pdks_fis_plan(FY(3, 2), bg(['yevmiye_hazir' => true]));
+ok('12b) plan: yevmiye < kişi → HATA (normalize atlansa bile)', $py['ok'] === false && hatalarda($py, 'az olamaz'), j($py['hatalar']));
+// Diğer tipler kolon kurulmamışken etkilenmez
+$py = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [2, 1]]), bg());
+ok('12b) yevmiyesiz fiş kolon kurulmamışken NORMAL planlanır (Kadın/Erkek etkilenmez)', $py['ok'] === true, j($py['hatalar']));
+// FM: yevmiyeli Rampacı FM havuzuna GİRMEZ
+$py = pdks_fis_plan(FY(3, 5, ['fm_kova' => [2 => 2]], ['KADIN' => [4, 0], 'ERKEK' => [6, 0]]), bg(['yevmiye_hazir' => true]));
+ok('12b) FM havuzu yalnız Tam kişi: Rampacı yevmiyeler FM almaz (FM Kadın/Erkek\'te)', $py['ok'] === true && !array_filter($py['fm']['tip_dagilim'] ?? [], fn($d, $k) => $k === 'RAMPACI', ARRAY_FILTER_USE_BOTH) && count(array_filter($py['gruplar'], fn($g) => $g['kod'] === 'RAMPACI' && $g['profil'] !== 'yevmiye')) === 0, j([$py['hatalar'], G($py)]));
+$py = pdks_fis_plan(FY(3, 5, ['fm_kova' => [2 => 2], 'fm_tipi' => ['RAMPACI']]), bg(['yevmiye_hazir' => true]));
+ok('12b) FM Tipi=Rampacı ama Rampacı yalnız yevmiyeli → «Tam kişi yok» hatası (FM yevmiyeye verilmez)', $py['ok'] === false && hatalarda($py, 'Tam kişi yok'), j($py['hatalar']));
+// hash yevmiyeyi görür
+$h1 = pdks_fis_plan(FY(3, 5), bg(['yevmiye_hazir' => true]))['hash']; $h2 = pdks_fis_plan(FY(3, 6), bg(['yevmiye_hazir' => true]))['hash'];
+ok('12b) plan hash yevmiye değişimini görür (önizleme = yazma sigortası)', $h1 !== $h2 && $h1 === pdks_fis_plan(FY(3, 5), bg(['yevmiye_hazir' => true]))['hash'], "$h1 / $h2");
+// zamanlama: yevmiye grubu da giriş + Tam süresi
+$z = pdks_fis_zamanla(pdks_fis_plan(FY(3, 5), bg(['yevmiye_hazir' => true])), date('Y-m-d', strtotime('-3 day')), '08:00');
+ok('12b) zamanla: yevmiye grupları 08:00→17:00', $z['ok'] === true && $z['gruplar'][0]['exit_clock'] === '17:00', j($z['gruplar'][0]));
+
 echo "\n=== 13. Determinizm / hash ===\n";
 $f = F(['KADIN' => [8, 0], 'ERKEK' => [12, 0], 'RAMPACI' => [2, 1]], ['fm_toplam' => 25]);
 $h1 = pdks_fis_plan($f, bg())['hash'];
@@ -426,10 +468,10 @@ $r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'er
 ok('11c) normalize: Erkek "12+1" + Şeritçi Tam dolu → HATA (çift sayım)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'çift sayım')), j($r['fisler'][0]['hatalar']));
 $r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '12+1', 'seritci_yarim' => '2'])]]);
 ok('11c) normalize: Erkek "12+1" + Şeritçi YARIM → çakışma değil: Şeritçi 1 Tam + 2 Yarım', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 1, 'yarim' => 2], j($r['fisler'][0]));
-$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '10', 'erkek_yarim' => '1', 'seritci_tam' => '3', 'seritci_yarim' => '1', 'rampaci_tam' => '2', 'rampaci_yarim' => '1'])]]);
-ok('11c) normalize: Şeritçi Tam/Yarım sütunları + Rampacı (eski Tam/Yarım) okunur', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 3, 'yarim' => 1] && $r['fisler'][0]['say']['RAMPACI'] === ['tam' => 2, 'yarim' => 1] && $r['fisler'][0]['say']['ERKEK'] === ['tam' => 10, 'yarim' => 1], j($r['fisler'][0]['say']));
-$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'rampaci_tam' => '2+1'])]]);
-ok('11c) normalize: Rampacı "2+1" → HATA (Rampacı alanında + yorumu yok)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 4, «Rampacı Tam»:')), j($r['fisler'][0]['hatalar']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '10', 'erkek_yarim' => '1', 'seritci_tam' => '3', 'seritci_yarim' => '1', 'rampaci_kisi' => '3', 'rampaci_yevmiye' => '5'])]]);
+ok('11c) normalize: Şeritçi Tam/Yarım sütunları + Rampacı Kişi/Yevmiye (v463) okunur', $r['fisler'][0]['hatalar'] === [] && $r['fisler'][0]['say']['SERITCI'] === ['tam' => 3, 'yarim' => 1] && $r['fisler'][0]['say']['RAMPACI'] === ['tam' => 0, 'yarim' => 0, 'kisi' => 3, 'yevmiye' => 5] && $r['fisler'][0]['say']['ERKEK'] === ['tam' => 10, 'yarim' => 1], j($r['fisler'][0]['say']));
+$r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'rampaci_kisi' => '2+1', 'rampaci_yevmiye' => '3'])]]);
+ok('11c) normalize: Rampacı Kişi "2+1" → HATA (Rampacı alanında + yorumu yok)', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 4, «Rampacı Kişi»:')), j($r['fisler'][0]['hatalar']));
 $r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'seritci_tam' => '2+1'])]]);
 ok('11c) normalize: Şeritçi Tam "2+1" → HATA', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_starts_with($x, 'Satır 4, «Şeritçi Tam»:')), j($r['fisler'][0]['hatalar']));
 $r = nor([['satir' => 4, 'hucreler' => H(['fis_no' => 'B1', 'tarih' => $gec, 'erkek_tam' => '+2'])]]);
