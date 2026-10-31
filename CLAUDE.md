@@ -7,9 +7,11 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v474` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v475` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Rol matrisi (v465):** Roller ekranı sidebar sıralı sayfa/alt başlık satırları ve Gör/Ekle/Düzenle/Sil anahtarları kullanır. Yükleme/Paletleme ve OGL/Siparişler bağımsız; rapor türleri ayrı read/export kapılıdır. Eski roller rol başına genişletilir; ayrıntılı roller yalnız seçilen eylemleri alır. Veri kapsamı rol izinleri yanında seçili depo kodlarıyla saklanır, seçili rol sınırları ve kullanıcı depo atamaları kesişir; admin istisnası korunur. Beyan şirket genelinde, Mail hesap ataması, Hesap kendi/tümü kuralı sürer. Eski günlük snapshot arşivi seçili depo rolünde doğrulanamadığından kapalıdır. Şema/seed migration yok. Detay/test/sınırlar: `docs/ROLES_MATRIX_DELIVERY.md`. Kullanıcı 31 Ekimde bu somut teslimin merge ve canlı testini açıkça onayladı.
+
+**Hızlı Maliyet v2 — 4. düzeltme (v475, sahip isteği):** v2 formundaki "Grup toplamları" kartı ve "Diğer kalemler (hasat, DTS taksi, CASUS…)" açıklaması KALDIRILDI; grup dökümü yalnız sonuç kartındaki "Genişletilmiş sonuçlar"da. (v1 formunun `.qc-breakdown` kartı AYNEN.)
 
 **Hızlı Maliyet v2 — 3. düzeltme (v474, sahip isteği):** Sonuç kartı (`.qc2-hero`: TOPLAM OPERASYON MALİYETİ + ihracatlık net KG + verimlilik + KG maliyeti + Genişletilmiş sonuçlar) TÜMÜYLE Satış karşılaştırması'nın ALTINA taşındı (v473'teki ayrı `.qc2-total-card` kalktı). Satış para birimine **RUB (Ruble) ve GBP (Sterlin)** eklendi (kur elle). Yeni hesapta palet başına malzeme adetleri hazır: palet 1, şapka 1, köşebent 4, kasa 0, viyol 1, kenar kartonu 2, taban kağıdı 1, şerit 1, file 1 (`quick_cost_v2_material_defaults()`; fiyatlar 0, eski kayıtlara dokunulmaz).
 
