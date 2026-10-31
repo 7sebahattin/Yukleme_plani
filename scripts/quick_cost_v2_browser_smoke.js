@@ -74,11 +74,13 @@ function check(v, label) { assert.ok(v, label); checks++; }
             // v473: kaldırılan kalemler ve yeni adlar
             const bodyText = await page.locator('#qc-form').innerText();
             check(await page.locator('[data-qc2-row="sorting_labor"], [data-qc2-row="grading"], [data-qc2-row="loading"], [data-qc2-row="cold_storage"], [data-qc2-row="fason_service"], .qc2-fason').count() === 0, name + ' removed rows/section are gone');
-            check(await rowEl('factory_cost').locator('[data-qc2-title]').textContent() === 'Fabrika gideri' && await rowEl('packing_labor').count() === 1, name + ' Fabrika gideri + Paketleme işçiliği present');
+            check(await rowEl('overhead').locator('[data-qc2-title]').textContent() === 'İşletme gideri' && await rowEl('packing_labor').count() === 1 && await page.locator('[data-qc2-row="factory_cost"]').count() === 0, name + ' İşletme gideri + Paketleme işçiliği present, Fabrika gideri gone');
             check(/Çıkma KG/.test(bodyText) && /Suluk KG/.test(bodyText) && /Çöp KG/.test(bodyText) && !/İç piyasa|Sanayi \/ meyve|Kullanılamayan|Ayıklama|Boylama|Fason işleme/.test(bodyText), name + ' Çıkma/Suluk/Çöp names, no old names');
-            await page.locator('[data-qc2-set="operation_type"][data-value="uretim"]').click();
-            check(await outText('total') === '713.000,00', name + ' Fason/Üretim is only a label, total unchanged');
-            await page.locator('[data-qc2-set="operation_type"][data-value="fason"]').click();
+            check(await page.locator('[data-qc2-set="operation_type"]').count() === 0 && !/Fason|Üretim/.test(bodyText.replace(/Fason işleme/g, '')), name + ' Fason/Üretim control removed');
+            check(!/andıman/.test(bodyText) && /Verimlilik/.test(bodyText), name + ' Randıman renamed to Verimlilik');
+            check(await rowEl('packing_labor').locator('[data-qc2-item="basis_unit"]').inputValue() === 'raw_kg|kg', name + ' packing labor defaults to raw KG base');
+            const totalBox = await page.locator('.qc2-total-card').boundingBox(), saleBox = await page.locator('.qc2-sale').boundingBox(), heroBox = await page.locator('.qc2-hero').boundingBox();
+            check(totalBox && saleBox && totalBox.y >= saleBox.y + saleBox.height - 1 && totalBox.y > heroBox.y + heroBox.height && await page.locator('.qc2-hero [data-qc2-out="total"]').count() === 0, name + ' total card sits below Satış karşılaştırması');
 
             // Malzeme: Palet detayı düğmesi (Ayar'ın altında) + panel
             const matBtn = rowEl('material').locator('[data-qc2-mat-toggle]'), panel = page.locator('[data-qc2-matpanel]');
@@ -115,18 +117,18 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await panel.isHidden() && await matBtn.getAttribute('aria-expanded') === 'false', name + ' panel closes');
 
             // Taban değişimi: eski miktar taşınmaz
-            await rowEl('factory_cost').locator('summary').click();
-            await rowEl('factory_cost').locator('[data-qc2-item="basis_unit"]').selectOption('manual|pallet');
-            check(await rowEl('factory_cost').locator('[data-qc2-item="qty"]').inputValue() === '0' && await rowEl('factory_cost').locator('.qc-unit-note').count() === 1, name + ' basis change resets quantity with note');
-            await rowEl('factory_cost').locator('[data-qc2-item="qty"]').fill('26');
-            await rowEl('factory_cost').locator('[data-qc2-item="unit_price"]').fill('380'); await blur();
-            check(await rowEl('factory_cost').locator('[data-qc2-amount]').textContent() === '9.880,00 TL' && await outText('total') === '722.880,00', name + ' pallet row 26 × 380');
-            await rowEl('factory_cost').locator('[data-qc2-item="basis_unit"]').selectOption('manual|worker_day');
-            check(await rowEl('factory_cost').locator('[data-qc2-qty2-wrap]').isVisible() && await rowEl('factory_cost').locator('[data-qc2-item="unit_price"]').inputValue() === '0', name + ' worker × day shows second factor, price reset');
-            await rowEl('factory_cost').locator('[data-qc2-item="basis_unit"]').selectOption('fixed|fixed');
+            await rowEl('overhead').locator('summary').click();
+            await rowEl('overhead').locator('[data-qc2-item="basis_unit"]').selectOption('manual|pallet');
+            check(await rowEl('overhead').locator('[data-qc2-item="qty"]').inputValue() === '0' && await rowEl('overhead').locator('.qc-unit-note').count() === 1, name + ' basis change resets quantity with note');
+            await rowEl('overhead').locator('[data-qc2-item="qty"]').fill('26');
+            await rowEl('overhead').locator('[data-qc2-item="unit_price"]').fill('380'); await blur();
+            check(await rowEl('overhead').locator('[data-qc2-amount]').textContent() === '9.880,00 TL' && await outText('total') === '722.880,00', name + ' pallet row 26 × 380');
+            await rowEl('overhead').locator('[data-qc2-item="basis_unit"]').selectOption('manual|worker_day');
+            check(await rowEl('overhead').locator('[data-qc2-qty2-wrap]').isVisible() && await rowEl('overhead').locator('[data-qc2-item="unit_price"]').inputValue() === '0', name + ' worker × day shows second factor, price reset');
+            await rowEl('overhead').locator('[data-qc2-item="basis_unit"]').selectOption('fixed|fixed');
             await noOverflow('settings open');
 
-            // Randıman ters hesabı
+            // Verimlilik ters hesabı
             await page.locator('[data-qc2-set="yield_mode"][data-value="target"]').click();
             check(await field('target_yield').inputValue() === '80' && await outText('required_raw') === '25.000 KG', name + ' target mode prefilled from actual yield');
             await field('credit.domestic_sold_kg').fill('0');
@@ -161,13 +163,13 @@ function check(v, label) { assert.ok(v, label); checks++; }
             // İnceleme bulgusu 1: gizlenen geçersiz miktar alanı formu kilitlememeli.
             await load(pages.saved);
             await page.locator('[data-qc2-set="method"][data-value="detailed"]').click();
-            await rowEl('factory_cost').locator('summary').click();
-            await rowEl('factory_cost').locator('[data-qc2-item="basis_unit"]').selectOption('manual|pallet');
-            await rowEl('factory_cost').locator('[data-qc2-item="qty"]').fill('-1'); await blur();
+            await rowEl('overhead').locator('summary').click();
+            await rowEl('overhead').locator('[data-qc2-item="basis_unit"]').selectOption('manual|pallet');
+            await rowEl('overhead').locator('[data-qc2-item="qty"]').fill('-1'); await blur();
             check(await page.locator('#qc-save').isDisabled(), name + ' invalid manual quantity blocks save');
-            await rowEl('factory_cost').locator('[data-qc2-item="basis_unit"]').selectOption('fixed|fixed');
+            await rowEl('overhead').locator('[data-qc2-item="basis_unit"]').selectOption('fixed|fixed');
             check(!(await page.locator('#qc-save').isDisabled()) && await page.evaluate(() => document.getElementById('qc-form').checkValidity()), name + ' switching to fixed clears stale validity of hidden quantity');
-            // İnceleme bulgusu 2: hedef yöntemine geçişte yuvarlanan randıman sessizce ham KG'yi değiştirmemeli.
+            // İnceleme bulgusu 2: hedef yöntemine geçişte yuvarlanan verimlilik sessizce ham KG'yi değiştirmemeli.
             check(await page.locator('[data-qc2-yield-note]').isHidden(), name + ' no yield note initially');
             await page.locator('[data-qc2-set="yield_mode"][data-value="target"]').click();
             check(await page.locator('[data-qc2-yield-note]').isHidden(), name + ' exact %80 switch needs no rounding note');

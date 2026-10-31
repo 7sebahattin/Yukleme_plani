@@ -12,9 +12,8 @@
         raw_purchase: { label: 'Ham mal alış bedeli', group: 'raw', basis: 'raw_kg', unit: 'kg', quick: true },
         harvest: { label: 'Hasat / toplama', group: 'supply', basis: 'raw_kg', unit: 'kg', quick: false },
         field_transport: { label: 'Tarladan fabrikaya nakliye', group: 'supply', basis: 'fixed', unit: 'fixed', quick: true },
-        packing_labor: { label: 'Paketleme işçiliği', group: 'packing', basis: 'export_kg', unit: 'kg', quick: true },
+        packing_labor: { label: 'Paketleme işçiliği', group: 'packing', basis: 'raw_kg', unit: 'kg', quick: true },
         material: { label: 'Malzeme', group: 'material', basis: 'export_kg', unit: 'kg', quick: true, detail: true },
-        factory_cost: { label: 'Fabrika gideri', group: 'factory', basis: 'fixed', unit: 'fixed', quick: true },
         export_freight: { label: 'İhracat nakliyesi', group: 'export', basis: 'fixed', unit: 'fixed', quick: true },
         customs: { label: 'Gümrükleme', group: 'export', basis: 'fixed', unit: 'fixed', quick: true },
         official_analysis: { label: 'Resmi analiz', group: 'export', basis: 'fixed', unit: 'fixed', quick: true },
@@ -23,11 +22,11 @@
         overhead: { label: 'İşletme gideri', group: 'other', basis: 'export_kg', unit: 'kg', quick: true },
         casus: { label: 'CASUS', group: 'export', basis: 'fixed', unit: 'fixed', quick: false }
     };
-    var GROUPS = ['raw', 'supply', 'packing', 'material', 'factory', 'export', 'other'];
+    var GROUPS = ['raw', 'supply', 'packing', 'material', 'export', 'other'];
     var MAT_LINES = { mat_pallet: 'PALET', mat_hat: 'ŞAPKA', mat_corner: 'KÖŞEBENT', mat_crate: 'KASA', mat_divider: 'VİYOL',
         mat_edge: 'KENAR KARTONU', mat_base: 'TABAN KAĞIDI', mat_strap: 'ŞERİT', mat_net: 'FİLE' };
     var MAT_CUSTOM_MAX = 20, PER_PALLET_MAX_CENTS = 100000000;
-    var LEGACY_CODES = ['custom_eski_ayiklama', 'custom_eski_boylama', 'custom_eski_yukleme', 'custom_eski_soguk_hava', 'custom_eski_fason'];
+    var LEGACY_CODES = ['custom_eski_ayiklama', 'custom_eski_boylama', 'custom_eski_yukleme', 'custom_eski_soguk_hava', 'custom_eski_fason', 'custom_eski_fabrika'];
     function userCustomCount(items) { return items.filter(function (x) { return customCode(x.code) && LEGACY_CODES.indexOf(x.code) < 0; }).length; }
     var MAT_CUSTOM_CODE = /^mat_custom_[a-z0-9_]{1,30}$(?![\s\S])/;
     var UNITS = {
@@ -142,7 +141,7 @@
         if (dt.getUTCFullYear() !== +m[1] || dt.getUTCMonth() !== +m[2] - 1 || dt.getUTCDate() !== +m[3]) fail('Geçerli bir işlem tarihi girin.');
         if (['fason', 'uretim'].indexOf(input.operation_type) < 0) fail('İşlem türü Fason veya Üretim olmalı.');
         if (['quick', 'detailed'].indexOf(input.method) < 0) fail('Görünüm Hızlı veya Detaylı olmalı.');
-        if (['actual', 'target'].indexOf(input.yield_mode) < 0) fail('Randıman yöntemi geçersiz.');
+        if (['actual', 'target'].indexOf(input.yield_mode) < 0) fail('Verimlilik yöntemi geçersiz.');
         var q = input.quantities; if (!q || typeof q !== 'object') fail('Miktar bilgileri eksik.');
         var exp = parseNumber(q.export_kg, 'İhracatlık net KG'), dom = parseNumber(q.domestic_kg, 'Çıkma KG');
         var ind = parseNumber(q.industry_kg, 'Suluk KG'), waste = parseNumber(q.waste_kg, 'Çöp KG');
@@ -150,15 +149,15 @@
         if (procIn !== null && procIn <= 0) procIn = null;
         var exp4 = i4(exp), raw4, raw, ty = 0;
         if (input.yield_mode === 'target') {
-            ty = percent(input.target_yield, 'Tahmini randıman', true);
-            if (exp4 > 0 && ty <= 0) fail('Hedef hesap için tahmini randımanı (%) girin.');
+            ty = percent(input.target_yield, 'Tahmini verimlilik', true);
+            if (exp4 > 0 && ty <= 0) fail('Hedef hesap için tahmini verimliliği (%) girin.');
             var ty100 = Math.round(ty * 100);
             raw4 = exp4 > 0 ? intdiv(2 * exp4 * 10000 + ty100, 2 * ty100) : 0;
-            if (raw4 > NUMBER_MAX * 10000) fail('Gerekli ham mal KG 1.000.000 sınırını aşıyor; randımanı veya hedefi kontrol edin.');
+            if (raw4 > NUMBER_MAX * 10000) fail('Gerekli ham mal KG 1.000.000 sınırını aşıyor; verimliliği veya hedefi kontrol edin.');
             raw = raw4 / 10000;
         } else {
             raw = parseNumber(q.raw_kg, 'Ham mal KG'); raw4 = i4(raw);
-            if (input.target_yield) ty = percent(input.target_yield, 'Tahmini randıman', true);
+            if (input.target_yield) ty = percent(input.target_yield, 'Tahmini verimlilik', true);
         }
         var assumed = procIn === null, proc4 = assumed ? raw4 : i4(procIn);
         if (exp4 > raw4) fail("İhracatlık net KG, ham mal KG'den büyük olamaz.");
@@ -289,7 +288,7 @@
     }
     /** Yöntem değişince diğer yöntemin girdisi mevcut sonuçtan doldurulur; döngü yoktur. */
     function setYieldMode(doc, mode) {
-        if (mode !== 'actual' && mode !== 'target') fail('Randıman yöntemi geçersiz.');
+        if (mode !== 'actual' && mode !== 'target') fail('Verimlilik yöntemi geçersiz.');
         var next = clone(doc), result = null;
         if (next.yield_mode === mode) return next;
         try { result = calculate(doc); } catch (_) { result = null; }
@@ -380,7 +379,7 @@
             var error = '';
             try { latest = calculate(state); } catch (e) { latest = null; error = e.message; }
             var r = latest;
-            form.dataset.view = state.method; form.dataset.op = state.operation_type; form.dataset.yieldMode = state.yield_mode;
+            form.dataset.view = state.method; form.dataset.yieldMode = state.yield_mode;
             form.querySelectorAll('[data-qc2-set]').forEach(function (b) { b.setAttribute('aria-pressed', String(state[b.dataset.qc2Set] === b.dataset.value)); });
             out('total', r ? fmt(r.total, 2) : '—'); out('total_tl', r ? tl(r.total) : '—');
             out('export_kg', r ? fmtKg(r.quantities.export_kg) : '—');
@@ -452,14 +451,14 @@
             if (!note) { note = dom.createElement('small'); note.className = 'qc-read-note'; note.setAttribute('role', 'status'); host.appendChild(note); }
             note.textContent = t;
         }
-        // Randıman iki ondalığa yuvarlandığı için hedef yöntemine geçiş ham KG'yi değiştirebilir: sessiz kalma, söyle.
+        // Verimlilik iki ondalığa yuvarlandığı için hedef yöntemine geçiş ham KG'yi değiştirebilir: sessiz kalma, söyle.
         function yieldNote(onceki, mode) {
             var note = form.querySelector('[data-qc2-yield-note]'); if (!note) return;
             var t = '';
             if (onceki !== null && mode === 'target') {
                 var r = null; try { r = calculate(state); } catch (_) { r = null; }
                 if (!r || i4(r.derived.raw_kg) !== i4(onceki)) {
-                    t = 'Randıman %' + fmt(state.target_yield, 2) + ' olarak yuvarlandı; gerekli ham mal KG ' + fmtKg(onceki)
+                    t = 'Verimlilik %' + fmt(state.target_yield, 2) + ' olarak yuvarlandı; gerekli ham mal KG ' + fmtKg(onceki)
                         + (r ? ' yerine ' + fmtKg(r.derived.raw_kg) + ' oldu' : ' ile tutarlı hesaplanamadı') + '. Kesin ham KG için "Ham KG + ihracat KG" yöntemini kullanın.';
                 }
             }

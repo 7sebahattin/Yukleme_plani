@@ -118,9 +118,9 @@
 @media (max-width: 359px) { .qc-panel { padding: 14px; } .qc-breakdown dl > div { flex-wrap: wrap; gap: 6px; } }
 @media print { .qc-save-bar, .qc-text-button, .qc-row-settings summary { display: none !important; } .qc-hero { break-inside: avoid; } .qc-row { break-inside: avoid; } }
 
-/* ===== Hızlı Maliyet v2 (ham mal / randıman / ihracat) — yalnız form.qc2 kapsamı ===== */
-.qc2-hero .qc-hero-total strong { margin-bottom: 16px; }
-.qc2-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; border-top: 1px solid var(--border-strong); padding-top: 14px; }
+/* ===== Hızlı Maliyet v2 (ham mal / verimlilik / ihracat) — yalnız form.qc2 kapsamı ===== */
+.qc2-total-card .qc-hero-total strong { margin-bottom: 0; }
+.qc2-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .qc2-kpis strong { margin-top: 5px; font-size: clamp(1.1rem, 4.6vw, 1.6rem); }
 .qc2-kpis .qc2-kpi-main { grid-column: 1 / -1; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--primary); }
 .qc2-kpis .qc2-kpi-main strong { color: var(--primary); font-size: clamp(1.5rem, 7vw, 2.2rem); }

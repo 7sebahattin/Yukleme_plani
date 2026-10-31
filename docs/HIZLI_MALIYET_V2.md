@@ -1,4 +1,4 @@
-# Hızlı Maliyet v2 — Ham Mal, Randıman ve İhracat Maliyeti (v472 → v473)
+# Hızlı Maliyet v2 — Ham Mal, Verimlilik ve İhracat Maliyeti (v472 → v473)
 
 Yeni hesaplar `hizli_maliyet_form.php`'de **v2 modeliyle** açılır. Her maliyet kalemi **kendi
 hesaplama tabanıyla** çarpılır; bütün giderler tek bir "Ürün KG" ile çarpılmaz.
@@ -18,7 +18,7 @@ Amaç ERP değil: ham mal alımı ve ihracat teklifinde hızlı, anlaşılır fi
 **PHP ve JS motorunu birlikte değiştir.** `scripts/quick_cost_v2_parity_smoke.js` iki motoru 172
 senaryoda (zorunlu örnekler + tohumlu rastgele) alan alan karşılaştırır.
 
-## Miktarlar ve randıman
+## Miktarlar ve verimlilik
 
 | Alan | Anlamı |
 |---|---|
@@ -28,9 +28,9 @@ senaryoda (zorunlu örnekler + tohumlu rastgele) alan alan karşılaştırır.
 | İç piyasa / sanayi / fire KG | Detaylı Hesapta dağılım |
 | Sınıflandırılmamış KG | Ham − (ihracat + iç piyasa + sanayi + fire); otomatik hesaplanır |
 
-- Randıman = ihracat ÷ ham × 100 (iki ondalık, yarım yukarı).
-- Ters hesap (Hedef ihracat + randıman): gerekli ham KG = hedef ÷ (randıman ÷ 100).
-  Randıman en fazla iki ondalık, 0 < r ≤ 100. Varsayılan randıman **yoktur** (sektör değeri atanmaz).
+- Verimlilik = ihracat ÷ ham × 100 (iki ondalık, yarım yukarı).
+- Ters hesap (Hedef ihracat + verimlilik): gerekli ham KG = hedef ÷ (verimlilik ÷ 100).
+  Verimlilik en fazla iki ondalık, 0 < r ≤ 100. Varsayılan verimlilik **yoktur** (sektör değeri atanmaz).
 - Yöntem değişince diğer yöntemin girdisi o anki sonuçtan doldurulur (döngü yok; alanlar birbirini sürekli değiştirmez).
 - Hata (kayıt engeli): ihracat > ham, işlenen > ham, ihracat > işlenen, dağılım toplamı > ham.
 
@@ -44,8 +44,8 @@ Her kalem `basis` + `unit` taşır:
   çalışma saati, palet × gün, ton × gün. İki çarpanlı miktar dört ondalığa yarım yukarı yuvarlanır.
 - `fixed` — sabit toplam TL.
 
-Varsayılanlar (v473): Ham mal alış = ham KG; hasat = ham KG; ön nakliye sabit; paketleme + malzeme + işletme gideri =
-ihracat KG; fabrika gideri, ihracat nakliyesi, gümrük, analizler, DTS taksi, CASUS sabit. Malzeme tek ana satırdır.
+Varsayılanlar (v473): Ham mal alış = ham KG; hasat = ham KG; ön nakliye sabit; paketleme işçiliği = ham mal KG (işçi ücreti ham ürün üzerinden verilir; Ayar'dan değiştirilebilir); malzeme + işletme gideri =
+ihracat KG; ihracat nakliyesi, gümrük, analizler, DTS taksi, CASUS sabit. Malzeme tek ana satırdır.
 
 **Taban/birim değişince eski miktar taşınmaz** (sıfırlanır); birim değiştiyse birim fiyat da sıfırlanır
 (2 TL/kg asla 2 TL/ton ya da 2 TL/palet olmaz). Satırda not çıkar.
@@ -54,17 +54,16 @@ ihracat KG; fabrika gideri, ihracat nakliyesi, gümrük, analizler, DTS taksi, C
 
 ## Fason / Üretim (v473)
 
-Fason/Üretim yalnız kaydın **etiketidir**; hesabı değiştirmez. v472'deki "fason hizmet kapsamı" (işçilik/ambalaj
+Fason/Üretim seçimi ekrandan KALDIRILDI; kayıttaki `operation_type` yalnız iç etiket olarak korunur (hesabı değiştirmez). v472'deki "fason hizmet kapsamı" (işçilik/ambalaj
 dahil seçimi) ve "Fason işleme hizmeti" kalemi kaldırıldı. Fason bedeli girmek isterseniz **Fabrika gideri** ya da
 **Yeni kalem** kullanılır.
 
 ## Kalemler (v473)
 
 Ham mal alış · Hasat · Tarladan fabrikaya nakliye · **Paketleme işçiliği** (ayıklama + boylama + paketleme aynı iş:
-tek satır, varsayılan taban ihracat KG; işçilik işlenen KG üzerinden ödeniyorsa Ayar'dan "İşlenen ham KG" seçilir) ·
-**Malzeme** · **Fabrika gideri** (sabit TL; eski yükleme / soğuk hava / fason hizmet yerine) · İhracat nakliyesi ·
-Gümrükleme · Resmi/Özel analiz · DTS taksi · İşletme gideri · CASUS. İşletme gideri ile Fabrika gideri aynı gideri
-kapsıyorsa birini 0 bırakın (mükerrer sayılmasın).
+tek satır, varsayılan taban ham mal KG; ihracat KG üzerinden ödeniyorsa Ayar'dan "İhracat KG" seçilir) ·
+**Malzeme** · İhracat nakliyesi ·
+Gümrükleme · Resmi/Özel analiz · DTS taksi · İşletme gideri · CASUS. Fabrika gideri kalemi YOKTUR: fabrika giderleri İşletme gideri satırına girilir. Eski v473 kayıtlarındaki Fabrika gideri tutarı "(ESKİ)" ek kalemi olarak korunur.
 
 ## Malzeme palet detayı (v473)
 
@@ -83,7 +82,7 @@ ham mal zaten tüm KG üzerinden alındığı için çöpün maliyeti toplam iç
 
 ## Sonuçlar ve yan ürün kredisi
 
-- Toplam operasyon maliyeti (kayıtta `total`), ihracat net KG, randıman, ihracat net KG maliyeti (`unit_cost`).
+- Toplam operasyon maliyeti (kayıtta `total`; ekranda Satış karşılaştırması'nın altındaki kartta), ihracat net KG, verimlilik, ihracat net KG maliyeti (`unit_cost`).
 - Varsayılan **ihtiyatlı**: tüm maliyet ihracat KG'ye yüklenir.
 - Detaylı Hesapta iç piyasa / sanayi **gerçekleşmiş** satılan KG ve net TL/kg girilebilir. Gelir yalnız
   "maliyetten düş" işaretlenirse düşülür → "İhracata yüklenen tahmini maliyet". Ekranda **yönetimsel tahmin,
@@ -99,7 +98,7 @@ marj 0 ≤ m < 100. Otomatik kur yok.
 
 ## Hızlı / Detaylı
 
-Aynı belge, yalnız görünüm (`method` kolonunda saklanır). Hızlı: ürün, ham KG, ihracat KG/randıman,
+Aynı belge, yalnız görünüm (`method` kolonunda saklanır). Hızlı: ürün, ham KG, ihracat KG/verimlilik,
 ham alış, paketleme, malzeme, fabrika gideri, ön nakliye, ihracat nakliyesi, gümrük,
 analizler, işletme gideri. **Tutarı sıfırdan farklı her kalem Hızlı'da da görünür ve her zaman hesaba girer.**
 Geçişte veri silinmez. Salt okunur kullanıcı da görünüm değiştirebilir.

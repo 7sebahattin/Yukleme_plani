@@ -56,7 +56,7 @@ function v2_example(): array {
     $d = quick_cost_v2_defaults('2026-10-31');
     $d['product'] = 'nar';
     $d['quantities'] = ['raw_kg' => 25000, 'processed_kg' => 25000, 'export_kg' => 20000, 'domestic_kg' => 3000, 'industry_kg' => 0, 'waste_kg' => 2000];
-    $prices = ['raw_purchase' => 20, 'packing_labor' => 2.5, 'material' => 4, 'field_transport' => 15000,
+    $prices = ['raw_purchase' => 20, 'packing_labor' => 2, 'material' => 4, 'field_transport' => 15000,
         'export_freight' => 60000, 'customs' => 5000, 'official_analysis' => 3000];
     foreach ($d['items'] as &$i) $i['unit_price'] = $prices[$i['code']] ?? 0;
     unset($i);
@@ -71,8 +71,8 @@ t('Zorunlu senaryo: 713.000 TL, %80, ihtiyatlı 35,65 TL/kg', function (): void 
     eq($r['total'], 713000); eq($r['derived']['yield_pct'], 80); eq($r['unit_cost'], 35.65); eq($r['unit_cost_prudent'], 35.65);
     eq($r['export_cost'], 713000); eq($r['credit_applied'], 0); eq($r['net_kg'], 20000);
     eq(row($r, 'raw_purchase')['amount'], 500000); eq(row($r, 'packing_labor')['amount'], 50000); eq(row($r, 'material')['amount'], 80000);
-    eq($r['groups'], ['raw' => 500000, 'supply' => 15000, 'packing' => 50000, 'material' => 80000, 'factory' => 0, 'export' => 68000, 'other' => 0]);
-    eq(array_column($r['items'], 'code'), ['raw_purchase', 'harvest', 'field_transport', 'packing_labor', 'material', 'factory_cost', 'export_freight', 'customs', 'official_analysis', 'private_analysis', 'dts_taxi', 'overhead', 'casus']);
+    eq($r['groups'], ['raw' => 500000, 'supply' => 15000, 'packing' => 50000, 'material' => 80000, 'export' => 68000, 'other' => 0]);
+    eq(array_column($r['items'], 'code'), ['raw_purchase', 'harvest', 'field_transport', 'packing_labor', 'material', 'export_freight', 'customs', 'official_analysis', 'private_analysis', 'dts_taxi', 'overhead', 'casus']);
     eq($r['derived']['unclassified_kg'], 0);
 });
 t('Yan ürün kredisi açıkça seçilince 689.000 TL / 34,45 TL/kg', function (): void {
@@ -114,7 +114,7 @@ t('Tabanlar: ham alış ham KG, bağlanan kalem işlenen KG, malzeme/paketleme i
     $r = quick_cost_calculate($d);
     eq(row($r, 'raw_purchase')['qty'], 25000); eq(row($r, 'raw_purchase')['amount'], 500000);
     eq(row($r, 'harvest')['qty'], 24000); eq(row($r, 'harvest')['amount'], 48000);
-    eq(row($r, 'packing_labor')['qty'], 20000); eq(row($r, 'packing_labor')['amount'], 50000);
+    eq(row($r, 'packing_labor')['qty'], 25000); eq(row($r, 'packing_labor')['amount'], 50000);
     eq(row($r, 'material')['qty'], 20000); eq($r['total'], 761000);
 });
 t('İşlenen KG boşsa ham KG varsayılır ve açıkça belirtilir', function (): void {
@@ -124,13 +124,13 @@ t('İşlenen KG boşsa ham KG varsayılır ve açıkça belirtilir', function ()
     ok(in_array('processed_assumed', codes($r), true));
     $d['quantities']['processed_kg'] = ''; ok(quick_cost_calculate($d)['derived']['processed_assumed']);
 });
-t('Randıman ve ters randıman (hedef 20.000 KG, %80 → 25.000 ham KG)', function (): void {
+t('Verimlilik ve ters verimlilik (hedef 20.000 KG, %80 → 25.000 ham KG)', function (): void {
     $d = v2_example(); $d['yield_mode'] = 'target'; $d['target_yield'] = 80; $d['quantities']['raw_kg'] = 1; // yok sayılır
     $r = quick_cost_calculate($d);
     eq($r['derived']['raw_kg'], 25000); eq($r['quantities']['raw_kg'], 25000); eq($r['total'], 713000); eq($r['derived']['yield_pct'], 80);
     $d['target_yield'] = '75,5'; $d['quantities'] = ['raw_kg' => 0, 'processed_kg' => null, 'export_kg' => 20000, 'domestic_kg' => 0, 'industry_kg' => 0, 'waste_kg' => 0];
     eq(quick_cost_calculate($d)['derived']['raw_kg'], 26490.0662); // 20000 / 0,755
-    $d['target_yield'] = 0; throws(fn() => quick_cost_calculate($d), 'randıman');
+    $d['target_yield'] = 0; throws(fn() => quick_cost_calculate($d), 'verimliliği');
     $d['target_yield'] = '80,123'; throws(fn() => quick_cost_calculate($d), 'iki ondalık');
     $d['target_yield'] = 101; throws(fn() => quick_cost_calculate($d), '%100');
     $d['target_yield'] = 2; $d['quantities']['export_kg'] = 30000; throws(fn() => quick_cost_calculate($d), '1.000.000');
@@ -147,20 +147,20 @@ t('Ürün dağılımı dengesi: aşım hata, kalan sınıflandırılmamış', fu
     eq($r['quantities']['domestic_kg'], 3000); eq($r['quantities']['waste_kg'], 2000); // çıkma çöpe karışmaz
 });
 t('Ton, palet, koli, araç ve iki çarpanlı birimler', function (): void {
-    $d = setRow(v2_example(), 'factory_cost', ['basis' => 'raw_kg', 'unit' => 'ton', 'unit_price' => 1500]);
-    eq(row(quick_cost_calculate($d), 'factory_cost')['amount'], 37500); // 25 ton × 1.500
-    $d = setRow(v2_example(), 'factory_cost', ['basis' => 'raw_kg', 'unit' => 'ton', 'unit_price' => '0,0005']);
-    eq(row(quick_cost_calculate($d), 'factory_cost')['amount'], 0.01); // 25 ton × 0,0005 = 0,0125 → 0,01
+    $d = setRow(v2_example(), 'overhead', ['basis' => 'raw_kg', 'unit' => 'ton', 'unit_price' => 1500]);
+    eq(row(quick_cost_calculate($d), 'overhead')['amount'], 37500); // 25 ton × 1.500
+    $d = setRow(v2_example(), 'overhead', ['basis' => 'raw_kg', 'unit' => 'ton', 'unit_price' => '0,0005']);
+    eq(row(quick_cost_calculate($d), 'overhead')['amount'], 0.01); // 25 ton × 0,0005 = 0,0125 → 0,01
     eq(quick_cost_v2_ton_cents(1, 5), 1); eq(quick_cost_v2_ton_cents(1, 4.9999), 0); eq(quick_cost_v2_ton_cents(999999.9999, 999999.9999), 99999999980);
-    $d = setRow(v2_example(), 'factory_cost', ['basis' => 'manual', 'unit' => 'pallet', 'qty' => 26, 'unit_price' => 380]);
-    eq(row(quick_cost_calculate($d), 'factory_cost')['amount'], 9880);
+    $d = setRow(v2_example(), 'overhead', ['basis' => 'manual', 'unit' => 'pallet', 'qty' => 26, 'unit_price' => 380]);
+    eq(row(quick_cost_calculate($d), 'overhead')['amount'], 9880);
     $d = setRow(v2_example(), 'packing_labor', ['basis' => 'manual', 'unit' => 'worker_day', 'qty' => 12, 'qty2' => '2,5', 'unit_price' => 1200]);
     eq(row(quick_cost_calculate($d), 'packing_labor')['amount'], 36000);
-    $d = setRow(v2_example(), 'factory_cost', ['basis' => 'manual', 'unit' => 'pallet_day', 'qty' => 26, 'qty2' => 3, 'unit_price' => 50]);
-    eq(row(quick_cost_calculate($d), 'factory_cost')['amount'], 3900);
-    $d = setRow(v2_example(), 'factory_cost', ['basis' => 'manual', 'unit' => 'ton_day', 'qty' => '0,3333', 'qty2' => '0,3333', 'unit_price' => 10000]);
-    eq(row(quick_cost_calculate($d), 'factory_cost')['amount'], 1111); // 0,11108889 → 0,1111 × 10.000
-    $d = setRow(v2_example(), 'factory_cost', ['basis' => 'manual', 'unit' => 'ton_day', 'qty' => 1000000, 'qty2' => 2, 'unit_price' => 1]);
+    $d = setRow(v2_example(), 'overhead', ['basis' => 'manual', 'unit' => 'pallet_day', 'qty' => 26, 'qty2' => 3, 'unit_price' => 50]);
+    eq(row(quick_cost_calculate($d), 'overhead')['amount'], 3900);
+    $d = setRow(v2_example(), 'overhead', ['basis' => 'manual', 'unit' => 'ton_day', 'qty' => '0,3333', 'qty2' => '0,3333', 'unit_price' => 10000]);
+    eq(row(quick_cost_calculate($d), 'overhead')['amount'], 1111); // 0,11108889 → 0,1111 × 10.000
+    $d = setRow(v2_example(), 'overhead', ['basis' => 'manual', 'unit' => 'ton_day', 'qty' => 1000000, 'qty2' => 2, 'unit_price' => 1]);
     throws(fn() => quick_cost_calculate($d), 'çarpımı');
     $d = setRow(v2_example(), 'packing_labor', ['basis' => 'manual', 'unit' => 'hour', 'qty' => 480, 'unit_price' => 150]);
     eq(row(quick_cost_calculate($d), 'packing_labor')['amount'], 72000);
@@ -229,37 +229,37 @@ t('Malzeme detayı: ek satır, kuruş yuvarlama, sınırlar, uyarı', function (
 });
 t('Eski (v472) belge: kaldırılan kalemler korunur, toplam DEĞİŞMEZ, fason dahil seçimi tutarsız bırakılmaz', function (): void {
     $old = v2_example();
-    $old['items'] = array_values(array_filter($old['items'], fn($i) => $i['code'] !== 'factory_cost' && $i['code'] !== 'packing_labor'));
+    $old['items'] = array_values(array_filter($old['items'], fn($i) => $i['code'] !== 'packing_labor'));
     foreach ([['sorting_labor', 'processed_kg', 'kg', 2], ['grading', 'processed_kg', 'kg', 0], ['packing_labor', 'export_kg', 'kg', 1],
-        ['fason_service', 'processed_kg', 'kg', 3], ['cold_storage', 'fixed', 'fixed', 0], ['loading', 'fixed', 'fixed', 1000]] as [$c, $b, $u, $pr]) {
+        ['fason_service', 'processed_kg', 'kg', 3], ['cold_storage', 'fixed', 'fixed', 0], ['loading', 'fixed', 'fixed', 1000], ['factory_cost', 'fixed', 'fixed', 700]] as [$c, $b, $u, $pr]) {
         $old['items'][] = ['code' => $c, 'basis' => $b, 'unit' => $u, 'qty' => 0, 'qty2' => 0, 'unit_price' => $pr];
     }
     unset($old['material_detail']); $old['fason_includes'] = ['labor' => false, 'material' => false];
     $r = quick_cost_calculate($old);
     // 713.000 − 50.000 (örnek paketleme) ... örnekte paketleme yok sayıldı: ham 500.000 + malzeme 80.000 + 68.000 + 15.000
-    eq($r['total'], 663000 + 50000 + 20000 + 75000 + 1000);
+    eq($r['total'], 663000 + 50000 + 20000 + 75000 + 1000 + 700);
     $codes = array_column($r['items'], 'code');
     ok(in_array('custom_eski_ayiklama', $codes, true) && in_array('custom_eski_fason', $codes, true) && in_array('custom_eski_yukleme', $codes, true));
     ok(!in_array('custom_eski_boylama', $codes, true) && !in_array('custom_eski_soguk_hava', $codes, true)); // sıfır tutarlılar düşer
-    ok(in_array('factory_cost', $codes, true) && !in_array('sorting_labor', $codes, true));
+    ok(in_array('custom_eski_fabrika', $codes, true) && !in_array('factory_cost', $codes, true) && !in_array('sorting_labor', $codes, true));
+    eq(row($r, 'custom_eski_fabrika')['label'], 'FABRİKA GİDERİ (ESKİ)'); eq(row($r, 'custom_eski_fabrika')['amount'], 700);
     eq(row($r, 'custom_eski_ayiklama')['label'], 'AYIKLAMA İŞÇİLİĞİ (ESKİ)'); eq(row($r, 'custom_eski_ayiklama')['amount'], 50000);
     eq(quick_cost_calculate($r), $r);
     $old['fason_includes'] = ['labor' => true, 'material' => true]; $r = quick_cost_calculate($old);
-    eq($r['total'], 663000 - 80000 + 75000 + 1000); // işçilik (ayıklama/paketleme) ve malzeme eskiden toplamda yoktu
+    eq($r['total'], 663000 - 80000 + 75000 + 1000 + 700); // işçilik (ayıklama/paketleme) ve malzeme eskiden toplamda yoktu
     eq(row($r, 'material')['amount'], 0);
     $old['operation_type'] = 'uretim'; $r = quick_cost_calculate($old); // üretimde seçim uygulanmazdı
-    eq($r['total'], 663000 + 50000 + 20000 + 75000 + 1000);
+    eq($r['total'], 663000 + 50000 + 20000 + 75000 + 1000 + 700);
 });
 t('Eski kayıt 40 ek kalemle doluysa taşınan "(ESKİ)" kalemleri sınırı aşmaz; 41. kullanıcı kalemi yine reddedilir', function (): void {
     $old = v2_example();
-    $old['items'] = array_values(array_filter($old['items'], fn($i) => $i['code'] !== 'factory_cost'));
     $old['items'][] = ['code' => 'loading', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 1000];
     $old['items'][] = ['code' => 'fason_service', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 500];
     for ($i = 0; $i < 40; $i++) $old['items'][] = ['code' => 'custom_k' . $i, 'label' => 'k' . $i, 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 1];
     $r = quick_cost_calculate($old);
-    eq($r['total'], 713000 + 1000 + 500 + 40); eq(count($r['items']), 13 + 40 + 2);
+    eq($r['total'], 713000 + 1000 + 500 + 40); eq(count($r['items']), 12 + 40 + 2);
     eq(quick_cost_calculate($r), $r); // taşınmış belge tekrar hesaplanabilir (kayıt açılır, düzenlenir, kopyalanır)
-    $f = quick_cost_v2_form_input($r); eq(count($f['items']), 13 + 40 + 2); // 422 sonrası taslak da kırpılmaz
+    $f = quick_cost_v2_form_input($r); eq(count($f['items']), 12 + 40 + 2); // 422 sonrası taslak da kırpılmaz
     $r['items'][] = ['code' => 'custom_k41', 'label' => 'fazla', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 1];
     throws(fn() => quick_cost_calculate($r), 'kırk');
 });
@@ -331,7 +331,7 @@ t('MySQL şeması değişmeden v2 değerlerini taşır (migration yok)', functio
     for ($i = 0; $i < 40; $i++) $d['items'][] = ['code' => 'custom_' . str_repeat('k', 30) . $i, 'label' => str_repeat('Ğ', 150), 'basis' => 'manual', 'unit' => 'worker_day', 'qty' => 1, 'qty2' => 1, 'unit_price' => 1];
     $payload = json_encode($d, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     ok(strlen($payload) < 65536, 'payload ' . strlen($payload));
-    eq(count(quick_cost_calculate($d)['items']), 53);
+    eq(count(quick_cost_calculate($d)['items']), 52);
 });
 
 $saved = null;

@@ -1,5 +1,5 @@
 <?php
-// Hızlı Maliyet v2 (ham mal / randıman / ihracat): yalnız çizim. Yetki, CSRF ve kayıt controller'dadır.
+// Hızlı Maliyet v2 (ham mal / verimlilik / ihracat): yalnız çizim. Yetki, CSRF ve kayıt controller'dadır.
 if (!isset($document, $can_write, $storage_ready)) return;
 $qc2_catalog = quick_cost_v2_catalog();
 $qc2_units = quick_cost_v2_units();
@@ -19,7 +19,6 @@ $qc2_sale = is_array($document['sale'] ?? null) ? $document['sale'] : [];
 $qc2_md = is_array($document['material_detail'] ?? null) ? $document['material_detail'] : quick_cost_v2_material_defaults();
 $qc2_matlabels = quick_cost_v2_material_lines();
 $qc2_view = ($document['method'] ?? '') === 'detailed' ? 'detailed' : 'quick';
-$qc2_op = ($document['operation_type'] ?? '') === 'uretim' ? 'uretim' : 'fason';
 $qc2_yield = ($document['yield_mode'] ?? '') === 'target' ? 'target' : 'actual';
 $qc2_out = static fn(string $key, string $fallback = '—') => '<strong data-qc2-out="' . h($key) . '">' . h($fallback) . '</strong>';
 $qc2_input = static function (string $path, $value, string $label, array $opt = []) use ($qc2_num, $qc2_dis): string {
@@ -36,16 +35,15 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
 <div class="qc-error" role="alert"><strong>Hesap kaydedilemedi.</strong><ul><?php foreach ($errors as $qc2_error): ?><li><?= h((string)$qc2_error) ?></li><?php endforeach; ?></ul></div>
 <?php endif; ?>
 <noscript><p class="qc-error">Canlı hesaplama ve kaydetme için JavaScript açık olmalıdır.</p></noscript>
-<form id="qc-form" method="post" class="qc-form qc2" data-model="2" data-view="<?= h($qc2_view) ?>" data-op="<?= h($qc2_op) ?>" data-yield-mode="<?= h($qc2_yield) ?>" data-save-available="<?= $can_write && $storage_ready ? '1' : '0' ?>">
+<form id="qc-form" method="post" class="qc-form qc2" data-model="2" data-view="<?= h($qc2_view) ?>" data-yield-mode="<?= h($qc2_yield) ?>" data-save-available="<?= $can_write && $storage_ready ? '1' : '0' ?>">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="version" value="<?= (int)($version ?? 0) ?>">
     <input type="hidden" name="payload" id="qc-payload" value="">
 
     <section class="qc-hero qc2-hero" aria-label="Canlı maliyet sonuçları">
-        <div class="qc-hero-total"><span>TOPLAM OPERASYON MALİYETİ (TL)</span><?= $qc2_out('total', $qc2_calc ? $qc2_money($qc2_calc['total']) : '—') ?></div>
         <div class="qc2-kpis">
             <div><span>İHRACATLIK NET KG</span><?= $qc2_out('export_kg', $qc2_calc ? $qc2_num($qc2_calc['quantities']['export_kg']) : '—') ?></div>
-            <div><span>İHRACAT RANDIMANI</span><?= $qc2_out('yield_pct', $qc2_calc ? '%' . number_format($qc2_calc['derived']['yield_pct'], 2, ',', '.') : '—') ?></div>
+            <div><span>İHRACAT VERİMLİLİĞİ</span><?= $qc2_out('yield_pct', $qc2_calc ? '%' . number_format($qc2_calc['derived']['yield_pct'], 2, ',', '.') : '—') ?></div>
             <div class="qc2-kpi-main"><span>İHRACAT NET KG MALİYETİ (TL/kg)</span><?= $qc2_out('unit_cost', $qc2_calc ? number_format($qc2_calc['unit_cost'], 4, ',', '.') : '—') ?></div>
         </div>
         <p class="qc2-method" data-qc2-out="method_note">İhtiyatlı yöntem: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir.</p>
@@ -56,7 +54,6 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
                 <div><dt>Hasat ve ön nakliye</dt><dd data-qc2-out="group.supply">—</dd></div>
                 <div><dt>Paketleme maliyeti</dt><dd data-qc2-out="group.packing">—</dd></div>
                 <div><dt>Malzeme maliyeti</dt><dd data-qc2-out="group.material">—</dd></div>
-                <div><dt>Fabrika gideri</dt><dd data-qc2-out="group.factory">—</dd></div>
                 <div><dt>Nakliye ve ihracat giderleri</dt><dd data-qc2-out="group.export">—</dd></div>
                 <div><dt>Genel ve diğer giderler</dt><dd data-qc2-out="group.other">—</dd></div>
                 <div><dt>Çıkma / suluk net gelir kredisi</dt><dd data-qc2-out="credit_applied">—</dd></div>
@@ -72,10 +69,6 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             <button type="button" data-qc2-set="method" data-value="quick" aria-pressed="<?= $qc2_view === 'quick' ? 'true' : 'false' ?>">Hızlı Hesap</button>
             <button type="button" data-qc2-set="method" data-value="detailed" aria-pressed="<?= $qc2_view === 'detailed' ? 'true' : 'false' ?>">Detaylı Hesap</button>
         </div>
-        <div class="qc2-seg" role="group" aria-label="İşlem türü">
-            <button type="button" data-qc2-set="operation_type" data-value="fason" aria-pressed="<?= $qc2_op === 'fason' ? 'true' : 'false' ?>"<?= $qc2_dis ?>>Fason</button>
-            <button type="button" data-qc2-set="operation_type" data-value="uretim" aria-pressed="<?= $qc2_op === 'uretim' ? 'true' : 'false' ?>"<?= $qc2_dis ?>>Üretim</button>
-        </div>
     </div>
 
     <section class="qc-panel"><h2>Temel bilgiler</h2><div class="qc-basics">
@@ -85,21 +78,21 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
     </div></section>
 
     <section class="qc-panel qc2-qty" aria-labelledby="qc2-qty-heading">
-        <div class="qc-section-heading"><h2 id="qc2-qty-heading">Miktar ve randıman</h2></div>
-        <div class="qc2-seg qc2-seg-small" role="group" aria-label="Randıman yöntemi">
+        <div class="qc-section-heading"><h2 id="qc2-qty-heading">Miktar ve verimlilik</h2></div>
+        <div class="qc2-seg qc2-seg-small" role="group" aria-label="Verimlilik yöntemi">
             <button type="button" data-qc2-set="yield_mode" data-value="actual" aria-pressed="<?= $qc2_yield === 'actual' ? 'true' : 'false' ?>"<?= $qc2_dis ?>>Ham KG + ihracat KG</button>
-            <button type="button" data-qc2-set="yield_mode" data-value="target" aria-pressed="<?= $qc2_yield === 'target' ? 'true' : 'false' ?>"<?= $qc2_dis ?>>Hedef ihracat + randıman</button>
+            <button type="button" data-qc2-set="yield_mode" data-value="target" aria-pressed="<?= $qc2_yield === 'target' ? 'true' : 'false' ?>"<?= $qc2_dis ?>>Hedef ihracat + verimlilik</button>
         </div>
         <div class="qc2-qty-grid">
             <?= $qc2_input('quantities.raw_kg', $qc2_q['raw_kg'] ?? 0, 'Ham mal KG (satın alınan)', ['class' => 'qc-net-field qc2-when-actual']) ?>
             <div class="qc2-readout qc2-when-target"><span>Gerekli ham mal KG</span><?= $qc2_out('required_raw') ?></div>
             <?= $qc2_input('quantities.export_kg', $qc2_q['export_kg'] ?? 0, 'İhracatlık net KG', ['class' => 'qc-net-field']) ?>
-            <?= $qc2_input('target_yield', $document['target_yield'] ?? 0, 'Tahmini randıman (%)', ['class' => 'qc2-when-target']) ?>
-            <div class="qc2-readout qc2-when-actual"><span>İhracat randımanı</span><?= $qc2_out('yield_readout') ?></div>
+            <?= $qc2_input('target_yield', $document['target_yield'] ?? 0, 'Tahmini verimlilik (%)', ['class' => 'qc2-when-target']) ?>
+            <div class="qc2-readout qc2-when-actual"><span>İhracat verimliliği</span><?= $qc2_out('yield_readout') ?></div>
         </div>
         <p class="qc-hint qc-unit-note" data-qc2-yield-note role="status" hidden></p>
-        <p class="qc-hint qc2-when-actual"><strong>Randıman</strong> = 100 kg ham üründen kaç kg ihracatlık ürün çıktığı: ihracat KG ÷ ham mal KG × 100. Örnek: 25.000 kg ham → 20.000 kg ihracat = %80. Alım yapıldıysa iki miktarı da girin, randıman kendiliğinden çıkar. Ham mal KG: kasa ve palet darası hariç, ayıklanmamış ürün.</p>
-        <p class="qc-hint qc2-when-target"><strong>Teklif / alım planı için:</strong> kaç kg ihracat yapmak istediğinizi ve tahmini randımanı girin; kaç kg ham mal almanız gerektiği hesaplanır (hedef ihracat KG ÷ randıman). Sabit bir randıman varsayılmaz, kendi tahmininizi girin.</p>
+        <p class="qc-hint qc2-when-actual"><strong>Verimlilik</strong> = 100 kg ham üründen kaç kg ihracatlık ürün çıktığı: ihracat KG ÷ ham mal KG × 100. Örnek: 25.000 kg ham → 20.000 kg ihracat = %80. Alım yapıldıysa iki miktarı da girin, verimlilik kendiliğinden çıkar. Ham mal KG: kasa ve palet darası hariç, ayıklanmamış ürün.</p>
+        <p class="qc-hint qc2-when-target"><strong>Teklif / alım planı için:</strong> kaç kg ihracat yapmak istediğinizi ve tahmini verimliliği girin; kaç kg ham mal almanız gerektiği hesaplanır (hedef ihracat KG ÷ verimlilik). Sabit bir verimlilik varsayılmaz, kendi tahmininizi girin.</p>
         <div class="qc2-detail-block" data-qc2-detail>
             <h3>Ürün dağılımı</h3>
             <div class="qc2-qty-grid">
@@ -225,6 +218,10 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
         </dl>
         <p class="qc-hint">Kâr marjı satış tutarına göredir (maliyet üzerine ekleme oranı değildir). Kur elle girilir; otomatik kur kullanılmaz. Satış fiyatı girmeden de hesap kaydedilebilir.</p>
     </details>
+
+    <section class="qc-hero qc2-total-card" aria-label="Toplam operasyon maliyeti">
+        <div class="qc-hero-total"><span>TOPLAM OPERASYON MALİYETİ (TL)</span><?= $qc2_out('total', $qc2_calc ? $qc2_money($qc2_calc['total']) : '—') ?></div>
+    </section>
 
     <ul class="qc2-warnings" data-qc2-out="warnings" aria-live="polite"><?php foreach (($qc2_calc['warnings'] ?? []) as $qc2_w): ?><li data-code="<?= h($qc2_w['code']) ?>"><?= h($qc2_w['text']) ?></li><?php endforeach; ?></ul>
     <p id="qc-validation" class="qc-error" role="alert" hidden></p>

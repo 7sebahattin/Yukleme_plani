@@ -1,5 +1,5 @@
 <?php
-// Hızlı Maliyet v2: ham mal, randıman ve ihracat maliyeti. Saf, yan etkisiz motor.
+// Hızlı Maliyet v2: ham mal, verimlilik ve ihracat maliyeti. Saf, yan etkisiz motor.
 // Belge "model": 2 taşır; taşımayan belge v1 motoruyla (quick_cost_calculate) hesaplanır.
 // assets/hizli-maliyet-v2.js bu dosyanın BİREBİR aynasıdır — birini değiştirirsen ötekini de değiştir
 // (scripts/quick_cost_v2_parity_smoke.js iki motoru aynı senaryolarla karşılaştırır).
@@ -11,7 +11,7 @@ const QUICK_COST_V2_CUSTOM_MAX = 40;
 const QUICK_COST_V2_RATE_MAX = 1000;
 const QUICK_COST_V2_MAT_CUSTOM_MAX = 20;
 /** v472'den taşınan "(ESKİ)" kalemleri kullanıcının 40 ek kalem hakkından DÜŞMEZ (kayıt açılabilir kalsın). */
-const QUICK_COST_V2_LEGACY_CODES = ['custom_eski_ayiklama', 'custom_eski_boylama', 'custom_eski_yukleme', 'custom_eski_soguk_hava', 'custom_eski_fason'];
+const QUICK_COST_V2_LEGACY_CODES = ['custom_eski_ayiklama', 'custom_eski_boylama', 'custom_eski_yukleme', 'custom_eski_soguk_hava', 'custom_eski_fason', 'custom_eski_fabrika'];
 const QUICK_COST_V2_PER_PALLET_MAX_CENTS = 100000000; // 1.000.000 TL
 
 function quick_cost_is_v2($document): bool
@@ -23,7 +23,8 @@ function quick_cost_is_v2($document): bool
  * Varsayılan kalemler. basis: raw_kg | processed_kg | export_kg (bağlı miktar), manual, fixed.
  * quick: Hızlı Hesapta tutarı sıfır olsa da görünen satır. detail: kalemin kendi ayrıntı paneli var.
  * v473: ayıklama + boylama + paketleme aynı iş olduğundan yalnız "Paketleme işçiliği" kaldı;
- * yükleme / soğuk hava / fason hizmet yerine tek "Fabrika gideri" geldi.
+ * yükleme / soğuk hava / fason hizmet kaldırıldı; v473'teki "Fabrika gideri" de kaldırıldı (İşletme gideri var).
+ * Paketleme işçiliği varsayılanı ham mal KG tabanıdır (işçi ücreti ham ürün üzerinden verilir).
  */
 function quick_cost_v2_catalog(): array
 {
@@ -31,9 +32,8 @@ function quick_cost_v2_catalog(): array
         'raw_purchase' => ['label' => 'Ham mal alış bedeli', 'group' => 'raw', 'basis' => 'raw_kg', 'unit' => 'kg', 'quick' => true],
         'harvest' => ['label' => 'Hasat / toplama', 'group' => 'supply', 'basis' => 'raw_kg', 'unit' => 'kg', 'quick' => false],
         'field_transport' => ['label' => 'Tarladan fabrikaya nakliye', 'group' => 'supply', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
-        'packing_labor' => ['label' => 'Paketleme işçiliği', 'group' => 'packing', 'basis' => 'export_kg', 'unit' => 'kg', 'quick' => true],
+        'packing_labor' => ['label' => 'Paketleme işçiliği', 'group' => 'packing', 'basis' => 'raw_kg', 'unit' => 'kg', 'quick' => true],
         'material' => ['label' => 'Malzeme', 'group' => 'material', 'basis' => 'export_kg', 'unit' => 'kg', 'quick' => true, 'detail' => true],
-        'factory_cost' => ['label' => 'Fabrika gideri', 'group' => 'factory', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
         'export_freight' => ['label' => 'İhracat nakliyesi', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
         'customs' => ['label' => 'Gümrükleme', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
         'official_analysis' => ['label' => 'Resmi analiz', 'group' => 'export', 'basis' => 'fixed', 'unit' => 'fixed', 'quick' => true],
@@ -47,7 +47,7 @@ function quick_cost_v2_catalog(): array
 function quick_cost_v2_groups(): array
 {
     return ['raw' => 'Ham mal alışı', 'supply' => 'Hasat ve ön nakliye', 'packing' => 'Paketleme işçiliği',
-        'material' => 'Malzeme', 'factory' => 'Fabrika gideri',
+        'material' => 'Malzeme',
         'export' => 'Nakliye ve ihracat giderleri', 'other' => 'Genel ve diğer giderler'];
 }
 
@@ -239,7 +239,8 @@ function quick_cost_v2_upgrade(array $input): array
         'grading' => ['custom_eski_boylama', 'BOYLAMA / SINIFLANDIRMA (ESKİ)'],
         'loading' => ['custom_eski_yukleme', 'YÜKLEME GİDERİ (ESKİ)'],
         'cold_storage' => ['custom_eski_soguk_hava', 'ÖN SOĞUTMA / SOĞUK HAVA (ESKİ)'],
-        'fason_service' => ['custom_eski_fason', 'FASON İŞLEME HİZMETİ (ESKİ)']];
+        'fason_service' => ['custom_eski_fason', 'FASON İŞLEME HİZMETİ (ESKİ)'],
+        'factory_cost' => ['custom_eski_fabrika', 'FABRİKA GİDERİ (ESKİ)']];
     $items = $input['items'] ?? null;
     if (!is_array($items) || !array_is_list($items)) return $input;
     $fi = is_array($input['fason_includes'] ?? null) ? $input['fason_includes'] : [];
@@ -258,9 +259,6 @@ function quick_cost_v2_upgrade(array $input): array
         }
         if (is_string($code) && in_array($code, $excluded, true)) $row['unit_price'] = 0;
         $out[] = $row;
-    }
-    if (!isset($seen['factory_cost'])) {
-        $out[] = ['code' => 'factory_cost', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 0];
     }
     $input['items'] = $out;
     unset($input['fason_includes']);
@@ -287,7 +285,7 @@ function quick_cost_v2_calculate(array $input): array
     $method = $input['method'] ?? '';
     if (!in_array($method, ['quick', 'detailed'], true)) throw new InvalidArgumentException('Görünüm Hızlı veya Detaylı olmalı.');
     $yieldMode = $input['yield_mode'] ?? '';
-    if (!in_array($yieldMode, ['actual', 'target'], true)) throw new InvalidArgumentException('Randıman yöntemi geçersiz.');
+    if (!in_array($yieldMode, ['actual', 'target'], true)) throw new InvalidArgumentException('Verimlilik yöntemi geçersiz.');
 
     // --- Miktarlar (tamsayı 1/10.000 kg) ---
     $q = $input['quantities'] ?? null;
@@ -302,12 +300,12 @@ function quick_cost_v2_calculate(array $input): array
     $export4 = quick_cost_v2_i4($export);
     $targetYield = 0.0;
     if ($yieldMode === 'target') {
-        $targetYield = quick_cost_v2_percent($input['target_yield'] ?? null, 'Tahmini randıman', true);
-        if ($export4 > 0 && $targetYield <= 0) throw new InvalidArgumentException('Hedef hesap için tahmini randımanı (%) girin.');
+        $targetYield = quick_cost_v2_percent($input['target_yield'] ?? null, 'Tahmini verimlilik', true);
+        if ($export4 > 0 && $targetYield <= 0) throw new InvalidArgumentException('Hedef hesap için tahmini verimliliği (%) girin.');
         $ty100 = (int)round($targetYield * 100);
         $raw4 = $export4 > 0 ? intdiv(2 * $export4 * 10000 + $ty100, 2 * $ty100) : 0;
         if ($raw4 > QUICK_COST_NUMBER_MAX * 10000) {
-            throw new InvalidArgumentException('Gerekli ham mal KG 1.000.000 sınırını aşıyor; randımanı veya hedefi kontrol edin.');
+            throw new InvalidArgumentException('Gerekli ham mal KG 1.000.000 sınırını aşıyor; verimliliği veya hedefi kontrol edin.');
         }
         $raw = $raw4 / 10000;
     } else {
@@ -315,7 +313,7 @@ function quick_cost_v2_calculate(array $input): array
         $raw4 = quick_cost_v2_i4($raw);
         if ($input['target_yield'] ?? null) {
             // Diğer yöntemin taslağı korunur ama doğrulanır.
-            $targetYield = quick_cost_v2_percent($input['target_yield'], 'Tahmini randıman', true);
+            $targetYield = quick_cost_v2_percent($input['target_yield'], 'Tahmini verimlilik', true);
         }
     }
     $processedAssumed = $processedInput === null;

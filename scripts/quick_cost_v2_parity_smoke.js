@@ -17,7 +17,7 @@ function base() {
         sale: { price: 0, currency: 'TL', rate: 1, target_margin: null }, items };
 }
 function example() {
-    const d = base(), p = { raw_purchase: 20, packing_labor: 2.5, material: 4, field_transport: 15000, export_freight: 60000, customs: 5000, official_analysis: 3000 };
+    const d = base(), p = { raw_purchase: 20, packing_labor: 2, material: 4, field_transport: 15000, export_freight: 60000, customs: 5000, official_analysis: 3000 };
     d.items.forEach(r => { r.unit_price = p[r.code] || 0; }); return d;
 }
 function setRow(d, code, c) { d.items = d.items.map(r => r.code === code ? Object.assign({}, r, c) : r); return d; }
@@ -30,16 +30,16 @@ test('Zorunlu senaryo JS: 713.000 / %80 / 35,65; kredi ile 689.000 / 34,45', () 
     const c = v2.calculate(d); assert.equal(c.export_cost, 689000); assert.equal(c.unit_cost, 34.45);
 });
 test('Taban değişiminde eski miktar ve farklı birimin fiyatı taşınmaz', () => {
-    let d = setRow(example(), 'factory_cost', { basis: 'manual', unit: 'kg', qty: 20000, unit_price: 2 });
-    d = v2.setBasis(d, 'factory_cost', 'manual', 'pallet');
-    assert.deepEqual([row(d, 'factory_cost').qty, row(d, 'factory_cost').unit_price], [0, 0]);
+    let d = setRow(example(), 'overhead', { basis: 'manual', unit: 'kg', qty: 20000, unit_price: 2 });
+    d = v2.setBasis(d, 'overhead', 'manual', 'pallet');
+    assert.deepEqual([row(d, 'overhead').qty, row(d, 'overhead').unit_price], [0, 0]);
     d = v2.setBasis(example(), 'packing_labor', 'raw_kg', 'kg');
-    assert.equal(row(d, 'packing_labor').unit_price, 2.5); // aynı birim (TL/kg): fiyat korunur
-    assert.equal(row(v2.calculate(d), 'packing_labor').amount, 62500);
+    assert.equal(row(d, 'packing_labor').unit_price, 2); // aynı birim (TL/kg): fiyat korunur
+    assert.equal(row(v2.calculate(d), 'packing_labor').amount, 50000);
     d = v2.setBasis(example(), 'packing_labor', 'processed_kg', 'ton');
-    assert.equal(row(d, 'packing_labor').unit_price, 0); // kg → ton: 2,5 TL/kg asla 2,5 TL/ton olmaz
+    assert.equal(row(d, 'packing_labor').unit_price, 0); // kg → ton: 2 TL/kg asla 2 TL/ton olmaz
 });
-test('Randıman yöntemi geçişi diğer girdiyi mevcut sonuçtan doldurur, veri kaybı yok', () => {
+test('Verimlilik yöntemi geçişi diğer girdiyi mevcut sonuçtan doldurur, veri kaybı yok', () => {
     let d = v2.setYieldMode(example(), 'target');
     assert.equal(d.target_yield, 80); assert.equal(v2.calculate(d).derived.raw_kg, 25000);
     d.quantities = Object.assign(d.quantities, { export_kg: 16000, processed_kg: null, domestic_kg: 0, waste_kg: 0 }); d = v2.setYieldMode(d, 'actual');
@@ -52,13 +52,13 @@ test('Geçersiz durumda yöntem geçişi mevcut girdiyi değiştirmez', () => {
 test('Hızlı görünüm: tutarlı satır hiçbir zaman gizlenmez', () => {
     assert.equal(v2.rowVisible('harvest', 'quick', 'fason', 0), false);
     assert.equal(v2.rowVisible('harvest', 'quick', 'fason', 10), true);
-    assert.equal(v2.rowVisible('factory_cost', 'quick', 'fason', 0), true);
+    assert.equal(v2.rowVisible('overhead', 'quick', 'fason', 0), true);
     assert.equal(v2.rowVisible('material', 'quick', 'uretim', 0), true);
     assert.equal(v2.rowVisible('casus', 'detailed', 'uretim', 0), true);
 });
-test('Kaldırılan kalemler katalogda yok; Fabrika gideri var', () => {
-    for (const c of ['sorting_labor', 'grading', 'loading', 'cold_storage', 'fason_service']) assert.equal(c in v2.catalog, false, c);
-    assert.equal(v2.catalog.factory_cost.label, 'Fabrika gideri'); assert.equal(v2.groups.includes('factory'), true);
+test('Kaldırılan kalemler katalogda yok; Fabrika gideri de yok', () => {
+    for (const c of ['sorting_labor', 'grading', 'loading', 'cold_storage', 'fason_service', 'factory_cost']) assert.equal(c in v2.catalog, false, c);
+    assert.equal(v2.groups.includes('factory'), false); assert.equal(v2.catalog.packing_labor.basis, 'raw_kg');
     assert.equal(v2.groups.includes('sorting') || v2.groups.includes('fason'), false);
 });
 test('Malzeme palet detayı JS: 26 palet × 1.790 TL = 46.540 TL', () => {
@@ -88,7 +88,7 @@ const cases = [];
 cases.push(example());
 { const d = example(); d.credit = { apply: true, domestic_sold_kg: 3000, domestic_price: 8, industry_sold_kg: 0, industry_price: 0 }; cases.push(d); }
 { const d = example(); d.yield_mode = 'target'; d.target_yield = '75,5'; d.quantities.processed_kg = null; d.quantities.domestic_kg = 0; d.quantities.waste_kg = 0; cases.push(d); }
-{ const d = example(); setRow(d, 'factory_cost', { basis: 'raw_kg', unit: 'ton', unit_price: '1.234,5' }); cases.push(d); }
+{ const d = example(); setRow(d, 'overhead', { basis: 'raw_kg', unit: 'ton', unit_price: '1.234,5' }); cases.push(d); }
 { const d = example(); d.material_detail.use = true; d.material_detail.pallets = '26,5'; d.material_detail.lines[0] = { code: 'mat_pallet', qty: 1, price: '300,99' }; d.material_detail.lines.push({ code: 'mat_custom_etiket', label: 'etiket', qty: '0,5', price: '0,333' }); cases.push(d); }
 { const d = example(); d.material_detail.use = true; cases.push(d); }
 for (const [cur, rate, price, m] of [['TL', 1, 40, 20], ['USD', '34,25', '1,1', ''], ['EUR', '36,8', '0,95', 10], ['EUR', 0, 1, null], ['TL', 1, 1, 100]]) {
