@@ -228,6 +228,46 @@ function pdks_faz8b_saat_kolonlari_hazir(?PDO $pdo = null): bool
     return true;
 }
 
+// =========================================================
+// RAMPACI YEVMİYE ADEDİ (v463)
+// daily_worker_work_periods.yevmiye_adedi — TEK nullable kolon (NULL = saat bazlı, bugünkü davranış).
+// Dolu (>0) ise dönem "yevmiyeli kayıt"tır: ödeme = yevmiye adedi × işçi tipinin Tam günlük tarifesi;
+// süre/FM/Yarım/Çift mantığı ATLANIR (TEK doğruluk: pdks_faz8b_donem_siniflandir). KENDİ migrate/hazır çifti —
+// pdks_faz8b_sema_hazir()'e BİLEREK EKLENMEZ (kolon yokken TÜM Faz 8B kilitlenirdi). Kolon yoksa Rampacı
+// yevmiyeli fiş FAIL-CLOSED (hata + sıfır yazım), kiosk/saat bazlı Rampacı etkilenmez.
+// Kurulum yalnız migrate.php › «Rampacı yevmiye alanı» kartı (açık GO); ekranlarda migrate ÇAĞRILMAZ.
+// =========================================================
+
+const PDKS_YEVMIYE_TABLO = 'daily_worker_work_periods';
+const PDKS_YEVMIYE_KOLON = 'yevmiye_adedi';
+const PDKS_YEVMIYE_UST   = 10;   // tek kişiye en çok yevmiye adedi (OCR hatası koruması)
+
+/** [kolon, tanım] — yalnız ADD COLUMN. */
+function pdks_yevmiye_kolon_tanimi(): array
+{
+    return [[PDKS_YEVMIYE_KOLON, 'TINYINT UNSIGNED NULL DEFAULT NULL']];
+}
+
+/** Kolonu ekler (idempotent). @return list<array{adim:string,durum:string,mesaj:string}> */
+function pdks_yevmiye_kolon_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+    foreach (pdks_yevmiye_kolon_tanimi() as [$kolon, $tanim]) {
+        $rapor[] = pdks_faz8b_kolon_ekle($pdo, PDKS_YEVMIYE_TABLO, $kolon, $tanim, 'status');
+    }
+    pdks_gunluk_kolon_onbellek_temizle($pdo, PDKS_YEVMIYE_TABLO);
+    return $rapor;
+}
+
+/** Tablo + kolon var mı? (istek başına kolon önbelleğinden) */
+function pdks_yevmiye_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_tablo_var($pdo, PDKS_YEVMIYE_TABLO)) return false;
+    return pdks_faz8b_kolon_var($pdo, PDKS_YEVMIYE_TABLO, PDKS_YEVMIYE_KOLON);
+}
+
 /**
  * Saat girdisi → dakika. "9" → 540, "9:30" / "09.30" → 570. Boş → null.
  * Geçersiz → -1 (çağıran hata mesajı üretir). Aralık denetimi ÇAĞIRANDA.
@@ -473,7 +513,7 @@ function pdks_faz8b_donem_siniflandir(array $donem, ?array $oran = null): array
         $sinifKaynak = 'fm_onayi';
     }
 
-    return $sure + [
+    $sonuc = $sure + [
         'tam_dk' => $e['tam_dk'],
         'tam_kaynak' => $e['tam_kaynak'],
         'yarim_dk' => $e['yarim_dk'],
@@ -494,6 +534,31 @@ function pdks_faz8b_donem_siniflandir(array $donem, ?array $oran = null): array
         'odenecek_fm_saat' => $odenecekFm,
         'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnaySaat !== null),
     ];
+
+    // v463 — RAMPACI YEVMİYE: dönemde yevmiye_adedi > 0 ise sonuç EZİLİR (süre/FM/Yarım/Çift mantığı ATLANIR).
+    // Sınıf 'tam' (otomatik, onay gerekmez), FM yok, hakediş = yevmiye × Tam tarife (pdks_faz8b_hakedis_hesapla).
+    // Kolon yoksa satırda anahtar da yoktur → 0 → bugünkü davranış birebir.
+    $yev = isset($donem[PDKS_YEVMIYE_KOLON]) && $donem[PDKS_YEVMIYE_KOLON] !== '' ? (int)$donem[PDKS_YEVMIYE_KOLON] : 0;
+    if ($yev > 0) {
+        $sonuc['otomatik_sinif'] = 'tam';
+        $sonuc['sinif_onayi_gerekli'] = false;
+        $sonuc['etkin_sinif'] = 'tam';
+        $sonuc['sinif_kaynak'] = 'yevmiye';
+        $sonuc['fazla_dk'] = 0;
+        $sonuc['fazla_mesai_saat'] = 0;
+        $sonuc['fazla_mesai_onayi_gerekli'] = false;
+        $sonuc['fazla_mesai_durum'] = 'yok';
+        $sonuc['fazla_mesai_onay_saat'] = null;
+        $sonuc['fazla_mesai_onay_kirpildi'] = false;
+        $sonuc['odenecek_fm_saat'] = 0;
+        $sonuc['yarim_alti'] = false;
+        $sonuc['cift_aday'] = false;
+        $sonuc['cift'] = false;
+        $sonuc['cift_fm_aday'] = 0;
+        $sonuc['finans_hazir'] = true;
+    }
+    $sonuc['yevmiye'] = $yev > 0 ? $yev : 0;
+    return $sonuc;
 }
 
 /**
@@ -690,6 +755,8 @@ if (!defined('PDKS_FAZ8B_OZET_FM_SUTUN')) define('PDKS_FAZ8B_OZET_FM_SUTUN', 5);
  *      süresi (ör. 9 sa) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı: 10:11 → 1,
  *      12:00 → 3. Reddedilen FM sayılmaz; Çift günde çift eşiğinden SONRAKİ onaylı saat.
  *  karisik   — atanmamış Karışık dönem sayısı (sınıfsız, süreye KATILMAZ)
+ *  yevmiye   — v463: yevmiyeli (Rampacı) dönemlerin toplam yevmiye adedi (Σy); bu dönemler tanim'de 'tam' KİŞİ sayılır (tanim satır
+ *              biçimi DEĞİŞMEDİ), süre/FM/Çalışma Saatleri toplamına KATILMAZ
  *  calisma_dk   — TOLERANSLI toplam çalışma: Σ [min(süre, FM başlangıcı) + FM saati × 60]
  *                 (FM = 15 dk tolerans sonrası, başlayan saat yukarı; bkz. pdks_faz8b_fm_saat)
  *  ham_dk       — Σ gerçek (çıkış − giriş) süre, toleranssız
@@ -713,7 +780,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
                              'bekliyor' => 0, 'suruyor' => 0, 'eksik' => 0, 'toplam' => 0];
     }
     $o = [
-        'tanim' => $tanim, 'karisik' => 0, 'diger' => 0,
+        'tanim' => $tanim, 'karisik' => 0, 'diger' => 0, 'yevmiye' => 0,
         'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0, 'fm_bas_dk' => [], 'fm_kaynak' => [],
         'fm_saat' => 0, 'fm_onayli' => 0, 'fm_bekleyen' => 0, 'fm_red' => 0,
         'servis' => array_fill_keys(array_keys(pdks_servis_turleri()), 0),
@@ -728,6 +795,13 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
         $f = $d['faz8b'];
         $t = &$o['tanim'][$ad];
         $t['toplam']++;
+        // v463: yevmiyeli Rampacı — Tam sayılır (kişi), yevmiye adedi ayrıca toplanır; sentetik süre/FM'ye KATILMAZ.
+        if ((int)($f['yevmiye'] ?? 0) > 0) {
+            $t['tam']++;
+            $o['yevmiye'] += (int)$f['yevmiye'];
+            unset($t);
+            continue;
+        }
         if ($f['toplam_dk'] === null) { $t[(($d['_s_status'] ?? '') === 'closed') ? 'eksik' : 'suruyor']++; unset($t); continue; }
         $sinif = $f['etkin_sinif'];
         if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++; else $t['bekliyor']++;
@@ -783,6 +857,7 @@ function pdks_faz8b_mesai_tanimi_etiketi(?array $f, bool $suruyor, bool $karisik
 {
     if ($karisik || $f === null) return '—';
     if ($suruyor) return '⏳ Sürüyor';
+    if ((int)($f['yevmiye'] ?? 0) > 0) return 'Yevmiye ×' . (int)$f['yevmiye'];   // v463
     if (($f['etkin_sinif'] ?? null) === null) return 'Karar bekliyor';
     $m = pdks_faz8b_sinif_etiketi((string)$f['etkin_sinif']);
     $aday = (int)($f['fazla_mesai_saat'] ?? 0);
@@ -888,6 +963,10 @@ function pdks_faz8b_degerlendirme_kaydet(
     // süre/FM burada YENİDEN HESAPLANMAZ.
     $p = pdks_faz8b_donem_getir($periodId, $pdo);
     if (!$p) return ['ok' => false, 'hata' => 'Mesai dönemi bulunamadı.'];
+    // v463: yevmiyeli Rampacı kaydı Tam/Yarım/FM değerlendirmesine tabi DEĞİLDİR (ödeme = yevmiye × Tam tarife).
+    if ((int)($p['faz8b']['yevmiye'] ?? 0) > 0) {
+        return ['ok' => false, 'hata' => 'Yevmiyeli kayıt Yarım/FM değerlendirmesine tabi değildir (ödeme yevmiye adedi × Tam günlük tarifedir).'];
+    }
 
     $stFinal = $pdo->prepare(
         "SELECT id FROM foreman_daily_entitlements
@@ -2004,6 +2083,45 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         );
         if (!$oran) {
             $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — geçerli fiyat yok';
+            continue;
+        }
+
+        // v463 — RAMPACI YEVMİYE: ödeme = yevmiye adedi × Tam günlük tarife. TEK satır biçimi (servis satırı emsali):
+        // worker_count = y, unit_rate = tarife, line_total = tarife × y (tam sayı kuruş çarpımı, YUVARLAMA YOK).
+        // Yarım/Çift/FM fiyatı OLMASA da hesaplanır (bunlara hiç bakılmaz). Yöntem B: SUM(worker_count) = kişi-gün = yevmiye.
+        $yev = (int)($f['yevmiye'] ?? 0);
+        if ($yev > 0) {
+            $yRaw = $oran['daily_rate'] ?? null;
+            if ($yRaw === null || $yRaw === '') {
+                $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — Tam Mesai fiyatı yok (yevmiye bu fiyatla ödenir)';
+                continue;
+            }
+            try {
+                $yKurus = pdks_hakedis_tl_kurus((string)$yRaw);
+            } catch (Throwable $e) {
+                $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — geçersiz temel fiyat';
+                continue;
+            }
+            $yPara = trim((string)($oran['currency'] ?? 'TRY')) ?: 'TRY';
+            $paraBirimleri[$yPara] = true;
+            $stKod->execute([$tipId]);
+            $yKod = (string)($stKod->fetchColumn() ?: '');
+            $yLine = $yKurus * $yev;
+            $toplamKurus += $yLine;
+            $satirlar[] = [
+                'work_period_id' => (int)$d['id'],
+                'worker_type_id' => $tipId,
+                'worker_type_code_snapshot' => $yKod,
+                'worker_type_name_snapshot' => (string)$d['worker_type_name_snapshot'],
+                'attendance_class_snapshot' => 'tam',
+                'worker_count' => $yev,
+                'unit_rate' => pdks_hakedis_kurus_tl($yKurus),
+                'overtime_hours' => 0,
+                'overtime_mode_snapshot' => null,
+                'overtime_unit_rate' => '0.00',
+                'overtime_total' => '0.00',
+                'line_total' => pdks_hakedis_kurus_tl($yLine),
+            ];
             continue;
         }
 

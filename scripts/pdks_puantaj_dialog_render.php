@@ -164,6 +164,15 @@ if (getenv('PUANTAJ_FAZ8B') === '1') {
     db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'CIKIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 19:00:00', $sid]);
 }
 
+// v463: PUANTAJ_YEVMIYE=1 (PUANTAJ_FAZ8B=1 ile) → yevmiye_adedi kolonu kurulur ve K002 kartının dönemi yevmiye=3 (kapalı, 08:00–17:00) yapılır —
+// Mesai Detayı «↻ 3 yevmiye» rozeti, Mesai Tanımı «Yevmiye ×3» ve Mesai Özeti «Rampacı yevmiye» notu (pdks_yevmiye_smoke.php).
+if (getenv('PUANTAJ_YEVMIYE') === '1' && getenv('PUANTAJ_FAZ8B') === '1') {
+    pdks_yevmiye_kolon_migrate(db());
+    // K002: çıkışsız kart → kapalı, 08:00–17:00 dönem (yevmiyeli kayıtlar gerçekte kapalı yazılır) + yevmiye = 3
+    $gunY = date('Y-m-d');
+    db()->prepare("UPDATE daily_worker_work_periods SET yevmiye_adedi = 3, entry_time = ?, exit_time = ?, status = 'closed' WHERE session_id = ? AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K002')")->execute([$gunY . ' 08:00:00', $gunY . ' 17:00:00', $sid]);
+}
+
 // v299: PUANTAJ_SERVIS=1 → Servis Ücreti tabloları + çavuş fiyatı (Büyük 1500 / Küçük 800) +
 // 2 servis kaydı (biri iptal) — "🚌 Servis Ücreti" penceresi ve Servisler listesi
 // (pdks_servis_dialog_smoke.js). Varsayılan (env yok) davranış DEĞİŞMEZ (tablo yok → gizli).

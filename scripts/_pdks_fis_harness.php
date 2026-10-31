@@ -93,6 +93,8 @@ db()->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY AUTO
 db()->exec("CREATE TABLE foreman_daily_entitlement_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, entitlement_id INTEGER, work_period_id INTEGER, worker_type_id INTEGER, worker_type_code_snapshot TEXT, worker_type_name_snapshot TEXT, attendance_class_snapshot TEXT, worker_count INTEGER, unit_rate TEXT, overtime_hours INTEGER, overtime_mode_snapshot TEXT, overtime_unit_rate TEXT, overtime_total TEXT, line_total TEXT)");
 foreach (pdks_servis_tablolar() as $sql) fis_ddl_kur(db(), $sql);
 pdks_faz8b_saat_kolonlari_migrate(db());
+// v463: Rampacı yevmiye kolonu (PDKS_FIS_HARNESS_YEVMIYE=0 → kolon kurulmamış senaryosu)
+if (getenv('PDKS_FIS_HARNESS_YEVMIYE') !== '0') pdks_yevmiye_kolon_migrate(db());
 
 $gecen = 0; $fail = 0;
 function ok(string $ad, bool $c, string $ipucu = ''): void {

@@ -2,7 +2,7 @@
 
 Kâğıt "İŞLETME İŞÇİ FİŞİ"ni dış bir yapay zekâyla (OCR) şablona döktürüp Excel'i yükleyerek fiş başına kartsız mesai kayıtlarını
 (Tam / fazla mesai / Yarım) ve servisi yazar. Sayfa: Günlük Puantaj › **📥 Fiş Excel'i Yükle** (`gunluk_fis_yukle.php`). Yalnız yönetici.
-Migration yok. Uygulama içinde OCR/AI yok; yüklenen dosya sunucuda saklanmaz.
+Migration yok (tek istisna v463: Rampacı yevmiye kolonu — aşağıdaki «v463» bölümü). Uygulama içinde OCR/AI yok; yüklenen dosya sunucuda saklanmaz.
 
 ## Kullanım
 1. **Şablonu indir** (`Fis_Excel_Sablonu_YYYYMMDD.xlsx`; çavuş listesi o günün sistem verisidir).
@@ -40,6 +40,10 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 | Mesaj | Anlamı |
 |---|---|
 | `Satır n, «Başlık»: "12 + 1" tek sayı değil` | Rampacı / Yarım sütununda birden çok sayı — ayrı sütunlara yazın |
+| `«Rampacı Tam/Yarım» eski şablona aittir …` | v463: eski şablondaki Rampacı Tam/Yarım DOLU — yeni şablonu indirip «Rampacı Kişi» + «Rampacı Yevmiye» kullanın |
+| `Rampacı yevmiye adedi yok («Rampacı Kişi» = N)` / `Rampacı kişi sayısı yok` / `yevmiye adedi (M) kişi sayısından (N) az olamaz` | Kişi ve yevmiye sütunları birlikte doldurulur; yevmiye ≥ kişi |
+| `Rampacı: tek kişiye N yevmiye düşüyor (en çok 10) — OCR hatası şüphesi` | Sayıları fişten kontrol edin |
+| `Rampacı yevmiye alanı kurulmadı (migrate.php › «Rampacı yevmiye alanı»)` | Yönetici Şema Migrasyon kartını bir kez basar; basılana dek yevmiyeli Rampacı fişleri yazılmaz (diğerleri yazılır) |
 | `«12+1» bu alanda belirsiz — «+» yalnız Erkek alanında Şeritçi anlamına gelir` | Kadın / Şeritçi alanında «+» yorumlanmaz; Kontrol Notu'na yazın |
 | `Ondalık («.5») yazımı ile «… Yarım» sütunu birlikte kullanılamaz` | Aynı kişi iki kez sayılırdı — yalnız birini yazın |
 | `Şeritçi hem «Erkek Tam» içindeki «+N» … çift sayım` | «+N» ya da «Şeritçi Tam» — yalnız birini kullanın |
@@ -61,3 +65,12 @@ sahibin kararına göre güncellenecek TEK yerdir; kod mantığı bundan bağım
 - **FM havuzu:** «Tümü» / boş FM Tipi Şeritçi'yi **kapsamaz** (`pdks_fis_fm_varsayilan_kodlar()`); Şeritçi FM'ye yalnız «FM Tipi» hücresinde `Şeritçi` / `Erkek Şeritçi` yazılırsa girer.
 - **Fiyatsız tip uyarısı:** önizlemede bir tipin o tarihte geçerli fiyatı yoksa ««Şeritçi» için gg.aa.yyyy tarihinde geçerli fiyat YOK — kayıt yazılır, fiyat girilene dek hakediş hesaplanamaz.» uyarısı çıkar (engel değil; hakediş fail-closed durur).
 - **Geçmiş tarihli fiyat:** Şeritçi için önce en eski fiyatı geçmiş tarihle girin, sonra güncel fiyatı yeni tarihle ekleyin. Yanlış tarihle açılmış ilk dönem Çavuş Ücretleri › Fiyat Geçmişi › «⏪ Başlangıcı geriye çek» ile (yalnız yönetici, gerekçeli, kesin hakedişli satırı olan aralıkta reddedilir) düzeltilir; etkilenen taslak hakedişler yeniden hesaba işaretlenir.
+
+## v463 — Rampacı yevmiye (W3)
+- **Sütunlar:** «Rampacı Tam» / «Rampacı Yarım» şablondan KALKTI; yerine **«Rampacı Kişi»** (kaç kişi) ve **«Rampacı Yevmiye»** (toplam yevmiye adedi). Şablon sürümü 3, 26 sütun. Eski şablon hâlâ okunur: eski Rampacı sütunları DOLUYSA fiş **hata** verir (sessiz tip kaybı olmasın), 0/boşsa sessiz geçilir.
+- **Kurallar:** ikisi de boş → Rampacı yok · kişi var yevmiye yok → HATA (fişte yevmiye adedi yoksa iki sütunu da boş bırakın, Kontrol Notu'na yazın) · yevmiye var kişi yok → HATA · yevmiye < kişi → HATA · tek kişiye 10'dan fazla yevmiye → HATA (OCR hatası şüphesi) · «+» ve «.5» bu sütunlarda hatadır (tahmin yok).
+- **Dağıtım** (`pdks_fis_rampaci_dagit`, rastgelelik yok): her kişiye *yevmiye ÷ kişi* (tam bölüm), kalan kadar kişiye +1. 3 kişi 3 yevmiye → 3 kişi 1 yevmiye · 3 kişi 5 yevmiye → 2 kişi 2 yevmiye + 1 kişi 1 yevmiye · 2 kişi 7 yevmiye → 1 kişi 4 + 1 kişi 3. Her kişi kartsız ayrı dönem olarak yazılır (`yevmiye_adedi` = kişinin yevmiyesi).
+- **Ödeme:** toplam yevmiye × çavuşun **Rampacı Tam günlük** ücreti (Yarım/Çift/FM ücreti gerekmez; yevmiye Yarım fiyatla ödenmez; Tam fiyat yoksa hakediş durur). Hakediş satırı: `worker_count` = yevmiye, `unit_rate` = Tam tarife, `line_total` = tarife × yevmiye. Yevmiyeli Rampacı fazla mesaiye/Yarım kararına girmez; Çavuş Ücreti Yöntem B'de kişi-gün = yevmiye.
+- **Kurulum (açık GO):** `daily_worker_work_periods.yevmiye_adedi` (tek nullable kolon). Yönetici **Şema Migrasyon › «Rampacı yevmiye alanı»** kartını test sitesinde ve canlıda ayrı ayrı bir kez basar. Basılmadan yevmiyeli Rampacı fişi önizlemede «Rampacı yevmiye alanı kurulmadı» hatası verir ve o fiş için hiçbir şey yazılmaz; yevmiyesiz fişler, kiosk ve Toplu İşlem/Çalışma Ekle'deki saat bazlı Rampacı etkilenmez.
+- **Toplu İşlem / Çalışma Ekle** ekranlarında yevmiye alanı YOKTUR (yalnız Fiş Excel kod yolu); Mesai Detayı'nda yevmiyeli dönem «↻ N yevmiye» rozeti ve Mesai Özeti'nde «Rampacı yevmiye: Σ» notu görünür.
+- **Test:** `php scripts/pdks_yevmiye_smoke.php` (kolonsuz senaryo dahil) · `pdks_fis_plan_smoke` (12b) · `pdks_fis_xlsx_smoke` (2c) · `pdks_fis_yaz_smoke` (P) · `node scripts/pdks_fis_ui_smoke.js`.

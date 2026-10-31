@@ -1496,6 +1496,9 @@ html[data-theme="dark"] .pdks-kiosk-type-badge.pdks-kiosk-type-badge-karisik { c
 
 .pdks-badge-karisik { background: #f3eeff; color: #5b34b8; border: 1px solid #d8c9ff; margin-left: 6px; white-space: nowrap; font-weight: 700; }
 html[data-theme="dark"] .pdks-badge-karisik { background: #2a2047; color: #cbb8ff; border-color: #4f3b8c; }
+/* v463 — yevmiyeli Rampacı kaydı rozeti (turuncu: Rampacı rengi) */
+.pdks-badge-yevmiye { background: #fff1e0; color: #9a4a00; border: 1px solid #f5c58d; margin-left: 6px; white-space: nowrap; font-weight: 700; }
+html[data-theme="dark"] .pdks-badge-yevmiye { background: #3a2610; color: #ffc98a; border-color: #7a4a14; }
 
 .pdks-karisik-uyari { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px;
     margin: 0 0 16px; padding: 12px 16px; border: 1px solid #d8c9ff; border-left: 4px solid #7c4ddb; border-radius: var(--radius);

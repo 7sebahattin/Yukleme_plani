@@ -264,6 +264,11 @@ $mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum
     if (empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'closed' && !$karisik) return 'Eksik çıkış';
     return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
 };
+// v463: yevmiyeli Rampacı dönemi → tip hücresinde «↻ N yevmiye» rozeti (sınıflandırıcıdan; kolon yoksa hiç çıkmaz).
+$yevmiyeRozet = function (array $k) use ($mesaiTanimF): string {
+    $y = (int)($mesaiTanimF[(int)($k['period_id'] ?? 0)]['yevmiye'] ?? 0);
+    return $y > 0 ? ' <span class="pdks-badge pdks-badge-yevmiye" title="Yevmiyeli Rampacı kaydı: tutar = yevmiye adedi × Tam günlük tarife">↻ ' . $y . ' yevmiye</span>' : '';
+};
 // v315/v317: Süre sütunu = HESAPLANAN süre (saat başı ±15 dk: 07:57/08:14 → 08:00, 16:46/17:13 → 17:00 —
 // pdks_faz8b_etkin_saatler). Ham süre farklıysa altında küçük not; faz8b yoksa ham süre.
 $sureBilgi = function (array $k) use ($mesaiTanimF): ?array {
@@ -439,6 +444,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
                 </tbody>
                 <tfoot><?= $moSatir('Toplam', $moTop, true) ?></tfoot>
             </table></div>
+            <?php if ((int)($mo['yevmiye'] ?? 0) > 0): /* v463: yevmiyeli Rampacı — Tam sütununda KİŞİ olarak sayılır; yevmiye adedi burada */ ?><p class="pdks-mo-not"><strong>Rampacı yevmiye:</strong> <?= (int)$mo['yevmiye'] ?> (tutar = yevmiye adedi × Rampacı Tam günlük ücreti; süre/fazla mesai hesabına girmez).</p><?php endif; ?>
             <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır<?php if (count($mo['fm_bas_dk']) === 1): $moE = (int)$mo['fm_bas_dk'][0]; /* v320: örnek, uygulanan eşikten üretilir */ ?> (ör. <?= h(pdks_faz8b_dakika_etiket($moE + 71)) ?> → 1. Saat; <?= h(pdks_faz8b_dakika_etiket($moE + 180)) ?> → 3. Saat)<?php endif; ?>. Giriş ve çıkış tam saate 15 dk yakınsa o saat sayılır (07:57 / 08:14 → 08:00, 16:46 / 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
         </div>
         <div class="pdks-mo-kart">
@@ -537,7 +543,7 @@ $tdKutu = function (array $k, string $gorunum) use ($kartsizKartIds, $karisikTip
 ?>
 <tr>
     <td class="pdks-uid" data-sirala-deger="<?= h($sd['kart']) ?>"><?= $tdAjaxKapi ? $tdKutu($k, 'pc') : '' ?><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'ters'): ?> <span class="pdks-badge pdks-badge-ters" title="Giriş Tanımlı — sabah kalan kart sayımıyla sabit saatte girildi (fiziksel okutma değil)">↩ Giriş Tanımlı</span><?php endif; ?></td>
-    <td data-sirala-deger="<?= h($sd['tip']) ?>"><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?></td>
+    <td data-sirala-deger="<?= h($sd['tip']) ?>"><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= $yevmiyeRozet($k) ?></td>
     <td class="muted" data-sirala-deger="<?= h($sd['mesai']) ?>"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td data-sirala-deger="<?= h($sd['giris']) ?>"><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
     <td class="muted" data-sirala-deger="<?= h($sd['cikis']) ?>"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
@@ -581,7 +587,7 @@ $tdKutu = function (array $k, string $gorunum) use ($kartsizKartIds, $karisikTip
     <div class="pdks-card-top">
         <?= $tdAjaxKapi ? $tdKutu($k, 'mob') : '' ?>
         <div class="pdks-card-meta">
-            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'ters'): ?> <span class="pdks-badge pdks-badge-ters" title="Giriş Tanımlı — sabah kalan kart sayımıyla sabit saatte girildi (fiziksel okutma değil)">↩ Giriş Tanımlı</span><?php endif; ?></div>
+            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= $yevmiyeRozet($k) ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'ters'): ?> <span class="pdks-badge pdks-badge-ters" title="Giriş Tanımlı — sabah kalan kart sayımıyla sabit saatte girildi (fiziksel okutma değil)">↩ Giriş Tanımlı</span><?php endif; ?></div>
             <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . $sureHtml($k) : '' ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>

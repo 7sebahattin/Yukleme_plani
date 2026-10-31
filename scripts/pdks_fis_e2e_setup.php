@@ -32,7 +32,7 @@ $gun = date('d.m.Y', strtotime('-3 day')); $gun2 = date('d.m.Y', strtotime('-4 d
 $satirlar = [
     ['fis_no' => 'E2E-1', 'tarih' => $gun, 'kadin_tam' => 8, 'erkek_tam' => 12, 'erkek_yarim' => 1, 'fm2' => 5, 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1,
      'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 | Erkek yarım 1 | Toplam Mesai: 5 kişi 2 saat | <script>window.__xss=1</script>', 'kontrol' => '"><img src=x onerror="window.__xss=2">'],
-    ['fis_no' => 'E2E-2', 'tarih' => $gun2, 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_tam' => 2, 'rampaci_yarim' => 1, 'fm_toplam' => 25, 'servis_buyuk' => 1, 'giris' => '09:00'],
+    ['fis_no' => 'E2E-2', 'tarih' => $gun2, 'kadin_tam' => 8, 'erkek_tam' => 12, 'rampaci_kisi' => 3, 'rampaci_yevmiye' => 5, 'fm_toplam' => 25, 'servis_buyuk' => 1, 'giris' => '09:00'],
     // v456: Kadın alanında «+» belirsiz → hücre HATASI (tahmin yok); «+» yalnız Erkek Tam'da Şeritçi anlamına gelir
     ['fis_no' => 'E2E-3', 'tarih' => $gun3, 'kadin_tam' => '12 + 1', 'not' => '=HYPERLINK("http://x","y")'],
     // v456: yeni yorum kuralları — Kadın «33,5» = 33 Tam + 1 Yarım, Erkek «12+1» = 12 Erkek + 1 Şeritçi (uyarılı ama yazılabilir)
