@@ -313,6 +313,26 @@ function can_siparis(string $perm): bool {
 }
 
 /**
+ * Hızlı Maliyet yetki kapısı — TEK kaynak: sayfalar (hizli_maliyet*.php), depo katmanı
+ * (quick_cost_access), sidebar, topnav, bottomnav, index kartı AYNI fonksiyonu çağırır.
+ * Yetkiler hizli_maliyet.read / .write / .delete AYRIDIR; eski maliyet.* izinleri Hızlı
+ * Maliyet'i AÇMAZ (operator/muhasebe kendiliğinden görmez). is_admin() her zaman geçer
+ * (canlı DB'de seed gerekmez). write ve delete okumayı da ister. can() yoksa FAIL-CLOSED.
+ * Tablo kurulumu bu kapıdan bağımsızdır: yalnız is_admin() (config/quick_cost_schema.php).
+ */
+function can_hizli_maliyet(string $perm): bool {
+    if (!function_exists('can')) return false;                      // fail-closed
+    if (function_exists('is_admin') && is_admin()) return in_array($perm, ['read', 'write', 'delete'], true);
+    $oku = can('hizli_maliyet.read');
+    return match ($perm) {
+        'read'   => $oku,
+        'write'  => $oku && can('hizli_maliyet.write'),
+        'delete' => $oku && can('hizli_maliyet.delete'),
+        default  => false,
+    };
+}
+
+/**
  * Personel Takibi girişi bu kullanıcıya gösterilsin mi?
  *
  * ⚠ TEK kaynak (sidebar + bottomnav). personel_takip.php'nin KENDİ kapı
@@ -361,6 +381,7 @@ function first_allowed_page(): ?string {
         'mail.php'           => can_mail('read'),                       // mail.php: can_mail('read')
         'siparisler.php'     => can_siparis('read'),                    // siparisler.php: require_siparis('read')
         'maliyet.php'        => can('maliyet.read') || $adm,            // can_maliyet('read')
+        'hizli_maliyet.php'  => can_hizli_maliyet('read'),              // hizli_maliyet.php: can_hizli_maliyet('read')
         // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
         // TEK yerde durur, üçüncü bir kopya ayrışma riski doğururdu.
         'personel_takip.php' => nav_ptak_gorunur(),
@@ -548,7 +569,8 @@ function render_desktop_sidebar(string $base): void {
     $a_sip   = $ak === 'siparis';
     $a_usip  = $ak === 'usip';
     // Liste ve form masaüstünde aynı Hızlı Maliyet bağlantısını etkinleştirir.
-    $a_quick = $p_adm && in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);
+    $p_quick = can_hizli_maliyet('read'); // TEK kaynak — hizli_maliyet.php'nin kapısıyla birebir
+    $a_quick = $p_quick && in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);
     $a_rep   = $ak === 'rapor' && !$a_quick;
     $a_ptak  = $ak === 'ptak';
     $a_def   = $ak === 'defs';
@@ -603,7 +625,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rec)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
         <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
-        <?php if ($p_adm)  $lnk('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick); ?>
+        <?php if ($p_quick) $lnk('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
 <?php   // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03, kullanıcı
@@ -783,7 +805,7 @@ function nav_alt_izinler(): array {
         'kantar'  => $c('kantar.read'),             // kantar.php: require_perm('kantar.read')
         'hks'     => $c('records.write'),           // halkayit/index.php: require_perm('records.write')
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
-        'qcost'   => $fn && $adm,                   // can_maliyet(read) admini kabul eder; cost_calc yüklenmeyen sayfalarda da görünür
+        'qcost'   => $fn && can_hizli_maliyet('read'), // hizli_maliyet.php: can_hizli_maliyet('read') — TEK kaynak (maliyet.* izni AÇMAZ)
         'mstok'   => $c('stok.read'),               // malzeme_stok.php: require_perm('stok.read')
         'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
         'mail'    => $fn && can_mail('read'),       // mail.php: can_mail('read') — TEK kaynak
@@ -1682,7 +1704,7 @@ endif;
                        'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements',
                        'attendance.foreman_accounts','attendance.foreman_payments',
                        'attendance.management_reports'];
-            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin','siparis.read','siparis.write','siparis.delete','siparis.match'], $pdks_p);
+            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin','siparis.read','siparis.write','siparis.delete','siparis.match','hizli_maliyet.read','hizli_maliyet.write','hizli_maliyet.delete'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
                 // Sprint Günlük-İşçi-03 düzeltmesi #2 (kullanıcının açık

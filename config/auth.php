@@ -299,6 +299,11 @@ function permission_catalog(): array {
             'maliyet.unlock' => 'Kesinleşmiş hesabın kilidini aç',
             'maliyet.admin'  => 'Alan / şablon / ambalaj tanımlarını yönet',
         ],
+        'Hızlı Maliyet' => [
+            'hizli_maliyet.read'   => 'Hızlı Maliyet kayıtlarını görüntüle (eski Maliyet izinlerinden bağımsızdır)',
+            'hizli_maliyet.write'  => 'Hızlı Maliyet hesabı oluştur / düzenle / kopyala',
+            'hizli_maliyet.delete' => 'Hızlı Maliyet kaydı sil',
+        ],
         'Hesap' => [
             'hesap.read'    => 'Hesabım — yalnız KENDİ hesap kayıtlarını görüntüle',
             'hesap.write'   => 'Kendi masraf kaydını oluştur / düzenle (onaylanana kadar)',

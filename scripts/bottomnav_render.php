@@ -111,6 +111,12 @@ $PROFILLER = [
         'rol' => ['slug' => 'viewer', 'label' => 'İzleyici'],
         'perms' => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read','hesap.read'],
     ],
+    'hizli_okuyucu' => [
+        // Özel rol: yalnız records.read + hizli_maliyet.read (eski maliyet.* YOK) → Hızlı Maliyet kapısı hizli_maliyet.read'den açılır.
+        'ad' => 'Özel rol: Hızlı Maliyet okuyucu', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'hizli_okuyucu', 'label' => 'Hızlı Maliyet Okuyucu'],
+        'perms' => ['dashboard.read','records.read','hizli_maliyet.read'],
+    ],
     'ozel_gunluk' => [
         // Özel rol: YALNIZ attendance.* (Günlük İşçi) — dashboard.read YOK.
         'ad' => 'Özel rol: yalnız Günlük İşçi (attendance.*)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
@@ -192,8 +198,8 @@ $GATES = [
     'cavus_cari.php'        => ['cavus_cari.php', "require_pdks_cari('accounts');",
                                 fn() => is_admin() || can('attendance.foreman_accounts'), 'is_admin() || attendance.foreman_accounts (pdks_cari_can)'],
     'reports.php'           => ['reports.php', "else { require_perm('reports.read'); }", fn() => can('reports.read'), 'reports.read'],
-    'hizli_maliyet.php'     => ['hizli_maliyet.php', "if (!is_admin()) forbidden(", fn() => is_admin(), 'admin; can_maliyet(read) also accepts admin'],
-    'hizli_maliyet_form.php' => ['hizli_maliyet_form.php', "if (!is_admin()) forbidden(", fn() => is_admin(), 'admin; can_maliyet(read) also accepts admin'],
+    'hizli_maliyet.php'     => ['hizli_maliyet.php', "require_hizli_maliyet('read');", fn() => can('hizli_maliyet.read') || is_admin(), 'can_hizli_maliyet(read) = hizli_maliyet.read || is_admin(); maliyet.* does NOT open'],
+    'hizli_maliyet_form.php' => ['hizli_maliyet_form.php', "require_hizli_maliyet('read');", fn() => can('hizli_maliyet.read') || is_admin(), 'can_hizli_maliyet(read) = hizli_maliyet.read || is_admin(); maliyet.* does NOT open'],
     'beyanlar.php'          => ['beyanlar.php', "if (!can_beyan('read')) forbidden();", fn() => can('beyan.read') || is_admin(), 'can_beyan(read) = beyan.read || is_admin()'],
     'kantar.php'            => ['kantar.php', "require_perm('kantar.read');", fn() => can('kantar.read'), 'kantar.read'],
     'malzeme_stok.php'      => ['malzeme_stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],

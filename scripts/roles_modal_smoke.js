@@ -1,7 +1,7 @@
 // =========================================================
 // scripts/roles_modal_smoke.js — Roller modalinin GERÇEK TARAYICI testi
 //
-// Neden gerekli: "Yeni Rol" modalinde 51 yetki kutusu var ve ekrana
+// Neden gerekli: "Yeni Rol" modalinde 54 yetki kutusu var ve ekrana
 // sığmıyor. .pm-dialog max-height:90vh + .pm-body overflow:auto kuralları
 // kaynakta DOĞRU görünüyordu, ama araya giren <form> sarmalayıcı flex
 // zincirini kırıyordu: gövde hiç kaydırılamıyor, alt yetki grupları ve
