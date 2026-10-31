@@ -153,14 +153,8 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
         <template id="qc2-custom-template"><?php $qc2_row(['code' => 'custom_template', 'label' => '', 'basis' => 'fixed', 'unit' => 'fixed', 'qty' => 0, 'qty2' => 0, 'unit_price' => 0]); ?></template>
         <button id="qc2-add-item" class="btn qc-add-item" type="button" data-qc2-detail>Yeni kalem ekle</button>
         <p id="qc2-custom-limit" class="qc-hint" hidden>En fazla kırk yeni kalem eklenebilir.</p>
-        <p class="qc-hint qc2-quick-only">Diğer kalemler (hasat, DTS taksi, CASUS, ek giderler) Detaylı Hesapta; tutarı olan kalem her iki görünümde de gösterilir ve hesaba katılır.</p>
         <?php endif; ?>
     </section>
-
-    <section class="qc-panel qc-breakdown" aria-labelledby="qc2-summary-heading"><h2 id="qc2-summary-heading">Grup toplamları</h2><dl>
-        <?php foreach ($qc2_groups as $qc2_key => $qc2_label): ?><div><dt><?= h($qc2_label) ?></dt><dd data-qc2-out="group.<?= h($qc2_key) ?>">—</dd></div><?php endforeach; ?>
-        <div class="qc-grand-total"><dt>Toplam operasyon maliyeti</dt><dd data-qc2-out="total_tl">—</dd></div>
-    </dl></section>
 
     <section class="qc-panel qc2-credit" data-qc2-detail aria-labelledby="qc2-credit-heading">
         <h2 id="qc2-credit-heading">Çıkma / suluk net geliri</h2>
