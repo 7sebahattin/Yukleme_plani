@@ -4,7 +4,7 @@ Kapsam: mevcut Asya Fresh uygulaması — asya.scai.tr.
 
 31 Ekim 2026. Ayrı çalışma kopyası: `Yukleme_plani_roles`, dal
 `codex/roles-permission-matrix`, başlangıç `origin/main` = `2ad0405`.
-Yerel uygulama ve doğrulama teslimidir; push/merge/yayın yapılmadı.
+İlk yerel teslimin ardından kullanıcı onayıyla PR838 main’e merge edildi; canlı v464 SW ve matris CSS dosyaları HTTP200 ile doğrulandı. Aşağıdaki yerel aşama notları bu ilk teslimin kanıtlarıdır.
 
 ## Sonuç
 
@@ -130,3 +130,29 @@ güncel main üzerine rebase edildi. Yayın sürümü v464 olarak ayrıldı. Ort
 PHP dosyalarında yalnız yeni yetki kapıları bulunur; Rampacı hesapları korunur.
 Önceki yerel teslim/push bekliyor ifadeleri tarihsel durumdur; güncel merge
 ve yayın sonucu PR kaydında ve bu bölümün devamında belirtilecektir.
+
+## v465 — geniş CI sonrası uyumluluk ve bağlantı doğrulaması
+
+PR838: https://github.com/7sebahattin/Yukleme_plani/pull/838; baş6881c02,
+merge96840fccacaf9e0a58ee52f3f4d9309058004360. Canlı SWv464/CSS200 ve
+roles.php oturumsuz login yönlendirmesi doğrulandı; rol/kayıt değiştirilmedi.
+
+Geniş CI eski test düzeneklerinde değişen kapılarla uyumsuzluk ve Personel
+Takip ekranında kaybolan kısayolları yakaladı. Özgün11 ana kart, ikon/metinler,
+Toplu Döküm ve Fiş Excel bağlantısı korundu. Yeni personel/kart/tarama/tip
+linkleri ayrı dar girişlerdir. Mesai/Manuel Çıkış, izinli son30 kayıt için
+yalnız SELECT kullanan depo kapsamlı seçimlerle erişilebilir. Sayım ve Ortak
+Çıkış bağlantıları ayrı yetkilendirilir; mevcut finansal ve yönetici koşulları
+korunur. Navbar/sidebar aynı hub yetki kaynağına bağlandı.
+
+HKS CSRF sırası ve kapılar yeni hks.access kodunu sınar; Beyan/rol fixture’ları
+gerçek izin genişletmesini kullanır. Excel gerçek SQL erişim kontrolünü
+anonim ortamda çalıştırır; child proc_open argv/environment ile platformdan
+bağımsızdır. Kaynak denetiminde Windows ayırıcıları normalize edildi. Test
+sözleşmeleri kaldırılmadı.
+
+Ana ajan sıralı doğrulama: Beyan UI/HKS iki test/rol kapıları geçti;
+Sipariş statik297, gerçekExcel22, Personelstatik231/UI125, Faz8C19, Faz8D20,
+Faz9E69, günlük Faz2statik102/Faz3statik94, PDKSlink91 geçti. Bağımsız Codex
+son kaynak incelemesinde açıkP1/P2yok. Tam CI sonuçları takip PR’ının
+kaydında belirtilir; yerel seçili test sonucu tüm CI yeşil demek değildir.

@@ -190,7 +190,7 @@ $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
 $sonIslemZamani = static fn(array $k): int => (int)(strtotime((string)(!empty($k['cikis_saat']) ? $k['cikis_saat'] : ($k['giris_saat'] ?? ''))) ?: 0);
 usort($kartlar, static fn(array $a, array $b): int => [$sonIslemZamani($b), (int)($b['period_id'] ?? 0)] <=> [$sonIslemZamani($a), (int)($a['period_id'] ?? 0)]);
 $faz8jHazir = function_exists('pdks_faz8j_sema_hazir') && pdks_faz8j_sema_hazir($pdo);
-$manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize');
+$manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('manual_exit','read');
 $manuelCikisDepoUygun = $oturum['depo'] === $aktifDepo;
 // ⚠ Faz 9E / E: bu oturumun dönemlerine (period_id) DETERMİNİSTİK bağlı
 // iptal/düzeltme geçmişi — bkz. pdks_gunluk_puantaj_denetim_gecmisi() docblock.

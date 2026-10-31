@@ -19,6 +19,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT = dirname(__DIR__);
+require_once $ROOT . '/config/role_permission_matrix.php';
 // Migration gurultusunu (SQLite'ta SHOW COLUMNS calismaz) log dosyasina yonlendir.
 $LOG = sys_get_temp_dir() . '/beyan_ui_smoke.log';
 ini_set('log_errors', '1');
@@ -33,7 +34,7 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test']; }
-function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
 function is_admin(): bool { return false; }
 function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }

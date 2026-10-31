@@ -37,7 +37,7 @@ if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
-$manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize');
+$manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('manual_exit','read');
 
 // ── v291: Geçmişe Dönük Çalışma Ekle (POST — yalnız yönetici) ──────────
 // Bu sayfa raporlama ekranıdır; tek yazma işlemi budur ve işlev kendi
