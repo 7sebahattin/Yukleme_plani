@@ -102,8 +102,10 @@
         }
         if (field === 'unit') {
             if (!Object.prototype.hasOwnProperty.call(UNITS, value)) throw new Error('Birim geçersiz.');
+            if (value === item.unit) return next;
+            // Eski miktar eski birime aittir (ör. 20.000 kg → 20.000 ton): yeni birimde 1'den başlar.
             item.unit = value; item.basis = value === 'fixed' ? 'fixed' : 'manual';
-            if (value === 'fixed') item.qty = 1;
+            item.qty = 1;
         } else if (field === 'qty') {
             if (item.unit === 'fixed') { item.qty = 1; item.basis = 'fixed'; }
             else { item.qty = value; item.basis = 'manual'; }
@@ -126,6 +128,13 @@
     }
     function editFormat(value) {
         return typeof value === 'number' ? value.toLocaleString('tr-TR', { maximumFractionDigits: 4 }) : String(value == null ? '' : value);
+    }
+    // "1.234" Türkçede binlik ayraçlıdır (1234); kullanıcı 1,234 kastetmiş olabilir.
+    function numberReadNote(value) {
+        var text = String(value == null ? '' : value).trim();
+        if (!/^\d{1,3}(?:\.\d{3})+$/.test(text)) return '';
+        try { return '"' + text + '" sayısı ' + String(parseNumber(text)) + ' olarak okunur. Ondalık için virgül kullanın: ' + text.replace('.', ',') + '.'; }
+        catch (_) { return ''; }
     }
     function isZeroInput(value) {
         if (typeof value !== 'string' || value.trim() === '') return false;
@@ -178,6 +187,22 @@
         form.querySelectorAll('[data-qc-row]').forEach(function (node) { rowNodes[node.dataset.qcRow] = node; });
         function setText(id, value) { var node = dom.getElementById(id); if (node) node.textContent = value; }
         function findItem(code) { return state.items.find(function (item) { return item.code === code; }); }
+        function noteHost(input) { return input.parentNode; }
+        function findChild(host, cls) { return Array.prototype.find.call(host.children, function (child) { return child.classList.contains(cls); }); }
+        function showReadNote(input) {
+            var host = noteHost(input), note = findChild(host, 'qc-read-note'), text = numberReadNote(input.value);
+            if (!text) { if (note) note.remove(); return; }
+            if (!note) { note = dom.createElement('small'); note.className = 'qc-read-note'; note.setAttribute('role', 'status'); host.appendChild(note); }
+            note.textContent = text;
+        }
+        function hideReadNote(input) { var note = findChild(noteHost(input), 'qc-read-note'); if (note) note.remove(); }
+        function rowNote(node, text) {
+            var settings = node.querySelector('[data-qc-settings]'), note = findChild(settings, 'qc-unit-note');
+            if (!text) { if (note) note.remove(); return; }
+            if (!note) { note = dom.createElement('p'); note.className = 'qc-hint qc-unit-note'; note.setAttribute('role', 'status'); settings.appendChild(note); }
+            note.textContent = text;
+        }
+        var kbdTimer;
         function showError(message) { validation.textContent = message; validation.hidden = !message; }
         function syncValue(input, value, source) {
             if (composingInputs.has(input)) return;
@@ -220,10 +245,10 @@
             var error = '';
             try { latest = calculate(state); } catch (failure) { latest = null; error = failure.message; }
             setText('qc-total', latest ? format(latest.total, 2) : '—');
-            setText('qc-unit-cost', latest ? format(latest.unit_cost, 2) : '—');
+            setText('qc-unit-cost', latest ? format(latest.unit_cost, 4) : '—');
             setText('qc-net-summary', latest ? editFormat(latest.net_kg) : '—');
             setText('qc-summary-total', latest ? format(latest.total, 2) + ' TL' : '—');
-            setText('qc-summary-unit', latest ? format(latest.unit_cost, 2) + ' TL/kg' : '—');
+            setText('qc-summary-unit', latest ? format(latest.unit_cost, 4) + ' TL/kg' : '—');
             ['A', 'B', 'D'].forEach(function (group) { setText('qc-group-' + group, latest ? format(latest.groups[group], 2) + ' TL' : '—'); });
             paintInputs(source);
             state.items.forEach(function (item, index) {
@@ -257,13 +282,16 @@
             if (addButton) addButton.disabled = readOnly || limit;
             var limitHint = dom.getElementById('qc-custom-limit'); if (limitHint) limitHint.hidden = !limit;
             clearTimeout(announceTimer);
-            announceTimer = setTimeout(function () { setText('qc-live-total', latest ? 'Toplam ' + format(latest.total, 2) + ' TL, net kilogram maliyeti ' + format(latest.unit_cost, 2) + ' TL.' : 'Hesap için sayısal girişleri kontrol edin.'); }, 350);
+            announceTimer = setTimeout(function () { setText('qc-live-total', latest ? 'Toplam ' + format(latest.total, 2) + ' TL, net kilogram maliyeti ' + format(latest.unit_cost, 4) + ' TL.' : 'Hesap için sayısal girişleri kontrol edin.'); }, 350);
         }
         function editableNumber(input) {
             return !readOnly && input && input.matches('input[inputmode="decimal"]') && !input.disabled && !input.readOnly;
         }
+        function keyboardField(el) { return !!el && el.matches && el.matches('input:not([type="hidden"]):not([type="date"]), textarea'); }
         form.addEventListener('focusin', function (event) {
             var input = event.target;
+            if (keyboardField(input)) { clearTimeout(kbdTimer); form.classList.add('qc-kbd'); }
+            if (!readOnly && input.matches && input.matches('input[inputmode="decimal"]')) showReadNote(input);
             if (editableNumber(input) && isZeroInput(input.value)) {
                 zeroClearedInput = input;
                 input.value = '';
@@ -271,6 +299,8 @@
         });
         form.addEventListener('focusout', function (event) {
             var input = event.target;
+            if (keyboardField(input)) { clearTimeout(kbdTimer); kbdTimer = setTimeout(function () { if (!keyboardField(dom.activeElement)) form.classList.remove('qc-kbd'); }, 150); }
+            if (input && input.matches && input.matches('input[inputmode="decimal"]')) hideReadNote(input);
             if (!editableNumber(input)) return;
             var normalized = normalizeInput(input.value);
             if (input === zeroClearedInput) zeroClearedInput = null;
@@ -300,6 +330,10 @@
         }
         function handleInput(event) {
             var input = event.target; if (readOnly) return;
+            if (input.matches && input.matches('input[inputmode="decimal"]')) {
+                showReadNote(input);
+                if (input.dataset.qcField === 'qty' && rowNodes[input.dataset.qcCode]) rowNote(rowNodes[input.dataset.qcCode], '');
+            }
             var composing = event.isComposing || composingInputs.has(input);
             if (!composing) uppercaseInput(input);
             if (input === zeroClearedInput) zeroClearedInput = null;
@@ -323,7 +357,10 @@
         });
         form.addEventListener('change', function (event) {
             var input = event.target; if (readOnly || input.dataset.qcField !== 'unit') return;
+            var changed = findItem(input.dataset.qcCode);
+            var previousUnit = changed && changed.unit;
             state = updateRow(state, input.dataset.qcCode, 'unit', input.value); dirty = true; paint(input);
+            if (previousUnit && previousUnit !== input.value && rowNodes[input.dataset.qcCode]) rowNote(rowNodes[input.dataset.qcCode], input.value === 'fixed' ? '' : 'Birim değişti; miktar 1 olarak sıfırlandı. Yeni miktarı girin.');
         });
         form.addEventListener('click', function (event) {
             var button = event.target.closest('button'); if (!button) return;
@@ -372,5 +409,5 @@
         paint();
         return { getDocument: function () { return clone(state); }, calculate: function () { return calculate(state); } };
     }
-    return { parseNumber: parseNumber, calculate: calculate, setMethod: setMethod, setNetKg: setNetKg, updateRow: updateRow, addCustomRow: addCustomRow, removeCustomRow: removeCustomRow, upperText: upperText, canonicalPayload: canonicalPayload, isZeroInput: isZeroInput, normalizeInput: normalizeInput, formulaText: formulaText, init: init, catalog: CATALOG };
+    return { parseNumber: parseNumber, calculate: calculate, setMethod: setMethod, setNetKg: setNetKg, updateRow: updateRow, addCustomRow: addCustomRow, removeCustomRow: removeCustomRow, upperText: upperText, canonicalPayload: canonicalPayload, isZeroInput: isZeroInput, numberReadNote: numberReadNote, normalizeInput: normalizeInput, formulaText: formulaText, init: init, catalog: CATALOG };
 }));

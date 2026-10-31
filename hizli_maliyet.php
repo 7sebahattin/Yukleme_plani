@@ -123,7 +123,7 @@ render_flash();
             <article class="qc-record">
                 <a href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a>
                 <span><?= h($row['sheet_date']) ?></span>
-                <span><?= number_format((float)$row['net_kg'], 4, ',', '.') ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 2, ',', '.') ?> TL/kg</span>
+                <span><?= h(rtrim(rtrim(number_format((float)$row['net_kg'], 4, ',', '.'), '0'), ',')) ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 4, ',', '.') ?> TL/kg</span>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
                     <a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
                     <?php if ($can_write): ?><a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>

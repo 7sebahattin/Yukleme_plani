@@ -103,5 +103,15 @@ test('Turkish uppercase is actual data and post-conversion limits/control charac
     d=quick.addCustomRow(example(),'custom_long'); d.items[10].label='ß'.repeat(76); assert.throws(()=>quick.calculate(d));
     d.items[10].label='BAD\u0000NAME'; assert.throws(()=>quick.calculate(d));
 });
+test('Unit change resets the stale quantity instead of reinterpreting it', () => {
+    let d = example(); d = quick.updateRow(d, 'transport', 'unit', 'ton'); const t = d.items.find(r => r.code === 'transport');
+    assert.equal(t.qty, 1); assert.equal(t.basis, 'manual');
+    d = quick.updateRow(d, 'transport', 'unit_price', '1500'); assert.equal(quick.calculate(d).items.find(r => r.code === 'transport').amount, 1500);
+    assert.strictEqual(quick.updateRow(d, 'transport', 'unit', 'ton').items.find(r => r.code === 'transport').qty, 1);
+});
+test('Dotted thousands input is explained, other inputs are not', () => {
+    assert.match(quick.numberReadNote('1.234'), /1234 olarak okunur/); assert.match(quick.numberReadNote('20.000'), /20000/);
+    ['', '1,234', '1.234,5', '12,5', '1234', '1.23', 'abc'].forEach(v => assert.equal(quick.numberReadNote(v), '', v));
+});
 console.log('PASS '+passed+' pure quick-cost UI checks');
 

@@ -8,6 +8,7 @@ $qc_value = static function ($value): string {
     return rtrim(rtrim(number_format((float)$value, 4, ',', '.'), '0'), ',');
 };
 $qc_money = static fn($value): string => number_format((float)$value, 2, ',', '.');
+$qc_money4 = static fn($value): string => number_format((float)$value, 4, ',', '.');
 $qc_total = $calculation['total'] ?? 0;
 $qc_unit = $calculation['unit_cost'] ?? 0;
 ?>
@@ -23,7 +24,7 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
 
     <section class="qc-hero" aria-label="Canlı maliyet özeti">
         <div class="qc-hero-total"><span>TOPLAM MALİYET (TL)</span><strong id="qc-total"><?= h($qc_money($qc_total)) ?></strong></div>
-        <div class="qc-hero-secondary"><div><span>NET KG MALİYETİ (TL/kg)</span><strong id="qc-unit-cost"><?= h($qc_money($qc_unit)) ?></strong></div><div><span>Ürün KG</span><strong id="qc-net-summary"><?= h($qc_value($document['net_kg'] ?? 0)) ?></strong></div></div>
+        <div class="qc-hero-secondary"><div><span>NET KG MALİYETİ (TL/kg)</span><strong id="qc-unit-cost"><?= h($qc_money4($qc_unit)) ?></strong></div><div><span>Ürün KG</span><strong id="qc-net-summary"><?= h($qc_value($document['net_kg'] ?? 0)) ?></strong></div></div>
         <span class="qc-sr-only" id="qc-live-total" aria-live="polite" aria-atomic="true"></span>
     </section>
 
@@ -72,12 +73,12 @@ $qc_unit = $calculation['unit_cost'] ?? 0;
         <div><dt>Malzeme Maliyetleri</dt><dd id="qc-group-B"><?= h($qc_money($calculation['groups']['B'] ?? 0)) ?> TL</dd></div>
         <div><dt>Ortak / Diğer Maliyetler</dt><dd id="qc-group-D"><?= h($qc_money($calculation['groups']['D'] ?? 0)) ?> TL</dd></div>
         <div class="qc-grand-total"><dt>Toplam maliyet</dt><dd id="qc-summary-total"><?= h($qc_money($qc_total)) ?> TL</dd></div>
-        <div><dt>Net KG maliyeti</dt><dd id="qc-summary-unit"><?= h($qc_money($qc_unit)) ?> TL/kg</dd></div>
+        <div><dt>Net KG maliyeti</dt><dd id="qc-summary-unit"><?= h($qc_money4($qc_unit)) ?> TL/kg</dd></div>
     </dl></section>
 
     <p id="qc-validation" class="qc-error" role="alert" hidden></p>
     <?php if ($can_write): ?>
-    <div class="qc-save-bar"><button id="qc-save" class="btn btn-primary" type="submit" disabled><?= !empty($is_copy) ? 'Kopyayı Yeni Hesap Olarak Kaydet' : 'Hesaplamayı Kaydet' ?></button><small><?= $storage_ready ? 'Kaydedilen sonuçlar yeniden hesaplanarak doğrulanır.' : 'Kaydetme henüz kullanılamıyor. Kurulumun tamamlanması gerekiyor.' ?></small></div>
+    <div class="qc-save-bar" data-ready="<?= $storage_ready ? '1' : '0' ?>"><button id="qc-save" class="btn btn-primary" type="submit" disabled><?= !empty($is_copy) ? 'Kopyayı Yeni Hesap Olarak Kaydet' : 'Hesaplamayı Kaydet' ?></button><small><?= $storage_ready ? 'Kaydedilen sonuçlar yeniden hesaplanarak doğrulanır.' : 'Kaydetme henüz kullanılamıyor. Kurulumun tamamlanması gerekiyor.' ?></small></div>
     <?php else: ?><p class="qc-hint">Bu hesabı görüntülüyorsunuz. Düzenlemek için maliyet yazma yetkisi gerekir.</p><?php endif; ?>
 </form>
 </div>
