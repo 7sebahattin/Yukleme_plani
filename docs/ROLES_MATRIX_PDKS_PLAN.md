@@ -1,5 +1,7 @@
 # PDKS yetki ayrıştırma planı
 
+Kapsam: mevcut Asya Fresh uygulaması — asya.scai.tr.
+
 31 Ekim 2026. Mevcut attendance.* paketleri sayfa görüntüleme ve yazma işlemlerini
 birlikte açıyor. Yeni ayrıntılı roller için gerçek sayfa/işlem kapıları eklenir;
 eski roller aynı paketlerden rol başına genişletilir. Canlı veri/migration yok.

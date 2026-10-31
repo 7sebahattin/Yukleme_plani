@@ -1,5 +1,7 @@
 # Roller: sayfa ve alt sayfa yetki matrisi
 
+Kapsam: mevcut Asya Fresh uygulaması — asya.scai.tr.
+
 31 Ekim 2026. Ayrı `codex/roles-permission-matrix` worktree'sinde yerel geliştirme.
 
 ## Analiz ve araştırma

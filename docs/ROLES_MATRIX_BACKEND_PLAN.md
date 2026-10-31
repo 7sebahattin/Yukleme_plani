@@ -1,5 +1,7 @@
 # Rol matrisi backend planı
 
+Kapsam: mevcut Asya Fresh uygulaması — asya.scai.tr.
+
 - Ortak saf API: config/role_permission_matrix.php, role_permission_matrix() => grup adı => satırlar. Satır key/label/route/actions/children/note/admin_only; action permission/label.
 - Bilinen sidebar hedefleri ve mevcut alt bölümler görünür. Hazır olmayan yönetici sayfalarına işlem yetkisi uydurulmaz.
 - role.permissions.detailed belirteci olmayan eski roller create/edit ve rapor tür izinleriyle genişletilir. Genişletme rol başına yapılır, sonra roller birleştirilir.

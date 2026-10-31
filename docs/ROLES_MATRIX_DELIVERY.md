@@ -1,5 +1,7 @@
 # Roller: sayfa ve alt başlık yetki matrisi
 
+Kapsam: mevcut Asya Fresh uygulaması — asya.scai.tr.
+
 31 Ekim 2026. Ayrı çalışma kopyası: `Yukleme_plani_roles`, dal
 `codex/roles-permission-matrix`, başlangıç `origin/main` = `2ad0405`.
 Yerel uygulama ve doğrulama teslimidir; push/merge/yayın yapılmadı.
@@ -115,8 +117,7 @@ kök dizin sınırı korunarak `DIRECTORY_SEPARATOR` ile düzeltildi. POSIX dosy
 izin testleri POSIX'te aynen kalır; Windows'ta okunabilirlik sınanır. Linux
 dosya modu veya native MySQL testi bu yerel Windows koşusundan çıkarılamaz.
 
-Canlı Atlas/asya.scai.tr/hosting, mevcut iş DB'si veya FDB'ye bağlantı/yazım,
+asya.scai.tr/hosting ve mevcut iş veritabanına bağlantı/yazım,
 push/merge/deploy yapılmadı. Gerçek kayıtlar testlere veya görsellere taşınmadı.
 Native MySQL, finansal kabul ve fiziksel telefon kabulü iddia edilmez.
-Atlas otomasyonu PAUSED, Atlas current/lastAccepted ve açık görsel QA işleri
-bu ayrı özellik tarafından değiştirilmez.
+Bu teslim yalnız mevcut Asya Fresh rol ve yetkilendirme geliştirmesidir.
