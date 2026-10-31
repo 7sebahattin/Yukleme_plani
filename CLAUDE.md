@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v467` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v468` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Rol matrisi (v465):** Roller ekranı sidebar sıralı sayfa/alt başlık satırları ve Gör/Ekle/Düzenle/Sil anahtarları kullanır. Yükleme/Paletleme ve OGL/Siparişler bağımsız; rapor türleri ayrı read/export kapılıdır. Eski roller rol başına genişletilir; ayrıntılı roller yalnız seçilen eylemleri alır. Veri kapsamı rol izinleri yanında seçili depo kodlarıyla saklanır, seçili rol sınırları ve kullanıcı depo atamaları kesişir; admin istisnası korunur. Beyan şirket genelinde, Mail hesap ataması, Hesap kendi/tümü kuralı sürer. Eski günlük snapshot arşivi seçili depo rolünde doğrulanamadığından kapalıdır. Şema/seed migration yok. Detay/test/sınırlar: `docs/ROLES_MATRIX_DELIVERY.md`. Kullanıcı 31 Ekimde bu somut teslimin merge ve canlı testini açıkça onayladı.
 

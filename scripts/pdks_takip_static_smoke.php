@@ -122,11 +122,13 @@ ok('personel_takip.php: legacy PDKS izinleri landing erişim koşulunda kullanı
 ok('personel_takip.php: tam 11 ana kartın (v354: +Ters Kart Takip) her biri kendi aktif hedef izniyle sarılı',
     substr_count($takipSrc, 'class="home-card"') === 11 && substr_count($takipSrc, "role_pdks_can('") >= 11);
 ok('personel_takip.php: eski ana kartlar korunur; yeni personel/tip girişleri ayrı ve izinli',
-    str_contains($takipSrc, 'pdks-secondary-links')
-    && str_contains($takipSrc, "'employees'=>['personel.php','Personeller']")
-    && str_contains($takipSrc, "'cards'=>['personel_kartlar.php','Personel Kartları']")
-    && str_contains($takipSrc, "'scan'=>['giris_cikis.php','Personel Giriş / Çıkış']")
-    && str_contains($takipSrc, "'worker_types'=>['isci_tipleri.php','İşçi Tipleri']")
+    str_contains($takipSrc, 'home-card home-card-ek')
+    && !str_contains($takipSrc, 'pdks-secondary-links') && !str_contains($takipSrc, 'pdks-context-links')
+    && str_contains($takipSrc, "'employees'=>['personel.php','Personeller'")
+    && str_contains($takipSrc, "'cards'=>['personel_kartlar.php','Personel Kartları'")
+    && str_contains($takipSrc, "'scan'=>['giris_cikis.php','Personel Giriş / Çıkış'")
+    && str_contains($takipSrc, "'worker_types'=>['isci_tipleri.php','İşçi Tipleri'")
+    && str_contains($takipSrc, 'personel_kayit_sec.php?tur=mesai') && str_contains($takipSrc, 'personel_kayit_sec.php?tur=cikis')
     && str_contains($takipSrc, 'if (role_pdks_can($ekKey))')
     && !str_contains($takipSrc, 'href="cavus_ekstre.php"'));
 ok('personel_takip.php: Kart Havuzu, Yönetim Raporları ve Çavuş Toplu Döküm doğru hedeflerde',

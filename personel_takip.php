@@ -58,39 +58,15 @@ if (!$tersGoster && $_fn && (role_pdks_can('ters_pool') || role_pdks_can('ters_c
     } catch (Throwable $e) { $tersGoster = false; }
 }
 
-// Context pages require a real record identifier. Read-only selectors provide
-// valid links without granting access to another list or changing any record.
-$contextSessions=[]; $contextPeriods=[]; $contextMesai=false; $contextExit=false;
-$contextMesaiUnavailable=false; $contextExitUnavailable=false;
+// Mesai Değerlendirme / Manuel Çıkış kayıt kimliği ister; kartlar kayıt seçiciyi
+// (personel_kayit_sec.php) açar. Kapı seçicininkiyle birebir aynıdır: Gör izni +
+// "Çavuş fiyatları Gör". Burada hiçbir sorgu çalışmaz.
+$contextMesai=false; $contextExit=false;
 if (role_pdks_can('mesai') || role_pdks_can('manual_exit')) {
-    require_once __DIR__ . '/config/pdks_gunluk.php';
     require_once __DIR__ . '/config/pdks_hakedis.php';
     $contextFinancial = pdks_hakedis_can('entitlements_finalize');
     $contextMesai = role_pdks_can('mesai') && $contextFinancial;
     $contextExit = role_pdks_can('manual_exit') && $contextFinancial;
-    $contextDepot = trim((string)(function_exists('active_depot') ? active_depot() : ''));
-    if ($contextDepot !== '' && function_exists('depo_sql_column')) {
-        if ($contextMesai) {
-            try {
-                [$contextScopeSql,$contextScopeParams]=depo_sql_column('s.depo', ':pcs');
-                $contextStatement=db()->prepare('SELECT s.id, s.foreman_name_snapshot, s.work_date, s.depo FROM daily_work_sessions s WHERE s.depo = :pcs_active' . $contextScopeSql . ' ORDER BY s.work_date DESC, s.id DESC LIMIT 30');
-                $contextStatement->execute([':pcs_active'=>$contextDepot]+$contextScopeParams);
-                $contextSessions=$contextStatement->fetchAll(PDO::FETCH_ASSOC);
-            } catch (PDOException $e) { $contextMesaiUnavailable=true; }
-        }
-        if ($contextExit) {
-            try {
-                [$contextSessionScope,$contextSessionParams]=depo_sql_column('s.depo', ':pcm');
-                [$contextPeriodScope,$contextPeriodParams]=depo_sql_column('p.depo_snapshot', ':pcp');
-                $contextStatement=db()->prepare("SELECT p.id, p.session_id, w.card_no, s.foreman_name_snapshot, s.work_date FROM daily_worker_work_periods p JOIN daily_work_sessions s ON s.id = p.session_id JOIN worker_cards w ON w.id = p.worker_card_id WHERE s.depo = :pcm_active AND p.depo_snapshot = :pcp_active AND p.exit_time IS NULL AND p.exit_event_id IS NULL AND p.status IN ('open','legacy_unresolved')" . $contextSessionScope . $contextPeriodScope . ' AND ' . pdks_gunluk_faz8j_etkin_kosul(db(), 'p') . ' ORDER BY s.work_date DESC, p.id DESC LIMIT 30');
-                $contextStatement->execute([':pcm_active'=>$contextDepot,':pcp_active'=>$contextDepot]+$contextSessionParams+$contextPeriodParams);
-                $contextPeriods=$contextStatement->fetchAll(PDO::FETCH_ASSOC);
-            } catch (PDOException $e) { $contextExitUnavailable=true; }
-        }
-    } else {
-        $contextMesaiUnavailable=$contextMesai;
-        $contextExitUnavailable=$contextExit;
-    }
 }
 
 render_header('Personel Takibi');
@@ -204,54 +180,54 @@ render_flash();
 <?php endif; ?>
 
 <?php
-// Additional granular pages keep their own read gate; existing eleven primary
-// cards and contextual mesai/deep-link navigation above remain intact.
+// Granüler sayfalar kendi Gör kapısını korur; her biri kendi kartıdır.
 $personelEkSayfalar = [
-    'employees'=>['personel.php','Personeller'],
-    'cards'=>['personel_kartlar.php','Personel Kartları'],
-    'scan'=>['giris_cikis.php','Personel Giriş / Çıkış'],
-    'worker_types'=>['isci_tipleri.php','İşçi Tipleri'],
+    'employees'=>['personel.php','Personeller','pdks-icon-foreman','Personel kayıtları'],
+    'cards'=>['personel_kartlar.php','Personel Kartları','pdks-icon-card','Kalıcı personel kartları'],
+    'scan'=>['giris_cikis.php','Personel Giriş / Çıkış','pdks-icon-scan','Kalıcı personel kart taraması'],
+    'worker_types'=>['isci_tipleri.php','İşçi Tipleri','pdks-icon-rates','İşçi tipi tanımları'],
 ];
 $personelEkGoster = false;
 foreach ($personelEkSayfalar as $ekKey=>$ekPage) if (role_pdks_can($ekKey)) $personelEkGoster = true;
 ?>
 <?php if ($personelEkGoster): ?>
-<div class="home-section-title">DİĞER PERSONEL SAYFALARI</div>
-<div class="pdks-secondary-links" style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap">
-<?php foreach ($personelEkSayfalar as $ekKey=>[$ekRoute,$ekTitle]): ?>
-<?php if (role_pdks_can($ekKey)): ?><a href="<?= h($ekRoute) ?>" class="btn"><?= h($ekTitle) ?></a><?php endif; ?>
-<?php endforeach; ?>
-</div>
+<div class="home-section-title">PERSONEL</div>
+<?php foreach ($personelEkSayfalar as $ekKey=>[$ekRoute,$ekTitle,$ekIcon,$ekSub]): ?>
+<?php if (role_pdks_can($ekKey)): ?>
+<a href="<?= h($ekRoute) ?>" class="home-card home-card-ek">
+    <div class="home-card-icon <?= h($ekIcon) ?>" aria-hidden="true"></div>
+    <div class="home-card-title"><?= h($ekTitle) ?></div>
+    <div class="home-card-sub"><?= h($ekSub) ?></div>
+</a>
 <?php endif; ?>
+<?php endforeach; ?>
+<?php endif; ?>
+
 <?php if ($contextMesai || $contextExit || $p_adm): ?>
-<div class="home-section-title">KAYIT SEÇEREK AÇILAN SAYFALAR</div>
-<div class="pdks-context-links" style="grid-column:1/-1;display:grid;gap:16px">
+<div class="home-section-title">MESAİ İŞLEMLERİ</div>
 <?php if ($contextMesai): ?>
-<section aria-label="Mesai değerlendirme için kayıt seçimi">
-<h2 style="font-size:1rem">Mesai Değerlendirme</h2>
-<p class="muted">Seçili deponun son 30 mesaisi. Açmak istediğiniz kaydı seçin.</p>
-<?php if ($contextSessions): ?><ul>
-<?php foreach ($contextSessions as $contextRow): ?>
-<li><a href="mesai_degerlendirme.php?session_id=<?= (int)$contextRow['id'] ?>"><?= h($contextRow['work_date']) ?> · <?= h($contextRow['foreman_name_snapshot']) ?></a></li>
-<?php endforeach; ?></ul>
-<?php else: ?><p class="muted"><?= $contextMesaiUnavailable ? 'Mesai listesi şu anda kullanılamıyor. Depo seçimini ve modül kurulumunu kontrol edin.' : 'Seçili depoda görüntülenebilecek mesai bulunamadı.' ?></p><?php endif; ?>
-</section>
+<a href="personel_kayit_sec.php?tur=mesai" class="home-card home-card-ek">
+    <div class="home-card-icon pdks-icon-entitlements" aria-hidden="true"></div>
+    <div class="home-card-title">Mesai Değerlendirme</div>
+    <div class="home-card-sub">Son mesailerden kayıt seçerek açılır</div>
+</a>
 <?php endif; ?>
 <?php if ($contextExit): ?>
-<section aria-label="Manuel çıkış için kayıt seçimi">
-<h2 style="font-size:1rem">Manuel Çıkış</h2>
-<p class="muted">Seçili deponun çıkışı bekleyen son 30 kaydı.</p>
-<?php if ($contextPeriods): ?><ul>
-<?php foreach ($contextPeriods as $contextRow): ?>
-<li><a href="manuel_cikis.php?period_id=<?= (int)$contextRow['id'] ?>&amp;session_id=<?= (int)$contextRow['session_id'] ?>"><?= h($contextRow['work_date']) ?> · <?= h($contextRow['foreman_name_snapshot']) ?> · <?= h($contextRow['card_no']) ?></a></li>
-<?php endforeach; ?></ul>
-<?php else: ?><p class="muted"><?= $contextExitUnavailable ? 'Çıkış bekleyen kayıtlar şu anda listelenemiyor. Depo seçimini ve modül kurulumunu kontrol edin.' : 'Seçili depoda çıkışı bekleyen kayıt bulunamadı.' ?></p><?php endif; ?>
-</section>
+<a href="personel_kayit_sec.php?tur=cikis" class="home-card home-card-ek">
+    <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
+    <div class="home-card-title">Manuel Çıkış</div>
+    <div class="home-card-sub">Çıkışı bekleyen kayıttan seçerek açılır</div>
+</a>
 <?php endif; ?>
-<?php if ($p_adm): ?><div><a href="gunluk_fis_yukle.php" class="btn">Fiş Excel Yükleme</a></div><?php endif; ?>
-</div>
+<?php if ($p_adm): ?>
+<a href="gunluk_fis_yukle.php" class="home-card home-card-ek">
+    <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
+    <div class="home-card-title">Fiş Excel Yükleme</div>
+    <div class="home-card-sub">Yönetici işlemi</div>
+</a>
 <?php endif; ?>
-<?php if (!$p_gunluk && !$p_hakcari && !$p_rapor && !$tersGoster && !$personelEkGoster): ?>
+<?php endif; ?>
+<?php if (!$p_gunluk && !$p_hakcari && !$p_rapor && !$tersGoster && !$personelEkGoster && !$contextMesai && !$contextExit): ?>
 <p class="muted">Genel ekranı görüntülüyorsunuz. Alt sayfalar ayrıca yetkilendirilir. Mesai değerlendirme ve manuel çıkış, ilgili mesai kaydından açılır.</p>
 <?php endif; ?>
 
