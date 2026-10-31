@@ -98,6 +98,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             <?= $qc2_input('target_yield', $document['target_yield'] ?? 0, 'Tahmini randıman (%)', ['class' => 'qc2-when-target']) ?>
             <div class="qc2-readout qc2-when-actual"><span>İhracat randımanı</span><?= $qc2_out('yield_readout') ?></div>
         </div>
+        <p class="qc-hint qc-unit-note" data-qc2-yield-note role="status" hidden></p>
         <p class="qc-hint qc2-when-actual">Randıman = ihracatlık net KG ÷ ham mal KG × 100. Ham mal KG: kasa ve palet darası hariç, ayıklanmamış ürün.</p>
         <p class="qc-hint qc2-when-target">Gerekli ham mal KG = hedef ihracat KG ÷ (randıman ÷ 100). Randıman için sabit bir sektör değeri kullanılmaz; kendi tahmininizi girin.</p>
         <div class="qc2-detail-block" data-qc2-detail>

@@ -124,6 +124,29 @@ function check(v, label) { assert.ok(v, label); checks++; }
             if (width >= 1024) check(await page.locator('.qc2-table-head').isVisible(), name + ' desktop table header');
             check(errors.length === 0, name + ' no page errors: ' + errors.join(' | '));
 
+            // İnceleme bulgusu 1: gizlenen geçersiz miktar alanı formu kilitlememeli.
+            await load(pages.saved);
+            await page.locator('[data-qc2-set="method"][data-value="detailed"]').click();
+            await rowEl('loading').locator('summary').click();
+            await rowEl('loading').locator('[data-qc2-item="basis_unit"]').selectOption('manual|pallet');
+            await rowEl('loading').locator('[data-qc2-item="qty"]').fill('-1'); await blur();
+            check(await page.locator('#qc-save').isDisabled(), name + ' invalid manual quantity blocks save');
+            await rowEl('loading').locator('[data-qc2-item="basis_unit"]').selectOption('fixed|fixed');
+            check(!(await page.locator('#qc-save').isDisabled()) && await page.evaluate(() => document.getElementById('qc-form').checkValidity()), name + ' switching to fixed clears stale validity of hidden quantity');
+            // İnceleme bulgusu 2: hedef yöntemine geçişte yuvarlanan randıman sessizce ham KG'yi değiştirmemeli.
+            check(await page.locator('[data-qc2-yield-note]').isHidden(), name + ' no yield note initially');
+            await page.locator('[data-qc2-set="yield_mode"][data-value="target"]').click();
+            check(await page.locator('[data-qc2-yield-note]').isHidden(), name + ' exact %80 switch needs no rounding note');
+            await page.locator('[data-qc2-set="yield_mode"][data-value="actual"]').click();
+            await field('quantities.raw_kg').fill('30.000'); await field('quantities.processed_kg').fill('30.000');
+            await field('quantities.domestic_kg').fill('10.000'); await field('quantities.waste_kg').fill('0'); await blur();
+            check(await outText('yield_pct') === '%66,67', name + ' 2/3 yield shown');
+            await page.locator('[data-qc2-set="yield_mode"][data-value="target"]').click();
+            const yNote = page.locator('[data-qc2-yield-note]');
+            check(await yNote.isVisible() && /yuvarlandı/.test(await yNote.textContent()) && /30\.000/.test(await yNote.textContent()), name + ' rounding change is announced, not silent');
+            await page.locator('[data-qc2-set="yield_mode"][data-value="actual"]').click();
+            check(await yNote.isHidden(), name + ' note clears when back to actual');
+
             await load(pages.fresh);
             check(await outText('total') === '0,00' && await page.locator('#qc-save').isDisabled() === false, name + ' new form starts at zero');
             await page.evaluate(() => document.getElementById('qc-form').addEventListener('submit', e => e.preventDefault()));

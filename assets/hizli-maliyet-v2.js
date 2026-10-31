@@ -333,7 +333,7 @@
         }
         function validateInputs() {
             form.querySelectorAll('input[inputmode="decimal"]').forEach(function (input) {
-                if (input.disabled || input.closest('[hidden]')) { input.removeAttribute('aria-invalid'); return; }
+                if (input.disabled || input.closest('[hidden]')) { input.removeAttribute('aria-invalid'); input.setCustomValidity(''); return; }
                 try { parseNumber(input.value); input.removeAttribute('aria-invalid'); input.setCustomValidity(''); }
                 catch (e) { input.setAttribute('aria-invalid', 'true'); input.setCustomValidity(e.message); }
             });
@@ -408,6 +408,19 @@
             if (!note) { note = dom.createElement('small'); note.className = 'qc-read-note'; note.setAttribute('role', 'status'); host.appendChild(note); }
             note.textContent = t;
         }
+        // Randıman iki ondalığa yuvarlandığı için hedef yöntemine geçiş ham KG'yi değiştirebilir: sessiz kalma, söyle.
+        function yieldNote(onceki, mode) {
+            var note = form.querySelector('[data-qc2-yield-note]'); if (!note) return;
+            var t = '';
+            if (onceki !== null && mode === 'target') {
+                var r = null; try { r = calculate(state); } catch (_) { r = null; }
+                if (!r || i4(r.derived.raw_kg) !== i4(onceki)) {
+                    t = 'Randıman %' + fmt(state.target_yield, 2) + ' olarak yuvarlandı; gerekli ham mal KG ' + fmtKg(onceki)
+                        + (r ? ' yerine ' + fmtKg(r.derived.raw_kg) + ' oldu' : ' ile tutarlı hesaplanamadı') + '. Kesin ham KG için "Ham KG + ihracat KG" yöntemini kullanın.';
+                }
+            }
+            note.textContent = t; note.hidden = !t;
+        }
         function rowNote(node, t) {
             var host = node.querySelector('[data-qc2-settings]'), note = host.querySelector('.qc-unit-note');
             if (!t) { if (note) note.remove(); return; }
@@ -473,7 +486,11 @@
             var b = e.target.closest('button'); if (!b) return;
             if (b.dataset.qc2Set) {
                 var key = b.dataset.qc2Set, val = b.dataset.value;
-                if (key === 'yield_mode') state = setYieldMode(state, val); else state[key] = val;
+                if (key === 'yield_mode') {
+                    var onceki = latest && state.yield_mode !== val ? latest.derived.raw_kg : null;
+                    state = setYieldMode(state, val);
+                    yieldNote(onceki, val);
+                } else state[key] = val;
                 if (key !== 'method') dirty = true;
                 paint();
             } else if (b.id === 'qc2-add-item') {
