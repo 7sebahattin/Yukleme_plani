@@ -43,6 +43,7 @@ if (!defined('PDKS_FIS_FM_KISI_UST_SAAT')) define('PDKS_FIS_FM_KISI_UST_SAAT', 3
 if (!defined('PDKS_FIS_TOKEN_TTL'))       define('PDKS_FIS_TOKEN_TTL', 1800);
 if (!defined('PDKS_FIS_SABLON_SURUMU'))   define('PDKS_FIS_SABLON_SURUMU', 3);
 if (!defined('PDKS_FIS_ETIKET'))          define('PDKS_FIS_ETIKET', '[FIS ');          // servis not öneki
+if (!defined('PDKS_FIS_USTUNE_GEREKCE_MAX')) define('PDKS_FIS_USTUNE_GEREKCE_MAX', 400);   // v464: void_reason ≤ 500 (önek payı)
 
 // =========================================================
 // A. SÜTUN TANIMI (TEK KAYNAK) + KATLAMA
@@ -1296,6 +1297,9 @@ function pdks_fis_secenek(array $in): array
         'onay_fm' => !empty($in['onay_fm']),
         'ek_yaz' => !empty($in['ek_yaz']),
         'isletme_onay' => !empty($in['isletme_onay']),
+        // v464: mevcut FİŞ kaynaklı kayıtların ÜSTÜNE YAZ (eski kayıtlar iptal edilir, silinmez) + zorunlu gerekçe.
+        'ustune_yaz' => !empty($in['ustune_yaz']),
+        'ustune_gerekce' => pdks_fis_metin_duz($in['ustune_gerekce'] ?? '', PDKS_FIS_USTUNE_GEREKCE_MAX),
     ];
 }
 
@@ -1515,7 +1519,22 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
     if ($tarih >= date('Y-m-d')) { $m['hatalar'][] = 'Bugün veya gelecek tarihli fişler desteklenmez.'; return $bitir('hata'); }
     if ($depo === '') { $m['hatalar'][] = 'Önce bir depo seçmelisiniz.'; return $bitir('hata'); }
     $m['servis']['hedef'] = ['buyuk' => (int)($fis['servis']['buyuk'] ?? 0), 'kucuk' => (int)($fis['servis']['kucuk'] ?? 0)];
-    $ist = pdks_fis_istek_idleri($depo, (string)$fis['fis_no'], (int)$fis['rev']);
+    // v464 — ÜSTÜNE YAZ: efektif revizyon (önizleme ve yazma AYNI kuralı kullanır). Aynı dosyada aynı çavuş + gün birden çok fişte
+    // YALNIZ ilk fiş üstüne yazar (sonrakiler, ilkin yeni yazdığı kayıtları iptal etmesin diye, mevcut kurallarla EK ister).
+    $revEf = (int)$fis['rev']; $ustuneIste = false; $ustuneOnceki = null;
+    if (!empty($secenek['ustune_yaz'])) {
+        if (!empty($fis['cakisma_dosya']) && (int)($fis['cakisma_sira'] ?? 0) > 0) {
+            $m['uyarilar'][] = 'Aynı dosyada aynı çavuş + gün için ilk fiş üstüne yazar; bu fiş mevcut kurallarla («Mevcut kayıtlara EK yaz») eklenir.';
+        } else {
+            $ustuneIste = true;
+            if ($secenek['ustune_gerekce'] === '') { $m['hatalar'][] = 'Üstüne yazmak için gerekçe zorunludur.'; return $bitir('hata'); }
+            $ur = pdks_fis_ustune_rev($pdo, $depo, (string)$fis['fis_no'], $revEf);
+            $revEf = $ur['rev']; $ustuneOnceki = $ur['onceki'];
+            $m['rev'] = $revEf;
+        }
+    }
+    $fisEf = $fis; $fisEf['rev'] = $revEf;
+    $ist = pdks_fis_istek_idleri($depo, (string)$fis['fis_no'], $revEf);
     $m['istek'] = $ist;
     $d = pdks_fis_durum($pdo, $ist['fis']);
     $m['yazma'] = $d;
@@ -1533,7 +1552,23 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
     }
     $m['mevcut'] = ['mesai' => $mevcut['oturum'] !== null, 'session_id' => $mevcut['oturum'] ? (int)$mevcut['oturum']['id'] : null, 'aktif_donem' => $mevcut['aktif_donem'],
                     'servis' => $mevcut['servis_toplam'], 'kesin' => $mevcut['kesin']];
-    if ($mevcut['kesin']) { $m['hatalar'][] = 'Bu mesainin kesinleşmiş hakedişi var — önce hakedişi yeniden açın.'; return $bitir('hata'); }
+    if ($mevcut['kesin']) {
+        $m['hatalar'][] = 'Bu mesainin kesinleşmiş hakedişi var — önce hakedişi yeniden açın.'
+            . (pdks_fis_odeme_var_mi($pdo, $cid) ? ' Çavuşun geçerli ödemesi varsa kesin hakediş yeniden açılamaz: bu gün bu yolla DEĞİŞTİRİLEMEZ (ek hakediş / düzeltme akışı bu sürümde yok).' : '');
+        return $bitir('hata');
+    }
+    // v464: üstüne yaz kapsamı (salt okunur). Devam durumunda işçi kayıtları ZATEN yazılmıştır → yalnız bekleyen servis iptalleri.
+    $ustune = null; $mevcutSv = $mevcut;
+    if ($devam) {
+        if ($mevcut['oturum'] !== null) {
+            $bek = pdks_fis_servis_satirlari_idler($pdo, (int)$mevcut['oturum']['id'], pdks_fis_ustune_bekleyen_servis($pdo, (string)($d['toplu_id'] ?? '')));
+            if ($bek) $mevcutSv = pdks_fis_servis_dus($mevcut, $bek);
+        }
+    } elseif ($ustuneIste && $mevcut['oturum'] !== null) {
+        $ustune = pdks_fis_ustune_kapsam($pdo, (int)$mevcut['oturum']['id'], (int)$mevcut['aktif_donem'], (string)$fis['fis_no']);
+        if ($ustune === null) $m['uyarilar'][] = 'Mesaide fiş kaynaklı (Fiş Excel) etkin kayıt yok — üstüne yazılacak bir şey bulunamadı; normal yazım kuralları geçerli.';
+        else $mevcutSv = pdks_fis_servis_dus($mevcut, $ustune['servis']);
+    }
 
     $normalDk = pdks_fis_normal_dk($pdo, $cid, $tarih, $mevcut['oturum']);
     $baglam = pdks_fis_baglam($pdo, $cid, $tarih, $normalDk, $secenek['fm_tip']);
@@ -1557,7 +1592,7 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
     $hedefSv = $m['servis']['hedef'];
     if ($hedefSv['buyuk'] + $hedefSv['kucuk'] > 0) {
         if (!pdks_servis_sema_hazir($pdo)) { $m['hatalar'][] = 'Fişte servis var ama Servis Ücreti tabloları kurulmamış (migrate.php) — fiş yazılamaz.'; return $bitir('hata'); }
-        $fark = pdks_fis_servis_fark($hedefSv, $mevcut, $secenek['ek_yaz']);
+        $fark = pdks_fis_servis_fark($hedefSv, $mevcutSv, $secenek['ek_yaz']);
         $m['servis']['yazilacak'] = $fark['yazilacak'];
         $m['uyarilar'] = array_merge($m['uyarilar'], $fark['uyarilar']);
         if ($fark['yazilacak']['buyuk'] + $fark['yazilacak']['kucuk'] > 0) {
@@ -1577,16 +1612,28 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
     }
 
     // İşçi yazımı: Faz 8J önizlemesi (kapılar, mesai çözümü, kesin hakediş, pasif çavuş…)
-    $girdi = pdks_fis_toplu_girdisi($fis, $plan, $secenek, $ist['fis'], '');
+    $girdi = pdks_fis_toplu_girdisi($fisEf, $plan, $secenek, $ist['fis'], '');
     $on = pdks_faz8j_toplu_onizle($girdi, $user, $pdo);
     $m['uyarilar'] = array_merge($m['uyarilar'], $on['uyarilar'] ?? []);
     if (empty($on['ok'])) {
         $m['hatalar'] = $on['hatalar'] ?: ['Önizleme başarısız.'];
         return $bitir('hata');
     }
+    $ustuneUygula = false;
     if ($mevcut['aktif_donem'] > 0) {
-        if (!$secenek['ek_yaz']) $m['engeller'][] = 'Bu mesaide ' . $mevcut['aktif_donem'] . ' aktif kayıt var — önce Toplu Geri Al / Kaydı İptal Et ya da «Mevcut kayıtlara EK yaz» seçeneğini işaretleyin.';
-        else $m['uyarilar'][] = 'Mesaide ' . $mevcut['aktif_donem'] . ' mevcut kayıt korunuyor; fişin kayıtları üzerine EKLENECEK.';
+        if ($ustune !== null) {
+            // Fiş kaynaklı kayıtlar iptal edilip yenisi yazılır; fiş-dışı (kiosk/elle/ters/tanımlı) kayıtlara ASLA dokunulmaz.
+            if ($ustune['fis_disi'] > 0 && !$secenek['ek_yaz']) {
+                $m['engeller'][] = 'Mesaide fiş dışı ' . $ustune['fis_disi'] . ' aktif kayıt (kiosk/elle/ters) var; bunlara dokunulmaz. Fiş kayıtlarının üstüne yazmak için «Mevcut kayıtlara EK yaz» seçeneğini de işaretleyin.';
+            } else {
+                $ustuneUygula = true;
+                if ($ustune['fis_disi'] > 0) $m['uyarilar'][] = 'Fiş dışı ' . $ustune['fis_disi'] . ' aktif kayıt korunuyor; yalnız fiş kaynaklı ' . $ustune['fis_aktif'] . ' kayıt iptal edilip yenisi yazılacak.';
+            }
+        } elseif (!$secenek['ek_yaz']) {
+            $m['engeller'][] = 'Bu mesaide ' . $mevcut['aktif_donem'] . ' aktif kayıt var — önce Toplu Geri Al / Kaydı İptal Et ya da «Mevcut kayıtlara EK yaz» seçeneğini işaretleyin.';
+        } else {
+            $m['uyarilar'][] = 'Mesaide ' . $mevcut['aktif_donem'] . ' mevcut kayıt korunuyor; fişin kayıtları üzerine EKLENECEK.';
+        }
     }
     if (!empty($fis['cakisma_dosya']) && (int)($fis['cakisma_sira'] ?? 0) > 0 && !$secenek['ek_yaz']) {
         $m['engeller'][] = 'Aynı dosyada aynı çavuş + gün için başka fiş var — bu fiş aynı mesaiye eklenir; «Mevcut kayıtlara EK yaz» gerekli.';
@@ -1596,6 +1643,19 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
         $m['isletme_uyusmaz'] = true;
         $m['uyarilar'][] = 'İşletme «' . pdks_fis_metin_duz($m['isletme'], 60) . '» aktif depo «' . $depo . '» ile uyuşmuyor.';
         if (!$secenek['isletme_onay']) return $bitir('onay');
+    }
+    if ($ustuneUygula) {
+        $svIdler = array_map(static fn($x) => (int)$x['id'], $ustune['servis']);
+        $svEski = array_fill_keys(array_keys(pdks_servis_turleri()), 0);
+        foreach ($ustune['servis'] as $x) if (isset($svEski[(string)$x['service_type']])) $svEski[(string)$x['service_type']] += (int)$x['quantity'];
+        $m['ustune'] = ['eski_toplu' => $ustune['eski_toplu'], 'eski_fisler' => $ustune['eski_fisler'], 'onceki_rev' => $ustuneOnceki, 'hedef_rev' => $revEf,
+                        'eski' => $ustune['eski'], 'yeni' => pdks_fis_plan_ozeti($plan), 'servis_iptal' => $svIdler, 'servis_eski' => $svEski,
+                        'fis_aktif' => $ustune['fis_aktif'], 'fis_disi' => $ustune['fis_disi'], 'gerekce' => $secenek['ustune_gerekce']];
+        // «Aynı saatlerde N kartsız kayıt zaten var» uyarısı (Faz 8J) üstüne yazda yanıltıcıdır: o kayıtlar iptal edilecek. Fiş dışı kayıt kalıyorsa korunur.
+        if ((int)$ustune['fis_disi'] === 0) $m['uyarilar'] = array_values(array_filter($m['uyarilar'], static fn($x) => !str_contains((string)$x, 'tekrar eklemediğinizden emin olun')));
+        // Önizleme = yazma sigortası: iptal edilecek küme, efektif revizyon ve servis kimlikleri hash'e girer; biri değişirse fiş YAZILMAZ.
+        $m['hash'] = substr(hash('sha256', $plan['hash'] . '|uy|' . json_encode([$ustune['eski_toplu'], $revEf, $svIdler])), 0, 16);
+        return $bitir('ustune');
     }
     return $bitir($m['uyarilar'] ? 'uyari' : 'hazir');
 }
@@ -1610,11 +1670,11 @@ function pdks_fis_onizle(PDO $pdo, array $fisler, array $secenek, int $user): ar
         $m = pdks_fis_degerlendir($pdo, $f, $secenek, $user);
         $sonuc[] = $m;
         $oz['durum'][$m['durum']] = ($oz['durum'][$m['durum']] ?? 0) + 1;
-        if (in_array($m['durum'], ['hazir', 'uyari', 'onay', 'engel'], true)) {
+        if (in_array($m['durum'], ['hazir', 'uyari', 'onay', 'engel', 'ustune'], true)) {
             $oz['kisi'] += $m['kisi'];
             $oz['fm_saat'] += (int)($m['plan']['fm']['toplam_saat'] ?? 0);
         }
-        if (in_array($m['durum'], ['hazir', 'uyari', 'onay', 'engel', 'devam'], true)) {
+        if (in_array($m['durum'], ['hazir', 'uyari', 'onay', 'engel', 'devam', 'ustune'], true)) {
             $oz['servis']['buyuk'] += $m['servis']['yazilacak']['buyuk']; $oz['servis']['kucuk'] += $m['servis']['yazilacak']['kucuk'];
         }
     }
@@ -1716,14 +1776,28 @@ function pdks_fis_yaz_fis(PDO $pdo, array $fis, array $secenek, int $user, strin
     if ($m['durum'] === 'onay') return ['durum' => 'hata', 'mesaj' => 'İşletme/depo uyuşmazlığı onaylanmadı — «İşletme uyuşmazlığı olan fişleri de yaz» kutusunu işaretleyin.'];
 
     $plan = $m['plan']; $ist = $m['istek']; $cid = (int)$fis['cavus']['id']; $tarih = (string)$fis['tarih'];
-    $sayac = new ArrayObject(['fm_onayli' => 0, 'yarim' => 0, 'fm_saat' => 0]);
+    $sayac = new ArrayObject(['fm_onayli' => 0, 'yarim' => 0, 'fm_saat' => 0, 'ustune_iptal' => 0]);
     $sid = (int)($m['yazma']['session_id'] ?? 0); $topluId = (string)($m['yazma']['toplu_id'] ?? '');
     $devam = $m['durum'] === 'devam';
     $uyarilar = $m['uyarilar'];
+    $ust = $m['ustune'] ?? null;                                  // v464: üstüne yaz (yalnız yeni yazımda anlamlı)
+    $rev = (int)$m['rev'];                                       // efektif revizyon (üstüne yazda otomatik artar)
+    $fisEf = $fis; $fisEf['rev'] = $rev;
 
     if (!$devam) {
-        $girdi = pdks_fis_toplu_girdisi($fis, $plan, $secenek, $ist['fis'], $dosyaSha);
+        $girdi = pdks_fis_toplu_girdisi($fisEf, $plan, $secenek, $ist['fis'], $dosyaSha);
         $girdi['yazdiktan_sonra'] = pdks_fis_onay_geri_cagrisi($plan, $secenek, $sayac);
+        if ($ust) {
+            // Eski fiş kayıtlarını YENİ kayıtlarla AYNI transaction'da iptal et (ya hepsi ya hiçbiri); servis iptalleri commit SONRASI.
+            $girdi['audit_ek']['ustune_yaz'] = ['eski_toplu' => $ust['eski_toplu'], 'onceki_rev' => $ust['onceki_rev'], 'hedef_rev' => $ust['hedef_rev'],
+                                                'servis_iptal_idler' => $ust['servis_iptal']];
+            $onayCb = $girdi['yazdiktan_sonra'];
+            $ustCb = pdks_fis_ustune_geri_cagrisi($ust['eski_toplu'], (string)$secenek['ustune_gerekce'], $sayac);
+            $girdi['yazdiktan_sonra'] = function (PDO $pdo2, int $sid2, array $pids, array $specs, array $oturum, int $user2) use ($onayCb, $ustCb): void {
+                $onayCb($pdo2, $sid2, $pids, $specs, $oturum, $user2);   // önce yeni dönemler doğrulanır/onaylanır
+                $ustCb($pdo2, $sid2, $pids, $specs, $oturum, $user2);    // sonra eski fiş dönemleri iptal edilir
+            };
+        }
         $r = pdks_faz8j_toplu_ekle($girdi, $user, $pdo);
         if (empty($r['ok'])) {
             if (!empty($r['tekrar'])) {
@@ -1740,6 +1814,30 @@ function pdks_fis_yaz_fis(PDO $pdo, array $fis, array $secenek, int $user, strin
         }
     }
     if ($sid < 1) return ['durum' => 'hata', 'mesaj' => 'İşçi kayıtları için mesai bulunamadı.'];
+
+    // v464: eski fiş servislerinin iptali (commit SONRASI, idempotent; pdks_servis_iptal kendi tx'ini açar). Çökme/hata halinde
+    // iptal listesi özet audit'tedir → aynı dosya yeniden yüklenince (devam) kalan iptaller tamamlanır.
+    $ustAudit = null;
+    if ($topluId !== '' && ($ust || $devam)) {
+        $kb = pdks_faz8j_toplu_bul($pdo, $topluId);
+        $ustAudit = is_array($kb['veri']['ustune_yaz'] ?? null) ? $kb['veri']['ustune_yaz'] : null;
+    }
+    $svIptalIdler = array_merge($ust ? $ust['servis_iptal'] : [], $devam ? pdks_fis_ustune_bekleyen_servis($pdo, $topluId) : []);
+    $svIptalSayi = 0;
+    if ($svIptalIdler) {
+        $gerekceSv = mb_substr('Fiş üstüne yazıldı: ' . ((string)$secenek['ustune_gerekce'] !== '' ? (string)$secenek['ustune_gerekce'] : 'devam'), 0, 500);
+        try {
+            $ip = pdks_fis_servis_iptal_idler($pdo, $sid, $svIptalIdler, $gerekceSv, $user);
+        } catch (Throwable $x) {
+            error_log('[pdks_fis_yaz_fis servis_iptal] ' . get_class($x));
+            $ip = ['ok' => false, 'iptal' => 0, 'hata' => 'Eski servis kayıtları iptal edilirken teknik bir hata oluştu.'];
+        }
+        $svIptalSayi = (int)$ip['iptal'];
+        if (empty($ip['ok'])) {
+            return ['durum' => 'hata', 'session_id' => $sid, 'toplu_id' => $topluId,
+                    'mesaj' => 'İşçi kayıtları yazıldı (toplu işlem ' . $topluId . '), eski servis kayıtları iptal edilemedi: ' . $ip['hata'] . ' — aynı dosyayı «Üstüne yaz» ile yeniden yükleyerek tamamlayın.'];
+        }
+    }
 
     // Servis (işçi tx'inden BAĞIMSIZ transaction)
     $yazilanSv = ['buyuk' => 0, 'kucuk' => 0]; $fiyatsiz = [];
@@ -1759,22 +1857,27 @@ function pdks_fis_yaz_fis(PDO $pdo, array $fis, array $secenek, int $user, strin
 
     // Tamamlanma izi
     $yevmiyeToplam = array_sum(array_map(fn($g) => $g['profil'] === 'yevmiye' ? (int)$g['adet'] * (int)$g['yevmiye'] : 0, $plan['gruplar']));
-    $yaz = ['kisi' => (int)$plan['kisi_toplam'], 'yevmiye' => $yevmiyeToplam, 'fm_onayli' => (int)$sayac['fm_onayli'], 'fm_saat' => (int)$sayac['fm_saat'], 'yarim' => (int)$sayac['yarim'], 'servis' => $yazilanSv, 'servis_fiyatsiz' => $fiyatsiz];
+    $yaz = ['kisi' => (int)$plan['kisi_toplam'], 'yevmiye' => $yevmiyeToplam, 'fm_onayli' => (int)$sayac['fm_onayli'], 'fm_saat' => (int)$sayac['fm_saat'], 'yarim' => (int)$sayac['yarim'], 'servis' => $yazilanSv, 'servis_fiyatsiz' => $fiyatsiz,
+             'ustune_iptal' => (int)$sayac['ustune_iptal'], 'servis_iptal' => $svIptalSayi];
+    $ustIz = [];
+    if ($ust) $ustIz = ['ustune_yaz' => true, 'onceki_rev' => $ust['onceki_rev'], 'degisen_toplu_idler' => $ust['eski_toplu']];
+    elseif ($ustAudit) $ustIz = ['ustune_yaz' => true, 'onceki_rev' => $ustAudit['onceki_rev'] ?? null, 'degisen_toplu_idler' => (array)($ustAudit['eski_toplu'] ?? [])];
     try {
-        pdks_faz8j_audit($pdo, $user, 'fis_yukle', $sid, [], [
-            'fis_no' => $no, 'rev' => (int)$fis['rev'], 'tarih' => $tarih, 'depo' => $depo, 'foreman_id' => $cid, 'session_id' => $sid, 'toplu_id' => $topluId,
+        pdks_faz8j_audit($pdo, $user, 'fis_yukle', $sid, [], $ustIz + [
+            'fis_no' => $no, 'rev' => $rev, 'tarih' => $tarih, 'depo' => $depo, 'foreman_id' => $cid, 'session_id' => $sid, 'toplu_id' => $topluId,
             'istek_id' => $ist['fis'], 'servis_istek_id' => $ist['servis'], 'dosya_sha256' => $dosyaSha, 'plan_hash' => (string)$plan['hash'],
             'kisi' => (int)$plan['kisi_toplam'], 'fm_modu' => (string)$plan['fm']['mod'], 'fm_saat' => (int)($plan['fm']['toplam_saat'] ?? 0),
             'rampaci_yevmiye' => $yevmiyeToplam,
             'yarim' => array_sum(array_map(fn($g) => $g['profil'] === 'yarim' ? (int)$g['adet'] : 0, $plan['gruplar'])),
             'servis_yazilan' => $yazilanSv, 'onaylar' => ['fm' => !empty($secenek['onay_fm']), 'yarim' => !empty($secenek['onay_yarim'])],
             'ek_yaz' => !empty($secenek['ek_yaz']), 'durum' => 'tamam',
+            'ustune_iptal_donem' => (int)$sayac['ustune_iptal'], 'servis_iptal_adet' => $svIptalSayi,
         ], 'daily_work_sessions');
     } catch (Throwable $x) {
         error_log('[pdks_fis_yaz_fis fis_yukle] ' . $x->getMessage());
         $uyarilar[] = 'Tamamlanma izi yazılamadı; aynı dosyayı yeniden yüklerseniz fiş "tamamlandı" olarak işaretlenir (kayıtlar çiftlenmez).';
     }
-    return ['durum' => $devam ? 'devam_tamamlandi' : 'yazildi', 'session_id' => $sid, 'toplu_id' => $topluId, 'yazilan' => $yaz, 'uyarilar' => array_values(array_unique($uyarilar)),
+    return ['durum' => $devam ? 'devam_tamamlandi' : 'yazildi', 'session_id' => $sid, 'toplu_id' => $topluId, 'rev' => $rev, 'yazilan' => $yaz, 'uyarilar' => array_values(array_unique($uyarilar)),
             'mesaj' => ($devam ? 'Eksik kalan kısım tamamlandı' : 'Yazıldı') . ' — ' . $plan['kisi_toplam'] . ' kişi kaydı'];
 }
 
@@ -1941,4 +2044,520 @@ function pdks_fis_token_sil(string $token): void
 {
     unset($_SESSION['fis_yukle'][$token]);
     pdks_fis_kv_sil(PDKS_FIS_KV_ONIZLE, $token);
+}
+
+// =========================================================
+// J. DÜZELTME (v464) — üstüne yaz · fiş yüklemelerini geri al · etkilenen fişler raporu
+// =========================================================
+// DEĞİŞMEZLER:
+//  - HARD DELETE YOK: dönem iptali yalnız pdks_faz8j_void_uygula() (üstüne yaz geri çağrısı) ya da
+//    pdks_faz8j_toplu_geri_al() (sıfırla), servis iptali yalnız pdks_servis_iptal(). Bu bölümde dönem/olay/kart
+//    tablolarına doğrudan yazım (INSERT/UPDATE/DELETE) YOK; test denetler.
+//  - Fiş kaynaklı = Faz 8J özet audit'inde `kaynak:fis_excel` izi olan toplu işlemler. Fiş-dışı (kiosk/elle/ters/tanımlı)
+//    kayıtlara ASLA dokunulmaz.
+//  - Kesinleşmiş (final) hakedişi olan mesai asla değiştirilmez/iptal edilmez; "ek hakediş / düzeltme" akışı bu sürümde YOK.
+
+/** LIKE kaçışı (ESCAPE '!'): MySQL ve SQLite'ta aynı çalışır (ters eğik çizgi kaçış sorunu yok). */
+function pdks_fis_like_kac(string $s): string
+{
+    return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
+}
+
+/**
+ * Bir mesaideki FİŞ KAYNAKLI toplu işlemler (audit `puantaj_toplu_ekle` + `kaynak:fis_excel`), eski → yeni.
+ * `aktif` = hâlâ iptal edilmemiş dönem sayısı, `geri_alindi` = Toplu Geri Al / üstüne yaz ile geri alınmış.
+ * @return list<array{toplu_id:string,fis_no:string,rev:int,period_ids:int[],aktif:int,geri_alindi:bool,created_at:string,ustune:bool}>
+ */
+function pdks_fis_oturum_batchleri(PDO $pdo, int $sid): array
+{
+    if ($sid < 1 || !pdks_gunluk_tablo_var($pdo, 'audit_log')) return [];
+    $st = $pdo->prepare("SELECT new_values, created_at FROM audit_log WHERE module = 'daily_work_sessions' AND action = 'puantaj_toplu_ekle' AND record_id = ? AND new_values LIKE ? ESCAPE '!' ORDER BY id ASC");
+    $st->execute([$sid, '%' . pdks_fis_like_kac('"kaynak":"fis_excel"') . '%']);
+    $liste = [];
+    foreach (pdks_faz8j_toplu_listele($sid, $pdo) as $t) $liste[(string)$t['toplu_id']] = $t;
+    $out = [];
+    foreach ($st->fetchAll() as $r) {
+        $nv = json_decode((string)$r['new_values'], true);
+        if (!is_array($nv) || ($nv['kaynak'] ?? '') !== 'fis_excel') continue;
+        $tid = (string)($nv['toplu_id'] ?? '');
+        if ($tid === '') continue;
+        $l = $liste[$tid] ?? null;
+        $pids = array_values(array_filter(array_map('intval', (array)($nv['period_ids'] ?? [])), static fn($x) => $x > 0));
+        $out[] = ['toplu_id' => $tid, 'fis_no' => (string)($nv['fis_no'] ?? ''), 'rev' => (int)($nv['fis_rev'] ?? 0), 'period_ids' => $pids,
+                  'aktif' => $l ? (int)$l['aktif'] : count($pids), 'geri_alindi' => $l ? (bool)$l['geri_alindi'] : false,
+                  'created_at' => (string)$r['created_at'], 'ustune' => !empty($nv['ustune_yaz'])];
+    }
+    return $out;
+}
+
+/** Etkin (aktif dönemi olan, geri alınmamış) fiş batch'leri. */
+function pdks_fis_etkin_batchler(array $batchler): array
+{
+    return array_values(array_filter($batchler, static fn($b) => (int)$b['aktif'] > 0 && empty($b['geri_alindi'])));
+}
+
+/**
+ * Aynı (depo, fiş no) için daha önce kullanılmış EN YÜKSEK revizyon (fis_yukle + fiş kaynaklı toplu ekleme izlerinden);
+ * hiç iz yoksa null. LIKE yalnız ön süzgeçtir; kesin karşılaştırma JSON üzerinde yapılır.
+ */
+function pdks_fis_en_yuksek_rev(PDO $pdo, string $depo, string $fisNo): ?int
+{
+    $no = pdks_fis_fisno_norm($fisNo) ?? mb_strtoupper(preg_replace('/\s+/u', '', trim($fisNo)) ?? '', 'UTF-8');
+    if ($no === '' || !pdks_gunluk_tablo_var($pdo, 'audit_log')) return null;
+    $dFold = pdks_fis_fold($depo);
+    $en = null;
+    $kalip = '%' . pdks_fis_like_kac('"fis_no":' . json_encode($no, JSON_UNESCAPED_UNICODE)) . '%';
+    $st = $pdo->prepare("SELECT action, record_id, new_values FROM audit_log WHERE module = 'daily_work_sessions' AND action IN ('fis_yukle', 'puantaj_toplu_ekle') AND new_values LIKE ? ESCAPE '!'");
+    $st->execute([$kalip]);
+    $sidDepo = [];
+    foreach ($st->fetchAll() as $r) {
+        $nv = json_decode((string)$r['new_values'], true);
+        if (!is_array($nv) || (string)($nv['fis_no'] ?? '') !== $no) continue;
+        if ($r['action'] === 'fis_yukle') {
+            if (pdks_fis_fold((string)($nv['depo'] ?? '')) !== $dFold) continue;
+            $rev = (int)($nv['rev'] ?? 0);
+        } else {
+            if (($nv['kaynak'] ?? '') !== 'fis_excel') continue;
+            $sid = (int)$r['record_id'];
+            if (!isset($sidDepo[$sid])) {
+                $q = $pdo->prepare('SELECT depo FROM daily_work_sessions WHERE id = ?');
+                $q->execute([$sid]);
+                $sidDepo[$sid] = pdks_fis_fold((string)($q->fetchColumn() ?: ''));
+            }
+            if ($sidDepo[$sid] !== $dFold) continue;
+            $rev = (int)($nv['fis_rev'] ?? 0);
+        }
+        if ($en === null || $rev > $en) $en = $rev;
+    }
+    return $en;
+}
+
+/**
+ * Üstüne yaz için efektif revizyon. Daha önce iz yoksa Excel'deki rev aynen; iz varsa max(rev, en_yuksek + 1) —
+ * AMA en yüksek revizyonun yazımı YARIM kaldıysa (işçi kayıtları yazılmış, tamamlanma izi yok) AYNI revizyon sürdürülür.
+ * @return array{rev:int, devam:bool, onceki:?int}
+ */
+function pdks_fis_ustune_rev(PDO $pdo, string $depo, string $fisNo, int $rev): array
+{
+    $ey = pdks_fis_en_yuksek_rev($pdo, $depo, $fisNo);
+    if ($ey === null) return ['rev' => $rev, 'devam' => false, 'onceki' => null];
+    $d = pdks_fis_durum($pdo, pdks_fis_istek_idleri($depo, $fisNo, $ey)['fis']);
+    if ($d['durum'] === 'yarim' && empty($d['geri_alindi']) && $ey >= $rev) return ['rev' => $ey, 'devam' => true, 'onceki' => $ey];
+    return ['rev' => max($rev, $ey + 1), 'devam' => false, 'onceki' => $ey];
+}
+
+/**
+ * Mesaideki aktif (iptal edilmemiş) FİŞ etiketli servis satırları. $fisNolar verilirse yalnız o fiş numaralarına
+ * etiketli olanlar; null ise `[FIS …]` etiketli hepsi.
+ * @return list<array>
+ */
+function pdks_fis_mesai_servis_fis(PDO $pdo, int $sid, ?array $fisNolar = null): array
+{
+    $out = [];
+    foreach (pdks_servis_listele($sid, $pdo) as $s) {
+        if ((int)($s['is_voided'] ?? 0) === 1) continue;
+        $not = (string)($s['note'] ?? '');
+        if (!str_starts_with($not, PDKS_FIS_ETIKET)) continue;
+        if ($fisNolar !== null) {
+            $es = false;
+            foreach ($fisNolar as $no) if ($no !== '' && str_starts_with($not, PDKS_FIS_ETIKET . $no . '] ')) { $es = true; break; }
+            if (!$es) continue;
+        }
+        $out[] = $s;
+    }
+    return $out;
+}
+
+/** Belirtilen servis kimliklerinden bu mesaiye ait ve HÂLÂ aktif olan satırlar. */
+function pdks_fis_servis_satirlari_idler(PDO $pdo, int $sid, array $idler): array
+{
+    $idler = array_values(array_unique(array_filter(array_map('intval', $idler), static fn($x) => $x > 0)));
+    if (!$idler || !pdks_servis_tablo_var($pdo, 'daily_session_services')) return [];
+    $st = $pdo->prepare('SELECT * FROM daily_session_services WHERE session_id = ? AND is_voided = 0 AND id IN (' . implode(',', array_fill(0, count($idler), '?')) . ') ORDER BY id');
+    $st->execute(array_merge([$sid], $idler));
+    return $st->fetchAll();
+}
+
+/** `pdks_fis_mevcut()` çıktısından iptal edilecek (fiş etiketli) servis satırlarını düşer — önizleme/fark hesabı için. */
+function pdks_fis_servis_dus(array $mevcut, array $satirlar): array
+{
+    foreach ($satirlar as $s) {
+        $tur = (string)($s['service_type'] ?? ''); $q = (int)($s['quantity'] ?? 0);
+        if (isset($mevcut['servis_toplam'][$tur])) $mevcut['servis_toplam'][$tur] = max(0, (int)$mevcut['servis_toplam'][$tur] - $q);
+        if (isset($mevcut['servis_fis'][$tur])) $mevcut['servis_fis'][$tur] = max(0, (int)$mevcut['servis_fis'][$tur] - $q);
+    }
+    return $mevcut;
+}
+
+/** Üstüne yaz yarım kalmışsa (işçi yazıldı, servis iptali/yazımı bitmedi) o toplu işlemin kayıtlı servis iptal listesi. */
+function pdks_fis_ustune_bekleyen_servis(PDO $pdo, string $topluId): array
+{
+    $k = pdks_faz8j_toplu_bul($pdo, $topluId);
+    if (!$k) return [];
+    return array_values(array_filter(array_map('intval', (array)($k['veri']['ustune_yaz']['servis_iptal_idler'] ?? [])), static fn($x) => $x > 0));
+}
+
+/**
+ * Servis kimliklerini idempotent iptal eder: zaten iptal edilmiş satır atlanır (başarı sayılır); kesin hakediş vb. hata döner.
+ * pdks_servis_iptal() KENDİ transaction'ını açar → işçi transaction'ının DIŞINDA (commit sonrası) çağrılır.
+ * @return array{ok:bool, iptal:int, hata?:string}
+ */
+function pdks_fis_servis_iptal_idler(PDO $pdo, int $sid, array $idler, string $reason, int $user): array
+{
+    $iptal = 0; $hata = [];
+    foreach (pdks_fis_servis_satirlari_idler($pdo, $sid, $idler) as $s) {
+        $r = pdks_servis_iptal((int)$s['id'], $sid, $reason, $user, $pdo);
+        if (!empty($r['ok'])) { $iptal++; continue; }
+        if (str_contains((string)($r['hata'] ?? ''), 'zaten iptal')) continue;
+        $hata[] = (string)($r['hata'] ?? 'Servis iptal edilemedi.');
+    }
+    return $hata ? ['ok' => false, 'iptal' => $iptal, 'hata' => implode(' ', array_unique($hata))] : ['ok' => true, 'iptal' => $iptal];
+}
+
+/** Çavuşun geçerli (iptal edilmemiş) ödemesi var mı? Tablo yoksa false. Salt okunur. */
+function pdks_fis_odeme_var_mi(PDO $pdo, int $foremanId): bool
+{
+    if (!pdks_hakedis_tablo_var($pdo, 'foreman_payments')) return false;
+    $st = $pdo->prepare("SELECT 1 FROM foreman_payments WHERE foreman_id = ? AND status = 'valid' LIMIT 1");
+    $st->execute([$foremanId]);
+    return (bool)$st->fetchColumn();
+}
+
+/** Dönem kümesinin (YALNIZ aktif olanlar) tip bazlı özeti — sınıflandırıcıdan (kopya mantık YOK). */
+function pdks_fis_donem_ozeti(PDO $pdo, array $periodIds): array
+{
+    $periodIds = array_values(array_unique(array_filter(array_map('intval', $periodIds), static fn($x) => $x > 0)));
+    if (!$periodIds) return [];
+    $o = [];
+    foreach (pdks_faz8b_donem_sorgu($pdo, 'p.id IN (' . implode(',', array_fill(0, count($periodIds), '?')) . ')', $periodIds) as $r) {
+        $ad = (string)($r['worker_type_name_snapshot'] ?? '?');
+        $f = is_array($r['faz8b'] ?? null) ? $r['faz8b'] : [];
+        $o[$ad] ??= ['kisi' => 0, 'tam' => 0, 'yarim' => 0, 'cift' => 0, 'bekliyor' => 0, 'fm_saat' => 0, 'yevmiye' => 0];
+        $o[$ad]['kisi']++;
+        $y = (int)($f['yevmiye'] ?? 0);
+        if ($y > 0) { $o[$ad]['tam']++; $o[$ad]['yevmiye'] += $y; continue; }   // v463: yevmiyeli Rampacı
+        $sn = $f['etkin_sinif'] ?? null;
+        if ($sn === 'tam') $o[$ad]['tam']++;
+        elseif ($sn === 'yarim') $o[$ad]['yarim']++;
+        elseif ($sn === 'cift') $o[$ad]['cift']++;
+        else $o[$ad]['bekliyor']++;
+        $o[$ad]['fm_saat'] += pdks_faz8b_fm_goster($f);
+    }
+    return $o;
+}
+
+/** Plan gruplarının tip bazlı özeti (donem_ozeti ile AYNI biçim) — "YENİ" tarafı. */
+function pdks_fis_plan_ozeti(array $plan): array
+{
+    $o = [];
+    foreach (($plan['gruplar'] ?? []) as $g) {
+        $ad = (string)($g['tip_ad'] ?? $g['kod'] ?? '?'); $n = (int)$g['adet'];
+        $o[$ad] ??= ['kisi' => 0, 'tam' => 0, 'yarim' => 0, 'cift' => 0, 'bekliyor' => 0, 'fm_saat' => 0, 'yevmiye' => 0];
+        $o[$ad]['kisi'] += $n;
+        $profil = (string)($g['profil'] ?? 'tam');
+        if ($profil === 'yarim') $o[$ad]['yarim'] += $n;
+        else {
+            $o[$ad]['tam'] += $n;
+            if ($profil === 'fm') $o[$ad]['fm_saat'] += $n * (int)($g['fm_saat'] ?? 0);
+            if ($profil === 'yevmiye') $o[$ad]['yevmiye'] += $n * (int)($g['yevmiye'] ?? 0);
+        }
+    }
+    return $o;
+}
+
+/** Özet → okunur satırlar ("Erkek: 12 kişi (12 Tam)"). Kaçışsız düz metin; çağıran h() uygular. */
+function pdks_fis_ozet_satirlari(array $oz): array
+{
+    $s = [];
+    foreach ($oz as $ad => $o) {
+        $p = [];
+        if ($o['tam'] > 0) $p[] = $o['tam'] . ' Tam';
+        if ($o['yarim'] > 0) $p[] = $o['yarim'] . ' Yarım';
+        if ($o['cift'] > 0) $p[] = $o['cift'] . ' Çift';
+        if ($o['bekliyor'] > 0) $p[] = $o['bekliyor'] . ' bekliyor';
+        if ($o['fm_saat'] > 0) $p[] = 'FM ' . $o['fm_saat'] . ' sa';
+        if ($o['yevmiye'] > 0) $p[] = $o['yevmiye'] . ' yevmiye';
+        $s[] = $ad . ': ' . $o['kisi'] . ' kişi' . ($p ? ' (' . implode(', ', $p) . ')' : '');
+    }
+    return $s;
+}
+
+/**
+ * Üstüne yaz kapsamı (SALT OKUNUR): mesaideki etkin fiş batch'leri, fiş-dışı aktif dönem sayısı, eski özet, iptal edilecek servisler.
+ * Etkin fiş batch'i yoksa null.
+ * @return ?array{eski_toplu:string[], eski_fisler:string[], period_ids:int[], fis_aktif:int, fis_disi:int, eski:array, servis:list<array>}
+ */
+function pdks_fis_ustune_kapsam(PDO $pdo, int $sid, int $aktifDonem, string $fisNo): ?array
+{
+    $etkin = pdks_fis_etkin_batchler(pdks_fis_oturum_batchleri($pdo, $sid));
+    if (!$etkin) return null;
+    $tops = array_column($etkin, 'toplu_id'); sort($tops, SORT_STRING);
+    $pids = []; $aktif = 0; $nolar = [];
+    foreach ($etkin as $b) {
+        $pids = array_merge($pids, $b['period_ids']); $aktif += (int)$b['aktif'];
+        if ($b['fis_no'] !== '') $nolar[$b['fis_no']] = true;
+    }
+    $nolar[$fisNo] = true;
+    return ['eski_toplu' => $tops, 'eski_fisler' => array_keys($nolar), 'period_ids' => $pids, 'fis_aktif' => $aktif,
+            'fis_disi' => max(0, $aktifDonem - $aktif), 'eski' => pdks_fis_donem_ozeti($pdo, $pids),
+            'servis' => pdks_fis_mesai_servis_fis($pdo, $sid, array_keys($nolar))];
+}
+
+/**
+ * pdks_faz8j_toplu_ekle `yazdiktan_sonra` geri çağrısı (AYNI transaction, commit'ten ÖNCE): mesai kilidi altında etkin fiş
+ * batch'leri YENİDEN okunur — önizlemedeki kümeyle birebir aynı değilse RuntimeException (tüm tx geri). Eşleşirse eski
+ * batch'lerin hâlâ aktif dönemleri pdks_faz8j_void_uygula ile iptal edilir (silinmez) ve her batch için tekil
+ * `puantaj_toplu_geri_al` audit'i yazılır (pdks_faz8j_toplu_listele "geri alındı" gösterir). Yeni dönem kimlikleri hariç tutulur.
+ */
+function pdks_fis_ustune_geri_cagrisi(array $eskiToplu, string $gerekce, ArrayObject $sayac): callable
+{
+    $eski = array_values(array_unique(array_map('strval', $eskiToplu))); sort($eski, SORT_STRING);
+    return function (PDO $pdo, int $sid, array $pids, array $specs, array $oturum, int $user) use ($eski, $gerekce, $sayac): void {
+        $depo = (string)$oturum['depo'];
+        $guncel = pdks_fis_etkin_batchler(pdks_fis_oturum_batchleri($pdo, $sid));
+        $g = array_column($guncel, 'toplu_id'); sort($g, SORT_STRING);
+        if ($g !== $eski) throw new RuntimeException('Mesaideki fiş kayıtları önizlemeden sonra değişti — hiçbir şey yazılmadı.');
+        $yeni = array_flip(array_map('intval', $pids));
+        $reason = mb_substr('Fiş üstüne yazıldı: ' . $gerekce, 0, 500);
+        foreach ($guncel as $b) {
+            $iptal = [];
+            foreach ($b['period_ids'] as $pid) {
+                if (isset($yeni[$pid])) continue;
+                $p = pdks_faz8j_donem($pdo, $pid, $sid, $depo);
+                if (!$p || (int)$p['is_voided'] === 1) continue;
+                pdks_faz8j_void_uygula($pdo, $p, $pid, $sid, $reason, $user, ['toplu_id' => $b['toplu_id'], 'ustune_yaz' => true]);
+                $iptal[] = $pid;
+            }
+            if (!$iptal) throw new RuntimeException('İç tutarsızlık: iptal edilecek eski fiş kaydı bulunamadı — hiçbir şey yazılmadı.');
+            pdks_faz8j_audit($pdo, $user, 'puantaj_toplu_geri_al', $sid, [], [
+                'session_id' => $sid, 'toplu_id' => $b['toplu_id'], 'period_ids' => $iptal, 'iptal_edilen' => count($iptal), 'atlanan' => 0,
+                'reason' => $reason, 'voided_at' => date('Y-m-d H:i:s'), 'user_id' => $user, 'ustune_yaz' => true,
+            ], 'daily_work_sessions');
+            $sayac['ustune_iptal'] = (int)$sayac['ustune_iptal'] + count($iptal);
+        }
+    };
+}
+
+// ── (a) ÇAVUŞUN FİŞ YÜKLEMELERİNİ GERİ AL (sıfırla) ─────────────────────────
+
+const PDKS_FIS_SIFIRLA_GUN_UST = 366;
+const PDKS_FIS_KV_SIFIRLA = 'fis_zk_';       // sıfırla onay yükü (token)
+const PDKS_FIS_KV_SIFIRLA_SONUC = 'fis_zs_'; // sıfırla sonucu
+
+function pdks_fis_tarih_gecerli(string $t): bool
+{
+    return (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/D', $t) && ($d = DateTimeImmutable::createFromFormat('!Y-m-d', $t)) && $d->format('Y-m-d') === $t;
+}
+
+/**
+ * SALT OKUNUR: çavuşun [bas, bit] aralığındaki fiş kaynaklı kayıtlarının dökümü. Her mesai: uygun · kesin (final hakediş) ·
+ * baska_depo. Yalnız fiş izi olan (etkin batch ya da `[FIS …]` etiketli aktif servis) mesailer listelenir.
+ * @return array{hata:?string, mesailer:list<array>, atlanan:list<array>, toplam:array, fis_nolari:string[], odeme_var:bool, hash:string}
+ */
+function pdks_fis_sifirla_onizle(PDO $pdo, int $foremanId, string $bas, string $bit, string $depo): array
+{
+    $s = ['hata' => null, 'mesailer' => [], 'atlanan' => [], 'toplam' => ['mesai' => 0, 'donem' => 0, 'servis' => 0, 'toplu' => 0], 'fis_nolari' => [], 'odeme_var' => false, 'hash' => ''];
+    if ($foremanId < 1) { $s['hata'] = 'Çavuş seçilmedi.'; return $s; }
+    if (!pdks_fis_tarih_gecerli($bas) || !pdks_fis_tarih_gecerli($bit)) { $s['hata'] = 'Geçerli bir tarih aralığı girin.'; return $s; }
+    if ($bas > $bit) { $s['hata'] = 'Başlangıç tarihi bitişten sonra olamaz.'; return $s; }
+    if ($bit >= date('Y-m-d')) { $s['hata'] = 'Bitiş tarihi bugünden önce olmalıdır (yalnız geçmiş günler).'; return $s; }
+    if ((strtotime($bit) - strtotime($bas)) / 86400 > PDKS_FIS_SIFIRLA_GUN_UST) { $s['hata'] = 'Tarih aralığı en çok ' . PDKS_FIS_SIFIRLA_GUN_UST . ' gün olabilir.'; return $s; }
+    $s['odeme_var'] = pdks_fis_odeme_var_mi($pdo, $foremanId);
+    $dFold = pdks_fis_fold($depo);
+    $st = $pdo->prepare('SELECT id, work_date, depo FROM daily_work_sessions WHERE foreman_id = ? AND work_date BETWEEN ? AND ? ORDER BY work_date ASC, id ASC');
+    $st->execute([$foremanId, $bas, $bit]);
+    $nolar = []; $kimlik = [];
+    foreach ($st->fetchAll() as $o) {
+        $sid = (int)$o['id'];
+        $etkin = pdks_fis_etkin_batchler(pdks_fis_oturum_batchleri($pdo, $sid));
+        $sv = pdks_fis_mesai_servis_fis($pdo, $sid);
+        if (!$etkin && !$sv) continue;
+        $q = $pdo->prepare('SELECT COUNT(*) FROM daily_worker_work_periods p WHERE p.session_id = ? AND ' . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p'));
+        $q->execute([$sid]);
+        $aktifToplam = (int)$q->fetchColumn();
+        $fisAktif = array_sum(array_column($etkin, 'aktif'));
+        $svAdet = array_sum(array_map(static fn($x) => (int)$x['quantity'], $sv));
+        $m = ['session_id' => $sid, 'tarih' => (string)$o['work_date'], 'depo' => (string)$o['depo'],
+              'fis_nolari' => array_values(array_unique(array_filter(array_column($etkin, 'fis_no'), static fn($x) => $x !== ''))),
+              'toplu_idler' => array_column($etkin, 'toplu_id'), 'toplu' => count($etkin), 'donem' => (int)$fisAktif, 'servis' => $svAdet,
+              'servis_idler' => array_map(static fn($x) => (int)$x['id'], $sv), 'fis_disi' => max(0, $aktifToplam - (int)$fisAktif), 'durum' => 'uygun', 'neden' => ''];
+        if (pdks_fis_fold((string)$o['depo']) !== $dFold) { $m['durum'] = 'baska_depo'; $m['neden'] = 'Mesai başka depoya ait («' . (string)$o['depo'] . '») — o depoyu seçip tekrar deneyin.'; }
+        elseif (pdks_faz8j_entitlement($pdo, $sid) === 'final') { $m['durum'] = 'kesin'; $m['neden'] = 'Kesinleşmiş hakediş var — bu gün DEĞİŞTİRİLEMEZ.'; }
+        if ($m['durum'] !== 'uygun') { $s['atlanan'][] = $m; continue; }
+        $s['mesailer'][] = $m;
+        $s['toplam']['mesai']++; $s['toplam']['donem'] += $m['donem']; $s['toplam']['servis'] += $svAdet; $s['toplam']['toplu'] += $m['toplu'];
+        foreach ($m['fis_nolari'] as $n) $nolar[$n] = true;
+        $kimlik[] = [$sid, $m['toplu_idler'], $m['servis_idler']];
+    }
+    $s['fis_nolari'] = array_keys($nolar);
+    $s['hash'] = substr(hash('sha256', json_encode($kimlik)), 0, 16);
+    return $s;
+}
+
+/** Aynı istek kimliğiyle sıfırlama daha önce yapılmış mı? (çift gönderim koruması) */
+function pdks_fis_sifirla_istek_kayitli(PDO $pdo, string $istekId): bool
+{
+    if (!preg_match('/^[a-f0-9]{32}$/D', $istekId)) return false;
+    $st = $pdo->prepare("SELECT 1 FROM audit_log WHERE action IN ('fis_sifirla', 'fis_sifirla_ozet') AND new_values LIKE ? LIMIT 1");
+    $st->execute(['%"istek_id":"' . $istekId . '"%']);
+    return (bool)$st->fetchColumn();
+}
+
+/**
+ * Çavuşun fiş kaynaklı kayıtlarını aralıkta SOFT-iptal eder (dönem: pdks_faz8j_toplu_geri_al · servis: pdks_servis_iptal).
+ * Her mesai/batch KENDİ transaction'ında (alt fonksiyonlar kendi tx'lerini açar) → HEP-YA-HİÇ DEĞİL: kısmi başarı raporlanır;
+ * yarım kalırsa aynı işlem yeni istek kimliğiyle tekrar edilince kaldığı yerden sürer (idempotent). Kesinleşmiş hakedişli
+ * ve başka depodaki mesailer atlanır. Şifre/yetki doğrulaması ÇAĞIRAN sayfadadır (sifre_onay_dogrula).
+ * @return array{ok:bool, hata?:string, tekrar?:bool, mesailer:list<array>, atlanan:list<array>, ozet:array}
+ */
+function pdks_fis_sifirla_uygula(PDO $pdo, int $foremanId, string $bas, string $bit, string $gerekce, string $istekId, int $user, string $depo): array
+{
+    $sonuc = ['ok' => false, 'mesailer' => [], 'atlanan' => [], 'ozet' => ['mesai' => 0, 'donem' => 0, 'servis' => 0, 'hatali' => 0]];
+    if ($e = pdks_faz8j_yetki()) return ['hata' => $e] + $sonuc;
+    if (!pdks_faz8j_sema_hazir($pdo)) return ['hata' => 'Faz 8J şeması henüz hazır değil.'] + $sonuc;
+    if ($e = pdks_faz8j_aktif_depo_kontrol($depo)) return ['hata' => $e] + $sonuc;
+    $gerekce = pdks_fis_metin_duz($gerekce, PDKS_FIS_USTUNE_GEREKCE_MAX);
+    if ($gerekce === '') return ['hata' => 'Gerekçe zorunludur.'] + $sonuc;
+    if (!preg_match('/^[a-f0-9]{32}$/D', $istekId)) return ['hata' => 'Geçersiz istek anahtarı; sayfayı yenileyip tekrar deneyin.'] + $sonuc;
+    if (pdks_fis_sifirla_istek_kayitli($pdo, $istekId)) return ['hata' => 'Bu işlem zaten yapılmış (tekrar gönderim).', 'tekrar' => true] + $sonuc;
+    $on = pdks_fis_sifirla_onizle($pdo, $foremanId, $bas, $bit, $depo);
+    if ($on['hata'] !== null) return ['hata' => $on['hata']] + $sonuc;
+    $sonuc['atlanan'] = $on['atlanan'];
+    $reason = mb_substr('Fiş yüklemesi geri alındı: ' . $gerekce, 0, 500);
+    foreach ($on['mesailer'] as $m) {
+        $sid = (int)$m['session_id'];
+        $r = ['session_id' => $sid, 'tarih' => $m['tarih'], 'fis_nolari' => $m['fis_nolari'], 'iptal_donem' => 0, 'iptal_servis' => 0, 'toplu_idler' => [], 'hata' => ''];
+        try {
+            foreach (pdks_fis_etkin_batchler(pdks_fis_oturum_batchleri($pdo, $sid)) as $b) {
+                $g = pdks_faz8j_toplu_geri_al($b['toplu_id'], $reason, $user, $pdo);
+                if (!empty($g['ok'])) { $r['iptal_donem'] += (int)$g['iptal_edilen']; $r['toplu_idler'][] = $b['toplu_id']; continue; }
+                if (str_contains((string)($g['hata'] ?? ''), 'zaten iptal')) continue;
+                $r['hata'] = (string)($g['hata'] ?? 'Geri alınamadı.');
+                break;
+            }
+            if ($r['hata'] === '') {
+                $ids = array_map(static fn($x) => (int)$x['id'], pdks_fis_mesai_servis_fis($pdo, $sid));
+                $sv = pdks_fis_servis_iptal_idler($pdo, $sid, $ids, $reason, $user);
+                $r['iptal_servis'] = (int)$sv['iptal'];
+                if (empty($sv['ok'])) $r['hata'] = (string)$sv['hata'];
+            }
+        } catch (Throwable $x) {
+            error_log('[pdks_fis_sifirla_uygula] ' . get_class($x));
+            $r['hata'] = 'Teknik bir hata oluştu; aynı işlemi tekrar çalıştırarak kalan kısmı tamamlayabilirsiniz.';
+        }
+        try {
+            pdks_faz8j_audit($pdo, $user, 'fis_sifirla', $sid, [], [
+                'session_id' => $sid, 'foreman_id' => $foremanId, 'tarih' => $m['tarih'], 'istek_id' => $istekId, 'toplu_idler' => $r['toplu_idler'],
+                'fis_nolari' => $m['fis_nolari'], 'iptal_donem' => $r['iptal_donem'], 'iptal_servis' => $r['iptal_servis'], 'reason' => $gerekce,
+                'durum' => $r['hata'] === '' ? 'tamam' : 'hata',
+            ], 'daily_work_sessions');
+        } catch (Throwable $x) {
+            error_log('[pdks_fis_sifirla_uygula audit] ' . get_class($x));
+        }
+        $sonuc['mesailer'][] = $r;
+        $sonuc['ozet']['mesai']++; $sonuc['ozet']['donem'] += $r['iptal_donem']; $sonuc['ozet']['servis'] += $r['iptal_servis'];
+        if ($r['hata'] !== '') $sonuc['ozet']['hatali']++;
+    }
+    try {
+        pdks_faz8j_audit($pdo, $user, 'fis_sifirla_ozet', $foremanId, [], [
+            'foreman_id' => $foremanId, 'bas' => $bas, 'bit' => $bit, 'istek_id' => $istekId, 'reason' => $gerekce,
+            'mesai' => $sonuc['ozet']['mesai'], 'iptal_donem' => $sonuc['ozet']['donem'], 'iptal_servis' => $sonuc['ozet']['servis'],
+            'hatali' => $sonuc['ozet']['hatali'], 'atlanan' => count($on['atlanan']),
+        ], 'foremen');
+    } catch (Throwable $x) {
+        error_log('[pdks_fis_sifirla_uygula ozet] ' . get_class($x));
+    }
+    $sonuc['ok'] = true;
+    return $sonuc;
+}
+
+/** Sıfırla onay yükünü oturuma + hks_kv yedeğine koyar (32 hex token; kullanıcı + depo + TTL'e bağlı). */
+function pdks_fis_sifirla_token_olustur(array $yuk): string
+{
+    if (session_status() === PHP_SESSION_NONE && !headers_sent()) @session_start();
+    $t = bin2hex(random_bytes(16));
+    $kayit = ['t' => time(), 'uid' => pdks_fis_kullanici_id(), 'depo' => (string)(function_exists('active_depot') ? active_depot() : '')] + $yuk;
+    $_SESSION['fis_sifirla'] ??= [];
+    $_SESSION['fis_sifirla'][$t] = $kayit;
+    while (count($_SESSION['fis_sifirla']) > 3) { reset($_SESSION['fis_sifirla']); unset($_SESSION['fis_sifirla'][key($_SESSION['fis_sifirla'])]); }
+    pdks_fis_kv_yaz(PDKS_FIS_KV_SIFIRLA, $t, $kayit);
+    return $t;
+}
+
+/** Token'ı çözer (biçim, TTL, kullanıcı + depo); yoksa null. $neden: bicim | yok | sure | kullanici | depo. */
+function pdks_fis_sifirla_token_al(string $token, ?string &$neden = null): ?array
+{
+    $neden = null;
+    if (!preg_match('/^[a-f0-9]{32}$/D', $token)) { $neden = 'bicim'; return null; }
+    $v = $_SESSION['fis_sifirla'][$token] ?? null;
+    if (!is_array($v)) {
+        $v = pdks_fis_kv_oku(PDKS_FIS_KV_SIFIRLA, $token);
+        if ($v === null) { $neden = 'yok'; return null; }
+    }
+    if (time() - (int)($v['t'] ?? 0) > PDKS_FIS_TOKEN_TTL) { pdks_fis_sifirla_token_sil($token); $neden = 'sure'; return null; }
+    if ((int)($v['uid'] ?? -1) !== pdks_fis_kullanici_id()) { $neden = 'kullanici'; return null; }
+    if ((string)($v['depo'] ?? '') !== (string)(function_exists('active_depot') ? active_depot() : '')) { $neden = 'depo'; return null; }
+    return $v;
+}
+
+function pdks_fis_sifirla_token_sil(string $token): void
+{
+    unset($_SESSION['fis_sifirla'][$token]);
+    pdks_fis_kv_sil(PDKS_FIS_KV_SIFIRLA, $token);
+}
+
+// ── ETKİLENEN FİŞLER RAPORU (salt okunur) ──────────────────────────────────
+
+/**
+ * Yazılmış fişleri (audit `fis_yukle`) tarih/çavuş/«Yarım > 0» süzgecinden geçirir; her fiş için dönem tablosundan TİP
+ * KIRILIMI (Yarım kararı verilen / bekleyen dönemler tip adına göre), «Erkek Yarım > 0» ise ✱ bayrağı (eski «12+1 = Tam + Yarım»
+ * yorumundan kalma olası yanlış), durum (aktif · geri alındı · kesin hakedişli). YAZMA YOK.
+ * @return list<array>
+ */
+function pdks_fis_etkilenen_rapor(PDO $pdo, ?int $foremanId, string $bas, string $bit, bool $yalnizYarim = true, bool $geriAlinanGizle = false, int $limit = 500): array
+{
+    if (!pdks_gunluk_tablo_var($pdo, 'audit_log')) return [];
+    $st = $pdo->query("SELECT id, record_id, new_values, created_at FROM audit_log WHERE module = 'daily_work_sessions' AND action = 'fis_yukle' ORDER BY id DESC LIMIT 5000");
+    $erkekAd = (string)(pdks_gunluk_tip_kayit()['ERKEK']['ad'] ?? 'Erkek');
+    $topluCache = []; $cavusCache = []; $out = [];
+    foreach ($st->fetchAll() as $r) {
+        $nv = json_decode((string)$r['new_values'], true);
+        if (!is_array($nv)) continue;
+        $tarih = (string)($nv['tarih'] ?? '');
+        if ($tarih === '' || $tarih < $bas || $tarih > $bit) continue;
+        $cid = (int)($nv['foreman_id'] ?? 0);
+        if ($foremanId !== null && $cid !== $foremanId) continue;
+        $yarim = (int)($nv['yarim'] ?? 0);
+        if ($yalnizYarim && $yarim < 1) continue;
+        $sid = (int)$r['record_id']; $tid = (string)($nv['toplu_id'] ?? '');
+        $topluCache[$sid] ??= pdks_faz8j_toplu_listele($sid, $pdo);
+        $t = null;
+        foreach ($topluCache[$sid] as $x) if ($x['toplu_id'] === $tid) { $t = $x; break; }
+        $geri = $t ? (bool)$t['geri_alindi'] : false;
+        if ($geriAlinanGizle && $geri) continue;
+        $tip = []; $erkekYarim = false;
+        if ($t && $t['period_ids'] && !$geri) {
+            foreach (pdks_faz8b_donem_sorgu($pdo, 'p.id IN (' . implode(',', array_fill(0, count($t['period_ids']), '?')) . ')', $t['period_ids']) as $d) {
+                $f = is_array($d['faz8b'] ?? null) ? $d['faz8b'] : [];
+                if (($f['etkin_sinif'] ?? null) === 'yarim' || !empty($f['sinif_onayi_gerekli'])) {
+                    $ad = (string)($d['worker_type_name_snapshot'] ?? '?');
+                    $tip[$ad] = ($tip[$ad] ?? 0) + 1;
+                    if ($ad === $erkekAd) $erkekYarim = true;
+                }
+            }
+        }
+        if (!isset($cavusCache[$cid])) {
+            $q = $pdo->prepare('SELECT code, name FROM foremen WHERE id = ?');
+            $q->execute([$cid]);
+            $c = $q->fetch() ?: null;
+            $cavusCache[$cid] = $c ? ((string)$c['code'] . ' · ' . (string)$c['name']) : ('#' . $cid);
+        }
+        $durum = $geri ? 'geri' : (pdks_faz8j_entitlement($pdo, $sid) === 'final' ? 'kesin' : 'aktif');
+        $out[] = ['fis_no' => (string)($nv['fis_no'] ?? ''), 'rev' => (int)($nv['rev'] ?? 0), 'tarih' => $tarih, 'cavus_id' => $cid, 'cavus' => $cavusCache[$cid],
+                  'session_id' => $sid, 'toplu_id' => $tid, 'yarim' => $yarim, 'yarim_tip' => $tip, 'erkek_yarim' => $erkekYarim, 'durum' => $durum,
+                  'ustune' => !empty($nv['ustune_yaz']), 'created_at' => (string)$r['created_at']];
+        if (count($out) >= $limit) break;
+    }
+    usort($out, static fn($a, $b) => [$b['tarih'], $b['fis_no']] <=> [$a['tarih'], $a['fis_no']]);
+    return $out;
 }

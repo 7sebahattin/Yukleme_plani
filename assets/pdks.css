@@ -2846,3 +2846,41 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 .fy-secimler select { width: 100%; }
 .fy-ust { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-width: 0; }
 .fy-ust > span { padding: 2px 10px; border-radius: 999px; background: var(--surface-2); font-size: .85rem; overflow-wrap: anywhere; }
+
+/* v464 — Fiş düzeltme: Üstüne yaz (ESKİ → YENİ), Fiş yüklemelerini geri al, Etkilenen fişler raporu */
+.fd-sayfa { min-width: 0; }
+.fd-ustune { margin-top: 4px; }
+.fd-ustune .fd-gerekce { margin: 6px 0 4px; }
+.fd-ustune .fd-gerekce input { width: 100%; max-width: 560px; box-sizing: border-box; }
+.fd-ustune-not { margin: 6px 0 0; }
+.fd-ustune-blok { margin: 6px 0 2px; min-width: 0; }
+.fy-tablo tr.fy-ustune-satir td { padding-top: 0; background: var(--card); }
+.fd-fark { display: grid; gap: 6px; margin: 6px 0 0; }
+.fd-fark > div { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 8px; min-width: 0; overflow-wrap: anywhere; }
+.fd-fark ul { margin: 2px 0 0; padding-left: 16px; }
+.fd-fark li { margin: 1px 0; }
+.fd-fark .fd-eski { background: var(--warn-soft); }
+.fd-fark .fd-yeni { background: var(--success-soft); }
+.fd-fark small { display: block; color: var(--muted); font-weight: 700; }
+.fd-servis { margin-top: 4px; font-size: .82rem; color: var(--muted); }
+.fd-iptal { color: var(--warn-text, var(--text)); font-size: .82rem; }
+.fd-alt-baslik { margin: 16px 0 8px; font-size: 1.05rem; }
+.fd-tablo td, .fd-tablo th { vertical-align: middle; }
+.fd-tablo td:nth-child(2), .fd-tablo td:nth-child(5), .fd-tablo td:nth-child(6) { min-width: 0; white-space: normal; }
+.fd-onay { max-width: 560px; margin-top: 14px; }
+.fd-onay input[type="text"], .fd-onay input[type="password"] { width: 100%; max-width: 100%; box-sizing: border-box; }
+.fd-filtre { flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.fd-ck { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.fd-ck input[type="checkbox"] { width: 18px; height: 18px; }
+@media (min-width: 900px) {
+    .fd-fark { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 767px) {
+    .fd-ustune .fd-gerekce input, .fd-onay input, #fisGeriAl textarea, #fisGeriAl input[type="date"], #fisGeriAl select, .fd-filtre input, .fd-filtre select { font-size: 16px; }
+    #fisGeriAl .fy-form { max-width: none; }
+    #fisGeriAl .fy-form input[type="date"], #fisGeriAl .fy-form textarea { width: 100%; box-sizing: border-box; }
+    .fd-filtre > * { flex: 1 1 100%; }
+    .fd-ck { white-space: normal; }
+}
+html[data-theme="dark"] .fd-fark .fd-eski { background: rgba(250, 190, 90, .12); }
+html[data-theme="dark"] .fd-fark .fd-yeni { background: rgba(80, 200, 140, .12); }

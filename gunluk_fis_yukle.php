@@ -80,10 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($o['ok'])) { set_flash('error', (string)($o['hata'] ?? 'Dosya okunamadı.')); header('Location: ' . $self); exit; }
         $n = pdks_fis_normalize($o, $cavusSec, $isletme);
         if (!$n['fisler']) { set_flash('error', implode(' ', $n['genel_hatalar'] ?: ['Dosyada fiş bulunamadı.'])); header('Location: ' . $self); exit; }
-        $fmTip = pdks_fis_secenek(['fm_tip' => $_POST['fm_tip'] ?? 'tumu'])['fm_tip'];
+        $sec0 = pdks_fis_secenek(['fm_tip' => $_POST['fm_tip'] ?? 'tumu', 'ustune_yaz' => !empty($_POST['ustune_yaz']), 'ustune_gerekce' => $_POST['ustune_gerekce'] ?? '']);
+        // v464: «Üstüne yaz» önizlemeden ÖNCE seçilir (eski → yeni fark önizlemede görünür); gerekçe zorunlu. Yazma anında seçenek TOKEN'dan okunur.
+        if ($sec0['ustune_yaz'] && $sec0['ustune_gerekce'] === '') { set_flash('error', 'Üstüne yazmak için gerekçe zorunludur.'); header('Location: ' . $self . '?isletme=' . rawurlencode($isletme) . '&cavus=' . (int)$cavusSec['id']); exit; }
         $token = pdks_fis_token_olustur([
             'sha' => (string)$d['sha256'], 'dosya_ad' => pdks_fis_metin_duz(basename(str_replace('\\', '/', (string)($_FILES['dosya']['name'] ?? 'dosya.xlsx'))), 120),
-            'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $fmTip], 'ust' => ['isletme' => $isletme, 'depo' => $depo, 'cavus' => $cavusSec['code'] . ' · ' . $cavusSec['name']], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
+            'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $sec0['fm_tip'], 'ustune_yaz' => $sec0['ustune_yaz'], 'ustune_gerekce' => $sec0['ustune_gerekce']], 'ust' => ['isletme' => $isletme, 'depo' => $depo, 'cavus' => $cavusSec['code'] . ' · ' . $cavusSec['name']], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
         ]);
         export_audit('gunluk_fis_yukle', 'Fiş Excel önizleme', 'xlsx', count($n['fisler']), ['sha256' => substr((string)$d['sha256'], 0, 16), 'cavus_id' => (int)$cavusSec['id']]);
         session_write_close();   // yönlendirmeden ÖNCE: sonraki GET oturum yazımını beklemeden token'ı görsün
@@ -105,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $secenek = pdks_fis_secenek([
             'fm_tip' => $yuk['secenek']['fm_tip'] ?? 'tumu', 'onay_yarim' => !empty($_POST['onay_yarim']), 'onay_fm' => !empty($_POST['onay_fm']),
             'ek_yaz' => !empty($_POST['ek_yaz']), 'isletme_onay' => !empty($_POST['isletme_onay']),
+            'ustune_yaz' => !empty($yuk['secenek']['ustune_yaz']), 'ustune_gerekce' => (string)($yuk['secenek']['ustune_gerekce'] ?? ''),   // v464: TOKEN'dan (önizlemedeki fark = yazılan)
         ]);
         // Seçim: masaüstü tablo (secilen[]) ve mobil kart (secilen_m[]) KESİŞİMİ — biri ayrışırsa fiş YAZILMAZ (güvenli yön).
         $a = array_map('intval', (array)($_POST['secilen'] ?? [])); $b = array_map('intval', (array)($_POST['secilen_m'] ?? []));
@@ -140,7 +143,7 @@ if ($onizleToken !== '') {
     $hashler = [];
     foreach ($on['fisler'] as $m) if ($m['hash'] !== '') $hashler[(int)$m['satir']] = $m['hash'];
     pdks_fis_token_hashler($onizleToken, $hashler);
-    $model = ['mod' => 'onizle', 'token' => $onizleToken, 'onizle' => $on, 'ust' => $yuk['ust'] ?? null, 'dosya_ad' => $yuk['dosya_ad'], 'sha' => $yuk['sha'], 'dosya_uyarilar' => $yuk['dosya_uyarilar'] ?? [], 'varsayilan' => $varsayilan];
+    $model = ['mod' => 'onizle', 'token' => $onizleToken, 'onizle' => $on, 'secenek' => $sec, 'ust' => $yuk['ust'] ?? null, 'dosya_ad' => $yuk['dosya_ad'], 'sha' => $yuk['sha'], 'dosya_uyarilar' => $yuk['dosya_uyarilar'] ?? [], 'varsayilan' => $varsayilan];
 } elseif ($sonucToken !== '') {
     $sk = $_SESSION['fis_sonuc'][$sonucToken] ?? pdks_fis_kv_oku(PDKS_FIS_KV_SONUC, $sonucToken);
     if (!preg_match('/^[a-f0-9]{32}$/D', $sonucToken) || !is_array($sk) || (int)$sk['uid'] !== $uid || (string)$sk['depo'] !== $depo || time() - (int)$sk['t'] > PDKS_FIS_TOKEN_TTL) {
@@ -157,6 +160,8 @@ render_flash();
 <div class="page-head">
     <h1>📥 Fiş Excel'i Yükle</h1>
     <div class="page-head-actions">
+        <a href="cavus_fis_rapor.php" class="btn">📋 Etkilenen fişler</a>
+        <a href="cavus_fis_geri_al.php" class="btn">↩ Fiş yüklemelerini geri al</a>
         <a href="gunluk_isci_puantaj.php" class="btn btn-geri">← Günlük Puantaj</a>
     </div>
 </div>
@@ -224,6 +229,15 @@ else: ?>
                     <option value="erkek_rampaci">Erkek + Rampacı</option>
                 </select>
             </div>
+            <fieldset class="fy-onay fd-ustune">
+                <legend>Düzeltme (isteğe bağlı)</legend>
+                <label><input type="checkbox" name="ustune_yaz" value="1" id="fyUstune"> Mevcut fiş kayıtlarının <b>ÜSTÜNE YAZ</b> — bu fişlerin daha önce yazılmış kayıtları <b>iptal edilir</b> (silinmez), yenisi yazılır; revizyon otomatik artar</label>
+                <div class="form-group fd-gerekce" id="fyUstuneGerekceKap" hidden>
+                    <label for="fyUstuneGerekce">Gerekçe (zorunlu)</label>
+                    <input type="text" id="fyUstuneGerekce" name="ustune_gerekce" maxlength="<?= (int)PDKS_FIS_USTUNE_GEREKCE_MAX ?>" placeholder="Örn. eski «12+1» kuralı düzeltildi" autocomplete="off">
+                </div>
+                <p class="fy-yonerge">Yalnız <b>Fiş Excel'i ile yazılmış</b> kayıtlar değişir; kiosk / elle / ters girişler korunur. Kesinleşmiş hakedişli günler değiştirilemez.</p>
+            </fieldset>
             <button type="submit" class="btn btn-primary">🔍 Önizle</button>
         </form>
         <p class="fy-yonerge">Önizlemede hiçbir kayıt yazılmaz. Dosya sunucuda saklanmaz.</p>
@@ -250,6 +264,11 @@ else: ?>
         document.getElementById('fyDepoCavus').value = c ? c.value : '';
         depoForm.submit();
     });
+    var ust = document.getElementById('fyUstune'), ustKap = document.getElementById('fyUstuneGerekceKap'), ustG = document.getElementById('fyUstuneGerekce');
+    if (ust && ustKap) {
+        var ustGuncelle = function () { ustKap.hidden = !ust.checked; if (ustG) ustG.required = ust.checked; };
+        ust.addEventListener('change', ustGuncelle); ustGuncelle();
+    }
     var form = document.getElementById('fyYazForm');
     if (!form) return;
     function satirlar() { return form.querySelectorAll('input[data-fy-satir]'); }
