@@ -34,6 +34,14 @@ function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'disp
 function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
 function is_admin(): bool { global $IS_ADMIN; return $IS_ADMIN; }
 function active_depot(): ?string { global $AKTIF_DEPO; return $AKTIF_DEPO; }
+$CONTEXT_ALLOWED_DEPOTS=['Depo A'];
+function depo_sql_column(string $column,string $prefix=':udc'): array {
+    global $CONTEXT_ALLOWED_DEPOTS;
+    if (!$CONTEXT_ALLOWED_DEPOTS) return [' AND 1=0 ',[]];
+    $params=[]; $names=[];
+    foreach($CONTEXT_ALLOWED_DEPOTS as $i=>$depot) { $name=$prefix.$i; $names[]=$name; $params[$name]=$depot; }
+    return [' AND '.$column.' IN ('.implode(',',$names).') ',$params];
+}
 function audit_log_event(...$a): void {}
 function h($v): string { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8'); }
 function csrf_token(): string { return 'testcsrf'; }
@@ -143,7 +151,9 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     file_put_contents($tmp, "<?php\n" . $src);
     ob_start();
     try { include $tmp; } catch (Throwable $e) { ob_end_clean(); return '__ERROR__: ' . $e->getMessage(); }
-    return ob_get_clean();
+    $out = ob_get_clean();
+    @unlink($tmp);
+    return $out;
 }
 
 $fail = 0; $gecen = 0;
@@ -165,9 +175,12 @@ foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'G
           'Çavuş Cari Hesapları', 'Çavuş Ödemeleri', 'Yönetim Raporları', 'Çavuş Toplu Döküm'] as $kartAdi) {
     ok("admin: '$kartAdi' kartı görünüyor", str_contains($s0, $kartAdi));
 }
-foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', 'İşçi Tipleri', 'Ekstre'] as $kartAdi) {
-    ok("admin: eski '$kartAdi' landing kartı görünmüyor", !str_contains($s0, $kartAdi));
+foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', 'İşçi Tipleri'] as $kartAdi) {
+    ok("admin: granular '$kartAdi' ek girişi görünür", str_contains($s0, $kartAdi));
 }
+ok('admin: Fiş Excel ek girişi korunur', str_contains($s0,'href="gunluk_fis_yukle.php"'));
+ok('admin: ek girişler ana kartları değiştirmiyor', str_contains($s0, 'pdks-secondary-links') && substr_count($s0, 'class="home-card"') === 11);
+ok('admin: parametresiz kırık Ekstre bağlantısı yok', !str_contains($s0, 'href="cavus_ekstre.php"'));
 ok('admin: Kart Havuzu doğru hedefe ve istenen alt başlığa sahip',
     (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu.*?Nötr günlük işçi kartları ve kart yönetimi/s', $s0));
 ok('admin: Yönetim Raporları doğru hedefe ve istenen alt başlığa sahip',
@@ -213,6 +226,81 @@ ok('yetkisiz kullanıcı forbidden() ile REDDEDİLDİ', str_starts_with($s4, '__
 $PERMS = ['attendance.employees', 'attendance.cards', 'attendance.scan', 'attendance.foremen', 'attendance.worker_cards',
           'attendance.daily_scan', 'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements',
           'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports'];   // sıfırla
+
+// New independent read grants must expose only their own secondary entry.
+$PERMS = ['role.permissions.detailed','attendance.employees.read'];
+$employeeOnly = renderPage('personel_takip.php');
+ok('yalnız employees.read genel ekrana ulaşır', !str_starts_with($employeeOnly, '__ERROR__'), $employeeOnly);
+ok('yalnız employees.read personel ek girişini gösterir', str_contains($employeeOnly, 'href="personel.php"') && str_contains($employeeOnly, 'Personeller'));
+ok('yalnız employees.read işçi/finans kartlarını açmaz', !str_contains($employeeOnly, 'href="cavuslar.php"') && !str_contains($employeeOnly, 'href="cavus_hakedis.php"') && !str_contains($employeeOnly, 'href="personel_kartlar.php"'));
+$PERMS = ['role.permissions.detailed','attendance.worker_types.read'];
+$typeOnly = renderPage('personel_takip.php');
+ok('yalnız worker_types.read doğru sayfaya giriş verir', !str_starts_with($typeOnly, '__ERROR__') && str_contains($typeOnly, 'href="isci_tipleri.php"'));
+ok('yalnız worker_types.read kart havuzuna izin vermez', !str_contains($typeOnly, 'href="isci_kartlari.php"'));
+$PERMS = ['role.permissions.detailed','attendance.hub.read'];
+$hubOnly = renderPage('personel_takip.php');
+ok('yalnız hub.read boş genel ekranı açar', !str_starts_with($hubOnly, '__ERROR__') && substr_count($hubOnly, 'class="home-card"')===0);
+$PERMS = ['role.permissions.detailed','attendance.employees.create'];
+ok('Gör olmadan yalnız Ekle genel ekranı açmaz', str_starts_with(renderPage('personel_takip.php'), '__ERROR__: forbidden'));
+
+// Context selectors use only anonymous rows and SELECTs; rollback keeps the
+// existing financial/print fixtures unchanged after this focused scenario.
+db()->exec('SAVEPOINT context_picker');
+foreach (pdks_gunluk_faz8a_tablolar() as $table=>$sql) if ($table==='daily_worker_work_periods') {
+    [$contextCreate,$contextIndexes]=pdks_ddl_sqlite($sql);
+    if (!pdks_gunluk_tablo_var(db(),$table)) { db()->exec($contextCreate); foreach($contextIndexes as $contextIndex)db()->exec($contextIndex); }
+}
+$contextSessionInsert=db()->prepare('INSERT INTO daily_work_sessions (id,foreman_id,foreman_name_snapshot,work_date,depo,opened_at) VALUES (?,?,?,?,?,?)');
+$contextSessionInsert->execute([90001,$ayseId,'Seçilebilir Örnek Çavuş','2026-10-30','Depo A','2026-10-30 08:00:00']);
+$contextSessionInsert->execute([90002,$ayseId,'Yabancı Depo Örneği','2026-10-30','Depo B','2026-10-30 08:00:00']);
+$contextCardId=(int)db()->query("SELECT id FROM worker_cards WHERE card_no='K002'")->fetchColumn();
+$contextPeriodInsert=db()->prepare("INSERT INTO daily_worker_work_periods (id,session_id,worker_card_id,entry_event_id,entry_time,work_date_snapshot,depo_snapshot,status) VALUES (?,?,?,?,?,?,?,?)");
+$contextPeriodInsert->execute([91001,90001,$contextCardId,92001,'2026-10-30 08:00:00','2026-10-30','Depo A','open']);
+$contextPeriodInsert->execute([91002,90002,$contextCardId,92002,'2026-10-30 08:00:00','2026-10-30','Depo B','legacy_unresolved']);
+$contextPeriodInsert->execute([91003,90001,$contextCardId,92003,'2026-10-30 08:00:00','2026-10-30','Depo B','open']);
+$contextPeriodInsert->execute([91004,90002,$contextCardId,92004,'2026-10-30 08:00:00','2026-10-30','Depo A','open']);
+$beforeContextChanges=(int)db()->query('SELECT total_changes()')->fetchColumn();
+$beforeContextSchema=(int)db()->query('PRAGMA schema_version')->fetchColumn();
+$PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.mesai.read','attendance.foreman_rates.read']);
+$mesaiOnly=renderPage('personel_takip.php');
+ok('yalnız mesai Gör+fiyat Gör hubda geçerli kayıt seçebilir', !str_starts_with($mesaiOnly,'__ERROR__') && str_contains($mesaiOnly,'mesai_degerlendirme.php?session_id=90001'),$mesaiOnly);
+ok('mesai seçici yabancı depoyu göstermez', !str_contains($mesaiOnly,'session_id=90002') && !str_contains($mesaiOnly,'Yabancı Depo Örneği'));
+ok('mesai seçici başka okuma paketlerini açmaz', !str_contains($mesaiOnly,'href="cavus_hakedis.php"') && !str_contains($mesaiOnly,'href="gunluk_isci_puantaj.php"'));
+$_SERVER['SCRIPT_NAME']='/mesai_degerlendirme.php'; $_SERVER['REQUEST_METHOD']='GET'; $_GET=['session_id'=>'90001'];
+$contextMesaiGate=true;
+try { require_pdks_hakedis('entitlements_finalize'); } catch(Throwable $e) { $contextMesaiGate=false; }
+ok('seçilen mesai hedefinin Gör ve ikincil finans kapısı 403 vermez', $contextMesaiGate);
+$_SERVER['SCRIPT_NAME']='';
+$PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.manual_exit.read','attendance.foreman_rates.read']);
+$exitOnly=renderPage('personel_takip.php');
+ok('manuel çıkış profili günlük tarama veya ters kart izni almıyor', !role_pdks_can('daily_scan') && !role_pdks_can('ters_pool') && !role_pdks_can('ters_count'));
+$contextSource=(string)file_get_contents($ROOT.'/personel_takip.php');
+$contextStart=strpos($contextSource, "if (role_pdks_can('mesai') || role_pdks_can('manual_exit'))");
+$contextDependency=strpos($contextSource, "require_once __DIR__ . '/config/pdks_gunluk.php';", $contextStart);
+$contextFunction=strpos($contextSource, 'pdks_gunluk_faz8j_etkin_kosul', $contextStart);
+ok('seçici tarama izinlerine bağlı olmadan günlük yardımcılarını önce yükler', $contextStart!==false && $contextDependency!==false && $contextFunction!==false && $contextDependency<$contextFunction);
+ok('yalnız manuel çıkış Gör+fiyat Gör iki gerekli kimlikle link alır', !str_starts_with($exitOnly,'__ERROR__') && str_contains($exitOnly,'manuel_cikis.php?period_id=91001&amp;session_id=90001'),$exitOnly);
+ok('manuel çıkış hem mesai hem dönem deposunu sınırlar', !str_contains($exitOnly,'period_id=91002') && !str_contains($exitOnly,'period_id=91003') && !str_contains($exitOnly,'period_id=91004'));
+$_SERVER['SCRIPT_NAME']='/manuel_cikis.php'; $_SERVER['REQUEST_METHOD']='GET'; $_GET=['session_id'=>'90001','period_id'=>'91001'];
+$contextExitGate=true;
+try { require_pdks_hakedis('entitlements_finalize'); } catch(Throwable $e) { $contextExitGate=false; }
+ok('seçilen manuel çıkış hedefinin Gör ve ikincil finans kapısı 403 vermez', $contextExitGate);
+$_SERVER['SCRIPT_NAME']='';
+$CONTEXT_ALLOWED_DEPOTS=[];
+$denyContext=renderPage('personel_takip.php');
+ok('depo ataması boşsa seçici kayıt sızdırmaz', !str_contains($denyContext,'period_id=91001'));
+$CONTEXT_ALLOWED_DEPOTS=['Depo A'];
+$PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.manual_exit.read']);
+$missingRates=renderPage('personel_takip.php');
+ok('ikincil fiyat Gör yoksa bağlamsal kayıt listesi verilmez', !str_contains($missingRates,'period_id=91001'));
+ok('bağlamsal seçimler SQL yazması yapmaz', (int)db()->query('SELECT total_changes()')->fetchColumn()===$beforeContextChanges);
+ok('bağlamsal seçimler şema değiştirmez', (int)db()->query('PRAGMA schema_version')->fetchColumn()===$beforeContextSchema);
+$PERMS=role_pdks_expand_permissions(['role.permissions.detailed','attendance.manual_exit.read','attendance.foreman_rates.read']);
+db()->exec('ALTER TABLE daily_worker_work_periods RENAME TO context_optional_periods');
+$optionalContext=renderPage('personel_takip.php');
+ok('isteğe bağlı dönem tablosu yoksa anlaşılır boş durum gösterilir', !str_starts_with($optionalContext,'__ERROR__') && !str_contains($optionalContext,'Warning:') && str_contains($optionalContext,'Çıkış bekleyen kayıtlar şu anda listelenemiyor.'));
+db()->exec('ALTER TABLE context_optional_periods RENAME TO daily_worker_work_periods');
+db()->exec('ROLLBACK TO context_picker'); db()->exec('RELEASE context_picker');
 
 echo "\n=== 10. HEDEF SAYFALAR KENDİ YETKİ KONTROLÜNÜ KORUYOR (personel_takip.php bypass DEĞİL) ===\n";
 $PERMS = ['attendance.daily_scan'];   // yalnız tarama — çavuş YÖNETİMİ yok

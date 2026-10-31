@@ -102,14 +102,13 @@ ok("index.php: kalıcı PDKS izinleri (employees/cards/scan) Personel Takibi kar
     !preg_match('/can\(.attendance\.(employees|cards|scan).\)/', $indexSrc));
 ok("index.php: Operasyon bölümü nav_ptak_gorunur()'ü de sayıyor (yalnız PDKS izinli kullanıcı kartı görebilsin)",
     (bool)preg_match('/\$_ops_show\s*=[^;]*nav_ptak_gorunur\(\)/', $indexSrc));
-// nav_ptak_gorunur()'ün izin listesi personel_takip.php'nin kapısıyla BİREBİR
+// Sidebar and hub use the same granular read policy; legacy package-list
+// equality would reject new independent employee/card-only roles.
 preg_match('/function nav_ptak_gorunur\(\): bool \{(.*?)\n\}/s', $helpersSrc, $__m);
-preg_match_all("/'(attendance\.[a-z_]+)'/", $__m[1] ?? '', $__nav);
-preg_match('/\$p_gunluk.*?\$p_rapor[^\n]*/s', $takipSrc, $__k);
-preg_match_all("/can\('(attendance\.[a-z_]+)'\)/", $__k[0] ?? '', $__tak);
-$__a = array_unique($__nav[1]); sort($__a); $__b = array_unique($__tak[1]); sort($__b);
-ok("nav_ptak_gorunur() izin listesi == personel_takip.php sayfa kapısı (" . count($__a) . " izin)",
-    $__a !== [] && $__a === $__b);
+ok("nav_ptak_gorunur() ve landing aynı hub Gör politikasını kullanıyor",
+    str_contains($__m[1] ?? '', "role_pdks_can('hub')")
+    && str_contains($takipSrc, "if (!role_pdks_can('hub'))")
+    && str_contains($takipSrc, 'role_pdks_require_request();'));
 ok("index.php: personel.php'ye DOĞRUDAN giden eski 'home-card' bağlantısı KALMADI", !preg_match('/href="personel\.php"[^>]*class="home-card"/', $indexSrc));
 
 echo "\n=== 3. PERSONEL TAKİP SAYFASI — YAPI VE İZİN FARKINDALIĞI ===\n";
@@ -117,14 +116,18 @@ ok('personel_takip.php: require_login() çağırıyor', str_contains($takipSrc, 
 ok('personel_takip.php: .home-grid/.home-card kullanıyor (ana dashboard İLE AYNI tasarım dili — görev talimatı)',
     str_contains($takipSrc, 'home-grid') && str_contains($takipSrc, 'home-card'));
 ok('personel_takip.php: yalnız aktif modüllere erişimi olmayan kullanıcı forbidden() ile REDDEDİLİYOR',
-    (bool)preg_match('/if \(!\$p_gunluk && !\$p_hakcari && !\$p_rapor\)\s*\{\s*\n\s*forbidden\(/', $takipSrc));
+    str_contains($takipSrc, "if (!role_pdks_can('hub'))") && str_contains($takipSrc, 'role_pdks_require_request();'));
 ok('personel_takip.php: legacy PDKS izinleri landing erişim koşulunda kullanılmıyor',
     !str_contains($takipSrc, 'attendance.employees') && !str_contains($takipSrc, 'attendance.cards') && !str_contains($takipSrc, 'attendance.scan'));
 ok('personel_takip.php: tam 11 ana kartın (v354: +Ters Kart Takip) her biri kendi aktif hedef izniyle sarılı',
-    substr_count($takipSrc, 'class="home-card"') === 11 && substr_count($takipSrc, "can('attendance.") >= 11);
-ok('personel_takip.php: legacy kartlar ve Ekstre landing kartı yok',
-    !str_contains($takipSrc, 'href="personel.php"') && !str_contains($takipSrc, 'href="personel_kartlar.php"')
-    && !str_contains($takipSrc, 'href="giris_cikis.php"') && !str_contains($takipSrc, 'href="isci_tipleri.php"')
+    substr_count($takipSrc, 'class="home-card"') === 11 && substr_count($takipSrc, "role_pdks_can('") >= 11);
+ok('personel_takip.php: eski ana kartlar korunur; yeni personel/tip girişleri ayrı ve izinli',
+    str_contains($takipSrc, 'pdks-secondary-links')
+    && str_contains($takipSrc, "'employees'=>['personel.php','Personeller']")
+    && str_contains($takipSrc, "'cards'=>['personel_kartlar.php','Personel Kartları']")
+    && str_contains($takipSrc, "'scan'=>['giris_cikis.php','Personel Giriş / Çıkış']")
+    && str_contains($takipSrc, "'worker_types'=>['isci_tipleri.php','İşçi Tipleri']")
+    && str_contains($takipSrc, 'if (role_pdks_can($ekKey))')
     && !str_contains($takipSrc, 'href="cavus_ekstre.php"'));
 ok('personel_takip.php: Kart Havuzu, Yönetim Raporları ve Çavuş Toplu Döküm doğru hedeflerde',
     (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu/s', $takipSrc)

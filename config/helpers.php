@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v464');
+    define('APP_SURUM', 'v465');
 }
 
 // --- HTML kaçışı ---
@@ -323,16 +323,8 @@ function can_siparis(string $perm): bool {
  * HER sayfada basılır.
  */
 function nav_ptak_gorunur(): bool {
-    if (function_exists('is_admin') && is_admin()) return true;
     if (!function_exists('can')) return true;
-    foreach ([
-        'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_scan',
-        'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements',
-        'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports',
-    ] as $izin) {
-        if (can($izin)) return true;
-    }
-    return false;
+    return role_pdks_can('hub');
 }
 
 // Kullanıcının GERÇEKTEN açabildiği ilk sayfa (yoksa null).

@@ -18,10 +18,11 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $ROOT = dirname(__DIR__);
+require_once $ROOT . '/config/role_permission_matrix.php';
 
 $PERMS = [];
 $IS_ADMIN = false;
-function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
 function is_admin(): bool { global $IS_ADMIN; return $IS_ADMIN; }
 function db(): PDO { throw new RuntimeException('bu test DB kullanmaz'); }
 function base_url(): string { return '/'; }
@@ -76,9 +77,15 @@ $PERMS = ['dashboard.read'];
 ok('yalnız dashboard.read → null (index.php zaten açılır)', first_allowed_page() === null);
 
 $PERMS = ['siparis.read'];
-ok('yalnız siparis.read → siparisler.php', first_allowed_page() === 'siparisler.php',
+ok('legacy siparis.read → yeni sırada Ürün Siparişler', first_allowed_page() === 'urun_siparis.php',
     'dönen: ' . var_export(first_allowed_page(), true));
 
+$PERMS = ['role.permissions.detailed','siparis.ogl.read'];
+ok('yalnız OGL sayfa izni → siparisler.php', first_allowed_page() === 'siparisler.php');
+$PERMS = ['role.permissions.detailed','siparis.urun.read'];
+ok('yalnız Ürün Siparişler izni → urun_siparis.php', first_allowed_page() === 'urun_siparis.php');
+$PERMS = ['role.permissions.detailed','records.pallet.read'];
+ok('yalnız Paletleme izni → cikmalar.php', first_allowed_page() === 'cikmalar.php');
 $PERMS = ['siparis.read', 'records.read'];
 ok('records.read varsa sıra yine records.php (siparisler ondan SONRA)', first_allowed_page() === 'records.php');
 

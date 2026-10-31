@@ -342,8 +342,15 @@ if (preg_match('/^function hks_csrf_girdi\(.*?^\}/ms', $api, $m)) {
     ok('api.php hks_csrf_girdi() tanımlı', false);
 }
 ok("api.php 'csrf' ucu csrf_token() döner", (bool)preg_match("/case 'csrf':\s*\{[^}]*hks_json_cikti\(\['csrf' => csrf_token\(\)\]\)/s", $api));
-ok("'csrf' ucu records.write kapısından SONRA", strpos($api, "can('records.write')") !== false
-    && strpos($api, "can('records.write')") < strpos($api, "case 'csrf':"));
+
+// The independent HKS grant must reject before token issuance or mutations.
+$_hksGate = strpos($api, "can('hks.access')");
+$_hksGateEnd = $_hksGate === false ? false : strpos($api, 'exit;', $_hksGate);
+$_hks403 = $_hksGate === false ? false : strpos($api, 'http_response_code(403)', $_hksGate);
+ok('bağımsız HKS kapısı 403 ve exit ile fail-closed', $_hksGate !== false && $_hksGateEnd !== false && $_hks403 !== false && $_hks403 < $_hksGateEnd);
+ok('geniş kayıt yazma izni doğrudan HKS kapısı değildir', !str_contains($api, "can('records.write')"));
+ok("'csrf' ucu hks.access kapısından SONRA", strpos($api, "can('hks.access')") !== false
+    && strpos($api, "can('hks.access')") < strpos($api, "case 'csrf':"));
 // v418: CSRF TEK merkezi kapıda (switch öncesi) — case içinde tekrar csrf_check YOK.
 // kisi_kaydet / kisi_sil muaf listede DEĞİL, dolayısıyla kapıya tabidir (ayrıntı: hks_csrf_kapsam_smoke.php).
 ok('kisi_kaydet + kisi_sil merkezi kapıda hks_csrf_girdi() ile denetlenir', substr_count($api, 'csrf_check(hks_csrf_girdi($g))') === 1
