@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v461');
+    define('APP_SURUM', 'v462');
 }
 
 // --- HTML kaçışı ---
@@ -1966,7 +1966,7 @@ function _audit_sanitize(array $data): array {
     static $blocked = ['password', 'password_hash', 'token', 'csrf', 'cookie', 'foto_data', 'session', 'asya_session', 'http_cookie'];
     // v455 (yalnız ekleme): PIN/hash/şifre alanları da audit'e girmez
     foreach (array_keys($data) as $__ak) {
-        if (in_array(strtolower((string)$__ak), ['pin', 'pin_hash', 'sifre', 'h'], true)) unset($data[$__ak]);
+        if (in_array(strtolower((string)$__ak), ['pin', 'pin_hash', 'sifre'], true)) unset($data[$__ak]);
     }
     $out = [];
     foreach ($data as $k => $v) {

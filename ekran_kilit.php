@@ -90,6 +90,10 @@ if ($islem === 'ac') {
 }
 
 if ($islem === 'kur') {
+    // Ekran kilitliyken (ör. yönetici PIN'i sıfırladı) PIN kurulamaz: kilitli ekran başındaki biri yeni PIN belirleyip içeri giremesin.
+    if (ekran_kilitli_mi()) {
+        ekran_kilit_json(['ok' => false, 'error' => 'Ekran kilitli. Çıkış yapıp şifrenizle tekrar giriş yapın, sonra yeni PIN belirleyin.', 'kod' => 'kilitli'], 409);
+    }
     $r = ekran_pin_kur($pdo, $uid, $s('pin'), $s('pin2'));
     if (!empty($r['ok'])) {
         audit_log_event('pin_kur', 'auth');

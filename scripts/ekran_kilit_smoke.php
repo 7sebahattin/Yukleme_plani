@@ -206,7 +206,8 @@ ok('I1 uç: csrf/oturum YOK; XRW + istek_denetle + 401 + 405 VAR',
 $corKod = preg_replace('#^\s*//.*$#m', '', $cor);
 ok('I2 core: $_SESSION yalnız unset (yorum hariç)', str_contains($corKod, 'unset($_SESSION[') && !str_contains(preg_replace('/unset\(\$_SESSION\[[^;]*;/', '', $corKod), '$_SESSION') && !str_contains($corKod, 'session_start'));
 $san = (string)substr($hlp, (int)strpos($hlp, 'function _audit_sanitize'), 900);
-ok('I3 _audit_sanitize pin, pin_hash, sifre, h süzer (+ işlevsel engeller kalır)', str_contains($san, "'pin'") && str_contains($san, "'pin_hash'") && str_contains($san, "'sifre'") && str_contains($san, "'h'") && str_contains($san, "'password'") && str_contains($san, "'csrf'"));
+ok('I3b ekran_kilit.php kur: kilitliyken reddedilir (kod kilitli)', str_contains(file_get_contents("$KOK/ekran_kilit.php"), "'kod' => 'kilitli'"));
+ok('I3 _audit_sanitize pin, pin_hash, sifre süzer (+ işlevsel engeller kalır)', str_contains($san, "'pin'") && str_contains($san, "'pin_hash'") && str_contains($san, "'sifre'") && str_contains($san, "'password'") && str_contains($san, "'csrf'"));
 ok('I4 users.php: pin_reset + audit + csrf kapısı altında', str_contains($us, "'pin_reset'") && str_contains($us, "audit_log_event('pin_reset'") && str_contains($us, 'ekran_pin_sifirla') && strpos($us, "csrf_check") < strpos($us, "=== 'pin_reset'"));
 ok('I5 login: sayaç sıfırla + mesaj beyaz listesi; logout: temizle',
     str_contains($lg, 'ekran_pin_sayac_sifirla') && str_contains($lg, "'kilit_oturum'") && str_contains($lg, "'pin_cikis'") && str_contains($lo, 'ekran_kilit_temizle') && strpos($lo, 'logout_user()') < strpos($lo, 'ekran_kilit_temizle'));
