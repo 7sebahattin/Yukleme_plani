@@ -104,7 +104,7 @@ function quick_page_v2_example(): array {
     $v2 = quick_cost_v2_defaults('2026-10-31');
     $v2['product'] = 'nar';
     $v2['quantities'] = ['raw_kg' => 25000, 'processed_kg' => 25000, 'export_kg' => 20000, 'domestic_kg' => 3000, 'industry_kg' => 0, 'waste_kg' => 2000];
-    $prices = ['raw_purchase' => 20, 'sorting_labor' => 2, 'material' => 4, 'field_transport' => 15000, 'export_freight' => 60000, 'customs' => 5000, 'official_analysis' => 3000];
+    $prices = ['raw_purchase' => 20, 'packing_labor' => 2, 'material' => 4, 'field_transport' => 15000, 'export_freight' => 60000, 'customs' => 5000, 'official_analysis' => 3000];
     foreach ($v2['items'] as &$item) $item['unit_price'] = $prices[$item['code']] ?? 0;
     unset($item);
     return $v2;
@@ -280,7 +280,7 @@ check(page([], array_merge($deletePost, ['version'=>'0']), 'list')['status'] ===
 check(page([], array_merge($deletePost, ['id'=>[]]), 'list')['status'] === 422, 'delete rejects array id');
 check(page([], array_merge($deletePost, ['id'=>'999999']), 'list')['status'] === 403, 'delete missing target denied without leakage');
 
-// ---- v2 (ham mal / randıman) controller akışı ----
+// ---- v2 (ham mal / verimlilik) controller akışı ----
 $newForm = page();
 check(str_contains($newForm['html'], 'data-model="2"') && str_contains($newForm['html'], 'assets/hizli-maliyet-v2.js') && str_contains($newForm['html'], '>Hızlı Hesap<') && str_contains($newForm['html'], '>Detaylı Hesap<'), 'new form opens v2 model with Hızlı/Detaylı switch');
 check(str_contains($newForm['html'], '"model":2') && !str_contains($newForm['html'], 'assets/hizli-maliyet.js?'), 'new form config carries v2 document only');

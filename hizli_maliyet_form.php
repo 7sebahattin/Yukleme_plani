@@ -58,7 +58,7 @@ $can_write = can_hizli_maliyet('write');
 $errors = [];
 $record = null;
 $version = 0;
-// Yeni hesap v2 (ham mal / randıman) modeliyle açılır; eski (model taşımayan) kayıt kendi v1 ekranında kalır.
+// Yeni hesap v2 (ham mal / verimlilik) modeliyle açılır; eski (model taşımayan) kayıt kendi v1 ekranında kalır.
 $document = quick_cost_v2_defaults();
 $calculation = quick_cost_calculate($document);
 $storage_ready = false;
@@ -141,7 +141,7 @@ render_flash();
 <link rel="stylesheet" href="assets/hizli-maliyet.css?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.css') ?>">
 <div class="qc-page">
     <div class="page-head">
-        <div><h1><?= $record && !$is_copy ? 'Maliyeti düzenle' : 'Yeni maliyet hesapla' ?></h1><p class="muted"><?= $is_v2 ? 'Ham mal, randıman ve ihracat maliyeti' : 'Eski hesap modeli: Ürün KG üzerinden maliyet' ?></p></div>
+        <div><h1><?= $record && !$is_copy ? 'Maliyeti düzenle' : 'Yeni maliyet hesapla' ?></h1><p class="muted"><?= $is_v2 ? 'Ham mal, verimlilik ve ihracat maliyeti' : 'Eski hesap modeli: Ürün KG üzerinden maliyet' ?></p></div>
         <div class="page-head-actions"><a class="btn" href="hizli_maliyet.php">← Kayıtlar</a></div>
     </div>
     <?php if ($record): ?>
