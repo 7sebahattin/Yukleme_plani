@@ -2957,24 +2957,90 @@ function ekranAlti() {
 })();
 
 
-/* Ekran kilidi (v454): YALNIZ masaüstü (≥900px + fare). 5 dk hareketsizlikte şifre penceresi
-   açılır (sayfa yenilenmez → form/sekme durumu korunur); sunucu durumu oturumda tutar
-   (ekran_kilit.php), yenileme / yeni sekme kilitli gelir. Son hareket zamanı sekmeler arası
-   localStorage'da paylaşılır; kiosk ekranlarında (.pdks-kiosk) otomatik kilit YOK. */
+/* Ekran kilidi — ortak yardımcılar (v455: PIN modeli). Kilit durumu sunucuda imzalı çerezde
+   (PHP oturumundan bağımsız); istemci yalnız YÜZEY: kapı = masaüstü (≥900px + fare), .pdks-kiosk muaf.
+   Bu IIFE: ortak yardımcılar + keep-alive nabzı (kilitliyken de) + rakam süzgeci. PIN/şifre ASLA
+   console'a ya da localStorage'a yazılmaz. */
+(function () {
+    var DLG_IDS = ['ekranKilit', 'ekranPinKur', 'ekranPinDegistir'];
+    var MQ = window.matchMedia ? window.matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)') : null;
+    var O = window.__asyaKilitOrtak = {};
+    O.masaustu = function () { return !!(MQ && MQ.matches); };
+    O.kiosk = function () { return !!document.querySelector('.pdks-kiosk'); };
+    O.yuzey = function () { return O.masaustu() && !O.kiosk(); };
+    O.pinGecerli = function (s) { return /^\d{4,8}$/.test(s); };
+    O.dlg = function () {
+        for (var i = 0; i < DLG_IDS.length; i++) { var d = document.getElementById(DLG_IDS[i]); if (d) return d; }
+        return null;
+    };
+    O.gonder = function (body) {
+        var d = O.dlg();
+        if (!d) return Promise.reject(new Error('dlg'));
+        return fetch(d.getAttribute('data-uc'), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(body)
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (j) { j.durum = r.status; return j; });
+        });
+    };
+    O.girise = function (j) {
+        var d = O.dlg();
+        location.href = d.getAttribute('data-login') + '?next=' + encodeURIComponent(location.pathname + location.search)
+            + '&mesaj=' + (j && j.kod === 'cikis' ? 'pin_cikis' : 'kilit_oturum');
+    };
+    O.hataMetni = function (j) {
+        if (j.error) return j.error;
+        var s = j.durum || 0;
+        if (s === 403) return 'İstek doğrulanamadı. Sayfayı yenileyip tekrar deneyin.';
+        if (s === 405 || s === 413 || s === 400) return 'İstek kabul edilmedi. Sayfayı yenileyip tekrar deneyin.';
+        if (s >= 500) return 'Sunucu şu an yanıt veremiyor. Biraz sonra tekrar deneyin.';
+        return 'İşlem tamamlanamadı. Tekrar deneyin.';
+    };
+    O.bildir = function (metin) {
+        var e = document.createElement('div');
+        e.className = 'ekran-pin-toast'; e.setAttribute('role', 'status'); e.textContent = metin;
+        document.body.appendChild(e);
+        setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, 4000);
+    };
+
+    // Rakam süzgeci (yalnız .ekran-pin-girdi; hesap şifresi alanına dokunmaz)
+    document.addEventListener('input', function (e) {
+        var t = e.target;
+        if (!t || !t.classList || !t.classList.contains('ekran-pin-girdi')) return;
+        var temiz = t.value.replace(/\D/g, '').slice(0, 8);
+        if (temiz !== t.value) t.value = temiz;
+    }, true);
+
+    // Keep-alive nabzı: oturumu canlı tutar, çıkış yapılmışsa login'e götürür, kilitliyse pencereyi açtırır
+    function nabiz() {
+        if (!O.dlg() || !O.yuzey()) return Promise.resolve();
+        return O.gonder({ islem: 'nabiz' }).then(function (j) {
+            if (j.durum === 401) { O.girise(j); return; }
+            if (j.ok) document.dispatchEvent(new CustomEvent('asya:nabiz', { detail: j }));
+        }).catch(function () {});
+    }
+    var aralik = window.ASYA_NABIZ_MS > 0 ? window.ASYA_NABIZ_MS : 300000;
+    setInterval(nabiz, aralik);
+    window.__ekranNabiz = nabiz;   // test kancası
+})();
+
+/* Ekran kilidi (v454 → v455 PIN): 5 dk hareketsizlikte PIN penceresi açılır (sayfa yenilenmez → form/sekme
+   durumu korunur); durum sunucuda imzalı çerezde, yenileme / yeni sekme kilitli gelir. Son hareket zamanı
+   sekmeler arası localStorage'da paylaşılır; kiosk ekranlarında otomatik kilit YOK. */
 (function () {
     var dlg = document.getElementById('ekranKilit');
-    if (!dlg || typeof dlg.showModal !== 'function') return;
+    var O = window.__asyaKilitOrtak;
+    if (!dlg || !O || typeof dlg.showModal !== 'function') return;
     var form = document.getElementById('ekranKilitForm');
-    var girdi = document.getElementById('ekranKilitSifre');
+    var girdi = document.getElementById('ekranKilitPin');
     var hataEl = document.getElementById('ekranKilitHata');
     var btn = document.getElementById('ekranKilitBtn');
-    var MQ = window.matchMedia ? window.matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)') : null;
     var SURE = window.ASYA_KILIT_MS > 0 ? window.ASYA_KILIT_MS : 300000;   // test kancası
     var HAREKET = 'asya_son_hareket', DURUM = 'asya_kilit_durum';
-    var yerel = Date.now(), sonYazim = 0, bekleZ = null;
+    var yerel = Date.now(), sonYazim = 0, bekleZ = null, kayitBekliyor = false, kayitSuruyor = false;
+    var KAYIT_NOTU = 'Kilit sunucuya kaydedilemedi; bağlantı yeniden denenecek.';
 
-    function masaustu() { return !!(MQ && MQ.matches); }
-    function kiosk() { return !!document.querySelector('.pdks-kiosk'); }
     function depoOku(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
     function depoYaz(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
     function son() { return Math.max(yerel, parseInt(depoOku(HAREKET), 10) || 0); }
@@ -2986,15 +3052,8 @@ function ekranAlti() {
         sonYazim = t;
         depoYaz(HAREKET, String(t));
     }
-    function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
-    function gonder(islem, sifre) {
-        return fetch(dlg.getAttribute('data-uc'), {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ csrf: csrf(), islem: islem, sifre: sifre || '' })
-        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { j.durum = r.status; return j; }); });
-    }
     function hataGoster(m) { hataEl.textContent = m || ''; hataEl.hidden = !m; }
+    function girdiAc() { clearTimeout(bekleZ); btn.disabled = false; girdi.disabled = false; }
 
     function ac(yayinla) {
         if (dlg.open) return;
@@ -3005,6 +3064,10 @@ function ekranAlti() {
         if (yayinla) depoYaz(DURUM, 'k:' + Date.now());
     }
     function kapat(yayinla) {
+        var pd = document.getElementById('ekranPinDegistir');
+        if (pd && pd.open) pd.close();
+        kayitBekliyor = false;
+        girdiAc();
         if (!dlg.open) { document.body.classList.remove('ekran-kilitli'); return; }
         dlg.close();
         document.body.classList.remove('ekran-kilitli');
@@ -3012,12 +3075,28 @@ function ekranAlti() {
         yerel = Date.now(); sonYazim = 0; hareket();
         if (yayinla) depoYaz(DURUM, 'a:' + Date.now());
     }
+    function sunucuyaKilitle() {
+        if (kayitSuruyor) return;
+        kayitSuruyor = true;
+        O.gonder({ islem: 'kilitle' }).then(function (j) {
+            kayitSuruyor = false;
+            if (j.durum === 401) { O.girise(j); return; }
+            if (j.ok) { if (kayitBekliyor) hataGoster(''); kayitBekliyor = false; return; }
+            kayitBekliyor = true;
+            if (dlg.open && hataEl.hidden) hataGoster(KAYIT_NOTU);
+        }).catch(function () {
+            kayitSuruyor = false; kayitBekliyor = true;
+            if (dlg.open && hataEl.hidden) hataGoster(KAYIT_NOTU);
+        });
+    }
     function kilitle() {
         ac(true);
-        gonder('kilitle').catch(function () {});   // sunucu da kilitli bilsin (yenilemeye dayanır); hata olsa pencere açık kalır
+        kayitBekliyor = true;
+        sunucuyaKilitle();
     }
     function kontrol() {
-        if (dlg.open || !masaustu() || kiosk()) return;
+        if (!O.yuzey()) return;
+        if (dlg.open) { if (kayitBekliyor) sunucuyaKilitle(); return; }   // kayıt başarısızsa yeniden dener
         if (Date.now() - son() >= SURE) kilitle();
     }
 
@@ -3025,18 +3104,19 @@ function ekranAlti() {
     form.addEventListener('submit', function (e) {
         e.preventDefault();
         if (btn.disabled) return;
-        if (!girdi.value) { hataGoster('Şifrenizi girin.'); girdi.focus(); return; }
+        if (!O.pinGecerli(girdi.value)) { hataGoster('PIN 4–8 haneli rakamlardan oluşmalı.'); girdi.focus(); return; }
         btn.disabled = true;
-        gonder('ac', girdi.value).then(function (j) {
+        O.gonder({ islem: 'ac', pin: girdi.value }).then(function (j) {
             if (j.ok) { btn.disabled = false; kapat(true); return; }
-            if (j.durum === 401) { location.href = dlg.getAttribute('data-login') + '?next=' + encodeURIComponent(location.pathname + location.search); return; }
-            hataGoster(j.error || 'Kilit açılamadı. Tekrar deneyin.');
-            girdi.value = ''; girdi.focus();
+            if (j.durum === 401) { O.girise(j); return; }
+            hataGoster(j.durum === 422 ? (j.error || 'PIN hatalı.') : O.hataMetni(j));
+            girdi.value = '';
             var bekle = parseInt(j.bekle, 10) || 0;
             if (bekle > 0) {
+                girdi.disabled = true;
                 clearTimeout(bekleZ);
-                bekleZ = setTimeout(function () { btn.disabled = false; hataGoster(''); girdi.focus(); }, bekle * 1000);
-            } else btn.disabled = false;
+                bekleZ = setTimeout(function () { girdiAc(); hataGoster(''); try { girdi.focus(); } catch (e) {} }, bekle * 1000);
+            } else { btn.disabled = false; girdi.focus(); }
         }).catch(function () { btn.disabled = false; hataGoster('Bağlantı hatası. Tekrar deneyin.'); });
     });
 
@@ -3047,13 +3127,137 @@ function ekranAlti() {
     window.addEventListener('focus', kontrol);
     window.addEventListener('storage', function (e) {   // başka sekmede kilit / açma
         if (e.key !== DURUM || !e.newValue) return;
-        if (e.newValue.charAt(0) === 'k') { if (masaustu() && !kiosk()) ac(false); }
+        if (e.newValue.charAt(0) === 'k') { if (O.yuzey()) ac(false); }
         else kapat(false);
+    });
+    document.addEventListener('asya:nabiz', function (e) {   // sunucu kilitli diyorsa pencere açılır
+        if (e.detail && e.detail.kilitli && !dlg.open && O.masaustu()) ac(false);
     });
     setInterval(kontrol, 10000);
     window.__ekranKilitKontrol = kontrol;   // test kancası
 
     // Sayfa açılışı: sunucu kilitliyse (masaüstünde) pencereyi aç; değilse bu yükleme bir hareket sayılır.
-    if (dlg.hasAttribute('data-kilitli') && masaustu()) ac(false);
+    if (dlg.hasAttribute('data-kilitli') && O.masaustu()) ac(false);
     else { yerel = Date.now(); depoYaz(HAREKET, String(yerel)); sonYazim = yerel; }
+})();
+
+/* PIN belirle (v455): PIN'i olmayan kullanıcıya masaüstünde ZORUNLU pencere (kiosk ve mobil muaf). */
+(function () {
+    var dlg = document.getElementById('ekranPinKur');
+    var O = window.__asyaKilitOrtak;
+    if (!dlg || !O || typeof dlg.showModal !== 'function') return;
+    var form = document.getElementById('ekranPinKurForm');
+    var p1 = document.getElementById('ekranPinKurPin');
+    var p2 = document.getElementById('ekranPinKurPin2');
+    var hataEl = document.getElementById('ekranPinKurHata');
+    var btn = document.getElementById('ekranPinKurBtn');
+    function hataGoster(m) { hataEl.textContent = m || ''; hataEl.hidden = !m; }
+    function kapat() { btn.disabled = false; if (dlg.open) dlg.close(); p1.value = ''; p2.value = ''; }
+
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); });   // kaçış yalnız çıkış linki
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (btn.disabled) return;
+        if (!O.pinGecerli(p1.value)) { hataGoster('PIN 4–8 haneli rakamlardan oluşmalı.'); p1.focus(); return; }
+        if (p1.value !== p2.value) { hataGoster('PIN\'ler eşleşmiyor.'); p2.focus(); return; }
+        btn.disabled = true;
+        O.gonder({ islem: 'kur', pin: p1.value, pin2: p2.value }).then(function (j) {
+            if (j.ok) { kapat(); O.bildir('PIN belirlendi.'); return; }
+            if (j.durum === 401) { O.girise(j); return; }
+            if (j.durum === 409) { kapat(); O.bildir('PIN zaten belirlenmiş.'); return; }
+            if (j.durum === 503) { kapat(); O.bildir('PIN özelliği şu an kullanılamıyor.'); return; }
+            btn.disabled = false;
+            hataGoster(O.hataMetni(j));
+        }).catch(function () { btn.disabled = false; hataGoster('Bağlantı hatası. Tekrar deneyin.'); });
+    });
+
+    function ilkAcilis() {
+        if (dlg.open || !O.yuzey()) return;
+        var kilit = document.getElementById('ekranKilit');
+        if (kilit && (kilit.open || kilit.hasAttribute('data-kilitli'))) return;
+        p1.value = ''; p2.value = ''; hataGoster('');
+        try { dlg.showModal(); } catch (e) { dlg.setAttribute('open', ''); }
+        setTimeout(function () { try { p1.focus(); } catch (e) {} }, 30);
+    }
+    ilkAcilis();
+})();
+
+/* PIN değiştir (v455): sidebar düğmesi; mevcut PIN ile ya da "PIN'imi unuttum" → hesap şifresiyle. */
+(function () {
+    var dlg = document.getElementById('ekranPinDegistir');
+    var O = window.__asyaKilitOrtak;
+    if (!dlg || !O || typeof dlg.showModal !== 'function') return;
+    var form = document.getElementById('ekranPinDegistirForm');
+    var mevcutKap = document.getElementById('ekranPinMevcutKap');
+    var sifreKap = document.getElementById('ekranPinSifreKap');
+    var mevcut = document.getElementById('ekranPinDegistirMevcut');
+    var sifre = document.getElementById('ekranPinDegistirSifre');
+    var unuttum = document.getElementById('ekranPinUnuttum');
+    var y1 = document.getElementById('ekranPinDegistirYeni');
+    var y2 = document.getElementById('ekranPinDegistirYeni2');
+    var hataEl = document.getElementById('ekranPinDegistirHata');
+    var btn = document.getElementById('ekranPinDegistirBtn');
+    var iptal = document.getElementById('ekranPinDegistirIptal');
+    var sifreYolu = false, bekleZ = null;
+    var ETIKET_UNUTTUM = unuttum.textContent.trim() || 'PIN\'imi unuttum';
+    var ETIKET_PIN = 'PIN ile doğrula';
+
+    function hataGoster(m) { hataEl.textContent = m || ''; hataEl.hidden = !m; }
+    function yontem(sifreMi) {
+        sifreYolu = sifreMi;
+        mevcutKap.hidden = sifreMi; sifreKap.hidden = !sifreMi;
+        mevcut.value = ''; sifre.value = '';   // gizlenen alan temizlenir
+        unuttum.textContent = sifreMi ? ETIKET_PIN : ETIKET_UNUTTUM;
+    }
+    function sifirla() {
+        clearTimeout(bekleZ); btn.disabled = false;
+        yontem(false); y1.value = ''; y2.value = ''; hataGoster('');
+    }
+    function ac() {
+        if (!O.yuzey() || dlg.open) return;
+        var kilit = document.getElementById('ekranKilit');
+        if (kilit && kilit.open) return;
+        sifirla();
+        try { dlg.showModal(); } catch (e) { dlg.setAttribute('open', ''); }
+        setTimeout(function () { try { mevcut.focus(); } catch (e) {} }, 30);
+    }
+    function kapat() { sifirla(); if (dlg.open) dlg.close(); }
+
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-pin-degistir]') : null;
+        if (b) { e.preventDefault(); ac(); }
+    });
+    unuttum.addEventListener('click', function () {
+        yontem(!sifreYolu); hataGoster('');
+        try { (sifreYolu ? sifre : mevcut).focus(); } catch (e) {}
+    });
+    iptal.addEventListener('click', kapat);
+    dlg.addEventListener('close', sifirla);   // Esc dahil her kapanışta alanlar temizlenir
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (btn.disabled) return;
+        var g = { islem: 'degistir' };
+        if (sifreYolu) {
+            if (!sifre.value) { hataGoster('Hesap şifrenizi girin.'); sifre.focus(); return; }
+            g.sifre = sifre.value;
+        } else {
+            if (!O.pinGecerli(mevcut.value)) { hataGoster('Mevcut PIN 4–8 haneli rakamlardan oluşmalı.'); mevcut.focus(); return; }
+            g.mevcut = mevcut.value;
+        }
+        if (!O.pinGecerli(y1.value)) { hataGoster('PIN 4–8 haneli rakamlardan oluşmalı.'); y1.focus(); return; }
+        if (y1.value !== y2.value) { hataGoster('PIN\'ler eşleşmiyor.'); y2.focus(); return; }
+        g.pin = y1.value; g.pin2 = y2.value;
+        btn.disabled = true;
+        O.gonder(g).then(function (j) {
+            if (j.ok) { kapat(); O.bildir('PIN değiştirildi.'); return; }
+            if (j.durum === 401) { O.girise(j); return; }
+            hataGoster(j.durum === 422 && j.error ? j.error : O.hataMetni(j));
+            var bekle = parseInt(j.bekle, 10) || 0;
+            if (bekle > 0) {
+                clearTimeout(bekleZ);
+                bekleZ = setTimeout(function () { btn.disabled = false; hataGoster(''); }, bekle * 1000);
+            } else btn.disabled = false;
+        }).catch(function () { btn.disabled = false; hataGoster('Bağlantı hatası. Tekrar deneyin.'); });
+    });
 })();
