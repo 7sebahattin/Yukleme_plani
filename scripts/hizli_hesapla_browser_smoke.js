@@ -121,16 +121,11 @@ function check(v, label) { assert.ok(v, label); checks++; }
             await f('target_margin').fill(''); check(await out_('suggested') === 'Hedef marj girin', name + ' marj boşsa öneri yok');
             await f('target_margin').fill('20');
 
-            // Paylaş: share yok → panoya kopyala; metin ekranla aynı
-            await page.evaluate(() => { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); });
-            await page.click('#hhShare'); await page.waitForFunction(() => document.getElementById('hhStatus').textContent.includes('panoya'));
-            const clip = await page.evaluate(() => navigator.clipboard.readText());
+            // Paylaş düğmesi yok; Geri bağlantısı var. Paylaşım metni (kanca) ekranla aynı
+            check(await page.locator('#hhShare').count() === 0 && await page.locator('#hhBack').textContent() === 'Geri' && (await page.locator('#hhBack').getAttribute('href')) === 'hizli_maliyet.php' && (await page.locator('#hhBack').boundingBox()).height >= 44, name + ' Geri düğmesi var, Paylaş yok');
+            const clip = await page.evaluate(() => window.__hhPaylasMetni());
             for (const k of ['total', 'total_fx', 'unit', 'unit_fx', 'sale', 'profit', 'margin', 'breakeven']) check(clip.includes((await out_(k)).trim()), name + ' paylaşım metni ' + k + ' ekranla aynı');
             check(clip.includes('1 USD = 50,00 TL') && clip.includes('önerilen satış fiyatı: 0,76 USD/kg') && !clip.includes('çıkma') && clip.includes('Fire oranı: %20,00 (ihracata kalan %80,00)') && clip.includes('Gerekli ham mal: 25.000 kg'), name + ' paylaşım kur + fire + ham mal + öneri');
-            // Yerel paylaşım menüsü
-            await page.evaluate(() => { window.__shared = null; Object.defineProperty(navigator, 'share', { value: d => { window.__shared = d; return Promise.resolve(); }, configurable: true }); });
-            await page.click('#hhShare'); await page.waitForFunction(() => window.__shared);
-            check((await page.evaluate(() => window.__shared.text)) === clip, name + ' navigator.share aynı metin');
 
             // Kaydet: ad penceresi + payload
             await page.click('#hhSave'); check(await page.locator('#hhDialog').evaluate(d => d.open), name + ' ad penceresi açıldı');
@@ -152,8 +147,7 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await page.locator('a:has-text("Yeni modelle kopyala")').count() === 1 && (await page.locator('.hh-row > span').first().textContent()) === 'Ham mal alış fiyatı (TL/kg)', name + ' eski kayıtta dönüştürme bağlantısı ve eski etiketler');
             await noOverflow('eski model');
             await page.goto(pages.saved); await page.waitForSelector('#hh');
-            await page.click('#hhShare'); await page.waitForFunction(() => document.getElementById('hhStatus').textContent.length > 0);
-            check((await page.evaluate(() => navigator.clipboard.readText().catch(() => ''))).includes('NAR - LİTVANYA') || true, name + ' kayıtlı ad paylaşılır');
+            check((await page.evaluate(() => window.__hhPaylasMetni())).includes('NAR - LİTVANYA') || true, name + ' kayıtlı ad paylaşım metninde');
             await page.goto(pages.readonly); await page.waitForSelector('#hh');
             check(await page.locator('#hhSave').isDisabled() && await f('sale_kg').isDisabled(), name + ' salt okunur');
             await ctx.close();

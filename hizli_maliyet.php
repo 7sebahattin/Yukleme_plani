@@ -93,22 +93,22 @@ if ($storage_ready) {
     }
 }
 
-render_header('Hızlı Maliyet');
+render_header('Maliyet');
 render_flash();
 ?>
 <link rel="stylesheet" href="assets/hizli-maliyet.css?v=<?= (int)filemtime(__DIR__ . '/assets/hizli-maliyet.css') ?>">
 <div class="qc-page">
     <div class="page-head">
-        <div><h1>Hızlı Maliyet</h1><p class="muted">Kaydedilen maliyet hesapları</p></div>
+        <div><h1>Maliyet</h1><p class="muted">Kaydedilen maliyet hesapları</p></div>
         <?php if ($can_write): ?><div class="page-head-actions"><a class="btn qc-btn-hh" href="hizli_hesapla.php">Hızlı Hesapla</a> <a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
     </div>
     <?php if ($errors): ?><div class="qc-error" role="alert"><ul><?php foreach ($errors as $error): ?><li><?= h($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
     <?php if (!$storage_ready && !$is_admin_user): ?>
-    <p class="qc-error" role="status">Hızlı Maliyet kayıt altyapısı henüz kurulmadı. Kurulum sistem yöneticisinden beklenir.</p>
+    <p class="qc-error" role="status">Maliyet kayıt altyapısı henüz kurulmadı. Kurulum sistem yöneticisinden beklenir.</p>
     <?php endif; ?>
     <?php if (!$storage_ready && $is_admin_user): ?>
     <section class="qc-panel" aria-labelledby="qc-install-heading">
-        <h2 id="qc-install-heading">Hızlı Maliyet kayıt altyapısı</h2>
+        <h2 id="qc-install-heading">Maliyet kayıt altyapısı</h2>
         <p>Kaydetmeyi açmak için yalnız yeni Hızlı Maliyet tablosu oluşturulur. Mevcut maliyet kayıtları korunur.</p>
         <form method="post" action="hizli_maliyet.php">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -118,7 +118,7 @@ render_flash();
     </section>
     <?php endif; ?>
     <section id="qc-records" class="qc-panel">
-        <h2>Hızlı maliyet kayıtları</h2>
+        <h2>Maliyet kayıtları</h2>
         <p class="muted">Aktif depo: <?= h(active_depot() ?? '') ?> · <?= (int)$list['total'] ?> kayıt</p>
         <form method="get" action="hizli_maliyet.php" class="qc-record-search"><label for="qc-search">Ürün ara</label><input id="qc-search" name="q" type="search" maxlength="150" value="<?= h($query) ?>"><button class="btn" type="submit">Ara</button></form>
         <?php if ($storage_ready && !$list['items']): ?><p>Henüz kayıt yok.</p><?php endif; ?>
