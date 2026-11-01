@@ -131,6 +131,8 @@ function quick_cost_calculate(array $input): array
 {
     // v2 (ham mal/verimlilik) belgesi kendi motoruna gider; model taşımayan eski belge aşağıdaki v1 kuralıyla.
     if (quick_cost_is_v2($input)) return quick_cost_v2_calculate($input);
+    // Hızlı Hesapla (model 3): kendi motoru; v1/v2 hesabı etkilenmez.
+    if (hh_is_model($input)) return hh_calculate($input);
     $product = quick_cost_upper_text($input['product'] ?? '', 'Ürün', 150);
     $notes = quick_cost_upper_text($input['notes'] ?? '', 'Açıklama', 2000);
     $date = $input['sheet_date'] ?? '';
@@ -203,3 +205,4 @@ function quick_cost_calculate(array $input): array
 }
 
 require_once __DIR__ . '/quick_cost_v2.php';
+require_once __DIR__ . '/hizli_hesapla.php';

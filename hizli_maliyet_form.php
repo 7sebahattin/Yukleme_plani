@@ -76,6 +76,10 @@ try {
             http_response_code(404);
             exit('Hızlı maliyet kaydı bulunamadı.');
         }
+        if (hh_is_model($record['document'])) {   // Hızlı Hesapla kaydı kendi ekranında açılır
+            header('Location: hizli_hesapla.php?id=' . $id . ($is_copy ? '&copy=1' : ''));
+            exit;
+        }
         $document = $record['document'];
         $version = $is_copy ? 0 : (int)$record['version'];
         if ($is_copy) $document['sheet_date'] = date('Y-m-d');
@@ -90,6 +94,7 @@ try {
         try { $input = json_decode($payload, true, 16, JSON_THROW_ON_ERROR); }
         catch (JsonException $e) { throw new InvalidArgumentException('Hesap verisi okunamadı.'); }
         if (!is_array($input) || array_is_list($input)) throw new InvalidArgumentException('Hesap verisi geçersiz.');
+        if (hh_is_model($input)) throw new InvalidArgumentException('Hızlı Hesapla hesapları Hızlı Hesapla ekranından kaydedilir.');
         if ($record !== null) {
             // Kayıt modeli sabittir: eski kayıt v1, v2 kayıt v2 kalır (sessiz dönüşüm yok).
             if (quick_cost_is_v2($record['document'])) {

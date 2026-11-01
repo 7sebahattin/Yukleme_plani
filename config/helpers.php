@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v477');
+    define('APP_SURUM', 'v478');
 }
 
 // --- HTML kaçışı ---
@@ -474,6 +474,7 @@ function nav_aktif_anahtar(): ?string {
     $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_invoice.php', 'siparis_denge.php'], true);
     $a_usip  = $cur === 'urun_siparis.php';   // v411: Ürün Siparişleri kendi bölümü ("Siparişler")
     $a_quick = in_array($cur, ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);
+    if ($cur === 'hizli_hesapla.php') $a_quick = true;   // v478: Hızlı Hesapla da Hızlı Maliyet bölümündedir
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
@@ -572,6 +573,7 @@ function render_desktop_sidebar(string $base): void {
     // Liste ve form masaüstünde aynı Hızlı Maliyet bağlantısını etkinleştirir.
     $p_quick = can_hizli_maliyet('read'); // TEK kaynak — hizli_maliyet.php'nin kapısıyla birebir
     $a_quick = $p_quick && in_array(basename($_SERVER['PHP_SELF'] ?? ''), ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);
+    if ($p_quick && basename($_SERVER['PHP_SELF'] ?? '') === 'hizli_hesapla.php') $a_quick = true;   // v478
     $a_rep   = $ak === 'rapor' && !$a_quick;
     $a_ptak  = $ak === 'ptak';
     $a_def   = $ak === 'defs';
