@@ -231,7 +231,7 @@
     }
     rates[currency] = fmtInput(doc.rate, 2);
     el.currency.value = currency;
-    el.price_in_fx.checked = doc.price_in_fx === undefined ? true : (doc.price_in_fx === true || doc.price_in_fx === 1 || doc.price_in_fx === '1');
+    el.price_in_fx.checked = doc.price_in_fx === undefined ? false : (doc.price_in_fx === true || doc.price_in_fx === 1 || doc.price_in_fx === '1');
     el.rate.value = rates[currency];
     if (cfg.readOnly) Object.keys(el).forEach(function (k) { el[k].disabled = true; });
 
@@ -254,7 +254,9 @@
 
     function render() {
         $('hhRateLabel').textContent = currency + ' kuru (TL)';
-        $('hhPriceHint').textContent = 'Satış fiyatı ' + (el.price_in_fx.checked ? currency + '/kg' : 'TL/kg') + ' olarak yorumlanır.';
+        var pu = el.price_in_fx.checked ? currency + '/kg' : 'TL/kg';
+        $('hhPriceHint').textContent = 'Satış fiyatı ' + pu + ' olarak yorumlanır.' + (el.price_in_fx.checked ? '' : ' Döviz işaretlenirse ' + currency + '/kg olur.');
+        $('hhPriceLbl').textContent = 'Satış Fiyatı (' + pu + ')';
         if (el.freight_cur) {   // nakliye satış dövizinden farklı bir dövizdeyse kendi kuru sorulur
             var fcv = el.freight_cur.value, ayri = fcv !== 'TRY' && fcv !== currency;
             $('hhFreightRateRow').hidden = !ayri;
@@ -298,18 +300,10 @@
         render();
     });
 
-    /** Fiyat döviz kutusu: satışın TL ekonomik değeri KORUNUR (1,10 USD @ 50 ⇄ 55 TL/kg). Kur yoksa değişiklik geri alınır. */
+    /** Fiyat döviz kutusu: yalnız yorumu değiştirir (işaretsiz = TL/kg, işaretli = döviz/kg); yazılan sayı DÖNÜŞTÜRÜLMEZ, engel yok. */
     el.price_in_fx.addEventListener('change', function () {
-        var rp = okRatePrice();
-        if (!rp) {
-            el.price_in_fx.checked = !el.price_in_fx.checked;
-            status('Satış fiyatını dönüştürmek için geçerli ' + currency + ' kuru ve fiyat girin.', true);
-            render();
-            return;
-        }
         pendingTl = null;
-        el.sale_price.value = put8(el.price_in_fx.checked ? rp.price / rp.rate : rp.price * rp.rate);
-        status(el.price_in_fx.checked ? 'Satış fiyatı ' + currency + '/kg olarak güncellendi (TL değeri korundu).' : 'Satış fiyatı TL/kg olarak güncellendi (değer korundu).');
+        status('');
         render();
     });
 

@@ -26,7 +26,7 @@ function hh_defaults(): array
 {
     // v481: yeni hesap BOŞ açılır (örnek veri yok); patron kendi değerlerini girer.
     return ['model' => HH_MODEL_V4, 'product' => '', 'sheet_date' => date('Y-m-d'), 'sale_kg' => null, 'sale_price' => null,
-        'currency' => 'USD', 'rate' => null, 'price_in_fx' => true, 'raw_price' => null, 'freight' => null, 'freight_in_fx' => false, 'freight_currency' => 'TRY', 'freight_rate' => null,
+        'currency' => 'USD', 'rate' => null, 'price_in_fx' => false, 'raw_price' => null, 'freight' => null, 'freight_in_fx' => false, 'freight_currency' => 'TRY', 'freight_rate' => null,
         'material_kg' => null, 'docs' => null, 'other_kg' => null, 'other_kg_basis' => 'net', 'other_fixed' => null,
         'yield_pct' => null, 'byproduct_income' => null, 'commission_pct' => null, 'target_margin' => null];
 }

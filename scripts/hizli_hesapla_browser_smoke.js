@@ -32,12 +32,14 @@ function check(v, label) { assert.ok(v, label); checks++; }
 
             // Açılış: TÜM alanlar boş (örnek veri yok); eksikler nötr ipucu olarak listelenir, sonuç iddia edilmez
             const bos = await page.evaluate(() => [...document.querySelectorAll('[data-hh]')].filter(e => e.type === 'text').every(e => e.value === ''));
-            check(bos && await f('currency').inputValue() === 'USD' && await f('price_in_fx').isChecked() && await f('freight_cur').inputValue() === 'TRY', name + ' boş açılış, USD + fiyat döviz + nakliye TL');
+            check(bos && await f('currency').inputValue() === 'USD' && !(await f('price_in_fx').isChecked()) && (await page.locator('#hhPriceLbl').textContent()) === 'Satış Fiyatı (TL/kg)' && await f('freight_cur').inputValue() === 'TRY', name + ' boş açılış, USD + fiyat işaretsiz (TL) + nakliye TL');
             check(await out_('total') === '—' && await page.locator('#hhErrs.hh-need').count() === 1 && (await page.locator('#hhErrs').textContent()).includes('Girilecek: Satış net KG, USD kuru, Fire oranı'), name + ' eksik alanlar nötr ipucu');
             check(await page.locator('[data-hh="waste_pct"], [data-hh="other_kg_basis"]').count() === 0 && await page.locator('button:has-text("Hesapla")').count() === 0, name + ' fire(eski)/Net-Ham seçimi/hesapla düğmesi yok');
             check(await page.locator('text=Örnek değerdir').count() === 0, name + ' örnek açıklama yazısı yok');
             const ornek = { sale_kg: '20.000', sale_price: '1,10', rate: '50,00', raw_price: '20', freight: '15.000', material_kg: '4', docs: '5.000', other_kg: '0,50', target_margin: '20' };
             for (const [k, v] of Object.entries(ornek)) await f(k).fill(v);
+            await f('price_in_fx').check();   // örnek fiyat 1,10 USD/kg
+            check((await page.locator('#hhPriceLbl').textContent()) === 'Satış Fiyatı (USD/kg)', name + ' işaretli: etiket USD/kg');
             await f('fire_pct').click(); await page.keyboard.type('20');
             check(await f('fire_pct').evaluate(e => document.activeElement === e && e.value === '20' && e.selectionStart === 2), name + ' yazarken odak/imleç korunur');
             check(await out_('total') === '610.000,00 TL' && (await out_('total_fx')).includes('12.200,00 USD'), name + ' toplam maliyet 610.000 TL + 12.200 USD');
@@ -78,15 +80,13 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await page.locator('#hhErrs').isVisible() && await out_('total') === '—', name + ' geçersiz giriş hata verir');
             await f('freight').fill('15.000'); check(await page.locator('#hhErrs').isHidden(), name + ' hata düzelince kalkar');
 
-            // Fiyat döviz: ekonomik değer korunur (1,10 USD × 50 = 55,00 TL/kg)
+            // Fiyat döviz kutusu: yalnız yorum değişir, sayı dönüştürülmez, kur yokken de kaldırılabilir
             await f('price_in_fx').uncheck();
-            check(await f('sale_price').inputValue() === '55,00' && await out_('sale') === '1.100.000,00 TL' && (await page.locator('#hhPriceHint').textContent()).includes('TL/kg'), name + ' işaret kalkınca 55,00 TL/kg, satış değişmez');
-            await f('price_in_fx').check();
-            check(await f('sale_price').inputValue() === '1,10' && await out_('sale') === '1.100.000,00 TL', name + ' işaretlenince 1,10 USD/kg, satış değişmez');
-            // Kur yokken dönüştürme reddedilir
-            await f('rate').fill(''); await f('price_in_fx').click();
-            check(await f('price_in_fx').isChecked() && await f('sale_price').inputValue() === '1,10', name + ' kur yokken dönüştürme geri alınır');
-            await f('rate').fill('50,00');
+            check(!(await f('price_in_fx').isChecked()) && await f('sale_price').inputValue() === '1,10' && await out_('sale') === '22.000,00 TL' && (await page.locator('#hhPriceLbl').textContent()) === 'Satış Fiyatı (TL/kg)', name + ' işaret kalkınca 1,10 TL/kg olarak hesaplanır');
+            await f('rate').fill(''); await f('price_in_fx').check(); await f('price_in_fx').uncheck();
+            check(!(await f('price_in_fx').isChecked()), name + ' kur yokken tik kaldırılabilir');
+            await f('rate').fill('50,00'); await f('price_in_fx').check();
+            check(await f('sale_price').inputValue() === '1,10' && await out_('sale') === '1.100.000,00 TL', name + ' işaretlenince 1,10 USD/kg');
             // USD → EUR: eski kur taşınmaz, TL değeri korunur
             await f('currency').selectOption('EUR');
             check(await f('rate').inputValue() === '' && await out_('total') === '—' && (await page.locator('#hhErrs').textContent()).includes('EUR kurunu girin'), name + ' EUR kuru istenir, USD kuru taşınmaz');

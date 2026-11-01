@@ -103,7 +103,7 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
     <section class="hh-box hh-inputs" aria-label="Satış bilgileri">
         <div class="hh-grid2">
             <label class="hh-f"><span>Satış Net KG</span><input data-hh="sale_kg" type="text" inputmode="decimal" autocomplete="off"></label>
-            <label class="hh-f"><span>Satış Fiyatı</span><input data-hh="sale_price" type="text" inputmode="decimal" autocomplete="off"></label>
+            <label class="hh-f"><span id="hhPriceLbl">Satış Fiyatı (TL/kg)</span><input data-hh="sale_price" type="text" inputmode="decimal" autocomplete="off"></label>
         </div>
         <div class="hh-grid2">
             <label class="hh-f"><span id="hhRateLabel">Kur (TL)</span><input data-hh="rate" type="text" inputmode="decimal" autocomplete="off"></label>
@@ -146,7 +146,6 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
         <?php if ($model === HH_MODEL): ?>
         <p class="hh-hint hh-legacy">Eski model (Ham/Net masraf tabanı yok). <?= $cfg['id'] ? '<a href="hizli_hesapla.php?id=' . (int)$cfg['id'] . '&amp;yeni=1">Yeni modelle kopyala</a> (fire aynı kalır, yeni kayıt açılır).' : '' ?></p>
         <?php else: ?>
-        <p class="hh-hint">Fire = ihracata çıkmayan tüm pay.</p>
         <?php endif; ?>
     </section>
 
