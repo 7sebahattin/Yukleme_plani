@@ -30,31 +30,31 @@ function check(v, label) { assert.ok(v, label); checks++; }
             await page.goto(pages.fresh); await page.waitForSelector('#hh');
             const noOverflow = async label => check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' ' + label + ' yatay taşma yok');
 
-            // Açılış: örnek girdiler hazır, randıman BOŞ (sabit varsayım yok) → hesap tamamlanmaz
+            // Açılış: örnek girdiler hazır, fire BOŞ (sabit varsayım yok) → hesap tamamlanmaz
             check(await f('sale_kg').inputValue() === '20.000' && await f('sale_price').inputValue() === '1,10' && await f('rate').inputValue() === '50,00', name + ' varsayılan girdiler');
             check(await f('currency').inputValue() === 'USD' && await f('price_in_fx').isChecked() && await f('other_kg_basis').inputValue() === 'net', name + ' USD + fiyat döviz + Net KG tabanı');
-            check(await f('yield_pct').inputValue() === '' && await out_('total') === '—' && (await page.locator('#hhErrs').textContent()).includes('randımanı girin'), name + ' randıman boşken sonuç iddia edilmez');
+            check(await f('fire_pct').inputValue() === '' && await out_('total') === '—' && (await page.locator('#hhErrs').textContent()).includes('Fire oranını girin'), name + ' fire boşken sonuç iddia edilmez');
             check(await page.locator('[data-hh="waste_pct"]').count() === 0 && await page.locator('button:has-text("Hesapla")').count() === 0, name + ' fire alanı / hesapla düğmesi yok');
-            await f('yield_pct').click(); await page.keyboard.type('80');
-            check(await f('yield_pct').evaluate(e => document.activeElement === e && e.value === '80' && e.selectionStart === 2), name + ' yazarken odak/imleç korunur');
+            await f('fire_pct').click(); await page.keyboard.type('20');
+            check(await f('fire_pct').evaluate(e => document.activeElement === e && e.value === '20' && e.selectionStart === 2), name + ' yazarken odak/imleç korunur');
             check(await out_('total') === '610.000,00 TL' && (await out_('total_fx')).includes('10.000 USD') === false && (await out_('total_fx')).includes('12.200,00 USD'), name + ' toplam maliyet 610.000 TL + 12.200 USD');
             check(await out_('unit') === '30,5000 TL/kg' && (await out_('unit_fx')).includes('0,6100 USD/kg'), name + ' net kg maliyeti');
             check(await out_('sale') === '1.100.000,00 TL' && await out_('profit') === '490.000,00 TL' && await out_('margin') === '%44,55', name + ' satış/kâr/marj');
             check((await out_('suggested')).startsWith('0,7625 USD/kg') && (await out_('breakeven')).startsWith('0,6100 USD/kg'), name + ' önerilen ve başabaş fiyat');
-            check(await page.locator('#hhRawInfo').textContent() === 'Gerekli ham mal: 25.000 kg', name + ' gerekli ham mal bilgisi');
+            check(await page.locator('#hhRawInfo').textContent() === 'Gerekli ham mal: 25.000 kg · İhracata kalan: %80,00', name + ' gerekli ham mal + ihracata kalan bilgisi');
             const lbl = await page.locator('.hh-row').evaluateAll(rs => rs.map(r => r.querySelector('span').textContent));
-            check(JSON.stringify(lbl) === JSON.stringify(['Ham mal alış fiyatı (TL/ham kg)', 'Nakliye bedeli (TL)', 'Malzeme gideri (TL/net kg)', 'Evrak masrafları (TL)', 'Diğer masraf (TL/kg)', 'Diğer sabit masraf (TL)', 'İhracat randımanı (%)', 'Hedef kâr marjı (%)']), name + ' kalem sırası ve etiketler');
+            check(JSON.stringify(lbl) === JSON.stringify(['Ham mal alış fiyatı (TL/ham kg)', 'Nakliye bedeli (TL)', 'Malzeme gideri (TL/net kg)', 'Evrak masrafları (TL)', 'Diğer masraf (TL/kg)', 'Diğer sabit masraf (TL)', 'Fire oranı (%)', 'Hedef kâr marjı (%)']), name + ' kalem sırası ve etiketler');
             await noOverflow('açılış');
-            for (const k of ['sale_kg', 'sale_price', 'rate', 'currency', 'price_in_fx', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_kg_basis', 'other_fixed', 'yield_pct', 'target_margin']) {
+            for (const k of ['sale_kg', 'sale_price', 'rate', 'currency', 'price_in_fx', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_kg_basis', 'other_fixed', 'fire_pct', 'target_margin']) {
                 const b = await f(k).boundingBox(); check(b && b.x >= 0 && b.x + b.width <= width + 0.5 && b.height >= 20, name + ' ' + k + ' sığar');
             }
             check((await page.locator('.hh-chk').boundingBox()).height >= 44 && (await f('other_kg_basis').boundingBox()).height >= 40, name + ' dokunma hedefleri');
 
             // Randıman değişimi, geçersizler
-            await f('yield_pct').fill('100'); check(await page.locator('#hhRawInfo').textContent() === 'Gerekli ham mal: 20.000 kg', name + ' randıman %100 → ham = net');
-            await f('yield_pct').fill('60'); check(await page.locator('#hhRawInfo').textContent() === 'Gerekli ham mal: 33.333 kg', name + ' randıman düşünce ham artar');
-            for (const bad of ['0', '101', 'abc']) { await f('yield_pct').fill(bad); check(await out_('total') === '—', name + ' geçersiz randıman ' + bad); }
-            await f('yield_pct').fill('80');
+            await f('fire_pct').fill('0'); check((await page.locator('#hhRawInfo').textContent()).startsWith('Gerekli ham mal: 20.000 kg'), name + ' fire %0 → ham = net');
+            await f('fire_pct').fill('40'); check((await page.locator('#hhRawInfo').textContent()).startsWith('Gerekli ham mal: 33.333 kg'), name + ' fire artınca ham artar');
+            for (const bad of ['100', '101', 'abc']) { await f('fire_pct').fill(bad); check(await out_('total') === '—', name + ' geçersiz fire ' + bad); }
+            await f('fire_pct').fill('20');
             // Diğer masraf Net/Ham
             await f('other_kg').fill('2'); check(await out_('total') === '640.000,00 TL', name + ' Net KG tabanı: 40.000');
             await f('other_kg_basis').selectOption('raw'); check(await out_('total') === '650.000,00 TL', name + ' Ham KG tabanı: 50.000');
@@ -95,7 +95,7 @@ function check(v, label) { assert.ok(v, label); checks++; }
             await page.click('#hhShare'); await page.waitForFunction(() => document.getElementById('hhStatus').textContent.includes('panoya'));
             const clip = await page.evaluate(() => navigator.clipboard.readText());
             for (const k of ['total', 'total_fx', 'unit', 'unit_fx', 'sale', 'profit', 'margin', 'breakeven']) check(clip.includes((await out_(k)).trim()), name + ' paylaşım metni ' + k + ' ekranla aynı');
-            check(clip.includes('1 USD = 50,00 TL') && clip.includes('önerilen satış fiyatı: 0,7625 USD/kg') && clip.includes('İhracat randımanı: %80,00') && clip.includes('Gerekli ham mal: 25.000 kg'), name + ' paylaşım kur + randıman + ham mal + öneri');
+            check(clip.includes('1 USD = 50,00 TL') && clip.includes('önerilen satış fiyatı: 0,7625 USD/kg') && clip.includes('Fire oranı: %20,00 (ihracata kalan %80,00)') && clip.includes('Gerekli ham mal: 25.000 kg'), name + ' paylaşım kur + fire + ham mal + öneri');
             // Yerel paylaşım menüsü
             await page.evaluate(() => { window.__shared = null; Object.defineProperty(navigator, 'share', { value: d => { window.__shared = d; return Promise.resolve(); }, configurable: true }); });
             await page.click('#hhShare'); await page.waitForFunction(() => window.__shared);
@@ -114,11 +114,11 @@ function check(v, label) { assert.ok(v, label); checks++; }
 
             // Kayıtlı hesap açılışı
             await page.goto(pages.saved); await page.waitForSelector('#hh');
-            check(await f('sale_kg').inputValue() === '20.000' && await f('yield_pct').inputValue() === '80' && await out_('total') === '610.000,00 TL', name + ' kayıtlı model 4 hesap yeniden açılır');
+            check(await f('sale_kg').inputValue() === '20.000' && await f('fire_pct').inputValue() === '20' && await out_('total') === '610.000,00 TL', name + ' kayıtlı model 4 hesap yeniden açılır');
             // Eski fire modeli: kendi alanı + sonucu, randıman alanı yok, açık dönüştürme bağlantısı
             await page.goto(pages.legacy); await page.waitForSelector('#hh');
-            check(await f('waste_pct').inputValue() === '8' && await page.locator('[data-hh="yield_pct"]').count() === 0 && await page.locator('[data-hh="other_kg_basis"]').count() === 0 && await out_('total') === '544.782,61 TL', name + ' eski model 3 kendi fire matematiğiyle açılır');
-            check(await page.locator('a:has-text("Yeni randıman modeliyle kopyala")').count() === 1 && (await page.locator('.hh-row > span').first().textContent()) === 'Ham mal alış fiyatı (TL/kg)', name + ' eski kayıtta dönüştürme bağlantısı ve eski etiketler');
+            check(await f('waste_pct').inputValue() === '8' && await page.locator('[data-hh="fire_pct"]').count() === 0 && await page.locator('[data-hh="other_kg_basis"]').count() === 0 && await out_('total') === '544.782,61 TL', name + ' eski model 3 kendi fire matematiğiyle açılır');
+            check(await page.locator('a:has-text("Yeni modelle kopyala")').count() === 1 && (await page.locator('.hh-row > span').first().textContent()) === 'Ham mal alış fiyatı (TL/kg)', name + ' eski kayıtta dönüştürme bağlantısı ve eski etiketler');
             await noOverflow('eski model');
             await page.goto(pages.saved); await page.waitForSelector('#hh');
             await page.click('#hhShare'); await page.waitForFunction(() => document.getElementById('hhStatus').textContent.length > 0);

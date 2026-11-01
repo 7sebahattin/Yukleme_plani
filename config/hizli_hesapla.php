@@ -21,7 +21,7 @@ function hh_model_of($document): int
     return is_array($document) && ($document['model'] ?? null) === HH_MODEL ? HH_MODEL : HH_MODEL_V4;
 }
 
-/** Yeni hesap (model 4). İhracat randımanı BİLEREK boş: ürüne göre kullanıcı girer (sabit varsayım yok). */
+/** Yeni hesap (model 4). Fire (ekranda; saklanan yield_pct = 100 − fire) BİLEREK boş: ürüne göre kullanıcı girer (sabit varsayım yok). */
 function hh_defaults(): array
 {
     return ['model' => HH_MODEL_V4, 'product' => '', 'sheet_date' => date('Y-m-d'), 'sale_kg' => 20000.0, 'sale_price' => 1.1,
@@ -193,11 +193,11 @@ function hh_calculate_v4(array $input): array
         'other_kg' => hh_num($input['other_kg'] ?? null, 'Diğer masraf'),
         'other_kg_basis' => $basis,
         'other_fixed' => hh_num($input['other_fixed'] ?? null, 'Diğer sabit masraf'),
-        'yield_pct' => hh_num($input['yield_pct'] ?? null, 'İhracat randımanı'),
+        'yield_pct' => hh_num($input['yield_pct'] ?? null, 'Fire oranı (ihracata kalan)'),
     ];
     if ($n['sale_kg'] <= 0) throw new InvalidArgumentException('Satış net KG sıfırdan büyük olmalı.');
     if ($n['rate'] <= 0) throw new InvalidArgumentException($currency . ' kuru sıfırdan büyük olmalı.');
-    if (!($n['yield_pct'] > 0 && $n['yield_pct'] <= 100)) throw new InvalidArgumentException('İhracat randımanı girin: %0\'dan büyük, en çok %100 olmalı.');
+    if (!($n['yield_pct'] > 0 && $n['yield_pct'] <= 100)) throw new InvalidArgumentException('Fire oranı %0 ile %100 arasında olmalı (%100 hariç).');
     $tmRaw = $input['target_margin'] ?? null;
     $n['target_margin'] = ($tmRaw === null || $tmRaw === '') ? null : hh_num($tmRaw, 'Hedef kâr marjı');
     if ($n['target_margin'] !== null && $n['target_margin'] >= 100) throw new InvalidArgumentException('Hedef kâr marjı %100\'ün altında olmalı.');
@@ -219,12 +219,14 @@ function hh_calculate(array $input): array
 }
 
 /**
- * Eski (model 3) hesaptan YENİ model için form girdisi. Fire yüzdesi randımana ASLA eşitlenmez: randıman boş bırakılır,
- * kullanıcı girer. Yalnız kullanıcı "Yeni randıman modeliyle kopyala" dediğinde kullanılır.
+ * Eski (model 3) hesaptan YENİ model için form girdisi. İkisinde de fire = ihracata çıkmayan pay: ihracata kalan (yield_pct) = 100 − fire,
+ * ham KG aynıdır. Yalnız kullanıcı "Yeni modelle kopyala" dediğinde kullanılır; kaynak kayıt değişmez.
  */
 function hh_donustur_v3_v4(array $doc): array
 {
     $out = ['model' => HH_MODEL_V4, 'product' => (string)($doc['product'] ?? ''), 'sheet_date' => date('Y-m-d'), 'other_kg_basis' => 'net', 'yield_pct' => null];
+    $w = $doc['waste_pct'] ?? null;
+    if (is_numeric($w) && $w >= 0 && $w < 100) $out['yield_pct'] = round(100 - (float)$w, 4);
     foreach (['sale_kg', 'sale_price', 'currency', 'rate', 'price_in_fx', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_fixed', 'target_margin'] as $k) {
         if (array_key_exists($k, $doc)) $out[$k] = $doc[$k];
     }

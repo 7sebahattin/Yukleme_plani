@@ -130,10 +130,10 @@ $a = hh_calculate(sample(['freight' => '0', 'docs' => '0']))['results']; near($r
 near(hh_calculate(sample(['target_margin' => '30']))['results']['suggested_tl'], $r['unit_cost'] / 0.7, 1e-9, 'marj 30');
 check(hh_calculate(sample(['target_margin' => '']))['results']['suggested_fx'] === null, 'hedef marj boşsa öneri uydurulmaz');
 // 6) Geçersiz giriş
-fails(fn() => hh_calculate(sample(['yield_pct' => '0'])), 'randıman', 'randıman 0');
-fails(fn() => hh_calculate(sample(['yield_pct' => ''])), 'randıman', 'randıman boş');
-fails(fn() => hh_calculate(sample(['yield_pct' => '100,5'])), 'randıman', 'randıman >100');
-fails(fn() => hh_calculate(sample(['yield_pct' => '-5'])), 'randıman', 'randıman negatif');
+fails(fn() => hh_calculate(sample(['yield_pct' => '0'])), 'Fire', 'ihracata kalan 0 (fire %100)');
+fails(fn() => hh_calculate(sample(['yield_pct' => ''])), 'Fire', 'ihracata kalan boş');
+fails(fn() => hh_calculate(sample(['yield_pct' => '100,5'])), 'Fire', 'ihracata kalan >100 (fire negatif)');
+fails(fn() => hh_calculate(sample(['yield_pct' => '-5'])), 'Fire', 'ihracata kalan negatif');
 fails(fn() => hh_calculate(sample(['other_kg_basis' => 'brut'])), 'taban', 'geçersiz taban');
 fails(fn() => hh_calculate(sample(['target_margin' => '100'])), 'marj', 'marj %100');
 fails(fn() => hh_calculate(sample(['sale_kg' => '0'])), 'Satış net KG', 'sıfır kg');
@@ -152,8 +152,8 @@ $o = hh_calculate(sample3());
 check($o['model'] === 3 && !array_key_exists('yield_pct', $o), 'model 3 kendi modelinde kalır');
 near(round($o['results']['total'], 2), 544782.61, 1e-9, 'eski fire sonucu birebir korunur'); near($o['results']['raw_kg'], 20000 / 0.92, 1e-6, 'eski ham KG');
 $don = hh_donustur_v3_v4(sample3());
-check($don['model'] === 4 && $don['yield_pct'] === null && !isset($don['waste_pct']) && $don['other_kg_basis'] === 'net', 'dönüşüm: fire randımana EŞİTLENMEZ, randıman boş');
-fails(fn() => hh_calculate($don), 'randıman', 'dönüştürülmüş taslak randıman girilmeden hesaplanmaz');
+check($don['model'] === 4 && $don['yield_pct'] === 92.0 && !isset($don['waste_pct']) && $don['other_kg_basis'] === 'net', 'dönüşüm: fire %8 → ihracata kalan %92 (aynı ham KG)');
+near(hh_calculate($don + ['product' => 'x'])['results']['raw_kg'], hh_calculate(sample3())['results']['raw_kg'], 1e-9, 'dönüşüm eski modelle AYNI ham KG verir');
 // 8) Kayıt: sunucu yeniden hesaplar, tarayıcı toplamına güvenilmez
 $in = sample(['total' => 1, 'results' => ['total' => 1], 'unit_cost' => 1]);
 $saved = quick_cost_save(db(), $in);
@@ -187,9 +187,9 @@ $bad = page('hh', [], ['payload' => json_encode($doc), 'version' => '0', 'csrf' 
 $noName = page('hh', [], $payload(array_replace($doc, ['product' => ' ']))); check($noName['status'] === 422 && str_contains($noName['html'], 'Hesap adı gerekli'), 'adsız kayıt reddi');
 $badNum = page('hh', [], $payload(array_replace($doc, ['rate' => 0]))); check($badNum['status'] === 422, 'geçersiz kur 422');
 $wrong = page('hh', [], $payload(['model' => 2] + $doc)); check($wrong['status'] === 422, 'başka model gövdesi 422');
-$yeni3 = page('hh', [], $payload($doc3)); check($yeni3['status'] === 422 && str_contains($yeni3['html'], 'randıman'), 'YENİ kayıt eski fire modeliyle kaydedilemez');
-$noY = page('hh', [], $payload(array_replace($doc, ['yield_pct' => '']))); check($noY['status'] === 422 && str_contains($noY['html'], 'randıman'), 'randımansız kayıt reddi');
-check(str_contains($noY['html'], 'data-hh="yield_pct"') && !str_contains($noY['html'], 'data-hh="waste_pct"'), 'model 4 sayfası randıman alanı taşır, fire alanı yok');
+$yeni3 = page('hh', [], $payload($doc3)); check($yeni3['status'] === 422 && str_contains($yeni3['html'], 'yeni modelle'), 'YENİ kayıt eski modelle kaydedilemez');
+$noY = page('hh', [], $payload(array_replace($doc, ['yield_pct' => '']))); check($noY['status'] === 422 && str_contains($noY['html'], 'Fire'), 'fire boş/geçersiz kayıt reddi');
+check(str_contains($noY['html'], 'data-hh="fire_pct"') && !str_contains($noY['html'], 'data-hh="waste_pct"') && !str_contains($noY['html'], 'data-hh="yield_pct"'), 'model 4 sayfası fire alanını taşır (ihracata kalan saklanır)');
 $testPermissions = ['read']; $ro = page('hh', [], $payload($doc)); check($ro['status'] === 403, 'yazma yetkisi yoksa kayıt yok');
 $view = page('hh'); check($view['status'] === 200 && str_contains($view['html'], 'id="hhSave" disabled'), 'salt okunur: Kaydet kapalı');
 $testPermissions = ['read', 'write', 'delete'];
@@ -198,15 +198,15 @@ check($rid > 0 && page('hh', ['id' => (string)$rid])['status'] === 200, 'listede
 check(str_contains(page('hh', ['id' => (string)$rid])['html'], 'name="hhNone"') === false && str_contains(page('hh', ['id' => (string)$rid])['html'], 'data-hh="other_kg_basis"'), 'Ham/Net seçimi yalnız model 4 sayfasında');
 // ESKİ model 3 kaydı: kendi alanlarıyla açılır, Yeni randıman modeliyle kopyala bağlantısı var; kayıt modeli korunur
 $rid3 = (int)$old3['id'];
-$p3 = page('hh', ['id' => (string)$rid3]); check($p3['status'] === 200 && str_contains($p3['html'], 'data-hh="waste_pct"') && !str_contains($p3['html'], 'data-hh="yield_pct"') && !str_contains($p3['html'], 'data-hh="other_kg_basis"'), 'model 3 sayfası fire alanıyla açılır');
-check(str_contains($p3['html'], 'yeni=1') && str_contains($p3['html'], 'Yeni randıman modeliyle kopyala'), 'eski kayıtta açık dönüştürme bağlantısı');
+$p3 = page('hh', ['id' => (string)$rid3]); check($p3['status'] === 200 && str_contains($p3['html'], 'data-hh="waste_pct"') && !str_contains($p3['html'], 'data-hh="fire_pct"') && !str_contains($p3['html'], 'data-hh="other_kg_basis"'), 'model 3 sayfası fire alanıyla açılır');
+check(str_contains($p3['html'], 'yeni=1') && str_contains($p3['html'], 'Yeni modelle kopyala'), 'eski kayıtta açık dönüştürme bağlantısı');
 check(str_contains($p3['html'], '"model":3'), 'eski kayıt model 3 olarak yapılandırılır');
 $up3 = page('hh', ['id' => (string)$rid3], ['payload' => json_encode($doc3), 'version' => (string)$old3['version'], 'csrf' => 'anonymous-csrf']);
 check($up3['status'] === 200, 'eski model 3 kaydı kendi modelinde güncellenebilir');
 $to4 = page('hh', ['id' => (string)$rid3], ['payload' => json_encode($doc), 'version' => '2', 'csrf' => 'anonymous-csrf']);
 check($to4['status'] === 422, 'eski kayıt sessizce model 4e çevrilemez');
 $dn = page('hh', ['id' => (string)$rid3, 'yeni' => '1']);
-check($dn['status'] === 200 && str_contains($dn['html'], '"model":4') && str_contains($dn['html'], '"yield_pct":null') && !str_contains($dn['html'], '"waste_pct"'), 'dönüştürme: model 4, randıman boş, fire taşınmaz');
+check($dn['status'] === 200 && str_contains($dn['html'], '"model":4') && str_contains($dn['html'], '"yield_pct":92') && !str_contains($dn['html'], '"waste_pct"'), 'dönüştürme: model 4, ihracata kalan = 100 − fire');
 $dnPost = page('hh', ['id' => (string)$rid3, 'yeni' => '1', 'copy' => '1'], ['payload' => json_encode($doc), 'version' => '0', 'csrf' => 'anonymous-csrf']);
 check($dnPost['status'] === 200 && str_contains(implode('', $dnPost['headers']), 'hizli_hesapla.php?id='), 'dönüştürülen kayıt YENİ kayıt olarak kaydedilir');
 check((int)db()->query("SELECT COUNT(*) FROM quick_cost_sheets WHERE id=$rid3")->fetchColumn() === 1 && json_decode((string)db()->query("SELECT document_json FROM quick_cost_sheets WHERE id=$rid3")->fetchColumn(), true)['model'] === 3, 'kaynak model 3 kaydı değişmedi');

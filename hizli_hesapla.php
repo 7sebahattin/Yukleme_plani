@@ -14,7 +14,7 @@ header('X-Content-Type-Options: nosniff');
 $id_raw = $_GET['id'] ?? '0';
 if (!is_string($id_raw) || !preg_match('/^\d{1,10}$/D', $id_raw)) { http_response_code(400); exit('Geçersiz kayıt numarası.'); }
 $id = (int)$id_raw;
-$donusum = ($_GET['yeni'] ?? '') === '1' && $id > 0;   // eski (fire) hesabı AÇIKÇA yeni randıman modeliyle kopyala
+$donusum = ($_GET['yeni'] ?? '') === '1' && $id > 0;   // eski (model 3) hesabı AÇIKÇA yeni modelle kopyala
 $is_copy = (($_GET['copy'] ?? '') === '1' || $donusum) && $id > 0;
 $record_model = HH_MODEL_V4;
 $can_write = can_hizli_maliyet('write');
@@ -44,7 +44,7 @@ try {
         $version = $is_copy ? 0 : (int)$record['version'];
         if ($is_copy) $document['sheet_date'] = date('Y-m-d');
         if ($donusum) {
-            // Kullanıcı seçti: değerler taşınır, fire % randımana EŞİTLENMEZ (randıman boş, kullanıcı girer).
+            // Kullanıcı seçti: değerler taşınır; fire aynı anlamdadır (ihracata kalan = 100 − fire), hesap aynı ham KG'yi verir.
             if ($record_model !== HH_MODEL) { header('Location: hizli_hesapla.php?id=' . $id . '&copy=1'); exit; }
             $document = hh_donustur_v3_v4($document);
         }
@@ -58,7 +58,7 @@ try {
         // Model sabittir: yeni/kopya kayıt YALNIZ model 4; mevcut kayıt kendi modelinde kalır (sessiz dönüşüm yok).
         $beklenen = ($record !== null && !$is_copy) ? $record_model : HH_MODEL_V4;
         if ($input['model'] !== $beklenen) throw new InvalidArgumentException($beklenen === HH_MODEL
-            ? 'Bu hesap eski fire modelindedir; aynı modelde kaydedilir.' : 'Yeni hesaplar İhracat randımanı modeliyle kaydedilir.');
+            ? 'Bu hesap eski fire modelindedir; aynı modelde kaydedilir.' : 'Yeni hesaplar yeni modelle (Fire + Ham/Net masraf tabanı) kaydedilir.');
         $document = hh_form_input($input);   // hata olursa kullanıcının girdisi korunur
         $posted = $_POST['version'] ?? '';
         if (!is_string($posted) || !preg_match('/^\d{1,10}$/D', $posted)) throw new InvalidArgumentException('Kayıt sürümü geçersiz.');
@@ -131,13 +131,13 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
         <?php if ($model === HH_MODEL): ?>
         <label class="hh-row"><span>Fire oranı (%)</span><input data-hh="waste_pct" type="text" inputmode="decimal" autocomplete="off"></label>
         <?php else: ?>
-        <label class="hh-row"><span>İhracat randımanı (%)</span><input data-hh="yield_pct" type="text" inputmode="decimal" autocomplete="off" placeholder="örn. 80"></label>
+        <label class="hh-row"><span>Fire oranı (%)</span><input data-hh="fire_pct" type="text" inputmode="decimal" autocomplete="off" placeholder="örn. 20"></label>
         <?php endif; ?>
         <p class="hh-hint" id="hhRawInfo"></p>
         <?php if ($model === HH_MODEL): ?>
-        <p class="hh-hint hh-legacy">Eski fire modelindeki hesap. Fire oranı ihracat randımanı DEĞİLDİR; <?= $cfg['id'] ? '<a href="hizli_hesapla.php?id=' . (int)$cfg['id'] . '&amp;yeni=1">Yeni randıman modeliyle kopyala</a> (randımanı siz girersiniz).' : '' ?></p>
+        <p class="hh-hint hh-legacy">Eski model (Ham/Net masraf tabanı yok). <?= $cfg['id'] ? '<a href="hizli_hesapla.php?id=' . (int)$cfg['id'] . '&amp;yeni=1">Yeni modelle kopyala</a> (fire aynı kalır, yeni kayıt açılır).' : '' ?></p>
         <?php else: ?>
-        <p class="hh-hint">Yan ürün (iç piyasa / sanayi) geliri düşülmemiş tahmini ihracat maliyeti. Ayrıntılı dağıtım için Detaylı Maliyet'i kullanın.</p>
+        <p class="hh-hint">Fire = ihracata çıkmayan tüm pay (iç piyasaya/sanayiye gidenler dahil); yan ürün geliri düşülmemiş tahmini maliyet. Ayrıntı için Detaylı Maliyet.</p>
         <?php endif; ?>
     </section>
 
@@ -161,7 +161,7 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
             <div class="hh-r"><dt>Girilen satış fiyatı</dt><dd><strong data-hh-out="entered">—</strong></dd></div>
         </dl>
         <label class="hh-row hh-target"><span>Hedef kâr marjı (%)</span><input data-hh="target_margin" type="text" inputmode="decimal" autocomplete="off"></label>
-        <p class="hh-hint">Örnek değerdir; değiştirebilirsiniz. Kâr ve önerilen fiyat, girilen maliyetlere ve randıman varsayımına bağlı tahmini yönetimsel sonuçlardır.</p>
+        <p class="hh-hint">Örnek değerdir; değiştirebilirsiniz. Kâr ve önerilen fiyat, girilen maliyetlere ve fire varsayımına bağlı tahmini yönetimsel sonuçlardır.</p>
         <div class="hh-sug"><span>Önerilen satış fiyatı</span><strong data-hh-out="suggested">—</strong></div>
     </section>
 

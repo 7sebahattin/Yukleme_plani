@@ -48,3 +48,6 @@ Diğer masraf 2 TL/kg: Net → 40.000, Ham → 50.000 TL.
 Döviz: "Fiyat döviz" işareti değişince fiyat dönüştürülür (1,10 USD ⇄ 55,00 TL/kg; satışın TL değeri korunur, kur yoksa değişiklik geri alınır).
 USD⇄EUR: kurlar ayrı saklanır; TL fiyat korunur, yeni döviz kuru girilene dek fiyat beklemede. Satış fiyatı 8 ondalığa kadar (dönüşüm kaybı yok).
 Kayıt: `document_json.model=4`, `calc_version=4`, `yield_pct`, `other_kg_basis`. Eski kayıt → "Yeni randıman modeliyle kopyala" (`?id=N&yeni=1`).
+
+## v480 — ekranda Fire
+Model 4 ekranı fire girişi ister: ihracata kalan (`yield_pct`) = 100 − fire; formül ve kayıt alanları değişmedi. Örnek: fire %20 → ihracata kalan %80 → ham 25.000 kg → toplam 610.000 TL. Eski model 3 kopyalanırken `yield_pct = 100 − waste_pct`.
