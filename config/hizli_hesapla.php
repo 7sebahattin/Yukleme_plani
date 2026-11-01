@@ -1,0 +1,112 @@
+<?php
+// Hızlı Hesapla (model 3): tek ekran ihracat maliyeti + satış fiyatı. Saf motor; DB/oturum yok.
+// Kayıt mevcut quick_cost_sheets tablosunda tutulur (şema DEĞİŞMEZ): method='hizli', document_json.model=3.
+// Eski Hızlı Maliyet v1/v2 hesapları bu dosyadan etkilenmez. JS aynası: assets/hizli-hesapla.js
+// ('hh_compute' ile 'compute' AYNI işlem sırasını kullanır — ikisini birlikte değiştir).
+declare(strict_types=1);
+
+const HH_MODEL = 3;
+const HH_METHOD = 'hizli';
+const HH_CURRENCIES = ['USD', 'EUR'];
+
+function hh_is_model($document): bool
+{
+    return is_array($document) && ($document['model'] ?? null) === HH_MODEL;
+}
+
+/** Ekrandaki varsayılan (örnek) değerler. */
+function hh_defaults(): array
+{
+    return ['model' => HH_MODEL, 'product' => '', 'sheet_date' => date('Y-m-d'), 'sale_kg' => 20000.0, 'sale_price' => 1.1,
+        'currency' => 'USD', 'rate' => 50.0, 'price_in_fx' => true, 'raw_price' => 20.0, 'freight' => 15000.0,
+        'material_kg' => 4.0, 'docs' => 5000.0, 'other_kg' => 0.5, 'other_fixed' => 0.0, 'waste_pct' => 8.0, 'target_margin' => 20.0];
+}
+
+/** Boş metin → 0; geçersiz biçim → hata (sessizce 0 yapılmaz). */
+function hh_num($value, string $label): float
+{
+    if ($value === null) return 0.0;
+    return quick_cost_number($value, $label);
+}
+
+/**
+ * Saf formül zinciri (erken yuvarlama YOK). $n: sayılar; $rate > 0, $sale_kg > 0, 0 <= waste < 100.
+ * Dönüş tüm ara/son sonuçları ham float olarak verir.
+ */
+function hh_compute(array $n): array
+{
+    $s = $n['sale_kg'];
+    $rawKg = $s / (1 - $n['waste_pct'] / 100);
+    $rawCost = $rawKg * $n['raw_price'];
+    $material = $s * $n['material_kg'];
+    $otherKg = $s * $n['other_kg'];
+    $fixed = $n['freight'] + $n['docs'] + $n['other_fixed'];
+    $total = $rawCost + $material + $otherKg + $fixed;
+    $unit = $total / $s;
+    $unitFx = $unit / $n['rate'];
+    $priceTl = $n['price_in_fx'] ? $n['sale_price'] * $n['rate'] : $n['sale_price'];
+    $priceFx = $n['price_in_fx'] ? $n['sale_price'] : $n['sale_price'] / $n['rate'];
+    $saleTl = $n['price_in_fx'] ? $s * $n['sale_price'] * $n['rate'] : $s * $n['sale_price'];
+    $profit = $saleTl - $total;
+    $margin = $saleTl > 0 ? $profit / $saleTl * 100 : null;
+    $tm = $n['target_margin'];
+    $sugTl = $tm === null ? null : $unit / (1 - $tm / 100);
+    return ['raw_kg' => $rawKg, 'raw_cost' => $rawCost, 'material_cost' => $material, 'other_kg_cost' => $otherKg,
+        'fixed_cost' => $fixed, 'total' => $total, 'unit_cost' => $unit, 'unit_cost_fx' => $unitFx,
+        'price_tl' => $priceTl, 'price_fx' => $priceFx, 'sale_tl' => $saleTl, 'sale_fx' => $saleTl / $n['rate'],
+        'profit' => $profit, 'profit_fx' => $profit / $n['rate'], 'margin_pct' => $margin,
+        'breakeven_fx' => $unitFx, 'suggested_tl' => $sugTl, 'suggested_fx' => $sugTl === null ? null : $sugTl / $n['rate']];
+}
+
+/** Doğrulayıp kanonik belge + sonuç üretir (sunucu her kayıtta ve açılışta yeniden hesaplar). */
+function hh_calculate(array $input): array
+{
+    $name = quick_cost_upper_text($input['product'] ?? '', 'Hesap adı', 150);
+    $date = $input['sheet_date'] ?? date('Y-m-d');
+    if (!is_string($date) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $date, $p) || !checkdate((int)$p[2], (int)$p[3], (int)$p[1])) {
+        throw new InvalidArgumentException('Geçerli bir işlem tarihi girin.');
+    }
+    $currency = $input['currency'] ?? '';
+    if (!is_string($currency) || !in_array($currency, HH_CURRENCIES, true)) throw new InvalidArgumentException('Döviz USD veya EUR olmalı.');
+    $fx = $input['price_in_fx'] ?? null;
+    if (!in_array($fx, [true, false, 1, 0, '1', '0'], true)) throw new InvalidArgumentException('Fiyat döviz seçimi geçersiz.');
+    $n = [
+        'sale_kg' => hh_num($input['sale_kg'] ?? null, 'Satış net KG'),
+        'sale_price' => hh_num($input['sale_price'] ?? null, 'Satış fiyatı'),
+        'rate' => hh_num($input['rate'] ?? null, 'Kur'),
+        'price_in_fx' => ($fx === true || $fx === 1 || $fx === '1'),
+        'raw_price' => hh_num($input['raw_price'] ?? null, 'Ham mal alış fiyatı'),
+        'freight' => hh_num($input['freight'] ?? null, 'Nakliye bedeli'),
+        'material_kg' => hh_num($input['material_kg'] ?? null, 'Malzeme gideri'),
+        'docs' => hh_num($input['docs'] ?? null, 'Evrak masrafları'),
+        'other_kg' => hh_num($input['other_kg'] ?? null, 'Diğer masraf'),
+        'other_fixed' => hh_num($input['other_fixed'] ?? null, 'Diğer sabit masraf'),
+        'waste_pct' => hh_num($input['waste_pct'] ?? null, 'Fire oranı'),
+    ];
+    if ($n['sale_kg'] <= 0) throw new InvalidArgumentException('Satış net KG sıfırdan büyük olmalı.');
+    if ($n['rate'] <= 0) throw new InvalidArgumentException($currency . ' kuru sıfırdan büyük olmalı.');
+    if ($n['waste_pct'] >= 100) throw new InvalidArgumentException('Fire oranı %100\'ün altında olmalı.');
+    $tmRaw = $input['target_margin'] ?? null;
+    $n['target_margin'] = ($tmRaw === null || $tmRaw === '') ? null : hh_num($tmRaw, 'Hedef kâr marjı');
+    if ($n['target_margin'] !== null && $n['target_margin'] >= 100) throw new InvalidArgumentException('Hedef kâr marjı %100\'ün altında olmalı.');
+    $r = hh_compute($n);
+    foreach ($r as $v) if ($v !== null && !is_finite($v)) throw new InvalidArgumentException('Hesap sınırı aşıldı.');
+    if ($r['total'] > 99999999999.0 || $r['sale_tl'] > 99999999999.0) throw new InvalidArgumentException('Toplam tutar sınırı aşıldı.');
+    return ['model' => HH_MODEL, 'product' => $name, 'sheet_date' => $date, 'operation_type' => 'fason', 'method' => HH_METHOD,
+        'notes' => '', 'net_kg' => $n['sale_kg'], 'sale_kg' => $n['sale_kg'], 'sale_price' => $n['sale_price'],
+        'currency' => $currency, 'rate' => $n['rate'], 'price_in_fx' => $n['price_in_fx'], 'raw_price' => $n['raw_price'],
+        'freight' => $n['freight'], 'material_kg' => $n['material_kg'], 'docs' => $n['docs'], 'other_kg' => $n['other_kg'],
+        'other_fixed' => $n['other_fixed'], 'waste_pct' => $n['waste_pct'], 'target_margin' => $n['target_margin'],
+        'results' => $r, 'total' => round($r['total'], 2), 'unit_cost' => round($r['unit_cost'], 6)];
+}
+
+/** Hata sonrası formu korumak için yalnız skaler, bilinen anahtarlar. */
+function hh_form_input(array $input): array
+{
+    $safe = [];
+    foreach (['product', 'sheet_date', 'sale_kg', 'sale_price', 'currency', 'rate', 'price_in_fx', 'raw_price', 'freight',
+        'material_kg', 'docs', 'other_kg', 'other_fixed', 'waste_pct', 'target_margin'] as $k) {
+        if (isset($input[$k]) && (is_string($input[$k]) || is_int($input[$k]) || is_float($input[$k]) || is_bool($input[$k]))) $safe[$k] = $input[$k];
+    }
+    return ['model' => HH_MODEL] + $safe;
+}

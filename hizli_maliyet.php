@@ -100,7 +100,7 @@ render_flash();
 <div class="qc-page">
     <div class="page-head">
         <div><h1>Hızlı Maliyet</h1><p class="muted">Kaydedilen maliyet hesapları</p></div>
-        <?php if ($can_write): ?><div class="page-head-actions"><a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
+        <?php if ($can_write): ?><div class="page-head-actions"><a class="btn" href="hizli_hesapla.php">Hızlı Hesapla</a> <a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
     </div>
     <?php if ($errors): ?><div class="qc-error" role="alert"><ul><?php foreach ($errors as $error): ?><li><?= h($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
     <?php if (!$storage_ready && !$is_admin_user): ?>
@@ -123,14 +123,14 @@ render_flash();
         <form method="get" action="hizli_maliyet.php" class="qc-record-search"><label for="qc-search">Ürün ara</label><input id="qc-search" name="q" type="search" maxlength="150" value="<?= h($query) ?>"><button class="btn" type="submit">Ara</button></form>
         <?php if ($storage_ready && !$list['items']): ?><p>Henüz kayıt yok.</p><?php endif; ?>
         <div class="qc-record-list">
-        <?php foreach ($list['items'] as $row): ?>
+        <?php foreach ($list['items'] as $row): $qc_hh = ($row['method'] ?? '') === 'hizli'; $qc_edit = $qc_hh ? 'hizli_hesapla.php' : 'hizli_maliyet_form.php'; ?>
             <article class="qc-record">
-                <a href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a>
+                <a href="<?= $qc_edit ?>?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a><?= $qc_hh ? ' <span class="muted">Hızlı Hesapla</span>' : '' ?>
                 <span><?= h($row['sheet_date']) ?></span>
                 <span><?= h(rtrim(rtrim(number_format((float)$row['net_kg'], 4, ',', '.'), '0'), ',')) ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 4, ',', '.') ?> TL/kg</span>
                 <div class="qc-record-actions">
-                    <a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
-                    <?php if ($can_write): ?><a class="btn" href="hizli_maliyet_form.php?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>
+                    <a class="btn" href="<?= $qc_edit ?>?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
+                    <?php if ($can_write): ?><a class="btn" href="<?= $qc_edit ?>?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>
                     <?php if ($can_delete): ?><form method="post" action="hizli_maliyet.php" data-confirm="<?= h('#' . (int)$row['id'] . ' – ' . $row['product'] . ' kalıcı olarak silinecek. Devam edilsin mi?') ?>" onsubmit="return confirm(this.dataset.confirm);">
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$row['id'] ?>"><input type="hidden" name="version" value="<?= (int)$row['version'] ?>">
                         <button class="btn" type="submit">Sil</button>

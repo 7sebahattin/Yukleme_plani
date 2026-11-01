@@ -7,9 +7,11 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v477` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v478` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Rol matrisi (v465):** Roller ekranı sidebar sıralı sayfa/alt başlık satırları ve Gör/Ekle/Düzenle/Sil anahtarları kullanır. Yükleme/Paletleme ve OGL/Siparişler bağımsız; rapor türleri ayrı read/export kapılıdır. Eski roller rol başına genişletilir; ayrıntılı roller yalnız seçilen eylemleri alır. Veri kapsamı rol izinleri yanında seçili depo kodlarıyla saklanır, seçili rol sınırları ve kullanıcı depo atamaları kesişir; admin istisnası korunur. Beyan şirket genelinde, Mail hesap ataması, Hesap kendi/tümü kuralı sürer. Eski günlük snapshot arşivi seçili depo rolünde doğrulanamadığından kapalıdır. Şema/seed migration yok. Detay/test/sınırlar: `docs/ROLES_MATRIX_DELIVERY.md`. Kullanıcı 31 Ekimde bu somut teslimin merge ve canlı testini açıkça onayladı.
+
+**Hızlı Hesapla (v478):** Hızlı Maliyet listesindeki "Hızlı Hesapla" düğmesiyle açılan tek ekran, mavi/ikonsuz mobil hesaplayıcı (`hizli_hesapla.php`, motor `config/hizli_hesapla.php` ↔ ayna `assets/hizli-hesapla.js` — ikisini birlikte değiştir; `quick_cost_calculate()` `model===3` ise oraya dağıtır). Ham KG girişi yok: gerekli ham = net KG/(1−fire). Kayıt mevcut `quick_cost_sheets` içinde `model:3`/`method:'hizli'` (şema/migration YOK); v1/v2 ile çapraz açılış yönlendirilir. Kur elle, dövize özel. Ayrıntı/test: `docs/HIZLI_HESAPLA.md`.
 
 **Hızlı Maliyet v2 — 6. düzeltme (v477, sahip isteği):** "İhtiyatlı" adı HER YERDEN kalktı (anlaşılmıyordu): Genişletilmiş sonuçlar'daki satır **"Çıkma / suluk net geliri düşülmemiş maliyet (TL/kg)"** (`unit_cost_prudent` iç anahtarı AYNI), sonuç kartı notu "Çıkma / suluk net geliri düşülmedi: …", uyarı metni "(çıkma / suluk net geliri düşülmemiş hesap)". Hesap değişmedi.
 

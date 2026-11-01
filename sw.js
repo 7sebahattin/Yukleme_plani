@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v477';
+const CACHE_NAME = 'yukleme-plani-v478';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -71,6 +71,8 @@ self.addEventListener('fetch', function(e) {
   var u = new URL(e.request.url);
   // Saved quick costs are authenticated business data; never retain their HTML.
   if (/\/hizli_maliyet(?:_form)?\.php(\/|$)/.test(u.pathname)) return;
+  // Hızlı Hesapla (v478): kaydedilmiş fiyat/maliyet hesapları da cihaz önbelleğine yazılmaz.
+  if (/\/hizli_hesapla\.php(\/|$)/.test(u.pathname)) return;
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   // Mail Merkezi: posta içeriği (sayfa, JSON, ek) cihazın CacheStorage'ına HİÇ yazılmaz.
   if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır
