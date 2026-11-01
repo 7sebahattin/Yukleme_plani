@@ -79,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $result_at = $checked['values']['analysis_result_at'];
     if (in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) $result_at = date('Y-m-d H:i:s');
     if (array_key_exists('sender_company_name', $_POST)) {   // Gönderici Firma: HKS adı eşleşirse id çözülür, değilse serbest ad
+        if (can_beyan('hks.read') && trim((string)$_POST['sender_company_name']) === '') $errors[] = 'Gönderici Firma seçilmelidir.';
         $g = beyan_gonderici_coz((string)$_POST['sender_company_name']);
         $_POST['hks_firma_id'] = $g['id'];
         $f['sender_company_name'] = $g['ad'];

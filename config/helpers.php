@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v484');
+    define('APP_SURUM', 'v486');
 }
 
 // --- HTML kaçışı ---
@@ -3678,13 +3678,16 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
     // Tam ad eşleşirse sunucu hks_firma_id'yi kendisi çözer (beyan_gonderici_coz).
     if ($sevk) {
         $gname = trim((string)($f['sender_company_name'] ?? ''));
-        if ($gname === '' && $firma_sec !== '') {
-            foreach ($firmalar as $x) if ($x['id'] === $firma_sec) { $gname = $x['ad']; break; }
+        // v485: "son kullanılan firma" Gönderici'yi DOLDURMAZ (eski beyan kaydı hariç: kayıtlı hks_firma_id adı getirir).
+        $gid = (string)($f['hks_firma_id'] ?? '');
+        if ($gname === '' && $gid !== '') {
+            foreach ($firmalar as $x) if ($x['id'] === $gid) { $gname = $x['ad']; break; }
         }
+        $gzorunlu = ($beyan === null);   // yeni beyanda seçim zorunlu
         echo '<div class="form-group" data-ic="bina">'
-           . '<label class="form-label" for="bf_sender_company_name">Gönderici Firma</label>'
+           . '<label class="form-label" for="bf_sender_company_name">Gönderici Firma' . ($gzorunlu ? ' *' : '') . '</label>'
            . '<input type="text" id="bf_sender_company_name" name="sender_company_name" class="form-control" maxlength="150"'
-           . ' list="bfGondericiListe" autocomplete="off" value="' . h($gname) . '">'
+           . ' list="bfGondericiListe" autocomplete="off"' . ($gzorunlu ? ' required' : '') . ' value="' . h($gname) . '">'
            . '<datalist id="bfGondericiListe">';
         foreach ($firmalar as $x) echo '<option value="' . h($x['ad']) . '"></option>';
         echo '</datalist></div>';
