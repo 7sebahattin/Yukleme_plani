@@ -15,6 +15,7 @@ test('Zorunlu sayısal örnek (fire %20 → ihracata kalan %80)', () => {
     const c = H.calculate(base()); assert.ok(c.ok); const r = c.r;
     near(r.raw_kg, 25000, 1e-9, 'ham kg'); near(r.raw_cost, 500000, 1e-6, 'ham maliyet');
     assert.equal(r.material_cost, 80000); assert.equal(r.other_kg_cost, 10000); assert.equal(r.fixed_cost, 20000);
+    const v0 = H.view(c.n, c.r, 'USD', ''); assert.equal(v0.unit, '30,50 TL/kg'); assert.equal(v0.unit_fx, '≈ 0,61 USD/kg'); assert.ok(v0.suggested.startsWith('0,76 USD/kg (38,13 TL/kg)'));
     assert.equal(H.fmt(r.total, 2), '610.000,00'); assert.equal(H.fmt(r.unit_cost, 4), '30,5000'); assert.equal(H.fmt(r.unit_cost_fx, 4), '0,6100');
     near(r.sale_tl, 1100000, 1e-6, 'satış'); assert.equal(H.fmt(r.profit, 2), '490.000,00'); assert.equal(H.fmt(r.margin_pct, 2), '44,55');
     assert.equal(H.fmt(r.breakeven_fx, 4), '0,6100'); assert.equal(H.fmt(r.suggested_fx, 4), '0,7625');
@@ -56,6 +57,10 @@ test('v481: nakliye döviz, çıkma/suluk geliri, komisyon', () => {
     assert.equal(H.fmt(c.r.breakeven_fx, 4), '0,6421'); assert.equal(H.fmt(c.r.suggested_fx, 4), '0,8133');
     const v = H.view(c.n, c.r, 'USD', ''); assert.ok(v.share.includes('Komisyon / finansman %5,00: 55.000,00 TL'));
     assert.equal(H.calculate(Object.assign(base(), { commission_pct: '85' })).ok, false);
+    c = H.calculate(Object.assign(base(), { freight: '250', freight_currency: 'EUR', freight_rate: '60' })); near(c.r.total, 610000, 1e-6, 'EUR nakliye');
+    assert.ok(H.view(c.n, c.r, 'USD', '').share.includes('Nakliye: 250,00 EUR (15.000,00 TL)'));
+    c = H.calculate(Object.assign(base(), { freight: '250', freight_currency: 'EUR', freight_rate: '' })); assert.equal(c.ok, false); assert.deepEqual(c.invalid, []); assert.ok(c.missing[0].includes('Nakliye EUR kuru'));
+    c = H.calculate(Object.assign(base(), { freight: '300', freight_currency: 'USD', freight_rate: '' })); near(c.r.freight_tl, 15000, 1e-9, 'USD nakliye satış kuru');
     const e = H.calculate(Object.assign(base(), { sale_kg: '', rate: '', fire_pct: '' })); assert.deepEqual(e.invalid, []); assert.equal(e.missing.length, 3);
 });
 test('Geçersiz giriş sonuç üretmez', () => {
@@ -72,7 +77,7 @@ test('Paylaşım metni ekrandaki değerlerle aynı + randıman/ham mal/başabaş
     const c = H.calculate(base()), v = H.view(c.n, c.r, 'USD', 'NAR TEKLİF');
     for (const k of ['total', 'total_fx', 'unit', 'unit_fx', 'sale', 'sale_fx', 'profit', 'profit_fx', 'margin', 'entered', 'suggested', 'breakeven']) assert.ok(v.share.includes(v[k]), k);
     assert.ok(v.share.startsWith('HIZLI HESAPLA — NAR TEKLİF')); assert.ok(v.share.includes('1 USD = 50,00 TL'));
-    assert.ok(v.share.includes('Fire oranı: %20,00 (ihracata kalan %80,00)') && v.share.includes('Gerekli ham mal: 25.000 kg') && v.share.includes('çıkma / suluk geliri düşülmedi'));
+    assert.ok(v.share.includes('Fire oranı: %20,00 (ihracata kalan %80,00)') && v.share.includes('Gerekli ham mal: 25.000 kg') && !v.share.includes('çıkma / suluk'));
 });
 test('PHP/JS eşitliği (rastgele 300 senaryo, model 4 + model 3)', () => {
     let seed = 12345; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
@@ -84,12 +89,12 @@ test('PHP/JS eşitliği (rastgele 300 senaryo, model 4 + model 3)', () => {
         const n = { model: m3 ? 3 : 4, product: 'T', sheet_date: '2026-11-01', sale_kg: Math.max(1, pick(50000, 0)), sale_price: pick(5, m3 ? 4 : 8), currency: i % 2 ? 'EUR' : 'USD',
             rate: Math.max(0.5, pick(80, 4)), price_in_fx: rnd() > 0.3, raw_price: pick(60, 4), freight: pick(60000, 2), material_kg: pick(10, 4),
             docs: pick(9000, 2), other_kg: pick(3, 4), other_fixed: pick(9000, 2), target_margin: rnd() > 0.2 ? pick(70, 2) : null };
-        if (m3) n.waste_pct = pick(60, 2); else { n.fire_pct = pick(95, 2); n.yield_pct = Math.round((100 - n.fire_pct) * 1e4) / 1e4; n.other_kg_basis = rnd() > 0.5 ? 'raw' : 'net'; n.freight_in_fx = rnd() > 0.5; n.byproduct_income = rnd() > 0.6 ? pick(80000, 2) : 0; n.commission_pct = rnd() > 0.5 ? pick(15, 2) : 0; }
+        if (m3) n.waste_pct = pick(60, 2); else { n.fire_pct = pick(95, 2); n.yield_pct = Math.round((100 - n.fire_pct) * 1e4) / 1e4; n.other_kg_basis = rnd() > 0.5 ? 'raw' : 'net'; n.freight_currency = ['TRY', 'USD', 'EUR', 'RUB', 'GBP'][Math.floor(rnd() * 5)]; n.freight_rate = (n.freight_currency !== 'TRY' && n.freight_currency !== n.currency) ? Math.max(0.5, pick(90, 4)) : null; n.byproduct_income = rnd() > 0.6 ? pick(80000, 2) : 0; n.commission_pct = rnd() > 0.5 ? pick(15, 2) : 0; }
         cases.push(n);
         const raw = { model: n.model, currency: n.currency, price_in_fx: n.price_in_fx, sale_kg: tr(n.sale_kg), sale_price: tr(n.sale_price), rate: tr(n.rate), raw_price: tr(n.raw_price),
             freight: tr(n.freight), material_kg: tr(n.material_kg), docs: tr(n.docs), other_kg: tr(n.other_kg), other_fixed: tr(n.other_fixed),
             target_margin: n.target_margin === null ? '' : tr(n.target_margin) };
-        if (m3) raw.waste_pct = tr(n.waste_pct); else { raw.fire_pct = tr(n.fire_pct); raw.other_kg_basis = n.other_kg_basis; raw.freight_in_fx = n.freight_in_fx; raw.byproduct_income = tr(n.byproduct_income); raw.commission_pct = tr(n.commission_pct); }
+        if (m3) raw.waste_pct = tr(n.waste_pct); else { raw.fire_pct = tr(n.fire_pct); raw.other_kg_basis = n.other_kg_basis; raw.freight_currency = n.freight_currency; raw.freight_rate = n.freight_rate === null ? '' : tr(n.freight_rate); raw.byproduct_income = tr(n.byproduct_income); raw.commission_pct = tr(n.commission_pct); }
         inputs.push(H.calculate(raw));
     }
     const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'hizli_hesapla_smoke.php'), '--json'], { input: JSON.stringify(cases), maxBuffer: 1 << 26 }).toString());

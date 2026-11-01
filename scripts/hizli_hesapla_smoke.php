@@ -143,6 +143,16 @@ $pr = $ko['suggested_tl'] * 20000; near(($pr - ($ko['base_total'] + $pr * 0.05))
 fails(fn() => hh_calculate(sample(['commission_pct' => '85'])), 'komisyon', 'marj + komisyon ≥ %100');
 fails(fn() => hh_calculate(sample(['commission_pct' => '100', 'target_margin' => ''])), 'Komisyon', 'komisyon %100');
 fails(fn() => hh_calculate(sample(['freight_in_fx' => 'evet'])), 'Nakliye', 'nakliye para birimi değeri');
+// v481: nakliye bağımsız para birimi (TL/USD/EUR/RUB/GBP)
+$fu = hh_calculate(sample(['freight' => '300', 'freight_currency' => 'USD']));
+near($fu['results']['freight_tl'], 15000, 1e-9, 'nakliye USD = satış dövizi → satış kuru'); check($fu['freight_currency'] === 'USD' && $fu['freight_rate'] === null, 'satış dövizinde ayrı kur saklanmaz');
+$fe = hh_calculate(sample(['freight' => '250', 'freight_currency' => 'EUR', 'freight_rate' => '60']));
+near($fe['results']['freight_tl'], 15000, 1e-9, 'nakliye 250 EUR × 60'); near($fe['results']['total'], 610000, 1e-6, 'EUR nakliye toplamı'); check($fe['freight_rate'] === 60.0, 'nakliye kuru saklanır');
+fails(fn() => hh_calculate(sample(['freight' => '250', 'freight_currency' => 'EUR'])), 'Nakliye EUR kuru', 'ayrı dövizde nakliye kuru zorunlu');
+check(hh_calculate(sample(['freight' => '0', 'freight_currency' => 'GBP']))['results']['freight_tl'] == 0, 'nakliye 0 ise kur gerekmez');
+fails(fn() => hh_calculate(sample(['freight_currency' => 'JPY'])), 'Nakliye para birimi', 'bilinmeyen nakliye dövizi');
+check(hh_calculate(sample(['freight' => '15.000']))['freight_currency'] === 'TRY', 'varsayılan nakliye TL');
+check(hh_calculate(sample(['freight' => '300', 'freight_in_fx' => true]))['freight_currency'] === 'USD', 'eski v480 freight_in_fx → satış dövizi'); 
 $d = hh_defaults(); check($d['sale_kg'] === null && $d['rate'] === null && $d['yield_pct'] === null && $d['target_margin'] === null && $d['raw_price'] === null, 'yeni hesap boş açılır (örnek veri yok)');
 // 6) Geçersiz giriş
 fails(fn() => hh_calculate(sample(['yield_pct' => '0'])), 'Fire', 'ihracata kalan 0 (fire %100)');
@@ -190,7 +200,8 @@ $v2Saved = quick_cost_save(db(), $v2); check(quick_cost_is_v2($v2Saved['document
 
 // 10) Sayfa: açma, kaydetme, yetki, CSRF, depo
 $p = page('hh'); check($p['status'] === 200 && str_contains($p['html'], 'Hızlı Hesapla') && !str_contains($p['html'], 'Hesapla</button>'), 'yeni sayfa açılır, hesapla düğmesi yok');
-check(!str_contains($p['html'], 'data-hh="other_kg_basis"') && str_contains($p['html'], 'data-hh="freight_cur"') && str_contains($p['html'], 'data-hh="byproduct_income"') && str_contains($p['html'], 'data-hh="commission_pct"') && str_contains($p['html'], '"sale_kg":null'), 'Net/Ham seçimi yok, yeni 3 alan var, boş açılış');
+check(!str_contains($p['html'], 'data-hh="other_kg_basis"') && str_contains($p['html'], 'data-hh="freight_cur"') && !str_contains($p['html'], 'data-hh="byproduct_income"') && str_contains($p['html'], '<option value="EUR">EUR</option><option value="RUB">RUB</option><option value="GBP">GBP</option></select>
+            <input id="hhFreight"') && str_contains($p['html'], 'data-hh="commission_pct"') && str_contains($p['html'], '"sale_kg":null'), 'Net/Ham seçimi yok, çıkma/suluk alanı yok, nakliye tüm dövizler, boş açılış');
 check(!str_contains($p['html'], 'Örnek değerdir') && str_contains($p['html'], '<option value="GBP">'), 'örnek açıklama yazısı yok, RUB/GBP seçeneği var');
 check(str_contains($p['html'], 'id="hhSave"') && str_contains($p['html'], 'id="hhShare"'), 'Kaydet/Paylaş düğmeleri');
 $payload = fn(array $d) => ['payload' => json_encode($d), 'version' => '0', 'csrf' => 'anonymous-csrf'];
@@ -200,6 +211,9 @@ $doc3 = ['model' => 3, 'product' => 'eski yeni', 'sale_kg' => 1000, 'sale_price'
     'freight' => 0, 'material_kg' => 0, 'docs' => 0, 'other_kg' => 0, 'other_fixed' => 0, 'waste_pct' => 8, 'target_margin' => 20];
 $ok = page('hh', [], $payload($doc));
 check($ok['status'] === 200 && str_contains(implode('', $ok['headers']), 'hizli_hesapla.php?id='), 'kaydet → PRG');
+$bySaved = page('hh', [], $payload(array_replace($doc, ['product' => 'gelirli eski', 'byproduct_income' => 5000, 'other_kg_basis' => 'net'])));
+$byId = (int)db()->query("SELECT id FROM quick_cost_sheets WHERE product='GELİRLİ ESKİ'")->fetchColumn();
+check($byId > 0 && str_contains(page('hh', ['id' => (string)$byId])['html'], 'data-hh="byproduct_income"'), 'eski kayıttaki çıkma/suluk geliri korunur (eski kayıt etiketiyle)');
 $bad = page('hh', [], ['payload' => json_encode($doc), 'version' => '0', 'csrf' => 'yanlis']); check($bad['status'] === 403, 'CSRF reddi');
 $noName = page('hh', [], $payload(array_replace($doc, ['product' => ' ']))); check($noName['status'] === 422 && str_contains($noName['html'], 'Hesap adı gerekli'), 'adsız kayıt reddi');
 $badNum = page('hh', [], $payload(array_replace($doc, ['rate' => 0]))); check($badNum['status'] === 422, 'geçersiz kur 422');
