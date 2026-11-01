@@ -381,9 +381,14 @@
         $('hhPayload').value = JSON.stringify(pl);
     });
 
-    $('hhShare').addEventListener('click', function () {
+    // v487: Paylaş düğmesi şimdilik yok (Geri var); metin üretimi korunur, test/ileride kullanım için kanca.
+    root.__hhPaylasMetni = function () {
+        return (last && last.ok) ? shareText(last.n, last.r, currency, cfg.savedName || '', last.v) : '';
+    };
+    var shareBtn = $('hhShare');
+    if (shareBtn) shareBtn.addEventListener('click', function () {
         if (!last || !last.ok) { status('Paylaşmak için hesabı hatasız tamamlayın.', true); return; }
-        var text = shareText(last.n, last.r, currency, cfg.savedName || '', last.v);
+        var text = root.__hhPaylasMetni();
         if (navigator.share) {
             navigator.share({ title: 'Hızlı Hesapla', text: text }).then(function () { status('Paylaşıldı.'); })
                 .catch(function (e) { if (!e || e.name !== 'AbortError') copy(text); });

@@ -174,7 +174,7 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
 
     <div class="hh-actions">
         <button type="button" class="hh-btn hh-btn-main" id="hhSave"<?= !$cfg['saveAvailable'] ? ' disabled' : '' ?>>Kaydet</button>
-        <button type="button" class="hh-btn" id="hhShare">Paylaş</button>
+        <a class="hh-btn hh-btn-geri" id="hhBack" href="hizli_maliyet.php">Geri</a>
     </div>
     <?php if (!$can_write): ?><p class="hh-hint">Kaydetme yetkiniz yok; hesap yalnız görüntülenir.</p>
     <?php elseif (!$storage_ready): ?><p class="hh-hint">Kayıt altyapısı henüz kurulmadı; hesaplama çalışır, kaydetme kapalıdır.</p><?php endif; ?>

@@ -208,7 +208,7 @@ $p = page('hh'); check($p['status'] === 200 && str_contains($p['html'], 'Hızlı
 check(!str_contains($p['html'], 'data-hh="other_kg_basis"') && str_contains($p['html'], 'data-hh="freight_cur"') && !str_contains($p['html'], 'data-hh="byproduct_income"') && str_contains($p['html'], '<option value="EUR">EUR</option><option value="RUB">RUB</option><option value="GBP">GBP</option></select>
             <input id="hhFreight"') && str_contains($p['html'], 'data-hh="commission_pct"') && str_contains($p['html'], '"sale_kg":null'), 'Net/Ham seçimi yok, çıkma/suluk alanı yok, nakliye tüm dövizler, boş açılış');
 check(!str_contains($p['html'], 'Örnek değerdir') && str_contains($p['html'], '<option value="GBP">'), 'örnek açıklama yazısı yok, RUB/GBP seçeneği var');
-check(str_contains($p['html'], 'id="hhSave"') && str_contains($p['html'], 'id="hhShare"'), 'Kaydet/Paylaş düğmeleri');
+check(str_contains($p['html'], 'id="hhSave"') && str_contains($p['html'], 'id="hhBack"') && !str_contains($p['html'], 'id="hhShare"') && str_contains($p['html'], 'href="hizli_maliyet.php">Geri</a>'), 'Kaydet/Geri düğmeleri (Paylaş yok)');
 $payload = fn(array $d) => ['payload' => json_encode($d), 'version' => '0', 'csrf' => 'anonymous-csrf'];
 $doc = ['model' => 4, 'product' => 'test hesap', 'sale_kg' => 1000, 'sale_price' => 1.1, 'currency' => 'USD', 'rate' => 50, 'price_in_fx' => true, 'raw_price' => 20,
     'freight' => 0, 'material_kg' => 0, 'docs' => 0, 'other_kg' => 0, 'other_kg_basis' => 'raw', 'other_fixed' => 0, 'yield_pct' => 80, 'target_margin' => 20];

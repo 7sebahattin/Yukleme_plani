@@ -43,6 +43,7 @@ html[data-theme="dark"] .hh-errs{background:#3b1c1c}
 .hh-btn{min-height:48px;border-radius:10px;border:1px solid var(--hh-blue);background:var(--card,#fff);color:var(--hh-blue);font-size:16px;font-weight:700;cursor:pointer;padding:0 14px}
 .hh-btn-main{background:var(--hh-blue);color:#fff}
 html[data-theme="dark"] .hh-btn-main{color:#0b1b38}
+.hh-btn-geri{display:flex;align-items:center;justify-content:center;text-decoration:none;box-sizing:border-box}
 .hh-btn:disabled{opacity:.5;cursor:not-allowed}
 .hh-status.hh-bad{color:var(--hh-bad)}
 .hh-copy{width:100%;box-sizing:border-box;margin-top:6px;font-size:13px}
