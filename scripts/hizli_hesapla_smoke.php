@@ -123,6 +123,7 @@ $t = hh_calculate(sample(['price_in_fx' => false, 'sale_price' => '55']))['resul
 near($t['sale_tl'], 1100000, 1e-6, 'TL fiyat'); near($t['price_fx'], 1.1, 1e-12, 'TL fiyatın döviz karşılığı');
 $e = hh_calculate(sample(['currency' => 'EUR', 'rate' => '55,5']));
 near($e['results']['sale_tl'], 20000 * 1.1 * 55.5, 1e-6, 'EUR kur'); check($e['currency'] === 'EUR', 'EUR etiketi');
+foreach (['RUB' => '0,6543', 'GBP' => '64,10'] as $c => $k) { $x = hh_calculate(sample(['currency' => $c, 'rate' => $k])); check($x['currency'] === $c && $x['results']['sale_fx'] > 0, $c . ' kabul edilir'); }
 near(hh_calculate(sample(['sale_price' => '1,09734512']))['sale_price'], 1.09734512, 1e-12, 'satış fiyatı 8 ondalık (dönüşüm kaybı yok)');
 // 5) Zarar, sabit, hedef marj
 $loss = hh_calculate(sample(['sale_price' => '0,40']))['results']; check($loss['profit'] < 0 && $loss['margin_pct'] < 0, 'zarar negatif');
@@ -143,7 +144,7 @@ fails(fn() => hh_calculate(sample(['rate' => ''])), 'kuru', 'boş kur');
 fails(fn() => hh_calculate(sample(['sale_price' => '1.10'])), 'Satış fiyatı', 'belirsiz nokta biçimi sessizce sıfır olmaz');
 fails(fn() => hh_calculate(sample(['raw_price' => 'abc'])), 'Ham mal', 'harf');
 fails(fn() => hh_calculate(sample(['freight' => '-5'])), 'Nakliye', 'negatif');
-fails(fn() => hh_calculate(sample(['currency' => 'JPY'])), 'USD veya EUR', 'döviz beyaz liste');
+fails(fn() => hh_calculate(sample(['currency' => 'JPY'])), 'USD, EUR, RUB veya GBP', 'döviz beyaz liste');
 fails(fn() => hh_calculate(sample(['price_in_fx' => 'evet'])), 'Fiyat döviz', 'checkbox değeri');
 check(hh_calculate(sample(['sale_price' => '1.100']))['sale_price'] === 1100.0, '1.100 = bin yüz');
 
@@ -175,6 +176,7 @@ $v2Saved = quick_cost_save(db(), $v2); check(quick_cost_is_v2($v2Saved['document
 
 // 10) Sayfa: açma, kaydetme, yetki, CSRF, depo
 $p = page('hh'); check($p['status'] === 200 && str_contains($p['html'], 'Hızlı Hesapla') && !str_contains($p['html'], 'Hesapla</button>'), 'yeni sayfa açılır, hesapla düğmesi yok');
+check(!str_contains($p['html'], 'Örnek değerdir') && str_contains($p['html'], '<option value="GBP">'), 'örnek açıklama yazısı yok, RUB/GBP seçeneği var');
 check(str_contains($p['html'], 'id="hhSave"') && str_contains($p['html'], 'id="hhShare"'), 'Kaydet/Paylaş düğmeleri');
 $payload = fn(array $d) => ['payload' => json_encode($d), 'version' => '0', 'csrf' => 'anonymous-csrf'];
 $doc = ['model' => 4, 'product' => 'test hesap', 'sale_kg' => 1000, 'sale_price' => 1.1, 'currency' => 'USD', 'rate' => 50, 'price_in_fx' => true, 'raw_price' => 20,

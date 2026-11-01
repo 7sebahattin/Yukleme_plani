@@ -79,6 +79,11 @@ function check(v, label) { assert.ok(v, label); checks++; }
             await f('rate').fill('55');
             check(await f('sale_price').inputValue() === '1,00' && await out_('sale') === '1.100.000,00 TL' && await page.locator('#hhPriceHint').textContent() === 'Satış fiyatı EUR/kg olarak yorumlanır.', name + ' EUR kuru girilince TL değeri korunarak 1,00 EUR/kg');
             check((await out_('total_fx')).includes(' EUR'), name + ' EUR etiketleri');
+            check(JSON.stringify(await f('currency').evaluate(e => [...e.options].map(o => o.value))) === '["USD","EUR","RUB","GBP"]', name + ' döviz seçenekleri USD/EUR/RUB/GBP');
+            await f('currency').selectOption('RUB');
+            check(await f('rate').inputValue() === '' && (await page.locator('#hhErrs').textContent()).includes('RUB kurunu girin'), name + ' RUB kuru istenir');
+            await f('rate').fill('0,6875'); check((await out_('total_fx')).includes(' RUB') && await out_('sale') === '1.100.000,00 TL', name + ' RUB: TL değeri korunur');
+            await f('currency').selectOption('EUR');
             await f('currency').selectOption('USD');
             check(await f('rate').inputValue() === '50,00' && await f('sale_price').inputValue() === '1,10' && await out_('sale') === '1.100.000,00 TL', name + ' USD kuru ve fiyat geri gelir');
             // Zarar

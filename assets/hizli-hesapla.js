@@ -150,7 +150,7 @@
             L.push('Fire oranı: %' + fmt(n.fire_pct, 2) + ' (ihracata kalan %' + fmt(n.yield_pct, 2) + ')');
             L.push('Gerekli ham mal: ' + v.rawKg);
         }
-        L.push('Döviz / kur: ' + cur + ' · 1 ' + cur + ' = ' + fmt(n.rate, 2) + ' TL');
+        L.push('Döviz / kur: ' + cur + ' · 1 ' + cur + ' = ' + fmtInput(n.rate, 2) + ' TL');   // kur 4 ondalığa kadar (RUB 0,6543 gibi) kırpılmaz
         L.push('Satış fiyatı: ' + v.entered);
         L.push('Toplam maliyet: ' + v.total + ' ' + v.total_fx);
         L.push('Net kg maliyeti: ' + v.unit + ' ' + v.unit_fx);
@@ -177,8 +177,9 @@
     var el = {}; document.querySelectorAll('[data-hh]').forEach(function (e) { el[e.getAttribute('data-hh')] = e; });
     var out = {}; document.querySelectorAll('[data-hh-out]').forEach(function (e) { out[e.getAttribute('data-hh-out')] = e; });
     var $ = function (id) { return document.getElementById(id); };
-    var rates = { USD: '', EUR: '' };
-    var currency = doc.currency === 'EUR' ? 'EUR' : 'USD';
+    var CURS = ['USD', 'EUR', 'RUB', 'GBP'];
+    var rates = { USD: '', EUR: '', RUB: '', GBP: '' };
+    var currency = CURS.indexOf(doc.currency) >= 0 ? doc.currency : 'USD';
     var last = null;
     var pendingTl = null;   // döviz değişti ama yeni kur henüz yok: korunacak TL/kg satış fiyatı
 
@@ -268,7 +269,7 @@
     el.currency.addEventListener('change', function () {
         var old = currency, rpOld = okRatePrice();
         rates[old] = el.rate.value;               // eski dövizin kuru saklanır, yenisine ASLA taşınmaz
-        currency = el.currency.value === 'EUR' ? 'EUR' : 'USD';
+        currency = CURS.indexOf(el.currency.value) >= 0 ? el.currency.value : 'USD';
         el.rate.value = rates[currency];
         pendingTl = (el.price_in_fx.checked && rpOld) ? rpOld.price * rpOld.rate : null;
         render();

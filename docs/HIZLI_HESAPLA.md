@@ -51,3 +51,4 @@ Kayıt: `document_json.model=4`, `calc_version=4`, `yield_pct`, `other_kg_basis`
 
 ## v480 — ekranda Fire
 Model 4 ekranı fire girişi ister: ihracata kalan (`yield_pct`) = 100 − fire; formül ve kayıt alanları değişmedi. Örnek: fire %20 → ihracata kalan %80 → ham 25.000 kg → toplam 610.000 TL. Eski model 3 kopyalanırken `yield_pct = 100 − waste_pct`.
+Döviz seçenekleri USD, EUR, RUB, GBP (kurlar ayrı saklanır). Hedef marj altındaki örnek açıklaması kaldırıldı.

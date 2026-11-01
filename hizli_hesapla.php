@@ -110,7 +110,7 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
             <div class="hh-f hh-cur">
                 <span>Döviz</span>
                 <div class="hh-cur-row">
-                    <select data-hh="currency" aria-label="Döviz"><option value="USD">USD</option><option value="EUR">EUR</option></select>
+                    <select data-hh="currency" aria-label="Döviz"><option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option><option value="GBP">GBP</option></select>
                     <label class="hh-chk"><input data-hh="price_in_fx" type="checkbox"><span>Fiyat döviz</span></label>
                 </div>
             </div>
@@ -161,7 +161,6 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
             <div class="hh-r"><dt>Girilen satış fiyatı</dt><dd><strong data-hh-out="entered">—</strong></dd></div>
         </dl>
         <label class="hh-row hh-target"><span>Hedef kâr marjı (%)</span><input data-hh="target_margin" type="text" inputmode="decimal" autocomplete="off"></label>
-        <p class="hh-hint">Örnek değerdir; değiştirebilirsiniz. Kâr ve önerilen fiyat, girilen maliyetlere ve fire varsayımına bağlı tahmini yönetimsel sonuçlardır.</p>
         <div class="hh-sug"><span>Önerilen satış fiyatı</span><strong data-hh-out="suggested">—</strong></div>
     </section>
 

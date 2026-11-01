@@ -8,7 +8,7 @@ declare(strict_types=1);
 const HH_MODEL = 3;        // v478: fire modeli (eski kayıtlar kendi matematiğiyle açılır)
 const HH_MODEL_V4 = 4;    // v479: ihracat randımanı modeli (YENİ kayıtlar)
 const HH_METHOD = 'hizli';
-const HH_CURRENCIES = ['USD', 'EUR'];
+const HH_CURRENCIES = ['USD', 'EUR', 'RUB', 'GBP'];   // v481: Ruble + Sterlin (kur elle)
 
 /** 3 (fire, eski) ya da 4 (randıman, yeni) — iki model de Hızlı Hesapla ekranına aittir. */
 function hh_is_model($document): bool
@@ -83,7 +83,7 @@ function hh_calculate_v3(array $input): array
         throw new InvalidArgumentException('Geçerli bir işlem tarihi girin.');
     }
     $currency = $input['currency'] ?? '';
-    if (!is_string($currency) || !in_array($currency, HH_CURRENCIES, true)) throw new InvalidArgumentException('Döviz USD veya EUR olmalı.');
+    if (!is_string($currency) || !in_array($currency, HH_CURRENCIES, true)) throw new InvalidArgumentException('Döviz USD, EUR, RUB veya GBP olmalı.');
     $fx = $input['price_in_fx'] ?? null;
     if (!in_array($fx, [true, false, 1, 0, '1', '0'], true)) throw new InvalidArgumentException('Fiyat döviz seçimi geçersiz.');
     $n = [
@@ -176,7 +176,7 @@ function hh_calculate_v4(array $input): array
         throw new InvalidArgumentException('Geçerli bir işlem tarihi girin.');
     }
     $currency = $input['currency'] ?? '';
-    if (!is_string($currency) || !in_array($currency, HH_CURRENCIES, true)) throw new InvalidArgumentException('Döviz USD veya EUR olmalı.');
+    if (!is_string($currency) || !in_array($currency, HH_CURRENCIES, true)) throw new InvalidArgumentException('Döviz USD, EUR, RUB veya GBP olmalı.');
     $fx = $input['price_in_fx'] ?? null;
     if (!in_array($fx, [true, false, 1, 0, '1', '0'], true)) throw new InvalidArgumentException('Fiyat döviz seçimi geçersiz.');
     $basis = $input['other_kg_basis'] ?? 'net';
