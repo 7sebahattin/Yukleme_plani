@@ -64,6 +64,12 @@ test('v481: nakliye döviz, çıkma/suluk geliri, komisyon', () => {
     c = H.calculate(Object.assign(base(), { freight: '300', freight_currency: 'USD', freight_rate: '' })); near(c.r.freight_tl, 15000, 1e-9, 'USD nakliye satış kuru');
     const e = H.calculate(Object.assign(base(), { sale_kg: '0', rate: '0', fire_pct: '' })); assert.deepEqual(e.invalid, []); assert.equal(e.missing.length, 2);
 });
+test('v484: kur yalnız dövizli fiyat/nakliye için şart', () => {
+    const t = H.calculate(Object.assign(base(), { rate: '0', price_in_fx: false, sale_price: '55' })); assert.ok(t.ok); near(t.r.total, 610000, 1e-6, 'TL hesap');
+    assert.equal(t.r.unit_cost_fx, null); const v = H.view(t.n, t.r, 'USD', ''); assert.equal(v.total_fx, ''); assert.equal(v.unit, '30,50 TL/kg'); assert.ok(!v.share.includes('Döviz / kur'));
+    const f = H.calculate(Object.assign(base(), { rate: '0' })); assert.equal(f.ok, false); assert.deepEqual(f.missing, ['USD kuru']);
+    const g = H.calculate(Object.assign(base(), { rate: '0', price_in_fx: false, freight: '300', freight_currency: 'USD' })); assert.deepEqual(g.missing, ['USD kuru']);
+});
 test('Geçersiz giriş sonuç üretmez', () => {
     for (const bad of [{ rate: '' }, { rate: '0' }, { sale_kg: '0' }, { sale_kg: '' }, { target_margin: '100' }, { freight: 'x' }, { freight: '-1' }]) {
         const c = H.calculate(Object.assign(base(), bad)); assert.equal(c.ok, false, JSON.stringify(bad)); assert.ok(c.errors.length);

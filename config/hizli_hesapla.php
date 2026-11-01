@@ -158,12 +158,14 @@ function hh_compute_v4(array $n): array
     $fixed = $freightTl + $n['docs'] + $n['other_fixed'];
     $base = $rawCost + $material + $otherKg + $fixed - $n['byproduct_income'];
     $priceTl = $n['price_in_fx'] ? $n['sale_price'] * $n['rate'] : $n['sale_price'];
-    $priceFx = $n['price_in_fx'] ? $n['sale_price'] : $n['sale_price'] / $n['rate'];
+    $hr = $n['rate'] > 0;   // v484: kur yalnız dövizli fiyat/nakliye için şart; yoksa döviz karşılıkları null (sonuç TL)
+    $fxd = fn(?float $x): ?float => ($x === null || !$hr) ? null : $x / $n['rate'];
+    $priceFx = $n['price_in_fx'] ? $n['sale_price'] : $fxd($n['sale_price']);
     $saleTl = $n['price_in_fx'] ? $s * $n['sale_price'] * $n['rate'] : $s * $n['sale_price'];
     $commission = $saleTl * $n['commission_pct'] / 100;
     $total = $base + $commission;
     $unit = $total / $s;
-    $unitFx = $unit / $n['rate'];
+    $unitFx = $fxd($unit);
     $profit = $saleTl - $total;
     $margin = $saleTl > 0 ? $profit / $saleTl * 100 : null;
     $baseUnit = $base / $s;
@@ -173,10 +175,10 @@ function hh_compute_v4(array $n): array
     return ['raw_kg' => $rawKg, 'raw_cost' => $rawCost, 'material_cost' => $material, 'other_kg_cost' => $otherKg,
         'freight_tl' => $freightTl, 'fixed_cost' => $fixed, 'byproduct_income' => $n['byproduct_income'], 'base_total' => $base,
         'commission' => $commission, 'total' => $total, 'unit_cost' => $unit, 'unit_cost_fx' => $unitFx,
-        'price_tl' => $priceTl, 'price_fx' => $priceFx, 'sale_tl' => $saleTl, 'sale_fx' => $saleTl / $n['rate'],
-        'profit' => $profit, 'profit_fx' => $profit / $n['rate'], 'margin_pct' => $margin,
-        'breakeven_tl' => $beTl, 'breakeven_fx' => $beTl / $n['rate'],
-        'suggested_tl' => $sugTl, 'suggested_fx' => $sugTl === null ? null : $sugTl / $n['rate']];
+        'price_tl' => $priceTl, 'price_fx' => $priceFx, 'sale_tl' => $saleTl, 'sale_fx' => $fxd($saleTl),
+        'profit' => $profit, 'profit_fx' => $fxd($profit), 'margin_pct' => $margin,
+        'breakeven_tl' => $beTl, 'breakeven_fx' => $fxd($beTl),
+        'suggested_tl' => $sugTl, 'suggested_fx' => $fxd($sugTl)];
 }
 
 /** Model 4: doğrular, kanonik belge + sonuç üretir (sunucu her kayıtta/açılışta yeniden hesaplar). */
@@ -221,7 +223,7 @@ function hh_calculate_v4(array $input): array
     $n['freight_mult'] = $fc === 'TRY' ? 1.0 : ($fc === $currency ? $n['rate'] : (float)$freightRate);
     if ($n['commission_pct'] >= 100) throw new InvalidArgumentException('Komisyon / finansman %100\'ün altında olmalı.');
     if ($n['sale_kg'] <= 0) throw new InvalidArgumentException('Satış net KG sıfırdan büyük olmalı.');
-    if ($n['rate'] <= 0) throw new InvalidArgumentException($currency . ' kuru sıfırdan büyük olmalı.');
+    if ($n['rate'] <= 0 && ($n['price_in_fx'] || ($fc === $currency && $n['freight'] > 0))) throw new InvalidArgumentException($currency . ' kuru sıfırdan büyük olmalı.');
     if (!($n['yield_pct'] > 0 && $n['yield_pct'] <= 100)) throw new InvalidArgumentException('Fire oranı %0 ile %100 arasında olmalı (%100 hariç).');
     $tmRaw = $input['target_margin'] ?? null;
     $n['target_margin'] = ($tmRaw === null || $tmRaw === '') ? null : hh_num($tmRaw, 'Hedef kâr marjı');
