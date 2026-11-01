@@ -66,7 +66,7 @@ function row(array $r, string $code): array { foreach ($r['items'] as $i) if ($i
 function setRow(array $d, string $code, array $c): array { foreach ($d['items'] as &$i) if ($i['code'] === $code) $i = array_merge($i, $c); unset($i); return $d; }
 function codes(array $r): array { return array_column($r['warnings'], 'code'); }
 
-t('Zorunlu senaryo: 713.000 TL, %80, ihtiyatlı 35,65 TL/kg', function (): void {
+t('Zorunlu senaryo: 713.000 TL, %80, gelir düşülmemiş 35,65 TL/kg', function (): void {
     $r = quick_cost_calculate(v2_example());
     eq($r['total'], 713000); eq($r['derived']['yield_pct'], 80); eq($r['unit_cost'], 35.65); eq($r['unit_cost_prudent'], 35.65);
     eq($r['export_cost'], 713000); eq($r['credit_applied'], 0); eq($r['net_kg'], 20000);

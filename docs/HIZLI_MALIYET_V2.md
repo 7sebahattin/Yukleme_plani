@@ -83,7 +83,7 @@ ham mal zaten tüm KG üzerinden alındığı için çöpün maliyeti toplam iç
 ## Sonuçlar ve yan ürün kredisi
 
 - Toplam operasyon maliyeti (kayıtta `total`; ekranda Satış karşılaştırması'nın altındaki kartta), ihracat net KG, verimlilik, ihracat net KG maliyeti (`unit_cost`).
-- Varsayılan **ihtiyatlı**: tüm maliyet ihracat KG'ye yüklenir.
+- Varsayılan: tüm maliyet ihracat KG'ye yüklenir; çıkma / suluk net geliri düşülmez ("Çıkma / suluk net geliri düşülmemiş maliyet" satırı bu rakamdır).
 - Detaylı Hesapta iç piyasa / sanayi **gerçekleşmiş** satılan KG ve net TL/kg girilebilir. Gelir yalnız
   "maliyetten düş" işaretlenirse düşülür → "İhracata yüklenen tahmini maliyet". Ekranda **yönetimsel tahmin,
   resmi muhasebe maliyeti değildir** yazar. Satılan KG ayrılan KG'yi, kredi toplam maliyeti aşamaz.

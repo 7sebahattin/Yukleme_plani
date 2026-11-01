@@ -244,7 +244,7 @@
         if (uncls4 > 0 && exp4 > 0) warnings.push({ code: 'unclassified', text: fmtKg(uncls4 / 10000) + ' KG ham ürün henüz sınıflandırılmamış (Çıkma / Suluk / Çöp ayrımı Detaylı Hesapta).' });
         if (mat.use && mat.total_cents === 0) warnings.push({ code: 'material_detail_empty', text: 'Malzeme detayından hesaplama açık ama tutar 0: satılan palet sayısını ve malzeme satırlarını girin.' });
         if (apply && credit > 0) warnings.push({ code: 'credit_applied', text: 'Yan ürün net geliri maliyetten düşüldü: yönetimsel tahmin, resmi muhasebe maliyeti değildir.' });
-        if (!apply && credit > 0) warnings.push({ code: 'credit_not_applied', text: 'Yan ürün geliri girildi fakat maliyetten düşülmedi (ihtiyatlı yöntem).' });
+        if (!apply && credit > 0) warnings.push({ code: 'credit_not_applied', text: 'Yan ürün geliri girildi fakat maliyetten düşülmedi (çıkma / suluk net geliri düşülmemiş hesap).' });
         var groupsTl = {}; GROUPS.forEach(function (g) { groupsTl[g] = groups[g] / 100; });
         return {
             model: 2, product: product, sheet_date: date, operation_type: input.operation_type, method: input.method, notes: notes,
@@ -401,8 +401,8 @@
             out('credit_total', r ? tl(r.credit_total) : '—');
             out('export_cost', r ? tl(r.export_cost) : '—');
             out('method_note', r && r.credit_applied > 0
-                ? 'Yan ürün kredisi uygulandı: iç piyasa/sanayi net geliri düşülerek ihracata kalan TAHMİNİ maliyet gösterilir (yönetimsel; resmi muhasebe maliyeti değildir).'
-                : "İhtiyatlı yöntem: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir (yan ürün geliri düşülmez).");
+                ? 'Yan ürün kredisi uygulandı: çıkma / suluk net geliri düşülerek ihracata kalan TAHMİNİ maliyet gösterilir (yönetimsel; resmi muhasebe maliyeti değildir).'
+                : "Çıkma / suluk net geliri düşülmedi: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir.");
             GROUPS.forEach(function (g) { out('group.' + g, r ? tl(r.groups[g]) : '—'); });
             var sr = r && r.sale_result, cur = state.sale && state.sale.currency || 'TL';
             out('sale.revenue', sr ? tl(sr.revenue_tl) + (cur !== 'TL' ? ' (' + fmt(sr.revenue_fx, 2) + ' ' + cur + ')' : '') : '—');
