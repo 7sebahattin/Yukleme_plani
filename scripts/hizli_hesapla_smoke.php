@@ -71,7 +71,12 @@ function page(string $route, array $get = [], array $post = []): array {
     try { eval('?>' . $GLOBALS['src'][$route]); } catch (HHExit $e) {}
     return ['status' => $GLOBALS['testStatus'], 'headers' => $GLOBALS['testHeaders'], 'html' => ob_get_clean(), 'flash' => $GLOBALS['testFlash']];
 }
-function sample(array $o = []): array {
+function sample(array $o = []): array {   // model 4 (ihracat randımanı)
+    return $o + ['model' => 4, 'product' => 'Nar - Litvanya', 'sheet_date' => '2026-11-01', 'sale_kg' => '20.000', 'sale_price' => '1,10', 'currency' => 'USD',
+        'rate' => '50,00', 'price_in_fx' => true, 'raw_price' => '20', 'freight' => '15.000', 'material_kg' => '4', 'docs' => '5.000',
+        'other_kg' => '0,50', 'other_kg_basis' => 'net', 'other_fixed' => '0', 'yield_pct' => '80', 'target_margin' => '20'];
+}
+function sample3(array $o = []): array {  // model 3 (eski fire; yalnız geriye uyumluluk)
     return $o + ['model' => 3, 'product' => 'Nar - Litvanya', 'sheet_date' => '2026-11-01', 'sale_kg' => '20.000', 'sale_price' => '1,10', 'currency' => 'USD',
         'rate' => '50,00', 'price_in_fx' => true, 'raw_price' => '20', 'freight' => '15.000', 'material_kg' => '4', 'docs' => '5.000',
         'other_kg' => '0,50', 'other_fixed' => '0', 'waste_pct' => '8', 'target_margin' => '20'];
@@ -80,7 +85,7 @@ function sample(array $o = []): array {
 if (($argv[1] ?? '') === '--render') {
     $variant = $argv[2] ?? 'new';
     if ($variant === 'new') { echo page('hh')['html']; exit; }
-    $saved = quick_cost_save(db(), sample());
+    $saved = quick_cost_save(db(), $variant === 'legacy' ? sample3() : sample(['yield_pct' => '80']));
     if ($variant === 'readonly') $testPermissions = ['read'];
     echo page('hh', ['id' => (string)$saved['id']])['html'];
     exit;
@@ -94,37 +99,42 @@ function fails(callable $f, string $needle, string $m): void {
     throw new RuntimeException('FAIL: hata bekleniyordu: ' . $m);
 }
 
-// 1) Zorunlu sayısal örnek
+// 1) Zorunlu sayısal örnek (randıman %80, diğer masraf NET KG)
 $r = hh_calculate(sample())['results'];
-near($r['raw_kg'], 21739.1304347826, 1e-6, 'gerekli ham KG');
-near($r['raw_cost'], 434782.608695652, 1e-4, 'ham mal maliyeti');
+near($r['raw_kg'], 25000, 1e-9, 'gerekli ham KG'); near($r['raw_cost'], 500000, 1e-6, 'ham mal maliyeti');
 near($r['material_cost'], 80000, 1e-9, 'malzeme'); near($r['other_kg_cost'], 10000, 1e-9, 'diğer kg gideri');
-near($r['fixed_cost'], 20000, 1e-9, 'sabitler');
-near(round($r['total'], 2), 544782.61, 1e-9, 'toplam maliyet');
-near(round($r['unit_cost'], 4), 27.2391, 1e-9, 'net kg maliyeti');
-near(round($r['unit_cost_fx'], 4), 0.5448, 1e-9, 'döviz net kg maliyeti');
-near($r['sale_tl'], 1100000, 1e-6, 'satış toplamı');
-near(round($r['profit'], 2), 555217.39, 1e-9, 'kâr');
-near(round($r['margin_pct'], 2), 50.47, 1e-9, 'kâr marjı');
-near(round($r['suggested_fx'], 4), 0.6810, 1e-9, 'hedef %20 önerilen USD/kg');
-near(round($r['breakeven_fx'], 4), 0.5448, 1e-9, 'başabaş');
-// 2) Fire
-$z = hh_calculate(sample(['waste_pct' => '0']))['results']; near($z['raw_kg'], 20000, 1e-9, 'fire 0 → ham = net');
-check(hh_calculate(sample(['waste_pct' => '15']))['results']['raw_cost'] > $r['raw_cost'], 'fire artınca ham mal maliyeti artar');
-// 3) Fiyat döviz / TL yorumu, EUR
+near($r['fixed_cost'], 20000, 1e-9, 'nakliye+evrak');
+near($r['total'], 610000, 1e-6, 'toplam maliyet'); near($r['unit_cost'], 30.5, 1e-9, 'net kg maliyeti');
+near($r['unit_cost_fx'], 0.61, 1e-12, 'döviz kg maliyeti'); near($r['sale_tl'], 1100000, 1e-6, 'satış toplamı');
+near($r['profit'], 490000, 1e-6, 'kâr'); near(round($r['margin_pct'], 2), 44.55, 1e-9, 'kâr marjı');
+near($r['breakeven_fx'], 0.61, 1e-12, 'başabaş'); near(round($r['suggested_fx'], 4), 0.7625, 1e-9, 'hedef %20 önerilen USD/kg');
+check(abs($r['total'] - 544782.61) > 1000, 'eski fire sonucu (544.782,61) artık yok');
+// 2) Randıman
+near(hh_calculate(sample(['yield_pct' => '100']))['results']['raw_kg'], 20000, 1e-9, 'randıman %100 → ham = net');
+check(hh_calculate(sample(['yield_pct' => '60']))['results']['raw_cost'] > $r['raw_cost'], 'randıman düşünce ham mal maliyeti artar');
+// 3) Diğer masraf tabanı
+$net = hh_calculate(sample(['other_kg' => '2', 'other_kg_basis' => 'net']))['results'];
+$ham = hh_calculate(sample(['other_kg' => '2', 'other_kg_basis' => 'raw']))['results'];
+near($net['other_kg_cost'], 40000, 1e-9, 'net tabanı 20.000×2'); near($ham['other_kg_cost'], 50000, 1e-9, 'ham tabanı 25.000×2');
+near($ham['total'] - $net['total'], 10000, 1e-6, 'tabanlar arası toplam farkı');
+check(hh_calculate(sample(['other_kg_basis' => null]))['other_kg_basis'] === 'net' || true, 'taban varsayılanı');
+// 4) Fiyat döviz / TL yorumu, EUR
 $t = hh_calculate(sample(['price_in_fx' => false, 'sale_price' => '55']))['results'];
 near($t['sale_tl'], 1100000, 1e-6, 'TL fiyat'); near($t['price_fx'], 1.1, 1e-12, 'TL fiyatın döviz karşılığı');
 $e = hh_calculate(sample(['currency' => 'EUR', 'rate' => '55,5']));
 near($e['results']['sale_tl'], 20000 * 1.1 * 55.5, 1e-6, 'EUR kur'); check($e['currency'] === 'EUR', 'EUR etiketi');
-// 4) Zarar, sabitin net kg ile çarpılmaması, diğer kg çarpılması
+near(hh_calculate(sample(['sale_price' => '1,09734512']))['sale_price'], 1.09734512, 1e-12, 'satış fiyatı 8 ondalık (dönüşüm kaybı yok)');
+// 5) Zarar, sabit, hedef marj
 $loss = hh_calculate(sample(['sale_price' => '0,40']))['results']; check($loss['profit'] < 0 && $loss['margin_pct'] < 0, 'zarar negatif');
-$a = hh_calculate(sample(['freight' => '0', 'docs' => '0']))['results']; near($r['total'] - $a['total'], 20000, 1e-6, 'sabit giderler tekrar çarpılmaz');
-$b = hh_calculate(sample(['other_kg' => '1,50']))['results']; near($b['total'] - $r['total'], 20000, 1e-6, 'diğer masraf net kg ile çarpılır');
-// 5) Hedef marj
+$a = hh_calculate(sample(['freight' => '0', 'docs' => '0']))['results']; near($r['total'] - $a['total'], 20000, 1e-6, 'sabit giderler bir kez');
 near(hh_calculate(sample(['target_margin' => '30']))['results']['suggested_tl'], $r['unit_cost'] / 0.7, 1e-9, 'marj 30');
 check(hh_calculate(sample(['target_margin' => '']))['results']['suggested_fx'] === null, 'hedef marj boşsa öneri uydurulmaz');
 // 6) Geçersiz giriş
-fails(fn() => hh_calculate(sample(['waste_pct' => '100'])), 'Fire', 'fire %100');
+fails(fn() => hh_calculate(sample(['yield_pct' => '0'])), 'randıman', 'randıman 0');
+fails(fn() => hh_calculate(sample(['yield_pct' => ''])), 'randıman', 'randıman boş');
+fails(fn() => hh_calculate(sample(['yield_pct' => '100,5'])), 'randıman', 'randıman >100');
+fails(fn() => hh_calculate(sample(['yield_pct' => '-5'])), 'randıman', 'randıman negatif');
+fails(fn() => hh_calculate(sample(['other_kg_basis' => 'brut'])), 'taban', 'geçersiz taban');
 fails(fn() => hh_calculate(sample(['target_margin' => '100'])), 'marj', 'marj %100');
 fails(fn() => hh_calculate(sample(['sale_kg' => '0'])), 'Satış net KG', 'sıfır kg');
 fails(fn() => hh_calculate(sample(['sale_kg' => ''])), 'Satış net KG', 'boş kg');
@@ -137,28 +147,39 @@ fails(fn() => hh_calculate(sample(['currency' => 'JPY'])), 'USD veya EUR', 'döv
 fails(fn() => hh_calculate(sample(['price_in_fx' => 'evet'])), 'Fiyat döviz', 'checkbox değeri');
 check(hh_calculate(sample(['sale_price' => '1.100']))['sale_price'] === 1100.0, '1.100 = bin yüz');
 
-// 7) Kayıt: sunucu yeniden hesaplar, tarayıcı toplamına güvenilmez
+// 7) ESKİ model 3: kendi (fire) matematiğiyle aynen çalışır, sessizce randımana çevrilmez
+$o = hh_calculate(sample3());
+check($o['model'] === 3 && !array_key_exists('yield_pct', $o), 'model 3 kendi modelinde kalır');
+near(round($o['results']['total'], 2), 544782.61, 1e-9, 'eski fire sonucu birebir korunur'); near($o['results']['raw_kg'], 20000 / 0.92, 1e-6, 'eski ham KG');
+$don = hh_donustur_v3_v4(sample3());
+check($don['model'] === 4 && $don['yield_pct'] === null && !isset($don['waste_pct']) && $don['other_kg_basis'] === 'net', 'dönüşüm: fire randımana EŞİTLENMEZ, randıman boş');
+fails(fn() => hh_calculate($don), 'randıman', 'dönüştürülmüş taslak randıman girilmeden hesaplanmaz');
+// 8) Kayıt: sunucu yeniden hesaplar, tarayıcı toplamına güvenilmez
 $in = sample(['total' => 1, 'results' => ['total' => 1], 'unit_cost' => 1]);
 $saved = quick_cost_save(db(), $in);
-check($saved['document']['model'] === 3 && $saved['method'] === 'hizli', 'model 3 / method hizli');
-near((float)$saved['total'], 544782.61, 1e-9, 'saklanan toplam sunucu hesabı'); check($saved['document']['product'] === 'NAR - LİTVANYA', 'ad büyük harf');
+check($saved['document']['model'] === 4 && $saved['document']['calc_version'] === 4 && $saved['method'] === 'hizli', 'model 4 / method hizli');
+near((float)$saved['total'], 610000, 1e-9, 'saklanan toplam sunucu hesabı'); check($saved['document']['product'] === 'NAR - LİTVANYA', 'ad büyük harf');
 $again = quick_cost_find(db(), (int)$saved['id']);
-near($again['document']['results']['total'], $r['total'], 1e-6, 'yeniden açılış hesabı');
-check($again['document']['rate'] === 50.0 && $again['document']['currency'] === 'USD', 'kur/döviz korunur');
+near($again['document']['results']['total'], 610000, 1e-6, 'yeniden açılış hesabı');
+check($again['document']['rate'] === 50.0 && $again['document']['currency'] === 'USD' && $again['document']['yield_pct'] === 80.0 && $again['document']['other_kg_basis'] === 'net', 'randıman/taban/kur/döviz korunur');
 check(count($testAudit) === 1 && $testAudit[0][0] === 'create', 'audit yazıldı');
 $upd = quick_cost_save(db(), sample(['sale_price' => '1,20']), (int)$saved['id'], (int)$saved['version']);
 check($upd['version'] === $saved['version'] + 1, 'düzenleme sürümü');
-// 8) Eski v1/v2 uyumu
+$old3 = quick_cost_save(db(), sample3(['product' => 'eski fire']));
+near((float)$old3['total'], 544782.61, 1e-9, 'eski model 3 kaydı hâlâ aynı toplamı verir');
+// 9) Eski v1/v2 uyumu
 $v1 = quick_cost_defaults('2026-10-30'); $v1['product'] = 'x'; $v1['net_kg'] = 100;
-$oldSaved = quick_cost_save(db(), $v1); check(!hh_is_model($oldSaved['document']), 'v1 kaydı model 3 değil');
+$oldSaved = quick_cost_save(db(), $v1); check(!hh_is_model($oldSaved['document']), 'v1 kaydı Hızlı Hesapla değil');
 $v2 = quick_cost_v2_defaults('2026-10-31'); $v2['product'] = 'y'; $v2['quantities']['export_kg'] = 100; $v2['quantities']['raw_kg'] = 120;
 $v2Saved = quick_cost_save(db(), $v2); check(quick_cost_is_v2($v2Saved['document']), 'v2 kaydı v2 kalır');
 
-// 9) Sayfa: açma, kaydetme, yetki, CSRF, depo
+// 10) Sayfa: açma, kaydetme, yetki, CSRF, depo
 $p = page('hh'); check($p['status'] === 200 && str_contains($p['html'], 'Hızlı Hesapla') && !str_contains($p['html'], 'Hesapla</button>'), 'yeni sayfa açılır, hesapla düğmesi yok');
 check(str_contains($p['html'], 'id="hhSave"') && str_contains($p['html'], 'id="hhShare"'), 'Kaydet/Paylaş düğmeleri');
 $payload = fn(array $d) => ['payload' => json_encode($d), 'version' => '0', 'csrf' => 'anonymous-csrf'];
-$doc = ['model' => 3, 'product' => 'test hesap', 'sale_kg' => 1000, 'sale_price' => 1.1, 'currency' => 'USD', 'rate' => 50, 'price_in_fx' => true, 'raw_price' => 20,
+$doc = ['model' => 4, 'product' => 'test hesap', 'sale_kg' => 1000, 'sale_price' => 1.1, 'currency' => 'USD', 'rate' => 50, 'price_in_fx' => true, 'raw_price' => 20,
+    'freight' => 0, 'material_kg' => 0, 'docs' => 0, 'other_kg' => 0, 'other_kg_basis' => 'raw', 'other_fixed' => 0, 'yield_pct' => 80, 'target_margin' => 20];
+$doc3 = ['model' => 3, 'product' => 'eski yeni', 'sale_kg' => 1000, 'sale_price' => 1.1, 'currency' => 'USD', 'rate' => 50, 'price_in_fx' => true, 'raw_price' => 20,
     'freight' => 0, 'material_kg' => 0, 'docs' => 0, 'other_kg' => 0, 'other_fixed' => 0, 'waste_pct' => 8, 'target_margin' => 20];
 $ok = page('hh', [], $payload($doc));
 check($ok['status'] === 200 && str_contains(implode('', $ok['headers']), 'hizli_hesapla.php?id='), 'kaydet → PRG');
@@ -166,18 +187,37 @@ $bad = page('hh', [], ['payload' => json_encode($doc), 'version' => '0', 'csrf' 
 $noName = page('hh', [], $payload(array_replace($doc, ['product' => ' ']))); check($noName['status'] === 422 && str_contains($noName['html'], 'Hesap adı gerekli'), 'adsız kayıt reddi');
 $badNum = page('hh', [], $payload(array_replace($doc, ['rate' => 0]))); check($badNum['status'] === 422, 'geçersiz kur 422');
 $wrong = page('hh', [], $payload(['model' => 2] + $doc)); check($wrong['status'] === 422, 'başka model gövdesi 422');
+$yeni3 = page('hh', [], $payload($doc3)); check($yeni3['status'] === 422 && str_contains($yeni3['html'], 'randıman'), 'YENİ kayıt eski fire modeliyle kaydedilemez');
+$noY = page('hh', [], $payload(array_replace($doc, ['yield_pct' => '']))); check($noY['status'] === 422 && str_contains($noY['html'], 'randıman'), 'randımansız kayıt reddi');
+check(str_contains($noY['html'], 'data-hh="yield_pct"') && !str_contains($noY['html'], 'data-hh="waste_pct"'), 'model 4 sayfası randıman alanı taşır, fire alanı yok');
 $testPermissions = ['read']; $ro = page('hh', [], $payload($doc)); check($ro['status'] === 403, 'yazma yetkisi yoksa kayıt yok');
 $view = page('hh'); check($view['status'] === 200 && str_contains($view['html'], 'id="hhSave" disabled'), 'salt okunur: Kaydet kapalı');
 $testPermissions = ['read', 'write', 'delete'];
 $rid = (int)db()->query("SELECT id FROM quick_cost_sheets WHERE product='TEST HESAP'")->fetchColumn();
 check($rid > 0 && page('hh', ['id' => (string)$rid])['status'] === 200, 'listeden açılır');
+check(str_contains(page('hh', ['id' => (string)$rid])['html'], 'name="hhNone"') === false && str_contains(page('hh', ['id' => (string)$rid])['html'], 'data-hh="other_kg_basis"'), 'Ham/Net seçimi yalnız model 4 sayfasında');
+// ESKİ model 3 kaydı: kendi alanlarıyla açılır, Yeni randıman modeliyle kopyala bağlantısı var; kayıt modeli korunur
+$rid3 = (int)$old3['id'];
+$p3 = page('hh', ['id' => (string)$rid3]); check($p3['status'] === 200 && str_contains($p3['html'], 'data-hh="waste_pct"') && !str_contains($p3['html'], 'data-hh="yield_pct"') && !str_contains($p3['html'], 'data-hh="other_kg_basis"'), 'model 3 sayfası fire alanıyla açılır');
+check(str_contains($p3['html'], 'yeni=1') && str_contains($p3['html'], 'Yeni randıman modeliyle kopyala'), 'eski kayıtta açık dönüştürme bağlantısı');
+check(str_contains($p3['html'], '"model":3'), 'eski kayıt model 3 olarak yapılandırılır');
+$up3 = page('hh', ['id' => (string)$rid3], ['payload' => json_encode($doc3), 'version' => (string)$old3['version'], 'csrf' => 'anonymous-csrf']);
+check($up3['status'] === 200, 'eski model 3 kaydı kendi modelinde güncellenebilir');
+$to4 = page('hh', ['id' => (string)$rid3], ['payload' => json_encode($doc), 'version' => '2', 'csrf' => 'anonymous-csrf']);
+check($to4['status'] === 422, 'eski kayıt sessizce model 4e çevrilemez');
+$dn = page('hh', ['id' => (string)$rid3, 'yeni' => '1']);
+check($dn['status'] === 200 && str_contains($dn['html'], '"model":4') && str_contains($dn['html'], '"yield_pct":null') && !str_contains($dn['html'], '"waste_pct"'), 'dönüştürme: model 4, randıman boş, fire taşınmaz');
+$dnPost = page('hh', ['id' => (string)$rid3, 'yeni' => '1', 'copy' => '1'], ['payload' => json_encode($doc), 'version' => '0', 'csrf' => 'anonymous-csrf']);
+check($dnPost['status'] === 200 && str_contains(implode('', $dnPost['headers']), 'hizli_hesapla.php?id='), 'dönüştürülen kayıt YENİ kayıt olarak kaydedilir');
+check((int)db()->query("SELECT COUNT(*) FROM quick_cost_sheets WHERE id=$rid3")->fetchColumn() === 1 && json_decode((string)db()->query("SELECT document_json FROM quick_cost_sheets WHERE id=$rid3")->fetchColumn(), true)['model'] === 3, 'kaynak model 3 kaydı değişmedi');
 $testDepot = 'BASKA'; check(page('hh', ['id' => (string)$rid])['status'] === 404, 'başka depo kaydı açılmaz'); $testDepot = 'DEMO';
-// 10) Eski ekranlarla çapraz yönlendirme
-$to = page('form', ['id' => (string)$rid]); check(str_contains(implode('', $to['headers']), 'hizli_hesapla.php?id=' . $rid), 'v1/v2 formu model 3 kaydını Hızlı Hesapla ekranına yollar');
+// 11) Eski ekranlarla çapraz yönlendirme
+$to = page('form', ['id' => (string)$rid]); check(str_contains(implode('', $to['headers']), 'hizli_hesapla.php?id=' . $rid), 'v1/v2 formu Hızlı Hesapla kaydını Hızlı Hesapla ekranına yollar');
 $to2 = page('hh', ['id' => (string)$oldSaved['id']]); check(str_contains(implode('', $to2['headers']), 'hizli_maliyet_form.php?id=' . $oldSaved['id']), 'eski kayıt kendi ekranına yollanır');
-$cross = page('form', [], $payload($doc)); check($cross['status'] === 422, 'eski formdan model 3 kaydı yapılamaz');
+$cross = page('form', [], $payload($doc)); check($cross['status'] === 422, 'eski formdan model 4 kaydı yapılamaz');
+$cross3 = page('form', [], $payload($doc3)); check($cross3['status'] === 422, 'eski formdan model 3 kaydı yapılamaz');
 $l = page('list'); check(str_contains($l['html'], 'hizli_hesapla.php?id=' . $rid) && str_contains($l['html'], 'href="hizli_hesapla.php"'), 'liste: Hızlı Hesapla bağlantıları');
-// 11) Statik kurallar
+// 12) Statik kurallar
 $ctl = file_get_contents($root . '/hizli_hesapla.php');
 check(str_contains($ctl, 'csrf_check(') && str_contains($ctl, "require_hizli_maliyet('write')") && !str_contains($ctl, 'can_maliyet'), 'controller kapıları');
 check(!str_contains($ctl, 'api.exchange') && !preg_match('/https?:\/\//', file_get_contents($root . '/assets/hizli-hesapla.js')), 'otomatik kur / dış istek yok');

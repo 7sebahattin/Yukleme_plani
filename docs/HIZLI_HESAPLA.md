@@ -1,4 +1,4 @@
-# Hızlı Hesapla (v478)
+# Hızlı Hesapla (v478 → v479)
 
 Tek ekran ihracat maliyeti + satış fiyatı. `hizli_hesapla.php` · motor `config/hizli_hesapla.php` (PHP otorite) ·
 `assets/hizli-hesapla.js` (JS ayna, **işlem sırası birebir aynı**) · `assets/hizli-hesapla.css`.
@@ -29,3 +29,22 @@ Paylaş = kullanıcı tıklamasıyla `navigator.share`, yoksa panoya kopyala (yo
 ## Test
 `php scripts/hizli_hesapla_smoke.php` · `node scripts/hizli_hesapla_js_smoke.js` (300 rastgele PHP/JS parite) ·
 `node scripts/hizli_hesapla_browser_smoke.js` (320/375/390/412/1280; ekran görüntüleri `HH_QA_OUT`).
+
+## v479 — İhracat randımanı modeli (model 4)
+Fire ≠ ihracat randımanı: ihracata ayrılmayan ürün iç piyasa/sanayiye satılabilir. YENİ hesaplar `model:4`; eski `model:3` (fire) kayıtlar
+`hh_calculate_v3` ile kendi matematiğiyle açılır (sessiz dönüşüm YOK; fire % randımana eşitlenmez).
+
+Formüller (`hh_compute_v4` ↔ `compute4`):
+- Gerekli ham KG = Satış net KG / (Randıman/100) · Ham mal = ham KG × ham fiyat (TL/ham kg)
+- Malzeme = net KG × TL/net kg · Diğer masraf = (Net KG ya da Ham KG, seçime göre) × TL/kg · Sabit = nakliye + evrak + diğer sabit
+- Toplam = ham mal + malzeme + diğer KG gideri + sabitler · Net kg maliyeti = Toplam / net KG · Döviz = / kur
+- Satış = net KG × fiyatın TL karşılığı · Kâr = Satış − Toplam · Marj = Kâr/Satış·100 · Başabaş = net kg maliyeti/kur ·
+  Önerilen TL/kg = net kg maliyeti / (1 − hedef marj/100); döviz = / kur. Randıman 0<y≤100, boşsa hesap tamamlanmaz.
+
+Zorunlu örnek (net 20.000, randıman %80, ham 20, nakliye 15.000, malzeme 4, evrak 5.000, diğer 0,50 NET, 1,10 USD @ 50, hedef %20):
+ham 25.000 kg · ham mal 500.000 · toplam **610.000 TL** · 30,5000 TL/kg · 0,6100 USD/kg · satış 1.100.000 · kâr 490.000 · marj %44,55 · önerilen 0,7625 USD/kg.
+Diğer masraf 2 TL/kg: Net → 40.000, Ham → 50.000 TL.
+
+Döviz: "Fiyat döviz" işareti değişince fiyat dönüştürülür (1,10 USD ⇄ 55,00 TL/kg; satışın TL değeri korunur, kur yoksa değişiklik geri alınır).
+USD⇄EUR: kurlar ayrı saklanır; TL fiyat korunur, yeni döviz kuru girilene dek fiyat beklemede. Satış fiyatı 8 ondalığa kadar (dönüşüm kaybı yok).
+Kayıt: `document_json.model=4`, `calc_version=4`, `yield_pct`, `other_kg_basis`. Eski kayıt → "Yeni randıman modeliyle kopyala" (`?id=N&yeni=1`).

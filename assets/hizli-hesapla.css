@@ -52,3 +52,8 @@ html[data-theme="dark"] .hh-btn-main{color:#0b1b38}
 .hh-dialog-act{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 @media (max-width:360px){.hh-row input[type=text]{flex-basis:100px;width:100px}.hh-row>span{font-size:12.5px}.hh-r strong{font-size:15.5px}}
 @media (min-width:900px){.hh{max-width:620px}}
+/* v479: Diğer masraf satırında Ham/Net KG tabanı + eski model uyarısı */
+.hh-row-basis>label{flex:1 1 auto;min-width:0;font-size:13.5px;cursor:pointer}
+.hh-row-basis .hh-basis{flex:0 0 84px;width:84px;min-height:44px;padding:4px 6px;font-size:14px}
+.hh-legacy{background:var(--hh-soft);border:1px solid var(--hh-line);border-radius:8px;padding:6px 8px}
+@media (max-width:360px){.hh-row-basis .hh-basis{flex-basis:74px;width:74px;font-size:13px}}
