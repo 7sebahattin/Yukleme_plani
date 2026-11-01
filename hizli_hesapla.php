@@ -14,7 +14,9 @@ header('X-Content-Type-Options: nosniff');
 $id_raw = $_GET['id'] ?? '0';
 if (!is_string($id_raw) || !preg_match('/^\d{1,10}$/D', $id_raw)) { http_response_code(400); exit('Geçersiz kayıt numarası.'); }
 $id = (int)$id_raw;
-$is_copy = ($_GET['copy'] ?? '') === '1' && $id > 0;
+$donusum = ($_GET['yeni'] ?? '') === '1' && $id > 0;   // eski (fire) hesabı AÇIKÇA yeni randıman modeliyle kopyala
+$is_copy = (($_GET['copy'] ?? '') === '1' || $donusum) && $id > 0;
+$record_model = HH_MODEL_V4;
 $can_write = can_hizli_maliyet('write');
 $errors = [];
 $record = null;
@@ -38,15 +40,25 @@ try {
             exit;
         }
         $document = $record['document'];
+        $record_model = hh_model_of($document);
         $version = $is_copy ? 0 : (int)$record['version'];
         if ($is_copy) $document['sheet_date'] = date('Y-m-d');
+        if ($donusum) {
+            // Kullanıcı seçti: değerler taşınır, fire % randımana EŞİTLENMEZ (randıman boş, kullanıcı girer).
+            if ($record_model !== HH_MODEL) { header('Location: hizli_hesapla.php?id=' . $id . '&copy=1'); exit; }
+            $document = hh_donustur_v3_v4($document);
+        }
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $payload = $_POST['payload'] ?? null;
         if (!is_string($payload) || strlen($payload) > 16384) throw new InvalidArgumentException('Hesap verisi geçersiz veya çok büyük.');
         try { $input = json_decode($payload, true, 8, JSON_THROW_ON_ERROR); }
         catch (JsonException $e) { throw new InvalidArgumentException('Hesap verisi okunamadı.'); }
-        if (!is_array($input) || array_is_list($input) || ($input['model'] ?? null) !== HH_MODEL) throw new InvalidArgumentException('Hesap verisi geçersiz.');
+        if (!is_array($input) || array_is_list($input) || !in_array($input['model'] ?? null, [HH_MODEL, HH_MODEL_V4], true)) throw new InvalidArgumentException('Hesap verisi geçersiz.');
+        // Model sabittir: yeni/kopya kayıt YALNIZ model 4; mevcut kayıt kendi modelinde kalır (sessiz dönüşüm yok).
+        $beklenen = ($record !== null && !$is_copy) ? $record_model : HH_MODEL_V4;
+        if ($input['model'] !== $beklenen) throw new InvalidArgumentException($beklenen === HH_MODEL
+            ? 'Bu hesap eski fire modelindedir; aynı modelde kaydedilir.' : 'Yeni hesaplar İhracat randımanı modeliyle kaydedilir.');
         $document = hh_form_input($input);   // hata olursa kullanıcının girdisi korunur
         $posted = $_POST['version'] ?? '';
         if (!is_string($posted) || !preg_match('/^\d{1,10}$/D', $posted)) throw new InvalidArgumentException('Kayıt sürümü geçersiz.');
@@ -76,7 +88,9 @@ try {
 
 render_header('Hızlı Hesapla');
 render_flash();
-$cfg = ['document' => $document, 'readOnly' => !$can_write, 'saveAvailable' => $can_write && $storage_ready,
+$model = hh_model_of($document);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !$donusum && $id === 0) $model = HH_MODEL_V4;
+$cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'readOnly' => !$can_write, 'saveAvailable' => $can_write && $storage_ready,
     'id' => ($record && !$is_copy) ? (int)$record['id'] : 0, 'version' => $version, 'copy' => $is_copy,
     'savedName' => ($record && !$is_copy) ? (string)($record['document']['product'] ?? '') : ''];
 ?>
@@ -106,14 +120,25 @@ $cfg = ['document' => $document, 'readOnly' => !$can_write, 'saveAvailable' => $
 
     <section class="hh-box" aria-label="Maliyet kalemleri">
         <h2 class="hh-h">Maliyet Kalemleri</h2>
-        <label class="hh-row"><span>Ham mal alış fiyatı (TL/kg)</span><input data-hh="raw_price" type="text" inputmode="decimal" autocomplete="off"></label>
+        <label class="hh-row"><span>Ham mal alış fiyatı (<?= $model === HH_MODEL ? 'TL/kg' : 'TL/ham kg' ?>)</span><input data-hh="raw_price" type="text" inputmode="decimal" autocomplete="off"></label>
         <label class="hh-row"><span>Nakliye bedeli (TL)</span><input data-hh="freight" type="text" inputmode="decimal" autocomplete="off"></label>
-        <label class="hh-row"><span>Malzeme gideri (TL/kg)</span><input data-hh="material_kg" type="text" inputmode="decimal" autocomplete="off"></label>
+        <label class="hh-row"><span>Malzeme gideri (<?= $model === HH_MODEL ? 'TL/kg' : 'TL/net kg' ?>)</span><input data-hh="material_kg" type="text" inputmode="decimal" autocomplete="off"></label>
         <label class="hh-row"><span>Evrak masrafları (TL)</span><input data-hh="docs" type="text" inputmode="decimal" autocomplete="off"></label>
-        <label class="hh-row"><span>Diğer masraf (TL/kg)</span><input data-hh="other_kg" type="text" inputmode="decimal" autocomplete="off"></label>
+        <div class="hh-row hh-row-basis"><label for="hhOtherKg"><span>Diğer masraf (TL/kg)</span></label>
+            <?php if ($model === HH_MODEL_V4): ?><select data-hh="other_kg_basis" class="hh-basis" aria-label="Diğer masraf hesaplama tabanı"><option value="net">Net KG</option><option value="raw">Ham KG</option></select><?php endif; ?>
+            <input id="hhOtherKg" data-hh="other_kg" type="text" inputmode="decimal" autocomplete="off"></div>
         <label class="hh-row"><span>Diğer sabit masraf (TL)</span><input data-hh="other_fixed" type="text" inputmode="decimal" autocomplete="off"></label>
+        <?php if ($model === HH_MODEL): ?>
         <label class="hh-row"><span>Fire oranı (%)</span><input data-hh="waste_pct" type="text" inputmode="decimal" autocomplete="off"></label>
+        <?php else: ?>
+        <label class="hh-row"><span>İhracat randımanı (%)</span><input data-hh="yield_pct" type="text" inputmode="decimal" autocomplete="off" placeholder="örn. 80"></label>
+        <?php endif; ?>
         <p class="hh-hint" id="hhRawInfo"></p>
+        <?php if ($model === HH_MODEL): ?>
+        <p class="hh-hint hh-legacy">Eski fire modelindeki hesap. Fire oranı ihracat randımanı DEĞİLDİR; <?= $cfg['id'] ? '<a href="hizli_hesapla.php?id=' . (int)$cfg['id'] . '&amp;yeni=1">Yeni randıman modeliyle kopyala</a> (randımanı siz girersiniz).' : '' ?></p>
+        <?php else: ?>
+        <p class="hh-hint">Yan ürün (iç piyasa / sanayi) geliri düşülmemiş tahmini ihracat maliyeti. Ayrıntılı dağıtım için Detaylı Maliyet'i kullanın.</p>
+        <?php endif; ?>
     </section>
 
     <div class="hh-errs" id="hhErrs" role="alert" hidden></div>
@@ -136,7 +161,7 @@ $cfg = ['document' => $document, 'readOnly' => !$can_write, 'saveAvailable' => $
             <div class="hh-r"><dt>Girilen satış fiyatı</dt><dd><strong data-hh-out="entered">—</strong></dd></div>
         </dl>
         <label class="hh-row hh-target"><span>Hedef kâr marjı (%)</span><input data-hh="target_margin" type="text" inputmode="decimal" autocomplete="off"></label>
-        <p class="hh-hint">Örnek değerdir; değiştirebilirsiniz.</p>
+        <p class="hh-hint">Örnek değerdir; değiştirebilirsiniz. Kâr ve önerilen fiyat, girilen maliyetlere ve randıman varsayımına bağlı tahmini yönetimsel sonuçlardır.</p>
         <div class="hh-sug"><span>Önerilen satış fiyatı</span><strong data-hh-out="suggested">—</strong></div>
     </section>
 
