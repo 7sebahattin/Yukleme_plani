@@ -26,7 +26,7 @@ function hh_defaults(): array
 {
     // v481: yeni hesap BOŞ açılır (örnek veri yok); patron kendi değerlerini girer.
     return ['model' => HH_MODEL_V4, 'product' => '', 'sheet_date' => date('Y-m-d'), 'sale_kg' => null, 'sale_price' => null,
-        'currency' => 'USD', 'rate' => null, 'price_in_fx' => true, 'raw_price' => null, 'freight' => null, 'freight_in_fx' => false,
+        'currency' => 'USD', 'rate' => null, 'price_in_fx' => true, 'raw_price' => null, 'freight' => null, 'freight_in_fx' => false, 'freight_currency' => 'TRY', 'freight_rate' => null,
         'material_kg' => null, 'docs' => null, 'other_kg' => null, 'other_kg_basis' => 'net', 'other_fixed' => null,
         'yield_pct' => null, 'byproduct_income' => null, 'commission_pct' => null, 'target_margin' => null];
 }
@@ -154,7 +154,7 @@ function hh_compute_v4(array $n): array
     $material = $s * $n['material_kg'];
     $otherBase = $n['other_kg_basis'] === 'raw' ? $rawKg : $s;   // 'raw' yalnız v479 eski kayıtları için
     $otherKg = $otherBase * $n['other_kg'];
-    $freightTl = $n['freight_in_fx'] ? $n['freight'] * $n['rate'] : $n['freight'];
+    $freightTl = $n['freight'] * $n['freight_mult'];   // TL ise 1, satış dövizi ise kur, başka döviz ise nakliye kuru
     $fixed = $freightTl + $n['docs'] + $n['other_fixed'];
     $base = $rawCost + $material + $otherKg + $fixed - $n['byproduct_income'];
     $priceTl = $n['price_in_fx'] ? $n['sale_price'] * $n['rate'] : $n['sale_price'];
@@ -195,6 +195,10 @@ function hh_calculate_v4(array $input): array
     if (!in_array($basis, ['net', 'raw'], true)) throw new InvalidArgumentException('Diğer masraf tabanı Net KG veya Ham KG olmalı.');
     $ffx = $input['freight_in_fx'] ?? false;
     if (!in_array($ffx, [true, false, 1, 0, '1', '0'], true)) throw new InvalidArgumentException('Nakliye para birimi seçimi geçersiz.');
+    // v481: nakliye para birimi bağımsız (TL/USD/EUR/RUB/GBP). Eski v480 kaydı: freight_in_fx → satış dövizi.
+    $fc = $input['freight_currency'] ?? null;
+    if ($fc === null || $fc === '') $fc = ($ffx === true || $ffx === 1 || $ffx === '1') ? $currency : 'TRY';
+    if (!is_string($fc) || ($fc !== 'TRY' && !in_array($fc, HH_CURRENCIES, true))) throw new InvalidArgumentException('Nakliye para birimi TL, USD, EUR, RUB veya GBP olmalı.');
     $n = [
         'sale_kg' => hh_num($input['sale_kg'] ?? null, 'Satış net KG'),
         'sale_price' => hh_num_dec($input['sale_price'] ?? null, 'Satış fiyatı', 8),
@@ -208,10 +212,13 @@ function hh_calculate_v4(array $input): array
         'other_kg_basis' => $basis,
         'other_fixed' => hh_num($input['other_fixed'] ?? null, 'Diğer sabit masraf'),
         'yield_pct' => hh_num($input['yield_pct'] ?? null, 'Fire oranı (ihracata kalan)'),
-        'freight_in_fx' => ($ffx === true || $ffx === 1 || $ffx === '1'),
         'byproduct_income' => hh_num($input['byproduct_income'] ?? null, 'Çıkma / suluk satış geliri'),
         'commission_pct' => hh_num($input['commission_pct'] ?? null, 'Komisyon / finansman'),
     ];
+    $frRaw = $input['freight_rate'] ?? null;
+    $freightRate = ($fc === 'TRY' || $fc === $currency || $frRaw === null || $frRaw === '') ? null : hh_num($frRaw, 'Nakliye ' . $fc . ' kuru');
+    if ($fc !== 'TRY' && $fc !== $currency && $n['freight'] > 0 && !($freightRate > 0)) throw new InvalidArgumentException('Nakliye ' . $fc . ' kuru sıfırdan büyük olmalı.');
+    $n['freight_mult'] = $fc === 'TRY' ? 1.0 : ($fc === $currency ? $n['rate'] : (float)$freightRate);
     if ($n['commission_pct'] >= 100) throw new InvalidArgumentException('Komisyon / finansman %100\'ün altında olmalı.');
     if ($n['sale_kg'] <= 0) throw new InvalidArgumentException('Satış net KG sıfırdan büyük olmalı.');
     if ($n['rate'] <= 0) throw new InvalidArgumentException($currency . ' kuru sıfırdan büyük olmalı.');
@@ -229,7 +236,7 @@ function hh_calculate_v4(array $input): array
         'currency' => $currency, 'rate' => $n['rate'], 'price_in_fx' => $n['price_in_fx'], 'raw_price' => $n['raw_price'],
         'freight' => $n['freight'], 'material_kg' => $n['material_kg'], 'docs' => $n['docs'], 'other_kg' => $n['other_kg'],
         'other_kg_basis' => $basis, 'other_fixed' => $n['other_fixed'], 'yield_pct' => $n['yield_pct'], 'target_margin' => $n['target_margin'],
-        'freight_in_fx' => $n['freight_in_fx'], 'byproduct_income' => $n['byproduct_income'], 'commission_pct' => $n['commission_pct'],
+        'freight_currency' => $fc, 'freight_rate' => $freightRate, 'freight_in_fx' => $fc === $currency, 'byproduct_income' => $n['byproduct_income'], 'commission_pct' => $n['commission_pct'],
         'results' => $r, 'total' => round($r['total'], 2), 'unit_cost' => round($r['unit_cost'], 6)];
 }
 
@@ -260,7 +267,7 @@ function hh_form_input(array $input): array
     $safe = [];
     foreach (['product', 'sheet_date', 'sale_kg', 'sale_price', 'currency', 'rate', 'price_in_fx', 'raw_price', 'freight',
         'material_kg', 'docs', 'other_kg', 'other_kg_basis', 'other_fixed', 'waste_pct', 'yield_pct', 'target_margin',
-        'freight_in_fx', 'byproduct_income', 'commission_pct'] as $k) {
+        'freight_in_fx', 'freight_currency', 'freight_rate', 'byproduct_income', 'commission_pct'] as $k) {
         if (isset($input[$k]) && (is_string($input[$k]) || is_int($input[$k]) || is_float($input[$k]) || is_bool($input[$k]))) $safe[$k] = $input[$k];
     }
     return ['model' => (($input['model'] ?? null) === HH_MODEL ? HH_MODEL : HH_MODEL_V4)] + $safe;

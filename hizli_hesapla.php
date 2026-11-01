@@ -125,8 +125,9 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
         <label class="hh-row"><span>Nakliye bedeli (TL)</span><input data-hh="freight" type="text" inputmode="decimal" autocomplete="off"></label>
         <?php else: ?>
         <div class="hh-row hh-row-basis"><label for="hhFreight"><span>Nakliye bedeli</span></label>
-            <select data-hh="freight_cur" class="hh-basis" aria-label="Nakliye para birimi"><option value="tl">TL</option><option value="fx">USD</option></select>
+            <select data-hh="freight_cur" class="hh-basis" aria-label="Nakliye para birimi"><option value="TRY">TL</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option><option value="GBP">GBP</option></select>
             <input id="hhFreight" data-hh="freight" type="text" inputmode="decimal" autocomplete="off"></div>
+        <label class="hh-row" id="hhFreightRateRow" hidden><span id="hhFreightRateLbl">Nakliye kuru (TL)</span><input data-hh="freight_rate" type="text" inputmode="decimal" autocomplete="off"></label>
         <?php endif; ?>
         <label class="hh-row"><span>Malzeme gideri (<?= $model === HH_MODEL ? 'TL/kg' : 'TL/net kg' ?>)</span><input data-hh="material_kg" type="text" inputmode="decimal" autocomplete="off"></label>
         <label class="hh-row"><span>Evrak masrafları (TL)</span><input data-hh="docs" type="text" inputmode="decimal" autocomplete="off"></label>
@@ -136,14 +137,16 @@ $cfg = ['model' => $model, 'donusum' => $donusum, 'document' => $document, 'read
         <label class="hh-row"><span>Fire oranı (%)</span><input data-hh="waste_pct" type="text" inputmode="decimal" autocomplete="off"></label>
         <?php else: ?>
         <label class="hh-row"><span>Fire oranı (%)</span><input data-hh="fire_pct" type="text" inputmode="decimal" autocomplete="off"></label>
-        <label class="hh-row"><span>Çıkma / suluk satış geliri (TL)</span><input data-hh="byproduct_income" type="text" inputmode="decimal" autocomplete="off"></label>
+        <?php if ((float)($document['byproduct_income'] ?? 0) > 0): /* v481: alan kaldırıldı; eski v480 kaydındaki değer korunur */ ?>
+        <label class="hh-row"><span>Çıkma / suluk satış geliri (TL) — eski kayıt</span><input data-hh="byproduct_income" type="text" inputmode="decimal" autocomplete="off"></label>
+        <?php endif; ?>
         <label class="hh-row"><span>Komisyon / finansman (% satış)</span><input data-hh="commission_pct" type="text" inputmode="decimal" autocomplete="off"></label>
         <?php endif; ?>
         <p class="hh-hint" id="hhRawInfo"></p>
         <?php if ($model === HH_MODEL): ?>
         <p class="hh-hint hh-legacy">Eski model (Ham/Net masraf tabanı yok). <?= $cfg['id'] ? '<a href="hizli_hesapla.php?id=' . (int)$cfg['id'] . '&amp;yeni=1">Yeni modelle kopyala</a> (fire aynı kalır, yeni kayıt açılır).' : '' ?></p>
         <?php else: ?>
-        <p class="hh-hint">Fire = ihracata çıkmayan tüm pay. Çıkma / suluk geliri girilirse maliyetten düşülür.</p>
+        <p class="hh-hint">Fire = ihracata çıkmayan tüm pay.</p>
         <?php endif; ?>
     </section>
 

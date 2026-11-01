@@ -59,3 +59,8 @@ Döviz seçenekleri USD, EUR, RUB, GBP (kurlar ayrı saklanır). Hedef marj alt�
 - Nakliye TL ya da seçili döviz (× kur). Çıkma / suluk satış geliri toplamdan düşülür (giderleri aşamaz).
 - Komisyon / finansman % satış: komisyon = satış × k; başabaş TL/kg = (toplam − komisyon)/net kg ÷ (1 − k); önerilen = ÷ (1 − k − hedef marj).
   Örnek: k %5 → toplam 665.000 TL, başabaş 0,6421 USD/kg, %20 hedefle 0,8133 USD/kg (bu fiyatta gerçek marj tam %20).
+
+## v481 — nakliye dövizi, çıkma/suluk kaldırıldı, 2 ondalık
+- Nakliye para birimi TL/USD/EUR/RUB/GBP (`freight_currency`). Satış dövizindeyse satış kuru; başka dövizdeyse ayrı nakliye kuru (`freight_rate`, nakliye > 0 ise zorunlu). `freight_tl = freight × freight_mult` (PHP ↔ JS aynı). Eski v480 kaydı `freight_in_fx` ile okunur.
+- Çıkma / suluk satış geliri alanı ekrandan kaldırıldı; eski kayıtta değer varsa "eski kayıt" etiketiyle görünür, toplam değişmez.
+- Kg fiyatları (maliyet, başabaş, girilen, önerilen) TL ve dövizde 2 ondalık gösterilir; saklanan değerler yuvarlanmaz.

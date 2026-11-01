@@ -127,7 +127,7 @@ render_flash();
             <article class="qc-record">
                 <a href="<?= $qc_edit ?>?id=<?= (int)$row['id'] ?>"><strong><?= h($row['product']) ?></strong></a><?= $qc_hh ? ' <span class="muted">Hızlı Hesapla</span>' : '' ?>
                 <span><?= h($row['sheet_date']) ?></span>
-                <span><?= h(rtrim(rtrim(number_format((float)$row['net_kg'], 4, ',', '.'), '0'), ',')) ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], 4, ',', '.') ?> TL/kg</span>
+                <span><?= h(rtrim(rtrim(number_format((float)$row['net_kg'], 4, ',', '.'), '0'), ',')) ?> kg · <?= number_format((float)$row['total'], 2, ',', '.') ?> TL · <?= number_format((float)$row['unit_cost'], $qc_hh ? 2 : 4, ',', '.') ?> TL/kg</span>
                 <div class="qc-record-actions">
                     <a class="btn" href="<?= $qc_edit ?>?id=<?= (int)$row['id'] ?>"><?= $can_write ? 'Düzenle' : 'Aç' ?></a>
                     <?php if ($can_write): ?><a class="btn" href="<?= $qc_edit ?>?id=<?= (int)$row['id'] ?>&amp;copy=1">Kopyala</a><?php endif; ?>
