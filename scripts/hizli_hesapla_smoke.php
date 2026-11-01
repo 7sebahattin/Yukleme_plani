@@ -130,6 +130,20 @@ $loss = hh_calculate(sample(['sale_price' => '0,40']))['results']; check($loss['
 $a = hh_calculate(sample(['freight' => '0', 'docs' => '0']))['results']; near($r['total'] - $a['total'], 20000, 1e-6, 'sabit giderler bir kez');
 near(hh_calculate(sample(['target_margin' => '30']))['results']['suggested_tl'], $r['unit_cost'] / 0.7, 1e-9, 'marj 30');
 check(hh_calculate(sample(['target_margin' => '']))['results']['suggested_fx'] === null, 'hedef marj boşsa öneri uydurulmaz');
+// 5b) v481 alanları: nakliye döviz, çıkma/suluk geliri, komisyon/finansman
+$fx = hh_calculate(sample(['freight' => '300', 'freight_in_fx' => true]))['results'];
+near($fx['freight_tl'], 15000, 1e-9, 'nakliye 300 USD × 50'); near($fx['total'], 610000, 1e-6, 'döviz nakliye aynı toplam');
+$by = hh_calculate(sample(['byproduct_income' => '50.000']))['results'];
+near($by['total'], 560000, 1e-6, 'çıkma/suluk geliri düşülür'); near($by['unit_cost'], 28, 1e-9, 'gelirli kg maliyeti');
+fails(fn() => hh_calculate(sample(['byproduct_income' => '999.999'])), 'giderlerden büyük', 'gelir giderleri aşamaz');
+$ko = hh_calculate(sample(['commission_pct' => '5']))['results'];
+near($ko['commission'], 55000, 1e-6, 'komisyon %5 satıştan'); near($ko['total'], 665000, 1e-6, 'komisyon toplama eklenir');
+near($ko['breakeven_tl'], 30.5 / 0.95, 1e-9, 'başabaş komisyonu karşılar'); near($ko['suggested_tl'], 30.5 / 0.75, 1e-9, 'öneri = maliyet/(1−komisyon−marj)');
+$pr = $ko['suggested_tl'] * 20000; near(($pr - ($ko['base_total'] + $pr * 0.05)) / $pr * 100, 20, 1e-9, 'önerilen fiyatla gerçek marj tam %20');
+fails(fn() => hh_calculate(sample(['commission_pct' => '85'])), 'komisyon', 'marj + komisyon ≥ %100');
+fails(fn() => hh_calculate(sample(['commission_pct' => '100', 'target_margin' => ''])), 'Komisyon', 'komisyon %100');
+fails(fn() => hh_calculate(sample(['freight_in_fx' => 'evet'])), 'Nakliye', 'nakliye para birimi değeri');
+$d = hh_defaults(); check($d['sale_kg'] === null && $d['rate'] === null && $d['yield_pct'] === null && $d['target_margin'] === null && $d['raw_price'] === null, 'yeni hesap boş açılır (örnek veri yok)');
 // 6) Geçersiz giriş
 fails(fn() => hh_calculate(sample(['yield_pct' => '0'])), 'Fire', 'ihracata kalan 0 (fire %100)');
 fails(fn() => hh_calculate(sample(['yield_pct' => ''])), 'Fire', 'ihracata kalan boş');
@@ -176,6 +190,7 @@ $v2Saved = quick_cost_save(db(), $v2); check(quick_cost_is_v2($v2Saved['document
 
 // 10) Sayfa: açma, kaydetme, yetki, CSRF, depo
 $p = page('hh'); check($p['status'] === 200 && str_contains($p['html'], 'Hızlı Hesapla') && !str_contains($p['html'], 'Hesapla</button>'), 'yeni sayfa açılır, hesapla düğmesi yok');
+check(!str_contains($p['html'], 'data-hh="other_kg_basis"') && str_contains($p['html'], 'data-hh="freight_cur"') && str_contains($p['html'], 'data-hh="byproduct_income"') && str_contains($p['html'], 'data-hh="commission_pct"') && str_contains($p['html'], '"sale_kg":null'), 'Net/Ham seçimi yok, yeni 3 alan var, boş açılış');
 check(!str_contains($p['html'], 'Örnek değerdir') && str_contains($p['html'], '<option value="GBP">'), 'örnek açıklama yazısı yok, RUB/GBP seçeneği var');
 check(str_contains($p['html'], 'id="hhSave"') && str_contains($p['html'], 'id="hhShare"'), 'Kaydet/Paylaş düğmeleri');
 $payload = fn(array $d) => ['payload' => json_encode($d), 'version' => '0', 'csrf' => 'anonymous-csrf'];
@@ -197,7 +212,8 @@ $view = page('hh'); check($view['status'] === 200 && str_contains($view['html'],
 $testPermissions = ['read', 'write', 'delete'];
 $rid = (int)db()->query("SELECT id FROM quick_cost_sheets WHERE product='TEST HESAP'")->fetchColumn();
 check($rid > 0 && page('hh', ['id' => (string)$rid])['status'] === 200, 'listeden açılır');
-check(str_contains(page('hh', ['id' => (string)$rid])['html'], 'name="hhNone"') === false && str_contains(page('hh', ['id' => (string)$rid])['html'], 'data-hh="other_kg_basis"'), 'Ham/Net seçimi yalnız model 4 sayfasında');
+$hamPage = page('hh', ['id' => (string)$rid])['html'];
+check(!str_contains($hamPage, 'data-hh="other_kg_basis"') && str_contains($hamPage, 'ham kg (eski kayıt)') && str_contains($hamPage, '"other_kg_basis":"raw"'), 'eski v479 Ham KG kaydı korunur ve etiketle belirtilir (seçim yok)');
 // ESKİ model 3 kaydı: kendi alanlarıyla açılır, Yeni randıman modeliyle kopyala bağlantısı var; kayıt modeli korunur
 $rid3 = (int)$old3['id'];
 $p3 = page('hh', ['id' => (string)$rid3]); check($p3['status'] === 200 && str_contains($p3['html'], 'data-hh="waste_pct"') && !str_contains($p3['html'], 'data-hh="fire_pct"') && !str_contains($p3['html'], 'data-hh="other_kg_basis"'), 'model 3 sayfası fire alanıyla açılır');

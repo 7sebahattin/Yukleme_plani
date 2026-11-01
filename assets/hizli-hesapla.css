@@ -57,3 +57,4 @@ html[data-theme="dark"] .hh-btn-main{color:#0b1b38}
 .hh-row-basis .hh-basis{flex:0 0 84px;width:84px;min-height:44px;padding:4px 6px;font-size:14px}
 .hh-legacy{background:var(--hh-soft);border:1px solid var(--hh-line);border-radius:8px;padding:6px 8px}
 @media (max-width:360px){.hh-row-basis .hh-basis{flex-basis:74px;width:74px;font-size:13px}}
+.hh-errs.hh-need{background:var(--hh-soft);border-color:var(--hh-line);color:var(--hh-blue-d)}

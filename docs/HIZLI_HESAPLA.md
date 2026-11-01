@@ -52,3 +52,10 @@ Kayıt: `document_json.model=4`, `calc_version=4`, `yield_pct`, `other_kg_basis`
 ## v480 — ekranda Fire
 Model 4 ekranı fire girişi ister: ihracata kalan (`yield_pct`) = 100 − fire; formül ve kayıt alanları değişmedi. Örnek: fire %20 → ihracata kalan %80 → ham 25.000 kg → toplam 610.000 TL. Eski model 3 kopyalanırken `yield_pct = 100 − waste_pct`.
 Döviz seçenekleri USD, EUR, RUB, GBP (kurlar ayrı saklanır). Hedef marj altındaki örnek açıklaması kaldırıldı.
+
+## v480 — sade ekran + 3 alan
+- Yeni hesap boş açılır; eksik zorunlular nötr ipucuyla listelenir.
+- Diğer masraf hep net KG (Net/Ham seçimi kaldırıldı; eski v479 Ham KG kayıtları gizli korunur).
+- Nakliye TL ya da seçili döviz (× kur). Çıkma / suluk satış geliri toplamdan düşülür (giderleri aşamaz).
+- Komisyon / finansman % satış: komisyon = satış × k; başabaş TL/kg = (toplam − komisyon)/net kg ÷ (1 − k); önerilen = ÷ (1 − k − hedef marj).
+  Örnek: k %5 → toplam 665.000 TL, başabaş 0,6421 USD/kg, %20 hedefle 0,8133 USD/kg (bu fiyatta gerçek marj tam %20).
