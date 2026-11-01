@@ -96,8 +96,8 @@
             var p = parseNum(raw[k], label, (m4 && k === 'sale_price') ? 8 : 4);
             if (p.error) { invalid.push(p.error); n[k] = 0; return; }
             n[k] = p.value;
-            if (p.empty && k === 'freight_rate' && n.freight > 0) missing.push(label);
-            if (p.empty && (k === 'sale_kg' || k === 'rate' || k === 'fire_pct')) missing.push(k === 'fire_pct' ? 'Fire oranı (yoksa 0)' : label);
+            // v483: kutular 0 ile açılır; zorunlu olanlar (satış KG, kur, ayrı nakliye kuru) 0/boşken nötr ipucu verir. Fire isteğe bağlı (boş = 0).
+            if (p.value === 0 && ((k === 'freight_rate' && n.freight > 0) || k === 'sale_kg' || k === 'rate')) missing.push(label);
         });
         var tmP = parseNum(raw.target_margin, LABELS.target_margin);
         if (tmP.error) { invalid.push(tmP.error); n.target_margin = null; }
@@ -219,17 +219,17 @@
     var NUMERIC = ['sale_kg', 'sale_price', 'raw_price', 'freight', 'freight_rate', 'material_kg', 'docs', 'other_kg', 'other_fixed', 'waste_pct', 'fire_pct', 'byproduct_income', 'commission_pct', 'target_margin'];
     NUMERIC.forEach(function (k) {
         if (!el[k]) return;
-        el[k].value = doc[k] === null || doc[k] === undefined ? '' : fmtInput(doc[k], k === 'sale_price' ? 2 : 0, k === 'sale_price' ? 8 : 4);
+        el[k].value = doc[k] === null || doc[k] === undefined ? (k === 'target_margin' ? '' : '0') : fmtInput(doc[k], k === 'sale_price' ? 2 : 0, k === 'sale_price' ? 8 : 4);
     });
     if (el.fire_pct) {   // kayıtlı değer yield_pct'tir; ekranda fire = 100 − randıman
         var yv = parseFloat(doc.yield_pct);
-        el.fire_pct.value = (doc.yield_pct === null || doc.yield_pct === undefined || doc.yield_pct === '' || !isFinite(yv)) ? '' : fmtInput(Math.round((100 - yv) * 1e4) / 1e4, 0, 4);
+        el.fire_pct.value = (doc.yield_pct === null || doc.yield_pct === undefined || doc.yield_pct === '' || !isFinite(yv)) ? '0' : fmtInput(Math.round((100 - yv) * 1e4) / 1e4, 0, 4);
     }
     if (el.freight_cur) {   // v481: nakliye kendi para biriminde; eski v480 kaydında freight_in_fx = satış dövizi
         var fcDoc = doc.freight_currency || ((doc.freight_in_fx === true || doc.freight_in_fx === 1 || doc.freight_in_fx === '1') ? currency : 'TRY');
         el.freight_cur.value = (fcDoc === 'TRY' || CURS.indexOf(fcDoc) >= 0) ? fcDoc : 'TRY';
     }
-    rates[currency] = fmtInput(doc.rate, 2);
+    rates[currency] = typeof doc.rate === 'number' ? fmtInput(doc.rate, 2) : '0';
     el.currency.value = currency;
     el.price_in_fx.checked = doc.price_in_fx === undefined ? false : (doc.price_in_fx === true || doc.price_in_fx === 1 || doc.price_in_fx === '1');
     el.rate.value = rates[currency];
@@ -249,6 +249,20 @@
         var rp = parseNum(el.rate.value, 'Kur'), pp = parseNum(el.sale_price.value, 'Satış fiyatı', MODEL === 4 ? 8 : 4);
         if (rp.error || rp.empty || !(rp.value > 0) || pp.error) return null;
         return { rate: rp.value, price: pp.value };
+    }
+    function isZero(t) { var p = parseNum(t, ''); return !!p.error || p.value === 0; }
+    /** Yazarken binlik ayırıcı: tam kısım 3'lü gruplanır (nokta), ondalık virgülle; yazılan nokta yok sayılır, imleç korunur. */
+    function liveFormat(e) {
+        var v = e.value, caret = e.selectionStart == null ? v.length : e.selectionStart;
+        var sig = 0; for (var i = 0; i < caret; i++) if (/[0-9,]/.test(v.charAt(i))) sig++;
+        var clean = v.replace(/[^0-9,]/g, ''), ci = clean.indexOf(',');
+        if (ci >= 0) clean = clean.slice(0, ci + 1) + clean.slice(ci + 1).replace(/,/g, '');
+        var parts = clean.split(','), ip = parts[0].replace(/^0+(?=\d)/, '');
+        var out = group(ip) + (parts.length > 1 ? ',' + parts[1] : '');
+        if (out === v) return;
+        e.value = out;
+        var pos = 0, cnt = 0; while (pos < out.length && cnt < sig) { if (/[0-9,]/.test(out.charAt(pos))) cnt++; pos++; }
+        try { e.setSelectionRange(pos, pos); } catch (x) { /* number dışı tip değil; yoksay */ }
     }
     function put8(x) { return fmtInput(Math.round(x * 1e8) / 1e8, 2, 8); }
 
@@ -287,16 +301,21 @@
 
     document.querySelectorAll('[data-hh]').forEach(function (e) {
         if (e.type === 'text') {
+            if (e !== el.target_margin && !cfg.readOnly) {
+                e.addEventListener('focus', function () { if (isZero(e.value) && !parseNum(e.value, '').error) { e.value = ''; render(); } });
+                e.addEventListener('input', function () { liveFormat(e); });
+                e.addEventListener('blur', function () { if (e.value.trim() === '') { e.value = '0'; render(); } });
+            }
             e.addEventListener('input', function () { if (e === el.sale_price) pendingTl = null; render(); tryPending(); });
             e.addEventListener('blur', function () {   // geçerli değeri düzgün biçimle; imleç yalnız odak kaybında etkilenir
                 var p = parseNum(e.value, '', e === el.sale_price && MODEL === 4 ? 8 : 4);
-                if (!p.error && !p.empty) e.value = fmtInput(p.value, (e === el.rate || e === el.sale_price) ? 2 : 0, e === el.sale_price && MODEL === 4 ? 8 : 4);
+                if (!p.error && !p.empty) e.value = p.value === 0 ? '0' : fmtInput(p.value, (e === el.rate || e === el.sale_price) ? 2 : 0, e === el.sale_price && MODEL === 4 ? 8 : 4);
             });
         }
     });
     if (el.freight_cur) el.freight_cur.addEventListener('change', function () {
         var fcv = el.freight_cur.value;   // aynı dövizin kuru daha önce satışta girildiyse önerilir
-        if (fcv !== 'TRY' && fcv !== currency && !el.freight_rate.value && rates[fcv]) el.freight_rate.value = rates[fcv];
+        if (fcv !== 'TRY' && fcv !== currency && isZero(el.freight_rate.value) && !isZero(rates[fcv])) el.freight_rate.value = rates[fcv];
         render();
     });
 
@@ -312,10 +331,10 @@
         var old = currency, rpOld = okRatePrice();
         rates[old] = el.rate.value;               // eski dövizin kuru saklanır, yenisine ASLA taşınmaz
         currency = CURS.indexOf(el.currency.value) >= 0 ? el.currency.value : 'USD';
-        el.rate.value = rates[currency];
+        el.rate.value = rates[currency] || '0';
         pendingTl = (el.price_in_fx.checked && rpOld) ? rpOld.price * rpOld.rate : null;
         // nakliye eski satış dövizindeyse artık ayrı kur ister: eski kur önerilir (nakliye tutarı değişmez)
-        if (el.freight_cur && el.freight_cur.value === old && old !== currency && !el.freight_rate.value) el.freight_rate.value = rates[old];
+        if (el.freight_cur && el.freight_cur.value === old && old !== currency && isZero(el.freight_rate.value) && !isZero(rates[old])) el.freight_rate.value = rates[old];
         render();
         tryPending();
     });
