@@ -282,7 +282,7 @@ check(page([], array_merge($deletePost, ['id'=>'999999']), 'list')['status'] ===
 
 // ---- v2 (ham mal / verimlilik) controller akışı ----
 $newForm = page();
-check(str_contains($newForm['html'], 'data-model="2"') && str_contains($newForm['html'], 'assets/hizli-maliyet-v2.js') && str_contains($newForm['html'], '>Hızlı Hesap<') && str_contains($newForm['html'], '>Detaylı Hesap<'), 'new form opens v2 model with Hızlı/Detaylı switch');
+check(str_contains($newForm['html'], 'data-model="2"') && str_contains($newForm['html'], 'assets/hizli-maliyet-v2.js') && !str_contains($newForm['html'], 'Hızlı Hesap') && !str_contains($newForm['html'], 'Detaylı Hesap') && !str_contains($newForm['html'], 'data-qc2-set="method"'), 'new form opens v2 model without Hızlı/Detaylı switch');
 check(str_contains($newForm['html'], '"model":2') && !str_contains($newForm['html'], 'assets/hizli-maliyet.js?'), 'new form config carries v2 document only');
 $v2Doc = quick_page_v2_example();
 $v2Save = page([], postDocument($v2Doc));

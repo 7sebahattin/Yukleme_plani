@@ -334,7 +334,7 @@
         var form = dom.getElementById('qc-form');
         if (!form || form.dataset.model !== '2' || !config || !config.document || form.dataset.qcReady === '1') return null;
         form.dataset.qcReady = '1';
-        var state = clone(config.document), readOnly = !!config.readOnly, dirty = false, submitted = false, latest = null, seq = 0, cleared = null;
+        var state = clone(config.document); state.method = 'detailed'; var readOnly = !!config.readOnly, dirty = false, submitted = false, latest = null, seq = 0, cleared = null;
         var validation = dom.getElementById('qc-validation'), save = dom.getElementById('qc-save'), announce, kbdTimer;
         state.product = upperText(state.product); state.notes = upperText(state.notes);
         function rowNode(code) { return form.querySelector('[data-qc2-row="' + code + '"]'); }

@@ -96,7 +96,7 @@ Satış TL = ihracat KG × fiyat (döviz kuruşuna yuvarlanır) × kur. Kâr = s
 Marj = kâr ÷ satış (markup değil). Başabaş = maliyet ÷ ihracat KG. Hedef marjlı fiyat = başabaş ÷ (1 − marj),
 marj 0 ≤ m < 100. Otomatik kur yok.
 
-## Hızlı / Detaylı
+## Hızlı / Detaylı (v476: yalnız Detaylı; düğmeler kaldırıldı)
 
 Aynı belge, yalnız görünüm (`method` kolonunda saklanır). Hızlı: ürün, ham KG, ihracat KG/verimlilik,
 ham alış, paketleme, malzeme, fabrika gideri, ön nakliye, ihracat nakliyesi, gümrük,
