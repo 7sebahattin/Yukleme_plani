@@ -40,64 +40,84 @@
             suggested_tl: sugTl, suggested_fx: sugTl === null ? null : sugTl / n.rate };
     }
 
+    /** PHP hh_compute_v4 ile BİREBİR aynı işlem sırası (v481: nakliye döviz, çıkma/suluk geliri, komisyon %). */
     function compute4(n) {
         var s = n.sale_kg;
         var rawKg = s / (n.yield_pct / 100);
         var rawCost = rawKg * n.raw_price;
         var material = s * n.material_kg;
-        var otherBase = n.other_kg_basis === 'raw' ? rawKg : s;
+        var otherBase = n.other_kg_basis === 'raw' ? rawKg : s;   // 'raw' yalnız v479 eski kayıtları için
         var otherKg = otherBase * n.other_kg;
-        var fixed = n.freight + n.docs + n.other_fixed;
-        var total = rawCost + material + otherKg + fixed;
-        var unit = total / s;
-        var unitFx = unit / n.rate;
+        var freightTl = n.freight_in_fx ? n.freight * n.rate : n.freight;
+        var fixed = freightTl + n.docs + n.other_fixed;
+        var base = rawCost + material + otherKg + fixed - n.byproduct_income;
         var priceTl = n.price_in_fx ? n.sale_price * n.rate : n.sale_price;
         var priceFx = n.price_in_fx ? n.sale_price : n.sale_price / n.rate;
         var saleTl = n.price_in_fx ? s * n.sale_price * n.rate : s * n.sale_price;
+        var commission = saleTl * n.commission_pct / 100;
+        var total = base + commission;
+        var unit = total / s;
+        var unitFx = unit / n.rate;
         var profit = saleTl - total;
         var margin = saleTl > 0 ? profit / saleTl * 100 : null;
+        var baseUnit = base / s;
+        var beTl = baseUnit / (1 - n.commission_pct / 100);
         var tm = n.target_margin;
-        var sugTl = tm === null ? null : unit / (1 - tm / 100);
-        return { raw_kg: rawKg, raw_cost: rawCost, material_cost: material, other_kg_cost: otherKg, fixed_cost: fixed,
-            total: total, unit_cost: unit, unit_cost_fx: unitFx, price_tl: priceTl, price_fx: priceFx, sale_tl: saleTl,
-            sale_fx: saleTl / n.rate, profit: profit, profit_fx: profit / n.rate, margin_pct: margin, breakeven_fx: unitFx,
+        var sugTl = tm === null ? null : baseUnit / (1 - n.commission_pct / 100 - tm / 100);
+        return { raw_kg: rawKg, raw_cost: rawCost, material_cost: material, other_kg_cost: otherKg,
+            freight_tl: freightTl, fixed_cost: fixed, byproduct_income: n.byproduct_income, base_total: base,
+            commission: commission, total: total, unit_cost: unit, unit_cost_fx: unitFx,
+            price_tl: priceTl, price_fx: priceFx, sale_tl: saleTl, sale_fx: saleTl / n.rate,
+            profit: profit, profit_fx: profit / n.rate, margin_pct: margin,
+            breakeven_tl: beTl, breakeven_fx: beTl / n.rate,
             suggested_tl: sugTl, suggested_fx: sugTl === null ? null : sugTl / n.rate };
     }
 
-    var LABELS = { yield_pct: 'İhracat randımanı', sale_kg: 'Satış net KG', sale_price: 'Satış fiyatı', rate: 'Kur', raw_price: 'Ham mal alış fiyatı',
+    var LABELS = { fire_pct: 'Fire oranı', sale_kg: 'Satış net KG', sale_price: 'Satış fiyatı', rate: 'Kur', raw_price: 'Ham mal alış fiyatı',
         freight: 'Nakliye bedeli', material_kg: 'Malzeme gideri', docs: 'Evrak masrafları', other_kg: 'Diğer masraf',
-        other_fixed: 'Diğer sabit masraf', waste_pct: 'Fire oranı', target_margin: 'Hedef kâr marjı' };
+        other_fixed: 'Diğer sabit masraf', waste_pct: 'Fire oranı', target_margin: 'Hedef kâr marjı',
+        byproduct_income: 'Çıkma / suluk satış geliri', commission_pct: 'Komisyon / finansman' };
 
-    /** Ham alan metinlerinden doğrulanmış hesap. raw: {model, alan: metin, currency, price_in_fx, other_kg_basis}. */
+    /**
+     * Ham alan metinlerinden doğrulanmış hesap. raw: {model, alan: metin, currency, price_in_fx, freight_in_fx, other_kg_basis}.
+     * missing = boş bırakılmış zorunlu alanlar (nötr ipucu), invalid = hatalı giriş (kırmızı). errors = ikisinin birleşimi.
+     */
     function calculate(raw) {
-        var errors = [], n = {}, m4 = raw.model !== 3;
-        var keys = ['sale_kg', 'sale_price', 'rate', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_fixed', m4 ? 'yield_pct' : 'waste_pct'];
+        var invalid = [], missing = [], n = {}, m4 = raw.model !== 3;
+        var keys = ['sale_kg', 'sale_price', 'rate', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_fixed', m4 ? 'fire_pct' : 'waste_pct'];
+        if (m4) keys.push('byproduct_income', 'commission_pct');
         keys.forEach(function (k) {
             var label = k === 'rate' ? raw.currency + ' kuru' : LABELS[k];
             var p = parseNum(raw[k], label, (m4 && k === 'sale_price') ? 8 : 4);
-            if (p.error) { errors.push(p.error); n[k] = 0; return; }
+            if (p.error) { invalid.push(p.error); n[k] = 0; return; }
             n[k] = p.value;
-            if (p.empty && (k === 'sale_kg' || k === 'rate')) errors.push(label + ': değer girin.');
-            if (p.empty && k === 'yield_pct') errors.push('İhracat randımanı girin (%0\'dan büyük, en çok %100).');
+            if (p.empty && (k === 'sale_kg' || k === 'rate' || k === 'fire_pct')) missing.push(k === 'fire_pct' ? 'Fire oranı (yoksa 0)' : label);
         });
         var tmP = parseNum(raw.target_margin, LABELS.target_margin);
-        if (tmP.error) { errors.push(tmP.error); n.target_margin = null; }
+        if (tmP.error) { invalid.push(tmP.error); n.target_margin = null; }
         else n.target_margin = tmP.empty ? null : tmP.value;
         n.price_in_fx = !!raw.price_in_fx;
         if (m4) {
             n.other_kg_basis = raw.other_kg_basis === 'raw' ? 'raw' : 'net';
+            n.freight_in_fx = !!raw.freight_in_fx;
             n.model = 4;
+            // Fire = ihracata çıkmayan pay; ihracata KALAN (randıman) = 100 − fire. Saklanan/hesaplanan değer yield_pct.
+            n.yield_pct = Math.round((100 - n.fire_pct) * 1e4) / 1e4;
         } else n.model = 3;
-        if (!errors.length) {
-            if (!(n.sale_kg > 0)) errors.push('Satış net KG sıfırdan büyük olmalı.');
-            if (!(n.rate > 0)) errors.push(raw.currency + ' kuru sıfırdan büyük olmalı.');
+        if (!invalid.length && !missing.length) {
+            if (!(n.sale_kg > 0)) invalid.push('Satış net KG sıfırdan büyük olmalı.');
+            if (!(n.rate > 0)) invalid.push(raw.currency + ' kuru sıfırdan büyük olmalı.');
             if (m4) {
-                if (!(n.yield_pct > 0 && n.yield_pct <= 100)) errors.push('İhracat randımanı girin: %0\'dan büyük, en çok %100 olmalı.');
-            } else if (n.waste_pct >= 100) errors.push('Fire oranı %100\'ün altında olmalı.');
-            if (n.target_margin !== null && n.target_margin >= 100) errors.push('Hedef kâr marjı %100\'ün altında olmalı.');
+                if (!(n.fire_pct >= 0 && n.fire_pct < 100)) invalid.push('Fire oranı %0 ile %100 arasında olmalı (%100 hariç).');
+                if (n.commission_pct >= 100) invalid.push('Komisyon / finansman %100\'ün altında olmalı.');
+                else if (n.target_margin !== null && n.target_margin < 100 && n.target_margin + n.commission_pct >= 100) invalid.push('Hedef kâr marjı + komisyon %100\'ün altında olmalı.');
+            } else if (n.waste_pct >= 100) invalid.push('Fire oranı %100\'ün altında olmalı.');
+            if (n.target_margin !== null && n.target_margin >= 100) invalid.push('Hedef kâr marjı %100\'ün altında olmalı.');
         }
-        if (errors.length) return { ok: false, errors: errors };
-        return { ok: true, n: n, r: m4 ? compute4(n) : compute(n) };
+        if (invalid.length || missing.length) return { ok: false, invalid: invalid, missing: missing, errors: invalid.concat(missing.map(function (x) { return x + ': değer girin.'; })) };
+        var r = m4 ? compute4(n) : compute(n);
+        if (m4 && r.base_total < 0) return { ok: false, invalid: ['Çıkma / suluk satış geliri toplam giderlerden büyük olamaz.'], missing: [], errors: ['Çıkma / suluk satış geliri toplam giderlerden büyük olamaz.'] };
+        return { ok: true, n: n, r: r };
     }
 
     function group(intStr) { return intStr.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
@@ -136,6 +156,7 @@
             : fmt(r.suggested_fx, 4) + ' ' + cur + '/kg (' + fmt(r.suggested_tl, 4) + ' TL/kg)';
         v.rawInfo = 'Gerekli ham mal: ' + fmt(r.raw_kg, 0) + ' kg';
         v.rawKg = fmt(r.raw_kg, 0) + ' kg';
+        if (n.model === 4) v.rawInfo += ' · İhracata kalan: %' + fmt(n.yield_pct, 2);
         v.share = shareText(n, r, cur, name, v);
         return v;
     }
@@ -144,14 +165,19 @@
         var L = ['HIZLI HESAPLA' + (name ? ' — ' + name : '')];
         L.push('Satış net KG: ' + fmt(n.sale_kg, 0) + ' kg');
         if (n.model === 4) {
-            L.push('İhracat randımanı: %' + fmt(n.yield_pct, 2));
+            L.push('Fire oranı: %' + fmt(n.fire_pct, 2) + ' (ihracata kalan %' + fmt(n.yield_pct, 2) + ')');
             L.push('Gerekli ham mal: ' + v.rawKg);
         }
-        L.push('Döviz / kur: ' + cur + ' · 1 ' + cur + ' = ' + fmt(n.rate, 2) + ' TL');
+        L.push('Döviz / kur: ' + cur + ' · 1 ' + cur + ' = ' + fmtInput(n.rate, 2) + ' TL');   // kur 4 ondalığa kadar (RUB 0,6543 gibi) kırpılmaz
         L.push('Satış fiyatı: ' + v.entered);
         L.push('Toplam maliyet: ' + v.total + ' ' + v.total_fx);
         L.push('Net kg maliyeti: ' + v.unit + ' ' + v.unit_fx);
-        if (n.model === 4) L.push('Not: yan ürün geliri düşülmemiş tahmini ihracat maliyeti');
+        if (n.model === 4) {
+            if (n.freight_in_fx && n.freight > 0) L.push('Nakliye: ' + fmtInput(n.freight, 2) + ' ' + cur + ' (' + fmt(r.freight_tl, 2) + ' TL)');
+            if (n.byproduct_income > 0) L.push('Çıkma / suluk geliri düşüldü: ' + fmt(n.byproduct_income, 2) + ' TL');
+            else L.push('Not: çıkma / suluk geliri düşülmedi');
+            if (n.commission_pct > 0) L.push('Komisyon / finansman %' + fmt(n.commission_pct, 2) + ': ' + fmt(r.commission, 2) + ' TL');
+        }
         L.push('Satış toplamı: ' + v.sale + ' ' + v.sale_fx);
         L.push((v.loss ? 'Zarar: ' : 'Kâr: ') + v.profit + ' ' + v.profit_fx);
         L.push('Kâr marjı: ' + v.margin);
@@ -174,17 +200,24 @@
     var el = {}; document.querySelectorAll('[data-hh]').forEach(function (e) { el[e.getAttribute('data-hh')] = e; });
     var out = {}; document.querySelectorAll('[data-hh-out]').forEach(function (e) { out[e.getAttribute('data-hh-out')] = e; });
     var $ = function (id) { return document.getElementById(id); };
-    var rates = { USD: '', EUR: '' };
-    var currency = doc.currency === 'EUR' ? 'EUR' : 'USD';
+    var CURS = ['USD', 'EUR', 'RUB', 'GBP'];
+    var rates = { USD: '', EUR: '', RUB: '', GBP: '' };
+    var currency = CURS.indexOf(doc.currency) >= 0 ? doc.currency : 'USD';
     var last = null;
     var pendingTl = null;   // döviz değişti ama yeni kur henüz yok: korunacak TL/kg satış fiyatı
+    var pendingFreightTl = null;   // aynı durum: döviz cinsinden girilmiş nakliyenin TL karşılığı
+    var OTHER_BASIS = doc.other_kg_basis === 'raw' ? 'raw' : 'net';   // v481: ekranda seçim yok (net); eski v479 kaydı korunur
 
-    var NUMERIC = ['sale_kg', 'sale_price', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_fixed', 'waste_pct', 'yield_pct', 'target_margin'];
+    var NUMERIC = ['sale_kg', 'sale_price', 'raw_price', 'freight', 'material_kg', 'docs', 'other_kg', 'other_fixed', 'waste_pct', 'fire_pct', 'byproduct_income', 'commission_pct', 'target_margin'];
     NUMERIC.forEach(function (k) {
         if (!el[k]) return;
         el[k].value = doc[k] === null || doc[k] === undefined ? '' : fmtInput(doc[k], k === 'sale_price' ? 2 : 0, k === 'sale_price' ? 8 : 4);
     });
-    if (el.other_kg_basis) el.other_kg_basis.value = doc.other_kg_basis === 'raw' ? 'raw' : 'net';
+    if (el.fire_pct) {   // kayıtlı değer yield_pct'tir; ekranda fire = 100 − randıman
+        var yv = parseFloat(doc.yield_pct);
+        el.fire_pct.value = (doc.yield_pct === null || doc.yield_pct === undefined || doc.yield_pct === '' || !isFinite(yv)) ? '' : fmtInput(Math.round((100 - yv) * 1e4) / 1e4, 0, 4);
+    }
+    if (el.freight_cur) el.freight_cur.value = (doc.freight_in_fx === true || doc.freight_in_fx === 1 || doc.freight_in_fx === '1') ? 'fx' : 'tl';
     rates[currency] = fmtInput(doc.rate, 2);
     el.currency.value = currency;
     el.price_in_fx.checked = doc.price_in_fx === undefined ? true : (doc.price_in_fx === true || doc.price_in_fx === 1 || doc.price_in_fx === '1');
@@ -192,8 +225,9 @@
     if (cfg.readOnly) Object.keys(el).forEach(function (k) { el[k].disabled = true; });
 
     function raw() {
-        var r = { model: MODEL, currency: currency, price_in_fx: el.price_in_fx.checked };
-        Object.keys(el).forEach(function (k) { if (k !== 'currency' && k !== 'price_in_fx') r[k] = el[k].value; });
+        var r = { model: MODEL, currency: currency, price_in_fx: el.price_in_fx.checked, other_kg_basis: OTHER_BASIS,
+            freight_in_fx: !!(el.freight_cur && el.freight_cur.value === 'fx') };
+        Object.keys(el).forEach(function (k) { if (k !== 'currency' && k !== 'price_in_fx' && k !== 'freight_cur') r[k] = el[k].value; });
         return r;
     }
     function setText(key, text) { if (out[key]) out[key].textContent = text; }
@@ -210,11 +244,14 @@
     function render() {
         $('hhRateLabel').textContent = currency + ' kuru (TL)';
         $('hhPriceHint').textContent = 'Satış fiyatı ' + (el.price_in_fx.checked ? currency + '/kg' : 'TL/kg') + ' olarak yorumlanır.';
+        if (el.freight_cur) el.freight_cur.querySelector('option[value="fx"]').textContent = currency;
         var c = calculate(raw()), errs = $('hhErrs');
         last = c;
         if (!c.ok) {
             errs.hidden = false; errs.innerHTML = '';
-            var list = c.errors.slice();
+            var list = c.invalid.slice();
+            if (c.missing.length) list.push('Girilecek: ' + c.missing.join(', '));
+            errs.classList.toggle('hh-need', !c.invalid.length && pendingTl === null);   // yalnız eksik alan: nötr ipucu, kırmızı değil
             if (pendingTl !== null) list.unshift(currency + ' kurunu girin; satış fiyatının TL karşılığı (' + fmt(pendingTl, 4) + ' TL/kg) korunarak ' + currency + ' fiyatı hesaplanacak.');
             list.forEach(function (m) { var d = document.createElement('div'); d.textContent = m; errs.appendChild(d); });
             Object.keys(out).forEach(function (k) { out[k].textContent = (k.slice(-3) === '_fx') ? '' : '—'; });
@@ -233,14 +270,14 @@
 
     document.querySelectorAll('[data-hh]').forEach(function (e) {
         if (e.type === 'text') {
-            e.addEventListener('input', function () { if (e === el.sale_price) pendingTl = null; render(); tryPending(); });
+            e.addEventListener('input', function () { if (e === el.sale_price) pendingTl = null; if (e === el.freight) pendingFreightTl = null; render(); tryPending(); });
             e.addEventListener('blur', function () {   // geçerli değeri düzgün biçimle; imleç yalnız odak kaybında etkilenir
                 var p = parseNum(e.value, '', e === el.sale_price && MODEL === 4 ? 8 : 4);
                 if (!p.error && !p.empty) e.value = fmtInput(p.value, (e === el.rate || e === el.sale_price) ? 2 : 0, e === el.sale_price && MODEL === 4 ? 8 : 4);
             });
         }
     });
-    if (el.other_kg_basis) el.other_kg_basis.addEventListener('change', render);
+    if (el.freight_cur) el.freight_cur.addEventListener('change', function () { pendingFreightTl = null; render(); });
 
     /** Fiyat döviz kutusu: satışın TL ekonomik değeri KORUNUR (1,10 USD @ 50 ⇄ 55 TL/kg). Kur yoksa değişiklik geri alınır. */
     el.price_in_fx.addEventListener('change', function () {
@@ -261,19 +298,22 @@
     el.currency.addEventListener('change', function () {
         var old = currency, rpOld = okRatePrice();
         rates[old] = el.rate.value;               // eski dövizin kuru saklanır, yenisine ASLA taşınmaz
-        currency = el.currency.value === 'EUR' ? 'EUR' : 'USD';
+        currency = CURS.indexOf(el.currency.value) >= 0 ? el.currency.value : 'USD';
         el.rate.value = rates[currency];
         pendingTl = (el.price_in_fx.checked && rpOld) ? rpOld.price * rpOld.rate : null;
+        var fp = parseNum(el.freight.value, 'Nakliye');   // döviz cinsinden nakliye de TL değeri korunarak çevrilir
+        pendingFreightTl = (el.freight_cur && el.freight_cur.value === 'fx' && rpOld && !fp.error && !fp.empty) ? fp.value * rpOld.rate : null;
         render();
         tryPending();
     });
     el.rate.addEventListener('input', function () { rates[currency] = el.rate.value; tryPending(); });
     function tryPending() {
-        if (pendingTl === null) return;
-        var rp = okRatePrice(); if (!rp) return;
-        el.sale_price.value = put8(pendingTl / rp.rate);
-        status('Satış fiyatı ' + currency + ' kuruna göre güncellendi (TL değeri korundu).');
-        pendingTl = null;
+        if (pendingTl === null && pendingFreightTl === null) return;
+        var rp = parseNum(el.rate.value, 'Kur'); if (rp.error || rp.empty || !(rp.value > 0)) return;
+        if (pendingTl !== null) el.sale_price.value = put8(pendingTl / rp.value);
+        if (pendingFreightTl !== null) el.freight.value = fmtInput(Math.round(pendingFreightTl / rp.value * 100) / 100, 0, 4);
+        status('Fiyatlar ' + currency + ' kuruna göre güncellendi (TL değeri korundu).');
+        pendingTl = null; pendingFreightTl = null;
         render();
     }
 
@@ -295,7 +335,10 @@
             sale_kg: n.sale_kg, sale_price: n.sale_price, currency: currency, rate: n.rate, price_in_fx: n.price_in_fx,
             raw_price: n.raw_price, freight: n.freight, material_kg: n.material_kg, docs: n.docs, other_kg: n.other_kg,
             other_fixed: n.other_fixed, target_margin: n.target_margin };
-        if (MODEL === 4) { pl.yield_pct = n.yield_pct; pl.other_kg_basis = n.other_kg_basis; } else pl.waste_pct = n.waste_pct;
+        if (MODEL === 4) {
+            pl.yield_pct = n.yield_pct; pl.other_kg_basis = n.other_kg_basis; pl.freight_in_fx = n.freight_in_fx;
+            pl.byproduct_income = n.byproduct_income; pl.commission_pct = n.commission_pct;
+        } else pl.waste_pct = n.waste_pct;
         $('hhPayload').value = JSON.stringify(pl);
     });
 
