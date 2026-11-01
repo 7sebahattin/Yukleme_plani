@@ -18,7 +18,7 @@ $qc2_credit = is_array($document['credit'] ?? null) ? $document['credit'] : [];
 $qc2_sale = is_array($document['sale'] ?? null) ? $document['sale'] : [];
 $qc2_md = is_array($document['material_detail'] ?? null) ? $document['material_detail'] : quick_cost_v2_material_defaults();
 $qc2_matlabels = quick_cost_v2_material_lines();
-$qc2_view = ($document['method'] ?? '') === 'detailed' ? 'detailed' : 'quick';
+$qc2_view = 'detailed'; // tek görünüm: Detaylı Hesap (Hızlı Hesap kaldırıldı)
 $qc2_yield = ($document['yield_mode'] ?? '') === 'target' ? 'target' : 'actual';
 $qc2_out = static fn(string $key, string $fallback = '—') => '<strong data-qc2-out="' . h($key) . '">' . h($fallback) . '</strong>';
 $qc2_input = static function (string $path, $value, string $label, array $opt = []) use ($qc2_num, $qc2_dis): string {
@@ -39,13 +39,6 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="version" value="<?= (int)($version ?? 0) ?>">
     <input type="hidden" name="payload" id="qc-payload" value="">
-
-    <div class="qc2-switches">
-        <div class="qc2-seg" role="group" aria-label="Görünüm">
-            <button type="button" data-qc2-set="method" data-value="quick" aria-pressed="<?= $qc2_view === 'quick' ? 'true' : 'false' ?>">Hızlı Hesap</button>
-            <button type="button" data-qc2-set="method" data-value="detailed" aria-pressed="<?= $qc2_view === 'detailed' ? 'true' : 'false' ?>">Detaylı Hesap</button>
-        </div>
-    </div>
 
     <section class="qc-panel"><h2>Temel bilgiler</h2><div class="qc-basics">
         <label for="qc2-product"><span>Ürün adı</span><input id="qc2-product" data-qc2="product" data-qc2-text="150" type="text" maxlength="150" required value="<?= h((string)($document['product'] ?? '')) ?>" autocomplete="off"<?= $qc2_dis ?>></label>
@@ -110,6 +103,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             foreach (($qc2_calc['items'] ?? []) as $calcRow) if (($calcRow['code'] ?? '') === $code) $amount = (float)$calcRow['amount'];
             $hidden = $qc2_view === 'quick' && !$custom && empty($meta['quick']) && $amount == 0.0;
             $sel = $basis . '|' . $unit;
+            $qc2_defkey = isset($qc2_catalog[$code]) ? ($qc2_catalog[$code]['basis'] . '|' . $qc2_catalog[$code]['unit']) : 'fixed|fixed';
         ?>
         <article class="qc-row qc2-row<?= $hidden ? ' qc2-row-hidden' : '' ?>" data-qc2-row="<?= h($code) ?>">
             <div class="qc-row-head"><h3 data-qc2-title><?= h($label) ?></h3><output data-qc2-amount aria-label="<?= h($label) ?> tutarı"><?= number_format($amount, 2, ',', '.') ?> TL</output><?php if ($custom && $can_write): ?><button type="button" class="qc-remove-button" data-qc2-remove aria-label="<?= h($label) ?> kalemini kaldır">Kaldır</button><?php endif; ?></div>
@@ -119,7 +113,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             <details class="qc-row-settings" data-qc2-settings>
                 <summary aria-label="<?= h($label) ?> ayarları">Ayar</summary>
                 <div class="qc-row-fields qc2-row-fields">
-                    <label class="qc2-basis-field"><span>Hesaplama tabanı</span><span class="qc-unit-select"><select data-qc2-item="basis_unit" aria-label="<?= h($label) ?> hesaplama tabanı"<?= $qc2_dis ?>><?php foreach ($qc2_options as $key => $text): ?><option value="<?= h($key) ?>"<?= $sel === $key ? ' selected' : '' ?>><?= h($text) ?></option><?php endforeach; ?></select></span></label>
+                    <label class="qc2-basis-field"><span>Hesaplama tabanı</span><span class="qc-unit-select"><select data-qc2-item="basis_unit" aria-label="<?= h($label) ?> hesaplama tabanı"<?= $qc2_dis ?>><?php foreach ($qc2_options as $key => $text): ?><option value="<?= h($key) ?>"<?= $sel === $key ? ' selected' : '' ?><?= $key === $qc2_defkey ? ' class="qc2-opt-default" style="font-weight:700"' : '' ?>><?= h($text) ?><?= $key === $qc2_defkey ? ' (varsayılan)' : '' ?></option><?php endforeach; ?></select></span></label>
                     <label data-qc2-qty-wrap><span data-qc2-qty-label>Miktar</span><input data-qc2-item="qty" type="text" inputmode="decimal" value="<?= h($qc2_num($basis === 'manual' ? ($item['qty'] ?? 0) : 0)) ?>" autocomplete="off"<?= $qc2_dis ?>></label>
                     <label data-qc2-qty2-wrap><span>Gün</span><input data-qc2-item="qty2" type="text" inputmode="decimal" value="<?= h($qc2_num($item['qty2'] ?? 0)) ?>" autocomplete="off"<?= $qc2_dis ?>></label>
                 </div>
@@ -170,7 +164,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
     </section>
 
     <details class="qc-panel qc2-sale"<?= (float)(is_numeric($qc2_sale['price'] ?? null) ? $qc2_sale['price'] : 0) > 0 ? ' open' : '' ?>>
-        <summary><h2>Satış karşılaştırması <small>(isteğe bağlı)</small></h2></summary>
+        <summary><h2>Satış karşılaştırması</h2></summary>
         <div class="qc2-qty-grid">
             <?= $qc2_input('sale.price', $qc2_sale['price'] ?? 0, 'Satış fiyatı (ihracat net KG başına)') ?>
             <label for="qc2-sale-currency"><span>Para birimi</span><span class="qc-unit-select"><select id="qc2-sale-currency" data-qc2="sale.currency"<?= $qc2_dis ?>><?php foreach (quick_cost_v2_currencies() as $qc2_cur => $qc2_curl): ?><option value="<?= h($qc2_cur) ?>"<?= ($qc2_sale['currency'] ?? 'TL') === $qc2_cur ? ' selected' : '' ?>><?= h($qc2_curl) ?></option><?php endforeach; ?></select></span></label>

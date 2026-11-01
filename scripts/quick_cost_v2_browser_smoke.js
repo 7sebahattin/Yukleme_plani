@@ -41,15 +41,22 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await outText('yield_pct') === '%80,00', name + ' yield %80');
             check(await outText('export_kg') === '20.000', name + ' export kg');
             check((await outText('method_note')).includes('İhtiyatlı'), name + ' prudent method labelled');
-            check(await page.locator('[data-qc2-set="method"][data-value="quick"]').getAttribute('aria-pressed') === 'true', name + ' quick view default');
-            check(await page.locator('[data-qc2-detail]:visible').count() === 0, name + ' quick view hides detailed-only blocks');
-            check(await rowEl('harvest').isHidden() && await rowEl('raw_purchase').isVisible(), name + ' quick view shows essential rows only');
+            check(await page.locator('[data-qc2-set="method"]').count() === 0 && !/Hızlı Hesap|Detaylı Hesap/.test(await page.locator('#qc-form').innerText()), name + ' Hızlı/Detaylı switch removed');
+            check(await rowEl('harvest').isVisible() && await rowEl('raw_purchase').isVisible() && await page.locator('[data-qc2-detail]:visible').count() > 0, name + ' single detailed view: all rows and blocks visible');
+            check(!/isteğe bağlı/i.test(await page.locator('.qc2-sale > summary').innerText()), name + ' sale summary has no "isteğe bağlı"');
+            await rowEl('raw_purchase').locator('summary').click();
+            const cardR = async () => { const c = await rowEl('raw_purchase').boundingBox(), b = await rowEl('raw_purchase').locator('summary').boundingBox(); return { right: c.x + c.width - (b.x + b.width), top: b.y - c.y }; };
+            const sumB1 = await cardR();
+            check(await rowEl('raw_purchase').locator('[data-qc2-item="basis_unit"]').isVisible(), name + ' settings open');
+            const defOpt = await rowEl('raw_purchase').locator('option.qc2-opt-default').evaluate(o => [o.value, o.textContent, getComputedStyle(o).fontWeight]);
+            check(defOpt[0] === 'raw_kg|kg' && /varsayılan/.test(defOpt[1]) && parseInt(defOpt[2], 10) >= 600, name + ' default basis option is bold + marked');
+            await rowEl('raw_purchase').locator('summary').click();
+            const sumB2 = await cardR();
+            check(Math.abs(sumB1.right - sumB2.right) < 2 && Math.abs(sumB1.top - sumB2.top) < 2, name + ' Ayar button does not move when opened');
             check(await page.locator('.qc-page .btn, .qc-workspace .btn, .qc2-seg button, .qc-row-settings summary').evaluateAll(n => n.filter(x => x.offsetParent).every(x => x.getBoundingClientRect().height >= 43.5)), name + ' touch targets >= 44px');
             check(await page.locator('input[inputmode="decimal"]').evaluateAll(n => n.filter(x => x.offsetParent).every(x => parseFloat(getComputedStyle(x).fontSize) >= 16)), name + ' numeric inputs 16px (no iOS zoom)');
             await noOverflow('quick');
 
-            // Detaylı görünüme geçiş veri kaybetmez
-            await page.locator('[data-qc2-set="method"][data-value="detailed"]').click();
             check(await rowEl('harvest').isVisible() && await field('quantities.domestic_kg').inputValue() === '3.000', name + ' detailed shows distribution with data');
             check(await outText('unclassified_kg') === '0 KG', name + ' distribution balanced');
             await field('quantities.waste_kg').fill('1.500'); await blur();
@@ -58,9 +65,7 @@ function check(v, label) { assert.ok(v, label); checks++; }
             await field('quantities.waste_kg').fill('2.001'); await blur();
             check(await outText('total') === '—' && !(await page.locator('#qc-validation').isHidden()) && await page.locator('#qc-save').isDisabled(), name + ' over-distribution blocks save');
             await field('quantities.waste_kg').fill('2.000'); await blur();
-            await page.locator('[data-qc2-set="method"][data-value="quick"]').click();
-            await page.locator('[data-qc2-set="method"][data-value="detailed"]').click();
-            check(await field('quantities.waste_kg').inputValue() === '2.000' && await outText('total') === '713.000,00', name + ' quick/detailed roundtrip keeps values');
+            check(await field('quantities.waste_kg').inputValue() === '2.000' && await outText('total') === '713.000,00', name + ' values kept');
             await noOverflow('detailed');
 
             // Yan ürün kredisi yalnız açıkça seçilince
@@ -162,7 +167,6 @@ function check(v, label) { assert.ok(v, label); checks++; }
 
             // İnceleme bulgusu 1: gizlenen geçersiz miktar alanı formu kilitlememeli.
             await load(pages.saved);
-            await page.locator('[data-qc2-set="method"][data-value="detailed"]').click();
             await rowEl('overhead').locator('summary').click();
             await rowEl('overhead').locator('[data-qc2-item="basis_unit"]').selectOption('manual|pallet');
             await rowEl('overhead').locator('[data-qc2-item="qty"]').fill('-1'); await blur();
@@ -192,8 +196,7 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await page.locator('#qc-payload').inputValue() === '' && (await page.locator('#qc-validation').textContent()).includes('ihracatlık net KG'), name + ' zero export kg is not submitted');
             await load(pages.readonly);
             check(await page.locator('#qc-save').count() === 0 && await field('quantities.raw_kg').isDisabled() && await outText('total') === '713.000,00', name + ' read-only');
-            await page.locator('[data-qc2-set="method"][data-value="detailed"]').click();
-            check(await rowEl('harvest').isVisible(), name + ' read-only can still switch view');
+            check(await rowEl('harvest').isVisible(), name + ' read-only shows the detailed view');
             if (name === 'phone' || name === 'desktop') {
                 await load(pages.saved);
                 await page.screenshot({ path: path.join(out, name + '.png'), fullPage: true });
