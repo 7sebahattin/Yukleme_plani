@@ -143,6 +143,11 @@ $pr = $ko['suggested_tl'] * 20000; near(($pr - ($ko['base_total'] + $pr * 0.05))
 fails(fn() => hh_calculate(sample(['commission_pct' => '85'])), 'komisyon', 'marj + komisyon ≥ %100');
 fails(fn() => hh_calculate(sample(['commission_pct' => '100', 'target_margin' => ''])), 'Komisyon', 'komisyon %100');
 fails(fn() => hh_calculate(sample(['freight_in_fx' => 'evet'])), 'Nakliye', 'nakliye para birimi değeri');
+// v484: kur yalnız dövizli fiyat/nakliye için şart
+$nr = hh_calculate(sample(['rate' => '0', 'price_in_fx' => false, 'sale_price' => '55', 'freight' => '15.000']))['results'];
+near($nr['total'], 610000, 1e-6, 'kur 0, TL fiyat/nakliye: TL hesap'); check($nr['unit_cost_fx'] === null && $nr['sale_fx'] === null && $nr['breakeven_fx'] === null && $nr['breakeven_tl'] > 0, 'kur yokken döviz karşılıkları null');
+fails(fn() => hh_calculate(sample(['rate' => '0', 'price_in_fx' => true])), 'kuru', 'dövizli fiyatta kur şart');
+fails(fn() => hh_calculate(sample(['rate' => '0', 'price_in_fx' => false, 'freight' => '300', 'freight_currency' => 'USD'])), 'kuru', 'satış dövizindeki nakliyede kur şart');
 // v481: nakliye bağımsız para birimi (TL/USD/EUR/RUB/GBP)
 $fu = hh_calculate(sample(['freight' => '300', 'freight_currency' => 'USD']));
 near($fu['results']['freight_tl'], 15000, 1e-9, 'nakliye USD = satış dövizi → satış kuru'); check($fu['freight_currency'] === 'USD' && $fu['freight_rate'] === null, 'satış dövizinde ayrı kur saklanmaz');

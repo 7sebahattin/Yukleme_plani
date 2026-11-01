@@ -7,9 +7,11 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v483` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v484` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 **Rol matrisi (v465):** Roller ekranı sidebar sıralı sayfa/alt başlık satırları ve Gör/Ekle/Düzenle/Sil anahtarları kullanır. Yükleme/Paletleme ve OGL/Siparişler bağımsız; rapor türleri ayrı read/export kapılıdır. Eski roller rol başına genişletilir; ayrıntılı roller yalnız seçilen eylemleri alır. Veri kapsamı rol izinleri yanında seçili depo kodlarıyla saklanır, seçili rol sınırları ve kullanıcı depo atamaları kesişir; admin istisnası korunur. Beyan şirket genelinde, Mail hesap ataması, Hesap kendi/tümü kuralı sürer. Eski günlük snapshot arşivi seçili depo rolünde doğrulanamadığından kapalıdır. Şema/seed migration yok. Detay/test/sınırlar: `docs/ROLES_MATRIX_DELIVERY.md`. Kullanıcı 31 Ekimde bu somut teslimin merge ve canlı testini açıkça onayladı.
+
+**Hızlı Hesapla — v484 (sahip isteği):** Döviz kuru artık YALNIZ gerektiğinde şart: fiyat dövizli işaretliyse ya da nakliye satış dövizindeyse (ve > 0). Aksi halde (TL fiyat + TL nakliye) kur 0 kalabilir; sonuç TL hesaplanır, döviz karşılıkları (`*_fx`) null/boş gösterilir, paylaşımda "Döviz / kur" satırı yoktur. PHP `$fxd` ↔ JS `fxd` AYNI. Kur etiketi gerekmiyorsa "— isteğe bağlı". Eski model 3 kayıtlarında kur şartı AYNEN.
 
 **Hızlı Hesapla — v483 (sahip isteği):** Hedef kâr marjı HARİÇ tüm kutular `0` ile açılır (marj boş). Kutuya odaklanınca 0 temizlenir, boş bırakılıp çıkılınca 0'a döner; yazarken tam kısım binlik noktayla gruplanır (`liveFormat`, imleç korunur; harf/ikinci virgül süzülür, yazılan nokta yok sayılır). **Fire isteğe bağlı** (boş/0 = fire yok, ham = net). Zorunlular (Satış net KG, kur, ayrı nakliye kuru) 0 iken nötr "Girilecek: …" ipucu verir. Yeni hesapta kur kutuları da 0.
 
