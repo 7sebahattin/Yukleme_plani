@@ -191,7 +191,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
             <div><span>İHRACAT VERİMLİLİĞİ</span><?= $qc2_out('yield_pct', $qc2_calc ? '%' . number_format($qc2_calc['derived']['yield_pct'], 2, ',', '.') : '—') ?></div>
             <div class="qc2-kpi-main"><span>İHRACAT NET KG MALİYETİ (TL/kg)</span><?= $qc2_out('unit_cost', $qc2_calc ? number_format($qc2_calc['unit_cost'], 4, ',', '.') : '—') ?></div>
         </div>
-        <p class="qc2-method" data-qc2-out="method_note">İhtiyatlı yöntem: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir.</p>
+        <p class="qc2-method" data-qc2-out="method_note">Çıkma / suluk net geliri düşülmedi: tüm operasyon maliyeti ihracatlık net KG'ye yüklenir.</p>
         <details class="qc2-more">
             <summary>Genişletilmiş sonuçlar</summary>
             <dl>
@@ -203,7 +203,7 @@ $qc2_input = static function (string $path, $value, string $label, array $opt = 
                 <div><dt>Genel ve diğer giderler</dt><dd data-qc2-out="group.other">—</dd></div>
                 <div><dt>Çıkma / suluk net gelir kredisi</dt><dd data-qc2-out="credit_applied">—</dd></div>
                 <div class="qc-grand-total"><dt>İhracata yüklenen tahmini maliyet</dt><dd data-qc2-out="export_cost">—</dd></div>
-                <div><dt>İhtiyatlı maliyet (kredi yok)</dt><dd data-qc2-out="unit_cost_prudent">—</dd></div>
+                <div><dt>Çıkma / suluk net geliri düşülmemiş maliyet (TL/kg)</dt><dd data-qc2-out="unit_cost_prudent">—</dd></div>
             </dl>
         </details>
         <span class="qc-sr-only" data-qc2-out="live" aria-live="polite" aria-atomic="true"></span>

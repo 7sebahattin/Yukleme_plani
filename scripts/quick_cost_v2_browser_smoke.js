@@ -40,7 +40,7 @@ function check(v, label) { assert.ok(v, label); checks++; }
             check(await outText('unit_cost') === '35,6500', name + ' export unit 35,65');
             check(await outText('yield_pct') === '%80,00', name + ' yield %80');
             check(await outText('export_kg') === '20.000', name + ' export kg');
-            check((await outText('method_note')).includes('İhtiyatlı'), name + ' prudent method labelled');
+            check((await outText('method_note')).includes('düşülmedi'), name + ' no-credit method labelled');
             check(await page.locator('[data-qc2-set="method"]').count() === 0 && !/Hızlı Hesap|Detaylı Hesap/.test(await page.locator('#qc-form').innerText()), name + ' Hızlı/Detaylı switch removed');
             check(await rowEl('harvest').isVisible() && await rowEl('raw_purchase').isVisible() && await page.locator('[data-qc2-detail]:visible').count() > 0, name + ' single detailed view: all rows and blocks visible');
             check(!/isteğe bağlı/i.test(await page.locator('.qc2-sale > summary').innerText()), name + ' sale summary has no "isteğe bağlı"');

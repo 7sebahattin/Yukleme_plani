@@ -454,7 +454,7 @@ function quick_cost_v2_calculate(array $input): array
     if ($unclassified4 > 0 && $export4 > 0) $warnings[] = ['code' => 'unclassified', 'text' => quick_cost_v2_kg_text($unclassified4) . ' KG ham ürün henüz sınıflandırılmamış (Çıkma / Suluk / Çöp ayrımı Detaylı Hesapta).'];
     if ($mat['use'] && $mat['total_cents'] === 0) $warnings[] = ['code' => 'material_detail_empty', 'text' => 'Malzeme detayından hesaplama açık ama tutar 0: satılan palet sayısını ve malzeme satırlarını girin.'];
     if ($applyCredit && $creditCents > 0) $warnings[] = ['code' => 'credit_applied', 'text' => 'Yan ürün net geliri maliyetten düşüldü: yönetimsel tahmin, resmi muhasebe maliyeti değildir.'];
-    if (!$applyCredit && $creditCents > 0) $warnings[] = ['code' => 'credit_not_applied', 'text' => 'Yan ürün geliri girildi fakat maliyetten düşülmedi (ihtiyatlı yöntem).'];
+    if (!$applyCredit && $creditCents > 0) $warnings[] = ['code' => 'credit_not_applied', 'text' => 'Yan ürün geliri girildi fakat maliyetten düşülmedi (çıkma / suluk net geliri düşülmemiş hesap).'];
 
     $quantities = ['raw_kg' => $raw4 / 10000, 'processed_kg' => $processedInput, 'export_kg' => $export,
         'domestic_kg' => $domestic, 'industry_kg' => $industry, 'waste_kg' => $waste];
