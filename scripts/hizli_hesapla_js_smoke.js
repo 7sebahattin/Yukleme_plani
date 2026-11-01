@@ -31,8 +31,9 @@ test('Fire: %0 → ham = net, arttıkça ham mal artar, geçersizler reddedilir'
     near(H.calculate(Object.assign(base(), { fire_pct: '0' })).r.raw_kg, 20000, 1e-9, 'ham = net');
     const a = H.calculate(base()), b = H.calculate(Object.assign(base(), { fire_pct: '40' }));
     assert.ok(b.r.raw_kg > a.r.raw_kg && b.r.raw_cost > a.r.raw_cost);
-    for (const y of ['', '100', '101', '-5', 'abc']) assert.equal(H.calculate(Object.assign(base(), { fire_pct: y })).ok, false, 'fire ' + y);
-    assert.ok(H.calculate(Object.assign(base(), { fire_pct: '' })).errors.join(' ').includes('Fire'));
+    for (const y of ['100', '101', '-5', 'abc']) assert.equal(H.calculate(Object.assign(base(), { fire_pct: y })).ok, false, 'fire ' + y);
+    assert.ok(H.calculate(Object.assign(base(), { fire_pct: '101' })).errors.join(' ').includes('Fire'));
+    const e0 = H.calculate(Object.assign(base(), { fire_pct: '' })); assert.ok(e0.ok, 'fire isteğe bağlı: boş = 0'); assert.equal(e0.n.yield_pct, 100);
     assert.equal(H.calculate(base()).n.yield_pct, 80); assert.equal(H.calculate(Object.assign(base(), { fire_pct: '12,5' })).n.yield_pct, 87.5);
 });
 test('Diğer masraf tabanı Net / Ham KG', () => {
@@ -61,7 +62,7 @@ test('v481: nakliye döviz, çıkma/suluk geliri, komisyon', () => {
     assert.ok(H.view(c.n, c.r, 'USD', '').share.includes('Nakliye: 250,00 EUR (15.000,00 TL)'));
     c = H.calculate(Object.assign(base(), { freight: '250', freight_currency: 'EUR', freight_rate: '' })); assert.equal(c.ok, false); assert.deepEqual(c.invalid, []); assert.ok(c.missing[0].includes('Nakliye EUR kuru'));
     c = H.calculate(Object.assign(base(), { freight: '300', freight_currency: 'USD', freight_rate: '' })); near(c.r.freight_tl, 15000, 1e-9, 'USD nakliye satış kuru');
-    const e = H.calculate(Object.assign(base(), { sale_kg: '', rate: '', fire_pct: '' })); assert.deepEqual(e.invalid, []); assert.equal(e.missing.length, 3);
+    const e = H.calculate(Object.assign(base(), { sale_kg: '0', rate: '0', fire_pct: '' })); assert.deepEqual(e.invalid, []); assert.equal(e.missing.length, 2);
 });
 test('Geçersiz giriş sonuç üretmez', () => {
     for (const bad of [{ rate: '' }, { rate: '0' }, { sale_kg: '0' }, { sale_kg: '' }, { target_margin: '100' }, { freight: 'x' }, { freight: '-1' }]) {
