@@ -100,7 +100,7 @@ render_flash();
 <div class="qc-page">
     <div class="page-head">
         <div><h1>Hızlı Maliyet</h1><p class="muted">Kaydedilen maliyet hesapları</p></div>
-        <?php if ($can_write): ?><div class="page-head-actions"><a class="btn" href="hizli_hesapla.php">Hızlı Hesapla</a> <a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
+        <?php if ($can_write): ?><div class="page-head-actions"><a class="btn qc-btn-hh" href="hizli_hesapla.php">Hızlı Hesapla</a> <a class="btn btn-primary" href="hizli_maliyet_form.php">Yeni maliyet hesapla</a></div><?php endif; ?>
     </div>
     <?php if ($errors): ?><div class="qc-error" role="alert"><ul><?php foreach ($errors as $error): ?><li><?= h($error) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
     <?php if (!$storage_ready && !$is_admin_user): ?>
