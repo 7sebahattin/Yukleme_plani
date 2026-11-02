@@ -303,6 +303,128 @@ $hg = siparis_denge_hesapla($v, siparis_denge_param(['n' => '5', 'kg' => '18200'
 ok('plan kapanan + kalan = kapatılacak (4 sevkiyat)', $hg['plan_ozet']['toplam_kapanan'] + $hg['plan_ozet']['kalan'] === $hg['ozet']['kapatilacak_kurus']);
 ok('plan_ozet: n 5, gram 18.200.000', $hg['plan_ozet']['n'] === 5 && $hg['plan_ozet']['gram'] === 18200000);
 
+echo "\n=== 7b. v489: plan kaynağı — yüklenmemiş siparişlere göre ===\n";
+$ykm = static function (int $id, ?string $tarih, string $ref, int $gram, bool $fiyatli = false, bool $kgv = false): array {
+    return ['id' => $id, 'order_ref' => $ref, 'tarih' => $tarih, 'ulke' => 'Rusya', 'plaka' => '34TST' . $id, 'parti' => ['P' . $id], 'nakliyeci' => '', 'yuklendi' => false, 'fiyatli' => $fiyatli,
+        'toplam' => ['palet' => 1, 'koli' => 1, 'gram' => $gram], 'satirlar' => [['kalibre' => '14', 'kg_varsayilan' => $kgv, 'gram' => $gram, 'fiyatli' => $fiyatli, 'pb' => 'EUR']]];
+};
+$cariY = ['fiyatli' => [$mk(1, '2026-10-01', 'T1', 18200000, 2639000, 13700)], 'yuklenen' => [],
+    'yuklenmemis' => [$ykm(33, '2026-11-09', 'YC', 7000000), $ykm(31, '2026-11-02', 'YA', 18200000), $ykm(32, '2026-11-02', 'YB', 10500000, false, true), $ykm(34, null, 'YD', 3500000), $ykm(35, '2026-11-01', 'YF', 9000000, true), $ykm(36, '2026-11-01', 'Y0', 0)]];
+// (c) param kaynak ayrıştırma
+$py = siparis_denge_param([], $cariY);
+ok('param: planlanabilir yüklenmemiş varken varsayılan kaynak = yuklenmemis (girilmedi)', $py['kaynak'] === 'yuklenmemis' && $py['kaynak_girilen'] === false && $py['hata'] === [], json_encode($py));
+ok('param: planlanabilir yok → elle', siparis_denge_param([], $cari1)['kaynak'] === 'elle' && siparis_denge_param([], [])['kaynak'] === 'elle' && siparis_denge_param([], ['kg_ort' => 1, 'son_pc_fiyat' => 1])['kaynak'] === 'elle');
+ok('param: yalnız fiyatı belli yüklenmemiş var → elle (planlanabilir sayılmaz)', siparis_denge_param([], ['fiyatli' => [], 'yuklenmemis' => [$ykm(1, null, 'X', 1000000, true)]])['kaynak'] === 'elle');
+ok('param: n yazıldıysa (kaynak verilmediyse) → elle', siparis_denge_param(['n' => '3'], $cariY)['kaynak'] === 'elle');
+ok('param: kg yazıldıysa → elle', siparis_denge_param(['kg' => '18200'], $cariY)['kaynak'] === 'elle');
+ok('param: kaynak açıkça verilirse kazanır (n yazılsa da): yuklenmemis / elle, kaynak_girilen true', siparis_denge_param(['kaynak' => 'yuklenmemis', 'n' => '3'], $cariY)['kaynak'] === 'yuklenmemis' && siparis_denge_param(['kaynak' => 'yuklenmemis', 'n' => '3'], $cariY)['kaynak_girilen'] === true
+    && siparis_denge_param(['kaynak' => 'elle'], $cariY)['kaynak'] === 'elle' && siparis_denge_param(['kaynak' => 'elle'], $cariY)['kaynak_girilen'] === true);
+$pk = siparis_denge_param(['kaynak' => 'tum'], $cariY);
+ok('param: geçersiz kaynak → varsayılan + hata satırı', $pk['kaynak'] === 'yuklenmemis' && $pk['kaynak_girilen'] === false && count($pk['hata']) === 1);
+ok('param: dizi kaynak → hata, varsayılan', siparis_denge_param(['kaynak' => ['x']], $cariY)['hata'] !== [] && siparis_denge_param(['kaynak' => ['x']], $cariY)['kaynak'] === 'yuklenmemis');
+// yardımcı: planlanabilir liste
+$yl = siparis_denge_yuklenmemis($cariY);
+ok('yuklenmemis(): fiyatlı (YF) ve 0 gram (Y0) hariç; sıra tarih artan, tarihsiz sonda, aynı tarihte id (YA 31 < YB 32)', array_column($yl['liste'], 'order_ref') === ['YA', 'YB', 'YC', 'YD'] && $yl['toplam'] === 4 && $yl['fiyatli_haric'] === 1, json_encode(array_column($yl['liste'], 'order_ref')));
+ok('yuklenmemis(): kg_varsayilan satırdan taşınır (YB true, YA false)', $yl['liste'][1]['kg_varsayilan'] === true && $yl['liste'][0]['kg_varsayilan'] === false);
+// (b) yüklenmemiş mod hesabı
+$hy = siparis_denge_hesapla($cariY, siparis_denge_param(['hedef' => '1,45'], $cariY));
+$gramlar = [18200000, 10500000, 7000000, 3500000];
+ok('yüklenmemiş: plan 4 satır, satır başına kendi gram (18.200 / 10.500 / 7.000 / 3.500 kg), sıra tarihe göre', array_column($hy['plan'], 'gram') === $gramlar && array_column($hy['plan'], 'sira') === [1, 2, 3, 4], json_encode(array_column($hy['plan'], 'gram')));
+ok('yüklenmemiş: plan_ozet kaynak/sevkiyat/toplam_gram/n', $hy['plan_ozet']['kaynak'] === 'yuklenmemis' && $hy['plan_ozet']['sevkiyat'] === 4 && $hy['plan_ozet']['n'] === 4 && $hy['plan_ozet']['toplam_gram'] === array_sum($gramlar) && $hy['plan_ozet']['gram'] === array_sum($gramlar), json_encode($hy['plan_ozet']));
+ok('yüklenmemiş: her satır sev (id/order_ref/tarih/ulke/plaka/parti) + kg_varsayilan taşır; kimlik yardımcısı çalışır', $hy['plan'][1]['sev']['order_ref'] === 'YB' && $hy['plan'][1]['kg_varsayilan'] === true && $hy['plan'][0]['kg_varsayilan'] === false
+    && str_contains(siparis_cari_kimlik_html($hy['plan'][0]['sev']), '<td>YA</td>'));
+$kapY = $hy['ozet']['kapatilacak_kurus'];
+ok('yüklenmemiş: Σkapanan + kalan === kapatılacak (tam eşitlik)', $kapY === 145600 && $hy['plan_ozet']['toplam_kapanan'] + $hy['plan_ozet']['kalan'] === $kapY, json_encode($hy['plan_ozet']));
+ok('yüklenmemiş: her satırda kalan = önceki kalan − kapanan; kapanan = tutar − hedef tutar; hedef tutar satırın kendi gramıyla', (function () use ($hy, $kapY): bool {
+    $rem = $kapY; $hedefTop = 0;
+    foreach ($hy['plan'] as $r) {
+        $ht = intdiv($r['gram'] * 14500 + 50000, 100000);
+        if ($r['hedef_tutar_kurus'] !== $ht || $r['kapanan_kurus'] !== $r['tutar_kurus'] - $ht) return false;
+        $rem -= $r['kapanan_kurus']; $hedefTop += $ht;
+        if ($r['kalan_kurus'] !== $rem) return false;
+    }
+    return $hy['plan_ozet']['hedef_tutar_kurus'] === $hedefTop;
+})());
+ok('yüklenmemiş: €/kg düzeltme her satırda yaklaşık eşit (|fark| ≤ 1 hane birimi = 0,01 €)', (function () use ($hy): bool {
+    $d = array_column($hy['plan'], 'duzeltme_fiyat'); return max($d) - min($d) <= 100;
+})(), json_encode(array_column($hy['plan'], 'duzeltme_fiyat')));
+ok('yüklenmemiş: tüm fiyatlar hane 2 adımında (100\'ün katı); duzeltme_fiyat = fiyat − hedef', count(array_filter($hy['plan'], static fn(array $r): bool => $r['fiyat'] % 100 !== 0 || $r['duzeltme_fiyat'] !== $r['fiyat'] - 14500)) === 0);
+$ortDz = intdiv(($hy['plan_ozet']['toplam_kapanan'] * 100000 * 2) + array_sum($gramlar), 2 * array_sum($gramlar));
+ok('yüklenmemiş: duzeltme_ort_fiyat = Σkapanan × 1e5 / Σgram (yarım yukarı)', $hy['plan_ozet']['duzeltme_ort_fiyat'] === $ortDz, (string)$hy['plan_ozet']['duzeltme_ort_fiyat'] . ' / ' . $ortDz);
+ok('yüklenmemiş: fiyatı belli yüklenmemiş sevkiyat plana ALINMADI + bilgi notu', !in_array('YF', array_column(array_column($hy['plan'], 'sev'), 'order_ref'), true)
+    && count(array_filter($hy['uyarilar'], static fn(array $u): bool => $u['mesaj'] === '1 yüklenmemiş sevkiyatın fiyatı belli; plana dahil değil.' && $u['seviye'] === 'bilgi')) === 1);
+ok('yüklenmemiş: kg tabanı "kg/n girildi" parametrelerinden etkilenmez (kaynak açık yuklenmemis + n=3 + kg=1 → aynı plan)', siparis_denge_hesapla($cariY, siparis_denge_param(['kaynak' => 'yuklenmemis', 'hedef' => '1,45', 'n' => '3', 'kg' => '1'], $cariY))['plan'] === $hy['plan']);
+// ağırlıklı pay: gram'ı büyük satır daha çok tutar kapatır
+ok('yüklenmemiş: ağırlıklı pay — en büyük sevkiyat (18.200 kg) en büyük kapanan tutarı, en küçüğü (3.500 kg) en küçüğünü kapatır', $hy['plan'][0]['kapanan_kurus'] > $hy['plan'][1]['kapanan_kurus'] && $hy['plan'][1]['kapanan_kurus'] > $hy['plan'][3]['kapanan_kurus'] && $hy['plan'][2]['kapanan_kurus'] > $hy['plan'][3]['kapanan_kurus']);
+foreach ([3, 4] as $hane) {
+    $hh = siparis_denge_hesapla($cariY, siparis_denge_param(['hedef' => '1,45', 'hane' => (string)$hane], $cariY));
+    $unit = 10 ** (4 - $hane);
+    ok('yüklenmemiş hane ' . $hane . ': adım ' . $unit . ', Σkapanan + kalan = kapatılacak, düzeltme farkı ≤ ' . $unit . ' on-binde', count(array_filter($hh['plan'], static fn(array $r): bool => $r['fiyat'] % $unit !== 0)) === 0
+        && $hh['plan_ozet']['toplam_kapanan'] + $hh['plan_ozet']['kalan'] === $kapY && (max(array_column($hh['plan'], 'duzeltme_fiyat')) - min(array_column($hh['plan'], 'duzeltme_fiyat'))) <= max($unit, 1) * 2, json_encode(array_column($hh['plan'], 'duzeltme_fiyat')));
+}
+// (a) elle modda eski plan BİREBİR aynı: kaynak=elle, aynı veri, yüklenmemiş sevkiyat dolu olsa bile
+$he = siparis_denge_hesapla($cariY, siparis_denge_param(['kaynak' => 'elle', 'n' => '5', 'kg' => '18200', 'hedef' => '1,45'], $cariY));
+$he1 = siparis_denge_hesapla($cari1, $p1);
+ok('ELLE: yüklenmemiş sevkiyat olsa da plan, plan_ozet (kaynak/sevkiyat/toplam_gram hariç) ve satırlar cari1\'deki eski planla BİREBİR aynı', $he['plan'] === $he1['plan'] && $he['plan_ozet']['kaynak'] === 'elle'
+    && array_diff_key($he['plan_ozet'], ['kaynak' => 1, 'sevkiyat' => 1, 'toplam_gram' => 1]) === array_diff_key($he1['plan_ozet'], ['kaynak' => 1, 'sevkiyat' => 1, 'toplam_gram' => 1]));
+ok('ELLE: satırlarda sev / kg_varsayilan anahtarı YOK (eski satır biçimi)', !isset($he['plan'][0]['sev']) && !isset($he['plan'][0]['kg_varsayilan']) && array_keys($he['plan'][0]) === ['sira', 'gram', 'hedef', 'duzeltme_fiyat', 'fiyat', 'tutar_kurus', 'hedef_tutar_kurus', 'kapanan_kurus', 'kalan_kurus']);
+ok('ELLE: hesapla param[kaynak] verilmezse elle (eski çağrılar bozulmaz); plan_ozet.gram = fatura başına gram, toplam_gram = n × gram', $h1['plan_ozet']['kaynak'] === 'elle' && $h1['plan_ozet']['gram'] === 18200000 && $h1['plan_ozet']['toplam_gram'] === 5 * 18200000);
+// elle modda her satır g_i aynı → genelleştirilmiş pay eski rem/r paylaşımıyla özdeş (rasgele tarama)
+mt_srand(7); $farkli = 0;
+for ($t = 0; $t < 300; $t++) {
+    $gr = mt_rand(1, 40) * 1000000 + mt_rand(0, 999) * 1000; $pcK = mt_rand(100, 3000000); $faF = mt_rand(8000, 20000); $faK = intdiv($gr * $faF + 50000, 100000);
+    $c = ['fiyatli' => [['id' => 1, 'order_ref' => 'T', 'tarih' => '2026-10-01', 'fiyatli' => true, 'fatura' => ['fiyat' => $faF], 'karsilastirma' => ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $pcK - $faK], 'satirlar' => [['fiyatli' => true, 'pb' => 'EUR']]]], 'yuklenen' => [], 'yuklenmemis' => []];
+    $n = mt_rand(1, 12); $kgT = mt_rand(1, 200000); $hd = mt_rand(5000, 40000); $hn = [2, 3, 4][mt_rand(0, 2)];
+    $pl = siparis_denge_hesapla($c, ['n' => $n, 'kg' => $kgT, 'hedef' => $hd, 'hane' => $hn, 'kaynak' => 'elle'])['plan'];
+    // bağımsız (eski formül) yeniden hesap
+    $gF = $kgT * 1000; $hT = intdiv($gF * $hd + 50000, 100000); $un = 10 ** (4 - $hn); $rem = $pcK - $faK; $eski = [];
+    for ($i = 1; $i <= $n; $i++) { $ideal = $hT + siparis_denge_bol($rem, $n - $i + 1); $fy = max(0, siparis_denge_bol($ideal * 100000, $gF * $un) * $un); $tu = intdiv($gF * $fy + 50000, 100000); $rem -= $tu - $hT; $eski[] = [$fy, $tu, $rem]; }
+    $yeni = array_map(static fn(array $r): array => [$r['fiyat'], $r['tutar_kurus'], $r['kalan_kurus']], $pl);
+    if ($eski !== $yeni) $farkli++;
+}
+ok('ELLE: 300 rasgele senaryoda genelleştirilmiş plan eski formülle (rem / kalan satır) satır satır AYNI', $farkli === 0, (string)$farkli);
+// >12 sevkiyat → ilk 12
+$many = []; for ($i = 1; $i <= 15; $i++) $many[] = $ykm(100 + $i, date('Y-m-d', strtotime('2026-12-01 +' . $i . ' day')), 'M' . $i, 3500000 + $i * 1000);
+$cariM = ['fiyatli' => $cari1['fiyatli'], 'yuklenen' => [], 'yuklenmemis' => array_reverse($many)];
+$hm = siparis_denge_hesapla($cariM, siparis_denge_param(['hedef' => '1,45'], $cariM));
+ok('>12 yüklenmemiş: ilk 12 (tarihe göre) planlanır + "ilk 12 sevkiyat planlandı" notu', count($hm['plan']) === 12 && $hm['plan'][0]['sev']['order_ref'] === 'M1' && $hm['plan'][11]['sev']['order_ref'] === 'M12'
+    && count(array_filter($hm['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'İlk 12 sevkiyat planlandı') && str_contains($u['mesaj'], '15 planlanabilir'))) === 1 && $hm['plan_ozet']['toplam_kapanan'] + $hm['plan_ozet']['kalan'] === $hm['ozet']['kapatilacak_kurus']);
+// hiç yüklenmemiş yok → elle'ye düşme
+$hz = siparis_denge_hesapla($cari1, siparis_denge_param(['kaynak' => 'yuklenmemis', 'kg' => '18200', 'hedef' => '1,45'], $cari1));
+ok('yüklenmemiş yokken kaynak=yuklenmemis istenirse elle plana düşer + "Yüklenmemiş sipariş yok; elle plan kullanıldı." bilgisi', $hz['plan_ozet']['kaynak'] === 'elle' && count($hz['plan']) === 5
+    && count(array_filter($hz['uyarilar'], static fn(array $u): bool => $u['mesaj'] === 'Yüklenmemiş sipariş yok; elle plan kullanıldı.' && $u['seviye'] === 'bilgi')) === 1);
+$hz2 = siparis_denge_hesapla($cari1, siparis_denge_param(['kg' => '18200', 'hedef' => '1,45'], $cari1));
+ok('varsayılan düşüşte (kaynak açıkça verilmedi) bu bilgi notu EKLENMEZ — eski çıktı aynı', count(array_filter($hz2['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'Yüklenmemiş sipariş yok'))) === 0);
+// hedef yoksa plan kurulamaz (yüklenmemiş)
+$hh0 = siparis_denge_hesapla($cariY, ['kaynak' => 'yuklenmemis', 'n' => 5, 'kg' => 0, 'hedef' => 0, 'hane' => 2]);
+ok('yüklenmemiş + hedef 0: plan boş; "beklenen PC fiyatı gerekli" (kg istenmez)', $hh0['plan'] === [] && $hh0['plan_ozet']['kaynak'] === 'yuklenmemis'
+    && count(array_filter($hh0['uyarilar'], static fn(array $u): bool => $u['mesaj'] === 'Plan için beklenen PC fiyatı gerekli; değeri girip yeniden hesaplayın.')) === 1);
+// karşılaştırılan sevkiyat yoksa (adet 0) plan yok
+ok('karşılaştırma yok: yüklenmemiş kaynak da plan üretmez', siparis_denge_hesapla(['fiyatli' => [], 'yuklenen' => [], 'yuklenmemis' => [$ykm(1, '2026-11-01', 'Z', 5000000)]], ['kaynak' => 'yuklenmemis', 'hedef' => 14500, 'hane' => 2])['plan'] === []);
+// büyük sıçrama: yüklenmemiş metin
+$cariYB = ['fiyatli' => [$mk(9, '2026-10-01', 'TB1', 18200000, 2639000, 10000)], 'yuklenen' => [], 'yuklenmemis' => [$ykm(1, '2026-11-01', 'Z1', 5000000), $ykm(2, '2026-11-02', 'Z2', 5000000)]];
+$hyb = siparis_denge_hesapla($cariYB, siparis_denge_param(['hedef' => '1.45'], $cariYB));
+$uyb = array_values(array_filter($hyb['uyarilar'], static fn(array $u): bool => $u['seviye'] === 'uyari'));
+ok('yüklenmemiş büyük sıçrama: "fatura sayısını N yap" önerisi YOK; "\'Elle\' kaynağıyla daha çok fatura deneyin."', count($uyb) === 1 && str_contains($uyb[0]['mesaj'], "büyük sıçrama; 'Elle' kaynağıyla daha çok fatura deneyin.") && !str_contains($uyb[0]['mesaj'], 'fatura sayısını') && str_contains($uyb[0]['mesaj'], '€/kg (hedefin %'), $uyb[0]['mesaj'] ?? '');
+ok('ELLE büyük sıçrama metni eskisi gibi ("fatura sayısını 11 yap")', isset($uy[0]) && str_contains($uy[0]['mesaj'], 'fatura sayısını 11 yap'));
+// pay: taşma koruması + eşit ağırlık
+ok('pay: eşit ağırlık → rem / r ile özdeş (taşmasız); orantılı pay yarım yukarı', siparis_denge_pay(-145600, 18200000000, 18200000000 * 3, 3) === siparis_denge_bol(-145600, 3) && siparis_denge_pay(100, 1, 3, 3) === 33 && siparis_denge_pay(100, 2, 3, 2) === 67);
+ok('pay: devasa gram × tutar çarpımı int64\'ü aşarsa taşmadan sonlanır (oran korunur)', siparis_denge_pay(900000000, 90000000000, 120000000000, 2) > 0);
+// DB'den gerçek yapıyla uçtan uca
+$ID['y1'] = sev($db, ['order_ref' => 'TC810101.10', 'yukleme_tarihi' => date('Y-m-d', strtotime('+6 day')), 'durum' => 'yola_cikti', 'alici_kodu' => '1038529', 'plakalar' => '34TST101']);
+kalem($db, $ID['y1'], ['kalibre' => '14', 'aciklama' => 'Testfruit 14 PC', 'etkin_koli' => 5000, 'pc_koli' => 0, 'koli_icerik' => '3,5 KG']);
+$ID['y2'] = sev($db, ['order_ref' => 'TC810102.10', 'yukleme_tarihi' => date('Y-m-d', strtotime('+3 day')), 'durum' => 'yola_cikti', 'alici_kodu' => '1038529', 'plakalar' => '34TST102']);
+kalem($db, $ID['y2'], ['kalibre' => '12', 'aciklama' => 'Testfruit 12 PC', 'etkin_koli' => 2000, 'pc_koli' => 0, 'koli_icerik' => '']);   // koli kg okunamadı → 3,5 varsayılan (*)
+$okuY = siparis_cari_oku($db, siparis_cari_filtre([], $bugun));
+$idsY = array_map(static fn(array $r): int => (int)$r['id'], $okuY['rows']);
+$vY = siparis_cari_veri($okuY, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => siparis_cari_fatura_fiyatlari($db, $idsY)]);
+$pY = siparis_denge_param(['hedef' => '1,45'], $vY);
+$hY = siparis_denge_hesapla($vY, $pY);
+ok('DB uçtan uca: kaynak yuklenmemis; yalnız fiyatsız yüklenmemiş (y2 +3g, y1 +6g) sırayla; s2 (fiyatlı, yola_cikti) hariç', $pY['kaynak'] === 'yuklenmemis' && array_column(array_column($hY['plan'], 'sev'), 'order_ref') === ['TC810102.10', 'TC810101.10']
+    && array_column($hY['plan'], 'gram') === [7000000, 17500000] && $hY['plan'][0]['kg_varsayilan'] === true && $hY['plan'][1]['kg_varsayilan'] === false, json_encode(array_column($hY['plan'], 'gram')));
+ok('DB uçtan uca: Σkapanan + kalan = kapatılacak', $hY['plan_ozet']['toplam_kapanan'] + $hY['plan_ozet']['kalan'] === $hY['ozet']['kapatilacak_kurus'] && $hY['plan_ozet']['sevkiyat'] === 2);
+ok('DB uçtan uca: kullanıcı n yazınca elle plana geçer (5 satır)', count(siparis_denge_hesapla($vY, siparis_denge_param(['hedef' => '1,45', 'n' => '5'], $vY))['plan']) === 5);
+
 echo "\n=== 8. Statik ===\n";
 $cfg = (string)file_get_contents($ROOT . '/config/siparis_denge.php');
 $cfgKod = (string)preg_replace('#/\*.*?\*/#s', '', $cfg);
