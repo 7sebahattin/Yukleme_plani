@@ -119,7 +119,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
     <a class="pr-btn" href="siparisler.php">← Siparişler</a>
   </div>
   <?= render_print_header_html('Fiyat Dengeleme', implode(' · ', $f['ozet']) . ($depo !== '' ? ' · Depo: ' . $depo : ''), 'Oluşturma: ' . date('d.m.Y H:i')) ?>
-  <p class="pr-note sc-kural">Yalnız EUR sevkiyatları karşılaştırılır. Fark = Fatura − PC: eksi = PC'den düşük faturalandı (alacak eksik kaldı), artı = fazla faturalandı. Kapatılacak tutar için "+" = ileride bu kadar FAZLA faturalanmalı.</p>
+  <p class="pr-note sc-kural">Yalnız EUR sevkiyatları karşılaştırılır. Gelen fiyat = OGL'nin Price Confirmation (PC) fiyatı; Kesilen fatura = bizim kestiğimiz invoice. Fark = Gelen fiyat − Kesilen fatura: eksi = kesilen fatura gelen fiyattan yüksek (fazla faturalandı), artı = daha düşük faturalandı (alacak eksik kaldı). Kapatılacak tutar için "+" = ileride bu kadar FAZLA faturalanmalı.</p>
   <?php if ($v['kesildi']): ?><p class="pr-note sc-uyari">İlk <?= (int)SIPARIS_CARI_LIMIT ?> sevkiyat okundu (kesildi) — tarih aralığını daraltın.</p><?php endif; ?>
   <?php if ($param['hata']): ?>
   <div class="sd-hata" role="alert">Parametre hatası — varsayılan değer kullanıldı:<ul><?php foreach ($param['hata'] as $m): ?><li><?= h((string)$m) ?></li><?php endforeach; ?></ul></div>
@@ -128,9 +128,9 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
   <!-- 1) Özet -->
   <div class="print-summary-row">
     <div class="print-summary-box"><span class="psb-label">Karşılaştırılan sevkiyat</span><span class="psb-value"><?= (int)$o['adet'] ?></span><span class="sc-alt"><?= h(siparis_cari_kg((int)$o['gram'])) ?> kg</span></div>
-    <div class="print-summary-box"><span class="psb-label">Ort. PC fiyatı</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['pc_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
-    <div class="print-summary-box"><span class="psb-label">Ort. fatura fiyatı</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['fatura_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
-    <div class="print-summary-box <?= $o['adet'] > 0 && (int)$o['fark_ort'] !== 0 ? 'psb-warn' : 'psb-ok' ?>"><span class="psb-label">Fark / kg (fatura − PC)</span><span class="psb-value"><?= $o['adet'] > 0 ? h(siparis_cari_fark_metin((int)$o['fark_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">toplam fark: <?= h($eurI((int)$o['fark_kurus'])) ?></span></div>
+    <div class="print-summary-box"><span class="psb-label">Ort. gelen fiyat</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['pc_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
+    <div class="print-summary-box"><span class="psb-label">Ort. kesilen fatura fiyatı</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['fatura_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
+    <div class="print-summary-box <?= $o['adet'] > 0 && (int)$o['fark_ort'] !== 0 ? 'psb-warn' : 'psb-ok' ?>"><span class="psb-label">Fark / kg (gelen − kesilen)</span><span class="psb-value"><?= $o['adet'] > 0 ? h(siparis_cari_fark_metin((int)$o['fark_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">toplam fark: <?= h($eurI((int)$o['fark_kurus'])) ?></span></div>
     <div class="print-summary-box psb-warn"><span class="psb-label">Kapatılacak tutar</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eurI($kapat)) : '—' ?></span><span class="sc-alt">+ = ileride bu kadar fazla faturalanmalı</span></div>
   </div>
 
@@ -138,7 +138,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
   <h3 class="pr-section">Sevkiyat bazında karşılaştırma</h3>
   <?php if (!function_exists('can_beyan') || !can_beyan('read')): ?><p class="pr-note">Parti no görmek için beyan okuma yetkisi gerekir (sütun "—" gösterilir).</p><?php endif; ?>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="sdKarsi">
-    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">PC fiyat / kg</th><th class="num">Fatura fiyat / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">Kümülatif fark (EUR)</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">Gelen Fiyat / kg</th><th class="num">Kesilen fatura fiyatı / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">Kümülatif fark (EUR)</th></tr></thead>
     <?php if (!$d['sevkiyatlar']): ?>
     <tbody><tr><td colspan="11" class="pr-empty">Karşılaştırılacak sevkiyat yok (fiyatlı + invoice kesilmiş EUR sevkiyat gerekir).</td></tr></tbody>
     <?php else: ?>
@@ -211,7 +211,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
     </ul>
     <ul class="sd-notlar">
       <li>Ortalama fiyatlar kg ağırlıklıdır (Σ tutar ÷ Σ kg); sevkiyat fiyatlarının basit ortalaması DEĞİLDİR.</li>
-      <li>Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat; PC fiyatı = Cari Döküm'deki satır fiyatı. İkisi de iskonto ÖNCESİDİR, iskonto % karşılaştırmaya katılmaz (iki tarafta aynı oranla uygulandığı varsayılır).</li>
+      <li>Kesilen fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat; Gelen fiyat (PC) = Cari Döküm'deki satır fiyatı. İkisi de iskonto ÖNCESİDİR, iskonto % karşılaştırmaya katılmaz (iki tarafta aynı oranla uygulandığı varsayılır).</li>
       <li>Kg tabanı Cari Döküm'deki koli × koli kg'dır; invoice'ta elle farklı bir net kg girildiyse (ör. PKL toplamından farklı) gerçek fatura tutarı bundan az farklı olabilir.</li>
       <li>PC fiyatı geldikçe sayfayı yenileyin — plan her seferinde güncel farktan yeniden hesaplanır.</li>
     </ul>

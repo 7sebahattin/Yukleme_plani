@@ -152,13 +152,13 @@ $v0 = siparis_cari_veri(siparis_cari_oku($db, $f), ['bugun' => $bugun, 'tahsilat
 $bul = static function (array $liste, string $ref): ?array { foreach ($liste as $s) if ($s['order_ref'] === $ref) return $s; return null; };
 $s1 = $bul($v['yuklenen'], 'TC810001.10');
 ok('s1: fatura = fiyat/no/tarih', $s1['fatura'] === ['fiyat' => 13700, 'no' => 'IHR2026000000340', 'tarih' => '2026-10-03'], json_encode($s1['fatura']));
-ok('s1: karşılaştırma gram 18.200.000, PC 26.390,00 €, fatura 24.934,00 €, fark −1.456,00 €',
-    $s1['karsilastirma'] === ['gram' => 18200000, 'pc_kurus' => 2639000, 'fatura_kurus' => 2493400, 'fark_kurus' => -145600], json_encode($s1['karsilastirma']));
-ok('s1 satırı: fatura_kg 13700, fiyat_kg 14500, fark_kg −800 (fatura − PC)', $s1['satirlar'][0]['fatura_kg'] === 13700 && $s1['satirlar'][0]['fiyat_kg'] === 14500 && $s1['satirlar'][0]['fark_kg'] === -800);
+ok('s1: karşılaştırma gram 18.200.000, PC 26.390,00 €, fatura 24.934,00 €, fark +1.456,00 € (gelen − kesilen)',
+    $s1['karsilastirma'] === ['gram' => 18200000, 'pc_kurus' => 2639000, 'fatura_kurus' => 2493400, 'fark_kurus' => 145600], json_encode($s1['karsilastirma']));
+ok('s1 satırı: fatura_kg 13700, fiyat_kg 14500, fark_kg +800 (gelen − kesilen)', $s1['satirlar'][0]['fatura_kg'] === 13700 && $s1['satirlar'][0]['fiyat_kg'] === 14500 && $s1['satirlar'][0]['fark_kg'] === 800);
 $s2 = $bul($v['yuklenen'], 'TC810002.10') ?? $bul($v['yuklenmemis'], 'TC810002.10');
-ok('s2 (yüklenmemiş, çok kalibreli): her satırda fatura 14000; fark_kg 10 → −2000, 12 → −1000', array_map(static fn(array $l): string => $l['kalibre'], $s2['satirlar']) === ['10', '12']
-    && $s2['satirlar'][0]['fatura_kg'] === 14000 && $s2['satirlar'][1]['fatura_kg'] === 14000 && $s2['satirlar'][0]['fark_kg'] === -2000 && $s2['satirlar'][1]['fark_kg'] === -1000, json_encode($s2['satirlar']));
-ok('s2: karşılaştırma toplamı (10.500 kg: PC 16.100,00 €, fatura 14.700,00 €, fark −1.400,00 €)', $s2['karsilastirma'] === ['gram' => 10500000, 'pc_kurus' => 1610000, 'fatura_kurus' => 1470000, 'fark_kurus' => -140000], json_encode($s2['karsilastirma']));
+ok('s2 (yüklenmemiş, çok kalibreli): her satırda fatura 14000; fark_kg 10 → +2000, 12 → +1000', array_map(static fn(array $l): string => $l['kalibre'], $s2['satirlar']) === ['10', '12']
+    && $s2['satirlar'][0]['fatura_kg'] === 14000 && $s2['satirlar'][1]['fatura_kg'] === 14000 && $s2['satirlar'][0]['fark_kg'] === 2000 && $s2['satirlar'][1]['fark_kg'] === 1000, json_encode($s2['satirlar']));
+ok('s2: karşılaştırma toplamı (10.500 kg: PC 16.100,00 €, fatura 14.700,00 €, fark +1.400,00 €)', $s2['karsilastirma'] === ['gram' => 10500000, 'pc_kurus' => 1610000, 'fatura_kurus' => 1470000, 'fark_kurus' => 140000], json_encode($s2['karsilastirma']));
 $s3 = $bul($v['yuklenen'], 'TC810003.10');
 ok('s3 (USD): fatura bilgisi var, ama satırda fatura_kg/fark_kg null ve karsilastirma null', $s3['fatura'] !== null && $s3['satirlar'][0]['fatura_kg'] === null && $s3['satirlar'][0]['fark_kg'] === null && $s3['karsilastirma'] === null);
 $s4 = $bul($v['yuklenen'], 'TC810004.10');
@@ -169,9 +169,9 @@ $s6 = $bul($v['yuklenen'], 'TC810006.10');
 ok('s6 (üretilmemiş invoice girdisi): fatura null', $s6['fatura'] === null && $s6['karsilastirma'] === null);
 $s7 = $bul($v['yuklenmemis'], 'TC810007.10') ?? $bul($v['yuklenen'], 'TC810007.10');
 ok('s7 karışık: yalnız EUR satırı karşılaştırılır (gram 350.000, PC 700,00 €, fatura 665,00 €)', $s7['satirlar'][0]['kalibre'] === '10' && $s7['satirlar'][0]['pb'] === 'USD' && $s7['satirlar'][0]['fatura_kg'] === null && $s7['satirlar'][0]['fark_kg'] === null
-    && $s7['satirlar'][1]['pb'] === 'EUR' && $s7['satirlar'][1]['fark_kg'] === -1000 && $s7['karsilastirma'] === ['gram' => 350000, 'pc_kurus' => 70000, 'fatura_kurus' => 66500, 'fark_kurus' => -3500], json_encode($s7['karsilastirma']));
+    && $s7['satirlar'][1]['pb'] === 'EUR' && $s7['satirlar'][1]['fark_kg'] === 1000 && $s7['karsilastirma'] === ['gram' => 350000, 'pc_kurus' => 70000, 'fatura_kurus' => 66500, 'fark_kurus' => 3500], json_encode($s7['karsilastirma']));
 $s8 = $bul($v['yuklenmemis'], 'TC810008.10') ?? $bul($v['yuklenen'], 'TC810008.10');
-ok('s8 koli bazlı: PC kg fiyatı 2,00 (20000), fatura 2,10 → fark +1000 (pozitif)', $s8['satirlar'][0]['baz'] === 'koli' && $s8['satirlar'][0]['fiyat_kg'] === 20000 && $s8['satirlar'][0]['fark_kg'] === 1000 && $s8['karsilastirma']['fark_kurus'] === 3500, json_encode($s8['karsilastirma']));
+ok('s8 koli bazlı: PC kg fiyatı 2,00 (20000), fatura 2,10 → fark −1000 (kesilen yüksek → eksi)', $s8['satirlar'][0]['baz'] === 'koli' && $s8['satirlar'][0]['fiyat_kg'] === 20000 && $s8['satirlar'][0]['fark_kg'] === -1000 && $s8['karsilastirma']['fark_kurus'] === -3500, json_encode($s8['karsilastirma']));
 ok('fatura haritası verilmezse alanlar null; mevcut anahtarlar aynı', $bul($v0['yuklenen'], 'TC810001.10')['fatura'] === null && $bul($v0['yuklenen'], 'TC810001.10')['karsilastirma'] === null
     && $bul($v0['yuklenen'], 'TC810001.10')['satirlar'][0]['fatura_kg'] === null && array_keys($v0) === array_keys($v));
 ok('sevkiyat anahtar sırası: eski anahtarlar aynı sırada, fatura + karsilastirma sonda', array_slice(array_keys($s1), 0, 14) === ['id', 'order_ref', 'tarih', 'ulke', 'plaka', 'nakliyeci', 'yuklendi', 'fiyatli', 'fiyat_tarihi', 'satirlar', 'toplam', 'tutar', 'fatura', 'karsilastirma'] || array_slice(array_keys($s1), -2) === ['fatura', 'karsilastirma'], json_encode(array_keys($s1)));
@@ -205,16 +205,16 @@ ok('tüm anahtarlar mevcut', array_keys($hv) === ['sevkiyatlar', 'satirlar', 'oz
 $refler = array_map(static fn(array $r): string => $r['order_ref'], $hv['sevkiyatlar']);
 ok('karşılaştırılan: s1 s2 s7 s8 (tarih artan: −3g, −1g, bugün, yarın)', $refler === ['TC810001.10', 'TC810002.10', 'TC810008.10', 'TC810007.10'], json_encode($refler));
 $r1 = $hv['sevkiyatlar'][0]; $r2 = $hv['sevkiyatlar'][1];
-ok('s1 satırı: pc_fiyat 14500, fatura_fiyat 13700, fark_fiyat −800, fark −1.456,00 €, kümülatif aynı', $r1['pc_fiyat'] === 14500 && $r1['fatura_fiyat'] === 13700 && $r1['fark_fiyat'] === -800 && $r1['fark_kurus'] === -145600 && $r1['kumulatif_fark_kurus'] === -145600 && $r1['tarih'] === $once);
-ok('s2 satırı: ağırlıklı PC fiyatı 1,5333 (16.100 € / 10.500 kg), fatura 1,40, kümülatif −285.600', $r2['pc_fiyat'] === 15333 && $r2['fatura_fiyat'] === 14000 && $r2['kumulatif_fark_kurus'] === -145600 - 140000, json_encode($r2));
+ok('s1 satırı: pc_fiyat 14500, fatura_fiyat 13700, fark_fiyat +800, fark +1.456,00 €, kümülatif aynı', $r1['pc_fiyat'] === 14500 && $r1['fatura_fiyat'] === 13700 && $r1['fark_fiyat'] === 800 && $r1['fark_kurus'] === 145600 && $r1['kumulatif_fark_kurus'] === 145600 && $r1['tarih'] === $once);
+ok('s2 satırı: ağırlıklı PC fiyatı 1,5333 (16.100 € / 10.500 kg), fatura 1,40, kümülatif +285.600', $r2['pc_fiyat'] === 15333 && $r2['fatura_fiyat'] === 14000 && $r2['kumulatif_fark_kurus'] === 145600 + 140000, json_encode($r2));
 $oz = $hv['ozet'];
 $topPc = 2639000 + 1610000 + 70000 + 70000; $topFa = 2493400 + 1470000 + 66500 + 73500; $topGr = 18200000 + 10500000 + 350000 + 350000;
-ok('özet: adet 4, gram, PC/fatura/fark toplamı', $oz['adet'] === 4 && $oz['gram'] === $topGr && $oz['pc_kurus'] === $topPc && $oz['fatura_kurus'] === $topFa && $oz['fark_kurus'] === $topFa - $topPc, json_encode($oz));
-ok('özet: kapatilacak = −fark (pozitif = ileride fazla faturalanmalı)', $oz['kapatilacak_kurus'] === -($topFa - $topPc));
+ok('özet: adet 4, gram, PC/fatura/fark toplamı', $oz['adet'] === 4 && $oz['gram'] === $topGr && $oz['pc_kurus'] === $topPc && $oz['fatura_kurus'] === $topFa && $oz['fark_kurus'] === $topPc - $topFa, json_encode($oz));
+ok('özet: kapatilacak = fark = gelen − kesilen (pozitif = ileride fazla faturalanmalı)', $oz['kapatilacak_kurus'] === ($topPc - $topFa) && $oz['kapatilacak_kurus'] === $oz['fark_kurus']);
 // kg-ağırlıklı ortalama, ELLE: pc_ort = Σpc / Σkg ; fatura_ort = Σ(kg × fatura fiyatı) / Σkg (basit ortalama DEĞİL)
 $pcOrt = intdiv($topPc * 100000 * 2 + $topGr, 2 * $topGr);
 $faOrt = intdiv((18200000 * 13700 + 10500000 * 14000 + 350000 * 19000 + 350000 * 21000) * 2 + $topGr, 2 * $topGr);
-ok('özet: pc_ort / fatura_ort kg-ağırlıklı; fark_ort = fatura_ort − pc_ort', $oz['pc_ort'] === $pcOrt && $oz['fatura_ort'] === $faOrt && $oz['fark_ort'] === $faOrt - $pcOrt, json_encode([$pcOrt, $faOrt]));
+ok('özet: pc_ort / fatura_ort kg-ağırlıklı; fark_ort = pc_ort − fatura_ort', $oz['pc_ort'] === $pcOrt && $oz['fatura_ort'] === $faOrt && $oz['fark_ort'] === $pcOrt - $faOrt, json_encode([$pcOrt, $faOrt]));
 $basit = intdiv(13700 + 14000 + 19000 + 21000, 4);
 ok('ağırlıklı ortalama basit ortalamadan farklı', $oz['fatura_ort'] !== $basit);
 ok('atlanan: fatura_yok 2 (s4, s6), para_birimi 1 (s3), pc_yok 1 (s5)', $hv['atlanan'] === ['fatura_yok' => 2, 'para_birimi' => 1, 'pc_yok' => 1], json_encode($hv['atlanan']));
@@ -224,13 +224,13 @@ echo "\n=== 6. Plan: saf senaryolar ===\n";
 $mk = static function (int $id, ?string $tarih, string $ref, int $gram, int $pcKurus, int $faFiyat): array {
     $fa = intdiv($gram * $faFiyat + 50000, 100000);
     return ['id' => $id, 'order_ref' => $ref, 'tarih' => $tarih, 'fiyatli' => true, 'yuklendi' => true, 'fatura' => ['fiyat' => $faFiyat, 'no' => '', 'tarih' => null],
-        'karsilastirma' => ['gram' => $gram, 'pc_kurus' => $pcKurus, 'fatura_kurus' => $fa, 'fark_kurus' => $fa - $pcKurus],
+        'karsilastirma' => ['gram' => $gram, 'pc_kurus' => $pcKurus, 'fatura_kurus' => $fa, 'fark_kurus' => $pcKurus - $fa],
         'satirlar' => [['fiyatli' => true, 'pb' => 'EUR']]];
 };
 $cari1 = ['fiyatli' => [$mk(1, '2026-10-01', 'T1', 18200000, 2639000, 13700)], 'yuklenen' => [], 'yuklenmemis' => []];
 $p1 = siparis_denge_param(['n' => '5', 'kg' => '18200', 'hedef' => '1,45'], $cari1);
 $h1 = siparis_denge_hesapla($cari1, $p1);
-ok('tek sevkiyat 18.200 kg: PC 1,45 / fatura 1,37 → fark −1.456,00 €, kapatılacak +1.456,00 €', $h1['ozet']['fark_kurus'] === -145600 && $h1['ozet']['kapatilacak_kurus'] === 145600 && $h1['ozet']['fark_ort'] === -800 && $h1['ozet']['pc_ort'] === 14500 && $h1['ozet']['fatura_ort'] === 13700);
+ok('tek sevkiyat 18.200 kg: PC 1,45 / fatura 1,37 → fark +1.456,00 €, kapatılacak +1.456,00 €', $h1['ozet']['fark_kurus'] === 145600 && $h1['ozet']['kapatilacak_kurus'] === 145600 && $h1['ozet']['fark_ort'] === 800 && $h1['ozet']['pc_ort'] === 14500 && $h1['ozet']['fatura_ort'] === 13700);
 ok('plan 5 satır; sıra 1..5; her satır gram 18.200.000, hedef 14500', count($h1['plan']) === 5 && array_column($h1['plan'], 'sira') === [1, 2, 3, 4, 5] && count(array_unique(array_column($h1['plan'], 'gram'))) === 1 && $h1['plan'][0]['gram'] === 18200000 && $h1['plan'][0]['hedef'] === 14500);
 $hedefTutar = intdiv(18200000 * 14500 + 50000, 100000);
 ok('hedef tutarı 26.390,00 €', $h1['plan_ozet']['hedef_tutar_kurus'] === 2639000 && $hedefTutar === 2639000);
@@ -254,7 +254,7 @@ ok('hane 4: kalan ≤ 1 € (100 kuruş)', abs($h4['plan_ozet']['kalan']) <= 100
 // D > 0 (fatura fazla): PC 1,30 / fatura 1,37 → fark +1.274,00 € → kapatılacak negatif, düzeltme negatif
 $cariP = ['fiyatli' => [$mk(2, '2026-10-02', 'T2', 18200000, 2366000, 13700)], 'yuklenen' => [], 'yuklenmemis' => []];
 $hp = siparis_denge_hesapla($cariP, siparis_denge_param(['n' => '4', 'kg' => '18200', 'hedef' => '1.30'], $cariP));
-ok('D>0: fark +1.274,00 €, kapatılacak −127.400; fiyatlar hedefin ALTINDA, kapanan negatif', $hp['ozet']['fark_kurus'] === 127400 && $hp['ozet']['kapatilacak_kurus'] === -127400 && $hp['plan'][0]['fiyat'] < 13000 && $hp['plan'][0]['kapanan_kurus'] < 0
+ok('D>0: fark −1.274,00 € (gelen − kesilen), kapatılacak −127.400; fiyatlar hedefin ALTINDA, kapanan negatif', $hp['ozet']['fark_kurus'] === -127400 && $hp['ozet']['kapatilacak_kurus'] === -127400 && $hp['plan'][0]['fiyat'] < 13000 && $hp['plan'][0]['kapanan_kurus'] < 0
     && $hp['plan_ozet']['duzeltme_ort_fiyat'] < 0 && $hp['plan_ozet']['duzeltme_oran_metin'][0] === '-' && $hp['plan_ozet']['toplam_kapanan'] + $hp['plan_ozet']['kalan'] === -127400, json_encode($hp['plan_ozet']));
 // D = 0
 $cari0 = ['fiyatli' => [$mk(3, '2026-10-03', 'T3', 10000000, 1450000, 14500)], 'yuklenen' => [], 'yuklenmemis' => []];
