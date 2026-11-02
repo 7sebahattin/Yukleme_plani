@@ -608,7 +608,7 @@
         var ilkPasif = dugmeler.map(function (b) { return b.disabled; });
         var devamIl = ilerleme ? q('[data-sip-mail-devam-et]', ilerleme) : null, vazgecIl = ilerleme ? q('[data-sip-mail-vazgec]', ilerleme) : null;
         var durum = { tid: '', tur: '', calisiyor: false };
-        var ETIKET = { siparis: 'Sipariş', lojistik: 'Lojistik' };
+        var ETIKET = { siparis: 'Sipariş', lojistik: 'Lojistik', odeme: 'Ödeme' };
 
         function kilitle(kilit) {
             kap.setAttribute('aria-busy', kilit ? 'true' : 'false');
@@ -622,7 +622,7 @@
             if (!ilerleme) return;
             var sy = y.sayac || {}, t = y.toplam || 0;
             if (bar) { bar.max = Math.max(1, t); bar.value = Math.min(t, y.i || 0); }
-            var m = 'Mailler taranıyor… ' + (y.i || 0) + ' / ' + t + ' ek · ' + (sy.alindi || 0) + ' alındı · ' + (sy.zaten || 0) + ' zaten vardı';
+            var m = 'Mailler taranıyor… ' + (y.i || 0) + ' / ' + t + ' ek · ' + (sy.alindi || 0) + (durum && durum.tur === 'odeme' ? ' ödeme eklendi · ' : ' alındı · ') + (sy.zaten || 0) + ' zaten vardı';
             if (sy.hata) m += ' · ' + sy.hata + ' hata';
             metin.textContent = m;
         }

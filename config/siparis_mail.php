@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// config/siparis_mail.php — Siparişler ← Mail Merkezi: "Sipariş / Lojistik sorgula" (v378; v381: Fiyat düğmesi Sipariş ile birleşti)
+// config/siparis_mail.php — Siparişler ← Mail Merkezi: "Sipariş / Lojistik / Ödeme sorgula" (v378; v381: Fiyat düğmesi Sipariş ile birleşti; v490: Ödeme sorgula)
 //
 // Tek tık = tara + içe aktar (önizleme adımı YOK). Mail Merkezi'nin DB'deki kayıtlarından (cron doldurur) son 15 günün
 // aday mailleri seçilir (ayarlı posta kutusu + From TAM adres allowlist), PDF ekleri mail_ek_hazirla() ile o an IMAP'tan
@@ -16,6 +16,9 @@
 //    IMAP istemci metodu çağrılmaz (statik test denetler). \Seen / is_read değişmez.
 //  • YENİ gelen-kutusu sorgusu mail_gonderilen_disla_sql() içermeli (siparis_mail_adaylar).
 //  • Çıktı basmaz / exit etmez; kullanıcı yetkisi uç dosyada + siparis_mail_yetkisi() ile.
+//  • v490 "Ödeme sorgula": OGL ödeme avizosu PDF'i PDF İÇERİĞİNDEN tanınır (doc_type payment_advice) ve belge satırı AÇILMADAN
+//    config/siparis_odeme_aviz.php ile ödemeye yazılır (siparis_dosya_yukle_isle / siparis_belgeler YOK). 'odeme' bir MAİL-KATMANI tür
+//    kodudur (siparis_mail_belge_tur_kodu), siparis_pdf_tur_kodu()'na girmez. Tür-başı yetki: siparis_mail_tur_yetkisi().
 // =========================================================
 declare(strict_types=1);
 
@@ -24,6 +27,7 @@ require_once __DIR__ . '/siparis_eslestir.php';
 require_once __DIR__ . '/mail_core.php';
 require_once __DIR__ . '/mail_mime.php';   // mail_view.php'nin mail_gorunum_charset_duzelt() çağrısı mail_mime_mojibake_duzelt() ister (sayfa render'ında da yüklü olmalı)
 require_once __DIR__ . '/mail_view.php';
+require_once __DIR__ . '/siparis_odeme_aviz.php';   // v490: avizo → ödeme (mail_ek_hazirla çağırmaz)
 
 const SIPARIS_MAIL_GUN = 15;            // sabit pencere (ekranda yazar)
 const SIPARIS_MAIL_ADIM_SN = 20;        // tek HTTP adımının süre bütçesi
@@ -41,15 +45,36 @@ const SIPARIS_MAIL_KV_SON = 'siparis_mail_son_';
 // ── TÜRLER + YETKİ ─────────────────────────────────────────────────────
 
 /**
- * @return array<string,array{etiket:string,dugme:string,belgeler:list<string>}> tur → etiketler + bu düğmenin ALDIĞI belge türleri (po|ll|pc).
+ * @return array<string,array{etiket:string,dugme:string,belgeler:list<string>}> tur → etiketler + bu düğmenin ALDIĞI belge türleri (po|ll|pc|odeme).
  * v381: Fiyat düğmesi kalktı — Price Confirmation Sipariş düğmesiyle (aynı gönderen) alınır.
+ * v490: `odeme` bir doc_type DEĞİL, mail-katmanı tür kodudur (siparis_mail_belge_tur_kodu: payment_advice → odeme).
  */
 function siparis_mail_turleri(): array
 {
     return [
         'siparis'  => ['etiket' => 'Sipariş',  'dugme' => '📥 Sipariş sorgula',  'belgeler' => ['po', 'pc']],
         'lojistik' => ['etiket' => 'Lojistik', 'dugme' => '🚚 Lojistik sorgula', 'belgeler' => ['ll']],
+        'odeme'    => ['etiket' => 'Ödeme',    'dugme' => '💶 Ödeme sorgula',    'belgeler' => ['odeme']],
     ];
+}
+
+/** Ödeme sorgusu: mail yetkisine EK olarak Cari Döküm (reports.export) + ödeme yazma (admin | hesap.pay). Fail-closed. */
+function siparis_mail_odeme_yetkisi(): bool
+{
+    return function_exists('siparis_cari_yetkili') && function_exists('siparis_odeme_yetkili') && siparis_cari_yetkili() && siparis_odeme_yetkili();
+}
+
+/** Tür-başı kapı: bilinen tür + mail yetkisi (+ ödeme için ek yetki). Düğme/son sonuç/yarım tarama/uç hep BUNU kullanır. */
+function siparis_mail_tur_yetkisi(string $tur): bool
+{
+    if (!isset(siparis_mail_turleri()[$tur]) || !siparis_mail_yetkisi()) return false;
+    return $tur !== 'odeme' || siparis_mail_odeme_yetkisi();
+}
+
+/** Mail katmanı tür kodu: payment_advice → odeme, diğerleri siparis_pdf_tur_kodu() (po|ll|pc|bilinmiyor). */
+function siparis_mail_belge_tur_kodu(array $doc): string
+{
+    return ($doc['doc_type'] ?? '') === 'payment_advice' ? 'odeme' : siparis_pdf_tur_kodu($doc);
 }
 
 /** Belge türü koduna (po/ll/pc) karşılık gelen düğmenin türü; yoksa null. */
@@ -283,6 +308,8 @@ function siparis_mail_defter(PDO $pdo, array $mailIds): array
                 'sonuc' => (string)($j['sonuc'] ?? ''), 'belge_id' => isset($j['belge_id']) ? (int)$j['belge_id'] : null,
                 'tur' => isset($j['tur']) ? (string)$j['tur'] : null, 'surum' => isset($j['surum']) ? (string)$j['surum'] : null,
                 'mesaj' => isset($j['mesaj']) ? (string)$j['mesaj'] : null,
+                'aviz_surum' => isset($j['aviz_surum']) ? (string)$j['aviz_surum'] : null,
+                'odeme' => is_array($j['odeme'] ?? null) ? $j['odeme'] : null,
             ];
         }
     }
@@ -294,21 +321,26 @@ function siparis_mail_defter_yaz(int $mailId, string $parca, string $sonuc, int 
 {
     if ($mailId <= 0 || $mailId > 2147483647) return;
     audit_log_event('siparis_mail_ek', 'siparis_mail', $mailId, null, [
-        'parca' => $parca, 'sonuc' => $sonuc, 'surum' => SIPARIS_PDF_SURUM, 'hesap_id' => $hesapId,
+        'parca' => $parca, 'sonuc' => $sonuc, 'surum' => SIPARIS_PDF_SURUM, 'aviz_surum' => SIPARIS_ODEME_AVIZO_SURUM, 'hesap_id' => $hesapId,
     ] + $ek, $uid);
 }
 
 /**
  * Defter kaydı bu düğme için SON karar mı? (değilse ek yeniden indirilir/denenir)
- * alindi/zaten/silinmis/gecersiz/ek_yok → evet · taninmadi → yalnız aynı ayrıştırıcı sürümüyle · baska_tur → yalnız defterdeki tür
- * bu düğmenin ALDIĞI türlerden biri DEĞİLSE (öyleyse bu düğmede alınabilir) · hata/diğer → hayır.
+ * alindi/zaten/silinmis/gecersiz/ek_yok → evet · taninmadi → yalnız aynı ayrıştırıcı sürümüyle (Ödeme düğmesi için ayrıca avizo sürümü) ·
+ * okunamadi (v490: tanınmış ama doğrulanamayan avizo) → Ödeme dışındaki düğmeler için evet, Ödeme için yalnız aynı avizo sürümüyle ·
+ * baska_tur → yalnız defterdeki tür bu düğmenin ALDIĞI türlerden biri DEĞİLSE (öyleyse bu düğmede alınabilir) · hata/diğer → hayır.
  * @param list<string> $beklenenler
  */
 function siparis_mail_defter_son_mu(array $d, array $beklenenler): bool
 {
     $s = (string)($d['sonuc'] ?? '');
+    $odemeDugmesi = in_array('odeme', $beklenenler, true);
+    $avizoGuncel = (string)($d['aviz_surum'] ?? '') === SIPARIS_ODEME_AVIZO_SURUM;
     if (in_array($s, ['alindi', 'zaten', 'silinmis', 'gecersiz', 'ek_yok'], true)) return true;
-    if ($s === 'taninmadi') return (string)($d['surum'] ?? '') === SIPARIS_PDF_SURUM;
+    // Eski `taninmadi` kayıtlarında aviz_surum YOKTUR: avizo olabilir → Ödeme düğmesi bir kez yeniden indirir (Sipariş/Lojistik için kayıt hâlâ son).
+    if ($s === 'taninmadi') return (string)($d['surum'] ?? '') === SIPARIS_PDF_SURUM && (!$odemeDugmesi || $avizoGuncel);
+    if ($s === 'okunamadi') return !$odemeDugmesi || $avizoGuncel;
     if ($s === 'baska_tur') return isset($d['tur']) && $d['tur'] !== null && !in_array($d['tur'], $beklenenler, true);
     return false;
 }
@@ -333,7 +365,7 @@ function siparis_mail_satir(array $oge, string $durum, array $ek = []): array
 {
     return $ek + [
         'm' => (int)$oge['m'], 'p' => (string)$oge['p'], 'dosya' => (string)($oge['dosya'] ?? ''), 'durum' => $durum, 'tur' => null,
-        'belge_id' => null, 'sevkiyatlar' => [], 'catisma' => 0, 'uyari' => 0, 'mesajlar' => [], 'hata' => null, 'kopya' => (int)($oge['kopya'] ?? 1),
+        'belge_id' => null, 'sevkiyatlar' => [], 'catisma' => 0, 'uyari' => 0, 'mesajlar' => [], 'hata' => null, 'kopya' => (int)($oge['kopya'] ?? 1), 'odeme' => null,
     ];
 }
 
@@ -400,7 +432,7 @@ function siparis_mail_plan(PDO $pdo, string $tur, array $hesapIds, array $ayar, 
             }
             if ($karar !== null) {
                 $durum = in_array($karar['sonuc'], ['alindi', 'zaten'], true) ? 'onceden' : $karar['sonuc'];
-                $plan['satirlar'][] = siparis_mail_satir($oge, $durum, ['tur' => $karar['tur'], 'belge_id' => $karar['belge_id'], 'hata' => $karar['mesaj']]);
+                $plan['satirlar'][] = siparis_mail_satir($oge, $durum, ['tur' => $karar['tur'], 'belge_id' => $karar['belge_id'], 'hata' => $karar['mesaj'], 'odeme' => $karar['odeme'] ?? null]);
                 continue;
             }
             $plan['oge'][] = $oge;
@@ -474,8 +506,22 @@ function siparis_mail_ek_isle(PDO $pdo, array $oge, array $beklenen, int $uid, s
         $dg = siparis_dosya_dogrula($dosya);
         if (!$dg['ok']) return $kaydet('gecersiz', ['hata' => (string)($dg['hata'] ?? 'Geçerli bir PDF değil.')], ['mesaj' => siparis_kirp((string)($dg['hata'] ?? ''), 120)]);
 
-        // 4) aynı içerik zaten var mı
+        // 3b) v490 ÖDEME düğmesi: avizo siparis_belgeler'e HİÇ girmez (belge satırı / sha sorgusu / siparis_dosya_yukle_isle YOK)
         $sha = (string)hash_file('sha256', $tmp);
+        if (in_array('odeme', $beklenen, true)) {
+            $override = $GLOBALS['_siparis_parse_override'] ?? null;     // YALNIZ TEST KANCASI
+            $doc = is_callable($override) ? (array)$override($tmp) : siparis_pdf_isle($tmp);
+            if (($doc['doc_type'] ?? '') === 'error') return $kaydet('gecersiz', ['hata' => 'PDF okunamadı (bozuk, şifreli ya da desteklenmeyen biçim).'], ['sha256' => $sha, 'mesaj' => 'PDF okunamadı']);
+            $t = siparis_mail_belge_tur_kodu($doc);
+            if ($t === 'bilinmiyor') return $kaydet('taninmadi', ['tur' => null], ['sha256' => $sha]);
+            if ($t !== 'odeme') return $kaydet('baska_tur', ['tur' => $t], ['sha256' => $sha]);
+            $x = siparis_odeme_aviz_isle($pdo, $doc, ['m' => $m, 'h' => $h, 'p' => $p], $uid);
+            $ek = ['tur' => 'odeme', 'odeme' => $x['odeme'], 'hata' => $x['sonuc'] === 'okunamadi' ? $x['mesaj'] : null];
+            if ($x['sonuc'] === 'hata') return siparis_mail_satir($oge, 'hata', ['dosya' => siparis_kirp($ad, 120), 'hata' => $x['mesaj']] + $ek);   // defter YOK → sonraki sorguda yeniden denenir
+            return $kaydet($x['sonuc'], $ek, ['sha256' => $sha, 'mesaj' => siparis_kirp($x['mesaj'], 120), 'odeme' => $x['odeme']]);
+        }
+
+        // 4) aynı içerik zaten var mı
         $o = $pdo->prepare('SELECT id, deleted_at FROM siparis_belgeler WHERE sha256 = ?');
         $o->execute([$sha]);
         $var = $o->fetch(PDO::FETCH_ASSOC);
@@ -488,7 +534,7 @@ function siparis_mail_ek_isle(PDO $pdo, array $oge, array $beklenen, int $uid, s
             if (($doc['doc_type'] ?? '') === 'error') {
                 return $kaydet('gecersiz', ['hata' => 'PDF okunamadı (bozuk, şifreli ya da desteklenmeyen biçim).'], ['sha256' => $sha, 'mesaj' => 'PDF okunamadı']);
             }
-            $t = siparis_pdf_tur_kodu($doc);
+            $t = siparis_mail_belge_tur_kodu($doc);   // v490: avizo burada `odeme` çıkar → Sipariş/Lojistik taramasında baska_tur (belge satırı açılmaz)
             if ($t === 'bilinmiyor') return $kaydet('taninmadi', ['tur' => null], ['sha256' => $sha]);
             if (!in_array($t, $beklenen, true)) return $kaydet('baska_tur', ['tur' => $t], ['sha256' => $sha]);
         }
@@ -614,10 +660,12 @@ function siparis_mail_baslat(PDO $pdo, string $tur, int $uid, string $depo, arra
 {
     if (!isset(siparis_mail_turleri()[$tur])) return siparis_mail_hata(400, 'tur', 'Geçersiz sorgu türü.');
     $etiket = siparis_mail_turleri()[$tur]['etiket'];
+    if ($tur === 'odeme' && !siparis_mail_odeme_yetkisi()) return siparis_mail_hata(403, 'yetki', 'Ödeme sorgusu için ödeme yazma (hesap.pay / yönetici) ve Cari Döküm (reports.export) yetkisi gerekir.');
     $ayar = siparis_mail_ayar_oku($pdo);
     if (!siparis_mail_ayarli_mi($ayar, $tur)) return siparis_mail_hata(400, 'ayarsiz', $etiket . ' sorgusu için gönderen adresi ya da posta kutusu ayarlanmadı.');
     $hesapIds = siparis_mail_tarama_hesaplari($pdo, $ayar, $uid);
     if (!$hesapIds) return siparis_mail_hata(400, 'hesap', 'Ayarlı posta kutularından hiçbiri size atanmamış.');
+    if ($tur === 'odeme' && !siparis_odeme_hazir($pdo)) return siparis_mail_hata(409, 'kurulmadi', 'Ödeme tablosu kurulmadı (migrate.php › Sipariş ödemeleri).');
     $simdi = (string)($opt['simdi'] ?? date('Y-m-d H:i:s'));
     $ts = strtotime($simdi) ?: time();
 
@@ -657,6 +705,7 @@ function siparis_mail_adim(PDO $pdo, string $taramaId, int $uid, string $depo, a
         if ($k === null || (string)$k['id'] !== $taramaId || (int)$k['uid'] !== $uid) {
             return siparis_mail_hata(409, 'sona_erdi', 'Bu sorgu başka bir kullanıcıya ait ya da sona ermiş.');
         }
+        if (($k['tur'] ?? '') === 'odeme' && !siparis_mail_odeme_yetkisi()) return siparis_mail_hata(403, 'yetki', 'Ödeme sorgusu için yetkiniz kalmadı.');   // yetki sürerken düşse de ödeme yazılamaz
         if ((string)$k['depo'] !== $depo) return siparis_mail_hata(409, 'depo', 'Aktif depo değişti — sorguyu yeniden başlatın.');
         $saat = isset($opt['saat']) && is_callable($opt['saat']) ? $opt['saat'] : static fn(): float => microtime(true);
         $t0 = (float)$saat();
@@ -693,6 +742,7 @@ function siparis_mail_vazgec(PDO $pdo, string $taramaId, int $uid): array
         if ($k === null || (string)$k['id'] !== $taramaId || (int)$k['uid'] !== $uid) {
             return siparis_mail_hata(409, 'sona_erdi', 'Bu sorgu başka bir kullanıcıya ait ya da sona ermiş.');
         }
+        if (($k['tur'] ?? '') === 'odeme' && !siparis_mail_odeme_yetkisi()) return siparis_mail_hata(403, 'yetki', 'Ödeme sorgusu için yetkiniz kalmadı.');
         $son = siparis_mail_bitir($pdo, $k, 'vazgecildi', time());
         return siparis_mail_yanit($k, true) + ['son' => $son];
     });

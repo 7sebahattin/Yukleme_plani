@@ -178,12 +178,13 @@ $mailSenaryo = array_filter(array_map('trim', explode(',', (string)(getenv('SIPA
 if ($mailSenaryo) {
     mail_test_sema_kur($db); mail_test_anahtar_kur();
     $db->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+    foreach (siparis_odeme_tablolar() as $ad => $ddl) { if (!siparis_tablo_var($db, $ad)) { [$cr, $ix] = siparis_ddl_sqlite($ddl); $db->exec($cr); foreach ($ix as $x) $db->exec($x); } }   // v490: Ödeme sorgula düğmesi için siparis_odemeler
     $mA = smt_hesap('export@ornek.test');
-    $mYaz = function (string $ad, string $dosya, array $get = [], array $perms = ['siparis.read', 'siparis.write', 'mail.read'], bool $yonetici = true) use ($OUT, &$manifest): void {
+    $mYaz = function (string $ad, string $dosya, array $get = [], array $perms = ['siparis.read', 'siparis.write', 'mail.read', 'reports.export'], bool $yonetici = true) use ($OUT, &$manifest): void {
         file_put_contents("$OUT/$ad.html", basla_sayfa($dosya, $get, $ad, $perms, $yonetici));
         $manifest['sayfalar'][] = $ad;
     };
-    $tumAyar = ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test']];
+    $tumAyar = ['siparis' => ['po@ornek.test'], 'lojistik' => ['log@ornek.test', 'kisi@ornek.test'], 'odeme' => ['odeme@ornek.test']];
     if (in_array('ayarsiz', $mailSenaryo, true)) $mYaz('mail_ayarsiz', 'siparisler.php');
     if (in_array('ayarsiz', $mailSenaryo, true)) $mYaz('mail_ayarsiz_operator', 'siparisler.php', [], ['siparis.read', 'siparis.write', 'mail.read'], false);
     smt_ayar([$mA], $tumAyar);
@@ -210,8 +211,9 @@ if ($mailSenaryo) {
         smt_tara('siparis', 1, 'DEPO1', ['simdi' => '2026-10-18 12:10:00']);                  // en yeni sonuç: Sipariş (PC Alındı satırı görünür)
         if (in_array('son', $mailSenaryo, true)) $mYaz('mail_son', 'siparisler.php');
         if (in_array('yarim', $mailSenaryo, true)) {
-            $mm('po@ornek.test', [smt_ek('2', 'PO_CW51.pdf', smt_pdf('po-ui-1'))], '2026-10-17 11:00:00', ['subject' => 'Purchase order CW51']);
-            $mm('po@ornek.test', [smt_ek('2', 'PO_CW52.pdf', smt_pdf('po-ui-2'))], '2026-10-17 11:30:00', ['subject' => 'Purchase order CW52']);
+            // yarım tarama gerçek saatle başlar (siparis_mail_yarim 24 sa kuralı) → mailler de gerçek saate göre 15 günlük pencerenin İÇİNDE olmalı (sabit tarih zamanla pencereden düşer)
+            $mm('po@ornek.test', [smt_ek('2', 'PO_CW51.pdf', smt_pdf('po-ui-1'))], date('Y-m-d H:i:s', strtotime('-2 days')), ['subject' => 'Purchase order CW51']);
+            $mm('po@ornek.test', [smt_ek('2', 'PO_CW52.pdf', smt_pdf('po-ui-2'))], date('Y-m-d H:i:s', strtotime('-2 days +30 minutes')), ['subject' => 'Purchase order CW52']);
             $b = siparis_mail_baslat($db, 'siparis', 1, 'DEPO1', ['simdi' => date('Y-m-d H:i:s')]);
             if (!$b['ok']) throw new RuntimeException('yarım tarama kurulamadı: ' . json_encode($b));
             $manifest['yarim_tid'] = $b['tarama_id'];

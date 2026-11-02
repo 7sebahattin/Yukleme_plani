@@ -32,7 +32,7 @@ require_once __DIR__ . '/siparis_pkl.php';
 /** Belge türü etiketleri (olay/ekran metinleri). */
 function siparis_belge_tur_etiketleri(): array
 {
-    return ['po' => 'PO', 'll' => 'Loading List', 'pc' => 'Price Confirmation', 'pkl' => 'PKL', 'invoice' => 'Invoice', 'efatura' => 'e-Fatura', 'diger' => 'Diğer', 'bilinmiyor' => 'Tanınmayan'];
+    return ['po' => 'PO', 'll' => 'Loading List', 'pc' => 'Price Confirmation', 'pkl' => 'PKL', 'invoice' => 'Invoice', 'efatura' => 'e-Fatura', 'odeme' => 'Ödeme avizosu', 'diger' => 'Diğer', 'bilinmiyor' => 'Tanınmayan'];
 }
 
 /**

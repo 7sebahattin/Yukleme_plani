@@ -154,6 +154,7 @@ ok('v382: sipui_yukle_ozet_html: yarım + son sorgu + hata turuncu, mail yoksa y
     && preg_match('/Son sorgu: Lojistik · \d{2}\.\d{2} \d{2}:\d{2} · 3 alındı · 2 hata/', sipui_yukle_ozet_html([['tur' => 'lojistik', 'bitis' => 1792400000, 'sayac' => ['alindi' => 3, 'hata' => 2]]], null, true)) === 1
     && str_contains(sipui_yukle_ozet_html([['tur' => 'lojistik', 'bitis' => 1792400000, 'sayac' => ['alindi' => 3, 'hata' => 2]]], null, true), 'sip-yukle-son--hata')
     && !str_contains(sipui_yukle_ozet_html([['tur' => 'siparis', 'bitis' => 0, 'sayac' => ['alindi' => 1]]], null, true), 'sip-yukle-son--hata'));
+ok('v490: özet satırında Ödeme sorgusu "Son sorgu: Ödeme · … · 1 eklendi"', (function (): bool { $o = sipui_yukle_ozet_html([['tur' => 'odeme', 'bitis' => 1792400000, 'sayac' => ['alindi' => 1]]], null, true); return str_contains($o, 'Son sorgu: Ödeme') && str_contains($o, '1 eklendi') && !str_contains($o, '1 alındı'); })());
 // v382 — "Açık Sevkiyatlar" yazdırma / PDF düğmeleri (veri ucu: siparis_yazdir.php)
 $yz = sayfa('siparisler.php', ['q' => 'TC90000', 'durum' => 'acik', 'acik_page' => '2', 'kapali_page' => '3']);
 $acikBas = preg_match('~<div class="sip-bolum-bas" id="sipAcik">.*?</div></div>~s', $yz['html'], $mb) === 1 ? $mb[0] : '';

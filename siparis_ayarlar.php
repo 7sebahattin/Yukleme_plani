@@ -66,7 +66,7 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!siparis_mail_ayar_yetkisi() || !siparis_mail_hazir($pdo)) { set_flash('error', 'Mail sorgu ayarları için Mail Merkezi yönetim yetkisi gerekir (ya da özellik kurulu değil).'); $git('#mail'); }
         $r = siparis_mail_ayar_kaydet($pdo, [
             'hesaplar' => (array)($_POST['hesaplar'] ?? []),
-            'gonderen' => ['siparis' => (string)($_POST['g_siparis'] ?? ''), 'lojistik' => (string)($_POST['g_lojistik'] ?? '')],
+            'gonderen' => ['siparis' => (string)($_POST['g_siparis'] ?? ''), 'lojistik' => (string)($_POST['g_lojistik'] ?? ''), 'odeme' => (string)($_POST['g_odeme'] ?? '')],
         ], $uid);
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Mail sorgu ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayarlar kaydedilemedi.'));
         $git('#mail');
@@ -184,8 +184,9 @@ $profilVeri = function (array $p): array {
     <?php if (!$mailHazir): ?>
       <p class="sip-bilgi" role="note">Mail sorgusu kurulu değil: Mail Merkezi tabloları, MAIL_MASTER_KEY ve Hal Kayıt ayar tablosu (hks_kv) gerekir.</p>
     <?php else: ?>
-      <p class="muted">Siparişler sayfasındaki <strong>Sipariş sorgula</strong> (sipariş PO + fiyat onayı PC) ve <strong>Lojistik sorgula</strong> düğmeleri yalnız burada işaretlenen posta kutularını ve yalnız aşağıdaki gönderen adreslerinden gelen mailleri tarar. Belge türü PDF içeriğinden anlaşılır; adres alan adına göre değil, <strong>tam adrese</strong> göre eşleşir.</p>
+      <p class="muted">Siparişler sayfasındaki <strong>Sipariş sorgula</strong> (sipariş PO + fiyat onayı PC) ve <strong>Lojistik sorgula</strong> ve <strong>Ödeme sorgula</strong> (OGL ödeme avizosu PDF'i) düğmeleri yalnız burada işaretlenen posta kutularını ve yalnız aşağıdaki gönderen adreslerinden gelen mailleri tarar. Belge türü PDF içeriğinden anlaşılır; adres alan adına göre değil, <strong>tam adrese</strong> göre eşleşir.</p>
       <p class="sip-bilgi" role="note">Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin.</p>
+      <p class="sip-bilgi" role="note">Ödeme sorgusu ödemeyi <strong>onay sormadan</strong> Ödemeler'e kaydeder; adresleri yalnız OGL muhasebe adresiyle sınırlayın. Düğme yalnız Cari Döküm (reports.export) ve ödeme yazma (yönetici / hesap.pay) yetkisi olana görünür.</p>
       <form method="post" action="siparis_ayarlar.php#mail" class="sip-form sip-mail-ayar" data-sip-tek>
         <?= sipui_csrf() ?><input type="hidden" name="islem" value="mail_ayar">
         <fieldset class="sip-mail-hesaplar"><legend>Taranacak posta kutuları</legend>
@@ -195,7 +196,7 @@ $profilVeri = function (array $p): array {
           <?php endforeach; ?>
         </fieldset>
         <div class="sip-mail-gonderenler">
-          <?php foreach (['siparis' => ['g_siparis', 'Sipariş + fiyat onayı (PO / Price Confirmation) gönderenleri'], 'lojistik' => ['g_lojistik', 'Lojistik (Loading List) gönderenleri']] as $t => [$ad, $et]): ?>
+          <?php foreach (['siparis' => ['g_siparis', 'Sipariş + fiyat onayı (PO / Price Confirmation) gönderenleri'], 'lojistik' => ['g_lojistik', 'Lojistik (Loading List) gönderenleri'], 'odeme' => ['g_odeme', 'Ödeme avizosu (Payment advice) gönderenleri']] as $t => [$ad, $et]): ?>
             <label><?= h($et) ?>
               <textarea name="<?= h($ad) ?>" rows="3" maxlength="1500" autocomplete="off" spellcheck="false"><?= h(implode("\n", $mailAyar['gonderen'][$t] ?? [])) ?></textarea>
             </label>

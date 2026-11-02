@@ -462,7 +462,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             let { ctx, page, hatalar } = await ac('mail_ayarsiz', w, h);
             const d = await page.evaluate(() => ({ n: document.querySelectorAll('[data-sip-mail]').length, pasif: Array.from(document.querySelectorAll('[data-sip-mail]')).every(b => b.disabled),
                 not: (document.querySelector('.sip-mail-not') || {}).textContent || '', link: !!document.querySelector('.sip-mail-not a[href="siparis_ayarlar.php#mail"]') }));
-            ok(`[${w}] mail ayarsız: 2 düğme, hepsi pasif`, d.n === 2 && d.pasif, JSON.stringify(d));
+            ok(`[${w}] mail ayarsız: 3 düğme (Sipariş · Lojistik · Ödeme; yönetici + reports.export), hepsi pasif`, d.n === 3 && d.pasif, JSON.stringify(d));
             ok(`[${w}] mail ayarsız (yönetici): ayar bağlantısı görünür`, d.link && /Mail sorgu ayarları/.test(d.not), d.not);
             ok(`[${w}] mail ayarsız: yatay taşma yok`, (await tasma(page)) <= 0);
             ok(`[${w}] mail ayarsız: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
@@ -489,10 +489,10 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 return { n: bs.length, hepsiAktif: bs.every(b => !b.disabled), tops: rc.map(x => Math.round(x.top)), w: rc.map(x => Math.round(x.width)), h: rc.map(x => x.height), kapW: kr.width,
                     sutun: cs.display === 'grid' ? cs.gridTemplateColumns.split(' ').length : 0, tasar: rc.some(x => x.right > kr.right + 1 || x.left < kr.left - 1) };
             });
-            ok(`[${w}] mail: iki düğme etkin ve kapsayıcıdan taşmıyor`, r.n === 2 && r.hepsiAktif && !r.tasar, JSON.stringify(r));
+            ok(`[${w}] mail: üç düğme etkin ve kapsayıcıdan taşmıyor`, r.n === 3 && r.hepsiAktif && !r.tasar, JSON.stringify(r));
             if (w < 390) ok(`[${w}] mail: <390px düğmeler alt alta, tam genişlik`, r.sutun === 1 && r.tops[0] < r.tops[1] && r.w.every(x => x >= r.kapW - 2), JSON.stringify(r));
-            else if (w < 768) ok(`[${w}] mail: <768px 2 eşit sütun, aynı satır`, r.sutun === 2 && r.tops[0] === r.tops[1] && Math.max(...r.w) - Math.min(...r.w) <= 2, JSON.stringify(r));
-            else ok(`[${w}] mail: masaüstü/tablet düğmeler aynı satırda`, r.tops[0] === r.tops[1], JSON.stringify(r));
+            else if (w < 768) ok(`[${w}] mail: <768px 2 sütun — ilk iki düğme eşit genişlikte aynı satırda, 3. düğme alt satırda tam genişlik`, r.sutun === 2 && r.tops[0] === r.tops[1] && Math.abs(r.w[0] - r.w[1]) <= 2 && r.tops[2] > r.tops[0] && r.w[2] >= r.kapW - 2, JSON.stringify(r));
+            else ok(`[${w}] mail: masaüstü/tablet 3 düğme aynı satırda`, r.tops[0] === r.tops[1] && r.tops[1] === r.tops[2], JSON.stringify(r));
             if (w < 768) ok(`[${w}] mail: dokunma hedefleri ≥ 44px`, r.h.every(x => x >= 43.5), JSON.stringify(r.h));
             ok(`[${w}] mail: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
             if (w === 390) await page.screenshot({ path: path.join(SHOTS, '390_mail_ayarli.png'), fullPage: true });
@@ -581,7 +581,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
             const { ctx, page } = await ac('mail_son', w, h);
             const o = await page.evaluate(() => { const d = document.querySelector('details[data-sip-yukle]'); const sm = d.querySelector(':scope > summary.sip-yukle-ozet');
                 return { acik: d.open, metin: sm.textContent.replace(/\s+/g, ' ').trim(), hata: !!sm.querySelector('.sip-yukle-son--hata') }; });
-            ok(`[${w}] yükleme kartı özeti: "Son sorgu: Sipariş · gg.aa ss:dd · N alındı" kapalıyken görünür, kartı açmaz`, !o.acik && /Belge yükle · 📧 Mailden al/.test(o.metin) && /Son sorgu: (Sipariş|Lojistik) · \d{2}\.\d{2} \d{2}:\d{2}( · \d+ alındı)?/.test(o.metin), JSON.stringify(o));
+            ok(`[${w}] yükleme kartı özeti: "Son sorgu: Sipariş · gg.aa ss:dd · N alındı" kapalıyken görünür, kartı açmaz`, !o.acik && /Belge yükle · 📧 Mailden al/.test(o.metin) && /Son sorgu: (Sipariş|Lojistik|Ödeme) · \d{2}\.\d{2} \d{2}:\d{2}( · \d+ (alındı|eklendi))?/.test(o.metin), JSON.stringify(o));
             ok(`[${w}] yükleme kartı özeti: taşma yok`, (await tasma(page)) <= 0);
             await ctx.close();
         }
@@ -663,9 +663,9 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
                 return { baslik: document.querySelector('#sipMailAyarBas').textContent, kutu: f.querySelectorAll('input[name="hesaplar[]"]').length, isaretli: f.querySelectorAll('input[name="hesaplar[]"]:checked').length, ta: ta.map(t => t.name), taFont: ta.map(t => parseFloat(getComputedStyle(t).fontSize)),
                     yonlendirme: /Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin\./.test(document.querySelector('#mail').textContent), csrf: !!f.querySelector('input[name=csrf]'), islem: (f.querySelector('input[name=islem]') || {}).value,
                     degerler: ta.map(t => t.value), btn: f.querySelector('button[type=submit]').getBoundingClientRect().height }; });
-            ok(`[${w}] mail ayar kartı: başlık, posta kutusu onay kutuları, 2 gönderen alanı, CSRF, islem=mail_ayar`, /Mail sorgu ayarları/.test(k.baslik) && k.kutu >= 1 && k.isaretli >= 1 && k.ta.join() === 'g_siparis,g_lojistik' && k.csrf && k.islem === 'mail_ayar', JSON.stringify(k));
+            ok(`[${w}] mail ayar kartı: başlık, posta kutusu onay kutuları, 3 gönderen alanı, CSRF, islem=mail_ayar`, /Mail sorgu ayarları/.test(k.baslik) && k.kutu >= 1 && k.isaretli >= 1 && k.ta.join() === 'g_siparis,g_lojistik,g_odeme' && k.csrf && k.islem === 'mail_ayar', JSON.stringify(k));
             ok(`[${w}] mail ayar kartı: "X adına Y" yönlendirmesi görünür`, k.yonlendirme);
-            ok(`[${w}] mail ayar kartı: kayıtlı adresler alanlara dolu`, k.degerler[0] === 'po@ornek.test' && k.degerler[1] === 'log@ornek.test\nkisi@ornek.test' && k.degerler.length === 2, JSON.stringify(k.degerler));
+            ok(`[${w}] mail ayar kartı: kayıtlı adresler alanlara dolu`, k.degerler[0] === 'po@ornek.test' && k.degerler[1] === 'log@ornek.test\nkisi@ornek.test' && k.degerler[2] === 'odeme@ornek.test' && k.degerler.length === 3, JSON.stringify(k.degerler));
             if (w < 768) ok(`[${w}] mail ayar kartı: mobil girdi 16px + düğme ≥44px`, k.taFont.every(x => x >= 16) && k.btn >= 43.5, JSON.stringify([k.taFont, k.btn]));
             ok(`[${w}] mail ayar kartı: yatay taşma yok`, (await tasma(page)) <= 0, String(await tasma(page)));
             ok(`[${w}] mail ayar kartı: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
@@ -800,11 +800,11 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         ({ ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, null, { yukleAcik: true }));
         const tr = await page.evaluate(() => {
             const rgb = e => (getComputedStyle(e).backgroundColor.match(/\d+/g) || []).map(Number);
-            const m = document.querySelector('.sip-yukle .sip-mail'), b1 = document.querySelector('[data-sip-mail="siparis"]'), b2 = document.querySelector('[data-sip-mail="lojistik"]');
-            return { mail: m ? rgb(m) : null, b1: b1 ? getComputedStyle(b1).backgroundColor : null, b2: b2 ? getComputedStyle(b2).backgroundColor : null };
+            const m = document.querySelector('.sip-yukle .sip-mail'), b1 = document.querySelector('[data-sip-mail="siparis"]'), b2 = document.querySelector('[data-sip-mail="lojistik"]'), b3 = document.querySelector('[data-sip-mail="odeme"]');
+            return { mail: m ? rgb(m) : null, b1: b1 ? getComputedStyle(b1).backgroundColor : null, b2: b2 ? getComputedStyle(b2).backgroundColor : null, b3: b3 ? getComputedStyle(b3).backgroundColor : null };
         });
         ok(`[${w}] v420 mail sorgu alanı: turuncu zemin (R > G > B, R ≥ 240)`, !!tr.mail && tr.mail[0] >= 240 && tr.mail[0] > tr.mail[1] && tr.mail[1] > tr.mail[2] && tr.mail[0] - tr.mail[2] >= 40, JSON.stringify(tr));
-        ok(`[${w}] v420 sorgu düğmeleri renkli (Sipariş mavi, Lojistik yeşil)`, tr.b1 === 'rgb(37, 99, 235)' && tr.b2 === 'rgb(21, 128, 61)', JSON.stringify(tr));
+        ok(`[${w}] v420/v490 sorgu düğmeleri renkli (Sipariş mavi, Lojistik yeşil, Ödeme mor)`, tr.b1 === 'rgb(37, 99, 235)' && tr.b2 === 'rgb(21, 128, 61)' && tr.b3 === 'rgb(124, 58, 237)', JSON.stringify(tr));
         await ctx.close();
         const YK0 = 'details[data-sip-yukle]', YS0 = 'details[data-sip-yukle] > summary.sip-yukle-ozet';
         ({ ctx, page, hatalar } = await ac('mail_ayarli', w, h, false, null, { otoKapat: 700 }));

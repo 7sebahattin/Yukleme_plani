@@ -11,6 +11,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 require_once __DIR__ . '/config/siparis_cari.php';
+require_once __DIR__ . '/config/siparis_odeme_aviz.php';   // v490: avizo kalemleri paneli (salt okunur)
 $auth_user = require_login();
 require_siparis('read');
 if (!siparis_cari_yetkili()) forbidden('Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: reports.export)');
@@ -30,6 +31,8 @@ $aralik = ($bas === '' && $bit === '') ? 'Tüm tarihler' : (($bas !== '' ? sipui
 $para = static fn(int $k, string $pb): string => siparis_cari_para($k) . ' ' . $pb;
 $toplamMetin = $toplam ? implode(' · ', array_map(static fn($pb) => $para((int)$toplam[$pb], (string)$pb), array_keys($toplam))) : '—';
 $sut = $yaz ? 5 : 4;
+$avizVar = $hazir ? siparis_odeme_aviz_var_idleri($pdo) : [];   // v490: avizo kalemi kaydı olan ödemeler
+$avizId = $hazir ? max(0, (int)($_GET['aviz'] ?? 0)) : 0;
 
 render_header('OGL ödemeleri');
 siparis_assets();
@@ -60,7 +63,7 @@ render_flash();
       <tbody>
       <?php if (!$odemeler): ?><tr><td colspan="<?= $sut ?>" class="muted">Bu aralıkta ödeme yok.</td></tr><?php endif; ?>
       <?php foreach ($odemeler as $o): $t = $para((int)$o['tutar_kurus'], (string)$o['para_birimi']); ?>
-        <tr><td><?= h(sipui_tarih((string)$o['odeme_tarihi'])) ?></td><td><?= h((string)($o['aciklama'] ?? '') !== '' ? (string)$o['aciklama'] : '—') ?></td>
+        <tr><td><?= h(sipui_tarih((string)$o['odeme_tarihi'])) ?></td><td><?= h((string)($o['aciklama'] ?? '') !== '' ? (string)$o['aciklama'] : '—') ?><?php if (isset($avizVar[(int)$o['id']])): ?> <a class="od-aviz-bag no-print" href="siparis_odemeler.php?<?= h(http_build_query(array_filter(['bas' => $bas, 'bit' => $bit, 'aviz' => (int)$o['id']], static fn($x) => $x !== ''))) ?>#odAviz">📄 Avizo kalemleri</a><?php endif; ?></td>
           <td><?= h((string)($o['dekont_no'] ?? '') !== '' ? (string)$o['dekont_no'] : '—') ?></td><td class="num"><?= h($t) ?></td>
           <?php if ($yaz): ?><td class="od-eylem no-print"><button type="button" class="btn btn-sm" data-od-iptal="<?= (int)$o['id'] ?>" data-od-ozet="<?= h(sipui_tarih((string)$o['odeme_tarihi']) . ' · ' . $t) ?>">İptal</button></td><?php endif; ?></tr>
       <?php endforeach; ?>
@@ -70,6 +73,7 @@ render_flash();
       </tbody><?php endif; ?>
     </table></div>
   </section>
+  <section id="odAviz" class="od-aviz-panel no-print" aria-label="Avizo kalemleri"><?= $avizId > 0 ? sipui_odeme_aviz_html($pdo, $avizId) : '' ?></section>
   <?php if ($yaz): ?>
   <dialog id="odEkleDlg" class="pm-dialog od-dialog" aria-labelledby="odEkleBaslik">
     <form method="post" action="siparis_odeme.php" data-sip-tek>

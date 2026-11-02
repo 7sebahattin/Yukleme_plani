@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// siparis_mail.php — "Sipariş / Lojistik sorgula" JSON ucu (POST; siparis.write + mail.read) — v378
+// siparis_mail.php — "Sipariş / Lojistik / Ödeme sorgula" JSON ucu (POST; siparis.write + mail.read; Ödeme için + reports.export + admin|hesap.pay) — v378/v490
 //
 // islem: baslat {tur} | devam {tarama_id} | vazgec {tarama_id}. Tek tık = tara + içe aktar; iş parçalı yürür
 // (adım başına ≤ 20 sn / ≤ 6 ek) ve JS döngüsüyle sürer. Mantık: config/siparis_mail.php (burada yalnız kapı + JSON).
@@ -20,6 +20,7 @@ require_once __DIR__ . '/config/siparis_pdf.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/siparis_mail.php';
 require_once __DIR__ . '/_siparis_ortak.php';
+require_once __DIR__ . '/config/siparis_cari.php';   // v490: siparis_cari_yetkili() — Ödeme sorgusu kapısı (yoksa kapı fail-closed)
 $auth_user = require_login();
 
 mail_no_store();
@@ -53,6 +54,10 @@ ignore_user_abort(true); // sekme kapansa da başlamış adım biter
 
 $islem = (string)($in['islem'] ?? '');
 $tid = is_string($in['tarama_id'] ?? null) ? (string)$in['tarama_id'] : '';
+// v490: tür-başı yetki (Ödeme sorgusu ek yetki ister); bilinmeyen tür siparis_mail_baslat'ta 400 olur
+if ($islem === 'baslat' && isset(siparis_mail_turleri()[(string)($in['tur'] ?? '')]) && !siparis_mail_tur_yetkisi((string)$in['tur'])) {
+    $json(['ok' => false, 'kod' => 'yetki', 'mesaj' => 'Bu sorgu türü için yetkiniz yok.'], 403);
+}
 if ($islem === 'baslat') {
     $r = siparis_mail_baslat($pdo, (string)($in['tur'] ?? ''), $uid, $depo);
 } elseif ($islem === 'devam' && preg_match('/^[a-f0-9]{16}$/', $tid)) {

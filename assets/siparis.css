@@ -575,6 +575,8 @@ html[data-theme="dark"] .sip-urun-meta { color: var(--primary); }
     .sip-mail-ilerleme-dugme { width: 100%; }
     .sip-mail-ilerleme-dugme .btn { flex: 1 1 auto; }
     .sip-mail-sonuc-kart { padding: 10px; }
+    /* v490: 3 düğmede tek kalan son düğme tam genişlik (2 düğmede tetiklenmez) */
+    .sip-mail-dugmeler > .sip-mail-btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 @media (max-width: 389px) {
     .sip-mail-dugmeler { grid-template-columns: 1fr; }
@@ -728,6 +730,14 @@ html[data-theme="dark"] .sip-mod .sip-bolum-evrak .sip-say { color: #0b1530; }
   body.od-yazdir-modu .table-wrap { overflow: visible; box-shadow: none; }
 }
 
+/* ==== v490 — Ödemeler: avizo kalemleri paneli (salt okunur; yazdırmada gizli) ==== */
+.od-aviz-bag { display: inline-block; margin-left: 6px; font-size: .85em; white-space: nowrap; }
+.od-aviz-panel { margin-top: 14px; min-width: 0; }
+.od-aviz-ozet { margin: 0 0 6px; }
+.od-aviz-tablo .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.od-aviz-fark { color: var(--sip-uyari-fg, #b45309); font-weight: 600; font-size: .85em; }
+@media print { .od-aviz-panel, .od-aviz-bag { display: none !important; } }
+
 /* ==== v402 — Evrak kartı açık mavi + "değişti" çerçevesi ==== */
 /* Evrak Takımı Bekleyen kartı: diğer iki karttan (turuncu/yeşil şeritli, beyaz zemin) hafif farklı açık mavi zemin; içteki satır bandı da mavi tonda. */
 .sip-mod { --sip-degisti: #7c3aed; }
@@ -781,6 +791,13 @@ html[data-theme="dark"] .sip-mod { --sip-ayrac: #55688a; --sip-sorgu-bg: #3b2410
 .sip-mail-btn--siparis:hover:not(:disabled) { background: #1d4ed8; }
 .sip-mail-btn--lojistik { background: #15803d; }
 .sip-mail-btn--lojistik:hover:not(:disabled) { background: #166534; }
+/* v490: Ödeme sorgula — mor (mavi/yeşil ve turuncu sorgu zemininden ayrışır) */
+.sip-mail-btn--odeme { color: #fff; border-color: transparent; font-weight: 700; background: #7c3aed; }
+.sip-mail-btn--odeme:hover:not(:disabled) { background: #6d28d9; }
+.sip-mail-odeme-not { margin: 8px 0 0; }
+.sip-mail-odeme-toplam { margin: 6px 0; }
+.sip-tur--odeme { color: #6d28d9; }
+html[data-theme="dark"] .sip-tur--odeme { color: #c4b5fd; }
 /* manuel dosya yükleme: kapalı başlar, tıklayınca açılır */
 .sip-dosya-ac { margin: 0; }
 .sip-dosya-ozet { display: flex; align-items: center; gap: 6px 12px; min-height: 48px; padding: 10px 14px; cursor: pointer; list-style: none; flex-wrap: wrap;

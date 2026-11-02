@@ -32,6 +32,8 @@ require_once __DIR__ . '/_mail_test_sema.php';
 require_once __DIR__ . '/_mail_fake_imap.php';
 require_once $ROOT . '/config/siparis_mail.php';
 require_once $ROOT . '/_siparis_ortak.php';
+require_once $ROOT . '/config/siparis_cari.php';          // v490: siparis_cari_yetkili() + siparis_cari_fatura_fiyatlari() (Ödeme sorgusu)
+require_once $ROOT . '/config/siparis_odeme_aviz.php';
 
 /** Tüm şema + anahtar + hks_kv. */
 function smt_kur(PDO $db): void
@@ -41,6 +43,12 @@ function smt_kur(PDO $db): void
     mail_test_sema_kur($db);
     mail_test_anahtar_kur();
     $db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+    foreach (siparis_odeme_tablolar() as $ad => $ddl) {   // v490: siparis_odemeler (Ödeme sorgusu)
+        if (siparis_test_mysql()) { $db->exec("DROP TABLE IF EXISTS `$ad`"); $db->exec($ddl); continue; }
+        [$cr, $ix] = siparis_ddl_sqlite($ddl);
+        $db->exec($cr);
+        foreach ($ix as $x) $db->exec($x);
+    }
 }
 
 /** Sentetik posta kutusu (şifreli parola ile). @return int hesap id */
@@ -123,6 +131,7 @@ function smt_pdf(string $etiket): string { return siparis_test_pdf($etiket); }
 /**
  * Parse kancası: PDF içindeki etikete göre sentetik ayrıştırıcı çıktısı.
  *  po1/po2.. → po_iki_sevkiyat · ll* → ll_plakali · pc* → pc_bolum_farkli · bilinmiyor* → doc_type unknown · bozuk* → doc_type error
+ *  odeme* → odeme_avizosu_pages.json (GERÇEK payment_advice ayrıştırıcısından geçer; etiket sonekine göre smt_odeme_doc() değişiklik uygular)
  */
 function smt_parse_kancasi_kur(): void
 {
@@ -133,8 +142,39 @@ function smt_parse_kancasi_kur(): void
         if (str_starts_with($e, 'll')) return siparis_test_fixture('ll_plakali');
         if (str_starts_with($e, 'pc')) return siparis_test_fixture('pc_bolum_farkli');
         if (str_starts_with($e, 'bozuk')) return ['doc_type' => 'error', 'error' => 'sentetik'];
+        if (str_starts_with($e, 'odeme')) return smt_odeme_doc($e);
         return ['doc_type' => 'unknown', 'checks' => [], 'warnings' => []];
     };
+}
+
+/**
+ * v490: SENTETİK avizo fixture'ı GERÇEK ayrıştırıcıdan geçirir; etiket → değişiklik:
+ *  odeme-toplam (bir Zahlung +1 kuruş → ayrıştırıcı reddeder) · odeme-gelecek (tarih 2099) · odeme-chf (para birimi) · odeme-sifir (toplam 0) ·
+ *  odeme-gonderen (sender_ok=false) · odeme-yeni (tarih 2026-10-29) · odeme-ayni (tarih+toplam AYNI, bir OP-Nummer farklı) · diğer odeme* → taban.
+ */
+function smt_odeme_doc(string $e): array
+{
+    global $ROOT;
+    $fx = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/odeme_avizosu_pages.json'), true)['pages'];
+    $p = []; foreach ($fx as $n => $sg) $p[(int)$n] = $sg;
+    if ($e === 'odeme-toplam') {
+        foreach ($p[1] as &$sg) if ($sg['text'] === '1.000,00' && $sg['x'] > 240) { $sg['text'] = '1.000,01'; break; }
+        unset($sg);
+    }
+    $d = siparis_pdf_parse_payment_advice($p);
+    if (!($d['ok'] ?? false)) return $d;
+    switch ($e) {
+        case 'odeme-gelecek': $d['header']['date'] = '2099-12-31'; break;
+        case 'odeme-chf': $d['header']['currency'] = 'CHF'; $d['total']['currency'] = 'CHF'; break;
+        case 'odeme-sifir': $d['header']['amount_kurus'] = 0; $d['total']['amount_kurus'] = 0; break;
+        case 'odeme-gonderen': $d['header']['sender_ok'] = false; break;
+        case 'odeme-yeni': $d['header']['date'] = '2026-10-29'; break;
+        case 'odeme-e': $d['header']['date'] = '2026-10-26'; break;     // başka tarih → başka istek_id (Sipariş taraması tuzağı)
+        case 'odeme-e2': $d['header']['date'] = '2026-10-25'; break;    // eski `taninmadi` kaydı simülasyonu
+        case 'odeme-g': $d['header']['date'] = '2026-10-24'; break;     // yetki testleri (yarım kalan tarama)
+        case 'odeme-ayni': $d['rows'][0]['no'] = 'IHR2026000009999'; break;
+    }
+    return $d;
 }
 
 /** Sunucuların aldığı TÜM IMAP komutları (alt bağlantılar dahil). @return list<string> */
@@ -157,7 +197,7 @@ function smt_sayac_sifirla(): void
 /** Sentetik ayarı yazar (hks_kv). */
 function smt_ayar(array $hesaplar, array $gonderen): void
 {
-    siparis_mail_kv_yaz(db(), SIPARIS_MAIL_KV_AYAR, ['hesaplar' => $hesaplar, 'gonderen' => $gonderen + ['siparis' => [], 'lojistik' => [], 'fiyat' => []]]);
+    siparis_mail_kv_yaz(db(), SIPARIS_MAIL_KV_AYAR, ['hesaplar' => $hesaplar, 'gonderen' => $gonderen + ['siparis' => [], 'lojistik' => [], 'odeme' => [], 'fiyat' => []]]);
 }
 
 /** Tarama bitene kadar adım adım yürütür. @return array son yanıt */
