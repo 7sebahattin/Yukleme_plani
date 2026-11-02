@@ -562,16 +562,61 @@ function sipui_onizle_modal_html(): string
 function sipui_mail_durum_adi(string $durum): string
 {
     return ['alindi' => 'Alındı', 'zaten' => 'Zaten vardı', 'onceden' => 'Daha önce alınmış', 'baska_tur' => 'Başka tür', 'taninmadi' => 'Tanınmadı',
-            'gecersiz' => 'Geçersiz', 'silinmis' => 'Silinmiş', 'cok_buyuk' => 'Çok büyük', 'iletilmis' => 'İletilmiş', 'ek_eksik' => 'Ek eksik', 'ek_yok' => 'Sunucuda yok', 'hata' => 'Hata'][$durum] ?? $durum;
+            'gecersiz' => 'Geçersiz', 'okunamadi' => 'Okunamadı', 'silinmis' => 'Silinmiş', 'cok_buyuk' => 'Çok büyük', 'iletilmis' => 'İletilmiş', 'ek_eksik' => 'Ek eksik', 'ek_yok' => 'Sunucuda yok', 'hata' => 'Hata'][$durum] ?? $durum;
+}
+
+/** v490: avizo ödemesi "tutar PB" metni (h() ile). */
+function sipui_odeme_tutar_metni(array $o): string
+{
+    return h(siparis_odeme_aviz_para((int)($o['tutar_kurus'] ?? 0)) . ' ' . (string)($o['pb'] ?? ''));
+}
+
+/** v490: avizodaki fatura eşleme özeti ("35 fatura: 11 eşleşti · 24 eşleşmedi[ · N belirsiz][ · N tutar farkı]"). */
+function sipui_odeme_esleme_ozeti(array $o): string
+{
+    $f = (int)($o['fatura'] ?? 0);
+    if ($f <= 0) return '';
+    $p = [(int)($o['eslesen'] ?? 0) . ' eşleşti', (int)($o['eslesmeyen'] ?? 0) . ' eşleşmedi'];
+    if ((int)($o['belirsiz'] ?? 0) > 0) $p[] = (int)$o['belirsiz'] . ' belirsiz';
+    if ((int)($o['tutar_fark'] ?? 0) > 0) $p[] = (int)$o['tutar_fark'] . ' tutar farkı';
+    return $f . ' fatura: ' . implode(' · ', $p);
+}
+
+/** v490: Ödeme sorgusu satırının "Sonuç" hücresi (alindi | zaten | onceden | okunamadi). Tümü h() ile kaçırılır. */
+function sipui_mail_odeme_durum_html(array $s, string $durum): string
+{
+    $o = is_array($s['odeme'] ?? null) ? $s['odeme'] : null;
+    $id = $o !== null ? (int)($o['id'] ?? 0) : 0;
+    $tarih = $o !== null ? sipui_tarih((string)($o['tarih'] ?? '')) : '—';
+    $tutar = $o !== null ? sipui_odeme_tutar_metni($o) : '—';
+    $kopya = (int)($s['kopya'] ?? 1) > 1 ? '<div class="sip-soluk">(' . (int)$s['kopya'] . ' posta kutusunda; bir kez alındı)</div>' : '';
+    switch ($durum) {
+        case 'alindi':
+            $ozet = $o !== null ? sipui_odeme_esleme_ozeti($o) : '';
+            return '<strong class="sip-mail-ok">Ödeme eklendi</strong><div>' . $tutar . ' · ' . h($tarih) . ' · ' . (int)($o['kalem'] ?? 0) . ' kalem</div>'
+                . ($ozet !== '' ? '<div class="sip-soluk">' . h($ozet) . '</div>' : '')
+                . ($id > 0 ? '<div class="sip-soluk"><a href="siparis_odemeler.php?aviz=' . $id . '#odAviz">Avizo kalemlerini aç</a></div>' : '') . $kopya;
+        case 'zaten':
+            if ($o !== null && !empty($o['iptal'])) return 'Bu avizo daha önce kaydedilmiş ve İPTAL edilmiş — yeniden eklenmedi. Gerekirse Ödemeler sayfasından elle girin.' . ($id > 0 ? ' <span class="sip-soluk">(#' . $id . ')</span>' : '') . $kopya;
+            if ($o !== null && !empty($o['deger_eslesme'])) return 'Aynı tarih ve tutarda ödeme zaten kayıtlı (#' . $id . '; elle girilmiş olabilir) — tekrar eklenmedi.<div class="sip-soluk">' . $tutar . ' · ' . h($tarih) . '</div>' . $kopya;
+            return 'Ödeme zaten kayıtlı (#' . $id . ') · ' . $tutar . ' · ' . h($tarih) . $kopya;
+        case 'onceden':
+            return 'Daha önce alındı' . ($id > 0 ? ' · Ödeme #' . $id : '') . ' · ' . $tutar . ' · ' . h($tarih) . $kopya;
+        default:   // okunamadi
+            $n = trim((string)($s['hata'] ?? ''));
+            return 'Ödeme avizosu otomatik alınmadı' . ($n !== '' ? ': ' . h($n) : '.') . '<div class="sip-soluk">Düzeltilemezse Ödemeler sayfasından elle girin.</div>';
+    }
 }
 
 /**
  * Mail sonuç satırının "Sonuç" hücresi (HTML). $belgeGorunur: belge_id → bu kullanıcıya görünür mü (görünmeyene bağlantı verilmez).
  * Alındı / Zaten metni elle yüklemeyle AYNI (sipui_sonuc_metni).
  */
-function sipui_mail_durum_html(array $s, array $belgeGorunur = []): string
+function sipui_mail_durum_html(array $s, array $belgeGorunur = [], string $kartTur = ''): string
 {
     $durum = (string)($s['durum'] ?? '');
+    $odeme = $kartTur === 'odeme' || (string)($s['tur'] ?? '') === 'odeme';   // v490: Ödeme sorgusu satırı
+    if ($odeme && in_array($durum, ['alindi', 'zaten', 'onceden', 'okunamadi'], true)) return sipui_mail_odeme_durum_html($s, $durum);
     $belge = (int)($s['belge_id'] ?? 0);
     $belgeBag = $belge > 0 && !empty($belgeGorunur[$belge]) ? '<a href="siparis_belge.php?id=' . $belge . '">Belge #' . $belge . '</a>' : ($belge > 0 ? 'Belge #' . $belge : '');
     $kopya = (int)($s['kopya'] ?? 1) > 1 ? '<div class="sip-soluk">(' . (int)$s['kopya'] . ' posta kutusunda; bir kez alındı)</div>' : '';
@@ -587,8 +632,11 @@ function sipui_mail_durum_html(array $s, array $belgeGorunur = []): string
         case 'baska_tur':
             $t = (string)($s['tur'] ?? '');
             $bu = siparis_mail_belge_turu($t);
+            // v490: ödeme avizosu için «Ödeme sorgula» önerisi yalnız bu kullanıcı o türü çalıştırabiliyorsa yazılır
+            if ($bu === 'odeme' && !siparis_mail_odeme_yetkisi()) $bu = null;
             return 'Başka tür: ' . h(siparis_belge_tur_etiketleri()[$t] ?? $t) . ($bu !== null ? ' — «' . h(siparis_mail_turleri()[$bu]['etiket']) . ' sorgula» ile alınır.' : '.');
         case 'taninmadi':
+            if ($kartTur === 'odeme') return 'Ödeme avizosu olarak tanınmadı — alınmadı. Gerekirse Ödemeler sayfasından elle girin.';
             return 'Belge türü tanınmadı — alınmadı. Gerekirse elle yükleyin.';
         case 'gecersiz':
             $n = trim((string)($s['hata'] ?? ''));
@@ -606,6 +654,63 @@ function sipui_mail_durum_html(array $s, array $belgeGorunur = []): string
         default:
             return '<span class="sip-hata-metin">Hata: ' . h((string)($s['hata'] ?? 'işlenemedi')) . '</span><div class="sip-soluk">Sonraki sorguda yeniden denenir.</div>';
     }
+}
+
+/**
+ * v490 — Ödemeler sayfasındaki SALT OKUNUR "Avizo kalemleri" paneli (siparis_odemeler.php?aviz=ID#odAviz).
+ * Kaynak: hks_kv `siparis_odeme_aviz_<odeme_id>`. Eşleşen sevkiyat bağlantısı yalnız bu kullanıcıya GÖRÜNÜR depodaki sevkiyat içindir
+ * (aksi "Başka depo"). Tümü h() ile kaçırılır; satır içi olay yok.
+ */
+function sipui_odeme_aviz_html(PDO $pdo, int $odemeId): string
+{
+    $st = $pdo->prepare('SELECT id, odeme_tarihi, tutar_kurus, para_birimi, iptal_at FROM siparis_odemeler WHERE id = ?');
+    $st->execute([$odemeId]);
+    $od = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$od) return '<div class="card od-aviz-kart"><p class="muted">Ödeme bulunamadı.</p></div>';
+    $kv = siparis_odeme_aviz_oku($pdo, $odemeId);
+    $baslik = '<div class="card-head"><h2>📄 Avizo kalemleri · Ödeme #' . (int)$od['id'] . '</h2></div>';
+    if ($kv === null || !is_array($kv['satirlar'] ?? null)) {
+        return '<div class="card od-aviz-kart">' . $baslik . '<p class="muted">Bu ödeme için avizo kalemi kaydı yok (elle girilmiş).</p></div>';
+    }
+    $pb = (string)($kv['pb'] ?? $od['para_birimi']);
+    $para = static fn(int $k): string => siparis_odeme_aviz_para($k) . ' ' . $pb;
+    $z = (array)($kv['ozet'] ?? []);
+    $satirlar = array_values(array_filter((array)$kv['satirlar'], 'is_array'));
+    $sids = [];
+    foreach ($satirlar as $r) foreach ((array)($r['v'] ?? []) as $v) if (is_array($v)) $sids[(int)($v['id'] ?? 0)] = true;
+    $sev = [];
+    $sids = array_keys(array_filter($sids, static fn($t, $k): bool => $k > 0, ARRAY_FILTER_USE_BOTH));
+    if ($sids) {
+        $q = $pdo->prepare('SELECT id, order_ref, depo FROM siparis_sevkiyatlar WHERE deleted_at IS NULL AND id IN (' . implode(',', array_fill(0, count($sids), '?')) . ')');
+        $q->execute($sids);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $x) $sev[(int)$x['id']] = $x;
+    }
+    $sira = ['ana' => 0, 'duzeltme' => 1];
+    usort($satirlar, static fn(array $a, array $b): int => ($sira[(string)($a['t'] ?? '')] ?? 2) <=> ($sira[(string)($b['t'] ?? '')] ?? 2));   // usort kararlı (PHP 8): aynı türde özgün sıra
+    $turAd = ['ana' => 'Fatura', 'duzeltme' => 'Düzeltme / kredi', 'ogl_ic' => 'OGL iç', 'ro' => 'RO', 'bg' => 'BG', 'diger' => 'Diğer'];
+    $o = '<div class="card od-aviz-kart">' . $baslik;
+    $o .= '<p class="od-aviz-ozet"><strong>' . h($para((int)($kv['toplam_kurus'] ?? $od['tutar_kurus']))) . '</strong> · ' . h(sipui_tarih((string)($kv['tarih'] ?? $od['odeme_tarihi']))) . ' · ' . (int)($z['kalem'] ?? count($satirlar)) . ' kalem'
+        . (isset($kv['rechnung_kurus']) ? ' · Σ Rechnung ' . h($para((int)$kv['rechnung_kurus'])) . ' <span class="sip-soluk">(bilgi)</span>' : '')
+        . ($od['iptal_at'] !== null ? ' · <strong class="sip-hata-metin">ÖDEME İPTAL EDİLDİ</strong>' : '') . '</p>';
+    $ozet = sipui_odeme_esleme_ozeti(['fatura' => $z['fatura'] ?? 0, 'eslesen' => $z['eslesen'] ?? 0, 'eslesmeyen' => $z['eslesmeyen'] ?? 0, 'belirsiz' => $z['belirsiz'] ?? 0, 'tutar_fark' => $z['tutar_fark'] ?? 0]);
+    if ($ozet !== '') $o .= '<p class="sip-soluk">' . h($ozet) . (!empty($z['diger']) ? ' · ' . (int)$z['diger'] . ' diğer kalem' : '') . (!empty($z['esleme_hata']) ? ' · fatura eşlemesi yapılamadı' : '') . '</p>';
+    if (!empty($kv['bagli_manuel'])) $o .= '<p class="sip-soluk">Ödeme elle girilmişti; avizo kalemleri bu ödemeye bağlandı.</p>';
+    $o .= '<div class="table-wrap"><table class="data-table od-aviz-tablo"><thead><tr><th>OP-Nummer</th><th>OP-Datum</th><th class="num">Rechnung</th><th class="num">Zahlung</th><th>Tür</th><th>Eşleşme</th></tr></thead><tbody>';
+    foreach ($satirlar as $r) {
+        $e = (string)($r['e'] ?? 'yok');
+        $v = array_values(array_filter((array)($r['v'] ?? []), 'is_array'));
+        if ($e === 'eslesti' && $v) {
+            $x = $sev[(int)($v[0]['id'] ?? 0)] ?? null;
+            $es = $x === null ? '<span class="sip-soluk">Sevkiyat artık yok</span>'
+                : (siparis_gorunur($x) ? '<a href="siparis_view.php?id=' . (int)$x['id'] . '">' . h((string)$x['order_ref']) . '</a>' : '<span class="sip-soluk">Başka depo</span>');
+            if (($r['k'] ?? '') === 'fark') $es .= ' <span class="od-aviz-fark">tutar farkı</span>';
+        } elseif ($e === 'belirsiz') $es = 'Birden çok sevkiyat (' . count($v) . ')';
+        elseif ($e === 'eslesmedi') $es = '<span class="sip-soluk">Eşleşmedi</span>';
+        else $es = '<span class="sip-soluk">—</span>';
+        $o .= '<tr><td>' . h((string)($r['n'] ?? '')) . '</td><td class="nowrap">' . h(sipui_tarih((string)($r['d'] ?? ''))) . '</td><td class="num">' . h(siparis_odeme_aviz_para((int)($r['r'] ?? 0))) . '</td>'
+            . '<td class="num">' . h(siparis_odeme_aviz_para((int)($r['z'] ?? 0))) . '</td><td>' . h($turAd[(string)($r['t'] ?? '')] ?? '—') . '</td><td>' . $es . '</td></tr>';
+    }
+    return $o . '</tbody></table></div><p class="sip-soluk">Eşleşme yalnız bilgidir: ödeme sevkiyata bağlanmaz, Tahsilat genel cariye girer.</p></div>';
 }
 
 /**
@@ -652,6 +757,7 @@ function sipui_mail_sonuc_html(PDO $pdo, array $son, array $hesapIds): string
     $turler = siparis_mail_turleri();
     $tur = (string)($son['tur'] ?? '');
     $etiket = $turler[$tur]['etiket'] ?? $tur;
+    $odeme = $tur === 'odeme';   // v490: Ödeme sorgusu — "Ödeme eklendi" chip'i, eklenen tutar özeti, Çatışma/Uyarı sütunları YOK
     $satirlar = array_values(array_filter((array)($son['satirlar'] ?? []), 'is_array'));
     $mailIds = array_values(array_unique(array_map(static fn(array $s): int => (int)$s['m'], $satirlar)));
     $mailler = [];
@@ -679,9 +785,14 @@ function sipui_mail_sonuc_html(PDO $pdo, array $son, array $hesapIds): string
     $baslik = 'Mail sorgusu — ' . $etiket . ' · son ' . SIPARIS_MAIL_GUN . ' gün' . ($bitis > 0 ? ' · ' . date('d.m.Y H:i', $bitis) : '') . ' · ' . siparis_mail_kullanici_adi($pdo, (int)($son['uid'] ?? 0));
     $chip = static fn(string $et, int $say, string $sinif = ''): string => '<span class="sip-mail-chip' . ($sinif !== '' ? ' sip-mail-chip--' . $sinif : '') . '"><span class="sip-mail-chip-et">' . h($et) . '</span> <b>' . $say . '</b></span>';
     $o = '<section class="card sip-mail-sonuc-kart" data-sip-mail-sonuc-kart aria-label="Mail sorgusu sonucu"><div class="card-head"><h2>' . h($baslik) . '</h2></div>';
-    $o .= '<div class="sip-mail-ozet">' . $chip('Bulunan mail', (int)($sy['mail'] ?? 0)) . $chip('PDF', (int)($sy['pdf'] ?? 0)) . $chip('Alındı', (int)($sy['alindi'] ?? 0), 'ok')
+    $o .= '<div class="sip-mail-ozet">' . $chip('Bulunan mail', (int)($sy['mail'] ?? 0)) . $chip('PDF', (int)($sy['pdf'] ?? 0)) . $chip($odeme ? 'Ödeme eklendi' : 'Alındı', (int)($sy['alindi'] ?? 0), 'ok')
         . $chip('Zaten vardı', (int)($sy['zaten'] ?? 0)) . $chip('Daha önce alınmış', (int)($sy['onceden'] ?? 0)) . $chip('Atlandı', (int)($sy['atlandi'] ?? 0), ((int)($sy['atlandi'] ?? 0)) > 0 ? 'uyari' : '')
         . $chip('Hata', (int)($sy['hata'] ?? 0), ((int)($sy['hata'] ?? 0)) > 0 ? 'hata' : '') . '</div>';
+    if ($odeme) {   // yalnız bu taramada eklenen ödemeler, para birimi başına (asla toplanmaz)
+        $eklenen = [];
+        foreach ($satirlar as $s) if (($s['durum'] ?? '') === 'alindi' && is_array($s['odeme'] ?? null)) { $pb = (string)($s['odeme']['pb'] ?? ''); $eklenen[$pb] = ($eklenen[$pb] ?? 0) + (int)($s['odeme']['tutar_kurus'] ?? 0); }
+        if ($eklenen) { ksort($eklenen); $o .= '<p class="sip-mail-odeme-toplam">Eklenen ödeme: <strong>' . h(implode(' · ', array_map(static fn(string $pb, int $k): string => siparis_odeme_aviz_para($k) . ' ' . $pb, array_keys($eklenen), $eklenen))) . '</strong></p>'; }
+    }
     if ((int)($son['pdfsiz'] ?? 0) > 0) $o .= '<p class="sip-soluk">PDF eki olmayan ' . (int)$son['pdfsiz'] . ' mail</p>';
     foreach ((array)($son['uyarilar'] ?? []) as $u) $o .= '<p class="sip-bilgi" role="note">' . h((string)$u) . '</p>';
     if (!$satirlar) return $o . '<p class="muted">Bu pencerede işlenecek ek bulunamadı.</p></section>';
@@ -697,22 +808,22 @@ function sipui_mail_sonuc_html(PDO $pdo, array $son, array $hesapIds): string
         return ['ad' => mail_gonderen_adi($m), 'konu' => trim((string)($m['subject'] ?? '')), 'tarih' => $t !== false ? date('d.m.Y H:i', $t) : '—', 'kisa' => $t !== false ? date('d.m H:i', $t) : '—', 'link' => true];
     };
     $sat = static fn(array $s): string => ((string)($s['durum'] ?? '') === 'onceden' ? ' sip-mail-onceden' : '');
-    $o .= '<div class="table-wrap pc-only sip-mail-tablo-kap"><table class="data-table sip-table sip-mail-tablo"><thead><tr><th>Mail tarihi</th><th>Gönderen</th><th>Dosya</th><th>Tür</th><th>Sonuç</th><th class="num">Çatışma</th><th class="num">Uyarı</th></tr></thead><tbody>';
+    $o .= '<div class="table-wrap pc-only sip-mail-tablo-kap"><table class="data-table sip-table sip-mail-tablo"><thead><tr><th>Mail tarihi</th><th>Gönderen</th><th>Dosya</th><th>Tür</th><th>Sonuç</th>' . ($odeme ? '' : '<th class="num">Çatışma</th><th class="num">Uyarı</th>') . '</tr></thead><tbody>';
     foreach ($satirlar as $s) {
         $mi = $mailBilgi((int)$s['m']);
         $konu = $mi['konu'] !== '' ? '<div class="sip-soluk sip-kes" title="' . h($mi['konu']) . '">' . h(siparis_kirp($mi['konu'], 80)) . '</div>' : '';
         $o .= '<tr class="sip-ms-satir' . $sat($s) . '" data-durum="' . h((string)$s['durum']) . '"><td class="nowrap">' . h($mi['tarih']) . '</td><td><span class="sip-kes">' . h($mi['ad']) . '</span>' . $konu . '</td>'
             . '<td><span class="sip-kes" title="' . h((string)$s['dosya']) . '">' . h((string)$s['dosya']) . '</span>'
             . ($mi['link'] ? '<div class="sip-soluk"><a href="mail.php?m=' . (int)$s['m'] . '">Maili aç</a></div>' : '') . '</td>'
-            . '<td>' . (empty($s['tur']) ? '—' : sipui_tur_rozeti((string)$s['tur'])) . '</td><td>' . sipui_mail_durum_html($s, $belgeGorunur) . sipui_mail_uyari_detay_html($s, $uyariMetin) . '</td>'
-            . '<td class="num">' . (int)($s['catisma'] ?? 0) . '</td><td class="num">' . (int)($s['uyari'] ?? 0) . '</td></tr>';
+            . '<td>' . (empty($s['tur']) ? '—' : sipui_tur_rozeti((string)$s['tur'])) . '</td><td>' . sipui_mail_durum_html($s, $belgeGorunur, $tur) . sipui_mail_uyari_detay_html($s, $uyariMetin) . '</td>'
+            . ($odeme ? '' : '<td class="num">' . (int)($s['catisma'] ?? 0) . '</td><td class="num">' . (int)($s['uyari'] ?? 0) . '</td>') . '</tr>';
     }
     $o .= '</tbody></table></div><div class="card-list mobile-only sip-mail-kartlar">';
     foreach ($satirlar as $s) {
         $mi = $mailBilgi((int)$s['m']);
         $o .= '<div class="sip-mini-kart sip-ms-satir' . $sat($s) . '" data-durum="' . h((string)$s['durum']) . '"><div class="sip-mini-ust"><strong class="sip-kes" title="' . h((string)$s['dosya']) . '">' . h((string)$s['dosya']) . '</strong>'
-            . (empty($s['tur']) ? '' : sipui_tur_rozeti((string)$s['tur'])) . '</div><div class="sip-soluk">' . h($mi['kisa']) . ' · ' . h($mi['ad']) . '</div><div>' . sipui_mail_durum_html($s, $belgeGorunur) . '</div>' . sipui_mail_uyari_detay_html($s, $uyariMetin);
-        if ((int)($s['catisma'] ?? 0) > 0 || (int)($s['uyari'] ?? 0) > 0) $o .= '<div class="sip-soluk">Çatışma: ' . (int)($s['catisma'] ?? 0) . ' · Uyarı: ' . (int)($s['uyari'] ?? 0) . '</div>';
+            . (empty($s['tur']) ? '' : sipui_tur_rozeti((string)$s['tur'])) . '</div><div class="sip-soluk">' . h($mi['kisa']) . ' · ' . h($mi['ad']) . '</div><div>' . sipui_mail_durum_html($s, $belgeGorunur, $tur) . '</div>' . sipui_mail_uyari_detay_html($s, $uyariMetin);
+        if (!$odeme && ((int)($s['catisma'] ?? 0) > 0 || (int)($s['uyari'] ?? 0) > 0)) $o .= '<div class="sip-soluk">Çatışma: ' . (int)($s['catisma'] ?? 0) . ' · Uyarı: ' . (int)($s['uyari'] ?? 0) . '</div>';
         $o .= ($mi['link'] ? '<div class="sip-soluk"><a href="mail.php?m=' . (int)$s['m'] . '">Maili aç</a></div>' : '') . '</div>';
     }
     return $o . '</div></section>';
@@ -732,14 +843,19 @@ function sipui_mail_blok_html(array $d): string
     $turler = siparis_mail_turleri();
     $herhangiAyarsiz = false;
     $dugmeler = '';
+    $ayarliH = (array)($d['ayarli'] ?? []);
     foreach ($turler as $t => $m) {
-        $ayarli = !empty($d['ayarli'][$t]);
+        if (!array_key_exists($t, $ayarliH)) continue;   // v490: siparisler.php yalnız bu kullanıcıya görünür türleri koyar (ödeme düğmesi tür-başı yetkili)
+        $ayarli = !empty($ayarliH[$t]);
         if (!$ayarli) $herhangiAyarsiz = true;
         $dugmeler .= '<button type="button" class="btn sip-mail-btn sip-mail-btn--' . h($t) . '" data-sip-mail="' . h($t) . '"' . ($ayarli ? '' : ' disabled title="Bu sorgu için gönderen adresi ayarlanmadı"') . '>' . h($m['dugme']) . '</button>';
     }
     $o = '<div class="sip-mail" id="mail" data-sip-mail-kap data-sip-mail-url="siparis_mail.php" data-sip-mail-csrf="' . h(csrf_token()) . '">';
     $o .= '<div class="sip-mail-baslik"><h2>📧 Mailden al</h2><p class="sip-soluk">Son ' . SIPARIS_MAIL_GUN . ' günün mailleri taranır; belge türü içerikten anlaşılır.</p></div>';
     $o .= '<div class="sip-mail-dugmeler" role="group" aria-label="Mailden belge al">' . $dugmeler . '</div>';
+    if (array_key_exists('odeme', $ayarliH)) {
+        $o .= '<p class="sip-soluk sip-mail-odeme-not">💶 Ödeme sorgula: OGL ödeme avizolarını (PDF) okur, ödemeyi onay sormadan Ödemeler\'e kaydeder ve fatura numaralarını eşleştirir. Yanlış kayıt Ödemeler sayfasında iptal edilebilir.</p>';
+    }
     if ($herhangiAyarsiz) {
         $o .= !empty($d['ayar_link'])
             ? '<p class="sip-soluk sip-mail-not">Ayarlanmamış sorgular için <a href="siparis_ayarlar.php#mail">Ayarlar › 📧 Mail sorgu ayarları</a>.</p>'
@@ -769,7 +885,7 @@ function sipui_mail_blok_html(array $d): string
  */
 function sipui_yukle_ozet_html(array $son, ?array $yarim, bool $mailVar): string
 {
-    $etiket = ['siparis' => 'Sipariş', 'lojistik' => 'Lojistik'];
+    $etiket = ['siparis' => 'Sipariş', 'lojistik' => 'Lojistik', 'odeme' => 'Ödeme'];
     $o = '<span class="sip-yukle-baslik">📥 Belge yükle' . ($mailVar ? ' · 📧 Mailden al' : '') . '</span>';
     if ($yarim !== null) $o .= '<span class="sip-yukle-son sip-yukle-son--hata">⏸ Yarım tarama var</span>';
     if ($mailVar && $son) {
@@ -777,7 +893,7 @@ function sipui_yukle_ozet_html(array $son, ?array $yarim, bool $mailVar): string
         $sy = (array)($s['sayac'] ?? []);
         $parca = ['Son sorgu: ' . ($etiket[(string)($s['tur'] ?? '')] ?? (string)($s['tur'] ?? ''))];
         if ((int)($s['bitis'] ?? 0) > 0) $parca[] = date('d.m H:i', (int)$s['bitis']);
-        if (isset($sy['alindi'])) $parca[] = (int)$sy['alindi'] . ' alındı';
+        if (isset($sy['alindi'])) $parca[] = (int)$sy['alindi'] . ((string)($s['tur'] ?? '') === 'odeme' ? ' eklendi' : ' alındı');
         $hata = (int)($sy['hata'] ?? 0);
         if ($hata > 0) $parca[] = $hata . ' hata';
         $o .= '<span class="sip-yukle-son' . ($hata > 0 ? ' sip-yukle-son--hata' : '') . '">' . h(implode(' · ', $parca)) . '</span>';

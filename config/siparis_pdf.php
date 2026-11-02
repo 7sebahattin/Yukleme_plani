@@ -462,7 +462,7 @@ function sipdf_line_cells(array $line, array $cols, string $mode = 'left', float
  * PART 3 - CLASSIFICATION + COMMON HEADER
  * ===================================================================================================== */
 
-/** 'purchase_order' | 'price_confirmation' | 'loading_list' | 'unknown'  (decided from the title text on PAGE 1 only). */
+/** 'purchase_order' | 'price_confirmation' | 'loading_list' | 'payment_advice' | 'unknown'  (decided from the title text on PAGE 1 only). */
 function siparis_pdf_belge_turu(array $pages): string
 {
     $t = '';
@@ -471,6 +471,8 @@ function siparis_pdf_belge_turu(array $pages): string
     if (preg_match('/Purchase order for/i', $t)) $hits[] = 'purchase_order';
     if (preg_match('/Price confirmation for/i', $t)) $hits[] = 'price_confirmation';
     if (preg_match('/Loading List\s*-\s*Ladeplan|^Loading List\b/mi', $t)) $hits[] = 'loading_list';
+    // v490: OGL ödeme avizosu (Almanca "Überweisung über … zum Ausgleich folgender Rechnungen")
+    if (preg_match('/Überweisung\s+über/iu', $t) && preg_match('/zum\s+Ausgleich\s+folgender\s+Rechnungen/iu', $t)) $hits[] = 'payment_advice';
     return count($hits) === 1 ? $hits[0] : 'unknown';
 }
 
@@ -1026,6 +1028,157 @@ function siparis_pdf_parse_loading_list(array $pages, array $meta = []): array
 }
 
 /* =====================================================================================================
+ * PART 6b - PAYMENT ADVICE (v490)  — OGL "Überweisung über … zum Ausgleich folgender Rechnungen"
+ * Konum (x/y) tabanlı: tutar sütunları başlık etiketlerinin x'inden ayrılır; metin akış sırasına GÜVENİLMEZ
+ * (akışta Zahlung tutarı Rechnung'dan ÖNCE gelir). Hiçbir kapı geçilmeden ok=true olmaz.
+ * ===================================================================================================== */
+const SIPDF_AMOUNT_RE = '/^-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}$/';
+const SIPDF_AVIZ_MESAJ = [
+    'aviz_baslik' => 'Ödeme avizosu tablo başlığı tanınmadı (OP-Nummer/OP-Datum/Rechnung/Zahlung).',
+    'aviz_satir' => 'Avizo tablosunda okunamayan satır var (sayfa %s).',
+    'aviz_sutun' => 'Avizo tutar sütunları ayırt edilemedi.',
+    'aviz_sutun_ters' => 'Avizo sütun sırası beklenenden farklı (Rechnung/Zahlung yer değiştirmiş olabilir) — otomatik alınmadı.',
+    'aviz_tarih' => 'Avizo mektup tarihi bulunamadı ya da belirsiz.',
+    'aviz_toplam_yok' => 'Avizoda «Zahlbetrag total» toplamı bulunamadı.',
+    'aviz_para' => 'Avizo para birimleri tutmuyor (başlık ile toplam).',
+    'aviz_baslik_toplam' => 'Avizo başlık tutarı ile «Zahlbetrag total» tutmuyor.',
+    'aviz_toplam' => 'Satır toplamı (Zahlung) %s avizo toplamı %s ile tutmuyor.',
+    'aviz_cok_blok' => 'Avizoda birden çok ödeme bloğu var — otomatik alınmadı.',
+    'aviz_bos' => 'Avizoda ödeme satırı bulunamadı.',
+    'aviz_cok_uzun' => 'Avizo çok uzun (500 kalemden fazla) — otomatik alınmadı.',
+];
+
+/** "-4.558,85"→-455885 ; "62377,44"→6237744 ; geçersiz→null (ondalık TAM 2 hane, binlik yalnız '.' ve 3'lü gruplar). */
+function sipdf_de_kurus(?string $s): ?int
+{
+    $s = trim((string)$s);
+    if (!preg_match('/^(-)?(\d{1,3}(?:\.\d{3})+|\d+),(\d{2})$/', $s, $m) || strlen($m[2]) > 12) return null;
+    $v = (int)str_replace('.', '', $m[2]) * 100 + (int)$m[3];
+    return $m[1] === '-' ? -$v : $v;
+}
+/** 6237744 → "62.377,44" */
+function sipdf_de_goster(int $k): string
+{
+    $a = abs($k);
+    return ($k < 0 ? '-' : '') . number_format(intdiv($a, 100), 0, ',', '.') . ',' . str_pad((string)($a % 100), 2, '0', STR_PAD_LEFT);
+}
+
+function siparis_pdf_parse_payment_advice(array $pages, array $meta = []): array
+{
+    $out = ['doc_type' => 'payment_advice', 'ok' => false, 'hata_kodu' => null, 'hata' => null,
+        'header' => ['date' => null, 'currency' => null, 'amount_kurus' => null, 'pages' => count($pages), 'sender_ok' => false, 'recipient_ok' => false],
+        'total' => ['currency' => null, 'amount_kurus' => null], 'rows' => [], 'sums' => ['zahlung_kurus' => 0, 'rechnung_kurus' => 0],
+        'checks' => [], 'warnings' => [], 'meta' => $meta];
+    $fail = function (string $kod, string ...$arg) use (&$out): array {
+        $msg = vsprintf(SIPDF_AVIZ_MESAJ[$kod] ?? $kod, $arg);
+        $out['ok'] = false; $out['hata_kodu'] = $kod; $out['hata'] = $msg;
+        $out['warnings'][] = ['level' => 'error', 'code' => $kod, 'message' => $msg];
+        return $out;
+    };
+    $reHdr = '/Überweisung\s+über\s+(?:([A-Z]{3})\s+)?(-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})(?:\s+([A-Z]{3}))?\s+zum\s+Ausgleich\s+folgender\s+Rechnungen/u';
+    $pages = array_filter($pages, 'is_array');
+    if (!$pages) return $fail('aviz_baslik');
+    $firstPn = array_key_first($pages);
+    $hdrIlk = null; $tarih = null; $totals = []; $rows = [];
+    foreach ($pages as $pn => $segs) {
+        // (1) başlık cümlesi: her sayfada bulunmalı ve sayfalar arası AYNI olmalı
+        $h = null; $hy = null;
+        foreach (sipdf_lines($segs) as $ln) {
+            if (!preg_match($reHdr, sipdf_ltext($ln), $m)) continue;
+            $cur = ($m[1] ?? '') !== '' ? $m[1] : ($m[3] ?? ''); $k = sipdf_de_kurus($m[2]);
+            if ($cur === '' || $k === null || (($m[1] ?? '') !== '' && ($m[3] ?? '') !== '')) break;
+            $h = ['cur' => $cur, 'k' => $k]; $hy = $ln['y']; break;
+        }
+        if ($h === null) return $fail('aviz_baslik');
+        if ($hdrIlk === null) $hdrIlk = $h; elseif ($hdrIlk !== $h) return $fail('aviz_cok_blok');
+        // (2) mektup tarihi: başlık cümlesinin ÜSTÜNDEKİ tam tarih segmentleri
+        $d = [];
+        foreach ($segs as $s) {
+            if ($s['y'] > $hy && preg_match('/^\d{2}\.\d{2}\.\d{4}$/', sipdf_t($s)) && sipdf_dmy(sipdf_t($s)) !== null) $d[sipdf_dmy(sipdf_t($s))] = 1;
+        }
+        if (count($d) > 1 || ($pn === $firstPn && count($d) !== 1)) return $fail('aviz_tarih');
+        if ($d) {
+            $dk = (string)array_key_first($d);
+            if ($tarih !== null && $tarih !== $dk) return $fail('aviz_tarih');
+            $tarih = $dk;
+        }
+        // (3) tablo başlığı: aynı y'de OP-Nummer×k; her blokta OP-Datum<Rechnung<Zahlung
+        $labs = array_values(array_filter($segs, fn($s) => sipdf_t($s) === 'OP-Nummer'));
+        if (!$labs) return $fail('aviz_baslik');
+        usort($labs, fn($a, $b) => $a['x'] <=> $b['x']);
+        $ty0 = $labs[0]['y'];
+        $bl = [];
+        foreach ($labs as $i => $l) {
+            if (abs($l['y'] - $ty0) > 2.5) return $fail('aviz_baslik');
+            $x0 = $l['x']; $x1 = $labs[$i + 1]['x'] ?? 1e9;
+            $bul = function (string $ad) use ($segs, $ty0, $x0, $x1) {
+                foreach ($segs as $s) if (sipdf_t($s) === $ad && abs($s['y'] - $ty0) <= 2.5 && $s['x'] >= $x0 - 1 && $s['x'] < $x1 - 1) return $s['x'];
+                return null;
+            };
+            $xd = $bul('OP-Datum'); $xr = $bul('Rechnung'); $xz = $bul('Zahlung');
+            if ($xd === null || $xr === null || $xz === null || !($x0 < $xd && $xd < $xr && $xr < $xz)) return $fail('aviz_baslik');
+            $bl[] = ['x0' => $x0, 'x1' => $x1, 'mid' => ($xr + $xz) / 2];
+        }
+        // (4) "Zahlbetrag total": tüm belgede tam 1 adet
+        $altSinir = null;
+        foreach ($segs as $t) {
+            if (!preg_match('/^Zahlbetrag\s+total$/i', sipdf_t($t))) continue;
+            $cur = []; $amt = [];
+            foreach ($segs as $s) {
+                if (abs($s['y'] - $t['y']) > 4 || $s === $t) continue;
+                $x = sipdf_t($s);
+                if (preg_match('/^[A-Z]{3}$/', $x)) $cur[] = $x; elseif (preg_match(SIPDF_AMOUNT_RE, $x)) $amt[] = $x;
+            }
+            if (count($cur) !== 1 || count($amt) !== 1 || sipdf_de_kurus($amt[0]) === null) return $fail('aviz_toplam_yok');
+            $totals[] = ['cur' => $cur[0], 'k' => sipdf_de_kurus($amt[0])];
+            $altSinir = $t['y'] + 4;
+        }
+        // (5) satırlar: başlığın altı (varsa toplam satırının üstü); '@#' yok sayılır
+        foreach (sipdf_lines($segs) as $ln) {
+            if ($ln['y'] >= $ty0 - 2.5) continue;
+            if ($altSinir !== null && $ln['y'] <= $altSinir) continue;
+            foreach ($bl as $b) {
+                $in = array_values(array_filter($ln['segs'], fn($s) => $s['x'] >= $b['x0'] - 6 && $s['x'] < $b['x1'] - 6));
+                $am = []; $rest = [];
+                foreach ($in as $s) {
+                    $t = sipdf_t($s);
+                    if ($t === '@#' || $t === '') continue;
+                    if (preg_match(SIPDF_AMOUNT_RE, $t)) $am[] = ['x' => $s['x'], 'k' => sipdf_de_kurus($t)]; else $rest[] = $t;
+                }
+                if (!$am && !$rest) continue;
+                if (count($am) !== 2) return $fail('aviz_satir', (string)$pn);
+                usort($am, fn($a, $c) => $a['x'] <=> $c['x']);
+                if (!($am[0]['x'] < $b['mid'] && $am[1]['x'] >= $b['mid'] && $am[1]['x'] - $am[0]['x'] >= 25)) return $fail('aviz_sutun');
+                if (!preg_match('/^([A-Za-z0-9\/-]{4,40}) (\d{2}\.\d{2}\.\d{4})$/u', implode(' ', $rest), $m) || sipdf_dmy($m[2]) === null) return $fail('aviz_satir', (string)$pn);
+                $rows[] = ['page' => (int)$pn, 'no' => $m[1], 'op_date' => sipdf_dmy($m[2]), 'rechnung_kurus' => $am[0]['k'], 'zahlung_kurus' => $am[1]['k']];
+            }
+        }
+    }
+    if (count($totals) !== 1) return $fail(count($totals) === 0 ? 'aviz_toplam_yok' : 'aviz_cok_blok');
+    if (!$rows) return $fail('aviz_bos');
+    if (count($rows) > 500) return $fail('aviz_cok_uzun');
+    $sz = array_sum(array_column($rows, 'zahlung_kurus')); $sr = array_sum(array_column($rows, 'rechnung_kurus'));
+    $tot = $totals[0];
+    sipdf_check($out['checks'], $out['warnings'], 'aviz_para', 'doc', $hdrIlk['cur'] === $tot['cur'], $hdrIlk['cur'], $tot['cur'], 'currency');
+    if ($hdrIlk['cur'] !== $tot['cur']) return $fail('aviz_para');
+    if ($hdrIlk['k'] !== $tot['k']) return $fail('aviz_baslik_toplam');
+    if ($sz !== $tot['k']) {
+        if ($sr === $tot['k']) return $fail('aviz_sutun_ters');
+        return $fail('aviz_toplam', sipdf_de_goster($sz), sipdf_de_goster($tot['k']));
+    }
+    $t1 = '';
+    foreach ($pages[$firstPn] as $s) $t1 .= sipdf_t($s) . "\n";
+    $out['header'] = ['date' => $tarih, 'currency' => $hdrIlk['cur'], 'amount_kurus' => $hdrIlk['k'], 'pages' => count($pages),
+        'sender_ok' => (bool)preg_match('/OGL\s+FOOD\s+TRADE/i', $t1), 'recipient_ok' => (bool)preg_match('/Asya\s+Fresh/i', $t1)];
+    $out['total'] = ['currency' => $tot['cur'], 'amount_kurus' => $tot['k']];
+    $out['rows'] = $rows;
+    $out['sums'] = ['zahlung_kurus' => $sz, 'rechnung_kurus' => $sr];
+    $out['warnings'][] = ['level' => 'warn', 'code' => 'payment_advice', 'message' => 'Payment advice recognised; it is not an order document (use Siparişler › Mailden al › Ödeme sorgula).'];
+    $out['ok'] = true; $out['hata_kodu'] = null; $out['hata'] = null;
+    return $out;
+}
+
+/* =====================================================================================================
  * PART 7 - DISPATCHER + CROSS-DOCUMENT CHECKS
  * ===================================================================================================== */
 /** Read + classify + parse. Never throws: on failure returns ['doc_type'=>..., 'error'=>msg]. Adds _file. */
@@ -1038,6 +1191,7 @@ function siparis_pdf_isle(string $file): array
             'purchase_order' => siparis_pdf_parse_order($r['pages'], $r['meta']),
             'price_confirmation' => siparis_pdf_parse_price_confirmation($r['pages'], $r['meta']),
             'loading_list' => siparis_pdf_parse_loading_list($r['pages'], $r['meta']),
+            'payment_advice' => siparis_pdf_parse_payment_advice($r['pages'], $r['meta']),
             default => ['doc_type' => 'unknown', 'checks' => [], 'warnings' => [['level' => 'error', 'code' => 'unknown_doc', 'message' => 'Document type not recognised.']], 'meta' => $r['meta']],
         };
     } catch (Throwable $e) {

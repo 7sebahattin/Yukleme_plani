@@ -82,7 +82,9 @@ $MUT = ['siparis_alan_elle', 'siparis_alan_kilidi_kaldir', 'siparis_catisma_coz'
         // v411: evrak takımı mail alıcıları (hks_kv) — yalnız siparis_ayarlar.php POST'u
         'siparis_evrak_mail_ayar_kaydet',
         // v442: OGL invoice — PDF üretimi / e-fatura yükleme (belge + dosya yazar) / ayar (hks_kv) — yalnız siparis_invoice.php + siparis_ayarlar.php POST'u
-        'siparis_inv_uret', 'siparis_inv_efatura_yukle', 'siparis_inv_ayar_kaydet'];
+        'siparis_inv_uret', 'siparis_inv_efatura_yukle', 'siparis_inv_ayar_kaydet',
+        // v490: OGL ödeme avizosu → ödeme yazar (siparis_odeme_ekle) — görünüm sayfaları çağırmaz; yalnız config/siparis_mail.php (uç: siparis_mail.php CSRF ister)
+        'siparis_odeme_aviz_isle'];
 $mutRe = '/\b(' . implode('|', $MUT) . ')\s*\(/';
 foreach ($sayfalar as $f) {
     $k = kod_oku($f);
@@ -181,7 +183,8 @@ foreach (['config/siparis_mail.php', 'siparis_mail.php', 'siparisler.php', 'sipa
     'siparis_paylas.php', 'config/siparis_wp.php', 'assets/siparis_wp.js',
     'siparis_cari.php', 'siparis_odemeler.php', 'siparis_denge.php', 'config/siparis_cari.php', 'config/siparis_denge.php', 'scripts/siparis_cari_smoke.php', 'scripts/siparis_denge_ui_smoke.php',
     'siparis_eml.php', 'config/siparis_pkl.php', 'siparis_view.php', 'scripts/siparis_pkl_mail_smoke.php',
-    'siparis_invoice.php', 'config/siparis_invoice.php', 'scripts/siparis_invoice_ui_smoke.php'] as $f) {
+    'siparis_invoice.php', 'config/siparis_invoice.php', 'scripts/siparis_invoice_ui_smoke.php',
+    'config/siparis_odeme_aviz.php', 'scripts/siparis_odeme_aviz_smoke.php'] as $f) {
     $t = str_ends_with($f, '.php') ? kod_oku($f) : oku($f);
     ok("$f: gerçek e-posta adresi YOK (yalnız @ornek.test)", $t !== '' && preg_match($epostaRe, $t, $em2) === 0, $em2[0] ?? '');
 }
@@ -372,9 +375,26 @@ foreach (array_merge(glob($ROOT . '/*.php') ?: [], glob($ROOT . '/config/*.php')
 ok("kapalı durum listesi sabit yazılmaz: kök/config PHP'de 'mail_gonderildi','iptal' YOK (siparis_kapali_durumlar()/siparis_kapanmamis_sql())", $sabitler === [], implode(',', $sabitler));
 ok('siparis_belge.php açık sevkiyat sorgusu siparis_kapanmamis_sql() kullanır', str_contains(kod_oku('siparis_belge.php'), 'siparis_kapanmamis_sql()'));
 
+echo "\n=== v490: Ödeme sorgula — tek yazma yolu, belge satırı yok, tür-başı yetki ===\n";
+$av = kod_oku('config/siparis_odeme_aviz.php'); $core490 = oku('config/siparis_pdf.php'); $eslKod = oku('config/siparis_eslestir.php');
+$smOdeme = (function () use ($sm): string { $i = strpos($sm, "in_array('odeme', \$beklenen, true)"); $j = $i === false ? false : strpos($sm, 'SELECT id, deleted_at FROM siparis_belgeler WHERE sha256', $i); return $i === false || $j === false ? '' : substr($sm, $i, $j - $i); })();
+ok('siparis_mail.php (uç) siparis_cari.php\'yi yüklüyor ve siparis_mail_tur_yetkisi( ile tür-başı yetki soruyor', str_contains($smUc, "config/siparis_cari.php") && str_contains($smUc, 'siparis_mail_tur_yetkisi('));
+ok('config/siparis_mail.php siparis_odeme_aviz_isle( çağırıyor; ödeme dalında siparis_odeme_ekle / siparis_dosya_yukle_isle / siparis_belgeler yazımı YOK', str_contains($sm, 'siparis_odeme_aviz_isle(') && $smOdeme !== '' && !preg_match('/siparis_odeme_ekle\(|siparis_dosya_yukle_isle\(|INSERT\s+INTO\s+siparis_belgeler/i', $smOdeme));
+ok('config/siparis_odeme_aviz.php: ödemeyi YALNIZ siparis_odeme_ekle( ile yazar; siparis_odemeler\'e doğrudan INSERT/UPDATE/DELETE YOK', str_contains($av, 'siparis_odeme_ekle(') && !preg_match('/\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?siparis_odemeler/i', $av));
+ok('config/siparis_odeme_aviz.php: mail_ek_hazirla( / CREATE|ALTER TABLE / eval / exec YOK', !str_contains($av, 'mail_ek_hazirla(') && !preg_match('/\b(CREATE|ALTER|DROP)\s+TABLE\b/i', $av) && !preg_match('/\b(eval|exec|shell_exec|passthru|system|popen|proc_open|unserialize)\s*\(/', preg_replace('/\$(?:pdo|db)->exec\(/', '', $av)));
+ok('config/siparis_odeme_aviz.php: dosyaya/diske yazmaz (file_put_contents / fopen YOK), doğrudan istek → 404 (tam yol)', !preg_match('/\b(file_put_contents|fopen|unlink)\s*\(/', $av) && str_contains(oku('config/siparis_odeme_aviz.php'), 'realpath((string)($_SERVER[\'SCRIPT_FILENAME\']'));
+ok('mail_ek_hazirla( çağıran dosya listesi DEĞİŞMEDİ: config/siparis_odeme_aviz.php çağırmıyor', !str_contains(oku('config/siparis_odeme_aviz.php'), 'mail_ek_hazirla('));
+preg_match('/function siparis_pdf_tur_kodu\b.*?\n\}/s', $eslKod, $tk);
+ok('siparis_pdf_tur_kodu() payment_advice / odeme İÇERMİYOR (odeme mail-katmanı tür kodu: siparis_mail_belge_tur_kodu)', !empty($tk[0]) && !str_contains($tk[0], 'payment_advice') && !str_contains($tk[0], "'odeme'") && str_contains($sm, "'payment_advice' ? 'odeme'"));
+ok("SIPARIS_PDF_SURUM hâlâ 'v4' (bump edilmedi; avizo sürümü SIPARIS_ODEME_AVIZO_SURUM ayrı)", str_contains($core490, "const SIPARIS_PDF_SURUM = 'v4'") && str_contains($av, "const SIPARIS_ODEME_AVIZO_SURUM = 'a1'"));
+ok('baslat/adim/vazgec ödeme kapısı fail-closed: siparis_mail_odeme_yetkisi( en az 3 yerde çağrılıyor + function_exists korumalı', substr_count($sm, 'siparis_mail_odeme_yetkisi()') >= 4 && str_contains($sm, "function_exists('siparis_cari_yetkili') && function_exists('siparis_odeme_yetkili')"));
+ok('siparisler.php: düğme/son sonuç/yarım tarama yalnız siparis_mail_tur_yetkisi( ile süzülmüş türler için', str_contains(kod_oku('siparisler.php'), 'siparis_mail_tur_yetkisi($t)') && str_contains(kod_oku('siparisler.php'), 'in_array($mY[\'tur\'], $mTurler, true)'));
+ok('siparis_ayarlar.php: g_odeme post\'u + textarea (listeyi sessizce boşaltmaz)', str_contains(oku('siparis_ayarlar.php'), "'odeme' => (string)(\$_POST['g_odeme'] ?? '')") && str_contains(oku('siparis_ayarlar.php'), "'g_odeme'"));
+ok('siparis_odemeler.php: avizo paneli GET, fonksiyon tanımlamaz, panel yazdırma alanı DIŞINDA', str_contains(oku('siparis_odemeler.php'), 'sipui_odeme_aviz_html(') && !preg_match('/^function\s/m', oku('siparis_odemeler.php')) && strpos(oku('siparis_odemeler.php'), 'id="odAviz"') > strpos(oku('siparis_odemeler.php'), 'id="odYazdirAlan"'));
+
 echo "\n=== Audit eylem adları ≤ 40 karakter ===\n";
 $uzun = []; $sayi = 0;
-$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'config/siparis_denge.php', 'config/siparis_invoice.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
+$dosyalar = array_merge(['config/siparis_core.php', 'config/siparis_eslestir.php', 'config/siparis_pkl.php', 'config/siparis_beyan.php', 'config/siparis_pdf.php', 'config/siparis_mail.php', 'config/siparis_sofor.php', 'config/siparis_yazdir.php', 'config/siparis_wp.php', 'config/siparis_cari.php', 'config/siparis_denge.php', 'config/siparis_invoice.php', 'config/siparis_odeme_aviz.php', 'migrate.php'], $sayfalar, ['_siparis_liste.php']);
 foreach ($dosyalar as $f) {
     $k = kod_oku($f);
     if (preg_match_all("/\b(?:siparis_audit|audit_log_event)\(\s*'([^']+)'/", $k, $mm)) {

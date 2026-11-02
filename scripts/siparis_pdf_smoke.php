@@ -211,4 +211,77 @@ $__d3 = siparis_pdf_parse_order($__pg($__f3));
 $__r3 = array_column($__d3['loadings'], 'order_ref');
 ok('v4 iki tır: devam satırı kendi sipariş no ile gelirse AYRI sipariş olur, birleştirilmez', in_array('TC999999.10', $__r3, true) && in_array('TC432924.10', $__r3, true) && !$__d3['orphan_items'] && !in_array('continuation_merged', array_column($__d3['warnings'], 'code'), true), json_encode($__r3));
 
+echo "\n=== v490. payment_advice (OGL ödeme avizosu; SENTETİK fixture) ===\n";
+// Fixture tamamen uydurmadır; gerçek avizonun düzenini taklit eder: iki sütunlu sayfa 1 + tek sütunlu sayfa 2, Zahlung tutarı akışta Rechnung'dan ÖNCE,
+// "Zahlbetrag total" satırında tutar "EUR"dan önce, başlık cümlesinde çift boşluk, sağa dayalı tutarlar, '@#'.
+$__av = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/odeme_avizosu_pages.json'), true)['pages'];
+$__avp = function (callable $mut = null) use ($__av): array { $p = []; foreach ($__av as $n => $sg) $p[(int)$n] = $sg; if ($mut) $p = $mut($p); return $p; };
+$__avs = function (array $p, callable $f): array { foreach ($p as $n => $sg) $p[$n] = array_values(array_filter($sg, $f)); return $p; };
+$__avd = siparis_pdf_parse_payment_advice($__avp());
+ok('v490 sınıflama: sentetik avizo → payment_advice', siparis_pdf_belge_turu($__avp()) === 'payment_advice');
+$__po = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/po_sayfa_devami_pages.json'), true)['pages'];
+$__po2 = []; foreach ($__po as $n => $sg) $__po2[(int)$n] = $sg;
+ok('v490 sınıflama: PO fixture hâlâ purchase_order, boş girdi unknown', siparis_pdf_belge_turu($__po2) === 'purchase_order' && siparis_pdf_belge_turu([]) === 'unknown');
+ok('v490 taban: ok, 15 satır, ΣZahlung 553775, ΣRechnung 556275, başlık 553775 EUR, mektup tarihi 2026-10-28, gönderen/alıcı',
+    $__avd['ok'] === true && count($__avd['rows']) === 15 && $__avd['sums']['zahlung_kurus'] === 553775 && $__avd['sums']['rechnung_kurus'] === 556275
+    && $__avd['header']['amount_kurus'] === 553775 && $__avd['header']['currency'] === 'EUR' && $__avd['header']['date'] === '2026-10-28'
+    && $__avd['header']['sender_ok'] && $__avd['header']['recipient_ok'] && $__avd['total']['amount_kurus'] === 553775, json_encode($__avd['hata'] ?? null));
+$__sf = array_count_values(array_column(array_filter($__avd['rows'], fn($r) => $r['page'] === 1), 'page'));
+ok('v490 taban: sayfa 1 → 12, sayfa 2 → 3 satır', ($__sf[1] ?? 0) === 12 && count(array_filter($__avd['rows'], fn($r) => $r['page'] === 2)) === 3);
+$__r8 = null; foreach ($__avd['rows'] as $r) if ($r['no'] === '2026-9002RO') $__r8 = $r;
+ok('v490 tuzak: Zahlung akışta ÖNCE gelse de satır 8 → Rechnung 0, Zahlung -2000 (konumla ayrılır)', $__r8 && $__r8['rechnung_kurus'] === 0 && $__r8['zahlung_kurus'] === -2000);
+ok('v490 taban: op_date ISO, OP-Nummer ham', $__avd['rows'][0]['op_date'] === '2026-10-02' && $__avd['rows'][0]['no'] === '26-IHR2026000009001');
+ok('v490 SIPARIS_PDF_SURUM değişmedi (v4)', SIPARIS_PDF_SURUM === 'v4');
+
+$__kod = fn(array $p) => (function () use ($p) { $d = siparis_pdf_parse_payment_advice($p); return [$d['ok'], $d['hata_kodu'], $d['hata']]; })();
+// M1 — tek Zahlung 1 kuruş farklı
+$__m = $__kod($__avp(function ($p) { foreach ($p[1] as &$s) if ($s['text'] === '1.000,00' && $s['x'] > 240) { $s['text'] = '1.000,01'; break; } return $p; }));
+ok('v490 M1: bir Zahlung +1 kuruş → aviz_toplam ve mesajda iki toplam', $__m[1] === 'aviz_toplam' && str_contains((string)$__m[2], '5.537,76') && str_contains((string)$__m[2], '5.537,75'), json_encode($__m));
+// M2 — Rechnung/Zahlung tutarları her satırda yer değiştirmiş
+$__m = $__kod($__avp(function ($p) {
+    foreach ($p as $n => $sg) {
+        $g = [];
+        foreach ($sg as $i => $s) if (preg_match(SIPDF_AMOUNT_RE, $s['text']) && $s['text'] !== '5.537,75') $g[(int)round($s['y'] * 100) . '|' . ($s['x'] < 311 ? 'L' : 'R')][] = $i;
+        foreach ($g as $idx) if (count($idx) === 2) { $t = $p[$n][$idx[0]]['text']; $p[$n][$idx[0]]['text'] = $p[$n][$idx[1]]['text']; $p[$n][$idx[1]]['text'] = $t; }
+    }
+    return $p; }));
+ok('v490 M2: Rechnung/Zahlung yer değişmiş → aviz_sutun_ters (sessiz takas yok)', $__m[1] === 'aviz_sutun_ters', json_encode($__m));
+$__m = $__kod($__avs($__avp(), fn($s) => trim($s['text']) !== 'Zahlung'));
+ok('v490 M3: başlıktan Zahlung etiketi → aviz_baslik', $__m[1] === 'aviz_baslik', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { foreach ($p as $n => $sg) foreach ($sg as $i => $s) $p[$n][$i]['text'] = str_replace('5.537,75  zum', '5.537,76  zum', $s['text']); return $p; }));
+ok('v490 M4: iki sayfada da başlık tutarı 5.537,76 → aviz_baslik_toplam', $__m[1] === 'aviz_baslik_toplam', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { foreach ($p as $n => $sg) foreach ($sg as $i => $s) $p[$n][$i]['text'] = str_replace('über  EUR', 'über  USD', $s['text']); return $p; }));
+ok('v490 M5: başlık USD, toplam EUR → aviz_para', $__m[1] === 'aviz_para', json_encode($__m));
+$__m = $__kod($__avs($__avp(), fn($s) => !($s['y'] > 355 && $s['y'] < 356)));
+ok('v490 M6: «Zahlbetrag total» satırı yok → aviz_toplam_yok', $__m[1] === 'aviz_toplam_yok', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { $p[1][] = ['x' => 524.4, 'y' => 600.0, 'size' => 9, 'text' => '29.10.2026']; return $p; }));
+$__m2 = $__kod($__avs($__avp(), fn($s) => $s['text'] !== '28.10.2026'));
+ok('v490 M7: iki farklı mektup tarihi / hiç yok → aviz_tarih', $__m[1] === 'aviz_tarih' && $__m2[1] === 'aviz_tarih', json_encode([$__m, $__m2]));
+$__m = $__kod($__avp(function ($p) { $p[1][] = ['x' => 29.76, 'y' => 300.0, 'size' => 9, 'text' => 'anlamsiz metin']; return $p; }));
+ok('v490 M8: tabloda anlamsız metin → aviz_satir', $__m[1] === 'aviz_satir', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { $p[1][] = ['x' => 240.0, 'y' => 488.4, 'size' => 9, 'text' => '1,00']; return $p; }));
+ok('v490 M9: üç tutarlı satır → aviz_satir', $__m[1] === 'aviz_satir', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { foreach ($p[2] as &$s) $s['text'] = str_replace('5.537,75', '5.537,77', $s['text']); return $p; }));
+ok('v490 M10: sayfa 2 başlık cümlesi farklı → aviz_cok_blok', $__m[1] === 'aviz_cok_blok', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { $p[1] = array_values(array_filter($p[1], fn($s) => $s['y'] > 500 || $s['y'] < 34)); $p[2] = array_values(array_filter($p[2], fn($s) => $s['y'] > 700 || $s['y'] < 400)); return $p; }));
+ok('v490 M11: tüm veri satırları silinmiş → aviz_bos', $__m[1] === 'aviz_bos', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { $p[1][] = ['x' => 29.77, 'y' => 300.0, 'size' => 9, 'text' => 'Zahlbetrag total']; $p[1][] = ['x' => 260.0, 'y' => 300.0, 'size' => 9, 'text' => '5.537,75']; $p[1][] = ['x' => 218.65, 'y' => 300.0, 'size' => 9, 'text' => 'EUR']; return $p; }));
+ok('v490 M12: «Zahlbetrag total» iki kez → aviz_cok_blok', $__m[1] === 'aviz_cok_blok', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { foreach ($p[1] as &$s) if ($s['text'] === '1.000,00' && $s['x'] > 240) { $s['text'] = '1,000.00'; break; } return $p; }));
+ok('v490 M13: İngilizce biçim 1,000.00 → aviz_satir', $__m[1] === 'aviz_satir', json_encode($__m));
+$__m = $__kod($__avp(function ($p) { $p[1][] = ['x' => 29.76, 'y' => 100.0, 'size' => 9, 'text' => '@#']; return $p; }));
+ok('v490: yalnız "@#" tablo bölgesinde yok sayılır', $__m[0] === true, json_encode($__m));
+ok('v490 sipdf_de_kurus: geçerli biçimler', sipdf_de_kurus('1.234,56') === 123456 && sipdf_de_kurus('-162,12') === -16212 && sipdf_de_kurus('0,00') === 0 && sipdf_de_kurus('62377,44') === 6237744);
+ok('v490 sipdf_de_kurus: geçersiz biçimler null', sipdf_de_kurus('1234.56') === null && sipdf_de_kurus('1.234,5') === null && sipdf_de_kurus('1,234,56') === null && sipdf_de_kurus('12.34,56') === null && sipdf_de_kurus('') === null);
+ok('v490 sipdf_de_goster tersi', sipdf_de_goster(6237744) === '62.377,44' && sipdf_de_goster(-5) === '-0,05' && sipdf_de_goster(0) === '0,00');
+$__ornek = (string)getenv('ODEME_ORNEK_PDF');
+if ($__ornek !== '' && is_file($__ornek)) {
+    $__g = siparis_pdf_isle($__ornek); $__gr = siparis_pdf_oku($__ornek);
+    $__tur = array_count_values(array_map(function ($r) { return preg_match('~^(?:\d{2}[-/])?IHR\d{13}$~', $r['no']) ? 'ana' : (preg_match('~^(?:\d{2}[-/])?IHR\d{13}D~', $r['no']) ? 'duz' : 'diger'); }, $__g['rows'] ?? []));
+    ok('v490 GERÇEK PDF: payment_advice, ok, 80 satır, ΣZahlung 6237744 = başlık = toplam, tarih 2026-10-27',
+        siparis_pdf_belge_turu($__gr['pages']) === 'payment_advice' && ($__g['ok'] ?? false) === true && count($__g['rows']) === 80 && $__g['sums']['zahlung_kurus'] === 6237744
+        && $__g['header']['amount_kurus'] === 6237744 && $__g['total']['amount_kurus'] === 6237744 && $__g['header']['date'] === '2026-10-27', json_encode($__g['hata'] ?? null));
+    ok('v490 GERÇEK PDF: ΣRechnung 6512784', $__g['sums']['rechnung_kurus'] === 6512784);
+} else echo "ATLANDI (ODEME_ORNEK_PDF yok)\n";
+
 siparis_test_bitir();

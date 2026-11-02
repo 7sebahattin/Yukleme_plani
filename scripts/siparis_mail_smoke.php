@@ -172,7 +172,7 @@ $st = array_column($r['son']['satirlar'], 'durum', 'm');
 ok('Sipariş düğmesi: PO → alindi, PC → alindi (fiyat onayı da Sipariş ile gelir), LL → baska_tur', ($st[$dPO] ?? '') === 'alindi' && ($st[$dPC] ?? '') === 'alindi' && ($st[$dLL] ?? '') === 'baska_tur', json_encode($st));
 $bt = array_values(array_filter($r['son']['satirlar'], fn($x) => $x['durum'] === 'baska_tur'))[0];
 ok('baska_tur (LL): BELGE SATIRI AÇILMADI (PO + PC için +2) ve metin Lojistik düğmesini söyler', $bt['tur'] === 'll' && $denetle('SELECT COUNT(*) FROM siparis_belgeler') === $belgeOnce + 2 && str_contains(sipui_mail_durum_html($bt), 'Lojistik sorgula'), sipui_mail_durum_html($bt));
-ok('Fiyat düğmesi artık YOK (tür listesi yalnız siparis + lojistik)', array_keys(siparis_mail_turleri()) === ['siparis', 'lojistik'] && !siparis_mail_baslat($db, 'fiyat', 1, 'DEPO1', ['simdi' => $SIMDI])['ok']);
+ok('Fiyat düğmesi artık YOK (tür listesi siparis + lojistik + odeme; fiyat reddedilir)', array_keys(siparis_mail_turleri()) === ['siparis', 'lojistik', 'odeme'] && !siparis_mail_baslat($db, 'fiyat', 1, 'DEPO1', ['simdi' => $SIMDI])['ok']);
 smt_sayac_sifirla();
 $r = smt_tara('siparis', 1, 'DEPO1', ['simdi' => $SIMDI]);
 ok('Sipariş yeniden: PO + PC onceden, LL baska_tur (defterden), IMAP 0', $SMT_BAGLANTI === 0 && (array_column($r['son']['satirlar'], 'durum', 'm')[$dPC] ?? '') === 'onceden' && (array_column($r['son']['satirlar'], 'durum', 'm')[$dPO] ?? '') === 'onceden', json_encode(smt_durumlar($r)) . " bağlantı:$SMT_BAGLANTI");

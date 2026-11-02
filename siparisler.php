@@ -182,14 +182,17 @@ if ($yaz && siparis_mail_yetkisi()) {
     $mD = ['hazir' => $mHazir, 'mail_admin' => can_mail('admin')];
     if ($mHazir) {
         $mAyar = siparis_mail_ayar_oku($pdo);
+        // v490: görünür türler = tür-başı yetki (+ ödeme tablosu kurulu). Yetkisiz kullanıcıya ödeme düğmesi/son sonucu/yarım tarama gelmez.
+        $mTurler = array_values(array_filter(array_keys(siparis_mail_turleri()), static fn(string $t): bool =>
+            siparis_mail_tur_yetkisi($t) && ($t !== 'odeme' || siparis_odeme_hazir($pdo))));
         $mD['ayarli'] = [];
-        foreach (array_keys(siparis_mail_turleri()) as $mt) $mD['ayarli'][$mt] = siparis_mail_ayarli_mi($mAyar, $mt);
+        foreach ($mTurler as $mt) $mD['ayarli'][$mt] = siparis_mail_ayarli_mi($mAyar, $mt);
         $mD['ayar_link'] = siparis_mail_ayar_yetkisi();
         $mY = siparis_mail_yarim($pdo, $mUid);
-        $mD['yarim'] = $mY !== null && $mY['depo'] === $mDepo ? $mY : null;
+        $mD['yarim'] = $mY !== null && $mY['depo'] === $mDepo && in_array($mY['tur'], $mTurler, true) ? $mY : null;
         $mGor = mail_gorunur_hesap_idleri($mUid, $pdo);
         $mSon = [];
-        foreach (array_keys(siparis_mail_turleri()) as $mt) {
+        foreach ($mTurler as $mt) {
             $mx = siparis_mail_son($pdo, $mt);
             if ($mx !== null && (string)($mx['depo'] ?? '') === $mDepo) $mSon[] = ['tur' => $mt, 'bitis' => (int)($mx['bitis'] ?? 0), 'sayac' => (array)($mx['sayac'] ?? []), 'html' => sipui_mail_sonuc_html($pdo, $mx, $mGor)];
         }
