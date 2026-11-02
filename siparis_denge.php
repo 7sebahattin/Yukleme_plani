@@ -50,6 +50,9 @@ $ham = static fn(string $k): string => is_string($_GET[$k] ?? null) ? trim((stri
 $kgTam = static fn(int $kg): string => $kg > 0 ? number_format($kg, 0, ',', '.') : '';
 $hane = (int)$param['hane'];
 $kapat = (int)$o['kapatilacak_kurus'];
+$yuk = ($po['kaynak'] ?? 'elle') === 'yuklenmemis';   // etkin plan kaynağı (yüklenmemiş siparişlere göre mi)
+$ykListe = siparis_denge_yuklenmemis($v)['liste'];
+$yildiz = static fn(bool $b): string => $b ? '<span class="sc-yildiz">*</span>' : '';
 $pctMetin = static fn(string $m): string => $m . ' %';   // duzeltme_oran_metin: işaretli, 2 ondalık ("+1,23")
 render_print_page_start('Fiyat Dengeleme', 'siparis', 'summary', 'landscape', ['print_pdks.css']);
 ?>
@@ -57,12 +60,32 @@ render_print_page_start('Fiyat Dengeleme', 'siparis', 'summary', 'landscape', ['
 @page { size: A4 landscape; margin: 0; }
 @media print { body { padding: 10mm; } }
 body.print-siparis .print-sheet { max-width: 1240px; }
-.sc-filtre { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0; }
-.sc-filtre label { display: flex; flex-direction: column; gap: 2px; font-size: .72rem; font-weight: 700; color: var(--pr-muted); }
-.sc-filtre input, .sc-filtre select { font: inherit; font-size: .85rem; padding: 6px 8px; min-height: 36px; border: 1px solid #c3ccd8; border-radius: 6px; background: #fff; color: var(--pr-ink); }
-.sc-filtre input[type="number"], .sc-filtre input[type="text"].sd-kisa { width: 120px; }
-.sd-formlar { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+/* v489: filtre paneli — Cari Döküm ile AYNI görünüm (sayfa gövdesinden bir ton farklı zemin, alta hizalı tek satır, 32px kutular) */
+.print-sheet > .pr-actions.no-print { display: block; padding: 0; margin: 0 0 14px; border: 0; }
+.sc-filtrebar { background: #eef3fa; border: 1px solid #d5dfec; border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+.sc-fb-satir { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.sc-fb-eylem { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; margin-left: auto; }
+.sc-fb-plan { border-top: 1px dashed #b4c3d8; padding-top: 6px; }
+.sc-fb-baslik { margin: 0 0 4px; font-size: .7rem; font-weight: 700; color: #46566b; }
+.sc-filtre { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; margin: 0; min-width: 0; }
+.sc-filtre label { display: flex; flex-direction: column; gap: 2px; font-size: .6875rem; font-weight: 700; color: #46566b; line-height: 1.2; }
+.sc-filtre input, .sc-filtre select { font: inherit; font-size: .8rem; padding: 3px 8px; height: 32px; box-sizing: border-box; border: 1px solid #b9c7da; border-radius: 6px; background: #fff; color: var(--pr-ink); }
+.sc-filtre input[type="date"] { width: 132px; }
+.sc-filtre select { max-width: 230px; }
+.sc-filtre input[type="number"] { width: 84px; }
+.sc-filtre input[type="text"].sd-kisa { width: 110px; }
+.sc-filtre .pr-btn, .sc-fb-eylem .pr-btn { height: 32px; box-sizing: border-box; padding: 0 12px; font-size: .8rem; white-space: nowrap; }
+.sc-filtre label.sd-pasif { opacity: .55; }
+@media screen and (max-width: 767px) {
+  .sc-filtrebar { padding: 8px 10px; }
+  .sc-filtre, .sc-filtre label { width: 100%; }
+  .sc-filtre input, .sc-filtre select, .sc-filtre input[type="date"], .sc-filtre input[type="number"], .sc-filtre input[type="text"].sd-kisa { width: 100%; max-width: none; height: 38px; font-size: 16px; }
+  .sc-filtre .pr-btn { width: 100%; height: 38px; justify-content: center; }
+  .sc-fb-eylem { margin-left: 0; width: 100%; }
+  .sc-fb-eylem .pr-btn { flex: 1 1 auto; height: 38px; justify-content: center; }
+}
 .sc-kural { margin: 6px 0 2px; }
+.sc-yildiz { font-weight: 800; margin-left: 1px; }
 .sc-uyari { font-weight: 700; color: var(--pr-warn); }
 .print-summary-box .sc-alt { display: block; margin-top: 3px; font-size: .74rem; color: var(--pr-muted); font-variant-numeric: tabular-nums; }
 .print-summary-box .sc-pb { display: block; font-size: 1rem; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
@@ -81,8 +104,12 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
 .sd-uyari-liste li { margin: 2px 0; }
 .sd-uyari-liste li.sd-u-uyari { font-weight: 700; color: var(--pr-warn); }
 .sc-cari { break-inside: avoid; page-break-inside: avoid; }
-@media screen and (max-width: 900px) { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
-@media screen and (max-width: 767px) { .sc-filtre input, .sc-filtre select { font-size: 16px; } }
+@media screen { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+#sdKaynak { max-width: none; width: 310px; }
+table.print-table.sc-tablo#sdPlan td { white-space: nowrap; }
+table.print-table.sc-tablo#sdPlan th { white-space: normal; line-height: 1.2; }
+table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { padding-left: 5px; padding-right: 5px; }
+@media screen and (max-width: 767px) { #sdKaynak { width: 100%; } }
 @media print {
   html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table.print-table.sc-tablo { font-size: 7.8pt; }
@@ -92,7 +119,8 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
 </style>
 <div class="print-sheet">
   <div class="pr-actions no-print">
-    <div class="sd-formlar">
+   <div class="sc-filtrebar">
+    <div class="sc-fb-satir">
       <form method="get" action="siparis_denge.php" class="sc-filtre">
         <label>Yükleme başı <input type="date" name="bas" value="<?= h($f['bas']) ?>"></label>
         <label>Yükleme sonu <input type="date" name="bit" value="<?= h($f['bit']) ?>"></label>
@@ -100,13 +128,25 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
           <?php foreach ($harita as $kod => $u): ?><option value="<?= h((string)$kod) ?>"<?= (string)$kod === $f['alici'] ? ' selected' : '' ?>><?= h($u['ad'] . ' (' . $kod . ')') ?></option><?php endforeach; ?>
           <?php if ($f['alici'] !== '' && !isset($harita[$f['alici']])): ?><option value="<?= h($f['alici']) ?>" selected><?= h($f['alici']) ?></option><?php endif; ?>
         </select></label>
-        <?php foreach (['n', 'kg', 'hedef', 'hane'] as $k): if ($ham($k) !== ''): ?><input type="hidden" name="<?= h($k) ?>" value="<?= h($ham($k)) ?>"><?php endif; endforeach; ?>
+        <?php foreach (['kaynak', 'n', 'kg', 'hedef', 'hane'] as $k): if ($ham($k) !== ''): ?><input type="hidden" name="<?= h($k) ?>" value="<?= h($ham($k)) ?>"><?php endif; endforeach; ?>
         <button type="submit" class="pr-btn">Uygula</button>
       </form>
+      <div class="sc-fb-eylem">
+        <button type="button" class="pr-btn" data-sc-yazdir>🖨 Yazdır</button>
+        <a class="pr-btn" href="siparis_cari.php?<?= h(http_build_query(['bas' => $f['bas'], 'bit' => $f['bit'], 'alici' => $f['alici']])) ?>">📒 Cari Döküm</a>
+        <a class="pr-btn" href="siparisler.php">← Siparişler</a>
+      </div>
+    </div>
+    <div class="sc-fb-plan">
+      <p class="sc-fb-baslik">Plan ayarları</p>
       <form method="get" action="siparis_denge.php" class="sc-filtre" id="sdParam">
         <input type="hidden" name="bas" value="<?= h($f['bas']) ?>"><input type="hidden" name="bit" value="<?= h($f['bit']) ?>"><input type="hidden" name="alici" value="<?= h($f['alici']) ?>">
-        <label>Fatura sayısı (1–12) <input type="number" name="n" min="1" max="12" step="1" value="<?= h($ham('n')) ?>" placeholder="<?= (int)$param['n'] ?>"></label>
-        <label>Fatura başına net kg (boş = ortalama) <input type="text" name="kg" inputmode="numeric" class="sd-kisa" value="<?= h($ham('kg')) ?>" placeholder="<?= h($kgTam((int)$param['kg'])) ?>"></label>
+        <label>Plan kaynağı <select name="kaynak" id="sdKaynak">
+          <option value="yuklenmemis"<?= $param['kaynak'] === 'yuklenmemis' ? ' selected' : '' ?>>Yüklenmemiş siparişlere göre (<?= (int)count($ykListe) ?> sevkiyat)</option>
+          <option value="elle"<?= $param['kaynak'] === 'elle' ? ' selected' : '' ?>>Elle: fatura sayısı ve kg</option>
+        </select></label>
+        <label class="<?= $yuk ? 'sd-pasif' : '' ?>" title="Elle modda geçerli">Fatura sayısı (1–12) <input type="number" name="n" min="1" max="12" step="1" value="<?= h($ham('n')) ?>" placeholder="<?= (int)$param['n'] ?>" title="Elle modda geçerli"></label>
+        <label class="<?= $yuk ? 'sd-pasif' : '' ?>" title="Elle modda geçerli">Fatura başına net kg (boş = ortalama) <input type="text" name="kg" inputmode="numeric" class="sd-kisa" value="<?= h($ham('kg')) ?>" placeholder="<?= h($kgTam((int)$param['kg'])) ?>" title="Elle modda geçerli"></label>
         <label>Beklenen PC fiyatı €/kg (boş = son sevkiyat) <input type="text" name="hedef" inputmode="decimal" class="sd-kisa" value="<?= h($ham('hedef')) ?>" placeholder="<?= h($fiyat((int)$param['hedef'])) ?>"></label>
         <label>Fatura fiyatı hassasiyeti <select name="hane">
           <?php foreach ([2, 3, 4] as $hh): ?><option value="<?= $hh ?>"<?= $hane === $hh ? ' selected' : '' ?>><?= $hh ?> ondalık</option><?php endforeach; ?>
@@ -114,9 +154,7 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
         <button type="submit" class="pr-btn pr-btn-primary">Hesapla</button>
       </form>
     </div>
-    <button type="button" class="pr-btn" data-sc-yazdir>🖨 Yazdır</button>
-    <a class="pr-btn" href="siparis_cari.php?<?= h(http_build_query(['bas' => $f['bas'], 'bit' => $f['bit'], 'alici' => $f['alici']])) ?>">📒 Cari Döküm</a>
-    <a class="pr-btn" href="siparisler.php">← Siparişler</a>
+   </div>
   </div>
   <?= render_print_header_html('Fiyat Dengeleme', implode(' · ', $f['ozet']) . ($depo !== '' ? ' · Depo: ' . $depo : ''), 'Oluşturma: ' . date('d.m.Y H:i')) ?>
   <p class="pr-note sc-kural">Yalnız EUR sevkiyatları karşılaştırılır. Gelen fiyat = OGL'nin Price Confirmation (PC) fiyatı; Kesilen fatura = bizim kestiğimiz invoice. Fark = Gelen fiyat − Kesilen fatura: eksi = kesilen fatura gelen fiyattan yüksek (fazla faturalandı), artı = daha düşük faturalandı (alacak eksik kaldı). Kapatılacak tutar için "+" = ileride bu kadar FAZLA faturalanmalı.</p>
@@ -167,18 +205,27 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
     <?php endif; ?>
   </table></div>
 
-  <!-- 3) Sonraki N fatura planı -->
+  <!-- 3) Fatura planı (v489: varsayılan = yüklenmemiş, fiyatı belli olmayan siparişlere göre; "Elle" = sonraki N fatura) -->
+  <?php if ($yuk): ?>
+  <h3 class="pr-section">Yüklenmemiş siparişlere göre fatura planı (<?= (int)$po['sevkiyat'] ?> sevkiyat)</h3>
+  <?php else: ?>
   <h3 class="pr-section">Sonraki <?= (int)$param['n'] ?> fatura planı</h3>
+  <?php endif; ?>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="sdPlan">
+    <?php if ($yuk): ?>
+    <thead><tr><th class="num">Sıra</th><?= siparis_cari_kimlik_baslik() ?><th>Planlanan yükleme</th><th class="num">Tahmini net kg</th><th class="num">Beklenen PC fiyatı / kg</th><th class="num">Düzeltme (€/kg)</th><th class="num sd-oneri">Önerilen fatura fiyatı / kg</th><th class="num">Fatura tutarı (EUR)</th><th class="num">PC beklenen tutar (EUR)</th><th class="num">Kapanan (EUR)</th><th class="num">Kalan (EUR)</th></tr></thead>
+    <?php else: ?>
     <thead><tr><th class="num">Sıra</th><th class="num">Tahmini net kg</th><th class="num">Beklenen PC fiyatı / kg</th><th class="num">Düzeltme (€/kg)</th><th class="num sd-oneri">Önerilen fatura fiyatı / kg</th><th class="num">Fatura tutarı (EUR)</th><th class="num">PC beklenen tutar (EUR)</th><th class="num">Kapanan (EUR)</th><th class="num">Kalan (EUR)</th></tr></thead>
+    <?php endif; ?>
     <?php if (!$d['plan']): ?>
-    <tbody><tr><td colspan="9" class="pr-empty">Plan çıkarılamadı — karşılaştırılan sevkiyat, net kg ve beklenen PC fiyatı gerekir (altta nedenler).</td></tr></tbody>
+    <tbody><tr><td colspan="<?= $yuk ? 14 : 9 ?>" class="pr-empty">Plan çıkarılamadı — karşılaştırılan sevkiyat, <?= $yuk ? 'yüklenmemiş sipariş' : 'net kg' ?> ve beklenen PC fiyatı gerekir (altta nedenler).</td></tr></tbody>
     <?php else: ?>
     <tbody>
       <?php foreach ($d['plan'] as $p): ?>
       <tr>
         <td class="num"><?= (int)$p['sira'] ?></td>
-        <td class="num"><?= h(siparis_cari_kg((int)$p['gram'])) ?></td>
+        <?php if ($yuk): ?><?= siparis_cari_kimlik_html($p['sev']) ?><td><?= h($tarih($p['sev']['tarih'])) ?></td><?php endif; ?>
+        <td class="num"><?= h(siparis_cari_kg((int)$p['gram'])) ?><?= $yuk ? $yildiz((bool)$p['kg_varsayilan']) : '' ?></td>
         <td class="num"><?= h($fiyat((int)$p['hedef'])) ?></td>
         <td class="num<?= $farkSinif((int)$p['duzeltme_fiyat']) ?>"><?= h(siparis_cari_fark_metin((int)$p['duzeltme_fiyat'])) ?></td>
         <td class="num sd-oneri"><?= h($fiyat((int)$p['fiyat'])) ?></td>
@@ -190,7 +237,12 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
       <?php endforeach; ?>
     </tbody>
     <tbody class="sc-toplam"><tr>
+      <?php if ($yuk): ?>
+      <td colspan="6">PLAN ÖZETİ — <?= (int)$po['sevkiyat'] ?> sevkiyat</td>
+      <td class="num"><?= h(siparis_cari_kg((int)$po['toplam_gram'])) ?></td><td></td>
+      <?php else: ?>
       <td colspan="3">PLAN ÖZETİ</td>
+      <?php endif; ?>
       <td class="num<?= $farkSinif((int)$po['duzeltme_ort_fiyat']) ?>"><?= h(siparis_cari_fark_metin((int)$po['duzeltme_ort_fiyat'])) ?><br><small>(<?= h($pctMetin($po['duzeltme_oran_metin'])) ?>)</small></td>
       <td colspan="3"></td>
       <td class="num"><?= h($isaretli((int)$po['toplam_kapanan'])) ?></td>
@@ -199,7 +251,8 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
     <?php endif; ?>
   </table></div>
   <?php if ($d['plan']): ?>
-  <p class="pr-note">Plan özeti: ortalama düzeltme <?= h(siparis_cari_fark_metin((int)$po['duzeltme_ort_fiyat'])) ?> EUR / kg (hedefe göre <?= h($pctMetin($po['duzeltme_oran_metin'])) ?>) · toplam kapanan <?= h($eurI((int)$po['toplam_kapanan'])) ?> · yuvarlama artığı <?= h($eurI((int)$po['kalan'])) ?> (<?= $hane ?> ondalık fatura fiyatı).</p>
+  <p class="pr-note">Plan özeti: ortalama düzeltme <?= h(siparis_cari_fark_metin((int)$po['duzeltme_ort_fiyat'])) ?> EUR / kg (hedefe göre <?= h($pctMetin($po['duzeltme_oran_metin'])) ?>) · toplam kapanan <?= h($eurI((int)$po['toplam_kapanan'])) ?> · yuvarlama artığı <?= h($eurI((int)$po['kalan'])) ?> (<?= $hane ?> ondalık fatura fiyatı).<?= $yuk ? ' Plan, henüz yüklenmemiş ve fiyatı belli olmayan siparişlerin tahmini net kg\'ına (koli × koli kg) göre kurulur; düzeltme €/kg her siparişte yaklaşık aynıdır.' : '' ?></p>
+  <?php if ($yuk && array_filter(array_column($d['plan'], 'kg_varsayilan'))): ?><p class="pr-note">* koli ağırlığı belgeden okunamadı, 3,5 kg varsayıldı.</p><?php endif; ?>
   <?php endif; ?>
 
   <!-- 4) Uyarılar / notlar -->
@@ -219,5 +272,8 @@ table.print-table.sc-tablo th.sd-oneri { border: 2px solid var(--pr-ink); }
 </div>
 <script>
 (function () { var b = document.querySelector('[data-sc-yazdir]'); if (b) b.addEventListener('click', function () { window.print(); }); })();
+// v489: "Fatura sayısı" / "Fatura başına net kg" yalnız Elle modda geçerli → yazılınca kaynak kendiliğinden "Elle" olur
+(function () { var k = document.getElementById('sdKaynak'); if (!k) return; var f = document.getElementById('sdParam'); if (!f) return;
+  ['n', 'kg'].forEach(function (a) { var i = f.elements[a]; if (i) i.addEventListener('input', function () { if (i.value.trim() !== '') k.value = 'elle'; }); }); })();
 </script>
 <?php render_print_page_end(); ?>

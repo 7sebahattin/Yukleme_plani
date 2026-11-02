@@ -309,6 +309,13 @@ ok('v449 Cari Döküm: A, B tabloları başlığında kimlik bloğu (Parti no ·
     && str_contains($caUc, '<strong>Parti no:</strong>') && str_contains($caUc, '<strong>Alıcı ülke:</strong>') && str_contains($caUc, '<strong>Plaka:</strong>'));
 ok('v449 Fiyat Dengeleme: karşılaştırma tablosunda aynı kimlik bloğu (siparis_cari_kimlik_baslik / _html) + parti haritası', str_contains($deUc, 'siparis_cari_kimlik_baslik()') && str_contains($deUc, 'siparis_cari_kimlik_html($s)') && str_contains($deUc, 'siparis_cari_parti_haritasi('));
 
+ok('v489 Fiyat Dengeleme: plan kaynağı (yüklenmemiş/elle) config\'te; sayfa kimlik bloğunu siparis_cari_kimlik_* ile basar (kopya yok), hesap sayfada YOK',
+    str_contains($dnHam, 'function siparis_denge_yuklenmemis(array $cariVeri): array') && str_contains($dnHam, 'function siparis_denge_pay(') && str_contains($dnHam, "'kaynak_girilen'")
+    && str_contains($deUc, 'siparis_denge_yuklenmemis($v)') && substr_count($deUc, 'siparis_cari_kimlik_baslik()') === 2 && str_contains($deUc, 'siparis_cari_kimlik_html($p[\'sev\'])') && str_contains($deUc, 'name="kaynak" id="sdKaynak"')
+    && !preg_match('/\bround\(|\bfloor\(|\bceil\(|intdiv\([^)]*\*/', $deUc));
+ok('v489 filtre paneli: Cari Döküm + Fiyat Dengeleme AYNI .sc-filtrebar (eylem düğmeleri panel içinde), 2 GET formu korunur', str_contains($caUc, 'class="sc-filtrebar"') && str_contains($deUc, 'class="sc-filtrebar"') && str_contains($caUc, 'class="sc-fb-eylem"') && str_contains($deUc, 'class="sc-fb-eylem"')
+    && str_contains($deUc, '<p class="sc-fb-baslik">Plan ayarları</p>') && substr_count($deUc, 'method="get" action="siparis_denge.php"') === 2);
+
 echo "\n=== v442: OGL Invoice (siparis_invoice.php) ===\n";
 $ivUc = kod_oku('siparis_invoice.php'); $ivCfg = kod_oku('config/siparis_invoice.php'); $ivHam = oku('config/siparis_invoice.php'); $ivJs = oku('assets/siparis.js'); $ivCss = oku('assets/siparis.css');
 $ivView = kod_oku('siparis_view.php');

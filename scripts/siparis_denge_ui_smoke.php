@@ -310,4 +310,67 @@ ok('denge: beyan.read YOK → parti sızmaz + açıklayıcı not', temiz($r) && 
 ok('siparis_cari_kimlik_html: XSS kaçışı, boş ülke "—", bitişik plakalar ayrı satır', str_contains($kh, 'P&lt;1&gt;') && str_contains($kh, '&lt;b&gt;X&lt;/b&gt;') && str_contains($kh, '<td>—</td>') && str_contains($kh, '33ABC123<br>33DEF456') && !str_contains($kh, '<b>'));
 ok('boş parti + boş plaka → "—"', siparis_cari_kimlik_html(['order_ref' => 'T']) === '<td>—</td><td>T</td><td>—</td><td>—</td>');
 
+echo "\n=== 8. v489: plan kaynağı (yüklenmemiş siparişlere göre) + filtre paneli ===\n";
+$yy1 = sev($db, ['order_ref' => 'TC810201.10', 'yukleme_tarihi' => date('Y-m-d', strtotime('+6 day')), 'durum' => 'yola_cikti', 'alici_kodu' => '1038529', 'alici_adi' => 'LIDL RS', 'plakalar' => '34TST201']);
+kalem($db, $yy1, ['kalibre' => '14', 'koli_icerik' => '3,5 KG', 'etkin_koli' => 5000]);                          // 17.500 kg
+$yy2 = sev($db, ['order_ref' => '<b>TC810202</b>.10', 'yukleme_tarihi' => date('Y-m-d', strtotime('+3 day')), 'durum' => 'yola_cikti', 'alici_kodu' => '1038529', 'alici_adi' => 'LIDL RS', 'plakalar' => '34TST202']);
+kalem($db, $yy2, ['kalibre' => '12', 'koli_icerik' => '', 'etkin_koli' => 2000]);                                 // koli kg okunamadı → 3,5 varsayılan → 7.000 kg *
+$yy3 = sev($db, ['order_ref' => 'TC810203.10', 'yukleme_tarihi' => date('Y-m-d', strtotime('+2 day')), 'durum' => 'yola_cikti', 'alici_kodu' => '1038529']);
+kalem($db, $yy3, ['kalibre' => '14', 'koli_icerik' => '3,5 KG', 'etkin_koli' => 100, 'pc_koli' => 100, 'fiyat' => 1.45, 'para_birimi' => 'EUR', 'fiyat_birim' => 'KG']);   // fiyatı belli yüklenmemiş → plana ALINMAZ
+$db->exec("INSERT INTO siparis_beyan (sevkiyat_id, beyan_id, tur, durum, created_by, created_at) VALUES ($yy1, $cdSon, 'elle', 'aktif', 1, '2026-10-02 10:00:00')");
+rol(array_merge($OKU, ['beyan.read']), false, 3, ['DEPO1']);
+$r = uc('siparis_denge.php', ['alici' => '1038529']); $g = $r['govde'];
+if ($cikti !== '') file_put_contents($cikti . '/denge_yuklenmemis.html', $g);
+$YP = kesit($g, 'id="sdPlan"', 'Uyarılar ve notlar');
+ok('yüklenmemiş mod: 200, uyarı yok, HTML dengeli', temiz($r) && $r['kod'] === 200 && html_dengeli($g) === null, (string)$r['hata'] . ' ' . (string)html_dengeli($g));
+ok('başlık "Yüklenmemiş siparişlere göre fatura planı (2 sevkiyat)"; "Sonraki N fatura planı" YOK', str_contains($g, 'Yüklenmemiş siparişlere göre fatura planı (2 sevkiyat)') && !str_contains($g, 'Sonraki 5 fatura planı'));
+ok('plan başlığı: Sıra · Parti no · Sipariş no · Alıcı ülke · Plaka (siparis_cari_kimlik_baslik) · Planlanan yükleme · Tahmini net kg · …', str_contains($YP, '<th class="num">Sıra</th><th>Parti no</th><th>Sipariş no</th><th>Alıcı ülke</th><th>Plaka</th><th>Planlanan yükleme</th><th class="num">Tahmini net kg</th><th class="num">Beklenen PC fiyatı / kg</th><th class="num">Düzeltme (€/kg)</th><th class="num sd-oneri">Önerilen fatura fiyatı / kg</th><th class="num">Fatura tutarı (EUR)</th><th class="num">PC beklenen tutar (EUR)</th><th class="num">Kapanan (EUR)</th><th class="num">Kalan (EUR)</th>'));
+$gen = satir_genislikleri($YP);
+ok('plan tablosu: tüm satırlar 14 hücre (özet satırı dahil)', $gen !== [] && count(array_unique($gen)) === 1 && $gen[0] === 14, json_encode($gen));
+ok('sıra tarihe göre: önce +3 gün (7.000 kg, "*"), sonra +6 gün (17.500 kg); fiyatı belli sipariş (TC810203) YOK', (bool)preg_match('~<td class="num">1</td>\s*<td>—</td><td>&lt;b&gt;TC810202&lt;/b&gt;\.10</td><td>[^<]+</td><td>34TST202</td><td>[^<]*</td>\s*<td class="num">7\.000<span class="sc-yildiz">\*</span></td>.*?<td class="num">2</td>\s*<td>[^<]*</td><td>TC810201\.10</td>~us', $YP) && !str_contains($YP, 'TC810203'));
+ok('17.500 kg satırı yıldızsız; parti no (beyan.read) sipariş no\'nun solunda', (bool)preg_match('~<td>P-810/2</td><td>TC810201\.10</td><td>[^<]+</td><td>34TST201</td><td>[^<]*</td>\s*<td class="num">17\.500</td>~u', $YP));
+ok('XSS: yüklenmemiş sipariş no kaçırılır (çıplak <b>TC810202 yok)', !str_contains($g, '<b>TC810202') && str_contains($g, '&lt;b&gt;TC810202&lt;/b&gt;'));
+ok('"*" dipnotu: koli ağırlığı belgeden okunamadı', str_contains($g, '* koli ağırlığı belgeden okunamadı, 3,5 kg varsayıldı.'));
+ok('önerilen fiyat hücreleri vurgulu (başlık + 2 satır)', substr_count($YP, 'sd-oneri') === 3);
+ok('bilgi: "1 yüklenmemiş sevkiyatın fiyatı belli; plana dahil değil."', str_contains($g, '1 yüklenmemiş sevkiyatın fiyatı belli; plana dahil değil.'));
+ok('plan özeti satırı: "PLAN ÖZETİ — 2 sevkiyat" + toplam 24.500 kg', str_contains($YP, 'PLAN ÖZETİ — 2 sevkiyat') && str_contains($YP, '24.500'));
+ok('Σ plan: kapanan + kalan = kapatılacak (hesap fonksiyonuyla bağımsız doğrulama)', (function () use ($db): bool {
+    $ok = siparis_cari_oku($db, siparis_cari_filtre(['alici' => '1038529'], date('Y-m-d')));
+    $vv = siparis_cari_veri($ok, ['bugun' => date('Y-m-d'), 'tahsilat' => [], 'fatura' => siparis_cari_fatura_fiyatlari($db, array_column($ok['rows'], 'id'))]);
+    $hh = siparis_denge_hesapla($vv, siparis_denge_param([], $vv));
+    return $hh['plan_ozet']['kaynak'] === 'yuklenmemis' && count($hh['plan']) === 2 && $hh['plan_ozet']['toplam_kapanan'] + $hh['plan_ozet']['kalan'] === $hh['ozet']['kapatilacak_kurus'];
+})());
+ok('plan kaynağı seçimi: select#sdKaynak, iki seçenek, yuklenmemis seçili, sevkiyat sayısı etikette', (bool)preg_match('~<select name="kaynak" id="sdKaynak">\s*<option value="yuklenmemis" selected>Yüklenmemiş siparişlere göre \(2 sevkiyat\)</option>\s*<option value="elle">Elle: fatura sayısı ve kg</option>~u', $g));
+ok('n / kg kutuları "Elle modda geçerli" ipucu taşır ve pasif görünümlü (sd-pasif); kutular gizlenmedi', substr_count($g, 'title="Elle modda geçerli"') === 4 && substr_count($g, 'class="sd-pasif"') === 2 && str_contains($g, 'name="n" min="1" max="12" step="1"') && str_contains($g, 'name="kg" inputmode="numeric"'));
+ok('Plan ayarları bölümü (kesik çizgili) + filtre paneli sc-filtrebar; Cari Döküm bağlantısı aynı', str_contains($g, '<p class="sc-fb-baslik">Plan ayarları</p>') && str_contains($g, 'class="sc-filtrebar"') && str_contains($g, 'href="siparis_cari.php?bas='));
+ok('2 GET formu korunur; #sdParam id\'si duruyor', substr_count($g, 'method="get" action="siparis_denge.php"') === 2 && str_contains($g, 'class="sc-filtre" id="sdParam"'));
+// elle mod
+$r = uc('siparis_denge.php', ['alici' => '1038529', 'kaynak' => 'elle', 'n' => '3', 'kg' => '18200', 'hedef' => '1,45']); $g = $r['govde'];
+$EP = kesit($g, 'id="sdPlan"', 'Uyarılar ve notlar');
+ok('kaynak=elle: eski plan — "Sonraki 3 fatura planı", 9 hücre, kimlik sütunları YOK, kaynak elle seçili', temiz($r) && str_contains($g, 'Sonraki 3 fatura planı') && !str_contains($g, 'Yüklenmemiş siparişlere göre fatura planı') && count(array_unique(satir_genislikleri($EP))) === 1 && satir_genislikleri($EP)[0] === 9
+    && !str_contains($EP, 'Planlanan yükleme') && str_contains($g, '<option value="elle" selected>') && substr_count($g, 'class="sd-pasif"') === 0);
+$r = uc('siparis_denge.php', ['alici' => '1038529', 'n' => '3']); $g = $r['govde'];
+ok('n yazıldı (kaynak verilmedi): elle plan, 3 satır', str_contains($g, 'Sonraki 3 fatura planı') && preg_match_all('~<tr>\s*<td class="num">(\d+)</td>~', kesit($g, 'id="sdPlan"', 'Uyarılar ve notlar')) === 3);
+ok('ilk formda gizli alan: kaynak + n taşınır', str_contains($g, '<input type="hidden" name="n" value="3">'));
+$r = uc('siparis_denge.php', ['alici' => '1038529', 'kaynak' => 'elle']); $g = $r['govde'];
+ok('kaynak=elle gizli alanı ilk formda taşınır', str_contains($g, '<input type="hidden" name="kaynak" value="elle">'));
+$r = uc('siparis_denge.php', ['alici' => '1038529', 'kaynak' => 'tum']); $g = $r['govde'];
+ok('geçersiz kaynak: hata kutusu, varsayılan (yüklenmemiş) plan', temiz($r) && str_contains($g, 'role="alert"') && str_contains($g, 'Plan kaynağı') && str_contains($g, 'Yüklenmemiş siparişlere göre fatura planı'));
+$r = uc('siparis_denge.php', ['alici' => '777', 'kaynak' => 'yuklenmemis']); $g = $r['govde'];
+ok('yüklenmemiş istendi ama yok (veri yok): sayfa çökmez; boş plan mesajı', temiz($r) && str_contains($g, 'Plan çıkarılamadı'));
+rol(array_merge($OKU, ['beyan.read']), false, 3, ['DEPO1']);
+$r = uc('siparis_denge.php', ['alici' => '1038512', 'kaynak' => 'yuklenmemis']); $g = $r['govde'];
+ok('yüklenmemiş istendi ama alıcıda yok: elle plana düşer + "Yüklenmemiş sipariş yok; elle plan kullanıldı."', temiz($r) && str_contains($g, 'Yüklenmemiş sipariş yok; elle plan kullanıldı.') && str_contains($g, 'Sonraki 5 fatura planı'));
+// filtre paneli — iki sayfada AYNI görünüm
+$r1 = uc('siparis_cari.php'); $r2 = uc('siparis_denge.php');
+foreach (['siparis_cari.php' => $r1['govde'], 'siparis_denge.php' => $r2['govde']] as $ad => $gg) {
+    ok($ad . ': filtre paneli (sc-filtrebar) + alta hizalı satır + eylem düğmeleri aynı panelde', temiz(['hata' => null, 'govde' => $gg]) && str_contains($gg, '<div class="pr-actions no-print">') && str_contains($gg, 'class="sc-filtrebar"') && str_contains($gg, 'class="sc-fb-eylem"') && str_contains($gg, '.sc-filtrebar {') && str_contains($gg, 'background: #eef3fa')
+        && str_contains($gg, 'height: 32px') && str_contains($gg, 'max-width: 767px') && str_contains($gg, 'font-size: 16px') && html_dengeli($gg) === null);
+    ok($ad . ': form adları/değerleri (bas / bit / alici) ve Uygula düğmesi korunur', str_contains($gg, 'name="bas"') && str_contains($gg, 'name="bit"') && str_contains($gg, 'name="alici"') && str_contains($gg, '>Uygula</button>'));
+}
+ok('iki sayfanın filtre paneli CSS\'i AYNI blok (kopya tutarlı)', (function () use ($r1, $r2): bool {
+    $cut = static function (string $h): string { $a = strpos($h, '/* v489: filtre paneli'); $b = strpos($h, '.sc-kural {', (int)$a); return $a === false || $b === false ? '' : substr($h, $a, $b - $a); };
+    return $cut($r1['govde']) !== '' && $cut($r1['govde']) === $cut($r2['govde']);
+})());
+
 siparis_test_bitir();

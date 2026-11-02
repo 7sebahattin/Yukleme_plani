@@ -57,9 +57,30 @@ render_print_page_start('Sipariş Cari Dökümü', 'siparis', 'summary', 'landsc
 @page { size: A4 landscape; margin: 0; }
 @media print { body { padding: 10mm; } }
 body.print-siparis .print-sheet { max-width: 1240px; }
-.sc-filtre { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0; }
-.sc-filtre label { display: flex; flex-direction: column; gap: 2px; font-size: .72rem; font-weight: 700; color: var(--pr-muted); }
-.sc-filtre input, .sc-filtre select { font: inherit; font-size: .85rem; padding: 6px 8px; min-height: 36px; border: 1px solid #c3ccd8; border-radius: 6px; background: #fff; color: var(--pr-ink); }
+/* v489: filtre paneli — Cari Döküm ile AYNI görünüm (sayfa gövdesinden bir ton farklı zemin, alta hizalı tek satır, 32px kutular) */
+.print-sheet > .pr-actions.no-print { display: block; padding: 0; margin: 0 0 14px; border: 0; }
+.sc-filtrebar { background: #eef3fa; border: 1px solid #d5dfec; border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+.sc-fb-satir { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.sc-fb-eylem { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; margin-left: auto; }
+.sc-fb-plan { border-top: 1px dashed #b4c3d8; padding-top: 6px; }
+.sc-fb-baslik { margin: 0 0 4px; font-size: .7rem; font-weight: 700; color: #46566b; }
+.sc-filtre { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; margin: 0; min-width: 0; }
+.sc-filtre label { display: flex; flex-direction: column; gap: 2px; font-size: .6875rem; font-weight: 700; color: #46566b; line-height: 1.2; }
+.sc-filtre input, .sc-filtre select { font: inherit; font-size: .8rem; padding: 3px 8px; height: 32px; box-sizing: border-box; border: 1px solid #b9c7da; border-radius: 6px; background: #fff; color: var(--pr-ink); }
+.sc-filtre input[type="date"] { width: 132px; }
+.sc-filtre select { max-width: 230px; }
+.sc-filtre input[type="number"] { width: 84px; }
+.sc-filtre input[type="text"].sd-kisa { width: 110px; }
+.sc-filtre .pr-btn, .sc-fb-eylem .pr-btn { height: 32px; box-sizing: border-box; padding: 0 12px; font-size: .8rem; white-space: nowrap; }
+.sc-filtre label.sd-pasif { opacity: .55; }
+@media screen and (max-width: 767px) {
+  .sc-filtrebar { padding: 8px 10px; }
+  .sc-filtre, .sc-filtre label { width: 100%; }
+  .sc-filtre input, .sc-filtre select, .sc-filtre input[type="date"], .sc-filtre input[type="number"], .sc-filtre input[type="text"].sd-kisa { width: 100%; max-width: none; height: 38px; font-size: 16px; }
+  .sc-filtre .pr-btn { width: 100%; height: 38px; justify-content: center; }
+  .sc-fb-eylem { margin-left: 0; width: 100%; }
+  .sc-fb-eylem .pr-btn { flex: 1 1 auto; height: 38px; justify-content: center; }
+}
 .sc-kural { margin: 6px 0 2px; }
 .sc-uyari { font-weight: 700; color: var(--pr-warn); }
 .print-summary-box .sc-alt { display: block; margin-top: 3px; font-size: .74rem; color: var(--pr-muted); font-variant-numeric: tabular-nums; }
@@ -89,18 +110,24 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
 </style>
 <div class="print-sheet">
   <div class="pr-actions no-print">
-    <form method="get" action="siparis_cari.php" class="sc-filtre">
-      <label>Yükleme başı <input type="date" name="bas" value="<?= h($f['bas']) ?>"></label>
-      <label>Yükleme sonu <input type="date" name="bit" value="<?= h($f['bit']) ?>"></label>
-      <label>Alıcı <select name="alici"><option value="">Tümü</option>
-        <?php foreach ($harita as $kod => $u): ?><option value="<?= h((string)$kod) ?>"<?= (string)$kod === $f['alici'] ? ' selected' : '' ?>><?= h($u['ad'] . ' (' . $kod . ')') ?></option><?php endforeach; ?>
-        <?php if ($f['alici'] !== '' && !isset($harita[$f['alici']])): ?><option value="<?= h($f['alici']) ?>" selected><?= h($f['alici']) ?></option><?php endif; ?>
-      </select></label>
-      <button type="submit" class="pr-btn">Uygula</button>
-    </form>
-    <button type="button" class="pr-btn pr-btn-primary" data-sc-yazdir>🖨 Yazdır</button>
-    <a class="pr-btn" href="siparis_denge.php?<?= h(http_build_query(['bas' => $f['bas'], 'bit' => $f['bit'], 'alici' => $f['alici']])) ?>" target="_blank" rel="noopener">📊 Fiyat dengeleme</a>
-    <a class="pr-btn" href="siparisler.php">← Siparişler</a>
+   <div class="sc-filtrebar">
+    <div class="sc-fb-satir">
+      <form method="get" action="siparis_cari.php" class="sc-filtre">
+        <label>Yükleme başı <input type="date" name="bas" value="<?= h($f['bas']) ?>"></label>
+        <label>Yükleme sonu <input type="date" name="bit" value="<?= h($f['bit']) ?>"></label>
+        <label>Alıcı <select name="alici"><option value="">Tümü</option>
+          <?php foreach ($harita as $kod => $u): ?><option value="<?= h((string)$kod) ?>"<?= (string)$kod === $f['alici'] ? ' selected' : '' ?>><?= h($u['ad'] . ' (' . $kod . ')') ?></option><?php endforeach; ?>
+          <?php if ($f['alici'] !== '' && !isset($harita[$f['alici']])): ?><option value="<?= h($f['alici']) ?>" selected><?= h($f['alici']) ?></option><?php endif; ?>
+        </select></label>
+        <button type="submit" class="pr-btn">Uygula</button>
+      </form>
+      <div class="sc-fb-eylem">
+        <button type="button" class="pr-btn pr-btn-primary" data-sc-yazdir>🖨 Yazdır</button>
+        <a class="pr-btn" href="siparis_denge.php?<?= h(http_build_query(['bas' => $f['bas'], 'bit' => $f['bit'], 'alici' => $f['alici']])) ?>" target="_blank" rel="noopener">📊 Fiyat dengeleme</a>
+        <a class="pr-btn" href="siparisler.php">← Siparişler</a>
+      </div>
+    </div>
+   </div>
   </div>
   <?= render_print_header_html('Sipariş Cari Dökümü', implode(' · ', $f['ozet']) . ($depo !== '' ? ' · Depo: ' . $depo : ''), 'Oluşturma: ' . date('d.m.Y H:i')) ?>
   <p class="pr-note sc-kural">Para birimleri ayrı gösterilir, birbiriyle toplanmaz. İşaret: Bakiye = müşterinin bize borcu (Gelen fiyat tutarı − Tahsilat). Kesilen fatura tutarı yalnız üretilmiş invoice'u olan EUR sevkiyatları kapsar, bilgi amaçlıdır ve bakiyeye girmez. Fark = gelen − kesilen (kesilen fatura gelen fiyattan yüksekse eksi). Her sevkiyat tablosunda Parti no · Sipariş no · Alıcı ülke · Plaka yer alır; parti no sevkiyata bağlı beyandan gelir (bağ yoksa "—")<?= $partiYetkisiz ? ' — parti no görmek için beyan okuma yetkisi gerekir' : '' ?>.</p>
