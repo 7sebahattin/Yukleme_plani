@@ -295,7 +295,9 @@ ok('v448 config: SAF — DB/çıktı/DDL/h() yok; tam yol koruması; kapıyı ca
 ok('v448 nav_aktif_anahtar $a_sip siparis_denge.php içerir', (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_denge\.php'/", $helpers));
 ok('v448 siparisler.php\'ye Fiyat dengeleme bağlantısı EKLENMEDİ (döküm içinden girilir)', !str_contains(oku('siparisler.php'), 'siparis_denge.php'));
 ok('v448 Cari Döküm: Fiyat dengeleme bağlantısı no-print eylem çubuğunda, target=_blank rel=noopener; B tablosu iki yeni sütun + dipnot', (bool)preg_match('~<div class="pr-actions no-print">.*?href="siparis_denge\.php\?[^"]*" target="_blank" rel="noopener">📊 Fiyat dengeleme</a>~su', $caUc)
-    && str_contains($caUc, 'Fatura fiyatı / kg') && str_contains($caUc, 'Fark / kg') && str_contains($caUc, 'sc-fark-eksi') && str_contains($caUc, 'sc-fark-arti') && str_contains($caUc, "Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi); fark = fatura − PC."));
+    && str_contains($caUc, 'Kesilen fatura fiyatı / kg') && str_contains($caUc, 'Gelen Fiyat / kg') && str_contains($caUc, 'Fark / kg') && str_contains($caUc, 'sc-fark-eksi') && str_contains($caUc, 'sc-fark-arti')
+    && str_contains($caUc, "Kesilen fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi). Fark = gelen − kesilen: kesilen fatura gelen fiyattan yüksekse eksi (−).")
+    && str_contains($caUc, 'Gelen fiyat tutarı') && str_contains($caUc, 'Kesilen fatura tutarı') && str_contains($caUc, "\$v['kesilen']"));
 ok('v448 Cari Döküm: veri siparis_cari_fatura_fiyatlari() ile bağlanır; kapı/CSRF/mutasyon değişmedi (v397/v401 denetimleri yukarıda)', str_contains($caUc, "'fatura' => \$faturaFiyat") && str_contains($caUc, 'siparis_cari_fatura_fiyatlari('));
 ok('v448 config/siparis_cari.php: fatura okuma yalnız SELECT (hks_kv), 500\'lük parça, fail soft', str_contains($caHam, 'function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array') && str_contains($caHam, 'array_chunk($ids, 500)') && str_contains($caHam, 'catch (Throwable'));
 $deUc = kod_oku('siparis_denge.php');

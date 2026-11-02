@@ -180,7 +180,7 @@ if (($out = getenv('SIPARIS_CARI_OUT')) !== false && $out !== '') file_put_conte
 ok('muhasebe benzeri rol açar: 200, hata yok', $r['hata'] === null && $r['kod'] === 200, (string)$r['hata']);
 foreach (['<title>Sipariş Cari Dökümü</title>', 'A) Gelen — Yüklenmemiş Siparişler', 'B) Yüklenen Sevkiyatlar', 'C) Fiyatlandırılmış Sevkiyatlar', '15.812,00 EUR', '420,00 USD',
     '4,1100 EUR / koli (3,5 kg)', '1,17 EUR / kg', '15.069,60 EUR', '4,2000 USD / koli (3,5 kg)', '1,20 USD / kg', 'Fiyat bekleniyor', 'Yüklenmedi',
-    'Bakiye = müşterinin bize borcu', '3,5 kg varsayıldı', 'tutara dahil değil', 'print_pdks.css', 'A4 landscape', 'window.print()', 'data-sc-yazdir'] as $parca) {
+    'Bakiye = müşterinin bize borcu', 'Gelen fiyat tutarı', 'Kesilen fatura tutarı', 'üretilmiş invoice yok', '3,5 kg varsayıldı', 'tutara dahil değil', 'print_pdks.css', 'A4 landscape', 'window.print()', 'data-sc-yazdir'] as $parca) {
     ok('sayfa içerir: ' . $parca, str_contains($g, $parca));
 }
 ok('sayfa: D) Cari Özet tek kez; tfoot yok; onclick yok', substr_count($g, 'D) Cari Özet') === 1 && !str_contains($g, '<tfoot') && !str_contains($g, 'onclick='));
@@ -269,11 +269,15 @@ ok('fiyat_kisa: en az 2, en çok 4 ondalık', siparis_cari_fiyat_kisa(13700) ===
 ok('fatura haritası: hks_kv yokken [] (fail soft, sayfa kırılmaz)', siparis_cari_fatura_fiyatlari($db, [1, 2, 3]) === []);
 $v7 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => [$ID['s1'] => ['fiyat' => 11000, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 0.0]]]);
 $a7 = $bul($v7['yuklenen'], 'TC800001.10');
-ok('s1 (EUR; kalibre 10 → 1,29 €/kg, 14 → 1,17 €/kg): fatura 1,10 her satırda; fark_kg −1900 / −700; karşılaştırma = Σ EUR satırı',
-    $a7['fatura']['fiyat'] === 11000 && $a7['satirlar'][0]['fatura_kg'] === 11000 && $a7['satirlar'][1]['fatura_kg'] === 11000 && $a7['satirlar'][0]['fark_kg'] === -1900 && $a7['satirlar'][1]['fark_kg'] === -700
+ok('s1 (EUR; kalibre 10 → 1,29 €/kg, 14 → 1,17 €/kg): fatura 1,10 her satırda; fark_kg +1900 / +700 (gelen − kesilen); karşılaştırma = Σ EUR satırı',
+    $a7['fatura']['fiyat'] === 11000 && $a7['satirlar'][0]['fatura_kg'] === 11000 && $a7['satirlar'][1]['fatura_kg'] === 11000 && $a7['satirlar'][0]['fark_kg'] === 1900 && $a7['satirlar'][1]['fark_kg'] === 700
     && $a7['karsilastirma']['gram'] === 3840 * 3500 && $a7['karsilastirma']['pc_kurus'] === 1579200 && $a7['karsilastirma']['fatura_kurus'] === intdiv(13440000 * 11000 + 50000, 100000)
-    && $a7['karsilastirma']['fark_kurus'] === $a7['karsilastirma']['fatura_kurus'] - 1579200, json_encode($a7['karsilastirma']));
+    && $a7['karsilastirma']['fark_kurus'] === 1579200 - $a7['karsilastirma']['fatura_kurus'] && $a7['karsilastirma']['fark_kurus'] === 100800, json_encode($a7['karsilastirma']));
 ok('fatura olmayan sevkiyatta fatura/karsilastirma null, satırda fatura_kg/fark_kg null', $bul($v7['yuklenen'], 'TC800003.10')['fatura'] === null && $bul($v7['yuklenen'], 'TC800003.10')['karsilastirma'] === null && $a7['satirlar'][0]['fiyat_kg'] !== null);
+ok('v488 kesilen: yalnız invoice\'lu EUR sevkiyatlar (s1) toplanır; bakiye alanları değişmez',
+    $v7['kesilen'] === ['sevkiyat' => 1, 'gram' => 13440000, 'gelen_kurus' => 1579200, 'kesilen_kurus' => 1478400, 'fark_kurus' => 100800], json_encode($v7['kesilen']));
+ok('v488 kesilen: fatura haritasız hepsi 0', $v['kesilen'] === ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0]);
+ok('v488 para_isaretli: + / - / sıfır', siparis_cari_para_isaretli(194600) === '+1.946,00' && siparis_cari_para_isaretli(-49000) === '-490,00' && siparis_cari_para_isaretli(0) === '0,00');
 ok('USD satırı (s4) karşılaştırılmaz, özet/cari haritasız ile aynı', $bul($v7['yuklenen'], 'TC800004.10')['karsilastirma'] === null && $v7['cari'] === $v['cari'] && $v7['ozet'] === $v['ozet']);
 
 siparis_test_bitir();

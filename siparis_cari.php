@@ -3,7 +3,7 @@
 // siparis_cari.php — "Sipariş Cari Dökümü" (yazdırılabilir A4 yatay; GET; siparis.read + siparis_cari_yetkili(); v397)
 // Ad TEK alt çizgili: sw.js bypass regex'i /siparis(ler|_[a-z]+)?\.php/ kapsar (ticari veri SW önbelleğine yazılmaz).
 // Mantık config/siparis_cari.php'de; bu dosya FONKSİYON TANIMLAMAZ. Satır içi onclick YOK (siparis_ui_smoke).
-// v448: B bölümünde "Fatura fiyatı / kg" + "Fark / kg" (invoice birim fiyatı − PC); "📊 Fiyat dengeleme" → siparis_denge.php.
+// v448: B bölümünde "Kesilen fatura fiyatı / kg" + "Fark / kg" (gelen − kesilen); v488: kartlarda Gelen fiyat tutarı + Kesilen fatura tutarı; "📊 Fiyat dengeleme" → siparis_denge.php.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -49,6 +49,7 @@ $pbHtml = static function (array $tutar): string {
     $o = ''; foreach ($tutar as $pb => $k) $o .= '<span class="sc-pb">' . h(siparis_cari_para((int)$k) . ' ' . $pb) . '</span>';
     return $o;
 };
+$k = $v['kesilen']; $kEur = $k['sevkiyat'] > 0 ? ['EUR' => (int)$k['kesilen_kurus']] : [];
 $oY = $v['ozet']['yuklenmemis']; $oL = $v['ozet']['yuklenen']; $oB = $v['ozet']['bekleyen'];
 render_print_page_start('Sipariş Cari Dökümü', 'siparis', 'summary', 'landscape', ['print_pdks.css']);
 ?>
@@ -102,12 +103,13 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
     <a class="pr-btn" href="siparisler.php">← Siparişler</a>
   </div>
   <?= render_print_header_html('Sipariş Cari Dökümü', implode(' · ', $f['ozet']) . ($depo !== '' ? ' · Depo: ' . $depo : ''), 'Oluşturma: ' . date('d.m.Y H:i')) ?>
-  <p class="pr-note sc-kural">Para birimleri ayrı gösterilir, birbiriyle toplanmaz. İşaret: Bakiye = müşterinin bize borcu (Faturalanan − Tahsilat). Her sevkiyat tablosunda Parti no · Sipariş no · Alıcı ülke · Plaka yer alır; parti no sevkiyata bağlı beyandan gelir (bağ yoksa "—")<?= $partiYetkisiz ? ' — parti no görmek için beyan okuma yetkisi gerekir' : '' ?>.</p>
+  <p class="pr-note sc-kural">Para birimleri ayrı gösterilir, birbiriyle toplanmaz. İşaret: Bakiye = müşterinin bize borcu (Gelen fiyat tutarı − Tahsilat). Kesilen fatura tutarı yalnız üretilmiş invoice'u olan EUR sevkiyatları kapsar, bilgi amaçlıdır ve bakiyeye girmez. Fark = gelen − kesilen (kesilen fatura gelen fiyattan yüksekse eksi). Her sevkiyat tablosunda Parti no · Sipariş no · Alıcı ülke · Plaka yer alır; parti no sevkiyata bağlı beyandan gelir (bağ yoksa "—")<?= $partiYetkisiz ? ' — parti no görmek için beyan okuma yetkisi gerekir' : '' ?>.</p>
   <?php if ($v['kesildi']): ?><p class="pr-note sc-uyari">İlk <?= (int)SIPARIS_CARI_LIMIT ?> sevkiyat gösteriliyor (kesildi) — tarih aralığını daraltın.</p><?php endif; ?>
   <div class="print-summary-row">
     <div class="print-summary-box"><span class="psb-label">Yüklenmemiş sipariş</span><span class="psb-value"><?= (int)$oY['sevkiyat'] ?> sevkiyat</span><span class="sc-alt"><?= h(sipui_sayi($oY['palet'])) ?> palet · <?= h(sipui_sayi($oY['koli'])) ?> koli</span></div>
     <div class="print-summary-box psb-ok"><span class="psb-label">Yüklenen sevkiyat</span><span class="psb-value"><?= (int)$oL['sevkiyat'] ?></span><span class="sc-alt"><?= h(sipui_sayi($oL['koli'])) ?> koli · <?= h(siparis_cari_kg($oL['gram'])) ?> kg</span></div>
-    <div class="print-summary-box"><span class="psb-label">Fiyatlı tutar</span><?= $pbHtml(array_map(static fn(array $c): int => $c['faturalanan'], $v['cari'])) ?></div>
+    <div class="print-summary-box"><span class="psb-label">Gelen fiyat tutarı</span><?= $pbHtml(array_map(static fn(array $c): int => $c['faturalanan'], $v['cari'])) ?><span class="sc-alt"><?= (int)count($v['fiyatli']) ?> fiyatlı sevkiyat</span></div>
+    <div class="print-summary-box"><span class="psb-label">Kesilen fatura tutarı</span><?= $pbHtml($kEur) ?><span class="sc-alt"><?= $k['sevkiyat'] > 0 ? (int)$k['sevkiyat'] . ' sevkiyat · gelen fiyat karşılığı ' . h(siparis_cari_para((int)$k['gelen_kurus'])) . ' EUR · fark ' . h(siparis_cari_para_isaretli((int)$k['fark_kurus'])) . ' EUR' : 'üretilmiş invoice yok' ?></span></div>
     <div class="print-summary-box psb-warn"><span class="psb-label">Bakiye</span><?= $pbHtml(array_map(static fn(array $c): int => $c['bakiye'], $v['cari'])) ?></div>
   </div>
 
@@ -144,7 +146,7 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
   <!-- B) Yüklenen sevkiyatlar -->
   <h3 class="pr-section">B) Yüklenen Sevkiyatlar</h3>
   <div class="sc-kaydir"><table class="print-table sc-tablo">
-    <thead><tr><th>Yükleme tarihi</th><?= $kimlikBas ?><th>Nakliyeci</th><th>Kalibre</th><th class="num">Koli</th><th class="num">Kg</th><th class="num">Fiyat / kg</th><th class="num">Fatura fiyatı / kg <span class="sc-baslik-not">fatura − PC</span></th><th class="num">Fark / kg</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><?= $kimlikBas ?><th>Nakliyeci</th><th>Kalibre</th><th class="num">Koli</th><th class="num">Kg</th><th class="num">Gelen Fiyat / kg</th><th class="num">Kesilen fatura fiyatı / kg</th><th class="num">Fark / kg <span class="sc-baslik-not">gelen − kesilen</span></th></tr></thead>
     <?php if (!$v['yuklenen']): ?>
     <tbody><tr><td colspan="12" class="pr-empty">Yüklenen sevkiyat yok.</td></tr></tbody>
     <?php else: ?>
@@ -175,7 +177,7 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
     <tbody class="sc-toplam"><tr><td colspan="7">TOPLAM — <?= (int)$oL['sevkiyat'] ?> sevkiyat · fiyat bekleyen: <?= (int)$oB['sevkiyat'] ?></td><td class="num"><?= h(sipui_sayi($oL['koli'])) ?></td><td class="num"><?= h(siparis_cari_kg($oL['gram'])) ?></td><td></td><td></td><td></td></tr></tbody>
     <?php endif; ?>
   </table></div>
-  <p class="pr-note">Fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi); fark = fatura − PC. Fatura yoksa ya da para birimi EUR değilse "—".</p>
+  <p class="pr-note">Gelen Fiyat = OGL'nin gönderdiği fiyat (Price Confirmation, Cari Döküm'deki satır fiyatı); Kesilen fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi). Fark = gelen − kesilen: kesilen fatura gelen fiyattan yüksekse eksi (−). Fatura yoksa ya da para birimi EUR değilse "—".</p>
 
   <!-- C) Fiyatlandırılmış sevkiyatlar -->
   <h3 class="pr-section">C) Fiyatlandırılmış Sevkiyatlar <span class="sc-baslik-not">(yüklenmemiş fiyatlı sevkiyatlar dahil — "Yüklenmedi" ile işaretli)</span></h3>
@@ -232,15 +234,15 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
   <section class="sc-cari">
     <h3 class="pr-section">D) Cari Özet</h3>
     <div class="sc-kaydir"><table class="print-table sc-tablo">
-      <thead><tr><th>Para birimi</th><th class="num">Faturalanan</th><th class="num">Tahsilat</th><th class="num">Bakiye</th></tr></thead>
+      <thead><tr><th>Para birimi</th><th class="num">Gelen fiyat tutarı</th><th class="num">Tahsilat</th><th class="num">Bakiye</th><th class="num">Kesilen fatura <span class="sc-baslik-not">(bilgi)</span></th></tr></thead>
       <tbody>
       <?php foreach ($v['cari'] as $pb => $c): ?>
-        <tr><td><?= h((string)$pb) ?></td><td class="num"><?= h(siparis_cari_para($c['faturalanan'])) ?></td><td class="num"><?= h(siparis_cari_para($c['tahsilat'])) ?></td><td class="num"><strong><?= h(siparis_cari_para($c['bakiye'])) ?></strong></td></tr>
+        <tr><td><?= h((string)$pb) ?></td><td class="num"><?= h(siparis_cari_para($c['faturalanan'])) ?></td><td class="num"><?= h(siparis_cari_para($c['tahsilat'])) ?></td><td class="num"><strong><?= h(siparis_cari_para($c['bakiye'])) ?></strong></td><td class="num"><?= ((string)$pb === 'EUR' && $k['sevkiyat'] > 0) ? h(siparis_cari_para((int)$k['kesilen_kurus'])) : '—' ?></td></tr>
       <?php endforeach; ?>
-      <?php if (!$v['cari']): ?><tr><td colspan="4" class="pr-empty">Fiyatlandırılmış sevkiyat yok.</td></tr><?php endif; ?>
+      <?php if (!$v['cari']): ?><tr><td colspan="5" class="pr-empty">Fiyatlandırılmış sevkiyat yok.</td></tr><?php endif; ?>
       </tbody>
     </table></div>
-    <p class="pr-note">Fiyat bekleyen yüklenmiş: <?= (int)$oB['sevkiyat'] ?> sevkiyat · <?= h(sipui_sayi($oB['koli'])) ?> koli / <?= h(siparis_cari_kg($oB['gram'])) ?> kg (tutara dahil değil).</p>
+    <p class="pr-note">Fiyat bekleyen yüklenmiş: <?= (int)$oB['sevkiyat'] ?> sevkiyat · <?= h(sipui_sayi($oB['koli'])) ?> koli / <?= h(siparis_cari_kg($oB['gram'])) ?> kg (tutara dahil değil). Kesilen fatura: <?= (int)$k['sevkiyat'] ?> sevkiyat (yalnız üretilmiş invoice'lu EUR); bakiye gelen fiyat üzerinden hesaplanır.</p>
     <?php if ($v['varsayilan_kg']): ?><p class="pr-note">* koli ağırlığı belgeden okunamadı, 3,5 kg varsayıldı.</p><?php endif; ?>
   </section>
 </div>

@@ -95,11 +95,17 @@ function siparis_cari_fiyat_kisa(int $onbinde): string
     return ($onbinde < 0 ? '-' : '') . number_format(intdiv($a, 10000), 0, ',', '.') . ',' . str_pad($kes, 2, '0', STR_PAD_RIGHT);
 }
 
-/** Fark metni (fatura − PC, on-binde): işaretli, en az 2 en çok 4 ondalık — "+0,08", "-0,125"; sıfır işaretsiz "0,00". */
+/** Fark metni (gelen − kesilen = PC − fatura, on-binde): işaretli, en az 2 en çok 4 ondalık — "+0,08", "-0,125"; sıfır işaretsiz "0,00". */
 function siparis_cari_fark_metin(int $onbinde): string
 {
     if ($onbinde === 0) return '0,00';
     return ($onbinde > 0 ? '+' : '') . siparis_cari_fiyat_kisa($onbinde);
+}
+
+/** Kuruş, işaretli: pozitifte "+" (negatif zaten "-"), sıfır işaretsiz — "+1.946,00", "-490,00", "0,00". */
+function siparis_cari_para_isaretli(int $kurus): string
+{
+    return ($kurus > 0 ? '+' : '') . siparis_cari_para($kurus);
 }
 
 /** Gram → ekranda tam kg ("12.880"; KG ekranda tam sayı kuralı). */
@@ -291,6 +297,7 @@ function siparis_cari_fatura_fiyatlari(PDO $pdo, array $sevIds): array
 /**
  * Saf: sınıflama + hesap. $ctx: bugun (Y-m-d), tahsilat (array<string,int>), fatura (siparis_cari_fatura_fiyatlari() haritası; yoksa []).
  * Her sevkiyatta `parti` (list<string>, v449) + `ulke` + `plaka` (tüm tablolarda Parti no · Sipariş no · Ülke · Plaka bloğu). Dönüş: yuklenmemis / yuklenen / fiyatli (sevkiyat listeleri, SQL sırası), ozet, cari (para birimi → faturalanan/tahsilat/bakiye),
+ * kesilen (v488: invoice'u üretilmiş EUR sevkiyatların sevkiyat/gram/gelen_kurus/kesilen_kurus/fark_kurus toplamı; bilgi amaçlı, bakiyeye girmez),
  * varsayilan_kg, kesildi. Her DB değeri açıkça çevrilir (SQLite/MySQL tip farkı + strict_types).
  */
 function siparis_cari_veri(array $okunan, array $ctx): array
@@ -303,7 +310,9 @@ function siparis_cari_veri(array $okunan, array $ctx): array
         'yuklenmemis' => ['sevkiyat' => 0, 'palet' => 0, 'koli' => 0, 'gram' => 0],
         'yuklenen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
         'bekleyen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
-    ], 'cari' => [], 'varsayilan_kg' => false, 'kesildi' => (bool)($okunan['kesildi'] ?? false)];
+    ], 'cari' => [],
+        'kesilen' => ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0],
+        'varsayilan_kg' => false, 'kesildi' => (bool)($okunan['kesildi'] ?? false)];
     $fatura = [];
     foreach ((array)($okunan['rows'] ?? []) as $r) {
         $id = (int)$r['id'];
@@ -339,7 +348,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
                 $pb = siparis_cari_pb(($k['para_birimi'] ?? null) !== null ? (string)$k['para_birimi'] : null);
                 $sat['fiyatli'] = true; $sat['pb'] = $pb; $sat['baz'] = $t['baz'];
                 $sat['fiyat_koli'] = $t['fiyat_koli']; $sat['fiyat_kg'] = $t['fiyat_kg']; $sat['tutar'] = $t['tutar'];
-                if ($fat !== null && $pb === 'EUR') $sat['fark_kg'] = $fat['fiyat'] - $t['fiyat_kg'];   // fatura − PC (on-binde)
+                if ($fat !== null && $pb === 'EUR') $sat['fark_kg'] = $t['fiyat_kg'] - $fat['fiyat'];   // gelen (PC) − kesilen fatura (on-binde); kesilen yüksekse eksi
                 elseif ($fat !== null) $sat['fatura_kg'] = null;                                       // invoice daima EUR: başka para birimi karşılaştırılmaz
                 $sev['tutar'][$pb] = ($sev['tutar'][$pb] ?? 0) + $t['tutar'];
                 $ft = ($k['fiyat_tarihi'] ?? null) !== null ? siparis_tarih_coz((string)$k['fiyat_tarihi']) : null;
@@ -358,7 +367,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             }
             if ($n > 0 && $gr > 0) {
                 $faK = intdiv($gr * $fat['fiyat'] + 50000, 100000);
-                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $faK - $pcK];
+                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $pcK - $faK];
             }
         }
         $sev['fiyatli'] = $sev['tutar'] !== [];
@@ -384,6 +393,14 @@ function siparis_cari_veri(array $okunan, array $ctx): array
         if ($sev['fiyatli']) {
             $out['fiyatli'][] = $sev;
             foreach ($sev['tutar'] as $pb => $kurus) $fatura[$pb] = ($fatura[$pb] ?? 0) + $kurus;
+            if ($sev['karsilastirma'] !== null) {   // invoice'u üretilmiş EUR sevkiyat: kartlarda "kesilen fatura" toplamı (bakiyeye GİRMEZ)
+                $kk = $sev['karsilastirma'];
+                $out['kesilen']['sevkiyat']++;
+                $out['kesilen']['gram'] += (int)$kk['gram'];
+                $out['kesilen']['gelen_kurus'] += (int)$kk['pc_kurus'];
+                $out['kesilen']['kesilen_kurus'] += (int)$kk['fatura_kurus'];
+                $out['kesilen']['fark_kurus'] += (int)$kk['fark_kurus'];
+            }
         }
     }
     foreach (array_unique(array_merge(array_keys($fatura), array_keys($tahsilat))) as $pb) {
