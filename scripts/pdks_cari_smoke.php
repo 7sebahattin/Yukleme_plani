@@ -461,6 +461,49 @@ $empIns->execute(['Test Personel']);
 $permKart = pdks_kart_olustur((int)db()->lastInsertId(), '999111222', 'usb_decimal', [], db());
 ok('kalıcı personel kartı Faz 5\'ten SONRA da normal oluşturuluyor', $permKart['ok'] === true, json_encode($permKart));
 
+// ═══════════════════════════════════════════════════════════
+echo "\n=== 24. v492 EKSTRE KIRILIMI — tip bazlı kişi/tutar + fazla mesai + diğer (yalnız gösterim) ===\n";
+$entH3 = (int)db()->query("SELECT id FROM foreman_daily_entitlements WHERE foreman_id = " . (int)$mehmetId . " AND work_date = '2026-09-21' AND status = 'final'")->fetchColumn();
+// Eski şema (Faz 4: overtime_*/work_period_id YOK) → kırılım gösterilmez ama ekstre ÇÖKMEZ.
+$ekEski = pdks_cari_ekstre($mehmetId, null, null, db());
+$hkEski = null; foreach ($ekEski['TRY'] as $r) if ($r['tip'] === 'HAKEDIS') $hkEski = $r;
+ok('24. eski şemada ekstre çalışır, kirilim null (fail-soft)', $hkEski !== null && ($hkEski['kirilim'] ?? null) === null);
+foreach (["work_period_id INTEGER", "attendance_class_snapshot TEXT DEFAULT 'tam'", "overtime_hours INTEGER DEFAULT 0", "overtime_mode_snapshot TEXT", "overtime_unit_rate TEXT DEFAULT '0.00'", "overtime_total TEXT DEFAULT '0.00'"] as $kolTanim) {
+    try { db()->exec("ALTER TABLE foreman_daily_entitlement_lines ADD COLUMN " . $kolTanim); } catch (Throwable $e) { /* zaten var */ }
+}
+db()->exec("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = " . $entH3);
+$insKir = db()->prepare("INSERT INTO foreman_daily_entitlement_lines (entitlement_id, work_period_id, worker_type_id, worker_type_code_snapshot, worker_type_name_snapshot, attendance_class_snapshot, worker_count, unit_rate, overtime_hours, overtime_mode_snapshot, overtime_unit_rate, overtime_total, line_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+// Kadın: 2 kişi × 1400 (biri yarım değil); Erkek: 2 kişi × 1500, birine 3 saat × 50 FM; Erkek yarım 1 kişi 750; çavuş ücreti (tip NULL) 500
+foreach ([
+    [1, 'KADIN', 'Kadın', 'tam', 1, '1400.00', 0, null, '0.00', '0.00', '1400.00'],
+    [1, 'KADIN', 'Kadın', 'tam', 1, '1400.00', 0, null, '0.00', '0.00', '1400.00'],
+    [2, 'ERKEK', 'Erkek', 'tam', 1, '1500.00', 3, 'hourly', '50.00', '150.00', '1650.00'],
+    [2, 'ERKEK', 'Erkek', 'yarim', 1, '750.00', 0, null, '0.00', '0.00', '750.00'],
+    [null, '', 'Çavuş Ücreti', 'tam', 1, '500.00', 0, null, '0.00', '0.00', '500.00'],
+] as [$tid, $kod, $ad, $sn, $wc, $ur, $oh, $om, $ou, $ot, $lt]) {
+    $insKir->execute([$entH3, null, $tid, $kod, $ad, $sn, $wc, $ur, $oh, $om, $ou, $ot, $lt]);
+}
+$ekK = pdks_cari_ekstre($mehmetId, null, null, db());
+$hk = null; foreach ($ekK['TRY'] as $r) if ($r['tip'] === 'HAKEDIS') $hk = $r;
+ok('24. hakediş satırı kirilim taşıyor', is_array($hk['kirilim'] ?? null), json_encode($hk));
+ok('24. Kadın: 2 kişi, 2800,00 TL', ($hk['kirilim']['tipler']['Kadın'] ?? null) === ['adet' => 2, 'yarim' => 0, 'kurus' => 280000], json_encode($hk['kirilim'] ?? null));
+ok('24. Erkek: 2 kişi (1 yarım), FM HARİÇ 2250,00 TL', ($hk['kirilim']['tipler']['Erkek'] ?? null) === ['adet' => 2, 'yarim' => 1, 'kurus' => 225000], json_encode($hk['kirilim'] ?? null));
+ok('24. Fazla mesai tek kalemde: 3 saat, 150,00 TL', ($hk['kirilim']['fm_saat'] ?? null) === 3 && ($hk['kirilim']['fm_kurus'] ?? null) === 15000);
+ok('24. Diğer (çavuş ücreti) 500,00 TL', ($hk['kirilim']['diger_kurus'] ?? null) === 50000);
+$kolK = pdks_cari_kirilim_kolonlar($ekK['TRY']);
+ok('24. sütun sırası Kadın, Erkek + FM + Diğer', $kolK['tipler'] === ['Kadın', 'Erkek'] && $kolK['fm'] === true && $kolK['diger'] === true, json_encode($kolK['tipler']));
+$odemeSatir = null; foreach ($ekK['TRY'] as $r) if ($r['tip'] === 'ODEME') $odemeSatir = $r;
+ok('24. ödeme satırında kırılım YOK (boş hücreler)', $odemeSatir !== null && array_filter(pdks_cari_kirilim_degerleri($odemeSatir, $kolK), fn($v) => $v !== null) === []);
+$bas = pdks_cari_kirilim_basliklar($kolK);
+ok('24. başlıklar Türkçe: Kadın / Kadın hakediş / Erkek / Erkek hakediş / Fazla mesai (saat) / Fazla mesai hakediş / Diğer',
+    array_column($bas, 'ad') === ['Kadın', 'Kadın hakediş', 'Erkek', 'Erkek hakediş', 'Fazla mesai (saat)', 'Fazla mesai hakediş', 'Diğer (çavuş ücreti / servis)'], json_encode(array_column($bas, 'ad')));
+ok('24. toplam alacak/borç ekstre ile aynı (hakediş toplamı DEĞİŞMEDİ)', $kolK['toplam']['alacak_kurus'] === 125000 && $kolK['toplam']['borc_kurus'] === 50000, json_encode($kolK['toplam']));
+ok('24. bakiye yönü: + Alacak, − Borç, 0 boş', pdks_cari_kirilim_bakiye_yonu('750.00') === ['750,00', 'Alacak'] && pdks_cari_kirilim_bakiye_yonu('-200.00') === ['200,00', 'Borç'] && pdks_cari_kirilim_bakiye_yonu('0.00') === ['0,00', '']);
+db()->exec("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = " . $entH3);
+$ekBos = pdks_cari_ekstre($mehmetId, null, null, db());
+$hkBos = null; foreach ($ekBos['TRY'] as $r) if ($r['tip'] === 'HAKEDIS') $hkBos = $r;
+ok('24. satırı olmayan hakedişte ekstre çalışır, kırılım sütunu çıkmaz', $hkBos !== null && ($hkBos['kirilim'] ?? null) === null && pdks_cari_kirilim_kolonlar($ekBos['TRY'])['tipler'] === []);
+
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);

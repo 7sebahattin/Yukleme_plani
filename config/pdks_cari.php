@@ -467,6 +467,133 @@ function pdks_cari_hesap_listesi(?PDO $pdo = null): array
 }
 
 /**
+ * v492 — Ekstre hakediş satırı kırılımı: işçi tipi başına kişi + tutar, toplam
+ * fazla mesai saati/tutarı, "diğer" (çavuş ücreti + servis; worker_type_id NULL).
+ * Tip satırı tutarı = line_total − overtime_total (FM ayrı kalemde). Salt okunur;
+ * kolonlar/tablo yoksa (eski şema) boş döner → ekstre eskisi gibi çalışır.
+ * @return array<int, array{tipler: array<string, array{adet:int, yarim:int, kurus:int}>, fm_saat:int, fm_kurus:int, diger_kurus:int}>
+ */
+function pdks_cari_kirilim_yukle(PDO $pdo, array $entIds): array
+{
+    $sonuc = [];
+    $entIds = array_values(array_unique(array_filter($entIds, fn($i) => $i > 0)));
+    if (!$entIds) return $sonuc;
+    try {
+        foreach (array_chunk($entIds, 400) as $parca) {
+            $ph = implode(',', array_fill(0, count($parca), '?'));
+            $st = $pdo->prepare(
+                "SELECT entitlement_id, worker_type_id, worker_type_name_snapshot, attendance_class_snapshot,
+                        worker_count, line_total, overtime_hours, overtime_total
+                   FROM foreman_daily_entitlement_lines WHERE entitlement_id IN ($ph)"
+            );
+            $st->execute($parca);
+            foreach ($st->fetchAll() as $l) {
+                $id = (int)$l['entitlement_id'];
+                $sonuc[$id] ??= ['tipler' => [], 'fm_saat' => 0, 'fm_kurus' => 0, 'diger_kurus' => 0];
+                $lineK = pdks_hakedis_tl_kurus((string)$l['line_total']);
+                if ($l['worker_type_id'] === null) { $sonuc[$id]['diger_kurus'] += $lineK; continue; }
+                $fmK = pdks_hakedis_tl_kurus((string)($l['overtime_total'] ?? '0'));
+                $ad = trim((string)$l['worker_type_name_snapshot']) ?: 'İşçi';
+                $t = $sonuc[$id]['tipler'][$ad] ?? ['adet' => 0, 'yarim' => 0, 'kurus' => 0];
+                $t['adet'] += (int)$l['worker_count'];
+                if ((string)$l['attendance_class_snapshot'] === 'yarim') $t['yarim'] += (int)$l['worker_count'];
+                $t['kurus'] += $lineK - $fmK;
+                $sonuc[$id]['tipler'][$ad] = $t;
+                $sonuc[$id]['fm_saat'] += (int)$l['overtime_hours'];
+                $sonuc[$id]['fm_kurus'] += $fmK;
+            }
+        }
+    } catch (Throwable $e) {
+        return [];   // eski şema (overtime_* yok) — kırılım gösterilmez
+    }
+    return $sonuc;
+}
+
+/**
+ * v492 — Ekstre tablosunun kırılım sütunları + dönem toplamları (TEK kaynak;
+ * ekran, yazdırma ve XLSX aynı fonksiyonu kullanır). Tipler Kadın, Erkek,
+ * Rampacı, Şeritçi sırasıyla, sonra diğerleri; yalnız verisi olanlar çıkar.
+ */
+function pdks_cari_kirilim_kolonlar(array $satirlar): array
+{
+    $tip = []; $fm = false; $diger = false;
+    $tot = ['tipler' => [], 'fm_saat' => 0, 'fm_kurus' => 0, 'diger_kurus' => 0, 'alacak_kurus' => 0, 'borc_kurus' => 0];
+    foreach ($satirlar as $s) {
+        $tot['alacak_kurus'] += (int)($s['artis_kurus'] ?? 0);
+        $tot['borc_kurus'] += (int)($s['azalis_kurus'] ?? 0);
+        $k = $s['kirilim'] ?? null;
+        if (!$k) continue;
+        foreach ($k['tipler'] as $ad => $t) {
+            $tip[$ad] = true;
+            $a = $tot['tipler'][$ad] ?? ['adet' => 0, 'yarim' => 0, 'kurus' => 0];
+            $a['adet'] += $t['adet']; $a['yarim'] += $t['yarim']; $a['kurus'] += $t['kurus'];
+            $tot['tipler'][$ad] = $a;
+        }
+        $tot['fm_saat'] += $k['fm_saat']; $tot['fm_kurus'] += $k['fm_kurus']; $tot['diger_kurus'] += $k['diger_kurus'];
+        if ($k['fm_saat'] > 0 || $k['fm_kurus'] > 0) $fm = true;
+        if ($k['diger_kurus'] > 0) $diger = true;
+    }
+    $oncelik = ['kadın' => 1, 'erkek' => 2, 'rampacı' => 3, 'şeritçi' => 4];
+    $adlar = array_keys($tip);
+    usort($adlar, function ($a, $b) use ($oncelik) {
+        $pa = $oncelik[mb_strtolower($a, 'UTF-8')] ?? 99; $pb = $oncelik[mb_strtolower($b, 'UTF-8')] ?? 99;
+        return $pa === $pb ? strcmp($a, $b) : $pa <=> $pb;
+    });
+    return ['tipler' => $adlar, 'fm' => $fm, 'diger' => $diger, 'toplam' => $tot];
+}
+
+/** v492 — kırılım sütun başlıkları (ekran/yazdırma/XLSX ortak). Her öğe ['ad' => metin, 'tur' => 'adet'|'tutar']. */
+function pdks_cari_kirilim_basliklar(array $kol): array
+{
+    $b = [];
+    foreach ($kol['tipler'] as $ad) {
+        $b[] = ['ad' => $ad, 'tur' => 'adet'];
+        $b[] = ['ad' => $ad . ' hakediş', 'tur' => 'tutar'];
+    }
+    if ($kol['fm']) { $b[] = ['ad' => 'Fazla mesai (saat)', 'tur' => 'adet']; $b[] = ['ad' => 'Fazla mesai hakediş', 'tur' => 'tutar']; }
+    if ($kol['diger']) $b[] = ['ad' => 'Diğer (çavuş ücreti / servis)', 'tur' => 'tutar'];
+    return $b;
+}
+
+/**
+ * v492 — bir ekstre satırının kırılım hücreleri, başlık sırasıyla. 'adet' → int|null,
+ * 'tutar' → kuruş (int)|null. Hakediş dışı satırlarda (ödeme, düzeltme) hepsi null.
+ * $toplam true ise satır yerine dönem toplamı ($kol['toplam']) döner.
+ */
+function pdks_cari_kirilim_degerleri(?array $s, array $kol, bool $toplam = false): array
+{
+    $k = $toplam ? $kol['toplam'] : ($s['kirilim'] ?? null);
+    $v = [];
+    $bos = $k === null;
+    foreach ($kol['tipler'] as $ad) {
+        $t = $bos ? null : ($k['tipler'][$ad] ?? null);
+        $v[] = $t ? ['adet' => $t['adet'], 'not' => $t['yarim'] > 0 ? ($t['yarim'] . ' yarım') : ''] : null;
+        $v[] = $t ? $t['kurus'] : null;
+    }
+    if ($kol['fm']) {
+        $v[] = (!$bos && $k['fm_saat'] > 0) ? ['adet' => $k['fm_saat'], 'not' => ''] : null;
+        $v[] = (!$bos && $k['fm_kurus'] > 0) ? $k['fm_kurus'] : null;
+    }
+    if ($kol['diger']) $v[] = (!$bos && $k['diger_kurus'] > 0) ? $k['diger_kurus'] : null;
+    return $v;
+}
+
+/** v492 — kırılım hücre değerini metne çevirir (kuruş → "1.234,56"; adet → "2" / "2 (1 yarım)"). */
+function pdks_cari_kirilim_hucre_metni(array|int|null $deger, string $tur): string
+{
+    if ($deger === null) return '';
+    if ($tur === 'adet') return (string)$deger['adet'] . ($deger['not'] !== '' ? ' (' . $deger['not'] . ')' : '');
+    return number_format($deger / 100, 2, ',', '.');
+}
+
+/** v492 — Bakiye gösterimi: + = çavuşun alacağı, − = çavuş avansı (borç). [mutlak TL metni, 'Alacak'|'Borç'|''] */
+function pdks_cari_kirilim_bakiye_yonu(string|float $bakiye): array
+{
+    $b = (float)$bakiye;
+    return [number_format(abs($b), 2, ',', '.'), $b > 0 ? 'Alacak' : ($b < 0 ? 'Borç' : '')];
+}
+
+/**
  * cavus_ekstre.php için — KRONOLOJİK hesap ekstresi, PARA BİRİMİ bazında
  * AYRI dizilerde (kullanıcının açık talimatı: "Do NOT sum different
  * currencies together"). Kaynak: YALNIZ KESİN hakediş + GEÇERLİ ödeme
@@ -487,7 +614,10 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
     if ($bitis !== null && $bitis !== '')       { $whereH[] = 'work_date <= ?'; $parH[] = $bitis; }
     $stH = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE " . implode(' AND ', $whereH));
     $stH->execute($parH);
-    foreach ($stH->fetchAll() as $h) {
+    $hakedisler = $stH->fetchAll();
+    // v492: hakedişin tip bazlı / fazla mesai kırılımı (yalnız gösterim; toplamı DEĞİŞTİRMEZ).
+    $kirilimlar = pdks_cari_kirilim_yukle($pdo, array_map(fn($h) => (int)$h['id'], $hakedisler));
+    foreach ($hakedisler as $h) {
         $satirlar[(string)$h['currency']][] = [
             'tarih' => $h['work_date'], 'tip' => 'HAKEDIS', 'tip_etiket' => 'HAKEDİŞ',
             'belge' => 'HKD-' . str_pad((string)$h['id'], 6, '0', STR_PAD_LEFT),
@@ -495,6 +625,7 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
             'artis_kurus' => pdks_hakedis_tl_kurus((string)$h['total_amount']), 'azalis_kurus' => 0,
             'siralama_zaman' => $h['finalized_at'] ?? $h['calculated_at'], 'siralama_id' => (int)$h['id'],
             'kaynak_id' => (int)$h['id'],
+            'kirilim' => $kirilimlar[(int)$h['id']] ?? null,
         ];
     }
 
