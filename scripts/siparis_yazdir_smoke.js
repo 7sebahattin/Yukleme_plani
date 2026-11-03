@@ -316,7 +316,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
 
     // ══ v394 — ⋮ menüsü › 💬 WP Paylaş ══
     ok('fixture (WP): 10 alan, tek kalem, toplam "23 / 3.680"', WP.ok && WP.alanlar.length === 10 && WP.kalemler.length === 1 && WP.toplam.palet_koli === '23 / 3.680' && WP.alanlar[6].deger === 'Test Sürücü Bir');
-    ok('fixture (WP): Boşaltma adresi verisi (v425)', WP.adres_baslik === 'Boşaltma adresi' && WP.adresler.length === 1 && WP.adresler[0].kod === '1001');
+    ok('fixture (WP): Boşaltma adresi verisi (v425) + kalibre (v491)', WP.adres_baslik === 'Boşaltma adresi' && WP.adresler.length === 1 && WP.adresler[0].kod === '1001' && JSON.stringify(WP.adresler[0].kalibreler) === '[{"kalibre":"14","palet":3}]');
     const PNG_IMZA = [137, 80, 78, 71, 13, 10, 26, 10];
     // html2canvas casusu: kart çizilmeden hemen önce yakalanır (gerçek kütüphane yine çağrılır)
     const WP_SPY = () => {
@@ -389,7 +389,7 @@ const JSONY = (obj, status) => ({ status: status || 200, contentType: 'applicati
         const k = await page.evaluate(() => window.__kart[0]);
         ok('[1280] kart: 480px, ×2, beyaz zemin', k.w === 480 && k.olcek === 2 && k.bg === 'rgb(255, 255, 255)', JSON.stringify([k.w, k.olcek, k.bg]));
         ok('[1280] kart: Boşaltma adresi notu — başlık + "AD NO — tam adres", küçük (≤ 13px) ve okunur (≥ 11px)', k.adres.length === 2 && k.adres[0][0] === 'Boşaltma adresi'
-            && k.adres[1][0] === 'LIDL TESTSTADT 1001 — Teststrasse 1 12345 Teststadt' && k.adres.every(x => x[1] >= 11 && x[1] <= 13), JSON.stringify(k.adres));
+            && k.adres[1][0] === '14 (3 palet) → LIDL TESTSTADT 1001 — Teststrasse 1 12345 Teststadt' && k.adres.every(x => x[1] >= 11 && x[1] <= 13), JSON.stringify(k.adres));
         ok('[1280] kart: başlıklar sahibin sırasıyla (10 alan + Ürün/Kalibre/PF/Palet-Koli + Toplam)', k.th.join('|') === 'Parti No|Yükleme tarihi|Sipariş No|Navlun No|Nakliyeci|Plakalar|Şoför adı|Şoför telefonu|Gümrük|Alıcı Ülke|Ürün|Kalibre|PF|Palet/Koli|Toplam', k.th.join('|'));
         ok('[1280] kart (v410): başlıklar kalın (≥700) ve turuncu (rgb(180, 83, 9)); veriler 500 (400–550; Parti No v419: 700, toplam satırı hariç)', k.thW.every(x => x >= 700) && k.thRenk.every(x => x === 'rgb(180, 83, 9)')
             && k.tdW.slice(1, -3).every(x => x >= 400 && x <= 550), JSON.stringify([k.thW, k.thRenk, k.tdW]));
