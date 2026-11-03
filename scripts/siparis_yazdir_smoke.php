@@ -358,16 +358,23 @@ $poF = ['loadings' => [[
     ['name' => 'LIDL ALAKASIZ', 'code' => '1005', 'address' => 'Alakasiz Weg 3']]];
 $kal14 = [['kalibre' => '14', 'urun' => 'Test', 'etkin_palet' => 3, 'etkin_koli' => 100]];
 $ad = siparis_wp_adres_coz($poF, 'TC900101.10', $kal14);
-ok('yalnız bu siparişin, palet>0, görünen kalibredeki nokta; numara + tam adres (boşluklar tekleşir)', $ad === [['ad' => 'LIDL TESTSTADT', 'kod' => '1001', 'adres' => 'Teststrasse 1 12345 Teststadt']], json_encode($ad, JSON_UNESCAPED_UNICODE));
+ok('yalnız bu siparişin, palet>0, görünen kalibredeki nokta; numara + tam adres (boşluklar tekleşir)', $ad === [['ad' => 'LIDL TESTSTADT', 'kod' => '1001', 'adres' => 'Teststrasse 1 12345 Teststadt', 'kalibreler' => [['kalibre' => '14', 'palet' => 3]]]], json_encode($ad, JSON_UNESCAPED_UNICODE));
 $ad2 = siparis_wp_adres_coz($poF, 'TC900101.10', [['kalibre' => '14', 'etkin_palet' => 3], ['kalibre' => '12', 'etkin_palet' => 2]]);
 ok('iki kalibre: PO sırasıyla iki nokta; adresi listede olmayan noktada yalnız ad+kod; başka sipariş / alakasız adres YOK', array_column($ad2, 'ad') === ['LIDL TESTSTADT', 'LIDL DIGER'] && $ad2[1]['adres'] === ''
     && !str_contains(json_encode($ad2), 'BASKA') && !str_contains(json_encode($ad2), 'ALAKASIZ'));
+$poK = ['loadings' => [['order_ref' => 'TC900102.10', 'items' => [
+    ['pcs_per_box' => '12', 'locations' => [['name' => 'LIDL A', 'code' => '1', 'role' => 'location', 'pallets' => 2], ['name' => 'LIDL B', 'code' => '2', 'role' => 'location', 'pallets' => 1]]],
+    ['pcs_per_box' => '14', 'locations' => [['name' => 'LIDL A', 'code' => '1', 'role' => 'location', 'pallets' => 4]]],
+    ['pcs_per_box' => '14', 'locations' => [['name' => 'LIDL A', 'code' => '1', 'role' => 'location', 'pallets' => 1]]]]]]];
+$ad3 = siparis_wp_adres_coz($poK, 'TC900102.10', [['kalibre' => '12', 'etkin_palet' => 3], ['kalibre' => '14', 'etkin_palet' => 5]]);
+ok('v491: adres başına kalibre + palet (aynı kalibre toplanır, büyük kalibre önce; ikinci noktada yalnız kendi kalibresi)', array_column($ad3, 'ad') === ['LIDL A', 'LIDL B']
+    && $ad3[0]['kalibreler'] === [['kalibre' => '14', 'palet' => 5], ['kalibre' => '12', 'palet' => 2]] && $ad3[1]['kalibreler'] === [['kalibre' => '12', 'palet' => 1]], json_encode($ad3, JSON_UNESCAPED_UNICODE));
 ok('eşleşmeyen order ref / loadings yok → boş', siparis_wp_adres_coz($poF, 'TC000.10', $kal14) === [] && siparis_wp_adres_coz([], 'TC900101.10', $kal14) === [] && siparis_wp_adres_coz($poF, '', $kal14) === []);
 $db->exec("INSERT INTO siparis_belgeler (tur, kaynak, durum, sha256, disk_adi, orijinal_ad, mime, boyut, parse_json) VALUES ('po','yukleme','islendi','" . str_repeat('c', 64) . "','x425','po.pdf','application/pdf',1," . $db->quote(json_encode($poF)) . ")");
 $poBid = (int)$db->lastInsertId();
 $db->exec("UPDATE siparis_sevkiyatlar SET po_belge_id = {$poBid} WHERE id = {$ID['gecmis']}");
 $vA = siparis_wp_veri(siparis_wp_oku($db, $ID['gecmis']), ['parti_yetki' => true]);
-ok('uçtan uca: sevkiyat → po_belge_id → kart verisi "Boşaltma adresi" + adresler', $vA['adres_baslik'] === 'Boşaltma adresi' && $vA['adresler'] === [['ad' => 'LIDL TESTSTADT', 'kod' => '1001', 'adres' => 'Teststrasse 1 12345 Teststadt']], json_encode($vA['adresler'], JSON_UNESCAPED_UNICODE));
+ok('uçtan uca: sevkiyat → po_belge_id → kart verisi "Boşaltma adresi" + adresler', $vA['adres_baslik'] === 'Boşaltma adresi' && $vA['adresler'] === [['ad' => 'LIDL TESTSTADT', 'kod' => '1001', 'adres' => 'Teststrasse 1 12345 Teststadt', 'kalibreler' => [['kalibre' => '14', 'palet' => 3]]]], json_encode($vA['adresler'], JSON_UNESCAPED_UNICODE));
 ok('PO bağı olmayan sevkiyatta adresler boş', siparis_wp_veri(siparis_wp_oku($db, $ID['bugun']), ['parti_yetki' => true])['adresler'] === []);
 $db->exec("UPDATE siparis_sevkiyatlar SET po_belge_id = NULL WHERE id = {$ID['gecmis']}");
 

@@ -115,13 +115,27 @@ function siparis_wp_adres_coz(array $po, string $orderRef, array $kalemler): arr
                 if (($l['role'] ?? 'location') !== 'location' || (int)($l['pallets'] ?? 0) <= 0) continue;
                 $ad = trim((string)($l['name'] ?? ''));
                 $anahtar = mb_strtoupper($ad);
-                if ($ad === '' || isset($gor[$anahtar])) continue;
-                $gor[$anahtar] = true;
-                $a = $adres[$anahtar] ?? [];
-                $out[] = ['ad' => $ad, 'kod' => trim((string)($a['code'] ?? $l['code'] ?? '')), 'adres' => trim((string)preg_replace('/\s+/u', ' ', (string)($a['address'] ?? '')))];
+                if ($ad === '') continue;
+                if (!isset($gor[$anahtar])) {
+                    $gor[$anahtar] = count($out);
+                    $a = $adres[$anahtar] ?? [];
+                    $out[] = ['ad' => $ad, 'kod' => trim((string)($a['code'] ?? $l['code'] ?? '')), 'adres' => trim((string)preg_replace('/\s+/u', ' ', (string)($a['address'] ?? ''))), 'kalibreler' => []];
+                }
+                if ($kalibre !== '') {   // v491: hangi kalibre bu noktaya iniyor (palet toplamıyla)
+                    $kl = &$out[$gor[$anahtar]]['kalibreler'];
+                    $kl[$kalibre] = ($kl[$kalibre] ?? 0) + (int)$l['pallets'];
+                    unset($kl);
+                }
             }
         }
     }
+    foreach ($out as &$o) {
+        $kl = $o['kalibreler'];
+        uksort($kl, static fn($x, $y) => is_numeric($x) && is_numeric($y) ? (float)$y <=> (float)$x : strcmp((string)$x, (string)$y));
+        $o['kalibreler'] = [];
+        foreach ($kl as $k => $p) $o['kalibreler'][] = ['kalibre' => (string)$k, 'palet' => $p];
+    }
+    unset($o);
     return $out;
 }
 
@@ -174,7 +188,7 @@ function siparis_wp_veri(array $okunan, array $ctx): array
         'kalemler' => $kalemler,
         'kalem_say' => $say,
         'adres_baslik' => 'Boşaltma adresi',
-        'adresler' => array_map(static fn(array $a): array => ['ad' => $a['ad'], 'kod' => $a['kod'], 'adres' => $a['adres']], (array)($okunan['adresler'] ?? [])),
+        'adresler' => array_map(static fn(array $a): array => ['ad' => $a['ad'], 'kod' => $a['kod'], 'adres' => $a['adres'], 'kalibreler' => array_values((array)($a['kalibreler'] ?? []))], (array)($okunan['adresler'] ?? [])),
         'toplam' => ['etiket' => 'Toplam', 'palet_koli' => siparis_wp_palet_koli($r['toplam_palet'] ?? null, $r['toplam_koli'] ?? null)],
         'notlar' => $notlar,
     ];

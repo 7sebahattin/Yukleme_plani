@@ -53,7 +53,8 @@
     '.swp-kalem tr.swp-toplam th{color:#b45309}.swp-kalem tr.swp-toplam td{font-weight:700;color:#111827}' +
     '.swp-adres{margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb}' +
     '.swp-adres-b{font-size:12px;font-weight:700;color:#b45309;margin:0 0 3px}' +
-    '.swp-adres-s{font-size:12px;font-weight:500;color:#374151;line-height:1.35;margin:0 0 3px}';
+    '.swp-adres-s{font-size:12px;font-weight:500;color:#374151;line-height:1.35;margin:0 0 3px}' +
+    '.swp-adres-k{font-weight:800;color:#111827}';
 
   // Her değer esc() ile HTML'e girer (sunucu ham metin döner).
   function kartHtml(v) {
@@ -72,7 +73,8 @@
       o += '<div class="swp-adres"><p class="swp-adres-b">' + esc(v.adres_baslik || 'Boşaltma adresi') + '</p>';
       v.adresler.forEach(function (a) {
         var ad = [a.ad, a.kod].filter(Boolean).join(' ');
-        o += '<p class="swp-adres-s">' + esc(a.adres ? ad + ' — ' + a.adres : ad) + '</p>';
+        var kal = (a.kalibreler || []).map(function (k) { return k.kalibre + (k.palet ? ' (' + k.palet + ' palet)' : ''); }).join(', ');
+        o += '<p class="swp-adres-s">' + (kal ? '<b class="swp-adres-k">' + esc(kal) + ' →</b> ' : '') + esc(a.adres ? ad + ' — ' + a.adres : ad) + '</p>';
       });
       o += '</div>';
     }
