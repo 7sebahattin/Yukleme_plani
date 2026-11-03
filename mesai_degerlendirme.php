@@ -67,6 +67,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string)($_POST['action'] ?? '
         }
     }
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string)($_POST['action'] ?? '')) === 'fm_toplu_kaydet') {
+    // v493 — toplu fazla mesai onayı/reddi (gerçek yazma pdks_faz8b_degerlendirme_kaydet()).
+    csrf_check($_POST['csrf'] ?? null);
+    require_pdks_hakedis('entitlements_finalize');
+    $fmKarar = trim((string)($_POST['fm_karar'] ?? ''));
+    $fmIdsRaw = $_POST['fm_period_ids'] ?? [];
+    $fmIds = is_array($fmIdsRaw) ? array_map('intval', $fmIdsRaw) : [];
+    if (!in_array($fmKarar, ['onayla', 'reddet'], true)) {
+        $errors[] = 'Toplu işlem için Onayla veya Reddet seçmelisiniz.';
+    } elseif (empty($fmIds)) {
+        $errors[] = 'Toplu işlem için en az bir satır seçmelisiniz.';
+    } else {
+        $sonuc = pdks_faz8b_toplu_fm_kaydet($fmIds, $fmKarar, $sessionId, (int)$auth_user['id'], $pdo);
+        if ($sonuc['hatalar']) $errors = array_merge($errors, array_slice($sonuc['hatalar'], 0, 5));
+        if ($sonuc['basarili'] > 0 && !$sonuc['hatalar']) {
+            $mesaj = $sonuc['basarili'] . ' satırın fazla mesaisi ' . ($fmKarar === 'onayla' ? 'onaylandı.' : 'reddedildi.');
+            header('Location: mesai_degerlendirme.php?session_id=' . $sessionId . '&ok=' . urlencode($mesaj));
+            exit;
+        }
+        if ($sonuc['basarili'] === 0 && !$sonuc['hatalar']) $errors[] = 'Seçilen satırların hiçbirinde fazla mesai adayı yok.';
+    }
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string)($_POST['action'] ?? '')) === 'tekli_kaydet') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_hakedis('entitlements_finalize');
@@ -127,6 +149,14 @@ if ($normalDkGosterim <= 0) $normalDkGosterim = 540;
 // tıklanacak hiçbir şey olmayan bir çubuk göstermenin anlamı yok.
 $topluUygunSayisi = 0;
 foreach ($donemler as $d) { if ($d['faz8b']['sinif_onayi_gerekli']) $topluUygunSayisi++; }
+// v493: toplu FM — durum sayıları (bekliyor / onaylı / reddedilen) satır filtresi için.
+$fmSayi = ['hepsi' => 0, 'bekliyor' => 0, 'onayli' => 0, 'red' => 0];
+$fmDurumu = static function (array $f): string {
+    if ((int)$f['fazla_mesai_saat'] <= 0) return '';
+    if ($f['fazla_mesai_onay_saat'] === null) return 'bekliyor';
+    return $f['fazla_mesai_durum'] === 'onayli' ? 'onayli' : 'red';
+};
+foreach ($donemler as $d) { $dk = $fmDurumu($d['faz8b']); if ($dk !== '') { $fmSayi['hepsi']++; $fmSayi[$dk]++; } }
 // v299: fiyat döneminden gelen saat eşikleri (işçi tipi bazında) — eşikler
 // sınıflandırıcının çıktısıdır, burada yeniden hesaplanmaz.
 $esikOzet = [];
@@ -183,6 +213,37 @@ render_flash();
 <div class="pdks-empty"><p>Bu oturumda mesai dönemi bulunamadı.</p></div>
 <?php else: ?>
 
+<?php if ($fmSayi['hepsi'] > 0): ?>
+<!-- v493 — TOPLU FAZLA MESAİ: filtre + seçerek onay/ret. Satır kutuları form="fmTopluForm" ile bağlanır
+     (satırların kendi tekli formları olduğu için iç içe <form> açılamaz). -->
+<form id="fmTopluForm" method="post" class="card" style="padding:12px 16px;margin-bottom:14px">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="session_id" value="<?= (int)$sessionId ?>">
+    <input type="hidden" name="action" value="fm_toplu_kaydet">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <strong>⏱ Toplu fazla mesai</strong>
+        <label class="muted" style="font-size:.85rem">Göster:
+            <select id="fmFiltre" style="margin-left:4px">
+                <option value="bekliyor">Onay bekleyen (<?= (int)$fmSayi['bekliyor'] ?>)</option>
+                <option value="onayli">Onaylı (<?= (int)$fmSayi['onayli'] ?>)</option>
+                <option value="red">Reddedilen (<?= (int)$fmSayi['red'] ?>)</option>
+                <option value="hepsi">Fazla mesaisi olan hepsi (<?= (int)$fmSayi['hepsi'] ?>)</option>
+                <option value="">Tüm satırlar</option>
+            </select>
+        </label>
+        <label class="muted" style="font-size:.85rem">FM saati:
+            <select id="fmSaatFiltre" style="margin-left:4px"><option value="">Hepsi</option></select>
+        </label>
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:6px"><input type="checkbox" id="fmTumunuSec"> Görünenlerin tümünü seç</label>
+        <span id="fmSayac" class="muted" style="font-size:.85rem">0 satır seçili</span>
+        <span style="flex:1"></span>
+        <button type="submit" name="fm_karar" value="onayla" class="btn btn-sm btn-primary" id="fmOnaylaBtn" disabled>✅ Seçilenleri Onayla</button>
+        <button type="submit" name="fm_karar" value="reddet" class="btn btn-sm" id="fmReddetBtn" disabled>❌ Seçilenleri Reddet</button>
+    </div>
+    <div class="pdks-row-sub" style="margin-top:6px">Onay = hesaplanan fazla mesai saatinin tamamı. Kısmi saat için satırdaki “Kaydet”i kullanın.</div>
+</form>
+<?php endif; ?>
+
 <?php if ($topluUygunSayisi > 0): ?>
 <!-- ── Toplu işlem (Sprint Toplu-Degerlendirme-01) ───────────
      Checkbox'lar tablo/kart satırlarının İÇİNDE ama bu <form>'un
@@ -213,8 +274,8 @@ render_flash();
     <th>Kart</th><th>Tip</th><th>Giriş</th><th>Çıkış</th><th>Süre</th><th>Giriş Beyanı</th><th>Sistem / Muhasebe</th><th>Fazla Mesai</th><th>İşlem</th>
 </tr></thead>
 <tbody>
-<?php foreach ($donemler as $d): $f = $d['faz8b']; ?>
-<tr>
+<?php foreach ($donemler as $d): $f = $d['faz8b']; $fmD = $fmDurumu($f); ?>
+<tr data-fm-durum="<?= h($fmD) ?>" data-fm-saat="<?= (int)$f['fazla_mesai_saat'] ?>">
     <?php if ($topluUygunSayisi > 0): ?>
     <td><?php if ($f['sinif_onayi_gerekli']): ?><input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" form="topluForm" class="js-toplu-check"><?php endif; ?></td>
     <?php endif; ?>
@@ -240,6 +301,7 @@ render_flash();
     <td>
         <?php if ((int)$f['fazla_mesai_saat'] <= 0): ?>—
         <?php else: ?>
+            <label style="display:inline-flex;align-items:center;gap:6px;margin-right:6px"><input type="checkbox" name="fm_period_ids[]" value="<?= (int)$d['id'] ?>" form="fmTopluForm" class="js-fm-check" aria-label="Toplu fazla mesai için seç"></label>
             Hesaplanan: <?= (int)$f['fazla_mesai_saat'] ?> saat
             <?php if ($f['fazla_mesai_onay_saat'] !== null): ?>
                 · Onaylanan: <?= (int)$f['fazla_mesai_onay_saat'] ?> saat ·
@@ -293,8 +355,8 @@ render_flash();
 </div>
 
 <div class="pdks-cards mobile-only">
-<?php foreach ($donemler as $d): $f = $d['faz8b']; ?>
-<div class="pdks-card-item">
+<?php foreach ($donemler as $d): $f = $d['faz8b']; $fmD = $fmDurumu($f); ?>
+<div class="pdks-card-item" data-fm-durum="<?= h($fmD) ?>" data-fm-saat="<?= (int)$f['fazla_mesai_saat'] ?>">
     <div class="pdks-row-name"><?= h($d['card_no']) ?> · <?= h($d['worker_type_name_snapshot']) ?></div>
     <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($d['entry_time']))) ?> · Çıkış <?= $d['exit_time'] ? h(date('H:i', strtotime($d['exit_time']))) : '—' ?></div>
     <div class="pdks-row-sub">Süre: <?= h(pdks_faz8b_sure_metni($f)) ?></div>
@@ -302,6 +364,11 @@ render_flash();
     <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h(pdks_faz8b_sinif_etiketi($f['etkin_sinif'])) : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM Hesaplanan ' . (int)$f['fazla_mesai_saat'] . ' saat' . ($f['fazla_mesai_onay_saat'] !== null ? ' / Onaylanan ' . (int)$f['fazla_mesai_onay_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : ' / Onay bekliyor') : '' ?></div>
     <?php if ($f['cift']): ?><div class="pdks-row-sub">Çift Yevmiye · çift sonrası FM <?= (int)$f['odenecek_fm_saat'] ?> saat</div><?php elseif ($f['cift_aday']): ?><div class="pdks-row-sub">Çift adayı — FM onayına bağlı</div><?php endif; ?>
     <?php if ($f['yarim_alti']): ?><div class="pdks-row-sub">Yarım saatinin (<?= h(pdks_faz8b_dakika_etiket((int)$f['yarim_dk'])) ?>) altında</div><?php endif; ?>
+    <?php if ((int)$f['fazla_mesai_saat'] > 0): ?>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.85rem">
+        <input type="checkbox" name="fm_period_ids[]" value="<?= (int)$d['id'] ?>" form="fmTopluForm" class="js-fm-check"> Toplu fazla mesai için seç
+    </label>
+    <?php endif; ?>
     <?php if ($topluUygunSayisi > 0 && $f['sinif_onayi_gerekli']): ?>
     <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.85rem">
         <input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" form="topluForm" class="js-toplu-check"> Toplu işlem için seç
@@ -387,6 +454,65 @@ render_flash();
             alert('Toplu kaydetmek için önce en az bir satır ve bir Tam/Yarım kararı seçin.');
         }
     });
+})();
+</script>
+<?php endif; ?>
+
+<?php if ($fmSayi['hepsi'] > 0): ?>
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('fmTopluForm');
+    if (!form) return;
+    var filtre = document.getElementById('fmFiltre');
+    var saatSel = document.getElementById('fmSaatFiltre');
+    var tumu = document.getElementById('fmTumunuSec');
+    var sayac = document.getElementById('fmSayac');
+    var btnO = document.getElementById('fmOnaylaBtn');
+    var btnR = document.getElementById('fmReddetBtn');
+    var satirlar = Array.prototype.slice.call(document.querySelectorAll('tr[data-fm-durum], .pdks-card-item[data-fm-durum]'));
+
+    // FM saati seçenekleri verideki değerlerden
+    var saatler = {};
+    satirlar.forEach(function (s) { var n = parseInt(s.getAttribute('data-fm-saat'), 10) || 0; if (n > 0) saatler[n] = true; });
+    Object.keys(saatler).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
+        var o = document.createElement('option'); o.value = String(n); o.textContent = n + ' saat'; saatSel.appendChild(o);
+    });
+
+    function uygula() {
+        var f = filtre.value, sa = saatSel.value;
+        satirlar.forEach(function (s) {
+            var d = s.getAttribute('data-fm-durum'), n = s.getAttribute('data-fm-saat');
+            var goster = true;
+            if (f === 'hepsi') goster = d !== '';
+            else if (f !== '') goster = d === f;
+            if (goster && sa !== '') goster = n === sa;
+            s.style.display = goster ? '' : 'none';
+            // gizlenen satırın seçimi kaybolsun (görünmeyeni yanlışlıkla göndermeyelim)
+            if (!goster) { var k = s.querySelector('.js-fm-check'); if (k) k.checked = false; }
+        });
+        tumu.checked = false;
+        guncelle();
+    }
+    function guncelle() {
+        var n = document.querySelectorAll('.js-fm-check:checked').length;
+        sayac.textContent = n + ' satır seçili';
+        btnO.disabled = btnR.disabled = n === 0;
+    }
+    filtre.addEventListener('change', uygula);
+    saatSel.addEventListener('change', uygula);
+    tumu.addEventListener('change', function () {
+        document.querySelectorAll('.js-fm-check').forEach(function (k) { if (k.offsetParent !== null) k.checked = tumu.checked; });
+        guncelle();
+    });
+    document.querySelectorAll('.js-fm-check').forEach(function (k) { k.addEventListener('change', guncelle); });
+    form.addEventListener('submit', function (e) {
+        var n = document.querySelectorAll('.js-fm-check:checked').length;
+        var btn = e.submitter, onay = btn && btn.value === 'onayla';
+        if (!n) { e.preventDefault(); return; }
+        if (!window.confirm(n + ' satırın fazla mesaisi ' + (onay ? 'ONAYLANACAK (hesaplanan saatin tamamı)' : 'REDDEDİLECEK (0 saat)') + '. Devam edilsin mi?')) e.preventDefault();
+    });
+    uygula();
 })();
 </script>
 <?php endif; ?>

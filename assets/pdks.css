@@ -2884,3 +2884,13 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 }
 html[data-theme="dark"] .fd-fark .fd-eski { background: rgba(250, 190, 90, .12); }
 html[data-theme="dark"] .fd-fark .fd-yeni { background: rgba(80, 200, 140, .12); }
+
+/* v492 — Çavuş ekstresi: tip bazlı kırılım sütunları (Borç / Alacak / Bakiye). Yalnız masaüstü tablosu; mobil kartlar etkilenmez. */
+.ce-tablo { font-size: .8rem; }
+.ce-tablo th, .ce-tablo td { padding: 7px 6px; vertical-align: middle; }
+.ce-tablo thead th { line-height: 1.2; white-space: normal; }
+.ce-tablo .ce-sag { text-align: right; font-variant-numeric: tabular-nums; }
+.ce-tablo .pdks-uid { white-space: nowrap; }
+.ce-tablo tbody td:nth-child(3) { min-width: 120px; }
+.ce-tablo thead th:last-child, .ce-tablo tbody td:last-child, .ce-tablo tfoot td:last-child { position: sticky; right: 0; background: var(--card, #fff); box-shadow: -6px 0 6px -6px rgba(0,0,0,.18); }
+.ce-tablo tbody td:last-child, .ce-tablo tfoot td:last-child { white-space: nowrap; }

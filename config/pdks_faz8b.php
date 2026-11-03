@@ -1104,6 +1104,49 @@ function pdks_faz8b_toplu_degerlendirme_kaydet(
     return ['ok' => $basarili > 0 && !$hatalar, 'basarili' => $basarili, 'atlandi' => $atlandi, 'hatalar' => $hatalar];
 }
 
+/**
+ * v493 — Mesai Değerlendirme → TOPLU FAZLA MESAİ (sahip isteği: tek tek onay işi uzatıyordu).
+ * Seçilen dönemlerin FM adayını TAMAMEN onaylar ('onayla' = hesaplanan saatin tamamı) ya da
+ * TAMAMEN reddeder ('reddet' = 0 saat). Kısmi saat toplu verilmez (tekli ekranda kalır).
+ *
+ * İKİNCİ yazma yolu YOK: her dönem pdks_faz8b_degerlendirme_kaydet()'e devredilir (audit, kesin
+ * hakediş reddi, taslağı bayat işaretleme orada). Burada yalnız "hangi dönem / hangi saat" çözülür:
+ * - dönem BAŞKA oturuma aitse ya da FM adayı yoksa ATLANIR (IDOR + gereksiz yazma yok);
+ * - sınıf kararı (Tam/Yarım) hâlâ bekliyorsa ATLANIR + hata (önce o karar verilmeli);
+ * - mevcut Tam/Yarım kararı AYNEN yeniden geçirilir (ezilmez).
+ *
+ * @param int[] $periodIds
+ * @return array{ok:bool, basarili:int, atlandi:int, hatalar:string[]}
+ */
+function pdks_faz8b_toplu_fm_kaydet(array $periodIds, string $karar, int $sessionId, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!in_array($karar, ['onayla', 'reddet'], true)) {
+        return ['ok' => false, 'basarili' => 0, 'atlandi' => 0, 'hatalar' => ['Onayla veya Reddet seçilmelidir.']];
+    }
+    $basarili = 0; $atlandi = 0; $hatalar = [];
+    foreach (array_unique(array_map('intval', $periodIds)) as $periodId) {
+        if ($periodId <= 0) { $atlandi++; continue; }
+        $donem = pdks_faz8b_donem_getir($periodId, $pdo, $sessionId);
+        if (!$donem) { $atlandi++; continue; }
+        $f = $donem['faz8b'];
+        $aday = (int)$f['fazla_mesai_saat'];
+        if ($aday <= 0) { $atlandi++; continue; }
+        $sinifKarari = null;
+        if ($f['sinif_onayi_gerekli']) {
+            $sinifKarari = (string)($donem['approved_attendance_class'] ?? '');
+            if (!in_array($sinifKarari, ['tam', 'yarim'], true)) {
+                $hatalar[] = "Dönem #{$periodId}: önce Tam/Yarım kararı verilmeli.";
+                continue;
+            }
+        }
+        $sonuc = pdks_faz8b_degerlendirme_kaydet($periodId, $sinifKarari, $karar === 'onayla' ? $aday : 0, $userId, $pdo);
+        if ($sonuc['ok']) { $basarili++; }
+        else { $hatalar[] = "Dönem #{$periodId}: " . ($sonuc['hata'] ?? 'kaydedilemedi'); }
+    }
+    return ['ok' => $basarili > 0 && !$hatalar, 'basarili' => $basarili, 'atlandi' => $atlandi, 'hatalar' => $hatalar];
+}
+
 // =========================================================
 // ÇAVUŞ FİYATLARI — TAM / YARIM / FAZLA MESAİ
 // =========================================================
