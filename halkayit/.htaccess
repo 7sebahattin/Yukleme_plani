@@ -5,11 +5,13 @@
 #  tekrar_gonder_lib.php Gönderilenler "Tekrar gönder" kopya/tohum kütüphanesidir;
 #  kunye_secim_lib.php referans künye seçim kuralları + künye/sıfat uyumsuzluğu kaydıdır;
 #  firma_yonetim_lib.php firma ekle/düzenle/sil DB + audit kütüphanesidir;
-#  belirsiz_gonderim_lib.php bağlantı kopunca belirsiz kalan gönderim işareti + HKS kontrolü kütüphanesidir.)
+#  belirsiz_gonderim_lib.php bağlantı kopunca belirsiz kalan gönderim işareti + HKS kontrolü kütüphanesidir;
+#  gonderim_rapor_lib.php Gönderim Raporu (gonderim_rapor.php) süzme/gruplama kütüphanesidir.)
+# gonderim_rapor.php Gönderim Raporu sayfasıdır (hks.access kapısı) — açık.
 # dogum_deney.php yönetici ekranıdır (is_admin kapısı) — açık.
 # include-only PHP dosyaları, SPA kabuğu, şema ve kılavuz doğrudan çağrıya kapalı.
 
-<FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib|dogum_deney_lib|tekrar_gonder_lib|kunye_secim_lib|firma_yonetim_lib|belirsiz_gonderim_lib)\.php$">
+<FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib|dogum_deney_lib|tekrar_gonder_lib|kunye_secim_lib|firma_yonetim_lib|belirsiz_gonderim_lib|gonderim_rapor_lib)\.php$">
     Require all denied
 </FilesMatch>
 
@@ -19,7 +21,7 @@
 
 # Apache 2.2 geriye dönük uyumluluk
 <IfModule !mod_authz_core.c>
-    <FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib|dogum_deney_lib|tekrar_gonder_lib|kunye_secim_lib|firma_yonetim_lib|belirsiz_gonderim_lib)\.php$">
+    <FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib|dogum_deney_lib|tekrar_gonder_lib|kunye_secim_lib|firma_yonetim_lib|belirsiz_gonderim_lib|gonderim_rapor_lib)\.php$">
         Order allow,deny
         Deny from all
     </FilesMatch>
