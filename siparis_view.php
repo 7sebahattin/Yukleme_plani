@@ -13,6 +13,8 @@ require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/siparis_beyan.php';
 require_once __DIR__ . '/config/siparis_invoice.php';
+require_once __DIR__ . '/config/siparis_cari.php';    // v492: siparis_cari_yetkili() (debit note kartı finansal veridir)
+require_once __DIR__ . '/config/siparis_debit.php';   // v492: OGL debit note (salt okunur kart)
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -74,6 +76,7 @@ if ($pkl && $pkl['uretildi_by']) {
 $invD = ['var' => false];
 try { $invD = siparis_inv_durum($pdo, $id); } catch (Throwable $e) { error_log('[siparis_view] invoice: ' . get_class($e)); }
 $invVar = !empty($invD['var']);
+$debitKart = siparis_cari_yetkili() ? (siparis_debit_harita($pdo)[$id] ?? null) : null;   // v492: bu sevkiyata eşleşen OGL debit note'ları (yalnız Cari Döküm yetkisi olana)
 $invBelge = (int)($invD['belge_id'] ?? 0);
 $invGirdi = is_array($invD['girdi'] ?? null) ? $invD['girdi'] : [];
 // Beyan
@@ -478,6 +481,21 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         </div>
         <?php if (!$yaz && !$invVar): ?><p class="sip-bilgi" role="note">Invoice hazırlamak için siparis.write yetkisi gerekir.</p><?php endif; ?>
       </section>
+
+      <?php if ($debitKart !== null && !empty($debitKart['liste'])): ?>
+      <!-- 8c) OGL debit note — v492 (salt okunur) -->
+      <section class="card sip-o7" id="debit" aria-labelledby="sipDebitBas">
+        <div class="card-head"><h2 id="sipDebitBas">OGL debit note</h2><span class="sip-pkl-durum sip-inv-durum--hazir"><?= h(siparis_odeme_aviz_para((int)$debitKart['kurus']) . ' EUR') ?></span></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Belge no</th><th>Tarih</th><th>Fatura</th><th>Neden</th><th class="num">Tutar</th></tr></thead><tbody>
+        <?php foreach ($debitKart['liste'] as $dn): ?>
+          <tr><td class="nowrap"><?= h((string)$dn['no']) ?></td><td class="nowrap"><?= h(sipui_tarih((string)$dn['tarih'])) ?></td><td class="nowrap"><?= h((string)$dn['invoice_no']) ?></td>
+            <td><?= h((string)$dn['neden'] !== '' ? (string)$dn['neden'] : '—') ?><?= !$dn['fiyat_farki'] ? ' <span class="sip-soluk">(fiyat farkı değil — kalan farka girmez)</span>' : '' ?></td>
+            <td class="num"><?= h(siparis_odeme_aviz_para((int)$dn['kurus']) . ' EUR') ?></td></tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+        <p class="sip-soluk">OGL fiyat farkını ödemeden düşer; tutar ödeme avizosundaki net tutara zaten yansımıştır. Cari Döküm ve Fiyat Dengeleme «kalan fark»ı bu tutarla azaltır. <a href="siparis_odemeler.php#odDebit">Tüm debit note'lar</a></p>
+      </section>
+      <?php endif; ?>
     </div>
 
     <div class="sip-col sip-col-yan">

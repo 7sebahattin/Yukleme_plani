@@ -5,6 +5,7 @@
 // Ortalama fiyatla kesilen invoice'lar ile sevkiyat sonrası gelen OGL Price Confirmation (PC) fiyatı arasındaki farkı,
 // gelecekteki N faturaya küçük düzeltmelerle yaymak için plan üretir. Girdi = siparis_cari_veri() çıktısı (`fatura` bağlı).
 // TAM SAYI aritmetiği: fiyat on-binde (4 ondalık), tutar kuruş, ağırlık gram. Float yalnız GET ayrıştırmada (siparis_inv_ondalik_coz).
+// v492: kapatilacak_kurus = KALAN fark = (PC − fatura) + OGL fiyat farkı debit'i (debit yoksa eskisiyle özdeş).
 // İşaret: Fark = Gelen fiyat (PC) − Kesilen fatura. Negatif = kesilen fatura gelen fiyattan YÜKSEK (fazla faturalandı); kapatilacak_kurus = fark (+ = ileride bu kadar FAZLA faturalanmalı). Anlamı v448'le AYNI.
 // Ağırlıklı ortalama kuralı: Σtutar / Σkg (basit ortalama DEĞİL). İskonto % karşılaştırmaya katılmaz (iki tarafta aynı oran varsayımı).
 // =========================================================
@@ -41,11 +42,13 @@ function siparis_denge_satirlar(array $cariVeri): array
         $gram = (int)$k['gram'];
         if ($gram <= 0) continue;
         $pc = (int)$k['pc_kurus']; $fa = (int)$k['fatura_kurus'];
+        $dk = max(0, (int)($k['debit_kurus'] ?? 0));
         $pcF = siparis_denge_bol($pc * 100000, $gram);
         $faF = (int)$s['fatura']['fiyat'];
         $liste[] = ['id' => (int)($s['id'] ?? 0), 'tarih' => ($s['tarih'] ?? null) !== null ? (string)$s['tarih'] : null, 'order_ref' => (string)($s['order_ref'] ?? ''),
             'parti' => array_values((array)($s['parti'] ?? [])), 'ulke' => (string)($s['ulke'] ?? ''), 'plaka' => (string)($s['plaka'] ?? ''),
             'gram' => $gram, 'pc_kurus' => $pc, 'fatura_kurus' => $fa, 'fark_kurus' => $pc - $fa,
+            'debit_kurus' => $dk, 'kalan_fark_kurus' => $pc - $fa + $dk,   // v492: OGL fiyat farkı debit'i (yoksa 0 → eski hesapla özdeş)
             'pc_fiyat' => $pcF, 'fatura_fiyat' => $faF, 'fark_fiyat' => $pcF - $faF, 'kumulatif_fark_kurus' => 0];
     }
     usort($liste, static function (array $a, array $b): int {
@@ -55,7 +58,7 @@ function siparis_denge_satirlar(array $cariVeri): array
         return $c !== 0 ? $c : ($a['id'] <=> $b['id']);
     });
     $kum = 0;
-    foreach ($liste as $i => $r) { $kum += $r['fark_kurus']; $liste[$i]['kumulatif_fark_kurus'] = $kum; }
+    foreach ($liste as $i => $r) { $kum += $r['kalan_fark_kurus']; $liste[$i]['kumulatif_fark_kurus'] = $kum; }   // kümülatif KALAN fark (debit düşülmüş)
     return $liste;
 }
 
@@ -185,7 +188,7 @@ function siparis_denge_bos(): array
 {
     return [
         'sevkiyatlar' => [], 'satirlar' => [],
-        'ozet' => ['adet' => 0, 'gram' => 0, 'pc_kurus' => 0, 'fatura_kurus' => 0, 'fark_kurus' => 0, 'pc_ort' => 0, 'fatura_ort' => 0, 'fark_ort' => 0, 'kapatilacak_kurus' => 0],
+        'ozet' => ['adet' => 0, 'gram' => 0, 'pc_kurus' => 0, 'fatura_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0, 'pc_ort' => 0, 'fatura_ort' => 0, 'fark_ort' => 0, 'kapatilacak_kurus' => 0],
         'atlanan' => ['fatura_yok' => 0, 'para_birimi' => 0, 'pc_yok' => 0],
         'plan' => [],
         'plan_ozet' => ['kaynak' => 'elle', 'sevkiyat' => 0, 'toplam_gram' => 0, 'n' => 0, 'gram' => 0, 'hedef_tutar_kurus' => 0, 'toplam_kapanan' => 0, 'kalan' => 0, 'duzeltme_ort_fiyat' => 0, 'duzeltme_oran_bp' => 0, 'duzeltme_oran_pct' => 0.0, 'duzeltme_oran_metin' => '0,00'],
@@ -225,14 +228,15 @@ function siparis_denge_hesapla(array $cariVeri, array $param): array
     $z = &$o['ozet'];
     $z['adet'] = count($sat);
     $fGram = 0;
-    foreach ($sat as $r) { $z['gram'] += $r['gram']; $z['pc_kurus'] += $r['pc_kurus']; $z['fatura_kurus'] += $r['fatura_kurus']; $fGram += $r['gram'] * $r['fatura_fiyat']; }
+    foreach ($sat as $r) { $z['gram'] += $r['gram']; $z['pc_kurus'] += $r['pc_kurus']; $z['fatura_kurus'] += $r['fatura_kurus']; $fGram += $r['gram'] * $r['fatura_fiyat']; $z['debit_kurus'] += $r['debit_kurus']; }
     $z['fark_kurus'] = $z['pc_kurus'] - $z['fatura_kurus'];
     if ($z['gram'] > 0) {
         $z['pc_ort'] = siparis_denge_bol($z['pc_kurus'] * 100000, $z['gram']);
         $z['fatura_ort'] = siparis_denge_bol($fGram, $z['gram']);
         $z['fark_ort'] = $z['pc_ort'] - $z['fatura_ort'];
     }
-    $z['kapatilacak_kurus'] = $z['fark_kurus'];   // PC − fatura: + = ileride fazla faturalanmalı (değer eskisiyle özdeş)
+    $z['kalan_fark_kurus'] = $z['fark_kurus'] + $z['debit_kurus'];   // v492: OGL'nin fiyat farkı debit'i kesilen fazlayı zaten kapattı
+    $z['kapatilacak_kurus'] = $z['kalan_fark_kurus'];   // (PC − fatura) + debit: + = ileride fazla faturalanmalı (debit yoksa değer eskisiyle özdeş)
     unset($z);
     $adet = $o['ozet']['adet'];
     $kapat = $o['ozet']['kapatilacak_kurus'];

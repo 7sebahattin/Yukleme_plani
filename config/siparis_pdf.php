@@ -473,6 +473,8 @@ function siparis_pdf_belge_turu(array $pages): string
     if (preg_match('/Loading List\s*-\s*Ladeplan|^Loading List\b/mi', $t)) $hits[] = 'loading_list';
     // v490: OGL ödeme avizosu (Almanca "Überweisung über … zum Ausgleich folgender Rechnungen")
     if (preg_match('/Überweisung\s+über/iu', $t) && preg_match('/zum\s+Ausgleich\s+folgender\s+Rechnungen/iu', $t)) $hits[] = 'payment_advice';
+    // v492: OGL "Invoice-Debit Note" (fiyat farkı borç dekontu)
+    if (preg_match('/Invoice-Debit\s+Note/i', $t) && preg_match('/We\s+debit\s+you\s+the\s+following\s+amount/i', $t)) $hits[] = 'debit_note';
     return count($hits) === 1 ? $hits[0] : 'unknown';
 }
 
@@ -1179,6 +1181,113 @@ function siparis_pdf_parse_payment_advice(array $pages, array $meta = []): array
 }
 
 /* =====================================================================================================
+ * PART 6c - DEBIT NOTE (v492) — OGL "Invoice-Debit Note" (her sayfa BİR borç dekontu; genelde "DEBIT BECAUSE OF WRONG PRICE")
+ * Sayfa başına bağımsız kapılar: gönderen/alıcı, belge no, tarih, fatura no, para birimi, Σ kalem = "Amount" = "Total amount".
+ * Kapıyı geçemeyen sayfa `ok=false` olur ve kaydedilmez; geçen sayfalar kaydedilir (doc.ok = en az bir sayfa tamam).
+ * ===================================================================================================== */
+/** "4,58" → 45800 (on-binde); geçersiz → null. */
+function sipdf_debit_fiyat(?string $s): ?int
+{
+    $s = trim((string)$s);
+    if (!preg_match('/^(\d{1,4}),(\d{1,4})$/', $s, $m)) return null;
+    return (int)$m[1] * 10000 + (int)str_pad($m[2], 4, '0');
+}
+
+/** Tek sayfa → not. @return array<string,mixed> */
+function sipdf_debit_sayfa(int $pn, array $segs): array
+{
+    $fail = static fn(string $m): array => ['ok' => false, 'page' => $pn, 'hata' => $m];
+    $t = '';
+    foreach ($segs as $s) $t .= sipdf_t($s) . "\n";
+    if (!preg_match('/Invoice-Debit\s+Note/i', $t) || !preg_match('/We\s+debit\s+you\s+the\s+following\s+amount/i', $t)) return $fail('Sayfa bir debit note değil.');
+    if (!preg_match('/OGL\s+FOOD\s+TRADE/i', $t) || !preg_match('/Asya\s+Fresh/i', $t)) return $fail('Gönderen/alıcı OGL Food Trade → Asya Fresh olarak görünmüyor.');
+    if (!preg_match('/Document\s+no\.?\s+(\d{4}-\d{4,8})\b/i', $t, $m)) return $fail('Belge numarası okunamadı.');
+    $no = $m[1];
+    $tarih = null;
+    foreach ($segs as $s) {
+        if (sipdf_t($s) !== 'Date') continue;
+        foreach ($segs as $v) if (abs($v['y'] - $s['y']) <= 2.5 && $v['x'] > $s['x'] && preg_match('/^\d{2}\.\d{2}\.\d{4}$/', sipdf_t($v)) && sipdf_dmy(sipdf_t($v)) !== null) { $tarih = sipdf_dmy(sipdf_t($v)); break 2; }
+    }
+    if ($tarih === null) return $fail('Belge tarihi okunamadı (' . $no . ').');
+    if (!preg_match('/Your\s+Invoice\s+(IHR\d{13}(?:D[IVX]{1,6})?)\b/', $t, $m)) return $fail('Fatura numarası okunamadı (' . $no . ').');
+    $fatura = $m[1];
+    // Lorry/Ship satırı (yalnız bilgi): "Lorry/Ship" etiketinden sonraki ilk segment, sondaki yükleme tarihi ayrılır
+    $lorry = ''; $gemiTarih = null;
+    foreach ($segs as $s) {
+        if (!preg_match('/^Lorry\/Ship$/', sipdf_t($s))) continue;
+        $c = [];
+        foreach ($segs as $v) if (abs($v['y'] - $s['y']) <= 2.5 && $v['x'] > $s['x'] && !preg_match('/Your\s+Invoice/', sipdf_t($v))) $c[] = $v;
+        usort($c, fn($a, $b) => $a['x'] <=> $b['x']);
+        if ($c) {
+            $x = sipdf_t($c[0]);
+            if (preg_match('/^(.*?)\s*(\d{2}\.\d{2}\.\d{4})$/', $x, $mm)) { $lorry = trim($mm[1]); $gemiTarih = sipdf_dmy($mm[2]); } else $lorry = $x;
+        }
+        break;
+    }
+    $neden = '';
+    foreach ($segs as $s) if (preg_match('/^DEBIT\s+BECAUSE\s+OF\s+(.+)$/i', sipdf_t($s), $mm)) { $neden = trim($mm[1]); break; }
+    $anl = null; $fat = null; $pbFiyat = null;
+    if (preg_match('/PRICE\s+AGREED\s+(\d+,\d+)\s+([A-Z]{3})/', $t, $mm)) { $anl = sipdf_debit_fiyat($mm[1]); $pbFiyat = $mm[2]; }
+    if (preg_match('/PRICE\s+INVOICED\s+(\d+,\d+)\s+([A-Z]{3})/', $t, $mm) && ($pbFiyat === null || $pbFiyat === $mm[2])) $fat = sipdf_debit_fiyat($mm[1]); else $pbFiyat = null;
+    $fiyatFarki = (bool)preg_match('/WRONG\s+PRICE/i', $neden) && $anl !== null && $fat !== null && $fat > $anl && $pbFiyat === 'EUR';
+    // LKW/Container (sipariş numarasının sayısal kısmı, ör. 418932.10) — kalem açıklamalarından
+    $lkw = [];
+    if (preg_match_all('/LKW\/Container:\s*(\d{5,}(?:\.\d{1,3})?)/', $t, $mm)) foreach ($mm[1] as $x) $lkw[$x] = true;
+    // kalemler: "<pos> <tutar> <kod> <miktar> <birim fiyat> <açıklama> <pal> <koli> <qty/c> <birim>" (sütun sırası x'e göre)
+    $kalem = []; $kalemToplam = 0;
+    foreach (sipdf_lines($segs) as $ln) {
+        $x = sipdf_ltext($ln);
+        if (!preg_match('/^(\d{1,3}) (-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}) (\d{6,}) \d+ \d+,\d+ (.+?) (\d+) (\d+) \d+ \S+$/u', $x, $mm)) {
+            if (preg_match('/^\d{1,3} -?[\d.]+,\d{2} \d{6,} /', $x)) return $fail('Kalem satırı okunamadı (' . $no . ').');
+            continue;
+        }
+        $k = sipdf_de_kurus($mm[2]);
+        if ($k === null) return $fail('Kalem tutarı okunamadı (' . $no . ').');
+        $kalem[] = ['pos' => (int)$mm[1], 'code' => $mm[3], 'desc' => mb_substr(trim($mm[4]), 0, 80), 'pal' => (int)$mm[5], 'colli' => (int)$mm[6], 'amount_kurus' => $k];
+        $kalemToplam += $k;
+    }
+    if (!$kalem) return $fail('Kalem bulunamadı (' . $no . ').');
+    $amount = null; $total = null; $pb = null;
+    foreach (sipdf_lines($segs) as $ln) {
+        $x = sipdf_ltext($ln);
+        if (preg_match('/^Amount\s+([A-Z]{3})\s+(-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})$/', $x, $mm)) { if ($amount !== null) return $fail('Birden çok «Amount» satırı (' . $no . ').'); $amount = sipdf_de_kurus($mm[2]); $pb = $mm[1]; }
+        elseif (preg_match('/^Total\s+amount\s+([A-Z]{3})\s+(-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})$/', $x, $mm)) { if ($total !== null) return $fail('Birden çok «Total amount» satırı (' . $no . ').'); $total = sipdf_de_kurus($mm[2]); if ($pb !== null && $pb !== $mm[1]) return $fail('Para birimleri tutmuyor (' . $no . ').'); $pb = $mm[1]; }
+    }
+    if ($amount === null || $total === null || $pb === null) return $fail('Toplam tutar okunamadı (' . $no . ').');
+    if ($amount !== $total) return $fail('«Amount» ile «Total amount» tutmuyor (KDV var; otomatik alınmadı) (' . $no . ').');
+    if ($kalemToplam !== $amount) return $fail('Kalem toplamı ' . sipdf_de_goster($kalemToplam) . ' belge toplamı ' . sipdf_de_goster($amount) . ' ile tutmuyor (' . $no . ').');
+    if ($amount <= 0) return $fail('Tutar sıfır ya da negatif (' . $no . ') — otomatik alınmadı.');
+    return ['ok' => true, 'page' => $pn, 'no' => $no, 'date' => $tarih, 'invoice_no' => $fatura, 'lorry' => $lorry, 'ship_date' => $gemiTarih,
+        'reason' => $neden, 'fiyat_farki' => $fiyatFarki, 'agreed_price' => $anl, 'invoiced_price' => $fat, 'pb' => $pb, 'amount_kurus' => $amount,
+        'lkw' => array_keys($lkw), 'items' => $kalem];
+}
+
+function siparis_pdf_parse_debit_note(array $pages, array $meta = []): array
+{
+    $out = ['doc_type' => 'debit_note', 'ok' => false, 'hata_kodu' => null, 'hata' => null, 'notes' => [], 'sayfa_hata' => 0, 'sayfa_hatalar' => [],
+        'header' => ['pages' => count($pages)], 'checks' => [], 'warnings' => [], 'meta' => $meta];
+    $pages = array_filter($pages, 'is_array');
+    if (!$pages) { $out['hata_kodu'] = 'debit_bos'; $out['hata'] = 'Debit note sayfası bulunamadı.'; return $out; }
+    if (count($pages) > 60) { $out['hata_kodu'] = 'debit_cok_uzun'; $out['hata'] = 'Debit note dosyası çok uzun (60 sayfadan fazla) — otomatik alınmadı.'; return $out; }
+    $goruldu = [];
+    foreach ($pages as $pn => $segs) {
+        $n = sipdf_debit_sayfa((int)$pn, $segs);
+        if (!$n['ok']) { $out['sayfa_hata']++; $out['sayfa_hatalar'][] = ['page' => (int)$pn, 'hata' => (string)$n['hata']]; continue; }
+        if (isset($goruldu[$n['no']])) continue;   // aynı belge numarası iki sayfada (kopya) → bir kez
+        $goruldu[$n['no']] = true;
+        $out['notes'][] = $n;
+    }
+    if (!$out['notes']) {
+        $out['hata_kodu'] = 'debit_okunamadi';
+        $out['hata'] = $out['sayfa_hatalar'][0]['hata'] ?? 'Debit note okunamadı.';
+        return $out;
+    }
+    $out['warnings'][] = ['level' => 'warn', 'code' => 'debit_note', 'message' => 'Debit note recognised; it is not an order document (use Siparişler › Mailden al › Ödeme sorgula).'];
+    $out['ok'] = true;
+    return $out;
+}
+
+/* =====================================================================================================
  * PART 7 - DISPATCHER + CROSS-DOCUMENT CHECKS
  * ===================================================================================================== */
 /** Read + classify + parse. Never throws: on failure returns ['doc_type'=>..., 'error'=>msg]. Adds _file. */
@@ -1192,6 +1301,7 @@ function siparis_pdf_isle(string $file): array
             'price_confirmation' => siparis_pdf_parse_price_confirmation($r['pages'], $r['meta']),
             'loading_list' => siparis_pdf_parse_loading_list($r['pages'], $r['meta']),
             'payment_advice' => siparis_pdf_parse_payment_advice($r['pages'], $r['meta']),
+            'debit_note' => siparis_pdf_parse_debit_note($r['pages'], $r['meta']),
             default => ['doc_type' => 'unknown', 'checks' => [], 'warnings' => [['level' => 'error', 'code' => 'unknown_doc', 'message' => 'Document type not recognised.']], 'meta' => $r['meta']],
         };
     } catch (Throwable $e) {

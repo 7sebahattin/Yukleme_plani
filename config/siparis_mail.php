@@ -28,6 +28,7 @@ require_once __DIR__ . '/mail_core.php';
 require_once __DIR__ . '/mail_mime.php';   // mail_view.php'nin mail_gorunum_charset_duzelt() çağrısı mail_mime_mojibake_duzelt() ister (sayfa render'ında da yüklü olmalı)
 require_once __DIR__ . '/mail_view.php';
 require_once __DIR__ . '/siparis_odeme_aviz.php';   // v490: avizo → ödeme (mail_ek_hazirla çağırmaz)
+require_once __DIR__ . '/siparis_debit.php';          // v492: debit note → hks_kv (ödeme YAZMAZ)
 
 const SIPARIS_MAIL_GUN = 15;            // sabit pencere (ekranda yazar)
 const SIPARIS_MAIL_ADIM_SN = 20;        // tek HTTP adımının süre bütçesi
@@ -74,7 +75,7 @@ function siparis_mail_tur_yetkisi(string $tur): bool
 /** Mail katmanı tür kodu: payment_advice → odeme, diğerleri siparis_pdf_tur_kodu() (po|ll|pc|bilinmiyor). */
 function siparis_mail_belge_tur_kodu(array $doc): string
 {
-    return ($doc['doc_type'] ?? '') === 'payment_advice' ? 'odeme' : siparis_pdf_tur_kodu($doc);
+    return in_array(($doc['doc_type'] ?? ''), ['payment_advice', 'debit_note'], true) ? 'odeme' : siparis_pdf_tur_kodu($doc);   // v492: debit note da Ödeme sorgusunun konusu
 }
 
 /** Belge türü koduna (po/ll/pc) karşılık gelen düğmenin türü; yoksa null. */
@@ -515,7 +516,9 @@ function siparis_mail_ek_isle(PDO $pdo, array $oge, array $beklenen, int $uid, s
             $t = siparis_mail_belge_tur_kodu($doc);
             if ($t === 'bilinmiyor') return $kaydet('taninmadi', ['tur' => null], ['sha256' => $sha]);
             if ($t !== 'odeme') return $kaydet('baska_tur', ['tur' => $t], ['sha256' => $sha]);
-            $x = siparis_odeme_aviz_isle($pdo, $doc, ['m' => $m, 'h' => $h, 'p' => $p], $uid);
+            $x = ($doc['doc_type'] ?? '') === 'debit_note'
+                ? siparis_debit_isle($pdo, $doc, ['m' => $m, 'h' => $h, 'p' => $p], $uid)          // v492: debit note → hks_kv (ödeme yazılmaz)
+                : siparis_odeme_aviz_isle($pdo, $doc, ['m' => $m, 'h' => $h, 'p' => $p], $uid);
             $ek = ['tur' => 'odeme', 'odeme' => $x['odeme'], 'hata' => $x['sonuc'] === 'okunamadi' ? $x['mesaj'] : null];
             if ($x['sonuc'] === 'hata') return siparis_mail_satir($oge, 'hata', ['dosya' => siparis_kirp($ad, 120), 'hata' => $x['mesaj']] + $ek);   // defter YOK → sonraki sorguda yeniden denenir
             return $kaydet($x['sonuc'], $ek, ['sha256' => $sha, 'mesaj' => siparis_kirp($x['mesaj'], 120), 'odeme' => $x['odeme']]);

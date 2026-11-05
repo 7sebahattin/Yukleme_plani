@@ -143,6 +143,7 @@ function smt_parse_kancasi_kur(): void
         if (str_starts_with($e, 'pc')) return siparis_test_fixture('pc_bolum_farkli');
         if (str_starts_with($e, 'bozuk')) return ['doc_type' => 'error', 'error' => 'sentetik'];
         if (str_starts_with($e, 'odeme')) return smt_odeme_doc($e);
+        if (str_starts_with($e, 'debit')) return smt_debit_doc($e);
         return ['doc_type' => 'unknown', 'checks' => [], 'warnings' => []];
     };
 }
@@ -175,6 +176,23 @@ function smt_odeme_doc(string $e): array
         case 'odeme-ayni': $d['rows'][0]['no'] = 'IHR2026000009999'; break;
     }
     return $d;
+}
+
+/**
+ * v492: SENTETİK debit note fixture'ı (3 sayfa: 2 fiyat farkı + 1 kalite) GERÇEK ayrıştırıcıdan geçirir; etiket → değişiklik:
+ *  debit-bozuk (2. sayfanın «Amount EUR» tutarı bozulur → o sayfa okunamaz, diğer 2 kaydedilir) · debit-yeni (1. sayfanın belge no'su farklı → yeni belge) · diğer debit* → taban.
+ */
+function smt_debit_doc(string $e): array
+{
+    global $ROOT;
+    $fx = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/debit_note_pages.json'), true)['pages'];
+    $p = []; foreach ($fx as $n => $sg) $p[(int)$n] = $sg;
+    foreach ($p as $n => &$sgs) foreach ($sgs as &$sg) {
+        if ($e === 'debit-bozuk' && $n === 2 && $sg['text'] === 'Amount EUR 16,13') $sg['text'] = 'Amount EUR 16,14';
+        if ($e === 'debit-yeni' && $n === 1) $sg['text'] = str_replace('2029-100001', '2029-100099', $sg['text']);
+    }
+    unset($sgs, $sg);
+    return siparis_pdf_parse_debit_note($p);
 }
 
 /** Sunucuların aldığı TÜM IMAP komutları (alt bağlantılar dahil). @return list<string> */

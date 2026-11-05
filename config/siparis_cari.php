@@ -306,12 +306,14 @@ function siparis_cari_veri(array $okunan, array $ctx): array
     $tahsilat = is_array($ctx['tahsilat'] ?? null) ? $ctx['tahsilat'] : [];
     $faturaH = is_array($ctx['fatura'] ?? null) ? $ctx['fatura'] : [];
     $partiH = is_array($ctx['parti'] ?? null) ? $ctx['parti'] : [];   // sid → list<string> (siparis_cari_parti_haritasi)
+    $debitH = is_array($ctx['debit'] ?? null) ? $ctx['debit'] : [];   // v492: sid → {kurus, diger_kurus, liste} (siparis_debit_harita; yalnız EUR + eşleşmiş)
     $out = ['yuklenmemis' => [], 'yuklenen' => [], 'fiyatli' => [], 'ozet' => [
         'yuklenmemis' => ['sevkiyat' => 0, 'palet' => 0, 'koli' => 0, 'gram' => 0],
         'yuklenen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
         'bekleyen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
     ], 'cari' => [],
-        'kesilen' => ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0],
+        'kesilen' => ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0],
+        'debit' => ['sevkiyat' => 0, 'kurus' => 0, 'diger_kurus' => 0],
         'varsayilan_kg' => false, 'kesildi' => (bool)($okunan['kesildi'] ?? false)];
     $fatura = [];
     foreach ((array)($okunan['rows'] ?? []) as $r) {
@@ -323,7 +325,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             'plaka' => (string)($r['plakalar'] ?? ''), 'nakliyeci' => (string)($r['nakliyeci'] ?? ''),
             'parti' => array_values(array_filter(array_map(static fn($x): string => trim((string)$x), (array)($partiH[$id] ?? [])), static fn(string $x): bool => $x !== '')),
             'yuklendi' => $yuklendi, 'fiyatli' => false, 'fiyat_tarihi' => null,
-            'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => [], 'fatura' => null, 'karsilastirma' => null];
+            'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => [], 'fatura' => null, 'karsilastirma' => null, 'debit' => null];
         $fat = (isset($faturaH[$id]) && is_array($faturaH[$id]) && (int)($faturaH[$id]['fiyat'] ?? 0) > 0)
             ? ['fiyat' => (int)$faturaH[$id]['fiyat'], 'no' => (string)($faturaH[$id]['no'] ?? ''), 'tarih' => ($faturaH[$id]['tarih'] ?? null) !== null ? (string)$faturaH[$id]['tarih'] : null]
             : null;
@@ -367,8 +369,14 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             }
             if ($n > 0 && $gr > 0) {
                 $faK = intdiv($gr * $fat['fiyat'] + 50000, 100000);
-                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $pcK - $faK];
+                // v492: OGL fiyat farkı debit'i kesilen fazlayı kapatır → kalan = (gelen − kesilen) + debit
+                $dk = isset($debitH[$id]) && is_array($debitH[$id]) ? max(0, (int)($debitH[$id]['kurus'] ?? 0)) : 0;
+                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $pcK - $faK, 'debit_kurus' => $dk, 'kalan_fark_kurus' => $pcK - $faK + $dk];
             }
+        }
+        if (isset($debitH[$id]) && is_array($debitH[$id]) && ((int)($debitH[$id]['kurus'] ?? 0) > 0 || (int)($debitH[$id]['diger_kurus'] ?? 0) > 0)) {
+            $sev['debit'] = ['kurus' => max(0, (int)($debitH[$id]['kurus'] ?? 0)), 'diger_kurus' => max(0, (int)($debitH[$id]['diger_kurus'] ?? 0)), 'liste' => array_values(array_filter((array)($debitH[$id]['liste'] ?? []), 'is_array'))];
+            $out['debit']['sevkiyat']++; $out['debit']['kurus'] += $sev['debit']['kurus']; $out['debit']['diger_kurus'] += $sev['debit']['diger_kurus'];
         }
         $sev['fiyatli'] = $sev['tutar'] !== [];
         $sev['fiyat_tarihi'] = $fiyatTarihi;
@@ -400,6 +408,8 @@ function siparis_cari_veri(array $okunan, array $ctx): array
                 $out['kesilen']['gelen_kurus'] += (int)$kk['pc_kurus'];
                 $out['kesilen']['kesilen_kurus'] += (int)$kk['fatura_kurus'];
                 $out['kesilen']['fark_kurus'] += (int)$kk['fark_kurus'];
+                $out['kesilen']['debit_kurus'] += (int)$kk['debit_kurus'];
+                $out['kesilen']['kalan_fark_kurus'] += (int)$kk['kalan_fark_kurus'];
             }
         }
     }

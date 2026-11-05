@@ -14,6 +14,7 @@ require_once __DIR__ . '/config/print_helpers.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 require_once __DIR__ . '/config/siparis_cari.php';
 require_once __DIR__ . '/config/siparis_denge.php';
+require_once __DIR__ . '/config/siparis_debit.php';   // v492: OGL debit note (kalan fark)
 $auth_user = require_login();
 require_siparis('read');
 if (!siparis_cari_yetkili()) forbidden('Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: reports.export)');
@@ -32,7 +33,7 @@ $f = siparis_cari_filtre($_GET, $bugun);
 $okunan = siparis_cari_oku($pdo, $f);
 $sevIdler = array_map(static fn(array $r): int => (int)$r['id'], $okunan['rows']);
 $faturaFiyat = siparis_cari_fatura_fiyatlari($pdo, $sevIdler);
-$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => $faturaFiyat, 'parti' => siparis_cari_parti_haritasi($pdo, $sevIdler)]);
+$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => $faturaFiyat, 'parti' => siparis_cari_parti_haritasi($pdo, $sevIdler), 'debit' => siparis_debit_harita($pdo)]);
 $param = siparis_denge_param($_GET, $v);   // varsayılanlar (kg boş → ortalama kg, hedef boş → son sevkiyat PC fiyatı) cari verisinden
 $d = siparis_denge_hesapla($v, $param);
 $o = $d['ozet'];
@@ -169,16 +170,17 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
     <div class="print-summary-box"><span class="psb-label">Ort. gelen fiyat</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['pc_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
     <div class="print-summary-box"><span class="psb-label">Ort. kesilen fatura fiyatı</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['fatura_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
     <div class="print-summary-box <?= $o['adet'] > 0 && (int)$o['fark_ort'] !== 0 ? 'psb-warn' : 'psb-ok' ?>"><span class="psb-label">Fark / kg (gelen − kesilen)</span><span class="psb-value"><?= $o['adet'] > 0 ? h(siparis_cari_fark_metin((int)$o['fark_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">toplam fark: <?= h($eurI((int)$o['fark_kurus'])) ?></span></div>
-    <div class="print-summary-box psb-warn"><span class="psb-label">Kapatılacak tutar</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eurI($kapat)) : '—' ?></span><span class="sc-alt">+ = ileride bu kadar fazla faturalanmalı</span></div>
+    <div class="print-summary-box"><span class="psb-label">OGL debit note</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eur((int)$o['debit_kurus'])) : '—' ?></span><span class="sc-alt">fiyat farkı olarak ödemeden düşülen</span></div>
+    <div class="print-summary-box psb-warn"><span class="psb-label">Kapatılacak tutar</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eurI($kapat)) : '—' ?></span><span class="sc-alt">kalan fark = fark + debit · + = ileride bu kadar fazla faturalanmalı</span></div>
   </div>
 
   <!-- 2) Sevkiyat bazında karşılaştırma -->
   <h3 class="pr-section">Sevkiyat bazında karşılaştırma</h3>
   <?php if (!function_exists('can_beyan') || !can_beyan('read')): ?><p class="pr-note">Parti no görmek için beyan okuma yetkisi gerekir (sütun "—" gösterilir).</p><?php endif; ?>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="sdKarsi">
-    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">Gelen Fiyat / kg</th><th class="num">Kesilen fatura fiyatı / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">Kümülatif fark (EUR)</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">Gelen Fiyat / kg</th><th class="num">Kesilen fatura fiyatı / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">OGL debit (EUR)</th><th class="num">Kümülatif kalan fark (EUR)</th></tr></thead>
     <?php if (!$d['sevkiyatlar']): ?>
-    <tbody><tr><td colspan="11" class="pr-empty">Karşılaştırılacak sevkiyat yok (fiyatlı + invoice kesilmiş EUR sevkiyat gerekir).</td></tr></tbody>
+    <tbody><tr><td colspan="12" class="pr-empty">Karşılaştırılacak sevkiyat yok (fiyatlı + invoice kesilmiş EUR sevkiyat gerekir).</td></tr></tbody>
     <?php else: ?>
     <tbody>
       <?php foreach ($d['sevkiyatlar'] as $s): ?>
@@ -189,6 +191,7 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
         <td class="num"><?= h($fiyat((int)$s['fatura_fiyat'])) ?></td>
         <td class="num<?= $farkSinif((int)$s['fark_fiyat']) ?>"><?= h(siparis_cari_fark_metin((int)$s['fark_fiyat'])) ?></td>
         <td class="num<?= $farkSinif((int)$s['fark_kurus']) ?>"><?= h($isaretli((int)$s['fark_kurus'])) ?></td>
+        <td class="num"><?= (int)$s['debit_kurus'] > 0 ? h($eur((int)$s['debit_kurus'])) : '—' ?></td>
         <td class="num<?= $farkSinif((int)$s['kumulatif_fark_kurus']) ?>"><?= h($isaretli((int)$s['kumulatif_fark_kurus'])) ?></td>
       </tr>
       <?php endforeach; ?>
@@ -200,7 +203,8 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
       <td class="num"><?= h($fiyat((int)$o['fatura_ort'])) ?></td>
       <td class="num<?= $farkSinif((int)$o['fark_ort']) ?>"><?= h(siparis_cari_fark_metin((int)$o['fark_ort'])) ?></td>
       <td class="num<?= $farkSinif((int)$o['fark_kurus']) ?>"><?= h($isaretli((int)$o['fark_kurus'])) ?></td>
-      <td class="num<?= $farkSinif((int)$o['fark_kurus']) ?>"><?= h($isaretli((int)$o['fark_kurus'])) ?></td>
+      <td class="num"><?= (int)$o['debit_kurus'] > 0 ? h($eur((int)$o['debit_kurus'])) : '—' ?></td>
+      <td class="num<?= $farkSinif((int)$o['kalan_fark_kurus']) ?>"><?= h($isaretli((int)$o['kalan_fark_kurus'])) ?></td>
     </tr></tbody>
     <?php endif; ?>
   </table></div>

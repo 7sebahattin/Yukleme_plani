@@ -275,9 +275,22 @@ ok('s1 (EUR; kalibre 10 → 1,29 €/kg, 14 → 1,17 €/kg): fatura 1,10 her sa
     && $a7['karsilastirma']['fark_kurus'] === 1579200 - $a7['karsilastirma']['fatura_kurus'] && $a7['karsilastirma']['fark_kurus'] === 100800, json_encode($a7['karsilastirma']));
 ok('fatura olmayan sevkiyatta fatura/karsilastirma null, satırda fatura_kg/fark_kg null', $bul($v7['yuklenen'], 'TC800003.10')['fatura'] === null && $bul($v7['yuklenen'], 'TC800003.10')['karsilastirma'] === null && $a7['satirlar'][0]['fiyat_kg'] !== null);
 ok('v488 kesilen: yalnız invoice\'lu EUR sevkiyatlar (s1) toplanır; bakiye alanları değişmez',
-    $v7['kesilen'] === ['sevkiyat' => 1, 'gram' => 13440000, 'gelen_kurus' => 1579200, 'kesilen_kurus' => 1478400, 'fark_kurus' => 100800], json_encode($v7['kesilen']));
-ok('v488 kesilen: fatura haritasız hepsi 0', $v['kesilen'] === ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0]);
+    $v7['kesilen'] === ['sevkiyat' => 1, 'gram' => 13440000, 'gelen_kurus' => 1579200, 'kesilen_kurus' => 1478400, 'fark_kurus' => 100800, 'debit_kurus' => 0, 'kalan_fark_kurus' => 100800], json_encode($v7['kesilen']));
+ok('v488 kesilen: fatura haritasız hepsi 0', $v['kesilen'] === ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0]);
 ok('v488 para_isaretli: + / - / sıfır', siparis_cari_para_isaretli(194600) === '+1.946,00' && siparis_cari_para_isaretli(-49000) === '-490,00' && siparis_cari_para_isaretli(0) === '0,00');
 ok('USD satırı (s4) karşılaştırılmaz, özet/cari haritasız ile aynı', $bul($v7['yuklenen'], 'TC800004.10')['karsilastirma'] === null && $v7['cari'] === $v['cari'] && $v7['ozet'] === $v['ozet']);
+// v492: OGL debit note — kesilen fazlayı kapatır (kalan = fark + debit); yalnız fiyat farkı debit'i hesaba girer
+$dbtL = [['no' => '2029-100001', 'tarih' => '2026-11-02', 'invoice_no' => 'IHR2026000000001DI', 'kurus' => 50000, 'fiyat_farki' => true, 'neden' => 'WRONG PRICE', 'anlasilan' => 45800, 'kesilen' => 46000]];
+$v8 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => [$ID['s1'] => ['fiyat' => 11000, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 0.0]],
+    'debit' => [$ID['s1'] => ['kurus' => 50000, 'diger_kurus' => 1000, 'liste' => $dbtL], $ID['s3'] => ['kurus' => 0, 'diger_kurus' => 500, 'liste' => []]]]);
+$a8 = $bul($v8['yuklenen'], 'TC800001.10');
+ok('v492 s1: karsilastirma debit_kurus 50.000, kalan_fark = fark(100.800) + debit; fark_kurus DEĞİŞMEDİ', $a8['karsilastirma']['fark_kurus'] === 100800 && $a8['karsilastirma']['debit_kurus'] === 50000 && $a8['karsilastirma']['kalan_fark_kurus'] === 150800, json_encode($a8['karsilastirma']));
+ok('v492 s1: sevkiyat.debit = {kurus 50.000, diger_kurus 1.000, liste}', $a8['debit']['kurus'] === 50000 && $a8['debit']['diger_kurus'] === 1000 && $a8['debit']['liste'] === $dbtL);
+ok('v492 s3 (invoice yok): debit gösterilir ama karsilastirma null (kalan fark üretilmez)', $bul($v8['yuklenen'], 'TC800003.10')['debit']['diger_kurus'] === 500 && $bul($v8['yuklenen'], 'TC800003.10')['karsilastirma'] === null);
+ok('v492 kesilen/debit toplamları: kesilen.debit_kurus 50.000, kalan 150.800; debit {sevkiyat 2, kurus 50.000, diger 1.500}', $v8['kesilen']['debit_kurus'] === 50000 && $v8['kesilen']['kalan_fark_kurus'] === 150800 && $v8['debit'] === ['sevkiyat' => 2, 'kurus' => 50000, 'diger_kurus' => 1500], json_encode([$v8['kesilen'], $v8['debit']]));
+ok('v492: debit bakiyeyi / özeti DEĞİŞTİRMEZ (debit ödemeden zaten düşülmüştür)', $v8['cari'] === $v7['cari'] && $v8['ozet'] === $v7['ozet']);
+ok('v492: debit bağlamı yoksa sevkiyat.debit null, toplamlar 0, kalan = fark', $a7['debit'] === null && $v7['debit'] === ['sevkiyat' => 0, 'kurus' => 0, 'diger_kurus' => 0] && $a7['karsilastirma']['kalan_fark_kurus'] === $a7['karsilastirma']['fark_kurus'] && $a7['karsilastirma']['debit_kurus'] === 0);
+$v9 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => [$ID['s1'] => ['fiyat' => 11000, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 0.0]], 'debit' => [$ID['s1'] => ['kurus' => -5, 'diger_kurus' => -1, 'liste' => []]]]);
+ok('v492: negatif/bozuk debit değeri 0 sayılır (kalan farkı artırmaz)', $bul($v9['yuklenen'], 'TC800001.10')['karsilastirma']['debit_kurus'] === 0 && $bul($v9['yuklenen'], 'TC800001.10')['debit'] === null);
 
 siparis_test_bitir();
