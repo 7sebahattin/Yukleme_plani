@@ -12,6 +12,7 @@ require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 require_once __DIR__ . '/config/siparis_cari.php';
 require_once __DIR__ . '/config/siparis_odeme_aviz.php';   // v490: avizo kalemleri paneli (salt okunur)
+require_once __DIR__ . '/config/siparis_debit.php';        // v492: debit note listesi (salt okunur)
 $auth_user = require_login();
 require_siparis('read');
 if (!siparis_cari_yetkili()) forbidden('Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: reports.export)');
@@ -74,6 +75,7 @@ render_flash();
     </table></div>
   </section>
   <section id="odAviz" class="od-aviz-panel no-print" aria-label="Avizo kalemleri"><?= $avizId > 0 ? sipui_odeme_aviz_html($pdo, $avizId) : '' ?></section>
+  <section id="odDebit" class="od-aviz-panel no-print" aria-label="OGL debit note'ları"><?= sipui_debit_html($pdo) ?></section>
   <?php if ($yaz): ?>
   <dialog id="odEkleDlg" class="pm-dialog od-dialog" aria-labelledby="odEkleBaslik">
     <form method="post" action="siparis_odeme.php" data-sip-tek>

@@ -561,6 +561,17 @@ $x = $A(['islem' => 'evrak_mail_ayar', 'evrak_kime' => '']);
 ok('v411 operatör evrak mail alıcılarını değiştiremez (siparis.delete), kart salt okunur', $x['hata'] !== null && siparis_evrak_mail_ayar_oku($db)['kime'] === ['customs@ornek.test']
     && !str_contains(sayfa('siparis_ayarlar.php')['html'], 'name="evrak_kime"') && str_contains(sayfa('siparis_ayarlar.php')['html'], '<code>customs@ornek.test</code>'));
 rol($ADMIN, true); $tok = csrf();
+// v492: sevkiyat sayfasında OGL debit note kartı (yalnız Cari Döküm yetkisi + eşleşen debit varsa; salt okunur)
+$db->prepare('INSERT INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['siparis_debit_2029-300001', json_encode(['v' => 1, 'tarih' => '2026-11-02', 'invoice_no' => 'IHR2026000000901DI', 'pb' => 'EUR', 'amount_kurus' => 7488, 'neden' => 'WRONG PRICE', 'fiyat_farki' => true, 'anlasilan' => 45800, 'kesilen' => 46000, 'lkw' => ['900001.10']])]);
+rol(array_merge($ADMIN, ['reports.export']), true); $tok = csrf();   // Cari Döküm yetkisi (reports.export) — debit finansal veridir
+$x = sayfa('siparis_view.php', ['id' => $ID['s1']]);
+ok('v492 sevkiyat sayfası: eşleşen debit varsa «OGL debit note» kartı (belge no, fatura, neden, 74,88 EUR), HTML dengeli', temiz($x) && html_dengeli($x['html']) === null && str_contains($x['html'], 'id="debit"') && str_contains($x['html'], '2029-300001') && str_contains($x['html'], '74,88 EUR') && str_contains($x['html'], 'WRONG PRICE'), json_encode([temiz($x), html_dengeli($x['html']), str_contains($x['html'], 'id="debit"'), $x['hata']]));
+ok('v492 sevkiyat sayfası: eşleşmeyen sevkiyatta kart YOK', !str_contains(sayfa('siparis_view.php', ['id' => $ID['s11']])['html'], 'id="debit"'));
+rol($OPER, false, 5); $tok = csrf();
+ok('v492 sevkiyat sayfası: Cari Döküm yetkisi (reports.export) olmayan kullanıcıya debit kartı GÖRÜNMEZ', !str_contains(sayfa('siparis_view.php', ['id' => $ID['s1']])['html'], 'id="debit"'));
+rol(array_merge($ADMIN), true); $tok = csrf();
+ok('v492 sevkiyat sayfası: yönetici olsa da reports.export yoksa debit kartı görünmez (fail-closed)', !str_contains(sayfa('siparis_view.php', ['id' => $ID['s1']])['html'], 'id="debit"'));
+rol($ADMIN, true); $tok = csrf();
 $db->exec('DROP TABLE hks_kv');
 
 echo "\n=== 11. Yükleme ucu ===\n";

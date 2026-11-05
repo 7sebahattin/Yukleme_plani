@@ -284,4 +284,21 @@ if ($__ornek !== '' && is_file($__ornek)) {
     ok('v490 GERÇEK PDF: ΣRechnung 6512784', $__g['sums']['rechnung_kurus'] === 6512784);
 } else echo "ATLANDI (ODEME_ORNEK_PDF yok)\n";
 
+echo "\n=== v492. debit_note (OGL Invoice-Debit Note; SENTETİK fixture) ===\n";
+$__db = json_decode((string)file_get_contents($ROOT . '/scripts/fixtures/siparis/debit_note_pages.json'), true)['pages'];
+$__dbp = []; foreach ($__db as $n => $sg) $__dbp[(int)$n] = $sg;
+ok('v492 sınıflama: sentetik debit → debit_note (payment_advice / unknown değil)', siparis_pdf_belge_turu($__dbp) === 'debit_note');
+$__dd = siparis_pdf_parse_debit_note($__dbp);
+ok('v492 3 sayfa → 3 belge (2029-100001/2/3), Σ tutar 191,01; sayfa_hata 0', $__dd['ok'] === true && array_column($__dd['notes'], 'no') === ['2029-100001', '2029-100002', '2029-100003'] && array_sum(array_column($__dd['notes'], 'amount_kurus')) === 19101 && $__dd['sayfa_hata'] === 0);
+$__ddt = $__dbp; foreach ($__ddt[1] as &$__s) if ($__s['text'] === 'Amount EUR 74,88') $__s['text'] = 'Amount EUR 74,89'; unset($__s);
+$__ddr = siparis_pdf_parse_debit_note($__ddt);
+ok('v492 kalem toplamı ≠ belge toplamı → o sayfa reddedilir (ödeme/kayıt yok), diğerleri alınır', count($__ddr['notes']) === 2 && $__ddr['sayfa_hata'] === 1 && str_contains($__ddr['sayfa_hatalar'][0]['hata'], 'tutmuyor'));
+ok('v492 sipdf_debit_fiyat: 4,58 → 45800, 4,6 → 46000, geçersiz → null', sipdf_debit_fiyat('4,58') === 45800 && sipdf_debit_fiyat('4,6') === 46000 && sipdf_debit_fiyat('abc') === null && sipdf_debit_fiyat('4.58') === null);
+$__dornek = (string)getenv('DEBIT_ORNEK_PDF');
+if ($__dornek !== '' && is_file($__dornek)) {
+    $__dg = siparis_pdf_isle($__dornek);
+    ok('v492 GERÇEK PDF: debit_note, ok, sayfa_hata 0, her belge EUR + fatura no + tutar > 0', ($__dg['doc_type'] ?? '') === 'debit_note' && ($__dg['ok'] ?? false) === true && ($__dg['sayfa_hata'] ?? 1) === 0 && count($__dg['notes']) >= 1
+        && !array_filter($__dg['notes'], fn($n) => $n['pb'] !== 'EUR' || $n['amount_kurus'] <= 0 || !preg_match('/^IHR\d{13}D[IVX]+$/', $n['invoice_no'])), json_encode($__dg['sayfa_hatalar'] ?? null));
+} else echo "ATLANDI (DEBIT_ORNEK_PDF yok)\n";
+
 siparis_test_bitir();

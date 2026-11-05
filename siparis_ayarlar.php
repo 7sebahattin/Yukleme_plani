@@ -184,7 +184,7 @@ $profilVeri = function (array $p): array {
     <?php if (!$mailHazir): ?>
       <p class="sip-bilgi" role="note">Mail sorgusu kurulu değil: Mail Merkezi tabloları, MAIL_MASTER_KEY ve Hal Kayıt ayar tablosu (hks_kv) gerekir.</p>
     <?php else: ?>
-      <p class="muted">Siparişler sayfasındaki <strong>Sipariş sorgula</strong> (sipariş PO + fiyat onayı PC) ve <strong>Lojistik sorgula</strong> ve <strong>Ödeme sorgula</strong> (OGL ödeme avizosu PDF'i) düğmeleri yalnız burada işaretlenen posta kutularını ve yalnız aşağıdaki gönderen adreslerinden gelen mailleri tarar. Belge türü PDF içeriğinden anlaşılır; adres alan adına göre değil, <strong>tam adrese</strong> göre eşleşir.</p>
+      <p class="muted">Siparişler sayfasındaki <strong>Sipariş sorgula</strong> (sipariş PO + fiyat onayı PC) ve <strong>Lojistik sorgula</strong> ve <strong>Ödeme sorgula</strong> (OGL ödeme avizosu ve debit note PDF'leri) düğmeleri yalnız burada işaretlenen posta kutularını ve yalnız aşağıdaki gönderen adreslerinden gelen mailleri tarar. Belge türü PDF içeriğinden anlaşılır; adres alan adına göre değil, <strong>tam adrese</strong> göre eşleşir.</p>
       <p class="sip-bilgi" role="note">Mailde 'X adına Y' görünüyorsa iki adresi de ekleyin.</p>
       <p class="sip-bilgi" role="note">Ödeme sorgusu ödemeyi <strong>onay sormadan</strong> Ödemeler'e kaydeder; adresleri yalnız OGL muhasebe adresiyle sınırlayın. Düğme yalnız Cari Döküm (reports.export) ve ödeme yazma (yönetici / hesap.pay) yetkisi olana görünür.</p>
       <form method="post" action="siparis_ayarlar.php#mail" class="sip-form sip-mail-ayar" data-sip-tek>

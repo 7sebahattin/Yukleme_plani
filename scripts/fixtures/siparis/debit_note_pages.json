@@ -1,0 +1,868 @@
+{
+    "pages": {
+        "1": [
+            {
+                "x": 29.76,
+                "y": 791.5,
+                "size": 10,
+                "text": "OGL FOOD TRADE "
+            },
+            {
+                "x": 29.76,
+                "y": 772.5,
+                "size": 9,
+                "text": "ORNEK GMBH Musterstrasse 1 00000 Musterstadt"
+            },
+            {
+                "x": 77,
+                "y": 196,
+                "size": 9,
+                "text": "Asya Fresh Sebza Meyve Nakliye"
+            },
+            {
+                "x": 77,
+                "y": 209,
+                "size": 9,
+                "text": "ORNEK ADRES 1"
+            },
+            {
+                "x": 77,
+                "y": 223,
+                "size": 9,
+                "text": "00000 ORNEKSEHIR"
+            },
+            {
+                "x": 77,
+                "y": 237,
+                "size": 9,
+                "text": "TÜRKEI"
+            },
+            {
+                "x": 530,
+                "y": 290,
+                "size": 12,
+                "text": "Invoice-Debit Note"
+            },
+            {
+                "x": 530,
+                "y": 308,
+                "size": 9,
+                "text": "Document no. 2029-100001"
+            },
+            {
+                "x": 530,
+                "y": 324,
+                "size": 9,
+                "text": "Date"
+            },
+            {
+                "x": 626,
+                "y": 324,
+                "size": 9,
+                "text": "02.11.2026"
+            },
+            {
+                "x": 530,
+                "y": 340,
+                "size": 9,
+                "text": "Supplier K00000"
+            },
+            {
+                "x": 81,
+                "y": 420,
+                "size": 9,
+                "text": "Pos."
+            },
+            {
+                "x": 180,
+                "y": 420,
+                "size": 9,
+                "text": "R0000000"
+            },
+            {
+                "x": 376,
+                "y": 420,
+                "size": 9,
+                "text": "TXXXXXX"
+            },
+            {
+                "x": 431,
+                "y": 420,
+                "size": 9,
+                "text": "Terms of deliver Ab Werk"
+            },
+            {
+                "x": 81,
+                "y": 436,
+                "size": 9,
+                "text": "Lorry\/Ship"
+            },
+            {
+                "x": 180,
+                "y": 436,
+                "size": 9,
+                "text": "11 TST 111 11 TST 222 13.10.2026"
+            },
+            {
+                "x": 431,
+                "y": 436,
+                "size": 9,
+                "text": "Your Invoice IHR2026000000901DI"
+            },
+            {
+                "x": 81,
+                "y": 452,
+                "size": 9,
+                "text": "TourNo"
+            },
+            {
+                "x": 77,
+                "y": 488,
+                "size": 9,
+                "text": "We debit you the following amount:"
+            },
+            {
+                "x": 77,
+                "y": 521,
+                "size": 9,
+                "text": "Pos. Code Qty Price Amount"
+            },
+            {
+                "x": 176,
+                "y": 521,
+                "size": 9,
+                "text": "Description"
+            },
+            {
+                "x": 395,
+                "y": 521,
+                "size": 9,
+                "text": "pal"
+            },
+            {
+                "x": 421,
+                "y": 521,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 459,
+                "y": 521,
+                "size": 9,
+                "text": "Qty\/C"
+            },
+            {
+                "x": 538,
+                "y": 521,
+                "size": 9,
+                "text": "Unit"
+            },
+            {
+                "x": 175,
+                "y": 555,
+                "size": 9,
+                "text": "DEBIT BECAUSE OF WRONG PRICE"
+            },
+            {
+                "x": 175,
+                "y": 580,
+                "size": 9,
+                "text": "PRICE AGREED 4,58 EUR"
+            },
+            {
+                "x": 175,
+                "y": 592,
+                "size": 9,
+                "text": "PRICE INVOICED 4,60 EUR"
+            },
+            {
+                "x": 77,
+                "y": 615,
+                "size": 9,
+                "text": "1 48,96"
+            },
+            {
+                "x": 119,
+                "y": 615,
+                "size": 9,
+                "text": "91017958 3400 0,01"
+            },
+            {
+                "x": 175,
+                "y": 615,
+                "size": 9,
+                "text": "GRANATAPFEL WONDERFUL 10 Stk"
+            },
+            {
+                "x": 395,
+                "y": 615,
+                "size": 9,
+                "text": "17 3400 1"
+            },
+            {
+                "x": 538,
+                "y": 615,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 175,
+                "y": 627,
+                "size": 9,
+                "text": "3,5kg (TR)"
+            },
+            {
+                "x": 175,
+                "y": 642,
+                "size": 9,
+                "text": "URSPRUNGSLAND TÜRKEI"
+            },
+            {
+                "x": 175,
+                "y": 657,
+                "size": 9,
+                "text": "LKW\/Container: 900001.10"
+            },
+            {
+                "x": 77,
+                "y": 696,
+                "size": 9,
+                "text": "2 25,92"
+            },
+            {
+                "x": 119,
+                "y": 696,
+                "size": 9,
+                "text": "91017959 1800 0,01"
+            },
+            {
+                "x": 175,
+                "y": 696,
+                "size": 9,
+                "text": "GRANATAPFEL WONDERFUL 12 Stk"
+            },
+            {
+                "x": 395,
+                "y": 696,
+                "size": 9,
+                "text": "9 1800 1"
+            },
+            {
+                "x": 538,
+                "y": 696,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 175,
+                "y": 708,
+                "size": 9,
+                "text": "3,5kg (TR)"
+            },
+            {
+                "x": 175,
+                "y": 723,
+                "size": 9,
+                "text": "URSPRUNGSLAND TÜRKEI"
+            },
+            {
+                "x": 175,
+                "y": 738,
+                "size": 9,
+                "text": "LKW\/Container: 900001.10"
+            },
+            {
+                "x": 581,
+                "y": 777,
+                "size": 9,
+                "text": "Amount EUR 74,88"
+            },
+            {
+                "x": 355,
+                "y": 796,
+                "size": 9,
+                "text": "plus VAT with tax-rate code 0,00 74,88"
+            },
+            {
+                "x": 493,
+                "y": 796,
+                "size": 9,
+                "text": "164"
+            },
+            {
+                "x": 551,
+                "y": 796,
+                "size": 9,
+                "text": "%"
+            },
+            {
+                "x": 711,
+                "y": 796,
+                "size": 9,
+                "text": "0,00"
+            },
+            {
+                "x": 554,
+                "y": 819,
+                "size": 9,
+                "text": "Total amount EUR"
+            },
+            {
+                "x": 705,
+                "y": 819,
+                "size": 9,
+                "text": "74,88"
+            },
+            {
+                "x": 73,
+                "y": 1092,
+                "size": 9,
+                "text": "Für unsere Handelsgeschäfte verwenden wir Allgemeine Geschäftsbedingungen."
+            }
+        ],
+        "2": [
+            {
+                "x": 29.76,
+                "y": 791.5,
+                "size": 10,
+                "text": "OGL FOOD TRADE "
+            },
+            {
+                "x": 29.76,
+                "y": 772.5,
+                "size": 9,
+                "text": "ORNEK GMBH Musterstrasse 1 00000 Musterstadt"
+            },
+            {
+                "x": 77,
+                "y": 196,
+                "size": 9,
+                "text": "Asya Fresh Sebza Meyve Nakliye"
+            },
+            {
+                "x": 77,
+                "y": 209,
+                "size": 9,
+                "text": "ORNEK ADRES 1"
+            },
+            {
+                "x": 77,
+                "y": 223,
+                "size": 9,
+                "text": "00000 ORNEKSEHIR"
+            },
+            {
+                "x": 77,
+                "y": 237,
+                "size": 9,
+                "text": "TÜRKEI"
+            },
+            {
+                "x": 530,
+                "y": 290,
+                "size": 12,
+                "text": "Invoice-Debit Note"
+            },
+            {
+                "x": 530,
+                "y": 308,
+                "size": 9,
+                "text": "Document no. 2029-100002"
+            },
+            {
+                "x": 530,
+                "y": 324,
+                "size": 9,
+                "text": "Date"
+            },
+            {
+                "x": 626,
+                "y": 324,
+                "size": 9,
+                "text": "02.11.2026"
+            },
+            {
+                "x": 530,
+                "y": 340,
+                "size": 9,
+                "text": "Supplier K00000"
+            },
+            {
+                "x": 81,
+                "y": 420,
+                "size": 9,
+                "text": "Pos."
+            },
+            {
+                "x": 180,
+                "y": 420,
+                "size": 9,
+                "text": "R0000000"
+            },
+            {
+                "x": 376,
+                "y": 420,
+                "size": 9,
+                "text": "TXXXXXX"
+            },
+            {
+                "x": 431,
+                "y": 420,
+                "size": 9,
+                "text": "Terms of deliver Ab Werk"
+            },
+            {
+                "x": 81,
+                "y": 436,
+                "size": 9,
+                "text": "Lorry\/Ship"
+            },
+            {
+                "x": 180,
+                "y": 436,
+                "size": 9,
+                "text": "22 TST 333 22 TST 444 13.10.2026"
+            },
+            {
+                "x": 431,
+                "y": 436,
+                "size": 9,
+                "text": "Your Invoice IHR2026000000902DII"
+            },
+            {
+                "x": 81,
+                "y": 452,
+                "size": 9,
+                "text": "TourNo"
+            },
+            {
+                "x": 77,
+                "y": 488,
+                "size": 9,
+                "text": "We debit you the following amount:"
+            },
+            {
+                "x": 77,
+                "y": 521,
+                "size": 9,
+                "text": "Pos. Code Qty Price Amount"
+            },
+            {
+                "x": 176,
+                "y": 521,
+                "size": 9,
+                "text": "Description"
+            },
+            {
+                "x": 395,
+                "y": 521,
+                "size": 9,
+                "text": "pal"
+            },
+            {
+                "x": 421,
+                "y": 521,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 459,
+                "y": 521,
+                "size": 9,
+                "text": "Qty\/C"
+            },
+            {
+                "x": 538,
+                "y": 521,
+                "size": 9,
+                "text": "Unit"
+            },
+            {
+                "x": 175,
+                "y": 555,
+                "size": 9,
+                "text": "DEBIT BECAUSE OF WRONG PRICE"
+            },
+            {
+                "x": 175,
+                "y": 580,
+                "size": 9,
+                "text": "PRICE AGREED 4,56 EUR"
+            },
+            {
+                "x": 175,
+                "y": 592,
+                "size": 9,
+                "text": "PRICE INVOICED 4,60 EUR"
+            },
+            {
+                "x": 77,
+                "y": 615,
+                "size": 9,
+                "text": "1 16,13"
+            },
+            {
+                "x": 119,
+                "y": 615,
+                "size": 9,
+                "text": "91017951 480 0,01"
+            },
+            {
+                "x": 175,
+                "y": 615,
+                "size": 9,
+                "text": "GRANATAPFEL HICAZ 14 Stk 3,5kg (TR)"
+            },
+            {
+                "x": 395,
+                "y": 615,
+                "size": 9,
+                "text": "3 480 1"
+            },
+            {
+                "x": 538,
+                "y": 615,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 175,
+                "y": 627,
+                "size": 9,
+                "text": "3,5kg (TR)"
+            },
+            {
+                "x": 175,
+                "y": 642,
+                "size": 9,
+                "text": "URSPRUNGSLAND TÜRKEI"
+            },
+            {
+                "x": 175,
+                "y": 657,
+                "size": 9,
+                "text": "LKW\/Container: 900002.10"
+            },
+            {
+                "x": 581,
+                "y": 777,
+                "size": 9,
+                "text": "Amount EUR 16,13"
+            },
+            {
+                "x": 355,
+                "y": 796,
+                "size": 9,
+                "text": "plus VAT with tax-rate code 0,00 16,13"
+            },
+            {
+                "x": 493,
+                "y": 796,
+                "size": 9,
+                "text": "164"
+            },
+            {
+                "x": 551,
+                "y": 796,
+                "size": 9,
+                "text": "%"
+            },
+            {
+                "x": 711,
+                "y": 796,
+                "size": 9,
+                "text": "0,00"
+            },
+            {
+                "x": 554,
+                "y": 819,
+                "size": 9,
+                "text": "Total amount EUR"
+            },
+            {
+                "x": 705,
+                "y": 819,
+                "size": 9,
+                "text": "16,13"
+            },
+            {
+                "x": 73,
+                "y": 1092,
+                "size": 9,
+                "text": "Für unsere Handelsgeschäfte verwenden wir Allgemeine Geschäftsbedingungen."
+            }
+        ],
+        "3": [
+            {
+                "x": 29.76,
+                "y": 791.5,
+                "size": 10,
+                "text": "OGL FOOD TRADE "
+            },
+            {
+                "x": 29.76,
+                "y": 772.5,
+                "size": 9,
+                "text": "ORNEK GMBH Musterstrasse 1 00000 Musterstadt"
+            },
+            {
+                "x": 77,
+                "y": 196,
+                "size": 9,
+                "text": "Asya Fresh Sebza Meyve Nakliye"
+            },
+            {
+                "x": 77,
+                "y": 209,
+                "size": 9,
+                "text": "ORNEK ADRES 1"
+            },
+            {
+                "x": 77,
+                "y": 223,
+                "size": 9,
+                "text": "00000 ORNEKSEHIR"
+            },
+            {
+                "x": 77,
+                "y": 237,
+                "size": 9,
+                "text": "TÜRKEI"
+            },
+            {
+                "x": 530,
+                "y": 290,
+                "size": 12,
+                "text": "Invoice-Debit Note"
+            },
+            {
+                "x": 530,
+                "y": 308,
+                "size": 9,
+                "text": "Document no. 2029-100003"
+            },
+            {
+                "x": 530,
+                "y": 324,
+                "size": 9,
+                "text": "Date"
+            },
+            {
+                "x": 626,
+                "y": 324,
+                "size": 9,
+                "text": "02.11.2026"
+            },
+            {
+                "x": 530,
+                "y": 340,
+                "size": 9,
+                "text": "Supplier K00000"
+            },
+            {
+                "x": 81,
+                "y": 420,
+                "size": 9,
+                "text": "Pos."
+            },
+            {
+                "x": 180,
+                "y": 420,
+                "size": 9,
+                "text": "R0000000"
+            },
+            {
+                "x": 376,
+                "y": 420,
+                "size": 9,
+                "text": "TXXXXXX"
+            },
+            {
+                "x": 431,
+                "y": 420,
+                "size": 9,
+                "text": "Terms of deliver Ab Werk"
+            },
+            {
+                "x": 81,
+                "y": 436,
+                "size": 9,
+                "text": "Lorry\/Ship"
+            },
+            {
+                "x": 180,
+                "y": 436,
+                "size": 9,
+                "text": "33 TST 555 13.10.2026"
+            },
+            {
+                "x": 431,
+                "y": 436,
+                "size": 9,
+                "text": "Your Invoice IHR2026000000903DI"
+            },
+            {
+                "x": 81,
+                "y": 452,
+                "size": 9,
+                "text": "TourNo"
+            },
+            {
+                "x": 77,
+                "y": 488,
+                "size": 9,
+                "text": "We debit you the following amount:"
+            },
+            {
+                "x": 77,
+                "y": 521,
+                "size": 9,
+                "text": "Pos. Code Qty Price Amount"
+            },
+            {
+                "x": 176,
+                "y": 521,
+                "size": 9,
+                "text": "Description"
+            },
+            {
+                "x": 395,
+                "y": 521,
+                "size": 9,
+                "text": "pal"
+            },
+            {
+                "x": 421,
+                "y": 521,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 459,
+                "y": 521,
+                "size": 9,
+                "text": "Qty\/C"
+            },
+            {
+                "x": 538,
+                "y": 521,
+                "size": 9,
+                "text": "Unit"
+            },
+            {
+                "x": 175,
+                "y": 555,
+                "size": 9,
+                "text": "DEBIT BECAUSE OF QUALITY CLAIM"
+            },
+            {
+                "x": 175,
+                "y": 580,
+                "size": 9,
+                "text": "PRICE AGREED 4,58 EUR"
+            },
+            {
+                "x": 175,
+                "y": 592,
+                "size": 9,
+                "text": "PRICE INVOICED 4,58 EUR"
+            },
+            {
+                "x": 77,
+                "y": 615,
+                "size": 9,
+                "text": "1 100,00"
+            },
+            {
+                "x": 119,
+                "y": 615,
+                "size": 9,
+                "text": "91017958 400 0,01"
+            },
+            {
+                "x": 175,
+                "y": 615,
+                "size": 9,
+                "text": "GRANATAPFEL WONDERFUL 10 Stk"
+            },
+            {
+                "x": 395,
+                "y": 615,
+                "size": 9,
+                "text": "2 400 1"
+            },
+            {
+                "x": 538,
+                "y": 615,
+                "size": 9,
+                "text": "Colli"
+            },
+            {
+                "x": 175,
+                "y": 627,
+                "size": 9,
+                "text": "3,5kg (TR)"
+            },
+            {
+                "x": 175,
+                "y": 642,
+                "size": 9,
+                "text": "URSPRUNGSLAND TÜRKEI"
+            },
+            {
+                "x": 175,
+                "y": 657,
+                "size": 9,
+                "text": "LKW\/Container: 900003.10"
+            },
+            {
+                "x": 581,
+                "y": 777,
+                "size": 9,
+                "text": "Amount EUR 100,00"
+            },
+            {
+                "x": 355,
+                "y": 796,
+                "size": 9,
+                "text": "plus VAT with tax-rate code 0,00 100,00"
+            },
+            {
+                "x": 493,
+                "y": 796,
+                "size": 9,
+                "text": "164"
+            },
+            {
+                "x": 551,
+                "y": 796,
+                "size": 9,
+                "text": "%"
+            },
+            {
+                "x": 711,
+                "y": 796,
+                "size": 9,
+                "text": "0,00"
+            },
+            {
+                "x": 554,
+                "y": 819,
+                "size": 9,
+                "text": "Total amount EUR"
+            },
+            {
+                "x": 705,
+                "y": 819,
+                "size": 9,
+                "text": "100,00"
+            },
+            {
+                "x": 73,
+                "y": 1092,
+                "size": 9,
+                "text": "Für unsere Handelsgeschäfte verwenden wir Allgemeine Geschäftsbedingungen."
+            }
+        ]
+    }
+}

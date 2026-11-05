@@ -21,7 +21,7 @@ require_once __DIR__ . '/siparis_core.php';
 require_once __DIR__ . '/siparis_invoice.php';   // siparis_inv_kv_oku/yaz + SIPARIS_INV_GIRDI_KV_ON (yalnız fonksiyon tanımlar, dompdf YÜKLEMEZ)
 
 /** Avizo ayrıştırıcı/kapı sürümü: ayrıştırıcı düzeltilince bump edilir → yalnız Ödeme düğmesi eski `okunamadi`/`taninmadi` kayıtları yeniden dener. */
-const SIPARIS_ODEME_AVIZO_SURUM = 'a1';
+const SIPARIS_ODEME_AVIZO_SURUM = 'a2';   // v492: debit note desteği → eski `taninmadi` (debit PDF'i tanınmıyordu) Ödeme düğmesinde bir kez yeniden denenir
 const SIPARIS_ODEME_AVIZ_KV = 'siparis_odeme_aviz_';
 const SIPARIS_ODEME_AVIZ_MAX = 500;
 
