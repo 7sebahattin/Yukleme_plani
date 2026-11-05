@@ -72,7 +72,7 @@ render_print_page_start('Sipariş Cari Dökümü', 'siparis', 'summary', 'landsc
 <style>
 @page { size: A4 landscape; margin: 0; }
 @media print { body { padding: 10mm; } }
-body.print-siparis .print-sheet { max-width: 1240px; }
+body.print-siparis .print-sheet { max-width: 1440px; }
 /* v489: filtre paneli — Cari Döküm ile AYNI görünüm (sayfa gövdesinden bir ton farklı zemin, alta hizalı tek satır, 32px kutular) */
 .print-sheet > .pr-actions.no-print { display: block; padding: 0; margin: 0 0 14px; border: 0; }
 .sc-filtrebar { background: #eef3fa; border: 1px solid #d5dfec; border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -103,8 +103,8 @@ body.print-siparis .print-sheet { max-width: 1240px; }
 .print-summary-box .sc-pb { display: block; font-size: 1rem; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
 .sc-baslik-not { font-size: .7rem; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--pr-muted); }
 table.print-table.sc-tablo .sc-alt { display: block; margin-top: 2px; font-size: .68rem; font-weight: 400; color: var(--pr-muted); white-space: normal; line-height: 1.25; }
-table.print-table.sc-tablo td.sc-dbt { min-width: 92px; max-width: 130px; }
-table.print-table.sc-tablo td.sc-kalan { min-width: 96px; }
+table.print-table.sc-tablo td.sc-dbt { min-width: 84px; max-width: 120px; }
+table.print-table.sc-tablo td.sc-kalan { min-width: 90px; }
 table.print-table.sc-tablo .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.print-table.sc-tablo tbody tr td { background: #fff; }
 table.print-table.sc-tablo tbody.sc-grup { break-inside: avoid; page-break-inside: avoid; }
@@ -119,7 +119,8 @@ table.print-table.sc-tablo .sc-fark-eksi { color: #b3261e; font-weight: 700; }
 table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
 .sc-cari { break-inside: avoid; page-break-inside: avoid; }
 .sc-cari table.sc-tablo { max-width: 720px; }
-@media screen and (max-width: 900px) { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+@media screen { .sc-kaydir { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; } }
+@media screen { table.print-table.sc-tablo th, table.print-table.sc-tablo td { padding-left: 5px; padding-right: 5px; } table.print-table.sc-tablo { font-size: .76rem; } }
 @media print {
   html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table.print-table.sc-tablo { font-size: 7.6pt; }
