@@ -3591,6 +3591,15 @@ function bb_ulke_adaylari(array $beyan, ?array $plan): array {
     // ön-dolardı.
     $ekle((string)($beyan['company_name'] ?? ''), 'sirket');
 
+    // "OGL-SIRBİSTAN" gibi müşteri-ülke birleşik adında tireden sonraki parça ülke adayıdır
+    // (yalnız ARAMA; 'metin' kaynağı öğrenilmez, ad tam eşleşmedikçe sonuç vermez).
+    $cn = (string)($beyan['company_name'] ?? '');
+    if (preg_match('/^[^\d,]{2,60}$/u', $cn) && str_contains($cn, '-')) {
+        foreach (array_reverse(preg_split('/\s*-\s*/u', $cn) ?: []) as $parca) {
+            if (mb_strlen(trim($parca), 'UTF-8') >= 3) $ekle($parca, 'metin');
+        }
+    }
+
     $ekle(bb_adres_ulke_parcasi((string)($beyan['company_address'] ?? '')), 'adres');
 
     $alici = trim((string)($beyan['buyer_name'] ?? ''));

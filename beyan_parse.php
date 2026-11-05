@@ -315,6 +315,52 @@ function parse_beyan_text(string $raw): array
         }
     }
 
+    // ── Pass 3b (EK, yeni metin biçimi): yalnız ÖNCEKİ geçişlerin açıkta bıraktığı satırlara bakar ──
+    // Eski biçimlerde (LTD/LLC blokları, etiketli satırlar) bu geçiş hiçbir şeyi değiştirmez.
+    //   OGL-SIRBİSTAN                                              → company_name
+    //   LIDL Nova Pazova / Prva juzna radna 3 / 22330 Nova Pazova  → company_address
+    //   Nar Hicaz / Kalibre 14                                     → product_name / product_variety
+    $n = count($lines);
+    $bos = static fn(int $k): bool => $k >= 0 && $k < $n && !$matched[$k] && $lines[$k] !== '';
+
+    // (1) Firma adı + hemen altındaki adres satırı
+    if ($out['company_name'] === null) {
+        for ($i = 0; $i < $n - 1; $i++) {
+            if (!$bos($i) || !$bos($i + 1)) continue;
+            $ad  = $lines[$i];
+            $adr = $lines[$i + 1];
+            if (mb_strlen($ad, 'UTF-8') > 60 || !preg_match('/^\p{L}[\p{L}\s.\-]*$/u', $ad)) continue;
+            // adres: ayraç ("/" ya da ",") ya da posta kodu (5-6 hane) taşımalı
+            if (mb_strlen($adr, 'UTF-8') < 10 || !preg_match('#[/,]|\b\d{5,6}\b#u', $adr)) continue;
+            $out['company_name'] = $ad;
+            $out['company_address'] = trim((string)preg_replace('#\s*/\s*#u', ', ', $adr), " ,");
+            $matched[$i] = $matched[$i + 1] = true;
+            break;
+        }
+    }
+
+    // (2) "Kalibre 14" satırı + hemen üstündeki ürün satırı ("Nar Hicaz" → ürün Nar, çeşit Hicaz)
+    foreach ($lines as $i => $t) {
+        if ($matched[$i] || !preg_match('/^KAL[İI]BRE\s*[:\-]?\s*(\d{1,3}(?:\s*[\/\-]\s*\d{1,3})?)$/ui', $t, $m)) continue;
+        $kal = 'KALİBRE ' . (string)preg_replace('/\s+/', '', $m[1]);
+        $matched[$i] = true;
+        $cesit = '';
+        $pk = $i - 1;                                   // en yakın önceki DOLU satır (arada boş satır olabilir)
+        while ($pk >= 0 && $lines[$pk] === '') $pk--;
+        if ($out['product_name'] === null && $bos($pk)
+            && mb_strlen($lines[$pk], 'UTF-8') <= 40
+            && preg_match('/^\p{L}[\p{L}\s.\-]*$/u', $lines[$pk])) {
+            $parts = (array)preg_split('/\s+/u', $lines[$pk], 2);
+            $out['product_name'] = $parts[0];
+            $matched[$pk] = true;
+            $cesit = trim((string)($parts[1] ?? ''));
+        }
+        if ($out['product_variety'] === null) {
+            $out['product_variety'] = trim($cesit . ' ' . $kal);
+        }
+        break;
+    }
+
     // ── Pass 4: collect unmatched non-empty lines ──
     $unmatched = [];
     foreach ($lines as $i => $t) {
