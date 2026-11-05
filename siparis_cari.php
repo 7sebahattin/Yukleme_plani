@@ -61,10 +61,10 @@ $dbtHucre = static function (array $s): string {   // sevkiyat başına: OGL deb
             . '<span class="sc-alt">' . h(implode(', ', array_map(static fn(array $x): string => (string)$x['no'], (array)$d['liste']))) . '</span>';
     }
     $kk = is_array($s['karsilastirma'] ?? null) ? $s['karsilastirma'] : null;
-    if ($kk === null) return '<td class="num">' . $c1 . '</td><td class="num">—</td>';
+    if ($kk === null) return '<td class="num sc-dbt">' . $c1 . '</td><td class="num sc-kalan">—</td>';
     $kf = (int)$kk['kalan_fark_kurus'];
-    return '<td class="num">' . $c1 . '</td><td class="num ' . ($kf < 0 ? 'sc-fark-eksi' : ($kf > 0 ? 'sc-fark-arti' : '')) . '">' . h(siparis_cari_para_isaretli($kf) . ' EUR')
-        . '<span class="sc-alt">fark ' . h(siparis_cari_para_isaretli((int)$kk['fark_kurus'])) . ' + debit ' . h(siparis_cari_para((int)$kk['debit_kurus'])) . '</span></td>';
+    $alt = (int)$kk['debit_kurus'] > 0 ? '<span class="sc-alt">fark ' . h(siparis_cari_para_isaretli((int)$kk['fark_kurus'])) . ' + debit ' . h(siparis_cari_para((int)$kk['debit_kurus'])) . '</span>' : '';   // debit yoksa kalan = fark: ek satır gereksiz
+    return '<td class="num sc-dbt">' . $c1 . '</td><td class="num sc-kalan ' . ($kf < 0 ? 'sc-fark-eksi' : ($kf > 0 ? 'sc-fark-arti' : '')) . '">' . h(siparis_cari_para_isaretli($kf) . ' EUR') . $alt . '</td>';
 };
 $oY = $v['ozet']['yuklenmemis']; $oL = $v['ozet']['yuklenen']; $oB = $v['ozet']['bekleyen'];
 render_print_page_start('Sipariş Cari Dökümü', 'siparis', 'summary', 'landscape', ['print_pdks.css']);
@@ -102,6 +102,9 @@ body.print-siparis .print-sheet { max-width: 1240px; }
 .print-summary-box .sc-alt { display: block; margin-top: 3px; font-size: .74rem; color: var(--pr-muted); font-variant-numeric: tabular-nums; }
 .print-summary-box .sc-pb { display: block; font-size: 1rem; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
 .sc-baslik-not { font-size: .7rem; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--pr-muted); }
+table.print-table.sc-tablo .sc-alt { display: block; margin-top: 2px; font-size: .68rem; font-weight: 400; color: var(--pr-muted); white-space: normal; line-height: 1.25; }
+table.print-table.sc-tablo td.sc-dbt { min-width: 92px; max-width: 130px; }
+table.print-table.sc-tablo td.sc-kalan { min-width: 96px; }
 table.print-table.sc-tablo .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.print-table.sc-tablo tbody tr td { background: #fff; }
 table.print-table.sc-tablo tbody.sc-grup { break-inside: avoid; page-break-inside: avoid; }
