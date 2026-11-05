@@ -558,6 +558,11 @@
     background:var(--kart); border:1px solid var(--cizgi); box-shadow:var(--golge); }
   .g-ust-sayac svg { width:18px; height:18px; flex:none; }
   .g-ust-sayac:has(.g-ara-say:empty) { display:none; }
+  .g-rapor-btn { display:inline-flex; align-items:center; gap:6px; flex:none; padding:9px 14px; border-radius:14px;
+    background:var(--kart); color:var(--metin); border:1px solid var(--cizgi); box-shadow:var(--golge);
+    font-size:13px; font-weight:800; text-decoration:none; white-space:nowrap; }
+  .g-rapor-btn:hover { border-color:var(--teal); color:var(--teal); }
+  .g-rapor-btn:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
   @media (max-width:599px) {
     /* Dar ekran: sayaç başlığın altına, sağa yaslanır; illüstrasyon yok */
     .g-ust .g-ust-ikon { width:34px; height:34px; }
@@ -565,6 +570,8 @@
     .g-ust .g-ust-aciklama { font-size:12px; }
     .g-ust .baslik { flex:1 1 170px; }
     .g-ust-sayac { margin-left:auto; padding:7px 12px; }
+    .g-rapor-btn { margin-left:auto; padding:7px 12px; }
+    .g-rapor-btn ~ .g-ust-sayac { margin-left:0; }
   }
   @media (min-width:900px) {
     /* Başlık main ile aynı hizada ve genişlikte (main ≥900px'te sola yaslı) */
@@ -1366,6 +1373,8 @@
       <path d="M121 60l23-26-26 22z" fill="#0f47b8" opacity=".55"/>
       <path d="M104 52l40-18" stroke="#ffffff" stroke-opacity=".6" stroke-width="1.2"/>
     </svg>
+    <!-- v494: Gönderim Raporu (ayrı sayfa, üst pencerede açılır; aktif firma ?firma= ile taşınır) -->
+    <a class="g-rapor-btn" id="gonderilenRapor" href="gonderim_rapor.php" target="_top" title="Ülke, ürün ve plakaya göre gönderim raporu">📊 Rapor</a>
     <div class="g-ust-sayac">
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="10" width="4" height="8" rx="1.2" fill="#8fb4f5"/><rect x="8" y="6" width="4" height="12" rx="1.2" fill="#4d82e8"/><rect x="14" y="2" width="4" height="16" rx="1.2" fill="#1d5fe0"/></svg>
       <span class="g-ara-say" id="gonderilenAraSay" aria-live="polite"></span>
@@ -2792,6 +2801,11 @@ $('btnTaslaklar').onclick = () => taslakEkraniAc();
 $('btnGonderilenler').onclick = () => gonderilenEkraniAc();
 $('btnTaslakGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
 $('btnGonderilenGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
+// v494: Gönderim Raporu bağlantısı — aktif firma raporda ön seçili gelsin (tıklama anında; id yalnız beyaz liste karakterleri).
+$('gonderilenRapor').addEventListener('click', function () {
+  const id = aktifFirma && aktifFirma.id ? String(aktifFirma.id) : '';
+  this.href = 'gonderim_rapor.php' + (/^[A-Za-z0-9_\-.]+$/.test(id) ? '?firma=' + encodeURIComponent(id) : '');
+});
 
 async function taslakSayiGuncelle() {
   if (!aktifFirma) return;

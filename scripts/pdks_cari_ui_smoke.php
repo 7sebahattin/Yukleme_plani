@@ -166,6 +166,7 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     // Ortak dışa aktarım yardımcısı (export_menu) gerçek dosyadan — sayfa /tmp'ye kopyalandığı için mutlak yol
     $src = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(dirname(__DIR__) . '/config/xlsx_export.php', true), $src);
+    $src = str_replace("__DIR__ . '/config/print_helpers.php'", var_export(dirname(__DIR__) . '/config/print_helpers.php', true), $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
     $tmp = sys_get_temp_dir() . '/pdkscariui_' . md5($file . serialize($get) . serialize($post)) . '.php';
@@ -270,6 +271,27 @@ ok('filtreliyken GERÇEK güncel bakiye (800,00 TRY, tüm zamanlar) AYRICA göst
 
 echo "\n=== 7c. cavus_ekstre.php — filtresiz iken etiket AYNEN 'GÜNCEL BAKİYE' kalır (regresyon değil) ===\n";
 ok('filtresizken hâlâ sade "GÜNCEL BAKİYE" (dönem etiketi yazılmıyor)', str_contains($s6, 'GÜNCEL BAKİYE') && !str_contains($s6, 'BU DÖNEMİN NET HAREKETİ'));
+
+echo "\n=== 7d. cavus_ekstre.php — v492: Borç / Alacak başlıkları + tip bazlı kırılım ===\n";
+$entAyse = (int)db()->query("SELECT id FROM foreman_daily_entitlements WHERE foreman_id = " . (int)$ayseId . " AND status = 'final' ORDER BY id LIMIT 1")->fetchColumn();
+foreach (["work_period_id INTEGER", "attendance_class_snapshot TEXT DEFAULT 'tam'", "overtime_hours INTEGER DEFAULT 0", "overtime_mode_snapshot TEXT", "overtime_unit_rate TEXT DEFAULT '0.00'", "overtime_total TEXT DEFAULT '0.00'"] as $kt) {
+    try { db()->exec("ALTER TABLE foreman_daily_entitlement_lines ADD COLUMN " . $kt); } catch (Throwable $e) {}
+}
+db()->exec("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = " . $entAyse);
+$insL = db()->prepare("INSERT INTO foreman_daily_entitlement_lines (entitlement_id, worker_type_id, worker_type_code_snapshot, worker_type_name_snapshot, attendance_class_snapshot, worker_count, unit_rate, overtime_hours, overtime_mode_snapshot, overtime_unit_rate, overtime_total, line_total) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+$insL->execute([$entAyse, 1, 'KADIN', 'Kadın', 'tam', 2, '1400.00', 0, null, '0.00', '0.00', '2800.00']);
+$insL->execute([$entAyse, 2, 'ERKEK', 'Erkek', 'tam', 4, '1500.00', 3, 'hourly', '150.00', '450.00', '6450.00']);
+$s6d = renderPage('cavus_ekstre.php', ['foreman_id' => (string)$ayseId]);
+ok('hata sızmadı (kırılım)', !str_starts_with($s6d, '__ERROR__') && !str_contains($s6d, 'Warning:') && !str_contains($s6d, 'Notice:'), substr($s6d, 0, 300));
+ok('başlıklar Borç / Alacak / Bakiye (Artış/Azalış YOK)', str_contains($s6d, '>Alacak<') && str_contains($s6d, '>Borç<') && str_contains($s6d, '>Bakiye<') && !str_contains($s6d, '>Artış<') && !str_contains($s6d, '>Azalış<'));
+ok('kırılım başlıkları: Kadın · Kadın hakediş · Erkek · Erkek hakediş · Fazla mesai', str_contains($s6d, '>Kadın hakediş<') && str_contains($s6d, '>Erkek hakediş<') && str_contains($s6d, '>Fazla mesai (saat)<') && str_contains($s6d, '>Fazla mesai hakediş<'));
+ok('kadın hakediş 2.800,00 ve erkek hakediş (FM hariç) 6.000,00 görünüyor', str_contains($s6d, '2.800,00') && str_contains($s6d, '6.000,00'));
+ok('fazla mesai 450,00 TL tek kalemde', str_contains($s6d, '450,00'));
+ok('TOPLAM satırı var', str_contains($s6d, '>TOPLAM<'));
+ok('bakiye yönü "Alacak" ile yazılıyor (800,00 … Alacak)', (bool)preg_match('/800,00.{0,200}?Alacak/s', $s6d));
+$s6dy = renderPage('cavus_ekstre_yazdir.php', ['foreman_id' => (string)$ayseId]);
+ok('yazdırma: kırılım + Borç/Alacak başlıkları', !str_starts_with($s6dy, '__ERROR__') && str_contains($s6dy, 'Kadın hakediş') && str_contains($s6dy, '<th>Alacak</th>') && str_contains($s6dy, '<th>Borç</th>') && !str_contains($s6dy, 'Azalış'), substr($s6dy, 0, 300));
+@file_put_contents(getenv('EKSTRE_HTML_OUT') ?: sys_get_temp_dir() . '/ekstre_v492.html', $s6d);
 
 echo "\n=== 8. cavus_ekstre.php — geçersiz çavuş id ===\n";
 ok('geçersiz foreman_id header()+exit() ile listeye YÖNLENDİRİYOR (in-process yakalanamaz — Faz 4 UI testinin AYNI kısıtı, dolayısıyla burada TEKRAR ÇAĞRILMIYOR)', true);

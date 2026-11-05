@@ -67,47 +67,46 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
     <?php else: foreach ($ekstre as $cur => $satirlar): if (empty($satirlar)) continue; ?>
 
     <div style="text-align:right;margin:14px 0 2px"><span class="pr-tag"><?= h($cur) ?></span></div>
-    <table class="print-table">
-        <thead><tr><th>Tarih</th><th>İşlem Türü</th><th>Belge / Referans</th><th>Açıklama</th><th>Hakediş / Borç Artışı</th><th>Ödeme / Azalış</th><th>Bakiye</th></tr></thead>
+    <?php
+        $kol = pdks_cari_kirilim_kolonlar($satirlar);
+        $kBaslik = pdks_cari_kirilim_basliklar($kol);
+        $kTop = pdks_cari_kirilim_degerleri(null, $kol, true);
+        $nK = count($kBaslik);
+        $sonBakiye = (float)end($satirlar)['kosan_bakiye'];
+        $durumEtiket = $sonBakiye > 0 ? 'Alacak (Çavuşa Borcumuz)' : ($sonBakiye < 0 ? 'Borç (Çavuş Avansı / Fazla Ödeme)' : 'Hesap Kapalı');
+    ?>
+    <table class="print-table" style="font-size:<?= $nK > 6 ? '9' : '10.5' ?>px">
+        <thead><tr><th>Tarih</th><th>İşlem Türü</th><th>Belge / Açıklama</th><?php foreach ($kBaslik as $kb): ?><th><?= h($kb['ad']) ?></th><?php endforeach; ?><th>Alacak</th><th>Borç</th><th>Bakiye</th></tr></thead>
         <tbody>
-        <?php $toplamArtis = 0.0; $toplamAzalis = 0.0; foreach ($satirlar as $s):
-            $toplamArtis += (float)($s['artis'] ?? 0);
-            $toplamAzalis += (float)($s['azalis'] ?? 0);
-        ?>
+        <?php foreach ($satirlar as $s): $kd = pdks_cari_kirilim_degerleri($s, $kol); [$bTutar, $bYon] = pdks_cari_kirilim_bakiye_yonu($s['kosan_bakiye']); ?>
         <tr>
             <td><?= h(date('d.m.Y', strtotime($s['tarih']))) ?></td>
             <td><?= h($s['tip_etiket']) ?></td>
-            <td><?= h($s['belge']) ?></td>
-            <td><?= h($s['aciklama']) ?></td>
-            <td><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '' ?></td>
-            <td><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '' ?></td>
-            <td class="num"><?= h(number_format((float)$s['kosan_bakiye'], 2, ',', '.')) ?></td>
+            <td><?= h($s['belge']) ?><br><small><?= h($s['aciklama']) ?></small></td>
+            <?php foreach ($kd as $i => $v): ?><td class="num"><?= $v === null ? '' : h(pdks_cari_kirilim_hucre_metni($v, $kBaslik[$i]['tur'])) ?></td><?php endforeach; ?>
+            <td class="num"><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '' ?></td>
+            <td class="num"><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '' ?></td>
+            <td class="num"><?= h($bTutar) ?> <?= h($bYon) ?></td>
         </tr>
-        <?php endforeach; $sonBakiye = (float)end($satirlar)['kosan_bakiye'];
-            $durum = $sonBakiye > 0 ? 'borc' : ($sonBakiye < 0 ? 'avans' : 'kapali');
-            $durumEtiket = match ($durum) {
-                'borc'  => 'Çavuşa Borcumuz',
-                'avans' => 'Çavuş Avansı / Fazla Ödeme',
-                default => 'Hesap Kapalı',
-            };
-        ?>
+        <?php endforeach; ?>
         </tbody>
         <tfoot>
-        <tr><td colspan="4" style="text-align:right">TOPLAM</td>
-            <td class="num"><?= h(number_format($toplamArtis, 2, ',', '.')) ?></td>
-            <td class="num"><?= h(number_format($toplamAzalis, 2, ',', '.')) ?></td>
+        <tr><td colspan="3" style="text-align:right">TOPLAM</td>
+            <?php foreach ($kTop as $i => $v): ?><td class="num"><?= $v === null ? '' : h(pdks_cari_kirilim_hucre_metni($v, $kBaslik[$i]['tur'])) ?></td><?php endforeach; ?>
+            <td class="num"><?= h(number_format($kol['toplam']['alacak_kurus'] / 100, 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format($kol['toplam']['borc_kurus'] / 100, 2, ',', '.')) ?></td>
             <td>—</td></tr>
-        <tr><td colspan="6" style="text-align:right"><?= $_ekstreBaslangicFiltreli ? 'BU DÖNEMİN NET HAREKETİ' : ('KALAN BAKİYE — ' . h($durumEtiket)) ?></td>
+        <tr><td colspan="<?= 5 + $nK ?>" style="text-align:right"><?= $_ekstreBaslangicFiltreli ? 'BU DÖNEMİN NET HAREKETİ' : ('KALAN BAKİYE — ' . h($durumEtiket)) ?></td>
             <td class="num"><?= h(number_format(abs($sonBakiye), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
         <?php if ($_ekstreBaslangicFiltreli):
             $_gercekKurus = (float)($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0);
             $_gercekDurumEtiket = match (true) {
-                $_gercekKurus > 0 => 'Çavuşa Borcumuz',
-                $_gercekKurus < 0 => 'Çavuş Avansı / Fazla Ödeme',
+                $_gercekKurus > 0 => 'Alacak (Çavuşa Borcumuz)',
+                $_gercekKurus < 0 => 'Borç (Çavuş Avansı / Fazla Ödeme)',
                 default => 'Hesap Kapalı',
             };
         ?>
-        <tr><td colspan="6" style="text-align:right">GÜNCEL BAKİYE (tüm zamanlar) — <?= h($_gercekDurumEtiket) ?></td>
+        <tr><td colspan="<?= 5 + $nK ?>" style="text-align:right">GÜNCEL BAKİYE (tüm zamanlar) — <?= h($_gercekDurumEtiket) ?></td>
             <td class="num"><?= h(number_format(abs($_gercekKurus), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
         <?php endif; ?>
         </tfoot>

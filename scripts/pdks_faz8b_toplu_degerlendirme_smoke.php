@@ -165,5 +165,36 @@ ok8bt('basarili=0', $r7['basarili'] === 0);
 ok8bt('1 hata mesajı var (aynı pdks_faz8b_degerlendirme_kaydet\'in KESİN kilidinden geçti)', count($r7['hatalar']) === 1, json_encode($r7));
 ok8bt('kesin dönem approved_attendance_class DEĞİŞMEDİ', $db->query("SELECT approved_attendance_class FROM daily_worker_work_periods WHERE id=$pKesin")->fetchColumn() === null);
 
+echo "\n=== 8. v493 TOPLU FAZLA MESAİ (onayla / reddet) ===\n";
+$db->exec("INSERT INTO daily_work_sessions (id,foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status)
+    VALUES (3,1,'Ayşe Çavuş','C001',540,'2026-09-20','Depo B','open')");
+$fm1 = period8bt($db, 3, 1, '08:00', '17:16');   // FM adayı 1 saat
+$fm2 = period8bt($db, 3, 2, '08:00', '18:20');   // FM adayı 2 saat
+$fm3 = period8bt($db, 3, 3, '08:00', '18:20');   // FM adayı 2 saat (reddedilecek)
+$fmYok = period8bt($db, 3, 4, '08:00', '17:00'); // FM adayı YOK
+$fmKisa = period8bt($db, 3, 5, '08:00', '11:00'); // karar bekleyen kısa
+$fmDb = fn(int $id) => $db->query("SELECT overtime_approved_hours h, approved_attendance_class c FROM daily_worker_work_periods WHERE id=$id")->fetch();
+$r8 = pdks_faz8b_toplu_fm_kaydet([$fm1, $fm2, $fmYok, $pBaskaOturum], 'onayla', 3, 7, $db);
+ok8bt('8a. 2 satır onaylandı, hata yok', $r8['basarili'] === 2 && !$r8['hatalar'], json_encode($r8));
+ok8bt('8b. FM adayı olmayan + başka oturum ATLANDI (2)', $r8['atlandi'] === 2, json_encode($r8));
+ok8bt('8c. onay = hesaplanan saatin TAMAMI (1 ve 2)', (int)$fmDb($fm1)['h'] === 1 && (int)$fmDb($fm2)['h'] === 2);
+ok8bt('8d. FM adayı olmayan dönemin FM alanı NULL kaldı', $fmDb($fmYok)['h'] === null);
+$r8b = pdks_faz8b_toplu_fm_kaydet([$fm3], 'reddet', 3, 7, $db);
+ok8bt('8e. reddet → 0 saat', $r8b['basarili'] === 1 && $fmDb($fm3)['h'] !== null && (int)$fmDb($fm3)['h'] === 0, json_encode($r8b));
+$r8c = pdks_faz8b_toplu_fm_kaydet([$fm1], 'reddet', 3, 7, $db);
+ok8bt('8f. onaylı satır sonradan toplu reddedilebilir (geri dönüş)', $r8c['basarili'] === 1 && (int)$fmDb($fm1)['h'] === 0);
+$r8d = pdks_faz8b_toplu_fm_kaydet([$fm1], 'sil', 3, 7, $db);
+ok8bt('8g. geçersiz karar reddedilir', $r8d['ok'] === false && $r8d['basarili'] === 0);
+$r8e = pdks_faz8b_toplu_fm_kaydet([$fm1, $fm1, $fm1], 'onayla', 3, 7, $db);
+ok8bt('8h. mükerrer id tek işlenir', $r8e['basarili'] === 1);
+$db->exec("INSERT INTO foreman_daily_entitlements (session_id,foreman_id,work_date,depo,status) VALUES (3,1,'2026-09-20','Depo B','final')");
+$r8f = pdks_faz8b_toplu_fm_kaydet([$fm2], 'reddet', 3, 7, $db);
+ok8bt('8i. KESİN hakedişte toplu FM değişmez (hata döner)', $r8f['basarili'] === 0 && count($r8f['hatalar']) === 1 && (int)$fmDb($fm2)['h'] === 2, json_encode($r8f));
+$src = file_get_contents(__DIR__ . '/../mesai_degerlendirme.php');
+ok8bt('8j. sayfa: csrf + yetki + gerçek yazma yolu', str_contains($src, "'fm_toplu_kaydet'") && str_contains($src, 'pdks_faz8b_toplu_fm_kaydet(') && preg_match("/fm_toplu_kaydet.*?csrf_check.*?require_pdks_hakedis/s", $src) === 1);
+$fnSrc = file_get_contents(__DIR__ . '/../config/pdks_faz8b.php');
+preg_match('/function pdks_faz8b_toplu_fm_kaydet.*?\n\}\n/s', $fnSrc, $mm);
+ok8bt('8k. toplu FM gövdesinde doğrudan UPDATE YOK (ikinci yazma yolu açılmadı)', isset($mm[0]) && !preg_match('/UPDATE\s+daily_worker_work_periods/i', $mm[0]));
+
 echo "\n=== SONUÇ: $gecen geçti, $hata hata ===\n";
 exit($hata === 0 ? 0 : 1);

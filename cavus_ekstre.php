@@ -62,14 +62,23 @@ if (isset($_GET['xlsx'])) {
         $bilgi = [['Çavuş', $cavus['name']], ['Dönem', ($baslangic === '' && $bitis === '') ? 'Tüm zamanlar' : $donem], ['Para Birimi', $cur],
                   [$_ekstreBaslangicFiltreli ? 'Bu Dönemin Net Hareketi' : 'Güncel Bakiye', $son, 'tutar']];
         if ($_ekstreBaslangicFiltreli) $bilgi[] = ['Güncel Bakiye (tüm zamanlar)', $_ekstreGercekBakiye[$cur]['bakiye'] ?? 0, 'tutar'];
+        $kol = pdks_cari_kirilim_kolonlar($satirlar);
+        $kBaslik = pdks_cari_kirilim_basliklar($kol);
+        $sutunlar = [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'İşlem Türü'], ['baslik' => 'Belge / Referans No'], ['baslik' => 'Açıklama']];
+        foreach ($kBaslik as $kb) $sutunlar[] = $kb['tur'] === 'adet' ? ['baslik' => $kb['ad'], 'tip' => 'tamsayi', 'topla' => true] : ['baslik' => $kb['ad'], 'tip' => 'tutar', 'topla' => true];
+        $sutunlar[] = ['baslik' => 'Alacak', 'tip' => 'tutar', 'topla' => true];
+        $sutunlar[] = ['baslik' => 'Borç', 'tip' => 'tutar', 'topla' => true];
+        $sutunlar[] = ['baslik' => 'Bakiye', 'tip' => 'tutar'];
         $sayfalar[] = [
             'ad' => 'Ekstre ' . $cur, 'baslik' => $cavus['name'] . ' — Ekstre (' . $cur . ')',
-            'aciklama' => 'Dönem: ' . $donem . ($_ekstreBaslangicFiltreli ? ' · Koşan bakiye dönem başında 0\'dan başlar' : ''),
+            'aciklama' => 'Dönem: ' . $donem . ' · Bakiye: + Alacak (çavuşun alacağı) / − Borç (avans)' . ($_ekstreBaslangicFiltreli ? ' · Koşan bakiye dönem başında 0\'dan başlar' : ''),
             'bilgi' => $bilgi, 'toplam' => true,
-            'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'İşlem Türü'], ['baslik' => 'Belge / Referans No'], ['baslik' => 'Açıklama'],
-                           ['baslik' => 'Hakediş / Borç Artışı', 'tip' => 'tutar', 'topla' => true], ['baslik' => 'Ödeme / Azalış', 'tip' => 'tutar', 'topla' => true],
-                           ['baslik' => 'Bakiye', 'tip' => 'tutar']],
-            'satirlar' => array_map(fn($x) => [$x['tarih'], $x['tip_etiket'], $x['belge'], $x['aciklama'], $x['artis'] ?? '', $x['azalis'] ?? '', $x['kosan_bakiye']], $satirlar),
+            'sutunlar' => $sutunlar,
+            'satirlar' => array_map(function ($x) use ($kol) {
+                $kd = array_map(fn($v) => is_array($v) ? $v['adet'] : ($v === null ? '' : $v / 100), pdks_cari_kirilim_degerleri($x, $kol));
+                // adet → tamsayı; tutar → kuruştan TL
+                return [$x['tarih'], $x['tip_etiket'], $x['belge'], $x['aciklama'], ...$kd, $x['artis'] ?? '', $x['azalis'] ?? '', $x['kosan_bakiye']];
+            }, $satirlar),
         ];
     }
     if (!$sayfalar) $sayfalar = [['ad' => 'Ekstre', 'baslik' => $cavus['name'] . ' — Ekstre', 'aciklama' => 'Dönem: ' . $donem,
@@ -134,35 +143,48 @@ render_flash();
 <h2 style="font-size:1.05rem"><?= h($cur) ?> Hareketleri</h2>
 <?php if (empty($satirlar)): ?>
 <div class="pdks-empty"><p>Bu para biriminde hareket yok.</p></div>
-<?php else: $sonBakiye = end($satirlar)['kosan_bakiye']; ?>
+<?php else:
+    $sonBakiye = end($satirlar)['kosan_bakiye'];
+    $kol = pdks_cari_kirilim_kolonlar($satirlar);
+    $kBaslik = pdks_cari_kirilim_basliklar($kol);
+    $kTop = pdks_cari_kirilim_degerleri(null, $kol, true);
+    $nK = count($kBaslik);
+    $tl = fn(int $kurus): string => number_format($kurus / 100, 2, ',', '.');
+?>
 
 <div class="table-wrap pc-only" style="margin-bottom:10px">
-<table class="data-table">
-<thead><tr><th>Tarih</th><th>Tip</th><th>Belge/Referans</th><th>Açıklama</th><th>Artış</th><th>Azalış</th><th>Koşan Bakiye</th></tr></thead>
+<table class="data-table ce-tablo">
+<thead><tr><th>Tarih</th><th>Tip</th><th>Belge / Açıklama</th><?php foreach ($kBaslik as $kb): ?><th<?= $kb['tur'] === 'adet' ? '' : ' class="ce-sag"' ?>><?= h($kb['ad']) ?></th><?php endforeach; ?><th class="ce-sag">Alacak</th><th class="ce-sag">Borç</th><th class="ce-sag">Bakiye</th></tr></thead>
 <tbody>
-<?php foreach ($satirlar as $s): ?>
+<?php foreach ($satirlar as $s): $kd = pdks_cari_kirilim_degerleri($s, $kol); [$bTutar, $bYon] = pdks_cari_kirilim_bakiye_yonu($s['kosan_bakiye']); ?>
 <tr>
     <td class="muted"><?= h(date('d.m.Y', strtotime($s['tarih']))) ?></td>
     <td><span class="pdks-badge <?= in_array($s['tip'], ['HAKEDIS','CAVUS_HAKEDIS'], true) ? 'pdks-badge-eksik_cikis' : 'pdks-badge-aktif' ?>"><?= h($s['tip_etiket']) ?></span></td>
-    <td class="pdks-uid"><?= h($s['belge']) ?></td>
-    <td><?= h($s['aciklama']) ?></td>
-    <td><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '—' ?></td>
-    <td><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '—' ?></td>
-    <td><strong><?= h(number_format((float)$s['kosan_bakiye'], 2, ',', '.')) ?></strong></td>
+    <td><span class="pdks-uid"><?= h($s['belge']) ?></span><br><span class="muted" style="font-size:.8rem"><?= h($s['aciklama']) ?></span></td>
+    <?php foreach ($kd as $i => $v): ?><td<?= $kBaslik[$i]['tur'] === 'adet' ? '' : ' class="ce-sag"' ?>><?= $v === null ? '' : h(pdks_cari_kirilim_hucre_metni($v, $kBaslik[$i]['tur'])) ?></td><?php endforeach; ?>
+    <td class="ce-sag"><strong><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '—' ?></strong></td>
+    <td class="ce-sag"><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '—' ?></td>
+    <td class="ce-sag"><strong><?= h($bTutar) ?></strong> <span class="muted" style="font-size:.8rem"><?= h($bYon) ?></span></td>
 </tr>
 <?php endforeach; ?>
 </tbody>
 <tfoot>
-<tr><td colspan="6" style="text-align:right;font-weight:700"><?= $_ekstreBaslangicFiltreli ? 'BU DÖNEMİN NET HAREKETİ' : 'GÜNCEL BAKİYE' ?></td><td style="font-weight:800"><?= h(number_format((float)$sonBakiye, 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
-<?php if ($_ekstreBaslangicFiltreli): ?>
-<tr><td colspan="6" style="text-align:right;font-weight:700">GÜNCEL BAKİYE (tüm zamanlar)</td><td style="font-weight:800"><?= h(number_format((float)($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
+<tr><td colspan="3" style="text-align:right;font-weight:700">TOPLAM</td>
+    <?php foreach ($kTop as $i => $v): ?><td<?= $kBaslik[$i]['tur'] === 'adet' ? '' : ' class="ce-sag"' ?>><strong><?= $v === null ? '' : h(pdks_cari_kirilim_hucre_metni($v, $kBaslik[$i]['tur'])) ?></strong></td><?php endforeach; ?>
+    <td style="text-align:right;font-weight:800"><?= h($tl($kol['toplam']['alacak_kurus'])) ?></td>
+    <td style="text-align:right;font-weight:800"><?= h($tl($kol['toplam']['borc_kurus'])) ?></td>
+    <td></td></tr>
+<?php [$sTutar, $sYon] = pdks_cari_kirilim_bakiye_yonu($sonBakiye); ?>
+<tr><td colspan="<?= 5 + $nK ?>" style="text-align:right;font-weight:700"><?= $_ekstreBaslangicFiltreli ? 'BU DÖNEMİN NET HAREKETİ' : 'GÜNCEL BAKİYE' ?></td><td style="text-align:right;font-weight:800"><?= h($sTutar) ?> <?= h($cur) ?> <span class="muted" style="font-size:.8rem"><?= h($sYon) ?></span></td></tr>
+<?php if ($_ekstreBaslangicFiltreli): [$gTutar, $gYon] = pdks_cari_kirilim_bakiye_yonu($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0); ?>
+<tr><td colspan="<?= 5 + $nK ?>" style="text-align:right;font-weight:700">GÜNCEL BAKİYE (tüm zamanlar)</td><td style="text-align:right;font-weight:800"><?= h($gTutar) ?> <?= h($cur) ?> <span class="muted" style="font-size:.8rem"><?= h($gYon) ?></span></td></tr>
 <?php endif; ?>
 </tfoot>
 </table>
 </div>
 
 <div class="pdks-cards mobile-only" style="margin-bottom:18px">
-<?php foreach ($satirlar as $s): ?>
+<?php foreach ($satirlar as $s): $kd = pdks_cari_kirilim_degerleri($s, $kol); [$bTutar, $bYon] = pdks_cari_kirilim_bakiye_yonu($s['kosan_bakiye']); ?>
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
@@ -171,15 +193,24 @@ render_flash();
         </div>
         <span class="pdks-badge <?= in_array($s['tip'], ['HAKEDIS','CAVUS_HAKEDIS'], true) ? 'pdks-badge-eksik_cikis' : 'pdks-badge-aktif' ?>"><?= h($s['tip_etiket']) ?></span>
     </div>
-    <div class="pdks-kiosk-counter-row"><span>Artış</span><span class="n"><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '—' ?></span></div>
-    <div class="pdks-kiosk-counter-row"><span>Azalış</span><span class="n"><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '—' ?></span></div>
-    <div class="pdks-kiosk-counter-row"><span>Koşan Bakiye</span><span class="n"><strong><?= h(number_format((float)$s['kosan_bakiye'], 2, ',', '.')) ?></strong></span></div>
+    <?php foreach ($kBaslik as $i => $kb): if ($kb['tur'] !== 'adet') continue;
+        // adet sütunu + hemen sonraki tutar sütunu tek satırda ("Kadın: 2 · 2.800,00")
+        $adet = $kd[$i] ?? null; $tutar = $kBaslik[$i + 1]['tur'] ?? null; $tutarV = $tutar === 'tutar' ? ($kd[$i + 1] ?? null) : null;
+        if ($adet === null && $tutarV === null) continue; ?>
+    <div class="pdks-kiosk-counter-row"><span><?= h($kb['ad']) ?><?= $adet !== null ? ': ' . h(pdks_cari_kirilim_hucre_metni($adet, 'adet')) : '' ?></span><span class="n"><?= $tutarV !== null ? h($tl($tutarV)) : '—' ?></span></div>
+    <?php endforeach; ?>
+    <?php if ($kol['diger'] && ($kd[$nK - 1] ?? null) !== null): ?>
+    <div class="pdks-kiosk-counter-row"><span>Diğer (çavuş ücreti / servis)</span><span class="n"><?= h($tl((int)$kd[$nK - 1])) ?></span></div>
+    <?php endif; ?>
+    <div class="pdks-kiosk-counter-row"><span>Alacak</span><span class="n"><strong><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '—' ?></strong></span></div>
+    <div class="pdks-kiosk-counter-row"><span>Borç</span><span class="n"><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '—' ?></span></div>
+    <div class="pdks-kiosk-counter-row"><span>Bakiye</span><span class="n"><strong><?= h($bTutar) ?></strong> <?= h($bYon) ?></span></div>
 </div>
 <?php endforeach; ?>
-<?php if ($_ekstreBaslangicFiltreli): ?>
+<?php if ($_ekstreBaslangicFiltreli): [$sTutar, $sYon] = pdks_cari_kirilim_bakiye_yonu($sonBakiye); [$gTutar, $gYon] = pdks_cari_kirilim_bakiye_yonu($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0); ?>
 <div class="pdks-card-item">
-    <div class="pdks-kiosk-counter-row"><span>Bu Dönemin Net Hareketi</span><span class="n"><strong><?= h(number_format((float)$sonBakiye, 2, ',', '.')) ?> <?= h($cur) ?></strong></span></div>
-    <div class="pdks-kiosk-counter-row"><span>Güncel Bakiye (tüm zamanlar)</span><span class="n"><strong><?= h(number_format((float)($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0), 2, ',', '.')) ?> <?= h($cur) ?></strong></span></div>
+    <div class="pdks-kiosk-counter-row"><span>Bu Dönemin Net Hareketi</span><span class="n"><strong><?= h($sTutar) ?> <?= h($cur) ?></strong> <?= h($sYon) ?></span></div>
+    <div class="pdks-kiosk-counter-row"><span>Güncel Bakiye (tüm zamanlar)</span><span class="n"><strong><?= h($gTutar) ?> <?= h($cur) ?></strong> <?= h($gYon) ?></span></div>
 </div>
 <?php endif; ?>
 </div>
