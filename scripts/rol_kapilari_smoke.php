@@ -143,6 +143,17 @@ ok('admin seed ($all_p) üç hizli_maliyet.* yetkisini içerir; operator/muhaseb
     && !preg_match("/'(operator|viewer|muhasebe|ik)'\s*=>\s*\[[^\]]*hizli_maliyet/", $hsrc));
 $IS_ADMIN = false;
 
+// v498: beyan.yukleme_bildir TEK BAŞINA Beyanlar sayfasına girer (beyan.read olmadan); beyan.write açmaz.
+$PERMS = ['beyan.yukleme_bildir'];
+ok('yalnız beyan.yukleme_bildir → beyanlar.php (beyan_sayfa_erisimi)',
+    first_allowed_page() === 'beyanlar.php' && beyan_sayfa_erisimi() && can_yukleme_bildir() && !can('beyan.read'));
+$PERMS = ['beyan.write', 'records.write'];
+ok('beyan.write (read olmadan) yukleme_bildir/sayfa kapısını AÇMAZ',
+    !can_yukleme_bildir() && !beyan_sayfa_erisimi() && first_allowed_page() !== 'beyanlar.php');
+ok('katalogda beyan.yukleme_bildir var; admin seed ($all_p) içerir, operator/viewer seed\'i içermez',
+    isset(permission_catalog()['Beyanlar']['beyan.yukleme_bildir'])
+    && str_contains($hsrc, "'beyan.delete','beyan.yukleme_bildir','maliyet.read'")
+    && !preg_match("/'(operator|viewer|muhasebe|ik)'\s*=>\s*\[[^\]]*yukleme_bildir/", $hsrc));
 $IS_ADMIN = true; $PERMS = [];
 ok('admin (yetkisi boşalmış olsa da) → beyanlar.php',
     first_allowed_page() === 'beyanlar.php', 'admin hiçbir yere gidemiyor');

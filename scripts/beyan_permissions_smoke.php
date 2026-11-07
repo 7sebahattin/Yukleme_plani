@@ -6,6 +6,9 @@ require_once dirname(__DIR__) . '/config/beyan_permissions.php';
 $source = file_get_contents(dirname(__DIR__) . '/config/helpers.php');
 preg_match('/function can_beyan\(string \$perm\): bool \{.*?\n\}/s', $source, $match);
 eval($match[0]);
+// v498: Yükleme Bildir kapısı da GERÇEK fonksiyondan (helpers.php) alınır.
+preg_match('/function can_yukleme_bildir\(\): bool \{.*?\n\}/s', $source, $match2);
+eval($match2[0]);
 $permissions = [];
 $admin = false;
 function can(string $p): bool { return in_array($p, $GLOBALS['permissions'], true); }
@@ -68,7 +71,7 @@ check_permission('driver fields kept without contact.write', $protected['driver_
 $permissions = ['beyan.read','beyan.edit','beyan.permissions.detailed','beyan.contact.read','beyan.contact.write'];
 $protected = beyan_protect_input(['driver_name' => 'NEW', 'driver_phone' => '3333333'], ['driver_name' => 'OLD']);
 check_permission('driver fields editable with contact.write', $protected['driver_name'] === 'NEW' && $protected['driver_phone'] === '3333333');
-foreach ([['beyan_create.php','create'], ['beyan_bulk_save.php','create'], ['beyan_kopyala.php','create'], ['beyan_edit.php','edit'], ['beyan_edit.php','status'], ['beyan_eslestir.php','match'], ['api_beyan_bildirim.php','notify']] as [$endpoint, $action]) {
+foreach ([['beyan_create.php','create'], ['beyan_bulk_save.php','create'], ['beyan_kopyala.php','create'], ['beyan_edit.php','edit'], ['beyan_edit.php','status'], ['beyan_eslestir.php','match'], ['api_beyan_bildirim.php','notify'], ['api_beyansiz_yukleme.php','yukleme_bildir']] as [$endpoint, $action]) {
     $proc = proc_open([PHP_BINARY, __FILE__, '--endpoint', $endpoint, $action], [0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']], $pipes);
     if (!is_resource($proc)) throw new RuntimeException('Unable to launch endpoint test');
     fclose($pipes[0]);
@@ -77,4 +80,16 @@ foreach ([['beyan_create.php','create'], ['beyan_bulk_save.php','create'], ['bey
     $code = proc_close($proc);
     check_permission('direct POST denied before database: ' . $endpoint . '/' . $action . ' ' . $out . $err, $code === 0 && str_contains($out, '|STATUS=403') && $err === '');
 }
+// v498: beyan.write / beyan.read yeni yetkiyi VERMEZ; yalnız açıkça verilince açılır.
+$admin = false;
+$permissions = beyan_expand_role_permissions(['beyan.read','beyan.write']);
+check_permission('legacy write does NOT grant yukleme_bildir', !can_yukleme_bildir());
+$permissions = ['beyan.read','beyan.write','beyan.permissions.detailed','beyan.notify'];
+check_permission('detailed notify does NOT grant yukleme_bildir', !can_yukleme_bildir());
+$permissions = ['beyan.yukleme_bildir'];
+check_permission('explicit yukleme_bildir grants (without beyan.read)', can_yukleme_bildir() && !can_beyan('read'));
+$admin = true;
+$permissions = [];
+check_permission('admin always yukleme_bildir', can_yukleme_bildir());
+$admin = false;
 echo "Beyan permissions: $tests checks passed.\n";

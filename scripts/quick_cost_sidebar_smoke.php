@@ -13,6 +13,7 @@ function can(string $permission): bool { return in_array($permission, $GLOBALS['
 function is_admin(): bool { return $GLOBALS['admin']; }
 function can_mail(string $permission): bool { return false; }
 function can_siparis(string $permission): bool { return false; }
+function beyan_sayfa_erisimi(): bool { return is_admin() || can('beyan.read'); }
 function nav_ptak_gorunur(): bool { return false; }
 // GERÇEK can_hizli_maliyet() (config/helpers.php) kaynaktan alınır; kapı kopyası yok.
 $gateStart = strpos($source, 'function can_hizli_maliyet(string $perm): bool {');

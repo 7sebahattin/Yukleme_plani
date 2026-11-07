@@ -142,6 +142,30 @@ function hks_liste_ad($cache, $listeAnahtari, $id) {
   return null;
 }
 
+// Karşı taraf TC/VKN denetimi (var → 10/11 hane → 11 haneyse algoritma). Normal
+// yurt içi doğrulama ile eksik (tamamlanacak) taslak yolu AYNI kuralı kullanır.
+// Hata metni ya da null döner.
+function hks_ikinci_tc_hatasi(array $o): ?string {
+  if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
+  // Hane denetimi: TC 11, VKN 10 hanedir. Bozuk bir değer eskiden sessizce
+  // HKS'e gidip geri alınamaz çağrıda "Mernis sisteminde bulunamadı" ile
+  // reddediliyordu — artık taslak kaydında/gönderim öncesi burada durur.
+  $tcTemiz = hks_tc_normalize($o['ikinciTc']);
+  $tcHane  = strlen($tcTemiz);
+  if ($tcHane !== 10 && $tcHane !== 11) {
+    return 'Karşı taraf TC/Vergi No geçersiz — TC 11, Vergi No 10 rakam olmalıdır ' .
+           '(girilen: ' . $tcHane . ' rakam).';
+  }
+  // TC ALGORİTMA DENETİMİ (yalnız 11 hanede): rakamı yanlış/yer değiştirmiş bir TC
+  // MERNİS'te BULUNMAZ. VKN (10 hane) bu algoritmaya tabi değildir.
+  if ($tcHane === 11 && !hks_tc_algoritma_gecerli($tcTemiz)) {
+    return 'Karşı taraf TC Kimlik No (' . $tcTemiz . ') geçersiz — kimlik numarası ' .
+           'doğrulama algoritmasından geçmiyor. Rakamları kişinin kimliğiyle ' .
+           'karşılaştırın (en sık neden: iki rakamın yer değiştirmesi).';
+  }
+  return null;
+}
+
 // Doğrulama (taslak/bildirim ortak) — yurt dışı (mevcut export) ve yurt içi (Sevk
 // Etme / yurt içi Satış / Satın Alım / Üreticiden Sevk Alım) için ayrı kurallar.
 // Yurt dışı yolu birebir korunur.
@@ -157,8 +181,15 @@ function hks_liste_ad($cache, $listeAnahtari, $id) {
 // fiyat, karşı taraf, yurt içi/dışı, hedef) DEĞİŞMEDEN çalışır. Gönderim
 // anında künyeler çözüldükten sonra bu fonksiyon $planMi=false ile TEKRAR
 // çağrılır — yani canlıya giden bildirim her zaman tam denetimden geçer.
-function hks_bildirim_dogrula($g, $planMi = false) {
+//
+// $fiyatsizIzin (v498): taslak fiyatsız yazılabilir (ortak.fiyatBekliyor — fiyat
+// Hal Kayıt'ta GÖNDERİMDE girilir); yalnız fiyat kuralları atlanır.
+// $eksikIzin (v498): yurt içi "Yükleme Bildir" taslağı (ortak.tamamlanacak) EKSİK
+// yazılabilir; yalnız TC/VKN biçimi, plaka, planKg/ürün, bildirim türü korunur.
+// Gönderim anında bu fonksiyon varsayılan (katı) parametrelerle çağrılır.
+function hks_bildirim_dogrula($g, $planMi = false, $fiyatsizIzin = false, $eksikIzin = false) {
   $o = $g['ortak'] ?? [];
+  $eksikIzin = $eksikIzin && !empty($o['yurtIci']) && !empty($o['tamamlanacak']);
   if ($planMi) {
     // Plan taslağı referanssız türlerde (Satın Alım / Üreticiden Sevk Alım)
     // anlamsızdır: o türlerde künye zaten kullanılmaz, malın tanımı girilir.
@@ -172,7 +203,7 @@ function hks_bildirim_dogrula($g, $planMi = false) {
     if (count($g['satirlar']) > 100) return 'Tek seferde en fazla 100 bildirim.';
   }
   // Her iki modda zorunlu ortak alanlar
-  foreach (['sifatId', 'bildirimTuruId', 'isletmeTuruId'] as $alan) {
+  foreach ($eksikIzin ? ['bildirimTuruId'] : ['sifatId', 'bildirimTuruId', 'isletmeTuruId'] as $alan) {
     if (empty($o[$alan])) return 'Eksik alan: ' . $alan;
   }
   if (empty($o['plaka']) && !(!empty($o['belgeNo']) && !empty($o['belgeTipiId']))) {
@@ -197,6 +228,12 @@ function hks_bildirim_dogrula($g, $planMi = false) {
       return 'İthalat işleminde gelen ülke seçilmeli.';
     }
   }
+  if ($eksikIzin) {
+    // Eksik (Hal Kayıt'ta Düzenle ile tamamlanacak) yurt içi taslak: yalnız
+    // karşı taraf TC/VKN biçimi. Sıfat, üretici kısıtları, kayıtsız kimlik,
+    // il/ilçe/belde, gidecek işyeri ve fiyat GÖNDERİMDE tam denetlenir.
+    return hks_ikinci_tc_hatasi($o);
+  }
   if (!empty($o['yurtIci'])) {
     $uret = hks_uret_sevk_mi($o);
     // KİMLİK BÜTÜNLÜĞÜ: karşı taraf için Ad/Ünvan veya Cep gönderiyorsak KPS'e EKSİK
@@ -213,25 +250,8 @@ function hks_bildirim_dogrula($g, $planMi = false) {
              'KPS, TC ile doğum tarihini BİRLİKTE doğrular; eksik kimlikle gönderilen ' .
              'bildirim "Mernis sisteminde bulunamadı" hatası verir.';
     }
-    // Yurt içi: karşı taraf + hedef zorunlu.
-    if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
-    // Hane denetimi: TC 11, VKN 10 hanedir. Bozuk bir değer eskiden sessizce
-    // HKS'e gidip geri alınamaz çağrıda "Mernis sisteminde bulunamadı" ile
-    // reddediliyordu — artık taslak kaydında/gönderim öncesi burada durur.
-    $__tcTemiz = hks_tc_normalize($o['ikinciTc']);
-    $__tcHane  = strlen($__tcTemiz);
-    if ($__tcHane !== 10 && $__tcHane !== 11) {
-      return 'Karşı taraf TC/Vergi No geçersiz — TC 11, Vergi No 10 rakam olmalıdır ' .
-             '(girilen: ' . $__tcHane . ' rakam).';
-    }
-    // TC ALGORİTMA DENETİMİ (yalnız 11 hanede): rakamı yanlış/yer değiştirmiş bir TC
-    // biçimsel olarak doğru görünür ama MERNİS'te BULUNMAZ. Geri alınamaz çağrıdan
-    // önce burada yakalanır. VKN (10 hane) bu algoritmaya tabi değildir.
-    if ($__tcHane === 11 && !hks_tc_algoritma_gecerli($__tcTemiz)) {
-      return 'Karşı taraf TC Kimlik No (' . $__tcTemiz . ') geçersiz — kimlik numarası ' .
-             'doğrulama algoritmasından geçmiyor. Rakamları kişinin kimliğiyle ' .
-             'karşılaştırın (en sık neden: iki rakamın yer değiştirmesi).';
-    }
+    // Yurt içi: karşı taraf + hedef zorunlu (TC/VKN denetimi: hks_ikinci_tc_hatasi).
+    if ($__tcHata = hks_ikinci_tc_hatasi($o)) return $__tcHata;
     if (empty($o['ikinciSifatId'])) return 'Karşı taraf sıfatı gerekli.';
 
     // ── ÜRETİCİDEN SEVK ALIM (docx kuralları) ──────────────────────────────
@@ -338,11 +358,11 @@ function hks_bildirim_dogrula($g, $planMi = false) {
       if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
     }
     // Fiyat yalnızca Sevk Etme dışında (fiyatGonder=true) zorunlu.
-    if (!empty($o['fiyatGonder']) && empty($o['fiyat'])) return 'Birim fiyat gerekli.';
+    if (!$fiyatsizIzin && !empty($o['fiyatGonder']) && empty($o['fiyat'])) return 'Birim fiyat gerekli.';
   } else {
     // Yurt dışı (mevcut export): ülke + fiyat zorunlu.
     if (empty($o['ulkeId'])) return 'Eksik alan: ulkeId';
-    if (empty($o['fiyat']))  return 'Eksik alan: fiyat';
+    if (!$fiyatsizIzin && empty($o['fiyat']))  return 'Eksik alan: fiyat';
   }
   return null;
 }
@@ -368,7 +388,10 @@ function hks_taslak_olustur(array $g): array {
   // PLAN TASLAĞI: künye seçilmeden, yalnız toplam kilo + fiyat ile kaydedilir.
   // Künyeler gönderim anında canlı stoktan çözülür (hks_plan_kunye_coz).
   $planMi = (float)($g['ortak']['planKg'] ?? 0) > 0 && empty($g['satirlar']);
-  $hata = hks_bildirim_dogrula($g, $planMi);
+  // v498: bayraklar ortak'tan türetilir (yazıcılar: yalnız beyan uçları).
+  $fiyatsiz = !empty($g['ortak']['fiyatBekliyor']);
+  $eksik    = !empty($g['ortak']['tamamlanacak']) && !empty($g['ortak']['yurtIci']);
+  $hata = hks_bildirim_dogrula($g, $planMi, $fiyatsiz, $eksik);
   if ($hata) return ['hata' => $hata, 'kod' => 400];
 
   $veri = json_encode([

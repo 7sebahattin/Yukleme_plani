@@ -41,4 +41,7 @@ foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row inve
 $codes=[]; foreach ($rows as $row) foreach ($row['actions'] as $action) $codes[]=$action['permission'];
 matrix_ok(in_array('records.pallet.create',$codes,true),'Pallet create editor control absent');
 matrix_ok(in_array('reports.yukleme.read',$codes,true),'Report child editor control absent');
+matrix_ok(in_array('beyan.yukleme_bildir',$codes,true),'Yükleme Bildir editor control absent');
+matrix_ok(!in_array('beyan.yukleme_bildir',role_matrix_expand_permissions(['beyan.read','beyan.write']),true),'Legacy beyan.write expanded to yukleme_bildir');
+matrix_ok(!in_array('beyan.yukleme_bildir',role_matrix_expand_permissions(['role.permissions.detailed','beyan.read']),true),'Detailed beyan.read expanded to yukleme_bildir');
 echo "Role matrix: $checks checks passed.\n";

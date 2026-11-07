@@ -473,7 +473,8 @@ function render_liste(array $get): string {
     if ($tmp === null) {
         $tmp = render_kaynak('beyanlar.php', 'kop_liste_', [
             'const BEYAN_PER_PAGE = 50;' => "defined('BEYAN_PER_PAGE') || define('BEYAN_PER_PAGE', 50);",
-            "__DIR__ . '/_beyan_liste.php'" => var_export($ROOT . '/_beyan_liste.php', true),
+            // v498: birden çok partial (_beyan_liste, _beyanlar_baslik, _yukleme_bildir_modal, config/beyansiz_yukleme) → gerçek köke
+            "__DIR__ . '/" => var_export($ROOT, true) . " . '/",
         ]);
         $src = (string)file_get_contents($tmp);
         $a = strpos($src, 'function valid_date_beyan');

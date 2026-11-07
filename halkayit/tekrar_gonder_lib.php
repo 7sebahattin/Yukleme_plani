@@ -65,6 +65,8 @@ function hks_kopya_skaler($v): bool {
   return $v === null || is_string($v) || is_int($v) || is_float($v) || is_bool($v);
 }
 
+// v498: ortak.fiyatBekliyor / ortak.tamamlanacak bayrakları BİLEREK beyaz listede DEĞİL —
+// kopya (Tekrar gönder) bayrak taşımaz; taslağı tam alanlarla yeniden kaydeder.
 // Gönderilen taslağın beyaz listeli kopyası. GÖNDERİMİ ASLA BOZMAZ: her hata
 // yutulur ve null döner (taslak_gonder geri alınamaz akışın ortasında çağırır).
 // Dönüş: ['v' => 1, 'ortak' => [...], 'satirlar' => [['kunyeNo','miktar'], ...]] | null.
@@ -590,6 +592,7 @@ function hks_gonderim_audit_ctx(array $t, array $ortak, array $satirlar, bool $p
     'satir_sayisi' => count($satirlar),
     'istenen_kg' => round($kg, 3),
     'beyan_id' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyan') ? (int)($kaynak['beyanId'] ?? 0) : 0,
+    'beyansiz_id' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyansiz') ? (int)($kaynak['kayitId'] ?? 0) : 0,
     'satirlar' => $satirlar,   // yalnız başarılı kg hesabı için okunur, payload'a girmez
   ];
 }
@@ -609,6 +612,7 @@ function hks_gonderim_audit_payload(string $tur, array $ctx, ?array $sonuc = nul
     'istenen_kg' => (float)($ctx['istenen_kg'] ?? 0),
   ];
   if (!empty($ctx['beyan_id'])) $p['beyan_id'] = (int)$ctx['beyan_id'];
+  if (!empty($ctx['beyansiz_id'])) $p['beyansiz_id'] = (int)$ctx['beyansiz_id'];
   if ($tur === 'basla' || $sonuc === null) {
     if ($tur === 'belirsiz' && !empty($ctx['exception_sinifi'])) {
       $p['exception_sinifi'] = hks_gonderim_audit_metin($ctx['exception_sinifi'], 80);

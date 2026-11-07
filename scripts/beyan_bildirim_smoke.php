@@ -37,7 +37,9 @@ function oku(string $p): string { return (string)@file_get_contents($p); }
 // ── 1) Sözdizimi ──────────────────────────────────────────────────────────
 $dosyalar = [
     'halkayit/api.php', 'halkayit/taslak_lib.php', 'config/helpers.php',
-    'api_beyan_bildirim.php', 'beyan_view.php', 'beyan_edit.php',
+    'api_beyan_bildirim.php', 'api_beyansiz_yukleme.php', 'config/beyansiz_yukleme.php',
+    '_beyanlar_baslik.php', '_beyansiz_sekme.php', '_beyansiz_liste.php', '_yukleme_bildir_modal.php',
+    'beyan_view.php', 'beyan_edit.php',
     'beyan_create.php', 'beyanlar.php',
 ];
 foreach ($dosyalar as $d) {
@@ -306,28 +308,61 @@ if (preg_match('/^(.*?)WHERE id = \?"\);\s*\n\s*\$st->execute\(\[(.*?)\n        
     ok('beyan_edit UPDATE bulundu', false, 'regex eslesmedi — dosya yapisi degismis');
 }
 
-// ── 11) Birim fiyat onerileri (Adim 3) ────────────────────────────────────
-ok('fiyat onerileri iki kaynaktan uretiliyor',
-   strpos($uc, "'kaynak'   => 'gonderilen'") !== false
-   && strpos($uc, "'kaynak'   => 'maliyet'") !== false,
-   'bb_fiyat_onerileri kaynaklari eksik');
+// ── 11) Birim fiyat (v498): fiyat artik Hal Kayit'ta GONDERIMDE girilir ─
+// Beyan akisi fiyatsiz taslak yazar (ortak.fiyatBekliyor); oneri/fiyat alani YOK.
+ok('fiyat alani yok: bb_taslak_kur $fiyat parametresi almiyor',
+   strpos($uc, 'function bb_taslak_kur(array $beyan, string $sifatId, string $turId, int $userId)') !== false
+   && strpos($uc, 'Birim fiyat girilmedi') === false,
+   'bb_taslak_kur hala fiyat istiyor');
+ok('taslak ortak alani fiyatBekliyor=true tasiyor, fiyat anahtari yok',
+   strpos($uc, "'fiyatBekliyor'  => true") !== false && strpos($uc, "'fiyat'          =>") === false,
+   'taslak fiyatli yaziliyor');
+ok('bb_fiyat_onerileri KALDIRILDI',
+   strpos($uc, 'bb_fiyat_onerileri') === false && strpos($view, 'fiyatOnerileriCiz') === false,
+   'oneri kodu kalmis');
+ok('maliyet.read / cost_sheets okumasi kalmadi (fiyat onerisi yok)',
+   strpos($uc, "can('maliyet.read')") === false && strpos($uc, 'cost_sheets') === false,
+   'maliyet satis fiyati hala okunuyor');
+ok('beyan_view fiyat alani/kontrolu yok',
+   strpos($view, 'hksFiyat') === false && strpos($view, 'Birim fiyat:') === false,
+   'modalde fiyat alani kalmis (TypeError riski)');
+ok('beyan_view uyarisi fiyatin Hal Kayit gonderiminde girildigini soyluyor',
+   strpos($view, "Hal\n          Kayıt'ta gönderimde girilir") !== false || strpos($view, "Kayıt'ta gönderimde girilir") !== false,
+   'kullanici fiyatin nerede girilecegini bilmiyor');
+ok('beyan_hks_bildirim INSERT fiyat kolonu yazmiyor',
+   preg_match('/INSERT INTO beyan_hks_bildirim[^"]*\bfiyat\b/s', $uc) !== 1,
+   'beyan bagi fiyat yaziyor');
+ok('api_beyan_bildirim: $govde[fiyat] okunmuyor',
+   strpos($uc, "\$govde['fiyat']") === false && strpos($uc, "['fiyat']") === false,
+   'istemciden fiyat alinabiliyor');
 
-// Maliyet hesabi is-hassas veridir — yetkisiz kullaniciya sizmamali.
-ok('maliyet onerisi maliyet.read yetkisiyle kapili',
-   strpos($uc, "can('maliyet.read')") !== false,
-   'beyan yetkisi olan herkes maliyet satis fiyatini gorebilir');
+$lst = oku("$KOK/beyanlar.php");
+ok('beyanlar.php toplu bildirimde Birim Fiyat kolonu/alani/yuku yok',
+   strpos($lst, 'Birim Fiyat') === false && strpos($lst, 'bbFiyat_') === false && strpos($lst, 'bb-fiyat') === false
+   && strpos($lst, "fiyat: el(") === false,
+   'toplu bildirim hala fiyat istiyor');
+ok('beyanlar.php toplu colspan 4',
+   strpos($lst, 'colspan="4" class="muted">') !== false, 'engel satiri kolon sayisina uymuyor');
 
-// EUR fiyati SESSIZCE TL'ye cevrilmemeli: HKS fiyat alaninda para birimi yok
-// ve rusum bu sayidan hesaplanir. Cevrim AYRI bir oneri olarak sunulmali.
-ok('kur cevrimi ayri oneri olarak sunuluyor',
-   strpos($uc, "'kaynak'   => 'maliyet_kur'") !== false,
-   'cevrim tek degere gomulmus — hangi birimin dogru oldugu varsayilmis');
-
-// Hicbir oneri alani KENDILIGINDEN doldurmamali.
-ok('oneriler yalnizca tiklaninca yaziyor',
-   strpos($view, "b.addEventListener('click'") !== false
-   && strpos($view, "el('hksFiyat').value = o.deger") !== false,
-   'oneri otomatik dolduruluyorsa kullanici rakamin kaynagini gormez');
+// Yeni uc (Yukleme Bildir) ayni kurallara tabi.
+$bs = oku("$KOK/api_beyansiz_yukleme.php");
+ok('api_beyansiz_yukleme HKS\'e gonderim yapmiyor',
+   strpos($bs, 'hks_bildirim_kaydet') === false && strpos($bs, 'taslak_gonder') === false,
+   'bu uc yalnizca TASLAK yazmalidir');
+ok('api_beyansiz_yukleme CSRF kontrolu yapiyor', strpos($bs, 'csrf_check(') !== false, 'yazma ucunda csrf_check yok');
+ok('api_beyansiz_yukleme istemciden ad/TC almiyor',
+   preg_match('/\$govde\[\'(urunAd|ulkeAd|firmaAd|tc)\'\]/', $bs) !== 1,
+   'katalog/havuz yerine istemci adi guvenilmis');
+ok('api_beyansiz_yukleme hks_taslaklar\'a dogrudan INSERT yapmiyor',
+   !preg_match('/INSERT\s+INTO\s+[`\'"]?[a-z_]*taslaklar/i', $bs), 'ikinci yazma yolu');
+ok('api_beyansiz_yukleme yetki kapisi sirasi: oturum -> yetki -> govde',
+   strpos($bs, 'bsz_cikti([\'hata\' => \'Oturum gerekli') < strpos($bs, 'can_yukleme_bildir()')
+   && strpos($bs, 'can_yukleme_bildir()') < strpos($bs, "file_get_contents('php://input')"),
+   'govde okunmadan once yetki kontrol edilmeli');
+ok('api_beyansiz_yukleme audit kisisel veri yazmiyor',
+   preg_match("/audit_log_event\\('beyansiz_yukleme_olustur'.*?\\]\\);/s", $bs, $am) === 1
+   && !preg_match('/karsi_kisi|ikinciTc|ikinciAd|ikinciCep|dogum|\\btc\\b/', $am[0]),
+   'audit kisisel alan iceriyor');
 
 // Modal ön-seçimi gercekten kullaniyor mu?
 ok('modal varsayilan sifat/tur on-secimini uyguluyor',

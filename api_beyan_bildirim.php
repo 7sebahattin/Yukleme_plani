@@ -18,6 +18,11 @@
 //  • Taslak PLAN TASLAĞI olarak yazılır (künye YOK, planKg VAR): künyeler
 //    gönderim anında canlı stoktan çözülür (halkayit/api.php hks_plan_kunye_coz).
 //    Beyan ekranında künye seçtirmek 300 sn'lik SOAP turları demekti.
+//  • v498: BİRİM FİYAT burada girilmez/önerilmez. Taslak fiyatsız yazılır
+//    (ortak.fiyatBekliyor=true); fiyat Hal Kayıt'ta GÖNDERİM anında girilir
+//    (halkayit/api.php taslak_fiyat_yaz). Fiyatsız taslak gönderilemez (fail-closed).
+//  • BİLİNEN HATA (kapsam dışı): 'hazirla' yanıtındaki `$ulkeMetni` tanımsızdır
+//    (plan ülke metni); v498 kapsamında DEĞİŞTİRİLMEDİ.
 // =============================================================================
 declare(strict_types=1);
 
@@ -105,80 +110,11 @@ function bb_on_kosul(array $beyan): ?string {
 // NOT: bb_bagli_plan / bb_ulke_adaylari / bb_ulke_tahmin de helpers.php'de —
 // beyan formu ülke alanını aynı ipucu zinciriyle ön-dolduruyor.
 
-// ── BİRİM FİYAT ÖNERİLERİ ─────────────────────────────────────────────────
-// HKS'in `MalinSatisFiyat` alanında PARA BİRİMİ YOKTUR (bkz. hks_soap.php:395)
-// — gönderilen sayı HKS'in kendi birimindedir ve rüsum bunun üzerinden
-// hesaplanır. Bu yüzden hiçbir öneri alana KENDİLİĞİNDEN YAZILMAZ: kullanıcı
-// hangi rakamı, nereden ve hangi para biriminden aldığını görerek seçer.
-//
-// İki kaynak, güvenilirlik sırasıyla:
-//   1. gonderilen — bu firmaya + bu ürüne yapılmış EN SON HKS bildiriminin
-//      fiyatı. HKS'e daha önce GİTMİŞ bir değerdir; birim belirsizliği yoktur.
-//   2. maliyet    — aynı yükleme planına bağlı maliyet hesabının satış birim
-//      fiyatı. KENDİ para biriminde tutulur (varsayılan EUR), bu yüzden hem
-//      ham hâli hem de kur varsa çevrilmiş hâli AYRI AYRI sunulur; hangisinin
-//      doğru olduğuna kullanıcı karar verir.
-function bb_fiyat_onerileri(array $beyan): array {
-    $oneriler = [];
-    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
-
-    // 1) Aynı firma + aynı ürün için en son gönderilen bildirim
-    try {
-        $st = db()->prepare("SELECT fiyat, zaman FROM `{$on}gonderilenler`
-                             WHERE firma_id = ? AND urun_ad = ? AND fiyat > 0
-                             ORDER BY zaman DESC LIMIT 1");
-        $st->execute([(string)$beyan['hks_firma_id'], (string)$beyan['hks_urun_ad']]);
-        if ($r = $st->fetch()) {
-            $oneriler[] = [
-                'kaynak'   => 'gonderilen',
-                'deger'    => (float)$r['fiyat'],
-                'etiket'   => 'Son HKS bildirimi',
-                'aciklama' => (string)($beyan['hks_urun_ad'] ?? '') . ' · ' . fmt_datetime($r['zaman']),
-            ];
-        }
-    } catch (PDOException $e) {}
-
-    // 2) Bağlı yükleme planının maliyet hesabı — yalnız maliyet.read yetkisiyle.
-    if (!empty($beyan['loading_record_id']) && (can('maliyet.read') || is_admin())) {
-        try {
-            $st = db()->prepare("SELECT sheet_no, sale_unit_price, currency_code, currency_rate
-                                 FROM cost_sheets
-                                 WHERE record_id = ? AND deleted_at IS NULL AND sale_unit_price > 0
-                                 ORDER BY id DESC LIMIT 1");
-            $st->execute([(int)$beyan['loading_record_id']]);
-            if ($c = $st->fetch()) {
-                $ham  = (float)$c['sale_unit_price'];
-                $kur  = (float)$c['currency_rate'];
-                $bir  = (string)($c['currency_code'] ?: 'EUR');
-                $no   = (string)($c['sheet_no'] ?: '');
-                $oneriler[] = [
-                    'kaynak'   => 'maliyet',
-                    'deger'    => $ham,
-                    'etiket'   => 'Maliyet hesabı (' . $bir . ')',
-                    'aciklama' => ($no !== '' ? $no . ' · ' : '') . 'satış birim fiyatı, ' . $bir . ' cinsinden',
-                ];
-                // Kur girilmişse çevrilmiş hâli AYRI bir öneri olarak sunulur —
-                // otomatik çevirmek, hangi birimin doğru olduğu varsayımı olurdu.
-                if ($kur > 0) {
-                    $oneriler[] = [
-                        'kaynak'   => 'maliyet_kur',
-                        'deger'    => round($ham * $kur, 4),
-                        'etiket'   => 'Maliyet hesabı × kur',
-                        'aciklama' => rtrim(rtrim(number_format($ham, 4, ',', '.'), '0'), ',') . ' ' . $bir
-                                    . ' × ' . rtrim(rtrim(number_format($kur, 4, ',', '.'), '0'), ','),
-                    ];
-                }
-            }
-        } catch (PDOException $e) {}
-    }
-    return $oneriler;
-}
-
 // ── TASLAK KURULUMU — tekil ve toplu akışın ORTAK gövdesi ────────────────
 // Tek beyan için: ön koşul → mükerrer kontrolü → doğrulama → taslak → bağ →
 // audit. Toplu akış bunu satır satır çağırır; İKİNCİ BİR KOPYA ÇIKARMAYIN.
 // Dönüş: ['tamam' => true, 'taslakId' => ...] veya ['hata' => ..., 'kod' => ...]
-function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiyat, int $userId): array {
+function bb_taslak_kur(array $beyan, string $sifatId, string $turId, int $userId): array {
     $bid = (int)$beyan['id'];
     $hata = bb_on_kosul($beyan);
     if ($hata) return ['kod' => 400, 'hata' => $hata];
@@ -213,7 +149,6 @@ function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiya
 
     if ($sifatId === '') return ['kod' => 400, 'hata' => 'Bildirimci sıfatı seçilmedi.'];
     if ($turId   === '') return ['kod' => 400, 'hata' => 'Bildirim türü seçilmedi.'];
-    if ($fiyat <= 0)     return ['kod' => 400, 'hata' => 'Birim fiyat girilmedi.'];
 
     $katalog = bb_katalog();
     if (!$katalog) return ['kod' => 409, 'hata' => 'HKS katalog listeleri yok — Hal Kayıt panelinden güncelleyin.'];
@@ -262,7 +197,8 @@ function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiya
             'plaka'          => $plaka,
             'belgeNo'        => '',
             'belgeTipiId'    => 0,
-            'fiyat'          => $fiyat,
+            // v498: fiyat artık Hal Kayıt'ta GÖNDERİM anında girilir; taslak fiyatsız yazılır.
+            'fiyatBekliyor'  => true,
             'isletmeTuruId'  => $isletmeTuruId,
             'ulkeId'         => $ulkeId,
             'ulkeAd'         => $ulkeAd,
@@ -288,10 +224,10 @@ function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiya
     // Bağ kaydı
     $ins = db()->prepare("INSERT INTO beyan_hks_bildirim
         (beyan_id, hks_firma_id, hks_firma_ad, taslak_id, durum,
-         urun_id, urun_ad, ulke_id, ulke_ad, plaka, kg, fiyat, created_by, created_at)
-        VALUES (?,?,?,?,'taslak',?,?,?,?,?,?,?,?,NOW())");
+         urun_id, urun_ad, ulke_id, ulke_ad, plaka, kg, created_by, created_at)
+        VALUES (?,?,?,?,'taslak',?,?,?,?,?,?,?,NOW())");
     $ins->execute([$bid, $firmaId, $sonuc['firmaAd'], $sonuc['id'],
-        $urunId, $urunAd, $ulkeId, $ulkeAd, $plaka, $kg, $fiyat,
+        $urunId, $urunAd, $ulkeId, $ulkeAd, $plaka, $kg,
         $userId]);
     beyan_hks_durum_tazele($bid);
 
@@ -303,7 +239,7 @@ function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiya
     audit_log_event('hks_taslak_olustur', 'beyan', $bid, null, [
         'taslak_id' => $sonuc['id'], 'firma_id' => $firmaId,
         'urun' => $urunAd, 'ulke' => $ulkeAd, 'plaka' => $plaka,
-        'kg' => $kg, 'fiyat' => $fiyat,
+        'kg' => $kg,
     ]);
 
     return ['tamam' => true, 'taslakId' => $sonuc['id']];
@@ -367,8 +303,6 @@ case 'hazirla': {
         ],
         // Ön-seçimler: sıfat/tür kural tabanlı.
         'varsayilan'    => bb_varsayilanlar($katalog),
-        // Birim fiyat ÖNERİLERİ — hiçbiri kendiliğinden yazılmaz.
-        'fiyatOnerileri' => bb_fiyat_onerileri($beyan),
     ]);
 }
 
@@ -380,7 +314,6 @@ case 'taslak_olustur': {
         $beyan,
         trim((string)($govde['sifatId'] ?? '')),
         trim((string)($govde['bildirimTuruId'] ?? '')),
-        num((string)($govde['fiyat'] ?? '')),          // Türkçe ondalık (1.234,56)
         (int)($auth_user['id'] ?? 0)
     );
     if (!empty($sonuc['hata'])) bb_cikti($sonuc, $sonuc['kod'] ?? 400);
@@ -425,7 +358,7 @@ case 'eslestir': {
 }
 
 // ── TOPLU HAZIRLA: seçilen beyanların önizlemesi ─────────────────────────
-// Her satır kendi uygunluğunu ve fiyat önerisini taşır; uygun OLMAYANLAR da
+// Her satır kendi uygunluğunu taşır; uygun OLMAYANLAR da
 // döner (sebebiyle birlikte) — sessizce listeden düşürmek, kullanıcının neyi
 // kaçırdığını göremediği için daha kötüdür.
 case 'toplu_hazirla': {
@@ -447,7 +380,6 @@ case 'toplu_hazirla': {
         $b = bb_beyan_yukle($bid);
         $engel = bb_on_kosul($b);
         if (!$engel && beyan_hks_aktif($bid)) $engel = 'Bu beyan için zaten bir bildirim var.';
-        $oneriler = $engel ? [] : bb_fiyat_onerileri($b);
         $satirlar[] = [
             'id'       => $bid,
             'partiNo'  => (string)($b['party_no'] ?? ''),
@@ -456,8 +388,6 @@ case 'toplu_hazirla': {
             'plaka'    => (string)($b['vehicle_plate'] ?? ''),
             'netKg'    => (float)($b['net_kg'] ?? 0),
             'engel'    => $engel,
-            'oneriler' => $oneriler,
-            'fiyat'    => $oneriler ? $oneriler[0]['deger'] : null,
         ];
     }
     bb_cikti([
@@ -490,7 +420,7 @@ case 'toplu_olustur': {
         $bid = (int)($satir['beyan_id'] ?? 0);
         if ($bid <= 0) continue;
         $b = bb_beyan_yukle($bid);
-        $r = bb_taslak_kur($b, $sifatId, $turId, num((string)($satir['fiyat'] ?? '')), $userId);
+        $r = bb_taslak_kur($b, $sifatId, $turId, $userId);
         if (!empty($r['tamam'])) $basarili++;
         $sonuclar[] = [
             'id'       => $bid,
