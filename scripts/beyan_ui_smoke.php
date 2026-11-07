@@ -192,8 +192,8 @@ function render_liste(array $get): string {
                            "defined('BEYAN_PER_PAGE') || define('BEYAN_PER_PAGE', 50);", $src);
         // Gecici kopya /tmp'te durdugu icin __DIR__ proje kokunu gostermez;
         // partial include'lari gercek koke sabitle.
-        $src = str_replace("__DIR__ . '/_beyan_liste.php'",
-                           var_export($ROOT . '/_beyan_liste.php', true), $src);
+        // (v498: birden çok partial + config/beyansiz_yukleme.php — hepsi gerçek köke sabitlenir.)
+        $src = str_replace("__DIR__ . '/", var_export($ROOT, true) . " . '/", $src);
         $a = strpos($src, 'function valid_date_beyan');
         $b = strpos($src, "defined('BEYAN_PER_PAGE')");
         $src = substr($src, 0, $a) . "if (!function_exists('beyan_url')) {\n"
@@ -1346,6 +1346,33 @@ $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet
 $mt7 = create_get(['mail_taslak' => '1', 'raw_text' => 'URLDEN GELEN', 'text' => 'URLDEN GELEN']);
 ok('[mail-taslak] URL parametresiyle metin enjekte EDİLEMEZ', !str_contains($mt7, 'URLDEN GELEN'));
 $_GET = []; $_POST = [];
+
+// ── v498: Beyanlar sekmeleri + Yükleme Bildir başlığı ─────────────────────
+// Ayrıntılı rol, yalnız beyan.read (hks.read YOK): sekme çubuğu ve Yükleme Bildir YOK.
+$PERMS = ['beyan.read', 'beyan.permissions.detailed', 'beyan.create', 'beyan.edit', 'beyan.status', 'records.write'];
+$sk0 = render_liste([]);
+ok('[sekme] hks.read olmayan beyan.read: sekme çubuğu YOK', strpos($sk0, 'bsz-sekmeler') === false);
+ok('[sekme] beyan.read: Yükleme Bildir düğmesi YOK', strpos($sk0, 'id="bszAc"') === false && strpos($sk0, 'id="bszOverlay"') === false);
+ok('[sekme] beyan sekmesi başlığı korunur', strpos($sk0, '<h1>🧾 Beyanlar</h1>') !== false && strpos($sk0, '+ Yeni Beyan') !== false);
+// Toplu bildirim penceresinde Birim Fiyat kolonu YOK
+ok('[fiyat] toplu bildirim penceresinde Birim Fiyat kolonu/alanı yok',
+   strpos($sk0, '<th>Birim Fiyat</th>') === false && strpos($sk0, 'bbFiyat_') === false);
+// beyan.read + hks.read (ayrıntılı değil → genişletilir): Beyansız sekmesini görür, Yükleme Bildir düğmesi yok.
+$PERMS = ['beyan.read', 'beyan.write', 'records.write'];
+$sk1 = render_liste([]);
+ok('[sekme] beyan.read+hks.read: sekme çubuğu VAR, Yükleme Bildir düğmesi YOK',
+   strpos($sk1, 'bsz-sekmeler') !== false && strpos($sk1, 'id="bszAc"') === false);
+// + beyan.yukleme_bildir: düğme ve modal
+$PERMS = ['beyan.read', 'beyan.yukleme_bildir'];
+$sk2 = render_liste([]);
+ok('[sekme] yukleme_bildir: düğme + modal + sekme çubuğu',
+   strpos($sk2, 'id="bszAc"') !== false && strpos($sk2, 'id="bszOverlay"') !== false && strpos($sk2, 'href="beyanlar.php?sekme=beyansiz"') !== false);
+$sk3 = render_liste(['sekme' => 'beyansiz']);
+ok('[sekme] sekme=beyansiz render edildi (tablo yoksa "kurulmadı")',
+   strncmp($sk3, '__HATA__', 8) !== 0 && strpos($sk3, 'id="bszKurulmadi"') !== false, substr($sk3, 0, 200));
+ok('[sekme] sekme=beyansiz: beyan listesi çizilmez', strpos($sk3, 'İşlem Bekleyen Beyanlar') === false);
+$_GET = []; $_POST = [];
+$PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

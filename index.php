@@ -157,7 +157,7 @@ if (is_admin()) {
 // nav_ptak_gorunur(): Personel Takibi kartı bu bölümün içinde — yalnız PDKS
 // izni olan kullanıcı (ör. yalnız attendance.foremen) bölüm kapalı olduğu
 // için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
-$_ops_show  = is_admin() || can('records.read') || can('records.write') || can('beyan.read')
+$_ops_show  = is_admin() || can('records.read') || can('records.write') || beyan_sayfa_erisimi()
     || can('kantar.read') || can('reports.read') || can('stok.read') || can('hesap.read')
     || nav_ptak_gorunur() || can_hizli_maliyet('read') || can_siparis('read') || can_mail('read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
@@ -265,7 +265,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
-    <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
+    <?php if (!function_exists('can') || beyan_sayfa_erisimi()): ?>
     <a href="beyanlar.php" class="home-card">
         <div class="home-card-icon" style="background:#ede9fe">🧾</div>
         <div class="home-card-title">Beyanlar</div>

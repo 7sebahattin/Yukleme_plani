@@ -249,7 +249,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
                     <td><?= h((string)($hg['ulke_ad'] ?? '')) ?: '—' ?></td>
                     <td><?= h((string)($hg['plaka'] ?? '')) ?: '—' ?></td>
                     <td class="num"><?= h(fmt_kg($hg['kg'] ?? 0)) ?></td>
-                    <td class="num"><?= h(number_format((float)($hg['fiyat'] ?? 0), 2, ',', '.')) ?></td>
+                    <td class="num"><?= ($hg['fiyat'] ?? null) === null || (float)$hg['fiyat'] <= 0 ? '—' : h(number_format((float)$hg['fiyat'], 2, ',', '.')) ?></td>
                     <td><?= h(fmt_datetime($hg['created_at'])) ?></td>
                 </tr>
                 <?php if (!empty($hg['hata_metni'])): ?>
@@ -952,21 +952,14 @@ function prompt_note(btn) {
           <label>Bildirim Türü <span id="hksTurRozet" class="beyan-hks-rozet"></span>
             <select id="hksTur" class="form-control"></select>
           </label>
-          <label style="grid-column:1/-1">Birim Fiyat <strong style="color:var(--danger)">*</strong>
-            <input type="text" id="hksFiyat" class="form-control" inputmode="decimal"
-                   placeholder="örn. 12,50" autocomplete="off">
-            <!-- Öneriler tıklanınca alana yazılır; HİÇBİRİ otomatik dolmaz.
-                 HKS'in fiyat alanında para birimi yok ve rüsum bu sayı
-                 üzerinden hesaplanıyor — rakamın nereden geldiği görünmeli. -->
-            <span id="hksFiyatOneri" class="beyan-hks-oneri"></span>
-          </label>
         </div>
 
         <p class="beyan-hks-warn">
           Bu işlem yalnızca <strong>TASLAK</strong> oluşturur. HKS'e bildirim
           <strong>GÖNDERİLMEZ</strong> — gönderim geri alınamaz ve rüsum doğurur,
           o adım Hal Kayıt ekranında yapılır. Künyeler gönderim anında canlı
-          stoktan çözülür.
+          stoktan çözülür. <strong>Birim fiyat burada girilmez</strong> — Fiyat Hal
+          Kayıt'ta gönderimde girilir.
         </p>
       </div>
     </div>
@@ -1015,32 +1008,10 @@ function prompt_note(btn) {
         span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
     }
 
-    // Birim fiyat önerileri. TIKLANINCA yazar — asla kendiliğinden doldurmaz:
-    // HKS'in fiyat alanında para birimi yok, rüsum bu sayıdan hesaplanıyor ve
-    // gönderim geri alınamaz; rakamın nereden geldiği kullanıcıya görünmeli.
-    function fiyatOnerileriCiz(liste) {
-        var kap = el('hksFiyatOneri');
-        if (!liste.length) { kap.innerHTML = ''; return; }
-        kap.innerHTML = '<span class="beyan-hks-oneri-baslik">Öneriler:</span>' +
-            liste.map(function (o, i) {
-                var g = o.deger.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
-                return '<button type="button" class="beyan-hks-oneri-btn" data-i="' + i + '" title="' +
-                       o.aciklama.replace(/"/g, '&quot;') + '">' +
-                       o.etiket + ': <strong>' + g + '</strong></button>';
-            }).join('');
-        Array.prototype.forEach.call(kap.querySelectorAll('button'), function (b) {
-            b.addEventListener('click', function () {
-                var o = liste[Number(b.dataset.i)];
-                el('hksFiyat').value = o.deger.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
-                kontrol();
-            });
-        });
-    }
-
     function kontrol() {
         // Firma/ürün/ülke beyandan gelir ve buton kapısında zaten doğrulandı;
         // burada yalnız bu ekranda girilen alanlar denetlenir.
-        var tam = el('hksSifat').value && el('hksTur').value && el('hksFiyat').value.trim() !== '';
+        var tam = el('hksSifat').value && el('hksTur').value;
         el('hksSave').disabled = !tam;
     }
 
@@ -1080,7 +1051,6 @@ function prompt_note(btn) {
             doldur(el('hksTur'),   veri.katalog.bildirimTurleri, vs.bildirimTuruId || '');
             onSecimRozet(el('hksSifatRozet'), el('hksSifat'), 'varsayılan');
             onSecimRozet(el('hksTurRozet'),   el('hksTur'),   'varsayılan');
-            fiyatOnerileriCiz(veri.fiyatOnerileri || []);
 
             el('hksLoading').hidden = true;
             el('hksContent').hidden = false;
@@ -1097,7 +1067,7 @@ function prompt_note(btn) {
     ov.addEventListener('click', function (e) { if (e.target === ov) kapat(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) kapat(); });
 
-    ['hksSifat','hksTur','hksFiyat'].forEach(function (i) {
+    ['hksSifat','hksTur'].forEach(function (i) {
         el(i).addEventListener('change', kontrol);
         el(i).addEventListener('input',  kontrol);
     });
@@ -1110,7 +1080,7 @@ function prompt_note(btn) {
                      'Ülke: ' + es.ulkeAd + '\n' +
                      'Plaka: ' + b.plaka + '\n' +
                      'Net KG: ' + b.netKg.toLocaleString('tr-TR') + '\n' +
-                     'Birim fiyat: ' + el('hksFiyat').value + '\n\n' +
+                     'Fiyat Hal Kayıt\'ta gönderimde girilir.\n\n' +
                      'Bildirim GÖNDERİLMEZ; gönderim Hal Kayıt ekranında yapılır.')) return;
 
         el('hksSave').disabled = true;
@@ -1121,8 +1091,7 @@ function prompt_note(btn) {
             body: JSON.stringify({
                 beyan_id: BEYAN_ID, csrf: CSRF,
                 sifatId: el('hksSifat').value,
-                bildirimTuruId: el('hksTur').value,
-                fiyat: el('hksFiyat').value
+                bildirimTuruId: el('hksTur').value
             })
         })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })

@@ -656,6 +656,19 @@
   .onay-satir { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
 
 
+
+  /* v498: fiyat gönderimde girilir (#fiyatPencere) + taslak rozetleri. z-index ≥ 600 (#modal z 20'nin üstünde). */
+  #fiyatPencere { z-index:600; }
+  #fiyatPencere .kisi-dlg { height:auto; max-width:420px; }
+  #fiyatPencere .fp-ozet { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
+  #fiyatPencere .fp-ozet b { text-align:right; overflow-wrap:anywhere; }
+  #fiyatPencere input { font-size:16px; }
+  #fiyatPencere .fp-oneri { margin-top:8px; width:100%; }
+  .tk-rozet { display:inline-block; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:6px; margin-left:6px; letter-spacing:.3px; }
+  .tk-rozet.tk-tamamla { background:#fef3c7; color:#b45309; }
+  .tk-rozet.tk-bsz { background:var(--cip-bg); color:var(--teal); }
+  html[data-theme="dark"] .tk-rozet.tk-tamamla { background:#78350f; color:#fcd34d; }
+
   /* Kişi havuzu penceresi (#kisiPencere) ve Yeni/Düzenle formu (#kisiForm).
      #modal'dan BAĞIMSIZ iki katman; form listenin üstünde. z-index ≥ 600. */
   .kisi-secili { font-size:12.5px; color:var(--soluk); margin-top:6px; overflow-wrap:anywhere; }
@@ -1588,6 +1601,27 @@
   </div>
 </div>
 
+<!-- v498: Fiyat penceresi — fiyat Hal Kayıt'ta GÖNDERİMDE girilir -->
+<div id="fiyatPencere" class="kisi-ovl">
+  <div class="kisi-dlg" role="dialog" aria-modal="true" aria-labelledby="fpBaslik">
+    <div class="kisi-bas">
+      <h3 id="fpBaslik">Birim fiyat</h3>
+      <button type="button" class="kisi-x" id="btnFpKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="kisi-form-govde">
+      <div id="fpOzet"></div>
+      <label for="fpFiyat">Birim fiyat (TL/KG) <span style="color:var(--hata-tx)">*</span></label>
+      <input id="fpFiyat" inputmode="decimal" autocomplete="off">
+      <button type="button" class="btn btn-soluk fp-oneri gizli" id="btnFpOneri"></button>
+      <div class="mesaj" id="fpMesaj"></div>
+    </div>
+    <div class="kisi-alt">
+      <button type="button" class="btn btn-soluk" id="btnFpIptal">Vazgeç</button>
+      <button type="button" class="btn btn-teal" id="btnFpKaydet">Kaydet ve devam</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modallar -->
 <div id="modal">
   <div class="kutu" id="modalOnayKutu">
@@ -1843,6 +1877,8 @@ const API_ROTA = {
   'POST /api/taslaklar': 'taslak_kaydet',
   'POST /api/taslaklar/sil': 'taslak_sil',
   'POST /api/taslaklar/gonder': 'taslak_gonder',
+  // v498: fiyat gönderimde girilir (taslağa yazar, HKS'e göndermez)
+  'POST /api/taslak_fiyat_yaz': 'taslak_fiyat_yaz',
   'GET /api/gonderilenler': 'gonderilenler',
   // Aynı gün aynı plaka uyarısı (SALT OKUNUR — Gönderim Onayı'nda)
   'POST /api/ayni_plaka': 'ayni_plaka_bugun',
@@ -1893,7 +1929,7 @@ async function csrfTazele() {
 // Yeni yazan uç eklenirse BURAYA da ekle (statik test: hks_csrf_kapsam_smoke.php).
 const API_GOVDE_CSRF = {
   kisi_kaydet: 1, kisi_sil: 1, firma_kaydet: 1, firma_sil: 1, listeler_yenile: 1,
-  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1,
+  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1, taslak_fiyat_yaz: 1,
 };
 async function api(yol, metod, govde, tekrar) {
   metod = metod || 'GET';
@@ -4803,6 +4839,8 @@ async function taslakEkraniAc() {
       div.innerHTML =
         `<div class="tk-ust">` +
         `<span class="tk-etiket">${plan ? '📝 PLAN TASLAĞI' : 'TASLAK'}</span>` +
+        (t.ortak.kaynak && t.ortak.kaynak.tip === 'beyansiz' ? '<span class="tk-rozet tk-bsz">Beyansız yükleme</span>' : '') +
+        (t.ortak.tamamlanacak ? '<span class="tk-rozet tk-tamamla">TAMAMLANACAK</span>' : '') +
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
         _satir('', '🏢 Firma', eHtml(t.firmaAd)) +
         _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—') + (t.ayniPlakaBugun > 0
@@ -4820,7 +4858,7 @@ async function taslakEkraniAc() {
           ? 'gönderimde stoktan seçilir'
           : `${t.satirlar.length} adet`) +
         _satir('', '💰 Fiyat', (t.ortak.yurtIci && !t.ortak.fiyatGonder)
-          ? '—' : `${fmt(t.ortak.fiyat)} TL/KG`) +
+          ? '—' : (Number(t.ortak.fiyat) > 0 ? `${fmt(t.ortak.fiyat)} TL/KG` : 'gönderimde girilecek')) +
         `<div class="tk-butonlar">` +
         `<button class="btn btn-amber" data-gonder="${t.id}">📤 Gönder</button>` +
         `<button class="btn btn-soluk" data-kopyala="${t.id}" title="Taslağın kopyasını forma yükle — asıl taslak yerinde kalır">📋 Kopyala</button>` +
@@ -4830,7 +4868,7 @@ async function taslakEkraniAc() {
       kap.appendChild(div);
     });
     kap.querySelectorAll('[data-gonder]').forEach(b => {
-      b.onclick = () => taslakOnayAc(taslaklar.find(t => t.id === b.dataset.gonder));
+      b.onclick = () => taslakGonderTikla(taslaklar.find(t => t.id === b.dataset.gonder));
     });
     kap.querySelectorAll('[data-duzenle]').forEach(b => {
       b.onclick = () => taslakDuzenle(taslaklar.find(t => t.id === b.dataset.duzenle));
@@ -5041,6 +5079,81 @@ function onayDugmeEtiketi() {
   if (belirsizOnay) return "HKS'te kontrol ettim — yine de gönder";
   return belirsizIsaret ? "HKS'te kontrol et ve gönder" : 'Evet, Gönder';
 }
+// v498: fiyat Hal Kayıt'ta GÖNDERİMDE girilir. Beyan uçları fiyatsız taslak yazar
+// (ortak.fiyatBekliyor); yurt içi Yükleme Bildir taslakları ayrıca EKSİK gelir
+// (ortak.tamamlanacak) ve Düzenle ile tamamlanır. Kapı BURADA (Gönder tıkı);
+// taslakOnayAc'ın kendisi kapı taşımaz.
+const fiyatGerekli = (t) => !t.ortak.yurtIci || !!t.ortak.fiyatGonder;
+const fiyatMetni = (t) => Number(t.ortak.fiyat) > 0 ? fmt(Number(t.ortak.fiyat)) + ' TL' : 'gönderimde girilecek';
+function taslakGonderTikla(t) {
+  if (!t) return;
+  if (t.ortak.tamamlanacak) {
+    toast('Bu taslakta eksik bilgi var — önce Düzenle ile tamamlayın.');
+    taslakDuzenle(t);
+    return;
+  }
+  if (fiyatGerekli(t) && (t.ortak.fiyatBekliyor || !(Number(t.ortak.fiyat) > 0))) { fiyatPenceresiAc(t); return; }
+  taslakOnayAc(t);
+}
+let fpTaslak = null, fpIstekte = false;
+function fiyatPenceresiKapat() {
+  $('fiyatPencere').classList.remove('acik');
+  fpTaslak = null; fpIstekte = false;
+}
+function fiyatPenceresiAc(t) {
+  fpTaslak = t; fpIstekte = false;
+  const plan = planTaslagiMi(t);
+  const toplam = plan ? Number(t.ortak.planKg) : t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
+  $('fpOzet').innerHTML =
+    `<div class="fp-ozet"><span>Ürün</span><b>${eHtml(t.ortak.urunAd || '—')}</b></div>` +
+    `<div class="fp-ozet"><span>Plaka</span><b>${eHtml(t.ortak.plaka || t.ortak.belgeNo || '—')}</b></div>` +
+    `<div class="fp-ozet"><span>Kilo</span><b>${fmt(toplam)} KG</b></div>`;
+  const inp = $('fpFiyat');
+  inp.value = '';
+  binlikGirisBagla(inp);
+  const mesaj = $('fpMesaj');
+  mesaj.style.display = 'none'; mesaj.textContent = '';
+  const on = $('btnFpOneri');
+  if (t.sonFiyat && Number(t.sonFiyat.deger) > 0) {
+    const tarih = t.sonFiyat.zaman ? new Date(t.sonFiyat.zaman).toLocaleDateString('tr-TR') : '';
+    on.textContent = `Son gönderim fiyatı: ${fmt(Number(t.sonFiyat.deger))} TL/KG${tarih ? ' (' + tarih + ')' : ''} — kullan`;
+    on.onclick = () => { inp.value = sayiBicimle(Number(t.sonFiyat.deger)); inp.focus(); };
+    on.classList.remove('gizli');
+  } else {
+    on.classList.add('gizli'); on.onclick = null;
+  }
+  $('btnFpKaydet').disabled = false;
+  $('fiyatPencere').classList.add('acik');
+  setTimeout(() => inp.focus(), 50);
+}
+async function fiyatKaydet() {
+  if (fpIstekte || !fpTaslak) return;
+  const t = fpTaslak;
+  const mesaj = $('fpMesaj');
+  const fiyat = trSayi($('fpFiyat').value);
+  const hataGoster = (m) => { mesaj.className = 'mesaj hata'; mesaj.textContent = m; mesaj.style.display = 'block'; };
+  if (!(fiyat > 0)) { hataGoster('Birim fiyat 0\'dan büyük olmalıdır.'); return; }
+  fpIstekte = true; $('btnFpKaydet').disabled = true;
+  try {
+    const j = await api('/api/taslak_fiyat_yaz', 'POST', { id: t.id, firmaId: aktifFirma ? aktifFirma.id : '', fiyat });
+    t.ortak.fiyat = Number(j.fiyat) || fiyat;
+    delete t.ortak.fiyatBekliyor;
+    fiyatPenceresiKapat();
+    await taslakEkraniAc();
+    taslakOnayAc(t);
+  } catch (e) {
+    fpIstekte = false; $('btnFpKaydet').disabled = false;
+    hataGoster(e.message || 'Fiyat kaydedilemedi.');
+    if (e.durum === 409) taslakEkraniAc();   // taslak değişmiş/gitmiş olabilir
+  }
+}
+binlikGirisBagla($('fpFiyat'));
+$('btnFpKaydet').onclick = fiyatKaydet;
+$('fpFiyat').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); fiyatKaydet(); } });
+$('btnFpIptal').onclick = fiyatPenceresiKapat;
+$('btnFpKapat').onclick = fiyatPenceresiKapat;
+$('fiyatPencere').addEventListener('click', (ev) => { if (ev.target === $('fiyatPencere')) fiyatPenceresiKapat(); });
+
 function taslakOnayAc(t) {
   gonderilecekTaslakId = t.id;
   belirsizIsaret = t.belirsizGonderim || null;
@@ -5068,7 +5181,7 @@ function taslakOnayAc(t) {
   if (t.ortak.yurtIci) {
     const turEtiket = t.ortak.turAd || (t.ortak.fiyatGonder ? 'Satış (yurt içi)' : 'Sevk Etme');
     html += `<div class="onay-satir"><span>Tür</span><b>${eHtml(turEtiket)} (yurt içi)</b></div>`;
-    if (t.ortak.fiyatGonder) html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
+    if (t.ortak.fiyatGonder) html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fiyatMetni(t)}</b></div>`;
     html += `<div class="onay-satir"><span>Karşı Taraf</span><b>${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || '—')}</b></div>`;
     // Kayıtsız karşı tarafta (üretici sevk / kayıtsız alıcı / kayıtsız satıcı)
     // docx "Eposta hariç tüm bilgiler" ister — gönderilecek TC, cep ve DOĞUM
@@ -5090,7 +5203,7 @@ function taslakOnayAc(t) {
       html += `<div class="onay-satir"><span>İşyeri / Depo</span><b>${eHtml(t.ortak.gidecekIsyeriAd || t.ortak.gidecekIsyeriId || '—')}</b></div>`;
     }
   } else {
-    html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
+    html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fiyatMetni(t)}</b></div>`;
     html += `<div class="onay-satir"><span>Ülke</span><b>${t.ortak.ulkeAd || '—'}</b></div>`;
   }
   html += `<div class="onay-satir"><span>Plaka/Belge</span><b>${t.ortak.plaka || t.ortak.belgeNo || '—'}</b></div>`;

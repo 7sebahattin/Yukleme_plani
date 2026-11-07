@@ -15,9 +15,11 @@ $roleSets = [
     4 => ['beyan.read'],
     5 => ['records.read', 'users.admin'],
     6 => ['beyan.permissions.detailed', 'beyan.read', 'beyan.write'],
+    7 => ['beyan.yukleme_bildir'],
+    8 => ['beyan.permissions.detailed', 'beyan.read', 'beyan.yukleme_bildir'],
 ];
 foreach ($roleSets as $id => $permissions) foreach ($permissions as $p) $insert->execute([$id, $p]);
-$testDb->exec('INSERT INTO user_roles VALUES (10,1),(11,2),(12,2),(12,3),(13,1),(13,2),(14,4),(15,5),(16,6)');
+$testDb->exec('INSERT INTO user_roles VALUES (10,1),(11,2),(12,2),(12,3),(13,1),(13,2),(14,4),(15,5),(16,6),(17,7),(18,8)');
 $checks = 0;
 function verify(bool $ok, string $message): void {
     global $checks;
@@ -48,4 +50,9 @@ $detailedLegacy = user_permissions(16);
 verify(!in_array('beyan.notify', $detailedLegacy, true), 'Detailed role legacy write must not expand');
 verify(!in_array('beyan.hks.read', $detailedLegacy, true), 'Detailed role read must not expand');
 verify(user_permissions(10) === $legacy, 'Per-user cache isolation failed');
+// v498: Yükleme Bildir ayrı yetkidir — beyan.write/read genişletmesi VERMEZ, ayrıntılı rolde açıkça işaretliyse VAR.
+verify(!in_array('beyan.yukleme_bildir', $legacy, true), 'Legacy beyan.write must NOT expand to yukleme_bildir');
+verify(!in_array('beyan.yukleme_bildir', $detailedLegacy, true), 'Detailed beyan.write must NOT grant yukleme_bildir');
+verify(in_array('beyan.yukleme_bildir', user_permissions(17), true) && !in_array('beyan.read', user_permissions(17), true), 'Standalone yukleme_bildir lost or gained read');
+verify(in_array('beyan.yukleme_bildir', user_permissions(18), true), 'Detailed role explicit yukleme_bildir lost');
 echo "Authentication permissions: $checks checks passed.\n";

@@ -50,7 +50,7 @@ function render_flash(): void {}
 
 if (!preg_match("/define\('APP_SURUM',\s*'(v\d+)'\)/", $dashboardHelperSource, $version)) throw new RuntimeException('Sürüm bulunamadı.');
 define('APP_SURUM', $version[1]);
-foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'render_desktop_sidebar'] as $functionName) {
+foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'render_desktop_sidebar'] as $functionName) {
     $functionSource = dashboard_extract_function($dashboardHelperSource, $functionName);
     eval(str_replace('__DIR__', var_export($dashboardRoot . '/config', true), $functionSource));
 }
