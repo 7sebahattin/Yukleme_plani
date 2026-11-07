@@ -33,7 +33,7 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
             <fieldset class="bsz-yon bsz-tam">
               <legend>Alıcı</legend>
               <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_disi" checked> Yurt dışı (ihracat) — ülke</label>
-              <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_ici"> Yurt içi — kişi / firma</label>
+              <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_ici"> Yurt içi — firma</label>
             </fieldset>
 
             <div class="form-group bsz-tam" data-ic="kure" id="bszUlkeKap">
@@ -41,23 +41,25 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
               <select id="bszUlke" class="form-control" data-aramali="Ülke yazın veya seçin"></select>
             </div>
             <div class="form-group bsz-tam" data-ic="kisi" id="bszKisiKap" hidden>
-              <label class="form-label" for="bszKisi">Kişi / Firma <strong class="bsz-zor">*</strong></label>
-              <select id="bszKisi" class="form-control" data-aramali="Kişi / firma yazın veya seçin"></select>
+              <label class="form-label" for="bszKisi">Firma <strong class="bsz-zor">*</strong></label>
+              <select id="bszKisi" class="form-control" data-aramali="Firma yazın veya seçin"></select>
+              <button type="button" class="bsz-yeni-bag" id="bszYeniAc">＋ Listede yok — yeni firma ekle</button>
             </div>
-            <div class="form-group bsz-tam" data-ic="depo" id="bszIscKap" hidden>
-              <label class="form-label" for="bszIsc">İşletme Türü (gidilen yer) <strong class="bsz-zor">*</strong></label>
-              <select id="bszIsc" class="form-control"></select>
+            <div class="form-group bsz-tam" data-ic="bina" id="bszYeniKap" hidden>
+              <label class="form-label" for="bszYeniAd">Yeni firma adı <strong class="bsz-zor">*</strong></label>
+              <input type="text" id="bszYeniAd" class="form-control" maxlength="150" autocomplete="off" data-uppercase="tr">
+              <button type="button" class="bsz-yeni-bag" id="bszYeniIptal">↩ Listeden seç</button>
             </div>
 
             <div class="form-group bsz-tam" data-ic="elma">
               <label class="form-label" for="bszUrun">Ürün <strong class="bsz-zor">*</strong></label>
               <select id="bszUrun" class="form-control" data-aramali="Ürün yazın veya seçin"></select>
             </div>
-            <div class="form-group" data-ic="terazi">
+            <div class="form-group bsz-vurgu bsz-vurgu-kg" data-ic="terazi">
               <label class="form-label" for="bszKg">Net KG <strong class="bsz-zor">*</strong></label>
               <input type="text" id="bszKg" class="form-control" inputmode="numeric" autocomplete="off" placeholder="örn. 20.000">
             </div>
-            <div class="form-group" data-ic="arac">
+            <div class="form-group bsz-vurgu bsz-vurgu-plaka" data-ic="arac">
               <label class="form-label" for="bszPlaka">Araç Plakası <strong class="bsz-zor">*</strong></label>
               <input type="text" id="bszPlaka" class="form-control" data-nospace data-uppercase="tr" autocomplete="off" maxlength="30">
             </div>
@@ -125,17 +127,27 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
         }
         el('bszHata').hidden = false;
     }
+    var yeniModu = false;
+    function yeniAd() { return el('bszYeniAd').value.replace(/\s+/g, ' ').trim(); }
+    function yeniUygula(v) {
+        yeniModu = v;
+        if (v) el('bszKisi').value = '';
+        if (el('bszKisi')._araTazele) el('bszKisi')._araTazele();
+        el('bszYeniKap').hidden = !v || yon() !== 'yurt_ici';
+        el('bszKisiKap').hidden = v || yon() !== 'yurt_ici';
+        kontrol();
+    }
     function kontrol() {
         var ok = el('bszFirma').value && el('bszUrun').value && el('bszPlaka').value.trim() !== '' &&
                  kgSayi() > 0 &&
-                 (yon() === 'yurt_ici' ? (el('bszKisi').value && el('bszIsc').value) : el('bszUlke').value);
+                 (yon() === 'yurt_ici' ? (yeniModu ? yeniAd().length >= 3 : el('bszKisi').value) : el('bszUlke').value);
         el('bszKaydet').disabled = !ok || gonderiyor;
     }
     function yonUygula() {
         var ici = yon() === 'yurt_ici';
         el('bszUlkeKap').hidden = ici;
-        el('bszKisiKap').hidden = !ici;
-        el('bszIscKap').hidden = !ici;
+        el('bszKisiKap').hidden = !ici || yeniModu;
+        el('bszYeniKap').hidden = !ici || !yeniModu;
         kontrol();
     }
     function bandKapat() { el('bszPlakaBand').hidden = true; plakaOnayli = false; }
@@ -184,7 +196,6 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
             doldur(el('bszFirma'), j.firmalar, 'Firma seçin');        // hiçbiri önceden seçili gelmez
             doldur(el('bszUlke'), j.ulkeler, '— seçilmedi —');
             doldur(el('bszKisi'), j.kisiler, '— seçilmedi —');
-            doldur(el('bszIsc'), j.isletmeTurleri || [], 'İşletme türü seçin');
             doldur(el('bszUrun'), j.urunler, '— seçilmedi —');
             el('bszYukleniyor').hidden = true;
             el('bszIcerik').hidden = false;
@@ -205,8 +216,8 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
             body: JSON.stringify({
                 csrf: CSRF, istek_kodu: istekKodu, yon: yon(),
                 partiNo: el('bszParti').value, firmaId: el('bszFirma').value,
-                ulkeId: ici ? '' : el('bszUlke').value, kisiId: ici ? el('bszKisi').value : '',
-                isletmeTuruId: ici ? el('bszIsc').value : '',
+                ulkeId: ici ? '' : el('bszUlke').value, kisiId: ici && !yeniModu ? el('bszKisi').value : '',
+                yeniFirmaAd: ici && yeniModu ? yeniAd() : '',
                 urunId: el('bszUrun').value, kg: kgSayi(), plaka: el('bszPlaka').value,
                 plakaOnay: !!onayli
             })
@@ -238,7 +249,10 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
     ov.addEventListener('click', function (e) { if (e.target === ov) kapat(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) kapat(); });
     Array.prototype.forEach.call(document.querySelectorAll('input[name="bszYon"]'), function (r) { r.addEventListener('change', yonUygula); });
-    ['bszFirma', 'bszUlke', 'bszKisi', 'bszIsc', 'bszUrun'].forEach(function (i) { el(i).addEventListener('change', kontrol); });
+    ['bszFirma', 'bszUlke', 'bszKisi', 'bszUrun'].forEach(function (i) { el(i).addEventListener('change', kontrol); });
+    el('bszYeniAc').addEventListener('click', function () { yeniUygula(true); el('bszYeniAd').focus(); });
+    el('bszYeniIptal').addEventListener('click', function () { el('bszYeniAd').value = ''; yeniUygula(false); });
+    el('bszYeniAd').addEventListener('input', kontrol);
     el('bszKg').addEventListener('input', function () { kgBicimle(); kontrol(); });
     el('bszPlaka').addEventListener('input', kontrol);
     el('bszPlaka').addEventListener('change', plakaKontrol);

@@ -3,7 +3,7 @@
 // api_beyansiz_yukleme.php — "Yükleme Bildir" (beyansız yükleme) JSON ucu — v498
 // =============================================================================
 // EYLEMLER:
-//   hazirla       → modalin listeleri (firma/ülke/ürün/kişi/işletme türü)
+//   hazirla       → modalin listeleri (firma/ülke/ürün/yurt içi firma)
 //   plaka_kontrol → bugün aynı plakaya kayıt var mı (SALT OKUNUR)
 //   olustur       → doğrular, beyansiz_yukleme satırı + HKS TASLAĞI yazar
 //
@@ -57,10 +57,6 @@ case 'hazirla': {
     $tabloVar = beyansiz_tablo_var();
     $katalog = bb_katalog();
     $firmalar = bsz_firma_secenekleri();
-    $yd = $katalog ? bb_yurtdisi_isletme_turu($katalog) : '';
-    $isletmeTurleri = array_values(array_filter($katalog['isletmeTurleri'] ?? [], function ($x) use ($yd) {
-        return (string)$x['id'] !== $yd;      // yurt içi alıcı için "Yurt Dışı" türü anlamsız
-    }));
     bsz_cikti([
         'tabloVar'   => $tabloVar,
         'katalogYok' => !$katalog,
@@ -68,7 +64,6 @@ case 'hazirla': {
         'ulkeler'    => $katalog['ulkeler'] ?? [],
         'urunler'    => $katalog['urunler'] ?? [],
         'kisiler'    => $tabloVar && $katalog ? bsz_kisi_secenekleri() : [],
-        'isletmeTurleri' => $isletmeTurleri,
     ]);
 }
 
@@ -93,7 +88,7 @@ case 'olustur': {
     $urunId = trim((string)($govde['urunId'] ?? ''));
     $ulkeId = trim((string)($govde['ulkeId'] ?? ''));
     $kisiId = (int)($govde['kisiId'] ?? 0);
-    $iscId  = trim((string)($govde['isletmeTuruId'] ?? ''));      // yalnız yurt içi (gidilen yer türü)
+    $yeniAd = trim(preg_replace('/\s+/u', ' ', (string)($govde['yeniFirmaAd'] ?? '')));   // yalnız yurt içi: listede olmayan firma (yalnız ad)
     $plaka = beyan_plaka_normalize((string)($govde['plaka'] ?? ''));
     $partiNo = trim((string)($govde['partiNo'] ?? ''));
     $istekKodu = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($govde['istek_kodu'] ?? ''));
@@ -127,16 +122,19 @@ case 'olustur': {
         $isletmeTuruId = bb_yurtdisi_isletme_turu($katalog);
         if ($isletmeTuruId === '') bsz_cikti(['hata' => 'Katalogda "Yurt Dışı" işletme türü bulunamadı — Hal Kayıt panelinden listeleri güncelleyin.'], 409);
     } else {
-        if ($kisiId <= 0) bsz_cikti(['hata' => 'Kişi/firma seçilmedi.'], 400);
-        $isc = bsz_katalogda($katalog['isletmeTurleri'] ?? [], $iscId);
-        if (!$isc || $iscId === bb_yurtdisi_isletme_turu($katalog)) bsz_cikti(['hata' => 'İşletme türü seçilmedi ya da katalogda yok.'], 400);
-        $isletmeTuruId = (string)$isc['id'];
-        try {
+        // İşletme türü (gidilen yer) BURADA seçilmez: fiyatı giren kişi Hal Kayıt'ta seçer.
+        if ($yeniAd !== '') {
+            if (mb_strlen($yeniAd) < 3 || mb_strlen($yeniAd) > 150) bsz_cikti(['hata' => 'Firma adı 3-150 karakter olmalı.'], 400);
+            $kisiId = 0;                 // yeni firma: yalnız ad; diğer bilgiler taslakta tamamlanır
+        } elseif ($kisiId <= 0) {
+            bsz_cikti(['hata' => 'Firma seçilmedi.'], 400);
+        }
+        if ($kisiId > 0) try {
             $st = db()->prepare("SELECT id, tc, ad, cep, dogum, sifat_id FROM `" . bsz_hks_on_ek() . "kisiler` WHERE id = ?");
             $st->execute([$kisiId]);
             $kisi = $st->fetch(PDO::FETCH_ASSOC) ?: null;
         } catch (Throwable $e) { $kisi = null; }
-        if (!$kisi) bsz_cikti(['hata' => 'Kişi/firma Kişi Havuzu\'nda bulunamadı.'], 400);
+        if ($kisiId > 0 && (!$kisi || strlen(preg_replace('/\D/', '', (string)$kisi['tc'])) !== 10)) bsz_cikti(['hata' => 'Firma Kişi Havuzu\'nda bulunamadı (yalnız firmalar seçilebilir).'], 400);
     }
 
     // Aynı gün aynı plaka: ENGEL DEĞİL, onay ister
@@ -155,7 +153,7 @@ case 'olustur': {
         $ins->execute([
             $partiNo !== '' ? $partiNo : null, $firmaId, $firmaAd, $yon,
             $yon === BSZ_YON_DISI ? $ulkeId : null, $yon === BSZ_YON_DISI ? $ulkeAd : null,
-            $kisi ? (int)$kisi['id'] : null, $kisi ? (string)$kisi['ad'] : null,
+            $kisi ? (int)$kisi['id'] : null, $kisi ? (string)$kisi['ad'] : ($yon === BSZ_YON_ICI ? $yeniAd : null),
             $urunId, (string)$urun['ad'], $kg, $plaka, $istekKodu, $userId ?: null,
         ]);
     } catch (PDOException $e) {
@@ -179,8 +177,8 @@ case 'olustur': {
         $ortak = bsz_ortak_yurtici([
             'turId' => $var['bildirimTuruId'], 'turAd' => $turAd, 'urunId' => $urunId, 'urunAd' => (string)$urun['ad'],
             'plaka' => $plaka, 'kg' => $kg, 'kayitId' => $kayitId, 'partiNo' => $partiNo,
-            'isletmeTuruId' => $isletmeTuruId,
-            'ikinciTc' => (string)$kisi['tc'], 'ikinciAd' => (string)$kisi['ad'], 'ikinciCep' => (string)$kisi['cep'],
+            'ikinciTc' => (string)($kisi['tc'] ?? ''), 'ikinciAd' => $kisi ? (string)$kisi['ad'] : $yeniAd,
+            'ikinciCep' => (string)($kisi['cep'] ?? ''),
             'ikinciDogumTarihi' => $dg, 'ikinciSifatId' => $kisi['sifat_id'] ?? '',
         ]);
     }

@@ -26,7 +26,6 @@ const HTML = { user: render(), admin: render('admin') };
 
 const HAZIR = {
   tabloVar: true, katalogYok: false,
-  isletmeTurleri: [{ id: '30', ad: 'Depo' }, { id: '31', ad: 'Şube' }],
   firmalar: [{ id: 'f1', ad: 'ASYA FRESH' }, { id: 'f2', ad: 'DİĞER' }],
   ulkeler: [{ id: '20', ad: 'Rusya' }, { id: '21', ad: 'Almanya' }],
   urunler: [{ id: '10', ad: 'Kayısı' }, { id: '11', ad: 'Kiraz' }],
@@ -141,18 +140,36 @@ async function doldur(sayfa, o) {
     await sayfa.click('#bszAc');
     await sayfa.waitForSelector('#bszIcerik:not([hidden])');
     await sayfa.check('input[name="bszYon"][value="yurt_ici"]');
-    ok('yurt içi: kişi + işletme türü görünür, ülke gizli', await sayfa.$eval('#bszKisiKap', e => !e.hidden) && await sayfa.$eval('#bszIscKap', e => !e.hidden) && await sayfa.$eval('#bszUlkeKap', e => e.hidden));
-    ok('yurt dışında işletme türü ve kişi gizli (yalnız ülke)', await (async () => { await sayfa.check('input[name="bszYon"][value="yurt_disi"]'); const r = await sayfa.$eval('#bszIscKap', e => e.hidden) && await sayfa.$eval('#bszKisiKap', e => e.hidden) && !(await sayfa.$eval('#bszUlkeKap', e => e.hidden)); await sayfa.check('input[name="bszYon"][value="yurt_ici"]'); return r; })());
+    ok('yurt içi: firma listesi görünür, ülke gizli, İşletme Türü alanı YOK', await sayfa.$eval('#bszKisiKap', e => !e.hidden) && await sayfa.$eval('#bszUlkeKap', e => e.hidden) && (await sayfa.$$('#bszIsc, #bszIscKap')).length === 0);
+    ok('seçenek etiketi "Yurt içi — firma"', (await sayfa.textContent('#bszOverlay fieldset')).includes('Yurt içi — firma'));
+    ok('yurt dışında firma listesi gizli (yalnız ülke)', await (async () => { await sayfa.check('input[name="bszYon"][value="yurt_disi"]'); const r = await sayfa.$eval('#bszKisiKap', e => e.hidden) && !(await sayfa.$eval('#bszUlkeKap', e => e.hidden)); await sayfa.check('input[name="bszYon"][value="yurt_ici"]'); return r; })());
+    ok('plaka + Net KG kutuları turuncu (Hal Kayıt bildirim)', await sayfa.$eval('#bszPlaka', e => getComputedStyle(e).borderTopColor) === 'rgb(245, 166, 35)' && await sayfa.$eval('#bszKg', e => getComputedStyle(e).borderTopColor) === 'rgb(245, 166, 35)', await sayfa.$eval('#bszPlaka', e => getComputedStyle(e).borderTopColor + '|' + getComputedStyle(e).borderTopWidth));
     await doldur(sayfa, { urun: 'Kayısı', kg: '500', plaka: '35IC1' });
     ok('kişi seçilmeden Kaydet pasif', await sayfa.$eval('#bszKaydet', e => e.disabled));
     await sayfa.fill('input[list="bszKisiListe"]', 'ALİ VELİ');
-    ok('işletme türü seçilmeden Kaydet pasif', await sayfa.$eval('#bszKaydet', e => e.disabled));
-    await sayfa.selectOption('#bszIsc', '30');
-    ok('kişi + işletme türü seçilince Kaydet aktif', await sayfa.$eval('#bszKaydet', e => !e.disabled));
+    ok('firma seçilince Kaydet aktif (işletme türü sorulmaz)', await sayfa.$eval('#bszKaydet', e => !e.disabled));
     await sayfa.click('#bszKaydet');
     await sayfa.waitForURL(/beyanlar\.php\?sekme=beyansiz/, { timeout: 5000 });
     const gi = D.istekler.filter(i => i.action === 'olustur')[0].govde;
-    ok('yurt içi gövde: yon + kisiId + isletmeTuruId, ulkeId boş', gi.yon === 'yurt_ici' && gi.kisiId === '5' && gi.isletmeTuruId === '30' && gi.ulkeId === '' && gi.kg === 500, JSON.stringify(gi));
+    ok('yurt içi gövde: yon + kisiId, isletmeTuruId YOK, ulkeId boş', gi.yon === 'yurt_ici' && gi.kisiId === '5' && !('isletmeTuruId' in gi) && gi.ulkeId === '' && gi.kg === 500, JSON.stringify(gi));
+    await ctx.close();
+
+    // ── 4b) Yeni firma (yalnız ad) ───────────────────────────
+    ({ ctx, sayfa, D } = await kur(browser, 1280));
+    await sayfa.goto(BASE);
+    await sayfa.click('#bszAc');
+    await sayfa.waitForSelector('#bszIcerik:not([hidden])');
+    await sayfa.check('input[name="bszYon"][value="yurt_ici"]');
+    await doldur(sayfa, { urun: 'Kayısı', kg: '500', plaka: '35YN1' });
+    ok('"yeni firma ekle" bağlantısı listenin altında', await sayfa.$eval('#bszYeniAc', e => !!e.offsetParent));
+    await sayfa.click('#bszYeniAc');
+    ok('yeni firma: ad kutusu açılır, liste gizlenir, ad yokken Kaydet pasif', await sayfa.$eval('#bszYeniKap', e => !e.hidden) && await sayfa.$eval('#bszKisiKap', e => e.hidden) && await sayfa.$eval('#bszKaydet', e => e.disabled));
+    await sayfa.fill('#bszYeniAd', 'yeni firma ltd');
+    ok('3+ karakter ad → Kaydet aktif', await sayfa.$eval('#bszKaydet', e => !e.disabled));
+    await sayfa.click('#bszKaydet');
+    await sayfa.waitForURL(/beyanlar\.php\?sekme=beyansiz/, { timeout: 5000 });
+    const gy = D.istekler.filter(i => i.action === 'olustur')[0].govde;
+    ok('yeni firma gövdesi: yeniFirmaAd var, kisiId boş, TC alanı yok', (gy.yeniFirmaAd || '').toLocaleLowerCase('tr') === 'yeni firma ltd' && gy.kisiId === '' && !('ikinciTc' in gy), JSON.stringify(gy));
     await ctx.close();
 
     // ── 5) Kurulu değil / katalog yok ────────────────────────

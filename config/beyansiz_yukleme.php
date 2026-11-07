@@ -195,7 +195,7 @@ function bsz_sayilar(): array {
 // ── Seçenekler (yalnız id + ad; TC/cep/doğum DÖNMEZ) ────────────────────────
 function bsz_kisi_secenekleri(): array {
     try {
-        $st = db()->query("SELECT id, ad FROM `" . bsz_hks_on_ek() . "kisiler` WHERE ad <> '' ORDER BY ad LIMIT 2000");
+        $st = db()->query("SELECT id, ad FROM `" . bsz_hks_on_ek() . "kisiler` WHERE ad <> '' AND LENGTH(tc) = 10 ORDER BY ad LIMIT 2000");
         return array_map(fn($r) => ['id' => (int)$r['id'], 'ad' => (string)$r['ad']], $st->fetchAll(PDO::FETCH_ASSOC));
     } catch (Throwable $e) { return []; }
 }
@@ -259,7 +259,7 @@ function bsz_ortak_yurtdisi(array $p): array {
  * Yurt içi satış: EKSİK taslak (tamamlanacak) — Hal Kayıt'ta Düzenle ile
  * tamamlanır. $p: turId, turAd, urunId, urunAd, plaka, kg, kayitId, partiNo,
  * ikinciTc, ikinciAd, ikinciCep, ikinciDogumTarihi (GG.AA.YYYY), ikinciSifatId (boş olabilir).
- * isletmeTuruId (gidilen yer türü) formdan gelir; sifatId / gidecekIsyeri / il alanları bilerek YOK
+ * isletmeTuruId (gidilen yer türü) YOK — fiyatı giren kişi Hal Kayıt'ta seçer; sifatId / gidecekIsyeri / il alanları bilerek YOK
  * (Hal Kayıt'ta Düzenle ile tamamlanır — canlı HKS sorgusu burada yapılmaz).
  */
 function bsz_ortak_yurtici(array $p): array {
@@ -290,6 +290,5 @@ function bsz_ortak_yurtici(array $p): array {
         'kaynak' => ['tip' => 'beyansiz', 'kayitId' => (int)$p['kayitId'], 'partiNo' => (string)($p['partiNo'] ?? '')],
     ];
     if (!empty($p['ikinciSifatId'])) $o['ikinciSifatId'] = (string)$p['ikinciSifatId'];
-    if (!empty($p['isletmeTuruId'])) $o['isletmeTuruId'] = (string)$p['isletmeTuruId'];
     return $o;
 }

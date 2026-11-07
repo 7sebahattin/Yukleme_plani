@@ -1666,7 +1666,7 @@
 
 <!-- Gönderilenler: "Tekrar gönder" açılır menüsü (position:fixed, z 620) -->
 <div id="gTekrarMenu" class="g-tekrar-menu" role="menu" aria-label="Tekrar gönder">
-  <button type="button" role="menuitem" data-sec="ayni">Aynı firma ile taslağa al<span class="g-menu-alt" id="gTekrarMenuAyniAlt"></span></button>
+  <button type="button" role="menuitem" data-sec="ayni"><span id="gTekrarMenuAyniAd">Aynı firma ile taslağa al</span><span class="g-menu-alt" id="gTekrarMenuAyniAlt"></span></button>
   <button type="button" role="menuitem" data-sec="firma">Firma değiştir…<span class="g-menu-alt">Başka bir firmayı seç</span></button>
 </div>
 <!-- Gönderilenler: "Firma değiştir…" firma seçim penceresi (z 600) -->
@@ -1879,6 +1879,8 @@ const API_ROTA = {
   'POST /api/taslaklar/gonder': 'taslak_gonder',
   // v498: fiyat gönderimde girilir (taslağa yazar, HKS'e göndermez)
   'POST /api/taslak_fiyat_yaz': 'taslak_fiyat_yaz',
+  // v500: taslağı başka firmanın taslaklarına kopyala
+  'POST /api/taslak_kopya_firmaya': 'taslak_kopya_firmaya',
   'GET /api/gonderilenler': 'gonderilenler',
   // Aynı gün aynı plaka uyarısı (SALT OKUNUR — Gönderim Onayı'nda)
   'POST /api/ayni_plaka': 'ayni_plaka_bugun',
@@ -1929,7 +1931,7 @@ async function csrfTazele() {
 // Yeni yazan uç eklenirse BURAYA da ekle (statik test: hks_csrf_kapsam_smoke.php).
 const API_GOVDE_CSRF = {
   kisi_kaydet: 1, kisi_sil: 1, firma_kaydet: 1, firma_sil: 1, listeler_yenile: 1,
-  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1, taslak_fiyat_yaz: 1,
+  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1, taslak_fiyat_yaz: 1, taslak_kopya_firmaya: 1,
 };
 async function api(yol, metod, govde, tekrar) {
   metod = metod || 'GET';
@@ -4815,6 +4817,7 @@ async function taslakEkraniAc() {
   try {
     const j = await api('/api/taslaklar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
     const taslaklar = j.taslaklar || [];
+    taslakSonListe = taslaklar;   // v500: Kopyala menüsü (kart dışı) bu listeden okur
     if (taslaklar.length === 0) {
       kap.innerHTML = '<div class="kart yukleniyor">Bekleyen taslak yok.</div>';
       return;
@@ -4877,8 +4880,12 @@ async function taslakEkraniAc() {
     // kayıtta eskiTaslakId GİTMEZ, asıl taslak SİLİNMEZ; beyan bağı (ortak.kaynak) forma
     // girmediği için kopyaya taşınmaz. Yazma yine normal "Taslağa Kaydet".
     kap.querySelectorAll('[data-kopyala]').forEach(b => {
-      b.onclick = () => taslakDuzenle(taslaklar.find(t => t.id === b.dataset.kopyala),
-        { kopya: true, toast: TASLAK_KOPYA_TOAST });
+      // v500: Gönderilenler'deki "Tekrar gönder" gibi menü — "Aynı firma ile kopyala"
+      // (eski davranış: forma kopya) ya da "Firma değiştir…" (başka firmanın taslaklarına
+      // doğrudan kopya taslak yazılır).
+      b.setAttribute('aria-haspopup', 'menu');
+      b.setAttribute('aria-expanded', 'false');
+      b.onclick = () => tekrarMenuAc(b, b.dataset.kopyala, 'taslak');
     });
     // v417: belirsiz gönderim işaretini kapat — kullanıcı HKS'te (hks.hal.gov.tr / Bildirim Sorgulama)
     // kontrol etti. Gönderim YAPMAZ; yalnız işareti kaldırır (sunucuda audit).
@@ -5976,12 +5983,16 @@ function tekrarMenuTus(e) {
     oge[n].focus({ preventScroll: true });
   }
 }
-function tekrarMenuAc(btn, idx) {
+let taslakSonListe = [];
+let tekrarMenuKip = 'gonderilen';
+function tekrarMenuAc(btn, idx, kip) {
   if (tekrarYukleniyor) return;
   if (tekrarMenuTetik === btn) { tekrarMenuKapat(); return; }   // aynı düğme: kapat
   tekrarMenuKapat();
   tekrarMenuTetik = btn;
   tekrarMenuIdx = idx;
+  tekrarMenuKip = kip || 'gonderilen';
+  $('gTekrarMenuAyniAd').textContent = tekrarMenuKip === 'taslak' ? 'Aynı firma ile kopyala' : 'Aynı firma ile taslağa al';
   btn.setAttribute('aria-expanded', 'true');
   $('gTekrarMenuAyniAlt').textContent = aktifFirma ? aktifFirma.ad : '';
   tekrarMenuKonumla(btn);
@@ -6006,6 +6017,13 @@ $('gTekrarMenu').addEventListener('click', (e) => {
   if (!b) return;
   const idx = tekrarMenuIdx, tetik = tekrarMenuTetik;
   tekrarMenuKapat();
+  if (tekrarMenuKip === 'taslak') {
+    const t = taslakSonListe.find(x => x.id === idx);
+    if (!t) return;
+    if (b.dataset.sec === 'ayni') taslakDuzenle(t, { kopya: true, toast: TASLAK_KOPYA_TOAST });
+    else firmaSecPencereAc(t, tetik, 'taslak');
+    return;
+  }
   const g = gonderilenVeri[idx];
   if (!g) return;
   if (b.dataset.sec === 'ayni') gonderilenTekrar(g, null);
@@ -6015,13 +6033,25 @@ $('gTekrarMenu').addEventListener('click', (e) => {
 // ── Firma seçim penceresi ("Firma değiştir…") ───────────────────────────────
 let firmaSecGonderim = null;
 let firmaSecTetik = null;
+let firmaSecKip = 'gonderilen';
 function firmaSecAcikMi() { return $('firmaSecPencere').classList.contains('acik'); }
-function firmaSecPencereAc(g, tetik) {
+function firmaSecPencereAc(g, tetik, kip) {
   firmaSecGonderim = g;
   firmaSecTetik = tetik || null;
-  const ozet = [g.plaka || g.belgeNo, g.urunAd, Math.round(Number(g.toplamKg) || 0).toLocaleString('tr-TR') + ' KG']
-    .filter(Boolean).join(' · ');
-  $('firmaSecOzet').textContent = 'Önceki gönderim: ' + ozet;
+  firmaSecKip = kip || 'gonderilen';
+  let ozet;
+  if (firmaSecKip === 'taslak') {
+    const o = g.ortak || {};
+    const kg = Number(o.planKg) || (g.satirlar || []).reduce((a, x) => a + (Number(x.miktar) || 0), 0);
+    ozet = [o.plaka || o.belgeNo, o.urunAd, Math.round(kg).toLocaleString('tr-TR') + ' KG'].filter(Boolean).join(' · ');
+    $('firmaSecBaslik').textContent = 'Hangi firmanın taslağına kopyalansın?';
+    $('firmaSecOzet').textContent = 'Kopyalanacak taslak: ' + ozet;
+  } else {
+    ozet = [g.plaka || g.belgeNo, g.urunAd, Math.round(Number(g.toplamKg) || 0).toLocaleString('tr-TR') + ' KG']
+      .filter(Boolean).join(' · ');
+    $('firmaSecBaslik').textContent = 'Hangi firma ile taslağa alınsın?';
+    $('firmaSecOzet').textContent = 'Önceki gönderim: ' + ozet;
+  }
   const kap = $('firmaSecListe');
   kap.textContent = '';
   // Aktif firma listede YOK: "Firma değiştir" başka bir firmaya geçmektir.
@@ -6046,7 +6076,8 @@ function firmaSecPencereAc(g, tetik) {
       b.onclick = () => {
         const gg = firmaSecGonderim;
         firmaSecPencereKapat(false);
-        gonderilenTekrar(gg, f);
+        if (firmaSecKip === 'taslak') taslakFirmayaKopyala(gg, f);
+        else gonderilenTekrar(gg, f);
       };
       izgara.appendChild(b);
     });
@@ -6067,6 +6098,25 @@ $('firmaSecPencere').addEventListener('pointerdown', (e) => { if (e.target === $
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && firmaSecAcikMi()) { e.stopPropagation(); firmaSecPencereKapat(); }
 });
+
+// v500: taslağı başka firmanın taslaklarına doğrudan kopyala (sunucu yazar: tek yol
+// hks_taslak_olustur). Başarıdan sonra hedef firmaya geçilir ve Taslaklar açılır.
+// Bildirimci sıfatı + işyeri hedef firmada Düzenle ile seçilir.
+let taslakKopyaYukleniyor = false;
+async function taslakFirmayaKopyala(t, hedef) {
+  if (taslakKopyaYukleniyor || !t || !aktifFirma) return;
+  taslakKopyaYukleniyor = true;
+  try {
+    const j = await api('/api/taslak_kopya_firmaya', 'POST', { id: t.id, firmaId: aktifFirma.id, hedefFirmaId: hedef.id });
+    if (!j || !j.tamam) throw new Error('Sunucudan geçerli bir yanıt alınamadı.');
+    firmaSec(hedef);
+    taslakEkraniAc();
+    toast('Taslak “' + (hedef.ad || '') + '” firmasına kopyalandı — Düzenle ile bildirimci sıfatı/işyerini seçin.');
+  } catch (e) {
+    alert('HATA: ' + e.message);
+  }
+  taslakKopyaYukleniyor = false;
+}
 
 // ── Tohumu al → (gerekirse firma değiştir) → formu doldur ───────────────────
 // SIRA ÖNEMLİ: tohum ÖNCE mevcut (aktif) firmayla istenir — kayıt o firmaya aittir

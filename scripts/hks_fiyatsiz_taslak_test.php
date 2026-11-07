@@ -131,10 +131,10 @@ ok('yanıt {tamam,id,fiyat}', str_contains($f, "['tamam' => true, 'id' => \$tid,
 
 $k = $govde('taslak_kaydet');
 ok("taslak_kaydet istemci ortak'ından fiyatBekliyor/tamamlanacak siler",
-    str_contains($k, "unset(\$g['ortak']['fiyatBekliyor'], \$g['ortak']['tamamlanacak'])"));
+    str_contains($k, "unset(\$g['ortak']['fiyatBekliyor'], \$g['ortak']['tamamlanacak'], \$g['ortak']['sifatBekliyor'])"));
 ok('hks_taslak_olustur bayrakları ortak\'tan türetir',
     str_contains($lib, "!empty(\$g['ortak']['fiyatBekliyor'])") && str_contains($lib, "!empty(\$g['ortak']['tamamlanacak'])")
-    && str_contains($lib, 'hks_bildirim_dogrula($g, $planMi, $fiyatsiz, $eksik)'));
+    && str_contains($lib, 'hks_bildirim_dogrula($g, $planMi, $fiyatsiz, $eksik, !empty($g[\'ortak\'][\'sifatBekliyor\']))'));
 
 $tg_ = $govde('taslak_gonder');
 ok('taslak_gonder: katı yeniden doğrulama satırı AYNEN', str_contains($tg_, "\$__revalHata = hks_bildirim_dogrula(['satirlar' => \$satirlar, 'ortak' => \$ortak]);"));
@@ -152,6 +152,25 @@ ok('taslaklar: fiyatBekliyor taslaklara sonFiyat, hks_gonderilenler fiyat>0 son 
 
 ok('audit ctx/payload beyansiz_id taşır (beyaz liste)', str_contains($tg, "'beyansiz_id' =>") && str_contains($tg, "\$p['beyansiz_id']"));
 
+echo "\n── v500: yeni firma (yalnız ad) + başka firmaya kopya (sifatBekliyor) ──\n";
+$yf = array_merge($ic, ['ikinciTc' => '', 'ikinciAd' => 'YENİ FİRMA LTD']);
+ok('eksik izin: TC boş ama ad var → GEÇER (TC taslakta tamamlanır)', hks_bildirim_dogrula($g($yf), true, true, true) === null);
+ok('eksik izin: TC boş ve ad boş → reddedilir', is_string(hks_bildirim_dogrula($g(array_merge($ic, ['ikinciTc' => '', 'ikinciAd' => ''])), true, true, true)));
+ok('eksik izin: dolu ama bozuk TC yine reddedilir', is_string(hks_bildirim_dogrula($g(array_merge($yf, ['ikinciTc' => '123'])), true, true, true)));
+ok('katı çağrıda (gönderim) TC boş yeni firma reddedilir', is_string(hks_bildirim_dogrula($g($yf), true)));
+$sb = $dis; unset($sb['sifatId']); $sb['sifatBekliyor'] = true;
+ok('sifatBekliyor + izin: sıfatsız yurt dışı taslak GEÇER', hks_bildirim_dogrula($g($sb), true, true, false, true) === null);
+ok('sifatBekliyor ama izin parametresi yok → sıfat reddedilir', is_string(hks_bildirim_dogrula($g($sb), true, true)));
+$sb2 = $sb; unset($sb2['sifatBekliyor']);
+ok('bayrak olmadan izin parametresi GEVŞETMEZ', is_string(hks_bildirim_dogrula($g($sb2), true, true, false, true)));
+$api2 = file_get_contents("$KOK/halkayit/api.php");
+$f2 = (preg_match('/case \'taslak_kopya_firmaya\': \{(.*?)\n    \}\n/s', $api2, $m2)) ? $m2[1] : '';
+ok('taslak_kopya_firmaya case var, muaf listede DEĞİL', $f2 !== '' && !preg_match("/function hks_csrf_muaf_eylemler[^}]*'taslak_kopya_firmaya'/s", $api2));
+ok('kaynak firma_id ile okunur, aynı firma reddedilir', str_contains($f2, 'WHERE id = ? AND firma_id = ?') && str_contains($f2, '$kaynakFid === $hedefFid'));
+ok('yazma TEK yoldan (hks_taslak_olustur), INSERT yok', str_contains($f2, 'hks_taslak_olustur(') && !str_contains($f2, 'INSERT'));
+ok('taslak_kaydet sifatBekliyor bayrağını istemciden siler', str_contains($api2, "\$g['ortak']['sifatBekliyor']"));
+ok('gönderim sifatBekliyor taslağı bloklar', str_contains($api2, "!empty(\$ortak['sifatBekliyor'])"));
+
 echo "\n── Tekrar gönder beyaz listesi bayrak KOPYALAMAZ ──\n";
 require_once "$KOK/halkayit/tekrar_gonder_lib.php";
 ok('beyaz listede fiyatBekliyor yok', !in_array('fiyatBekliyor', hks_kopya_ortak_anahtarlari(), true));
@@ -162,6 +181,8 @@ ok('kopyada bayrak/kaynak yok', is_array($kp) && !isset($kp['ortak']['fiyatBekli
 echo "\n── app.html ──\n";
 ok("API_ROTA 'POST /api/taslak_fiyat_yaz'", str_contains($app, "'POST /api/taslak_fiyat_yaz': 'taslak_fiyat_yaz'"));
 ok('API_GOVDE_CSRF taslak_fiyat_yaz:1', str_contains($app, 'taslak_fiyat_yaz: 1'));
+ok("API_ROTA 'POST /api/taslak_kopya_firmaya'", str_contains($app, "'POST /api/taslak_kopya_firmaya': 'taslak_kopya_firmaya'") && str_contains($app, 'taslak_kopya_firmaya: 1'));
+ok('Kopyala menü kipinde (taslak) açılır', str_contains($app, "tekrarMenuAc(b, b.dataset.kopyala, 'taslak')") && str_contains($app, 'taslakFirmayaKopyala('));
 ok('taslakOnayAc içinde fiyat kapısı YOK (kapı Gönder tıkında)', !preg_match('/function taslakOnayAc\(t\) \{[^}]{0,200}fiyatPenceresiAc/s', $app));
 
 echo $fail === 0 ? "\n>>> TÜM TESTLER GEÇTİ\n" : "\n>>> $fail TEST BAŞARISIZ\n";
