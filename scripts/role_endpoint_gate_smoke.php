@@ -50,4 +50,15 @@ foreach ([['record_edit.php','records.loading.create'],['kantar_edit.php','kanta
     $denied=false; try { require_perm($match[1]); } catch (RuntimeException $e) { $denied=true; }
     $checks++; if (!$denied) throw new RuntimeException('Create-only can enter edit route '.$file);
 }
+// v498: beyanlar.php girişi = beyan_sayfa_erisimi() (beyan.read VEYA beyan.yukleme_bildir); GERÇEK fonksiyon helpers.php'den.
+$hsrc=file_get_contents(dirname(__DIR__).'/config/helpers.php');
+foreach (['can_yukleme_bildir','beyan_sayfa_erisimi'] as $fn) {
+    if (!preg_match('/function '.$fn.'\(\): bool \{.*?\n\}/s',$hsrc,$fm)) throw new RuntimeException('Missing '.$fn);
+    eval($fm[0]);
+}
+function forbidden($m=''): void { throw new RuntimeException('denied'); }
+gate_case('beyanlar.php',"\$beyanOku = can_beyan('read');",['beyan.yukleme_bildir'],[],true);
+gate_case('beyanlar.php',"\$beyanOku = can_beyan('read');",['beyan.read'],[],true);
+gate_case('beyanlar.php',"\$beyanOku = can_beyan('read');",['beyan.write','beyan.notify'],[],false);
+gate_case('beyanlar.php',"\$beyanOku = can_beyan('read');",[],[],false);
 echo "Endpoint action gates: $checks checks passed.\n";

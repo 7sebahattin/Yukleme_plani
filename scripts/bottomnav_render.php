@@ -204,7 +204,7 @@ $GATES = [
     'reports.php'           => ['reports.php', "else { require_perm('reports.read'); }", fn() => can('reports.read'), 'reports.read'],
     'hizli_maliyet.php'     => ['hizli_maliyet.php', "require_hizli_maliyet('read');", fn() => can('hizli_maliyet.read') || is_admin(), 'can_hizli_maliyet(read) = hizli_maliyet.read || is_admin(); maliyet.* does NOT open'],
     'hizli_maliyet_form.php' => ['hizli_maliyet_form.php', "require_hizli_maliyet('read');", fn() => can('hizli_maliyet.read') || is_admin(), 'can_hizli_maliyet(read) = hizli_maliyet.read || is_admin(); maliyet.* does NOT open'],
-    'beyanlar.php'          => ['beyanlar.php', "if (!can_beyan('read')) forbidden();", fn() => can('beyan.read') || is_admin(), 'can_beyan(read) = beyan.read || is_admin()'],
+    'beyanlar.php'          => ['beyanlar.php', "if (!beyan_sayfa_erisimi()) forbidden();", fn() => can('beyan.read') || can('beyan.yukleme_bildir') || is_admin(), 'beyan_sayfa_erisimi() = beyan.read || beyan.yukleme_bildir || is_admin() (v498)'],
     'kantar.php'            => ['kantar.php', "require_perm('kantar.read');", fn() => can('kantar.read'), 'kantar.read'],
     'malzeme_stok.php'      => ['malzeme_stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],
     'stok.php'              => ['stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],

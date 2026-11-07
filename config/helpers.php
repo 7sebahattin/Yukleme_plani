@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v497');
+    define('APP_SURUM', 'v498');
 }
 
 // --- HTML kaçışı ---
@@ -351,6 +351,22 @@ function nav_ptak_gorunur(): bool {
     return role_pdks_can('hub');
 }
 
+// v498 — Yükleme Bildir (beyansız yükleme) yetkisi. beyan.write bunu VERMEZ
+// (beyan_expand_role_permissions listesinde yok); ayrı anahtardır ve TEK BAŞINA
+// yeterlidir: Beyanlar sayfasına girer, yalnız Beyansız Yüklemeler sekmesini görür.
+function can_yukleme_bildir(): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    return function_exists('can') && can('beyan.yukleme_bildir');
+}
+
+// Beyanlar sayfasına giriş kapısı (beyanlar.php, sidebar, topnav, bottomnav,
+// first_allowed_page ve index.php AYNI fonksiyonu çağırır).
+function beyan_sayfa_erisimi(): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    if (!function_exists('can')) return false;
+    return can('beyan.read') || can('beyan.yukleme_bildir');
+}
+
 // Kullanıcının GERÇEKTEN açabildiği ilk sayfa (yoksa null).
 //
 // Neden var: giriş akışı login → depo_sec → index.php'dir ve index.php
@@ -369,7 +385,7 @@ function first_allowed_page(): ?string {
 
     $adaylar = [
         'records.php'        => role_matrix_page_can('records','loading'),                    // require_perm('records.read')
-        'beyanlar.php'       => can('beyan.read') || $adm,              // can_beyan('read')
+        'beyanlar.php'       => beyan_sayfa_erisimi(),                  // beyanlar.php: beyan_sayfa_erisimi()
         'kantar.php'         => can('kantar.read'),                     // require_perm('kantar.read')
         'halkayit/index.php' => can('hks.access'),                   // require_perm('records.write')
         'reports.php'        => can('reports.read'),                    // require_perm('reports.read')
@@ -536,7 +552,7 @@ function render_desktop_sidebar(string $base): void {
     $p_def   = !$_fn || can('defs.read');
     $p_usr   = $_fn && can('users.admin');
     $p_adm   = function_exists('is_admin') && is_admin();
-    $p_beyan = !$_fn || can('beyan.read') || $p_adm;
+    $p_beyan = !$_fn || beyan_sayfa_erisimi() || $p_adm;
     // Hesap: yalnız kendi yetkisi. Eski "reports.read'e düş" köprüsü kaldırıldı
     // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan
     // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
@@ -804,7 +820,7 @@ function nav_alt_izinler(): array {
     return [
         'records' => role_matrix_page_can('records','loading'),            // records.php: require_perm('records.read')
         'cikma'   => role_matrix_page_can('records','pallet'),            // cikmalar.php: require_perm('records.read')
-        'beyan'   => $c('beyan.read') || $adm,      // beyanlar.php: can_beyan('read')
+        'beyan'   => beyan_sayfa_erisimi() || $adm, // beyanlar.php: beyan_sayfa_erisimi()
         'kantar'  => $c('kantar.read'),             // kantar.php: require_perm('kantar.read')
         'hks'     => $c('hks.access'),           // halkayit/index.php: require_perm('records.write')
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
@@ -1142,7 +1158,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php if (role_matrix_page_can('siparis','urun')): ?>
             <a href="<?= $base ?>urun_siparis.php" <?= nav_aktif_anahtar() === 'usip' ? 'class="active"' : '' ?>>Siparişler</a>
             <?php endif; ?>
-            <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
+            <?php if (!function_exists('can') || beyan_sayfa_erisimi()): ?>
             <a href="<?= $base ?>beyanlar.php" <?= in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php'], true) ? 'class="active"' : '' ?>>Beyanlar</a>
             <?php endif; ?>
             <?php if (can_mail('read')): ?>
@@ -1711,7 +1727,7 @@ endif;
                        'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements',
                        'attendance.foreman_accounts','attendance.foreman_payments',
                        'attendance.management_reports'];
-            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin','siparis.read','siparis.write','siparis.delete','siparis.match','hizli_maliyet.read','hizli_maliyet.write','hizli_maliyet.delete'], $pdks_p);
+            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','beyan.yukleme_bildir','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin','siparis.read','siparis.write','siparis.delete','siparis.match','hizli_maliyet.read','hizli_maliyet.write','hizli_maliyet.delete'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
                 // Sprint Günlük-İşçi-03 düzeltmesi #2 (kullanıcının açık
@@ -2745,6 +2761,19 @@ function can_beyan(string $perm): bool {
     return false;
 }
 
+// `beyansiz_yukleme` tablosu kurulu mu? (migrate.php kartı kurar.) Hata → false.
+function beyansiz_tablo_var(): bool {
+    static $var = null;
+    if ($var !== null) return $var;
+    try {
+        db()->query("SELECT 1 FROM beyansiz_yukleme LIMIT 1");
+        $var = true;
+    } catch (Throwable $e) {
+        $var = false;
+    }
+    return $var;
+}
+
 // ── Sayı normalize: zaten sayı ise dokunma (parser JSON'undan gelen float
 //    "." round-trip'inde num() tarafından binlik sanılıp bozulmasın). ──
 function beyan_num_or_null($v): ?float {
@@ -3134,6 +3163,13 @@ function hks_eslesme_yaz(string $tip, string $kaynak, string $hks_id, string $hk
 // yanlışlıkla kapatmasın.
 function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek = []): void {
     if ($taslak_id === '') return;
+    beyan_hks_taslak_isaretle_beyan($taslak_id, $durum, $ek);
+    // v498: beyansız yükleme kaydı AYRI ve BAĞIMSIZ güncellenir — beyan bağı
+    // bulunmasa (return) bile çalışır. Tablo yoksa sessiz geçer.
+    beyansiz_taslak_isaretle($taslak_id, $durum, $ek);
+}
+
+function beyan_hks_taslak_isaretle_beyan(string $taslak_id, string $durum, array $ek): void {
     try {
         $st = db()->prepare("SELECT id, beyan_id FROM beyan_hks_bildirim
                              WHERE taslak_id = ? AND durum = 'taslak' ORDER BY id DESC LIMIT 1");
@@ -3160,6 +3196,32 @@ function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek =
     }
 }
 
+// v498 — beyansiz_yukleme satırının akıbeti. taslak_id eşleşirse o satır;
+// yalnız GÖNDERİMDE ve eşleşme yoksa `$ek['beyansizId']` yedeği (yalnız hâlâ
+// durum='taslak' olan satır). Sonuç 'gonderildi' | 'silindi' (diğer değer yok sayılır).
+function beyansiz_taslak_isaretle(string $taslak_id, string $durum, array $ek = []): void {
+    if ($taslak_id === '' || !in_array($durum, ['gonderildi', 'silindi'], true)) return;
+    try {
+        $gid = isset($ek['gonderim_id']) ? (string)$ek['gonderim_id'] : null;
+        $hata = isset($ek['hata_metni']) ? (string)$ek['hata_metni'] : null;
+        $up = db()->prepare("UPDATE beyansiz_yukleme
+                             SET durum = ?, gonderim_id = ?, hata_metni = ?, updated_at = NOW()
+                             WHERE taslak_id = ? AND durum = 'taslak'");
+        $up->execute([$durum, $gid, $hata, $taslak_id]);
+        if ($up->rowCount() === 0 && $durum === 'gonderildi') {
+            $bid = (int)($ek['beyansizId'] ?? 0);
+            if ($bid > 0) {
+                db()->prepare("UPDATE beyansiz_yukleme
+                               SET durum = 'gonderildi', gonderim_id = ?, hata_metni = ?, updated_at = NOW()
+                               WHERE id = ? AND durum = 'taslak'")
+                    ->execute([$gid, $hata, $bid]);
+            }
+        }
+    } catch (Throwable $e) {
+        // tablo yok / kolon yok → sessiz; HKS akışı asla kesilmez
+    }
+}
+
 // Hal Kayıt'ta "Düzenle": SPA yeni taslağı kaydedip ESKİSİNİ siler (yeni id).
 // Eskiden silme bağı `iptal`e çekiyor, yeni taslak ise beyana hiç bağlanmıyordu
 // → gönderilse bile beyan "bildirim yapılmadı" görünüyordu. Bağ silmeden ÖNCE
@@ -3174,6 +3236,12 @@ function beyan_hks_taslak_tasi(string $eski_id, string $yeni_id): void {
     } catch (PDOException $e) {
         error_log('[beyan-hks] bag tasinamadi: ' . $e->getMessage());
     }
+    // v498: beyansız yükleme satırı da yeni taslak id'sine taşınır (ayrı UPDATE).
+    try {
+        db()->prepare("UPDATE beyansiz_yukleme SET taslak_id = ?, updated_at = NOW()
+                       WHERE taslak_id = ? AND durum = 'taslak'")
+            ->execute([$yeni_id, $eski_id]);
+    } catch (Throwable $e) {}
 }
 
 // Beyanın bildirim bağına yapılabilecek ELLE düzeltmeler (beyan_edit.php).

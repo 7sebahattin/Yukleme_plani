@@ -25,6 +25,7 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/mail_core.php';
 // Siparişler (v371): tablolar YALNIZ buradan (admin, CSRF, audit) kurulur; sayfalar şema değiştirmez.
 require_once __DIR__ . '/config/siparis_core.php';
+require_once __DIR__ . '/config/beyansiz_yukleme.php';   // v498 Yükleme Bildir (beyansız yükleme) tablosu
 require_once __DIR__ . '/config/urun_siparis.php';   // v409 Ürün Siparişleri (yalnız CREATE TABLE kartı)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
@@ -119,6 +120,7 @@ $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
 $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
+$bsz_results = []; $bsz_ran = false;                            // v498 beyansiz_yukleme tablosu
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
@@ -284,6 +286,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($sr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'siparis', null, null,
                 ['operation' => 'add_column', 'column' => $sr['adim']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'beyansiz_yukleme') {
+    csrf_check($_POST['csrf'] ?? null);
+    $bsz_ran     = true;
+    $bsz_results = beyansiz_yukleme_migrate($pdo);
+    foreach ($bsz_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'beyansiz_yukleme', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'urun_siparis') {
@@ -719,6 +730,27 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
         foreach (siparis_sofor_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `siparis_sevkiyatlar` ADD COLUMN `$skol` $stan;") . "\n"; }
       ?></pre>
     </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('beyansiz-yukleme'); ?>
+    <h2 style="margin-top:0;">Beyanlar — Yükleme Bildir (beyansız yükleme)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>beyansiz_yukleme</code> tablosunu ekler (yabancı anahtar YOK, mevcut veriye dokunmaz).
+      Çalıştırılmazsa "Yükleme Bildir" ve Beyansız Yüklemeler sekmesi "henüz kurulmadı" der, Beyanlar aynen çalışır.
+      <?php if ($bsz_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($bsz_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $bszHazir = false; try { $pdo->query('SELECT 1 FROM beyansiz_yukleme LIMIT 1'); $bszHazir = true; } catch (Throwable $e) {} ?>
+    <p style="font-weight:600;color:<?= $bszHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $bszHazir ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="beyansiz_yukleme">
+      <button type="submit" class="btn btn-primary">Beyansız Yükleme Tablosunu Oluştur</button>
+    </form>
   <?php mg_kart_kapat(); ?>
 
   <?php mg_kart_ac('urun-siparis'); ?>

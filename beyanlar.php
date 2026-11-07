@@ -6,7 +6,28 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-if (!can_beyan('read')) forbidden();
+// v498: Beyanlar sayfasına giriş = beyan.read VEYA beyan.yukleme_bildir.
+if (!beyan_sayfa_erisimi()) forbidden();
+
+// ── Sekme: Beyanlar | Beyansız Yüklemeler (?sekme=) ──────────────────────
+// Yalnız yukleme_bildir yetkisi olan kullanıcı SADECE Beyansız sekmesini görür
+// (beyan sorguları hiç çalışmaz). Beyansız sekmesi: Yükleme Bildir yetkisi YA DA
+// beyan.read + hks.read. Görmüyorsa Beyanlar sekmesine düşer.
+$beyanOku = can_beyan('read');
+$bszGor   = can_yukleme_bildir() || ($beyanOku && can_beyan('hks.read'));
+$sekme    = (string)($_GET['sekme'] ?? '');
+if (!in_array($sekme, ['beyanlar', 'beyansiz'], true)) $sekme = $beyanOku ? 'beyanlar' : 'beyansiz';
+if (!$beyanOku) $sekme = 'beyansiz';
+if ($sekme === 'beyansiz' && !$bszGor) $sekme = 'beyanlar';
+
+if ($sekme === 'beyansiz') {
+    require_once __DIR__ . '/config/beyansiz_yukleme.php';
+    render_header('Beyanlar');
+    render_flash();
+    include __DIR__ . '/_beyansiz_sekme.php';
+    render_footer();
+    return;
+}
 
 function valid_date_beyan(string $d): bool {
     return (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
@@ -204,21 +225,11 @@ render_header('Beyanlar');
 render_flash();
 ?>
 
-<div class="page-head">
-    <div>
-        <h1>🧾 Beyanlar</h1>
-        <p class="muted">Toplam <?= $total ?> beyan<?php if ($bekleyen_total): ?> · <strong><?= $bekleyen_total ?></strong> işlem bekliyor<?php endif; ?></p>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <?php if (is_admin()): ?>
-        <a href="beyan_bildirim_tani.php" class="btn btn-ghost btn-sm"
-           title="Bildirim köprüsü ön kontrolü (salt-okunur)">🩺 Bildirim Ön Kontrol</a>
-        <?php endif; ?>
-        <?php if (can_beyan('create')): ?>
-        <a href="beyan_create.php" class="btn btn-primary btn-lg">+ Yeni Beyan</a>
-        <?php endif; ?>
-    </div>
-</div>
+<?php
+    // Başlık + sekme çubuğu: _beyanlar_baslik.php (iki sekmenin ORTAK parçası).
+    $bsl_alt = 'Toplam ' . $total . ' beyan' . ($bekleyen_total ? ' · <strong>' . $bekleyen_total . '</strong> işlem bekliyor' : '');
+    include __DIR__ . '/_beyanlar_baslik.php';
+?>
 
 <!-- ══ ÜST BÖLÜM — YÜKLENMEYENLER ═══════════════════════════════════════════
      İşlem bekleyen beyanlar. Filtreden ve sayfalamadan BAĞIMSIZ: burası tam
@@ -500,11 +511,11 @@ render_flash();
           <label>Bildirimci Sıfatı<select id="bbSifat" class="form-control"></select></label>
           <label>Bildirim Türü<select id="bbTur" class="form-control"></select></label>
         </div>
-        <div class="beyan-hks-sub">Seçilen beyanlar — birim fiyatları ayrı ayrı girilir</div>
+        <div class="beyan-hks-sub">Seçilen beyanlar — birim fiyat Hal Kayıt'ta gönderimde girilir</div>
         <div class="table-wrap">
           <table class="beyan-match-table" id="bbTablo">
             <thead><tr><th>Parti</th><th>Ürün</th><th>Ülke</th><th>Plaka</th>
-                       <th class="num">Net KG</th><th>Birim Fiyat</th></tr></thead>
+                       <th class="num">Net KG</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -611,11 +622,7 @@ render_flash();
 
     function kontrol() {
         var uygun = (veri ? veri.satirlar : []).filter(function (r) { return !r.engel; });
-        var hepsiFiyatli = uygun.length > 0 && uygun.every(function (r) {
-            var i = el('bbFiyat_' + r.id);
-            return i && i.value.trim() !== '';
-        });
-        el('bbKaydet').disabled = !(el('bbSifat').value && el('bbTur').value && hepsiFiyatli);
+        el('bbKaydet').disabled = !(el('bbSifat').value && el('bbTur').value && uygun.length > 0);
     }
 
     el('bbAc').addEventListener('click', function () {
@@ -648,20 +655,14 @@ render_flash();
             el('bbTablo').querySelector('tbody').innerHTML = veri.satirlar.map(function (r) {
                 if (r.engel) {
                     return '<tr class="bb-engel"><td>' + eHtml(r.partiNo || '#' + r.id) + '</td>' +
-                           '<td colspan="5" class="muted">⚠️ ' + eHtml(r.engel) + '</td></tr>';
+                           '<td colspan="4" class="muted">⚠️ ' + eHtml(r.engel) + '</td></tr>';
                 }
-                var f = r.fiyat === null ? '' : r.fiyat.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
                 return '<tr><td><strong>' + eHtml(r.partiNo || '#' + r.id) + '</strong></td>' +
                        '<td>' + eHtml(r.urunAd) + '</td><td>' + eHtml(r.ulkeAd) + '</td>' +
                        '<td>' + eHtml(r.plaka) + '</td>' +
-                       '<td class="num">' + r.netKg.toLocaleString('tr-TR') + '</td>' +
-                       '<td><input type="text" class="form-control bb-fiyat" id="bbFiyat_' + r.id +
-                       '" inputmode="decimal" value="' + eHtml(f) + '" placeholder="örn. 12,50"></td></tr>';
+                       '<td class="num">' + r.netKg.toLocaleString('tr-TR') + '</td></tr>';
             }).join('');
 
-            Array.prototype.forEach.call(document.querySelectorAll('.bb-fiyat'), function (i) {
-                i.addEventListener('input', kontrol);
-            });
             el('bbSifat').addEventListener('change', kontrol);
             el('bbTur').addEventListener('change', kontrol);
 
@@ -678,7 +679,7 @@ render_flash();
 
     el('bbKaydet').addEventListener('click', function () {
         var satirlar = veri.satirlar.filter(function (r) { return !r.engel; }).map(function (r) {
-            return { beyan_id: r.id, fiyat: el('bbFiyat_' + r.id).value };
+            return { beyan_id: r.id };
         });
         if (!satirlar.length) return;
         if (!confirm(satirlar.length + ' beyan için HKS TASLAĞI oluşturulacak.\n\n' +
@@ -723,5 +724,7 @@ render_flash();
 })();
 </script>
 <?php endif; ?>
+
+<?php if (can_yukleme_bildir()) include __DIR__ . '/_yukleme_bildir_modal.php'; ?>
 
 <?php render_footer(); ?>

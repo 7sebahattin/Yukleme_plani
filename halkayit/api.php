@@ -455,13 +455,31 @@ try {
       $__belirsizListe = [];
       try { $__belirsizListe = hks_belirsiz_liste_firma($fid, date('Y-m-d')); }
       catch (Throwable $e) { error_log('[hks] belirsiz işaret listesi okunamadı: ' . get_class($e)); }
-      $taslaklar = array_map(function ($r) use ($__adlar, $__ayniPlaka, $__belirsizListe) {
+      // v498: fiyatı gönderimde girilecek taslaklara aynı firma+ürünün SON gönderim fiyatı
+      // (yalnız öneri; otomatik doldurulmaz). (firma, ürün) başına bir kez, hata yutulur.
+      $__sonFiyatC = [];
+      $__sonFiyat = function (array $o) use ($db, $fid, &$__sonFiyatC) {
+        $ua = trim((string)($o['urunAd'] ?? ''));
+        if ($ua === '') return null;
+        if (!array_key_exists($ua, $__sonFiyatC)) {
+          $__sonFiyatC[$ua] = null;
+          try {
+            $q = $db->prepare('SELECT fiyat, zaman FROM ' . hks_tablo('gonderilenler') .
+              ' WHERE firma_id = ? AND urun_ad = ? AND fiyat > 0 ORDER BY zaman DESC LIMIT 1');
+            $q->execute([$fid, $ua]);
+            $f = $q->fetch();
+            if ($f) $__sonFiyatC[$ua] = ['deger' => (float)$f['fiyat'], 'zaman' => (new DateTime($f['zaman']))->format('c')];
+          } catch (Throwable $e) { error_log('[hks] son fiyat okunamadı: ' . get_class($e)); }
+        }
+        return $__sonFiyatC[$ua];
+      };
+      $taslaklar = array_map(function ($r) use ($__adlar, $__ayniPlaka, $__belirsizListe, $__sonFiyat) {
         $veri = json_decode($r['veri'], true);
         $__plakaBugun = $__ayniPlaka((array)($veri['ortak'] ?? []), (string)$r['firma_ad']);
         if (isset($veri['ortak']['ulkeAd'])) {
           $veri['ortak']['ulkeAd'] = hks_gonderilen_ulke_isimle($veri['ortak']['ulkeAd'], $__adlar);
         }
-        return [
+        $__t = [
           'id' => $r['id'], 'zaman' => (new DateTime($r['zaman']))->format('c'),
           'firmaId' => $r['firma_id'], 'firmaAd' => $r['firma_ad'],
           'satirlar' => $veri['satirlar'], 'ortak' => $veri['ortak'],
@@ -469,6 +487,8 @@ try {
           'belirsizGonderim' => hks_belirsiz_taslak_icin($__belirsizListe,
             $veri['ortak']['plaka'] ?? '', $veri['ortak']['belgeNo'] ?? ''),
         ];
+        if (!empty($veri['ortak']['fiyatBekliyor'])) $__t['sonFiyat'] = $__sonFiyat((array)$veri['ortak']);
+        return $__t;
       }, $rows);
       hks_json_cikti(['taslaklar' => $taslaklar]);
     }
@@ -482,6 +502,9 @@ try {
       // bağı kapatıyor, düzenlenip gönderilen taslak beyana hiç yansımıyordu.
       $eskiId = trim((string)($g['eskiTaslakId'] ?? ''));
       unset($g['eskiTaslakId']);
+      // v498: fiyatBekliyor / tamamlanacak YALNIZ beyan uçları tarafından yazılır; SPA
+      // üretmez, istemciden geleni güvenme (bayrak taslağı kapıdan geçirmesin).
+      if (is_array($g['ortak'] ?? null)) unset($g['ortak']['fiyatBekliyor'], $g['ortak']['tamamlanacak']);
       if ($eskiId !== '' && is_array($g['ortak'] ?? null) && empty($g['ortak']['kaynak'])) {
         $es = $db->prepare('SELECT veri FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
         $es->execute([$eskiId, trim((string)($g['firmaId'] ?? ''))]);
@@ -494,6 +517,48 @@ try {
         beyan_hks_taslak_tasi($eskiId, (string)$sonuc['id']);
       }
       hks_json_cikti(['tamam' => true, 'id' => $sonuc['id']]);
+    }
+    // v498: fiyat Hal Kayıt'ta GÖNDERİMDE girilir. Beyan uçları fiyatsız taslak yazar
+    // (ortak.fiyatBekliyor); bu uç fiyatı yazar ve bayrağı siler. HKS'e GÖNDERMEZ.
+    // CSRF merkezi kapıda (muaf listede DEĞİL). Firma izolasyonu: id + firma_id.
+    case 'taslak_fiyat_yaz': {
+      $fid = trim((string)($g['firmaId'] ?? ''));
+      $tid = trim((string)($g['id'] ?? ''));
+      if ($fid === '' || $tid === '') hks_json_cikti(['hata' => 'Firma ve taslak gerekli.'], 400);
+      $fiyat = round((float)str_replace(',', '.', (string)($g['fiyat'] ?? 0)), 4);
+      if (!($fiyat > 0) || $fiyat >= 1e7) hks_json_cikti(['hata' => 'Birim fiyat 0\'dan büyük olmalıdır.'], 400);
+      $st = $db->prepare('SELECT * FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+      $st->execute([$tid, $fid]);
+      $t = $st->fetch();
+      if (!$t) hks_json_cikti(['hata' => 'Taslak bulunamadı (gönderilmiş ya da silinmiş olabilir). Listeyi yenileyin.'], 409);
+      $veri = json_decode((string)$t['veri'], true);
+      if (!is_array($veri) || !is_array($veri['ortak'] ?? null)) hks_json_cikti(['hata' => 'Taslak okunamadı.'], 409);
+      $ortak = $veri['ortak'];
+      if (!empty($ortak['tamamlanacak'])) {
+        hks_json_cikti(['hata' => 'Bu taslak eksik bilgi içeriyor — önce "Düzenle" ile tamamlayın.'], 409);
+      }
+      if (!empty($ortak['yurtIci']) && empty($ortak['fiyatGonder'])) {
+        hks_json_cikti(['hata' => 'Bu bildirim türünde fiyat gönderilmez.'], 400);
+      }
+      $ortak['fiyat'] = $fiyat;
+      unset($ortak['fiyatBekliyor']);
+      $veri['ortak'] = $ortak;
+      // Tam (katı) doğrulama: fiyat yazıldıktan sonra taslak gönderilebilir olmalı.
+      $planMi = (float)($ortak['planKg'] ?? 0) > 0 && empty($veri['satirlar']);
+      $hata = hks_bildirim_dogrula(['satirlar' => $veri['satirlar'] ?? [], 'ortak' => $ortak], $planMi);
+      if ($hata) hks_json_cikti(['hata' => $hata], 400);
+      $up = $db->prepare('UPDATE ' . hks_tablo('taslaklar') . ' SET veri = ? WHERE id = ? AND firma_id = ?');
+      $up->execute([json_encode($veri, JSON_UNESCAPED_UNICODE), $tid, $fid]);
+      // Etkilenen-satır sayısına GÜVENİLMEZ (değişmeyen satırda 0 dönebilir); satır hâlâ var mı teyidi.
+      $te = $db->prepare('SELECT 1 FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+      $te->execute([$tid, $fid]);
+      if (!$te->fetchColumn()) {
+        hks_json_cikti(['hata' => 'Taslak işlem sırasında gönderildi ya da silindi. Listeyi yenileyin.'], 409);
+      }
+      audit_log_event('update', 'hks_taslak_fiyat', null, null, [
+        'taslak_id' => $tid, 'firma_id' => $fid, 'fiyat' => $fiyat,
+      ]);
+      hks_json_cikti(['tamam' => true, 'id' => $tid, 'fiyat' => $fiyat]);
     }
     case 'taslak_sil': {
       // Yalnızca seçili firmanın taslağı silinebilir (firma-izolasyonu).
@@ -633,6 +698,11 @@ try {
         } catch (Throwable $e) { /* havuz okunamadı — doğrulama durdurur */ }
       }
       $__revalHata = hks_bildirim_dogrula(['satirlar' => $satirlar, 'ortak' => $ortak]);
+      // v498: fiyatı girilmemiş / tamamlanacak taslak ASLA gitmez (bayrak varken katı
+      // doğrulama zaten kaçırdıysa bile). Yeni yanıt biçimi/502 yok: mevcut 400 kolu.
+      if (!empty($ortak['fiyatBekliyor']) || !empty($ortak['tamamlanacak'])) {
+        $__revalHata = 'Taslakta eksik bilgi var (fiyat/yurt içi alanlar). Düzenle ile tamamlayın.';
+      }
       if ($__revalHata) {
         $taslagiGeriKoy();
         hks_json_cikti(['hata' => 'Taslak artık geçerli kurallara uymuyor: ' . $__revalHata .
@@ -1037,7 +1107,8 @@ try {
       if (function_exists('beyan_hks_taslak_isaretle')) {
         $kaynak = $ortak['kaynak'] ?? null;
         beyan_hks_taslak_isaretle((string)$t['id'], 'gonderildi', ['gonderim_id' => $gid,
-          'beyanId' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyan') ? (int)($kaynak['beyanId'] ?? 0) : 0]);
+          'beyanId' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyan') ? (int)($kaynak['beyanId'] ?? 0) : 0,
+          'beyansizId' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyansiz') ? (int)($kaynak['kayitId'] ?? 0) : 0]);
       }
 
       // Taslak zaten en başta ATOMİK olarak sahiplenilirken silinmişti (çift

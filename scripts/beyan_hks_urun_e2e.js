@@ -150,6 +150,7 @@ const beyan = () => sql('SELECT product_name, hks_urun_id, hks_urun_ad FROM cust
         const tarihAlan = await page.locator('#bf_sample_taken_at, #bf_analysis_result_at').count();
         ok('J1 Yeni Beyan formunda iki analiz tarihi alanı var', tarihAlan === 2, String(tarihAlan));
         await page.locator('[name=party_no]').fill('J-1');
+        await page.locator('[name=sender_company_name]').fill('TEST FİRMA');   // v485: yeni beyanda Gönderici Firma zorunlu
         await page.locator('[name=product_name]').fill('KABAK'); await page.locator('[name=product_variety]').click();
         await page.locator('[data-beyan-tab=analiz]').click();
         await page.locator('#bf_sample_taken_at').fill('2026-10-12T09:30');
