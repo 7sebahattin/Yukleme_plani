@@ -290,5 +290,6 @@ function bsz_ortak_yurtici(array $p): array {
         'kaynak' => ['tip' => 'beyansiz', 'kayitId' => (int)$p['kayitId'], 'partiNo' => (string)($p['partiNo'] ?? '')],
     ];
     if (!empty($p['ikinciSifatId'])) $o['ikinciSifatId'] = (string)$p['ikinciSifatId'];
+    if (!empty($p['isletmeTuruId'])) $o['isletmeTuruId'] = (string)$p['isletmeTuruId'];
     return $o;
 }

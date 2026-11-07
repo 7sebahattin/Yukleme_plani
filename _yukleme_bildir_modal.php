@@ -196,6 +196,7 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
             doldur(el('bszFirma'), j.firmalar, 'Firma seçin');        // hiçbiri önceden seçili gelmez
             doldur(el('bszUlke'), j.ulkeler, '— seçilmedi —');
             doldur(el('bszKisi'), j.kisiler, '— seçilmedi —');
+            doldur(el('bszIsc'), j.isletmeTurleri || [], 'İşletme türü seçin');
             doldur(el('bszUrun'), j.urunler, '— seçilmedi —');
             el('bszYukleniyor').hidden = true;
             el('bszIcerik').hidden = false;

@@ -325,7 +325,7 @@ foreach ([
     ok("doğrulama: $ad → $beklenen, kayıt oluşmaz", $rr['status'] === $beklenen && (int)$dp2->query("SELECT COUNT(*) FROM beyansiz_yukleme")->fetchColumn() === $n0, json_encode($rr));
 }
 // Yurt içi
-$gi = ['csrf' => 'tok', 'firmaId' => 'f1', 'yon' => 'yurt_ici', 'kisiId' => '1', 'urunId' => '10', 'kg' => '2500', 'plaka' => '06 ICI 22', 'istek_kodu' => 'ki1'];
+$gi = ['csrf' => 'tok', 'firmaId' => 'f1', 'yon' => 'yurt_ici', 'kisiId' => '1', 'isletmeTuruId' => '4', 'urunId' => '10', 'kg' => '2500', 'plaka' => '06 ICI 22', 'istek_kodu' => 'ki1'];
 $ri = api_cagir($dbf, 'olustur', $gi);
 ok('yurt içi olustur → 200 (EKSİK taslak yazılabildi: gerçek hks_bildirim_dogrula eksikIzin)', $ri['status'] === 200 && !empty($ri['govde']['tamam']), json_encode($ri));
 $ti = json_decode((string)$dp2->query("SELECT veri FROM hks_taslaklar ORDER BY zaman DESC, id DESC LIMIT 1")->fetchColumn(), true);
