@@ -25,7 +25,8 @@ const render = (...a) => cp.execFileSync('php', [path.join(KOK, 'scripts', 'beya
 const HTML = { user: render(), admin: render('admin') };
 
 const HAZIR = {
-  tabloVar: true, katalogYok: false, sonFirma: 'f1',
+  tabloVar: true, katalogYok: false,
+  isletmeTurleri: [{ id: '30', ad: 'Depo' }, { id: '31', ad: 'Şube' }],
   firmalar: [{ id: 'f1', ad: 'ASYA FRESH' }, { id: 'f2', ad: 'DİĞER' }],
   ulkeler: [{ id: '20', ad: 'Rusya' }, { id: '21', ad: 'Almanya' }],
   urunler: [{ id: '10', ad: 'Kayısı' }, { id: '11', ad: 'Kiraz' }],
@@ -67,7 +68,7 @@ async function kur(browser, w, hazir) {
   return { ctx, sayfa, D };
 }
 async function doldur(sayfa, o) {
-  if (o.firma) await sayfa.selectOption('#bszFirma', o.firma);
+  if (o.firma !== '') await sayfa.selectOption('#bszFirma', o.firma || 'f1');
   if (o.ulke) { await sayfa.fill('#bszUlke + input, input[list="bszUlkeListe"]', o.ulke); }
   if (o.urun) { await sayfa.fill('input[list="bszUrunListe"]', o.urun); }
   if (o.kg) await sayfa.fill('#bszKg', o.kg);
@@ -86,11 +87,14 @@ async function doldur(sayfa, o) {
     await sayfa.waitForSelector('#bszIcerik:not([hidden])');
     ok('pencere açıldı, hazırla çağrıldı', D.istekler.filter(i => i.action === 'hazirla').length === 1);
     ok('overlay z-index ≥ 600', Number(await sayfa.$eval('#bszOverlay', e => getComputedStyle(e).zIndex)) >= 600);
-    ok('firma listesi dolu, son firma seçili', (await sayfa.$$eval('#bszFirma option', o => o.length)) === 3 && (await sayfa.$eval('#bszFirma', e => e.value)) === 'f1');
+    ok('firma listesi dolu, HİÇBİRİ seçili gelmez ("Firma seçin")', (await sayfa.$$eval('#bszFirma option', o => o.length)) === 3 && (await sayfa.$eval('#bszFirma', e => e.value)) === '' && (await sayfa.$eval('#bszFirma option', o => o.textContent)) === 'Firma seçin');
     ok('Kaydet pasif (alanlar boş)', await sayfa.$eval('#bszKaydet', e => e.disabled));
     ok('yurt dışı varsayılan: ülke görünür, kişi gizli', await sayfa.$eval('#bszUlkeKap', e => !e.hidden) && await sayfa.$eval('#bszKisiKap', e => e.hidden));
     ok('fiyat alanı YOK', (await sayfa.$$('#bszIcerik input[id*="iyat"]')).length === 0);
-    await doldur(sayfa, { ulke: 'Rusya', urun: 'Kayısı', kg: '20.000', plaka: '34 abc 123' });
+    await doldur(sayfa, { firma: '', ulke: 'Rusya', urun: 'Kayısı', kg: '20000', plaka: '34 abc 123' });
+    ok('firma seçilmeden Kaydet pasif', await sayfa.$eval('#bszKaydet', e => e.disabled));
+    ok('Net KG yazarken binlik nokta alır (20000 → 20.000)', await sayfa.$eval('#bszKg', e => e.value) === '20.000');
+    await sayfa.selectOption('#bszFirma', 'f1');
     ok('plaka boşluksuz', (await sayfa.$eval('#bszPlaka', e => e.value)).replace(/\s/g, '') === await sayfa.$eval('#bszPlaka', e => e.value));
     ok('plaka büyük harf', await sayfa.$eval('#bszPlaka', e => e.value) === '34ABC123');
     ok('alanlar dolunca Kaydet aktif', await sayfa.$eval('#bszKaydet', e => !e.disabled));
@@ -137,15 +141,18 @@ async function doldur(sayfa, o) {
     await sayfa.click('#bszAc');
     await sayfa.waitForSelector('#bszIcerik:not([hidden])');
     await sayfa.check('input[name="bszYon"][value="yurt_ici"]');
-    ok('yurt içi: kişi görünür, ülke gizli, not görünür', await sayfa.$eval('#bszKisiKap', e => !e.hidden) && await sayfa.$eval('#bszUlkeKap', e => e.hidden) && await sayfa.$eval('#bszIciNot', e => !e.hidden));
+    ok('yurt içi: kişi + işletme türü görünür, ülke gizli', await sayfa.$eval('#bszKisiKap', e => !e.hidden) && await sayfa.$eval('#bszIscKap', e => !e.hidden) && await sayfa.$eval('#bszUlkeKap', e => e.hidden));
+    ok('yurt dışında işletme türü ve kişi gizli (yalnız ülke)', await (async () => { await sayfa.check('input[name="bszYon"][value="yurt_disi"]'); const r = await sayfa.$eval('#bszIscKap', e => e.hidden) && await sayfa.$eval('#bszKisiKap', e => e.hidden) && !(await sayfa.$eval('#bszUlkeKap', e => e.hidden)); await sayfa.check('input[name="bszYon"][value="yurt_ici"]'); return r; })());
     await doldur(sayfa, { urun: 'Kayısı', kg: '500', plaka: '35IC1' });
     ok('kişi seçilmeden Kaydet pasif', await sayfa.$eval('#bszKaydet', e => e.disabled));
     await sayfa.fill('input[list="bszKisiListe"]', 'ALİ VELİ');
-    ok('kişi seçilince Kaydet aktif', await sayfa.$eval('#bszKaydet', e => !e.disabled));
+    ok('işletme türü seçilmeden Kaydet pasif', await sayfa.$eval('#bszKaydet', e => e.disabled));
+    await sayfa.selectOption('#bszIsc', '30');
+    ok('kişi + işletme türü seçilince Kaydet aktif', await sayfa.$eval('#bszKaydet', e => !e.disabled));
     await sayfa.click('#bszKaydet');
     await sayfa.waitForURL(/beyanlar\.php\?sekme=beyansiz/, { timeout: 5000 });
     const gi = D.istekler.filter(i => i.action === 'olustur')[0].govde;
-    ok('yurt içi gövde: yon + kisiId, ulkeId boş', gi.yon === 'yurt_ici' && gi.kisiId === '5' && gi.ulkeId === '', JSON.stringify(gi));
+    ok('yurt içi gövde: yon + kisiId + isletmeTuruId, ulkeId boş', gi.yon === 'yurt_ici' && gi.kisiId === '5' && gi.isletmeTuruId === '30' && gi.ulkeId === '' && gi.kg === 500, JSON.stringify(gi));
     await ctx.close();
 
     // ── 5) Kurulu değil / katalog yok ────────────────────────
