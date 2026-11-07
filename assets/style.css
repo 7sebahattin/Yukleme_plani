@@ -7051,3 +7051,9 @@ html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.fo
 html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.form-control::placeholder { color: #b58a3e; }
 .bsz-yeni-bag { display: inline-block; margin-top: 6px; padding: 4px 0; background: none; border: 0; color: var(--primary, #2563eb); font-size: .85rem; font-weight: 600; cursor: pointer; text-align: left; }
 .bsz-yeni-bag:hover { text-decoration: underline; }
+/* v501: beyansız yükleme Sil düğmesi */
+.bsz-sil { color: #b91c1c; border-color: #fca5a5; }
+.bsz-sil:hover { background: #fee2e2; }
+html[data-theme="dark"] .bsz-sil { color: #fca5a5; border-color: #7f1d1d; }
+html[data-theme="dark"] .bsz-sil:hover { background: #450a0a; }
+.bsz-kart-sil { margin-top: 8px; }

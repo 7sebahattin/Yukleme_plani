@@ -214,6 +214,20 @@ ok('contact.read YOK → karşı kişi adı GİZLİ', str_contains($h, 'id="bszB
 $h = sayfa([]);
 ok('Beyanlar sekmesi çubuğu iki sekme; beyan çıktısı bozulmadı', str_contains($h, 'bsz-sekmeler') && str_contains($h, 'İşlem Bekleyen Beyanlar') && str_contains($h, 'Kapanan Beyanlar'));
 
+// ── v501: Sil düğmesi — yalnız yukleme_sil + YALNIZ Bildirim Bekleyenler ──
+echo "\n=== 3b. Sil düğmesi (v501) ===\n";
+$PERMS = ['beyan.yukleme_bildir'];
+ok('yukleme_sil yok → Sil düğmesi YOK', !str_contains(sayfa(['sekme' => 'beyansiz']), 'data-bsz-sil'));
+$PERMS = ['beyan.yukleme_bildir', 'beyan.yukleme_sil'];
+$h = sayfa(['sekme' => 'beyansiz']);
+$bekB = substr($h, strpos($h, 'id="bszBekleyen"'), strpos($h, 'id="bszYapilan"') - strpos($h, 'id="bszBekleyen"'));
+$yapA = strpos($h, 'id="bszYapilan"');
+$yapB = substr($h, $yapA, strpos($h, '</section>', $yapA) - $yapA);   // yalnız bölüm (betik dışarıda)
+ok('yukleme_sil → Bekleyenler satırlarında Sil düğmesi var (masaüstü+mobil)', substr_count($bekB, 'data-bsz-sil=') >= 4, (string)substr_count($bekB, 'data-bsz-sil='));
+ok('Bildirim Yapılanlar bölümünde Sil düğmesi ASLA YOK', !str_contains($yapB, 'data-bsz-sil=') && !str_contains($yapB, 'bsz-sil'));
+ok('Sil betiği sayfada (api sil + confirm), satır içi onclick yok', str_contains($h, "api_beyansiz_yukleme.php?action=sil") && !preg_match('/\sonclick=/i', $bekB));
+ok('PHP uyarısı yok (v501)', temiz($h) && !etiket_dengesi($h), implode(' | ', etiket_dengesi($h)));
+
 // ── 4) Tablo yok ─────────────────────────────────────────────────────────
 echo "\n=== 4. tablo kurulu değil ===\n";
 db()->exec("DROP TABLE beyansiz_yukleme");

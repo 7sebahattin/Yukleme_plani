@@ -232,7 +232,7 @@ ok('yurt içi: dolu ikinciSifatId taşınır', ($ic2['ikinciSifatId'] ?? null) =
 echo "\n=== 7. api_beyansiz_yukleme.php statik ===\n";
 $api = (string)file_get_contents($ROOT . '/api_beyansiz_yukleme.php');
 ok('HKS gönderim sözcüğü yok (hks_bildirim_kaydet / taslak_gonder)', !str_contains($api, 'hks_bildirim_kaydet') && !str_contains($api, 'taslak_gonder') && !str_contains($api, 'bb_cikti'));
-ok('csrf_check( var; yalnız olustur eyleminde', str_contains($api, 'csrf_check(') && substr_count($api, 'csrf_check(') === 1);
+ok('csrf_check( yalnız olustur + sil (yazan) eylemlerinde', str_contains($api, 'csrf_check(') && substr_count($api, 'csrf_check(') === 2);
 ok('istemciden ad/TC OKUNMAZ', !preg_match('/\$govde\[\'(urunAd|ulkeAd|firmaAd|tc)\'\]/', $api));
 ok('hks_taslaklar\'a doğrudan INSERT yok, taslak yazma TEK yol hks_taslak_olustur', !preg_match('/INSERT\s+INTO\s+[`\'"]?\w*taslaklar/i', $api) && str_contains($api, 'hks_taslak_olustur('));
 ok('kapı sırası: 401 → can_yukleme_bildir 403 → gövde', strpos($api, 'Oturum gerekli') < strpos($api, 'can_yukleme_bildir()') && strpos($api, 'can_yukleme_bildir()') < strpos($api, "php://input"));
@@ -363,6 +363,33 @@ $GLOBALS['PDO_TEST'] = $cp;   // db() artık dosya DB'si
 $cp->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
 beyan_hks_taslak_isaretle($tid, 'gonderildi', ['gonderim_id' => 'gid-1', 'beyansizId' => (int)$satir['id']]);
 ok('HKS gönderimi → beyansiz satırı gonderildi + gonderim_id', $cp->query("SELECT durum||'/'||gonderim_id FROM beyansiz_yukleme WHERE id = " . (int)$satir['id'])->fetchColumn() === 'gonderildi/gid-1');
+// ── v501: SİL — yalnız "Bildirim Bekleyenler"; Yapılanlar (gönderilen/silinen/belirsiz) ASLA ──
+$ydi = (int)$cp->query("SELECT id FROM beyansiz_yukleme WHERE yon='yurt_ici' ORDER BY id DESC LIMIT 1")->fetchColumn();   // taslağı canlı → bekleyen
+$gid = (int)$satir['id'];                                                                                          // gönderildi
+$cp->exec("INSERT INTO beyansiz_yukleme (hks_firma_id,yon,urun_id,urun_ad,kg,plaka,taslak_id,durum) VALUES ('f1','yurt_disi','10','K',1,'OLU1','tYok','taslak')");
+$oluId = (int)$cp->lastInsertId();                                                                                  // taslağı ölü → belirsiz
+$cp->exec("INSERT INTO beyansiz_yukleme (hks_firma_id,yon,urun_id,urun_ad,kg,plaka,taslak_id,durum) VALUES ('f1','yurt_disi','10','K',1,'SIL1','tS','silindi')");
+$silmisId = (int)$cp->lastInsertId();
+$sg = fn(int $id) => ['csrf' => 'tok', 'id' => $id];
+ok('sil: yetkisiz (yalnız yukleme_bildir) → 403, kayıt durmaz', api_cagir($dbf, 'sil', $sg($ydi), 'beyan.yukleme_bildir')['status'] === 403
+   && $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $ydi")->fetchColumn() === 'taslak');
+ok('sil: CSRF yanlış → 403', api_cagir($dbf, 'sil', ['csrf' => 'x', 'id' => $ydi], 'beyan.yukleme_sil')['status'] === 403);
+foreach (['gönderilmiş' => $gid, 'taslağı ölü (belirsiz)' => $oluId, 'taslağı silinen' => $silmisId] as $ad => $id) {
+    $once = $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $id")->fetchColumn();
+    $rs = api_cagir($dbf, 'sil', $sg($id), 'beyan.yukleme_sil');
+    ok("sil: Yapılanlar ($ad) SİLİNEMEZ → 409, durum değişmez", $rs['status'] === 409 && $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $id")->fetchColumn() === $once, json_encode($rs));
+}
+$tasId = (string)$cp->query("SELECT taslak_id FROM beyansiz_yukleme WHERE id = $ydi")->fetchColumn();
+$rs = api_cagir($dbf, 'sil', $sg($ydi), 'beyan.yukleme_sil');
+ok('sil: Bekleyen → 200; kayıt kaldirildi + Hal Kayıt taslağı silindi',
+   $rs['status'] === 200 && !empty($rs['govde']['tamam']) && $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $ydi")->fetchColumn() === 'kaldirildi'
+   && (int)$cp->query("SELECT COUNT(*) FROM hks_taslaklar WHERE id = " . $cp->quote($tasId))->fetchColumn() === 0, json_encode($rs));
+ok('sil: aynı kayıt tekrar → 409', api_cagir($dbf, 'sil', $sg($ydi), 'beyan.yukleme_sil')['status'] === 409);
+$bol = bsz_bolumle('');
+ok('silinen (kaldirildi) hiçbir listede/sayaçta yok', !in_array($ydi, array_column(array_merge($bol['bekleyen'], $bol['yapilan']), 'id')));
+ok('sil audit: kişisel alan yok, yalnız id/durum', (string)$cp->query("SELECT new_values FROM audit_log WHERE action='beyansiz_yukleme_sil'")->fetchColumn() !== ''
+   && !str_contains((string)$cp->query("SELECT group_concat(new_values||old_values) FROM audit_log WHERE action='beyansiz_yukleme_sil'")->fetchColumn(), 'GIDA'));
+ok('sil: yukleme_bildir + beyan.write ile 403 (sil yetkisi ayrı)', api_cagir($dbf, 'sil', $sg($oluId), 'beyan.write,beyan.yukleme_bildir')['status'] === 403);
 @unlink($dbf);
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");

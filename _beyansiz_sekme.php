@@ -131,4 +131,30 @@ include __DIR__ . '/_beyanlar_baslik.php';
 </section>
 <?php endif; ?>
 
+<?php if (function_exists('can_yukleme_sil') && can_yukleme_sil()): ?>
+<script>
+(function () {
+    var CSRF = <?= json_encode(csrf_token()) ?>;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-bsz-sil]'), function (b) {
+        b.addEventListener('click', function () {
+            var id = parseInt(b.getAttribute('data-bsz-sil'), 10) || 0;
+            var ad = b.getAttribute('data-bsz-ad') || '';
+            var m = '“' + ad + '” plakalı kaydı silmek istiyor musunuz?\n\nHal Kayıt\'ta bekleyen taslağı da silinir.';
+            if (!id || !window.confirm(m)) return;
+            b.disabled = true;
+            fetch('api_beyansiz_yukleme.php?action=sil', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csrf: CSRF, id: id })
+            }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                if (res.ok && res.j.tamam) { location.reload(); return; }
+                b.disabled = false;
+                alert('HATA: ' + (res.j.hata || 'Silinemedi.'));
+            }).catch(function (e) { b.disabled = false; alert('Bağlantı hatası: ' + e.message); });
+        });
+    });
+})();
+</script>
+<?php endif; ?>
+
 <?php if (can_yukleme_bildir()) include __DIR__ . '/_yukleme_bildir_modal.php'; ?>

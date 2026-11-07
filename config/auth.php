@@ -261,6 +261,7 @@ function permission_catalog(): array {
             'beyan.write'  => 'Beyan oluştur / düzenle / bildirim yap',
             'beyan.delete' => 'Beyan sil',
             'beyan.yukleme_bildir' => 'Yükleme Bildir: beyansız yükleme için HKS taslağı oluştur (Hal Kayıt\'ta göndermek için ayrıca "Hal Bildirimi erişimi" gerekir)',
+            'beyan.yukleme_sil' => 'Yükleme Bildir sil: hatalı/fazla beyansız yükleme kaydını sil (bekleyen Hal Kayıt taslağı da silinir; gönderilmiş olan silinemez)',
             'beyan.permissions.detailed' => 'Ayrıntılı yetkilendirme (eski toplu yazma yetkisini sınırlar)',
             'beyan.create' => 'Beyan oluştur / kopyala / toplu içe aktar',
             'beyan.edit' => 'Temel beyan bilgilerini düzenle',

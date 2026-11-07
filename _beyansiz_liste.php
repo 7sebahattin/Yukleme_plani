@@ -25,6 +25,13 @@ $bsz_rozet = static function (array $r) use ($bsz_hks_erisim): string {
         default:           return '<span class="bsz-rozet bsz-r-belirsiz" title="Taslak Hal Kayıt\'ta bulunamadı; gönderilmiş ya da silinmiş olabilir">Durum belirsiz</span>';
     }
 };
+// v501: Sil düğmesi yalnız can_yukleme_sil() olana ve YALNIZ 'Bildirim Bekleyenler' satırında (Yapılanlarda ASLA; sunucu da reddeder).
+$bsz_sil_yetki = function_exists('can_yukleme_sil') && can_yukleme_sil();
+$bsz_sil_btn = static function (array $r) use ($bsz_sil_yetki): string {
+    if (!$bsz_sil_yetki || (string)($r['goster'] ?? '') !== 'bekliyor') return '';
+    return '<button type="button" class="btn btn-sm bsz-sil" data-bsz-sil="' . (int)$r['id'] . '"'
+         . ' data-bsz-ad="' . h((string)$r['plaka']) . '">🗑 Sil</button>';
+};
 $bsz_hedef = static function (array $r) use ($bsz_kisi_gor): string {
     if ((string)($r['yon'] ?? '') === 'yurt_ici') {
         $ad = $bsz_kisi_gor ? trim((string)($r['karsi_kisi_ad'] ?? '')) : '';
@@ -39,7 +46,7 @@ $bsz_hedef = static function (array $r) use ($bsz_kisi_gor): string {
         <thead>
         <tr>
             <th>Tarih</th><th>Parti No</th><th>HKS Firma</th><th>Ülke / Kişi-Firma</th>
-            <th>Ürün</th><th class="num">Net KG</th><th>Plaka</th><th>Durum</th>
+            <th>Ürün</th><th class="num">Net KG</th><th>Plaka</th><th>Durum</th><?php if ($bsz_sil_yetki): ?><th></th><?php endif; ?>
         </tr>
         </thead>
         <tbody>
@@ -53,6 +60,7 @@ $bsz_hedef = static function (array $r) use ($bsz_kisi_gor): string {
             <td class="num strong"><?= h(fmt_kg($r['kg'])) ?></td>
             <td><span class="bl-plaka"><?= h((string)$r['plaka']) ?></span></td>
             <td class="bsz-durum-td"><?= $bsz_rozet($r) ?></td>
+            <?php if ($bsz_sil_yetki): ?><td><?= $bsz_sil_btn($r) ?></td><?php endif; ?>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -71,6 +79,7 @@ $bsz_hedef = static function (array $r) use ($bsz_kisi_gor): string {
         <div class="bsz-kart-alt"><?= $bsz_hedef($r) ?></div>
         <div class="bsz-kart-alt muted"><?= h((string)($r['hks_firma_ad'] ?? '')) ?><?php if ((string)($r['parti_no'] ?? '') !== ''): ?> · Parti <?= h((string)$r['parti_no']) ?><?php endif; ?></div>
         <div class="bsz-kart-durum"><?= $bsz_rozet($r) ?></div>
+        <?php if ($bsz_sil_yetki && ($b = $bsz_sil_btn($r)) !== ''): ?><div class="bsz-kart-sil"><?= $b ?></div><?php endif; ?>
     </div>
     <?php endforeach; ?>
 </div>
