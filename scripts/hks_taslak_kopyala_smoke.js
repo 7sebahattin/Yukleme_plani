@@ -25,7 +25,7 @@ const LISTELER = {
   sifatlar: [{ id: 1, ad: 'İhracat' }], isletmeTurleri: [{ id: 1, ad: 'Hal' }],
   bildirimTurleri: [{ id: 1, ad: 'Satış' }],
 };
-const FIRMALAR = [{ id: 7, ad: 'Test Firma A', vergiNo: '1111111111', renk: 'teal' }];
+const FIRMALAR = [{ id: 7, ad: 'Test Firma A', vergiNo: '1111111111', renk: 'teal' }, { id: 8, ad: 'Test Firma B', vergiNo: '2222222222', renk: 'teal' }];
 const planOrtak = (plaka, kg, ek) => Object.assign({
   sifatId: 1, bildirimTuruId: 1, plaka, urunId: 1, urunAd: 'Kayısı', ulkeId: 1, ulkeAd: 'Rusya', fiyat: 20, planKg: kg,
   planSorgu: { urunId: 1, aySayisi: 12, isletmeTuruId: 0, sirala: 'azalan' },
@@ -65,6 +65,7 @@ async function sayfaKur(ctx, D, hatalar) {
       case 'csrf': return j({ csrf: 'taze456' });
       case 'taslak_kaydet': return j({ tamam: true, id: 'yeni-t1' });
       case 'taslak_sil': return j({ tamam: true });
+      case 'taslak_kopya_firmaya': return j({ tamam: true, id: 'kopya-1', firmaAd: 'Test Firma B', notlar: [] });
       default: return j({});
     }
   });
@@ -109,6 +110,11 @@ const butonOlcu = (sayfa) => sayfa.evaluate(() => {
   // --- Kopyala → form ---
   D.istekler.length = 0;
   await sayfa.click('#taslakListe [data-kopyala="t-asil"]');
+  ok('Kopyala bir menü açar (Aynı firma ile kopyala / Firma değiştir…)',
+     await sayfa.isVisible('#gTekrarMenu') && (await sayfa.textContent('#gTekrarMenuAyniAd')) === 'Aynı firma ile kopyala'
+     && await sayfa.isVisible('#gTekrarMenu [data-sec="firma"]'));
+  ok('menü açılınca henüz forma yüklenmedi, sunucuya yazı yok', !(await sayfa.isVisible('#ekranBildirim')) && !D.istekler.some(i => i.action === 'taslak_kopya_firmaya'));
+  await sayfa.click('#gTekrarMenu [data-sec="ayni"]');
   await sayfa.waitForSelector('#ekranBildirim:not(.gizli)');
   await sayfa.waitForTimeout(400);
   ok('Kopyala: form açıldı, plaka + plan kilosu taslaktan doldu',
@@ -147,6 +153,23 @@ const butonOlcu = (sayfa) => sayfa.evaluate(() => {
   const k2 = D.istekler.find(i => i.action === 'taslak_kaydet'), sil2 = D.istekler.find(i => i.action === 'taslak_sil');
   ok('Düzenle→Kaydet: eskiTaslakId gider + eski taslak silinir (DEĞİŞMEDİ)',
      !!k2 && k2.govde.eskiTaslakId === 't-asil' && !!sil2 && sil2.govde.id === 't-asil', JSON.stringify([k2 && k2.govde.eskiTaslakId, sil2 && sil2.govde]));
+
+  // --- v500: Kopyala → Firma değiştir… (doğrudan kopya taslak) ---
+  await sayfa.waitForSelector('#taslakListe [data-kopyala="t-iki"]');
+  D.istekler.length = 0;
+  await sayfa.click('#taslakListe [data-kopyala="t-iki"]');
+  await sayfa.click('#gTekrarMenu [data-sec="firma"]');
+  await sayfa.waitForSelector('#firmaSecPencere.acik');
+  ok('firma penceresi: taslak başlığı + özet, aktif firma listede YOK',
+     (await sayfa.textContent('#firmaSecBaslik')).includes('taslağına kopyalansın') && (await sayfa.textContent('#firmaSecOzet')).includes('06IKI02')
+     && JSON.stringify(await sayfa.$$eval('#firmaSecListe [data-firma-id]', bs => bs.map(b => b.dataset.firmaId))) === JSON.stringify(['8']));
+  await sayfa.click('#firmaSecListe [data-firma-id="8"]');
+  await sayfa.waitForTimeout(500);
+  const kf = D.istekler.find(i => i.action === 'taslak_kopya_firmaya');
+  ok('taslak_kopya_firmaya: id + kaynak firma + hedef firma gitti', !!kf && kf.govde.id === 't-iki' && String(kf.govde.firmaId) === '7' && String(kf.govde.hedefFirmaId) === '8', JSON.stringify(kf && kf.govde));
+  ok('kopya sonrası hedef firmaya geçildi, form AÇILMADI, kaynak taslak silinmedi',
+     await sayfa.evaluate(() => String(aktifFirma.id) === '8') && !D.istekler.some(i => i.action === 'taslak_sil') && !(await sayfa.isVisible('#ekranBildirim')));
+  ok('hedef firmanın Taslaklar ekranı yenilendi (taslaklar isteği)', D.istekler.some(i => i.action === 'taslaklar'));
 
   // --- Düğme yerleşimi: taşma yok ---
   await sayfa.waitForSelector('#taslakListe .taslak-kart');

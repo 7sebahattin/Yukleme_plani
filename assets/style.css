@@ -7042,3 +7042,12 @@ form.bsz-bf .bsz-yon { grid-column: 1 / -1; }
 form.bsz-bf .form-group[data-ic] > .ara-sec-sarmal, form.bsz-bf .form-group[data-ic] > input, form.bsz-bf .form-group[data-ic] > select { width: 100%; }
 .bsz-plaka-band[hidden], .bsz-overlay [hidden] { display: none !important; }
 @media (max-width: 560px) { form.bsz-bf .bsz-grid { grid-template-columns: 1fr; } }
+/* v500: Yükleme Bildir — Araç Plakası ve Net KG kutuları Hal Kayıt bildirim ekranındaki
+   turuncu (dikkat çekici) giriş kutularıyla aynı görünür. */
+form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.form-control { background: rgba(245,166,35,.12); border: 2px solid #f5a623; color: #7a4a00; font-weight: 700; }
+form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.form-control::placeholder { color: #c98a3a; font-weight: 600; }
+form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.form-control:focus { background: var(--card, #fff); border-color: #ea580c; box-shadow: 0 0 0 3px rgba(234,88,12,.18); outline: 0; }
+html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.form-control { background: rgba(245,166,35,.10); border-color: #8a6210; color: #f2c27d; }
+html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.form-control::placeholder { color: #b58a3e; }
+.bsz-yeni-bag { display: inline-block; margin-top: 6px; padding: 4px 0; background: none; border: 0; color: var(--primary, #2563eb); font-size: .85rem; font-weight: 600; cursor: pointer; text-align: left; }
+.bsz-yeni-bag:hover { text-decoration: underline; }

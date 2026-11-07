@@ -504,7 +504,7 @@ try {
       unset($g['eskiTaslakId']);
       // v498: fiyatBekliyor / tamamlanacak YALNIZ beyan uçları tarafından yazılır; SPA
       // üretmez, istemciden geleni güvenme (bayrak taslağı kapıdan geçirmesin).
-      if (is_array($g['ortak'] ?? null)) unset($g['ortak']['fiyatBekliyor'], $g['ortak']['tamamlanacak']);
+      if (is_array($g['ortak'] ?? null)) unset($g['ortak']['fiyatBekliyor'], $g['ortak']['tamamlanacak'], $g['ortak']['sifatBekliyor']);
       if ($eskiId !== '' && is_array($g['ortak'] ?? null) && empty($g['ortak']['kaynak'])) {
         $es = $db->prepare('SELECT veri FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
         $es->execute([$eskiId, trim((string)($g['firmaId'] ?? ''))]);
@@ -517,6 +517,39 @@ try {
         beyan_hks_taslak_tasi($eskiId, (string)$sonuc['id']);
       }
       hks_json_cikti(['tamam' => true, 'id' => $sonuc['id']]);
+    }
+    // v500: taslağı BAŞKA firmanın taslaklarına kopyalar (olası yanlış firma seçimi).
+    // Yazma yine TEK yoldan (hks_taslak_olustur). Kaynak taslak firma_id ile izole okunur;
+    // kopya beyaz listeden geçer (kişisel veri/beyan bağı/bayrak yok), künyeli taslak plana
+    // çevrilir, bildirimci sıfatı + işyeri boşaltılır (ortak.sifatBekliyor). Kaynak SİLİNMEZ.
+    // CSRF merkezi kapıda (muaf listede DEĞİL).
+    case 'taslak_kopya_firmaya': {
+      $kaynakFid = trim((string)($g['firmaId'] ?? ''));
+      $hedefFid  = trim((string)($g['hedefFirmaId'] ?? ''));
+      $tid       = trim((string)($g['id'] ?? ''));
+      if ($kaynakFid === '' || $hedefFid === '' || $tid === '') hks_json_cikti(['hata' => 'Kaynak firma, hedef firma ve taslak gerekli.'], 400);
+      if ($kaynakFid === $hedefFid) hks_json_cikti(['hata' => 'Hedef firma kaynakla aynı olamaz.'], 400);
+      if (!hks_firma_bul($hedefFid)) hks_json_cikti(['hata' => 'Hedef firma bulunamadı.'], 400);
+      $st = $db->prepare('SELECT veri FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+      $st->execute([$tid, $kaynakFid]);
+      $ham = $st->fetchColumn();
+      if ($ham === false) hks_json_cikti(['hata' => 'Taslak bulunamadı (gönderilmiş ya da silinmiş olabilir). Listeyi yenileyin.'], 409);
+      $veri = json_decode((string)$ham, true);
+      $kopya = is_array($veri) ? hks_gonderim_kopyasi($veri) : null;
+      if ($kopya === null) hks_json_cikti(['hata' => 'Taslak okunamadı.'], 409);
+      $t = hks_gonderim_tohumu($db, ['veri' => json_encode(['kopya' => $kopya], JSON_UNESCAPED_UNICODE)], $hedefFid, true);
+      $ortak = $t['tohum']['ortak'];
+      $ortak['sifatBekliyor'] = true;
+      // Kaynakta bekleyen bayraklar kopyada da sürer (beyaz liste bayrak taşımaz).
+      $kOrtak = is_array($veri['ortak'] ?? null) ? $veri['ortak'] : [];
+      if (!empty($kOrtak['fiyatBekliyor']) || (!empty($ortak['fiyatGonder']) && !((float)($ortak['fiyat'] ?? 0) > 0))) $ortak['fiyatBekliyor'] = true;
+      if (!empty($kOrtak['tamamlanacak']) && !empty($ortak['yurtIci'])) $ortak['tamamlanacak'] = true;
+      $sonuc = hks_taslak_olustur(['firmaId' => $hedefFid, 'satirlar' => $t['tohum']['satirlar'], 'ortak' => $ortak]);
+      if (!empty($sonuc['hata'])) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod'] ?? 400);
+      audit_log_event('create', 'hks_taslak_kopya', null, null, [
+        'kaynak_taslak' => $tid, 'kaynak_firma' => $kaynakFid, 'hedef_firma' => $hedefFid, 'yeni_taslak' => $sonuc['id'],
+      ]);
+      hks_json_cikti(['tamam' => true, 'id' => $sonuc['id'], 'firmaAd' => $sonuc['firmaAd'] ?? '', 'notlar' => $t['notlar']]);
     }
     // v498: fiyat Hal Kayıt'ta GÖNDERİMDE girilir. Beyan uçları fiyatsız taslak yazar
     // (ortak.fiyatBekliyor); bu uç fiyatı yazar ve bayrağı siler. HKS'e GÖNDERMEZ.
@@ -534,7 +567,7 @@ try {
       $veri = json_decode((string)$t['veri'], true);
       if (!is_array($veri) || !is_array($veri['ortak'] ?? null)) hks_json_cikti(['hata' => 'Taslak okunamadı.'], 409);
       $ortak = $veri['ortak'];
-      if (!empty($ortak['tamamlanacak'])) {
+      if (!empty($ortak['tamamlanacak']) || !empty($ortak['sifatBekliyor'])) {
         hks_json_cikti(['hata' => 'Bu taslak eksik bilgi içeriyor — önce "Düzenle" ile tamamlayın.'], 409);
       }
       if (!empty($ortak['yurtIci']) && empty($ortak['fiyatGonder'])) {
@@ -700,7 +733,7 @@ try {
       $__revalHata = hks_bildirim_dogrula(['satirlar' => $satirlar, 'ortak' => $ortak]);
       // v498: fiyatı girilmemiş / tamamlanacak taslak ASLA gitmez (bayrak varken katı
       // doğrulama zaten kaçırdıysa bile). Yeni yanıt biçimi/502 yok: mevcut 400 kolu.
-      if (!empty($ortak['fiyatBekliyor']) || !empty($ortak['tamamlanacak'])) {
+      if (!empty($ortak['fiyatBekliyor']) || !empty($ortak['tamamlanacak']) || !empty($ortak['sifatBekliyor'])) {
         $__revalHata = 'Taslakta eksik bilgi var (fiyat/yurt içi alanlar). Düzenle ile tamamlayın.';
       }
       if ($__revalHata) {

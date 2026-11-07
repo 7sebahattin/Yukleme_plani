@@ -145,7 +145,9 @@ function hks_liste_ad($cache, $listeAnahtari, $id) {
 // Karşı taraf TC/VKN denetimi (var → 10/11 hane → 11 haneyse algoritma). Normal
 // yurt içi doğrulama ile eksik (tamamlanacak) taslak yolu AYNI kuralı kullanır.
 // Hata metni ya da null döner.
-function hks_ikinci_tc_hatasi(array $o): ?string {
+function hks_ikinci_tc_hatasi(array $o, bool $adlaYetin = false): ?string {
+  // v500: "yeni firma" (yalnız ad) — TC/VKN taslakta tamamlanır. Dolu TC yine denetlenir.
+  if ($adlaYetin && trim((string)($o['ikinciTc'] ?? '')) === '' && trim((string)($o['ikinciAd'] ?? '')) !== '') return null;
   if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
   // Hane denetimi: TC 11, VKN 10 hanedir. Bozuk bir değer eskiden sessizce
   // HKS'e gidip geri alınamaz çağrıda "Mernis sisteminde bulunamadı" ile
@@ -187,9 +189,13 @@ function hks_ikinci_tc_hatasi(array $o): ?string {
 // $eksikIzin (v498): yurt içi "Yükleme Bildir" taslağı (ortak.tamamlanacak) EKSİK
 // yazılabilir; yalnız TC/VKN biçimi, plaka, planKg/ürün, bildirim türü korunur.
 // Gönderim anında bu fonksiyon varsayılan (katı) parametrelerle çağrılır.
-function hks_bildirim_dogrula($g, $planMi = false, $fiyatsizIzin = false, $eksikIzin = false) {
+function hks_bildirim_dogrula($g, $planMi = false, $fiyatsizIzin = false, $eksikIzin = false, $sifatBekleyenIzin = false) {
   $o = $g['ortak'] ?? [];
   $eksikIzin = $eksikIzin && !empty($o['yurtIci']) && !empty($o['tamamlanacak']);
+  // v500: başka firmaya kopyalanan taslak (ortak.sifatBekliyor) — bildirimci sıfatı ve
+  // gidecek işyeri FİRMAYA ÖZGÜDÜR, hedef firmada Düzenle ile seçilir. YALNIZ taslak
+  // yazarken gevşer; gönderimde katı çağrı sıfatı yine ister.
+  $sifatIzin = $sifatBekleyenIzin && !empty($o['sifatBekliyor']);
   if ($planMi) {
     // Plan taslağı referanssız türlerde (Satın Alım / Üreticiden Sevk Alım)
     // anlamsızdır: o türlerde künye zaten kullanılmaz, malın tanımı girilir.
@@ -203,7 +209,7 @@ function hks_bildirim_dogrula($g, $planMi = false, $fiyatsizIzin = false, $eksik
     if (count($g['satirlar']) > 100) return 'Tek seferde en fazla 100 bildirim.';
   }
   // Her iki modda zorunlu ortak alanlar
-  foreach ($eksikIzin ? ['bildirimTuruId'] : ['sifatId', 'bildirimTuruId', 'isletmeTuruId'] as $alan) {
+  foreach ($eksikIzin ? ['bildirimTuruId'] : ($sifatIzin ? ['bildirimTuruId', 'isletmeTuruId'] : ['sifatId', 'bildirimTuruId', 'isletmeTuruId']) as $alan) {
     if (empty($o[$alan])) return 'Eksik alan: ' . $alan;
   }
   if (empty($o['plaka']) && !(!empty($o['belgeNo']) && !empty($o['belgeTipiId']))) {
@@ -232,7 +238,7 @@ function hks_bildirim_dogrula($g, $planMi = false, $fiyatsizIzin = false, $eksik
     // Eksik (Hal Kayıt'ta Düzenle ile tamamlanacak) yurt içi taslak: yalnız
     // karşı taraf TC/VKN biçimi. Sıfat, üretici kısıtları, kayıtsız kimlik,
     // il/ilçe/belde, gidecek işyeri ve fiyat GÖNDERİMDE tam denetlenir.
-    return hks_ikinci_tc_hatasi($o);
+    return hks_ikinci_tc_hatasi($o, true);
   }
   if (!empty($o['yurtIci'])) {
     $uret = hks_uret_sevk_mi($o);
@@ -355,7 +361,7 @@ function hks_bildirim_dogrula($g, $planMi = false, $fiyatsizIzin = false, $eksik
     } else {
       // Kayıtlı ikinci kişi (yurt içi Satış / Sevk Etme) veya Satın Alım
       // (kendi işyerimiz): gidecek işyeri.
-      if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
+      if (empty($o['gidecekIsyeriId']) && !$sifatIzin) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
     }
     // Fiyat yalnızca Sevk Etme dışında (fiyatGonder=true) zorunlu.
     if (!$fiyatsizIzin && !empty($o['fiyatGonder']) && empty($o['fiyat'])) return 'Birim fiyat gerekli.';
@@ -391,7 +397,7 @@ function hks_taslak_olustur(array $g): array {
   // v498: bayraklar ortak'tan türetilir (yazıcılar: yalnız beyan uçları).
   $fiyatsiz = !empty($g['ortak']['fiyatBekliyor']);
   $eksik    = !empty($g['ortak']['tamamlanacak']) && !empty($g['ortak']['yurtIci']);
-  $hata = hks_bildirim_dogrula($g, $planMi, $fiyatsiz, $eksik);
+  $hata = hks_bildirim_dogrula($g, $planMi, $fiyatsiz, $eksik, !empty($g['ortak']['sifatBekliyor']));
   if ($hata) return ['hata' => $hata, 'kod' => 400];
 
   $veri = json_encode([
