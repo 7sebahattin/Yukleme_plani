@@ -14,7 +14,7 @@ function role_permission_matrix(): array {
     $beyan = [];
     foreach (['contact'=>'İletişim ve adres','analysis'=>'Analiz ve numune','hks'=>'HKS eşleştirme','source'=>'Ham kaynak metni'] as $key=>$label) $beyan[]=$row('beyan_'.$key,$label,'beyanlar.php',['read'=>$a("beyan.$key.read"),'edit'=>$a("beyan.$key.write")]);
     $beyanActions = $crud('beyan');
-    foreach (['status'=>'Durum değiştir','match'=>'Yüklemeyle eşleştir','notify'=>'Bildirim yönet','yukleme_bildir'=>'Yükleme bildir (beyansız)'] as $key=>$label) $beyanActions[$key]=$a('beyan.'.$key,$label);
+    foreach (['status'=>'Durum değiştir','match'=>'Yüklemeyle eşleştir','notify'=>'Bildirim yönet','yukleme_bildir'=>'Yükleme bildir (beyansız)','yukleme_sil'=>'Yükleme bildir sil (beyansız)'] as $key=>$label) $beyanActions[$key]=$a('beyan.'.$key,$label);
     $pdks=[];
     foreach (role_pdks_pages() as $key=>$policy) {
         if ($key === 'hub') continue;

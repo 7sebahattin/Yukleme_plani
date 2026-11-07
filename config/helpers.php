@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v500');
+    define('APP_SURUM', 'v501');
 }
 
 // --- HTML kaçışı ---
@@ -357,6 +357,13 @@ function nav_ptak_gorunur(): bool {
 function can_yukleme_bildir(): bool {
     if (function_exists('is_admin') && is_admin()) return true;
     return function_exists('can') && can('beyan.yukleme_bildir');
+}
+
+// v501 — beyansız yükleme kaydını SİLME (hatalı/fazla açılanlar). Admin her zaman;
+// başka rol yalnız Roller ekranından 'beyan.yukleme_sil' verilirse. beyan.delete/write VERMEZ.
+function can_yukleme_sil(): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    return function_exists('can') && can('beyan.yukleme_sil');
 }
 
 // Beyanlar sayfasına giriş kapısı (beyanlar.php, sidebar, topnav, bottomnav,
@@ -1727,7 +1734,7 @@ endif;
                        'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements',
                        'attendance.foreman_accounts','attendance.foreman_payments',
                        'attendance.management_reports'];
-            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','beyan.yukleme_bildir','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin','siparis.read','siparis.write','siparis.delete','siparis.match','hizli_maliyet.read','hizli_maliyet.write','hizli_maliyet.delete'], $pdks_p);
+            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','beyan.yukleme_bildir','beyan.yukleme_sil','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin','siparis.read','siparis.write','siparis.delete','siparis.match','hizli_maliyet.read','hizli_maliyet.write','hizli_maliyet.delete'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
                 // Sprint Günlük-İşçi-03 düzeltmesi #2 (kullanıcının açık

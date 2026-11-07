@@ -9,6 +9,8 @@ eval($match[0]);
 // v498: Yükleme Bildir kapısı da GERÇEK fonksiyondan (helpers.php) alınır.
 preg_match('/function can_yukleme_bildir\(\): bool \{.*?\n\}/s', $source, $match2);
 eval($match2[0]);
+preg_match('/function can_yukleme_sil\(\): bool \{.*?\n\}/s', $source, $match3);   // v501
+eval($match3[0]);
 $permissions = [];
 $admin = false;
 function can(string $p): bool { return in_array($p, $GLOBALS['permissions'], true); }
@@ -91,5 +93,11 @@ check_permission('explicit yukleme_bildir grants (without beyan.read)', can_yukl
 $admin = true;
 $permissions = [];
 check_permission('admin always yukleme_bildir', can_yukleme_bildir());
+check_permission('v501: admin her zaman yukleme_sil', can_yukleme_sil());
+$admin = false;
+$permissions = ['beyan.read','beyan.write','beyan.yukleme_bildir'];
+check_permission('v501: write/bildir yukleme_sil VERMEZ', !can_yukleme_sil());
+$permissions = ['beyan.yukleme_sil'];
+check_permission('v501: açık yukleme_sil verir', can_yukleme_sil());
 $admin = false;
 echo "Beyan permissions: $tests checks passed.\n";

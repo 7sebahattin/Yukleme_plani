@@ -6,6 +6,7 @@
 //   hazirla       → modalin listeleri (firma/ülke/ürün/yurt içi firma)
 //   plaka_kontrol → bugün aynı plakaya kayıt var mı (SALT OKUNUR)
 //   olustur       → doğrular, beyansiz_yukleme satırı + HKS TASLAĞI yazar
+//   sil           → (v501) YALNIZ bekleyen kaydı kaldırır + Hal Kayıt taslağını siler (can_yukleme_sil); yapılanlar silinemez
 //
 // TASARIM:
 //  • HKS'e HİÇBİR ŞEY GÖNDERİLMEZ; yalnız taslak açılır. Gönderim Hal Kayıt'ta,
@@ -34,11 +35,27 @@ function bsz_cikti(array $veri, int $kod = 200): void {
 // ── Kapı sırası: oturum 401 → yetki 403 → sonra gövde/DB ──────────────────
 $auth_user = function_exists('current_user') ? current_user() : null;
 if ($auth_user === null) bsz_cikti(['hata' => 'Oturum gerekli. Lütfen tekrar giriş yapın.'], 401);
-if (!can_yukleme_bildir()) bsz_cikti(['hata' => 'Bu işlem için yetkiniz yok (Yükleme Bildir).'], 403);
+if (!can_yukleme_bildir() && !can_yukleme_sil()) bsz_cikti(['hata' => 'Bu işlem için yetkiniz yok (Yükleme Bildir).'], 403);
 
 $govde = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($govde)) $govde = [];
 $action = (string)($_GET['action'] ?? ($govde['action'] ?? ''));
+
+// v501: 'sil' ayrı yetkidir (can_yukleme_sil); diğer eylemler Yükleme Bildir yetkisi ister.
+if ($action !== 'sil' && !can_yukleme_bildir()) bsz_cikti(['hata' => 'Bu işlem için yetkiniz yok (Yükleme Bildir).'], 403);
+if ($action === 'sil') {
+    if (!can_yukleme_sil()) bsz_cikti(['hata' => 'Silme yetkiniz yok.'], 403);
+    csrf_check($govde['csrf'] ?? null);
+    $silId = (int)($govde['id'] ?? 0);
+    if ($silId <= 0) bsz_cikti(['hata' => 'Kayıt seçilmedi.'], 400);
+    if (!beyansiz_tablo_var()) bsz_cikti(['hata' => 'Beyansız yükleme tablosu kurulu değil.', 'tabloYok' => true], 409);
+    $sr = bsz_kaldir($silId);
+    if (empty($sr['ok'])) bsz_cikti(['hata' => (string)$sr['hata']], (int)$sr['kod']);
+    audit_log_event('beyansiz_yukleme_sil', 'beyansiz_yukleme', $silId, ['durum' => $sr['eski_durum']], [
+        'durum' => 'kaldirildi', 'taslak_silindi' => !empty($sr['taslak_silindi']),
+    ]);
+    bsz_cikti(['tamam' => true, 'mesaj' => 'Kayıt silindi.' . (!empty($sr['taslak_silindi']) ? ' Hal Kayıt taslağı da silindi.' : '')]);
+}
 
 function bsz_katalogda(array $liste, string $id): ?array {
     foreach ($liste as $x) if ((string)$x['id'] === $id) return $x;

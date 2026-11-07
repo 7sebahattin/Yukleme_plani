@@ -146,6 +146,8 @@ function bsz_bolumle(string $q = ''): array {
             $kosul = ' WHERE (' . implode(' OR ', array_map(fn($a) => "$a LIKE ? ESCAPE '!'", $alanlar)) . ')';
             $par = array_fill(0, count($alanlar), $like);
         }
+        // v501: 'kaldirildi' (silinmiş) kayıt hiçbir listede/sayaçta görünmez.
+        $kosul = ($kosul === '' ? ' WHERE ' : $kosul . ' AND ') . "durum <> 'kaldirildi'";
         $st = db()->prepare('SELECT * FROM beyansiz_yukleme' . $kosul .
             ' ORDER BY created_at DESC, id DESC LIMIT ' . BSZ_TARAMA_LIMIT);
         $st->execute($par);
@@ -192,6 +194,47 @@ function bsz_sayilar(): array {
     return ['bekleyen' => count($b['bekleyen']), 'yapilan' => count($b['yapilan'])];
 }
 
+// ── Silme (v501) ────────────────────────────────────────────────────────────
+/**
+ * Beyansız yükleme kaydını kaldırır — YALNIZ "Bildirim Bekleyenler"deki kayıt
+ * (durum 'taslak' + Hal Kayıt taslağı hâlâ var). "Bildirim Yapılanlar" (gönderilen,
+ * taslağı silinen, durum belirsiz) ASLA silinmez (sahip kararı).
+ * Soft: durum='kaldirildi' (satır + audit kalır); bekleyen taslak da silinir.
+ * Dönüş: ['ok'=>bool, 'kod'=>http, 'hata'=>?, 'taslak_silindi'=>bool, 'eski_durum'=>string]
+ */
+function bsz_kaldir(int $id): array {
+    $pdo = db();
+    try {
+        $st = $pdo->prepare('SELECT id, durum, taslak_id FROM beyansiz_yukleme WHERE id = ?');
+        $st->execute([$id]);
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return ['ok' => false, 'kod' => 500, 'hata' => 'Kayıt okunamadı.'];
+    }
+    if (!$r) return ['ok' => false, 'kod' => 404, 'hata' => 'Kayıt bulunamadı.'];
+    $durum = (string)$r['durum'];
+    $tid = (string)($r['taslak_id'] ?? '');
+    $bekliyor = $durum === 'taslak' && $tid !== '' && in_array($tid, bsz_canli_taslak_idleri([$tid]), true);
+    if (!$bekliyor) {
+        return ['ok' => false, 'kod' => 409, 'hata' => 'Yalnız "Bildirim Bekleyenler"deki kayıt silinebilir; bildirimi yapılan kayıt silinemez. Listeyi yenileyin.'];
+    }
+    try {
+        $d = $pdo->prepare('DELETE FROM `' . bsz_hks_on_ek() . 'taslaklar` WHERE id = ?');
+        $d->execute([$tid]);
+        // Canlı görünen taslak 0 satır sildiyse aynı anda gönderiliyor/silinmiş olabilir → dokunma.
+        if ($d->rowCount() < 1) return ['ok' => false, 'kod' => 409, 'hata' => 'Taslak şu an işlemde (gönderiliyor olabilir). Listeyi yenileyip tekrar deneyin.'];
+    } catch (Throwable $e) {
+        return ['ok' => false, 'kod' => 500, 'hata' => 'Hal Kayıt taslağı silinemedi.'];
+    }
+    try {
+        $u = $pdo->prepare("UPDATE beyansiz_yukleme SET durum = 'kaldirildi', updated_at = NOW() WHERE id = ? AND durum = 'taslak'");
+        $u->execute([$id]);
+    } catch (Throwable $e) {
+        return ['ok' => false, 'kod' => 500, 'hata' => 'Kayıt silinemedi.'];
+    }
+    return ['ok' => true, 'kod' => 200, 'taslak_silindi' => true, 'eski_durum' => $durum];
+}
+
 // ── Seçenekler (yalnız id + ad; TC/cep/doğum DÖNMEZ) ────────────────────────
 function bsz_kisi_secenekleri(): array {
     try {
@@ -213,7 +256,7 @@ function bsz_ayni_plaka_bugun(string $plaka): array {
     if ($plaka === '') return [];
     try {
         $st = db()->prepare("SELECT created_at, urun_ad, kg, hks_firma_ad FROM beyansiz_yukleme
-                             WHERE plaka = ? AND created_at >= ? AND durum <> 'silindi'
+                             WHERE plaka = ? AND created_at >= ? AND durum NOT IN ('silindi','kaldirildi')
                              ORDER BY created_at DESC LIMIT 10");
         $st->execute([$plaka, date('Y-m-d') . ' 00:00:00']);
         return array_map(fn($r) => [
