@@ -224,7 +224,7 @@ $bekB = substr($h, strpos($h, 'id="bszBekleyen"'), strpos($h, 'id="bszYapilan"')
 $yapA = strpos($h, 'id="bszYapilan"');
 $yapB = substr($h, $yapA, strpos($h, '</section>', $yapA) - $yapA);   // yalnız bölüm (betik dışarıda)
 ok('yukleme_sil → Bekleyenler satırlarında Sil düğmesi var (masaüstü+mobil)', substr_count($bekB, 'data-bsz-sil=') >= 4, (string)substr_count($bekB, 'data-bsz-sil='));
-ok('Bildirim Yapılanlar bölümünde Sil düğmesi ASLA YOK', !str_contains($yapB, 'data-bsz-sil=') && !str_contains($yapB, 'bsz-sil'));
+ok('Yapılanlarda Sil YALNIZ taslağı silinen (07SILIN4) satırında; Gönderildi/belirsiz/XSS satırında YOK', substr_count($yapB, 'data-bsz-sil=') === 2 && str_contains($yapB, 'data-bsz-ad="07SILIN4"') && !str_contains($yapB, 'data-bsz-ad="16GONDER3"') && !str_contains($yapB, 'data-bsz-ad="35OLU555"') && !str_contains($yapB, 'data-bsz-ad="01XSS999"'), (string)substr_count($yapB, 'data-bsz-sil='));
 ok('Sil betiği sayfada (api sil + confirm), satır içi onclick yok', str_contains($h, "api_beyansiz_yukleme.php?action=sil") && !preg_match('/\sonclick=/i', $bekB));
 ok('PHP uyarısı yok (v501)', temiz($h) && !etiket_dengesi($h), implode(' | ', etiket_dengesi($h)));
 

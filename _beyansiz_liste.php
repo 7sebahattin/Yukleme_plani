@@ -28,7 +28,7 @@ $bsz_rozet = static function (array $r) use ($bsz_hks_erisim): string {
 // v501: Sil düğmesi yalnız can_yukleme_sil() olana ve YALNIZ 'Bildirim Bekleyenler' satırında (Yapılanlarda ASLA; sunucu da reddeder).
 $bsz_sil_yetki = function_exists('can_yukleme_sil') && can_yukleme_sil();
 $bsz_sil_btn = static function (array $r) use ($bsz_sil_yetki): string {
-    if (!$bsz_sil_yetki || (string)($r['goster'] ?? '') !== 'bekliyor') return '';
+    if (!$bsz_sil_yetki || !in_array((string)($r['goster'] ?? ''), ['bekliyor', 'silindi'], true)) return '';
     return '<button type="button" class="btn btn-sm bsz-sil" data-bsz-sil="' . (int)$r['id'] . '"'
          . ' data-bsz-ad="' . h((string)$r['plaka']) . '">🗑 Sil</button>';
 };

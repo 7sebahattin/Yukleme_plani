@@ -196,9 +196,9 @@ function bsz_sayilar(): array {
 
 // ── Silme (v501) ────────────────────────────────────────────────────────────
 /**
- * Beyansız yükleme kaydını kaldırır — YALNIZ "Bildirim Bekleyenler"deki kayıt
- * (durum 'taslak' + Hal Kayıt taslağı hâlâ var). "Bildirim Yapılanlar" (gönderilen,
- * taslağı silinen, durum belirsiz) ASLA silinmez (sahip kararı).
+ * Beyansız yükleme kaydını kaldırır — silinebilen: (a) "Bildirim Bekleyenler"deki kayıt
+ * (durum 'taslak' + Hal Kayıt taslağı hâlâ var) ve (b) taslağı silinmiş kayıt (durum 'silindi').
+ * GÖNDERİLMİŞ ('gonderildi') ve durumu belirsiz kayıt ASLA silinmez (sahip kararı).
  * Soft: durum='kaldirildi' (satır + audit kalır); bekleyen taslak da silinir.
  * Dönüş: ['ok'=>bool, 'kod'=>http, 'hata'=>?, 'taslak_silindi'=>bool, 'eski_durum'=>string]
  */
@@ -215,8 +215,19 @@ function bsz_kaldir(int $id): array {
     $durum = (string)$r['durum'];
     $tid = (string)($r['taslak_id'] ?? '');
     $bekliyor = $durum === 'taslak' && $tid !== '' && in_array($tid, bsz_canli_taslak_idleri([$tid]), true);
+    if ($durum === 'silindi') {
+        // Taslağı zaten silinmiş kayıt: Hal Kayıt'a dokunulmaz, yalnız satır kaldırılır.
+        try {
+            $u = $pdo->prepare("UPDATE beyansiz_yukleme SET durum = 'kaldirildi', updated_at = NOW() WHERE id = ? AND durum = 'silindi'");
+            $u->execute([$id]);
+            if ($u->rowCount() < 1) return ['ok' => false, 'kod' => 409, 'hata' => 'Kayıt durumu değişti. Listeyi yenileyin.'];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'kod' => 500, 'hata' => 'Kayıt silinemedi.'];
+        }
+        return ['ok' => true, 'kod' => 200, 'taslak_silindi' => false, 'eski_durum' => $durum];
+    }
     if (!$bekliyor) {
-        return ['ok' => false, 'kod' => 409, 'hata' => 'Yalnız "Bildirim Bekleyenler"deki kayıt silinebilir; bildirimi yapılan kayıt silinemez. Listeyi yenileyin.'];
+        return ['ok' => false, 'kod' => 409, 'hata' => 'Yalnız bekleyen ya da taslağı silinmiş kayıt silinebilir; gönderilmiş/durumu belirsiz kayıt silinemez. Listeyi yenileyin.'];
     }
     try {
         $d = $pdo->prepare('DELETE FROM `' . bsz_hks_on_ek() . 'taslaklar` WHERE id = ?');
