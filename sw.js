@@ -86,6 +86,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/personel_kayit_sec\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // Yükleme Bildir (v498): kişi/firma ad listesi döndürür, HİÇ önbelleğe alınmaz
+  if (/\/api_beyansiz_yukleme\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
   if (SW_MUHASEBE_RE.test(u.pathname)) return;
   e.respondWith(
