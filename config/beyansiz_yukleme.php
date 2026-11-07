@@ -259,7 +259,8 @@ function bsz_ortak_yurtdisi(array $p): array {
  * Yurt içi satış: EKSİK taslak (tamamlanacak) — Hal Kayıt'ta Düzenle ile
  * tamamlanır. $p: turId, turAd, urunId, urunAd, plaka, kg, kayitId, partiNo,
  * ikinciTc, ikinciAd, ikinciCep, ikinciDogumTarihi (GG.AA.YYYY), ikinciSifatId (boş olabilir).
- * sifatId / isletmeTuruId / gidecekIsyeri / il alanları bilerek YOK.
+ * isletmeTuruId (gidilen yer türü) formdan gelir; sifatId / gidecekIsyeri / il alanları bilerek YOK
+ * (Hal Kayıt'ta Düzenle ile tamamlanır — canlı HKS sorgusu burada yapılmaz).
  */
 function bsz_ortak_yurtici(array $p): array {
     $o = [
@@ -289,5 +290,6 @@ function bsz_ortak_yurtici(array $p): array {
         'kaynak' => ['tip' => 'beyansiz', 'kayitId' => (int)$p['kayitId'], 'partiNo' => (string)($p['partiNo'] ?? '')],
     ];
     if (!empty($p['ikinciSifatId'])) $o['ikinciSifatId'] = (string)$p['ikinciSifatId'];
+    if (!empty($p['isletmeTuruId'])) $o['isletmeTuruId'] = (string)$p['isletmeTuruId'];
     return $o;
 }

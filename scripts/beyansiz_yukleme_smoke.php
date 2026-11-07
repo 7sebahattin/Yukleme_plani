@@ -263,7 +263,7 @@ $dp->prepare("INSERT INTO hks_kv VALUES ('listeler_cache', ?)")->execute([json_e
     'zaman' => '2026-11-01T10:00:00+03:00',
     'urunler' => [['id' => '10', 'ad' => 'Kayısı']], 'ulkeler' => [['id' => '20', 'ad' => 'Rusya']],
     'sifatlar' => [['id' => '7', 'ad' => 'İhracat']], 'bildirimTurleri' => [['id' => '5', 'ad' => 'Satış']],
-    'isletmeTurleri' => [['id' => '3', 'ad' => 'Yurt Dışı']],
+    'isletmeTurleri' => [['id' => '3', 'ad' => 'Yurt Dışı'], ['id' => '4', 'ad' => 'Depo']],
 ], JSON_UNESCAPED_UNICODE)]);
 $dp->exec("CREATE TABLE beyansiz_yukleme_geciciyok (x)");   // (tablo henüz yok: aşağıda migrate ile kurulacak)
 $dp->exec("DROP TABLE beyansiz_yukleme_geciciyok");
@@ -283,6 +283,7 @@ $dp2->exec(beyansiz_yukleme_ddl($dp2));
 $h = api_cagir($dbf, 'hazirla', []);
 ok('hazirla: tabloVar + katalog + firmalar + son firma', $h['status'] === 200 && $h['govde']['tabloVar'] === true && count($h['govde']['firmalar']) === 1
    && count($h['govde']['ulkeler']) === 1 && count($h['govde']['kisiler']) === 2 && !isset($h['govde']['kisiler'][0]['tc']), json_encode($h));
+ok('hazirla: isletmeTurleri (Yurt Dışı HARİÇ) + sonFirma YOK (firma önceden seçilmez)', count($h['govde']['isletmeTurleri'] ?? []) === 1 && ($h['govde']['isletmeTurleri'][0]['ad'] ?? '') === 'Depo' && !array_key_exists('sonFirma', $h['govde']), json_encode($h['govde']['isletmeTurleri'] ?? null));
 ok('kapı: oturumsuz → 401', api_cagir($dbf, 'hazirla', [], 'beyan.yukleme_bildir', true)['status'] === 401);
 ok('kapı: yetkisiz (yalnız beyan.write) → 403, DB\'ye dokunmadan', api_cagir($dbf, 'olustur', $g0, 'beyan.write,beyan.read')['status'] === 403);
 $r = api_cagir($dbf, 'olustur', array_merge($g0, ['csrf' => 'yanlis']));
@@ -324,7 +325,7 @@ foreach ([
     ok("doğrulama: $ad → $beklenen, kayıt oluşmaz", $rr['status'] === $beklenen && (int)$dp2->query("SELECT COUNT(*) FROM beyansiz_yukleme")->fetchColumn() === $n0, json_encode($rr));
 }
 // Yurt içi
-$gi = ['csrf' => 'tok', 'firmaId' => 'f1', 'yon' => 'yurt_ici', 'kisiId' => '1', 'urunId' => '10', 'kg' => '2500', 'plaka' => '06 ICI 22', 'istek_kodu' => 'ki1'];
+$gi = ['csrf' => 'tok', 'firmaId' => 'f1', 'yon' => 'yurt_ici', 'kisiId' => '1', 'isletmeTuruId' => '4', 'urunId' => '10', 'kg' => '2500', 'plaka' => '06 ICI 22', 'istek_kodu' => 'ki1'];
 $ri = api_cagir($dbf, 'olustur', $gi);
 ok('yurt içi olustur → 200 (EKSİK taslak yazılabildi: gerçek hks_bildirim_dogrula eksikIzin)', $ri['status'] === 200 && !empty($ri['govde']['tamam']), json_encode($ri));
 $ti = json_decode((string)$dp2->query("SELECT veri FROM hks_taslaklar ORDER BY zaman DESC, id DESC LIMIT 1")->fetchColumn(), true);
@@ -332,7 +333,12 @@ $orow = $dp2->query("SELECT * FROM beyansiz_yukleme WHERE yon = 'yurt_ici'")->fe
 ok('yurt içi taslak: tamamlanacak + fiyatBekliyor + TC/ad/cep/doğum havuzdan, sifatId/işyeri yok',
    ($ti['ortak']['tamamlanacak'] ?? null) === true && ($ti['ortak']['fiyatBekliyor'] ?? null) === true && ($ti['ortak']['ikinciTc'] ?? '') === '10000000146'
    && ($ti['ortak']['ikinciAd'] ?? '') === 'ALİ VELİ' && ($ti['ortak']['ikinciDogumTarihi'] ?? '') === '02.01.1980'
-   && !isset($ti['ortak']['sifatId']) && !isset($ti['ortak']['gidecekIsyeriId']) && !isset($ti['ortak']['fiyat']), json_encode($ti['ortak'] ?? null));
+   && !isset($ti['ortak']['sifatId']) && !isset($ti['ortak']['gidecekIsyeriId']) && !isset($ti['ortak']['fiyat'])
+   && ($ti['ortak']['isletmeTuruId'] ?? '') === '4', json_encode($ti['ortak'] ?? null));
+$n0 = (int)$dp2->query("SELECT COUNT(*) FROM beyansiz_yukleme")->fetchColumn();
+$rn = api_cagir($dbf, 'olustur', array_merge($gi, ['isletmeTuruId' => '', 'istek_kodu' => 'ki4', 'plaka' => '07 ISC 1']));
+$ry = api_cagir($dbf, 'olustur', array_merge($gi, ['isletmeTuruId' => '3', 'istek_kodu' => 'ki5', 'plaka' => '07 ISC 2']));
+ok('yurt içi: işletme türü yok / "Yurt Dışı" türü → 400, kayıt oluşmaz', $rn['status'] === 400 && $ry['status'] === 400 && (int)$dp2->query("SELECT COUNT(*) FROM beyansiz_yukleme")->fetchColumn() === $n0, json_encode([$rn, $ry]));
 ok('yurt içi satır: karsi_kisi_ad yalnız ad, TC/cep/doğum saklanmaz', $orow && $orow['karsi_kisi_ad'] === 'ALİ VELİ' && (int)$orow['karsi_kisi_id'] === 1 && $orow['ulke_id'] === null
    && !in_array('tc', array_keys($orow), true), json_encode($orow));
 $au = implode('|', $dp2->query("SELECT new_values FROM audit_log")->fetchAll(PDO::FETCH_COLUMN));

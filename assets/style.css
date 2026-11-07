@@ -7031,3 +7031,14 @@ html[data-theme="dark"] .bsz-r-silindi { background:#1e293b; color:#cbd5e1; }
 html[data-theme="dark"] .bsz-r-belirsiz { background:#450a0a; color:#fca5a5; }
 html[data-theme="dark"] .bsz-sekme-aktif { background:var(--card, #1e293b); }
 @media (max-width:767px) { .bsz-sekme { flex:1 1 auto; justify-content:center; } }
+
+/* — Yükleme Bildir penceresi (v499): Yeni Beyan formunun ikonlu alan düzeni (form.bf) — */
+.bsz-bf { margin: 0; }
+body:not(.print-mode) form.bsz-bf .beyan-section[data-bf] { padding: 14px 14px 16px; margin-bottom: 8px; border-radius: 14px; box-shadow: none; }
+form.bsz-bf .bsz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+form.bsz-bf .bsz-tam { grid-column: 1 / -1; }
+form.bsz-bf .bsz-zor { color: var(--danger, #dc2626); }
+form.bsz-bf .bsz-yon { grid-column: 1 / -1; }
+form.bsz-bf .form-group[data-ic] > .ara-sec-sarmal, form.bsz-bf .form-group[data-ic] > input, form.bsz-bf .form-group[data-ic] > select { width: 100%; }
+.bsz-plaka-band[hidden], .bsz-overlay [hidden] { display: none !important; }
+@media (max-width: 560px) { form.bsz-bf .bsz-grid { grid-template-columns: 1fr; } }

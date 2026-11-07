@@ -18,49 +18,59 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
       <div id="bszYukleniyor" class="muted" style="padding:20px;text-align:center">Hazırlanıyor…</div>
       <div id="bszHata" class="flash flash-error" hidden></div>
       <div id="bszIcerik" hidden>
-        <div class="beyan-hks-fields bsz-form">
-          <label>Parti No <span class="muted">(isteğe bağlı · HKS'e gitmez)</span>
-            <input type="text" id="bszParti" class="form-control" maxlength="60" autocomplete="off">
-          </label>
-          <label>HKS Firma <strong style="color:var(--danger)">*</strong>
-            <select id="bszFirma" class="form-control"></select>
-          </label>
+        <form class="bf bsz-bf" id="bszForm" novalidate onsubmit="return false">
+        <section class="beyan-section" data-bf="lojistik">
+          <div class="beyan-form-grid bsz-grid">
+            <div class="form-group" data-ic="diyez">
+              <label class="form-label" for="bszParti">Parti No</label>
+              <input type="text" id="bszParti" class="form-control" maxlength="60" autocomplete="off">
+            </div>
+            <div class="form-group" data-ic="bina">
+              <label class="form-label" for="bszFirma">HKS Firma <strong class="bsz-zor">*</strong></label>
+              <select id="bszFirma" class="form-control"></select>
+            </div>
 
-          <fieldset class="bsz-yon" style="grid-column:1/-1">
-            <legend>Alıcı</legend>
-            <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_disi" checked> Yurt dışı (ihracat) — ülke</label>
-            <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_ici"> Yurt içi — kişi / firma</label>
-          </fieldset>
+            <fieldset class="bsz-yon bsz-tam">
+              <legend>Alıcı</legend>
+              <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_disi" checked> Yurt dışı (ihracat) — ülke</label>
+              <label class="bsz-radyo"><input type="radio" name="bszYon" value="yurt_ici"> Yurt içi — kişi / firma</label>
+            </fieldset>
 
-          <label id="bszUlkeKap" style="grid-column:1/-1">Ülke <strong style="color:var(--danger)">*</strong>
-            <select id="bszUlke" class="form-control" data-aramali="Ülke yazın veya seçin"></select>
-          </label>
-          <label id="bszKisiKap" style="grid-column:1/-1" hidden>Kişi / Firma <strong style="color:var(--danger)">*</strong>
-            <select id="bszKisi" class="form-control" data-aramali="Kişi / firma yazın veya seçin"></select>
-          </label>
+            <div class="form-group bsz-tam" data-ic="kure" id="bszUlkeKap">
+              <label class="form-label" for="bszUlke">Ülke <strong class="bsz-zor">*</strong></label>
+              <select id="bszUlke" class="form-control" data-aramali="Ülke yazın veya seçin"></select>
+            </div>
+            <div class="form-group bsz-tam" data-ic="kisi" id="bszKisiKap" hidden>
+              <label class="form-label" for="bszKisi">Kişi / Firma <strong class="bsz-zor">*</strong></label>
+              <select id="bszKisi" class="form-control" data-aramali="Kişi / firma yazın veya seçin"></select>
+            </div>
+            <div class="form-group bsz-tam" data-ic="depo" id="bszIscKap" hidden>
+              <label class="form-label" for="bszIsc">İşletme Türü (gidilen yer) <strong class="bsz-zor">*</strong></label>
+              <select id="bszIsc" class="form-control"></select>
+            </div>
 
-          <label style="grid-column:1/-1">Ürün <strong style="color:var(--danger)">*</strong>
-            <select id="bszUrun" class="form-control" data-aramali="Ürün yazın veya seçin"></select>
-          </label>
-          <label>Net KG <strong style="color:var(--danger)">*</strong>
-            <input type="text" id="bszKg" class="form-control" inputmode="decimal" autocomplete="off" placeholder="örn. 20000">
-          </label>
-          <label>Araç Plakası <strong style="color:var(--danger)">*</strong>
-            <input type="text" id="bszPlaka" class="form-control" data-nospace data-uppercase="tr" autocomplete="off" maxlength="30">
-          </label>
-        </div>
+            <div class="form-group bsz-tam" data-ic="elma">
+              <label class="form-label" for="bszUrun">Ürün <strong class="bsz-zor">*</strong></label>
+              <select id="bszUrun" class="form-control" data-aramali="Ürün yazın veya seçin"></select>
+            </div>
+            <div class="form-group" data-ic="terazi">
+              <label class="form-label" for="bszKg">Net KG <strong class="bsz-zor">*</strong></label>
+              <input type="text" id="bszKg" class="form-control" inputmode="numeric" autocomplete="off" placeholder="örn. 20.000">
+            </div>
+            <div class="form-group" data-ic="arac">
+              <label class="form-label" for="bszPlaka">Araç Plakası <strong class="bsz-zor">*</strong></label>
+              <input type="text" id="bszPlaka" class="form-control" data-nospace data-uppercase="tr" autocomplete="off" maxlength="30">
+            </div>
+          </div>
+        </section>
+        </form>
 
         <div id="bszPlakaBand" class="bsz-plaka-band" hidden role="status">
           <span id="bszPlakaMetin"></span>
           <button type="button" class="btn btn-sm" id="bszYineDe">Yine de bildir</button>
         </div>
 
-        <p class="beyan-hks-warn">
-          Bu işlem yalnızca <strong>TASLAK</strong> oluşturur; HKS'e bildirim <strong>GÖNDERİLMEZ</strong>.
-          Birim fiyat burada girilmez — <strong>Hal Kayıt'ta gönderimde</strong> girilir.
-          <span id="bszIciNot" hidden>Yurt içi alıcı için taslak <strong>eksik</strong> açılır; Hal Kayıt'ta
-          Düzenle ile tamamlanır.</span>
-        </p>
+        <p class="beyan-hks-warn">Bu işlem yalnızca <strong>TASLAK</strong> oluşturur; HKS'e bildirim <strong>GÖNDERİLMEZ</strong>.</p>
       </div>
     </div>
     <div class="beyan-hks-foot">
@@ -93,6 +103,19 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
         });
         if (sel._araTazele) sel._araTazele();
     }
+    // Net KG: yazarken binlik nokta (20000 → 20.000); KG tam sayı gösterilir. İmleç korunur.
+    function kgSayi() { return parseInt(String(el('bszKg').value).replace(/\D/g, ''), 10) || 0; }
+    function kgBicimle() {
+        var k = el('bszKg'), v = k.value, pos = k.selectionStart || 0;
+        var solRakam = v.slice(0, pos).replace(/\D/g, '').length;
+        var d = v.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+        var yeni = d.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        if (yeni === v) return;
+        k.value = yeni;
+        var n = 0, i = 0;
+        while (i < yeni.length && n < solRakam) { if (/\d/.test(yeni.charAt(i))) n++; i++; }
+        try { k.setSelectionRange(i, i); } catch (_) {}
+    }
     function yon() { var r = document.querySelector('input[name="bszYon"]:checked'); return r ? r.value : 'yurt_disi'; }
     function hataGoster(msg) {
         el('bszYukleniyor').hidden = true;
@@ -104,15 +127,15 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
     }
     function kontrol() {
         var ok = el('bszFirma').value && el('bszUrun').value && el('bszPlaka').value.trim() !== '' &&
-                 String(el('bszKg').value).trim() !== '' &&
-                 (yon() === 'yurt_ici' ? el('bszKisi').value : el('bszUlke').value);
+                 kgSayi() > 0 &&
+                 (yon() === 'yurt_ici' ? (el('bszKisi').value && el('bszIsc').value) : el('bszUlke').value);
         el('bszKaydet').disabled = !ok || gonderiyor;
     }
     function yonUygula() {
         var ici = yon() === 'yurt_ici';
         el('bszUlkeKap').hidden = ici;
         el('bszKisiKap').hidden = !ici;
-        el('bszIciNot').hidden = !ici;
+        el('bszIscKap').hidden = !ici;
         kontrol();
     }
     function bandKapat() { el('bszPlakaBand').hidden = true; plakaOnayli = false; }
@@ -158,11 +181,10 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
             if (!j.tabloVar) { hataGoster('Beyansız yükleme tablosu kurulu değil — yönetici kurulumu yapmalı.'); return; }
             if (j.katalogYok) { hataGoster('HKS katalog listeleri henüz indirilmemiş. Hal Kayıt panelinde "Listeleri Güncelle"ye basın.'); return; }
             veri = j;
-            doldur(el('bszFirma'), j.firmalar, '— seçiniz —');
-            if (j.sonFirma) el('bszFirma').value = j.sonFirma;
-            else if (j.firmalar.length === 1) el('bszFirma').value = j.firmalar[0].id;
+            doldur(el('bszFirma'), j.firmalar, 'Firma seçin');        // hiçbiri önceden seçili gelmez
             doldur(el('bszUlke'), j.ulkeler, '— seçilmedi —');
             doldur(el('bszKisi'), j.kisiler, '— seçilmedi —');
+            doldur(el('bszIsc'), j.isletmeTurleri || [], 'İşletme türü seçin');
             doldur(el('bszUrun'), j.urunler, '— seçilmedi —');
             el('bszYukleniyor').hidden = true;
             el('bszIcerik').hidden = false;
@@ -184,7 +206,8 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
                 csrf: CSRF, istek_kodu: istekKodu, yon: yon(),
                 partiNo: el('bszParti').value, firmaId: el('bszFirma').value,
                 ulkeId: ici ? '' : el('bszUlke').value, kisiId: ici ? el('bszKisi').value : '',
-                urunId: el('bszUrun').value, kg: el('bszKg').value, plaka: el('bszPlaka').value,
+                isletmeTuruId: ici ? el('bszIsc').value : '',
+                urunId: el('bszUrun').value, kg: kgSayi(), plaka: el('bszPlaka').value,
                 plakaOnay: !!onayli
             })
         })
@@ -215,8 +238,9 @@ if (!function_exists('can_yukleme_bildir') || !can_yukleme_bildir()) return;
     ov.addEventListener('click', function (e) { if (e.target === ov) kapat(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) kapat(); });
     Array.prototype.forEach.call(document.querySelectorAll('input[name="bszYon"]'), function (r) { r.addEventListener('change', yonUygula); });
-    ['bszFirma', 'bszUlke', 'bszKisi', 'bszUrun'].forEach(function (i) { el(i).addEventListener('change', kontrol); });
-    ['bszKg', 'bszPlaka'].forEach(function (i) { el(i).addEventListener('input', kontrol); });
+    ['bszFirma', 'bszUlke', 'bszKisi', 'bszIsc', 'bszUrun'].forEach(function (i) { el(i).addEventListener('change', kontrol); });
+    el('bszKg').addEventListener('input', function () { kgBicimle(); kontrol(); });
+    el('bszPlaka').addEventListener('input', kontrol);
     el('bszPlaka').addEventListener('change', plakaKontrol);
     el('bszKaydet').addEventListener('click', function () { gonder(plakaOnayli); });
     el('bszYineDe').addEventListener('click', function () { plakaOnayli = true; el('bszYineDe').hidden = true; gonder(true); });

@@ -3,7 +3,7 @@
 // api_beyansiz_yukleme.php — "Yükleme Bildir" (beyansız yükleme) JSON ucu — v498
 // =============================================================================
 // EYLEMLER:
-//   hazirla       → modalin listeleri (firma/ülke/ürün/kişi) + son firma
+//   hazirla       → modalin listeleri (firma/ülke/ürün/kişi/işletme türü)
 //   plaka_kontrol → bugün aynı plakaya kayıt var mı (SALT OKUNUR)
 //   olustur       → doğrular, beyansiz_yukleme satırı + HKS TASLAĞI yazar
 //
@@ -57,7 +57,10 @@ case 'hazirla': {
     $tabloVar = beyansiz_tablo_var();
     $katalog = bb_katalog();
     $firmalar = bsz_firma_secenekleri();
-    $sonFirma = bb_son_firma();
+    $yd = $katalog ? bb_yurtdisi_isletme_turu($katalog) : '';
+    $isletmeTurleri = array_values(array_filter($katalog['isletmeTurleri'] ?? [], function ($x) use ($yd) {
+        return (string)$x['id'] !== $yd;      // yurt içi alıcı için "Yurt Dışı" türü anlamsız
+    }));
     bsz_cikti([
         'tabloVar'   => $tabloVar,
         'katalogYok' => !$katalog,
@@ -65,7 +68,7 @@ case 'hazirla': {
         'ulkeler'    => $katalog['ulkeler'] ?? [],
         'urunler'    => $katalog['urunler'] ?? [],
         'kisiler'    => $tabloVar && $katalog ? bsz_kisi_secenekleri() : [],
-        'sonFirma'   => $sonFirma,
+        'isletmeTurleri' => $isletmeTurleri,
     ]);
 }
 
@@ -90,6 +93,7 @@ case 'olustur': {
     $urunId = trim((string)($govde['urunId'] ?? ''));
     $ulkeId = trim((string)($govde['ulkeId'] ?? ''));
     $kisiId = (int)($govde['kisiId'] ?? 0);
+    $iscId  = trim((string)($govde['isletmeTuruId'] ?? ''));      // yalnız yurt içi (gidilen yer türü)
     $plaka = beyan_plaka_normalize((string)($govde['plaka'] ?? ''));
     $partiNo = trim((string)($govde['partiNo'] ?? ''));
     $istekKodu = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($govde['istek_kodu'] ?? ''));
@@ -124,6 +128,9 @@ case 'olustur': {
         if ($isletmeTuruId === '') bsz_cikti(['hata' => 'Katalogda "Yurt Dışı" işletme türü bulunamadı — Hal Kayıt panelinden listeleri güncelleyin.'], 409);
     } else {
         if ($kisiId <= 0) bsz_cikti(['hata' => 'Kişi/firma seçilmedi.'], 400);
+        $isc = bsz_katalogda($katalog['isletmeTurleri'] ?? [], $iscId);
+        if (!$isc || $iscId === bb_yurtdisi_isletme_turu($katalog)) bsz_cikti(['hata' => 'İşletme türü seçilmedi ya da katalogda yok.'], 400);
+        $isletmeTuruId = (string)$isc['id'];
         try {
             $st = db()->prepare("SELECT id, tc, ad, cep, dogum, sifat_id FROM `" . bsz_hks_on_ek() . "kisiler` WHERE id = ?");
             $st->execute([$kisiId]);
@@ -172,6 +179,7 @@ case 'olustur': {
         $ortak = bsz_ortak_yurtici([
             'turId' => $var['bildirimTuruId'], 'turAd' => $turAd, 'urunId' => $urunId, 'urunAd' => (string)$urun['ad'],
             'plaka' => $plaka, 'kg' => $kg, 'kayitId' => $kayitId, 'partiNo' => $partiNo,
+            'isletmeTuruId' => $isletmeTuruId,
             'ikinciTc' => (string)$kisi['tc'], 'ikinciAd' => (string)$kisi['ad'], 'ikinciCep' => (string)$kisi['cep'],
             'ikinciDogumTarihi' => $dg, 'ikinciSifatId' => $kisi['sifat_id'] ?? '',
         ]);
