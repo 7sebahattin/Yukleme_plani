@@ -374,11 +374,13 @@ $sg = fn(int $id) => ['csrf' => 'tok', 'id' => $id];
 ok('sil: yetkisiz (yalnız yukleme_bildir) → 403, kayıt durmaz', api_cagir($dbf, 'sil', $sg($ydi), 'beyan.yukleme_bildir')['status'] === 403
    && $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $ydi")->fetchColumn() === 'taslak');
 ok('sil: CSRF yanlış → 403', api_cagir($dbf, 'sil', ['csrf' => 'x', 'id' => $ydi], 'beyan.yukleme_sil')['status'] === 403);
-foreach (['gönderilmiş' => $gid, 'taslağı ölü (belirsiz)' => $oluId, 'taslağı silinen' => $silmisId] as $ad => $id) {
+foreach (['gönderilmiş' => $gid, 'taslağı ölü (belirsiz)' => $oluId] as $ad => $id) {
     $once = $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $id")->fetchColumn();
     $rs = api_cagir($dbf, 'sil', $sg($id), 'beyan.yukleme_sil');
     ok("sil: Yapılanlar ($ad) SİLİNEMEZ → 409, durum değişmez", $rs['status'] === 409 && $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $id")->fetchColumn() === $once, json_encode($rs));
 }
+$rsil = api_cagir($dbf, 'sil', $sg($silmisId), 'beyan.yukleme_sil');
+ok('sil (v502): taslağı silinen kayıt SİLİNİR → 200, kaldirildi', $rsil['status'] === 200 && $cp->query("SELECT durum FROM beyansiz_yukleme WHERE id = $silmisId")->fetchColumn() === 'kaldirildi', json_encode($rsil));
 $tasId = (string)$cp->query("SELECT taslak_id FROM beyansiz_yukleme WHERE id = $ydi")->fetchColumn();
 $rs = api_cagir($dbf, 'sil', $sg($ydi), 'beyan.yukleme_sil');
 ok('sil: Bekleyen → 200; kayıt kaldirildi + Hal Kayıt taslağı silindi',
