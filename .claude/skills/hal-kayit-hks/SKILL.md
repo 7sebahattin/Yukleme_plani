@@ -1,0 +1,197 @@
+---
+name: hal-kayit-hks
+description: Hal Kayıt modülü (halkayit/*): doğum tarihi biçimi, Üretici cep, Kişi Havuzu, Gönderilenler/Tekrar gönder, künye seçimi, Gönderim Raporu, CSRF kapısı, belirsiz gönderim. halkayit/ altına dokunurken kullan.
+---
+
+# Hal Kayıt (HKS) — halkayit/
+
+> CLAUDE.md'den taşındı (v503). Çekirdek kurallar (Critical Rules, mobil, CSRF, migration, deploy) CLAUDE.md'de kalır.
+
+## Hal Kayıt — Kayıtsız Kişi Doğum Tarihi (v291, kesinleşti v304)
+
+Kayıtsız satıcıdan **Satın Alım**'ın İLK bildiriminde HKS "Tc kimlik numarası
+Mernis sisteminde bulunamadı" (satır `HataKodu 21`, künye/rüsum YOK) döndürüyordu.
+**KÖK NEDEN (canlı deneyle KESİN, 05.10.2026):** HKS `DogumTarihi` metnini
+**SAATSİZ `GG.AA.YYYY`** (örn. `11.02.1959`) bekliyor. Aynı kişi (kayıtsız,
+gün≤12) beş biçimle denendi: `GG.AA.YYYY 00:00:00` (GTB örneği!), `GG.AA.YYYY 12:00:00`,
+`YYYY-AA-GGT12:00:00`, `YYYY-AA-GG` → Mernis; yalnız **`GG.AA.YYYY` → künye**.
+GTB örneğindeki `00:00:00` ekli biçim yanıltıcıydı. Sitedeki Sorgula saatsiz
+gönderdiği ve geçici bir Mernis sonucu bıraktığı için "sitede sorgula → geçer"
+gözlemi de buydu. Rapor: `docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` (§11).
+
+- **Varsayılan biçim `gtb_tarih`** (`halkayit/config.php` `HKS_DOGUM_BICIMI`).
+  Konum sabit alfabetik (CepTel < DogumTarihi < KisiSifat; canlı WSDL `xs:string`).
+  Merdiven/otomatik yeniden gönderim YOK. Yeni uç (`ws.gtb.gov.tr:8443`) aynı sözleşme.
+- **Biçim beyaz listesi** `hks_dogum_bicimleri()`: `gtb` · `gtb_oglen` · `gtb_tarih` ·
+  `iso` · `iso_oglen` · `iso_tarih`. **`gtb` (00:00:00 ekli) ve ISO'yu varsayılan yapma.**
+- **OTOMATİK ÖĞRENME YOK (v304).** Sitede yeni Sorgula'lanmış kişi yanlış biçimle de
+  geçer; eski otomatik öğrenme bu yüzden yanlış biçimi kalıcı yazabiliyordu.
+  Kalıcı değişiklik yalnız yöneticinin elle işlemidir (`dogum_deney.php` → "Kalıcı yap",
+  `hks_kv.dogum_varyant`, `kanitli=true`). Eski kanıtsız kayıtlar (`konum='son'`) yok sayılır.
+- **Gidecek yer adresi:** kayıtsız kişide kılavuz 1189-1193 İl/İlçe/Belde ister;
+  `api.php taslak_gonder` kişiyi gönderimden hemen önce `hks_kayit_durumu()` ile sorar
+  (ENGELLEMEZ), KAYITSIZ ise işyeri adresini (`hks_isyeri_adres_bul()`) `$ortak['gidecekAdres']`'e
+  koyar; `hks_bildirim_xml()` işyeriyle BİRLİKTE yazar (GTB 195 örneği gibi).
+- **Deney** (`halkayit/dogum_deney.php`, yalnız `is_admin()`, CSRF + audit
+  `hks_dogum_deney`): bir TC için TEK KULLANIMLIK biçim (24 sa), yalnız kişi gönderim
+  anında KAYITSIZ ise uygulanır ve gönderimden ÖNCE tüketilir; kayıtlı/belirsizse
+  gönderim 409 ile DURUR. Ekran HKS'e hiçbir şey göndermez. **Deneyi sitede o gün
+  Sorgula'lanmış kişiyle yapma** — geçici sonuç sonucu bozar.
+- **Teşhis kaydı** `hks_kv.dogum_denemeleri` (son 200): TC yalnız `***son4`, doğum
+  tarihi yalnız SINIF (`gun>12`/`gun<=12`/`gun=ay`). Kütüphane `dogum_deney_lib.php`
+  (include-only, `.htaccess`'te kapalı).
+- **Tek gönderim yolu** korunur: `hks_bildirim_kaydet()` → `hks_bildirim_kaydet_tek()`.
+- Test: `php scripts/hks_uretici_sevk_test.php` · `php scripts/hks_dogum_deney_smoke.php`.
+
+## Hal Kayıt — Karşı Taraf "Üretici" → Cep Zorunlu (v322)
+
+Canlı HKS, ikinci kişi sıfatı TAM "Üretici" iken — kişi/firma GTB'de KAYITLI olsa da — `CepTel` yoksa satırı
+**HataKodu 263** ("Lütfen üreticinin GSM numarasını doğru giriniz") ile reddeder (örn. kendi bahçesinden İhracat
+sıfatıyla Satın Alım). Eskiden kayıtlı karşı tarafa cep hiç gönderilmiyordu.
+- Kural TEK yerde: `hks_uretici_cep_gerekli($o)` (taslak_lib.php; yurt içi + sıfat = `hks_uretici_sifat_id()`;
+  katalog yoksa false). `hks_bildirim_dogrula()` cep yoksa/geçersizse reddeder.
+- Kayıtlı kişide YALNIZ `ikinciCep` gider (AdSoyad/DogumTarihi YOK); "ad/cep varsa doğum şart" kimlik bütünlüğü
+  kuralı artık yalnız cep için KAYITSIZ kişide uygulanır (ad için her zaman).
+- `taslak_gonder` yeniden doğrulamadan ÖNCE cep boşsa Kişi Havuzu'ndan TC ile tamamlar (eski taslaklar).
+- Arayüz: `ureticiCepGerekli()` → kayıtlı + Üretici sıfatında `#cepTelBlok` görünür (not: "Üretici sıfatında HKS zorunlu
+  tutar"), havuz seçiminde cep dolar, kayıtta zorunlu; sonuç ekranında 263 ipucu; kayıtlı kişide "Doğum: GÖNDERİLMEDİ"
+  uyarısı yerine "gerekmez".
+- **Gönderim Sonucu penceresi (v323):** köşedeki ✕ (`#btnModalX`) ve kutunun dışına (boşluğa) tıklamak YALNIZ kapatır (`sonucKapat()`, bulunulan ekranda kalır; taslak listesi açıksa tazelenir). Gönderilenler'e geçiş/Taslağa dönüş yalnız alttaki "Gönderilenlere Git"/"Taslağa Dön" düğmesiyle. CANLI "Gönderim Onayı" ve firma penceresinde ✕/boşluk kapatması YOK (`#modal.dataset.sonuc='1'` yalnız sonuç ekranında).
+- Test: `php scripts/hks_uretici_cep_test.php` · `node scripts/hks_uretici_cep_smoke.js`.
+
+## Hal Kayıt — Kişi Havuzu (v282, v283)
+
+Karşı taraf (Satın Alım'da satıcı, Satış/Sevk'te alıcı) artık firma bazlı
+"Son Kullanılanlar" açılır listesinden değil, **GLOBAL havuzdan** seçilir: tüm
+firmalar aynı müstahsil/firma listesini görür.
+
+- **Tablo `hks_kisiler`** (tc UNIQUE, yalnız rakam) — `hks_tablolari_hazirla()` →
+  `hks_kisi_tablo_hazirla()` ile otomatik oluşur (halkayit deseni). Çekirdek
+  mantık `halkayit/kisi_havuzu_lib.php` (include-only, `.htaccess`'te kapalı);
+  çıktı basmaz/exit etmez — test onu doğrudan require eder.
+- **Uçlar:** `kisiler` (liste + ilk çağrıda tek seferlik içe aktarma) ·
+  `kisi_kaydet` · `kisi_sil`. Yazma uçları **CSRF** ister: `app.php`
+  `app.html`'deki `__CSRF_TOKEN__` meta yer tutucusunu doldurur, `api()` her
+  istekte `X-CSRF-Token` yollar. `app.html`'i `readfile` ile basmaya DÖNME.
+- **Doğrulama sunucuda** (`hks_kisi_dogrula`): 10 hane VKN / 11 hane TC
+  (algoritma zorunlu), cep boş ya da 10–13 hane, doğum boş ya da geçmiş tarih.
+  Aynı TC → 409. **Ad: VKN'de OPSİYONEL (yalnız takip), TC'de zorunlu** (v283) —
+  kayıtlı karşı tarafta HKS'e AdSoyad zaten GÖNDERİLMEZ (`hks_soap.php`, yalnız
+  doluysa; `karsiTarafSec()` adı yalnız KAYITSIZ sonuçta forma yazar).
+- **Sıfat** (`sifat_id`, v283): formda seçilir, kişi seçilince doğrulamadan SONRA
+  `#sIkSifat`'a uygulanır (Üreticiden Sevk Alım'da dokunulmaz). Gönderim upsert'inde
+  son kullanılan kazanır, Üreticiden Sevk Alım'da YAZILMAZ. Kolon eski tabloya
+  `hks_kisi_sifat_kolonu_hazirla()` ile eklenir (ucuz yoklama, ALTER yalnız bir kez).
+- **CSRF token ömrü ≠ giriş ömrü:** giriş `asya_session` (uzun), token PHP
+  oturumunda (varsayılan GC ~24 dk). Uzun açık kalan SPA eski token'la 403 alıyordu
+  (canlı, v282). Çözüm: `csrf` okuma ucu + `api()` 403'te token'ı tazeleyip BİR KEZ
+  tekrarlar; meta boş/`__CSRF_TOKEN__` ise önce uçtan alır. Sunucu token'ı
+  `hks_csrf_girdi()` ile başlık → gövde `csrf` sırasıyla okur; gövdeye `csrf`
+  YALNIZ `kisi_*` çağrılarında eklenir (taslak verisine sızmasın).
+- **Gönderim sonrası** `hks_kisi_havuzuna_isle()` upsert eder (boş gelen
+  ad/cep/doğum eskiyi SİLMEZ; hata yutulur — künye zaten oluştu).
+  `hks_son_guncelle()` artık `karsiTaraflar` YAZMAZ; eski `sonlar_*` kv verisi
+  silinmez, bayrak `kisi_havuzu_aktarildi` ile bir kez havuza aktarılır.
+- **Seçim canlı sorguya gider:** pencerede kişiye tıklamak `karsiTarafSec()`
+  çağırır — saklı bilgi karar vermez, HKS KayitliKisiSorgu yine çalışır.
+- **Audit** `module='hks_kisi'`: yalnız ad + maskeli TC; cep/doğum YAZILMAZ.
+- Pencere `#kisiPencere` (z 600) + `#kisiForm` (z 650); flex kolon, gövde
+  `min-height:0` ile kayar; mobilde alttan sayfa. Kullanıcı verisi yalnız
+  `textContent` ile basılır.
+- **Test:** `php scripts/hks_kisi_havuzu_smoke.php` (SQLite) ·
+  `node scripts/hks_kisi_pencere_smoke.js` (Playwright; yoksa atlar).
+- **Bildirim ekranı görsel katmanı (v285):** yalnız CSS (`app.html` "BİLDİRİM
+  EKRANI — GÖRSEL KATMAN" bloğu). Kart rengi `.bk-ayar/.bk-sevk/.bk-mal/.bk-kunye`,
+  numara rozeti `h2[data-no]` (başlık metninde numara YOK — `kart1Baslik`/
+  `kart2Baslik`'ı JS'te yazarken numara EKLEME), alan ikonu `--bi-ikon` (id bazlı
+  liste; aranabilir select'in görünen kutusu `<id>Ara`). Yeni alan eklersen
+  ikon listesine ekle. Başlık `display:block` kalmalı — flex olursa firma adı
+  span'i ayrı sütuna kırılır. Geri düğmeleri tüm ekranlarda ok + "Geri"
+  (firma menüsünde "Firmalar").
+- **Kilo/fiyat binlik ayırıcı (v286):** `sayiBicimle()` + `binlikGirisBagla()`
+  (app.html, `fmt` altında) — yazarken "1.234.567,89", imleç korunur, tuşla
+  yazılan "." ondalık virgüle çevrilir. Okuma HER ZAMAN `trSayi()` (noktaları
+  siler); `parseFloat(el.value)` YAZMA. Programatik atama `sayiBicimle(n)` ile —
+  `String(x).replace('.', ',')` KULLANMA. Yeni `inputmode="decimal"` kutu
+  eklersen bağla (test hepsinin bağlı olduğunu denetler).
+  Test: `node scripts/hks_binlik_smoke.js`.
+
+---
+
+## Hal Kayıt — Gönderilenler Tablosu + Tekrar Gönder (v305)
+
+Gönderilenler ekranı masaüstünde (iframe ≥900px) kompakt TABLO: Tarih+durum · Firma · Plaka ·
+Ülke/Müstahsil (yön öneki atılır, tür etiketi + `title` tam metin) · Ürün · Kilo (tam sayı) ·
+Ücret (BİRİM fiyat `TL/KG`, 0 → —) · 🖨 Yazdır · ↻ Tekrar gönder ▾. Satıra tık/Enter/Boşluk →
+altında bugünkü kart (`.g-kart-gomulu`, ilk açılışta kurulur). <900px kartlar AYNEN; bilgi satırlarının
+altına tam genişlik "↻ Tekrar gönder" düğmesi eklendi (`.g-kart-eylem`, v307) — künye detayının DIŞINDA,
+kart kapalıyken de görünür; gömülü masaüstü kartında çizilmez (satırın kendi düğmesi var). Kip `matchMedia('(min-width:900px)')` (`gonderilenCiz()`), eşik geçilince
+veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üzerinde.
+
+- **Amaç:** önceki gönderimi forma DOLU açmak (kullanıcı kararı: taslak doğrudan YAZILMAZ). Kullanıcı
+  plaka/kilo düzeltip "Taslağa Kaydet" der → yazma yine TEK yol `taslak_kaydet` → `hks_taslak_olustur()`.
+  **İkinci yazma yolu AÇMA.**
+- **Kopya** (`hks_gonderim_kopyasi()`, `halkayit/tekrar_gonder_lib.php`): `taslak_gonder`'de
+  `$veri` çözülür çözülmez (plan çözümünden ve `gidecekAdres`'ten ÖNCE) alınır, `hks_gonderilenler.veri.kopya`
+  olarak saklanır (migration YOK). `ortak` BEYAZ LİSTE (`hks_kopya_ortak_anahtarlari()`); DIŞARIDA:
+  `kaynak` (beyan bağı — kopyadan açılan taslak beyana bağlanmasın), `gidecekAdres`, `eskiTaslakId`,
+  `ikinciDogumTarihi`/`ikinciCep` (kişisel veri). Hata yutar, null dönebilir — gönderimi asla bozmaz.
+  Liste ucu yalnız `kopyaVar` döner (kopyanın kendisi DÖNMEZ).
+- **Tohum** — salt okunur uç `gonderilen_tohum` (`id`, `firmaId`, `firmaAd`, ops. `hedefFirmaId`):
+  firma izolasyonu `gonderilenler` ile BİREBİR; INSERT/UPDATE/DELETE/SOAP YOK (test denetler).
+  `hks_gonderim_tohumu()` → `{tohum:{satirlar,ortak}, kaynak:'kopya'|'eski', plana, notlar[]}`.
+  Referanslı + künye satırlı kopya → PLAN taslağı (`planKg` = Σmiktar, künyeler gönderimde stoktan;
+  kullanılmış künyeler kopyalanmaz). Doğum/cep TC ile Kişi Havuzu'ndan. Firma değişince `sifatId`,
+  `gidecekIsyeriId`, `gidecekIsyeriAd` SİLİNİR (firmaya özgü).
+- **Eski kayıt (kopya yok):** kolonlardan kısmi kurulum; tür `bildirim_turu` (NULL ise `ulke_ad` öneki),
+  ürün/ülke/tür katalogda (`listeler_cache`) yalnız TAM ad (`hks_tr_normalize`) ve TEK eşleşme; karşı
+  taraf Kişi Havuzu'nda AD ile TAM ve TEK eşleşme (`hks_kisi_ad_ile_tek()`) — yoksa/birden çoksa BOŞ.
+  id ASLA uydurulmaz; eksikler `notlar` ile formun üstünde (`#kopyaNotlar`, textContent) söylenir.
+- **Listede karşı taraf adı (v306):** kayıtlı karşı tarafta form adı doldurmaz, `ulkeAd`'a yalnız TC/VKN düşer
+  (`Yurt içi → 8330514103`). `gonderilenler` VE `taslaklar` uçları yanıtta bu numarayı Kişi Havuzu adıyla değiştirir
+  (`hks_gonderilen_adlari()` tek sorgu + `hks_gonderilen_ulke_isimle()`; önek ve " (İl/İlçe)" eki korunur, havuzda
+  yoksa/adı boşsa metin DEĞİŞMEZ). **Yalnız yanıt kopyası:** saklı kayıt değişmez; `taslak_gonder` ve `gonderilen_tohum`
+  DB satırından okur, bu çıktıyı KULLANMAZ (test denetler). Hata yutulur — liste adsız da çizilir.
+- **Toplam kilo/adet yalnız BAŞARILI satırlardan (v309):** `hks_gonderilenler.toplam_kg`/`adet` eskiden gönderilen TÜM
+  satırları topluyordu → 3 künyeden 1'i hatalıysa liste 19.500 yerine hatalıyı da içeren toplamı gösteriyordu.
+  Yeni kayıtta `taslak_gonder` `hks_basarili_ozet()` ile yalnız künyesi oluşan satırları yazar; ESKİ kayıtlar listede
+  `hks_gonderilen_gercek_toplam()` ile `veri.sonuclar`'dan yeniden hesaplanır (yalnız hatalı satır varsa; DB değişmez,
+  migration yok). Eski kayıttan "Tekrar gönder" tohumu da aynı kg'ı kullanır. Başarılı ölçüt `hks_sonuc_basarili_mi()`.
+- **Arama süzgeci (v321):** Gönderilenler'de `#gonderilenAra` (liste DIŞINDA; ✕ + "N / M gönderim" sayacı, 150 ms debounce). `gonderilenVeri` HER ZAMAN tam liste; çizim `gonderilenGorunen` = `[{g, i}]` kullanır ve `data-i` / `gonderilenSatirHtml(g,i)` / `gonderilenKartIcerik(g,i)` **özgün indeksi** `i` taşır — süzülmüş dizinin sırasını (`map` indeksi) ASLA yazma, yoksa Yazdır / Tekrar gönder yanlış kaydı açar. Eşleşme `gAraNorm` (trNorm + ı→i), tüm sözcükler AND; alanlar plaka (alfasayısal biçimiyle de), ürün, gönderilen taraf (`gonderilenUlkeParcala().ad`) + tam `ulkeAd`, firma, belge no. Girdi DOM'a basılmaz; ekran her açılışta sıfırlanır; kip değişimi (`gonderilenKipDegisti`) süzgeci korur. Test: `node scripts/hks_gonderilenler_smoke.js` ("filtre:" satırları, 1280 + 390).
+- **Künye + fiyat TEK render (v321):** `btnKunyeler.onclick` `/api/kunyeler` ve `/api/kunye_detay`'ı `Promise.allSettled` ile PARALEL ister, fiyat haritasını işleyip TEK `kunyeCiz()` çağırır (eski `kunyeFiyatlariEnjekte` + "fiyatlar yükleniyor…" ikinci çizimi KALDIRILDI — ikinci çizim taslaktan geri yüklenen seçimi silerdi). `kunye_detay` hata verirse künyeler fiyatsız basılır, `#kunyeSayi`'ya "fiyatlar alınamadı" yazılır. Sorgu kimliği `kunyeSorguNo` + istek anındaki firma id'si: eski cevap atılır; `formuTemizle()` de sayacı artırır. `taslakDuzenle`'nin `await onclick()`'i artık fiyatlı tam veriyi bekler. Test: `node scripts/hks_binlik_smoke.js`.
+- **"Panel sürümü" damgası KALDIRILDI (v306):** ana menü altındaki `panel sürümü: …` yazısı ve `PANEL_SURUM` sabiti
+  gitti; tek sürüm kaynağı sidebar'daki `APP_SURUM`. Geri ekleme (test ana menüde yazının YOKLUĞUNU denetler).
+- **v324 görünüm:** Gönderilenler başlığı (Geri + ikon + başlık/alt yazı + illüstrasyon + `#gonderilenAraSay` sayaç hapı), büyük arama kutusu (Ctrl/⌘+K odaklar), lacivert başlık bandı, hap rozetler (tür renkleri), ürün emojisi `gonderilenUrunEmoji()` (kartlarda `urunIkonu()` kalır), split görünümlü "Tekrar gönder" (TEK düğme, iki yarım aynı menüyü açar). Harici görsel/font YOK (inline SVG + emoji). Özgün indeks `i` kuralı aynen geçerli.
+- **Kişi Havuzu filtresi (v324):** `#kisiFiltre` Tümü/Firma(VKN)/Müstahsil(TC), `kisiVknMu(k)` tek ayrım kaynağı, arama ile AND, pencere her açılışta Tümü. Test: `hks_kisi_pencere_smoke.js`.
+- **Kişi listesi sırası (v325):** `kisiListeCiz()` listeyi İSTEMCİDE A→Z sıralar (`KISI_SIRA` = `Intl.Collator('tr')`, adsız kişi sonda); sunucunun 'son kullanılan' sırası kullanılmaz. Test: `hks_kisi_pencere_smoke.js`.
+- **Künye seçim kuralları (v338, kullanıcı kararı):** otomatik seçim (istemci `kunyeOncelikSirasi()` + sunucu `hks_kunye_sirala()` — `halkayit/kunye_secim_lib.php`, İKİSİ BİRLİKTE DEĞİŞİR) sıra anahtarı: [satış fiyatına |alış fiyatı farkı| (2 ondalık; fiyatsız künye sonda) → en eski tarih → en küçük kalan → künyeNo]. Alış fiyatı = künyeyi doğuran bildirimin `MalinSatisFiyati` (`hks_kunye_detaylari_getir`, best-effort; alınamazsa tarih→kalan). Plan taslağı çözümü (`hks_plan_kunye_coz`) aynı sırayı kullanır; `sirala` ayarı yalnız sorguya etki eder.
+- **Künye × sıfat uyumsuzluğu (v338):** `taslak_gonder` sonrası künyeye özgü sıfat hatası (hataKodu≠0 + mesajda "sıfat" + [mesajda künye no VEYA aynı gönderimde başarılı satır VEYA tek satır]) `hks_kv` `kunye_sifat_uyumsuz_<firmaId>` içine {künye:{sıfat:tarih}} yazılır (30 gün TTL, firma başına 2000). Sonraki plan çözümü o künyeyi o sıfatla DIŞLAR; `/api/kunyeler` (+`sifatId`) her künyeye `sifatUyumsuz` ekler (rozet; elle seçilebilir, otomatik dağıtıma girmez). Yanıt `sifatUyumsuzKunyeler`. Gönderim yolu DEĞİŞMEDİ (tek SOAP, yeniden deneme YOK). Risk: sıfatın kendisi yanlışsa tek satırlık denemeler künyeleri tek tek işaretleyebilir (30 gün sonra düşer). Test: `php scripts/hks_kunye_secim_test.php` · `node scripts/hks_kunye_secim_smoke.js`.
+- **Sıfat filtreli künye seçimi (v453):** HKS ReferansKunyeIstek.KisiSifat filtresi 'kişi hangi sıfatla bildirim aldıysa o sıfatla referans künye kullanabilir' kuralını uygular (eski 'filtre künyeleri düşürüyor' notu yanlıştı: düşenler uyumsuz olanlardır). `hks_kunye_penceresi` yalnız `$secenek['kisiSifat']>0` ise `<a:KisiSifat>`'ı KalanMiktari… ile KunyeNo arasına yazar. `hks_plan_kunye_coz_cekirdek(..., $sifatliGetir)` plan çözümünde ÖNCE filtreli listeyi alır (doluysa künye listesi odur, `sifatFiltreKullanildi`; boş → `sifatFiltreBos`, hata → `sifatFiltreHata`: ikisinde FAIL-OPEN eski yol); stok yetmezse mesaja uyumsuz kg notu. Öğrenilmiş harita hâlâ filtre SONRASI uygulanır; 'kunyeler' ucu `sifatFiltre` + `hks_kunyelere_sifat_filtre_bayragi()` ile rozet işaretler. Gönderim yolu değişmedi. Test: `php scripts/hks_sifat_filtre_test.php`.
+- **Depo/Tasnif kaynak kuralı (v366):** HKS HataKodu 108 ("Depo/Tasnif sıfatından sevk ederken, ancak referans künye bildirimini yapan kişiye ve sıfatına geri bildirim yapabilirsiniz") künye×sıfat uyumsuzluğu DEĞİLDİR: `hks_kaynak_karsi_taraf_hatasi_mi()` (kunye_secim_lib.php; kod 108 ya da metin) bu satırları `hks_kunye_sifat_hatali_satirlar()`'dan DIŞLAR. Eski yanlış kayıtlar için `kunye_sifat_v366_<firma>` bayrağıyla uyumsuzluk haritası ilk okumada BİR KEZ boşaltılır. 108 → kv `kunye_kaynak_<firma>` = `{künye: {red: {tc: {sıfat: tarih}}, koken, kokenTarih}}` (60 gün, 2000 künye; `koken` = künyenin kaynağı, detay haritası biliniyorsa); yanıtta `kaynakHatalari` (kaynakTc maskeli, `kaynakFarkli`). Mod = `hks_kaynak_sevk_mi($o)` (taslak_lib: SEVK_ETME + bildirimci sıfatı = `hks_depo_tasnif_sifat_id()`, katalogda ADA göre "depo"+"tasnif", tek eşleşme; katalog yoksa kural YOK). Kaynak = BildirimSorgu `BildirimciTcKimlikVergiNo` (kendi VKN'miz değilse) ya da öğrenilen `koken` (`hks_kunye_koken_haritasi`). Bu modda: plan çözümü detay haritasını FİYATSIZ sevkte de ister ve kaynağı KESİN bilinip karşı taraftan farklı künyeyi DENEMEZ (`atlananKaynakFarkli`); `taslak_gonder` gönderimden ÖNCE (elle seçimde detay best-effort sorgulanır) `hks_kaynak_tc_engeli` (kaynak ≠ ikinciTc) ve `hks_kaynak_red_engeli` (aynı künye+TC+sıfat 108 almış) ile durur — taslak geri konur, 400, hiçbir şey gönderilmez; kaynağı bilinmeyen künye engellenmez. `bildirimciSifatId` (`hks_bildirimsorgu_sifat_id`: `Sifat`/`BildirimciSifat`/`BildirimciKisiSifat`/`BildirimciSifatId`) **DOĞRULANMAMIŞ alan adıdır** — canlı yanıtta görülmedi. İstemci (`kaynakUygula()`, `kaynakRozetGuncelle()`): künye seçilince TC boşsa kaynağın TC'si dolar + normal doğrulama; TC farklıysa/karışık kaynakta yalnız UYARI (`#ikKaynakNot`); sıfat `bildirimciSifatId` ya da (kayıtlı sıfatlar − red listesi) tek adayı (elle seçim ezilmez; yalnız boş/son otomatik/reddedilmiş değişir); başka kaynaklı künye "kaynak: başka kişi (TC ***1234)" rozetli ve `kunyeOncelikSirasi`'ndan DIŞLANIR (`k.kaynakBaska`, sunucudaki dışlamanın aynası). Sonuç penceresinde `#kaynakHataBilgi` (sıfat uyumsuz metni YOK). **v367 — bildirimci = KENDİ VKN'miz** (künyeyi biz doğurduk, ör. müstahsilden alım; canlı vaka 15.10.2026: 1204…133175 bildirimci ASYA FRESH) kaynak "bilinmiyor" DEĞİL, kaynak = kendimizdir: `hks_kunye_koken_haritasi` onu dışlamaz, plan çözümü atlar, `hks_kaynak_tc_engeli(..., $kendiVkn)` `kendi=true` ile durdurur; ekranda "kaynak: kendi bildiriminiz" rozeti (TC girilmeden de), dağıtım dışı, seçilince uyarı ve TC kendi VKN ile DOLDURULMAZ (`kaynakKendiMi`). Geri alma. Tek gönderim yolu değişmedi, yeniden deneme YOK. Test: `php scripts/hks_kunye_secim_test.php` · `php scripts/hks_depo_tasnif_kaynak_test.php` · `php scripts/hks_kunye_detay_test.php` · `node scripts/hks_depo_tasnif_kaynak_smoke.js`.
+- **Satın Alım birim varsayılanı (v324):** `miktarBirimKgVarsayilan()` — Satın Alım/Üreticiden Sevk Alım'da `#sMiktarBirim` BOŞSA listeden ADA göre "Kg" seçer (id uydurmaz; elle/taslak değeri ezmez). Test: `node scripts/hks_kg_varsayilan_smoke.js`.
+- **Düşük tonaj uyarısı (v412):** Taslaklar kartında toplam kilo `DUSUK_TONAJ_KG` (5.000) altındaysa Kilo satırında küçük amber `⚠ … altı — kilo eksik girilmiş olabilir` (`.tk-uyari`; satır SAYISI sabit) ve Gönderim Onayı'nda uyarı satırı. ENGEL değil, yalnız uyarı (20.199 yerine 2.199 yazma hatası için). Kural TEK yer `dusukTonajMu()` (halkayit/app.html). Test: `node scripts/hks_dusuk_tonaj_smoke.js`.
+- **OGL sevkiyat ↔ beyan araç/şoför aktarımı + yüklendi gizleme (v413, migration YOK):** `siparis_beyan_bagla()` bağ kurulunca (aynı transaction) `siparis_beyan_arac_aktar()` sevkiyatın GERÇEK `plakalar`ını (1. = çekici → `tractor_plate`, 2. = dorse → `vehicle_plate`; `siparis_beyan_plaka_ayir()`) ve şoför adı/telefonunu (`driver_name`/`driver_phone`) beyana yazar. Sipariş değeri doğru kabul edilir (beyandakini ezer); sipariş tarafı BOŞSA beyandaki değer korunur. Kapı: `can_beyan('write')`, şoför için ayrıca `contact.write` (yoksa o alan atlanır, bağ yine kurulur). iptal/red beyana yazılmaz. Kolon yoksa o alan atlanır (`siparis_beyan_kolon_var`). Audit `siparis_beyan_arac_aktar` (şoför adı/telefonu YAZILMAZ). Bağ kaldırma beyana geri yazmaz. **Yüklendi beyan** (`siparis_beyan_gizli_durum()`) önerilerde/aramada çıkmaz ve bağlanamaz; MEVCUT bağlar (`siparis_beyan_baglar`, parti haritası) filtrelenmez. Test: `php scripts/siparis_core_smoke.php` (12b).
+- **Tekli Yazdır = günün tüm bildirimleri (v444, migration YOK):** bir araca aynı gün birden çok bildirim yapılabildiği için tekli Yazdır (Gönderilenler satır/kart + Gönderim Sonucu) v414-v443'te yalnız tıklanan gönderimin künyelerini gösteriyordu (kullanıcı şikâyeti). `gonderimKunyeleriAl(o, sorgu, tumu)` — `tumu=true` (yalnız `gonderimYazdir`) HKS'in döndürdüğü hepsini listeler (Çoklu Künye gibi); gönderimin kendi künyelerinden eksik olan varsa yalnız uyarı (`#yzUyari`, engel değil). Toplu Yazdır `tumu` vermez → her gönderim kendi künyelerine süzülür, ayrı sayfa. Test: `node scripts/hks_gonderim_yazdir_smoke.js`.
+- **Gönderimi doğrudan yazdır (v414, migration YOK):** Gönderilenler'deki **🖨 Yazdır** artık Çoklu Künye Basım ekranına UĞRAMAZ; Gönderim Sonucu penceresinde de "Gönderilenlere Git"in solunda **🖨️ Yazdır** (`#btnSonucYazdir`, `.modal-eylem` satırı; yalnız ≥1 künye oluştuysa ve yanıtta `gonderim` varsa; CANLI onayda gizli). İkisi de `gonderimYazdir()` (app.html): pencere TIKLAMA ANINDA açılır (sorgudan sonra açmak engelleyiciye takılır) → "alınıyor" → HKS'e CANLI `toplu_kunye` (plaka/belge + gün; **önbellek YOK — sahip kararı: çıktı gönderimin gerçekten gittiğinin kanıtı**) → sonuç — v444'ten beri — o plaka/belge+gün için HKS'in döndürdüğü TÜM künyelerdir (süzme YOK; yalnız Toplu Yazdır gönderimin künyelerine süzer) (aynı gün aynı plakaya başka gönderim olabilir; liste boşsa — eski kayıt — süzme yok) → ortak `topluYazdirPenceresiAc(..., {pencere, uyari})` aynı pencereye yazar. Eksik künye varsa basılmayan uyarı (`#yzUyari`) görünür; hiç yoksa/HKS hatası → "↻ Tekrar dene". `taslak_gonder` yanıtına yalnız `gonderim {id, plaka, belgeNo, tarih, kunyeler}` eklendi. **Çoklu Künye Basım ekranı DEĞİŞMEDİ** (süzme yok, otomatik print yok). Test: `node scripts/hks_gonderim_yazdir_smoke.js` · `hks_gonderilenler_smoke.js`.
+- **Toplu Yazdır (v415, migration YOK):** Gönderilenler'de her satırda (tarihin solunda) / kartta (Yazdır'ın solunda) seçim kutusu (`.g-sec-kutu`, data-i = ÖZGÜN indeks; seçim `gonderilenSecili` = gönderim id Set'i, süzgeç/yeniden çizim korur, ekran her açılışta sıfırlanır; "tümünü seç" YOK — sahip kararı), seçim varken alttaki sabit çubuk `#gTopluBar` ("N gönderim seçili · Temizle · 🖨️ Toplu Yazdır", z 30; liste altına 84px pay). En çok `TOPLU_YAZDIR_LIMIT` (30). `gonderimTopluYazdir()`: tek pencere, ilerleme "k / N gönderim HKS'ten alındı", aynı tarih+plaka+belge için TEK `toplu_kunye` sorgusu (en çok `TOPLU_YAZDIR_PARALEL`=2 eşzamanlı), her gönderim kendi künyelerine süzülür (`gonderimKunyeleriAl()` — tekli yazdırmayla ORTAK). **Her gönderim AYRI bölüm = AYRI SAYFA, tek tek basılmış gibi** (sahip kararı): `kunyeBolumHtml()` + `kunyeYazdirmaSayfasiYaz()` (tekli/Çoklu Künye de bunu kullanır), baskıda `.yz-bolum+.yz-bolum{break-before:page}`, PDF'te (`topluPdfPaylas`) her bölüm yeni PDF sayfasından başlar; tablo artık `.kunye-tablo` sınıfı (id YOK). Hatalı/bulunamayan gönderim işi durdurmaz: basılmayan uyarıda listelenir, kalanlar basılır, hepsi başarısızsa "↻ Tekrar dene". Test: `node scripts/hks_gonderim_yazdir_smoke.js` (T/M bölümleri; sahte api.php test SUNUCUSUNDA — Playwright `route()` açıkken yazdırma penceresine eklenen html2canvas/jspdf istekleri takılıyordu).
+- **Aynı gün aynı plaka uyarısı (v416, migration YOK, sahip kararı: ENGEL DEĞİL):** aynı gün aynı plakaya (plaka yoksa aynı belge no'ya) ikinci gönderim Çoklu Künye / toplu künye sorgusunda (plaka + gün) iki gönderimin künyelerini karıştırır. Kural TEK yer `hks_bugun_ayni_plaka($db, $tablo, $firmaId, $firmaAd, $plaka, $belgeNo, $gun=null)` + `hks_plaka_norm()` (tekrar_gonder_lib.php; AYNI firma — Gönderilenler izolasyonu, sunucu günü, plaka büyük harf + yalnız harf/rakam, plaka doluysa belge no karşılaştırılmaz). Salt okunur uç `ayni_plaka_bugun` (istemci `POST /api/ayni_plaka`); `taslaklar` yanıtı her taslağa `ayniPlakaBugun` (sayı) ekler → kart plaka satırında `.tk-uyari`. Gönderim Onayı açılınca `ayniPlakaKontrol(t)`: kontrol sürerken `#btnOnay` kilitli (en çok 6 sn), eşleşme varsa `#onayPlakaUyari` içinde `.onay-plaka-uyari` (saat · karşı taraf · ürün · kg) ve düğme "Yine de Gönder"; hata/zaman aşımında not + gönderim serbest; geç gelen eski yanıt `ayniPlakaSorguNo` ile atılır. `taslak_gonder` DEĞİŞMEDİ (test denetler). Test: `php scripts/hks_ayni_plaka_smoke.php` · `node scripts/hks_gonderim_yazdir_smoke.js` (P bölümü).
+- **Firma yönetimi yalnız yönetici + audit (v417, sahip önerisi — güvenlik adımları):** HKS firma yönetimi yalnız yönetici (v417): halkayit/api.php `firma_kaydet` ve `firma_sil` en başta `hks_firma_yonetici_kapisi($g)` çağırır; bu kapı `is_admin()` ('admin' slug'ı, dogum_deney.php/tani.php ile aynı kapı) ve ardından `csrf_check(hks_csrf_girdi($g))` ister. Yönetici değilse 403 döner ve gövdede `code` alanı yoktur, böylece app.html `api()` gereksiz CSRF tazeleme/tekrar denemesi yapmaz; `users.admin` yetkili özel roller firma yönetemez (bilinçli, is_admin özel role devredilemez). DB ve audit mantığı include-only `halkayit/firma_yonetim_lib.php`'dedir (kapı api.php'de kalır): audit modülü `hks_firma`, `record_id` null (firma id'si metindir, `firma_id` değer içinde), dizi `hks_firma_audit_degerleri()` ile BEYAZ LİSTEden kurulur (firma_id, ad, maskeli vergi no, renk, degisen_alanlar, kullanici_adi/sifre/servis_sifresi değişti-verildi bayrakları); şifre ve kullanıcı adı DEĞERİ asla yazılmaz — `hks_firma_bul()` çıktısını doğrudan audit'e geçirme, çünkü `_audit_sanitize` servicePassword/password_enc'i süzmez. `firma_sil` olmayan/boş id'de artık 400 döner (eskiden sessiz tamam:true) ve audit yazmaz. `firmalar` yanıtına üst düzey `yonetici` bayrağı eklendi (dizi biçimi aynı); app.html bayrak yoksa 'yönetici değil' sayar ve ✎ ile '＋ Yeni Firma' kartını çizmez, firma seçimi etkilenmez. Test: `php scripts/hks_firma_yonetim_smoke.php` (SQLite + kapı fonksiyonunun gerçek çalıştırması + statik) · `node scripts/hks_firma_yonetim_smoke.js` (Playwright, 390/1280px).
+- **Gönderim audit’i + gönderen (v417, sahip önerisi — güvenlik adımları):** v417 — Gönderim audit'i + gönderen. `taslak_gonder` (halkayit/api.php) her gönderimi audit_log'a yazar (module `hks_gonderim`). `hks_gonderim_basla` gönderimden önce niyet kaydıdır. `hks_gonderim_sonuc` sonuçtan sonra yazılır; `sonuc_turu` basarili, kismi, tam_basarisiz, belirsiz veya yanit_bos olur. Aynı gönderimin kayıtlarını rastgele `gonderim_ref` bağlar; basla var, sonuc yok ise süreç fatal veya zaman aşımıyla öldü demektir. Basarili/kismi kaydı `hks_son_guncelle`, kişi havuzu ve Gönderilenler INSERT'inden ÖNCE yazılır (`$gid` bu yüzden erken üretilir). Payload `halkayit/tekrar_gonder_lib.php`'de elle beyaz listeyle kurulur ve hata için yalnız int hata kodu ve bayrak yazar; `$sonuc` / `$ortak` doğrudan audit'e geçmez (TC, doğum, cep, ad, ulkeAd, HKS mesajları, ham/hamIstek YOK). `hks_gonderim_audit_yaz()` Throwable yutar, HKS akışını kesmez. Kullanıcıyı `audit_log_event` kendisi ekler. `hks_gonderilenler.veri.gonderen` = {id, ad} anlık görüntüdür (migration yok); liste ucu `gonderen` döndürür, Gönderilenler kart detayında "Gönderen" satırı çizilir (masaüstü tablo sütunu YOK). Gönderen kopya beyaz listesine ve tekrar-gönder tohumuna GİRMEZ. Yeni yardımcı adları `hks_gonderilen_` ile başlamaz ve `taslak_gonder` gövdesinde 'ayni_plaka' geçmez (mevcut smoke kısıtları). Test: `php scripts/hks_gonderim_audit_smoke.php` · `node scripts/hks_gonderilenler_smoke.js`.
+- **Belirsiz gönderim (v417, sahip önerisi — güvenlik adımları):** Hal Kayıt — Belirsiz Gönderim (v417, migration YOK): taslak_gonder'de hks_bildirim_kaydet() istisna fırlatırsa (zaman aşımı/ağ kopması) HKS'in bildirimi alıp almadığı bilinmez; taslak geri konur ve plaka(yoksa belge no)+gün anahtarlı bir İŞARET hks_kv'ye yazılır (`bg_<firma md5[8]>_<plaka md5[12]>_<YYYYMMDD>`, anahtar-başına-kayıt, ≤60 karakter; TTL = işaret gününü izleyen günün sonu; taslak JSON'una YAZILMAZ, Düzenle/Kopyala/sil-yeniden-oluştur yollarında kaybolmasın). Kütüphane `halkayit/belirsiz_gonderim_lib.php` (include-only, .htaccess'te kapalı, `hks_belirsiz_*` öneki; 'ayni_plaka' ve 'hks_gonderilen_' alt dizelerini taslak_gonder bloğunda KULLANMA). Aynı plakaya tekrar gönderimde, doğum-deneyi token'ı tüketilmeden ÖNCE ve gerçek gönderimden önce, işaret varsa HKS'e salt okunur `hks_toplu_kunye` ile sorulur: Gönderilenler'de kaydı olmayan künye varsa 409 `belirsiz_gonderim_kunye_var`, sorgu yapılamazsa 409 `belirsiz_gonderim_kontrol_edilemedi` (fail-closed, taslak her zaman geri konur); 'temiz' sonuç KESİN kanıt sayılmaz (işaret silinmez, yalnız başarılı gönderimde silinir). Bilinçli geçiş: istemci `belirsizOnay` = kayıtlı işaret id'si (sunucuda birebir doğrulanır) + künye bulunduysa ayrıca `belirsizKunyeOnay`, CSRF sahiplenmeden önce, audit `hks_belirsiz` (kişisel veri yok, plaka son 3 karakter); kullanıcı HKS'te baktıysa kartta "HKS'te kontrol ettim" → `belirsiz_isaret_kapat` (gönderim yapmaz). Belirsiz yanıt 502 yerine 409 (ters vekil HTML 502 uyarıyı yutuyordu); yalnız cURL errno 6/7/35/60 (`HksAgHatasi`, istek hiç gitmedi) işaretsiz 502'dir; sahiplenme sonrası fatal/timeout `register_shutdown_function` ile geri konur+işaretlenir, SIGKILL kapsam dışı. Künye oluştuktan sonraki kv/Gönderilenler INSERT hataları 500 vermez (`kayitUyari`). Test: `php scripts/hks_belirsiz_gonderim_smoke.php` · `node scripts/hks_belirsiz_gonderim_smoke.js`.
+- **CSRF merkezi kapısı (v417, sahip önerisi — güvenlik adımları):** Hal Kayıt - CSRF merkezi kapısı (v417): `halkayit/api.php` içinde `switch ($action)`'ten önce tek bir kapı vardır. `hks_csrf_muaf_eylemler()` listesindeki salt okunur eylemler dışında HER eylem (bilinmeyenler dahil) `csrf_check(hks_csrf_girdi($g))` ister (fail-closed). Kapı taslak_gonder'in atomik DELETE sahiplenmesinden ÖNCE çalışır, doğrulamadan hemen sonra `session_write_close()` yapar (300-600 sn süren gönderimlerde PHP oturum kilidi paralel istekleri bloklamasın; api.php'de `$_SESSION` yazımı yoktur) ve gövdedeki `csrf` yedeğini `unset` eder. Case içinde ayrıca csrf_check YAZMA: ikinci çağrı kapatılmış oturumu yeniden açıp kilitler. Yeni case yazarken muaf listeye YALNIZ gerçekten salt okunursa (DB'ye yazmayan, HKS'e gönderim yapmayan) ekle; yazan uçsa `halkayit/app.html` `API_GOVDE_CSRF`'e de ekle. `kisiler` idempotent içe aktarma nedeniyle bilinçli muaf istisnadır; `tani.php` token yollamadığı için kullandığı eylemler (iller, ilceler, beldeler, isyerleri, kayitli_kisi, urun_listeleri, bildirim_onizle) muaf kalmalıdır. Kalıcı 403'te istemci "Sayfayı yenileyip tekrar deneyin." ipucu gösterir; yetki 403'üne `code` alanı koyma (istemci yalnız `code===403` görünce token tazeleyip tekrar dener). Test: `php scripts/hks_csrf_kapsam_smoke.php` · `node scripts/hks_csrf_taslak_smoke.js`.
+- **Yazdırma KENDİLİĞİNDEN açılmaz (v418, sahip kararı):** tekli (`gonderimYazdir`) ve toplu (`gonderimTopluYazdir`) yazdırma sayfası künyelerle açılır; yazıcı penceresi yalnız sayfadaki **Yazdır** düğmesine basılınca açılır (PDF indirmek isteyen önce yazıcı penceresiyle karşılaşmasın). `yzOtomatikBas()` KALDIRILDI — geri ekleme. Test: `hks_gonderim_yazdir_smoke.js` (print sayacı 0).
+- **Hal Kayıt iframe sağdan kesiliyordu (v431):** `halkayit/index.php` `body.hk-page .container` `width:100%` idi; masaüstünde global kural `.container{margin-left:220/260px !important}` verdiği için iframe sidebar genişliği kadar sağdan taştı ve `body{overflow:hidden}` onu KESTİ (Gönderilenler'de Yazdır/Tekrar gönder düğmeleri görünmüyor, `@media` iframe'in gerçek genişliğine baktığı için dar-mod simgeleri de devreye girmiyordu). Artık `width:auto; min-width:0` — `width:100%` GERİ EKLEME. **Mobil düzeltmesi:** `width:auto` tek başına yetmez — body flex-kolon + global `.container{margin:0 auto}` auto yan marjları öğeyi stretch yerine içeriğe (iframe'in 300px varsayılanına) daraltıp mobilde ortada dar sütun yapıyordu. Kural şimdi `width:auto; min-width:0; align-self:stretch; margin-left:0; margin-right:0` (masaüstündeki `margin-left:220/260px !important` soldaki marjı yine ezer, `margin-right:0 !important` zaten var). Ölçüm: iframe `getBoundingClientRect()` 390/767 px'te left 0 right=viewport, ≥900 px'te left=sidebar (220/260) right=body sağı.
+- **Bana yapılan bildirimler (v432, migration YOK):** "Raporlama İşlemleri" › **📥 Bana Yapılan Bildirimler** (`#ekranGelen`, `#btnGelen`): firmaya YAPILAN (gelen) bildirimler, tarih aralığıyla (varsayılan bugün; çipler Bugün/Dün/Son 7/Son 30). Uç `gelen_sorgu` (api.php; salt okunur SOAP → `hks_csrf_muaf_eylemler()`'de, `API_GOVDE_CSRF`'e EKLENMEZ). Sunucu `hks_gelen_bildirimler()` (hks_soap.php): `BildirimServisBildirimciyeYapilanBildirimListesi` AMA `KalanMiktariSifirdanBuyukOlanlar=false` (kalan 0 olanlar da gelir — `hks_kunye_detay_penceresi`'nin `true`'su stok içindir, KARIŞTIRMA); HKS 1 ay sınırı → ≤27 günlük pencereler (`hks_gelen_pencereler`), aralık EN ÇOK 186 gün (`hks_gelen_aralik_dogrula`, aşarsa/bozuk tarih/bas>bit → 400 Türkçe; bitiş gelecekteyse bugüne kırpılır); künyeNo ile tekilleştirilir, yeni → eski; pencere hatası işlemi kesmez (`kismiHata` sayacı), hiç pencere başarılı değilse hata. Gönderen ADI HKS yanıtında YOK (yalnız `BildirimciTcKimlikVergiNo`) → ekranda TC/VKN; Kişi Havuzu'nda ad varsa `hks_gelen_kisi_adlari()` (tekrar_gonder_lib.php, tek sorgu, hata yutulur) adı da gösterir (yanıt `gonderenAd`). Test: `php scripts/hks_gelen_bildirim_test.php` (ağsız) · `node scripts/hks_gelen_bildirim_smoke.js` (1280 + 390).
+- **Taslak Kopyala (v368):** Taslaklar kartında **📋 Kopyala** (`data-kopyala`, sıra Gönder · Kopyala · Düzenle · Sil; <420px 2×2)
+  → `taslakDuzenle(t, {kopya:true, toast:TASLAK_KOPYA_TOAST})` — Düzenle ile AYNI yükleme yolu, kopya kipi: `duzenlenenTaslakId=null`,
+  kayıtta `eskiTaslakId` GİTMEZ, asıl taslak SİLİNMEZ, beyan bağı (`ortak.kaynak`) forma girmediği için kopyaya TAŞINMAZ. Yazma yine
+  `taslak_kaydet` → `hks_taslak_olustur()`. Tekrar gönder metinleri (`KOPYA_TOAST`, "Önceki gönderimden") değişmedi.
+  Test: `node scripts/hks_taslak_kopyala_smoke.js`.
+- **Gönderim Raporu (v494, migration YOK, yeni yetki YOK, SALT OKUNUR):** AYRI sayfa `halkayit/gonderim_rapor.php` (Gönderilenler başlığındaki **📊 Rapor** `#gonderilenRapor`, `target="_top"`; tıkta aktif firma `?firma=` eklenir). Kapı `require_login()` + `require_perm('hks.access')` (index.php ile aynı; firma seçimi SPA'daki gibi serbest, "Tüm firmalar" dahil). GET filtre: firma · bas/bit (varsayılan ayın 1'i → bugün; gelecek bitiş bugüne, bas>bit yer değiştirir, en çok 366 gün) · ülke/karşı taraf · ürün (harf duyarsız tam) · plaka (`hks_grapor_plaka_norm`, İÇERİR) · tür (ihracat/uretici/alim/sevk/satis/yurtici) · grup (ulke/urun/plaka/firma). Mantık `halkayit/gonderim_rapor_lib.php` (`hks_grapor_*`, include-only, `.htaccess`'te kapalı): SQL yalnız firma (Gönderilenler izolasyonu: firma_id ya da firma_id'siz eski kayıtta firma ADI) + tarih ('Y-m-d H:i:s' dizgisi, taşınabilir), en çok `HKS_GRAPOR_LIMIT` 5000 (+ kesildi notu); kg/künye `hks_gonderilen_gercek_toplam()`, TC/VKN → ad `hks_gonderilen_adlari()` + `hks_gonderilen_ulke_isimle()` (KOPYALAMA); tür/ad ayrıştırması `hks_grapor_tur_coz()` = app.html `gonderilenUlkeParcala()` aynası (ikisini birlikte değiştir; " (İl/İlçe)" eki gruplama için atılır). **Tamamen başarısız gönderim (gerçek künye 0) toplamlara/gruplara GİRMEZ**, ayrıntıda "Hatalı", özette "N hatalı" rozeti. Ekran: özet kartları + Özet tablosu (TOPLAM tbody sonunda) + Ayrıntı; KG tam sayı binlik noktalı. 🖨 Yazdır (`data-gr-yazdir`, A4 yatay, filtre/düğme gizli, filtre özeti yazılı) · 📊 XLSX İndir (`?xlsx=1`, render_header'dan ÖNCE, `require_perm('reports.export')`, `export_audit('hks','gonderim_rapor','xlsx',…)`, Özet + Ayrıntı sayfaları, dosya `Gonderim-Raporu-<bas>_<bit>.xlsx`). **CSV YOK.** no-store; sw.js `/\/halkayit\/gonderim_rapor\.php/` önbelleğe almaz. Test: `php scripts/hks_gonderim_rapor_smoke.php` (lib + statik + gerçek sayfa render alt süreçte: `scripts/hks_gonderim_rapor_render.php`, veri `_hks_gonderim_rapor_fixture.php`) · `node scripts/hks_gonderim_rapor_smoke.js` (1280/390, açık/koyu, yazdırma, app.html Rapor bağlantısı).
+- **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma
+  değişiyorsa `firmaSec(hedef)` → `taslakDuzenle(tohum, {kopya:true, notlar})`. Kopya kipinde
+  `duzenlenenTaslakId = null`: `eskiTaslakId` GİTMEZ, hiçbir taslak SİLİNMEZ. Karşı taraf yine
+  "Doğrula"dan geçer. Menü `#gTekrarMenu` (position:fixed, z 620), firma penceresi `#firmaSecPencere` (z 600,
+  aktif firma hariç). Lib `taslak_lib.php`'yi require ETMEZ (test edilebilirlik; api.php yükler).
+- Test: `php scripts/hks_tekrar_gonder_smoke.php` · `node scripts/hks_gonderilenler_smoke.js`
+  (`GSHOT=<klasör>` ekran görüntüsü kaydeder).
