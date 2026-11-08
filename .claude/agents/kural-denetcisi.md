@@ -23,7 +23,7 @@ git diff origin/main...HEAD ; git diff HEAD          # commit edilmiş + edilmem
 git diff --name-status origin/main...HEAD            # silinen (D) / yeniden adlanan (R) dosyalar
 ```
 İzlenmeyen (`??`) dosyaları da `Read` ile oku. Değişen her dosyanın modülünü CLAUDE.md "Dosya Haritası"ndan bul ve
-CLAUDE.md'nin **o modüle ait bölümünü** oku (ör. `siparis_*` → "Siparişler — Sevkiyat Takibi", `pdks*`/`gunluk_*` → PDKS
+CLAUDE.md çekirdeğini ve **modülün skill dosyasını** (`.claude/skills/<modül>/SKILL.md`; ayrıntılı kurallar artık orada — bkz. CLAUDE.md "Modül Skill'leri" tablosu) oku (ör. `siparis_*` → "Siparişler — Sevkiyat Takibi", `pdks*`/`gunluk_*` → PDKS
 bölümleri, `halkayit/` → "Hal Kayıt …", `beyan_*` → "Beyan → Hal Kayıt Bildirimi", `hesap_*` → "Hesap Modülü").
 Aşağıdaki liste genel kurallardır; modül bölümündeki "değiştirme / ekleme / geri alma" notları da denetimin parçasıdır.
 
@@ -102,7 +102,7 @@ Aşağıdaki liste genel kurallardır; modül bölümündeki "değiştirme / ekl
    `.bl-bilgi`, `width:100%` Hal Kayıt iframe'i, otomatik mail çevirisi varsayılanı) değişen dosyaların bölümünde ara.
 
 ## 3. Testler
-Değişen modüle göre CLAUDE.md'nin o bölümünde "Test:" satırındaki komutları topla (statik `*_smoke.php`, render + `node … .js`).
+Değişen modüle göre ilgili skill dosyasında "Test:" satırındaki komutları topla (statik `*_smoke.php`, render + `node … .js`).
 Her zaman: `php scripts/rol_kapilari_smoke.php` (kapı/tombstone değişirse), sürüm değiştiyse ilgili `*_gate_static_smoke.php`,
 bottomnav/sidebar değiştiyse `bottomnav_render.php` → `bottomnav_smoke.js`, CSS/modal değiştiyse ilgili Playwright testi.
 Yeni davranış için test eklenip eklenmediğini de söyle (eklenmediyse 🟡). Komutları **çalıştırma**, listele.

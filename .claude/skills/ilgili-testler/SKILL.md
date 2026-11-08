@@ -18,7 +18,7 @@ git fetch origin main -q
 
 ## 2. Dosya → test eşlemesi
 
-Tablo CLAUDE.md'deki "Test:" satırlarından derlenmiştir. Birden çok satır
+Tablo CLAUDE.md ve `.claude/skills/*/SKILL.md`'deki "Test:" satırlarından derlenmiştir. Birden çok satır
 eşleşirse hepsini birleştir. Yeni test eklendiyse `ls scripts/` ile kontrol et;
 listede olmayan adı ÇALIŞTIRMA (uydurma test adı yok).
 
@@ -66,11 +66,11 @@ Hata olursa çıkış kodu 1. `-v` başarısız testin son 40 satırını göste
 ne çalışacağını yazar. Playwright yoksa tarayıcı testi "ATLANDI" der.)
 
 `scripts/tum_testler.sh` yoksa doğrudan çalıştır: `php scripts/x.php`. `.js`
-testlerinden önce CLAUDE.md'deki render adımı gerekir, örn.
+testlerinden önce CLAUDE.md ya da ilgili modül skill'i (`.claude/skills`)'deki render adımı gerekir, örn.
 `BOTTOMNAV_OUT=/tmp/bn php scripts/bottomnav_render.php && BOTTOMNAV_OUT=/tmp/bn node scripts/bottomnav_smoke.js`,
 `php scripts/roles_modal_render.php > _test_roles.html && node scripts/roles_modal_smoke.js`,
 `SIPARIS_UI_OUT=/tmp/sip php scripts/siparis_ui_render.php && node scripts/siparis_ui_smoke.js`.
-Render adımını bilmediğin bir `.js` testi için CLAUDE.md'de test adını ara.
+Render adımını bilmediğin bir `.js` testi için CLAUDE.md ve `.claude/skills` altında test adını `grep` ile ara.
 Kökte üretilen `_test_*.html` dosyalarını commit'leme.
 
 ## 4. Raporla
