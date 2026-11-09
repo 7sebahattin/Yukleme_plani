@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // =========================================================
-// scripts/pdks_cift_yovmiye_smoke.php — v299 Fiyat dönemi saatleri + Çift Yevmiye.
+// scripts/pdks_cift_yovmiye_smoke.php — v299 Fiyat dönemi saatleri + Çift Yevmiye (v503: SÜRE BAZLI çift DEVRE DIŞI — çift artık kişi bayrağı: pdks_cift_isaret_smoke.php).
 //
 // Bellek içi SQLite + GERÇEK fonksiyonlar (pdks_cavus_ucret_smoke.php harness'i);
 // canlı DB'ye dokunmaz. Kapsam: geriye uyum (kolon yok / NULL → bugünkü tutarlar
@@ -134,24 +134,17 @@ okcy('D0) saatli + çiftli fiyat dönemi eklenir', $r['ok'] === true, json_encod
 $oran2 = $db->query("SELECT * FROM foreman_worker_rates WHERE foreman_id = 2")->fetch();
 okcy('D0b) kolonlara dakika/ücret yazıldı', (int)$oran2['full_day_minutes'] === 540 && (int)$oran2['half_day_max_minutes'] === 300
     && $oran2['overtime_start_minutes'] === null && (int)$oran2['double_day_minutes'] === 720 && (float)$oran2['double_day_rate'] === 2000.0, json_encode($oran2));
-$BEK_D = ['8' => '1000.00', '9' => '1000.00', '10.5' => '1300.00', '11' => '1300.00', '12' => '2000.00', '13' => '2150.00'];
+$BEK_D = ['8' => '1000.00', '9' => '1000.00', '10.5' => '1300.00', '11' => '1300.00', '12' => '1450.00', '13' => '1600.00'];   // v503: süre bazlı çift YOK → Tam + FM
 foreach ($SENARYO_DK as $ad => $dk) {
     [$pid, $sid] = mesaiKur(2, $dk);
     [$f, $h] = hesapla($pid, $sid);
-    okcy("D1) saatlik · {$ad} s → {$BEK_D[$ad]}", tutar($h) === $BEK_D[$ad], tutar($h) . ' ' . json_encode(satir($h), JSON_UNESCAPED_UNICODE));
+    okcy("D1) saatlik · {$ad} s → {$BEK_D[$ad]} (v503: süre bazlı çift YOK → Tam + FM)", tutar($h) === $BEK_D[$ad], tutar($h) . ' ' . json_encode(satir($h), JSON_UNESCAPED_UNICODE));
     if ($ad === '13') {
         $s = satir($h);
-        okcy("D2) 13 s satırı: sınıf 'cift', birim 2000, FM 1 saat × 150, worker_count 1",
-            ($s['attendance_class_snapshot'] ?? '') === 'cift' && $s['unit_rate'] === '2000.00' && (int)$s['overtime_hours'] === 1
-            && $s['overtime_total'] === '150.00' && (int)$s['worker_count'] === 1 && (int)$s['worker_type_id'] === $kadin, json_encode($s, JSON_UNESCAPED_UNICODE));
-        okcy('D3) 13 s sınıflandırıcı: cift=true, etkin_sinif cift, ödenecek FM 1', $f['cift'] === true && $f['etkin_sinif'] === 'cift' && $f['odenecek_fm_saat'] === 1);
-        okcy('D4) Mesai Tanımı metni "Çift · FM 1 s"', pdks_faz8b_mesai_tanimi_etiketi($f, false, false) === 'Çift · FM 1 s', pdks_faz8b_mesai_tanimi_etiketi($f, false, false));
+        okcy("D2) 13 s satırı: sınıf 'tam' (çift süreyle OLUŞMAZ), birim 1000, FM 4 saat × 150", ($s['attendance_class_snapshot'] ?? '') === 'tam' && $s['unit_rate'] === '1000.00' && (int)$s['overtime_hours'] === 4 && $s['overtime_total'] === '600.00', json_encode($s, JSON_UNESCAPED_UNICODE));
+        okcy('D3) 13 s sınıflandırıcı: cift=false, cift_aday=false, cift_dk null', $f['cift'] === false && $f['cift_aday'] === false && $f['cift_dk'] === null);
     }
-    if ($ad === '12') okcy('D5) 12 s: FM 0 (tam ile çift arası ayrıca ödenmez)', (int)(satir($h)['overtime_hours'] ?? -1) === 0);
-    if ($ad === '11') {
-        okcy('D6) 11 s çift adayı DEĞİL (eşik toleranssız ≥ 12 s)', $f['cift_aday'] === false && $f['etkin_sinif'] === 'tam');
-        okcy('D7) Mesai Tanımı "Tam · FM 2 s"', pdks_faz8b_mesai_tanimi_etiketi($f, false, false) === 'Tam · FM 2 s');
-    }
+    if ($ad === '11') okcy('D7) Mesai Tanımı "Tam · FM 2 s"', pdks_faz8b_mesai_tanimi_etiketi($f, false, false) === 'Tam · FM 2 s');
 }
 // 11 s 44 dk: FM aday 3 (onaylı süre 12 s) ama toplam < 12 s → Tam + 3 FM.
 // (v317: 11 s 50 dk artık 17:50 → 18:00 saat başına çekilip 12 s olur; sınır 16 dk dışında kalsın.)
@@ -163,7 +156,7 @@ okcy('D8) 11 s 44 dk → Tam + 3 FM = 1450 (çalışılan süre çift eşiğine 
 echo "\n=== E. FM onay durumları (13 s) ===\n";
 [$pid, $sid] = mesaiKur(2, 780);
 $f = sinif($pid);
-okcy('E1) FM onayı BEKLİYOR → finans hazır değil', $f['finans_hazir'] === false && $f['fazla_mesai_durum'] === 'bekliyor' && $f['cift_aday'] === true && $f['cift'] === false);
+okcy('E1) FM onayı BEKLİYOR → finans hazır değil', $f['finans_hazir'] === false && $f['fazla_mesai_durum'] === 'bekliyor' && $f['cift_aday'] === false && $f['cift'] === false);
 okcy('E1b) Mesai Tanımı "Tam · FM 4 s (bekliyor)"', pdks_faz8b_mesai_tanimi_etiketi($f, false, false) === 'Tam · FM 4 s (bekliyor)', pdks_faz8b_mesai_tanimi_etiketi($f, false, false));
 $h = pdks_faz8b_hakedis_hesapla($sid, 1, $db);
 okcy('E2) FM bekliyorken hakediş hesaplanmaz', ($h['ok'] ?? true) === false && ($h['kod'] ?? '') === 'faz8b_degerlendirme_gerekli', json_encode($h, JSON_UNESCAPED_UNICODE));
@@ -171,7 +164,7 @@ okcy('E2) FM bekliyorken hakediş hesaplanmaz', ($h['ok'] ?? true) === false && 
 okcy('E3) FM REDDEDİLDİ → Tam 1000', tutar($h) === '1000.00' && $f['etkin_sinif'] === 'tam', tutar($h));
 okcy('E3b) Mesai Tanımı "Tam · FM reddedildi"', pdks_faz8b_mesai_tanimi_etiketi($f, false, false) === 'Tam · FM reddedildi');
 [$f, $h] = hesapla($pid, $sid, 3);
-okcy('E4) kısmi onay 3 s (onaylı süre = 12 s) → Çift 2000, FM 0', tutar($h) === '2000.00' && $f['cift'] === true && $f['odenecek_fm_saat'] === 0, tutar($h));
+okcy('E4) kısmi onay 3 s → Tam + 3 FM = 1450 (v503: çift yok)', tutar($h) === '1450.00' && $f['cift'] === false && $f['odenecek_fm_saat'] === 3, tutar($h));
 [$f, $h] = hesapla($pid, $sid, 2);
 okcy('E5) kısmi onay 2 s (onaylı süre 11 s) → Tam + 2 FM = 1300', tutar($h) === '1300.00' && $f['cift'] === false, tutar($h));
 
@@ -180,14 +173,14 @@ echo "\n=== F. Sabit (fixed) FM — çift gününe FM eklenmez ===\n";
 $r = pdks_faz8b_oran_ekle(3, $kadin, '1000', '600', 'fixed', '300', '2020-01-01', 'TRY', 1, $db,
     ['full_day' => '9', 'double_day' => '12', 'double_day_rate' => '2000']);
 okcy('F0) sabit FM + çift fiyat dönemi', $r['ok'] === true, json_encode($r, JSON_UNESCAPED_UNICODE));
-$BEK_F = ['8' => '1000.00', '9' => '1000.00', '10.5' => '1300.00', '11' => '1300.00', '12' => '2000.00', '13' => '2000.00'];
+$BEK_F = ['8' => '1000.00', '9' => '1000.00', '10.5' => '1300.00', '11' => '1300.00', '12' => '1300.00', '13' => '1300.00'];   // v503: çift yok → Tam + sabit FM
 foreach ($SENARYO_DK as $ad => $dk) {
     [$pid, $sid] = mesaiKur(3, $dk);
     [$f, $h] = hesapla($pid, $sid);
     okcy("F1) sabit · {$ad} s → {$BEK_F[$ad]}", tutar($h) === $BEK_F[$ad], tutar($h));
     if ($ad === '13') {
         $s = satir($h);
-        okcy('F2) sabit FM çift gününde: satır cift, FM 0 / mod yok', ($s['attendance_class_snapshot'] ?? '') === 'cift' && (int)$s['overtime_hours'] === 0 && $s['overtime_total'] === '0.00' && $s['overtime_mode_snapshot'] === null, json_encode($s, JSON_UNESCAPED_UNICODE));
+        okcy('F2) sabit FM 13 s: satır tam, sabit FM 300 bir kez', ($s['attendance_class_snapshot'] ?? '') === 'tam' && $s['overtime_total'] === '300.00' && $s['overtime_mode_snapshot'] === 'fixed', json_encode($s, JSON_UNESCAPED_UNICODE));
     }
 }
 
@@ -197,13 +190,13 @@ $r = pdks_faz8b_oran_ekle(4, $kadin, '1000', '600', 'hourly', '150', '2020-01-01
     ['full_day' => '9', 'double_day' => '12', 'double_day_rate' => '2000']);
 [$pid, $sid] = mesaiKur(4, 780);
 [$f, $h] = hesapla($pid, $sid);   // aday 4 onaylandı → 2150
-okcy('G0) önce 13 s → 2150 (onay 4 s)', tutar($h) === '2150.00', tutar($h));
+okcy('G0) önce 13 s → 1600 (Tam + 4 FM; v503 çift yok)', tutar($h) === '1600.00', tutar($h));
 $db->exec("UPDATE foreman_worker_rates SET overtime_start_minutes = 600 WHERE foreman_id = 4");
 $f = sinif($pid);
 okcy('G1) FM başı 10 s olunca aday 3, onaylı 4 → 3\'e KIRPILDI', $f['fazla_mesai_saat'] === 3 && $f['fazla_mesai_onay_saat'] === 3 && $f['fazla_mesai_onay_kirpildi'] === true, json_encode([$f['fazla_mesai_saat'], $f['fazla_mesai_onay_saat']]));
 okcy('G2) kırpma yeni değerlendirme istemez (finans hazır)', $f['finans_hazir'] === true && $f['fazla_mesai_durum'] === 'onayli');
 $h = pdks_faz8b_hakedis_hesapla($sid, 1, $db);
-okcy('G3) kırpılmış onayla 13 s → Çift 2000 + 1 FM = 2150', tutar($h) === '2150.00', tutar($h));
+okcy('G3) kırpılmış onayla 13 s → Tam + 3 FM = 1450', tutar($h) === '1450.00', tutar($h));
 $r = pdks_faz8b_degerlendirme_kaydet($pid, null, 4, 1, $db);
 okcy('G4) kırpılmış adaydan fazla (4) yeni onay REDDEDİLİR', $r['ok'] === false, json_encode($r, JSON_UNESCAPED_UNICODE));
 
@@ -271,7 +264,7 @@ $kg = (int)$db->query("SELECT SUM(l.worker_count) FROM foreman_daily_entitlement
     JOIN foreman_daily_entitlements e ON e.id = l.entitlement_id
     WHERE l.attendance_class_snapshot = 'cift' AND l.worker_type_id IS NOT NULL")->fetchColumn();
 $cs = (int)$db->query("SELECT COUNT(*) FROM foreman_daily_entitlement_lines WHERE attendance_class_snapshot = 'cift'")->fetchColumn();
-okcy('J1) çift satırı = 1 kişi-gün (Yöntem B sayım kuralı SUM(worker_count) WHERE worker_type_id IS NOT NULL)', $cs > 0 && $kg === $cs, "$kg / $cs");
+okcy('J1) v503: süre bazlı çift satırı ÜRETİLMEZ (çift yalnız bayrakla — pdks_cift_isaret_smoke.php)', $cs === 0 && $kg === 0, "$kg / $cs");
 okcy('J2) Mesai Tanımı: açık mesaide çıkışsız dönem "⏳ Sürüyor"', pdks_faz8b_mesai_tanimi_etiketi(['etkin_sinif' => null], true, false) === '⏳ Sürüyor');
 okcy('J3) Mesai Tanımı: Karışık "—", sınıflandırma yok "—"', pdks_faz8b_mesai_tanimi_etiketi(['etkin_sinif' => 'tam'], false, true) === '—' && pdks_faz8b_mesai_tanimi_etiketi(null, false, false) === '—');
 okcy('J4) sınıf etiketi', pdks_faz8b_sinif_etiketi('cift') === 'Çift' && pdks_faz8b_sinif_etiketi('yarim') === 'Yarım' && pdks_faz8b_sinif_etiketi('tam') === 'Tam');
@@ -299,7 +292,7 @@ okcy('K5) hakediş ödenecek FM\'i sınıflandırıcıdan alır', str_contains($
 $sayfa = file_get_contents($root . '/cavus_fiyatlari.php');
 okcy('K6) cavus_fiyatlari.php saat migrasyonunu ÇAĞIRMAZ', !str_contains($sayfa, 'pdks_faz8b_saat_kolonlari_migrate('));
 foreach (['daily_rate', 'half_day_rate', 'overtime_mode', 'overtime_rate', 'currency', 'valid_from', 'worker_type_id',
-          'full_day_saat', 'half_day_saat', 'overtime_start_saat', 'double_day_saat', 'double_day_rate'] as $alan) {
+          'full_day_saat', 'half_day_saat', 'overtime_start_saat'] as $alan) {   // v503: çift alanları formdan kalktı
     if (!str_contains($sayfa, 'name="' . $alan . '"')) okcy("K7) form alanı {$alan}", false);
 }
 okcy('K7) fiyat formu eski + yeni alan adları yerinde', true);
@@ -319,7 +312,7 @@ $cmd = 'PUANTAJ_FAZ8B=1 ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($r
 $html = (string)shell_exec($cmd);
 okcy('L1) sayfa render edildi, PHP uyarısı yok', str_contains($html, 'Kart Hareketleri') && !preg_match('/(Warning|Notice|Deprecated|Fatal error):/', $html), substr($html, 0, 300));
 okcy('L2) "Mesai Tanımı" başlığı DURUM\'un yanında', (bool)preg_match('#<th[^>]*>\s*<button[^>]*>Durum<.*?</th>\s*<th[^>]*>\s*<button[^>]*>Mesai Tanımı<#us', $html));   // v299: başlıklar sıralama düğmesi içinde
-okcy('L3) K001 (13 s, FM 4 onaylı) → "Çift · FM 1 s"', str_contains($html, 'data-mesai-tanim>Çift · FM 1 s<'));
+okcy('L3) K001 (13 s, FM 4 onaylı) → "Tam · FM 4 s" (v503: çift süreyle oluşmaz)', str_contains($html, 'data-mesai-tanim>Tam · FM 4 s<'));
 okcy('L4) açık mesaide çıkışsız → "⏳ Sürüyor", Karışık → "—"', str_contains($html, 'data-mesai-tanim>⏳ Sürüyor<') && str_contains($html, 'data-mesai-tanim>—<'));
 okcy('L5) mobil kartta da Mesai Tanımı', str_contains($html, 'Mesai Tanımı: <strong>'));
 okcy('L6) DURUM "✅ Çıkış yapıldı"', str_contains($html, '✅ Çıkış yapıldı'));

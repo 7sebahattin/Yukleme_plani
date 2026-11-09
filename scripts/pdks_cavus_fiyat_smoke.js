@@ -102,7 +102,7 @@ const ALANLAR = {
                     ok(`form=${ayirici} var, POST, tüm alanlar orijinal adlarıyla`, varMi.form && varMi.method === 'post' && varMi.eksik.length === 0, JSON.stringify(varMi));
                 }
                 // v299: saat + Çift Yevmiye alanları (yalnız kolonlar kuruluyken)
-                const SAAT_ALAN = ['full_day_saat', 'half_day_saat', 'overtime_start_saat', 'double_day_saat', 'double_day_rate'];
+                const SAAT_ALAN = ['full_day_saat', 'half_day_saat', 'overtime_start_saat'];   // v503: çift alanları formdan kalktı
                 const saatDurum = await page.evaluate((adlar) => {
                     const f = document.querySelector('form input[type="hidden"][name="form"][value="oran"]').form;
                     const kur = document.getElementById('cfSaatKurulum');
@@ -112,7 +112,7 @@ const ALANLAR = {
                              gruplar: Array.from(f.querySelectorAll('[data-cf-grup]')).map(g => g.getAttribute('data-cf-grup')) };
                 }, SAAT_ALAN);
                 if (senaryo === 'dolu') {
-                    ok('v299: 5 saat/Çift alanı formda', saatDurum.var === 5, JSON.stringify(saatDurum));
+                    ok('v299: 3 saat alanı formda (v503: çift alanları yok)', saatDurum.var === 3, JSON.stringify(saatDurum));
                     // v320: Tam saati artık ÖN-DOLDURULMAZ (her kayıtta kalıcı yazılıyordu); boş = çavuş süresi, placeholder'da görünür.
                     ok('v320: Tam saati BOŞ gelir (ön-doldurma yok)', saatDurum.tam === null, String(saatDurum.tam));
                     const tamPh = await page.evaluate(() => (document.querySelector('[name="full_day_saat"]') || {}).placeholder || '');

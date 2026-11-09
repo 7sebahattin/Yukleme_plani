@@ -121,6 +121,8 @@ for ($i=1; $i<=8; $i++) {
 
 $rKad = pdks_faz8b_oran_ekle(1, 1, '1500', '900', 'hourly', '200', '2026-09-01', 'TRY', 1, $db);
 $rErk = pdks_faz8b_oran_ekle(1, 2, '1300', '800', 'fixed', '350', '2026-09-01', 'TRY', 1, $db);
+// v503: oran_ekle FM'yi tüm tiplere eşitler; bu test eski/legacy tip bazlı farklı FM verisini sınar → doğrudan satıra yaz.
+$db->exec("UPDATE foreman_worker_rates SET overtime_mode = 'hourly', overtime_rate = '200' WHERE foreman_id = 1 AND worker_type_id = 1");
 ok8bf('Kadın Tam/Yarım/Saatlik FM fiyatı eklendi', $rKad['ok'] === true, json_encode($rKad, JSON_UNESCAPED_UNICODE));
 ok8bf('Erkek Tam/Yarım/Sabit FM fiyatı eklendi', $rErk['ok'] === true, json_encode($rErk, JSON_UNESCAPED_UNICODE));
 

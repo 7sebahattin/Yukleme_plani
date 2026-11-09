@@ -95,7 +95,7 @@ function orBeklenen(string $k, int $snap, string $g, string $c): array {
     $tam = $k === 'K4' ? $snap : 540;
     $fmBas = $k === 'K3' ? 600 : $tam;
     $aday = orFm($eff - $fmBas);
-    $cift = $k === 'K5' && $eff >= 720;
+    $cift = false;   // v503: SÜRE BAZLI çift DEVRE DIŞI (çift artık kişi bayrağı) — K5 artık normal Tam + FM
     $fm = $cift ? orFm($eff - 720) : $aday;
     $sinif = $cift ? 'cift' : 'tam';
     $onceki = $eff >= $tam ? $sinif : 'bekliyor';          // karar öncesi sınıf

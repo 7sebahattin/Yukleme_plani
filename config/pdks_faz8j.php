@@ -121,7 +121,7 @@ function pdks_faz8j_void(int $periodId, int $sessionId, string $depo, string $re
  * Kurallar (zaman, kart, kartsız, tip, çakışma) → RuntimeException; yazma
  * kuralların HEPSİ geçtikten sonra başlar. $auditEk: satır audit'ine ek alanlar (toplu_id).
  */
-function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int $card, int $type, string $entry, ?string $exit, string $reason, string $note, int $user, array $auditEk = []): void {
+function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int $card, int $type, string $entry, ?string $exit, string $reason, string $note, int $user, array $auditEk = [], ?bool $cift = null): void {
     $pid=(int)$p['id'];
     if(substr($entry,0,10)!==(string)$p['work_date']||$entry>date('Y-m-d H:i:s')||($exit!==null&&($exit<$entry||strtotime($exit)>strtotime($entry)+86400||$exit>date('Y-m-d H:i:s')))) throw new RuntimeException('Giriş/çıkış zamanı mesai tarihi, 24 saat ve gelecek kurallarına uymuyor.');
     $c=$pdo->prepare('SELECT card_no FROM worker_cards WHERE id=?'); $c->execute([$card]); $cardNo=$c->fetchColumn(); $tip=pdks_faz8j_desteklenen_tip($pdo,$type); $typeName=$tip['name']??null;
@@ -161,6 +161,12 @@ function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int
     // onaylı FM saati YENİ süreye SESSİZCE taşınmaz.
     $fmSaatSifirla = pdks_gunluk_kolon_var($pdo, 'daily_worker_work_periods', 'overtime_approved_hours') ? ',overtime_approved_hours=NULL' : '';
     $pdo->prepare('UPDATE daily_worker_work_periods SET worker_card_id=?,worker_type_id_snapshot=?,worker_type_name_snapshot=?,entry_time=?,exit_time=?,status=?,exit_event_id=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL' . $fmSaatSifirla . ',overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$card,$type,$typeName,$entry,$exit,$status,$eventId,$pid]);
+    // v503: çift yevmiye bayrağı (kişi başı; Tam × 2). null = dokunma. Kolon kurulu değilse true yazılamaz (fail-closed).
+    if($cift!==null) {
+        $eskiCift=!empty($p[PDKS_CIFT_KOLON]);
+        if($cift && !pdks_cift_hazir($pdo)) throw new RuntimeException('Çift yevmiye alanı kurulu değil (migrate.php › Çift yevmiye alanı).');
+        if($cift!==$eskiCift) { pdks_cift_yevmiye_yaz($pdo,$pid,$cift); $old['cift_yevmiye']=$eskiCift?1:0; $auditEk['cift_yevmiye']=$cift?1:0; }
+    }
     pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);   // + Çavuş Ücreti (Faz 8B eki): kardeş oturum
     pdks_faz8j_audit($pdo,$user,'puantaj_duzeltme',$pid,$old,['session_id'=>$sid,'period_id'=>$pid,'worker_card_id'=>$card,'card_no'=>$cardNo,'worker_type_id_snapshot'=>$type,'worker_type_name_snapshot'=>$typeName,'entry_time'=>$entry,'exit_time'=>$exit,'status'=>$status,'reason'=>$reason,'note'=>$note,'corrected_at'=>date('Y-m-d H:i:s'),'user_id'=>$user] + $auditEk);
 }
@@ -175,7 +181,8 @@ function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
         $pdo->beginTransaction(); $p=pdks_faz8j_donem($pdo,$pid,$sid,$depo);
         if(!$p||(int)$p['is_voided']) throw new RuntimeException('Mesai dönemi bulunamadı veya iptal edilmiş.');
         if(pdks_faz8j_entitlement($pdo,$sid)==='final') throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
-        pdks_faz8j_duzelt_satir($pdo,$p,$sid,$depo,$card,$type,$entry,$exit,$reason,$note,$user);
+        $ciftIstek = isset($v['cift_form']) ? !empty($v['cift_yevmiye']) : null;   // v503: formda kutu gönderildiyse
+        pdks_faz8j_duzelt_satir($pdo,$p,$sid,$depo,$card,$type,$entry,$exit,$reason,$note,$user,[],$ciftIstek);
         $pdo->commit(); return ['ok'=>true];
     } catch(Throwable $x) { if($pdo->inTransaction())$pdo->rollBack(); return ['ok'=>false,'hata'=>$x->getMessage()]; }
 }
@@ -538,6 +545,12 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
         if ($yevmiye > PDKS_YEVMIYE_UST) throw new RuntimeException('Yevmiye adedi en çok ' . PDKS_YEVMIYE_UST . ' olabilir — hiçbir şey yazılmadı.');
         $kolonlar .= ', yevmiye_adedi'; $isaret .= ',?'; $deger[] = $yevmiye;
     }
+    // v504: çift yevmiye bayrağı (opt-in, YALNIZ kod: toplu `coklu_grup` grubunun `cift`i). Kolon yoksa YAZILMAZ (fail-closed).
+    $cift = !empty($satir['cift']);
+    if ($cift) {
+        if (!function_exists('pdks_cift_hazir') || !pdks_cift_hazir($pdo)) throw new RuntimeException('Çift yevmiye alanı kurulmamış (migrate.php › «Çift yevmiye alanı») — hiçbir şey yazılmadı.');
+        $kolonlar .= ', ' . PDKS_CIFT_KOLON; $isaret .= ',?'; $deger[] = 1;
+    }
     $pdo->prepare("INSERT INTO daily_worker_work_periods ($kolonlar) VALUES ($isaret)")->execute($deger);
     $pid = (int)$pdo->lastInsertId();
     $kayit = [
@@ -552,6 +565,7 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     if (!empty($meta['istek_id'])) $kayit['istek_id'] = (string)$meta['istek_id'];
     if ($kaynak !== 'manual') $kayit['kaynak'] = $kaynak;
     if ($yevmiye > 0) $kayit['yevmiye'] = $yevmiye;
+    if ($cift) $kayit['cift_yevmiye'] = 1;
     pdks_faz8j_audit($pdo, $user, (string)($meta['audit_action'] ?? 'puantaj_ekle'), $pid, [], $kayit);
     return $pid;
 }
@@ -711,6 +725,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
                 }
             }
         }
+        // v504: çift yevmiye grubu (opt-in, yalnız kod/`coklu_grup`): kolon kurulu değilse grup reddedilir (fail-closed).
+        $cift = $coklu && !empty($g['cift']);
+        if ($cift && $grupHata === null && (!function_exists('pdks_cift_hazir') || !pdks_cift_hazir($pdo))) {
+            $grupHata = 'Çift yevmiye alanı kurulmamış (migrate.php › «Çift yevmiye alanı»).';
+        }
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
         $cikis = pdks_faz8j_cikis_zamani($g);
         $exit = $cikis['ok'] ? $cikis['exit'] : null;
@@ -737,11 +756,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
             }
             $grupKart[$k] = true; $kartGoruldu[$k] = true;
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => false, 'kart_id' => $k, 'kart' => $kart, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye, 'cift' => $cift];
         }
         for ($n = 0; $n < $kartsizAdet; $n++) {
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => true, 'kart_id' => 0, 'kart' => null, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye, 'cift' => $cift];
         }
     }
     $h['hatalar'] = array_values(array_unique($h['hatalar']));

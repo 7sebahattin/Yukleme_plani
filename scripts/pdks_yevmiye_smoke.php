@@ -80,7 +80,7 @@ if (!$KOLONSUZ) {
     $uzun = ['entry_time' => '2026-10-01 07:00:00', 'exit_time' => '2026-10-01 23:00:00', 'normal_work_minutes_snapshot' => 540, 'overtime_approved_hours' => 3, 'approved_attendance_class' => 'yarim'];
     $fn = pdks_faz8b_donem_siniflandir($uzun, $oran);
     $fy = pdks_faz8b_donem_siniflandir($uzun + ['yevmiye_adedi' => 2], $oran);
-    ok('B4) yevmiyesiz 16 sa + çift eşiği + FM onayı: çift/FM hesaplanır (kontrol)', $fn['etkin_sinif'] === 'cift' && $fn['fazla_mesai_saat'] > 0, j([$fn['etkin_sinif'], $fn['fazla_mesai_saat']]));
+    ok('B4) yevmiyesiz 16 sa + FM onayı: Tam + FM hesaplanır (kontrol; v503: süre bazlı çift YOK)', $fn['etkin_sinif'] === 'tam' && $fn['fazla_mesai_saat'] > 0, j([$fn['etkin_sinif'], $fn['fazla_mesai_saat']]));
     ok('B5) AYNI dönem yevmiye=2: Tam, çift YOK, FM 0/yok, odenecek_fm 0, yarım onayı yok sayılır, süre alanları korunur', $fy['etkin_sinif'] === 'tam' && $fy['cift'] === false && $fy['cift_aday'] === false && $fy['fazla_mesai_saat'] === 0 && $fy['odenecek_fm_saat'] === 0 && $fy['yevmiye'] === 2 && $fy['toplam_dk'] === $fn['toplam_dk'], j($fy));
     $fc = pdks_faz8b_donem_siniflandir(['entry_time' => '2026-10-01 08:00:00', 'exit_time' => null, 'yevmiye_adedi' => 2, 'normal_work_minutes_snapshot' => 540]);
     ok('B6) çıkışsız (içeride) yevmiyeli dönem de Tam/hazır (süreye bağlı değil)', $fc['etkin_sinif'] === 'tam' && $fc['finans_hazir'] === true && $fc['yevmiye'] === 2, j($fc));
@@ -177,7 +177,8 @@ if (!$KOLONSUZ) {
     $j8 = file_get_contents($ROOT . '/config/pdks_faz8j.php');
     ok('F2) dönem INSERT\'ü TEK yerde (pdks_faz8j_satir_yaz; yevmiye dinamik kolon)', substr_count($j8, 'INSERT INTO daily_worker_work_periods') === 1 && str_contains($j8, ', yevmiye_adedi'));
     $ajax = file_get_contents($ROOT . '/_puantaj_toplu_ajax.php');
-    ok('F3) HTTP ucu (_puantaj_toplu_ajax.php) yevmiye / coklu_grup / yazdiktan_sonra / audit_ek anahtarını GEÇİRMEZ', !preg_match('/yevmiye|coklu_grup|yazdiktan_sonra|audit_ek/', $ajax));
+    // v504: ajax uç artık `coklu_grup`/`audit_ek`'i SUNUCUDA (hizli girdisinden) kurar; İSTEMCİ girdisinden (`$__tpIn[...]` / `$__g[...]`) bu anahtarlar GEÇMEZ.
+    ok('F3) HTTP ucu (_puantaj_toplu_ajax.php) yevmiye / coklu_grup / yazdiktan_sonra / audit_ek / cift anahtarını İSTEMCİDEN GEÇİRMEZ', !preg_match('/\$__(tpIn|g)\[[\'"](yevmiye|coklu_grup|yazdiktan_sonra|audit_ek|cift|cift_yevmiye|etiket)[\'"]\]/', $ajax) && !str_contains($ajax, "'yevmiye'"));
     $mig = file_get_contents($ROOT . '/migrate.php');
     ok('F4) migrate.php: «Rampacı yevmiye alanı» kartı (rampaci-yevmiye) + POST ne=pdks_yevmiye + pdks_yevmiye_kolon_migrate + csrf', str_contains($mig, "mg_kart_ac('rampaci-yevmiye')") && str_contains($mig, "'pdks_yevmiye'") && str_contains($mig, 'pdks_yevmiye_kolon_migrate($pdo)') && preg_match("/'pdks_yevmiye'\)\s*\{\s*csrf_check/", $mig) === 1);
     ok('F5) ekranlarda migrate ÇAĞRILMAZ (pdks_yevmiye_kolon_migrate yalnız migrate.php\'de çağrılır)', (function () use ($ROOT) {

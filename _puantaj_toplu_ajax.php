@@ -34,10 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($__tpAjax, ['toplu_onizle'
             'kartsiz_adet' => $__tpI($__g['kartsiz_adet'] ?? 0),
         ];
     }
-    $__tpV = [
+    // v504: "kişi sayısı" girişi (Tam / Yarım / Çift + Fazla mesai). Gruplar ve ek anahtarlar SUNUCUDA kurulur
+    // (config/pdks_toplu_hizli.php); istemci bu anahtarları gönderemez, saat/dağıtıma güvenilmez.
+    require_once __DIR__ . '/config/pdks_toplu_hizli.php';
+    $__tpHz = pdks_toplu_hizli_isle($__tpIn['hizli'] ?? null, (string)$topluAjaxSabit['work_date'], $__tpGruplar, static function (int $tid) use ($pdo): ?string {
+        $tt = pdks_faz8j_desteklenen_tip($pdo, $tid);
+        return $tt ? (string)($tt['code'] ?? '') : null;
+    });
+    if ($__tpHz['hata'] !== null) $__tpCikti(['ok' => false, 'error' => $__tpHz['hata'], 'hatalar' => [$__tpHz['hata']], 'satirlar' => [], 'ozet' => []], 200);
+    $__tpV = $__tpHz['ek'] + [
         'foreman_id' => $topluAjaxSabit['foreman_id'] ?? $__tpI($__tpIn['foreman_id'] ?? 0),
         'work_date' => (string)$topluAjaxSabit['work_date'], 'depo' => (string)$topluAjaxSabit['depo'],
-        'reason' => $__tpS($__tpIn['reason'] ?? ''), 'note' => $__tpS($__tpIn['note'] ?? ''), 'gruplar' => $__tpGruplar,
+        'reason' => $__tpS($__tpIn['reason'] ?? ''), 'note' => $__tpS($__tpIn['note'] ?? ''), 'gruplar' => $__tpHz['gruplar'],
         'istek_id' => $__tpS($__tpIn['istek_id'] ?? ''),
     ];
     if ($__tpAjax === 'toplu_onizle') {

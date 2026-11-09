@@ -154,6 +154,14 @@ YALNIZ admin, CSRF, audit. Migration YOK.
   `node scripts/pdks_toplu_ekle_smoke.js`.
 
 
+### Toplu İşlem — Kişi Sayısı + Fazla Mesai (v504; migration YOK, yeni yetki YOK)
+`_puantaj_toplu.php` penceresinin ÜSTÜNDE "Kişi sayısı": **Kadın Tam/Yarım, Erkek Tam/Yarım, Rampacı Tam, Şeritçi Tam** kutuları → Tam = 08:00–17:00 (9 sa), **Yarım = 08:00–12:30** (sahip kararı) otomatik; eski saat/kartlı/kartsız gruplar `<details class="tv-gelismis">` «Gelişmiş» altında AYNEN çalışır. En altta **Fazla mesai**: kişi + saat (0,25 adım, ≤12 sa).
+- **Saf mantık** `config/pdks_toplu_hizli.php` (DB yok): `pdks_toplu_fm_dagit($mevcut,$kisi)` = en büyük kalan yöntemi, tamsayı aritmetiği (deterministik); beraberlik: büyük kalan > büyük mevcut > sıra; kategori mevcudunu AŞMAZ, aşan istek hata. `pdks_toplu_hizli_gruplar()` Tam/Yarım + FM'den `gruplar` üretir (FM'li kişi kendi grubundan DÜŞER, ayrı grup: çıkış = taban (17:00 / yarım 12:30) + FM; gece yarısını aşarsa ertesi gün). **JS aynası** `fmDagit()` yalnız canlı önizleme — kural ve `HAVUZ` sırası PHP `PDKS_TOPLU_FM_HAVUZ` ile aynı kalmalı; gerçek gruplar SUNUCUDA üretilir.
+- **FM havuzu** (sahip kararı) = Kadın Tam · Erkek Tam · Kadın Yarım · Erkek Yarım · Şeritçi (Rampacı DEĞİL), en büyük kalanla orantılı. Örnek: K17 E10 EY1 Ş1, 5 kişi → 3 Kadın + 2 Erkek (testte). Yarım/Şeritçi payı düşerse onlar da FM alır.
+- Yazma yolu DEĞİŞMEDİ: `_puantaj_toplu_ajax.php` `hizli` (tam/yarim/fm) girdisinden grupları üretip `pdks_faz8j_toplu_onizle/ekle`'ye verir; aynı tip için çok grup `coklu_grup`'u YALNIZ sunucu açar. Audit `puantaj_toplu_ekle`'ye `hizli_giris` eklenir. Hakediş/çift yevmiye/FM tek ücret kuralları DEĞİŞMEDİ. Kartlı girişte FM YOK (bilinçli).
+- **Çift yevmiye** (sahip kararı): Kadın/Erkek/Rampacı/Şeritçi TAM kategorilerinde ayrı «Çift yevmiye» kutusu; kişiler Tam sayısına EK girilir (düşmez), 08:00–17:00, FM havuzuna GİRMEZ, yarım için çift YOK. Grup `cift=true` → `pdks_faz8j_toplu_hazirla` (kolon yoksa `pdks_cift_hazir()` false → grup reddedilir, fail-closed) → `pdks_faz8j_satir_yaz` INSERT'e `PDKS_CIFT_KOLON` (daily_worker_work_periods.cift_yevmiye) koyar, audit `cift_yevmiye`. Ücret (Tam×2) hakediş tarafında (config/pdks_faz8b). Rampacı çiftli kişi toplu ekrandan yevmiye_adedi İÇERMEZ (o yalnız Fiş Excel).
+- Test: `php scripts/pdks_toplu_hizli_smoke.php` · `pdks_toplu_ekle_smoke.php` · `node scripts/pdks_toplu_ekle_smoke.js`.
+
 ### Karışık Giriş + Otomatik Ata (v295)
 
 Kiosk GİRİŞ tip ekranında **KADIN / ERKEK / KARIŞIK**. Karışık girenler sonra Mesai
