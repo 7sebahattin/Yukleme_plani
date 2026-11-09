@@ -2770,6 +2770,22 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
     .isk-kaldir .isk-kaldir-neden input, .isk-kaldir .pdks-scan-input { font-size: 16px; }
 }
 
+/* v504 — Toplu İşlem: kişi sayısı ile hızlı giriş + Fazla mesai (.tv-hizli / .tv-fm / .tv-gelismis) */
+.toplu-v2 .tv-hizli { margin: 0 0 14px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; }
+.toplu-v2 .tv-hizli-bas, .toplu-v2 .tv-fm-bas { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 1rem; }
+.toplu-v2 .tv-hizli-not { margin: 0 0 10px; font-size: .85rem; }
+.toplu-v2 .tv-hizli-izgara { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.toplu-v2 .tv-hizli-kutu em { font-style: normal; opacity: .7; }
+.toplu-v2 .tv-hizli input, .toplu-v2 .tv-fm input { width: 100%; box-sizing: border-box; font-size: 16px; min-height: 44px; }
+.toplu-v2 .tv-fm { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #d9dee7); }
+.toplu-v2 .tv-fm-alanlar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.toplu-v2 .tv-fm-onizleme { margin: 8px 0 0; font-size: .9rem; overflow-wrap: anywhere; }
+.toplu-v2 .tv-gelismis { margin: 0 0 12px; }
+.toplu-v2 .tv-gelismis > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+@media (max-width: 767px) {
+    .toplu-v2 .tv-hizli-izgara { grid-template-columns: 1fr 1fr; }
+}
+
 /* ── v446 — Fiş Excel'i Yükle (gunluk_fis_yukle.php + _fis_onizle.php) ─────────
    Yalnız EKLEME; sınıflar fy- önekli. Renkler token — koyu tema hazır. <768px kuralları yalnız fy-* içindir. */
 .fy-sayfa { min-width: 0; }
@@ -2894,19 +2910,3 @@ html[data-theme="dark"] .fd-fark .fd-yeni { background: rgba(80, 200, 140, .12);
 .ce-tablo tbody td:nth-child(3) { min-width: 120px; }
 .ce-tablo thead th:last-child, .ce-tablo tbody td:last-child, .ce-tablo tfoot td:last-child { position: sticky; right: 0; background: var(--card, #fff); box-shadow: -6px 0 6px -6px rgba(0,0,0,.18); }
 .ce-tablo tbody td:last-child, .ce-tablo tfoot td:last-child { white-space: nowrap; }
-
-/* v504 — Toplu İşlem: kişi sayısı ile hızlı giriş + Fazla mesai (.tv-hizli / .tv-fm / .tv-gelismis) */
-.toplu-v2 .tv-hizli { margin: 0 0 14px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; }
-.toplu-v2 .tv-hizli-bas, .toplu-v2 .tv-fm-bas { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 1rem; }
-.toplu-v2 .tv-hizli-not { margin: 0 0 10px; font-size: .85rem; }
-.toplu-v2 .tv-hizli-izgara { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.toplu-v2 .tv-hizli-kutu em { font-style: normal; opacity: .7; }
-.toplu-v2 .tv-hizli input, .toplu-v2 .tv-fm input { width: 100%; box-sizing: border-box; font-size: 16px; min-height: 44px; }
-.toplu-v2 .tv-fm { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #d9dee7); }
-.toplu-v2 .tv-fm-alanlar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.toplu-v2 .tv-fm-onizleme { margin: 8px 0 0; font-size: .9rem; overflow-wrap: anywhere; }
-.toplu-v2 .tv-gelismis { margin: 0 0 12px; }
-.toplu-v2 .tv-gelismis > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
-@media (max-width: 767px) {
-    .toplu-v2 .tv-hizli-izgara { grid-template-columns: 1fr 1fr; }
-}

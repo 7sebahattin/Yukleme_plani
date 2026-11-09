@@ -119,3 +119,34 @@ function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate)
     foreach ($ciftGruplar as $cg) $cik['gruplar'][] = $cg;
     return $cik;
 }
+
+/**
+ * HTTP ucu için: "hizli" girdisini sunucuda gruplara çevirir ve toplu_hazirla'ya EK anahtarları (aynı tip çok grup,
+ * denetim özeti) SUNUCU tarafında kurar — istemci bu anahtarları gönderemez. SAF (DB yok): tip kodu çözümü $tipKodu ile.
+ * @param callable $tipKodu fn(int $tipId): ?string  (KADIN/ERKEK/RAMPACI/SERITCI ya da null)
+ * @return array{hata:?string, gruplar:array, ek:array}  gruplar = üretilenler + istemci grupları; ek = toplu girdiye eklenecek anahtarlar
+ */
+function pdks_toplu_hizli_isle($hizli, string $workDate, array $istemciGruplar, callable $tipKodu): array {
+    $cik = ['hata' => null, 'gruplar' => $istemciGruplar, 'ek' => []];
+    if (!is_array($hizli)) return $cik;
+    $tipKod = [];
+    foreach (['tam', 'yarim', 'cift'] as $a) {
+        foreach (array_keys(is_array($hizli[$a] ?? null) ? $hizli[$a] : []) as $tid) {
+            $kod = $tipKodu((int)$tid);
+            if ($kod !== null && $kod !== '') $tipKod[(int)$tid] = $kod;
+        }
+    }
+    $h = pdks_toplu_hizli_gruplar($hizli, $tipKod, $workDate);
+    if ($h['hata'] !== null) { $cik['hata'] = $h['hata']; return $cik; }
+    if ($h['gruplar']) {
+        $cik['gruplar'] = array_merge($h['gruplar'], $istemciGruplar);
+        $cik['ek'] = [
+            'coklu_grup' => true,
+            'audit_ek' => ['hizli_giris' => [
+                'gruplar' => array_map(static fn($g) => ['etiket' => $g['etiket'], 'adet' => $g['kartsiz_adet'], 'cikis' => $g['exit_date'] . ' ' . $g['exit_clock'], 'cift' => !empty($g['cift'])], $h['gruplar']),
+                'fm_dagilim' => $h['dagilim'],
+            ]],
+        ];
+    }
+    return $cik;
+}

@@ -70,8 +70,8 @@ t('FM yok → tek grup', count(pdks_toplu_hizli_gruplar(['tam' => [1 => 4]], $ti
 $js = (string)file_get_contents($ROOT . '/_puantaj_toplu.php');
 t('JS fmDagit aynası', str_contains($js, 'function fmDagit') && str_contains($js, 'kalan[b] - kalan[a]') && str_contains($js, 'mevcut[b] - mevcut[a]') && str_contains($js, "'ERKEK_YARIM', 'SERITCI'"));
 $aj = (string)file_get_contents($ROOT . '/_puantaj_toplu_ajax.php');
-t('ajax: csrf + grup sunucuda', str_contains($aj, 'csrf_check(') && str_contains($aj, 'pdks_toplu_hizli_gruplar('));
-t('ajax: coklu_grup yalnız sunucu', !str_contains($aj, "\$__tpIn['coklu_grup']"));
+t('ajax: csrf + grup sunucuda', str_contains($aj, 'csrf_check(') && str_contains($aj, 'pdks_toplu_hizli_isle('));
+t('ajax: coklu_grup yalnız sunucu', !str_contains($aj, 'coklu_grup'));
 $fz = (string)file_get_contents($ROOT . '/config/pdks_toplu_hizli.php');
 t('saf fonksiyon: DB/INSERT yok', !preg_match('/\b(INSERT|UPDATE|DELETE|db\(\)|\$pdo)\b/i', $fz));
 
@@ -83,6 +83,11 @@ t('cift: FM havuzuna girmez', array_sum(array_column(array_filter($gc['gruplar']
 t('cift: Tamdan dusmez', array_sum(array_column(array_filter($gc['gruplar'], fn($x) => empty($x['cift'])), 'kartsiz_adet')) === 4);
 t('cift: yalniz cift ile FM hata', pdks_toplu_hizli_gruplar(['cift' => [1 => 3], 'fm' => ['kisi' => 1, 'saat' => '1']], $tipKod, '2026-11-09')['hata'] !== null);
 t('cift: JS kutusu + hz.cift + FM dislama', str_contains($js, 'data-hizli-cift') && str_contains($js, 'cift: {}') && str_contains($js, "c.hasAttribute('data-hizli-cift')) return;"));
+$kodFn = static fn(int $i): ?string => $tipKod[$i] ?? null;
+$is = pdks_toplu_hizli_isle(['tam' => [1 => 3], 'cift' => [2 => 1]], '2026-11-09', [['worker_type_id' => 1, 'kartsiz_adet' => 0]], $kodFn);
+t('isle: ek anahtarlar sunucuda kurulur', $is['hata'] === null && ($is['ek']['coklu_grup'] ?? false) === true && isset($is['ek']['audit_ek']['hizli_giris']) && count($is['gruplar']) === 3);
+t('isle: hizli yoksa istemci grupları aynen, ek boş', pdks_toplu_hizli_isle(null, '2026-11-09', [['x' => 1]], $kodFn) === ['hata' => null, 'gruplar' => [['x' => 1]], 'ek' => []]);
+t('isle: hata iletilir', pdks_toplu_hizli_isle(['tam' => [1 => 1], 'fm' => ['kisi' => 5, 'saat' => '1']], '2026-11-09', [], $kodFn)['hata'] !== null);
 $f8 = (string)file_get_contents($ROOT . '/config/pdks_faz8j.php');
 t('çift bayrağı: kolon PDKS_CIFT_KOLON adıyla + fail-closed (satir_yaz)', str_contains($f8, "', ' . PDKS_CIFT_KOLON") && str_contains($f8, 'Çift yevmiye alanı kurulmamış'));
 t('çift bayrağı: yalnız coklu_grup (kod yolu)', str_contains($f8, "\$cift = \$coklu && !empty(\$g['cift'])"));
