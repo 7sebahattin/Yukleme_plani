@@ -115,6 +115,7 @@ declare -A PHP_HARIC=(
 #   pdks_tanimli_giris_smoke.js ...... pdks_tanimli_giris_render.php > _test_tanimli_giris.html
 #   pdks_ters_kart_smoke.js .......... -  (pdks_ters_kart_render.php kendisi)
 #   pdks_toplu_duzelt_smoke.js ....... -  (render'ı kendisi)
+#   pdks_toplu_duzen_smoke.js ........ -  (render'ı kendisi)
 #   pdks_toplu_ekle_smoke.js ......... -  (render'ı kendisi)
 #   pdks_v296b_smoke.js .............. -  (satır içi fixture)
 #   roles_modal_smoke.js ............. roles_modal_render.php > _test_roles.html

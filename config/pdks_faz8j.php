@@ -340,8 +340,15 @@ function pdks_faz8j_tanim_kart_engeli(PDO $pdo, int $kartId, int $foremanId, str
 /** Giriş/çıkış zaman kuralı (TEK yer). $exit null = açık dönem (çağıran izin vermiş olmalı). */
 function pdks_faz8j_zaman_kurali(string $workDate, string $entry, ?string $exit, string $simdi): ?string {
     $hata = 'Giriş/çıkış zamanı mesai tarihi, 24 saat ve gelecek kurallarına uymuyor.';
-    if (substr($entry, 0, 10) !== $workDate || $entry > $simdi) return $hata;
-    if ($exit !== null && ($exit <= $entry || strtotime($exit) > strtotime($entry) + 86400 || $exit > $simdi)) return $hata;
+    if (substr($entry, 0, 10) !== $workDate) return $hata;
+    // v504: "gelecek" ayrı ve açık söylenir (bugüne toplu eklemede 08:00–17:00 gibi sabit saatler henüz gelmemiş olabilir).
+    $gelecek = static fn(string $z): string => 'Giriş/çıkış zamanı henüz gelmedi (' . substr($z, 8, 2) . '.' . substr($z, 5, 2) . '.' . substr($z, 0, 4) . ' ' . substr($z, 11, 5)
+        . ', şu an ' . substr($simdi, 11, 5) . '); gelecekteki saat girilemez.';
+    if ($entry > $simdi) return $gelecek($entry);
+    if ($exit !== null) {
+        if ($exit <= $entry || strtotime($exit) > strtotime($entry) + 86400) return $hata;
+        if ($exit > $simdi) return $gelecek($exit);
+    }
     return null;
 }
 
