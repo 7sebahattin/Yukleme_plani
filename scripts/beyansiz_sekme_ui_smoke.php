@@ -31,7 +31,7 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test']; }
-function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions(beyan_expand_role_permissions($PERMS)), true); }
 function is_admin(): bool { return false; }
 function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }

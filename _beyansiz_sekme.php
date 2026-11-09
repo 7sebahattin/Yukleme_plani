@@ -55,6 +55,7 @@ include __DIR__ . '/_beyanlar_baslik.php';
 <?php else: ?>
 
 <!-- ══ BİLDİRİM BEKLEYENLER ═══════════════════════════════════════════════ -->
+<?php if (can_bsz_kart('bek', 'read')): ?>
 <section class="beyan-blok beyan-blok-acik" id="bszBekleyen">
     <div class="beyan-blok-head">
         <span class="bl-ikon bl-ikon-acik" aria-hidden="true">⏳</span>
@@ -92,7 +93,9 @@ include __DIR__ . '/_beyanlar_baslik.php';
     <?php endif; ?>
 </section>
 
+<?php endif; // bsz_bek ?>
 <!-- ══ BİLDİRİM YAPILANLAR ════════════════════════════════════════════════ -->
+<?php if (can_bsz_kart('yap', 'read')): ?>
 <section class="beyan-blok beyan-blok-kapanmis" id="bszYapilan">
     <div class="beyan-blok-head">
         <span class="bl-ikon bl-ikon-kapali" aria-hidden="true">✅</span>
@@ -129,6 +132,7 @@ include __DIR__ . '/_beyanlar_baslik.php';
     <?php endif; ?>
     <?php endif; ?>
 </section>
+<?php endif; // bsz_yap ?>
 <?php endif; ?>
 
 <?php if (function_exists('can_yukleme_sil') && can_yukleme_sil()): ?>

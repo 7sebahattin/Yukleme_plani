@@ -17,6 +17,11 @@ $st = db()->prepare("SELECT * FROM customs_declarations WHERE id = ? AND deleted
 $st->execute([$id]);
 $beyan = $st->fetch();
 if (!$beyan) { set_flash('error', 'Beyan bulunamadı veya silinmiş.'); header('Location: beyanlar.php'); exit; }
+// v504 — kart yetkisi: kayıt bulunduğu kartta Düzenle ister; durum başka karta taşıyorsa hedef kartta da Düzenle gerekir.
+if (!can_beyan_kart((string)$beyan['status'], 'edit')) forbidden('Bu beyanın bulunduğu bölümde düzenleme yetkiniz yok.');
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['status']) && (string)$_POST['status'] !== ''
+    && beyan_kart_of((string)$_POST['status']) !== beyan_kart_of((string)$beyan['status'])
+    && !can_beyan_kart((string)$_POST['status'], 'edit')) forbidden('Beyanı hedef bölüme taşımak için o bölümde Düzenle yetkisi gerekir.');
 
 $errors = [];
 $edit_token = $_SERVER['REQUEST_METHOD'] === 'POST'

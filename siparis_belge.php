@@ -33,8 +33,9 @@ if (!$b) {
     exit;
 }
 if (!siparis_belge_gorunur($pdo, $b)) forbidden('Bu belge aktif depoda görünmüyor.');
-$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','edit'));
-$sil = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
+siparis_belge_kapi($pdo, (int)$b['id'], 'read', 'Bu belgenin bağlı olduğu bölümü görüntüleme yetkiniz yok.');   // v504
+$yaz = (can_siparis('write') && role_ogl_any('edit'));
+$sil = (can_siparis('delete') && role_ogl_any('delete'));
 
 $ext  = strtolower(pathinfo((string)$b['disk_adi'], PATHINFO_EXTENSION));
 $cins = siparis_dosya_uzantilari()[$ext] ?? 'bilinmiyor';

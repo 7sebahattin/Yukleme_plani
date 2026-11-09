@@ -429,6 +429,25 @@ function require_siparis(string $perm, string $page = 'ogl'): void
     }
 }
 
+/**
+ * v504 — Mevcut sevkiyat üzerinde işlem kapısı: sevkiyatın BULUNDUĞU bölümün (kart) yetkisi.
+ * $action: read|create|edit|delete. Admin her zaman geçer. Uçlar 403 basar (forbidden AJAX-aware).
+ */
+function siparis_sev_kapi(array $sev, string $action, string $mesaj = 'Bu işlem için yetkiniz yok.'): void
+{
+    if (!role_ogl_can((string)($sev['durum'] ?? ''), $action)) forbidden($mesaj);
+}
+
+/** v504 — Belgenin bağlı olduğu HER sevkiyatın bölümünde $action yetkisi gerekir (bağsız belge = İşlem Bekleyen). */
+function siparis_belge_kapi(PDO $pdo, int $belgeId, string $action, string $mesaj = 'Bu belgenin bağlı olduğu bölümde bu işleme yetkiniz yok.'): void
+{
+    $st = $pdo->prepare('SELECT s.durum FROM siparis_belge_bag bb JOIN siparis_sevkiyatlar s ON s.id = bb.sevkiyat_id WHERE bb.belge_id = ? AND s.deleted_at IS NULL');
+    $st->execute([$belgeId]);
+    $durumlar = $st->fetchAll(PDO::FETCH_COLUMN);
+    if (!$durumlar) $durumlar = [''];
+    foreach ($durumlar as $d) if (!role_ogl_can((string)$d, $action)) forbidden($mesaj);
+}
+
 /** Modül CSS'i — render_header()'dan SONRA çağrılır. */
 function siparis_assets(): void
 {
@@ -1050,6 +1069,18 @@ function siparis_liste_filtre(array $get): array
     elseif ($f_durum === 'arac_bekleyen') { $tek = true; $tekSql = "s.durum IN ('siparis_alindi','hazirlik')"; }
     elseif ($f_durum !== '') { $tek = true; $tekSql = "s.durum = '" . $f_durum . "'"; }   // f_durum beyaz listeden
 
+    // v504 — bölüm (kart) Gör yetkisi: yetkisiz bölüm hiç sorgulanmaz/çizilmez; belirli durum filtresi de kartına göre süzülür.
+    $okAcik   = role_ogl_can('', 'read');
+    $okEvrak  = role_ogl_can((string)($evrakDur[0] ?? 'mail_gonderildi'), 'read');
+    $okKapali = role_ogl_can((string)($kapaliDur[0] ?? 'iptal'), 'read');
+    if (!$okAcik)   $bolumAcik = false;
+    if (!$okEvrak)  $bolumEvrak = false;
+    if (!$okKapali) $bolumKapali = false;
+    if ($tek) {
+        $tekDurum = $f_durum === 'arac_bekleyen' ? 'siparis_alindi' : $f_durum;
+        if (!role_ogl_can($tekDurum, 'read')) $tekSql = '1=0';
+    }
+
     $detayFiltre = $f_cw !== '' || $f_alici !== '' || $f_eksik !== '' || $f_catisma || $f_po > 0 || $t_bas !== '' || $t_bit !== '' || ($f_durum !== '' && !in_array($f_durum, ['acik', 'evrak_bekleyen', 'kapali'], true));
     $filtreVar = $detayFiltre || $q !== '' || in_array($f_durum, ['acik', 'evrak_bekleyen', 'kapali'], true);
     $detayOzet = [];
@@ -1063,7 +1094,7 @@ function siparis_liste_filtre(array $get): array
 
     return ['q' => $q, 'f_durum' => $f_durum, 'f_cw' => $f_cw, 'f_alici' => $f_alici, 'f_eksik' => $f_eksik, 'f_catisma' => $f_catisma, 'f_po' => $f_po, 't_bas' => $t_bas, 't_bit' => $t_bit,
         'kapaliSql' => $kapaliSql, 'acikSql' => $acikSql, 'evrakSql' => $evrakSql, 'temelWhere' => $temelWhere, 'temelPar' => $temelPar, 'dprm' => $dprm, 'dsql' => $dsql,
-        'tek' => $tek, 'tekSql' => $tekSql, 'bolumAcik' => $bolumAcik, 'bolumEvrak' => $bolumEvrak, 'bolumKapali' => $bolumKapali, 'detayFiltre' => $detayFiltre, 'filtreVar' => $filtreVar, 'detayOzet' => $detayOzet];
+        'tek' => $tek, 'tekSql' => $tekSql, 'bolumAcik' => $bolumAcik, 'bolumEvrak' => $bolumEvrak, 'bolumKapali' => $bolumKapali, 'okAcik' => $okAcik, 'okEvrak' => $okEvrak, 'okKapali' => $okKapali, 'detayFiltre' => $detayFiltre, 'filtreVar' => $filtreVar, 'detayOzet' => $detayOzet];
 }
 
 /**

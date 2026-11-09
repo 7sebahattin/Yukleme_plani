@@ -35,6 +35,7 @@ if (!$src || !empty($src['deleted_at'])) {
     exit;
 }
 
+if (!can_beyan_kart((string)$src['status'], 'read')) forbidden('Bu beyanın bulunduğu bölümü görüntüleme yetkiniz yok.');   // v504
 $src = beyan_protect_input($src);
 $user_id = (int)($auth_user['id'] ?? 0);
 $ins = db()->prepare("INSERT INTO customs_declarations

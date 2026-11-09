@@ -14,7 +14,11 @@ if (!beyan_sayfa_erisimi()) forbidden();
 // (beyan sorguları hiç çalışmaz). Beyansız sekmesi: Yükleme Bildir yetkisi YA DA
 // beyan.read + hks.read. Görmüyorsa Beyanlar sekmesine düşer.
 $beyanOku = can_beyan('read');
-$bszGor   = can_yukleme_bildir() || ($beyanOku && can_beyan('hks.read'));
+// v504: Beyanlar sekmesi = sayfa Gör + en az bir kartın (İşlem Bekleyen / Kapanan) Gör izni.
+$gorBek   = can_beyan_kart('', 'read');
+$gorKap   = can_beyan_kart('yuklendi', 'read');
+$beyanOku = $beyanOku && ($gorBek || $gorKap);
+$bszGor   = can_bsz_gor();
 $sekme    = (string)($_GET['sekme'] ?? '');
 if (!in_array($sekme, ['beyanlar', 'beyansiz'], true)) $sekme = $beyanOku ? 'beyanlar' : 'beyansiz';
 if (!$beyanOku) $sekme = 'beyansiz';
@@ -126,11 +130,11 @@ foreach ($kapali_durumlar as $i => $kd) $kapali_params[':kd' . $i] = $kd;
 
 // Bekleyenlerin kendi araması/sayfası var; arşiv filtreleri burayı etkilemez.
 $st_bek_c = db()->prepare("SELECT COUNT(*) FROM customs_declarations
-                           WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)");
+                           WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)" . ($gorBek ? '' : ' AND 1=0'));
 $st_bek_c->execute($kapali_params);
 $bekleyen_total = (int)$st_bek_c->fetchColumn();
 
-$bek_where = "WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)";
+$bek_where = "WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)" . ($gorBek ? '' : ' AND 1=0');
 $bek_params = $kapali_params;
 if ($bek_q !== '') {
     $bek_parts = [];
@@ -154,7 +158,7 @@ $st_bek->execute();
 $bekleyen_rows   = array_map('beyan_redact_fields', $st_bek->fetchAll());
 
 // ALT bölüm — kapanan arşiv; kendi filtreleri ve sayfalaması vardır.
-$w_kapali = $where . " AND status IN ($kapali_ph)";
+$w_kapali = $where . " AND status IN ($kapali_ph)" . ($gorKap ? '' : ' AND 1=0');
 $p_kapali = $params + $kapali_params;
 
 $st_count = db()->prepare("SELECT COUNT(*) FROM customs_declarations $w_kapali");
@@ -171,7 +175,7 @@ $st->bindValue(':off', $offset,        PDO::PARAM_INT);
 $st->execute();
 $kapali_rows = array_map('beyan_redact_fields', $st->fetchAll());
 
-$total = (int)db()->query("SELECT COUNT(*) FROM customs_declarations WHERE deleted_at IS NULL")->fetchColumn();
+$total = (int)db()->query("SELECT COUNT(*) FROM customs_declarations WHERE deleted_at IS NULL" . (($gorBek && $gorKap) ? '' : ($gorBek ? " AND status NOT IN ('" . implode("','", beyan_kapali_durumlar()) . "')" : " AND status IN ('" . implode("','", beyan_kapali_durumlar()) . "')")))->fetchColumn();
 // Toplu bildirim uygunluk sorgusu ve seçim JS'i İKİ bölümün satırlarını
 // birlikte görür — uygunluk kapısı bölümden bağımsızdır.
 $rows = array_merge($bekleyen_rows, $kapali_rows);
@@ -234,6 +238,7 @@ render_flash();
 <!-- ══ ÜST BÖLÜM — YÜKLENMEYENLER ═══════════════════════════════════════════
      İşlem bekleyen beyanlar. Filtreden ve sayfalamadan BAĞIMSIZ: burası tam
      bir iş listesidir, arama ya da sayfa geçişi onu eksiltmez. -->
+<?php if ($gorBek): ?>
 <section class="beyan-blok beyan-blok-acik">
     <div class="beyan-blok-head">
         <span class="bl-ikon bl-ikon-acik" aria-hidden="true">⏳</span>
@@ -279,7 +284,7 @@ render_flash();
     <?php else: ?>
     <?php
         $sec_rows  = $bekleyen_rows;
-        $sec_secim = (bool)$uygun_sayisi;
+        $sec_secim = (bool)$uygun_sayisi; $sec_kart = 'bek';
         $sec_plaka_grup = true;
         include __DIR__ . '/_beyan_liste.php';
     ?>
@@ -293,9 +298,11 @@ render_flash();
     <?php endif; ?>
 </section>
 
+<?php endif; // $gorBek ?>
 <!-- ══ ALT BÖLÜM — YÜKLENENLER + FİLTRE ═════════════════════════════════════
      Yüklenen/kapanan beyanların aranabilir arşivi. Filtre şeridi ve sayfalama
      bu bölüme aittir; üst bölümü etkilemez. -->
+<?php if ($gorKap): ?>
 <section class="beyan-blok beyan-blok-kapanmis">
     <div class="beyan-blok-head">
         <span class="bl-ikon bl-ikon-kapali" aria-hidden="true">✅</span>
@@ -386,7 +393,7 @@ render_flash();
     <?php else: ?>
     <?php
         $sec_rows  = $kapali_rows;
-        $sec_secim = (bool)$uygun_sayisi;
+        $sec_secim = (bool)$uygun_sayisi; $sec_kart = 'kap';
         $sec_plaka_grup = false;
         include __DIR__ . '/_beyan_liste.php';
     ?>
@@ -407,6 +414,7 @@ render_flash();
     <?php endif; ?>
     <?php endif; ?>
 </section>
+<?php endif; // $gorKap ?>
 
 <script>
 // Liste: durum rozeti üzerine gelince aşağı açılan durum seçenekleri (v344). Menü position:fixed —

@@ -27,6 +27,7 @@ if ($islem === 'bagla') {
     $sev = siparis_sevkiyat($pdo, $sid);
     if ($sev === null) { set_flash('error', 'Sevkiyat bulunamadı.'); $git('siparisler.php'); }
     if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+    siparis_sev_kapi($sev, 'edit', 'Bu bölümdeki sevkiyatlar için düzenleme yetkiniz yok.');   // v504
     $tur = ($_POST['tur'] ?? '') === 'oneri' ? 'oneri' : 'elle';
     $r = siparis_beyan_bagla($pdo, $sid, (int)($_POST['beyan_id'] ?? 0), $uid, $tur, (string)($_POST['gerekce'] ?? ''));
     $not = !empty($r['aktarilan']) ? ' Araç/şoför bilgisi beyana aktarıldı (' . implode(', ', array_map(fn($k) => ['tractor_plate' => 'çekici', 'vehicle_plate' => 'dorse', 'driver_name' => 'şoför adı', 'driver_phone' => 'şoför tel.'][$k] ?? $k, $r['aktarilan'])) . ').' : '';
@@ -41,6 +42,7 @@ if ($islem === 'kaldir') {
     $sev = $sid > 0 ? siparis_sevkiyat($pdo, $sid) : null;
     if ($sev === null) { set_flash('error', 'Bağ bulunamadı.'); $git('siparisler.php'); }
     if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+    siparis_sev_kapi($sev, 'edit', 'Bu bölümdeki sevkiyatlar için düzenleme yetkiniz yok.');   // v505
     $r = siparis_beyan_bag_kaldir($pdo, $bagId, $uid);
     set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Beyan bağı kaldırıldı.' : (string)($r['hata'] ?? 'Bağ kaldırılamadı.'));
     $git('siparis_view.php?id=' . $sid . '#beyan');

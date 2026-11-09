@@ -73,6 +73,12 @@ try {
         exit;
     }
 
+    // v504 — kart yetkisi: beyan bulunduğu kartta Düzenle ister; eşleştirme beyanı "yüklendi"ye (Kapanan kart) taşır.
+    if (!can_beyan_kart((string)$beyan['status'], 'edit') || !can_beyan_kart('yuklendi', 'edit')) {
+        $pdo->rollBack();
+        forbidden('Eşleştirme için beyanın bulunduğu ve taşınacağı bölümde Düzenle yetkisi gerekir.');
+    }
+
     // Yüklendi işaretlenmiş fakat bağlantısız beyan sonradan eşleştirilebilir.
     if (!empty($beyan['loading_record_id']) && (int)$beyan['loading_record_id'] !== $loading_id) {
         $pdo->rollBack();

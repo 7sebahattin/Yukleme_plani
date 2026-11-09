@@ -21,6 +21,10 @@ $beyan = beyan_redact_fields($beyan);
 $is_deleted = !empty($beyan['deleted_at']);
 $statuses   = beyan_statuses();
 $cur_status = (string)($beyan['status'] ?? 'beyan_acildi');
+// v504 — kayıt hangi karttaysa (İşlem Bekleyen / Kapanan) o kartın Gör izni gerekir; eylemler kartın Düzenle/Sil iznine bağlı.
+if (!can_beyan_kart($cur_status, 'read')) forbidden('Bu beyanın bulunduğu bölümü görüntüleme yetkiniz yok.');
+$kart_edit   = can_beyan_kart($cur_status, 'edit');
+$kart_delete = can_beyan_kart($cur_status, 'delete');
 
 // Yükleme planı bağlantısı
 $linked_record = null;
@@ -148,10 +152,10 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
-        <?php if (!$is_deleted && can_beyan('edit')): ?>
+        <?php if (!$is_deleted && can_beyan('edit') && $kart_edit): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary btn-duzenle">Düzenle</a>
         <?php endif; ?>
-        <?php if (!$is_deleted && can_beyan('delete')): ?>
+        <?php if (!$is_deleted && can_beyan('delete') && $kart_delete): ?>
         <form method="post" action="beyan_delete.php" style="display:inline"
               onsubmit="return confirm('Bu beyan arşivden gizlenecek. Devam edilsin mi?')">
             <input type="hidden" name="id"   value="<?= $id ?>">
@@ -181,7 +185,7 @@ $bk_ulke  = trim((string)($beyan['hks_ulke_ad'] ?? ''));
 $bk_urun  = trim((string)($beyan['hks_urun_ad'] ?? '')) ?: trim((string)($beyan['product_name'] ?? ''));
 $bk_hks   = trim((string)($beyan['hks_urun_ad'] ?? '')) !== '';   // HKS karşılığı seçilmiş mi
 $bk_kg    = $beyan['net_kg'] !== null && (float)$beyan['net_kg'] > 0;
-$bk_plaka_hizli = !$is_deleted && can_beyan('write') && can_beyan('hks.write');   // v340: hızlı plaka girişi
+$bk_plaka_hizli = !$is_deleted && can_beyan('edit') && $kart_edit && can_beyan('hks.write');   // v340: hızlı plaka girişi
 $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = '', string $ic = ''): void { ?>
     <div class="bk-hucre<?= $tam ? '' : ' bk-eksik' ?>"<?= $ic !== '' ? ' data-ic="' . h($ic) . '"' : '' ?>>
         <div class="bk-etiket"><?= h($etiket) ?></div>
@@ -494,7 +498,7 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
     // duruyor, seçili olan ÇERÇEVE ile işaretli ve doğrudan sonuca gidilebilir.
     // Sunucu status_only dalında güncel satırın durum/not alanlarını değiştirir.
     $next_states = beyan_next_statuses($cur_status);   // yalnız "önerilen" işareti
-    if (!$is_deleted && can_beyan('status')):
+    if (!$is_deleted && can_beyan('status') && $kart_edit):
     ?>
     <div class="bv-durum">
         <div class="muted bv-durum-ipucu">

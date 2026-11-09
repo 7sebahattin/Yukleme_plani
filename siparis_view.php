@@ -33,9 +33,10 @@ $sev = siparis_sevkiyat($pdo, $id);
 if ($sev === null) { sipui_yok_sayfasi('Sevkiyat bulunamadı'); exit; }
 if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat "' . (string)$sev['depo'] . '" deposuna ait; aktif depoda görünmüyor.');
 
-$yaz  = (can_siparis('write') && role_matrix_page_can('siparis','ogl','edit'));
-$sil  = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
-$esle = can_siparis('match') && can_beyan('read');
+siparis_sev_kapi($sev, 'read', 'Bu bölümdeki sevkiyatları görüntüleme yetkiniz yok.');   // v504: sevkiyatın bulunduğu kartın Gör izni
+$yaz  = (can_siparis('write') && role_ogl_can((string)$sev['durum'], 'edit'));
+$sil  = (can_siparis('delete') && role_ogl_can((string)$sev['durum'], 'delete'));
+$esle = can_siparis('match') && can_beyan('read') && role_ogl_can((string)$sev['durum'], 'edit');
 $beyanOku = can_beyan('read');
 $durumlar = siparis_durumlar();
 $kapali   = in_array((string)$sev['durum'], siparis_kapali_durumlar(), true);
@@ -790,7 +791,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
               <?php foreach ($evrakTaslak['kime'] as $em): ?>
                 <div class="sip-mail-satir"><span class="sip-mail-rol">Kime</span> <code><?= h($em) ?></code> <button type="button" class="btn btn-sm" data-sip-kopyala="<?= h($em) ?>">Kopyala</button></div>
               <?php endforeach; ?>
-              <?php if ($evrakAyarBos): ?><p class="sip-soluk sip-mail-ipucu">Customs adresi tanımlı değil — <?php if ((can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'))): ?><a href="siparis_ayarlar.php#evrak-mail">Sipariş ayarları › Evrak takımı mail alıcıları</a><?php else: ?>Sipariş ayarları › Evrak takımı mail alıcıları<?php endif; ?></p><?php endif; ?>
+              <?php if ($evrakAyarBos): ?><p class="sip-soluk sip-mail-ipucu">Customs adresi tanımlı değil — <?php if ((can_siparis('delete') && role_ogl_can((string)$sev['durum'], 'delete'))): ?><a href="siparis_ayarlar.php#evrak-mail">Sipariş ayarları › Evrak takımı mail alıcıları</a><?php else: ?>Sipariş ayarları › Evrak takımı mail alıcıları<?php endif; ?></p><?php endif; ?>
               <div class="sip-mail-konu"><span class="sip-soluk">Konu:</span> <?= h($evrakTaslak['konu']) ?></div>
               <label class="sip-mail-metin">Mail metni <span class="sip-soluk">(düzenleyebilirsiniz)</span>
                 <textarea rows="6" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" data-sip-govde data-sip-govde-ilk="<?= h($evrakTaslak['govde']) ?>" spellcheck="false"><?= h($evrakTaslak['govde']) ?></textarea>

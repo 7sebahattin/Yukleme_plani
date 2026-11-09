@@ -24,7 +24,7 @@ $silIslemleri = ['belge_sil', 'sil'];
 if (in_array($islem, $silIslemleri, true)) require_siparis('delete');
 else {
     require_siparis('write');
-    if (!role_matrix_page_can('siparis','ogl', in_array($islem, ['yeni','yetim_ekle'], true) ? 'create' : 'edit')) forbidden('Bu işlem için yetkiniz yok.');
+    if ($islem === 'yeni' ? !role_ogl_can('', 'create') : !role_ogl_any(in_array($islem, ['yetim_ekle'], true) ? 'create' : 'edit')) forbidden('Bu işlem için yetkiniz yok.');
 }
 
 $pdo = db();
@@ -41,10 +41,12 @@ if (!siparis_sema_hazir($pdo)) $hata('Sipariş modülü henüz kurulmadı.');
 if (!in_array($islem, array_merge($yazIslemleri, $silIslemleri), true)) $hata('Geçersiz işlem.');
 
 /** Sevkiyatı yükler; yoksa hata, depoda görünmüyorsa 403. */
-$sevYukle = function (int $sid) use ($pdo, $hata): array {
+$sevYukle = function (int $sid) use ($pdo, $hata, $islem, $silIslemleri): array {
     $sev = siparis_sevkiyat($pdo, $sid);
     if ($sev === null) $hata('Sevkiyat bulunamadı.');
     if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+    // v504 — işlem, sevkiyatın BULUNDUĞU bölümün (kart) yetkisine tabidir
+    siparis_sev_kapi($sev, in_array($islem, $silIslemleri, true) ? 'delete' : ($islem === 'yetim_ekle' ? 'create' : 'edit'), 'Bu bölümdeki sevkiyatlar için bu işleme yetkiniz yok.');
     return $sev;
 };
 /** Belgeyi yükler; yoksa hata, görünmüyorsa 403. */
@@ -66,6 +68,7 @@ if ($islem === 'alan' || $islem === 'not' || $islem === 'kilit_ac') {
     if ($v === null) $hata('Kayıt bulunamadı.');
     $sid = (int)$v['sid'];
     if (!siparis_gorunur($v['sev'])) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+    siparis_sev_kapi($v['sev'], 'edit', 'Bu bölümdeki sevkiyatlar için düzenleme yetkiniz yok.');   // v504
     $url = $sevUrl($sid);
     $tanimlar = siparis_alan_tanimlari()[$varlik];
 
@@ -120,6 +123,7 @@ if ($islem === 'durum') {
     if ($hedef === 'evrak_gonderildi' && ($_POST['onay_evrak'] ?? '') !== '1') {
         $hata('Evrak takımını müşteriye gönderdiğinizi onaylayın.', $url);
     }
+    if (!role_ogl_can($hedef, 'edit')) forbidden('Sevkiyatı hedef bölüme taşımak için o bölümde Düzenle yetkisi gerekir.');
     $r = siparis_durum_degistir($pdo, $sid, $hedef, $uid, $gerekce, ($_POST['onay_eksik'] ?? '') === '1');
     $mesaj = 'Durum güncellendi: ' . (siparis_durumlar()[$hedef]['etiket'] ?? $hedef) . '.';
     if ($hedef === 'mail_gonderildi') $mesaj = 'Mail gönderildi işaretlendi — sevkiyat evrak takımı bekliyor.';
@@ -145,6 +149,7 @@ if ($islem === 'catisma') {
 // ── belge bağla / yeniden işle ──────────────────────────
 if ($islem === 'belge_bagla' || $islem === 'yeniden_isle') {
     $b = $belgeYukle((int)($_POST['belge_id'] ?? 0));
+    siparis_belge_kapi($pdo, (int)$b['id'], 'edit');   // v504
     // v442: invoice (sistemde üretilir) ve e-fatura (Invoice sayfasından yüklenir) içerikten sınıflanmaz; yeniden işleme / başka sevkiyata bağlama bu belgeleri bozardı
     if (in_array((string)$b['tur'], ['invoice', 'efatura'], true)) $hata('Invoice / e-fatura belgeleri yeniden işlenmez ya da başka sevkiyata bağlanmaz (Invoice sayfasından yönetilir).', (int)($_POST['donus_belge'] ?? 0) > 0 ? 'siparis_belge.php?id=' . (int)$_POST['donus_belge'] : 'siparisler.php#yetim');
     $hedefSid = null;
@@ -170,6 +175,7 @@ if ($islem === 'belge_bagla' || $islem === 'yeniden_isle') {
 // ── belge sil ───────────────────────────────────────────
 if ($islem === 'belge_sil') {
     $b = $belgeYukle((int)($_POST['belge_id'] ?? 0));
+    siparis_belge_kapi($pdo, (int)$b['id'], 'delete');   // v504
     $sidDonus = (int)($_POST['donus_sid'] ?? 0);
     $r = siparis_belge_sil($pdo, (int)$b['id'], $uid);
     set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Belge silindi (uygulanmış değerler geri alınmadı).' : (string)($r['hata'] ?? 'Belge silinemedi.'));

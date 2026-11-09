@@ -199,7 +199,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
 
     </div>
 
-    <?php if ($is_edit && can_beyan('delete')): ?>
+    <?php if ($is_edit && can_beyan('delete') && can_beyan_kart((string)($beyan['status'] ?? ''), 'delete')): ?>
     <details class="beyan-workspace-delete" data-beyan-single-section>
         <summary>Diğer işlemler</summary>
         <button type="submit" class="btn btn-ghost" formaction="beyan_delete.php" formmethod="post" formnovalidate
