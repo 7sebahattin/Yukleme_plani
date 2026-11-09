@@ -27,6 +27,7 @@ require_once __DIR__ . '/config/mail_core.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/beyansiz_yukleme.php';   // v498 Yükleme Bildir (beyansız yükleme) tablosu
 require_once __DIR__ . '/config/urun_siparis.php';   // v409 Ürün Siparişleri (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/sirket_yapisi.php';   // v505 Şirket · Şube · Depo ek bilgisi (yalnız CREATE TABLE kartı)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -124,6 +125,7 @@ $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (
 $bsz_results = []; $bsz_ran = false;                            // v498 beyansiz_yukleme tablosu
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
+$sirket_yapisi_results = []; $sirket_yapisi_ran = false;            // v505 Şirket · Şube · Depo (4 tablo)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
 
@@ -317,6 +319,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         } elseif ($sr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'add_column', 'column' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'sirket_yapisi') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sirket_yapisi_ran     = true;
+    $sirket_yapisi_results = sirket_yapisi_migrate($pdo);
+    foreach ($sirket_yapisi_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'sirket_yapisi', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -1399,6 +1410,29 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="pdks_faz8b">
       <button type="submit" class="btn btn-primary">Faz 8B Migrasyonunu Çalıştır</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('sirket-yapisi'); ?>
+    <h2 style="margin-top:0;">Şirket · Şube · Depo (Faz 0.1)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: dört YENİ tablo oluşturur — <code>sirketler</code>, <code>subeler</code>, <code>depo_detay</code>,
+      <code>depo_sirket</code>. Mevcut tablolara ve depo tanımlarına DOKUNMAZ; ALTER ve yabancı anahtar YOK.
+      Çalıştırılınca Program Tanımları, Şube Tanımları ve Depo Tanımları sayfalarından şirket/şube/depo bilgisi girilir.
+      Çalıştırılmazsa bu üç sayfa yalnız "tablolar kurulmadı" uyarısı gösterir; diğer ekranlar aynen çalışır.
+      <?php if ($sirket_yapisi_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($sirket_yapisi_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $sirkyap = sirket_yapisi_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $sirkyap ? '#1f9d55' : '#c0392b' ?>;"><?= $sirkyap ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="sirket_yapisi">
+      <button type="submit" class="btn btn-primary">Şirket · Şube · Depo Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

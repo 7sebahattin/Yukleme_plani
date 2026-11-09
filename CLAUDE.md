@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `test.scai.tr` (v504; `testasya` dalı, ayrı DB, dış gönderim kapalı — `APP_ORTAM='test'`). Eski `nuverna.derspros.com.tr` 25.12.2026'da kapanır, yerini test.scai.tr aldı  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v504` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v505` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -271,6 +271,10 @@ $net  = round(max(0, $brut - $dara), 3);
 ## Muhasebe Yer Tutucu Sayfaları (v435 → v439)
 
 Sidebar'daki Cari İşlemler vb. gruplar (yalnız `is_admin()`) `nav_muhasebe_gruplari()` (config/helpers.php) TEK kaynağından beslenir; yeni sayfa BURAYA eklenir. Her sayfa `require_login()` + `is_admin()` kapısı taşır; içerik yoksa "Bu bölüm hazırlanıyor." kartı. **v439: mevcut klonu olan 12 sayfa 302 ile o sayfaya yönlendirir** (kapı kalır): kantar_fisleri, mal_kabul_fisleri → `kantar.php` · veritabani_islemleri → `admin_db_backups.php` · kullanici_tanimlari → `users.php` · depo_tanimlari → `definitions.php?type=depo` · raporlar_listeler → `reports.php` · alinan_siparis_fisleri → `urun_siparis.php` · arac_yukleme_fisleri → `records.php` · palet_fisleri → `cikmalar.php` · ihracat_faturasi_maliyeti → `maliyet.php` · beyanname_siparis_proforma → `beyanlar.php` · sube_degistirme → `depo_sec.php`. Diğerleri yer tutucu kalır. `nav_aktif_anahtar()` bu sayfalarda dosya slug'ı döndürür. `sw.js` `SW_MUHASEBE_RE` bu adları önbelleğe almaz (stok.php/kantar.php vb. kapsanmaz). Test: `php scripts/nav_muhasebe_static_smoke.php`.
+
+## Şirket · Şube · Depo tanımları (Faz 0.1, v505)
+
+Muhasebe yol haritasının temeli (belge: `docs/` dışında, sohbet raporu). **Altyapıdır: içeriği kullanıcı girer** (Program Tanımları = Şirketler, Şube Tanımları, Depo Tanımları — üçü artık gerçek ekran; v439 yönlendirmesi/yer tutucu kalktı). Kodda sabit şirket adı/kodu YOK, sayı sınırı YOK. Çekirdek `config/sirket_yapisi.php` (CRUD + doğrulama + audit; şirket/şube SİLİNMEZ, pasife alınır), form parçaları `config/sirket_yapisi_ui.php`. Şema 4 yeni tablo (`sirketler`, `subeler`, `depo_detay`, `depo_sirket`) yalnız `migrate.php` "Şirket · Şube · Depo" kartından (GO ile); tablo yokken üç sayfa yalnız "kurulmadı" kartı gösterir. Depo ek bilgisi mevcut `material_definitions type='depo'` tanımına DOKUNMAZ; `depo_sirket`'te satır yoksa depo kısıtsızdır (`depo_sirket_izinli()`). Kapı: `is_admin()` + `csrf_check`; yeni yetki anahtarları 0.2'de. Test: `php scripts/sirket_yapisi_smoke.php` · `php scripts/sirket_yapisi_sayfa_smoke.php` (sayfaları gerçekten çalıştırır; `SY_HTML_OUT=<klasör>` ile görsel kontrol HTML'i yazar).
 
 ## Önemli Desenler
 
