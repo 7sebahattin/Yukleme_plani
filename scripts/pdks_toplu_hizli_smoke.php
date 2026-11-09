@@ -75,6 +75,14 @@ t('ajax: coklu_grup yalnız sunucu', !str_contains($aj, "\$__tpIn['coklu_grup']"
 $fz = (string)file_get_contents($ROOT . '/config/pdks_toplu_hizli.php');
 t('saf fonksiyon: DB/INSERT yok', !preg_match('/\b(INSERT|UPDATE|DELETE|db\(\)|\$pdo)\b/i', $fz));
 
+// Çift yevmiye: Tam'a EK, FM havuzuna girmez, 08:00-17:00, yarım yok
+$gc = pdks_toplu_hizli_gruplar(['tam' => [1 => 4], 'cift' => [1 => 2, 2 => 1, 4 => 1, 5 => 1], 'fm' => ['kisi' => 2, 'saat' => '1']], $tipKod, '2026-11-09');
+$cg = array_values(array_filter($gc['gruplar'], fn($x) => !empty($x['cift'])));
+t('cift: 4 grup, 08:00-17:00', count($cg) === 4 && $cg[0]['kartsiz_adet'] === 2 && $cg[0]['exit_clock'] === '17:00' && $cg[0]['entry_clock'] === '08:00');
+t('cift: FM havuzuna girmez', array_sum(array_column(array_filter($gc['gruplar'], fn($x) => empty($x['cift']) && $x['exit_clock'] === '18:00'), 'kartsiz_adet')) === 2 && $gc['hata'] === null);
+t('cift: Tamdan dusmez', array_sum(array_column(array_filter($gc['gruplar'], fn($x) => empty($x['cift'])), 'kartsiz_adet')) === 4);
+t('cift: yalniz cift ile FM hata', pdks_toplu_hizli_gruplar(['cift' => [1 => 3], 'fm' => ['kisi' => 1, 'saat' => '1']], $tipKod, '2026-11-09')['hata'] !== null);
+t('cift: JS kutusu + hz.cift + FM dislama', str_contains($js, 'data-hizli-cift') && str_contains($js, 'cift: {}') && str_contains($js, "c.hasAttribute('data-hizli-cift')) return;"));
 $f8 = (string)file_get_contents($ROOT . '/config/pdks_faz8j.php');
 t('çift bayrağı: kolon PDKS_CIFT_KOLON adıyla + fail-closed (satir_yaz)', str_contains($f8, "', ' . PDKS_CIFT_KOLON") && str_contains($f8, 'Çift yevmiye alanı kurulmamış'));
 t('çift bayrağı: yalnız coklu_grup (kod yolu)', str_contains($f8, "\$cift = \$coklu && !empty(\$g['cift'])"));

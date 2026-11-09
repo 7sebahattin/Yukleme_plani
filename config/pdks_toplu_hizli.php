@@ -7,7 +7,8 @@
 // Yazma yolu DEĞİŞMEDİ: bu dosya yalnız pdks_faz8j_toplu_hazirla()'nın beklediği `gruplar`ı üretir.
 // JS aynası: _puantaj_toplu.php içindeki fmDagit() — kural AYNI olmalı (test denetler).
 // Yarım mesai: 08:00–12:30 (Kadın/Erkek). FM havuzu: Kadın Tam, Erkek Tam, Kadın Yarım, Erkek Yarım, Şeritçi (Rampacı DEĞİL).
-// Çift yevmiye kişi sayısı: bayrak altyapısı başka ajanda — BURADA YOK.
+// Çift yevmiye: her Tam kategoride (Kadın/Erkek/Rampacı/Şeritçi) EK kişi sayısı (Tam'dan düşmez), 08:00–17:00,
+// FM havuzuna GİRMEZ; grup `cift`=true → pdks_faz8j_satir_yaz() cift_yevmiye bayrağını yazar (kolon yoksa fail-closed).
 // =========================================================
 const PDKS_TOPLU_HIZLI_GIRIS = '08:00';
 const PDKS_TOPLU_HIZLI_CIKIS = '17:00';
@@ -85,6 +86,15 @@ function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate)
         if (!$d['ok']) { $cik['hata'] = $d['hata']; return $cik; }
         $cik['dagilim'] = $fmKat = $d['dagilim'];
     }
+    // Çift yevmiye (Tam kategorilere EK; yarım yok; FM'siz): 08:00–17:00 grubu, cift bayrağı.
+    $ciftGruplar = [];
+    foreach ((is_array($hizli['cift'] ?? null) ? $hizli['cift'] : []) as $tid => $n) {
+        $tid = (int)$tid; $n = is_scalar($n) ? (int)$n : 0;
+        if ($tid < 1 || !isset($tipKod[$tid]) || $n < 1) continue;
+        if (!in_array($tipKod[$tid], ['KADIN', 'ERKEK', 'RAMPACI', 'SERITCI'], true)) continue;
+        $ciftGruplar[] = ['worker_type_id' => $tid, 'entry_clock' => PDKS_TOPLU_HIZLI_GIRIS, 'exit_date' => $workDate, 'exit_clock' => PDKS_TOPLU_HIZLI_CIKIS,
+                          'kart_ids' => [], 'kartsiz_adet' => $n, 'etiket' => $tipKod[$tid] . ' Çift', 'cift' => true];
+    }
     $cikisSaat = static function (string $saat, int $ekDk) use ($workDate): array {
         $t = (new DateTimeImmutable($workDate . ' ' . $saat . ':00'))->modify('+' . $ekDk . ' minutes');
         return [$t->format('Y-m-d'), $t->format('H:i')];
@@ -106,5 +116,6 @@ function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate)
                                  'kart_ids' => [], 'kartsiz_adet' => $fmN, 'etiket' => $ad . ' + FM'];
         }
     }
+    foreach ($ciftGruplar as $cg) $cik['gruplar'][] = $cg;
     return $cik;
 }
