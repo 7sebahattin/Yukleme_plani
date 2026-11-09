@@ -35,6 +35,11 @@ $firmalar = $db->query('SELECT id, ad FROM ' . hks_tablo('firmalar') . ' ORDER B
 // istek doğrudan kurulur (üretim kodu değiştirilmeden).
 function endpoint_dene(string $kalip, array $cfg): array {
     $url = sprintf($kalip, 'Genel');
+    // Test ortamı kapısı (v504): bu sayfa hks_soap_cagir()'ı atlayıp doğrudan curl atar; canlı kopyada
+    // kayıtlı kimlik bilgisiyle HKS'e gitmesin. (ortam.php hks_soap.php'den yüklü.)
+    if (app_dis_gonderim_kapali()) {
+        return ['ok' => false, 'url' => $url, 'ms' => 0, 'mesaj' => 'Test ortamında HKS bağlantısı kapalı (APP_ORTAM=test); istek gönderilmedi.'];
+    }
     $istek = '<BaseRequestMessageOf_UlkelerIstek xmlns="' . HKS_SVC_NS . '">'
            . '<Istek/>'
            . '<Password>' . hks_esc($cfg['password']) . '</Password>'

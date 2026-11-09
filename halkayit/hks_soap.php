@@ -6,6 +6,10 @@
 // Bu dosya, Node.js server.js'teki SOAP mantığının birebir PHP çevirisidir.
 // =============================================================================
 
+// Test ortamı kapısı (v504): APP_ORTAM test iken HKS'e HİÇBİR istek gitmez. Dosya kendi başına
+// require edilebildiği için (CLI testleri) yardımcıyı burada kendisi yükler.
+require_once __DIR__ . '/../config/ortam.php';
+
 const HKS_SVC_NS = 'http://www.gtb.gov.tr//WebServices';
 const HKS_NS_SC = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Bildirim.ServiceContract';
 const HKS_NS_MODEL = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Bildirim.Model';
@@ -203,6 +207,13 @@ if (!class_exists('HksAgHatasi', false)) {
 
 // SOAP zarfını gönder, cevap gövdesini döndür
 function hks_soap_cagir($servis, $metod, $icerikXml) {
+  // TEST ORTAMI: canlı veritabanı kopyasında gerçek bildirim gitmesin. errno 7 = "istek hiç gitmedi":
+  // belirsiz-gönderim işareti YAZILMAZ, taslak geri konur (belirsiz_gonderim_lib.php 6/7/35/60'ı böyle sayar).
+  if (app_dis_gonderim_kapali()) {
+    $__ex = new HksAgHatasi('Test ortamında HKS bağlantısı kapalı (APP_ORTAM=test); hiçbir istek gönderilmedi.');
+    $__ex->errno = 7;
+    throw $__ex;
+  }
   $zarf =
     '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>' .
     $icerikXml . '</s:Body></s:Envelope>';

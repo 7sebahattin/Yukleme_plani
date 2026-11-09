@@ -16,6 +16,9 @@ if (!defined('APP_SURUM')) {
     define('APP_SURUM', 'v565');
 }
 
+// Çalışma ortamı (canlı/test) — render_header test şeridini buradan okur (v504)
+require_once __DIR__ . '/ortam.php';
+
 // --- HTML kaçışı ---
 function h($v): string {
     return htmlspecialchars((string)($v ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -1220,7 +1223,7 @@ function render_header(string $title, bool $print_mode = false): void {
     <link rel="manifest" href="<?= $base ?>manifest.json?v=<?= (int)@filemtime(__DIR__ . '/../manifest.json') ?>">
     <link rel="apple-touch-icon" href="<?= $base ?>assets/apple-touch-icon.png">
     <link rel="icon" type="image/png" href="<?= $base ?>assets/icon-192.png">
-    <title><?= h($title) ?> · Asya Fresh</title>
+    <title><?= app_test_ortami() ? '[TEST] ' : '' ?><?= h($title) ?> · Asya Fresh</title>
     <script>
     /* Tema (Açık/Koyu/Sistem) — CSS yüklenmeden ÖNCE uygulanır (beyaz parlama olmaz).
        localStorage 'asya_tema' ∈ acik|koyu|sistem. halkayit iframe'i aynı anahtarı
@@ -1282,6 +1285,9 @@ function render_header(string $title, bool $print_mode = false): void {
     if (str_contains($__body_cls, 'ekran-kilitli') && ekran_pin_durum_otomatik(current_user()) !== 'var') $__body_cls = trim(str_replace('ekran-kilitli', '', $__body_cls));
 ?>
 <body class="<?= $__body_cls ?>"<?= $__body_style ?>>
+<?php if (!$print_mode && app_test_ortami()): ?>
+<div class="test-serit" role="status" aria-live="polite">TEST ORTAMI · gerçek HKS ve e-posta kapalı</div>
+<?php endif; ?>
 <?php if (!$print_mode): ?>
 <header class="topbar">
     <div class="topbar-inner">

@@ -16,6 +16,9 @@
 // =========================================================
 declare(strict_types=1);
 
+// Test ortamı kapısı (v504): APP_ORTAM test iken IMAP/SMTP'ye bağlanılmaz (okuma da yazma da).
+require_once __DIR__ . '/ortam.php';
+
 interface MailStream
 {
     /** CRLF'e kadar bir satır (CRLF'siz). EOF/zaman aşımında null. */
@@ -49,6 +52,9 @@ final class MailSocketStream implements MailStream
 
     public static function baglan(string $host, int $port, string $guvenlik, float $timeout = 20.0): self
     {
+        if (app_dis_gonderim_kapali()) {
+            throw new MailImapException('connect', 'Test ortamında mail bağlantısı kapalı (APP_ORTAM=test).');
+        }
         if (!in_array($guvenlik, ['ssl', 'starttls'], true)) {
             throw new MailImapException('connect', 'Yalnız ssl / starttls desteklenir.');
         }
