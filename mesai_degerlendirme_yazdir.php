@@ -107,7 +107,8 @@ render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orien
             <td><?= h(pdks_faz8b_sure_metni($f)) ?></td>
             <td><?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></td>
             <td><?php
-                if ($f['cift']) echo 'Çift Yevmiye (çift sonrası FM ' . (int)$f['odenecek_fm_saat'] . ' saat)';
+                if ($f['cift']) echo 'Çift Yevmiye (Tam ücret × 2)';
+                elseif (!empty($f['yarim_min_ihlal'])) echo 'Yarım — 3 saatten az, ücret yok';
                 elseif ($f['sinif_kaynak'] === 'otomatik') echo 'Otomatik Tam';
                 elseif ($f['etkin_sinif']) echo 'Muhasebe: ' . h(pdks_faz8b_sinif_etiketi($f['etkin_sinif']));
                 else echo 'Karar bekliyor';

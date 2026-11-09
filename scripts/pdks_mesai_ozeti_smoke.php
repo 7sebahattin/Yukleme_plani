@@ -309,12 +309,12 @@ $r = pdks_faz8b_oran_ekle(2, $kadin, '1000', '600', 'hourly', '150', '2020-01-01
 okmo('9a) çift fiyat dönemi eklendi', ($r['ok'] ?? false) === true, json_encode($r, JSON_UNESCAPED_UNICODE));
 $sc = moSession(540, 2); moDonem($sc, $kadin, 780, 4);
 $z = moOzet([$sc]);
-okmo('9b) 13 sa, FM onaylı 4 → Çift; ödenecek FM 1 → fm[1]=1, fm_saat 1 (aday 4 DEĞİL)',
-    $z['tanim']['Kadın']['cift'] === 1 && $z['tanim']['Kadın']['tam'] === 0 && fmDagilim($z) === fmBeklenen(1, 1) && $z['fm_saat'] === 1, json_encode($z['tanim']['Kadın']));
+okmo('9b) v503: süre bazlı çift YOK — 13 sa, FM onaylı 4 → Tam; fm[4]=1, fm_saat 4',
+    $z['tanim']['Kadın']['cift'] === 0 && $z['tanim']['Kadın']['tam'] === 1 && fmDagilim($z) === fmBeklenen(4, 1) && $z['fm_saat'] === 4, json_encode($z['tanim']['Kadın']));
 $sc2 = moSession(540, 2); moDonem($sc2, $kadin, 780, 3);
 $z = moOzet([$sc2]);
-okmo('9c) 13 sa, FM onaylı 3 (çift eşiği = onaylı 12 sa) → Çift, ödenecek FM 0 → dağılım boş, fm_saat 0',
-    $z['tanim']['Kadın']['cift'] === 1 && fmDagilim($z) === $fz && $z['fm_saat'] === 0, json_encode($z['tanim']['Kadın']));
+okmo('9c) v503: 13 sa, FM onaylı 3 → Tam; Özet FM ADAYI gösterir: fm[4]=1, fm_saat 4',
+    $z['tanim']['Kadın']['cift'] === 0 && fmDagilim($z) === fmBeklenen(4, 1) && $z['fm_saat'] === 4, json_encode($z['tanim']['Kadın']));
 $sc3 = moSession(540, 2); moDonem($sc3, $kadin, 780, 0);
 $z = moOzet([$sc3]);
 okmo('9d) 13 sa, FM reddedildi → Tam, dağılım boş, fm_saat 0', $z['tanim']['Kadın']['tam'] === 1 && $z['tanim']['Kadın']['cift'] === 0 && fmDagilim($z) === $fz && $z['fm_saat'] === 0, json_encode($z['tanim']['Kadın']));

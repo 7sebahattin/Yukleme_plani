@@ -287,7 +287,7 @@ render_flash();
     <td><?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></td>
     <td>
         <?php if ($f['cift']): ?>
-            <span class="pdks-badge pdks-badge-cift">Çift Yevmiye</span>
+            <span class="pdks-badge pdks-badge-cift">Çift Yevmiye</span><div class="pdks-row-sub">Tam ücret × 2<?= !empty($f['cift_isaret']) ? ' (işaretli)' : '' ?></div>
         <?php elseif ($f['sinif_kaynak'] === 'otomatik'): ?>
             <span class="pdks-badge pdks-badge-tamamlandi">Otomatik Tam</span>
         <?php elseif ($f['etkin_sinif']): ?>
@@ -297,6 +297,7 @@ render_flash();
         <?php endif; ?>
         <?php if ($f['cift_aday'] && !$f['cift']): ?><div class="pdks-row-sub">Çift adayı (≥ <?= h(pdks_faz8b_dakika_etiket((int)$f['cift_dk'])) ?>) — FM onayına bağlı</div><?php endif; ?>
         <?php if ($f['yarim_alti']): ?><div class="pdks-row-sub">Yarım saatinin (<?= h(pdks_faz8b_dakika_etiket((int)$f['yarim_dk'])) ?>) altında</div><?php endif; ?>
+        <?php if (!empty($f['yarim_min_ihlal'])): ?><div class="pdks-row-sub" style="color:#c0392b;font-weight:600;">⚠ 3 saatten az çalışma: Yarım sayılmaz, ücret yazılmaz</div><?php endif; ?>
     </td>
     <td>
         <?php if ((int)$f['fazla_mesai_saat'] <= 0): ?>—
@@ -362,7 +363,8 @@ render_flash();
     <div class="pdks-row-sub">Süre: <?= h(pdks_faz8b_sure_metni($f)) ?></div>
     <div class="pdks-row-sub">Beyan: <?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></div>
     <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h(pdks_faz8b_sinif_etiketi($f['etkin_sinif'])) : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM Hesaplanan ' . (int)$f['fazla_mesai_saat'] . ' saat' . ($f['fazla_mesai_onay_saat'] !== null ? ' / Onaylanan ' . (int)$f['fazla_mesai_onay_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : ' / Onay bekliyor') : '' ?></div>
-    <?php if ($f['cift']): ?><div class="pdks-row-sub">Çift Yevmiye · çift sonrası FM <?= (int)$f['odenecek_fm_saat'] ?> saat</div><?php elseif ($f['cift_aday']): ?><div class="pdks-row-sub">Çift adayı — FM onayına bağlı</div><?php endif; ?>
+    <?php if ($f['cift']): ?><div class="pdks-row-sub">Çift Yevmiye · Tam ücret × 2</div><?php endif; ?>
+    <?php if (!empty($f['yarim_min_ihlal'])): ?><div class="pdks-row-sub" style="color:#c0392b;font-weight:600;">⚠ 3 saatten az çalışma: Yarım sayılmaz, ücret yazılmaz</div><?php endif; ?>
     <?php if ($f['yarim_alti']): ?><div class="pdks-row-sub">Yarım saatinin (<?= h(pdks_faz8b_dakika_etiket((int)$f['yarim_dk'])) ?>) altında</div><?php endif; ?>
     <?php if ((int)$f['fazla_mesai_saat'] > 0): ?>
     <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.85rem">
