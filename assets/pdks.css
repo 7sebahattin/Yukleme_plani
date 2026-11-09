@@ -2774,16 +2774,28 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 .toplu-v2 .tv-hizli { margin: 0 0 14px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 12px; }
 .toplu-v2 .tv-hizli-bas, .toplu-v2 .tv-fm-bas { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 1rem; }
 .toplu-v2 .tv-hizli-not { margin: 0 0 10px; font-size: .85rem; }
-.toplu-v2 .tv-hizli-izgara { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+/* Satır satır: her işçi tipi KENDİ satırında (sol: tip başlığı, sağ: Tam · Yarım · Çift yevmiye kutuları). */
+.toplu-v2 .tv-hizli-izgara { display: flex; flex-direction: column; gap: 8px; }
+.toplu-v2 .tv-hizli-satir { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border, #d9dee7); border-radius: 10px; }
+.toplu-v2 .tv-hizli-tip { flex: 0 0 88px; font-weight: 700; font-size: .85rem; letter-spacing: .03em; }
+.toplu-v2 .tv-hizli-kutular { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.toplu-v2 .tv-hizli-kutu { flex: 1 1 96px; min-width: 88px; max-width: 160px; }
 .toplu-v2 .tv-hizli-kutu em { font-style: normal; opacity: .7; }
 .toplu-v2 .tv-hizli input, .toplu-v2 .tv-fm input { width: 100%; box-sizing: border-box; font-size: 16px; min-height: 44px; }
 .toplu-v2 .tv-fm { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #d9dee7); }
-.toplu-v2 .tv-fm-alanlar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.toplu-v2 .tv-fm-onizleme { margin: 8px 0 0; font-size: .9rem; overflow-wrap: anywhere; }
+.toplu-v2 .tv-fm-not { margin: 0 0 8px; font-size: .85rem; }
+.toplu-v2 .tv-fm-satirlar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.toplu-v2 .tv-fm-satir { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+.toplu-v2 .tv-fm-sil { min-height: 44px; min-width: 44px; font-size: 1.3rem; line-height: 1; }
+.toplu-v2 .tv-fm-sil[hidden] { display: none; }
+.toplu-v2 .tv-fm-onizleme { margin: 8px 0 0; font-size: .9rem; overflow-wrap: anywhere; white-space: pre-line; }
 .toplu-v2 .tv-gelismis { margin: 0 0 12px; }
 .toplu-v2 .tv-gelismis > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
 @media (max-width: 767px) {
-    .toplu-v2 .tv-hizli-izgara { grid-template-columns: 1fr 1fr; }
+    /* Tipler ayrı satır kalır; kutular sığmazsa satır İÇİNDE kırılır, başlık üstte. */
+    .toplu-v2 .tv-hizli-satir { flex-direction: column; align-items: stretch; gap: 6px; }
+    .toplu-v2 .tv-hizli-tip { flex: 0 0 auto; }
+    .toplu-v2 .tv-hizli-kutu { flex: 1 1 90px; max-width: none; }
 }
 
 /* ── v446 — Fiş Excel'i Yükle (gunluk_fis_yukle.php + _fis_onizle.php) ─────────
