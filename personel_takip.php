@@ -22,6 +22,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/uretim.php';   // v507: can_uretim()
 $auth_user = require_login();
 role_pdks_require_request();
 
@@ -183,6 +184,15 @@ render_flash();
     <div class="home-card-icon pdks-icon-report" aria-hidden="true"></div>
     <div class="home-card-title">Çavuş Toplu Döküm</div>
     <div class="home-card-sub">Aylık çavuş ve kart bazlı işçi dökümü</div>
+</a>
+<?php endif; ?>
+
+<?php if (can_uretim('read')): ?>
+<div class="home-section-title">ÜRETİM</div>
+<a href="gunluk_uretim.php" class="home-card home-card-uretim">
+    <div class="home-card-icon pdks-icon-analytics" aria-hidden="true"></div>
+    <div class="home-card-title">Günlük Üretim</div>
+    <div class="home-card-sub">İşlenen mal ve işçi başı verim</div>
 </a>
 <?php endif; ?>
 
