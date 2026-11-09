@@ -34,7 +34,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($__tpAjax, ['toplu_onizle'
             'kartsiz_adet' => $__tpI($__g['kartsiz_adet'] ?? 0),
         ];
     }
+    // v504: "kişi sayısı" girişi (Tam + Fazla mesai). Gruplar SUNUCUDA üretilir (saat/dağıtım istemciye güvenilmez);
+    // aynı tip birden çok grup olabilir → coklu_grup yalnız sunucu tarafından açılır.
+    require_once __DIR__ . '/config/pdks_toplu_hizli.php';
+    $__tpCoklu = false;
+    if (is_array($__tpIn['hizli'] ?? null)) {
+        $__tpKod = [];
+        foreach (array_unique(array_merge(array_keys(is_array($__tpIn['hizli']['tam'] ?? null) ? $__tpIn['hizli']['tam'] : []), array_keys(is_array($__tpIn['hizli']['yarim'] ?? null) ? $__tpIn['hizli']['yarim'] : []), array_keys(is_array($__tpIn['hizli']['cift'] ?? null) ? $__tpIn['hizli']['cift'] : []))) as $__tid) {
+            $__tt = pdks_faz8j_desteklenen_tip($pdo, (int)$__tid);
+            if ($__tt) $__tpKod[(int)$__tid] = (string)($__tt['code'] ?? '');
+        }
+        $__tpH = pdks_toplu_hizli_gruplar($__tpIn['hizli'], $__tpKod, (string)$topluAjaxSabit['work_date']);
+        if ($__tpH['hata'] !== null) $__tpCikti(['ok' => false, 'error' => $__tpH['hata'], 'hatalar' => [$__tpH['hata']], 'satirlar' => [], 'ozet' => []], 200);
+        if ($__tpH['gruplar']) { $__tpGruplar = array_merge($__tpH['gruplar'], $__tpGruplar); $__tpCoklu = true; }
+    }
     $__tpV = [
+        'coklu_grup' => $__tpCoklu,
+        'audit_ek' => $__tpCoklu ? ['hizli_giris' => ['gruplar' => array_map(static fn($g) => ['etiket' => $g['etiket'], 'adet' => $g['kartsiz_adet'], 'cikis' => $g['exit_date'] . ' ' . $g['exit_clock']], $__tpH['gruplar']), 'fm_dagilim' => $__tpH['dagilim']]] : [],
         'foreman_id' => $topluAjaxSabit['foreman_id'] ?? $__tpI($__tpIn['foreman_id'] ?? 0),
         'work_date' => (string)$topluAjaxSabit['work_date'], 'depo' => (string)$topluAjaxSabit['depo'],
         'reason' => $__tpS($__tpIn['reason'] ?? ''), 'note' => $__tpS($__tpIn['note'] ?? ''), 'gruplar' => $__tpGruplar,

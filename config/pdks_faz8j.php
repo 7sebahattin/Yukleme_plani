@@ -545,6 +545,12 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
         if ($yevmiye > PDKS_YEVMIYE_UST) throw new RuntimeException('Yevmiye adedi en çok ' . PDKS_YEVMIYE_UST . ' olabilir — hiçbir şey yazılmadı.');
         $kolonlar .= ', yevmiye_adedi'; $isaret .= ',?'; $deger[] = $yevmiye;
     }
+    // v504: çift yevmiye bayrağı (opt-in, YALNIZ kod: toplu `coklu_grup` grubunun `cift`i). Kolon yoksa YAZILMAZ (fail-closed).
+    $cift = !empty($satir['cift']);
+    if ($cift) {
+        if (!function_exists('pdks_cift_hazir') || !pdks_cift_hazir($pdo)) throw new RuntimeException('Çift yevmiye alanı kurulmamış (migrate.php › «Çift yevmiye alanı») — hiçbir şey yazılmadı.');
+        $kolonlar .= ', ' . PDKS_CIFT_KOLON; $isaret .= ',?'; $deger[] = 1;
+    }
     $pdo->prepare("INSERT INTO daily_worker_work_periods ($kolonlar) VALUES ($isaret)")->execute($deger);
     $pid = (int)$pdo->lastInsertId();
     $kayit = [
@@ -559,6 +565,7 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     if (!empty($meta['istek_id'])) $kayit['istek_id'] = (string)$meta['istek_id'];
     if ($kaynak !== 'manual') $kayit['kaynak'] = $kaynak;
     if ($yevmiye > 0) $kayit['yevmiye'] = $yevmiye;
+    if ($cift) $kayit['cift_yevmiye'] = 1;
     pdks_faz8j_audit($pdo, $user, (string)($meta['audit_action'] ?? 'puantaj_ekle'), $pid, [], $kayit);
     return $pid;
 }
@@ -718,6 +725,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
                 }
             }
         }
+        // v504: çift yevmiye grubu (opt-in, yalnız kod/`coklu_grup`): kolon kurulu değilse grup reddedilir (fail-closed).
+        $cift = $coklu && !empty($g['cift']);
+        if ($cift && $grupHata === null && (!function_exists('pdks_cift_hazir') || !pdks_cift_hazir($pdo))) {
+            $grupHata = 'Çift yevmiye alanı kurulmamış (migrate.php › «Çift yevmiye alanı»).';
+        }
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
         $cikis = pdks_faz8j_cikis_zamani($g);
         $exit = $cikis['ok'] ? $cikis['exit'] : null;
@@ -744,11 +756,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
             }
             $grupKart[$k] = true; $kartGoruldu[$k] = true;
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => false, 'kart_id' => $k, 'kart' => $kart, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye, 'cift' => $cift];
         }
         for ($n = 0; $n < $kartsizAdet; $n++) {
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => true, 'kart_id' => 0, 'kart' => null, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye, 'cift' => $cift];
         }
     }
     $h['hatalar'] = array_values(array_unique($h['hatalar']));
