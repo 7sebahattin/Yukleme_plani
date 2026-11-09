@@ -423,7 +423,7 @@ render_flash();
             <?php if ($saatHazir): ?><p class="cf2-not">Yarım saati yalnız bilgidir: Tam saatinin altındaki mesailerde karar yine muhasebede (otomatik Yarım yok).</p><?php endif; ?>
         </div>
         <div class="cf2-grup" data-cf-grup="fm">
-            <div class="cf2-grup-bas"><?= $cfIk('saat+') ?><span>Fazla Mesai</span></div>
+            <div class="cf2-grup-bas"><?= $cfIk('saat+') ?><span>Fazla Mesai <small class="cf2-ek">(tüm işçi tipleri için TEK ücret)</small></span></div>
             <div class="cf2-izgara cf2-izgara--3">
                 <label class="cf2-alan">
                     <span class="cf2-etiket"><?= $cfIk('saat') ?>Fazla Mesai Tipi <b class="cf2-zorunlu">*</b></span>
@@ -446,24 +446,12 @@ render_flash();
                 </label>
                 <?php endif; ?>
             </div>
-            <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>Saatlik: 15 dk tolerans sonrası başlayan her saat yukarı yuvarlanır. Sabit: onaylanan FM için bir kez uygulanır.</span></p>
+            <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>Saatlik: 15 dk tolerans sonrası başlayan her saat yukarı yuvarlanır. Sabit: onaylanan FM için bir kez uygulanır. Fazla mesai kadın / erkek / rampacı / şeritçi için TEK ücrettir: kaydettiğiniz FM tipi ve ücreti bu çavuşun diğer işçi tiplerinin güncel fiyat satırlarına da yazılır (kesinleşmiş hakedişler değişmez).</span></p>
         </div>
         <?php if ($saatHazir): ?>
         <div class="cf2-grup" data-cf-grup="cift">
-            <div class="cf2-grup-bas"><?= $cfIk('gunes') ?><span>Çift Yevmiye <small class="cf2-ek">(isteğe bağlı)</small></span></div>
-            <div class="cf2-izgara">
-                <label class="cf2-alan">
-                    <span class="cf2-etiket"><?= $cfIk('para') ?>Çift Yevmiye Ücreti</span>
-                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
-                    <input type="text" name="double_day_rate" inputmode="decimal" placeholder="ör. 2000" value="<?= h($saatForm['double_day_rate']) ?>"></span>
-                </label>
-                <label class="cf2-alan">
-                    <span class="cf2-etiket"><?= $cfIk('saat') ?>Çift Yevmiye Eşik Saati</span>
-                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
-                    <input type="text" name="double_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 12" value="<?= h($saatForm['double_day_saat']) ?>"></span>
-                </label>
-            </div>
-            <p class="cf2-bilgi cf2-bilgi--mor"><?= $cfIk('bilgi') ?><span>Eşik saati kadar çalışılıp FM onayı bunu kapsıyorsa Tam ücretin YERİNE çift ücret ödenir; eşikten sonraki süre FM olur (Tam ile çift arası ayrıca ödenmez). Sabit FM tipinde çift gününe FM eklenmez. İkisi birlikte girilir ya da boş bırakılır.</span></p>
+            <div class="cf2-grup-bas"><?= $cfIk('gunes') ?><span>Çift Yevmiye</span></div>
+            <p class="cf2-bilgi cf2-bilgi--mor"><?= $cfIk('bilgi') ?><span>Çift yevmiye artık süreye göre DEĞİL, kişi başı işaretlenir (Mesai Detayı › Düzenle / Toplu İşlem). Ücret = o işçi tipinin <b>Tam mesai ücreti × 2</b>; ayrı çift ücreti girilmez.</span></p>
         </div>
         <?php else: ?>
         <p class="cf2-bilgi cf2-bilgi--mavi" id="cfSaatKurulum"><?= $cfIk('bilgi') ?><span>Tam / Yarım / FM saatleri ve Çift Yevmiye alanları için yönetici <a href="migrate.php">migrate.php</a>'den "Fiyat Dönemi Saatleri" kolonlarını kurmalıdır. Kurulana kadar Tam eşiği mesainin normal süresidir.</span></p>
@@ -589,10 +577,6 @@ $cfSaatDuzeltBtn = static function (array $o): string {
                 <input type="text" name="half_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 5"></label>
             <label class="cf2-alan"><span class="cf2-etiket">FM Başlangıç Saati</span>
                 <input type="text" name="overtime_start_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="boş = Tam saati"></label>
-            <label class="cf2-alan"><span class="cf2-etiket">Çift Yevmiye Eşiği (saat)</span>
-                <input type="text" name="double_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="boş = çift yok"></label>
-            <label class="cf2-alan"><span class="cf2-etiket">Çift Yevmiye Ücreti</span>
-                <input type="text" name="double_day_rate" inputmode="decimal" autocomplete="off" placeholder="boş = çift yok"></label>
             <label class="cf2-alan"><span class="cf2-etiket">Düzeltme Gerekçesi <b class="cf2-zorunlu">*</b></span>
                 <textarea name="gerekce" required maxlength="500" rows="2" placeholder="ör. Tam saati yanlış girilmişti"></textarea></label>
         </div>
@@ -607,7 +591,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
     var dlg = document.getElementById('cfSaatDuzelt');
     if (!dlg || typeof dlg.showModal !== 'function') return;
     var f = dlg.querySelector('form');
-    var alanlar = { full_day_saat: 'tam', half_day_saat: 'yarim', overtime_start_saat: 'fm', double_day_saat: 'cift', double_day_rate: 'ciftUcret' };
+    var alanlar = { full_day_saat: 'tam', half_day_saat: 'yarim', overtime_start_saat: 'fm' };
     document.addEventListener('click', function (e) {
         var b = e.target.closest('[data-cf-saat-duzelt]');
         if (!b) return;
