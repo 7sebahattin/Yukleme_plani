@@ -7057,3 +7057,47 @@ html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.fo
 html[data-theme="dark"] .bsz-sil { color: #fca5a5; border-color: #7f1d1d; }
 html[data-theme="dark"] .bsz-sil:hover { background: #450a0a; }
 .bsz-kart-sil { margin-top: 8px; }
+
+/* ===== Test ortamı şeridi (v504) — yalnız config/local.php'de APP_ORTAM='test' olan sitede basılır =====
+   Üstte ortada küçük sabit hap: tıklamayı engellemez (pointer-events:none), içeriği itmez. z-index topbar/sidebar
+   (100) ve bottomnav (500) üstünde, "yeni modal ≥ 600" kuralıyla aynı katmanda tutulur ama etiket/crop (3000) üstünde. */
+.test-serit {
+  position: fixed; top: 4px; left: 50%; transform: translateX(-50%);
+  z-index: 3500; pointer-events: none; white-space: nowrap;
+  max-width: calc(100vw - 24px); overflow: hidden; text-overflow: ellipsis;
+  padding: 2px 12px; border-radius: 999px;
+  background: #f59e0b; color: #1f1300; border: 1px solid #b45309;
+  font: 700 11px/16px system-ui, -apple-system, 'Segoe UI', sans-serif; letter-spacing: .02em;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+}
+@media print { .test-serit { display: none !important; } }
+
+/* ===== Şirket · Şube · Depo tanımları (Faz 0.1, v505) — program_tanimlari / sube_tanimlari / depo_tanimlari ===== */
+.sy-sekme { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+.sy-sekme a { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: #fff; color: var(--text); text-decoration: none; font-weight: 600; font-size: .9rem; }
+.sy-sekme a.aktif { background: var(--primary); border-color: var(--primary); color: #fff; }
+.sy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 14px; margin: 12px 0; }
+.sy-alan { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sy-genis { grid-column: 1 / -1; }
+.sy-etiket { font-size: .85rem; font-weight: 600; color: var(--muted); }
+.sy-etiket b { color: var(--danger); }
+.sy-ipucu { font-size: .78rem; color: var(--muted); }
+.sy-alan input[type="color"] { padding: 2px; height: 40px; width: 64px; }
+.sy-nokta { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; vertical-align: baseline; }
+.sy-pasif td { opacity: .55; }
+.sy-eylem { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.sy-eylem form { margin: 0; }
+.sy-baslik { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.sy-baslik h2 { margin: 0; }
+.sy-secim { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 6px 0; }
+.sy-secim label { display: flex; align-items: center; gap: 6px; font-size: .92rem; }
+.sy-rozet { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--primary-soft); color: var(--primary); white-space: nowrap; }
+.sy-rozet-pasif { background: var(--danger-soft); color: var(--danger); }
+.sy-rozet-gri { background: #eef0f3; color: var(--muted); }
+html[data-theme="dark"] .sy-sekme a { background: #1b2430; }
+html[data-theme="dark"] .sy-rozet-gri { background: #243040; }
+@media (max-width: 767px) {
+  .sy-gizle { display: none; }
+  .sy-sekme a { flex: 1 1 auto; text-align: center; }
+  .sy-grid { grid-template-columns: 1fr; }
+}
