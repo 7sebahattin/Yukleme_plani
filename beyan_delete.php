@@ -33,6 +33,8 @@ if (!$beyan) {
     exit;
 }
 
+if (!can_beyan_kart((string)$beyan['status'], 'delete')) forbidden('Bu beyanın bulunduğu bölümde silme yetkiniz yok.');   // v504
+
 if (!empty($beyan['deleted_at'])) {
     set_flash('error', 'Bu beyan zaten silinmiş.');
     header('Location: beyanlar.php');

@@ -31,6 +31,7 @@ if (!siparis_sema_hazir($pdo)) $metinHata(503, 'Sipariş modülü henüz kurulma
 $sev = siparis_sevkiyat($pdo, (int)($_GET['sid'] ?? 0));
 if ($sev === null) $metinHata(404, 'Sevkiyat bulunamadı.');
 if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+siparis_sev_kapi($sev, 'read', 'Bu bölümdeki sevkiyatları görüntüleme yetkiniz yok.');   // v504
 if (!in_array((string)$sev['durum'], ['mail_gonderildi', 'evrak_gonderildi'], true)) $metinHata(409, 'Evrak takımı taslağı yalnız mail gönderildikten sonra kurulur.');
 
 $pk = $pdo->prepare('SELECT dosya_adi FROM siparis_pkl WHERE sevkiyat_id = ?');

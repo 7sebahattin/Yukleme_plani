@@ -27,7 +27,7 @@ if ($__hks_user === null) {
 }
 if (!(can('hks.access') || (function_exists('is_admin') && is_admin()))) {
   http_response_code(403);
-  echo json_encode(['hata' => 'Bu işlem için yetkiniz yok (records.write).'], JSON_UNESCAPED_UNICODE);
+  echo json_encode(['hata' => 'Bu işlem için yetkiniz yok (Hal Bildirimi).'], JSON_UNESCAPED_UNICODE);
   exit;
 }
 
@@ -228,6 +228,31 @@ function hks_firma_yonetici_kapisi(array $g): void {
   }
 }
 
+// v504 — Hal Bildirimi eylem yetkisi: TEK harita (action → read|create|edit|delete|admin).
+// Salt okunur eylemler = CSRF muaf liste + listeler_yenile (referans önbelleği). Yazan eylemler
+// Gör'e ek olarak ilgili eylemi ister. taslak_gonder (HKS'e geri alınamaz gönderim, rüsum doğurur)
+// "Ekle" sınıfındadır. Bilinmeyen eylem 'read' sayılır ve switch'in default 404'üne düşer.
+// 403 gövdesinde `code` alanı YOK (app.html api() yalnız code===403'te CSRF tazeler).
+function hks_eylem_sinifi(string $action, array $g): string {
+  return match ($action) {
+    'firma_kaydet', 'firma_sil' => 'admin',
+    'kisi_kaydet' => (int)($g['id'] ?? 0) > 0 ? 'edit' : 'create',
+    'kisi_sil', 'taslak_sil' => 'delete',
+    'taslak_kaydet' => trim((string)($g['eskiTaslakId'] ?? '')) !== '' ? 'edit' : 'create',
+    'taslak_kopya_firmaya', 'taslak_gonder' => 'create',
+    'taslak_fiyat_yaz', 'belirsiz_isaret_kapat' => 'edit',
+    default => 'read',
+  };
+}
+function hks_eylem_kapisi(string $action, array $g): void {
+  $sinif = hks_eylem_sinifi($action, $g);
+  if ($sinif === 'admin') return;   // firma yönetimi kendi kapısında (hks_firma_yonetici_kapisi)
+  if (!role_hks_can($sinif)) {
+    $etiket = ['read' => 'görüntüleme', 'create' => 'ekleme / gönderme', 'edit' => 'düzenleme', 'delete' => 'silme'][$sinif] ?? $sinif;
+    hks_json_cikti(['hata' => 'Hal Bildirimi için ' . $etiket . ' yetkiniz yok.'], 403);
+  }
+}
+
 function hks_csrf_girdi(array $g): ?string {
   $baslik = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
   if (is_string($baslik) && $baslik !== '') return $baslik;
@@ -239,6 +264,9 @@ function hks_csrf_girdi(array $g): ?string {
 try {
   $action = $_GET['action'] ?? '';
   $g = hks_govde();
+
+  // ---- EYLEM YETKİSİ (v504): Gör/Ekle/Düzenle/Sil; CSRF'den ÖNCE (yetki 403'ü token 403'ünden önce gelir) ----
+  hks_eylem_kapisi((string)$action, $g);
 
   // ---- MERKEZİ CSRF KAPISI (v418) ----
   // Salt okunur eylemler dışındaki her şey (durum değiştiren, HKS'e gönderen, bilinmeyen
@@ -502,6 +530,12 @@ try {
       // bağı kapatıyor, düzenlenip gönderilen taslak beyana hiç yansımıyordu.
       $eskiId = trim((string)($g['eskiTaslakId'] ?? ''));
       unset($g['eskiTaslakId']);
+      // v505 — Düzenle sınıfı yalnız GERÇEKTEN var olan taslağı yeniden yazar; yoksa bu yeni kayıttır (Ekle gerekir).
+      if ($eskiId !== '' && !role_hks_can('create')) {
+        $var = $db->prepare('SELECT 1 FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+        $var->execute([$eskiId, trim((string)($g['firmaId'] ?? ''))]);
+        if (!$var->fetchColumn()) hks_json_cikti(['hata' => 'Düzenlenecek taslak bulunamadı; yeni taslak için ekleme yetkisi gerekir.'], 403);
+      }
       // v498: fiyatBekliyor / tamamlanacak YALNIZ beyan uçları tarafından yazılır; SPA
       // üretmez, istemciden geleni güvenme (bayrak taslağı kapıdan geçirmesin).
       if (is_array($g['ortak'] ?? null)) unset($g['ortak']['fiyatBekliyor'], $g['ortak']['tamamlanacak'], $g['ortak']['sifatBekliyor']);
@@ -515,6 +549,12 @@ try {
       if (!empty($sonuc['hata'])) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod'] ?? 400);
       if ($eskiId !== '' && function_exists('beyan_hks_taslak_tasi')) {
         beyan_hks_taslak_tasi($eskiId, (string)$sonuc['id']);
+      }
+      // v504 — düzenleme = yeni taslağı yaz + eskisini kaldır; eski taslak burada (Düzenle yetkisiyle) silinir,
+      // böylece Düzenle izni olup Sil izni olmayan kullanıcıda kopya kalmaz. SPA'nin sonraki taslak_sil çağrısı 0 satır siler.
+      if ($eskiId !== '' && $eskiId !== (string)$sonuc['id']) {
+        $esk = $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+        $esk->execute([$eskiId, trim((string)($g['firmaId'] ?? ''))]);
       }
       hks_json_cikti(['tamam' => true, 'id' => $sonuc['id']]);
     }

@@ -34,7 +34,7 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test']; }
-function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions($PERMS), true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions(beyan_expand_role_permissions($PERMS)), true); }
 function is_admin(): bool { return false; }
 function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }
@@ -893,7 +893,7 @@ ok('[plaka] arşivlenmiş beyanda hızlı giriş yok', strpos(render_beyan($B_PL
 $api_pl = (string)file_get_contents($ROOT . '/api_beyan_plaka.php');
 ok('[plaka] uç: POST + CSRF + yetki + yalnız vehicle_plate + audit',
    strpos($api_pl, "REQUEST_METHOD'] !== 'POST'") !== false && strpos($api_pl, 'csrf_check(') !== false
-   && strpos($api_pl, "can_beyan('write') && can_beyan('hks.write')") !== false
+   && strpos($api_pl, "can_beyan('edit') && can_beyan('hks.write')") !== false
    && preg_match('/UPDATE customs_declarations SET vehicle_plate = \?, updated_by = \?, updated_at = NOW\(\) WHERE id = \? AND deleted_at IS NULL/', $api_pl) === 1
    && strpos($api_pl, 'beyan_plaka_normalize(') !== false && strpos($api_pl, 'audit_log_event(') !== false);
 // Form temizliği (v340): parantez içi ipuçları ve alt metinler yok

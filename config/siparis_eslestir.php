@@ -1135,13 +1135,18 @@ function siparis_pdf_tur_kodu(array $doc, bool $hedefVar = false): string
  */
 /** Check the actual shipment mutation, after matching and before business writes. */
 function siparis_pipeline_authorize(PDO $pdo, string $action, ?int $shipmentId): void {
-    if (!role_matrix_page_can('siparis','ogl',$action)) throw new RuntimeException('Bu belge işlemi için OGL '.($action==='create'?'ekleme':'düzenleme').' yetkisi gerekir.');
-    if ($shipmentId !== null) {
-        $access = $pdo->prepare('SELECT id,depo FROM siparis_sevkiyatlar WHERE id = ?');
-        $access->execute([$shipmentId]);
-        $shipment = $access->fetch(PDO::FETCH_ASSOC) ?: null;
-        if ($shipment === null || !siparis_gorunur($shipment)) throw new RuntimeException('Bu sevkiyat erişim kapsamınızda değil.');
+    $msg = 'Bu belge işlemi için OGL '.($action==='create'?'ekleme':'düzenleme').' yetkisi gerekir.';
+    if ($shipmentId === null) {
+        // v504 — henüz sevkiyatı belli olmayan işlem: yeni kayıt İşlem Bekleyen kartı Ekle; aksi halde herhangi bir kartta eylem
+        if (!($action === 'create' ? role_ogl_can('', 'create') : role_ogl_any($action))) throw new RuntimeException($msg);
+        return;
     }
+    $access = $pdo->prepare('SELECT id,depo,durum FROM siparis_sevkiyatlar WHERE id = ?');
+    $access->execute([$shipmentId]);
+    $shipment = $access->fetch(PDO::FETCH_ASSOC) ?: null;
+    if ($shipment === null || !siparis_gorunur($shipment)) throw new RuntimeException('Bu sevkiyat erişim kapsamınızda değil.');
+    // v504 — sevkiyatın BULUNDUĞU bölümün (kart) yetkisi; Evrak/Kapanan sevkiyata mail/PDF ile içerik yazılamaz
+    if (!role_ogl_can((string)$shipment['durum'], $action === 'create' ? 'edit' : $action)) throw new RuntimeException($msg);
 }
 
 function siparis_belge_isle(PDO $pdo, int $belgeId, int $uid, ?int $hedefSevkiyatId = null): array

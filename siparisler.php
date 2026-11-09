@@ -27,8 +27,8 @@ if (!$hazir) {
     exit;
 }
 
-$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','create'));
-$sil = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
+$yaz = (can_siparis('write') && role_ogl_can('', 'create'));   // v504: yeni kayıt / belge = İşlem Bekleyen kartı Ekle
+$sil = (can_siparis('delete') && role_ogl_any('delete'));
 
 // ── filtreler (v382: liste + yazdırma ORTAK — config/siparis_core.php siparis_liste_filtre) ──
 $F = siparis_liste_filtre($_GET);
@@ -115,8 +115,7 @@ try {
         COALESCE(SUM(CASE WHEN s.acik_catisma > 0 THEN 1 ELSE 0 END),0) AS catisma,
         COALESCE(SUM(CASE WHEN s.var_po = 0 THEN 1 ELSE 0 END),0) AS po
         FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND " . $acikSql . $dsql);
-    $k->execute($dprm);
-    $kpi = array_map('intval', $k->fetch(PDO::FETCH_ASSOC) ?: $kpi);
+    if ($F['okAcik']) { $k->execute($dprm); $kpi = array_map('intval', $k->fetch(PDO::FETCH_ASSOC) ?: $kpi); }
 } catch (PDOException $e) {
     error_log('[siparisler] kpi: ' . $e->getMessage());
 }
@@ -126,7 +125,7 @@ try {
         FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL ' . $dsql);
     $c->execute($dprm);
     $__say = $c->fetch(PDO::FETCH_ASSOC) ?: [];
-    $kapaliSay = (int)($__say['kapali'] ?? 0); $evrakSay = (int)($__say['evrak'] ?? 0);
+    $kapaliSay = $F['okKapali'] ? (int)($__say['kapali'] ?? 0) : 0; $evrakSay = $F['okEvrak'] ? (int)($__say['evrak'] ?? 0) : 0;
 } catch (PDOException $e) {
     error_log('[siparisler] kapali/evrak say: ' . $e->getMessage());
 }
@@ -223,6 +222,13 @@ $chipler = [
     ['k' => 'po',      'et' => 'PO bekleyen',   'say' => $kpi['po'],      'url' => siparis_url(['durum' => 'acik', 'eksik' => 'po', 'catisma' => null, 'po' => null, 'acik_page' => null, 'evrak_page' => null, 'kapali_page' => null]),
         'aktif' => $f_eksik === 'po'],
 ];
+
+// v504 — yetkisiz karta ait KPI çipleri gösterilmez
+$chipler = array_values(array_filter($chipler, static function (array $c) use ($F): bool {
+    if ($c['k'] === 'evrak') return $F['okEvrak'];
+    if (in_array($c['k'], ['acik', 'arac', 'yolda', 'pkl', 'mail', 'po'], true)) return $F['okAcik'];
+    return $F['okAcik'] || $F['okEvrak'] || $F['okKapali'];
+}));
 
 $sayfalama = function (array $b, string $param): string {
     if ($b['sayfa_say'] <= 1) return '';
@@ -374,6 +380,7 @@ $yazdirEk = function (?string $bolumAdi): string {
       }
       echo '</section>';
   };
+  if (!$F['okAcik'] && !$F['okEvrak'] && !$F['okKapali']) echo '<div class="card sip-bos"><p>Bu sayfadaki sevkiyat bölümlerinden hiçbirini görüntüleme yetkiniz yok. Yetkili kişiden Roller ekranında ilgili bölümün “Gör” iznini isteyin.</p></div>';
   if ($tek) $bolumCiz($B_tek, 'Sonuçlar', 'sipSonuclar', 'acik_page', 'Bu filtreyle eşleşen sevkiyat yok.');
   if ($B_acik !== null) $bolumCiz($B_acik, 'İşlem Bekleyen Sevkiyatlar', 'sipAcik', 'acik_page', $filtreVar ? 'Bu filtreyle eşleşen açık sevkiyat yok.' : ($yaz ? 'Henüz açık sevkiyat yok. Yukarıdan PO, Loading List ya da Price Confirmation PDF\'i yükleyin.' : 'Henüz açık sevkiyat yok.'), '⏳', 'Araç, belge, PKL ya da mail bekleyen açık işler');
   if ($B_evrak !== null) $bolumCiz($B_evrak, 'Evrak Takımı Bekleyen Sevkiyatlar', 'sipEvrak', 'evrak_page',

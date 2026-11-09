@@ -21,6 +21,7 @@ $sid = (int)($_GET['id'] ?? 0);
 $sev = siparis_sevkiyat($pdo, $sid);
 if ($sev === null) { set_flash('error', 'Sevkiyat bulunamadı.'); header('Location: siparisler.php'); exit; }
 if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+siparis_sev_kapi($sev, 'read', 'Bu bölümdeki sevkiyatları görüntüleme yetkiniz yok.');   // v504
 $geri = 'siparis_view.php?id=' . $sid . '#belgeler';
 
 $eskiDahil = ($_GET['eski'] ?? '') === '1';

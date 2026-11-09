@@ -42,6 +42,7 @@ try {
     $yanit(500, ['ok' => false, 'hata' => 'Sevkiyat okunamadı.']);
 }
 if ($okunan === null) $yanit(404, ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.']);
+if (!role_ogl_can((string)($okunan['sev']['durum'] ?? ''), 'read')) $yanit(403, ['ok' => false, 'hata' => 'Bu bölümdeki sevkiyatları görüntüleme yetkiniz yok.']);   // v504
 
 $veri = siparis_wp_veri($okunan, ['parti_yetki' => function_exists('can_beyan') && can_beyan('read')]);
 siparis_audit('siparis_wp_paylas', $sid, null, ['kalem' => $veri['kalem_say']], (int)$auth_user['id']);

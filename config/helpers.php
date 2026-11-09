@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v504');
+    define('APP_SURUM', 'v505');
 }
 
 // --- HTML kaçışı ---
@@ -373,7 +373,32 @@ function can_yukleme_sil(): bool {
 function beyan_sayfa_erisimi(): bool {
     if (function_exists('is_admin') && is_admin()) return true;
     if (!function_exists('can')) return false;
-    return can('beyan.read') || can('beyan.yukleme_bildir');
+    return can('beyan.read') || can('beyan.yukleme_bildir') || can('beyan.bsz.read');
+}
+
+// v504 — Beyan kart (bölüm) kapıları. Beyanlar sekmesi: İşlem Bekleyen (bek) / Kapanan (kap);
+// Beyansız Yüklemeler sekmesi: Bildirim Bekleyenler (bsz_bek) / Yapılanlar (bsz_yap).
+// Eski roller role_matrix_expand_permissions() ile kartlara genişler; kapı kayda bakar.
+function beyan_kart_of(?string $status): string {
+    return in_array((string)$status, beyan_kapali_durumlar(), true) ? 'kap' : 'bek';
+}
+/** Kayıt durumuna göre: sayfa Gör (beyan.read) + kartın eylemi (read|edit|delete). */
+function can_beyan_kart(?string $status, string $action): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    if (!function_exists('can') || !can('beyan.read')) return false;
+    return can('beyan.' . beyan_kart_of($status) . '.' . $action);
+}
+/** Beyansız Yüklemeler sekmesini görme kapısı (Yükleme Bildir tek başına da yeter — v498). */
+function can_bsz_gor(): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    return function_exists('can') && (can('beyan.bsz.read') || can('beyan.yukleme_bildir'));
+}
+/** Beyansız kart eylemi: $kart 'bek'|'yap'; $action 'read'|'delete'. */
+function can_bsz_kart(string $kart, string $action): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    if (!function_exists('can')) return false;
+    if ($action === 'read' && $kart === 'bek' && can('beyan.yukleme_bildir')) return true;   // kayıt açan, açtığı kartı görür
+    return can('beyan.bsz_' . $kart . '.' . $action);
 }
 
 // Kullanıcının GERÇEKTEN açabildiği ilk sayfa (yoksa null).

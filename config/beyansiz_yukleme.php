@@ -215,6 +215,10 @@ function bsz_kaldir(int $id): array {
     $durum = (string)$r['durum'];
     $tid = (string)($r['taslak_id'] ?? '');
     $bekliyor = $durum === 'taslak' && $tid !== '' && in_array($tid, bsz_canli_taslak_idleri([$tid]), true);
+    // v504 — kart yetkisi: Bildirim Bekleyenler / Bildirim Yapılanlar kartının Sil izni
+    if (function_exists('can_bsz_kart') && !can_bsz_kart($durum === 'silindi' ? 'yap' : 'bek', 'delete')) {
+        return ['ok' => false, 'kod' => 403, 'hata' => 'Bu kartta silme yetkiniz yok.'];
+    }
     if ($durum === 'silindi') {
         // Taslağı zaten silinmiş kayıt: Hal Kayıt'a dokunulmaz, yalnız satır kaldırılır.
         try {
