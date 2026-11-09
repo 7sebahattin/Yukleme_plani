@@ -268,6 +268,60 @@ function pdks_yevmiye_hazir(?PDO $pdo = null): bool
     return pdks_faz8b_kolon_var($pdo, PDKS_YEVMIYE_TABLO, PDKS_YEVMIYE_KOLON);
 }
 
+// =========================================================
+// ÇİFT YEVMİYE BAYRAĞI (v503 — sahip kararı)
+// daily_worker_work_periods.cift_yevmiye — TEK nullable kolon (NULL/0 = çift değil, bugünkü davranış).
+// 1 ise o KİŞİ-GÜN çift yevmiyedir: ödeme = işçi tipinin Tam günlük ücreti (daily_rate) × 2; süre/FM/Yarım
+// mantığı ATLANIR (TEK doğruluk: pdks_faz8b_donem_siniflandir). Eski süre bazlı çift (double_day_minutes /
+// double_day_rate) DEVRE DIŞI (esikler() yok sayar; kolonlar ve eski veri durur). Kendi migrate/hazır çifti —
+// pdks_faz8b_sema_hazir()'e BİLEREK EKLENMEZ. Kurulum yalnız migrate.php › «Çift yevmiye alanı» kartı (açık GO).
+// Bayrağı yazan TEK düşük seviye fonksiyon: pdks_cift_yevmiye_yaz() — toplu ekran ekleme INSERT'ünde kolonu
+// PDKS_CIFT_KOLON adıyla doğrudan satıra koyar (pdks_faz8j_satir_yaz).
+// =========================================================
+
+const PDKS_CIFT_TABLO = 'daily_worker_work_periods';
+const PDKS_CIFT_KOLON = 'cift_yevmiye';
+
+/** [kolon, tanım] — yalnız ADD COLUMN. */
+function pdks_cift_kolon_tanimi(): array
+{
+    return [[PDKS_CIFT_KOLON, 'TINYINT UNSIGNED NULL DEFAULT NULL']];
+}
+
+/** Kolonu ekler (idempotent). @return list<array{adim:string,durum:string,mesaj:string}> */
+function pdks_cift_kolon_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+    foreach (pdks_cift_kolon_tanimi() as [$kolon, $tanim]) {
+        $rapor[] = pdks_faz8b_kolon_ekle($pdo, PDKS_CIFT_TABLO, $kolon, $tanim, 'status');
+    }
+    pdks_gunluk_kolon_onbellek_temizle($pdo, PDKS_CIFT_TABLO);
+    return $rapor;
+}
+
+/** Tablo + kolon var mı? */
+function pdks_cift_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_tablo_var($pdo, PDKS_CIFT_TABLO)) return false;
+    return pdks_faz8b_kolon_var($pdo, PDKS_CIFT_TABLO, PDKS_CIFT_KOLON);
+}
+
+/**
+ * Bir dönemin çift yevmiye bayrağını yazar (düşük seviye, tx/yetki/kesin-hakediş denetimi ÇAĞIRANDA —
+ * çağıran mesai kilidi altında kesin hakedişi reddetmeli ve taslağı needs_recalculation yapmalı).
+ * true = kolon var ve UPDATE çalıştı; false = kolon kurulu değil (fail-closed, hiçbir şey yazılmaz).
+ * Değer 0 → NULL yazılır (bayrak yok = bugünkü davranış).
+ */
+function pdks_cift_yevmiye_yaz(PDO $pdo, int $periodId, bool $cift): bool
+{
+    if (!pdks_cift_hazir($pdo)) return false;
+    $pdo->prepare('UPDATE ' . PDKS_CIFT_TABLO . ' SET ' . PDKS_CIFT_KOLON . ' = ? WHERE id = ?')
+        ->execute([$cift ? 1 : null, $periodId]);
+    return true;
+}
+
 /**
  * Saat girdisi → dakika. "9" → 540, "9:30" / "09.30" → 570. Boş → null.
  * Geçersiz → -1 (çağıran hata mesajı üretir). Aralık denetimi ÇAĞIRANDA.
