@@ -1,6 +1,6 @@
 # Deploy Workflow — "Canlıya Al" Talimatı
 
-**Proje:** Yükleme Planı — canlı `asya.scai.tr` · test `nuverna.derspros.com.tr`
+**Proje:** Yükleme Planı — canlı `asya.scai.tr` · test `test.scai.tr` (v504; eski test `nuverna.derspros.com.tr` kapanıyor)
 **Kapsam:** Kullanıcı "canlıya al" / "yayına al" / "deploy et" dediğinde Claude'un izleyeceği adımlar.
 **Not:** Bu dosya Claude'un kendi hafızası için yazıldı (CLAUDE.md'den referans verilir). Kullanıcı bu süreci değiştirirse burayı güncelle.
 
@@ -8,32 +8,48 @@
 
 ## Özet (tek cümle)
 
-**`main`'e merge = canlıya çıktı.** Repoda bir GitHub **webhook**'u var; `main`'e her push'ta
-sunucudaki `https://asya.scai.tr/deploy.php` (canlı) ve `https://nuverna.derspros.com.tr/deploy.php`
-(test) tetikleniyor ve dosyalar dakikalar
-içinde canlıya iniyor. Claude'un yapması gereken tek şey PR açıp merge etmek; **kullanıcıdan
-elle bir şey çalıştırmasını İSTEME.**
+**`main`'e merge = canlıya çıktı; `testasya`'ya merge = yalnız test sitesine çıktı (v504).** Repoda GitHub
+**webhook**'ları var: `main` push'u `https://asya.scai.tr/deploy.php`'yi (canlı; nuverna webhook'u silinene kadar
+onu da), `testasya` push'u `https://test.scai.tr/deploy.php`'yi tetikler ve dosyalar dakikalar içinde iner.
+Claude'un yapması gereken tek şey PR açıp merge etmek; **kullanıcıdan elle bir şey çalıştırmasını İSTEME.**
+Muhasebe geliştirmesinde akış önce `testasya`, kullanıcı onayından sonra `main` (bkz. §0).
 
 ---
 
-## 0. İki site (2026-09-27'den beri)
+## 0. Siteler ve dallar (v504)
 
-| | Canlı | Test |
-|---|---|---|
-| Adres | `https://asya.scai.tr` | `https://nuverna.derspros.com.tr` |
-| cPanel klasörü | `/asya.scai.tr` | `/nuverna.derspros.com.tr` |
-| Veritabanı | `derspros_asya` | `derspros_yukleme_plani` |
+| | Canlı | Test (yeni) | Eski test (kapanıyor) |
+|---|---|---|---|
+| Adres | `https://asya.scai.tr` | `https://test.scai.tr` | `https://nuverna.derspros.com.tr` |
+| cPanel klasörü | `/asya.scai.tr` | `/test.scai.tr` | `/nuverna.derspros.com.tr` |
+| Dal | `main` | `testasya` | `main` (webhook silinene kadar) |
+| Veritabanı | `derspros_asya` | ayrı (canlının kopyası) | `derspros_yukleme_plani` |
+| `APP_ORTAM` | tanımsız (= canlı) | `test` | — |
 
 - Aynı cPanel hesabı (`talom.wlsrv.com`, kullanıcı `derspros`), aynı PHP 8.3.
-- Canlı site, test klasörünün **kopyalanmasıyla** kuruldu; git'te olmayan `config/db.php`
-  (sunucuya özgü DB bilgileri), `config/local.php` (`HKS_CRED_KEY`), kökteki `deploy.php`,
-  `.htaccess` ve `uploads/` bu yüzden iki sitede de var. **Boş klasöre GitHub'dan kurulum
-  YAPMA:** deploy `config/db.php`'yi repodaki `root`/boş şifre hâliyle yazar, site açılmaz.
-- `scai.tr` DNS'i hosting.com.tr'de (`ns1/ns2.hosting.com.tr`); cPanel'e domain eklemek
-  zone'u kendiliğinden açmadı, destek talebiyle açıldı. SSL: Let's Encrypt (cPanel SSL/TLS Wizard).
-- `derspros.com.tr` 25.12.2026'da bitiyor ve yenilenmeyecek → test sitesi o tarihte kapanır.
-  Gerekirse test `test.scai.tr` altına aynı yöntemle taşınır.
-- Şu an iki site de `main`'i izler: merge edilen her şey test ve canlıya birlikte iner.
+- Siteler birbirinin **klasör kopyası** olarak kuruldu; git'te olmayan `config/db.php` (sunucuya özgü DB bilgileri), `config/local.php` (`HKS_CRED_KEY`, `MAIL_MASTER_KEY`, `APP_ORTAM`), kökteki `deploy.php`, `.htaccess` ve `uploads/` bu yüzden her sitede ayrıdır. **Boş klasöre GitHub'dan kurulum YAPMA:** deploy `config/db.php`'yi repodaki `root`/boş şifre hâliyle yazar, site açılmaz.
+- `scai.tr` DNS'i hosting.com.tr'de (`ns1/ns2.hosting.com.tr`); cPanel'e domain eklemek zone'u kendiliğinden açmadı, destek talebiyle açıldı. SSL: Let's Encrypt (cPanel SSL/TLS Wizard).
+- `derspros.com.tr` 25.12.2026'da bitiyor ve yenilenmeyecek → nuverna o tarihte kapanır; `nuverna/deploy.php` webhook'unu kullanıcı GitHub'dan siler.
+
+### Dal akışı (muhasebe geliştirmesi)
+
+1. Her iş kendi dalında yapılır, PR **`testasya`** dalına açılır ve merge edilir → webhook yalnız `test.scai.tr`'yi günceller. Veritabanı değişikliği (migrate.php kartları) test sitesinde kullanıcının "GO"suyla çalıştırılır.
+2. Kullanıcı test sitesinde dener.
+3. Onay gelince `testasya` → `main` PR'ı açılır ve merge edilir → `asya.scai.tr` güncellenir (canlıda migrate.php yine yalnız "GO" ile).
+4. Acil canlı düzeltmesi doğrudan `main`'e gidebilir; ardından `testasya` `main` ile eşlenir (`main`'i `testasya`'ya merge et).
+5. Dal adı test sitesinde kökteki `deploy.php` içindeki `DEPLOY_BRANCH` sabitidir (`'testasya'`). Dalın adı değişirse orası da değişmeli.
+
+### Test ortamı kapısı (`config/ortam.php`)
+
+Test sitesi canlı veritabanının kopyasıyla çalıştığı için dış dünyaya giden HER yol kodda kapalıdır (`APP_ORTAM='test'`): HKS SOAP (`hks_soap_cagir`, `endpoint_test.php`), IMAP/SMTP (`MailSocketStream::baglan`) ve mail çevirisi (`mail_http_istek`). Üstte turuncu "TEST ORTAMI" hapı ve sekme başlığında `[TEST]` görünür. Tanımsız sabit = canlı; `canli` dışındaki her değer test sayılır.
+
+Test sitesinin `config/local.php`'sinde (kopyadan sonra elle):
+- `HKS_CRED_KEY` → yeni, rastgele, 40+ karakter (silinmez: silinirse kodda hazır bir yedek anahtara düşer). Kopyadaki HKS şifreleri çözülemez.
+- `MAIL_MASTER_KEY` ve `MAIL_TRANSLATE_KEY` → silinir.
+- `define('APP_ORTAM', 'test');` → eklenir.
+- Test sitesi için cPanel'de cron EKLENMEZ (mail senkronu, yedek).
+
+Yeni bir dış bağlantı yolu eklenirse aynı kapı kurulur; `php scripts/test_ortami_smoke.php` kapısız yolu yakalar.
 
 ---
 

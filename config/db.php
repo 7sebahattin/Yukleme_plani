@@ -12,6 +12,8 @@ date_default_timezone_set('Europe/Istanbul');
 if (file_exists(__DIR__ . '/local.php')) {
     require_once __DIR__ . '/local.php';
 }
+// Çalışma ortamı (canlı/test) — APP_ORTAM yardımcıları (v504)
+require_once __DIR__ . '/ortam.php';
 
 // --- DB AYARLARI ---
 const DB_HOST    = 'localhost';
