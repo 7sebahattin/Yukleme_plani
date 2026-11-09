@@ -154,5 +154,15 @@ foreach (['siparis_acik', 'siparis_evrak', 'siparis_kapali', 'beyan_bek', 'beyan
 $hksRow = null; foreach ($schema['Operasyon'] as $r) if ($r['key'] === 'hks') $hksRow = $r;
 t('hks satırı: Gör/Ekle/Düzenle/Sil', $hksRow && array_keys($hksRow['actions']) === ['read', 'create', 'edit', 'delete']);
 
+// v506 — Ayarlar yalnız Gör yetkisine kapalı; uyarı yok; roller matrisinde sayfa başına renk
+$ay = (string)file_get_contents($root . '/siparis_ayarlar.php');
+t('ayarlar: yalnız Gör yetkisi forbidden', str_contains($ay, '$ekle || $yaz || $sil') && str_contains($ay, "forbidden('Sipariş ayarları"));
+$sp = (string)file_get_contents($root . '/siparisler.php');
+t('liste: Ayarlar bağlantısı ekle/düzenle/sil koşullu', (bool)preg_match("/role_ogl_any\('create'\).*?siparis_ayarlar\.php/s", $sp));
+t('liste: Salt okunur uyarısı kaldırıldı', !str_contains($sp, 'Salt okunur yetkiniz var'));
+$rl = (string)file_get_contents($root . '/roles.php');
+t('roles: satır tonu (alt başlıklar sayfayla aynı)', str_contains($rl, "rol-tone-") && str_contains($rl, '$depth + 1, $tone'));
+t('css: 6 ton + koyu tema uyumlu yarı saydam', substr_count((string)file_get_contents($root . '/assets/style.css'), 'tr.rol-tone-') >= 6);
+
 echo "Role sections: $ok geçti, $fail kaldı\n";
 exit($fail ? 1 : 0);
