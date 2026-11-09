@@ -75,5 +75,9 @@ t('ajax: coklu_grup yalnız sunucu', !str_contains($aj, "\$__tpIn['coklu_grup']"
 $fz = (string)file_get_contents($ROOT . '/config/pdks_toplu_hizli.php');
 t('saf fonksiyon: DB/INSERT yok', !preg_match('/\b(INSERT|UPDATE|DELETE|db\(\)|\$pdo)\b/i', $fz));
 
+$f8 = (string)file_get_contents($ROOT . '/config/pdks_faz8j.php');
+t('çift bayrağı: kolon PDKS_CIFT_KOLON adıyla + fail-closed (satir_yaz)', str_contains($f8, "', ' . PDKS_CIFT_KOLON") && str_contains($f8, 'Çift yevmiye alanı kurulmamış'));
+t('çift bayrağı: yalnız coklu_grup (kod yolu)', str_contains($f8, "\$cift = \$coklu && !empty(\$g['cift'])"));
+t('INSERT dönem hâlâ TEK yerde', substr_count($f8, 'INSERT INTO daily_worker_work_periods') === 1);
 echo "pdks_toplu_hizli_smoke: $ok ok, $fail fail\n";
 exit($fail ? 1 : 0);
