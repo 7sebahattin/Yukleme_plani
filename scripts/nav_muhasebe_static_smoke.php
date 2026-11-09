@@ -24,6 +24,8 @@ if (preg_match('/function nav_alt_sayfalar\(\): array \{(.*?)\n\}\n/s', $helpers
 }
 ok('nav_alt_sayfalar anahtarları okundu', count($altKeys) > 5);
 
+// Gerçek ekrana dönüşen sayfalar (yer tutucu/yönlendirme değil): Faz 0.1 (v505)
+$GERCEK = ['program_tanimlari.php', 'sube_tanimlari.php', 'depo_tanimlari.php'];
 $gorulen = [];
 foreach ($gruplar as $slug => $g) {
     ok("slug tekil: $slug", !isset($gorulen["slug:$slug"]));
@@ -40,7 +42,11 @@ foreach ($gruplar as $slug => $g) {
         ok("$dosya: <?php ile başlar", str_starts_with($s, '<?php'));
         ok("$dosya: require_login()", str_contains($s, 'require_login()'));
         ok("$dosya: is_admin() kapısı", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
-        if (preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
+        if (in_array($dosya, $GERCEK, true)) {
+            // v505: yer tutucu/yönlendirme değil, gerçek yönetim ekranı (kapı + CSRF + şablon zorunlu)
+            ok("$dosya: gerçek ekran (render_header/render_footer)", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: POST'lar csrf_check ile", str_contains($s, "csrf_check(\$_POST['csrf'] ?? null)"));
+        } elseif (preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
             $hedef = explode('?', $lm[1])[0];
             ok("$dosya: yönlendirme hedefi var ($hedef)", is_file($ROOT . '/' . $hedef));
             ok("$dosya: yönlendirme exit'li", (bool)preg_match('/header\([^;]+\);\s*exit;/', $s));
