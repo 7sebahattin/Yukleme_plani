@@ -7057,3 +7057,22 @@ html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.fo
 html[data-theme="dark"] .bsz-sil { color: #fca5a5; border-color: #7f1d1d; }
 html[data-theme="dark"] .bsz-sil:hover { background: #450a0a; }
 .bsz-kart-sil { margin-top: 8px; }
+
+/* v506 — Roller matrisi: her sayfa kendi renginde, alt başlıkları (kartlar) sayfayla AYNI renk. Yarı saydam ton: açık + koyu temada çalışır. */
+.rol-matrix-table tbody tr.rol-tone-0 { --rol-tone:37,99,235; }
+.rol-matrix-table tbody tr.rol-tone-1 { --rol-tone:22,163,74; }
+.rol-matrix-table tbody tr.rol-tone-2 { --rol-tone:217,119,6; }
+.rol-matrix-table tbody tr.rol-tone-3 { --rol-tone:147,51,234; }
+.rol-matrix-table tbody tr.rol-tone-4 { --rol-tone:219,39,119; }
+.rol-matrix-table tbody tr.rol-tone-5 { --rol-tone:8,145,178; }
+.rol-matrix-table tbody tr[class*="rol-tone-"] > th,
+.rol-matrix-table tbody tr[class*="rol-tone-"] > td { background:rgba(var(--rol-tone),.09); }
+.rol-matrix-table tbody tr[class*="rol-tone-"] > th:first-child { box-shadow:inset 4px 0 0 rgb(var(--rol-tone)); }
+.rol-matrix-table tbody tr[class*="rol-tone-"]:hover > th,
+.rol-matrix-table tbody tr[class*="rol-tone-"]:hover > td { background:rgba(var(--rol-tone),.16); }
+.rol-matrix-table tbody tr.rol-matrix-extra[class*="rol-tone-"] > td { background:rgba(var(--rol-tone),.09); box-shadow:inset 4px 0 0 rgb(var(--rol-tone)); }
+@media (max-width: 767px) {
+  .rol-matrix-table tbody tr.rol-matrix-row[class*="rol-tone-"] { background:rgba(var(--rol-tone),.09); box-shadow:inset 4px 0 0 rgb(var(--rol-tone)); }
+  .rol-matrix-table tbody tr.rol-matrix-row[class*="rol-tone-"] > th,
+  .rol-matrix-table tbody tr.rol-matrix-row[class*="rol-tone-"] > td { background:transparent; box-shadow:none; }
+}

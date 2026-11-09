@@ -27,6 +27,9 @@ $pdo   = db();
 $hazir = siparis_sema_hazir($pdo);
 $yaz = (can_siparis('write') && role_ogl_any('edit'));
 $sil = (can_siparis('delete') && role_ogl_any('delete'));
+// v506 — yalnız Gör yetkisi olan Ayarlar'ı görmez; Ekle/Düzenle/Sil gerekir (bağlantı da aynı koşulla gizlenir)
+$ekle = (can_siparis('write') && role_ogl_any('create'));
+if (!($ekle || $yaz || $sil)) forbidden('Sipariş ayarları için ekleme, düzenleme ya da silme yetkisi gerekir.');
 $uid = (int)$auth_user['id'];
 
 if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {

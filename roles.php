@@ -84,18 +84,21 @@ function render_matrix_control(array $action, array $checked, string $prefix, st
     $id = $prefix . '_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $row . '_' . $kind . '_' . $perm);
     return '<label class="rol-switch" for="' . h($id) . '" title="' . h($label) . '"><input type="checkbox" role="switch" id="' . h($id) . '" name="permissions[]" value="' . h($perm) . '" aria-label="' . h($row . ' — ' . $label) . '" ' . (in_array($perm, $checked, true) ? 'checked' : '') . '><span class="rol-switch-track" aria-hidden="true"></span><span class="rol-switch-label">' . h($label) . '</span></label>';
 }
-function render_matrix_rows(array $rows, array $checked, string $prefix, array &$used, string $parent = '', int $depth = 0): void {
+function render_matrix_rows(array $rows, array $checked, string $prefix, array &$used, string $parent = '', int $depth = 0, int $parentTone = -1): void {
     $columns = ['read'=>'Gör', 'create'=>'Ekle', 'edit'=>'Düzenle', 'delete'=>'Sil'];
     foreach ($rows as $index => $row) {
         $key = (string)($row['key'] ?? $index);
         $path = $parent === '' ? $key : $parent . '/' . $key;
+        // v506 — her sayfa kendi renginde; alt başlıkları (kartlar) sayfanın rengini paylaşır
+        $tone = $parentTone >= 0 ? $parentTone : ((int)$index % 6);
+        $toneClass = ' rol-tone-' . $tone;
         $label = (string)($row['label'] ?? $key);
         $actions = $row['actions'] ?? [];
         $children = $row['children'] ?? [];
         $extras = array_diff_key($actions, $columns);
         $expandable = $children || $extras;
         $adminOnly = !empty($row['admin_only']);
-        echo '<tr class="rol-matrix-row" data-path="' . h($path) . '" data-parent="' . h($parent) . '" data-label="' . h($label) . '" data-depth="' . $depth . '"><th scope="row"><div class="rol-row-heading" style="--rol-depth:' . $depth . '">';
+        echo '<tr class="rol-matrix-row' . $toneClass . '" data-path="' . h($path) . '" data-parent="' . h($parent) . '" data-label="' . h($label) . '" data-depth="' . $depth . '"><th scope="row"><div class="rol-row-heading" style="--rol-depth:' . $depth . '">';
         if ($expandable) echo '<button type="button" class="rol-row-expand" aria-expanded="false" aria-label="' . h($label . ' alt başlıklarını aç') . '"><span aria-hidden="true">›</span></button>';
         else echo '<span class="rol-row-spacer" aria-hidden="true"></span>';
         echo '<div><span class="rol-row-title">' . h($label) . '</span>';
@@ -110,13 +113,13 @@ function render_matrix_rows(array $rows, array $checked, string $prefix, array &
         }
         echo '</tr>';
         if ($extras) {
-            echo '<tr class="rol-matrix-extra" data-path="' . h($path . '/_actions') . '" data-parent="' . h($path) . '" data-label="' . h($label . ' diğer yetkiler') . '"><td colspan="5"><div class="rol-extra-permissions"><strong>Diğer yetkiler</strong>';
+            echo '<tr class="rol-matrix-extra' . $toneClass . '" data-path="' . h($path . '/_actions') . '" data-parent="' . h($path) . '" data-label="' . h($label . ' diğer yetkiler') . '"><td colspan="5"><div class="rol-extra-permissions"><strong>Diğer yetkiler</strong>';
             foreach ($extras as $kind => $action) {
                 echo '<div class="rol-extra-item"><span>' . h((string)($action['label'] ?? $kind)) . '</span>' . render_matrix_control($action, $checked, $prefix, $label, (string)$kind, $used) . '</div>';
             }
             echo '</div></td></tr>';
         }
-        if ($children) render_matrix_rows($children, $checked, $prefix, $used, $path, $depth + 1);
+        if ($children) render_matrix_rows($children, $checked, $prefix, $used, $path, $depth + 1, $tone);
     }
 }
 function render_permission_grid(array $catalog, array $checked, string $prefix): void {

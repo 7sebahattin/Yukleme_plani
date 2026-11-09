@@ -183,7 +183,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
 
         // ── liste (izleyici) ──
         ({ ctx, page } = await ac('liste_viewer', w, h));
-        ok(`[${w}] izleyici listesi: yükleme formu yok, pasif düğmenin nedeni görünür`, !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(() => /Salt okunur/.test(document.querySelector('#sipSaltOkunur').textContent)));
+        ok(`[${w}] izleyici listesi: yükleme formu yok, salt okunur uyarısı YOK`, !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(() => !document.querySelector('#sipSaltOkunur')));
         await ctx.close();
 
         // ── detay ──

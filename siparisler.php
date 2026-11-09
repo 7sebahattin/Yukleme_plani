@@ -276,15 +276,11 @@ $yazdirEk = function (?string $bolumAdi): string {
         <button class="btn pc-kebab" type="button" title="Diğer işlemler" aria-label="Diğer işlemler">⋮</button>
         <div class="pc-dropdown" hidden>
           <?php if ($yaz): ?><button type="button" data-sip-ac="sipYeniModal">➕ Elle sevkiyat aç</button><?php endif; ?>
-          <a href="siparis_ayarlar.php">⚙ Ayarlar (sayaçlar, profiller)</a>
+          <?php if ((can_siparis('write') && (role_ogl_any('create') || role_ogl_any('edit'))) || $sil): ?><a href="siparis_ayarlar.php">⚙ Ayarlar (sayaçlar, profiller)</a><?php endif; ?>
         </div>
       </div>
     </div>
   </div>
-  <?php if (!$yaz): ?>
-    <p class="sip-bilgi" id="sipSaltOkunur" role="note">Salt okunur yetkiniz var: belge yükleme, düzenleme ve durum değiştirme kapalıdır (gerekli yetki: siparis.write).</p>
-  <?php endif; ?>
-
   <?= sipui_yukleme_sonuc_html($yuklemeSonuc) ?>
 
   <?php if ($yaz): ?>
