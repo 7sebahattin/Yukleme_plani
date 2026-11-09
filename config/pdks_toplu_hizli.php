@@ -6,10 +6,12 @@
 // "Fazla mesai" alanı: N kişi × S saat → kadın/erkek sayısına ORANTILI dağıtılır, çıkış uzar.
 // Yazma yolu DEĞİŞMEDİ: bu dosya yalnız pdks_faz8j_toplu_hazirla()'nın beklediği `gruplar`ı üretir.
 // JS aynası: _puantaj_toplu.php içindeki fmDagit() — kural AYNI olmalı (test denetler).
-// ÇÖZÜLMEMİŞ (sahip yanıtı bekleniyor): yarım mesai varsayılan saatleri ve kadın yarım — burada YOK.
+// Yarım mesai: 08:00–12:30 (Kadın/Erkek). FM havuzu: Kadın Tam, Erkek Tam, Kadın Yarım, Erkek Yarım, Şeritçi (Rampacı DEĞİL).
+// Çift yevmiye kişi sayısı: bayrak altyapısı başka ajanda — BURADA YOK.
 // =========================================================
 const PDKS_TOPLU_HIZLI_GIRIS = '08:00';
 const PDKS_TOPLU_HIZLI_CIKIS = '17:00';
+const PDKS_TOPLU_HIZLI_YARIM_CIKIS = '12:30';   // sahip kararı: yarım mesai 08:00–12:30
 const PDKS_TOPLU_FM_UST_DK = 720;   // en çok 12 sa FM
 
 /**
@@ -46,50 +48,62 @@ function pdks_toplu_fm_dakika($saat): ?int {
     return $dk;
 }
 
+/** FM havuzu kategori sırası (beraberlik sırası). */
+const PDKS_TOPLU_FM_HAVUZ = ['KADIN_TAM', 'ERKEK_TAM', 'KADIN_YARIM', 'ERKEK_YARIM', 'SERITCI'];
+
 /**
  * "hizli" girdisinden toplu_hazirla `gruplar`ı üretir.
- * @param array $hizli ['tam'=>[tipId=>adet], 'fm'=>['kisi'=>n,'saat'=>s]]
+ * @param array $hizli ['tam'=>[tipId=>adet], 'yarim'=>[tipId=>adet] (yalnız KADIN/ERKEK), 'fm'=>['kisi'=>n,'saat'=>s]]
  * @param array<int,string> $tipKod tipId => KOD (KADIN/ERKEK/SERITCI/RAMPACI)
  * @return array{gruplar:array, hata:?string, dagilim:array}
- * FM havuzu = yalnız KADIN + ERKEK Tam sayıları (şeritçi/rampacı/yarım havuza girmez — sahip onayı bekliyor).
+ * FM havuzu = Kadın Tam, Erkek Tam, Kadın Yarım, Erkek Yarım, Şeritçi; en büyük kalanla orantılı.
+ * FM alan yarım kişinin çıkışı 12:30 + FM olur. Rampacı havuza girmez (yalnız Tam).
  */
 function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate): array {
     $cik = ['gruplar' => [], 'hata' => null, 'dagilim' => []];
-    $tam = [];
-    foreach ((is_array($hizli['tam'] ?? null) ? $hizli['tam'] : []) as $tid => $n) {
-        $tid = (int)$tid; $n = is_scalar($n) ? (int)$n : 0;
-        if ($tid > 0 && isset($tipKod[$tid]) && $n > 0) $tam[$tid] = $n;
+    $adetler = [];   // [tipId, tur('TAM'|'YARIM'), adet]
+    foreach (['tam' => 'TAM', 'yarim' => 'YARIM'] as $anahtar => $tur) {
+        foreach ((is_array($hizli[$anahtar] ?? null) ? $hizli[$anahtar] : []) as $tid => $n) {
+            $tid = (int)$tid; $n = is_scalar($n) ? (int)$n : 0;
+            if ($tid < 1 || !isset($tipKod[$tid]) || $n < 1) continue;
+            if ($tur === 'YARIM' && !in_array($tipKod[$tid], ['KADIN', 'ERKEK'], true)) continue;   // yarım yalnız Kadın/Erkek
+            $adetler[] = [$tid, $tur, $n];
+        }
     }
+    $kat = static fn(int $tid, string $tur): ?string => in_array($tipKod[$tid], ['KADIN', 'ERKEK'], true) ? $tipKod[$tid] . '_' . $tur
+        : ($tipKod[$tid] === 'SERITCI' ? 'SERITCI' : null);
     $fm = is_array($hizli['fm'] ?? null) ? $hizli['fm'] : [];
     $fmKisi = is_scalar($fm['kisi'] ?? null) ? (int)$fm['kisi'] : 0;
-    $fmDk = 0; $fmTip = [];   // tipId => FM kişi
+    $fmDk = 0; $fmKat = [];
     if ($fmKisi > 0) {
         $fmDk = (int)pdks_toplu_fm_dakika($fm['saat'] ?? null);
         if ($fmDk === 0) { $cik['hata'] = 'Fazla mesai saati geçersiz (0,25 saat adımıyla, en çok 12 saat).'; return $cik; }
-        $havuz = []; $kodTip = [];
-        foreach ($tam as $tid => $n) { $kod = $tipKod[$tid]; if ($kod === 'KADIN' || $kod === 'ERKEK') { $havuz[$kod] = $n; $kodTip[$kod] = $tid; } }
-        $d = pdks_toplu_fm_dagit($havuz, $fmKisi);
+        $mevcut = [];
+        foreach (PDKS_TOPLU_FM_HAVUZ as $k) $mevcut[$k] = 0;
+        foreach ($adetler as [$tid, $tur, $n]) { $k = $kat($tid, $tur); if ($k !== null) $mevcut[$k] += $n; }
+        $d = pdks_toplu_fm_dagit($mevcut, $fmKisi);
         if (!$d['ok']) { $cik['hata'] = $d['hata']; return $cik; }
-        $cik['dagilim'] = $d['dagilim'];
-        foreach ($d['dagilim'] as $kod => $n) if ($n > 0) $fmTip[$kodTip[$kod]] = $n;
+        $cik['dagilim'] = $fmKat = $d['dagilim'];
     }
-    $cikisSaat = static function (int $ekDk) use ($workDate): array {
-        $t = new DateTimeImmutable($workDate . ' ' . PDKS_TOPLU_HIZLI_CIKIS . ':00');
-        $t = $t->modify('+' . $ekDk . ' minutes');
+    $cikisSaat = static function (string $saat, int $ekDk) use ($workDate): array {
+        $t = (new DateTimeImmutable($workDate . ' ' . $saat . ':00'))->modify('+' . $ekDk . ' minutes');
         return [$t->format('Y-m-d'), $t->format('H:i')];
     };
-    foreach ($tam as $tid => $n) {
-        $fmN = $fmTip[$tid] ?? 0;
-        $ad = $tipKod[$tid];
+    foreach ($adetler as [$tid, $tur, $n]) {
+        $k = $kat($tid, $tur);
+        $fmN = $k !== null ? ($fmKat[$k] ?? 0) : 0;
+        $baz = $tur === 'YARIM' ? PDKS_TOPLU_HIZLI_YARIM_CIKIS : PDKS_TOPLU_HIZLI_CIKIS;
+        $ad = $tipKod[$tid] . ($tur === 'YARIM' ? ' Yarım' : ' Tam');
         if ($n - $fmN > 0) {
-            [$cd, $cs] = $cikisSaat(0);
+            [$cd, $cs] = $cikisSaat($baz, 0);
             $cik['gruplar'][] = ['worker_type_id' => $tid, 'entry_clock' => PDKS_TOPLU_HIZLI_GIRIS, 'exit_date' => $cd, 'exit_clock' => $cs,
-                                 'kart_ids' => [], 'kartsiz_adet' => $n - $fmN, 'etiket' => $ad . ' Tam'];
+                                 'kart_ids' => [], 'kartsiz_adet' => $n - $fmN, 'etiket' => $ad];
         }
         if ($fmN > 0) {
-            [$cd, $cs] = $cikisSaat($fmDk);
+            // Aynı kategoriyi paylaşan birden çok tip olamaz (kategori = tip+tür); FM'nin tamamı bu satıra yazılır.
+            [$cd, $cs] = $cikisSaat($baz, $fmDk);
             $cik['gruplar'][] = ['worker_type_id' => $tid, 'entry_clock' => PDKS_TOPLU_HIZLI_GIRIS, 'exit_date' => $cd, 'exit_clock' => $cs,
-                                 'kart_ids' => [], 'kartsiz_adet' => $fmN, 'etiket' => $ad . ' Tam + FM'];
+                                 'kart_ids' => [], 'kartsiz_adet' => $fmN, 'etiket' => $ad . ' + FM'];
         }
     }
     return $cik;

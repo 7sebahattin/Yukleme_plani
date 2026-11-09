@@ -89,7 +89,7 @@ $topluIk = function (string $ad): string {
 
     <section class="tv-hizli" id="tpHizli" aria-label="Kişi sayısı ile hızlı giriş">
         <h3 class="tv-hizli-bas"><?= $topluIk('kisiler') ?><span>Kişi sayısı</span></h3>
-        <p class="muted tv-hizli-not">Tam mesai için kişi sayısını girin; giriş <strong>08:00</strong>, çıkış <strong>17:00</strong> (9 saat) otomatik yazılır. Saat/kartlı giriş için aşağıdaki «Gelişmiş» bölümünü kullanın.</p>
+        <p class="muted tv-hizli-not">Kişi sayısını girin: <strong>Tam</strong> 08:00–17:00 (9 saat), <strong>Yarım</strong> 08:00–12:30 otomatik yazılır. Saat/kartlı giriş için aşağıdaki «Gelişmiş» bölümünü kullanın.</p>
         <div class="tv-hizli-izgara">
         <?php foreach ($topluTipler as $t):
             $hKod = pdks_gunluk_tip_kod_adindan((string)$t['name']) ?? pdks_gunluk_tip_kod_adindan((string)($t['code'] ?? ''));
@@ -98,6 +98,10 @@ $topluIk = function (string $ad): string {
         ?>
             <label class="tv-hizli-kutu tv-grup-<?= h($hRenk) ?>"><span class="form-label"><?= h($hAd) ?> <em>Tam</em></span>
                 <input type="number" min="0" max="<?= (int)$topluLimit ?>" step="1" inputmode="numeric" value="0" data-hizli-tam="<?= (int)$t['id'] ?>" data-hizli-kod="<?= h((string)$hKod) ?>"></label>
+            <?php if ($hKod === 'KADIN' || $hKod === 'ERKEK'): ?>
+            <label class="tv-hizli-kutu tv-grup-<?= h($hRenk) ?>"><span class="form-label"><?= h($hAd) ?> <em>Yarım</em></span>
+                <input type="number" min="0" max="<?= (int)$topluLimit ?>" step="1" inputmode="numeric" value="0" data-hizli-yarim="<?= (int)$t['id'] ?>" data-hizli-kod="<?= h((string)$hKod) ?>"></label>
+            <?php endif; ?>
         <?php endforeach; ?>
         </div>
         <div class="tv-fm">
@@ -106,7 +110,7 @@ $topluIk = function (string $ad): string {
                 <label><span class="form-label">Kişi sayısı</span><input type="number" min="0" max="<?= (int)$topluLimit ?>" step="1" inputmode="numeric" value="0" id="tpFmKisi"></label>
                 <label><span class="form-label">Saat</span><input type="text" inputmode="decimal" placeholder="Örn. 3" id="tpFmSaat" maxlength="5"></label>
             </div>
-            <p class="muted tv-fm-onizleme" id="tpFmOnizleme" aria-live="polite">Kadın/erkek Tam sayısına orantılı dağıtılır (yalnız Kadın ve Erkek Tam).</p>
+            <p class="muted tv-fm-onizleme" id="tpFmOnizleme" aria-live="polite">Fazla mesai kişileri Kadın/Erkek (Tam, Yarım) ve Şeritçi sayısına orantılı dağıtılır.</p>
         </div>
     </section>
     <details class="tv-gelismis"><summary>Gelişmiş: saat ve kartlı giriş</summary>
@@ -188,7 +192,7 @@ $topluIk = function (string $ad): string {
     function adet(g) { var n = parseInt(alan(g, 'kartsiz_adet').value, 10); return isFinite(n) && n > 0 ? n : 0; }
     function secili(g) { return kutular(g).filter(function (c) { return c.checked; }); }
     // v504: kişi sayısı ile hızlı giriş (Tam + Fazla mesai). Sunucu gruplarını KENDİ üretir; buradaki hesap yalnız önizleme.
-    var hizliKutular = [].slice.call(dlg.querySelectorAll('[data-hizli-tam]'));
+    var hizliKutular = [].slice.call(dlg.querySelectorAll('[data-hizli-tam],[data-hizli-yarim]'));
     var fmKisiEl = document.getElementById('tpFmKisi'), fmSaatEl = document.getElementById('tpFmSaat'), fmOnEl = document.getElementById('tpFmOnizleme');
     function tamsayi(x) { var n = parseInt(x, 10); return isFinite(n) && n > 0 ? n : 0; }
     function hizliToplam() { return hizliKutular.reduce(function (t, c) { return t + tamsayi(c.value); }, 0); }
@@ -213,21 +217,33 @@ $topluIk = function (string $ad): string {
         var dk = Math.round(Number(s) * 60);
         return (dk < 15 || dk > 720 || dk % 15 !== 0) ? null : dk;
     }
+    // Havuz kategori sırası = PHP PDKS_TOPLU_FM_HAVUZ (beraberlik sırası). Rampacı havuza girmez.
+    var HAVUZ = ['KADIN_TAM', 'ERKEK_TAM', 'KADIN_YARIM', 'ERKEK_YARIM', 'SERITCI'];
+    var HAVUZ_AD = { KADIN_TAM: 'Kadın Tam', ERKEK_TAM: 'Erkek Tam', KADIN_YARIM: 'Kadın Yarım', ERKEK_YARIM: 'Erkek Yarım', SERITCI: 'Şeritçi' };
+    function katOf(c) {
+        var k = c.getAttribute('data-hizli-kod'), tur = c.hasAttribute('data-hizli-yarim') ? 'YARIM' : 'TAM';
+        return (k === 'KADIN' || k === 'ERKEK') ? k + '_' + tur : (k === 'SERITCI' ? 'SERITCI' : null);
+    }
     function fmHavuz() {
         var h = {};
-        hizliKutular.forEach(function (c) { var k = c.getAttribute('data-hizli-kod'); if ((k === 'KADIN' || k === 'ERKEK') && tamsayi(c.value) > 0) h[k] = tamsayi(c.value); });
+        HAVUZ.forEach(function (k) { h[k] = 0; });
+        hizliKutular.forEach(function (c) { var k = katOf(c); if (k) h[k] += tamsayi(c.value); });
         return h;
     }
     function fmOnizle() {
         var kisi = tamsayi(fmKisiEl.value), dk = fmDakika(fmSaatEl.value);
-        if (kisi < 1) { fmOnEl.textContent = 'Kadın/erkek Tam sayısına orantılı dağıtılır (yalnız Kadın ve Erkek Tam).'; return; }
+        if (kisi < 1) { fmOnEl.textContent = 'Fazla mesai kişileri Kadın/Erkek (Tam, Yarım) ve Şeritçi sayısına orantılı dağıtılır.'; return; }
         if (dk === null) { fmOnEl.textContent = 'Saat girin (0,25 saat adımıyla, en çok 12 saat).'; return; }
         var d = fmDagit(fmHavuz(), kisi);
         if (!d.ok) { fmOnEl.textContent = d.hata || 'Dağıtım yapılamadı.'; return; }
-        var ad = { KADIN: 'Kadın', ERKEK: 'Erkek' }, p = [];
-        Object.keys(d.dagilim).forEach(function (k) { if (d.dagilim[k] > 0) p.push(d.dagilim[k] + ' ' + ad[k]); });
-        var c = 17 * 60 + dk, hh = Math.floor(c / 60) % 24, mm = c % 60;
-        fmOnEl.textContent = p.join(' + ') + ' × ' + String(fmSaatEl.value).trim() + ' sa → çıkış ' + (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm + (c >= 1440 ? ' (+1 gün)' : '');
+        var p = [];
+        function sa(c) { var hh = Math.floor(c / 60) % 24, mm = c % 60; return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm + (c >= 1440 ? ' (+1 gün)' : ''); }
+        Object.keys(d.dagilim).forEach(function (k) {
+            if (d.dagilim[k] < 1) return;
+            var baz = k.slice(-5) === 'YARIM' ? 12 * 60 + 30 : 17 * 60;
+            p.push(d.dagilim[k] + ' ' + HAVUZ_AD[k] + ' → ' + sa(baz + dk));
+        });
+        fmOnEl.textContent = p.join(' · ') + ' (' + String(fmSaatEl.value).trim() + ' sa FM)';
     }
     function toplamKisi() { return gruplar.reduce(function (t, g) { return t + secili(g).length + adet(g); }, hizliToplam()); }
 
@@ -277,8 +293,8 @@ $topluIk = function (string $ad): string {
                       exit_date: alan(g, 'exit_date').value, exit_clock: alan(g, 'exit_clock').value, kart_ids: ids, kartsiz_adet: m });
         });
         // istek_id: sayfa/pencere çizilirken sunucuda üretilir; Kaydet tekrarlanırsa AYNI değer gider (tekrar gönderim koruması).
-        var hz = { tam: {}, fm: { kisi: tamsayi(fmKisiEl.value), saat: fmSaatEl.value.trim() } };
-        hizliKutular.forEach(function (c) { var n = tamsayi(c.value); if (n) hz.tam[c.getAttribute('data-hizli-tam')] = n; });
+        var hz = { tam: {}, yarim: {}, fm: { kisi: tamsayi(fmKisiEl.value), saat: fmSaatEl.value.trim() } };
+        hizliKutular.forEach(function (c) { var n = tamsayi(c.value); if (!n) return; if (c.hasAttribute('data-hizli-yarim')) hz.yarim[c.getAttribute('data-hizli-yarim')] = n; else hz.tam[c.getAttribute('data-hizli-tam')] = n; });
         return { hizli: hz, csrf: dlg.getAttribute('data-csrf'), istek_id: dlg.getAttribute('data-istek-id'), foreman_id: cavusSel ? (parseInt(cavusSel.value, 10) || 0) : sabitCavus,
                  work_date: gun, reason: document.getElementById('tpReason').value.trim(), note: document.getElementById('tpNote').value.trim(), gruplar: gr };
     }

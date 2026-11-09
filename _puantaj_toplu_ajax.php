@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($__tpAjax, ['toplu_onizle'
     $__tpCoklu = false;
     if (is_array($__tpIn['hizli'] ?? null)) {
         $__tpKod = [];
-        foreach (array_keys(is_array($__tpIn['hizli']['tam'] ?? null) ? $__tpIn['hizli']['tam'] : []) as $__tid) {
+        foreach (array_unique(array_merge(array_keys(is_array($__tpIn['hizli']['tam'] ?? null) ? $__tpIn['hizli']['tam'] : []), array_keys(is_array($__tpIn['hizli']['yarim'] ?? null) ? $__tpIn['hizli']['yarim'] : []))) as $__tid) {
             $__tt = pdks_faz8j_desteklenen_tip($pdo, (int)$__tid);
             if ($__tt) $__tpKod[(int)$__tid] = (string)($__tt['code'] ?? '');
         }
