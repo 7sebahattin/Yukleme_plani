@@ -116,6 +116,7 @@ $pdks_kart_tanim_results = []; $pdks_kart_tanim_ran = false;   // v298 Tanımlı
 $pdks_ters_results = []; $pdks_ters_ran = false;   // v354 Ters Kart Takip (4 yeni tablo)
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 $pdks_yevmiye_results = []; $pdks_yevmiye_ran = false;   // v463 Rampacı yevmiye alanı
+$pdks_cift_results = []; $pdks_cift_ran = false;   // v503 çift yevmiye alanı
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
@@ -225,6 +226,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_saat_results as $pr) {
         if ($pr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'pdks_saat', null, null,
+                ['operation' => 'add_column', 'column' => $pr['adim']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cift') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_cift_ran     = true;
+    $pdks_cift_results = pdks_cift_kolon_migrate($pdo);
+    foreach ($pdks_cift_results as $pr) {
+        if ($pr['durum'] === 'eklendi') {
+            audit_log_event('migrate', 'pdks_cift', null, null,
                 ['operation' => 'add_column', 'column' => $pr['adim']]);
         }
     }
@@ -1087,6 +1098,48 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <summary style="cursor:pointer;color:#555;">ALTER TABLE SQL'ini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_yevmiye_kolon_tanimi() as [$pyk, $pytanim]) { echo h('ALTER TABLE `' . PDKS_YEVMIYE_TABLO . "` ADD COLUMN `{$pyk}` {$pytanim};") . "\n"; }
+      ?></pre>
+    </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('cift-yevmiye'); ?>
+    <h2 style="margin-top:0;">Çift Yevmiye Alanı (v503)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>daily_worker_work_periods</code>'e 1 nullable kolon ekler
+      (<code>cift_yevmiye</code> — NULL = çift değil, bugünkü davranış). İşaretli kişi-gün ödemesi = işçi tipinin
+      <b>Tam günlük</b> ücreti × 2. Kolon kurulmadan çift yevmiye işaretlenemez (net hata). Faz 8B'nin genel
+      hazır-mı kontrolüne BİLEREK EKLENMEZ.
+      <?php if ($pdks_cift_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_cift_results as $pcr): ?>
+        <br>&nbsp;&nbsp;<?= h($pcr['adim']) ?>: <?= h($pcr['durum']) ?> — <?= h($pcr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Kolon</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php $pcTablo = pdks_faz8b_tablo_var($pdo, PDKS_CIFT_TABLO);
+        foreach (pdks_cift_kolon_tanimi() as [$pck, $pctanim]):
+          $pce = $pcTablo && pdks_faz8b_kolon_var($pdo, PDKS_CIFT_TABLO, $pck); ?>
+          <tr>
+            <td><?= h(PDKS_CIFT_TABLO) ?>.<?= h($pck) ?> <small>(<?= h($pctanim) ?>)</small></td>
+            <td style="color:<?= $pce ? '#1f9d55' : '#c0392b' ?>;font-weight:600;"><?= $pce ? '✓ Var' : '✗ Eksik' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_cift">
+      <button type="submit" class="btn btn-primary">Çift Yevmiye Kolonunu Ekle</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">ALTER TABLE SQL'ini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_cift_kolon_tanimi() as [$pck, $pctanim]) { echo h('ALTER TABLE `' . PDKS_CIFT_TABLO . "` ADD COLUMN `{$pck}` {$pctanim};") . "\n"; }
       ?></pre>
     </details>
   <?php mg_kart_kapat(); ?>
