@@ -7057,3 +7057,17 @@ html[data-theme="dark"] form.bf.bsz-bf .form-group.bsz-vurgu[data-ic] > input.fo
 html[data-theme="dark"] .bsz-sil { color: #fca5a5; border-color: #7f1d1d; }
 html[data-theme="dark"] .bsz-sil:hover { background: #450a0a; }
 .bsz-kart-sil { margin-top: 8px; }
+
+/* ===== Test ortamı şeridi (v504) — yalnız config/local.php'de APP_ORTAM='test' olan sitede basılır =====
+   Üstte ortada küçük sabit hap: tıklamayı engellemez (pointer-events:none), içeriği itmez. z-index topbar/sidebar
+   (100) ve bottomnav (500) üstünde, "yeni modal ≥ 600" kuralıyla aynı katmanda tutulur ama etiket/crop (3000) üstünde. */
+.test-serit {
+  position: fixed; top: 4px; left: 50%; transform: translateX(-50%);
+  z-index: 3500; pointer-events: none; white-space: nowrap;
+  max-width: calc(100vw - 24px); overflow: hidden; text-overflow: ellipsis;
+  padding: 2px 12px; border-radius: 999px;
+  background: #f59e0b; color: #1f1300; border: 1px solid #b45309;
+  font: 700 11px/16px system-ui, -apple-system, 'Segoe UI', sans-serif; letter-spacing: .02em;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+}
+@media print { .test-serit { display: none !important; } }

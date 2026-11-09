@@ -70,6 +70,8 @@ interface MailTranslationProviderInterface
  */
 function mail_http_istek(string $metod, string $url, array $baslik, ?string $govde, float $timeout = 20.0): array
 {
+    require_once __DIR__ . '/ortam.php';   // test ortamı kapısı (v504): çeviri servisine istek gitmez
+    if (app_dis_gonderim_kapali()) throw new MailTranslateException('config', 'Test ortamında çeviri servisi kapalı (APP_ORTAM=test).');
     if (!preg_match('#^https://[^/\s]+#i', $url)) throw new MailTranslateException('config', 'Çeviri adresi https:// olmalı.');
     if (!function_exists('curl_init')) throw new MailTranslateException('config', 'PHP cURL eklentisi yok.');
     $ch = curl_init($url);

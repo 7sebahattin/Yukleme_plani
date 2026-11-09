@@ -5,9 +5,9 @@
 PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA kurulabilir.
 Çerçeve yok — saf PHP, vanilla JS, tek CSS (`assets/style.css`), tek JS (`assets/app.js`).
 
-**Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
+**Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `test.scai.tr` (v504; `testasya` dalı, ayrı DB, dış gönderim kapalı — `APP_ORTAM='test'`). Eski `nuverna.derspros.com.tr` 25.12.2026'da kapanır, yerini test.scai.tr aldı  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v503` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v504` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -75,7 +75,9 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 - **KG ekranda tam sayı ve virgülsüz** — CSV decimal koruyabilir.
 - **Kişisel isim/e-posta örneklerde kullanma.**
 - **Kaldırılan web sayfası = 410 tombstone** (DB/oturum yok, ≤15 satır, kalıcı ekrana link; deploy dosya silmez) — `rol_kapilari_smoke` değişmezleri denetler; dosyayı `git rm` ETME.
-- **"Canlıya al" = PR açıp `main`'e merge et** — bkz. `@docs/DEPLOY_WORKFLOW.md`. Merge sunucuya **OTOMATİK yansır**: GitHub push webhook'ları `https://asya.scai.tr/deploy.php` (canlı) ve `https://nuverna.derspros.com.tr/deploy.php` (test) adreslerini tetikler — `main`'e merge İKİ siteye birden iner, dosyalar ~dakikalar içinde iner (doğrulandı 2026-09-13). **Kullanıcıdan SSH'dan bir şey çalıştırmasını İSTEME** — doküman uzun süre yanlışlıkla bunu söylüyordu. Doğrulama: hard refresh → sidebar'daki `APP_SURUM`. Webhook'un **Secret'ı boş**; kökteki `deploy.php` repoda değil ve deploy onu bilerek atlar (koruma listesi).
+- **"Canlıya al" = PR açıp `main`'e merge et** — bkz. `@docs/DEPLOY_WORKFLOW.md`. Merge sunucuya **OTOMATİK yansır** (GitHub push webhook'ları, dosyalar ~dakikalar içinde iner); **kullanıcıdan SSH'dan bir şey çalıştırmasını İSTEME**. Doğrulama: hard refresh → sidebar'daki `APP_SURUM`. Webhook'un **Secret'ı** canlıda boş; kökteki `deploy.php` repoda değil ve deploy onu bilerek atlar (koruma listesi).
+  - **Dal akışı (v504, muhasebe geliştirmesi):** önce PR `testasya` dalına açılır → yalnız `test.scai.tr` güncellenir → kullanıcı orada dener → onay verince `testasya` → `main` PR'ı açılıp merge edilir → `asya.scai.tr` güncellenir. Acil canlı düzeltmesi doğrudan `main`'e gidebilir; ardından `testasya` `main` ile eşlenir. `main` dalı `nuverna` webhook'u silinene kadar nuverna'ya da iner (kullanıcı silecek; 25.12.2026'da zaten kapanır).
+  - **Ortam kapısı (v504):** `config/ortam.php` — `APP_ORTAM` sunucuya özel `config/local.php`'de (git dışında); tanımsız = canlı, `canli` dışındaki her değer = test (fail-closed). Test ortamında HKS SOAP, IMAP/SMTP ve mail çevirisi AĞA ÇIKMADAN reddedilir; üstte turuncu "TEST ORTAMI" hapı ve sekme başlığında `[TEST]`. **Yeni bir dış bağlantı yolu (curl, soket, e-posta, SMS, API) eklersen aynı kapıyı `app_dis_gonderim_kapali()` ile kur** ve `scripts/test_ortami_smoke.php` izinli dosya listesine ekle (test, kapısız yeni yolu yakalar). Test sitesinin `config/local.php`'sinde `HKS_CRED_KEY` YENİ rastgele değer, `MAIL_MASTER_KEY`/`MAIL_TRANSLATE_KEY` silinmiş olmalı (kopya veritabanındaki şifreler okunamasın). Test: `php scripts/test_ortami_smoke.php`.
 
 ---
 
