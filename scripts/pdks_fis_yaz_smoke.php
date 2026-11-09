@@ -36,6 +36,11 @@ function fiyatKur(int $cid, string $mod = 'hourly', $birim = '200', ?array $saat
         $r = pdks_faz8b_oran_ekle($cid, $tid, '1500', '900', $mod, $b, '2020-01-01', 'TRY', 1, db(), $saatler);
         if (!$r['ok']) throw new RuntimeException('fiyatKur: ' . j($r));
     }
+    // v503: oran_ekle FM'yi tüm tiplere eşitler (FM tek ücret). Bu test BİLEREK tip bazlı farklı FM (eski/legacy veri)
+    // senaryolarını sınar — farklı birimi döngü SONRASI doğrudan satıra yazarız.
+    if (is_array($birim)) foreach (['KADIN' => $kadin, 'ERKEK' => $erkek, 'RAMPACI' => $rampaci] as $kod => $tid) {
+        db()->prepare("UPDATE foreman_worker_rates SET overtime_rate = ? WHERE foreman_id = ? AND worker_type_id = ?")->execute([$birim[$kod], $cid, $tid]);
+    }
 }
 /** Tek tip için fiyat dönemi (2020-01-01'den; FM saatlik 200). */
 function fiyatKur_tek(int $cid, int $tipId, string $ucret): void {
@@ -182,9 +187,9 @@ ok('B6i) sayfa seçeneği fm_tip=erkek de aynı işi görür', $mf['durum'] === 
 
 // çift yevmiye
 $me = onizle1(fisYap(['ERKEK' => [10, 0]], ['cavus' => $cavus['E'], 'fm_kova' => [6 => 1]]), $sec);
-ok('B7) çift eşiği (12 sa) + (a) FM6 → UYARI "Çift yevmiye"', $me['durum'] === 'uyari' && hVar($me, 'Çift yevmiye'), j([$me['durum'], $me['hatalar'], $me['uyarilar']]));
+ok('B7) v503: süre bazlı çift eşiği DEVRE DIŞI — (a) FM6 → "Çift yevmiye" uyarısı ÇIKMAZ', !hVar($me, 'Çift yevmiye'), j([$me['durum'], $me['hatalar'], $me['uyarilar']]));
 $me = onizle1(fisYap(['ERKEK' => [20, 0]], ['cavus' => $cavus['E'], 'fm_toplam' => 25]), $sec);
-ok('B7b) çift eşiği + (b) → V5 dağılımı (12×2 sa + 1×1 sa), çift eşiğine girmez', $me['durum'] === 'hazir' && $me['plan']['fm']['saatler'] === array_merge(array_fill(0, 12, 2), [1]) && !hVar($me, 'Çift yevmiye'), j([$me['durum'], $me['hatalar'], $me['plan']['fm']['saatler'] ?? null]));
+ok('B7b) v503: çift eşiği yok → (b) dağılımı eşiksiz hazır, "Çift yevmiye" yok', $me['durum'] === 'hazir' && !hVar($me, 'Çift yevmiye'), j([$me['durum'], $me['hatalar'], $me['plan']['fm']['saatler'] ?? null]));
 
 // tarih / çavuş / hakediş kapıları
 $mt = onizle1(fisYap(['ERKEK' => [3, 0]], ['tarih' => $bugun]), $sec);
@@ -548,7 +553,7 @@ ok('L3) çift eşiği 12 sa: (b) 12 kişi×2 sa + 1 kişi×1 sa; hiçbir dönem 
 // çavuş E (a) FM6 → çift eşiği: UYARI ile yazılır; onaylı FM6 → çift sınıfı
 $rl4 = yaz1(fisYap(['ERKEK' => [3, 0]], ['cavus' => $cavus['E'], 'fis_no' => 'L-004', 'fm_kova' => [6 => 1], 'tarih' => $dun2]), $sec);
 $dl4 = $rl4['durum'] === 'yazildi' ? donemler((int)$rl4['session_id']) : [];
-ok('L4) (a) FM6 çift eşiğine girer: UYARI ile yazıldı; sınıflandırıcı bu kişiyi "çift" sayar', $rl4['durum'] === 'yazildi' && (bool)array_filter($rl4['uyarilar'], fn($x) => str_contains($x, 'Çift yevmiye')) && count(array_filter($dl4, fn($d) => $d['faz8b']['etkin_sinif'] === 'cift')) === 1, j([$rl4, array_map(fn($d) => $d['faz8b']['etkin_sinif'], $dl4)]));
+ok('L4) v503: (a) FM6 — süre bazlı çift yok, uyarısız yazıldı; hiçbir dönem "çift" sınıfına girmez', $rl4['durum'] === 'yazildi' && !array_filter($rl4['uyarilar'], fn($x) => str_contains($x, 'Çift yevmiye')) && count(array_filter($dl4, fn($d) => $d['faz8b']['etkin_sinif'] === 'cift')) === 0, j([$rl4['durum'], $rl4['uyarilar'] ?? null]));
 ok('L5) yazma-içi doğrulama: sınıflandırıcı farklı çıkarsa tx geri alınır (sentetik bozulma)', (function () use ($cavus, $erkek, $sec) {
     // plan Tam 17:00 bekler; geri çağrıyı bilerek yanlış plan süresiyle çağırıp RuntimeException beklenir
     $cx = yeniCavus('Çavuş CL5');

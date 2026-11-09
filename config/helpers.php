@@ -257,6 +257,8 @@ function nav_ptak_sayfalari(): array {
         'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
         'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
         'mesai_degerlendirme.php', 'manuel_cikis.php',
+        // v503 Buçuklu Çıkışlar (çıkış dakikası :30 olanları düzeltme, yalnız yönetici)
+        'bucuklu_cikislar.php',
         'cavus_donem_raporu.php',
         // v446 Fiş Excel'i Yükle
         'gunluk_fis_yukle.php',
