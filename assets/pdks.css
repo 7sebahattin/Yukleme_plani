@@ -2815,6 +2815,11 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 .tvo-s-karar { border-left: 4px solid var(--warn, #d68910); }
 .tvo-onizleme { padding: 14px 16px; margin-bottom: 14px; }
 .tvo-ozet { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.tvo-oto { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.tvo-oto-metin { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 320px; }
+.tvo-oto-ozet { margin: 8px 0; }
+.tvo-uyari { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-weight: 600; }
+.tvo-uyari-satir { display: block; margin-top: 4px; color: var(--warn); font-size: .8rem; font-weight: 600; }
 .tvo-uygula-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 @media (max-width: 767px) {
     .tvo-kontrol { grid-template-columns: 1fr; }
@@ -2824,6 +2829,7 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
     .tvo-satir .tvo-hucre { grid-column: 2; }
     .tvo-onizleme-liste .tvo-satir .tvo-hucre { grid-column: 1; }
     .tvo-satir .tvo-chk { grid-row: 1 / span 4; }
+    .tvo-oto .btn { width: 100%; }
 }
 
 /* ── v446 — Fiş Excel'i Yükle (gunluk_fis_yukle.php + _fis_onizle.php) ─────────

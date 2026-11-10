@@ -2,7 +2,7 @@
 // =========================================================
 // scripts/pdks_toplu_onay_render.php — Toplu Mesai Onayı ekranını (gerçek _toplu_onay_ekran.php + gerçek
 // config/pdks_toplu_onay.php, bellek içi SQLite) HTML'e basar. Tarayıcı testi girdisi; canlı DB'ye dokunmaz.
-//   TO_ONIZLE=1  → seçili satırlarla önizleme durumunu basar
+//   TO_ONIZLE=1  → seçili satırlarla önizleme durumunu basar · TO_OTO=1 → "elle girilenleri otomatik onayla" önizlemesi
 //   php scripts/pdks_toplu_onay_render.php > _test_toplu_onay.html
 // =========================================================
 declare(strict_types=1);
@@ -37,7 +37,7 @@ $db->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY AUTOI
 $db->exec("CREATE TABLE foreman_daily_entitlement_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, entitlement_id INT NOT NULL, worker_type_id INT NULL, worker_type_code_snapshot VARCHAR(30) NOT NULL DEFAULT '', worker_type_name_snapshot VARCHAR(80) NOT NULL DEFAULT '', worker_count INT NOT NULL, unit_rate DECIMAL(12,2) NOT NULL, line_total DECIMAL(14,2) NOT NULL)");
 pdks_faz8b_migrate($db);
 $db->exec("INSERT INTO foremen (id,code,name) VALUES (1,'C001','Ayşe Çavuş Uzun Bir Ad Soyad'),(2,'C002','Mehmet Çavuş')");
-$db->exec("INSERT INTO worker_types (id,code,name) VALUES (1,'KADIN','Kadın'),(2,'ERKEK','Erkek')");
+$db->exec("INSERT INTO worker_types (id,code,name) VALUES (1,'KADIN','Kadın'),(2,'ERKEK','Erkek'),(3,'KARISIK','Karışık')");
 $db->exec("INSERT INTO daily_work_sessions (id,foreman_id,foreman_name_snapshot,foreman_code_snapshot,work_date,depo) VALUES (1,1,'Ayşe Çavuş Uzun Bir Ad Soyad','C001','2026-10-24','FİNİKE'),(2,2,'Mehmet Çavuş','C002','2026-10-24','FİNİKE')");
 for ($i = 1; $i <= 12; $i++) $db->prepare("INSERT INTO worker_cards (id,card_no) VALUES (?,?)")->execute([$i, sprintf('K%03d', $i)]);
 pdks_faz8b_oran_ekle(1, 1, '1500', '900', 'hourly', '200', '2026-09-01', 'TRY', 1, $db);
@@ -52,6 +52,7 @@ $ids[] = $per(1, 2, 1, 'Kadın', '08:00', '18:20', 'manual');
 $ids[] = $per(1, 3, 1, 'Kadın', '08:00', '12:00', 'manual');
 $ids[] = $per(1, 4, 2, 'Erkek', '08:00', '17:16', 'manual');   // fiyatsız
 $ids[] = $per(2, 5, 1, 'Kadın', '08:00', '', 'scan');          // çıkışsız (çavuş 2 fiyatsız da)
+$ids[] = $per(1, 6, 3, 'Karışık', '08:00', '17:16', 'manual'); // Karışık — onaylanmaz
 
 $auth_user = ['id' => 1];
 $depo = 'FİNİKE'; $tarih = '2026-10-24'; $cavusId = null; $yalnizElle = false;
@@ -59,6 +60,12 @@ $errors = []; $sinifKarari = ''; $fmKarar = ''; $topluId = []; $onizleme = null;
 if (getenv('TO_ONIZLE') === '1') {
     $sinifKarari = 'tam'; $fmKarar = 'onayla'; $topluId = $ids;
     $onizleme = pdks_toplu_onay_calistir($topluId, $sinifKarari, $fmKarar, 1, $depo, false, $db);
+}
+$onizlemeOto = false;
+if (getenv('TO_OTO') === '1') {
+    $onizlemeOto = true;
+    $elleIds = array_map(fn($x) => (int)$x['d']['id'], pdks_toplu_onay_bekleyenler($tarih, $depo, null, true, $db));
+    $onizleme = pdks_toplu_onay_calistir($elleIds, null, null, 1, $depo, false, $db, true);
 }
 $cavuslar = $db->query("SELECT id, name, is_active FROM foremen")->fetchAll();
 $bekleyen = pdks_toplu_onay_bekleyenler($tarih, $depo, $cavusId, $yalnizElle, $db);

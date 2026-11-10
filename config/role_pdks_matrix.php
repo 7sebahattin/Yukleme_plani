@@ -105,7 +105,7 @@ function role_pdks_request_action(string $route, string $method, array $query=[]
     if ($route==='cavus_hakedis_detay.php') return match($action) {'duzeltme_ekle'=>['entitlements','create'],'hesapla','finalize','yeniden_ac'=>['entitlements','edit'],'duzeltme_ters_kayit'=>['entitlements','delete'],default=>null};
     if ($route==='cavus_odeme.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
     if ($route==='mesai_degerlendirme.php') return in_array($action,['tekli_kaydet','toplu_kaydet','fm_toplu_kaydet'],true)?['mesai','edit']:null;
-    if ($route==='mesai_toplu_onay.php') return $action==='uygula'?['mesai','edit']:($action==='onizle'?['mesai','read']:null);
+    if ($route==='mesai_toplu_onay.php') return in_array($action,['uygula','oto_uygula'],true)?['mesai','edit']:(in_array($action,['onizle','oto_onizle'],true)?['mesai','read']:null);
     if ($route==='manuel_cikis.php') return ($action==='' && $form==='' && $ajax==='') ? ['manual_exit','edit'] : null;
     if ($route==='ters_kart_havuz.php') {
         if ($form==='saat' && $ajax==='') return ['ters_pool','edit'];
