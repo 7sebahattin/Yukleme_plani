@@ -1242,6 +1242,53 @@ function pdks_rapor_para_formatla($tl): string
 // =========================================================
 
 /**
+ * v512: Servis (Büyük / Küçük) oturum bazlı adet + tutar — Toplu Döküm ekran/yazdırma/XLSX/detay TEK kaynağı.
+ * Adet = daily_session_services (iptal edilmemiş, pdks_servis_toplamlar_toplu ile AYNI kural, oturum başına);
+ * tutar (yalnız $finansal) = hakedişin DONDURULMUŞ SERVIS_* satırı (line_total) → hakedişin total_amount'u
+ * ile aynı kaynaktan gelir. Tek sorgu / kaynak (N+1 yok). Servis tabloları yoksa boş dizi.
+ * @return array<int, array<string, array{adet:int, tutar:?string}>> [session_id => [BUYUK|KUCUK => ...]]
+ */
+function pdks_rapor_servis_oturum_toplu(array $sessionIds, bool $finansal, PDO $pdo): array
+{
+    $sessionIds = array_values(array_unique(array_filter(array_map('intval', $sessionIds), static fn($i) => $i > 0)));
+    if (!$sessionIds || !function_exists('pdks_servis_turleri') || !function_exists('pdks_servis_tablo_var')
+        || !pdks_servis_tablo_var($pdo, 'daily_session_services')) {
+        return [];
+    }
+    $turler = pdks_servis_turleri();
+    $bos = [];
+    foreach ($turler as $t => $_) $bos[$t] = ['adet' => 0, 'tutar' => null];
+    $out = [];
+    $ph = implode(',', array_fill(0, count($sessionIds), '?'));
+    $st = $pdo->prepare("SELECT session_id, service_type, COALESCE(SUM(quantity),0) AS n
+                           FROM daily_session_services
+                          WHERE is_voided = 0 AND session_id IN ($ph) GROUP BY session_id, service_type");
+    $st->execute($sessionIds);
+    foreach ($st->fetchAll() as $r) {
+        $sid = (int)$r['session_id']; $t = (string)$r['service_type'];
+        if (!isset($turler[$t])) continue;
+        $out[$sid] = $out[$sid] ?? $bos;
+        $out[$sid][$t]['adet'] = (int)$r['n'];
+    }
+    if ($finansal && $out && pdks_servis_tablo_var($pdo, 'foreman_daily_entitlement_lines')) {
+        $kodTur = [];
+        foreach ($turler as $t => $d) $kodTur[$d['kod']] = $t;
+        $stL = $pdo->prepare("SELECT e.session_id, l.worker_type_code_snapshot AS kod, l.line_total
+                                FROM foreman_daily_entitlement_lines l
+                                JOIN foreman_daily_entitlements e ON e.id = l.entitlement_id
+                               WHERE e.session_id IN ($ph)
+                                 AND l.worker_type_code_snapshot IN ('" . implode("','", array_keys($kodTur)) . "')");
+        $stL->execute($sessionIds);
+        foreach ($stL->fetchAll() as $l) {
+            $sid = (int)$l['session_id']; $t = $kodTur[(string)$l['kod']] ?? null;
+            if ($t === null || !isset($out[$sid])) continue;
+            $out[$sid][$t]['tutar'] = number_format((float)($out[$sid][$t]['tutar'] ?? 0) + (float)$l['line_total'], 2, '.', '');
+        }
+    }
+    return $out;
+}
+
+/**
  * Bir ay içindeki çavuş/gün oturumlarını tek toplu sorguda döndürür.
  * İşçi sayısı Faz 8A work-period katılımlarından gelir.
  *
@@ -1359,6 +1406,17 @@ function pdks_rapor_cavus_toplu_dokum(
         $r['fm_saat']    = $fm ? (int)$fm['saat'] : 0;
         $r['fm_kisi']    = $fm ? (int)$fm['kisi'] : 0;
         $r['fm_dagilim'] = $fm ? $fm['dagilim'] : [];
+    }
+    unset($r);
+
+    // v512: Servis — Büyük / Küçük (adet + finansal yetkide tutar). Toplam İşçi'ye KATILMAZ.
+    $svMap = $satirlar ? pdks_rapor_servis_oturum_toplu(array_column($satirlar, 'session_id'), $finansal, $pdo) : [];
+    foreach ($satirlar as &$r) {
+        $sv = $svMap[$r['session_id']] ?? null;
+        foreach (['BUYUK' => 'buyuk', 'KUCUK' => 'kucuk'] as $tur => $an) {
+            $r['servis_' . $an] = $sv ? (int)$sv[$tur]['adet'] : 0;
+            $r['servis_' . $an . '_tutar'] = $sv ? $sv[$tur]['tutar'] : null;
+        }
     }
     unset($r);
 
