@@ -9,8 +9,9 @@
 //   reddi, Yarım ≥ 3 sa kuralı, taslağı bayat işaretleme ve audit orada). Burada yalnız "hangi dönem /
 //   hangi karar" çözülür; gövdede UPDATE/INSERT YOK (test denetler). Süre/FM/sınıf hesabı da YAPILMAZ —
 //   sınıflandırıcı (pdks_faz8b_donem_siniflandir) çıktısı okunur.
-// ⚠ HİÇBİR ŞEY OTOMATİK ONAYLANMAZ: çağıran açıkça dönem id'lerini + kararları verir. Karar boşsa o satır
-//   "karar gerekli" olur ve onaylanmaz.
+// ⚠ Seçili akışta HİÇBİR ŞEY otomatik onaylanmaz: çağıran açıkça dönem id'lerini + kararları verir; karar boşsa
+//   o satır "karar gerekli" olur. TEK İSTİSNA (v508, sahip kararı): $otomatik=true "Elle girilenleri otomatik onayla"
+//   — yalnız source='manual' ve kararı gerektirmeyen dönemler (bkz. pdks_toplu_onay_plan).
 // =========================================================
 declare(strict_types=1);
 
@@ -42,28 +43,54 @@ function pdks_toplu_onay_elle_mi(?string $src): bool
 /**
  * Bir dönem için karar planı (SAF — DB yok; $d = pdks_faz8b_donem_sorgu satırı, $f = $d['faz8b']).
  *
- * @return array{durum:string, sinif:?string, fm:?int, neden:string, etiket:string}
- *   durum: 'onay' (onaylanacak) | 'karar' (Tam/Yarım ya da FM kararı seçilmedi) | 'uygunsuz' (onaylanmaz) | 'atla' (zaten hazır)
+ * v508 değişiklikleri (sahip kararları):
+ *  - ÇIKIŞSIZ dönem artık "onaylanmaz" DEĞİL: eski tekli/toplu akış (pdks_faz8b_degerlendirme_kaydet) çıkışsız
+ *    dönemde Tam/Yarım kararını kabul eder (süre bilinmez → Yarım ≥ 3 sa kuralı uygulanamaz, FM adayı yok; hakediş
+ *    sınıfın sabit ücretini yazar). AYNISI burada: sınıf kararı seçilmişse onaylanır, uyarı gösterilir.
+ *  - FİYATSIZ tip onayı ENGELLEMEZ: yalnız uyarı (hakediş fiyat girilene dek hesaplanamaz).
+ *  - $otomatik (yalnız "Elle girilenleri otomatik onayla" yolu): yalnız source='manual' dönemler KARAR SEÇMEDEN onaylanır
+ *    ve YALNIZ kararı gerektirmeyenler: süre Tam eşiğini karşılıyorsa (zaten otomatik Tam) + FM adayı varsa hesaplanan
+ *    saatin tamamı. Tam/Yarım ayırt edilemeyen (3 sa altı, 3 sa–Tam eşiği arası, çıkışsız) → "karar" (sınıf TAHMİN
+ *    EDİLMEZ). Kart okutmuş (manual dışı) dönem otomatik onaylanmaz → "karar".
+ *
+ * @return array{durum:string, sinif:?string, fm:?int, neden:string, etiket:string, uyari:string, sonuc_sinif:?string, fm_saat:int}
+ *   durum: 'onay' (onaylanacak) | 'karar' (karar seçilmedi/verilemez) | 'uygunsuz' (onaylanmaz) | 'atla' (zaten hazır)
  */
-function pdks_toplu_onay_plan(array $d, bool $kesin, bool $fiyatVar, ?string $sinifKarari, ?string $fmKarar): array
+function pdks_toplu_onay_plan(array $d, bool $kesin, bool $fiyatVar, ?string $sinifKarari, ?string $fmKarar, bool $otomatik = false): array
 {
     $f = $d['faz8b'];
-    $r = static fn(string $durum, ?string $sinif, ?int $fm, string $neden, string $etiket = ''): array =>
-        ['durum' => $durum, 'sinif' => $sinif, 'fm' => $fm, 'neden' => $neden, 'etiket' => $etiket];
+    $uyari = [];
+    if (!$fiyatVar) $uyari[] = 'Bu tip için o tarihte geçerli fiyat YOK — fiyat girilene dek hakediş hesaplanamaz';
+    $r = static function (string $durum, ?string $sinif, ?int $fm, string $neden, string $etiket = '', ?string $sonucSinif = null, int $fmSaat = 0) use (&$uyari): array {
+        // Uyarı yalnız ilerleyebilen (onay/karar) satırlarda gösterilir; engelli satırda gürültü olur.
+        return ['durum' => $durum, 'sinif' => $sinif, 'fm' => $fm, 'neden' => $neden, 'etiket' => $etiket,
+                'uyari' => in_array($durum, ['onay', 'karar'], true) ? implode(' · ', $uyari) : '', 'sonuc_sinif' => $sonucSinif, 'fm_saat' => $fmSaat];
+    };
 
     if ($kesin) return $r('uygunsuz', null, null, 'Hakediş KESİN — önce yeniden açılmalı');
     if (!empty($f['finans_hazir'])) return $r('atla', null, null, 'Zaten hazır');
     if ((int)($f['yevmiye'] ?? 0) > 0) return $r('atla', null, null, 'Yevmiyeli kayıt (onay gerekmez)');
     if (($d['worker_type_name_snapshot'] ?? '') === PDKS_GUNLUK_KARISIK_AD) return $r('uygunsuz', null, null, 'Karışık — önce Otomatik Ata');
-    if ($f['toplam_dk'] === null) return $r('uygunsuz', null, null, 'Çıkış yok (eksik/açık dönem)');
-    if (!$fiyatVar) return $r('uygunsuz', null, null, 'Bu tip için o tarihte geçerli fiyat YOK');
+
+    if ($otomatik && !pdks_toplu_onay_elle_mi($d['source'] ?? null)) {
+        return $r('karar', null, null, 'Kart okutulmuş kayıt — otomatik onaylanmaz (elle seçip karar verin)');
+    }
+
+    $toplamDk = $f['toplam_dk'];
+    if ($toplamDk === null) $uyari[] = 'Çıkış yok — süre bilinmiyor' . ($sinifKarari === 'yarim' ? ' (Yarım için 3 sa kuralı doğrulanamaz)' : '');
 
     $sinif = null;
     $etiket = [];
     if (!empty($f['sinif_onayi_gerekli'])) {
+        if ($otomatik) {
+            // Sınıf ASLA tahmin edilmez: bu noktada süre Tam eşiğinin altında ya da bilinmiyor.
+            if ($toplamDk === null) return $r('karar', null, null, 'Çıkış yok — Tam/Yarım belirlenemez, karar gerekli');
+            if ((int)$toplamDk < PDKS_FAZ8B_YARIM_MIN_DK) return $r('karar', null, null, 'Süre ' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ' (3 saatten az) — karar gerekli');
+            return $r('karar', null, null, 'Süre ' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ' — Tam mı Yarım mı belirsiz, karar gerekli');
+        }
         if (!in_array($sinifKarari, ['tam', 'yarim'], true)) return $r('karar', null, null, 'Tam/Yarım kararı seçilmeli');
-        if ($sinifKarari === 'yarim' && (int)$f['toplam_dk'] < PDKS_FAZ8B_YARIM_MIN_DK) {
-            return $r('uygunsuz', null, null, 'Yarım için en az ' . intdiv(PDKS_FAZ8B_YARIM_MIN_DK, 60) . ' sa gerekir (' . pdks_faz8b_dakika_etiket((int)$f['toplam_dk']) . ')');
+        if ($sinifKarari === 'yarim' && $toplamDk !== null && (int)$toplamDk < PDKS_FAZ8B_YARIM_MIN_DK) {
+            return $r('uygunsuz', null, null, 'Yarım için en az ' . intdiv(PDKS_FAZ8B_YARIM_MIN_DK, 60) . ' sa gerekir (' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ')');
         }
         $sinif = $sinifKarari;
         $etiket[] = pdks_faz8b_sinif_etiketi($sinif);
@@ -75,7 +102,7 @@ function pdks_toplu_onay_plan(array $d, bool $kesin, bool $fiyatVar, ?string $si
         $mevcut = $f['fazla_mesai_onay_saat'];
         if ($mevcut !== null) {
             $fm = (int)$mevcut;                      // zaten karar verilmiş — AYNEN geçirilir
-        } elseif ($fmKarar === 'onayla') {
+        } elseif ($otomatik || $fmKarar === 'onayla') {
             $fm = $aday;
             $etiket[] = 'FM ' . $aday . ' sa onay';
         } elseif ($fmKarar === 'reddet') {
@@ -85,7 +112,8 @@ function pdks_toplu_onay_plan(array $d, bool $kesin, bool $fiyatVar, ?string $si
             return $r('karar', null, null, 'Fazla mesai (' . $aday . ' sa) kararı seçilmeli');
         }
     }
-    return $r('onay', $sinif, $fm, '', implode(' + ', $etiket) ?: 'Onay');
+    if ($otomatik && $sinif === null) $etiket = array_merge(['Tam'], $etiket);
+    return $r('onay', $sinif, $fm, '', implode(' + ', $etiket) ?: 'Onay', $sinif ?? ($f['etkin_sinif'] ?? null), (int)($fm ?? 0));
 }
 
 /** Oturumların KESİN hakedişi var mı → [session_id => true]. */
@@ -167,18 +195,20 @@ function pdks_toplu_onay_zenginlestir(array $donemler, PDO $pdo): array
  * istemciden plan ALINMAZ). Yalnız verilen id'ler işlenir.
  *
  * Kapılar: dönemin oturumu aktif depoya ait olmalı (pdks_gunluk_depo_kontrol); başka depodaki id SATIR olarak
- * 'uygunsuz' döner ve yazılmaz. Kesin hakediş / çıkışsız / fiyatsız / Karışık / Yarım<3sa → 'uygunsuz'.
+ * 'uygunsuz' döner ve yazılmaz. Kesin hakediş / Karışık / Yarım<3sa → 'uygunsuz' (v508: çıkışsız ve fiyatsız artık engel DEĞİL — bkz. pdks_toplu_onay_plan).
  *
  * $uygula=true: tek transaction; planı 'onay' olanların HEPSİ pdks_faz8b_degerlendirme_kaydet()'ten geçer; biri
  * beklenmedik biçimde hata verirse HEPSİ geri alınır (hiçbiri yazılmaz). Sonda tek özet audit (toplu_onay + adet).
  *
+ * v508: $otomatik=true → "Elle girilenleri otomatik onayla" (bkz. pdks_toplu_onay_plan); sınıf/FM seçicileri yok sayılır.
+ *       $beklenenOnay: önizlemede gösterilen onay adedi; uygulamada sunucunun yeniden hesabı farklıysa HİÇBİR ŞEY yazılmaz.
  * @param int[] $periodIds
- * @return array{ok:bool, hata:?string, uygulandi:bool, satirlar:array, sayac:array{onay:int,karar:int,uygunsuz:int,atla:int,yok:int}}
+ * @return array{ok:bool, hata:?string, uygulandi:bool, satirlar:array, sayac:array{onay:int,karar:int,uygunsuz:int,atla:int,yok:int,tam:int,yarim:int,fm_saat:int,fiyatsiz:int}}
  */
-function pdks_toplu_onay_calistir(array $periodIds, ?string $sinifKarari, ?string $fmKarar, int $userId, ?string $aktifDepo, bool $uygula, ?PDO $pdo = null): array
+function pdks_toplu_onay_calistir(array $periodIds, ?string $sinifKarari, ?string $fmKarar, int $userId, ?string $aktifDepo, bool $uygula, ?PDO $pdo = null, bool $otomatik = false, ?int $beklenenOnay = null): array
 {
     $pdo = $pdo ?? db();
-    $bos = ['onay' => 0, 'karar' => 0, 'uygunsuz' => 0, 'atla' => 0, 'yok' => 0];
+    $bos = ['onay' => 0, 'karar' => 0, 'uygunsuz' => 0, 'atla' => 0, 'yok' => 0, 'tam' => 0, 'yarim' => 0, 'fm_saat' => 0, 'fiyatsiz' => 0];
     $sonuc = static fn(bool $ok, ?string $hata, bool $uyg, array $satirlar, array $sayac): array =>
         ['ok' => $ok, 'hata' => $hata, 'uygulandi' => $uyg, 'satirlar' => $satirlar, 'sayac' => $sayac];
 
@@ -203,14 +233,22 @@ function pdks_toplu_onay_calistir(array $periodIds, ?string $sinifKarari, ?strin
     foreach ($z as $s) {
         $depoHata = pdks_gunluk_depo_kontrol((string)$s['oturum']['depo'], $aktifDepo);
         $plan = $depoHata !== null
-            ? ['durum' => 'uygunsuz', 'sinif' => null, 'fm' => null, 'neden' => $depoHata, 'etiket' => '']
-            : pdks_toplu_onay_plan($s['d'], $s['kesin'], $s['fiyat_var'], $sinifKarari, $fmKarar);
+            ? ['durum' => 'uygunsuz', 'sinif' => null, 'fm' => null, 'neden' => $depoHata, 'etiket' => '', 'uyari' => '', 'sonuc_sinif' => null, 'fm_saat' => 0]
+            : pdks_toplu_onay_plan($s['d'], $s['kesin'], $s['fiyat_var'], $otomatik ? null : $sinifKarari, $otomatik ? null : $fmKarar, $otomatik);
         $sayac[$plan['durum']]++;
+        if ($plan['durum'] === 'onay') {
+            if ($plan['sonuc_sinif'] === 'yarim') $sayac['yarim']++; else $sayac['tam']++;
+            $sayac['fm_saat'] += (int)$plan['fm_saat'];
+            if ($plan['uyari'] !== '' && !$s['fiyat_var']) $sayac['fiyatsiz']++;
+        }
         $satirlar[] = $s + ['plan' => $plan];
     }
 
     if (!$uygula) return $sonuc(true, null, false, $satirlar, $sayac);
     if ($sayac['onay'] === 0) return $sonuc(false, 'Onaylanacak uygun satır yok.', false, $satirlar, $sayac);
+    if ($otomatik && $beklenenOnay !== null && $sayac['onay'] !== $beklenenOnay) {
+        return $sonuc(false, 'Liste önizlemeden sonra değişti (' . $beklenenOnay . ' → ' . $sayac['onay'] . ' kayıt). Hiçbir şey yazılmadı — önizlemeyi yenileyin.', false, $satirlar, $sayac);
+    }
 
     $kendiTx = !$pdo->inTransaction();
     if ($kendiTx) $pdo->beginTransaction();
@@ -231,7 +269,8 @@ function pdks_toplu_onay_calistir(array $periodIds, ?string $sinifKarari, ?strin
 
     if (function_exists('audit_log_event')) {
         audit_log_event('toplu_onay', 'daily_worker_work_periods', null, null, [
-            'adet' => count($onaylanan), 'sinif_karari' => $sinifKarari, 'fm_karar' => $fmKarar,
+            'adet' => count($onaylanan), 'mod' => $otomatik ? 'otomatik_elle' : 'secili', 'tam' => $sayac['tam'], 'yarim' => $sayac['yarim'], 'fm_saat' => $sayac['fm_saat'],
+            'fiyatsiz' => $sayac['fiyatsiz'], 'sinif_karari' => $sinifKarari, 'fm_karar' => $fmKarar,
             'uygunsuz' => $sayac['uygunsuz'], 'karar_gerekli' => $sayac['karar'], 'period_ids' => $onaylanan,
         ]);
     }

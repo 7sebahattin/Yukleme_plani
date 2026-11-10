@@ -26,7 +26,8 @@ $cavusId = filter_var($_GET['cavus'] ?? $_POST['cavus'] ?? '', FILTER_VALIDATE_I
 $yalnizElle = (string)($_GET['kaynak'] ?? $_POST['kaynak'] ?? '') === 'elle';
 
 $errors = [];
-$onizleme = null;      // önizleme sonucu (POST action=onizle)
+$onizleme = null;      // önizleme sonucu (POST action=onizle | oto_onizle)
+$onizlemeOto = false;  // v508: önizleme otomatik (elle girilenler) modunda mı
 $topluId = [];
 $sinifKarari = trim((string)($_POST['sinif_karari'] ?? ''));
 $fmKarar = trim((string)($_POST['fm_karar'] ?? ''));
@@ -37,12 +38,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
     $idsRaw = $_POST['period_ids'] ?? [];
     $topluId = is_array($idsRaw) ? array_values(array_unique(array_map('intval', $idsRaw))) : [];
-    if (!in_array($action, ['onizle', 'uygula'], true)) {
+    if (!in_array($action, ['onizle', 'uygula', 'oto_onizle', 'oto_uygula'], true)) {
         $errors[] = 'Geçersiz işlem.';
     } else {
-        $r = pdks_toplu_onay_calistir($topluId, $sinifKarari, $fmKarar, (int)$auth_user['id'], $depo, $action === 'uygula', $pdo);
-        if ($action === 'uygula' && $r['ok']) {
-            $mesaj = $r['sayac']['onay'] . ' dönem onaylandı.'
+        $oto = in_array($action, ['oto_onizle', 'oto_uygula'], true);
+        $uygula = in_array($action, ['uygula', 'oto_uygula'], true);
+        $beklenen = null;
+        if ($oto) {
+            // v508: kapsam SUNUCUDA çözülür (gün + çavuş + aktif depo, yalnız source='manual'); istemciden id ALINMAZ.
+            $topluId = array_map(static fn($s) => (int)$s['d']['id'], pdks_toplu_onay_bekleyenler($tarih, $depo, $cavusId, true, $pdo));
+            $sinifKarari = ''; $fmKarar = '';
+            // Uygulamada önizlemedeki onay adedi zorunlu; yoksa/uyuşmazsa HİÇBİR ŞEY yazılmaz.
+            if ($uygula) $beklenen = isset($_POST['beklenen']) ? max(0, (int)$_POST['beklenen']) : -1;
+        }
+        $r = $oto && !$topluId
+            ? ['ok' => false, 'hata' => 'Otomatik onaylanacak, elle girilmiş bekleyen dönem yok.', 'uygulandi' => false, 'satirlar' => [], 'sayac' => []]
+            : pdks_toplu_onay_calistir($topluId, $sinifKarari, $fmKarar, (int)$auth_user['id'], $depo, $uygula, $pdo, $oto, $beklenen);
+        $onizlemeOto = $oto;
+        if ($uygula && $r['ok']) {
+            $mesaj = $r['sayac']['onay'] . ' dönem onaylandı' . ($oto ? ' (otomatik: ' . $r['sayac']['tam'] . ' Tam' . ($r['sayac']['yarim'] > 0 ? ', ' . $r['sayac']['yarim'] . ' Yarım' : '') . ', ' . $r['sayac']['fm_saat'] . ' sa FM)' : '') . '.'
+                . ($r['sayac']['fiyatsiz'] > 0 ? ' ' . $r['sayac']['fiyatsiz'] . ' kayıtta fiyat yok — fiyat girilene dek hakediş hesaplanamaz.' : '')
                 . ($r['sayac']['uygunsuz'] > 0 ? ' ' . $r['sayac']['uygunsuz'] . ' uygunsuz satır onaylanmadı.' : '')
                 . ($r['sayac']['karar'] > 0 ? ' ' . $r['sayac']['karar'] . ' satır karar beklediği için atlandı.' : '');
             set_flash('success', $mesaj);

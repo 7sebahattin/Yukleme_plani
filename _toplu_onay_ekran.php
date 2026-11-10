@@ -41,7 +41,12 @@ $beklemeNedeni = static function (array $f): string {
 <?php if ($onizleme !== null && $onizleme['satirlar']): ?>
 <?php $sy = $onizleme['sayac']; ?>
 <div class="card tvo-onizleme" id="tvoOnizleme">
-    <strong><?= $onizleme['uygulandi'] ? 'Sonuç' : '🔍 Önizleme' ?></strong>
+    <strong><?= $onizleme['uygulandi'] ? 'Sonuç' : '🔍 Önizleme' ?><?= !empty($onizlemeOto) ? ' — Elle girilenleri otomatik onayla' : '' ?></strong>
+    <?php if (!empty($onizlemeOto)): ?>
+    <div class="tvo-oto-ozet"><strong><?= (int)$sy['onay'] ?> kayıt onaylanacak:</strong> <?= (int)$sy['tam'] ?> Tam<?= $sy['yarim'] > 0 ? ', ' . (int)$sy['yarim'] . ' Yarım' : '' ?>, toplam <?= (int)$sy['fm_saat'] ?> sa fazla mesai (hesaplanan saatin tamamı).
+        <?php if ($sy['karar'] > 0): ?><br><span class="muted"><?= (int)$sy['karar'] ?> kayıt “Karar gerekli” — otomatik onaylanmaz, aşağıdaki listeden elle karar verilir.</span><?php endif; ?></div>
+    <?php endif; ?>
+    <?php if (!empty($sy['fiyatsiz'])): ?><div class="tvo-uyari">⚠ <?= (int)$sy['fiyatsiz'] ?> onaylanacak kayıtta işçi tipi fiyatı yok — onay yazılır, ancak fiyat girilene dek hakediş hesaplanamaz.</div><?php endif; ?>
     <div class="tvo-ozet">
         <span class="pdks-badge pdks-badge-tamamlandi">✅ Onaylanacak: <?= (int)$sy['onay'] ?></span>
         <span class="pdks-badge pdks-badge-eksik_cikis">⚠ Karar gerekli: <?= (int)$sy['karar'] ?></span>
@@ -53,25 +58,41 @@ $beklemeNedeni = static function (array $f): string {
         <div class="tvo-satir tvo-s-<?= h($pl['durum']) ?>">
             <div class="tvo-hucre tvo-ad"><strong><?= h($s['oturum']['foreman_name_snapshot']) ?></strong><span class="pdks-row-sub"><?= h($d['card_no']) ?> · <?= h($d['worker_type_name_snapshot']) ?></span></div>
             <div class="tvo-hucre"><?= h(date('H:i', strtotime((string)$d['entry_time']))) ?> – <?= $d['exit_time'] ? h(date('H:i', strtotime((string)$d['exit_time']))) : '—' ?> · <?= h(pdks_faz8b_sure_metni($d['faz8b'])) ?></div>
-            <div class="tvo-hucre"><span class="pdks-badge pdks-badge-<?= h($kod) ?>"><?= h($et) ?></span> <span class="pdks-row-sub"><?= h($pl['durum'] === 'onay' ? $pl['etiket'] : $pl['neden']) ?></span></div>
+            <div class="tvo-hucre"><span class="pdks-badge pdks-badge-<?= h($kod) ?>"><?= h($et) ?></span> <span class="pdks-row-sub"><?= h($pl['durum'] === 'onay' ? $pl['etiket'] : $pl['neden']) ?></span><?php if ($pl['uyari'] !== ''): ?><span class="tvo-uyari-satir">⚠ <?= h($pl['uyari']) ?></span><?php endif; ?></div>
         </div>
         <?php endforeach; ?>
     </div>
     <?php if (!$onizleme['uygulandi'] && $sy['onay'] > 0): ?>
     <form method="post" class="tvo-uygula-form">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <input type="hidden" name="action" value="uygula">
+        <input type="hidden" name="action" value="<?= !empty($onizlemeOto) ? 'oto_uygula' : 'uygula' ?>">
+        <?php if (!empty($onizlemeOto)): ?><input type="hidden" name="beklenen" value="<?= (int)$sy['onay'] ?>"><?php endif; ?>
         <input type="hidden" name="tarih" value="<?= h($tarih) ?>">
         <input type="hidden" name="cavus" value="<?= (int)($cavusId ?? 0) ?>">
         <input type="hidden" name="kaynak" value="<?= $yalnizElle ? 'elle' : '' ?>">
         <input type="hidden" name="sinif_karari" value="<?= h($sinifKarari) ?>">
         <input type="hidden" name="fm_karar" value="<?= h($fmKarar) ?>">
-        <?php foreach ($onizleme['satirlar'] as $s): if ($s['plan']['durum'] !== 'onay') continue; ?><input type="hidden" name="period_ids[]" value="<?= (int)$s['d']['id'] ?>"><?php endforeach; ?>
+        <?php if (empty($onizlemeOto)) foreach ($onizleme['satirlar'] as $s): if ($s['plan']['durum'] !== 'onay') continue; ?><input type="hidden" name="period_ids[]" value="<?= (int)$s['d']['id'] ?>"><?php endforeach; ?>
         <button type="submit" class="btn btn-primary" onclick="return confirm('<?= (int)$sy['onay'] ?> dönem onaylanacak. Devam edilsin mi?');">✅ <?= (int)$sy['onay'] ?> kaydı onayla</button>
         <span class="muted">Yalnız “Onaylanacak” satırlar uygulanır; diğerleri hiç yazılmaz.</span>
     </form>
     <?php endif; ?>
 </div>
+<?php endif; ?>
+
+<?php $elleAdet = count(array_filter($bekleyen, static fn($s) => !empty($s['elle']))); ?>
+<?php if ($elleAdet > 0): ?>
+<form method="post" class="card tvo-oto" id="tvoOtoForm">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="oto_onizle">
+    <input type="hidden" name="tarih" value="<?= h($tarih) ?>">
+    <input type="hidden" name="cavus" value="<?= (int)($cavusId ?? 0) ?>">
+    <div class="tvo-oto-metin">
+        <strong>Elle girilenleri otomatik onayla</strong>
+        <span class="muted">Bu gün/çavuş/depoda onay bekleyen <?= (int)$elleAdet ?> elle girilmiş dönem var. Yalnız karar gerektirmeyenler onaylanır (süre Tam eşiğini karşılıyorsa Tam, fazla mesai varsa hesaplanan saatin tamamı). Kısa/çıkışsız/Tam-Yarım belirsiz olanlar ve kart okutulmuş kayıtlar onaylanmaz. Önce önizleme gösterilir.</span>
+    </div>
+    <button type="submit" class="btn btn-primary">⚡ Elle girilenleri otomatik onayla (önizle)</button>
+</form>
 <?php endif; ?>
 
 <?php if (!$bekleyen): ?>
@@ -118,7 +139,7 @@ $beklemeNedeni = static function (array $f): string {
             <span class="tvo-hucre tvo-ad"><strong><?= h($s['oturum']['foreman_name_snapshot']) ?></strong><span class="pdks-row-sub"><?= h($d['card_no']) ?> · <?= h($d['worker_type_name_snapshot']) ?></span></span>
             <span class="tvo-hucre"><?= h(date('H:i', strtotime((string)$d['entry_time']))) ?> – <?= $d['exit_time'] ? h(date('H:i', strtotime((string)$d['exit_time']))) : '—' ?><span class="pdks-row-sub"><?= h(pdks_faz8b_sure_metni($f)) ?></span></span>
             <span class="tvo-hucre"><?= h($beklemeNedeni($f)) ?><span class="pdks-row-sub">Kaynak: <?= h($s['kaynak']) ?></span></span>
-            <span class="tvo-hucre"><?php if ($engel !== ''): ?><span class="pdks-badge pdks-badge-eksik_cikis">⛔ <?= h($engel) ?></span><?php endif; ?></span>
+            <span class="tvo-hucre"><?php if ($engel !== ''): ?><span class="pdks-badge pdks-badge-eksik_cikis">⛔ <?= h($engel) ?></span><?php endif; ?><?php if ($pl['uyari'] !== ''): ?><span class="tvo-uyari-satir">⚠ <?= h($pl['uyari']) ?></span><?php endif; ?></span>
         </label>
         <?php endforeach; ?>
     </div>
