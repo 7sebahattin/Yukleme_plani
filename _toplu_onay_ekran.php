@@ -129,13 +129,25 @@ $beklemeNedeni = static function (array $f): string {
         </div>
     </div>
 
+    <?php $sinifKararAdet = count(array_filter($bekleyen, static fn($s) => !empty($s['d']['faz8b']['sinif_onayi_gerekli']) && ($s['d']['faz8b']['etkin_sinif'] ?? null) === null)); ?>
+    <?php if ($sinifKararAdet > 0): ?>
+    <div class="card tvo-yarim-kisayol" id="tvoYarimKisayol">
+        <div class="tvo-oto-metin">
+            <strong>Eski kısa kayıtlar için Yarım kısayolu (<?= (int)$sinifKararAdet ?> “Tam/Yarım kararı” bekleyen satır)</strong>
+            <span class="muted">Kutularla hangi satırların Yarım olacağını SİZ seçersiniz; hiçbir şey otomatik varsayılmaz. “Seçilenleri Yarım olarak önizle” Tam/Yarım kararını Yarım yapıp önizlemeye gider: 3 saatten kısa olanlar “Onaylanmaz” görünür, onay yine önizlemeden sonra verilir.</span>
+        </div>
+        <button type="button" class="btn" id="tvoKararSec">☑ Tam/Yarım kararı bekleyenleri seç</button>
+        <button type="button" class="btn btn-primary" id="tvoYarimBtn" disabled>🌓 Seçilenleri Yarım olarak önizle</button>
+    </div>
+    <?php endif; ?>
+
     <div class="tvo-liste" role="list">
         <?php foreach ($bekleyen as $s): $d = $s['d']; $f = $d['faz8b'];
             $pl = pdks_toplu_onay_plan($d, $s['kesin'], $s['fiyat_var'], null, null);
             $engel = $pl['durum'] === 'uygunsuz' ? $pl['neden'] : '';
         ?>
         <label class="tvo-satir<?= $engel !== '' ? ' tvo-s-uygunsuz' : '' ?>" role="listitem">
-            <span class="tvo-chk"><input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" class="js-tvo-chk" <?= isset($topluGuvenli[(int)$d['id']]) ? 'checked' : '' ?>></span>
+            <span class="tvo-chk"><input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" class="js-tvo-chk"<?= (!empty($f['sinif_onayi_gerekli']) && ($f['etkin_sinif'] ?? null) === null) ? ' data-sinif-karar="1"' : '' ?> <?= isset($topluGuvenli[(int)$d['id']]) ? 'checked' : '' ?>></span>
             <span class="tvo-hucre tvo-ad"><strong><?= h($s['oturum']['foreman_name_snapshot']) ?></strong><span class="pdks-row-sub"><?= h($d['card_no']) ?> · <?= h($d['worker_type_name_snapshot']) ?></span></span>
             <span class="tvo-hucre"><?= h(date('H:i', strtotime((string)$d['entry_time']))) ?> – <?= $d['exit_time'] ? h(date('H:i', strtotime((string)$d['exit_time']))) : '—' ?><span class="pdks-row-sub"><?= h(pdks_faz8b_sure_metni($f)) ?></span></span>
             <span class="tvo-hucre"><?= h($beklemeNedeni($f)) ?><span class="pdks-row-sub">Kaynak: <?= h($s['kaynak']) ?></span></span>
@@ -149,9 +161,19 @@ $beklemeNedeni = static function (array $f): string {
     var f = document.getElementById('tvoForm'); if (!f) return;
     var tumu = document.getElementById('tvoTumu'), sayac = document.getElementById('tvoSayac'), btn = document.getElementById('tvoOnizleBtn');
     var kutular = [].slice.call(f.querySelectorAll('.js-tvo-chk'));
+    var yarimBtn = document.getElementById('tvoYarimBtn'), kararSec = document.getElementById('tvoKararSec');
+    if (kararSec) kararSec.addEventListener('click', function () {
+        kutular.forEach(function (k) { k.checked = k.hasAttribute('data-sinif-karar'); }); guncelle();
+    });
+    if (yarimBtn) yarimBtn.addEventListener('click', function () {
+        // Yalnız kararı Yarım yapıp ÖNİZLEMEYE gönderir (yazma yok); onay önizlemeden sonra.
+        document.getElementById('tvoSinif').value = 'yarim';
+        if (f.requestSubmit) f.requestSubmit(btn); else f.submit();
+    });
     function guncelle() {
         var n = kutular.filter(function (k) { return k.checked; }).length;
         sayac.textContent = n + ' satır seçili'; btn.disabled = n === 0;
+        if (yarimBtn) yarimBtn.disabled = n === 0;
         tumu.checked = n > 0 && n === kutular.length;
     }
     tumu.addEventListener('change', function () { kutular.forEach(function (k) { k.checked = tumu.checked; }); guncelle(); });

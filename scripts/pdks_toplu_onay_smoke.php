@@ -280,6 +280,8 @@ ok8bt('8d sayfa: sınıf/FM kararı varsayılanı BOŞ (otomatik onay yok)', sub
 ok8bt('8e sayfa: önizleme + ayrı uygula', str_contains($sayfa, "'onizle'") && str_contains($sayfa, "'uygula'"));
 ok8bt('8e2 sayfa: otomatik onay ayrı buton + önizleme + beklenen adet; id sunucuda çözülür', str_contains($sayfa, 'Elle girilenleri otomatik onayla') && str_contains($sayfa, "'oto_onizle'") && str_contains($sayfa, "'oto_uygula'")
     && str_contains($sayfa, 'name="beklenen"') && str_contains($sayfa, 'pdks_toplu_onay_bekleyenler($tarih, $depo, $cavusId, true, $pdo)'));
+ok8bt('8e3 v510: Yarım kısayolu yalnız önizlemeye gider (yazma yok), karar kullanıcıdan', str_contains($sayfa, 'id="tvoYarimBtn"') && str_contains($sayfa, 'id="tvoKararSec"')
+    && str_contains($sayfa, "getElementById('tvoSinif').value = 'yarim'") && str_contains($sayfa, 'requestSubmit(btn)') && str_contains($sayfa, 'data-sinif-karar'));
 ok8bt('8f cavus_hakedis.php Toplu Onay bağlantısı', str_contains((string)file_get_contents(__DIR__ . '/../cavus_hakedis.php'), 'mesai_toplu_onay.php'));
 require_once __DIR__ . '/../config/role_pdks_matrix.php';
 ok8bt('8g rol matrisi: route kayıtlı, uygula=mesai edit, önizle=read', (role_pdks_routes()['mesai_toplu_onay.php'] ?? '') === 'mesai'
