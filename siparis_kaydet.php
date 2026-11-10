@@ -30,7 +30,7 @@ else {
 // v507 — içerik (düğme) yetkisi: işlem türüne göre; durum değişiminde hedef duruma göre.
 $icerikHarita = ['alan' => 'alan_duzenle', 'not' => 'alan_duzenle', 'kilit_ac' => 'alan_duzenle', 'eksik_okuma_tamam' => 'alan_duzenle',
     'kalem_ekle' => 'kalem_duzenle', 'catisma' => 'catisma_coz', 'belge_bagla' => 'belge_isle', 'yeniden_isle' => 'belge_isle', 'yetim_ekle' => 'belge_isle',
-    'belge_sil' => 'belge_sil', 'yeni' => 'elle_ac'];
+    'belge_sil' => 'belge_sil', 'sil' => 'sev_sil', 'yeni' => 'elle_ac'];
 if ($islem === 'durum') {
     $__hedef = (string)($_POST['hedef'] ?? '');
     icerik_kapi('siparis.' . (['mail_gonderildi' => 'durum_mail', 'evrak_gonderildi' => 'durum_evrak', 'iptal' => 'durum_iptal'][$__hedef] ?? 'durum_degistir'));

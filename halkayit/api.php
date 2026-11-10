@@ -251,7 +251,7 @@ function hks_eylem_icerigi(string $action, array $g): ?string {
     'taslaklar' => 'ekr_taslaklar',
     'gonderilenler' => 'ekr_gonderilenler',
     'gonderilen_tohum' => 'tekrar_gonder',
-    'toplu_kunye' => 'ekr_kunye',
+    'toplu_kunye', 'kunyeler', 'kunye_detay' => 'ekr_kunye',
     'sorgu' => 'ekr_sorgu',
     'etiket' => 'ekr_etiket',
     'stok' => 'ekr_stok',

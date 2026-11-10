@@ -77,6 +77,7 @@ function role_content_catalog(): array {
                 'ui.siparis.invoice_olustur' => $i('Invoice oluştur / düzenle', 'dugme', $oglKart('edit')),
                 'ui.siparis.belge_isle'      => $i('Belgeyi yeniden işle / sevkiyata bağla', 'dugme', $oglKart('edit')),
                 'ui.siparis.belge_sil'       => $i('Belge sil', 'dugme', $oglKart('delete')),
+                'ui.siparis.sev_sil'         => $i('Sevkiyatı sil', 'dugme', $oglKart('delete')),
                 'ui.siparis.mail_taslak'     => $i('Mail taslağı (Outlook / mail programı)', 'dugme', 'siparis.ogl.read', true),
             ],
         ],

@@ -42,7 +42,7 @@ $ic = static fn(string $k): bool => icerik_can('siparis.' . $k);
 $yazYukle = $yaz && $ic('belge_yukle');   $yazAlan  = $yaz && $ic('alan_duzenle');   $yazKalem = $yaz && $ic('kalem_duzenle');
 $yazCat   = $yaz && $ic('catisma_coz');   $yazDurum = $yaz && $ic('durum_degistir'); $yazMail  = $yaz && $ic('durum_mail');
 $yazEvrak = $yaz && $ic('durum_evrak');   $yazIptal = $yaz && $ic('durum_iptal');    $yazPkl   = $yaz && $ic('pkl_olustur');
-$yazInv   = $yaz && $ic('invoice_olustur'); $yazIsle = $yaz && $ic('belge_isle');    $silBelge = $sil && $ic('belge_sil');
+$yazInv   = $yaz && $ic('invoice_olustur'); $yazIsle = $yaz && $ic('belge_isle');    $silBelge = $sil && $ic('belge_sil'); $silSev = $sil && $ic('sev_sil');
 $icZip = $ic('zip'); $icIndir = $ic('belge_indir'); $icTaslak = $ic('mail_taslak');
 $beyanOku = can_beyan('read');
 $durumlar = siparis_durumlar();
@@ -166,7 +166,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       <?php elseif ($belgeler): ?><a class="btn" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a>
       <?php else: ?><button type="button" class="btn" disabled title="Henüz belge yok">🗜 Evrak takımı (ZIP)</button><?php endif; ?>
       <?php if ($ic('sev_pkl')): ?><a class="btn" href="siparis_pkl.php?id=<?= $id ?>">📄 PKL</a><?php endif; ?>
-      <?php if ($sil): ?>
+      <?php if ($silSev): ?>
         <div class="pc-kebab-wrap">
           <button class="btn pc-kebab" type="button" title="Diğer işlemler" aria-label="Diğer işlemler">⋮</button>
           <div class="pc-dropdown" hidden><button type="button" class="pc-drop-danger" data-sip-ac="sipSilModal">🗑 Sevkiyatı sil</button></div>
@@ -840,7 +840,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
   <?php endif; ?>
   <?php endif; ?>
 
-  <?php if ($sil): ?>
+  <?php if ($silSev): ?>
   <div class="pm-overlay" id="sipSilModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipSilBas">
     <div class="pm-dialog">
       <form method="post" action="siparis_kaydet.php" data-sip-tek>
