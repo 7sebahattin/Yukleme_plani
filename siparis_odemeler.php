@@ -16,6 +16,7 @@ require_once __DIR__ . '/config/siparis_debit.php';        // v492: debit note l
 $auth_user = require_login();
 require_siparis('read');
 if (!siparis_cari_yetkili()) forbidden('Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: reports.export)');
+icerik_kapi('siparis.odeme');   // v507
 siparis_no_store();
 
 $pdo = db();

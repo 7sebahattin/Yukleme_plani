@@ -139,7 +139,7 @@ $list = renderPage();
 ok('hata sızmadı', !str_starts_with($list, '__ERROR__'), $list);
 ok('PHP Warning/Notice yok', !str_contains($list, 'Warning:') && !str_contains($list, 'Notice:'));
 ok('"Yeni Rol" butonu var', str_contains($list, 'Yeni Rol'));
-ok('4 rol de listede', cnt($list, 'rol-badge-slug') >= 4 * 2, 'her rol tablo+kart için 2 kez basılır');
+ok('4 rol de listede', cnt($list, 'class="rol-badge-slug"') >= 4 * 2, 'her rol tablo+kart için 2 kez basılır');
 ok('admin "Sistem" rozetiyle', (bool)preg_match('/Sistem Yöneticisi.*?rol-badge-system/s', $list));
 ok('Depo Sorumlusu Sil AKTİF (0 kullanıcı)', !deleteFormDisabled($list, 3));
 ok('Eski Rol Sil PASİF (1 kullanıcı atanmış)', deleteFormDisabled($list, 4));
@@ -193,8 +193,16 @@ ok('yetki seti değişti (records.read)', in_array('records.read', $newPerms->fe
 
 // Matrix form and persisted authorization semantics.
 ok('Gör / Ekle / Düzenle / Sil sütunları var', str_contains($list, '<th scope="col">Gör</th><th scope="col">Ekle</th><th scope="col">Düzenle</th><th scope="col">Sil</th>'));
+// v507 — iki panelli düzenleyici + içerik (kart/düğme) anahtarları
+ok('v507: sayfa başına panel + sol gezinme', str_contains($list, 'class="rolx-panel" data-sayfa="siparis"') && str_contains($list, 'class="rolx-nav-oge" data-git="siparis"') && str_contains($list, 'data-git="kapsam"'));
+ok('v507: içerik anahtarları formda (OGL, Beyan, Hal, Ana Sayfa)', str_contains($list, 'value="ui.siparis.mail_al"') && str_contains($list, 'value="ui.beyan.wa_kopyala"') && str_contains($list, 'value="ui.hks.gonder"') && str_contains($list, 'value="ui.dashboard.rozetler"'));
+ok('v507: katalog sürüm işaretleyicisi gönderilir', str_contains($list, 'name="permissions[]" value="role.catalog.' . ROLE_CATALOG_VERSION . '"'));
+ok('v507: hazır ayarlar (Tam yetki / Yalnız görüntüleme / Kapat) ve kopyalama', str_contains($list, 'data-hazir="tam"') && str_contains($list, 'data-hazir="salt"') && str_contains($list, 'data-hazir="kapat"') && str_contains($list, 'data-rol-kopyala="3"'));
+ok('v507: ön koşul bilgisi içerik öğesinde', (bool)preg_match('/class="rolx-oge" data-gerek="\[[^"]*siparis\.ogl_acik\.create/', $list));
+ok('v507: yöneticiye özel sayfalar ayrı panelde, anahtarsız', str_contains($list, 'data-sayfa="yonetici"') && str_contains($list, 'İşlem Geçmişi'));
+ok('v507: tek pencere (oluştur + düzenle)', substr_count($list, 'class="pm-overlay"') === 1 && str_contains($list, 'id="rolModal"'));
 ok('Raporlar altında yükleme raporu satırı var', str_contains($list, 'data-path="reports/reports_yukleme"'));
-ok('Arama / bölüm / seçim filtreleri var', str_contains($list, 'rol-search') && str_contains($list, 'rol-section-filter') && str_contains($list, 'rol-state-filter'));
+ok('Arama kutusu ve mobil sayfa seçici var', str_contains($list, 'rolx-ara-kutu') && str_contains($list, 'rolx-nav-sec'));
 ok('Veri kapsamı ve kesişim açıklaması var', str_contains($list, 'scope_mode') && str_contains($list, 'kesişir'));
 ok('Saklı ek izin düzenlenebilir anahtar olarak var', str_contains($list, 'value="extension.example"'));
 $persisted = db()->query('SELECT permission FROM role_permissions WHERE role_id = 3')->fetchAll(PDO::FETCH_COLUMN);

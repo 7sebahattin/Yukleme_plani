@@ -14,6 +14,7 @@ $auth_user = require_login();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: siparisler.php'); exit; }
 csrf_check($_POST['csrf'] ?? null);
 require_siparis('match');
+icerik_kapi('siparis.sev_beyan');   // v507
 if (!can_beyan('read')) forbidden('Beyan bağı için beyan görüntüleme yetkisi de gerekir. (Gerekli yetki: beyan.read)');
 
 $pdo = db();

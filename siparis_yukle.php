@@ -33,6 +33,7 @@ if (($postMax > 0 && $icerikUzunluk > $postMax) || ($icerikUzunluk > 0 && !$_POS
 
 csrf_check($_POST['csrf'] ?? null);
 require_siparis('write');
+icerik_kapi('siparis.belge_yukle');   // v507
 if ($hedefId > 0 ? !role_ogl_any('edit') : !role_ogl_can('', 'create')) forbidden('Bu işlem için yetkiniz yok.');
 $pdo = db();
 if (!siparis_sema_hazir($pdo)) { set_flash('error', 'Sipariş modülü henüz kurulmadı.'); header('Location: siparisler.php'); exit; }

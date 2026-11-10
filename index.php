@@ -247,6 +247,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 }
 </style>
 
+<?php $__rozet_gizle = !icerik_can('dashboard.rozetler'); if ($__rozet_gizle) ob_start();   // v507: sayaç rozetleri ve özet satırları içerik yetkisine bağlı ?>
 <div class="home-grid">
 
 <?php if ($_ops_show): ?>
@@ -454,6 +455,10 @@ if (nav_ptak_gorunur()):
 <?php endif; ?>
 
 </div>
+<?php if ($__rozet_gizle) {
+    // Rozet ve özet satırları HTML'e hiç yazılmaz (yalnız gizlemek sayıları kaynakta bırakırdı).
+    echo preg_replace('~<div class="home-card-(?:badge|sub)\b[^>]*>.*?</div>\s*~su', '', (string)ob_get_clean());
+} ?>
 
 <!-- Sürüm damgası — mobilde sidebar görünmediği için buraya da konur.
      "Deploy yansıdı mı?" sorusunun telefondan cevabı. -->

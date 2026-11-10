@@ -183,7 +183,7 @@ $rows = array_merge($bekleyen_rows, $kapali_rows);
 // ── Toplu bildirim: hangi satırlar uygun? ─────────────────────────────────
 // beyan_view'daki buton kapısının aynısı. Aktif bağlar TEK sorguda çekilir
 // (satır başına sorgu, 50 satırlık sayfada 50 sorgu demekti).
-$toplu_yetki = can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin());
+$toplu_yetki = can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin()) && icerik_can('beyan.toplu_bildirim');
 $aktif_bagli = [];
 if ($toplu_yetki && $rows) {
     try {
@@ -207,7 +207,7 @@ $uygun_sayisi = count(array_filter($rows, $bildirim_uygun));
 
 // HKS firma adları (tek sorgu) — listede firma + plaka görünsün diye.
 $firma_adlari = beyan_hks_firma_adlari(array_map(fn($r) => (string)($r['hks_firma_id'] ?? ''), $rows));
-$kopyala_yetki = can_beyan('create');
+$kopyala_yetki = can_beyan('create') && icerik_can('beyan.taslak_olustur');
 
 $statuses  = beyan_statuses();
 $today     = date('Y-m-d');
@@ -248,7 +248,7 @@ render_flash();
             </h2>
             <span class="muted beyan-blok-not">Açık işler · <?= $bek_result_total ?> sonuç · Sayfa <?= $bek_page ?> / <?= $bek_total_pages ?></span>
         </div>
-        <?php if (!empty($bekleyen_rows)): ?>
+        <?php if (!empty($bekleyen_rows) && icerik_can('beyan.yazdir')): ?>
         <!-- v357: kartta görünen satırları yazdır / PDF olarak gönder (assets/beyan_yazdir.js) -->
         <div class="bl-aksiyon" role="group" aria-label="Bekleyen beyanları yazdır veya PDF gönder">
             <button type="button" class="btn btn-sm bl-yazdir-btn" id="bekleyenYazdirBtn"
@@ -473,7 +473,7 @@ render_flash();
 })();
 </script>
 
-<?php if (!empty($bekleyen_rows)): ?>
+<?php if (!empty($bekleyen_rows) && icerik_can('beyan.yazdir')): ?>
 <script type="application/json" id="bekleyenYazdirVeri"><?= json_encode(
     beyan_bekleyen_yazdir_veri($bekleyen_rows, $firma_adlari, (string)(active_depot() ?? ''), $bek_q),
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PARTIAL_OUTPUT_ON_ERROR

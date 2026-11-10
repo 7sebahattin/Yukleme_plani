@@ -41,6 +41,7 @@ $in = json_decode($raw, true);
 if (!is_array($in)) $in = [];
 csrf_check(is_string($in['csrf'] ?? null) ? $in['csrf'] : null);   // JSON-aware 403; ilk mutasyondan ÖNCE
 require_siparis('write');
+icerik_kapi('siparis.mail_al');   // v507
     if (!role_ogl_can('', 'create')) forbidden('Bu işlem için yetkiniz yok.');
 if (!siparis_mail_yetkisi()) forbidden('Mail sorgusu için Mail Merkezi okuma yetkisi gerekir.');
 $pdo = db();

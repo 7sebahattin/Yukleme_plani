@@ -31,6 +31,7 @@ $pdo->exec("INSERT INTO customs_declarations (created_at,company_name,company_ad
 if (($argv[1] ?? '') === '--endpoint') {
     function require_login(): array { return ['id'=>1]; }
     function can_beyan(string $perm): bool { return getenv('BEYAN_TEST_DENY') !== '1'; }
+    if (!function_exists('icerik_can')) { function icerik_can(string $k): bool { return true; } }   // v507: içerik kapısı (bu test can_beyan'ı sınar)
     function csrf_check($token): void {
         if ($token !== 'test-csrf') { http_response_code(403); echo json_encode(['ok'=>false,'error'=>'CSRF']); exit; }
     }
