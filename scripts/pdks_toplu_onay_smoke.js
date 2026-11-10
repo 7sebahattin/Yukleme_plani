@@ -59,6 +59,15 @@ const sunucu = http.createServer((req, res) => {
             const fs16 = await sayfa.locator('#tvoSinif').evaluate(e => parseFloat(getComputedStyle(e).fontSize));
             ok(`${ad}: select 16px`, fs16 >= 16, String(fs16));
         }
+        // v510: Yarım kısayolu
+        ok(`${ad}: Yarım kısayol kartı görünür`, (await sayfa.locator('#tvoYarimKisayol').count()) === 1 && (await sayfa.locator('#tvoYarimKisayol').isVisible()));
+        const yb = await sayfa.locator('#tvoYarimBtn').boundingBox();
+        ok(`${ad}: Yarım kısayol düğmesi ekran içinde`, !!yb && yb.x >= 0 && yb.x + yb.width <= w + 1, JSON.stringify(yb));
+        await sayfa.locator('#tvoKararSec').click();
+        const nKarar = await sayfa.locator('.js-tvo-chk[data-sinif-karar]').count();
+        const nSecili = await sayfa.locator('.js-tvo-chk:checked').count();
+        ok(`${ad}: "kararı bekleyenleri seç" yalnız Tam/Yarım bekleyenleri seçer`, nKarar > 0 && nSecili === nKarar, nSecili + '/' + nKarar);
+        ok(`${ad}: seçim varken Yarım düğmesi açık`, !(await sayfa.locator('#tvoYarimBtn').isDisabled()));
         const kutu = await sayfa.locator('.js-tvo-chk').first().boundingBox();
         ok(`${ad}: onay kutusu ekranda ve ≥ 20px`, !!kutu && kutu.width >= 20 && kutu.x >= 0 && kutu.x + kutu.width <= w);
         if (SHOT) await sayfa.screenshot({ path: path.join(SHOT, `toplu_onay_${ad}.png`), fullPage: true });
