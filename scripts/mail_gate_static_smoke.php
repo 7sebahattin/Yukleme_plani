@@ -146,7 +146,7 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, Fil
     if (preg_match('/\bmail_ek_hazirla\s*\(/', php_strip_whitespace($yol))) $ekCagiran[] = $rel;
 }
 sort($ekCagiran);
-ok('mail_ek_hazirla( yalnız tanım (mail_attach) + mail_ek.php (GET indirme) + config/siparis_mail.php (Siparişler "mailden al")', $ekCagiran === ['config/mail_attach.php', 'config/siparis_mail.php', 'mail_ek.php'], implode(',', $ekCagiran));
+ok('mail_ek_hazirla( yalnız tanım (mail_attach) + mail_ek.php (GET indirme) + config/siparis_mail.php (Siparişler "mailden al") + config/frugro_mail.php (Frugro "mailden al")', $ekCagiran === ['config/frugro_mail.php', 'config/mail_attach.php', 'config/siparis_mail.php', 'mail_ek.php'], implode(',', $ekCagiran));
 $uidParcaCagiran = [];
 foreach (glob($ROOT . '/{,config/}*.php', GLOB_BRACE) as $f) if (preg_match('/->uidParca\(/', php_strip_whitespace($f))) $uidParcaCagiran[] = substr($f, strlen($ROOT) + 1);
 sort($uidParcaCagiran);
