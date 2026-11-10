@@ -2798,6 +2798,41 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
     .toplu-v2 .tv-hizli-kutu { flex: 1 1 90px; max-width: none; }
 }
 
+/* v507 — Toplu Mesai Onayı (mesai_toplu_onay.php): .tvo-* */
+.tvo-kontrol { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; padding: 14px 16px; margin-bottom: 12px; }
+.tvo-kontrol-alan label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; }
+.tvo-kontrol-alan select { width: 100%; box-sizing: border-box; min-height: 44px; }
+.tvo-kontrol-btn { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tvo-kontrol-btn .tvo-hepsi { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.tvo-liste { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.tvo-satir { display: grid; grid-template-columns: 32px 1.4fr 1.2fr 1.4fr 1.4fr; gap: 10px; align-items: center; padding: 8px 12px; border: 1px solid var(--border, #d9dee7); border-radius: 10px; background: var(--card, transparent); cursor: pointer; }
+.tvo-onizleme-liste .tvo-satir { grid-template-columns: 1.4fr 1.4fr 2fr; cursor: default; }
+.tvo-satir .tvo-hucre { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.tvo-satir input[type=checkbox] { width: 22px; height: 22px; }
+.tvo-satir .pdks-badge { max-width: 100%; white-space: normal; }
+.tvo-s-uygunsuz { border-left: 4px solid var(--danger, #c0392b); }
+.tvo-s-onay { border-left: 4px solid var(--ok, #2e8b57); }
+.tvo-s-karar { border-left: 4px solid var(--warn, #d68910); }
+.tvo-onizleme { padding: 14px 16px; margin-bottom: 14px; }
+.tvo-ozet { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.tvo-oto { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.tvo-oto-metin { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 320px; }
+.tvo-oto-ozet { margin: 8px 0; }
+.tvo-uyari { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-weight: 600; }
+.tvo-uyari-satir { display: block; margin-top: 4px; color: var(--warn); font-size: .8rem; font-weight: 600; }
+.tvo-yarim-kisayol { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.tvo-uygula-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+@media (max-width: 767px) {
+    .tvo-kontrol { grid-template-columns: 1fr; }
+    .tvo-kontrol select { font-size: 16px; }
+    .tvo-satir, .tvo-onizleme-liste .tvo-satir { grid-template-columns: 32px 1fr; }
+    .tvo-onizleme-liste .tvo-satir { grid-template-columns: 1fr; }
+    .tvo-satir .tvo-hucre { grid-column: 2; }
+    .tvo-onizleme-liste .tvo-satir .tvo-hucre { grid-column: 1; }
+    .tvo-satir .tvo-chk { grid-row: 1 / span 4; }
+    .tvo-oto .btn, .tvo-yarim-kisayol .btn { width: 100%; }
+}
+
 /* ── v446 — Fiş Excel'i Yükle (gunluk_fis_yukle.php + _fis_onizle.php) ─────────
    Yalnız EKLEME; sınıflar fy- önekli. Renkler token — koyu tema hazır. <768px kuralları yalnız fy-* içindir. */
 .fy-sayfa { min-width: 0; }

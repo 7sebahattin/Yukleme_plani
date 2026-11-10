@@ -545,7 +545,10 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     // Yevmiye istenip kolon yoksa YAZILMAZ (fail-closed): sessizce yevmiyesiz Tam kaydı oluşmaz.
     $yevmiye = (int)($satir['yevmiye'] ?? 0);
     $kolonlar = 'session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot, entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class, work_date_snapshot, depo_snapshot, status, source';
-    $isaret = "?,?,?,?,?,?,?,?,'auto',?,?,?,?";
+    // v509: toplu ekran "Yarım" kutusu (YALNIZ kod: `coklu_grup` grubunun `yarim`i) → beyan 'yarim' (kalıcı niyet işareti;
+    // Toplu Mesai Onayı "otomatik onayla" bunu Yarım olarak onaylar). Diğer tüm yollar 'auto' (eski davranış).
+    $beyan = !empty($satir['yarim']) ? 'yarim' : 'auto';
+    $isaret = "?,?,?,?,?,?,?,?,'{$beyan}',?,?,?,?";
     $deger = [$sid, $card, $type, $typeName, $girisEv, $cikisEv, $entry, $exit, $workDate, $depo, $status, $kaynak];
     if ($yevmiye > 0) {
         if (!function_exists('pdks_yevmiye_hazir') || !pdks_yevmiye_hazir($pdo)) throw new RuntimeException('Rampacı yevmiye alanı kurulmamış (migrate.php › «Rampacı yevmiye alanı») — hiçbir şey yazılmadı.');
@@ -573,6 +576,7 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     if ($kaynak !== 'manual') $kayit['kaynak'] = $kaynak;
     if ($yevmiye > 0) $kayit['yevmiye'] = $yevmiye;
     if ($cift) $kayit['cift_yevmiye'] = 1;
+    if ($beyan === 'yarim') $kayit['beyan'] = 'yarim';
     pdks_faz8j_audit($pdo, $user, (string)($meta['audit_action'] ?? 'puantaj_ekle'), $pid, [], $kayit);
     return $pid;
 }
@@ -737,6 +741,8 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
         if ($cift && $grupHata === null && (!function_exists('pdks_cift_hazir') || !pdks_cift_hazir($pdo))) {
             $grupHata = 'Çift yevmiye alanı kurulmamış (migrate.php › «Çift yevmiye alanı»).';
         }
+        // v509: Yarım kutusu işareti (opt-in, yalnız kod/`coklu_grup`; HTTP ucu `yarim` anahtarını GEÇİRMEZ).
+        $yarim = $coklu && !empty($g['yarim']);
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
         $cikis = pdks_faz8j_cikis_zamani($g);
         $exit = $cikis['ok'] ? $cikis['exit'] : null;
@@ -763,11 +769,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
             }
             $grupKart[$k] = true; $kartGoruldu[$k] = true;
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => false, 'kart_id' => $k, 'kart' => $kart, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye, 'cift' => $cift];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye, 'cift' => $cift, 'yarim' => $yarim];
         }
         for ($n = 0; $n < $kartsizAdet; $n++) {
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => true, 'kart_id' => 0, 'kart' => null, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye, 'cift' => $cift];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye, 'cift' => $cift, 'yarim' => $yarim];
         }
     }
     $h['hatalar'] = array_values(array_unique($h['hatalar']));
