@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: siparis_odemeler.
 csrf_check($_POST['csrf'] ?? null);
 require_siparis('read');
 if (!siparis_cari_yetkili() || !siparis_odeme_yetkili()) forbidden('Ödeme girişi için yetkiniz yok.');
+icerik_kapi('siparis.odeme');   // v507
 siparis_no_store();
 
 $pdo = db();

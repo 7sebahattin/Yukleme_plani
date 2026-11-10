@@ -17,6 +17,7 @@ require_once __DIR__ . '/config/siparis_invoice.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.sev_invoice');   // v507
 siparis_no_store();
 $pdo   = db();
 $hazir = siparis_sema_hazir($pdo);
@@ -61,6 +62,7 @@ $FORM_ALANLARI = ['no', 'tarih', 'fiyat', 'iskonto', 'efatura_toplam', 'net_kg',
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_siparis('write');
+    icerik_kapi('siparis.invoice_olustur');   // v507
     if (!role_ogl_can((string)$sev['durum'], 'edit')) forbidden('Bu işlem için yetkiniz yok.');
     $islem = (string)($_POST['islem'] ?? '');
     $gonderilen = [];

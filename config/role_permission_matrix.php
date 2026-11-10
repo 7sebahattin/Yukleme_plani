@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/role_pdks_matrix.php';
+require_once __DIR__ . '/role_content.php';   // v507: sayfa içi kart/düğme (içerik) yetkileri
 
 /** Pure editor schema. Unsupported operations are absent, never implied. */
 function role_permission_matrix(): array {
@@ -103,6 +104,7 @@ function role_matrix_expand_permissions(array $permissions): array {
         }
     }
     $permissions = role_sections_fanout($permissions);
+    $permissions = role_content_expand($permissions);   // v507 — SON adım: içerik öğeleri ön koşul izinlerine bakar
     return array_values(array_unique($permissions));
 }
 
@@ -146,7 +148,59 @@ function role_matrix_catalog_additions(): array {
     }
     foreach (['records'=>['loading','pallet'],'siparis'=>['ogl','urun']] as $module=>$pages) foreach ($pages as $page) foreach (['read','create','edit','delete'] as $action) $out["$module.$page.$action"] = "$page $action";
     foreach (role_report_types() as $type=>$label) { $out["reports.$type.read"]=$label.' görüntüle'; $out["reports.$type.export"]=$label.' dışa aktar'; }
-    return $out + role_pdks_catalog();
+    return $out + role_pdks_catalog() + role_content_catalog_labels();
+}
+
+/**
+ * v507 — Özet şeması: yönetici-dışı her sayfa için içerdiği TÜM izinler (sayfa + kartlar + ek işlemler + içerik).
+ * Roller listesi ve Kullanıcılar ekranındaki "ne görür / ne yapar" özeti bu TEK şemadan üretilir.
+ * t: r=Gör c=Ekle e=Düzenle d=Sil x=ek işlem i=içerik · s: salt görüntüleme türü mü.
+ */
+function role_ozet_sema(): array {
+    static $sema = null;
+    if ($sema !== null) return $sema;
+    $sema = [];
+    $kisa = ['read' => 'r', 'create' => 'c', 'edit' => 'e', 'delete' => 'd'];
+    $icerik = role_content_catalog();
+    foreach (role_permission_matrix() as $grup => $rows) {
+        foreach ($rows as $row) {
+            if (!empty($row['admin_only'])) continue;
+            $perms = [];
+            $topla = static function (array $r) use (&$topla, &$perms, $kisa): void {
+                if (empty($r['admin_only'])) foreach ((array)$r['actions'] as $tur => $a) {
+                    $perms[] = ['p' => (string)$a['permission'], 't' => $kisa[$tur] ?? 'x', 's' => $tur === 'read' || $tur === 'export'];
+                }
+                foreach ((array)$r['children'] as $c) $topla($c);
+            };
+            $topla($row);
+            foreach ((array)($icerik[$row['key']] ?? []) as $ogeler) foreach ($ogeler as $k => $o) $perms[] = ['p' => (string)$k, 't' => 'i', 's' => !empty($o['salt'])];
+            $sema[] = ['key' => (string)$row['key'], 'label' => (string)$row['label'], 'grup' => (string)$grup,
+                'okuma' => (string)($row['actions']['read']['permission'] ?? ''), 'perms' => $perms];
+        }
+    }
+    return $sema;
+}
+
+/** Genişletilmiş izin listesinden sayfa özeti: [key,label,grup,gor,c,e,d,acik,toplam,duzey(kapali|salt|kismi|tam)]. */
+function role_ozet(array $expanded): array {
+    $var = array_flip(array_filter($expanded, 'is_string'));
+    $out = [];
+    foreach (role_ozet_sema() as $sayfa) {
+        $acik = 0; $toplam = 0; $saltDisi = false; $tur = ['c' => false, 'e' => false, 'd' => false]; $gorulen = [];
+        foreach ($sayfa['perms'] as $x) {
+            if (isset($gorulen[$x['p']])) continue;
+            $gorulen[$x['p']] = true; $toplam++;
+            if (!isset($var[$x['p']])) continue;
+            $acik++;
+            if (!$x['s']) $saltDisi = true;
+            if (isset($tur[$x['t']])) $tur[$x['t']] = true;
+        }
+        $gor = $sayfa['okuma'] !== '' ? isset($var[$sayfa['okuma']]) : $acik > 0;
+        $duzey = (!$gor || $acik === 0) ? 'kapali' : ($acik === $toplam ? 'tam' : ($saltDisi ? 'kismi' : 'salt'));
+        $out[] = ['key' => $sayfa['key'], 'label' => $sayfa['label'], 'grup' => $sayfa['grup'], 'gor' => $gor,
+            'c' => $tur['c'], 'e' => $tur['e'], 'd' => $tur['d'], 'acik' => $acik, 'toplam' => $toplam, 'duzey' => $duzey];
+    }
+    return $out;
 }
 
 /** Additional CRUD check; caller must retain its existing module/read gate. */

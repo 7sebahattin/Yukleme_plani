@@ -20,7 +20,7 @@ function beyan_plaka_json(array $payload, int $code = 200): void {
 $auth_user = function_exists('current_user') ? current_user() : null;
 if ($auth_user === null) beyan_plaka_json(['ok' => false, 'error' => 'Oturum gerekli. Lütfen tekrar giriş yapın.'], 401);
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') beyan_plaka_json(['ok' => false, 'error' => 'Geçersiz istek.'], 405);
-if (!(can_beyan('edit') && can_beyan('hks.write'))) beyan_plaka_json(['ok' => false, 'error' => 'Bu işlem için yetkiniz yok.'], 403);
+if (!(can_beyan('edit') && can_beyan('hks.write') && icerik_can('beyan.plaka_hizli'))) beyan_plaka_json(['ok' => false, 'error' => 'Bu işlem için yetkiniz yok.'], 403);
 
 $raw = (string)file_get_contents('php://input');
 if (strlen($raw) > 2000) beyan_plaka_json(['ok' => false, 'error' => 'İstek çok uzun.'], 413);

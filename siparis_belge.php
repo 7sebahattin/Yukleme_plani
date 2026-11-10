@@ -12,6 +12,7 @@ require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.belge_indir');   // v507
 $pdo   = db();
 $hazir = siparis_sema_hazir($pdo);
 $parca = ($_GET['parca'] ?? '') === '1';

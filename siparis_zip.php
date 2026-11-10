@@ -13,6 +13,7 @@ require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.zip');   // v507
 siparis_no_store();
 
 $pdo = db();

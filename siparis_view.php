@@ -37,6 +37,13 @@ siparis_sev_kapi($sev, 'read', 'Bu bölümdeki sevkiyatları görüntüleme yetk
 $yaz  = (can_siparis('write') && role_ogl_can((string)$sev['durum'], 'edit'));
 $sil  = (can_siparis('delete') && role_ogl_can((string)$sev['durum'], 'delete'));
 $esle = can_siparis('match') && can_beyan('read') && role_ogl_can((string)$sev['durum'], 'edit');
+// v507 — içerik (kart/düğme) yetkileri: mevcut kapıya EK
+$ic = static fn(string $k): bool => icerik_can('siparis.' . $k);
+$yazYukle = $yaz && $ic('belge_yukle');   $yazAlan  = $yaz && $ic('alan_duzenle');   $yazKalem = $yaz && $ic('kalem_duzenle');
+$yazCat   = $yaz && $ic('catisma_coz');   $yazDurum = $yaz && $ic('durum_degistir'); $yazMail  = $yaz && $ic('durum_mail');
+$yazEvrak = $yaz && $ic('durum_evrak');   $yazIptal = $yaz && $ic('durum_iptal');    $yazPkl   = $yaz && $ic('pkl_olustur');
+$yazInv   = $yaz && $ic('invoice_olustur'); $yazIsle = $yaz && $ic('belge_isle');    $silBelge = $sil && $ic('belge_sil'); $silSev = $sil && $ic('sev_sil');
+$icZip = $ic('zip'); $icIndir = $ic('belge_indir'); $icTaslak = $ic('mail_taslak');
 $beyanOku = can_beyan('read');
 $durumlar = siparis_durumlar();
 $kapali   = in_array((string)$sev['durum'], siparis_kapali_durumlar(), true);
@@ -153,12 +160,13 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       <?php endif; ?>
     </div>
     <div class="page-head-actions sip-eylemler">
-      <?php if ($yaz): ?><button type="button" class="btn btn-primary" data-sip-ac="sipYukleModal">📥 Belge yükle</button>
-      <?php else: ?><button type="button" class="btn" disabled title="Gerekli yetki: siparis.write">📥 Belge yükle</button><?php endif; ?>
-      <?php if ($belgeler): ?><a class="btn" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a>
+      <?php if ($yazYukle): ?><button type="button" class="btn btn-primary" data-sip-ac="sipYukleModal">📥 Belge yükle</button>
+      <?php elseif (!$yaz): ?><button type="button" class="btn" disabled title="Gerekli yetki: siparis.write">📥 Belge yükle</button><?php endif; ?>
+      <?php if (!$icZip): ?>
+      <?php elseif ($belgeler): ?><a class="btn" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a>
       <?php else: ?><button type="button" class="btn" disabled title="Henüz belge yok">🗜 Evrak takımı (ZIP)</button><?php endif; ?>
-      <a class="btn" href="siparis_pkl.php?id=<?= $id ?>">📄 PKL</a>
-      <?php if ($sil): ?>
+      <?php if ($ic('sev_pkl')): ?><a class="btn" href="siparis_pkl.php?id=<?= $id ?>">📄 PKL</a><?php endif; ?>
+      <?php if ($silSev): ?>
         <div class="pc-kebab-wrap">
           <button class="btn pc-kebab" type="button" title="Diğer işlemler" aria-label="Diğer işlemler">⋮</button>
           <div class="pc-dropdown" hidden><button type="button" class="pc-drop-danger" data-sip-ac="sipSilModal">🗑 Sevkiyatı sil</button></div>
@@ -194,29 +202,29 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
     </ol>
     <?php $ilr = siparis_ilerleme($sev); ?>
     <p class="sip-adim-mobil"><?= $iptal ? 'İptal' : 'Adım ' . $sira . '/' . (int)$ilr['toplam'] . ' · ' . h($durumlar[(string)$sev['durum']]['etiket'] ?? '') ?></p>
-    <?php if ($yaz): ?>
+    <?php if ($yazDurum || $yazMail || $yazEvrak || $yazIptal): ?>
     <div class="sip-hizli">
-      <?php if (!$kapali && (string)$sev['durum'] === 'siparis_alindi'): ?>
+      <?php if ($yazDurum && !$kapali && (string)$sev['durum'] === 'siparis_alindi'): ?>
         <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="hedef" value="hazirlik"><input type="hidden" name="donus" value="durum">
           <button type="submit" class="btn">🧺 Hazırlık başladı</button></form>
       <?php endif; ?>
-      <?php if (!$kapali && $sira <= 3): ?>
+      <?php if ($yazDurum && !$kapali && $sira <= 3): ?>
         <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek data-sip-onay="Araç yola çıktı olarak işaretlensin mi?"><?= sipui_csrf() ?><input type="hidden" name="islem" value="durum"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="hedef" value="yola_cikti"><input type="hidden" name="donus" value="durum">
           <button type="submit" class="btn">🛣 Yola çıktı ✓</button></form>
       <?php endif; ?>
-      <?php if (!$kapali && (string)$sev['durum'] !== 'mail_gonderildi'): ?>
+      <?php if ($yazMail && !$kapali && (string)$sev['durum'] !== 'mail_gonderildi'): ?>
         <?php if ($pklHazir): ?><button type="button" class="btn btn-secondary" data-sip-ac="sipMailModal">✅ Mail gönderildi</button>
         <?php else: ?><span class="sip-pasif-grup"><button type="button" class="btn" disabled aria-describedby="sipMailNeden">✅ Mail gönderildi</button><span class="sip-pasif-neden" id="sipMailNeden">Önce PKL oluşturun ya da yükleyin.</span></span><?php endif; ?>
       <?php endif; ?>
-      <?php if ((string)$sev['durum'] === 'mail_gonderildi'): ?>
+      <?php if ($yazEvrak && (string)$sev['durum'] === 'mail_gonderildi'): ?>
         <button type="button" class="btn btn-secondary" data-sip-ac="sipEvrakModal">📦 Evrak takımı gönderildi</button>
       <?php endif; ?>
-      <?php if (!$kapali): ?>
+      <?php if ($yazIptal && !$kapali): ?>
         <button type="button" class="btn btn-danger" data-sip-ac="sipIptalModal">✖ İptal</button>
       <?php endif; ?>
-      <button type="button" class="btn btn-ghost" data-sip-ac="sipDurumModal">⇄ Durumu değiştir</button>
+      <?php if ($yazDurum): ?><button type="button" class="btn btn-ghost" data-sip-ac="sipDurumModal">⇄ Durumu değiştir</button><?php endif; ?>
     </div>
-    <?php else: ?>
+    <?php elseif (!$yaz): ?>
       <p class="sip-bilgi" role="note">Durumu değiştirmek için siparis.write yetkisi gerekir.</p>
     <?php endif; ?>
   </section>
@@ -228,7 +236,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       <section class="sip-uyari sip-o2" id="uyarilar" aria-label="Uyarılar">
         <h2>⚠ Uyarılar <span class="sip-say"><?= count($sev['_uyarilar']) ?></span></h2>
         <ul><?php foreach ($sev['_uyarilar'] as $u): ?><li<?= ($u['seviye'] ?? '') === 'hata' ? ' class="sip-uyari-hata"' : '' ?>><?= ($u['seviye'] ?? '') === 'hata' ? '⛔ ' : '' ?><?= h((string)($u['mesaj'] ?? '')) ?></li><?php endforeach; ?></ul>
-        <?php if ($yaz && array_filter($sev['_uyarilar'], fn($u) => ($u['kod'] ?? '') === 'po_eksik_okuma')): ?>
+        <?php if ($yazAlan && array_filter($sev['_uyarilar'], fn($u) => ($u['kod'] ?? '') === 'po_eksik_okuma')): ?>
           <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="eksik_okuma_tamam"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="donus" value="uyarilar">
             <button type="submit" class="btn btn-sm">✓ Kalemleri kontrol ettim, sorun yok</button></form>
         <?php endif; ?>
@@ -236,9 +244,10 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
       <?php endif; ?>
 
       <!-- 5) Sevkiyat bilgileri -->
+      <?php if ($ic('sev_bilgi')): ?>
       <section class="card sip-o4" id="bilgi" aria-labelledby="sipBilgiBas">
         <div class="card-head"><h2 id="sipBilgiBas">Sevkiyat bilgileri</h2><span class="sip-soluk">Elle girilen değer kilitlenir; belgeler onu ezmez.</span></div>
-        <?php if ($yaz && $duzenleAlan !== '' && isset($tanimlar['sevkiyat'][$duzenleAlan]) && ($soforHazir || !in_array($duzenleAlan, siparis_sofor_alanlari(), true)) && ($yiHazir || $duzenleAlan !== 'yurtici_gumruk')): $dv = $alanDuzenleVeri($duzenleAlan); ?>
+        <?php if ($yazAlan && $duzenleAlan !== '' && isset($tanimlar['sevkiyat'][$duzenleAlan]) && ($soforHazir || !in_array($duzenleAlan, siparis_sofor_alanlari(), true)) && ($yiHazir || $duzenleAlan !== 'yurtici_gumruk')): $dv = $alanDuzenleVeri($duzenleAlan); ?>
           <form method="post" action="siparis_kaydet.php" class="sip-edit-inline" data-sip-tek>
             <?= sipui_csrf() ?><input type="hidden" name="islem" value="alan"><input type="hidden" name="varlik" value="sevkiyat"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="alan" value="<?= h($duzenleAlan) ?>"><input type="hidden" name="donus" value="bilgi">
             <label><?= h($dv['etiket']) ?>
@@ -260,7 +269,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                 <dd>
                   <span class="sip-dd-deger<?= $sev[$alan] === null || $sev[$alan] === '' ? ' sip-bos' : '' ?>"><?php $tel = $t['tip'] === 'telefon' ? preg_replace('~[^0-9+]~', '', (string)$sev[$alan]) : ''; ?><?php if ($tel !== '' && strlen(ltrim($tel, '+')) >= 7): ?><a class="sip-tel" href="tel:<?= h($tel) ?>"><?= h($goster($t['tip'], $sev[$alan])) ?></a><?php else: ?><?= h($goster($t['tip'], $sev[$alan])) ?><?php endif; ?></span>
                   <?= sipui_kaynak_chip($kaynak, $kilit) ?>
-                  <?php if ($yaz): ?>
+                  <?php if ($yazAlan): ?>
                     <a class="sip-edit" href="siparis_view.php?id=<?= $id ?>&amp;duzenle=<?= h($alan) ?>#bilgi" data-sip-alan="<?= sipui_json_attr($alanDuzenleVeri($alan)) ?>" title="<?= h($t['etiket']) ?> alanını düzenle">✎<span class="sip-sr"> Düzenle</span></a>
                     <?php if ($kilit): ?>
                       <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="kilit_ac"><input type="hidden" name="varlik" value="sevkiyat"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="alan" value="<?= h($alan) ?>"><input type="hidden" name="donus" value="bilgi">
@@ -279,13 +288,15 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <?php $nk = isset($sev['_elle']['notlar']); ?>
         <div class="sip-not">
           <div class="sip-not-metin<?= (string)$sev['notlar'] === '' ? ' sip-bos' : '' ?>"><?= (string)$sev['notlar'] !== '' ? nl2br(h((string)$sev['notlar'])) : 'Not yok' ?></div>
-          <?php if ($yaz): ?><a class="sip-edit" href="siparis_view.php?id=<?= $id ?>&amp;duzenle=notlar#bilgi" data-sip-alan="<?= sipui_json_attr($alanDuzenleVeri('notlar')) ?>" title="Notu düzenle">✎<span class="sip-sr"> Notu düzenle</span></a><?php endif; ?>
+          <?php if ($yazAlan): ?><a class="sip-edit" href="siparis_view.php?id=<?= $id ?>&amp;duzenle=notlar#bilgi" data-sip-alan="<?= sipui_json_attr($alanDuzenleVeri('notlar')) ?>" title="Notu düzenle">✎<span class="sip-sr"> Notu düzenle</span></a><?php endif; ?>
         </div>
       </section>
+      <?php endif; ?>
 
       <!-- 6) Kalemler -->
+      <?php if ($ic('sev_kalemler')): ?>
       <section class="card sip-o5" id="kalemler" aria-labelledby="sipKalemBas">
-        <div class="card-head"><h2 id="sipKalemBas">Kalemler (kalibre bazında)</h2><span class="sip-soluk">Etkin = elle &gt; PC &gt; LL &gt; PO</span><?php if ($yaz): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemEkleModal" title="Ayrıştırıcının kaçırdığı kalemi elle ekle">➕ Kalem ekle</button><?php endif; ?></div>
+        <div class="card-head"><h2 id="sipKalemBas">Kalemler (kalibre bazında)</h2><span class="sip-soluk">Etkin = elle &gt; PC &gt; LL &gt; PO</span><?php if ($yazKalem): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemEkleModal" title="Ayrıştırıcının kaçırdığı kalemi elle ekle">➕ Kalem ekle</button><?php endif; ?></div>
         <?php if (!$kalemler): ?>
           <div class="empty sip-bos-kutu"><p>Henüz kalem yok. PO ya da Loading List yüklenince kalemler oluşur.</p></div>
         <?php else:
@@ -320,7 +331,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                   <?php if ($k['etkin_kaynak']): ?><?= sipui_kaynak_chip($ek ? 'elle' : (string)$k['etkin_kaynak'], $ek) ?><?php endif; ?></td>
                 <td class="num"><?= h(sipui_fiyat($k['fiyat'], $k['para_birimi'])) ?><?php if ($k['fiyat'] !== null && $k['fiyat_birim']): ?> <span class="sip-soluk">/<?= h((string)$k['fiyat_birim']) ?></span><?php endif; ?>
                   <?php if ((int)$k['fiyat_miras'] === 1): ?><span class="sip-miras" title="Fiyat önceki bir onaydan miras alındı">ⓘ miras</span><?php endif; ?></td>
-                <td class="actions-col"><?php if ($yaz): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemModal" data-sip-doldur="<?= sipui_json_attr($kalemDuzenleVeri($k)) ?>" aria-label="Kalibre <?= h((string)$k['kalibre']) ?> düzenle">✎ Düzenle</button><?php endif; ?></td>
+                <td class="actions-col"><?php if ($yazKalem): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemModal" data-sip-doldur="<?= sipui_json_attr($kalemDuzenleVeri($k)) ?>" aria-label="Kalibre <?= h((string)$k['kalibre']) ?> düzenle">✎ Düzenle</button><?php endif; ?></td>
               </tr>
               <?php if (!empty($k['_yerler'])): ?>
               <tr class="sip-yer-tr"><td colspan="8">
@@ -360,25 +371,27 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                 <span role="row" class="sip-mini-etkin"><span role="cell">Etkin <?= $ek ? '🔒' : '' ?></span><span role="cell" class="num"><?= h(sipui_sayi($k['etkin_palet'])) ?></span><span role="cell" class="num"><?= h(sipui_sayi($k['etkin_koli'])) ?></span></span>
               </div>
               <div class="sip-kalem-alt"><span>Fiyat: <?= h(sipui_fiyat($k['fiyat'], $k['para_birimi'])) ?><?= (int)$k['fiyat_miras'] === 1 ? ' <span class="sip-miras">ⓘ miras</span>' : '' ?></span>
-                <?php if ($yaz): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemModal" data-sip-doldur="<?= sipui_json_attr($kalemDuzenleVeri($k)) ?>">✎ Düzenle</button><?php endif; ?></div>
+                <?php if ($yazKalem): ?><button type="button" class="btn btn-sm" data-sip-ac="sipKalemModal" data-sip-doldur="<?= sipui_json_attr($kalemDuzenleVeri($k)) ?>">✎ Düzenle</button><?php endif; ?></div>
             </article>
           <?php endforeach; ?>
         </div>
         <?php endif; ?>
       </section>
+      <?php endif; ?>
 
       <!-- 7) Belgeler -->
+      <?php if ($ic('sev_belgeler')): ?>
       <section class="card sip-o6" id="belgeler" aria-labelledby="sipBelgeBas">
         <div class="card-head">
           <h2 id="sipBelgeBas">Belgeler</h2>
           <div class="sip-zip-eylem">
             <label class="sip-onay-satir"><input type="checkbox" data-sip-eski> Eski sürümler dahil</label>
-            <a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>" data-sip-zip-hepsi<?= $belgeler ? '' : ' aria-disabled="true"' ?>>🗜 Tümünü ZIP</a>
+            <?php if ($icZip): ?><a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>" data-sip-zip-hepsi<?= $belgeler ? '' : ' aria-disabled="true"' ?>>🗜 Tümünü ZIP</a><?php endif; ?>
             <button type="button" class="btn btn-sm" data-sip-zip-secili data-id="<?= $id ?>" disabled title="Önce listeden belge seçin">🗜 Seçilenleri ZIP</button>
           </div>
         </div>
         <?php if (!$belgeler): ?>
-          <div class="empty sip-bos-kutu"><p>Bu sevkiyata bağlı belge yok.</p><?php if ($yaz): ?><button type="button" class="btn btn-primary" data-sip-ac="sipYukleModal">📥 Belge yükle</button><?php endif; ?></div>
+          <div class="empty sip-bos-kutu"><p>Bu sevkiyata bağlı belge yok.</p><?php if ($yazYukle): ?><button type="button" class="btn btn-primary" data-sip-ac="sipYukleModal">📥 Belge yükle</button><?php endif; ?></div>
         <?php else:
             $gruplu = [];
             foreach ($belgeler as $b) $gruplu[(string)$b['tur']][] = $b;
@@ -404,8 +417,8 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                 </div>
                 <div class="sip-belge-eylem">
                   <a class="btn btn-sm" href="siparis_belge.php?id=<?= (int)$b['id'] ?>" data-sip-onizle data-id="<?= (int)$b['id'] ?>" data-ext="<?= h($ext) ?>" data-ad="<?= h((string)$b['orijinal_ad']) ?>">Önizle</a>
-                  <a class="btn btn-sm" href="siparis_dosya.php?id=<?= (int)$b['id'] ?>&amp;dl=1">İndir</a>
-                  <?php if ($sil): ?>
+                  <?php if ($icIndir): ?><a class="btn btn-sm" href="siparis_dosya.php?id=<?= (int)$b['id'] ?>&amp;dl=1">İndir</a><?php endif; ?>
+                  <?php if ($silBelge): ?>
                     <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-onay="Bu belge silinsin mi? Uygulanmış değerler geri alınmaz.">
                       <?= sipui_csrf() ?><input type="hidden" name="islem" value="belge_sil"><input type="hidden" name="belge_id" value="<?= (int)$b['id'] ?>"><input type="hidden" name="donus_sid" value="<?= $id ?>">
                       <button type="submit" class="btn btn-sm btn-danger" aria-label="<?= h((string)$b['orijinal_ad']) ?> sil">Sil</button></form>
@@ -416,8 +429,10 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           </ul>
         <?php endforeach; endif; ?>
       </section>
+      <?php endif; ?>
 
       <!-- 8) PKL -->
+      <?php if ($ic('sev_pkl')): ?>
       <section class="card sip-o7" id="pkl" aria-labelledby="sipPklBas">
         <div class="card-head"><h2 id="sipPklBas">Packing List (PKL)</h2>
           <?php
@@ -436,9 +451,9 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           <p class="muted"><?= (int)$sev['var_ll'] === 1 ? 'Henüz PKL oluşturulmadı.' : 'PKL için önce Loading List (navlun numarası) yüklenmeli.' ?></p>
         <?php endif; ?>
         <div class="sip-pkl-eylem">
-          <?php if ($yaz): ?><a class="btn btn-primary" href="siparis_pkl.php?id=<?= $id ?>"><?= $pkl && $pkl['dosya_belge_id'] ? '📄 PKL düzenle / yeniden oluştur' : '📄 PKL oluştur' ?></a>
+          <?php if ($yazPkl): ?><a class="btn btn-primary" href="siparis_pkl.php?id=<?= $id ?>"><?= $pkl && $pkl['dosya_belge_id'] ? '📄 PKL düzenle / yeniden oluştur' : '📄 PKL oluştur' ?></a>
           <?php else: ?><a class="btn" href="siparis_pkl.php?id=<?= $id ?>">📄 PKL'yi görüntüle</a><?php endif; ?>
-          <?php if ($pkl && $pkl['dosya_belge_id']): ?><a class="btn" href="siparis_dosya.php?id=<?= (int)$pkl['dosya_belge_id'] ?>&amp;dl=1">⬇ İndir</a><?php endif; ?>
+          <?php if ($icIndir && $pkl && $pkl['dosya_belge_id']): ?><a class="btn" href="siparis_dosya.php?id=<?= (int)$pkl['dosya_belge_id'] ?>&amp;dl=1">⬇ İndir</a><?php endif; ?>
         </div>
         <?php
           $pklOn = null;
@@ -458,8 +473,10 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           </details>
         <?php endif; ?>
       </section>
+      <?php endif; ?>
 
       <!-- 8b) Invoice (OGL) — v442 -->
+      <?php if ($ic('sev_invoice')): ?>
       <section class="card sip-o7" id="invoice" aria-labelledby="sipInvBas">
         <div class="card-head"><h2 id="sipInvBas">Invoice (OGL)</h2>
           <span class="sip-pkl-durum sip-inv-durum--<?= $invVar ? 'hazir' : 'yok' ?>"><?= $invVar ? 'Hazır' : 'Yok' ?></span>
@@ -474,17 +491,19 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           <p class="muted"><?= $pklHazir ? 'Henüz invoice hazırlanmadı.' : 'Invoice PKL’deki palet, koli ve ağırlık toplamlarından kurulur.' ?></p>
         <?php endif; ?>
         <div class="sip-pkl-eylem">
-          <?php if ($yaz): ?>
+          <?php if ($yazInv): ?>
             <?php if ($pklHazir): ?><a class="btn btn-primary" href="siparis_invoice.php?id=<?= $id ?>"><?= $invVar ? '🧾 Invoice düzenle / yeniden oluştur' : '🧾 Invoice hazırla' ?></a>
             <?php else: ?><span class="sip-pasif-grup"><button type="button" class="btn btn-primary" disabled aria-describedby="sipInvNeden">🧾 Invoice hazırla</button><span class="sip-pasif-neden" id="sipInvNeden">Önce PKL oluşturun ya da yükleyin.</span></span><?php endif; ?>
           <?php elseif ($invVar): ?><a class="btn" href="siparis_invoice.php?id=<?= $id ?>">🧾 Invoice’u görüntüle</a><?php endif; ?>
-          <?php if ($invVar && $invBelge > 0): ?><a class="btn" href="siparis_dosya.php?id=<?= $invBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?>
+          <?php if ($icIndir && $invVar && $invBelge > 0): ?><a class="btn" href="siparis_dosya.php?id=<?= $invBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?>
         </div>
         <?php if (!$yaz && !$invVar): ?><p class="sip-bilgi" role="note">Invoice hazırlamak için siparis.write yetkisi gerekir.</p><?php endif; ?>
       </section>
+      <?php endif; ?>
 
       <?php if ($debitKart !== null && !empty($debitKart['liste'])): ?>
       <!-- 8c) OGL debit note — v492 (salt okunur) -->
+      <?php if ($ic('sev_debit')): ?>
       <section class="card sip-o7" id="debit" aria-labelledby="sipDebitBas">
         <div class="card-head"><h2 id="sipDebitBas">OGL debit note</h2><span class="sip-pkl-durum sip-inv-durum--hazir"><?= h(siparis_odeme_aviz_para((int)$debitKart['kurus']) . ' EUR') ?></span></div>
         <div class="table-wrap"><table class="data-table"><thead><tr><th>Belge no</th><th>Tarih</th><th>Fatura</th><th>Neden</th><th class="num">Tutar</th></tr></thead><tbody>
@@ -497,11 +516,13 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <p class="sip-soluk">OGL fiyat farkını ödemeden düşer; tutar ödeme avizosundaki net tutara zaten yansımıştır. Cari Döküm ve Fiyat Dengeleme «kalan fark»ı bu tutarla azaltır. <a href="siparis_odemeler.php#odDebit">Tüm debit note'lar</a></p>
       </section>
       <?php endif; ?>
+      <?php endif; ?>
     </div>
 
     <div class="sip-col sip-col-yan">
       <!-- 4) Çatışmalar -->
       <?php if ($acikCat || $cozulenCat): ?>
+      <?php if ($ic('sev_catisma')): ?>
       <section class="card sip-catisma sip-o3" id="catismalar" aria-labelledby="sipCatBas">
         <div class="card-head"><h2 id="sipCatBas">⚠ Çatışmalar <span class="sip-say"><?= count($acikCat) ?></span></h2></div>
         <?php if (!$acikCat): ?><p class="muted">Açık çatışma yok.</p><?php endif; ?>
@@ -517,7 +538,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
               <div><span class="sip-soluk">Gelen</span><br><span class="sip-cat-deger"><?= h($goster($tip, $c['gelen_deger'])) ?></span> <?= sipui_kaynak_chip($c['gelen_kaynak']) ?>
                 <?php if ($c['belge_id']): ?><a class="sip-link" href="siparis_belge.php?id=<?= (int)$c['belge_id'] ?>">belge</a><?php endif; ?></div>
             </div>
-            <?php if ($yaz): ?>
+            <?php if ($yazCat): ?>
             <div class="sip-cat-eylem">
               <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="catisma"><input type="hidden" name="catisma_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="karar" value="kabul"><input type="hidden" name="donus" value="catismalar"><button type="submit" class="btn btn-sm btn-primary">Geleni kabul et</button></form>
               <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="catisma"><input type="hidden" name="catisma_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="karar" value="red"><input type="hidden" name="donus" value="catismalar"><button type="submit" class="btn btn-sm">Mevcudu koru</button></form>
@@ -533,9 +554,11 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <?php endif; ?>
       </section>
       <?php endif; ?>
+      <?php endif; ?>
 
       <!-- 9) Beyan -->
       <?php if ($beyanOku): ?>
+      <?php if ($ic('sev_beyan')): ?>
       <section class="card sip-o8" id="beyan" aria-labelledby="sipBeyanBas">
         <div class="card-head"><h2 id="sipBeyanBas">🏛 Gümrük beyanı</h2></div>
         <?php if ($beyanHata): ?><p class="sip-hata-metin">Beyan verisi okunamadı.</p><?php endif; ?>
@@ -584,8 +607,10 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <?php endif; ?>
       </section>
       <?php endif; ?>
+      <?php endif; ?>
 
       <!-- 10) Geçmiş -->
+      <?php if ($ic('sev_gecmis')): ?>
       <section class="card sip-o9" id="gecmis" aria-labelledby="sipGecmisBas">
         <div class="card-head"><h2 id="sipGecmisBas">Geçmiş</h2></div>
         <?php if (!$olaylar): ?><p class="muted">Kayıtlı olay yok.</p><?php else: ?>
@@ -603,6 +628,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
         <?php if (!$tumGecmis && count($olaylar) >= 30): ?><p><a class="btn btn-sm" href="siparis_view.php?id=<?= $id ?>&amp;gecmis=tum#gecmis">Tümünü göster</a></p><?php endif; ?>
         <?php endif; ?>
       </section>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -743,7 +769,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           <p>Uygulama mail göndermez: PKL'yi kendi mail programınızdan müşteriye gönderin, sonra burada işaretleyin. Sevkiyat “📦 Evrak takımı bekleyen” bölümüne geçer.</p>
           <?php if ($mailPklAd !== ''): ?>
             <div class="sip-mail-dosya">📎 <strong class="sip-kes"><?= h($mailPklAd) ?></strong>
-              <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?></div>
+              <?php if ($icIndir && $mailPklBelge > 0): ?><a class="btn btn-sm" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;dl=1">⬇ İndir</a><?php endif; ?></div>
           <?php endif; ?>
           <?php if ($mailTaslak['kime']): ?>
             <div class="sip-mail-alici"><span class="sip-soluk">PO'da yazan Packing List adresi:</span>
@@ -755,7 +781,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                 <textarea rows="6" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" data-sip-govde data-sip-govde-ilk="<?= h($mailTaslak['govde']) ?>" spellcheck="false"><?= h($mailTaslak['govde']) ?></textarea>
               </label>
               <div class="sip-mail-eylem">
-                <?php if ($mailPklBelge > 0): ?><a class="btn btn-sm btn-primary" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;eml=1&amp;sid=<?= $id ?>" data-sip-eml data-sip-govde-eml>📎 Ekli mail taslağını indir</a><?php endif; ?>
+                <?php if ($icTaslak && $mailPklBelge > 0): ?><a class="btn btn-sm btn-primary" href="siparis_dosya.php?id=<?= $mailPklBelge ?>&amp;eml=1&amp;sid=<?= $id ?>" data-sip-eml data-sip-govde-eml>📎 Ekli mail taslağını indir</a><?php endif; ?>
                 <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($mailTaslak)) ?>" data-sip-govde-mailto>✉ Mail programını aç</a>
                 <button type="button" class="btn btn-sm btn-ghost" data-sip-govde-sifirla>↺ Metni sıfırla</button>
               </div>
@@ -797,14 +823,14 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
                 <textarea rows="6" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" data-sip-govde data-sip-govde-ilk="<?= h($evrakTaslak['govde']) ?>" spellcheck="false"><?= h($evrakTaslak['govde']) ?></textarea>
               </label>
               <div class="sip-mail-eylem">
-                <a class="btn btn-sm btn-primary" href="siparis_eml.php?sid=<?= $id ?>" data-sip-evrak-eml data-sip-govde-eml>📧 Outlook taslağını indir</a>
+                <?php if ($icTaslak): ?><a class="btn btn-sm btn-primary" href="siparis_eml.php?sid=<?= $id ?>" data-sip-evrak-eml data-sip-govde-eml>📧 Outlook taslağını indir</a><?php endif; ?>
                 <a class="btn btn-sm" href="<?= h(siparis_pkl_mailto($evrakTaslak)) ?>" data-sip-govde-mailto>✉ Mail programını aç</a>
                 <button type="button" class="btn btn-sm btn-ghost" data-sip-govde-sifirla>↺ Metni sıfırla</button>
               </div>
               <p class="sip-soluk sip-mail-ipucu">Taslak ek İÇERMEZ — evrak takımını (ZIP / belgeler) Outlook'ta kendiniz ekleyin. "Outlook taslağını indir" Kime, konu ve metinle hazır bir taslak (.eml) indirir.</p>
             </div>
           <?php endif; ?>
-          <?php if ($belgeler): ?><div class="sip-mail-eylem"><a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a></div><?php endif; ?>
+          <?php if ($belgeler && $icZip): ?><div class="sip-mail-eylem"><a class="btn btn-sm" href="siparis_zip.php?id=<?= $id ?>">🗜 Evrak takımı (ZIP)</a></div><?php endif; ?>
           <label class="sip-onay-satir"><input type="checkbox" name="onay_evrak" value="1" required data-sip-evrak-onay> Evrak takımını müşteriye gönderdim</label>
         </div>
         <div class="pm-footer"><button type="button" class="btn" data-sip-kapat>Vazgeç</button><button type="submit" class="btn btn-secondary" data-sip-evrak-gonder disabled>📦 Süreci kapat</button></div>
@@ -814,7 +840,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
   <?php endif; ?>
   <?php endif; ?>
 
-  <?php if ($sil): ?>
+  <?php if ($silSev): ?>
   <div class="pm-overlay" id="sipSilModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipSilBas">
     <div class="pm-dialog">
       <form method="post" action="siparis_kaydet.php" data-sip-tek>

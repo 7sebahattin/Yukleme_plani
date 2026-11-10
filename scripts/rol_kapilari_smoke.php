@@ -241,7 +241,7 @@ ok('roles.php POST yetkilerini is_string ile süzüyor',
 ok('roles.php silme işlemi atomik',
     (bool)preg_match('/beginTransaction\(\);\s*\n\s*try \{\s*\n\s*\$pdo->prepare\("DELETE FROM role_permissions/', $rol));
 ok('yeni rol varsayılanında dashboard.read işaretli',
-    str_contains($rol, ": ['dashboard.read'];"));
+    str_contains($rol, "json_encode(['dashboard.read', 'ui.dashboard.rozetler'])"));   // v507: varsayılan JS'e data-varsayilan ile geçer
 
 // ── Kaldırılan web sayfaları = 410 tombstone (v281) ──────────────────────
 // Deploy repodan silinen dosyayı sunucudan SİLMEZ; kaldırılan sayfa içeriği

@@ -14,6 +14,7 @@ require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.sev_pkl');   // v507
 $pdo   = db();
 $hazir = siparis_sema_hazir($pdo);
 if (!$hazir) {
@@ -57,6 +58,7 @@ $profilUygula = function (array $post) use ($profilHaritasi): array {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_siparis('write');
+    icerik_kapi('siparis.pkl_olustur');   // v507
     if (!role_ogl_can((string)$sev['durum'], 'edit')) forbidden('Bu işlem için yetkiniz yok.');
     $islem = (string)($_POST['islem'] ?? '');
     $baslikG = is_array($_POST['baslik'] ?? null) ? $_POST['baslik'] : [];

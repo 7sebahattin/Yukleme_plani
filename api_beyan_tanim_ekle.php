@@ -10,7 +10,7 @@ function beyan_tanim_json(array $payload, int $code = 200): void {
 }
 $auth_user = require_login();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') beyan_tanim_json(['ok'=>false,'error'=>'Geçersiz istek.'], 405);
-if (!(can_beyan('create') || can_beyan('edit'))) beyan_tanim_json(['ok'=>false,'error'=>'Bu işlem için yetkiniz yok.'], 403);
+if (!(can_beyan('create') || can_beyan('edit')) || !icerik_can('beyan.oneri_yonet')) beyan_tanim_json(['ok'=>false,'error'=>'Bu işlem için yetkiniz yok.'], 403);
 $raw_body = (string)file_get_contents('php://input');
 if (strlen($raw_body) > 16000) beyan_tanim_json(['ok'=>false,'error'=>'İstek çok uzun.'], 413);
 $in = json_decode($raw_body, true);

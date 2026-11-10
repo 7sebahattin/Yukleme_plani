@@ -238,7 +238,7 @@ ok('config/siparis_wp.php: yalnız SELECT; çıktı/DDL yok; kapıyı can(\'sipa
 ok('config/siparis_wp.php: planlanan_* okunmaz, tur no\'ya düşülmez', !str_contains($wpCfg, 'planlanan_') && !str_contains($wpCfg, 'tur_no'));
 ok('audit: siparis_wp_paylas, ad/telefon/plaka/nakliyeci YAZILMAZ (yalnız kalem sayısı)', str_contains($wpUc, "siparis_audit('siparis_wp_paylas',") && !preg_match('/siparis_audit\([^;]*(sofor|telefon|plaka|nakliyeci)/i', $wpUc));
 ok('liste: her iki menüde (masaüstü + mobil) PKL\'den SONRA data-sip-wp düğmesi; kişisel veri / data-sip-yazdir YOK', substr_count($lst, 'data-sip-wp="') === 2
-    && preg_match_all('~siparis_pkl\.php\?id=<\?= \$__id \?>">📄 PKL</a>\s*<button type="button" data-sip-wp="<\?= \$__id \?>"~', $lst) === 2
+    && preg_match_all('~siparis_pkl\.php\?id=<\?= \$__id \?>">📄 PKL</a><\?php endif; \?>\s*<\?php if \(icerik_can\(\'siparis\.wp_paylas\'\)\): \?><button type="button" data-sip-wp="<\?= \$__id \?>"~', $lst) === 2
     && !preg_match('/sofor_adi/i', $lst) && !str_contains($lst, 'data-sip-yazdir')
     && !preg_match('/data-[a-z-]*\s*=\s*"<\?=[^"]*sofor/i', $lst));   // v440: yalnız şoför TELEFONU görünür metin olarak (Lojistik hücresi); ad / data-* yok
 ok('siparisler.php: siparis_wp.js defer yüklenir; şoför kolonu sayfa sorgusuna girmez', str_contains(oku('siparisler.php'), 'assets/siparis_wp.js?v=') && str_contains(oku('siparisler.php'), 'defer></script>') && !str_contains(kod_oku('siparisler.php'), 'sofor_adi'));   // v440: listeye yalnız sofor_telefon (Lojistik hücresi)
@@ -261,7 +261,7 @@ ok('v397 config: yalnız SELECT; tam yol koruması; çıktı yok; can(siparis.*)
     && str_contains($caHam, "if (realpath((string)(\$_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }")
     && !preg_match('/\b(echo|print|die)\b/', $caCfg) && preg_match("/\bcan\('siparis\./", $caCfg) === 0 && substr_count($caCfg, "can('reports.export')") === 1);
 ok('v397 config: tahsilat kancası siparis_cari_tahsilat_toplam()', str_contains($caCfg, 'function siparis_cari_tahsilat_toplam(PDO $pdo, array $f): array'));
-ok('v397 siparisler.php: Cari Döküm bağlantısı siparis_cari_yetkili() kapılı', (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\)\): \?>\s*<a class="btn btn-lg" href="siparis_cari\.php">📒 Cari Döküm<\/a>/u', oku('siparisler.php')));
+ok('v397 siparisler.php: Cari Döküm bağlantısı siparis_cari_yetkili() kapılı', (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\) && icerik_can\(\'siparis\.cari\'\)\): \?>\s*<a class="btn btn-lg" href="siparis_cari\.php">📒 Cari Döküm<\/a>/u', oku('siparisler.php')));
 ok('v397 nav_aktif_anahtar $a_sip siparis_cari.php içerir', (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_cari\.php'/", $helpers));
 
 echo "\n=== v401: Ödemeler sayfası (giriş Cari Döküm'den taşındı) ===\n";
@@ -275,7 +275,7 @@ ok('v401 uç: PRG → siparis_odemeler.php (2 yer), cari\'ye dönmez; sıra csrf
     && strpos($odUc, 'csrf_check(') < strpos($odUc, "require_siparis('read')") && strpos($odUc, "require_siparis('read')") < strpos($odUc, 'siparis_odeme_yetkili()') && strpos($odUc, 'siparis_odeme_yetkili()') < strpos($odUc, 'siparis_odeme_ekle('));
 ok('v401 Cari Döküm: ödeme formu/iptal yok, liste + tahsilat kalır', !str_contains($caUc, 'siparis_odeme.php') && !str_contains($caUc, 'method="post"') && str_contains($caUc, 'siparis_odeme_oku(') && str_contains($caUc, "'tahsilat' =>"));
 ok('v401 siparisler.php: Ödeme ekle → siparis_odemeler.php (siparis_cari_yetkili kapılı); "+ Belge yükle" yok; #yukle kartı duruyor',
-    (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\)\): \?>\s*<a class="btn btn-primary btn-lg" href="siparis_odemeler\.php">/u', $sl) && !str_contains($sl, '+ Belge yükle') && str_contains($sl, 'id="yukle"'));
+    (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\) && icerik_can\(\'siparis\.odeme\'\)\): \?>\s*<a class="btn btn-primary btn-lg" href="siparis_odemeler\.php">/u', $sl) && !str_contains($sl, '+ Belge yükle') && str_contains($sl, 'id="yukle"'));
 ok('v401 sw bypass + $a_sip', preg_match($swPcre, '/siparis_odemeler.php') === 1 && (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_odemeler\.php'/", $helpers));
 ok('v401 siparis.js data-od-* delege + afterprint; css od-yazdir-modu', str_contains(oku('assets/siparis.js'), "'[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir]'") && str_contains(oku('assets/siparis.js'), 'afterprint')
     && str_contains(oku('assets/siparis.css'), 'body.od-yazdir-modu #odYazdirAlan'));
@@ -338,7 +338,7 @@ ok('v442 config: sayfa kapısını can(\'siparis.*\') ile KOPYALAMIYOR; çıktı
 ok('v442 config: şemasız (CREATE/ALTER/DROP TABLE yok) + dompdf uzak kaynak/PHP kapalı', $ivCfg !== '' && !preg_match('/\b(CREATE|ALTER|DROP)\s+TABLE\b/i', $ivCfg) && str_contains($ivCfg, 'isRemoteEnabled') && str_contains($ivCfg, 'isPhpEnabled'));
 ok('v442 config: menşe beyanı metni şablonda koşulsuz (Customs Authorisation No.)', str_contains($ivHam, 'Customs Authorisation No.'));
 ok('v442 view: Invoice kartı (#invoice) PKL kartından SONRA; yalnız siparis_inv_durum okunur (mutasyon çağrısı yok)', str_contains($ivView, 'id="invoice"') && strpos($ivView, 'id="invoice"') > strpos($ivView, 'id="pkl"') && str_contains($ivView, 'siparis_inv_durum(') && preg_match($mutRe, $ivView) === 0);
-ok('v442 view: PKL yoksa Invoice düğmesi pasif + sebep; yalnız-okuma kullanıcıda hazırla düğmesi yok', str_contains($ivView, 'aria-describedby="sipInvNeden"') && (bool)preg_match("/if \(\\\$yaz\): \?>\s*<\?php if \(\\\$pklHazir\)/", $ivView));
+ok('v442 view: PKL yoksa Invoice düğmesi pasif + sebep; yalnız-okuma kullanıcıda hazırla düğmesi yok', str_contains($ivView, 'aria-describedby="sipInvNeden"') && (bool)preg_match("/if \(\\\$yazInv\): \?>\s*<\?php if \(\\\$pklHazir\)/", $ivView));
 ok('v442 view: belge türü sırasında invoice + efatura', str_contains($ivView, "'pkl', 'invoice', 'efatura', 'diger'"));
 ok('v442 siparis_belge.php: "Yeniden işle" invoice/efatura için gizli; siparis_kaydet.php belge_bagla/yeniden_isle bu türleri reddeder; yetim kutusu hariç tutar',
     (bool)preg_match("/if \(\\\$yaz && !in_array\(\(string\)\\\$b\['tur'\], \['invoice', 'efatura'\], true\)\)/", oku('siparis_belge.php'))

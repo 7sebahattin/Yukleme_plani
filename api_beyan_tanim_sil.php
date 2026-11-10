@@ -11,7 +11,7 @@ function beyan_tanim_sil_json(array $payload, int $code = 200): void {
 }
 $auth_user = require_login();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') beyan_tanim_sil_json(['ok'=>false,'error'=>'Geçersiz istek.'], 405);
-if (!(can_beyan('create') || can_beyan('edit'))) beyan_tanim_sil_json(['ok'=>false,'error'=>'Bu işlem için yetkiniz yok.'], 403);
+if (!(can_beyan('create') || can_beyan('edit')) || !icerik_can('beyan.oneri_yonet')) beyan_tanim_sil_json(['ok'=>false,'error'=>'Bu işlem için yetkiniz yok.'], 403);
 $raw = (string)file_get_contents('php://input');
 if (strlen($raw) > 8000) beyan_tanim_sil_json(['ok'=>false,'error'=>'İstek çok uzun.'], 413);
 $in = json_decode($raw, true);

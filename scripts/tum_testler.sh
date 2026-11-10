@@ -119,6 +119,7 @@ declare -A PHP_HARIC=(
 #   pdks_toplu_ekle_smoke.js ......... -  (render'ı kendisi)
 #   pdks_v296b_smoke.js .............. -  (satır içi fixture)
 #   roles_modal_smoke.js ............. roles_modal_render.php > _test_roles.html
+#   users_ozet_smoke.js .............. users_ozet_render.php > _test_users.html
 #   siparis_ui_smoke.js .............. SIPARIS_UI_OUT=<tmp> php scripts/siparis_ui_render.php  (test de SIPARIS_UI_OUT ile)
 #   siparis_invoice_ui_smoke.js ...... aynı render (inv_*.html), SIPARIS_UI_OUT ile
 #   siparis_yazdir_smoke.js .......... -  (siparis_ui_render.php + --json fixture'ları kendisi)
@@ -180,6 +181,8 @@ js_hazirla() {
             php scripts/pdks_tanimli_giris_render.php > _test_tanimli_giris.html ;;
         roles_modal_smoke.js)
             php scripts/roles_modal_render.php > _test_roles.html ;;
+        users_ozet_smoke.js)
+            php scripts/users_ozet_render.php > _test_users.html ;;
         siparis_ui_smoke.js|siparis_invoice_ui_smoke.js)
             JS_ORTAM=("SIPARIS_UI_OUT=$GECICI/sip-ui")
             env "${JS_ORTAM[@]}" php scripts/siparis_ui_render.php ;;

@@ -967,6 +967,21 @@
   html[data-theme="dark"] #modal { background:rgba(0,0,0,.62); }
   html[data-theme="dark"] #ekranBildirim .kart h2 .kart1-firma { color:#f87171; }
   html[data-theme="dark"] .btn { box-shadow:0 4px 12px rgba(0,0,0,.35); }
+  /* v507 — içerik yetkisi: sunucunun kapattığı ekran/düğmeler gizlenir (asıl koruma api.php hks_eylem_kapisi) */
+  body.icx-ekr_bildirim #btnEBildirim, body.icx-ekr_bildirim #btnEBildirimGrup,
+  body.icx-ekr_taslaklar #btnTaslaklar,
+  body.icx-ekr_gonderilenler #btnGonderilenler,
+  body.icx-ekr_kunye #btnTopluKunyeAna, body.icx-ekr_kunye #btnTopluKunye,
+  body.icx-ekr_sorgu #btnSorgu,
+  body.icx-ekr_etiket #btnEtiket,
+  body.icx-ekr_stok #btnStok, body.icx-ekr_stok #stokBolum,
+  body.icx-ekr_gelen #btnGelen,
+  body.icx-gonderim_raporu #gonderilenRapor,
+  body.icx-gonder [data-gonder],
+  body.icx-taslak_kopyala [data-kopyala],
+  body.icx-tekrar_gonder .g-btn-tekrar,
+  body.icx-kisi_havuzu #btnKisiYeni,
+  body.icx-liste_guncelle #btnListeler { display: none !important; }
 </style>
 </head>
 <body>
@@ -1998,12 +2013,16 @@ function ekranGoster(ad) {
 }
 
 // ================= FİRMALAR =================
+let hksIcerik = {};   // v507: sunucudan gelen ui.hks.* izinleri (yoksa hepsi açık sayılır; sunucu yine denetler)
 async function firmalariYukle() {
   try {
     const j = await api('/api/firmalar');
     firmalar = j.firmalar;
     // Firma ekle/düzenle/sil yalnız yönetici (sunucu da is_admin() ister). Alan yoksa → yönetici DEĞİL.
     firmaYonetici = j.yonetici === true;
+    // v507 — içerik yetkisi: kapalı (false) her anahtar için body'ye icx-<anahtar> sınıfı (CSS gizler)
+    hksIcerik = j.icerik || {};
+    Object.keys(hksIcerik).forEach(k => document.body.classList.toggle('icx-' + k, hksIcerik[k] === false));
   } catch (e) { firmalar = []; firmaYonetici = false; }
   firmaIzgaraCiz();
 }
@@ -2058,7 +2077,7 @@ function firmaSec(f) {
   // Firma seçilince stok otomatik sorgulanıp ana sayfada gösterilir.
   // Otomatik açılış HIZLI olsun diye 6 ay ile sınırlı; tam (5 yıllık) geçmiş
   // için "Raporlama İşlemleri → Stok Sorgulama" kullanılır.
-  stokListele(6);
+  if (hksIcerik.ekr_stok !== false) stokListele(6);
   bekleyenEkraniAc();
 }
 
@@ -2847,6 +2866,7 @@ $('gonderilenRapor').addEventListener('click', function () {
 
 async function taslakSayiGuncelle() {
   if (!aktifFirma) return;
+  if (hksIcerik.ekr_taslaklar === false) return;   // v507: Taslaklar ekranı kapalıysa sayaç sorgulanmaz
   try {
     const j = await api('/api/taslaklar', 'GET', { firmaId: aktifFirma.id });
     const n = (j.taslaklar || []).length;

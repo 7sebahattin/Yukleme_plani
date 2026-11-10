@@ -18,6 +18,7 @@ require_once __DIR__ . '/../config/xlsx_export.php';
 
 $auth_user = require_login();
 require_perm('hks.access');   // Hal Kayıt paneliyle (index.php) aynı kapı
+icerik_kapi('hks.gonderim_raporu');   // v507
 
 header('Cache-Control: no-store, private');
 
