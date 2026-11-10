@@ -223,6 +223,13 @@ Rampacı emsali 4. SABİT sistem tipi: `worker_types` SERITCI/"Şeritçi" (sahip
 - **v408 — FM sütunları 1. · 2. · 3. · 4. · 5+ Saat** (sahip isteği; Mesai Özeti ile aynı kural): her sütun o kadar saat FM yapan KİŞİ sayısı (0 soluk); `pdks_faz8b_fm_kovalari($fm_dagilim)` TEK kova kuralı (`PDKS_FAZ8B_OZET_FM_SUTUN`). Ekran/yazdırma/XLSX aynı sütunlar (XLSX: FM Toplam Saat + 5 sütun; eski "FM Kişi"/"FM Dağılımı" sütunları kalktı). Yazdırma tfoot kova toplamı.
 - Test: `php scripts/pdks_toplu_dokum_fm_smoke.php` · `php scripts/pdks_toplu_dokum_xlsx_smoke.php` (gerçek sayfa alt süreçte).
 
+### Çavuş Toplu Döküm — Servis Büyük / Küçük (v512 sürümüyle gelecek; sürüm artırılmadı, migration YOK)
+Sahip isteği: Toplu Döküm raporlarında servis Büyük/Küçük ayrı listelensin (öncesinde servis HİÇ gösterilmiyordu; yalnız Hakediş toplamına gömülüydü).
+- **TEK kaynak** `pdks_rapor_servis_oturum_toplu($sessionIds,$finansal,$pdo)` (config/pdks_rapor.php): adet = `daily_session_services` (iptal hariç, `pdks_servis_toplamlar_toplu` ile AYNI kural, oturum başına, tek sorgu); tutar (yalnız finansal yetkide) = hakedişin DONDURULMUŞ `SERVIS_BUYUK/KUCUK` satırı `line_total`. `pdks_rapor_cavus_toplu_dokum()` satırlara `servis_buyuk/kucuk` (adet) + `servis_buyuk/kucuk_tutar` (string|null) ekler. Sayfalarda servis hesabı/SQL YAZMA (test denetler).
+- **Gösterim:** ayda en az 1 servis varsa "Servis — Büyük" / "Servis — Küçük" sütunları (Toplam İşçi'nin yanında, adet; finansal yetkide altında tutar + para birimi) + özet kutuları; servissiz ayda sütun açılmaz. Ekran, yazdırma (tfoot adet toplamı), XLSX (adet sütunları SUBTOTAL, tutar sütunları 'tutar' tipi ve TOPLANMAZ — para birimleri karışabilir), kart dökümü detayı + yazdırması (yalnız adet kutuları). **Toplam İşçi servisi İÇERMEZ.** Hakediş sütunu zaten servisi içerir (total_amount) → rapor toplamı = hakediş toplamı korunur; tutarı yeniden hesaplama.
+- Adet canlıdır (taslak bayatsa hakediş satırından sapabilir; tutar donmuş satırdan gelir — taslak yeniden hesaplanınca eşitlenir). CSS eklenmedi (tablo `.table-wrap` içinde).
+- Test: `php scripts/pdks_toplu_dokum_servis_smoke.php` (42; gerçek servis girişi + gerçek hakediş + gerçek sayfalar alt süreçte). `TD_DUMP=<dosya>` ekran HTML'ini Playwright ölçümü için yazar.
+
 ### Saat Başı Toleransı (v315 → v317)
 Sahip kararı (v317 kesin kural): `pdks_faz8b_sure_karari()` süreyi ham değil **etkin** saatlerle hesaplar
 (`pdks_faz8b_saat_basi()` / `pdks_faz8b_etkin_saatler()`): giriş VE çıkış tam saate **±15 dk** (önce de sonra da) yakınsa
