@@ -223,6 +223,52 @@ ok8bt('9o otomatik: verilmiş FM kararı (reddet=0) AYNEN geçer', $pz['durum'] 
 $sa = pdks_toplu_onay_plan(['faz8b' => ['finans_hazir' => false, 'toplam_dk' => null, 'sinif_onayi_gerekli' => true, 'fazla_mesai_saat' => 0, 'fazla_mesai_onay_saat' => null, 'etkin_sinif' => null], 'worker_type_name_snapshot' => 'Kadın', 'source' => 'scan'], false, true, 'tam', null);
 ok8bt('9p seçili akış: kart okutmuş çıkışsız + Tam kararı → onay', $sa['durum'] === 'onay' && $sa['sinif'] === 'tam' && str_contains($sa['uyari'], 'Çıkış yok'));
 
+echo "\n=== 10. v509: TOPLU EKRANDAN 'YARIM' İŞARETLİ DÖNEM → OTOMATİK YARIM ===\n";
+for ($i = 31; $i <= 45; $i++) $db->prepare("INSERT INTO worker_cards (id,card_no) VALUES (?,?)")->execute([$i, sprintf('K%03d', $i)]);
+$db->exec("INSERT INTO daily_work_sessions (id,foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status) VALUES
+    (5,1,'Ayşe Çavuş','C001',540,'2026-10-24','FİNİKE','closed'),(6,1,'Ayşe Çavuş','C001',540,'2026-10-24','FİNİKE','closed')");
+function perB(PDO $db, int $s, int $card, string $g, string $c, string $decl, string $src = 'manual'): int {
+    $db->prepare("INSERT INTO daily_worker_work_periods (session_id,worker_card_id,worker_type_id_snapshot,worker_type_name_snapshot,entry_time,exit_time,declared_attendance_class,source) VALUES (?,?,1,'Kadın',?,?,?,?)")
+       ->execute([$s, $card, "2026-10-24 {$g}:00", $c === '' ? null : "2026-10-24 {$c}:00", $decl, $src]);
+    return (int)$db->lastInsertId();
+}
+$y1 = perB($db, 5, 31, '08:00', '12:30', 'yarim');            // işaretli, 4,5 sa → oto Yarım
+$y2 = perB($db, 5, 32, '08:00', '12:30', 'auto');             // işaretsiz eski kısa kayıt → karar
+$y2b = perB($db, 5, 33, '08:00', '12:30', 'tam');             // işaretsiz ('tam') → karar
+$y3 = perB($db, 5, 34, '08:00', '10:00', 'yarim');            // işaretli ama < 3 sa → karar
+$y4 = perB($db, 5, 35, '08:00', '13:30', 'yarim');            // Yarım + FM 1 sa girişi → Yarım, ek süre uyarısı
+$y5 = perB($db, 5, 36, '08:00', '', 'yarim');                 // işaretli ama çıkışsız → karar
+$y6 = perB($db, 5, 37, '08:00', '17:16', 'yarim');            // işaretli ama süre Tam eşiğinde (saat değişmiş) → karar
+$y7 = perB($db, 5, 38, '08:00', '12:30', 'yarim', 'scan');    // kart okutmuş → karar
+$t1 = perB($db, 5, 39, '08:00', '17:16', 'auto');             // Tam + FM → etkilenmez
+$ids10 = [$y1, $y2, $y2b, $y3, $y4, $y5, $y6, $y7, $t1];
+$o10 = pdks_toplu_onay_calistir($ids10, null, null, 7, 'FİNİKE', false, $db, true);
+$p10 = []; foreach ($o10['satirlar'] as $s) $p10[(int)$s['d']['id']] = $s['plan'];
+ok8bt('10a işaretli Yarım 08:00–12:30 → onay, sınıf yarim', ($p10[$y1]['durum'] ?? '') === 'onay' && ($p10[$y1]['sinif'] ?? '') === 'yarim', json_encode($p10[$y1] ?? null, JSON_UNESCAPED_UNICODE));
+ok8bt('10b işaretsiz eski kısa kayıt (auto / tam) → karar gerekli (geriye dönük tahmin yok)', ($p10[$y2]['durum'] ?? '') === 'karar' && ($p10[$y2b]['durum'] ?? '') === 'karar' && str_contains($p10[$y2]['neden'], 'belirsiz'));
+ok8bt('10c işaretli ama < 3 sa → karar gerekli', ($p10[$y3]['durum'] ?? '') === 'karar' && str_contains($p10[$y3]['neden'], '3 saatten az'));
+ok8bt('10d Yarım + ek süre (13:30) → Yarım onay + "ek süre ücrete yansımaz" uyarısı, FM yazılmaz', ($p10[$y4]['durum'] ?? '') === 'onay' && ($p10[$y4]['sinif'] ?? '') === 'yarim' && array_key_exists('fm', $p10[$y4]) && $p10[$y4]['fm'] === null && str_contains($p10[$y4]['uyari'], 'ek süre ücrete yansımaz'), json_encode($p10[$y4] ?? null, JSON_UNESCAPED_UNICODE));
+ok8bt('10e işaretli çıkışsız → karar gerekli', ($p10[$y5]['durum'] ?? '') === 'karar' && str_contains($p10[$y5]['neden'], 'Çıkış yok'));
+ok8bt('10f işaretli ama süre Tam eşiğinde → karar (bayat işaret tahmin edilmez)', ($p10[$y6]['durum'] ?? '') === 'karar' && str_contains($p10[$y6]['neden'], 'Tam eşiğinde'));
+ok8bt('10g kart okutmuş (scan) işaretli → yine karar (scan\'e dokunulmaz)', ($p10[$y7]['durum'] ?? '') === 'karar' && str_contains($p10[$y7]['neden'], 'Kart okutulmuş'));
+ok8bt('10h Tam + FM kayıt etkilenmez (Tam, FM 1 sa)', ($p10[$t1]['durum'] ?? '') === 'onay' && array_key_exists('sinif', $p10[$t1]) && $p10[$t1]['sinif'] === null && ($p10[$t1]['fm'] ?? 0) === 1);
+ok8bt('10i önizleme özeti: 3 onay (2 Yarım, 1 Tam), FM 1 sa', $o10['sayac']['onay'] === 3 && $o10['sayac']['yarim'] === 2 && $o10['sayac']['tam'] === 1 && $o10['sayac']['fm_saat'] === 1 && $o10['sayac']['karar'] === 6, json_encode($o10['sayac']));
+ok8bt('10j önizleme yan etkisiz', onay($db, $y1)['a'] === null);
+$u10 = pdks_toplu_onay_calistir($ids10, null, null, 7, 'FİNİKE', true, $db, true, 3);
+ok8bt('10k uygulandı: işaretli Yarım approved=yarim (gerçek tekli yolla), işaretsiz/kart/<3sa/çıkışsız/bayat DOKUNULMADI', $u10['uygulandi'] === true && onay($db, $y1)['a'] === 'yarim' && onay($db, $y4)['a'] === 'yarim'
+    && onay($db, $y2)['a'] === null && onay($db, $y2b)['a'] === null && onay($db, $y3)['a'] === null && onay($db, $y5)['a'] === null && onay($db, $y6)['a'] === null && onay($db, $y7)['a'] === null, json_encode($u10['hata'], JSON_UNESCAPED_UNICODE));
+$a10 = (string)$db->query("SELECT new_values FROM audit_log WHERE action='toplu_onay' ORDER BY id DESC LIMIT 1")->fetchColumn();
+ok8bt('10l audit toplu_onay: yarim=2', str_contains($a10, '"yarim":2') && str_contains($a10, '"mod":"otomatik_elle"'), $a10);
+// Seçili (eski) akış işareti görmezden gelir: işaretsiz karar seçilmeden onaylanmaz
+$yz = pdks_toplu_onay_calistir([$y2], null, null, 7, 'FİNİKE', false, $db, false);
+ok8bt('10m seçili akış DEĞİŞMEDİ: işaretli olsa da sınıf kararı seçilmeden onaylanmaz', $yz['sayac']['karar'] === 1 && pdks_toplu_onay_calistir([$y5], null, null, 7, 'FİNİKE', false, $db, false)['sayac']['karar'] === 1);
+// Hakediş: Yarım ücretiyle (oturum 6: yalnız bir işaretli Yarım)
+$h1 = perB($db, 6, 40, '08:00', '12:30', 'yarim');
+$u10b = pdks_toplu_onay_calistir([$h1], null, null, 7, 'FİNİKE', true, $db, true, 1);
+$hk10 = pdks_faz8b_hakedis_hesapla(6, 7, $db);
+$tut = (float)$db->query("SELECT total_amount FROM foreman_daily_entitlements WHERE session_id = 6")->fetchColumn();
+ok8bt('10n hakediş Yarım ücretiyle (900) hesaplandı', $u10b['uygulandi'] === true && !empty($hk10['ok']) && abs($tut - 900.0) < 0.01, json_encode([$hk10, $tut], JSON_UNESCAPED_UNICODE));
+
 echo "\n=== 8. STATİK: İKİNCİ YAZMA YOLU YOK + KAPILAR ===\n";
 $cfg = (string)file_get_contents(__DIR__ . '/../config/pdks_toplu_onay.php');
 $sayfa = (string)file_get_contents(__DIR__ . '/../mesai_toplu_onay.php') . (string)file_get_contents(__DIR__ . '/../_toplu_onay_ekran.php');

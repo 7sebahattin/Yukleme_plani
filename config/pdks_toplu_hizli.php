@@ -159,14 +159,14 @@ function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate)
         if ($n - $fmN > 0) {
             [$cd, $cs] = $cikisSaat($baz, 0);
             $cik['gruplar'][] = ['worker_type_id' => $tid, 'entry_clock' => PDKS_TOPLU_HIZLI_GIRIS, 'exit_date' => $cd, 'exit_clock' => $cs,
-                                 'kart_ids' => [], 'kartsiz_adet' => $n - $fmN, 'etiket' => $ad];
+                                 'kart_ids' => [], 'kartsiz_adet' => $n - $fmN, 'etiket' => $ad] + ($tur === 'YARIM' ? ['yarim' => true] : []);
         }
         // Her FM satırı AYRI grup (farklı saat → farklı çıkış). Kategori = tip+tür tekil olduğundan kişi çift sayılmaz.
         foreach ($fmSatirN as $i => $fmKisi) {
             $dk = $fmSat['satirlar'][$i]['dk'];
             [$cd, $cs] = $cikisSaat($baz, $dk);
             $cik['gruplar'][] = ['worker_type_id' => $tid, 'entry_clock' => PDKS_TOPLU_HIZLI_GIRIS, 'exit_date' => $cd, 'exit_clock' => $cs,
-                                 'kart_ids' => [], 'kartsiz_adet' => $fmKisi, 'etiket' => $ad . ' + FM ' . rtrim(rtrim(number_format($dk / 60, 2, ',', ''), '0'), ',') . ' sa'];
+                                 'kart_ids' => [], 'kartsiz_adet' => $fmKisi, 'etiket' => $ad . ' + FM ' . rtrim(rtrim(number_format($dk / 60, 2, ',', ''), '0'), ',') . ' sa'] + ($tur === 'YARIM' ? ['yarim' => true] : []);
         }
     }
     foreach ($ciftGruplar as $cg) $cik['gruplar'][] = $cg;
@@ -196,7 +196,7 @@ function pdks_toplu_hizli_isle($hizli, string $workDate, array $istemciGruplar, 
         $cik['ek'] = [
             'coklu_grup' => true,
             'audit_ek' => ['hizli_giris' => [
-                'gruplar' => array_map(static fn($g) => ['etiket' => $g['etiket'], 'adet' => $g['kartsiz_adet'], 'cikis' => $g['exit_date'] . ' ' . $g['exit_clock'], 'cift' => !empty($g['cift'])], $h['gruplar']),
+                'gruplar' => array_map(static fn($g) => ['etiket' => $g['etiket'], 'adet' => $g['kartsiz_adet'], 'cikis' => $g['exit_date'] . ' ' . $g['exit_clock'], 'cift' => !empty($g['cift']), 'yarim' => !empty($g['yarim'])], $h['gruplar']),
                 'fm_dagilim' => $h['dagilim'],
                 'fm_satirlar' => $h['fm_satirlar'] ?? [],
             ]],

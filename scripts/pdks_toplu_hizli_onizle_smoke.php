@@ -158,6 +158,9 @@ ok('A5 ekleme: 67 dönem yazıldı, yeni mesai açıldı', !empty($tE['ok']) && 
 $cik = db()->query("SELECT substr(exit_time,12,5) c, COUNT(*) n FROM daily_worker_work_periods WHERE session_id=" . (int)$tE['session_id'] . " AND is_voided=0 GROUP BY c ORDER BY c")->fetchAll(PDO::FETCH_KEY_PAIR);
 $fmAlan = 0; foreach ($cik as $c => $n) if (!in_array($c, ['17:00', '12:30'], true)) $fmAlan += (int)$n;
 ok('A6 FM saatli çıkış alan toplam 45 kişi (40+4+1)', $fmAlan === 45, j($cik));
+// v509: Yarım kutusundan eklenen dönem kalıcı olarak declared='yarim'; diğerleri 'auto' (eski davranış)
+$dc = db()->query("SELECT declared_attendance_class d, COUNT(*) n FROM daily_worker_work_periods WHERE session_id=" . (int)$tE['session_id'] . " AND is_voided=0 GROUP BY d")->fetchAll(PDO::FETCH_KEY_PAIR);
+ok('A7 v509: Yarım kutusundan 1 dönem declared=yarim, kalan 66 auto', (int)($dc['yarim'] ?? 0) === 1 && (int)($dc['auto'] ?? 0) === 66 && count($dc) === 2, j($dc));
 
 echo "\n=== B. Sahip örneği: Kadın tam 45, Kadın yarım 1, Erkek tam 21 — 40 kişi 1 saat FM ===\n";
 $g = pdks_toplu_hizli_gruplar(['tam' => [$kadin => 45, $erkek => 21], 'yarim' => [$kadin => 1], 'fm' => ['kisi' => 40, 'saat' => '1']], $tipKodlari, $dun);

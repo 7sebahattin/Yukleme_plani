@@ -20,6 +20,8 @@ require_once __DIR__ . '/pdks_hakedis.php';
 require_once __DIR__ . '/pdks_faz8b.php';
 
 const PDKS_TOPLU_ONAY_LIMIT = 500;
+/** Toplu ekran Yarım tabanı 08:00–12:30 = 270 dk; bunun üstündeki süre (Yarım + FM girişi) ücrete yansımaz — uyarı. */
+const PDKS_TOPLU_ONAY_YARIM_TABAN_DK = 270;
 
 /** Dönem kaynağı → etiket. Elle = kart okutulmadan yazılan (admin ekleme / toplu / Fiş Excel). */
 function pdks_toplu_onay_kaynak_etiketi(?string $src): string
@@ -81,19 +83,32 @@ function pdks_toplu_onay_plan(array $d, bool $kesin, bool $fiyatVar, ?string $si
 
     $sinif = null;
     $etiket = [];
+    // v509 (sahip kararı): Toplu Ekle ekranının "Yarım" kutusundan gelen dönem = declared_attendance_class 'yarim'
+    // (kalıcı niyet işareti). Otomatik yolda bu işaret Yarım kararı yerine geçer; işaretsiz (eski) kayıt "karar" kalır.
+    $yarimIsaretli = $otomatik && (string)($d['declared_attendance_class'] ?? '') === 'yarim';
+    if ($yarimIsaretli && empty($f['sinif_onayi_gerekli'])) {
+        return $r('karar', null, null, 'Yarım işaretli ama süre Tam eşiğinde (saatler değiştirilmiş olabilir) — karar gerekli');
+    }
     if (!empty($f['sinif_onayi_gerekli'])) {
-        if ($otomatik) {
+        if ($yarimIsaretli) {
+            if ($toplamDk === null) return $r('karar', null, null, 'Çıkış yok — Yarım işaretli ama süre bilinmiyor, karar gerekli');
+            if ((int)$toplamDk < PDKS_FAZ8B_YARIM_MIN_DK) return $r('karar', null, null, 'Yarım işaretli ama süre ' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ' (3 saatten az) — karar gerekli');
+            if ((int)$toplamDk > PDKS_TOPLU_ONAY_YARIM_TABAN_DK) $uyari[] = 'Yarım + ek süre: fazla mesai yalnız Tam eşiği sonrası sayılır, ek süre ücrete yansımaz';
+            $sinif = 'yarim';
+            $etiket[] = 'Yarım (toplu ekranda girildi)';
+        } elseif ($otomatik) {
             // Sınıf ASLA tahmin edilmez: bu noktada süre Tam eşiğinin altında ya da bilinmiyor.
             if ($toplamDk === null) return $r('karar', null, null, 'Çıkış yok — Tam/Yarım belirlenemez, karar gerekli');
             if ((int)$toplamDk < PDKS_FAZ8B_YARIM_MIN_DK) return $r('karar', null, null, 'Süre ' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ' (3 saatten az) — karar gerekli');
             return $r('karar', null, null, 'Süre ' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ' — Tam mı Yarım mı belirsiz, karar gerekli');
+        } else {
+            if (!in_array($sinifKarari, ['tam', 'yarim'], true)) return $r('karar', null, null, 'Tam/Yarım kararı seçilmeli');
+            if ($sinifKarari === 'yarim' && $toplamDk !== null && (int)$toplamDk < PDKS_FAZ8B_YARIM_MIN_DK) {
+                return $r('uygunsuz', null, null, 'Yarım için en az ' . intdiv(PDKS_FAZ8B_YARIM_MIN_DK, 60) . ' sa gerekir (' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ')');
+            }
+            $sinif = $sinifKarari;
+            $etiket[] = pdks_faz8b_sinif_etiketi($sinif);
         }
-        if (!in_array($sinifKarari, ['tam', 'yarim'], true)) return $r('karar', null, null, 'Tam/Yarım kararı seçilmeli');
-        if ($sinifKarari === 'yarim' && $toplamDk !== null && (int)$toplamDk < PDKS_FAZ8B_YARIM_MIN_DK) {
-            return $r('uygunsuz', null, null, 'Yarım için en az ' . intdiv(PDKS_FAZ8B_YARIM_MIN_DK, 60) . ' sa gerekir (' . pdks_faz8b_dakika_etiket((int)$toplamDk) . ')');
-        }
-        $sinif = $sinifKarari;
-        $etiket[] = pdks_faz8b_sinif_etiketi($sinif);
     }
 
     $fm = null;
