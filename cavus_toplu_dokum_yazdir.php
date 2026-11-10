@@ -64,18 +64,22 @@ $toplamTip = [];       // v299: tip kayıt defterinden — sutun anahtarı => to
 foreach (pdks_gunluk_tip_sutunlari() as $tc) $toplamTip[$tc['sutun']] = 0;
 $toplamEksik = 0;
 $toplamFm = 0;   // v407: toplam fazla mesai saati
+$toplamSvB = 0; $toplamSvK = 0;   // v512: toplam servis adedi
 foreach ($satirlar as $r) {
     $toplamIsci  += (int)$r['toplam_isci'];
     foreach ($toplamTip as $sk => $_) $toplamTip[$sk] += (int)($r[$sk] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
     $toplamFm    += (int)($r['fm_saat'] ?? 0);
+    $toplamSvB   += (int)($r['servis_buyuk'] ?? 0);
+    $toplamSvK   += (int)($r['servis_kucuk'] ?? 0);
 }
+$svGoster = ($toplamSvB + $toplamSvK) > 0;   // v512: ekranla AYNI kural
 
 // Hakediş kolonu yalnız yetkiliye çizilir; yetkisizde kolon hiç AÇILMAZ
 // (bir kolon dolusu "—" basmak kâğıtta yer kaybıdır).
 // Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
 $tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
-$kolonSayisi = ($finansalGosterilebilir ? 7 : 6) + PDKS_FAZ8B_OZET_FM_SUTUN + count($tipSut);
+$kolonSayisi = ($finansalGosterilebilir ? 7 : 6) + PDKS_FAZ8B_OZET_FM_SUTUN + count($tipSut) + ($svGoster ? 2 : 0);
 $mode = 'summary';
 $orientation = print_orientation($mode, $kolonSayisi);
 
@@ -109,6 +113,8 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
         <?php foreach ($tipSut as $tc): ?><div class="print-summary-box"><div class="psb-label"><?= h($tc['sayac']) ?></div><div class="psb-value"><?= (int)$toplamTip[$tc['sutun']] ?></div></div><?php endforeach; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $toplamIsci ?></div></div>
         <div class="print-summary-box<?= $toplamEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $toplamEksik ?></div></div>
+        <?php if ($svGoster): ?><div class="print-summary-box"><div class="psb-label">Servis — Büyük</div><div class="psb-value"><?= $toplamSvB ?></div></div>
+        <div class="print-summary-box"><div class="psb-label">Servis — Küçük</div><div class="psb-value"><?= $toplamSvK ?></div></div><?php endif; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam FM (saat)</div><div class="psb-value"><?= $toplamFm ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Mesai Günü</div><div class="psb-value"><?= count($satirlar) ?></div></div>
     </div>
@@ -121,6 +127,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <th>Çavuş</th>
             <?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?>
             <th>Toplam İşçi</th>
+            <?php if ($svGoster): ?><th>Servis — Büyük</th><th>Servis — Küçük</th><?php endif; ?>
             <?php if ($finansalGosterilebilir): ?><th>Hakediş</th><?php endif; ?>
             <th>İlk Giriş</th>
             <th>Son Çıkış</th>
@@ -136,6 +143,9 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= h($r['cavus_adi']) ?><?= $r['cavus_kodu'] !== '' ? ' (' . h($r['cavus_kodu']) . ')' : '' ?></td>
             <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($r[$tc['sutun']] ?? 0) ?></td><?php endforeach; ?>
             <td class="num"><?= (int)$r['toplam_isci'] ?></td>
+            <?php if ($svGoster): foreach (['buyuk', 'kucuk'] as $svAn): $svAdet = (int)($r['servis_' . $svAn] ?? 0); $svTutar = $r['servis_' . $svAn . '_tutar'] ?? null; ?>
+            <td class="num"><?php if ($svAdet > 0): ?><?= $svAdet ?><?php if ($finansalGosterilebilir && $svTutar !== null && $hakedis !== null): ?><br><small><?= h(pdks_rapor_para_formatla($svTutar)) ?> <?= h($hakedis['currency']) ?></small><?php endif; ?><?php else: ?>·<?php endif; ?></td>
+            <?php endforeach; endif; ?>
             <?php if ($finansalGosterilebilir): ?>
             <td><?php if ($hakedis === null): ?>Hesaplanmadı<?php else: ?><?= h(pdks_rapor_para_formatla($hakedis['total_amount'])) ?> <?= h($hakedis['currency']) ?> (<?= $hakedis['status'] === 'final' ? 'Kesin' : 'Taslak' ?>)<?php endif; ?></td>
             <?php endif; ?>
@@ -155,6 +165,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td colspan="2">TOPLAM (<?= count($satirlar) ?> mesai günü)</td>
             <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)$toplamTip[$tc['sutun']] ?></td><?php endforeach; ?>
             <td class="num"><?= $toplamIsci ?></td>
+            <?php if ($svGoster): ?><td class="num"><?= $toplamSvB ?></td><td class="num"><?= $toplamSvK ?></td><?php endif; ?>
             <?php if ($finansalGosterilebilir): ?><td>—</td><?php endif; ?>
             <td>—</td>
             <td>—</td>
