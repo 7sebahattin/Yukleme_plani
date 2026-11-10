@@ -27,6 +27,7 @@ require_once __DIR__ . '/config/mail_core.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/beyansiz_yukleme.php';   // v498 Yükleme Bildir (beyansız yükleme) tablosu
 require_once __DIR__ . '/config/urun_siparis.php';   // v409 Ürün Siparişleri (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yalnız CREATE TABLE kartı)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -123,6 +124,7 @@ $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tabl
 $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
 $bsz_results = []; $bsz_ran = false;                            // v498 beyansiz_yukleme tablosu
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
+$frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
@@ -317,6 +319,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         } elseif ($sr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'add_column', 'column' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'frugro') {
+    csrf_check($_POST['csrf'] ?? null);
+    $frg_ran     = true;
+    $frg_results = frg_migrate($pdo);
+    foreach ($frg_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'frugro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -787,6 +798,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="urun_siparis">
       <button type="submit" class="btn btn-primary">Ürün Siparişleri Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('frugro'); ?>
+    <h2 style="margin-top:0;">Frugro Siparişler</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>frugro_siparisler</code>, <code>frugro_palet</code> ve <code>frugro_olaylar</code> tablolarını ekler
+      (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz). OGL Siparişler tablolarından bağımsızdır. Çalıştırılmazsa
+      Frugro sayfaları "henüz kurulmadı" der, diğer sayfalar aynen çalışır.
+      <?php if ($frg_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($frg_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $frgHazir = frg_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $frgHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $frgHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="frugro">
+      <button type="submit" class="btn btn-primary">Frugro Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

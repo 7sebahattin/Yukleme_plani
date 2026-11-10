@@ -1,0 +1,16 @@
+/* frugro_invoice.css — Frugro Invoice sayfası (ortak sip-* sınıfları assets/siparis.css'ten gelir; burada yalnız eklemeler). */
+.frgi-sayfa .card { margin-bottom: var(--sip-gap, 14px); }
+.frgi-durum--hazir { background: var(--sip-mail-bg, #dcfce7); color: var(--sip-mail-fg, #166534); border-color: transparent; }
+.frgi-durum--yok { background: var(--surface-2, #f1f5f9); color: var(--muted, #64748b); }
+.frgi-sayfa .sip-izgara label { min-width: 0; }
+.frgi-sayfa .sip-izgara input, .frgi-sayfa .sip-izgara select { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.frgi-agirlik-onay { margin-top: 10px; }
+.frgi-ozet .sip-dl-satir dd { overflow-wrap: anywhere; }
+.frgi-sayfa .sip-inv-fark { grid-column: 1 / -1; padding: 6px 10px; border-radius: var(--radius-sm, 6px); background: var(--warn-soft, #fef3c7); font-size: .88rem; }
+.frgi-sayfa .sip-inv-fark[hidden] { display: none; }
+@media (max-width: 767px) {
+  .frgi-sayfa input, .frgi-sayfa select, .frgi-sayfa textarea { font-size: 16px; }
+  .frgi-sayfa .sip-inv-eylem { flex-direction: column; align-items: stretch; }
+  .frgi-sayfa .sip-inv-eylem .btn, .frgi-sayfa .sip-inv-eylem .sip-pasif-grup { width: 100%; }
+  .frgi-sayfa .sip-inv-onizle { display: none; }
+}

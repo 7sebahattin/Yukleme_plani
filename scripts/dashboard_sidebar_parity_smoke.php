@@ -188,7 +188,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 69, 'admin: Ana Sayfa hariç 69 benzersiz kart');
+        dashboard_check(count($home) === 70, 'admin: Ana Sayfa hariç 70 benzersiz kart');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }

@@ -1,0 +1,33 @@
+/* Frugro PKL ekranı (frugro_pkl.php). style.css'e dokunulmaz. Dialog kuralları (.pm-dialog > form flex, dialog:not([open])) style.css'te. */
+.frp-sayfa .card { margin-bottom: 14px; padding: 14px; }
+.frp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.frp-grid label, .frp-uret label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.frp-grid input, .frp-uret input[type=text] { width: 100%; box-sizing: border-box; padding: 7px 8px; }
+.frp-ust { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.frp-araclar { display: flex; flex-wrap: wrap; gap: 6px; }
+.frp-tablo { min-width: 860px; }
+.frp-tablo th, .frp-tablo td { white-space: nowrap; }
+.frp-in { width: 100%; box-sizing: border-box; padding: 6px 6px; min-width: 70px; }
+.frp-in.frp-palet { min-width: 64px; }
+.frp-in.frp-ggn { min-width: 128px; }
+.frp-in.frp-ad { min-width: 150px; }
+.frp-in.frp-kal, .frp-in.frp-sayi { min-width: 74px; text-align: right; }
+.frp-in.frp-lot { min-width: 130px; }
+.frp-in[aria-invalid="true"] { outline: 2px solid var(--danger, #c0392b); }
+.frp-in[readonly] { background: transparent; border-color: transparent; }
+.frp-netkap { display: flex; gap: 4px; align-items: center; }
+.frp-toplam td { background: var(--surface-2, #f2f5f8); }
+.frp-no { color: var(--muted, #667); text-align: right; }
+.frp-kaydet { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.frp-hata { margin: 6px 0 0 18px; padding: 0; }
+.frp-uret form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+.frp-uret-btn { display: flex; gap: 8px; flex-wrap: wrap; }
+.frp-uret p { flex-basis: 100%; margin: 0; }
+.frp-onay { flex-direction: row !important; align-items: center; gap: 6px !important; }
+.frp-dialog textarea { width: 100%; box-sizing: border-box; font-family: monospace; }
+.frp-olay ul { margin: 0; padding-left: 18px; font-size: 13px; }
+@media (max-width: 767px) {
+  .frp-grid { grid-template-columns: 1fr 1fr; }
+  .frp-in, .frp-grid input, .frp-uret input[type=text], .frp-dialog textarea { font-size: 16px; }
+}
+@media print { .frp-araclar, .frp-kaydet, .frp-uret, .frp-olay { display: none; } }
