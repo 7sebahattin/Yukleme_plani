@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v511';
+const CACHE_NAME = 'yukleme-plani-v512';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -30,6 +30,7 @@ const SHELL = [
   './assets/nav-icons/hesap.svg',
   './assets/nav-icons/mail.svg',
   './assets/nav-icons/siparis.svg',
+  './assets/nav-icons/frugro.svg',
   './assets/nav-icons/ptak.svg',
   './assets/nav-icons/defs.svg',
   './assets/nav-icons/users.svg',
@@ -86,6 +87,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/personel_kayit_sec\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // Frugro Siparişler (v512): frugro_siparis/view/pkl/invoice/yukle/kaydet… müşteri/ticari veri taşır — HİÇ önbelleğe alınmaz (assets/frugro_*.js/css SHELL'de DEĞİL)
+  if (/\/frugro(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Yükleme Bildir (v498): kişi/firma ad listesi döndürür, HİÇ önbelleğe alınmaz
   if (/\/api_beyansiz_yukleme\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
