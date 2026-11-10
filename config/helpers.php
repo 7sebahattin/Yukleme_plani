@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v506');
+    define('APP_SURUM', 'v507');
 }
 
 // --- HTML kaçışı ---
@@ -257,6 +257,7 @@ function nav_ptak_sayfalari(): array {
         'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
         'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
         'mesai_degerlendirme.php', 'manuel_cikis.php',
+        'mesai_toplu_onay.php',   // v507 Toplu Mesai Onayı
         // v503 Buçuklu Çıkışlar (çıkış dakikası :30 olanları düzeltme, yalnız yönetici)
         'bucuklu_cikislar.php',
         'cavus_donem_raporu.php',

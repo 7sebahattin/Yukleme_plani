@@ -97,6 +97,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 <div class="page-head">
     <h1>🧾 Çavuş Hakediş</h1>
     <div class="page-head-actions">
+        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('mesai','read')): ?><a href="<?= h('mesai_toplu_onay.php?' . http_build_query(array_filter(['tarih' => $tarih, 'cavus' => $cavusId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-primary">✅ Toplu Onay</a><?php endif; ?>
         <a href="<?= h('cavus_hakedis_liste_yazdir.php?' . http_build_query(array_filter(['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>

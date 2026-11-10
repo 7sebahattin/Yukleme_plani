@@ -64,7 +64,7 @@ function role_pdks_routes(): array {
         'foreman_accounts'=>['cavus_cari.php','cavus_ekstre.php','cavus_cari_yazdir.php','cavus_ekstre_yazdir.php'],
         'foreman_payments'=>['cavus_odeme.php','cavus_odeme_yazdir.php'],
         'management_reports'=>['raporlar.php','rapor_yazdir.php','cavus_donem_raporu.php','cavus_toplu_dokum.php','cavus_toplu_dokum_detay.php','cavus_toplu_dokum_yazdir.php','cavus_toplu_dokum_detay_yazdir.php'],
-        'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php'],
+        'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php','mesai_toplu_onay.php'],
         'manual_exit'=>['manuel_cikis.php'], 'ters_pool'=>['ters_kart_havuz.php'],
         'ters_count'=>['ters_kart_sayim.php'], 'ters_report'=>['ters_kart_mutabakat.php'],
     ] as $page=>$routes) foreach ($routes as $route) $out[$route]=$page;
@@ -104,7 +104,8 @@ function role_pdks_request_action(string $route, string $method, array $query=[]
     if ($route==='cavus_hakedis.php') return $action==='hesapla'?['entitlements','create']:null;
     if ($route==='cavus_hakedis_detay.php') return match($action) {'duzeltme_ekle'=>['entitlements','create'],'hesapla','finalize','yeniden_ac'=>['entitlements','edit'],'duzeltme_ters_kayit'=>['entitlements','delete'],default=>null};
     if ($route==='cavus_odeme.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
-    if ($route==='mesai_degerlendirme.php') return in_array($action,['tekli_kaydet','toplu_kaydet'],true)?['mesai','edit']:null;
+    if ($route==='mesai_degerlendirme.php') return in_array($action,['tekli_kaydet','toplu_kaydet','fm_toplu_kaydet'],true)?['mesai','edit']:null;
+    if ($route==='mesai_toplu_onay.php') return $action==='uygula'?['mesai','edit']:($action==='onizle'?['mesai','read']:null);
     if ($route==='manuel_cikis.php') return ($action==='' && $form==='' && $ajax==='') ? ['manual_exit','edit'] : null;
     if ($route==='ters_kart_havuz.php') {
         if ($form==='saat' && $ajax==='') return ['ters_pool','edit'];
