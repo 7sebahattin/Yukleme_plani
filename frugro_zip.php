@@ -32,7 +32,7 @@ $id = (int)($_GET['id'] ?? 0);
 $s = $id > 0 ? frg_getir($pdo, $id) : null;
 if ($s === null || !frg_gorunur($s)) $hata(404, 'Sipariş bulunamadı.');
 
-$pkl = frgd_pkl_pdf($s);
+$pkl = frgd_pkl_pdf($s, $pdo);
 if ($pkl === null) $hata(409, 'Evrak takımı için önce Packing List palet satırlarını tamamlayın.');
 $dosyalar = [frgp_dosya_adi($s, 'pdf') => $pkl];
 $inv = frgd_invoice_pdf($pdo, $id);

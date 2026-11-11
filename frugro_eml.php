@@ -42,7 +42,7 @@ if ($tur === 'evrak') {
     if (!in_array((string)$s['durum'], array_merge(frg_evrak_bekleyen_durumlar(), ['evrak_gonderildi']), true)) $hata(409, 'Evrak takımı taslağı yalnız mail gönderildikten sonra hazırlanır.');
     $eml = siparis_evrak_eml($t);
 } else {
-    $pkl = frgd_pkl_pdf($s);
+    $pkl = frgd_pkl_pdf($s, $pdo);
     if ($pkl === null) $hata(409, 'PKL PDF üretilemedi: önce Packing List palet satırlarını tamamlayın.');
     $ekler[] = ['ad' => frgp_dosya_adi($s, 'pdf'), 'icerik' => $pkl, 'mime' => 'application/pdf'];
     $inv = frgd_invoice_pdf($pdo, $id);

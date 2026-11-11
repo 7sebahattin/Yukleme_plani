@@ -17,6 +17,12 @@ declare(strict_types=1);
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 
 const FRGP_MAX_SATIR = 200;
+const FRGP_GGN_KV = 'frugro_ggn_uretici';          // hks_kv: {"liste":[{"ad","ggn"}]} — GGN adı + no YALNIZ frugro_ayarlar.php#ggn'de tanımlanır
+const FRGP_EK_KV_ON = 'frugro_pkl_ek_';            // hks_kv: frugro_pkl_ek_<id> = {"logger_palet":"4","antet":true} (60 karakter sınırı içinde)
+const FRGP_GGN_MAX = 100;
+const FRGP_LOGO = 'assets/asyafresh-logo.png';
+const FRGP_AYAK_ADRES = 'HANÇERLİ MAH. DERVİŞZADE SK.NO:12 İÇ KAPI NO:3 İLKADIM - SAMSUN - TÜRKİYE';   // frugro_invoice.php ayağıyla aynı metin (o dosyaya dokunulmaz)
+const FRGP_AYAK_ILETISIM = 'Phone: +90 362 465 54 54 &nbsp;&nbsp; E-mail: contact@asyafresh.com &nbsp;&nbsp; Website: www.asyafresh.com';
 
 /** PKL düzenlenebilir durumlar (sonrası kilitli — evrakların net/brüt'ü aynı kalmalı). */
 function frgp_duzenlenebilir(array $s): bool
@@ -135,31 +141,128 @@ function frgp_toplam(array $satirlar): array
     return $t;
 }
 
+
+// ── GGN listesi (genel) + sipariş başına PKL ekleri (logger palet, antet) — hks_kv; şema YOK ──
+
+function frgp_kv_hazirla(): void
+{
+    if (!function_exists('siparis_inv_kv_oku')) require_once __DIR__ . '/siparis_invoice.php';
+}
+
+/** Ayardaki GGN listesi. Tablo yok / JSON bozuk → []. @return list<array{ad:string,ggn:string}> */
+function frgp_ggn_liste(PDO $pdo): array
+{
+    try { frgp_kv_hazirla(); $j = siparis_inv_kv_oku($pdo, FRGP_GGN_KV); } catch (Throwable $e) { return []; }
+    $out = [];
+    foreach ((array)($j['liste'] ?? []) as $r) {
+        if (!is_array($r)) continue;
+        $ad = frgp_metin(is_scalar($r['ad'] ?? null) ? (string)$r['ad'] : '', 100); $no = frgp_metin(is_scalar($r['ggn'] ?? null) ? (string)$r['ggn'] : '', 20);
+        if ($ad !== null && $no !== null) $out[] = ['ad' => $ad, 'ggn' => $no];
+    }
+    return array_slice($out, 0, FRGP_GGN_MAX);
+}
+
+/** @return array<string,string> ad => ggn */
+function frgp_ggn_harita(array $liste): array
+{
+    $h = [];
+    foreach ($liste as $r) $h[(string)$r['ad']] = (string)$r['ggn'];
+    return $h;
+}
+
+/**
+ * GGN listesini yazar (tümden değiştirir). Boş satır atlanır; ad + GGN zorunlu; aynı ad (büyük/küçük harf duyarsız) reddedilir.
+ * Audit yalnız sayıyı yazar (ad / GGN DEĞERİ yazılmaz).
+ * @return array{ok:bool,hata?:string}
+ */
+function frgp_ggn_kaydet(PDO $pdo, array $satirlar, int $uid): array
+{
+    $out = []; $gor = [];
+    foreach (array_values($satirlar) as $i => $r) {
+        if (!is_array($r)) continue;
+        $ad = trim((string)(is_scalar($r['ad'] ?? null) ? $r['ad'] : '')); $no = trim((string)(is_scalar($r['no'] ?? ($r['ggn'] ?? null)) ? ($r['no'] ?? $r['ggn']) : ''));
+        if ($ad === '' && $no === '') continue;
+        $n = $i + 1;
+        $adT = frgp_metin($ad, 100);
+        if ($adT === null) return ['ok' => false, 'hata' => "Satır $n: GGN adı boş olamaz."];
+        if (!preg_match('/^[A-Za-z0-9\-]{1,20}$/', $no)) return ['ok' => false, 'hata' => "Satır $n: GGN no yalnız harf, rakam ve tire içerebilir (en çok 20)."];
+        $key = mb_strtolower($adT, 'UTF-8');
+        if (isset($gor[$key])) return ['ok' => false, 'hata' => "Satır $n: aynı GGN adı ikinci kez girilemez."];
+        $gor[$key] = true;
+        $out[] = ['ad' => $adT, 'ggn' => $no];
+        if (count($out) > FRGP_GGN_MAX) return ['ok' => false, 'hata' => 'En çok ' . FRGP_GGN_MAX . ' GGN kaydı girilebilir.'];
+    }
+    frgp_kv_hazirla();
+    if (!siparis_inv_kv_yaz($pdo, FRGP_GGN_KV, ['liste' => $out])) return ['ok' => false, 'hata' => 'GGN listesi kaydedilemedi (ayar tablosu yok).'];
+    audit_log_event('frugro_ggn_ayar', 'frugro_ayar', 0, null, ['sayi' => count($out)]);
+    return ['ok' => true];
+}
+
+/** Sipariş PKL ekleri. Kayıt yoksa antet = true (varsayılan seçili). @return array{logger_palet:string,antet:bool} */
+function frgp_ek_oku(PDO $pdo, int $sid): array
+{
+    $e = ['logger_palet' => '', 'antet' => true];
+    try { frgp_kv_hazirla(); $j = siparis_inv_kv_oku($pdo, FRGP_EK_KV_ON . $sid); } catch (Throwable $x) { return $e; }
+    if (!is_array($j)) return $e;
+    $lp = is_scalar($j['logger_palet'] ?? null) ? trim((string)$j['logger_palet']) : '';
+    if (preg_match('/^\d{1,3}$/', $lp)) $e['logger_palet'] = $lp;
+    if (array_key_exists('antet', $j)) $e['antet'] = (bool)$j['antet'];
+    return $e;
+}
+
+function frgp_ek_yaz(PDO $pdo, int $sid, array $ek): bool
+{
+    try { frgp_kv_hazirla(); } catch (Throwable $e) { return false; }
+    $lp = trim((string)($ek['logger_palet'] ?? ''));
+    return siparis_inv_kv_yaz($pdo, FRGP_EK_KV_ON . $sid, ['logger_palet' => preg_match('/^\d{1,3}$/', $lp) ? $lp : '', 'antet' => (bool)($ek['antet'] ?? true)]);
+}
+
+/** Logo: base64 data URI (dompdf uzak kaynak kapalı). Dosya yoksa null. */
+function frgp_logo_uri(): ?string
+{
+    static $uri = false;
+    if ($uri === false) {
+        $f = dirname(__DIR__) . '/' . FRGP_LOGO;
+        $b = is_file($f) ? @file_get_contents($f) : false;
+        $uri = ($b !== false && $b !== '') ? 'data:image/png;base64,' . base64_encode($b) : null;
+    }
+    return $uri;
+}
+
 // ── Satır doğrulama ─────────────────────────────────────────────────────────
 
 /**
  * Ham palet satırlarını (form/yapıştırma) doğrular ve temizler. Tamamen boş satır atlanır.
+ * Palet no POST'tan ALINMAZ: sunucu sırayla 1..N yazar. $bag: kutu_palet:int (>0 ise her satıra o kutu), ggn:array<ad,ggn> (ayar),
+ * eski:array<"ad\x1fggn",true> (kayıtlı eski çiftler — korunur), palet:int (siparişteki palet adedi; farklıysa UYARI).
  * Hatalar engeller (kaydedilmez); uyarılar engellemez.
  * @return array{satirlar:list<array<string,mixed>>,hatalar:list<string>,uyarilar:list<string>}
  */
-function frgp_satirlari_dogrula(array $ham): array
+function frgp_satirlari_dogrula(array $ham, array $bag = []): array
 {
-    $satirlar = []; $hatalar = []; $uyarilar = []; $gorulen = [];
+    $satirlar = []; $hatalar = []; $uyarilar = [];
+    $kp = (int)($bag['kutu_palet'] ?? 0); $ayar = (array)($bag['ggn'] ?? []); $eski = (array)($bag['eski'] ?? []);
     $i = 0;
     foreach ($ham as $p) {
         if (!is_array($p)) continue;
         $i++;
         $no = $i;
         $alan = fn(string $k): string => is_scalar($p[$k] ?? null) ? trim((string)$p[$k]) : '';
-        if (implode('', array_map($alan, ['palet_no', 'konum', 'kalibre', 'lot', 'ggn_no', 'ggn_adi', 'kutu', 'brut_kg', 'net_kg'])) === '') continue;
+        if (implode('', array_map($alan, ['konum', 'kalibre', 'lot', 'ggn_adi', 'kutu', 'brut_kg', 'net_kg'])) === '') continue;
         if (count($satirlar) >= FRGP_MAX_SATIR) { $hatalar[] = 'En çok ' . FRGP_MAX_SATIR . ' palet satırı girilebilir.'; break; }
 
-        $paletNo = frgp_metin($alan('palet_no'), 10);
-        if ($paletNo !== null && !preg_match('/^[A-Za-z0-9\-]{1,10}$/', $paletNo)) { $hatalar[] = "Satır $no: palet no yalnız harf, rakam ve tire içerebilir (en çok 10)."; $paletNo = null; }
-        $ggn = frgp_metin($alan('ggn_no'), 20);
+        $paletNo = (string)(count($satirlar) + 1);
+        $ad = frgp_metin($alan('ggn_adi'), 100); $ggn = frgp_metin($alan('ggn_no'), 20);
         if ($ggn !== null && !preg_match('/^[A-Za-z0-9\-]{1,20}$/', $ggn)) { $hatalar[] = "Satır $no: GGN no yalnız harf, rakam ve tire içerebilir."; $ggn = null; }
+        $eskiMi = $ggn !== null && isset($eski[(string)$ad . "\x1f" . $ggn]);
+        if ($ad !== null) {
+            if (isset($ayar[$ad])) {
+                if ($eskiMi && $ggn !== $ayar[$ad]) $uyarilar[] = "Satır $no: ayardaki GGN farklı (kayıtlı değer korundu) — '↓' ya da yeniden seçimle güncelleyin.";
+                elseif (!$eskiMi) $ggn = $ayar[$ad];
+            } elseif (!$eskiMi) { $hatalar[] = "Satır $no: GGN adı ayarlarda yok (Frugro ayarları › GGN)."; }
+        } elseif ($ggn !== null && !isset($eski["\x1f" . $ggn])) { $hatalar[] = "Satır $no: GGN adı seçilmeden GGN no girilemez."; $ggn = null; }
 
-        $kutu = frgp_kutu_coz($alan('kutu'));
+        $kutu = $kp > 0 ? $kp : frgp_kutu_coz($alan('kutu'));
         if ($kutu === false) { $hatalar[] = "Satır $no: kutu 0'dan büyük TAM sayı olmalı."; $kutu = null; }
         elseif ($kutu === null) $hatalar[] = "Satır $no: kutu adedi boş.";
         $brut = frgp_kg_coz($alan('brut_kg'));
@@ -172,16 +275,14 @@ function frgp_satirlari_dogrula(array $ham): array
             $kb = $brut / $kutu;
             if ($kb > 30 || $kb < 1) $uyarilar[] = "Satır $no: kutu başına brüt " . number_format($kb, 1, ',', '.') . " kg — sayıları kontrol edin.";
         }
-        if ($paletNo !== null && !str_contains($paletNo, 'DOOR')) {
-            if (isset($gorulen[$paletNo])) $uyarilar[] = "Satır $no: palet no $paletNo tekrar ediyor.";
-            $gorulen[$paletNo] = true;
-        }
         $satirlar[] = [
             'palet_no' => $paletNo, 'konum' => frgp_metin($alan('konum'), 30), 'kalibre' => frgp_metin($alan('kalibre'), 20),
-            'lot' => frgp_metin($alan('lot'), 30), 'ggn_no' => $ggn, 'ggn_adi' => frgp_metin($alan('ggn_adi'), 100),
+            'lot' => frgp_metin($alan('lot'), 30), 'ggn_no' => $ggn, 'ggn_adi' => $ad,
             'kutu' => is_int($kutu) ? $kutu : null, 'brut_kg' => is_float($brut) ? $brut : null, 'net_kg' => is_float($net) ? $net : null,
         ];
     }
+    $pl = (int)($bag['palet'] ?? 0);
+    if ($pl > 0 && $satirlar && count($satirlar) !== $pl) $uyarilar[] = 'Satır sayısı (' . count($satirlar) . ') siparişteki palet sayısından (' . $pl . ') farklı.';
     return ['satirlar' => $satirlar, 'hatalar' => $hatalar, 'uyarilar' => $uyarilar];
 }
 
@@ -211,8 +312,8 @@ function frgp_kalibre_coz(?string $boy): ?string
 }
 
 /**
- * PO'dan boş palet satırları: palet adedi = palet (yoksa ⌈kutu / kutu_palet⌉); her satır kutu = kutu_palet
- * (son satır kalan kutu); kalibre = boy, lot = PO no ön-dolu; palet no 1..N (azalan sıra: Frugro örneğinde yüksekten başlar → artan bırakıldı, elle değişir).
+ * PO'dan boş palet satırları: palet adedi = palet (yoksa ⌈kutu / kutu_palet⌉); kutu_palet > 0 ise HER satır kutu = kutu_palet
+ * (sahip kararı: kutu siparişten gelir); kalibre = boy, lot = PO no ön-dolu; palet no 1..N.
  * @return list<array<string,mixed>>
  */
 function frgp_taslak_satirlari(array $s): array
@@ -223,12 +324,9 @@ function frgp_taslak_satirlari(array $s): array
     $kal = frgp_kalibre_coz($s['boy'] ?? null);
     $lot = frgp_metin($s['po_no'] ?? null, 30);
     $out = [];
-    $kalan = $kutu > 0 ? $kutu : $pl * $kp;
     for ($i = 1; $i <= $pl; $i++) {
-        $k = $kp > 0 ? ($i === $pl ? max(0, $kalan - $kp * ($pl - 1)) : $kp) : null;
-        if ($kp > 0 && $k === 0) $k = $kp;
         $out[] = ['palet_no' => (string)$i, 'konum' => null, 'kalibre' => $kal, 'lot' => $lot, 'ggn_no' => null, 'ggn_adi' => null,
-            'kutu' => $k, 'brut_kg' => null, 'net_kg' => null];
+            'kutu' => $kp > 0 ? $kp : null, 'brut_kg' => null, 'net_kg' => null];
     }
     return $out;
 }
@@ -236,15 +334,13 @@ function frgp_taslak_satirlari(array $s): array
 // ── Excel yapıştırma ayrıştırıcı ────────────────────────────────────────────
 
 /**
- * Excel'den kopyalanan metni (satır = \n, hücre = \t) ayrıştırır. HEP-YA-HİÇ: tek hata → satır yok.
- * Sütun düzenleri (tüm satırlarda AYNI hücre sayısı):
- *   1 sütun  = brüt                                  (mod 'brut')
- *   2 sütun  = brüt | net                            (mod 'brut_net')
- *   6 sütun  = palet no | GGN no | GGN adı | kutu | brüt | net   (mod 'tam')
- * Kg'da nokta-ondalık REDDEDİLİR (frgp_kg_coz). Boş satırlar atlanır; en çok FRGP_MAX_SATIR.
+ * Excel'den kopyalanan metni (satır = \n, hücre = \t) ayrıştırır (OGL siparis.js eşi). HEP-YA-HİÇ: tek hata → satır yok.
+ *   1 sütun  = hedef sütunun değeri (brüt ya da net)        (mod 'tek')
+ *   2 sütun  = brüt | net — YALNIZ hedef 'brut_kg' iken     (mod 'brut_net')
+ * Kg'da nokta-ondalık REDDEDİLİR (frgp_kg_coz). Boş satırlar atlanır; en çok FRGP_MAX_SATIR. JS aynası: assets/frugro_pkl.js yapistirCoz().
  * @return array{ok:bool,mod:?string,satirlar:list<array<string,?string>>,hatalar:list<string>}
  */
-function frgp_yapistir_coz(string $metin): array
+function frgp_yapistir_coz(string $metin, string $hedef = 'brut_kg'): array
 {
     $bos = ['ok' => false, 'mod' => null, 'satirlar' => [], 'hatalar' => []];
     $metin = str_replace(["\r\n", "\r"], "\n", $metin);
@@ -256,26 +352,21 @@ function frgp_yapistir_coz(string $metin): array
     if (!$satirlar) { $bos['hatalar'][] = 'Yapıştırılacak veri yok.'; return $bos; }
     if (count($satirlar) > FRGP_MAX_SATIR) { $bos['hatalar'][] = 'En çok ' . FRGP_MAX_SATIR . ' satır yapıştırılabilir.'; return $bos; }
     $sayilar = array_unique(array_map('count', $satirlar));
-    if (count($sayilar) !== 1) { $bos['hatalar'][] = 'Satırların sütun sayısı aynı değil (1, 2 ya da 6 sütun olmalı).'; return $bos; }
+    if (count($sayilar) !== 1) { $bos['hatalar'][] = 'Satırların sütun sayısı aynı değil (1 ya da 2 sütun olmalı).'; return $bos; }
     $n = $sayilar[array_key_first($sayilar)];
-    $mod = [1 => 'brut', 2 => 'brut_net', 6 => 'tam'][$n] ?? null;
-    if ($mod === null) { $bos['hatalar'][] = "Sütun sayısı $n desteklenmiyor — 1 (brüt), 2 (brüt | net) ya da 6 (palet no | GGN no | GGN adı | kutu | brüt | net)."; return $bos; }
+    $hedef = $hedef === 'net_kg' ? 'net_kg' : 'brut_kg';
+    if ($n === 2 && $hedef !== 'brut_kg') { $bos['hatalar'][] = 'Hedef Net iken tek sütun yapıştırın (2 sütun yalnız Brüt hedefinde: brüt | net).'; return $bos; }
+    $mod = [1 => 'tek', 2 => 'brut_net'][$n] ?? null;
+    if ($mod === null) { $bos['hatalar'][] = "Sütun sayısı $n desteklenmiyor — 1 sütun (hedef sütun) ya da 2 sütun (brüt | net)."; return $bos; }
 
     $hatalar = []; $out = [];
     foreach ($satirlar as $i => $h) {
         $no = $i + 1;
-        $r = [];
-        if ($mod === 'tam') {
-            [$r['palet_no'], $r['ggn_no'], $r['ggn_adi'], $kutu, $brut, $net] = $h;
-            if ($kutu !== '' && !is_int(frgp_kutu_coz($kutu))) $hatalar[] = "Satır $no: kutu geçersiz ('" . mb_substr($kutu, 0, 20) . "').";
-            $r['kutu'] = $kutu;
-        } elseif ($mod === 'brut_net') { [$brut, $net] = $h; }
-        else { $brut = $h[0]; $net = ''; }
+        if ($mod === 'brut_net') { [$brut, $net] = $h; } elseif ($hedef === 'net_kg') { $brut = ''; $net = $h[0]; } else { $brut = $h[0]; $net = ''; }
         foreach (['brut' => $brut, 'net' => $net] as $ad => $v) {
             if ($v !== '' && frgp_kg_coz($v) === false) $hatalar[] = "Satır $no: $ad kg geçersiz ('" . mb_substr($v, 0, 20) . "') — ondalık için virgül kullanın, nokta binliktir.";
         }
-        $r['brut_kg'] = $brut; $r['net_kg'] = $net;
-        $out[] = $r;
+        $out[] = ['brut_kg' => $brut, 'net_kg' => $net];
     }
     if ($hatalar) { $bos['hatalar'] = array_slice($hatalar, 0, 10); $bos['mod'] = $mod; return $bos; }
     return ['ok' => true, 'mod' => $mod, 'satirlar' => $out, 'hatalar' => []];
@@ -299,7 +390,7 @@ function frgp_saat_coz($v)
 }
 
 /**
- * Başlık alanlarını doğrular (SAF). @return array{degerler:array<string,mixed>,hatalar:list<string>}
+ * Başlık alanlarını doğrular (SAF). logger_palet AYRI döner (hks_kv eki; frugro_siparisler kolonu DEĞİL). @return array{degerler:array<string,mixed>,hatalar:list<string>,logger_palet:string}
  * Telefon: yalnız rakam ve + ( ) - . boşluk, 7–15 hane (OGL şoför kuralı).
  */
 function frgp_baslik_dogrula(array $post): array
@@ -315,7 +406,9 @@ function frgp_baslik_dogrula(array $post): array
     $pd = frgp_kucuk_coz($post['palet_diger_kg'] ?? null, 2, 500.0);
     if ($pd === false) { $h[] = 'Palet diğer kg 0–500 arası, ondalık için VİRGÜL olmalı (örn. 25).'; $pd = null; }
     $d['karton_kg'] = $kar; $d['palet_diger_kg'] = $pd;
-    return ['degerler' => $d, 'hatalar' => $h];
+    $lp = trim((string)(is_scalar($post['logger_palet'] ?? null) ? $post['logger_palet'] : ''));
+    if ($lp !== '' && !preg_match('/^\d{1,3}$/', $lp)) { $h[] = 'Logger palet no 1–3 haneli bir sayı olmalı.'; $lp = ''; }
+    return ['degerler' => $d, 'hatalar' => $h, 'logger_palet' => $lp];
 }
 
 /**
@@ -328,8 +421,13 @@ function frgp_kaydet(PDO $pdo, array $s, array $post, ?int $uid): array
     $sid = (int)$s['id'];
     if (!frgp_duzenlenebilir($s)) return ['ok' => false, 'mesaj' => '', 'hatalar' => ['PKL bu durumda düzenlenemez (net/brüt tüm evraklarda aynı kalmalı).'], 'uyarilar' => []];
     $b = frgp_baslik_dogrula(is_array($post['b'] ?? null) ? $post['b'] : []);
-    $p = frgp_satirlari_dogrula(is_array($post['p'] ?? null) ? $post['p'] : []);
+    $eskiCift = [];
+    foreach (($s['paletler'] ?? []) as $x) $eskiCift[(string)($x['ggn_adi'] ?? '') . "\x1f" . (string)($x['ggn_no'] ?? '')] = true;
+    $p = frgp_satirlari_dogrula(is_array($post['p'] ?? null) ? $post['p'] : [], [
+        'kutu_palet' => (int)($s['kutu_palet'] ?? 0), 'palet' => (int)($s['palet'] ?? 0), 'eski' => $eskiCift, 'ggn' => frgp_ggn_harita(frgp_ggn_liste($pdo))]);
     $hatalar = array_merge($b['hatalar'], $p['hatalar']);
+    $lp = (string)$b['logger_palet'];
+    if ($lp !== '' && !in_array($lp, array_map(fn($x) => (string)$x['palet_no'], $p['satirlar']), true)) $hatalar[] = "Logger palet no ($lp) palet satırları arasında yok.";
     if ($hatalar) return ['ok' => false, 'mesaj' => '', 'hatalar' => $hatalar, 'uyarilar' => $p['uyarilar']];
 
     $degisen = [];
@@ -337,6 +435,8 @@ function frgp_kaydet(PDO $pdo, array $s, array $post, ?int $uid): array
     $eskiPal = json_encode(array_map(fn($x) => [$x['palet_no'], $x['kalibre'], $x['lot'], $x['ggn_no'], $x['ggn_adi'], (int)$x['kutu'], (float)$x['brut_kg'], (float)$x['net_kg']], $s['paletler'] ?? []));
     $yeniPal = json_encode(array_map(fn($x) => [$x['palet_no'], $x['kalibre'], $x['lot'], $x['ggn_no'], $x['ggn_adi'], (int)$x['kutu'], (float)$x['brut_kg'], (float)$x['net_kg']], $p['satirlar']));
     $paletDegisti = $eskiPal !== $yeniPal;
+    $ekEski = frgp_ek_oku($pdo, $sid);
+    $loggerDegisti = $ekEski['logger_palet'] !== $lp;
 
     $pdo->beginTransaction();
     try {
@@ -348,8 +448,9 @@ function frgp_kaydet(PDO $pdo, array $s, array $post, ?int $uid): array
         }
         $n = null;
         if ($paletDegisti) $n = frg_palet_kaydet($pdo, $sid, $p['satirlar']);
-        if ($degisen || $paletDegisti) {
-            frg_olay_yaz($pdo, $sid, 'pkl_kaydedildi', ($paletDegisti ? count($p['satirlar']) . ' palet satırı' : 'palet satırları değişmedi') . ($degisen ? '; başlık: ' . implode(', ', $degisen) : ''), $uid);
+        if ($loggerDegisti && !frgp_ek_yaz($pdo, $sid, ['logger_palet' => $lp, 'antet' => $ekEski['antet']])) throw new RuntimeException('logger palet yazılamadı');
+        if ($degisen || $paletDegisti || $loggerDegisti) {
+            frg_olay_yaz($pdo, $sid, 'pkl_kaydedildi', ($paletDegisti ? count($p['satirlar']) . ' palet satırı' : 'palet satırları değişmedi') . ($degisen ? '; başlık: ' . implode(', ', $degisen) : '') . ($loggerDegisti ? '; logger palet' : ''), $uid);
         }
         $pdo->commit();
     } catch (Throwable $e) {
@@ -357,10 +458,10 @@ function frgp_kaydet(PDO $pdo, array $s, array $post, ?int $uid): array
         error_log('[frgp_kaydet] ' . $e->getMessage());
         return ['ok' => false, 'mesaj' => '', 'hatalar' => ['Kayıt sırasında hata oluştu; hiçbir şey kaydedilmedi.'], 'uyarilar' => []];
     }
-    if ($degisen || $paletDegisti) {
-        audit_log_event('frugro_pkl_kaydet', 'frugro_siparis', $sid, null, ['alanlar' => $degisen, 'palet_satiri' => count($p['satirlar']), 'palet_degisti' => $paletDegisti]);
+    if ($degisen || $paletDegisti || $loggerDegisti) {
+        audit_log_event('frugro_pkl_kaydet', 'frugro_siparis', $sid, null, ['alanlar' => $degisen, 'palet_satiri' => count($p['satirlar']), 'palet_degisti' => $paletDegisti, 'logger_palet_degisti' => $loggerDegisti]);
     }
-    return ['ok' => true, 'mesaj' => ($degisen || $paletDegisti) ? 'PKL kaydedildi.' : 'Değişiklik yok.', 'hatalar' => [], 'uyarilar' => $p['uyarilar']];
+    return ['ok' => true, 'mesaj' => ($degisen || $paletDegisti || $loggerDegisti) ? 'PKL kaydedildi.' : 'Değişiklik yok.', 'hatalar' => [], 'uyarilar' => $p['uyarilar']];
 }
 
 /** TASLAK: PO'dan boş palet satırları. Mevcut satır varsa yalnız $uzerineYaz ile. @return array{ok:bool,mesaj:string,hatalar:list<string>} */
@@ -415,10 +516,10 @@ function frgp_tarih_goster(?string $t): string
 }
 
 /**
- * PDF/XLSX'in ortak verisi. $cikisSaati "HH:MM" (kayda girmez).
+ * PDF/XLSX'in ortak verisi. $cikisSaati "HH:MM" (kayda girmez). $ek = frgp_ek_oku() sonucu (verilmezse antet=true, logger yok).
  * @return array<string,mixed>
  */
-function frgp_belge_verisi(array $s, string $cikisSaati = ''): array
+function frgp_belge_verisi(array $s, string $cikisSaati = '', ?array $ek = null): array
 {
     $pal = array_values($s['paletler'] ?? []);
     $kalib = [];
@@ -426,9 +527,11 @@ function frgp_belge_verisi(array $s, string $cikisSaati = ''): array
     $tek = count($kalib) === 1 ? array_key_first($kalib) : null;
     $urun = frgp_urun_ad($s['urun'] ?? null);
     $satirlar = [];
+    $lp = (string)($ek['logger_palet'] ?? '');
     foreach ($pal as $p) {
         $k = (string)($p['kalibre'] ?? '');
         $satirlar[] = [
+            'logger' => $lp !== '' && (string)($p['palet_no'] ?? '') === $lp,
             'ggn_no' => (string)($p['ggn_no'] ?? ''), 'ggn_adi' => (string)($p['ggn_adi'] ?? ''), 'palet_no' => (string)($p['palet_no'] ?? ''),
             'urun' => $urun . ($k !== '' ? ', CALIBER ' . $k : ''), 'lot' => (string)($p['lot'] ?? ''),
             'kutu' => (int)($p['kutu'] ?? 0), 'brut' => (float)($p['brut_kg'] ?? 0), 'net' => (float)($p['net_kg'] ?? 0),
@@ -443,6 +546,7 @@ function frgp_belge_verisi(array $s, string $cikisSaati = ''): array
         'sofor' => (string)($s['sofor_adi'] ?? ''), 'telefon' => (string)($s['sofor_telefon'] ?? ''),
         'karton_kg' => $s['karton_kg'] ?? null, 'palet_diger_kg' => $s['palet_diger_kg'] ?? null,
         'satirlar' => $satirlar, 'toplam' => $tp, 'tek_kalibre' => $tek, 'urun' => $urun,
+        'antet' => (bool)($ek['antet'] ?? true), 'logger_palet' => $lp,
     ];
 }
 
@@ -456,12 +560,15 @@ function frgp_pdf_html(array $v): string
     $tarih = $v['tarih'] . ($v['saat'] !== '' ? '   ' . $v['saat'] : '');
     $sol = [['SUPPLIER', 'ASYA FRESH - TURKIYE'], ['REGION', $v['bolge']], ['PARTI NO', $v['parti_no']], ['TRANSPORTER', $v['nakliyeci']],
         ['TEMPERATURE', $v['sicaklik']], ['DEPARTURE DATE', $tarih]];
-    $sag = [['DATE', $v['tarih']], ['LORRY NUMBER', $v['plaka']], ['ID LOGGER', $v['logger']], ['DRIVER', $v['sofor']],
+    $antet = (bool)($v['antet'] ?? true);
+    $logo = $antet ? frgp_logo_uri() : null;
+    $lgDeger = $v['logger'] . (($v['logger_palet'] ?? '') !== '' ? ' (PALET ' . $v['logger_palet'] . ')' : '');
+    $sag = [['DATE', $v['tarih']], ['LORRY NUMBER', $v['plaka']], ['ID LOGGER', $lgDeger], ['DRIVER', $v['sofor']],
         ['DRIVER PHONE', $v['telefon']], ['REF.', $v['ref']], ['POS. NR.', 'FRUGRO']];
     ob_start();
     ?><!doctype html><html lang="en"><head><meta charset="utf-8"><title>PKL <?= $e($v['po_no']) ?></title>
 <style>
-@page { margin: 28pt 28pt 40pt 28pt; }
+@page { margin: <?= $antet ? '86pt 28pt 78pt 28pt' : '28pt 28pt 40pt 28pt' ?>; }
 body { font-family: 'DejaVu Sans', sans-serif; font-size: 8pt; color: #111; }
 h1 { font-size: 13pt; margin: 0 0 6pt; letter-spacing: 1pt; }
 table { border-collapse: collapse; }
@@ -480,17 +587,31 @@ table { border-collapse: collapse; }
 .alt td { padding: 2pt 3pt; font-size: 8pt; border: 0.6pt solid #888; }
 .alt td.b { font-weight: bold; }
 .tp td { background: #f2f5f8; font-weight: bold; }
+.lg td { background: #ffeb3b; }
+.band { width: 100%; border-collapse: collapse; }
+.band td { height: 2pt; padding: 0; border: 0; }
+.ayak { text-align: center; font-size: 6.8pt; color: #333; line-height: 1.5; }
 </style></head><body>
+<?php if ($antet): ?>
+<div style="position:fixed;top:-72pt;left:0;right:0;">
+<?php if ($logo !== null): ?><img src="<?= $logo ?>" alt="" style="height:42pt;"><?php endif; ?>
+<table class="band" style="margin-top:3pt;"><tr><td style="width:62%;background:#3e8e2f"></td><td style="background:#c8202f"></td></tr></table>
+</div>
+<div style="position:fixed;bottom:-66pt;left:0;right:0;">
+<table class="band" style="margin-bottom:4pt;"><tr><td style="width:62%;background:#3e8e2f"></td><td style="background:#c8202f"></td></tr></table>
+<div class="ayak"><b>Address:</b> <?= FRGP_AYAK_ADRES ?><br><?= FRGP_AYAK_ILETISIM ?></div>
+</div>
+<?php endif; ?>
 <h1>PACKING LIST</h1>
 <table class="ust"><tr>
 <td style="width:54%"><table class="kv"><?php foreach ($sol as [$k, $d]): ?><tr><td class="k"><?= $e($k) ?></td><td>: <?= $e($d) ?></td></tr><?php endforeach; ?></table></td>
-<td><table class="kv"><?php foreach ($sag as [$k, $d]): ?><tr><td class="k"><?= $e($k) ?></td><td><?= $e($d) ?></td></tr><?php endforeach; ?></table></td>
+<td><table class="kv"><?php foreach ($sag as [$k, $d]): ?><tr><td class="k"><?= $e($k) ?></td><td><?php if ($k === 'ID LOGGER' && $d !== ''): ?><span style="background:#ffeb3b;padding:0 3pt"><?= $e($d) ?></span><?php else: ?><?= $e($d) ?><?php endif; ?></td></tr><?php endforeach; ?></table></td>
 </tr></table>
 <table class="liste">
 <thead><tr><th style="width:14%">GROWER-GGN</th><th style="width:16%">GGN NAME</th><th style="width:9%">PALET NO</th><th style="width:25%">PRODUCT</th><th style="width:15%">LOT NO</th><th style="width:7%">BOX</th><th style="width:8%">BRUT KG</th><th style="width:8%">NET KG</th></tr></thead>
 <tbody>
-<?php $onceki = null; foreach ($sat as $r): $lot = $r['lot']; $tekrar = ($onceki !== null && $lot !== '' && $lot === $onceki); $onceki = $lot; ?>
-<tr><td><?= $e($r['ggn_no']) ?></td><td><?= $e($r['ggn_adi']) ?></td><td class="orta"><?= $e($r['palet_no']) ?></td><td><?= $e($r['urun']) ?></td><td class="orta"><?= $tekrar ? '&quot;' : $e($lot) ?></td><td class="sag"><?= $e($r['kutu']) ?></td><td class="sag"><?= $e(frgp_kg_goster($r['brut'])) ?></td><td class="sag"><?= $e(frgp_kg_goster($r['net'])) ?></td></tr>
+<?php foreach ($sat as $r): $lot = $r['lot']; ?>
+<tr<?= !empty($r['logger']) ? ' class="lg"' : '' ?>><td><?= $e($r['ggn_no']) ?></td><td><?= $e($r['ggn_adi']) ?></td><td class="orta"><?= $e($r['palet_no']) ?></td><td><?= $e($r['urun']) ?></td><td class="orta"><?= $e($lot) ?></td><td class="sag"><?= $e($r['kutu']) ?></td><td class="sag"><?= $e(frgp_kg_goster($r['brut'])) ?></td><td class="sag"><?= $e(frgp_kg_goster($r['net'])) ?></td></tr>
 <?php endforeach; ?>
 </tbody></table>
 <table class="alt"><tr class="tp">
@@ -523,8 +644,9 @@ function frgp_pdf(array $v): ?string
     $d->render();
     $c = $d->getCanvas();
     $f = $d->getFontMetrics()->getFont('DejaVu Sans', 'normal');
-    $c->page_text(28, $c->get_height() - 26, 'ASYA FRESH · PKL ' . $v['po_no'], $f, 7, [0.42, 0.45, 0.52]);
-    $c->page_text($c->get_width() - 110, $c->get_height() - 26, 'Page {PAGE_NUM} / {PAGE_COUNT}', $f, 7, [0.42, 0.45, 0.52]);
+    $antet = (bool)($v['antet'] ?? true);
+    if (!$antet) $c->page_text(28, $c->get_height() - 26, 'ASYA FRESH · PKL ' . $v['po_no'], $f, 7, [0.42, 0.45, 0.52]);
+    $c->page_text($c->get_width() - 110, $c->get_height() - ($antet ? 14 : 26), 'Page {PAGE_NUM} / {PAGE_COUNT}', $f, 7, [0.42, 0.45, 0.52]);
     return $d->output();
 }
 
@@ -534,7 +656,7 @@ function frgp_xlsx(array $v): ?string
     if (!function_exists('xlsx_olustur')) require_once __DIR__ . '/xlsx_export.php';
     xlsx_motor_yukle();
     $bilgi = [['SUPPLIER', 'ASYA FRESH - TURKIYE'], ['REGION', $v['bolge']], ['PARTI NO', $v['parti_no']], ['TRANSPORTER', $v['nakliyeci']], ['TEMPERATURE', $v['sicaklik']],
-        ['DEPARTURE DATE', trim($v['tarih'] . ' ' . $v['saat'])], ['LORRY NUMBER', $v['plaka']], ['ID LOGGER', $v['logger']], ['DRIVER', $v['sofor']],
+        ['DEPARTURE DATE', trim($v['tarih'] . ' ' . $v['saat'])], ['LORRY NUMBER', $v['plaka']], ['ID LOGGER', $v['logger']], ['ID LOGGER PALET', $v['logger_palet'] ?? ''], ['DRIVER', $v['sofor']],
         ['DRIVER PHONE', $v['telefon']], ['REF.', $v['ref']], ['POS. NR.', 'FRUGRO'],
         ['CARTON BOX WEIGHT KG', frgp_kucuk_goster($v['karton_kg'])], ['PALLET OTHERS KG', frgp_kucuk_goster($v['palet_diger_kg'])]];
     $satirlar = [];
@@ -558,7 +680,7 @@ function frgp_xlsx(array $v): ?string
  * Başarıda: olay 'pkl_uretildi' + audit + durum yeni|hazirlik → pkl_hazir (frg_durum_degistir).
  * @return array{ok:bool,hatalar:list<string>,ad:string,tip:string,veri:string}
  */
-function frgp_uret(PDO $pdo, array $s, string $bicim, string $cikisSaati, ?int $uid): array
+function frgp_uret(PDO $pdo, array $s, string $bicim, string $cikisSaati, ?int $uid, ?bool $antet = null): array
 {
     $hata = fn(array $h) => ['ok' => false, 'hatalar' => $h, 'ad' => '', 'tip' => '', 'veri' => ''];
     if (!in_array($bicim, ['pdf', 'xlsx'], true)) return $hata(['Geçersiz biçim.']);
@@ -566,7 +688,12 @@ function frgp_uret(PDO $pdo, array $s, string $bicim, string $cikisSaati, ?int $
     if ($saat === false) return $hata(['Çıkış saati SS:DD olmalı (örn. 18:00).']);
     $eks = frgp_uretime_hazir($s);
     if ($eks) return $hata($eks);
-    $v = frgp_belge_verisi($s, (string)$saat);
+    $ek = frgp_ek_oku($pdo, (int)$s['id']);
+    if ($antet !== null && $antet !== $ek['antet']) {            // antet seçimi sipariş bazında saklanır; kilit ENGELLEMEZ (net/brüt değildir)
+        $ek['antet'] = $antet;
+        frgp_ek_yaz($pdo, (int)$s['id'], $ek);
+    }
+    $v = frgp_belge_verisi($s, (string)$saat, $ek);
     $veri = $bicim === 'pdf' ? frgp_pdf($v) : frgp_xlsx($v);
     if ($veri === null || $veri === '') return $hata(['Dosya üretilemedi (PDF/Excel motoru yok).']);
     $sid = (int)$s['id'];

@@ -53,10 +53,10 @@ $SIPT = ['h' => [], 'kod' => 200];
 function sipt_header(string $h, bool $replace = true, int $code = 0): void { global $SIPT; if (str_contains($h, ':')) { [$a, $b] = explode(':', $h, 2); $SIPT['h'][strtolower(trim($a))] = trim($b); } if ($code > 0) $SIPT['kod'] = $code; }
 function sipt_code(?int $c = null) { global $SIPT; if ($c !== null) $SIPT['kod'] = $c; return $SIPT['kod']; }
 function sip_calistir(string $tmp): void { include $tmp; }
-function sayfa(array $get = [], array $post = []): array
+function sayfa(array $get = [], array $post = [], string $dosya = 'frugro_invoice.php'): array
 {
     global $ROOT, $SIPT;
-    $src = (string)file_get_contents($ROOT . '/frugro_invoice.php');
+    $src = (string)file_get_contents($ROOT . '/' . $dosya);
     $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
     $src = str_replace('__DIR__', var_export($ROOT, true), $src);
     $src = preg_replace('/\bheader\(/', 'sipt_header(', $src);
@@ -66,7 +66,7 @@ function sayfa(array $get = [], array $post = []): array
     file_put_contents($tmp, $src);
     $SIPT = ['h' => [], 'kod' => 200];
     $_GET = $get; $_POST = $post; $_FILES = [];
-    $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET'; $_SERVER['PHP_SELF'] = '/frugro_invoice.php';
+    $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET'; $_SERVER['PHP_SELF'] = '/' . $dosya;
     if (session_status() === PHP_SESSION_NONE) session_start();
     unset($_SESSION['flash']);
     ob_start(); $hata = null;
@@ -111,7 +111,10 @@ ok('para birimi yalnız GBP | EUR', array_keys(frgi_para_birimleri()) === ['GBP'
 ok('sayfa: require_login + require_siparis(read) + no-store + frg_gorunur + CSRF', str_contains($sayfaK, 'require_login()') && str_contains($sayfaK, "require_siparis('read')") && str_contains($sayfaK, 'siparis_no_store()') && str_contains($sayfaK, 'frg_gorunur(') && str_contains($sayfaK, 'csrf_check('));
 $cs = strpos($sayfaK, 'csrf_check('); $mt = strpos($sayfaK, 'frgi_uret(');
 ok('csrf_check mutasyondan ÖNCE; yazma kapısı require_siparis(write)', $cs !== false && $mt !== false && $cs < $mt && str_contains($sayfaK, "require_siparis('write')"));
-ok('ayar yalnız can_siparis(delete) ile', str_contains($sayfaK, "can_siparis('delete')") && str_contains($sayfaK, '$ayarYk'));
+ok('ayar yalnız can_siparis(delete) ile (bağlantı kapısı)', str_contains($sayfaK, "can_siparis('delete')") && str_contains($sayfaK, '$ayarYk'));
+$ayarlarK = (string)file_get_contents($ROOT . '/frugro_ayarlar.php');
+ok('v515: frugro_ayarlar.php fatura_ayar dalı: CSRF → require_siparis(delete) → frgi_ayar_kaydet; bölüm id=fatura', (bool)preg_match("/fatura_ayar'\) \{\s*csrf_check\(.*?require_siparis\('delete'\).*?frgi_ayar_kaydet/s", $ayarlarK) && str_contains($ayarlarK, 'id="fatura"'));
+ok('v515: frugro_invoice.php ayar formu + frgi_ayar_kaydet KALDIRILDI; islem=ayar yalnız yönlendirir', !str_contains($sayfaK, 'name="islem" value="ayar"') && !str_contains($sayfaK, 'frgi_ayar_kaydet') && str_contains($sayfaK, 'frugro_ayarlar.php#fatura') && !str_contains($sayfaK, '#ayar'));
 ok('satır içi onclick / on* öznitelikleri yok; PRG var', !preg_match('/\son(click|change|input|submit)\s*=/i', $sayfaK) && str_contains($sayfaK, "header('Location: '"));
 ok('sw.js bypass regex frugro_invoice.php\'yi kapsar; assets SHELL\'de değil', (bool)preg_match('#/frugro(_[a-z]+)?\.php(/|$)#', '/frugro_invoice.php') && !str_contains((string)file_get_contents($ROOT . '/sw.js'), 'assets/frugro_invoice'));
 ok('sayfa dosya fonksiyon TANIMLAMAZ', !preg_match('/^\s*function\s+\w+\s*\(/m', $sayfaK));
@@ -285,7 +288,7 @@ $r = sayfa(['id' => $S]);
 ok('GET (operatör): 200, temiz render, form + CSRF + kontrol listesi', $r['kod'] === 200 && $M($r) && str_contains($r['html'], 'name="csrf"') && str_contains($r['html'], 'id="kontrol"') && str_contains($r['html'], 'data-frgi'), (string)$r['hata']);
 ok('mobil: input 16px kuralı CSS\'te, assets bağlı, onclick yok', str_contains((string)file_get_contents($ROOT . '/assets/frugro_invoice.css'), 'font-size: 16px') && str_contains($r['html'], 'assets/frugro_invoice.js'));
 ok('PKL toplamları görünür (5.280 kutu, 18.520 / 20.995)', str_contains($r['html'], '5.280') && str_contains($r['html'], '18.520') && str_contains($r['html'], '20.995'));
-ok('operatör HTML\'inde ayar değeri YOK (IBAN / VAT / banka); ayar bölümü yok', !str_contains($r['html'], T_IBAN_GBP) && !str_contains($r['html'], T_IBAN_EUR) && !str_contains($r['html'], T_VAT_A) && !str_contains($r['html'], T_BANKA) && !str_contains($r['html'], 'frgiAyarBas'));
+ok('operatör HTML\'inde ayar değeri YOK (IBAN / VAT / banka); ayar bölümü yok', !str_contains($r['html'], T_IBAN_GBP) && !str_contains($r['html'], T_IBAN_EUR) && !str_contains($r['html'], T_VAT_A) && !str_contains($r['html'], T_BANKA) && !str_contains($r['html'], 'frgiAyarBas') && !str_contains($r['html'], 'frugro_ayarlar.php') && str_contains($r['html'], 'Banka / fatura ayarları'));
 $x = siparis_ac($db, '25-7777-12345', ['son_musteri' => '<img src=x onerror=alert(1)>']);
 $rx = sayfa(['id' => $x]);
 ok('XSS: müşteri adı kaçırılır', !str_contains($rx['html'], '<img src=x onerror') && str_contains($rx['html'], '&lt;img'));
@@ -338,28 +341,32 @@ $db->exec("UPDATE frugro_siparisler SET depo = '' WHERE id = $d2");
 ok('deposu BOŞ sipariş her depoda görünür', sayfa(['id' => $d2])['kod'] === 200);
 $r = sayfa(['id' => 99999]);
 ok('olmayan sipariş 404', $r['kod'] === 404);
-// ayar (yalnız siparis.delete)
+// ayar (yalnız siparis.delete). v515: ayar formu frugro_ayarlar.php#fatura'da; bu sayfada yalnız durum satırı + eski POST yönlendirmesi.
 // v514: alan bazında kayıt — hatalı alan diğerlerini SİLMEZ; 10 karakterli SWIFT kabul
 $__e = frgi_ayar_ham($db);
 $__k = frgi_ayar_kaydet($db, ['banka_ad' => 'YENI BANKA', 'swift' => 'TESTTRISXX', 'iban_gbp' => 'XX'], 7);
 ok('v514: ayar — geçerli alanlar kaydedilir, hatalı IBAN eski değerinde kalır, hata alan bazında', !$__k['ok'] && isset($__k['hatalar']['iban_gbp']) && !isset($__k['hatalar']['swift']) && frgi_ayar_ham($db)['banka_ad'] === 'YENI BANKA' && frgi_ayar_ham($db)['swift'] === 'TESTTRISXX' && frgi_ayar_ham($db)['iban_gbp'] === $__e['iban_gbp']);
 rol($ADMIN, true);
-$r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'sube' => 'YENI SUBE', 'iban_eur' => 'BOZUK']);
-$r = sayfa(['id' => $S]);
-ok('v514: ayar sayfası — hatalı alan girilen değeriyle ve mesajıyla geri gelir, diğer alan kaydedilmiş', str_contains($r['html'], 'value="BOZUK"') && str_contains($r['html'], 'frgi-alan-hata') && frgi_ayar_ham($db)['sube'] === 'YENI SUBE' && str_contains($r['html'], 'value="YENI SUBE"'));
+$r = sayfa([], ['csrf' => csrf(), 'islem' => 'fatura_ayar', 'sube' => 'YENI SUBE', 'iban_eur' => 'BOZUK'], 'frugro_ayarlar.php');
+$r = sayfa([], [], 'frugro_ayarlar.php');
+ok('v514/v515: ayarlar#fatura — hatalı alan girilen değeriyle ve mesajıyla geri gelir, diğer alan kaydedilmiş', str_contains($r['html'], 'value="BOZUK"') && str_contains($r['html'], 'frgi-alan-hata') && frgi_ayar_ham($db)['sube'] === 'YENI SUBE' && str_contains($r['html'], 'value="YENI SUBE"'));
 frgi_ayar_kaydet($db, ['banka_ad' => $__e['banka_ad'], 'swift' => $__e['swift'], 'sube' => $__e['sube']], 7);
 rol($OPER, false);
-$r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => 'GB82WEST12345698765432']);
-ok('operatör POST ayar → 403', $r['hata'] !== null && str_contains($r['hata'], 'forbidden') && frgi_ayar_ham($db)['iban_gbp'] === T_IBAN_GBP);
+$r = sayfa([], ['csrf' => csrf(), 'islem' => 'fatura_ayar', 'iban_gbp' => 'GB82WEST12345698765432'], 'frugro_ayarlar.php');
+ok('operatör POST fatura_ayar (ayarlar) → 403, yazmaz', $r['hata'] !== null && str_contains($r['hata'], 'forbidden') && frgi_ayar_ham($db)['iban_gbp'] === T_IBAN_GBP);
 rol($ADMIN, true);
-$r = sayfa(['id' => $S]);
-ok('admin: "Fatura ayarları" bölümü + kayıtlı değerler formda', str_contains($r['html'], 'frgi-ayar-ozet') && str_contains($r['html'], T_IBAN_GBP) && str_contains($r['html'], 'name="islem" value="ayar"'));
+$r = sayfa([], [], 'frugro_ayarlar.php');
+ok('admin: ayarlar sayfasında "fatura" bölümü + kayıtlı IBAN formda + islem=fatura_ayar', str_contains($r['html'], 'id="fatura"') && str_contains($r['html'], T_IBAN_GBP) && str_contains($r['html'], 'name="islem" value="fatura_ayar"'));
 $yeniIban = 'GB82WEST12345698765432';
-$r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => $yeniIban]);
+$r = sayfa([], ['csrf' => csrf(), 'islem' => 'fatura_ayar', 'iban_gbp' => $yeniIban], 'frugro_ayarlar.php');
 $au = audit_hepsi($db);
-ok('admin POST ayar → kaydedildi; flash + audit yeni IBAN / eski değer İÇERMEZ', ($r['flash']['type'] ?? '') === 'success' && frgi_ayar_ham($db)['iban_gbp'] === $yeniIban && !str_contains(flash_metin($r['flash']), $yeniIban) && !str_contains($au, $yeniIban) && !str_contains($au, T_IBAN_GBP), flash_metin($r['flash']));
-$r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => 'bozuk']);
+ok('admin POST fatura_ayar → kaydedildi; PRG #fatura; flash + audit yeni IBAN / eski değer İÇERMEZ', ($r['git'] ?? '') === 'frugro_ayarlar.php#fatura' && ($r['flash']['type'] ?? '') === 'success' && frgi_ayar_ham($db)['iban_gbp'] === $yeniIban && !str_contains(flash_metin($r['flash']), $yeniIban) && !str_contains($au, $yeniIban) && !str_contains($au, T_IBAN_GBP), flash_metin($r['flash']));
+$r = sayfa([], ['csrf' => csrf(), 'islem' => 'fatura_ayar', 'iban_gbp' => 'bozuk'], 'frugro_ayarlar.php');
 ok('geçersiz IBAN → hata flash; değer değişmez', ($r['flash']['type'] ?? '') === 'error' && frgi_ayar_ham($db)['iban_gbp'] === $yeniIban);
+$r = sayfa(['id' => $S]);
+ok('v515: invoice (admin) → ayar FORMU yok; "Ayarlar" bağlantısı #fatura; IBAN sayfada yok', !str_contains($r['html'], 'name="islem" value="ayar"') && !str_contains($r['html'], 'frgi-ayar-ozet') && str_contains($r['html'], 'frugro_ayarlar.php#fatura') && str_contains($r['html'], 'Banka / fatura ayarları kayıtlı') && !str_contains($r['html'], $yeniIban));
+$r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => 'GB82WEST12345698765432']);
+ok('v515: eski islem=ayar POST (invoice) → frugro_ayarlar.php#fatura\'ya yönlendirir, YAZMAZ', ($r['git'] ?? '') === 'frugro_ayarlar.php#fatura' && frgi_ayar_ham($db)['iban_gbp'] === $yeniIban);
 ok('HTML dengeli', true);
 
 echo "\n=== 10. CSRF ===\n";

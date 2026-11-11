@@ -32,43 +32,66 @@ ok('net önerisi: 160 kutu × 0,312 + 25, brüt 634 ⇒ 559,08 (≈ 559)', $no =
 ok('net önerisi alt sınır 0', frgp_net_oneri(100, 10.0, 0.3, 25.0) === 0.0);
 
 echo "\n=== 3. Satır doğrulama ===\n";
+$AYAR = ['Uretici A' => '4063651214000', 'Uretici B' => '4069453419551'];
 $v = frgp_satirlari_dogrula([
-    ['palet_no' => '1-DOOR', 'ggn_no' => '4049929000000', 'ggn_adi' => 'Uretici X', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559'],
+    ['palet_no' => '1-DOOR', 'ggn_no' => '9999', 'ggn_adi' => 'Uretici A', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559'],
     ['palet_no' => '', 'ggn_no' => '', 'kutu' => '', 'brut_kg' => '', 'net_kg' => ''],
-    ['palet_no' => '2', 'kutu' => '160', 'brut_kg' => '631,5', 'net_kg' => ''],
-]);
-ok('geçerli: 2 satır (boş atlandı), hata yok, net boş null', count($v['satirlar']) === 2 && $v['hatalar'] === [] && $v['satirlar'][1]['net_kg'] === null && $v['satirlar'][1]['brut_kg'] === 631.5 && $v['satirlar'][0]['palet_no'] === '1-DOOR');
-$h = frgp_satirlari_dogrula([['palet_no' => '1', 'kutu' => '0', 'brut_kg' => '600', 'net_kg' => '500'], ['palet_no' => '2', 'kutu' => '160', 'brut_kg' => '812.5', 'net_kg' => '500'], ['palet_no' => '3', 'kutu' => '160', 'brut_kg' => '500', 'net_kg' => '600'], ['palet_no' => 'a b', 'kutu' => '1', 'brut_kg' => '5', 'net_kg' => '4'], ['palet_no' => '5', 'kutu' => '', 'brut_kg' => '5']]);
+    ['palet_no' => '77', 'kutu' => '160', 'brut_kg' => '631,5', 'net_kg' => ''],
+], ['ggn' => $AYAR]);
+ok('geçerli: 2 satır (boş atlandı), hata yok, net boş null', count($v['satirlar']) === 2 && $v['hatalar'] === [] && $v['satirlar'][1]['net_kg'] === null && $v['satirlar'][1]['brut_kg'] === 631.5, json_encode($v));
+ok('palet no POST\'tan ALINMAZ: sunucu 1..N yazar ("1-DOOR" ve "77" yok sayılır)', $v['satirlar'][0]['palet_no'] === '1' && $v['satirlar'][1]['palet_no'] === '2');
+ok('GGN no ayardan gelir (POST\'taki 9999 yok sayılır)', $v['satirlar'][0]['ggn_no'] === '4063651214000' && $v['satirlar'][0]['ggn_adi'] === 'Uretici A');
+$h = frgp_satirlari_dogrula([['kutu' => '0', 'brut_kg' => '600', 'net_kg' => '500'], ['kutu' => '160', 'brut_kg' => '812.5', 'net_kg' => '500'], ['kutu' => '160', 'brut_kg' => '500', 'net_kg' => '600'], ['kutu' => '', 'brut_kg' => '500', 'net_kg' => '400']]);
 $hm = implode(' | ', $h['hatalar']);
-ok('hata: kutu 0, nokta-ondalık brüt, brüt<net, geçersiz palet no, kutu boş', str_contains($hm, 'Satır 1: kutu') && str_contains($hm, 'Satır 2: brüt kg geçersiz') && str_contains($hm, 'Satır 3: brüt kg') && str_contains($hm, 'Satır 4: palet no') && str_contains($hm, 'Satır 5: kutu adedi boş'), $hm);
-$w = frgp_satirlari_dogrula([['palet_no' => '7', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559'], ['palet_no' => '7', 'kutu' => '1', 'brut_kg' => '634', 'net_kg' => '559']]);
-ok('uyarı (engellemez): palet no tekrarı + kutu başına brüt anormal', $w['hatalar'] === [] && count($w['uyarilar']) === 2, json_encode($w['uyarilar']));
-ok('brüt=net serbest', frgp_satirlari_dogrula([['palet_no' => '1', 'kutu' => '10', 'brut_kg' => '50', 'net_kg' => '50']])['hatalar'] === []);
+ok('hata: kutu 0, nokta-ondalık brüt, brüt<net, kutu boş', str_contains($hm, 'Satır 1: kutu') && str_contains($hm, 'Satır 2: brüt kg geçersiz') && str_contains($hm, 'Satır 3: brüt kg') && str_contains($hm, 'Satır 4: kutu adedi boş'), $hm);
+ok('"palet no" hatası/uyarısı artık YOK (sunucu atar)', !str_contains($hm, 'palet no'));
+$w = frgp_satirlari_dogrula([['kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559'], ['kutu' => '1', 'brut_kg' => '634', 'net_kg' => '559']]);
+ok('uyarı (engellemez): kutu başına brüt anormal; tekrar uyarısı yok', $w['hatalar'] === [] && count($w['uyarilar']) === 1 && !str_contains(implode('', $w['uyarilar']), 'tekrar'), json_encode($w['uyarilar']));
+$wp = frgp_satirlari_dogrula([['kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['palet' => 3]);
+ok('uyarı: satır sayısı ≠ siparişteki palet sayısı (engellemez)', $wp['hatalar'] === [] && str_contains(implode('', $wp['uyarilar']), 'palet sayısından'));
+ok('brüt=net serbest', frgp_satirlari_dogrula([['kutu' => '10', 'brut_kg' => '50', 'net_kg' => '50']])['hatalar'] === []);
 ok('GGN no kontrol: harf/rakam/tire dışı reddedilir', frgp_satirlari_dogrula([['ggn_no' => "40'; DROP", 'kutu' => '1', 'brut_kg' => '5', 'net_kg' => '4']])['hatalar'] !== []);
-$cok = array_fill(0, 205, ['palet_no' => '1', 'kutu' => '1', 'brut_kg' => '5', 'net_kg' => '4']);
+$cok = array_fill(0, 205, ['kutu' => '1', 'brut_kg' => '5', 'net_kg' => '4']);
 ok('en çok 200 satır', frgp_satirlari_dogrula($cok)['hatalar'] !== []);
+$kz = frgp_satirlari_dogrula([['kutu' => '5', 'brut_kg' => '3000', 'net_kg' => '2800'], ['kutu' => '', 'brut_kg' => '3000', 'net_kg' => '2800']], ['kutu_palet' => 200]);
+ok('kutu siparişten: kutu_palet>0 ise POST yok sayılır, her satır 200 (boş kutu da hata değil)', $kz['hatalar'] === [] && $kz['satirlar'][0]['kutu'] === 200 && $kz['satirlar'][1]['kutu'] === 200, json_encode($kz['hatalar']));
+$ky = frgp_satirlari_dogrula([['kutu' => '5', 'brut_kg' => '3000', 'net_kg' => '2800']]);
+ok('kutu_palet yoksa kutu elle girilen değer', $ky['satirlar'][0]['kutu'] === 5);
+// GGN kuralları
+$g1 = frgp_satirlari_dogrula([['ggn_adi' => 'Uretici B', 'ggn_no' => '', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['ggn' => $AYAR]);
+ok('GGN: ayarda olan ad → no ayardan (4069453419551)', $g1['hatalar'] === [] && $g1['satirlar'][0]['ggn_no'] === '4069453419551');
+$g2 = frgp_satirlari_dogrula([['ggn_adi' => 'Yeni Uretici', 'ggn_no' => '1234', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['ggn' => $AYAR]);
+ok('GGN: ayarda olmayan YENİ ad → hata', $g2['hatalar'] !== [] && str_contains($g2['hatalar'][0], 'ayarlarda yok'), json_encode($g2['hatalar']));
+$g3 = frgp_satirlari_dogrula([['ggn_adi' => 'Eski Uretici', 'ggn_no' => '777', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['ggn' => $AYAR, 'eski' => ["Eski Uretici\x1f777" => true]]);
+ok('GGN: ayarda olmayan ama ESKİ kayıtlı çift korunur', $g3['hatalar'] === [] && $g3['satirlar'][0]['ggn_adi'] === 'Eski Uretici' && $g3['satirlar'][0]['ggn_no'] === '777');
+$g4 = frgp_satirlari_dogrula([['ggn_adi' => 'Uretici A', 'ggn_no' => '555', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['ggn' => $AYAR, 'eski' => ["Uretici A\x1f555" => true]]);
+ok('GGN: ayar değişmiş, satır eski no ile kayıtlı → eski no korunur + uyarı', $g4['hatalar'] === [] && $g4['satirlar'][0]['ggn_no'] === '555' && str_contains(implode('', $g4['uyarilar']), 'ayardaki GGN farklı'));
+$g5 = frgp_satirlari_dogrula([['ggn_adi' => '', 'ggn_no' => '321', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['ggn' => $AYAR, 'eski' => ["\x1f321" => true]]);
+$g6 = frgp_satirlari_dogrula([['ggn_adi' => '', 'ggn_no' => '321', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559']], ['ggn' => $AYAR]);
+ok('GGN: boş ad + eski no korunur; boş ad + yeni no hata', $g5['hatalar'] === [] && $g5['satirlar'][0]['ggn_no'] === '321' && $g6['hatalar'] !== []);
 
 echo "\n=== 4. Taslak ===\n";
 $po = ['po_no' => '26-1622-44080', 'kutu_palet' => 200, 'palet' => 26, 'kutu' => 5200, 'boy' => 'x14'];
 $tk = frgp_taslak_satirlari($po);
 ok('26 palet × 200 kutu, kalibre 14 (x14), lot=PO no, palet no 1..26', count($tk) === 26 && $tk[0]['kutu'] === 200 && $tk[25]['kutu'] === 200 && $tk[0]['kalibre'] === '14' && $tk[0]['lot'] === '26-1622-44080' && $tk[25]['palet_no'] === '26' && $tk[0]['brut_kg'] === null);
 $tk2 = frgp_taslak_satirlari(['po_no' => '26-1-1', 'kutu_palet' => 200, 'palet' => 3, 'kutu' => 500, 'boy' => '']);
-ok('son palet kalan kutu (200,200,100); kalibre boş', array_column($tk2, 'kutu') === [200, 200, 100] && $tk2[0]['kalibre'] === null);
+ok('kutu siparişten: 3 palet × 200 kutu (toplam 500 olsa da SON satır da 200); kalibre boş', array_column($tk2, 'kutu') === [200, 200, 200] && $tk2[0]['kalibre'] === null);
 ok('palet yoksa ⌈kutu/kutu_palet⌉; bilgi yoksa boş', count(frgp_taslak_satirlari(['kutu' => 450, 'kutu_palet' => 200])) === 3 && frgp_taslak_satirlari(['po_no' => 'x']) === []);
 
-echo "\n=== 5. Yapıştırma ayrıştırıcı ===\n";
+echo "\n=== 5. Yapıştırma ayrıştırıcı (yalnız Brüt / Net) ===\n";
 $y1 = frgp_yapistir_coz("634\r\n631,5\r\n\r\n1.250\r\n");
-ok('1 sütun (brüt): CRLF + boş satır + binlik', $y1['ok'] && $y1['mod'] === 'brut' && count($y1['satirlar']) === 3 && $y1['satirlar'][2]['brut_kg'] === '1.250');
-$y2 = frgp_yapistir_coz("634\t559\n631\t556\t\n");
-ok('2 sütun (brüt|net): sondaki sekme tolere', $y2['ok'] && $y2['mod'] === 'brut_net' && $y2['satirlar'][1]['net_kg'] === '556');
-$y6 = frgp_yapistir_coz("33\t4063651214000\tUretici A\t160\t634\t559\n32\t4063651214000\t\t160\t631\t556");
-ok('6 sütun (tam): palet no / GGN / ad / kutu / brüt / net', $y6['ok'] && $y6['mod'] === 'tam' && $y6['satirlar'][0]['ggn_adi'] === 'Uretici A' && $y6['satirlar'][1]['ggn_adi'] === '' && $y6['satirlar'][1]['kutu'] === '160');
+ok('1 sütun (brüt): CRLF + boş satır + binlik', $y1['ok'] && $y1['mod'] === 'tek' && count($y1['satirlar']) === 3 && $y1['satirlar'][2]['brut_kg'] === '1.250' && $y1['satirlar'][0]['net_kg'] === '');
+$yn1 = frgp_yapistir_coz("559\n556", 'net_kg');
+ok('hedef Net, 1 sütun → net_kg dolar, brüt boş', $yn1['ok'] && $yn1['satirlar'][0]['net_kg'] === '559' && $yn1['satirlar'][0]['brut_kg'] === '' && $yn1['satirlar'][1]['net_kg'] === '556');
+ok('hedef Net, 2 sütun → REDDEDİLİR', !frgp_yapistir_coz("634\t559", 'net_kg')['ok']);
+$y2 = frgp_yapistir_coz("634\t559\n631\t556\t\n", 'brut_kg');
+ok('hedef Brüt, 2 sütun (brüt|net): sondaki sekme tolere', $y2['ok'] && $y2['mod'] === 'brut_net' && $y2['satirlar'][1]['net_kg'] === '556' && $y2['satirlar'][1]['brut_kg'] === '631');
+ok('6 sütun modu KALKTI → reddedilir', !frgp_yapistir_coz("33\t4063651214000\tUretici A\t160\t634\t559")['ok']);
 $yn = frgp_yapistir_coz("812.5\n634");
 ok('nokta-ondalık REDDEDİLİR, hep-ya-hiç (hiç satır dönmez)', !$yn['ok'] && $yn['satirlar'] === [] && str_contains($yn['hatalar'][0], 'Satır 1'));
 ok('farklı sütun sayısı reddedilir', !frgp_yapistir_coz("634\t559\n631")['ok']);
 ok('3/4/5 sütun desteklenmez', !frgp_yapistir_coz("1\t2\t3")['ok'] && !frgp_yapistir_coz("1\t2\t3\t4")['ok']);
 ok('boş girdi reddedilir', !frgp_yapistir_coz("  \n\t\n")['ok']);
-ok('6 sütunda geçersiz kutu reddedilir', !frgp_yapistir_coz("1\t\t\t0\t634\t559")['ok']);
 ok('201 satır reddedilir', !frgp_yapistir_coz(implode("\n", array_fill(0, 201, '634')))['ok']);
 
 echo "\n=== 6. Başlık doğrulama ===\n";
@@ -86,13 +109,25 @@ $t = frgp_taslak_olustur($db, $s, false, 1);
 $s = frg_getir($db, $sid);
 ok('taslak: 3 boş satır yazıldı + olay', $t['ok'] && count($s['paletler']) === 3 && $s['paletler'][0]['lot'] === '26-1710-60001' && $s['paletler'][0]['kalibre'] === '10');
 ok('taslak: mevcut satır varken onaysız reddedilir, onayla geçer', !frgp_taslak_olustur($db, $s, false, 1)['ok'] && frgp_taslak_olustur($db, $s, true, 1)['ok']);
-$post = ['b' => ['parti_no' => '61/236', 'plaka' => '34 TST 123', 'sofor_adi' => 'Test Sofor', 'sofor_telefon' => '+90 555 000 00 00', 'nakliyeci' => 'TEST NAKLIYE', 'logger_id' => 'LG1', 'sicaklik' => '+6', 'karton_kg' => '0,312', 'palet_diger_kg' => '25', 'bolge' => 'FINIKE'],
-    'p' => [['palet_no' => '1-DOOR', 'ggn_no' => '4049929000000', 'ggn_adi' => 'Uretici X', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '160', 'brut_kg' => '634', 'net_kg' => '559'],
-            ['palet_no' => '2', 'ggn_no' => '4049929000000', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '160', 'brut_kg' => '631,5', 'net_kg' => '556'],
-            ['palet_no' => '3', 'ggn_no' => '4049929000000', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '160', 'brut_kg' => '627', 'net_kg' => '552']]];
+$db->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+$gk = frgp_ggn_kaydet($db, [['ad' => 'Uretici X', 'no' => '4049929000000'], ['ad' => '', 'no' => ''], ['ad' => 'Uretici Y', 'no' => '4049929000999']], 1);
+ok('GGN ayarı kaydedilir (boş satır atlanır), liste/harita okunur', $gk['ok'] && count(frgp_ggn_liste($db)) === 2 && frgp_ggn_harita(frgp_ggn_liste($db)) === ['Uretici X' => '4049929000000', 'Uretici Y' => '4049929000999'], json_encode($gk));
+ok('GGN ayarı: aynı ad ikinci kez (harf duyarsız) → ret', !frgp_ggn_kaydet($db, [['ad' => 'A Uretici', 'no' => '1'], ['ad' => 'a uretici', 'no' => '2']], 1)['ok'] && count(frgp_ggn_liste($db)) === 2);
+ok('GGN ayarı: geçersiz GGN no / adsız satır → ret', !frgp_ggn_kaydet($db, [['ad' => 'X', 'no' => "1'; DROP"]], 1)['ok'] && !frgp_ggn_kaydet($db, [['ad' => '', 'no' => '123']], 1)['ok']);
+$auG = (string)$db->query("SELECT group_concat(new_values) FROM audit_log WHERE action='frugro_ggn_ayar'")->fetchColumn();
+ok('GGN audit: yalnız sayı; ad ve GGN DEĞERİ yazılmaz', $auG !== '' && str_contains($auG, 'sayi') && !preg_match('/Uretici|4049929/', $auG), $auG);
+$post = ['b' => ['parti_no' => '61/236', 'plaka' => '34 TST 123', 'sofor_adi' => 'Test Sofor', 'sofor_telefon' => '+90 555 000 00 00', 'nakliyeci' => 'TEST NAKLIYE', 'logger_id' => 'LG1', 'logger_palet' => '2', 'sicaklik' => '+6', 'karton_kg' => '0,312', 'palet_diger_kg' => '25', 'bolge' => 'FINIKE'],
+    'p' => [['palet_no' => '1-DOOR', 'ggn_no' => 'x', 'ggn_adi' => 'Uretici X', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '1', 'brut_kg' => '634', 'net_kg' => '559'],
+            ['palet_no' => '9', 'ggn_adi' => 'Uretici Y', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '1', 'brut_kg' => '631,5', 'net_kg' => '556'],
+            ['ggn_adi' => 'Uretici X', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => '1', 'brut_kg' => '627', 'net_kg' => '552']]];
 $k = frgp_kaydet($db, $s, $post, 1);
 $s = frg_getir($db, $sid);
-ok('kaydet ok; başlık + 3 palet yazıldı; ondalık brüt 631,5', $k['ok'] && $s['parti_no'] === '61/236' && (float)$s['karton_kg'] === 0.312 && (float)$s['palet_diger_kg'] === 25.0 && count($s['paletler']) === 3 && (float)$s['paletler'][1]['brut_kg'] === 631.5 && $s['paletler'][0]['palet_no'] === '1-DOOR', json_encode($k));
+ok('kaydet ok; başlık + 3 palet yazıldı; ondalık brüt 631,5', $k['ok'] && $s['parti_no'] === '61/236' && (float)$s['karton_kg'] === 0.312 && (float)$s['palet_diger_kg'] === 25.0 && count($s['paletler']) === 3 && (float)$s['paletler'][1]['brut_kg'] === 631.5 && $s['paletler'][0]['palet_no'] === '1' && $s['paletler'][1]['palet_no'] === '2' && $s['paletler'][2]['palet_no'] === '3', json_encode($k));
+ok('kaydet: palet no 1..N sunucuda atandı (POST \'1-DOOR\'/\'9\' yok sayıldı); kutu siparişten (160); GGN no ayardan', $s['paletler'][0]['ggn_no'] === '4049929000000' && $s['paletler'][1]['ggn_no'] === '4049929000999' && (int)$s['paletler'][0]['kutu'] === 160 && (int)$s['paletler'][2]['kutu'] === 160);
+ok('kaydet: logger palet eki yazıldı (2); antet varsayılan true', frgp_ek_oku($db, $sid) === ['logger_palet' => '2', 'antet' => true]);
+$kLg = $post; $kLg['b']['logger_palet'] = '9';
+ok('logger palet: satırlar arasında olmayan numara → ret; harf → ret', !frgp_kaydet($db, $s, $kLg, 1)['ok'] && count(frgp_baslik_dogrula(['logger_palet' => 'x'])['hatalar']) === 1 && frgp_baslik_dogrula(['logger_palet' => ''])['hatalar'] === []);
+ok('logger palet audit\'te yalnız bayrak (değer yok)', str_contains((string)$db->query("SELECT group_concat(new_values) FROM audit_log WHERE action='frugro_pkl_kaydet'")->fetchColumn(), 'logger_palet_degisti'));
 $au = $db->query("SELECT action, new_values FROM audit_log WHERE module='frugro_siparis' AND action LIKE 'frugro_pkl%'")->fetchAll();
 $aj = json_encode($au, JSON_UNESCAPED_UNICODE);
 ok('audit yazıldı (taslak + kaydet); şoför/plaka/telefon/üretici/nakliyeci DEĞERİ sızmaz', count($au) >= 2 && !preg_match('/Test Sofor|34 TST|555 000|Uretici X|TEST NAKLIYE|LG1/', $aj), $aj);
@@ -123,8 +158,36 @@ ok('invoice_hazir: PKL kilitli (kaydet reddedilir) ama üretim serbest ve durumu
 $tmp = tempnam(sys_get_temp_dir(), 'pkl'); file_put_contents($tmp, $pdf['veri']);
 $txt = (string)@shell_exec('pdftotext -layout ' . escapeshellarg($tmp) . ' - 2>/dev/null');
 if (trim($txt) === '') echo "ATLANDI (pdftotext yok): PDF metin doğrulaması\n";
-else ok('PDF metni: PACKING LIST, REF 26-1710, PARTI NO, 1-DOOR, POMEGRANATE, CALIBER 10, toplam 480 / 1.893 / 1.667', str_contains($txt, 'PACKING LIST') && str_contains($txt, '26-1710') && str_contains($txt, '61/236') && str_contains($txt, '1-DOOR') && str_contains($txt, 'POMEGRANATE, CALIBER 10') && str_contains($txt, '1.893') && str_contains($txt, '1.667') && str_contains($txt, '18:00') && str_contains($txt, '"'), $txt);
+else ok('PDF metni: PACKING LIST, REF 26-1710, PARTI NO, 1-DOOR, POMEGRANATE, CALIBER 10, toplam 480 / 1.893 / 1.667', str_contains($txt, 'PACKING LIST') && str_contains($txt, '26-1710') && str_contains($txt, '61/236') && str_contains($txt, 'POMEGRANATE, CALIBER 10') && str_contains($txt, '1.893') && str_contains($txt, '1.667') && str_contains($txt, '18:00') && !str_contains($txt, '"') && substr_count($txt, '26-1710-60001') === 3 && str_contains($txt, 'Website: www.asyafresh.com') && str_contains($txt, 'Address:') && str_contains($txt, 'LG1 (PALET 2)'), $txt);
 @unlink($tmp);
+// antet + logger + ek
+$ekV = frgp_ek_oku($db, 99999);
+ok('ek: kayıt yoksa antet varsayılan TRUE, logger boş', $ekV === ['logger_palet' => '', 'antet' => true]);
+$sL = frg_getir($db, $sid);
+$hA = frgp_pdf_html(frgp_belge_verisi($sL, '', ['logger_palet' => '2', 'antet' => true]));
+$hB = frgp_pdf_html(frgp_belge_verisi($sL, '', ['logger_palet' => '2', 'antet' => false]));
+ok('HTML antetli: logo (data:image/png), adres/telefon/web, logger satırı class="lg" (yalnız 1), ID LOGGER sarı', str_contains($hA, 'data:image/png;base64') && str_contains($hA, 'Website: www.asyafresh.com') && str_contains($hA, 'E-mail: contact@asyafresh.com') && substr_count($hA, 'class="lg"') === 1 && str_contains($hA, 'background:#ffeb3b;padding:0 3pt') && str_contains($hA, 'LG1 (PALET 2)'));
+ok('HTML antetsiz: logo/adres/web YOK; logger sarısı yine var', !str_contains($hB, 'data:image/png') && !str_contains($hB, 'Website:') && !str_contains($hB, 'Address:') && substr_count($hB, 'class="lg"') === 1);
+ok('HTML: lot her satırda (tekrar işareti ditto YOK)', substr_count($hA, '<td class="orta">26-1710-60001</td>') === 3 && !str_contains($hA, '&quot;'));
+ok('HTML: logger palet yoksa sarı satır yok', substr_count(frgp_pdf_html(frgp_belge_verisi($sL, '', ['logger_palet' => '', 'antet' => true])), 'class="lg"') === 0 && !str_contains(frgp_pdf_html(frgp_belge_verisi($sL)), 'class="lg"'));
+ok('PDF HTML: uzak kaynak yok (logo base64)', !preg_match('#(src|href)\s*=\s*["\']?https?:#i', $hA));
+$sZ = frg_getir($db, $sid);
+$db->exec("UPDATE frugro_siparisler SET durum='invoice_hazir' WHERE id=$sid");
+$sZ = frg_getir($db, $sid);
+$u1 = frgp_uret($db, $sZ, 'pdf', '', 1, false);
+ok('antet=false: KİLİTLİYKEN de kv\'ye yazılır (net/brüt değildir); sonraki GET/ZIP aynı değeri okur', $u1['ok'] && frgp_ek_oku($db, $sid)['antet'] === false && frgp_ek_oku($db, $sid)['logger_palet'] === '2');
+$u2 = frgp_uret($db, $sZ, 'pdf', '', 1);
+ok('antet verilmezse (null) kayıtlı değer korunur; true verilince geri açılır', $u2['ok'] && frgp_ek_oku($db, $sid)['antet'] === false && frgp_uret($db, $sZ, 'pdf', '', 1, true)['ok'] && frgp_ek_oku($db, $sid)['antet'] === true);
+$db->exec("UPDATE frugro_siparisler SET durum='pkl_hazir' WHERE id=$sid");
+$tmp2 = tempnam(sys_get_temp_dir(), 'pk2'); file_put_contents($tmp2, (string)frgp_pdf(frgp_belge_verisi(frg_getir($db, $sid), '', ['logger_palet' => '2', 'antet' => false])));
+$txt2 = (string)@shell_exec('pdftotext -layout ' . escapeshellarg($tmp2) . ' - 2>/dev/null'); @unlink($tmp2);
+if (trim($txt2) !== '') ok('PDF antetsiz: "Website:" yok, "ASYA FRESH · PKL" alt yazısı var', !str_contains($txt2, 'Website:') && str_contains($txt2, 'ASYA FRESH'));
+$xz = frgp_xlsx(frgp_belge_verisi(frg_getir($db, $sid), '', ['logger_palet' => '2', 'antet' => true]));
+$tx2 = tempnam(sys_get_temp_dir(), 'pk3'); file_put_contents($tx2, $xz);
+$za2 = new ZipArchive(); $za2->open($tx2); $ss2 = (string)$za2->getFromName('xl/sharedStrings.xml'); $sh2 = (string)$za2->getFromName('xl/worksheets/sheet1.xml'); $za2->close(); @unlink($tx2);
+ok('XLSX: ID LOGGER PALET satırı + lot her satırda (3 kez)', str_contains($ss2, 'ID LOGGER PALET') && substr_count($sh2, '<c ') > 0 && preg_match_all('/26-1710-60001/', $ss2) >= 1);
+$st = $db->prepare('SELECT COUNT(*) FROM hks_kv WHERE anahtar = ?'); $st->execute(['frugro_pkl_ek_' . $sid]);
+ok('ek kaydı hks_kv\'de, anahtar ≤ 60 karakter', (int)$st->fetchColumn() === 1 && strlen(FRGP_EK_KV_ON . '9999999') <= 60);
 // çok sayfa
 $cokPal = [];
 for ($i = 1; $i <= 90; $i++) $cokPal[] = ['palet_no' => (string)$i, 'ggn_no' => '4049929000000', 'ggn_adi' => '', 'kalibre' => '10', 'lot' => '26-1710-60001', 'kutu' => 160, 'brut_kg' => 634, 'net_kg' => 559];
@@ -177,5 +240,18 @@ ok('config: include-only koruma; PDF güvenlik seçenekleri; ALTER/DROP yok; get
 ok('config: yalnız frugro_siparisler başlık UPDATE\'i; yazma yolu frg_palet_kaydet', substr_count($kod, 'UPDATE frugro_siparisler') === 1 && !preg_match('/UPDATE\s+frugro_siparisler\s+SET\s+durum/i', $kod) && str_contains($kod, 'frg_palet_kaydet(') && !preg_match('/\bINSERT\s+INTO\s+frugro_palet\b/i', $kod));
 ok('JS: kg/kutu/karton regex\'leri PHP ile aynı (nokta=binlik, 4 ondalık yok)', str_contains($js, '/^\d{1,3}(\.\d{3})+$/') && str_contains($js, '/^(\d+|\d{1,3}(\.\d{3})+),\d{1,3}$/') && str_contains($js, '/^\d{1,4}(,\d{1,3})?$/') && str_contains($kod, '\d{1,3}(\.\d{3})+'));
 ok('JS: form Enter ile gönderilmez; satır içi eval/innerHTML kullanıcı verisi yok', str_contains($js, 'e.preventDefault()') && !str_contains($js, 'eval(') && !str_contains($js, 'document.write'));
+
+$ayar = (string)file_get_contents($ROOT . '/frugro_ayarlar.php');
+$zip = (string)file_get_contents($ROOT . '/frugro_zip.php'); $eml = (string)file_get_contents($ROOT . '/frugro_eml.php');
+ok('JS: 6 sütun modu ("tam") kalktı; ↓ alttakilere uygula + hücreye yapıştırma (paste) var', !str_contains($js, "'tam'") && str_contains($js, 'data-frp-asagi') && str_contains($js, "addEventListener('paste'") && str_contains($js, 'yapistirCoz(metin, hedef)'));
+ok('sayfa: GGN adı <select>, GGN no readonly, palet no gizli+salt okunur, antet onay kutusu (checked varsayılan), logger palet alanı', str_contains($pg, '<select name="p[__I__][ggn_adi]"') && str_contains($pg, 'readonly tabindex="-1"') && str_contains($pg, 'name="antet" value="1"') && str_contains($pg, 'Üst başlık / alt bilgi (AsyaFresh logosu)') && str_contains($pg, "\$ek['antet'] ? ' checked'") && str_contains($pg, 'b[logger_palet]'));
+ok('sayfa: antet POST\'ta yalnız "1" ise true; frgp_uret\'e geçer', str_contains($pg, "(\$_POST['antet'] ?? '') === '1'") && str_contains($pg, '$uid, $antet)'));
+ok('ZIP / .eml / detay: kayıtlı antet için frgd_pkl_pdf($s, $pdo)', str_contains($zip, 'frgd_pkl_pdf($s, $pdo)') && str_contains($eml, 'frgd_pkl_pdf($s, $pdo)'));
+ok('logo dosyası var, PNG', is_file($ROOT . '/' . FRGP_LOGO) && str_starts_with((string)file_get_contents($ROOT . '/' . FRGP_LOGO, false, null, 0, 8), "\x89PNG") && frgp_logo_uri() !== null);
+$pk = ''; foreach (token_get_all($ayar) as $tk) { if (is_array($tk)) { if ($tk[0] === T_COMMENT || $tk[0] === T_DOC_COMMENT) continue; $pk .= $tk[1]; } else $pk .= $tk; }
+$pG = strpos($pk, "'islem'] ?? '') === 'ggn'"); $pGen = strpos($pk, "if (\$_SERVER['REQUEST_METHOD'] === 'POST') {");
+ok('ayarlar: GGN POST dalı csrf_check + require_siparis(\'delete\') + frgp_ggn_kaydet, genel POST dalından ÖNCE; #ggn kartı $pklYk kapısında', $pG !== false && $pGen !== false && $pG < $pGen && preg_match("/'ggn'\) \{\s*csrf_check\([^;]+;\s*require_siparis\('delete'\);[^}]*frgp_ggn_kaydet\(/s", $pk) && str_contains($ayar, 'id="ggn"') && (bool)preg_match('/<\?php if \(\$pklYk\): \?>\s*<section class="card" id="ggn"/', $ayar));
+ok('ayarlar: mevcut #fatura / #pkl-mail dalları duruyor', str_contains($pk, "'fatura_ayar'") && str_contains($pk, "'pkl_mail'") && str_contains($ayar, 'id="fatura"') && str_contains($ayar, 'id="pkl-mail"'));
+ok('config: yeni kv anahtarları sabit; ayar DB şeması değişmedi (CREATE/ALTER yok)', str_contains($kod, "'frugro_ggn_uretici'") && str_contains($kod, "'frugro_pkl_ek_'") && !preg_match('/\b(CREATE|ALTER)\s+TABLE\b/i', $kod));
 
 siparis_test_bitir();
