@@ -73,6 +73,9 @@ file_put_contents("$OUT/siparis_idleri.json", json_encode($sentIds));
 bas('frugro_siparis.php', [], 'liste');
 bas('frugro_siparis.php', ['q' => 'P-100'], 'liste_arama');
 bas('frugro_siparis.php', ['durum' => 'mail_gonderildi'], 'liste_tek_durum');
+bas('frugro_siparis.php', ['durum' => 'pb_eksik', 'musteri' => 'Musteri-A'], 'liste_filtre');   // P1: sanal durum + müşteri süzgeci (▾ Filtre açık)
+bas('frugro_yazdir.php', ['bolum' => 'acik'], 'yazdir_acik');          // P1: JSON uçlar (içerik .html adıyla)
+bas('frugro_paylas.php', ['id' => $sentIds['pkl_hazir']], 'paylas_pkl_hazir');
 foreach ($sentIds as $dur => $sid) bas('frugro_view.php', ['id' => $sid], 'detay_' . $dur);
 bas('frugro_view.php', ['id' => $ids[0]], 'detay');   // fixture siparişi (26 paletli)
 bas('frugro_pkl.php', ['id' => $ids[0]], 'pkl');

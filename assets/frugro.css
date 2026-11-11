@@ -1,45 +1,21 @@
 /* frugro.css — Frugro Siparişler (frugro_siparis.php, frugro_view.php). Yalnız bu sayfalarda yüklenir; style.css'e dokunmaz.
-   Renkler style.css tokenlarından gelir (açık + koyu tema otomatik). Pencere .pm-* sınıflarını kullanır (native <dialog>). */
+   Renkler style.css tokenlarından gelir (açık + koyu tema otomatik). Pencere .pm-* sınıflarını kullanır (native <dialog>).
+   v515: LİSTE görünümü artık OGL ile ORTAK assets/siparis.css (.sip-mod) — bu dosyada liste kuralı YOK; yalnız Frugro'ya özel kalanlar aşağıda. */
 .frg .frg-kart { padding: 0; overflow: visible; }
 .frg [hidden] { display: none !important; }   /* hidden öznitelik display kurallarını ezemez — SİLME */
 .frg-soluk { color: var(--muted); }
 .frg-bos { padding: 24px; }
 .frg-bos-satir { padding: 34px 16px; text-align: center; color: var(--muted); }
 
-/* KPI çipleri */
-.frg-kpi { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
-.frg-kpi-cip { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--card); color: var(--text); font-size: .85rem; text-decoration: none; white-space: nowrap; }
-.frg-kpi-cip b { font-size: 1rem; font-variant-numeric: tabular-nums; }
-.frg-kpi-cip:hover { background: var(--primary-soft); }
-.frg-kpi-cip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
-.frg-kpi-cip.on b { color: #fff; }
-
-/* arama çubuğu */
-.frg-bas { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--border); }
-.frg-ara { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 320px; min-width: 0; }
-.frg-ara input[type="search"] { flex: 1 1 180px; min-width: 0; }
-.frg-ara input, .frg-ara select { padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; }
-.frg-say { color: var(--muted); font-size: .88rem; white-space: nowrap; }
-
-/* durum rozetleri */
-.frg-rozet { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .76rem; font-weight: 700; white-space: nowrap; background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); }
-.frg-rozet--yeni { background: #e0ecff; color: #1e429f; border-color: #bcd2fb; }
-.frg-rozet--pkl_hazir { background: #fef3c7; color: #92400e; border-color: #fde68a; }
-.frg-rozet--invoice_hazir { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
-.frg-rozet--yola_cikti { background: #ccfbf1; color: #115e59; border-color: #99f6e4; }
-.frg-rozet--kapali { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
-.frg-rozet--iptal { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-html[data-theme="dark"] .frg-rozet--yeni { background: #1e3a6b; color: #bcd2fb; border-color: #2c4f8f; }
-html[data-theme="dark"] .frg-rozet--pkl_hazir { background: #5a4310; color: #fde68a; border-color: #7a5b17; }
-html[data-theme="dark"] .frg-rozet--invoice_hazir { background: #3b2a73; color: #ddd6fe; border-color: #52399c; }
-html[data-theme="dark"] .frg-rozet--yola_cikti { background: #0f4a45; color: #99f6e4; border-color: #17655e; }
-html[data-theme="dark"] .frg-rozet--kapali { background: #0f4d38; color: #a7f3d0; border-color: #176b50; }
-html[data-theme="dark"] .frg-rozet--iptal { background: #5a1c1c; color: #fecaca; border-color: #7a2828; }
-
-/* belge rozetleri */
-.frg-belgeler { display: flex; gap: 4px; flex-wrap: wrap; }
-.frg-belge { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: .72rem; font-weight: 700; border: 1px dashed var(--border-strong); color: var(--muted); }
-.frg-belge--hazir { border-style: solid; border-color: var(--success); color: var(--success); }
+/* Frugro'ya özel: "Invoice hazır" durum rozeti (OGL'de karşılığı yok; --sip-pkl-* ile karışmasın diye ayrı mor-pembe ton) */
+.sip-mod { --frg-invoice-bg: #fde7f3; --frg-invoice-fg: #9d174d; }
+html[data-theme="dark"] .sip-mod { --frg-invoice-bg: #4a1d36; --frg-invoice-fg: #f9a8d4; }
+.sip-badge--invoice { background: var(--frg-invoice-bg); color: var(--frg-invoice-fg); }
+.frg-tutar { font-weight: 700; }
+/* açılır "Order Log yükle · Mailden al" kartı: içteki Frugro mail kartı OGL kartı gibi düz (kart içinde kart olmasın) */
+.sip-yukle .frgm { margin: 0 0 14px; padding: 14px; border: 1px solid var(--sip-sorgu-kenar, var(--border)); background: var(--sip-sorgu-bg, var(--surface-2)); box-shadow: none; }
+.sip-yukle .frgm .frgm-sonuc-kart { background: var(--sip-sorgu-kart, var(--card)); }
+.sip-yukle .frg-sonuc { margin: 10px 0 0; }
 
 /* tarih rengi: OGL v376 eşiği (geçmiş yeşil kalın, bugün turuncu kalın, ileri normal) */
 .frg-tar { font-variant-numeric: tabular-nums; }
@@ -49,30 +25,6 @@ html[data-theme="dark"] .frg-rozet--iptal { background: #5a1c1c; color: #fecaca;
 html[data-theme="dark"] .frg-tar--gecmis { color: #4ade80; }
 html[data-theme="dark"] .frg-tar--bugun { color: #fb923c; }
 .frg-pb-bekle { color: var(--warn); font-weight: 600; font-size: .85rem; }
-
-/* tablo */
-.frg-tablo { width: 100%; border-collapse: collapse; min-width: 900px; }
-.frg-tablo th { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); text-align: left; padding: 10px 8px; background: var(--surface-2); border-bottom: 2px solid var(--border-strong); white-space: nowrap; }
-.frg-tablo th.num { text-align: right; }
-.frg-tablo td { padding: 11px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.frg-tablo td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.frg-satir { cursor: pointer; }
-.frg-satir:hover { background: var(--primary-soft); }
-.frg-satir:focus-visible, .frg-kt:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-.frg-po a { font-weight: 700; color: inherit; text-decoration: none; white-space: nowrap; }
-.frg-tutar { font-weight: 700; }
-.frg-tablo tfoot td { background: var(--surface-2); font-weight: 700; border-bottom: 0; }
-
-/* mobil kartlar */
-.frg-kartlar { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-.frg-kt { display: block; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--card); color: inherit; text-decoration: none; }
-.frg-kt-ust, .frg-kt-alt { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.frg-kt-satir { margin-top: 4px; font-size: .9rem; }
-.frg-kt-urun { color: var(--muted); }
-.frg-ayrac { padding: 0 2px; }
-.frg-kt-alt { margin: 6px 0; font-size: .88rem; color: var(--muted); }
-.frg-kt-alt strong { color: var(--text); }
-.frg-kt-top { background: var(--surface-2); font-size: .88rem; }
 
 /* yükleme sonucu */
 .frg-sonuc { margin-bottom: 12px; }
@@ -134,7 +86,7 @@ dialog.frg-dialog::backdrop { background: rgba(0, 0, 0, .45); }
     .frg-grid { grid-template-columns: minmax(0, 1fr); }
     .frg-izgara, .frg-baglar { grid-template-columns: minmax(0, 1fr); }
     .frg-bilgi { grid-template-columns: minmax(96px, 40%) 1fr; }
-    .frg-ara input, .frg-ara select, .frg-f input, .frg-f select, .frg-f textarea { font-size: 16px; }   /* iOS zoom önleme */
+    .frg-f input, .frg-f select, .frg-f textarea { font-size: 16px; }   /* iOS zoom önleme */
     .frg-sil { margin-left: 0; }
 }
 @media print { .frg .no-print { display: none !important; } }

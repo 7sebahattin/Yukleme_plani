@@ -719,7 +719,7 @@
         var kalici = det.open, kapanZaman = null;
         function hashUygun() { return location.hash === '#yukle' || location.hash === '#mail'; }
         function otoIptal() { clearTimeout(kapanZaman); kapanZaman = null; }
-        function mesgul() { return !!q('[data-sip-mail-kap][aria-busy="true"]', det); }
+        function mesgul() { return !!q('[data-sip-mail-kap][aria-busy="true"], [data-frgm-kap][aria-busy="true"]', det); }   // frgm: Frugro "Mailden al" (frugro_mail.js)
         function dosyaVar() { var f = q('input[type=file]', det); return !!(f && f.files && f.files.length); }
         function otoPlanla() {
             otoIptal();
