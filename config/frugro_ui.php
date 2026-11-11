@@ -561,7 +561,7 @@ function frgui_belge_ad_html(array $s, bool $pklVar, bool $invVar): string
         return '<a class="sip-pkl-ad" href="' . h($href) . '" title="' . h($ipucu . ': ' . $ad) . '">' . $ic . '</a>';
     };
     $o = '';
-    if ($pklVar && function_exists('frgp_dosya_adi')) $o .= $bag(frgp_dosya_adi($s, 'xlsx'), 'frugro_pkl.php?id=' . $id, 'Packing List');
+    if ($pklVar && function_exists('frgp_dosya_adi')) $o .= $bag(frgp_dosya_adi($s, 'pdf'), 'frugro_pkl.php?id=' . $id . '&indir=pdf', 'Packing List PDF (indir)');
     $no = trim((string)($s['fatura_no'] ?? ''));
     if ($invVar && $no !== '' && function_exists('frgi_dosya_adi')) $o .= $bag(frgi_dosya_adi($no, (string)($s['po_no'] ?? '')), 'frugro_invoice.php?id=' . $id . '&pdf=1&dl=1', 'Invoice PDF (indir)');
     return $o;

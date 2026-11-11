@@ -150,3 +150,13 @@ OGL "Siparişler"den BAĞIMSIZ, firma + ürün + çoklu kalibre/palet siparişi;
 - **v428 — Teslim Yeri + Teslim Şekli (kod) (2 nullable ADD COLUMN, aynı migrate düğmesi):** `teslim_yeri` (serbest metin) · `teslim_sekli` (Incoterms kodu, büyük harf, yalnız harf/rakam ≤10, `usip_kod()`; `usip_teslim_kodlari()` yalnız datalist ÖNERİSİ, serbest kod kabul). Kolonlar grup 'b' (`usip_ek_hazir($pdo,'b')`) — v427 grubundan BAĞIMSIZ kontrol edilir: v428 kolonları kurulmadan v427 alanları kaybolmaz.
 - **v430 — Palet kasa + birim ağırlık ZORUNLU DEĞİL (sahip kararı, sonradan güncellenir):** boşsa 0 kaydedilir (kasa/kg/tutar 0 hesaplanır), doluysa eski kurallar (palet kasa 1–100000 tam sayı, birim ağırlık > 0) geçerli. Şema değişmedi (kolonlar zaten `NOT NULL DEFAULT 0`).
 - Test: `php scripts/urun_siparis_smoke.php` (bellek içi SQLite; hesap, doğrulama, kaydet/düzelt/sil, depo izolasyonu, uçlar, sayfa render).
+
+### Frugro Siparişler (v512 → v515)
+
+OGL'den BAĞIMSIZ veri (3 tablo `frugro_siparisler/_palet/_olaylar`, şema yalnız migrate.php `#frugro`), ama KULLANIM ve GÖRÜNÜM OGL'nin eşi (sahip kararı: "mantık ve görünüm benzesin, içerik Frugro belgelerinden"). Kapı OGL ile aynı (`frgui_yetki`), yeni yetki YOK.
+- **Durum akışı 7 adım:** yeni (Sipariş alındı) → hazirlik → pkl_hazir (otomatik) → invoice_hazir (otomatik) → yola_cikti → mail_gonderildi (PKL şart) → evrak_gonderildi (kapanış) + iptal; eski `kapali` kodu takma ad. Durum yazmanın TEK yolu `frg_durum_degistir()`; kapalı/evrak listeleri YALNIZ `frg_kapali_durumlar()` / `frg_evrak_bekleyen_durumlar()` / `frg_kapanmamis_sql()` / `frg_bolum_sql()` — sabit liste yazma (gate smoke denetler).
+- **Dosya saklanmaz:** gelen Order Log xlsx, PKL (PDF/XLSX), Invoice PDF, ZIP ve .eml diske YAZILMAZ; her istekte kayıtlı veriden taze üretilir. Fatura formu kalıcı taslak (`hks_kv frugro_invoice_taslak_<id>`), banka ayarı alan bazında kaydedilir (`frugro_invoice_ayar`), SWIFT 8–11.
+- **Mail penceresi** OGL "Mail gönderildi" eşi: .eml taslağına PKL PDF + (üretildiyse) Invoice PDF eklenir, Excel EKLENMEZ; alıcılar `frugro_ayarlar.php#pkl-mail` (hks_kv, repoda adres yok).
+- **Ortak betik kancaları (geriye uyumlu):** `data-sip-gor-ns="frg"` (`[data-sip-gor-uid]` elemanında; `frgui_gorulen_meta()`), `data-sip-wp-url="frugro_paylas.php"`, yazdırma JSON'unda `birim`. siparis.js / siparis_wp.js / siparis_yazdir.js değişirse OGL smoke'ları da çalıştır.
+- **Tarayıcı kontrolü zorunlu** (v512 ekrana bakılmadan çıktı ve reddedildi): `FRUGRO_UI_OUT=<dir> php scripts/frugro_ui_render.php` → `node scripts/frugro_liste_smoke.js` · `FRUGRO_UI_OUT=<dir> node scripts/frugro_detay_smoke.js`.
+- Test: `php scripts/frugro_{core,ui,liste,detay,pkl,invoice,mail,gate_static}_smoke.php`.

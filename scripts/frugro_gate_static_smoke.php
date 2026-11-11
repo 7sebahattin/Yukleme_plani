@@ -25,6 +25,12 @@ $sayfalar = array_map('basename', glob($ROOT . '/frugro*.php') ?: []);
 sort($sayfalar);
 foreach (['frugro_siparis.php', 'frugro_view.php', 'frugro_yukle.php', 'frugro_kaydet.php'] as $b) ok("$b mevcut", in_array($b, $sayfalar, true));
 $MUT = ['frugro_yukle.php', 'frugro_kaydet.php'];
+// v515: salt okunur GET uçları — mevcut, read kapılı, depo kapılı (tekil) ve TEK alt çizgili ad (sw bypass)
+foreach (['frugro_yazdir.php', 'frugro_paylas.php', 'frugro_eml.php', 'frugro_zip.php'] as $b) {
+    ok("$b mevcut + read kapısı + no-store", in_array($b, $sayfalar, true) && (str_contains(kod_oku($b), "require_siparis('read')") || str_contains(kod_oku($b), "frgui_yetki('read')")) && (bool)preg_match('/no_store|no-store/', kod_oku($b)));
+    ok("$b adı sw bypass regex'ine uyar", (bool)preg_match('/^frugro(_[a-z]+)?\\.php$/', $b));
+}
+foreach (['frugro_paylas.php', 'frugro_eml.php', 'frugro_zip.php'] as $b) ok("$b tekil kayıt depo kapısı", (bool)preg_match('/frg_gorunur\\(|frgw_oku\\(|frgd_/', kod_oku($b)));
 foreach ($sayfalar as $f) {
     $k = kod_oku($f);
     ok("$f: ad TEK alt çizgili (sw bypass regex'i kapsar)", (bool)preg_match('/^frugro(_[a-z]+)?\.php$/', $f));

@@ -68,6 +68,7 @@ $sec_adim  = isset($sec_adim) && is_array($sec_adim) ? $sec_adim : [];
               <a href="frugro_view.php?id=<?= $__id ?>">📂 Aç</a>
               <a href="frugro_pkl.php?id=<?= $__id ?>">📄 PKL</a>
               <a href="frugro_invoice.php?id=<?= $__id ?>">🧾 Invoice</a>
+              <?php if (!empty($__pkl)): ?><a href="frugro_zip.php?id=<?= $__id ?>">🗜 Evrak takımı (ZIP)</a><?php endif; ?>
               <button type="button" data-sip-wp="<?= $__id ?>" data-sip-wp-url="frugro_paylas.php" title="WhatsApp için sipariş kartı (görsel)">💬 WP Paylaş</button>
             </div>
           </div>
@@ -131,6 +132,7 @@ $sec_adim  = isset($sec_adim) && is_array($sec_adim) ? $sec_adim : [];
           <a href="frugro_view.php?id=<?= $__id ?>">📂 Aç</a>
           <a href="frugro_pkl.php?id=<?= $__id ?>">📄 PKL</a>
           <a href="frugro_invoice.php?id=<?= $__id ?>">🧾 Invoice</a>
+              <?php if (!empty($__pkl)): ?><a href="frugro_zip.php?id=<?= $__id ?>">🗜 Evrak takımı (ZIP)</a><?php endif; ?>
           <button type="button" data-sip-wp="<?= $__id ?>" data-sip-wp-url="frugro_paylas.php" title="WhatsApp için sipariş kartı (görsel)">💬 WP Paylaş</button>
         </div>
       </div>

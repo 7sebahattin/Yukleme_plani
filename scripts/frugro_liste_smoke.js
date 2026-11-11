@@ -64,7 +64,7 @@ const JSONY = obj => ({ status: 200, contentType: 'application/json; charset=utf
             ok(t + 'ürün kartı satırın hemen altında, colspan = sütun sayısı', k.kart && String(k.sutun) === k.colspan, JSON.stringify(k));
             await page.click('section.sip-bolum-acik tbody tr.sip-ust .pc-kebab');
             const m = await page.evaluate(() => { const d = document.querySelector('section.sip-bolum-acik tbody tr.sip-ust .pc-dropdown'); return { goster: !d.hidden && getComputedStyle(d).display !== 'none', metin: Array.from(d.children).map(x => x.textContent.trim()) }; });
-            ok(t + '⋮ menü açılır: Aç / PKL / Invoice / WP Paylaş', m.goster && m.metin.join('|') === '📂 Aç|📄 PKL|🧾 Invoice|💬 WP Paylaş', JSON.stringify(m));
+            ok(t + '⋮ menü açılır: Aç / PKL / Invoice / [Evrak ZIP: yalnız PKL varsa] / WP Paylaş', m.goster && ['📂 Aç|📄 PKL|🧾 Invoice|💬 WP Paylaş', '📂 Aç|📄 PKL|🧾 Invoice|🗜 Evrak takımı (ZIP)|💬 WP Paylaş'].includes(m.metin.join('|')), JSON.stringify(m));
             await page.click('.page-head h1');
         } else {
             const c = await page.evaluate(() => ({ kart: document.querySelectorAll('.sip-kartlar .sip-card').length, tablo: getComputedStyle(document.querySelector('table.sip-table').closest('.pc-only')).display, urun: document.querySelectorAll('.sip-card .sip-card-urun .sip-urunler').length }));
