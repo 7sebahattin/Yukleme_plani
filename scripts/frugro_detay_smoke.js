@@ -62,7 +62,9 @@ const url = f => pathToFileURL(path.join(dir, f + '.html')).href;
             ok('mail: onaysız gönder pasif' + id, await gonder.isDisabled());
             const kutu = m.locator('input[name="onay_pkl"]');
             await kutu.scrollIntoViewIfNeeded();
-            const kay = await m.locator('.pm-body').evaluate(b => b.scrollTop);
+            // Kaydırılabilirliği DOĞRUDAN ölç: onay kutusu taşan kısmın üstünde kalıp zaten görünürse scrollIntoViewIfNeeded hiç kaydırmaz
+            // (CI yazı tipinde içerik gövdeden 28px uzun, kutu görünür → scrollTop 0 kalıp yanlış alarm veriyordu).
+            const kay = await m.locator('.pm-body').evaluate(b => { const o = b.scrollTop; b.scrollTop = b.scrollHeight; const k = b.scrollTop; b.scrollTop = o; return Math.max(o, k); });
             ok('mail: gövde kaydırılıyor (uzun içerik) ya da sığıyor' + id, ol.sh <= ol.ch || kay > 0, JSON.stringify({ kay, sh: ol.sh, ch: ol.ch }));
             ok('mail: en alttaki onay kutusu görünür' + id, await kutu.isVisible());
             await kutu.click();
