@@ -9,7 +9,7 @@
 // SAYI KURALI (OGL num() ile aynı, 100x/1000x hata riski): kg alanlarında nokta = BİNLİK, virgül = ONDALIK.
 //   "1.234" = 1234 · "634,5" = 634,5 · "812.5" REDDEDİLİR (nokta-ondalık). Karton/palet-diğer kg (küçük sayılar) yalnız virgül kabul eder.
 // KG ekranda TAM SAYI; hesap ham (yuvarlama yalnız gösterimde). Net HER ZAMAN elle girilebilir; frgp_net_oneri() yalnız ÖNERİDİR.
-// Frugro kuralı: net/brüt tüm evraklarda AYNI → PKL kilidi: yalnız 'yeni' / 'pkl_hazir' durumunda düzenlenir.
+// Frugro kuralı: net/brüt tüm evraklarda AYNI → PKL kilidi: yalnız 'yeni' / 'hazirlik' / 'pkl_hazir' durumunda düzenlenir.
 // Dosya diske YAZILMAZ: PDF/XLSX her istekte taze üretilir (frgp_uret).
 // =========================================================
 declare(strict_types=1);
@@ -21,7 +21,7 @@ const FRGP_MAX_SATIR = 200;
 /** PKL düzenlenebilir durumlar (sonrası kilitli — evrakların net/brüt'ü aynı kalmalı). */
 function frgp_duzenlenebilir(array $s): bool
 {
-    return in_array((string)($s['durum'] ?? ''), ['yeni', 'pkl_hazir'], true);
+    return in_array((string)($s['durum'] ?? ''), ['yeni', 'hazirlik', 'pkl_hazir'], true);
 }
 
 // ── Sayı çözücüler ───────────────────────────────────────────────────────────
@@ -555,7 +555,7 @@ function frgp_xlsx(array $v): ?string
 
 /**
  * ÜRET: PDF ya da XLSX'i taze üretir (diske YAZILMAZ). Eksik palet verisi → hata.
- * Başarıda: olay 'pkl_uretildi' + audit + durum yeni → pkl_hazir (yalnız yeni'den).
+ * Başarıda: olay 'pkl_uretildi' + audit + durum yeni|hazirlik → pkl_hazir (frg_durum_degistir).
  * @return array{ok:bool,hatalar:list<string>,ad:string,tip:string,veri:string}
  */
 function frgp_uret(PDO $pdo, array $s, string $bicim, string $cikisSaati, ?int $uid): array
@@ -573,16 +573,14 @@ function frgp_uret(PDO $pdo, array $s, string $bicim, string $cikisSaati, ?int $
     $gecti = false;
     try {
         frg_olay_yaz($pdo, $sid, 'pkl_uretildi', strtoupper($bicim) . ' · ' . count($v['satirlar']) . ' palet · ' . $v['toplam']['kutu'] . ' kutu', $uid);
-        if ((string)$s['durum'] === 'yeni') {
-            $st = $pdo->prepare("UPDATE frugro_siparisler SET durum = 'pkl_hazir', updated_at = ? WHERE id = ? AND durum = 'yeni' AND deleted_at IS NULL");
-            $st->execute([date('Y-m-d H:i:s'), $sid]);
-            $gecti = $st->rowCount() > 0;
-            if ($gecti) frg_olay_yaz($pdo, $sid, 'durum', 'yeni → pkl_hazir', $uid);
+        // yeni|hazirlik → pkl_hazir: durum yazmanın TEK yolu (koşullu UPDATE + olay + audit)
+        if (frg_otomatik_gecis_mi((string)$s['durum'], 'pkl_hazir')) {
+            $gecti = frg_durum_degistir($pdo, $s, 'pkl_hazir', '', $uid, 'otomatik')['ok'];
         }
     } catch (Throwable $e) {
         error_log('[frgp_uret] ' . $e->getMessage());
     }
-    audit_log_event('frugro_pkl_uret', 'frugro_siparis', $sid, $gecti ? ['durum' => 'yeni'] : null, ['bicim' => $bicim, 'palet_satiri' => count($v['satirlar']), 'durum_gecti' => $gecti] + ($gecti ? ['durum' => 'pkl_hazir'] : []));
+    audit_log_event('frugro_pkl_uret', 'frugro_siparis', $sid, $gecti ? ['durum' => (string)$s['durum']] : null, ['bicim' => $bicim, 'palet_satiri' => count($v['satirlar']), 'durum_gecti' => $gecti] + ($gecti ? ['durum' => 'pkl_hazir'] : []));
     return ['ok' => true, 'hatalar' => [], 'ad' => frgp_dosya_adi($s, $bicim), 'veri' => $veri,
         'tip' => $bicim === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
 }

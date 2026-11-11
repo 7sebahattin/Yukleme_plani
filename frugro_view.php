@@ -40,7 +40,7 @@ if ($s === null || !frg_gorunur($s)) {
 $duzenle = frgui_yetki('edit');
 $sil     = frgui_yetki('delete');
 $durum   = (string)$s['durum'];
-$kilitli = in_array($durum, ['kapali', 'iptal'], true);
+$kilitli = in_array($durum, frg_kapali_durumlar(), true);
 $hs      = frg_hesap($s);
 $bugun   = date('Y-m-d');
 $olaylar = frg_olaylar($pdo, $id, 100);

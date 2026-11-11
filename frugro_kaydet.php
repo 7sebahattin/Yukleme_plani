@@ -3,7 +3,9 @@
 // frugro_kaydet.php — Frugro Siparişler: elle düzenleme · durum (kapat / iptal / yeniden aç) · silme (POST JSON)
 //
 // POST {csrf, islem:'duzenle', id, alanlar:{…}}              siparis.write — yalnız frgui_duzenle_alanlari() beyaz listesi
-// POST {csrf, islem:'durum', id, durum:'kapali'|'iptal'|'yeniden_ac', gerekce}   siparis.write — iptalde gerekçe ZORUNLU
+// POST {csrf, islem:'durum', id, durum:'hazirlik'|'yola_cikti'|'mail_gonderildi'|'evrak_gonderildi'|'iptal'|'geri'|'yeniden_ac', gerekce}
+//   siparis.write — TEK yol frg_durum_degistir() (matris, ön koşullar, koşullu UPDATE, olay, audit). iptal/geri gerekçe ZORUNLU;
+//   eski istemcinin 'yeniden_ac'ı 'geri'ye eşlenir; 'kapali' artık kabul edilmez (adım adım: mail → evrak takımı).
 // POST {csrf, islem:'sil', id, onay:true}                    siparis.delete — soft silme (iki adımlı onayı arayüz yapar)
 // Her işlem frugro_olaylar'a yazılır ve audit_log_event'e düşer (alan adlarıyla). Başka depoya ait kayıt "bulunamadı" der.
 // Ad TEK alt çizgili ek içerir: sw.js bypass regex'i (frugro(_[a-z]+)?.php) bunu önbelleğe almaz.
@@ -45,7 +47,7 @@ $ozetle = static fn(string $x): string => $x === '' ? '—' : (mb_strlen($x) > 8
 
 if ($islem === 'duzenle') {
     if (!frgui_yetki('edit')) $yanit(403, ['ok' => false, 'hata' => 'Düzenleme yetkiniz yok.']);
-    if (in_array($s['durum'], ['kapali', 'iptal'], true)) $yanit(422, ['ok' => false, 'hata' => 'Kapalı/iptal sipariş düzenlenemez; önce yeniden açın.']);
+    if (in_array($s['durum'], frg_kapali_durumlar(), true)) $yanit(422, ['ok' => false, 'hata' => 'Kapalı/iptal sipariş düzenlenemez; önce yeniden açın.']);
     $alanlar = $in['alanlar'] ?? null;
     if (!is_array($alanlar)) $yanit(400, ['ok' => false, 'hata' => 'Geçersiz istek.']);
     [$temiz, $hatalar] = frgui_duzenle_dogrula($alanlar);
@@ -78,42 +80,10 @@ if ($islem === 'durum') {
     if (!frgui_yetki('edit')) $yanit(403, ['ok' => false, 'hata' => 'Durum değiştirme yetkiniz yok.']);
     $hedef = (string)($in['durum'] ?? '');
     $gerekce = frg_metin(is_string($in['gerekce'] ?? null) ? $in['gerekce'] : '') ?? '';
-    $eskiDurum = (string)$s['durum'];
-    if ($hedef === 'iptal') {
-        if ($eskiDurum === 'iptal') $yanit(422, ['ok' => false, 'hata' => 'Sipariş zaten iptal.']);
-        if (mb_strlen($gerekce) < 3) $yanit(422, ['ok' => false, 'hata' => 'İptal için gerekçe zorunlu.']);
-        $yeniDurum = 'iptal';
-    } elseif ($hedef === 'kapali') {
-        if (in_array($eskiDurum, ['kapali', 'iptal'], true)) $yanit(422, ['ok' => false, 'hata' => 'Sipariş zaten kapalı/iptal.']);
-        $yeniDurum = 'kapali';
-    } elseif ($hedef === 'yeniden_ac') {
-        if (!in_array($eskiDurum, ['kapali', 'iptal'], true)) $yanit(422, ['ok' => false, 'hata' => 'Yalnız kapalı/iptal sipariş yeniden açılır.']);
-        // Belgelere göre geri dön: fatura no → invoice_hazir, palet satırı → pkl_hazir, yoksa yeni
-        $yeniDurum = trim((string)($s['fatura_no'] ?? '')) !== '' ? 'invoice_hazir' : ($s['paletler'] ? 'pkl_hazir' : 'yeni');
-    } else {
-        $yanit(400, ['ok' => false, 'hata' => 'Geçersiz durum.']);
-    }
-    $gerekce = mb_substr($gerekce, 0, 500);
-    $sahip = !$pdo->inTransaction();
-    if ($sahip) $pdo->beginTransaction();
-    try {
-        $st = $pdo->prepare('UPDATE frugro_siparisler SET durum = ?, updated_at = ? WHERE id = ? AND durum = ? AND deleted_at IS NULL');
-        $st->execute([$yeniDurum, $simdi, $id, $eskiDurum]);
-        $cakisma = $st->rowCount() !== 1;
-        if ($cakisma) { if ($sahip) $pdo->rollBack(); }
-        else {
-            $et = frg_durumlar();
-            frg_olay_yaz($pdo, $id, 'durum', ($et[$eskiDurum] ?? $eskiDurum) . ' → ' . ($et[$yeniDurum] ?? $yeniDurum) . ($gerekce !== '' ? ' · Gerekçe: ' . $gerekce : ''), $uid);
-            if ($sahip) $pdo->commit();
-        }
-    } catch (Throwable $e) {
-        if ($sahip && $pdo->inTransaction()) $pdo->rollBack();
-        error_log('[frugro_kaydet] ' . $e->getMessage());
-        $yanit(500, ['ok' => false, 'hata' => 'Kaydedilemedi (ayrıntı sunucu günlüğünde).']);
-    }
-    if ($cakisma) $yanit(409, ['ok' => false, 'hata' => 'Sipariş başka biri tarafından değiştirilmiş; sayfayı yenileyin.']);
-    audit_log_event('frugro_durum', 'frugro_siparis', $id, ['durum' => $eskiDurum], ['durum' => $yeniDurum, 'po_no' => $s['po_no'], 'gerekce' => $gerekce]);
-    $yanit(200, ['ok' => true, 'durum' => $yeniDurum, 'mesaj' => 'Durum güncellendi.']);
+    if ($hedef === 'kapali') $yanit(422, ['ok' => false, 'hata' => 'Sipariş artık adım adım kapanır: Mail gönderildi, ardından Evrak takımı gönderildi.']);
+    $r = frg_durum_degistir($pdo, $s, $hedef, $gerekce, $uid, 'elle');
+    if (!$r['ok']) $yanit($r['kod'] >= 400 ? $r['kod'] : 422, ['ok' => false, 'hata' => (string)($r['hata'] ?? 'Durum değiştirilemedi.')]);
+    $yanit(200, ['ok' => true, 'durum' => $r['durum'], 'mesaj' => 'Durum güncellendi.']);
 }
 
 if ($islem === 'sil') {

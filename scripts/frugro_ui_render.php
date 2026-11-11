@@ -1,6 +1,8 @@
 <?php
 // scripts/frugro_ui_render.php — Frugro sayfalarını TARAYICI kontrolü için HTML'e basar (bellek içi SQLite, stub auth).
 //   FRUGRO_UI_OUT=/tmp/frg php scripts/frugro_ui_render.php   (FRUGRO_ORNEK_DIR=<xlsx klasörü> ile gerçek örnekler)
+//   Çıktı: liste.html, liste_arama.html, liste_tek_durum.html, detay.html (fixture), detay_<durum>.html (her durumdan sentetik sipariş),
+//   pkl.html, invoice.html, ayarlar.html, siparis_idleri.json ({durum: id}).
 require_once __DIR__ . '/_siparis_test_lib.php';
 require_once $ROOT . '/config/frugro_core.php';
 require_once $ROOT . '/vendor/autoload.php';
@@ -30,8 +32,49 @@ foreach ($dosyalar as $f) { $o = frg_xlsx_oku($f); if ($o['ok']) frg_toplu_kayde
 $ids = $db->query('SELECT id FROM frugro_siparisler ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
 $pal = []; for ($i = 1; $i <= 26; $i++) $pal[] = ['palet_no' => (string)$i, 'kalibre' => '14', 'lot' => '26-1622-44080', 'ggn_no' => '4000000000001', 'ggn_adi' => 'ORNEK URETICI', 'kutu' => 200, 'brut_kg' => 780 + $i, 'net_kg' => 680 + $i];
 frg_palet_kaydet($db, (int)$ids[0], $pal);
+// ── Sentetik siparişler: HER durumdan en az bir tane (kişisel veri YOK; P1/P2 ajanları ekran kontrolünde bunu kullanır) ──
+//   Durumlar: yeni, hazirlik, pkl_hazir (paletli, 2 kalibreli), invoice_hazir (fatura_no + GBP), yola_cikti, mail_gonderildi,
+//   evrak_gonderildi, iptal, eski kapali. Adım zamanları frugro_olaylar 'durum' olaylarından ("eski → yeni" kod biçimi) okunur.
+//   Çıkış tarihleri bugüne göre dağıtılır (geçmiş / bugün / ileri) ve ikinci müşteri/liman çeşitliliği verilir.
+$SENT = [  // [po, durum, çıkış günü ofseti, müşteri, liman, kutu_palet, palet, fiyat(on-binde), pb, parti, plaka, nakliyeci, tel, paletli, fatura]
+    ['26-9001-90001', 'yeni',             3, 'Musteri-A', 'LIMAN-1', 200, 26, 46000, null,  null,    null,       null,        null,         false, null],
+    ['26-9002-90002', 'hazirlik',         2, 'Musteri-B', 'LIMAN-2', 180, 20, 44000, null,  null,    null,       null,        null,         false, null],
+    ['26-9003-90003', 'pkl_hazir',        1, 'Musteri-A', 'LIMAN-1', 200, 4,  46000, null,  'P-1001', '34 TST 001', 'Test Nakliyat', '+90 555 000 00 01', true,  null],
+    ['26-9004-90004', 'invoice_hazir',    0, 'Musteri-C', 'LIMAN-1', 200, 4,  52000, 'GBP', 'P-1002', '34 TST 002', 'Test Nakliyat', '+90 555 000 00 02', true,  'INV-9004'],
+    ['26-9005-90005', 'yola_cikti',      -1, 'Musteri-A', 'LIMAN-3', 220, 4,  46000, 'EUR', 'P-1003', '34 TST 003', 'Deneme Lojistik', '+90 555 000 00 03', true, 'INV-9005'],
+    ['26-9006-90006', 'mail_gonderildi', -2, 'Musteri-B', 'LIMAN-2', 200, 4,  48000, 'GBP', 'P-1004', '34 TST 004', 'Deneme Lojistik', '+90 555 000 00 04', true, 'INV-9006'],
+    ['26-9007-90007', 'evrak_gonderildi', -3, 'Musteri-C', 'LIMAN-1', 200, 4, 48000, 'GBP', 'P-1005', '34 TST 005', 'Test Nakliyat', '+90 555 000 00 05', true, 'INV-9007'],
+    ['26-9008-90008', 'iptal',           -4, 'Musteri-B', 'LIMAN-3', 200, 10, 46000, null,  null,    null,       null,        null,         false, null],
+    ['26-9009-90009', 'kapali',          -5, 'Musteri-A', 'LIMAN-1', 200, 4,  46000, 'GBP', 'P-1006', '34 TST 006', 'Test Nakliyat', '+90 555 000 00 06', true, 'INV-9009'],
+];
+$ADIM = ['yeni', 'hazirlik', 'pkl_hazir', 'invoice_hazir', 'yola_cikti', 'mail_gonderildi', 'evrak_gonderildi'];
+$ins = $db->prepare("INSERT INTO frugro_siparisler (po_no, cikis_tarihi, varis_tarihi, giris_limani, son_musteri, son_musteri_po, urun, cesit, mense, boy, dis_paket, ic_paket, kutu, kutu_palet, palet, palet_tipi, incoterm, fiyat_kutu_birim, para_birimi, parti_no, plaka, sofor_adi, sofor_telefon, nakliyeci, fatura_no, durum, depo, kaynak, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+$sentIds = [];
+foreach ($SENT as $i => [$po, $dur, $of, $mus, $lim, $kp, $pl, $fy, $pb, $parti, $plaka, $nak, $tel, $paletli, $fat]) {
+    $cik = date('Y-m-d', strtotime(($of >= 0 ? '+' : '') . $of . ' day'));
+    $t0 = date('Y-m-d H:i:s', strtotime('-' . (10 - $i) . ' day'));
+    $ins->execute([$po, $cik, date('Y-m-d', strtotime($cik . ' +8 day')), $lim, $mus, 'MP-' . (7000 + $i), $i % 2 ? 'NAR' : 'LIMON', 'Wonderful', 'TURKEY', '80-100', 'Karton 2.5 kg', 'Ağ', $kp * $pl, $kp, $pl, 'EUR palet', 'FCA', $fy, $pb, $parti, $plaka, $paletli ? 'Test Sofor' : null, $tel, $nak, $fat, $dur, 'DEPO1', $i % 2 ? 'mail' : 'yukleme', $t0, $t0]);
+    $sid = (int)$db->lastInsertId(); $sentIds[$dur] = $sid;
+    $db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sid, 'olustu', 'Sipariş alındı: ' . $po, $t0]);
+    if ($paletli) {   // 2 kalibreli palet seti (14 ve 16)
+        $pp = []; for ($k = 1; $k <= $pl; $k++) $pp[] = ['palet_no' => (string)$k, 'kalibre' => $k % 2 ? '14' : '16', 'lot' => 'L-' . $k, 'ggn_no' => '4000000000001', 'ggn_adi' => 'ORNEK URETICI', 'kutu' => $kp, 'brut_kg' => 700 + $k, 'net_kg' => 640 + $k];
+        frg_palet_kaydet($db, $sid, $pp);
+    }
+    $idx = array_search($dur, $ADIM, true);                 // geçilen adımların durum olayları (zaman damgalı)
+    if ($idx !== false) for ($j = 1; $j <= $idx; $j++) $db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sid, 'durum', $ADIM[$j - 1] . ' → ' . $ADIM[$j], date('Y-m-d H:i:s', strtotime($t0 . ' +' . $j . ' hour'))]);
+    if ($dur === 'iptal') $db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sid, 'durum', 'yeni → iptal · Gerekçe: Müşteri vazgeçti', date('Y-m-d H:i:s', strtotime($t0 . ' +1 hour'))]);
+    if ($dur === 'kapali') $db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sid, 'durum', 'Yeni → Kapalı', date('Y-m-d H:i:s', strtotime($t0 . ' +1 hour'))]);
+}
+// "fark" olayı + ham_json uyarısı (liste/detay ⚠ rozet ve Uyarılar kartı için) — yola_cikti siparişinde
+$db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sentIds['yola_cikti'], 'fark', 'Yeni dosyada fark var, alanlar EZİLMEDİ: palet: 4 → 5', date('Y-m-d H:i:s')]);
+$db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sentIds['yola_cikti'], 'guncellendi', 'Güncellendi: cikis_tarihi: 01.01.2026 → 02.01.2026', date('Y-m-d H:i:s')]);
+$db->prepare('UPDATE frugro_siparisler SET ham_json = ? WHERE id = ?')->execute([json_encode(['uyarilar' => ['Sentetik uyarı: kutu toplamı palet x kutu/palet ile tutmuyor.']], JSON_UNESCAPED_UNICODE), $sentIds['yola_cikti']]);
+file_put_contents("$OUT/siparis_idleri.json", json_encode($sentIds));
 bas('frugro_siparis.php', [], 'liste');
-bas('frugro_view.php', ['id' => $ids[0]], 'detay');
+bas('frugro_siparis.php', ['q' => 'P-100'], 'liste_arama');
+bas('frugro_siparis.php', ['durum' => 'mail_gonderildi'], 'liste_tek_durum');
+foreach ($sentIds as $dur => $sid) bas('frugro_view.php', ['id' => $sid], 'detay_' . $dur);
+bas('frugro_view.php', ['id' => $ids[0]], 'detay');   // fixture siparişi (26 paletli)
 bas('frugro_pkl.php', ['id' => $ids[0]], 'pkl');
 bas('frugro_invoice.php', ['id' => $ids[0]], 'invoice');
 bas('frugro_ayarlar.php', [], 'ayarlar');

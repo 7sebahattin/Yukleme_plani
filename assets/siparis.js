@@ -806,7 +806,9 @@
     // { t: taban zaman (ilk ziyaret, sunucu saati), s: { sevkiyat id: görülen değişme zamanı } }. Zamanlar "YYYY-AA-GG SS:DD:SS" → dizgi kıyaslanır.
     function gorulen() {
         var m = q('[data-sip-gor-uid]'); if (!m) return;
-        var k = 'asya_sip_gorulen_' + m.getAttribute('data-sip-gor-uid'), now = m.getAttribute('data-sip-gor-now') || '', d = null;
+        // data-sip-gor-ns (opsiyonel, ör. "frg"): modüller arası id çakışmasını önler; YOKSA anahtar BİREBİR eski ('asya_sip_gorulen_<uid>' — OGL kaydı kaybolmaz)
+        var ns = (m.getAttribute('data-sip-gor-ns') || '').replace(/[^a-z0-9]/gi, '');
+        var k = 'asya_' + (ns || 'sip') + '_gorulen_' + m.getAttribute('data-sip-gor-uid'), now = m.getAttribute('data-sip-gor-now') || '', d = null;
         try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
         if (!d || typeof d !== 'object' || typeof d.t !== 'string' || !d.s || typeof d.s !== 'object') d = { t: now, s: {} };
         var yaz = function () {

@@ -157,6 +157,92 @@ $g = frg_getir($db, $id);
 ok('frg_gorunur: başka depo kaydı kapalı, kendi depo açık', frg_gorunur($g) === false && frg_gorunur(['depo' => 'DEPO2']) === true && frg_gorunur(['depo' => '']) === true);
 $DEPOLAR = null; $AKTIF_DEPO = 'DEPO1';
 
+echo "\n=== 7b. Durum akışı (v515: 7 adım, tek yazma yolu) ===\n";
+$yeniSip = function (string $po, string $durum, array $ek = []) use ($db): array {
+    $db->prepare("INSERT INTO frugro_siparisler (po_no, durum, depo, created_at) VALUES (?,?,'',datetime('now'))")->execute([$po, $durum]);
+    $i = (int)$db->lastInsertId();
+    if (!empty($ek['palet'])) $db->exec("INSERT INTO frugro_palet (siparis_id, sira, palet_no, kalibre, kutu, brut_kg, net_kg) VALUES ($i, 1, '1', '14', 100, 500, 450)");
+    if (!empty($ek['fatura_no'])) $db->exec("UPDATE frugro_siparisler SET fatura_no='IHR1' WHERE id=$i");
+    return frg_getir($db, $i);
+};
+$tan = frg_durum_tanimlari();
+ok('tanımlar: 7 adım + iptal(0) + eski kapali(7); sıra 1..7', array_column($tan, 'sira', 'etiket') !== [] && $tan['yeni']['sira'] === 1 && $tan['evrak_gonderildi']['sira'] === 7 && $tan['iptal']['sira'] === 0 && $tan['kapali']['sira'] === 7 && count($tan) === 9);
+ok('tanımlar: yola çıktı, PKL ve Invoice\'tan SONRA (sahip kararı)', $tan['yola_cikti']['sira'] > $tan['invoice_hazir']['sira'] && $tan['mail_gonderildi']['sira'] > $tan['yola_cikti']['sira']);
+ok('frg_durumlar(): aynı kodlar, kod → etiket, eski kapali takma adı durur', array_keys(frg_durumlar()) === array_keys($tan) && frg_durumlar()['kapali'] === 'Kapalı (eski)');
+ok('kapalı = evrak_gonderildi + kapali + iptal; evrak bekleyen = mail_gonderildi', frg_kapali_durumlar() === ['evrak_gonderildi', 'kapali', 'iptal'] && frg_evrak_bekleyen_durumlar() === ['mail_gonderildi']);
+ok('frg_ilerleme: yeni 1/7, pkl 3/7 (43), kapali 7/7 (100), iptal 0', frg_ilerleme(['durum' => 'yeni']) === ['adim' => 1, 'toplam' => 7, 'yuzde' => 14] && frg_ilerleme(['durum' => 'pkl_hazir'])['yuzde'] === 43 && frg_ilerleme(['durum' => 'kapali']) === ['adim' => 7, 'toplam' => 7, 'yuzde' => 100] && frg_ilerleme(['durum' => 'iptal'])['adim'] === 0);
+// bölüm / kapanmamış SQL (SQLite'ta gerçekten çalışır)
+foreach (array_keys($tan) as $k) $yeniSip('27-0000-' . str_pad((string)(100 + (int)array_search($k, array_keys($tan), true)), 5, '0', STR_PAD_LEFT), $k);
+$say = fn(string $w) => (int)$db->query("SELECT COUNT(*) FROM frugro_siparisler WHERE po_no LIKE '27-0000-%' AND $w")->fetchColumn();
+ok('frg_kapanmamis_sql: kapalı üçü hariç (6 açık+evrak bekleyen)', $say(frg_kapanmamis_sql()) === 6 && frg_kapanmamis_sql('s.durum') === "s.durum NOT IN ('evrak_gonderildi','kapali','iptal')");
+ok('frg_bolum_sql: acik 5 (mail bekleyen hariç) · evrak 1 · kapali 3; bilinmeyen → boş', $say(frg_bolum_sql('acik')) === 5 && $say(frg_bolum_sql('evrak')) === 1 && $say(frg_bolum_sql('kapali')) === 3 && frg_bolum_sql('x') === '');
+ok('frg_sql_kolon: enjeksiyon denemesi "durum"a düşer', frg_kapanmamis_sql("durum; DROP TABLE x") === "durum NOT IN ('evrak_gonderildi','kapali','iptal')");
+$DEPOLAR = null;
+ok('frg_liste bolum=kapali: eski kapali kaydı Kapanan bölümünde', in_array('27-0000-00108', array_column(frg_liste($db, ['bolum' => 'kapali', 'q' => '27-0000']), 'po_no'), true) && count(frg_liste($db, ['bolum' => 'kapali', 'q' => '27-0000'])) === 3);
+ok('frg_liste_say = frg_liste (bölüm + q) ve sayfalama', frg_liste_say($db, ['bolum' => 'acik', 'q' => '27-0000']) === 5 && count(frg_liste($db, ['q' => '27-0000', 'adet' => 4, 'sayfa' => 1])) === 4 && count(frg_liste($db, ['q' => '27-0000', 'adet' => 4, 'sayfa' => 3])) === 1);
+$db->exec("UPDATE frugro_siparisler SET parti_no='P-77', plaka='34ABC123', nakliyeci='Aras Nak', son_musteri='Mus X', giris_limani='LIM Y' WHERE po_no='27-0000-00100'");
+ok('arama: parti no / plaka / nakliyeci + müşteri & liman tam eşleşme filtresi', count(frg_liste($db, ['q' => 'P-77'])) === 1 && count(frg_liste($db, ['q' => '34abc'])) === 1 && count(frg_liste($db, ['q' => 'aras'])) === 1 && count(frg_liste($db, ['musteri' => 'Mus X'])) === 1 && count(frg_liste($db, ['liman' => 'LIM Y'])) === 1 && frg_liste($db, ['liman' => 'LIM']) === []);
+$ar = array_column(frg_liste($db, ['bolum' => 'acik', 'q' => '27-0000', 'sira' => 'artan']), 'po_no'); ok('sira=artan çalışır (hata yok)', count($ar) === 5);
+
+// geçiş matrisi
+ok('matris: yeni→hazirlik/iptal; yola_cikti yalnız pkl/invoice\'tan; mail pkl..yola\'dan; evrak yalnız mail\'den', frg_gecis_izinli('yeni', 'hazirlik') && frg_gecis_izinli('yeni', 'iptal') && !frg_gecis_izinli('yeni', 'yola_cikti') && frg_gecis_izinli('pkl_hazir', 'yola_cikti') && frg_gecis_izinli('invoice_hazir', 'yola_cikti') && !frg_gecis_izinli('hazirlik', 'yola_cikti') && frg_gecis_izinli('yola_cikti', 'mail_gonderildi') && frg_gecis_izinli('pkl_hazir', 'mail_gonderildi') && !frg_gecis_izinli('yeni', 'mail_gonderildi'));
+ok('matris: evrak_gonderildi YALNIZ mail_gonderildi\'den; kapalılardan çıkış yok', frg_gecis_izinli('mail_gonderildi', 'evrak_gonderildi') && !frg_gecis_izinli('yola_cikti', 'evrak_gonderildi') && !frg_gecis_izinli('invoice_hazir', 'evrak_gonderildi') && !frg_gecis_izinli('evrak_gonderildi', 'iptal') && !frg_gecis_izinli('kapali', 'hazirlik') && !frg_gecis_izinli('iptal', 'yeni'));
+ok('otomatik geçişler: yeni|hazirlik→pkl_hazir, pkl_hazir→invoice_hazir; başka yok', frg_otomatik_gecis_mi('yeni', 'pkl_hazir') && frg_otomatik_gecis_mi('hazirlik', 'pkl_hazir') && frg_otomatik_gecis_mi('pkl_hazir', 'invoice_hazir') && !frg_otomatik_gecis_mi('yola_cikti', 'invoice_hazir') && !frg_otomatik_gecis_mi('yeni', 'invoice_hazir'));
+
+// frg_durum_degistir
+$durumOf = fn(int $i): string => (string)$db->query("SELECT durum FROM frugro_siparisler WHERE id=$i")->fetchColumn();
+$A = $yeniSip('27-1000-00001', 'yeni');
+$r1 = frg_durum_degistir($db, $A, 'hazirlik', '', 5);
+ok('yeni → hazirlik: ok, olay "yeni → hazirlik" (kod biçimi), audit frugro_durum', $r1['ok'] && $r1['durum'] === 'hazirlik' && $durumOf((int)$A['id']) === 'hazirlik'
+    && (string)$db->query("SELECT metin FROM frugro_olaylar WHERE siparis_id={$A['id']} AND tur='durum'")->fetchColumn() === 'yeni → hazirlik'
+    && (int)$db->query("SELECT COUNT(*) FROM audit_log WHERE action='frugro_durum'")->fetchColumn() >= 1);
+$A = frg_getir($db, (int)$A['id']);
+$rr = frg_durum_degistir($db, $A, 'yola_cikti', '', 5); ok('hazirlik → yola_cikti reddedilir (422)', !$rr['ok'] && $rr['kod'] === 422 && $durumOf((int)$A['id']) === 'hazirlik');
+$rr = frg_durum_degistir($db, $A, 'kapali', '', 5); ok('eski "kapali" hedefi kabul edilmez (400)', !$rr['ok'] && $rr['kod'] === 400);
+$rr = frg_durum_degistir($db, $A, 'bilinmeyen', '', 5); ok('bilinmeyen hedef 400', !$rr['ok'] && $rr['kod'] === 400);
+$rr = frg_durum_degistir($db, $A, 'iptal', 'x', 5); ok('iptal: gerekçe < 3 karakter → 422', !$rr['ok'] && $rr['kod'] === 422);
+$rr = frg_durum_degistir($db, $A, 'pkl_hazir', '', 5); ok('elle pkl_hazir YASAK (yalnız otomatik)', !$rr['ok'] && $durumOf((int)$A['id']) === 'hazirlik');
+$rr = frg_durum_degistir($db, $A, 'pkl_hazir', '', 5, 'otomatik'); ok('otomatik: hazirlik → pkl_hazir ok (pkl_uret hazirlik\'ten de ilerletir)', $rr['ok'] && $durumOf((int)$A['id']) === 'pkl_hazir');
+$A = frg_getir($db, (int)$A['id']);
+$rr = frg_durum_degistir($db, $A, 'mail_gonderildi', '', 5); ok('mail_gonderildi paletsiz siparişte 422', !$rr['ok'] && $rr['kod'] === 422 && str_contains((string)$rr['hata'], 'palet'));
+$rr = frg_durum_degistir($db, $A, 'yola_cikti', '', 5); ok('yola_cikti paletsiz 422', !$rr['ok'] && $rr['kod'] === 422);
+$B = $yeniSip('27-1000-00002', 'pkl_hazir', ['palet' => 1]);
+$rr = frg_durum_degistir($db, $B, 'evrak_gonderildi', '', 5); ok('evrak_gonderildi pkl_hazir\'dan 422', !$rr['ok'] && $rr['kod'] === 422);
+ok('yola_cikti paletli pkl_hazir\'dan ok', frg_durum_degistir($db, $B, 'yola_cikti', '', 5)['ok'] && $durumOf((int)$B['id']) === 'yola_cikti');
+$B = frg_getir($db, (int)$B['id']);
+$rr = frg_durum_degistir($db, $B, 'yola_cikti', '', 5); ok('aynı duruma geçiş 422', !$rr['ok'] && $rr['kod'] === 422);
+ok('mail_gonderildi ok → evrak_gonderildi ok (kapalı sayılır)', frg_durum_degistir($db, $B, 'mail_gonderildi', '', 5)['ok'] && frg_durum_degistir($db, frg_getir($db, (int)$B['id']), 'evrak_gonderildi', '', 5)['ok'] && in_array($durumOf((int)$B['id']), frg_kapali_durumlar(), true));
+$B = frg_getir($db, (int)$B['id']);
+$rr = frg_durum_degistir($db, $B, 'iptal', 'neden var', 5); ok('kapalı (evrak) sipariş iptal edilemez', !$rr['ok'] && $rr['kod'] === 422);
+$rr = frg_durum_degistir($db, $B, 'geri', '', 5); ok('evrak → mail geri alma: gerekçe ZORUNLU', !$rr['ok'] && $rr['kod'] === 422);
+$rr = frg_durum_degistir($db, $B, 'geri', 'yanlış işaretlendi', 5); ok('evrak → geri = mail_gonderildi', $rr['ok'] && $rr['durum'] === 'mail_gonderildi');
+// zamanlar
+$z = frg_adim_zamanlari($db, (int)$B['id']);
+ok('frg_adim_zamanlari: yola_cikti, mail_gonderildi, evrak_gonderildi zamanları var; PKL yok', isset($z['yola_cikti'], $z['mail_gonderildi'], $z['evrak_gonderildi']) && !isset($z['pkl_hazir']));
+$db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$B['id'], 'durum', 'Yeni → PKL hazır', '2026-01-02 03:04:05']);
+$db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$B['id'], 'invoice_uretildi', 'IHR1 · £ 1', '2026-01-03 00:00:00']);
+$z = frg_adim_zamanlari($db, (int)$B['id']);
+ok('eski etiket biçimi ("Yeni → PKL hazır") ve invoice_uretildi yedeği okunur', ($z['pkl_hazir'] ?? '') === '2026-01-02 03:04:05' && ($z['invoice_hazir'] ?? '') === '2026-01-03 00:00:00');
+$h = frg_adim_zaman_haritasi($db, [(int)$A['id'], (int)$B['id'], 999999], ['mail_gonderildi']);
+ok('frg_adim_zaman_haritasi: tek sorgu, çok sipariş, kod süzgeci, olmayan id boş', isset($h[(int)$B['id']]['mail_gonderildi']) && count($h[(int)$B['id']]) === 1 && $h[(int)$A['id']] === [] && $h[999999] === []);
+// geri_durum
+ok('frg_geri_durum: açık adımlar bir önceki; kapali/iptal belgelere göre, mail yaşandıysa mail', frg_geri_durum(['durum' => 'invoice_hazir']) === 'pkl_hazir' && frg_geri_durum(['durum' => 'pkl_hazir']) === 'yeni' && frg_geri_durum(['durum' => 'yeni']) === ''
+    && frg_geri_durum(['durum' => 'kapali', 'fatura_no' => 'X'], []) === 'invoice_hazir' && frg_geri_durum(['durum' => 'iptal', 'paletler' => [1]], []) === 'pkl_hazir' && frg_geri_durum(['durum' => 'iptal'], []) === 'yeni'
+    && frg_geri_durum(['durum' => 'kapali'], ['mail_gonderildi' => 'x']) === 'mail_gonderildi' && frg_geri_durum(['durum' => 'yola_cikti', 'fatura_no' => 'X']) === 'invoice_hazir' && frg_geri_durum(['durum' => 'mail_gonderildi'], ['yola_cikti' => 'x']) === 'yola_cikti');
+// eski kapali: yeniden aç
+$K = $yeniSip('27-1000-00003', 'kapali', ['palet' => 1]);
+$rr = frg_durum_degistir($db, $K, 'yeniden_ac', '', 5); ok('eski kapali yeniden açılabilir (gerekçesiz) → pkl_hazir (paletli)', $rr['ok'] && $rr['durum'] === 'pkl_hazir');
+$Y = $yeniSip('27-1000-00004', 'yeni'); $rr = frg_durum_degistir($db, $Y, 'yeniden_ac', '', 5); ok('yeniden_ac açık siparişte 422', !$rr['ok'] && $rr['kod'] === 422);
+$I = $yeniSip('27-1000-00005', 'iptal'); $rr = frg_durum_degistir($db, $I, 'geri', '', 5); ok('iptal → geri gerekçesiz ok (yeni)', $rr['ok'] && $rr['durum'] === 'yeni');
+// yarış: bayat $s → 409, durum DEĞİŞMEZ
+$Q = $yeniSip('27-1000-00006', 'yeni'); $db->exec("UPDATE frugro_siparisler SET durum='hazirlik' WHERE id={$Q['id']}");
+$rr = frg_durum_degistir($db, $Q, 'hazirlik', '', 5); ok('bayat durum: 422/409, kayıt bozulmaz', !$rr['ok']);
+$Q2 = $yeniSip('27-1000-00007', 'yeni'); $bayat = $Q2; $db->exec("UPDATE frugro_siparisler SET durum='hazirlik' WHERE id={$Q2['id']}");
+$rr = frg_durum_degistir($db, $bayat, 'iptal', 'yarış testi', 5); ok('yarış: koşullu UPDATE 409 döner, durum olayı yazılmaz', !$rr['ok'] && $rr['kod'] === 409 && $durumOf((int)$Q2['id']) === 'hazirlik' && (int)$db->query("SELECT COUNT(*) FROM frugro_olaylar WHERE siparis_id={$Q2['id']} AND tur='durum'")->fetchColumn() === 0);
+// kaynak denetimi
+$kc = (string)file_get_contents($ROOT . '/config/frugro_core.php');
+ok('durum olayı TEK biçim: frg_durum_olay_yaz "<eski> → <yeni>"', str_contains($kc, "\$eski . ' → ' . \$yeni"));
+
 echo "\n=== 7. Gerçek örnekler (FRUGRO_ORNEK_DIR) ===\n";
 $dir = (string)getenv('FRUGRO_ORNEK_DIR');
 if ($dir === '' || !is_dir($dir)) {

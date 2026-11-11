@@ -39,7 +39,7 @@ function frgi_para_birimleri(): array
 /** Faturanın yazılabildiği durumlar (kapalı / iptal salt okunur). */
 function frgi_yazilabilir(array $s): bool
 {
-    return !in_array((string)($s['durum'] ?? ''), ['kapali', 'iptal'], true);
+    return !in_array((string)($s['durum'] ?? ''), frg_kapali_durumlar(), true);
 }
 
 // ── AYAR (hks_kv) ───────────────────────────────────────────────────────
@@ -531,7 +531,7 @@ function frgi_girdi_kaydet(PDO $pdo, int $sid, int $uid, array $veri): array
 /**
  * Faturayı üretir (girdi + anlık görüntü kaydı, olay, durum, audit) — TEK transaction. PDF diske YAZILMAZ (frgi_pdf_uret taze üretir).
  * 'hata' seviyesinde kontrol varsa ÜRETMEZ; ayar eksikse yalnız $eksikIzin=true ile üretir. Olay 'invoice_uretildi'; durum yalnız
- * pkl_hazir → invoice_hazir. Depo / yetki kapıları SAYFADA.
+ * pkl_hazir → invoice_hazir (frg_durum_degistir). Depo / yetki kapıları SAYFADA.
  * @return array{ok:bool,hata?:string,dosya_adi?:string,uyarilar:list<array>,toplam_kurus?:int}
  */
 function frgi_uret(PDO $pdo, int $sid, int $uid, array $veri, bool $eksikIzin): array
@@ -564,12 +564,12 @@ function frgi_uret(PDO $pdo, int $sid, int $uid, array $veri, bool $eksikIzin): 
             throw new RuntimeException('Fatura bilgileri kaydedilemedi (hks_kv).');
         }
         $pdo->prepare('UPDATE frugro_siparisler SET fatura_no = ?, para_birimi = ?, updated_at = ? WHERE id = ?')->execute([$veri['no'], $veri['para_birimi'], $simdi, $sid]);
-        $terfi = (string)$s['durum'] === 'pkl_hazir';
-        if ($terfi) $pdo->prepare("UPDATE frugro_siparisler SET durum = 'invoice_hazir' WHERE id = ? AND durum = 'pkl_hazir'")->execute([$sid]);
+        // pkl_hazir → invoice_hazir: durum yazmanın TEK yolu (aynı transaction; olayı/auditi o yazar)
+        $terfi = frg_otomatik_gecis_mi((string)$s['durum'], 'invoice_hazir');
+        if ($terfi) $terfi = frg_durum_degistir($pdo, $s, 'invoice_hazir', '', $uid, 'otomatik')['ok'];
         $sem = frgi_para_birimleri()[$veri['para_birimi']]['sembol'];
         $dosyaAdi = frgi_dosya_adi($veri['no'], (string)$s['po_no']);
         frg_olay_yaz($pdo, $sid, 'invoice_uretildi', $veri['no'] . ' · ' . $sem . ' ' . siparis_inv_tutar_goster((float)$hes['toplam']) . ($eksik ? ' (ayar eksik: ' . implode(', ', $eksik) . ')' : ''), $uid);
-        if ($terfi) frg_olay_yaz($pdo, $sid, 'durum', 'PKL hazır → Invoice hazır', $uid);
         if (function_exists('audit_log_event')) {
             audit_log_event('frugro_invoice_uret', 'frugro_siparis', $sid, null, ['invoice_no' => $veri['no'], 'toplam_kurus' => $hes['toplam_kurus'], 'para_birimi' => $veri['para_birimi']], $uid);
         }

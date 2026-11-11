@@ -21,7 +21,7 @@ function frgui_yetki(string $eylem): bool
 /** Durum → [CSS son eki, ikon]. */
 function frgui_durum_css(string $d): string
 {
-    return in_array($d, ['yeni', 'pkl_hazir', 'invoice_hazir', 'yola_cikti', 'kapali', 'iptal'], true) ? $d : 'yeni';
+    return isset(frg_durum_tanimlari()[$d]) ? $d : 'yeni';
 }
 
 function frgui_durum_rozet(string $d): string
@@ -69,10 +69,9 @@ function frgui_belge_rozetleri(array $s): string
 {
     $d = (string)($s['durum'] ?? 'yeni');
     if ($d === 'iptal') return '';
-    $sira = array_flip(array_keys(frg_durumlar()));
-    $r = $sira[$d] ?? 0;
-    $pkl = $r >= 1 && $d !== 'iptal';
-    $inv = $r >= 2 || trim((string)($s['fatura_no'] ?? '')) !== '';
+    $r = (int)(frg_durum_tanimlari()[$d]['sira'] ?? 0);   // 3 = PKL hazır, 4 = Invoice hazır (sıra tablodan; kapalı/eski kapali = 7)
+    $pkl = $r >= 3;
+    $inv = $r >= 4 || trim((string)($s['fatura_no'] ?? '')) !== '';
     $o = '<span class="frg-belge' . ($pkl ? ' frg-belge--hazir' : '') . '" title="Packing List">PKL' . ($pkl ? ' ✓' : '') . '</span>';
     $o .= '<span class="frg-belge' . ($inv ? ' frg-belge--hazir' : '') . '" title="Invoice">INV' . ($inv ? ' ✓' : '') . '</span>';
     return $o;
