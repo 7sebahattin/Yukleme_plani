@@ -18,7 +18,8 @@ const dir = process.env.FRUGRO_UI_OUT;
 if (!dir || !fs.existsSync(path.join(dir, 'detay_invoice_hazir.html'))) { console.error('Önce: FRUGRO_UI_OUT=<dir> php scripts/frugro_ui_render.php'); process.exit(1); }
 const qa = process.env.FRUGRO_QA_DIR; if (qa) fs.mkdirSync(qa, { recursive: true });
 let fail = 0, pass = 0;
-function ok(n, v, d) { if (v) { pass++; console.log('OK ' + n); } else { fail++; console.log('FAIL ' + n + (d ? ' — ' + d : '')); } }
+const dusenler = [];
+function ok(n, v, d) { if (v) { pass++; console.log('OK ' + n); } else { fail++; dusenler.push(n + (d ? ' — ' + d : '')); console.log('FAIL ' + n + (d ? ' — ' + d : '')); } }
 const url = f => pathToFileURL(path.join(dir, f + '.html')).href;
 
 (async () => {
@@ -102,6 +103,7 @@ const url = f => pathToFileURL(path.join(dir, f + '.html')).href;
             await page.close();
         }
     } finally { await browser.close(); }
+    if (dusenler.length) console.log('\nDÜŞENLER (CI günlüğü son satırları gösterir):\n' + dusenler.map(x => '  FAIL ' + x).join('\n'));
     console.log('\n' + pass + ' geçti, ' + fail + ' kaldı');
     process.exit(fail ? 1 : 0);
 })();
