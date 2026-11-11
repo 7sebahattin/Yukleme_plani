@@ -14,3 +14,8 @@
   .frgi-sayfa .sip-inv-eylem .btn, .frgi-sayfa .sip-inv-eylem .sip-pasif-grup { width: 100%; }
   .frgi-sayfa .sip-inv-onizle { display: none; }
 }
+/* v514: ayar kartı açılır-kapanır + alan bazında hata */
+.frgi-ayar > summary.frgi-ayar-ozet { cursor: pointer; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; padding: 4px 0; }
+.frgi-ayar[open] > summary.frgi-ayar-ozet { margin-bottom: 10px; }
+.frgi-sayfa input.frgi-hatali { border-color: #dc2626; background: #fef2f2; }
+.frgi-sayfa .frgi-alan-hata { display: block; color: #b91c1c; font-size: .8rem; margin-top: 3px; }

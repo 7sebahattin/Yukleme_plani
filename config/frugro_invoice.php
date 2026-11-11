@@ -91,38 +91,56 @@ function frgi_ayar_eksikler(array $ayar, string $pb): array
  */
 function frgi_ayar_kaydet(PDO $pdo, array $girdi, int $uid): array
 {
+    // Alan BAZINDA doğrulama: geçerli alanlar KAYDEDİLİR, hatalı alan eski değerinde kalır ve 'hatalar' ile bildirilir
+    // (eskiden tek hatalı alan tüm ayarı reddediyor, form boş dönüyordu).
     $eski = frgi_ayar_ham($pdo);
     $yeni = $eski;
-    if (!siparis_evrak_mail_kv_hazir($pdo)) return ['ok' => false, 'hata' => 'Ayar tablosu (hks_kv) yok; Frugro invoice ayarı kaydedilemedi.'];
-    foreach ($girdi as $v) if (!is_scalar($v) && $v !== null) return ['ok' => false, 'hata' => 'Ayar değerleri metin olmalıdır.'];
-    foreach (['banka_ad', 'banka_adres', 'sube'] as $k) {
+    $hatalar = [];
+    if (!siparis_evrak_mail_kv_hazir($pdo)) return ['ok' => false, 'hata' => 'Ayar tablosu (hks_kv) yok; Frugro invoice ayarı kaydedilemedi.', 'hatalar' => []];
+    $A = frgi_ayar_alanlari();
+    foreach ($A as $k => [$et, $n]) {
         if (!array_key_exists($k, $girdi)) continue;
-        $s = siparis_inv_metin($girdi[$k], 1000);
-        if (mb_strlen($s) > frgi_ayar_alanlari()[$k][1]) return ['ok' => false, 'hata' => frgi_ayar_alanlari()[$k][0] . ' en çok ' . frgi_ayar_alanlari()[$k][1] . ' karakter olabilir.'];
-        $yeni[$k] = $s;
+        if (!is_scalar($girdi[$k]) && $girdi[$k] !== null) { $hatalar[$k] = $et . ' metin olmalıdır.'; continue; }
+        if (in_array($k, ['banka_ad', 'banka_adres', 'sube'], true)) {
+            $v = siparis_inv_metin($girdi[$k], 1000);
+            if (mb_strlen($v) > $n) { $hatalar[$k] = $et . ' en çok ' . $n . ' karakter olabilir.'; continue; }
+        } elseif ($k === 'iban_gbp' || $k === 'iban_eur') {
+            $v = strtoupper((string)preg_replace('/[\s\-]+/u', '', (string)$girdi[$k]));
+            if ($v !== '' && !preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/', $v)) { $hatalar[$k] = $et . ' geçersiz (ülke kodu + 2 kontrol hanesi + hesap no).'; continue; }
+        } elseif ($k === 'swift') {
+            $v = strtoupper((string)preg_replace('/\s+/u', '', (string)$girdi[$k]));
+            if ($v !== '' && !preg_match('/^[A-Z0-9]{8,11}$/', $v)) { $hatalar[$k] = 'SWIFT kodu 8–11 harf/rakam olmalıdır.'; continue; }
+        } else {
+            $v = siparis_inv_metin($girdi[$k], 100);
+            if ($v !== '' && !preg_match('/^[A-Za-z0-9 .\-\/]{1,40}$/', $v)) { $hatalar[$k] = $et . ' yalnız harf, rakam, boşluk ve . - / içerebilir (en çok 40 karakter).'; continue; }
+        }
+        $yeni[$k] = $v;
     }
-    foreach (['iban_gbp', 'iban_eur'] as $k) {
-        if (!array_key_exists($k, $girdi)) continue;
-        $s = strtoupper((string)preg_replace('/[\s\-]+/u', '', (string)$girdi[$k]));
-        if ($s !== '' && !preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/', $s)) return ['ok' => false, 'hata' => frgi_ayar_alanlari()[$k][0] . ' geçersiz (ülke kodu + 2 kontrol hanesi + hesap no).'];
-        $yeni[$k] = $s;
-    }
-    if (array_key_exists('swift', $girdi)) {
-        $s = strtoupper((string)preg_replace('/\s+/u', '', (string)$girdi['swift']));
-        if ($s !== '' && !preg_match('/^[A-Z0-9]{8}([A-Z0-9]{3})?$/', $s)) return ['ok' => false, 'hata' => 'SWIFT kodu 8 ya da 11 harf/rakam olmalıdır.'];
-        $yeni['swift'] = $s;
-    }
-    foreach (['vat_ihracatci', 'vat_alici'] as $k) {
-        if (!array_key_exists($k, $girdi)) continue;
-        $s = siparis_inv_metin($girdi[$k], 100);
-        if ($s !== '' && !preg_match('/^[A-Za-z0-9 .\-\/]{1,40}$/', $s)) return ['ok' => false, 'hata' => frgi_ayar_alanlari()[$k][0] . ' yalnız harf, rakam, boşluk ve . - / içerebilir (en çok 40 karakter).'];
-        $yeni[$k] = $s;
-    }
-    if (!siparis_inv_kv_yaz($pdo, FRGI_AYAR_KV, $yeni)) return ['ok' => false, 'hata' => 'Ayar kaydedilemedi (hks_kv tablosu yazılamadı).'];
     $degisen = [];
     foreach ($yeni as $k => $v) if ($v !== ($eski[$k] ?? '')) $degisen[] = $k;
+    if ($degisen && !siparis_inv_kv_yaz($pdo, FRGI_AYAR_KV, $yeni)) return ['ok' => false, 'hata' => 'Ayar kaydedilemedi (hks_kv tablosu yazılamadı).', 'hatalar' => $hatalar];
     if ($degisen && function_exists('audit_log_event')) audit_log_event('frugro_invoice_ayar', 'frugro_siparis', null, null, ['degisen_alanlar' => $degisen], $uid);
-    return ['ok' => true, 'degisen' => $degisen];
+    $r = ['ok' => !$hatalar, 'degisen' => $degisen, 'hatalar' => $hatalar];
+    if ($hatalar) $r['hata'] = implode(' ', array_values($hatalar));
+    return $r;
+}
+
+/** Fatura formunun KALICI taslağı (ham girilen değerler; doğrulanmamış) — hatalı gönderimde/yenilemede hiçbir alan kaybolmaz. */
+function frgi_taslak_yaz(PDO $pdo, int $sid, array $deger): void
+{
+    if ($sid <= 0 || !siparis_evrak_mail_kv_hazir($pdo)) return;
+    $t = [];
+    foreach ($deger as $k => $v) if (is_string($k) && is_scalar($v)) $t[$k] = mb_substr((string)$v, 0, 120, 'UTF-8');
+    siparis_inv_kv_yaz($pdo, 'frugro_invoice_taslak_' . $sid, $t);
+}
+/** @return array<string,string> */
+function frgi_taslak_oku(PDO $pdo, int $sid): array
+{
+    if ($sid <= 0) return [];
+    $j = siparis_inv_kv_oku($pdo, 'frugro_invoice_taslak_' . $sid);
+    $t = [];
+    if (is_array($j)) foreach ($j as $k => $v) if (is_string($k) && is_scalar($v)) $t[$k] = (string)$v;
+    return $t;
 }
 
 // ── GİRDİ (doğrulama, SAF) ──────────────────────────────────────────────
