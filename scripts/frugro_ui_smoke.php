@@ -148,13 +148,14 @@ echo "\n=== 5. Detay ===\n";
 $r = sayfa('frugro_view.php', ['id' => $ID]);
 ok('detay temiz', temiz($r), (string)$r['hata']);
 ok('detay: bilgi + PKL/Invoice bağlantıları', str_contains($r['html'], '26-1622-44080') && str_contains($r['html'], 'frugro_pkl.php?id=' . $ID) && str_contains($r['html'], 'frugro_invoice.php?id=' . $ID));
-ok('detay: Düzenle penceresi native <dialog class="pm-dialog"> + iki adımlı sil', str_contains($r['html'], '<dialog class="pm-dialog frg-dialog"') && str_contains($r['html'], 'frgSilIlk') && str_contains($r['html'], 'frgSilOnay'));
+ok('detay (P2, OGL eşi): ✎ alan penceresi + 7 adımlı şerit + ⋮ → Sil penceresi (onay kutulu); eski <dialog> YOK', str_contains($r['html'], 'id="sipAlanModal"') && str_contains($r['html'], 'data-sip-alan=') && substr_count($r['html'], '<li class="sip-step') === 7
+    && str_contains($r['html'], 'data-sip-ac="frgSilModal"') && str_contains($r['html'], 'id="frgSilModal"') && !str_contains(substr($r['html'], (int)strpos($r['html'], 'sip-mod sip-view')), '<dialog'));
 ok('detay: olay zaman çizelgesi (Sipariş alındı)', str_contains($r['html'], 'Sipariş alındı'));
 $r = sayfa('frugro_view.php', ['id' => 99999]);
 ok('olmayan id: 404', $r['kod'] === 404);
 rol($VIEW);
 $r = sayfa('frugro_view.php', ['id' => $ID]);
-ok('yalnız okuma: Düzenle/İşlemler YOK', temiz($r) && !str_contains($r['html'], 'frgDuzenleAc') && !str_contains($r['html'], 'frgSilIlk') && !str_contains($r['html'], '<dialog'));
+ok('yalnız okuma: ✎ / pencereler / Sil YOK', temiz($r) && !str_contains($r['html'], 'data-sip-alan=') && !str_contains($r['html'], 'frgSilModal') && !str_contains($r['html'], 'pm-overlay'));
 
 echo "\n=== 6. Düzenle / durum / sil ===\n";
 rol($OPER);

@@ -70,6 +70,13 @@ $db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VA
 $db->prepare("INSERT INTO frugro_olaylar (siparis_id, tur, metin, created_at) VALUES (?,?,?,?)")->execute([$sentIds['yola_cikti'], 'guncellendi', 'Güncellendi: cikis_tarihi: 01.01.2026 → 02.01.2026', date('Y-m-d H:i:s')]);
 $db->prepare('UPDATE frugro_siparisler SET ham_json = ? WHERE id = ?')->execute([json_encode(['uyarilar' => ['Sentetik uyarı: kutu toplamı palet x kutu/palet ile tutmuyor.']], JSON_UNESCAPED_UNICODE), $sentIds['yola_cikti']]);
 file_put_contents("$OUT/siparis_idleri.json", json_encode($sentIds));
+// P2 (detay): hks_kv — Frugro mail alıcı ayarı (yalnız @ornek.test) + üretilmiş Invoice girdisi (Invoice kartı / mail ekleri için)
+$db->exec('CREATE TABLE IF NOT EXISTS hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+$db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_pkl_mail_ayar', json_encode(['kime' => ['siparis@ornek.test'], 'bilgi' => ['packinglist@ornek.test', 'lojistik@ornek.test'], 'govde' => '', 'evrak_govde' => ''])]);
+foreach (['invoice_hazir' => 'INV-9004', 'yola_cikti' => 'INV-9005', 'mail_gonderildi' => 'INV-9006', 'evrak_gonderildi' => 'INV-9007'] as $dur => $no) {
+    $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_invoice_' . $sentIds[$dur], json_encode(['no' => $no, 'para_birimi' => 'GBP', 'uretildi_at' => date('Y-m-d H:i:s'), 'toplam_kurus' => 416000, 'snap' => ['no' => $no, 'po_no' => '26-900' . substr($no, -1) . '-9000' . substr($no, -1)]])]);
+}
+if (getenv('FRUGRO_UI_AYARSIZ')) $db->exec("DELETE FROM hks_kv WHERE anahtar = 'frugro_pkl_mail_ayar'");   // "alıcı tanımlı değil" görünümü
 bas('frugro_siparis.php', [], 'liste');
 bas('frugro_siparis.php', ['q' => 'P-100'], 'liste_arama');
 bas('frugro_siparis.php', ['durum' => 'mail_gonderildi'], 'liste_tek_durum');
