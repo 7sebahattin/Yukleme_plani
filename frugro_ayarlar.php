@@ -21,6 +21,7 @@ require_once __DIR__ . '/config/siparis_mail.php';
 require_once __DIR__ . '/config/frugro_core.php';
 require_once __DIR__ . '/config/frugro_mail.php';
 require_once __DIR__ . '/config/frugro_detay.php';
+require_once __DIR__ . '/config/frugro_pkl.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -61,6 +62,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'fatura
     header('Location: frugro_ayarlar.php#fatura');
     exit;
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'ggn') {
+    csrf_check($_POST['csrf'] ?? null);
+    require_siparis('delete');                                   // GGN adı + no listesi: yalnız siparis.delete
+    $r = frgp_ggn_kaydet($pdo, is_array($_POST['ggn'] ?? null) ? $_POST['ggn'] : [], $uid);
+    set_flash(!empty($r['ok']) ? 'success' : 'error', !empty($r['ok']) ? 'GGN listesi kaydedildi.' : (string)($r['hata'] ?? 'GGN listesi kaydedilemedi.'));
+    header('Location: frugro_ayarlar.php#ggn');
+    exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_siparis('delete');
@@ -76,6 +85,7 @@ $ayar = $hazir ? frgm_ayar_oku($pdo) : ['hesaplar' => [], 'gonderen' => []];
 $hesaplar = $hazir ? siparis_mail_hesaplar($pdo) : [];
 $pklAyar = frgd_mail_ayar_oku($pdo);
 $kvHazir = siparis_evrak_mail_kv_hazir($pdo);
+$ggnListe = $pklYk ? frgp_ggn_liste($pdo) : [];
 
 // Banka / fatura ayarı (yalnız siparis.delete): form değerleri + hatalı alan mesajları (PRG sonrası tek kullanımlık oturum)
 $faHam = $pklYk ? frgi_ayar_ham($pdo) : [];
@@ -138,6 +148,31 @@ render_flash();
         <textarea name="govde" rows="6" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" placeholder="<?= h(SIPARIS_PKL_GOVDE_VARSAYILAN) ?>" spellcheck="false"><?= h($pklAyar['govde']) ?></textarea></label>
       <label>Evrak takımı mail metni
         <textarea name="evrak_govde" rows="5" maxlength="<?= (int)SIPARIS_MAIL_GOVDE_MAX ?>" placeholder="<?= h(SIPARIS_EVRAK_GOVDE_VARSAYILAN) ?>" spellcheck="false"><?= h($pklAyar['evrak_govde']) ?></textarea></label>
+      <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
+    </form>
+    <?php endif; ?>
+  </section>
+  <?php endif; ?>
+  <?php if ($pklYk): ?>
+  <section class="card" id="ggn" aria-labelledby="frgGgnBas">
+    <div class="card-head"><h2 id="frgGgnBas">🌱 GGN listesi (üretici)</h2></div>
+    <p class="muted">Packing List satırlarında <strong>GGN adı</strong> bu listeden seçilir, GGN no otomatik gelir. Adlar ve numaralar yalnız burada tanımlanır; aynı ad iki kez girilemez. Satırı silmek için adı ve numarayı boşaltın (mevcut PKL satırlarındaki kayıtlı değerler korunur).</p>
+    <?php if (!$kvHazir): ?>
+      <p class="sip-bilgi" role="note">Ayar tablosu (hks_kv) yok; Hal Kayıt modülü kurulunca bu ayar kaydedilebilir.</p>
+    <?php else: ?>
+    <form method="post" action="frugro_ayarlar.php#ggn" class="sip-form" data-sip-tek>
+      <?= sipui_csrf() ?><input type="hidden" name="islem" value="ggn">
+      <div class="table-wrap"><table class="data-table frgp-ggn-tablo">
+        <thead><tr><th>#</th><th>GGN adı</th><th>GGN no</th></tr></thead>
+        <tbody>
+        <?php $gSat = array_merge($ggnListe, array_fill(0, 5, ['ad' => '', 'ggn' => ''])); foreach ($gSat as $gi => $g): ?>
+          <tr><td class="muted"><?= $gi + 1 ?></td>
+            <td><input type="text" name="ggn[<?= $gi ?>][ad]" value="<?= h($g['ad']) ?>" maxlength="100" autocomplete="off" aria-label="GGN adı <?= $gi + 1 ?>"></td>
+            <td><input type="text" name="ggn[<?= $gi ?>][no]" value="<?= h($g['ggn']) ?>" maxlength="20" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="GGN no <?= $gi + 1 ?>"></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <p class="sip-soluk">En çok <?= (int)FRGP_GGN_MAX ?> kayıt; GGN no yalnız harf, rakam ve tire. Kayıttan sonra 5 yeni boş satır daha açılır.</p>
       <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
     </form>
     <?php endif; ?>

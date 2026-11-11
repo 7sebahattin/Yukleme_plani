@@ -38,7 +38,7 @@ $self = 'frugro_pkl.php?id=' . $id;
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && isset($_GET['indir'])) {
     $bic = (string)$_GET['indir'] === 'xlsx' ? 'xlsx' : 'pdf';
     $eks = frgp_uretime_hazir($s);
-    $veri = $eks ? null : ($bic === 'pdf' ? frgp_pdf(frgp_belge_verisi($s)) : frgp_xlsx(frgp_belge_verisi($s)));
+    $veri = $eks ? null : ($bic === 'pdf' ? frgp_pdf(frgp_belge_verisi($s, '', frgp_ek_oku($pdo, $id))) : frgp_xlsx(frgp_belge_verisi($s, '', frgp_ek_oku($pdo, $id))));
     if ($veri === null || $veri === '') {
         set_flash('error', $eks ? implode(' ', $eks) : 'Dosya üretilemedi (PDF/Excel motoru yok).');
         header('Location: frugro_view.php?id=' . $id . '#pkl');
@@ -71,7 +71,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         header('Location: ' . $self); exit;
     } elseif ($eylem === 'uret_pdf' || $eylem === 'uret_xlsx') {
         $saat = trim((string)($_POST['cikis_saati'] ?? ''));
-        $r = frgp_uret($pdo, $s, $eylem === 'uret_pdf' ? 'pdf' : 'xlsx', $saat, $uid);
+        $antet = ($_POST['antet'] ?? '') === '1';        // işaretsiz onay kutusu POST'a girmez → false; seçim sipariş bazında saklanır
+        $r = frgp_uret($pdo, $s, $eylem === 'uret_pdf' ? 'pdf' : 'xlsx', $saat, $uid, $antet);
         if (!$r['ok']) { set_flash('error', implode(' ', $r['hatalar'])); header('Location: ' . $self . ($saat !== '' ? '&saat=' . rawurlencode($saat) : '')); exit; }
         while (ob_get_level() > 0) { ob_end_clean(); }
         session_write_close();
@@ -89,6 +90,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $duz = $yazar && frgp_duzenlenebilir($s);
+$ggnListe = frgp_ggn_liste($pdo);
+$ek = frgp_ek_oku($pdo, $id);
+$kp = (int)($s['kutu_palet'] ?? 0);
 $ro = $duz ? '' : ' readonly';
 $satirlar = $postP !== null ? array_values($postP) : $s['paletler'];
 if ($postP === null) foreach ($satirlar as &$sr) { $sr['brut_kg'] = frgp_kg_alan($sr['brut_kg']); $sr['net_kg'] = frgp_kg_alan($sr['net_kg']); } unset($sr);
@@ -96,6 +100,7 @@ $bv = static fn(string $k): string => $postB !== null ? (string)($postB[$k] ?? '
 $tp = frgp_toplam($postP !== null ? array_map(static fn($r) => ['kutu' => (frgp_kutu_coz((string)($r['kutu'] ?? '')) ?: null), 'brut_kg' => (frgp_kg_coz((string)($r['brut_kg'] ?? '')) ?: null), 'net_kg' => (frgp_kg_coz((string)($r['net_kg'] ?? '')) ?: null), 'palet_no' => $r['palet_no'] ?? null], $satirlar) : $s['paletler']);
 $saatVarsayilan = (string)($_GET['saat'] ?? '');
 $durumAd = frg_durumlar()[$s['durum']] ?? (string)$s['durum'];
+$loggerDeger = $postB !== null ? (string)($postB['logger_palet'] ?? '') : $ek['logger_palet'];
 $alanlar = [['parti_no', 'Parti no', 'text', 30], ['plaka', 'Plaka (lorry)', 'text', 80], ['nakliyeci', 'Nakliyeci', 'text', 150], ['logger_id', 'ID logger', 'text', 60],
     ['sofor_adi', 'Şoför', 'text', 100], ['sofor_telefon', 'Şoför telefonu', 'tel', 40], ['sicaklik', 'Sıcaklık', 'text', 30], ['bolge', 'Bölge', 'text', 100]];
 
@@ -103,14 +108,26 @@ $alan = static function (string $ad, array $r, string $sinif, string $tip = 'tex
     return '<input type="' . $tip . '" name="p[__I__][' . $ad . ']" class="' . $sinif . '" value="' . h((string)($r[$ad] ?? '')) . '" maxlength="' . $max . '" autocomplete="off"'
         . ($inputmode !== '' ? ' inputmode="' . $inputmode . '"' : '') . ' data-frp-alan="' . $ad . '"' . $ro . '>';
 };
-$satirHtml = static function (array $r, int $i) use ($alan, $duz): string {
-    $h = '<tr data-frp-satir><td class="frp-no" data-frp-sira>' . ($i + 1) . '</td>'
-        . '<td>' . $alan('palet_no', $r, 'frp-in frp-palet', 'text', '', 10) . '<input type="hidden" name="p[__I__][konum]" value="' . h((string)($r['konum'] ?? '')) . '"></td>'
-        . '<td>' . $alan('ggn_no', $r, 'frp-in frp-ggn', 'text', 'numeric', 20) . '</td>'
-        . '<td>' . $alan('ggn_adi', $r, 'frp-in frp-ad', 'text', '', 100) . '</td>'
+$satirHtml = static function (array $r, int $i) use ($alan, $duz, $ggnListe, $kp, $ro): string {
+    $ad = (string)($r['ggn_adi'] ?? ''); $no = (string)($r['ggn_no'] ?? '');
+    $sec = '<select name="p[__I__][ggn_adi]" class="frp-in frp-ad frp-ggnsec" data-frp-alan="ggn_adi" aria-label="GGN adı"' . ($duz ? '' : ' disabled') . '><option value="" data-ggn="">—</option>';
+    $var = false;
+    foreach ($ggnListe as $g) {
+        $on = $ad !== '' && $ad === $g['ad']; $var = $var || $on;
+        $sec .= '<option value="' . h($g['ad']) . '" data-ggn="' . h($g['ggn']) . '"' . ($on ? ' selected' : '') . '>' . h($g['ad']) . '</option>';
+    }
+    if ($ad !== '' && !$var) $sec .= '<option value="' . h($ad) . '" data-ggn="' . h($no) . '" selected>(kayıtlı) ' . h($ad) . '</option>';
+    $sec .= '</select>';
+    $kutuRo = ($kp > 0 || !$duz) ? ' readonly' : '';
+    if ($kp > 0) $r['kutu'] = $kp;
+    $h = '<tr data-frp-satir><td class="frp-no" data-frp-no>' . ($i + 1) . '</td>'
+        . '<td class="frp-paletno"><span data-frp-sira>' . ($i + 1) . '</span><input type="hidden" name="p[__I__][palet_no]" value="' . ($i + 1) . '" data-frp-alan="palet_no"><input type="hidden" name="p[__I__][konum]" value="' . h((string)($r['konum'] ?? '')) . '"></td>'
+        . '<td>' . $sec . '</td>'
+        . '<td><input type="text" name="p[__I__][ggn_no]" class="frp-in frp-ggn" value="' . h($no) . '" maxlength="20" readonly tabindex="-1" aria-label="GGN no (ayardan)" data-frp-alan="ggn_no"></td>'
+        . '<td class="frp-asagicell">' . ($duz ? '<button type="button" class="btn btn-sm frp-asagi" data-frp-asagi title="Alttakilere uygula (GGN adı + no)" aria-label="GGN\'yi alttaki satırlara uygula">↓</button>' : '') . '</td>'
         . '<td>' . $alan('kalibre', $r, 'frp-in frp-kal', 'text', '', 20) . '</td>'
         . '<td>' . $alan('lot', $r, 'frp-in frp-lot', 'text', '', 30) . '</td>'
-        . '<td>' . $alan('kutu', $r, 'frp-in frp-sayi', 'text', 'numeric', 9) . '</td>'
+        . '<td><input type="text" name="p[__I__][kutu]" class="frp-in frp-sayi" value="' . h((string)($r['kutu'] ?? '')) . '" maxlength="9" autocomplete="off" inputmode="numeric" data-frp-alan="kutu"' . $kutuRo . ($kp > 0 ? ' title="Siparişten: ' . $kp . ' kutu/palet"' : '') . '></td>'
         . '<td>' . $alan('brut_kg', $r, 'frp-in frp-sayi', 'text', 'decimal', 12) . '</td>'
         . '<td class="frp-netkap">' . $alan('net_kg', $r, 'frp-in frp-sayi', 'text', 'decimal', 12) . ($duz ? '<button type="button" class="btn btn-sm frp-oner" data-frp-oner title="Net öner: brüt − (kutu × karton kg + palet diğer kg)">≈</button>' : '') . '</td>'
         . ($duz ? '<td><button type="button" class="btn btn-sm" data-frp-sil aria-label="Satırı sil">✕</button></td>' : '')
@@ -135,7 +152,7 @@ render_flash();
   <?php if ($hatalar): ?><div class="flash flash-error" role="alert"><strong>Kaydedilmedi:</strong><ul class="frp-hata"><?php foreach ($hatalar as $x): ?><li><?= h($x) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
   <?php if ($uyarilar && !$hatalar): ?><div class="sip-bilgi" role="note"><?php foreach ($uyarilar as $x): ?><div><?= h($x) ?></div><?php endforeach; ?></div><?php endif; ?>
 
-  <form method="post" action="<?= h($self) ?>" id="frpForm" data-frp-form data-frp-duz="<?= $duz ? '1' : '0' ?>">
+  <form method="post" action="<?= h($self) ?>" id="frpForm" data-frp-form data-frp-duz="<?= $duz ? '1' : '0' ?>" data-frp-kp="<?= $kp ?>">
     <?= sipui_csrf() ?><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="eylem" value="kaydet">
     <section class="card frp-baslik">
       <h2>Başlık</h2>
@@ -143,6 +160,7 @@ render_flash();
         <?php foreach ($alanlar as [$k, $et, $tip, $uz]): ?>
           <label><?= h($et) ?><input type="<?= $tip ?>" name="b[<?= $k ?>]" value="<?= h($bv($k)) ?>" maxlength="<?= $uz ?>" autocomplete="off"<?= $k === 'sofor_telefon' ? ' inputmode="tel"' : '' ?><?= $ro ?>></label>
         <?php endforeach; ?>
+        <label>Logger palet no <small>(sarı boyanır)</small><input type="text" name="b[logger_palet]" value="<?= h($loggerDeger) ?>" inputmode="numeric" maxlength="3" autocomplete="off" data-frp-logger<?= $ro ?>></label>
         <label>Karton kg <small>(virgül: 0,312)</small><input type="text" name="b[karton_kg]" value="<?= h($postB !== null ? (string)($postB['karton_kg'] ?? '') : frgp_kucuk_goster($s['karton_kg'] ?? null)) ?>" inputmode="decimal" maxlength="7" autocomplete="off" data-frp-karton<?= $ro ?>></label>
         <label>Palet diğer kg <small>(örn. 25)</small><input type="text" name="b[palet_diger_kg]" value="<?= h($postB !== null ? (string)($postB['palet_diger_kg'] ?? '') : frgp_kucuk_goster($s['palet_diger_kg'] ?? null)) ?>" inputmode="decimal" maxlength="7" autocomplete="off" data-frp-pdiger<?= $ro ?>></label>
       </div>
@@ -157,16 +175,18 @@ render_flash();
           <button type="button" class="btn" data-frp-tum-oner>≈ Boş netleri öner</button>
         </div><?php endif; ?>
       </div>
+      <div class="frp-durum" data-frp-durum role="status" hidden></div>
       <div class="table-wrap"><table class="data-table frp-tablo" id="frpTablo">
-        <thead><tr><th>#</th><th>Palet no</th><th>GGN no</th><th>GGN adı</th><th>Kalibre</th><th>Lot (PO)</th><th class="num">Kutu</th><th class="num">Brüt kg</th><th class="num">Net kg</th><?php if ($duz): ?><th></th><?php endif; ?></tr></thead>
+        <thead><tr><th>#</th><th>Palet no</th><th>GGN adı</th><th>GGN no</th><th><span class="sr-only">Alttakilere uygula</span></th><th>Kalibre</th><th>Lot (PO)</th><th class="num">Kutu</th><th class="num">Brüt kg</th><th class="num">Net kg</th><?php if ($duz): ?><th></th><?php endif; ?></tr></thead>
         <tbody data-frp-govde>
           <?php foreach ($satirlar as $i => $r) echo str_replace('__I__', (string)$i, $satirHtml($r, $i)); ?>
         </tbody>
-        <tfoot><tr class="frp-toplam"><td colspan="6"><strong>Toplam</strong> · <span data-frp-n><?= (int)$tp['palet'] ?></span> palet</td>
+        <tfoot><tr class="frp-toplam"><td colspan="8"><strong>Toplam</strong> · <span data-frp-n><?= (int)$tp['palet'] ?></span> palet</td>
           <td class="num"><strong data-frp-tkutu><?= h(frgp_kg_goster($tp['kutu'])) ?></strong></td>
           <td class="num"><strong data-frp-tbrut><?= h(frgp_kg_goster($tp['brut'])) ?></strong></td>
           <td class="num"><strong data-frp-tnet><?= h(frgp_kg_goster($tp['net'])) ?></strong></td><?php if ($duz): ?><td></td><?php endif; ?></tr></tfoot>
       </table></div>
+      <p class="muted frp-not">Palet no siparişteki sıraya göre 1..N otomatik atanır. GGN adı + no yalnız <a href="frugro_ayarlar.php#ggn">Frugro ayarları</a>nda tanımlanır; satırda seçilir, "↓" yalnız alttaki satırlara uygular.<?php if ($kp > 0): ?> Kutu adedi siparişten gelir (<?= $kp ?> kutu/palet), değiştirilemez.<?php endif; ?> Brüt/Net hücresine Excel'den çok satırlı yapıştırabilirsiniz.</p>
       <p class="muted frp-not">Kg: ondalık için VİRGÜL (634,5); nokta binliktir (1.234 = 1234). Net elle girilir; "≈" yalnız öneridir. Toplamlar kayıtta sunucuda yeniden hesaplanır.</p>
       <?php if ($duz): ?><div class="frp-kaydet"><button type="submit" class="btn btn-primary btn-lg">Kaydet</button> <span class="muted" data-frp-kirli hidden>Kaydedilmemiş değişiklik var.</span></div><?php endif; ?>
     </section>
@@ -178,6 +198,7 @@ render_flash();
     <form method="post" action="<?= h($self) ?>" data-frp-uret>
       <?= sipui_csrf() ?><input type="hidden" name="id" value="<?= $id ?>">
       <label>Çıkış saati <small>(SS:DD, kayda girmez)</small><input type="text" name="cikis_saati" value="<?= h($saatVarsayilan) ?>" placeholder="18:00" inputmode="numeric" maxlength="5" autocomplete="off"></label>
+      <label class="frp-onay"><input type="checkbox" name="antet" value="1"<?= $ek['antet'] ? ' checked' : '' ?>> Üst başlık / alt bilgi (AsyaFresh logosu)</label>
       <div class="frp-uret-btn">
         <?php if ($yazar): ?><button type="submit" name="eylem" value="uret_pdf" class="btn btn-primary" data-frp-uretbtn>📄 PDF indir</button>
         <button type="submit" name="eylem" value="uret_xlsx" class="btn" data-frp-uretbtn>📊 Excel indir</button><?php endif; ?>
@@ -197,8 +218,13 @@ render_flash();
     <form method="dialog" data-frp-yapistir-form>
       <div class="pm-header"><h2 class="pm-title" id="frpYapistirBaslik">Excelden yapıştır</h2><button type="button" class="pm-close" data-frp-kapat aria-label="Kapat">✕</button></div>
       <div class="pm-body">
-        <p class="muted">Excel'de hücreleri kopyalayıp aşağıya yapıştırın. Sütunlar: <strong>brüt</strong> · <strong>brüt | net</strong> · ya da <strong>palet no | GGN no | GGN adı | kutu | brüt | net</strong>. Tek hata varsa hiçbir satır uygulanmaz.</p>
+        <p class="muted">Excel'de hücreleri kopyalayıp aşağıya yapıştırın: tek sütun (hedef sütunun değeri) ya da — yalnız Brüt hedefinde — <strong>brüt | net</strong> iki sütun. Tek hata varsa hiçbir satır uygulanmaz. Satır eklenmez; fazla satır yok sayılır.</p>
+        <div class="frp-yap-sec">
+          <label>Hedef sütun<select data-frp-yap-hedef><option value="brut_kg">Brüt kg</option><option value="net_kg">Net kg</option></select></label>
+          <label>Başlangıç satırı<select data-frp-yap-satir></select></label>
+        </div>
         <textarea rows="10" data-frp-yapistir-metin aria-label="Yapıştırılacak veri" autocomplete="off"></textarea>
+        <div class="frp-onizleme" data-frp-yap-onizleme aria-live="polite"></div>
         <ul class="frp-hata" data-frp-yapistir-hata hidden></ul>
       </div>
       <div class="pm-footer"><button type="button" class="btn" data-frp-kapat>Vazgeç</button><button type="button" class="btn btn-primary" data-frp-yapistir-uygula>Uygula</button></div>

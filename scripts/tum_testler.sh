@@ -148,7 +148,7 @@ js_hazirla() {
             env "${JS_ORTAM[@]}" php scripts/bottomnav_render.php ;;
         buton_gorunum_smoke.js|pdks_geri_ptak_smoke.js)
             render_puantaj _test_puantaj_liste.html PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun ;;
-        frugro_detay_smoke.js)
+        frugro_detay_smoke.js|frugro_pkl_smoke.js)
             JS_ORTAM=("FRUGRO_UI_OUT=$GECICI/frg-ui")
             env "${JS_ORTAM[@]}" php scripts/frugro_ui_render.php ;;
         export_menu_smoke.js)

@@ -30,7 +30,7 @@ $PERMS = ['siparis.read', 'siparis.write', 'siparis.delete', 'siparis.match']; $
 $dir = getenv('FRUGRO_ORNEK_DIR'); $dosyalar = $dir ? glob($dir . '/*.xlsx') : [$ROOT . '/scripts/fixtures/frugro/order_log_ornek.xlsx'];
 foreach ($dosyalar as $f) { $o = frg_xlsx_oku($f); if ($o['ok']) frg_toplu_kaydet($db, $o, ['user_id' => 1, 'kaynak' => 'yukleme', 'dosya_sha' => $o['dosya_sha']]); }
 $ids = $db->query('SELECT id FROM frugro_siparisler ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
-$pal = []; for ($i = 1; $i <= 26; $i++) $pal[] = ['palet_no' => (string)$i, 'kalibre' => '14', 'lot' => '26-1622-44080', 'ggn_no' => '4000000000001', 'ggn_adi' => 'ORNEK URETICI', 'kutu' => 200, 'brut_kg' => 780 + $i, 'net_kg' => 680 + $i];
+$pal = []; for ($i = 1; $i <= 26; $i++) $pal[] = ['palet_no' => (string)$i, 'kalibre' => '14', 'lot' => '26-1622-44080', 'ggn_no' => $i % 3 ? '4063651214000' : '4069453419551', 'ggn_adi' => $i % 3 ? 'Uretici A' : 'Uretici B', 'kutu' => 200, 'brut_kg' => 780 + $i, 'net_kg' => 680 + $i];
 frg_palet_kaydet($db, (int)$ids[0], $pal);
 // ── Sentetik siparişler: HER durumdan en az bir tane (kişisel veri YOK; P1/P2 ajanları ekran kontrolünde bunu kullanır) ──
 //   Durumlar: yeni, hazirlik, pkl_hazir (paletli, 2 kalibreli), invoice_hazir (fatura_no + GBP), yola_cikti, mail_gonderildi,
@@ -76,6 +76,9 @@ $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['fr
 foreach (['invoice_hazir' => 'INV-9004', 'yola_cikti' => 'INV-9005', 'mail_gonderildi' => 'INV-9006', 'evrak_gonderildi' => 'INV-9007'] as $dur => $no) {
     $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_invoice_' . $sentIds[$dur], json_encode(['no' => $no, 'para_birimi' => 'GBP', 'uretildi_at' => date('Y-m-d H:i:s'), 'toplam_kurus' => 416000, 'snap' => ['no' => $no, 'po_no' => '26-900' . substr($no, -1) . '-9000' . substr($no, -1)]])]);
 }
+// v516: GGN listesi (ayar) + PKL eki (logger palet 2, antet açık) — sentetik, kişisel veri yok
+$db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_ggn_uretici', json_encode(['liste' => [['ad' => 'Uretici A', 'ggn' => '4063651214000'], ['ad' => 'Uretici B', 'ggn' => '4069453419551']]])]);
+$db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_pkl_ek_' . (int)$ids[0], json_encode(['logger_palet' => '2', 'antet' => true])]);
 if (getenv('FRUGRO_UI_AYARSIZ')) $db->exec("DELETE FROM hks_kv WHERE anahtar = 'frugro_pkl_mail_ayar'");   // "alıcı tanımlı değil" görünümü
 bas('frugro_siparis.php', [], 'liste');
 bas('frugro_siparis.php', ['q' => 'P-100'], 'liste_arama');

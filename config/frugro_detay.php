@@ -92,10 +92,10 @@ function frgd_mail_taslak(PDO $pdo, array $s, string $imza, string $tur = 'pkl')
 }
 
 /** PKL PDF baytları — taze, YAN ETKİSİZ (olay/durum/audit yok). Palet satırı eksikse ya da motor yoksa null. */
-function frgd_pkl_pdf(array $s): ?string
+function frgd_pkl_pdf(array $s, ?PDO $pdo = null): ?string
 {
     if (frgp_uretime_hazir($s)) return null;
-    $p = frgp_pdf(frgp_belge_verisi($s));
+    $p = frgp_pdf(frgp_belge_verisi($s, '', $pdo !== null ? frgp_ek_oku($pdo, (int)($s['id'] ?? 0)) : null));
     return ($p !== null && strncmp($p, '%PDF', 4) === 0) ? $p : null;
 }
 
