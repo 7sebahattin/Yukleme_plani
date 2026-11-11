@@ -80,9 +80,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $girdi = [];
         foreach ($AYAR_ALANLARI as $k) if (array_key_exists($k, $_POST)) $girdi[$k] = $_POST[$k];
         $r = frgi_ayar_kaydet($pdo, $girdi, $uid);
-        set_flash(!empty($r['ok']) ? 'success' : 'error', !empty($r['ok'])
-            ? (empty($r['degisen']) ? 'Fatura ayarında değişiklik yok.' : 'Fatura ayarı kaydedildi (' . count((array)$r['degisen']) . ' alan).')
-            : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
+        $kaydedilen = count((array)($r['degisen'] ?? []));
+        $hatalarA = (array)($r['hatalar'] ?? []);
+        if ($hatalarA) {                                      // hatalı alanların GİRİLEN değeri formda kalsın (geçerli alanlar kaydedildi)
+            $_SESSION['frugro_invoice_ayar_form'] = ['deger' => array_map(static fn($v) => mb_substr((string)(is_scalar($v) ? $v : ''), 0, 250, 'UTF-8'), $girdi), 'hata' => $hatalarA];
+            set_flash('error', ($kaydedilen > 0 ? $kaydedilen . ' alan kaydedildi. ' : '') . 'Düzeltilmesi gereken: ' . implode(' ', array_values($hatalarA)));
+        } else {
+            unset($_SESSION['frugro_invoice_ayar_form']);
+            set_flash(!empty($r['ok']) ? 'success' : 'error', !empty($r['ok'])
+                ? ($kaydedilen === 0 ? 'Fatura ayarında değişiklik yok.' : 'Fatura ayarı kaydedildi (' . $kaydedilen . ' alan). Bir daha girmeniz gerekmez.')
+                : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
+        }
         $git('#ayar');
     }
     require_siparis('write');
@@ -90,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gonderilen = [];
     foreach ($GIRDI_ALANLARI as $k) $gonderilen[$k] = mb_substr(trim((string)($_POST[$k] ?? '')), 0, 120, 'UTF-8');
     $izin = ($_POST['eksik_izin'] ?? '') === '1';
+    frgi_taslak_yaz($pdo, $id, $gonderilen);                 // KALICI taslak: hatalı gönderimde / yenilemede hiçbir alan kaybolmaz
     $formSakla = function (array $deger, array $hata = []) use ($id, $izin): void {
         $_SESSION['frugro_invoice_form'] = [$id => ['deger' => $deger, 'hata' => $hata, 'izin' => $izin]];
     };
@@ -125,6 +134,8 @@ $kayitli = frgi_girdi_oku($pdo, $id);
 $form   = $_SESSION['frugro_invoice_form'][$id] ?? null;      // başarısız gönderim / kontrol: tek kullanımlık
 unset($_SESSION['frugro_invoice_form']);
 $deger  = (array)$vs['girdi'];
+foreach (frgi_taslak_oku($pdo, $id) as $k => $v) if (in_array($k, $GIRDI_ALANLARI, true)) $deger[$k] = $v;   // son girilen (kalıcı taslak)
+if (preg_match('/^\d+\.\d{1,4}$/', (string)($deger['fiyat'] ?? ''))) $deger['fiyat'] = str_replace('.', ',', (string)$deger['fiyat']);   // ekranda virgül
 if (is_array($form)) foreach ($GIRDI_ALANLARI as $k) if (array_key_exists($k, (array)$form['deger'])) $deger[$k] = (string)$form['deger'][$k];
 $deger['tarih'] = (string)(siparis_tarih_coz($deger['tarih']) ?? $deger['tarih']);
 $hataMap = is_array($form) ? (array)($form['hata'] ?? []) : [];
@@ -146,6 +157,10 @@ $var  = !empty($kayitli['uretildi_at']) && is_array($kayitli['snap'] ?? null);
 $para = static fn(int $kurus): string => number_format($kurus / 100, 2, ',', '.');
 $kgG  = static fn(int|float $x): string => $x > 0 ? number_format((float)$x, 0, ',', '.') : '—';
 $ayarHam = $ayarYk ? frgi_ayar_ham($pdo) : [];
+$ayarForm = $_SESSION['frugro_invoice_ayar_form'] ?? null; unset($_SESSION['frugro_invoice_ayar_form']);
+$ayarHata = is_array($ayarForm) ? (array)($ayarForm['hata'] ?? []) : [];
+if ($ayarYk && is_array($ayarForm)) foreach ($ayarHata as $k => $_m) if (isset($ayarForm['deger'][$k])) $ayarHam[$k] = (string)$ayarForm['deger'][$k];
+$ayarDolu = count(array_filter($ayarYk ? frgi_ayar_ham($pdo) : [], static fn($v) => $v !== ''));
 
 render_header('Frugro Invoice ' . (string)$s['po_no']);
 siparis_assets();
@@ -155,7 +170,7 @@ render_flash();
 <div class="sip-mod frgi-sayfa">
   <div class="page-head">
     <div>
-      <a class="btn btn-geri" href="index.php">← Ana sayfa</a>
+      <a class="btn btn-geri" href="frugro_view.php?id=<?= $id ?>">← Sipariş</a>
       <h1 class="sip-h1">Frugro Invoice <span class="sip-pkl-durum frgi-durum--<?= $var ? 'hazir' : 'yok' ?>"><?= $var ? 'Hazır' : 'Yok' ?></span></h1>
       <p class="muted sip-alt-satir">PO <?= h((string)$s['po_no']) ?> · <?= h((string)($s['son_musteri'] ?? '') !== '' ? (string)$s['son_musteri'] : 'Müşteri belirtilmemiş') ?> · <?= h(frg_durumlar()[(string)$s['durum']] ?? (string)$s['durum']) ?></p>
     </div>
@@ -278,21 +293,23 @@ render_flash();
   </form>
 
   <?php if ($ayarYk): ?>
-  <section class="card" id="ayar" aria-labelledby="frgiAyarBas">
-    <div class="card-head"><h2 id="frgiAyarBas">Fatura ayarları</h2></div>
-    <p class="muted">Banka, IBAN ve VAT bilgileri faturaya basılır. Boş bırakılan alan, varsa OGL invoice ayarından (banka adı / adres / şube / SWIFT / IBAN-EUR) alınır. Değerler günlüğe ve bildirimlere yazılmaz.</p>
+  <details class="card frgi-ayar" id="ayar"<?= ($ayarHata || $ayarEksik) ? ' open' : '' ?>>
+    <summary class="frgi-ayar-ozet"><strong>⚙ Banka / fatura ayarları</strong>
+      <span class="muted"><?= $ayarEksik ? 'Eksik: ' . h(implode(', ', $ayarEksik)) : '✓ Kayıtlı — tüm Frugro faturalarında kullanılır, yeniden girmeniz gerekmez' ?></span></summary>
+    <p class="muted">Bir kez girilir, TÜM Frugro faturalarına basılır. Boş bırakılan alan, varsa OGL invoice ayarından (banka adı / adres / şube / SWIFT / IBAN-EUR) alınır. Hatalı alan olursa diğerleri yine kaydedilir.</p>
     <form method="post" action="<?= h($buSayfa) ?>#ayar" class="frgi-ayar-form">
       <?= sipui_csrf() ?><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="islem" value="ayar">
       <div class="sip-izgara">
         <?php foreach (frgi_ayar_alanlari() as $k => [$et, $n]): ?>
           <label><?= h($et) ?>
-            <input type="text" name="<?= h($k) ?>" value="<?= h((string)($ayarHam[$k] ?? '')) ?>" maxlength="<?= (int)$n + 8 ?>" autocomplete="off"<?= in_array($k, ['iban_gbp', 'iban_eur', 'swift'], true) ? ' autocapitalize="characters" spellcheck="false"' : '' ?>>
+            <input type="text" name="<?= h($k) ?>" value="<?= h((string)($ayarHam[$k] ?? '')) ?>" maxlength="<?= (int)$n + 8 ?>" autocomplete="off"<?= isset($ayarHata[$k]) ? ' aria-invalid="true" class="frgi-hatali"' : '' ?><?= in_array($k, ['iban_gbp', 'iban_eur', 'swift'], true) ? ' autocapitalize="characters" spellcheck="false"' : '' ?>>
+            <?php if (isset($ayarHata[$k])): ?><small class="frgi-alan-hata" role="alert"><?= h((string)$ayarHata[$k]) ?></small><?php endif; ?>
           </label>
         <?php endforeach; ?>
       </div>
       <div class="sip-pkl-eylem"><button type="submit" class="btn btn-primary">Ayarları kaydet</button></div>
     </form>
-  </section>
+  </details>
   <?php endif; ?>
 </div>
 <script src="assets/frugro_invoice.js?v=<?= (int)@filemtime(__DIR__ . '/assets/frugro_invoice.js') ?>" defer></script>

@@ -36,7 +36,7 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             page.on('pageerror', error => errors.push(error.message));
             await page.goto(fixtures.admin);
             await page.locator('.home-card[href="hizli_maliyet.php"] img').waitFor({ state: 'attached' });
-            check(await page.locator('.home-card').count() === 69, name + ' all sixty-nine admin destinations are cards');
+            check(await page.locator('.home-card').count() === 70, name + ' all seventy admin destinations are cards');
             check(await page.evaluate(() => {
                 const cards = new Set(Array.from(document.querySelectorAll('.home-card')).map(a => a.getAttribute('href')));
                 return Array.from(document.querySelectorAll('.sidebar-nav .sidebar-link')).every(a => a.getAttribute('href') === 'index.php' || cards.has(a.getAttribute('href')));

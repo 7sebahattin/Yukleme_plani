@@ -33,6 +33,29 @@ if ($s === null) { http_response_code(404); render_header('Frugro PKL'); echo '<
 if (!frg_gorunur($s)) forbidden('Bu sipariş aktif depoda görünmüyor.');
 $self = 'frugro_pkl.php?id=' . $id;
 
+// GET ?indir=pdf|xlsx[&goster=1] — detay sayfasının Belgeler/PKL kartı indirmesi: kayıtlı veriden TAZE üretim, YAN ETKİSİZ
+// (olay/durum/audit yazmaz; "pkl_uretildi" olayı ve durum terfisi yalnız aşağıdaki POST üretimde). Diske yazılmaz.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && isset($_GET['indir'])) {
+    $bic = (string)$_GET['indir'] === 'xlsx' ? 'xlsx' : 'pdf';
+    $eks = frgp_uretime_hazir($s);
+    $veri = $eks ? null : ($bic === 'pdf' ? frgp_pdf(frgp_belge_verisi($s)) : frgp_xlsx(frgp_belge_verisi($s)));
+    if ($veri === null || $veri === '') {
+        set_flash('error', $eks ? implode(' ', $eks) : 'Dosya üretilemedi (PDF/Excel motoru yok).');
+        header('Location: frugro_view.php?id=' . $id . '#pkl');
+        exit;
+    }
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    session_write_close();
+    $ascii = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', frgp_dosya_adi($s, $bic)), '_');
+    header('Content-Type: ' . ($bic === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+    header('Content-Disposition: ' . ($bic === 'pdf' && isset($_GET['goster']) ? 'inline' : 'attachment') . '; filename="' . $ascii . '"');
+    header('Content-Length: ' . strlen($veri));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    echo $veri;
+    exit;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     require_siparis('write');
     csrf_check($_POST['csrf'] ?? null);
@@ -105,7 +128,7 @@ render_flash();
   <div class="page-head">
     <div><h1>📦 Packing List · <?= h($s['po_no']) ?></h1>
       <p class="muted"><?= h((string)($s['son_musteri'] ?? '')) ?> · <?= h(frgp_urun_ad($s['urun'] ?? null)) ?> · çıkış <?= h(frgp_tarih_goster($s['cikis_tarihi'] ?? null) ?: '—') ?> · durum <strong><?= h($durumAd) ?></strong></p></div>
-    <div class="page-head-actions"><a class="btn btn-lg" href="siparisler.php">← Siparişler</a></div>
+    <div class="page-head-actions"><a class="btn btn-lg" href="frugro_view.php?id=<?= $id ?>">← Sipariş</a></div>
   </div>
   <?php if (!$yazar): ?><p class="sip-bilgi" role="note">Salt okunur — düzenleme için sipariş yazma yetkisi gerekir.</p>
   <?php elseif (!frgp_duzenlenebilir($s)): ?><p class="sip-bilgi" role="note">Bu durumda (<?= h($durumAd) ?>) PKL kilitli: net/brüt tüm evraklarda aynı kalmalı. Dosyayı yine üretebilirsiniz.</p><?php endif; ?>

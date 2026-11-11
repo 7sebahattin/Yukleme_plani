@@ -1,6 +1,6 @@
-/* frugro.js — Frugro Siparişler (frugro_siparis.php liste + frugro_view.php detay).
+/* frugro.js — Frugro Siparişler LİSTESİ (frugro_siparis.php).
  * Liste: satıra tıkla → detay, Order Log xlsx yükleme (frugro_yukle.php) + sonuç özeti.
- * Detay: Düzenle penceresi (native <dialog>), durum (kapat / iptal / yeniden aç), iki adımlı silme (frugro_kaydet.php).
+ * Detay bu dosyayı KULLANMAZ (assets/siparis.js + assets/frugro_detay.js).
  * Satır içi onclick YOK; tüm metin textContent ile basılır (XSS yok). Sunucu tek otoritedir; buradaki doğrulama yalnız kolaylık. */
 (function () {
   'use strict';
@@ -75,73 +75,6 @@
     });
   }
 
-  /* ---- detay ---- */
-  var ID = parseInt(kok.getAttribute('data-id') || '0', 10);
-  if (!ID) return;
-  var genelHata = $('frgHata');
-  function gonder(yuk) {
-    yuk.csrf = CSRF; yuk.id = ID;
-    return fetch('frugro_kaydet.php', { method: 'POST', body: JSON.stringify(yuk), credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } })
-      .then(function (r) { return r.json().catch(function () { return { ok: false, hata: 'Sunucu yanıtı okunamadı.' }; }); })
-      .catch(function () { return { ok: false, hata: 'Bağlantı hatası.' }; });
-  }
-  function hata(kutu, m) { kutu.textContent = m; kutu.hidden = false; }
-
-  Array.prototype.forEach.call(document.querySelectorAll('[data-frg-kapat]'), function (b) {
-    b.addEventListener('click', function () { var d = b.closest('dialog'); if (d) d.close(); });
-  });
-
-  var dlg = $('frgDialog'), duzenleAc = $('frgDuzenleAc'), form = $('frgForm');
-  if (duzenleAc && dlg && form) {
-    duzenleAc.addEventListener('click', function () { $('frgFormHata').hidden = true; dlg.showModal(); });
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var alanlar = {};
-      Array.prototype.forEach.call(form.elements, function (f) { if (f.name) alanlar[f.name] = f.value; });
-      var k = $('frgKaydet'); k.disabled = true;
-      gonder({ islem: 'duzenle', alanlar: alanlar }).then(function (j) {
-        k.disabled = false;
-        if (j && j.ok) { window.location.reload(); return; }
-        hata($('frgFormHata'), (j && (j.hata || j.error)) || 'Kaydedilemedi.');
-      });
-    });
-  }
-
-  function durumGonder(hedef, gerekce, kutu) {
-    return gonder({ islem: 'durum', durum: hedef, gerekce: gerekce || '' }).then(function (j) {
-      if (j && j.ok) { window.location.reload(); return; }
-      hata(kutu || genelHata, (j && (j.hata || j.error)) || 'İşlem başarısız.');
-    });
-  }
-  Array.prototype.forEach.call(document.querySelectorAll('[data-frg-durum]'), function (b) {
-    b.addEventListener('click', function () {
-      var hedef = b.getAttribute('data-frg-durum');
-      if (hedef === 'kapali' && !window.confirm('Sipariş kapatılsın mı?')) return;
-      durumGonder(hedef, '', genelHata);
-    });
-  });
-
-  var ipDlg = $('frgIptalDialog'), ipAc = $('frgIptalAc'), ipForm = $('frgIptalForm');
-  if (ipDlg && ipAc && ipForm) {
-    ipAc.addEventListener('click', function () { $('frgIptalHata').hidden = true; $('frgGerekce').value = ''; ipDlg.showModal(); });
-    ipForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var g = $('frgGerekce').value.trim();
-      if (g.length < 3) { hata($('frgIptalHata'), 'İptal için gerekçe zorunlu.'); return; }
-      durumGonder('iptal', g, $('frgIptalHata'));
-    });
-  }
-
-  var silIlk = $('frgSilIlk'), silOnay = $('frgSilOnay');
-  if (silIlk && silOnay) {
-    silIlk.addEventListener('click', function () { silIlk.hidden = true; silOnay.hidden = false; });
-    $('frgSilHayir').addEventListener('click', function () { silOnay.hidden = true; silIlk.hidden = false; });
-    $('frgSilEvet').addEventListener('click', function () {
-      gonder({ islem: 'sil', onay: true }).then(function (j) {
-        if (j && j.ok) { window.location.href = 'frugro_siparis.php'; return; }
-        hata(genelHata, (j && (j.hata || j.error)) || 'Silinemedi.');
-        silOnay.hidden = true; silIlk.hidden = false;
-      });
-    });
-  }
+  /* Detay (frugro_view.php) artık OGL sevkiyat sayfasının eşi: pencereler / ✎ / durum formları assets/siparis.js
+     (data-sip-*) + assets/frugro_detay.js ile çalışır; bu dosya yalnız LİSTE içindir. */
 })();

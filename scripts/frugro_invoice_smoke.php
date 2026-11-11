@@ -297,7 +297,11 @@ ok('POST kontrol → 302 PRG (#kontrol)', $r['git'] !== null && str_contains($r[
 $r = sayfa(['id' => $S]);
 ok('kontrol sonrası GET: oturumdaki form değerleri + "PKL ile farklı" uyarısı', str_contains($r['html'], 'PKL ile farklı') && str_contains($r['html'], 'value="18000"'));
 $r = sayfa(['id' => $S]);
-ok('form tek kullanımlık (ikinci GET kayıtlı değerlere döner)', !str_contains($r['html'], 'value="18000"'));
+ok('v514: girilen değerler KALICI taslak (ikinci GET / yenilemede de durur)', str_contains($r['html'], 'value="18000"'));
+$r = sayfa(['id' => $S], ['csrf' => $c, 'id' => $S, 'islem' => 'kaydet', 'no' => 'IHR2026000000123', 'tarih' => 'bozuk-tarih', 'para_birimi' => 'GBP', 'fiyat' => '7,25', 'plaka' => '34TST1']);
+$r = sayfa(['id' => $S]); $r2 = sayfa(['id' => $S]);
+ok('v514: tek hatalı alan (tarih) → diğer girilenler SİLİNMEZ (fiyat/no/plaka formda, yenilemede de)', str_contains($r2['html'], 'value="7,25"') && str_contains($r2['html'], 'value="IHR2026000000123"') && str_contains($r2['html'], 'value="34TST1"'));
+frgi_taslak_yaz($db, $S, []);
 // üret
 $r = sayfa(['id' => $S], ['csrf' => $c, 'id' => $S, 'islem' => 'uret'] + $form);
 ok('POST uret → PRG #uretim + başarı flash (IBAN/VAT/banka içermez)', $r['git'] !== null && str_contains($r['git'], '#uretim') && ($r['flash']['type'] ?? '') === 'success' && !str_contains(flash_metin($r['flash']), T_IBAN_GBP) && !str_contains(flash_metin($r['flash']), T_BANKA), flash_metin($r['flash']));
@@ -335,12 +339,21 @@ ok('deposu BOŞ sipariş her depoda görünür', sayfa(['id' => $d2])['kod'] ===
 $r = sayfa(['id' => 99999]);
 ok('olmayan sipariş 404', $r['kod'] === 404);
 // ayar (yalnız siparis.delete)
+// v514: alan bazında kayıt — hatalı alan diğerlerini SİLMEZ; 10 karakterli SWIFT kabul
+$__e = frgi_ayar_ham($db);
+$__k = frgi_ayar_kaydet($db, ['banka_ad' => 'YENI BANKA', 'swift' => 'TESTTRISXX', 'iban_gbp' => 'XX'], 7);
+ok('v514: ayar — geçerli alanlar kaydedilir, hatalı IBAN eski değerinde kalır, hata alan bazında', !$__k['ok'] && isset($__k['hatalar']['iban_gbp']) && !isset($__k['hatalar']['swift']) && frgi_ayar_ham($db)['banka_ad'] === 'YENI BANKA' && frgi_ayar_ham($db)['swift'] === 'TESTTRISXX' && frgi_ayar_ham($db)['iban_gbp'] === $__e['iban_gbp']);
+rol($ADMIN, true);
+$r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'sube' => 'YENI SUBE', 'iban_eur' => 'BOZUK']);
+$r = sayfa(['id' => $S]);
+ok('v514: ayar sayfası — hatalı alan girilen değeriyle ve mesajıyla geri gelir, diğer alan kaydedilmiş', str_contains($r['html'], 'value="BOZUK"') && str_contains($r['html'], 'frgi-alan-hata') && frgi_ayar_ham($db)['sube'] === 'YENI SUBE' && str_contains($r['html'], 'value="YENI SUBE"'));
+frgi_ayar_kaydet($db, ['banka_ad' => $__e['banka_ad'], 'swift' => $__e['swift'], 'sube' => $__e['sube']], 7);
 rol($OPER, false);
 $r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => 'GB82WEST12345698765432']);
 ok('operatör POST ayar → 403', $r['hata'] !== null && str_contains($r['hata'], 'forbidden') && frgi_ayar_ham($db)['iban_gbp'] === T_IBAN_GBP);
 rol($ADMIN, true);
 $r = sayfa(['id' => $S]);
-ok('admin: "Fatura ayarları" bölümü + kayıtlı değerler formda', str_contains($r['html'], 'frgiAyarBas') && str_contains($r['html'], T_IBAN_GBP) && str_contains($r['html'], 'name="islem" value="ayar"'));
+ok('admin: "Fatura ayarları" bölümü + kayıtlı değerler formda', str_contains($r['html'], 'frgi-ayar-ozet') && str_contains($r['html'], T_IBAN_GBP) && str_contains($r['html'], 'name="islem" value="ayar"'));
 $yeniIban = 'GB82WEST12345698765432';
 $r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => $yeniIban]);
 $au = audit_hepsi($db);

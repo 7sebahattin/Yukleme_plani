@@ -63,11 +63,14 @@
     var kol = v.kolonlar || [];
     var top = v.toplam || {};
     var dolu = function (x) { return x != null && x !== ''; };
+    // v.birim (opsiyonel; {adet:'sipariş', kasa:'kutu'}): meta etiketleri; yoksa eski metin ('sevkiyat' / 'kasa') — geriye uyumlu.
+    var birim = v.birim || {};
+    var bAdet = birim.adet || 'sevkiyat', bKasa = birim.kasa || 'kasa';
     var meta = 'Basım: <b>' + esc(v.basim) + '</b>';
     if (v.depo) meta += ' &nbsp;|&nbsp; Depo: <b>' + esc(v.depo) + '</b>';
-    meta += ' &nbsp;|&nbsp; <b>' + esc(v.adet) + '</b> sevkiyat';
+    meta += ' &nbsp;|&nbsp; <b>' + esc(v.adet) + '</b> ' + esc(bAdet);
     if (dolu(top.palet)) meta += ' &nbsp;|&nbsp; <b>' + esc(top.palet) + '</b> palet';
-    if (dolu(top.kasa)) meta += ' &nbsp;|&nbsp; <b>' + esc(top.kasa) + '</b> kasa';
+    if (dolu(top.kasa)) meta += ' &nbsp;|&nbsp; <b>' + esc(top.kasa) + '</b> ' + esc(bKasa);
     // "Geçmiş" yalnız açık iş listesinde anlamlı (kapanan/evrak bölümünde hepsi geçmiştir).
     if (!v.kapsam || v.kapsam === 'acik' || v.kapsam === 'tek') meta += ' &nbsp;|&nbsp; Geçmiş: <b>' + esc(v.gecmis_say) + '</b>';
     if (v.filtre) meta += ' &nbsp;|&nbsp; Filtre: <b>' + esc(v.filtre) + '</b>';
@@ -266,7 +269,7 @@
       var ad = dosyaAdiOlustur(v);
       var blob = await pdfUret(v);
       var dosya = new File([blob], ad + '.pdf', { type: 'application/pdf' });
-      var metin = v.baslik + ' · ' + v.adet + ' sevkiyat\n' + v.basim;
+      var metin = v.baslik + ' · ' + v.adet + ' ' + ((v.birim && v.birim.adet) || 'sevkiyat') + '\n' + v.basim;
       if (mobil && navigator.canShare && navigator.canShare({ files: [dosya] })) {
         try {
           await paylas({ dosya: dosya, ad: ad, metin: metin });

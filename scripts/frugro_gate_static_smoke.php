@@ -25,6 +25,12 @@ $sayfalar = array_map('basename', glob($ROOT . '/frugro*.php') ?: []);
 sort($sayfalar);
 foreach (['frugro_siparis.php', 'frugro_view.php', 'frugro_yukle.php', 'frugro_kaydet.php'] as $b) ok("$b mevcut", in_array($b, $sayfalar, true));
 $MUT = ['frugro_yukle.php', 'frugro_kaydet.php'];
+// v515: salt okunur GET uçları — mevcut, read kapılı, depo kapılı (tekil) ve TEK alt çizgili ad (sw bypass)
+foreach (['frugro_yazdir.php', 'frugro_paylas.php', 'frugro_eml.php', 'frugro_zip.php'] as $b) {
+    ok("$b mevcut + read kapısı + no-store", in_array($b, $sayfalar, true) && (str_contains(kod_oku($b), "require_siparis('read')") || str_contains(kod_oku($b), "frgui_yetki('read')")) && (bool)preg_match('/no_store|no-store/', kod_oku($b)));
+    ok("$b adı sw bypass regex'ine uyar", (bool)preg_match('/^frugro(_[a-z]+)?\\.php$/', $b));
+}
+foreach (['frugro_paylas.php', 'frugro_eml.php', 'frugro_zip.php'] as $b) ok("$b tekil kayıt depo kapısı", (bool)preg_match('/frg_gorunur\\(|frgw_oku\\(|frgd_/', kod_oku($b)));
 foreach ($sayfalar as $f) {
     $k = kod_oku($f);
     ok("$f: ad TEK alt çizgili (sw bypass regex'i kapsar)", (bool)preg_match('/^frugro(_[a-z]+)?\.php$/', $f));
@@ -50,6 +56,25 @@ ok('liste/detay/uç migrate çağırmıyor (şema yalnız migrate.php)', !str_co
 ok("yeni yetki YOK: frugro_ui yalnız can_siparis + role_matrix_page_can", str_contains(oku('config/frugro_ui.php'), 'can_siparis(') && preg_match("/\bcan\('/", kod_oku('config/frugro_ui.php')) === 0);
 $ui = oku('frugro_siparis.php') . oku('frugro_view.php') . oku('_frugro_liste.php');
 ok('arayüzde satır içi onclick/onsubmit YOK', preg_match('/\son(click|submit|change)=/i', $ui) === 0);
+
+echo "\n=== Durum akışı değişmezleri (v515) ===\n";
+$tumKok = array_merge($sayfalar, array_map(static fn($f) => 'config/' . basename($f), glob($ROOT . '/config/frugro*.php') ?: []));
+$sabit = []; $durumYaz = [];
+foreach ($tumKok as $f) {
+    $k = kod_oku($f);
+    if (preg_match("/'kapali'\s*,\s*'iptal'|'iptal'\s*,\s*'kapali'|'evrak_gonderildi'\s*,\s*'iptal'/", $k)) $sabit[] = $f;
+    if (preg_match('/UPDATE\s+frugro_siparisler\s+SET\s+durum\b/i', $k)) $durumYaz[] = $f;
+}
+ok("kapalı listesi SABİT yazılmaz: yalnız frg_kapali_durumlar() (config/frugro_core.php)", $sabit === ['config/frugro_core.php'], implode(',', $sabit));
+ok('"UPDATE frugro_siparisler SET durum" yalnız frg_durum_degistir içinde (config/frugro_core.php, tek yer)', $durumYaz === ['config/frugro_core.php'] && substr_count(kod_oku('config/frugro_core.php'), 'SET durum') === 1, implode(',', $durumYaz));
+ok('durum yazımı frg_durum_degistir içinde: koşullu (AND durum = ?) + olay + audit', (bool)preg_match('/function frg_durum_degistir\(.*?SET durum = \?, updated_at = \?[^;]*AND durum = \?.*?frg_durum_olay_yaz\(.*?audit_log_event\(\'frugro_durum\'/s', kod_oku('config/frugro_core.php')));
+ok('frugro_kaydet durum dalı frg_durum_degistir çağırır (kendi UPDATE\'i yok)', str_contains(kod_oku('frugro_kaydet.php'), 'frg_durum_degistir(') && !preg_match('/UPDATE\s+frugro_siparisler\s+SET\s+durum/i', kod_oku('frugro_kaydet.php')));
+ok('PKL/Invoice üretimi terfiyi frg_durum_degistir(…, \'otomatik\') ile yapar', str_contains(kod_oku('config/frugro_pkl.php'), "'otomatik'") && str_contains(kod_oku('config/frugro_invoice.php'), "'otomatik'"));
+ok('frgi_yazilabilir kapalı listesini fonksiyondan okur', str_contains(kod_oku('config/frugro_invoice.php'), 'frg_kapali_durumlar()'));
+$migCagri = [];
+foreach (array_merge(glob($ROOT . '/*.php') ?: [], glob($ROOT . '/config/*.php') ?: []) as $f) { if (basename($f) !== 'frugro_core.php' && preg_match('/\bfrg_migrate\s*\(/', (string)file_get_contents($f))) $migCagri[] = basename($f); }
+ok('frg_migrate() çağrısı yalnız migrate.php\'de', $migCagri === ['migrate.php'], implode(',', $migCagri));
+ok('ortak JS kancaları geriye uyumlu: siparis.js ns varsayılanı "sip", siparis_wp.js varsayılan siparis_paylas.php, yazdır birim varsayılanı', str_contains(oku('assets/siparis.js'), "(ns || 'sip')") && str_contains(oku('assets/siparis_wp.js'), "'siparis_paylas.php?id='") && str_contains(oku('assets/siparis_yazdir.js'), "birim.adet || 'sevkiyat'"));
 
 echo "\n=== sw.js ===\n";
 preg_match_all('#if \((/\\\\/frugro[^\n]*?)\.test\(u\.pathname\)\) return;#', $sw, $m);
