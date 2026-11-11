@@ -3,8 +3,8 @@
 // frugro_invoice.php?id= — Frugro INVOICE hazırlama (sipariş id)
 //
 // GET: fatura bilgileri formu + PKL'den salt okunur özet + kontrol listesi + üretilmiş PDF'in indirme/önizlemesi (?pdf=1[&dl=1]).
-//      Alt bölüm "Fatura ayarları" (banka / IBAN / VAT) YALNIZ siparis.delete görür. Okuma: siparis.read.
-// POST (siparis.write, CSRF, PRG): kaydet · kontrol · uret · ayar (siparis.delete). Mantık config/frugro_invoice.php (frgi_*).
+//      Banka / IBAN / VAT ayarı artık frugro_ayarlar.php#fatura'da (siparis.delete); burada yalnız "ayar tamam / eksik" satırı. Okuma: siparis.read.
+// POST (siparis.write, CSRF, PRG): kaydet · kontrol · uret. Eski islem=ayar → frugro_ayarlar.php#fatura'ya yönlendirilir (yazmaz). Mantık config/frugro_invoice.php (frgi_*).
 // PDF diske KAYDEDİLMEZ: ?pdf=1 her istekte kayıtlı girdiden taze üretir. Bu dosya FONKSİYON TANIMLAMAZ.
 // Ad TEK alt çizgili: sw.js bypass regex'i kapsar (/frugro_*.php önbelleğe girmez). Satır içi onclick YOK: data-frgi-*.
 // =========================================================
@@ -40,11 +40,10 @@ if ($s === null || !frg_gorunur($s)) {                       // başka depodaki 
     exit;
 }
 $yaz    = can_siparis('write') && frgi_yazilabilir($s);
-$ayarYk = can_siparis('delete');                            // Fatura ayarları: yalnız siparis.delete
+$ayarYk = can_siparis('delete');                            // Ayar linki: yalnız siparis.delete (ayar sayfası kendi kapısında)
 $buSayfa = 'frugro_invoice.php?id=' . $id;
 $git = function (string $parca = '') use ($buSayfa): void { header('Location: ' . $buSayfa . $parca); exit; };
 $GIRDI_ALANLARI = ['no', 'tarih', 'para_birimi', 'fiyat', 'kutu', 'palet', 'net_kg', 'brut_kg', 'incoterm', 'plaka', 'aciklama', 'agirlik_onay'];
-$AYAR_ALANLARI = array_keys(frgi_ayar_alanlari());
 
 // ── PDF (GET ?pdf=1): kayıtlı girdiden taze üretim ──────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['pdf'])) {
@@ -75,23 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['pdf'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $islem = (string)($_POST['islem'] ?? '');
-    if ($islem === 'ayar') {
-        if (!$ayarYk) forbidden('Fatura ayarlarını yalnız silme yetkisi olan kullanıcı değiştirebilir.');
-        $girdi = [];
-        foreach ($AYAR_ALANLARI as $k) if (array_key_exists($k, $_POST)) $girdi[$k] = $_POST[$k];
-        $r = frgi_ayar_kaydet($pdo, $girdi, $uid);
-        $kaydedilen = count((array)($r['degisen'] ?? []));
-        $hatalarA = (array)($r['hatalar'] ?? []);
-        if ($hatalarA) {                                      // hatalı alanların GİRİLEN değeri formda kalsın (geçerli alanlar kaydedildi)
-            $_SESSION['frugro_invoice_ayar_form'] = ['deger' => array_map(static fn($v) => mb_substr((string)(is_scalar($v) ? $v : ''), 0, 250, 'UTF-8'), $girdi), 'hata' => $hatalarA];
-            set_flash('error', ($kaydedilen > 0 ? $kaydedilen . ' alan kaydedildi. ' : '') . 'Düzeltilmesi gereken: ' . implode(' ', array_values($hatalarA)));
-        } else {
-            unset($_SESSION['frugro_invoice_ayar_form']);
-            set_flash(!empty($r['ok']) ? 'success' : 'error', !empty($r['ok'])
-                ? ($kaydedilen === 0 ? 'Fatura ayarında değişiklik yok.' : 'Fatura ayarı kaydedildi (' . $kaydedilen . ' alan). Bir daha girmeniz gerekmez.')
-                : (string)($r['hata'] ?? 'Ayar kaydedilemedi.'));
-        }
-        $git('#ayar');
+    if ($islem === 'ayar') {                                  // eski form/bağlantı: ayar artık frugro_ayarlar.php#fatura'da; burada YAZILMAZ
+        header('Location: frugro_ayarlar.php#fatura');
+        exit;
     }
     require_siparis('write');
     if (!frgi_yazilabilir($s)) forbidden('Bu siparişin durumu fatura işlemine kapalı.');
@@ -156,11 +141,6 @@ $ayarEksik = frgi_ayar_eksikler($ayar, $pbSec !== '' ? $pbSec : 'GBP');
 $var  = !empty($kayitli['uretildi_at']) && is_array($kayitli['snap'] ?? null);
 $para = static fn(int $kurus): string => number_format($kurus / 100, 2, ',', '.');
 $kgG  = static fn(int|float $x): string => $x > 0 ? number_format((float)$x, 0, ',', '.') : '—';
-$ayarHam = $ayarYk ? frgi_ayar_ham($pdo) : [];
-$ayarForm = $_SESSION['frugro_invoice_ayar_form'] ?? null; unset($_SESSION['frugro_invoice_ayar_form']);
-$ayarHata = is_array($ayarForm) ? (array)($ayarForm['hata'] ?? []) : [];
-if ($ayarYk && is_array($ayarForm)) foreach ($ayarHata as $k => $_m) if (isset($ayarForm['deger'][$k])) $ayarHam[$k] = (string)$ayarForm['deger'][$k];
-$ayarDolu = count(array_filter($ayarYk ? frgi_ayar_ham($pdo) : [], static fn($v) => $v !== ''));
 
 render_header('Frugro Invoice ' . (string)$s['po_no']);
 siparis_assets();
@@ -254,7 +234,7 @@ render_flash();
       <section class="card" id="uretim" aria-labelledby="frgiUretBas">
         <div class="card-head"><h2 id="frgiUretBas">3. Fatura PDF</h2></div>
         <p class="sip-inv-mensei">🛈 Menşe notu ("<?= h(FRGI_MENSE_NOTU) ?>") her faturaya otomatik eklenir ve kaldırılamaz.</p>
-        <?php if ($ayarEksik): ?><div class="sip-ok-uyari">Fatura ayarında eksik: <?= h(implode(', ', $ayarEksik)) ?>.<?= $ayarYk ? ' <a class="sip-link" href="#ayar">Fatura ayarları</a>' : ' Yönetici Fatura ayarlarını tamamlamalı.' ?></div><?php endif; ?>
+        <?php if ($ayarEksik): ?><div class="sip-ok-uyari">Fatura ayarında eksik: <?= h(implode(', ', $ayarEksik)) ?>.<?= $ayarYk ? ' <a class="sip-link" href="frugro_ayarlar.php#fatura">Fatura ayarları</a>' : ' Yönetici Fatura ayarlarını tamamlamalı.' ?></div><?php endif; ?>
         <?php if ($var): ?>
           <dl class="sip-dl sip-dl--kisa">
             <div class="sip-dl-satir"><dt>Fatura no</dt><dd><?= h((string)($kayitli['snap']['no'] ?? '')) ?></dd></div>
@@ -292,24 +272,10 @@ render_flash();
     </fieldset>
   </form>
 
-  <?php if ($ayarYk): ?>
-  <details class="card frgi-ayar" id="ayar"<?= ($ayarHata || $ayarEksik) ? ' open' : '' ?>>
-    <summary class="frgi-ayar-ozet"><strong>⚙ Banka / fatura ayarları</strong>
-      <span class="muted"><?= $ayarEksik ? 'Eksik: ' . h(implode(', ', $ayarEksik)) : '✓ Kayıtlı — tüm Frugro faturalarında kullanılır, yeniden girmeniz gerekmez' ?></span></summary>
-    <p class="muted">Bir kez girilir, TÜM Frugro faturalarına basılır. Boş bırakılan alan, varsa OGL invoice ayarından (banka adı / adres / şube / SWIFT / IBAN-EUR) alınır. Hatalı alan olursa diğerleri yine kaydedilir.</p>
-    <form method="post" action="<?= h($buSayfa) ?>#ayar" class="frgi-ayar-form">
-      <?= sipui_csrf() ?><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="islem" value="ayar">
-      <div class="sip-izgara">
-        <?php foreach (frgi_ayar_alanlari() as $k => [$et, $n]): ?>
-          <label><?= h($et) ?>
-            <input type="text" name="<?= h($k) ?>" value="<?= h((string)($ayarHam[$k] ?? '')) ?>" maxlength="<?= (int)$n + 8 ?>" autocomplete="off"<?= isset($ayarHata[$k]) ? ' aria-invalid="true" class="frgi-hatali"' : '' ?><?= in_array($k, ['iban_gbp', 'iban_eur', 'swift'], true) ? ' autocapitalize="characters" spellcheck="false"' : '' ?>>
-            <?php if (isset($ayarHata[$k])): ?><small class="frgi-alan-hata" role="alert"><?= h((string)$ayarHata[$k]) ?></small><?php endif; ?>
-          </label>
-        <?php endforeach; ?>
-      </div>
-      <div class="sip-pkl-eylem"><button type="submit" class="btn btn-primary">Ayarları kaydet</button></div>
-    </form>
-  </details>
+  <?php if ($ayarEksik): ?>
+  <p class="muted frgi-ayar-durum" role="note">Eksik: <?= h(implode(', ', $ayarEksik)) ?><?= $ayarYk ? ' — <a class="sip-link" href="frugro_ayarlar.php#fatura">Banka / fatura ayarları</a>' : '' ?></p>
+  <?php else: ?>
+  <p class="muted frgi-ayar-durum" role="status">✓ Banka / fatura ayarları kayıtlı<?= $ayarYk ? ' (<a class="sip-link" href="frugro_ayarlar.php#fatura">Ayarlar</a>)' : '' ?></p>
   <?php endif; ?>
 </div>
 <script src="assets/frugro_invoice.js?v=<?= (int)@filemtime(__DIR__ . '/assets/frugro_invoice.js') ?>" defer></script>
