@@ -165,8 +165,8 @@ function frgd_alan_ipucu(string $alan): string
 {
     return [
         'fiyat_kutu_birim' => 'Kutu başı fiyat; ondalık için virgül (örn. 4,60).',
-        'para_birimi' => 'GBP ya da EUR. Boş bırakılırsa tutar "GBP/EUR seçilecek" görünür.',
-        'parti_no' => 'Elle girilir (gümrük beyanına bağlı değil).',
+        'para_birimi' => 'GBP, EUR, USD ya da RUB. Boş bırakılırsa tutar "Döviz seçilecek" görünür; faturada varsayılan GBP gelir.',
+        'parti_no' => 'Elle girilir; boşsa bağlanan gümrük beyanının parti no\'su yazılır.',
         'plaka' => 'Çekici-Dorse, örn. 34ABC123-34XYZ456',
         'sofor_telefon' => 'Elle girilen not (ör. +90 5xx xxx xx xx).',
         'teslim_adresi' => 'Order Log\'daki teslim adresi.',
@@ -270,6 +270,7 @@ function frgd_olay_etiketleri(): array
         'duzenlendi' => ['✎', 'Elle düzenlendi'], 'durum' => ['🔁', 'Durum değişti'], 'pkl_kaydedildi' => ['📦', 'PKL kaydedildi'],
         'pkl_taslak' => ['📦', 'PKL taslağı oluşturuldu'], 'pkl_uretildi' => ['📄', 'PKL üretildi'], 'invoice_uretildi' => ['🧾', 'Invoice üretildi'],
         'mail_gonderildi' => ['✅', 'Mail gönderildi'], 'evrak_gonderildi' => ['📦', 'Evrak takımı gönderildi'], 'silindi' => ['🗑', 'Silindi'],
+        'beyan_baglandi' => ['🏛', 'Beyan bağlandı'], 'beyan_kaldirildi' => ['🏛', 'Beyan bağı kaldırıldı'],
     ];
 }
 
@@ -312,7 +313,7 @@ function frgd_uyarilar(array $s, array $olaylar): array
     foreach ((array)(is_array($j) ? ($j['uyarilar'] ?? []) : []) as $m) if (is_scalar($m) && trim((string)$m) !== '') $u[] = ['seviye' => 'uyari', 'mesaj' => (string)$m];
     foreach ($olaylar as $o) if ((string)$o['tur'] === 'fark') $u[] = ['seviye' => 'fark', 'mesaj' => (string)$o['metin']];
     if (trim((string)($s['fiyat_kutu_birim'] ?? '')) !== '' && trim((string)($s['para_birimi'] ?? '')) === '') {
-        $u[] = ['seviye' => 'uyari', 'mesaj' => 'Para birimi seçilmedi (GBP/EUR); tutar para birimsiz.'];
+        $u[] = ['seviye' => 'uyari', 'mesaj' => 'Para birimi seçilmedi; tutar para birimsiz (faturada varsayılan GBP).'];
     }
     return $u;
 }

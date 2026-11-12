@@ -93,8 +93,9 @@ $faForm = $_SESSION['frugro_invoice_ayar_form'] ?? null; unset($_SESSION['frugro
 $faHata = is_array($faForm) ? (array)($faForm['hata'] ?? []) : [];
 if ($pklYk && is_array($faForm)) foreach ($faHata as $k => $_m) if (isset($faForm['deger'][$k])) $faHam[$k] = (string)$faForm['deger'][$k];
 $faEtkin = $pklYk ? frgi_ayar_etkin($pdo) : [];
-$faEksikGbp = $pklYk ? frgi_ayar_eksikler($faEtkin, 'GBP') : [];
-$faEksikEur = $pklYk ? frgi_ayar_eksikler($faEtkin, 'EUR') : [];
+$faEksik = [];                                                    // para birimi → eksik alan etiketleri (GBP/EUR/USD/RUB)
+foreach (array_keys(frgi_para_birimleri()) as $pbK) $faEksik[$pbK] = $pklYk ? frgi_ayar_eksikler($faEtkin, $pbK) : [];
+$faEksikVar = (bool)array_filter($faEksik);
 
 render_header('Frugro ayarları');
 siparis_assets();
@@ -172,8 +173,12 @@ render_flash();
         <?php endforeach; ?>
         </tbody>
       </table></div>
-      <p class="sip-soluk">En çok <?= (int)FRGP_GGN_MAX ?> kayıt; GGN no yalnız harf, rakam ve tire. Kayıttan sonra 5 yeni boş satır daha açılır.</p>
-      <div class="sip-yukle-alt"><button type="submit" class="btn btn-primary">Kaydet</button></div>
+      <p class="sip-soluk">En çok <?= (int)FRGP_GGN_MAX ?> kayıt; GGN no yalnız harf, rakam ve tire. Daha fazla satır için "+ Satır ekle" (JS kapalıysa en çok 5 boş satır).</p>
+      <p class="sip-soluk" data-frga-not hidden>En çok <?= (int)FRGP_GGN_MAX ?> GGN kaydına ulaşıldı; yeni satır eklenemez.</p>
+      <div class="sip-yukle-alt"><button type="button" class="btn" data-frga-ekle data-frga-max="<?= (int)FRGP_GGN_MAX ?>">+ Satır ekle</button> <button type="submit" class="btn btn-primary">Kaydet</button></div>
+      <template id="frga-satir"><tr><td class="muted" data-frga-no></td>
+        <td><input type="text" name="ggn[0][ad]" value="" maxlength="100" autocomplete="off" data-frga-ad></td>
+        <td><input type="text" name="ggn[0][no]" value="" maxlength="20" inputmode="numeric" autocomplete="off" spellcheck="false" data-frga-no-giris></td></tr></template>
     </form>
     <?php endif; ?>
   </section>
@@ -181,12 +186,12 @@ render_flash();
   <?php if ($pklYk): ?>
   <section class="card frgi-sayfa" id="fatura" aria-labelledby="frgFaturaBas">
     <div class="card-head"><h2 id="frgFaturaBas">🏦 Banka / fatura ayarları</h2></div>
-    <p class="muted">Bir kez girilir, TÜM Frugro faturalarına basılır. Boş bırakılan alan, varsa OGL invoice ayarından (banka adı / adres / şube / SWIFT / IBAN-EUR) alınır. Hatalı alan olursa diğerleri yine kaydedilir.</p>
+    <p class="muted">Bir kez girilir, TÜM Frugro faturalarına basılır. Boş bırakılan alan, varsa OGL invoice ayarından (banka adı / adres / şube / SWIFT / IBAN-EUR) alınır. Her para birimi (GBP, EUR, USD, RUB) kendi IBAN alanını kullanır. Hatalı alan olursa diğerleri yine kaydedilir.</p>
     <?php if (!$kvHazir): ?>
       <p class="sip-bilgi" role="note">Ayar tablosu (hks_kv) yok; Hal Kayıt modülü kurulunca bu ayar kaydedilebilir.</p>
     <?php else: ?>
-      <?php if ($faEksikGbp || $faEksikEur): ?>
-        <p class="sip-ok-uyari" role="note">Eksik — GBP faturası: <?= $faEksikGbp ? h(implode(', ', $faEksikGbp)) : 'tamam' ?> · EUR faturası: <?= $faEksikEur ? h(implode(', ', $faEksikEur)) : 'tamam' ?></p>
+      <?php if ($faEksikVar): ?>
+        <p class="sip-ok-uyari" role="note">Eksik — <?php $faSat = []; foreach ($faEksik as $pbK => $ek) $faSat[] = h($pbK) . ' faturası: ' . ($ek ? h(implode(', ', $ek)) : 'tamam'); echo implode(' · ', $faSat); ?></p>
       <?php else: ?>
         <p class="muted" role="status">✓ Kayıtlı — tüm Frugro faturalarında kullanılır, yeniden girmeniz gerekmez.</p>
       <?php endif; ?>
@@ -195,7 +200,7 @@ render_flash();
         <div class="sip-izgara">
           <?php foreach (frgi_ayar_alanlari() as $k => [$et, $n]): ?>
             <label><?= h($et) ?>
-              <input type="text" name="<?= h($k) ?>" value="<?= h((string)($faHam[$k] ?? '')) ?>" maxlength="<?= (int)$n + 8 ?>" autocomplete="off"<?= isset($faHata[$k]) ? ' aria-invalid="true" class="frgi-hatali"' : '' ?><?= in_array($k, ['iban_gbp', 'iban_eur', 'swift'], true) ? ' autocapitalize="characters" spellcheck="false"' : '' ?>>
+              <input type="text" name="<?= h($k) ?>" value="<?= h((string)($faHam[$k] ?? '')) ?>" maxlength="<?= (int)$n + 8 ?>" autocomplete="off"<?= isset($faHata[$k]) ? ' aria-invalid="true" class="frgi-hatali"' : '' ?><?= in_array($k, ['iban_gbp', 'iban_eur', 'iban_usd', 'iban_rub', 'swift'], true) ? ' autocapitalize="characters" spellcheck="false"' : '' ?>>
               <?php if (isset($faHata[$k])): ?><small class="frgi-alan-hata" role="alert"><?= h((string)$faHata[$k]) ?></small><?php endif; ?>
             </label>
           <?php endforeach; ?>
@@ -208,4 +213,5 @@ render_flash();
 </div>
 <?php
 siparis_scripts();
+echo '<script src="assets/frugro_ayar.js?v=' . (int)@filemtime(__DIR__ . '/assets/frugro_ayar.js') . '" defer></script>' . "\n";
 render_footer();

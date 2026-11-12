@@ -11,7 +11,7 @@
 // ⚠ Banka / IBAN / VAT no DEĞERİ kodda, audit'te, flash'ta, listelerde YOK (ayardan gelir; eksikse yer tutucu "______").
 // ⚠ Hesap: kutu × birim fiyat (on-binde tamsayı) → kuruş, yarım yukarı, TAM SAYI (frg_hesap TEK yer; JS yalnız önizleme).
 // ⚠ Frugro şartı: net/brüt ağırlık TÜM evraklarda aynı → varsayılan PKL toplamı (frugro_palet); elle farklıysa onay + uyarı.
-// ⚠ Para birimi yalnız GBP | EUR (başlık: GBP → POUND, EUR → EURO; 2024 örneğindeki 'USD' başlığı hataydı).
+// ⚠ Para birimi GBP | EUR | USD | RUB (başlık: GBP → POUND, EUR → EURO, USD → USD, RUB → RUBLE; varsayılan GBP). 2024 örneğindeki 'USD' başlığı hataydı; USD artık resmi seçenek.
 // ⚠ dompdf: siparis_inv_pdf() (Hesap PDF kuralları: uzak kaynak/PHP kapalı, DejaVu, text-transform YOK).
 // Depo + yetki kapıları SAYFADA (frugro_invoice.php); buradaki fonksiyonlar salt DB + hesap.
 // =========================================================
@@ -30,10 +30,20 @@ const FRGI_ALICI_ADRES = 'Tingdene House, 21-24 Bradfield Rd, NN8 4HB - Wellingb
 const FRGI_INCOTERMLER = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'DAT'];
 const FRGI_YER_TUTUCU = '______';
 
-/** @return array<string,array{sembol:string,baslik:string}> */
+/** Desteklenen para birimleri (sıra = formdaki sıra; ilk = GBP varsayılan). Sembol DejaVu Sans'ta var (₽ dahil). @return array<string,array{sembol:string,baslik:string}> */
 function frgi_para_birimleri(): array
 {
-    return ['GBP' => ['sembol' => '£', 'baslik' => 'POUND'], 'EUR' => ['sembol' => '€', 'baslik' => 'EURO']];
+    return ['GBP' => ['sembol' => '£', 'baslik' => 'POUND'], 'EUR' => ['sembol' => '€', 'baslik' => 'EURO'],
+            'USD' => ['sembol' => '$', 'baslik' => 'USD'], 'RUB' => ['sembol' => '₽', 'baslik' => 'RUBLE']];
+}
+
+/** Para biriminin varsayılan (form / fatura) değeri: GBP. */
+const FRGI_PB_VARSAYILAN = 'GBP';
+
+/** Para birimine ait IBAN ayar anahtarı: GBP → iban_gbp, EUR → iban_eur, USD → iban_usd, RUB → iban_rub. */
+function frgi_iban_anahtari(string $pb): string
+{
+    return 'iban_' . strtolower($pb);
 }
 
 /** Faturanın yazılabildiği durumlar (kapalı / iptal salt okunur). */
@@ -48,7 +58,7 @@ function frgi_yazilabilir(array $s): bool
 function frgi_ayar_alanlari(): array
 {
     return ['banka_ad' => ['Banka adı', 100], 'banka_adres' => ['Banka adresi', 200], 'sube' => ['Şube', 100], 'swift' => ['SWIFT', 11],
-            'iban_gbp' => ['IBAN (GBP)', 34], 'iban_eur' => ['IBAN (EUR)', 34], 'vat_ihracatci' => ['İhracatçı VAT no', 40], 'vat_alici' => ['Alıcı (Frugro) VAT no', 40]];
+            'iban_gbp' => ['IBAN (GBP)', 34], 'iban_eur' => ['IBAN (EUR)', 34], 'iban_usd' => ['IBAN (USD)', 34], 'iban_rub' => ['IBAN (RUB)', 34], 'vat_ihracatci' => ['İhracatçı VAT no', 40], 'vat_alici' => ['Alıcı (Frugro) VAT no', 40]];
 }
 
 /** Yalnız Frugro'ya özgü kayıtlı ayar (eksikler ''; OGL varsayılanı UYGULANMAZ — ayar ekranı bunu gösterir). @return array<string,string> */
@@ -76,8 +86,8 @@ function frgi_ayar_etkin(PDO $pdo): array
 function frgi_ayar_eksikler(array $ayar, string $pb): array
 {
     $e = [];
-    $iban = $pb === 'EUR' ? ['iban_eur', 'IBAN (EUR)'] : ['iban_gbp', 'IBAN (GBP)'];
-    foreach (['banka_ad' => 'Banka adı', 'banka_adres' => 'Banka adresi', 'sube' => 'Şube', 'swift' => 'SWIFT', $iban[0] => $iban[1],
+    $ik = frgi_iban_anahtari($pb);
+    foreach (['banka_ad' => 'Banka adı', 'banka_adres' => 'Banka adresi', 'sube' => 'Şube', 'swift' => 'SWIFT', $ik => 'IBAN (' . strtoupper($pb) . ')',
               'vat_ihracatci' => 'İhracatçı VAT no', 'vat_alici' => 'Alıcı VAT no'] as $k => $et) {
         if (trim((string)($ayar[$k] ?? '')) === '') $e[] = $et;
     }
@@ -104,7 +114,7 @@ function frgi_ayar_kaydet(PDO $pdo, array $girdi, int $uid): array
         if (in_array($k, ['banka_ad', 'banka_adres', 'sube'], true)) {
             $v = siparis_inv_metin($girdi[$k], 1000);
             if (mb_strlen($v) > $n) { $hatalar[$k] = $et . ' en çok ' . $n . ' karakter olabilir.'; continue; }
-        } elseif ($k === 'iban_gbp' || $k === 'iban_eur') {
+        } elseif (in_array($k, ['iban_gbp', 'iban_eur', 'iban_usd', 'iban_rub'], true)) {
             $v = strtoupper((string)preg_replace('/[\s\-]+/u', '', (string)$girdi[$k]));
             if ($v !== '' && !preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/', $v)) { $hatalar[$k] = $et . ' geçersiz (ülke kodu + 2 kontrol hanesi + hesap no).'; continue; }
         } elseif ($k === 'swift') {
@@ -156,7 +166,7 @@ function frgi_tam_alan(mixed $v, int $ust): int|string|null
 
 /**
  * Formdan gelen girdiyi doğrular/normalleştirir. Fiyat kutu başına, 0..1000, ≤ 4 ondalık, TEK ayraç HEP ondalık ("1.370" = 1,37).
- * Para birimi yalnız GBP | EUR. kutu / palet / net_kg / brut_kg isteğe bağlı TAM SAYI override (boş = PKL ya da sipariş).
+ * Para birimi GBP | EUR | USD | RUB (boş/bilinmeyen → hata). kutu / palet / net_kg / brut_kg isteğe bağlı TAM SAYI override (boş = PKL ya da sipariş).
  * @return array{ok:bool,veri:array<string,mixed>,hata:array<string,string>}
  */
 function frgi_girdi_temizle(array $post): array
@@ -169,7 +179,7 @@ function frgi_girdi_temizle(array $post): array
     $tarih = siparis_tarih_coz(is_scalar($post['tarih'] ?? null) ? trim((string)$post['tarih']) : null);
     if ($tarih === null) $hata['tarih'] = 'Geçerli bir fatura tarihi girin.';
     $pb = strtoupper(trim((string)($post['para_birimi'] ?? '')));
-    if (!isset(frgi_para_birimleri()[$pb])) { $hata['para_birimi'] = 'Para birimi GBP ya da EUR olmalıdır.'; $pb = ''; }
+    if (!isset(frgi_para_birimleri()[$pb])) { $hata['para_birimi'] = 'Para birimi GBP, EUR, USD ya da RUB olmalıdır.'; $pb = ''; }
     $fiyatS = '';
     $f = siparis_inv_ondalik_coz($post['fiyat'] ?? '', false);
     if (trim((string)($post['fiyat'] ?? '')) === '' || $f === null) $hata['fiyat'] = 'Kutu başına fiyat gerekli — örn. 5,90.';
@@ -253,7 +263,7 @@ function frgi_varsayilan(PDO $pdo, array $s): array
     $sipKutu = frg_hesap($s)['kutu'];
     $fSip = isset($s['fiyat_kutu_birim']) && $s['fiyat_kutu_birim'] !== null && $s['fiyat_kutu_birim'] !== '' ? (int)$s['fiyat_kutu_birim'] : null;
     $pbSip = strtoupper(trim((string)($s['para_birimi'] ?? '')));
-    $girdi = ['no' => '', 'tarih' => date('Y-m-d'), 'para_birimi' => isset(frgi_para_birimleri()[$pbSip]) ? $pbSip : '',
+    $girdi = ['no' => '', 'tarih' => date('Y-m-d'), 'para_birimi' => isset(frgi_para_birimleri()[$pbSip]) ? $pbSip : FRGI_PB_VARSAYILAN,
               'fiyat' => $fSip !== null ? siparis_inv_fiyat_metin($fSip / 10000) : '', 'kutu' => '', 'palet' => '', 'net_kg' => '', 'brut_kg' => '',
               'incoterm' => '', 'plaka' => '', 'aciklama' => '', 'agirlik_onay' => ''];
     $kayitli = $sid > 0 ? frgi_girdi_oku($pdo, $sid) : [];
@@ -419,7 +429,7 @@ function frgi_html(array $snap, array $ayar): string
     $yt = static fn(string $v): string => trim($v) !== '' ? h($v) : FRGI_YER_TUTUCU;
     $kgG = static fn($v): string => (int)$v > 0 ? number_format((int)$v, 0, ',', '.') . ' KG' : '—';
     $inc = (string)($snap['incoterm'] ?? '');
-    $iban = $pb === 'EUR' ? (string)($ayar['iban_eur'] ?? '') : (string)($ayar['iban_gbp'] ?? '');
+    $iban = (string)($ayar[frgi_iban_anahtari($pb)] ?? '');
     $satirlar = [
         ['PO', $yt((string)($snap['po_no'] ?? ''))],
         ['HARVEST', $yt((string)($snap['harvest'] ?? ''))],

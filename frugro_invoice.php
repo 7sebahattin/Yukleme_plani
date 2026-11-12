@@ -186,7 +186,7 @@ render_flash();
               <option value="">— seçin —</option>
               <?php foreach (frgi_para_birimleri() as $kod => $pbb): ?><option value="<?= h($kod) ?>" data-frgi-sembol="<?= h($pbb['sembol']) ?>"<?= $deger['para_birimi'] === $kod ? ' selected' : '' ?>><?= h($kod . ' (' . $pbb['sembol'] . ')') ?></option><?php endforeach; ?>
             </select>
-            <span class="sip-ipucu">Yalnız GBP ya da EUR (Frugro şartı). Başlıkta POUND / EURO basılır.</span>
+            <span class="sip-ipucu">GBP, EUR, USD ya da RUB (varsayılan GBP). Başlıkta POUND / EURO / USD / RUBLE basılır; IBAN satırı seçilen para birimine göre gelir.</span>
             <?php if (isset($hataMap['para_birimi'])): ?><span class="sip-hata-metin" role="alert"><?= h((string)$hataMap['para_birimi']) ?></span><?php endif; ?>
           </label>
           <?php foreach ($alanlar as $k => [$et, $tip, $ph, $ek, $ipucu]): ?>

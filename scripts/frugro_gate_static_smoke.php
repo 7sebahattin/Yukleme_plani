@@ -24,7 +24,7 @@ echo "=== Sayfa / uç kapıları ===\n";
 $sayfalar = array_map('basename', glob($ROOT . '/frugro*.php') ?: []);
 sort($sayfalar);
 foreach (['frugro_siparis.php', 'frugro_view.php', 'frugro_yukle.php', 'frugro_kaydet.php'] as $b) ok("$b mevcut", in_array($b, $sayfalar, true));
-$MUT = ['frugro_yukle.php', 'frugro_kaydet.php'];
+$MUT = ['frugro_yukle.php', 'frugro_kaydet.php', 'frugro_beyan.php'];
 // v515: salt okunur GET uçları — mevcut, read kapılı, depo kapılı (tekil) ve TEK alt çizgili ad (sw bypass)
 foreach (['frugro_yazdir.php', 'frugro_paylas.php', 'frugro_eml.php', 'frugro_zip.php'] as $b) {
     ok("$b mevcut + read kapısı + no-store", in_array($b, $sayfalar, true) && (str_contains(kod_oku($b), "require_siparis('read')") || str_contains(kod_oku($b), "frgui_yetki('read')")) && (bool)preg_match('/no_store|no-store/', kod_oku($b)));
@@ -48,6 +48,8 @@ foreach ($MUT as $f) {
     ok("$f: Cache-Control no-store (siparis_no_store)", str_contains($k, 'siparis_no_store()'));
 }
 ok('frugro_kaydet: audit_log_event + frugro_olaylar (frg_olay_yaz)', str_contains(kod_oku('frugro_kaydet.php'), 'audit_log_event(') && str_contains(kod_oku('frugro_kaydet.php'), 'frg_olay_yaz('));
+ok('frugro_beyan: can_siparis(match) + can_beyan(read) + frg_gorunur + audit + frg_olay_yaz (config)', str_contains(kod_oku('frugro_beyan.php'), "can_siparis('match')") && str_contains(kod_oku('frugro_beyan.php'), "can_beyan('read')") && str_contains(kod_oku('frugro_beyan.php'), 'frg_gorunur(') && str_contains(kod_oku('frugro_beyan.php'), 'audit_log_event(') && str_contains(kod_oku('config/frugro_beyan.php'), 'frg_olay_yaz('));
+ok('config/frugro_beyan: customs_declarations\'a UPDATE YOK, siparis_beyan_arac_aktar YOK', !preg_match('/UPDATE\s+`?customs_declarations/i', kod_oku('config/frugro_beyan.php')) && !str_contains(kod_oku('config/frugro_beyan.php'), 'siparis_beyan_arac_aktar'));
 ok('frugro_kaydet: alan beyaz listesi (frgui_duzenle_dogrula)', str_contains(kod_oku('frugro_kaydet.php'), 'frgui_duzenle_dogrula('));
 ok('frugro_kaydet: sil yalnız delete kapısı + onay', (bool)preg_match("/islem === 'sil'\)\s*\{\s*if \(!frgui_yetki\('delete'\)\)/", kod_oku('frugro_kaydet.php')) && str_contains(kod_oku('frugro_kaydet.php'), "'onay'"));
 ok('frugro_yukle: dosya diske KAYDEDİLMİYOR (move_uploaded_file/file_put_contents yok)', !str_contains(kod_oku('frugro_yukle.php'), 'move_uploaded_file') && !str_contains(kod_oku('frugro_yukle.php'), 'file_put_contents'));

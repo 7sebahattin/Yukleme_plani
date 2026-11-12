@@ -562,7 +562,7 @@ function frgp_pdf_html(array $v): string
         ['TEMPERATURE', $v['sicaklik']], ['DEPARTURE DATE', $tarih]];
     $antet = (bool)($v['antet'] ?? true);
     $logo = $antet ? frgp_logo_uri() : null;
-    $lgDeger = $v['logger'] . (($v['logger_palet'] ?? '') !== '' ? ' (PALET ' . $v['logger_palet'] . ')' : '');
+    $lgDeger = (string)$v['logger'];
     $sag = [['DATE', $v['tarih']], ['LORRY NUMBER', $v['plaka']], ['ID LOGGER', $lgDeger], ['DRIVER', $v['sofor']],
         ['DRIVER PHONE', $v['telefon']], ['REF.', $v['ref']], ['POS. NR.', 'FRUGRO']];
     ob_start();
@@ -594,7 +594,7 @@ table { border-collapse: collapse; }
 </style></head><body>
 <?php if ($antet): ?>
 <div style="position:fixed;top:-72pt;left:0;right:0;">
-<?php if ($logo !== null): ?><img src="<?= $logo ?>" alt="" style="height:42pt;"><?php endif; ?>
+<?php if ($logo !== null): ?><div style="text-align:center;"><img src="<?= $logo ?>" alt="" style="height:60pt;"></div><?php endif; ?>
 <table class="band" style="margin-top:3pt;"><tr><td style="width:62%;background:#3e8e2f"></td><td style="background:#c8202f"></td></tr></table>
 </div>
 <div style="position:fixed;bottom:-66pt;left:0;right:0;">
@@ -602,10 +602,9 @@ table { border-collapse: collapse; }
 <div class="ayak"><b>Address:</b> <?= FRGP_AYAK_ADRES ?><br><?= FRGP_AYAK_ILETISIM ?></div>
 </div>
 <?php endif; ?>
-<h1>PACKING LIST</h1>
 <table class="ust"><tr>
 <td style="width:54%"><table class="kv"><?php foreach ($sol as [$k, $d]): ?><tr><td class="k"><?= $e($k) ?></td><td>: <?= $e($d) ?></td></tr><?php endforeach; ?></table></td>
-<td><table class="kv"><?php foreach ($sag as [$k, $d]): ?><tr><td class="k"><?= $e($k) ?></td><td><?php if ($k === 'ID LOGGER' && $d !== ''): ?><span style="background:#ffeb3b;padding:0 3pt"><?= $e($d) ?></span><?php else: ?><?= $e($d) ?><?php endif; ?></td></tr><?php endforeach; ?></table></td>
+<td><table class="kv"><?php foreach ($sag as [$k, $d]): ?><tr><td class="k"><?= $e($k) ?></td><td>: <?php if ($k === 'ID LOGGER' && $d !== ''): ?><span style="background:#ffeb3b;padding:0 3pt"><?= $e($d) ?></span><?php else: ?><?= $e($d) ?><?php endif; ?></td></tr><?php endforeach; ?></table></td>
 </tr></table>
 <table class="liste">
 <thead><tr><th style="width:14%">GROWER-GGN</th><th style="width:16%">GGN NAME</th><th style="width:9%">PALET NO</th><th style="width:25%">PRODUCT</th><th style="width:15%">LOT NO</th><th style="width:7%">BOX</th><th style="width:8%">BRUT KG</th><th style="width:8%">NET KG</th></tr></thead>

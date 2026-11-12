@@ -9,7 +9,7 @@
     return /^\d+$/.test(s) ? parseInt(s, 10) : null;
   }
   function fiyat1e4(v) {            // TEK ayraç HER ZAMAN ondalık ("1.370" = 1,37)
-    var s = String(v == null ? '' : v).replace(/[\s €£]/g, '');
+    var s = String(v == null ? '' : v).replace(/[\s €£$\u20BD]/g, '');
     if (!/^[0-9.,]+$/.test(s) || !/\d/.test(s)) return null;
     var nd = (s.match(/\./g) || []).length, nc = (s.match(/,/g) || []).length;
     if (nd > 0 && nc > 0) {                              // son ayraç ondalık, öteki binlik

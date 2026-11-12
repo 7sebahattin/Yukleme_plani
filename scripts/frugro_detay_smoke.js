@@ -102,6 +102,24 @@ const url = f => pathToFileURL(path.join(dir, f + '.html')).href;
             ok('evrak penceresi: footer ekran içinde' + id, eo.fBot <= eo.vh + 1, JSON.stringify(eo));
             const ek = em.locator('input[name="onay_evrak"]'); await ek.scrollIntoViewIfNeeded(); await ek.click();
             ok('evrak: onayla "Süreci kapat" açılır; .eml evrak bağlantısı' + id, !(await em.locator('[data-sip-evrak-gonder]').isDisabled()) && (await em.locator('a[data-sip-govde-eml]').getAttribute('href')).includes('tur=evrak'));
+
+            // Gümrük beyanı kartı (bağlı / öneri / arama) — ölçümler yazı tipinden bağımsız (konum ilişkileri)
+            await page.goto(url('detay_mail_gonderildi')); await page.waitForTimeout(150);
+            const bk = await page.evaluate(() => { const c = document.querySelector('#beyan'); if (!c) return null; const yan = c.closest('.sip-col-yan'); const kayit = document.querySelector('#kayit');
+                return { yanda: !!yan, h2: c.querySelector('h2').textContent, link: !!c.querySelector('a[href^="beyan_view.php"]'), kaldirAction: (c.querySelector('form[data-sip-onay] ')?.getAttribute('action')) || '', kaldirMetin: [...c.querySelectorAll('button')].some(b => b.textContent.trim() === 'Bağı kaldır'),
+                    kayitUstunde: !!kayit && !!(c.compareDocumentPosition(kayit) & Node.DOCUMENT_POSITION_FOLLOWING), partiRozet: document.querySelectorAll('.sip-h1 .sip-parti-btn').length, ara: !!c.querySelector('input[name="beyan_q"]') }; });
+            ok('beyan kartı: sağ sütunda, "Gümrük beyanı", Kayıt kartından ÖNCE' + id, !!bk && bk.yanda && bk.h2.includes('Gümrük beyanı') && bk.kayitUstunde, JSON.stringify(bk));
+            ok('beyan kartı (bağlı): beyan_view bağlantısı + "Bağı kaldır" formu frugro_beyan.php + arama kutusu' + id, !!bk && bk.link && bk.kaldirMetin && bk.kaldirAction === 'frugro_beyan.php' && bk.ara, JSON.stringify(bk));
+            ok('başlıkta 2 parti rozeti (sipariş + bağlı beyan)' + id, !!bk && bk.partiRozet === 2, JSON.stringify(bk));
+            if (qa) await page.screenshot({ path: path.join(qa, 'beyan_' + vp.width + '.png'), fullPage: true });
+            await page.goto(url('detay_yola_cikti')); await page.waitForTimeout(150);
+            const bo = await page.evaluate(() => { const c = document.querySelector('#beyan'); return { oneri: [...c.querySelectorAll('h3')].some(h => h.textContent.trim() === 'Öneriler'), bagla: c.querySelectorAll('form[data-sip-tek] button').length, puan: c.querySelectorAll('.sip-puan').length, ov: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+            ok('beyan kartı (açık sipariş): "Öneriler" h3 + Bağla düğmesi + puan çubuğu, taşma yok' + id, bo.oneri && bo.bagla >= 1 && bo.puan >= 1 && bo.ov <= 0, JSON.stringify(bo));
+            if (qa) await page.screenshot({ path: path.join(qa, 'beyan_oneri_' + vp.width + '.png'), fullPage: true });
+            await page.goto(url('detay_beyan_ara')); await page.waitForTimeout(150);
+            const ba = await page.evaluate(() => { const c = document.querySelector('#beyan'); const k = [...c.querySelectorAll('.sip-beyan-kart')].filter(x => x.textContent.includes('P-2001')); return { n: k.length, bagla: k.some(x => x.querySelector('form[data-sip-tek] button')), q: c.querySelector('input[name="beyan_q"]').value, ov: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+            ok('beyan arama sonucu kartı: P-2001 + Bağla; kutuda sorgu; taşma yok' + id, ba.n >= 1 && ba.bagla && ba.q === 'P-2001' && ba.ov <= 0, JSON.stringify(ba));
+            if (qa) await page.screenshot({ path: path.join(qa, 'beyan_ara_' + vp.width + '.png'), fullPage: true });
             await page.close();
         }
     } finally { await browser.close(); }
