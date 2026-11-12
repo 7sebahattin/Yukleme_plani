@@ -61,14 +61,12 @@ function frgui_para(int $kurus): string
 }
 
 /**
- * Tutar hücresi. Fiyat yoksa "—"; para birimi atanmamışsa "Döviz seçilecek" (tutar o zamana dek para birimsiz,
- * sayı gösterilmez — yanlış birimle yorumlanmasın). Para birimleri toplanmaz.
+ * Tutar hücresi. Fiyat yoksa "—"; para birimi boşsa GBP varsayılır (frg_hesap). Para birimleri toplanmaz.
  */
 function frgui_tutar_html(array $s): string
 {
     $h = frg_hesap($s);
     if (!$h['fiyat_var']) return '<span class="frg-soluk">—</span>';
-    if ($h['para_birimi'] === null) return '<span class="frg-pb-bekle">Döviz seçilecek</span>';
     return h(frgui_para($h['tutar_kurus'])) . ' ' . h($h['para_birimi']);
 }
 
@@ -299,7 +297,6 @@ function frgui_kpi_cipler(PDO $pdo, array $F, ?array $say = null): array
         $c('yolda', 'Yolda', $k['yolda'], 'yola_cikti'),
         $c('mail', 'Mail bekleyen', $k['mail'], 'mail_bekleyen'),
         $c('evrak', 'Evrak bekleyen', $k['evrak'], 'evrak'),
-        $c('pb', 'PB eksik', $k['pb'], 'pb_eksik'),
     ];
 }
 

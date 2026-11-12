@@ -145,11 +145,11 @@ $uHata = frgp_uret($db, ['id' => $sid, 'durum' => 'yeni', 'po_no' => 'X', 'palet
 ok('net eksikse üretim reddedilir, durum değişmez', !$uHata['ok'] && frg_getir($db, $sid)['durum'] === 'yeni');
 ok('geçersiz saat / biçim reddedilir', !frgp_uret($db, $s, 'pdf', '99:99', 1)['ok'] && !frgp_uret($db, $s, 'exe', '', 1)['ok']);
 $pdf = frgp_uret($db, $s, 'pdf', '18:00', 1);
-ok('PDF üretildi: %PDF başlığı, ad PKL-<po>-12.11.2026.pdf, tip', $pdf['ok'] && str_starts_with($pdf['veri'], '%PDF') && $pdf['ad'] === 'PKL-26-1710-60001-12.11.2026.pdf' && $pdf['tip'] === 'application/pdf', json_encode([$pdf['ok'], $pdf['hatalar'], $pdf['ad']]));
+ok('PDF üretildi: %PDF başlığı, ad PO <kısa>-PCK. LIST-ASYA FRESH-FRUGRO.pdf, tip', $pdf['ok'] && str_starts_with($pdf['veri'], '%PDF') && $pdf['ad'] === 'PO 26-1710-PCK. LIST-ASYA FRESH-FRUGRO.pdf' && $pdf['tip'] === 'application/pdf', json_encode([$pdf['ok'], $pdf['hatalar'], $pdf['ad']]));
 $s2 = frg_getir($db, $sid);
 ok('durum yeni → pkl_hazir + olay pkl_uretildi', $s2['durum'] === 'pkl_hazir' && in_array('pkl_uretildi', array_column(frg_olaylar($db, $sid), 'tur'), true));
 $xl = frgp_uret($db, $s2, 'xlsx', '', 1);
-ok('XLSX üretildi: ZIP (PK) başlığı + .xlsx adı', $xl['ok'] && str_starts_with($xl['veri'], 'PK') && $xl['ad'] === 'PKL-26-1710-60001-12.11.2026.xlsx', json_encode($xl['hatalar']));
+ok('XLSX üretildi: ZIP (PK) başlığı + .xlsx adı', $xl['ok'] && str_starts_with($xl['veri'], 'PK') && $xl['ad'] === 'PO 26-1710-PCK. LIST-ASYA FRESH-FRUGRO.xlsx', json_encode($xl['hatalar']));
 $n1 = count(array_filter(frg_olaylar($db, $sid), fn($o) => $o['tur'] === 'pkl_uretildi'));
 ok('yeniden üretim: her seferinde pkl_uretildi olayı (2), durum pkl_hazir kalır', $n1 === 2 && frg_getir($db, $sid)['durum'] === 'pkl_hazir');
 $db->exec("UPDATE frugro_siparisler SET durum='invoice_hazir' WHERE id=$sid");
@@ -203,7 +203,7 @@ $xx = frgp_xlsx(frgp_belge_verisi(['po_no' => '26-1-1', 'urun' => 'NAR', 'nakliy
 $tx = tempnam(sys_get_temp_dir(), 'pkx'); file_put_contents($tx, $xx);
 $za = new ZipArchive(); $za->open($tx); $sh = (string)$za->getFromName('xl/worksheets/sheet1.xml'); $ss = (string)$za->getFromName('xl/sharedStrings.xml'); $za->close(); @unlink($tx);
 ok('XLSX: "=..." metni formül olarak yazılmaz (<f> yok)', !str_contains($sh, '<f>HYPERLINK') && !str_contains($sh, '<f>1+1') && str_contains($ss, 'HYPERLINK'));
-ok('dosya adı temizlenir (yol/enjeksiyon)', frgp_dosya_adi(['po_no' => '../a"b;c', 'cikis_tarihi' => '2026-01-05'], 'pdf') === 'PKL-..abc-05.01.2026.pdf' || preg_match('/^PKL-[A-Za-z0-9.\-]+-05\.01\.2026\.pdf$/', frgp_dosya_adi(['po_no' => '../a"b;c', 'cikis_tarihi' => '2026-01-05'], 'pdf')) === 1);
+ok('dosya adı temizlenir (yol/enjeksiyon; yalnız [A-Za-z0-9 .-])', preg_match('/^PO [A-Za-z0-9.\-]+-PCK\. LIST-ASYA FRESH-FRUGRO\.pdf$/', frgp_dosya_adi(['po_no' => '../a"b;c', 'cikis_tarihi' => '2026-01-05'], 'pdf')) === 1 && frgp_dosya_adi(['po_no' => '25-2023-35529'], 'pdf') === 'PO 25-2023-PCK. LIST-ASYA FRESH-FRUGRO.pdf');
 
 echo "\n=== 9. Yetki + depo izolasyonu ===\n";
 global $PERMS, $IS_ADMIN, $AKTIF_DEPO, $DEPOLAR;

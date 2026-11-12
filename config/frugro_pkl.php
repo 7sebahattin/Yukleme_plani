@@ -20,6 +20,7 @@ const FRGP_MAX_SATIR = 200;
 const FRGP_GGN_KV = 'frugro_ggn_uretici';          // hks_kv: {"liste":[{"ad","ggn"}]} — GGN adı + no YALNIZ frugro_ayarlar.php#ggn'de tanımlanır
 const FRGP_EK_KV_ON = 'frugro_pkl_ek_';            // hks_kv: frugro_pkl_ek_<id> = {"logger_palet":"4","antet":true} (60 karakter sınırı içinde)
 const FRGP_GGN_MAX = 100;
+if (!function_exists('frg_belge_adi')) require_once __DIR__ . '/frugro_core.php';
 const FRGP_LOGO = 'assets/asyafresh-logo.png';
 const FRGP_AYAK_ADRES = 'HANÇERLİ MAH. DERVİŞZADE SK.NO:12 İÇ KAPI NO:3 İLKADIM - SAMSUN - TÜRKİYE';   // frugro_invoice.php ayağıyla aynı metin (o dosyaya dokunulmaz)
 const FRGP_AYAK_ILETISIM = 'Phone: +90 362 465 54 54 &nbsp;&nbsp; E-mail: contact@asyafresh.com &nbsp;&nbsp; Website: www.asyafresh.com';
@@ -497,16 +498,13 @@ function frgp_urun_ad(?string $urun): string
 /** PO "26-1816-34726" → REF "26-1816" (yıl-sipariş; örnekte "25-1816"). */
 function frgp_ref(string $po): string
 {
-    return preg_match('/^(\d{2}-\d{4})-\d{5}$/', $po, $m) ? $m[1] : $po;
+    return frg_po_kisa($po);
 }
 
-/** PKL-<po_no>-<gg.aa.yyyy>.<uzantı>; parçalar [A-Za-z0-9.-]'e temizlenir. */
+/** "PO <25-2023>-PCK. LIST-ASYA FRESH-FRUGRO.<uzantı>" (frg_belge_adi). */
 function frgp_dosya_adi(array $s, string $uzanti): string
 {
-    $po = trim((string)preg_replace('/[^A-Za-z0-9.\-]/', '', (string)($s['po_no'] ?? '')), '._-');
-    $t = frg_tarih($s['cikis_tarihi'] ?? null);
-    $tarih = $t !== null ? date('d.m.Y', (int)strtotime($t . ' 12:00:00')) : date('d.m.Y');
-    return 'PKL-' . ($po !== '' ? $po : 'PO') . '-' . $tarih . '.' . $uzanti;
+    return frg_belge_adi((string)($s['po_no'] ?? ''), 'PCK. LIST', $uzanti);
 }
 
 function frgp_tarih_goster(?string $t): string

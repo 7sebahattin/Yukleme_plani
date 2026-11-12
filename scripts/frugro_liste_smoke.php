@@ -97,7 +97,7 @@ ok('⚠ rozet "2 fark" + baloncuk verisi (alan etiketi Türkçe, tarih gg.aa.yyy
 ok('görülme kaydı: data-sip-gor-ns="frg" meta + satır işaretçileri (YENİ/değişti)', preg_match('/<span hidden data-sip-gor-ns="frg" data-sip-gor-uid="1"/', $h) === 1 && str_contains($h, 'data-sip-gor-yeni='));
 ok('para birimleri toplanmaz: tutar satır başına (GBP ve EUR ayrı), tfoot yok, birleşik toplam yok, PB boşta GBP', !str_contains($h, '<tfoot') && !str_contains($h, 'Döviz seçilecek') && str_contains($h, '3.680,00 GBP') && str_contains($h, '3.680,00 EUR') && !str_contains($h, '7.360,00'));
 ok('Excel yükle + Mailden al kartı: details.sip-yukle[data-sip-yukle] içinde, #frgYukleDugme/#frgDosya/#frgSonuc id\'leri', str_contains($h, 'details class="card sip-yukle"') && str_contains($h, 'data-sip-yukle') && str_contains($h, 'id="frgYukleDugme"') && str_contains($h, 'id="frgDosya"') && str_contains($h, 'id="frgSonuc"') && str_contains($h, 'id="frg" data-csrf='));
-ok('KPI çipleri 8 + tek satır arama + ▾ Filtre', preg_match_all('/class="sip-chip[ "]/', $h) === 8 && str_contains($h, 'data-sip-filtre-toggle') && str_contains($h, 'name="musteri"') && str_contains($h, 'name="liman"'));
+ok('KPI çipleri 7 + tek satır arama + ▾ Filtre', preg_match_all('/class="sip-chip[ "]/', $h) === 7 && str_contains($h, 'data-sip-filtre-toggle') && str_contains($h, 'name="musteri"') && str_contains($h, 'name="liman"'));
 ok('onclick/onsubmit YOK; assets: siparis.css/js + siparis_yazdir.js + siparis_wp.js + frugro.js', !preg_match('/\son(click|submit|change)=/i', substr($h, (int)strpos($h, 'class="sip-mod frg"'))) && str_contains($h, 'assets/siparis.css') && str_contains($h, 'assets/siparis_yazdir.js') && str_contains($h, 'assets/siparis_wp.js') && str_contains($h, 'assets/frugro.js'));
 
 echo "\n=== 2. KPI sayıları ===\n";
@@ -105,7 +105,7 @@ $k = frgui_kpi_say($db);
 ok('KPI: açık 5 · hazırlık 1 · pkl bekleyen 2 · invoice bekleyen 1 · yolda 1 · mail bekleyen 2 · evrak 1 · kapalı 3', $k['acik'] === 5 && $k['hazirlik'] === 1 && $k['pkl'] === 2 && $k['invoice'] === 1 && $k['yolda'] === 1 && $k['mail'] === 2 && $k['evrak'] === 1 && $k['kapali'] === 3, json_encode($k));
 ok('KPI: PB eksik = fiyatı olup para birimi olmayan KAPANMAMIŞ (yeni, hazırlık = 2; iptal sayılmaz)', $k['pb'] === 2, (string)$k['pb']);
 $c = frgui_kpi_cipler($db, frgui_filtre(['durum' => 'yola_cikti']));
-ok('KPI çipleri: aktif olan işaretli, bağlantılar beyaz liste', count($c) === 8 && array_sum(array_map(fn($x) => $x['aktif'] ? 1 : 0, $c)) === 1 && $c[4]['aktif'] && str_contains($c[2]['url'], 'durum=pkl_bekleyen'));
+ok('KPI çipleri: aktif olan işaretli, bağlantılar beyaz liste', count($c) === 7 && array_sum(array_map(fn($x) => $x['aktif'] ? 1 : 0, $c)) === 1 && $c[4]['aktif'] && str_contains($c[2]['url'], 'durum=pkl_bekleyen'));
 
 echo "\n=== 3. Süzgeçler + sayfalama ===\n";
 $say = static function (array $g, string $kapsam = 'tek') use ($db): int { $F = frgui_filtre($g); return (int)frgui_bolum_oku($db, $F, $kapsam, 1)['toplam']; };

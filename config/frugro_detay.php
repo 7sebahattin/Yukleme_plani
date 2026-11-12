@@ -132,7 +132,7 @@ function frgd_eml(array $t, array $ekler, ?int $zaman = null): string
     $b[] = rtrim(chunk_split(base64_encode(str_replace("\n", "\r\n", (string)$t['govde'])), 76, "\r\n"));
     foreach ($ekler as $e) {
         $ad = (string)$e['ad'];
-        $ascii = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', $ad), '_') ?: 'ek.pdf';
+        $ascii = trim((string)preg_replace('/[^A-Za-z0-9 ._-]+/', '', $ad)) ?: 'ek.pdf';
         $mime = preg_match('~^[a-z]+/[a-z0-9.+-]+$~', (string)$e['mime']) ? (string)$e['mime'] : 'application/octet-stream';
         $b[] = '--' . $sinir;
         $b[] = 'Content-Type: ' . $mime . '; name="' . $ascii . '"';
@@ -165,7 +165,7 @@ function frgd_alan_ipucu(string $alan): string
 {
     return [
         'fiyat_kutu_birim' => 'Kutu başı fiyat; ondalık için virgül (örn. 4,60).',
-        'para_birimi' => 'GBP, EUR, USD ya da RUB. Boş bırakılırsa tutar "Döviz seçilecek" görünür; faturada varsayılan GBP gelir.',
+        'para_birimi' => 'GBP, EUR, USD ya da RUB. Seçilmezse varsayılan GBP sayılır.',
         'parti_no' => 'Elle girilir; boşsa bağlanan gümrük beyanının parti no\'su yazılır.',
         'plaka' => 'Çekici-Dorse, örn. 34ABC123-34XYZ456',
         'sofor_telefon' => 'Elle girilen not (ör. +90 5xx xxx xx xx).',
@@ -179,11 +179,12 @@ function frgd_alan_ipucu(string $alan): string
 function frgd_alan_goster(array $s, string $alan): string
 {
     $v = $s[$alan] ?? null;
+    if ($alan === 'para_birimi' && trim((string)$v) === '') $v = 'GBP';   // boş → varsayılan GBP (okuma)
     if ($v === null || $v === '') return '';
     [$tur] = frgui_duzenle_alanlari()[$alan] ?? ['metin'];
     if ($tur === 'tarih') return sipui_tarih((string)$v);
     if ($tur === 'tam') return sipui_sayi($v);
-    if ($tur === 'fiyat') return frg_fiyat_metin((int)$v) . (trim((string)($s['para_birimi'] ?? '')) !== '' ? ' ' . $s['para_birimi'] : '');
+    if ($tur === 'fiyat') return frg_fiyat_metin((int)$v) . ' ' . (trim((string)($s['para_birimi'] ?? '')) !== '' ? $s['para_birimi'] : 'GBP');
     return (string)$v;
 }
 
@@ -193,6 +194,7 @@ function frgd_alan_veri(array $s, string $alan, int $id): array
     $t = frgui_duzenle_alanlari()[$alan];
     $tip = match ($t[0]) { 'tarih' => 'tarih', 'uzun' => 'notlar', default => $alan === 'plaka' ? 'plaka' : ($alan === 'sofor_telefon' ? 'telefon' : 'metin') };
     $ham = $s[$alan] ?? null;
+    if ($alan === 'para_birimi' && trim((string)$ham) === '') $ham = 'GBP';   // seçici GBP göstersin
     $deger = $ham === null ? '' : ($t[0] === 'fiyat' ? frg_fiyat_metin((int)$ham) : (string)$ham);
     return ['varlik' => 'frugro', 'id' => $id, 'alan' => $alan, 'etiket' => $t[1], 'tip' => $tip, 'deger' => $deger, 'ipucu' => frgd_alan_ipucu($alan), 'kilitli' => false];
 }
@@ -231,7 +233,7 @@ function frgd_invoice_ozet(PDO $pdo, array $s): array
     $g = frgi_girdi_oku($pdo, (int)$s['id']);
     $uretildi = !empty($g['uretildi_at']) && is_array($g['snap'] ?? null);
     $no = trim((string)($g['no'] ?? '')) ?: trim((string)($s['fatura_no'] ?? ''));
-    $pb = strtoupper(trim((string)($g['para_birimi'] ?? ''))) ?: (string)($s['para_birimi'] ?? '');
+    $pb = strtoupper(trim((string)($g['para_birimi'] ?? ''))) ?: (trim((string)($s['para_birimi'] ?? '')) !== '' ? (string)$s['para_birimi'] : 'GBP');
     $sem = frgi_para_birimleri()[$pb]['sembol'] ?? '';
     return ['var' => $uretildi, 'taslak' => !$uretildi && $g !== [], 'no' => $no, 'para_birimi' => $pb,
             'tutar' => isset($g['toplam_kurus']) ? trim($sem . ' ' . frgui_para((int)$g['toplam_kurus'])) : '',
@@ -312,9 +314,6 @@ function frgd_uyarilar(array $s, array $olaylar): array
     $j = json_decode((string)($s['ham_json'] ?? ''), true);
     foreach ((array)(is_array($j) ? ($j['uyarilar'] ?? []) : []) as $m) if (is_scalar($m) && trim((string)$m) !== '') $u[] = ['seviye' => 'uyari', 'mesaj' => (string)$m];
     foreach ($olaylar as $o) if ((string)$o['tur'] === 'fark') $u[] = ['seviye' => 'fark', 'mesaj' => (string)$o['metin']];
-    if (trim((string)($s['fiyat_kutu_birim'] ?? '')) !== '' && trim((string)($s['para_birimi'] ?? '')) === '') {
-        $u[] = ['seviye' => 'uyari', 'mesaj' => 'Para birimi seçilmedi; tutar para birimsiz (faturada varsayılan GBP).'];
-    }
     return $u;
 }
 

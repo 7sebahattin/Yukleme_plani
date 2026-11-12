@@ -51,7 +51,7 @@ if ($tur === 'evrak') {
 }
 audit_log_event('frugro_eml', 'frugro_siparis', $id, null, ['tur' => $tur, 'alici' => count($t['kime']) + count($t['bilgi']), 'ek' => count($ekler), 'metin_duzenlendi' => isset($_GET['govde']) && trim((string)$_GET['govde']) !== '']);
 
-$ad = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', ($t['konu'] !== '' ? $t['konu'] : 'Frugro-' . $s['po_no']) . ($tur === 'evrak' ? '-Evrak' : '')), '_') . '.eml';
+$ad = trim((string)preg_replace('/[^A-Za-z0-9 ._-]+/', '', ($t['konu'] !== '' ? $t['konu'] : 'Frugro-' . $s['po_no']) . ($tur === 'evrak' ? '-Evrak' : '')), '_') . '.eml';
 while (ob_get_level() > 0) { ob_end_clean(); }
 session_write_close();
 header('Content-Type: message/rfc822');
