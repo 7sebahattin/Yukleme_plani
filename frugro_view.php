@@ -19,7 +19,7 @@ require_once __DIR__ . '/config/frugro_detay.php';
 require_once __DIR__ . '/config/frugro_beyan.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'frugro');
 siparis_no_store();
 $pdo   = db();
 $hazir = frg_hazir($pdo);
@@ -48,7 +48,7 @@ if ($s === null || !frg_gorunur($s)) {   // başka depo = olmayan kayıt (varlı
 
 $yaz   = frgui_yetki('edit');
 $sil   = frgui_yetki('delete');
-$ayarYk = can_siparis('delete');
+$ayarYk = frgui_yetki('delete');
 $durum = (string)$s['durum'];
 $tan   = frg_durum_tanimlari();
 $kapali = in_array($durum, frg_kapali_durumlar(), true);
@@ -113,7 +113,7 @@ render_flash();
       <a class="btn btn-geri" href="frugro_siparis.php">← Frugro Siparişler</a>
       <h1 class="sip-h1"><?= h((string)$s['po_no']) ?> <?php foreach ($partiler as $pt): ?><span class="sip-parti-btn" title="Parti numarası"><span class="sip-parti-et">Parti</span> <?= h($pt) ?></span> <?php endforeach; ?><?= frgui_durum_badge($durum) ?></h1>
       <p class="sip-alt-satir muted">
-        🍇 <?= h($v('son_musteri') !== '' ? $v('son_musteri') : 'Müşteri bilinmiyor') ?>
+        📦 <?= h($v('son_musteri') !== '' ? $v('son_musteri') : 'Müşteri bilinmiyor') ?>
         <?php if ($v('giris_limani') !== ''): ?> · <?= h($v('giris_limani')) ?><?php endif; ?>
         <?php if ($v('son_musteri_po') !== ''): ?> · Müşteri PO <?= h($v('son_musteri_po')) ?><?php endif; ?>
         <?php if ($v('depo') !== ''): ?> · <span class="sip-depo" title="Depo"><?= h($v('depo')) ?></span><?php endif; ?>

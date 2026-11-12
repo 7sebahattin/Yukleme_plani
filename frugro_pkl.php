@@ -11,15 +11,16 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/frugro_core.php';
 require_once __DIR__ . '/config/frugro_pkl.php';
+require_once __DIR__ . '/config/frugro_ui.php';         // frgui_yetki (Roller › Frugro Siparişler)
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'frugro');
 siparis_no_store();
 
 $pdo = db();
 $uid = isset($auth_user['id']) ? (int)$auth_user['id'] : null;
 $id = (int)($_POST['id'] ?? $_GET['id'] ?? 0);
-$yazar = can_siparis('write');
+$yazar = frgui_yetki('edit');                       // Roller › Frugro Siparişler › Düzenle
 $hatalar = []; $uyarilar = []; $postP = null; $postB = null;
 
 if (!frg_hazir($pdo)) {
@@ -57,7 +58,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && isset($_GET['indir'])) {
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    require_siparis('write');
+    require_siparis('write', 'frugro');
+    if (!frgui_yetki('edit')) forbidden('Bu işlem için düzenleme yetkiniz yok.');
     csrf_check($_POST['csrf'] ?? null);
     $eylem = (string)($_POST['eylem'] ?? '');
     if ($eylem === 'kaydet') {

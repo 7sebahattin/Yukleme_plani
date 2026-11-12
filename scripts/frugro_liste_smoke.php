@@ -206,7 +206,7 @@ ok('frugro.css: liste kuralı kalmadı (frg-kpi/frg-tablo/frg-kt/frg-rozet)', !p
 ok('sabit kapalı listesi yok (yalnız frg_*_sql)', !preg_match("/'kapali'\s*,\s*'iptal'|'evrak_gonderildi'\s*,\s*'iptal'/", (string)file_get_contents($ROOT . '/config/frugro_ui.php') . (string)file_get_contents($ROOT . '/config/frugro_yazdir.php') . (string)file_get_contents($ROOT . '/frugro_siparis.php')));
 foreach (['frugro_yazdir.php', 'frugro_paylas.php'] as $u) {
     $k = (string)file_get_contents($ROOT . '/' . $u);
-    ok("$u: require_login + require_siparis('read') + no-store + 405 + yazma yok", str_contains($k, 'require_login()') && str_contains($k, "require_siparis('read')") && str_contains($k, 'siparis_no_store()') && str_contains($k, '405') && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $k));
+    ok("$u: require_login + require_siparis('read') + no-store + 405 + yazma yok", str_contains($k, 'require_login()') && str_contains($k, "require_siparis('read', 'frugro')") && str_contains($k, 'siparis_no_store()') && str_contains($k, '405') && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $k));
 }
 foreach (['config/frugro_yazdir.php', 'config/frugro_wp.php'] as $u) ok("$u: include-only 404 koruması (realpath)", str_contains((string)file_get_contents($ROOT . '/' . $u), 'realpath((string)($_SERVER[\'SCRIPT_FILENAME\'] ?? \'\')) === __FILE__'));
 ok('siparis.js: ns kancası + frgm meşgul kontrolü (yükle kartı tarama sürerken kapanmaz)', str_contains((string)file_get_contents($ROOT . '/assets/siparis.js'), '[data-frgm-kap][aria-busy="true"]'));

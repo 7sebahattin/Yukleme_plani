@@ -10,7 +10,7 @@
 // FORM-POST (application/x-www-form-urlencoded; frugro_view.php pencereleri, PRG + flash) — aynı dallar, aynı kurallar:
 //   islem=alan (id, alan, deger)  → tek alan ✎ (beyaz liste frgui_duzenle_alanlari; 'duzenle' dalına eşlenir) → #bilgi
 //   islem=durum (id, hedef, gerekce, onay_pkl, onay_invoice_yok, onay_evrak) → #durum · islem=sil (id, onay=1) → liste
-//   Form dalı ek olarak require_siparis('write') (sil: 'delete') kapısından geçer.
+//   Form dalı ek olarak require_siparis('write', 'frugro') (sil: 'delete') kapısından geçer.
 // Mail/evrak onayı SUNUCUDA da zorlanır: mail_gonderildi → onay_pkl; Invoice üretilmemişse onay_invoice_yok; evrak → onay_evrak.
 // Her işlem frugro_olaylar'a yazılır ve audit_log_event'e düşer (alan adlarıyla; adres/şoför/telefon DEĞERİ audit'e yazılmaz).
 // Başka depoya ait kayıt "bulunamadı" der.
@@ -29,7 +29,7 @@ siparis_no_store();
 $form = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['islem']);   // form-POST (PRG) mı, JSON mı
 if ($form) {
     csrf_check($_POST['csrf'] ?? null);
-    require_siparis(($_POST['islem'] ?? '') === 'sil' ? 'delete' : 'write');
+    require_siparis(($_POST['islem'] ?? '') === 'sil' ? 'delete' : 'write', 'frugro');
 } else {
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');

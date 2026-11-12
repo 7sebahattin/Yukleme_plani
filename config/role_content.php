@@ -22,7 +22,7 @@ declare(strict_types=1);
 //    katalogda olduğunu denetler.
 // =============================================================================
 
-const ROLE_CATALOG_VERSION = 2;   // 0 = eski rol · 1 = v505 kart işaretleyicisi · 2 = v507 içerik anahtarları
+const ROLE_CATALOG_VERSION = 3;   // 0 = eski rol · 1 = v505 kart işaretleyicisi · 2 = v507 içerik anahtarları · 3 = Frugro Siparişler satırı (siparis.frugro.*; role_frugro_derive)
 
 /** Katalog: satır anahtarı => [ grup başlığı => [ 'ui.x.y' => [ad, tur, gerek, salt, since, not] ] ]. */
 function role_content_catalog(): array {

@@ -17,7 +17,7 @@ require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/frugro_core.php';
 require_once __DIR__ . '/config/frugro_detay.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'frugro');
 siparis_no_store();
 header('X-Content-Type-Options: nosniff');
 

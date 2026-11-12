@@ -14,9 +14,10 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/siparis_eslestir.php';
 require_once __DIR__ . '/config/frugro_invoice.php';
+require_once __DIR__ . '/config/frugro_ui.php';         // frgui_yetki (Roller › Frugro Siparişler)
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'frugro');
 siparis_no_store();
 $pdo = db();
 $id  = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
@@ -39,8 +40,8 @@ if ($s === null || !frg_gorunur($s)) {                       // başka depodaki 
     render_footer();
     exit;
 }
-$yaz    = can_siparis('write') && frgi_yazilabilir($s);
-$ayarYk = can_siparis('delete');                            // Ayar linki: yalnız siparis.delete (ayar sayfası kendi kapısında)
+$yaz    = frgui_yetki('edit') && frgi_yazilabilir($s);   // Roller › Frugro Siparişler › Düzenle
+$ayarYk = frgui_yetki('delete');                           // Ayar linki: yalnız Frugro › Sil (ayar sayfası kendi kapısında)
 $buSayfa = 'frugro_invoice.php?id=' . $id;
 $git = function (string $parca = '') use ($buSayfa): void { header('Location: ' . $buSayfa . $parca); exit; };
 $GIRDI_ALANLARI = ['no', 'tarih', 'para_birimi', 'fiyat', 'kutu', 'palet', 'net_kg', 'brut_kg', 'incoterm', 'plaka', 'aciklama', 'agirlik_onay'];
@@ -78,7 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: frugro_ayarlar.php#fatura');
         exit;
     }
-    require_siparis('write');
+    require_siparis('write', 'frugro');
+    if (!frgui_yetki('edit')) forbidden('Bu işlem için düzenleme yetkiniz yok.');
     if (!frgi_yazilabilir($s)) forbidden('Bu siparişin durumu fatura işlemine kapalı.');
     $gonderilen = [];
     foreach ($GIRDI_ALANLARI as $k) $gonderilen[$k] = mb_substr(trim((string)($_POST[$k] ?? '')), 0, 120, 'UTF-8');

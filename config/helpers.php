@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v520');
+    define('APP_SURUM', 'v521');
 }
 
 // --- HTML kaçışı ---
@@ -430,6 +430,7 @@ function first_allowed_page(): ?string {
         'cikmalar.php'       => role_matrix_page_can('records','pallet'),
         'urun_siparis.php'   => role_matrix_page_can('siparis','urun'),
         'siparisler.php'     => role_matrix_page_can('siparis','ogl'),                    // siparisler.php: require_siparis('read')
+        'frugro_siparis.php' => role_matrix_page_can('siparis','frugro'),                 // frugro_siparis.php: require_siparis('read', 'frugro')
         'maliyet.php'        => can('maliyet.read') || $adm,            // can_maliyet('read')
         'hizli_maliyet.php'  => can_hizli_maliyet('read'),              // hizli_maliyet.php: can_hizli_maliyet('read')
         // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
@@ -595,7 +596,7 @@ function render_desktop_sidebar(string $base): void {
     $p_hes   = !$_fn || can('hesap.read') || $p_adm;
     $p_mail  = can_mail('read');   // TEK kaynak — mail.php'nin kapısıyla birebir
     $p_sip   = role_matrix_page_can('siparis','ogl');
-    $p_frg   = $p_sip;   // v512: Frugro Siparişler — yeni yetki YOK, OGL ile AYNI kapı (frugro_siparis.php: require_siparis('read'))
+    $p_frg   = role_matrix_page_can('siparis','frugro');   // Frugro Siparişler — KENDİ sayfa izni (frugro_siparis.php: require_siparis('read', 'frugro'))
     $p_usip = role_matrix_page_can('siparis','urun'); // TEK kaynak — siparisler.php'nin kapısıyla birebir
     // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
     // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
@@ -670,12 +671,18 @@ function render_desktop_sidebar(string $base): void {
     <?php unset($__sdp); endif; ?>
 
     <nav class="sidebar-nav">
+        <?php if ($p_sip || $p_frg || $p_usip): ?>
+        <details class="sidebar-grup" data-sb-grup="siparis">
+        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span><span class="sidebar-section-ad">Sipariş</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
+        <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
+        <?php if ($p_frg)  $lnk('frugro_siparis.php', '📦', 'Frugro Siparişler', $a_frg); ?>
+        <?php if ($p_usip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
+        </details>
+        <?php endif; ?>
+
         <details class="sidebar-grup" data-sb-grup="operasyon"<?= $a_ynt ? '' : ' open' ?>>
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="sidebar-section-ad">Operasyon</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
         <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
-        <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
-        <?php if ($p_frg)  $lnk('frugro_siparis.php', '🍇', 'Frugro Siparişler', $a_frg); ?>
-        <?php if ($p_usip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
@@ -869,7 +876,7 @@ function nav_alt_izinler(): array {
         'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
         'mail'    => $fn && can_mail('read'),       // mail.php: can_mail('read') — TEK kaynak
         'siparis' => $fn && role_matrix_page_can('siparis','ogl'),    // siparisler.php: require_siparis('read') — TEK kaynak
-        'frugro'  => $fn && role_matrix_page_can('siparis','ogl'),    // frugro_siparis.php: require_siparis('read') — OGL ile AYNI kapı
+        'frugro'  => $fn && role_matrix_page_can('siparis','frugro'), // frugro_siparis.php: require_siparis('read', 'frugro') — KENDİ sayfa izni
         'usip'    => $fn && role_matrix_page_can('siparis','urun'),    // urun_siparis.php: require_siparis('read') — aynı kapı
         'ptak'    => $fn && nav_ptak_gorunur(),     // personel_takip.php — TEK kaynak
         'defs'    => $c('defs.read'),               // definitions.php: require_perm('defs.read')
@@ -1196,7 +1203,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php if (role_matrix_page_can('siparis','ogl')): ?>
             <a href="<?= $base ?>siparisler.php" <?= nav_aktif_anahtar() === 'siparis' ? 'class="active"' : '' ?>>OGL Siparişler</a>
             <?php endif; ?>
-            <?php if (role_matrix_page_can('siparis','ogl')): ?>
+            <?php if (role_matrix_page_can('siparis','frugro')): ?>
             <a href="<?= $base ?>frugro_siparis.php" <?= nav_aktif_anahtar() === 'frugro' ? 'class="active"' : '' ?>>Frugro Siparişler</a>
             <?php endif; ?>
             <?php if (role_matrix_page_can('siparis','urun')): ?>

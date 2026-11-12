@@ -108,7 +108,7 @@ $kod = (string)file_get_contents($ROOT . '/config/frugro_beyan.php');
 $uc = (string)file_get_contents($ROOT . '/frugro_beyan.php');
 ok('config: customs_declarations\'a UPDATE/INSERT/DELETE YOK; siparis_beyan_arac_aktar/bagla/bag_kaldir YOK', !preg_match('/(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+`?customs_declarations/i', $kod) && !str_contains($kod, 'siparis_beyan_arac_aktar') && !preg_match('/siparis_beyan_(bagla|bag_kaldir)\(/', $kod) && !preg_match('/(INSERT\s+INTO|UPDATE)\s+siparis_beyan/i', $kod));
 ok('config: include-only koruma; şema DDL YOK', str_contains($kod, 'SCRIPT_FILENAME') && !preg_match('/CREATE TABLE|ALTER TABLE/i', $kod));
-ok('uç: csrf_check → require_siparis(write) → match + beyan.read → frgui_yetki(edit) → depo sırası', (bool)preg_match("/csrf_check\(.*require_siparis\('write'\).*can_siparis\('match'\).*can_beyan\('read'\).*frgui_yetki\('edit'\).*enforce_active_depot/s", $uc));
+ok('uç: csrf_check → require_siparis(write) → match + beyan.read → frgui_yetki(edit) → depo sırası', (bool)preg_match("/csrf_check\(.*require_siparis\('write', 'frugro'\).*can_siparis\('match'\).*can_beyan\('read'\).*frgui_yetki\('edit'\).*enforce_active_depot/s", $uc));
 ok('uç: POST dışı 405 + frg_gorunur + audit_log_event + PRG 303', str_contains($uc, '405') && str_contains($uc, 'frg_gorunur(') && str_contains($uc, 'audit_log_event(') && str_contains($uc, '303') && str_contains($uc, 'siparis_no_store()'));
 ok('uç: audit\'e parti/plaka DEĞERİ yazılmaz (yalnız id/bayrak)', !preg_match("/audit_log_event\([^;]*(party_no|plaka|parti_no)/", $uc));
 ok('uç: kapalı/iptal siparişte ENGEL YOK (frg_kapali_durumlar kullanılmaz)', !str_contains($uc, 'frg_kapali_durumlar'));
