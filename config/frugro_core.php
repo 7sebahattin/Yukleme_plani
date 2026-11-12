@@ -3,7 +3,7 @@
 // config/frugro_core.php — Frugro Siparişler çekirdeği (Frugro Ltd., İngiltere alıcı; include-only)
 //
 // OGL siparişleriyle AYNI mantık: alıcının gönderdiği "Order Log" Excel'i okunur, PO no'ya göre TEK kayıt tutulur.
-// Yetki: yeni yetki YOK — can_siparis() (siparis.read / write / delete).
+// Yetki: can_siparis() (siparis.read / write / delete) + Roller › Frugro Siparişler sayfa izni (siparis.frugro.*; frgui_yetki).
 // Şema yalnız migrate.php "Frugro Siparişler" kartından kurulur (frg_migrate; ALTER yok, 3 tablo, GO kuralı).
 // Excel okuyucu SAF'tır (frg_xlsx_oku: DB yok, dosyayı diske KAYDETMEZ, yalnız sha256 alır; salt veri okuma, formül hesaplama YOK).
 // Fiyat on-binde TAM SAYI (4,6 => 46000); tutar kuruş TAM SAYI; para birimi siparişte YOK (fatura ekranında seçilir).

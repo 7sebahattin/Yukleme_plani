@@ -2,8 +2,9 @@
 // =========================================================
 // config/frugro_ui.php — Frugro Siparişler EKRAN yardımcıları (include-only; frugro_core.php'yi tamamlar)
 //
-// Yetki: yeni yetki YOK. Okuma = require_siparis('read') (OGL ile aynı kapı); yazma/silme OGL sayfasının
-// kapısıyla aynı kuralla (can_siparis + role_matrix_page_can('siparis','ogl',eylem)) — kapı TEK yerde: frgui_yetki().
+// Yetki: Roller ekranında KENDİ satırı (siparis.frugro.read|create|edit|delete). Okuma = require_siparis('read', 'frugro');
+// yazma/silme can_siparis + role_matrix_page_can('siparis','frugro',eylem) — kapı TEK yerde: frgui_yetki().
+// Frugro satırından önce kaydedilmiş roller izni OGL'den alır (role_frugro_derive; DB'ye yazılmaz).
 // Para birimleri ASLA toplanmaz; tutar yalnız tek sipariş içinde (kutu × fiyat) hesaplanır.
 // =========================================================
 declare(strict_types=1);
@@ -15,7 +16,7 @@ function frgui_yetki(string $eylem): bool
 {
     $perm = ['read' => 'read', 'create' => 'write', 'edit' => 'write', 'delete' => 'delete'][$eylem] ?? null;
     if ($perm === null || !can_siparis($perm)) return false;
-    return role_matrix_page_can('siparis', 'ogl', $eylem);
+    return role_matrix_page_can('siparis', 'frugro', $eylem);
 }
 
 /** Durum → CSS son eki (`sip-badge--<css>`); bilinmeyen kod "alindi" görünür. */

@@ -5,8 +5,8 @@
 //                                             hks_kv frugro_pkl_mail_ayar — frgd_mail_ayar_kaydet)
 //                                         (3) Banka / fatura ayarları #fatura (Frugro Invoice: banka / IBAN / VAT; hks_kv frugro_invoice_ayar
 //                                             — frgi_ayar_kaydet; POST islem=fatura_ayar; taşındı: eski frugro_invoice.php › islem=ayar)
-// Kapı: (1) siparis.delete + Mail Merkezi yönetimi (frgm_ayar_yetkisi(); OGL mail ayarıyla AYNI) · (2) siparis.delete (OGL v422 eşi)
-//       · (3) siparis.delete (bölüm yalnız bunu görür; POST da burada 403).
+// Kapı: (1) siparis.delete + Mail Merkezi yönetimi + Frugro › Sil (frgm_ayar_yetkisi()) · (2) Frugro › Sil (frgui_yetki('delete'); OGL v422 eşi)
+//       · (3) Frugro › Sil (bölüm yalnız bunu görür; POST da burada 403). Sayfa izni siparis.frugro.* (Roller).
 // Sayfa ikisinden birine yetkisi olana açılır; her bölüm kendi kapısıyla çizilir ve kaydedilir.
 // Adresler / IBAN / VAT repoya GİRMEZ (DB'de). Audit yalnız SAYILARI / alan ADLARINI yazar. POST: CSRF + kapı burada, yazma kütüphanede.
 // =========================================================
@@ -24,10 +24,10 @@ require_once __DIR__ . '/config/frugro_detay.php';
 require_once __DIR__ . '/config/frugro_pkl.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'frugro');
 siparis_no_store();
 $mailYk = frgm_ayar_yetkisi();
-$pklYk = can_siparis('delete');
+$pklYk = frgui_yetki('delete');
 if (!$mailYk && !$pklYk) forbidden('Frugro ayarları için sipariş silme yetkisi gerekir.');
 $pdo = db();
 $uid = (int)$auth_user['id'];
@@ -35,7 +35,7 @@ $hazir = $mailYk && frgm_hazir($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'pkl_mail') {
     csrf_check($_POST['csrf'] ?? null);
-    require_siparis('delete');
+    require_siparis('delete', 'frugro');
     $r = frgd_mail_ayar_kaydet($pdo, ['kime' => (string)($_POST['kime'] ?? ''), 'bilgi' => (string)($_POST['bilgi'] ?? ''),
         'govde' => (string)($_POST['govde'] ?? ''), 'evrak_govde' => (string)($_POST['evrak_govde'] ?? '')], $uid);
     set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'Frugro mail ayarları kaydedildi.' : (string)($r['hata'] ?? 'Ayarlar kaydedilemedi.'));
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'pkl_ma
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'fatura_ayar') {
     csrf_check($_POST['csrf'] ?? null);
-    require_siparis('delete');                                   // Banka / fatura ayarı: yalnız siparis.delete
+    require_siparis('delete', 'frugro');                                   // Banka / fatura ayarı: yalnız siparis.delete
     $girdi = [];
     foreach (array_keys(frgi_ayar_alanlari()) as $k) if (array_key_exists($k, $_POST)) $girdi[$k] = $_POST[$k];
     $r = frgi_ayar_kaydet($pdo, $girdi, $uid);
@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'fatura
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'ggn') {
     csrf_check($_POST['csrf'] ?? null);
-    require_siparis('delete');                                   // GGN adı + no listesi: yalnız siparis.delete
+    require_siparis('delete', 'frugro');                                   // GGN adı + no listesi: yalnız siparis.delete
     $r = frgp_ggn_kaydet($pdo, is_array($_POST['ggn'] ?? null) ? $_POST['ggn'] : [], $uid);
     set_flash(!empty($r['ok']) ? 'success' : 'error', !empty($r['ok']) ? 'GGN listesi kaydedildi.' : (string)($r['hata'] ?? 'GGN listesi kaydedilemedi.'));
     header('Location: frugro_ayarlar.php#ggn');
@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'ggn') 
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
-    require_siparis('delete');
+    require_siparis('delete', 'frugro');
     if (!$mailYk) forbidden('Mailden al ayarı için Mail Merkezi yönetim yetkisi gerekir.');
     if (!$hazir) { set_flash('error', 'Frugro mail sorgusu kurulu değil (Frugro şeması, Mail Merkezi, MAIL_MASTER_KEY ya da hks_kv eksik).'); header('Location: frugro_ayarlar.php'); exit; }
     $r = frgm_ayar_kaydet($pdo, ['hesaplar' => (array)($_POST['hesaplar'] ?? []), 'gonderen' => (string)($_POST['gonderen'] ?? '')], $uid);

@@ -19,7 +19,7 @@ require_once __DIR__ . '/config/frugro_pkl.php';       // frgp_dosya_adi (liste 
 require_once __DIR__ . '/config/frugro_invoice.php';   // frgi_dosya_adi (Invoice dosya adı)
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
-require_siparis('read');
+require_siparis('read', 'frugro');
 siparis_no_store();
 $pdo   = db();
 $hazir = frg_hazir($pdo);
@@ -99,7 +99,7 @@ $yazdirEk = static function (?string $bolumAdi): string {
   <?= frgui_gorulen_meta((int)$auth_user['id']) ?>
   <div class="page-head">
     <div>
-      <h1>🍇 Frugro Siparişler</h1>
+      <h1>📦 Frugro Siparişler</h1>
       <p class="muted"><?= (int)$kpiAcik ?> açık · <?= (int)$kpiEvrak ?> evrak bekleyen · <?= (int)$kapaliSay ?> kapanan sipariş</p>
     </div>
     <div class="page-head-actions no-print">

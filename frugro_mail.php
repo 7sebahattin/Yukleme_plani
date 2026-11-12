@@ -39,7 +39,7 @@ if (strlen($raw) > 4000) $json(['ok' => false, 'mesaj' => 'İstek çok uzun.'], 
 $in = json_decode($raw, true);
 if (!is_array($in)) $in = [];
 csrf_check(is_string($in['csrf'] ?? null) ? $in['csrf'] : null);   // JSON-aware 403; ilk mutasyondan ÖNCE
-require_siparis('write');
+require_siparis('write', 'frugro');
 if (!frgm_yetkisi()) forbidden('Mail sorgusu için Mail Merkezi okuma yetkisi gerekir.');
 $pdo = db();
 if (!frgm_hazir($pdo)) $json(['ok' => false, 'kod' => 'kurulmadi', 'mesaj' => 'Frugro mail sorgusu kurulu değil (Frugro / Mail Merkezi şeması, MAIL_MASTER_KEY ya da hks_kv eksik).'], 409);

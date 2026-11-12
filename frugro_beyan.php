@@ -17,7 +17,7 @@ $auth_user = require_login();
 siparis_no_store();
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') { header('Allow: POST'); http_response_code(405); echo 'Geçersiz istek.'; exit; }
 csrf_check($_POST['csrf'] ?? null);
-require_siparis('write');
+require_siparis('write', 'frugro');
 if (!can_siparis('match') || !can_beyan('read')) forbidden('Beyan bağı için siparis.match ve beyan.read yetkileri gerekir.');
 if (!frgui_yetki('edit')) forbidden('Bu işlem için düzenleme yetkiniz yok.');
 try { enforce_active_depot(); } catch (Throwable $e) { forbidden('Aktif depo seçilmeli.'); }

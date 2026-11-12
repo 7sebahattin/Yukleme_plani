@@ -259,7 +259,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
         <div class="home-card-title">OGL Siparişler</div>
     </a>
 <?php endif; ?>
-<?php if (role_matrix_page_can('siparis','ogl')): ?>
+<?php if (role_matrix_page_can('siparis','frugro')): ?>
     <a href="frugro_siparis.php" class="home-card">
         <div class="home-card-icon" style="background:#fdf0dc">📦</div>
         <div class="home-card-title">Frugro Siparişler</div>

@@ -42,6 +42,7 @@ function role_permission_matrix(): array {
                 $row('siparis_evrak','Evrak Takımı Bekleyen Sevkiyatlar','siparisler.php?kart=evrak',$crud('siparis.ogl_evrak')),
                 $row('siparis_kapali','Kapanan Sevkiyatlar','siparisler.php?kart=kapali',$crud('siparis.ogl_kapali')),
             ],'Sayfayı açar. İşlem için ilgili kartta da izin verilmelidir; kart izni sevkiyatın bulunduğu bölüme göre uygulanır.'),
+            $row('frugro','Frugro Siparişler','frugro_siparis.php',$crud('siparis.frugro'),[],'OGL’den bağımsız sayfa. Mailden alma için Mail Merkezi okuma, ayarlar için Sil yetkisi de gerekir; beyan bağı OGL satırındaki “Beyan eşleştir” iznini kullanır.'),
             $row('urun_siparis','Siparişler','urun_siparis.php',$crud('siparis.urun')),
             $row('beyan','Beyanlar','beyanlar.php',$beyanActions,$beyan),
             $row('hks','Hal Bildirimi','halkayit/index.php',$crud('hks'),[],'Ekle: taslak hazırlama, kopyalama ve HKS’ye bildirim gönderme (geri alınamaz). Düzenle: taslak ve kişi düzenleme. Sil: taslak ve kişi silme. Firma tanımları yalnız sistem yöneticisidir.'),
@@ -94,7 +95,8 @@ function role_matrix_expand_permissions(array $permissions): array {
         if (in_array('reports.export',$original,true)) $permissions[]="reports.$type.export";
     }
     $permissions = role_sections_derive($permissions, $original);
-    foreach (['records'=>['loading','pallet'],'siparis'=>['ogl','urun']] as $module=>$pages) {
+    $permissions = role_frugro_derive($permissions, $original);
+    foreach (['records'=>['loading','pallet'],'siparis'=>role_siparis_pages()] as $module=>$pages) {
         foreach (['read','create','edit','delete'] as $action) {
             if (!$detailed && (in_array("$module.$action",$original,true) || (in_array($action,['create','edit'],true) && in_array("$module.write",$original,true)))) foreach ($pages as $page) $permissions[]="$module.$page.$action";
             foreach ($pages as $page) if (($detailed || in_array("$module.$action",$original,true) || in_array("$module.write",$original,true)) && in_array("$module.$page.$action",$permissions,true)) {
@@ -106,6 +108,26 @@ function role_matrix_expand_permissions(array $permissions): array {
     $permissions = role_sections_fanout($permissions);
     $permissions = role_content_expand($permissions);   // v507 — SON adım: içerik öğeleri ön koşul izinlerine bakar
     return array_values(array_unique($permissions));
+}
+
+/** Sipariş modülünün sayfa anahtarları (Roller satırları: siparis.<sayfa>.read|create|edit|delete). */
+function role_siparis_pages(): array { return ['ogl','urun','frugro']; }
+
+/** Frugro Siparişler satırının kataloğa girdiği sürüm (role.catalog.N). */
+const ROLE_FRUGRO_SINCE = 3;
+
+/**
+ * Frugro sayfası geri uyumluluğu (DB'ye yazmaz): Frugro satırından ÖNCE kaydedilmiş rol
+ * (katalog sürümü < ROLE_FRUGRO_SINCE) Frugro izinlerini OGL sayfa izinlerinden alır —
+ * eskiden Frugro OGL kapısını kullanıyordu, kimse erişim kaybetmez. Roller ekranında bir kez
+ * kaydedilen rol güncel sürüm işaretleyicisini taşır ve yalnız açıkça seçilen siparis.frugro.* geçerli olur.
+ * Detaylı (role.permissions.detailed) ve kart işaretleyicili roller dahil; işaretleyicisiz düz roller
+ * ayrıca modül izninden (siparis.read/write/delete) sayfa döngüsüyle genişler.
+ */
+function role_frugro_derive(array $p, array $original): array {
+    if (role_catalog_version_of($original) >= ROLE_FRUGRO_SINCE) return $p;
+    foreach (['read','create','edit','delete'] as $a) if (in_array("siparis.ogl.$a", $p, true)) $p[] = "siparis.frugro.$a";
+    return $p;
 }
 
 /** v504 — kart (bölüm) yetkileri. Yeni matristen kaydedilen rol `role.sections.detailed` taşır. */
@@ -146,7 +168,7 @@ function role_matrix_catalog_additions(): array {
     foreach (['records','kantar','stok','maliyet','hesap','defs','siparis'] as $module) {
         $out["$module.create"]='Yeni kayıt ekle'; $out["$module.edit"]='Mevcut kaydı düzenle';
     }
-    foreach (['records'=>['loading','pallet'],'siparis'=>['ogl','urun']] as $module=>$pages) foreach ($pages as $page) foreach (['read','create','edit','delete'] as $action) $out["$module.$page.$action"] = "$page $action";
+    foreach (['records'=>['loading','pallet'],'siparis'=>role_siparis_pages()] as $module=>$pages) foreach ($pages as $page) foreach (['read','create','edit','delete'] as $action) $out["$module.$page.$action"] = "$page $action";
     foreach (role_report_types() as $type=>$label) { $out["reports.$type.read"]=$label.' görüntüle'; $out["reports.$type.export"]=$label.' dışa aktar'; }
     return $out + role_pdks_catalog() + role_content_catalog_labels();
 }

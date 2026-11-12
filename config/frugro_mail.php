@@ -38,17 +38,17 @@ const FRGM_KV_SON = 'frugro_mail_son';
 
 // ── YETKİ + HAZIRLIK ───────────────────────────────────────────────────
 
-/** Mailden alma: sipariş yazma + Mail Merkezi okuma (OGL ile aynı kapı; yeni yetki YOK). */
+/** Mailden alma: sipariş yazma + Mail Merkezi okuma + Roller › Frugro Siparişler › Ekle. */
 function frgm_yetkisi(): bool
 {
-    // OGL sayfasıyla AYNI matris kapısı (frugro_ui.php frgui_yetki('create') ile aynı kural)
-    return siparis_mail_yetkisi() && (!function_exists('role_matrix_page_can') || role_matrix_page_can('siparis', 'ogl', 'create'));
+    // frugro_ui.php frgui_yetki('create') ile aynı matris kuralı (sayfa anahtarı 'frugro')
+    return siparis_mail_yetkisi() && (!function_exists('role_matrix_page_can') || role_matrix_page_can('siparis', 'frugro', 'create'));
 }
 
-/** Ayar düzenleme: sipariş silme + Mail Merkezi yönetimi (OGL ile aynı kapı). */
+/** Ayar düzenleme: sipariş silme + Mail Merkezi yönetimi (OGL ile aynı) + Roller › Frugro Siparişler › Sil. */
 function frgm_ayar_yetkisi(): bool
 {
-    return siparis_mail_ayar_yetkisi();
+    return siparis_mail_ayar_yetkisi() && (!function_exists('role_matrix_page_can') || role_matrix_page_can('siparis', 'frugro', 'delete'));
 }
 
 /** Özellik kurulu mu: OGL mail şeması/anahtarı/hks_kv + Frugro tabloları. */

@@ -207,7 +207,7 @@ ok('dosya adı temizlenir (yol/enjeksiyon; yalnız [A-Za-z0-9 .-])', preg_match(
 
 echo "\n=== 9. Yetki + depo izolasyonu ===\n";
 global $PERMS, $IS_ADMIN, $AKTIF_DEPO, $DEPOLAR;
-$deneme = function (string $perm): string { try { require_siparis($perm); return 'gecti'; } catch (RuntimeException $e) { return 'forbidden'; } };
+$deneme = function (string $perm): string { try { require_siparis($perm, 'frugro'); return 'gecti'; } catch (RuntimeException $e) { return 'forbidden'; } };
 $PERMS = ['siparis.read']; $IS_ADMIN = false;
 ok("viewer: require_siparis('read') geçer, ('write') 403", $deneme('read') === 'gecti' && $deneme('write') === 'forbidden');
 $PERMS = ['siparis.read', 'siparis.write'];
@@ -228,8 +228,8 @@ $js = (string)file_get_contents($ROOT . '/assets/frugro_pkl.js');
 $css = (string)file_get_contents($ROOT . '/assets/frugro_pkl.css');
 $pgk = ''; foreach (token_get_all($pg) as $tk) { if (is_array($tk)) { if ($tk[0] === T_COMMENT || $tk[0] === T_DOC_COMMENT) continue; $pgk .= $tk[1]; } else $pgk .= $tk; }
 $pos = fn(string $n) => strpos($pgk, $n);
-ok("sayfa: require_login + require_siparis('read') + no-store + frg_gorunur", $pos('require_login()') !== false && $pos("require_siparis('read')") !== false && $pos('siparis_no_store()') !== false && $pos('frg_gorunur($s)') !== false);
-ok("sayfa: POST dalı require_siparis('write') + csrf_check, ikisi de ilk mutasyondan ÖNCE", ($w = $pos("require_siparis('write')")) !== false && ($c = $pos('csrf_check(')) !== false && $w < $c && $c < $pos('frgp_kaydet(') && $c < $pos('frgp_taslak_olustur(') && $c < $pos('frgp_uret('));
+ok("sayfa: require_login + require_siparis('read') + no-store + frg_gorunur", $pos('require_login()') !== false && $pos("require_siparis('read', 'frugro')") !== false && $pos('siparis_no_store()') !== false && $pos('frg_gorunur($s)') !== false);
+ok("sayfa: POST dalı require_siparis('write') + csrf_check, ikisi de ilk mutasyondan ÖNCE", ($w = $pos("require_siparis('write', 'frugro')")) !== false && ($c = $pos('csrf_check(')) !== false && $w < $c && $c < $pos('frgp_kaydet(') && $c < $pos('frgp_taslak_olustur(') && $c < $pos('frgp_uret('));
 ok('sayfa: mutasyon yalnız REQUEST_METHOD === POST dalında; kimlik doğrulama sonrası depo kapısı POST\'tan önce', (bool)preg_match("/REQUEST_METHOD'\] \?\? 'GET'\) === 'POST'/", $pgk) && $pos('frg_gorunur($s)') < $pos("=== 'POST'"));
 ok('sayfa: PRG (Location + exit) + CSRF alanı', str_contains($pgk, "header('Location: '") && str_contains($pgk, 'sipui_csrf()'));
 ok('sayfa: satır içi onclick/onchange YOK; <table> .table-wrap içinde; native dialog.pm-dialog; fonksiyon tanımı YOK', !preg_match('/\son(click|change|input|submit)\s*=/i', $pg) && str_contains($pg, '<div class="table-wrap"><table') && str_contains($pg, '<dialog id="frpYapistirDlg" class="pm-dialog') && !preg_match('/^\s*function\s+\w+\s*\(/m', $pgk));
@@ -250,7 +250,7 @@ ok('ZIP / .eml / detay: kayıtlı antet için frgd_pkl_pdf($s, $pdo)', str_conta
 ok('logo dosyası var, PNG', is_file($ROOT . '/' . FRGP_LOGO) && str_starts_with((string)file_get_contents($ROOT . '/' . FRGP_LOGO, false, null, 0, 8), "\x89PNG") && frgp_logo_uri() !== null);
 $pk = ''; foreach (token_get_all($ayar) as $tk) { if (is_array($tk)) { if ($tk[0] === T_COMMENT || $tk[0] === T_DOC_COMMENT) continue; $pk .= $tk[1]; } else $pk .= $tk; }
 $pG = strpos($pk, "'islem'] ?? '') === 'ggn'"); $pGen = strpos($pk, "if (\$_SERVER['REQUEST_METHOD'] === 'POST') {");
-ok('ayarlar: GGN POST dalı csrf_check + require_siparis(\'delete\') + frgp_ggn_kaydet, genel POST dalından ÖNCE; #ggn kartı $pklYk kapısında', $pG !== false && $pGen !== false && $pG < $pGen && preg_match("/'ggn'\) \{\s*csrf_check\([^;]+;\s*require_siparis\('delete'\);[^}]*frgp_ggn_kaydet\(/s", $pk) && str_contains($ayar, 'id="ggn"') && (bool)preg_match('/<\?php if \(\$pklYk\): \?>\s*<section class="card" id="ggn"/', $ayar));
+ok('ayarlar: GGN POST dalı csrf_check + require_siparis(\'delete\') + frgp_ggn_kaydet, genel POST dalından ÖNCE; #ggn kartı $pklYk kapısında', $pG !== false && $pGen !== false && $pG < $pGen && preg_match("/'ggn'\) \{\s*csrf_check\([^;]+;\s*require_siparis\('delete', 'frugro'\);[^}]*frgp_ggn_kaydet\(/s", $pk) && str_contains($ayar, 'id="ggn"') && (bool)preg_match('/<\?php if \(\$pklYk\): \?>\s*<section class="card" id="ggn"/', $ayar));
 ok('ayarlar: mevcut #fatura / #pkl-mail dalları duruyor', str_contains($pk, "'fatura_ayar'") && str_contains($pk, "'pkl_mail'") && str_contains($ayar, 'id="fatura"') && str_contains($ayar, 'id="pkl-mail"'));
 ok('config: yeni kv anahtarları sabit; ayar DB şeması değişmedi (CREATE/ALTER yok)', str_contains($kod, "'frugro_ggn_uretici'") && str_contains($kod, "'frugro_pkl_ek_'") && !preg_match('/\b(CREATE|ALTER)\s+TABLE\b/i', $kod));
 
