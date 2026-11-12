@@ -166,11 +166,16 @@ function cari_sayfa_kapisi(PDO $pdo): void
         exit;
     }
     render_header('Cari İşlemler');
-    echo '<div class="container"><div class="card" style="margin:16px 0;padding:16px;">'
-        . '<h2 style="margin-top:0;">Cari İşlemler</h2>'
-        . '<p>Cari tabloları kurulmamış. Yönetici: Şema Migrasyon → Cari İşlemler kartı.</p>'
-        . '<p><a class="btn btn-primary" href="migrate.php#cari">Şema Migrasyon › Cari İşlemler</a></p>'
-        . '</div></div>';
+    if (function_exists('cari_assets')) cari_assets();
+    if (function_exists('cari_sema_uyari')) {
+        echo cari_sema_uyari();
+    } else {
+        echo '<div class="container"><div class="card" style="margin:16px 0;padding:16px;">'
+            . '<h2 style="margin-top:0;">Cari İşlemler</h2>'
+            . '<p>Cari tabloları kurulmamış. Yönetici: Şema Migrasyon → Cari İşlemler kartı.</p>'
+            . '<p><a class="btn btn-primary" href="migrate.php#cari">Şema Migrasyon › Cari İşlemler</a></p>'
+            . '</div></div>';
+    }
     render_footer();
     exit;
 }
@@ -211,6 +216,14 @@ function cari_tipler(): array
 
 /** @return list<string> */
 function cari_para_birimleri(): array { return ['TRY', 'USD', 'EUR']; }
+
+/** Para birimi anahtarlı diziyi TRY, USD, EUR sırasına dizer (bilinmeyenler sona, alfabetik). */
+function cari_pb_sirala(array $d): array
+{
+    $sira = array_flip(cari_para_birimleri());
+    uksort($d, static fn($a, $b): int => [$sira[$a] ?? 99, (string)$a] <=> [$sira[$b] ?? 99, (string)$b]);
+    return $d;
+}
 
 /**
  * tur → etiket, sinif (fis|dekont), yon (B | A | 'sec' = kullanıcı seçer | 'cift' = virman), onek.
@@ -714,6 +727,9 @@ function cari_hareket_where(array $f, string $durum): array
     if (isset($turSiniflar[$sinif])) { $w[] = 'h.tur IN (' . implode(',', array_fill(0, count($turSiniflar[$sinif]), '?')) . ')'; array_push($p, ...$turSiniflar[$sinif]); }
     if (!empty($f['tur'])) { $w[] = 'h.tur = ?'; $p[] = (string)$f['tur']; }
     if (!empty($f['cari_id'])) { $w[] = 'h.cari_id = ?'; $p[] = (int)$f['cari_id']; }
+    $cq = trim((string)($f['cari_q'] ?? ''));
+    if ($cq !== '') { $w[] = '(k.unvan LIKE ? OR k.kod LIKE ?)'; array_push($p, '%' . $cq . '%', '%' . $cq . '%'); }
+    if (!empty($f['virman_tek'])) $w[] = "NOT (h.tur = 'virman' AND h.yon = 'B')";   // virman çifti listede TEK satır (kaynak/A satırı)
     if (!empty($f['pb'])) { $w[] = 'h.para_birimi = ?'; $p[] = (string)$f['pb']; }
     if (!empty($f['bas'])) { $w[] = 'h.tarih >= ?'; $p[] = (string)$f['bas']; }
     if (!empty($f['bit'])) { $w[] = 'h.tarih <= ?'; $p[] = (string)$f['bit']; }
@@ -775,6 +791,22 @@ function cari_bakiye(PDO $pdo, int $cari_id, ?string $bitis = null): array
     return $out;
 }
 
+/** Kartın (iptaller dahil) hareket satırı sayısı — "Sil" düğmesinin etkinliği için. */
+function cari_kart_hareket_say(PDO $pdo, int $id): int
+{
+    $st = $pdo->prepare('SELECT COUNT(*) FROM cari_hareketler WHERE cari_id = ?');
+    $st->execute([$id]);
+    return (int)$st->fetchColumn();
+}
+
+/** Kartta hareketi (iptal dahil) olan para birimleri (ekstre segmenti). @return list<string> */
+function cari_kart_pbler(PDO $pdo, int $id): array
+{
+    $st = $pdo->prepare('SELECT DISTINCT para_birimi FROM cari_hareketler WHERE cari_id = ? ORDER BY para_birimi');
+    $st->execute([$id]);
+    return array_keys(cari_pb_sirala(array_fill_keys(array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN)), 1)));
+}
+
 /** @param list<int> $ids @return array<int,array<string,int>> id → pb → bakiye */
 function cari_bakiyeler_toplu(PDO $pdo, array $ids): array
 {
@@ -822,7 +854,7 @@ function cari_ekstre(PDO $pdo, int $cari_id, array $f): array
     if (!empty($f['pb'])) { $w .= ' AND h.para_birimi = ?'; $p[] = (string)$f['pb']; }
     if ($bit !== '') { $w .= ' AND h.tarih <= ?'; $p[] = $bit; }
     if (empty($f['iptaller_gorunsun'])) $w .= " AND h.durum = 'gecerli'";
-    $st = $pdo->prepare("SELECT h.*, bk.unvan AS bagli_cari_unvan FROM cari_hareketler h
+    $st = $pdo->prepare("SELECT h.*, bk.unvan AS bagli_cari_unvan, b.cari_id AS bagli_cari_id FROM cari_hareketler h
         LEFT JOIN cari_hareketler b ON b.id = h.bagli_id LEFT JOIN cari_kartlar bk ON bk.id = b.cari_id
         WHERE $w ORDER BY h.para_birimi, h.tarih, h.id");
     $st->execute($p);
@@ -853,11 +885,11 @@ function cari_ekstre(PDO $pdo, int $cari_id, array $f): array
             'borc' => $borc, 'alacak' => $alacak, 'yuruyen' => $gecerli ? $out[$pb]['_yur'] : null,
             'kur' => $kur, 'tl_karsilik' => ($kur !== null && $pb !== 'TRY') ? (int)round($kurus * (float)$kur) : null,
             'durum' => (string)$r['durum'], 'iptal_neden' => $r['iptal_neden'], 'bagli_cari_unvan' => $r['bagli_cari_unvan'],
+            'bagli_cari_id' => $r['bagli_cari_id'] !== null ? (int)$r['bagli_cari_id'] : null, 'kaynak_modul' => $r['kaynak_modul'], 'yon' => (string)$r['yon'],
         ];
     }
     foreach ($out as $pb => $x) { $out[$pb]['kapanis'] = $x['_yur']; unset($out[$pb]['_yur']); }
-    ksort($out);
-    return $out;
+    return cari_pb_sirala($out);
 }
 
 // ── Tanım ───────────────────────────────────────────────────────────────────
@@ -976,4 +1008,44 @@ function cari_ice_aktar(PDO $pdo, int $uid): array
     });
     audit_log_event('cari_ice_aktar', 'cari', null, null, ['eklenen' => $eklenen, 'atlanan' => $atlanan]);
     return ['ok' => true, 'hata' => null, 'id' => null, 'eklenen' => $eklenen, 'atlanan' => $atlanan];
+}
+
+// ── Uç yardımcıları (cari_kaydet.php / cari_ekstre.php) ──────────────────────
+
+/** `geri` yalnız yerel cari_*.php adresi (açık yönlendirme yok). */
+function cari_geri_guvenli(mixed $g): string
+{
+    $g = is_string($g) ? $g : '';
+    return preg_match('/^cari_[a-z]+\.php(\?[^\r\n]*)?$/', $g) === 1 ? $g : 'cari_kartlari.php';
+}
+
+/** Sonucu JSON ya da PRG olarak gönderir. */
+function cari_cevap(array $s, string $geri, string $okMesaj, bool $json): never
+{
+    $ok = !empty($s['ok']);
+    if ($json) {
+        if (!$ok && ($s['kod'] ?? '') === 'kaynakli') http_response_code(409);
+        elseif (!$ok) http_response_code(422);
+        echo json_encode([
+            'ok' => $ok, 'id' => $s['id'] ?? null, 'belge_no' => $s['belge_no'] ?? null, 'hata' => $ok ? null : (string)($s['hata'] ?? 'İşlem yapılamadı.'),
+            'alanlar' => (object)($s['alanlar'] ?? []), 'uyari' => $s['uyari'] ?? null, 'yonlendir' => $geri, 'tekrar' => !empty($s['tekrar']),
+            'kod' => $s['kod'] ?? null, 'eklenen' => $s['eklenen'] ?? null, 'atlanan' => $s['atlanan'] ?? null,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $msg = $ok ? $okMesaj . (!empty($s['belge_no']) ? ' · ' . $s['belge_no'] : '') . (!empty($s['uyari']) ? ' — ' . $s['uyari'] : '') : (string)($s['hata'] ?? 'İşlem yapılamadı.');
+    set_flash($ok ? 'success' : 'error', $msg);
+    header('Location: ' . $geri, true, 303);
+    exit;
+}
+
+function cari_csv_para(int $kurus): string { return number_format($kurus / 100, 2, ',', ''); }   // binlik ayraçsız — aktarımda güvenli
+function cari_csv_ac(string $ad): mixed
+{
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $ad . '"');
+    header('Cache-Control: no-cache');
+    $o = fopen('php://output', 'w');
+    fwrite($o, "\xEF\xBB\xBF");
+    return $o;
 }

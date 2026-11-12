@@ -69,7 +69,10 @@ function role_permission_matrix(): array {
     ];
     if (function_exists('nav_muhasebe_gruplari')) foreach (nav_muhasebe_gruplari() as $key=>[$label,$icon,$pages]) {
         $children=[];
-        foreach ($pages as $route=>[$title,$emoji]) $children[]=$row(pathinfo($route,PATHINFO_FILENAME),$title,$route,[],[],'Hazırlanan sayfa; yalnız sistem yöneticisi. İşlem yetkisi bulunmuyor.',true);
+        $aciklama=$key==='cari'
+            ? 'Çalışan modül; yalnız sistem yöneticisi (rol bazlı cari yetkileri sonraki faz).'
+            : 'Hazırlanan sayfa; yalnız sistem yöneticisi. İşlem yetkisi bulunmuyor.';
+        foreach ($pages as $route=>[$title,$emoji]) $children[]=$row(pathinfo($route,PATHINFO_FILENAME),$title,$route,[],[],$aciklama,true);
         $groups[$label.' · Menü']=$children;
     }
     return $groups;

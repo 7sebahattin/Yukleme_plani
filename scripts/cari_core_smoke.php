@@ -277,6 +277,28 @@ ok('ikinci çalıştırma 0 ekler (idempotent)', $ia2['eklenen'] === 0 && say('c
 $by2 = array_column(cari_ice_aktar_onizle($pdo), null, 'ad');
 ok('sonra önizleme: var_md', $by2['Zeta Ihracat']['durum'] === 'var_md' && $by2['Ortak Firma']['durum'] === 'var_md');
 
+echo "\n=== 12b. Sayfa/uç katmanı için çekirdek ekleri ===\n";
+$za = (int)cari_kart_kaydet($pdo, ['unvan' => 'ZZ Liste A', 'tip' => 'musteri', 'para_birimi' => 'TRY', 'aktif' => '1'], $UID)['id'];
+$zb = (int)cari_kart_kaydet($pdo, ['unvan' => 'ZZ Liste B', 'tip' => 'musteri', 'para_birimi' => 'TRY', 'aktif' => '1'], $UID)['id'];
+cari_hareket_ekle($pdo, ['cari_id' => $za, 'tur' => 'tahsilat', 'tarih' => $bugun, 'tutar' => '10,00', 'para_birimi' => 'TRY', 'aciklama' => 'zz tahsilat'], $UID);
+$vz = cari_virman_ekle($pdo, ['kaynak_id' => $za, 'hedef_id' => $zb, 'tarih' => $bugun, 'tutar' => '5,00', 'para_birimi' => 'TRY', 'aciklama' => 'zz virman'], $UID);
+$L = cari_hareket_listesi($pdo, ['cari_q' => 'ZZ Liste'], 100, 0);
+ok('cari_q: ünvan/kod LIKE → yalnız ZZ kartlarının satırları (1 tahsilat + 2 virman satırı)', $L['toplam_satir'] === 3 && count($L['satirlar']) === 3, (string)$L['toplam_satir']);
+$L2 = cari_hareket_listesi($pdo, ['cari_q' => 'ZZ Liste', 'virman_tek' => true], 100, 0);
+ok('virman_tek: virman çifti TEK satır (kaynak/A satırı), özet adedi 1 (çift sayılmaz)', $L2['toplam_satir'] === 2 && $L2['ozet']['TRY']['virman']['adet'] === 1 && $L2['ozet']['TRY']['virman']['kurus'] === 500);
+$vs = array_values(array_filter($L2['satirlar'], fn($r) => $r['tur'] === 'virman'))[0];
+ok('liste satırı: bagli_cari_id/unvan karşı carinin', (int)$vs['cari_id'] === $za && (int)$vs['bagli_cari_id'] === $zb && $vs['bagli_cari_unvan'] === 'ZZ Liste B' && $vs['yon'] === 'A');
+$ek = cari_ekstre($pdo, $za, ['pb' => 'TRY'])['TRY']['satirlar'];
+$ev = array_values(array_filter($ek, fn($r) => $r['tur'] === 'virman'))[0];
+ok('ekstre satırı: id + yon + kaynak_modul(null) + bagli_cari_id (iptal düğmesi/karşı cari bağlantısı için)', $ev['id'] === (int)$vz['id'] && $ev['yon'] === 'A' && array_key_exists('kaynak_modul', $ev) && $ev['kaynak_modul'] === null && $ev['bagli_cari_id'] === $zb);
+ok('cari_pb_sirala: TRY, USD, EUR, bilinmeyen sona', array_keys(cari_pb_sirala(['EUR' => 1, 'ZZZ' => 4, 'USD' => 3, 'TRY' => 2])) === ['TRY', 'USD', 'EUR', 'ZZZ']);
+ok('cari_kart_pbler: hareketli para birimleri (sıralı); hareket sayısı', cari_kart_pbler($pdo, $za) === ['TRY'] && cari_kart_hareket_say($pdo, $za) === 2 && cari_kart_pbler($pdo, 999999) === [] && cari_kart_hareket_say($pdo, 999999) === 0);
+ok('cari_geri_guvenli: yalnız yerel cari_*.php (+ sorgu); açık yönlendirme/CRLF/yol gezme → cari_kartlari.php',
+    cari_geri_guvenli('cari_fisler.php?bas=2026-01-01') === 'cari_fisler.php?bas=2026-01-01' && cari_geri_guvenli('cari_kartlari.php') === 'cari_kartlari.php'
+    && cari_geri_guvenli('https://x.example/') === 'cari_kartlari.php' && cari_geri_guvenli('//x.example') === 'cari_kartlari.php' && cari_geri_guvenli("cari_x.php\r\nSet-Cookie: a=b") === 'cari_kartlari.php'
+    && cari_geri_guvenli('../index.php') === 'cari_kartlari.php' && cari_geri_guvenli('index.php') === 'cari_kartlari.php' && cari_geri_guvenli(null) === 'cari_kartlari.php' && cari_geri_guvenli(['cari_a.php']) === 'cari_kartlari.php');
+ok('cari_csv_para: binlik ayraçsız, virgül ondalık', cari_csv_para(12540000) === '125400,00' && cari_csv_para(5) === '0,05');
+
 echo "\n=== 13. Kaynak değişmezleri ===\n";
 $src = (string)file_get_contents($ROOT . '/config/cari_core.php');
 preg_match_all('/UPDATE\s+cari_hareketler\s+SET\s+([^"\']+?)\s+WHERE/i', $src, $mm);
