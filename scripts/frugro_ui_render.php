@@ -26,7 +26,7 @@ function bas(string $dosya, array $get, string $ad): void {
     $html = preg_replace('#(href|src)="(?:\.\.?/)?assets/#', '$1="file://' . $ROOT . '/assets/', $html);
     file_put_contents("$OUT/$ad.html", $html); echo "$ad.html " . strlen($html) . "\n";
 }
-$PERMS = ['siparis.read', 'siparis.write', 'siparis.delete', 'siparis.match']; $IS_ADMIN = true; $UID = 1;
+$PERMS = ['siparis.read', 'siparis.write', 'siparis.delete', 'siparis.match', 'beyan.read']; $IS_ADMIN = true; $UID = 1;
 $dir = getenv('FRUGRO_ORNEK_DIR'); $dosyalar = $dir ? glob($dir . '/*.xlsx') : [$ROOT . '/scripts/fixtures/frugro/order_log_ornek.xlsx'];
 foreach ($dosyalar as $f) { $o = frg_xlsx_oku($f); if ($o['ok']) frg_toplu_kaydet($db, $o, ['user_id' => 1, 'kaynak' => 'yukleme', 'dosya_sha' => $o['dosya_sha']]); }
 $ids = $db->query('SELECT id FROM frugro_siparisler ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
@@ -80,6 +80,12 @@ foreach (['invoice_hazir' => 'INV-9004', 'yola_cikti' => 'INV-9005', 'mail_gonde
 $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_ggn_uretici', json_encode(['liste' => [['ad' => 'Uretici A', 'ggn' => '4063651214000'], ['ad' => 'Uretici B', 'ggn' => '4069453419551']]])]);
 $db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_pkl_ek_' . (int)$ids[0], json_encode(['logger_palet' => '2', 'antet' => true])]);
 if (getenv('FRUGRO_UI_AYARSIZ')) $db->exec("DELETE FROM hks_kv WHERE anahtar = 'frugro_pkl_mail_ayar'");   // "alıcı tanımlı değil" görünümü
+// Gümrük beyanı kartı: 3 sentetik beyan (yola_cikti plakası, mail_gonderildi partisi, ilgisiz); mail_gonderildi'ye KV bağı
+$bsd = $db->prepare("INSERT INTO customs_declarations (status, party_no, tractor_plate, vehicle_plate, net_kg, pallet_count, product_name, created_at) VALUES (?,?,?,?,?,?,?,?)");
+$bsd->execute(['taslak', 'P-2001', '34 TST 003', '34 TSD 003', 14200, 26, 'NAR', date('Y-m-d H:i:s')]); $bYola = (int)$db->lastInsertId();
+$bsd->execute(['beyan_acildi', 'P-3004', '06 AAA 111', '06 AAB 111', 14000, 26, 'NAR', date('Y-m-d H:i:s')]); $bMail = (int)$db->lastInsertId();
+$bsd->execute(['taslak', 'P-9999', '07 ZZZ 222', '07 ZZY 222', 9000, 20, 'LIMON', date('Y-m-d H:i:s')]);
+$db->prepare('REPLACE INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['frugro_beyan_' . $sentIds['mail_gonderildi'], json_encode(['beyanlar' => [['id' => $bMail, 'tur' => 'elle', 'at' => date('Y-m-d H:i:s'), 'by' => 1]], 'parti_kaynak' => null, 'parti_deger' => null])]);
 bas('frugro_siparis.php', [], 'liste');
 bas('frugro_siparis.php', ['q' => 'P-100'], 'liste_arama');
 bas('frugro_siparis.php', ['durum' => 'mail_gonderildi'], 'liste_tek_durum');
@@ -87,6 +93,7 @@ bas('frugro_siparis.php', ['durum' => 'pb_eksik', 'musteri' => 'Musteri-A'], 'li
 bas('frugro_yazdir.php', ['bolum' => 'acik'], 'yazdir_acik');          // P1: JSON uçlar (içerik .html adıyla)
 bas('frugro_paylas.php', ['id' => $sentIds['pkl_hazir']], 'paylas_pkl_hazir');
 foreach ($sentIds as $dur => $sid) bas('frugro_view.php', ['id' => $sid], 'detay_' . $dur);
+bas('frugro_view.php', ['id' => $sentIds['yola_cikti'], 'beyan_q' => 'P-2001'], 'detay_beyan_ara');
 bas('frugro_view.php', ['id' => $ids[0]], 'detay');   // fixture siparişi (26 paletli)
 bas('frugro_pkl.php', ['id' => $ids[0]], 'pkl');
 bas('frugro_invoice.php', ['id' => $ids[0]], 'invoice');

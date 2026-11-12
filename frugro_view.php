@@ -16,6 +16,7 @@ require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/frugro_core.php';
 require_once __DIR__ . '/config/frugro_ui.php';
 require_once __DIR__ . '/config/frugro_detay.php';
+require_once __DIR__ . '/config/frugro_beyan.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
@@ -76,6 +77,18 @@ try {
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $u) $kullanici[(int)$u['id']] = (string)$u['ad'];
     }
 } catch (Throwable $e) { /* ad çözülemezse yalnız ad gösterilmez */ }
+$beyanOku = can_beyan('read');
+$esle = $yaz && can_siparis('match') && $beyanOku;
+$beyanQ = trim((string)($_GET['beyan_q'] ?? ''));
+$frgBaglar = []; $frgOneri = []; $frgAra = []; $beyanHata = false;
+if ($beyanOku) {
+    try {
+        $frgBaglar = frgb_baglar($pdo, $id);
+        if ($esle && !$kapali) $frgOneri = frgb_oneriler($pdo, $s);
+        if ($esle && $beyanQ !== '') $frgAra = frgb_ara($pdo, $beyanQ, $id);
+    } catch (Throwable $e) { $beyanHata = true; error_log('[frugro_view] beyan: ' . get_class($e)); }
+}
+$partiler = frgb_parti_listesi($s, $frgBaglar);
 $imza = (string)(($auth_user['display_name'] ?? '') ?: ($auth_user['username'] ?? ''));
 $mailAyar = frgd_mail_ayar_oku($pdo);
 $ayarBos = $mailAyar['kime'] === [] && $mailAyar['bilgi'] === [];
@@ -98,7 +111,7 @@ render_flash();
   <div class="page-head sip-head">
     <div class="sip-head-sol">
       <a class="btn btn-geri" href="frugro_siparis.php">← Frugro Siparişler</a>
-      <h1 class="sip-h1"><?= h((string)$s['po_no']) ?> <?php if ($v('parti_no') !== ''): ?><span class="sip-parti-btn" title="Parti numarası (elle)"><span class="sip-parti-et">Parti</span> <?= h($v('parti_no')) ?></span> <?php endif; ?><?= frgui_durum_badge($durum) ?></h1>
+      <h1 class="sip-h1"><?= h((string)$s['po_no']) ?> <?php foreach ($partiler as $pt): ?><span class="sip-parti-btn" title="Parti numarası"><span class="sip-parti-et">Parti</span> <?= h($pt) ?></span> <?php endforeach; ?><?= frgui_durum_badge($durum) ?></h1>
       <p class="sip-alt-satir muted">
         🍇 <?= h($v('son_musteri') !== '' ? $v('son_musteri') : 'Müşteri bilinmiyor') ?>
         <?php if ($v('giris_limani') !== ''): ?> · <?= h($v('giris_limani')) ?><?php endif; ?>
@@ -303,6 +316,58 @@ render_flash();
       <section class="sip-uyari sip-o2" id="uyarilar" aria-label="Uyarılar">
         <h2>⚠ Uyarılar <span class="sip-say"><?= count($uyarilar) ?></span></h2>
         <ul><?php foreach ($uyarilar as $u): ?><li><?= $u['seviye'] === 'fark' ? '<strong>Fark:</strong> ' : '' ?><?= h($u['mesaj']) ?></li><?php endforeach; ?></ul>
+      </section>
+      <?php endif; ?>
+
+      <?php if ($beyanOku): ?>
+      <section class="card sip-o8" id="beyan" aria-labelledby="frgBeyanBas">
+        <div class="card-head"><h2 id="frgBeyanBas">🏛 Gümrük beyanı</h2></div>
+        <?php if ($beyanHata): ?><p class="sip-hata-metin">Beyan verisi okunamadı.</p><?php endif; ?>
+        <?php if (!$frgBaglar): ?><p class="muted">Bu siparişe bağlı beyan yok.</p><?php endif; ?>
+        <?php foreach ($frgBaglar as $bg): $b = $bg['beyan']; ?>
+          <div class="sip-beyan-kart">
+            <?php if ($b): ?>
+              <div class="sip-beyan-ust"><a href="beyan_view.php?id=<?= (int)$b['id'] ?>"><strong>Beyan #<?= (int)$b['id'] ?></strong></a> <?= beyan_badge_html((string)$b['status']) ?></div>
+              <div class="sip-soluk">Parti <?= h((string)($b['party_no'] ?? '—')) ?> · <?= h(trim((string)($b['tractor_plate'] ?? '') . ' ' . (string)($b['vehicle_plate'] ?? ''))) ?: '—' ?></div>
+              <div class="sip-soluk"><?= $b['net_kg'] !== null ? h(fmt_kg($b['net_kg'])) . ' kg net' : 'net —' ?> · <?= $b['pallet_count'] !== null ? (int)$b['pallet_count'] . ' palet' : 'palet —' ?></div>
+            <?php else: ?><div class="sip-soluk">Beyan #<?= (int)$bg['beyan_id'] ?> (okunamadı)</div><?php endif; ?>
+            <?php if ($esle): ?>
+              <form method="post" action="frugro_beyan.php" class="sip-satir-form" data-sip-onay="Beyan bağı kaldırılsın mı?"><?= sipui_csrf() ?><input type="hidden" name="islem" value="kaldir"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="beyan_id" value="<?= (int)$bg['beyan_id'] ?>"><button type="submit" class="btn btn-sm">Bağı kaldır</button></form>
+            <?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+        <?php if ($esle): ?>
+          <?php if (!$frgBaglar): ?><p class="sip-bilgi" role="note">Beyan otomatik eşleşmediyse parti no, beyan no ya da plaka ile arayıp elle bağlayabilirsiniz<?= can_beyan('create') ? '; beyan henüz yoksa <a href="beyan_create.php">yeni beyan oluşturun</a>' : '' ?>.</p><?php endif; ?>
+          <?php if ($frgOneri): ?>
+            <h3 class="sip-grup-bas">Öneriler</h3>
+            <?php foreach ($frgOneri as $o): $b = $o['beyan']; ?>
+              <div class="sip-beyan-kart">
+                <div class="sip-beyan-ust"><a href="beyan_view.php?id=<?= (int)$o['beyan_id'] ?>"><strong>Beyan #<?= (int)$o['beyan_id'] ?></strong></a> <?= beyan_badge_html((string)$b['status']) ?>
+                  <span class="sip-puan" title="Eşleşme puanı"><span class="sip-puan-cubuk" style="width:<?= min(100, (int)$o['puan']) ?>%"></span><span class="sip-puan-txt"><?= (int)$o['puan'] ?></span></span></div>
+                <div class="sip-soluk">Parti <?= h((string)($b['party_no'] ?? '—')) ?> · <?= h(trim((string)($b['tractor_plate'] ?? '') . ' ' . (string)($b['vehicle_plate'] ?? ''))) ?: '—' ?></div>
+                <div class="sip-nedenler"><?= h(implode(' · ', $o['gerekce'])) ?></div>
+                <form method="post" action="frugro_beyan.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="bagla"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="beyan_id" value="<?= (int)$o['beyan_id'] ?>"><input type="hidden" name="tur" value="oneri"><button type="submit" class="btn btn-sm btn-primary">Bağla</button></form>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
+          <form method="get" action="frugro_view.php#beyan" class="sip-beyan-ara"><input type="hidden" name="id" value="<?= $id ?>">
+            <label class="sip-sr" for="frgBeyanQ">Beyan ara</label>
+            <input type="search" id="frgBeyanQ" name="beyan_q" value="<?= h($beyanQ) ?>" placeholder="Beyan no, parti no ya da plaka ara…"><button type="submit" class="btn btn-sm">Ara</button></form>
+          <?php if ($beyanQ !== ''): ?>
+            <?php if (!$frgAra): ?><p class="muted">"<?= h($beyanQ) ?>" için beyan bulunamadı.</p><?php endif; ?>
+            <?php foreach ($frgAra as $b): ?>
+              <div class="sip-beyan-kart">
+                <div class="sip-beyan-ust"><a href="beyan_view.php?id=<?= (int)$b['id'] ?>"><strong>Beyan #<?= (int)$b['id'] ?></strong></a> <?= beyan_badge_html((string)$b['status']) ?></div>
+                <div class="sip-soluk">Parti <?= h((string)($b['party_no'] ?? '—')) ?> · <?= h(trim((string)($b['tractor_plate'] ?? '') . ' ' . (string)($b['vehicle_plate'] ?? ''))) ?: '—' ?></div>
+                <?php if ($b['bagli'] === 'bu'): ?><div class="sip-soluk">Bu siparişe bağlı</div>
+                <?php elseif ($b['bagli'] !== null): ?><div class="sip-soluk">Bağlı: <?= h((string)$b['bagli']) ?></div>
+                <?php else: ?><form method="post" action="frugro_beyan.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="bagla"><input type="hidden" name="id" value="<?= $id ?>"><input type="hidden" name="beyan_id" value="<?= (int)$b['id'] ?>"><input type="hidden" name="tur" value="elle"><button type="submit" class="btn btn-sm btn-primary">Bağla</button></form><?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
+        <?php elseif (!$esle && $frgBaglar === []): ?>
+          <p class="sip-bilgi" role="note">Beyan bağlamak için siparis.match yetkisi gerekir.</p>
+        <?php endif; ?>
       </section>
       <?php endif; ?>
 

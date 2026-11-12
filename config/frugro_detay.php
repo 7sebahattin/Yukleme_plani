@@ -166,7 +166,7 @@ function frgd_alan_ipucu(string $alan): string
     return [
         'fiyat_kutu_birim' => 'Kutu başı fiyat; ondalık için virgül (örn. 4,60).',
         'para_birimi' => 'GBP ya da EUR. Boş bırakılırsa tutar "GBP/EUR seçilecek" görünür.',
-        'parti_no' => 'Elle girilir (gümrük beyanına bağlı değil).',
+        'parti_no' => 'Elle girilir; boşsa bağlanan gümrük beyanının parti no\'su yazılır.',
         'plaka' => 'Çekici-Dorse, örn. 34ABC123-34XYZ456',
         'sofor_telefon' => 'Elle girilen not (ör. +90 5xx xxx xx xx).',
         'teslim_adresi' => 'Order Log\'daki teslim adresi.',
@@ -270,6 +270,7 @@ function frgd_olay_etiketleri(): array
         'duzenlendi' => ['✎', 'Elle düzenlendi'], 'durum' => ['🔁', 'Durum değişti'], 'pkl_kaydedildi' => ['📦', 'PKL kaydedildi'],
         'pkl_taslak' => ['📦', 'PKL taslağı oluşturuldu'], 'pkl_uretildi' => ['📄', 'PKL üretildi'], 'invoice_uretildi' => ['🧾', 'Invoice üretildi'],
         'mail_gonderildi' => ['✅', 'Mail gönderildi'], 'evrak_gonderildi' => ['📦', 'Evrak takımı gönderildi'], 'silindi' => ['🗑', 'Silindi'],
+        'beyan_baglandi' => ['🏛', 'Beyan bağlandı'], 'beyan_kaldirildi' => ['🏛', 'Beyan bağı kaldırıldı'],
     ];
 }
 
