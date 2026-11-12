@@ -8,7 +8,7 @@ Migration yok (tek istisna v463: Rampacı yevmiye kolonu — aşağıdaki «v463
 1. **Şablonu indir** (`Fis_Excel_Sablonu_YYYYMMDD.xlsx`; çavuş listesi o günün sistem verisidir).
 2. Fiş fotoğraflarını sayfadaki **komutla** birlikte yapay zekâya verin; «Fişler» sayfasını doldurmasını isteyin. Belirsiz hücre BOŞ + «Kontrol Notu» dolu gelmelidir.
 3. Dolu `.xlsx`'i yükleyin → **önizleme** (hiçbir şey yazılmaz): fiş başına gruplar, FM dağılımı, servis, mevcut kayıt durumu, hata/uyarılar.
-4. Onay kutularını gözden geçirin (Yarım kararı ☑, FM onayı ☑, EK yaz ☐, işletme uyuşmazlığı ☐) → **Seçilenleri yaz**.
+4. Onay kutularını gözden geçirin (Yarım kararı ☑, FM onayı ☑, EK yaz ☐) → **Seçilenleri yaz**.
 5. Hatalı satırları Excel'de düzeltip **aynı dosyayı** yeniden yükleyin: yazılmış fişler «zaten yüklü» atlanır, çiftlenmez.
 
 ## Düzeltme (yazılmış fiş)

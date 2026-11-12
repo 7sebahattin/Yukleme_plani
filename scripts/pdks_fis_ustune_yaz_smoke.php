@@ -19,7 +19,7 @@ function fisYap(array $say, array $o = []): array {
     foreach (($o['fm_kova'] ?? []) as $sa => $c) $kova[$sa] = $c;
     unset($o['fm_kova']);
     $cv = $o['cavus'] ?? $cavus['A']; unset($o['cavus']);
-    return $o + ['satir' => 1 + $n, 'fis_no' => 'T' . $n, 'fis_no_ham_sayi' => false, 'tarih' => $dun3, 'isletme' => '', 'cavus' => ['id' => $cv, 'kod' => '', 'ad' => '', 'yontem' => 'kod'],
+    return $o + ['satir' => 1 + $n, 'fis_no' => 'T' . $n, 'fis_no_ham_sayi' => false, 'tarih' => $dun3, 'cavus' => ['id' => $cv, 'kod' => '', 'ad' => '', 'yontem' => 'kod'],
                  'say' => $s, 'fm_kova' => $kova, 'fm_toplam' => null, 'fm_kisi' => null, 'fm_tipi' => null, 'servis' => ['buyuk' => 0, 'kucuk' => 0],
                  'giris' => '08:00', 'giris_varsayilan' => true, 'rev' => 0, 'not' => '', 'ham' => '', 'kontrol' => '', 'cakisma_dosya' => false, 'cakisma_sira' => 0,
                  'hatalar' => [], 'uyarilar' => []];

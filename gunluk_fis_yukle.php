@@ -31,8 +31,7 @@ $uid = (int)$auth_user['id'];
 $depo = function_exists('active_depot') ? (string)(active_depot() ?? '') : '';
 $self = 'gunluk_fis_yukle.php';
 // Form seçenekleri (depo değişiminde seçimler sorgu dizgesiyle taşınır)
-$isletmeler = depot_options();
-$isletmeSec = trim((string)($_GET['isletme'] ?? '')); if (!in_array($isletmeSec, $isletmeler, true)) $isletmeSec = $depo;
+$depolar = depot_options();
 $cavusOnsec = (int)($_GET['cavus'] ?? 0);
 $cavuslar = pdks_fis_cavuslar($pdo);
 
@@ -56,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($eylem === 'depo_degistir') {
         $yeni = trim((string)($_POST['depo'] ?? ''));
-        $qs = array_filter(['isletme' => trim((string)($_POST['isletme'] ?? '')), 'cavus' => (int)($_POST['cavus_id'] ?? 0) ?: ''], fn($v) => $v !== '');
+        $qs = array_filter(['cavus' => (int)($_POST['cavus_id'] ?? 0) ?: ''], fn($v) => $v !== '');
         if ($yeni === '' || !in_array($yeni, depot_options(), true)) { set_flash('error', 'Geçersiz depo seçimi.'); header('Location: ' . $self); exit; }
         if ($yeni !== $depo) {
             set_active_depot($yeni);
@@ -69,8 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($eylem === 'onizle') {
         if ($depo === '') { set_flash('error', 'Önce bir depo seçmelisiniz.'); header('Location: ' . $self); exit; }
         if (trim((string)($_POST['depo'] ?? '')) !== $depo) { set_flash('error', 'Seçilen depo, aktif depodan farklı — depoyu seçip sayfanın yenilenmesini bekleyin.'); header('Location: ' . $self); exit; }
-        $isletme = trim((string)($_POST['isletme'] ?? ''));
-        if ($isletme === '' || !in_array($isletme, depot_options(), true)) { set_flash('error', 'İşletme seçin.'); header('Location: ' . $self); exit; }
         $cavusSec = null;
         foreach (pdks_fis_cavuslar($pdo) as $c) if ((int)$c['id'] === (int)($_POST['cavus_id'] ?? 0)) { $cavusSec = $c; break; }
         if ($cavusSec === null) { set_flash('error', 'Çavuş seçin.'); header('Location: ' . $self); exit; }
@@ -78,14 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$d['ok']) { set_flash('error', (string)$d['hata']); header('Location: ' . $self); exit; }
         $o = pdks_fis_oku((string)$d['yol']);
         if (empty($o['ok'])) { set_flash('error', (string)($o['hata'] ?? 'Dosya okunamadı.')); header('Location: ' . $self); exit; }
-        $n = pdks_fis_normalize($o, $cavusSec, $isletme);
+        $n = pdks_fis_normalize($o, $cavusSec);
         if (!$n['fisler']) { set_flash('error', implode(' ', $n['genel_hatalar'] ?: ['Dosyada fiş bulunamadı.'])); header('Location: ' . $self); exit; }
         $sec0 = pdks_fis_secenek(['fm_tip' => $_POST['fm_tip'] ?? 'tumu', 'ustune_yaz' => !empty($_POST['ustune_yaz']), 'ustune_gerekce' => $_POST['ustune_gerekce'] ?? '']);
         // v464: «Üstüne yaz» önizlemeden ÖNCE seçilir (eski → yeni fark önizlemede görünür); gerekçe zorunlu. Yazma anında seçenek TOKEN'dan okunur.
-        if ($sec0['ustune_yaz'] && $sec0['ustune_gerekce'] === '') { set_flash('error', 'Üstüne yazmak için gerekçe zorunludur.'); header('Location: ' . $self . '?isletme=' . rawurlencode($isletme) . '&cavus=' . (int)$cavusSec['id']); exit; }
+        if ($sec0['ustune_yaz'] && $sec0['ustune_gerekce'] === '') { set_flash('error', 'Üstüne yazmak için gerekçe zorunludur.'); header('Location: ' . $self . '?cavus=' . (int)$cavusSec['id']); exit; }
         $token = pdks_fis_token_olustur([
             'sha' => (string)$d['sha256'], 'dosya_ad' => pdks_fis_metin_duz(basename(str_replace('\\', '/', (string)($_FILES['dosya']['name'] ?? 'dosya.xlsx'))), 120),
-            'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $sec0['fm_tip'], 'ustune_yaz' => $sec0['ustune_yaz'], 'ustune_gerekce' => $sec0['ustune_gerekce']], 'ust' => ['isletme' => $isletme, 'depo' => $depo, 'cavus' => $cavusSec['code'] . ' · ' . $cavusSec['name']], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
+            'fisler' => $n['fisler'], 'secenek' => ['fm_tip' => $sec0['fm_tip'], 'ustune_yaz' => $sec0['ustune_yaz'], 'ustune_gerekce' => $sec0['ustune_gerekce']], 'ust' => ['depo' => $depo, 'cavus' => $cavusSec['code'] . ' · ' . $cavusSec['name']], 'hashler' => [], 'dosya_uyarilar' => $o['uyarilar'],
         ]);
         export_audit('gunluk_fis_yukle', 'Fiş Excel önizleme', 'xlsx', count($n['fisler']), ['sha256' => substr((string)$d['sha256'], 0, 16), 'cavus_id' => (int)$cavusSec['id']]);
         session_write_close();   // yönlendirmeden ÖNCE: sonraki GET oturum yazımını beklemeden token'ı görsün
@@ -106,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($yuk === null) { error_log('[fis_yukle] yaz: token ' . ($tokenNeden ?? '?')); set_flash('error', pdks_fis_token_hata_metni($tokenNeden)); header('Location: ' . $self); exit; }
         $secenek = pdks_fis_secenek([
             'fm_tip' => $yuk['secenek']['fm_tip'] ?? 'tumu', 'onay_yarim' => !empty($_POST['onay_yarim']), 'onay_fm' => !empty($_POST['onay_fm']),
-            'ek_yaz' => !empty($_POST['ek_yaz']), 'isletme_onay' => !empty($_POST['isletme_onay']),
+            'ek_yaz' => !empty($_POST['ek_yaz']),
             'ustune_yaz' => !empty($yuk['secenek']['ustune_yaz']), 'ustune_gerekce' => (string)($yuk['secenek']['ustune_gerekce'] ?? ''),   // v464: TOKEN'dan (önizlemedeki fark = yazılan)
         ]);
         // Seçim: masaüstü tablo (secilen[]) ve mobil kart (secilen_m[]) KESİŞİMİ — biri ayrışırsa fiş YAZILMAZ (güvenli yön).
@@ -133,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $model = null;
 $onizleToken = (string)($_GET['onizle'] ?? '');
 $sonucToken = (string)($_GET['sonuc'] ?? '');
-$varsayilan = ['onay_yarim' => true, 'onay_fm' => true, 'ek_yaz' => false, 'isletme_onay' => false];
+$varsayilan = ['onay_yarim' => true, 'onay_fm' => true, 'ek_yaz' => false];
 if ($onizleToken !== '') {
     $yuk = pdks_fis_token_al($onizleToken, $tokenNeden);
     if ($yuk === null) { error_log('[fis_yukle] onizle: token ' . ($tokenNeden ?? '?')); set_flash('error', pdks_fis_token_hata_metni($tokenNeden)); header('Location: ' . $self); exit; }
@@ -175,7 +172,7 @@ render_flash();
 else: ?>
     <div class="card fy-kart-adim">
         <h2>1 · Şablon</h2>
-        <p>Şablonu indirin, fiş fotoğraflarıyla birlikte yapay zekâya verin (aşağıdaki komutla) ve «Fişler» sayfasını doldurtun. İşletme, depo ve çavuşu Excel'e yazmayın — aşağıdaki 2. adımda seçersiniz; bir dosya tek çavuşa aittir. Yalnız <b>geçmiş günlerin</b> fişleri · en çok <?= (int)PDKS_FIS_MAX_FIS ?> fiş · en çok <?= (int)(PDKS_FIS_MAX_BAYT / 1048576) ?> MB.</p>
+        <p>Şablonu indirin, fiş fotoğraflarıyla birlikte yapay zekâya verin (aşağıdaki komutla) ve «Fişler» sayfasını doldurtun. Depo ve çavuşu Excel'e yazmayın — aşağıdaki 2. adımda seçersiniz; bir dosya tek çavuşa aittir. Yalnız <b>geçmiş günlerin</b> fişleri · en çok <?= (int)PDKS_FIS_MAX_FIS ?> fiş · en çok <?= (int)(PDKS_FIS_MAX_BAYT / 1048576) ?> MB.</p>
         <p><a class="btn btn-primary" href="<?= h($self) ?>?sablon=1">📄 Şablonu indir (.xlsx)</a></p>
         <details class="fy-komut">
             <summary>Yapay zekâya verilecek komut</summary>
@@ -188,7 +185,6 @@ else: ?>
         <form method="post" action="<?= h($self) ?>" id="fyDepoForm" class="fy-depo-form">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="eylem" value="depo_degistir">
-            <input type="hidden" name="isletme" value="" id="fyDepoIsletme">
             <input type="hidden" name="cavus_id" value="" id="fyDepoCavus">
             <noscript><button type="submit" class="btn">Depoyu değiştir</button></noscript>
         </form>
@@ -197,15 +193,9 @@ else: ?>
             <input type="hidden" name="eylem" value="onizle">
             <div class="fy-secimler">
                 <div class="form-group">
-                    <label for="fyIsletme">İşletme</label>
-                    <select id="fyIsletme" name="isletme" required>
-                        <?php foreach ($isletmeler as $x): ?><option value="<?= h($x) ?>"<?= $x === $isletmeSec ? ' selected' : '' ?>><?= h($x) ?></option><?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
                     <label for="fyDepo">Depo</label>
                     <select id="fyDepo" name="depo" form="fyDepoForm" required>
-                        <?php foreach ($isletmeler as $x): ?><option value="<?= h($x) ?>"<?= $x === $depo ? ' selected' : '' ?>><?= h($x) ?></option><?php endforeach; ?>
+                        <?php foreach ($depolar as $x): ?><option value="<?= h($x) ?>"<?= $x === $depo ? ' selected' : '' ?>><?= h($x) ?></option><?php endforeach; ?>
                     </select>
                     <input type="hidden" name="depo" value="<?= h($depo) ?>">
                 </div>
@@ -224,9 +214,11 @@ else: ?>
             <div class="form-group">
                 <label for="fyFmTip">Toplam FM dağıtımında / FM Tipi boş fişlerde FM yapanlar</label>
                 <select id="fyFmTip" name="fm_tip">
-                    <option value="tumu">Tümü (Tam kişi sayısıyla orantılı)</option>
+                    <option value="tumu">Tümü — Kadın + Erkek (Tam sayısıyla orantılı; Şeritçi hariç)</option>
+                    <option value="kadin">Yalnız Kadın</option>
                     <option value="erkek">Yalnız Erkek</option>
-                    <option value="erkek_rampaci">Erkek + Rampacı</option>
+                    <option value="seritci">Yalnız Şeritçi</option>
+                    <option value="erkek_seritci">Erkek + Şeritçi</option>
                 </select>
             </div>
             <fieldset class="fy-onay fd-ustune">
@@ -258,9 +250,8 @@ else: ?>
     });
     var depoSec = document.getElementById('fyDepo'), depoForm = document.getElementById('fyDepoForm');
     if (depoSec && depoForm) depoSec.addEventListener('change', function () {
-        // depo değişince aktif depo sunucuda değişir; işletme/çavuş seçimi sorgu dizgesiyle taşınır
-        var i = document.getElementById('fyIsletme'), c = document.getElementById('fyCavus');
-        document.getElementById('fyDepoIsletme').value = i ? i.value : '';
+        // depo değişince aktif depo sunucuda değişir; çavuş seçimi sorgu dizgesiyle taşınır
+        var c = document.getElementById('fyCavus');
         document.getElementById('fyDepoCavus').value = c ? c.value : '';
         depoForm.submit();
     });
