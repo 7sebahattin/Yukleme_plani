@@ -61,14 +61,14 @@ function frgui_para(int $kurus): string
 }
 
 /**
- * Tutar hücresi. Fiyat yoksa "—"; para birimi atanmamışsa "GBP/EUR seçilecek" (tutar o zamana dek para birimsiz,
+ * Tutar hücresi. Fiyat yoksa "—"; para birimi atanmamışsa "Döviz seçilecek" (tutar o zamana dek para birimsiz,
  * sayı gösterilmez — yanlış birimle yorumlanmasın). Para birimleri toplanmaz.
  */
 function frgui_tutar_html(array $s): string
 {
     $h = frg_hesap($s);
     if (!$h['fiyat_var']) return '<span class="frg-soluk">—</span>';
-    if ($h['para_birimi'] === null) return '<span class="frg-pb-bekle">GBP/EUR seçilecek</span>';
+    if ($h['para_birimi'] === null) return '<span class="frg-pb-bekle">Döviz seçilecek</span>';
     return h(frgui_para($h['tutar_kurus'])) . ' ' . h($h['para_birimi']);
 }
 
@@ -121,7 +121,7 @@ function frgui_duzenle_dogrula(array $girdi): array
             case 'pb':
                 $v = strtoupper((string)$v);
                 if ($v === '') { $temiz[$alan] = null; break; }
-                if (!in_array($v, ['GBP', 'EUR'], true)) $hata[] = "$etiket: GBP veya EUR olmalı."; else $temiz[$alan] = $v;
+                if (!in_array($v, ['GBP', 'EUR', 'USD', 'RUB'], true)) $hata[] = "$etiket: GBP, EUR, USD ya da RUB olmalı."; else $temiz[$alan] = $v;   // liste frgi_para_birimleri() ile AYNI
                 break;
             case 'kod':
                 $v = strtoupper((string)preg_replace('/[^A-Za-z0-9]/', '', (string)$v));
