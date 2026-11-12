@@ -76,32 +76,34 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     }
     if (SHOT) { await page.setViewportSize({ width: 1280, height: 900 }); await page.screenshot({ path: path.join(SHOT, 'fis_form_1280.png'), fullPage: true }); }
 
-    console.log('\n=== 1b. İşletme · Depo · Çavuş seçimi (Excel\'de değil, formda) ===');
+    console.log('\n=== 1b. Depo · Çavuş seçimi (Excel\'de değil, formda) ===');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(URL);
-    ok('1b) üç seçim alanı: İşletme, Depo, Çavuş (hepsi zorunlu)', await page.locator('#fyIsletme[required]').count() === 1 && await page.locator('#fyDepo[required]').count() === 1 && await page.locator('#fyCavus[required]').count() === 1);
-    ok('1b) varsayılan: İşletme = Depo = aktif depo (Depo A); çavuş seçilmedi', (await page.locator('#fyIsletme').inputValue()) === 'Depo A' && (await page.locator('#fyDepo').inputValue()) === 'Depo A' && (await page.locator('#fyCavus').inputValue()) === '');
+    ok('1b) iki seçim alanı: Depo, Çavuş (zorunlu); İŞLETME alanı YOK (v519)', await page.locator('#fyIsletme').count() === 0 && await page.locator('[name=isletme]').count() === 0 && await page.locator('#fyDepo[required]').count() === 1 && await page.locator('#fyCavus[required]').count() === 1);
+    ok('1b) varsayılan: Depo = aktif depo (Depo A); çavuş seçilmedi', (await page.locator('#fyDepo').inputValue()) === 'Depo A' && (await page.locator('#fyCavus').inputValue()) === '');
     ok('1b) çavuş listesi "kod · ad" biçiminde ve seçeneklerde çavuş var', await page.locator('#fyCavus option', { hasText: 'C001 · Çavuş A' }).count() === 1);
     await page.setInputFiles('#fyDosya', XLSX);
     ok('1b) çavuş seçilmeden Önizle engellenir (HTML zorunlu alan)', await page.locator('#fyCavus').evaluate(e => e.validity.valueMissing));
     await page.selectOption('#fyCavus', { label: 'C002 · Çavuş B' });
     await page.selectOption('#fyDepo', 'Depo B');
     await page.waitForURL(/gunluk_fis_yukle\.php\?/);
-    ok('1b) depo değişince aktif depo değişir; çavuş/işletme seçimi sorgu dizgesiyle korunur', (await page.locator('#fyDepo').inputValue()) === 'Depo B' && (await page.locator('#fyCavus option:checked').innerText()).includes('Çavuş B') && (await page.locator('#fyIsletme').inputValue()) === 'Depo A', page.url());
-    const farkliDepo = await page.evaluate(async (u) => { const t = document.body.innerHTML.match(/name="csrf" value="([a-f0-9]+)"/); const r = await fetch(u, { method: 'POST', body: new URLSearchParams({ csrf: t ? t[1] : '', eylem: 'onizle', depo: 'Depo A', isletme: 'Depo A', cavus_id: '1' }) }); return await r.text(); }, URL);
+    ok('1b) depo değişince aktif depo değişir; çavuş seçimi sorgu dizgesiyle korunur', (await page.locator('#fyDepo').inputValue()) === 'Depo B' && (await page.locator('#fyCavus option:checked').innerText()).includes('Çavuş B'), page.url());
+    const farkliDepo = await page.evaluate(async (u) => { const t = document.body.innerHTML.match(/name="csrf" value="([a-f0-9]+)"/); const r = await fetch(u, { method: 'POST', body: new URLSearchParams({ csrf: t ? t[1] : '', eylem: 'onizle', depo: 'Depo A', cavus_id: '1' }) }); return await r.text(); }, URL);
     ok('1b) formdaki depo aktif depodan farklıysa (eski sekme) önizleme REDDEDİLİR', farkliDepo.includes('aktif depodan farklı'), farkliDepo.slice(0, 200));
     await page.selectOption('#fyDepo', 'Depo A');
     await page.waitForURL(/gunluk_fis_yukle\.php\?/);
     ok('1b) depoya geri dönüldü (Depo A)', (await page.locator('#fyDepo').inputValue()) === 'Depo A');
-    // İşletme ≠ Depo → uyuşmazlık onayı; dosyada işletme sütunu yok
+    // Önizleme üst özeti: Depo · Çavuş (İşletme yok)
     await page.goto(URL);
     await page.selectOption('#fyCavus', { label: 'C001 · Çavuş A' });
-    await page.selectOption('#fyIsletme', 'Depo B');
     await page.setInputFiles('#fyDosya', XLSX);
     await Promise.all([page.waitForURL(/\?onizle=[a-f0-9]{32}/), page.locator('button:has-text("Önizle")').click()]);
-    ok('1b) önizleme üstünde İşletme / Depo / Çavuş özeti', await page.locator('.fy-ust').innerText().then(t => t.includes('Depo B') && t.includes('Depo A') && t.includes('C001') && t.includes('Çavuş A')));
-    ok('1b) seçilen işletme ≠ depo → "uyuşmuyor" uyarısı (yazmak için onay kutusu)', (await page.locator('#fisYukle').innerText()).includes('uyuşmuyor'));
+    ok('1b) önizleme üstünde Depo / Çavuş özeti; İşletme YOK', await page.locator('.fy-ust').innerText().then(t => t.includes('Depo A') && t.includes('C001') && t.includes('Çavuş A') && !t.includes('İşletme')));
+    ok('1b) uyuşmazlık uyarısı / onay kutusu YOK', !(await page.locator('#fisYukle').innerText()).includes('uyuşmuyor') && (await page.locator('[name=isletme_onay]').count()) === 0);
     await Promise.all([page.waitForURL(url => !/onizle=/.test(url.toString())), page.locator('.fy-vazgec button').click()]);
+
+    ok('1b) FM seçenekleri: tumu · kadin · erkek · seritci · erkek_seritci (erkek_rampaci YOK)', (await page.locator('#fyFmTip option').evaluateAll(l => l.map(o => o.value).join())) === 'tumu,kadin,erkek,seritci,erkek_seritci');
+    ok('1b) «Tümü» etiketi: Kadın + Erkek (Şeritçi hariç)', (await page.locator('#fyFmTip option[value=tumu]').innerText()).includes('Kadın + Erkek') && (await page.locator('#fyFmTip option[value=tumu]').innerText()).includes('Şeritçi hariç'));
 
     console.log('\n=== 2. Yükle → önizleme ===');
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -118,7 +120,7 @@ const tasma = page => page.evaluate(() => document.documentElement.scrollWidth -
     ok('2) E2E-2 (v463): Rampacı 3 kişi 5 yevmiye → gruplar «Rampacı · 2 yevmiye · 2 kişi» + «Rampacı · 1 yevmiye · 1 kişi» ve özet «Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)»', await page.locator('.pc-only tbody tr').nth(1).innerText().then(t => t.includes('Rampacı · 2 yevmiye · 2 kişi') && t.includes('Rampacı · 1 yevmiye · 1 kişi') && t.includes('Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)')));
     ok('2) hatalı satır: Türkçe hücre hatası (Satır 4, «Kadın Tam» — «+» yalnız Erkek alanında)', await page.locator('.pc-only tr.fy-s-hata').innerText().then(t => t.includes('Satır 4, «Kadın Tam»') && t.includes('yalnız Erkek alanında')));
     ok('2) XSS: <script>/<img onerror> çalışmadı, DOM\'a eklenmedi', (await page.evaluate(() => window.__xss === undefined && document.querySelectorAll('#fisYukle script, #fisYukle img[src="x"]').length === 0)) && (await page.locator('#fisYukle').textContent()).includes('<script>window.__xss=1</script>'));
-    ok('2) onay kutuları varsayılan: Yarım ☑ FM ☑ EK ☐ İşletme ☐', await page.locator('[name=onay_yarim]').isChecked() && await page.locator('[name=onay_fm]').isChecked() && !(await page.locator('[name=ek_yaz]').isChecked()) && !(await page.locator('[name=isletme_onay]').isChecked()));
+    ok('2) onay kutuları varsayılan: Yarım ☑ FM ☑ EK ☐', await page.locator('[name=onay_yarim]').isChecked() && await page.locator('[name=onay_fm]').isChecked() && !(await page.locator('[name=ek_yaz]').isChecked()));
     ok('2) seçim: hazır + uyarılı fişler işaretli, hatalı disabled; sayaç (3)', await page.locator('.pc-only input[name="secilen[]"]').evaluateAll(l => l.map(c => c.checked + ':' + c.disabled).join()) === 'true:false,true:false,false:true,true:false' && (await page.locator('[data-fy-sayi]').innerText()) === '3');
     // seçim eşitleme
     await page.locator('.pc-only input[name="secilen[]"]').nth(1).uncheck();

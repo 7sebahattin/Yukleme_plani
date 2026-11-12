@@ -45,12 +45,12 @@ ok('1) şablon indirme GET + export_audit + xlsx_gonder, çıktıdan (render_hea
 ok('1) önizleme POST\'ta dosya doğrulama → okuma → normalize → token (dosya saklanmaz: move_uploaded_file / copy YOK)', $sira('pdks_fis_dosya_dogrula(') < $sira('pdks_fis_oku(') && $sira('pdks_fis_oku(') < $sira('pdks_fis_normalize(') && $sira('pdks_fis_normalize(') < $sira('pdks_fis_token_olustur(') && !preg_match('/move_uploaded_file|copy\(|file_put_contents\(/', $sayfa));
 ok('1) yazma yalnız token\'dan: fişler pdks_fis_token_al() ile, kova/saat/sayı POST\'tan OKUNMAZ', str_contains($sayfa, 'pdks_fis_token_al($token, $tokenNeden)') && !preg_match('/\$_POST\[\'(fm_(?!tip)|kova|saat|say|kadin|erkek|rampaci|servis)/', $sayfa));
 ok('1) seçim: tablo ∩ kart kesişimi + token\'daki bilinen satırlarla kesiştirilir', str_contains($sayfa, 'array_intersect($a, $b, $bilinen)'));
-ok('1) onay kutuları POST\'tan (onay_yarim/onay_fm/ek_yaz/isletme_onay), fm_tip token\'dan', str_contains($sayfa, "!empty(\$_POST['onay_yarim'])") && str_contains($sayfa, "\$yuk['secenek']['fm_tip']"));
+ok('1) onay kutuları POST\'tan (onay_yarim/onay_fm/ek_yaz), fm_tip token\'dan', str_contains($sayfa, "!empty(\$_POST['onay_yarim'])") && str_contains($sayfa, "\$yuk['secenek']['fm_tip']"));
 ok('1) kullanıcı verisi h(); ham $_POST/$_GET echo YOK', say_alt($sayfa, 'h(') >= 8 && !preg_match('/echo\s+\$_(POST|GET|REQUEST)|<\?=\s*\$_(POST|GET|REQUEST)/', $sayfa . $partial));
 ok('1) onayda confirm (onsubmit) — partial', str_contains($partial, 'onsubmit="return confirm('));
-ok('1) v451: İşletme/Depo/Çavuş formdan seçilir — onizle dalı çavuşu pdks_fis_cavuslar() listesinden doğrular, isletmeyi depot_options() ile', str_contains($sayfa, "\$_POST['cavus_id']") && str_contains($sayfa, 'pdks_fis_cavuslar($pdo)') && str_contains($sayfa, "in_array(\$isletme, depot_options(), true)"));
+ok('1) v519: Depo/Çavuş formdan seçilir (İşletme KALDIRILDI) — çavuş pdks_fis_cavuslar() listesinden doğrulanır; sayfada işletme yok', str_contains($sayfa, "\$_POST['cavus_id']") && str_contains($sayfa, 'pdks_fis_cavuslar($pdo)') && !preg_match('/isletme/i', $sayfa . $partial));
 ok('1) v451: depo değişimi depo_sec.php kuralıyla (depot_options + set_active_depot + audit depot_switch), onizle formdaki depo aktif depodan farklıysa REDDEDER', str_contains($sayfa, "'depo_degistir'") && str_contains($sayfa, 'set_active_depot($yeni)') && str_contains($sayfa, "'depot_switch'") && str_contains($sayfa, 'aktif depodan farklı'));
-ok('1) v451: normalize seçilen çavuş + işletmeyle çağrılır (dosyadan çavuş/işletme OKUNMAZ)', str_contains($sayfa, 'pdks_fis_normalize($o, $cavusSec, $isletme)') && !preg_match("/'(isletme|cavus_kodu|cavus_adi)'\\s*,/", $lib . '') );
+ok('1) v519: normalize seçilen çavuşla çağrılır (dosyadan çavuş OKUNMAZ); lib\'te işletme yok', str_contains($sayfa, 'pdks_fis_normalize($o, $cavusSec)') && !preg_match('/isletme/i', $lib) && !preg_match("/'(isletme|cavus_kodu|cavus_adi)'\\s*,/", $lib . '') );
 ok('1) v451: sütun tanımında işletme / çavuş yok', !array_intersect(array_column(pdks_fis_sutunlar(), 'anahtar'), ['isletme', 'cavus_kodu', 'cavus_adi']));
 ok('1) <dialog> / modal YOK', !str_contains($sayfa . $partial, '<dialog') && !str_contains($sayfa . $partial, 'pm-dialog'));
 ok('1) geri bağlantısı "← Günlük Puantaj" btn-geri (btn-geri-ptak YOK)', str_contains($sayfa, '<a href="gunluk_isci_puantaj.php" class="btn btn-geri">← Günlük Puantaj</a>') && !str_contains($sayfa, 'btn-geri-ptak'));
@@ -93,7 +93,7 @@ ok('3) doğrudan istek guard\'ı ($model / SCRIPT_FILENAME) kaynakta', str_conta
 
 function fixture(string $durum, int $satir, array $o = []): array {
     return $o + [
-        'satir' => $satir, 'fis_no' => 'T-' . $satir, 'rev' => 0, 'tarih' => '2026-10-20', 'giris' => '08:00', 'isletme' => '', 'not' => '',
+        'satir' => $satir, 'fis_no' => 'T-' . $satir, 'rev' => 0, 'tarih' => '2026-10-20', 'giris' => '08:00', 'not' => '',
         'cavus' => ['id' => 1, 'kod' => 'C001', 'ad' => 'Çavuş A', 'yontem' => 'kod'], 'durum' => $durum, 'hatalar' => [], 'engeller' => [], 'uyarilar' => [],
         'kontrol' => '', 'ham' => '', 'hash' => 'abcdef0123456789', 'kisi' => 3,
         'plan' => ['gruplar' => [['kod' => 'ERKEK', 'tip_ad' => 'Erkek', 'profil' => 'tam', 'fm_saat' => 0, 'adet' => 3, 'entry_clock' => '08:00', 'exit_date' => '2026-10-20', 'exit_clock' => '17:00']],
@@ -122,14 +122,14 @@ $fisler = [
 $model = [
     'mod' => 'onizle', 'token' => str_repeat('a', 32), 'csrf' => 'CSRF"TOKEN', 'url' => 'gunluk_fis_yukle.php', 'depo' => 'Depo A',
     'dosya_ad' => $XSS . '.xlsx', 'sha' => str_repeat('f', 64), 'dosya_uyarilar' => ['Tanınmayan sütun yok sayıldı: «' . $XSS . '».'],
-    'varsayilan' => ['onay_yarim' => true, 'onay_fm' => true, 'ek_yaz' => false, 'isletme_onay' => false],
+    'varsayilan' => ['onay_yarim' => true, 'onay_fm' => true, 'ek_yaz' => false],
     'onizle' => ['fisler' => $fisler, 'ozet' => ['fis' => 8, 'durum' => ['hazir' => 2, 'uyari' => 1, 'engel' => 1, 'onay' => 1, 'hata' => 1, 'zaten' => 1, 'devam' => 1], 'kisi' => 24, 'fm_saat' => 10, 'servis' => ['buyuk' => 0, 'kucuk' => 1]]],
 ];
 ob_start(); include $ROOT . '/_fis_onizle.php'; $html = (string)ob_get_clean();
 ok('3) önizleme render edildi (boş değil, #fisYukle kapsayıcı)', strlen($html) > 2000 && str_contains($html, 'id="fisYukle"'), (string)strlen($html));
 ok('3) v463: yevmiyeli Rampacı grupları «Rampacı · 2 yevmiye · 2 kişi» + özet «Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)»', str_contains($html, 'Rampacı · 2 yevmiye · 2 kişi') && str_contains($html, 'Rampacı · 1 yevmiye · 1 kişi') && str_contains($html, 'Rampacı: 3 kişi · 5 yevmiye (2×2 + 1×1)'));
 ok('3) tüm rozet sınıfları: hazır/uyarı/engel/hata/zaten/devam', (bool)preg_match('/fy-b-hazir.*fy-b-uyari.*fy-b-engel.*fy-b-hata.*fy-b-zaten.*fy-b-devam/s', $html));
-ok('3) onay_yarim ve onay_fm varsayılan CHECKED; ek_yaz ve isletme_onay işaretsiz', (bool)preg_match('/name="onay_yarim" value="1" checked/', $html) && (bool)preg_match('/name="onay_fm" value="1" checked/', $html) && (bool)preg_match('/name="ek_yaz" value="1" >/', $html) && (bool)preg_match('/name="isletme_onay" value="1" >/', $html));
+ok('3) onay_yarim ve onay_fm varsayılan CHECKED; ek_yaz işaretsiz; isletme_onay kutusu YOK', (bool)preg_match('/name="onay_yarim" value="1" checked/', $html) && (bool)preg_match('/name="onay_fm" value="1" checked/', $html) && (bool)preg_match('/name="ek_yaz" value="1" >/', $html) && !str_contains($html, 'isletme_onay'));
 ok('3) gizli alanlar: csrf (kaçışlı), eylem=yaz, token', str_contains($html, 'name="csrf" value="CSRF&quot;TOKEN"') && str_contains($html, 'name="eylem" value="yaz"') && str_contains($html, 'name="token" value="' . str_repeat('a', 32) . '"'));
 ok('3) kova/saat/sayı için GİZLİ ALAN YOK (veri istemciden gelmez)', !preg_match('/name="(fm|kova|saat|say|kadin|erkek|rampaci|servis)[^"]*"/', $html));
 ok('3) XSS: <script>, <img onerror>, <svg onload> ham basılmadı', !str_contains($html, '<script>alert') && !str_contains($html, '<img src=x') && !str_contains($html, '<svg onload') && str_contains($html, '&lt;script&gt;alert(1)&lt;/script&gt;'));

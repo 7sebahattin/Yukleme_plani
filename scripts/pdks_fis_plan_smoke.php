@@ -198,7 +198,7 @@ ok('11) mod hourly/fixed dışı → false', pdks_fis_fm_notr(['KADIN' => $orn(t
 function bg(array $o = []): array {
     $tip = fn(int $id, string $ad, array $ek = []) => $ek + ['id' => $id, 'ad' => $ad, 'tam_dk' => 540, 'fm_bas_dk' => 540, 'cift_dk' => null,
         'oran' => ['var' => true, 'fm_modu' => 'hourly', 'fm_birim' => '200', 'para' => 'TRY']];
-    $b = ['tipler' => ['KADIN' => $tip(1, 'Kadın'), 'ERKEK' => $tip(2, 'Erkek'), 'RAMPACI' => $tip(3, 'Rampacı')], 'fm_tip_secenegi' => 'tumu'];
+    $b = ['tipler' => ['KADIN' => $tip(1, 'Kadın'), 'ERKEK' => $tip(2, 'Erkek'), 'RAMPACI' => $tip(3, 'Rampacı'), 'SERITCI' => $tip(4, 'Şeritçi')], 'fm_tip_secenegi' => 'tumu'];
     foreach ($o as $k => $v) {
         if ($k === 'tipler') { foreach ($v as $kod => $ek) $b['tipler'][$kod] = array_replace_recursive($b['tipler'][$kod], $ek); }
         else $b[$k] = $v;
@@ -242,8 +242,15 @@ ok('12) FM yok: mod=yok, tek grup', $p0['ok'] && $p0['fm']['mod'] === 'yok' && G
 // FM Tipi sayfa seçeneği (fiş boş)
 $p = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 0]], ['fm_kova' => [1 => 2]]), bg(['fm_tip_secenegi' => 'erkek']));
 ok('12) sayfa seçeneği erkek: FM yalnız Erkek', $p['ok'] && G($p) === ['KADIN:tam×4', 'ERKEK:tam×4', 'ERKEK:fm1×2'], j([$p['hatalar'], G($p)]));
-$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 2], 'RAMPACI' => [2, 0]], ['fm_kova' => [1 => 3]]), bg(['fm_tip_secenegi' => 'erkek_rampaci']));
-ok('12) sayfa seçeneği erkek_rampaci: ağırlıklı (6:2 → 2 Erkek + 1 Rampacı)', $p['ok'] && G($p) === ['KADIN:tam×4', 'ERKEK:tam×4', 'ERKEK:fm1×2', 'ERKEK:yarim×2', 'RAMPACI:tam×1', 'RAMPACI:fm1×1'], j([$p['hatalar'], G($p)]));
+$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 2], 'SERITCI' => [2, 0]], ['fm_kova' => [1 => 3]]), bg(['fm_tip_secenegi' => 'erkek_seritci']));
+ok('12) sayfa seçeneği erkek_seritci: ağırlıklı (6:2 → 2 Erkek + 1 Şeritçi)', $p['ok'] && G($p) === ['KADIN:tam×4', 'ERKEK:tam×4', 'ERKEK:fm1×2', 'ERKEK:yarim×2', 'SERITCI:tam×1', 'SERITCI:fm1×1'], j([$p['hatalar'], G($p)]));
+$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 0]], ['fm_kova' => [1 => 2]]), bg(['fm_tip_secenegi' => 'kadin']));
+ok('12) sayfa seçeneği kadin: FM yalnız Kadın', $p['ok'] && G($p) === ['KADIN:tam×2', 'KADIN:fm1×2', 'ERKEK:tam×6'], j([$p['hatalar'], G($p)]));
+$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'SERITCI' => [3, 0]], ['fm_kova' => [1 => 2]]), bg(['fm_tip_secenegi' => 'seritci']));
+ok('12) sayfa seçeneği seritci: FM yalnız Şeritçi', $p['ok'] && G($p) === ['KADIN:tam×4', 'SERITCI:tam×1', 'SERITCI:fm1×2'], j([$p['hatalar'], G($p)]));
+$p = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 0], 'RAMPACI' => [2, 0]], ['fm_kova' => [1 => 3]]), bg(['fm_tip_secenegi' => 'erkek_rampaci']));
+$p2 = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 0], 'RAMPACI' => [2, 0]], ['fm_kova' => [1 => 3]]), bg(['fm_tip_secenegi' => 'erkek']));
+ok('12) eski token değeri erkek_rampaci = erkek (Rampacı FM yapmaz)', $p['ok'] && G($p) === G($p2) && !str_contains(implode(',', G($p)), 'RAMPACI:fm'), j([$p['hatalar'], G($p)]));
 $p = pdks_fis_plan(F(['KADIN' => [4, 0], 'ERKEK' => [6, 0]], ['fm_kova' => [1 => 1], 'fm_tipi' => ['KADIN'], 'fm_tip_secenegi' => 'x']), bg(['fm_tip_secenegi' => 'erkek']));
 ok('12) fişin FM Tipi sayfa seçeneğini EZER', $p['ok'] && G($p) === ['KADIN:tam×3', 'KADIN:fm1×1', 'ERKEK:tam×6'], j([$p['hatalar'], G($p)]));
 
@@ -370,7 +377,7 @@ ok('14) zamanla girdi planı DEĞİŞTİRMEZ (saf)', (function () { $p = pdks_fi
 
 echo "\n=== 11b. pdks_fis_normalize ===\n";
 function H(array $kv): array { $o = []; foreach ($kv as $k => $v) $o[$k] = ['v' => $v, 't' => is_string($v) ? 's' : (is_null($v) ? 'e' : 'n')]; return $o; }
-function nor(array $satirlar, array $cv = null, string $isl = 'Depo A'): array { global $cvs; return pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => $satirlar, 'bilinmeyen' => []], $cv ?? $cvs[0], $isl); }
+function nor(array $satirlar, array $cv = null): array { global $cvs; return pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => $satirlar, 'bilinmeyen' => []], $cv ?? $cvs[0]); }
 $gec = date('d.m.Y', strtotime('-3 day')); $gecIso = date('Y-m-d', strtotime('-3 day'));
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => '01410', 'tarih' => $gec, 'kadin_tam' => '8', 'erkek_tam' => 12.0, 'erkek_yarim' => '1', 'fm2' => '5', 'fm_tipi' => 'Erkek', 'servis_kucuk' => 1, 'giris' => '8:30', 'rev' => '1', 'not' => 'Rampa', 'ham' => 'Bayan 8 | Erkek 12 + 1'])]]);
 $f = $r['fisler'][0] ?? [];
@@ -402,16 +409,16 @@ $r = nor([['satir' => 2, 'hucreler' => ['fis_no' => ['v' => 1411, 't' => 'n']] +
 ok('11b) sayı olarak gelen Fiş No → uyarı (baştaki sıfır)', $r['fisler'][0]['fis_no'] === '1411' && !empty($r['fisler'][0]['fis_no_ham_sayi']) && (bool)array_filter($r['fisler'][0]['uyarilar'], fn($x) => str_contains($x, 'sıfır')), j($r['fisler'][0]['uyarilar']));
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], $cvs[2]);
 ok('11b) pasif çavuş seçimi → uyarı (hata değil)', $r['fisler'][0]['hatalar'] === [] && (bool)array_filter($r['fisler'][0]['uyarilar'], fn($x) => str_contains($x, 'pasif')) && $r['fisler'][0]['cavus']['id'] === 3, j($r['fisler'][0]));
-$r = pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => [['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], 'bilinmeyen' => []], ['id' => 0], 'Depo A');
+$r = pdks_fis_normalize(['ok' => true, 'uyarilar' => [], 'satirlar' => [['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], 'bilinmeyen' => []], ['id' => 0]);
 ok('11b) çavuş seçilmemiş → genel hata, fiş yok', $r['fisler'] === [] && $r['genel_hatalar'] === ['Çavuş seçilmedi.'], j($r));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], $cvs[1], 'Depo B');
-ok('11b) fişler seçilen çavuş + işletmeyi taşır (dosyadan DEĞİL)', $r['fisler'][0]['cavus'] === ['id' => 2, 'kod' => 'C006', 'ad' => 'Ali Veli', 'yontem' => 'secim'] && $r['fisler'][0]['isletme'] === 'Depo B', j($r['fisler'][0]));
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1])]], $cvs[1]);
+ok('11b) fişler seçilen çavuşu taşır (dosyadan DEĞİL); fişte işletme alanı YOK', $r['fisler'][0]['cavus'] === ['id' => 2, 'kod' => 'C006', 'ad' => 'Ali Veli', 'yontem' => 'secim'] && !array_key_exists('isletme', $r['fisler'][0]), j($r['fisler'][0]));
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'fm_tipi' => 'Kuş'])]]);
 ok('11b) bilinmeyen FM Tipi → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'FM Tipi')), j($r['fisler'][0]['hatalar']));
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'servis_buyuk' => 100])]]);
 ok('11b) servis > 99 → hata', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'Servis Büyük')), j($r['fisler'][0]['hatalar']));
-$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'not' => '=HYPERLINK("http://x")', 'ham' => '+1'])]], null, '@x');
-ok('11b) serbest metin alanları enjeksiyona karşı \' önekli', str_starts_with($r['fisler'][0]['not'], "'=") && str_starts_with($r['fisler'][0]['ham'], "'+") && str_starts_with($r['fisler'][0]['isletme'], "'@"), j([$r['fisler'][0]['not'], $r['fisler'][0]['ham']]));
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'not' => '=HYPERLINK("http://x")', 'ham' => '+1'])]]);
+ok('11b) serbest metin alanları enjeksiyona karşı \' önekli', str_starts_with($r['fisler'][0]['not'], "'=") && str_starts_with($r['fisler'][0]['ham'], "'+"), j([$r['fisler'][0]['not'], $r['fisler'][0]['ham']]));
 $r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec])]]);
 ok('11b) boş sayılar → say 0 (hata değil, plan karar verir)', $r['fisler'][0]['say']['ERKEK'] === ['tam' => 0, 'yarim' => 0] && $r['fisler'][0]['fm_toplam'] === null && $r['fisler'][0]['giris'] === '08:00' && $r['fisler'][0]['rev'] === 0, j($r['fisler'][0]));
 
@@ -496,7 +503,11 @@ ok('14b) pdks_fis_tip_kodlari() = tip kayıt defteri politikası (KADIN, ERKEK, 
 ok('14b) FM varsayılan havuzu Şeritçi\'yi KAPSAMAZ', pdks_fis_fm_varsayilan_kodlar() === ['KADIN', 'ERKEK', 'RAMPACI']);
 ok('14b) FM Tipi «Tümü/Hepsi/Tüm» Şeritçi\'siz', pdks_fis_fm_tipi_coz('Tümü') === ['KADIN', 'ERKEK', 'RAMPACI'] && pdks_fis_fm_tipi_coz('hepsi') === ['KADIN', 'ERKEK', 'RAMPACI'] && pdks_fis_fm_tipi_coz('TÜM') === ['KADIN', 'ERKEK', 'RAMPACI']);
 ok('14b) FM Tipi «Şeritçi» / «Erkek+Şeritçi» (ve ve/ters sıra) çözülür', pdks_fis_fm_tipi_coz('Şeritçi') === ['SERITCI'] && pdks_fis_fm_tipi_coz('SERİTÇİ') === ['SERITCI'] && pdks_fis_fm_tipi_coz('Erkek Şeritçi') === ['ERKEK', 'SERITCI'] && pdks_fis_fm_tipi_coz('erkek ve şeritçi') === ['ERKEK', 'SERITCI'] && pdks_fis_fm_tipi_coz('Şeritçi Erkek') === ['ERKEK', 'SERITCI'], j([pdks_fis_fm_tipi_coz('Erkek Şeritçi')]));
-ok('14b) FM Tipi Rampacı girişleri DEĞİŞMEDİ', pdks_fis_fm_tipi_coz('Rampacı') === ['RAMPACI'] && pdks_fis_fm_tipi_coz('Erkek Rampacı') === ['ERKEK', 'RAMPACI'] && pdks_fis_fm_tipi_coz('rampacı erkek') === ['ERKEK', 'RAMPACI']);
+ok('14b) FM Tipi Rampacı girişleri → \'rampaci\' (FM yapmaz; çözücü kod listesi DÖNMEZ)', pdks_fis_fm_tipi_coz('Rampacı') === 'rampaci' && pdks_fis_fm_tipi_coz('Erkek Rampacı') === 'rampaci' && pdks_fis_fm_tipi_coz('rampacı erkek') === 'rampaci' && pdks_fis_fm_tipi_coz('Erkek+Rampacı') === 'rampaci');
+$r = nor([['satir' => 2, 'hucreler' => H(['fis_no' => 'A1', 'tarih' => $gec, 'erkek_tam' => 1, 'fm_tipi' => 'Rampacı'])]]);
+ok('14b) normalize: FM Tipi Rampacı → net HATA «Rampacı yevmiyelidir, FM yapmaz»', (bool)array_filter($r['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'Rampacı yevmiyelidir, FM yapmaz')), j($r['fisler'][0]['hatalar']));
+ok('14b) pdks_fis_secenek: yeni değerler geçerli, erkek_rampaci → erkek, bilinmeyen → tumu', pdks_fis_secenek(['fm_tip' => 'kadin'])['fm_tip'] === 'kadin' && pdks_fis_secenek(['fm_tip' => 'seritci'])['fm_tip'] === 'seritci' && pdks_fis_secenek(['fm_tip' => 'erkek_seritci'])['fm_tip'] === 'erkek_seritci' && pdks_fis_secenek(['fm_tip' => 'erkek_rampaci'])['fm_tip'] === 'erkek' && pdks_fis_secenek(['fm_tip' => 'x'])['fm_tip'] === 'tumu');
+ok('14b) tip adları Türkçe harfli (Kadın/Rampacı/Şeritçi)', pdks_fis_tip_adi('KADIN') === 'Kadın' && pdks_fis_tip_adi('RAMPACI') === 'Rampacı' && pdks_fis_tip_adi('SERITCI') === 'Şeritçi');
 ok('14b) fm_izinli_kodlar: fişte tip yok + sayfa «tumu» → Şeritçi HARİÇ; fişte «Şeritçi» yazıyorsa dahil',
     pdks_fis_fm_izinli_kodlar(null, 'tumu') === ['KADIN', 'ERKEK', 'RAMPACI'] && pdks_fis_fm_izinli_kodlar(['ERKEK', 'SERITCI'], 'tumu') === ['ERKEK', 'SERITCI'] && pdks_fis_fm_izinli_kodlar(null, 'erkek') === ['ERKEK']);
 $r = pdks_fis_fm_tip_dagit([3, 2], ['KADIN' => 2, 'SERITCI' => 2]);
