@@ -224,10 +224,10 @@ $e = eml_coz($r['html']);
 ok('eml: 200, message/rfc822, no-store (siparis_no_store), nosniff, .eml adı', $r['kod'] === 200 && ($r['h']['content-type'] ?? '') === 'message/rfc822' && str_contains((string)file_get_contents($ROOT . '/frugro_eml.php'), 'siparis_no_store();') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff' && str_ends_with((string)($r['h']['content-disposition'] ?? ''), '.eml"'), json_encode([$r['kod'], $r['h'], $r['hata']]));
 ok('eml: X-Unsent: 1, From YOK', ($e['h']['x-unsent'] ?? '') === '1' && !isset($e['h']['from']));
 ok('eml: To/Cc ayardan', ($e['h']['to'] ?? '') === 'siparis@ornek.test' && ($e['h']['cc'] ?? '') === 'packinglist@ornek.test, lojistik@ornek.test', json_encode($e['h']));
-ok('eml: konu = PKL dosya adı (uzantısız), başlık enjeksiyonu yok', str_starts_with((string)($e['h']['subject'] ?? ''), 'PKL-26-5000-00002-') && !isset($e['h']['subject ']) && substr_count($r['html'], "\r\nSubject:") === 1);
+ok('eml: konu = PKL dosya adı (uzantısız), başlık enjeksiyonu yok', str_starts_with((string)($e['h']['subject'] ?? ''), 'PO 26-5000-PCK. LIST-ASYA FRESH-FRUGRO') && !isset($e['h']['subject ']) && substr_count($r['html'], "\r\nSubject:") === 1);
 $ekler = array_values(array_filter($e['p'], static fn($p) => $p['ad'] !== ''));
 ok('eml: TAM 2 ek, ikisi de PDF ve %PDF ile başlar (PKL + Invoice)', count($ekler) === 2 && $ekler[0]['tip'] === 'application/pdf' && $ekler[1]['tip'] === 'application/pdf'
-    && str_starts_with($ekler[0]['govde'], '%PDF') && str_starts_with($ekler[1]['govde'], '%PDF') && str_starts_with($ekler[0]['ad'], 'PKL-') && str_starts_with($ekler[1]['ad'], 'INV-'), json_encode(array_map(static fn($p) => [$p['tip'], $p['ad']], $e['p'])));
+    && str_starts_with($ekler[0]['govde'], '%PDF') && str_starts_with($ekler[1]['govde'], '%PDF') && str_starts_with($ekler[0]['ad'], 'PO 26-5000-PCK. LIST-') && str_starts_with($ekler[1]['ad'], 'PO 26-5000-INVOICE-'), json_encode(array_map(static fn($p) => [$p['tip'], $p['ad']], $e['p'])));
 ok('eml: xlsx eki YOK', !preg_match('/spreadsheetml|\.xlsx/i', $r['html']));
 ok('eml: düzenlenmiş metin (govde=) uygulandı, satır sonları temiz', str_contains($e['p'][0]['govde'], 'Merhaba') && str_contains($e['p'][0]['govde'], 'Test'));
 ok('eml: audit frugro_eml yalnız sayılar (adres yok)', say($db, "SELECT COUNT(*) FROM audit_log WHERE action='frugro_eml' AND new_values LIKE '%\"ek\":2%' AND new_values NOT LIKE '%@%'") === 1);
@@ -263,7 +263,7 @@ $tmp = tempnam(sys_get_temp_dir(), 'frgdz'); file_put_contents($tmp, $r['html'])
 $z = new ZipArchive(); $acik = $z->open($tmp) === true; $adlar = [];
 if ($acik) { for ($i = 0; $i < $z->numFiles; $i++) $adlar[] = $z->getNameIndex($i); }
 ok('zip: 200, application/zip, no-store, nosniff, Frugro-<po>-Evrak.zip', $r['kod'] === 200 && ($r['h']['content-type'] ?? '') === 'application/zip' && str_contains((string)file_get_contents($ROOT . '/frugro_zip.php'), 'siparis_no_store();') && ($r['h']['x-content-type-options'] ?? '') === 'nosniff' && str_contains((string)($r['h']['content-disposition'] ?? ''), 'Frugro-26-5000-00002-Evrak.zip'), json_encode([$r['kod'], $r['h'], $r['hata']]));
-ok('zip: 2 dosya (PKL PDF + Invoice PDF), ikisi de %PDF; xlsx YOK', $acik && count($adlar) === 2 && str_starts_with($adlar[0], 'PKL-') && str_starts_with($adlar[1], 'INV-')
+ok('zip: 2 dosya (PKL PDF + Invoice PDF), ikisi de %PDF; xlsx YOK', $acik && count($adlar) === 2 && $adlar[0] === 'PO 26-5000-PCK. LIST-ASYA FRESH-FRUGRO.pdf' && $adlar[1] === 'PO 26-5000-INVOICE-ASYA FRESH-FRUGRO.pdf'
     && str_starts_with((string)$z->getFromIndex(0), '%PDF') && str_starts_with((string)$z->getFromIndex(1), '%PDF') && !preg_grep('/\.xlsx$/', $adlar), json_encode($adlar));
 if ($acik) $z->close(); @unlink($tmp);
 ok('zip: geçici dosya bırakılmadı', (glob(sys_get_temp_dir() . '/frgzip*') ?: []) === []);

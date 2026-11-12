@@ -95,9 +95,9 @@ ok('belge rozetleri OL/PKL/INV/ML (ML yalnız mail adımından sonra)', str_cont
 ok('⋮ menü: Aç · PKL · Invoice · WP Paylaş (data-sip-wp-url=frugro_paylas.php)', str_contains($A, 'frugro_view.php?id=' . $ID['yeni']) && str_contains($A, 'frugro_pkl.php?id=') && str_contains($A, 'frugro_invoice.php?id=') && str_contains($A, 'data-sip-wp="' . $ID['yeni'] . '" data-sip-wp-url="frugro_paylas.php"'));
 ok('⚠ rozet "2 fark" + baloncuk verisi (alan etiketi Türkçe, tarih gg.aa.yyyy)', str_contains($A, '⚠ 2 fark') && str_contains($A, 'Çıkış tarihi: 01.01.2026 → 02.01.2026') && str_contains($A, 'Palet: 4 → 5'));
 ok('görülme kaydı: data-sip-gor-ns="frg" meta + satır işaretçileri (YENİ/değişti)', preg_match('/<span hidden data-sip-gor-ns="frg" data-sip-gor-uid="1"/', $h) === 1 && str_contains($h, 'data-sip-gor-yeni='));
-ok('para birimleri toplanmaz: tutar satır başına (GBP ve EUR ayrı), tfoot yok, birleşik toplam yok, PB eksikte "Döviz seçilecek"', !str_contains($h, '<tfoot') && str_contains($h, 'Döviz seçilecek') && str_contains($h, '3.680,00 GBP') && str_contains($h, '3.680,00 EUR') && !str_contains($h, '7.360,00'));
+ok('para birimleri toplanmaz: tutar satır başına (GBP ve EUR ayrı), tfoot yok, birleşik toplam yok, PB boşta GBP', !str_contains($h, '<tfoot') && !str_contains($h, 'Döviz seçilecek') && str_contains($h, '3.680,00 GBP') && str_contains($h, '3.680,00 EUR') && !str_contains($h, '7.360,00'));
 ok('Excel yükle + Mailden al kartı: details.sip-yukle[data-sip-yukle] içinde, #frgYukleDugme/#frgDosya/#frgSonuc id\'leri', str_contains($h, 'details class="card sip-yukle"') && str_contains($h, 'data-sip-yukle') && str_contains($h, 'id="frgYukleDugme"') && str_contains($h, 'id="frgDosya"') && str_contains($h, 'id="frgSonuc"') && str_contains($h, 'id="frg" data-csrf='));
-ok('KPI çipleri 8 + tek satır arama + ▾ Filtre', preg_match_all('/class="sip-chip[ "]/', $h) === 8 && str_contains($h, 'data-sip-filtre-toggle') && str_contains($h, 'name="musteri"') && str_contains($h, 'name="liman"'));
+ok('KPI çipleri 7 + tek satır arama + ▾ Filtre', preg_match_all('/class="sip-chip[ "]/', $h) === 7 && str_contains($h, 'data-sip-filtre-toggle') && str_contains($h, 'name="musteri"') && str_contains($h, 'name="liman"'));
 ok('onclick/onsubmit YOK; assets: siparis.css/js + siparis_yazdir.js + siparis_wp.js + frugro.js', !preg_match('/\son(click|submit|change)=/i', substr($h, (int)strpos($h, 'class="sip-mod frg"'))) && str_contains($h, 'assets/siparis.css') && str_contains($h, 'assets/siparis_yazdir.js') && str_contains($h, 'assets/siparis_wp.js') && str_contains($h, 'assets/frugro.js'));
 
 echo "\n=== 2. KPI sayıları ===\n";
@@ -105,7 +105,7 @@ $k = frgui_kpi_say($db);
 ok('KPI: açık 5 · hazırlık 1 · pkl bekleyen 2 · invoice bekleyen 1 · yolda 1 · mail bekleyen 2 · evrak 1 · kapalı 3', $k['acik'] === 5 && $k['hazirlik'] === 1 && $k['pkl'] === 2 && $k['invoice'] === 1 && $k['yolda'] === 1 && $k['mail'] === 2 && $k['evrak'] === 1 && $k['kapali'] === 3, json_encode($k));
 ok('KPI: PB eksik = fiyatı olup para birimi olmayan KAPANMAMIŞ (yeni, hazırlık = 2; iptal sayılmaz)', $k['pb'] === 2, (string)$k['pb']);
 $c = frgui_kpi_cipler($db, frgui_filtre(['durum' => 'yola_cikti']));
-ok('KPI çipleri: aktif olan işaretli, bağlantılar beyaz liste', count($c) === 8 && array_sum(array_map(fn($x) => $x['aktif'] ? 1 : 0, $c)) === 1 && $c[4]['aktif'] && str_contains($c[2]['url'], 'durum=pkl_bekleyen'));
+ok('KPI çipleri: aktif olan işaretli, bağlantılar beyaz liste', count($c) === 7 && array_sum(array_map(fn($x) => $x['aktif'] ? 1 : 0, $c)) === 1 && $c[4]['aktif'] && str_contains($c[2]['url'], 'durum=pkl_bekleyen'));
 
 echo "\n=== 3. Süzgeçler + sayfalama ===\n";
 $say = static function (array $g, string $kapsam = 'tek') use ($db): int { $F = frgui_filtre($g); return (int)frgui_bolum_oku($db, $F, $kapsam, 1)['toplam']; };
@@ -127,7 +127,11 @@ $j = $r['json'];
 $kol = array_column($j['kolonlar'] ?? [], 'k');
 ok('200 + JSON sözleşmesi (ok, kapsam, baslik, dosya, basim, depo, filtre, adet, gecmis_say, kesildi, limit, notlar, kolonlar, satirlar, toplam, birim)', $r['kod'] === 200 && $j !== null && !array_diff(['ok', 'kapsam', 'baslik', 'dosya', 'basim', 'depo', 'filtre', 'adet', 'gecmis_say', 'kesildi', 'limit', 'notlar', 'kolonlar', 'satirlar', 'toplam', 'birim'], array_keys($j)));
 ok('birim = {adet:sipariş, kasa:kutu}; başlık "İşlem Bekleyen Siparişler"; adet 5', ($j['birim'] ?? null) === ['adet' => 'sipariş', 'kasa' => 'kutu'] && $j['baslik'] === 'İşlem Bekleyen Siparişler' && $j['adet'] === 5);
-ok('sütunlar: tarih, parti, siparis, musteri, liman, tel, plaka, nakliyeci, urun, kal_16, kal_14, palet, kasa; genişlik toplamı ≈ 100', implode(',', $kol) === 'tarih,parti,siparis,musteri,liman,tel,plaka,nakliyeci,urun,kal_16,kal_14,palet,kasa' && abs(array_sum(array_column($j['kolonlar'], 'w')) - 100) < 0.2);
+ok('sütunlar: tarih, parti, siparis, tel, plaka, nakliyeci, urun, kal_16, kal_14, palet, kasa (Müşteri/Liman YOK); genişlik toplamı ≈ 100', implode(',', $kol) === 'tarih,parti,siparis,tel,plaka,nakliyeci,urun,kal_16,kal_14,palet,kasa' && abs(array_sum(array_column($j['kolonlar'], 'w')) - 100) < 0.2);
+ok('yazdır: Ürün hücresi "NAR · Wonderful · kutu tipi" (dis_paket); Müşteri/Liman başlık ve hücrede YOK', (function () use ($j, $kol) {
+    $u = array_search('urun', $kol, true); $cell = $j['satirlar'][0]['h'][$u] ?? '';
+    return $cell === 'NAR · Wonderful · Karton 2.5 kg' && !str_contains(json_encode($j['kolonlar'], JSON_UNESCAPED_UNICODE), 'Müşteri') && !str_contains(json_encode($j['kolonlar'], JSON_UNESCAPED_UNICODE), 'Liman') && count($j['satirlar'][0]['h']) === 11;
+})(), json_encode($j['satirlar'][0]['h'] ?? null, JSON_UNESCAPED_UNICODE));
 ok('her satır sütun sayısı kadar hücre; toplam palet/kasa (sayı), kalibre toplamları', count(array_unique(array_map(fn($s) => count($s['h']), $j['satirlar']))) === 1 && count($j['satirlar'][0]['h']) === count($kol) && $j['toplam']['palet'] === '20' && $j['toplam']['kasa'] === '4.000' && $j['toplam']['kal_14'] === '6', json_encode($j['toplam']));
 ok('geçmiş çıkış: gecmis=true + " ✓"; gecmis_say = çıkışı bugünden eski açık sipariş', $j['gecmis_say'] === 1 && $j['satirlar'][0]['gecmis'] === true && str_contains($j['satirlar'][0]['h'][0], '✓'));
 ok('toplam hiçbir para birimi/tutar içermez', !str_contains(json_encode($j['toplam']), 'GBP') && !str_contains(json_encode($j), '4.600'));
@@ -153,8 +157,15 @@ rol($ADMIN, true);
 echo "\n=== 5. WP Paylaş ucu ===\n";
 $r = sayfa('frugro_paylas.php', ['id' => $ID['pkl_hazir']]);
 $j = $r['json'];
-ok('200 + sözleşme (alanlar 9, kalem başlıkları 4, kalemler, adresler, toplam)', $r['kod'] === 200 && count($j['alanlar']) === 9 && $j['kalem_basliklar'] === ['Ürün', 'Kalibre', 'PF', 'Palet/Kutu'] && $j['adres_baslik'] === 'Teslim adresi' && $j['toplam']['etiket'] === 'Toplam');
-ok('alanlar sırası: Parti No · Çıkış tarihi · PO No · Müşteri · Giriş limanı · Nakliyeci · Plaka · Şoför adı · Şoför telefonu', implode('|', array_column($j['alanlar'], 'etiket')) === 'Parti No|Çıkış tarihi|PO No|Müşteri|Giriş limanı|Nakliyeci|Plaka|Şoför adı|Şoför telefonu');
+ok('200 + sözleşme (alanlar 7, kalem başlıkları 4, kalemler, adresler, toplam)', $r['kod'] === 200 && count($j['alanlar']) === 7 && $j['kalem_basliklar'] === ['Ürün', 'Kalibre', 'PF', 'Palet/Kutu'] && $j['adres_baslik'] === 'Teslim adresi' && $j['toplam']['etiket'] === 'Toplam');
+ok('alanlar sırası: Parti No · Çıkış tarihi · PO No · Nakliyeci · Plaka · Şoför adı · Şoför telefonu (Müşteri/Giriş limanı YOK)', implode('|', array_column($j['alanlar'], 'etiket')) === 'Parti No|Çıkış tarihi|PO No|Nakliyeci|Plaka|Şoför adı|Şoför telefonu');
+ok('WP kartı: kalem ürün metninde kutu tipi var, ham " /" artığı YOK; Teslim adresi bloğu kalır', (function () use ($j) {
+    $t = json_encode($j['kalemler'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    return str_contains($t, 'Karton 2.5 kg') && !str_contains($t, 'kg /') && !str_contains($t, '/"') && $j['adres_baslik'] === 'Teslim adresi';
+})(), json_encode($j['kalemler'], JSON_UNESCAPED_UNICODE));
+require_once $ROOT . '/config/frugro_yazdir.php';
+require_once $ROOT . '/config/frugro_wp.php';
+ok('kutu tipi temizliği: " /" artığı atılır, boş → "" (yazdır + WP aynı kural)', frgy_kutu_tipi('Siyah Düz Markasiz Karton Kutu 30x40cm /') === 'Siyah Düz Markasiz Karton Kutu 30x40cm' && frgw_kutu_tipi('Siyah Düz Markasiz Karton Kutu 30x40cm /') === 'Siyah Düz Markasiz Karton Kutu 30x40cm' && frgy_kutu_tipi(' / ') === '' && frgw_kutu_tipi(null) === '' && frgy_kutu_tipi('Karton 2.5 kg') === 'Karton 2.5 kg');
 ok('kalem = kalibre başına (16 sonra 14), PF 200, "2 / 400"; toplam "4 / 800"', count($j['kalemler']) === 2 && $j['kalemler'][0]['kalibre'] === '16' && $j['kalemler'][0]['pf'] === '200' && $j['kalemler'][0]['palet_koli'] === '2 / 400' && $j['toplam']['palet_koli'] === '4 / 800');
 $r = sayfa('frugro_paylas.php', ['id' => $ID['yeni']]);
 ok('paletsiz sipariş: tek kalem = siparişin kendisi (boy)', ($r['json']['kalem_say'] ?? 0) === 1 && $r['json']['kalemler'][0]['kalibre'] === '80-100');

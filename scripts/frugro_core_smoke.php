@@ -88,7 +88,7 @@ ok('frg_fiyat_metin: 46000 → 4,60; 45833 → 4,5833', frg_fiyat_metin(46000) =
 echo "\n=== 4. Hesap ===\n";
 $h = frg_hesap($s);
 ok('5200 × 4,6 = 23.920,00 → 2392000 kuruş (TAM SAYI)', $h['tutar_kurus'] === 2392000 && is_int($h['tutar_kurus']) && $h['kutu'] === 5200 && $h['palet'] === 26);
-ok('para birimi yok → null, tutar yine hesaplanır', $h['para_birimi'] === null && $h['fiyat_var']);
+ok('para birimi yok → GBP varsayılan, tutar hesaplanır', $h['para_birimi'] === 'GBP' && $h['fiyat_var']);
 ok('kutu boşsa palet × kutu/palet', frg_hesap(['kutu_palet' => 200, 'palet' => 26, 'fiyat_kutu_birim' => 46000])['kutu'] === 5200);
 ok('fiyat yoksa tutar 0, fiyat_var false', frg_hesap(['kutu' => 10])['tutar_kurus'] === 0 && frg_hesap(['kutu' => 10])['fiyat_var'] === false);
 ok('kuruşa yarım yukarı: 3 kutu × 0,3333 = 0,9999 → 100 kuruş', frg_hesap(['kutu' => 3, 'fiyat_kutu_birim' => 3333])['tutar_kurus'] === 100);
@@ -99,7 +99,7 @@ $k1 = frg_toplu_kaydet($db, $o, $ctx);
 ok('ilk kayıt: olustu', ($k1['sayac']['olustu'] ?? 0) === 1 && $k1['sonuclar'][0]['id'] > 0, json_encode($k1));
 $id = (int)$k1['sonuclar'][0]['id'];
 $row = frg_getir($db, $id);
-ok('satır: durum yeni, depo = aktif depo, sha, ham_json, para_birimi NULL', $row['durum'] === 'yeni' && $row['depo'] === 'DEPO1' && $row['dosya_sha'] === $o['dosya_sha'] && $row['para_birimi'] === null && str_contains((string)$row['ham_json'], '26-1622-44080'));
+ok('satır: durum yeni, depo = aktif depo, sha, ham_json, para_birimi GBP (varsayılan)', $row['durum'] === 'yeni' && $row['depo'] === 'DEPO1' && $row['dosya_sha'] === $o['dosya_sha'] && $row['para_birimi'] === 'GBP' && str_contains((string)$row['ham_json'], '26-1622-44080'));
 ok('değerler: kutu 5200 / fiyat 46000 / tarih', (int)$row['kutu'] === 5200 && (int)$row['fiyat_kutu_birim'] === 46000 && $row['varis_tarihi'] === '2026-11-18');
 $k2 = frg_toplu_kaydet($db, $o, $ctx);
 ok('aynı dosya tekrar → zaten, satır açılmaz', ($k2['sayac']['zaten'] ?? 0) === 1 && (int)$db->query('SELECT COUNT(*) FROM frugro_siparisler')->fetchColumn() === 1);

@@ -650,7 +650,7 @@ function frg_hesap(array $s): array
     $f = isset($s['fiyat_kutu_birim']) && $s['fiyat_kutu_birim'] !== null && $s['fiyat_kutu_birim'] !== '' ? (int)$s['fiyat_kutu_birim'] : null;
     // kutu × f (1/10000 birim) → kuruş (1/100): ÷100, yarım yukarı
     $kurus = $f === null ? 0 : intdiv($kutu * $f + 50, 100);
-    $pb = isset($s['para_birimi']) && $s['para_birimi'] !== '' ? (string)$s['para_birimi'] : null;
+    $pb = isset($s['para_birimi']) && trim((string)$s['para_birimi']) !== '' ? (string)$s['para_birimi'] : 'GBP';   // boş → varsayılan GBP (okuma tarafı; DB'ye dokunulmaz)
     return ['kutu' => $kutu, 'palet' => $pl, 'tutar_kurus' => $kurus, 'para_birimi' => $pb, 'fiyat_var' => $f !== null];
 }
 
@@ -833,6 +833,7 @@ function frg_siparis_kaydet(PDO $pdo, array $okunan, array $ctx = []): array
     $depo = (string)($ctx['depo'] ?? (function_exists('active_depot') ? (active_depot() ?? '') : ''));
     $kol = ['po_no' => $po];
     foreach (array_merge(frg_excel_alanlari(), frg_pkl_alanlari()) as $a) $kol[$a] = $okunan[$a] ?? null;
+    if (trim((string)($kol['para_birimi'] ?? '')) === '') $kol['para_birimi'] = 'GBP';   // döviz okunamadıysa varsayılan GBP
     $ham = $ctx['ham'] ?? $okunan;
     unset($ham['uyarilar']);
     $kol += ['durum' => 'yeni', 'depo' => $depo, 'kaynak' => $kaynak, 'kaynak_mail_id' => isset($ctx['kaynak_mail_id']) ? (int)$ctx['kaynak_mail_id'] : null,
@@ -897,4 +898,17 @@ function frg_palet_kaydet(PDO $pdo, int $siparisId, array $paletler): int
         if ($sahip && $pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
+}
+
+/** PO "25-2023-35529" → "25-2023" (yıl-sipariş); kalıba uymazsa po_no'nun tamamı. Belge dosya adları için. */
+function frg_po_kisa(string $po): string
+{
+    return preg_match('/^(\d{2}-\d{4})-\d{5}$/', trim($po), $m) ? $m[1] : trim($po);
+}
+
+/** Belge dosya adı: "PO <kısa po>-<BELGE>-ASYA FRESH-FRUGRO.<uzantı>"; yalnız [A-Za-z0-9 .-] (başlık enjeksiyonu yok). */
+function frg_belge_adi(string $po, string $belge, string $uzanti): string
+{
+    $po = trim((string)preg_replace('/[^A-Za-z0-9.\-]/', '', frg_po_kisa($po)), '._-');
+    return 'PO ' . ($po !== '' ? $po : 'PO') . '-' . $belge . '-ASYA FRESH-FRUGRO.' . $uzanti;
 }

@@ -249,7 +249,7 @@ echo "\n=== 8. Üretim + PDF ===\n";
 $olayS = fn(int $id, string $tur) => (int)$db->query("SELECT COUNT(*) FROM frugro_olaylar WHERE siparis_id = $id AND tur = '$tur'")->fetchColumn();
 $db->exec("UPDATE frugro_siparisler SET durum = 'pkl_hazir' WHERE id = $S");
 $r = frgi_uret($db, $S, 7, $form, false);
-ok('ayar tam → üretildi (izin gerekmez); dosya adı INV-<no>-<PO>.pdf', !empty($r['ok']) && $r['dosya_adi'] === 'INV-IHR2025000000451-25-1816-34726.pdf' && $r['toplam_kurus'] === 3115200, json_encode($r));
+ok('ayar tam → üretildi (izin gerekmez); dosya adı PO <kısa>-INVOICE-ASYA FRESH-FRUGRO.pdf', !empty($r['ok']) && $r['dosya_adi'] === 'PO 25-1816-INVOICE-ASYA FRESH-FRUGRO.pdf' && $r['toplam_kurus'] === 3115200, json_encode($r));
 ok('durum pkl_hazir → invoice_hazir; fatura_no + para_birimi sipariş satırına', (string)$db->query("SELECT durum FROM frugro_siparisler WHERE id = $S")->fetchColumn() === 'invoice_hazir'
     && (string)$db->query("SELECT fatura_no FROM frugro_siparisler WHERE id = $S")->fetchColumn() === 'IHR2025000000451' && (string)$db->query("SELECT para_birimi FROM frugro_siparisler WHERE id = $S")->fetchColumn() === 'GBP');
 ok("olay 'invoice_uretildi' (no + tutar) + durum olayı", $olayS($S, 'invoice_uretildi') === 1 && $olayS($S, 'durum') === 1 && str_contains((string)$db->query("SELECT metin FROM frugro_olaylar WHERE tur='invoice_uretildi'")->fetchColumn(), '31.152,00'));
@@ -323,7 +323,7 @@ ok('üretim sonrası: Hazır rozeti + indir + önizleme bağlantısı', str_cont
 $r = sayfa(['id' => $S, 'pdf' => '1']);
 ok('?pdf=1 → application/pdf, %PDF, inline', strncmp($r['html'], '%PDF', 4) === 0 && str_contains((string)($r['h']['content-type'] ?? ''), 'application/pdf') && str_contains((string)($r['h']['content-disposition'] ?? ''), 'inline'));
 $r = sayfa(['id' => $S, 'pdf' => '1', 'dl' => '1']);
-ok('?pdf=1&dl=1 → attachment + dosya adı', str_contains((string)($r['h']['content-disposition'] ?? ''), 'attachment') && str_contains((string)($r['h']['content-disposition'] ?? ''), 'INV-IHR2025000000451-25-1816-34726.pdf'));
+ok('?pdf=1&dl=1 → attachment + dosya adı', str_contains((string)($r['h']['content-disposition'] ?? ''), 'attachment') && str_contains((string)($r['h']['content-disposition'] ?? ''), 'PO 25-1816-INVOICE-ASYA FRESH-FRUGRO.pdf'));
 $r = sayfa(['id' => $x, 'pdf' => '1']);
 ok('üretilmemiş sipariş ?pdf=1 → 404', $r['kod'] === 404 && strncmp($r['html'], '%PDF', 4) !== 0);
 // duplikat no sayfa üstünden

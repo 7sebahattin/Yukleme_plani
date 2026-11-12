@@ -16,13 +16,17 @@ function frgw_alanlari(): array
         ['k' => 'parti',     'etiket' => 'Parti No'],
         ['k' => 'tarih',     'etiket' => 'Çıkış tarihi'],
         ['k' => 'siparis',   'etiket' => 'PO No'],
-        ['k' => 'musteri',   'etiket' => 'Müşteri'],
-        ['k' => 'liman',     'etiket' => 'Giriş limanı'],
         ['k' => 'nakliyeci', 'etiket' => 'Nakliyeci'],
         ['k' => 'plaka',     'etiket' => 'Plaka'],
         ['k' => 'sofor',     'etiket' => 'Şoför adı'],
         ['k' => 'tel',       'etiket' => 'Şoför telefonu'],
     ];
+}
+
+/** Kutu / ambalaj tipi (dış paket): sondaki/baştaki " /", "·", "-", "," gibi boş artıkları atar. Boşsa ''. (frugro_yazdir.php frgy_kutu_tipi() ile AYNI kural.) */
+function frgw_kutu_tipi(mixed $v): string
+{
+    return trim((string)preg_replace('/^[\s\/·,;\-]+|[\s\/·,;\-]+$/u', '', (string)($v ?? '')));
 }
 
 function frgw_deger(mixed $v): string
@@ -58,8 +62,6 @@ function frgw_veri(array $s, array $ozet = []): array
         'parti' => frgw_deger($s['parti_no'] ?? null),
         'tarih' => $t !== null ? date('d.m.Y', (int)strtotime($t . ' 12:00:00')) : '—',
         'siparis' => frgw_deger($s['po_no'] ?? null),
-        'musteri' => frgw_deger($s['son_musteri'] ?? null),
-        'liman' => frgw_deger($s['giris_limani'] ?? null),
         'nakliyeci' => frgw_deger($s['nakliyeci'] ?? null),
         'plaka' => frgw_deger($s['plaka'] ?? null),
         'sofor' => frgw_deger($s['sofor_adi'] ?? null),
@@ -68,6 +70,7 @@ function frgw_veri(array $s, array $ozet = []): array
     $alanlar = [];
     foreach (frgw_alanlari() as $a) $alanlar[] = ['k' => $a['k'], 'etiket' => $a['etiket'], 'deger' => $deger[$a['k']]];
     $kalemler = [];
+    $s['dis_paket'] = frgw_kutu_tipi($s['dis_paket'] ?? null);   // kart ürün satırında ham " /" artığı çıkmasın
     foreach (frgui_kalemler($s, $ozet) as $k) {
         $c = sipui_kalem_coz($k);
         if ($c === null) continue;

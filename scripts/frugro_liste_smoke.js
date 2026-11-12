@@ -47,7 +47,7 @@ const JSONY = obj => ({ status: 200, contentType: 'application/json; charset=utf
         const bol = await page.evaluate(() => ['sipAcik', 'sipEvrak', 'sipKapali'].map(id => { const e = document.getElementById(id); return e ? { id, say: e.querySelector('.sip-say').textContent, dugme: e.querySelectorAll('[data-sip-yazdir]').length } : null; }));
         ok(t + 'üç bölüm: İşlem Bekleyen (6) · Evrak (1) · Kapanan (3), her başlıkta 3 düğme', bol.every(Boolean) && bol.map(b => b.say).join() === '6,1,3' && bol.every(b => b.dugme === 3), JSON.stringify(bol));
         const kpi = await page.evaluate(() => Array.from(document.querySelectorAll('.sip-chip')).map(c => c.textContent.replace(/\s+/g, ' ').trim()));
-        ok(t + '8 KPI çipi', kpi.length === 8 && /^Açık\s*6/.test(kpi[0]), kpi.join('|'));
+        ok(t + '7 KPI çipi', kpi.length === 7 && /^Açık\s*6/.test(kpi[0]), kpi.join('|'));
 
         if (w >= 1024) {
             const z = await page.evaluate(() => {

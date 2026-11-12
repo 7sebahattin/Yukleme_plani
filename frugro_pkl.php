@@ -46,7 +46,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && isset($_GET['indir'])) {
     }
     while (ob_get_level() > 0) { ob_end_clean(); }
     session_write_close();
-    $ascii = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', frgp_dosya_adi($s, $bic)), '_');
+    $ascii = trim((string)preg_replace('/[^A-Za-z0-9 ._-]+/', '', frgp_dosya_adi($s, $bic)));
     header('Content-Type: ' . ($bic === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
     header('Content-Disposition: ' . ($bic === 'pdf' && isset($_GET['goster']) ? 'inline' : 'attachment') . '; filename="' . $ascii . '"');
     header('Content-Length: ' . strlen($veri));
@@ -76,7 +76,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (!$r['ok']) { set_flash('error', implode(' ', $r['hatalar'])); header('Location: ' . $self . ($saat !== '' ? '&saat=' . rawurlencode($saat) : '')); exit; }
         while (ob_get_level() > 0) { ob_end_clean(); }
         session_write_close();
-        $ascii = trim((string)preg_replace('/[^A-Za-z0-9._-]+/', '_', $r['ad']), '_');
+        $ascii = trim((string)preg_replace('/[^A-Za-z0-9 ._-]+/', '', $r['ad']));
         header('Content-Type: ' . $r['tip']);
         header('Content-Disposition: attachment; filename="' . $ascii . '"');
         header('Content-Length: ' . strlen($r['veri']));

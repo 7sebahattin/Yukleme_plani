@@ -40,6 +40,15 @@ function frgy_baslik(array $F, string $kapsam): string
 }
 
 /**
+ * Kutu / ambalaj tipi (siparişteki dış paket): sondaki/baştaki " /", "·", "-", "," gibi boş artıkları atar. Boşsa ''.
+ * (config/frugro_wp.php frgw_kutu_tipi() ile AYNI kural — iki dosya bağımsız yüklenir.)
+ */
+function frgy_kutu_tipi(mixed $v): string
+{
+    return trim((string)preg_replace('/^[\s\/·,;\-]+|[\s\/·,;\-]+$/u', '', (string)($v ?? '')));
+}
+
+/**
  * Kalibre sütunları: listelenen siparişlerin PKL paletlerinde geçen kalibreler (sayısal AZALAN, sayısal olmayanlar sonda). Palet yoksa HİÇ kalibre sütunu yok.
  * @param array<int,array{kalibreler?:list<array{kalibre:string}>}> $paletHarita @return array<string,string> kalibre → sütun anahtarı ('kal_14')
  */
@@ -74,13 +83,11 @@ function frgy_kolonlari(array $kalibreler = []): array
 {
     $n = count($kalibreler);
     $kalW = $n > 0 ? max(3.0, min(5.5, 22.0 / $n)) : 0.0;
-    $urunW = max(8.0, 100 - 71 - $kalW * $n);
+    $urunW = max(8.0, 100 - 51 - $kalW * $n);   // Müşteri + Liman (toplam 20 birim) kaldırıldı → Ürün sütununa geçer
     $bas = [
         ['k' => 'tarih',    'l' => 'Çıkış tarihi', 't' => 'metin', 'w' => 7.0],
         ['k' => 'parti',    'l' => 'Parti no',     't' => 'metin', 'w' => 8.0],
         ['k' => 'siparis',  'l' => 'PO no',        't' => 'metin', 'w' => 10.0],
-        ['k' => 'musteri',  'l' => 'Müşteri',      't' => 'metin', 'w' => 11.0],
-        ['k' => 'liman',    'l' => 'Liman',        't' => 'metin', 'w' => 9.0],
         ['k' => 'tel',      'l' => 'Şoför Tel',    't' => 'metin', 'w' => 8.0],
         ['k' => 'plaka',    'l' => 'Plaka',        't' => 'metin', 'w' => 8.0],
         ['k' => 'nakliyeci', 'l' => 'Nakliyeci',   't' => 'metin', 'w' => 8.0],
@@ -142,13 +149,11 @@ function frgy_bicimle(array $okunan, array $ctx): array
         $topPalet += $hs['palet']; $topKutu += $hs['kutu'];
         $kp = [];
         foreach ((array)($paletH[$sid]['kalibreler'] ?? []) as $k) $kp[(string)$k['kalibre']] = ($kp[(string)$k['kalibre']] ?? 0) + (int)$k['palet'];
-        $urun = implode(' · ', array_filter([trim((string)($r['urun'] ?? '')), trim((string)($r['cesit'] ?? ''))], static fn(string $x): bool => $x !== ''));
+        $urun = implode(' · ', array_filter([trim((string)($r['urun'] ?? '')), trim((string)($r['cesit'] ?? '')), frgy_kutu_tipi($r['dis_paket'] ?? null)], static fn(string $x): bool => $x !== ''));
         $h = [
             $tarih,
             trim((string)($r['parti_no'] ?? '')),
             trim((string)($r['po_no'] ?? '')),
-            trim((string)($r['son_musteri'] ?? '')),
-            trim((string)($r['giris_limani'] ?? '')),
             trim((string)($r['sofor_telefon'] ?? '')),
             function_exists('siparis_yazdir_plakalar') ? siparis_yazdir_plakalar((string)($r['plaka'] ?? '')) : trim((string)($r['plaka'] ?? '')),
             trim((string)($r['nakliyeci'] ?? '')),

@@ -21,6 +21,7 @@ declare(strict_types=1);
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 
 require_once __DIR__ . '/frugro_core.php';
+require_once __DIR__ . '/frugro_pkl.php';   // frgp_logo_uri (antet/ayak logosu)
 require_once __DIR__ . '/siparis_invoice.php';   // yeniden kullanım: hks_kv okuma/yazma, ondalık çözümü, tutar gösterimi, dompdf, OGL ayarı (varsayılan)
 
 const FRGI_AYAR_KV = 'frugro_invoice_ayar';
@@ -448,7 +449,8 @@ function frgi_html(array $snap, array $ayar): string
     ?><!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Invoice</title>
 <style>
-@page { margin: 26pt 30pt 24pt 30pt; }
+@page { margin: 26pt 30pt 74pt 30pt; }
+.logo { text-align: center; margin: 0; }
 body { font-family: 'DejaVu Sans', sans-serif; font-size: 7.6pt; color: #000; margin: 0; }
 table { border-collapse: collapse; }
 .baslik { font-family: 'DejaVu Serif', serif; font-size: 20pt; font-weight: bold; text-align: center; margin: 8pt 0 6pt 0; }
@@ -472,8 +474,10 @@ table { border-collapse: collapse; }
 .meta td.v { font-weight: bold; }
 .notlar { margin: 16pt 20pt 0 20pt; font-size: 7.4pt; line-height: 1.4; }
 .alt { margin: 18pt 20pt 0 20pt; font-size: 5.4pt; line-height: 1.5; }
-.ayak { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 5.8pt; line-height: 1.6; }
+.ayak { position: fixed; bottom: -62pt; left: 0; right: 0; text-align: center; font-size: 5.8pt; line-height: 1.6; }
 </style></head><body>
+<?php $logo = function_exists('frgp_logo_uri') ? frgp_logo_uri() : null; ?>
+<?php if ($logo): ?><div class="logo"><img src="<?= $logo ?>" style="height:58pt"></div><?php endif; ?>
 <div class="baslik">INVOICE</div>
 <table class="no"><tr><td>INVOICE NUMBER: <b><?= h((string)($snap['no'] ?? '')) ?></b></td><td style="text-align:right">INVOICE DATE: <b><?= h(siparis_inv_tarih_goster((string)($snap['tarih'] ?? ''))) ?></b></td></tr></table>
 <table class="cerceve"><tr>
@@ -499,16 +503,15 @@ table { border-collapse: collapse; }
 </table>
 <div class="notlar"><b>NOTES:</b> "<?= h(FRGI_MENSE_NOTU) ?>"</div>
 <div class="alt">The Importer shall discharge the goods immediately upon arrival to the delivery address. The shipment shall be immediately inspected upon arrival. The goods belong to <b>Asya Fresh</b> (the exporter) until the inspection results agreed between both parties. Out of this period without above mentioned conditions no claim can be accepted.</div>
-<div class="ayak">Address: HANÇERLİ MAH. DERVİŞZADE SK.NO:12 İÇ KAPI NO:3 İLKADIM - SAMSUN - TÜRKİYE<br>Phone: +90 362 465 54 54 &nbsp;&nbsp;&nbsp; Website: www.asyafresh.com</div>
+<div class="ayak"><?php if ($logo): ?><img src="<?= $logo ?>" style="height:22pt"><br><?php endif; ?><b>Address:</b> HANÇERLİ MAH. DERVİŞZADE SK.NO:12 İÇ KAPI NO:3 İLKADIM - SAMSUN - TÜRKİYE<br><b>Phone:</b> +90 362 465 54 54 &nbsp;&nbsp; <b>E-mail:</b> contact@asyafresh.com &nbsp;&nbsp; <b>Website:</b> www.asyafresh.com<div style="height:2pt;margin-top:3pt;background:#c8102e"></div></div>
 </body></html><?php
     return (string)ob_get_clean();
 }
 
-/** INV-<fatura no>-<PO>.pdf (parçalar [A-Za-z0-9.-] ile temizlenir). */
+/** "PO <25-2023>-INVOICE-ASYA FRESH-FRUGRO.pdf" ($no artık adda yok; imza geriye uyumlu). */
 function frgi_dosya_adi(string $no, string $po): string
 {
-    $tem = static fn(string $x): string => trim((string)preg_replace('/[^A-Za-z0-9.\-]/', '', $x), '._-');
-    return implode('-', array_values(array_filter(['INV', $tem($no), $tem($po)], static fn($x) => $x !== ''))) . '.pdf';
+    return frg_belge_adi($po, 'INVOICE', 'pdf');
 }
 
 // ── ÜRETİM / İNDİRME ────────────────────────────────────────────────────
