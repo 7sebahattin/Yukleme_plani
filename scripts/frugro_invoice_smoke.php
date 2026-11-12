@@ -36,6 +36,8 @@ ini_set('session.save_path', sys_get_temp_dir()); ini_set('session.use_cookies',
 
 const T_IBAN_GBP = 'GB29NWBK60161331926819';     // bilinen geçerli TEST IBAN (sentetik)
 const T_IBAN_EUR = 'DE89370400440532013000';     // bilinen geçerli TEST IBAN (sentetik)
+const T_IBAN_USD = 'NL91ABNA0417164300';     // bilinen geçerli TEST IBAN (sentetik; USD hesabı için ayar alanı)
+const T_IBAN_RUB = 'RU0204452560040702810412345678'; // sentetik RU biçimi (ayar alanı, doğrulama yalnız biçim)
 const T_SWIFT = 'TESTGB2L';
 const T_BANKA = 'SENTETIK TEST BANKASI';
 const T_VAT_A = 'TESTVAT-AAA-111';
@@ -105,9 +107,9 @@ ok('kodda IBAN / VAT / banka DEĞERİ yok', !preg_match('/\b[A-Z]{2}\d{2}\s?[A-Z
 ok('menşe notu sabiti koşulsuz ve şablonda kullanılır', str_contains($kaynak, "const FRGI_MENSE_NOTU = 'Unless specified otherwise, these goods are of Türkiye preferential origin';") && str_contains($kaynak, '<?= h(FRGI_MENSE_NOTU) ?>'));
 ok('PDF diske YAZILMAZ (file_put_contents / SIPARIS_DEPO yok)', !preg_match('/file_put_contents|SIPARIS_DEPO|fopen\(|\bsiparis_belgeler\b/', $kodsuz));
 ok('dompdf siparis_inv_pdf() yeniden kullanılır (kopya yok)', str_contains($kaynak, 'siparis_inv_pdf(') && !str_contains($kodsuz, 'new \\Dompdf'));
-ok("'USD' başlığı yok (2024 örneğindeki hata kopyalanmadı)", !str_contains($kodsuz, 'USD') && !str_contains($kodsuz, 'UNIT PRICE'));
+ok("'USD' başlığı 'USD' (2024 örneğindeki 'UNIT PRICE' hatası kopyalanmadı)", frgi_para_birimleri()['USD']['baslik'] === 'USD' && !str_contains($kodsuz, 'UNIT PRICE'));
 ok('hesap frg_hesap() üzerinden (TEK yer)', str_contains($kaynak, 'frg_hesap('));
-ok('para birimi yalnız GBP | EUR', array_keys(frgi_para_birimleri()) === ['GBP', 'EUR'] && frgi_para_birimleri()['GBP']['baslik'] === 'POUND' && frgi_para_birimleri()['EUR']['baslik'] === 'EURO');
+ok('para birimi GBP | EUR | USD | RUB; GBP ilk (varsayılan); başlıklar POUND/EURO/USD/RUBLE', array_keys(frgi_para_birimleri()) === ['GBP', 'EUR', 'USD', 'RUB'] && FRGI_PB_VARSAYILAN === 'GBP' && frgi_para_birimleri()['GBP']['baslik'] === 'POUND' && frgi_para_birimleri()['EUR']['baslik'] === 'EURO' && frgi_para_birimleri()['USD']['baslik'] === 'USD' && frgi_para_birimleri()['RUB']['baslik'] === 'RUBLE' && frgi_para_birimleri()['RUB']['sembol'] === '₽' && frgi_para_birimleri()['USD']['sembol'] === '$');
 ok('sayfa: require_login + require_siparis(read) + no-store + frg_gorunur + CSRF', str_contains($sayfaK, 'require_login()') && str_contains($sayfaK, "require_siparis('read')") && str_contains($sayfaK, 'siparis_no_store()') && str_contains($sayfaK, 'frg_gorunur(') && str_contains($sayfaK, 'csrf_check('));
 $cs = strpos($sayfaK, 'csrf_check('); $mt = strpos($sayfaK, 'frgi_uret(');
 ok('csrf_check mutasyondan ÖNCE; yazma kapısı require_siparis(write)', $cs !== false && $mt !== false && $cs < $mt && str_contains($sayfaK, "require_siparis('write')"));
@@ -134,7 +136,9 @@ $t = fn(array $p) => frgi_girdi_temizle($p + ['no' => 'IHR2025000000451', 'tarih
 $r = $t([]);
 ok('geçerli: tarih Y-m-d, fiyat 5.90, GBP', $r['ok'] && $r['veri']['tarih'] === '2025-10-23' && $r['veri']['fiyat'] === '5.90' && $r['veri']['para_birimi'] === 'GBP' && $r['hata'] === [], json_encode($r));
 ok('EUR kabul (küçük harf de)', $t(['para_birimi' => 'eur'])['veri']['para_birimi'] === 'EUR');
-foreach (['USD', 'TRY', '', 'XXX', '£'] as $pb) ok("para birimi reddedilir: '$pb'", isset($t(['para_birimi' => $pb])['hata']['para_birimi']) && !$t(['para_birimi' => $pb])['ok']);
+foreach (['TRY', '', 'XXX', '£'] as $pb) ok("para birimi reddedilir: '$pb'", isset($t(['para_birimi' => $pb])['hata']['para_birimi']) && !$t(['para_birimi' => $pb])['ok']);
+ok('USD ve RUB kabul (küçük harf de)', $t(['para_birimi' => 'USD'])['veri']['para_birimi'] === 'USD' && $t(['para_birimi' => 'rub'])['veri']['para_birimi'] === 'RUB' && $t(['para_birimi' => 'USD'])['hata'] === []);
+ok('ret mesajı 4 para birimini sayar', str_contains($t(['para_birimi' => 'TRY'])['hata']['para_birimi'], 'GBP, EUR, USD ya da RUB'));
 ok('fiyat "5.90" / "5,90" / "5.900" (tek ayraç ondalık, 5900 DEĞİL)', $t(['fiyat' => '5.90'])['veri']['fiyat'] === '5.90' && $t(['fiyat' => '5,90'])['veri']['fiyat'] === '5.90' && $t(['fiyat' => '5.900'])['veri']['fiyat'] === '5.90');
 foreach (['' => 'boş', '0' => 'sıfır', 'abc' => 'harf', '5,12345' => '5 ondalık', '1.234,56' => '≥ 1000', '-1' => 'negatif'] as $kotu => $ad) ok("fiyat reddedilir: $ad", isset($t(['fiyat' => (string)$kotu])['hata']['fiyat']));
 ok('kutu "5.200" = 5200; net "20.995" = 20995; bozuk reddedilir', $t(['kutu' => '5.200'])['veri']['kutu'] === 5200 && $t(['net_kg' => '20.995'])['veri']['net_kg'] === 20995
@@ -150,7 +154,7 @@ $S = siparis_ac($db, '25-1816-34726');
 $s0 = frg_getir($db, $S);
 $vs0 = frgi_varsayilan($db, $s0);
 ok('PKL yokken kaynak=siparis; kutu 5280 / palet 33 siparişten', $vs0['ozet']['kaynak'] === 'siparis' && $vs0['ozet']['kutu'] === 5280 && $vs0['ozet']['palet'] === 33 && $vs0['ozet']['net_pkl_kg'] === 0);
-ok('fiyat ön-dolu (siparişteki 5,9 → "5.90"); para birimi boş (siparişte yok)', $vs0['girdi']['fiyat'] === '5.90' && $vs0['girdi']['para_birimi'] === '');
+ok('fiyat ön-dolu (siparişteki 5,9 → "5.90"); para birimi siparişte yok → varsayılan GBP', $vs0['girdi']['fiyat'] === '5.90' && $vs0['girdi']['para_birimi'] === 'GBP');
 ok('açıklama PO boy\'undan: "FRESH POMEGRANATE 14 PC."', $vs0['ozet']['aciklama'] === 'FRESH POMEGRANATE 14 PC.', $vs0['ozet']['aciklama']);
 ok('hasat yılı çıkış tarihinden: 2025', $vs0['ozet']['harvest'] === '2025');
 palet_yaz($db, $S, 10, 528, 2099.5, 1852.0);                       // Σkutu 5280, Σbrüt 20.995, Σnet 18.520 (gerçek PKL rakamları)
@@ -220,7 +224,13 @@ ok('GBP: başlık "BOX PRICE<br>POUND" + "TOTAL<br>POUND"; £5,90 ve £31.152,00
 $snapE = $snap; $snapE['para_birimi'] = 'EUR';
 $htmlE = frgi_html($snapE, $ayar);
 ok('EUR: başlık EURO + € sembolü + "ACCOUNT IBAN EUR"; POUND yok', str_contains($htmlE, 'BOX PRICE<br>EURO') && str_contains($htmlE, '€31.152,00') && str_contains($htmlE, 'ACCOUNT IBAN EUR') && !str_contains($htmlE, 'POUND'));
-ok('USD hiçbir şablonda yok', !str_contains($html, 'USD') && !str_contains($htmlE, 'USD'));
+$snapU = $snap; $snapU['para_birimi'] = 'USD';
+$htmlU = frgi_html($snapU, array_merge($ayar, ['iban_usd' => '']));
+ok('USD: başlık "BOX PRICE<br>USD" + $31.152,00; IBAN USD eksikse "______"; POUND/EURO yok', str_contains($htmlU, 'BOX PRICE<br>USD') && str_contains($htmlU, 'TOTAL<br>USD') && str_contains($htmlU, '$31.152,00') && str_contains($htmlU, 'ACCOUNT IBAN USD') && !str_contains($htmlU, 'POUND') && !str_contains($htmlU, 'EURO'));
+$snapR = $snap; $snapR['para_birimi'] = 'RUB';
+$htmlR = frgi_html($snapR, array_merge($ayar, ['iban_rub' => T_IBAN_RUB]));
+ok('RUB: başlık "BOX PRICE<br>RUBLE" + ₽31.152,00 + ACCOUNT IBAN RUB (girilen IBAN)', str_contains($htmlR, 'BOX PRICE<br>RUBLE') && str_contains($htmlR, '₽31.152,00') && str_contains($htmlR, 'ACCOUNT IBAN RUB') && str_contains($htmlR, frgi_iban_goster(T_IBAN_RUB)) && !str_contains($htmlR, 'POUND'));
+ok('USD IBAN ayarda girilirse USD şablonunda basılır; GBP IBAN\'ı USD\'de basılmaz', str_contains(frgi_html($snapU, array_merge($ayar, ['iban_usd' => T_IBAN_USD, 'iban_gbp' => T_IBAN_GBP])), frgi_iban_goster(T_IBAN_USD)) && !str_contains(frgi_html($snapU, array_merge($ayar, ['iban_usd' => T_IBAN_USD, 'iban_gbp' => T_IBAN_GBP])), frgi_iban_goster(T_IBAN_GBP)));
 ok('kutu 5.200 noktalı binlik', str_contains(frgi_html(['kutu' => 5200] + $snap, $ayar), '5.200'));
 ok('net/brüt "18.520 KG" / "20.995 KG"', str_contains($html, '18.520 KG') && str_contains($html, '20.995 KG'));
 ok('menşe notu KOŞULSUZ (ayar boş olsa da)', str_contains($html, 'Unless specified otherwise, these goods are of Türkiye preferential origin') && str_contains(frgi_html($snap, array_fill_keys(array_keys($ayar), '')), 'Unless specified otherwise, these goods are of Türkiye preferential origin'));
@@ -263,8 +273,8 @@ $r = frgi_uret($db, $S, 7, ['net_kg' => '18000', 'brut_kg' => '20500', 'agirlik_
 $g = frgi_girdi_oku($db, $S);
 ok('onayla üretilir; kayıtlı anlık görüntü fatura değerini taşır (20.500 / 18.000)', !empty($r['ok']) && $g['snap']['net_kg'] === 18000 && $g['snap']['brut_kg'] === 20500);
 frgi_uret($db, $S, 7, $form, false);
-$r = frgi_uret($db, $S, 7, ['para_birimi' => 'USD'] + $form, false);
-ok('USD → üretilmez', empty($r['ok']) && str_contains((string)$r['hata'], 'GBP ya da EUR'));
+$r = frgi_uret($db, $S, 7, ['para_birimi' => 'TRY'] + $form, false);
+ok('TRY → üretilmez (GBP, EUR, USD ya da RUB)', empty($r['ok']) && str_contains((string)$r['hata'], 'GBP, EUR, USD ya da RUB'));
 $db->exec("DELETE FROM hks_kv WHERE anahtar = 'frugro_invoice_ayar'"); $db->exec("DELETE FROM hks_kv WHERE anahtar = 'siparis_invoice_ayar'");
 $r = frgi_uret($db, $S, 7, $form, false);
 ok('ayar boş + izin yok → "eksik bilgiyle" onayı ister', empty($r['ok']) && str_contains((string)$r['hata'], 'eksik'));
@@ -367,6 +377,25 @@ $r = sayfa(['id' => $S]);
 ok('v515: invoice (admin) → ayar FORMU yok; "Ayarlar" bağlantısı #fatura; IBAN sayfada yok', !str_contains($r['html'], 'name="islem" value="ayar"') && !str_contains($r['html'], 'frgi-ayar-ozet') && str_contains($r['html'], 'frugro_ayarlar.php#fatura') && str_contains($r['html'], 'Banka / fatura ayarları kayıtlı') && !str_contains($r['html'], $yeniIban));
 $r = sayfa(['id' => $S], ['csrf' => csrf(), 'id' => $S, 'islem' => 'ayar', 'iban_gbp' => 'GB82WEST12345698765432']);
 ok('v515: eski islem=ayar POST (invoice) → frugro_ayarlar.php#fatura\'ya yönlendirir, YAZMAZ', ($r['git'] ?? '') === 'frugro_ayarlar.php#fatura' && frgi_ayar_ham($db)['iban_gbp'] === $yeniIban);
+echo "\n=== 9b. v517: para birimi (USD/RUB), IBAN ayar alanları, varsayılan GBP, GGN satır ekle ===\n";
+$ay = frgi_ayar_kaydet($db, ['iban_usd' => 'nl91 abna 0417 1643 00', 'iban_rub' => T_IBAN_RUB], 7);
+ok('ayar: iban_usd / iban_rub alanları kaydedilir (boşluksuz BÜYÜK)', $ay['ok'] && frgi_ayar_ham($db)['iban_usd'] === T_IBAN_USD && frgi_ayar_ham($db)['iban_rub'] === T_IBAN_RUB, json_encode($ay));
+ok('ayar: geçersiz iban_usd reddedilir, eski değer kalır', !frgi_ayar_kaydet($db, ['iban_usd' => 'XX'], 7)['ok'] && frgi_ayar_ham($db)['iban_usd'] === T_IBAN_USD);
+ok('eksikler USD: IBAN (USD) yalnız USD\'de; GBP/EUR etkilenmez', !in_array('IBAN (USD)', frgi_ayar_eksikler(['iban_usd' => ''] + $a2, 'GBP'), true) && in_array('IBAN (USD)', frgi_ayar_eksikler(array_merge($a2, ['iban_usd' => '']), 'USD'), true) && !in_array('IBAN (RUB)', frgi_ayar_eksikler($a2, 'USD'), true));
+ok('eksikler RUB: IBAN (RUB) boşsa listede', in_array('IBAN (RUB)', frgi_ayar_eksikler(array_merge($a2, ['iban_rub' => '']), 'RUB'), true) && frgi_ayar_eksikler(array_merge($a2, ['iban_rub' => T_IBAN_RUB]), 'RUB') === []);
+$sxV = frg_getir($db, $S); $sxV['id'] = 0; $sxV['para_birimi'] = '';
+ok('varsayılan: kayıt/taslak yoksa para birimi GBP', frgi_varsayilan($db, $sxV)['girdi']['para_birimi'] === 'GBP');
+frgi_girdi_kaydet($db, $S, 7, ['para_birimi' => 'RUB'] + $form); frgi_taslak_yaz($db, $S, ['para_birimi' => 'RUB']);
+ok('kayıtlı girdi varsa o (RUB) — varsayılan GBP ezilmez', frgi_varsayilan($db, frg_getir($db, $S))['girdi']['para_birimi'] === 'RUB');
+$rP = sayfa(['id' => $S]);
+ok('form: kayıtlı RUB seçili, GBP seçili DEĞİL; dört seçenek var', str_contains($rP['html'], 'value="RUB" data-frgi-sembol="₽" selected') && !str_contains($rP['html'], 'value="GBP" data-frgi-sembol="£" selected') && str_contains($rP['html'], 'value="USD"'));
+frgi_girdi_kaydet($db, $S, 7, ['para_birimi' => 'GBP'] + $form); frgi_taslak_yaz($db, $S, ['para_birimi' => 'GBP']);
+$rP = sayfa(['id' => $S]);
+ok('form: kayıt GBP iken GBP seçili (varsayılan görünüm)', str_contains($rP['html'], 'value="GBP" data-frgi-sembol="£" selected'));
+$rA = sayfa([], [], 'frugro_ayarlar.php');
+ok('GGN: "+ Satır ekle" düğmesi (data-frga-ekle, max 100) + <template id="frga-satir"> var; satır içi onclick YOK', str_contains($rA['html'], 'data-frga-ekle') && str_contains($rA['html'], 'data-frga-max="100"') && str_contains($rA['html'], '<template id="frga-satir">') && !preg_match('/data-frga[^>]*onclick=/', $rA['html']));
+ok('ayarlar: USD/RUB IBAN alanları formda; frugro_ayar.js yüklenir (defer)', str_contains($rA['html'], 'name="iban_usd"') && str_contains($rA['html'], 'name="iban_rub"') && str_contains($rA['html'], 'assets/frugro_ayar.js?v=') && str_contains($rA['html'], 'defer'));
+ok('ayarlar: sunucu GGN satırı sayısı en az 5 boş (JS kapalıyken de satır var)', substr_count($rA['html'], 'name="ggn[') >= 10);
 ok('HTML dengeli', true);
 
 echo "\n=== 10. CSRF ===\n";
