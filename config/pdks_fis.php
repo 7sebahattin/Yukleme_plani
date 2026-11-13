@@ -1655,6 +1655,13 @@ function pdks_fis_degerlendir(PDO $pdo, array $fis, array $secenek, int $user): 
                         'fis_aktif' => $ustune['fis_aktif'], 'fis_disi' => $ustune['fis_disi'], 'gerekce' => $secenek['ustune_gerekce']];
         // «Aynı saatlerde N kartsız kayıt zaten var» uyarısı (Faz 8J) üstüne yazda yanıltıcıdır: o kayıtlar iptal edilecek. Fiş dışı kayıt kalıyorsa korunur.
         if ((int)$ustune['fis_disi'] === 0) $m['uyarilar'] = array_values(array_filter($m['uyarilar'], static fn($x) => !str_contains((string)$x, 'tekrar eklemediğinizden emin olun')));
+        // Çift yevmiye bayrağı (kişi başı, Mesai Detayı › Düzenle) fişte taşınmaz: üstüne yazınca yeni dönemler bayraksız
+        // yazılır. Sahip kararı: ENGEL değil, UYARI. Yalnız gösterim — hash/durum değişmez.
+        $ciftEski = 0;
+        foreach ((array)$ustune['eski'] as $eo) $ciftEski += (int)($eo['cift'] ?? 0);
+        if ($ciftEski > 0) {
+            $m['uyarilar'][] = 'Üstüne yazılan kayıtlarda ' . $ciftEski . ' kişi Çift yevmiye işaretli; fiş Çift taşımaz — yazımdan sonra Mesai Detayı › Düzenle ile yeniden işaretleyin.';
+        }
         // Önizleme = yazma sigortası: iptal edilecek küme, efektif revizyon ve servis kimlikleri hash'e girer; biri değişirse fiş YAZILMAZ.
         $m['hash'] = substr(hash('sha256', $plan['hash'] . '|uy|' . json_encode([$ustune['eski_toplu'], $revEf, $svIdler])), 0, 16);
         return $bitir('ustune');

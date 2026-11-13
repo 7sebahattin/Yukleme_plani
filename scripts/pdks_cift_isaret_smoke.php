@@ -128,6 +128,15 @@ okcy('C8) eski double_day_rate (5000) KULLANILMAZ: çift = Tam × 2 = 2000', tut
 $kg = (int)$db->query("SELECT SUM(worker_count) FROM foreman_daily_entitlement_lines WHERE attendance_class_snapshot = 'cift' AND worker_type_id IS NOT NULL")->fetchColumn();
 $cs = (int)$db->query("SELECT COUNT(*) FROM foreman_daily_entitlement_lines WHERE attendance_class_snapshot = 'cift'")->fetchColumn();
 okcy('C9) çift satırı = 1 kişi-gün (Yöntem B sayımı)', $cs > 0 && $kg === $cs);
+// K5: Tam fiyatı olmayan çavuşta bayraklı kişi → eksik mesajı aranan fiyatı (Tam) söyler, "Çift Mesai" demez
+$db->exec("INSERT INTO foreman_worker_rates (is_active,foreman_id,worker_type_id,daily_rate,half_day_rate,overtime_mode,overtime_rate,currency,valid_from) VALUES (1,7,{$kadin},NULL,'600','hourly','150','TRY','2020-01-01')");
+[$pid, $sid] = mesaiKur(7, 540);
+pdks_cift_yevmiye_yaz($db, $pid, true);
+$h = pdks_faz8b_hakedis_hesapla($sid, 1, $db);
+$eks = implode(' | ', $h['eksikler'] ?? []);
+okcy('C10) Tam fiyatı yok + çift bayrak → hesap durur, eksik "Tam Mesai fiyatı yok (çift yevmiye Tam × 2 ödenir)", "Çift Mesai" YOK',
+    ($h['ok'] ?? true) === false && str_contains($eks, 'Tam Mesai fiyatı yok (çift yevmiye Tam × 2 ödenir)') && !str_contains($eks, 'Çift Mesai')
+    && !str_contains((string)($h['hata'] ?? ''), 'Çift Mesai'), $eks . ' / ' . ($h['hata'] ?? ''));
 
 echo "\n=== D. Yarım: minimum 3 saat ===\n";
 [$pid, $sid] = mesaiKur(1, 150);   // 2 s 30 dk

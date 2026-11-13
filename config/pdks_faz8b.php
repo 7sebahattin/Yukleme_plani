@@ -2319,7 +2319,11 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         // v503: 'cift' = Tam ücret (daily_rate) × 2 (aşağıda); süre bazlı double_day_rate artık KULLANILMAZ.
         $baseRaw = $sinif === 'yarim' ? ($oran['half_day_rate'] ?? null) : ($oran['daily_rate'] ?? null);
         if ($baseRaw === null || $baseRaw === '') {
-            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — ' . $sinifEtiket . ' Mesai fiyatı yok';
+            // v503: çiftte aranan fiyat Tam'dır (daily_rate) — mesaj onu söyler.
+            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — '
+                . ($sinif === 'cift'
+                    ? 'Tam Mesai fiyatı yok (çift yevmiye Tam × 2 ödenir)'
+                    : $sinifEtiket . ' Mesai fiyatı yok');
             continue;
         }
         try {

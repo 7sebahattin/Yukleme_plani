@@ -269,6 +269,31 @@ if (pdks_yevmiye_hazir(db())) {
     ok('9) yevmiye kolonu kurulu değil — bölüm atlandı', true);
 }
 
+echo "\n=== 9b. Çift yevmiye bayrağı üstüne yazda UYARI (engel değil; fiş Çift taşımaz) ===\n";
+pdks_cift_kolon_migrate(db());
+ok('9b-a) cift_yevmiye kolonu kuruldu (pdks_cift_kolon_migrate)', pdks_cift_hazir(db()));
+$c10 = yeniCavus('Çavuş U10');
+$e10 = fisYap(['ERKEK' => [4, 0]], ['cavus' => $c10, 'fis_no' => 'U-011']);
+$r10a = yaz1($e10, $sec); $sid10 = (int)$r10a['session_id'];
+$pids10 = db()->query("SELECT id FROM daily_worker_work_periods WHERE session_id = $sid10 AND is_voided = 0 ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+ok('9b-b) fiş yazıldı (4 Erkek) ve 1 dönem Çift işaretlendi', $r10a['durum'] === 'yazildi' && count($pids10) === 4 && pdks_cift_yevmiye_yaz(db(), (int)$pids10[0], true), j($r10a));
+$y10 = fisYap(['ERKEK' => [4, 0]], ['cavus' => $c10, 'fis_no' => 'U-011']);
+$m10ust = pdks_fis_degerlendir(db(), $y10, $ust, 1);
+$m10cift = 'Üstüne yazılan kayıtlarda 1 kişi Çift yevmiye işaretli; fiş Çift taşımaz — yazımdan sonra Mesai Detayı › Düzenle ile yeniden işaretleyin.';
+ok('9b-c) önizleme durumu yine "ustune" (engel yok) ve uyarı listede', $m10ust['durum'] === 'ustune' && in_array($m10cift, $m10ust['uyarilar'], true), j([$m10ust['durum'], $m10ust['uyarilar']]));
+ok('9b-d) ESKİ özette cift = 1', (int)($m10ust['ustune']['eski']['Erkek']['cift'] ?? -1) === 1, j($m10ust['ustune']['eski'] ?? null));
+// hash uyarıdan bağımsız: bayrak kaldırılınca aynı hash (durum/hash değişmez)
+pdks_cift_yevmiye_yaz(db(), (int)$pids10[0], false);
+$m10b = pdks_fis_degerlendir(db(), $y10, $ust, 1);
+ok('9b-e) bayraksız aynı önizleme: uyarı YOK, hash AYNI', !hVarU($m10b, 'Çift yevmiye işaretli') && $m10b['hash'] === $m10ust['hash'], j([$m10b['hash'], $m10ust['hash']]));
+pdks_cift_yevmiye_yaz(db(), (int)$pids10[0], true);
+$s10 = pdks_fis_yaz(db(), [$y10], $ust, 1, 'x', [$y10['satir']], [$y10['satir'] => $m10ust['hash']])['sonuclar'][0];
+$yeniCift = db()->query("SELECT COUNT(*) AS n, SUM(CASE WHEN cift_yevmiye IS NULL THEN 1 ELSE 0 END) AS bos FROM daily_worker_work_periods WHERE session_id = $sid10 AND is_voided = 0")->fetch();
+ok('9b-f) yazıldı; yeni 4 dönemde bayrak NULL (fiş Çift taşımaz)', $s10['durum'] === 'yazildi' && (int)$yeniCift['n'] === 4 && (int)$yeniCift['bos'] === 4, j([$s10['durum'], $s10['mesaj'] ?? '', $yeniCift]));
+ok('9b-g) eski (iptal edilen) işaretli dönem bayrağı korunur (iz)', (int)db()->query("SELECT cift_yevmiye FROM daily_worker_work_periods WHERE id = " . (int)$pids10[0])->fetchColumn() === 1);
+$fo = file_get_contents($ROOT . '/_fis_onizle.php');
+ok('9b-h) _fis_onizle.php fişin uyarılarını basar ($m[\'uyarilar\'] döngüsü)', str_contains($fo, "foreach (\$m['uyarilar'] as \$x)"));
+
 echo "\n=== 10. Statik güvenceler (HARD DELETE yok, ikinci void yolu yok) ===\n";
 $fk = file_get_contents($ROOT . '/config/pdks_fis.php');
 $j0 = strpos($fk, '// J. DÜZELTME (v464)');
