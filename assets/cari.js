@@ -208,6 +208,7 @@
         var m = document.getElementById(id); if (!m) return;
         if (acik) modalKapat(true);
         kapatMenuler();
+        var eskiToast = $('.cari-toast'); if (eskiToast && !eskiToast.querySelector('button')) eskiToast.hidden = true;   /* eski bildirim modalın (özellikle mobil alt kenar) üstünü örtmesin */
         acik = m; acan = geriOdak || zorlaOdak || opener || document.activeElement; acanImza = imzaAl(acan);
         m.removeAttribute('data-kirli');
         m.hidden = false;
@@ -470,7 +471,8 @@
     }
     function yanitMesaji(s) {
         var r = s.r, j = s.j;
-        if (j && j.hata) return String(j.hata) + (r.status === 403 && !/yenile/i.test(j.hata) ? ' ' + SOZLESME.m.csrf : '');
+        var hm = j && (j.hata || j.error);   /* CSRF 403 yanıtında anahtar `error` (config/helpers.php csrf_check) */
+        if (hm) return r.status === 403 && j.error && !j.hata ? SOZLESME.m.csrf : String(hm) + (r.status === 403 && !/yenile/i.test(hm) ? ' ' + SOZLESME.m.csrf : '');
         if (r.status === 403) return SOZLESME.m.csrf;
         if (r.status === 401 || r.redirected) return SOZLESME.m.oturum;
         return metin(SOZLESME.m.sunucu, { kod: r.status });
@@ -496,7 +498,7 @@
             .then(function (s) {
                 kilitle(f, false, btnler);
                 if (s.j && s.j.ok) basari(f, fd, s.j);
-                else if (s.j && (s.j.alanlar || s.j.hata)) { sunucuHatasi(f, s.j); if (s.r.status === 403 && !s.j.alanlar) genelHata(f, yanitMesaji(s)); }
+                else if (s.j && (s.j.alanlar || s.j.hata) && !s.j.error) { sunucuHatasi(f, s.j); if (s.r.status === 403 && !s.j.alanlar) genelHata(f, yanitMesaji(s)); }
                 else genelHata(f, yanitMesaji(s));
             })
             .catch(function () { kilitle(f, false, btnler); genelHata(f, SOZLESME.m.ag); });
@@ -552,6 +554,7 @@
             btn.dataset.kilit = ''; btn.disabled = false;
             if (s.j && s.j.ok) {
                 var msg = btn.getAttribute('data-ok') || s.j.mesaj || SOZLESME.m.kaydedildi;
+                if (islem === SOZLESME.islem.iceAktar && s.j.eklenen != null) msg = 'İçe aktarıldı: ' + s.j.eklenen + ' kart eklendi, ' + (s.j.atlanan || 0) + ' atlandı';
                 if (s.j.uyari) msg += ' — ' + s.j.uyari;
                 if (kartlarSayfasi() && /^kart_(durum)$/.test(islem)) { toast(msg); return tazele(); }
                 yenileToastla(msg, islem === 'kart_sil' ? SOZLESME.uc.kartlar : (guvenliYol(s.j.yonlendir) ? s.j.yonlendir : null));
@@ -640,8 +643,16 @@
         } else o.appendChild(satir('İşlem sonrası (tutar girilince hesaplanır)', '—', true));
     }
 
+    /* "İptal et ve düzelt" kopyası: virmanda satır HEDEF carininki olabilir → kaynak/hedef alanlarından kur (cari_id = kaynak). */
+    function kopyaNormal(k) {
+        if (!k) return k;
+        var o = {}; Object.keys(k).forEach(function (a) { o[a] = k[a]; });
+        if (o.tur === 'virman' && o.kaynak_id) { o.cari_id = o.kaynak_id; if (o.hedef_id == null) o.hedef_id = ''; }
+        return o;
+    }
     function hareketAc(tur, opener, cariId, dolgu) {
         var m = document.getElementById('crModalHareket'); if (!m) return;
+        if (dolgu) { dolgu = kopyaNormal(dolgu); cariId = dolgu.cari_id || cariId; }
         var f = $('form', m); if (!f) return;
         formSifirla(f);
         var r = $('input[name="tur"][value="' + tur + '"]', f); if (r) r.checked = true;
@@ -719,6 +730,11 @@
         if (oz) {
             oz.textContent = '';
             var ham = opener.getAttribute('data-ozet');
+            if (!ham && opener.getAttribute('data-belge')) {
+                /* PHP düğmesi: data-belge / data-tur-etiket / data-cari / data-tutar / data-tarih / data-aciklama */
+                var d = function (a) { return (opener.getAttribute('data-' + a) || '').trim(); };
+                ham = [d('belge') + (d('tur-etiket') ? ' · ' + d('tur-etiket') : ''), d('cari'), d('tutar'), [d('tarih'), d('aciklama')].filter(Boolean).join(' · ')].filter(Boolean).join('|');
+            }
             if (ham) {
                 ham.split('|').forEach(function (s, i) {
                     var e = document.createElement(i === 0 ? 'strong' : 'span'); e.textContent = s.trim(); oz.appendChild(e);
@@ -751,7 +767,7 @@
         if (menuAcik && (menuOge || menuOrtu)) { geriOdak = menuAcik.dugme; kapatMenuler(); if (menuOrtu) return; }
 
         var tn = t.closest('[data-cr-islem]');
-        if (tn) { e.preventDefault(); hizliIslem(tn, tn.getAttribute('data-cr-islem')); return; }
+        if (tn) { var onaysiz = e.defaultPrevented; e.preventDefault(); if (!onaysiz) hizliIslem(tn, tn.getAttribute('data-cr-islem')); return; }   /* satır içi onclick="return confirm()" iptal edildiyse (defaultPrevented) işlem YAPILMAZ */
 
         var mo = t.closest('[data-cr-modal]');
         if (mo) {
@@ -874,9 +890,22 @@
     function parcaCoz(html, sel) {
         var t = document.createElement('template'); t.innerHTML = html;
         var k = t.content.querySelector(sel);
-        if (k) return { ic: k.innerHTML, k: k };
+        if (k) return { ic: k.innerHTML, k: k, kok: t.content };
         if (/<html[\s>]|class="sidebar|id="bottomnav"/i.test(html)) return null;     /* tam sayfa geldi: parça değil */
-        return { ic: html, k: null };
+        return { ic: html, k: null, kok: t.content };
+    }
+    /* Kök seviyesindeki menüler (#crMenuDekont, #crMenuDiger) karta özeldir (data-cari, ekstre bağlantıları, Pasifleştir/Aktifleştir, Sil durumu):
+       detay/tazele yanıtının ARDINDAN gelen yenilerle değiştirilir. */
+    function menuleriYenile(kok) {
+        if (!kok) return;
+        ['crMenuDekont', 'crMenuDiger'].forEach(function (mid) {
+            var yeni = kok.querySelector ? kok.querySelector('#' + mid) : null, eski = document.getElementById(mid);
+            if (!yeni) return;
+            if (eski && menuAcik && menuAcik.liste === eski) kapatMenuler();
+            var kopya = document.importNode(yeni, true); kopya.hidden = true;
+            if (eski) eski.parentNode.replaceChild(kopya, eski);
+            else KOK.appendChild(kopya);   /* seçimsiz açılan sayfada menüler yoktu (id yok): ilk detay yüklenince eklenir */
+        });
     }
     function yukleniyor(el, ac) {
         if (!el) return;
@@ -910,6 +939,7 @@
             var p = parcaCoz(html, '#crDetay'); if (!p) throw new Error('parca');
             yukleniyor(det, false);
             det.innerHTML = p.ic; det.setAttribute('data-id', id);
+            menuleriYenile(p.kok);
             if (p.k && p.k.getAttribute('aria-label')) det.setAttribute('aria-label', p.k.getAttribute('aria-label'));
             seciliKartIsaretle(id);
             if (ana) ana.classList.add('cari-ana--detay');
@@ -934,7 +964,10 @@
         e.preventDefault();
         var id = a.getAttribute('data-id');
         if (String(id) === String(detayId()) && !$('#crDetay .cari-yukle-hata')) {
-            seciliKartIsaretle(id); if (ana) ana.classList.add('cari-ana--detay'); if (!genis()) window.scrollTo(0, 0); return;
+            seciliKartIsaretle(id); if (ana) ana.classList.add('cari-ana--detay'); if (!genis()) window.scrollTo(0, 0);
+            /* Geri ile listeye dönüldüyse URL'de id yok; aynı karta yeniden dokunulunca da geçmiş kaydı atılmalı (yoksa Geri sayfadan çıkar) */
+            if (!new URLSearchParams(location.search).get(SOZLESME.p.id)) { try { history.pushState({ cariId: id }, '', a.getAttribute('href')); } catch (x) { /* kritik değil */ } }
+            return;
         }
         detayYukle(id, a.getAttribute('href'), true);
     });
@@ -1009,7 +1042,8 @@
             yukleniyor(panel, false); yukleHata(panel, function () { ekstreYukle(form); });
         });
     }
-    function ekstreFormu(el) { return el && el.closest ? (el.closest('#crEkstreForm') || (el.form && el.form.id === 'crEkstreForm' ? el.form : null)) : null; }
+    /* DİKKAT: formda name="id" girdisi var → `form.id` bir ELEMENT döner (adlandırılmış erişim gölgelemesi); kimlik için getAttribute('id') kullan. */
+    function ekstreFormu(el) { return el && el.closest ? (el.closest('#crEkstreForm') || (el.form && el.form.getAttribute('id') === 'crEkstreForm' ? el.form : null)) : null; }
     document.addEventListener('click', function (e) {
         var c = e.target.closest && e.target.closest('.cari-cip[data-donem], #crEkstreForm .cari-cip'); if (!c) return;
         var form = ekstreFormu(c); if (!form) return;
@@ -1027,7 +1061,7 @@
         if (n === 'pb' || n === 'tur' || n === 'iptal' || ((n === 'bas' || n === 'bit') && form.elements.bas.value && form.elements.bit.value)) ekstreYukle(form);
     });
     document.addEventListener('submit', function (e) {
-        var form = e.target; if (form.id !== 'crEkstreForm' || !document.getElementById('crPanelEkstre')) return;
+        var form = e.target; if (!form.getAttribute || form.getAttribute('id') !== 'crEkstreForm' || !document.getElementById('crPanelEkstre')) return;
         e.preventDefault(); ekstreYukle(form);
     });
 
@@ -1059,6 +1093,7 @@
                 if (yk && ek) ek.defaultValue = yk.defaultValue;
                 var yd = doc.getElementById('crDetay');
                 if (yd && det) { det.innerHTML = yd.innerHTML; if (yd.getAttribute('data-id')) det.setAttribute('data-id', yd.getAttribute('data-id')); }
+                menuleriYenile(doc);
                 yukleniyor(det, false);
                 seciliKartIsaretle(id); filtrele();
                 if (!document.activeElement || document.activeElement === document.body) odakGeri();

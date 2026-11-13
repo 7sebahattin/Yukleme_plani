@@ -221,7 +221,7 @@ $r = get('cari_tanimlari.php');
 $b = bolge($r['govde']);
 ok('tanımlar: 3 sekme (Cari Grupları n, Ödeme Şekilleri 6, İçe Aktar 2 yeni)', str_contains($b, 'Ödeme Şekilleri <small>6</small>') && str_contains($b, 'İçe Aktar <small>2 yeni</small>') && str_contains($b, 'id="crPanelGrup"') && str_contains($b, 'id="crPanelOdeme" role="tabpanel" aria-labelledby="crTabOdeme" hidden'));
 ok('tanımlar: kullanılan grupta (Ambalaj) Sil YOK, ödeme şekillerinde Sil var', (bool)preg_match('/Ambalaj<small>Sıra 1 · 2 kartta kullanılıyor.*?<\/li>/s', $b, $mm) && !str_contains($mm[0], 'tanim_sil') && substr_count($b, 'value="tanim_sil"') >= 6 + 1);
-ok('tanımlar: aktif switch formu (role=switch, tanim_durum) + satır içi düzenleme formu (tanim_kaydet + id)', str_contains($b, 'role="switch" name="aktif"') && str_contains($b, 'name="islem" value="tanim_durum"') && preg_match('/cari-tanim-satir--duzen" hidden><form[^>]*><input type="hidden" name="csrf"[^>]*><input type="hidden" name="islem" value="tanim_kaydet">/', $b) === 1);
+ok('tanımlar: aktif switch formu (role=switch, tanim_durum) + satır içi düzenleme formu (tanim_kaydet + id)', (bool)preg_match('/role="switch" data-id="\d+" name="aktif"/', $b) && str_contains($b, 'name="islem" value="tanim_durum"') && preg_match('/cari-tanim-satir--duzen" hidden><form[^>]*><input type="hidden" name="csrf"[^>]*><input type="hidden" name="islem" value="tanim_kaydet">/', $b) === 1);
 ok('tanımlar: bilgi kutusu (sabit listeler)', str_contains($b, 'hareket türleri sabittir'));
 ok('tanımlar: HTML denge / form csrf', html_hata($b) === [] && form_hata($b) === [], json_encode([html_hata($b), form_hata($b)]));
 $r = get('cari_tanimlari.php', ['sekme' => 'ice_aktar']);

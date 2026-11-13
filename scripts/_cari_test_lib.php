@@ -11,14 +11,21 @@ require_once __DIR__ . '/_siparis_test_lib.php';
 require_once $ROOT . '/config/cari_core.php';
 require_once $ROOT . '/config/cari_ui.php';
 
-$CARI_T_DB = sys_get_temp_dir() . '/cari_t_' . getmypid() . '_' . bin2hex(random_bytes(3)) . '.sqlite';
-register_shutdown_function(static function () use ($CARI_T_DB): void { @unlink($CARI_T_DB); });
+// CARI_E2E_DB verilirse (scripts/cari_ui_smoke.js sunucu köprüsü) o dosya kullanılır ve SİLİNMEZ (istekler arası kalıcı durum).
+$CARI_T_DB = (string)(getenv('CARI_E2E_DB') ?: '');
+if ($CARI_T_DB === '') {
+    $CARI_T_DB = sys_get_temp_dir() . '/cari_t_' . getmypid() . '_' . bin2hex(random_bytes(3)) . '.sqlite';
+    register_shutdown_function(static function () use ($CARI_T_DB): void { @unlink($CARI_T_DB); });
+}
+$CARI_T_MEVCUT = is_file($CARI_T_DB) && filesize($CARI_T_DB) > 0;   // kalıcı e2e DB zaten kurulduysa tablolar yeniden yaratılmaz
 $PDO_TEST = new PDO('sqlite:' . $CARI_T_DB);
 $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
-siparis_test_diger_tablolar($PDO_TEST);   // users + audit_log
-$PDO_TEST->exec('CREATE TABLE material_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, name TEXT, is_active INT DEFAULT 1)');
+if (!$CARI_T_MEVCUT) {
+    siparis_test_diger_tablolar($PDO_TEST);   // users + audit_log
+    $PDO_TEST->exec('CREATE TABLE material_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, name TEXT, is_active INT DEFAULT 1)');
+}
 
 /** Alt süreçte tek istek çalıştırır. @return array{govde:string,kod:int,basliklar:list<string>,flash:?array,hata:?string} */
 function cari_t_istek(array $spec): array

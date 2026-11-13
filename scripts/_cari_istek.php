@@ -3,6 +3,7 @@
 // scripts/_cari_istek.php — Cari testleri için TEK İSTEK çalıştırıcı (SADECE CLI; include-only değil, alt süreç olarak çalışır).
 // Gerçek sayfa/uç dosyasını GERÇEK exit/header/http_response_code ile çalıştırır; çıktıyı JSON olarak basar.
 // Girdi: ortam değişkeni CARI_T_SPEC = base64(JSON {dosya, get, post, server, admin, perms, uid, db}). DB: dosya tabanlı SQLite (üst süreç hazırlar).
+// `sid` verilirse oturum kimliği sabitlenir (flash bir sonraki istekte görünür).
 // `govde_dosya` verilirse ham gövde o dosyaya yazılır (XLSX gibi ikili çıktılar için).
 // Çıktı: stdout'un sonunda "@@CARI@@" + JSON {govde, kod, basliklar, flash, hata}.
 // =========================================================
@@ -20,6 +21,7 @@ if (!function_exists('require_perm')) { function require_perm(string $p): void {
 $PERMS = $spec['perms'] ?? []; $IS_ADMIN = (bool)($spec['admin'] ?? true); $UID = (int)($spec['uid'] ?? 1);
 
 ini_set('session.save_path', sys_get_temp_dir()); ini_set('session.use_cookies', '0'); ini_set('session.cache_limiter', '');
+if (!empty($spec['sid'])) session_id(preg_replace('/[^A-Za-z0-9]/', '', (string)$spec['sid']));   // sabit oturum → flash istekler arası taşınır (tarayıcı köprüsü)
 session_start();
 $_SESSION['csrf'] = 'test-csrf-belirteci';
 

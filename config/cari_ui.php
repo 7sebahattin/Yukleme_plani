@@ -446,7 +446,7 @@ function cari_detay_menuleri(array $k, bool $hareketli): string
         . '<li class="cari-menu-ayrac cari-menu-mobil" role="separator"></li>';
     $diger = $mob
         . '<li role="none"><button type="button" role="menuitem" class="cari-menu-oge" data-cr-modal="kart" data-duzenle="1">Düzenle</button></li>'
-        . '<li role="none"><button type="submit" form="crIslemForm" name="islem" value="kart_durum" role="menuitem" class="cari-menu-oge" data-cr-islem="kart_durum">' . ($pasif ? 'Aktifleştir' : 'Pasifleştir') . '</button></li>'
+        . '<li role="none"><button type="submit" form="crIslemForm" name="islem" value="kart_durum" role="menuitem" class="cari-menu-oge" data-cr-islem="kart_durum" data-aktif="' . ($pasif ? '1' : '0') . '">' . ($pasif ? 'Aktifleştir' : 'Pasifleştir') . '</button></li>'
         . '<li role="none">' . ($hareketli
             ? '<button type="button" role="menuitem" class="cari-menu-oge cari-menu-oge--tehlike" disabled title="Hareketi olan cari silinemez">Sil (hareketi var)</button>'
             : '<button type="submit" form="crIslemForm" name="islem" value="kart_sil" role="menuitem" class="cari-menu-oge cari-menu-oge--tehlike" data-cr-islem="kart_sil" onclick="return confirm(\'Bu cari kart kalıcı olarak silinecek. Emin misiniz?\')">Sil</button>') . '</li>';
@@ -820,7 +820,7 @@ function cari_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
         . ($grup ? 'Cari kartlarını sınıflandırır; listede filtre olarak kullanılır. Kartta kullanılan grup silinemez, pasifleştirilir.'
                  : 'Tahsilat ve ödeme fişlerinde seçilir. Adı değişirse eski fişler değişmez (fişe yazıldığı ad saklanır).') . '</p>';
     if ($yaz) {
-        $h .= '<form class="cari-tanim-ekle" method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım eklendi"><input type="hidden" name="csrf" value="' . $csrf . '">'
+        $h .= '<form class="cari-tanim-ekle" method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım eklendi" novalidate><input type="hidden" name="csrf" value="' . $csrf . '">'
             . '<input type="hidden" name="islem" value="tanim_kaydet"><input type="hidden" name="tur" value="' . $tur . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
             . '<label class="pm-label"><span>' . ($grup ? 'Yeni grup adı' : 'Yeni ödeme şekli') . '</span><input type="text" name="ad" maxlength="100" autocomplete="off" required></label>'
             . '<label class="pm-label"><span>Sıra</span><input type="number" name="sira" value="' . $oneri . '" inputmode="numeric"></label>'
@@ -835,7 +835,7 @@ function cari_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
         if ($yaz) {
             $h .= '<form method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım güncellendi" style="display:contents"><input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="islem" value="tanim_durum">'
                 . '<input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
-                . '<label class="cari-aktif"><input type="checkbox" role="switch" name="aktif" value="1"' . ($aktif ? ' checked' : '') . ' aria-label="' . h($t['ad']) . ' aktif"><span>Aktif</span></label>'
+                . '<label class="cari-aktif"><input type="checkbox" role="switch" data-id="' . $id . '" name="aktif" value="1"' . ($aktif ? ' checked' : '') . ' aria-label="' . h($t['ad']) . ' aktif"><span>Aktif</span></label>'
                 . '<noscript><button type="submit" class="btn btn-sm">Uygula</button></noscript></form>'
                 . '<button type="button" class="btn btn-sm" data-tanim-duzen aria-label="' . h($t['ad']) . ' düzenle">Düzenle</button>';
             if (!$grup || $kul === 0) {
@@ -848,7 +848,7 @@ function cari_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
         }
         $h .= '</div></li>';
         if ($yaz) {
-            $h .= '<li class="cari-tanim-satir cari-tanim-satir--duzen" hidden><form method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım güncellendi" style="display:contents">'
+            $h .= '<li class="cari-tanim-satir cari-tanim-satir--duzen" hidden><form method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım güncellendi" style="display:contents" novalidate>'
                 . '<input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="islem" value="tanim_kaydet"><input type="hidden" name="tur" value="' . $tur . '"><input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
                 . '<label class="pm-label"><span>Ad</span><input type="text" name="ad" value="' . h($t['ad']) . '" maxlength="100" required></label>'
                 . '<label class="pm-label"><span>Sıra</span><input type="number" name="sira" value="' . (int)$t['sira'] . '" inputmode="numeric"></label>'

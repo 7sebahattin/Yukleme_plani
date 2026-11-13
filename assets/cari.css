@@ -718,3 +718,6 @@ body.print-cari { color: #000; }
 .cari-tutar-uyari { color: var(--danger); font-weight: 600; }
 .cari-dialog .cari-secici-liste[hidden] { display: none; }
 @media print { .cari-yukle-hata, .cari-yukleniyor { display: none !important; } }
+
+/* Özel tarih alanları: satır içi display:flex [hidden]i ezmesin (entegrasyon) */
+.cari-ozel-tarih[hidden] { display: none !important; }
