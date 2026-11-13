@@ -79,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['hks_bag_islem'])) {
         if (!can_beyan('hks.write') || !(can('records.write') || is_admin())) forbidden();
         $islem = (string)$_POST['hks_bag_islem'];
+        if ($islem === 'tekrar_aktif') icerik_kapi('beyan.tekrar_aktif');   // v507
         $once  = beyan_hks_aktif($id);
         $hata  = beyan_hks_bag_duzelt($id, $islem, (int)($auth_user['id'] ?? 0));
         if ($hata !== null) {

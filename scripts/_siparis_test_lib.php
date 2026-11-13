@@ -60,7 +60,7 @@ function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }
 function active_depot(): ?string { global $AKTIF_DEPO; return $AKTIF_DEPO; }
 function enforce_active_depot(): void {}
-function depot_options(): array { global $AKTIF_DEPO; return [$AKTIF_DEPO]; }
+function depot_options(): array { global $AKTIF_DEPO, $DEPO_SECENEK; return is_array($DEPO_SECENEK ?? null) ? $DEPO_SECENEK : [$AKTIF_DEPO]; }   // $DEPO_SECENEK: çok depolu testler (stok transfer)
 function user_allowed_depots(): ?array { global $DEPOLAR; return $DEPOLAR; }
 function depo_fold(string $s): string { return mb_strtolower(trim(str_replace(['İ', 'I'], ['i', 'ı'], $s)), 'UTF-8'); }
 function depot_visible_to_user(?string $depo): bool {

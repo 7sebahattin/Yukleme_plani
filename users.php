@@ -72,6 +72,8 @@ foreach ($pdo->query('SELECT role_id, permission FROM role_permissions')->fetchA
 }
 foreach ($role_permission_preview as &$preview_permissions) {
     if (function_exists('beyan_expand_role_permissions')) $preview_permissions = beyan_expand_role_permissions($preview_permissions);
+    // v507 — özet, can() ile AYNI genişletmeden geçer (eski rol → sayfa/kart/içerik anahtarları)
+    if (function_exists('role_matrix_expand_permissions')) $preview_permissions = role_matrix_expand_permissions($preview_permissions);
     $preview_permissions = array_values(array_filter($preview_permissions, static fn($p) => !in_array($p, ['beyan.write', 'beyan.permissions.detailed'], true)));
 }
 unset($preview_permissions);
@@ -560,6 +562,7 @@ render_header('Kullanıcı Yönetimi');
                     'role_ids'     => $u['role_ids'] ? array_map('intval', explode(',', $u['role_ids'])) : [],
                     'depots'       => $user_depots_map[(int)$u['id']] ?? [],
                 ])) ?>)'>Düzenle</button>
+            <button type="button" class="btn btn-sm btn-ghost" data-usr-ozet="<?= h(json_encode($u['role_ids'] ? array_map('intval', explode(',', $u['role_ids'])) : [])) ?>" data-usr-ad="<?= h((string)($u['display_name'] ?: $u['username'])) ?>" title="Bu kullanıcı hangi sayfada ne yapabilir?">Yetkiler</button>
             <button type="button" class="btn btn-sm btn-ghost"
                 onclick="usrOpenPwReset(<?= (int)$u['id'] ?>, <?= h(json_encode($u['username'])) ?>)">Şifre</button>
             <form method="post" style="margin:0" onsubmit="return confirm('Bu kullanıcının ekran kilidi PIN\'i sıfırlansın mı? Bir sonraki sayfada yeni PIN belirleyecek.')">
@@ -620,6 +623,7 @@ render_header('Kullanıcı Yönetimi');
                 'is_active'    => (int)$u['is_active'],
                 'role_ids'     => $u['role_ids'] ? array_map('intval', explode(',', $u['role_ids'])) : [],
             ])) ?>)'>Düzenle</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-usr-ozet="<?= h(json_encode($u['role_ids'] ? array_map('intval', explode(',', $u['role_ids'])) : [])) ?>" data-usr-ad="<?= h((string)($u['display_name'] ?: $u['username'])) ?>">Yetkiler</button>
         <button type="button" class="btn btn-sm btn-ghost"
             onclick="usrOpenPwReset(<?= (int)$u['id'] ?>, <?= h(json_encode($u['username'])) ?>)">Şifre Sıfırla</button>
         <form method="post" style="margin:0" onsubmit="return confirm('Bu kullanıcının ekran kilidi PIN\'i sıfırlansın mı? Bir sonraki sayfada yeni PIN belirleyecek.')">
@@ -845,6 +849,18 @@ render_header('Kullanıcı Yönetimi');
 </div>
 </div>
 
+<!-- ── Yetki özeti (salt okunur) ───────────────────────────────────────── -->
+<div id="usrOzetModal" class="pm-overlay" hidden>
+<div class="pm-dialog usr-ozet-dialog" role="dialog" aria-modal="true" aria-labelledby="usrOzetBaslik">
+    <div class="pm-header">
+        <h2 class="pm-title" id="usrOzetBaslik">Yetki özeti</h2>
+        <button type="button" class="pm-close" data-usr-ozet-kapat aria-label="Kapat">✕</button>
+    </div>
+    <div class="pm-body"><div class="usr-ozet" id="usrOzetGovde"></div></div>
+    <div class="pm-footer"><button type="button" class="btn btn-ghost" data-usr-ozet-kapat>Kapat</button></div>
+</div>
+</div>
+
 <script>
 (function () {
     var meId = <?= $me ?>;
@@ -867,30 +883,99 @@ render_header('Kullanıcı Yönetimi');
     });
 
     var rolePermissions = <?= json_encode($role_permission_preview, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    var permissionLabels = <?= json_encode($permission_labels, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var ozetSema = <?= json_encode(function_exists('role_ozet_sema') ? role_ozet_sema() : [], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var rolMeta = <?= json_encode(array_column(array_map(static fn($r) => ['id' => (int)$r['id'], 'label' => (string)$r['label'], 'slug' => (string)$r['slug']], $all_roles), null, 'id'), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var DUZEY = { kapali: 'Kapalı', salt: 'Görüntüleme', kismi: 'Kısmi', tam: 'Tam' };
+
+    // v507 — Yetki yalnız rolden gelir: seçilen rollerin birleşimi, sayfa sayfa (role_ozet() ile AYNI kural).
+    function ozetHesapla(rolIdleri) {
+        var izin = {}, admin = false;
+        rolIdleri.forEach(function (rid) {
+            if (rolMeta[rid] && rolMeta[rid].slug === 'admin') admin = true;
+            (rolePermissions[rid] || []).forEach(function (p) { izin[p] = true; });
+        });
+        var sayfalar = ozetSema.map(function (sayfa) {
+            var gorulen = {}, acik = 0, toplam = 0, saltDisi = false, tur = { c: false, e: false, d: false };
+            sayfa.perms.forEach(function (x) {
+                if (gorulen[x.p]) return;
+                gorulen[x.p] = true; toplam++;
+                if (!izin[x.p] && !admin) return;
+                acik++;
+                if (!x.s) saltDisi = true;
+                if (x.t in tur) tur[x.t] = true;
+            });
+            var gor = admin || (sayfa.okuma ? !!izin[sayfa.okuma] : acik > 0);
+            var duzey = (!gor || acik === 0) ? 'kapali' : (acik === toplam ? 'tam' : (saltDisi ? 'kismi' : 'salt'));
+            return { key: sayfa.key, label: sayfa.label, grup: sayfa.grup, gor: gor, c: tur.c, e: tur.e, d: tur.d, acik: acik, toplam: toplam, duzey: duzey };
+        });
+        return { admin: admin, sayfalar: sayfalar };
+    }
+    function el(etiket, sinif, metin) {
+        var e = document.createElement(etiket);
+        if (sinif) e.className = sinif;
+        if (metin != null) e.textContent = metin;
+        return e;
+    }
+    function ozetCiz(kap, rolIdleri, ad) {
+        kap.replaceChildren();
+        var o = ozetHesapla(rolIdleri);
+        var bas = el('div', 'usr-ozet-bas');
+        bas.appendChild(el('strong', null, ad ? ad + ' — ne görür, ne yapar' : 'Bu kullanıcı ne görür, ne yapar'));
+        kap.appendChild(bas);
+        if (!rolIdleri.length) { kap.appendChild(el('p', 'usr-ozet-not', 'Rol seçilmedi: kullanıcı hiçbir sayfayı açamaz.')); return; }
+        var roller = el('p', 'usr-ozet-roller');
+        roller.appendChild(document.createTextNode('Yetki kaynağı: '));
+        rolIdleri.forEach(function (rid, i) {
+            if (i) roller.appendChild(document.createTextNode(' + '));
+            var a = el('a', null, (rolMeta[rid] || {}).label || ('Rol #' + rid));
+            a.href = 'roles.php?duzenle=' + encodeURIComponent(rid);
+            a.title = 'Bu rolün yetkilerini düzenle';
+            roller.appendChild(a);
+        });
+        kap.appendChild(roller);
+        if (o.admin) kap.appendChild(el('p', 'usr-ozet-not usr-ozet-admin', 'Sistem Yöneticisi rolü: tüm sayfalar ve yöneticiye özel işlemler açıktır.'));
+        var acik = o.sayfalar.filter(function (s) { return s.duzey !== 'kapali'; });
+        var kapali = o.sayfalar.filter(function (s) { return s.duzey === 'kapali'; });
+        if (acik.length) {
+            var liste = el('div', 'usr-ozet-liste');
+            acik.forEach(function (s) {
+                var satir = el('div', 'usr-ozet-satir');
+                satir.appendChild(el('span', 'usr-ozet-ad', s.label));
+                var eylem = el('span', 'usr-ozet-eylem');
+                [['Gör', s.gor], ['Ekle', s.c], ['Düzenle', s.e], ['Sil', s.d]].forEach(function (x) {
+                    eylem.appendChild(el('span', 'usr-ozet-e' + (x[1] ? ' usr-ozet-e-var' : ''), x[0]));
+                });
+                satir.appendChild(eylem);
+                satir.appendChild(el('span', 'rolx-cip rolx-cip-' + s.duzey, DUZEY[s.duzey] + (s.duzey === 'tam' ? '' : ' · ' + s.acik + '/' + s.toplam)));
+                liste.appendChild(satir);
+            });
+            kap.appendChild(liste);
+        } else {
+            kap.appendChild(el('p', 'usr-ozet-not', 'Seçili roller hiçbir sayfayı açmıyor.'));
+        }
+        if (kapali.length) kap.appendChild(el('p', 'usr-ozet-kapali', 'Kapalı sayfalar: ' + kapali.map(function (s) { return s.label; }).join(', ')));
+        kap.appendChild(el('p', 'usr-ozet-not', 'Depo kapsamı, kayıt sahipliği ve işlem kilitleri ayrıca uygulanır. Ayrıntı ve değişiklik için rol adına tıklayın.'));
+    }
     function refreshRolePreview(modal) {
         if (!modal) return;
         var preview = modal.querySelector('.usr-permission-preview');
         if (!preview) return;
-        var permissions = new Set();
-        modal.querySelectorAll('input[name="roles[]"]:checked').forEach(function (cb) {
-            (rolePermissions[cb.value] || []).forEach(function (p) { permissions.add(p); });
-        });
-        preview.replaceChildren();
-        var summary = document.createElement('strong');
-        summary.textContent = 'Birleşik yetkiler: ' + permissions.size + ' izin';
-        preview.appendChild(summary);
-        var note = document.createElement('p');
-        note.textContent = 'Depo kapsamı, kayıt sahipliği ve işlem kilitleri ayrıca uygulanır. Yönetici rolü bazı alanlarda ek erişim sağlar.';
-        preview.appendChild(note);
-        if (permissions.size) {
-            var details = document.createElement('details');
-            var heading = document.createElement('summary'); heading.textContent = 'Yetki listesini göster'; details.appendChild(heading);
-            var list = document.createElement('ul');
-            Array.from(permissions).sort().forEach(function (p) { var li = document.createElement('li'); li.textContent = permissionLabels[p] || p; list.appendChild(li); });
-            details.appendChild(list); preview.appendChild(details);
-        }
+        var idler = [];
+        modal.querySelectorAll('input[name="roles[]"]:checked').forEach(function (cb) { idler.push(parseInt(cb.value, 10)); });
+        ozetCiz(preview, idler, '');
     }
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-usr-ozet]');
+        if (b) {
+            var idler = [];
+            try { idler = JSON.parse(b.getAttribute('data-usr-ozet')) || []; } catch (err) { idler = []; }
+            ozetCiz(document.getElementById('usrOzetGovde'), idler, b.getAttribute('data-usr-ad') || '');
+            openModal('usrOzetModal');
+            return;
+        }
+        if (e.target.closest('[data-usr-ozet-kapat]') || e.target.id === 'usrOzetModal') closeModal('usrOzetModal');
+    });
+    document.getElementById('usrOzetModal').addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal('usrOzetModal'); });
     ['usrCreateModal', 'usrEditModal'].forEach(function (id) {
         var modal = document.getElementById(id);
         modal.addEventListener('change', function () { refreshRolePreview(modal); });

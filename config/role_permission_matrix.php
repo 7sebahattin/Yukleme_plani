@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/role_pdks_matrix.php';
+require_once __DIR__ . '/role_content.php';   // v507: sayfa içi kart/düğme (içerik) yetkileri
 
 /** Pure editor schema. Unsupported operations are absent, never implied. */
 function role_permission_matrix(): array {
@@ -41,6 +42,7 @@ function role_permission_matrix(): array {
                 $row('siparis_evrak','Evrak Takımı Bekleyen Sevkiyatlar','siparisler.php?kart=evrak',$crud('siparis.ogl_evrak')),
                 $row('siparis_kapali','Kapanan Sevkiyatlar','siparisler.php?kart=kapali',$crud('siparis.ogl_kapali')),
             ],'Sayfayı açar. İşlem için ilgili kartta da izin verilmelidir; kart izni sevkiyatın bulunduğu bölüme göre uygulanır.'),
+            $row('frugro','Frugro Siparişler','frugro_siparis.php',$crud('siparis.frugro'),[],'OGL’den bağımsız sayfa. Mailden alma için Mail Merkezi okuma, ayarlar için Sil yetkisi de gerekir; beyan bağı OGL satırındaki “Beyan eşleştir” iznini kullanır.'),
             $row('urun_siparis','Siparişler','urun_siparis.php',$crud('siparis.urun')),
             $row('beyan','Beyanlar','beyanlar.php',$beyanActions,$beyan),
             $row('hks','Hal Bildirimi','halkayit/index.php',$crud('hks'),[],'Ekle: taslak hazırlama, kopyalama ve HKS’ye bildirim gönderme (geri alınamaz). Düzenle: taslak ve kişi düzenleme. Sil: taslak ve kişi silme. Firma tanımları yalnız sistem yöneticisidir.'),
@@ -68,7 +70,10 @@ function role_permission_matrix(): array {
     ];
     if (function_exists('nav_muhasebe_gruplari')) foreach (nav_muhasebe_gruplari() as $key=>[$label,$icon,$pages]) {
         $children=[];
-        foreach ($pages as $route=>[$title,$emoji]) $children[]=$row(pathinfo($route,PATHINFO_FILENAME),$title,$route,[],[],'Hazırlanan sayfa; yalnız sistem yöneticisi. İşlem yetkisi bulunmuyor.',true);
+        $aciklama=$key==='cari'
+            ? 'Çalışan modül; yalnız sistem yöneticisi (rol bazlı cari yetkileri sonraki faz).'
+            : 'Hazırlanan sayfa; yalnız sistem yöneticisi. İşlem yetkisi bulunmuyor.';
+        foreach ($pages as $route=>[$title,$emoji]) $children[]=$row(pathinfo($route,PATHINFO_FILENAME),$title,$route,[],[],$aciklama,true);
         $groups[$label.' · Menü']=$children;
     }
     return $groups;
@@ -94,7 +99,8 @@ function role_matrix_expand_permissions(array $permissions): array {
         if (in_array('reports.export',$original,true)) $permissions[]="reports.$type.export";
     }
     $permissions = role_sections_derive($permissions, $original);
-    foreach (['records'=>['loading','pallet'],'siparis'=>['ogl','urun']] as $module=>$pages) {
+    $permissions = role_frugro_derive($permissions, $original);
+    foreach (['records'=>['loading','pallet'],'siparis'=>role_siparis_pages()] as $module=>$pages) {
         foreach (['read','create','edit','delete'] as $action) {
             if (!$detailed && (in_array("$module.$action",$original,true) || (in_array($action,['create','edit'],true) && in_array("$module.write",$original,true)))) foreach ($pages as $page) $permissions[]="$module.$page.$action";
             foreach ($pages as $page) if (($detailed || in_array("$module.$action",$original,true) || in_array("$module.write",$original,true)) && in_array("$module.$page.$action",$permissions,true)) {
@@ -104,7 +110,28 @@ function role_matrix_expand_permissions(array $permissions): array {
         }
     }
     $permissions = role_sections_fanout($permissions);
+    $permissions = role_content_expand($permissions);   // v507 — SON adım: içerik öğeleri ön koşul izinlerine bakar
     return array_values(array_unique($permissions));
+}
+
+/** Sipariş modülünün sayfa anahtarları (Roller satırları: siparis.<sayfa>.read|create|edit|delete). */
+function role_siparis_pages(): array { return ['ogl','urun','frugro']; }
+
+/** Frugro Siparişler satırının kataloğa girdiği sürüm (role.catalog.N). */
+const ROLE_FRUGRO_SINCE = 3;
+
+/**
+ * Frugro sayfası geri uyumluluğu (DB'ye yazmaz): Frugro satırından ÖNCE kaydedilmiş rol
+ * (katalog sürümü < ROLE_FRUGRO_SINCE) Frugro izinlerini OGL sayfa izinlerinden alır —
+ * eskiden Frugro OGL kapısını kullanıyordu, kimse erişim kaybetmez. Roller ekranında bir kez
+ * kaydedilen rol güncel sürüm işaretleyicisini taşır ve yalnız açıkça seçilen siparis.frugro.* geçerli olur.
+ * Detaylı (role.permissions.detailed) ve kart işaretleyicili roller dahil; işaretleyicisiz düz roller
+ * ayrıca modül izninden (siparis.read/write/delete) sayfa döngüsüyle genişler.
+ */
+function role_frugro_derive(array $p, array $original): array {
+    if (role_catalog_version_of($original) >= ROLE_FRUGRO_SINCE) return $p;
+    foreach (['read','create','edit','delete'] as $a) if (in_array("siparis.ogl.$a", $p, true)) $p[] = "siparis.frugro.$a";
+    return $p;
 }
 
 /** v504 — kart (bölüm) yetkileri. Yeni matristen kaydedilen rol `role.sections.detailed` taşır. */
@@ -145,9 +172,61 @@ function role_matrix_catalog_additions(): array {
     foreach (['records','kantar','stok','maliyet','hesap','defs','siparis'] as $module) {
         $out["$module.create"]='Yeni kayıt ekle'; $out["$module.edit"]='Mevcut kaydı düzenle';
     }
-    foreach (['records'=>['loading','pallet'],'siparis'=>['ogl','urun']] as $module=>$pages) foreach ($pages as $page) foreach (['read','create','edit','delete'] as $action) $out["$module.$page.$action"] = "$page $action";
+    foreach (['records'=>['loading','pallet'],'siparis'=>role_siparis_pages()] as $module=>$pages) foreach ($pages as $page) foreach (['read','create','edit','delete'] as $action) $out["$module.$page.$action"] = "$page $action";
     foreach (role_report_types() as $type=>$label) { $out["reports.$type.read"]=$label.' görüntüle'; $out["reports.$type.export"]=$label.' dışa aktar'; }
-    return $out + role_pdks_catalog();
+    return $out + role_pdks_catalog() + role_content_catalog_labels();
+}
+
+/**
+ * v507 — Özet şeması: yönetici-dışı her sayfa için içerdiği TÜM izinler (sayfa + kartlar + ek işlemler + içerik).
+ * Roller listesi ve Kullanıcılar ekranındaki "ne görür / ne yapar" özeti bu TEK şemadan üretilir.
+ * t: r=Gör c=Ekle e=Düzenle d=Sil x=ek işlem i=içerik · s: salt görüntüleme türü mü.
+ */
+function role_ozet_sema(): array {
+    static $sema = null;
+    if ($sema !== null) return $sema;
+    $sema = [];
+    $kisa = ['read' => 'r', 'create' => 'c', 'edit' => 'e', 'delete' => 'd'];
+    $icerik = role_content_catalog();
+    foreach (role_permission_matrix() as $grup => $rows) {
+        foreach ($rows as $row) {
+            if (!empty($row['admin_only'])) continue;
+            $perms = [];
+            $topla = static function (array $r) use (&$topla, &$perms, $kisa): void {
+                if (empty($r['admin_only'])) foreach ((array)$r['actions'] as $tur => $a) {
+                    $perms[] = ['p' => (string)$a['permission'], 't' => $kisa[$tur] ?? 'x', 's' => $tur === 'read' || $tur === 'export'];
+                }
+                foreach ((array)$r['children'] as $c) $topla($c);
+            };
+            $topla($row);
+            foreach ((array)($icerik[$row['key']] ?? []) as $ogeler) foreach ($ogeler as $k => $o) $perms[] = ['p' => (string)$k, 't' => 'i', 's' => !empty($o['salt'])];
+            $sema[] = ['key' => (string)$row['key'], 'label' => (string)$row['label'], 'grup' => (string)$grup,
+                'okuma' => (string)($row['actions']['read']['permission'] ?? ''), 'perms' => $perms];
+        }
+    }
+    return $sema;
+}
+
+/** Genişletilmiş izin listesinden sayfa özeti: [key,label,grup,gor,c,e,d,acik,toplam,duzey(kapali|salt|kismi|tam)]. */
+function role_ozet(array $expanded): array {
+    $var = array_flip(array_filter($expanded, 'is_string'));
+    $out = [];
+    foreach (role_ozet_sema() as $sayfa) {
+        $acik = 0; $toplam = 0; $saltDisi = false; $tur = ['c' => false, 'e' => false, 'd' => false]; $gorulen = [];
+        foreach ($sayfa['perms'] as $x) {
+            if (isset($gorulen[$x['p']])) continue;
+            $gorulen[$x['p']] = true; $toplam++;
+            if (!isset($var[$x['p']])) continue;
+            $acik++;
+            if (!$x['s']) $saltDisi = true;
+            if (isset($tur[$x['t']])) $tur[$x['t']] = true;
+        }
+        $gor = $sayfa['okuma'] !== '' ? isset($var[$sayfa['okuma']]) : $acik > 0;
+        $duzey = (!$gor || $acik === 0) ? 'kapali' : ($acik === $toplam ? 'tam' : ($saltDisi ? 'kismi' : 'salt'));
+        $out[] = ['key' => $sayfa['key'], 'label' => $sayfa['label'], 'grup' => $sayfa['grup'], 'gor' => $gor,
+            'c' => $tur['c'], 'e' => $tur['e'], 'd' => $tur['d'], 'acik' => $acik, 'toplam' => $toplam, 'duzey' => $duzey];
+    }
+    return $out;
 }
 
 /** Additional CRUD check; caller must retain its existing module/read gate. */

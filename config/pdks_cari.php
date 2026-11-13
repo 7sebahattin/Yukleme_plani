@@ -471,7 +471,8 @@ function pdks_cari_hesap_listesi(?PDO $pdo = null): array
  * fazla mesai saati/tutarı, "diğer" (çavuş ücreti + servis; worker_type_id NULL).
  * Tip satırı tutarı = line_total − overtime_total (FM ayrı kalemde). Salt okunur;
  * kolonlar/tablo yoksa (eski şema) boş döner → ekstre eskisi gibi çalışır.
- * @return array<int, array{tipler: array<string, array{adet:int, yarim:int, kurus:int}>, fm_saat:int, fm_kurus:int, diger_kurus:int}>
+ * Yarım / çift adedi satırın DONDURULMUŞ sınıfından (attendance_class_snapshot 'yarim' / 'cift') sayılır.
+ * @return array<int, array{tipler: array<string, array{adet:int, yarim:int, cift:int, kurus:int}>, fm_saat:int, fm_kurus:int, diger_kurus:int}>
  */
 function pdks_cari_kirilim_yukle(PDO $pdo, array $entIds): array
 {
@@ -494,9 +495,10 @@ function pdks_cari_kirilim_yukle(PDO $pdo, array $entIds): array
                 if ($l['worker_type_id'] === null) { $sonuc[$id]['diger_kurus'] += $lineK; continue; }
                 $fmK = pdks_hakedis_tl_kurus((string)($l['overtime_total'] ?? '0'));
                 $ad = trim((string)$l['worker_type_name_snapshot']) ?: 'İşçi';
-                $t = $sonuc[$id]['tipler'][$ad] ?? ['adet' => 0, 'yarim' => 0, 'kurus' => 0];
+                $t = $sonuc[$id]['tipler'][$ad] ?? ['adet' => 0, 'yarim' => 0, 'cift' => 0, 'kurus' => 0];
                 $t['adet'] += (int)$l['worker_count'];
                 if ((string)$l['attendance_class_snapshot'] === 'yarim') $t['yarim'] += (int)$l['worker_count'];
+                if ((string)$l['attendance_class_snapshot'] === 'cift') $t['cift'] += (int)$l['worker_count'];
                 $t['kurus'] += $lineK - $fmK;
                 $sonuc[$id]['tipler'][$ad] = $t;
                 $sonuc[$id]['fm_saat'] += (int)$l['overtime_hours'];
@@ -525,8 +527,8 @@ function pdks_cari_kirilim_kolonlar(array $satirlar): array
         if (!$k) continue;
         foreach ($k['tipler'] as $ad => $t) {
             $tip[$ad] = true;
-            $a = $tot['tipler'][$ad] ?? ['adet' => 0, 'yarim' => 0, 'kurus' => 0];
-            $a['adet'] += $t['adet']; $a['yarim'] += $t['yarim']; $a['kurus'] += $t['kurus'];
+            $a = $tot['tipler'][$ad] ?? ['adet' => 0, 'yarim' => 0, 'cift' => 0, 'kurus' => 0];
+            $a['adet'] += $t['adet']; $a['yarim'] += $t['yarim']; $a['cift'] += (int)($t['cift'] ?? 0); $a['kurus'] += $t['kurus'];
             $tot['tipler'][$ad] = $a;
         }
         $tot['fm_saat'] += $k['fm_saat']; $tot['fm_kurus'] += $k['fm_kurus']; $tot['diger_kurus'] += $k['diger_kurus'];
@@ -567,7 +569,7 @@ function pdks_cari_kirilim_degerleri(?array $s, array $kol, bool $toplam = false
     $bos = $k === null;
     foreach ($kol['tipler'] as $ad) {
         $t = $bos ? null : ($k['tipler'][$ad] ?? null);
-        $v[] = $t ? ['adet' => $t['adet'], 'not' => $t['yarim'] > 0 ? ($t['yarim'] . ' yarım') : ''] : null;
+        $v[] = $t ? ['adet' => $t['adet'], 'not' => pdks_cari_kirilim_sinif_notu($t)] : null;
         $v[] = $t ? $t['kurus'] : null;
     }
     if ($kol['fm']) {
@@ -584,6 +586,47 @@ function pdks_cari_kirilim_hucre_metni(array|int|null $deger, string $tur): stri
     if ($deger === null) return '';
     if ($tur === 'adet') return (string)$deger['adet'] . ($deger['not'] !== '' ? ' (' . $deger['not'] . ')' : '');
     return number_format($deger / 100, 2, ',', '.');
+}
+
+/** Tip hücresi notu: yarım/çift adedi → "2 yarım, 3 çift" (ikisi de yoksa ''). Ekran: "Kadın 37 (5 çift)". */
+function pdks_cari_kirilim_sinif_notu(array $t): string
+{
+    $p = [];
+    if ((int)($t['yarim'] ?? 0) > 0) $p[] = (int)$t['yarim'] . ' yarım';
+    if ((int)($t['cift'] ?? 0) > 0) $p[] = (int)$t['cift'] . ' çift';
+    return implode(', ', $p);
+}
+
+/**
+ * XLSX — Yarım / Çift için AYRI adet sütunları (sahip kararı). Tip başına değil, satırın TÜM tiplerinin
+ * toplamı (ekstre düzeninin en sade biçimi); yalnız dönemde o sınıftan en az 1 kişi varsa sütun açılır.
+ * Her öğe ['ad' => başlık, 'sinif' => 'yarim'|'cift'].
+ */
+function pdks_cari_kirilim_sinif_basliklar(array $kol): array
+{
+    $top = ['yarim' => 0, 'cift' => 0];
+    foreach ($kol['toplam']['tipler'] ?? [] as $t) {
+        $top['yarim'] += (int)($t['yarim'] ?? 0);
+        $top['cift'] += (int)($t['cift'] ?? 0);
+    }
+    $b = [];
+    if ($top['yarim'] > 0) $b[] = ['ad' => 'Yarım (kişi)', 'sinif' => 'yarim'];
+    if ($top['cift'] > 0) $b[] = ['ad' => 'Çift Yevmiye (kişi)', 'sinif' => 'cift'];
+    return $b;
+}
+
+/** XLSX — bir ekstre satırının Yarım / Çift adetleri (başlık sırasıyla); kırılımı olmayan satırda null. */
+function pdks_cari_kirilim_sinif_degerleri(?array $s, array $sinifBaslik): array
+{
+    $k = $s['kirilim'] ?? null;
+    $v = [];
+    foreach ($sinifBaslik as $sb) {
+        if ($k === null) { $v[] = null; continue; }
+        $n = 0;
+        foreach ($k['tipler'] as $t) $n += (int)($t[$sb['sinif']] ?? 0);
+        $v[] = $n;
+    }
+    return $v;
 }
 
 /** v492 — Bakiye gösterimi: + = çavuşun alacağı, − = çavuş avansı (borç). [mutlak TL metni, 'Alacak'|'Borç'|''] */

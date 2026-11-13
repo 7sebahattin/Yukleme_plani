@@ -162,7 +162,7 @@ $PROFILLER = [
         'perms' => ['hesap.read'],
     ],
 ];
-foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read'] as $key=>$permission) {
+foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read','frugro_only'=>'siparis.frugro.read'] as $key=>$permission) {
     $PROFILLER[$key]=['ad'=>'Ayrıntılı sayfa '.$key,'admin'=>false,'depo'=>'ANONIM TEST DEPO','rol'=>['slug'=>$key,'label'=>$key],'perms'=>['dashboard.read','role.permissions.detailed',$permission]];
 }
 foreach ($PROFILLER as $pk => $pr) {
@@ -211,6 +211,7 @@ $GATES = [
     'hesap.php'             => ['hesap.php', "require_hesap('read');", fn() => can('hesap.read') || is_admin(), 'hesap_can(read) = is_admin() || hesap.read'],
     'mail.php'              => ['mail.php', "require_mail('read');", fn() => can('mail.read') || can('mail.admin') || is_admin(), 'can_mail(read) = mail.read || mail.admin || is_admin()'],
     'siparisler.php'        => ['siparisler.php', "require_siparis('read');", fn() => role_matrix_page_can('siparis','ogl'), 'siparis.ogl.read or admin'],
+    'frugro_siparis.php'    => ['frugro_siparis.php', "require_siparis('read', 'frugro');", fn() => role_matrix_page_can('siparis','frugro'), 'siparis.frugro.read or admin (Frugro satırı öncesi kaydedilmiş rolde OGL\'den türer)'],
     'urun_siparis.php'      => ['urun_siparis.php', "require_siparis('read', 'urun');", fn() => role_matrix_page_can('siparis','urun'), 'siparis.urun.read or admin'],
     'maliyet.php'           => ['maliyet.php', "require_maliyet('read');", fn() => can('maliyet.read') || is_admin(), 'can_maliyet(read) = maliyet.read || is_admin()'],
     'definitions.php'       => ['definitions.php', "require_perm('defs.read');", fn() => can('defs.read'), 'defs.read'],
@@ -228,12 +229,12 @@ $GATES = [
 $ANAHTAR_SAYFA = [
     'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
     'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php', 'qcost' => 'hizli_maliyet.php',
-    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'usip' => 'urun_siparis.php', 'ptak' => 'personel_takip.php',
+    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'frugro' => 'frugro_siparis.php', 'usip' => 'urun_siparis.php', 'ptak' => 'personel_takip.php',
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'frugro', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }

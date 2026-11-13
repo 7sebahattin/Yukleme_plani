@@ -180,9 +180,9 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <label class="form-label" for="bf_raw_text">Kaynak metin</label>
                         <textarea id="bf_raw_text" name="raw_text" rows="6" class="form-control beyan-source-text" placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırın."><?= h((string)$f['raw_text']) ?></textarea>
                     </div>
-                    <div>
+                    <?php if (icerik_can('beyan.metin_ayristir')): ?><div>
                         <button type="button" class="btn btn-secondary bf-ayristir" data-ic="sihir" data-beyan-parse-btn data-base-url="<?= h(base_url()) ?>">Metni Ayrıştır</button>
-                    </div>
+                    </div><?php endif; ?>
                     <div id="beyanParseStatus" aria-live="polite" hidden></div>
                     <?php if (!$is_edit): ?><div id="beyanBulkPreview" hidden></div><?php endif; ?>
                     <details class="beyan-unmatched" data-beyan-unmatched<?= trim((string)$f['unmatched_text']) === '' ? ' hidden' : '' ?>>

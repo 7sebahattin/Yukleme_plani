@@ -88,6 +88,7 @@ declare -A PHP_HARIC=(
 #   beyan_workspace_permissions_smoke.js - (beyan_workspace_render.php kendisi)
 #   beyan_workspace_smoke.js ......... -  (satır içi fixture)
 #   beyan_yazdir_smoke.js ............ -  (beyan_ui_smoke.php --render-liste kendisi)
+#   cari_ui_smoke.js ................. -  (kendi köprü sunucusu: scripts/_cari_e2e_sunucu.js + dosya SQLite; gerçek cari_*.php + assets/cari.js)
 #   bottomnav_smoke.js ............... BOTTOMNAV_OUT=<tmp> php scripts/bottomnav_render.php  (test de BOTTOMNAV_OUT ile)
 #   buton_gorunum_smoke.js ........... PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun pdks_puantaj_dialog_render.php > _test_puantaj_liste.html
 #   export_menu_smoke.js ............. export_menu_render.php > _test_export_menu.html
@@ -119,6 +120,7 @@ declare -A PHP_HARIC=(
 #   pdks_toplu_ekle_smoke.js ......... -  (render'ı kendisi)
 #   pdks_v296b_smoke.js .............. -  (satır içi fixture)
 #   roles_modal_smoke.js ............. roles_modal_render.php > _test_roles.html
+#   users_ozet_smoke.js .............. users_ozet_render.php > _test_users.html
 #   siparis_ui_smoke.js .............. SIPARIS_UI_OUT=<tmp> php scripts/siparis_ui_render.php  (test de SIPARIS_UI_OUT ile)
 #   siparis_invoice_ui_smoke.js ...... aynı render (inv_*.html), SIPARIS_UI_OUT ile
 #   siparis_yazdir_smoke.js .......... -  (siparis_ui_render.php + --json fixture'ları kendisi)
@@ -147,6 +149,9 @@ js_hazirla() {
             env "${JS_ORTAM[@]}" php scripts/bottomnav_render.php ;;
         buton_gorunum_smoke.js|pdks_geri_ptak_smoke.js)
             render_puantaj _test_puantaj_liste.html PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun ;;
+        frugro_detay_smoke.js|frugro_pkl_smoke.js)
+            JS_ORTAM=("FRUGRO_UI_OUT=$GECICI/frg-ui")
+            env "${JS_ORTAM[@]}" php scripts/frugro_ui_render.php ;;
         export_menu_smoke.js)
             php scripts/export_menu_render.php > _test_export_menu.html ;;
         mail_ui_smoke.js)
@@ -180,6 +185,8 @@ js_hazirla() {
             php scripts/pdks_tanimli_giris_render.php > _test_tanimli_giris.html ;;
         roles_modal_smoke.js)
             php scripts/roles_modal_render.php > _test_roles.html ;;
+        users_ozet_smoke.js)
+            php scripts/users_ozet_render.php > _test_users.html ;;
         siparis_ui_smoke.js|siparis_invoice_ui_smoke.js)
             JS_ORTAM=("SIPARIS_UI_OUT=$GECICI/sip-ui")
             env "${JS_ORTAM[@]}" php scripts/siparis_ui_render.php ;;
@@ -209,7 +216,7 @@ else
         done
     fi
     if [ "$JS_AC" = 1 ]; then
-        for f in scripts/*.js; do TESTLER+=("$f"); done
+        for f in scripts/*.js; do case "$(basename "$f")" in _*) continue ;; esac; TESTLER+=("$f"); done   # _*.js = yardımcı (test değil)
     fi
     shopt -u nullglob
 fi

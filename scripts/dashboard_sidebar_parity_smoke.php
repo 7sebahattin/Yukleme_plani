@@ -93,6 +93,9 @@ $dashboardProfiles['loading_only']=dashboard_profile('loading_only',false,['role
 $dashboardProfiles['pallet_only']=dashboard_profile('pallet_only',false,['role.permissions.detailed','records.pallet.read']);
 $dashboardProfiles['product_orders_only']=dashboard_profile('product_orders_only',false,['role.permissions.detailed','siparis.urun.read']);
 $dashboardProfiles['ogl_only']=dashboard_profile('ogl_only',false,['role.permissions.detailed','siparis.ogl.read']);
+// Frugro Siparişler KENDİ sayfa izni: güncel sürümde kaydedilmiş rol (Frugro kapalı / yalnız Frugro). İşaretleyicisiz ogl_only eski roldür → Frugro'yu OGL'den alır.
+$dashboardProfiles['ogl_only_v3']=dashboard_profile('ogl_only_v3',false,['role.permissions.detailed','role.catalog.'.ROLE_CATALOG_VERSION,'siparis.ogl.read']);
+$dashboardProfiles['frugro_only']=dashboard_profile('frugro_only',false,['role.permissions.detailed','role.catalog.'.ROLE_CATALOG_VERSION,'siparis.frugro.read']);
 // Eski maliyet.* izinleriyle operator/muhasebe benzeri profil: Hızlı Maliyet'i görmemeli.
 $dashboardProfiles['legacy_maliyet'] = dashboard_profile('legacy_maliyet', false, ['records.read', 'maliyet.read', 'maliyet.write', 'maliyet.delete']);
 $dashboardProfiles['hizli_rw'] = dashboard_profile('hizli_rw', false, ['hizli_maliyet.read', 'hizli_maliyet.write']);
@@ -188,7 +191,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 69, 'admin: Ana Sayfa hariç 69 benzersiz kart');
+        dashboard_check(count($home) === 70, 'admin: Ana Sayfa hariç 70 benzersiz kart');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }
@@ -197,10 +200,12 @@ foreach ($dashboardProfiles as $name => $profile) {
     dashboard_check(in_array('hizli_maliyet.php', $homeHrefs, true) === $quickExpected, $name . ': Hızlı Maliyet kartı yalnız hizli_maliyet.read/yönetici');
     dashboard_check(in_array('hizli_maliyet.php', array_column($sidebar, 'href'), true) === $quickExpected, $name . ': Hızlı Maliyet sidebar bağlantısı kartla aynı kapı');
     if ($name === 'only_hizli_maliyet_read') dashboard_check(isset($homeLabels['hizli_maliyet.php']) && count($home) === 1, 'yalnız hizli_maliyet.read tek kart + bölüm görünür');
-    foreach (['loading_only'=>['records.php','cikmalar.php'],'pallet_only'=>['cikmalar.php','records.php'],'product_orders_only'=>['urun_siparis.php','siparisler.php'],'ogl_only'=>['siparisler.php','urun_siparis.php']] as $profileName=>[$yes,$no]) if ($name===$profileName) {
+    foreach (['loading_only'=>['records.php','cikmalar.php'],'pallet_only'=>['cikmalar.php','records.php'],'product_orders_only'=>['urun_siparis.php','siparisler.php'],'ogl_only'=>['siparisler.php','urun_siparis.php'],'ogl_only_v3'=>['siparisler.php','frugro_siparis.php'],'frugro_only'=>['frugro_siparis.php','siparisler.php']] as $profileName=>[$yes,$no]) if ($name===$profileName) {
         dashboard_check(in_array($yes,$homeHrefs,true),'Detailed page visible '.$yes);
         dashboard_check(!in_array($no,$homeHrefs,true),'Sibling page denied '.$no);
+        dashboard_check(in_array($yes,array_column($sidebar,'href'),true) && !in_array($no,array_column($sidebar,'href'),true),'Sidebar matches card gate '.$profileName);
     }
+    if ($name === 'ogl_only') dashboard_check(in_array('frugro_siparis.php',$homeHrefs,true),'Eski (Frugro satırı öncesi) OGL rolü Frugro kartını korur');
     if ($name === 'only_defs_read') dashboard_check(isset($homeLabels['definitions.php']), 'admin olmayan tanım yetkili kartı korunur');
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');
     if ($name === 'dashboard_only') dashboard_check(count($home) === 0, 'yalnız dashboard yetkisinde ilgisiz kart yok');

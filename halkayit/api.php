@@ -244,12 +244,36 @@ function hks_eylem_sinifi(string $action, array $g): string {
     default => 'read',
   };
 }
+// v507 — içerik (ekran/düğme) yetkisi: eylem → ui.hks.* anahtarı. Haritada olmayan eylem yalnız
+// Gör/Ekle/Düzenle/Sil sınıfına tabidir. Arayüz aynı anahtarlarla düğmeleri gizler (firmalar.icerik).
+function hks_eylem_icerigi(string $action, array $g): ?string {
+  return match ($action) {
+    'taslaklar' => 'ekr_taslaklar',
+    'gonderilenler' => 'ekr_gonderilenler',
+    'gonderilen_tohum' => 'tekrar_gonder',
+    'toplu_kunye', 'kunyeler', 'kunye_detay' => 'ekr_kunye',
+    'sorgu' => 'ekr_sorgu',
+    'etiket' => 'ekr_etiket',
+    'stok' => 'ekr_stok',
+    'gelen_sorgu' => 'ekr_gelen',
+    'taslak_gonder', 'taslak_fiyat_yaz' => 'gonder',
+    'taslak_kopya_firmaya' => 'taslak_kopyala',
+    'listeler_yenile' => 'liste_guncelle',
+    'kisi_kaydet', 'kisi_sil' => 'kisi_havuzu',
+    'taslak_kaydet' => trim((string)($g['eskiTaslakId'] ?? '')) !== '' ? null : 'ekr_bildirim',
+    default => null,
+  };
+}
 function hks_eylem_kapisi(string $action, array $g): void {
   $sinif = hks_eylem_sinifi($action, $g);
   if ($sinif === 'admin') return;   // firma yönetimi kendi kapısında (hks_firma_yonetici_kapisi)
   if (!role_hks_can($sinif)) {
     $etiket = ['read' => 'görüntüleme', 'create' => 'ekleme / gönderme', 'edit' => 'düzenleme', 'delete' => 'silme'][$sinif] ?? $sinif;
     hks_json_cikti(['hata' => 'Hal Bildirimi için ' . $etiket . ' yetkiniz yok.'], 403);
+  }
+  $icerik = hks_eylem_icerigi($action, $g);
+  if ($icerik !== null && !icerik_can('hks.' . $icerik)) {
+    hks_json_cikti(['hata' => 'Bu işlem için yetkiniz yok: ' . (role_content_flat()['ui.hks.' . $icerik]['ad'] ?? $icerik) . '.'], 403);
   }
 }
 
@@ -294,7 +318,11 @@ try {
         'renk' => $f['renk'] ?: 'teal', 'userName' => $f['user_name'],
       ], $rows);
       // `yonetici`: arayüz ekle/düzenle/sil düğmelerini gösterir. Asıl koruma firma_kaydet/firma_sil'de.
-      hks_json_cikti(['firmalar' => $firmalar, 'yonetici' => (function_exists('is_admin') && is_admin())]);
+      // v507 — `icerik`: arayüzün gizleyeceği ekran/düğmeler (ui.hks.*) + Ekle/Düzenle/Sil. Asıl koruma hks_eylem_kapisi'nda.
+      $icerik = [];
+      foreach (role_content_flat() as $__k => $__o) if (($__o['sayfa'] ?? '') === 'hks') $icerik[substr($__k, 7)] = icerik_can(substr($__k, 3));
+      hks_json_cikti(['firmalar' => $firmalar, 'yonetici' => (function_exists('is_admin') && is_admin()), 'icerik' => $icerik,
+        'yetki' => ['create' => role_hks_can('create'), 'edit' => role_hks_can('edit'), 'delete' => role_hks_can('delete')]]);
     }
 
     case 'firma_kaydet': {

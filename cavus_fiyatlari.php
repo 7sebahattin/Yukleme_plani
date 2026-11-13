@@ -133,9 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
         'full_day' => (string)($_POST['full_day_saat'] ?? ''),
         'half_day' => (string)($_POST['half_day_saat'] ?? ''),
         'overtime_start' => (string)($_POST['overtime_start_saat'] ?? ''),
-        'double_day' => (string)($_POST['double_day_saat'] ?? ''),
-        'double_day_rate' => (string)($_POST['double_day_rate'] ?? ''),
-    ];
+    ];   // v503: çift alanları formda yok (süre bazlı çift devre dışı)
     $stR = $pdo->prepare("SELECT foreman_id FROM foreman_worker_rates WHERE id = ?");
     $stR->execute([(int)$rateId]);
     $rateCavus = $stR->fetchColumn();
@@ -198,9 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
                 'full_day' => (string)($_POST['full_day_saat'] ?? ''),
                 'half_day' => (string)($_POST['half_day_saat'] ?? ''),
                 'overtime_start' => (string)($_POST['overtime_start_saat'] ?? ''),
-                'double_day' => (string)($_POST['double_day_saat'] ?? ''),
-                'double_day_rate' => (string)($_POST['double_day_rate'] ?? ''),
-            ];
+            ];   // v503: çift alanları formda yok (süre bazlı çift devre dışı)
             $sonuc = pdks_faz8b_oran_ekle(
                 $cavusId,
                 $workerTypeId,
@@ -285,7 +281,7 @@ $oranHataPost = $errors && ($_POST['form'] ?? '') === 'oran';
 $cavusNormalEtiket = $seciliCavus ? pdks_faz8b_dk_girdi(pdks_faz8b_cavus_normal_sure_dk((int)$seciliCavus['id'], $pdo)) : '';
 $saatForm = [
     'full_day_saat' => '',
-    'half_day_saat' => '', 'overtime_start_saat' => '', 'double_day_saat' => '', 'double_day_rate' => '',
+    'half_day_saat' => '', 'overtime_start_saat' => '',
 ];
 if ($oranHataPost) {
     foreach (array_keys($saatForm) as $k) $saatForm[$k] = substr(trim((string)($_POST[$k] ?? '')), 0, 16);
@@ -494,10 +490,15 @@ $cfGeriBtn = static function (array $o) use ($cfEnEski): string {
         . '>⏪ Başlangıcı geriye çek</button>';
 };
 $cfIslemSutunu = $saatHazir || $cfEnEski !== [];
+// v503: süre bazlı çift yevmiye DEVRE DIŞI — eski double_day_* değeri tutar olarak gösterilmez
+// (yanlışlıkla geçerli sanılmasın); yalnız ipucunda (title) eski ayar durur. Boşsa "".
+$cfCiftEski = static function (array $oSaat): string {
+    if (($oSaat['cift'] ?? '') === '') return '';
+    return '<span class="muted" title="' . h('Eski ayar: ' . $oSaat['cift']) . '">devre dışı (v503)</span>';
+};
 // v320: geçmiş fiyat döneminin saatlerini düzeltme düğmesi (ücretlere dokunmaz).
 $cfSaatDuzeltBtn = static function (array $o): string {
     $dkG = static fn($v) => ($v === null || $v === '' || (int)$v <= 0) ? '' : pdks_faz8b_dk_girdi((int)$v);
-    $cr = $o['double_day_rate'] ?? null;
     $aralik = date('d.m.Y', strtotime((string)$o['valid_from'])) . ' → ' . (!empty($o['valid_to']) ? date('d.m.Y', strtotime((string)$o['valid_to'])) : 'devam ediyor');
     return '<button type="button" class="btn btn-sm" data-cf-saat-duzelt'
         . ' data-rate="' . (int)$o['id'] . '"'
@@ -505,8 +506,6 @@ $cfSaatDuzeltBtn = static function (array $o): string {
         . ' data-tam="' . h($dkG($o['full_day_minutes'] ?? null)) . '"'
         . ' data-yarim="' . h($dkG($o['half_day_max_minutes'] ?? null)) . '"'
         . ' data-fm="' . h($dkG($o['overtime_start_minutes'] ?? null)) . '"'
-        . ' data-cift="' . h($dkG($o['double_day_minutes'] ?? null)) . '"'
-        . ' data-cift-ucret="' . h(($cr === null || $cr === '') ? '' : str_replace('.', ',', rtrim(rtrim(number_format((float)$cr, 2, '.', ''), '0'), '.'))) . '"'
         . '>✏ Saatleri Düzelt</button>';
 };
 ?>
@@ -536,7 +535,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
     <?php endif; ?>
     <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?>
     <td class="cf2-saatler"><?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : '<span class="muted">mesai normal süresi</span>' ?></td>
-    <td><?= $oSaat['cift'] !== '' ? h($oSaat['cift']) : '—' ?></td>
+    <td><?= $oSaat['cift'] !== '' ? $cfCiftEski($oSaat) : '—' ?></td>
     <?php endif; ?>
     <td class="muted"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></td>
     <td><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
@@ -551,7 +550,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
     <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($o['worker_type_name']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></div></div><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></div>
     <div class="pdks-row-sub"><?= $faz8bHazir ? 'Tam' : 'Günlük' ?>: <strong><?= h(number_format((float)$o['daily_rate'],2,',','.')) ?> <?= h($o['currency']) ?></strong></div>
     <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Yarım: <?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'],2,',','.') . ' ' . $o['currency']) : '—' ?></div><div class="pdks-row-sub">FM: <?= ($o['overtime_rate'] ?? null) !== null ? h(number_format((float)$o['overtime_rate'],2,',','.') . ' ' . $o['currency'] . ' · ' . (($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik')) : '—' ?></div><?php endif; ?>
-    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= h($oSaat['cift']) ?></div><?php endif; ?><div class="cf-sd-mobil"><?= $cfSaatDuzeltBtn($o) ?></div><?php endif; ?><?php if (($gb = $cfGeriBtn($o)) !== ''): ?><div class="cf-sd-mobil"><?= $gb ?></div><?php endif; ?>
+    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= $cfCiftEski($oSaat) ?></div><?php endif; ?><div class="cf-sd-mobil"><?= $cfSaatDuzeltBtn($o) ?></div><?php endif; ?><?php if (($gb = $cfGeriBtn($o)) !== ''): ?><div class="cf-sd-mobil"><?= $gb ?></div><?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>

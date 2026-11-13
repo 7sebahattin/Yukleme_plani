@@ -161,8 +161,8 @@ $sp = (string)file_get_contents($root . '/siparisler.php');
 t('liste: Ayarlar bağlantısı ekle/düzenle/sil koşullu', (bool)preg_match("/role_ogl_any\('create'\).*?siparis_ayarlar\.php/s", $sp));
 t('liste: Salt okunur uyarısı kaldırıldı', !str_contains($sp, 'Salt okunur yetkiniz var'));
 $rl = (string)file_get_contents($root . '/roles.php');
-t('roles: satır tonu (alt başlıklar sayfayla aynı)', str_contains($rl, "rol-tone-") && str_contains($rl, '$depth + 1, $tone'));
-t('css: 6 ton + koyu tema uyumlu yarı saydam', substr_count((string)file_get_contents($root . '/assets/style.css'), 'tr.rol-tone-') >= 6);
+// v507: matris tek sayfa görünümüne geçti (iki panelli düzenleyici) — satır tonu yerine sayfa başına ayrı panel
+t('roles: iki panelli düzenleyici (sayfa başına panel + içerik anahtarları)', str_contains($rl, 'function rolx_panel(') && str_contains($rl, 'role_content_catalog()') && str_contains($rl, "role.catalog.' . ROLE_CATALOG_VERSION"));
 
 echo "Role sections: $ok geçti, $fail kaldı\n";
 exit($fail ? 1 : 0);

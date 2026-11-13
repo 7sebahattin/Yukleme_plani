@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v507';
+const CACHE_NAME = 'yukleme-plani-v525';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -30,6 +30,7 @@ const SHELL = [
   './assets/nav-icons/hesap.svg',
   './assets/nav-icons/mail.svg',
   './assets/nav-icons/siparis.svg',
+  './assets/nav-icons/frugro.svg',
   './assets/nav-icons/ptak.svg',
   './assets/nav-icons/defs.svg',
   './assets/nav-icons/users.svg',
@@ -61,7 +62,7 @@ self.addEventListener('activate', function(e) {
 });
 
 // Muhasebe sayfa adları (stok.php, kantar.php, malzeme_stok*.php, records.php vb. KAPSANMAZ: ön ek + '_' ya da tam ad)
-var SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|alis_fat|satis_fat|sevk_irs|dovizli|transfer_fis|ihracat_|stok_(kartlari|giris|cikis|donusum|tanimlari)|kantar_fisleri|palet_fisleri|mal_kabul_fisleri|arac_yukleme|alinan_siparis|beyanname_siparis|rapor_tanimlari|raporlar_listeler|sifre_deg|sube_|sirket_deg|kullanici_(tanimlari|tercihleri)|depo_tanimlari|veritabani_islemleri|ajanda|mesajlar|gunluk_kurlar|doviz_tanimlari|kayit_bilgisi|waap_|genel_duyurular|guncelleme|program_|diger_uygulama|lisans_)[a-z_]*\.php(\/|$)/;
+var SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|alis_fat|satis_fat|sevk_irs|dovizli|transfer_fis|ihracat_|stok_|kantar_fisleri|palet_fisleri|mal_kabul_fisleri|arac_yukleme|alinan_siparis|beyanname_siparis|rapor_tanimlari|raporlar_listeler|sifre_deg|sube_|sirket_deg|kullanici_(tanimlari|tercihleri)|depo_tanimlari|veritabani_islemleri|ajanda|mesajlar|gunluk_kurlar|doviz_tanimlari|kayit_bilgisi|waap_|genel_duyurular|guncelleme|program_|diger_uygulama|lisans_)[a-z_]*\.php(\/|$)/;
 
 // Network-first: önce ağ dene, başarısız olursa önbellekten sun
 self.addEventListener('fetch', function(e) {
@@ -86,6 +87,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/personel_kayit_sec\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // Frugro Siparişler (v512): frugro_siparis/view/pkl/invoice/yukle/kaydet… müşteri/ticari veri taşır — HİÇ önbelleğe alınmaz (assets/frugro_*.js/css SHELL'de DEĞİL)
+  if (/\/frugro(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Yükleme Bildir (v498): kişi/firma ad listesi döndürür, HİÇ önbelleğe alınmaz
   if (/\/api_beyansiz_yukleme\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz

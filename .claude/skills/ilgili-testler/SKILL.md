@@ -39,6 +39,7 @@ listede olmayan adı ÇALIŞTIRMA (uydurma test adı yok).
 | `config/siparis*.php` · `siparis*.php` · `_siparis_*.php` · `assets/siparis*` | `siparis_core_smoke.php` · `siparis_pdf_smoke.php` · `siparis_pkl_smoke.php` · `siparis_pkl_mail_smoke.php` · `siparis_gate_static_smoke.php` · `siparis_ui_smoke.php` · `siparis_ui_smoke.js` · `siparis_yazdir_smoke.php` · `siparis_yazdir_smoke.js` · `siparis_cari_smoke.php` · `siparis_mail_smoke.php` (mail yolu) |
 | `urun_siparis*` · `config/urun_siparis.php` · `assets/usip.*` | `urun_siparis_smoke.php` · `urun_siparis_smoke.js` |
 | `hesap*` · `config/hesap_*` · `assets/hesap.*` | `hesap_smoke.php` · `hesap_ui_smoke.php` · `hesap_izolasyon_smoke.php` · `hesap_pdf_smoke.php` |
+| `cari*` · `config/cari_*` · `assets/cari.*` · `scripts/_cari_*` | `cari_core_smoke.php` · `cari_gate_static_smoke.php` · `cari_ui_smoke.php` (alt süreçle gerçek sayfa/uç çalıştırır; ~5 sn) · `nav_muhasebe_static_smoke.php` · `migrate_panel_smoke.php` · tarayıcı için `php scripts/cari_ui_render.php <kartlar\|fisler\|dekontlar\|tanimlar\|ekstre> [param=değer …] > _test_cari_<sayfa>.html` |
 | `mail*` · `config/mail_*` | `mail_*_smoke.php` (`mail_race_mysql_smoke.php` MySQL yoksa kendini ATLAR) · `mail_ui_smoke.js` (önce `MAIL_UI_OUT=… php scripts/mail_ui_render.php`) · `mail_gate_static_smoke.php` |
 | `maliyet*` · `config/cost_*` | `cost_link_smoke.php` |
 | `record*` · `_form.php` · `templates/excel/*` | `record_excel_smoke.php` |
