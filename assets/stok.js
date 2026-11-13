@@ -1,19 +1,25 @@
 /* =========================================================
-   assets/stok.js — Stok (muhasebe) modülü istemcisi (stok_kartlari / stok_tanimlari; Parça B: fiş sayfaları)
+   assets/stok.js — Stok (muhasebe) modülü istemcisi (stok_kartlari / stok_tanimlari / 4 fiş sayfası)
    Yalnız #stok kökü olan sayfada çalışır. Yazmalar YALNIZ stok_kaydet.php'ye (fetch + X-Requested-With: fetch;
    JS kapalıyken aynı formlar klasik POST + 303 ile çalışır). app.js / cari.js'e DOKUNMAZ.
    Kancalar: form[data-st-ajax] · [data-st-modal="kart"] (+data-duzenle) · [data-st-kapat] · #stArama · [data-filtre] ·
              #stListe a.st-satir (≥1024 master-detail: ?parca=detay) · [data-tanim-duzen]/[data-tanim-vazgec] · input[role=switch] ·
              .st-tanim-nav-oge (sekme) · #stKartVeri (düzenleme verisi).
+   Fiş sayfaları (#stok[data-sayfa="fis"]): #stFisForm[data-st-fis] (fetch JSON kaydet; 409 yetersiz_stok → #stEksik + "Yine de kaydet") ·
+             #stFisVeri (kartlar/bakiye/cariler) · #stSatirSablon · [data-satir-ekle] · [data-satir-sil] · [data-lot-ac] · [data-depo-takas] ·
+             [data-st-modal="iptal"|"kantar"] · form[data-st-kantar-form] · [data-oto-gonder] · [data-yazdir].
+             Klavye: Enter sonraki hücre (son hücrede yeni satır) · Ctrl+S / Ctrl+Enter kaydet · Ctrl+↓ yeni satır · Ctrl+Del satır sil · Esc.
    ========================================================= */
 (function () {
     'use strict';
     var KOK = document.getElementById('stok');
     if (!KOK) return;
+    var FIS = KOK.getAttribute('data-sayfa') === 'fis';
 
     var S = {
         kaydet: 'stok_kaydet.php',
         kartlar: 'stok_kartlari.php',
+        sayfa: (location.pathname.replace(/^.*\//, '') || 'stok_kartlari.php'),
         toastAnahtar: 'stok_toast',
         yonRe: /^(stok_[a-z_]+|transfer_fisleri)\.php(\?[^\r\n]*)?$/,
         baslik: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' },
@@ -63,6 +69,8 @@
         var g = $('.st-form-hata', f);
         if (g) { g.textContent = msg; g.hidden = false; } else toast(msg, true);
     }
+    /** Sunucu kısmi yanıtını (kendi stok_*.php sayfamızın ?parca= çıktısı) DOM'a çevirir — modüldeki TEK HTML ayrıştırma noktası. */
+    function htmlParca(h) { var t = document.createElement('div'); t.innerHTML = h; return t; }
     function yanitCoz(r) {
         return r.text().then(function (t) { var j = null; try { j = JSON.parse(t); } catch (x) { j = null; } return { r: r, j: j }; });
     }
@@ -160,13 +168,21 @@
         var t = e.target.closest ? e.target.closest('[data-st-modal], [data-st-kapat]') : null;
         if (t && t.hasAttribute('data-st-kapat')) { e.preventDefault(); modalKapat(); return; }
         if (t && t.getAttribute('data-st-modal') === 'kart') { e.preventDefault(); kartModalAc(t.getAttribute('data-duzenle') === '1', t); return; }
+        if (t && t.getAttribute('data-st-modal') === 'iptal') { e.preventDefault(); iptalModalAc(t); return; }
+        if (t && t.getAttribute('data-st-modal') === 'kantar') { e.preventDefault(); modalAc('stModalKantar', t); return; }
+        var yz = e.target.closest ? e.target.closest('[data-yazdir]') : null;
+        if (yz) { e.preventDefault(); window.print(); return; }
         var ov = e.target;
         if (ov && ov.classList && ov.classList.contains('pm-overlay') && ov === acik) modalKapat();
     });
     document.addEventListener('keydown', function (e) {
         if (acik) {
             if (e.key === 'Escape') { e.preventDefault(); modalKapat(); return; }
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { var f = $('form', acik); if (f) { e.preventDefault(); gonder(f); } return; }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                var f = $('form', acik);
+                if (f) { e.preventDefault(); if (f.matches('form[data-st-ajax]')) gonder(f); else if (f.requestSubmit) f.requestSubmit(); else f.submit(); }
+                return;
+            }
             if (e.key === 'Tab') {   // odak tuzağı
                 var od = $$('button, input:not([type=hidden]), select, textarea, a[href]', acik).filter(function (x) { return !x.disabled && x.getClientRects().length; });
                 if (!od.length) return;
@@ -179,7 +195,7 @@
         var ar = document.getElementById('stArama');
         var yazim = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
         if (ar && e.key === '/' && !yazim) { e.preventDefault(); ar.focus(); ar.select(); return; }
-        if (ar && document.activeElement === ar && e.key === 'Escape') { ar.value = ''; listeSuz(); return; }
+        if (ar && document.activeElement === ar && e.key === 'Escape') { ar.value = ''; if (!FIS) listeSuz(); return; }
         // ↑/↓ liste satırları arası (gerçek odak)
         var a = document.activeElement;
         if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && (a === ar || (a && a.classList && a.classList.contains('st-satir')))) {
@@ -193,9 +209,10 @@
 
     /* ═════════ Kart listesi süzgeci ═════════ */
     var liste = document.getElementById('stListe');
+    var kartListe = FIS ? null : liste;   // istemci süzgeci yalnız kart sayfasında (fiş listesi sunucuda süzülür: GET formu)
     function durumSecili() { var b = $('.st-cip[aria-pressed="true"]', KOK); return b ? b.getAttribute('data-deger') : 'aktif'; }
     function listeSuz() {
-        if (!liste) return;
+        if (!kartListe) return;
         var q = trKucuk(($('#stArama') || {}).value || '').trim();
         var d = durumSecili();
         var tip = ($('select[data-filtre="tip"]', KOK) || {}).value || '';
@@ -218,7 +235,7 @@
             history.replaceState(history.state, '', u.pathname.replace(/^.*\//, '') + u.search);
         } catch (x) { /* kritik değil */ }
     }
-    if (liste) {
+    if (kartListe) {
         var ar = document.getElementById('stArama');
         if (ar) ar.addEventListener('input', listeSuz);
         $$('.st-cip[data-filtre="durum"]', KOK).forEach(function (b) {
@@ -234,17 +251,18 @@
     function detayYukle(id, href, push) {
         var d = document.getElementById('stDetay');
         if (d) d.classList.add('st-yukleniyor');
-        return fetch(S.kartlar + '?id=' + encodeURIComponent(id) + '&parca=detay', { headers: { 'X-Requested-With': 'fetch', 'Accept': 'text/html' }, credentials: 'same-origin' })
+        return fetch(S.sayfa + '?id=' + encodeURIComponent(id) + '&parca=detay', { headers: { 'X-Requested-With': 'fetch', 'Accept': 'text/html' }, credentials: 'same-origin' })
             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
             .then(function (h) {
-                var t = document.createElement('div'); t.innerHTML = h;
+                var t = htmlParca(h);
                 var yeni = $('#stDetay', t);
                 if (!yeni) throw new Error('detay yok');
                 var eski = document.getElementById('stDetay');
                 eski.parentNode.replaceChild(yeni, eski);
-                var ana = $('.st-ana', KOK); if (ana) ana.classList.add('st-ana--detay');
+                var ana = $('.st-ana', KOK); if (ana) { ana.classList.add('st-ana--detay'); ana.classList.remove('st-ana--form'); }
                 $$('#stListe a.st-satir').forEach(function (a) { if (a.getAttribute('data-id') === String(id)) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
                 var mf = $('#stModalKart form'); if (mf) mf.elements.geri.value = S.kartlar + '?id=' + id;
+                if (FIS) { var dk = $('.st-fis-icerik', yeni) || yeni; try { dk.scrollTop = 0; } catch (x) { /* önemsiz */ } }
                 if (push) { try { history.pushState({ stId: id }, '', href); } catch (x) { /* kritik değil */ } }
             })
             .catch(function () { location.assign(href); });
@@ -253,6 +271,7 @@
         liste.addEventListener('click', function (e) {
             var a = e.target.closest ? e.target.closest('a.st-satir') : null;
             if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0 || !masaustu()) return;
+            if (FIS && document.getElementById('stFisForm') && fisDegisti() && !window.confirm('Kaydedilmemiş fiş formu kapanacak. Devam edilsin mi?')) { e.preventDefault(); return; }
             e.preventDefault();
             detayYukle(a.getAttribute('data-id'), a.getAttribute('href'), true);
         });
@@ -288,6 +307,370 @@
             li.hidden = true; if (on) { on.hidden = false; var b = $('[data-tanim-duzen]', on); if (b) b.focus(); }
         }
     });
+
+    /* ═════════ Fiş sayfaları (Parça B) ═════════ */
+    // İptal modalı: tetikleyicinin data-id / data-fis-no / data-geri değerleriyle (master-detail ile yüklenen detay için de)
+    function iptalModalAc(t) {
+        var m = document.getElementById('stModalIptal'); if (!m) return;
+        var f = $('form', m);
+        f.reset(); hataTemizle(f);
+        f.elements.id.value = t.getAttribute('data-id') || '';
+        f.elements.geri.value = t.getAttribute('data-geri') || S.sayfa;
+        var no = $('[data-iptal-no]', m); if (no) no.textContent = t.getAttribute('data-fis-no') || '';
+        iptalSayac(f);
+        modalAc('stModalIptal', t);
+    }
+    function iptalSayac(f) {
+        var ta = $('[data-iptal-neden]', f), n = ta ? ta.value.trim().length : 0;
+        var b = $('[data-iptal-onay]', f); if (b) b.disabled = n < 3;
+        var sy = $('[data-sayac]', f); if (sy) sy.textContent = n < 3 ? 'En az 3 karakter' : n + ' / 500';
+    }
+    document.addEventListener('input', function (e) {
+        var t = e.target;
+        if (t && t.matches && t.matches('[data-iptal-neden]')) iptalSayac(t.form);
+        if (t && t.id === 'stKantarAra') {
+            var q = trKucuk(t.value).trim();
+            $$('#stModalKantar .st-kaynak-satir').forEach(function (l) { l.parentNode.hidden = !!q && (l.getAttribute('data-ara') || '').indexOf(q) < 0; });
+        }
+    });
+    // Süzgeç seçimleri: değişince GET formunu gönder
+    document.addEventListener('change', function (e) {
+        var t = e.target;
+        if (t && t.matches && t.matches('select[data-oto-gonder]') && t.form) t.form.submit();
+    });
+
+    var fisDegistiBayrak = false;
+    function fisDegisti() { return fisDegistiBayrak; }
+
+    var FF = document.getElementById('stFisForm');
+    if (FF) fisFormKur(FF);
+
+    function fisFormKur(f) {
+        var V = {};
+        try { V = JSON.parse((document.getElementById('stFisVeri') || {}).textContent || '{}'); } catch (x) { V = {}; }
+        var tur = f.getAttribute('data-tur');
+        var fiyatli = tur === 'giris' || tur === 'cikis';
+        var kartlar = V.kartlar || [], cariler = V.cariler || [], bakiye = V.bakiye || {};
+        var kartId = {}; kartlar.forEach(function (k) { kartId[String(k.id)] = k; });
+        var liste = S.sayfa.replace(/\?.*$/, '');
+
+        function katla(s) { return String(s || '').replace(/[İIı]/g, 'i').toLowerCase().trim(); }
+        function sayiOku(v) {
+            var s = String(v || '').replace(/[\s ₺$€]/g, '');
+            if (!s) return NaN;
+            if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+            else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+            return /^\d+(\.\d+)?$/.test(s) ? parseFloat(s) : NaN;
+        }
+        function tam(b) { return b !== 'lt' && b !== 'm'; }
+        function miktarBicim(v, b) { return Number(v).toLocaleString('tr-TR', { maximumFractionDigits: tam(b) ? 0 : 3 }); }
+        function para(kurus) { return (kurus / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function kartBul(metin) {
+            metin = String(metin || '').trim(); if (!metin) return null;
+            var kod = katla(metin.split(' — ')[0]), i;
+            for (i = 0; i < kartlar.length; i++) if (katla(kartlar[i].kod) === kod) return kartlar[i];
+            for (i = 0; i < kartlar.length; i++) if (kartlar[i].barkod && String(kartlar[i].barkod) === metin) return kartlar[i];
+            var ad = kartlar.filter(function (k) { return katla(k.ad) === katla(metin); });
+            return ad.length === 1 ? ad[0] : null;
+        }
+        function cariBul(metin) {
+            metin = String(metin || '').trim(); if (!metin) return null;
+            var kod = katla(metin.split(' — ')[0]);
+            for (var i = 0; i < cariler.length; i++) if (katla(cariler[i].kod) === kod || katla(cariler[i].unvan) === katla(metin)) return cariler[i];
+            return null;
+        }
+        function el(tr, ad) { return $('[name="' + ad + '[]"]', tr); }
+        function satirlar() { return $$('.st-fsatir', f); }
+        function satirKart(tr) { return kartId[el(tr, 'kart_id').value] || null; }
+        function satirDolu(tr) { return !!(el(tr, 'kart_id').value || el(tr, 'kart_ara').value.trim() || el(tr, 'miktar').value.trim()); }
+        function depo() { return f.elements.depo ? f.elements.depo.value : ''; }
+
+        function birimKur(tr, k, secili) {
+            var s = el(tr, 'birim'); while (s.firstChild) s.removeChild(s.firstChild);
+            var o = document.createElement('option'); o.value = ''; o.textContent = k ? k.birim : '—'; s.appendChild(o);
+            if (k && k.cevrim_birim && k.cevrim_katsayi) {
+                o = document.createElement('option'); o.value = k.cevrim_birim;
+                o.textContent = k.cevrim_birim + ' (×' + miktarBicim(k.cevrim_katsayi, 'lt') + ' ' + k.birim + ')';
+                if (secili === k.cevrim_birim) o.selected = true;
+                s.appendChild(o);
+            }
+            el(tr, 'miktar').setAttribute('inputmode', k && !tam(k.birim) ? 'decimal' : 'numeric');
+        }
+        function kartSec(tr, k, yaz) {
+            el(tr, 'kart_id').value = k ? String(k.id) : '';
+            birimKur(tr, k, '');
+            if (k && yaz !== false) el(tr, 'kart_ara').value = k.kod + ' — ' + k.ad;
+        }
+        /** Satırın ana birim miktarı (sayı) ya da NaN */
+        function anaMiktar(tr) {
+            var k = satirKart(tr), m = sayiOku(el(tr, 'miktar').value);
+            if (!k || isNaN(m)) return NaN;
+            var b = el(tr, 'birim').value;
+            return b && b === k.cevrim_birim ? m * Number(k.cevrim_katsayi || 0) : m;
+        }
+        function satirGuncelle(tr) {
+            var k = satirKart(tr), ana = anaMiktar(tr), ip = $('.st-fs-ipucu', tr), cv = $('.st-cevrim', tr);
+            var yon = tr.getAttribute('data-yon');
+            var dusen = tur === 'cikis' || tur === 'transfer' || (tur === 'donusum' && yon === 'C');
+            tr.classList.remove('st-fsatir--eksik');
+            if (cv) cv.textContent = k && el(tr, 'birim').value && !isNaN(ana) ? '= ' + miktarBicim(ana, k.birim) + ' ' + k.birim : '';
+            if (ip) {
+                if (!k) ip.textContent = el(tr, 'kart_ara').value.trim() ? 'Kart bulunamadı — listeden seçin' : '';
+                else {
+                    var bk = ((bakiye[k.id] || {})[depo()] || 0) / 1000;
+                    var t = 'Mevcut: ' + miktarBicim(bk, k.birim) + ' ' + k.birim + (k.ort ? ' · ort ' + para(Math.round(k.ort)) + ' ₺/' + k.birim : '');
+                    if (dusen && !isNaN(ana) && ana > bk + 1e-9) { tr.classList.add('st-fsatir--eksik'); t += ' — yetersiz'; }
+                    ip.textContent = t;
+                }
+            }
+            var out = $('.st-fs-tutar-deger', tr);
+            if (out) {
+                var fy = sayiOku(el(tr, 'birim_fiyat') ? el(tr, 'birim_fiyat').value : '');
+                out.textContent = !isNaN(ana) && !isNaN(fy) ? para(Math.round(ana * fy * 100)) : '—';
+            }
+        }
+        function toplamlar() {
+            var mik = 0, tut = 0, kdv = 0, g = 0, c = 0, cDeger = 0;
+            satirlar().forEach(function (tr) {
+                var k = satirKart(tr), ana = anaMiktar(tr); if (!k || isNaN(ana)) return;
+                var yon = tr.getAttribute('data-yon');
+                if (tur === 'donusum') { if (yon === 'C') { c += ana; cDeger += ana * (k.ort || 0); } else g += ana; return; }
+                mik += ana;
+                var fy = sayiOku(el(tr, 'birim_fiyat') ? el(tr, 'birim_fiyat').value : '');
+                if (!isNaN(fy)) {
+                    var t = Math.round(ana * fy * 100); tut += t;
+                    var kv = el(tr, 'kdv_orani') ? el(tr, 'kdv_orani').value : '';
+                    kdv += Math.round(t * (kv === '' ? (k.kdv || 0) : Number(kv)) / 100);
+                }
+            });
+            var set = function (ad, v) { var b = $('[data-top="' + ad + '"]', f.closest('.st-detay') || f); if (b) b.textContent = v; };
+            if (tur === 'donusum') {
+                set('miktar', miktarBicim(c, 'lt') + ' → ' + miktarBicim(g, 'lt'));
+                set('fark', miktarBicim(c - g, 'lt') + (c > 0 ? ' (%' + ((c - g) / c * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ')' : ''));
+                set('cikti_ort', g > 0 && cDeger > 0 ? para(Math.round(cDeger / g)) + ' ₺/birim' : '—');
+            } else set('miktar', miktarBicim(mik, 'lt'));
+            set('tutar', para(tut)); set('kdv', para(kdv));
+        }
+        function hepsi() { satirlar().forEach(satirGuncelle); toplamlar(); }
+        function numarala() { $$('.st-satirlar', f).forEach(function (g) { $$('.st-fsatir', g).forEach(function (tr, i) { var n = $('.st-fs-no', tr); if (n) n.textContent = String(i + 1); }); }); }
+        function satirEkle(grup, odak) {
+            var sb = document.getElementById('stSatirSablon');
+            var tr = sb.content.firstElementChild.cloneNode(true), yon = grup.getAttribute('data-yon');
+            tr.setAttribute('data-yon', yon); el(tr, 'yon').value = yon;
+            $('.st-fsatirlar', grup).appendChild(tr);
+            numarala(); fisDegistiBayrak = true;
+            if (odak) $('.st-kart-ara', tr).focus();
+            return tr;
+        }
+        function satirSil(tr) {
+            var grup = tr.closest('.st-satirlar'), kardes = $$('.st-fsatir', grup), i = kardes.indexOf(tr);
+            if (kardes.length > 1) { tr.parentNode.removeChild(tr); var y = $$('.st-fsatir', grup); var o = y[Math.min(i, y.length - 1)]; if (o) $('.st-kart-ara', o).focus(); }
+            else { $$('input:not([type=hidden])', tr).forEach(function (x) { x.value = ''; }); kartSec(tr, null); el(tr, 'kart_ara').value = ''; $('.st-kart-ara', tr).focus(); }
+            numarala(); hepsi(); fisDegistiBayrak = true;
+        }
+        /** yaz=true: çözülen kartın "KOD — Ad" metni alana yazılır (change / Enter / odak çıkışı); yazarken (input) metne dokunulmaz. */
+        function kartGirdi(inp, yaz) {
+            var tr = inp.closest('.st-fsatir'), k = kartBul(inp.value);
+            if (k !== satirKart(tr)) kartSec(tr, k, false);
+            if (k && yaz) inp.value = k.kod + ' — ' + k.ad;
+            satirGuncelle(tr); toplamlar();
+        }
+        function cariGirdi() {
+            var inp = f.elements.cari_ara; if (!inp) return;
+            var c = cariBul(inp.value);
+            f.elements.cari_id.value = c ? String(c.id) : '';
+            if (tur === 'cikis') f.classList.toggle('st-form--fiyatsiz', !c);
+            if (c && f.elements.para_birimi && c.pb && f.elements.para_birimi.value !== c.pb && !fisDegistiPb) { f.elements.para_birimi.value = c.pb; pbGuncelle(); }
+        }
+        var fisDegistiPb = false;
+        function pbGuncelle() {
+            var pb = f.elements.para_birimi, kur = f.elements.kur; if (!pb || !kur) return;
+            kur.disabled = pb.value === 'TRY'; if (kur.disabled) kur.value = '';
+        }
+
+        // — olaylar —
+        f.addEventListener('input', function (e) {
+            var t = e.target; fisDegistiBayrak = true;
+            if (t.classList.contains('st-kart-ara')) { kartGirdi(t, false); return; }
+            if (t.name === 'cari_ara') { cariGirdi(); return; }
+            var tr = t.closest('.st-fsatir'); if (tr) satirGuncelle(tr);
+            toplamlar();
+        });
+        f.addEventListener('change', function (e) {
+            var t = e.target; fisDegistiBayrak = true;
+            if (t.classList.contains('st-kart-ara')) { kartGirdi(t, true); return; }
+            if (t.name === 'cari_ara') { cariGirdi(); return; }
+            if (t.name === 'para_birimi') { fisDegistiPb = true; pbGuncelle(); }
+            if (t.name === 'depo') { hepsi(); return; }
+            var tr = t.closest('.st-fsatir'); if (tr) satirGuncelle(tr);
+            toplamlar();
+        });
+        f.addEventListener('focusout', function (e) {
+            var t = e.target;
+            if (t.classList && t.classList.contains('st-kart-ara')) { var k = satirKart(t.closest('.st-fsatir')); if (k) t.value = k.kod + ' — ' + k.ad; }
+        });
+        f.addEventListener('click', function (e) {
+            var b = e.target.closest ? e.target.closest('[data-satir-ekle], [data-satir-sil], [data-lot-ac], [data-depo-takas], [data-eksik-duzelt], [data-eksik-kaydet]') : null;
+            if (!b) return;
+            e.preventDefault();
+            if (b.hasAttribute('data-satir-ekle')) satirEkle(b.closest('.st-satirlar'), true);
+            else if (b.hasAttribute('data-satir-sil')) satirSil(b.closest('.st-fsatir'));
+            else if (b.hasAttribute('data-lot-ac')) { var td = b.closest('td'), l = $('.st-fs-lot', td); l.classList.remove('st-fs-lot--kapali'); b.hidden = true; $('input', l).focus(); }
+            else if (b.hasAttribute('data-depo-takas')) {
+                var a = f.elements.depo, h = f.elements.hedef_depo, av = a.value, hv = h.value;
+                if ($$('option', a).some(function (o) { return o.value === hv; })) { a.value = hv; h.value = av; hepsi(); }
+                else toast('Hedef depo aktif deponuz değil; takas için önce depo değiştirin.', true);
+            }
+            else if (b.hasAttribute('data-eksik-duzelt')) { eksikGizle(); var ek = $('.st-fsatir--eksik [name="miktar[]"]', f) || $('[name="miktar[]"]', f); if (ek) ek.focus(); }
+            else if (b.hasAttribute('data-eksik-kaydet')) kaydet(true);
+        });
+        function odaklanabilir(kok) {
+            return $$('input:not([type=hidden]), select', kok).filter(function (x) { return !x.disabled && x.getClientRects().length && !x.closest('[hidden]'); });
+        }
+        function sonraki(t) {
+            var tr = t.closest('.st-fsatir');
+            if (tr) {
+                var h = odaklanabilir(tr), i = h.indexOf(t);
+                if (i >= 0 && i < h.length - 1) { h[i + 1].focus(); if (h[i + 1].select && h[i + 1].tagName === 'INPUT') h[i + 1].select(); return; }
+                var grup = tr.closest('.st-satirlar'), ss = $$('.st-fsatir', grup);
+                if (tr === ss[ss.length - 1]) { if (satirDolu(tr)) satirEkle(grup, true); return; }
+                var n = odaklanabilir(tr.nextElementSibling)[0]; if (n) n.focus();
+                return;
+            }
+            var tum = odaklanabilir($('.st-form-govde', f)), j = tum.indexOf(t);
+            if (j >= 0 && j < tum.length - 1) tum[j + 1].focus();
+        }
+        f.addEventListener('keydown', function (e) {
+            var t = e.target;
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.key === 'Enter')) { e.preventDefault(); kaydet(false); return; }
+            var tr = t.closest ? t.closest('.st-fsatir') : null;
+            if (e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); var g = (tr || t).closest('.st-satirlar') || $('.st-satirlar', f); satirEkle(g, true); return; }
+            if (e.ctrlKey && e.key === 'Delete' && tr) { e.preventDefault(); satirSil(tr); return; }
+            if (e.key === 'Escape') {
+                if (!$('#stEksik').hidden) { e.preventDefault(); eksikGizle(); return; }
+                if (fisDegistiBayrak && window.confirm('Kaydedilmemiş değişiklikler var. Fiş formundan çıkılsın mı?')) { fisDegistiBayrak = false; location.assign(liste); }
+                return;
+            }
+            if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && t.matches && t.matches('input:not([type=submit]):not([type=checkbox]), select')) {
+                e.preventDefault();
+                if (t.classList.contains('st-kart-ara')) kartGirdi(t, true);
+                sonraki(t);
+            }
+        });
+        f.addEventListener('submit', function (e) { e.preventDefault(); kaydet(false); });
+        window.addEventListener('beforeunload', function (e) { if (fisDegistiBayrak && f.dataset.kilit !== '1' && !f.dataset.bitti) { e.preventDefault(); e.returnValue = ''; } });
+
+        // — yetersiz stok —
+        function eksikGizle() { $('#stEksik').hidden = true; }
+        function eksikGoster(list) {
+            var kutu = $('#stEksik'), tb = $('tbody', kutu);
+            while (tb.firstChild) tb.removeChild(tb.firstChild);
+            var idler = {};
+            (list || []).forEach(function (x) {
+                idler[String(x.kart_id)] = true;
+                var r = document.createElement('tr');
+                [x.kod + ' — ' + x.ad, x.depo || '—', miktarBicim(x.istenen_milli / 1000, x.birim) + ' ' + x.birim, miktarBicim(x.mevcut_milli / 1000, x.birim) + ' ' + x.birim, miktarBicim(x.eksik_milli / 1000, x.birim) + ' ' + x.birim]
+                    .forEach(function (v, i) { var td = document.createElement('td'); td.textContent = v; if (i > 1) td.className = 'st-sayi'; r.appendChild(td); });
+                tb.appendChild(r);
+            });
+            satirlar().forEach(function (tr) { if (idler[el(tr, 'kart_id').value] && tr.getAttribute('data-yon') !== 'G') tr.classList.add('st-fsatir--eksik'); });
+            kutu.hidden = false;
+            try { kutu.scrollIntoView({ block: 'nearest' }); } catch (x) { /* eski tarayıcı */ }
+            var d = $('[data-eksik-duzelt]', kutu); if (d) d.focus();
+        }
+        // — kaydet (fetch JSON; klasik form da çalışır) —
+        function satirHata(i, alan, msg) {
+            var tr = satirlar()[Number(i)]; if (!tr) return null;
+            tr.classList.add('st-fsatir--hata');
+            var x = alan === 'kart_id' ? el(tr, 'kart_ara') : el(tr, alan === 'aciklama' ? 'satir_aciklama' : alan);
+            if (!x || x.type === 'hidden') x = el(tr, 'kart_ara');
+            x.setAttribute('aria-invalid', 'true');
+            var s = document.createElement('span'); s.className = 'st-hata'; s.textContent = msg;
+            var id = 'stH' + Math.random().toString(36).slice(2, 8); s.id = id; x.setAttribute('aria-describedby', id);
+            x.closest('td').appendChild(s);
+            return x;
+        }
+        function kaydet(eksiye) {
+            if (f.dataset.kilit === '1') return;
+            hataTemizle(f);
+            satirlar().forEach(function (tr) { tr.classList.remove('st-fsatir--hata'); });
+            if (!eksiye) eksikGizle();
+            var eksik = $$('[required]', f).filter(function (x) { return !x.disabled && !String(x.value || '').trim(); });
+            if (eksik.length) { eksik.forEach(function (x) { alanHata(f, x.name, S.m.zorunlu); }); eksik[0].focus(); return; }
+            if (!satirlar().some(satirDolu)) { genelHata(f, 'En az bir satır girin.'); $('.st-kart-ara', f).focus(); return; }
+            f.elements.eksiye_izin.value = eksiye ? '1' : '0';
+            var btn = $('[data-kaydet]', f), etiket = btn.textContent;
+            f.dataset.kilit = '1'; btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+            var bitir = function () { f.dataset.kilit = ''; btn.disabled = false; btn.textContent = etiket; };
+            fetch(S.kaydet, { method: 'POST', body: new FormData(f), headers: S.baslik, credentials: 'same-origin' })
+                .then(yanitCoz)
+                .then(function (s) {
+                    var j = s.j;
+                    if (j && j.ok) {
+                        f.dataset.bitti = '1'; fisDegistiBayrak = false;
+                        var msg = (j.tekrar ? 'Fiş zaten kaydedilmişti' : 'Fiş kaydedildi') + (j.fis_no ? ' · ' + j.fis_no : '') + (j.uyari ? ' — ' + j.uyari : '');
+                        yenileToastla(msg, j.yonlendir);
+                        return;
+                    }
+                    bitir();
+                    if (j && j.kod === 'yetersiz_stok') { eksikGoster(j.eksikler); return; }
+                    var ilk = null;
+                    if (j && j.alanlar) Object.keys(j.alanlar).forEach(function (ad) { var x = alanHata(f, ad, j.alanlar[ad]); if (x && !ilk) ilk = x; });
+                    if (j && j.satir_hatalari) Object.keys(j.satir_hatalari).forEach(function (i) {
+                        Object.keys(j.satir_hatalari[i]).forEach(function (a) { var x = satirHata(i, a, j.satir_hatalari[i][a]); if (x && !ilk) ilk = x; });
+                    });
+                    genelHata(f, (j && j.hata) || ('Kaydedilemedi (HTTP ' + s.r.status + ').'));
+                    if (ilk && ilk.focus) ilk.focus();
+                })
+                .catch(function () { bitir(); genelHata(f, S.m.ag); });
+        }
+
+        // — Kantardan doldur (giriş) —
+        var kf = document.querySelector('form[data-st-kantar-form]');
+        if (kf) kf.addEventListener('submit', function (e) {
+            var r = $('input[name="kantar_id"]:checked', kf);
+            if (!r) { e.preventDefault(); toast('Bir kantar fişi seçin.', true); return; }
+            var o = null; try { o = JSON.parse(r.getAttribute('data-oneri') || 'null'); } catch (x) { o = null; }
+            if (!o) return;   // JS verisi yoksa klasik GET (?yeni=1&kantar_id=) sunucu doldurur
+            e.preventDefault();
+            kantarDoldur(o);
+            modalKapat();
+        });
+        function kantarDoldur(o) {
+            if (o.tarih && f.elements.tarih) f.elements.tarih.value = o.tarih;
+            if (o.depo && $$('option', f.elements.depo).some(function (x) { return x.value === o.depo; })) f.elements.depo.value = o.depo;
+            f.elements.kaynak_modul.value = 'kantar'; f.elements.kaynak_id.value = String(o.kantar_id);
+            var ss = satirlar(), tr = ss.filter(function (x) { return !satirDolu(x); })[0] || ss[0];
+            var k = o.kart_id ? kartId[String(o.kart_id)] : null;
+            kartSec(tr, k);
+            if (!k) el(tr, 'kart_ara').value = o.urun || '';
+            el(tr, 'miktar').value = miktarBicim(o.miktar_milli / 1000, 'kg');
+            if (o.cari_id && f.elements.cari_ara) {
+                var c = cariler.filter(function (x) { return x.id === o.cari_id; })[0];
+                if (c) { f.elements.cari_ara.value = c.kod + ' — ' + c.unvan; cariGirdi(); }
+            }
+            var bil = $('[data-kaynak-bilgi]', f);
+            if (bil) { bil.textContent = 'Kantar #' + o.kantar_no + '’ten dolduruldu · ' + miktarBicim(o.miktar_milli / 1000, 'kg') + ' kg net' + (!k && o.urun ? ' · ürün: ' + o.urun + ' (kartı seçin)' : ''); bil.hidden = false; }
+            fisDegistiBayrak = true;
+            hepsi();
+            var od = k ? (el(tr, 'birim_fiyat') || el(tr, 'miktar')) : el(tr, 'kart_ara');
+            setTimeout(function () { od.focus(); }, 40);
+        }
+
+        // — açılış —
+        satirlar().forEach(function (tr) {
+            var k = satirKart(tr), sec = el(tr, 'birim').value;
+            if (k) birimKur(tr, k, sec);
+            else if (el(tr, 'kart_ara').value.trim()) { var b = kartBul(el(tr, 'kart_ara').value); if (b) kartSec(tr, b); }
+        });
+        pbGuncelle();
+        if (tur === 'cikis' && f.elements.cari_id) f.classList.toggle('st-form--fiyatsiz', !f.elements.cari_id.value);
+        hepsi();
+        if (masaustu() || /[?&](yeni|kopya)=/.test(location.search)) {
+            var ilkBos = satirlar().filter(function (x) { return !satirDolu(x); })[0];
+            setTimeout(function () { var o = ilkBos ? $('.st-kart-ara', ilkBos) : $('[name="tarih"]', f); if (o && masaustu()) o.focus(); }, 30);
+        }
+    }
 
     /* ═════════ Açılış ═════════ */
     if (KOK.getAttribute('data-yeni') === 'kart') {

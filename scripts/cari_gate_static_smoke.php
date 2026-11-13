@@ -106,15 +106,18 @@ preg_match_all('/UPDATE\s+cari_hareketler\s+SET\s+([^"\']+?)\s+WHERE/i', $c, $um
 $setler = array_map(fn($x) => preg_replace('/\s+/', ' ', trim($x)), $um[1]);
 ok('core: cari_hareketler UPDATE\'leri yalnız belge_no[/bagli_id] ve durum/iptal_* setleri', $setler && !array_filter($setler, fn($x) => !preg_match('/^(belge_no = \?(, bagli_id = \?)?|durum = \'iptal\', iptal_at = \?, iptal_by = \?, iptal_neden = \?)$/', $x)), json_encode($setler));
 ok('core: tutar|cari_id|tarih|para_birimi|yon UPDATE\'i YOK', !preg_match('/UPDATE\s+cari_hareketler\s+SET[^;]*\b(tutar|cari_id|tarih|para_birimi|yon)\s*=/i', $c));
-foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil', 'cari_ice_aktar'] as $fn) {
+foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_kaynakli_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil', 'cari_ice_aktar'] as $fn) {
     $g = govde($c, $fn);
     ok("core $fn: audit_log_event( var", $g !== null && str_contains($g, 'audit_log_event('));
 }
 $yetkiliCagri = [];
-foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil', 'cari_ice_aktar'] as $fn) {
+foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_kaynakli_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil', 'cari_ice_aktar'] as $fn) {
     if (preg_match('/\b(can|is_admin|require_perm|cari_can|cari_kapi)\s*\(/', (string)govde($c, $fn))) $yetkiliCagri[] = $fn;
 }
 ok('core: yazan fonksiyonlarda yetki kontrolü YOK (uçların işi; testte saf çağrılabilir)', !$yetkiliCagri, implode(',', $yetkiliCagri));
+ok('core: cari_hareket_ekle kaynak bağını YALNIZ $kaynak parametresinden alır ($g[\'kaynak_*\'] okunmaz); cari_kaydet.php 4. parametre geçmez',
+    ($g = govde($c, 'cari_hareket_ekle')) !== null && str_contains($g, "\$kaynak['modul']") && !str_contains($g, '$g[\'kaynak') && !str_contains($g, '$g["kaynak') && !preg_match('/cari_hareket_ekle\(([^;,]+,){3}/', $k));
+ok('core: cari_kaynakli_iptal UPDATE yalnız kaynak_modul + kaynak_id + durum=gecerli WHERE ile', (bool)preg_match("/SET durum = 'iptal', iptal_at = \\?, iptal_by = \\?, iptal_neden = \\? WHERE kaynak_modul = \\? AND kaynak_id = \\? AND durum = 'gecerli'/", (string)govde($c, 'cari_kaynakli_iptal')));
 ok('core: depo filtre yardımcıları KULLANILMAZ (Hesap gibi bilinçli istisna: kart firma geneli)', !str_contains($c, 'depo_sql_') && !str_contains($c, 'depot_visible_to_user'));
 ok('core: named parametre (:ad) kullanılmaz — pozisyonel ? (HY093 tekrar riski yok)', !preg_match('/[ (,=]:[a-z_]{2,}\b/', $c));
 $ui = kod($ROOT . '/config/cari_ui.php');

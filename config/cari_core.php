@@ -591,9 +591,21 @@ function cari_hareket_ortak(array $g, string $sinif, bool $aciklamaZorunlu): arr
     return [['pb' => $pb, 'kurus' => $kurus, 'kur' => $kur, 'tarih' => $tarih, 'aciklama' => $ac, 'ik' => $ik === '' ? null : $ik], []];
 }
 
-/** Virman HARİÇ tek satırlık hareket (tahsilat/ödeme/açılış/dekont). @return array{ok:bool,hata:?string,id:?int,belge_no?:string,tekrar?:bool,alanlar?:array} */
-function cari_hareket_ekle(PDO $pdo, array $g, int $uid): array
+/**
+ * Virman HARİÇ tek satırlık hareket (tahsilat/ödeme/açılış/dekont).
+ * $kaynak: başka bir modülün (ör. stok fişi) kendi çekirdeğinden verdiği bağ ['modul' => ^[a-z_]{2,30}$, 'id' => int > 0].
+ *   YALNIZ çağıran çekirdek verir; $g'den (POST) kaynak_modul/kaynak_id OKUNMAZ — cari_kaydet.php bu parametreyi hiç geçmez.
+ *   Kaynaklı satır cari ekranından iptal edilemez (cari_hareket_iptal → 409 kaynakli); kaynağı cari_kaynakli_iptal ile iptal eder.
+ * @return array{ok:bool,hata:?string,id:?int,belge_no?:string,tekrar?:bool,alanlar?:array}
+ */
+function cari_hareket_ekle(PDO $pdo, array $g, int $uid, ?array $kaynak = null): array
 {
+    $kMod = null; $kId = null;
+    if ($kaynak !== null) {
+        $kMod = (string)($kaynak['modul'] ?? '');
+        $kId = (int)($kaynak['id'] ?? 0);
+        if (!preg_match('/^[a-z_]{2,30}$/', $kMod) || $kId <= 0) return cari_hata('Geçersiz kaynak bağı.');
+    }
     $ik = trim((string)($g['istek_anahtari'] ?? ''));
     if ($ik !== '' && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $ik) && ($var = cari_istek_bul($pdo, $ik)) !== null) {
         return ['ok' => true, 'hata' => null, 'id' => (int)$var['id'], 'belge_no' => (string)$var['belge_no'], 'tekrar' => true];
@@ -630,9 +642,9 @@ function cari_hareket_ekle(PDO $pdo, array $g, int $uid): array
     $depo = function_exists('active_depot') ? (string)(active_depot() ?? '') : '';
     $simdi = date('Y-m-d H:i:s');
     try {
-        $id = (int)cari_tx($pdo, function () use ($pdo, $o, $tur, $yon, $cariId, $evrak, $odeme, $depo, $uid, $simdi): int {
-            $pdo->prepare('INSERT INTO cari_hareketler (cari_id, tarih, tur, yon, tutar, para_birimi, kur, belge_no, evrak_no, odeme_sekli, aciklama, depo, istek_anahtari, durum, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                ->execute([$cariId, $o['tarih'], $tur, $yon, number_format($o['kurus'] / 100, 2, '.', ''), $o['pb'], $o['kur'], '', $evrak === '' ? null : $evrak, $odeme, $o['aciklama'], $depo, $o['ik'], 'gecerli', $simdi, $uid]);
+        $id = (int)cari_tx($pdo, function () use ($pdo, $o, $tur, $yon, $cariId, $evrak, $odeme, $depo, $uid, $simdi, $kMod, $kId): int {
+            $pdo->prepare('INSERT INTO cari_hareketler (cari_id, tarih, tur, yon, tutar, para_birimi, kur, belge_no, evrak_no, odeme_sekli, aciklama, depo, kaynak_modul, kaynak_id, istek_anahtari, durum, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                ->execute([$cariId, $o['tarih'], $tur, $yon, number_format($o['kurus'] / 100, 2, '.', ''), $o['pb'], $o['kur'], '', $evrak === '' ? null : $evrak, $odeme, $o['aciklama'], $depo, $kMod, $kId, $o['ik'], 'gecerli', $simdi, $uid]);
             $id = (int)$pdo->lastInsertId();
             $pdo->prepare('UPDATE cari_hareketler SET belge_no = ? WHERE id = ?')->execute([cari_belge_no($tur, $o['tarih'], $id), $id]);
             return $id;
@@ -645,7 +657,7 @@ function cari_hareket_ekle(PDO $pdo, array $g, int $uid): array
         return cari_hata('Hareket kaydedilemedi.');
     }
     $belge = cari_belge_no($tur, $o['tarih'], $id);
-    audit_log_event('create', 'cari', $id, null, ['cari_id' => $cariId, 'tur' => $tur, 'yon' => $yon, 'tutar' => $o['kurus'] / 100, 'pb' => $o['pb'], 'belge_no' => $belge]);
+    audit_log_event('create', 'cari', $id, null, ['cari_id' => $cariId, 'tur' => $tur, 'yon' => $yon, 'tutar' => $o['kurus'] / 100, 'pb' => $o['pb'], 'belge_no' => $belge] + ($kMod !== null ? ['kaynak_modul' => $kMod, 'kaynak_id' => $kId] : []));
     return ['ok' => true, 'hata' => null, 'id' => $id, 'belge_no' => $belge, 'tekrar' => false];
 }
 
@@ -701,7 +713,9 @@ function cari_hareket_iptal(PDO $pdo, int $id, string $neden, int $uid): array
     $r = cari_hareket_oku($pdo, $id);
     if ($r === null) return cari_hata('Hareket bulunamadı.');
     if ($r['durum'] === 'iptal') return cari_hata('Hareket zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
-    if (!empty($r['kaynak_modul'])) return cari_hata('Bu hareketi kaynak modülden iptal edin.', ['kod' => 'kaynakli']);
+    if (!empty($r['kaynak_modul'])) {
+        return cari_hata($r['kaynak_modul'] === 'stok' ? 'Bu hareket bir stok fişine bağlı; stok fişinden iptal edin.' : 'Bu hareketi kaynak modülden iptal edin.', ['kod' => 'kaynakli']);
+    }
 
     $idler = [$id];
     if ($r['tur'] === 'virman' && !empty($r['bagli_id'])) {
@@ -715,6 +729,31 @@ function cari_hareket_iptal(PDO $pdo, int $id, string $neden, int $uid): array
     });
     audit_log_event('cancel', 'cari', $id, ['durum' => 'gecerli', 'belge_no' => $r['belge_no']], ['durum' => 'iptal', 'neden' => $neden, 'satirlar' => $idler]);
     return ['ok' => true, 'hata' => null, 'id' => $id, 'iptal_idler' => $idler];
+}
+
+/**
+ * Kaynak modülün (ör. stok fişi iptali) kendi çekirdeğinden çağırdığı iptal: o kaynağa bağlı TÜM geçerli satırları iptal eder.
+ * Yetki KONTROL ETMEZ (çağıran uç denetler); idempotent (iptal edilecek satır yoksa ok + boş liste). Dış transaction varsa onun içinde çalışır.
+ * @return array{ok:bool,hata:?string,id:?int,iptal_idler:list<int>}
+ */
+function cari_kaynakli_iptal(PDO $pdo, string $modul, int $kaynakId, string $neden, int $uid): array
+{
+    $neden = trim($neden);
+    if (!preg_match('/^[a-z_]{2,30}$/', $modul) || $kaynakId <= 0) return cari_hata('Geçersiz kaynak bağı.') + ['iptal_idler' => []];
+    if (mb_strlen($neden) < 3) return cari_hata('İptal nedeni en az 3 karakter olmalı.', ['alanlar' => ['neden' => 'Neden zorunlu.']]) + ['iptal_idler' => []];
+    if (mb_strlen($neden) > 500) return cari_hata('İptal nedeni en çok 500 karakter.', ['alanlar' => ['neden' => 'Çok uzun.']]) + ['iptal_idler' => []];
+    $st = $pdo->prepare("SELECT id, belge_no FROM cari_hareketler WHERE kaynak_modul = ? AND kaynak_id = ? AND durum = 'gecerli' ORDER BY id");
+    $st->execute([$modul, $kaynakId]);
+    $satirlar = $st->fetchAll(PDO::FETCH_ASSOC);
+    if (!$satirlar) return ['ok' => true, 'hata' => null, 'id' => null, 'iptal_idler' => []];
+    $simdi = date('Y-m-d H:i:s');
+    cari_tx($pdo, function () use ($pdo, $modul, $kaynakId, $simdi, $uid, $neden): void {
+        $pdo->prepare("UPDATE cari_hareketler SET durum = 'iptal', iptal_at = ?, iptal_by = ?, iptal_neden = ? WHERE kaynak_modul = ? AND kaynak_id = ? AND durum = 'gecerli'")
+            ->execute([$simdi, $uid, $neden, $modul, $kaynakId]);
+    });
+    $idler = array_map(static fn(array $r): int => (int)$r['id'], $satirlar);
+    audit_log_event('cancel', 'cari', $idler[0], ['durum' => 'gecerli', 'belge_no' => $satirlar[0]['belge_no']], ['durum' => 'iptal', 'neden' => $neden, 'satirlar' => $idler, 'kaynak_modul' => $modul, 'kaynak_id' => $kaynakId]);
+    return ['ok' => true, 'hata' => null, 'id' => $idler[0], 'iptal_idler' => $idler];
 }
 
 /** Filtre WHERE (pozisyonel). */

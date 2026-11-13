@@ -14,6 +14,7 @@ description: Cari İşlemler modülü (cari_kartlari/fisler/dekontlar/tanimlari/
 
 ## Değiştirmeden önce oku
 - **Ledger DEĞİŞMEZ:** `cari_hareketler` satırına UPDATE/DELETE YOK; düzeltme = iptal (durum=iptal + neden ≥3 + kim/ne zaman) + yeni belge. Virman = iki bacak, birlikte iptal.
+- **Kaynak bağı (v524, Stok Parça B):** başka modül cari satırını YALNIZ `cari_hareket_ekle($pdo, $g, $uid, ['modul'=>…, 'id'=>…])` ile yazar (`$g`/POST'tan `kaynak_*` OKUNMAZ; `cari_kaydet.php` 4. parametre geçmez) ve `cari_kaynakli_iptal($pdo, $modul, $id, $neden, $uid)` ile iptal eder (idempotent, yetki yok, audit cancel). `cari_hareket_iptal` kaynaklı satırı 409 `kaynakli` ile reddeder. `cari_core`'a `stok_` adı yazma (stok gate smoke).
 - **Para birimleri ASLA toplanmaz** (TRY/USD/EUR ayrı bakiye, ayrı özet; tutar kuruş tamsayı). Kur yalnız bilgi.
 - **Yön kuralı:** bakiye = Borç − Alacak (+ = cari bize borçlu). Tahsilat/alacak dekontu = Alacak (bakiye azalır), ödeme/borç dekontu = Borç; açılışta yönü kullanıcı seçer; virman kaynak Alacak, hedef Borç.
 - **Şema yalnız `migrate.php` "Cari İşlemler" kartı** (`cari_migrate`, CREATE TABLE IF NOT EXISTS); sayfalar tablo yoksa uyarı kartı (`cari_sayfa_kapisi`), yazma ucu 503 — sayfa tablo YARATMAZ. Test sitesinde şema yine migrate'ten kurulur.

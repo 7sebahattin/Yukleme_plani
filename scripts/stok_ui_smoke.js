@@ -1,13 +1,14 @@
 // =========================================================
-// scripts/stok_ui_smoke.js — "Stok (muhasebe)" TARAYICI uçtan uca testi (gerçek PHP + gerçek assets/stok.js) — Parça A
+// scripts/stok_ui_smoke.js — "Stok (muhasebe)" TARAYICI uçtan uca testi (gerçek PHP + gerçek assets/stok.js) — Parça A + B
 //   node scripts/stok_ui_smoke.js        → çıkış 0 = geçti (Playwright yoksa ATLANIR)
-//   STOK_SHOT=<klasör>                   → ekran görüntüleri (A_pc.png 1366 · A_mobil.png 390 + diğerleri; repoya konmaz)
+//   STOK_SHOT=<klasör>                   → ekran görüntüleri (A_pc / A_mobil · B_form_pc / B_form_mobil / B_transfer_pc + diğerleri; repoya konmaz)
 //
 // Sahte yanıt YOK: scripts/_stok_e2e_sunucu.js her isteği scripts/_stok_istek.php alt süreciyle GERÇEK stok_*.php sayfalarında
 // çalıştırır (gerçek config/helpers.php kabuğu + stok_core + stok_ui) ve assets/'i diskten sunar. Durum dosya SQLite'ta kalıcıdır;
 // DB gerçeği scripts/stok_ui_e2e_say.php ile okunur. Canlı DB'ye / migrasyona HİÇ dokunulmaz.
 // Bölümler: 1 kartlar masaüstü 1366 (tek ekran, süzgeç, master-detail, kart oluştur/düzenle/pasifleştir/sil) · 2 tanımlar 1366 ·
-//           3 tablet 820 · 4 mobil 390 (liste→detay→geri, alt çubuk, ≥44px, ≥16px, taşma, modal) · 5 şema yok / boş.
+//           3 tablet 820 · 4 mobil 390 (liste→detay→geri, alt çubuk, ≥44px, ≥16px, taşma, modal) · 5 şema yok / boş ·
+//           6 fişler 1366 (Enter/Ctrl+S giriş, master-detail, iptal, kopya, yetersiz→Yine de kaydet, transfer, dönüşüm, kantar + cari) · 7 fiş formu 390.
 // =========================================================
 'use strict';
 const { execFileSync } = require('child_process');
@@ -319,6 +320,172 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await bekle(400); await b.waitForLoadState('load');
     ok('boş DB\'de ilk kart kaydedildi → detayı açık', S6.say().kart === 1 && await detayBekle(b, 1));
     await b.context().close();
+
+    // ───────────────────────────────────────── 6. FİŞLER — masaüstü 1366x800 (Parça B)
+    console.log('\n=== 6. Fişler (1366x800) ===');
+    const S7 = await ortam('fisler'); sunucular.push(S7);
+    const E0 = S7.say();
+    const fp = await sayfa(browser, S7, { width: 1366, height: 800 });
+    const fpost = () => S7.sayi(/^POST \/stok_kaydet/);
+    const kartYaz = async (p, sec, metin) => { await p.fill(sec, metin); await p.press(sec, 'Enter'); };
+    await git(fp, 'stok_giris_fisleri.php?yeni=1');
+    await kisaBekle(fp, () => document.activeElement && document.activeElement.classList.contains('st-kart-ara'));
+    const ft = await fp.evaluate(() => {
+      const L = document.getElementById('stListeKol').getBoundingClientRect(), D = document.getElementById('stDetay').getBoundingClientRect(), bar = document.querySelector('.st-eylem-bar').getBoundingClientRect();
+      return { kayar: document.documentElement.scrollHeight - document.documentElement.clientHeight, yanyana: L.right <= D.left + 1, solW: Math.round(L.width), sagW: Math.round(D.width), barIc: bar.bottom <= innerHeight && bar.top > 0 };
+    });
+    ok('[1366] giriş formu: TEK EKRAN (sayfa kaymaz), liste + form yan yana, eylem çubuğu ekranda; odak ilk kart alanında', ft.kayar <= 2 && ft.yanyana && ft.barIc && ft.sagW >= 620, JSON.stringify(ft));
+    ok('[1366] taşma yok; satır tablosu başlıklı (thead görünür)', (await tasma(fp)) <= 0 && await goster(fp, '.st-ftablo thead'));
+    await fp.selectOption('#stFisForm [name="neden_id"]', { label: 'Alış' });
+    await fp.fill('#stFisForm [name="evrak_no"]', 'IRS-E2E');
+    await kartYaz(fp, '.st-fsatir:nth-child(1) .st-kart-ara', 'STK-0002');
+    ok('Enter: kod → kart çözüldü ("STK-0002 — Biber (Dolmalık)"), bakiye ipucu, odak Miktar\'da', (await fp.inputValue('.st-fsatir:nth-child(1) .st-kart-ara')) === 'STK-0002 — Biber (Dolmalık)'
+      && /Mevcut: 2\.570 kg/.test(await metin(fp, '.st-fsatir:nth-child(1) .st-fs-ipucu') || '') && await fp.evaluate(() => document.activeElement.name === 'miktar[]'), await metin(fp, '.st-fsatir:nth-child(1) .st-fs-ipucu'));
+    await fp.keyboard.type('100'); await fp.keyboard.press('Enter');
+    ok('Enter: Miktar → Birim', await fp.evaluate(() => document.activeElement.name === 'birim[]'));
+    await fp.keyboard.press('Enter'); await fp.keyboard.type('20'); await fp.keyboard.press('Enter');
+    ok('Enter: Birim → Fiyat → KDV; satır tutarı 2.000,00', await fp.evaluate(() => document.activeElement.name === 'kdv_orani[]') && (await metin(fp, '.st-fsatir:nth-child(1) .st-fs-tutar-deger')) === '2.000,00');
+    await fp.keyboard.press('Enter');
+    ok('son hücrede Enter → YENİ SATIR + odak yeni satırın kart alanında', (await gorunurSay(fp, '#stFisForm .st-fsatir')) === 2 && await fp.evaluate(() => document.activeElement.classList.contains('st-kart-ara') && document.activeElement.closest('.st-fsatir') === document.querySelectorAll('.st-fsatir')[1]));
+    await kartYaz(fp, '.st-fsatir:nth-child(2) .st-kart-ara', 'STK-0004');
+    await fp.keyboard.type('50'); await fp.keyboard.press('Enter'); await fp.keyboard.press('Enter'); await fp.keyboard.type('1,5');
+    ok('toplamlar: miktar 150 · tutar 2.075,00 · KDV 35,00 (kart KDV\'leri %1 / %20)', (await metin(fp, '[data-top="miktar"]')) === '150' && (await metin(fp, '[data-top="tutar"]')) === '2.075,00' && (await metin(fp, '[data-top="kdv"]')) === '35,00',
+      [await metin(fp, '[data-top="miktar"]'), await metin(fp, '[data-top="tutar"]'), await metin(fp, '[data-top="kdv"]')].join(' | '));
+    await shot(fp, 'B_form_pc');
+    n0 = fpost();
+    await fp.keyboard.press('Control+s');
+    await yenilenmeBekle(fp, n0);
+    let E = S7.say(); let son = E.fisler[E.fisler.length - 1];
+    ok('Ctrl+S kaydeder: DB +1 giriş fişi (evrak IRS-E2E), detayına gidildi (?id=), toast fiş no', E.fis === E0.fis + 1 && son.tur === 'giris' && new RegExp('id=' + son.id).test(fp.url()) && (await metin(fp, '#stDetay .st-unvan')) === son.fis_no && new RegExp(son.fis_no).test(await toastMetin(fp) || ''), JSON.stringify(son));
+    ok('bakiye arttı: Biber Merkez 2.570 → 2.670 kg, Kasa +50', E.kartlar['2'].depo['Merkez Depo'] === 2670000 && E.kartlar['4'].depo['Merkez Depo'] === E0.kartlar['4'].depo['Merkez Depo'] + 50000);
+    ok('detay: 2 satır, tutar sütunları, liste başında yeni fiş seçili', (await gorunurSay(fp, '#stDetay .st-fis-tablo tbody tr')) === 2 && (await fp.$eval('#stListe a.st-satir[aria-current="true"]', e => e.getAttribute('data-id'))) === String(son.id));
+    const girisId = son.id;
+
+    // master-detail (fiş listesi)
+    const ilkFis = E.fisler.find(f => f.tur === 'giris' && f.id !== girisId);
+    await fp.click(`#stListe a.st-satir[data-id="${ilkFis.id}"]`);
+    ok('fiş listesi satırı → detay sayfa yenilemeden (parca=detay); URL ?id=', await detayBekle(fp, ilkFis.id) && new RegExp('id=' + ilkFis.id).test(fp.url()) && S7.sayi(/parca=detay/) >= 1);
+
+    // iptal
+    await git(fp, 'stok_giris_fisleri.php?id=' + girisId); await detayBekle(fp, girisId);
+    await fp.click('#stDetay [data-st-modal="iptal"]');
+    ok('İptal et → modal (z ≥ 600), başlıkta fiş no, "Fişi iptal et" neden girilene dek kapalı', await modalAcik(fp, 'stModalIptal') && (await metin(fp, '#stModalIptal [data-iptal-no]')) === son.fis_no
+      && await fp.$eval('#stModalIptal [data-iptal-onay]', e => e.disabled) && +(await fp.$eval('#stModalIptal', e => getComputedStyle(e).zIndex)) >= 600);
+    await fp.fill('#stModalIptal [name="neden"]', 'Test iptali');
+    ok('neden ≥ 3 → düğme etkin', !(await fp.$eval('#stModalIptal [data-iptal-onay]', e => e.disabled)));
+    n0 = fpost();
+    await fp.click('#stModalIptal [data-iptal-onay]');
+    await yenilenmeBekle(fp, n0);
+    E = S7.say();
+    ok('iptal: DB durum iptal, Biber bakiyesi geri (2.570), detayda İPTAL şeridi', E.fisler.find(f => f.id === girisId).durum === 'iptal' && E.kartlar['2'].depo['Merkez Depo'] === 2570000 && await goster(fp, '#stDetay .st-iptal-serit'));
+    await fp.click('#stDetay [data-kopya]'); await fp.waitForLoadState('load');
+    ok('Kopyala → yeni form, satırlar dolu (2), "kopyalandı" bilgisi', /kopya=/.test(fp.url()) && (await gorunurSay(fp, '#stFisForm .st-fsatir')) === 2 && (await fp.inputValue('.st-fsatir:nth-child(1) .st-kart-ara')) === 'STK-0002 — Biber (Dolmalık)' && /kopyalandı/.test(await metin(fp, '[data-kaynak-bilgi]') || ''));
+
+    // yetersiz stok → Yine de kaydet
+    await git(fp, 'stok_cikis_fisleri.php?yeni=1');
+    ok('çıkış formu: cari yokken fiyat sütunu gizli', !(await goster(fp, '#stFisForm .st-fs-fiyat')));
+    await fp.selectOption('#stFisForm [name="neden_id"]', { label: 'Satış/Sevk' });
+    await kartYaz(fp, '.st-fsatir:nth-child(1) .st-kart-ara', 'STK-0003');
+    await fp.keyboard.type('500');
+    ok('miktar > bakiye: satır kırmızı + "yetersiz" ipucu', await fp.$eval('.st-fsatir', e => e.classList.contains('st-fsatir--eksik')) && /yetersiz/.test(await metin(fp, '.st-fs-ipucu') || ''));
+    n0 = fpost();
+    await fp.click('#stFisForm [data-kaydet]');
+    ok('Kaydet → 409: "Yetersiz stok" kutusu (Patlıcan, Mevcut 240, Eksik 260), kayıt yok', await kisaBekle(fp, () => !document.getElementById('stEksik').hidden) && /240 kg/.test(await metin(fp, '#stEksik tbody') || '') && /260 kg/.test(await metin(fp, '#stEksik tbody') || '') && S7.say().fis === E.fis,
+      await metin(fp, '#stEksik'));
+    ok('odak "Düzelt" düğmesinde', await fp.evaluate(() => document.activeElement && document.activeElement.hasAttribute('data-eksik-duzelt')));
+    n0 = fpost();
+    await fp.click('#stEksik [data-eksik-kaydet]');
+    await yenilenmeBekle(fp, n0);
+    E = S7.say(); son = E.fisler[E.fisler.length - 1];
+    ok('"Yine de kaydet": DB çıkış fişi + uyarı, bakiye −260, toast "Eksiye"', son.tur === 'cikis' && /Eksiye/.test(son.uyari || '') && E.kartlar['3'].depo['Merkez Depo'] === -260000 && /Eksiye/.test(await toastMetin(fp) || ''));
+
+    // transfer
+    await git(fp, 'transfer_fisleri.php?yeni=1');
+    await fp.selectOption('#stFisForm [name="hedef_depo"]', 'Şube Depo');
+    await kartYaz(fp, '.st-fsatir:nth-child(1) .st-kart-ara', 'STK-0001');
+    await fp.keyboard.type('100');
+    n0 = fpost();
+    await fp.click('#stFisForm [data-kaydet]');
+    await yenilenmeBekle(fp, n0);
+    E = S7.say(); son = E.fisler[E.fisler.length - 1];
+    ok('transfer kaydedildi: Domates Merkez −100, Şube +100; detay "Merkez Depo → Şube Depo"', son.tur === 'transfer' && E.kartlar['1'].depo['Merkez Depo'] === 5450000 && E.kartlar['1'].depo['Şube Depo'] === 8350000 && /Merkez Depo → hedef Şube Depo|Merkez Depo.*Şube Depo/.test(await metin(fp, '#stDetay .st-meta') || ''),
+      JSON.stringify(E.kartlar['1'].depo));
+    await shot(fp, 'B_transfer_pc');
+    const trfTek = await fp.evaluate(() => ({ kayar: document.documentElement.scrollHeight - document.documentElement.clientHeight, tasma: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+    ok('[1366] transfer detayı: sayfa kaymaz, taşma yok', trfTek.kayar <= 2 && trfTek.tasma <= 0, JSON.stringify(trfTek));
+
+    // dönüşüm
+    await git(fp, 'stok_donusum_fisleri.php?yeni=1');
+    await kartYaz(fp, '.st-satirlar[data-yon="C"] .st-kart-ara', 'STK-0001');
+    await fp.keyboard.type('10');
+    await kartYaz(fp, '.st-satirlar[data-yon="G"] .st-kart-ara', 'STK-0002');
+    await fp.keyboard.type('9');
+    ok('dönüşüm formu: fire özeti 1 (%10), çıktı birim maliyeti tahmini', /^1 \(%10\)/.test(await metin(fp, '[data-top="fark"]') || '') && /₺/.test(await metin(fp, '[data-top="cikti_ort"]') || ''), await metin(fp, '[data-fire]'));
+    n0 = fpost();
+    await fp.click('#stFisForm [data-kaydet]');
+    await yenilenmeBekle(fp, n0);
+    E = S7.say(); son = E.fisler[E.fisler.length - 1];
+    ok('dönüşüm kaydedildi (DNS-), detayda Girdiler + Çıktılar', son.tur === 'donusum' && /^DNS-/.test(son.fis_no) && await goster(fp, '#stDetay .st-donusum-kol--girdi') && await goster(fp, '#stDetay .st-donusum-kol--cikti'));
+
+    // cari seçili alış + kantardan doldur
+    await git(fp, 'stok_giris_fisleri.php?yeni=1');
+    await fp.click('#stFisForm [data-st-modal="kantar"]');
+    ok('Kantardan doldur → modal; 3 aday (Şube kantarı da kısıtsız oturumda)', await modalAcik(fp, 'stModalKantar') && (await gorunurSay(fp, '#stModalKantar .st-kaynak-satir')) === 3);
+    await fp.fill('#stKantarAra', 'karpuz');
+    ok('modal araması süzer (karpuz → 1)', (await gorunurSay(fp, '#stModalKantar .st-kaynak-satir')) === 1);
+    await fp.fill('#stKantarAra', '');
+    const k1 = E.kantar.find(k => k.fis_no === '1201');
+    await fp.check(`#stModalKantar input[name="kantar_id"][value="${k1.id}"]`);
+    await fp.click('#stModalKantar button[type="submit"]');
+    ok('Seç → form doldu: Domates, 6.120 kg, cari Örnek Tarım, bilgi şeridi; modal kapandı', await kisaBekle(fp, () => document.getElementById('stModalKantar').hidden) && (await fp.inputValue('.st-fsatir:nth-child(1) .st-kart-ara')) === 'STK-0001 — Domates (Salkım)'
+      && (await fp.inputValue('.st-fsatir:nth-child(1) [name="miktar[]"]')) === '6.120' && /Örnek Tarım/.test(await fp.inputValue('#stFisForm [name="cari_ara"]')) && /Kantar #1201/.test(await metin(fp, '[data-kaynak-bilgi]') || '')
+      && (await fp.inputValue('#stFisForm [name="kaynak_id"]')) === String(k1.id));
+    await fp.selectOption('#stFisForm [name="neden_id"]', { label: 'Alış' });
+    n0 = fpost();
+    await fp.click('#stFisForm [data-kaydet]');
+    ok('cari seçili + fiyat yok → satır hatası (birim fiyat zorunlu), kayıt yok', await kisaBekle(fp, () => !!document.querySelector('#stFisForm .st-fsatir .st-hata')) && S7.say().fis === E.fis);
+    await fp.fill('.st-fsatir:nth-child(1) [name="birim_fiyat[]"]', '9,50');
+    n0 = fpost();
+    await fp.click('#stFisForm [data-kaydet]');
+    await yenilenmeBekle(fp, n0);
+    let E2 = S7.say(); son = E2.fisler[E2.fisler.length - 1];
+    ok('kantar + cari alış kaydedildi: kaynak kantar, cari hareketi +1 (alacak dekontu)', son.kaynak_modul === 'kantar' && +son.kaynak_id === k1.id && son.cari_hareket_id && E2.cari_hareket === E.cari_hareket + 1, JSON.stringify(son));
+    await git(fp, 'stok_giris_fisleri.php?yeni=1');
+    await fp.click('#stFisForm [data-st-modal="kantar"]'); await modalAcik(fp, 'stModalKantar');
+    ok('aynı kantar fişi artık "Aktarıldı" ve seçilemez', await fp.$eval(`#stModalKantar input[name="kantar_id"][value="${k1.id}"]`, e => e.disabled) && /Aktarıldı/.test(await metin(fp, '#stModalKantar .st-kaynak-satir--pasif') || ''));
+    await fp.keyboard.press('Escape');
+    ok('Esc kantar modalını kapatır', await kisaBekle(fp, () => document.getElementById('stModalKantar').hidden));
+    ok('hareket satırı fiş no → kart detayından fiş sayfasına', (await (async () => { await git(fp, 'stok_kartlari.php?id=1'); return !!(await fp.$('#stDetay a[href^="transfer_fisleri.php?id="]')); })()));
+    await fp.context().close();
+
+    // ───────────────────────────────────────── 7. FİŞ — mobil 390x844
+    console.log('\n=== 7. Fiş formu mobil (390x844) ===');
+    const fm = await sayfa(browser, S7, { width: 390, height: 844 }, { dokunmatik: true });
+    await git(fm, 'stok_giris_fisleri.php');
+    ok('[390] fiş listesi: tam ekran, form/detay gizli, taşma yok', await goster(fm, '#stListeKol') && !(await goster(fm, '#stDetay')) && (await tasma(fm)) <= 0);
+    await git(fm, 'stok_giris_fisleri.php?yeni=1');
+    ok('[390] form: liste gizli, ← Liste görünür, 3 adım başlığı, taşma yok', !(await goster(fm, '#stListeKol')) && await goster(fm, '.st-geri') && (await gorunurSay(fm, '#stFisForm .st-adim')) >= 3 && (await tasma(fm)) <= 0);
+    ok('[390] satır = kart (thead gizli; Miktar/Birim etiketleri görünür)', !(await goster(fm, '.st-ftablo thead')) && await goster(fm, '.st-fsatir .st-fs-etiket'));
+    ky = await kucukYazi(fm, '#stFisForm');
+    ok('[390] form girdileri ≥ 16px', ky.length === 0, ky.join(','));
+    kh = await kucukHedef(fm, '#stDetay');
+    ok('[390] form dokunma hedefleri ≥ 44px', kh.length === 0, JSON.stringify(kh));
+    const mbar = await fm.evaluate(() => { const b = document.querySelector('.st-eylem-bar').getBoundingClientRect(), bn = document.querySelector('.bottomnav').getBoundingClientRect(); return { alt: Math.round(b.bottom), bnUst: Math.round(bn.top), gor: b.top >= 0 && b.height > 0 }; });
+    ok('[390] alt eylem çubuğu (toplam + Kaydet) bottomnav\'ın ÜSTÜNDE, ekranda', mbar.gor && mbar.alt <= mbar.bnUst + 1, JSON.stringify(mbar));
+    await shot(fm, 'B_form_mobil');
+    await fm.selectOption('#stFisForm [name="neden_id"]', { label: 'Sayım Fazlası' });
+    await fm.fill('.st-fsatir:nth-child(1) .st-kart-ara', 'STK-0005 — Euro Palet');
+    await fm.fill('.st-fsatir:nth-child(1) [name="miktar[]"]', '14');
+    await fm.tap('#stFisForm [data-satir-ekle]');
+    ok('[390] ＋ Satır ekle → 2. kart', (await gorunurSay(fm, '#stFisForm .st-fsatir')) === 2);
+    await fm.tap('.st-fsatir:nth-child(2) [data-satir-sil]');
+    ok('[390] ✕ satırı siler', (await gorunurSay(fm, '#stFisForm .st-fsatir')) === 1);
+    n0 = fm.srv.sayi(/^POST \/stok_kaydet/);
+    await fm.tap('#stFisForm [data-kaydet]');
+    await yenilenmeBekle(fm, n0);
+    ok('[390] dokunarak kaydedildi → fiş detayı (tam ekran), Euro Palet +14', /id=\d+/.test(fm.url()) && await goster(fm, '#stDetay .st-unvan') && S7.say().kartlar['5'].depo['Merkez Depo'] === (E2.kartlar['5'].depo['Merkez Depo'] || 0) + 14000, fm.url() + ' | ' + (await metin(fm, '.st-form-hata') || '') + ' | ' + JSON.stringify(S7.say().kartlar['5'].depo) + ' ' + JSON.stringify(E2.kartlar['5'].depo));
+    ok('[390] fiş detayı: satırlar kart görünümünde, taşma yok', (await gorunurSay(fm, '#stDetay .st-hk')) === 1 && (await tasma(fm)) <= 0);
+    await fm.context().close();
 
     ok('köprü: PHP alt süreç hatası yok', !sunucular.some(x => x.istekler.some(i => i.hata)), JSON.stringify(sunucular.flatMap(x => x.istekler.filter(i => i.hata)).slice(0, 3)));
     ok('tarayıcı: JS hatası / 5xx yok', hatalar.length === 0, hatalar.slice(0, 5).join(' | '));

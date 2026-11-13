@@ -105,6 +105,14 @@ ok('core: stok_fisler\'de DELETE YOK', !preg_match('/DELETE\s+FROM\s+`?stok_fisl
 preg_match_all('/UPDATE\s+`?stok_fisler`?\s+SET\s+([^"\']+?)\s+WHERE/i', $c, $um);
 $setler = array_map(fn($x) => preg_replace('/\s+/', ' ', trim($x)), $um[1]);
 ok('core: stok_fisler UPDATE\'leri yalnız beyaz liste (fis_no[, cari_hareket_id] · durum=iptal + iptal_*)', !array_filter($setler, fn($x) => !preg_match('/^(fis_no = \?(, cari_hareket_id = \?)?|cari_hareket_id = \?|durum = \'iptal\', iptal_at = \?, iptal_by = \?, iptal_neden = \?)$/', $x)), json_encode($setler));
+ok('B: stok_kaydet 9 dal (A 7 + fis_kaydet + fis_iptal, bu sırayla)', $isl === [...$A, 'fis_kaydet', 'fis_iptal'], json_encode($isl));
+ok('B: 4 fiş sayfası çalışan modül (stok_core + stok_fis_parca + stok_fis_sayfa_govde, render_header\'dan ÖNCE kısmi yanıt)', count(array_filter($fisSayfalari, function ($f) use ($ROOT, $pos) {
+    $s = kod($ROOT . '/' . $f); return str_contains($s, 'config/stok_core.php') && $pos($s, 'stok_fis_parca(') > 0 && $pos($s, 'stok_fis_parca(') < $pos($s, 'render_header(') && str_contains($s, 'stok_fis_sayfa_govde('); })) === 4);
+ok('B: cari bağı yalnız cari_core fonksiyonlarıyla, kaynak modül değeri stok_core\'da verilir', str_contains((string)govde($c, 'stok_fis_kaydet'), "cari_hareket_ekle(") && str_contains((string)govde($c, 'stok_fis_kaydet'), "['modul' => 'stok', 'id' => \$fid]")
+    && str_contains((string)govde($c, 'stok_fis_iptal'), "cari_kaynakli_iptal(\$pdo, 'stok', \$id"));
+ok('B: kantar YALNIZ okunur (stok_core/ui\'da kantar_ tablosuna INSERT/UPDATE/DELETE yok)', !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?kantar_/i', $c . kod($ROOT . '/config/stok_ui.php')));
+ok('B: defter INSERT tek noktada (stok_hareket_yaz) — stok_hareketler INSERT metni core\'da 1 kez', substr_count($c, 'INSERT INTO stok_hareketler') === 1 && str_contains((string)govde($c, 'stok_hareket_yaz'), 'INSERT INTO stok_hareketler'));
+ok('B: yetersiz_stok / kantar_aktarilmis → 409 (stok_cevap)', str_contains((string)govde($c, 'stok_cevap'), "'yetersiz_stok', 'kantar_aktarilmis'"));
 ok('core: cari tablolarına doğrudan SQL YOK (cari bağı yalnız cari_core fonksiyonlarıyla)', !preg_match('/\b(FROM|INTO|UPDATE|JOIN)\s+`?cari_(hareketler|kartlar|tanimlar)\b/i', $c));
 ok('core: named parametre (:ad) kullanılmaz — pozisyonel ?', !preg_match('/[ (,=]:[a-z_]{2,}\b/', $c));
 ok('core: depo filtresi yalnız depo_sql_in (depo_sql_column / depo_sql_records YOK)', str_contains($c, 'depo_sql_in(') && !str_contains($c, 'depo_sql_column(') && !str_contains($c, 'depo_sql_records'));

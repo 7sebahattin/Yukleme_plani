@@ -308,4 +308,28 @@ ok('hareket tablosunda DELETE yok', !preg_match('/DELETE\s+FROM\s+cari_hareketle
 ok('depo filtre yardımcıları çağrılmaz (bilinçli istisna)', !preg_match('/depo_sql_|depot_visible_to_user/', preg_replace('#//[^\n]*#', '', $src)));
 ok('named parametre kullanılmaz', !preg_match('/(?:WHERE|AND|SET|VALUES)[^;]*\s:\w+/', $src));
 
+echo "\n=== 14. Kaynak bağı (v524 Stok Parça B: cari_hareket_ekle \$kaynak · cari_kaynakli_iptal) ===\n";
+$kk = cari_kart_kaydet($pdo, ['unvan' => 'Kaynak Deneme Ltd', 'tip' => 'tedarikci', 'aktif' => '1'], $UID);
+$kId = (int)$kk['id'];
+$kg = ['tur' => 'alacak_dekont', 'cari_id' => $kId, 'tarih' => $bugun, 'tutar' => '120,00', 'para_birimi' => 'TRY', 'aciklama' => 'Kaynaklı dekont'];
+$r = cari_hareket_ekle($pdo, $kg + ['kaynak_modul' => 'sahte', 'kaynak_id' => '77'], $UID);
+$h = cari_hareket_oku($pdo, (int)$r['id']);
+ok('POST\'tan (g) gelen kaynak_modul/kaynak_id YOK SAYILIR', $r['ok'] && $h['kaynak_modul'] === null && $h['kaynak_id'] === null);
+$r = cari_hareket_ekle($pdo, $kg, $UID, ['modul' => 'stok', 'id' => 41]);
+$h = cari_hareket_oku($pdo, (int)$r['id']);
+ok('$kaynak parametresi yazılır (stok/41) + audit\'te kaynak', $r['ok'] && $h['kaynak_modul'] === 'stok' && (int)$h['kaynak_id'] === 41
+    && say('audit_log', "module = 'cari' AND record_id = ? AND new_values LIKE '%kaynak_modul%'", [(int)$r['id']]) === 1);
+ok('geçersiz kaynak bağı reddedilir (modül biçimi / id ≤ 0)', !cari_hareket_ekle($pdo, $kg, $UID, ['modul' => 'Stok-1', 'id' => 1])['ok'] && !cari_hareket_ekle($pdo, $kg, $UID, ['modul' => 'stok', 'id' => 0])['ok']);
+$r2 = cari_hareket_ekle($pdo, $kg, $UID, ['modul' => 'stok', 'id' => 41]);
+$i = cari_hareket_iptal($pdo, (int)$h['id'], 'Elle iptal', $UID);
+ok('cari_hareket_iptal kaynaklı satırı reddeder (kod kaynakli; stok ipucu)', !$i['ok'] && ($i['kod'] ?? '') === 'kaynakli' && str_contains((string)$i['hata'], 'stok fişinden'));
+$c0 = audit_say('cancel');
+ok('cari_kaynakli_iptal: kısa neden reddedilir', !cari_kaynakli_iptal($pdo, 'stok', 41, 'ab', $UID)['ok']);
+$i = cari_kaynakli_iptal($pdo, 'stok', 41, 'Stok fişi iptali', $UID);
+ok('cari_kaynakli_iptal: o kaynağın TÜM geçerli satırları iptal (2), tek audit cancel', $i['ok'] && count($i['iptal_idler']) === 2 && cari_hareket_oku($pdo, (int)$h['id'])['durum'] === 'iptal'
+    && cari_hareket_oku($pdo, (int)$r2['id'])['durum'] === 'iptal' && audit_say('cancel') === $c0 + 1);
+$i = cari_kaynakli_iptal($pdo, 'stok', 41, 'Tekrar', $UID);
+ok('cari_kaynakli_iptal idempotent: ikinci çağrı ok + boş liste, audit yok', $i['ok'] && $i['iptal_idler'] === [] && audit_say('cancel') === $c0 + 1);
+ok('başka kaynağa dokunmaz (stok/42 yok → boş)', cari_kaynakli_iptal($pdo, 'stok', 42, 'Neden yok', $UID)['iptal_idler'] === []);
+
 siparis_test_bitir();

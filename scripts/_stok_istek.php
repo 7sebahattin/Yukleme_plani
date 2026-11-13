@@ -18,6 +18,8 @@ $PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
 if (!function_exists('require_perm')) { function require_perm(string $p): void { if (!can($p)) forbidden('yetki: ' . $p); } }
 $PERMS = $spec['perms'] ?? []; $IS_ADMIN = (bool)($spec['admin'] ?? true); $UID = (int)($spec['uid'] ?? 1);
 if (array_key_exists('depolar', $spec)) $DEPOLAR = $spec['depolar'];
+$AKTIF_DEPO = (string)($spec['aktif_depo'] ?? 'Merkez Depo');                       // stok örnek verisinin depoları
+$DEPO_SECENEK = $spec['depo_secenek'] ?? ['Merkez Depo', 'Şube Depo'];
 
 ini_set('session.save_path', sys_get_temp_dir()); ini_set('session.use_cookies', '0'); ini_set('session.cache_limiter', '');
 if (!empty($spec['sid'])) session_id(preg_replace('/[^A-Za-z0-9]/', '', (string)$spec['sid']));

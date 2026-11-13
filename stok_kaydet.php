@@ -2,7 +2,8 @@
 // =========================================================
 // stok_kaydet.php — Stok (muhasebe): TÜM yazmaların TEK ucu (yalnız POST; GET → 405). cari_kaydet.php aynası.
 // Sıra: yöntem → require_login → csrf_check (yazmadan ÖNCE) → şema kapısı → işleme göre stok_kapi → yalnız config/stok_core.php fonksiyonu.
-// İşlemler (`islem`): kart_kaydet · kart_durum · kart_sil · tanim_kaydet · tanim_durum · tanim_sil · ice_aktar   (Parça B: + fis_kaydet · fis_iptal).
+// İşlemler (`islem`): kart_kaydet · kart_durum · kart_sil · tanim_kaydet · tanim_durum · tanim_sil · ice_aktar · fis_kaydet (write) · fis_iptal (delete).
+//   fis_kaydet: satırlar paralel dizilerle (kart_id[] kart_ara[] miktar[] birim[] birim_fiyat[] kdv_orani[] lot[] yon[]); 409 yetersiz_stok → eksiye_izin=1 ile yeniden.
 // Yanıt: fetch (X-Requested-With: fetch ya da ajax=1) → JSON {ok, id, fis_no, hata, alanlar{ad:hata}, uyari, yonlendir, kod, ...};
 //        klasik form → set_flash + 303 `geri`'ye (YALNIZ ^(stok_[a-z_]+|transfer_fisleri)\.php(\?…)?$ yerel adres; aksi stok_kartlari.php).
 // Her yazma stok_core'da audit_log_event'li. Defter tablosuna bu dosya DOĞRUDAN yazmaz.
@@ -73,6 +74,18 @@ try {
             stok_kapi('admin');
             $s = stok_ice_aktar($pdo, $uid);
             stok_cevap($s, $geri, 'İçe aktarıldı: ' . (int)$s['eklenen'] . ' kart eklendi, ' . (int)$s['atlanan'] . ' atlandı', $json);
+
+        case 'fis_kaydet':
+            stok_kapi('write');
+            $s = stok_fis_kaydet($pdo, $P, $uid);
+            $turSayfa = stok_fis_turleri()[(string)($P['tur'] ?? '')]['sayfa'] ?? 'stok_giris_fisleri.php';
+            if (!empty($s['ok'])) $geri = $turSayfa . '?id=' . (int)$s['id'];
+            stok_cevap($s, $geri, !empty($s['tekrar']) ? 'Fiş zaten kaydedilmişti' : 'Fiş kaydedildi', $json);
+
+        case 'fis_iptal':
+            stok_kapi('delete');
+            $s = stok_fis_iptal($pdo, $id, (string)($P['neden'] ?? ''), $uid);
+            stok_cevap($s, $geri, 'Fiş iptal edildi', $json);
 
         default:
             stok_cevap($yok, $geri, '', $json);
