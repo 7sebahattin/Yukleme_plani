@@ -45,6 +45,12 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: yönlendirme hedefi var ($hedef)", is_file($ROOT . '/' . $hedef));
             ok("$dosya: yönlendirme exit'li", (bool)preg_match('/header\([^;]+\);\s*exit;/', $s));
             ok("$dosya: yer tutucu kartı yok", !str_contains($s, 'render_header'));
+        } elseif (str_contains($s, 'config/cari_core.php')) {
+            // Çalışan modül (Cari İşlemler, cari_* sayfaları): yer tutucu DEĞİL — şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
+            ok("$dosya: çalışan modül — cari_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'cari_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));

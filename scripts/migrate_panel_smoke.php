@@ -37,9 +37,9 @@ function csrf(): string { if (session_status() === PHP_SESSION_NONE) session_sta
 
 echo "=== 1. Kaynak: hiçbir kart / POST dalı kaldırılmadı ===\n";
 $kaynak = (string)file_get_contents($ROOT . '/migrate.php');
-ok('26 kart sarıldı (mg_kart_ac / mg_kart_kapat eşli)', preg_match_all("/<\?php mg_kart_ac\(/", $kaynak) === 26 && preg_match_all('/<\?php mg_kart_kapat\(\); \?>/', $kaynak) === 26);
+ok('27 kart sarıldı (mg_kart_ac / mg_kart_kapat eşli)', preg_match_all("/<\?php mg_kart_ac\(/", $kaynak) === 27 && preg_match_all('/<\?php mg_kart_kapat\(\); \?>/', $kaynak) === 27);
 ok('sarılmamış üst düzey .card kalmadı', preg_match('/^  <div class="card"/m', $kaynak) === 0);
-foreach (['pdks', 'pdks_gunluk', 'pdks_hakedis', 'pdks_cari', 'pdks_gunluk_faz8a', 'pdks_faz8b', 'pdks_gunluk_faz8j', 'pdks_faz9d', 'pdks_cavus_ucret', 'pdks_cavus_b', 'pdks_kart_tanim', 'pdks_ters', 'pdks_saat', 'pdks_yevmiye', 'pdks_servis', 'mail', 'siparis', 'siparis_sofor', 'siparis_yurtici_gumruk', 'siparis_odeme', 'siparis_evrak_gecis', 'urun_siparis', 'frugro', 'beyansiz_yukleme'] as $ne) {
+foreach (['pdks', 'pdks_gunluk', 'pdks_hakedis', 'pdks_cari', 'pdks_gunluk_faz8a', 'pdks_faz8b', 'pdks_gunluk_faz8j', 'pdks_faz9d', 'pdks_cavus_ucret', 'pdks_cavus_b', 'pdks_kart_tanim', 'pdks_ters', 'pdks_saat', 'pdks_yevmiye', 'pdks_servis', 'mail', 'siparis', 'siparis_sofor', 'siparis_yurtici_gumruk', 'siparis_odeme', 'siparis_evrak_gecis', 'urun_siparis', 'frugro', 'cari', 'beyansiz_yukleme'] as $ne) {
     ok("POST dalı duruyor: ne=$ne (csrf_check ile)", (bool)preg_match("/'" . preg_quote($ne, '/') . "'\)\s*\{\s*\n\s*csrf_check/", $kaynak));
 }
 ok('POST sonrası hiçbir kart kapanmaz (sonuç satırları görünür kalsın)', str_contains($kaynak, "=== 'POST'") && str_contains($kaynak, "\$hazir && !\$post ? '' : ' open'"));
@@ -49,10 +49,10 @@ rol([], true);
 $r = mig_sayfa();
 ok('sayfa hatasız çizilir', $r['hata'] === null && str_contains($r['html'], 'Şema Migrasyon Paneli'), (string)$r['hata']);
 $say = substr_count($r['html'], '<details class="card mg-kart');
-ok('26 kart <details> olarak çizilir', $say === 26, (string)$say);
-ok('tablo yokken kartlar EKSİK + AÇIK (kapalı hazır kart yok)', substr_count($r['html'], 'mg-hazir') === 0 && substr_count($r['html'], ' open style=') === 26, substr_count($r['html'], 'mg-hazir') . '/' . substr_count($r['html'], ' open style='));
-ok('özet satırı: 0 / 25 hazır, düğme var', str_contains($r['html'], '0 / 26 kart hazır') && str_contains($r['html'], 'id="mgTumu"'));
-ok('kartların kimlikleri korunur (migrate.php#siparis-sofor vb. bağlantılar)', str_contains($r['html'], 'id="beyansiz-yukleme"') && str_contains($r['html'], 'id="siparis"') && str_contains($r['html'], 'id="siparis-sofor"') && str_contains($r['html'], 'id="siparis-yurtici-gumruk"') && str_contains($r['html'], 'id="siparis-evrak-gecis"') && str_contains($r['html'], 'id="siparis-odeme"'));
+ok('27 kart <details> olarak çizilir', $say === 27, (string)$say);
+ok('tablo yokken kartlar EKSİK + AÇIK (kapalı hazır kart yok)', substr_count($r['html'], 'mg-hazir') === 0 && substr_count($r['html'], ' open style=') === 27, substr_count($r['html'], 'mg-hazir') . '/' . substr_count($r['html'], ' open style='));
+ok('özet satırı: 0 / 27 hazır, düğme var', str_contains($r['html'], '0 / 27 kart hazır') && str_contains($r['html'], 'id="mgTumu"'));
+ok('kartların kimlikleri korunur (migrate.php#siparis-sofor vb. bağlantılar)', str_contains($r['html'], 'id="beyansiz-yukleme"') && str_contains($r['html'], 'id="cari"') && str_contains($r['html'], 'id="siparis"') && str_contains($r['html'], 'id="siparis-sofor"') && str_contains($r['html'], 'id="siparis-yurtici-gumruk"') && str_contains($r['html'], 'id="siparis-evrak-gecis"') && str_contains($r['html'], 'id="siparis-odeme"'));
 ok('başlık özet satırında, gövdede h2 kalmadı', str_contains($r['html'], '<span class="mg-baslik">Siparişler — Yurt içi gümrük</span>') && !str_contains($r['html'], '<h2 style="margin-top:0;">Siparişler'));
 ok('formlar + düğmeler yerinde (kurulum yolu bozulmadı)', str_contains($r['html'], 'Yurt İçi Gümrük Alanını Ekle') && str_contains($r['html'], 'name="ne" value="siparis_sofor"'));
 ok('HTML blok dengesi (details/div)', substr_count($r['html'], '<details') === substr_count($r['html'], '</details>') && substr_count($r['html'], '<div') === substr_count($r['html'], '</div>'));
@@ -68,7 +68,7 @@ ok('hazır Siparişler kartları kapalı + ✓ Hazır rozeti', $r['hata'] === nu
 ok('v400: taşınacak sevkiyat yokken Evrak takımı geçiş kartı HAZIR (kapalı, ✓ Taşınacak sevkiyat yok, form yok)', preg_match('/<details class="card mg-kart mg-hazir" id="siparis-evrak-gecis" style=/', $r['html']) === 1
     && str_contains($r['html'], 'Taşınacak sevkiyat yok') && !str_contains($r['html'], 'name="ne" value="siparis_evrak_gecis"'));
 ok('hazır kartta "open" YOK, eksik kartta var', preg_match('/mg-hazir" id="siparis-sofor"[^>]*\sopen\s/', $r['html']) === 0 && preg_match('/mg-eksik"[^>]*\sopen\s/', $r['html']) === 1);
-ok('özet satırı sayıları tutarlı', preg_match('#(\d+) / 26 kart hazır#', $r['html'], $m) === 1 && (int)$m[1] === substr_count($r['html'], 'class="card mg-kart mg-hazir"') && (int)$m[1] >= 3, $m[0] ?? '');
+ok('özet satırı sayıları tutarlı', preg_match('#(\d+) / 27 kart hazır#', $r['html'], $m) === 1 && (int)$m[1] === substr_count($r['html'], 'class="card mg-kart mg-hazir"') && (int)$m[1] >= 3, $m[0] ?? '');
 
 echo "\n=== 4. POST sonrası kart kapatılmaz ===\n";
 $tok = csrf();
@@ -82,12 +82,25 @@ $r = mig_sayfa();
 ok('legacy mail_gonderildi → kart EKSİK + AÇIK, "1 sevkiyat" bekliyor, aday listesi + taşı formu', $r['hata'] === null
     && preg_match('/<details class="card mg-kart mg-eksik" id="siparis-evrak-gecis"[^>]*\sopen\s/', $r['html']) === 1
     && str_contains($r['html'], '1 sevkiyat taşınmayı bekliyor') && str_contains($r['html'], 'TC900801.10') && str_contains($r['html'], 'name="ne" value="siparis_evrak_gecis"') && str_contains($r['html'], "1 sevkiyatı Kapanan'a taşı"), (string)$r['hata']);
-ok('v400: kart özeti sayaç tutarlı (26 kart, hazır sayısı bir azaldı)', preg_match('#(\d+) / 26 kart hazır#', $r['html'], $m5) === 1 && (int)$m5[1] === substr_count($r['html'], 'class="card mg-kart mg-hazir"'), $m5[0] ?? '');
+ok('v400: kart özeti sayaç tutarlı (27 kart, hazır sayısı bir azaldı)', preg_match('#(\d+) / 27 kart hazır#', $r['html'], $m5) === 1 && (int)$m5[1] === substr_count($r['html'], 'class="card mg-kart mg-hazir"'), $m5[0] ?? '');
 $r = mig_sayfa(['csrf' => csrf(), 'ne' => 'siparis_evrak_gecis']);
 ok('POST: "Son çalıştırma sonucu" + "1 sevkiyat taşındı, kalan 0"; kart açık kalır', $r['hata'] === null && str_contains($r['html'], 'Son çalıştırma sonucu') && str_contains($r['html'], '1 sevkiyat taşındı, kalan 0')
     && preg_match('/id="siparis-evrak-gecis"[^>]*\sopen\s/', $r['html']) === 1, (string)$r['hata']);
 ok('veri: sevkiyat evrak_gonderildi oldu', db()->query("SELECT durum FROM siparis_sevkiyatlar WHERE id = $lid")->fetchColumn() === 'evrak_gonderildi');
 $r = mig_sayfa();
 ok('sonraki GET: kart yine HAZIR (kapalı)', preg_match('/<details class="card mg-kart mg-hazir" id="siparis-evrak-gecis" style=/', $r['html']) === 1 && str_contains($r['html'], 'Taşınacak sevkiyat yok'));
+
+echo "\n=== 6. Cari İşlemler kartı (ne=cari) ===\n";
+$r = mig_sayfa();
+ok('tablolar yokken cari kartı EKSİK + AÇIK, ✗ Tablolar eksik, form ne=cari', $r['hata'] === null
+    && preg_match('/<details class="card mg-kart mg-eksik" id="cari"[^>]*\sopen\s/', $r['html']) === 1
+    && str_contains($r['html'], 'name="ne" value="cari"') && str_contains($r['html'], '✗ Tablolar eksik'), (string)$r['hata']);
+$GLOBALS['_cari_ddl_calistir'] = function (PDO $p, string $ad, string $ddl): void { [$c, $ix] = siparis_ddl_sqlite($ddl); $p->exec($c); foreach ($ix as $x) $p->exec($x); };
+$r = mig_sayfa(['csrf' => csrf(), 'ne' => 'cari']);
+ok('POST ne=cari: 3 tablo oluşturuldu, sonuç satırları görünür, genel kolon migrasyonu ÇALIŞMADI', $r['hata'] === null
+    && str_contains($r['html'], 'Son çalıştırma sonucu') && substr_count($r['html'], 'cari_kartlar: olusturuldu') === 1 && !str_contains($r['html'], 'Çalıştırma Sonucu</h2>'), (string)$r['hata']);
+ok('veri: 3 tablo + ödeme şekli tohumu 6', cari_hazir(db()) && siparis_test_say(db(), 'cari_tanimlar', "tur = 'odeme_sekli'") === 6);
+$r = mig_sayfa();
+ok('sonraki GET: cari kartı HAZIR (kapalı, ✓ Hazır)', preg_match('/<details class="card mg-kart mg-hazir" id="cari" style=/', $r['html']) === 1);
 
 siparis_test_bitir();

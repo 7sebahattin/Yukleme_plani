@@ -88,6 +88,7 @@ declare -A PHP_HARIC=(
 #   beyan_workspace_permissions_smoke.js - (beyan_workspace_render.php kendisi)
 #   beyan_workspace_smoke.js ......... -  (satır içi fixture)
 #   beyan_yazdir_smoke.js ............ -  (beyan_ui_smoke.php --render-liste kendisi)
+#   cari_ui_smoke.js ................. -  (kendi köprü sunucusu: scripts/_cari_e2e_sunucu.js + dosya SQLite; gerçek cari_*.php + assets/cari.js)
 #   bottomnav_smoke.js ............... BOTTOMNAV_OUT=<tmp> php scripts/bottomnav_render.php  (test de BOTTOMNAV_OUT ile)
 #   buton_gorunum_smoke.js ........... PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun pdks_puantaj_dialog_render.php > _test_puantaj_liste.html
 #   export_menu_smoke.js ............. export_menu_render.php > _test_export_menu.html
@@ -215,7 +216,7 @@ else
         done
     fi
     if [ "$JS_AC" = 1 ]; then
-        for f in scripts/*.js; do TESTLER+=("$f"); done
+        for f in scripts/*.js; do case "$(basename "$f")" in _*) continue ;; esac; TESTLER+=("$f"); done   # _*.js = yardımcı (test değil)
     fi
     shopt -u nullglob
 fi

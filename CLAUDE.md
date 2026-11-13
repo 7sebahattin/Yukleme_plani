@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v521` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v522` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -30,6 +30,7 @@ Sürüm sürüm modül kuralları token tasarrufu için `.claude/skills/<ad>/SKI
 | `excel-export` | Excel İndir — CSV + XLSX |
 | `db-yedekleri` | Veritabanı Yedekleri |
 | `bottomnav` | Mobil Alt Çubuk (bottomnav) |
+| `cari-modulu` | Cari İşlemler (cari_*; ledger, tahsilat/virman, ekstre) |
 
 ---
 
@@ -52,6 +53,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Raporlar | `reports` · `raporlar` · `rapor_malzeme` · `rapor_yazdir` · `kantar_raporu` | `xlsx_export` | — | `rapor_malzeme_xlsx_smoke` |
 | Siparişler | `siparisler` · `siparis_view/yukle/kaydet/pkl/belge/dosya/zip/beyan_bagla/ayarlar/yazdir/cari` · `_siparis_liste` | `siparis_core` · `siparis_pdf` · `siparis_eslestir` · `siparis_pkl` · `siparis_beyan` · `siparis_yazdir` · `siparis_cari` · `siparis_evrak` | `siparis.css` · `siparis.js` · `siparis_yazdir.js` · `nav-icons/siparis.svg` · `templates/excel/pkl_v14_blank.xlsx` | `siparis_core_smoke` · `siparis_pdf_smoke` · `siparis_pkl_smoke` · `siparis_ui_smoke`(`.js`) · `siparis_gate_static_smoke` · `siparis_yazdir_smoke`(`.js`) · `siparis_pkl_mail_smoke` · `siparis_cari_smoke` |
 | Frugro Siparişler (v512 → v515 OGL eşi) | `frugro_siparis` (liste, 3 bölüm) · `frugro_view` (detay, 7 adım) · `frugro_pkl` · `frugro_invoice` · `frugro_yukle` (Order Log xlsx) · `frugro_kaydet` · `frugro_mail` · `frugro_ayarlar` · `frugro_yazdir` · `frugro_paylas` · `frugro_eml` · `frugro_zip` · `_frugro_liste` · `_frugro_mail_kart` · nav anahtarı `frugro` (Roller'de KENDİ satırı `siparis.frugro.*`; Frugro satırı öncesi kaydedilmiş rol OGL'den türetir — `role_frugro_derive`) | `frugro_core` (durum yazmanın TEK yolu `frg_durum_degistir`) · `frugro_ui` · `frugro_detay` · `frugro_pkl` · `frugro_invoice` · `frugro_mail` · `frugro_yazdir` · `frugro_wp` | `frugro*.css/js` · `nav-icons/frugro.svg` | `frugro_{core,ui,liste,detay,pkl,invoice,mail,gate_static}_smoke` · `role_frugro_matrix_smoke` · `frugro_liste_smoke.js` · `frugro_detay_smoke.js` · `frugro_ui_render` |
+| Cari İşlemler (yalnız admin) | `cari_kartlari` · `cari_fisler` · `cari_dekontlar` · `cari_tanimlari` · `cari_ekstre` · `cari_kaydet` (TEK yazma ucu, POST) | `cari_core` · `cari_ui` | `cari.css` · `cari.js` | `cari_{core,gate_static,ui}_smoke` · `cari_ui_smoke.js` (gerçek PHP köprüsü) |
 | Yönetim | `definitions` · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
 | **Kaldırılan / 410 tombstone** | `admin_db_backup_download` · `hesap_sahipsiz` · `depo_tasima` · `firma_eslestirme` · `fix_brand` · `repair_xz_tables` · `faz8b_migrate` · `record_new` | — | — | `rol_kapilari_smoke` (değişmezleri denetler) |
 | Klasörler | `scripts/` (testler + `create_admin_user`, `deploy*`, `db_backup_cron`) · `scripts/arsiv/` (biten tek seferlik araçlar; çalıştırılmaz) · `docs/` · `docs/arsiv/` (biten faz/sprint belgeleri) · `tools/arsiv/` · `templates/excel/` · `storage/` (yedekler) · `uploads/` · `vendor/` | | | |
@@ -219,6 +221,7 @@ kantar_gruplar / kantar_kayitlar
 customs_declarations -- Beyanlar (+ vehicle_plate, hks_durum)
 hks_firmalar / hks_taslaklar / hks_gonderilenler / hks_kv   -- Hal Kayıt modülü
 beyan_hks_bildirim  -- Beyan ↔ HKS bildirim bağı ve geçmişi
+cari_kartlar / cari_hareketler / cari_tanimlar  -- Cari İşlemler (hareketler DEĞİŞMEZ ledger; şema yalnız migrate.php kartı)
 hks_eslesme         -- Serbest metin ↔ HKS katalog id eşlemeleri (öğrenilen)
 ```
 
@@ -265,9 +268,11 @@ $net  = round(max(0, $brut - $dara), 3);
 
 ### Şema Migrasyon Paneli görünümü (v388)
 
-`migrate.php` kartları (22 adet) `mg_kart_ac('<id>')` / `mg_kart_kapat()` ile sarılır: kartın KENDİ çıktısında `✓` var ve `✗` yoksa kart **hazır** sayılır → kapalı `<details>` tek satıra iner (başlık + "✓ Hazır" rozeti); eksik olan AÇIK kalır. Üstte "N / 21 kart hazır" özeti + "Tümünü aç" düğmesi; `migrate.php#siparis-sofor` gibi bağlantılar kapalı kartı açar. **POST sonrası hiçbir kart kapanmaz** (migrasyon sonuç satırları görünsün). **Hiçbir kart / POST dalı / migrasyon fonksiyonu KALDIRILMADI** — ayrı veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur; birçok statik smoke (`ne=` dalları, tek çağıran = migrate.php) bunu sabitler. Yeni kart eklerken `<div class="card" …>` yerine `<?php mg_kart_ac('id'); ?>` … `<?php mg_kart_kapat(); ?>` kullan ve kartın çıktısına durum için `✓`/`✗` bas (hazırsa yalnız `✓`). Test: `php scripts/migrate_panel_smoke.php` (migrate.php'yi bellek içi SQLite'ta gerçekten çalıştırır).
+`migrate.php` kartları (28 adet) `mg_kart_ac('<id>')` / `mg_kart_kapat()` ile sarılır: kartın KENDİ çıktısında `✓` var ve `✗` yoksa kart **hazır** sayılır → kapalı `<details>` tek satıra iner (başlık + "✓ Hazır" rozeti); eksik olan AÇIK kalır. Üstte "N / <toplam> kart hazır" özeti + "Tümünü aç" düğmesi; `migrate.php#siparis-sofor` gibi bağlantılar kapalı kartı açar. **POST sonrası hiçbir kart kapanmaz** (migrasyon sonuç satırları görünsün). **Hiçbir kart / POST dalı / migrasyon fonksiyonu KALDIRILMADI** — ayrı veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur; birçok statik smoke (`ne=` dalları, tek çağıran = migrate.php) bunu sabitler. Yeni kart eklerken `<div class="card" …>` yerine `<?php mg_kart_ac('id'); ?>` … `<?php mg_kart_kapat(); ?>` kullan ve kartın çıktısına durum için `✓`/`✗` bas (hazırsa yalnız `✓`). Test: `php scripts/migrate_panel_smoke.php` (migrate.php'yi bellek içi SQLite'ta gerçekten çalıştırır).
 
 ## Muhasebe Yer Tutucu Sayfaları (v435 → v439)
+
+> **Cari İşlemler grubunun 4 sayfası (`cari_kartlari/fisler/dekontlar/tanimlari`) artık ÇALIŞAN modüldür** (yer tutucu değil; `cari-modulu` skill'i) — kapı yine `is_admin()`; `nav_muhasebe_static_smoke` bunları `cari_core` içerenler olarak ayrı denetler.
 
 Sidebar'daki Cari İşlemler vb. gruplar (yalnız `is_admin()`) `nav_muhasebe_gruplari()` (config/helpers.php) TEK kaynağından beslenir; yeni sayfa BURAYA eklenir. Her sayfa `require_login()` + `is_admin()` kapısı taşır; içerik yoksa "Bu bölüm hazırlanıyor." kartı. **v439: mevcut klonu olan 12 sayfa 302 ile o sayfaya yönlendirir** (kapı kalır): kantar_fisleri, mal_kabul_fisleri → `kantar.php` · veritabani_islemleri → `admin_db_backups.php` · kullanici_tanimlari → `users.php` · depo_tanimlari → `definitions.php?type=depo` · raporlar_listeler → `reports.php` · alinan_siparis_fisleri → `urun_siparis.php` · arac_yukleme_fisleri → `records.php` · palet_fisleri → `cikmalar.php` · ihracat_faturasi_maliyeti → `maliyet.php` · beyanname_siparis_proforma → `beyanlar.php` · sube_degistirme → `depo_sec.php`. Diğerleri yer tutucu kalır. `nav_aktif_anahtar()` bu sayfalarda dosya slug'ı döndürür. `sw.js` `SW_MUHASEBE_RE` bu adları önbelleğe almaz (stok.php/kantar.php vb. kapsanmaz). Test: `php scripts/nav_muhasebe_static_smoke.php`.
 
