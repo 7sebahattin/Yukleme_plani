@@ -68,6 +68,7 @@ foreach (pdks_gunluk_tip_sutunlari() as $tc) $toplamTip[$tc['sutun']] = 0;
 $toplamEksik = 0;
 $toplamFm = 0;   // v407: toplam fazla mesai saati
 $toplamSvB = 0; $toplamSvK = 0;   // v512: toplam servis adedi (Büyük / Küçük)
+$toplamCift = 0;   // çift yevmiyeli kişi sayısı (Toplam İşçi'nin İÇİNDE — ayrıca toplanmaz)
 
 foreach ($satirlar as $r) {
     $toplamIsci += (int)$r['toplam_isci'];
@@ -76,8 +77,10 @@ foreach ($satirlar as $r) {
     $toplamFm    += (int)($r['fm_saat'] ?? 0);
     $toplamSvB   += (int)($r['servis_buyuk'] ?? 0);
     $toplamSvK   += (int)($r['servis_kucuk'] ?? 0);
+    $toplamCift  += (int)($r['cift'] ?? 0);
 }
 $svGoster = ($toplamSvB + $toplamSvK) > 0;   // v512: ayda servis varsa Servis — Büyük / Küçük sütunları açılır
+$ciftGoster = $toplamCift > 0;   // çift yevmiyeli kişi varsa "Çift Yevmiye" sütunu açılır (Toplam İşçi'ye katılmaz)
 
 // Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
 $tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
@@ -105,6 +108,9 @@ if (isset($_GET['xlsx'])) {
         $sutunlar[] = $kol((string)$tc['kisa'], 'tamsayi', true, $rn['ac'], $rn['koyu']);
     }
     $sutunlar[] = $kol('Toplam İşçi', 'tamsayi', true);
+    if ($ciftGoster) {   // bilgi: Toplam İşçi'nin kaçı çift yevmiyeli
+        $sutunlar[] = $kol('Çift Yevmiye (kişi)', 'tamsayi', true, 'FFFEF3C7', 'FFFCD34D');
+    }
     if ($svGoster) {   // v512: servis adedi (+ finansal yetkide tutarı); Toplam İşçi'ye katılmaz
         $sutunlar[] = $kol('Servis — Büyük (adet)', 'tamsayi', true, 'FFE0F2FE', 'FFA5D4F0');
         $sutunlar[] = $kol('Servis — Küçük (adet)', 'tamsayi', true, 'FFE0F2FE', 'FFA5D4F0');
@@ -137,6 +143,7 @@ if (isset($_GET['xlsx'])) {
         $sat = [$r['tarih'], (string)$r['cavus_adi'], (string)$r['cavus_kodu']];
         foreach ($tipSut as $tc) $sat[] = (int)($r[$tc['sutun']] ?? 0);
         $sat[] = (int)$r['toplam_isci'];
+        if ($ciftGoster) $sat[] = (int)($r['cift'] ?? 0);
         if ($svGoster) {
             $sat[] = (int)($r['servis_buyuk'] ?? 0);
             $sat[] = (int)($r['servis_kucuk'] ?? 0);
@@ -245,6 +252,12 @@ render_flash();
             <div class="lbl">Toplam İşçi</div>
             <div class="val"><?= $toplamIsci ?></div>
         </div>
+        <?php if ($ciftGoster): ?>
+        <div class="pdks-kiosk-counter-box">
+            <div class="lbl">Çift Yevmiye</div>
+            <div class="val"><?= $toplamCift ?></div>
+        </div>
+        <?php endif; ?>
         <?php if ($svGoster): ?>
         <div class="pdks-kiosk-counter-box">
             <div class="lbl">Servis — Büyük</div>
@@ -281,6 +294,7 @@ render_flash();
         <th>Çavuş</th>
         <?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?>
         <th>Toplam İşçi</th>
+        <?php if ($ciftGoster): ?><th class="num">Çift Yevmiye</th><?php endif; ?>
         <?php if ($svGoster): ?><th class="num">Servis — Büyük</th><th class="num">Servis — Küçük</th><?php endif; ?>
         <th>Hakediş</th>
         <th>İlk Giriş</th>
@@ -316,6 +330,9 @@ render_flash();
         </td>
         <?php foreach ($tipSut as $tc): ?><td><?= (int)($r[$tc['sutun']] ?? 0) ?></td><?php endforeach; ?>
         <td><strong><?= (int)$r['toplam_isci'] ?></strong><?php if ((int)($r['karisik'] ?? 0) > 0): ?><div class="muted" style="font-size:.78rem"><?= (int)$r['karisik'] ?> Karışık</div><?php endif; ?></td>
+        <?php if ($ciftGoster): $ciftN = (int)($r['cift'] ?? 0); $ciftKir = pdks_rapor_cift_tip_metni((array)($r['cift_tipler'] ?? [])); ?>
+        <td class="num ctd-cift"><?php if ($ciftN > 0): ?><strong><?= $ciftN ?></strong><?php if ($ciftKir !== ''): ?><div class="muted" style="font-size:.78rem"><?= h($ciftKir) ?></div><?php endif; ?><?php else: ?><span class="muted">0</span><?php endif; ?></td>
+        <?php endif; ?>
         <?php if ($svGoster): foreach (['buyuk', 'kucuk'] as $svAn): $svAdet = (int)($r['servis_' . $svAn] ?? 0); $svTutar = $r['servis_' . $svAn . '_tutar'] ?? null; ?>
         <td class="num ctd-sv"><?php if ($svAdet > 0): ?><strong><?= $svAdet ?></strong><?php if ($finansalGosterilebilir && $svTutar !== null && $hakedis !== null): ?><div class="muted" style="font-size:.78rem"><?= h(pdks_rapor_para_formatla($svTutar)) ?> <?= h($hakedis['currency']) ?></div><?php endif; ?><?php else: ?><span class="muted">0</span><?php endif; ?></td>
         <?php endforeach; endif; ?>

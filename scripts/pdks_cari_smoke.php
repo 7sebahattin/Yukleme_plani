@@ -486,8 +486,8 @@ foreach ([
 $ekK = pdks_cari_ekstre($mehmetId, null, null, db());
 $hk = null; foreach ($ekK['TRY'] as $r) if ($r['tip'] === 'HAKEDIS') $hk = $r;
 ok('24. hakediş satırı kirilim taşıyor', is_array($hk['kirilim'] ?? null), json_encode($hk));
-ok('24. Kadın: 2 kişi, 2800,00 TL', ($hk['kirilim']['tipler']['Kadın'] ?? null) === ['adet' => 2, 'yarim' => 0, 'kurus' => 280000], json_encode($hk['kirilim'] ?? null));
-ok('24. Erkek: 2 kişi (1 yarım), FM HARİÇ 2250,00 TL', ($hk['kirilim']['tipler']['Erkek'] ?? null) === ['adet' => 2, 'yarim' => 1, 'kurus' => 225000], json_encode($hk['kirilim'] ?? null));
+ok('24. Kadın: 2 kişi, 2800,00 TL', ($hk['kirilim']['tipler']['Kadın'] ?? null) === ['adet' => 2, 'yarim' => 0, 'cift' => 0, 'kurus' => 280000], json_encode($hk['kirilim'] ?? null));
+ok('24. Erkek: 2 kişi (1 yarım), FM HARİÇ 2250,00 TL', ($hk['kirilim']['tipler']['Erkek'] ?? null) === ['adet' => 2, 'yarim' => 1, 'cift' => 0, 'kurus' => 225000], json_encode($hk['kirilim'] ?? null));
 ok('24. Fazla mesai tek kalemde: 3 saat, 150,00 TL', ($hk['kirilim']['fm_saat'] ?? null) === 3 && ($hk['kirilim']['fm_kurus'] ?? null) === 15000);
 ok('24. Diğer (çavuş ücreti) 500,00 TL', ($hk['kirilim']['diger_kurus'] ?? null) === 50000);
 $kolK = pdks_cari_kirilim_kolonlar($ekK['TRY']);

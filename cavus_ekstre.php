@@ -66,6 +66,9 @@ if (isset($_GET['xlsx'])) {
         $kBaslik = pdks_cari_kirilim_basliklar($kol);
         $sutunlar = [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'İşlem Türü'], ['baslik' => 'Belge / Referans No'], ['baslik' => 'Açıklama']];
         foreach ($kBaslik as $kb) $sutunlar[] = $kb['tur'] === 'adet' ? ['baslik' => $kb['ad'], 'tip' => 'tamsayi', 'topla' => true] : ['baslik' => $kb['ad'], 'tip' => 'tutar', 'topla' => true];
+        // Yarım / Çift ayrı adet sütunları (tüm tiplerin toplamı; yalnız dönemde varsa) — tip sütunları bu kişileri İÇERİR
+        $sBaslik = pdks_cari_kirilim_sinif_basliklar($kol);
+        foreach ($sBaslik as $sb) $sutunlar[] = ['baslik' => $sb['ad'], 'tip' => 'tamsayi', 'topla' => true];
         $sutunlar[] = ['baslik' => 'Alacak', 'tip' => 'tutar', 'topla' => true];
         $sutunlar[] = ['baslik' => 'Borç', 'tip' => 'tutar', 'topla' => true];
         $sutunlar[] = ['baslik' => 'Bakiye', 'tip' => 'tutar'];
@@ -74,10 +77,11 @@ if (isset($_GET['xlsx'])) {
             'aciklama' => 'Dönem: ' . $donem . ' · Bakiye: + Alacak (çavuşun alacağı) / − Borç (avans)' . ($_ekstreBaslangicFiltreli ? ' · Koşan bakiye dönem başında 0\'dan başlar' : ''),
             'bilgi' => $bilgi, 'toplam' => true,
             'sutunlar' => $sutunlar,
-            'satirlar' => array_map(function ($x) use ($kol) {
+            'satirlar' => array_map(function ($x) use ($kol, $sBaslik) {
                 $kd = array_map(fn($v) => is_array($v) ? $v['adet'] : ($v === null ? '' : $v / 100), pdks_cari_kirilim_degerleri($x, $kol));
                 // adet → tamsayı; tutar → kuruştan TL
-                return [$x['tarih'], $x['tip_etiket'], $x['belge'], $x['aciklama'], ...$kd, $x['artis'] ?? '', $x['azalis'] ?? '', $x['kosan_bakiye']];
+                $sd = array_map(fn($v) => $v === null ? '' : $v, pdks_cari_kirilim_sinif_degerleri($x, $sBaslik));
+                return [$x['tarih'], $x['tip_etiket'], $x['belge'], $x['aciklama'], ...$kd, ...$sd, $x['artis'] ?? '', $x['azalis'] ?? '', $x['kosan_bakiye']];
             }, $satirlar),
         ];
     }
