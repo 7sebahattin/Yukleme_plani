@@ -45,6 +45,8 @@ foreach ($cards as $c) { if ($c['eksik_cikis']) $eksik++; }
 // v512: servis adetleri — ekran detayı ile AYNI kaynak
 $svOturum = $session ? (pdks_rapor_servis_oturum_toplu([(int)$session['id']], false, $pdo)[(int)$session['id']] ?? null) : null;
 $svB = (int)($svOturum['BUYUK']['adet'] ?? 0); $svK = (int)($svOturum['KUCUK']['adet'] ?? 0);
+// Çift yevmiyeli kişi sayısı — ekran detayı ile AYNI kaynak
+$ciftN = $session ? (int)(pdks_rapor_cift_oturum_toplu([(int)$session['id']], [], $pdo)[(int)$session['id']]['toplam'] ?? 0) : 0;
 
 $ay = trim((string)($_GET['ay'] ?? ''));
 if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $ay)) {
@@ -82,6 +84,7 @@ render_print_page_start('Çavuş Kart Dökümü', 'account', $mode, $orientation
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Kart / Katılım</div><div class="psb-value"><?= count($cards) ?></div></div>
         <div class="print-summary-box<?= $eksik > 0 ? ' psb-warn' : ' psb-ok' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $eksik ?></div></div>
+        <?php if ($ciftN > 0): ?><div class="print-summary-box"><div class="psb-label">Çift Yevmiye</div><div class="psb-value"><?= $ciftN ?></div></div><?php endif; ?>
         <?php if ($svB + $svK > 0): ?><div class="print-summary-box"><div class="psb-label">Servis — Büyük</div><div class="psb-value"><?= $svB ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Servis — Küçük</div><div class="psb-value"><?= $svK ?></div></div><?php endif; ?>
         <div class="print-summary-box"><div class="psb-label">Oturum</div><div class="psb-value"><?= h($session['oturum_durumu'] === 'closed' ? 'Kapalı' : 'Açık') ?></div></div>

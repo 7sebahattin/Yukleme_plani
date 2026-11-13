@@ -1289,6 +1289,65 @@ function pdks_rapor_servis_oturum_toplu(array $sessionIds, bool $finansal, PDO $
 }
 
 /**
+ * Çift yevmiye (kişi başı bayrak) oturum bazlı KİŞİ sayısı — Toplu Döküm ekran/yazdırma/XLSX/detay TEK kaynağı.
+ * Sayım = TEK sınıflandırıcının (pdks_faz8b_donem_sorgu üzerinden) faz8b['cift'] === true dediği ETKİN dönemler; Rampacı
+ * yevmiye önceliği ve diğer kurallar orada (burada kopyalanmaz). Ön süzgeç: bayrağı 1 olan etkin dönemi bulunan
+ * oturumlar tek sorguda bulunur, YALNIZ onlar için tek sınıflandırıcı sorgusu çalışır (N+1 yok; çiftsiz ayda
+ * sınıflandırıcı hiç çalışmaz). Toplam İşçi'ye EKLENMEZ ("bunların kaçı çift" bilgisi). Finansal yetkiye bağlı değil.
+ * $tipIds = [tip kodu => worker_types.id] (pdks_gunluk_tip_kayit() kodları); verilmeyen tip kırılıma girmez.
+ * Kapı: çift kolonu + Faz 8B şeması hazır değilse boş dizi. SALT OKUNUR.
+ * @return array<int, array{toplam:int, tipler:array<string,int>}> [session_id => ...] (yalnız çifti olan oturumlar)
+ */
+function pdks_rapor_cift_oturum_toplu(array $sessionIds, array $tipIds, PDO $pdo): array
+{
+    $sessionIds = array_values(array_unique(array_filter(array_map('intval', $sessionIds), static fn($i) => $i > 0)));
+    if (!$sessionIds || !function_exists('pdks_cift_hazir') || !function_exists('pdks_faz8b_sema_hazir')
+        || !defined('PDKS_CIFT_KOLON') || !pdks_cift_hazir($pdo) || !pdks_faz8b_sema_hazir($pdo)) {
+        return [];
+    }
+    $etkin = pdks_gunluk_faz8j_etkin_kosul($pdo, 'p');
+    $ph = implode(',', array_fill(0, count($sessionIds), '?'));
+    $st = $pdo->prepare('SELECT DISTINCT p.session_id FROM daily_worker_work_periods p
+                          WHERE p.session_id IN (' . $ph . ') AND p.' . PDKS_CIFT_KOLON . ' = 1 AND ' . $etkin);
+    $st->execute($sessionIds);
+    $adaylar = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    if (!$adaylar) return [];
+
+    $tipKayit = function_exists('pdks_gunluk_tip_kayit') ? pdks_gunluk_tip_kayit() : [];
+    $idSutun = [];
+    foreach ($tipIds as $kod => $id) {
+        if ((int)$id > 0 && isset($tipKayit[$kod]['sutun'])) $idSutun[(int)$id] = (string)$tipKayit[$kod]['sutun'];
+    }
+
+    $phA = implode(',', array_fill(0, count($adaylar), '?'));
+    $out = [];
+    foreach (pdks_faz8b_donem_sorgu($pdo, 'p.session_id IN (' . $phA . ') AND p.' . PDKS_CIFT_KOLON . ' = 1', $adaylar) as $d) {
+        if (($d['faz8b']['cift'] ?? false) !== true) continue;
+        $sid = (int)$d['session_id'];
+        $out[$sid] ??= ['toplam' => 0, 'tipler' => []];
+        $out[$sid]['toplam']++;
+        $sutun = $idSutun[(int)($d['worker_type_id_snapshot'] ?? 0)] ?? null;
+        if ($sutun !== null) $out[$sid]['tipler'][$sutun] = ($out[$sid]['tipler'][$sutun] ?? 0) + 1;
+    }
+    return $out;
+}
+
+/**
+ * Çift yevmiye tip kırılımı metni: [sutun => n] → "Kadın 37 · Erkek 21" (tip kayıt defteri sırasıyla).
+ * Birden az tip varsa '' (tek tipte kırılım gereksiz — sayfa göstermez).
+ */
+function pdks_rapor_cift_tip_metni(array $tipler): string
+{
+    $tipler = array_filter(array_map('intval', $tipler), static fn($n) => $n > 0);
+    if (count($tipler) < 2) return '';
+    $p = [];
+    foreach (pdks_gunluk_tip_sutunlari() as $tc) {
+        if (isset($tipler[$tc['sutun']])) $p[] = $tc['kisa'] . ' ' . $tipler[$tc['sutun']];
+    }
+    return implode(' · ', $p);
+}
+
+/**
  * Bir ay içindeki çavuş/gün oturumlarını tek toplu sorguda döndürür.
  * İşçi sayısı Faz 8A work-period katılımlarından gelir.
  *
@@ -1417,6 +1476,15 @@ function pdks_rapor_cavus_toplu_dokum(
             $r['servis_' . $an] = $sv ? (int)$sv[$tur]['adet'] : 0;
             $r['servis_' . $an . '_tutar'] = $sv ? $sv[$tur]['tutar'] : null;
         }
+    }
+    unset($r);
+
+    // Çift yevmiye — kişi sayısı + tip kırılımı (Toplam İşçi'ye KATILMAZ; finansal kapıya bağlı değil).
+    $ciftMap = $satirlar ? pdks_rapor_cift_oturum_toplu(array_column($satirlar, 'session_id'), $tipIds, $pdo) : [];
+    foreach ($satirlar as &$r) {
+        $c = $ciftMap[$r['session_id']] ?? null;
+        $r['cift'] = $c ? (int)$c['toplam'] : 0;
+        $r['cift_tipler'] = $c ? $c['tipler'] : [];
     }
     unset($r);
 
