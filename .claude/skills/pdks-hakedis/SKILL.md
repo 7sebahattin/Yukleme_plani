@@ -242,3 +242,12 @@ v316 ek bir kısaltma koruması yuvarlıyordu — v317'de ikisi de bu simetrik k
   (final) hakedişler donmuştur, değişmez; taslaklar yeniden hesaplanınca yeni kuralı alır.
 - Ekran süresi: `pdks_faz8b_sure_metni()` → "9s 00dk (ham 9s 16dk)"; Mesai Detayı Süre sütunu da etkin süre + `.pdks-sure-ham` notu.
 - Test: `php scripts/pdks_saat_basi_tolerans_smoke.php`.
+
+### Çift Yevmiye — rapor görünürlüğü ve kalıntı temizliği (v523)
+- Sahip kararları (13.11.2026): çift = Tam × 2, saat ekranlarında 9 sa / FM 0 (18 sa eşdeğeri YOK), çift kişinin 9 sa üstü FM'si ÖDENMEZ, Yöntem B'de çift gün 1 kişi-gün.
+- Toplu Döküm: tek "Çift Yevmiye" sütunu (Toplam İşçi'den sonra, Servis'ten önce) + çok tipte soluk kırılım; tek kaynak `pdks_rapor_cift_oturum_toplu()` (config/pdks_rapor.php; ön süzgeç SQL + tek `pdks_faz8b_donem_sorgu`, N+1 yok). Toplam İşçi = COUNT(p.id) AYNEN (çiftleri içerir). Çiftsiz ayda sütun açılmaz. Ekran/yazdır/XLSX/detay/detay yazdır.
+- Çavuş Ekstresi: kırılımda `cift` sayacı (donmuş `attendance_class_snapshot='cift'`), ekranda "Kadın 37 (5 çift)"; XLSX'te satır toplamı Yarım (kişi) / Çift Yevmiye (kişi) sütunları (yalnız o sınıf varsa).
+- Dikkat: Toplu Döküm çift sayısı CANLI dönemden, Ekstre DONMUŞ hakedişten gelir; kesinleşmeden sonra bayrak değişirse farklı görünebilir.
+- K5: Tam fiyatı yokken çift kişide eksik mesajı "… — Tam Mesai fiyatı yok (çift yevmiye Tam × 2 ödenir)".
+- K6: Fiyat Geçmişi'nde eski `double_day_*` → "devre dışı (v503)" (eski değer title'da); POST `double_day_*` okumaları ve `data-cift*` kaldırıldı. Doğrulayıcı/`oran_ekle` double_day dalı testlerle sabit — SİLME. Mesai Değerlendirme'deki ölü "Çift adayı"/"Çift sonrası FM" dalları kaldırıldı.
+- Test: `php scripts/pdks_toplu_dokum_cift_smoke.php` · `pdks_cari_smoke` · `pdks_cift_isaret_smoke` · `node scripts/pdks_cavus_fiyat_smoke.js`
