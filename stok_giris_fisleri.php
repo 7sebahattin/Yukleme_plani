@@ -1,11 +1,29 @@
 <?php
-// Stok Giriş Fişleri — yer tutucu sayfa (içerik sonra eklenecek). Yalnız yönetici.
+// =========================================================
+// stok_giris_fisleri.php — Stok Giriş Fişleri (Giriş fişi — alış, açılış/devir, sayım fazlası; isteğe bağlı cari (alacak dekontu) ve Kantardan doldur).
+//   Sol liste (GET süzgeç: ?ara= &durum=tumu|gecerli|iptal &donem=tumu|30g|bu_ay|gecen_ay &neden=<id>) + sağ panel:
+//   ?id=N detay · ?yeni=1 form · ?kopya=ID kopya formu · ?yeni=1&kantar_id=ID kantar önerili form
+//   ?parca=detay&id=N kısmi yanıt (header/footer YOK) · ?parca=kantar_oneri&kantar_id=ID (JSON)
+// YALNIZ GET; yazma (fis_kaydet / fis_iptal) stok_kaydet.php'de. Kapı: is_admin() tabanlı stok_kapi('read'); tablo yoksa şema uyarı kartı.
+// Ortak gövde config/stok_ui.php stok_fis_sayfa_govde(); kurallar config/stok_core.php (Parça B).
+// =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/stok_core.php';
+require_once __DIR__ . '/config/stok_ui.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+stok_kapi('read');
+stok_no_store();
+$pdo = db();
+stok_sayfa_kapisi($pdo);
+
+if (stok_fis_parca($pdo, 'giris')) exit;   // kısmi yanıt
+
 render_header('Stok Giriş Fişleri');
-?>
-<div class="card"><h2>Stok Giriş Fişleri</h2><p>Bu bölüm hazırlanıyor.</p></div>
-<?php render_footer();
+stok_assets();
+render_flash();
+echo stok_fis_sayfa_govde($pdo, 'giris');
+stok_scripts();
+render_footer();
