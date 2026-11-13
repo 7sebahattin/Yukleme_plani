@@ -54,6 +54,7 @@ function role_permission_matrix(): array {
             $row('quick_cost','Hızlı Maliyet','hizli_maliyet.php',['read'=>$a('hizli_maliyet.read'),'create'=>$a('hizli_maliyet.write','Kaydet / kopyala'),'delete'=>$a('hizli_maliyet.delete')],[],'Eski Maliyet izinleri bunu açmaz. Kayıt tablosunun kurulumu yalnız sistem yöneticisine açıktır.'),
             $row('stok','Malzeme Stok','malzeme_stok.php',['read'=>$a('stok.read'),'create'=>$a('stok.create')],[],'Hareket düzenleme, silme ve taşıma yalnız sistem yöneticisine açıktır.'),
             $row('hesap','Hesap','hesap.php',$crud('hesap')+['approve'=>$a('hesap.approve','Onayla'),'pay'=>$a('hesap.pay','Ödendi işaretle'),'admin'=>$a('hesap.admin','Tüm personelin hesaplarını yönet')],[],'Normal erişim yalnız kendi kayıtlarıdır. Tüm personel için hesap yönetimi gerekir.'),
+            $row('uretim','Günlük Üretim','gunluk_uretim.php',['read'=>$a('uretim.read'),'create'=>$a('uretim.write','Veri gir (Excel / toplu / elle)'),'delete'=>$a('uretim.delete')],[],'İşlenen mal ve işçi başı verim raporu. Sayfaya Personel Takibi sayfasından ulaşılır; Personel Takibi için de Gör izni verin. Yönetici her zaman erişir.'),
             $row('attendance','Personel Takibi','personel_takip.php',['read'=>$a('attendance.hub.read')],$pdks,'Gör, genel ekranı açar. Alt sayfa izinleri ayrı seçilir; alt sayfayı gören genel ekrana da ulaşabilir.'),
         ],
         'Yönetim'=>[

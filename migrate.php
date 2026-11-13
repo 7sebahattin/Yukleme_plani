@@ -27,6 +27,7 @@ require_once __DIR__ . '/config/mail_core.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/beyansiz_yukleme.php';   // v498 Yükleme Bildir (beyansız yükleme) tablosu
 require_once __DIR__ . '/config/urun_siparis.php';   // v409 Ürün Siparişleri (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/uretim.php';   // v507 Günlük Üretim tabloları (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
@@ -120,6 +121,7 @@ $pdks_ters_results = []; $pdks_ters_ran = false;   // v354 Ters Kart Takip (4 ye
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 $pdks_yevmiye_results = []; $pdks_yevmiye_ran = false;   // v463 Rampacı yevmiye alanı
 $pdks_cift_results = []; $pdks_cift_ran = false;   // v503 çift yevmiye alanı
+$uretim_results = []; $uretim_ran = false;          // v507 Günlük Üretim tabloları
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
@@ -243,6 +245,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'pdks_cift', null, null,
                 ['operation' => 'add_column', 'column' => $pr['adim']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'uretim') {
+    csrf_check($_POST['csrf'] ?? null);
+    $uretim_ran     = true;
+    $uretim_results = uretim_migrate($pdo);
+    foreach ($uretim_results as $ur) {
+        if ($ur['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'uretim', null, null, ['operation' => 'create_table', 'table' => $ur['adim']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_yevmiye') {
@@ -1240,6 +1251,45 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <summary style="cursor:pointer;color:#555;">ALTER TABLE SQL'ini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_cift_kolon_tanimi() as [$pck, $pctanim]) { echo h('ALTER TABLE `' . PDKS_CIFT_TABLO . "` ADD COLUMN `{$pck}` {$pctanim};") . "\n"; }
+      ?></pre>
+    </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('uretim'); ?>
+    <h2 style="margin-top:0;">Günlük Üretim Tabloları (v507)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>uretim_gunluk</code> (gün + depo başına işlenen net kg / kasa / palet) ve
+      <code>uretim_gunluk_kalem</code> (Excel'deki ürün satırları). Mevcut hiçbir tabloya dokunulmaz. Kurulmadan
+      «Günlük Üretim» sayfaları net bir uyarı gösterir.
+      <?php if ($uretim_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($uretim_results as $ur): ?>
+        <br>&nbsp;&nbsp;<?= h($ur['adim']) ?>: <?= h($ur['durum']) ?> — <?= h($ur['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(uretim_tablolar()) as $utab): $ue = uretim_tablo_var($pdo, $utab); ?>
+          <tr>
+            <td><?= h($utab) ?></td>
+            <td style="color:<?= $ue ? '#1f9d55' : '#c0392b' ?>;font-weight:600;"><?= $ue ? '✓ Var' : '✗ Eksik' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="uretim">
+      <button type="submit" class="btn btn-primary">Günlük Üretim Tablolarını Kur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'ini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (uretim_tablolar() as $usql) echo h($usql) . ";\n\n";
       ?></pre>
     </details>
   <?php mg_kart_kapat(); ?>

@@ -1,0 +1,19 @@
+---
+name: gunluk-uretim
+description: Günlük Üretim (gunluk_uretim*.php, config/uretim.php, assets/uretim.js|css, assets/chart.umd.min.js, v507): günlük işlenen mal + işçi başı verim raporu, Excel/toplu/elle veri girişi. Bu dosyalara ya da yeni üretim/verim/maliyet ölçüsü eklerken kullan.
+---
+
+# Günlük Üretim (v507, Faz 1)
+
+Sahip isteği: günlük işlenen mal (net kg) ve personel takibinden gelen işçi/saat ile **işçi başı verim**. Faz 2 = işçilik maliyeti (işçi başı TL, kg başı TL), Faz 3 = satış fiyatı → kâr/zarar. Sistemde henüz üretim girişi yoktu; veri dışarıdan (Excel) gelir.
+
+- **Sayfalar:** `gunluk_uretim.php` (rapor: ay seçici, 4 KPI, etkileşimli günlük grafik, gün gün tablo, son 12 ay) · `gunluk_uretim_yukle.php` (giriş: Excel, toplu yapıştırma, tek gün elle, son girilenler + sil). Personel Takibi ailesi (`nav_ptak_sayfalari`), hub'da «ÜRETİM» kartı (`home-card home-card-uretim` — `class="home-card"` sayısı 11'de kalmalı, `pdks_takip_static_smoke`).
+- **Tablolar (yalnız migrate.php › «Günlük Üretim» kartı, `ne=uretim`; açık GO ile):** `uretim_gunluk` (UNIQUE gün+depo; net_kg/kasa/palet INT, kaynak excel|toplu|elle) ve `uretim_gunluk_kalem` (Excel ürün satırları; Faz 3'te fiyatla çarpılacak). Tablo yoksa sayfalar net uyarı verir, kırılmaz. Sayfalar `uretim_migrate` ÇAĞIRMAZ (test denetler).
+- **Yetki:** `uretim.read/write/delete` (katalog «Günlük Üretim», seed `$all_p`, matris satırı `uretim`). `can_uretim()` (config/uretim.php) TEK kapı: admin her zaman; write/delete okumayı da ister. Yetkisi olan ama Personel Takibi'ni göremeyen rol sayfaya menüden ulaşamaz (matris notu bunu söyler). Seed'de uretim.* `hizli_maliyet.*`'DEN ÖNCE durur (`rol_kapilari_smoke` son parçayı sabitler).
+- **Veri kaynağı tek yerde:** işçi sayısı `pdks_rapor_gunluk_trend()`, çalışma saati `pdks_faz8b_gun_mesai_ozeti()` (toleranslı, FM dahil). Burada süre/FM hesabı YAZMA. Şema yoksa `personel_var/saat_var=false` → oranlar «—».
+- **Oran kuralı (değiştirme):** ay satırı AĞIRLIKLIDIR (Σkg ÷ Σişçi-gün); günlük oranların ortalaması alınmaz. Yalnız hem malı hem işçi kaydı olan günler (`durum=tamam`) paya/paydaya girer; «mal var işçi yok» / «işçi var mal yok» günleri uyarı olarak sayılır.
+- **Excel okuyucu `uretim_excel_oku()`** iki biçimi tanır: günlük «Sipariş Durum Listesi» (2. satırda `İlk Tarih:… Son Tarih:…`, tek gün; ilk≠son REDDEDİLİR; alt toplam tutmazsa UYARI) ve toplu tablo (`Tarih` + `Net Kilo`). ReadDataOnly, formül HESAPLANMAZ, dosya diske yazılmaz (`move_uploaded_file` YOK). ⚠ «İlk» büyük noktalı İ ile gelir: tarih regex'i önce `uretim_fold()` ile katlar — PCRE `/i` işe yaramaz (test 3a yakaladı). Hücrelerde sondaki boşluk + palet metin olarak gelir (`uretim_metin/uretim_sayi`).
+- **Akış:** Önizle → (oturumda token'lı önizleme, 1 saat, depo değişirse geçersiz) → Kaydet. Aynı gün+depo varsa «üzerine yaz» işaretlenmeden YAZILMAZ; üzerine yazmada kalemler yenilenir, eski değer audit'te. Depo = `active_depot()` damgası. Audit `create/update/delete` modül `uretim_gunluk`.
+- **Grafik:** Chart.js 4.4.7 (MIT) YEREL `assets/chart.umd.min.js` (CDN YOK — çevrimdışı PWA + CSP bağımsız); JSON `#uretimVeri` (`JSON_HEX_TAG`). Çubuk = net kg, çizgi = seçilebilir ölçü (kg/işçi · kg/saat · kasa/işçi · işçi · saat) + kesikli ay ortalaması, ikinci eksen. Yeni grafik kütüphanesi ekleme; sürüm yükseltirken dosyayı npm paketinden (`dist/chart.umd.js`) al.
+- **Henüz YOK (sonraki fazlar):** XLSX/CSV dışa aktarma, yazdırma sayfası, işçilik maliyeti, fiyat/kâr-zarar, Mal Kabul/Paletleme'den otomatik üretim.
+- **Test:** `php scripts/uretim_smoke.php` (61: yardımcılar, toplu metin, günlük+toplu Excel (PhpSpreadsheet ile üretilir), kayıt/üzerine yaz/sil, 07.11.2026 örneği 94.697 kg ÷ 63 = 1.503 kg/işçi, 155 kg/saat, statik) · ilgili: `migrate_panel_smoke` (26 kart) · `rol_kapilari_smoke` · `role_permission_matrix_smoke` · `pdks_takip_static_smoke`.
