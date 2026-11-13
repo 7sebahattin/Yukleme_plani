@@ -118,6 +118,8 @@ foreach ($cards as $c) {
 // v512: servis adetleri (Büyük / Küçük) — Toplu Döküm ile AYNI kaynak (tutar bu sayfada gösterilmez: finansal kapısı yok)
 $svOturum = pdks_rapor_servis_oturum_toplu([(int)$session['id']], false, $pdo)[(int)$session['id']] ?? null;
 $svB = (int)($svOturum['BUYUK']['adet'] ?? 0); $svK = (int)($svOturum['KUCUK']['adet'] ?? 0);
+// Çift yevmiyeli kişi sayısı — Toplu Döküm ile AYNI kaynak
+$ciftN = (int)(pdks_rapor_cift_oturum_toplu([(int)$session['id']], [], $pdo)[(int)$session['id']]['toplam'] ?? 0);
 ?>
 
 <div class="pdks-kiosk-counters rapor-genis" style="margin-bottom:16px">
@@ -131,6 +133,9 @@ $svB = (int)($svOturum['BUYUK']['adet'] ?? 0); $svK = (int)($svOturum['KUCUK']['
             <div class="lbl">Eksik Çıkış</div>
             <div class="val"><?= $eksik ?></div>
         </div>
+        <?php if ($ciftN > 0): ?>
+        <div class="pdks-kiosk-counter-box"><div class="lbl">Çift Yevmiye</div><div class="val"><?= $ciftN ?></div></div>
+        <?php endif; ?>
         <?php if ($svB + $svK > 0): ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Servis — Büyük</div><div class="val"><?= $svB ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Servis — Küçük</div><div class="val"><?= $svK ?></div></div>
