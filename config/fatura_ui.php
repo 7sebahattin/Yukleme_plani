@@ -912,7 +912,8 @@ function fatura_sayfa_govde(PDO $pdo, string $sinif): string
         $kids = fatura_kaynak_idler($_GET['kaynak'] ?? '');
         if ($kids && in_array($o['tur'], $turler, true)) {
             $sat = fatura_kaynak_satirlari($pdo, $kids, $o['tur']);
-            $ilk = fatura_ham($pdo, $kids[0]);
+            $ilk = null; // ön doldurma yalnız GÖRÜNÜR (aktif depo) ilk kaynak belgeden
+            foreach ($kids as $kid) { $kb = fatura_ham($pdo, $kid); if ($kb !== null && fatura_gorunur($kb)) { $ilk = $kb; break; } }
             if ($sat && $ilk !== null) {
                 $nos = array_values(array_unique(array_column($sat, 'kaynak_belge_no')));
                 $o += ['cari_id' => (int)$ilk['cari_id'], 'depo' => (string)$ilk['depo'], 'para_birimi' => (string)$ilk['para_birimi'], 'kur' => fatura_kur_metin($ilk['kur'] ?? null),

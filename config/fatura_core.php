@@ -993,10 +993,11 @@ function fatura_cari_ozet(PDO $pdo, int $cariId, string $sinif): array
     $son = [];
     $tl = fatura_sinif_turleri($sinif);
     if ($tl) {
+        [$dw, $dp] = stok_depo_filtre('b.depo'); // son fiyat da aktif depo kuralına uyar
         $st = $pdo->prepare("SELECT s.kart_id, s.birim_fiyat, b.para_birimi, b.tarih, b.belge_no FROM fatura_satirlar s JOIN fatura_belgeler b ON b.id = s.belge_id
-            WHERE b.cari_id = ? AND b.durum = 'gecerli' AND s.kart_id IS NOT NULL AND s.birim_fiyat IS NOT NULL AND b.tur IN (" . implode(',', array_fill(0, count($tl), '?')) . ')
-            ORDER BY b.tarih DESC, b.id DESC, s.id DESC LIMIT 2000');
-        $st->execute([$cariId, ...$tl]);
+            WHERE b.cari_id = ? AND b.durum = 'gecerli' AND s.kart_id IS NOT NULL AND s.birim_fiyat IS NOT NULL AND b.tur IN (" . implode(',', array_fill(0, count($tl), '?')) . ") AND $dw
+            ORDER BY b.tarih DESC, b.id DESC, s.id DESC LIMIT 2000");
+        $st->execute([$cariId, ...$tl, ...$dp]);
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $k = (int)$r['kart_id'];
             if (isset($son[$k])) continue;
