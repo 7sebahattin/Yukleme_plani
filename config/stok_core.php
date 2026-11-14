@@ -355,12 +355,12 @@ function stok_tx(PDO $pdo, callable $fn): mixed { return cari_tx($pdo, $fn); }
 
 function stok_hata(string $msg, array $ek = []): array { return cari_hata($msg, $ek); }
 
-/** Sonucu JSON ya da PRG olarak gönderir. 409: yetersiz_stok · kantar_aktarilmis · hareketli · kullanimda; diğer hata 422. */
+/** Sonucu JSON ya da PRG olarak gönderir. 409: yetersiz_stok · kantar_aktarilmis · hareketli · kullanimda · kaynakli; diğer hata 422. */
 function stok_cevap(array $s, string $geri, string $okMesaj, bool $json): never
 {
     $ok = !empty($s['ok']);
     if ($json) {
-        if (!$ok && in_array((string)($s['kod'] ?? ''), ['yetersiz_stok', 'kantar_aktarilmis', 'hareketli', 'kullanimda'], true)) http_response_code(409);
+        if (!$ok && in_array((string)($s['kod'] ?? ''), ['yetersiz_stok', 'kantar_aktarilmis', 'hareketli', 'kullanimda', 'kaynakli'], true)) http_response_code(409);
         elseif (!$ok) http_response_code(422);
         echo json_encode([
             'ok' => $ok, 'id' => $s['id'] ?? null, 'fis_no' => $s['fis_no'] ?? null, 'hata' => $ok ? null : (string)($s['hata'] ?? 'İşlem yapılamadı.'),
@@ -1218,9 +1218,12 @@ function stok_eksik_uyari(array $eksikler, string $onek = 'Eksiye düşürüldü
  * Fişi kaydeder (TEK transaction): kilit → (kantar çift aktarım + negatif stok kontrolü) → fiş → satırlar → defter → (cari dekontu) → fis_no/cari bağı.
  * Aynı istek_anahtari → mevcut fiş (tekrar=true). Negatif stok: varsayılan RED (kod yetersiz_stok + eksikler); eksiye_izin=1 ile kayıt + fiş uyarısı.
  * Cari: giriş → alacak_dekont, çıkış → borc_dekont; tutar = KDV hariç toplam + KDV, fiş para birimiyle; hata → HEPSİ geri alınır.
+ * $kaynak: başka bir modülün KENDİ çekirdeğinden verdiği bağ ['modul' => ^[a-z_]{2,30}$ ('kantar' hariç), 'id' => int > 0].
+ *   POST ($g['kaynak_modul']) yolu DEĞİŞMEZ (yalnız kantar + giriş); stok_kaydet.php bu parametreyi hiç geçmez. Kaynaklı fişte cari
+ *   SEÇİLMEZ (dekontu kaynak belge yazar) ve fiş yalnız kaynağından iptal edilir (stok_fis_iptal $kaynakModul; aksi 409 kaynakli).
  * @return array{ok:bool,hata:?string,id:?int,fis_no?:string,uyari?:?string,tekrar?:bool,kod?:string,eksikler?:list<array>,alanlar?:array,satir_hatalari?:array}
  */
-function stok_fis_kaydet(PDO $pdo, array $g, int $uid): array
+function stok_fis_kaydet(PDO $pdo, array $g, int $uid, ?array $kaynak = null): array
 {
     $ik = trim((string)($g['istek_anahtari'] ?? ''));
     if ($ik !== '' && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $ik) && ($var = stok_fis_istek_bul($pdo, $ik)) !== null) {
@@ -1229,6 +1232,12 @@ function stok_fis_kaydet(PDO $pdo, array $g, int $uid): array
     $d = stok_fis_dogrula($pdo, $g);
     if (!$d['ok']) return stok_hata((string)$d['hata'], ['alanlar' => $d['alanlar'] ?? [], 'satir_hatalari' => $d['satir_hatalari'] ?? []] + (isset($d['kod']) ? ['kod' => $d['kod']] : []));
     $v = $d['veri'];
+    if ($kaynak !== null) {
+        $km = (string)($kaynak['modul'] ?? '');
+        if (!preg_match('/^[a-z_]{2,30}$/', $km) || $km === 'kantar' || (int)($kaynak['id'] ?? 0) <= 0 || $v['kaynak_modul'] !== null) return stok_hata('Geçersiz kaynak bağı.');
+        if ($v['cari_id'] !== null) return stok_hata('Kaynaklı fişte cari seçilmez (dekontu kaynak belge yazar).');
+        $v['kaynak_modul'] = $km; $v['kaynak_id'] = (int)$kaynak['id'];
+    }
     $etiket = stok_fis_turleri()[$v['tur']]['etiket'];
     try {
         $s = stok_tx($pdo, function () use ($pdo, $v, $uid, $etiket): array {
@@ -1329,8 +1338,9 @@ function stok_fis_gorunur(array $f): bool
 /**
  * İptal: durum + ters defter satırları (INSERT, ters_id; ters sırayla) + bağlı cari hareketi (cari_kaynakli_iptal). Her zaman yapılabilir;
  * iptal stoğu eksiye düşürürse `uyari` döner. Neden 3–500 karakter; zaten iptal → kod zaten_iptal.
+ * Kaynaklı fiş (kaynak_modul dolu, 'kantar' dışında) yalnız $kaynakModul o modülse iptal edilir; aksi kod kaynakli (409).
  */
-function stok_fis_iptal(PDO $pdo, int $id, string $neden, int $uid): array
+function stok_fis_iptal(PDO $pdo, int $id, string $neden, int $uid, ?string $kaynakModul = null): array
 {
     $neden = trim($neden);
     if (mb_strlen($neden) < 3) return stok_hata('İptal nedeni en az 3 karakter olmalı.', ['alanlar' => ['neden' => 'Neden zorunlu (en az 3 karakter).']]);
@@ -1339,6 +1349,8 @@ function stok_fis_iptal(PDO $pdo, int $id, string $neden, int $uid): array
     if ($f === null) return stok_hata('Fiş bulunamadı.');
     if (!stok_fis_gorunur($f)) return stok_hata('Bu fiş aktif deponuzda görünmüyor.');
     if ($f['durum'] === 'iptal') return stok_hata('Fiş zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
+    $fk = (string)($f['kaynak_modul'] ?? '');
+    if ($fk !== '' && $fk !== 'kantar' && $fk !== $kaynakModul) return stok_hata('Bu fiş başka bir belgeden üretildi; o belgeden iptal edin.', ['kod' => 'kaynakli']);
     try {
         $s = stok_tx($pdo, function () use ($pdo, $f, $id, $neden, $uid): array {
             $st = $pdo->prepare('SELECT * FROM stok_hareketler WHERE fis_id = ? AND ters_id IS NULL ORDER BY id DESC');

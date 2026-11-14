@@ -27,6 +27,17 @@ const SIPARIS_INV_HS_KODU = '8109075';
 const SIPARIS_INV_MARKA = 'ASYA FRESH';
 const SIPARIS_INV_TESLIM_VARSAYILAN = 'INCOTERMS 2020 DAP';
 
+/**
+ * Düzenleyen (ihracatçı) firma bilgisi — TEK kaynak: OGL Invoice şablonu ve Fatura modülü yazdırma başlığı (fatura_cikti.php) buradan okur.
+ * @return array{unvan:string,unvan_1:string,unvan_2:string,adres:string,ilce_il:string,vergi_dairesi:string,vergi_no:string}
+ */
+function siparis_inv_ihracatci(): array
+{
+    $u1 = 'ASYA FRESH SEBZE MEYVE NAKLİYAT'; $u2 = 'VE TİCARET LİMİTED ŞİRKETİ';
+    return ['unvan' => $u1 . ' ' . $u2, 'unvan_1' => $u1, 'unvan_2' => $u2, 'adres' => 'Hançerli Mahallesi Dervişzade Sk. No: 12 İç Kapı No:3',
+        'ilce_il' => 'İlkadım / SAMSUN', 'vergi_dairesi' => 'Gaziler', 'vergi_no' => '8330514103'];
+}
+
 // ── AYAR (hks_kv) ───────────────────────────────────────────────────────
 
 /** @return array{rex_no:string,banka_ad:string,banka_adres:string,sube:string,swift:string,iban_eur:string,teslim:string,iskonto_varsayilan:float} */
@@ -625,8 +636,8 @@ table { border-collapse: collapse; }
 <div class="no">INVOICE NUMBER: <b><?= h($veri['no'] ?? '') ?></b> &nbsp;&nbsp;&nbsp;&nbsp; INVOICE DATE: <b><?= h(siparis_inv_tarih_goster((string)($veri['tarih'] ?? ''))) ?></b></div>
 <table class="cerceve"><tr>
 <td class="exp"><div class="et">EXPORTER</div>
-<div class="ad">ASYA FRESH SEBZE MEYVE NAKLİYAT<br>VE TİCARET LİMİTED ŞİRKETİ</div>
-<div class="adr"><b>Address</b><br>Hançerli Mahallesi Dervişzade Sk. No: 12 İç Kapı No:3<br>İlkadım / SAMSUN / TURKEY<br>Gaziler Vergi Dairesi VAT: 8330514103</div></td>
+<?php $ihr = siparis_inv_ihracatci(); ?><div class="ad"><?= h($ihr['unvan_1']) ?><br><?= h($ihr['unvan_2']) ?></div>
+<div class="adr"><b>Address</b><br><?= h($ihr['adres']) ?><br><?= h($ihr['ilce_il']) ?> / TURKEY<br><?= h($ihr['vergi_dairesi']) ?> Vergi Dairesi VAT: <?= h($ihr['vergi_no']) ?></div></td>
 <td class="sold"><div>Sold to Party;</div>
 <div class="b">OGL FOOD TRADE LEBENSMİTTEL VERTRIEB GMBH.<br>C/O INTEGRATED SERVICE SOLUTIONS LTD.<br>UNIT K EUROLINK BUSINESS PARK SITTINGBOURNE KENT<br>Great Britain VAT ID: GB 306 253 334</div>
 <div>Ship to Party;</div>

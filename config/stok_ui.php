@@ -608,6 +608,7 @@ function stok_fis_detay_html(PDO $pdo, array $f): string
     $tur = (string)$f['tur']; $id = (int)$f['id']; $iptal = $f['durum'] === 'iptal';
     $sayfa = stok_fis_sayfa($tur);
     $pb = (string)$f['para_birimi'];
+    $kaynakli = (string)($f['kaynak_modul'] ?? '') !== '' && $f['kaynak_modul'] !== 'kantar';   // başka modülün çekirdeğinden üretilmiş fiş
     $meta = '<span>' . h(stok_tarih_tr((string)$f['tarih'])) . '</span>'
         . ($tur === 'transfer'
             ? '<span class="st-depo-yol"><b>' . h($f['depo']) . '</b> <span aria-hidden="true">&#8594;</span><span class="st-sr">hedef</span> <b>' . h($f['hedef_depo'] ?? '') . '</b></span>' . (($y = stok_transfer_yonu($f)) !== '' ? '<span class="st-rozet st-rozet--yon">' . h($y) . '</span>' : '')
@@ -615,16 +616,19 @@ function stok_fis_detay_html(PDO $pdo, array $f): string
         . (!empty($f['cari']) ? '<span>Cari: <a href="cari_kartlari.php?id=' . (int)$f['cari']['id'] . '">' . h($f['cari']['unvan']) . '</a></span>' : '')
         . (!empty($f['evrak_no']) ? '<span>Evrak: ' . h($f['evrak_no']) . '</span>' : '')
         . ($pb !== 'TRY' ? '<span>' . h($pb) . ($f['kur'] !== null ? ' · kur ' . h(rtrim(rtrim((string)$f['kur'], '0'), '.')) : '') . '</span>' : '')
-        . (!empty($f['kantar']) ? '<span class="st-rozet">Kantar #' . h($f['kantar']['fis_no']) . '</span>' : ($f['kaynak_modul'] === 'kantar' ? '<span class="st-rozet">Kantar #' . (int)$f['kaynak_id'] . '</span>' : ''));
+        . (!empty($f['kantar']) ? '<span class="st-rozet">Kantar #' . h($f['kantar']['fis_no']) . '</span>' : ($f['kaynak_modul'] === 'kantar' ? '<span class="st-rozet">Kantar #' . (int)$f['kaynak_id'] . '</span>' : ''))
+        . ($kaynakli ? '<span class="st-rozet st-rozet--kaynak">Kaynak belge #' . (int)$f['kaynak_id'] . '</span>' : '');
     $serit = $iptal ? '<div class="st-iptal-serit" role="note"><b>İptal edildi:</b> ' . h((string)$f['iptal_neden']) . ' · ' . h(stok_tarih_tr((string)$f['iptal_at'])) . '</div>' : '';
     $uyari = !empty($f['uyari']) ? '<div class="st-fis-uyari"><span class="st-rozet st-rozet--uyari">Eksiye düşürüldü</span> ' . h((string)$f['uyari']) . '</div>' : '';
     $cariH = !empty($f['cari_hareket']) ? '<p class="st-not">Cari hareketi: <a href="cari_kartlari.php?id=' . (int)$f['cari_hareket']['cari_id'] . '">' . h((string)$f['cari_hareket']['belge_no']) . '</a>'
         . ($f['cari_hareket']['durum'] === 'iptal' ? ' <span class="st-rozet st-rozet--iptal">İPTAL</span>' : '') . ' · ' . h(cari_tutar_bicim(cari_kurus($f['cari_hareket']['tutar']), (string)$f['cari_hareket']['para_birimi'])) . '</p>' : '';
     $islem = '<div class="st-islemler" role="toolbar" aria-label="Fiş işlemleri">'
         . '<a class="btn btn-primary" href="' . h($sayfa . '?kopya=' . $id) . '" data-kopya>Kopyala</a>'
-        . ($iptal || !stok_can('delete')
+        . (!$iptal && $kaynakli
+            ? '<span class="st-not">Kaynak belgeden iptal edilir.</span>'
+            : ($iptal || !stok_can('delete')
             ? '<button type="button" class="btn st-tehlike" disabled title="' . ($iptal ? 'Fiş zaten iptal edildi' : 'Yetkiniz yok') . '">İptal et</button>'
-            : '<button type="button" class="btn st-tehlike" data-st-modal="iptal" data-id="' . $id . '" data-fis-no="' . h($f['fis_no']) . '" data-geri="' . h($sayfa . '?id=' . $id) . '">İptal et</button>')
+            : '<button type="button" class="btn st-tehlike" data-st-modal="iptal" data-id="' . $id . '" data-fis-no="' . h($f['fis_no']) . '" data-geri="' . h($sayfa . '?id=' . $id) . '">İptal et</button>'))
         . '<button type="button" class="btn" data-yazdir>Yazdır</button></div>';
     if ($tur === 'donusum') {
         $C = array_values(array_filter($f['satirlar'], static fn($s) => $s['yon'] === 'C'));
