@@ -350,3 +350,164 @@ function bsz_ortak_yurtici(array $p): array {
     if (!empty($p['ikinciSifatId'])) $o['ikinciSifatId'] = (string)$p['ikinciSifatId'];
     return $o;
 }
+
+// ── v526 — Elle girilen parti no'lu Hal bildirimi → beyan / beyansız kayıt ─────
+/**
+ * Çıkış yönlü bildirim mi (Satış / Sevk Etme)? Alım türleri (Satın Alım,
+ * Üreticiden Sevk Alım) HARİÇ. Karar halkayit'in kendi yardımcılarıyla verilir
+ * (hks_bildirim_turu_kodu; tür adı için bb_alim_turu_mu) — kural kopyalanmaz.
+ */
+function bsz_oto_cikis_yonlu_mu(array $ortak): bool {
+    if (!empty($ortak['uretSevk']) || !empty($ortak['referanssiz'])) return false;
+    $turAd = trim((string)($ortak['turAd'] ?? ''));
+    if ($turAd !== '' && function_exists('bb_alim_turu_mu') && bb_alim_turu_mu($turAd)) return false;
+    if (function_exists('hks_bildirim_turu_kodu')) {
+        return in_array(hks_bildirim_turu_kodu($ortak), ['SATIS', 'SEVK_ETME'], true);
+    }
+    return true;
+}
+
+/**
+ * Hal Kayıt'ta ELLE açılmış (ortak.kaynak YOK) ve parti no girilmiş çıkış yönlü bildirim
+ * en az bir künyeyle gönderildikten sonra (taslak_gonder, Gönderilenler INSERT'inden SONRA):
+ *   • yurt DIŞI → customs_declarations'a eksik bilgili beyan, durum 'yuklendi' ("Kapanan
+ *     Beyanlar") + beyan_hks_bildirim bağı 'gonderildi' (beyan yeniden "bildirime uygun" görünmez).
+ *     Aynı party_no + aynı hks_urun_id ile beyan varsa OLUŞTURULMAZ.
+ *   • yurt İÇİ → beyansiz_yukleme satırı durum 'gonderildi' ("Bildirim Yapılanlar"). Karşı taraf
+ *     için yalnız ad (+ Kişi Havuzu id'si); TC SAKLANMAZ. Tablo yoksa sessizce atlanır. Aynı
+ *     gönderim / aynı parti no + ürün için ikinci satır OLUŞTURULMAZ.
+ * HKS akışını ASLA kesmez (Throwable yutulur). Audit 'beyan_oto_olustur' (kişisel veri yok).
+ * Dönüş: ['tip' => 'beyan'|'beyansiz'|'', 'id' => int] (yalnız yeni oluşturulan kayıt).
+ */
+function hks_partili_gonderim_beyana_isle(array $ortak, array $taslak, string $gid, float $kg, ?int $userId): array {
+    $bos = ['tip' => '', 'id' => 0];
+    try {
+        if (!function_exists('hks_parti_no_normalize')) return $bos;
+        $parti = hks_parti_no_normalize($ortak['partiNo'] ?? '');
+        if ($parti === '' || $gid === '') return $bos;
+        if (!empty($ortak['kaynak'])) return $bos;   // beyan/beyansız kaynaklı: köprü zaten işler
+        if (!bsz_oto_cikis_yonlu_mu($ortak)) return $bos;
+
+        $pdo     = db();
+        $firmaId = (string)($taslak['firma_id'] ?? '');
+        $firmaAd = (string)($taslak['firma_ad'] ?? '');
+        $urunId  = (string)($ortak['urunId'] ?? '');
+        $urunAd  = trim((string)($ortak['urunAd'] ?? ''));
+        $plaka   = beyan_plaka_normalize((string)($ortak['plaka'] ?? ''));
+        $kg      = round(max(0.0, $kg), 3);
+        $simdi   = date('Y-m-d H:i:s');
+        $not     = 'Hal Bildiriminden otomatik oluşturuldu';
+
+        if (empty($ortak['yurtIci'])) {
+            // ── Yurt dışı: beyan ──
+            $partiU = function_exists('tr_upper') ? tr_upper($parti) : mb_strtoupper($parti, 'UTF-8');
+            $var = $pdo->prepare("SELECT id FROM customs_declarations
+                                  WHERE deleted_at IS NULL AND (party_no = ? OR party_no = ?)
+                                    AND COALESCE(hks_urun_id, '') = ? LIMIT 1");
+            $var->execute([$partiU, $parti, $urunId]);
+            if ($var->fetchColumn() !== false) return $bos;
+
+            $kendiTx = !$pdo->inTransaction();
+            if ($kendiTx) $pdo->beginTransaction();
+            try {
+                $id = beyan_insert([
+                    'party_no'      => $parti,
+                    'product_name'  => $urunAd,
+                    'net_kg'        => $kg > 0 ? $kg : null,
+                    'vehicle_plate' => $plaka,
+                    'status'        => 'yuklendi',
+                ], (int)($userId ?? 0));
+                $pdo->prepare("UPDATE customs_declarations
+                               SET hks_firma_id = ?, hks_urun_id = ?, hks_urun_ad = ?, hks_ulke_id = ?, hks_ulke_ad = ?,
+                                   sender_company_name = ?, note = ?, created_by = ?, updated_by = ?, hks_durum = 'gonderildi'
+                               WHERE id = ?")
+                    ->execute([
+                        $firmaId !== '' ? $firmaId : null,
+                        $urunId !== '' ? $urunId : null,
+                        $urunAd !== '' ? mb_substr($urunAd, 0, 150, 'UTF-8') : null,
+                        (string)($ortak['ulkeId'] ?? '') !== '' ? (string)$ortak['ulkeId'] : null,
+                        trim((string)($ortak['ulkeAd'] ?? '')) !== '' ? mb_substr(trim((string)$ortak['ulkeAd']), 0, 150, 'UTF-8') : null,
+                        $firmaAd !== '' ? mb_substr($firmaAd, 0, 150, 'UTF-8') : null,
+                        $not,
+                        $userId ?: null, $userId ?: null,
+                        $id,
+                    ]);
+                $fiyat = (float)($ortak['fiyat'] ?? 0);
+                $pdo->prepare("INSERT INTO beyan_hks_bildirim
+                    (beyan_id, hks_firma_id, hks_firma_ad, taslak_id, gonderim_id, durum, urun_id, urun_ad,
+                     ulke_id, ulke_ad, plaka, kg, fiyat, hata_metni, created_by, created_at, updated_at)
+                    VALUES (?,?,?,?,?,'gonderildi',?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([
+                        $id, $firmaId !== '' ? $firmaId : null, $firmaAd !== '' ? mb_substr($firmaAd, 0, 200, 'UTF-8') : null,
+                        (string)($taslak['id'] ?? '') !== '' ? (string)$taslak['id'] : null, $gid,
+                        $urunId !== '' ? $urunId : null, $urunAd !== '' ? mb_substr($urunAd, 0, 150, 'UTF-8') : null,
+                        (string)($ortak['ulkeId'] ?? '') !== '' ? (string)$ortak['ulkeId'] : null,
+                        trim((string)($ortak['ulkeAd'] ?? '')) !== '' ? mb_substr(trim((string)$ortak['ulkeAd']), 0, 150, 'UTF-8') : null,
+                        $plaka !== '' ? $plaka : null, $kg, $fiyat > 0 ? $fiyat : null, $not,
+                        $userId ?: null, $simdi, $simdi,
+                    ]);
+                if ($kendiTx) $pdo->commit();
+            } catch (Throwable $e) {
+                if ($kendiTx && $pdo->inTransaction()) $pdo->rollBack();
+                throw $e;
+            }
+            if (function_exists('beyan_hks_durum_tazele')) beyan_hks_durum_tazele($id);
+            bsz_oto_audit('beyan', $id, $gid, $parti, $urunId, $kg);
+            return ['tip' => 'beyan', 'id' => $id];
+        }
+
+        // ── Yurt içi: beyansız yükleme ("Bildirim Yapılanlar") ──
+        try { $pdo->query('SELECT 1 FROM beyansiz_yukleme LIMIT 1'); }
+        catch (Throwable $e) { return $bos; }   // migrate kartı basılmamış → sessiz
+        $istek = 'oto_' . substr($gid, 0, 36);
+        $var = $pdo->prepare("SELECT id FROM beyansiz_yukleme
+                              WHERE gonderim_id = ? OR istek_kodu = ?
+                                 OR (parti_no = ? AND urun_id = ? AND durum <> 'kaldirildi') LIMIT 1");
+        $var->execute([$gid, $istek, $parti, $urunId]);
+        if ($var->fetchColumn() !== false) return $bos;
+
+        $karsiAd = trim((string)($ortak['ikinciAd'] ?? ''));
+        $karsiId = null;
+        $tc = preg_replace('/\D+/', '', (string)($ortak['ikinciTc'] ?? ''));
+        if ($tc !== '' && function_exists('hks_kisi_tc_ile')) {
+            try {
+                $k = hks_kisi_tc_ile($pdo, $tc);
+                if ($k) {
+                    $karsiId = (int)$k['id'];
+                    if ($karsiAd === '') $karsiAd = trim((string)($k['ad'] ?? ''));
+                }
+            } catch (Throwable $e) { /* havuz okunamadı — adsız sürer */ }
+        }
+        $pdo->prepare("INSERT INTO beyansiz_yukleme
+            (parti_no, hks_firma_id, hks_firma_ad, yon, ulke_id, ulke_ad, karsi_kisi_id, karsi_kisi_ad,
+             urun_id, urun_ad, kg, plaka, taslak_id, gonderim_id, durum, hata_metni, istek_kodu,
+             created_by, created_at, updated_at)
+            VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,'gonderildi',?,?,?,?,?)")
+            ->execute([
+                $parti, $firmaId, $firmaAd !== '' ? mb_substr($firmaAd, 0, 200, 'UTF-8') : null, BSZ_YON_ICI,
+                $karsiId, $karsiAd !== '' ? mb_substr($karsiAd, 0, 200, 'UTF-8') : null,
+                $urunId, mb_substr($urunAd, 0, 150, 'UTF-8'), $kg, $plaka,
+                (string)($taslak['id'] ?? '') !== '' ? (string)$taslak['id'] : null, $gid, $not, $istek,
+                $userId ?: null, $simdi, $simdi,
+            ]);
+        $id = (int)$pdo->lastInsertId();
+        bsz_oto_audit('beyansiz', $id, $gid, $parti, $urunId, $kg);
+        return ['tip' => 'beyansiz', 'id' => $id];
+    } catch (Throwable $e) {
+        error_log('[beyansiz] partili gonderim isleme: ' . get_class($e) . ': ' . $e->getMessage());
+        return $bos;
+    }
+}
+
+/** Oto kayıt audit'i — kişisel veri YOK (TC/ad/cep yazılmaz). Hata yutulur. */
+function bsz_oto_audit(string $tip, int $id, string $gid, string $parti, string $urunId, float $kg): void {
+    try {
+        if (!function_exists('audit_log_event')) return;
+        audit_log_event('beyan_oto_olustur', $tip === 'beyan' ? 'declarations' : 'beyansiz_yukleme', $id, null, [
+            'tip' => $tip, 'gonderim_id' => $gid, 'parti_no' => $parti, 'urun_id' => $urunId, 'kg' => $kg,
+            'kaynak' => 'hal_bildirimi',
+        ]);
+    } catch (Throwable $e) {
+        error_log('[beyansiz] oto audit: ' . get_class($e));
+    }
+}

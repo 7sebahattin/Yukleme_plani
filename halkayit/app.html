@@ -282,6 +282,8 @@
   /* v416: aynı gün aynı plaka — kartta plaka satırının altında, onayda uyarı kutusu */
   .tk-satir.tk-plaka .d { display:flex; flex-direction:column; align-items:flex-end; }
   .tk-satir.tk-plaka .tk-uyari { letter-spacing:0; }
+  .tk-satir.tk-plaka .tk-parti { letter-spacing:0; font-size:11px; font-weight:700; color:var(--soluk); background:var(--cip-bg);
+    border:1px solid var(--cizgi); border-radius:99px; padding:1px 8px; margin-top:3px; max-width:100%; overflow-wrap:anywhere; }
   .onay-plaka-uyari { margin-top:10px; padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.45;
     background:#fef3c7; border:1px solid #f59e0b; color:#78350f; }
   .onay-plaka-uyari b { color:#92400e; }
@@ -434,6 +436,25 @@
   html[data-theme="dark"] .g-plaka { color:var(--plaka); background:rgba(255,120,120,.12); border-color:rgba(255,120,120,.28); box-shadow:none; }
   .g-kilo { font-weight:900; color:var(--teal); }
   .g-ucret { font-weight:600; }
+  /* v526: Parti No sütunu + Fatura anahtarı. Kapalı (sol) = TURUNCU = kesilmedi; açık (sağ) = MAVİ = kesildi.
+     Renk tek başına bilgi değil: title + aria-label (kartta ayrıca yanında metin). */
+  .g-parti { display:inline-block; max-width:112px; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; font-weight:700; font-size:12.5px; white-space:nowrap; }
+  .g-tablo th.g-c-ulke { overflow:hidden; text-overflow:ellipsis; }
+  .g-tablo th.g-c-parti, .g-tablo td.g-c-parti, .g-tablo th.g-c-fatura, .g-tablo td.g-c-fatura { padding-left:6px; padding-right:6px; }
+  .g-fatura-kap { display:inline-flex; align-items:center; gap:8px; }
+  .g-fatura { position:relative; flex:none; width:40px; height:22px; padding:0; border:0; border-radius:999px; cursor:pointer;
+    background:#f59e0b; transition:background-color .15s; vertical-align:middle; box-shadow:inset 0 1px 2px rgba(0,0,0,.18); }
+  .g-fatura::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.35); transition:transform .15s; }
+  .g-fatura[aria-checked="true"] { background:#1d5fe0; }
+  .g-fatura[aria-checked="true"]::after { transform:translateX(18px); }
+  .g-fatura:disabled { opacity:.55; cursor:progress; }
+  .g-fatura:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+  .g-fatura-yazi { font-size:12.5px; font-weight:700; }
+  .g-tablo .g-c-fatura { text-align:center; }
+  .g-kart .g-fatura { width:46px; height:26px; }
+  .g-kart .g-fatura::after { width:22px; height:22px; }
+  .g-kart .g-fatura[aria-checked="true"]::after { transform:translateX(20px); }
   .g-ik-sol { width:17px; height:17px; vertical-align:-3px; margin-right:7px; }
   .g-ulke-kap { display:flex; align-items:center; gap:10px; min-width:0; }
   .g-ulke-ad { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -622,6 +643,18 @@
     .g-tablo .g-yazdir-btn-ust { padding:0 9px; }
     .g-tablo .g-btn-tekrar .g-tk-ana { padding:0 9px; }
     .g-tablo .g-ik-bina, .g-tablo .g-ik-sol { margin-right:4px; }
+    /* v526: Parti No + Fatura sütunları eklendi — Firma/Ülke/Ürün'e yer açmak için bina simgesi gizli, parti no kısalır (title tam) */
+    .g-tablo .g-ik-bina { display:none; }
+    .g-tablo .g-parti { max-width:84px; }
+    .g-tablo .g-plaka { padding-left:8px; padding-right:8px; }
+    .g-tablo .g-fatura { width:36px; height:20px; }
+    .g-tablo .g-fatura::after { width:16px; height:16px; }
+    .g-tablo .g-fatura[aria-checked="true"]::after { transform:translateX(16px); }
+  }
+  @media (min-width:1200px) and (max-width:1399px) {
+    /* v526: iki yeni sütun için hücre boşlukları daralır (düğme metinleri KALIR) */
+    .g-tablo th, .g-tablo td { padding-left:6px; padding-right:6px; }
+    .g-tablo thead th:first-child { padding-left:62px; }
   }
 
   /* "Tekrar gönder" ile yüklenen formun üstündeki bilgi kutusu (metin textContent ile) */
@@ -658,6 +691,10 @@
 
 
   /* v498: fiyat gönderimde girilir (#fiyatPencere) + taslak rozetleri. z-index ≥ 600 (#modal z 20'nin üstünde). */
+  #faturaPencere { z-index:600; }
+  #faturaPencere .kisi-dlg { height:auto; max-width:420px; }
+  #faturaPencere .fp-ozet { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
+  #faturaPencere .fp-ozet b { text-align:right; overflow-wrap:anywhere; }
   #fiyatPencere { z-index:600; }
   #fiyatPencere .kisi-dlg { height:auto; max-width:420px; }
   #fiyatPencere .fp-ozet { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
@@ -829,6 +866,7 @@
   #ekranBildirim #oMalMiktar, #ekranBildirim #oPlanKilo { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='m12 2 9 4.5v11L12 22l-9-4.5v-11L12 2Zm0 2.2L5.9 7.3 12 10.4l6.1-3.1L12 4.2ZM5 9v7.3l6 3v-7.3L5 9Zm14 0-6 3v7.3l6-3V9Z'/%3E%3C/svg%3E"); }
   #ekranBildirim #oMalFiyat, #ekranBildirim #oPlanFiyat { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 3c4.4 0 8 1.6 8 3.5S16.4 10 12 10 4 8.4 4 6.5 7.6 3 12 3Zm-8 6.2C5.6 10.9 8.6 12 12 12s6.4-1.1 8-2.8V12c0 1.9-3.6 3.5-8 3.5S4 13.9 4 12V9.2Zm0 5.5c1.6 1.7 4.6 2.8 8 2.8s6.4-1.1 8-2.8v2.8c0 1.9-3.6 3.5-8 3.5s-8-1.6-8-3.5v-2.8Z'/%3E%3C/svg%3E"); }
   #ekranBildirim #sMalNitelik, #ekranBildirim #sUretimSekli, #ekranBildirim #sMiktarBirim, #ekranBildirim #sIkSifat, #ekranBildirim #sSifat, #ekranBildirim #sTur { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M3 3h8l10 10-8 8L3 11V3Zm4.5 2.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sPartiNo { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M9.4 3 8.8 6H5v2h3.4l-.8 4H4v2h3.2l-.7 3.5 2 .4.8-3.9h3.9l-.7 3.5 2 .4.8-3.9H20v-2h-3.4l.8-4H21V6h-3.2l.6-3-2-.4-.7 3.4h-3.9l.7-3-2-.4Zm.4 5h3.9l-.8 4H9l.8-4Z'/%3E%3C/svg%3E"); }
   #ekranBildirim #sGun { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1 4v6.4l5 3 1-1.7-4-2.4V6h-2Z'/%3E%3C/svg%3E"); }
   #ekranBildirim #sKunyeSirala { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M7 3 3 7.5h3V21h2V7.5h3L7 3Zm10 18 4-4.5h-3V3h-2v13.5h-3l4 4.5Z'/%3E%3C/svg%3E"); }
   #ekranBildirim :is(input, select)[id] { background-repeat:no-repeat; }
@@ -864,6 +902,9 @@
   #ekranBildirim #oMalFiyat, #ekranBildirim #oPlanFiyat { --bi-sol:40px; }
   #ekranBildirim #sMalNitelik, #ekranBildirim #sUretimSekli, #ekranBildirim #sMiktarBirim, #ekranBildirim #sIkSifat, #ekranBildirim #sSifat, #ekranBildirim #sTur { --bi-sol:40px; }
   #ekranBildirim #sGun { --bi-sol:40px; }
+  #ekranBildirim #sPartiNo { --bi-sol:40px; }
+  #ekranBildirim .parti-not { margin-top:5px; font-size:12px; font-weight:700; color:var(--soluk); }
+  #ekranBildirim .parti-not.gizli { display:none; }
   #ekranBildirim #sKunyeSirala { --bi-sol:40px; }
 
   /* Butonlar */
@@ -1124,6 +1165,13 @@
         <div class="mesaj tamam gizli" id="ikCokluSifatUyari"></div>
         <!-- Depo/Tasnif kaynak kuralı (v366): kaynakUygula() yazar (yalnız textContent). -->
         <div class="mesaj" id="ikKaynakNot" role="status"></div>
+      </div>
+
+      <!-- v526: Parti No (opsiyonel) — taslağa ortak.partiNo olarak yazılır; beyandan gelen taslakta sunucu zorlar (salt okunur) -->
+      <div id="partiNoBlok" style="margin-top:12px">
+        <label for="sPartiNo">Parti No</label>
+        <input id="sPartiNo" maxlength="60" autocomplete="off" placeholder="Opsiyonel">
+        <div class="parti-not gizli" id="partiNoNot">Beyandan geldi</div>
       </div>
 
       <div class="mesaj" id="bildirimMesaj"></div>
@@ -1637,6 +1685,24 @@
   </div>
 </div>
 
+<!-- v526: Fatura durumu onayı (kesildi → kesilmedi) — window.confirm DEĞİL -->
+<div id="faturaPencere" class="kisi-ovl">
+  <div class="kisi-dlg" role="dialog" aria-modal="true" aria-labelledby="fvBaslik">
+    <div class="kisi-bas">
+      <h3 id="fvBaslik">Fatura durumu</h3>
+      <button type="button" class="kisi-x" id="btnFvKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="kisi-form-govde">
+      <p id="fvMetin" style="font-size:14px;line-height:1.45;margin:0 0 8px"></p>
+      <div id="fvOzet"></div>
+    </div>
+    <div class="kisi-alt">
+      <button type="button" class="btn btn-soluk" id="btnFvIptal">Vazgeç</button>
+      <button type="button" class="btn btn-teal" id="btnFvOnay">Evet, kesilmedi yap</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modallar -->
 <div id="modal">
   <div class="kutu" id="modalOnayKutu">
@@ -1896,6 +1962,8 @@ const API_ROTA = {
   'POST /api/taslak_fiyat_yaz': 'taslak_fiyat_yaz',
   // v500: taslağı başka firmanın taslaklarına kopyala
   'POST /api/taslak_kopya_firmaya': 'taslak_kopya_firmaya',
+  // v526: Gönderilenler — fatura kesildi/kesilmedi anahtarı (yazar; CSRF ister)
+  'POST /api/gonderilen_fatura': 'gonderilen_fatura',
   'GET /api/gonderilenler': 'gonderilenler',
   // Aynı gün aynı plaka uyarısı (SALT OKUNUR — Gönderim Onayı'nda)
   'POST /api/ayni_plaka': 'ayni_plaka_bugun',
@@ -1946,7 +2014,7 @@ async function csrfTazele() {
 // Yeni yazan uç eklenirse BURAYA da ekle (statik test: hks_csrf_kapsam_smoke.php).
 const API_GOVDE_CSRF = {
   kisi_kaydet: 1, kisi_sil: 1, firma_kaydet: 1, firma_sil: 1, listeler_yenile: 1,
-  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1, taslak_fiyat_yaz: 1, taslak_kopya_firmaya: 1,
+  taslak_kaydet: 1, taslak_sil: 1, taslak_gonder: 1, belirsiz_isaret_kapat: 1, taslak_fiyat_yaz: 1, taslak_kopya_firmaya: 1, gonderilen_fatura: 1,
 };
 async function api(yol, metod, govde, tekrar) {
   metod = metod || 'GET';
@@ -2878,12 +2946,14 @@ async function taslakSayiGuncelle() {
 // ================= FORM TEMİZLİĞİ =================
 // Her yeni işlemde sayfa temiz gelir
 function formuTemizle() {
-  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oIkDogum',
+  ['oPlaka', 'oBelgeNo', 'sPartiNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oIkDogum',
    'oPlanKilo', 'oPlanFiyat'].forEach(id => { $(id).value = ''; });
   // "Yurt Dışı" tiki HTML VARSAYILANINA (işaretli) döner. Sıfırlanmadığı için
   // yurt içi bir bildirimden sonra form yurt içi modunda kalıyor, sonraki
   // ihracat bildirimi yanlış modda başlıyordu (ülke yerine hedef alanları).
   $('chkYurtDisi').checked = true;
+  $('sPartiNo').readOnly = false;               // v526: beyandan gelen taslağın kilidi sonraki forma taşınmaz
+  $('partiNoNot').classList.add('gizli');
   // Plan taslağı bloğu kapalı başlar
   $('planBlok').classList.add('gizli');
   $('btnPlanAc').textContent = '📝 Taslak Oluştur';
@@ -4653,6 +4723,8 @@ function ortakTopla(fiyatId) {
     belgeNo: $('oBelgeNo').value.trim(),
     belgeTipiId: $('sBelgeTipi').value || 0,
   };
+  const partiNo = $('sPartiNo').value.trim();
+  if (partiNo) ortakBase.partiNo = partiNo;   // boşsa gönderme (opsiyonel)
 
   let ortak;
   if (yurtIciMi()) {
@@ -4866,7 +4938,8 @@ async function taslakEkraniAc() {
         (t.ortak.tamamlanacak ? '<span class="tk-rozet tk-tamamla">TAMAMLANACAK</span>' : '') +
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
         _satir('', '🏢 Firma', eHtml(t.firmaAd)) +
-        _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—') + (t.ayniPlakaBugun > 0
+        _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—') +
+          (t.partiNo ? `<span class="tk-parti" title="Parti No">Parti: ${eHtml(t.partiNo)}</span>` : '') + (t.ayniPlakaBugun > 0
           ? `<span class="tk-uyari">⚠ Bugün bu plakaya ${Number(t.ayniPlakaBugun)} gönderim yapıldı</span>` : '') +
           (t.belirsizGonderim
             ? `<span class="tk-uyari tk-belirsiz" role="alert">⚠ Önceki gönderim belirsiz — HKS'te kontrol edilecek ` +
@@ -4966,6 +5039,15 @@ async function taslakDuzenle(t, secenek) {
   $('oPlaka').value   = o.plaka || '';
   $('oBelgeNo').value = o.belgeNo || '';
   if (o.belgeTipiId && String(o.belgeTipiId) !== '0') $('sBelgeTipi').value = String(o.belgeTipiId);
+  // v526: Parti No — kopya kipinde BOŞ ve düzenlenebilir; aksi hâlde taslağın değeri
+  // (üst düzey → ortak → ortak.kaynak); beyandan/beyansız yüklemeden geldiyse salt okunur.
+  if (!kopya) {
+    const pn = t.partiNo || o.partiNo || (o.kaynak && o.kaynak.partiNo) || '';
+    $('sPartiNo').value = String(pn || '');
+    const kilit = !!t.partiKaynak;
+    $('sPartiNo').readOnly = kilit;
+    $('partiNoNot').classList.toggle('gizli', !kilit);
+  }
 
   if (o.yurtIci) {
     // Yurt içi Satış'ta tik kaldırılmış olmalı (Sevk/Satın Alım türden bellidir)
@@ -5602,6 +5684,76 @@ function gonderilenSecKutu(g, i) {
   return `<label class="g-sec" title="Toplu yazdırma için seç"><input type="checkbox" class="g-sec-kutu" data-i="${i}"` +
     ` aria-label="Toplu yazdırma için seç: ${eHtml(g.plaka || g.belgeNo || '')}"${gonderilenSecili.has(g.id) ? ' checked' : ''}></label>`;
 }
+// ── Fatura anahtarı (v526) ── g.faturaKesildi (sunucu varsayılanı: yurt dışı true, yurt içi false).
+// data-i HER ZAMAN özgün indeks. İstek sürerken (faturaIstekte) anahtar disabled çizilir.
+const faturaIstekte = new Set();
+const FATURA_ETIKET = { true: 'Faturası kesildi', false: 'Fatura kesilmedi' };
+function faturaAnahtarHtml(g, i, yaziyla) {
+  const k = !!g.faturaKesildi;
+  const et = FATURA_ETIKET[k];
+  return `<span class="g-fatura-kap"><button type="button" class="g-fatura" role="switch" aria-checked="${k}"` +
+    ` aria-label="${et}" title="${et}" data-fatura data-i="${i}"${faturaIstekte.has(g.id) ? ' disabled aria-busy="true"' : ''}></button>` +
+    (yaziyla ? `<span class="g-fatura-yazi" data-fatura-yazi data-i="${i}">${et}</span>` : '') + `</span>`;
+}
+// Tek gönderimin tüm anahtarlarını (tablo satırı + gömülü/mobil kart) tutarlı tutar; liste yeniden istenmez.
+function faturaAnahtarlariGuncelle(g) {
+  const i = gonderilenVeri.indexOf(g);
+  if (i < 0) return;
+  const k = !!g.faturaKesildi, et = FATURA_ETIKET[k], mesgul = faturaIstekte.has(g.id);
+  document.querySelectorAll(`#gonderilenListe [data-fatura][data-i="${i}"]`).forEach(b => {
+    b.setAttribute('aria-checked', String(k));
+    b.title = et; b.setAttribute('aria-label', et);
+    b.disabled = mesgul;
+    if (mesgul) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
+  });
+  document.querySelectorAll(`#gonderilenListe [data-fatura-yazi][data-i="${i}"]`).forEach(y => { y.textContent = et; });
+}
+async function faturaUygula(g, kesildi) {
+  if (faturaIstekte.has(g.id)) return;
+  faturaIstekte.add(g.id);
+  faturaAnahtarlariGuncelle(g);
+  try {
+    const j = await api('/api/gonderilen_fatura', 'POST', {
+      id: g.id, firmaId: aktifFirma ? aktifFirma.id : '', firmaAd: aktifFirma ? aktifFirma.ad : '', kesildi: !!kesildi,
+    });
+    g.faturaKesildi = (j && typeof j.faturaKesildi === 'boolean') ? j.faturaKesildi : !!kesildi;
+  } catch (e) {
+    toast('⚠ Fatura durumu değiştirilemedi: ' + ((e && e.message) || 'hata'));   // g.faturaKesildi DEĞİŞMEDİ → eski durum
+  } finally {
+    faturaIstekte.delete(g.id);
+    faturaAnahtarlariGuncelle(g);
+  }
+}
+let faturaBekleyen = null;
+function faturaPenceresiKapat() { $('faturaPencere').classList.remove('acik'); faturaBekleyen = null; }
+function faturaPenceresiAc(g) {
+  faturaBekleyen = g;
+  $('fvMetin').textContent = 'Bu gönderim \'Faturası kesildi\' olarak işaretli. \'Fatura kesilmedi\' durumuna alınsın mı?';
+  const ozet = $('fvOzet');
+  ozet.textContent = '';
+  [['Plaka', g.plaka || g.belgeNo || '—'], ['Parti No', g.partiNo || '-']].forEach(([e, d]) => {
+    const satir = document.createElement('div'); satir.className = 'fp-ozet';
+    const a = document.createElement('span'); a.textContent = e;
+    const b = document.createElement('b'); b.textContent = d;
+    satir.appendChild(a); satir.appendChild(b); ozet.appendChild(satir);
+  });
+  $('faturaPencere').classList.add('acik');
+  setTimeout(() => $('btnFvIptal').focus(), 30);
+}
+$('btnFvIptal').onclick = faturaPenceresiKapat;
+$('btnFvKapat').onclick = faturaPenceresiKapat;
+$('faturaPencere').addEventListener('click', (ev) => { if (ev.target === $('faturaPencere')) faturaPenceresiKapat(); });
+$('btnFvOnay').onclick = () => { const g = faturaBekleyen; faturaPenceresiKapat(); if (g) faturaUygula(g, false); };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('faturaPencere').classList.contains('acik')) { e.preventDefault(); e.stopPropagation(); faturaPenceresiKapat(); }
+}, true);
+function faturaTikla(btn) {
+  const g = gonderilenVeri[+btn.dataset.i];
+  if (!g || btn.disabled || faturaIstekte.has(g.id)) return;
+  if (g.faturaKesildi) faturaPenceresiAc(g);        // kesildi → kesilmedi: önce onay
+  else faturaUygula(g, true);                       // kesilmedi → kesildi: doğrudan
+}
+
 function gonderilenKartIcerik(g, i, gomulu) {
   const tarih = new Date(g.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const durumRozet = (g.hataSayisi > 0 || g.genelHata)
@@ -5631,12 +5783,14 @@ function gonderilenKartIcerik(g, i, gomulu) {
     `</div>` +
     _gs('', '🏢 Firma', eHtml(g.firmaAd || '—')) +
     _gs('tk-plaka', '🚛 Plaka', eHtml(g.plaka || g.belgeNo || '—')) +
+    _gs('', '🏷️ Parti No', eHtml(g.partiNo || '-')) +
     _gs('', '🌍 Ülke', eHtml(g.ulkeAd || '—')) +
     _gs('', (g.urunAd ? urunIkonu(g.urunAd) : '🍎') + ' Ürün', eHtml(g.urunAd || '—')) +
     _gs('tk-kilo', '⚖️ Kilo', `${fmt(g.toplamKg)} KG`) +
     _gs('', '📦 Künye', `${g.adet} adet`) +
     _gs('', '💰 Fiyat', `${fmt(g.fiyat)} TL`) +
     _gs('', '🧾 Rüsum', g.rusum ? `${fmt(g.rusum)} TL` : '—') +
+    _gs('', '🧾 Fatura', faturaAnahtarHtml(g, i, true)) +
     (gomulu ? '' :
       `<div class="g-kart-eylem">` +
       `<button type="button" class="g-btn-tekrar" data-i="${i}" aria-haspopup="menu" aria-expanded="false">↻ Tekrar gönder ▾</button>` +
@@ -5707,12 +5861,14 @@ function gonderilenSatirHtml(g, i) {
     `<td class="g-c-kisa">${gonderilenSecKutu(g, i)}<span class="g-ok" aria-hidden="true">${G_SVG.ok}</span><span class="g-tarih-kap">${G_SVG.saat}<span>${gun}</span> <span class="g-t-saat">${saat}</span></span>${durum}</td>` +
     `<td class="g-c-firma" title="${eHtml(g.firmaAd || '')}">${G_SVG.bina}${eHtml(g.firmaAd || '—')}</td>` +
     `<td class="g-c-kisa"><span class="g-plaka">${eHtml(plaka)}</span></td>` +
+    `<td class="g-c-kisa g-c-parti">${g.partiNo ? `<span class="g-parti" title="${eHtml(g.partiNo)}">${eHtml(g.partiNo)}</span>` : '-'}</td>` +
     `<td class="g-c-ulke" title="${eHtml(u.tam)}"><div class="g-ulke-kap">` +
       (u.etiket ? `<span class="g-tag ${u.sinif}">${gonderilenTagIkon(u.sinif)}${eHtml(u.etiket)}</span>` : '') +
       `<span class="g-ulke-ad">${eHtml(u.ad || '—')}</span></div></td>` +
     `<td class="g-c-urun" title="${eHtml(g.urunAd || '')}">${urun}</td>` +
     `<td class="g-c-kisa g-kilo">${G_SVG.agirlik}${kilo}</td>` +
     `<td class="g-c-kisa g-ucret">${G_SVG.para}${ucret}</td>` +
+    `<td class="g-c-kisa g-c-fatura">${faturaAnahtarHtml(g, i, false)}</td>` +
     `<td class="g-c-kisa g-c-eylem"><div class="g-eylem-kap">` +
       `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Künyeleri HKS'ten sorgulayıp yazdır" aria-label="Yazdır">${G_SVG.yazici}<span class="g-btn-yazi">Yazdır</span></button>` +
       `<button type="button" class="g-btn-tekrar" data-i="${i}" title="Tekrar gönder" aria-label="Tekrar gönder" aria-haspopup="menu" aria-expanded="false">` +
@@ -5731,7 +5887,7 @@ const gAraAlnum = (s) => gAraNorm(s).replace(/[^0-9a-z]/g, '');   // plaka: boş
 function gonderilenAramaSamanlik(g) {
   const u = gonderilenUlkeParcala(g);
   const plaka = String(g.plaka || '');
-  return gAraNorm([plaka, g.urunAd, u.ad, g.ulkeAd, g.firmaAd, g.belgeNo].join(' ')) + ' ' + gAraAlnum(plaka);
+  return gAraNorm([plaka, g.urunAd, u.ad, g.ulkeAd, g.firmaAd, g.belgeNo, g.partiNo].join(' ')) + ' ' + gAraAlnum(plaka) + ' ' + gAraAlnum(g.partiNo);
 }
 function gonderilenSuz() {
   const ham = gAraNorm($('gonderilenAra').value).split(/\s+/).filter(Boolean);
@@ -5764,9 +5920,9 @@ function gonderilenCiz() {
   }
   if (gonderilenMasaustu) {
     kap.innerHTML = '<div class="g-tablo-sarma"><table class="g-tablo"><thead><tr>' +
-      '<th class="g-c-kisa">Tarih</th><th class="g-c-firma">Firma</th><th class="g-c-kisa">Plaka</th>' +
+      '<th class="g-c-kisa">Tarih</th><th class="g-c-firma">Firma</th><th class="g-c-kisa">Plaka</th><th class="g-c-kisa g-c-parti">Parti No</th>' +
       '<th class="g-c-ulke">Ülke / Müstahsil</th><th class="g-c-urun">Ürün</th>' +
-      '<th class="g-c-kisa">Kilo</th><th class="g-c-kisa" title="Birim fiyat">Ücret</th>' +
+      '<th class="g-c-kisa">Kilo</th><th class="g-c-kisa" title="Birim fiyat">Ücret</th><th class="g-c-kisa g-c-fatura">Fatura</th>' +
       '<th class="g-c-kisa g-c-eylem">İşlem</th></tr></thead>' +
       gonderilenGorunen.map(x => gonderilenSatirHtml(x.g, x.i)).join('') + '</table></div>';
   } else {
@@ -5892,7 +6048,7 @@ function gonderilenSatirAcKapa(tr) {
     det.className = 'g-detay-tr';
     det.hidden = true;
     const td = document.createElement('td');
-    td.colSpan = 8;
+    td.colSpan = 10;
     const kart = document.createElement('div');
     kart.className = 'g-kart g-kart-gomulu acik';
     kart.innerHTML = gonderilenKartIcerik(g, +tr.dataset.i, true);
@@ -5910,6 +6066,10 @@ function gonderilenSatirAcKapa(tr) {
 $('gonderilenListe').addEventListener('click', (e) => {
   // Seçim kutusu: satır/kart açılıp kapanmasın (işaretleme 'change' dinleyicisinde)
   if (e.target.closest('.g-sec')) { e.stopPropagation(); return; }
+  // v526: Fatura anahtarı — satır/kart açılıp kapanmasın
+  const fat = e.target.closest('.g-fatura');
+  if (fat) { e.stopPropagation(); faturaTikla(fat); return; }
+  if (e.target.closest('.g-fatura-kap')) { e.stopPropagation(); return; }
   const yaz = e.target.closest('.g-yazdir-btn-ust');
   if (yaz) {
     e.stopPropagation();                   // satır/kart açılıp kapanmasın

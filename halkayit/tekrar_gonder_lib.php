@@ -654,3 +654,75 @@ function hks_gonderim_audit_yaz(string $action, string $tur, array $ctx, ?array 
     error_log('[hks_gonderim_audit] ' . get_class($e));
   }
 }
+
+// =============================================================================
+// v526 — PARTİ NO + FATURA DURUMU (saf; SQL yok, DB'ye dokunmaz)
+// =============================================================================
+// Parti no taslakta `ortak.partiNo` (opsiyonel) olarak durur; HKS'e GİTMEZ
+// (hks_soap.php bu alanı okumaz) ve "Tekrar gönder" kopyasına GİRMEZ (beyaz
+// listede yok: yeni sevkiyat = yeni parti). Beyan/beyansız kaynaklı taslakta
+// parti no BEYANDAN gelir (ortak.kaynak.partiNo) — istemci değeri yok sayılır.
+// Fatura durumu Gönderilenler `veri.fatura` = {kesildi, zaman, kullanici}; kayıt
+// yoksa varsayılan: yurt dışı bildirimi → kesildi (true), yurt içi → false.
+const HKS_PARTI_NO_MAX = 60;
+
+// Serbest metin → parti no: kontrol/biçim karakterleri atılır, trim, en çok 60 karakter.
+function hks_parti_no_normalize($s): string {
+  if (!is_string($s) && !is_int($s) && !is_float($s)) return '';
+  $s = (string)$s;
+  if (!mb_check_encoding($s, 'UTF-8')) $s = (string)mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+  $s = (string)preg_replace('/[\p{Cc}\p{Cf}]+/u', '', $s);
+  $s = trim((string)preg_replace('/\s+/u', ' ', $s));
+  return trim(mb_substr($s, 0, HKS_PARTI_NO_MAX, 'UTF-8'));
+}
+
+// Taslağın kaynak tipi: 'beyan' | 'beyansiz' | '' (elle açılmış bildirim).
+function hks_taslak_parti_kaynak_tipi(array $ortak): string {
+  $k = $ortak['kaynak'] ?? null;
+  $tip = is_array($k) ? (string)($k['tip'] ?? '') : '';
+  return in_array($tip, ['beyan', 'beyansiz'], true) ? $tip : '';
+}
+
+// taslak_kaydet: istemciden gelen ortak.partiNo normalize edilir; kaynaklı taslakta
+// kaynak.partiNo'ya ZORLANIR. Boşsa anahtar kaldırılır.
+function hks_taslak_parti_uygula(array $ortak): array {
+  $p = hks_taslak_parti_kaynak_tipi($ortak) !== ''
+    ? hks_parti_no_normalize($ortak['kaynak']['partiNo'] ?? '')
+    : hks_parti_no_normalize($ortak['partiNo'] ?? '');
+  if ($p === '') unset($ortak['partiNo']);
+  else $ortak['partiNo'] = $p;
+  return $ortak;
+}
+
+// Taslağın geçerli parti no'su: ortak.partiNo, yoksa kaynak.partiNo, yoksa ''.
+function hks_taslak_parti_no(array $ortak): string {
+  $p = hks_parti_no_normalize($ortak['partiNo'] ?? '');
+  if ($p === '' && is_array($ortak['kaynak'] ?? null)) $p = hks_parti_no_normalize($ortak['kaynak']['partiNo'] ?? '');
+  return $p;
+}
+
+// Gönderim yurt dışı (ihracat) bildirimi mi? TEK karar yeri. Sıra: veri.yurtDisi
+// (v526+ kayıt) → kopya.ortak.yurtIci (v305+ kayıt) → eski kayıt: hks_eski_tur_coz
+// (bildirim_turu, NULL ise ulke_ad öneki; "Yurt içi →", Satın Alım, Üreticiden Sevk
+// Alım, Sevk Etme = yurt içi; öneksiz Satış = ihracat).
+function hks_fatura_yurtdisi_mi(array $row, array $veri): bool {
+  if (array_key_exists('yurtDisi', $veri) && is_bool($veri['yurtDisi'])) return $veri['yurtDisi'];
+  $kopya = $veri['kopya'] ?? null;
+  if (is_array($kopya) && (int)($kopya['v'] ?? 0) === HKS_KOPYA_SURUM && is_array($kopya['ortak'] ?? null)) {
+    return empty($kopya['ortak']['yurtIci']);
+  }
+  return !hks_eski_tur_coz($row)['yurtIci'];
+}
+
+// Fatura kesildi mi? Açık kayıt (veri.fatura.kesildi) varsa o; yoksa varsayılan.
+function hks_fatura_kesildi_mi(array $row, array $veri): bool {
+  $f = $veri['fatura'] ?? null;
+  if (is_array($f) && array_key_exists('kesildi', $f) && is_bool($f['kesildi'])) return $f['kesildi'];
+  return hks_fatura_yurtdisi_mi($row, $veri);
+}
+
+// veri JSON'una fatura durumunu işler; diğer anahtarlar KORUNUR. Kullanıcı yalnız {id, ad}.
+function hks_fatura_veri_isle(array $veri, bool $kesildi, $kullanici, string $zaman): array {
+  $veri['fatura'] = ['kesildi' => $kesildi, 'zaman' => $zaman, 'kullanici' => hks_gonderim_gonderen($kullanici)];
+  return $veri;
+}

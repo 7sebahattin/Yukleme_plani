@@ -37,19 +37,19 @@ function gonderilenler() {
   return [
     { id: 'g1001', zaman: '2026-10-05T14:32:10+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '31AJE915', belgeNo: '',
       ulkeAd: 'Rusya', urunAd: 'Kayısı', adet: 3, toplamKg: 24500.4, fiyat: 25, rusum: 123.45, hataSayisi: 0, genelHata: '',
-      bildirimTuru: 'SATIS', yeniKunyeler: KUNYELER, gonderen: 'Örnek <b>Kullanıcı</b><img src=x onerror=window.__gx=1>' },
+      bildirimTuru: 'SATIS', partiNo: 'PRT-2026-001', faturaKesildi: true, yeniKunyeler: KUNYELER, gonderen: 'Örnek <b>Kullanıcı</b><img src=x onerror=window.__gx=1>' },
     { id: 'g1002', zaman: '2026-10-04T09:05:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '', belgeNo: 'B-77',
       ulkeAd: 'Satın Alım ← Örnek Müstahsil', urunAd: 'Kiraz', adet: 1, toplamKg: 1200, fiyat: 18.5, rusum: 0, hataSayisi: 2, genelHata: '',
-      bildirimTuru: 'SATIN_ALIM', yeniKunyeler: [] },
+      bildirimTuru: 'SATIN_ALIM', partiNo: '', faturaKesildi: false, yeniKunyeler: [] },
     { id: 'g1003', zaman: '2026-10-03T18:20:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '06ABC123', belgeNo: '',
       ulkeAd: 'Yurt içi → Hal Komisyoncu A.Ş.', urunAd: 'Kayısı', adet: 2, toplamKg: 8000, fiyat: 0, rusum: 0, hataSayisi: 0, genelHata: '',
-      bildirimTuru: 'SEVK_ETME', yeniKunyeler: KUNYELER.slice(0, 2) },
+      bildirimTuru: 'SEVK_ETME', partiNo: '', faturaKesildi: false, yeniKunyeler: KUNYELER.slice(0, 2) },
     { id: 'g1004', zaman: '2026-10-02T07:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '33XYZ99', belgeNo: '',
       ulkeAd: 'Üreticiden Sevk Alım ← Örnek Üretici (Mersin/Silifke)', urunAd: 'Kayısı', adet: 1, toplamKg: 15000, fiyat: 22.75, rusum: 0,
-      hataSayisi: 0, genelHata: '', bildirimTuru: 'URETICIDEN_SEVK_ALIM', yeniKunyeler: ['3601234567890199'] },
+      hataSayisi: 0, genelHata: '', bildirimTuru: 'URETICIDEN_SEVK_ALIM', faturaKesildi: false, yeniKunyeler: ['3601234567890199'] },
     { id: 'g1005', zaman: '2026-09-30T12:00:00+03:00', firmaId: 7, firmaAd: UZUN_FIRMA, plaka: '35UZUN1', belgeNo: '',
       ulkeAd: UZUN_ULKE, urunAd: 'Kayısı', adet: 1, toplamKg: 1234567.8, fiyat: 100.126, rusum: 5, hataSayisi: 0, genelHata: '',
-      bildirimTuru: 'SATIN_ALIM', yeniKunyeler: [] },
+      bildirimTuru: 'SATIN_ALIM', partiNo: 'UZUN-PARTI-99', faturaKesildi: true, yeniKunyeler: [] },
   ];
 }
 
@@ -62,7 +62,7 @@ const sunucu = http.createServer((q, s) => {
 
 // Her sayfa kendi sahte sunucu durumuna sahiptir.
 function durumYarat(extra) {
-  return Object.assign({ istekler: [], firmalar: FIRMALAR, taslaklar: [], tohumGecikme: 0, tohumHata: false, dialoglar: [] }, extra || {});
+  return Object.assign({ istekler: [], firmalar: FIRMALAR, taslaklar: [], tohumGecikme: 0, tohumHata: false, dialoglar: [], faturaGecikme: 0, faturaHata: false }, extra || {});
 }
 async function sayfaKur(ctx, durum, hatalar) {
   const sayfa = await ctx.newPage();
@@ -86,6 +86,11 @@ async function sayfaKur(ctx, durum, hatalar) {
       case 'csrf': return j({ csrf: 'taze456' });
       case 'taslak_kaydet': return j({ tamam: true, id: 'yeni-t1' });
       case 'taslak_sil': return j({ tamam: true });
+      case 'gonderilen_fatura': {
+        if (durum.faturaGecikme) await new Promise(r2 => setTimeout(r2, durum.faturaGecikme));
+        if (durum.faturaHata) return j({ hata: 'Sunucu hatası (deneme)' }, 500);
+        return j({ tamam: true, faturaKesildi: !!g.kesildi });
+      }
       case 'gonderilen_tohum': {
         if (durum.tohumGecikme) await new Promise(r2 => setTimeout(r2, durum.tohumGecikme));
         if (durum.tohumHata || g.id === 'yok') return j({ hata: 'Gönderim bulunamadı (veya bu firmaya ait değil).' }, 404);
@@ -140,27 +145,148 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   ok('masaüstü: TABLO çizildi, kart yok', await gor(sayfa, '.g-tablo') && await sayfa.locator('#gonderilenListe .g-kart').count() === 0);
   ok('5 gönderim = 5 satır', await sayfa.locator('tbody.g-grup > tr.g-satir').count() === 5);
   const basliklar = (await sayfa.locator('.g-tablo thead th').allTextContents()).map(t => t.trim());
-  ok('sütun başlıkları', JSON.stringify(basliklar) === JSON.stringify(['Tarih', 'Firma', 'Plaka', 'Ülke / Müstahsil', 'Ürün', 'Kilo', 'Ücret', 'İşlem']), basliklar.join('|'));
+  ok('sütun başlıkları', JSON.stringify(basliklar) === JSON.stringify(['Tarih', 'Firma', 'Plaka', 'Parti No', 'Ülke / Müstahsil', 'Ürün', 'Kilo', 'Ücret', 'Fatura', 'İşlem']), basliklar.join('|'));
   const hucre = async (satir, n) => (await sayfa.locator('tr.g-satir').nth(satir).locator('td').nth(n).innerText()).replace(/\s+/g, ' ').trim();
   const t0 = await hucre(0, 0);
   ok('satır1 tarih kısa (gg.aa.yy ss:dd) + ✓', /^▾?\s*\d\d\.\d\d\.\d\d \d\d:\d\d\s*✓$/.test(t0), t0);
   ok('satır1 firma / plaka', (await hucre(0, 1)) === 'Test Firma A' && (await hucre(0, 2)) === '31AJE915');
-  ok('satır1 ülke: etiket + ad', (await hucre(0, 3)) === 'İhracat Rusya', await hucre(0, 3));
-  ok('satır1 kilo TAM SAYI, binlik nokta (24500,4 → 24.500 KG)', (await hucre(0, 5)) === '24.500 KG', await hucre(0, 5));
-  ok('satır1 ücret "25 TL/KG"', (await hucre(0, 6)) === '25 TL/KG', await hucre(0, 6));
+  ok('satır1 ülke: etiket + ad', (await hucre(0, 4)) === 'İhracat Rusya', await hucre(0, 4));
+  ok('satır1 kilo TAM SAYI, binlik nokta (24500,4 → 24.500 KG)', (await hucre(0, 6)) === '24.500 KG', await hucre(0, 6));
+  ok('satır1 ücret "25 TL/KG"', (await hucre(0, 7)) === '25 TL/KG', await hucre(0, 7));
   ok('satır2 hata durumu ✗2', /✗2$/.test(await hucre(1, 0)), await hucre(1, 0));
   ok('satır2 plaka yoksa belgeNo', (await hucre(1, 2)) === 'B-77');
-  ok('satır2 önek atıldı, etiket "Satın alım"', (await hucre(1, 3)) === 'Satın alım Örnek Müstahsil', await hucre(1, 3));
+  ok('satır2 önek atıldı, etiket "Satın alım"', (await hucre(1, 4)) === 'Satın alım Örnek Müstahsil', await hucre(1, 4));
   ok('satır2 title = tam metin', (await sayfa.locator('tr.g-satir').nth(1).locator('td.g-c-ulke').getAttribute('title')) === 'Satın Alım ← Örnek Müstahsil');
-  ok('satır2 ücret 18,5 TL/KG (2 ondalığa kadar)', (await hucre(1, 6)) === '18,5 TL/KG', await hucre(1, 6));
-  ok('satır3 "Yurt içi →" atıldı, "Sevk etme", fiyat 0 → "—"', (await hucre(2, 3)) === 'Sevk etme Hal Komisyoncu A.Ş.' && (await hucre(2, 6)) === '—', (await hucre(2, 3)) + ' / ' + (await hucre(2, 6)));
-  ok('satır4 "Üreticiden Sevk Alım ←" atıldı', (await hucre(3, 3)) === 'Üretici sevk Örnek Üretici (Mersin/Silifke)', await hucre(3, 3));
-  ok('satır5 ücret 100,13 TL/KG, kilo 1.234.568 KG', (await hucre(4, 6)) === '100,13 TL/KG' && (await hucre(4, 5)) === '1.234.568 KG', (await hucre(4, 6)) + ' / ' + (await hucre(4, 5)));
+  ok('satır2 ücret 18,5 TL/KG (2 ondalığa kadar)', (await hucre(1, 7)) === '18,5 TL/KG', await hucre(1, 7));
+  ok('satır3 "Yurt içi →" atıldı, "Sevk etme", fiyat 0 → "—"', (await hucre(2, 4)) === 'Sevk etme Hal Komisyoncu A.Ş.' && (await hucre(2, 7)) === '—', (await hucre(2, 4)) + ' / ' + (await hucre(2, 7)));
+  ok('satır4 "Üreticiden Sevk Alım ←" atıldı', (await hucre(3, 4)) === 'Üretici sevk Örnek Üretici (Mersin/Silifke)', await hucre(3, 4));
+  ok('satır5 ücret 100,13 TL/KG, kilo 1.234.568 KG', (await hucre(4, 7)) === '100,13 TL/KG' && (await hucre(4, 6)) === '1.234.568 KG', (await hucre(4, 7)) + ' / ' + (await hucre(4, 6)));
   ok('satır5 uzun firma "…" ile kısalır (title tam)',
      (await sayfa.locator('tr.g-satir').nth(4).locator('td.g-c-firma').getAttribute('title')) === UZUN_FIRMA &&
      await sayfa.evaluate(() => { const td = document.querySelectorAll('tr.g-satir')[4].querySelector('td.g-c-firma'); return td.scrollWidth > td.clientWidth; }));
   ok('1280: sayfada yatay taşma yok', !(await yatayTasma(sayfa)));
   ok('1280: tablo sarmalayıcıda kaydırma gerekmiyor', await sayfa.evaluate(() => { const s = document.querySelector('.g-tablo-sarma'); return s.scrollWidth <= s.clientWidth + 1; }));
+
+  // ================= v526: Parti No + Fatura anahtarı (1280) =================
+  {
+    const fSat = (n) => sayfa.locator('tr.g-satir').nth(n);
+    const fBtn = (n) => fSat(n).locator('button.g-fatura');
+    const fPost = () => D.istekler.filter(i => i.action === 'gonderilen_fatura');
+    const fDurum = (n) => fBtn(n).getAttribute('aria-checked');
+    const fBekle = (n, d) => sayfa.waitForFunction(([k, v]) => document.querySelectorAll('tr.g-satir button.g-fatura')[k].getAttribute('aria-checked') === v, [n, d]);
+    ok('v526: parti no hücresi: dolu kayıt "PRT-2026-001", partisiz (eski/boş) kayıt "-"',
+       (await hucre(0, 3)) === 'PRT-2026-001' && (await hucre(1, 3)) === '-' && (await hucre(2, 3)) === '-' && (await hucre(4, 3)) === 'UZUN-PARTI-99',
+       [await hucre(0, 3), await hucre(1, 3), await hucre(2, 3)].join(' / '));
+    ok('v526: Fatura sütunu Ücret\'ten sonra, İşlem\'den önce; her satırda 1 anahtar',
+       (await sayfa.locator('.g-tablo thead th').nth(8).innerText()).trim() === 'Fatura' && (await sayfa.locator('tr.g-satir button.g-fatura').count()) === 5);
+    const durumlar = await sayfa.$$eval('tr.g-satir button.g-fatura', a => a.map(b => b.getAttribute('aria-checked')));
+    ok('v526: başlangıç durumu g.faturaKesildi: [true,false,false,false,true]', JSON.stringify(durumlar) === '["true","false","false","false","true"]', JSON.stringify(durumlar));
+    const nitel = await sayfa.evaluate(() => {
+      const b = document.querySelectorAll('tr.g-satir button.g-fatura');
+      const renk = (e) => getComputedStyle(e).backgroundColor;
+      return { rol: b[0].getAttribute('role'), data: b[0].hasAttribute('data-fatura'), di: [...b].map(x => x.dataset.i).join(','),
+        titleAcik: b[0].title, titleKapali: b[1].title, ariaKapali: b[1].getAttribute('aria-label'),
+        renkAcik: renk(b[0]), renkKapali: renk(b[1]), w: b[0].getBoundingClientRect().width };
+    });
+    ok('v526: role=switch, data-fatura, data-i özgün indeks, title/aria-label metinli',
+       nitel.rol === 'switch' && nitel.data && nitel.di === '0,1,2,3,4' && nitel.titleAcik === 'Faturası kesildi' && nitel.titleKapali === 'Fatura kesilmedi' && nitel.ariaKapali === 'Fatura kesilmedi', JSON.stringify(nitel));
+    ok('v526: açık = MAVİ (29,95,224), kapalı = TURUNCU (245,158,11), anahtar ~40px',
+       nitel.renkAcik === 'rgb(29, 95, 224)' && nitel.renkKapali === 'rgb(245, 158, 11)' && nitel.w >= 38 && nitel.w <= 42, JSON.stringify(nitel));
+    ok('v526: yurt içi (g1003) kapalı, yurt dışı (g1001) açık', (await fDurum(2)) === 'false' && (await fDurum(0)) === 'true');
+    await foto(sayfa, '13_fatura_1280');
+
+    // kapalı → açık: DOĞRUDAN istek, satır açılmaz
+    D.istekler.length = 0;
+    await fBtn(1).click();
+    await fBekle(1, 'true');
+    const p1 = fPost();
+    ok('v526: kapalı→açık tıkta onay penceresi ÇIKMAZ, istek gider (g1002, firmaId 7, kesildi true, csrf)',
+       !(await sayfa.locator('#faturaPencere.acik').count()) && p1.length === 1 && p1[0].govde.id === 'g1002' && String(p1[0].govde.firmaId) === '7' && p1[0].govde.kesildi === true && p1[0].govde.csrf === 'tok123',
+       JSON.stringify(p1));
+    ok('v526: anahtara tık satırı AÇMAZ (aria-expanded=false, detay satırı yok)',
+       (await fSat(1).getAttribute('aria-expanded')) === 'false' && (await sayfa.locator('tr.g-detay-tr').count()) === 0);
+    ok('v526: başarıda başka satırlar etkilenmez, anahtar tekrar etkin', (await fDurum(2)) === 'false' && !(await fBtn(1).isDisabled()));
+
+    // açık → kapalı: ONAY penceresi
+    D.istekler.length = 0;
+    await fBtn(1).click();
+    await sayfa.waitForSelector('#faturaPencere.acik');
+    const pen = await sayfa.evaluate(() => { const o = document.getElementById('faturaPencere'), d = o.querySelector('.kisi-dlg').getBoundingClientRect();
+      return { z: +getComputedStyle(o).zIndex, baslik: document.getElementById('fvBaslik').textContent, metin: document.getElementById('fvMetin').textContent,
+        ozet: document.getElementById('fvOzet').innerText.replace(/\s+/g, ' ').trim(), vazgec: document.getElementById('btnFvIptal').textContent, onay: document.getElementById('btnFvOnay').textContent,
+        ekranda: d.left >= 0 && d.right <= innerWidth && d.top >= 0 && d.bottom <= innerHeight }; });
+    ok('v526: onay penceresi (z≥600): başlık, metin, plaka/parti, düğmeler',
+       pen.z >= 600 && pen.baslik === 'Fatura durumu' && pen.metin === "Bu gönderim 'Faturası kesildi' olarak işaretli. 'Fatura kesilmedi' durumuna alınsın mı?" &&
+       /Plaka B-77/.test(pen.ozet) && /Parti No -/.test(pen.ozet) && pen.vazgec === 'Vazgeç' && pen.onay === 'Evet, kesilmedi yap' && pen.ekranda, JSON.stringify(pen));
+    ok('v526: pencere açıkken henüz istek YOK, durum değişmedi', fPost().length === 0 && (await fDurum(1)) === 'true');
+    await foto(sayfa, '14_fatura_onay_1280');
+    await sayfa.click('#btnFvIptal');
+    await sayfa.waitForTimeout(80);
+    ok('v526: Vazgeç → pencere kapanır, istek GİTMEZ, durum aynı', !(await sayfa.locator('#faturaPencere.acik').count()) && fPost().length === 0 && (await fDurum(1)) === 'true');
+    await fBtn(1).click();
+    await sayfa.waitForSelector('#faturaPencere.acik');
+    await sayfa.keyboard.press('Escape');
+    await sayfa.waitForTimeout(80);
+    ok('v526: Esc → pencere kapanır, istek GİTMEZ, durum aynı', !(await sayfa.locator('#faturaPencere.acik').count()) && fPost().length === 0 && (await fDurum(1)) === 'true');
+    await fBtn(1).click();
+    await sayfa.waitForSelector('#faturaPencere.acik');
+    await sayfa.click('#btnFvKapat'); await sayfa.waitForTimeout(60);
+    ok('v526: ✕ → kapanır, istek yok', fPost().length === 0 && !(await sayfa.locator('#faturaPencere.acik').count()));
+    await fBtn(1).click();
+    await sayfa.waitForSelector('#faturaPencere.acik');
+    D.faturaGecikme = 350;
+    await sayfa.click('#btnFvOnay');
+    await sayfa.waitForTimeout(80);
+    ok('v526: onayda istek sürerken anahtar DISABLED (aria-busy), pencere kapalı',
+       (await fBtn(1).isDisabled()) && (await fBtn(1).getAttribute('aria-busy')) === 'true' && !(await sayfa.locator('#faturaPencere.acik').count()));
+    await fBekle(1, 'false');
+    const p2 = fPost();
+    ok('v526: onayda istek gider (g1002, kesildi false), aria-checked=false, title "Fatura kesilmedi", anahtar tekrar etkin',
+       p2.length === 1 && p2[0].govde.id === 'g1002' && p2[0].govde.kesildi === false && (await fBtn(1).getAttribute('title')) === 'Fatura kesilmedi' && !(await fBtn(1).isDisabled()),
+       JSON.stringify(p2));
+    D.faturaGecikme = 0;
+
+    // hata: eski duruma döner
+    D.faturaHata = true;
+    await fBtn(1).click();                                   // false → true denenir, sunucu 500
+    await sayfa.waitForFunction(() => document.getElementById('toast').textContent.includes('Fatura durumu değiştirilemedi'));
+    await sayfa.waitForTimeout(60);
+    ok('v526: hatada anahtar ESKİ duruma döner (false), etkin kalır + toast hata gösterir', (await fDurum(1)) === 'false' && !(await fBtn(1).isDisabled()));
+    D.faturaHata = false;
+
+    // satır açık iken gömülü kart tutarlı
+    await fSat(0).locator('td.g-c-firma').click();
+    ok('v526: gömülü kartta Parti No + Fatura satırı var (aynı anahtar)',
+       (await sayfa.locator('.g-detay-tr .g-kart-gomulu').first().innerText()).includes('PRT-2026-001') && (await sayfa.locator('.g-detay-tr button.g-fatura').count()) === 1);
+    await fBtn(0).click();                                    // açık → kapalı: onay
+    await sayfa.waitForSelector('#faturaPencere.acik');
+    await sayfa.click('#btnFvOnay');
+    await fBekle(0, 'false');
+    ok('v526: tablo anahtarı değişince gömülü kartın anahtarı + yazısı da güncellenir',
+       (await sayfa.locator('.g-detay-tr button.g-fatura').getAttribute('aria-checked')) === 'false' && /Fatura kesilmedi/.test(await sayfa.locator('.g-detay-tr .g-fatura-yazi').innerText()));
+    await sayfa.locator('.g-detay-tr button.g-fatura').click();   // gömülü karttaki anahtar da çalışır (kesilmedi → kesildi)
+    await fBekle(0, 'true');
+    ok('v526: gömülü karttaki anahtar da çalışır, tablo anahtarı eşitlenir', /Faturası kesildi/.test(await sayfa.locator('.g-detay-tr .g-fatura-yazi').innerText()));
+    await fSat(0).locator('td.g-c-firma').click();
+
+    // süzgeç: özgün indeks + parti no ile arama
+    await sayfa.fill('#gonderilenAra', 'prt-2026'); await sayfa.waitForTimeout(350);
+    ok('v526: parti no ile arama "prt-2026" → yalnız g1001', (await sayfa.locator('tr.g-satir').count()) === 1 && (await sayfa.locator('tr.g-satir').first().getAttribute('data-i')) === '0');
+    await sayfa.fill('#gonderilenAra', 'prt2026001'); await sayfa.waitForTimeout(350);
+    ok('v526: parti no alfasayısal ("prt2026001") de eşleşir', (await sayfa.locator('tr.g-satir').count()) === 1);
+    await sayfa.fill('#gonderilenAra', 'uzun-parti'); await sayfa.waitForTimeout(350);
+    ok('v526: arama "uzun-parti" → g1005 (özgün indeks 4)', (await sayfa.locator('tr.g-satir').count()) === 1 && (await sayfa.locator('tr.g-satir').first().getAttribute('data-i')) === '4');
+    await sayfa.fill('#gonderilenAra', 'kiraz'); await sayfa.waitForTimeout(350);
+    D.istekler.length = 0;
+    await sayfa.locator('tr.g-satir button.g-fatura').click();     // g1002 (özgün indeks 1), şu an false → true
+    await sayfa.waitForTimeout(250);
+    const pf = fPost();
+    ok('v526: süzgeçliyken doğru kaydın id\'si gider (g1002, özgün indeks 1)', pf.length === 1 && pf[0].govde.id === 'g1002' && (await sayfa.locator('tr.g-satir button.g-fatura').getAttribute('data-i')) === '1', JSON.stringify(pf));
+    await sayfa.fill('#gonderilenAra', ''); await sayfa.waitForTimeout(350);
+    ok('v526: süzgeç temizlenince durum korunur (g1002 artık açık)', (await fDurum(1)) === 'true');
+    ok('v526: sayfada yatay taşma yok (1280, yeni sütunlarla)', !(await yatayTasma(sayfa)));
+  }
+
   ok('her satırda Yazdır + split "Tekrar gönder | ▾" (v324: simge SVG, ▾ ayrı bölme)',
      (await sayfa.locator('tr.g-satir .g-yazdir-btn-ust').count()) === 5 &&
      /^Tekrar gönder\s*▾$/.test((await sayfa.locator('tr.g-satir .g-btn-tekrar').first().innerText()).replace(/\s+/g, ' ').trim()) &&
@@ -491,8 +617,8 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   });
   ok('mobil v324: başlık sıkışmaz (≥160px), sayaç hapı ekranda, illüstrasyon + kısayol ipucu gizli, taşma yok',
      mUst.baslikGen >= 160 && mUst.sayacEkranda && !mUst.tasma && mUst.resimGizli && mUst.kbdGizli, JSON.stringify(mUst));
-  ok('mobil: kart başlığında Yazdır var, her kartta 8 bilgi satırı',
-     await sayfaM.locator('.g-kart .g-yazdir-btn-ust').count() === 5 && await sayfaM.locator('.g-kart').first().locator('.tk-satir').count() === 8);
+  ok('mobil: kart başlığında Yazdır var, her kartta 10 bilgi satırı (v526: + Parti No, Fatura)',
+     await sayfaM.locator('.g-kart .g-yazdir-btn-ust').count() === 5 && await sayfaM.locator('.g-kart').first().locator('.tk-satir').count() === 10);
   ok('mobil: kart içeriği DEĞİŞMEDİ (kilo 2 ondalık biçimli "24.500,4 KG", fiyat "25 TL")',
      (await sayfaM.locator('.g-kart').first().innerText()).includes('24.500,4 KG') && (await sayfaM.locator('.g-kart').first().innerText()).includes('25 TL'));
   ok('mobil: başta künye detayı KAPALI', !(await sayfaM.locator('.g-kart').first().evaluate(e => e.classList.contains('acik'))));
@@ -508,6 +634,39 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   });
   ok('mobil: düğme bilgi satırlarının ALTINDA, künye detayının DIŞINDA, tam genişlik, parmakla basılır boy (≥40px)',
      mkonum.altinda && mkonum.detayDisinda && mkonum.tamGenislik && mkonum.ekranda && mkonum.yukseklik >= 40, JSON.stringify(mkonum));
+  // --- v526 mobil: Parti No + Fatura satırları ---
+  {
+    const k0 = sayfaM.locator('.g-kart').nth(0), k1 = sayfaM.locator('.g-kart').nth(1);
+    const mTxt = async (k) => (await k.innerText()).replace(/\s+/g, ' ');
+    ok('v526 mobil: Parti No satırı (dolu "PRT-2026-001", boş "-") + Fatura yazısı (kesildi / kesilmedi)',
+       /Parti No PRT-2026-001/.test(await mTxt(k0)) && /Parti No -/.test(await mTxt(k1)) && /Fatura Faturası kesildi/.test(await mTxt(k0)) && /Fatura Fatura kesilmedi/.test(await mTxt(k1)), await mTxt(k1));
+    const fb = await sayfaM.evaluate(() => { const b = document.querySelector('.g-kart button.g-fatura').getBoundingClientRect();
+      return { w: b.width, h: b.height, ekranda: b.left >= 0 && b.right <= innerWidth }; });
+    ok('v526 mobil: anahtar ekranda, dokunma boyu ≥ 44×26', fb.ekranda && fb.w >= 44 && fb.h >= 26, JSON.stringify(fb));
+    DM.istekler.length = 0;
+    await k1.locator('button.g-fatura').tap();                        // kesilmedi → kesildi: doğrudan
+    await sayfaM.waitForFunction(() => document.querySelectorAll('.g-kart button.g-fatura')[1].getAttribute('aria-checked') === 'true');
+    ok('v526 mobil: kesilmedi→kesildi doğrudan (onay yok), yazı güncellenir, kart AÇILMAZ',
+       DM.istekler.filter(i => i.action === 'gonderilen_fatura').length === 1 && !(await sayfaM.locator('#faturaPencere.acik').count()) &&
+       /Faturası kesildi/.test(await mTxt(k1)) && !(await k1.evaluate(e => e.classList.contains('acik'))));
+    await k1.locator('button.g-fatura').tap();                        // kesildi → kesilmedi: onay
+    await sayfaM.waitForSelector('#faturaPencere.acik');
+    const mp2 = await sayfaM.evaluate(() => { const d = document.querySelector('#faturaPencere .kisi-dlg').getBoundingClientRect();
+      return { l: d.left, r: d.right, b: d.bottom, vw: innerWidth, vh: innerHeight, ozet: document.getElementById('fvOzet').innerText.replace(/\s+/g, ' ') }; });
+    ok('v526 mobil: onay penceresi ekranı aşmaz, plaka/parti görünür', mp2.l >= 0 && mp2.r <= mp2.vw + 1 && mp2.b <= mp2.vh + 1 && /B-77/.test(mp2.ozet), JSON.stringify(mp2));
+    await foto(sayfaM, '15_mobil_fatura_onay');
+    DM.istekler.length = 0;
+    await sayfaM.tap('#btnFvIptal');
+    ok('v526 mobil: Vazgeç → istek yok, durum aynı (true)', DM.istekler.filter(i => i.action === 'gonderilen_fatura').length === 0 &&
+       (await k1.locator('button.g-fatura').getAttribute('aria-checked')) === 'true');
+    await k1.locator('button.g-fatura').tap();
+    await sayfaM.waitForSelector('#faturaPencere.acik');
+    await sayfaM.tap('#btnFvOnay');
+    await sayfaM.waitForFunction(() => document.querySelectorAll('.g-kart button.g-fatura')[1].getAttribute('aria-checked') === 'false');
+    ok('v526 mobil: onayda istek gider (g1002, kesildi false), yazı "Fatura kesilmedi"',
+       DM.istekler.filter(i => i.action === 'gonderilen_fatura').length === 1 && /Fatura kesilmedi/.test(await mTxt(k1)));
+    ok('v526 mobil: yatay taşma yok', !(await yatayTasma(sayfaM)));
+  }
   await foto(sayfaM, '09a_mobil_kapali');
   await mtekrar.tap();
   ok('mobil: düğmeye dokunmak kartı AÇMAZ (yalnız menüyü açar)', !(await sayfaM.locator('.g-kart').first().evaluate(e => e.classList.contains('acik'))) && await sayfaM.isVisible('#gTekrarMenu'));
