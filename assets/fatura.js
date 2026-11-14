@@ -2,7 +2,7 @@
    assets/fatura.js — Fatura modülü istemcisi (satis_faturalari / alis_faturalari / sevk_irsaliyeleri / alinan_siparis_fisleri / fatura_tanimlari)
    Yalnız #fatura kökü olan sayfada çalışır. Yazmalar YALNIZ fatura_kaydet.php'ye (fetch + X-Requested-With: fetch; JS kapalıyken
    aynı formlar klasik POST + 303 ile çalışır). app.js / stok.js / cari.js'e DOKUNMAZ. kalıcı tarayıcı deposu KULLANILMAZ (toast: yalnız sessionStorage).
-   Canlı toplamlar YALNIZ önizlemedir (sunucu esas; plan §4 formülü: kuruş/milli/on-binde TAM SAYI, parseFloat YOK). JS hiçbir toplamı POST etmez.
+   Canlı toplamlar YALNIZ önizlemedir (sunucu esas; plan §4 formülü: kuruş/milli/on-binde TAM SAYI, kayan noktalı ayrıştırma yok). JS hiçbir toplamı POST etmez.
    Satırların doğruluk kaynağı DOM'dur (#ftForm .ft-fsatir; paralel `name[]` dizileri) — ayrı satır dizisi tutulmaz.
    Kancalar: #ftForm[data-ft-fatura] · #ftVeri · #ftSatirSablon · [data-satir-ekle|sil|kopya|menu|ayrinti] · [data-son-fiyat-uygula] · [data-kalana-esitle] ·
              #ftEksik ([data-eksik-duzelt] / [data-eksik-kaydet]) · [data-kaynak-getir] · #ftModalKaynak · #ftSatirSheet · [data-ft-modal="iptal"|"kapat"] ·

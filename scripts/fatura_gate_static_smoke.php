@@ -3,8 +3,8 @@
 // scripts/fatura_gate_static_smoke.php — Fatura: kapı / csrf / audit / dosya adı / değişmezlik / bağımlılık yönü STATİK denetimi
 //   php scripts/fatura_gate_static_smoke.php     → çıkış kodu 0 = hepsi geçti
 // Kaynağa bakar (yorumlar token_get_all ile atılır; çalıştırma YOK). Davranış testleri: fatura_core_smoke.php (+ Dalga B: fatura_ui_smoke.php).
-// Dalga A + B'yi birlikte tanır: 5 sayfa ya yer tutucu ("hazırlanıyor"; alinan_siparis_fisleri 302) ya da çalışan modül kabuğu olmalı.
-// Dalga B bu dosyaya ekler: istemci varlıkları (assets/fatura.css|js) ve sürüm eşitliği (≥526) bölümleri.
+// Dalga B (v526) durumu: 5 sayfanın HEPSİ çalışan modül kabuğu (yer tutucu / 302 YOK), fatura_cikti.php salt okunur uç,
+// istemci varlıkları (assets/fatura.css|js) ve sürüm eşitliği (≥526) bölümleri.
 // =========================================================
 declare(strict_types=1);
 $ROOT = dirname(__DIR__);
@@ -34,9 +34,8 @@ $sayfalar = ['alis_faturalari.php', 'satis_faturalari.php', 'sevk_irsaliyeleri.p
 echo "=== 1. Dosya kümesi ve adlar ===\n";
 $kok = array_map('basename', glob($ROOT . '/fatura_*.php'));
 sort($kok);
-$A = ['fatura_kaydet.php', 'fatura_tanimlari.php'];
 $B = ['fatura_cikti.php', 'fatura_kaydet.php', 'fatura_tanimlari.php'];
-ok('kökte fatura_*.php: Dalga A {fatura_kaydet, fatura_tanimlari} ya da Dalga B {+ fatura_cikti} — başka yok', $kok === $A || $kok === $B, json_encode($kok));
+ok('kökte fatura_*.php TAM {fatura_cikti, fatura_kaydet, fatura_tanimlari} — başka yok', $kok === $B, json_encode($kok));
 ok('5 fatura sayfası var (URL\'ler sabit)', count(array_filter($sayfalar, fn($f) => is_file($ROOT . '/' . $f))) === 5);
 ok('api_fatura*.php / _fatura*.php kökte YOK', !glob($ROOT . '/api_fatura*.php') && !glob($ROOT . '/_fatura*.php'));
 ok('config/fatura_core.php var', is_file($ROOT . '/config/fatura_core.php'));
@@ -59,7 +58,7 @@ foreach ($sayfalar as $f) {
         ok("$f: (Dalga A) yer tutucu: is_admin kapısı + 'hazırlanıyor', \$_POST yok", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST'));
     }
 }
-echo '   (' . count($calisan) . ' çalışan sayfa, ' . count($yerTutucu) . " yer tutucu — Dalga B hepsini çalışan modüle çevirir)\n";
+ok('Dalga B: 5 sayfanın hepsi çalışan modül (yer tutucu / 302 kalmadı)', count($calisan) === 5 && !$yerTutucu, json_encode($yerTutucu));
 foreach ($calisan as $f) {
     $s = kod($ROOT . '/' . $f);
     ok("$f: <?php + strict_types", str_starts_with($s, '<?php') && str_contains($s, 'declare(strict_types=1)'));
@@ -164,6 +163,35 @@ ok('migrate.php: require fatura_core + mg_kart_ac(\'fatura\') + ne=fatura dalı 
 ok('migrate.php: fatura kartı stok kartından SONRA; ✓/✗ durum satırı + form ne=fatura', $pos($mg, "mg_kart_ac('stok')") > 0 && $pos($mg, "mg_kart_ac('fatura')") > $pos($mg, "mg_kart_ac('stok')")
     && str_contains($mg, "\$faturaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik'") && str_contains($mg, 'name="ne" value="fatura"'));
 
-echo "\n(Dalga B: istemci varlıkları + sürüm eşitliği bölümleri henüz yok — assets/fatura.* ve v526 Dalga B'de.)\n";
+echo "\n=== 8. fatura_cikti.php: salt okunur çıktı ucu ===\n";
+$fc = kod($ROOT . '/fatura_cikti.php');
+ok('fatura_cikti: kapı sırası require_login → is_admin → fatura_kapi(\'read\') → fatura_no_store → fatura_sayfa_kapisi', $sirali(array_map(fn($a) => $pos($fc, $a), ['require_login()', 'if (!is_admin()) { forbidden(', "fatura_kapi('read')", 'fatura_no_store()', 'fatura_sayfa_kapisi($pdo)'])));
+ok('fatura_cikti: yalnız GET — $_POST / csrf_check / SQL / ->prepare YOK; config/cari_core.php / stok_core.php metni GEÇMEZ', !str_contains($fc, '$_POST') && !str_contains($fc, 'csrf_check(') && !preg_match($SQL_YAZ, $fc) && !preg_match('/->(prepare|query|exec)\(/', $fc)
+    && !str_contains($fc, 'config/cari_core.php') && !str_contains($fc, 'config/stok_core.php'));
+ok("fatura_cikti: dışa aktarım require_perm('reports.export') + export_audit('fatura', 'liste', …) + xlsx_indir; belge fatura_gorunur", str_contains($fc, "require_perm('reports.export')") && str_contains($fc, "export_audit('fatura', 'liste',")
+    && str_contains($fc, 'xlsx_indir(') && str_contains($fc, 'fatura_gorunur($b)') && $pos($fc, "require_perm('reports.export')") < $pos($fc, "export_audit('fatura'"));
+ok('fatura_cikti: firma bilgisi tek kaynaktan (siparis_inv_ihracatci) + "resmî e-belge değildir" alt notu (fatura_ui)', str_contains($fc, 'siparis_inv_ihracatci()') && str_contains((string)file_get_contents($ROOT . '/config/fatura_ui.php'), 'Bu çıktı bilgi amaçlıdır, resmî e-belge değildir.'));
+$ui = kod($ROOT . '/config/fatura_ui.php');
+ok('config/fatura_ui.php: SORGU / yazma YOK (yalnız fatura_core okuyucuları), $_POST yok', !preg_match('/->(prepare|query|exec)\(/', $ui) && !preg_match($SQL_YAZ, $ui) && !str_contains($ui, '$_POST'));
+ok('config/fatura_ui.php: tutar yazıyla YOK (yönetici kararı #8)', !preg_match('/yaziyla|Yalnız:/u', $ui));
+
+echo "\n=== 9. İstemci varlıkları (assets/fatura.css|js) ===\n";
+$js = (string)file_get_contents($ROOT . '/assets/fatura.js');
+$css = (string)file_get_contents($ROOT . '/assets/fatura.css');
+ok('fatura.js: TEK innerHTML (htmlParca), localStorage YOK', substr_count($js, 'innerHTML') === 1 && str_contains($js, 'function htmlParca(') && !str_contains($js, 'localStorage'));
+ok('fatura.js: yönlendirme beyaz listesi çekirdekteki fatura_geri_guvenli regex\'inin aynısı', str_contains($js, 'yonRe: /^(alis_faturalari|satis_faturalari|sevk_irsaliyeleri|alinan_siparis_fisleri|fatura_tanimlari)\.php(\?[^\r\n]*)?$/'));
+ok('fatura.js: yazmalar yalnız fatura_kaydet.php; parseFloat YOK (tam sayı hesap)', str_contains($js, "kaydet: 'fatura_kaydet.php'") && !str_contains($js, 'parseFloat'));
+$cssKod = preg_replace('#/\*.*?\*/#s', '', $css) ?? $css;
+ok('fatura.css: çıplak html / body / input / .btn / .card seçicisi YOK', !preg_match('/(^|[},]\s*)(html|body|input|\.btn|\.card)\s*[{,]/m', $cssKod));
+ok('fatura.css: overflow-x: hidden YOK; mobil 16px, var(--bn-h), env(safe-area-inset-bottom', !preg_match('/overflow-x\s*:\s*hidden/', $cssKod) && str_contains($cssKod, 'font-size: 16px') && str_contains($cssKod, 'var(--bn-h)') && str_contains($cssKod, 'env(safe-area-inset-bottom'));
+ok('fatura.css: yapışkan alt çubuk (.ft-eylem-bar) z-index taşımaz', (bool)preg_match('/\.ft-eylem-bar \{[^}]*position: sticky[^}]*\}/', $cssKod) && !preg_match('/\.ft-eylem-bar \{[^}]*z-index/', $cssKod));
+ok('style.css\'te .ft- yok; app.js\'te fatura_kaydet yok', !str_contains((string)file_get_contents($ROOT . '/assets/style.css'), '.ft-') && !str_contains((string)file_get_contents($ROOT . '/assets/app.js'), 'fatura_kaydet'));
+
+echo "\n=== 10. Sürüm eşitliği (≥526) ===\n";
+preg_match("/define\('APP_SURUM', 'v(\d+)'\)/", (string)file_get_contents($ROOT . '/config/helpers.php'), $a1);
+preg_match("/CACHE_NAME = 'yukleme-plani-v(\d+)'/", $sw, $a2);
+preg_match('/\*\*SW Cache:\*\* `yukleme-plani-v(\d+)`/', (string)file_get_contents($ROOT . '/CLAUDE.md'), $a3);
+ok('APP_SURUM = sw.js CACHE_NAME = CLAUDE.md SW Cache ve ≥ 526', isset($a1[1], $a2[1], $a3[1]) && $a1[1] === $a2[1] && $a2[1] === $a3[1] && (int)$a1[1] >= 526, json_encode([$a1[1] ?? null, $a2[1] ?? null, $a3[1] ?? null]));
+
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
