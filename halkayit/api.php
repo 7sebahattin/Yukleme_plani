@@ -67,6 +67,9 @@ require_once __DIR__ . '/tekrar_gonder_lib.php';
 require_once __DIR__ . '/kunye_secim_lib.php';
 // Firma ekle/düzenle/sil: DB + audit mantığı (yetki/CSRF kapısı aşağıda, burada).
 require_once __DIR__ . '/firma_yonetim_lib.php';
+// v526: elle girilen parti no'lu gönderimi beyan / beyansız yükleme tarafına işler
+// (hks_partili_gonderim_beyana_isle — hata yutar, HKS akışını kesmez).
+require_once __DIR__ . '/../config/beyansiz_yukleme.php';
 
 
 // =============================================================================
@@ -240,7 +243,7 @@ function hks_eylem_sinifi(string $action, array $g): string {
     'kisi_sil', 'taslak_sil' => 'delete',
     'taslak_kaydet' => trim((string)($g['eskiTaslakId'] ?? '')) !== '' ? 'edit' : 'create',
     'taslak_kopya_firmaya', 'taslak_gonder' => 'create',
-    'taslak_fiyat_yaz', 'belirsiz_isaret_kapat' => 'edit',
+    'taslak_fiyat_yaz', 'belirsiz_isaret_kapat', 'gonderilen_fatura' => 'edit',
     default => 'read',
   };
 }
@@ -249,7 +252,7 @@ function hks_eylem_sinifi(string $action, array $g): string {
 function hks_eylem_icerigi(string $action, array $g): ?string {
   return match ($action) {
     'taslaklar' => 'ekr_taslaklar',
-    'gonderilenler' => 'ekr_gonderilenler',
+    'gonderilenler', 'gonderilen_fatura' => 'ekr_gonderilenler',
     'gonderilen_tohum' => 'tekrar_gonder',
     'toplu_kunye', 'kunyeler', 'kunye_detay' => 'ekr_kunye',
     'sorgu' => 'ekr_sorgu',
@@ -542,6 +545,9 @@ try {
           'ayniPlakaBugun' => $__plakaBugun,
           'belirsizGonderim' => hks_belirsiz_taslak_icin($__belirsizListe,
             $veri['ortak']['plaka'] ?? '', $veri['ortak']['belgeNo'] ?? ''),
+          // v526: parti no (ortak.partiNo, yoksa beyan/beyansız kaynağın partiNo'su) + kaynak tipi.
+          'partiNo' => hks_taslak_parti_no(is_array($veri['ortak'] ?? null) ? $veri['ortak'] : []),
+          'partiKaynak' => hks_taslak_parti_kaynak_tipi(is_array($veri['ortak'] ?? null) ? $veri['ortak'] : []),
         ];
         if (!empty($veri['ortak']['fiyatBekliyor'])) $__t['sonFiyat'] = $__sonFiyat((array)$veri['ortak']);
         return $__t;
@@ -573,6 +579,9 @@ try {
         $eskiVeri = json_decode((string)$es->fetchColumn(), true);
         if (!empty($eskiVeri['ortak']['kaynak'])) $g['ortak']['kaynak'] = $eskiVeri['ortak']['kaynak'];
       }
+      // v526: parti no — normalize (trim, kontrol karakteri, ≤60); kaynaklı (beyan/beyansız)
+      // taslakta kaynak.partiNo'ya ZORLANIR (istemci değeri yok sayılır). Kaynak aktarımından SONRA.
+      if (is_array($g['ortak'] ?? null)) $g['ortak'] = hks_taslak_parti_uygula($g['ortak']);
       $sonuc = hks_taslak_olustur($g);
       if (!empty($sonuc['hata'])) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod'] ?? 400);
       if ($eskiId !== '' && function_exists('beyan_hks_taslak_tasi')) {
@@ -1189,7 +1198,8 @@ try {
           $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
           $__badet > 0 ? $__badet : count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
           count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
-          json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya, 'gonderen' => hks_gonderim_gonderen($__hks_user)], JSON_UNESCAPED_UNICODE)]);
+          json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya, 'gonderen' => hks_gonderim_gonderen($__hks_user),
+            'partiNo' => hks_taslak_parti_no($ortak), 'yurtDisi' => empty($ortak['yurtIci'])], JSON_UNESCAPED_UNICODE)]);
       } catch (Throwable $__ke) {
         // Künye HKS'te oluştu; Gönderilenler kaydı yazılamadı (audit'te izi var). 500 vermek sonucu
         // gizler, kullanıcı veriyi yeniden girip MÜKERRER gönderirdi → sonuç yine döner, uyarıyla.
@@ -1211,6 +1221,14 @@ try {
           'beyanId' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyan') ? (int)($kaynak['beyanId'] ?? 0) : 0,
           'beyansizId' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyansiz') ? (int)($kaynak['kayitId'] ?? 0) : 0]);
       }
+      // v526 — ELLE girilen parti no'lu (kaynaksız) çıkış yönlü bildirim → yurt dışıysa eksik bilgili
+      // "yuklendi" beyan + gonderildi bağı, yurt içiyse "Bildirim Yapılanlar"a beyansız satır.
+      // Kural ve mükerrer koruması fonksiyonda; Throwable yutar (künye zaten oluştu).
+      $__otoKayit = ['tip' => '', 'id' => 0];
+      if (function_exists('hks_partili_gonderim_beyana_isle')) {
+        $__otoKayit = hks_partili_gonderim_beyana_isle($ortak, $t, $gid, (float)$toplamKg,
+          isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
+      }
 
       // Taslak zaten en başta ATOMİK olarak sahiplenilirken silinmişti (çift
       // gönderim koruması) ve buraya gelindiyse en az bir künye GERİ ALINAMAZ
@@ -1221,7 +1239,7 @@ try {
       // satırıyla AYNI plaka/belge/gün/künyeler — yazdırma HKS'e yine canlı sorgu atar).
       hks_json_cikti($sonuc + ['gonderim' => ['id' => $gid, 'plaka' => (string)($ortak['plaka'] ?? ''),
         'belgeNo' => (string)($ortak['belgeNo'] ?? ''), 'tarih' => date('Y-m-d'), 'kunyeler' => $yeniKunyeler],
-        'belirsizKontrol' => $__belirsizKontrol, 'kayitUyari' => $kayitUyari]);
+        'belirsizKontrol' => $__belirsizKontrol, 'kayitUyari' => $kayitUyari, 'otoKayit' => $__otoKayit]);
     }
 
     // ---- GÖNDERİLENLER (yalnızca seçili firma) ----
@@ -1256,6 +1274,9 @@ try {
           'kopyaVar' => !empty($veri['kopya']),
           // v417: gönderen kullanıcının ad anlık görüntüsü (eski kayıtlarda boş).
           'gonderen' => is_string($veri['gonderen']['ad'] ?? null) ? $veri['gonderen']['ad'] : '',
+          // v526: parti no (eski kayıtta '') + fatura durumu (açık kayıt yoksa yurt dışı → true).
+          'partiNo' => is_string($veri['partiNo'] ?? null) ? $veri['partiNo'] : '',
+          'faturaKesildi' => hks_fatura_kesildi_mi($r, $veri),
         ];
       }, $rows);
       hks_json_cikti(['gonderilenler' => $liste]);
@@ -1283,6 +1304,37 @@ try {
       $firmaDegisti = $hedef !== '' && $hedef !== $fid;
       if ($firmaDegisti && !hks_firma_bul($hedef)) hks_json_cikti(['hata' => 'Hedef firma bulunamadı.'], 400);
       hks_json_cikti(hks_gonderim_tohumu($db, $row, $hedef !== '' ? $hedef : null, $firmaDegisti));
+    }
+
+    case 'gonderilen_fatura': {
+      // v526 — Gönderilenler satırının fatura durumu (kesildi / kesilmedi). Yalnız `veri` JSON'unun
+      // `fatura` anahtarı yazılır, diğer anahtarlar korunur; HKS'e bağlanmaz. CSRF merkezi kapıda
+      // (muaf listede DEĞİL), eylem sınıfı 'edit'. Firma izolasyonu 'gonderilenler' ile BİREBİR.
+      $fid = trim((string)($g['firmaId'] ?? ''));
+      $fad = trim((string)($g['firmaAd'] ?? ''));
+      $gid = trim((string)($g['id'] ?? ''));
+      if ($fid === '') hks_json_cikti(['hata' => 'Firma seçilmedi.'], 400);
+      if ($gid === '') hks_json_cikti(['hata' => 'Gönderim seçilmedi.'], 400);
+      $__yeni = filter_var($g['kesildi'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+      if (!is_bool($__yeni)) hks_json_cikti(['hata' => 'Fatura durumu (kesildi) true/false olmalıdır.'], 400);
+      $st = $db->prepare('SELECT * FROM ' . hks_tablo('gonderilenler') . '
+        WHERE id = ? AND (firma_id = ? OR (COALESCE(firma_id, \'\') = \'\' AND firma_ad = ?))');
+      $st->execute([$gid, $fid, $fad]);
+      $row = $st->fetch();
+      if (!$row) hks_json_cikti(['hata' => 'Gönderim bulunamadı (veya bu firmaya ait değil).'], 404);
+      $__ham = (string)($row['veri'] ?? '');
+      $veri = $__ham === '' ? [] : json_decode($__ham, true);
+      if (!is_array($veri)) hks_json_cikti(['hata' => 'Gönderim kaydı okunamadı; fatura durumu yazılmadı.'], 409);
+      $__eski = hks_fatura_kesildi_mi($row, $veri);
+      $veri = hks_fatura_veri_isle($veri, $__yeni, $__hks_user, date('Y-m-d H:i:s'));
+      $up = $db->prepare('UPDATE ' . hks_tablo('gonderilenler') . ' SET veri = ?
+        WHERE id = ? AND (firma_id = ? OR (COALESCE(firma_id, \'\') = \'\' AND firma_ad = ?))');
+      $up->execute([json_encode($veri, JSON_UNESCAPED_UNICODE), $gid, $fid, $fad]);
+      try {
+        audit_log_event('hks_fatura_durum', 'hks_gonderim', null, ['kesildi' => $__eski],
+          ['gonderim_id' => $gid, 'kesildi' => $__yeni]);
+      } catch (Throwable $__ae) { error_log('[hks] fatura audit yazılamadı: ' . get_class($__ae)); }
+      hks_json_cikti(['tamam' => true, 'faturaKesildi' => $__yeni]);
     }
 
     // ---- ÜRÜN REFERANSLARI (referanssız bildirim / Satın Alım için) ----
