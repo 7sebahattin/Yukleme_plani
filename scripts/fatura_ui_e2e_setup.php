@@ -1,7 +1,7 @@
 <?php
 // =========================================================
 // scripts/fatura_ui_e2e_setup.php — scripts/fatura_ui_smoke.js / fatura_ui_render.php için KALICI dosya SQLite hazırlar (canlı DB'ye HİÇ dokunmaz).
-//   php scripts/fatura_ui_e2e_setup.php <db-yolu> [ornek|bos|sema]
+//   php scripts/fatura_ui_e2e_setup.php <db-yolu> [ornek|bos|sema] [cok]   (cok: + Deneme Gıda için 40 sipariş — uzun kaynak listesi)
 //   ornek = şema + uydurma örnek veri (fatura_t_ornek_veri) + GERÇEK fatura_kaydet ile örnek belgeler:
 //           sipariş (Domates 1.000 kg + Kasa 100) → irsaliye (Domates 400 kg) · satış (2 satır) · alış · İhracat USD
 //   bos   = şema + örnek kart/cari, belge YOK · sema = tablo YOK (uyarı kartı senaryosu)
@@ -42,6 +42,10 @@ if ($mod !== 'sema') {
         $ist = fatura_t_tanim($db, 'istisna', '301 — KDV 11/1-a Mal ihracatı');
         $ih = $kaydet('satis_ihracat', [['kart_id' => $dom, 'miktar' => '2.000', 'birim_fiyat' => '1,15', 'kdv_orani' => '0']], ['cari_id' => (string)$C['Örnek İhracat Ltd.'], 'para_birimi' => 'USD', 'kur' => '34,5678', 'istisna_id' => (string)$ist]);
         $R['ihracat'] = $ih['id'];
+        if (in_array('cok', array_slice($argv, 3), true)) {   // uzun kaynak listesi (modal kaydırma testi): 40 sipariş
+            $dg = $C['Deneme Gıda A.Ş.'];
+            for ($i = 1; $i <= 40; $i++) $kaydet('siparis', [['kart_id' => $kasa, 'miktar' => (string)(10 + $i), 'birim_fiyat' => '2,00', 'kdv_orani' => '20']], ['cari_id' => (string)$dg, 'fatura_no' => 'DG-' . $i]);
+        }
     }
 }
 echo "hazir $mod\n" . json_encode($R, JSON_UNESCAPED_UNICODE) . "\n";

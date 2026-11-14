@@ -273,7 +273,7 @@ function fatura_toplam_html(array $t, string $tur, bool $salt, array $o = []): s
         . '<div><dt>KDV matrahı</dt><dd data-top="net">' . $p((int)$t['net']) . '</dd></div>'
         . '<div><dt>KDV</dt><dd data-top="kdv">' . $p((int)$t['kdv']) . '</dd></div>'
         . '<div class="ft-top-genel"><dt>' . ($faturali ? 'Genel toplam' : 'Tutar (bilgi)') . '</dt><dd data-top="genel">' . $p((int)$t['genel']) . ' <small data-top-pb>' . h($pb) . '</small></dd></div>'
-        . '<div data-satir="tevkifat"' . $gizli((int)$t['tevkifat'] > 0 || (!$salt && !empty($b['tevkifat_izin']))) . '><dt data-et="tevkifat">' . h((string)($o['tevkifat_etiket'] ?? 'Tevkifat')) . '</dt><dd data-top="tevkifat">−' . $p((int)$t['tevkifat']) . '</dd></div>'
+        . '<div data-satir="tevkifat"' . $gizli((int)$t['tevkifat'] > 0) . '><dt data-et="tevkifat">' . h((string)($o['tevkifat_etiket'] ?? 'Tevkifat')) . '</dt><dd data-top="tevkifat">−' . $p((int)$t['tevkifat']) . '</dd></div>'
         . '<div data-satir="stopaj"' . $gizli((int)$t['stopaj'] > 0 || (!$salt && !empty($b['mustahsil']))) . '><dt data-et="stopaj">' . h((string)($o['stopaj_etiket'] ?? 'GV stopajı')) . '</dt><dd data-top="stopaj">−' . $p((int)$t['stopaj']) . '</dd></div>'
         . '<div data-satir="bagkur"' . $gizli((int)$t['bagkur'] > 0 || (!$salt && !empty($b['mustahsil']))) . '><dt data-et="bagkur">' . h((string)($o['bagkur_etiket'] ?? 'Bağ-Kur')) . '</dt><dd data-top="bagkur">−' . $p((int)$t['bagkur']) . '</dd></div>'
         . '<div class="ft-top-cari" data-satir="cari"' . $gizli($faturali || !$salt) . '><dt data-cari-etiket>' . h($cariEt) . '</dt><dd data-top="cari">' . $p((int)$t['cari']) . '</dd></div>'
@@ -722,9 +722,10 @@ function fatura_form_html(PDO $pdo, string $sinif, array $o, array $cariler): st
         . '<form method="post" action="fatura_kaydet.php" class="ft-form" id="ftForm" data-ft-fatura data-tur="' . h($tur) . '" data-sinif="' . h($sinif) . '" novalidate>'
         . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '"><input type="hidden" name="islem" value="belge_kaydet">'
         . '<input type="hidden" name="istek_anahtari" value="' . h(bin2hex(random_bytes(12))) . '"><input type="hidden" name="eksiye_izin" value="0"><input type="hidden" name="geri" value="' . h($sayfa . '?yeni=1') . '">'
-        . '<header class="ft-form-bas"><h2 class="ft-unvan" data-form-baslik>' . h($M['yeni']) . '</h2>' . $seg . $kaynakBtn . '</header>'
+        . '<header class="ft-form-bas"><h2 class="ft-unvan" data-form-baslik>' . h($M['yeni']) . '</h2>' . $seg . $kaynakBtn
+        . '<button type="button" class="btn btn-sm ft-daralt" data-bas-daralt aria-expanded="' . ($kapaliBas ? 'false' : 'true') . '" aria-controls="ftBasIc" title="Başlığı daralt / aç (Alt+B)"><span class="ft-daralt-ac">Başlığı aç &#9662;</span><span class="ft-daralt-kapa">Başlığı daralt &#9652;</span></button></header>'
         . '<div class="ft-kaynak-bilgi" data-kaynak-bilgi' . ($bilgiMetin === '' ? ' hidden' : '') . '>' . h($bilgiMetin) . '</div>'
-        . '<div class="ft-kaynak-ipucu" hidden><span data-kaynak-ipucu-metin></span> <button type="button" class="btn btn-sm" data-kaynak-getir>Getir</button></div>'
+        . ($kaynakTur ? '<div class="ft-kaynak-ipucu" hidden><span data-kaynak-ipucu-metin></span> <button type="button" class="btn btn-sm" data-kaynak-getir>Getir</button></div>' : '')
         . $onSart
         . '<div class="flash flash-error ft-form-hata ft-hata-ozet" id="ftHataOzet" role="alert" hidden></div>'
         . '<div class="ft-eksik" id="ftEksik" role="alertdialog" aria-labelledby="ftEksikBaslik" aria-describedby="ftEksikAck" hidden><h3 id="ftEksikBaslik">Yetersiz stok</h3>'
@@ -733,9 +734,9 @@ function fatura_form_html(PDO $pdo, string $sinif, array $o, array $cariler): st
         . '<div class="ft-eksik-eylem"><button type="button" class="btn" data-eksik-duzelt>Düzelt</button><button type="button" class="btn ft-btn-uyari" data-eksik-kaydet>Yine de kaydet</button></div></div>'
         . '<div class="ft-form-govde">'
         . '<section class="ft-bas' . ($kapaliBas ? ' ft-bas--ozet' : '') . '" id="ftBas" aria-expanded="' . ($kapaliBas ? 'false' : 'true') . '" aria-label="Belge başlığı">'
-        . '<div class="ft-bas-ust"><h3 class="ft-bolum-baslik">Başlık</h3>' . $ozet . '<button type="button" class="btn btn-sm ft-daralt" data-bas-daralt aria-expanded="' . ($kapaliBas ? 'false' : 'true') . '" aria-controls="ftBasIc" title="Başlığı daralt / aç (Alt+B)"><span class="ft-daralt-ac">Düzenle &#9662;</span><span class="ft-daralt-kapa">Daralt &#9652;</span></button></div>'
-        . '<div class="ft-bas-ic" id="ftBasIc"><div class="ft-bas-grid">' . $bas . '</div>'
-        . '<details class="ft-diger" id="ftDiger"><summary>Diğer bilgiler <small data-diger-say>' . ($doluSay > 0 ? '(' . $doluSay . ' dolu)' : '') . '</small></summary><div class="ft-bas-grid">' . $dg . '</div></details></div></section>'
+        . '<div class="ft-bas-ust"><h3 class="ft-bolum-baslik">Başlık</h3>' . $ozet . '</div>'
+        . '<div class="ft-bas-ic" id="ftBasIc"><div class="ft-bas-grid">' . $bas
+        . '<details class="ft-diger" id="ftDiger"><summary>Diğer bilgiler <small data-diger-say>' . ($doluSay > 0 ? '(' . $doluSay . ' dolu)' : '') . '</small></summary><div class="ft-bas-grid">' . $dg . '</div></details></div></div></section>'
         . '<section class="ft-satirlar-bolum" aria-label="Satırlar"><div class="ft-satir-bas"><h3 class="ft-bolum-baslik">Satırlar <small data-satir-say>(' . max(1, $no) . ')</small></h3><small class="ft-ipucu" data-fiyat-ipucu>fiyat KDV hariç, <span data-pb-etiket>' . h($pb) . '</span></small></div>'
         . '<div class="ft-satirlar-kaydir"><table class="ft-ftablo"><caption class="ft-sr">Belge satırları</caption><thead><tr>'
         . '<th scope="col" class="ft-fs-no">#</th><th scope="col" class="ft-fs-kart">Ürün / stok kartı</th><th scope="col" class="ft-fs-miktar">Miktar</th><th scope="col" class="ft-fs-birim">Birim</th>'

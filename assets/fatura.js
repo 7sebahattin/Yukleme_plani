@@ -541,7 +541,7 @@
             ['tevkifat', 'stopaj', 'bagkur'].forEach(function (a) { set(a, '−' + para(T[a])); });
             set('cari', para(T.cari)); set('tl', T.tl != null ? para(T.tl, 'TRY') : '—');
             var vis = function (ad, v) { var e = $('[data-satir="' + ad + '"]', top); if (e) e.hidden = !v; };
-            vis('tevkifat', !!b.tevkifat_izin); vis('stopaj', !!b.mustahsil); vis('bagkur', !!b.mustahsil); vis('cari', !!b.cari); vis('tl', T.tl != null);
+            vis('tevkifat', !!tev); vis('stopaj', !!b.mustahsil); vis('bagkur', !!b.mustahsil); vis('cari', !!b.cari); vis('tl', T.tl != null);
             var et = function (ad, v) { var e = $('[data-et="' + ad + '"]', top); if (e) e.textContent = v; };
             et('tevkifat', tev ? 'Tevkifat (' + tev.d1 + '/' + tev.d2 + ')' : 'Tevkifat');
             et('stopaj', sto ? 'GV stopajı %' + bpBicim(sto.d1) : 'GV stopajı'); et('bagkur', bag ? 'Bağ-Kur %' + bpBicim(bag.d1) : 'Bağ-Kur');
@@ -692,7 +692,7 @@
                 if (!s || s.disabled) { sp.textContent = ''; return; }
                 var yil = (f.elements.tarih && f.elements.tarih.value || '').slice(0, 4);
                 var on = ((V.seri_onizleme || {})[s.value] || {})[yil];
-                sp.textContent = on ? '→ ' + on + ' (tahmini; kesin numara kayıtta verilir)' : (s.value ? 'Numara kayıtta verilir' : '');
+                sp.textContent = on ? '→ ' + on + ' (tahmini)' : (s.value ? 'Numara kayıtta verilir' : ''); sp.title = 'Kesin numara kayıtta verilir';
             });
             var kay = $('[data-kaydet]', f), seriYok = $$('[data-ft-on-sart="seri"]', f).some(function (x) { return !x.hidden; });
             var cariYok = !!$('[data-ft-on-sart="cari"]', f);
