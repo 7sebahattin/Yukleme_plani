@@ -31,9 +31,9 @@ const planOrtak = (plaka, kg, ek) => Object.assign({
   planSorgu: { urunId: 1, aySayisi: 12, isletmeTuruId: 0, sirala: 'azalan' },
 }, ek || {});
 const TASLAKLAR = () => [
-  { id: 't-asil', zaman: '2026-10-06T10:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', satirlar: [],
+  { id: 't-asil', zaman: '2026-10-06T10:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', satirlar: [], partiNo: 'BYN-77', partiKaynak: 'beyan',
     ortak: planOrtak('34ASL01', 5000, { kaynak: { tip: 'beyan', beyanId: 42 } }) },
-  { id: 't-iki', zaman: '2026-10-06T11:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', satirlar: [],
+  { id: 't-iki', zaman: '2026-10-06T11:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', satirlar: [], partiNo: 'MAN-5', partiKaynak: '',
     ortak: planOrtak('06IKI02', 7000) },
 ];
 
@@ -104,6 +104,11 @@ const butonOlcu = (sayfa) => sayfa.evaluate(() => {
 
   ok('her taslak kartında 📋 Kopyala (data-kopyala = taslak id)',
      JSON.stringify(await sayfa.$$eval('#taslakListe [data-kopyala]', bs => bs.map(b => b.dataset.kopyala))) === JSON.stringify(['t-asil', 't-iki']));
+  // --- v526: taslak kartında parti no rozeti (yeni satır AÇMAZ: iki kartta da satır sayısı eşit) ---
+  const rz = await sayfa.evaluate(() => [...document.querySelectorAll('#taslakListe .taslak-kart')].map(k => ({
+    satir: k.querySelectorAll('.tk-satir').length, rozet: (k.querySelector('.tk-parti') || {}).textContent || '', plakaIci: !!k.querySelector('.tk-plaka .tk-parti') })));
+  ok('v526: taslak kartında Parti rozeti plaka satırının içinde ("Parti: BYN-77" / "Parti: MAN-5"), satır sayısı eşit',
+     rz.length === 2 && rz[0].rozet === 'Parti: BYN-77' && rz[1].rozet === 'Parti: MAN-5' && rz[0].plakaIci && rz[1].plakaIci && rz[0].satir === rz[1].satir, JSON.stringify(rz));
   const o1280 = await butonOlcu(sayfa);
   ok('düğme sırası: Gönder · Kopyala · Düzenle · Sil', JSON.stringify(o1280.sira) === JSON.stringify(['📤 Gönder', '📋 Kopyala', '✏️ Düzenle', '🗑️ Sil']), o1280.sira.join('|'));
 
@@ -127,6 +132,12 @@ const butonOlcu = (sayfa) => sayfa.evaluate(() => {
   ok('Kopyala: yükleme sunucuya hiçbir şey YAZMAZ (taslak_kaydet/taslak_sil yok)',
      !D.istekler.some(i => i.action === 'taslak_kaydet' || i.action === 'taslak_sil'));
   ok('Kopyala: duzenlenenTaslakId null', await sayfa.evaluate(() => duzenlenenTaslakId === null));
+  const pk = await sayfa.evaluate(() => ({ v: document.getElementById('sPartiNo').value, ro: document.getElementById('sPartiNo').readOnly,
+    not: !document.getElementById('partiNoNot').classList.contains('gizli'), max: document.getElementById('sPartiNo').maxLength,
+    kart1: !!document.querySelector('.kart.bk-ayar #sPartiNo'), fs: getComputedStyle(document.getElementById('sPartiNo')).fontSize }));
+  ok('v526: Kopyala kipinde Parti No BOŞ ve düzenlenebilir (beyandan gelen BYN-77 taşınmaz), not gizli; alan 1. kartta, maxlength 60',
+     pk.v === '' && !pk.ro && !pk.not && pk.max === 60 && pk.kart1, JSON.stringify(pk));
+  await sayfa.fill('#sPartiNo', '  KOP-1  ');
 
   // Plakayı değiştirip kaydet → YENİ taslak, asıl taslak dokunulmaz
   await sayfa.fill('#oPlaka', '35KOP99');
@@ -138,6 +149,7 @@ const butonOlcu = (sayfa) => sayfa.evaluate(() => {
      !!kayit && !('eskiTaslakId' in kayit.govde) && kayit.govde.ortak.plaka === '35KOP99' && kayit.govde.ortak.planKg === 5000,
      JSON.stringify(kayit && kayit.govde));
   ok('Kaydet: beyan bağı (ortak.kaynak) kopyaya TAŞINMADI', !!kayit && !('kaynak' in kayit.govde.ortak));
+  ok('v526: Kaydet: ortak.partiNo = trim(değer) = "KOP-1"', !!kayit && kayit.govde.ortak.partiNo === 'KOP-1', JSON.stringify(kayit && kayit.govde.ortak));
   ok('Kaydet: hiçbir taslak_sil isteği YOK (asıl taslak silinmez)', !D.istekler.some(i => i.action === 'taslak_sil'));
   ok('Kaydet: toast "Taslak kaydedildi" (güncellendi DEĞİL), Taslaklar ekranı',
      (await sayfa.textContent('#toast')).includes('Taslak kaydedildi') && await sayfa.isVisible('#ekranTaslaklar'));
@@ -148,11 +160,31 @@ const butonOlcu = (sayfa) => sayfa.evaluate(() => {
   await sayfa.waitForSelector('#ekranBildirim:not(.gizli)');
   await sayfa.waitForTimeout(400);
   ok('Düzenle: eski toast ("Plan taslağı forma yüklendi")', (await sayfa.textContent('#toast')).includes('Plan taslağı forma yüklendi'));
+  const pd = await sayfa.evaluate(() => ({ v: document.getElementById('sPartiNo').value, ro: document.getElementById('sPartiNo').readOnly,
+    not: !document.getElementById('partiNoNot').classList.contains('gizli'), notMetin: document.getElementById('partiNoNot').textContent }));
+  ok('v526: Düzenle (beyandan gelen taslak): Parti No "BYN-77", salt okunur + "Beyandan geldi" notu',
+     pd.v === 'BYN-77' && pd.ro && pd.not && pd.notMetin === 'Beyandan geldi', JSON.stringify(pd));
   D.istekler.length = 0;
   await sayfa.click('#btnPlanKaydet'); await sayfa.waitForTimeout(400);
   const k2 = D.istekler.find(i => i.action === 'taslak_kaydet'), sil2 = D.istekler.find(i => i.action === 'taslak_sil');
   ok('Düzenle→Kaydet: eskiTaslakId gider + eski taslak silinir (DEĞİŞMEDİ)',
      !!k2 && k2.govde.eskiTaslakId === 't-asil' && !!sil2 && sil2.govde.id === 't-asil', JSON.stringify([k2 && k2.govde.eskiTaslakId, sil2 && sil2.govde]));
+  ok('v526: Düzenle→Kaydet: ortak.partiNo "BYN-77" korunur', !!k2 && k2.govde.ortak.partiNo === 'BYN-77');
+  const pt = await sayfa.evaluate(() => ({ v: document.getElementById('sPartiNo').value, ro: document.getElementById('sPartiNo').readOnly, not: !document.getElementById('partiNoNot').classList.contains('gizli') }));
+  ok('v526: kayıttan sonra formuTemizle: alan boş, readOnly kalkar, not gizli', pt.v === '' && !pt.ro && !pt.not, JSON.stringify(pt));
+
+  // --- v526: beyansız (kaynaksız) taslakta alan düzenlenebilir; boş bırakılırsa ortak.partiNo GİTMEZ ---
+  await sayfa.waitForSelector('#taslakListe [data-duzenle="t-iki"]');
+  await sayfa.click('#taslakListe [data-duzenle="t-iki"]');
+  await sayfa.waitForSelector('#ekranBildirim:not(.gizli)');
+  await sayfa.waitForTimeout(400);
+  const pi = await sayfa.evaluate(() => ({ v: document.getElementById('sPartiNo').value, ro: document.getElementById('sPartiNo').readOnly, not: !document.getElementById('partiNoNot').classList.contains('gizli') }));
+  ok('v526: Düzenle (elle taslak): Parti No "MAN-5", düzenlenebilir, not yok', pi.v === 'MAN-5' && !pi.ro && !pi.not, JSON.stringify(pi));
+  await sayfa.fill('#sPartiNo', '');
+  D.istekler.length = 0;
+  await sayfa.click('#btnPlanKaydet'); await sayfa.waitForTimeout(400);
+  const k3 = D.istekler.find(i => i.action === 'taslak_kaydet');
+  ok('v526: alan boşaltılınca ortak.partiNo GÖNDERİLMEZ (opsiyonel)', !!k3 && !('partiNo' in k3.govde.ortak), JSON.stringify(k3 && k3.govde.ortak));
 
   // --- v500: Kopyala → Firma değiştir… (doğrudan kopya taslak) ---
   await sayfa.waitForSelector('#taslakListe [data-kopyala="t-iki"]');
