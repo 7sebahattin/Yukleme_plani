@@ -291,7 +291,8 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
      (await sayfa.locator('tr.g-satir .g-yazdir-btn-ust').count()) === 5 &&
      /^Tekrar gönder\s*▾$/.test((await sayfa.locator('tr.g-satir .g-btn-tekrar').first().innerText()).replace(/\s+/g, ' ').trim()) &&
      (await sayfa.locator('tr.g-satir').first().locator('.g-btn-tekrar .g-tk-ok').count()) === 1 &&
-     (await sayfa.locator('tr.g-satir').first().locator('.g-yazdir-btn-ust').innerText()).trim() === 'Yazdır',
+     (await sayfa.locator('tr.g-satir').first().locator('.g-yazdir-btn-ust').getAttribute('aria-label')) === 'Yazdır' &&   // v526: 1200–1399px'te Yazdır yalnız simge (aria-label/title tam)
+     (await sayfa.locator('tr.g-satir').first().locator('.g-yazdir-btn-ust').textContent()).includes('Yazdır'),
      await sayfa.locator('tr.g-satir .g-btn-tekrar').first().innerText());
   // --- v324 görsel katman: başlık, sayaç hapı, arama ipucu, rozetler (işlev değil, yapı) ---
   const v324 = await sayfa.evaluate(() => {
@@ -560,6 +561,7 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
     ok(w + 'px: sayfada yatay taşma yok', ol.sayfa <= ol.vw + 1, JSON.stringify(ol));
     if (w >= 1200) ok(w + 'px: tablo sarmalayıcıda kaydırma gerekmiyor', ol.sarma <= ol.sarmaC + 1, JSON.stringify(ol));
     const bt = await sayfa.evaluate(() => [...document.querySelectorAll('tr.g-satir')[0].querySelectorAll('button')].map(b => { const r = b.getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth + 1; }));
+    if (w >= 1400) ok(w + 'px: Yazdır düğmesi metinli (v526: yalnız 1200–1399 arası simge)', (await sayfa.locator('tr.g-satir').first().locator('.g-yazdir-btn-ust').innerText()).trim() === 'Yazdır');
     ok(w + 'px: eylem düğmeleri görünür/ekran içinde', bt.every(Boolean), JSON.stringify(bt));
     await foto(sayfa, '06_masaustu_' + w);
     await sayfa.locator('tr.g-satir').first().click();

@@ -644,7 +644,8 @@
     .g-tablo .g-btn-tekrar .g-tk-ana { padding:0 9px; }
     .g-tablo .g-ik-bina, .g-tablo .g-ik-sol { margin-right:4px; }
     /* v526: Parti No + Fatura sütunları eklendi — Firma/Ülke/Ürün'e yer açmak için bina simgesi gizli, parti no kısalır (title tam) */
-    .g-tablo .g-ik-bina { display:none; }
+    .g-tablo .g-ik-bina, .g-tablo .g-ik-sol, .g-tablo .g-ik-saat { display:none; }
+    .g-tablo .g-tarih-kap { display:block; }
     .g-tablo .g-parti { max-width:84px; }
     .g-tablo .g-plaka { padding-left:8px; padding-right:8px; }
     .g-tablo .g-fatura { width:36px; height:20px; }
@@ -655,6 +656,13 @@
     /* v526: iki yeni sütun için hücre boşlukları daralır (düğme metinleri KALIR) */
     .g-tablo th, .g-tablo td { padding-left:6px; padding-right:6px; }
     .g-tablo thead th:first-child { padding-left:62px; }
+    .g-tablo .g-ik-bina, .g-tablo .g-ik-sol, .g-tablo .g-ik-saat { display:none; }
+    .g-tablo .g-tarih-kap { display:inline-block; }
+    .g-tablo .g-plaka { padding-left:8px; padding-right:8px; }
+    .g-tablo .g-parti { max-width:100px; }
+    /* "Yazdır" yalnız simge (title/aria-label tam); "Tekrar gönder" metni KALIR */
+    .g-tablo .g-yazdir-btn-ust .g-btn-yazi { display:none; }
+    .g-tablo .g-yazdir-btn-ust { padding:0 9px; }
   }
 
   /* "Tekrar gönder" ile yüklenen formun üstündeki bilgi kutusu (metin textContent ile) */
@@ -905,6 +913,7 @@
   #ekranBildirim #sPartiNo { --bi-sol:40px; }
   #ekranBildirim .parti-not { margin-top:5px; font-size:12px; font-weight:700; color:var(--soluk); }
   #ekranBildirim .parti-not.gizli { display:none; }
+  @media (max-width:767px) { #ekranBildirim #sPartiNo { font-size:16px; } }   /* iOS odak yakınlaştırması olmasın */
   #ekranBildirim #sKunyeSirala { --bi-sol:40px; }
 
   /* Butonlar */
