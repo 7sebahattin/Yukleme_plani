@@ -31,6 +31,7 @@ require_once __DIR__ . '/config/uretim.php';   // v507 Günlük Üretim tablolar
 require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -131,6 +132,7 @@ $usip_results = []; $usip_ran = false;                          // v409 Ürün S
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
+$fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
@@ -361,6 +363,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($stok_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'stok', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'fatura') {
+    csrf_check($_POST['csrf'] ?? null);
+    $fatura_ran     = true;
+    $fatura_results = fatura_migrate($pdo);
+    foreach ($fatura_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'fatura', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -898,6 +909,33 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="stok">
       <button type="submit" class="btn btn-primary">Stok Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('fatura'); ?>
+    <h2 style="margin-top:0;">Fatura</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>fatura_belgeler</code>, <code>fatura_satirlar</code> ve <code>fatura_tanimlar</code> tablolarını ekler
+      (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve KDV / tevkifat / stopaj / Bağ-Kur / istisna / seri / teslim şekli / açıklama şablonu
+      tanımlarını bir kez tohumlar (oranlar ve kodlar mali müşavirle kontrol edilmeli). Fatura; Cari İşlemler ve Stok (muhasebe) tablolarını kullanır —
+      onlar önce kurulmalıdır. Çalıştırılmazsa Fatura sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($fatura_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($fatura_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $faturaOnkosul = array_values(array_filter([cari_hazir($pdo) ? null : 'Cari İşlemler', stok_hazir($pdo) ? null : 'Stok (muhasebe)'])); ?>
+    <?php if ($faturaOnkosul): ?>
+    <p style="color:#b7791f;font-size:.9em;">⚠ Önce şu kart(lar) çalıştırılmalı: <?= h(implode(', ', $faturaOnkosul)) ?> — tablolar kurulabilir ama Fatura sayfaları bu şemalar olmadan açılmaz.</p>
+    <?php endif; ?>
+    <?php $faturaHazir = fatura_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $faturaHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $faturaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="fatura">
+      <button type="submit" class="btn btn-primary">Fatura Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

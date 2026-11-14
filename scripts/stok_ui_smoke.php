@@ -324,6 +324,12 @@ ok('yönetici değil: fis_kaydet 403', $r['kod'] === 403);
 $r = post(['islem' => 'fis_iptal', 'id' => (string)$GID, 'neden' => 'Yetkisiz'], true, ['admin' => false]);
 ok('yönetici değil: fis_iptal 403, fiş geçerli kalır', $r['kod'] === 403 && stok_fis_ham($db, $GID)['durum'] === 'gecerli');
 foreach ($sayfalar as $f) ok("yönetici değil: $f forbidden", str_contains((string)get($f, [], ['admin' => false])['hata'], 'forbidden'));
+$kr = stok_fis_kaydet($db, stok_t_fis_istek('cikis', 'Merkez Depo', [[$K['Biber (Dolmalık)'], '3']], ['neden_id' => (string)$nd['Satış/Sevk']]), 1, ['modul' => 'ornek_modul', 'id' => 41]);
+$r = get('stok_cikis_fisleri.php', ['id' => (string)($kr['id'] ?? 0)]); $b = bolge($r['govde']);
+ok('kaynaklı fiş detayı: "Kaynak belge #41" rozeti, İptal et düğmesi YOK ("Kaynak belgeden iptal edilir."), Kopyala var', $kr['ok'] && uyari_yok($r) && html_hata($b) === [] && str_contains($b, 'Kaynak belge #41')
+    && str_contains($b, 'Kaynak belgeden iptal edilir.') && !str_contains($b, 'data-st-modal="iptal" data-id="' . (int)$kr['id'] . '"') && !preg_match('/>İptal et<\/button>/', $b) && str_contains($b, '?kopya=' . (int)$kr['id']), json_encode([$kr, html_hata($b)], JSON_UNESCAPED_UNICODE));
+$r = post(['islem' => 'fis_iptal', 'id' => (string)($kr['id'] ?? 0), 'neden' => 'Stok ekranından']);
+ok('kaynaklı fişi stok_kaydet ile iptal → 409 kaynakli, fiş geçerli kalır', $r['kod'] === 409 && js($r)['kod'] === 'kaynakli' && stok_fis_ham($db, (int)$kr['id'])['durum'] === 'gecerli', $r['govde']);
 $r = get('stok_kartlari.php', ['id' => (string)$K['Domates (Salkım)']]);
 ok('kart detayı: transfer/dönüşüm hareket fiş no bağlantıları kendi sayfalarına', (bool)preg_match('/href="transfer_fisleri\.php\?id=' . $FB['transfer'] . '">TRF-/', $r['govde']) && (bool)preg_match('/href="stok_donusum_fisleri\.php\?id=' . $FB['donusum'] . '">DNS-/', $r['govde']));
 

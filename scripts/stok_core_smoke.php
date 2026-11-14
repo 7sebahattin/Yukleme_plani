@@ -440,4 +440,39 @@ ok('iptal fişlerinde her orijinal satırın TEK tersi var', !$db->query('SELECT
 ok('stok_bakiye_haritasi + stok_ortlar_toplu', ($bh = stok_bakiye_haritasi($db)) && isset($bh[$A]['Merkez Depo']) && ($ot = stok_ortlar_toplu($db)) && isset($ot[$A]));
 ok('audit eylemleri: create|update|activate|deactivate|delete|cancel', !$db->query("SELECT COUNT(*) FROM audit_log WHERE module = 'stok' AND action NOT IN ('create','update','activate','deactivate','delete','cancel')")->fetchColumn());
 
+echo "\n=== 20. Kaynak bağı (başka modülün çekirdeği: \$kaynak parametresi) ===\n";
+$f0 = say('stok_fisler'); $c0 = say('cari_hareketler');
+$r = stok_fis_kaydet($db, stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '40', '5,00']], ['neden_id' => (string)$ALIS, 'tarih' => $bugun]), 1, ['modul' => 'fatura', 'id' => 77]);
+$KF1 = (int)($r['id'] ?? 0); $kf = $KF1 ? stok_fis_ham($db, $KF1) : [];
+ok('kaynaklı giriş: kaynak_modul/kaynak_id saklanır, cari_id NULL, cari satırı YAZILMAZ', $r['ok'] && $kf['kaynak_modul'] === 'fatura' && (int)$kf['kaynak_id'] === 77 && $kf['cari_id'] === null
+    && $kf['cari_hareket_id'] === null && say('cari_hareketler') === $c0 && say('stok_fisler') === $f0 + 1, json_encode($r, JSON_UNESCAPED_UNICODE));
+ok('kaynaklı giriş: audit create kaynak = fatura:77', say('audit_log', "module = 'stok' AND action = 'create' AND record_id = ? AND new_values LIKE ?", [$KF1, '%fatura:77%']) === 1);
+$r = stok_fis_kaydet($db, stok_t_fis_istek('cikis', 'Merkez Depo', [[$A, '10']], ['neden_id' => (string)$SATIS, 'tarih' => $bugun, 'eksiye_izin' => '1']), 1, ['modul' => 'fatura', 'id' => 78]);
+$KF2 = (int)($r['id'] ?? 0);
+ok('kaynaklı çıkış: defter −10 kg (ortalamadan), kaynak fatura:78, cari satırı yok', $r['ok'] && stok_fis_ham($db, $KF2)['kaynak_modul'] === 'fatura' && (int)stok_fis_ham($db, $KF2)['kaynak_id'] === 78
+    && stok_milli($db->query("SELECT miktar FROM stok_hareketler WHERE fis_id = $KF2")->fetchColumn()) === -10000 && say('cari_hareketler') === $c0);
+$f1 = say('stok_fisler');
+$r = stok_fis_kaydet($db, stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '5', '1']], ['neden_id' => (string)$ALIS, 'tarih' => $bugun, 'cari_id' => (string)$CR]), 1, ['modul' => 'fatura', 'id' => 79]);
+ok('kaynak + cari → red (dekontu kaynak belge yazar), hiçbir şey yazılmaz', !$r['ok'] && str_contains((string)$r['hata'], 'cari seçilmez') && say('stok_fisler') === $f1 && say('cari_hareketler') === $c0);
+foreach ([['modul' => 'kantar', 'id' => 5], ['modul' => 'Fatura-1', 'id' => 5], ['modul' => 'fatura', 'id' => 0], []] as $kb) {
+    $r = stok_fis_kaydet($db, stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '5', '1']], ['neden_id' => (string)$ALIS, 'tarih' => $bugun]), 1, $kb);
+    ok('geçersiz kaynak bağı ' . json_encode($kb) . ' → red, yazılmaz', !$r['ok'] && $r['hata'] === 'Geçersiz kaynak bağı.' && say('stok_fisler') === $f1);
+}
+$r = stok_fis_kaydet($db, stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '5', '1']], ['neden_id' => (string)$ALIS, 'tarih' => $bugun, 'kaynak_modul' => 'fatura', 'kaynak_id' => '77']), 1);
+ok('POST yolu DEĞİŞMEDİ: $g[kaynak_modul]=fatura → "Geçersiz kaynak." (yalnız kantar)', !$r['ok'] && ($r['alanlar']['kaynak_modul'] ?? '') === 'Geçersiz kaynak.' && say('stok_fisler') === $f1);
+$r = stok_fis_kaydet($db, stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '5', '1']], ['neden_id' => (string)$ALIS, 'tarih' => $bugun, 'kaynak_modul' => 'kantar', 'kaynak_id' => '1']), 1, ['modul' => 'fatura', 'id' => 80]);
+ok('POST kaynağı + çekirdek kaynağı birlikte → red', !$r['ok'] && say('stok_fisler') === $f1);
+$h0 = say('stok_hareketler');
+$r = stok_fis_iptal($db, $KF1, 'Stok ekranından iptal', 1);
+ok('kaynaklı fiş parametresiz iptal → kod kaynakli (409), fiş geçerli kalır, ters satır yok', !$r['ok'] && ($r['kod'] ?? '') === 'kaynakli' && stok_fis_ham($db, $KF1)['durum'] === 'gecerli' && say('stok_hareketler') === $h0, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = stok_fis_iptal($db, $KF1, 'Başka modül', 1, 'baska_modul');
+ok('kaynaklı fiş başka modül adıyla iptal → kaynakli', !$r['ok'] && ($r['kod'] ?? '') === 'kaynakli');
+$r = stok_fis_iptal($db, $KF1, 'Kaynak belge iptali', 1, 'fatura');
+ok('kaynaklı fiş kendi modülünden iptal → ok + ters satır (1), durum iptal', $r['ok'] && $r['ters'] === 1 && stok_fis_ham($db, $KF1)['durum'] === 'iptal' && say('stok_hareketler') === $h0 + 1);
+$r = stok_fis_iptal($db, $KF1, 'Tekrar', 1, 'fatura');
+ok('kaynaklı fiş ikinci iptal → zaten_iptal', !$r['ok'] && ($r['kod'] ?? '') === 'zaten_iptal');
+$KF3 = (int)$fis('giris', 'Merkez Depo', [[$A, '2', '1']], ['neden_id' => (string)$ALIS])['id'];
+$r = stok_fis_iptal($db, $KF3, 'Kaynaksız fiş', 1, 'fatura');
+ok('kaynaksız fiş modül parametresiyle de iptal edilir (geriye uyumlu)', $r['ok'] && stok_fis_ham($db, $KF3)['durum'] === 'iptal');
+
 siparis_test_bitir();

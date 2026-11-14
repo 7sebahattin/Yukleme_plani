@@ -85,6 +85,8 @@ foreach ($cm as $m) {
     ok("dal $m[1]: stok_kapi('$y') İLK ifade; dalda tek stok_kapi; yalnız stok_ fonksiyonu", (bool)preg_match("/^\\s*stok_kapi\\('" . $y . "'\\);/", $m[2]) && substr_count($m[2], 'stok_kapi(') === 1 && !preg_match('/\bcari_[a-z_]+\(/', $m[2]), substr($m[2], 0, 80));
 }
 ok('`geri` yerel beyaz liste: stok_geri_guvenli($_POST[\'geri\']) + çekirdekte ^(stok_[a-z_]+|transfer_fisleri)\\.php regex', str_contains($k, "stok_geri_guvenli(\$_POST['geri']") && str_contains((string)file_get_contents($ROOT . '/config/stok_core.php'), '^(stok_[a-z_]+|transfer_fisleri)\\.php'));
+ok('stok_kaydet.php: stok_fis_kaydet($pdo, $P, $uid) 3 argüman — uç çekirdek kaynak bağını ($kaynak) VEREMEZ', str_contains($k, 'stok_fis_kaydet($pdo, $P, $uid);') && substr_count($k, 'stok_fis_kaydet(') === 1);
+ok('stok_kaydet.php: stok_fis_iptal($pdo, $id, (string)($P[\'neden\'] ?? \'\'), $uid) 4 argüman — kaynaklı fişi uçtan iptal edemez', str_contains($k, "stok_fis_iptal(\$pdo, \$id, (string)(\$P['neden'] ?? ''), \$uid);") && substr_count($k, 'stok_fis_iptal(') === 1);
 ok('stok_kaydet.php: $_GET kullanmaz; doğrudan SQL yazmaz; ->prepare yok', !str_contains($k, '$_GET') && !preg_match($SQL_YAZ, $k) && !preg_match('/->(prepare|query|exec)\(/', $k));
 ok('PDOException → 500 genel mesaj (ayrıntı yalnız error_log)', str_contains($k, 'catch (PDOException $e)') && str_contains($k, 'http_response_code(500)') && str_contains($k, 'error_log('));
 
