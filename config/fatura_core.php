@@ -424,6 +424,7 @@ function fatura_cevap(array $s, string $geri, string $okMesaj, bool $json): neve
             'hata' => $ok ? null : (string)($s['hata'] ?? 'İşlem yapılamadı.'), 'alanlar' => (object)($s['alanlar'] ?? []),
             'satir_hatalari' => (object)($s['satir_hatalari'] ?? []), 'uyari' => $s['uyari'] ?? null, 'yonlendir' => $geri, 'tekrar' => !empty($s['tekrar']),
             'kod' => $s['kod'] ?? null, 'eksikler' => $s['eksikler'] ?? null, 'stok_fis_no' => $s['stok_fis_no'] ?? null, 'cari_belge_no' => $s['cari_belge_no'] ?? null,
+            'bagli' => $s['bagli'] ?? null,   // Dalga B: 409 bagli_belge → list{id,belge_no,tur} (iptal modalında bağlantı)
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -1104,6 +1105,22 @@ function fatura_kaynak_kontrol(PDO $pdo, string $hedefTur, int $cariId, string $
         if ($istenen[$kid] > $k) { $sh[(int)$s['i']]['miktar'] = 'Kalan miktarı aşıyor (kalan: ' . stok_miktar_bicim(max(0, $k), 'lt') . ').'; $kod = 'kalan_asimi'; }
     }
     return ['sh' => $sh, 'h' => $h, 'kod' => $kod, 'turler' => $turler, 'belgeler' => array_keys($belgeler)];
+}
+
+/**
+ * (Dalga B) Kaynak satırlarının belge bilgisi: satır id → {belge_id, belge_no, tur, sira} (detay ve formdaki "IRS-… · 3" rozeti). YAZMAZ.
+ * @param list<int> $kaynakSatirIdler @return array<int,array{belge_id:int,belge_no:string,tur:string,sira:int}>
+ */
+function fatura_kaynak_satir_bilgileri(PDO $pdo, array $kaynakSatirIdler): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $kaynakSatirIdler), static fn(int $x): bool => $x > 0)));
+    $out = [];
+    foreach (array_chunk($ids, 500) as $parca) {
+        $st = $pdo->prepare('SELECT s.id, s.sira, b.id AS bid, b.belge_no, b.tur FROM fatura_satirlar s JOIN fatura_belgeler b ON b.id = s.belge_id WHERE s.id IN (' . implode(',', array_fill(0, count($parca), '?')) . ')');
+        $st->execute($parca);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(int)$r['id']] = ['belge_id' => (int)$r['bid'], 'belge_no' => (string)$r['belge_no'], 'tur' => (string)$r['tur'], 'sira' => (int)$r['sira']];
+    }
+    return $out;
 }
 
 // ── Doğrulama / yazanlar ────────────────────────────────────────────────────
