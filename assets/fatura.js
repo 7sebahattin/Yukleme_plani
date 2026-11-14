@@ -643,8 +643,9 @@
             }
             FT.cari = c; f.elements.cari_id.value = c ? String(c.id) : '';
             if (!c) { FT.ozet = null; ozetCiz(); hesapla(); return; }
-            if (degisim && (!eski || eski.id !== c.id)) {
-                if (f.elements.para_birimi && c.pb && !satirlar().some(satirDolu)) { f.elements.para_birimi.value = c.pb; pbGuncelle(true); }
+            if (FT.uyg !== c.id) {   // yeni cari ilk kez çözüldü (yazarken ya da seçerken): pb + vade bir kez uygulanır
+                FT.uyg = c.id;
+                if (f.elements.para_birimi && c.pb && !satirlar().some(satirDolu) && f.elements.para_birimi.value !== c.pb) { f.elements.para_birimi.value = c.pb; pbGuncelle(true); }
                 vadeOto();
             }
             if (!eski || eski.id !== c.id || !FT.ozet) cariOzetAl(c);
@@ -1209,7 +1210,7 @@
         });
         turUygula(FT.tur, true);
         numarala();
-        if (f.elements.cari_ara && f.elements.cari_ara.value.trim()) cariGirdi(false);
+        if (f.elements.cari_ara && f.elements.cari_ara.value.trim()) { var c0 = cariBulV(f.elements.cari_ara.value); if (c0) FT.uyg = c0.id; cariGirdi(false); }
         if (window.matchMedia('(min-width: 1024px) and (max-height: 760px)').matches && !$('#ftBas', f).classList.contains('ft-bas--ozet') && FT.cari) basDaralt(false);
         hepsi();
         setTimeout(function () {

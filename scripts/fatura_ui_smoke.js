@@ -53,7 +53,7 @@ const git = async (p, yol) => { await p.goto(p.url0 + '/' + yol, { waitUntil: 'l
 const tasma = p => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 const sayfaKayar = p => p.evaluate(() => document.scrollingElement.scrollHeight - innerHeight);
 const goster = (p, s) => p.$eval(s, e => !!(e.getClientRects().length) && getComputedStyle(e).visibility !== 'hidden').catch(() => false);
-const metin = (p, s) => p.$eval(s, e => e.textContent.replace(/\s+/g, ' ').trim()).catch(() => null);
+const metin = (p, s) => p.$eval(s, e => (e.tagName === 'TR' ? [...e.children].map(c => c.textContent).join(' ') : e.textContent).replace(/\s+/g, ' ').trim()).catch(() => null);
 const gorunurSay = (p, s) => p.$$eval(s, l => l.filter(e => e.getClientRects().length).length);
 const kisaBekle = async (p, fn, arg, ms) => { try { await p.waitForFunction(fn, arg, { timeout: ms || 8000 }); return true; } catch (e) { return false; } };
 const postSay = p => p.srv.sayi(/^POST \/fatura_kaydet/);
@@ -76,7 +76,7 @@ async function satirDoldur(p, i, o) {
   if (o.fiyat != null) await p.fill(s + ' [name="birim_fiyat[]"]', o.fiyat);
   if (o.isk != null) await p.fill(s + ' [name="iskonto[]"]', o.isk);
   if (o.kdv != null) await p.selectOption(s + ' [name="kdv_orani[]"]', o.kdv);
-  await bekle(120);
+  await bekle(200);
 }
 const kucukHedef = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k + ' a, ' + k + ' button, ' + k + ' select, ' + k + ' input:not([type=hidden]):not([type=checkbox]):not([type=radio]), ' + k + ' summary')]
   .filter(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' && !e.closest('[hidden]'))
@@ -99,9 +99,9 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     ok('liste: sayfa kaymaz (tek ekran), yatay taşma yok, 2 belge', (await sayfaKayar(p)) <= 1 && (await tasma(p)) <= 0 && (await gorunurSay(p, '#ftListe a.ft-satir')) === 2);
     ok('liste: sidebar görünür; bottomnav gizli; hızlı eylem (⋯) PC\'de gizli', await goster(p, 'aside.desktop-sidebar') && !(await goster(p, '.bottomnav')) && (await gorunurSay(p, '.ft-hizli')) === 0);
     await shot(p, 'pc_liste');
-    const yuk0 = S1.sayi(/^GET \/satis_faturalari\.php\?id=/);
+    const yuk0 = S1.sayi(/^GET \/satis_faturalari\.php\?id=\d+$/);
     await p.click('#ftListe a.ft-satir[data-id="' + O.satis + '"]');
-    ok('liste satırı → detay sayfa yenilemeden (?parca=detay); URL ?id=; seçili satır aria-current', await detayBekle(p, O.satis) && /[?&]id=\d+/.test(p.url()) && S1.sayi(/parca=detay/) >= 1 && S1.sayi(/^GET \/satis_faturalari\.php\?id=/) === yuk0
+    ok('liste satırı → detay sayfa yenilemeden (?parca=detay); URL ?id=; seçili satır aria-current', await detayBekle(p, O.satis) && /[?&]id=\d+/.test(p.url()) && S1.sayi(/parca=detay/) >= 1 && S1.sayi(/^GET \/satis_faturalari\.php\?id=\d+$/) === yuk0
       && (await p.$eval('#ftListe a.ft-satir[data-id="' + O.satis + '"]', e => e.getAttribute('aria-current'))) === 'true');
     ok('detay: toplam 15.197,86 · cariye 15.197,86 · sayfa kaymaz', (await top(p, 'genel')).startsWith('15.197,86') && (await top(p, 'cari')) === '15.197,86' && (await sayfaKayar(p)) <= 1);
     await p.focus('#ftArama'); await p.keyboard.press('ArrowDown');
@@ -139,14 +139,14 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     // Ctrl+↓ / Ctrl+Shift+↓ / Ctrl+Del
     await p.focus(R(2) + ' [name="miktar[]"]'); await p.keyboard.press('Control+ArrowDown');
     ok('Ctrl+↓ yeni satır', (await p.$$('tbody.ft-fsatirlar > tr')).length === 3);
-    await p.keyboard.press('Control+Delete');
+    await p.keyboard.press('Control+Delete'); await bekle(150);
     ok('Ctrl+Del satır siler', (await p.$$('tbody.ft-fsatirlar > tr')).length === 2);
-    await p.focus(R(2) + ' [name="miktar[]"]'); await p.keyboard.press('Control+Shift+ArrowDown');
+    await p.focus(R(2) + ' [name="miktar[]"]'); await p.keyboard.press('Control+Shift+ArrowDown'); await bekle(200);
     ok('Ctrl+Shift+↓ satırı alta kopyalar; toplam iki katı Nakliye (genel 15.199,06)', (await p.$$('tbody.ft-fsatirlar > tr')).length === 3 && (await top(p, 'genel')).startsWith('15.199,06'));
     await p.click(R(3) + ' [data-satir-menu]');
     const menu = await p.evaluate(() => { const m = document.querySelector('.ft-menu'); const r = m.getBoundingClientRect(); return { pos: getComputedStyle(m).position, ic: r.bottom <= innerHeight && r.top >= 0, z: +getComputedStyle(m).zIndex }; });
     ok('⋯ satır menüsü: position fixed, ekran içinde, z 200', menu.pos === 'fixed' && menu.ic && menu.z === 200, JSON.stringify(menu));
-    await p.click('.ft-menu [data-satir-sil]');
+    await p.click('.ft-menu [data-satir-sil]'); await bekle(200);
     ok('menü → Sil: 2 satıra döner, toplam 15.197,86', (await p.$$('tbody.ft-fsatirlar > tr')).length === 2 && (await top(p, 'genel')).startsWith('15.197,86'));
     if (SHOT) { const ps = await sayfa(browser, S1, { width: 1366, height: 768 }, { dsf: 2 }); await git(ps, 'satis_faturalari.php?kopya=' + O.satis); await ps.screenshot({ path: path.join(SHOT, 'ss_pc_form.png') }); await git(ps, 'satis_faturalari.php?id=' + O.satis); await ps.screenshot({ path: path.join(SHOT, 'ss_pc_liste.png') }); await ps.context().close(); }
     // gerçek kaydet (Ctrl+S)
