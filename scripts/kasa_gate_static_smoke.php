@@ -208,13 +208,30 @@ if (is_file($ROOT . '/assets/kasa.css')) {
     ok('kasa.css: çıplak html / body / input / .btn / .card seçicisi YOK; overflow-x: hidden YOK', !preg_match('/(^|[},]\s*)(html|body|input|\.btn|\.card)\s*[{,]/m', $cssKod) && !preg_match('/overflow-x\s*:\s*hidden/', $cssKod));
 }
 ok('style.css\'te .ks- yok; app.js\'te kasa_kaydet yok (ortak dosyalara dokunulmadı)', !str_contains((string)file_get_contents($ROOT . '/assets/style.css'), '.ks-') && !str_contains((string)file_get_contents($ROOT . '/assets/app.js'), 'kasa_kaydet'));
-ok('Aşama 1 notu: kasa.css/js ve kasa_ui.php henüz yoksa bu bölüm hiçbir şeyi atlamaz (varsa denetlenir)', true);
+// Aşama 2 (ön yüz) — dosyalar artık zorunlu
+foreach (['config/kasa_ui.php', 'assets/kasa.css', 'assets/kasa.js', 'kasa_cikti.php'] as $f) ok("Aşama 2: $f var", is_file($ROOT . '/' . $f));
+$ui = kod($ROOT . '/config/kasa_ui.php');
+$uiHam = (string)file_get_contents($ROOT . '/config/kasa_ui.php');
+ok('kasa_ui: yalnız fonksiyon bildirir (üst düzey çalışan kod yok: include-only 404 koruması dışında); kasa_assets/kasa_scripts/kasa_sema_uyari/kasa_parca/kasa_fisleri_govde/kasa_tanimlari_govde var',
+    !array_diff(['kasa_assets', 'kasa_scripts', 'kasa_sema_uyari', 'kasa_parca', 'kasa_fisleri_govde', 'kasa_tanimlari_govde', 'kasa_defter_yazdir_html'], array_map(fn($fn) => govde($ui, $fn) !== null ? $fn : '', ['kasa_assets', 'kasa_scripts', 'kasa_sema_uyari', 'kasa_parca', 'kasa_fisleri_govde', 'kasa_tanimlari_govde', 'kasa_defter_yazdir_html'])));
+ok('kasa_ui: cari tablolarına SQL yok; yalnız cari_core okuyucuları (cari_kart_listesi / cari_hareket_oku)', !preg_match('/\b(FROM|JOIN)\s+`?cari_/i', $ui) && str_contains($ui, 'cari_kart_listesi(') && str_contains($ui, 'cari_hareket_oku('));
+ok('kasa_ui: kasa_kaydet.php dışında bir yazma ucu yok; her POST formunda csrf; yazma formları kasa_kaydet.php\'ye gider', substr_count($uiHam, 'method="post"') === substr_count($uiHam, 'action="kasa_kaydet.php"') && substr_count($uiHam, 'name="csrf"') >= substr_count($uiHam, 'method="post"') - 1);
+ok('kasa_ui: HTML\'e girecek veri h() ile; ham $_GET çıktısı yok (echo \$_GET)', !preg_match('/(echo|\.)\s*\$_(GET|POST|REQUEST)\[/', $ui));
+ok('kasa_ui: dahili türler (kaynak_giris / kaynak_cikis) formda SEÇENEK olarak sunulmaz (yalnız etiket/süzgeç)', !str_contains(preg_replace('/function kasa_filtre_html.*?\n\}\n/s', '', (string)govde($ui, 'kasa_modal_form')), 'kaynak_giris'));
+$ct = kod($ROOT . '/kasa_cikti.php');
+ok("kasa_cikti: dışa aktarım require_perm('reports.export') + export_audit('kasa', 'defter', …) + xlsx_indir; siparis_inv_ihracatci tek kaynak", str_contains($ct, "require_perm('reports.export')") && str_contains($ct, "export_audit('kasa', 'defter',") && str_contains($ct, 'xlsx_indir(') && str_contains($ct, 'siparis_inv_ihracatci()'));
+ok('kasa_cikti: export_audit yazmadan ÖNCE değil, require_perm ÇIKTIDAN önce', $pos($ct, "require_perm('reports.export')") < $pos($ct, "export_audit('kasa'") && $pos($ct, "export_audit('kasa'") < $pos($ct, 'xlsx_indir('));
+$js = (string)file_get_contents($ROOT . '/assets/kasa.js'); $cssH = (string)file_get_contents($ROOT . '/assets/kasa.css');
+ok("kasa.js: yönlendirme beyaz listesi yonRe (kasa_(fisleri|tanimlari)); Math.random yalnız crypto yedeği; fetch yalnız kasa_kaydet.php / kısmi yanıt", str_contains($js, 'yonRe: /^kasa_(fisleri|tanimlari)\.php') && str_contains($js, "kaydet: 'kasa_kaydet.php'") && substr_count($js, 'fetch(') === 3);
+ok('kasa.css: <768 girdi 16px kuralı + --bn-h ile alt çubuk payı + safe-area (sabit px yok); karanlık mod tokenları', str_contains($cssH, 'font-size: 16px') && str_contains($cssH, 'var(--bn-h)') && str_contains($cssH, 'env(safe-area-inset-bottom') && str_contains($cssH, 'html[data-theme="dark"] .kasa'));
+ok('kasa.css: eylem çubuğuna / sticky öğelere z-index VERİLMEZ (modal ≥600 style.css\'te)', !preg_match('/\.ks-(eylem-bar|daha)\s*\{[^}]*z-index/', $cssH));
+ok('kasa.css: .pm-dialog > form zincirine dokunulmaz (kural style.css\'te); .ks-dialog max-height tanımlı', str_contains($cssH, '.ks-dialog {') && !str_contains($cssKod ?? '', '.pm-dialog > form'));
 
-echo "\n=== 9. Sürüm eşitliği (≥527) ===\n";
+echo "\n=== 9. Sürüm eşitliği (≥528) ===\n";
 preg_match("/define\('APP_SURUM', 'v(\d+)'\)/", (string)file_get_contents($ROOT . '/config/helpers.php'), $a1);
 preg_match("/CACHE_NAME = 'yukleme-plani-v(\d+)'/", $sw, $a2);
 preg_match('/\*\*SW Cache:\*\* `yukleme-plani-v(\d+)`/', (string)file_get_contents($ROOT . '/CLAUDE.md'), $a3);
-ok('APP_SURUM = sw.js CACHE_NAME = CLAUDE.md SW Cache ve ≥ 527', isset($a1[1], $a2[1], $a3[1]) && $a1[1] === $a2[1] && $a2[1] === $a3[1] && (int)$a1[1] >= 527, json_encode([$a1[1] ?? null, $a2[1] ?? null, $a3[1] ?? null]));
+ok('APP_SURUM = sw.js CACHE_NAME = CLAUDE.md SW Cache ve ≥ 528', isset($a1[1], $a2[1], $a3[1]) && $a1[1] === $a2[1] && $a2[1] === $a3[1] && (int)$a1[1] >= 528, json_encode([$a1[1] ?? null, $a2[1] ?? null, $a3[1] ?? null]));
 
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
