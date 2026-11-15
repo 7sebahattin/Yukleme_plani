@@ -116,7 +116,9 @@ ok('core: INSERT INTO ceksenet_hareketler tam 2 kez (bordro_kaydet + islem_uygul
     && str_contains((string)govde($c, 'ceksenet_islem_uygula'), 'INSERT INTO ceksenet_hareketler') && substr_count($c, 'INSERT INTO ceksenet_kayitlar') === 1 && str_contains((string)govde($c, 'ceksenet_bordro_kaydet'), 'INSERT INTO ceksenet_kayitlar'));
 ok('core: DELETE yalnız ceksenet_tanimlar (ceksenet_tanim_sil, kullanılmayan)', preg_match_all('/DELETE\s+FROM\s+`?(\w+)/i', $c, $dm) === 1 && $dm[1] === ['ceksenet_tanimlar'] && str_contains((string)govde($c, 'ceksenet_tanim_sil'), 'DELETE FROM ceksenet_tanimlar'));
 ok('core: ceksenet_tanim_sil kullanım sayısına bakar DELETE\'ten ÖNCE', $pos((string)govde($c, 'ceksenet_tanim_sil'), 'COUNT(*)') > 0 && $pos((string)govde($c, 'ceksenet_tanim_sil'), 'COUNT(*)') < $pos((string)govde($c, 'ceksenet_tanim_sil'), 'DELETE FROM'));
-ok('core: cari_* ve kasa_* TABLOLARINA hiç SQL yok (okuma dahil; yalnız cari_core / kasa_core fonksiyonları)', !preg_match('/\b(FROM|INTO|UPDATE|JOIN)\s+`?(cari|kasa)_(hareketler|kartlar|tanimlar)\b/i', $c));
+$cariKilit = "SELECT id FROM cari_kartlar WHERE id = ? FOR UPDATE";   // TEK istisna: bordro tx'inin başında cari satırı kilidi (yazmaz; cari_core'da kilit fonksiyonu yok)
+ok('core: cari_* ve kasa_* TABLOLARINA hiç SQL yok (okuma dahil; yalnız cari_core / kasa_core fonksiyonları) — tek istisna: bordro cari satırı FOR UPDATE kilidi', substr_count($c, $cariKilit) === 1 && str_contains((string)govde($c, 'ceksenet_bordro_kaydet'), $cariKilit)
+    && !preg_match('/\b(FROM|INTO|UPDATE|JOIN)\s+`?(cari|kasa)_(hareketler|kartlar|tanimlar)\b/i', str_replace($cariKilit, '', $c)));
 ok('core: named parametre (:ad) kullanılmaz — pozisyonel ?', !preg_match('/[ (,=]:[a-z_]{2,}\b/', $c));
 ok('core: depo filtresi yalnız depo_sql_in (ceksenet_depo_filtre) / depot_visible_to_user / active_depot (depo_sql_column / depo_sql_records YOK)', str_contains($c, 'depo_sql_in(') && str_contains($c, 'depot_visible_to_user(') && !str_contains($c, 'depo_sql_column(') && !str_contains($c, 'depo_sql_records'));
 $yazanlar = ['ceksenet_bordro_kaydet', 'ceksenet_islem_uygula', 'ceksenet_hareket_iptal', 'ceksenet_tanim_kaydet', 'ceksenet_tanim_durum', 'ceksenet_tanim_sil'];
@@ -198,6 +200,31 @@ if (is_file($ROOT . '/assets/ceksenet.css')) {
     ok('ceksenet.css: çıplak html / body / input / .btn / .card seçicisi YOK; overflow-x: hidden YOK', !preg_match('/(^|[},]\s*)(html|body|input|\.btn|\.card)\s*[{,]/m', $cssKod) && !preg_match('/overflow-x\s*:\s*hidden/', $cssKod));
 }
 ok('style.css\'te .cs- yok; app.js\'te cek_kaydet yok (ortak dosyalara dokunulmadı)', !str_contains((string)file_get_contents($ROOT . '/assets/style.css'), '.cs-') && !str_contains((string)file_get_contents($ROOT . '/assets/app.js'), 'cek_kaydet'));
+
+
+echo "\n=== 9. Aşama 4 (ön yüz) — dosyalar zorunlu + UI kuralları ===\n";
+foreach (['config/ceksenet_ui.php', 'assets/ceksenet.css', 'assets/ceksenet.js', 'cek_cikti.php', 'cek_dekontu.php', 'senet_dekontu.php', 'cek_tanimlari.php'] as $f) ok("Aşama 4: $f var", is_file($ROOT . '/' . $f));
+$ui = kod($ROOT . '/config/ceksenet_ui.php');
+$uiHam = (string)file_get_contents($ROOT . '/config/ceksenet_ui.php');
+$uiFn = ['ceksenet_assets', 'ceksenet_scripts', 'ceksenet_sema_uyari', 'ceksenet_parca', 'ceksenet_sayfa_govde', 'ceksenet_tanimlari_govde', 'ceksenet_bordro_yazdir_html', 'ceksenet_modal_islem', 'ceksenet_bordro_form_html'];
+ok('ceksenet_ui: ' . implode('/', $uiFn) . ' var', !array_diff($uiFn, array_map(fn($fn) => govde($ui, $fn) !== null ? $fn : '', $uiFn)));
+ok('ceksenet_ui: require YOK (yalnız fonksiyon bildirir; çekirdekler sayfa dosyasından yüklenir)', !preg_match('/\brequire(_once)?\b/', $ui) && !str_contains($ui, 'include'));
+ok('ceksenet_ui: cari / kasa tablolarına SQL yok; veri yalnız cari_core / kasa_core / ceksenet_core fonksiyonlarından', !preg_match('/\b(FROM|JOIN|INTO|UPDATE)\s+`?(cari|kasa|ceksenet)_/i', $ui) && str_contains($ui, 'cari_kart_listesi(') && str_contains($ui, 'kasa_secenekleri('));
+ok('ceksenet_ui: cek_kaydet.php dışında yazma ucu yok; her POST formunda csrf', substr_count($uiHam, 'method="post"') === substr_count($uiHam, 'action="cek_kaydet.php"') && substr_count($uiHam, 'name="csrf"') >= substr_count($uiHam, 'method="post"'));
+ok('ceksenet_ui: ham $_GET çıktısı yok; işlem modalı alanları ceksenet_islemler() yapısından (ceksenet_islem_meta)', !preg_match('/(echo|\.)\s*\$_(GET|POST|REQUEST)\[/', $ui) && str_contains((string)govde($ui, 'ceksenet_islem_meta'), 'ceksenet_islemler()') && str_contains($ui, "'islemler' => ceksenet_islem_meta()"));
+ok('ceksenet_ui: bordro formu paralel dizi adları ceksenet_satir_topla ile aynı 12 alan (seri_no … karne_id)', (bool)preg_match('/\$tum = \[\'seri_no\', \'banka_ad\', \'sube\', \'hesap_no\', \'borclu\', \'kefil\', \'yer_adi\', \'duzenleme_tarihi\', \'vade\', \'tutar\', \'para_birimi\', \'karne_id\'\];/', $ui));
+ok('ceksenet_ui: satır girdileri disabled EDİLMEZ (paralel dizi hizası; yalnız readonly / hidden)', !preg_match('/<(input|select)[^>]*name="[a-z_]+\[\]"[^>]*\bdisabled\b/', $ui));
+ok('ceksenet_ui: durum rozeti `cs-d-*` sınıfı çekirdekten (durum_sinif); vade geçmiş / yakın sınıfları var', str_contains($ui, "durum_sinif") && str_contains($ui, 'cs-vade--gecmis') && str_contains($ui, 'cs-vade--yakin'));
+$ct = kod($ROOT . '/cek_cikti.php');
+ok("cek_cikti: dışa aktarım require_perm('reports.export') + export_audit('ceksenet', 'liste', …) + xlsx_indir; siparis_inv_ihracatci tek kaynak", str_contains($ct, "require_perm('reports.export')") && str_contains($ct, "export_audit('ceksenet', 'liste',") && str_contains($ct, 'xlsx_indir(') && str_contains($ct, 'siparis_inv_ihracatci()'));
+ok('cek_cikti: require_perm → export_audit → xlsx_indir sırası; CSV `;` + BOM', $pos($ct, "require_perm('reports.export')") < $pos($ct, "export_audit('ceksenet'") && $pos($ct, "export_audit('ceksenet'") < $pos($ct, 'xlsx_indir(') && str_contains($ct, '\xEF\xBB\xBF') && str_contains($ct, "';', '\"', '\\\\'"));
+$js = (string)file_get_contents($ROOT . '/assets/ceksenet.js'); $cssH = (string)file_get_contents($ROOT . '/assets/ceksenet.css');
+ok("ceksenet.js: yonRe = ceksenet_geri_guvenli ile aynı üç sayfa; yazma yalnız cek_kaydet.php; Math.random yalnız crypto yedeği", str_contains($js, 'yonRe: /^(cek_dekontu|senet_dekontu|cek_tanimlari)\.php') && str_contains($js, "kaydet: 'cek_kaydet.php'") && substr_count($js, 'Math.random') === 2 && !str_contains($js, 'XMLHttpRequest'));
+ok('ceksenet.js: işlem geçişi `gecis` alanıyla gönderilir (`islem` yönlendirme anahtarı)', str_contains($js, 'f.elements.gecis.value') && str_contains((string)govde($ui, 'ceksenet_modal_islem'), 'name="gecis"'));
+ok('ceksenet.css: <768 girdi 16px + --bn-h ile alt çubuk payı + safe-area (sabit px yok); karanlık mod tokenları; durum rozetleri cs-d-*', str_contains($cssH, 'font-size: 16px') && str_contains($cssH, 'var(--bn-h)') && str_contains($cssH, 'env(safe-area-inset-bottom') && str_contains($cssH, 'html[data-theme="dark"] .ceksenet') && str_contains($cssH, '.cs-d-karsiliksiz'));
+ok('ceksenet.css: alt eylem / seçim çubuğuna z-index VERİLMEZ; panel + modal ≥ 600', !preg_match('/\.cs-(eylem-bar|secim-bar)\s*\{[^}]*z-index/', $cssH) && (bool)preg_match('/\.cs-panel--acik\s*\{[^}]*z-index:\s*600/', $cssH));
+ok('ceksenet.css: .pm-dialog > form zincirine dokunulmaz; .cs-dialog max-height tanımlı', str_contains($cssH, '.cs-dialog {') && !str_contains(preg_replace('#/\*.*?\*/#s', '', $cssH) ?? '', '.pm-dialog > form'));
+ok('bağımlılık yönü: kasa_ui / kasa_core "ceksenet" sözcüğünü bilmez', !is_file($ROOT . '/config/kasa_ui.php') || stripos((string)file_get_contents($ROOT . '/config/kasa_ui.php'), 'ceksenet') === false);
 
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

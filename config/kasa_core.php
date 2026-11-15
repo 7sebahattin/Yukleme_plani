@@ -328,6 +328,13 @@ function kasa_kart_kilitle(PDO $pdo, array $ids): void
 /** Kasa aktif depoda görünür mü? (kart deposu boşsa görünür) */
 function kasa_gorunur(array $kart): bool { return depot_visible_to_user((string)($kart['depo'] ?? '')); }
 
+/** Görünmeyen (başka gerçek depoya ait) kasa için ret cevabı; görünürse null. */
+function kasa_depo_ret(?array $kart): ?array
+{
+    if ($kart === null || kasa_gorunur($kart)) return null;
+    return kasa_hata('Bu kasa "' . (string)$kart['depo'] . '" deposuna ait; aktif deponuzda görünmüyor.', ['kod' => 'depo']);
+}
+
 /** Kart deposuna göre aktif depo süzgeci (boş depo daima görünür). @return array{0:string,1:array} */
 function kasa_depo_filtre(string $col): array
 {
@@ -369,7 +376,7 @@ function kasa_kart_dogrula(PDO $pdo, array $g, ?int $id, ?array $eski = null): a
 
     $kod = cari_kod_normalize((string)($g['kod'] ?? ''));
     if ($kod === '') {
-        $kod = kasa_kod_oner($pdo);
+        $kod = $eski !== null && (string)($eski['kod'] ?? '') !== '' ? (string)$eski['kod'] : kasa_kod_oner($pdo);   // düzenlemede boş kod = ESKİ kod korunur
     } elseif (!preg_match('/^[A-Z0-9._-]{1,30}$/', $kod)) {
         $h['kod'] = 'Kod 1-30 karakter; yalnız harf, rakam, . _ -';
     }
@@ -381,9 +388,9 @@ function kasa_kart_dogrula(PDO $pdo, array $g, ?int $id, ?array $eski = null): a
         else $v['kod'] = $kod;
     }
 
-    $tip = (string)($g['tip'] ?? 'nakit');
+    $tip = (string)(($g['tip'] ?? '') !== '' ? $g['tip'] : ($eski['tip'] ?? 'nakit'));   // gelmezse eski değer korunur
     if (!isset(kasa_tipler()[$tip])) $h['tip'] = 'Geçersiz kasa tipi.'; else $v['tip'] = $tip;
-    $pb = (string)($g['para_birimi'] ?? 'TRY');
+    $pb = (string)(($g['para_birimi'] ?? '') !== '' ? $g['para_birimi'] : ($eski['para_birimi'] ?? 'TRY'));
     if (!in_array($pb, cari_para_birimleri(), true)) $h['para_birimi'] = 'Geçersiz para birimi.'; else $v['para_birimi'] = $pb;
 
     $depo = trim((string)($g['depo'] ?? ''));
@@ -436,6 +443,7 @@ function kasa_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
     if ($id !== null) {
         $eski = kasa_kart_oku($pdo, $id);
         if ($eski === null) return kasa_hata('Kasa bulunamadı.');
+        if (($r = kasa_depo_ret($eski)) !== null) return $r;
     }
     $d = kasa_kart_dogrula($pdo, $g, $id, $eski);
     if (!$d['ok']) {
@@ -484,6 +492,7 @@ function kasa_kart_durum(PDO $pdo, int $id, bool $aktif, int $uid): array
 {
     $k = kasa_kart_oku($pdo, $id);
     if ($k === null) return kasa_hata('Kasa bulunamadı.');
+    if (($r = kasa_depo_ret($k)) !== null) return $r;
     $pdo->prepare('UPDATE kasa_kartlar SET aktif = ?, updated_at = ?, updated_by = ? WHERE id = ?')->execute([$aktif ? 1 : 0, date('Y-m-d H:i:s'), $uid, $id]);
     $uyari = null;
     if (!$aktif && kasa_bakiye($pdo, $id) !== 0) $uyari = 'Kasa bakiyesi sıfır değil; pasif kasa yeni hareket almaz.';
@@ -496,6 +505,7 @@ function kasa_kart_sil(PDO $pdo, int $id, int $uid): array
 {
     $k = kasa_kart_oku($pdo, $id);
     if ($k === null) return kasa_hata('Kasa bulunamadı.');
+    if (($r = kasa_depo_ret($k)) !== null) return $r;
     if (kasa_kart_hareket_say($pdo, $id) > 0) return kasa_hata('Hareketi olan kasa silinemez; pasifleştirin.', ['kod' => 'hareketli']);
     $pdo->prepare('DELETE FROM kasa_kartlar WHERE id = ?')->execute([$id]);
     audit_log_event('delete', 'kasa', $id, ['kayit' => 'kart'] + $k, null);
@@ -570,6 +580,19 @@ function kasa_bakiye(PDO $pdo, int $kasaId, ?string $bitis = null): int
     return $r === false ? 0 : cari_kurus($r['g']) - cari_kurus($r['c']);
 }
 
+/**
+ * Kilitli bakiye (tx içinde, kasa kartı kilidinden sonra): MySQL'de FOR UPDATE ile en son İŞLENMİŞ veriyi okur — REPEATABLE READ görüntüsü eskimez. SQLite: düz okuma.
+ */
+function kasa_bakiye_kilitli(PDO $pdo, int $kasaId): int
+{
+    $sql = "SELECT SUM(CASE WHEN yon = 'G' THEN tutar ELSE 0 END) AS g, SUM(CASE WHEN yon = 'C' THEN tutar ELSE 0 END) AS c FROM kasa_hareketler WHERE kasa_id = ? AND durum = 'gecerli'"
+        . ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '');
+    $st = $pdo->prepare($sql);
+    $st->execute([$kasaId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    return $r === false ? 0 : cari_kurus($r['g']) - cari_kurus($r['c']);
+}
+
 /** @param list<int> $ids @return array<int,int> kasa id → bakiye (kuruş) */
 function kasa_bakiyeler_toplu(PDO $pdo, array $ids): array
 {
@@ -623,7 +646,7 @@ function kasa_istek_bul(PDO $pdo, string $anahtar): ?array
 /** Çıkış kontrolü: kasa bakiyesi tutardan azsa ve kasa eksiye izin vermiyorsa eksik kuruşu döner (aksi null). */
 function kasa_eksik_hesapla(PDO $pdo, array $kasa, int $kurus): ?array
 {
-    $bak = kasa_bakiye($pdo, (int)$kasa['id']);
+    $bak = kasa_bakiye_kilitli($pdo, (int)$kasa['id']);   // kilitli okuma (çağıran kasa kartını zaten kilitlemiştir)
     return $bak < $kurus ? ['bakiye' => $bak, 'eksik' => $kurus - $bak] : null;
 }
 
@@ -715,6 +738,9 @@ function kasa_hareket_ekle(PDO $pdo, array $g, int $uid, ?array $kaynak = null):
     try {
         $s = kasa_tx($pdo, function () use ($pdo, $kasa, $kasaId, $tur, $bilgi, $yonH, $o, $pb, $cariId, $kalemId, $kalemAd, $depo, $simdi, $uid, $kMod, $kId, $eksiyeIzin, &$ic): array {
             kasa_kart_kilitle($pdo, [$kasaId]);
+            if ($o['ik'] !== null && ($var = kasa_istek_bul($pdo, $o['ik'])) !== null) {   // kilit beklerken aynı istek tamamlanmış olabilir
+                return ['ok' => true, 'hata' => null, 'id' => (int)$var['id'], 'belge_no' => (string)$var['belge_no'], 'tekrar' => true];
+            }
             $taze = kasa_kart_oku($pdo, $kasaId);
             if ($taze === null || (int)$taze['aktif'] !== 1) return kasa_hata('Pasif kasaya yeni hareket girilemez.', ['alanlar' => ['kasa_id' => 'Pasif kasa.']]);
             $uyarilar = [];
@@ -745,17 +771,17 @@ function kasa_hareket_ekle(PDO $pdo, array $g, int $uid, ?array $kaynak = null):
             return ['ok' => true, 'hata' => null, 'id' => $hid, 'belge_no' => $belgeNo, 'tekrar' => false, 'uyari' => $uyarilar ? implode(' ', $uyarilar) : null,
                 'cari_hareket_id' => $cariHid, 'cari_belge_no' => $cariNo];
         });
-    } catch (RuntimeException $e) {
-        if ($e->getCode() !== KASA_IC_HATA) throw $e;
-        $ek = [];
-        if (is_array($ic) && !empty($ic['alanlar'])) $ek['alanlar'] = $ic['alanlar'];
-        return kasa_hata($e->getMessage(), $ek);
     } catch (PDOException $e) {
         if ($o['ik'] !== null && ($var = kasa_istek_bul($pdo, $o['ik'])) !== null) {
             return ['ok' => true, 'hata' => null, 'id' => (int)$var['id'], 'belge_no' => (string)$var['belge_no'], 'tekrar' => true];
         }
         error_log('[kasa_hareket_ekle] ' . $e->getMessage());
         return kasa_hata('Hareket kaydedilemedi.');
+    } catch (RuntimeException $e) {
+        if ($e->getCode() !== KASA_IC_HATA) throw $e;
+        $ek = [];
+        if (is_array($ic) && !empty($ic['alanlar'])) $ek['alanlar'] = $ic['alanlar'];
+        return kasa_hata($e->getMessage(), $ek);
     }
     if (empty($s['ok'])) return $s;
     audit_log_event('create', 'kasa', (int)$s['id'], null, ['kayit' => 'hareket', 'kasa_id' => $kasaId, 'tur' => $tur, 'yon' => $yonH, 'tutar' => $o['kurus'] / 100, 'pb' => $pb, 'belge_no' => $s['belge_no'],
@@ -795,6 +821,10 @@ function kasa_virman_ekle(PDO $pdo, array $g, int $uid): array
     try {
         $s = kasa_tx($pdo, function () use ($pdo, $kid, $hid, $o, $pb, $ac, $depo, $simdi, $uid, $eksiyeIzin, $ins): array {
             kasa_kart_kilitle($pdo, [$kid, $hid]);
+            if ($o['ik'] !== null && ($var = kasa_istek_bul($pdo, $o['ik'])) !== null) {
+                $b = kasa_hareket_oku($pdo, (int)$var['id']);
+                return ['ok' => true, 'hata' => null, 'id' => (int)$var['id'], 'id2' => $b !== null && $b['bagli_id'] !== null ? (int)$b['bagli_id'] : null, 'belge_no' => (string)$var['belge_no'], 'tekrar' => true];
+            }
             $kt = kasa_kart_oku($pdo, $kid); $ht = kasa_kart_oku($pdo, $hid);
             if ($kt === null || $ht === null || (int)$kt['aktif'] !== 1 || (int)$ht['aktif'] !== 1) return kasa_hata('Pasif kasaya yeni hareket girilemez.');
             $uyari = null;
@@ -852,6 +882,7 @@ function kasa_hareket_iptal(PDO $pdo, int $id, string $neden, int $uid): array
     if ($r === null) return kasa_hata('Hareket bulunamadı.');
     if ($r['durum'] === 'iptal') return kasa_hata('Hareket zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
     if (!empty($r['kaynak_modul'])) return kasa_hata('Bu hareket bir kaynak belgeye bağlı; kaynak belgesinden iptal edin.', ['kod' => 'kaynakli']);
+    if (($dr = kasa_depo_ret(kasa_kart_oku($pdo, (int)$r['kasa_id']))) !== null) return $dr;   // başka gerçek depoya ait kasa (boş depo serbest)
 
     $idler = [$id]; $kasalar = [(int)$r['kasa_id']];
     if ($r['tur'] === 'virman' && !empty($r['bagli_id'])) {
@@ -1098,12 +1129,20 @@ function kasa_tanim_kaydet(PDO $pdo, string $tur, string $ad, int $sira, int $ui
     }
     $simdi = date('Y-m-d H:i:s');
     if ($id === null) {
-        $pdo->prepare('INSERT INTO kasa_tanimlar (tur, ad, sira, aktif, created_at, created_by) VALUES (?, ?, ?, 1, ?, ?)')->execute([$tur, $ad, $sira, $simdi, $uid]);
+        try {
+            $pdo->prepare('INSERT INTO kasa_tanimlar (tur, ad, sira, aktif, created_at, created_by) VALUES (?, ?, ?, 1, ?, ?)')->execute([$tur, $ad, $sira, $simdi, $uid]);
+        } catch (PDOException $e) {
+            return kasa_hata('Bu ad zaten tanımlı.', ['kod' => 'kullanimda', 'alanlar' => ['ad' => 'Bu ad zaten tanımlı.']]);
+        }
         $yid = (int)$pdo->lastInsertId();
         audit_log_event('create', 'kasa', $yid, null, ['kayit' => 'tanim', 'tur' => $tur, 'ad' => $ad, 'sira' => $sira]);
         return ['ok' => true, 'hata' => null, 'id' => $yid];
     }
-    $pdo->prepare('UPDATE kasa_tanimlar SET ad = ?, sira = ?, updated_at = ?, updated_by = ? WHERE id = ?')->execute([$ad, $sira, $simdi, $uid, $id]);
+    try {
+        $pdo->prepare('UPDATE kasa_tanimlar SET ad = ?, sira = ?, updated_at = ?, updated_by = ? WHERE id = ?')->execute([$ad, $sira, $simdi, $uid, $id]);
+    } catch (PDOException $e) {
+        return kasa_hata('Bu ad zaten tanımlı.', ['kod' => 'kullanimda', 'alanlar' => ['ad' => 'Bu ad zaten tanımlı.']]);
+    }
     audit_log_event('update', 'kasa', $id, ['kayit' => 'tanim', 'tur' => $tur, 'ad' => $eski['ad']], ['kayit' => 'tanim', 'tur' => $tur, 'ad' => $ad, 'sira' => $sira]);
     return ['ok' => true, 'hata' => null, 'id' => $id];
 }

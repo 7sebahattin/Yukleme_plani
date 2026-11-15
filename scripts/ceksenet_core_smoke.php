@@ -106,6 +106,12 @@ ok('tek satır = kendi vadesi; boş / geçersiz baz / geçersiz vade → null', 
     && ceksenet_ortalama_vade([['vade' => '2026-02-01', 'kurus' => 7]], 'x') === null && ceksenet_ortalama_vade([['vade' => 'bozuk', 'kurus' => 7]], '2026-01-01') === null);
 ok('çok büyük tutar × gün taşmaz (999.999.999.999,99 × 3650 gün)', ceksenet_ortalama_vade([['vade' => gun(3650), 'kurus' => 99999999999999]], date('Y-m-d'))['TRY']['gun'] === 3650);
 
+$osv = []; for ($i = 0; $i < 30; $i++) $osv[] = ['vade' => gun(3650), 'kurus' => 99999999999999, 'para_birimi' => 'TRY'];
+try { $ov = ceksenet_ortalama_vade($osv, date('Y-m-d')); $ovh = null; } catch (Throwable $e) { $ov = null; $ovh = get_class($e) . ': ' . $e->getMessage(); }
+ok('ortalama vade: Σ(kuruş×gün) int sınırını aşsa da istisna YOK (TypeError yok); gün 3650, adet 30', $ovh === null && ($ov['TRY']['gun'] ?? null) === 3650 && ($ov['TRY']['adet'] ?? null) === 30 && $ov['TRY']['tarih'] === gun(3650), (string)$ovh . json_encode($ov));
+$ov2 = ceksenet_ortalama_vade([['vade' => gun(-4000), 'kurus' => 99999999999999, 'para_birimi' => 'TRY'], ['vade' => gun(-4000), 'kurus' => 99999999999999, 'para_birimi' => 'TRY'], ['vade' => gun(-4000), 'kurus' => 99999999999999, 'para_birimi' => 'TRY']], date('Y-m-d'));
+ok('ortalama vade: büyük tutar + negatif gün (vade geçmiş) de istisnasız ve doğru işaretli (-4000)', ($ov2['TRY']['gun'] ?? null) === -4000);
+
 echo "\n=== 4. Bordro: alınan çek girişi ===\n";
 $a0 = audit_say('create');
 $r = bordro('cek', 'alinan', $MUS, [
@@ -486,13 +492,113 @@ $r = uc(['islem' => 'tanim_sil', 'id' => (string)$ub]); ok('tanim_sil 200; kulla
 $r = uc(['islem' => 'bilinmeyen']); ok('bilinmeyen işlem → 422', $r['kod'] === 422);
 foreach (['bordro_kaydet', 'islem_uygula', 'hareket_iptal', 'tanim_kaydet', 'tanim_durum', 'tanim_sil'] as $isl) { $r = uc(['islem' => $isl], true, ['admin' => false]); ok("yönetici değil: $isl → 403 JSON", $r['kod'] === 403 && js($r)['ok'] === false); }
 $r = uc(['islem' => 'bordro_kaydet', 'geri' => 'https://kotu.example/cek_dekontu.php'] + $P, false);
-ok('klasik form: başarılı kayıt → 303 (cek_dekontu.php?yon=alinan); ikinci (mükerrer) → hata flash + dış `geri` yok sayılır (cek_dekontu.php)', $r['kod'] === 303 && baslik($r, 'Location') === 'cek_dekontu.php?yon=alinan' || ($r['kod'] === 303 && baslik($r, 'Location') === 'cek_dekontu.php' && ($r['flash']['type'] ?? '') === 'error'));
+ok('klasik form: yerel olmayan `geri` yok sayılır; sonuç 303 (başarılıysa cek_dekontu.php?yon=alinan, mükerrerse cek_dekontu.php + hata flash)', $r['kod'] === 303 && in_array(baslik($r, 'Location'), ['cek_dekontu.php?yon=alinan', 'cek_dekontu.php'], true));
+ok('klasik form: Location ile flash tipi tutarlı — başarı → yon=alinan, hata (mükerrer) → cek_dekontu.php + flash error', $r['kod'] === 303 && (baslik($r, 'Location') === 'cek_dekontu.php?yon=alinan' ? ($r['flash']['type'] ?? '') !== 'error' : (baslik($r, 'Location') === 'cek_dekontu.php' && ($r['flash']['type'] ?? '') === 'error')));
 $r = uc(['islem' => 'tanim_kaydet', 'tur' => 'banka', 'ad' => 'Klasik Banka', 'geri' => 'cek_tanimlari.php?sekme=banka'], false);
 ok('klasik form + yerel `geri` (cek_tanimlari.php?sekme=banka) korunur', $r['kod'] === 303 && baslik($r, 'Location') === 'cek_tanimlari.php?sekme=banka');
 $r = uc(['islem' => 'tanim_kaydet', 'tur' => 'banka', 'ad' => 'X', 'geri' => 'kasa_fisleri.php'], false);
 ok('klasik form: başka modül sayfası `geri` → cek_dekontu.php', baslik($r, 'Location') === 'cek_dekontu.php');
 $sb = ceksenet_t_istek_cagri(['dosya' => 'cek_kaydet.php', 'post' => ['islem' => 'bordro_kaydet', 'csrf' => 'test-csrf-belirteci', 'sinif' => 'senet', 'yon' => 'verilen', 'cari_id' => (string)$TED, 'tarih' => gun(0), 'seri_no' => ['US-1'], 'vade' => [gun(30)], 'tutar' => ['10,00']], 'server' => ['HTTP_X_REQUESTED_WITH' => 'fetch']]);
 ok('senet verilen bordro → yonlendir senet_dekontu.php?yon=verilen', js($sb)['yonlendir'] === 'senet_dekontu.php?yon=verilen' && $sb['kod'] === 200, $sb['govde']);
+
+echo "\n=== 13b. Denetim düzeltmeleri (K1 yarım bordro, Ö1 PDO, Ö2 iptal, karne kasası) ===\n";
+function sayim(): array { global $db; return [say('ceksenet_kayitlar'), say('ceksenet_hareketler'), say('cari_hareketler', "kaynak_modul = 'ceksenet'"), say('kasa_hareketler', "kaynak_modul = 'ceksenet'")]; }
+$vd = gun(30); $c0 = cb($TED); $s0 = sayim();
+// K1 senaryo 1: verilen + karnesiz, aynı banka + aynı seri, FARKLI hesap no
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '111', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-1', 'vade' => $vd, 'tutar' => '1000,00'], ['seri_no' => '111', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-2', 'vade' => $vd, 'tutar' => '2000,00']]);
+ok('K1/1 verilen karnesiz aynı banka+seri (farklı hesap no): 409 mukerrer, satır 2 işaretli; DB\'de 0 kayıt / 0 hareket / 0 cari dekont; cari bakiye değişmedi', !$r['ok'] && $r['kod'] === 'mukerrer' && isset($r['satir_hatalari'][1]['seri_no']) && sayim() === $s0 && cb($TED) === $c0, json_encode($r, JSON_UNESCAPED_UNICODE));
+// K1 senaryo 2: karneli + karnesiz (karnenin bankası, harf farkıyla) aynı seri — her iki sırada
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '0800501', 'karne_id' => (string)$KARNE, 'vade' => $vd, 'tutar' => '10,00'], ['seri_no' => '0800501', 'banka_ad' => 'ÖRNEK BANKA', 'vade' => $vd, 'tutar' => '20,00']]);
+ok('K1/2 karneli + karnesiz (karnenin bankası, harf-duyarsız) aynı seri: 409 mukerrer; 0 kayıt / 0 hareket / 0 dekont', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $s0 && cb($TED) === $c0, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '0800502', 'banka_ad' => 'Örnek Banka', 'vade' => $vd, 'tutar' => '20,00'], ['seri_no' => '0800502', 'karne_id' => (string)$KARNE, 'vade' => $vd, 'tutar' => '10,00']]);
+ok('K1/2b karnesiz + karneli (ters sıra) aynı seri: 409 mukerrer, 0 yazım', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $s0 && cb($TED) === $c0, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = bordro('cek', 'alinan', $MUS, [['seri_no' => 'ab-77', 'banka_ad' => 'Akbank', 'hesap_no' => 'x-1', 'vade' => $vd, 'tutar' => '5,00'], ['seri_no' => 'AB-77', 'banka_ad' => 'AKBANK', 'hesap_no' => 'X-1', 'vade' => $vd, 'tutar' => '6,00']]);
+ok('alınan çek: seri / banka / hesap no harf-duyarsız aynı sayılır (bordro içi mükerrer) → 409, 0 yazım', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $s0);
+$r1 = bordro('cek', 'alinan', $MUS, [['seri_no' => 'ab-78', 'banka_ad' => 'Akbank', 'hesap_no' => 'x-1', 'vade' => $vd, 'tutar' => '5,00']]); $s1 = sayim();
+$r = bordro('cek', 'alinan', $MUS, [['seri_no' => 'AB-78', 'banka_ad' => 'AKBANK', 'hesap_no' => 'X-1', 'vade' => $vd, 'tutar' => '6,00']]);
+ok('DB karşılaştırması da harf-duyarsız: önceden kayıtlı "ab-78" varken "AB-78" mükerrer', $r1['ok'] && !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $s1);
+ok('mükerrer anahtarı TEK yardımcıdan: ceksenet_mukerrer_anahtar (verilen: hesap no anahtara girmez; alınan: girer; senet: null)', ceksenet_mukerrer_anahtar('cek', 'verilen', 'Akbank', 'H-1', '1') === ceksenet_mukerrer_anahtar('cek', 'verilen', 'AKBANK', 'H-2', '1')
+    && ceksenet_mukerrer_anahtar('cek', 'alinan', 'Akbank', 'H-1', '1') !== ceksenet_mukerrer_anahtar('cek', 'alinan', 'Akbank', 'H-2', '1') && ceksenet_mukerrer_anahtar('senet', 'alinan', 'a', 'b', '1') === null);
+// K1: tx İÇİNDE mükerrer (yarış benzetimi: ilk dekont yazılınca "başka istek" aynı seriyi işler) → HEPSİ geri alınır
+$db->exec("CREATE TRIGGER dz_race AFTER INSERT ON cari_hareketler WHEN NEW.kaynak_modul = 'ceksenet' AND NOT EXISTS (SELECT 1 FROM ceksenet_kayitlar WHERE seri_no = 'R-2')
+    BEGIN INSERT INTO ceksenet_kayitlar (sinif, yon, portfoy_no, seri_no, banka_ad, vade, tutar, para_birimi, cari_id, durum, created_at) VALUES ('cek', 'verilen', 'RACE-1', 'R-2', 'Rc Banka', '$vd', 1, 'TRY', 1, 'verildi', '2026-01-01 00:00:00'); END");
+$s2 = sayim();
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => 'R-1', 'banka_ad' => 'Rc Banka', 'vade' => $vd, 'tutar' => '30,00'], ['seri_no' => 'R-2', 'banka_ad' => 'Rc Banka', 'vade' => $vd, 'tutar' => '40,00']]);
+$db->exec('DROP TRIGGER dz_race');
+ok('K1 tx-içi mükerrer (yarış): ok=false, kod mukerrer + satir_hatalari DÖNER; kayıt + hareket + cari dekontu HEPSİ geri alındı (yarım bordro yok); cari bakiye değişmedi', !$r['ok'] && ($r['kod'] ?? '') === 'mukerrer' && isset($r['satir_hatalari'][1]['seri_no']) && sayim() === $s2 && cb($TED) === $c0 && !$db->inTransaction(), json_encode($r, JSON_UNESCAPED_UNICODE));
+ok('K1 geri alınan bordro numara tüketmedi: aynı satırlar yarış bitince başarıyla kaydedilir, portföy / bordro / belge no dolu, cari_hareket_id dolu', ($rr = bordro('cek', 'verilen', $TED, [['seri_no' => 'R-1', 'banka_ad' => 'Rc Banka', 'vade' => $vd, 'tutar' => '30,00'], ['seri_no' => 'R-2', 'banka_ad' => 'Rc Banka', 'vade' => $vd, 'tutar' => '40,00']]))['ok']
+    && !$db->query("SELECT 1 FROM ceksenet_kayitlar WHERE seri_no IN ('R-1','R-2') AND (portfoy_no = '' OR bordro_no = '')")->fetch() && !$db->query("SELECT 1 FROM ceksenet_hareketler WHERE id IN (" . implode(',', array_map('intval', $rr['hareket_idler'])) . ") AND (belge_no = '' OR cari_hareket_id IS NULL OR bordro_no = '')")->fetch() && cb($TED) === $c0 + 7000, json_encode($rr, JSON_UNESCAPED_UNICODE));
+// Bordroda 2. satırda cari yazımı patlar → tam rollback
+$c1 = cb($TED); $s3 = sayim();
+$db->exec("CREATE TRIGGER dz_cari BEFORE INSERT ON cari_hareketler WHEN NEW.kaynak_modul = 'ceksenet' AND EXISTS (SELECT 1 FROM ceksenet_kayitlar WHERE seri_no = 'P-2') BEGIN SELECT RAISE(ABORT, 'cari zorla'); END");
+try { $r = bordro('cek', 'verilen', $TED, [['seri_no' => 'P-1', 'banka_ad' => 'Pz Banka', 'vade' => $vd, 'tutar' => '11,00'], ['seri_no' => 'P-2', 'banka_ad' => 'Pz Banka', 'vade' => $vd, 'tutar' => '12,00']]); $pe = null; } catch (Throwable $e) { $r = null; $pe = get_class($e); }
+$db->exec('DROP TRIGGER dz_cari');
+ok('2. satırda cari yazımı patlar: istisna SIZMAZ, ok=false; 1. satırın kayıt/hareket/dekontu dahil HİÇBİR şey kalmadı; tx kapalı', $pe === null && is_array($r) && !$r['ok'] && sayim() === $s3 && cb($TED) === $c1 && !$db->inTransaction(), (string)$pe . json_encode($r, JSON_UNESCAPED_UNICODE));
+// Ö1: PDO hatası istisna sızmaz (PDOException catch'i RuntimeException'dan ÖNCE)
+$id = cek1($MUS, 'DZ-A1', '10,00')['id']; $s4 = sayim();
+$db->exec("CREATE TRIGGER dz_h BEFORE INSERT ON ceksenet_hareketler BEGIN SELECT RAISE(ABORT, 'zorla'); END");
+$f = [];
+foreach (['bordro' => fn() => bordro('cek', 'alinan', $MUS, [['seri_no' => 'DZ-A2', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-9', 'vade' => $vd, 'tutar' => '1,00']], ['istek_anahtari' => 'dz-b1']),
+          'islem' => fn() => gecis('tahsile_ver', [$id], ['kasa_id' => (string)$BANKA, 'istek_anahtari' => 'dz-i1'])] as $ad => $fn) {
+    try { $x = $fn(); $f[$ad] = !$x['ok'] && empty($x['tekrar']) ? 'ok' : 'beklenmeyen ' . json_encode($x, JSON_UNESCAPED_UNICODE); } catch (Throwable $e) { $f[$ad] = 'FIRLATTI ' . get_class($e); }
+}
+$db->exec('DROP TRIGGER dz_h');
+ok('PDO hatasında istisna sızmaz: bordro_kaydet + islem_uygula ok=false; hiçbir şey yazılmadı; kayıt durumu portfoy; tx kapalı', $f === ['bordro' => 'ok', 'islem' => 'ok'] && sayim() === $s4 && durum($id) === 'portfoy' && !$db->inTransaction(), json_encode($f));
+$cc = file_get_contents(__DIR__ . '/../config/ceksenet_core.php');
+foreach (['ceksenet_bordro_kaydet', 'ceksenet_islem_uygula'] as $fn) {
+    preg_match('/function ' . $fn . '\(.*?\n}\n/s', $cc, $mm); $g = $mm[0] ?? '';
+    $pp = strpos($g, 'catch (PDOException'); $rp = strpos($g, 'catch (RuntimeException'); $ip = strpos($g, 'ceksenet_istek_bul(', (int)strpos($g, 'ceksenet_tx('));
+    ok("$fn: catch (PDOException) RuntimeException'dan ÖNCE; tx içinde (kilit/ilk okuma sonrası) istek anahtarı yeniden denenir; tekrar sonucu audit'i çiftlemez", $pp !== false && $rp !== false && $pp < $rp && $ip !== false && str_contains($g, "!empty(\$s['tekrar'])"));
+}
+$gb = (preg_match('/function ceksenet_bordro_kaydet\(.*?\n}\n/s', $cc, $mm) ? $mm[0] : '');
+ok('bordro: COMMIT sonrası hesap try/catch (Throwable) içinde; tx closure\'ında `return ceksenet_hata` YOK (yazmadan sonra return-hata commit ederdi)', str_contains($gb, 'catch (Throwable $e)') && !preg_match('/function \(\) use .*?\n(?:.*\n)*?\s+return ceksenet_hata\(\'Satır/', $gb));
+// İptal: kaynaklı cari / kasa satırlarını HER ZAMAN temizler (hareket satırındaki *_hareket_id boş kalmış olsa da)
+$rv = bordro('cek', 'verilen', $TED, [['seri_no' => 'DZ-V1', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-1', 'vade' => $vd, 'tutar' => '77,00']]); $hv = (int)$rv['hareket_idler'][0];
+$cb1 = cb($TED); $cariSatir = (int)$db->query("SELECT cari_hareket_id FROM ceksenet_hareketler WHERE id = $hv")->fetchColumn();
+$db->exec("UPDATE ceksenet_hareketler SET cari_hareket_id = NULL WHERE id = $hv");   // eski yarım yazımı taklit: bağ boş
+$ip = ceksenet_hareket_iptal($db, $hv, 'yetim dekont temizligi', 1);
+$db->exec("UPDATE ceksenet_hareketler SET cari_hareket_id = $cariSatir WHERE id = $hv");
+ok('iptal: hareketin cari_hareket_id boş olsa da kaynaklı cari dekontu iptal edilir (cari_iptal dolu, bakiye -77,00 geri)', $ip['ok'] && count($ip['cari_iptal']) === 1 && cb($TED) === $cb1 - 7700 && say('cari_hareketler', "kaynak_modul = 'ceksenet' AND kaynak_id = $hv AND durum = 'gecerli'") === 0, json_encode($ip));
+$ik2 = cek1($MUS, 'DZ-K2', '300,00')['id']; $k0 = kb($KASA);
+$rk = gecis('tahsil_kasa', [$ik2], ['kasa_id' => (string)$KASA]); $hk = (int)$rk['hareket_idler'][0];
+$kSonra = kb($KASA); $kasaSatir = (int)$db->query("SELECT kasa_hareket_id FROM ceksenet_hareketler WHERE id = $hk")->fetchColumn();
+$db->exec("UPDATE ceksenet_hareketler SET kasa_hareket_id = NULL WHERE id = $hk");
+$ip = ceksenet_hareket_iptal($db, $hk, 'yetim kasa satiri', 1);
+$db->exec("UPDATE ceksenet_hareketler SET kasa_hareket_id = $kasaSatir WHERE id = $hk");   // bağ geri konur (tutarlılık bölümü bağları denetler)
+ok('iptal: kasa_hareket_id boş olsa da kaynaklı kasa satırı iptal edilir (kasa bakiyesi geri döner)', $rk['ok'] && $kSonra === $k0 + 30000 && $ip['ok'] && count($ip['kasa_iptal']) === 1 && kb($KASA) === $k0 && durum($ik2) === 'portfoy', json_encode($ip));
+// Ö2a: kayıt UPDATE'i AND durum = ? — kayıt, hareketin bıraktığı durumda değilse HEPSİ geri
+$ik3 = cek1($MUS, 'DZ-K3', '20,00')['id']; $rk = gecis('tahsil_kasa', [$ik3], ['kasa_id' => (string)$KASA]); $hk = (int)$rk['hareket_idler'][0]; $k1 = kb($KASA);
+$db->exec("UPDATE ceksenet_kayitlar SET durum = 'tahsilde' WHERE id = $ik3");   // başka işlem durumu değiştirmiş gibi
+$ip = ceksenet_hareket_iptal($db, $hk, 'durum degismis', 1);
+ok('iptal: kayıt durumu hareketin yeni_durumundan farklıysa 409 son_degil ve HİÇBİR şey değişmez (hareket + kasa satırı geçerli kalır)', !$ip['ok'] && ($ip['kod'] ?? '') === 'son_degil' && ceksenet_hareket_oku($db, $hk)['durum'] === 'gecerli' && kb($KASA) === $k1 && !$db->inTransaction(), json_encode($ip, JSON_UNESCAPED_UNICODE));
+$db->exec("UPDATE ceksenet_kayitlar SET durum = 'tahsil' WHERE id = $ik3");
+ok('…durum düzelince aynı iptal başarılı', ceksenet_hareket_iptal($db, $hk, 'durum duzeldi', 1)['ok'] && durum($ik3) === 'portfoy' && kb($KASA) === $k1 - 2000);
+ok('bakiye okuması kilitli: kasa_eksik_hesapla kasa_bakiye_kilitli kullanır (MySQL FOR UPDATE)', str_contains(file_get_contents(__DIR__ . '/../config/kasa_core.php'), 'kasa_bakiye_kilitli($pdo, (int)$kasa[\'id\'])'));
+// Karne kasası doğrulaması
+$DEPOLAR = null;
+$kbP = kart('Dz Karne Pasif', 'banka', 'TRY', ['banka_adi' => 'Dz Banka']); $kbSube = kart('Dz Karne Şube', 'banka', 'TRY', ['depo' => 'Şube Depo']); $kbN = kart('Dz Karne Nakit', 'nakit');
+kasa_kart_durum($db, $kbP, false, 1);
+$r = ceksenet_tanim_kaydet($db, ['tur' => 'karne', 'ad' => 'Dz Karne X', 'kasa_id' => (string)$kbP, 'ilk_no' => '100', 'yaprak' => '10'], 1);
+ok('karne tanımı: PASİF banka hesabı → hata alanlar[kasa_id]', !$r['ok'] && isset($r['alanlar']['kasa_id']));
+$DEPOLAR = ['Merkez Depo'];
+$r = ceksenet_tanim_kaydet($db, ['tur' => 'karne', 'ad' => 'Dz Karne Y', 'kasa_id' => (string)$kbSube, 'ilk_no' => '100', 'yaprak' => '10'], 1);
+ok('karne tanımı: aktif depoda GÖRÜNMEYEN banka hesabı → hata alanlar[kasa_id]', !$r['ok'] && isset($r['alanlar']['kasa_id']));
+$DEPOLAR = null;
+$r = ceksenet_tanim_kaydet($db, ['tur' => 'karne', 'ad' => 'Dz Karne Z', 'kasa_id' => (string)$kbN, 'ilk_no' => '100', 'yaprak' => '10'], 1);
+ok('karne tanımı: nakit kasa hâlâ reddedilir; aktif + görünür banka hesabı kabul edilir', !$r['ok'] && isset($r['alanlar']['kasa_id']) && ($kt2 = ceksenet_tanim_kaydet($db, ['tur' => 'karne', 'ad' => 'Dz Karne OK', 'kasa_id' => (string)$kbSube, 'ilk_no' => '5000', 'yaprak' => '10'], 1))['ok']);
+$kk = (int)$kt2['id']; $KBA = (int)kart('Dz Karne Aktif', 'banka', 'TRY', ['banka_adi' => 'Dz Banka 2']);
+$db->exec("UPDATE ceksenet_tanimlar SET kasa_id = $KBA WHERE id = $kk");
+$rv = bordro('cek', 'verilen', $TED, [['seri_no' => '5001', 'karne_id' => (string)$kk, 'vade' => $vd, 'tutar' => '9,00']]); $vid = (int)$rv['idler'][0];
+kasa_kart_durum($db, $KBA, false, 1);   // karnenin banka hesabı sonradan pasife alındı
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '5002', 'karne_id' => (string)$kk, 'vade' => $vd, 'tutar' => '9,00']]);
+ok('bordro: karnenin banka hesabı PASİFse açık satır hatası (karne_id), yazım yok', $rv['ok'] && !$r['ok'] && isset($r['satir_hatalari'][0]['karne_id']) && str_contains($r['satir_hatalari'][0]['karne_id'], 'pasif'), json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = gecis('odendi', [$vid]);
+ok('ödendi (kasa seçilmedi, karnenin kasası pasif): açık hata "Karnenin banka hesabı pasif …", alanlar[kasa_id]; kayıt değişmedi', !$r['ok'] && str_contains((string)$r['hata'], 'Karnenin banka hesabı pasif') && isset($r['alanlar']['kasa_id']) && durum($vid) === 'verildi', json_encode($r, JSON_UNESCAPED_UNICODE));
+$db->exec("UPDATE ceksenet_tanimlar SET kasa_id = 999999 WHERE id = $kk");
+$r = gecis('odendi', [$vid]);
+ok('ödendi (karnenin kasası artık YOK): açık hata "Karnenin banka hesabı bulunamadı …"', !$r['ok'] && str_contains((string)$r['hata'], 'Karnenin banka hesabı bulunamadı') && durum($vid) === 'verildi', json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '5003', 'karne_id' => (string)$kk, 'vade' => $vd, 'tutar' => '9,00']]);
+ok('bordro: karnenin kasası yok → "Karnenin banka hesabı bulunamadı" (satır hatası)', !$r['ok'] && isset($r['satir_hatalari'][0]['karne_id']));
 
 echo "\n=== 14. Tutarlılık ve denetim izi ===\n";
 ok('audit: create / update / cancel / activate-deactivate / delete var, hepsi module=ceksenet', audit_say('create') >= 3 && audit_say('update') >= 3 && audit_say('cancel') >= 3 && audit_say('deactivate') >= 1 && audit_say('delete') >= 1);

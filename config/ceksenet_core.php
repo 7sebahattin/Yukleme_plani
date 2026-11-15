@@ -528,15 +528,26 @@ function ceksenet_ortalama_vade(array $satirlar, string $bazTarih): ?array
         if ($kurus <= 0) continue;
         $pb = (string)($s['para_birimi'] ?? 'TRY'); if ($pb === '') $pb = 'TRY';
         $gun = (int)(strtotime($v . ' 00:00:00 UTC') / 86400) - $baz;
-        $acc[$pb] ??= ['s' => 0, 't' => 0, 'n' => 0];
-        $acc[$pb]['s'] += $kurus * $gun; $acc[$pb]['t'] += $kurus; $acc[$pb]['n']++;
+        $acc[$pb] ??= ['s' => 0, 't' => 0, 'n' => 0, 'bs' => '0', 'bt' => '0'];
+        $acc[$pb]['s'] += $kurus * $gun; $acc[$pb]['t'] += $kurus; $acc[$pb]['n']++;   // taşarsa PHP float'a geçer (aşağıda ele alınır)
+        if (function_exists('bcadd')) { $acc[$pb]['bs'] = bcadd($acc[$pb]['bs'], bcmul((string)$kurus, (string)$gun, 0), 0); $acc[$pb]['bt'] = bcadd($acc[$pb]['bt'], (string)$kurus, 0); }
     }
     if (!$acc) return null;
     $out = [];
     foreach ($acc as $pb => $a) {
         $S = $a['s']; $T = $a['t'];
-        $g = $S >= 0 ? intdiv(2 * $S + $T, 2 * $T) : -intdiv(-2 * $S + $T, 2 * $T);
-        $out[$pb] = ['gun' => $g, 'tarih' => gmdate('Y-m-d', ($baz + $g) * 86400), 'toplam_kurus' => $T, 'adet' => $a['n']];
+        if (is_int($S) && is_int($T) && abs($S) < intdiv(PHP_INT_MAX, 4) && $T < intdiv(PHP_INT_MAX, 4)) {
+            $g = $S >= 0 ? intdiv(2 * $S + $T, 2 * $T) : -intdiv(-2 * $S + $T, 2 * $T);   // tam sayı yolu (kayıpsız)
+        } elseif (function_exists('bcadd') && bccomp($a['bt'], '0', 0) > 0) {            // taşma: bcmath ile kayıpsız
+            $neg = bccomp($a['bs'], '0', 0) < 0;
+            $abs = $neg ? substr($a['bs'], 1) : $a['bs'];
+            $q = (int)bcdiv(bcadd(bcmul('2', $abs, 0), $a['bt'], 0), bcmul('2', $a['bt'], 0), 0);
+            $g = $neg ? -$q : $q;
+        } else {
+            $q = (float)$S / max(1.0, (float)$T);                                            // bcmath yok: float (yarım sıfırdan uzağa yuvarlama)
+            $g = (int)($q >= 0 ? floor($q + 0.5) : -floor(-$q + 0.5));
+        }
+        $out[$pb] = ['gun' => $g, 'tarih' => gmdate('Y-m-d', ($baz + $g) * 86400), 'toplam_kurus' => is_int($T) ? $T : PHP_INT_MAX, 'adet' => $a['n']];
     }
     return cari_pb_sirala($out);
 }
@@ -641,6 +652,8 @@ function ceksenet_tanim_dogrula(PDO $pdo, array $g, ?int $id, ?array $eski): arr
         $kasa = $kid > 0 ? kasa_kart_oku($pdo, $kid) : null;
         if ($kasa === null) $h['kasa_id'] = 'Banka hesabı seçin.';
         elseif ((string)$kasa['tip'] !== 'banka') $h['kasa_id'] = 'Yalnız banka hesabı seçilebilir.';
+        elseif (!($eski !== null && (int)($eski['kasa_id'] ?? 0) === $kid) && (int)$kasa['aktif'] !== 1) $h['kasa_id'] = 'Pasif banka hesabı seçilemez.';
+        elseif (!($eski !== null && (int)($eski['kasa_id'] ?? 0) === $kid) && !kasa_gorunur($kasa)) $h['kasa_id'] = 'Bu banka hesabı aktif deponuzda görünmüyor.';
         else $v['kasa_id'] = $kid;
         $ilk = trim((string)($g['ilk_no'] ?? ''));
         if (!preg_match('/^\d{1,20}$/', $ilk)) $h['ilk_no'] = 'İlk çek numarası yalnız rakam (en çok 20 hane).'; else $v['ilk_no'] = $ilk;
@@ -730,18 +743,29 @@ function ceksenet_satir_topla(array $g): array
     return $out;
 }
 
-/** Mükerrer evrak: alınan çek → aynı banka + hesap no + seri no; verilen çek → aynı karne (yoksa banka) + seri no; iade / iptal edilenler sayılmaz. Senette kontrol yok. */
-function ceksenet_mukerrer_bul(PDO $pdo, string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId): ?array
+/**
+ * Mükerrer anahtarı (TEK kural; hem bordro içi hem DB karşılaştırması bunu kullanır). Harf-duyarsız (cari_fold).
+ * alınan çek → banka + hesap no + seri no; verilen çek → banka + seri no (karneli satırda banka = karnenin banka hesabının bankası; hesap no / karne kimliği anahtara GİRMEZ).
+ * Senet → null (kontrol yok). $karneId imza uyumu için durur, anahtarı etkilemez.
+ */
+function ceksenet_mukerrer_anahtar(string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId = null): ?string
 {
     if ($sinif !== 'cek') return null;
-    $st = $pdo->prepare("SELECT * FROM ceksenet_kayitlar WHERE sinif = 'cek' AND yon = ? AND seri_no = ? AND durum NOT IN ('iade', 'iptal') ORDER BY id");
+    return $yon === 'verilen'
+        ? 'verilen|' . cari_fold($bankaAd) . '|' . cari_fold($seriNo)
+        : 'alinan|' . cari_fold($bankaAd) . '|' . cari_fold($hesapNo) . '|' . cari_fold($seriNo);
+}
+
+/** Mükerrer evrak (bkz. ceksenet_mukerrer_anahtar); iade / iptal edilenler sayılmaz. Senette kontrol yok. Not: kilitsiz okur — yarışı bordro tx'inin cari kilidi daraltır, tam kapatmaz. */
+function ceksenet_mukerrer_bul(PDO $pdo, string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId): ?array
+{
+    $anahtar = ceksenet_mukerrer_anahtar($sinif, $yon, $bankaAd, $hesapNo, $seriNo, $karneId);
+    if ($anahtar === null) return null;
+    $nocase = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? ' COLLATE NOCASE' : '';   // MySQL karşılaştırması zaten harf-duyarsız
+    $st = $pdo->prepare("SELECT * FROM ceksenet_kayitlar WHERE sinif = 'cek' AND yon = ? AND seri_no = ?$nocase AND durum NOT IN ('iade', 'iptal') ORDER BY id");
     $st->execute([$yon, $seriNo]);
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if ($yon === 'verilen') {
-            if ($karneId !== null ? (int)$r['karne_id'] === $karneId : cari_fold((string)$r['banka_ad']) === cari_fold($bankaAd)) return $r;
-        } elseif (cari_fold((string)$r['banka_ad']) === cari_fold($bankaAd) && cari_fold((string)$r['hesap_no']) === cari_fold($hesapNo)) {
-            return $r;
-        }
+        if (ceksenet_mukerrer_anahtar('cek', $yon, (string)$r['banka_ad'], (string)$r['hesap_no'], (string)$r['seri_no']) === $anahtar) return $r;
     }
     return null;
 }
@@ -810,6 +834,8 @@ function ceksenet_bordro_dogrula(PDO $pdo, array $g): array
             else {
                 $ks = !empty($kt['kasa_id']) ? kasa_kart_oku($pdo, (int)$kt['kasa_id']) : null;
                 if ($ks === null) $e['karne_id'] = 'Karnenin banka hesabı bulunamadı.';
+                elseif ((int)$ks['aktif'] !== 1) $e['karne_id'] = 'Karnenin banka hesabı pasif.';
+                elseif ((string)$ks['tip'] !== 'banka') $e['karne_id'] = 'Karnenin hesabı banka hesabı değil.';
                 elseif ($pb !== (string)$ks['para_birimi']) $e['para_birimi'] = 'Para birimi karnenin banka hesabıyla (' . $ks['para_birimi'] . ') aynı olmalı.';
                 else {
                     $karne = $kt;
@@ -827,7 +853,7 @@ function ceksenet_bordro_dogrula(PDO $pdo, array $g): array
         if ($sinif === 'cek') { $r['kefil'] = ''; }
 
         if (!$e && $sinif === 'cek') {
-            $anahtar = $yon . '|' . ($karne !== null ? 'k' . (int)$karne['id'] : cari_fold($banka) . '|' . cari_fold($hesap)) . '|' . $seri;
+            $anahtar = ceksenet_mukerrer_anahtar($sinif, $yon, $banka, $hesap, $seri, $karne !== null ? (int)$karne['id'] : null);
             if (isset($gorulen[$anahtar])) { $e['seri_no'] = 'Bu bordroda aynı numara tekrarlanıyor.'; $kod = 'mukerrer'; }
             else {
                 $gorulen[$anahtar] = true;
@@ -866,9 +892,12 @@ function ceksenet_bordro_kaydet(PDO $pdo, array $g, int $uid): array
     $tn = ceksenet_islemler()[$islem];
     $depo = ceksenet_depo_damgasi();
     $simdi = date('Y-m-d H:i:s');
-    $ic = null; $sonuclar = [];
+    $ic = null; $sonuclar = []; $mk = null;
     try {
-        $s = ceksenet_tx($pdo, function () use ($pdo, $v, $islem, $tn, $depo, $simdi, $uid, &$ic, &$sonuclar): array {
+        $s = ceksenet_tx($pdo, function () use ($pdo, $v, $islem, $tn, $depo, $simdi, $uid, &$ic, &$sonuclar, &$mk): array {
+            // Aynı cariye eşzamanlı iki bordroyu sıraya sokar (MySQL; SQLite no-op) + kilit sonrası istek anahtarı yeniden denenir (çift gönderim → tekrar)
+            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') $pdo->prepare('SELECT id FROM cari_kartlar WHERE id = ? FOR UPDATE')->execute([(int)$v['cari']['id']]);
+            if ($v['ik'] !== null && ($var = ceksenet_istek_bul($pdo, $v['ik'])) !== null) return ceksenet_tekrar_sonucu($pdo, $var);
             $S = ceksenet_siniflar()[$v['sinif']]['etiket'];
             $kayitIns = $pdo->prepare('INSERT INTO ceksenet_kayitlar (sinif, yon, portfoy_no, seri_no, banka_ad, sube, hesap_no, borclu, kefil, yer_adi, duzenleme_tarihi, vade, tutar, para_birimi, cari_id, durum, yer_cari_id, yer_kasa_id, karne_id, aciklama, depo, bordro_no, created_at, created_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -876,9 +905,11 @@ function ceksenet_bordro_kaydet(PDO $pdo, array $g, int $uid): array
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $ilkHid = null; $kayitlar = [];
             foreach ($v['satirlar'] as $n => $r) {
-                // Kilit altında kesin mükerrer kontrolü (yazma öncesi; aynı bordroda önceki satırlar zaten yazıldı → onlar da yakalanır)
+                // Son kontrol (yazma sırasında; aynı bordroda önceki satırlar zaten yazıldı → onlar da yakalanır). KİLİTSİZ okur: tam kapatmaz, yarışı cari kilidi daraltır.
+                // Hata → HEPSİ geri alınır (closure'dan `return hata` YOK: cari_tx commit ederdi → yarım bordro).
                 if (($m = ceksenet_mukerrer_bul($pdo, $v['sinif'], $v['yon'], (string)$r['banka_ad'], (string)$r['hesap_no'], $r['seri_no'], $r['karne_id'])) !== null) {
-                    return ceksenet_hata('Satır ' . ($r['i'] + 1) . ': bu numara zaten kayıtlı (' . $m['portfoy_no'] . ').', ['kod' => 'mukerrer', 'satir_hatalari' => [$r['i'] => ['seri_no' => 'Zaten kayıtlı: ' . $m['portfoy_no'] . '.']]]);
+                    $mk = ['kod' => 'mukerrer', 'satir_hatalari' => [$r['i'] => ['seri_no' => 'Zaten kayıtlı: ' . $m['portfoy_no'] . '.']]];
+                    throw new RuntimeException('Satır ' . ($r['i'] + 1) . ': bu numara zaten kayıtlı (' . $m['portfoy_no'] . ').', CEKSENET_IC_HATA);
                 }
                 $kayitIns->execute([$v['sinif'], $v['yon'], '', $r['seri_no'], $r['banka_ad'], $r['sube'], $r['hesap_no'], $r['borclu'], $r['kefil'], $r['yer_adi'], $r['duzenleme_tarihi'], $r['vade'],
                     ceksenet_para_db($r['kurus']), $r['pb'], (int)$v['cari']['id'], $tn['yeni'], null, null, $r['karne_id'], $v['aciklama'] === '' ? null : $v['aciklama'], $depo, '', $simdi, $uid]);
@@ -902,22 +933,28 @@ function ceksenet_bordro_kaydet(PDO $pdo, array $g, int $uid): array
             return ['ok' => true, 'hata' => null, 'id' => (int)$kayitlar[0]['kid'], 'idler' => array_column($kayitlar, 'kid'), 'bordro_no' => $bordro, 'tekrar' => false,
                 'hareket_idler' => array_column($kayitlar, 'hid'), 'kayitlar' => $kayitlar, 'sinif' => $v['sinif'], 'yon' => $v['yon'], 'yeni_durum' => $tn['yeni']];
         });
-    } catch (RuntimeException $e) {
-        if ($e->getCode() !== CEKSENET_IC_HATA) throw $e;
-        $ek = [];
-        if (is_array($ic) && !empty($ic['alanlar'])) $ek['alanlar'] = $ic['alanlar'];
-        return ceksenet_hata($e->getMessage(), $ek);
     } catch (PDOException $e) {
         if ($v['ik'] !== null && ($var = ceksenet_istek_bul($pdo, $v['ik'])) !== null) return ceksenet_tekrar_sonucu($pdo, $var);
         error_log('[ceksenet_bordro_kaydet] ' . $e->getMessage());
         return ceksenet_hata('Bordro kaydedilemedi.');
+    } catch (RuntimeException $e) {
+        if ($e->getCode() !== CEKSENET_IC_HATA) throw $e;
+        $ek = [];
+        if (is_array($mk)) $ek += $mk;                                   // kod=mukerrer + satir_hatalari (tx geri alındı)
+        elseif (is_array($ic) && !empty($ic['alanlar'])) $ek['alanlar'] = $ic['alanlar'];
+        return ceksenet_hata($e->getMessage(), $ek);
     }
-    if (empty($s['ok'])) return $s;
-    $satirOz = array_map(static fn(array $k): array => ['vade' => $k['vade'], 'kurus' => $k['kurus'], 'para_birimi' => $k['pb']], $s['kayitlar']);
-    $tpl = [];
-    foreach ($s['kayitlar'] as $k) { $tpl[$k['pb']]['kurus'] = ($tpl[$k['pb']]['kurus'] ?? 0) + $k['kurus']; $tpl[$k['pb']]['adet'] = ($tpl[$k['pb']]['adet'] ?? 0) + 1; }
-    $s['toplamlar'] = cari_pb_sirala($tpl);
-    $s['ortalama_vade'] = ceksenet_ortalama_vade($satirOz, $v['tarih']) ?? [];
+    if (empty($s['ok']) || !empty($s['tekrar'])) return $s;
+    // COMMIT sonrası: hiçbir hesap istisna fırlatıp kaydı 500'e çevirmez (kayıt yazıldı; audit her koşulda yazılır)
+    $tpl = []; $s['toplamlar'] = []; $s['ortalama_vade'] = [];
+    try {
+        $satirOz = array_map(static fn(array $k): array => ['vade' => $k['vade'], 'kurus' => $k['kurus'], 'para_birimi' => $k['pb']], $s['kayitlar']);
+        foreach ($s['kayitlar'] as $k) { $tpl[$k['pb']]['kurus'] = ($tpl[$k['pb']]['kurus'] ?? 0) + $k['kurus']; $tpl[$k['pb']]['adet'] = ($tpl[$k['pb']]['adet'] ?? 0) + 1; }
+        $s['toplamlar'] = cari_pb_sirala($tpl);
+        $s['ortalama_vade'] = ceksenet_ortalama_vade($satirOz, $v['tarih']) ?? [];
+    } catch (Throwable $e) {
+        error_log('[ceksenet_bordro_kaydet:hesap] ' . $e->getMessage());
+    }
     $s['uyari'] = $v['uyarilar'] ? implode(' ', $v['uyarilar']) : null;
     $s['belge_no'] = $s['bordro_no'];
     unset($s['kayitlar']);
@@ -955,13 +992,13 @@ function ceksenet_dekont_yaz(PDO $pdo, array $tn, string $sinif, array $k, array
  */
 function ceksenet_kasa_coz(PDO $pdo, array $tn, array $kayit, int $seciliKasaId): array
 {
-    $id = 0;
+    $id = 0; $karneden = false;
     if (($tn['para']['kasa'] ?? '') === 'yer') $id = (int)($kayit['yer_kasa_id'] ?? 0);
     elseif ($tn['kasa_sec'] !== null) {
         $id = $seciliKasaId;
         if ($id <= 0 && $tn['yeni'] === 'odendi' && !empty($kayit['karne_id'])) {   // verilen çek: karnenin banka hesabı varsayılan
             $kt = ceksenet_tanim_bul($pdo, (int)$kayit['karne_id']);
-            $id = (int)($kt['kasa_id'] ?? 0);
+            $id = (int)($kt['kasa_id'] ?? 0); $karneden = true;
         }
     } else {
         return [null, null, null];
@@ -969,8 +1006,8 @@ function ceksenet_kasa_coz(PDO $pdo, array $tn, array $kayit, int $seciliKasaId)
     $zorunlu = ($tn['para']['kasa'] ?? '') === 'yer' || !empty($tn['kasa_sec']['zorunlu']);
     if ($id <= 0) return $zorunlu ? [null, ($tn['para']['kasa'] ?? '') === 'yer' ? 'Kayıtta tahsilat bankası bulunamadı.' : 'Kasa / banka hesabı seçin.', 'kasa_id'] : [null, null, null];
     $kasa = kasa_kart_oku($pdo, $id);
-    if ($kasa === null) return [null, 'Kasa bulunamadı.', 'kasa_id'];
-    if ((int)$kasa['aktif'] !== 1) return [null, 'Pasif kasa / banka hesabı seçilemez.', 'kasa_id'];
+    if ($kasa === null) return [null, $karneden ? 'Karnenin banka hesabı bulunamadı; kasa / banka hesabını elle seçin.' : 'Kasa bulunamadı.', 'kasa_id'];
+    if ((int)$kasa['aktif'] !== 1) return [null, $karneden ? 'Karnenin banka hesabı pasif; kasa / banka hesabını elle seçin.' : 'Pasif kasa / banka hesabı seçilemez.', 'kasa_id'];
     if (!kasa_gorunur($kasa)) return [null, 'Bu kasa aktif deponuzda görünmüyor.', 'kasa_id'];
     if ((string)$kasa['para_birimi'] !== (string)$kayit['para_birimi']) return [null, 'Kasa para birimi (' . $kasa['para_birimi'] . ') evrakın para biriminden (' . $kayit['para_birimi'] . ') farklı.', 'kasa_id'];
     $tip = $tn['kasa_sec']['tip'] ?? null;
@@ -1020,7 +1057,8 @@ function ceksenet_islem_uygula(PDO $pdo, array $g, int $uid): array
     $ic = null;
     try {
         $s = ceksenet_tx($pdo, function () use ($pdo, $tn, $islem, $ids, $tarih, $ac, $cari, $seciliKasa, $eksiyeIzin, $depo, $simdi, $uid, $ik, &$ic): array {
-            $rows = ceksenet_kayitlari_kilitle_oku($pdo, $ids);
+            $rows = ceksenet_kayitlari_kilitle_oku($pdo, $ids);   // İLK ifade: kilitli okuma (kilitsiz okuma MySQL RR görüntüsünü sabitlerdi)
+            if ($ik !== '' && ($var = ceksenet_istek_bul($pdo, $ik)) !== null) return ceksenet_tekrar_sonucu($pdo, $var);   // kilit beklerken aynı istek tamamlanmış olabilir
             $gecersiz = [];
             foreach ($ids as $i) {
                 if (!isset($rows[$i])) { $gecersiz[] = ['id' => $i, 'portfoy_no' => null, 'durum' => null, 'neden' => 'Kayıt bulunamadı.']; continue; }
@@ -1090,6 +1128,10 @@ function ceksenet_islem_uygula(PDO $pdo, array $g, int $uid): array
                 'sonuclar' => $sonuclar, 'hareket_idler' => array_column($sonuclar, 'hareket_id'), 'yeni_durum' => $tn['yeni'], 'sinif' => $ilk['sinif'], 'yon' => $ilk['yon'],
                 'uyari' => $uyarilar ? implode(' ', array_unique($uyarilar)) : null];
         });
+    } catch (PDOException $e) {
+        if ($ik !== '' && ($var = ceksenet_istek_bul($pdo, $ik)) !== null) return ceksenet_tekrar_sonucu($pdo, $var);
+        error_log('[ceksenet_islem_uygula] ' . $e->getMessage());
+        return ceksenet_hata('İşlem kaydedilemedi.');
     } catch (RuntimeException $e) {
         if ($e->getCode() !== CEKSENET_IC_HATA) throw $e;
         $ek = [];
@@ -1100,12 +1142,8 @@ function ceksenet_islem_uygula(PDO $pdo, array $g, int $uid): array
             if (!empty($ic['alanlar'])) $ek['alanlar'] = $ic['alanlar'];
         }
         return ceksenet_hata($e->getMessage(), $ek);
-    } catch (PDOException $e) {
-        if ($ik !== '' && ($var = ceksenet_istek_bul($pdo, $ik)) !== null) return ceksenet_tekrar_sonucu($pdo, $var);
-        error_log('[ceksenet_islem_uygula] ' . $e->getMessage());
-        return ceksenet_hata('İşlem kaydedilemedi.');
     }
-    if (empty($s['ok'])) return $s;
+    if (empty($s['ok']) || !empty($s['tekrar'])) return $s;
     audit_log_event('update', 'ceksenet', (int)$s['id'], ['kayit' => 'islem', 'onceki_durumlar' => array_column($s['sonuclar'], 'onceki_durum', 'id')],
         ['islem' => $islem, 'yeni_durum' => $tn['yeni'], 'idler' => $s['idler'], 'bordro_no' => $s['bordro_no'], 'tarih' => $tarih, 'cari_id' => $cari['id'] ?? null, 'kasa_id' => $seciliKasa ?: null,
             'hareketler' => $s['hareket_idler'], 'uyari' => $s['uyari']]);
@@ -1131,8 +1169,9 @@ function ceksenet_hareket_iptal(PDO $pdo, int $hid, string $neden, int $uid): ar
     $sebep = mb_substr('Çek-senet iptali: ' . $neden, 0, 500);
     $ic = null;
     try {
-        $s = ceksenet_tx($pdo, function () use ($pdo, $hid, $neden, $sebep, $uid): array {
-            $rows = ceksenet_kayitlari_kilitle_oku($pdo, [(int)ceksenet_hareket_oku($pdo, $hid)['kayit_id']]);
+        $kayitId = (int)$h['kayit_id'];   // tx DIŞINDA okundu: tx'in İLK ifadesi kayıt satırı kilidi olsun (MySQL RR görüntüsü kilitten sonra alınsın)
+        $s = ceksenet_tx($pdo, function () use ($pdo, $hid, $kayitId, $neden, $sebep, $uid, &$ic): array {
+            $rows = ceksenet_kayitlari_kilitle_oku($pdo, [$kayitId]);
             $h = ceksenet_hareket_oku($pdo, $hid);
             if ($h === null || !$rows) return ceksenet_hata('Hareket bulunamadı.');
             if ($h['durum'] === 'iptal') return ceksenet_hata('Hareket zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
@@ -1147,27 +1186,28 @@ function ceksenet_hareket_iptal(PDO $pdo, int $hid, string $neden, int $uid): ar
             $up->execute([date('Y-m-d H:i:s'), $uid, $neden, $hid]);
             if ($up->rowCount() !== 1) return ceksenet_hata('Hareket zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
             $cariIptal = []; $kasaIptal = []; $uyari = null;
-            if (!empty($h['cari_hareket_id']) || !empty($h['cari_hareket2_id'])) {
-                $cr = cari_kaynakli_iptal($pdo, 'ceksenet', $hid, $sebep, $uid);   // iki dekontu birden iptal eder (aynı kaynak id)
-                if (empty($cr['ok'])) throw new RuntimeException('Bağlı cari hareketi iptal edilemedi: ' . (string)($cr['hata'] ?? ''), CEKSENET_IC_HATA);
-                $cariIptal = $cr['iptal_idler'];
-            }
-            if (!empty($h['kasa_hareket_id'])) {
-                $kr = kasa_kaynakli_iptal($pdo, 'ceksenet', $hid, $sebep, $uid);
-                if (empty($kr['ok'])) throw new RuntimeException('Bağlı kasa hareketi iptal edilemedi: ' . (string)($kr['hata'] ?? ''), CEKSENET_IC_HATA);
-                $kasaIptal = $kr['iptal_idler']; $uyari = $kr['uyari'] ?? null;
-            }
+            // HER ZAMAN çağrılır (ikisi de idempotent): hareket satırındaki *_hareket_id boş kalmış olsa da (eski yarım yazım) kaynaklı dekont / kasa satırı temizlenir
+            $cr = cari_kaynakli_iptal($pdo, 'ceksenet', $hid, $sebep, $uid);   // iki dekontu birden iptal eder (aynı kaynak id)
+            if (empty($cr['ok'])) throw new RuntimeException('Bağlı cari hareketi iptal edilemedi: ' . (string)($cr['hata'] ?? ''), CEKSENET_IC_HATA);
+            $cariIptal = $cr['iptal_idler'];
+            $kr = kasa_kaynakli_iptal($pdo, 'ceksenet', $hid, $sebep, $uid);
+            if (empty($kr['ok'])) throw new RuntimeException('Bağlı kasa hareketi iptal edilemedi: ' . (string)($kr['hata'] ?? ''), CEKSENET_IC_HATA);
+            $kasaIptal = $kr['iptal_idler']; $uyari = $kr['uyari'] ?? null;
             $olusturma = in_array((string)$h['islem'], ['giris', 'cikis'], true);
             $yeni = $olusturma ? 'iptal' : (string)$h['onceki_durum'];
-            $pdo->prepare('UPDATE ceksenet_kayitlar SET durum = ?, yer_cari_id = ?, yer_kasa_id = ?, updated_at = ?, updated_by = ? WHERE id = ?')
-                ->execute([$yeni, $olusturma ? null : $h['onceki_yer_cari_id'], $olusturma ? null : $h['onceki_yer_kasa_id'], date('Y-m-d H:i:s'), $uid, (int)$h['kayit_id']]);
+            $upK = $pdo->prepare('UPDATE ceksenet_kayitlar SET durum = ?, yer_cari_id = ?, yer_kasa_id = ?, updated_at = ?, updated_by = ? WHERE id = ? AND durum = ?');
+            $upK->execute([$yeni, $olusturma ? null : $h['onceki_yer_cari_id'], $olusturma ? null : $h['onceki_yer_kasa_id'], date('Y-m-d H:i:s'), $uid, (int)$h['kayit_id'], (string)$h['yeni_durum']]);
+            if ($upK->rowCount() !== 1) {   // kayıt, bu hareketin bıraktığı durumda değil (başka işlem araya girdi) → HEPSİ geri
+                $ic = ['kod' => 'son_degil'];
+                throw new RuntimeException('Kayıt başka bir işlemle değişmiş; yalnız son hareket iptal edilebilir. Yeniden deneyin.', CEKSENET_IC_HATA);
+            }
             return ['ok' => true, 'hata' => null, 'id' => $hid, 'kayit_id' => (int)$h['kayit_id'], 'belge_no' => (string)$h['belge_no'], 'bordro_no' => (string)$h['bordro_no'],
                 'yeni_durum' => $yeni, 'onceki_durum' => (string)$k['durum'], 'islem' => (string)$h['islem'], 'cari_iptal' => $cariIptal, 'kasa_iptal' => $kasaIptal, 'uyari' => $uyari,
                 'sinif' => (string)$k['sinif'], 'yon' => (string)$k['yon']];
         });
     } catch (RuntimeException $e) {
         if ($e->getCode() !== CEKSENET_IC_HATA) throw $e;
-        return ceksenet_hata($e->getMessage());
+        return ceksenet_hata($e->getMessage(), is_array($ic) && isset($ic['kod']) ? ['kod' => $ic['kod']] : []);
     }
     if (empty($s['ok'])) return $s;
     audit_log_event('cancel', 'ceksenet', $hid, ['kayit' => 'hareket', 'durum' => 'gecerli', 'islem' => $s['islem'], 'kayit_id' => $s['kayit_id'], 'belge_no' => $s['belge_no'], 'kayit_durumu' => $s['onceki_durum']],

@@ -377,7 +377,11 @@ ok('görünmeyen kasaya hareket: hata "aktif deponuzda görünmüyor", yazılmad
 ok('virman: kaynak/hedef görünmüyorsa reddedilir', !kasa_virman_ekle($db, ['kaynak_kasa_id' => (string)$K, 'hedef_kasa_id' => (string)$S, 'tarih' => gun(0), 'tutar' => '1,00'], 1)['ok']);
 ok('defter görünmeyen kasa için null; liste o kasa için 0 satır', kasa_defter($db, $K, null, null) === null && kasa_hareket_listesi($db, ['kasa_id' => $K])['toplam_satir'] === 0);
 ok('boş depolu kasa (Banka) her depoda kullanılır', ekle($B, 'acilis', '1,00')['ok']);
-ok('kasa_bakiye depo süzgeci UYGULAMAZ (kasa bütünü)', kasa_bakiye($db, $K) === kasa_bakiye($db, $K) && is_int(kasa_bakiye($db, $K)));
+$b0 = kasa_bakiye($db, $S);
+$AKTIF_DEPO = 'Şube Depo'; $rs1 = ekle($S, 'acilis', '10,00');
+$AKTIF_DEPO = 'Merkez Depo'; $rs2 = ekle($S, 'acilis', '5,00');   // ikinci hareket BAŞKA depo damgalı
+ok('kasa_bakiye depo süzgeci UYGULAMAZ: farklı depo damgalı iki hareket de bakiyeye girer (+15,00), bakiye int', $rs1['ok'] && $rs2['ok'] && kasa_hareket_oku($db, (int)$rs1['id'])['depo'] === 'Şube Depo' && kasa_hareket_oku($db, (int)$rs2['id'])['depo'] === 'Merkez Depo'
+    && kasa_bakiye($db, $S) === $b0 + 1500 && is_int(kasa_bakiye($db, $S)) && kasa_bakiye_kilitli($db, $S) === kasa_bakiye($db, $S));
 $DEPOLAR = null;
 ok('kısıtsız kullanıcı hepsini görür', in_array('Merkez Kasa', array_column(kasa_kart_listesi($db)['satirlar'], 'ad'), true));
 ok('hareket deposu = active_depot() damgası (kasa kartı deposundan bağımsız)', (function () use ($db, $S) { global $AKTIF_DEPO; $AKTIF_DEPO = 'Şube Depo'; $r = ekle($S, 'acilis', '2,00'); $d = kasa_hareket_oku($db, (int)$r['id'])['depo']; $AKTIF_DEPO = 'Merkez Depo'; return $d === 'Şube Depo'; })());
@@ -495,6 +499,51 @@ $r = uc(['islem' => 'hareket_ekle', 'geri' => 'cari_kartlari.php'] + kasa_t_hare
 ok('klasik form + başka modül sayfası `geri` → kasa_fisleri.php', baslik($r, 'Location') === 'kasa_fisleri.php');
 $r = uc(['islem' => 'hareket_ekle'] + kasa_t_hareket($uK, 'gider', '99999,00', ['kalem_id' => (string)$giderK]), false);
 ok('klasik form yetersiz bakiye: 303 + error flash (mesaj tutarları içerir)', $r['kod'] === 303 && ($r['flash']['type'] ?? '') === 'error' && str_contains((string)($r['flash']['msg'] ?? ''), 'yetersiz'));
+
+echo "\n=== 15b. Denetim düzeltmeleri (depo kapsamı, kod/tip koruma, PDO hatası, UNIQUE) ===\n";
+$DEPOLAR = null; $AKTIF_DEPO = 'Merkez Depo';
+$dM = kart('Dz Merkez Kasa', 'nakit', 'TRY', ['depo' => 'Merkez Depo']); $dS = kart('Dz Şube Kasa', 'nakit', 'TRY', ['depo' => 'Şube Depo']); $dB = kart('Dz Boş Depolu', 'nakit', 'TRY');
+$AKTIF_DEPO = 'Şube Depo'; $hS = ekle($dS, 'acilis', '100,00'); $hSk = ekle($dS, 'kaynak_giris', '7,00', ['aciklama' => 'dz kaynakli giris'], ['modul' => 'dz_test', 'id' => 901]); $AKTIF_DEPO = 'Merkez Depo';
+$hB = ekle($dB, 'acilis', '50,00');
+$DEPOLAR = ['Merkez Depo'];
+$r = kasa_hareket_iptal($db, (int)$hS['id'], 'baska depo kasasi', 1);
+ok('depo dışı kasada hareket iptali reddedilir (kod depo; mesaj hangi depo olduğunu söyler); hareket geçerli kalır', !$r['ok'] && ($r['kod'] ?? '') === 'depo' && str_contains((string)$r['hata'], 'Şube Depo') && kasa_hareket_oku($db, (int)$hS['id'])['durum'] === 'gecerli', json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = kasa_kart_kaydet($db, ['ad' => 'Degisti', 'tip' => 'nakit', 'para_birimi' => 'TRY', 'depo' => 'Şube Depo'], 1, $dS);
+ok('depo dışı kasanın kartı düzenlenemez (ad değişmedi)', !$r['ok'] && ($r['kod'] ?? '') === 'depo' && kasa_kart_oku($db, $dS)['ad'] === 'Dz Şube Kasa');
+ok('depo dışı kasa pasife alınamaz / silinemez (kart değişmedi)', !kasa_kart_durum($db, $dS, false, 1)['ok'] && (int)kasa_kart_oku($db, $dS)['aktif'] === 1 && !kasa_kart_sil($db, $dS, 1)['ok'] && kasa_kart_oku($db, $dS) !== null);
+$r = kasa_hareket_iptal($db, (int)$hB['id'], 'bos depolu kasa serbest', 1);
+ok('boş depolu kasada iptal her depoda serbest', $r['ok']);
+$r = kasa_kaynakli_iptal($db, 'dz_test', 901, 'kaynak belge iptali', 1);
+ok('kasa_kaynakli_iptal depo denetimi YAPMAZ (kaynak modül çağırır): depo dışı kasadaki kaynaklı satır iptal edilir', $r['ok'] && $r['iptal_idler'] === [(int)$hSk['id']] && kasa_hareket_oku($db, (int)$hSk['id'])['durum'] === 'iptal');
+$DEPOLAR = null;
+// kod / tip / para birimi düzenlemede korunur
+$kd = kasa_kart_kaydet($db, ['ad' => 'Kod Koru', 'kod' => 'KORU-1', 'tip' => 'banka', 'para_birimi' => 'USD', 'banka_adi' => 'Örnek'], 1);
+$ku = kasa_kart_kaydet($db, ['ad' => 'Kod Koru 2'], 1, (int)$kd['id']); $ko = kasa_kart_oku($db, (int)$kd['id']);
+ok('düzenleme: kod boş/yok → ESKİ kod korunur (yeni KS-nnn üretilmez); tip + para birimi gelmezse eski değer korunur', $kd['ok'] && $ku['ok'] && $ko['kod'] === 'KORU-1' && $ko['tip'] === 'banka' && $ko['para_birimi'] === 'USD' && $ko['ad'] === 'Kod Koru 2', json_encode([$ku, $ko], JSON_UNESCAPED_UNICODE));
+$ku = kasa_kart_kaydet($db, ['ad' => 'Kod Koru 3', 'kod' => '', 'tip' => '', 'para_birimi' => ''], 1, (int)$kd['id']); $ko = kasa_kart_oku($db, (int)$kd['id']);
+ok('düzenleme: kod / tip / para birimi BOŞ metin gelse de korunur', $ku['ok'] && $ko['kod'] === 'KORU-1' && $ko['tip'] === 'banka' && $ko['para_birimi'] === 'USD');
+ok('yeni kartta kod boşsa hâlâ otomatik üretilir', ($ky = kasa_kart_kaydet($db, ['ad' => 'Kodsuz Yeni', 'tip' => 'nakit', 'para_birimi' => 'TRY'], 1))['ok'] && str_starts_with((string)kasa_kart_oku($db, (int)$ky['id'])['kod'], 'KS-'));
+// PDO hatası: istisna SIZMAZ (PDOException catch'i RuntimeException'dan ÖNCE), tx geri alınır
+$n0 = say('kasa_hareketler');
+$db->exec("CREATE TRIGGER dz_t1 BEFORE INSERT ON kasa_hareketler BEGIN SELECT RAISE(ABORT, 'zorla'); END");
+$f = [];
+foreach (['hareket' => fn() => kasa_hareket_ekle($db, kasa_t_hareket($dB, 'acilis', '5,00', ['istek_anahtari' => 'dz-x1']), 1),
+          'virman' => fn() => kasa_virman_ekle($db, ['kaynak_kasa_id' => (string)$dB, 'hedef_kasa_id' => (string)$dM, 'tarih' => gun(0), 'tutar' => '5,00', 'eksiye_izin' => '1'], 1)] as $ad => $fn) {
+    try { $x = $fn(); $f[$ad] = !$x['ok'] && empty($x['tekrar']) ? 'ok' : 'beklenmeyen: ' . json_encode($x, JSON_UNESCAPED_UNICODE); } catch (Throwable $e) { $f[$ad] = 'FIRLATTI ' . get_class($e); }
+}
+$db->exec('DROP TRIGGER dz_t1');
+ok('PDO hatasında istisna sızmaz: hareket_ekle + virman_ekle ok=false döner; hiçbir satır yazılmadı; tx açık kalmadı', $f === ['hareket' => 'ok', 'virman' => 'ok'] && say('kasa_hareketler') === $n0 && !$db->inTransaction(), json_encode($f));
+$kc = file_get_contents(__DIR__ . '/../config/kasa_core.php');
+foreach (['kasa_hareket_ekle', 'kasa_virman_ekle'] as $fn) {
+    $g = (string)preg_match('/function ' . $fn . '\(.*?\n}\n/s', $kc, $mm) ? $mm[0] : '';
+    $pp = strpos($g, 'catch (PDOException'); $rp = strpos($g, 'catch (RuntimeException'); $kp = strpos($g, 'kasa_kart_kilitle(');
+    ok("$fn: catch (PDOException) catch (RuntimeException)'dan ÖNCE (yoksa PDOException ölü dalda kalır); kilit sonrası kasa_istek_bul yeniden denenir", $pp !== false && ($rp === false || $pp < $rp) && $kp !== false && strpos($g, 'kasa_istek_bul(', $kp) !== false);
+}
+// tanım UNIQUE ihlali → 500 değil kullanimda
+$db->exec("CREATE TRIGGER dz_t2 BEFORE INSERT ON kasa_tanimlar BEGIN SELECT RAISE(ABORT, 'UNIQUE zorla'); END");
+try { $x = kasa_tanim_kaydet($db, 'gelir', 'Dz Yeni Kalem', 1, 1); $tg = $x; } catch (Throwable $e) { $tg = 'FIRLATTI ' . get_class($e); }
+$db->exec('DROP TRIGGER dz_t2');
+ok('kasa_tanim_kaydet: DB UNIQUE/PDO hatasında istisna yok → ok=false, kod kullanimda', is_array($tg) && !$tg['ok'] && ($tg['kod'] ?? '') === 'kullanimda', json_encode($tg, JSON_UNESCAPED_UNICODE));
 
 echo "\n=== 16. Denetim izi ===\n";
 ok('audit: create / update / cancel / delete / activate-deactivate kayıtları var, hepsi module=kasa', audit_say('create') > 20 && audit_say('update') >= 3 && audit_say('cancel') >= 6 && audit_say('delete') >= 2 && (audit_say('deactivate') + audit_say('activate')) >= 4);
