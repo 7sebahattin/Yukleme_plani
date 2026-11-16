@@ -59,7 +59,7 @@ try {
         case 'hareket_iptal':
             ceksenet_kapi('delete');
             $s = ceksenet_hareket_iptal($pdo, $id, (string)($P['neden'] ?? ''), $uid);
-            if (!empty($s['ok'])) $geri = $sayfa($s['sinif'] ?? '') . '?id=' . (int)$s['kayit_id'];
+            if (!empty($s['ok'])) $geri = $sayfa($s['sinif'] ?? '') . '?yon=' . urlencode((string)($s['yon'] ?? 'alinan')) . '&id=' . (int)$s['kayit_id'];   // yön taşınır: verilen evrak Alınan sekmesine dönmesin
             ceksenet_cevap($s, $geri, 'Hareket iptal edildi', $json);
 
         case 'tanim_kaydet':

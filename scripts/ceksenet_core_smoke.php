@@ -482,7 +482,7 @@ $r = uc(['islem' => 'hareket_iptal', 'id' => (string)$hY, 'neden' => 'Deneme']);
 ok('hareket_iptal: son olmayan → 409 son_degil', $r['kod'] === 409 && $j['kod'] === 'son_degil');
 $hc = (int)$db->query("SELECT id FROM ceksenet_hareketler WHERE kayit_id = $y1 AND islem = 'ciro'")->fetchColumn();
 $r = uc(['islem' => 'hareket_iptal', 'id' => (string)$hc, 'neden' => 'Ciro yanlış']); $j = js($r);
-ok('hareket_iptal: 200, kayit_id, yeni_durum portfoy, yonlendir ?id=', $r['kod'] === 200 && $j['ok'] && $j['kayit_id'] === $y1 && $j['yeni_durum'] === 'portfoy' && $j['yonlendir'] === 'cek_dekontu.php?id=' . $y1, $r['govde']);
+ok('hareket_iptal: 200, kayit_id, yeni_durum portfoy, yonlendir ?id=', $r['kod'] === 200 && $j['ok'] && $j['kayit_id'] === $y1 && $j['yeni_durum'] === 'portfoy' && $j['yonlendir'] === 'cek_dekontu.php?yon=alinan&id=' . $y1, $r['govde']);
 $r = uc(['islem' => 'hareket_iptal', 'id' => (string)$hc, 'neden' => 'Tekrar']); ok('hareket_iptal zaten iptal → 422 kod zaten_iptal', $r['kod'] === 422 && js($r)['kod'] === 'zaten_iptal');
 $r = uc(['islem' => 'hareket_iptal', 'id' => (string)$hc, 'neden' => 'x']); ok('hareket_iptal neden kısa → 422', $r['kod'] === 422);
 $r = uc(['islem' => 'tanim_kaydet', 'tur' => 'banka', 'ad' => 'Uç Banka', 'sube' => 'X']); $j = js($r); $ub = (int)$j['id'];
@@ -504,9 +504,9 @@ ok('senet verilen bordro → yonlendir senet_dekontu.php?yon=verilen', js($sb)['
 echo "\n=== 13b. Denetim düzeltmeleri (K1 yarım bordro, Ö1 PDO, Ö2 iptal, karne kasası) ===\n";
 function sayim(): array { global $db; return [say('ceksenet_kayitlar'), say('ceksenet_hareketler'), say('cari_hareketler', "kaynak_modul = 'ceksenet'"), say('kasa_hareketler', "kaynak_modul = 'ceksenet'")]; }
 $vd = gun(30); $c0 = cb($TED); $s0 = sayim();
-// K1 senaryo 1: verilen + karnesiz, aynı banka + aynı seri, FARKLI hesap no
-$r = bordro('cek', 'verilen', $TED, [['seri_no' => '111', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-1', 'vade' => $vd, 'tutar' => '1000,00'], ['seri_no' => '111', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-2', 'vade' => $vd, 'tutar' => '2000,00']]);
-ok('K1/1 verilen karnesiz aynı banka+seri (farklı hesap no): 409 mukerrer, satır 2 işaretli; DB\'de 0 kayıt / 0 hareket / 0 cari dekont; cari bakiye değişmedi', !$r['ok'] && $r['kod'] === 'mukerrer' && isset($r['satir_hatalari'][1]['seri_no']) && sayim() === $s0 && cb($TED) === $c0, json_encode($r, JSON_UNESCAPED_UNICODE));
+// K1 senaryo 1: verilen + karnesiz, aynı banka + aynı seri, hesaplardan biri BOŞ (v528 düzeltmesi: iki dolu FARKLI hesap artık meşru → aşağıda)
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '111', 'banka_ad' => 'Akbank', 'hesap_no' => 'H-1', 'vade' => $vd, 'tutar' => '1000,00'], ['seri_no' => '111', 'banka_ad' => 'Akbank', 'hesap_no' => '', 'vade' => $vd, 'tutar' => '2000,00']]);
+ok('K1/1 verilen karnesiz aynı banka+seri (hesaplardan biri boş): 409 mukerrer, satır 2 işaretli; DB\'de 0 kayıt / 0 hareket / 0 cari dekont; cari bakiye değişmedi', !$r['ok'] && $r['kod'] === 'mukerrer' && isset($r['satir_hatalari'][1]['seri_no']) && sayim() === $s0 && cb($TED) === $c0, json_encode($r, JSON_UNESCAPED_UNICODE));
 // K1 senaryo 2: karneli + karnesiz (karnenin bankası, harf farkıyla) aynı seri — her iki sırada
 $r = bordro('cek', 'verilen', $TED, [['seri_no' => '0800501', 'karne_id' => (string)$KARNE, 'vade' => $vd, 'tutar' => '10,00'], ['seri_no' => '0800501', 'banka_ad' => 'ÖRNEK BANKA', 'vade' => $vd, 'tutar' => '20,00']]);
 ok('K1/2 karneli + karnesiz (karnenin bankası, harf-duyarsız) aynı seri: 409 mukerrer; 0 kayıt / 0 hareket / 0 dekont', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $s0 && cb($TED) === $c0, json_encode($r, JSON_UNESCAPED_UNICODE));
@@ -517,8 +517,56 @@ ok('alınan çek: seri / banka / hesap no harf-duyarsız aynı sayılır (bordro
 $r1 = bordro('cek', 'alinan', $MUS, [['seri_no' => 'ab-78', 'banka_ad' => 'Akbank', 'hesap_no' => 'x-1', 'vade' => $vd, 'tutar' => '5,00']]); $s1 = sayim();
 $r = bordro('cek', 'alinan', $MUS, [['seri_no' => 'AB-78', 'banka_ad' => 'AKBANK', 'hesap_no' => 'X-1', 'vade' => $vd, 'tutar' => '6,00']]);
 ok('DB karşılaştırması da harf-duyarsız: önceden kayıtlı "ab-78" varken "AB-78" mükerrer', $r1['ok'] && !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $s1);
-ok('mükerrer anahtarı TEK yardımcıdan: ceksenet_mukerrer_anahtar (verilen: hesap no anahtara girmez; alınan: girer; senet: null)', ceksenet_mukerrer_anahtar('cek', 'verilen', 'Akbank', 'H-1', '1') === ceksenet_mukerrer_anahtar('cek', 'verilen', 'AKBANK', 'H-2', '1')
-    && ceksenet_mukerrer_anahtar('cek', 'alinan', 'Akbank', 'H-1', '1') !== ceksenet_mukerrer_anahtar('cek', 'alinan', 'Akbank', 'H-2', '1') && ceksenet_mukerrer_anahtar('senet', 'alinan', 'a', 'b', '1') === null);
+$mm = static fn(string $sn, string $b1, string $h1, ?int $k1, string $b2, string $h2, ?int $k2, string $seri = '1'): bool => ceksenet_mukerrer_mu($sn, ['banka' => $b1, 'hesap' => $h1, 'seri' => $seri, 'kasa' => $k1], ['banka' => $b2, 'hesap' => $h2, 'seri' => $seri, 'kasa' => $k2]);
+ok('mükerrer kuralı TEK yardımcıdan (ceksenet_mukerrer_mu): banka+seri eşit VE (hesap boş YA DA eşit); iki dolu farklı hesap meşru; boşluk/tire/harf farkı yok sayılır; senet hiç mükerrer değil',
+    $mm('cek', 'Akbank', 'H-1', null, 'AKBANK', 'h 1', null) && !$mm('cek', 'Akbank', 'H-1', null, 'Akbank', 'H-2', null) && $mm('cek', 'Akbank', '', null, 'Akbank', 'H-2', null) && $mm('cek', 'Akbank', 'H-1', null, 'Akbank', '', null)
+    && !$mm('cek', 'Akbank', 'H-1', null, 'Garanti', 'H-1', null) && $mm('cek', 'Akbank', '', null, 'Akbank', '', null) && !$mm('senet', 'a', 'b', null, 'a', 'b', null)
+    && ceksenet_mukerrer_mu('cek', ['banka' => 'A', 'hesap' => '', 'seri' => '1', 'kasa' => null], ['banka' => 'A', 'hesap' => '', 'seri' => '2', 'kasa' => null]) === false);
+ok('mükerrer kuralı: iki FARKLI karne-kasası (IBAN boş olsa da) farklı hesap; aynı kasa mükerrer; karneli ↔ karnesiz hesapsız mükerrer; karneli IBAN ↔ karnesiz farklı hesap meşru',
+    !$mm('cek', 'X', '', 5, 'X', '', 6) && $mm('cek', 'X', '', 5, 'X', '', 5) && $mm('cek', 'X', 'TR11', 5, 'X', '', null) && !$mm('cek', 'X', 'TR11', 5, 'X', 'TR22', null) && $mm('cek', 'X', 'TR 11', 5, 'X', 'tr-11', null));
+// v528 mükerrer kuralı: aynı bankada iki FARKLI banka-kasalı karne → aynı seri KABUL; aynı karne aynı seri RED
+$KBX = kart('Mk Banka X', 'banka', 'TRY', ['banka_adi' => 'Mk Banka']); $KBY = kart('Mk Banka Y', 'banka', 'TRY', ['banka_adi' => 'Mk Banka']);
+$KX = (int)ceksenet_tanim_kaydet($db, ['tur' => 'karne', 'ad' => 'Mk Karne X', 'kasa_id' => (string)$KBX, 'ilk_no' => '7000', 'yaprak' => '50'], 1)['id'];
+$KY = (int)ceksenet_tanim_kaydet($db, ['tur' => 'karne', 'ad' => 'Mk Karne Y', 'kasa_id' => (string)$KBY, 'ilk_no' => '7000', 'yaprak' => '50'], 1)['id'];
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '7001', 'karne_id' => (string)$KX, 'vade' => $vd, 'tutar' => '10,00'], ['seri_no' => '7001', 'karne_id' => (string)$KY, 'vade' => $vd, 'tutar' => '20,00']]);
+ok('aynı bankada İKİ FARKLI banka-kasalı karnede aynı seri (aynı bordro): KABUL, 2 kayıt', $r['ok'] && count($r['idler']) === 2, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '7002', 'karne_id' => (string)$KX, 'vade' => $vd, 'tutar' => '10,00']]);
+$r2 = bordro('cek', 'verilen', $TED, [['seri_no' => '7002', 'karne_id' => (string)$KY, 'vade' => $vd, 'tutar' => '10,00']]);
+ok('aynı seri, diğer karne-kasası, ayrı bordro (DB karşılaştırması): KABUL', $r['ok'] && $r2['ok'], json_encode($r2, JSON_UNESCAPED_UNICODE));
+$sx = sayim();
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '7002', 'karne_id' => (string)$KX, 'vade' => $vd, 'tutar' => '10,00']]);
+ok('AYNI karnede aynı seri (DB): 409 mukerrer, 0 yazım', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $sx, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '7003', 'karne_id' => (string)$KX, 'vade' => $vd, 'tutar' => '10,00'], ['seri_no' => '7003', 'karne_id' => (string)$KX, 'vade' => $vd, 'tutar' => '10,00']]);
+ok('AYNI karnede aynı seri (bordro içi): 409 mukerrer, 0 yazım', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $sx);
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '7001', 'banka_ad' => 'MK BANKA', 'vade' => $vd, 'tutar' => '10,00']]);
+ok('karneli (kayıtlı) + karnesiz HESAPSIZ aynı banka+seri: 409 mukerrer', !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $sx, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = bordro('cek', 'verilen', $TED, [['seri_no' => '7004', 'banka_ad' => 'Mk Banka', 'hesap_no' => 'TR0001', 'vade' => $vd, 'tutar' => '10,00'], ['seri_no' => '7004', 'banka_ad' => 'Mk Banka', 'hesap_no' => 'TR0002', 'vade' => $vd, 'tutar' => '10,00']]);
+ok('verilen karnesiz, aynı banka+seri, iki dolu FARKLI hesap: KABUL', $r['ok'], json_encode($r, JSON_UNESCAPED_UNICODE));
+// alınan çek: aynı banka+hesap+seri RED, farklı hesap KABUL
+$r1 = bordro('cek', 'alinan', $MUS, [['seri_no' => 'MA-1', 'banka_ad' => 'Mk Banka', 'hesap_no' => 'TR-100', 'vade' => $vd, 'tutar' => '5,00']]); $sa = sayim();
+$r = bordro('cek', 'alinan', $MUS, [['seri_no' => 'MA-1', 'banka_ad' => 'Mk Banka', 'hesap_no' => 'tr 100', 'vade' => $vd, 'tutar' => '5,00']]);
+ok('alınan çek: aynı banka+hesap+seri (boşluk/harf farkı) → 409 mukerrer, 0 yazım', $r1['ok'] && !$r['ok'] && $r['kod'] === 'mukerrer' && sayim() === $sa);
+$r = bordro('cek', 'alinan', $MUS, [['seri_no' => 'MA-1', 'banka_ad' => 'Mk Banka', 'hesap_no' => 'TR-200', 'vade' => $vd, 'tutar' => '5,00']]);
+ok('alınan çek: aynı banka+seri, FARKLI hesap → KABUL', $r['ok'], json_encode($r, JSON_UNESCAPED_UNICODE));
+$c0 = cb($TED);   // v528 mükerrer testleri cari bakiyeyi değiştirdi: yeniden ölç
+// v528: hareket iptali sonrası yonlendir kaydın YÖNÜNÜ taşır (verilen evrak Alınan sekmesine dönmez)
+$vyb = bordro('cek', 'verilen', $TED, [['seri_no' => 'YN-1', 'banka_ad' => 'Yn Banka', 'vade' => $vd, 'tutar' => '12,00']]); $vyk = (int)$vyb['idler'][0];
+$vyh = (int)$db->query("SELECT id FROM ceksenet_hareketler WHERE kayit_id = $vyk AND islem = 'cikis'")->fetchColumn();
+$r = uc(['islem' => 'hareket_iptal', 'id' => (string)$vyh, 'neden' => 'Yön denemesi']); $j = js($r);
+ok('hareket_iptal (VERİLEN evrak): yonlendir cek_dekontu.php?yon=verilen&id=<kayıt> (Alınan sekmesine dönmez)', $r['kod'] === 200 && $j['ok'] && $j['yonlendir'] === 'cek_dekontu.php?yon=verilen&id=' . $vyk && $j['yon'] === 'verilen', $r['govde']);
+// v528: tutar belirsizliği ("1,500" = 1.500,00 mü 1,50 mi?) — bordro satırında 422/alan hatası; diğer biçimler mevcut ayrıştırıcıdan aynen
+$s3 = sayim();
+$r = bordro('senet', 'alinan', $MUS, [['seri_no' => 'TB-1', 'vade' => $vd, 'tutar' => '1,500']]);
+ok('bordro tutarı "1,500" BELİRSİZ: ok=false, satir_hatalari[0][tutar] "Tutar belirsiz: 1.500 …", 0 yazım', !$r['ok'] && str_contains((string)($r['satir_hatalari'][0]['tutar'] ?? ''), 'Tutar belirsiz: 1.500 için nokta kullanın') && sayim() === $s3, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = uc(['islem' => 'bordro_kaydet', 'sinif' => 'senet', 'yon' => 'alinan', 'cari_id' => (string)$MUS, 'tarih' => gun(0), 'seri_no' => ['TB-2'], 'vade' => [$vd], 'tutar' => ['12,345']]); $j = js($r);
+ok('uç: belirsiz tutar → 422 + satir_hatalari nesnesinde tutar hatası (12,345), yazım yok', $r['kod'] === 422 && isset($j['satir_hatalari']['0']['tutar']) && sayim() === $s3, $r['govde']);
+foreach (['1.500' => 150000, '1.500,00' => 150000, '1500' => 150000, '1,50' => 150, '1,5' => 150, '0,500' => 50, '1,234.56' => 123456, '12.345,67' => 1234567, '2,50' => 250, '1 500,25' => 150025] as $girdi => $beklenen) {
+    $r = bordro('senet', 'alinan', $MUS, [['seri_no' => 'TB-' . md5($girdi), 'vade' => $vd, 'tutar' => (string)$girdi]]);
+    $k = $r['ok'] ? (int)round((float)$db->query('SELECT tutar FROM ceksenet_kayitlar WHERE id = ' . (int)$r['idler'][0])->fetchColumn() * 100) : null;
+    ok("tutar \"$girdi\" → $beklenen kuruş (mevcut davranış korunur)", $r['ok'] && $k === $beklenen, json_encode($r, JSON_UNESCAPED_UNICODE));
+}
+ok('kasa_tutar_coz: belirsiz = dizi (belirsiz=true, mesaj); "0,500" ve "1.500" belirsiz DEĞİL; geçersiz = null', is_array(kasa_tutar_coz('1,500')) && kasa_tutar_coz('1,500')['belirsiz'] === true && kasa_tutar_coz('999,999') !== null && is_array(kasa_tutar_coz(' 12,345 ₺ '))
+    && kasa_tutar_coz('0,500') === 50 && kasa_tutar_coz('1.500') === 150000 && kasa_tutar_coz('abc') === null && kasa_tutar_coz('') === null && kasa_tutar_coz('-5') === null && kasa_tutar_coz('0,005') === null);
 // K1: tx İÇİNDE mükerrer (yarış benzetimi: ilk dekont yazılınca "başka istek" aynı seriyi işler) → HEPSİ geri alınır
 $db->exec("CREATE TRIGGER dz_race AFTER INSERT ON cari_hareketler WHEN NEW.kaynak_modul = 'ceksenet' AND NOT EXISTS (SELECT 1 FROM ceksenet_kayitlar WHERE seri_no = 'R-2')
     BEGIN INSERT INTO ceksenet_kayitlar (sinif, yon, portfoy_no, seri_no, banka_ad, vade, tutar, para_birimi, cari_id, durum, created_at) VALUES ('cek', 'verilen', 'RACE-1', 'R-2', 'Rc Banka', '$vd', 1, 'TRY', 1, 'verildi', '2026-01-01 00:00:00'); END");

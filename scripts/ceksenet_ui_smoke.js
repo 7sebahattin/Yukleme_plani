@@ -45,7 +45,7 @@ async function sayfa(browser, srv, vp, o) {
   p.on('console', m => { if (m.type() === 'error' && !/^Failed to load resource/.test(m.text())) hatalar.push('[' + vp.width + '] console: ' + m.text()); });
   p.on('response', r => { if (r.status() >= 500) hatalar.push('[' + vp.width + '] HTTP ' + r.status() + ' ' + r.url()); });
   p.on('dialog', d => d.accept());
-  p.srv = srv; p.url0 = srv.url;
+  p.setDefaultTimeout(20000); p.srv = srv; p.url0 = srv.url;
   return p;
 }
 const git = (p, yol) => p.goto(p.url0 + '/' + yol, { waitUntil: 'load' });
@@ -199,7 +199,9 @@ async function gonderCevap(p, tikla) {
     ok('önizlemedeki ortalama vade = SUNUCU yanıtındaki ortalama_vade (gün + tarih)', sonuc.j.ortalama_vade.TRY.gun === beklenen.gun && sonuc.j.ortalama_vade.TRY.tarih === beklenen.tarih && onizleme.includes(sonuc.j.ortalama_vade.TRY.gun + ' gün · ' + trT(sonuc.j.ortalama_vade.TRY.tarih)), JSON.stringify(sonuc.j.ortalama_vade));
     await yenilenmeBekle(q, n0);
     const E1 = S2.say();
-    ok('liste sayfasına döndü: 3 satır görünür, toast "Bordro kaydedildi · BRD-…"', /cek_dekontu\.php/.test(q.url()) && (await gorunurSay(q, '.cs-tablo tbody tr')) === 3 && /Bordro kaydedildi · BRD-/.test(await metin(q, '.cs-toast:not([hidden])') || ''));
+    ok('liste sayfasına döndü: 3 satır görünür, toast "Bordro kaydedildi · BRD-…"', /cek_dekontu\.php/.test(q.url()) && (await gorunurSay(q, '.cs-tablo tbody tr')) === 3 && /Bordro kaydedildi · 3 evrak · BRD-/.test(await metin(q, '.cs-toast:not([hidden])') || ''));
+    const bagH = await q.$eval('.cs-toast:not([hidden]) a.cs-toast-bag', e => ({ href: e.getAttribute('href'), hedef: e.target, rel: e.rel, tik: getComputedStyle(e).pointerEvents })).catch(() => null);
+    ok('toast\'taki bordro no bağlantı: cek_cikti.php?bordro=BRD-…, yeni sekme (_blank + noopener), tıklanabilir (pointer-events auto)', !!bagH && /^cek_cikti\.php\?bordro=BRD-\d{4}-\d{6}$/.test(bagH.href) && bagH.hedef === '_blank' && /noopener/.test(bagH.rel) && bagH.tik === 'auto', JSON.stringify(bagH));
     ok('DB: 3 kayıt (portföy), 3 giriş hareketi, ortak bordro_no, 3 cari dekontu ALACAK (kuruşu kuruşuna 10.000,00 / 20.000,50 / 5.000,00), ortalama sunucu = istemci',
       E1.kayit === 3 && E1.kayitlar.every(k => k.durum === 'portfoy' && k.cari_id === C1.id && k.bordro_no === sonuc.j.bordro_no) && E1.cari_hareketler.length === 3 && E1.cari_hareketler.every(c => c.yon === 'A' && c.kaynak_modul === 'ceksenet')
       && E1.cari_hareketler.map(c => kr(c.tutar)).join() === '1000000,2000050,500000' && E1.ortalama[sonuc.j.bordro_no].TRY.gun === beklenen.gun, JSON.stringify([E1.cari_hareketler.map(c => c.yon + c.tutar), E1.ortalama]));
@@ -217,6 +219,8 @@ async function gonderCevap(p, tikla) {
     await cariSec(q, '#csIslemForm', C3);
     await q.click('#csIslemForm button[type="submit"]');
     await yenilenmeBekle(q, n0);
+    const ciroToast = await q.$eval('.cs-toast:not([hidden])', e => ({ m: e.textContent.replace(/\s+/g, ' ').trim(), a: (e.querySelector('a.cs-toast-bag') || {}).href || '', t: (e.querySelector('a.cs-toast-bag') || {}).target || '' })).catch(() => null);
+    ok('işlem (Ciro Et) sonrası toast: "Ciro Et kaydedildi · BRD-…" + işlem bordrosuna yeni sekme bağlantısı (arayüzden işlem bordrosuna ulaşılır)', !!ciroToast && /^Ciro Et kaydedildi · BRD-\d{4}-\d{6}$/.test(ciroToast.m) && /cek_cikti\.php\?bordro=BRD-/.test(ciroToast.a) && ciroToast.t === '_blank', JSON.stringify(ciroToast));
     const E2 = S2.say();
     ok('DB: r1 durum=ciro, yer_cari=NAKLİYAT; cari dekontu BORÇ 10.000,00 NAKLİYAT; hareket ciro', E2.kayitlar.find(k => k.id === r1).durum === 'ciro' && E2.kayitlar.find(k => k.id === r1).yer_cari_id === C3.id && E2.cari_hareketler.some(c => c.cari_id === C3.id && c.yon === 'B' && kr(c.tutar) === 1000000) && E2.hareketler.some(h => h.kayit_id === r1 && h.islem === 'ciro'));
     // 2c. tahsile ver (banka kasası)
@@ -475,6 +479,86 @@ async function gonderCevap(p, tikla) {
     ok('kasasız Karne sekmesi: "Önce Kasa Tanımları\'ndan banka hesabı ekleyin"; Yeni karne düğmesi devre dışı', /Önce Kasa Tanımları/.test(await metin(e2, '#csPanelKarne')) && await e2.$eval('#csPanelKarne [data-cs-tanim-ac="karne"]', e => e.disabled));
     await e2.context().close();
 
+
+    // ───────────────────────────── 7. v528 DENETİM DÜZELTMELERİ
+    console.log('\n=== 7. v528 denetim düzeltmeleri: tutar önizlemesi (JS = PHP) · toast · aktif/pasif anahtarı ===');
+    // 7a. JS ↔ PHP tutar eşitliği (assets/ceksenet.js `tutarCoz` kaynaktan çıkarılıp çalıştırılır; sunucu = kasa_tutar_coz)
+    {
+      const src = fs.readFileSync(path.join(ROOT, 'assets/ceksenet.js'), 'utf8');
+      const a0 = src.indexOf('function tutarCoz(ham)'), b0 = src.indexOf('function kurusCoz');
+      const tutarCoz = new Function(src.slice(a0, b0) + '; return tutarCoz;')();
+      const girdiler = ['1.234', '12.345', '1.5', '1,5', '1.234,5', '1,234.56', '1.234.567', '0,005', '1 234,56', '-5', '1e3', '1.234,56', '100', '0,01', '1.00', '10.50', '1.000.000,00', '1,2,3', '12,345', '1.23', '123.456,789', ' 5 ', '٥', '1.2345',
+        '1,500', '999,999', '0,500', '1.500', '1.500,00', '1500', '1,50', '100,000', '1,000,000', '-1,500', '', ' ', 'abc', '0', '0,00', '1.500 TL', '₺1.500,00', '2.50 tl', '1,15', '19,99', '4,35', '0,07', '0,015', '999.999.999.999,99', '1.000.000.000.000,00', '1.234,5.6', ',5', '5,', '.5', '1.5.5', '12,34,567', '1 500,25', '7,000', '10,000'];
+      const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_tutar.php'), path.join(TMP, 'tutar.sqlite'), JSON.stringify(girdiler)], { cwd: ROOT }).toString());
+      const farklar = girdiler.filter(g => { const j = tutarCoz(g), q = php[g]; return j.k !== q.k || j.belirsiz !== q.belirsiz || j.mesaj !== q.mesaj; }).map(g => JSON.stringify(g) + ' JS=' + JSON.stringify(tutarCoz(g)) + ' PHP=' + JSON.stringify(php[g]));
+      ok('tutar çözümü: JS tutarCoz ile PHP kasa_tutar_coz ' + girdiler.length + ' girdide BİREBİR aynı (kuruş + belirsiz + mesaj)', farklar.length === 0, farklar.join('\n    → '));
+      ok('belirsiz kalıp iki tarafta da "belirsiz": 1,500 · 12,345 · 100,000; "0,500" belirsiz değil (50 kuruş); "1,234.56" = 123456', tutarCoz('1,500').belirsiz && tutarCoz('12,345').belirsiz && tutarCoz('100,000').belirsiz && !tutarCoz('0,500').belirsiz && tutarCoz('0,500').k === 50 && tutarCoz('1,234.56').k === 123456 && php['1,500'].belirsiz && php['0,500'].k === 50);
+    }
+    // 7b. bordro formu: tutar önizlemesi (PC tablo satırı + mobil kart), belirsiz tutar, toplam = kaydedilecek toplam
+    const S10 = await ortam('fisler'); sunucular.push(S10);
+    const F0 = S10.say();
+    const FC1 = F0.cariler.find(c => /TİCARET/.test(c.unvan));
+    for (const [ad, vp, dok] of [['PC', { width: 1366, height: 800 }, false], ['mobil', { width: 390, height: 844 }, true]]) {
+      const pb = await sayfa(browser, S10, vp, { dokunmatik: dok });
+      await git(pb, 'cek_dekontu.php?yeni=1&yon=alinan');
+      await cariSec(pb, '#csBordroForm', FC1);
+      await satirDoldur(pb, 0, { seri_no: 'V528-1', banka_ad: 'Akbank', hesap_no: '77', vade: tarihGun(bugun, 30), tutar: '1,500' });
+      const tx = '.cs-fsatir:nth-child(1) [data-tutar-onizleme]';
+      ok(ad + ': tutar "1,500" → alanın altında BELİRSİZ hata metni (kırmızı), alan aria-invalid; toplam bu satırı saymaz (—)', /Tutar belirsiz: 1\.500 için nokta kullanın \(1\.500\), bir buçuk için 1,50 yazın\./.test(await metin(pb, tx) || '') && await goster(pb, tx)
+        && (await pb.getAttribute('.cs-fsatir [name="tutar[]"]', 'aria-invalid')) === 'true' && (await metin(pb, '[data-top-pb] b')) === '—', await metin(pb, tx));
+      await shot(pb, 'tutar_belirsiz_' + ad);
+      await satirDoldur(pb, 0, { tutar: '1.500' });
+      ok(ad + ': "1.500" → "= 1.500,00 ₺", hata işareti kalkar; canlı toplam 1.500,00 ₺ (kaydedilecek tutarla aynı)', (await metin(pb, tx)) === '= 1.500,00 ₺' && (await pb.getAttribute('.cs-fsatir [name="tutar[]"]', 'aria-invalid')) !== 'true' && /1\.500,00 ₺/.test(await metin(pb, '[data-top-pb] b') || ''));
+      await satirDoldur(pb, 0, { tutar: '1,500' });
+      const n0b = S10.say().kayit;
+      const sn = await gonderCevap(pb, () => pb.click('#csBordroForm [data-kaydet]'));
+      ok(ad + ': "1,500" gönderilirse sunucu 422 satır hatası (Tutar belirsiz …), kayıt YOK, form açık', sn.kod === 422 && /Tutar belirsiz/.test((sn.j.satir_hatalari && sn.j.satir_hatalari['0'] && sn.j.satir_hatalari['0'].tutar) || '') && S10.say().kayit === n0b && await kisaBekle(pb, () => !!document.querySelector('.cs-fsatir--hata')) && (await pb.$$eval('.cs-fsatir--hata .cs-hata', l => l.length)) === 0);
+      await satirDoldur(pb, 0, { tutar: '1.500' });
+      ok(ad + ': 422 sonrası tutar düzeltilince alan hata işareti ve satır hata metni kalmaz', (await pb.getAttribute('.cs-fsatir [name="tutar[]"]', 'aria-invalid')) !== 'true' && (await pb.$$eval('.cs-fsatir .cs-hata', l => l.length)) === 0);
+      await pb.context().close();
+    }
+    // 7c. mobil: toast bordro Kaydet düğmesini örtmez
+    {
+      const pm = await sayfa(browser, S10, { width: 390, height: 844 }, { dokunmatik: true });
+      await git(pm, 'cek_dekontu.php?yeni=1&yon=alinan');
+      await pm.evaluate(() => sessionStorage.setItem('cek_toast', 'Ciro Et kaydedildi — uyarı metni uzun uzun uzun'));
+      await pm.reload({ waitUntil: 'load' }); await bekle(250);
+      const t = await pm.evaluate(() => {
+        const to = document.querySelector('.cs-toast'), bar = document.querySelector('.cs-eylem-bar'), tr = to.getBoundingClientRect(), br = bar.getBoundingClientRect(), btn = bar.querySelector('[data-kaydet]'), r = btn.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { gorunur: !to.hidden && tr.height > 0, toastAlt: Math.round(tr.bottom), barUst: Math.round(br.top), pe: getComputedStyle(to).pointerEvents, tik: el === btn || btn.contains(el) };
+      });
+      ok('mobil toast (390): bordro alt çubuğunun ÜSTÜNDE, pointer-events none; Kaydet düğmesi elementFromPoint ile tıklanabilir', t.gorunur && t.toastAlt <= t.barUst && t.pe === 'none' && t.tik, JSON.stringify(t));
+      await shot(pm, 'mobil_toast_form');
+      await pm.context().close();
+      const pl = await sayfa(browser, S10, { width: 390, height: 844 }, { dokunmatik: true });
+      await git(pl, 'cek_dekontu.php');
+      await pl.evaluate(() => sessionStorage.setItem('cek_toast', JSON.stringify({ m: 'Ciro Et kaydedildi', b: 'BRD-2026-000123' })));
+      await pl.reload({ waitUntil: 'load' }); await bekle(250);
+      const tl = await pl.evaluate(() => {
+        const to = document.querySelector('.cs-toast'), a = to.querySelector('a.cs-toast-bag'), bars = [...document.querySelectorAll('.cs-eylem-bar, .cs-secim-bar')].filter(b => b.getClientRects().length), tr = to.getBoundingClientRect();
+        return { link: a ? a.getAttribute('href') : null, tik: a ? getComputedStyle(a).pointerEvents : null, barlar: bars.length, ustte: bars.every(b => tr.bottom <= b.getBoundingClientRect().top + 1) };
+      });
+      ok('mobil liste: toast bordro bağlantısı (pointer-events auto) + görünür alt çubuğun üstünde', tl.link === 'cek_cikti.php?bordro=BRD-2026-000123' && tl.tik === 'auto' && tl.ustte, JSON.stringify(tl));
+      await shot(pl, 'mobil_toast_liste');
+      await pl.context().close();
+    }
+    // 7d. aktif/pasif anahtarı: istek sürerken devre dışı, hata dönerse eski hâline
+    {
+      const pk = await sayfa(browser, S10, { width: 1366, height: 800 });
+      await git(pk, 'cek_tanimlari.php?sekme=banka');
+      await pk.route('**/cek_kaydet.php', async r => { await bekle(900); await r.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ ok: false, hata: 'Deneme hatası', alanlar: {} }) }); });
+      const sel = '#csPanelBanka .cs-tanim-satir input[role="switch"]';
+      const once = await pk.$eval(sel, e => e.checked);
+      await pk.click(sel);
+      await bekle(250);
+      const bekleyen = await pk.$eval(sel, e => ({ dis: e.disabled, chk: e.checked }));
+      await kisaBekle(pk, s => { const e = document.querySelector(s); return e && !e.disabled; }, sel, 4000);
+      const sonra = await pk.$eval(sel, e => ({ dis: e.disabled, chk: e.checked }));
+      ok('anahtar (aktif/pasif): istek sürerken kutu disabled; sunucu hata dönünce kutu eski hâline (işaret geri alındı) ve yeniden etkin', bekleyen.dis === true && sonra.dis === false && sonra.chk === once && bekleyen.chk === !once, JSON.stringify({ once, bekleyen, sonra }));
+      await pk.context().close();
+    }
+    ok('v528 bölümünde pageerror / console error / 5xx YOK', hatalar.length === 0, hatalar.join(' | '));
     ok('tüm senaryolarda sayfa/konsol hatası yok (pageerror / console.error / HTTP ≥500)', hatalar.length === 0, hatalar.join(' | '));
   } catch (e) {
     fail++; console.log('*** BEKLENMEYEN HATA: ' + (e && e.stack || e));

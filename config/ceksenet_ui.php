@@ -256,14 +256,15 @@ function ceksenet_detay_html(array $o): string
     $zc = '';
     foreach ($har as $h) {
         $iptal = (string)$h['durum'] === 'iptal';
-        $gecis = ($h['onceki_durum'] !== null ? $h['onceki_durum_etiket'] . ' &rarr; ' : '') . '<b>' . h((string)$h['yeni_durum_etiket']) . '</b>';
+        $gecis = ($h['onceki_durum'] !== null ? h((string)$h['onceki_durum_etiket']) . ' &rarr; ' : '') . '<b>' . h((string)$h['yeni_durum_etiket']) . '</b>';
         $bagli = '';
         foreach ([['cari_belge_no', 'Cari'], ['cari_belge_no2', 'Cari'], ['kasa_belge_no', 'Kasa']] as [$a, $et]) if (!empty($h[$a])) $bagli .= '<span class="cs-zc-bag">' . $et . ' ' . h((string)$h[$a]) . '</span>';
         if ((string)($h['cari_unvan'] ?? '') !== '') $bagli .= '<span class="cs-zc-bag">' . h((string)$h['cari_unvan']) . '</span>';
         if ((string)($h['kasa_ad'] ?? '') !== '') $bagli .= '<span class="cs-zc-bag">' . h((string)$h['kasa_ad']) . '</span>';
         $zc .= '<li class="cs-zc' . ($iptal ? ' cs-zc--iptal' : '') . '" data-hareket="' . (int)$h['id'] . '"><div class="cs-zc-ust"><b>' . h((string)$h['islem_etiket']) . '</b><span>' . h(ceksenet_tarih_tr((string)$h['tarih'])) . '</span></div>'
             . '<div class="cs-zc-gecis">' . $gecis . ($iptal ? ' <span class="cs-rozet cs-d-iptal">İPTAL</span>' : '') . '</div>'
-            . ((string)$h['belge_no'] !== '' ? '<div class="cs-zc-belge">' . h((string)$h['belge_no']) . '</div>' : '')
+            . ((string)$h['belge_no'] !== '' || (string)($h['bordro_no'] ?? '') !== '' ? '<div class="cs-zc-belge">' . h((string)$h['belge_no'])
+                . ((string)($h['bordro_no'] ?? '') !== '' ? ((string)$h['belge_no'] !== '' ? ' · ' : '') . '<a href="cek_cikti.php?bordro=' . h(rawurlencode((string)$h['bordro_no'])) . '" target="_blank" rel="noopener" data-bordro-bag>' . h((string)$h['bordro_no']) . '</a>' : '') . '</div>' : '')
             . ($bagli !== '' ? '<div class="cs-zc-bagli">' . $bagli . '</div>' : '')
             . ((string)$h['aciklama'] !== '' ? '<div class="cs-zc-ack">' . h((string)$h['aciklama']) . '</div>' : '')
             . ($iptal ? '<div class="cs-zc-neden">İptal nedeni: ' . h((string)$h['iptal_neden']) . '</div>' : '')
@@ -410,7 +411,7 @@ function ceksenet_form_satiri(string $sinif, string $yon, array $s, array $karne
         } elseif ($tip === 'date') {
             $in = '<input type="date" name="' . $ad . '" value="' . h($v) . '" aria-label="' . h($et) . '">';
         } elseif ($tip === 'money') {
-            $in = '<input type="text" name="' . $ad . '" value="' . h($v) . '" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Tutar">';
+            $in = '<input type="text" name="' . $ad . '" value="' . h($v) . '" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Tutar"><small class="cs-tutar-onizleme" data-tutar-onizleme aria-live="polite"></small>';
         } else {
             $in = '<input type="text" name="' . $ad . '" value="' . h($v) . '" maxlength="150" autocomplete="off" aria-label="' . h($et) . '">';
         }
@@ -503,6 +504,10 @@ function ceksenet_sayfa_govde(PDO $pdo, string $sinif): string
 
     $boy = ceksenet_ui_sayfa_boyu();
     $L = ceksenet_listesi($pdo, $sinif, ceksenet_liste_suzgec($F), $boy, ($F['sayfa'] - 1) * $boy);
+    if (!$L['satirlar'] && $L['toplam_satir'] > 0 && $F['sayfa'] > 1) {   // son sayfadan büyük ?sayfa=N → son sayfaya sınırla (yanlış "Henüz kayıt yok" olmasın)
+        $F['sayfa'] = (int)ceil($L['toplam_satir'] / $boy);
+        $L = ceksenet_listesi($pdo, $sinif, ceksenet_liste_suzgec($F), $boy, ($F['sayfa'] - 1) * $boy);
+    }
     $oz = ceksenet_ozet($pdo, $sinif, $F['yon']);
     $cariAd = $F['cari'] > 0 ? (ceksenet_cari_ad($pdo, $F['cari'])['unvan'] ?? null) : null;
     $verilen = $F['yon'] === 'verilen';
@@ -529,7 +534,7 @@ function ceksenet_sayfa_govde(PDO $pdo, string $sinif): string
     $sayfalama = $sayfaSay > 1 ? '<nav class="cs-sayfalama" aria-label="Sayfalar">' . ($F['sayfa'] > 1 ? '<a class="btn btn-sm" href="' . h(ceksenet_url($sinif, $F, ['sayfa' => $F['sayfa'] > 2 ? $F['sayfa'] - 1 : ''])) . '">&lsaquo; Önceki</a>' : '')
         . '<span>' . $F['sayfa'] . ' / ' . $sayfaSay . '</span>' . ($F['sayfa'] < $sayfaSay ? '<a class="btn btn-sm" href="' . h(ceksenet_url($sinif, $F, ['sayfa' => $F['sayfa'] + 1])) . '">Sonraki &rsaquo;</a>' : '') . '</nav>' : '';
     $listeOz = '<div class="cs-liste-ozet" id="csListeOzet"><span>' . count($L['satirlar']) . ($L['toplam_satir'] > count($L['satirlar']) ? ' / ' . $L['toplam_satir'] : '') . ' kayıt</span>'
-        . ($L['ozet'] ? '<span class="cs-liste-ozet-pb">' . ceksenet_pb_satirlari($L['ozet'], 'cs-pb-satir cs-pb-satir--kucuk') . '</span>' : '') . '<small>iptal edilenler toplama girmez</small></div>';
+        . ($L['ozet'] ? '<span class="cs-liste-ozet-pb">' . ceksenet_pb_satirlari($L['ozet'], 'cs-pb-satir cs-pb-satir--kucuk') . '</span>' : '') . '<small>' . (!empty($L['ozet_iptal']) ? 'bu toplam yalnız iptal edilen kayıtlara aittir' : 'iptal edilenler toplama girmez') . '</small></div>';
 
     // Detay (?id=)
     $detay = null; $detayId = max(0, (int)($_GET['id'] ?? 0)); $not = '';
@@ -648,6 +653,25 @@ function ceksenet_tanimlari_govde(PDO $pdo): string
 
 // ── Bordro çıktısı (cek_cikti.php) ──────────────────────────────────────────
 
+/** Türkçe büyük harf ("Ciro" → "CİRO"). */
+function ceksenet_buyuk(string $s): string { return mb_strtoupper(strtr($s, ['i' => 'İ', 'ı' => 'I']), 'UTF-8'); }
+
+/** Bordro başlığı: giriş/çıkış bordroları "ÇEK GİRİŞ BORDROSU" / "ÇEK ÇIKIŞ BORDROSU"; işlem bordroları işlem adıyla ("ÇEK CİRO ET BORDROSU"). */
+function ceksenet_bordro_baslik(array $b): string
+{
+    $sinif = (string)$b['sinif']; $S = ceksenet_siniflar()[$sinif];
+    $islem = (string)($b['islem'] ?? '');
+    if ($islem === 'giris' || $islem === 'cikis' || $islem === '') $ad = $b['yon'] === 'alinan' ? 'GİRİŞ' : 'ÇIKIŞ';
+    else $ad = ceksenet_buyuk((string)($b['islem_etiket'] ?? ceksenet_islem_etiketi($islem, $sinif)));
+    return ceksenet_buyuk($S['etiket']) . ' ' . $ad . ' BORDROSU';
+}
+
+/** Bordro cari satırı etiketi (işleme uygun): ciro → "Ciro edilen cari". */
+function ceksenet_bordro_cari_etiket(array $b): string
+{
+    return match ((string)($b['islem'] ?? '')) { 'ciro' => 'Ciro edilen cari', default => 'Cari' };
+}
+
 /** A4 dikey bordro gövdesi. $b: ceksenet_bordro_oku() sonucu; $firma: siparis_inv_ihracatci(). */
 function ceksenet_bordro_yazdir_html(array $b, array $firma): string
 {
@@ -664,8 +688,8 @@ function ceksenet_bordro_yazdir_html(array $b, array $firma): string
     foreach ($b['toplamlar'] as $pb => $x) $tp .= '<tr><th>Toplam ' . h((string)$pb) . ' (' . (int)$x['adet'] . ' adet)</th><td>' . h(ceksenet_para((int)$x['kurus'], (string)$pb)) . '</td></tr>';
     foreach ($b['ortalama_vade'] as $pb => $x) $tp .= '<tr><th>Ortalama vade ' . h((string)$pb) . '</th><td>' . (int)$x['gun'] . ' gün · ' . h(ceksenet_tarih_tr((string)$x['tarih'])) . '</td></tr>';
     return '<div class="cs-yz"><div class="cs-yz-ust"><div class="cs-yz-firma"><b>' . h($firma['unvan'] ?? '') . '</b></div>'
-        . '<div class="cs-yz-belge"><div class="cs-yz-tur">' . h(mb_strtoupper($S['etiket'], 'UTF-8') . ' ' . ($b['yon'] === 'alinan' ? 'GİRİŞ' : 'ÇIKIŞ') . ' BORDROSU') . '</div><table><tr><th>Bordro no</th><td>' . h($b['bordro_no']) . '</td></tr>'
-        . '<tr><th>Cari</th><td>' . h((string)$b['cari_unvan']) . '</td></tr><tr><th>Tarih</th><td>' . h(ceksenet_tarih_tr($b['tarih'])) . '</td></tr><tr><th>Basım</th><td>' . h(date('d.m.Y H:i')) . '</td></tr></table></div></div>'
+        . '<div class="cs-yz-belge"><div class="cs-yz-tur">' . h(ceksenet_bordro_baslik($b)) . '</div><table><tr><th>Bordro no</th><td>' . h($b['bordro_no']) . '</td></tr>'
+        . ((string)$b['cari_unvan'] !== '' ? '<tr><th>' . h(ceksenet_bordro_cari_etiket($b)) . '</th><td>' . h((string)$b['cari_unvan']) . '</td></tr>' : '') . '<tr><th>Tarih</th><td>' . h(ceksenet_tarih_tr($b['tarih'])) . '</td></tr><tr><th>Basım</th><td>' . h(date('d.m.Y H:i')) . '</td></tr></table></div></div>'
         . '<table class="cs-yz-satir"><thead><tr><th>#</th><th>Portföy no</th><th>' . ($sinif === 'cek' ? 'Çek no' : 'Senet no') . '</th><th>' . ($sinif === 'cek' ? 'Banka / keşideci' : 'Borçlu / kefil') . '</th><th>Vade</th><th class="cs-sayi">Tutar</th><th>Durum</th></tr></thead><tbody>' . $trs . '</tbody></table>'
         . '<table class="cs-yz-toplam">' . $tp . '</table>'
         . '<div class="cs-yz-imza"><div>Teslim eden</div><div>Teslim alan</div></div>'

@@ -247,15 +247,19 @@ function kasa_filtre_html(array $F, ?array $secili): string
 }
 
 /** Dönem özeti: para birimi başına giriş / çıkış / net (filtreli geçerli satırlar). @param array<string,array{giris:int,cikis:int,adet:int}> $ozet */
-function kasa_ozet_html(array $ozet, int $toplam, int $gorunen): string
+function kasa_ozet_html(array $ozet, int $toplam, int $gorunen, string $durum = 'gecerli', string $ozetDurum = 'gecerli'): string
 {
+    // Etiket süzgeci söyler: iptal sekmesi → "İptal edilen"; "Tümü" sekmesi → toplamlar yalnız geçerlileri kapsar
+    $iptal = $ozetDurum === 'iptal';
+    $on = $iptal ? 'İptal edilen' : ($durum === 'tumu' ? 'Geçerli hareketler' : '');
     $o = '';
     foreach ($ozet as $pb => $x) {
         $net = (int)$x['giris'] - (int)$x['cikis'];
-        $o .= '<span class="ks-ozet-pb" data-pb="' . h((string)$pb) . '"><b>' . h((string)$pb) . '</b> Giriş <span class="ks-giris">' . h(kasa_para((int)$x['giris'], (string)$pb)) . '</span> · Çıkış <span class="ks-cikis">' . h(kasa_para((int)$x['cikis'], (string)$pb))
-            . '</span> · Net ' . kasa_bakiye_html($net, (string)$pb) . '</span>';
+        $o .= '<span class="ks-ozet-pb" data-pb="' . h((string)$pb) . '"><b>' . h((string)$pb) . '</b> ' . ($on !== '' ? h($on) . ': ' : '') . 'Giriş <span class="ks-giris">' . h(kasa_para((int)$x['giris'], (string)$pb)) . '</span> · Çıkış <span class="ks-cikis">' . h(kasa_para((int)$x['cikis'], (string)$pb))
+            . '</span>' . ($iptal ? '' : ' · Net ' . kasa_bakiye_html($net, (string)$pb)) . '</span>';
     }
-    return '<div class="ks-ozet" id="ksOzet"><span class="ks-ozet-say" id="ksSayi">' . $gorunen . ($toplam > $gorunen ? ' / ' . $toplam : '') . ' hareket</span>' . ($o !== '' ? $o : '<span class="ks-ozet-pb">Geçerli hareket yok</span>') . '</div>';
+    $bos = $iptal ? 'İptal edilen hareket yok' : 'Geçerli hareket yok';
+    return '<div class="ks-ozet" id="ksOzet" data-ozet="' . ($iptal ? 'iptal' : 'gecerli') . '"><span class="ks-ozet-say" id="ksSayi">' . $gorunen . ($toplam > $gorunen ? ' / ' . $toplam : '') . ' hareket</span>' . ($o !== '' ? $o : '<span class="ks-ozet-pb">' . $bos . '</span>') . '</div>';
 }
 
 // ── Detay (modal içeriği; ?parca=detay) ─────────────────────────────────────
@@ -383,7 +387,7 @@ function kasa_modal_form(array $aktifKasalar, array $gelirKalemleri, array $gide
         . '<label class="pm-label ks-alan" data-turler="virman"><span>Kaynak kasa' . $z . '</span><select name="kaynak_kasa_id">' . $kasaOpt('') . '</select><span class="ks-ipucu" data-bakiye-ipucu aria-live="polite"></span></label>'
         . '<label class="pm-label ks-alan" data-turler="virman"><span>Hedef kasa' . $z . '</span><select name="hedef_kasa_id">' . $kasaOpt('') . '</select><span class="ks-ipucu" data-hedef-ipucu aria-live="polite"></span></label>'
         . '<label class="pm-label ks-alan"><span>Tarih' . $z . '</span><input type="date" name="tarih" value="' . h(date('Y-m-d')) . '" required></label>'
-        . '<label class="pm-label ks-alan"><span>Tutar' . $z . ' <small class="ks-pb" data-pb-etiket></small></span><input type="text" name="tutar" inputmode="decimal" autocomplete="off" placeholder="0,00" required></label>'
+        . '<label class="pm-label ks-alan"><span>Tutar' . $z . ' <small class="ks-pb" data-pb-etiket></small></span><input type="text" name="tutar" inputmode="decimal" autocomplete="off" placeholder="0,00" required><span class="ks-ipucu ks-tutar-onizleme" data-tutar-onizleme aria-live="polite"></span></label>'
         . '<label class="pm-label ks-alan" data-turler="cari_tahsilat cari_odeme gelir gider acilis" data-kur hidden><span>Kur <small class="ks-ipucu">döviz kasası</small></span><input type="text" name="kur" inputmode="decimal" autocomplete="off" placeholder="isteğe bağlı"></label>'
         . '<label class="pm-label ks-alan ks-span2" data-turler="cari_tahsilat cari_odeme"><span>Cari' . $z . '</span><input type="hidden" name="cari_id" value="">'
         . '<input type="text" name="cari_ara" list="ksCariListe" placeholder="Cari ara (kod ya da unvan)" autocomplete="off" spellcheck="false"><span class="ks-ipucu" data-cari-ipucu aria-live="polite"></span></label>'
@@ -420,6 +424,10 @@ function kasa_fisleri_govde(PDO $pdo): string
     $sf = ['kasa_id' => $secili !== null ? (int)$secili['id'] : 0, 'tur' => $F['tur'], 'durum' => $F['durum'], 'donem' => $F['donem'], 'bas' => $F['bas'], 'bit' => $F['bit'], 'ara' => $F['ara']];
     $boy = kasa_ui_sayfa_boyu();
     $L = kasa_hareket_listesi($pdo, $sf, $boy, ($F['sayfa'] - 1) * $boy);
+    if (!$L['satirlar'] && $L['toplam_satir'] > 0 && $F['sayfa'] > 1) {   // son sayfadan büyük ?sayfa=N → son sayfaya sınırla (yanlış "Henüz hareket yok" olmasın)
+        $F['sayfa'] = (int)ceil($L['toplam_satir'] / $boy);
+        $L = kasa_hareket_listesi($pdo, $sf, $boy, ($F['sayfa'] - 1) * $boy);
+    }
     $tek = $secili !== null;
     $F['kasa'] = $tek ? (int)$secili['id'] : 0;
 
@@ -495,7 +503,7 @@ function kasa_fisleri_govde(PDO $pdo): string
         . ($not !== '' ? '<div class="flash flash-error" role="alert">' . h($not) . '</div>' : '')
         . '<div class="ks-ana">' . kasa_sol_html($kartlar, $ozet, $F, $secili)
         . '<section class="ks-sag" aria-label="Kasa hareketleri">' . $baslik . $eylemler . kasa_filtre_html($F, $secili)
-        . '<div class="ks-liste-govde" id="ksListe">' . $liste . $sayfalama . '</div>' . kasa_ozet_html($L['ozet'], $L['toplam_satir'], count($L['satirlar'])) . '</section></div>'
+        . '<div class="ks-liste-govde" id="ksListe">' . $liste . $sayfalama . '</div>' . kasa_ozet_html($L['ozet'], $L['toplam_satir'], count($L['satirlar']), $F['durum'], (string)$L['ozet_durum']) . '</section></div>'
         . ($yazabilir ? $altBar : '')
         . $pbUyari
         . (kasa_can('write') && $aktifler ? kasa_modal_form($aktifler, kasa_tanim_listesi($pdo, 'gelir'), kasa_tanim_listesi($pdo, 'gider'), $cariler, $tek ? (int)$secili['id'] : 0) : '')

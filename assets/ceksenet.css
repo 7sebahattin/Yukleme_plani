@@ -56,7 +56,8 @@ html[data-theme="dark"] .ceksenet {
 .cs-ipucu { font-size: .76rem; color: var(--muted); font-weight: 400; }
 .cs-tehlike { color: var(--danger); }
 .cs-icerik { display: contents; }
-.cs-toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 700; bottom: calc(var(--bn-h) + 16px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: var(--radius-sm); background: #1c2230; color: #fff; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.cs-toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 700; pointer-events: none; bottom: calc(var(--bn-h) + 16px + var(--cs-toast-ek, 0px) + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: var(--radius-sm); background: #1c2230; color: #fff; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.cs-toast a { pointer-events: auto; color: inherit; text-decoration: underline; }
 .cs-toast--hata { background: var(--danger); color: #fff; }
 html[data-theme="dark"] .cs-toast:not(.cs-toast--hata) { background: #e7ecf4; color: #0f141b; }
 .cs-bos { text-align: center; padding: 32px 20px; background: var(--card); border: 1px dashed var(--border-strong); border-radius: var(--radius); }
@@ -288,6 +289,9 @@ html[data-theme="dark"] .cs-toast:not(.cs-toast--hata) { background: #e7ecf4; co
 .cs-fsatir input[readonly] { background: var(--surface-2); color: var(--muted); }
 .cs-fs-ipucu { display: block; margin-top: 3px; font-size: .76rem; color: var(--muted); }
 .cs-fs-ipucu:empty { display: none; }
+.cs-tutar-onizleme { display: block; margin-top: 3px; font-size: .76rem; color: var(--muted); }
+.cs-tutar-onizleme:empty { display: none; }
+.cs-tutar-onizleme--hata { color: var(--danger); font-weight: 600; }
 .cs-fsatir--hata { border-color: var(--danger); }
 .cs-fsatir-sil { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--danger); font-size: 1rem; cursor: pointer; }
 .cs-fsatir-sil:hover { background: var(--cs-gecmis-bg); }

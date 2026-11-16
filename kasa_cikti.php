@@ -48,6 +48,7 @@ if ($bicim !== 'yazdir') {
         foreach ($d['satirlar'] as $r) {
             $s = $dizi($r);
             $s[0] = kasa_tarih_tr($s[0]);
+            foreach ([1, 2, 3, 4, 5] as $mi) $s[$mi] = kasa_csv_metin((string)$s[$mi]);   // metin hücreleri: formül enjeksiyonu koruması
             $s[6] = $r['yon'] === 'G' ? $para((int)$r['tutar_kurus']) : ''; $s[7] = $r['yon'] === 'C' ? $para((int)$r['tutar_kurus']) : ''; $s[8] = $para((int)$r['yurume']);
             fputcsv($o, $s, ';', '"', '\\');
         }

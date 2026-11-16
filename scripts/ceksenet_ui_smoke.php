@@ -215,4 +215,54 @@ ok('arama kutusu değeri kaçışlı (ara="><script>)', !str_contains(get('cek_d
 ok('csVeri JSON içinde </script> kaçışı (JSON_HEX_TAG)', !preg_match('#id="csVeri">[^<]*</script>[^<]*<img#', $lx));
 
 
+echo "\n=== 14. v528 denetim düzeltmeleri ===\n";
+$TIC = $CARI['ÖRNEK TİCARET A.Ş.'];
+$senetSatir = static function (string $no, string $tutar = '10,00', string $borclu = 'Sayfa Borçlu'): array { return ['seri_no' => $no, 'borclu' => $borclu, 'vade' => date('Y-m-d', strtotime('+40 days')), 'tutar' => $tutar, 'para_birimi' => 'TRY']; };
+$topla = static function (array $satirlar): array { $g = ['seri_no' => [], 'banka_ad' => [], 'sube' => [], 'hesap_no' => [], 'borclu' => [], 'kefil' => [], 'yer_adi' => [], 'duzenleme_tarihi' => [], 'vade' => [], 'tutar' => [], 'para_birimi' => [], 'karne_id' => []]; foreach ($satirlar as $x) foreach ($g as $k => $_) $g[$k][] = (string)($x[$k] ?? ''); return $g; };
+// 105 senet (4 bordro) → 107 açık senet = 2 sayfa
+$sayfaIdler = [];
+for ($b = 0; $b < 4; $b++) {
+    $sat = []; for ($i = 0; $i < ($b < 3 ? 30 : 15); $i++) $sat[] = $senetSatir('SY-' . $b . '-' . $i);
+    $rr = ceksenet_bordro_kaydet($db, ['sinif' => 'senet', 'yon' => 'alinan', 'cari_id' => (string)$TIC, 'tarih' => date('Y-m-d')] + $topla($sat), 1);
+    if (empty($rr['ok'])) { ok('sayfa testi kurulumu', false, json_encode($rr, JSON_UNESCAPED_UNICODE)); break; }
+    array_push($sayfaIdler, ...$rr['idler']);
+}
+$sp = get('senet_dekontu.php', ['sayfa' => '9999']); $hp = $sp['govde'];
+ok('?sayfa=9999 (son sayfadan büyük): "Henüz senet kaydı yok" YOK; son sayfa (2 / 2) 7 satır + önceki bağlantısı; 7 / 107 kayıt', !str_contains($hp, 'Henüz senet kaydı yok') && str_contains($hp, '<span>2 / 2</span>') && satir_say($hp) === 7 && str_contains($hp, '7 / 107 kayıt') && uyari_yok($sp), (string)satir_say($hp));
+ok('?sayfa=2 ile aynı; ?sayfa=0 → 1. sayfa (100 satır)', satir_say(get('senet_dekontu.php', ['sayfa' => '2'])['govde']) === 7 && satir_say(get('senet_dekontu.php', ['sayfa' => '0'])['govde']) === 100);
+ok('çek listesinde (tek sayfalık) ?sayfa=50: liste yine görünür (yanlış boş durum yok)', ($cp = get('cek_dekontu.php', ['sayfa' => '50'])) && satir_say($cp['govde']) >= 4 && !str_contains($cp['govde'], 'Henüz çek kaydı yok'));
+// iptal süzgeci özeti
+$ihid = (int)$db->query('SELECT id FROM ceksenet_hareketler WHERE kayit_id = ' . (int)$sayfaIdler[0] . " AND islem = 'giris'")->fetchColumn();
+$ip = ceksenet_hareket_iptal($db, $ihid, 'Özet testi iptali', 1);
+$li = get('senet_dekontu.php', ['durum' => 'iptal'])['govde'];
+ok('durum=iptal: liste özeti iptal edilenlerin toplamı (10,00 ₺, 1 kayıt) + "yalnız iptal edilen kayıtlara aittir" notu', $ip['ok'] && satir_say($li) === 1 && preg_match('#id="csListeOzet".*?10,00 ₺.*?yalnız iptal edilen kayıtlara aittir#s', $li) === 1 && !str_contains($li, 'iptal edilenler toplama girmez'), '');
+$lt = get('senet_dekontu.php', ['durum' => 'acik'])['govde'];
+ok('durum=acik (varsayılan): özet iptal HARİÇ + "iptal edilenler toplama girmez" notu', str_contains($lt, 'iptal edilenler toplama girmez') && !str_contains($lt, 'yalnız iptal edilen kayıtlara aittir'));
+// işlem bordrosu başlığı + cari etiketi
+$cb = (string)$db->query("SELECT bordro_no FROM ceksenet_hareketler WHERE islem = 'ciro' LIMIT 1")->fetchColumn();
+$tb = (string)$db->query("SELECT bordro_no FROM ceksenet_hareketler WHERE islem = 'tahsile_ver' LIMIT 1")->fetchColumn();
+$yb = get('cek_cikti.php', ['bordro' => $cb])['govde']; $zb = get('cek_cikti.php', ['bordro' => $tb])['govde'];
+ok('ciro bordrosu: başlık "ÇEK CİRO ET BORDROSU" (GİRİŞ DEĞİL), cari satırı "Ciro edilen cari" + hedef cari', str_contains($yb, 'ÇEK CİRO ET BORDROSU') && !str_contains($yb, 'GİRİŞ BORDROSU') && str_contains($yb, '<th>Ciro edilen cari</th><td>ÖRNEK NAKLİYAT LTD.</td>'), substr(strip_tags($yb), 0, 200));
+ok('tahsile verme bordrosu: başlık "ÇEK TAHSİLE VER BORDROSU"; carisi olmayan işlemde cari satırı BASILMAZ', str_contains($zb, 'ÇEK TAHSİLE VER BORDROSU') && !str_contains($zb, '<th>Cari</th>') && !str_contains($zb, 'Ciro edilen cari'), substr(strip_tags($zb), 0, 200));
+ok('giriş bordrosu hâlâ "ÇEK GİRİŞ BORDROSU" + <th>Cari</th>; verilen çıkış bordrosu "ÇEK ÇIKIŞ BORDROSU"', str_contains(get('cek_cikti.php', ['bordro' => $BRD])['govde'], 'ÇEK GİRİŞ BORDROSU') && str_contains(get('cek_cikti.php', ['bordro' => $BRD])['govde'], '<th>Cari</th>')
+    && str_contains(get('cek_cikti.php', ['bordro' => (string)$db->query("SELECT bordro_no FROM ceksenet_hareketler WHERE islem = 'cikis' LIMIT 1")->fetchColumn()])['govde'], 'ÇEK ÇIKIŞ BORDROSU'));
+// detay zaman çizgisinde her hareketin bordro bağlantısı (yeni sekme)
+$ciroKayit = (int)$db->query("SELECT kayit_id FROM ceksenet_hareketler WHERE islem = 'ciro' LIMIT 1")->fetchColumn();
+$dz = get('cek_dekontu.php', ['parca' => 'detay', 'id' => (string)$ciroKayit], ['server' => ['HTTP_X_REQUESTED_WITH' => 'fetch']])['govde'];
+ok('detay zaman çizgisi: giriş + ciro hareketlerinin bordro no\'su cek_cikti.php?bordro= bağlantısı (target=_blank, rel=noopener)', substr_count($dz, 'data-bordro-bag') === 2 && str_contains($dz, 'cek_cikti.php?bordro=' . rawurlencode($cb) . '" target="_blank" rel="noopener"'), (string)substr_count($dz, 'data-bordro-bag'));
+// önceki durum etiketi kaçışlı (h) — zaman çizgisi
+ok('zaman çizgisi: önceki durum etiketi h() ile (kaynakta ham dinamik çıktı yok)', preg_match('/\$h\[\'onceki_durum_etiket\'\] \./', file_get_contents(__DIR__ . '/../config/ceksenet_ui.php')) === 0);
+// CSV formül enjeksiyonu
+$cs = ceksenet_bordro_kaydet($db, ['sinif' => 'cek', 'yon' => 'alinan', 'cari_id' => (string)$TIC, 'tarih' => date('Y-m-d')] + $topla([['seri_no' => '=1+1', 'banka_ad' => '@banka', 'hesap_no' => '-hesap', 'borclu' => '+borclu', 'vade' => date('Y-m-d', strtotime('+3 days')), 'tutar' => '10,00', 'para_birimi' => 'TRY']]), 1);
+$cc = get('cek_cikti.php', ['sinif' => 'cek', 'bicim' => 'csv', 'durum' => 'tumu'])['govde'];
+ok("CSV: metin hücreleri (seri '=1+1', banka '@banka', hesap '-hesap', keşideci '+borclu') başına ' alır; ham =1+1 hücresi YOK", !empty($cs['ok']) && str_contains($cc, "'=1+1") && str_contains($cc, "'@banka") && str_contains($cc, "'-hesap") && str_contains($cc, "'+borclu") && !preg_match('/(^|;)"?=1\+1/m', $cc), substr($cc, 0, 400));
+ok("CSV: tutar (10,00) ve tarih hücreleri ' ALMAZ; vadeye gün (negatif olabilir) sayısal", str_contains($cc, ';10,00;') && !str_contains($cc, "'10,00") && preg_match('/;\d{2}\.\d{2}\.\d{4};-?\d+;TRY;/', $cc) === 1 && !preg_match("/;'-?\d+;/", $cc), substr($cc, 0, 300));
+$ci = get('cek_cikti.php', ['sinif' => 'senet', 'bicim' => 'csv', 'durum' => 'iptal'])['govde'];
+ok('CSV durum=iptal: toplam satırı "(yalnız iptal edilenler N)" (iptal hariç DEĞİL)', str_contains($ci, 'yalnız iptal edilenler 1') && !str_contains($ci, 'iptal hariç'), $ci);
+ok('CSV durum=tumu: toplam satırı "(iptal hariç N)"', str_contains($cc, '(iptal hariç '));
+// bordro formu: tutar önizleme alanı + belirsiz tutar sunucu reddi
+$fx = get('cek_dekontu.php', ['yeni' => '1', 'yon' => 'alinan'])['govde'];
+ok('bordro formu: her tutar girdisinin altında [data-tutar-onizleme] (PC satırı + mobil kart AYNI DOM; şablonda da)', substr_count($fx, 'data-tutar-onizleme') >= 2 && (bool)preg_match('#<template id="csSatirSablon">.*data-tutar-onizleme.*</template>#s', $fx));
+
+
 siparis_test_bitir();

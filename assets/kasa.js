@@ -31,15 +31,44 @@
     function trKucuk(s) { return String(s || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLocaleLowerCase('tr-TR'); }
 
     /* ═════════ Para (yalnız önizleme) ═════════ */
-    function kurusCoz(ham) {
-        var s = String(ham || '').replace(/[\s ]/g, '');
-        if (s === '') return null;
-        if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-        else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
-        if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
-        var k = Math.round(Number(s) * 100);
-        return k > 0 ? k : null;
+    /* Sunucudaki kasa_tutar_coz (cari_tutar_coz → hesap_parse_amount) ile BİREBİR aynı: {k: kuruş|null, belirsiz, mesaj} */
+    function tutarCoz(ham) {
+        var s = String(ham == null ? '' : ham).trim();
+        ['₺', '$', '€', 'TRY', 'TL', 'USD', 'EUR', 'AED'].forEach(function (t) { s = s.replace(new RegExp(t.replace('$', '\\$'), 'gi'), ''); });
+        s = s.replace(/[\s  ]+/g, '');
+        var bos = { k: null, belirsiz: false, mesaj: '' };
+        var bm = /^([1-9]\d{0,2}),(\d{3})$/.exec(s);
+        if (bm) { var a = bm[1] + '.' + bm[2]; return { k: null, belirsiz: true, mesaj: 'Tutar belirsiz: ' + a + ' için nokta kullanın (' + a + '), ' + (a === '1.500' ? 'bir buçuk için 1,50 yazın.' : 'ondalık için ' + bm[1] + ',50 yazın.') }; }
+        if (s === '') return bos;
+        var neg = false;
+        if (s.charAt(0) === '-') { neg = true; s = s.slice(1); }
+        if (s === '' || !/^[0-9.,]+$/.test(s) || !/[0-9]/.test(s)) return bos;
+        function gruplarGecerli(g) {
+            if (!/^[0-9]{1,3}$/.test(g[0])) return false;
+            for (var i = 1; i < g.length; i++) if (!/^[0-9]{3}$/.test(g[i])) return false;
+            return true;
+        }
+        var nd = s.split('.').length - 1, nc = s.split(',').length - 1, val;
+        if (nd === 0 && nc === 0) val = Number(s);
+        else if (nd > 0 && nc > 0) {
+            var dp = Math.max(s.lastIndexOf('.'), s.lastIndexOf(',')), ds = s.charAt(dp), bs = ds === '.' ? ',' : '.';
+            var ip = s.slice(0, dp), tail = s.slice(dp + 1);
+            if (ip.indexOf(ds) >= 0 || !/^[0-9]+$/.test(tail === '' ? '0' : tail)) return bos;
+            if (!gruplarGecerli(ip.split(bs))) return bos;
+            val = Number(ip.split(bs).join('') + '.' + (tail === '' ? '0' : tail));
+        } else {
+            var sep = nd > 0 ? '.' : ',', p = s.split(sep);
+            if (p.length > 2) { if (!gruplarGecerli(p)) return bos; val = Number(p.join('')); }
+            else if (p[1].length === 3 && /^[1-9][0-9]{0,2}$/.test(p[0])) val = Number(p[0] + p[1]);
+            else val = Number((p[0] === '' ? '0' : p[0]) + '.' + (p[1] === '' ? '0' : p[1]));
+        }
+        if (neg) val = -val;
+        if (!isFinite(val) || val <= 0) return bos;
+        var k = Math.round(val * 100);
+        if (k <= 0 || k > 99999999999999 || Math.abs(val * 100 - k) > 1e-6) return bos;
+        return { k: k, belirsiz: false, mesaj: '' };
     }
+    function kurusCoz(ham) { return tutarCoz(ham).k; }
     function paraYaz(kurus, pb) {
         var m = Math.abs(kurus), t = Math.floor(m / 100), k = String(m % 100);
         var sym = { TRY: '₺', USD: '$', EUR: '€' }[pb] || pb || '';
@@ -53,6 +82,12 @@
         if (!t) { t = document.createElement('div'); t.className = 'ks-toast'; t.setAttribute('role', 'status'); t.setAttribute('aria-live', 'polite'); document.body.appendChild(t); }
         t.textContent = msg;
         t.classList.toggle('ks-toast--hata', !!hata);
+        /* Mobilde görünür alt eylem çubuğunun ÜSTÜNE otur (çubuğu / Kaydet düğmesini örtmesin) */
+        var ek = 0;
+        if (window.matchMedia && window.matchMedia('(max-width: 767px)').matches) {
+            $$('.ks-eylem-bar').forEach(function (b) { if (!b.hidden && b.getClientRects().length) ek = Math.max(ek, b.offsetHeight + 8); });
+        }
+        t.style.setProperty('--ks-toast-ek', ek + 'px');
         t.hidden = false;
         clearTimeout(toastZ);
         toastZ = setTimeout(function () { t.hidden = true; }, hata ? 6500 : (msg.length > 70 ? 9000 : 3200));
@@ -75,6 +110,7 @@
         var el = $$('[name="' + ad + '"]', f).filter(function (x) { return x.type !== 'hidden' && !x.disabled; })[0];
         if (!el) return null;
         el.setAttribute('aria-invalid', 'true');
+        if (ad === 'tutar' && el.closest('label') && $('.ks-tutar-onizleme--hata', el.closest('label'))) return el;   // önizleme aynı belirsizlik metnini zaten gösterir
         var s = document.createElement('span'); s.className = 'ks-hata'; s.textContent = msg;
         var id = 'ksH' + Math.random().toString(36).slice(2, 8); s.id = id; el.setAttribute('aria-describedby', id);
         (el.closest('.pm-label') || el.parentNode).appendChild(s);
@@ -91,7 +127,7 @@
     }
 
     /* ═════════ AJAX form gönderimi (basit formlar) ═════════ */
-    function gonder(f) {
+    function gonder(f, sw) {
         if (f.dataset.kilit === '1') return;
         if (f.getAttribute('data-onay') && !window.confirm(f.getAttribute('data-onay'))) return;
         hataTemizle(f);
@@ -99,7 +135,10 @@
         if (eksik.length) { eksik.forEach(function (e) { alanHata(f, e.name, S.m.zorunlu); }); eksik[0].focus(); return; }
         var btn = $$('button[type=submit], button:not([type])', f);
         f.dataset.kilit = '1'; btn.forEach(function (b) { b.disabled = true; });
-        var fd = new FormData(f);
+        var fd = new FormData(f);   // anahtar kutusu devre dışı bırakılmadan ÖNCE okunur (disabled alan gönderilmez)
+        if (sw) sw.disabled = true;
+        // Hata dönerse anahtar eski hâline: kutu devre dışı kalmaz, işaret geri alınır
+        function anahtarGeri() { if (sw) { sw.checked = !sw.checked; sw.disabled = false; } }
         fetch(f.getAttribute('action') || S.kaydet, { method: 'POST', body: fd, headers: S.baslik, credentials: 'same-origin' })
             .then(yanitCoz)
             .then(function (s) {
@@ -110,6 +149,7 @@
                     yenileToastla(msg, s.j.yonlendir);
                     return;
                 }
+                anahtarGeri();
                 if (s.j && s.j.alanlar) {
                     var ilk = null;
                     Object.keys(s.j.alanlar).forEach(function (ad) { var el = alanHata(f, ad, s.j.alanlar[ad]); if (el && !ilk) ilk = el; });
@@ -117,7 +157,7 @@
                 }
                 genelHata(f, (s.j && s.j.hata) || ('İşlem yapılamadı (HTTP ' + s.r.status + ').'));
             })
-            .catch(function () { f.dataset.kilit = ''; btn.forEach(function (b) { b.disabled = false; }); genelHata(f, S.m.ag); });
+            .catch(function () { f.dataset.kilit = ''; btn.forEach(function (b) { b.disabled = false; }); anahtarGeri(); genelHata(f, S.m.ag); });
     }
     document.addEventListener('submit', function (e) {
         var f = e.target;
@@ -128,7 +168,7 @@
     document.addEventListener('change', function (e) {
         var c = e.target;
         if (!c.matches) return;
-        if (c.matches('input[role="switch"]') && c.form && c.form.matches('form[data-ks-ajax]')) { gonder(c.form); return; }
+        if (c.matches('input[role="switch"]') && c.form && c.form.matches('form[data-ks-ajax]')) { gonder(c.form, c); return; }
         if (c.matches('select[data-oto-gonder]') && c.form) {
             if (c.matches('[data-ks-donem]')) {
                 var oz = $('.ks-ozel-tarih', c.form);
@@ -317,7 +357,14 @@
     function formOzet() {
         var f = document.getElementById('ksForm'); if (!f) return;
         var tur = turForm(), kasa = kasaBul(f.elements[kaynakKasaAd()].value);
-        var kurus = kurusCoz(f.elements.tutar.value);
+        var tc = tutarCoz(f.elements.tutar.value), kurus = tc.k;
+        var onz = $('[data-tutar-onizleme]', f);
+        if (onz) {
+            onz.textContent = tc.belirsiz ? tc.mesaj : (kurus !== null ? '= ' + paraYaz(kurus, kasa ? kasa.pb : 'TRY') : '');
+            onz.classList.toggle('ks-tutar-onizleme--hata', tc.belirsiz);
+            if (tc.belirsiz) f.elements.tutar.setAttribute('aria-invalid', 'true');
+            else if (!$('.ks-hata', f.elements.tutar.closest('label'))) f.elements.tutar.removeAttribute('aria-invalid');
+        }
         $$('[data-pb-etiket]', f).forEach(function (e) { e.textContent = kasa ? kasa.pb : ''; });
         var kur = $('[data-kur]', f);
         if (kur) { var goster = tur !== 'virman' && !!kasa && kasa.pb !== 'TRY'; kur.hidden = !goster; $$('input', kur).forEach(function (i) { i.disabled = !goster; }); }

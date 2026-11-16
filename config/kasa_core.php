@@ -650,12 +650,50 @@ function kasa_eksik_hesapla(PDO $pdo, array $kasa, int $kurus): ?array
     return $bak < $kurus ? ['bakiye' => $bak, 'eksik' => $kurus - $bak] : null;
 }
 
+/**
+ * Kasa ve onu kullanan modüller için TEK tutar ayrıştırıcı sarmalayıcı. Ortak ayrıştırıcıya (cari_tutar_coz → hesap_parse_amount) dokunmaz.
+ * Nokta İÇERMEYEN ve tam `^[1-9]\d{0,2},\d{3}$` kalıbındaki girdi ("1,500") BELİRSİZdir: ortak ayrıştırıcı bunu 1.500,00 sayar, oysa
+ * Türk kullanıcı "bir buçuk" kastedebilir (1000 kat hata). "0,500" belirsiz DEĞİL (0,50). Diğer girdiler ortak ayrıştırıcıya aynen gider.
+ * assets/kasa.js `kurusCoz` (ve diğer modüllerin JS ön izlemeleri) bununla BİREBİR aynı sonucu verir (ui smoke JS ↔ PHP eşitliğini sabitler).
+ * @return array{belirsiz:true,mesaj:string}|int|null  int = kuruş; null = geçersiz/boş; dizi = belirsiz
+ */
+function kasa_tutar_coz(mixed $ham): array|int|null
+{
+    if (is_string($ham) || is_int($ham) || is_float($ham)) {
+        $s = str_ireplace(['₺', '$', '€', 'TRY', 'TL', 'USD', 'EUR', 'AED'], '', trim((string)$ham));
+        $s = preg_replace('/[\s\x{00A0}\x{202F}]+/u', '', $s) ?? '';
+        if (preg_match('/^([1-9]\d{0,2}),(\d{3})$/', $s, $m)) {
+            $a = $m[1] . '.' . $m[2];
+            $ek = $a === '1.500' ? 'bir buçuk için 1,50 yazın.' : 'ondalık için ' . $m[1] . ',50 yazın.';
+            return ['belirsiz' => true, 'mesaj' => "Tutar belirsiz: $a için nokta kullanın ($a), $ek"];
+        }
+    }
+    return cari_tutar_coz($ham);
+}
+
+/**
+ * CSV formül enjeksiyonu koruması: METİN hücresi `=`, `+`, `-`, `@`, TAB ya da CR ile başlıyorsa başına `'` konur (Excel/Calc formül saymasın).
+ * YALNIZ metin hücrelerine uygulanır — sayısal tutar/bakiye (eksi dahil) ve tarih hücrelerine DEĞİL.
+ */
+function kasa_csv_metin(string $s): string
+{
+    return preg_match('/^[=+\-@\t\r]/', $s) === 1 ? "'" . $s : $s;
+}
+
+/** kasa_tutar_coz sonucundan alan hata metni (geçerliyse null). $varsayilan = geçersiz tutar mesajı. */
+function kasa_tutar_hata(array|int|null $r, string $varsayilan): ?string
+{
+    if (is_array($r)) return (string)$r['mesaj'];
+    return $r === null ? $varsayilan : null;
+}
+
 /** Ortak: tarih / tutar / kur / açıklama / evrak / istek anahtarı. @return array{0:?array,1:array<string,string>} */
 function kasa_hareket_ortak(array $g, string $pb, bool $aciklamaZorunlu): array
 {
     $h = [];
-    $kurus = cari_tutar_coz($g['tutar'] ?? '');
-    if ($kurus === null) $h['tutar'] = 'Geçerli bir tutar girin (> 0, en çok 2 ondalık).';
+    $kurus = kasa_tutar_coz($g['tutar'] ?? '');
+    $th = kasa_tutar_hata($kurus, 'Geçerli bir tutar girin (> 0, en çok 2 ondalık).');
+    if ($th !== null) { $h['tutar'] = $th; $kurus = null; }
     $kur = cari_kur_coz($g['kur'] ?? '', $pb);
     if ($kur === false) $h['kur'] = $pb === 'TRY' ? 'TL için kur girilmez.' : 'Geçerli bir kur girin (en çok 6 ondalık).';
     $tarih = kasa_tarih_coz($g['tarih'] ?? '');
@@ -1015,7 +1053,8 @@ function kasa_satir_zenginlestir(PDO $pdo, array $satirlar): array
  * Hareket listesi (EN YENİ ÖNCE: tarih, id azalan). f: kasa_id, tur, durum tumu|gecerli|iptal (varsayılan tumu), donem tumu|bugun|30g|bu_ay|gecen_ay|ozel (+ bas, bit), ara, cari_id.
  * Satırda kasa_kod/kasa_ad/kasa_tip, cari_unvan/cari_kod, tutar_kurus, imzali_kurus, karsi_kasa_ad/karsi_kasa_kod (virman eşinin kasası) ve — yalnız TEK kasa + durum=gecerli +
  * tur/ara/cari süzgeci yokken — yurume (satırdan SONRAKİ kasa bakiyesi, kuruş; kasanın tüm geçerli satırlarına göre) bulunur.
- * @return array{satirlar:list<array>,toplam_satir:int,ozet:array<string,array{giris:int,cikis:int,adet:int}>,yurume_var:bool}
+ * ozet: durum=iptal → İPTAL satırlarının pb başına toplamı (ozet_durum='iptal'); gecerli/tumu → yalnız GEÇERLİ satırların toplamı (ozet_durum='gecerli').
+ * @return array{satirlar:list<array>,toplam_satir:int,ozet:array<string,array{giris:int,cikis:int,adet:int}>,ozet_durum:string,yurume_var:bool}
  */
 function kasa_hareket_listesi(PDO $pdo, array $f, int $limit = 100, int $offset = 0): array
 {
@@ -1046,12 +1085,13 @@ function kasa_hareket_listesi(PDO $pdo, array $f, int $limit = 100, int $offset 
         unset($s);
     }
 
-    [$w2, $p2] = kasa_hareket_where($pdo, $f, 'gecerli');
+    // Özet listelenen süzgeçle TUTARLI: durum=iptal → iptal satırlarının toplamı; gecerli/tumu → yalnız geçerliler (iptaller toplanmaz)
+    [$w2, $p2] = kasa_hareket_where($pdo, $f, $durum === 'iptal' ? 'iptal' : 'gecerli');
     $st = $pdo->prepare("SELECT h.para_birimi AS pb, COUNT(*) AS adet, SUM(CASE WHEN h.yon = 'G' THEN h.tutar ELSE 0 END) AS g, SUM(CASE WHEN h.yon = 'C' THEN h.tutar ELSE 0 END) AS c $join WHERE $w2 GROUP BY h.para_birimi");
     $st->execute($p2);
     $ozet = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $ozet[(string)$r['pb']] = ['giris' => cari_kurus($r['g']), 'cikis' => cari_kurus($r['c']), 'adet' => (int)$r['adet']];
-    return ['satirlar' => $satirlar, 'toplam_satir' => $toplam, 'ozet' => cari_pb_sirala($ozet), 'yurume_var' => (bool)$yurumeVar];
+    return ['satirlar' => $satirlar, 'toplam_satir' => $toplam, 'ozet' => cari_pb_sirala($ozet), 'ozet_durum' => $durum === 'iptal' ? 'iptal' : 'gecerli', 'yurume_var' => (bool)$yurumeVar];
 }
 
 /**

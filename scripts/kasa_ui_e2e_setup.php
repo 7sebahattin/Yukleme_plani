@@ -2,7 +2,7 @@
 // =========================================================
 // scripts/kasa_ui_e2e_setup.php — scripts/kasa_ui_smoke.js için KALICI dosya SQLite hazırlar (canlı DB'ye HİÇ dokunmaz).
 //   php scripts/kasa_ui_e2e_setup.php <db-yolu> [ornek|fisler|bos|sema|kasasiz]
-//   ornek = cari + kasa şeması + 2 cari + 4 kasa (hareket YOK) · fisler = ornek + örnek hareketler (gerçek kasa_hareket_ekle / kasa_virman_ekle / kasa_hareket_iptal) ·
+//   ornek = cari + kasa şeması + 2 cari + 4 kasa (hareket YOK) · cok = ornek + Merkez Kasa'da 130 hareket (2 sayfa; sayfalama çubuğu testi) · fisler = ornek + örnek hareketler (gerçek kasa_hareket_ekle / kasa_virman_ekle / kasa_hareket_iptal) ·
 //   bos = şema, veri yok (hiç kasa yok) · sema = tablo YOK (uyarı kartı senaryosu) · kasasiz = bos ile aynı
 // =========================================================
 $yol = (string)($argv[1] ?? '');
@@ -13,8 +13,17 @@ $mod = (string)($argv[2] ?? 'ornek');
 if ($mod !== 'sema') {
     $db = db();
     kasa_t_sema_kur($db);
-    if ($mod === 'ornek' || $mod === 'fisler') {
+    if ($mod === 'ornek' || $mod === 'fisler' || $mod === 'cok') {
         $O = kasa_t_ornek_veri($db);
+        if ($mod === 'cok') {
+            $K = $O['kasa']; $C = $O['cari'];
+            $r = kasa_hareket_ekle($db, kasa_t_hareket($K['Merkez Kasa'], 'acilis', '500.000,00', ['aciklama' => 'Açılış bakiyesi']), 1);
+            if (empty($r['ok'])) throw new RuntimeException('cok: ' . json_encode($r, JSON_UNESCAPED_UNICODE));
+            for ($i = 0; $i < 129; $i++) {
+                $r = kasa_hareket_ekle($db, kasa_t_hareket($K['Merkez Kasa'], $i % 2 ? 'cari_tahsilat' : 'cari_odeme', (string)(100 + $i) . ',25', ['cari_id' => (string)$C['ÖRNEK TİCARET A.Ş.'], 'aciklama' => 'Çok hareketli kasa satırı ' . $i, 'tarih' => date('Y-m-d', strtotime('-' . (130 - $i) . ' days'))]), 1);
+                if (empty($r['ok'])) throw new RuntimeException('cok: ' . json_encode($r, JSON_UNESCAPED_UNICODE));
+            }
+        }
         if ($mod === 'fisler') {
             $K = $O['kasa']; $C = $O['cari'];
             $hep = static function (array $r) { if (empty($r['ok'])) throw new RuntimeException('örnek hareket: ' . json_encode($r, JSON_UNESCAPED_UNICODE)); return $r; };

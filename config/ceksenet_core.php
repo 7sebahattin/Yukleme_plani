@@ -743,29 +743,49 @@ function ceksenet_satir_topla(array $g): array
     return $out;
 }
 
-/**
- * Mükerrer anahtarı (TEK kural; hem bordro içi hem DB karşılaştırması bunu kullanır). Harf-duyarsız (cari_fold).
- * alınan çek → banka + hesap no + seri no; verilen çek → banka + seri no (karneli satırda banka = karnenin banka hesabının bankası; hesap no / karne kimliği anahtara GİRMEZ).
- * Senet → null (kontrol yok). $karneId imza uyumu için durur, anahtarı etkilemez.
- */
-function ceksenet_mukerrer_anahtar(string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId = null): ?string
+/** Hesap kimliği normalizasyonu: boşluk / tire atılır, harf-duyarsız (cari_fold). IBAN / hesap no karşılaştırması içindir. */
+function ceksenet_hesap_norm(string $hesap): string
 {
-    if ($sinif !== 'cek') return null;
-    return $yon === 'verilen'
-        ? 'verilen|' . cari_fold($bankaAd) . '|' . cari_fold($seriNo)
-        : 'alinan|' . cari_fold($bankaAd) . '|' . cari_fold($hesapNo) . '|' . cari_fold($seriNo);
+    return cari_fold(preg_replace('/[\s\-]+/u', '', $hesap) ?? '');
 }
 
-/** Mükerrer evrak (bkz. ceksenet_mukerrer_anahtar); iade / iptal edilenler sayılmaz. Senette kontrol yok. Not: kilitsiz okur — yarışı bordro tx'inin cari kilidi daraltır, tam kapatmaz. */
+/** Karnenin banka kasasının id'si (karne yoksa / kasa bağı yoksa null). Mükerrer kuralında karneli satırın "hesabı" bu kasadır. */
+function ceksenet_karne_kasa_id(PDO $pdo, ?int $karneId): ?int
+{
+    if ($karneId === null || $karneId <= 0) return null;
+    $kt = ceksenet_tanim_bul($pdo, $karneId);
+    return $kt !== null && !empty($kt['kasa_id']) ? (int)$kt['kasa_id'] : null;
+}
+
+/**
+ * Mükerrer kuralı — TEK yardımcı (alınan + verilen çek; bordro içi ve DB karşılaştırması bunu kullanır). Senette kontrol YOK (false).
+ * İki çek mükerrer ⇔ banka (cari_fold) eşit VE seri (cari_fold) eşit VE (hesaplardan biri boş YA DA hesaplar eşit).
+ * Hesap: karnesiz çekte hesap_no (boşluk/tire temizlenmiş, fold); karneli verilen çekte karnenin banka KASASI — iki karneli çek yalnız AYNI kasaysa aynı hesaptır
+ * (iki farklı banka-kasalı karnede aynı seri meşru); karneli ↔ karnesizde karnesizin hesabı boşsa mükerrer, doluysa kasanın IBAN'ı ile kıyaslanır (IBAN boşsa mükerrer).
+ * Aynı bankada iki FARKLI hesabın karnelerinde aynı seri no böylece kabul edilir.
+ * @param array{banka:string,hesap:string,seri:string,kasa:?int} $a  @param array{banka:string,hesap:string,seri:string,kasa:?int} $b
+ */
+function ceksenet_mukerrer_mu(string $sinif, array $a, array $b): bool
+{
+    if ($sinif !== 'cek') return false;
+    if (cari_fold((string)$a['banka']) !== cari_fold((string)$b['banka'])) return false;
+    if (cari_fold((string)$a['seri']) !== cari_fold((string)$b['seri'])) return false;
+    if (!empty($a['kasa']) && !empty($b['kasa'])) return (int)$a['kasa'] === (int)$b['kasa'];
+    $ha = ceksenet_hesap_norm((string)$a['hesap']); $hb = ceksenet_hesap_norm((string)$b['hesap']);
+    return $ha === '' || $hb === '' || $ha === $hb;
+}
+
+/** Mükerrer evrak (bkz. ceksenet_mukerrer_mu); iade / iptal edilenler sayılmaz. Senette kontrol yok. Not: kilitsiz okur — yarışı bordro tx'inin cari kilidi daraltır, tam kapatmaz. */
 function ceksenet_mukerrer_bul(PDO $pdo, string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId): ?array
 {
-    $anahtar = ceksenet_mukerrer_anahtar($sinif, $yon, $bankaAd, $hesapNo, $seriNo, $karneId);
-    if ($anahtar === null) return null;
+    if ($sinif !== 'cek') return null;
     $nocase = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? ' COLLATE NOCASE' : '';   // MySQL karşılaştırması zaten harf-duyarsız
     $st = $pdo->prepare("SELECT * FROM ceksenet_kayitlar WHERE sinif = 'cek' AND yon = ? AND seri_no = ?$nocase AND durum NOT IN ('iade', 'iptal') ORDER BY id");
     $st->execute([$yon, $seriNo]);
+    $a = ['banka' => $bankaAd, 'hesap' => $hesapNo, 'seri' => $seriNo, 'kasa' => ceksenet_karne_kasa_id($pdo, $karneId)];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if (ceksenet_mukerrer_anahtar('cek', $yon, (string)$r['banka_ad'], (string)$r['hesap_no'], (string)$r['seri_no']) === $anahtar) return $r;
+        $b = ['banka' => (string)$r['banka_ad'], 'hesap' => (string)$r['hesap_no'], 'seri' => (string)$r['seri_no'], 'kasa' => ceksenet_karne_kasa_id($pdo, isset($r['karne_id']) ? (int)$r['karne_id'] : null)];
+        if (ceksenet_mukerrer_mu('cek', $a, $b)) return $r;
     }
     return null;
 }
@@ -811,8 +831,9 @@ function ceksenet_bordro_dogrula(PDO $pdo, array $g): array
         $seri = $r['seri_no'];
         if ($seri === '') $e['seri_no'] = ($sinif === 'cek' ? 'Çek' : 'Senet') . ' numarası girin.';
         elseif (mb_strlen($seri) > 40) $e['seri_no'] = 'En çok 40 karakter.';
-        $kurus = cari_tutar_coz($r['tutar']);
-        if ($kurus === null) $e['tutar'] = 'Geçerli bir tutar girin.';
+        $kurus = kasa_tutar_coz($r['tutar']);
+        $th = kasa_tutar_hata($kurus, 'Geçerli bir tutar girin.');
+        if ($th !== null) { $e['tutar'] = $th; $kurus = null; }
         $pb = $r['para_birimi'] === '' ? 'TRY' : $r['para_birimi'];
         if (!in_array($pb, cari_para_birimleri(), true)) $e['para_birimi'] = 'Geçersiz para birimi.';
         $vade = ceksenet_vade_coz($r['vade']);
@@ -853,10 +874,12 @@ function ceksenet_bordro_dogrula(PDO $pdo, array $g): array
         if ($sinif === 'cek') { $r['kefil'] = ''; }
 
         if (!$e && $sinif === 'cek') {
-            $anahtar = ceksenet_mukerrer_anahtar($sinif, $yon, $banka, $hesap, $seri, $karne !== null ? (int)$karne['id'] : null);
-            if (isset($gorulen[$anahtar])) { $e['seri_no'] = 'Bu bordroda aynı numara tekrarlanıyor.'; $kod = 'mukerrer'; }
+            $aday = ['banka' => $banka, 'hesap' => $hesap, 'seri' => $seri, 'kasa' => $karne !== null && !empty($karne['kasa_id']) ? (int)$karne['kasa_id'] : null];
+            $tekrar = false;
+            foreach ($gorulen as $onceki) if (ceksenet_mukerrer_mu($sinif, $aday, $onceki)) { $tekrar = true; break; }   // bordro içi: DB ile AYNI kural
+            if ($tekrar) { $e['seri_no'] = 'Bu bordroda aynı numara tekrarlanıyor.'; $kod = 'mukerrer'; }
             else {
-                $gorulen[$anahtar] = true;
+                $gorulen[] = $aday;
                 if (($m = ceksenet_mukerrer_bul($pdo, $sinif, $yon, $banka, $hesap, $seri, $karne !== null ? (int)$karne['id'] : null)) !== null) {
                     $e['seri_no'] = 'Bu numara zaten kayıtlı: ' . $m['portfoy_no'] . '.'; $kod = 'mukerrer';
                 }
@@ -1315,7 +1338,7 @@ function ceksenet_liste_where(PDO $pdo, string $sinif, array $f): array
 
 /**
  * Liste (vadeye göre artan: vade, id). $f: yon, durum (tek durum | acik | tumu), cari, ara, donem (tumu|gecmis|7g|30g|bu_ay|ozel + bas, bit; vade üzerinden), bugun? (test).
- * Satırlar ceksenet_satir_zenginlestir ile (cari_unvan, durum_etiket, vade_gun, vade_gecmis, vade_yakin, izinli…). ozet: süzgeçteki İPTAL OLMAYAN kayıtların para birimi başına adet + kuruş.
+ * Satırlar ceksenet_satir_zenginlestir ile (cari_unvan, durum_etiket, vade_gun, vade_gecmis, vade_yakin, izinli…). ozet: süzgeçteki İPTAL OLMAYAN kayıtların (durum=iptal süzgecinde İPTAL edilenlerin, ozet_iptal=true) para birimi başına adet + kuruş.
  * @return array{satirlar:list<array>,toplam_satir:int,ozet:array<string,array{adet:int,kurus:int}>}
  */
 function ceksenet_listesi(PDO $pdo, string $sinif, array $f = [], int $limit = 100, int $offset = 0): array
@@ -1329,11 +1352,12 @@ function ceksenet_listesi(PDO $pdo, string $sinif, array $f = [], int $limit = 1
     $st = $pdo->prepare("SELECT k.* FROM ceksenet_kayitlar k WHERE $w ORDER BY k.vade ASC, k.id ASC LIMIT $limit OFFSET $offset");
     $st->execute($p);
     $satirlar = ceksenet_satir_zenginlestir($pdo, $st->fetchAll(PDO::FETCH_ASSOC), isset($f['bugun']) ? (ceksenet_vade_coz($f['bugun']) ?? null) : null);
-    $st = $pdo->prepare("SELECT k.para_birimi AS pb, COUNT(*) AS adet, SUM(k.tutar) AS t FROM ceksenet_kayitlar k WHERE $w AND k.durum <> 'iptal' GROUP BY k.para_birimi");
+    $iptalSuz = (string)($f['durum'] ?? '') === 'iptal';   // durum=iptal süzgecinde özet de iptal edilenlerin toplamı (liste ile tutarlı)
+    $st = $pdo->prepare("SELECT k.para_birimi AS pb, COUNT(*) AS adet, SUM(k.tutar) AS t FROM ceksenet_kayitlar k WHERE $w" . ($iptalSuz ? '' : " AND k.durum <> 'iptal'") . ' GROUP BY k.para_birimi');
     $st->execute($p);
     $ozet = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $ozet[(string)$r['pb']] = ['adet' => (int)$r['adet'], 'kurus' => cari_kurus($r['t'])];
-    return ['satirlar' => $satirlar, 'toplam_satir' => $toplam, 'ozet' => cari_pb_sirala($ozet)];
+    return ['satirlar' => $satirlar, 'toplam_satir' => $toplam, 'ozet' => cari_pb_sirala($ozet), 'ozet_iptal' => $iptalSuz];
 }
 
 /**

@@ -43,7 +43,7 @@ async function sayfa(browser, srv, vp, o) {
   p.on('console', m => { if (m.type() === 'error' && !/^Failed to load resource/.test(m.text())) hatalar.push('[' + vp.width + '] console: ' + m.text()); });
   p.on('response', r => { if (r.status() >= 500) hatalar.push('[' + vp.width + '] HTTP ' + r.status() + ' ' + r.url()); });
   p.on('dialog', d => d.accept());
-  p.srv = srv; p.url0 = srv.url;
+  p.setDefaultTimeout(20000); p.srv = srv; p.url0 = srv.url;
   return p;
 }
 const git = (p, yol) => p.goto(p.url0 + '/' + yol, { waitUntil: 'load' });
@@ -112,6 +112,9 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await p.waitForLoadState('load');
     await git(p, 'kasa_fisleri.php?kasa=' + KID + '&durum=iptal');
     ok('durum=iptal: yalnız iptalli hareket (Hatalı giriş), İPTAL rozeti', (await gorunurSay(p, '.ks-tablo tbody tr')) === 1 && /İPTAL/.test(await metin(p, '.ks-tablo tbody tr')));
+    ok('iptal sekmesi özeti süzgeçle tutarlı: "İptal edilen" etiketi, çıkış 10,00 (geçerli toplam DEĞİL), Net yok', /İptal edilen/.test(await metin(p, '#ksOzet')) && /10,00/.test(await metin(p, '#ksOzet')) && !/Net/.test(await metin(p, '#ksOzet')) && !/81\.325/.test(await metin(p, '#ksOzet')), await metin(p, '#ksOzet'));
+    await git(p, 'kasa_fisleri.php?kasa=' + KID + '&durum=tumu');
+    ok('tümü sekmesi özeti: etiket "Geçerli hareketler" (iptaller toplanmaz bilgisi)', /Geçerli hareketler/.test(await metin(p, '#ksOzet')), await metin(p, '#ksOzet'));
     await git(p, 'kasa_fisleri.php?kasa=' + KID);
     await p.keyboard.press('/');
     ok('"/" kısayolu aramaya odaklar', await p.evaluate(() => document.activeElement && document.activeElement.id === 'ksArama'));
@@ -390,6 +393,94 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     const yr = await e4.request.get(S8.url + '/kasa_fisleri.php?kasa=' + KID, { headers: {} });
     ok('GET sayfaları $_POST kabul etmez: kasa_kaydet GET → 405', (await e4.request.get(S8.url + '/kasa_kaydet.php')).status() === 405 && yr.status() === 200);
     await e4.context().close();
+
+    // ───────────────────────────── 7. v528 DENETİM DÜZELTMELERİ
+    console.log('\n=== 7. v528 denetim düzeltmeleri: sayfalama çubuğu · tutar önizlemesi (JS = PHP) · toast · anahtar ===');
+    // 7a. JS ↔ PHP tutar eşitliği (assets/kasa.js `tutarCoz` kaynaktan çıkarılıp çalıştırılır; sunucu = kasa_tutar_coz)
+    {
+      const src = fs.readFileSync(path.join(ROOT, 'assets/kasa.js'), 'utf8');
+      const a0 = src.indexOf('function tutarCoz(ham)'), b0 = src.indexOf('function kurusCoz');
+      const tutarCoz = new Function(src.slice(a0, b0) + '; return tutarCoz;')();
+      const girdiler = ['1.234', '12.345', '1.5', '1,5', '1.234,5', '1,234.56', '1.234.567', '0,005', '1 234,56', '-5', '1e3', '1.234,56', '100', '0,01', '1.00', '10.50', '1.000.000,00', '1,2,3', '12,345', '1.23', '123.456,789', ' 5 ', '٥', '1.2345',
+        '1,500', '999,999', '0,500', '1.500', '1.500,00', '1500', '1,50', '100,000', '1,000,000', '-1,500', '', ' ', 'abc', '0', '0,00', '1.500 TL', '₺1.500,00', '2.50 tl', '1,15', '19,99', '4,35', '0,07', '0,015', '999.999.999.999,99', '1.000.000.000.000,00', '1.234,5.6', ',5', '5,', '.5', '1.5.5', '12,34,567', '1 500,25', '1 500,25', '7,000', '10,000'];
+      const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_tutar.php'), path.join(TMP, 'tutar.sqlite'), JSON.stringify(girdiler)], { cwd: ROOT }).toString());
+      const farklar = girdiler.filter(g => { const j = tutarCoz(g), q = php[g]; return j.k !== q.k || j.belirsiz !== q.belirsiz || j.mesaj !== q.mesaj; }).map(g => JSON.stringify(g) + ' JS=' + JSON.stringify(tutarCoz(g)) + ' PHP=' + JSON.stringify(php[g]));
+      ok('tutar çözümü: JS tutarCoz ile PHP kasa_tutar_coz ' + girdiler.length + ' girdide BİREBİR aynı (kuruş + belirsiz + mesaj)', farklar.length === 0, farklar.join('\n    → '));
+      ok('belirsiz kalıp iki tarafta da "belirsiz": 1,500 · 12,345 · 100,000; "0,500" belirsiz değil (50 kuruş); "1,234.56" = 123456', tutarCoz('1,500').belirsiz && tutarCoz('12,345').belirsiz && tutarCoz('100,000').belirsiz && !tutarCoz('0,500').belirsiz && tutarCoz('0,500').k === 50 && tutarCoz('1,234.56').k === 123456 && php['1,500'].belirsiz && php['0,500'].k === 50);
+    }
+    // 7b. sayfalama çubuğu (100+ hareket) son satırın ALTINDA ve liste sonuna kaydırınca görünür/tıklanabilir
+    const S9 = await ortam('cok'); sunucular.push(S9);
+    const K9 = Object.keys(S9.say().kasalar).find(i => S9.say().kasalar[i].ad === 'Merkez Kasa');
+    for (const vp of [{ width: 1366, height: 800 }, { width: 1024, height: 768 }]) {
+      const pg = await sayfa(browser, S9, vp);
+      await git(pg, 'kasa_fisleri.php?kasa=' + K9);
+      const o = await pg.evaluate(() => {
+        const g = document.getElementById('ksListe'), sf = g.querySelector('.ks-sayfalama'), satir = [...g.querySelectorAll('.ks-tablo tbody tr')], son = satir[satir.length - 1];
+        const once = { sfUst: sf.getBoundingClientRect().top, sonAlt: son.getBoundingClientRect().bottom };
+        g.scrollTop = g.scrollHeight;
+        const gr = g.getBoundingClientRect(), sr = sf.getBoundingClientRect(), el = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+        return { satir: satir.length, altinda: once.sfUst >= once.sonAlt - 1, gorunur: sr.top >= gr.top - 1 && sr.bottom <= gr.bottom + 1, tiklanir: !!el && sf.contains(el), kayar: g.scrollHeight > g.clientHeight };
+      });
+      ok('sayfalama (' + vp.width + 'px, ' + o.satir + ' satır): çubuk son satırın ALTINDA; listenin sonuna kaydırınca görünür ve tıklanabilir', o.satir === 100 && o.altinda && o.gorunur && o.tiklanir && o.kayar, JSON.stringify(o));
+      await shot(pg, 'pager_' + vp.width);
+      await pg.click('.ks-sayfalama a');
+      await pg.waitForLoadState('load');
+      ok('sayfalama bağlantısı tıklanır: ?sayfa=2, kalan 30 satır', /sayfa=2/.test(pg.url()) && (await gorunurSay(pg, '.ks-tablo tbody tr')) === 30, pg.url());
+      await pg.context().close();
+    }
+    // 7c. tutar önizlemesi + belirsiz tutar (PC form ve mobil kart görünümü)
+    const S10 = await ortam('fisler'); sunucular.push(S10);
+    for (const [ad, vp, dok] of [['PC', { width: 1366, height: 800 }, false], ['mobil', { width: 390, height: 844 }, true]]) {
+      const pt = await sayfa(browser, S10, vp, { dokunmatik: dok });
+      await git(pt, 'kasa_fisleri.php?kasa=' + KID);
+      await pt.click(dok ? '.ks-eylem-bar [data-ks-form="cari_tahsilat"]' : '.ks-eylemler [data-ks-form="cari_tahsilat"]');
+      await modalAcik(pt, 'ksModalForm');
+      await pt.fill('#ksForm [name="tutar"]', '1.500');
+      ok(ad + ': tutar "1.500" → altında "= 1.500,00 ₺" önizlemesi', /^= 1\.500,00 ₺$/.test(await metin(pt, '#ksForm [data-tutar-onizleme]') || ''), await metin(pt, '#ksForm [data-tutar-onizleme]'));
+      await pt.fill('#ksForm [name="tutar"]', '1,500');
+      ok(ad + ': tutar "1,500" → BELİRSİZ hata metni görünür, alan aria-invalid', /Tutar belirsiz: 1\.500 için nokta kullanın \(1\.500\)/.test(await metin(pt, '#ksForm [data-tutar-onizleme]') || '') && await goster(pt, '#ksForm [data-tutar-onizleme]') && (await pt.getAttribute('#ksForm [name="tutar"]', 'aria-invalid')) === 'true');
+      await shot(pt, 'tutar_belirsiz_' + ad);
+      await pt.fill('#ksForm [name="tutar"]', '1,50');
+      ok(ad + ': "1,50" → "= 1,50 ₺", hata işareti kalkar', /^= 1,50 ₺$/.test(await metin(pt, '#ksForm [data-tutar-onizleme]') || '') && (await pt.getAttribute('#ksForm [name="tutar"]', 'aria-invalid')) !== 'true');
+      await pt.fill('#ksForm [name="tutar"]', '1,500');
+      const cr = S10.say().hareket;
+      await pt.fill('#ksForm [name="cari_ara"]', S10.say().cariler[0].kod + ' — ' + S10.say().cariler[0].unvan);
+      await pt.dispatchEvent('#ksForm [name="cari_ara"]', 'change');
+      await pt.click('#ksForm button[type="submit"]');
+      ok(ad + ': "1,500" gönderilirse sunucu 422 alan hatası (Tutar belirsiz …), kayıt YOK, modal açık', await bekle(900) === undefined && await kisaBekle(pt, () => document.querySelector('#ksForm .ks-tutar-onizleme--hata') && !document.querySelector('#ksForm .ks-hata')) && S10.say().hareket === cr && await goster(pt, '#ksModalForm .pm-dialog'));
+      await pt.context().close();
+    }
+    // 7d. mobil: toast alt eylem çubuğunu örtmez, tıklamayı engellemez
+    {
+      const pm = await sayfa(browser, S10, { width: 390, height: 844 }, { dokunmatik: true });
+      await git(pm, 'kasa_fisleri.php?kasa=' + KID);
+      await pm.evaluate(() => sessionStorage.setItem('kasa_toast', 'Cari Tahsilat kaydedildi · KTH-2026-000999 — uyarı metni uzun uzun'));
+      await pm.reload({ waitUntil: 'load' }); await bekle(250);
+      const t = await pm.evaluate(() => {
+        const to = document.querySelector('.ks-toast'), bar = document.querySelector('.ks-eylem-bar'), tr = to.getBoundingClientRect(), br = bar.getBoundingClientRect(), btn = bar.querySelector('[data-ks-form="cari_tahsilat"]'), r = btn.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { gorunur: !to.hidden && tr.height > 0, toastAlt: Math.round(tr.bottom), barUst: Math.round(br.top), pe: getComputedStyle(to).pointerEvents, tik: el === btn || btn.contains(el) };
+      });
+      ok('mobil toast (390): alt eylem çubuğunun ÜSTÜNDE, pointer-events none; Tahsilat düğmesi elementFromPoint ile tıklanabilir', t.gorunur && t.toastAlt <= t.barUst && t.pe === 'none' && t.tik, JSON.stringify(t));
+      await shot(pm, 'mobil_toast');
+      await pm.context().close();
+    }
+    // 7e. aktif/pasif anahtarı: istek sürerken devre dışı, hata dönerse eski hâline
+    {
+      const pk = await sayfa(browser, S10, { width: 1366, height: 800 });
+      await git(pk, 'kasa_tanimlari.php?sekme=gider');
+      await pk.route('**/kasa_kaydet.php', async r => { await bekle(900); await r.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ ok: false, hata: 'Deneme hatası', alanlar: {} }) }); });
+      const sel = '#ksPanelGider .ks-tanim-satir:not(.ks-tanim-satir--duzen) input[role="switch"]';
+      const once = await pk.$eval(sel, e => e.checked);
+      await pk.click(sel);
+      await bekle(250);
+      const bekleyen = await pk.$eval(sel, e => ({ dis: e.disabled, chk: e.checked }));
+      await kisaBekle(pk, s => { const e = document.querySelector(s); return e && !e.disabled; }, sel, 4000);
+      const sonra = await pk.$eval(sel, e => ({ dis: e.disabled, chk: e.checked }));
+      ok('anahtar (aktif/pasif): istek sürerken kutu disabled; sunucu hata dönünce kutu eski hâline (işaret geri alındı) ve yeniden etkin', bekleyen.dis === true && sonra.dis === false && sonra.chk === once && bekleyen.chk === !once, JSON.stringify({ once, bekleyen, sonra }));
+      await pk.context().close();
+    }
+    ok('v528 bölümünde pageerror / console error / 5xx YOK', hatalar.length === 0, hatalar.join(' | '));
     ok('tüm oturum boyunca pageerror / console error / 5xx YOK', hatalar.length === 0, hatalar.join(' | '));
   } catch (e) {
     fail++; console.log('*** İSTİSNA: ' + (e && e.stack || e));

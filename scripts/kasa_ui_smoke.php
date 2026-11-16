@@ -204,4 +204,34 @@ ok('xlsx: reports.export yoksa forbidden, audit artmaz', str_contains((string)$r
 $r = get('kasa_cikti.php', ['kasa' => (string)$M, 'bicim' => 'csv'], ['perms' => ['records.read']]);
 ok('csv: reports.export yoksa forbidden', str_contains((string)$r['hata'], 'forbidden'));
 
+echo "\n=== 10. v528 denetim düzeltmeleri ===\n";
+// iptal / tümü özeti süzgeçle tutarlı
+$r = get('kasa_fisleri.php', ['kasa' => (string)$M, 'durum' => 'iptal']); $h = bolge($r['govde']);
+ok('durum=iptal özeti: data-ozet="iptal", "İptal edilen" etiketi, çıkış 10,00 ₺, Net yok, geçerli toplam (510.000…) YOK', str_contains($h, 'id="ksOzet" data-ozet="iptal"') && str_contains($h, 'İptal edilen') && str_contains($h, '10,00 ₺') && !str_contains($h, '> · Net') && !str_contains($h, '81.325,50'), '');
+$r = get('kasa_fisleri.php', ['kasa' => (string)$M, 'durum' => 'tumu']); $h = bolge($r['govde']);
+ok('durum=tumu özeti: "Geçerli hareketler" etiketi, data-ozet="gecerli", Net var', str_contains($h, 'data-ozet="gecerli"') && str_contains($h, 'Geçerli hareketler') && str_contains($h, 'Net'));
+$r = get('kasa_fisleri.php', ['kasa' => (string)$M]); $h = bolge($r['govde']);
+ok('durum=gecerli (varsayılan) özeti: ek etiket yok (Giriş / Çıkış / Net)', str_contains($h, 'data-ozet="gecerli"') && !str_contains($h, 'Geçerli hareketler') && !str_contains($h, 'İptal edilen'));
+// son sayfadan büyük ?sayfa=N → son sayfaya sınırlanır (yanlış "Henüz hareket yok" değil)
+$kc = kasa_kart_kaydet($db, ['ad' => 'Çok Sayfalı Kasa', 'tip' => 'nakit', 'para_birimi' => 'TRY', 'aktif' => '1'], 1);
+for ($i = 0; $i < 105; $i++) { $x = kasa_hareket_ekle($db, kasa_t_hareket((int)$kc['id'], 'acilis', (string)(10 + $i) . ',00', ['aciklama' => 'Sayfa testi ' . $i]), 1); if (empty($x['ok'])) break; }
+$r = get('kasa_fisleri.php', ['kasa' => (string)$kc['id'], 'sayfa' => '9999']); $h = bolge($r['govde']);
+ok('?sayfa=9999 (son sayfadan büyük): "Henüz hareket yok" YOK; son sayfa (2 / 2) 5 satır + önceki bağlantısı', !str_contains($h, 'Henüz hareket yok') && str_contains($h, '<span>2 / 2</span>') && preg_match_all('/<tr[^>]*data-id=/', $h) === 5 && str_contains($h, '5 / 105 hareket') && uyari_yok($r), (string)preg_match_all('/<tr[^>]*data-id=/', $h));
+$r = get('kasa_fisleri.php', ['kasa' => (string)$kc['id'], 'sayfa' => '2']); $h2 = bolge($r['govde']);
+ok('?sayfa=2 (geçerli son sayfa) ile aynı içerik', preg_match_all('/<tr[^>]*data-id=/', $h2) === 5 && str_contains($h2, '<span>2 / 2</span>'));
+$r = get('kasa_fisleri.php', ['kasa' => (string)$kc['id'], 'sayfa' => '0']);
+ok('?sayfa=0 / negatif → 1. sayfa (100 satır)', preg_match_all('/<tr[^>]*data-id=/', bolge($r['govde'])) === 100);
+$r = get('kasa_fisleri.php', ['kasa' => (string)$K['Döviz Kasası'], 'sayfa' => '50']); $h = bolge($r['govde']);
+ok('gerçekten boş olmayan tek sayfalık kasada ?sayfa=50: liste yine görünür (yanlış boş durum yok)', !str_contains($h, 'Henüz hareket yok') && str_contains($h, 'Açılış bakiyesi'));
+// belirsiz tutar (uç) + CSV formül enjeksiyonu
+$r = post(['islem' => 'hareket_ekle', 'kasa_id' => (string)$M, 'tur' => 'acilis', 'tutar' => '1,500', 'tarih' => date('Y-m-d')]); $j = js($r);
+ok('kasa_kaydet: "1,500" → 422 + alanlar.tutar "Tutar belirsiz: 1.500 için nokta kullanın (1.500), bir buçuk için 1,50 yazın."', $r['kod'] === 422 && ($j['alanlar']['tutar'] ?? '') === 'Tutar belirsiz: 1.500 için nokta kullanın (1.500), bir buçuk için 1,50 yazın.', $r['govde']);
+$fk = kasa_kart_kaydet($db, ['ad' => 'Csv Kasa', 'tip' => 'nakit', 'para_birimi' => 'TRY', 'aktif' => '1', 'eksi_izin' => '1'], 1);
+$fkalem = (int)$db->query("SELECT id FROM kasa_tanimlar WHERE tur = 'gider' ORDER BY id LIMIT 1")->fetchColumn();
+kasa_hareket_ekle($db, kasa_t_hareket((int)$fk['id'], 'acilis', '10,00', ['aciklama' => '@SUM(A1)', 'evrak_no' => '=1+1']), 1);
+kasa_hareket_ekle($db, kasa_t_hareket((int)$fk['id'], 'gider', '25,00', ['kalem_id' => (string)$fkalem, 'aciklama' => '-1 deneme', 'evrak_no' => '+evrak', 'eksiye_izin' => '1']), 1);
+$r = get('kasa_cikti.php', ['kasa' => (string)$fk['id'], 'bicim' => 'csv']); $g = $r['govde'];
+ok("CSV: metin hücreleri (evrak no '=1+1' / '+evrak', açıklama '@SUM(A1)') başına ' alır; ham =1+1 hücresi YOK", str_contains($g, "'=1+1") && str_contains($g, "'@SUM(A1)") && str_contains($g, "'+evrak") && !preg_match('/(^|;)"?=1\+1/m', $g), $g);
+ok("CSV: SAYISAL hücreler (eksi bakiye -15,00 dahil) ve tarih ' ALMAZ", str_contains($g, ';-15,00') && !str_contains($g, "'-15,00") && !str_contains($g, "'-") && preg_match('/^\d{2}\.\d{2}\.\d{4};/m', $g) === 1 && !str_contains($g, "'" . date('d.m.Y')), $g);
+
 siparis_test_bitir();

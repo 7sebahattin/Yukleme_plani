@@ -545,6 +545,32 @@ try { $x = kasa_tanim_kaydet($db, 'gelir', 'Dz Yeni Kalem', 1, 1); $tg = $x; } c
 $db->exec('DROP TRIGGER dz_t2');
 ok('kasa_tanim_kaydet: DB UNIQUE/PDO hatasında istisna yok → ok=false, kod kullanimda', is_array($tg) && !$tg['ok'] && ($tg['kod'] ?? '') === 'kullanimda', json_encode($tg, JSON_UNESCAPED_UNICODE));
 
+echo "\n=== 15c. v528 denetim düzeltmeleri (belirsiz tutar, iptal özeti, CSV metin koruması) ===\n";
+$tK = kart('Tb Kasa', 'nakit', 'TRY'); $tK2 = kart('Tb Kasa 2', 'nakit', 'TRY');
+ekle($tK, 'acilis', '10.000,00');
+$tn = say('kasa_hareketler');
+$r = ekle($tK, 'gelir', '1,500', ['kalem_id' => (string)kasa_tanim_listesi($db, 'gelir')[0]['id']]);
+ok('belirsiz tutar "1,500" (nokta yok + virgül + tam 3 hane) → ok=false, alanlar[tutar] "Tutar belirsiz: 1.500 için nokta kullanın (1.500)", HİÇ yazılmadı', !$r['ok'] && str_contains((string)($r['alanlar']['tutar'] ?? ''), 'Tutar belirsiz: 1.500 için nokta kullanın (1.500)') && say('kasa_hareketler') === $tn, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = kasa_virman_ekle($db, ['kaynak_kasa_id' => (string)$tK, 'hedef_kasa_id' => (string)$tK2, 'tarih' => gun(0), 'tutar' => '12,345'], 1);
+ok('virman da aynı sarmalayıcıdan: "12,345" belirsiz → alanlar[tutar], yazım yok', !$r['ok'] && str_contains((string)($r['alanlar']['tutar'] ?? ''), 'Tutar belirsiz: 12.345') && say('kasa_hareketler') === $tn, json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = uc(['islem' => 'hareket_ekle', 'kasa_id' => (string)$tK, 'tur' => 'acilis', 'tutar' => '1,500', 'tarih' => gun(0)]); $j = js($r);
+ok('uç: belirsiz tutar → 422 + alanlar.tutar', $r['kod'] === 422 && isset($j['alanlar']['tutar']) && str_contains($j['alanlar']['tutar'], 'belirsiz') && say('kasa_hareketler') === $tn, $r['govde']);
+foreach (['1.500' => 150000, '1.500,00' => 150000, '1500' => 150000, '1,50' => 150, '1,5' => 150, '0,500' => 50, '1,234.56' => 123456, '12.345,67' => 1234567, '2,50' => 250] as $girdi => $beklenen) {
+    $r = ekle($tK2, 'acilis', (string)$girdi);
+    $k = $r['ok'] ? (int)round((float)$db->query('SELECT tutar FROM kasa_hareketler WHERE id = ' . (int)$r['id'])->fetchColumn() * 100) : null;
+    ok("tutar \"$girdi\" → $beklenen kuruş (mevcut davranış korunur; belirsiz değil)", $r['ok'] && $k === $beklenen, json_encode($r, JSON_UNESCAPED_UNICODE));
+}
+ok('kasa_tutar_coz: "1,500" ve " 12,345 ₺ " belirsiz (dizi); "0,500" / "1.500" / "1,50" değil; "999,999" belirsiz; boş/geçersiz null',
+    is_array(kasa_tutar_coz('1,500')) && is_array(kasa_tutar_coz(' 12,345 ₺ ')) && is_array(kasa_tutar_coz('999,999')) && kasa_tutar_coz('0,500') === 50 && kasa_tutar_coz('1.500') === 150000 && kasa_tutar_coz('1,50') === 150 && kasa_tutar_coz('') === null && kasa_tutar_coz('x') === null);
+// iptal sekmesi özeti süzgeçle tutarlı
+$iO = kart('Io Kasa', 'nakit', 'TRY'); ekle($iO, 'acilis', '100,00'); $ig = ekle($iO, 'acilis', '40,00'); $ic = ekle($iO, 'gider', '7,00', ['kalem_id' => (string)kasa_tanim_listesi($db, 'gider')[0]['id']]);
+kasa_hareket_iptal($db, (int)$ig['id'], 'Özet testi iptali', 1);
+$gl = kasa_hareket_listesi($db, ['kasa_id' => $iO, 'durum' => 'gecerli']); $ip = kasa_hareket_listesi($db, ['kasa_id' => $iO, 'durum' => 'iptal']); $tm = kasa_hareket_listesi($db, ['kasa_id' => $iO, 'durum' => 'tumu']);
+ok('özet durum=iptal: İPTAL satırlarının toplamı (giriş 40,00, çıkış 0, adet 1), ozet_durum=iptal', $ip['ozet']['TRY'] === ['giris' => 4000, 'cikis' => 0, 'adet' => 1] && $ip['ozet_durum'] === 'iptal', json_encode($ip['ozet']));
+ok('özet durum=gecerli / tumu: yalnız GEÇERLİLER (giriş 100,00, çıkış 7,00); ozet_durum=gecerli', $gl['ozet']['TRY'] === ['giris' => 10000, 'cikis' => 700, 'adet' => 2] && $tm['ozet']['TRY'] === $gl['ozet']['TRY'] && $tm['ozet_durum'] === 'gecerli' && $gl['ozet_durum'] === 'gecerli');
+ok('kasa_csv_metin: = + - @ TAB CR ile başlayan METİN başına \' alır; normal metin / boş aynen', kasa_csv_metin('=1+1') === "'=1+1" && kasa_csv_metin('+5') === "'+5" && kasa_csv_metin('-x') === "'-x" && kasa_csv_metin('@SUM(A1)') === "'@SUM(A1)" && kasa_csv_metin("\tx") === "'\tx" && kasa_csv_metin("\rx") === "'\rx"
+    && kasa_csv_metin('Normal') === 'Normal' && kasa_csv_metin('') === '' && kasa_csv_metin('a=b') === 'a=b');
+
 echo "\n=== 16. Denetim izi ===\n";
 ok('audit: create / update / cancel / delete / activate-deactivate kayıtları var, hepsi module=kasa', audit_say('create') > 20 && audit_say('update') >= 3 && audit_say('cancel') >= 6 && audit_say('delete') >= 2 && (audit_say('deactivate') + audit_say('activate')) >= 4);
 ok('audit: hassas alan yok (IBAN kart create kaydında olabilir ama csrf/password yok)', say('audit_log', "module = 'kasa' AND (new_values LIKE '%csrf%' OR new_values LIKE '%password%')") === 0);
