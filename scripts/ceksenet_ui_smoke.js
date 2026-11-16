@@ -23,17 +23,19 @@ const ROOT = path.resolve(__dirname, '..');
 const { baslat } = require('./_ceksenet_e2e_sunucu.js');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ceksenet_ui_'));
 const SHOT = process.env.CEKSENET_SHOT || '';
+const IZLE = !!process.env.E2E_IZLE;
 let fail = 0, n = 0, dbNo = 0;
-const ok = (ad, k, ip) => { n++; if (!k) fail++; console.log(ad.padEnd(100) + (k ? 'OK' : '*** FAIL' + (ip !== undefined ? '\n    → ' + ip : ''))); };
+let sonAd = '';
+const ok = (ad, k, ip) => { n++; sonAd = ad.slice(0, 70); if (!k) fail++; console.log(ad.padEnd(100) + (k ? 'OK' : '*** FAIL' + (ip !== undefined ? '\n    → ' + ip : ''))); };
 const bekle = ms => new Promise(r => setTimeout(r, ms));
 const hatalar = [];
 const kr = x => Math.round(Number(x) * 100);   // SQLite sayı / MySQL metin: kuruşa çevir
 
 async function ortam(mod) {
   const db = path.join(TMP, 'cs' + (++dbNo) + '.sqlite');
-  execFileSync('php', [path.join(__dirname, 'ceksenet_ui_e2e_setup.php'), db, mod || 'fisler'], { cwd: ROOT, stdio: 'pipe' });
+  execFileSync('php', [path.join(__dirname, 'ceksenet_ui_e2e_setup.php'), db, mod || 'fisler'], { cwd: ROOT, stdio: 'pipe', timeout: 60000 });
   const srv = await baslat({ db, sid: 'csE2E' + dbNo, depolar: ['Merkez Depo'] });
-  srv.say = ids => JSON.parse(execFileSync('php', [path.join(__dirname, 'ceksenet_ui_e2e_say.php'), db].concat(ids ? [ids.join(',')] : []), { cwd: ROOT }).toString());
+  srv.say = ids => JSON.parse(execFileSync('php', [path.join(__dirname, 'ceksenet_ui_e2e_say.php'), db].concat(ids ? [ids.join(',')] : []), { cwd: ROOT, timeout: 60000 }).toString());
   srv.sayi = re => srv.istekler.filter(i => re.test(i.yontem + ' ' + i.url)).length;
   return srv;
 }
@@ -44,7 +46,15 @@ async function sayfa(browser, srv, vp, o) {
   p.on('pageerror', e => hatalar.push('[' + vp.width + '] pageerror: ' + e.message));
   p.on('console', m => { if (m.type() === 'error' && !/^Failed to load resource/.test(m.text())) hatalar.push('[' + vp.width + '] console: ' + m.text()); });
   p.on('response', r => { if (r.status() >= 500) hatalar.push('[' + vp.width + '] HTTP ' + r.status() + ' ' + r.url()); });
-  p.on('dialog', d => d.accept());
+  p.on('dialog', d => { if (IZLE) console.error('[tanı] dialog ' + d.type() + ' ' + JSON.stringify(d.message()).slice(0, 80)); d.accept().catch(() => {}); });
+  if (IZLE) {
+    p.bekleyen = new Set();
+    p.on('request', r => p.bekleyen.add(r)); p.on('requestfinished', r => p.bekleyen.delete(r)); p.on('requestfailed', r => p.bekleyen.delete(r));
+    p.on('crash', () => console.error('[tanı] SAYFA ÇÖKTÜ (crash) w=' + vp.width));
+    p.on('close', () => console.error('[tanı] sayfa KAPANDI w=' + vp.width));
+    p.on('framenavigated', f => { if (f === p.mainFrame()) console.error('[tanı] navigasyon → ' + f.url().replace(/^http:\/\/[^/]+/, '')); });
+    p.on('requestfailed', r => console.error('[tanı] istek başarısız ' + r.method() + ' ' + r.url().replace(/^http:\/\/[^/]+/, '') + ' ' + (r.failure() || {}).errorText));
+  }
   p.setDefaultTimeout(20000); p.srv = srv; p.url0 = srv.url;
   return p;
 }
@@ -57,7 +67,13 @@ const kisaBekle = async (p, fn, arg, ms) => { try { await p.waitForFunction(fn, 
 const postSay = p => p.srv.sayi(/^POST \/cek_kaydet/);
 async function yenilenmeBekle(p, n0) {
   for (let i = 0; i < 80 && postSay(p) <= n0; i++) await bekle(100);
-  await bekle(300); await p.waitForLoadState('load');
+  await bekle(300);
+  try { await p.waitForLoadState('load', { timeout: 15000 }); } catch (e) {
+    const d = await Promise.race([p.evaluate(() => ({ rs: document.readyState, url: location.href })).catch(x => 'evaluate başarısız: ' + x.message), bekle(4000).then(() => 'evaluate yanıt vermedi')]);
+    const bk = p.bekleyen ? [...p.bekleyen].map(r => r.method() + ' ' + r.url().replace(/^http:\/\/[^/]+/, '')) : [];
+    ok('sayfa yenilendikten sonra "load" 15 sn içinde geldi', false, JSON.stringify({ sayfa: d, bekleyenIstekler: bk }));
+    throw new Error('sayfa yüklenemedi (yenilenmeBekle)');   // sonraki adımlar anlamsız → koşu net hatayla biter
+  }
   await kisaBekle(p, () => document.readyState === 'complete');
   await bekle(250);
 }
@@ -89,26 +105,60 @@ async function satirDoldur(p, i, v) {
     if (ad === 'para_birimi' || ad === 'karne_id') await el.selectOption(deger); else await el.fill(deger);
   }
 }
-async function gonderCevap(p, tikla) {
-  let cap = null;
-  const isleyici = async route => {
-    if (route.request().method() !== 'POST') return route.continue();
-    const r = await route.fetch(), govde = await r.text();
-    try { cap = { kod: r.status(), j: JSON.parse(govde) }; } catch (e) { cap = { kod: r.status(), j: { _hata: govde } }; }
-    await route.fulfill({ response: r, body: govde });
+// cek_kaydet.php POST yanıtını YAKALAR — page.route (Fetch interception) KULLANMAZ.
+// Eski sürüm `page.route` açık tutup, kayıttan hemen sonra başlayan yönlendirme (location.assign) sürerken `unroute` ediyordu. Route açıkken
+// Chromium TÜM istekleri (yeni belgenin stil/js/görsel alt kaynakları dahil) Playwright'a durdurtur; unroute ile yeni belgenin yüklenmesi
+// yarışınca bazı alt kaynak istekleri hiç sunucuya ulaşmıyor, `load` olayı gelmiyordu (yenilenmeBekle'de "waitForLoadState: Timeout";
+// bazen sayfa/tarayıcı kapanıp süreç asılı kalıyordu; ~1/10 koşuda, hep gonderCevap'ın hemen ardından).
+// Şimdi: sayfa içindeki fetch sarmalanır; yanıt klonu `exposeFunction` bağlamasıyla Node'a İLETİLDİKTEN SONRA uygulamaya verilir
+// (navigasyon gövdeyi silmeden önce yakalama garantili; interception yok → yarış yok).
+const SAR = () => {
+  if (window.__csSar) return; window.__csSar = 1;
+  const f = window.fetch;
+  window.fetch = function (u, o) {
+    const pr = f.apply(this, arguments);
+    if (!(o && /^POST$/i.test(o.method || '') && /cek_kaydet\.php/.test(String((u && u.url) || u)))) return pr;
+    return pr.then(r => r.clone().text().then(
+      t => Promise.resolve().then(() => window.__csYakala(r.status, t)).then(() => r, () => r),
+      () => r));
   };
-  await p.route('**/cek_kaydet.php', isleyici);
-  try {
-    await tikla();
-    for (let i = 0; i < 100 && !cap; i++) await bekle(100);
-  } finally { await p.unroute('**/cek_kaydet.php', isleyici); }
-  return cap || { kod: 0, j: {} };
+};
+async function gonderCevap(p, tikla) {
+  if (!p.__yakalaKurulu) {
+    p.__cap = null;
+    await p.exposeFunction('__csYakala', (kod, govde) => { let j; try { j = JSON.parse(govde); } catch (e) { j = { _hata: govde }; } p.__cap = { kod, j }; });
+    await p.addInitScript(SAR);   // sonraki belgeler (kayıttan sonra yönlendirme dahil)
+    p.__yakalaKurulu = true;
+  }
+  await p.evaluate(SAR);          // geçerli belge
+  p.__cap = null;
+  await tikla();
+  const t0 = Date.now();
+  while (!p.__cap && Date.now() - t0 < 15000) await bekle(50);   // en çok 15 sn; gelmezse {kod:0} → çağıran adım BAŞARISIZ olur (sonsuz bekleme YOK)
+  return p.__cap || { kod: 0, j: {} };
 }
 
+// ── Sağlamlık: hiçbir bekleme sonsuza dek sürmez ─────────────────────────────────────────────
+let browser; const sunucular = [];
+async function temizle() {   // tarayıcı + köprü sunucuları + geçici klasör; her adım zaman sınırlı (asılırsa atlanır)
+  if (browser) await Promise.race([browser.close().catch(() => {}), bekle(10000)]);
+  for (const s of sunucular) { try { await Promise.race([s.kapat(), bekle(3000)]); } catch (e) { /* kapanış */ } }
+  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* geçici */ }
+}
+const SURE_MS = +(process.env.CEKSENET_UI_SURE_MS || 240000);   // tüm koşu için üst sınır (normal koşu ~35-60 sn)
+setTimeout(async () => {
+  console.log('\n*** ZAMAN AŞIMI: koşu ' + SURE_MS / 1000 + ' sn içinde bitmedi (son adım: ' + n + '. — "' + sonAd + '") — tarayıcı/köprü kapatılıp çıkılıyor');
+  await temizle(); process.exit(2);
+}, SURE_MS).unref();
+let kapaniyor = false;
+const olumcul = async (e) => { if (kapaniyor) return; kapaniyor = true; console.log('\n*** BEKLENMEYEN HATA (süreç düzeyi): ' + (e && e.stack || e)); await temizle(); process.exit(1); };
+process.on('unhandledRejection', olumcul); process.on('uncaughtException', olumcul);
+process.on('SIGTERM', async () => { console.log('\n*** SIGTERM alındı — temizlenip çıkılıyor'); await temizle(); process.exit(143); });
+
 (async () => {
-  let browser; const sunucular = [];
   try {
     browser = await pw.chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+    if (IZLE) browser.on('disconnected', () => console.error('[tanı] TARAYICI bağlantısı koptu'));
 
     // ───────────────────────────── 1. MASAÜSTÜ 1366x800
     console.log('\n=== 1. Çek Dekontu (1366x800) ===');
@@ -489,7 +539,7 @@ async function gonderCevap(p, tikla) {
       const tutarCoz = new Function(src.slice(a0, b0) + '; return tutarCoz;')();
       const girdiler = ['1.234', '12.345', '1.5', '1,5', '1.234,5', '1,234.56', '1.234.567', '0,005', '1 234,56', '-5', '1e3', '1.234,56', '100', '0,01', '1.00', '10.50', '1.000.000,00', '1,2,3', '12,345', '1.23', '123.456,789', ' 5 ', '٥', '1.2345',
         '1,500', '999,999', '0,500', '1.500', '1.500,00', '1500', '1,50', '100,000', '1,000,000', '-1,500', '', ' ', 'abc', '0', '0,00', '1.500 TL', '₺1.500,00', '2.50 tl', '1,15', '19,99', '4,35', '0,07', '0,015', '999.999.999.999,99', '1.000.000.000.000,00', '1.234,5.6', ',5', '5,', '.5', '1.5.5', '12,34,567', '1 500,25', '7,000', '10,000'];
-      const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_tutar.php'), path.join(TMP, 'tutar.sqlite'), JSON.stringify(girdiler)], { cwd: ROOT }).toString());
+      const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_tutar.php'), path.join(TMP, 'tutar.sqlite'), JSON.stringify(girdiler)], { cwd: ROOT, timeout: 60000 }).toString());
       const farklar = girdiler.filter(g => { const j = tutarCoz(g), q = php[g]; return j.k !== q.k || j.belirsiz !== q.belirsiz || j.mesaj !== q.mesaj; }).map(g => JSON.stringify(g) + ' JS=' + JSON.stringify(tutarCoz(g)) + ' PHP=' + JSON.stringify(php[g]));
       ok('tutar çözümü: JS tutarCoz ile PHP kasa_tutar_coz ' + girdiler.length + ' girdide BİREBİR aynı (kuruş + belirsiz + mesaj)', farklar.length === 0, farklar.join('\n    → '));
       ok('belirsiz kalıp iki tarafta da "belirsiz": 1,500 · 12,345 · 100,000; "0,500" belirsiz değil (50 kuruş); "1,234.56" = 123456', tutarCoz('1,500').belirsiz && tutarCoz('12,345').belirsiz && tutarCoz('100,000').belirsiz && !tutarCoz('0,500').belirsiz && tutarCoz('0,500').k === 50 && tutarCoz('1,234.56').k === 123456 && php['1,500'].belirsiz && php['0,500'].k === 50);
@@ -563,9 +613,7 @@ async function gonderCevap(p, tikla) {
   } catch (e) {
     fail++; console.log('*** BEKLENMEYEN HATA: ' + (e && e.stack || e));
   } finally {
-    if (browser) await browser.close();
-    for (const s of sunucular) { try { await s.kapat(); } catch (e) { /* kapanış */ } }
-    try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* geçici */ }
+    kapaniyor = true; await temizle();
   }
   console.log('\n' + n + ' adım, ' + fail + ' başarısız');
   process.exit(fail ? 1 : 0);

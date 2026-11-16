@@ -8,15 +8,18 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { execFile } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
+const COCUKLAR = new Set();   // çalışan PHP alt süreçleri; kapat() hepsini öldürür (artık süreç kalmaz)
+const PHP_ZAMAN_ASIMI = 60000;   // tek PHP isteği en çok 60 sn; asılırsa SIGKILL + 500 (köprü kuyruğu sonsuza dek tıkanmaz)
 const MIME = { '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2' };
 
 function phpIstek(spec) {
   return new Promise(res => {
-    execFile('php', [path.join(__dirname, '_kasa_istek.php')], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, KASA_T_SPEC: Buffer.from(JSON.stringify(spec)).toString('base64') } }, (err, out) => {
+    const cocuk = execFile('php', [path.join(__dirname, '_kasa_istek.php')], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024, timeout: PHP_ZAMAN_ASIMI, killSignal: 'SIGKILL', env: { ...process.env, KASA_T_SPEC: Buffer.from(JSON.stringify(spec)).toString('base64') } }, (err, out) => {
       const s = String(out || ''), p = s.lastIndexOf('\n@@KASA@@');
-      if (p < 0) return res({ kod: 500, govde: s, basliklar: [], hata: 'alt süreç çıktısı çözülemedi' + (err ? ': ' + err.message : '') });
+      if (p < 0) return res({ kod: 500, govde: s, basliklar: [], hata: (err && err.killed ? 'PHP alt süreç zaman aşımı (' + (PHP_ZAMAN_ASIMI / 1000) + ' sn) — SIGKILL' : 'alt süreç çıktısı çözülemedi') + (err ? ': ' + err.message : '') });
       try { const r = JSON.parse(s.slice(p + 9)); r.govde = s.slice(0, p) + r.govde; res(r); } catch (e) { res({ kod: 500, govde: s, basliklar: [], hata: 'JSON bozuk' }); }
     });
+    COCUKLAR.add(cocuk); cocuk.on('close', () => COCUKLAR.delete(cocuk));
   });
 }
 
@@ -48,6 +51,9 @@ const kokYol = h => h.replace(/(href|src|action)="(?:\.\.?\/)+((?:assets\/|kasa_
 /** @param {{db:string, sid?:string, admin?:boolean}} o @returns {Promise<{url:string, kapat:()=>Promise<void>, istekler:any[]}>} */
 async function baslat(o) {
   const istekler = [];
+  // Oturum dosyası (sys_get_temp_dir()/sess_<sid>) koşular arası PAYLAŞILMASIN: sid her başlatmada benzersiz (önceki/eşzamanlı koşunun artık flash'ı ya da kilidi karışmaz).
+  const sid = String((o.sid || 'kasaE2E')).replace(/[^A-Za-z0-9]/g, '') + process.pid.toString(36) + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const t0 = Date.now(), izle = !!process.env.E2E_IZLE;
   let kuyruk = Promise.resolve();   // PHP istekleri sırayla (SQLite kilidi)
   const srv = http.createServer((rq, rs) => {
     const u = new URL(rq.url, 'http://x'), ad = u.pathname.replace(/^\/+/, '');
@@ -65,9 +71,11 @@ async function baslat(o) {
       const server = { REQUEST_METHOD: rq.method };
       if (rq.headers['x-requested-with']) server.HTTP_X_REQUESTED_WITH = rq.headers['x-requested-with'];
       if (rq.headers.accept) server.HTTP_ACCEPT = rq.headers.accept;
-      const spec = { depolar: o.depolar, dosya: ad, get, post, server, admin: o.admin !== false, sid: o.sid || 'kasaE2E', db: o.db, perms: ['reports.export', 'records.read'] };
-      kuyruk = kuyruk.then(() => phpIstek(spec)).then(r => {
-        istekler.push({ yontem: rq.method, url: rq.url, kod: r.kod, post, hata: r.hata || null, ham: r.govde.length < 4000 ? r.govde : null });
+      const spec = { depolar: o.depolar, dosya: ad, get, post, server, admin: o.admin !== false, sid, db: o.db, perms: ['reports.export', 'records.read'] };
+      const gelis = Date.now();
+      kuyruk = kuyruk.then(() => { const b = Date.now(); return phpIstek(spec).then(r => { r.sure = Date.now() - b; r.bekleme = b - gelis; return r; }); }).then(r => {
+        istekler.push({ yontem: rq.method, url: rq.url, kod: r.kod, post, hata: r.hata || null, sure: r.sure, bekleme: r.bekleme, ham: r.govde.length < 4000 ? r.govde : null });
+        if (izle) console.error('[köprü +' + (Date.now() - t0) + 'ms] ' + rq.method + ' ' + rq.url + ' → ' + r.kod + ' (php ' + r.sure + 'ms, kuyrukta ' + r.bekleme + 'ms)' + (r.hata ? ' HATA ' + r.hata : ''));
         const bas = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' };
         for (const h of r.basliklar || []) { const i = h.indexOf(':'); if (i > 0) bas[h.slice(0, i).trim()] = h.slice(i + 1).trim(); }
         for (const k of Object.keys(bas)) if (/^(set-cookie|cache-control)$/i.test(k) && k !== 'Cache-Control') delete bas[k];
@@ -75,10 +83,10 @@ async function baslat(o) {
         if (/html/i.test(bas['Content-Type'])) g = kokYol(g);
         if (r.hata) { rs.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); return rs.end('PHP HATA: ' + r.hata + '\n' + g.slice(0, 3000)); }
         rs.writeHead(r.kod || 200, bas); rs.end(g);
-      });
+      }).catch(e => { try { rs.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); rs.end('KÖPRÜ HATA: ' + (e && e.message)); } catch (x) { /* soket kapalı */ } });   // kuyruk zinciri ASLA reddedilmiş kalmaz (kalsaydı sonraki tüm istekler sonsuza dek beklerdi)
     });
   });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
-  return { url: 'http://127.0.0.1:' + srv.address().port, istekler, kapat: () => new Promise(r => srv.close(() => r())) };
+  return { url: 'http://127.0.0.1:' + srv.address().port, istekler, kapat: () => new Promise(r => { for (const c of COCUKLAR) { try { c.kill('SIGKILL'); } catch (e) { /* bitti */ } } try { srv.closeAllConnections(); } catch (e) { /* eski Node */ } srv.close(() => r()); try { fs.unlinkSync(path.join(require('os').tmpdir(), 'sess_' + sid)); } catch (e) { /* yok */ } }) };
 }
 module.exports = { baslat };

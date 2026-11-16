@@ -23,15 +23,16 @@ const { baslat } = require('./_kasa_e2e_sunucu.js');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'kasa_ui_'));
 const SHOT = process.env.KASA_SHOT || '';
 let fail = 0, n = 0, dbNo = 0;
-const ok = (ad, k, ip) => { n++; if (!k) fail++; console.log(ad.padEnd(100) + (k ? 'OK' : '*** FAIL' + (ip !== undefined ? '\n    → ' + ip : ''))); };
+let sonAd = '';
+const ok = (ad, k, ip) => { n++; sonAd = ad.slice(0, 70); if (!k) fail++; console.log(ad.padEnd(100) + (k ? 'OK' : '*** FAIL' + (ip !== undefined ? '\n    → ' + ip : ''))); };
 const bekle = ms => new Promise(r => setTimeout(r, ms));
 const hatalar = [];
 
 async function ortam(mod) {
   const db = path.join(TMP, 'kasa' + (++dbNo) + '.sqlite');
-  execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_setup.php'), db, mod || 'fisler'], { cwd: ROOT, stdio: 'pipe' });
+  execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_setup.php'), db, mod || 'fisler'], { cwd: ROOT, stdio: 'pipe', timeout: 60000 });
   const srv = await baslat({ db, sid: 'kasaE2E' + dbNo, depolar: ['Merkez Depo'] });
-  srv.say = () => JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_say.php'), db], { cwd: ROOT }).toString());
+  srv.say = () => JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_say.php'), db], { cwd: ROOT, timeout: 60000 }).toString());
   srv.sayi = re => srv.istekler.filter(i => re.test(i.yontem + ' ' + i.url)).length;
   return srv;
 }
@@ -69,8 +70,24 @@ const kucukHedef = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(
 const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k + ' input:not([type=hidden]):not([type=checkbox]), ' + k + ' select, ' + k + ' textarea')]
   .filter(e => e.getClientRects().length).filter(e => parseFloat(getComputedStyle(e).fontSize) < 16).map(e => e.name || e.id || e.type), kapsam);
 
+// ── Sağlamlık: hiçbir bekleme sonsuza dek sürmez ─────────────────────────────────────────────
+let browser; const sunucular = [];
+async function temizle() {   // tarayıcı + köprü sunucuları + geçici klasör; her adım zaman sınırlı (asılırsa atlanır)
+  if (browser) await Promise.race([browser.close().catch(() => {}), bekle(10000)]);
+  for (const s of sunucular) { try { await Promise.race([s.kapat(), bekle(3000)]); } catch (e) { /* kapanış */ } }
+  try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* geçici */ }
+}
+const SURE_MS = +(process.env.KASA_UI_SURE_MS || 240000);   // tüm koşu için üst sınır
+setTimeout(async () => {
+  console.log('\n*** ZAMAN AŞIMI: koşu ' + SURE_MS / 1000 + ' sn içinde bitmedi (son adım: ' + n + '. — "' + sonAd + '") — tarayıcı/köprü kapatılıp çıkılıyor');
+  await temizle(); process.exit(2);
+}, SURE_MS).unref();
+let kapaniyor = false;
+const olumcul = async (e) => { if (kapaniyor) return; kapaniyor = true; console.log('\n*** BEKLENMEYEN HATA (süreç düzeyi): ' + (e && e.stack || e)); await temizle(); process.exit(1); };
+process.on('unhandledRejection', olumcul); process.on('uncaughtException', olumcul);
+process.on('SIGTERM', async () => { console.log('\n*** SIGTERM alındı — temizlenip çıkılıyor'); await temizle(); process.exit(143); });
+
 (async () => {
-  let browser; const sunucular = [];
   try {
     browser = await pw.chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
@@ -403,7 +420,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
       const tutarCoz = new Function(src.slice(a0, b0) + '; return tutarCoz;')();
       const girdiler = ['1.234', '12.345', '1.5', '1,5', '1.234,5', '1,234.56', '1.234.567', '0,005', '1 234,56', '-5', '1e3', '1.234,56', '100', '0,01', '1.00', '10.50', '1.000.000,00', '1,2,3', '12,345', '1.23', '123.456,789', ' 5 ', '٥', '1.2345',
         '1,500', '999,999', '0,500', '1.500', '1.500,00', '1500', '1,50', '100,000', '1,000,000', '-1,500', '', ' ', 'abc', '0', '0,00', '1.500 TL', '₺1.500,00', '2.50 tl', '1,15', '19,99', '4,35', '0,07', '0,015', '999.999.999.999,99', '1.000.000.000.000,00', '1.234,5.6', ',5', '5,', '.5', '1.5.5', '12,34,567', '1 500,25', '1 500,25', '7,000', '10,000'];
-      const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_tutar.php'), path.join(TMP, 'tutar.sqlite'), JSON.stringify(girdiler)], { cwd: ROOT }).toString());
+      const php = JSON.parse(execFileSync('php', [path.join(__dirname, 'kasa_ui_e2e_tutar.php'), path.join(TMP, 'tutar.sqlite'), JSON.stringify(girdiler)], { cwd: ROOT, timeout: 60000 }).toString());
       const farklar = girdiler.filter(g => { const j = tutarCoz(g), q = php[g]; return j.k !== q.k || j.belirsiz !== q.belirsiz || j.mesaj !== q.mesaj; }).map(g => JSON.stringify(g) + ' JS=' + JSON.stringify(tutarCoz(g)) + ' PHP=' + JSON.stringify(php[g]));
       ok('tutar çözümü: JS tutarCoz ile PHP kasa_tutar_coz ' + girdiler.length + ' girdide BİREBİR aynı (kuruş + belirsiz + mesaj)', farklar.length === 0, farklar.join('\n    → '));
       ok('belirsiz kalıp iki tarafta da "belirsiz": 1,500 · 12,345 · 100,000; "0,500" belirsiz değil (50 kuruş); "1,234.56" = 123456', tutarCoz('1,500').belirsiz && tutarCoz('12,345').belirsiz && tutarCoz('100,000').belirsiz && !tutarCoz('0,500').belirsiz && tutarCoz('0,500').k === 50 && tutarCoz('1,234.56').k === 123456 && php['1,500'].belirsiz && php['0,500'].k === 50);
@@ -485,9 +502,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
   } catch (e) {
     fail++; console.log('*** İSTİSNA: ' + (e && e.stack || e));
   } finally {
-    if (browser) await browser.close();
-    for (const s of sunucular) { try { await s.kapat(); } catch (x) { /* kapandı */ } }
-    try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (x) { /* önemsiz */ }
+    kapaniyor = true; await temizle();
   }
   console.log('\n' + (n - fail) + ' geçti, ' + fail + ' kaldı (' + n + ' adım)');
   process.exit(fail ? 1 : 0);
