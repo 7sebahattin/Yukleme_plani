@@ -32,6 +32,8 @@ require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yaln
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -133,6 +135,8 @@ $frg_results = []; $frg_ran = false;                            // Frugro Sipari
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
+$kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
+$ceksenet_results = []; $ceksenet_ran = false;                  // Çek-Senet (3 yeni tablo)
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
@@ -372,6 +376,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($fatura_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'fatura', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kasa') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kasa_ran     = true;
+    $kasa_results = kasa_migrate($pdo);
+    foreach ($kasa_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'kasa', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'ceksenet') {
+    csrf_check($_POST['csrf'] ?? null);
+    $ceksenet_ran     = true;
+    $ceksenet_results = ceksenet_migrate($pdo);
+    foreach ($ceksenet_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'ceksenet', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -936,6 +958,60 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="fatura">
       <button type="submit" class="btn btn-primary">Fatura Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kasa'); ?>
+    <h2 style="margin-top:0;">Kasa</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>kasa_kartlar</code> (nakit kasa + banka hesabı), <code>kasa_hareketler</code> (değişmez defter) ve <code>kasa_tanimlar</code>
+      (gelir / gider kalemleri) tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve gelir / gider kalemlerini bir kez tohumlar.
+      Kasa; cari tahsilat / ödeme için Cari İşlemler tablolarını kullanır — önce o kart çalıştırılmalıdır.
+      Çalıştırılmazsa Kasa sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($kasa_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($kasa_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $kasaOnkosul = array_values(array_filter([cari_hazir($pdo) ? null : 'Cari İşlemler'])); ?>
+    <?php if ($kasaOnkosul): ?>
+    <p style="color:#b7791f;font-size:.9em;">⚠ Önce şu kart(lar) çalıştırılmalı: <?= h(implode(', ', $kasaOnkosul)) ?> — tablolar kurulabilir ama Kasa sayfaları bu şema olmadan açılmaz.</p>
+    <?php endif; ?>
+    <?php $kasaHazir = kasa_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $kasaHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $kasaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kasa">
+      <button type="submit" class="btn btn-primary">Kasa Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('ceksenet'); ?>
+    <h2 style="margin-top:0;">Çek-Senet</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>ceksenet_kayitlar</code> (alınan / verilen çek ve senetler), <code>ceksenet_hareketler</code> (değişmez durum geçmişi) ve
+      <code>ceksenet_tanimlar</code> (bankalar + çek karneleri) tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve bankaları bir kez tohumlar.
+      Çek-Senet; cari dekontları için Cari İşlemler, tahsilat / ödeme için Kasa tablolarını kullanır — önce o kartlar çalıştırılmalıdır.
+      Çalıştırılmazsa Çek-Senet sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($ceksenet_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($ceksenet_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $csOnkosul = array_values(array_filter([cari_hazir($pdo) ? null : 'Cari İşlemler', kasa_hazir($pdo) ? null : 'Kasa'])); ?>
+    <?php if ($csOnkosul): ?>
+    <p style="color:#b7791f;font-size:.9em;">⚠ Önce şu kart(lar) çalıştırılmalı: <?= h(implode(', ', $csOnkosul)) ?> — tablolar kurulabilir ama Çek-Senet sayfaları bu şemalar olmadan açılmaz.</p>
+    <?php endif; ?>
+    <?php $csHazir = ceksenet_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $csHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $csHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="ceksenet">
+      <button type="submit" class="btn btn-primary">Çek-Senet Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v527` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v528` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -34,6 +34,8 @@ Sürüm sürüm modül kuralları token tasarrufu için `.claude/skills/<ad>/SKI
 | `cari-modulu` | Cari İşlemler (cari_*; ledger, tahsilat/virman, ekstre) |
 | `stok-modulu` | Stok (muhasebe; stok_*; INSERT-only defter, ortalama maliyet, tanımlar) |
 | `fatura-modulu` | Fatura (satış/alış faturası, müstahsil, irsaliye, sipariş fişi; fatura_*; dönüşüm, kalan, tanımlar, yazdır) |
+| `kasa-modulu` | Kasa (kasa_*; nakit kasa + banka hesabı, INSERT-only defter, tahsilat/tediye/virman, cari bağı, yazdır) |
+| `cek-senet` | Çek-Senet (cek_*/senet_*/ceksenet_*; alınan/verilen çek + senet, durum makinesi, bordro, ortalama vade) |
 
 ---
 
@@ -60,6 +62,8 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Cari İşlemler (yalnız admin) | `cari_kartlari` · `cari_fisler` · `cari_dekontlar` · `cari_tanimlari` · `cari_ekstre` · `cari_kaydet` (TEK yazma ucu, POST) | `cari_core` · `cari_ui` | `cari.css` · `cari.js` | `cari_{core,gate_static,ui}_smoke` · `cari_ui_smoke.js` (gerçek PHP köprüsü) |
 | Stok (muhasebe, yalnız admin; v524) | `stok_kartlari` · `stok_tanimlari` · `stok_kaydet` (TEK yazma ucu, POST) · fiş sayfaları `stok_giris/cikis/donusum_fisleri` + `transfer_fisleri` (giriş/çıkış/transfer/dönüşüm; cari dekont bağı `cari_hareket_ekle($kaynak)`) | `stok_core` · `stok_ui` | `stok.css` · `stok.js` | `stok_{core,gate_static,ui}_smoke` · `stok_ui_smoke.js` |
 | Fatura (yalnız admin; v527) | `satis_faturalari` · `alis_faturalari` · `sevk_irsaliyeleri` · `alinan_siparis_fisleri` · `fatura_tanimlari` · `fatura_kaydet` (TEK yazma ucu, POST) · `fatura_cikti` (yazdır / liste xlsx-csv, GET) | `fatura_core` · `fatura_ui` | `fatura.css` · `fatura.js` | `fatura_{core,gate_static,ui}_smoke` · `fatura_ui_smoke.js` |
+| Kasa (yalnız admin; v528) | `kasa_fisleri` · `kasa_tanimlari` · `kasa_kaydet` (TEK yazma ucu, POST) · `kasa_cikti` (kasa defteri yazdır / xlsx-csv, GET) | `kasa_core` · `kasa_ui` | `kasa.css` · `kasa.js` | `kasa_{core,gate_static,ui}_smoke` · `kasa_ui_smoke.js` |
+| Çek-Senet (yalnız admin; v528) | `cek_dekontu` · `senet_dekontu` · `cek_tanimlari` · `cek_kaydet` (TEK yazma ucu, POST) · `cek_cikti` (bordro yazdır / liste xlsx-csv, GET) | `ceksenet_core` · `ceksenet_ui` | `ceksenet.css` · `ceksenet.js` | `ceksenet_{core,gate_static,ui}_smoke` · `ceksenet_ui_smoke.js` |
 | Yönetim | `definitions` · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
 | **Kaldırılan / 410 tombstone** | `admin_db_backup_download` · `hesap_sahipsiz` · `depo_tasima` · `firma_eslestirme` · `fix_brand` · `repair_xz_tables` · `faz8b_migrate` · `record_new` | — | — | `rol_kapilari_smoke` (değişmezleri denetler) |
 | Klasörler | `scripts/` (testler + `create_admin_user`, `deploy*`, `db_backup_cron`) · `scripts/arsiv/` (biten tek seferlik araçlar; çalıştırılmaz) · `docs/` · `docs/arsiv/` (biten faz/sprint belgeleri) · `tools/arsiv/` · `templates/excel/` · `storage/` (yedekler) · `uploads/` · `vendor/` | | | |
@@ -231,6 +235,8 @@ cari_kartlar / cari_hareketler / cari_tanimlar  -- Cari İşlemler (hareketler D
 hks_eslesme         -- Serbest metin ↔ HKS katalog id eşlemeleri (öğrenilen)
 stok_kartlar / stok_tanimlar / stok_fisler / stok_fis_satirlar / stok_hareketler  -- Stok (muhasebe; hareketler INSERT-only defter, stok.php/malzemeden bağımsız; şema yalnız migrate.php kartı)
 fatura_belgeler / fatura_satirlar / fatura_tanimlar  -- Fatura (8 belge türü tek başlıkta; satırlar INSERT-only; kalan miktar türetilir; şema yalnız migrate.php "Fatura" kartı)
+kasa_kartlar / kasa_hareketler / kasa_tanimlar  -- Kasa (nakit kasa + banka hesabı = tip='banka' kart; hareketler INSERT-only defter; cari bağı `cari_hareket_ekle`; şema yalnız migrate.php "Kasa" kartı)
+ceksenet_kayitlar / ceksenet_hareketler / ceksenet_tanimlar  -- Çek-Senet (4 tür tek şemada; hareketler INSERT-only geçmiş; durum makinesi `ceksenet_islemler()`; cari + kasa bağı; şema yalnız migrate.php "Çek-Senet" kartı)
 ```
 
 **Auto-migration:** `config/db.php` açılışta `type` kolonu ve index'leri ekler.
@@ -276,12 +282,13 @@ $net  = round(max(0, $brut - $dara), 3);
 
 ### Şema Migrasyon Paneli görünümü (v388)
 
-`migrate.php` kartları (30 adet) `mg_kart_ac('<id>')` / `mg_kart_kapat()` ile sarılır: kartın KENDİ çıktısında `✓` var ve `✗` yoksa kart **hazır** sayılır → kapalı `<details>` tek satıra iner (başlık + "✓ Hazır" rozeti); eksik olan AÇIK kalır. Üstte "N / <toplam> kart hazır" özeti + "Tümünü aç" düğmesi; `migrate.php#siparis-sofor` gibi bağlantılar kapalı kartı açar. **POST sonrası hiçbir kart kapanmaz** (migrasyon sonuç satırları görünsün). **Hiçbir kart / POST dalı / migrasyon fonksiyonu KALDIRILMADI** — ayrı veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur; birçok statik smoke (`ne=` dalları, tek çağıran = migrate.php) bunu sabitler. Yeni kart eklerken `<div class="card" …>` yerine `<?php mg_kart_ac('id'); ?>` … `<?php mg_kart_kapat(); ?>` kullan ve kartın çıktısına durum için `✓`/`✗` bas (hazırsa yalnız `✓`). Test: `php scripts/migrate_panel_smoke.php` (migrate.php'yi bellek içi SQLite'ta gerçekten çalıştırır).
+`migrate.php` kartları (32 adet) `mg_kart_ac('<id>')` / `mg_kart_kapat()` ile sarılır: kartın KENDİ çıktısında `✓` var ve `✗` yoksa kart **hazır** sayılır → kapalı `<details>` tek satıra iner (başlık + "✓ Hazır" rozeti); eksik olan AÇIK kalır. Üstte "N / <toplam> kart hazır" özeti + "Tümünü aç" düğmesi; `migrate.php#siparis-sofor` gibi bağlantılar kapalı kartı açar. **POST sonrası hiçbir kart kapanmaz** (migrasyon sonuç satırları görünsün). **Hiçbir kart / POST dalı / migrasyon fonksiyonu KALDIRILMADI** — ayrı veritabanında (ör. test sitesi) eksik kalan şema yine buradan kurulur; birçok statik smoke (`ne=` dalları, tek çağıran = migrate.php) bunu sabitler. Yeni kart eklerken `<div class="card" …>` yerine `<?php mg_kart_ac('id'); ?>` … `<?php mg_kart_kapat(); ?>` kullan ve kartın çıktısına durum için `✓`/`✗` bas (hazırsa yalnız `✓`). Test: `php scripts/migrate_panel_smoke.php` (migrate.php'yi bellek içi SQLite'ta gerçekten çalıştırır).
 
 ## Muhasebe Yer Tutucu Sayfaları (v435 → v439)
 
 > **Stok grubunun sayfaları (`stok_kartlari` / `stok_tanimlari` + 4 fiş sayfası `stok_giris/cikis/donusum_fisleri`, `transfer_fisleri`) çalışan modüldür (v524; `stok-modulu` skill'i)**; `kantar_fisleri` 302 kalır (kantar yalnız "Kantardan doldur" ile SALT okunur). `nav_muhasebe_static_smoke` `stok_core` içerenleri ayrı denetler.
 > **Fatura grubunun 5 sayfası (`satis_faturalari` · `alis_faturalari` · `sevk_irsaliyeleri` · `alinan_siparis_fisleri` · `fatura_tanimlari`) çalışan modüldür (v527; `fatura-modulu` skill'i)**; `alinan_siparis_fisleri` artık 302 DEĞİL (Ürün Siparişleri `urun_siparis.php` ayrı kalır). `nav_muhasebe_static_smoke` `fatura_core` içerenleri ayrı denetler.
+> **Kasa grubunun 2 sayfası (`kasa_fisleri` · `kasa_tanimlari`) ve Çek-Senet grubunun 3 sayfası (`cek_dekontu` · `senet_dekontu` · `cek_tanimlari`) çalışan modüldür (v528; `kasa-modulu` / `cek-senet` skill'leri)**; kapı yine `is_admin()`. `nav_muhasebe_static_smoke` bunları `kasa_core` / `ceksenet_core` içerenler olarak ayrı denetler.
 > **Cari İşlemler grubunun 4 sayfası (`cari_kartlari/fisler/dekontlar/tanimlari`) artık ÇALIŞAN modüldür** (yer tutucu değil; `cari-modulu` skill'i) — kapı yine `is_admin()`; `nav_muhasebe_static_smoke` bunları `cari_core` içerenler olarak ayrı denetler.
 
 Sidebar'daki Cari İşlemler vb. gruplar (yalnız `is_admin()`) `nav_muhasebe_gruplari()` (config/helpers.php) TEK kaynağından beslenir; yeni sayfa BURAYA eklenir. Her sayfa `require_login()` + `is_admin()` kapısı taşır; içerik yoksa "Bu bölüm hazırlanıyor." kartı. **v439: mevcut klonu olan 11 sayfa 302 ile o sayfaya yönlendirir** (kapı kalır): kantar_fisleri, mal_kabul_fisleri → `kantar.php` · veritabani_islemleri → `admin_db_backups.php` · kullanici_tanimlari → `users.php` · depo_tanimlari → `definitions.php?type=depo` · raporlar_listeler → `reports.php` · arac_yukleme_fisleri → `records.php` · palet_fisleri → `cikmalar.php` · ihracat_faturasi_maliyeti → `maliyet.php` · beyanname_siparis_proforma → `beyanlar.php` · sube_degistirme → `depo_sec.php`. Diğerleri yer tutucu kalır. `nav_aktif_anahtar()` bu sayfalarda dosya slug'ı döndürür. `sw.js` `SW_MUHASEBE_RE` bu adları önbelleğe almaz (stok.php/kantar.php vb. kapsanmaz). Test: `php scripts/nav_muhasebe_static_smoke.php`.

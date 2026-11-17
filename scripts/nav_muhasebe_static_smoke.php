@@ -63,6 +63,18 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
             ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/kasa_core.php')) {
+            // Çalışan modül (Kasa, kasa_* sayfaları — v528): şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
+            ok("$dosya: çalışan modül — kasa_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'kasa_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/ceksenet_core.php')) {
+            // Çalışan modül (Çek-Senet, cek_* / senet_* sayfaları — v528): şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
+            ok("$dosya: çalışan modül — ceksenet_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'ceksenet_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
