@@ -406,4 +406,32 @@ ok('ortak fonksiyon: geçersiz dosya → hata durumu (elle yükleme ile aynı me
 $src = file_get_contents($ROOT . '/config/siparis_mail.php');
 ok('config/siparis_mail.php siparis_dosya_kaydet / siparis_belge_isle\'yi DOĞRUDAN çağırmıyor (tek yazma yolu)', !preg_match('/\b(siparis_dosya_kaydet|siparis_belge_isle)\s*\(/', $src));
 
+echo "\n=== J. v529: 🔔 bildirim akışı + otomatik sorgu ===\n";
+$zl = siparis_bildirim_liste($db, 'DEPO1', true, 100);
+ok('J1 önceki taramalar akışa yazıldı: PO/PC alındı → sevkiyat olayları (en yeni önce, id artan)', count($zl) >= 2 && $zl[0]['id'] > $zl[count($zl) - 1]['id'] && (bool)array_filter($zl, static fn($b) => str_contains($b['metin'], '(PO)') || str_contains($b['metin'], 'Fiyat onayı')), json_encode(array_slice($zl, 0, 3), JSON_UNESCAPED_UNICODE));
+ok('J1 bağlantılar yalnız beyaz listeli iç sayfalar', !array_filter($zl, static fn($b) => !preg_match('~^(siparis_view\.php\?id=\d+|siparis_belge\.php\?id=\d+|siparis_odemeler\.php.*|siparisler\.php)$~', $b['link'])));
+ok('J1 başka depo aktifken sevkiyat olayları görünmez', siparis_bildirim_liste($db, 'BASKA_DEPO', true) === []);
+$og = siparis_bildirim_ogeleri('siparis', [
+    ['durum' => 'alindi', 'tur' => 'po', 'sevkiyatlar' => [['id' => 5, 'order_ref' => 'TC1.10', 'yeni' => true], ['id' => 6, 'order_ref' => 'TC2.10', 'yeni' => false]], 'catisma' => 1],
+    ['durum' => 'zaten', 'tur' => 'po', 'sevkiyatlar' => [['id' => 7, 'order_ref' => 'TC3.10', 'yeni' => false]]],
+    ['durum' => 'alindi', 'tur' => 'odeme', 'odeme' => ['debit' => true, 'yeni' => 2, 'kurus' => 30000, 'pb' => 'EUR', 'eslesmeyen' => 1]],
+    ['durum' => 'alindi', 'tur' => 'odeme', 'odeme' => ['id' => 9, 'tutar_kurus' => 123456, 'pb' => 'EUR', 'tarih' => '2026-11-09']],
+]);
+ok('J2 öğeler: yalnız alindi; yeni sevkiyat 🆕, güncellenen 🔄 + çatışma, debit 📉, avizo 💶', count($og) === 4 && $og[0]['ikon'] === '🆕' && str_contains($og[0]['metin'], 'Yeni sevkiyat: TC1.10') && $og[1]['ikon'] === '🔄' && str_contains($og[1]['metin'], '⚠ 1 çatışma')
+    && $og[2]['ikon'] === '📉' && str_contains($og[2]['metin'], '300,00 EUR') && $og[3]['ikon'] === '💶' && str_contains($og[3]['metin'], '1.234,56 EUR') && $og[3]['link'] === 'siparis_odemeler.php?aviz=9#odAviz', json_encode($og, JSON_UNESCAPED_UNICODE));
+siparis_bildirim_ekle($db, $og, 'DEPO1', strtotime($SIMDI));
+ok('J3 ödeme/debit olayları cari yetkisi olmayana görünmez', !array_filter(siparis_bildirim_liste($db, 'DEPO1', false, 100), static fn($b) => in_array($b['ikon'], ['📉', '💶'], true))
+    && count(array_filter(siparis_bildirim_liste($db, 'DEPO1', true, 100), static fn($b) => in_array($b['ikon'], ['📉', '💶'], true))) === 2);
+for ($i = 0; $i < 30; $i++) siparis_bildirim_ekle($db, $og, 'DEPO1', strtotime($SIMDI));
+$kvB = siparis_mail_kv_oku($db, SIPARIS_BILDIRIM_KV);
+ok('J4 akış en çok ' . SIPARIS_BILDIRIM_MAX . ' olay tutar; seq artmaya devam eder', count($kvB['liste']) === SIPARIS_BILDIRIM_MAX && $kvB['seq'] > SIPARIS_BILDIRIM_MAX);
+$zh = sipui_zil_html([['id' => 1, 't' => '2026-11-20 10:00:00', 'ikon' => '🆕', 'metin' => '</script><img src=x onerror=alert(1)>', 'link' => 'siparisler.php']], 7);
+ok('J5 zil HTML: JSON gömülü, </script> kaçışlı (XSS yok), uid', str_contains($zh, 'data-sip-zil-uid="7"') && !str_contains($zh, '</script><img') && str_contains($zh, 'u003C\/script'));
+$sonO = siparis_mail_son($db, 'siparis');
+ok('J6 otomatik sorgu: son tarama yeniyse (< ' . SIPARIS_MAIL_OTO_DK . ' dk) tür sıraya GİRMEZ, eskiyse girer', siparis_mail_oto_turler($db, ['siparis'], (int)$sonO['bitis'] + 60) === []
+    && siparis_mail_oto_turler($db, ['siparis'], (int)$sonO['bitis'] + SIPARIS_MAIL_OTO_DK * 60) === ['siparis'] && siparis_mail_oto_turler($db, ['yok_tur'], time()) === ['yok_tur']);
+$blokO = sipui_mail_blok_html(['hazir' => true, 'ayarli' => ['siparis' => true, 'lojistik' => false], 'oto' => ['siparis', 'lojistik', '"><x'], 'son' => []]);
+ok('J6 blok: data-sip-mail-oto yalnız AYARLI türler (ayarsız/sahte tür girmez)', str_contains($blokO, 'data-sip-mail-oto="siparis"'));
+ok('J6 blok: yarım tarama varken oto yazılmaz (siparisler.php yarim → [])', !str_contains(sipui_mail_blok_html(['hazir' => true, 'ayarli' => ['siparis' => true], 'oto' => [], 'son' => []]), 'data-sip-mail-oto'));
+
 siparis_test_bitir();

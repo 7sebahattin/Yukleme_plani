@@ -30,7 +30,7 @@ $core = oku('config/siparis_core.php'); $migrate = oku('migrate.php'); $auth = o
 $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
-$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_denge.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_invoice.php', 'siparis_kaydet.php',
+$BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_denge.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_invoice.php', 'siparis_kaydet.php', 'siparis_kesinti.php',
              'siparis_mail.php', 'siparis_odeme.php', 'siparis_odemeler.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
@@ -277,7 +277,7 @@ ok('v401 Cari Döküm: ödeme formu/iptal yok, liste + tahsilat kalır', !str_co
 ok('v401 siparisler.php: Ödeme ekle → siparis_odemeler.php (siparis_cari_yetkili kapılı); "+ Belge yükle" yok; #yukle kartı duruyor',
     (bool)preg_match('/<\?php if \(siparis_cari_yetkili\(\) && icerik_can\(\'siparis\.odeme\'\)\): \?>\s*<a class="btn btn-primary btn-lg" href="siparis_odemeler\.php">/u', $sl) && !str_contains($sl, '+ Belge yükle') && str_contains($sl, 'id="yukle"'));
 ok('v401 sw bypass + $a_sip', preg_match($swPcre, '/siparis_odemeler.php') === 1 && (bool)preg_match("/\\\$a_sip\s+= in_array\(\\\$cur, \[[^\]]*'siparis_odemeler\.php'/", $helpers));
-ok('v401 siparis.js data-od-* delege + afterprint; css od-yazdir-modu', str_contains(oku('assets/siparis.js'), "'[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir]'") && str_contains(oku('assets/siparis.js'), 'afterprint')
+ok('v401 siparis.js data-od-* delege + afterprint; css od-yazdir-modu', str_contains(oku('assets/siparis.js'), "'[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir],[data-od-kesinti]'") && str_contains(oku('assets/siparis.js'), 'afterprint')
     && str_contains(oku('assets/siparis.css'), 'body.od-yazdir-modu #odYazdirAlan'));
 
 echo "\n=== v448: Fiyat Dengeleme (siparis_denge.php) + Cari Döküm fatura sütunları ===\n";
@@ -391,7 +391,7 @@ ok('v492 config/siparis_debit.php: doğrudan istek → 404 (tam yol), e-posta li
 ok('v492 siparis_mail.php debit dalı: siparis_debit_isle( çağırıyor, ödeme dalında siparis_odeme_ekle( YOK', str_contains($sm, 'siparis_debit_isle(') && !preg_match('/siparis_odeme_ekle\(/', $smOdeme));
 preg_match('/function siparis_pdf_tur_kodu\b.*?\n\}/s', $eslKod, $tk);
 ok('siparis_pdf_tur_kodu() payment_advice / odeme İÇERMİYOR (odeme mail-katmanı tür kodu: siparis_mail_belge_tur_kodu)', !empty($tk[0]) && !str_contains($tk[0], 'payment_advice') && !str_contains($tk[0], "'odeme'") && str_contains($sm, "['payment_advice', 'debit_note'], true) ? 'odeme'"));   // v492: debit note da 'odeme' mail-katmanı türü
-ok("SIPARIS_PDF_SURUM hâlâ 'v4' (bump edilmedi; avizo sürümü SIPARIS_ODEME_AVIZO_SURUM ayrı)", str_contains($core490, "const SIPARIS_PDF_SURUM = 'v4'") && str_contains($av, "const SIPARIS_ODEME_AVIZO_SURUM = 'a2'"));   // v492: debit note desteği → a2
+ok("SIPARIS_PDF_SURUM hâlâ 'v4' (bump edilmedi; avizo sürümü SIPARIS_ODEME_AVIZO_SURUM ayrı)", str_contains($core490, "const SIPARIS_PDF_SURUM = 'v4'") && str_contains($av, "const SIPARIS_ODEME_AVIZO_SURUM = 'a3'"));   // v492: debit note → a2; v529: çok sayfalı + Invoice biçimli debit → a3
 ok('baslat/adim/vazgec ödeme kapısı fail-closed: siparis_mail_odeme_yetkisi( en az 3 yerde çağrılıyor + function_exists korumalı', substr_count($sm, 'siparis_mail_odeme_yetkisi()') >= 4 && str_contains($sm, "function_exists('siparis_cari_yetkili') && function_exists('siparis_odeme_yetkili')"));
 ok('siparisler.php: düğme/son sonuç/yarım tarama yalnız siparis_mail_tur_yetkisi( ile süzülmüş türler için', str_contains(kod_oku('siparisler.php'), 'siparis_mail_tur_yetkisi($t)') && str_contains(kod_oku('siparisler.php'), 'in_array($mY[\'tur\'], $mTurler, true)'));
 ok('siparis_ayarlar.php: g_odeme post\'u + textarea (listeyi sessizce boşaltmaz)', str_contains(oku('siparis_ayarlar.php'), "'odeme' => (string)(\$_POST['g_odeme'] ?? '')") && str_contains(oku('siparis_ayarlar.php'), "'g_odeme'"));
@@ -419,6 +419,18 @@ preg_match("/CACHE_NAME = 'yukleme-plani-(v\d+)'/", $sw, $m2);
 ok('APP_SURUM == sw.js CACHE_NAME', ($m1[1] ?? 'a') === ($m2[1] ?? 'b'), (($m1[1] ?? '?') . ' / ' . ($m2[1] ?? '?')));
 ok('sürüm ≥ v371 (Siparişler modülünün sürümü)', (int)ltrim($m1[1] ?? 'v0', 'v') >= 371);
 ok('CLAUDE.md üst satırı aynı sürümü taşıyor', str_contains(oku('CLAUDE.md'), '`yukleme-plani-' . ($m1[1] ?? '?') . '`'));
+
+echo "\n=== v529: OGL kesintisi elle (siparis_kesinti.php) ===\n";
+$kes = kod_oku('siparis_kesinti.php');
+$kesMut = min(array_filter([strpos($kes, 'siparis_debit_elle_ekle('), strpos($kes, 'siparis_debit_bagla('), strpos($kes, 'siparis_debit_iptal(')], 'is_int'));
+ok('v529 uç: sıra csrf → read → cari+ödeme yetkisi → mutasyon', strpos($kes, 'csrf_check(') !== false && strpos($kes, 'csrf_check(') < $kesMut
+    && strpos($kes, 'siparis_odeme_yetkili()') !== false && strpos($kes, 'siparis_odeme_yetkili()') < $kesMut && strpos($kes, 'siparis_cari_yetkili()') < $kesMut);
+ok('v529 uç: mutasyon yalnız POST dalında (GET yalnız PDF sunar)', (bool)preg_match("/REQUEST_METHOD'\]\s*!==\s*'POST'/", $kes) && strpos($kes, 'readfile(') < strpos($kes, 'csrf_check('));
+ok('v529 uç: PRG → siparis_odemeler.php#odDebit; fonksiyon tanımlamaz', str_contains($kes, "Location: siparis_odemeler.php") && str_contains($kes, "'#odDebit'") && !preg_match('/\bfunction\s+\w+\s*\(/', $kes));
+ok('v529 sw bypass siparis_kesinti.php (finansal veri SW önbelleğine yazılmaz)', preg_match($swPcre, '/siparis_kesinti.php') === 1);
+$dbtK = kod_oku('config/siparis_debit.php');
+ok('v529 debit: ödeme/belge satırı açmaz (siparis_odeme_ekle / siparis_belgeler INSERT yok)', !str_contains($dbtK, 'siparis_odeme_ekle(') && !preg_match('/INSERT\s+INTO\s+siparis_belgeler/i', $dbtK));
+ok('v529 Ödemeler sayfası kesinti formu siparis_kesinti.php\'ye multipart POST', str_contains(oku('siparis_odemeler.php'), 'action="siparis_kesinti.php" enctype="multipart/form-data"'));
 
 echo "\n";
 printf("%d geçti, %d başarısız\n", $pass, $fail);

@@ -163,8 +163,74 @@ $dk = (string)file_get_contents($ROOT . '/config/siparis_debit.php');
 ok('config/siparis_debit.php: siparis_odemeler / siparis_belgeler yazımı YOK; ödeme ekleme (siparis_odeme_ekle) çağrısı YOK', !preg_match('/\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?siparis_(odemeler|belgeler|sevkiyatlar)/i', $dk) && !str_contains($dk, 'siparis_odeme_ekle(') && !str_contains($dk, 'siparis_dosya_yukle_isle('));
 ok('config/siparis_debit.php: mail_ek_hazirla / CREATE|ALTER|DROP TABLE / eval / exec YOK; doğrudan istek 404 (tam yol)', !str_contains($dk, 'mail_ek_hazirla(') && !preg_match('/\b(CREATE|ALTER|DROP)\s+TABLE\b/i', $dk) && !preg_match('/\b(eval|exec|shell_exec|passthru|system|popen|proc_open|unserialize)\s*\(/', $dk) && str_contains($dk, "realpath((string)(\$_SERVER['SCRIPT_FILENAME']"));
 ok('e-posta literali yok (yalnız @ornek.test sentetik)', !preg_match('/[A-Za-z0-9._%+-]+@(?!ornek\.test)[A-Za-z0-9.-]+\.[a-z]{2,}/', $dk));
-ok('SIPARIS_PDF_SURUM DEĞİŞMEDİ (v4); avizo/debit kapı sürümü a2', SIPARIS_PDF_SURUM === 'v4' && SIPARIS_ODEME_AVIZO_SURUM === 'a2');
+ok('SIPARIS_PDF_SURUM DEĞİŞMEDİ (v4); avizo/debit kapı sürümü a3 (v529)', SIPARIS_PDF_SURUM === 'v4' && SIPARIS_ODEME_AVIZO_SURUM === 'a3');
 ok('siparis_pdf_tur_kodu() debit_note / odeme İÇERMİYOR', !preg_match('/function siparis_pdf_tur_kodu\b.*?debit_note.*?\n\}/s', (string)file_get_contents($ROOT . '/config/siparis_eslestir.php')));
+
+echo "\n=== I. v529: çok sayfalı + «Invoice» biçimli debit, elle kesinti ===\n";
+// I1 — çok sayfalı: toplam satırları 2. sayfaya taşınır (OGL "Invoice-Debit Note <no> Page 2 v. 2" devam sayfası)
+$p1 = []; $p2 = [['x' => 29.76, 'y' => 791.5, 'size' => 10, 'text' => 'OGL FOOD TRADE '], ['x' => 300, 'y' => 277, 'size' => 9, 'text' => 'Invoice-Debit Note 2029-100001 Page 2 v. 2']];
+foreach ($pages[1] as $sg) { if (preg_match('/^(Total amount EUR|74,88)$/', $sg['text']) && $sg['y'] > 800) { $sg['y'] -= 470; $p2[] = $sg; } else $p1[] = $sg; }
+$cok = siparis_pdf_parse_debit_note([1 => $p1, 2 => $p2, 3 => $pages[2]]);
+ok('I1 çok sayfalı debit: devam sayfası birleşir → 2 belge, sayfa hatası yok, 74,88 okunur', ($cok['ok'] ?? false) === true && count($cok['notes']) === 2 && $cok['sayfa_hata'] === 0 && $cok['notes'][0]['amount_kurus'] === 7488, json_encode($cok['sayfa_hatalar']));
+$yabanci = $p2; $yabanci[1]['text'] = 'Invoice-Debit Note 2029-999999 Page 2 v. 2';
+ok('I1 başka belge no\'lu devam sayfası birleşmez (ilk belge toplamsız → reddedilir)', siparis_pdf_parse_debit_note([1 => $p1, 2 => $yabanci])['ok'] === false);
+// I2 — "Invoice" biçimli kesinti (kalite / analiz; fatura no + LKW yok)
+$q = [['x' => 30, 'y' => 791, 'size' => 10, 'text' => 'OGL FOOD TRADE '], ['x' => 77, 'y' => 217, 'size' => 9, 'text' => 'Asya Fresh Sebza Meyve Nakliye'],
+    ['x' => 530, 'y' => 292, 'size' => 12, 'text' => 'Invoice'], ['x' => 530, 'y' => 311, 'size' => 9, 'text' => 'Document no. 2029-100500'],
+    ['x' => 530, 'y' => 327, 'size' => 9, 'text' => 'Date'], ['x' => 626, 'y' => 327, 'size' => 9, 'text' => '01.11.2026'],
+    ['x' => 81, 'y' => 488, 'size' => 9, 'text' => 'Lorry/Ship'], ['x' => 180, 'y' => 488, 'size' => 9, 'text' => 'Quality Control'],
+    ['x' => 175, 'y' => 569, 'size' => 9, 'text' => 'DEBIT FOR NON-COMPLIANCE OF SUPPLIERS DECLARATION'],
+    ['x' => 77, 'y' => 592, 'size' => 9, 'text' => '1 300,00'], ['x' => 119, 'y' => 592, 'size' => 9, 'text' => '99800002 1 300,00'],
+    ['x' => 175, 'y' => 592, 'size' => 9, 'text' => 'Analysis of delivered goods non compliance'], ['x' => 421, 'y' => 592, 'size' => 9, 'text' => '1 1 Pc.'],
+    ['x' => 175, 'y' => 629, 'size' => 9, 'text' => 'Service Date: 10/2026'], ['x' => 175, 'y' => 642, 'size' => 9, 'text' => 'Audit Report: 000123'],
+    ['x' => 581, 'y' => 665, 'size' => 9, 'text' => 'Amount EUR 300,00'], ['x' => 554, 'y' => 707, 'size' => 9, 'text' => 'Total amount EUR 300,00'],
+    ['x' => 77, 'y' => 760, 'size' => 9, 'text' => 'For a better handling we shorten the amount by the payment of your invoice.']];
+ok('I2 tür tanıma: OGL «Invoice» + «DEBIT FOR …» + kısaltma notu → debit_note', siparis_pdf_belge_turu([1 => $q]) === 'debit_note');
+$qd = siparis_pdf_parse_debit_note([1 => $q]); $qn = $qd['notes'][0] ?? [];
+ok('I2 kalite kesintisi: 300,00 EUR, fatura no boş, fiyat farkı DEĞİL, audit + hizmet dönemi okunur', ($qd['ok'] ?? false) === true && ($qn['amount_kurus'] ?? 0) === 30000 && ($qn['invoice_no'] ?? 'x') === '' && ($qn['fiyat_farki'] ?? true) === false
+    && ($qn['audit_report'] ?? '') === '000123' && ($qn['service_date'] ?? '') === '10/2026' && ($qn['bicim'] ?? '') === 'invoice', json_encode($qd['sayfa_hatalar'] ?? null));
+$qBaska = $q; $qBaska[1]['text'] = 'Baska Firma';
+ok('I2 alıcı Asya Fresh değil → reddedilir', siparis_pdf_parse_debit_note([1 => $qBaska])['ok'] === false);
+ok('I2 OGL\'nin normal satış faturası (DEBIT satırı yok) debit SAYILMAZ', siparis_pdf_belge_turu([1 => array_values(array_filter($q, static fn($x) => !str_starts_with($x['text'], 'DEBIT')))]) === 'unknown');
+// I3 — elle kesinti (form) + bağla + iptal
+$db->exec("DELETE FROM hks_kv WHERE anahtar LIKE 'siparis_debit_%'");
+$odemeOnce = $denetle('SELECT COUNT(*) FROM siparis_odemeler'); $belgeOnce = $denetle('SELECT COUNT(*) FROM siparis_belgeler');
+$e1 = siparis_debit_elle_ekle($db, ['no' => '2029-100700', 'tarih' => '2026-11-01', 'tutar' => '300,00', 'pb' => 'EUR', 'neden' => 'kalite', 'aciklama' => '<b>LIDL analiz</b>'], null, 1);
+$k1 = siparis_debit_oku($db, '2029-100700');
+ok('I3 elle kalite kesintisi kaydedilir (kaynak elle, fiyat farkı değil, ödeme/belge satırı YOK)', $e1['ok'] && ($k1['kaynak'] ?? '') === 'elle' && ($k1['fiyat_farki'] ?? true) === false && ($k1['amount_kurus'] ?? 0) === 30000
+    && $denetle('SELECT COUNT(*) FROM siparis_odemeler') === $odemeOnce && $denetle('SELECT COUNT(*) FROM siparis_belgeler') === $belgeOnce, $e1['mesaj']);
+ok('I3 aynı belge no ikinci kez → reddedilir (ilk kayıt ezilmez)', !siparis_debit_elle_ekle($db, ['no' => '2029-100700', 'tarih' => '2026-11-01', 'tutar' => '1,00', 'pb' => 'EUR', 'neden' => 'diger'], null, 1)['ok'] && siparis_debit_oku($db, '2029-100700')['amount_kurus'] === 30000);
+foreach ([['no' => '!!', 'm' => 'belge no'], ['tarih' => '2099-01-01', 'm' => 'gelecek'], ['tutar' => 'abc', 'm' => 'tutar'], ['neden' => 'x', 'm' => 'neden'], ['pb' => 'XYZ', 'm' => 'para birimi'], ['invoice_no' => 'ABC', 'm' => 'fatura no']] as $boz) {
+    $m = $boz['m']; unset($boz['m']);
+    ok("I3 doğrulama reddeder: $m", !siparis_debit_elle_ekle($db, $boz + ['no' => '2029-100701', 'tarih' => '2026-11-01', 'tutar' => '5,00', 'pb' => 'EUR', 'neden' => 'fiyat'], null, 1)['ok']);
+}
+$e2 = siparis_debit_elle_ekle($db, ['no' => '2029-100702', 'tarih' => '2026-11-01', 'tutar' => '74,88', 'pb' => 'EUR', 'neden' => 'fiyat', 'anlasilan' => '4,58', 'kesilen' => '4,60', 'sid' => (string)$S2], null, 1);
+$h = siparis_debit_harita($db);
+ok('I3 elle fiyat farkı + seçilen sevkiyat → eşleşir (yöntem elle) ve kalan farka girer', $e2['ok'] && ($h[$S2]['kurus'] ?? 0) === 7488 && (siparis_debit_esle($db, [siparis_debit_oku($db, '2029-100702') + ['no' => '2029-100702']])['2029-100702']['yontem'] ?? '') === 'elle', $e2['mesaj']);
+ok('I3 olmayan sevkiyat seçilemez', !siparis_debit_elle_ekle($db, ['no' => '2029-100703', 'tarih' => '2026-11-01', 'tutar' => '5,00', 'pb' => 'EUR', 'neden' => 'fiyat', 'sid' => '999999'], null, 1)['ok']);
+$b = siparis_debit_bagla($db, '2029-100700', $S3, 1);
+ok('I3 kalite kesintisini sevkiyata bağla → diger_kurus (kalan farka GİRMEZ)', $b['ok'] && ($h2 = siparis_debit_harita($db)) && ($h2[$S3]['diger_kurus'] ?? 0) === 30000 && ($h2[$S3]['kurus'] ?? -1) === 0);
+ok('I3 bağı kaldır (sid=0)', siparis_debit_bagla($db, '2029-100700', 0, 1)['ok'] && !isset(siparis_debit_oku($db, '2029-100700')['sid']));
+ok('I3 iptal gerekçesiz reddedilir', !siparis_debit_iptal($db, '2029-100702', '  ', 1)['ok']);
+$ip = siparis_debit_iptal($db, '2029-100702', 'yanlış giriş', 1);
+ok('I3 iptal: listeden + haritadan düşer, kayıt silinmez (iptalDahil ile görünür)', $ip['ok'] && !isset(siparis_debit_harita($db)[$S2]) && count(siparis_debit_hepsi($db)) === 1 && count(siparis_debit_hepsi($db, true)) === 2);
+ok('I3 iptal edilen belge mailden yeniden gelse de dirilmez (zaten)', siparis_debit_isle($db, ['ok' => true, 'notes' => [['no' => '2029-100702', 'date' => '2026-11-01', 'invoice_no' => '', 'pb' => 'EUR', 'amount_kurus' => 7488]]], ['m' => 1], 1)['sonuc'] === 'zaten' && count(siparis_debit_hepsi($db)) === 1);
+ok('I3 audit: elle ekle / bağla / iptal izleri (değer değil sayı + no)', $denetle("SELECT COUNT(*) FROM audit_log WHERE action IN ('siparis_debit','siparis_debit_bagla','siparis_debit_iptal')") >= 5);
+// I4 — PDF yüklendi + okundu (test kancası) → form alanları yok sayılır, dosya saklanır, tek belgeye seçilen sevkiyat yazılır
+$tmp = tempnam(sys_get_temp_dir(), 'dbt'); file_put_contents($tmp, "%PDF-1.4\n%sentetik\n");
+$tasi = static fn(string $a, string $b): bool => copy($a, $b);
+$e4 = siparis_debit_elle_ekle($db, ['no' => '', 'sid' => (string)$S4], ['name' => 'kalite.pdf', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => filesize($tmp)], 1, $tasi, static fn(string $f): array => $qd);
+$k4 = siparis_debit_oku($db, '2029-100500');
+ok('I4 PDF okundu → kayıt (kaynak elle, dosya saklandı, seçilen sevkiyat)', $e4['ok'] && ($k4['kaynak'] ?? '') === 'elle' && preg_match('/^[a-f0-9]{32}\.pdf$/', (string)($k4['dosya'] ?? '')) === 1 && (int)($k4['sid'] ?? 0) === $S4, $e4['mesaj']);
+ok('I4 dosya yolu çözülür (depo içi)', siparis_debit_dosya_yolu($db, '2029-100500') !== null);
+$e5 = siparis_debit_elle_ekle($db, ['no' => ''], ['name' => 'x.pdf', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => filesize($tmp)], 1, $tasi, static fn(string $f): array => ['doc_type' => 'unknown']);
+ok('I4 PDF okunamadı + alan yok → yönlendirici hata, artık dosya bırakılmaz', !$e5['ok'] && str_contains($e5['mesaj'], 'elle girin'));
+@unlink(rtrim(SIPARIS_DEPO_DIR, '/') . '/' . (string)($k4['dosya'] ?? 'yok')); @unlink($tmp);
+$pnl = sipui_debit_html($db, 300, true);
+ok('I5 panel: «OGL kesintisi ekle» + PDF bağlantısı + elle rozeti + Audit no + bağla/iptal düğmeleri', str_contains($pnl, 'data-od-ac="odKesintiDlg"') && str_contains($pnl, 'siparis_kesinti.php?dosya=2029-100500') && str_contains($pnl, '✍ elle')
+    && str_contains($pnl, 'Audit 000123') && str_contains($pnl, 'data-od-kesinti="bagla"') && str_contains($pnl, 'data-od-kesinti="iptal"'));
+ok('I5 panel salt okunur kipte eylem yok', !str_contains(sipui_debit_html($db), 'data-od-kesinti') && !str_contains(sipui_debit_html($db), 'odKesintiDlg'));
+ok('I5 XSS: açıklama kaçırılır', !str_contains(sipui_debit_html($db, 300, true), '<b>LIDL'));
 
 echo "\n=== H. Gerçek PDF (opsiyonel) ===\n";
 $gercek = (string)getenv('DEBIT_ORNEK_PDF');
@@ -172,7 +238,7 @@ if ($gercek !== '' && is_file($gercek)) {
     $dg = siparis_pdf_isle($gercek);
     ok('GERÇEK PDF: debit_note, ok, tüm sayfalar okundu, her belge EUR + fatura no + tutar > 0',
         ($dg['doc_type'] ?? '') === 'debit_note' && ($dg['ok'] ?? false) === true && ($dg['sayfa_hata'] ?? 1) === 0 && count($dg['notes']) >= 1
-        && !array_filter($dg['notes'], static fn(array $n): bool => $n['pb'] !== 'EUR' || $n['amount_kurus'] <= 0 || !preg_match('/^IHR\d{13}D[IVX]+$/', $n['invoice_no'])), json_encode($dg['sayfa_hatalar'] ?? null));
+        && !array_filter($dg['notes'], static fn(array $n): bool => $n['pb'] !== 'EUR' || $n['amount_kurus'] <= 0 || (($n['bicim'] ?? 'debit_note') === 'debit_note' && !preg_match('/^IHR\d{13}D[IVX]+$/', $n['invoice_no']))), json_encode($dg['sayfa_hatalar'] ?? null));   // v529: "Invoice" biçimli (kalite) kesinti fatura no taşımaz
     $top = array_sum(array_column($dg['notes'], 'amount_kurus'));
     echo "  bilgi: " . count($dg['notes']) . ' belge, toplam ' . siparis_odeme_aviz_para((int)$top) . " EUR\n";
 } else echo "ATLANDI (DEBIT_ORNEK_PDF yok)\n";

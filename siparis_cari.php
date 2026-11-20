@@ -52,6 +52,14 @@ $pbHtml = static function (array $tutar): string {
     return $o;
 };
 $dbt = $v['debit']; $k = $v['kesilen']; $kEur = $k['sevkiyat'] > 0 ? ['EUR' => (int)$k['kesilen_kurus']] : [];
+// v529: tüm aktif kesintiler (eşleşmeyen + fiyat farkı olmayanlar dahil) — kart altında bilgi; hesap/bakiye DEĞİŞMEZ
+$dbtTum = siparis_debit_hepsi($pdo); $dbtEsl = $dbtTum ? siparis_debit_esle($pdo, $dbtTum) : [];
+$dbtAcik = ['adet' => 0, 'kurus' => 0]; $dbtDiger = ['adet' => 0, 'kurus' => 0];
+foreach ($dbtTum as $dn) {
+    if (strtoupper((string)($dn['pb'] ?? '')) !== 'EUR') continue;
+    if (empty($dn['fiyat_farki'])) { $dbtDiger['adet']++; $dbtDiger['kurus'] += (int)$dn['amount_kurus']; }
+    elseif (($dbtEsl[(string)$dn['no']]['durum'] ?? 'yok') !== 'eslesti') { $dbtAcik['adet']++; $dbtAcik['kurus'] += (int)$dn['amount_kurus']; }
+}
 $dbtB = 0; foreach ($v['yuklenen'] as $sx) $dbtB += (int)($sx['debit']['kurus'] ?? 0);   // B bölümü toplamı (yalnız fiyat farkı debit'i)
 $dbtHucre = static function (array $s): string {   // sevkiyat başına: OGL debit note + kalan fark hücreleri (2 <td>)
     $d = is_array($s['debit'] ?? null) ? $s['debit'] : null;
@@ -158,7 +166,10 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
     <div class="print-summary-box psb-ok"><span class="psb-label">Yüklenen sevkiyat</span><span class="psb-value"><?= (int)$oL['sevkiyat'] ?></span><span class="sc-alt"><?= h(sipui_sayi($oL['koli'])) ?> koli · <?= h(siparis_cari_kg($oL['gram'])) ?> kg</span></div>
     <div class="print-summary-box"><span class="psb-label">Gelen fiyat tutarı</span><?= $pbHtml(array_map(static fn(array $c): int => $c['faturalanan'], $v['cari'])) ?><span class="sc-alt"><?= (int)count($v['fiyatli']) ?> fiyatlı sevkiyat</span></div>
     <div class="print-summary-box"><span class="psb-label">Kesilen fatura tutarı</span><?= $pbHtml($kEur) ?><span class="sc-alt"><?= $k['sevkiyat'] > 0 ? (int)$k['sevkiyat'] . ' sevkiyat · gelen fiyat karşılığı ' . h(siparis_cari_para((int)$k['gelen_kurus'])) . ' EUR · fark ' . h(siparis_cari_para_isaretli((int)$k['fark_kurus'])) . ' EUR' : 'üretilmiş invoice yok' ?></span></div>
-    <div class="print-summary-box"><span class="psb-label">OGL debit note</span><?= $pbHtml($dbt['kurus'] > 0 ? ['EUR' => (int)$dbt['kurus']] : []) ?><span class="sc-alt"><?= $dbt['sevkiyat'] > 0 ? (int)$dbt['sevkiyat'] . ' sevkiyat · fiyat farkı debit' . ($k['sevkiyat'] > 0 ? ' · kalan fark ' . h(siparis_cari_para_isaretli((int)$k['kalan_fark_kurus'])) . ' EUR' : '') : 'debit note yok' ?></span></div>
+    <div class="print-summary-box"><span class="psb-label">OGL debit note</span><?= $pbHtml($dbt['kurus'] > 0 ? ['EUR' => (int)$dbt['kurus']] : []) ?><span class="sc-alt"><?= $dbt['sevkiyat'] > 0 ? (int)$dbt['sevkiyat'] . ' sevkiyat · fiyat farkı debit' . ($k['sevkiyat'] > 0 ? ' · kalan fark ' . h(siparis_cari_para_isaretli((int)$k['kalan_fark_kurus'])) . ' EUR' : '') : 'debit note yok' ?></span>
+      <?php if ($dbtAcik['adet'] > 0): ?><span class="sc-alt sc-fark-eksi"><?= (int)$dbtAcik['adet'] ?> fiyat farkı kesintisi sevkiyata eşleşmedi · <?= h(siparis_cari_para($dbtAcik['kurus'])) ?> EUR</span><?php endif; ?>
+      <?php if ($dbtDiger['adet'] > 0): ?><span class="sc-alt"><?= (int)$dbtDiger['adet'] ?> diğer kesinti (kalite vb.) · <?= h(siparis_cari_para($dbtDiger['kurus'])) ?> EUR — kalan farka girmez</span><?php endif; ?>
+      <?php if (siparis_odeme_yetkili()): ?><a class="sc-alt no-print" href="siparis_odemeler.php#odDebit">➖ Kesinti ekle / bağla</a><?php endif; ?></div>
     <div class="print-summary-box psb-warn"><span class="psb-label">Bakiye</span><?= $pbHtml(array_map(static fn(array $c): int => $c['bakiye'], $v['cari'])) ?></div>
   </div>
 
@@ -246,7 +257,7 @@ table.print-table.sc-tablo .sc-fark-arti { color: #1b6e3c; font-weight: 700; }
         <td class="num"><?= h(siparis_cari_kg_metin($l['koli_kg'])) ?><?= $yildiz($l['kg_varsayilan']) ?></td>
         <td class="num"><?= h(siparis_cari_kg($l['gram'])) ?></td>
         <?php if ($l['fiyatli']): ?>
-        <td class="num<?= $l['baz'] === 'koli' ? ' sc-esas' : '' ?>"><?= h(siparis_cari_fiyat4((int)$l['fiyat_koli']) . ' ' . $l['pb'] . ' / koli (' . siparis_cari_kg_metin($l['koli_kg']) . ' kg)') ?></td>
+        <td class="num<?= $l['baz'] === 'koli' ? ' sc-esas' : '' ?>"><?= h(siparis_cari_fiyat_kisa((int)$l['fiyat_koli']) . ' ' . $l['pb'] . ' / koli (' . siparis_cari_kg_metin($l['koli_kg']) . ' kg)') ?></td>
         <td class="num<?= $l['baz'] === 'kg' ? ' sc-esas' : '' ?>"><?= h(siparis_cari_para(intdiv((int)$l['fiyat_kg'], 100)) . ' ' . $l['pb'] . ' / kg') ?></td>
         <td class="num"><?= h(siparis_cari_para((int)$l['tutar']) . ' ' . $l['pb']) ?></td>
         <?php else: ?>

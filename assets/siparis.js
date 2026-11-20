@@ -223,8 +223,16 @@
     (function () {
       var fareli = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
       if (!fareli) return;
-      var balon = null, zaman = null, hedef = null;
-      function kapat() { clearTimeout(zaman); zaman = null; hedef = null; if (balon) balon.hidden = true; }
+      var balon = null, zaman = null, hedef = null, acikHedef = null, acilis = 0;
+      // v529: "ne değişti" noktası (.sip-dg) baloncuğu en az SIP_DG_OKUNDU_MS açık kaldıysa kapanırken "okundu" sayılır → nokta kalkar
+      function kapat() {
+        clearTimeout(zaman); zaman = null; hedef = null;
+        if (balon) balon.hidden = true;
+        var a = acikHedef; acikHedef = null;
+        if (a && a.classList.contains('sip-dg') && Date.now() - acilis >= (window.SIP_DG_OKUNDU_MS != null ? window.SIP_DG_OKUNDU_MS : 700)) {
+          try { a.dispatchEvent(new CustomEvent('sip-dg-okundu', { bubbles: true })); } catch (e) { /* eski tarayıcı: nokta sevkiyat açılınca kalkar */ }
+        }
+      }
       function ac(a) {
         var v = a.nextElementSibling;
         if (!v || !v.classList.contains('sip-balon-veri')) return;
@@ -240,7 +248,7 @@
           qa('[data-satir]', g).forEach(function (sa) { var li = document.createElement('li'); li.textContent = sa.textContent; ul.appendChild(li); });
           balon.appendChild(ul);
         });
-        balon.hidden = false;
+        balon.hidden = false; acikHedef = a; acilis = Date.now();
         var r = a.getBoundingClientRect(), bw = balon.offsetWidth, bh = balon.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
         var sol = Math.max(8, Math.min(r.left, vw - bw - 8));
         var ust = r.bottom + 6; if (ust + bh > vh - 8 && r.top - bh - 6 > 8) ust = r.top - bh - 6;
@@ -596,6 +604,58 @@
         pklApi = { hazirla: hazirla, topla: topla, paletGuncelle: paletGuncelle };
     }
 
+    /* ── v529: 🔔 bildirim zili (siparisler.php sağ üst) ─────────────────────────
+       Veri: gömülü JSON (sunucu, en yeni önce) → yalnız textContent ile çizilir. Okundu = cihazda (localStorage asya_sip_zil_<uid> = son görülen id).
+       İlk ziyarette mevcut olaylar "okundu" sayılır (taban; sayfa ilk kez açılınca 100 eski olay kırmızı görünmesin).
+       Panel açılınca görüldü sayılır; okunmamışlar panel kapanana dek vurgulu kalır. Arka plan sorgusu window.sipZil.guncelle() ile tazeler. */
+    function zil(kok) {
+        var btn = q('[data-sip-zil-ac]', kok), panel = q('[data-sip-zil-panel]', kok), ul = q('[data-sip-zil-liste]', kok);
+        var sayiEl = q('[data-sip-zil-sayi]', kok), don = q('[data-sip-zil-don]', kok), durumEl = q('[data-sip-zil-durum]', kok), yenile = q('[data-sip-zil-yenile]', kok);
+        var k = 'asya_sip_zil_' + (kok.getAttribute('data-sip-zil-uid') || '0'), liste = [], gor = null, vurgu = 0;
+        try { liste = JSON.parse((q('[data-sip-zil-veri]', kok) || {}).textContent || '[]') || []; } catch (e) { liste = []; }
+        try { var g = localStorage.getItem(k); gor = g === null ? null : parseInt(g, 10) || 0; } catch (e) { gor = null; }
+        var enBuyuk = function () { return liste.reduce(function (m, b) { return Math.max(m, b.id || 0); }, 0); };
+        var yaz = function (v) { gor = v; try { localStorage.setItem(k, String(v)); } catch (e) { /* depolama kapalı: sayı her açılışta yeniden hesaplanır */ } };
+        if (gor === null) yaz(enBuyuk());
+        function tarih(t) { var m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(t || ''); return m ? m[3] + '.' + m[2] + ' ' + m[4] + ':' + m[5] : ''; }
+        function ciz() {
+            var yeni = liste.filter(function (b) { return (b.id || 0) > gor; }).length;
+            sayiEl.textContent = yeni > 99 ? '99+' : String(yeni); sayiEl.hidden = yeni === 0;
+            btn.classList.toggle('sip-zil-var', yeni > 0);
+            btn.setAttribute('aria-label', yeni > 0 ? 'Bildirimler — ' + yeni + ' yeni' : 'Bildirimler');
+            ul.textContent = '';
+            if (!liste.length) { var bos = document.createElement('li'); bos.className = 'sip-zil-bos'; bos.textContent = 'Henüz bildirim yok.'; ul.appendChild(bos); return; }
+            liste.forEach(function (b) {
+                var li = document.createElement('li'); if ((b.id || 0) > vurgu) li.className = 'sip-zil-yeni';
+                var a = document.createElement('a'); a.href = /^[a-z_]+\.php(\?[\w=&]*)?(#\w+)?$/.test(b.link || '') ? b.link : 'siparisler.php';
+                var i = document.createElement('span'); i.className = 'sip-zil-oi'; i.textContent = b.ikon || '📄';
+                var m = document.createElement('span'); m.className = 'sip-zil-om'; m.textContent = b.metin || '';
+                var z = document.createElement('span'); z.className = 'sip-zil-oz'; z.textContent = tarih(b.t);
+                a.appendChild(i); a.appendChild(m); a.appendChild(z); li.appendChild(a); ul.appendChild(li);
+            });
+        }
+        function ac() {
+            vurgu = gor; panel.hidden = false; btn.setAttribute('aria-expanded', 'true');
+            yaz(Math.max(gor, enBuyuk())); ciz();
+        }
+        function kapat() { if (panel.hidden) return; panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); vurgu = gor; ciz(); }
+        vurgu = gor; ciz();
+        btn.addEventListener('click', function (e) { e.stopPropagation(); if (panel.hidden) ac(); else kapat(); });
+        document.addEventListener('click', function (e) { if (!kok.contains(e.target)) kapat(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') kapat(); });
+        if (yenile) yenile.addEventListener('click', function () { location.reload(); });
+        window.sipZil = {
+            guncelle: function (yeniListe, tazele) {
+                if (!Array.isArray(yeniListe)) return;
+                var once = enBuyuk(); liste = yeniListe;
+                if (!panel.hidden) { yaz(Math.max(gor, enBuyuk())); }
+                if (tazele && enBuyuk() > once && yenile) yenile.hidden = false;   // liste sayfası bayat: yenileme önerilir
+                ciz();
+            },
+            donuyor: function (acik, m) { if (don) don.hidden = !acik; btn.classList.toggle('sip-zil-sorgu', !!acik); if (durumEl) durumEl.textContent = acik ? (m || 'Sorgulanıyor…') : ''; }
+        };
+    }
+
     /* ── v378: Mailden al (Sipariş / Lojistik sorgula) ─────────────────────────
        Tek tık = tara + içe aktar. İş sunucuda parçalı yürür (siparis_mail.php: baslat → devam… → bitti); burada yalnız döngü + ilerleme.
        Sonuç HTML'i sunucunun h() ile kaçırdığı TEK render (innerHTML yalnız bu). Ağ kopunca "Devam et" aynı tarama_id'yle sürer. */
@@ -629,11 +689,23 @@
         function bitir(y) {
             durum.calisiyor = false; durum.tid = '';
             ilerlemeGoster(false); dugmeGoster(false, false); seritKaldir(); hataYaz('');
-            if (sonucKap && y.html) { sonucKap.innerHTML = y.html; try { sonucKap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { /* yok say */ } }
+            if (sonucKap && y.html) {
+                sonucKap.innerHTML = y.html;
+                if (!durum.oto) { try { sonucKap.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { /* yok say */ } }   // v529: arka plan sorgusu sayfayı kaydırmaz
+            }
+            if (y.bildirimler && window.sipZil) window.sipZil.guncelle(y.bildirimler, true);
             kilitle(false);
+            var sonra = durum.sonra; durum.sonra = null;
+            if (sonra) sonra(true);
         }
         function sorun(m, devamEdilebilir) {
             durum.calisiyor = false;
+            if (durum.oto) {   // v529: arka plan sorgusu hata/meşgulde SESSİZ kalır (elle düğme yine çalışır); sıradaki türe geçilir
+                ilerlemeGoster(false); dugmeGoster(false, false); kilitle(false);
+                if (durum.tid && devamEdilebilir) { /* yarım kalan: sonraki açılışta "Devam et" şeridi çıkar */ }
+                var s2 = durum.sonra; durum.sonra = null; if (s2) s2(false);
+                return;
+            }
             hataYaz(m);
             dugmeGoster(devamEdilebilir, !!durum.tid);
             if (devamEdilebilir && metin) metin.textContent = 'Mail sorgusu yarıda kaldı.';
@@ -660,7 +732,8 @@
                 if (y.bitti) bitir(y); else dongu();
             }, function () { sorun('Bağlantı kesildi — kaldığı yerden devam edebilirsiniz.', true); });
         }
-        function baslat(tur) {
+        function baslat(tur, oto, sonra) {
+            durum.oto = !!oto; durum.sonra = sonra || null;
             durum.tur = tur; hataYaz(''); kilitle(true); ilerlemeGoster(true); dugmeGoster(false, false);
             seritKaldir();
             if (bar) { bar.max = 1; bar.value = 0; }
@@ -672,9 +745,26 @@
                 if (y.bitti) bitir(y); else dongu();
             }, function () { sorun('Bağlantı kesildi — sorgu başlatılamadı. Yeniden deneyin.', false); });
         }
+        // v529 — sayfa açılışında ARKA PLAN sorgusu: sunucunun "zamanı geldi" dediği türler (data-sip-mail-oto) sırayla, sayfa çizildikten sonra.
+        // Sayfayı engellemez (fetch, kart kapalı kalır, kaydırma yok); gelenler 🔔 zile düşer. Elle düğmeye basılırsa sıra durur.
+        // Test kancası: window.SIP_MAIL_OTO_MS (gecikme; < 0 = kapalı).
+        (function () {
+            var oto = (kap.getAttribute('data-sip-mail-oto') || '').split(',').filter(function (t) { return /^[a-z]+$/.test(t); });
+            var gec = typeof window.SIP_MAIL_OTO_MS === 'number' ? window.SIP_MAIL_OTO_MS : 1500;
+            if (!oto.length || gec < 0 || q('[data-sip-mail-devam]', kap)) return;
+            var sira = oto.slice();
+            function sonraki() {
+                if (durum.elle || !sira.length) { if (window.sipZil) window.sipZil.donuyor(false); return; }
+                var t = sira.shift(), b = q('[data-sip-mail="' + t + '"]', kap);
+                if (!b || b.disabled) { sonraki(); return; }
+                if (window.sipZil) window.sipZil.donuyor(true, (ETIKET[t] || '') + ' sorgulanıyor…');
+                baslat(t, true, function () { sonraki(); });
+            }
+            setTimeout(function () { if (!durum.calisiyor) sonraki(); }, gec);
+        })();
         kap.addEventListener('click', function (e) {
             var d = e.target.closest('[data-sip-mail]');
-            if (d && kap.contains(d)) { if (!d.disabled && !durum.calisiyor) baslat(d.getAttribute('data-sip-mail')); return; }
+            if (d && kap.contains(d)) { if (!d.disabled && !durum.calisiyor) { durum.elle = true; baslat(d.getAttribute('data-sip-mail')); } return; }
             var dv = e.target.closest('[data-sip-mail-devam-et]');
             if (dv) {
                 var serit = dv.closest('[data-sip-mail-devam]');
@@ -764,11 +854,20 @@
     }
     function odKapat(d) { if (!d) return; if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
     document.addEventListener('click', function (e) {
-        var t = e.target.closest ? e.target.closest('[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir]') : null;
+        var t = e.target.closest ? e.target.closest('[data-od-ac],[data-od-kapat],[data-od-iptal],[data-od-yazdir],[data-od-kesinti]') : null;
         if (!t || !t.closest('.sip-mod')) return;
         e.preventDefault();
         if (t.hasAttribute('data-od-ac')) { odAc(document.getElementById(t.getAttribute('data-od-ac'))); return; }
         if (t.hasAttribute('data-od-kapat')) { odKapat(t.closest('dialog')); return; }
+        if (t.hasAttribute('data-od-kesinti')) {   // v529: OGL kesintisi — sevkiyata bağla / iptal
+            var kd = document.getElementById(t.getAttribute('data-od-kesinti') === 'bagla' ? 'odKesBaglaDlg' : 'odKesIptalDlg'); if (!kd) return;
+            var kf = q('form', kd);
+            kf.elements['no'].value = t.getAttribute('data-no') || '';
+            if (kf.elements['sid']) kf.elements['sid'].value = t.getAttribute('data-sid') || '0';
+            if (kf.elements['neden']) kf.elements['neden'].value = '';
+            var ko = q('[data-od-ozet-yazi]', kd); if (ko) ko.textContent = t.getAttribute('data-ozet') || '';
+            odAc(kd); return;
+        }
         if (t.hasAttribute('data-od-iptal')) {
             var d = document.getElementById('odIptalDlg'); if (!d) return;
             var f = q('form', d);
@@ -811,20 +910,35 @@
         var k = 'asya_' + (ns || 'sip') + '_gorulen_' + m.getAttribute('data-sip-gor-uid'), now = m.getAttribute('data-sip-gor-now') || '', d = null;
         try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
         if (!d || typeof d !== 'object' || typeof d.t !== 'string' || !d.s || typeof d.s !== 'object') d = { t: now, s: {} };
+        if (!d.g || typeof d.g !== 'object') d.g = {};   // v529: baloncukta okunan güncellemeler (yalnız nokta + çerçeve; "YENİ" rozeti sevkiyat açılınca kalkar)
         var yaz = function () {
             Object.keys(d.s).forEach(function (i) { if (d.s[i] <= d.t) delete d.s[i]; });   // tabanın altı zaten "eski" → kayıt gereksiz
+            Object.keys(d.g).forEach(function (i) { if (d.g[i] <= d.t || d.g[i] <= (d.s[i] || '')) delete d.g[i]; });
             try { localStorage.setItem(k, JSON.stringify(d)); } catch (e) { /* depolama kapalı: işaret çıkmaz, sayfa bozulmaz */ }
         };
         var vid = m.getAttribute('data-sip-gor-id');
         if (vid) { d.s[vid] = m.getAttribute('data-sip-gor-upd') || now; yaz(); return; }   // sevkiyat sayfası açıldı = görüldü
         yaz();
+        var fareli = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+        // v529: nokta baloncuğu okununca (kapanırken) o sevkiyatın güncellemeleri görülmüş sayılır → nokta + çerçeve kalkar (bu cihazda)
+        document.addEventListener('sip-dg-okundu', function (ev) {
+            var kap = ev.target.closest ? ev.target.closest('tr, .sip-card') : null, e = kap ? q('[data-sip-gor-id]', kap) : null;
+            if (!e) return;
+            var id = e.getAttribute('data-sip-gor-id'), upd = e.getAttribute('data-sip-gor-upd') || now;
+            d.g[id] = upd; yaz();
+            var dk = ev.target.closest('.sip-dg-kap'); if (dk) dk.hidden = true;
+            [kap, kap.nextElementSibling].forEach(function (x) { if (x && x.classList && (x === kap || x.classList.contains('sip-urun-tr'))) { x.classList.remove('sip-degisti'); x.removeAttribute('title'); } });
+        });
         qa('[data-sip-gor-id]').forEach(function (e) {
             var id = e.getAttribute('data-sip-gor-id'), upd = e.getAttribute('data-sip-gor-upd') || '', cre = e.getAttribute('data-sip-gor-yeni') || '';
+            var gor = (d.g[id] || '') > (d.s[id] || '') ? d.g[id] : (d.s[id] || '');
             if (!upd || upd <= d.t || upd <= (d.s[id] || '')) return;
             var tr = e.closest ? e.closest('tr') : null, kart = e.closest ? e.closest('.sip-card') : null;
-            dgGoster(tr || kart, d.t, d.s[id] || '');
+            if (upd <= gor) { yeniRozet(); return; }   // güncellemeler baloncukta okundu: nokta/çerçeve yok, "YENİ" kalır
+            dgGoster(tr || kart, d.t, gor);
             // v420: son bakışınızdan sonra OLUŞAN sevkiyat → referansın yanında yanıp sönen neon "YENİ" (açılınca görüldü sayılır, rozet kalkar)
-            if (cre && cre > d.t && cre > (d.s[id] || '')) {
+            function yeniRozet() {
+                if (!(cre && cre > d.t && cre > (d.s[id] || ''))) return;
                 var kap = tr || kart, ref = kap ? q('.sip-ref', kap) : null;
                 if (ref && !q('.sip-yeni', kap)) {
                     var yr = document.createElement('span');
@@ -832,11 +946,14 @@
                     if (kart) ref.insertBefore(yr, q('.sip-sr', ref)); else ref.parentNode.insertBefore(yr, ref.nextSibling);
                 }
             }
+            yeniRozet();
+            // v529: fareli cihazda satıra native title YAZILMAZ — sarı sistem baloncuğu "ne değişti" baloncuğunun üstüne biniyordu
+            var ipucu = 'Son bakışınızdan sonra değişti';
             if (tr) {
-                tr.classList.add('sip-degisti'); tr.title = 'Son bakışınızdan sonra değişti';
+                tr.classList.add('sip-degisti'); if (!fareli) tr.title = ipucu;
                 var sn = tr.nextElementSibling;
                 if (sn && sn.classList.contains('sip-urun-tr') && sn.getAttribute('data-href') === tr.getAttribute('data-href')) sn.classList.add('sip-degisti');
-            } else if (kart) { kart.classList.add('sip-degisti'); kart.title = 'Son bakışınızdan sonra değişti'; }
+            } else if (kart) { kart.classList.add('sip-degisti'); if (!fareli) kart.title = ipucu; }
         });
     }
 
@@ -907,6 +1024,7 @@
         gorulen();
         qa('details[data-sip-yukle]').forEach(yukleKart);
         qa('form[data-sip-upload]').forEach(yukleme);
+        qa('[data-sip-zil]').forEach(zil);
         qa('[data-sip-mail-kap]').forEach(mailAl);
         var p = q('form[data-sip-pkl]'); if (p) { pkl(p); pklIzgara(p); }
         qa('form[data-sip-inv]').forEach(invoice);

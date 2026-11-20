@@ -205,9 +205,14 @@ if ($icMail && siparis_mail_yetkisi()) {
         }
         usort($mSon, static fn(array $a, array $b): int => $b['bitis'] <=> $a['bitis']);
         $mD['son'] = $mSon;
+        // v529: sayfa her açılışta arka planda otomatik sorgu — yalnız ayarlı + son SIPARIS_MAIL_OTO_DK dakikada sorgulanmamış türler
+        $mD['oto'] = $mD['yarim'] === null ? siparis_mail_oto_turler($pdo, array_keys(array_filter($mD['ayarli'])), time()) : [];
     }
     $mailBlok = sipui_mail_blok_html($mD);
 }
+// v529 — 🔔 bildirim zili (mail sorgusuyla gelenler; okundu bilgisi cihazda). Görünürlük: sevkiyat olayları aktif depo, ödeme/debit yalnız cari yetkili.
+$zilVar = siparis_mail_hazir($pdo);
+$zilListe = $zilVar ? siparis_bildirim_liste($pdo, (string)(active_depot() ?? ''), siparis_cari_yetkili()) : [];
 // v382 — yükleme kartı native <details>: varsayılan KAPALI; yalnız yarım kalan mail taraması varsa sunucu açık yazar ("Devam et" şeridi gizlenmesin).
 $yukleAcik = !empty($mD['yarim']);
 
@@ -288,6 +293,7 @@ $yazdirEk = function (?string $bolumAdi): string {
           <?php if (((can_siparis('write') && (role_ogl_any('create') || role_ogl_any('edit'))) || $sil) && icerik_can('siparis.ayarlar')): ?><a href="siparis_ayarlar.php">⚙ Ayarlar (sayaçlar, profiller)</a><?php endif; ?>
         </div>
       </div>
+      <?= $zilVar ? sipui_zil_html($zilListe, (int)$auth_user['id']) : '' ?>
     </div>
   </div>
   <?= sipui_yukleme_sonuc_html($yuklemeSonuc) ?>

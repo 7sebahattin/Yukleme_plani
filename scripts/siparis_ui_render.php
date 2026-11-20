@@ -221,6 +221,13 @@ if ($mailSenaryo) {
         }
         unset($GLOBALS['_siparis_parse_override']);
     }
+    // v529: Ödemeler sayfası + OGL kesintisi (elle girilmiş kalite kesintisi, sevkiyata bağlı fiyat farkı) — kesinti penceresi / tablo eylemleri
+    require_once $ROOT . '/config/siparis_debit.php';
+    global $PERMS, $IS_ADMIN, $UID;
+    $PERMS = ['reports.export']; $IS_ADMIN = true; $UID = 1;
+    siparis_debit_elle_ekle($db, ['no' => '2029-100500', 'tarih' => '2026-11-17', 'tutar' => '300,00', 'pb' => 'EUR', 'neden' => 'kalite', 'aciklama' => 'Analiz — Audit Report 000123'], null, 1);
+    siparis_debit_elle_ekle($db, ['no' => '2029-100501', 'tarih' => '2026-10-27', 'tutar' => '74,88', 'pb' => 'EUR', 'neden' => 'fiyat', 'anlasilan' => '4,58', 'kesilen' => '4,60', 'sid' => (string)$ID['s1']], null, 1);
+    $mYaz('odemeler_kesinti', 'siparis_odemeler.php', [], ['siparis.read', 'reports.export'], true);
 }
 file_put_contents("$OUT/manifest.json", json_encode($manifest));
 echo count($sayfalar) . " sayfa yazıldı → $OUT\n";
