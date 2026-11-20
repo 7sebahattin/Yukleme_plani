@@ -244,6 +244,11 @@ HATALILAR=(); ATLANANLAR=(); KARARSIZLAR=()
 
 goster_cikti() {
     [ "$AYRINTI" = 1 ] || return 0
+    # Başarısız satırlar 40 satırlık kuyruğun dışında kalabiliyor (uzun tarayıcı testleri) — önce onları bas.
+    if grep -qE '^FAIL |\*\*\* HATA' "$2"; then
+        echo "----- $1 (başarısız satırlar) -----"
+        grep -E -A1 '^FAIL |\*\*\* HATA' "$2" | head -n 60
+    fi
     echo "----- $1 (son 40 satır) -----"
     tail -n 40 "$2"
     echo "-----"

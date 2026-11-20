@@ -510,6 +510,18 @@ function mail_html_renk(string $v): ?string
 }
 
 /**
+ * Öğenin etiket adı — libxml sürümünden BAĞIMSIZ. Eski HTML ayrıştırıcı (2.9.x) "<o:p>" gibi önekli adı "p"ye
+ * indirir; yeni HTML5 uyumlu ayrıştırıcı (2.14+) "o:p" olarak bırakır. Önek burada her sürümde atılır, böylece
+ * "<x:script>" de "script" sayılıp içeriğiyle düşer ve çıktı tüm sürümlerde aynıdır.
+ */
+function mail_html_etiket(DOMElement $c): string
+{
+    $ad = strtolower((string)($c->localName ?? $c->nodeName));
+    $i = strrpos($ad, ':');
+    return $i === false ? $ad : substr($ad, $i + 1);
+}
+
+/**
  * libxml'e verilecek HTML'yi hazırlar: <meta> etiketleri atılır (belgedeki charset bildirimi, MIME katmanının ZATEN
  * UTF-8'e çevirdiği içeriği ikinci kez çözer / utf-7'yi etkinleştirirdi) ve 0x80+ her karakter sayısal varlığa
  * çevrilir → girdi saf ASCII; hiçbir charset yorumu sonucu değiştiremez.
@@ -557,7 +569,7 @@ function mail_html_sanitize(string $html, ?bool &$kesildi = null): string
                 continue;
             }
             if (!($c instanceof DOMElement)) continue;   // yorum / CDATA / PI düşer
-            $tag = strtolower($c->localName ?? $c->nodeName);
+            $tag = mail_html_etiket($c);
             if (isset($dusen[$tag])) continue;
             if (!isset($izinli[$tag])) { $o .= $yaz($c, $d + 1); continue; }   // bilinmeyen: sar-aç (içerik korunur)
             $a = [];
@@ -627,7 +639,7 @@ function mail_html_to_text(string $html): string
             if (++$sayac > 20000) break;
             if ($c instanceof DOMText) { $o .= preg_replace('/[ \t\r\n]+/', ' ', (string)$c->nodeValue); continue; }
             if (!($c instanceof DOMElement)) continue;
-            $t = strtolower($c->localName ?? '');
+            $t = mail_html_etiket($c);
             if (isset($dusen[$t])) continue;
             $in = $yaz($c, $d + 1);
             $o .= isset($blok[$t]) ? "\n" . $in . "\n" : ($t === 'td' || $t === 'th' ? $in . "\t" : $in);
