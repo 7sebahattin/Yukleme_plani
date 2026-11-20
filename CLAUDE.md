@@ -3,11 +3,11 @@
 ## Project Summary
 
 PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA kurulabilir.
-Çerçeve yok — saf PHP, vanilla JS, tek CSS (`assets/style.css`), tek JS (`assets/app.js`).
+Çerçeve yok — saf PHP, vanilla JS; ortak `assets/style.css` / `assets/app.js` ile gerektiğinde sayfaya özel CSS/JS dosyaları.
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v529` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v530` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -291,7 +291,7 @@ $net  = round(max(0, $brut - $dara), 3);
 > **Kasa grubunun 2 sayfası (`kasa_fisleri` · `kasa_tanimlari`) ve Çek-Senet grubunun 3 sayfası (`cek_dekontu` · `senet_dekontu` · `cek_tanimlari`) çalışan modüldür (v528; `kasa-modulu` / `cek-senet` skill'leri)**; kapı yine `is_admin()`. `nav_muhasebe_static_smoke` bunları `kasa_core` / `ceksenet_core` içerenler olarak ayrı denetler.
 > **Cari İşlemler grubunun 4 sayfası (`cari_kartlari/fisler/dekontlar/tanimlari`) artık ÇALIŞAN modüldür** (yer tutucu değil; `cari-modulu` skill'i) — kapı yine `is_admin()`; `nav_muhasebe_static_smoke` bunları `cari_core` içerenler olarak ayrı denetler.
 
-Sidebar'daki Cari İşlemler vb. gruplar (yalnız `is_admin()`) `nav_muhasebe_gruplari()` (config/helpers.php) TEK kaynağından beslenir; yeni sayfa BURAYA eklenir. Her sayfa `require_login()` + `is_admin()` kapısı taşır; içerik yoksa "Bu bölüm hazırlanıyor." kartı. **v439: mevcut klonu olan 10 sayfa 302 ile o sayfaya yönlendirir** (kapı kalır): kantar_fisleri, mal_kabul_fisleri → `kantar.php` · veritabani_islemleri → `admin_db_backups.php` · kullanici_tanimlari → `users.php` · depo_tanimlari → `definitions.php?type=depo` · raporlar_listeler → `reports.php` · arac_yukleme_fisleri → `records.php` · ihracat_faturasi_maliyeti → `maliyet.php` · beyanname_siparis_proforma → `beyanlar.php` · sube_degistirme → `depo_sec.php`. **`palet_fisleri.php` yönlendirmeyi bırakıp `Palet Fişleri` / `Bu bölüm hazırlanıyor.` yer tutucusunu gösterir.** Diğerleri yer tutucu kalır. `nav_aktif_anahtar()` bu sayfalarda dosya slug'ı döndürür. `sw.js` `SW_MUHASEBE_RE` bu adları önbelleğe almaz (stok.php/kantar.php vb. kapsanmaz). Test: `php scripts/nav_muhasebe_static_smoke.php`.
+Sidebar'daki Cari İşlemler vb. gruplar (yalnız `is_admin()`) `nav_muhasebe_gruplari()` (config/helpers.php) TEK kaynağından beslenir; yeni sayfa BURAYA eklenir. Her sayfa `require_login()` + `is_admin()` kapısı taşır; içerik yoksa "Bu bölüm hazırlanıyor." kartı. **v439: mevcut klonu olan 10 sayfa 302 ile o sayfaya yönlendirir** (kapı kalır): kantar_fisleri, mal_kabul_fisleri → `kantar.php` · veritabani_islemleri → `admin_db_backups.php` · kullanici_tanimlari → `users.php` · depo_tanimlari → `definitions.php?type=depo` · raporlar_listeler → `reports.php` · arac_yukleme_fisleri → `records.php` · ihracat_faturasi_maliyeti → `maliyet.php` · beyanname_siparis_proforma → `beyanlar.php` · sube_degistirme → `depo_sec.php`. **`palet_fisleri.php` v530'da yönetim tablosuna dönüşmüştür:** kayıtlar en yeniden eskiye listelenir, klavye ile seçilip düzenlenebilir/kopyalanabilir/silinebilir; açıklama alanları `loading_pallets.aciklama1/aciklama2` kolonlarındadır. Diğerleri yer tutucu kalır. `nav_aktif_anahtar()` bu sayfalarda dosya slug'ı döndürür. `sw.js` `SW_MUHASEBE_RE` bu adları önbelleğe almaz (stok.php/kantar.php vb. kapsanmaz). Test: `php scripts/nav_muhasebe_static_smoke.php`.
 
 ## Önemli Desenler
 
