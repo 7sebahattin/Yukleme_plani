@@ -1673,6 +1673,7 @@ html[data-theme="dark"] .ekle-v2 .ekle-gerekli { color: #ff7b72; }
 
 .cf2-eylem { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .cf2 .btn.cf2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 20px; border-radius: 10px; font-weight: 650; }
+.cf2 #cfFiyatGecmisi [data-cf-saat-duzelt] { min-height: 38px; }
 .cf2 .btn.btn-primary.cf2-btn { box-shadow: 0 1px 2px rgba(16,24,40,.1), 0 4px 10px -4px rgba(29,108,240,.5); }
 .cf2 .btn.cf2-btn--cizgi { background: var(--card); color: var(--primary); border: 1.5px solid var(--primary); }
 .cf2 .btn.cf2-btn--cizgi:hover { background: var(--primary-soft); }
