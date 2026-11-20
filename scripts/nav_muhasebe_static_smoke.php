@@ -75,6 +75,12 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
             ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif ($dosya === 'palet_fisleri.php') {
+            // v530: Palet Fişleri aktif, yöneticiye açık Excel tarzı tablo sayfası.
+            ok("$dosya: yönetim tablosu", str_contains($s, 'id="pfTable"'));
+            ok("$dosya: yeni fiş ve hücre işlemleri", str_contains($s, "'create'") && str_contains($s, "'save'") && str_contains($s, "'duplicate'") && str_contains($s, "'delete'"));
+            ok("$dosya: BRÜT / NET başlıkları ve referans alanı yok", str_contains($s, '>BRÜT<') && str_contains($s, '>NET<') && !str_contains($s, 'Yük.Ref') && !str_contains($s, '>Ref<'));
+            ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
