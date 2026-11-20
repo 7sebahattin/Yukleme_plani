@@ -714,8 +714,20 @@ function hks_fatura_yurtdisi_mi(array $row, array $veri): bool {
   return !hks_eski_tur_coz($row)['yurtIci'];
 }
 
+// Sevk Etme bildirimi mi? Sevkte fatura KESİLMEZ → anahtar pasif, durum hep "kesilmedi" (v531).
+// Karar bildirim_turu kolonuna (yoksa eski kayıt kuralına) dayanır: hks_eski_tur_coz()['sevk'].
+function hks_fatura_sevk_mi(array $row, array $veri = []): bool {
+  if (trim((string)($row['bildirim_turu'] ?? '')) === '' && is_array($veri['kopya']['ortak'] ?? null)
+      && (int)($veri['kopya']['v'] ?? 0) === HKS_KOPYA_SURUM) {
+    $o = $veri['kopya']['ortak'];   // kolon boşsa kopya (v305+) güvenilir bayrakları taşır
+    return !empty($o['yurtIci']) && empty($o['fiyatGonder']) && empty($o['referanssiz']) && empty($o['uretSevk']);
+  }
+  return !empty(hks_eski_tur_coz($row)['sevk']);
+}
+
 // Fatura kesildi mi? Açık kayıt (veri.fatura.kesildi) varsa o; yoksa varsayılan.
 function hks_fatura_kesildi_mi(array $row, array $veri): bool {
+  if (hks_fatura_sevk_mi($row, $veri)) return false;   // Sevk Etme'de fatura kesilmez (v531)
   $f = $veri['fatura'] ?? null;
   if (is_array($f) && array_key_exists('kesildi', $f) && is_bool($f['kesildi'])) return $f['kesildi'];
   return hks_fatura_yurtdisi_mi($row, $veri);

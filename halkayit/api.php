@@ -1190,6 +1190,13 @@ try {
       $toplamKg = $__bkg ?? array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));
       $yeniKunyeler = array_values(array_map(fn($s) => $s['yeniKunyeNo'], $basarili));
+      // v531: yurt içi SATIŞ için Gönderim Onayı penceresindeki fatura anahtarı (kesildi/kesilmedi) ilk
+      // kayda yazılır. Yurt dışı (varsayılan kesildi) ve Sevk Etme (kesilmez) için istemci değeri yok sayılır.
+      $__faturaIlk = null;
+      if (!empty($ortak['yurtIci']) && hks_bildirim_turu_kodu($ortak) === 'SATIS') {
+        $__fb = filter_var($g['faturaKesildi'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if (is_bool($__fb)) $__faturaIlk = $__fb;
+      }
       try {
         $st = $db->prepare('INSERT INTO ' . hks_tablo('gonderilenler') . '
           (id, zaman, firma_id, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, bildirim_turu, veri)
@@ -1198,7 +1205,9 @@ try {
           $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
           $__badet > 0 ? $__badet : count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
           count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
-          json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya, 'gonderen' => hks_gonderim_gonderen($__hks_user),
+          json_encode(($__faturaIlk === null
+            ? [] : ['fatura' => ['kesildi' => $__faturaIlk, 'zaman' => date('Y-m-d H:i:s'), 'kullanici' => hks_gonderim_gonderen($__hks_user)]]) +
+            ['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya, 'gonderen' => hks_gonderim_gonderen($__hks_user),
             'partiNo' => hks_taslak_parti_no($ortak), 'yurtDisi' => empty($ortak['yurtIci'])], JSON_UNESCAPED_UNICODE)]);
       } catch (Throwable $__ke) {
         // Künye HKS'te oluştu; Gönderilenler kaydı yazılamadı (audit'te izi var). 500 vermek sonucu
@@ -1277,6 +1286,7 @@ try {
           // v526: parti no (eski kayıtta '') + fatura durumu (açık kayıt yoksa yurt dışı → true).
           'partiNo' => is_string($veri['partiNo'] ?? null) ? $veri['partiNo'] : '',
           'faturaKesildi' => hks_fatura_kesildi_mi($r, $veri),
+          'faturaPasif' => hks_fatura_sevk_mi($r, $veri),   // v531: Sevk Etme'de fatura kesilmez → anahtar pasif
         ];
       }, $rows);
       hks_json_cikti(['gonderilenler' => $liste]);
@@ -1325,6 +1335,7 @@ try {
       $__ham = (string)($row['veri'] ?? '');
       $veri = $__ham === '' ? [] : json_decode($__ham, true);
       if (!is_array($veri)) hks_json_cikti(['hata' => 'Gönderim kaydı okunamadı; fatura durumu yazılmadı.'], 409);
+      if (hks_fatura_sevk_mi($row, $veri)) hks_json_cikti(['hata' => 'Sevk bildirimlerinde fatura kesilmez; durum değiştirilemez.'], 409);
       $__eski = hks_fatura_kesildi_mi($row, $veri);
       $veri = hks_fatura_veri_isle($veri, $__yeni, $__hks_user, date('Y-m-d H:i:s'));
       $up = $db->prepare('UPDATE ' . hks_tablo('gonderilenler') . ' SET veri = ?

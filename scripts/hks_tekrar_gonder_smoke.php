@@ -459,8 +459,8 @@ $pTaslakLib = strpos($api, "require_once __DIR__ . '/taslak_lib.php';");
 $pLib = strpos($api, "require_once __DIR__ . '/tekrar_gonder_lib.php';");
 ok('api.php tekrar_gonder_lib.php\'yi taslak_lib\'ten SONRA yükler', $pTaslakLib !== false && $pLib !== false && $pLib > $pTaslakLib);
 ok("INSERT veri JSON'u kopyayı taşır", strpos($api,
-    "json_encode(['yeniKunyeler' => \$yeniKunyeler, 'sonuclar' => \$sonuc['sonuclar'], 'kopya' => \$__kopya, 'gonderen' => hks_gonderim_gonderen(\$__hks_user),\n" .
-    "            'partiNo' => hks_taslak_parti_no(\$ortak), 'yurtDisi' => empty(\$ortak['yurtIci'])], JSON_UNESCAPED_UNICODE)") !== false);
+    "['yeniKunyeler' => \$yeniKunyeler, 'sonuclar' => \$sonuc['sonuclar'], 'kopya' => \$__kopya, 'gonderen' => hks_gonderim_gonderen(\$__hks_user),\n" .
+    "            'partiNo' => hks_taslak_parti_no(\$ortak), 'yurtDisi' => empty(\$ortak['yurtIci'])], JSON_UNESCAPED_UNICODE)") !== false);   // v531: json_encode( öneki fatura birleşimi nedeniyle aranmaz
 $pCase = strpos($api, "case 'taslak_gonder':");
 $pVeri = strpos($api, "\$veri = json_decode(\$t['veri'], true);", (int)$pCase);
 $pKopya = strpos($api, '$__kopya = hks_gonderim_kopyasi(is_array($veri) ? $veri : []);', (int)$pCase);
