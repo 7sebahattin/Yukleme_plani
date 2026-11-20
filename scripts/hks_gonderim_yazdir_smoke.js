@@ -379,6 +379,43 @@ const sunucu = http.createServer((q, s) => {
   // Onay penceresi (CANLI) açılışında Yazdır yok
   await sayfa.evaluate(() => taslakOnayAc({ id: 'T1', firmaAd: 'Test Firma A', satirlar: [{ miktar: 10 }], ortak: { plaka: '33NCN99', fiyat: 1 } }));
   ok('(G) CANLI onay penceresinde Yazdır GİZLİ', !(await sayfa.isVisible('#btnSonucYazdir')) && (await sayfa.innerText('#btnVazgec')).trim() === 'Vazgeç');
+
+  // ================= v531: Gönderim Onayı'nda fatura anahtarı (yalnız yurt içi SATIŞ) =================
+  const onayTaslak = (ortak) => sayfa.evaluate((o) => taslakOnayAc({ id: 'T9', firmaAd: 'Test Firma A', satirlar: [{ miktar: 10 }], ortak: Object.assign({ plaka: '33NCN99' }, o) }), ortak);
+  await onayTaslak({ yurtIci: true, fiyatGonder: true, fiyat: 5, turAd: 'Satış', ikinciAd: 'Alıcı' });
+  ok('(F) yurt içi satış onayında Fatura anahtarı VAR, varsayılan KAPALI (kesilmedi)',
+     (await sayfa.locator('#onayFatura').count()) === 1 && (await sayfa.getAttribute('#onayFatura', 'aria-checked')) === 'false' && /Fatura kesilmedi/.test(await sayfa.innerText('#onayFaturaYazi')));
+  await sayfa.click('#onayFatura');
+  ok('(F) tıkla → AÇIK (kesildi), metin güncellenir', (await sayfa.getAttribute('#onayFatura', 'aria-checked')) === 'true' && /Faturası kesildi/.test(await sayfa.innerText('#onayFaturaYazi')));
+  D.gonderYanit = { sonuclar: [{ yeniKunyeNo: '3601000000000007', miktar: 10 }] };
+  D.istekler.length = 0;
+  await sayfa.waitForFunction(() => !document.getElementById('btnOnay').disabled);
+  await sayfa.click('#btnOnay');
+  await sayfa.waitForFunction(() => document.getElementById('modalBaslik').textContent.includes('Gönderim Sonucu'));
+  const fg = D.istekler.find(i => i.action === 'taslak_gonder');
+  ok('(F) gönderim gövdesinde faturaKesildi:true', !!fg && fg.govde.faturaKesildi === true, JSON.stringify(fg && fg.govde));
+  await sayfa.click('#btnVazgec');
+  await onayTaslak({ yurtIci: true, fiyatGonder: true, fiyat: 5, turAd: 'Satış', ikinciAd: 'Alıcı' });
+  await sayfa.waitForFunction(() => !document.getElementById('btnOnay').disabled);
+  D.istekler.length = 0;
+  await sayfa.click('#btnOnay');
+  await sayfa.waitForFunction(() => document.getElementById('modalBaslik').textContent.includes('Gönderim Sonucu'));
+  const fg2 = D.istekler.find(i => i.action === 'taslak_gonder');
+  ok('(F) dokunulmazsa faturaKesildi:false (yurt içi varsayılan)', !!fg2 && fg2.govde.faturaKesildi === false, JSON.stringify(fg2 && fg2.govde));
+  await sayfa.click('#btnVazgec');
+  for (const [ad, o] of [['yurt dışı', { fiyat: 5 }], ['sevk etme', { yurtIci: true, ikinciAd: 'X' }], ['satın alım', { yurtIci: true, referanssiz: true, fiyatGonder: true }]]) {
+    await onayTaslak(o);
+    ok('(F) ' + ad + ' onayında Fatura anahtarı YOK ve gövdeye faturaKesildi girmez', (await sayfa.locator('#onayFatura').count()) === 0);
+    await sayfa.waitForFunction(() => !document.getElementById('btnOnay').disabled);
+    D.istekler.length = 0;
+    await sayfa.click('#btnOnay');
+    await sayfa.waitForFunction(() => document.getElementById('modalBaslik').textContent.includes('Gönderim Sonucu'));
+    const fg3 = D.istekler.find(i => i.action === 'taslak_gonder');
+    ok('(F) ' + ad + ': gövdede faturaKesildi YOK', !!fg3 && !('faturaKesildi' in fg3.govde), JSON.stringify(fg3 && fg3.govde));
+    await sayfa.click('#btnVazgec');
+  }
+  await sayfa.evaluate(() => taslakOnayAc({ id: 'T1', firmaAd: 'Test Firma A', satirlar: [{ miktar: 10 }], ortak: { plaka: '33NCN99', fiyat: 1 } }));
+  await sayfa.waitForFunction(() => !document.getElementById('btnOnay').disabled);
   await gonder({ sonuclar: [{ yeniKunyeNo: '3601000000000003', miktar: 22000 }],
     gonderim: { id: 'g9', plaka: '33NCN99', belgeNo: '', tarih: '2026-10-21', kunyeler: ['3601000000000003'] } });
   ok('(G) başarılı sonuç: Yazdır görünür, yanında "Gönderilenlere Git"', await sayfa.isVisible('#btnSonucYazdir') && (await sayfa.innerText('#btnVazgec')).trim() === 'Gönderilenlere Git');

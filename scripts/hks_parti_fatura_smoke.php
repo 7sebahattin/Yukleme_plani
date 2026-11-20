@@ -214,6 +214,24 @@ ok('fatura: geçersiz kesildi → 400', $kod === 400);
 [$kod, $y] = uc('gonderilen_fatura', ['firmaId' => '', 'id' => 'g1', 'kesildi' => true]);
 ok('fatura: firma yok → 400', $kod === 400);
 
+// ── v531: Sevk Etme'de fatura kesilmez (pasif) + Gönderim Onayı'ndaki ilk değer ──
+$ins->execute(['g5', $Z, 'f1', 'Firma A', '34AB5', '', 'Yurt içi → Depo A', 'ELMA', 1, 4000, 0, 0, 0, null, 'SEVK_ETME',
+    json_encode(['yeniKunyeler' => ['k5'], 'partiNo' => '', 'yurtDisi' => false, 'fatura' => ['kesildi' => true]], JSON_UNESCAPED_UNICODE)]);   // zorla true yazılmış olsa bile
+[$kod, $y] = uc('gonderilenler', ['firmaId' => 'f1', 'firmaAd' => 'Firma A']);
+$byId = []; foreach ($y['gonderilenler'] ?? [] as $r) $byId[$r['id']] = $r;
+ok('v531 liste: Sevk Etme faturaPasif=true ve faturaKesildi=false (kayıtlı true bile ezilir); diğerlerinde faturaPasif=false',
+    ($byId['g5']['faturaPasif'] ?? null) === true && ($byId['g5']['faturaKesildi'] ?? null) === false
+    && ($byId['g1']['faturaPasif'] ?? null) === false && ($byId['g2']['faturaPasif'] ?? null) === false, json_encode([$byId['g5'] ?? null]));
+$v5once = (string)$db->query("SELECT veri FROM hks_gonderilenler WHERE id='g5'")->fetchColumn();
+[$kod, $y] = uc('gonderilen_fatura', ['firmaId' => 'f1', 'firmaAd' => 'Firma A', 'id' => 'g5', 'kesildi' => true]);
+ok('v531 fatura: Sevk Etme → 409, kayıt DEĞİŞMEZ', $kod === 409 && (string)$db->query("SELECT veri FROM hks_gonderilenler WHERE id='g5'")->fetchColumn() === $v5once, json_encode([$kod, $y]));
+ok('v531: eski sevk kaydı (bildirim_turu NULL, fiyat 0, "Yurt içi →") da pasif', hks_fatura_sevk_mi(['ulke_ad' => 'Yurt içi → X', 'fiyat' => 0, 'bildirim_turu' => null]) === true
+    && hks_fatura_sevk_mi(['ulke_ad' => 'Yurt içi → X', 'fiyat' => 5, 'bildirim_turu' => null]) === false && hks_fatura_sevk_mi(['bildirim_turu' => 'SATIS']) === false);
+$apiKaynak = (string)file_get_contents($KOK . '/halkayit/api.php');
+ok('v531 statik: taslak_gonder yalnız yurt içi SATIŞ için istemci faturaKesildi değerini ilk kayda yazar',
+    strpos($apiKaynak, "hks_bildirim_turu_kodu(\$ortak) === 'SATIS'") !== false && strpos($apiKaynak, '$__faturaIlk') !== false
+    && strpos($apiKaynak, "FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);\n        if (is_bool(\$__fb))") !== false);
+
 // ── 4. oto beyan / beyansız ─────────────────────────────────────────────────
 echo "\n=== 4. elle parti no → beyan / beyansız ===\n";
 $T = ['id' => 't100', 'firma_id' => 'f1', 'firma_ad' => 'Firma A', 'zaman' => $Z];
@@ -308,7 +326,7 @@ $pIns = strpos($tg, "INSERT INTO ' . hks_tablo('gonderilenler')");
 $pKopru = strpos($tg, "beyan_hks_taslak_isaretle((string)\$t['id'], 'gonderildi'");
 $pOto = strpos($tg, 'hks_partili_gonderim_beyana_isle($ortak, $t, $gid, (float)$toplamKg');
 ok('taslak_gonder: oto kayıt INSERT ve beyan köprüsünden SONRA', $pIns !== false && $pKopru !== false && $pOto !== false && $pIns < $pKopru && $pKopru < $pOto);
-ok("taslak_gonder: veri'ye partiNo + yurtDisi; fatura INSERT'te YAZILMAZ", str_contains($tg, "'partiNo' => hks_taslak_parti_no(\$ortak), 'yurtDisi' => empty(\$ortak['yurtIci'])") && !str_contains($tg, "'fatura'"));
+ok("taslak_gonder: veri'ye partiNo + yurtDisi; fatura yalnız yurt içi satış onay değeriyle (v531)", str_contains($tg, "'partiNo' => hks_taslak_parti_no(\$ortak), 'yurtDisi' => empty(\$ortak['yurtIci'])") && str_contains($tg, '$__faturaIlk'));   // v531: fatura yalnız yurt içi SATIŞ onay değeriyle yazılır
 ok("taslak_gonder: 'ayni_plaka' / 'hks_gonderilen_' / audit_log_event( yok", !str_contains($tg, 'ayni_plaka') && !str_contains($tg, 'hks_gonderilen_') && !str_contains($tg, 'audit_log_event('));
 ok("taslak_gonder yanıtı otoKayit taşır", str_contains($tg, "'otoKayit' => \$__otoKayit"));
 ok('api.php config/beyansiz_yukleme.php\'yi yükler', str_contains($api, "require_once __DIR__ . '/../config/beyansiz_yukleme.php';"));

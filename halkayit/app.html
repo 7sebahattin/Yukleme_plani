@@ -449,6 +449,7 @@
   .g-fatura[aria-checked="true"] { background:#1d5fe0; }
   .g-fatura[aria-checked="true"]::after { transform:translateX(18px); }
   .g-fatura:disabled { opacity:.55; cursor:progress; }
+  .g-fatura[data-pasif]:disabled { opacity:.4; cursor:not-allowed; filter:grayscale(.6); }
   .g-fatura:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
   .g-fatura-yazi { font-size:12.5px; font-weight:700; }
   .g-tablo .g-c-fatura { text-align:center; }
@@ -5330,10 +5331,27 @@ function taslakOnayAc(t) {
       `(bağlantı koptu; HKS bildirimi alıp almadığı bilinmiyor). "Gönder"e basınca önce HKS'te bu plakanın künyeleri ` +
       `<b>otomatik kontrol edilir</b> (bir dakikaya kadar sürebilir); künye bulunursa gönderim durdurulur.</div>`;
   }
+  // v531: yurt içi SATIŞ (fiyatlı; alım/sevk değil) → faturayı burada da işaretle; Gönderilenler'e gitmek gerekmez.
+  onayFaturaGoster = !!(t.ortak.yurtIci && t.ortak.fiyatGonder && !t.ortak.uretSevk && !t.ortak.referanssiz);
+  onayFaturaKesildi = false;
+  if (onayFaturaGoster) {
+    html += `<div class="onay-satir onay-fatura"><span>🧾 Fatura</span><span class="g-fatura-kap">` +
+      `<button type="button" class="g-fatura" id="onayFatura" role="switch" aria-checked="false" aria-label="Fatura kesilmedi" title="Fatura kesilmedi"></button>` +
+      `<span class="g-fatura-yazi" id="onayFaturaYazi">Fatura kesilmedi</span></span></div>`;
+  }
   html += `<div id="onayPlakaUyari"></div>`;
   html += `<p style="font-size:12px;color:var(--hata-tx);margin-top:10px">Bu işlem GERÇEK bildirim oluşturur ve geri alınamaz!</p>`;
   $('modalBaslik').textContent = '⚠️ Gönderim Onayı — CANLI SİSTEM';
   $('modalIcerik').innerHTML = html;
+  if (onayFaturaGoster) {
+    $('onayFatura').onclick = () => {
+      onayFaturaKesildi = !onayFaturaKesildi;
+      const et = FATURA_ETIKET[onayFaturaKesildi];
+      $('onayFatura').setAttribute('aria-checked', String(onayFaturaKesildi));
+      $('onayFatura').setAttribute('aria-label', et); $('onayFatura').title = et;
+      $('onayFaturaYazi').textContent = et;
+    };
+  }
   $('btnOnay').classList.remove('gizli');
   $('btnVazgec').textContent = 'Vazgeç';
   $('btnSonucYazdir').classList.add('gizli');
@@ -5453,12 +5471,14 @@ function belirsizDurduruldu(g) {
   $('modal').classList.add('acik');
 }
 
+let onayFaturaGoster = false, onayFaturaKesildi = false;   // v531: Gönderim Onayı fatura anahtarı (yalnız yurt içi satış)
 $('btnOnay').onclick = async () => {
   $('btnOnay').disabled = true;
   $('btnOnay').textContent = (belirsizIsaret || belirsizOnay) ? '⏳ HKS kontrol ediliyor…' : '⏳ Gönderiliyor...';
   let belirsizDurdu = false;
   try {
     const _govde = { id: gonderilecekTaslakId, firmaId: aktifFirma ? aktifFirma.id : '' };
+    if (onayFaturaGoster) _govde.faturaKesildi = !!onayFaturaKesildi;
     // Bilinçli geçiş: yalnız sunucu 409 ile durdurup kullanıcı onay kutularını işaretlediyse.
     // Sunucu isaretId'yi kayıtlı işaretle birebir yeniden doğrular (istemci bayrağına güvenmez).
     if (belirsizOnay && belirsizOnay.isaretId) {
@@ -5697,18 +5717,22 @@ function gonderilenSecKutu(g, i) {
 // data-i HER ZAMAN özgün indeks. İstek sürerken (faturaIstekte) anahtar disabled çizilir.
 const faturaIstekte = new Set();
 const FATURA_ETIKET = { true: 'Faturası kesildi', false: 'Fatura kesilmedi' };
+const FATURA_SEVK_ETIKET = 'Sevkte fatura kesilmez';
+// v531: Sevk Etme'de fatura kesilmez → anahtar PASİF (sunucu faturaPasif); durum hep "kesilmedi".
+function faturaEtiket(g) { return g.faturaPasif ? FATURA_SEVK_ETIKET : FATURA_ETIKET[!!g.faturaKesildi]; }
 function faturaAnahtarHtml(g, i, yaziyla) {
-  const k = !!g.faturaKesildi;
-  const et = FATURA_ETIKET[k];
+  const k = !!g.faturaKesildi && !g.faturaPasif;
+  const et = faturaEtiket(g);
+  const pasif = !!g.faturaPasif;
   return `<span class="g-fatura-kap"><button type="button" class="g-fatura" role="switch" aria-checked="${k}"` +
-    ` aria-label="${et}" title="${et}" data-fatura data-i="${i}"${faturaIstekte.has(g.id) ? ' disabled aria-busy="true"' : ''}></button>` +
+    ` aria-label="${et}" title="${et}" data-fatura data-i="${i}"${pasif ? ' disabled data-pasif="1"' : (faturaIstekte.has(g.id) ? ' disabled aria-busy="true"' : '')}></button>` +
     (yaziyla ? `<span class="g-fatura-yazi" data-fatura-yazi data-i="${i}">${et}</span>` : '') + `</span>`;
 }
 // Tek gönderimin tüm anahtarlarını (tablo satırı + gömülü/mobil kart) tutarlı tutar; liste yeniden istenmez.
 function faturaAnahtarlariGuncelle(g) {
   const i = gonderilenVeri.indexOf(g);
   if (i < 0) return;
-  const k = !!g.faturaKesildi, et = FATURA_ETIKET[k], mesgul = faturaIstekte.has(g.id);
+  const k = !!g.faturaKesildi && !g.faturaPasif, et = faturaEtiket(g), mesgul = faturaIstekte.has(g.id) || !!g.faturaPasif;
   document.querySelectorAll(`#gonderilenListe [data-fatura][data-i="${i}"]`).forEach(b => {
     b.setAttribute('aria-checked', String(k));
     b.title = et; b.setAttribute('aria-label', et);
@@ -5758,7 +5782,7 @@ document.addEventListener('keydown', (e) => {
 }, true);
 function faturaTikla(btn) {
   const g = gonderilenVeri[+btn.dataset.i];
-  if (!g || btn.disabled || faturaIstekte.has(g.id)) return;
+  if (!g || g.faturaPasif || btn.disabled || faturaIstekte.has(g.id)) return;
   if (g.faturaKesildi) faturaPenceresiAc(g);        // kesildi → kesilmedi: önce onay
   else faturaUygula(g, true);                       // kesilmedi → kesildi: doğrudan
 }

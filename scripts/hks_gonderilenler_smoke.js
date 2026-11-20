@@ -43,7 +43,7 @@ function gonderilenler() {
       bildirimTuru: 'SATIN_ALIM', partiNo: '', faturaKesildi: false, yeniKunyeler: [] },
     { id: 'g1003', zaman: '2026-10-03T18:20:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '06ABC123', belgeNo: '',
       ulkeAd: 'Yurt içi → Hal Komisyoncu A.Ş.', urunAd: 'Kayısı', adet: 2, toplamKg: 8000, fiyat: 0, rusum: 0, hataSayisi: 0, genelHata: '',
-      bildirimTuru: 'SEVK_ETME', partiNo: '', faturaKesildi: false, yeniKunyeler: KUNYELER.slice(0, 2) },
+      bildirimTuru: 'SEVK_ETME', partiNo: '', faturaKesildi: false, faturaPasif: true, yeniKunyeler: KUNYELER.slice(0, 2) },
     { id: 'g1004', zaman: '2026-10-02T07:00:00+03:00', firmaId: 7, firmaAd: 'Test Firma A', plaka: '33XYZ99', belgeNo: '',
       ulkeAd: 'Üreticiden Sevk Alım ← Örnek Üretici (Mersin/Silifke)', urunAd: 'Kayısı', adet: 1, toplamKg: 15000, fiyat: 22.75, rusum: 0,
       hataSayisi: 0, genelHata: '', bildirimTuru: 'URETICIDEN_SEVK_ALIM', faturaKesildi: false, yeniKunyeler: ['3601234567890199'] },
@@ -193,6 +193,14 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
     ok('v526: açık = MAVİ (29,95,224), kapalı = TURUNCU (245,158,11), anahtar ~40px',
        nitel.renkAcik === 'rgb(29, 95, 224)' && nitel.renkKapali === 'rgb(245, 158, 11)' && nitel.w >= 38 && nitel.w <= 42, JSON.stringify(nitel));
     ok('v526: yurt içi (g1003) kapalı, yurt dışı (g1001) açık', (await fDurum(2)) === 'false' && (await fDurum(0)) === 'true');
+    // v531: Sevk Etme'de fatura kesilmez → anahtar PASİF
+    D.istekler.length = 0;
+    await fBtn(2).click({ force: true }).catch(() => {});
+    await sayfa.waitForTimeout(80);
+    ok('v531: Sevk Etme (g1003) anahtarı PASİF (disabled, kapalı, title "Sevkte fatura kesilmez"), tıkta istek/pencere YOK; diğer türler etkin',
+       (await fBtn(2).isDisabled()) && (await fDurum(2)) === 'false' && (await fBtn(2).getAttribute('title')) === 'Sevkte fatura kesilmez' &&
+       fPost().length === 0 && !(await sayfa.locator('#faturaPencere.acik').count()) &&
+       !(await fBtn(0).isDisabled()) && !(await fBtn(1).isDisabled()) && !(await fBtn(3).isDisabled()));
     await foto(sayfa, '13_fatura_1280');
 
     // kapalı → açık: DOĞRUDAN istek, satır açılmaz
