@@ -29,6 +29,7 @@ require_once __DIR__ . '/mail_mime.php';   // mail_view.php'nin mail_gorunum_cha
 require_once __DIR__ . '/mail_view.php';
 require_once __DIR__ . '/siparis_odeme_aviz.php';   // v490: avizo → ödeme (mail_ek_hazirla çağırmaz)
 require_once __DIR__ . '/siparis_debit.php';          // v492: debit note → hks_kv (ödeme YAZMAZ)
+require_once __DIR__ . '/siparis_bildirim.php';        // v529: 🔔 bildirim akışı (tarama bitince yeni gelenler)
 
 const SIPARIS_MAIL_GUN = 15;            // sabit pencere (ekranda yazar)
 const SIPARIS_MAIL_ADIM_SN = 20;        // tek HTTP adımının süre bütçesi
@@ -649,6 +650,8 @@ function siparis_mail_bitir(PDO $pdo, array $k, string $durum, int $simdiTs): ar
             'durum' => $durum, 'sayac' => $k['sayac'], 'pdfsiz' => (int)($k['pdfsiz'] ?? 0), 'uyarilar' => $uyarilar, 'satirlar' => $satirlar, 'i' => (int)$k['i'], 'toplam' => count($k['oge'])];
     siparis_mail_kv_yaz($pdo, SIPARIS_MAIL_KV_SON . $k['tur'], $son);
     siparis_mail_kv_sil($pdo, SIPARIS_MAIL_KV_TARAMA);
+    // v529: yeni gelenler 🔔 akışına (budanmamış TÜM satırlardan; kilit altında). Hata taramayı bozmaz.
+    siparis_bildirim_ekle($pdo, siparis_bildirim_ogeleri((string)$k['tur'], (array)$k['satirlar']), (string)$k['depo'], $simdiTs);
     siparis_audit('siparis_mail_tara', null, null, ['tur' => $k['tur'], 'gun' => SIPARIS_MAIL_GUN, 'hesap_sayisi' => count((array)$k['hesaplar']), 'sayac' => $k['sayac'],
         'sure_sn' => max(0, $simdiTs - (int)$k['basla']), 'durum' => $durum], (int)$k['uid']);
     return $son;

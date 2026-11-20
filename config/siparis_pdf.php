@@ -475,6 +475,8 @@ function siparis_pdf_belge_turu(array $pages): string
     if (preg_match('/Überweisung\s+über/iu', $t) && preg_match('/zum\s+Ausgleich\s+folgender\s+Rechnungen/iu', $t)) $hits[] = 'payment_advice';
     // v492: OGL "Invoice-Debit Note" (fiyat farkı borç dekontu)
     if (preg_match('/Invoice-Debit\s+Note/i', $t) && preg_match('/We\s+debit\s+you\s+the\s+following\s+amount/i', $t)) $hits[] = 'debit_note';
+    // v529: OGL "Invoice" biçimli borç dekontu (ör. kalite / analiz masrafı "DEBIT FOR NON-COMPLIANCE …"; fatura no/LKW taşımaz)
+    elseif (sipdf_debit_fatura_bicimi($t)) $hits[] = 'debit_note';
     return count($hits) === 1 ? $hits[0] : 'unknown';
 }
 
@@ -1199,7 +1201,9 @@ function sipdf_debit_sayfa(int $pn, array $segs): array
     $fail = static fn(string $m): array => ['ok' => false, 'page' => $pn, 'hata' => $m];
     $t = '';
     foreach ($segs as $s) $t .= sipdf_t($s) . "\n";
-    if (!preg_match('/Invoice-Debit\s+Note/i', $t) || !preg_match('/We\s+debit\s+you\s+the\s+following\s+amount/i', $t)) return $fail('Sayfa bir debit note değil.');
+    $klasik = preg_match('/Invoice-Debit\s+Note/i', $t) && preg_match('/We\s+debit\s+you\s+the\s+following\s+amount/i', $t);
+    $faturaBicimi = !$klasik && sipdf_debit_fatura_bicimi($t);   // v529: "Invoice" başlıklı kesinti (kalite/analiz vb.)
+    if (!$klasik && !$faturaBicimi) return $fail('Sayfa bir debit note değil.');
     if (!preg_match('/OGL\s+FOOD\s+TRADE/i', $t) || !preg_match('/Asya\s+Fresh/i', $t)) return $fail('Gönderen/alıcı OGL Food Trade → Asya Fresh olarak görünmüyor.');
     if (!preg_match('/Document\s+no\.?\s+(\d{4}-\d{4,8})\b/i', $t, $m)) return $fail('Belge numarası okunamadı.');
     $no = $m[1];
@@ -1209,8 +1213,9 @@ function sipdf_debit_sayfa(int $pn, array $segs): array
         foreach ($segs as $v) if (abs($v['y'] - $s['y']) <= 2.5 && $v['x'] > $s['x'] && preg_match('/^\d{2}\.\d{2}\.\d{4}$/', sipdf_t($v)) && sipdf_dmy(sipdf_t($v)) !== null) { $tarih = sipdf_dmy(sipdf_t($v)); break 2; }
     }
     if ($tarih === null) return $fail('Belge tarihi okunamadı (' . $no . ').');
-    if (!preg_match('/Your\s+Invoice\s+(IHR\d{13}(?:D[IVX]{1,6})?)\b/', $t, $m)) return $fail('Fatura numarası okunamadı (' . $no . ').');
-    $fatura = $m[1];
+    $fatura = '';
+    if (preg_match('/Your\s+Invoice\s+(IHR\d{13}(?:D[IVX]{1,6})?)\b/', $t, $m)) $fatura = $m[1];
+    elseif ($klasik) return $fail('Fatura numarası okunamadı (' . $no . ').');
     // Lorry/Ship satırı (yalnız bilgi): "Lorry/Ship" etiketinden sonraki ilk segment, sondaki yükleme tarihi ayrılır
     $lorry = ''; $gemiTarih = null;
     foreach ($segs as $s) {
@@ -1225,7 +1230,9 @@ function sipdf_debit_sayfa(int $pn, array $segs): array
         break;
     }
     $neden = '';
-    foreach ($segs as $s) if (preg_match('/^DEBIT\s+BECAUSE\s+OF\s+(.+)$/i', sipdf_t($s), $mm)) { $neden = trim($mm[1]); break; }
+    foreach ($segs as $s) if (preg_match('/^DEBIT\s+(?:BECAUSE\s+OF|FOR)\s+(.+)$/i', sipdf_t($s), $mm)) { $neden = trim($mm[1]); break; }
+    $denetim = preg_match('/Audit\s+Report:?\s*([A-Za-z0-9\-\/]{1,30})/i', $t, $mm) ? $mm[1] : '';
+    $hizmet = preg_match('/Service\s+Date:?\s*(\d{1,2}\/\d{4}|\d{2}\.\d{2}\.\d{4})/i', $t, $mm) ? $mm[1] : '';
     $anl = null; $fat = null; $pbFiyat = null;
     if (preg_match('/PRICE\s+AGREED\s+(\d+,\d+)\s+([A-Z]{3})/', $t, $mm)) { $anl = sipdf_debit_fiyat($mm[1]); $pbFiyat = $mm[2]; }
     if (preg_match('/PRICE\s+INVOICED\s+(\d+,\d+)\s+([A-Z]{3})/', $t, $mm) && ($pbFiyat === null || $pbFiyat === $mm[2])) $fat = sipdf_debit_fiyat($mm[1]); else $pbFiyat = null;
@@ -1238,8 +1245,13 @@ function sipdf_debit_sayfa(int $pn, array $segs): array
     foreach (sipdf_lines($segs) as $ln) {
         $x = sipdf_ltext($ln);
         if (!preg_match('/^(\d{1,3}) (-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}) (\d{6,}) \d+ \d+,\d+ (.+?) (\d+) (\d+) \d+ \S+$/u', $x, $mm)) {
-            if (preg_match('/^\d{1,3} -?[\d.]+,\d{2} \d{6,} /', $x)) return $fail('Kalem satırı okunamadı (' . $no . ').');
-            continue;
+            // v529: "Invoice" biçimli kesintide palet sütunu yok: "<pos> <tutar> <kod> <miktar> <fiyat> <açıklama> <koli> <qty/c> <birim>"
+            if ($faturaBicimi && preg_match('/^(\d{1,3}) (-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}) (\d{6,}) \d+ (?:\d{1,3}(?:\.\d{3})+|\d+),\d+ (.+?) (\d+) \d+ \S+$/u', $x, $m2)) {
+                $mm = [$m2[0], $m2[1], $m2[2], $m2[3], $m2[4], '0', $m2[5]];
+            } else {
+                if (preg_match('/^\d{1,3} -?[\d.]+,\d{2} \d{6,} /', $x)) return $fail('Kalem satırı okunamadı (' . $no . ').');
+                continue;
+            }
         }
         $k = sipdf_de_kurus($mm[2]);
         if ($k === null) return $fail('Kalem tutarı okunamadı (' . $no . ').');
@@ -1259,7 +1271,23 @@ function sipdf_debit_sayfa(int $pn, array $segs): array
     if ($amount <= 0) return $fail('Tutar sıfır ya da negatif (' . $no . ') — otomatik alınmadı.');
     return ['ok' => true, 'page' => $pn, 'no' => $no, 'date' => $tarih, 'invoice_no' => $fatura, 'lorry' => $lorry, 'ship_date' => $gemiTarih,
         'reason' => $neden, 'fiyat_farki' => $fiyatFarki, 'agreed_price' => $anl, 'invoiced_price' => $fat, 'pb' => $pb, 'amount_kurus' => $amount,
-        'lkw' => array_keys($lkw), 'items' => $kalem];
+        'lkw' => array_keys($lkw), 'items' => $kalem, 'bicim' => $klasik ? 'debit_note' : 'invoice', 'audit_report' => $denetim, 'service_date' => $hizmet];
+}
+
+/** v529: OGL'nin "Invoice" başlıklı borç dekontu mu (kalite/analiz masrafı vb.)? Sayfa metni üzerinden; klasik "Invoice-Debit Note" DEĞİL. */
+function sipdf_debit_fatura_bicimi(string $t): bool
+{
+    return (bool)preg_match('/OGL\s+FOOD\s+TRADE/i', $t) && (bool)preg_match('/^Invoice$/mi', $t) && (bool)preg_match('/^DEBIT\s+(?:FOR|BECAUSE\s+OF)\s+\S/mi', $t)
+        && (bool)preg_match('/shorten\s+the\s+amount\s+by\s+the\s+payment\s+of\s+your\s+invoice/i', $t) && !preg_match('/Invoice-Debit\s+Note/i', $t);
+}
+
+/** v529: "Invoice-Debit Note <no> Page N v. M" devam sayfası mı? Dönüş: belge no ya da null. */
+function sipdf_debit_devam_no(array $segs): ?string
+{
+    $t = '';
+    foreach ($segs as $s) $t .= sipdf_t($s) . "\n";
+    if (preg_match('/We\s+debit\s+you\s+the\s+following\s+amount/i', $t)) return null;
+    return preg_match('/Invoice-Debit\s+Note\s+(\d{4}-\d{4,8})\s+Page\s+([2-9]|\d{2,})\s+v\.?\s+\d+/i', $t, $m) ? $m[1] : null;
 }
 
 function siparis_pdf_parse_debit_note(array $pages, array $meta = []): array
@@ -1269,6 +1297,19 @@ function siparis_pdf_parse_debit_note(array $pages, array $meta = []): array
     $pages = array_filter($pages, 'is_array');
     if (!$pages) { $out['hata_kodu'] = 'debit_bos'; $out['hata'] = 'Debit note sayfası bulunamadı.'; return $out; }
     if (count($pages) > 60) { $out['hata_kodu'] = 'debit_cok_uzun'; $out['hata'] = 'Debit note dosyası çok uzun (60 sayfadan fazla) — otomatik alınmadı.'; return $out; }
+    // v529: çok sayfalı debit note — "Invoice-Debit Note <no> Page 2 v. 2" devam sayfası önceki sayfaya EKLENİR (toplam çoğu zaman devam sayfasındadır).
+    // Segmentler y ekseninde sayfa başına kaydırılır (satır gruplaması sayfalar arası karışmasın). Devamın belge numarası önceki sayfanınkiyle aynı olmalı.
+    $birlesik = []; $ekSayi = []; $sonPn = null;
+    foreach ($pages as $pn => $segs) {
+        $dn = sipdf_debit_devam_no($segs);
+        if ($dn !== null && $sonPn !== null && preg_match('/Document\s+no\.?\s+' . preg_quote($dn, '/') . '\b/i', implode("\n", array_map('sipdf_t', $birlesik[$sonPn])))) {
+            $ekSayi[$sonPn]++;
+            foreach ($segs as $sg) { $sg['y'] = (float)$sg['y'] + 2000.0 * $ekSayi[$sonPn]; $birlesik[$sonPn][] = $sg; }
+            continue;
+        }
+        $birlesik[$pn] = $segs; $ekSayi[$pn] = 0; $sonPn = $pn;
+    }
+    $pages = $birlesik;
     $goruldu = [];
     foreach ($pages as $pn => $segs) {
         $n = sipdf_debit_sayfa((int)$pn, $segs);

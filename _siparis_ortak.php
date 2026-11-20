@@ -727,11 +727,12 @@ function sipui_odeme_aviz_html(PDO $pdo, int $odemeId): string
  * Cari Döküm / Fiyat Dengeleme'de "kalan fark"a girer. Sevkiyat bağlantısı yalnız bu kullanıcıya GÖRÜNÜR depodaki sevkiyat içindir.
  * Tümü h() ile kaçırılır; yazma YOK.
  */
-function sipui_debit_html(PDO $pdo, int $en = 300): string
+function sipui_debit_html(PDO $pdo, int $en = 300, bool $yaz = false): string
 {
     $notlar = siparis_debit_hepsi($pdo);
-    $baslik = '<div class="card-head"><h2>📉 OGL debit note\'ları</h2></div>';
-    if (!$notlar) return '<div class="card od-aviz-kart">' . $baslik . '<p class="muted">Kayıtlı debit note yok. Siparişler › Mailden al › «Ödeme sorgula» OGL\'nin debit note PDF\'lerini de okur.</p></div>';
+    $baslik = '<div class="card-head"><h2>📉 OGL kesintileri (debit note)</h2>'
+        . ($yaz ? '<button type="button" class="btn btn-primary" data-od-ac="odKesintiDlg">➖ OGL kesintisi ekle</button>' : '') . '</div>';
+    if (!$notlar) return '<div class="card od-aviz-kart">' . $baslik . '<p class="muted">Kayıtlı debit note yok. Siparişler › Mailden al › «Ödeme sorgula» OGL\'nin debit note PDF\'lerini okur; mailde gelmeyenleri «OGL kesintisi ekle» ile PDF yükleyerek ya da elle girebilirsiniz.</p></div>';
     $esl = siparis_debit_esle($pdo, $notlar);
     $sids = [];
     foreach ($esl as $e) if ($e['durum'] === 'eslesti' && $e['sid'] !== null) $sids[$e['sid']] = true;
@@ -748,18 +749,24 @@ function sipui_debit_html(PDO $pdo, int $en = 300): string
     $o = '<div class="card od-aviz-kart">' . $baslik;
     $o .= '<p class="od-aviz-ozet"><strong>' . count($notlar) . ' debit note</strong> · ' . h(implode(' · ', array_map(static fn(string $pb, int $k): string => siparis_odeme_aviz_para($k) . ' ' . $pb, array_keys($top), $top)))
         . ' <span class="sip-soluk">(para birimleri toplanmaz; tutarlar ödeme avizosunda net ödemeden zaten düşülmüştür)</span></p>';
-    $o .= '<div class="table-wrap"><table class="data-table od-aviz-tablo"><thead><tr><th>Belge no</th><th>Tarih</th><th>Fatura</th><th>Sevkiyat</th><th>Neden</th><th class="num">Anlaşılan / Kesilen</th><th class="num">Tutar</th><th>Hesaba</th></tr></thead><tbody>';
+    $o .= '<div class="table-wrap"><table class="data-table od-aviz-tablo"><thead><tr><th>Belge no</th><th>Tarih</th><th>Fatura</th><th>Sevkiyat</th><th>Neden</th><th class="num">Anlaşılan / Kesilen</th><th class="num">Tutar</th><th>Hesaba</th><th>Belge</th>' . ($yaz ? '<th class="no-print"></th>' : '') . '</tr></thead><tbody>';
     foreach (array_slice($notlar, 0, $en) as $n) {
         $e = $esl[(string)$n['no']] ?? ['durum' => 'yok', 'sid' => null, 'yontem' => '', 'ref' => ''];
         if ($e['durum'] === 'eslesti' && $e['sid'] !== null) {
             $x = $sev[$e['sid']] ?? null;
             $es = $x === null ? '<span class="sip-soluk">Sevkiyat artık yok</span>'
-                : (siparis_gorunur($x) ? '<a href="siparis_view.php?id=' . (int)$x['id'] . '">' . h((string)$x['order_ref']) . '</a> <span class="sip-soluk">(' . ($e['yontem'] === 'fatura' ? 'fatura' : 'LKW') . ')</span>' : '<span class="sip-soluk">Başka depo</span>');
+                : (siparis_gorunur($x) ? '<a href="siparis_view.php?id=' . (int)$x['id'] . '">' . h((string)$x['order_ref']) . '</a> <span class="sip-soluk">(' . ($e['yontem'] === 'fatura' ? 'fatura' : ($e['yontem'] === 'elle' ? 'elle' : 'LKW')) . ')</span>' : '<span class="sip-soluk">Başka depo</span>');
         } else $es = $e['durum'] === 'belirsiz' ? 'Birden çok sevkiyat' : '<span class="sip-soluk">Eşleşmedi</span>';
         $hesap = !empty($n['fiyat_farki']) ? ($e['durum'] === 'eslesti' && strtoupper((string)($n['pb'] ?? '')) === 'EUR' ? '✓ Kalan farka girer' : '<span class="sip-soluk">Eşleşince girer</span>') : '<span class="sip-soluk">Fiyat farkı değil — girmez</span>';
         $o .= '<tr><td class="nowrap">' . h((string)$n['no']) . '</td><td class="nowrap">' . h(sipui_tarih((string)($n['tarih'] ?? ''))) . '</td><td class="nowrap">' . h((string)($n['invoice_no'] ?? '')) . '</td><td>' . $es . '</td>'
             . '<td>' . h((string)($n['neden'] ?? '') !== '' ? (string)$n['neden'] : '—') . '</td><td class="num">' . h($fiyat($n['anlasilan'] ?? null) . ' / ' . $fiyat($n['kesilen'] ?? null)) . '</td>'
-            . '<td class="num">' . h(siparis_odeme_aviz_para((int)$n['amount_kurus']) . ' ' . (string)($n['pb'] ?? '')) . '</td><td>' . $hesap . '</td></tr>';
+            . '<td class="num">' . h(siparis_odeme_aviz_para((int)$n['amount_kurus']) . ' ' . (string)($n['pb'] ?? '')) . '</td><td>' . $hesap . '</td>'
+            . '<td class="nowrap">' . (!empty($n['dosya']) ? '<a href="siparis_kesinti.php?dosya=' . rawurlencode((string)$n['no']) . '" target="_blank" rel="noopener">📄 PDF</a>' : '<span class="sip-soluk">—</span>')
+            . ' <span class="sip-soluk">' . (($n['kaynak'] ?? 'mail') === 'elle' ? '✍ elle' : '📧 mail') . '</span>'
+            . ((string)($n['audit_report'] ?? '') !== '' ? '<br><span class="sip-soluk">Audit ' . h((string)$n['audit_report']) . ((string)($n['hizmet'] ?? '') !== '' ? ' · ' . h((string)$n['hizmet']) : '') . '</span>' : '') . '</td>'
+            . ($yaz ? '<td class="no-print nowrap"><button type="button" class="btn btn-sm" data-od-kesinti="bagla" data-no="' . h((string)$n['no']) . '" data-sid="' . (int)($n['sid'] ?? 0) . '" data-ozet="' . h((string)$n['no'] . ' · ' . siparis_odeme_aviz_para((int)$n['amount_kurus']) . ' ' . (string)($n['pb'] ?? '')) . '">🔗 Sevkiyat</button> '
+                . '<button type="button" class="btn btn-sm" data-od-kesinti="iptal" data-no="' . h((string)$n['no']) . '" data-ozet="' . h((string)$n['no'] . ' · ' . siparis_odeme_aviz_para((int)$n['amount_kurus']) . ' ' . (string)($n['pb'] ?? '')) . '">İptal</button></td>' : '')
+            . '</tr>';
     }
     $o .= '</tbody></table></div>';
     if (count($notlar) > $en) $o .= '<p class="sip-soluk">İlk ' . $en . ' kayıt gösterildi (toplam ' . count($notlar) . ').</p>';
@@ -903,8 +910,11 @@ function sipui_mail_blok_html(array $d): string
         if (!$ayarli) $herhangiAyarsiz = true;
         $dugmeler .= '<button type="button" class="btn sip-mail-btn sip-mail-btn--' . h($t) . '" data-sip-mail="' . h($t) . '"' . ($ayarli ? '' : ' disabled title="Bu sorgu için gönderen adresi ayarlanmadı"') . '>' . h($m['dugme']) . '</button>';
     }
-    $o = '<div class="sip-mail" id="mail" data-sip-mail-kap data-sip-mail-url="siparis_mail.php" data-sip-mail-csrf="' . h(csrf_token()) . '">';
-    $o .= '<div class="sip-mail-baslik"><h2>📧 Mailden al</h2><p class="sip-soluk">Son ' . SIPARIS_MAIL_GUN . ' günün mailleri taranır; belge türü içerikten anlaşılır.</p></div>';
+    $oto = array_values(array_filter((array)($d['oto'] ?? []), static fn($t): bool => is_string($t) && !empty($ayarliH[$t])));
+    $o = '<div class="sip-mail" id="mail" data-sip-mail-kap data-sip-mail-url="siparis_mail.php" data-sip-mail-csrf="' . h(csrf_token()) . '"'
+        . ($oto ? ' data-sip-mail-oto="' . h(implode(',', $oto)) . '"' : '') . '>';
+    $o .= '<div class="sip-mail-baslik"><h2>📧 Mailden al</h2><p class="sip-soluk">Son ' . SIPARIS_MAIL_GUN . ' günün mailleri taranır; belge türü içerikten anlaşılır.'
+        . ' <span title="Aynı tür en çok ' . SIPARIS_MAIL_OTO_DK . ' dakikada bir">Sayfa açılınca kendiliğinden sorgulanır; gelenler 🔔 zilde.</span></p></div>';
     $o .= '<div class="sip-mail-dugmeler" role="group" aria-label="Mailden belge al">' . $dugmeler . '</div>';
     if (array_key_exists('odeme', $ayarliH)) {
         $o .= '<p class="sip-soluk sip-mail-odeme-not">💶 Ödeme sorgula: OGL ödeme avizolarını (PDF) okur, ödemeyi onay sormadan Ödemeler\'e kaydeder ve fatura numaralarını eşleştirir. Yanlış kayıt Ödemeler sayfasında iptal edilebilir. OGL debit note PDF\'lerini de okur (ödeme eklemez; fiyat farkı debit\'i Cari Döküm ve Fiyat Dengeleme\'de kalan farka girer).</p>';
@@ -952,4 +962,23 @@ function sipui_yukle_ozet_html(array $son, ?array $yarim, bool $mailVar): string
         $o .= '<span class="sip-yukle-son' . ($hata > 0 ? ' sip-yukle-son--hata' : '') . '">' . h(implode(' · ', $parca)) . '</span>';
     }
     return $o . '<span class="sip-yukle-mesgul" data-sip-yukle-mesgul hidden role="status">Tarama sürüyor</span><span class="sip-yukle-ok" aria-hidden="true">▸</span>';
+}
+
+/**
+ * v529 — 🔔 bildirim zili (siparisler.php sağ üst). Liste sunucuda h() ile değil JSON olarak gömülür (JSON_HEX_TAG: </script> kaçışı),
+ * istemci yalnız textContent ile çizer. Okundu = cihazda (localStorage asya_sip_zil_<uid>). Boş akışta da zil çizilir (arka plan sorgusu doldurabilir).
+ * @param list<array{id:int,t:string,ikon:string,metin:string,link:string}> $liste
+ */
+function sipui_zil_html(array $liste, int $uid): string
+{
+    $veri = json_encode(array_values($liste), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]';
+    return '<div class="sip-zil" data-sip-zil data-sip-zil-uid="' . $uid . '">'
+        . '<button type="button" class="btn btn-lg sip-zil-btn" data-sip-zil-ac aria-haspopup="dialog" aria-expanded="false" aria-label="Bildirimler">'
+        . '<span class="sip-zil-ikon" aria-hidden="true">🔔</span><span class="sip-zil-sayi" data-sip-zil-sayi hidden></span><span class="sip-zil-don" data-sip-zil-don hidden aria-hidden="true"></span></button>'
+        . '<div class="sip-zil-panel" data-sip-zil-panel role="dialog" aria-label="Bildirimler" hidden>'
+        . '<div class="sip-zil-bas"><strong>Bildirimler</strong><span class="sip-soluk" data-sip-zil-durum></span>'
+        . '<button type="button" class="btn btn-sm" data-sip-zil-yenile hidden>↻ Listeyi yenile</button></div>'
+        . '<ul class="sip-zil-liste" data-sip-zil-liste></ul>'
+        . '<p class="sip-soluk sip-zil-not">Mail sorgusuyla (otomatik ya da düğmeyle) gelen yeni sipariş, güncelleme, ödeme ve kesintiler. Son 100 olay saklanır.</p></div>'
+        . '<script type="application/json" data-sip-zil-veri>' . $veri . '</script></div>';
 }

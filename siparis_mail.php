@@ -72,5 +72,6 @@ if ($r['ok'] && !empty($r['bitti']) && isset($r['son'])) {
     // sonuç tek yerde, sunucuda çizilir (kullanıcı verisi h() ile kaçırılır); gönderen/konu yalnız izleyenin görünür hesaplarından
     $r['html'] = sipui_mail_sonuc_html($pdo, $r['son'], mail_gorunur_hesap_idleri($uid, $pdo));
     unset($r['son']);
+    $r['bildirimler'] = siparis_bildirim_liste($pdo, $depo, siparis_cari_yetkili());   // v529: 🔔 zil tazelenir (arka plan sorgusu yeni geleni sessizce kaybetmesin)
 }
 $json($r, (int)($r['http'] ?? 200));
