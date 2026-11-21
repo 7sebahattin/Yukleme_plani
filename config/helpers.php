@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v545');
+    define('APP_SURUM', 'v546');
 }
 
 // --- HTML kaçışı ---
@@ -2280,6 +2280,18 @@ function ensure_definition(string $type, string $name): void {
             "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)"
         )->execute([$type, $name]);
     } catch (PDOException $e) {}
+}
+
+/**
+ * Mal Kabul fişinin tarihi formda yalnız GÜN olarak girilir (yyyy-mm-dd); kayıtta eski biçim (yyyy-mm-ddTHH:MM) korunur ki
+ * rapor/stok gibi okuyucular bozulmasın. Gün değişmediyse eski kaydın saati kalır; yeni günse bugünse şimdiki saat, değilse 00:00.
+ * Geçersiz/boş girdi '' döner (çağıran "tarih zorunludur" hatası verir).
+ */
+function kantar_tarih_birlestir(string $girdi, string $eski = ''): string {
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})/', trim($girdi), $m) || !checkdate((int)$m[2], (int)$m[3], (int)$m[1])) return '';
+    $gun = $m[1] . '-' . $m[2] . '-' . $m[3];
+    if (preg_match('/^' . preg_quote($gun, '/') . '[T ](\d{2}:\d{2})/', trim($eski), $e)) return $gun . 'T' . $e[1];
+    return $gun === date('Y-m-d') ? date('Y-m-d\TH:i') : $gun . 'T00:00';
 }
 
 // ═══════════════════════════════════════════════════════════

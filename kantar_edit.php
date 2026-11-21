@@ -58,6 +58,7 @@ $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
+    $eski_tarih = (string)($fis['giris_tarih'] ?? '');
     $fields = [
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
         'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
@@ -67,6 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($fields as $k) {
         $fis[$k] = trim((string)($_POST[$k] ?? ''));
     }
+
+    // Tarih yalnız gün olarak gelir; saat kayıtta korunur
+    $fis['giris_tarih'] = kantar_tarih_birlestir($fis['giris_tarih'], $eski_tarih);
 
     // ── Normalleştir ──────────────────────────────────────
     $fis['firma_adi']   = normalize_firma($fis['firma_adi']);
@@ -78,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Zorunlu alan kontrolü ─────────────────────────────
-    if ($fis['giris_tarih'] === '') $errors[] = 'Giriş tarihi zorunludur.';
+    if ($fis['giris_tarih'] === '') $errors[] = 'Geçerli bir tarih girin.';
     if ($fis['firma_adi']   === '') $errors[] = 'Firma adı zorunludur.';
     if ($fis['malin_cinsi'] === '') $errors[] = 'Mal cinsi zorunludur.';
     if ($fis['depo']        === '') $errors[] = 'Depo zorunludur.';
@@ -92,6 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ensure_definition('firma', $fis['firma_adi']);
         ensure_definition('urun',  $fis['malin_cinsi']);
         ensure_definition('depo',  $fis['depo']);
+        ensure_definition('lokasyon', $fis['geldigi_yer']);
     }
 
     if (empty($errors)) try {
@@ -100,6 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $net = max(0, $t1 - $t2);
 
         [$kp_rows, $kasa_tot_dara, $palet_tot_dara, $first_kasa, $first_palet, $tot_kasa_say, $tot_palet_say, $kasa_dara_val, $palet_dara_val] = _parse_kp_rows($_POST['kp_rows'] ?? [], $kasa_list, $palet_list);
+        // Listede olmayan palet/kasa cinsi yazıldıysa tanımlara eklenir
+        foreach ($kp_rows as $_kr) ensure_definition($_kr['tip'] === 'kasa' ? 'kasa_cinsi' : 'palet_tipi', $_kr['cinsi']);
 
         $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
         $foto_sql = '';

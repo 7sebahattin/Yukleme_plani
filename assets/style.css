@@ -7243,13 +7243,8 @@ html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --m
 .mk-sec-title--tartim { background: var(--mk-warn-soft); color: var(--mk-warn); }
 .mk-g { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .mk-lbl { display: block; font-size: .85rem; color: var(--muted); font-weight: 500; }
-.mk-lbl > input, .mk-lbl > select, .mk-lbl > small { display: block; margin-top: 4px; }
+.mk-lbl > input, .mk-lbl > select, .mk-lbl > small, .mk-lbl > .mk-cb { display: block; margin-top: 4px; }
 .mk-lbl > small.mk-inline { display: inline; margin: 0; }
-.mk-lbl > input[type="datetime-local"] {
-    width: 100%; padding: 10px 12px; min-height: 42px; font-family: inherit; font-size: 1rem;
-    color: var(--text); background: #fff; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-}
-.mk-lbl > input[type="datetime-local"]:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); }
 .mk-row2 { display: grid; grid-template-columns: 1fr; gap: 0; }
 .mk-row2 > .mk-card { margin-bottom: 14px; }
 .mk-ambalaj { display: grid; grid-template-columns: 1fr; gap: 16px; }
@@ -7294,3 +7289,36 @@ html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --m
     .mk-foot-right .btn { flex: 1 1 auto; }
     .mk-head .page-head-actions { width: 100%; }
 }
+
+/* Yazarak bulunan alan (assets/kantar-combo.js) */
+.mk-cb { position: relative; display: block; }
+.mk-cb-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 30; margin: 0; padding: 4px; list-style: none;
+    max-height: 260px; overflow-y: auto; background: var(--card, #fff); color: var(--text);
+    border: 1px solid var(--primary); border-radius: var(--radius-sm); box-shadow: 0 10px 28px rgba(11, 36, 64, .25);
+}
+.mk-cb-list[hidden] { display: none; }
+.mk-cb-list li { padding: 10px 12px; border-radius: 6px; font-weight: 600; font-size: .95rem; cursor: pointer; }
+.mk-cb-list li:hover, .mk-cb-list li.mk-cb-aktif { background: var(--primary-soft); color: var(--primary); }
+.mk-cb-list li.mk-cb-ekle { color: var(--mk-accent, #12824a); font-weight: 800; border-top: 1px dashed var(--border); }
+.mk-form .kp-row > .mk-cb { flex: 1 1 100%; min-width: 0; }
+html[data-theme="dark"] .mk-cb-list li:hover, html[data-theme="dark"] .mk-cb-list li.mk-cb-aktif { background: #1c2a40; color: #8ab8ff; }
+
+/* ═══ Mal Kabul Fişleri listesi (kantar.php, assets/kantar-liste.js; görünüm palet-fisleri.css ile ortak) ═══ */
+.kf-table tbody tr { cursor: pointer; }
+.kf-table tbody tr:focus { outline: 2px solid #0877d1; outline-offset: -2px; }
+.kf-table thead tr#kfHead th { cursor: pointer; user-select: none; }
+.kf-table th.kf-sirali-art::after { content: " ▲"; font-size: .7em; }
+.kf-table th.kf-sirali-azal::after { content: " ▼"; font-size: .7em; }
+.kf-table thead tr.kf-filtre-satir th {
+    top: 0; z-index: 2; padding: 3px 4px; cursor: default; font-weight: 400;
+    background: var(--pf-bg); border-bottom: 2px solid var(--pf-head);
+}
+.kf-filtre-satir input[type="search"] {
+    width: 100%; min-height: 0; padding: 4px 6px; border: 1px solid var(--pf-border); border-radius: 4px;
+    background: var(--pf-surface); color: var(--pf-text); box-sizing: border-box;
+}
+@media (min-width: 768px) { .kf-filtre-satir input[type="search"] { font-size: .8rem; } }
+a.pf-tb { text-decoration: none; display: inline-flex; align-items: center; }
+.pf-tb[hidden] { display: none; }
+html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; color: #e7ecf4; border-color: #34445a; }

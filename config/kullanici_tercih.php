@@ -41,24 +41,32 @@ function kt_migrate(PDO $pdo): array
     }
 }
 
+/** Tablo tercihi (genişlik/sıra/gizli) doğrulayıcısı: yalnız verilen sütun adları kabul edilir. */
+function kt_tablo_temizle(mixed $deger, array $kolonlar): ?array
+{
+    if (!is_array($deger)) return null;
+    $out = ['genislik' => [], 'sira' => [], 'gizli' => []];
+    foreach ((array)($deger['genislik'] ?? []) as $k => $w) {
+        if (in_array($k, $kolonlar, true) && is_numeric($w)) $out['genislik'][$k] = max(30, min(1200, (int)round((float)$w)));
+    }
+    foreach ((array)($deger['sira'] ?? []) as $k) {
+        if (is_string($k) && in_array($k, $kolonlar, true) && !in_array($k, $out['sira'], true)) $out['sira'][] = $k;
+    }
+    foreach ((array)($deger['gizli'] ?? []) as $k) {
+        if (is_string($k) && in_array($k, $kolonlar, true) && !in_array($k, $out['gizli'], true)) $out['gizli'][] = $k;
+    }
+    if (count($out['gizli']) >= count($kolonlar)) $out['gizli'] = [];   // en az bir sütun görünür kalır
+    return $out;
+}
+
 /** Anahtar → doğrulayıcı. Değer geçerliyse temizlenmiş dizi, değilse null. */
 function kt_dogrula(string $anahtar, mixed $deger): ?array
 {
     if ($anahtar === 'palet_fisleri.tablo') {
-        $kolonlar = ['belge_no', 'parti_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad', 'aciklama1', 'aciklama2', 'tarih', 'islem', 'islem_zaman', 'kullanici', 'sube'];
-        if (!is_array($deger)) return null;
-        $out = ['genislik' => [], 'sira' => [], 'gizli' => []];
-        foreach ((array)($deger['genislik'] ?? []) as $k => $w) {
-            if (in_array($k, $kolonlar, true) && is_numeric($w)) $out['genislik'][$k] = max(30, min(1200, (int)round((float)$w)));
-        }
-        foreach ((array)($deger['sira'] ?? []) as $k) {
-            if (is_string($k) && in_array($k, $kolonlar, true) && !in_array($k, $out['sira'], true)) $out['sira'][] = $k;
-        }
-        foreach ((array)($deger['gizli'] ?? []) as $k) {
-            if (is_string($k) && in_array($k, $kolonlar, true) && !in_array($k, $out['gizli'], true)) $out['gizli'][] = $k;
-        }
-        if (count($out['gizli']) >= count($kolonlar)) $out['gizli'] = [];   // en az bir sütun görünür kalır
-        return $out;
+        return kt_tablo_temizle($deger, ['belge_no', 'parti_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad', 'aciklama1', 'aciklama2', 'tarih', 'islem', 'islem_zaman', 'kullanici', 'sube']);
+    }
+    if ($anahtar === 'kantar.tablo') {
+        return kt_tablo_temizle($deger, ['fis_no', 'tarih', 'plaka', 'firma', 'malin', 'geldigi', 'depo', 'palet', 'palet_cinsi', 'kasa', 'kasa_cinsi', 't1', 't2', 'brut', 'dara', 'net', 'aciklama', 'islem', 'islem_yapan', 'islem_zaman']);
     }
     return null;
 }
