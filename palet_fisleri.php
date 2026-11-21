@@ -294,10 +294,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
 
 $palet_tipi_list = get_definitions_by_type('palet_tipi');
 $pf_listeler = [
-    'palet' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], $palet_tipi_list),
+    'palet' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], $palet_tipi_list),
     'firma' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('firma')),
     'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
-    'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('kasa_cinsi')),
+    'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], get_definitions_by_type('kasa_cinsi')),
     'mustahsil' => $mustahsil_aktif ? array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['unvan']], $pdo->query('SELECT id, unvan FROM cari_kartlar WHERE aktif = 1 ORDER BY unvan LIMIT 5000')->fetchAll(PDO::FETCH_ASSOC)) : [],
     'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pdo->query("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
 ];
@@ -437,23 +437,23 @@ render_header('Palet Fişleri');
 
 <dialog class="pf-dialog" id="pfDialog">
     <form id="pfForm" method="dialog" autocomplete="off" novalidate>
-        <div class="pf-dialog-head"><div><h2>Palet Fişi Ekle</h2><p>Kaydedince pencere açık kalır; parti, palet, müşteri, ürün ve kasa bir sonraki palet için korunur. <b>Enter</b> sonraki alan · <b>F10</b> kaydet · <b>Esc</b> kapat</p></div><button type="button" class="pf-close" id="pfClose" aria-label="Kapat">×</button></div>
+        <div class="pf-dialog-head"><div><h2>Palet Fişi Ekle</h2></div><button type="button" class="pf-close" id="pfClose" aria-label="Kapat">×</button></div>
         <div class="pf-form-grid">
-            <label>Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
-            <label>Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
-            <label class="pf-cb">Parti No <input name="parti_no" data-cb="parti" maxlength="100" placeholder="Yazın veya listeden seçin"></label>
-            <label class="pf-cb">Palet <input name="palet" data-cb="palet" placeholder="Yazdıkça bulunur"></label>
-            <label class="pf-cb">Müşteri <input name="firma" data-cb="firma" maxlength="150" placeholder="Yazdıkça bulunur" required></label>
-            <label class="pf-cb">Ürün <input name="urun" data-cb="urun" maxlength="150" placeholder="Yazdıkça bulunur" required></label>
-            <label class="pf-cb">Kasa Ambalaj <input name="kasa" data-cb="kasa" placeholder="Yazdıkça bulunur"></label>
-            <label>Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
-            <label class="pf-cb pf-must">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? 'Yazdıkça cari kartlardan bulunur' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
-            <label class="pf-kg">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
-            <label class="pf-kg">Dara (kg) <input name="dara_kg" inputmode="decimal"></label>
-            <label class="pf-kg">Net (kg) <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0"></label>
+            <label class="pf-w3">Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
+            <label class="pf-w3">Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
+            <label class="pf-cb pf-w6">Parti No <input name="parti_no" data-cb="parti" maxlength="100"></label>
+            <label class="pf-cb pf-w6">Palet <input name="palet" data-cb="palet"></label>
+            <label class="pf-cb pf-w6">Müşteri <input name="firma" data-cb="firma" maxlength="150" required></label>
+            <label class="pf-cb pf-w6">Ürün <input name="urun" data-cb="urun" maxlength="150" required></label>
+            <label class="pf-cb pf-w4">Kasa Ambalaj <input name="kasa" data-cb="kasa"></label>
+            <label class="pf-w2">Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
+            <label class="pf-cb pf-must pf-w6">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? '' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
+            <label class="pf-kg pf-w2">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" hidden disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
+            <label class="pf-kg pf-w2">Dara (kg) <input name="dara_kg" id="pfDara" readonly tabindex="-1" class="pf-readonly" value="0" title="Palet + kasa adedi × kasa darasından otomatik hesaplanır"></label>
+            <label class="pf-kg pf-w2">Net (kg) <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0"></label>
             <div class="pf-uyari" id="pfUyari" role="status" aria-live="polite"></div>
-            <label>Açıklama-1 <input name="aciklama1" maxlength="2000"></label>
-            <label>Açıklama-2 <input name="aciklama2" maxlength="2000"></label>
+            <label class="pf-w6">Açıklama-1 <input name="aciklama1" maxlength="2000"></label>
+            <label class="pf-w6">Açıklama-2 <input name="aciklama2" maxlength="2000"></label>
         </div>
         <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
     </form>

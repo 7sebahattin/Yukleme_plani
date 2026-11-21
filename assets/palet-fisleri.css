@@ -186,3 +186,32 @@ html[data-theme="dark"] .pf-bul-baslik{background:linear-gradient(#2c4b70,#1f3a5
 .pf-table tbody tr.pf-row-silinecek td,.pf-table tbody tr.pf-row-silinecek td.pf-cell-selected{background:#c0261c!important;color:#fff!important;font-weight:700}
 .pf-table tbody tr.pf-row-silinecek td[data-col="belge_no"]::before{color:#fff}
 .pf-table tbody tr.pf-row-silinecek td.pf-cell-selected{outline-color:#ffd0cc}
+
+/* ── v540: Ekle/Düzelt penceresi — kantar kg'si, kapalı "Kantardan al", mobilde tam ekran ── */
+.pf-kantar[hidden]{display:none}
+.pf-error:empty{display:none}
+@media(max-width:699px){
+  #pfDialog{width:100%;max-width:100%;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;box-shadow:none}
+  #pfDialog[open]{display:flex;flex-direction:column}
+  #pfDialog form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  #pfDialog .pf-dialog-head{position:static;align-items:center;padding:10px 14px}
+  #pfDialog .pf-dialog-head h2{font-size:1.1rem}
+  #pfDialog .pf-close{font-size:2rem;padding:0 6px}
+  #pfDialog .pf-form-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px 8px;padding:12px 14px;flex:1 1 auto;min-height:0;overflow-y:auto;align-content:start;-webkit-overflow-scrolling:touch}
+  #pfDialog .pf-form-grid>label{grid-column:span 6;font-size:.78rem;gap:3px}
+  #pfDialog .pf-form-grid>label.pf-w2{grid-column:span 2}
+  #pfDialog .pf-form-grid>label.pf-w3{grid-column:span 3}
+  #pfDialog .pf-form-grid>label.pf-w4{grid-column:span 4}
+  #pfDialog .pf-form-grid>label.pf-w6{grid-column:span 6}
+  #pfDialog .pf-form-grid input{min-height:44px;font-size:16px;padding:6px 9px}
+  #pfDialog .pf-kg input[name="brut_kg"],#pfDialog .pf-kg input[name="dara_kg"],#pfDialog .pf-kg input[name="net_kg"]{min-height:50px;font-size:1.15rem;padding:4px 7px}
+  #pfDialog .pf-cb-list{max-height:200px}
+  #pfDialog .pf-cb-list li{padding:12px 12px}
+  #pfDialog .pf-uyari{min-height:0}
+  #pfDialog .pf-uyari:empty{display:none}
+  #pfDialog .pf-dialog-foot{position:static;flex-wrap:wrap;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));background:var(--pf-surface)}
+  #pfDialog .pf-error{flex:1 1 100%;margin:0;order:-1}
+  #pfDialog .pf-dialog-foot .btn{flex:1 1 0;min-height:50px;font-size:1rem}
+  #pfDialog .pf-dialog-foot .pf-shortcut{display:none}
+}
+.pf-kg input[name="dara_kg"]{color:var(--pf-text)}

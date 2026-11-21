@@ -231,9 +231,10 @@
         if (silinecek !== row) {
             silmeIptal();
             silinecek = row; row.classList.add('pf-row-silinecek');
-            setStatus(`${belge} numaralı palet fişi silinecek — silmek için Sil'e tekrar basın, vazgeçmek için Esc.`);
+            setStatus(`${belge} numaralı palet fişi silinecek — devam etmek için Sil'e tekrar basın (onay sorulur), vazgeçmek için Esc.`);
             return;
         }
+        if (!window.confirm(`${belge} numaralı palet fişi silinsin mi? Bu işlem geri alınamaz.`)) { silmeIptal(true); return; }
         try {
             await send('delete', { id: row.dataset.id });
             silinecek = null;
@@ -271,7 +272,7 @@
     const saveBtn = document.getElementById('pfSave');
     const uyari = document.getElementById('pfUyari');
     const netBox = document.getElementById('pfNet');
-    const alanSirasi = ['tarih', 'parti_no', 'palet', 'firma', 'urun', 'kasa', 'kasa_adeti', 'mustahsil', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2'];
+    const alanSirasi = ['tarih', 'parti_no', 'palet', 'firma', 'urun', 'kasa', 'kasa_adeti', 'mustahsil', 'brut_kg', 'aciklama1', 'aciklama2'];
     let nextBelge = window.PALET_FISLERI?.sonrakiBelge || 1;
 
     function mesaj(text, ok) { errorBox.textContent = text || ''; errorBox.classList.toggle('pf-ok', !!ok); }
@@ -310,6 +311,7 @@
         }
         function render() {
             const q = trUp(input.value);
+            if (!q) { items = []; close(); return; }     // odaklanınca ya da boşken liste açılmaz; yazınca açılır
             const all = kaynak();
             const skor = x => { const n = trUp(x.name); return n === q ? 0 : n.startsWith(q) ? 1 : 2; };
             items = (q ? all.filter(x => trUp(x.name).includes(q)).sort((a, b) => skor(a) - skor(b)) : all).slice(0, 8).map(x => ({ type: 'var', x }));
@@ -319,7 +321,7 @@
             draw();
         }
         async function choose(it) {
-            if (it.type === 'var') { input.value = it.x.name; if (it.x.id) input.dataset.id = it.x.id; else delete input.dataset.id; close(); return true; }
+            if (it.type === 'var') { input.value = it.x.name; if (it.x.id) input.dataset.id = it.x.id; else delete input.dataset.id; close(); daraOtomatik(); return true; }
             try {
                 if (kind === 'mustahsil') {
                     const r = await cariKartEkle(it.ad);
@@ -329,12 +331,11 @@
                 }
                 const r = await send('tanim_ekle', { tur: TUR[kind], ad: it.ad });
                 const list = L()[kind]; if (list && !list.some(x => x.id === r.id)) list.push({ id: r.id, name: r.name });
-                input.value = r.name; input.dataset.id = r.id; close(); mesaj(r.yeni ? `“${r.name}” tanımlara eklendi.` : '', true);
+                input.value = r.name; input.dataset.id = r.id; close(); daraOtomatik(); mesaj(r.yeni ? `“${r.name}” tanımlara eklendi.` : '', true);
                 return true;
             } catch (error) { mesaj(error.message); return false; }
         }
         input.addEventListener('input', () => { delete input.dataset.id; render(); });
-        input.addEventListener('focus', render);
         input.addEventListener('blur', () => setTimeout(close, 120));
         input.addEventListener('keydown', async event => {
             if (box.hidden) return;
@@ -359,12 +360,25 @@
     });
 
     function sayi(v) { return parseDecimal(v); }
+    // Dara = kasa adedi × kasa darası + palet darası (Yükleme Planı ile aynı formül; tanımlardaki birim dara).
+    function tanimBul(kind) {
+        const girilen = trUp(alan(kind).value);
+        if (!girilen) return null;
+        return (L()[kind] || []).find(x => trUp(x.name) === girilen) || null;
+    }
+    function daraOtomatik() {
+        const adet = Math.max(0, parseInt(alan('kasa_adeti').value, 10) || 0);
+        const dara = adet * (Number(tanimBul('kasa')?.unit) || 0) + (Number(tanimBul('palet')?.unit) || 0);
+        alan('dara_kg').value = String(Math.round(dara * 1000) / 1000).replace('.', ',');   // ham saklanır (yuvarlama yalnız gösterimde)
+        hesapla();
+    }
     function hesapla() {
         const brut = sayi(alan('brut_kg').value), dara = sayi(alan('dara_kg').value);
         const net = brut - dara;
         netBox.value = fmt0(Math.max(0, net));
         let u = '';
-        if (dara > brut) u = 'Dara, brüt ağırlıktan büyük olamaz.';
+        const daraAsti = brut > 0 && dara > brut;
+        if (daraAsti) u = 'Dara, brüt ağırlıktan büyük olamaz.';
         else if (brut > 0) {
             const parti = alan('parti_no').value.trim();
             const ornek = parti ? Array.from(body.querySelectorAll('tr')).filter(r => (r.querySelector('[data-col="parti_no"]')?.dataset.value ?? '') === parti).map(r => parseDecimal(r.querySelector('[data-col="brut_kg"]')?.dataset.value)).filter(n => n > 0).slice(0, 30) : [];
@@ -374,24 +388,23 @@
             }
         }
         uyari.textContent = u;
-        uyari.classList.toggle('pf-uyari-hata', dara > brut);
-        saveBtn.disabled = dara > brut;
+        uyari.classList.toggle('pf-uyari-hata', daraAsti);
+        saveBtn.disabled = daraAsti;
     }
-    ['brut_kg', 'dara_kg', 'parti_no'].forEach(n => alan(n).addEventListener('input', hesapla));
+    ['brut_kg', 'parti_no'].forEach(n => alan(n).addEventListener('input', hesapla));
+    ['palet', 'kasa', 'kasa_adeti'].forEach(n => alan(n).addEventListener('input', daraOtomatik));
 
     let mod = 'ekle';          // 'ekle' | 'duzelt'
     let duzenlenen = null;     // Düzelt modunda satır (tr)
     let orijinal = {};         // Düzelt: değişmemiş müşteri/ürün kayıtlı tanım olmasa da kabul edilir (eski serbest metin kayıtlar)
     const baslikEl = dialog.querySelector('.pf-dialog-head h2');
-    const aciklamaEl = dialog.querySelector('.pf-dialog-head p');
-    const ekleAciklama = aciklamaEl ? aciklamaEl.innerHTML : '';
     function bugun() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
     function formSifirla() {
         form.reset();
         alan('tarih').value = bugun();
         form.querySelectorAll('input[data-cb]').forEach(i => { delete i.dataset.id; });
         alan('belge_no').value = String(nextBelge);
-        mesaj(''); hesapla();
+        mesaj(''); daraOtomatik();
     }
     function formDoldur(tr) {
         const c = n => tr.querySelector(`[data-col="${n}"]`);
@@ -410,7 +423,7 @@
         alan('kasa_adeti').value = String(parseDecimal(v('kasa_adeti')) || 0);
         const mustId = Number(tr.dataset.mustId || 0);
         ata('mustahsil', mustId ? v('mustahsil_ad') : '', mustId);
-        alan('brut_kg').value = kg('brut_kg'); alan('dara_kg').value = kg('dara_kg');
+        alan('brut_kg').value = kg('brut_kg'); alan('dara_kg').value = kg('dara_kg') || '0';
         alan('aciklama1').value = v('aciklama1'); alan('aciklama2').value = v('aciklama2');
         orijinal = { firma: v('firma'), urun: tr.dataset.urun || '' };
         hesapla();
@@ -425,12 +438,10 @@
             duzenlenen = tr;
             formDoldur(tr);
             if (baslikEl) baslikEl.textContent = 'Palet Fişi Düzelt';
-            if (aciklamaEl) aciklamaEl.innerHTML = 'Değişikliği <b>Güncelle</b> ile kaydedin. <b>Enter</b> sonraki alan · <b>F10</b> kaydet · <b>Esc</b> vazgeç';
             saveBtn.innerHTML = 'Güncelle <span class="pf-shortcut">F10</span>';
         } else {
             duzenlenen = null;
             if (baslikEl) baslikEl.textContent = 'Palet Fişi Ekle';
-            if (aciklamaEl) aciklamaEl.innerHTML = ekleAciklama;
             saveBtn.innerHTML = 'Kaydet <span class="pf-shortcut">F10</span>';
             alan('belge_no').value = String(nextBelge);
         }
@@ -524,9 +535,9 @@
             alan('parti_no').value = parti;
             if (parti && !(L().parti || []).some(x => trUp(x.name) === trUp(parti))) (L().parti = L().parti || []).unshift({ id: 0, name: parti });
             nextBelge = r.next_belge; alan('belge_no').value = String(nextBelge);
-            ['brut_kg', 'dara_kg', 'aciklama1', 'aciklama2', 'mustahsil'].forEach(n => { alan(n).value = ''; });
+            ['brut_kg', 'aciklama1', 'aciklama2', 'mustahsil'].forEach(n => { alan(n).value = ''; });
             delete alan('mustahsil').dataset.id;   // müstahsil palet başınadır, bir sonrakine taşınmaz
-            hesapla();
+            daraOtomatik();   // palet/kasa/adet korunur → dara aynı kalır
             mesaj(`${r.row.belge_no} numaralı belge kaydedildi.`, true);
             alan('brut_kg').focus();
         } catch (error) { mesaj(error.message); }
