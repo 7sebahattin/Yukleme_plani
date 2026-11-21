@@ -203,9 +203,27 @@ render_header('Palet Fişleri');
         <div class="pf-title"><div><h1>Palet Fişleri</h1><p>Yeni kayıtlar listenin en üstünde görünür.</p></div>
             <button type="button" class="btn btn-primary" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?>>＋ Yeni Palet Fişi <span class="pf-shortcut">Ctrl + N</span></button>
         </div>
-        <div class="pf-tools">
+        <div class="pf-toolbar" role="toolbar" aria-label="Palet fişi araçları">
+            <div class="pf-tb-grup">
+                <button type="button" class="pf-tb pf-tb-ekle" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">＋ F2 - Ekle</button>
+                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⧉ Çoğalt</button>
+                <button type="button" class="pf-tb pf-tb-sil" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">🗑 F3 - Sil</button>
+                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⌕ Bul</button>
+                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">✎ Düzelt</button>
+                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">▮▮ Parti Özeti</button>
+            </div>
+            <div class="pf-tb-grup">
+                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⎙ Yazdır</button>
+                <button type="button" class="pf-tb pf-tb-wp" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">◔ WhatsApp</button>
+                <button type="button" class="pf-tb pf-tb-xl" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">▦ Excel</button>
+            </div>
+        </div>
+        <div class="pf-filtre">
+            <label class="pf-f-alan">Başlangıç Tarihi <input type="date" value="<?= h(date('Y-m-d', strtotime('-3 months'))) ?>" data-pf-pasif></label>
+            <label class="pf-f-alan pf-f-chk">Yüklenen Paletleri Göster <input type="checkbox" data-pf-pasif></label>
+            <button type="button" class="pf-getir" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⌕ Getir</button>
             <label class="pf-search"><span aria-hidden="true">⌕</span><input id="pfSearch" type="search" placeholder="Belge, parti, palet veya ünvan ara" autocomplete="off"></label>
-            <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Düzenle: çift tık / F2</span><span>Kopyala: Ctrl + Shift + D</span><span>Sil: Delete</span></div>
+            <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Kopyala: Ctrl + Shift + D</span><span>Sil: Delete</span></div>
         </div>
     </div>
     <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi tamamlanamadı. DB kullanıcısına ALTER TABLE yetkisi verin.</div><?php endif; ?>
@@ -224,9 +242,9 @@ render_header('Palet Fişleri');
                     <td class="pf-cell" data-col="palet_adi" data-value="<?= h($r['palet_tipi_id']) ?>"><?= h($r['palet_adi']) ?></td>
                     <td class="pf-cell" data-col="firma" data-value="<?= h($r['firma']) ?>"><?= h($r['firma']) ?></td>
                     <td class="pf-cell pf-num" data-col="kasa_adeti" data-value="<?= (int)$r['kasa_adeti'] ?>"><?= number_format((int)$r['kasa_adeti'], 0, ',', '.') ?></td>
-                    <td class="pf-cell pf-num" data-col="brut_kg" data-value="<?= h($r['brut_kg']) ?>"><?= number_format((float)$r['brut_kg'], 3, ',', '.') ?></td>
-                    <td class="pf-cell pf-num" data-col="dara_kg" data-value="<?= h($r['dara_kg']) ?>"><?= number_format((float)$r['dara_kg'], 3, ',', '.') ?></td>
-                    <td class="pf-cell pf-num" data-col="net_kg" data-value="<?= h($r['net_kg']) ?>"><?= number_format((float)$r['net_kg'], 3, ',', '.') ?></td>
+                    <td class="pf-cell pf-num" data-col="brut_kg" data-value="<?= h($r['brut_kg']) ?>"><?= number_format((float)$r['brut_kg'], 0, ',', '.') ?></td>
+                    <td class="pf-cell pf-num" data-col="dara_kg" data-value="<?= h($r['dara_kg']) ?>"><?= number_format((float)$r['dara_kg'], 0, ',', '.') ?></td>
+                    <td class="pf-cell pf-num" data-col="net_kg" data-value="<?= h($r['net_kg']) ?>"><?= number_format((float)$r['net_kg'], 0, ',', '.') ?></td>
                     <td class="pf-cell" data-col="aciklama1" data-value="<?= h($r['aciklama1']) ?>"><?= h($r['aciklama1']) ?></td>
                     <td class="pf-cell" data-col="aciklama2" data-value="<?= h($r['aciklama2']) ?>"><?= h($r['aciklama2']) ?></td>
                 </tr>
@@ -236,13 +254,15 @@ render_header('Palet Fişleri');
         <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. Yeni Palet Fişi ile başlayın.' ?></div>
     </div>
     <div class="pf-bottom">
-        <div class="pf-total"><span>Kayıt</span><strong id="pfCount"><?= count($rows) ?></strong></div>
-        <div class="pf-total"><span>Adet Toplamı</span><strong data-total="kasa_adeti"><?= number_format(array_sum(array_map(fn($x) => (int)$x['kasa_adeti'], $rows)), 0, ',', '.') ?></strong></div>
-        <div class="pf-total"><span>BRÜT</span><strong data-total="brut_kg"><?= number_format(array_sum(array_map(fn($x) => (float)$x['brut_kg'], $rows)), 3, ',', '.') ?></strong></div>
-        <div class="pf-total"><span>Dara</span><strong data-total="dara_kg"><?= number_format(array_sum(array_map(fn($x) => (float)$x['dara_kg'], $rows)), 3, ',', '.') ?></strong></div>
-        <div class="pf-total"><span>NET</span><strong data-total="net_kg"><?= number_format(array_sum(array_map(fn($x) => (float)$x['net_kg'], $rows)), 3, ',', '.') ?></strong></div>
-        <div class="pf-status" id="pfStatus" role="status" aria-live="polite">Sütunları taşımak için başlığa basılı tutun.</div>
+        <div class="pf-kart pf-kart-parti"><i aria-hidden="true">▤</i><div><span>PARTİ</span><strong data-sum="parti">—</strong></div></div>
+        <div class="pf-kart"><i aria-hidden="true">▥</i><div><span>PALET TOPLAMI</span><strong data-sum="palet">0</strong></div></div>
+        <div class="pf-kart"><i aria-hidden="true">▢</i><div><span>AMBALAJ TOPLAMI</span><strong data-sum="adet">0</strong></div></div>
+        <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span>BRÜT</span><strong data-sum="brut">0</strong></div></div>
+        <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span>DARA</span><strong data-sum="dara">0</strong></div></div>
+        <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span>NET</span><strong data-sum="net">0</strong></div></div>
+        <div class="pf-kart"><i aria-hidden="true">▮</i><div><span>AMB. ORTALAMA</span><strong data-sum="ort">0</strong></div></div>
     </div>
+    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite">Özet kartları tıklanan satırın partisini gösterir. Sütunları taşımak için başlığa basılı tutun.</span></div>
 </section>
 
 <dialog class="pf-dialog" id="pfDialog">
