@@ -249,7 +249,11 @@ ok('yeni rol varsayılanında dashboard.read işaretli',
 // uygulamanın hiçbir yerinden bağlantı almaz.
 echo "\n── Tombstone değişmezleri ──\n";
 $TOMBSTONES = ['admin_db_backup_download.php', 'hesap_sahipsiz.php', 'depo_tasima.php', 'firma_eslestirme.php',
-               'fix_brand.php', 'repair_xz_tables.php', 'faz8b_migrate.php', 'record_new.php'];
+               'fix_brand.php', 'repair_xz_tables.php', 'faz8b_migrate.php', 'record_new.php',
+               // v548: menü sadeleştirme — yer tutucu sayfalar
+               'kayit_bilgisi.php', 'waap_mesaj.php', 'genel_duyurular.php', 'guncelleme_bilgisi.php', 'program_hakkinda.php',
+               'program_tanimlari.php', 'diger_uygulama_tanimlari.php', 'guncellemeyi_calistir.php', 'lisans_kayit_islemleri.php',
+               'sube_degistirme.php', 'sirket_degistirme.php', 'mesajlar.php'];
 $kaynaklar = array_merge(glob($ROOT . '/*.php'), glob($ROOT . '/config/*.php'), glob($ROOT . '/assets/*.js'));
 foreach ($TOMBSTONES as $t) {
     $src = (string)@file_get_contents($ROOT . '/' . $t);

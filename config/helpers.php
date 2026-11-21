@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v547');
+    define('APP_SURUM', 'v548');
 }
 
 // --- HTML kaçışı ---
@@ -459,7 +459,8 @@ function nav_muhasebe_gruplari(): array {
             'cari_kartlari.php' => ['Cari Kayıt Kartları', '🪪'], 'cari_dekontlar.php' => ['Cari Dekontlar', '🧮'],
             'cari_fisler.php' => ['Cari Fişler', '🧾'], 'cari_tanimlari.php' => ['Cari Tanımları', '🗂️']]],
         'kasa' => ['Kasa', '<rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="12" cy="13" r="2.5"/><path d="M7 7V5h10v2"/>', [
-            'kasa_fisleri.php' => ['Kasa Fişleri', '💵'], 'kasa_tanimlari.php' => ['Kasa Tanımları', '🗂️']]],
+            'kasa_fisleri.php' => ['Kasa Fişleri', '💵'], 'gunluk_kurlar.php' => ['Günlük Kurlar', '💹'],
+            'doviz_tanimlari.php' => ['Döviz Tanımları', '💱'], 'kasa_tanimlari.php' => ['Kasa Tanımları', '🗂️']]],
         'cek_senet' => ['Çek-Senet', '<path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"/><path d="M14 6l3 3"/>', [
             'cek_dekontu.php' => ['Çek Dekontu', '✒️'], 'senet_dekontu.php' => ['Senet Dekontu', '📝'],
             'cek_tanimlari.php' => ['Çek Tanımları', '🗂️']]],
@@ -472,27 +473,24 @@ function nav_muhasebe_gruplari(): array {
             'alis_faturalari.php' => ['Alış Faturaları', '📑'], 'satis_faturalari.php' => ['Satış Faturaları', '🧾'],
             'sevk_irsaliyeleri.php' => ['Sevk İrsaliyeleri', '🚚'], 'alinan_siparis_fisleri.php' => ['Alınan Sipariş Fişleri', '📦'],
             'fatura_tanimlari.php' => ['Fatura Tanımları', '🗂️']]],
+        // v548: Araç Yükleme / Palet / Mal Kabul fişleri "Operasyon_fis" grubuna taşındı (sidebar'da Operasyon'un İÇİNDE çizilir).
+        'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
+            'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
+            'mal_kabul_fisleri.php' => ['Mal Kabul Fişleri', '📋']]],
         'ihracat' => ['İhracat Programı', '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>', [
-            'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'ihracat_faturasi_maliyeti.php' => ['İhracat Faturası ve Maliyeti', '💲'],
-            'palet_fisleri.php' => ['Palet Fişleri', '🧱'], 'mal_kabul_fisleri.php' => ['Mal Kabul Fişleri', '📋'],
+            'ihracat_faturasi_maliyeti.php' => ['İhracat Faturası ve Maliyeti', '💲'],
             'beyanname_siparis_proforma.php' => ['Beyanname-Sipariş-Proforma', '🗒️'], 'dovizli_cari_fis.php' => ['Dövizli Cari Fiş', '💱'],
             'ihracat_tanimlari.php' => ['İhracat Tanımları', '🗂️']]],
         'raporlar_grup' => ['Raporlar', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', [
             'raporlar_listeler.php' => ['Raporlar-Listeler', '📊'], 'rapor_tanimlari.php' => ['Rapor Tanımları', '🗂️']]],
-        'kullanici_konsolu' => ['Kullanıcı Konsolu', '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 15-5 16 0"/>', [
-            'sifre_degistirme.php' => ['Şifre Değiştirme', '🔒'], 'sube_degistirme.php' => ['Şube Değiştirme', '🏬'],
-            'ajanda.php' => ['Ajanda', '📅'], 'mesajlar.php' => ['Mesajlar', '✉️'],
-            'sirket_degistirme.php' => ['Şirket Değiştirme', '🔄'], 'kullanici_tercihleri.php' => ['Kullanıcı Tercihleri', '🎛️']]],
-        'genel_uygulamalar' => ['Genel Uygulamalar', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>', [
-            'gunluk_kurlar.php' => ['Günlük Kurlar', '💹'], 'doviz_tanimlari.php' => ['Döviz Tanımları', '💱'],
-            'kayit_bilgisi.php' => ['Kayıt Bilgisi', 'ℹ️'], 'waap_mesaj.php' => ['WAAP Mesaj', '💬'],
-            'genel_duyurular.php' => ['Genel Duyurular', '📢'], 'guncelleme_bilgisi.php' => ['Güncelleme Bilgisi', '⬆️'],
-            'program_hakkinda.php' => ['Program Hakkında', '❓']]],
+        // v548: "Kullanıcı Konsolu" → "Kullanıcı Ayarları"; Şube/Şirket Değiştirme + Mesajlar kalktı. Hesap sayfası sidebar'da bu gruba eklenir (render_desktop_sidebar).
+        'kullanici_konsolu' => ['Kullanıcı Ayarları', '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 15-5 16 0"/>', [
+            'sifre_degistirme.php' => ['Şifre Değiştirme', '🔒'], 'ajanda.php' => ['Ajanda', '📅'],
+            'kullanici_tercihleri.php' => ['Kullanıcı Tercihleri', '🎛️']]],
+        // v548: "Genel Uygulamalar" grubu komple kaldırıldı (Günlük Kurlar + Döviz Tanımları → Kasa).
         'admin_konsolu' => ['Admin Konsolu', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', [
-            'kullanici_tanimlari.php' => ['Kullanıcı Tanımları', '👥'], 'program_tanimlari.php' => ['Program Tanımları', '🛠️'],
-            'sube_tanimlari.php' => ['Şube Tanımları', '🏢'], 'depo_tanimlari.php' => ['Depo Tanımları', '🏭'],
-            'diger_uygulama_tanimlari.php' => ['Diğer Uygulama Tanımları', '📂'], 'guncellemeyi_calistir.php' => ['Güncellemeyi Çalıştır', '⬇️'],
-            'lisans_kayit_islemleri.php' => ['Lisans & Kayıt İşlemleri', '🔑'], 'veritabani_islemleri.php' => ['Veritabanı İşlemleri', '🗄️']]],
+            'kullanici_tanimlari.php' => ['Kullanıcı Tanımları', '👥'], 'sube_tanimlari.php' => ['Şube Tanımları', '🏢'],
+            'depo_tanimlari.php' => ['Depo Tanımları', '🏭'], 'veritabani_islemleri.php' => ['Veritabanı İşlemleri', '🗄️']]],
     ];
 }
 
@@ -643,6 +641,15 @@ function render_desktop_sidebar(string $base): void {
     // Etkin sayfanın grubu (Yönetim ya da Operasyon) sunucuda AÇIK basılır.
     $a_ynt   = $a_def || $a_usr || $a_rol || $a_aud || $a_bkp;
 
+    // v548: Malzeme Stok → Stok, Raporlar ("Eski Raporlar") → Raporlar, Hesap → Kullanıcı Ayarları grubuna taşındı.
+    // Bu sayfalar admin olmayan rollere de açıktır → grup, yetkili bağlantısı varsa admin olmayana da çizilir
+    // (grubun KENDİ yer tutucu sayfaları yine yalnız admin'e). [href, emoji, etiket, aktif, izin]
+    $__muh = nav_muhasebe_gruplari();
+    $__ek = [
+        'stok'              => [['malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok, $p_stok]],
+        'raporlar_grup'     => [['reports.php', '📊', 'Eski Raporlar', $a_rep, $p_rep]],
+        'kullanici_konsolu' => [['hesap.php', '🏦', 'Hesap', $a_hes, $p_hes]],
+    ];
     $lnk = function (string $href, string $icon, string $label, bool $active, int $rozet = 0) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '"'
            . ($rozet > 0 ? ' aria-label="' . h($label) . ', ' . $rozet . ' okunmamış"' : '') . '>'
@@ -675,6 +682,7 @@ function render_desktop_sidebar(string $base): void {
     <?php unset($__sdp); endif; ?>
 
     <nav class="sidebar-nav">
+        <?php if ($p_dash) $lnk('index.php', '🏠', 'Ana Sayfa', $a_home); ?>
         <?php if ($p_sip || $p_frg || $p_usip): ?>
         <details class="sidebar-grup" data-sb-grup="siparis">
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span><span class="sidebar-section-ad">Sipariş</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
@@ -686,17 +694,14 @@ function render_desktop_sidebar(string $base): void {
 
         <details class="sidebar-grup" data-sb-grup="operasyon"<?= $a_ynt ? '' : ' open' ?>>
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="sidebar-section-ad">Operasyon</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
-        <?php if ($p_rec)  $lnk('records.php',   '🚚', 'Yükleme Planları', $a_yuk);  ?>
-        <?php if ($p_cik)  $lnk('cikmalar.php',  '📋', 'Paletleme',  $a_cik);   ?>
-        <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Mal Kabul', $a_kant);  ?>
-        <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
+        <?php if ($p_adm && isset($__muh['operasyon_fis'])) foreach ($__muh['operasyon_fis'][2] as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); unset($__dosya, $__et, $__em); ?>
+        <?php if ($p_rec)  $lnk('records.php',   '🚚', 'Eski Yükleme Planı', $a_yuk);  ?>
+        <?php if ($p_cik)  $lnk('cikmalar.php',  '📋', 'Eski Paletleme',  $a_cik);   ?>
+        <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Eski Mal Kabul', $a_kant);  ?>
         <?php if ($p_quick) $lnk('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick); ?>
-        <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
-        <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
 <?php   // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03, kullanıcı
         // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
         // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
@@ -724,19 +729,26 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         </details>
         <?php endif; ?>
-        <?php if ($p_adm): foreach (nav_muhasebe_gruplari() as $__slug => [$__bas, $__svg, $__sayfalar]): ?>
-        <details class="sidebar-grup" data-sb-grup="<?= h($__slug) ?>"<?= isset($__sayfalar[$ak . '.php']) ? ' open' : '' ?>>
+        <?php foreach ($__muh as $__slug => [$__bas, $__svg, $__sayfalar]):
+            if ($__slug === 'operasyon_fis') continue;   // Operasyon grubunun İÇİNDE çizilir
+            $__eks = array_values(array_filter($__ek[$__slug] ?? [], fn($e) => (bool)$e[4]));
+            if (!$p_adm && !$__eks) continue;
+            $__acik = isset($__sayfalar[$ak . '.php']);
+            foreach ($__eks as $__e) if ($__e[3]) $__acik = true; ?>
+        <details class="sidebar-grup" data-sb-grup="<?= h($__slug) ?>"<?= $__acik ? ' open' : '' ?>>
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><?= $__svg ?></svg></span><span class="sidebar-section-ad"><?= h($__bas) ?></span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php foreach ($__sayfalar as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); ?>
+        <?php if ($p_adm) foreach ($__sayfalar as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); ?>
+        <?php foreach ($__eks as [$__eh, $__ei, $__el, $__ea]) $lnk($__eh, $__ei, $__el, $__ea); ?>
         </details>
-        <?php endforeach; unset($__slug, $__bas, $__svg, $__sayfalar, $__dosya, $__et, $__em); endif; ?>
+        <?php endforeach; unset($__slug, $__bas, $__svg, $__sayfalar, $__dosya, $__et, $__em, $__eks, $__e, $__eh, $__ei, $__el, $__ea, $__acik, $__muh, $__ek); ?>
         <!-- Şema Migrasyon: menüden kaldırıldı — doğrudan URL (migrate.php) ile
              admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
              tombstone. -->
     </nav>
 
-    <div class="sidebar-surum"><?= h(APP_SURUM) ?></div>
-
+    <?php if (!function_exists('current_user') || current_user() === null): ?>
+    <div class="sidebar-user"><span class="sidebar-surum"><?= h(APP_SURUM) ?></span></div>
+    <?php endif; ?>
     <?php if (function_exists('current_user') && ($__su = current_user()) !== null): ?>
     <div class="sidebar-user">
         <div class="sidebar-user-info">
@@ -746,6 +758,7 @@ function render_desktop_sidebar(string $base): void {
             <?php unset($__sr); endif; ?>
         </div>
         <?php if (function_exists('ekran_pin_sidebar_dugme_html')) echo ekran_pin_sidebar_dugme_html(); ?>
+        <span class="sidebar-surum" title="Uygulama sürümü"><?= h(APP_SURUM) ?></span>
         <a href="<?= $base ?>logout.php" class="sidebar-user-logout" title="Çıkış Yap" aria-label="Çıkış Yap">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </a>
@@ -828,10 +841,10 @@ function nav_alt_sayfalar(): array {
         'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
         'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
         'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
-        'records' => ['href' => 'records.php',          'etiket' => 'Yükleme Planları',    'kisa' => 'Yük. Planı', 'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
-        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Paletleme',   'dar' => null,      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
-        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',            'kisa' => 'Mal Kabul',  'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
-        'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
+        'records' => ['href' => 'records.php',          'etiket' => 'Eski Yükleme Planı', 'kisa' => 'Eski Plan', 'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Eski Paletleme',      'kisa' => 'Eski Palet',  'dar' => 'Palet',      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
+        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Eski Mal Kabul',      'kisa' => 'Eski Kabul', 'dar' => 'Kabul',      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
+        'rapor'   => ['href' => 'reports.php',          'etiket' => 'Eski Raporlar',       'kisa' => 'Eski Rapor', 'dar' => 'Rapor',      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
         'qcost'   => ['href' => 'hizli_maliyet.php',     'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/qcost.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
         'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
@@ -1221,13 +1234,13 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?><?= $__tm > 0 ? ' aria-label="Mail, ' . $__tm . ' okunmamış"' : '' ?>>Mail<?= nav_rozet_html($__tm, false) ?></a>
             <?php endif; ?>
             <?php if (role_matrix_page_can('records','loading')): ?>
-            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yükleme Planları</a>
+            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Eski Yükleme Planı</a>
             <?php endif; ?>
             <?php if (role_matrix_page_can('records','pallet')): ?>
-            <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Paletleme</a>
+            <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Eski Paletleme</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
-            <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
+            <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Eski Raporlar</a>
             <?php endif; ?>
             <?php if ($_nav_stok): ?>
             <a href="<?= $base ?>stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
