@@ -4,12 +4,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/cari_core.php';
+require_once __DIR__ . '/config/palet_fisleri_core.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
 $pdo = db();
-$has_aciklama1 = ensure_column('loading_pallets', 'aciklama1', "ALTER TABLE `loading_pallets` ADD COLUMN `aciklama1` TEXT NULL");
-$has_aciklama2 = ensure_column('loading_pallets', 'aciklama2', "ALTER TABLE `loading_pallets` ADD COLUMN `aciklama2` TEXT NULL");
+// Şema yalnız migrate.php › "Palet Fişleri" kartından kurulur; sayfa kolon EKLEMEZ, yalnız var mı diye bakar.
+$has_aciklama1 = palet_fisleri_kolon_var($pdo, 'aciklama1');
+$has_aciklama2 = palet_fisleri_kolon_var($pdo, 'aciklama2');
+$has_mustahsil = palet_fisleri_kolon_var($pdo, 'mustahsil_id') && palet_fisleri_kolon_var($pdo, 'mustahsil_ad');
+$cari_var = cari_hazir($pdo);
+$mustahsil_aktif = $has_mustahsil && $cari_var;
 
 function pf_json(array $data, int $status = 200): void {
     http_response_code($status);
@@ -20,7 +26,7 @@ function pf_json(array $data, int $status = 200): void {
 
 function pf_require_note_columns(): void {
     global $has_aciklama1, $has_aciklama2;
-    if (!$has_aciklama1 || !$has_aciklama2) throw new RuntimeException('Açıklama alanları için veritabanı güncellemesi gerekli. DB kullanıcısına ALTER TABLE yetkisi verin.');
+    if (!$has_aciklama1 || !$has_aciklama2) throw new RuntimeException('Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.');
 }
 
 function pf_input_text(string $key, int $limit = 500): string {
@@ -45,6 +51,21 @@ function pf_tanim_bul_ekle(string $type, string $name): array {
     $id = (int)$pdo->lastInsertId();
     audit_log_event('create', 'tanim', $id, null, ['type' => $type, 'name' => $name, 'kaynak' => 'palet_fisleri']);
     return ['id' => $id, 'name' => $name, 'yeni' => true];
+}
+
+/** Müstahsil (cari kartı) doğrula: [id, ünvan] ya da [null, null]. */
+function pf_mustahsil_coz(PDO $pdo): array
+{
+    global $has_mustahsil, $cari_var;
+    $id = (int)($_POST['mustahsil_id'] ?? 0);
+    if ($id <= 0) return [null, null];
+    if (!$has_mustahsil) throw new RuntimeException('Müstahsil alanı için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.');
+    if (!$cari_var) throw new RuntimeException('Cari İşlemler şeması kurulu değil; müstahsil seçilemez.');
+    $st = $pdo->prepare('SELECT unvan FROM cari_kartlar WHERE id = ? AND aktif = 1');
+    $st->execute([$id]);
+    $unvan = $st->fetchColumn();
+    if ($unvan === false) throw new RuntimeException('Müstahsil cari kartı bulunamadı ya da pasif.');
+    return [$id, (string)$unvan];
 }
 
 function pf_valid_date(string $value): bool {
@@ -123,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             $net = round(max(0, $brut - $dara), 3);
             $aciklama1 = pf_input_text('aciklama1', 2000);
             $aciklama2 = pf_input_text('aciklama2', 2000);
+            [$must_id, $must_ad] = pf_mustahsil_coz($pdo);
             if ($firma === '' || $urun === '' || !pf_valid_date($tarih)) throw new RuntimeException('Müşteri, ürün ve geçerli tarih zorunludur.');
             if ($kasa_cinsi_id > 0) {
                 $kdef = $pdo->prepare("SELECT id FROM material_definitions WHERE id = ? AND type = 'kasa_cinsi' AND is_active = 1");
@@ -139,10 +161,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
                 $pdo->prepare("INSERT INTO loading_records (type, tarih, firma, parti_no, urun) VALUES ('yukleme', ?, ?, ?, ?)")
                     ->execute([$tarih, $firma, $parti, $urun]);
                 $record_id = (int)$pdo->lastInsertId();
+                $ek_kol = $has_mustahsil ? ', mustahsil_id, mustahsil_ad' : '';
+                $ek_val = $has_mustahsil ? ', ?, ?' : '';
+                $ek_par = $has_mustahsil ? [$must_id, $must_ad] : [];
                 $pdo->prepare("INSERT INTO loading_pallets
-                    (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg, kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi, aciklama1, aciklama2)
-                    VALUES (?, '', ?, '', ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)")
-                    ->execute([$record_id, $adet, $brut, $dara, $net, $kasa_cinsi_id, $palet_tipi_id, $urun, active_depot() ?? '', $aciklama1, $aciklama2]);
+                    (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg, kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi, aciklama1, aciklama2$ek_kol)
+                    VALUES (?, '', ?, '', ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?$ek_val)")
+                    ->execute([$record_id, $adet, $brut, $dara, $net, $kasa_cinsi_id, $palet_tipi_id, $urun, active_depot() ?? '', $aciklama1, $aciklama2, ...$ek_par]);
                 $pallet_id = (int)$pdo->lastInsertId();
                 $pdo->commit();
             } catch (Throwable $e) {
@@ -150,13 +175,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
                 throw $e;
             }
             sync_malzeme_kullanim($record_id);
-            audit_log_event('create', 'palet_fisleri', $pallet_id, null, ['belge_no' => $record_id, 'firma' => $firma, 'parti_no' => $parti, 'brut_kg' => $brut, 'net_kg' => $net]);
+            audit_log_event('create', 'palet_fisleri', $pallet_id, null, ['belge_no' => $record_id, 'firma' => $firma, 'parti_no' => $parti, 'brut_kg' => $brut, 'net_kg' => $net, 'mustahsil_id' => $must_id]);
             $yeni = pf_get_row($pallet_id);
             pf_json(['ok' => true, 'id' => $pallet_id, 'next_belge' => $record_id + 1, 'row' => [
                 'id' => $pallet_id, 'loading_record_id' => $record_id, 'belge_no' => (int)$yeni['belge_no'], 'parti_no' => (string)$yeni['parti_no'],
                 'palet_tipi_id' => (int)($yeni['palet_tipi_id'] ?? 0), 'palet_adi' => (string)$yeni['palet_adi'], 'firma' => (string)$yeni['firma'], 'urun' => (string)$yeni['urun'],
                 'kasa_adeti' => (int)$yeni['kasa_adeti'], 'brut_kg' => (float)$yeni['brut_kg'], 'dara_kg' => (float)$yeni['dara_kg'], 'net_kg' => (float)$yeni['net_kg'],
-                'aciklama1' => (string)($yeni['aciklama1'] ?? ''), 'aciklama2' => (string)($yeni['aciklama2'] ?? '')]]);
+                'aciklama1' => (string)($yeni['aciklama1'] ?? ''), 'aciklama2' => (string)($yeni['aciklama2'] ?? ''), 'mustahsil_ad' => (string)($yeni['mustahsil_ad'] ?? '')]]);
         }
         if ($action === 'tanim_ekle') {
             $tur = (string)($_POST['tur'] ?? '');
@@ -195,10 +220,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
                 $pdo->prepare("INSERT INTO loading_records (type, tarih, firma, parti_no, urun) VALUES ('yukleme', ?, ?, ?, ?)")
                     ->execute([$old['tarih'], $old['firma'], $old['parti_no'], $old['urun']]);
                 $new_record_id = (int)$pdo->lastInsertId();
+                $ek_kol = $has_mustahsil ? ', mustahsil_id, mustahsil_ad' : '';
+                $ek_val = $has_mustahsil ? ', ?, ?' : '';
+                $ek_par = $has_mustahsil ? [$old['mustahsil_id'] ?? null, $old['mustahsil_ad'] ?? null] : [];
                 $pdo->prepare("INSERT INTO loading_pallets
-                    (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg, kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi, aciklama1, aciklama2)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)")
-                    ->execute([$new_record_id, $old['palet_no'], $old['kasa_adeti'], $old['size'], $old['brut_kg'], $old['dara_kg'], $old['net_kg'], $old['kasa_cinsi_id'], $old['palet_tipi_id'], $old['urun_cinsi'], $old['depo'], $old['aciklama1'] ?? '', $old['aciklama2'] ?? '']);
+                    (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg, kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi, aciklama1, aciklama2$ek_kol)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?$ek_val)")
+                    ->execute([$new_record_id, $old['palet_no'], $old['kasa_adeti'], $old['size'], $old['brut_kg'], $old['dara_kg'], $old['net_kg'], $old['kasa_cinsi_id'], $old['palet_tipi_id'], $old['urun_cinsi'], $old['depo'], $old['aciklama1'] ?? '', $old['aciklama2'] ?? '', ...$ek_par]);
                 $new_id = (int)$pdo->lastInsertId();
                 $pdo->prepare("INSERT INTO pallet_materials (loading_pallet_id, material_id, quantity, total_dara_kg)
                                SELECT ?, material_id, quantity, total_dara_kg FROM pallet_materials WHERE loading_pallet_id = ?")
@@ -224,13 +252,15 @@ $pf_listeler = [
     'firma' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('firma')),
     'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
     'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('kasa_cinsi')),
+    'mustahsil' => $mustahsil_aktif ? array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['unvan']], $pdo->query('SELECT id, unvan FROM cari_kartlar WHERE aktif = 1 ORDER BY unvan LIMIT 5000')->fetchAll(PDO::FETCH_ASSOC)) : [],
     'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pdo->query("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
 ];
 $pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loading_records')->fetchColumn();
 $desc1_sql = $has_aciklama1 ? 'p.aciklama1' : "'' AS aciklama1";
 $desc2_sql = $has_aciklama2 ? 'p.aciklama2' : "'' AS aciklama2";
+$must_sql = $has_mustahsil ? 'p.mustahsil_ad' : "'' AS mustahsil_ad";
 $st = $pdo->query("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
-                          p.palet_tipi_id, $desc1_sql, $desc2_sql,
+                          p.palet_tipi_id, $desc1_sql, $desc2_sql, $must_sql,
                           r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun,
                           COALESCE(md.name, p.palet_no, '') AS palet_adi
                    FROM loading_pallets p
@@ -269,12 +299,13 @@ render_header('Palet Fişleri');
             <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Kopyala: Ctrl + Shift + D</span><span>Sil: Delete</span></div>
         </div>
     </div>
-    <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi tamamlanamadı. DB kullanıcısına ALTER TABLE yetkisi verin.</div><?php endif; ?>
+    <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.</div><?php endif; ?>
     <div class="pf-table-wrap" id="pfTableWrap" tabindex="0" aria-label="Palet fişleri tablosu">
         <table class="pf-table" id="pfTable">
             <thead><tr>
                 <th data-col="belge_no">Belge No</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
                 <th data-col="kasa_adeti">Adet</th><th data-col="brut_kg">BRÜT</th><th data-col="dara_kg">Dara</th><th data-col="net_kg">NET</th>
+                <?php if ($has_mustahsil): ?><th data-col="mustahsil_ad">Müstahsil</th><?php endif; ?>
                 <th data-col="aciklama1">Açıklama-1</th><th data-col="aciklama2">Açıklama-2</th>
             </tr></thead>
             <tbody id="pfBody">
@@ -288,6 +319,7 @@ render_header('Palet Fişleri');
                     <td class="pf-cell pf-num" data-col="brut_kg" data-value="<?= h($r['brut_kg']) ?>"><?= number_format((float)$r['brut_kg'], 0, ',', '.') ?></td>
                     <td class="pf-cell pf-num" data-col="dara_kg" data-value="<?= h($r['dara_kg']) ?>"><?= number_format((float)$r['dara_kg'], 0, ',', '.') ?></td>
                     <td class="pf-cell pf-num" data-col="net_kg" data-value="<?= h($r['net_kg']) ?>"><?= number_format((float)$r['net_kg'], 0, ',', '.') ?></td>
+                    <?php if ($has_mustahsil): ?><td class="pf-cell" data-col="mustahsil_ad" data-value="<?= h($r['mustahsil_ad']) ?>"><?= h($r['mustahsil_ad']) ?></td><?php endif; ?>
                     <td class="pf-cell" data-col="aciklama1" data-value="<?= h($r['aciklama1']) ?>"><?= h($r['aciklama1']) ?></td>
                     <td class="pf-cell" data-col="aciklama2" data-value="<?= h($r['aciklama2']) ?>"><?= h($r['aciklama2']) ?></td>
                 </tr>
@@ -320,6 +352,7 @@ render_header('Palet Fişleri');
             <label class="pf-cb">Ürün <input name="urun" data-cb="urun" maxlength="150" placeholder="Yazdıkça bulunur" required></label>
             <label class="pf-cb">Kasa Ambalaj <input name="kasa" data-cb="kasa" placeholder="Yazdıkça bulunur"></label>
             <label>Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
+            <label class="pf-cb pf-must">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? 'Yazdıkça cari kartlardan bulunur' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
             <label class="pf-kg">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
             <label class="pf-kg">Dara (kg) <input name="dara_kg" inputmode="decimal"></label>
             <label class="pf-kg">Net (kg) <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0"></label>
@@ -330,6 +363,6 @@ render_header('Palet Fişleri');
         <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
     </form>
 </dialog>
-<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
+<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'mustahsilAktif' => $mustahsil_aktif, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="assets/palet-fisleri.js?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.js') ?>" defer></script>
 <?php render_footer();
