@@ -21,7 +21,7 @@ ok('müşteri ve ürün zorunlu', str_contains($php, 'name="firma"') && str_cont
 ok('JS: F2 açar, F10 kaydeder', str_contains($js, "event.key === 'F2'") && str_contains($js, "event.key === 'F10'"));
 ok('JS: yazdıkça bul + "+ ekle" satırı', str_contains($js, 'function makeCombo') && str_contains($js, "type: 'ekle'"));
 ok('JS: kaydedince pencere kapanmaz (sonraki palet hazırlanır)', str_contains($js, 'satirEkle(r.row)') && !str_contains($js, 'location.reload(); }\n        catch'));
-ok('JS: hücre çift tıklama ile düzenleme yok', !str_contains($js, "'dblclick'"));
+ok('JS: satıra çift tık Düzelt penceresini açar; hücre içinde düzenleme (beginEdit) tetiklenmez', preg_match("/body\.addEventListener\('dblclick'[^}]*openDialog\('duzelt'\)/s", $js) === 1 && !preg_match("/body\.addEventListener\('dblclick'[^}]*beginEdit/s", $js));
 ok('JS: kantardan al yer tutucusu pasif', str_contains($php, 'pf-kantar" disabled'));
 // ── Müstahsil (v535) ──
 $core = (string)file_get_contents(__DIR__ . '/../config/palet_fisleri_core.php');
@@ -38,7 +38,7 @@ ok('migrasyon yalnız ADD COLUMN/ADD KEY (DROP/MODIFY/UPDATE yok)', !preg_match(
 ok('migrasyon idempotent (kolon varsa atlar)', str_contains($core, "'durum' => 'var'"));
 // ── Araç çubuğu işlevleri (v536) ──
 ok('hiçbir araç pasif değil (data-pf-pasif yok)', !str_contains($php, 'data-pf-pasif') && !str_contains($js, 'data-pf-pasif') && !str_contains($js, 'henüz çalışmıyor'));
-foreach (['coglat', 'sil', 'bul', 'duzelt', 'ozet', 'yazdir', 'wp'] as $arac) ok("araç bağlı: $arac", str_contains($php, "data-pf=\"$arac\"") && str_contains($js, $arac));
+foreach (['coglat', 'sil', 'bul', 'duzelt', 'yazdir'] as $arac) ok("araç bağlı: $arac", str_contains($php, "data-pf=\"$arac\"") && str_contains($js, $arac));
 ok('Sil: F3 + Delete, Düzelt: F4', str_contains($js, "event.key === 'F3'") && str_contains($js, "event.key === 'F4'"));
 ok('Sil onay ister ve sunucuya delete gönderir', str_contains($js, "window.confirm(") && str_contains($js, "send('delete'"));
 ok('Çoğalt sunucu satırını listeye ekler (yeniden yükleme yok)', str_contains($js, "send('duplicate'") && !str_contains($js, 'location.reload'));
@@ -47,7 +47,17 @@ ok('Filtre: başlangıç tarihi + yüklenen göster (GET, yazma yok)', str_conta
 ok('Excel: reports.export kapısı + export_audit + csv/xlsx', str_contains($php, "require_perm('reports.export')") && str_contains($php, "export_audit('palet_fisleri'") && str_contains($php, 'xlsx_indir(') && str_contains($php, 'export_menu('));
 ok('CSV: BOM + ; ayracı + binlik ayraçsız', str_contains($php, 'xEF') && str_contains($php, "fputcsv(\$out, \$x, ';'") && str_contains($php, "number_format((float)\$x[\$i], 3, ',', '')"));
 ok('Yazdır gizli çerçeve kullanır (pencere açmaz)', str_contains($js, "createElement('iframe')") && str_contains($js, 'contentWindow.print()'));
-ok('WhatsApp wa.me bağlantısı, seçili parti özeti', str_contains($js, 'https://wa.me/?text=') && str_contains($js, 'partiToplamlari(false)'));
-ok('Parti Özeti penceresi var', str_contains($php, 'id="pfOzetDialog"') && str_contains($js, 'function ozetAc'));
+ok('WhatsApp ve Parti Özeti düğmeleri kaldırıldı', !str_contains($php, 'data-pf="wp"') && !str_contains($php, 'data-pf="ozet"') && !str_contains($js, 'wa.me'));
+ok('Kartlara tıklayınca partinin palet listesi açılır', str_contains($php, 'data-pf-liste') && str_contains($php, 'id="pfOzetDialog"') && str_contains($js, 'function partiListesiAc') && str_contains($js, "'[data-pf-liste]'"));
+ok('Getir düğmesi yok; tarih/yüklenen değişince otomatik yenilenir', !str_contains($php, 'pf-getir') && str_contains($js, "requestSubmit()"));
+ok('Başlık yazısı ve kısayol ipucu satırı kaldırıldı', !str_contains($php, 'pf-title') && !str_contains($php, 'pf-hints') && !str_contains($php, 'Yeni kayıtlar listenin en üstünde'));
+ok('Buton sırası (soldan sağa): Yazdır · Excel · Düzelt · Bul · Sil · Çoğalt · Ekle', preg_match('/data-pf="yazdir".*?export_menu\(.*?data-pf="duzelt".*?data-pf="bul".*?data-pf="sil".*?data-pf="coglat".*?id="pfAdd"/s', $php) === 1);
+ok('Sol üst köşe alanı + sütun genişliği tutacı', str_contains($php, 'id="pfKose"') && str_contains($js, "className = 'pf-rs'") && str_contains($js, 'hepsiniDaralt'));
+// ── Kullanıcı bazlı sütun tercihi (v537) ──
+$kt = (string)file_get_contents(__DIR__ . '/../config/kullanici_tercih.php');
+ok('tercih: kullanıcı bazlı (user_id + anahtar) tablo, beyaz liste doğrulayıcı', str_contains($kt, 'PRIMARY KEY (`user_id`, `anahtar`)') && str_contains($kt, "if (\$anahtar === 'palet_fisleri.tablo')"));
+ok('tercih kaydı sayfada kullanıcı kimliğiyle + csrf kapısı içinde', str_contains($php, "kt_yaz(\$pdo, (int)(\$auth_user['id'] ?? 0), \$anahtar, \$deger)") && str_contains($php, "csrf_check(\$_POST['csrf']"));
+ok('tablo yoksa tarayıcıya (localStorage) düşer', str_contains($js, 'localStorage.setItem(YEREL_ANAHTAR') && str_contains($php, "'tercihSunucu' => kt_hazir(\$pdo)"));
+ok('tercih tablosu yalnız migrate.php kartından (ne=kullanici_tercih), sayfa tablo yaratmaz', str_contains((string)file_get_contents(__DIR__ . '/../migrate.php'), "'kullanici_tercih'") && !str_contains($php, 'CREATE TABLE'));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

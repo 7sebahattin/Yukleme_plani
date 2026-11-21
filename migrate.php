@@ -32,6 +32,7 @@ require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yaln
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/palet_fisleri_core.php'; // Palet Fişleri (loading_pallets'e kolon ekleyen kart)
+require_once __DIR__ . '/config/kullanici_tercih.php';   // Kullanıcı Tercihleri (kullanici_tercihleri tablosu; yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
@@ -136,6 +137,7 @@ $bsz_results = []; $bsz_ran = false;                            // v498 beyansiz
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
+$kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
 $pf_results = []; $pf_ran = false;                              // Palet Fişleri (loading_pallets kolonları: açıklama + müstahsil)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
@@ -372,6 +374,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($cari_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'cari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kullanici_tercih') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kt_ran     = true;
+    $kt_results = kt_migrate($pdo);
+    foreach ($kt_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'kullanici_tercih', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'palet_fisleri') {
@@ -931,6 +942,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="cari">
       <button type="submit" class="btn btn-primary">Cari Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kullanici-tercih'); ?>
+    <h2 style="margin-top:0;">Kullanıcı Tercihleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>kullanici_tercihleri</code> tablosunu ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz).
+      Palet Fişleri tablosunun sütun genişliği ve sırası gibi kullanıcıya özel arayüz tercihlerini <strong>kullanıcı bazında sunucuda</strong> saklar;
+      hangi cihazdan girilirse aynı ayarlar gelir. Çalıştırılmazsa bu tercihler yalnız o tarayıcıda saklanır, diğer her şey aynen çalışır.
+      <?php if ($kt_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($kt_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $ktHazir = kt_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $ktHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ktHazir ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kullanici_tercih">
+      <button type="submit" class="btn btn-primary">Kullanıcı Tercihleri Tablosunu Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

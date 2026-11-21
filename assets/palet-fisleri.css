@@ -107,3 +107,30 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-ozet-tablo tfoot td{font-weight:800;background:var(--bg,#eef3f8);border-top:2px solid var(--pf-head)}
 .pf-tb-grup .dl-menu{display:inline-block}
 .pf-tb-grup .dl-menu .pf-tb{cursor:pointer}
+/* ── v537: tek mavi bant, hover, sütun genişliği, köşe alanı, kart listesi ── */
+.pf-filtre{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;border-radius:8px;background:var(--pf-head);padding:8px 12px;color:#fff;font-size:.82rem}
+.pf-filtre .pf-tb-grup{margin-left:auto;flex-wrap:nowrap;align-items:center}
+.pf-filtre .pf-bul{max-width:300px;flex:0 1 300px}
+.pf-tb{cursor:pointer;transition:background .12s,border-color .12s,box-shadow .12s,transform .12s;box-shadow:0 1px 2px #0b244026}
+.pf-tb:hover{background:#e3f1ff;border-color:#0782dc;box-shadow:0 3px 8px #0b244040;transform:translateY(-1px)}
+.pf-tb:active{transform:none;box-shadow:none;background:#c9e3fa}
+.pf-tb:focus-visible{outline:2px solid #7cc4ff;outline-offset:2px}
+.pf-tb-ekle:hover{background:#15823c;border-color:#10692f;color:#fff}
+.pf-tb-sil:hover{background:#fde8e6;border-color:#c0261c}
+.pf-tb:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none}
+.pf-kart{cursor:pointer;transition:border-color .12s,box-shadow .12s,transform .12s}
+.pf-kart:hover{border-color:#0782dc;box-shadow:0 4px 12px #0b244033;transform:translateY(-1px)}
+.pf-kart:focus-visible{outline:2px solid #0782dc;outline-offset:2px}
+.pf-table-wrap{background:linear-gradient(to right,#e4eaf1 22px,transparent 22px),var(--surface,#fff)}
+.pf-kose{position:sticky;top:0;left:0;z-index:6;width:22px;height:34px;margin-bottom:-34px;box-sizing:border-box;background:var(--pf-head);border-right:1px solid #ffffff55;cursor:pointer}
+.pf-kose::after{content:"";position:absolute;right:3px;bottom:3px;border:5px solid transparent;border-right-color:#ffffffb0;border-bottom-color:#ffffffb0}
+.pf-kose:hover{background:#0a5ea8}
+.pf-table{table-layout:fixed;width:max-content;min-width:0!important;margin-left:22px}
+.pf-table td{max-width:none!important}
+.pf-table th{height:34px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
+.pf-rs{position:absolute;top:0;right:0;bottom:0;width:8px;cursor:col-resize;z-index:3}
+.pf-rs:hover{background:#7cc4ff99}
+body.pf-boyutlaniyor{cursor:col-resize;user-select:none}
+body.pf-boyutlaniyor .pf-rs{background:#7cc4ff99}
+.pf-ozet-tablo tbody tr:hover{background:#d5ecff}
+@media(max-width:900px){.pf-filtre .pf-tb-grup{margin-left:0;flex-wrap:wrap}}

@@ -14,7 +14,6 @@
     let holdTimer = 0;
     let armedHeader = null;
     let movingHeader = false;
-    const columnOrderKey = 'asya.palet-fisleri.column-order.v1';
     const editable = new Set(['parti_no', 'palet_adi', 'firma', 'kasa_adeti', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2']);
 
     async function send(action, data) {
@@ -181,6 +180,13 @@
     body.addEventListener('click', event => {
         const cell = event.target.closest('td.pf-cell');
         if (cell && !editor) selectCell(cell);
+    });
+    // Satıra çift tık: Düzelt penceresi (hücre içinde düzenleme YOK).
+    body.addEventListener('dblclick', event => {
+        const cell = event.target.closest('td.pf-cell');
+        if (!cell) return;
+        selectCell(cell);
+        openDialog('duzelt');
     });
     body.addEventListener('keydown', event => {
         if (!editor) return;
@@ -522,50 +528,52 @@
     bulInput?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); bulKapat(); } });
     document.getElementById('pfBulKapat')?.addEventListener('click', bulKapat);
 
-    // ───────── Parti Özeti ─────────
+    // ───────── Parti palet listesi (alttaki kartlara tıklayınca) ─────────
     const ozetDialog = document.getElementById('pfOzetDialog');
     function satirDeger(row, name) { return row.querySelector(`[data-col="${name}"]`)?.dataset.value ?? ''; }
-    function partiToplamlari(yalnizGorunen) {
-        const harita = new Map();
-        body.querySelectorAll('tr').forEach(row => {
-            if (yalnizGorunen && row.hidden) return;
-            const parti = satirDeger(row, 'parti_no') || '—';
-            const g = harita.get(parti) || { parti, palet: 0, adet: 0, brut: 0, dara: 0, net: 0 };
-            g.palet++; g.adet += parseDecimal(satirDeger(row, 'kasa_adeti')); g.brut += parseDecimal(satirDeger(row, 'brut_kg'));
-            g.dara += parseDecimal(satirDeger(row, 'dara_kg')); g.net += parseDecimal(satirDeger(row, 'net_kg'));
-            harita.set(parti, g);
-        });
-        return Array.from(harita.values());
-    }
-    const ort2 = (brut, adet) => adet > 0 ? (brut / adet).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0';
-    function ozetAc() {
+    function partiListesiAc() {
         if (!ozetDialog) return;
-        const liste = partiToplamlari(true);
-        const tb = ozetDialog.querySelector('tbody'), tf = ozetDialog.querySelector('tfoot');
-        tb.innerHTML = ''; tf.innerHTML = '';
-        const hucre = (tr, text, sinif) => { const td = document.createElement('td'); td.textContent = text; if (sinif) td.className = sinif; tr.appendChild(td); };
-        const T = { palet: 0, adet: 0, brut: 0, dara: 0, net: 0 };
-        liste.forEach(g => {
-            const tr = document.createElement('tr'); tr.tabIndex = 0; tr.dataset.parti = g.parti === '—' ? '' : g.parti;
-            hucre(tr, g.parti, 'pf-ozet-parti'); [g.palet, g.adet, g.brut, g.dara, g.net].forEach(n => hucre(tr, fmt0(n), 'pf-num')); hucre(tr, ort2(g.brut, g.adet), 'pf-num');
+        const row = seciliSatir();
+        if (!row) { setStatus('Önce bir satır seçin.'); return; }
+        const parti = satirDeger(row, 'parti_no');
+        const satirlar = Array.from(body.querySelectorAll('tr')).filter(r => satirDeger(r, 'parti_no') === parti);
+        const kolonlar = ['belge_no', 'palet_adi', 'firma', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad']
+            .filter(c => table.tHead.rows[0].querySelector(`th[data-col="${c}"]`));
+        const sayisal = ['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'];
+        const ad = c => table.tHead.rows[0].querySelector(`th[data-col="${c}"]`).childNodes[0]?.textContent.trim() || c;
+        const hr = ozetDialog.querySelector('thead tr'), tb = ozetDialog.querySelector('tbody'), tf = ozetDialog.querySelector('tfoot');
+        hr.innerHTML = ''; tb.innerHTML = ''; tf.innerHTML = '';
+        kolonlar.forEach(c => { const th = document.createElement('th'); th.textContent = ad(c); hr.appendChild(th); });
+        const T = { kasa_adeti: 0, brut_kg: 0, dara_kg: 0, net_kg: 0 };
+        satirlar.forEach(r => {
+            const tr = document.createElement('tr'); tr.tabIndex = 0; tr.dataset.id = r.dataset.id;
+            kolonlar.forEach(c => {
+                const td = document.createElement('td'); td.textContent = r.querySelector(`[data-col="${c}"]`)?.textContent.trim() || '';
+                if (sayisal.includes(c)) { td.className = 'pf-num'; T[c] += parseDecimal(satirDeger(r, c)); }
+                tr.appendChild(td);
+            });
             tb.appendChild(tr);
-            T.palet += g.palet; T.adet += g.adet; T.brut += g.brut; T.dara += g.dara; T.net += g.net;
         });
-        if (!liste.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 7; td.textContent = 'Listede palet fişi yok.'; tr.appendChild(td); tb.appendChild(tr); }
         const ft = document.createElement('tr');
-        hucre(ft, `Toplam (${liste.length.toLocaleString('tr-TR')} parti)`); [T.palet, T.adet, T.brut, T.dara, T.net].forEach(n => hucre(ft, fmt0(n), 'pf-num')); hucre(ft, ort2(T.brut, T.adet), 'pf-num');
+        kolonlar.forEach((c, i) => { const td = document.createElement('td'); if (sayisal.includes(c)) { td.className = 'pf-num'; td.textContent = fmt0(T[c]); } else if (i === 0) td.textContent = `Toplam (${satirlar.length.toLocaleString('tr-TR')} palet)`; ft.appendChild(td); });
         tf.appendChild(ft);
+        ozetDialog.querySelector('#pfOzetBaslik').textContent = `Parti: ${parti || '—'}`;
+        ozetDialog.querySelector('#pfOzetAlt').textContent = `${satirlar.length.toLocaleString('tr-TR')} palet · Bir satıra tıklarsanız listede o palete gidilir.`;
         ozetDialog.showModal();
     }
-    function ozetGit(tr) {
-        if (!tr || tr.dataset.parti === undefined) return;
-        const hedef = Array.from(body.querySelectorAll('tr')).find(r => !r.hidden && satirDeger(r, 'parti_no') === tr.dataset.parti);
+    function paleteGit(tr) {
+        if (!tr || !tr.dataset.id) return;
+        const hedef = Array.from(body.querySelectorAll('tr')).find(r => r.dataset.id === tr.dataset.id);
         ozetDialog.close();
-        if (hedef) { selectCell(hedef.children[0]); hedef.scrollIntoView({ block: 'center' }); }
+        if (hedef) { hedef.hidden = false; selectCell(hedef.children[0]); hedef.scrollIntoView({ block: 'center' }); }
     }
-    ozetDialog?.querySelector('tbody').addEventListener('click', event => ozetGit(event.target.closest('tr')));
-    ozetDialog?.querySelector('tbody').addEventListener('keydown', event => { if (event.key === 'Enter') ozetGit(event.target.closest('tr')); });
+    ozetDialog?.querySelector('tbody').addEventListener('click', event => paleteGit(event.target.closest('tr')));
+    ozetDialog?.querySelector('tbody').addEventListener('keydown', event => { if (event.key === 'Enter') paleteGit(event.target.closest('tr')); });
     document.getElementById('pfOzetKapat')?.addEventListener('click', () => ozetDialog.close());
+    document.querySelectorAll('[data-pf-liste]').forEach(kart => {
+        kart.addEventListener('click', partiListesiAc);
+        kart.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); partiListesiAc(); } });
+    });
 
     // ───────── Yazdır (görünen liste; gizli çerçeve ile, açılır pencere yok) ─────────
     const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -595,24 +603,31 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
         document.body.appendChild(cerceve);
     }
 
-    // ───────── WhatsApp (seçili partinin özeti) ─────────
-    function whatsapp() {
-        const row = seciliSatir();
-        if (!row) { setStatus('Önce paylaşılacak partiden bir satır seçin.'); return; }
-        const parti = satirDeger(row, 'parti_no');
-        const g = partiToplamlari(false).find(x => x.parti === (parti || '—'));
-        if (!g) return;
-        const metin = [`*Palet Fişleri — Parti: ${parti || '—'}*`, `Tarih: ${new Date().toLocaleDateString('tr-TR')}`, `Palet: ${fmt0(g.palet)}`, `Ambalaj: ${fmt0(g.adet)}`,
-            `Brüt: ${fmt0(g.brut)} kg`, `Dara: ${fmt0(g.dara)} kg`, `Net: ${fmt0(g.net)} kg`, `Amb. ortalama: ${ort2(g.brut, g.adet)}`].join('\n');
-        window.open('https://wa.me/?text=' + encodeURIComponent(metin), '_blank', 'noopener');
-        setStatus('WhatsApp açıldı; mesaj hazır.');
-    }
-
     // ───────── Araç çubuğu ─────────
-    const araclar = { coglat, sil, bul: bulAc, duzelt: () => openDialog('duzelt'), ozet: ozetAc, yazdir, wp: whatsapp };
+    const araclar = { coglat, sil, bul: bulAc, duzelt: () => openDialog('duzelt'), yazdir };
     document.querySelectorAll('[data-pf]').forEach(btn => btn.addEventListener('click', () => araclar[btn.dataset.pf]?.()));
 
-    // Başlıklara basılı tutup sürükleyerek sütun sırası değiştir.
+    // ───────── Sütun sırası + genişliği (kullanıcı bazında sunucuda; tablo kurulu değilse bu tarayıcıda) ─────────
+    const TERCIH_ANAHTAR = 'palet_fisleri.tablo';
+    const YEREL_ANAHTAR = 'asya.palet-fisleri.tablo.v2';
+    const tercihSunucu = !!window.PALET_FISLERI?.tercihSunucu;
+    const VARSAYILAN_GEN = { belge_no: 80, parti_no: 130, palet_adi: 150, firma: 200, kasa_adeti: 70, brut_kg: 80, dara_kg: 70, net_kg: 80, mustahsil_ad: 150, aciklama1: 150, aciklama2: 150 };
+    const headers = table.tHead.rows[0];
+    let tercih = { genislik: {}, sira: [] };
+    (function tercihYukle() {
+        let ham = tercihSunucu ? window.PALET_FISLERI?.tercih : null;
+        if (!tercihSunucu) { try { ham = JSON.parse(localStorage.getItem(YEREL_ANAHTAR) || 'null'); } catch (_) { ham = null; } }
+        if (ham && typeof ham === 'object') tercih = { genislik: ham.genislik || {}, sira: Array.isArray(ham.sira) ? ham.sira : [] };
+    })();
+    let tercihZamani = 0;
+    function tercihKaydet() {
+        clearTimeout(tercihZamani);
+        tercihZamani = window.setTimeout(async () => {
+            if (!tercihSunucu) { try { localStorage.setItem(YEREL_ANAHTAR, JSON.stringify(tercih)); } catch (_) { /* depolama kapalı */ } return; }
+            try { await send('tercih_kaydet', { anahtar: TERCIH_ANAHTAR, deger: JSON.stringify(tercih) }); }
+            catch (error) { setStatus('Sütun ayarı kaydedilemedi: ' + error.message); }
+        }, 500);
+    }
     function moveColumn(from, to) {
         if (from === to || from < 0 || to < 0) return;
         table.querySelectorAll('tr').forEach(row => {
@@ -622,22 +637,74 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
             if (item && ref) row.insertBefore(item, from < to ? ref.nextSibling : ref);
         });
     }
-    function saveOrder() { localStorage.setItem(columnOrderKey, JSON.stringify(Array.from(table.tHead.rows[0].children).map(th => th.dataset.col))); }
-    function applyOrder() {
-        let order; try { order = JSON.parse(localStorage.getItem(columnOrderKey) || '[]'); } catch (_) { return; }
-        const header = Array.from(table.tHead.rows[0].children);
-        if (!Array.isArray(order) || order.length !== header.length) return;
-        const current = header.map(th => th.dataset.col);
-        if (order.some(col => !current.includes(col))) return;
-        order.forEach((col, targetIndex) => {
-            const currentIndex = Array.from(table.tHead.rows[0].children).findIndex(th => th.dataset.col === col);
-            if (currentIndex !== targetIndex) moveColumn(currentIndex, targetIndex);
+    function siraKaydet() { tercih.sira = Array.from(headers.children).map(th => th.dataset.col); tercihKaydet(); }
+    function siraUygula() {
+        const mevcut = Array.from(headers.children).map(th => th.dataset.col);
+        const hedef = tercih.sira.filter(c => mevcut.includes(c)).concat(mevcut.filter(c => !tercih.sira.includes(c)));
+        hedef.forEach((col, i) => {
+            const simdi = Array.from(headers.children).findIndex(th => th.dataset.col === col);
+            if (simdi !== i) moveColumn(simdi, i);
         });
     }
-    applyOrder();
-    const headers = table.tHead.rows[0];
+    const KOSE = 22;   // sol üst köşe alanı + satır numarası şeridi
+    function genislikUygula() {
+        let toplam = 0;
+        Array.from(headers.children).forEach(th => {
+            const w = tercih.genislik[th.dataset.col] || 120;
+            th.style.width = th.style.minWidth = th.style.maxWidth = w + 'px';
+            toplam += w;
+        });
+        table.style.width = toplam + 'px';
+    }
+    // İlk açılış (kayıtlı genişlik yoksa): varsayılanlar, boş alanı dolduracak şekilde ölçeklenir.
+    function varsayilanGenislikler() {
+        const cols = Array.from(headers.children).map(th => th.dataset.col);
+        const toplam = cols.reduce((s, c) => s + (VARSAYILAN_GEN[c] || 120), 0);
+        const oran = Math.max(1, (wrap.clientWidth - KOSE - 24) / toplam);
+        cols.forEach(c => { if (!tercih.genislik[c]) tercih.genislik[c] = Math.round((VARSAYILAN_GEN[c] || 120) * oran); });
+    }
+    // İçeriğe göre daralt: sütundaki en uzun yazı (başlık dahil) kadar.
+    const olcum = document.createElement('canvas').getContext('2d');
+    function icerikGenisligi(col) {
+        const th = headers.querySelector(`th[data-col="${col}"]`);
+        const ornek = body.querySelector(`td[data-col="${col}"]`);
+        const stilT = getComputedStyle(th), stilH = ornek ? getComputedStyle(ornek) : stilT;
+        let en = 0;
+        olcum.font = `${stilT.fontWeight} ${stilT.fontSize} ${stilT.fontFamily}`;
+        en = olcum.measureText(th.childNodes[0]?.textContent || '').width + 30;
+        olcum.font = `${stilH.fontWeight} ${stilH.fontSize} ${stilH.fontFamily}`;
+        body.querySelectorAll(`td[data-col="${col}"]`).forEach(td => { en = Math.max(en, olcum.measureText(td.textContent).width + 22); });
+        return Math.max(44, Math.min(1200, Math.ceil(en)));
+    }
+    function sutunuDaralt(col) { tercih.genislik[col] = icerikGenisligi(col); genislikUygula(); tercihKaydet(); }
+    function hepsiniDaralt() {
+        Array.from(headers.children).forEach(th => { tercih.genislik[th.dataset.col] = icerikGenisligi(th.dataset.col); });
+        genislikUygula(); tercihKaydet();
+        setStatus('Sütunlar içeriğe göre daraltıldı.');
+    }
+    document.getElementById('pfKose')?.addEventListener('dblclick', hepsiniDaralt);
+    // Başlık kenarından sürükle (Excel gibi); kenara çift tık: o sütunu daralt.
+    Array.from(headers.children).forEach(th => {
+        const tutac = document.createElement('i'); tutac.className = 'pf-rs'; tutac.title = 'Sürükleyin: genişlik · Çift tık: içeriğe göre daralt'; th.appendChild(tutac);
+        tutac.addEventListener('dblclick', event => { event.stopPropagation(); sutunuDaralt(th.dataset.col); });
+        tutac.addEventListener('pointerdown', event => {
+            if (event.button !== 0) return;
+            event.preventDefault(); event.stopPropagation();
+            const x0 = event.clientX, w0 = th.getBoundingClientRect().width, col = th.dataset.col;
+            tutac.setPointerCapture(event.pointerId); document.body.classList.add('pf-boyutlaniyor');
+            const hareket = e => { tercih.genislik[col] = Math.max(44, Math.min(1200, Math.round(w0 + e.clientX - x0))); genislikUygula(); };
+            const bitti = () => { tutac.removeEventListener('pointermove', hareket); tutac.removeEventListener('pointerup', bitti); tutac.removeEventListener('pointercancel', bitti); document.body.classList.remove('pf-boyutlaniyor'); tercihKaydet(); };
+            tutac.addEventListener('pointermove', hareket); tutac.addEventListener('pointerup', bitti); tutac.addEventListener('pointercancel', bitti);
+        });
+    });
+    siraUygula();
+    varsayilanGenislikler();
+    genislikUygula();
+
+    // Başlıklara basılı tutup sürükleyerek sütun sırası değiştir.
     headers.addEventListener('pointerdown', event => {
         if (event.button !== 0) return;
+        if (event.target.closest('.pf-rs')) return;
         const th = event.target.closest('th[data-col]'); if (!th) return;
         clearTimeout(holdTimer); armedHeader = th; movingHeader = false;
         holdTimer = window.setTimeout(() => { movingHeader = true; th.classList.add('pf-drag-armed'); setStatus('Sütun taşınıyor — istediğiniz yere bırakın.'); }, 520);
@@ -654,12 +721,16 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     });
     function releaseHeader() {
         clearTimeout(holdTimer);
-        if (movingHeader) { headers.querySelectorAll('.pf-drag-armed').forEach(th => th.classList.remove('pf-drag-armed')); saveOrder(); setStatus('Sütun sırası bu cihazda kaydedildi.'); }
+        if (movingHeader) { headers.querySelectorAll('.pf-drag-armed').forEach(th => th.classList.remove('pf-drag-armed')); siraKaydet(); setStatus('Sütun sırası kaydedildi.'); }
         movingHeader = false; armedHeader = null;
     }
     headers.addEventListener('pointerup', releaseHeader);
     headers.addEventListener('pointercancel', releaseHeader);
     headers.addEventListener('contextmenu', event => { if (movingHeader) event.preventDefault(); });
+
+    // Tarih / "Yüklenen" değişince liste otomatik yenilenir (Getir düğmesi yok).
+    const filtre = document.getElementById('pfFiltre');
+    filtre?.querySelectorAll('input[name="baslangic"], input[name="yuklenen"]').forEach(i => i.addEventListener('change', () => { if (filtre.reportValidity()) filtre.requestSubmit(); }));
     { const first = visibleRows()[0]; if (first) selectCell(first.children[0]); }
     // Sayfa, pencere yüksekliğine ölçeklenir: tablo kalan alanı doldurur, altta boşluk kalmaz.
     function fitPage() {
