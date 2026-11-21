@@ -156,15 +156,10 @@ function kf_datalist(string $id, array $items): string {
             <?php endif; ?>
         </label>
         <label class="mk-lbl">Firma Adı <span class="req">*</span>
-            <?php if (!empty($_all_firma)): ?>
-            <select name="firma_adi"><?= kf_sel_opt($fis['firma_adi'] ?? '', $_all_firma, '-- Seçiniz --') ?></select>
-            <?php else: ?>
-            <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>" data-uppercase="tr">
-            <small class="muted"><a href="definitions.php?type=firma">Tanımlar → Firmalar'dan ekleyin</a></small>
-            <?php endif; ?>
+            <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>" data-mkcb="firma" placeholder="Yazarak arayın…" data-uppercase="tr">
         </label>
-        <label class="mk-lbl">Tarih / Saat <span class="req">*</span>
-            <input type="datetime-local" name="giris_tarih" value="<?= h($fis['giris_tarih'] ?? '') ?>">
+        <label class="mk-lbl">Tarih <span class="req">*</span>
+            <input type="date" name="giris_tarih" value="<?= h(substr((string)($fis['giris_tarih'] ?? ''), 0, 10)) ?>">
         </label>
     </div>
 </section>
@@ -174,29 +169,13 @@ function kf_datalist(string $id, array $items): string {
     <h2 class="mk-sec-title"><span aria-hidden="true">📦</span> Malzeme ve Depo</h2>
     <div class="mk-g mk-g3">
         <label class="mk-lbl">Malın Cinsi <span class="req">*</span>
-            <?php if (!empty($_urun_names)): ?>
-            <select name="malin_cinsi"><?= kf_sel_opt($fis['malin_cinsi'] ?? '', $_urun_names, '-- Seçiniz --') ?></select>
-            <?php else: ?>
-            <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-uppercase="tr">
-            <small class="muted"><a href="definitions.php?type=urun">Tanımlar → Ürünler'den ekleyin</a></small>
-            <?php endif; ?>
+            <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-mkcb="urun" placeholder="Yazarak arayın…" data-uppercase="tr">
         </label>
         <label class="mk-lbl">Geldiği Yer
-            <?php if (!empty($_lokasyon_names)): ?>
-            <select name="geldigi_yer"><?= kf_sel_opt($fis['geldigi_yer'] ?? '', $_lokasyon_names, '-- Seçiniz --') ?></select>
-            <?php else: ?>
-            <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-uppercase="tr">
-            <small class="muted"><a href="definitions.php?type=lokasyon">Tanımlar → Lokasyonlar'dan ekleyin</a></small>
-            <?php endif; ?>
+            <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-mkcb="lokasyon" placeholder="Yazarak arayın…" data-uppercase="tr">
         </label>
         <label class="mk-lbl">Depo <span class="req">*</span> <small class="muted mk-inline">(stok için)</small>
-            <?php if (!empty($_depo_names_kf)): ?>
-            <select name="depo"><?= kf_sel_opt($fis['depo'] ?? '', $_depo_names_kf, '— Seçin —') ?></select>
-            <?php else: ?>
-            <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>"
-                placeholder="Depoya yönlendiriliyor">
-            <small class="muted"><a href="definitions.php?type=depo">Tanımlar → Depolar'dan ekleyin</a></small>
-            <?php endif; ?>
+            <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>" data-mkcb="depo" data-mkcb-ekle="0" placeholder="Yazarak arayın…">
         </label>
     </div>
 </section>
@@ -260,6 +239,10 @@ function kf_datalist(string $id, array $items): string {
     </div>
 </section>
 
+<script id="mkComboData" type="application/json"><?= json_encode([
+    'firma' => array_values($_all_firma), 'urun' => array_values($_urun_names),
+    'lokasyon' => array_values($_lokasyon_names), 'depo' => array_values($_depo_names_kf),
+], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 <script id="firmaListData" type="application/json"><?= json_encode(
     array_values($_all_firma), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="grupInitData" type="application/json"><?= json_encode(
@@ -417,6 +400,7 @@ function kf_datalist(string $id, array $items): string {
   </div>
 </div>
 
+<script src="assets/kantar-combo.js?v=<?= (int)@filemtime(__DIR__ . '/assets/kantar-combo.js') ?>"></script>
 <script>
 (function () {
 
@@ -917,24 +901,19 @@ var _kasaTotSayisi = 0, _paletTotSayisi = 0;
 var _kasaListData  = JSON.parse((document.getElementById('kasaListData')  || {}).textContent || '[]');
 var _paletListData = JSON.parse((document.getElementById('paletListData') || {}).textContent || '[]');
 
-function _buildKpSelect(tip, selectedVal, name) {
-    var list = tip === 'kasa' ? _kasaListData : _paletListData;
-    var html = '<select name="' + name + '" class="kp-cinsi"><option value="">— seç —</option>';
-    list.forEach(function(item) {
-        html += '<option value="' + esc(item.name) + '" data-dara="' + item.dara + '"' +
-                (item.name === (selectedVal || '') ? ' selected' : '') + '>' +
-                esc(item.name) + (item.dara > 0 ? ' (' + fmt(item.dara) + ' kg)' : '') + '</option>';
-    });
-    return html + '</select>';
+function _kpListe(tip) { return tip === 'kasa' ? _kasaListData : _paletListData; }
+function _kpTanimDara(tip, ad) {
+    var q = String(ad || '').trim().toLocaleUpperCase('tr-TR'), r = null;
+    _kpListe(tip).forEach(function(x) { if (String(x.name).toLocaleUpperCase('tr-TR') === q) r = x; });
+    return r ? (parseFloat(r.dara) || 0) : 0;
 }
 
 /* Satırın birim darası: kutu doluysa kullanıcının değeri, boşsa seçili cinsin tanımlı darası */
 function _kpRowDara(row) {
     var inp = row.querySelector('.kp-dara');
     if (inp && inp.value.trim() !== '') return Math.max(0, parseNum(inp.value));
-    var sel = row.querySelector('.kp-cinsi');
-    var opt = sel && sel.selectedIndex > 0 ? sel.options[sel.selectedIndex] : null;
-    return opt ? (parseFloat(opt.getAttribute('data-dara') || 0) || 0) : 0;
+    var cin = row.querySelector('.kp-cinsi');
+    return cin ? _kpTanimDara(row.dataset.tip, cin.value) : 0;
 }
 
 function _addKpRow(tip, cinsi, sayisi, birimDara) {
@@ -942,9 +921,10 @@ function _addKpRow(tip, cinsi, sayisi, birimDara) {
     var n = _kpCount;
     var div = document.createElement('div');
     div.className = 'kp-row';
+    div.dataset.tip = tip;
     div.innerHTML =
         '<input type="hidden" name="kp_rows[' + n + '][tip]" value="' + esc(tip) + '">' +
-        _buildKpSelect(tip, cinsi, 'kp_rows[' + n + '][cinsi]') +
+        '<input type="text" name="kp_rows[' + n + '][cinsi]" class="kp-cinsi" placeholder="Yazarak arayın…" value="' + esc(cinsi || '') + '">' +
         '<input type="text" inputmode="numeric" name="kp_rows[' + n + '][sayisi]" class="num kp-sayisi" placeholder="Adet" value="' + esc(sayisi != null ? String(sayisi) : '') + '">' +
         '<label class="kp-dara-lbl" title="Birim dara (kg/adet) — seçimle gelir, değiştirilebilir">Dara <input type="text" inputmode="decimal" name="kp_rows[' + n + '][birim_dara_kg]" class="num kp-dara" placeholder="0" value="' + (birimDara != null ? esc(fmtInput(birimDara)) : '') + '"> kg</label>' +
         '<span class="kp-calc">= <strong class="kp-toplam-val">0 kg</strong></span>' +
@@ -952,7 +932,7 @@ function _addKpRow(tip, cinsi, sayisi, birimDara) {
     var targetList = tip === 'palet' ? document.getElementById('paletRowList') : document.getElementById('kasaRowList');
     if (!targetList) return;
     targetList.appendChild(div);
-    var sel     = div.querySelector('.kp-cinsi');
+    var cinInp  = div.querySelector('.kp-cinsi');
     var sayInp  = div.querySelector('.kp-sayisi');
     var daraInp = div.querySelector('.kp-dara');
     var totEl   = div.querySelector('.kp-toplam-val');
@@ -961,19 +941,17 @@ function _addKpRow(tip, cinsi, sayisi, birimDara) {
         totEl.textContent = fmtRound(say * _kpRowDara(div)) + ' kg';
         _computeKpTotals();
     }
-    /* Cins değişince tanımlı dara kutuya gelir; kullanıcı sonra elle değiştirebilir */
-    sel.addEventListener('change', function() {
-        var opt = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex] : null;
-        var d = opt ? (parseFloat(opt.getAttribute('data-dara') || 0) || 0) : 0;
-        daraInp.value = d > 0 ? fmtInput(d) : '';
-        updateKpRow();
+    /* Cins seçilince tanımdaki dara kutuya gelir (yeni cinste boş kalır); kullanıcı elle değiştirebilir */
+    if (window.mkCombo) mkCombo(cinInp, {
+        items: function() { return _kpListe(tip); },
+        canAdd: true,
+        onPick: function(it) { var d = it ? (parseFloat(it.dara) || 0) : 0; daraInp.value = d > 0 ? fmtInput(d) : ''; updateKpRow(); }
     });
     sayInp.addEventListener('input', updateKpRow);
     daraInp.addEventListener('input', updateKpRow);
-    /* İlk açılış: kayıtlı dara yoksa (yeni satır / eski kayıt) seçili cinsin darasını göster */
+    /* İlk açılış: kayıtlı dara yoksa (yeni satır / eski kayıt) cinsin tanımdaki darasını göster */
     if (!daraInp.value) {
-        var o0 = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex] : null;
-        var d0 = o0 ? (parseFloat(o0.getAttribute('data-dara') || 0) || 0) : 0;
+        var d0 = _kpTanimDara(tip, cinInp.value);
         if (d0 > 0) daraInp.value = fmtInput(d0);
     }
     div.querySelector('.kp-del-btn').addEventListener('click', function() { div.remove(); _computeKpTotals(); });

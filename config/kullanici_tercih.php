@@ -44,8 +44,10 @@ function kt_migrate(PDO $pdo): array
 /** Anahtar → doğrulayıcı. Değer geçerliyse temizlenmiş dizi, değilse null. */
 function kt_dogrula(string $anahtar, mixed $deger): ?array
 {
-    if ($anahtar === 'palet_fisleri.tablo') {
-        $kolonlar = ['belge_no', 'parti_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad', 'aciklama1', 'aciklama2', 'tarih', 'islem', 'islem_zaman', 'kullanici', 'sube'];
+    if ($anahtar === 'palet_fisleri.tablo' || $anahtar === 'kantar.tablo') {
+        $kolonlar = $anahtar === 'kantar.tablo'
+            ? ['fis_no', 'tarih', 'plaka', 'firma', 'malin', 'geldigi', 'depo', 'palet', 'palet_cinsi', 'kasa', 'kasa_cinsi', 't1', 't2', 'brut', 'dara', 'net', 'aciklama', 'islem', 'islem_yapan', 'islem_zaman']
+            : ['belge_no', 'parti_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad', 'aciklama1', 'aciklama2', 'tarih', 'islem', 'islem_zaman', 'kullanici', 'sube'];
         if (!is_array($deger)) return null;
         $out = ['genislik' => [], 'sira' => [], 'gizli' => []];
         foreach ((array)($deger['genislik'] ?? []) as $k => $w) {
