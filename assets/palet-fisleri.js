@@ -213,12 +213,9 @@
             navigator.clipboard?.writeText(getValue(selectedCell)).then(() => setStatus('Hücre panoya kopyalandı.')).catch(() => setStatus('Pano erişimi için HTTPS gerekir.'));
         }
     });
-    document.addEventListener('keydown', event => {
-        if (event.ctrlKey && event.key.toLowerCase() === 'n' && !dialog.open && !event.target.matches('input,textarea,select')) { event.preventDefault(); openDialog(); }
-    });
 
     function openDialog() { form.reset(); form.elements.tarih.value = new Date().toISOString().slice(0, 10); document.getElementById('pfFormError').textContent = ''; dialog.showModal(); form.elements.firma.focus(); }
-    document.getElementById('pfAdd').addEventListener('click', openDialog);
+    
     document.getElementById('pfClose').addEventListener('click', () => dialog.close());
     document.getElementById('pfCancel').addEventListener('click', () => dialog.close());
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
@@ -291,5 +288,14 @@
     headers.addEventListener('contextmenu', event => { if (movingHeader) event.preventDefault(); });
     document.querySelectorAll('[data-pf-pasif]').forEach(el => el.addEventListener('click', event => { event.preventDefault(); setStatus('Bu araç henüz çalışmıyor.'); }));
     { const first = visibleRows()[0]; if (first) selectCell(first.children[0]); }
+    // Sayfa, pencere yüksekliğine ölçeklenir: tablo kalan alanı doldurur, altta boşluk kalmaz.
+    function fitPage() {
+        if (window.innerWidth < 768) { page.style.height = ''; return; }
+        const top = page.getBoundingClientRect().top + window.scrollY;
+        page.style.height = Math.max(320, window.innerHeight - top - 12) + 'px';
+    }
+    fitPage();
+    window.addEventListener('resize', fitPage);
+    window.addEventListener('load', fitPage);
     wrap.addEventListener('click', () => wrap.focus({ preventScroll: true }));
 })();
