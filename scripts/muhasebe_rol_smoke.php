@@ -60,6 +60,7 @@ foreach (['kullanici_tanimlari', 'sube_tanimlari', 'depo_tanimlari', 'veritabani
 ok('(d) admin_only satırı tam 7', count($adminAnahtar) === 7);
 foreach ($satirlar as $r) if (in_array($r['key'], ['cari_kartlari', 'stok_kartlari', 'palet_fisleri', 'sifre_degistirme'], true)) ok("kapsam içi satır admin_only DEĞİL: {$r['key']}", !$r['admin_only']);
 
+$pf = (string)file_get_contents($ROOT . '/palet_fisleri.php');
 echo "=== (b) sayfa + işlem kapıları ===\n";
 $IS_ADMIN = false;
 $PERMS = ['role.permissions.detailed', 'muhasebe.cari_kartlari.read'];
@@ -83,6 +84,26 @@ $PERMS = ['role.permissions.detailed', 'muhasebe.palet_fisleri.create'];
 ok('palet: Gör olmadan create işe yaramaz', !muhasebe_palet_can('create') && !muhasebe_palet_can('read'));
 $PERMS = ['stok.read', 'stok.write', 'reports.read', 'reports.export', 'records.write', 'users.admin', 'defs.admin'];
 ok('eski izinler (stok.*, reports.*, records.*, users.admin, defs.*) hiçbir muhasebe kapısını AÇMAZ', !cari_can('read') && !stok_can('read') && !fatura_can('read') && !kasa_can('read') && !ceksenet_can('read') && !muhasebe_palet_can('read') && !muhasebe_sayfa_can('ajanda') && !muhasebe_sayfa_can('stok_kartlari'));
+
+
+echo "=== palet_fisleri: aktif depo kapsamı + yetki bayrakları (v550) ===\n";
+ok('pf_liste_getir: depo_sql_in(\'p.depo\') süzgeci (liste + CSV/XLSX aynı sorgu)', str_contains($pf, "depo_sql_in('p.depo')") && str_contains($pf, '$st->execute([$baslangic, ...$depoPar])'));
+ok('pf_get_row: depot_visible_to_user yoksa "bulunamadı" (save/delete/duplicate buna dayanır)', (bool)preg_match("/depot_visible_to_user\\(\\(string\\)\\(\\\$row\\['depo'\\]/", $pf));
+ok('parti önerileri depo_sql_records_in ile süzülür', str_contains($pf, "depo_sql_records_in('loading_records')"));
+ok('sayfa data-izin-ekle/duzelt/sil/mus bayraklarını basar (mus = muhasebe_grup_can cari create)', str_contains($pf, 'data-izin-ekle') && str_contains($pf, 'data-izin-duzelt') && str_contains($pf, 'data-izin-sil') && str_contains($pf, "muhasebe_grup_can('cari', 'create')"));
+$js = (string)file_get_contents($ROOT . '/assets/palet-fisleri.js');
+ok('JS: F2/F3/Delete/F4/Ctrl+Shift+D/çift tık yolları izin() bayrağına bakar', str_contains($js, "izin('Ekle')") && str_contains($js, "izin('Sil')") && str_contains($js, "izin('Duzelt')") === false && str_contains($js, "'Duzelt'") && str_contains($js, "izin('Mus')"));
+// Çalışma zamanı: depo kapsamı (SQLite, stub depo_sql_in / depot_visible_to_user)
+$pdoD = db();
+$pdoD->exec("CREATE TABLE loading_pallets (id INTEGER PRIMARY KEY, depo TEXT)");
+foreach ([[1, 'DEPO A'], [2, 'DEPO B'], [3, ''], [4, null]] as [$i, $d]) $pdoD->prepare('INSERT INTO loading_pallets (id, depo) VALUES (?, ?)')->execute([$i, $d]);
+$DEPOLAR = ['DEPO A'];
+[$ds, $dp] = depo_sql_in('p.depo');
+$st = $pdoD->prepare("SELECT p.id FROM loading_pallets p WHERE 1=1 AND $ds ORDER BY p.id"); $st->execute($dp);
+ok('depo süzgeci: yalnız aktif depo + deposu boş satırlar görünür (yabancı depo yok)', $st->fetchAll(PDO::FETCH_COLUMN) === [1, 3, 4]);
+ok('get_row mantığı: yabancı depo görünmez, boş depo görünür', !depot_visible_to_user('DEPO B') && depot_visible_to_user('DEPO A') && depot_visible_to_user('') && depot_visible_to_user('depo a'));
+$DEPOLAR = null;
+ok('kısıtsız kullanıcıda süzgeç yok', depo_sql_in('p.depo')[0] === '');
 
 echo "=== (c) admin her şeyi geçer ===\n";
 $IS_ADMIN = true; $PERMS = [];
@@ -108,7 +129,6 @@ foreach (['cari_kaydet', 'stok_kaydet', 'fatura_kaydet', 'kasa_kaydet', 'cek_kay
     $s = (string)file_get_contents("$ROOT/$f.php");
     ok("$f.php: hiçbir dal 'write'/'admin' kapısı taşımaz (create|edit|delete)", !preg_match("/_kapi\('(write|admin)'\)/", $s));
 }
-$pf = (string)file_get_contents($ROOT . '/palet_fisleri.php');
 ok('palet_fisleri.php: create/save/delete/duplicate/tanim_ekle işlem kapıları + records.unlock/reports.export korunur', substr_count($pf, 'pf_yetki(') >= 6 && str_contains($pf, "can('records.unlock')") && str_contains($pf, "require_perm('reports.export')"));
 $sidebarBas = strpos($helpers, 'function render_desktop_sidebar'); $sidebar = substr($helpers, $sidebarBas, 9000);
 ok('sidebar: muhasebe sayfaları muhasebe_sayfa_can ile çizilir ($p_adm kapısı değil)', str_contains($sidebar, 'muhasebe_sayfa_can(') && !str_contains($sidebar, 'if ($p_adm) foreach ($__sayfalar'));

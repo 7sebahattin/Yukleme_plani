@@ -13,6 +13,8 @@
     let editor = null;
     let holdTimer = 0;
     const gizli = new Set();   // kullanıcının gizlediği sütunlar (data-col)
+    // v550: yetki bayrakları sunucudan (data-izin-*): ekle / duzelt / sil / mus (yeni müstahsil kartı = cari ekle). Yönetici hepsi "1". Asıl koruma sunucuda.
+    const izin = ad => (page.dataset['izin' + ad] ?? '1') !== '0';
     const gorHuc = row => Array.from(row.children).filter(c => !gizli.has(c.dataset.col));
     const ilkHucre = row => gorHuc(row)[0] || row.children[0];
     const editable = new Set(['parti_no', 'palet_adi', 'firma', 'kasa_adeti', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2']);
@@ -205,6 +207,7 @@
     // gerekirse değiştirip Güncelle ile kaydedilir, kapatılırsa kopya olduğu gibi kalır.
     async function coglat() {
         const row = seciliSatir();
+        if (!izin('Ekle')) { setStatus('Çoğaltma için yetkiniz yok.'); return; }
         if (!row) { setStatus('Önce çoğaltılacak satırı seçin.'); return; }
         if (dialog?.open) return;
         try {
@@ -221,6 +224,7 @@
     let silHedef = null;
     async function sil() {
         const row = seciliSatir();
+        if (!izin('Sil')) { setStatus('Silme için yetkiniz yok.'); return; }
         if (!row) { setStatus('Önce silinecek satırı seçin.'); return; }
         if (silDialog?.open) return;
         const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
@@ -301,7 +305,7 @@
     // Yazdıkça bul — yoksa "+ ekle" (parti serbest metindir, ekleme satırı yok)
     function makeCombo(input) {
         const kind = input.dataset.cb;
-        const canAdd = kind !== 'parti';
+        const canAdd = kind !== 'parti' && (kind !== 'mustahsil' || izin('Mus'));   // yeni müstahsil = cari_kaydet (cari Ekle yetkisi)
         const box = document.createElement('ul');
         box.className = 'pf-cb-list'; box.hidden = true; box.setAttribute('role', 'listbox');
         input.parentElement.appendChild(box);
@@ -456,6 +460,7 @@
     }
     function openDialog(istenen) {
         if (!dialog || dialog.open) return;
+        if (!izin(istenen === 'duzelt' ? 'Duzelt' : 'Ekle')) { setStatus('Bu işlem için yetkiniz yok.'); return; }
         mod = istenen === 'duzelt' ? 'duzelt' : 'ekle';
         if (mod === 'duzelt') {
             const tr = seciliSatir();

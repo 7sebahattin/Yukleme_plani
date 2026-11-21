@@ -112,7 +112,8 @@ function pf_get_row(int $id): array {
                          WHERE p.id = ? AND r.type = 'yukleme'");
     $st->execute([$id]);
     $row = $st->fetch();
-    if (!$row) throw new RuntimeException('Palet fişi bulunamadı.');
+    // v550: aktif depo kapsamı — başka depoya ait palet "bulunamadı" (save/delete/duplicate buna dayanır). Deposu boş kayıt görünür.
+    if (!$row || !depot_visible_to_user((string)($row['depo'] ?? ''))) throw new RuntimeException('Palet fişi bulunamadı.');
     return $row;
 }
 
@@ -335,6 +336,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
     }
 }
 
+// v550: parti önerileri de aktif depo kapsamında (loading_records, palet deposu üzerinden).
+$pf_parti_sorgu = function (string $sql) use ($pdo): PDOStatement {
+    [$ds, $dp] = depo_sql_records_in('loading_records');
+    if ($ds !== '') $sql = str_replace(" GROUP BY", " AND $ds GROUP BY", $sql);
+    $st = $pdo->prepare($sql); $st->execute($dp); return $st;
+};
 $palet_tipi_list = get_definitions_by_type('palet_tipi');
 $pf_listeler = [
     'palet' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], $palet_tipi_list),
@@ -342,7 +349,7 @@ $pf_listeler = [
     'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
     'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], get_definitions_by_type('kasa_cinsi')),
     'mustahsil' => $mustahsil_aktif ? array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['unvan']], $pdo->query('SELECT id, unvan FROM cari_kartlar WHERE aktif = 1 ORDER BY unvan LIMIT 5000')->fetchAll(PDO::FETCH_ASSOC)) : [],
-    'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pdo->query("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
+    'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pf_parti_sorgu("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
 ];
 $pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loading_records')->fetchColumn();
 $desc1_sql = $has_aciklama1 ? 'p.aciklama1' : "'' AS aciklama1";
@@ -360,6 +367,8 @@ function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $des
     [$islem_sel, $islem_join] = pf_islem_sql($pdo);
     $w = "r.type = 'yukleme' AND r.tarih >= ?";
     if (!$yuklenen) $w .= " AND COALESCE(r.durum, '') <> 'yuklendi'";
+    [$depoSql, $depoPar] = depo_sql_in('p.depo');   // v550: aktif depo (boş depo her yerde görünür kuralı depo_sql_in'de)
+    if ($depoSql !== '') $w .= " AND $depoSql";
     $st = $pdo->prepare("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
                           p.palet_tipi_id, p.kasa_cinsi_id, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql,
                           r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun, r.durum, r.locked_at,
@@ -371,7 +380,7 @@ function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $des
                    $islem_join
                    WHERE $w
                    ORDER BY r.id DESC, p.sira_no ASC, p.id DESC");
-    $st->execute([$baslangic]);
+    $st->execute([$baslangic, ...$depoPar]);
     return $st->fetchAll();
 }
 $rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql);
@@ -421,7 +430,7 @@ if ($export === 'csv' || $export === 'xlsx') {
 render_header('Palet Fişleri');
 ?>
 <link rel="stylesheet" href="assets/palet-fisleri.css?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.css') ?>">
-<section class="pf-page" id="pfPage" data-csrf="<?= h(csrf_token()) ?>">
+<section class="pf-page" id="pfPage" data-csrf="<?= h(csrf_token()) ?>" data-izin-ekle="<?= muhasebe_palet_can('create') ? '1' : '0' ?>" data-izin-duzelt="<?= muhasebe_palet_can('edit') ? '1' : '0' ?>" data-izin-sil="<?= muhasebe_palet_can('delete') ? '1' : '0' ?>" data-izin-mus="<?= muhasebe_grup_can('cari', 'create') ? '1' : '0' ?>">
     <div class="pf-top">
         <form class="pf-filtre" id="pfFiltre" method="get" action="palet_fisleri.php">
             <label class="pf-f-alan">Başlangıç Tarihi <input type="date" name="baslangic" value="<?= h($f_baslangic) ?>" required></label>
