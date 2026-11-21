@@ -27,6 +27,26 @@ function pf_input_text(string $key, int $limit = 500): string {
     return mb_substr(trim((string)($_POST[$key] ?? '')), 0, $limit, 'UTF-8');
 }
 
+// Ekle penceresindeki "+ ekle": yalnız bu dört tanım türü açılabilir (sayfa zaten yalnız yöneticiye açık).
+function pf_tanim_turleri(): array {
+    return ['palet_tipi' => 'palet', 'firma' => 'müşteri', 'urun' => 'ürün', 'kasa_cinsi' => 'kasa'];
+}
+
+function pf_tanim_bul_ekle(string $type, string $name): array {
+    $pdo = db();
+    $name = tr_upper(trim((string)preg_replace('/\s+/u', ' ', $name)));
+    if ($name === '' || mb_strlen($name, 'UTF-8') > 150 || !preg_match('/[\p{L}\p{N}]/u', $name)) throw new RuntimeException('Geçerli bir ad girin (en fazla 150 karakter).');
+    $st = $pdo->prepare("SELECT id, name FROM material_definitions WHERE type = ? AND is_active = 1");
+    $st->execute([$type]);
+    foreach ($st->fetchAll() as $d) {
+        if (tr_upper((string)$d['name']) === $name) return ['id' => (int)$d['id'], 'name' => (string)$d['name'], 'yeni' => false];
+    }
+    $pdo->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)")->execute([$type, $name]);
+    $id = (int)$pdo->lastInsertId();
+    audit_log_event('create', 'tanim', $id, null, ['type' => $type, 'name' => $name, 'kaynak' => 'palet_fisleri']);
+    return ['id' => $id, 'name' => $name, 'yeni' => true];
+}
+
 function pf_valid_date(string $value): bool {
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
     return $date !== false && $date->format('Y-m-d') === $value;
@@ -95,13 +115,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             $urun = pf_input_text('urun', 150);
             $tarih = pf_input_text('tarih', 10);
             $palet_tipi_id = (int)($_POST['palet_tipi_id'] ?? 0);
+            $kasa_cinsi_id = (int)($_POST['kasa_cinsi_id'] ?? 0);
             $adet = max(0, min(1000000, intval_safe($_POST['kasa_adeti'] ?? 0)));
             $brut = max(0, min(999999999, parse_decimal($_POST['brut_kg'] ?? 0)));
             $dara = max(0, min(999999999, parse_decimal($_POST['dara_kg'] ?? 0)));
+            if ($dara > $brut) throw new RuntimeException('Dara, brüt ağırlıktan büyük olamaz.');
             $net = round(max(0, $brut - $dara), 3);
             $aciklama1 = pf_input_text('aciklama1', 2000);
             $aciklama2 = pf_input_text('aciklama2', 2000);
-            if ($firma === '' || $urun === '' || !pf_valid_date($tarih)) throw new RuntimeException('Ünvan, ürün ve geçerli tarih zorunludur.');
+            if ($firma === '' || $urun === '' || !pf_valid_date($tarih)) throw new RuntimeException('Müşteri, ürün ve geçerli tarih zorunludur.');
+            if ($kasa_cinsi_id > 0) {
+                $kdef = $pdo->prepare("SELECT id FROM material_definitions WHERE id = ? AND type = 'kasa_cinsi' AND is_active = 1");
+                $kdef->execute([$kasa_cinsi_id]);
+                if (!$kdef->fetchColumn()) throw new RuntimeException('Kasa tanımı geçerli değil.');
+            } else $kasa_cinsi_id = null;
             if ($palet_tipi_id > 0) {
                 $def = $pdo->prepare("SELECT id FROM material_definitions WHERE id = ? AND type = 'palet_tipi' AND is_active = 1");
                 $def->execute([$palet_tipi_id]);
@@ -114,8 +141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
                 $record_id = (int)$pdo->lastInsertId();
                 $pdo->prepare("INSERT INTO loading_pallets
                     (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg, kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi, aciklama1, aciklama2)
-                    VALUES (?, '', ?, '', ?, ?, ?, NULL, ?, ?, ?, 0, 0, ?, ?)")
-                    ->execute([$record_id, $adet, $brut, $dara, $net, $palet_tipi_id, $urun, active_depot() ?? '', $aciklama1, $aciklama2]);
+                    VALUES (?, '', ?, '', ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)")
+                    ->execute([$record_id, $adet, $brut, $dara, $net, $kasa_cinsi_id, $palet_tipi_id, $urun, active_depot() ?? '', $aciklama1, $aciklama2]);
                 $pallet_id = (int)$pdo->lastInsertId();
                 $pdo->commit();
             } catch (Throwable $e) {
@@ -124,7 +151,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             }
             sync_malzeme_kullanim($record_id);
             audit_log_event('create', 'palet_fisleri', $pallet_id, null, ['belge_no' => $record_id, 'firma' => $firma, 'parti_no' => $parti, 'brut_kg' => $brut, 'net_kg' => $net]);
-            pf_json(['ok' => true, 'id' => $pallet_id]);
+            $yeni = pf_get_row($pallet_id);
+            pf_json(['ok' => true, 'id' => $pallet_id, 'next_belge' => $record_id + 1, 'row' => [
+                'id' => $pallet_id, 'loading_record_id' => $record_id, 'belge_no' => (int)$yeni['belge_no'], 'parti_no' => (string)$yeni['parti_no'],
+                'palet_tipi_id' => (int)($yeni['palet_tipi_id'] ?? 0), 'palet_adi' => (string)$yeni['palet_adi'], 'firma' => (string)$yeni['firma'], 'urun' => (string)$yeni['urun'],
+                'kasa_adeti' => (int)$yeni['kasa_adeti'], 'brut_kg' => (float)$yeni['brut_kg'], 'dara_kg' => (float)$yeni['dara_kg'], 'net_kg' => (float)$yeni['net_kg'],
+                'aciklama1' => (string)($yeni['aciklama1'] ?? ''), 'aciklama2' => (string)($yeni['aciklama2'] ?? '')]]);
+        }
+        if ($action === 'tanim_ekle') {
+            $tur = (string)($_POST['tur'] ?? '');
+            if (!isset(pf_tanim_turleri()[$tur])) throw new RuntimeException('Bu tür için tanım eklenemez.');
+            pf_json(['ok' => true] + pf_tanim_bul_ekle($tur, (string)($_POST['ad'] ?? '')));
         }
 
         $id = max(0, (int)($_POST['id'] ?? 0));
@@ -182,6 +219,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
 }
 
 $palet_tipi_list = get_definitions_by_type('palet_tipi');
+$pf_listeler = [
+    'palet' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], $palet_tipi_list),
+    'firma' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('firma')),
+    'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
+    'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('kasa_cinsi')),
+    'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pdo->query("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
+];
+$pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loading_records')->fetchColumn();
 $desc1_sql = $has_aciklama1 ? 'p.aciklama1' : "'' AS aciklama1";
 $desc2_sql = $has_aciklama2 ? 'p.aciklama2' : "'' AS aciklama2";
 $st = $pdo->query("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
@@ -204,7 +249,7 @@ render_header('Palet Fişleri');
         </div>
         <div class="pf-toolbar" role="toolbar" aria-label="Palet fişi araçları">
             <div class="pf-tb-grup">
-                <button type="button" class="pf-tb pf-tb-ekle" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">＋ F2 - Ekle</button>
+                <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?>>＋ F2 - Ekle</button>
                 <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⧉ Çoğalt</button>
                 <button type="button" class="pf-tb pf-tb-sil" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">🗑 F3 - Sil</button>
                 <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⌕ Bul</button>
@@ -249,7 +294,7 @@ render_header('Palet Fişleri');
             <?php endforeach; ?>
             </tbody>
         </table>
-        <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. Yeni Palet Fişi ile başlayın.' ?></div>
+        <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. F2 - Ekle ile başlayın.' ?></div>
     </div>
     <div class="pf-bottom">
         <div class="pf-kart pf-kart-parti"><i aria-hidden="true">▤</i><div><span>PARTİ</span><strong data-sum="parti">—</strong></div></div>
@@ -264,23 +309,27 @@ render_header('Palet Fişleri');
 </section>
 
 <dialog class="pf-dialog" id="pfDialog">
-    <form id="pfForm" method="dialog">
-        <div class="pf-dialog-head"><div><h2>Yeni Palet Fişi</h2><p>Kaydettiğinde fiş listenin en üstüne eklenir.</p></div><button type="button" class="pf-close" id="pfClose" aria-label="Kapat">×</button></div>
+    <form id="pfForm" method="dialog" autocomplete="off" novalidate>
+        <div class="pf-dialog-head"><div><h2>Palet Fişi Ekle</h2><p>Kaydedince pencere açık kalır; parti, palet, müşteri, ürün ve kasa bir sonraki palet için korunur. <b>Enter</b> sonraki alan · <b>F10</b> kaydet · <b>Esc</b> kapat</p></div><button type="button" class="pf-close" id="pfClose" aria-label="Kapat">×</button></div>
         <div class="pf-form-grid">
-            <label>Ünvan <input name="firma" maxlength="150" required autofocus></label>
-            <label>Parti No <input name="parti_no" maxlength="100"></label>
-            <label>Ürün <input name="urun" maxlength="150" required></label>
             <label>Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
-            <label>Palet <select name="palet_tipi_id"><option value="">Seçiniz</option><?php foreach ($palet_tipi_list as $pt): ?><option value="<?= (int)$pt['id'] ?>"><?= h($pt['name']) ?></option><?php endforeach; ?></select></label>
-            <label>Adet <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
-            <label>BRÜT (kg) <input name="brut_kg" inputmode="decimal" value=""></label>
-            <label>Dara (kg) <input name="dara_kg" inputmode="decimal" value=""></label>
+            <label>Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
+            <label class="pf-cb">Parti No <input name="parti_no" data-cb="parti" maxlength="100" placeholder="Yazın veya listeden seçin"></label>
+            <label class="pf-cb">Palet <input name="palet" data-cb="palet" placeholder="Yazdıkça bulunur"></label>
+            <label class="pf-cb">Müşteri <input name="firma" data-cb="firma" maxlength="150" placeholder="Yazdıkça bulunur" required></label>
+            <label class="pf-cb">Ürün <input name="urun" data-cb="urun" maxlength="150" placeholder="Yazdıkça bulunur" required></label>
+            <label class="pf-cb">Kasa Ambalaj <input name="kasa" data-cb="kasa" placeholder="Yazdıkça bulunur"></label>
+            <label>Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
+            <label class="pf-kg">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
+            <label class="pf-kg">Dara (kg) <input name="dara_kg" inputmode="decimal"></label>
+            <label class="pf-kg">Net (kg) <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0"></label>
+            <div class="pf-uyari" id="pfUyari" role="status" aria-live="polite"></div>
             <label>Açıklama-1 <input name="aciklama1" maxlength="2000"></label>
             <label>Açıklama-2 <input name="aciklama2" maxlength="2000"></label>
         </div>
-        <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Vazgeç</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet</button></div>
+        <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
     </form>
 </dialog>
-<script>window.PALET_FISLERI = {paletTipleri: <?= json_encode(array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], $palet_tipi_list), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>};</script>
+<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="assets/palet-fisleri.js?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.js') ?>" defer></script>
 <?php render_footer();
