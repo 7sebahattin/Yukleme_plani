@@ -8,7 +8,6 @@
     const dialog = document.getElementById('pfDialog');
     const form = document.getElementById('pfForm');
     const status = document.getElementById('pfStatus');
-    const search = document.getElementById('pfSearch');
     const empty = document.getElementById('pfEmpty');
     let selectedCell = null;
     let editor = null;
@@ -190,20 +189,41 @@
         else if (event.key === 'Tab') { event.preventDefault(); finishEdit(true, true); }
     });
 
-    async function rowAction(action) {
-        if (!selectedCell) return;
-        const row = selectedCell.parentElement;
-        if (action === 'delete' && !window.confirm('Seçili palet fişi silinsin mi? Bu işlem geri alınamaz.')) return;
+    function seciliSatir() { return selectedCell ? selectedCell.parentElement : null; }
+    function sayacDegis(delta) {
+        const sayac = document.getElementById('pfCount');
+        if (sayac) sayac.textContent = Math.max(0, Number(String(sayac.textContent).replace(/\./g, '')) + delta).toLocaleString('tr-TR');
+    }
+    async function coglat() {
+        const row = seciliSatir();
+        if (!row) { setStatus('Önce çoğaltılacak satırı seçin.'); return; }
         try {
-            await send(action, { id: row.dataset.id });
-            setStatus(action === 'delete' ? 'Palet fişi silindi.' : 'Palet fişi kopyalandı.');
-            location.reload();
+            const r = await send('duplicate', { id: row.dataset.id });
+            satirEkle(r.row);
+            nextBelge = r.next_belge || nextBelge;
+            setStatus(`${r.row.belge_no} numaralı belge olarak kopyalandı.`);
+        } catch (error) { setStatus(error.message); }
+    }
+    async function sil() {
+        const row = seciliSatir();
+        if (!row) { setStatus('Önce silinecek satırı seçin.'); return; }
+        const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
+        if (!window.confirm(`${belge} numaralı palet fişi silinsin mi? Bu işlem geri alınamaz.`)) return;
+        try {
+            await send('delete', { id: row.dataset.id });
+            const komsu = row.nextElementSibling || row.previousElementSibling;
+            row.remove(); selectedCell = null;
+            sayacDegis(-1);
+            if (komsu) selectCell(komsu.children[0]); else refreshTotals();
+            empty.hidden = body.children.length > 0;
+            setStatus(`${belge} numaralı palet fişi silindi.`);
         } catch (error) { setStatus(error.message); }
     }
     wrap.addEventListener('keydown', event => {
         if (editor || event.target.matches('input,select,textarea')) return;
-        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); rowAction('duplicate'); return; }
-        if (event.key === 'Delete' && selectedCell) { event.preventDefault(); rowAction('delete'); return; }
+        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); coglat(); return; }
+        if ((event.key === 'Delete' || event.key === 'F3') && selectedCell) { event.preventDefault(); sil(); return; }
+        if (event.key === 'F4' && selectedCell) { event.preventDefault(); openDialog('duzelt'); return; }
         if (event.key === 'ArrowDown') { event.preventDefault(); moveSelection(1, 0); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); moveSelection(-1, 0); }
         else if (event.key === 'ArrowRight' || event.key === 'Tab') { event.preventDefault(); moveSelection(0, 1); }
@@ -330,18 +350,70 @@
     }
     ['brut_kg', 'dara_kg', 'parti_no'].forEach(n => alan(n).addEventListener('input', hesapla));
 
-    function openDialog() {
-        if (!dialog || dialog.open) return;
+    let mod = 'ekle';          // 'ekle' | 'duzelt'
+    let duzenlenen = null;     // Düzelt modunda satır (tr)
+    let orijinal = {};         // Düzelt: değişmemiş müşteri/ürün kayıtlı tanım olmasa da kabul edilir (eski serbest metin kayıtlar)
+    const baslikEl = dialog.querySelector('.pf-dialog-head h2');
+    const aciklamaEl = dialog.querySelector('.pf-dialog-head p');
+    const ekleAciklama = aciklamaEl ? aciklamaEl.innerHTML : '';
+    function bugun() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+    function formSifirla() {
+        form.reset();
+        alan('tarih').value = bugun();
+        form.querySelectorAll('input[data-cb]').forEach(i => { delete i.dataset.id; });
         alan('belge_no').value = String(nextBelge);
+        mesaj(''); hesapla();
+    }
+    function formDoldur(tr) {
+        const c = n => tr.querySelector(`[data-col="${n}"]`);
+        const v = n => c(n)?.dataset.value ?? '';
+        const kg = n => { const x = parseDecimal(v(n)); return x ? String(x) : ''; };
+        const ata = (name, text, id) => { alan(name).value = text; if (id) alan(name).dataset.id = id; else delete alan(name).dataset.id; };
+        alan('tarih').value = tr.dataset.tarih || bugun();
+        alan('belge_no').value = v('belge_no');
+        alan('parti_no').value = v('parti_no');
+        const paletId = v('palet_adi');
+        ata('palet', paletId ? (c('palet_adi')?.textContent || '') : '', paletId);
+        ata('firma', v('firma'), 0);
+        ata('urun', tr.dataset.urun || '', 0);
+        const kasaId = Number(tr.dataset.kasaId || 0);
+        ata('kasa', kasaId ? ((L().kasa || []).find(x => x.id === kasaId)?.name || '') : '', kasaId);
+        alan('kasa_adeti').value = String(parseDecimal(v('kasa_adeti')) || 0);
+        const mustId = Number(tr.dataset.mustId || 0);
+        ata('mustahsil', mustId ? v('mustahsil_ad') : '', mustId);
+        alan('brut_kg').value = kg('brut_kg'); alan('dara_kg').value = kg('dara_kg');
+        alan('aciklama1').value = v('aciklama1'); alan('aciklama2').value = v('aciklama2');
+        orijinal = { firma: v('firma'), urun: tr.dataset.urun || '' };
+        hesapla();
+    }
+    function openDialog(istenen) {
+        if (!dialog || dialog.open) return;
+        mod = istenen === 'duzelt' ? 'duzelt' : 'ekle';
+        if (mod === 'duzelt') {
+            const tr = seciliSatir();
+            if (!tr) { setStatus('Önce düzeltilecek satırı seçin.'); mod = 'ekle'; return; }
+            duzenlenen = tr;
+            formDoldur(tr);
+            if (baslikEl) baslikEl.textContent = 'Palet Fişi Düzelt';
+            if (aciklamaEl) aciklamaEl.innerHTML = 'Değişikliği <b>Güncelle</b> ile kaydedin. <b>Enter</b> sonraki alan · <b>F10</b> kaydet · <b>Esc</b> vazgeç';
+            saveBtn.innerHTML = 'Güncelle <span class="pf-shortcut">F10</span>';
+        } else {
+            duzenlenen = null;
+            if (baslikEl) baslikEl.textContent = 'Palet Fişi Ekle';
+            if (aciklamaEl) aciklamaEl.innerHTML = ekleAciklama;
+            saveBtn.innerHTML = 'Kaydet <span class="pf-shortcut">F10</span>';
+            alan('belge_no').value = String(nextBelge);
+        }
         mesaj('');
         dialog.showModal();
         const hazir = alan('parti_no').value && alan('firma').value;
-        const hedef = hazir ? alan('brut_kg') : alan('parti_no');
+        const hedef = (mod === 'duzelt' || hazir) ? alan('brut_kg') : alan('parti_no');
         hedef.focus(); if (hedef.select) hedef.select();
     }
-    document.getElementById('pfAdd')?.addEventListener('click', openDialog);
+    dialog.addEventListener('close', () => { if (mod === 'duzelt') { mod = 'ekle'; duzenlenen = null; formSifirla(); } });
+    document.getElementById('pfAdd')?.addEventListener('click', () => openDialog('ekle'));
     document.addEventListener('keydown', event => {
-        if (event.key === 'F2' && !dialog.open && !event.target.matches('input,textarea,select')) { event.preventDefault(); openDialog(); }
+        if (event.key === 'F2' && !dialog.open && !event.target.matches('input,textarea,select')) { event.preventDefault(); openDialog('ekle'); }
     });
     document.getElementById('pfClose').addEventListener('click', () => dialog.close());
     document.getElementById('pfCancel').addEventListener('click', () => dialog.close());
@@ -352,17 +424,25 @@
         const text = input.value.trim();
         if (!text) { if (zorunlu) throw new Error(`${etiket} zorunludur.`); return null; }
         if (input.dataset.id) return { id: Number(input.dataset.id), name: text };
+        if (mod === 'duzelt' && orijinal[name] !== undefined && trUp(orijinal[name]) === trUp(text)) return { id: 0, name: text };
         const bulunan = (L()[input.dataset.cb] || []).find(x => trUp(x.name) === trUp(text));
         if (bulunan) { input.dataset.id = bulunan.id; input.value = bulunan.name; return { id: bulunan.id, name: bulunan.name }; }
         throw new Error(`${etiket}: “${text}” kayıtlı değil. Listeden seçin ya da “+ ekle” ile tanımlayın.`);
     }
-    function satirEkle(r) {
-        const tr = document.createElement('tr');
-        tr.dataset.id = r.id; tr.dataset.recordId = r.loading_record_id;
-        tr.dataset.search = [r.belge_no, r.parti_no, r.palet_adi, r.firma, r.urun].join(' ').toLocaleLowerCase('tr-TR');
-        const deger = { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma],
+    function degerler(r) {
+        return { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma],
             kasa_adeti: [r.kasa_adeti, fmt0(r.kasa_adeti)], brut_kg: [r.brut_kg, fmt0(r.brut_kg)], dara_kg: [r.dara_kg, fmt0(r.dara_kg)], net_kg: [r.net_kg, fmt0(r.net_kg)],
             mustahsil_ad: [r.mustahsil_ad, r.mustahsil_ad], aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2] };
+    }
+    function satirOznitelik(tr, r) {
+        tr.dataset.id = r.id; tr.dataset.recordId = r.loading_record_id;
+        tr.dataset.urun = r.urun || ''; tr.dataset.tarih = r.tarih || ''; tr.dataset.kasaId = r.kasa_cinsi_id || 0; tr.dataset.mustId = r.mustahsil_id || 0; tr.dataset.kilit = r.kilit ? 1 : 0;
+        tr.dataset.search = [r.belge_no, r.parti_no, r.palet_adi, r.firma, r.urun].join(' ').toLocaleLowerCase('tr-TR');
+    }
+    function satirEkle(r) {
+        const tr = document.createElement('tr');
+        satirOznitelik(tr, r);
+        const deger = degerler(r);
         Array.from(table.tHead.rows[0].children).forEach(th => {
             const col = th.dataset.col; const [raw, shown] = deger[col] || ['', ''];
             const td = document.createElement('td');
@@ -372,9 +452,15 @@
         });
         body.insertBefore(tr, body.firstChild);
         empty.hidden = true;
-        const sayac = document.getElementById('pfCount'); if (sayac) sayac.textContent = (Number(String(sayac.textContent).replace(/\./g, '')) + 1).toLocaleString('tr-TR');
+        sayacDegis(1);
         selectCell(tr.children[0]);
         wrap.scrollTop = 0;
+    }
+    function satirGuncelle(tr, r) {
+        satirOznitelik(tr, r);
+        const deger = degerler(r);
+        tr.querySelectorAll('td.pf-cell').forEach(td => { const d = deger[td.dataset.col]; if (d) { td.dataset.value = String(d[0] ?? ''); td.textContent = String(d[1] ?? ''); } });
+        selectCell(tr.children[0]);
     }
     let kaydediyor = false;
     async function submitForm() {
@@ -389,6 +475,16 @@
             const palet = coz('palet', false, 'Palet');
             const kasa = coz('kasa', false, 'Kasa ambalaj');
             const mustahsil = alan('mustahsil').disabled ? null : coz('mustahsil', false, 'Müstahsil');
+            if (mod === 'duzelt') {
+                kaydediyor = true; saveBtn.disabled = true;
+                const sonuc = await send('save', { id: duzenlenen.dataset.id, tam: 1, tarih: alan('tarih').value, parti_no: trUp(alan('parti_no').value), firma: firma.name, urun: urun.name,
+                    palet_tipi_id: palet ? palet.id : '', kasa_cinsi_id: kasa ? kasa.id : '', mustahsil_id: mustahsil ? mustahsil.id : '', mustahsil_duzenle: alan('mustahsil').disabled ? '' : 1,
+                    kasa_adeti: alan('kasa_adeti').value || 0, brut_kg: brut, dara_kg: dara, aciklama1: alan('aciklama1').value, aciklama2: alan('aciklama2').value });
+                satirGuncelle(duzenlenen, sonuc.row);
+                setStatus(`${sonuc.row.belge_no} numaralı palet fişi güncellendi.`);
+                dialog.close();
+                return;
+            }
             kaydediyor = true; saveBtn.disabled = true;
             const r = await send('create', { tarih: alan('tarih').value, parti_no: trUp(alan('parti_no').value), firma: firma.name, urun: urun.name,
                 palet_tipi_id: palet ? palet.id : '', kasa_cinsi_id: kasa ? kasa.id : '', mustahsil_id: mustahsil ? mustahsil.id : '', kasa_adeti: alan('kasa_adeti').value || 0, brut_kg: brut, dara_kg: dara,
@@ -408,14 +504,113 @@
     }
     form.addEventListener('submit', event => { event.preventDefault(); submitForm(); });
 
-    if (search) search.addEventListener('input', () => {
-        const q = search.value.trim().toLocaleLowerCase('tr-TR');
-        let count = 0;
-        body.querySelectorAll('tr').forEach(row => { row.hidden = !!q && !row.dataset.search.toLocaleLowerCase('tr-TR').includes(q); if (!row.hidden) count++; });
-        document.getElementById('pfCount').textContent = count.toLocaleString('tr-TR');
-        empty.hidden = count > 0;
-        if (!count) empty.textContent = q ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. F2 - Ekle ile başlayın.';
-    });
+    // ───────── Bul (listede ara) ─────────
+    const bulKutu = document.getElementById('pfBulKutu');
+    const bulInput = document.getElementById('pfBul');
+    function bulUygula() {
+        const q = (bulInput?.value || '').trim().toLocaleLowerCase('tr-TR');
+        let say = 0;
+        body.querySelectorAll('tr').forEach(row => { row.hidden = !!q && !row.textContent.toLocaleLowerCase('tr-TR').includes(q); if (!row.hidden) say++; });
+        const sayac = document.getElementById('pfCount'); if (sayac) sayac.textContent = say.toLocaleString('tr-TR');
+        empty.hidden = say > 0;
+        if (!say) empty.textContent = q ? 'Aramanızla eşleşen kayıt yok.' : 'Seçilen filtreye uyan palet fişi yok.';
+        if (q) setStatus(`${say.toLocaleString('tr-TR')} kayıt bulundu.`);
+    }
+    function bulAc() { if (!bulKutu) return; bulKutu.hidden = false; bulInput.focus(); bulInput.select(); }
+    function bulKapat() { if (!bulKutu) return; bulInput.value = ''; bulUygula(); bulKutu.hidden = true; wrap.focus({ preventScroll: true }); }
+    bulInput?.addEventListener('input', bulUygula);
+    bulInput?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); bulKapat(); } });
+    document.getElementById('pfBulKapat')?.addEventListener('click', bulKapat);
+
+    // ───────── Parti Özeti ─────────
+    const ozetDialog = document.getElementById('pfOzetDialog');
+    function satirDeger(row, name) { return row.querySelector(`[data-col="${name}"]`)?.dataset.value ?? ''; }
+    function partiToplamlari(yalnizGorunen) {
+        const harita = new Map();
+        body.querySelectorAll('tr').forEach(row => {
+            if (yalnizGorunen && row.hidden) return;
+            const parti = satirDeger(row, 'parti_no') || '—';
+            const g = harita.get(parti) || { parti, palet: 0, adet: 0, brut: 0, dara: 0, net: 0 };
+            g.palet++; g.adet += parseDecimal(satirDeger(row, 'kasa_adeti')); g.brut += parseDecimal(satirDeger(row, 'brut_kg'));
+            g.dara += parseDecimal(satirDeger(row, 'dara_kg')); g.net += parseDecimal(satirDeger(row, 'net_kg'));
+            harita.set(parti, g);
+        });
+        return Array.from(harita.values());
+    }
+    const ort2 = (brut, adet) => adet > 0 ? (brut / adet).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0';
+    function ozetAc() {
+        if (!ozetDialog) return;
+        const liste = partiToplamlari(true);
+        const tb = ozetDialog.querySelector('tbody'), tf = ozetDialog.querySelector('tfoot');
+        tb.innerHTML = ''; tf.innerHTML = '';
+        const hucre = (tr, text, sinif) => { const td = document.createElement('td'); td.textContent = text; if (sinif) td.className = sinif; tr.appendChild(td); };
+        const T = { palet: 0, adet: 0, brut: 0, dara: 0, net: 0 };
+        liste.forEach(g => {
+            const tr = document.createElement('tr'); tr.tabIndex = 0; tr.dataset.parti = g.parti === '—' ? '' : g.parti;
+            hucre(tr, g.parti, 'pf-ozet-parti'); [g.palet, g.adet, g.brut, g.dara, g.net].forEach(n => hucre(tr, fmt0(n), 'pf-num')); hucre(tr, ort2(g.brut, g.adet), 'pf-num');
+            tb.appendChild(tr);
+            T.palet += g.palet; T.adet += g.adet; T.brut += g.brut; T.dara += g.dara; T.net += g.net;
+        });
+        if (!liste.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 7; td.textContent = 'Listede palet fişi yok.'; tr.appendChild(td); tb.appendChild(tr); }
+        const ft = document.createElement('tr');
+        hucre(ft, `Toplam (${liste.length.toLocaleString('tr-TR')} parti)`); [T.palet, T.adet, T.brut, T.dara, T.net].forEach(n => hucre(ft, fmt0(n), 'pf-num')); hucre(ft, ort2(T.brut, T.adet), 'pf-num');
+        tf.appendChild(ft);
+        ozetDialog.showModal();
+    }
+    function ozetGit(tr) {
+        if (!tr || tr.dataset.parti === undefined) return;
+        const hedef = Array.from(body.querySelectorAll('tr')).find(r => !r.hidden && satirDeger(r, 'parti_no') === tr.dataset.parti);
+        ozetDialog.close();
+        if (hedef) { selectCell(hedef.children[0]); hedef.scrollIntoView({ block: 'center' }); }
+    }
+    ozetDialog?.querySelector('tbody').addEventListener('click', event => ozetGit(event.target.closest('tr')));
+    ozetDialog?.querySelector('tbody').addEventListener('keydown', event => { if (event.key === 'Enter') ozetGit(event.target.closest('tr')); });
+    document.getElementById('pfOzetKapat')?.addEventListener('click', () => ozetDialog.close());
+
+    // ───────── Yazdır (görünen liste; gizli çerçeve ile, açılır pencere yok) ─────────
+    const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    function yazdir() {
+        const basliklar = Array.from(table.tHead.rows[0].children);
+        const satirlar = Array.from(body.querySelectorAll('tr')).filter(r => !r.hidden);
+        if (!satirlar.length) { setStatus('Yazdırılacak kayıt yok.'); return; }
+        const sayisal = ['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'];
+        const toplam = { kasa_adeti: 0, brut_kg: 0, dara_kg: 0, net_kg: 0 };
+        let govde = '';
+        satirlar.forEach(r => {
+            govde += '<tr>' + basliklar.map(th => { const col = th.dataset.col; const td = r.querySelector(`[data-col="${col}"]`); if (col in toplam) toplam[col] += parseDecimal(td?.dataset.value); return `<td${sayisal.includes(col) ? ' class="n"' : ''}>${esc(td?.textContent)}</td>`; }).join('') + '</tr>';
+        });
+        const alt = '<tr class="t">' + basliklar.map((th, i) => { const col = th.dataset.col; return col in toplam ? `<td class="n">${fmt0(toplam[col])}</td>` : `<td>${i === 0 ? 'TOPLAM' : ''}</td>`; }).join('') + '</tr>';
+        const veri = window.PALET_FISLERI || {};
+        const bas = veri.baslangic ? veri.baslangic.split('-').reverse().join('.') : '';
+        const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Palet Fişleri</title><style>
+@page{size:A4 landscape;margin:10mm}body{font:11px/1.35 system-ui,Arial,sans-serif;color:#111}h1{font-size:16px;margin:0 0 2px}p{margin:0 0 8px;color:#555}
+table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:3px 5px;text-align:left;white-space:nowrap}th{background:#e8eef5;text-align:center}thead{display:table-header-group}tr{break-inside:avoid}
+td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Palet Fişleri</h1>
+<p>${bas ? 'Başlangıç: ' + bas + ' · ' : ''}${veri.yuklenen ? 'Yüklenen paletler dahil' : 'Yüklenen paletler hariç'} · ${satirlar.length.toLocaleString('tr-TR')} kayıt · ${new Date().toLocaleString('tr-TR')}</p>
+<table><thead><tr>${basliklar.map(th => `<th>${esc(th.textContent)}</th>`).join('')}</tr></thead><tbody>${govde}${alt}</tbody></table></body></html>`;
+        const cerceve = document.createElement('iframe');
+        cerceve.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+        cerceve.srcdoc = html;
+        cerceve.onload = () => { try { cerceve.contentWindow.focus(); cerceve.contentWindow.print(); } finally { setTimeout(() => cerceve.remove(), 60000); } };
+        document.body.appendChild(cerceve);
+    }
+
+    // ───────── WhatsApp (seçili partinin özeti) ─────────
+    function whatsapp() {
+        const row = seciliSatir();
+        if (!row) { setStatus('Önce paylaşılacak partiden bir satır seçin.'); return; }
+        const parti = satirDeger(row, 'parti_no');
+        const g = partiToplamlari(false).find(x => x.parti === (parti || '—'));
+        if (!g) return;
+        const metin = [`*Palet Fişleri — Parti: ${parti || '—'}*`, `Tarih: ${new Date().toLocaleDateString('tr-TR')}`, `Palet: ${fmt0(g.palet)}`, `Ambalaj: ${fmt0(g.adet)}`,
+            `Brüt: ${fmt0(g.brut)} kg`, `Dara: ${fmt0(g.dara)} kg`, `Net: ${fmt0(g.net)} kg`, `Amb. ortalama: ${ort2(g.brut, g.adet)}`].join('\n');
+        window.open('https://wa.me/?text=' + encodeURIComponent(metin), '_blank', 'noopener');
+        setStatus('WhatsApp açıldı; mesaj hazır.');
+    }
+
+    // ───────── Araç çubuğu ─────────
+    const araclar = { coglat, sil, bul: bulAc, duzelt: () => openDialog('duzelt'), ozet: ozetAc, yazdir, wp: whatsapp };
+    document.querySelectorAll('[data-pf]').forEach(btn => btn.addEventListener('click', () => araclar[btn.dataset.pf]?.()));
 
     // Başlıklara basılı tutup sürükleyerek sütun sırası değiştir.
     function moveColumn(from, to) {
@@ -465,7 +660,6 @@
     headers.addEventListener('pointerup', releaseHeader);
     headers.addEventListener('pointercancel', releaseHeader);
     headers.addEventListener('contextmenu', event => { if (movingHeader) event.preventDefault(); });
-    document.querySelectorAll('[data-pf-pasif]').forEach(el => el.addEventListener('click', event => { event.preventDefault(); setStatus('Bu araç henüz çalışmıyor.'); }));
     { const first = visibleRows()[0]; if (first) selectCell(first.children[0]); }
     // Sayfa, pencere yüksekliğine ölçeklenir: tablo kalan alanı doldurur, altta boşluk kalmaz.
     function fitPage() {

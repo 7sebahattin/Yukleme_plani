@@ -36,5 +36,18 @@ ok('müstahsil palet başına: kayıttan sonra temizlenir', str_contains($js, "'
 ok('migrate: tek çağıran migrate.php kartı (ne=palet_fisleri), açık GO sözleşmesi', str_contains($mig, "'ne'] ?? '') === 'palet_fisleri'") && str_contains($mig, 'palet_fisleri_migrate($pdo)'));
 ok('migrasyon yalnız ADD COLUMN/ADD KEY (DROP/MODIFY/UPDATE yok)', !preg_match('/DROP |MODIFY |CHANGE COLUMN|UPDATE |DELETE /i', $core));
 ok('migrasyon idempotent (kolon varsa atlar)', str_contains($core, "'durum' => 'var'"));
+// ── Araç çubuğu işlevleri (v536) ──
+ok('hiçbir araç pasif değil (data-pf-pasif yok)', !str_contains($php, 'data-pf-pasif') && !str_contains($js, 'data-pf-pasif') && !str_contains($js, 'henüz çalışmıyor'));
+foreach (['coglat', 'sil', 'bul', 'duzelt', 'ozet', 'yazdir', 'wp'] as $arac) ok("araç bağlı: $arac", str_contains($php, "data-pf=\"$arac\"") && str_contains($js, $arac));
+ok('Sil: F3 + Delete, Düzelt: F4', str_contains($js, "event.key === 'F3'") && str_contains($js, "event.key === 'F4'"));
+ok('Sil onay ister ve sunucuya delete gönderir', str_contains($js, "window.confirm(") && str_contains($js, "send('delete'"));
+ok('Çoğalt sunucu satırını listeye ekler (yeniden yükleme yok)', str_contains($js, "send('duplicate'") && !str_contains($js, 'location.reload'));
+ok('Düzelt tam kayıt kaydeder (tam=1) ve müstahsili yalnız bayrakla değiştirir', str_contains($js, 'tam: 1') && str_contains($js, 'mustahsil_duzenle') && str_contains($php, "!empty(\$_POST['mustahsil_duzenle'])"));
+ok('Filtre: başlangıç tarihi + yüklenen göster (GET, yazma yok)', str_contains($php, "\$_GET['baslangic']") && str_contains($php, "COALESCE(r.durum, '') <> 'yuklendi'") && str_contains($php, 'name="baslangic"'));
+ok('Excel: reports.export kapısı + export_audit + csv/xlsx', str_contains($php, "require_perm('reports.export')") && str_contains($php, "export_audit('palet_fisleri'") && str_contains($php, 'xlsx_indir(') && str_contains($php, 'export_menu('));
+ok('CSV: BOM + ; ayracı + binlik ayraçsız', str_contains($php, 'xEF') && str_contains($php, "fputcsv(\$out, \$x, ';'") && str_contains($php, "number_format((float)\$x[\$i], 3, ',', '')"));
+ok('Yazdır gizli çerçeve kullanır (pencere açmaz)', str_contains($js, "createElement('iframe')") && str_contains($js, 'contentWindow.print()'));
+ok('WhatsApp wa.me bağlantısı, seçili parti özeti', str_contains($js, 'https://wa.me/?text=') && str_contains($js, 'partiToplamlari(false)'));
+ok('Parti Özeti penceresi var', str_contains($php, 'id="pfOzetDialog"') && str_contains($js, 'function ozetAc'));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
