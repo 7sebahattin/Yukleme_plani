@@ -242,3 +242,14 @@ body.pf-suruklen{cursor:grabbing;user-select:none;-webkit-user-select:none}
 .pf-sutun-satir:hover{background:var(--pf-hover-bg);color:var(--pf-hover-text);border-radius:6px}
 .pf-sutun-satir input{width:20px;height:20px;flex:none;accent-color:#0b78d0}
 .pf-sutun-satir input:disabled{opacity:.5}
+
+/* ── v543: Sil penceresi (Sil · Geri Al · İptal) ── */
+.pf-sil-dialog{width:min(440px,calc(100vw - 24px))}
+.pf-sil-metin{margin:0;padding:16px 20px;line-height:1.5;color:var(--pf-text);font-size:1rem}
+.pf-sil-dugme{justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.pf-sil-onay{background:#c0261c;border:1px solid #a31f16;color:#fff;font-weight:700}
+.pf-sil-onay:hover{background:#a31f16}
+.pf-sil-onay:disabled{opacity:.6}
+@media(max-width:600px){.pf-sil-dugme .btn{flex:1 1 0;min-height:48px}}
+.pf-sil-dialog .pf-sil-onay{background:#c0261c!important;border:1px solid #a31f16!important;color:#fff!important}
+.pf-sil-dialog .pf-sil-onay:hover{background:#a31f16!important}

@@ -30,17 +30,10 @@
 
     function cells() { return Array.from(body.querySelectorAll('td.pf-cell')); }
     function visibleRows() { return Array.from(body.querySelectorAll('tr')).filter(row => !row.hidden); }
-    let silinecek = null;     // ilk Sil ile kırmızıya boyanan satır (ikinci Sil'de silinir)
-    function silmeIptal(mesajli) {
-        if (!silinecek) return;
-        silinecek.classList.remove('pf-row-silinecek'); silinecek = null;
-        if (mesajli) setStatus('Silme vazgeçildi.');
-    }
     function selectCell(cell) {
         if (!cell || cell.tagName !== 'TD') return;
         body.querySelectorAll('.pf-cell-selected').forEach(node => node.classList.remove('pf-cell-selected'));
         body.querySelectorAll('.pf-row-selected').forEach(node => node.classList.remove('pf-row-selected'));
-        if (silinecek && silinecek !== cell.parentElement) silmeIptal();
         cell.classList.add('pf-cell-selected');
         cell.parentElement.classList.add('pf-row-selected');
         selectedCell = cell;
@@ -214,7 +207,6 @@
         const row = seciliSatir();
         if (!row) { setStatus('Önce çoğaltılacak satırı seçin.'); return; }
         if (dialog?.open) return;
-        silmeIptal();
         try {
             const r = await send('duplicate', { id: row.dataset.id });
             satirEkle(r.row);
@@ -223,33 +215,51 @@
             openDialog('duzelt');
         } catch (error) { setStatus(error.message); }
     }
-    // Sil: ilk basışta satır kırmızı olur; AYNI satırda ikinci basışta (düğme / F3 / Delete) silinir.
-    // Başka satıra geçmek, Esc ya da Çoğalt/Düzelt vazgeçirir.
+    // Sil: ilk basış satırı KIRMIZI işaretler (başka satıra geçilse de kırmızı kalır); işaretli satırda ikinci basış
+    // (düğme / F3 / Delete) Sil · Geri Al · İptal penceresini açar. Sil: siler. Geri Al: kırmızılık kalkar. İptal: kırmızı kalır.
+    const silDialog = document.getElementById('pfSilDialog');
+    let silHedef = null;
     async function sil() {
         const row = seciliSatir();
         if (!row) { setStatus('Önce silinecek satırı seçin.'); return; }
+        if (silDialog?.open) return;
         const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
-        if (silinecek !== row) {
-            silmeIptal();
-            silinecek = row; row.classList.add('pf-row-silinecek');
-            setStatus(`${belge} numaralı palet fişi silinecek — devam etmek için Sil'e tekrar basın (onay sorulur), vazgeçmek için Esc.`);
+        if (!row.classList.contains('pf-row-silinecek')) {
+            row.classList.add('pf-row-silinecek');
+            setStatus(`${belge} numaralı palet fişi silinmek üzere işaretlendi — silmek için Sil'e tekrar basın.`);
             return;
         }
-        if (!window.confirm(`${belge} numaralı palet fişi silinsin mi? Bu işlem geri alınamaz.`)) { silmeIptal(true); return; }
+        silHedef = row;
+        const ozet = ['parti_no', 'firma', 'brut_kg'].map(c => row.querySelector(`[data-col="${c}"]`)?.textContent.trim()).filter(Boolean).join(' · ');
+        document.getElementById('pfSilMetin').innerHTML = '';
+        const b = document.createElement('b'); b.textContent = `${belge} numaralı palet fişi`;
+        document.getElementById('pfSilMetin').append(b, ` silinsin mi? Bu işlem geri alınamaz.${ozet ? ' (' + ozet + ')' : ''}`);
+        silDialog.showModal();
+        document.getElementById('pfSilIptal')?.focus();
+    }
+    async function silOnayla() {
+        const row = silHedef; if (!row) return;
+        const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
+        const dugme = document.getElementById('pfSilOnay'); if (dugme) dugme.disabled = true;
         try {
             await send('delete', { id: row.dataset.id });
-            silinecek = null;
+            const secili = row === seciliSatir();
             const komsu = row.nextElementSibling || row.previousElementSibling;
-            row.remove(); selectedCell = null;
-            sayacDegis(-1);
-            if (komsu) selectCell(ilkHucre(komsu)); else refreshTotals();
+            row.remove(); sayacDegis(-1);
+            if (secili) { selectedCell = null; if (komsu) selectCell(ilkHucre(komsu)); else refreshTotals(); }
             empty.hidden = body.children.length > 0;
             setStatus(`${belge} numaralı palet fişi silindi.`);
-        } catch (error) { silmeIptal(); setStatus(error.message); }
+            silHedef = null; silDialog.close();
+        } catch (error) { silDialog.close(); setStatus(error.message); }
+        finally { if (dugme) dugme.disabled = false; }
     }
-    document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && silinecek && !document.querySelector('dialog[open]')) { event.preventDefault(); silmeIptal(true); }
+    document.getElementById('pfSilOnay')?.addEventListener('click', silOnayla);
+    document.getElementById('pfSilGeriAl')?.addEventListener('click', () => {
+        if (silHedef) { silHedef.classList.remove('pf-row-silinecek'); setStatus('Silme geri alındı.'); }
+        silHedef = null; silDialog.close();
     });
+    document.getElementById('pfSilIptal')?.addEventListener('click', () => { silHedef = null; silDialog.close(); });
+    silDialog?.addEventListener('close', () => { silHedef = null; });
     wrap.addEventListener('keydown', event => {
         if (editor || event.target.matches('input,select,textarea')) return;
         if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); coglat(); return; }
@@ -447,7 +457,6 @@
     function openDialog(istenen) {
         if (!dialog || dialog.open) return;
         mod = istenen === 'duzelt' ? 'duzelt' : 'ekle';
-        silmeIptal();
         if (mod === 'duzelt') {
             const tr = seciliSatir();
             if (!tr) { setStatus('Önce düzeltilecek satırı seçin.'); mod = 'ekle'; return; }

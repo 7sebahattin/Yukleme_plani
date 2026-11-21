@@ -510,6 +510,11 @@ render_header('Palet Fişleri');
         <div class="pf-bul-dugme"><button type="submit" class="pf-bul-tamam" id="pfBulTamam" title="Uygula (Enter)" aria-label="Uygula">✔</button><button type="button" class="pf-bul-iptal" id="pfBulIptal" title="Vazgeç (Esc)" aria-label="Vazgeç">✖</button></div>
     </form>
 </dialog>
+<dialog class="pf-dialog pf-sil-dialog" id="pfSilDialog">
+    <div class="pf-dialog-head"><div><h2>Palet fişi silinsin mi?</h2></div></div>
+    <p class="pf-sil-metin" id="pfSilMetin"></p>
+    <div class="pf-dialog-foot pf-sil-dugme"><button type="button" class="btn btn-ghost" id="pfSilIptal">İptal</button><button type="button" class="btn btn-ghost" id="pfSilGeriAl">Geri Al</button><button type="button" class="btn pf-sil-onay" id="pfSilOnay">Sil</button></div>
+</dialog>
 <dialog class="pf-dialog pf-sutun-dialog" id="pfSutunDialog">
     <div class="pf-dialog-head"><div><h2>Sütunlar</h2></div><button type="button" class="pf-close" id="pfSutunKapat" aria-label="Kapat">×</button></div>
     <div class="pf-sutun-liste" id="pfSutunListe"></div>
