@@ -98,7 +98,7 @@
         if (col === 'palet_adi') {
             input = document.createElement('select');
             const blank = document.createElement('option'); blank.value = ''; blank.textContent = 'Seçiniz'; input.appendChild(blank);
-            (window.PALET_FISLERI?.paletTipleri || []).forEach(item => {
+            (window.PALET_FISLERI?.listeler?.palet || []).forEach(item => {
                 const option = document.createElement('option'); option.value = item.id; option.textContent = item.name;
                 if (String(item.id) === String(oldValue)) option.selected = true;
                 input.appendChild(option);
@@ -175,7 +175,7 @@
     function displayValue(col, value) {
         if (['kasa_adeti'].includes(col)) return Number(value || 0).toLocaleString('tr-TR');
         if (['brut_kg', 'dara_kg', 'net_kg'].includes(col)) return Number(value || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-        if (col === 'palet_adi') return (window.PALET_FISLERI?.paletTipleri || []).find(p => String(p.id) === String(value))?.name || '';
+        if (col === 'palet_adi') return (window.PALET_FISLERI?.listeler?.palet || []).find(p => String(p.id) === String(value))?.name || '';
         return value;
     }
 
@@ -214,20 +214,180 @@
         }
     });
 
-    function openDialog() { form.reset(); form.elements.tarih.value = new Date().toISOString().slice(0, 10); document.getElementById('pfFormError').textContent = ''; dialog.showModal(); form.elements.firma.focus(); }
-    
+    // ───────── Ekle penceresi (kantar girişi) ─────────
+    const L = () => window.PALET_FISLERI?.listeler || {};
+    const trUp = v => String(v ?? '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('tr-TR');
+    const TUR = { palet: 'palet_tipi', firma: 'firma', urun: 'urun', kasa: 'kasa_cinsi' };
+    const errorBox = document.getElementById('pfFormError');
+    const saveBtn = document.getElementById('pfSave');
+    const uyari = document.getElementById('pfUyari');
+    const netBox = document.getElementById('pfNet');
+    const alanSirasi = ['tarih', 'parti_no', 'palet', 'firma', 'urun', 'kasa', 'kasa_adeti', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2'];
+    let nextBelge = window.PALET_FISLERI?.sonrakiBelge || 1;
+
+    function mesaj(text, ok) { errorBox.textContent = text || ''; errorBox.classList.toggle('pf-ok', !!ok); }
+
+    // Yazdıkça bul — yoksa "+ ekle" (parti serbest metindir, ekleme satırı yok)
+    function makeCombo(input) {
+        const kind = input.dataset.cb;
+        const canAdd = kind !== 'parti';
+        const box = document.createElement('ul');
+        box.className = 'pf-cb-list'; box.hidden = true; box.setAttribute('role', 'listbox');
+        input.parentElement.appendChild(box);
+        let items = [], active = -1;
+        const kaynak = () => L()[kind] || [];
+        function close() { box.hidden = true; active = -1; }
+        function draw() {
+            box.innerHTML = '';
+            items.forEach((it, i) => {
+                const li = document.createElement('li');
+                li.setAttribute('role', 'option');
+                li.className = (it.type === 'ekle' ? 'pf-cb-ekle ' : '') + (i === active ? 'pf-cb-aktif' : '');
+                li.textContent = it.type === 'ekle' ? `+ “${it.ad}” ekle` : it.x.name;
+                li.addEventListener('pointerdown', e => { e.preventDefault(); choose(it); });
+                box.appendChild(li);
+            });
+            box.hidden = !items.length;
+        }
+        function render() {
+            const q = trUp(input.value);
+            const all = kaynak();
+            const skor = x => { const n = trUp(x.name); return n === q ? 0 : n.startsWith(q) ? 1 : 2; };
+            items = (q ? all.filter(x => trUp(x.name).includes(q)).sort((a, b) => skor(a) - skor(b)) : all).slice(0, 8).map(x => ({ type: 'var', x }));
+            const tam = q && all.some(x => trUp(x.name) === q);
+            if (canAdd && q && !tam) items.push({ type: 'ekle', ad: q });
+            active = (kind !== 'parti' && q && items.length) ? 0 : -1;
+            draw();
+        }
+        async function choose(it) {
+            if (it.type === 'var') { input.value = it.x.name; if (it.x.id) input.dataset.id = it.x.id; else delete input.dataset.id; close(); return true; }
+            try {
+                const r = await send('tanim_ekle', { tur: TUR[kind], ad: it.ad });
+                const list = L()[kind]; if (list && !list.some(x => x.id === r.id)) list.push({ id: r.id, name: r.name });
+                input.value = r.name; input.dataset.id = r.id; close(); mesaj(r.yeni ? `“${r.name}” tanımlara eklendi.` : '', true);
+                return true;
+            } catch (error) { mesaj(error.message); return false; }
+        }
+        input.addEventListener('input', () => { delete input.dataset.id; render(); });
+        input.addEventListener('focus', render);
+        input.addEventListener('blur', () => setTimeout(close, 120));
+        input.addEventListener('keydown', async event => {
+            if (box.hidden) return;
+            if (event.key === 'ArrowDown') { event.preventDefault(); active = Math.min(items.length - 1, active + 1); draw(); }
+            else if (event.key === 'ArrowUp') { event.preventDefault(); active = Math.max(0, active - 1); draw(); }
+            else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+            else if (event.key === 'Enter' && active >= 0) { event.preventDefault(); event.stopPropagation(); if (await choose(items[active])) siradaki(input); }
+        });
+    }
+    function alan(name) { return form.elements[name]; }
+    function siradaki(from) {
+        const i = alanSirasi.indexOf(from.name);
+        const next = alan(alanSirasi[i + 1]);
+        if (next) { next.focus(); if (next.select) next.select(); } else submitForm();
+    }
+    form.querySelectorAll('input[data-cb]').forEach(makeCombo);
+    form.addEventListener('keydown', event => {
+        const t = event.target;
+        if (event.key === 'F10') { event.preventDefault(); submitForm(); return; }
+        if (event.key === 'Enter' && t.tagName === 'INPUT' && alanSirasi.includes(t.name) && !event.defaultPrevented) { event.preventDefault(); siradaki(t); }
+    });
+
+    function sayi(v) { return parseDecimal(v); }
+    function hesapla() {
+        const brut = sayi(alan('brut_kg').value), dara = sayi(alan('dara_kg').value);
+        const net = brut - dara;
+        netBox.value = fmt0(Math.max(0, net));
+        let u = '';
+        if (dara > brut) u = 'Dara, brüt ağırlıktan büyük olamaz.';
+        else if (brut > 0) {
+            const parti = alan('parti_no').value.trim();
+            const ornek = parti ? Array.from(body.querySelectorAll('tr')).filter(r => (r.querySelector('[data-col="parti_no"]')?.dataset.value ?? '') === parti).map(r => parseDecimal(r.querySelector('[data-col="brut_kg"]')?.dataset.value)).filter(n => n > 0).slice(0, 30) : [];
+            if (ornek.length >= 5) {
+                const ort = ornek.reduce((s, n) => s + n, 0) / ornek.length;
+                if (Math.abs(brut - ort) / ort > 0.4) u = `Dikkat: bu partinin ortalama brütü yaklaşık ${fmt0(ort)} kg; girilen değer çok farklı.`;
+            }
+        }
+        uyari.textContent = u;
+        uyari.classList.toggle('pf-uyari-hata', dara > brut);
+        saveBtn.disabled = dara > brut;
+    }
+    ['brut_kg', 'dara_kg', 'parti_no'].forEach(n => alan(n).addEventListener('input', hesapla));
+
+    function openDialog() {
+        if (!dialog || dialog.open) return;
+        alan('belge_no').value = String(nextBelge);
+        mesaj('');
+        dialog.showModal();
+        const hazir = alan('parti_no').value && alan('firma').value;
+        const hedef = hazir ? alan('brut_kg') : alan('parti_no');
+        hedef.focus(); if (hedef.select) hedef.select();
+    }
+    document.getElementById('pfAdd')?.addEventListener('click', openDialog);
+    document.addEventListener('keydown', event => {
+        if (event.key === 'F2' && !dialog.open && !event.target.matches('input,textarea,select')) { event.preventDefault(); openDialog(); }
+    });
     document.getElementById('pfClose').addEventListener('click', () => dialog.close());
     document.getElementById('pfCancel').addEventListener('click', () => dialog.close());
-    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-    form.addEventListener('submit', async event => {
-        event.preventDefault();
-        const errorBox = document.getElementById('pfFormError');
-        const button = document.getElementById('pfSave');
-        errorBox.textContent = ''; button.disabled = true;
-        const data = Object.fromEntries(new FormData(form).entries());
-        try { await send('create', data); location.reload(); }
-        catch (error) { errorBox.textContent = error.message; button.disabled = false; }
-    });
+
+    // Listede yok mu? Tam eşleşme varsa id'yi bul; yoksa hata (kullanıcı "+ ekle" ile tanımlasın).
+    function coz(name, zorunlu, etiket) {
+        const input = alan(name);
+        const text = input.value.trim();
+        if (!text) { if (zorunlu) throw new Error(`${etiket} zorunludur.`); return null; }
+        if (input.dataset.id) return { id: Number(input.dataset.id), name: text };
+        const bulunan = (L()[input.dataset.cb] || []).find(x => trUp(x.name) === trUp(text));
+        if (bulunan) { input.dataset.id = bulunan.id; input.value = bulunan.name; return { id: bulunan.id, name: bulunan.name }; }
+        throw new Error(`${etiket}: “${text}” kayıtlı değil. Listeden seçin ya da “+ ekle” ile tanımlayın.`);
+    }
+    function satirEkle(r) {
+        const tr = document.createElement('tr');
+        tr.dataset.id = r.id; tr.dataset.recordId = r.loading_record_id;
+        tr.dataset.search = [r.belge_no, r.parti_no, r.palet_adi, r.firma, r.urun].join(' ').toLocaleLowerCase('tr-TR');
+        const deger = { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma],
+            kasa_adeti: [r.kasa_adeti, fmt0(r.kasa_adeti)], brut_kg: [r.brut_kg, fmt0(r.brut_kg)], dara_kg: [r.dara_kg, fmt0(r.dara_kg)], net_kg: [r.net_kg, fmt0(r.net_kg)],
+            aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2] };
+        Array.from(table.tHead.rows[0].children).forEach(th => {
+            const col = th.dataset.col; const [raw, shown] = deger[col] || ['', ''];
+            const td = document.createElement('td');
+            td.className = 'pf-cell' + (['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'].includes(col) ? ' pf-num' : '');
+            td.dataset.col = col; td.dataset.value = String(raw ?? ''); td.textContent = String(shown ?? '');
+            tr.appendChild(td);
+        });
+        body.insertBefore(tr, body.firstChild);
+        empty.hidden = true;
+        const sayac = document.getElementById('pfCount'); if (sayac) sayac.textContent = (Number(String(sayac.textContent).replace(/\./g, '')) + 1).toLocaleString('tr-TR');
+        selectCell(tr.children[0]);
+        wrap.scrollTop = 0;
+    }
+    let kaydediyor = false;
+    async function submitForm() {
+        if (kaydediyor || saveBtn.disabled) return;
+        mesaj('');
+        try {
+            const brut = sayi(alan('brut_kg').value), dara = sayi(alan('dara_kg').value);
+            if (!(brut > 0)) { alan('brut_kg').focus(); throw new Error('Brüt ağırlık girin.'); }
+            if (dara > brut) throw new Error('Dara, brüt ağırlıktan büyük olamaz.');
+            const firma = coz('firma', true, 'Müşteri');
+            const urun = coz('urun', true, 'Ürün');
+            const palet = coz('palet', false, 'Palet');
+            const kasa = coz('kasa', false, 'Kasa ambalaj');
+            kaydediyor = true; saveBtn.disabled = true;
+            const r = await send('create', { tarih: alan('tarih').value, parti_no: trUp(alan('parti_no').value), firma: firma.name, urun: urun.name,
+                palet_tipi_id: palet ? palet.id : '', kasa_cinsi_id: kasa ? kasa.id : '', kasa_adeti: alan('kasa_adeti').value || 0, brut_kg: brut, dara_kg: dara,
+                aciklama1: alan('aciklama1').value, aciklama2: alan('aciklama2').value });
+            satirEkle(r.row);
+            const parti = trUp(alan('parti_no').value);
+            alan('parti_no').value = parti;
+            if (parti && !(L().parti || []).some(x => trUp(x.name) === trUp(parti))) (L().parti = L().parti || []).unshift({ id: 0, name: parti });
+            nextBelge = r.next_belge; alan('belge_no').value = String(nextBelge);
+            ['brut_kg', 'dara_kg', 'aciklama1', 'aciklama2'].forEach(n => { alan(n).value = ''; });
+            hesapla();
+            mesaj(`${r.row.belge_no} numaralı belge kaydedildi.`, true);
+            alan('brut_kg').focus();
+        } catch (error) { mesaj(error.message); }
+        finally { kaydediyor = false; hesapla(); }
+    }
+    form.addEventListener('submit', event => { event.preventDefault(); submitForm(); });
 
     if (search) search.addEventListener('input', () => {
         const q = search.value.trim().toLocaleLowerCase('tr-TR');
@@ -235,7 +395,7 @@
         body.querySelectorAll('tr').forEach(row => { row.hidden = !!q && !row.dataset.search.toLocaleLowerCase('tr-TR').includes(q); if (!row.hidden) count++; });
         document.getElementById('pfCount').textContent = count.toLocaleString('tr-TR');
         empty.hidden = count > 0;
-        if (!count) empty.textContent = q ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. Yeni Palet Fişi ile başlayın.';
+        if (!count) empty.textContent = q ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. F2 - Ekle ile başlayın.';
     });
 
     // Başlıklara basılı tutup sürükleyerek sütun sırası değiştir.
