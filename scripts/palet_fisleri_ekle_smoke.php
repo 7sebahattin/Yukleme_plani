@@ -22,7 +22,7 @@ ok('JS: F2 açar, F10 kaydeder', str_contains($js, "event.key === 'F2'") && str_
 ok('JS: yazdıkça bul + "+ ekle" satırı', str_contains($js, 'function makeCombo') && str_contains($js, "type: 'ekle'"));
 ok('JS: kaydedince pencere kapanmaz (sonraki palet hazırlanır)', str_contains($js, 'satirEkle(r.row)') && !str_contains($js, 'location.reload(); }\n        catch'));
 ok('JS: satıra çift tık Düzelt penceresini açar; hücre içinde düzenleme (beginEdit) tetiklenmez', preg_match("/body\.addEventListener\('dblclick'[^}]*openDialog\('duzelt'\)/s", $js) === 1 && !preg_match("/body\.addEventListener\('dblclick'[^}]*beginEdit/s", $js));
-ok('JS: kantardan al yer tutucusu pasif', str_contains($php, 'pf-kantar" disabled'));
+ok('JS: kantardan al yer tutucusu pasif ve gizli', str_contains($php, 'pf-kantar" hidden disabled'));
 // ── Müstahsil (v535) ──
 $core = (string)file_get_contents(__DIR__ . '/../config/palet_fisleri_core.php');
 $mig  = (string)file_get_contents(__DIR__ . '/../migrate.php');
@@ -40,7 +40,7 @@ ok('migrasyon idempotent (kolon varsa atlar)', str_contains($core, "'durum' => '
 ok('hiçbir araç pasif değil (data-pf-pasif yok)', !str_contains($php, 'data-pf-pasif') && !str_contains($js, 'data-pf-pasif') && !str_contains($js, 'henüz çalışmıyor'));
 foreach (['coglat', 'sil', 'bul', 'duzelt', 'yazdir'] as $arac) ok("araç bağlı: $arac", str_contains($php, "data-pf=\"$arac\"") && str_contains($js, $arac));
 ok('Sil: F3 + Delete, Düzelt: F4', str_contains($js, "event.key === 'F3'") && str_contains($js, "event.key === 'F4'"));
-ok('Sil: ilk basış satırı kırmızı yapar (pf-row-silinecek), ikinci basış sunucuya delete gönderir; tarayıcı onay penceresi yok', str_contains($js, "classList.add('pf-row-silinecek')") && str_contains($js, "send('delete'") && !str_contains($js, 'window.confirm(') && str_contains((string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.css'), 'tr.pf-row-silinecek td'));
+ok('Sil: ilk basış satırı kırmızı yapar (pf-row-silinecek), ikinci basış ONAY SORUSUNDAN sonra sunucuya delete gönderir', str_contains($js, "classList.add('pf-row-silinecek')") && preg_match("/window\\.confirm\\(.*?send\\('delete'/s", $js) === 1 && str_contains((string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.css'), 'tr.pf-row-silinecek td'));
 ok('Sil: başka satıra geçmek / Esc / Düzelt silme işaretini kaldırır', str_contains($js, 'silmeIptal()') && str_contains($js, "event.key === 'Escape' && silinecek"));
 ok('Çoğalt sunucu satırını listeye ekler (yeniden yükleme yok) ve kopyayı Düzelt penceresinde açar', str_contains($js, "send('duplicate'") && !str_contains($js, 'location.reload') && preg_match("/send\\('duplicate'.*?satirEkle\\(r\\.row\\).*?openDialog\\('duzelt'\\)/s", $js) === 1);
 ok('Düzelt tam kayıt kaydeder (tam=1) ve müstahsili yalnız bayrakla değiştirir', str_contains($js, 'tam: 1') && str_contains($js, 'mustahsil_duzenle') && str_contains($php, "!empty(\$_POST['mustahsil_duzenle'])"));
@@ -74,5 +74,11 @@ ok('Koyu tema: --surface tanımsızdı → sayfa kendi renk belirteçlerini taş
 ok('Araç çubuğu düğmeleri her temada beyaz zemin + koyu yazı', str_contains($css, 'background:#fff;color:#162c44;font:inherit;font-size:.86rem'));
 ok('Mobil: sayfa kaymaz (html/body overflow hidden), tablo kendi içinde kayar', str_contains($css, 'html:has(.pf-page),body:has(.pf-page){overflow:hidden') && str_contains($css, '.pf-table-wrap{flex:1;min-height:0;height:auto}'));
 ok('Mobil: özet kartları tek satır (7 sütun) + kısa etiket, alt çubuğun üstünde biter', str_contains($css, 'grid-template-columns:1.7fr repeat(6,minmax(0,1fr))') && str_contains($php, 'class="pf-k"') && str_contains($js, '--bn-h') && str_contains($js, 'safe-area-inset-bottom'));
+// ── Ekle/Düzelt penceresi sadeleştirme + otomatik dara (v540) ──
+ok('Pencerede açıklama paragrafı ve "Yazdıkça bulunur" yer tutucuları yok', !str_contains($php, 'Kaydedince pencere açık kalır') && !str_contains($php, 'Yazdıkça bulunur') && !str_contains($php, 'Yazın veya listeden seçin') && !str_contains($js, 'aciklamaEl'));
+ok('Açılır liste odaklanınca açılmaz, yalnız yazınca açılır', !str_contains($js, "input.addEventListener('focus', render)") && str_contains($js, 'if (!q) { items = []; close(); return; }'));
+ok('Dara otomatik: kasa adedi × kasa darası + palet darası (tanım unit_dara_kg), alan salt okunur', str_contains($php, "'unit' => (float)(\$x['unit_dara_kg']") && str_contains($php, 'name="dara_kg" id="pfDara" readonly') && str_contains($js, 'function daraOtomatik()') && str_contains($js, 'adet * (Number(tanimBul(\'kasa\')?.unit) || 0) + (Number(tanimBul(\'palet\')?.unit) || 0)'));
+ok('"Kantardan al" düğmesi gizli (hidden)', str_contains($php, 'class="btn btn-ghost pf-kantar" hidden'));
+ok('Mobil: Ekle/Düzelt penceresi tam ekran, alanlar 6 sütunlu ızgarada (pf-w2/w3/w4/w6), alt çubuk sabit', str_contains($css, '#pfDialog{width:100%;max-width:100%;height:100dvh') && str_contains($css, 'label.pf-w3{grid-column:span 3}') && str_contains($php, 'class="pf-kg pf-w2"'));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
