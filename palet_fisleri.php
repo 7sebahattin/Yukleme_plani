@@ -424,15 +424,15 @@ render_header('Palet Fişleri');
         <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Seçilen filtreye uyan palet fişi yok. Başlangıç tarihini geri alın ya da “Yüklenen Paletleri Göster”i işaretleyip Getir’e basın; ya da F2 - Ekle ile başlayın.' ?></div>
     </div>
     <div class="pf-bottom">
-        <div class="pf-kart pf-kart-parti" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▤</i><div><span>PARTİ</span><strong data-sum="parti">—</strong></div></div>
-        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▥</i><div><span>PALET TOPLAMI</span><strong data-sum="palet">0</strong></div></div>
-        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▢</i><div><span>AMBALAJ TOPLAMI</span><strong data-sum="adet">0</strong></div></div>
-        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>BRÜT</span><strong data-sum="brut">0</strong></div></div>
-        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>DARA</span><strong data-sum="dara">0</strong></div></div>
-        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>NET</span><strong data-sum="net">0</strong></div></div>
-        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▮</i><div><span>AMB. ORTALAMA</span><strong data-sum="ort">0</strong></div></div>
+        <div class="pf-kart pf-kart-parti" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▤</i><div><span><em class="pf-u">PARTİ</em><em class="pf-k">PARTİ</em></span><strong data-sum="parti">—</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▥</i><div><span><em class="pf-u">PALET TOPLAMI</em><em class="pf-k">PALET</em></span><strong data-sum="palet">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▢</i><div><span><em class="pf-u">AMBALAJ TOPLAMI</em><em class="pf-k">AMB.</em></span><strong data-sum="adet">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span><em class="pf-u">BRÜT</em><em class="pf-k">BRÜT</em></span><strong data-sum="brut">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span><em class="pf-u">DARA</em><em class="pf-k">DARA</em></span><strong data-sum="dara">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span><em class="pf-u">NET</em><em class="pf-k">NET</em></span><strong data-sum="net">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▮</i><div><span><em class="pf-u">AMB. ORTALAMA</em><em class="pf-k">ORT.</em></span><strong data-sum="ort">0</strong></div></div>
     </div>
-    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-filtreler" id="pfFiltreler" hidden></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite">Kartlar seçili satırın partisini gösterir; tıklarsanız partinin palet listesi açılır. Sütunları taşımak için başlığa basılı tutun, kenarından sürükleyerek genişliğini ayarlayın.</span></div>
+    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-filtreler" id="pfFiltreler" hidden></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite"></span></div>
 </section>
 
 <dialog class="pf-dialog" id="pfDialog">

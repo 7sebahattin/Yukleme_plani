@@ -802,8 +802,17 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     { const first = visibleRows()[0]; if (first) selectCell(first.children[0]); }
     // Sayfa, pencere yüksekliğine ölçeklenir: tablo kalan alanı doldurur, altta boşluk kalmaz.
     function fitPage() {
-        if (window.innerWidth < 768) { page.style.height = ''; return; }
         const top = page.getBoundingClientRect().top + window.scrollY;
+        if (window.innerWidth < 768) {
+            // Mobil: sayfa kaymaz; alt çubuğun (--bn-h + güvenli alan) üstünde biter, yalnız tablo kayar.
+            const probe = document.createElement('div');
+            probe.style.cssText = 'position:fixed;left:-9999px;bottom:0;height:0;padding-bottom:calc(var(--bn-h, 0px) + env(safe-area-inset-bottom, 0px))';
+            document.body.appendChild(probe);
+            const alt = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+            probe.remove();
+            page.style.height = Math.max(240, window.innerHeight - top - alt - 8) + 'px';
+            return;
+        }
         page.style.height = Math.max(320, window.innerHeight - top - 12) + 'px';
     }
     fitPage();
