@@ -22,6 +22,8 @@ if (!function_exists('_parse_kp_rows')) {
                 $birim = 0.0;
                 $list  = $tip === 'kasa' ? $kasa_list : $palet_list;
                 foreach ($list as $kd) { if ($kd['name'] === $cinsi) { $birim = (float)$kd['unit_dara_kg']; break; } }
+                // Birim dara formda düzenlenebilir: dolu gelirse o kullanılır, boşsa tanımdaki değer
+                if (isset($row['birim_dara_kg']) && trim((string)$row['birim_dara_kg']) !== '') $birim = max(0.0, round(num($row['birim_dara_kg']), 3));
                 $rows[] = ['tip' => $tip, 'cinsi' => $cinsi, 'sayisi' => $sayisi, 'birim_dara_kg' => $birim];
                 if ($tip === 'kasa') { $kasa_tot += $sayisi * $birim; $tot_kasa_say += $sayisi; if ($first_kasa === '') $first_kasa = $cinsi; }
                 else                 { $palet_tot += $sayisi * $birim; $tot_palet_say += $sayisi; if ($first_palet === '') $first_palet = $cinsi; }

@@ -7256,6 +7256,13 @@ html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --m
 .mk-form .kp-section { margin-top: 0; }
 .mk-form .kp-section-title { text-transform: none; letter-spacing: 0; font-size: .9rem; color: var(--text); }
 .mk-form .kp-row { background: none; border: 0; padding: 0; }
+.kp-dara-lbl { display: inline-flex; align-items: center; gap: 4px; font-size: .82rem; color: var(--muted); white-space: nowrap; }
+.kp-row .kp-dara { width: 70px; min-height: 38px; padding: 6px 8px; font-size: .95rem; }
+/* Mal kabul formu: cins seçimi kendi satırında, adet · dara · toplam altında */
+.mk-form .kp-row { gap: 8px; }
+.mk-form .kp-row .kp-cinsi { flex: 1 1 100%; min-width: 0; }
+.mk-form .kp-row .kp-sayisi { width: 84px; }
+.mk-form .kp-row .kp-calc { margin-left: auto; }
 .mk-btn-add { color: var(--mk-accent); border-color: var(--mk-accent); background: transparent; font-weight: 600; }
 .mk-form .kantar-tartim-wrap { margin-top: 0; }
 .mk-ico { font-size: 1.1rem; line-height: 1; }
@@ -7269,12 +7276,12 @@ html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --m
 .mk-foot-left, .mk-foot-right { display: flex; gap: 8px; flex-wrap: wrap; }
 .mk-foot-right { justify-content: flex-end; }
 @media (min-width: 720px) {
-    .mk-g2 { grid-template-columns: 1fr 1fr; }
+    .mk-g3 { grid-template-columns: 1fr 1fr; }
     .mk-g4 { grid-template-columns: 1fr 1fr; }
-    .mk-g2 > .mk-span2 { grid-column: 1 / -1; }
 }
 @media (min-width: 900px) {
     .mk-g4 { grid-template-columns: repeat(4, 1fr); }
+    .mk-g3 { grid-template-columns: repeat(3, 1fr); }
     .mk-row2 { grid-template-columns: 1fr 1fr; gap: 14px; }
     .mk-ambalaj { grid-template-columns: 1fr 1fr; gap: 28px; }
     .mk-ambalaj > .kp-section + .kp-section { border-left: 1px solid var(--border); padding-left: 28px; }
