@@ -76,7 +76,7 @@ render_flash();
                 <p>Satıra tıklayınca fiş açılır. Başlığa çift tık: sütunları göster/gizle · kenardan sürükle: genişlik · başlığa tık: sırala.</p>
             </div>
             <div class="pf-tb-grup">
-                <button type="button" class="pf-tb" id="kfSutunBtn" title="Sütunları göster / gizle">▦ Sütunlar</button>
+                <button type="button" class="pf-tb" id="kfYazdirBtn" title="Görünen listeyi (süzgeç ve sütun ayarıyla) yazdırır">⎙ Yazdır</button>
                 <button type="button" class="pf-tb" id="kfFiltreTemizle" title="Tüm süzgeçleri kaldırır" hidden>✕ Süzgeçleri temizle</button>
                 <?php if ($can_create): ?><a href="kantar_create.php" class="pf-tb pf-tb-ekle" title="Yeni mal kabul fişi">＋ Yeni Mal Kabul Fişi</a><?php endif; ?>
             </div>
