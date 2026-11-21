@@ -47,13 +47,17 @@ function kt_dogrula(string $anahtar, mixed $deger): ?array
     if ($anahtar === 'palet_fisleri.tablo') {
         $kolonlar = ['belge_no', 'parti_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad', 'aciklama1', 'aciklama2', 'tarih', 'islem', 'islem_zaman', 'kullanici', 'sube'];
         if (!is_array($deger)) return null;
-        $out = ['genislik' => [], 'sira' => []];
+        $out = ['genislik' => [], 'sira' => [], 'gizli' => []];
         foreach ((array)($deger['genislik'] ?? []) as $k => $w) {
             if (in_array($k, $kolonlar, true) && is_numeric($w)) $out['genislik'][$k] = max(30, min(1200, (int)round((float)$w)));
         }
         foreach ((array)($deger['sira'] ?? []) as $k) {
             if (is_string($k) && in_array($k, $kolonlar, true) && !in_array($k, $out['sira'], true)) $out['sira'][] = $k;
         }
+        foreach ((array)($deger['gizli'] ?? []) as $k) {
+            if (is_string($k) && in_array($k, $kolonlar, true) && !in_array($k, $out['gizli'], true)) $out['gizli'][] = $k;
+        }
+        if (count($out['gizli']) >= count($kolonlar)) $out['gizli'] = [];   // en az bir sütun görünür kalır
         return $out;
     }
     return null;

@@ -12,6 +12,9 @@
     let selectedCell = null;
     let editor = null;
     let holdTimer = 0;
+    const gizli = new Set();   // kullanıcının gizlediği sütunlar (data-col)
+    const gorHuc = row => Array.from(row.children).filter(c => !gizli.has(c.dataset.col));
+    const ilkHucre = row => gorHuc(row)[0] || row.children[0];
     const editable = new Set(['parti_no', 'palet_adi', 'firma', 'kasa_adeti', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2']);
 
     async function send(action, data) {
@@ -27,17 +30,10 @@
 
     function cells() { return Array.from(body.querySelectorAll('td.pf-cell')); }
     function visibleRows() { return Array.from(body.querySelectorAll('tr')).filter(row => !row.hidden); }
-    let silinecek = null;     // ilk Sil ile kırmızıya boyanan satır (ikinci Sil'de silinir)
-    function silmeIptal(mesajli) {
-        if (!silinecek) return;
-        silinecek.classList.remove('pf-row-silinecek'); silinecek = null;
-        if (mesajli) setStatus('Silme vazgeçildi.');
-    }
     function selectCell(cell) {
         if (!cell || cell.tagName !== 'TD') return;
         body.querySelectorAll('.pf-cell-selected').forEach(node => node.classList.remove('pf-cell-selected'));
         body.querySelectorAll('.pf-row-selected').forEach(node => node.classList.remove('pf-row-selected'));
-        if (silinecek && silinecek !== cell.parentElement) silmeIptal();
         cell.classList.add('pf-cell-selected');
         cell.parentElement.classList.add('pf-row-selected');
         selectedCell = cell;
@@ -45,17 +41,17 @@
     }
     function selectionPosition() {
         if (!selectedCell) return [0, 0];
-        return [visibleRows().indexOf(selectedCell.parentElement), Array.from(selectedCell.parentElement.children).indexOf(selectedCell)];
+        return [visibleRows().indexOf(selectedCell.parentElement), gorHuc(selectedCell.parentElement).indexOf(selectedCell)];
     }
     function moveSelection(rowDelta, colDelta) {
         const rows = visibleRows();
         if (!rows.length) return;
-        if (!selectedCell) { selectCell(rows[0].children[0]); rows[0].children[0].scrollIntoView({ block: 'nearest', inline: 'nearest' }); return; }
+        if (!selectedCell) { const h = ilkHucre(rows[0]); selectCell(h); h.scrollIntoView({ block: 'nearest', inline: 'nearest' }); return; }
         let [ri, ci] = selectionPosition();
         ri = Math.max(0, Math.min(rows.length - 1, ri + rowDelta));
-        const maxCol = Math.max(0, rows[ri].children.length - 1);
-        ci = Math.max(0, Math.min(maxCol, ci + colDelta));
-        const target = rows[ri].children[ci];
+        const hucreler = gorHuc(rows[ri]);
+        ci = Math.max(0, Math.min(Math.max(0, hucreler.length - 1), ci + colDelta));
+        const target = hucreler[ci] || rows[ri].children[0];
         selectCell(target);
         target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
@@ -211,7 +207,6 @@
         const row = seciliSatir();
         if (!row) { setStatus('Önce çoğaltılacak satırı seçin.'); return; }
         if (dialog?.open) return;
-        silmeIptal();
         try {
             const r = await send('duplicate', { id: row.dataset.id });
             satirEkle(r.row);
@@ -220,33 +215,51 @@
             openDialog('duzelt');
         } catch (error) { setStatus(error.message); }
     }
-    // Sil: ilk basışta satır kırmızı olur; AYNI satırda ikinci basışta (düğme / F3 / Delete) silinir.
-    // Başka satıra geçmek, Esc ya da Çoğalt/Düzelt vazgeçirir.
+    // Sil: ilk basış satırı KIRMIZI işaretler (başka satıra geçilse de kırmızı kalır); işaretli satırda ikinci basış
+    // (düğme / F3 / Delete) Sil · Geri Al · İptal penceresini açar. Sil: siler. Geri Al: kırmızılık kalkar. İptal: kırmızı kalır.
+    const silDialog = document.getElementById('pfSilDialog');
+    let silHedef = null;
     async function sil() {
         const row = seciliSatir();
         if (!row) { setStatus('Önce silinecek satırı seçin.'); return; }
+        if (silDialog?.open) return;
         const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
-        if (silinecek !== row) {
-            silmeIptal();
-            silinecek = row; row.classList.add('pf-row-silinecek');
-            setStatus(`${belge} numaralı palet fişi silinecek — devam etmek için Sil'e tekrar basın (onay sorulur), vazgeçmek için Esc.`);
+        if (!row.classList.contains('pf-row-silinecek')) {
+            row.classList.add('pf-row-silinecek');
+            setStatus(`${belge} numaralı palet fişi silinmek üzere işaretlendi — silmek için Sil'e tekrar basın.`);
             return;
         }
-        if (!window.confirm(`${belge} numaralı palet fişi silinsin mi? Bu işlem geri alınamaz.`)) { silmeIptal(true); return; }
+        silHedef = row;
+        const ozet = ['parti_no', 'firma', 'brut_kg'].map(c => row.querySelector(`[data-col="${c}"]`)?.textContent.trim()).filter(Boolean).join(' · ');
+        document.getElementById('pfSilMetin').innerHTML = '';
+        const b = document.createElement('b'); b.textContent = `${belge} numaralı palet fişi`;
+        document.getElementById('pfSilMetin').append(b, ` silinsin mi? Bu işlem geri alınamaz.${ozet ? ' (' + ozet + ')' : ''}`);
+        silDialog.showModal();
+        document.getElementById('pfSilIptal')?.focus();
+    }
+    async function silOnayla() {
+        const row = silHedef; if (!row) return;
+        const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
+        const dugme = document.getElementById('pfSilOnay'); if (dugme) dugme.disabled = true;
         try {
             await send('delete', { id: row.dataset.id });
-            silinecek = null;
+            const secili = row === seciliSatir();
             const komsu = row.nextElementSibling || row.previousElementSibling;
-            row.remove(); selectedCell = null;
-            sayacDegis(-1);
-            if (komsu) selectCell(komsu.children[0]); else refreshTotals();
+            row.remove(); sayacDegis(-1);
+            if (secili) { selectedCell = null; if (komsu) selectCell(ilkHucre(komsu)); else refreshTotals(); }
             empty.hidden = body.children.length > 0;
             setStatus(`${belge} numaralı palet fişi silindi.`);
-        } catch (error) { silmeIptal(); setStatus(error.message); }
+            silHedef = null; silDialog.close();
+        } catch (error) { silDialog.close(); setStatus(error.message); }
+        finally { if (dugme) dugme.disabled = false; }
     }
-    document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && silinecek && !document.querySelector('dialog[open]')) { event.preventDefault(); silmeIptal(true); }
+    document.getElementById('pfSilOnay')?.addEventListener('click', silOnayla);
+    document.getElementById('pfSilGeriAl')?.addEventListener('click', () => {
+        if (silHedef) { silHedef.classList.remove('pf-row-silinecek'); setStatus('Silme geri alındı.'); }
+        silHedef = null; silDialog.close();
     });
+    document.getElementById('pfSilIptal')?.addEventListener('click', () => { silHedef = null; silDialog.close(); });
+    silDialog?.addEventListener('close', () => { silHedef = null; });
     wrap.addEventListener('keydown', event => {
         if (editor || event.target.matches('input,select,textarea')) return;
         if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); coglat(); return; }
@@ -444,7 +457,6 @@
     function openDialog(istenen) {
         if (!dialog || dialog.open) return;
         mod = istenen === 'duzelt' ? 'duzelt' : 'ekle';
-        silmeIptal();
         if (mod === 'duzelt') {
             const tr = seciliSatir();
             if (!tr) { setStatus('Önce düzeltilecek satırı seçin.'); mod = 'ekle'; return; }
@@ -509,14 +521,14 @@
         body.insertBefore(tr, body.firstChild);
         empty.hidden = true;
         sayacDegis(1);
-        selectCell(tr.children[0]);
+        selectCell(ilkHucre(tr));
         wrap.scrollTop = 0;
     }
     function satirGuncelle(tr, r) {
         satirOznitelik(tr, r);
         const deger = degerler(r);
         tr.querySelectorAll('td.pf-cell').forEach(td => { const d = deger[td.dataset.col]; if (d) { td.dataset.value = String(d[0] ?? ''); td.textContent = String(d[1] ?? ''); } });
-        selectCell(tr.children[0]);
+        selectCell(ilkHucre(tr));
     }
     let kaydediyor = false;
     async function submitForm() {
@@ -608,7 +620,7 @@
             });
         }
         const gorunen = body.querySelector('tr:not([hidden])');
-        if (selectedCell && selectedCell.parentElement.hidden && gorunen) selectCell(gorunen.children[Array.from(selectedCell.parentElement.children).indexOf(selectedCell)] || gorunen.children[0]);
+        if (selectedCell && selectedCell.parentElement.hidden && gorunen) selectCell(gorHuc(gorunen)[gorHuc(selectedCell.parentElement).indexOf(selectedCell)] || ilkHucre(gorunen));
     }
     let bulSutun = 'parti_no';
     function bulAc() {
@@ -656,7 +668,7 @@
         const parti = satirDeger(row, 'parti_no');
         const satirlar = Array.from(body.querySelectorAll('tr')).filter(r => satirDeger(r, 'parti_no') === parti);
         const kolonlar = ['belge_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad']
-            .filter(c => table.tHead.rows[0].querySelector(`th[data-col="${c}"]`));
+            .filter(c => !gizli.has(c) && table.tHead.rows[0].querySelector(`th[data-col="${c}"]`));
         const sayisal = ['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'];
         const ad = c => table.tHead.rows[0].querySelector(`th[data-col="${c}"]`).childNodes[0]?.textContent.trim() || c;
         const hr = ozetDialog.querySelector('thead tr'), tb = ozetDialog.querySelector('tbody'), tf = ozetDialog.querySelector('tfoot');
@@ -683,7 +695,7 @@
         if (!tr || !tr.dataset.id) return;
         const hedef = Array.from(body.querySelectorAll('tr')).find(r => r.dataset.id === tr.dataset.id);
         ozetDialog.close();
-        if (hedef) { hedef.hidden = false; selectCell(hedef.children[0]); hedef.scrollIntoView({ block: 'center' }); }
+        if (hedef) { hedef.hidden = false; selectCell(ilkHucre(hedef)); hedef.scrollIntoView({ block: 'center' }); }
     }
     ozetDialog?.querySelector('tbody').addEventListener('click', event => paleteGit(event.target.closest('tr')));
     ozetDialog?.querySelector('tbody').addEventListener('keydown', event => { if (event.key === 'Enter') paleteGit(event.target.closest('tr')); });
@@ -696,7 +708,7 @@
     // ───────── Yazdır (görünen liste; gizli çerçeve ile, açılır pencere yok) ─────────
     const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     function yazdir() {
-        const basliklar = Array.from(table.tHead.rows[0].children);
+        const basliklar = Array.from(table.tHead.rows[0].children).filter(th => !gizli.has(th.dataset.col));
         const satirlar = Array.from(body.querySelectorAll('tr')).filter(r => !r.hidden);
         if (!satirlar.length) { setStatus('Yazdırılacak kayıt yok.'); return; }
         const sayisal = ['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'];
@@ -731,11 +743,11 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     const tercihSunucu = !!window.PALET_FISLERI?.tercihSunucu;
     const VARSAYILAN_GEN = { belge_no: 80, tarih: 90, islem: 100, islem_zaman: 130, kullanici: 130, sube: 130, parti_no: 130, palet_adi: 150, firma: 200, kasa_adi: 130, kasa_adeti: 70, brut_kg: 80, dara_kg: 70, net_kg: 80, mustahsil_ad: 150, aciklama1: 150, aciklama2: 150 };
     const headers = table.tHead.rows[0];
-    let tercih = { genislik: {}, sira: [] };
+    let tercih = { genislik: {}, sira: [], gizli: [] };
     (function tercihYukle() {
         let ham = tercihSunucu ? window.PALET_FISLERI?.tercih : null;
         if (!tercihSunucu) { try { ham = JSON.parse(localStorage.getItem(YEREL_ANAHTAR) || 'null'); } catch (_) { ham = null; } }
-        if (ham && typeof ham === 'object') tercih = { genislik: ham.genislik || {}, sira: Array.isArray(ham.sira) ? ham.sira : [] };
+        if (ham && typeof ham === 'object') tercih = { genislik: ham.genislik || {}, sira: Array.isArray(ham.sira) ? ham.sira : [], gizli: Array.isArray(ham.gizli) ? ham.gizli : [] };
     })();
     let tercihZamani = 0;
     function tercihKaydet() {
@@ -764,10 +776,11 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
             if (simdi !== i) moveColumn(simdi, i);
         });
     }
-    const KOSE = 22;   // sol üst köşe alanı + satır numarası şeridi
+    const KOSE = 0;   // sol şerit kaldırıldı
     function genislikUygula() {
         let toplam = 0;
         Array.from(headers.children).forEach(th => {
+            if (gizli.has(th.dataset.col)) return;
             const w = tercih.genislik[th.dataset.col] || 120;
             th.style.width = th.style.minWidth = th.style.maxWidth = w + 'px';
             toplam += w;
@@ -776,7 +789,7 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     }
     // İlk açılış (kayıtlı genişlik yoksa): varsayılanlar, boş alanı dolduracak şekilde ölçeklenir.
     function varsayilanGenislikler() {
-        const cols = Array.from(headers.children).map(th => th.dataset.col);
+        const cols = Array.from(headers.children).map(th => th.dataset.col).filter(c => !gizli.has(c));
         const toplam = cols.reduce((s, c) => s + (VARSAYILAN_GEN[c] || 120), 0);
         const oran = Math.max(1, (wrap.clientWidth - KOSE - 24) / toplam);
         cols.forEach(c => { if (!tercih.genislik[c]) tercih.genislik[c] = Math.round((VARSAYILAN_GEN[c] || 120) * oran); });
@@ -813,9 +826,42 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
             tutac.addEventListener('pointermove', hareket); tutac.addEventListener('pointerup', bitti); tutac.addEventListener('pointercancel', bitti);
         });
     });
+    // ── Sütun görünürlüğü: başlığa çift tık → Sütunlar penceresi (aç/kapa, kullanıcı bazlı kayıt) ──
+    const sutunDialog = document.getElementById('pfSutunDialog');
+    const sutunListe = document.getElementById('pfSutunListe');
+    const gizliStil = document.head.appendChild(document.createElement('style'));
+    function gizliUygula() {
+        gizliStil.textContent = Array.from(gizli).map(c => `#pfTable [data-col="${c}"]{display:none}`).join('');
+        genislikUygula();
+        if (selectedCell && gizli.has(selectedCell.dataset.col)) selectCell(ilkHucre(selectedCell.parentElement));
+    }
+    const mevcutSutunlar = () => Array.from(headers.children).map(th => th.dataset.col);
+    (tercih.gizli || []).filter(c => mevcutSutunlar().includes(c)).forEach(c => gizli.add(c));
+    if (gizli.size >= mevcutSutunlar().length) gizli.clear();
+    function sutunListeCiz() {
+        sutunListe.innerHTML = '';
+        const toplam = mevcutSutunlar().length;
+        Array.from(headers.children).forEach(th => {
+            const col = th.dataset.col;
+            const satir = document.createElement('label'); satir.className = 'pf-sutun-satir';
+            const kutu = document.createElement('input'); kutu.type = 'checkbox'; kutu.checked = !gizli.has(col);
+            kutu.disabled = kutu.checked && toplam - gizli.size <= 1;   // en az bir sütun görünür kalır
+            kutu.addEventListener('change', () => {
+                if (kutu.checked) gizli.delete(col); else gizli.add(col);
+                tercih.gizli = Array.from(gizli); gizliUygula(); tercihKaydet(); sutunListeCiz();
+            });
+            const ad = document.createElement('span'); ad.textContent = th.childNodes[0]?.textContent.trim() || col;
+            satir.append(kutu, ad); sutunListe.appendChild(satir);
+        });
+    }
+    function sutunPenceresiAc() { if (!sutunDialog || sutunDialog.open) return; sutunListeCiz(); sutunDialog.showModal(); sutunListe.querySelector('input:not(:disabled)')?.focus(); }
+    headers.addEventListener('dblclick', event => { if (event.target.closest('.pf-rs')) return; event.preventDefault(); sutunPenceresiAc(); });
+    document.getElementById('pfSutunTamam')?.addEventListener('click', () => sutunDialog.close());
+    document.getElementById('pfSutunKapat')?.addEventListener('click', () => sutunDialog.close());
+    document.getElementById('pfSutunHepsi')?.addEventListener('click', () => { gizli.clear(); tercih.gizli = []; gizliUygula(); tercihKaydet(); sutunListeCiz(); });
     siraUygula();
     varsayilanGenislikler();
-    genislikUygula();
+    gizliUygula();
 
     // Sütun sırası: başlığı tutup sürükle. Sürüklerken yarı saydam bir "hayalet" başlık imleci izler, sütun soluklaşır,
     // bırakılacak yer mavi çizgiyle gösterilir; sütun yalnız BIRAKINCA taşınır (Esc: vazgeç). Fare: 6px hareketle başlar;
@@ -841,11 +887,11 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
         const d = surukle; if (!d) return;
         d.x = x;
         d.ghost.style.left = (x - d.dx) + 'px'; d.ghost.style.top = (headers.getBoundingClientRect().top) + 'px';
-        const ths = Array.from(headers.children).map(t => t.getBoundingClientRect());
-        let b = ths.length;
-        for (let i = 0; i < ths.length; i++) { if (x < ths[i].left + ths[i].width / 2) { b = i; break; } }
+        const tum = Array.from(headers.children);
+        const gor = tum.filter(t => !gizli.has(t.dataset.col)).map(t => ({ i: tum.indexOf(t), r: t.getBoundingClientRect() }));   // gizli sütunlar sayılmaz
+        let b = gor[gor.length - 1].i + 1, cx = gor[gor.length - 1].r.right;
+        for (const g of gor) { if (x < g.r.left + g.r.width / 2) { b = g.i; cx = g.r.left; break; } }
         d.sinir = b;
-        const cx = b < ths.length ? ths[b].left : ths[ths.length - 1].right;
         const w = wrap.getBoundingClientRect();
         d.cizgi.style.left = (Math.max(w.left, Math.min(w.right - 3, cx)) - 1) + 'px';
         d.cizgi.style.top = w.top + 'px'; d.cizgi.style.height = wrap.clientHeight + 'px';
@@ -893,7 +939,7 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     // Tarih / "Yüklenen" değişince liste otomatik yenilenir (Getir düğmesi yok).
     const filtre = document.getElementById('pfFiltre');
     filtre?.querySelectorAll('input[name="baslangic"], input[name="yuklenen"]').forEach(i => i.addEventListener('change', () => { if (filtre.reportValidity()) filtre.requestSubmit(); }));
-    { const first = visibleRows()[0]; if (first) selectCell(first.children[0]); }
+    { const first = visibleRows()[0]; if (first) selectCell(ilkHucre(first)); }
     // Sayfa, pencere yüksekliğine ölçeklenir: tablo kalan alanı doldurur, altta boşluk kalmaz.
     function fitPage() {
         const top = page.getBoundingClientRect().top + window.scrollY;

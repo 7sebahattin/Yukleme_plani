@@ -429,7 +429,6 @@ render_header('Palet Fişleri');
     </div>
     <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.</div><?php endif; ?>
     <div class="pf-table-wrap" id="pfTableWrap" tabindex="0" aria-label="Palet fişleri tablosu">
-        <div class="pf-kose" aria-hidden="true"></div>
         <table class="pf-table" id="pfTable">
             <thead><tr>
                 <th data-col="belge_no">Belge No</th><th data-col="tarih">Tarih</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
@@ -510,6 +509,16 @@ render_header('Palet Fişleri');
         <input id="pfBulMetin" type="text" aria-label="Aranacak değer" placeholder="Aranacak değer">
         <div class="pf-bul-dugme"><button type="submit" class="pf-bul-tamam" id="pfBulTamam" title="Uygula (Enter)" aria-label="Uygula">✔</button><button type="button" class="pf-bul-iptal" id="pfBulIptal" title="Vazgeç (Esc)" aria-label="Vazgeç">✖</button></div>
     </form>
+</dialog>
+<dialog class="pf-dialog pf-sil-dialog" id="pfSilDialog">
+    <div class="pf-dialog-head"><div><h2>Palet fişi silinsin mi?</h2></div></div>
+    <p class="pf-sil-metin" id="pfSilMetin"></p>
+    <div class="pf-dialog-foot pf-sil-dugme"><button type="button" class="btn btn-ghost" id="pfSilIptal">İptal</button><button type="button" class="btn btn-ghost" id="pfSilGeriAl">Geri Al</button><button type="button" class="btn pf-sil-onay" id="pfSilOnay">Sil</button></div>
+</dialog>
+<dialog class="pf-dialog pf-sutun-dialog" id="pfSutunDialog">
+    <div class="pf-dialog-head"><div><h2>Sütunlar</h2></div><button type="button" class="pf-close" id="pfSutunKapat" aria-label="Kapat">×</button></div>
+    <div class="pf-sutun-liste" id="pfSutunListe"></div>
+    <div class="pf-dialog-foot"><button type="button" class="btn btn-ghost" id="pfSutunHepsi" style="margin-right:auto">Tümünü göster</button><button type="button" class="btn btn-primary" id="pfSutunTamam">Tamam</button></div>
 </dialog>
 <dialog class="pf-dialog pf-ozet-dialog" id="pfOzetDialog">
     <div class="pf-dialog-head"><div><h2 id="pfOzetBaslik">Parti</h2><p id="pfOzetAlt">Partinin paletleri. Bir satıra tıklarsanız listede o palete gidilir.</p></div><button type="button" class="pf-close" id="pfOzetKapat" aria-label="Kapat">×</button></div>
