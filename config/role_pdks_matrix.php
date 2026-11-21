@@ -61,7 +61,7 @@ function role_pdks_routes(): array {
         'daily_reports'=>['gunluk_isci_puantaj.php','gunluk_isci_puantaj_detay.php','gunluk_puantaj_yazdir.php','gunluk_puantaj_liste_yazdir.php'],
         'foreman_rates'=>['cavus_fiyatlari.php'],
         'entitlements'=>['cavus_hakedis.php','cavus_hakedis_detay.php','cavus_hakedis_yazdir.php','cavus_hakedis_liste_yazdir.php'],
-        'foreman_accounts'=>['servis_hesabi.php','cavus_cari.php','cavus_ekstre.php','cavus_cari_yazdir.php','cavus_ekstre_yazdir.php'],
+        'foreman_accounts'=>['servis_hesabi.php','servis_odemeleri.php','cavus_cari.php','cavus_ekstre.php','cavus_cari_yazdir.php','cavus_ekstre_yazdir.php'],
         'foreman_payments'=>['cavus_odeme.php','cavus_odeme_yazdir.php'],
         'management_reports'=>['raporlar.php','rapor_yazdir.php','cavus_donem_raporu.php','cavus_toplu_dokum.php','cavus_toplu_dokum_detay.php','cavus_toplu_dokum_yazdir.php','cavus_toplu_dokum_detay_yazdir.php'],
         'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php','mesai_toplu_onay.php'],
@@ -103,7 +103,7 @@ function role_pdks_request_action(string $route, string $method, array $query=[]
     if ($route==='cavus_fiyatlari.php') return match($form) {'oran','cavus_ucret','servis_ucret',''=>['foreman_rates','create'],'cavus_yontem','saat_duzelt','baslangic_geri'=>['foreman_rates','edit'],default=>null};
     if ($route==='cavus_hakedis.php') return $action==='hesapla'?['entitlements','create']:null;
     if ($route==='cavus_hakedis_detay.php') return match($action) {'duzeltme_ekle'=>['entitlements','create'],'hesapla','finalize','yeniden_ac'=>['entitlements','edit'],'duzeltme_ters_kayit'=>['entitlements','delete'],default=>null};
-    if ($route==='servis_hesabi.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
+    if ($route==='servis_odemeleri.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
     if ($route==='cavus_odeme.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
     if ($route==='mesai_degerlendirme.php') return in_array($action,['tekli_kaydet','toplu_kaydet','fm_toplu_kaydet'],true)?['mesai','edit']:null;
     if ($route==='mesai_toplu_onay.php') return in_array($action,['uygula','oto_uygula'],true)?['mesai','edit']:(in_array($action,['onizle','oto_onizle'],true)?['mesai','read']:null);
