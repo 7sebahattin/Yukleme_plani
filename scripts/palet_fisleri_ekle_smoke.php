@@ -80,5 +80,14 @@ ok('Açılır liste odaklanınca açılmaz, yalnız yazınca açılır', !str_co
 ok('Dara otomatik: kasa adedi × kasa darası + palet darası (tanım unit_dara_kg), alan salt okunur', str_contains($php, "'unit' => (float)(\$x['unit_dara_kg']") && str_contains($php, 'name="dara_kg" id="pfDara" readonly') && str_contains($js, 'function daraOtomatik()') && str_contains($js, 'adet * (Number(tanimBul(\'kasa\')?.unit) || 0) + (Number(tanimBul(\'palet\')?.unit) || 0)'));
 ok('"Kantardan al" düğmesi gizli (hidden)', str_contains($php, 'class="btn btn-ghost pf-kantar" hidden'));
 ok('Mobil: Ekle/Düzelt penceresi tam ekran, alanlar 6 sütunlu ızgarada (pf-w2/w3/w4/w6), alt çubuk sabit', str_contains($css, '#pfDialog{width:100%;max-width:100%;height:100dvh') && str_contains($css, 'label.pf-w3{grid-column:span 3}') && str_contains($php, 'class="pf-kg pf-w2"'));
+// ── İşlem sütunları + dara göstergesi (v541) ──
+$cssd = (string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.css');
+ok('Yeni sütunlar: Tarih · İşlem · İşlem Tarihi · Kullanıcı · Şube (başlık + hücre + tercih beyaz listesi)', str_contains($php, '<th data-col="tarih">Tarih</th>') && str_contains($php, '<th data-col="islem">İşlem</th><th data-col="islem_zaman">İşlem Tarihi</th><th data-col="kullanici">Kullanıcı</th><th data-col="sube">Şube</th>') && str_contains($php, 'data-col="sube"') && str_contains($kt, "'islem_zaman', 'kullanici', 'sube'"));
+ok('İşlem bilgisi audit_log + users\'tan okunur (şema değişmez), tablo yoksa boş döner', str_contains($php, 'function pf_islem_sql(PDO $pdo)') && str_contains($php, "a2.module = 'palet_fisleri'") && str_contains($php, "a2.action IN ('create', 'update')") && str_contains($php, "SELECT 1 FROM audit_log LIMIT 0") && !str_contains($php, 'ALTER TABLE'));
+ok('İşlem adları: Eklendi / Çoğaltıldı (duplicate_of) / Düzeltildi', str_contains($php, "'Düzeltildi'") && str_contains($php, "'Çoğaltıldı'") && str_contains($php, "'Eklendi'") && str_contains($php, 'duplicate_of'));
+ok('Şube = paletin depo damgası; Excel/CSV sonuna İşlem·İşlem Tarihi·Kullanıcı·Şube eklenir', str_contains($php, "p.depo, COALESCE(md.name") && str_contains($php, "'İşlem', 'İşlem Tarihi', 'Kullanıcı', 'Şube'"));
+ok('Kayıt/güncelle/çoğalt yanıtı da işlem alanlarını taşır (satır anında güncellenir)', str_contains($php, "'islem' => pf_islem_adi(\$y)") && str_contains($js, 'islem_zaman: [r.islem_zaman'));
+ok('Pencerede seçilen paletin ve ambalajın darası kutunun yanında yazar', str_contains($php, 'data-birim="palet"') && str_contains($php, 'data-birim="kasa"') && str_contains($js, 'function birimGoster()'));
+ok('Brüt/Dara/Net kutuları belirgin zeminli (açık + koyu)', str_contains($cssd, '.pf-form-grid>label.pf-kg{background:var(--pf-kg-bg)') && str_contains($cssd, '--pf-kg-bg:#14304d'));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

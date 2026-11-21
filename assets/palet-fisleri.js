@@ -366,10 +366,24 @@
         if (!girilen) return null;
         return (L()[kind] || []).find(x => trUp(x.name) === girilen) || null;
     }
+    // Seçilen palet / ambalajın birim darası, kutunun yanında gösterilir.
+    function birimGoster() {
+        const yaz = (kind, ek) => {
+            const el = form.querySelector(`[data-birim="${kind}"]`); if (!el) return;
+            const u = tanimBul(kind)?.unit;
+            const var_ = Number(u) > 0;
+            const sayi_ = Number(u).toLocaleString('tr-TR', { maximumFractionDigits: 3 });
+            el.textContent = var_ ? `Dara ${sayi_} kg${ek}` : '';
+            el.dataset.kisa = var_ ? `${sayi_} kg${ek}` : '';   // dar ekranda "Dara" sözü düşer
+            el.hidden = !var_;
+        };
+        yaz('palet', ''); yaz('kasa', '/adet');
+    }
     function daraOtomatik() {
         const adet = Math.max(0, parseInt(alan('kasa_adeti').value, 10) || 0);
         const dara = adet * (Number(tanimBul('kasa')?.unit) || 0) + (Number(tanimBul('palet')?.unit) || 0);
         alan('dara_kg').value = String(Math.round(dara * 1000) / 1000).replace('.', ',');   // ham saklanır (yuvarlama yalnız gösterimde)
+        birimGoster();
         hesapla();
     }
     function hesapla() {
@@ -426,6 +440,7 @@
         alan('brut_kg').value = kg('brut_kg'); alan('dara_kg').value = kg('dara_kg') || '0';
         alan('aciklama1').value = v('aciklama1'); alan('aciklama2').value = v('aciklama2');
         orijinal = { firma: v('firma'), urun: tr.dataset.urun || '' };
+        birimGoster();
         hesapla();
     }
     function openDialog(istenen) {
@@ -470,10 +485,12 @@
         if (bulunan) { input.dataset.id = bulunan.id; input.value = bulunan.name; return { id: bulunan.id, name: bulunan.name }; }
         throw new Error(`${etiket}: “${text}” kayıtlı değil. Listeden seçin ya da “+ ekle” ile tanımlayın.`);
     }
+    function trTarih(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; }
     function degerler(r) {
         return { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma], kasa_adi: [r.kasa_adi, r.kasa_adi],
             kasa_adeti: [r.kasa_adeti, fmt0(r.kasa_adeti)], brut_kg: [r.brut_kg, fmt0(r.brut_kg)], dara_kg: [r.dara_kg, fmt0(r.dara_kg)], net_kg: [r.net_kg, fmt0(r.net_kg)],
-            mustahsil_ad: [r.mustahsil_ad, r.mustahsil_ad], aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2] };
+            mustahsil_ad: [r.mustahsil_ad, r.mustahsil_ad], aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2],
+            tarih: [trTarih(r.tarih), trTarih(r.tarih)], islem: [r.islem, r.islem], islem_zaman: [r.islem_zaman, r.islem_zaman], kullanici: [r.kullanici, r.kullanici], sube: [r.sube, r.sube] };
     }
     function satirOznitelik(tr, r) {
         tr.dataset.id = r.id; tr.dataset.recordId = r.loading_record_id;
@@ -714,7 +731,7 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     const TERCIH_ANAHTAR = 'palet_fisleri.tablo';
     const YEREL_ANAHTAR = 'asya.palet-fisleri.tablo.v2';
     const tercihSunucu = !!window.PALET_FISLERI?.tercihSunucu;
-    const VARSAYILAN_GEN = { belge_no: 80, parti_no: 130, palet_adi: 150, firma: 200, kasa_adi: 130, kasa_adeti: 70, brut_kg: 80, dara_kg: 70, net_kg: 80, mustahsil_ad: 150, aciklama1: 150, aciklama2: 150 };
+    const VARSAYILAN_GEN = { belge_no: 80, tarih: 90, islem: 100, islem_zaman: 130, kullanici: 130, sube: 130, parti_no: 130, palet_adi: 150, firma: 200, kasa_adi: 130, kasa_adeti: 70, brut_kg: 80, dara_kg: 70, net_kg: 80, mustahsil_ad: 150, aciklama1: 150, aciklama2: 150 };
     const headers = table.tHead.rows[0];
     let tercih = { genislik: {}, sira: [] };
     (function tercihYukle() {
