@@ -31,6 +31,7 @@ require_once __DIR__ . '/config/uretim.php';   // v507 Günlük Üretim tablolar
 require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/palet_fisleri_core.php'; // Palet Fişleri (loading_pallets'e kolon ekleyen kart)
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
@@ -135,6 +136,7 @@ $bsz_results = []; $bsz_ran = false;                            // v498 beyansiz
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
+$pf_results = []; $pf_ran = false;                              // Palet Fişleri (loading_pallets kolonları: açıklama + müstahsil)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
 $kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
@@ -370,6 +372,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($cari_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'cari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'palet_fisleri') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pf_ran     = true;
+    $pf_results = palet_fisleri_migrate($pdo);
+    foreach ($pf_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'palet_fisleri', null, null, ['operation' => 'add_column', 'target' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'stok') {
@@ -920,6 +931,29 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="cari">
       <button type="submit" class="btn btn-primary">Cari Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('palet-fisleri'); ?>
+    <h2 style="margin-top:0;">Palet Fişleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>loading_pallets</code> tablosuna <code>aciklama1</code>, <code>aciklama2</code>, <code>mustahsil_id</code> ve
+      <code>mustahsil_ad</code> kolonlarını (ve <code>idx_lp_mustahsil</code> indeksini) ekler. Mevcut veriye dokunmaz, yabancı anahtar YOK, yeniden
+      çalıştırmak güvenlidir. Çalıştırılmazsa Palet Fişleri sayfasında Müstahsil alanı pasif görünür, diğer her şey aynen çalışır.
+      Çalıştırmadan önce veritabanı yedeği alın.
+      <?php if ($pf_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pf_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $pfHazir = palet_fisleri_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $pfHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $pfHazir ? '✓ Kolonlar var' : '✗ Kolonlar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="palet_fisleri">
+      <button type="submit" class="btn btn-primary">Palet Fişleri Kolonlarını Ekle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

@@ -89,3 +89,5 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-form-grid input:focus,.pf-form-grid select:focus{outline:2px solid #0782dc;outline-offset:0;border-color:#0782dc}
 .pf-dialog-foot{position:sticky;bottom:0;z-index:2;background:var(--surface,#fff)}
 .pf-dialog-head{position:sticky;top:0;z-index:2;background:var(--surface,#fff)}
+.pf-form-grid>label.pf-must{grid-column:1/-1}
+.pf-form-grid input:disabled{background:var(--bg,#eef3f8);color:#7a8ba0;cursor:not-allowed}

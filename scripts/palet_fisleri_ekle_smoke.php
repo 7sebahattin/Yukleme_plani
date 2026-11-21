@@ -23,5 +23,18 @@ ok('JS: yazdıkça bul + "+ ekle" satırı', str_contains($js, 'function makeCom
 ok('JS: kaydedince pencere kapanmaz (sonraki palet hazırlanır)', str_contains($js, 'satirEkle(r.row)') && !str_contains($js, 'location.reload(); }\n        catch'));
 ok('JS: hücre çift tıklama ile düzenleme yok', !str_contains($js, "'dblclick'"));
 ok('JS: kantardan al yer tutucusu pasif', str_contains($php, 'pf-kantar" disabled'));
+// ── Müstahsil (v535) ──
+$core = (string)file_get_contents(__DIR__ . '/../config/palet_fisleri_core.php');
+$mig  = (string)file_get_contents(__DIR__ . '/../migrate.php');
+ok('sayfa kolon EKLEMEZ (ensure_column / ALTER yok)', !str_contains($php, 'ensure_column(') && !str_contains($php, 'ALTER TABLE'));
+ok('sayfa kolonu yalnız denetler (palet_fisleri_kolon_var)', str_contains($php, "palet_fisleri_kolon_var(\$pdo, 'mustahsil_id')"));
+ok('müstahsil cari kartından doğrulanır (aktif kart)', str_contains($php, 'SELECT unvan FROM cari_kartlar WHERE id = ? AND aktif = 1'));
+ok('müstahsil kolonu yoksa INSERT\'e eklenmez', str_contains($php, "\$has_mustahsil ? ', mustahsil_id, mustahsil_ad' : ''"));
+ok('sayfa cari kartı YAZMAZ (cari_kart_kaydet çağrısı yok; yazma cari_kaydet.php)', !str_contains($php, 'cari_kart_kaydet(') && str_contains($js, "'cari_kaydet.php'") && str_contains($js, "'kart_kaydet'"));
+ok('yeni müstahsil kartı tedarikçi tipinde açılır', str_contains($js, "fd.append('tip', 'tedarikci')"));
+ok('müstahsil palet başına: kayıttan sonra temizlenir', str_contains($js, "'aciklama2', 'mustahsil'].forEach"));
+ok('migrate: tek çağıran migrate.php kartı (ne=palet_fisleri), açık GO sözleşmesi', str_contains($mig, "'ne'] ?? '') === 'palet_fisleri'") && str_contains($mig, 'palet_fisleri_migrate($pdo)'));
+ok('migrasyon yalnız ADD COLUMN/ADD KEY (DROP/MODIFY/UPDATE yok)', !preg_match('/DROP |MODIFY |CHANGE COLUMN|UPDATE |DELETE /i', $core));
+ok('migrasyon idempotent (kolon varsa atlar)', str_contains($core, "'durum' => 'var'"));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

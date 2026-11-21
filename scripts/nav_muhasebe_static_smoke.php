@@ -51,7 +51,7 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
             ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
-        } elseif (str_contains($s, 'config/cari_core.php')) {
+        } elseif (str_contains($s, 'config/cari_core.php') && $dosya !== 'palet_fisleri.php') {   // palet_fisleri.php cari_core'u yalnız müstahsil kartlarını OKUMAK için yükler (v535) — kendi dalında denetlenir
             // Çalışan modül (Cari İşlemler, cari_* sayfaları): yer tutucu DEĞİL — şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
             ok("$dosya: çalışan modül — cari_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'cari_sayfa_kapisi('));
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
@@ -81,6 +81,8 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: yeni fiş ve hücre işlemleri", str_contains($s, "'create'") && str_contains($s, "'save'") && str_contains($s, "'duplicate'") && str_contains($s, "'delete'"));
             ok("$dosya: BRÜT / NET başlıkları ve referans alanı yok", str_contains($s, '>BRÜT<') && str_contains($s, '>NET<') && !str_contains($s, 'Yük.Ref') && !str_contains($s, '>Ref<'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: yalnız yönetici kapısı (is_admin)", str_contains($s, 'is_admin()'));
+            ok("$dosya: cari tablolarına YAZMAZ (cari_kart_kaydet/cari_hareket_ekle yok; yazma cari_kaydet.php)", !str_contains($s, 'cari_kart_kaydet(') && !str_contains($s, 'cari_hareket_ekle(') && !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?cari_/i', $s));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));

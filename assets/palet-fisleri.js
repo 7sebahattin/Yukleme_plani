@@ -222,10 +222,20 @@
     const saveBtn = document.getElementById('pfSave');
     const uyari = document.getElementById('pfUyari');
     const netBox = document.getElementById('pfNet');
-    const alanSirasi = ['tarih', 'parti_no', 'palet', 'firma', 'urun', 'kasa', 'kasa_adeti', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2'];
+    const alanSirasi = ['tarih', 'parti_no', 'palet', 'firma', 'urun', 'kasa', 'kasa_adeti', 'mustahsil', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2'];
     let nextBelge = window.PALET_FISLERI?.sonrakiBelge || 1;
 
     function mesaj(text, ok) { errorBox.textContent = text || ''; errorBox.classList.toggle('pf-ok', !!ok); }
+
+    // Müstahsil için yeni cari kartı: yazma, Cari modülünün TEK ucu cari_kaydet.php üzerinden (kendi yetki + audit kapısıyla).
+    async function cariKartEkle(ad) {
+        const fd = new FormData();
+        fd.append('csrf', page.dataset.csrf || ''); fd.append('islem', 'kart_kaydet'); fd.append('unvan', ad); fd.append('tip', 'tedarikci'); fd.append('aktif', '1');
+        const response = await fetch('cari_kaydet.php', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' } });
+        const r = await response.json().catch(() => ({ ok: false, hata: 'Sunucudan geçerli yanıt alınamadı.' }));
+        if (!response.ok || !r.ok) throw new Error(r.hata || 'Cari kartı açılamadı.');
+        return { id: Number(r.id), name: ad };
+    }
 
     // Yazdıkça bul — yoksa "+ ekle" (parti serbest metindir, ekleme satırı yok)
     function makeCombo(input) {
@@ -262,6 +272,12 @@
         async function choose(it) {
             if (it.type === 'var') { input.value = it.x.name; if (it.x.id) input.dataset.id = it.x.id; else delete input.dataset.id; close(); return true; }
             try {
+                if (kind === 'mustahsil') {
+                    const r = await cariKartEkle(it.ad);
+                    const list = L().mustahsil; if (list && !list.some(x => x.id === r.id)) list.push({ id: r.id, name: r.name });
+                    input.value = r.name; input.dataset.id = r.id; close(); mesaj(`“${r.name}” cari kartı açıldı (tedarikçi).`, true);
+                    return true;
+                }
                 const r = await send('tanim_ekle', { tur: TUR[kind], ad: it.ad });
                 const list = L()[kind]; if (list && !list.some(x => x.id === r.id)) list.push({ id: r.id, name: r.name });
                 input.value = r.name; input.dataset.id = r.id; close(); mesaj(r.yeni ? `“${r.name}” tanımlara eklendi.` : '', true);
@@ -281,8 +297,9 @@
     }
     function alan(name) { return form.elements[name]; }
     function siradaki(from) {
-        const i = alanSirasi.indexOf(from.name);
-        const next = alan(alanSirasi[i + 1]);
+        let i = alanSirasi.indexOf(from.name) + 1;
+        while (i < alanSirasi.length && (!alan(alanSirasi[i]) || alan(alanSirasi[i]).disabled)) i++;
+        const next = alan(alanSirasi[i]);
         if (next) { next.focus(); if (next.select) next.select(); } else submitForm();
     }
     form.querySelectorAll('input[data-cb]').forEach(makeCombo);
@@ -345,7 +362,7 @@
         tr.dataset.search = [r.belge_no, r.parti_no, r.palet_adi, r.firma, r.urun].join(' ').toLocaleLowerCase('tr-TR');
         const deger = { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma],
             kasa_adeti: [r.kasa_adeti, fmt0(r.kasa_adeti)], brut_kg: [r.brut_kg, fmt0(r.brut_kg)], dara_kg: [r.dara_kg, fmt0(r.dara_kg)], net_kg: [r.net_kg, fmt0(r.net_kg)],
-            aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2] };
+            mustahsil_ad: [r.mustahsil_ad, r.mustahsil_ad], aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2] };
         Array.from(table.tHead.rows[0].children).forEach(th => {
             const col = th.dataset.col; const [raw, shown] = deger[col] || ['', ''];
             const td = document.createElement('td');
@@ -371,16 +388,18 @@
             const urun = coz('urun', true, 'Ürün');
             const palet = coz('palet', false, 'Palet');
             const kasa = coz('kasa', false, 'Kasa ambalaj');
+            const mustahsil = alan('mustahsil').disabled ? null : coz('mustahsil', false, 'Müstahsil');
             kaydediyor = true; saveBtn.disabled = true;
             const r = await send('create', { tarih: alan('tarih').value, parti_no: trUp(alan('parti_no').value), firma: firma.name, urun: urun.name,
-                palet_tipi_id: palet ? palet.id : '', kasa_cinsi_id: kasa ? kasa.id : '', kasa_adeti: alan('kasa_adeti').value || 0, brut_kg: brut, dara_kg: dara,
+                palet_tipi_id: palet ? palet.id : '', kasa_cinsi_id: kasa ? kasa.id : '', mustahsil_id: mustahsil ? mustahsil.id : '', kasa_adeti: alan('kasa_adeti').value || 0, brut_kg: brut, dara_kg: dara,
                 aciklama1: alan('aciklama1').value, aciklama2: alan('aciklama2').value });
             satirEkle(r.row);
             const parti = trUp(alan('parti_no').value);
             alan('parti_no').value = parti;
             if (parti && !(L().parti || []).some(x => trUp(x.name) === trUp(parti))) (L().parti = L().parti || []).unshift({ id: 0, name: parti });
             nextBelge = r.next_belge; alan('belge_no').value = String(nextBelge);
-            ['brut_kg', 'dara_kg', 'aciklama1', 'aciklama2'].forEach(n => { alan(n).value = ''; });
+            ['brut_kg', 'dara_kg', 'aciklama1', 'aciklama2', 'mustahsil'].forEach(n => { alan(n).value = ''; });
+            delete alan('mustahsil').dataset.id;   // müstahsil palet başınadır, bir sonrakine taşınmaz
             hesapla();
             mesaj(`${r.row.belge_no} numaralı belge kaydedildi.`, true);
             alan('brut_kg').focus();
