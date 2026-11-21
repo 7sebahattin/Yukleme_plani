@@ -251,3 +251,10 @@ v316 ek bir kısaltma koruması yuvarlıyordu — v317'de ikisi de bu simetrik k
 - K5: Tam fiyatı yokken çift kişide eksik mesajı "… — Tam Mesai fiyatı yok (çift yevmiye Tam × 2 ödenir)".
 - K6: Fiyat Geçmişi'nde eski `double_day_*` → "devre dışı (v503)" (eski değer title'da); POST `double_day_*` okumaları ve `data-cift*` kaldırıldı. Doğrulayıcı/`oran_ekle` double_day dalı testlerle sabit — SİLME. Mesai Değerlendirme'deki ölü "Çift adayı"/"Çift sonrası FM" dalları kaldırıldı.
 - Test: `php scripts/pdks_toplu_dokum_cift_smoke.php` · `pdks_cari_smoke` · `pdks_cift_isaret_smoke` · `node scripts/pdks_cavus_fiyat_smoke.js`
+
+### Servis Hesabı — servisçi cari, çavuştan AYRI (v532; migration ÇALIŞTIRILMADI, açık GO bekler)
+Sahip kararı: servisçi ile ayrı hesaplaşılır. Servis GİRİŞİ ve FİYATI aynen (Mesai Detayı › Servis Ücreti, Çavuş Ücretleri › Servis Ücreti) ama tutar çavuş hakedişine/bakiyesine **YAZILMAZ**: `PDKS_SERVIS_HAKEDISTE=false` (config/pdks_servis.php; `pdks_servis_hakedis_satirlari` boş döner; true = eski davranış, testler `pdks_servis_smoke`/`pdks_toplu_dokum_servis_smoke` başında true tanımlar). Fiyatsız servis artık hakedişi DURDURMAZ.
+- `servis_hesabi.php` (+ `config/pdks_servis_hesap.php`): ay/çavuş filtreli günlük döküm (adet × o gün geçerli fiyat, CANLI türetilir), servisçi ödeme defteri `servis_odemeleri` (DEĞİŞMEZ; yalnız gerekçeli iptal, SİLME YOK; kendi migrate çifti, yalnız migrate.php «Servis Ödemeleri» kartı) ve bakiye (servis − geçerli ödeme, para birimi ayrı). Yetki: `foreman_accounts` (görme) / `foreman_payments` (ödeme/iptal); rol matrisi rotası eklendi. Kart Personel Takibi ana sayfasında (`home-card-ek`).
+- **Çift ödeme koruması:** v532 ÖNCESİ KESİN hakedişte `SERVIS_*` satırı olan mesai "çavuş hakedişinde ödendi" diye işaretlenir, servisçi bakiyesine KATILMAZ. Taslak hakedişteki bayat servis satırı yeniden hesaplanınca düşer.
+- Toplu Döküm servis adedi aynen; tutarı yalnız eski dondurulmuş satırlardan gelir (yeni servis tutarı Servis Hesabı'nda).
+- Test: `php scripts/pdks_servis_hesap_smoke.php` (23).
