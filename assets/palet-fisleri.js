@@ -38,6 +38,7 @@
         cell.classList.add('pf-cell-selected');
         cell.parentElement.classList.add('pf-row-selected');
         selectedCell = cell;
+        refreshTotals();
     }
     function selectionPosition() {
         if (!selectedCell) return [0, 0];
@@ -66,12 +67,21 @@
         const n = Number(s);
         return Number.isFinite(n) ? n : 0;
     }
+    function fmt0(value) { return Math.round(Number(value) || 0).toLocaleString('tr-TR'); }
     function refreshTotals() {
-        ['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'].forEach(col => {
-            const sum = Array.from(body.querySelectorAll(`td[data-col="${col}"]`)).reduce((total, cell) => total + parseDecimal(cell.dataset.value), 0);
-            const target = document.querySelector(`[data-total="${col}"]`);
-            if (target) target.textContent = formatNumber(sum, col === 'kasa_adeti' ? 0 : 3);
+        const set = (key, text) => { const el = document.querySelector(`[data-sum="${key}"]`); if (el) el.textContent = text; };
+        const cell = selectedCell;
+        if (!cell) { set('parti', '—'); ['palet', 'adet', 'brut', 'dara', 'net'].forEach(k => set(k, '0')); set('ort', '0'); return; }
+        const parti = cell.parentElement.querySelector('[data-col="parti_no"]')?.dataset.value ?? '';
+        let palet = 0, adet = 0, brut = 0, dara = 0, net = 0;
+        body.querySelectorAll('tr').forEach(row => {
+            if ((row.querySelector('[data-col="parti_no"]')?.dataset.value ?? '') !== parti) return;
+            const num = name => parseDecimal(row.querySelector(`[data-col="${name}"]`)?.dataset.value);
+            palet++; adet += num('kasa_adeti'); brut += num('brut_kg'); dara += num('dara_kg'); net += num('net_kg');
         });
+        set('parti', parti || '—'); set('palet', fmt0(palet)); set('adet', fmt0(adet));
+        set('brut', fmt0(brut)); set('dara', fmt0(dara)); set('net', fmt0(net));
+        set('ort', adet > 0 ? (brut / adet).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0');
     }
     function rowData(row) {
         const get = name => row.querySelector(`[data-col="${name}"]`)?.dataset.value ?? '';
@@ -164,7 +174,7 @@
     }
     function displayValue(col, value) {
         if (['kasa_adeti'].includes(col)) return Number(value || 0).toLocaleString('tr-TR');
-        if (['brut_kg', 'dara_kg', 'net_kg'].includes(col)) return Number(value || 0).toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+        if (['brut_kg', 'dara_kg', 'net_kg'].includes(col)) return Number(value || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         if (col === 'palet_adi') return (window.PALET_FISLERI?.paletTipleri || []).find(p => String(p.id) === String(value))?.name || '';
         return value;
     }
@@ -172,10 +182,6 @@
     body.addEventListener('click', event => {
         const cell = event.target.closest('td.pf-cell');
         if (cell && !editor) selectCell(cell);
-    });
-    body.addEventListener('dblclick', event => {
-        const cell = event.target.closest('td.pf-cell');
-        if (cell) beginEdit(cell);
     });
     body.addEventListener('keydown', event => {
         if (!editor) return;
@@ -198,8 +204,6 @@
         if (editor || event.target.matches('input,select,textarea')) return;
         if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); rowAction('duplicate'); return; }
         if (event.key === 'Delete' && selectedCell) { event.preventDefault(); rowAction('delete'); return; }
-        if (event.key === 'F2' && selectedCell) { event.preventDefault(); beginEdit(selectedCell); return; }
-        if (event.key === 'Enter' && selectedCell) { event.preventDefault(); beginEdit(selectedCell); return; }
         if (event.key === 'ArrowDown') { event.preventDefault(); moveSelection(1, 0); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); moveSelection(-1, 0); }
         else if (event.key === 'ArrowRight' || event.key === 'Tab') { event.preventDefault(); moveSelection(0, 1); }
@@ -285,5 +289,7 @@
     headers.addEventListener('pointerup', releaseHeader);
     headers.addEventListener('pointercancel', releaseHeader);
     headers.addEventListener('contextmenu', event => { if (movingHeader) event.preventDefault(); });
+    document.querySelectorAll('[data-pf-pasif]').forEach(el => el.addEventListener('click', event => { event.preventDefault(); setStatus('Bu araç henüz çalışmıyor.'); }));
+    { const first = visibleRows()[0]; if (first) selectCell(first.children[0]); }
     wrap.addEventListener('click', () => wrap.focus({ preventScroll: true }));
 })();
