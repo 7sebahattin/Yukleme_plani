@@ -15,7 +15,7 @@
     var bosEl = document.getElementById('kfEmpty');
     var durum = document.getElementById('kfStatus');
     var YEREL = 'kantar.tablo.v1';
-    var VARSAYILAN = { fis_no: 80, tarih: 95, plaka: 100, firma: 150, malin: 120, geldigi: 130, depo: 130, palet: 70, palet_cinsi: 130, kasa: 70, kasa_cinsi: 130,
+    var VARSAYILAN = { sofor: 130, mal_sahibi: 140, mustahsil: 140, bahce: 120, fis_no: 80, tarih: 95, plaka: 100, firma: 150, malin: 120, geldigi: 130, depo: 130, palet: 70, palet_cinsi: 130, kasa: 70, kasa_cinsi: 130,
         t1: 95, t2: 95, brut: 100, dara: 80, net: 95, aciklama: 200, islem: 95, islem_yapan: 130, islem_zaman: 130 };
     var tr = function (s) { return String(s == null ? '' : s).toLocaleLowerCase('tr-TR'); };
     var satirlar = Array.prototype.slice.call(body.querySelectorAll('tr'));

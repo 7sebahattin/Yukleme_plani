@@ -5,6 +5,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/kantar_alanlari_core.php';
 $auth_user = require_login();
 require_perm('kantar.create');
 
@@ -43,6 +44,7 @@ $fis = [
     'giris_tarih' => date('Y-m-d\TH:i'), 'cikis_tarih' => '', 'operator_adi' => '',
     'malin_cinsi' => '', 'geldigi_yer' => '', 'gittigi_yer' => '',
     'aciklama' => '',
+    'sofor' => '', 'mal_sahibi' => '', 'mustahsil' => '', 'bahce' => '',   // ek alanlar (kolonlar migrate.php kartından)
     // Yeni fişte depo varsayılanı = aktif depo
     'depo' => (function_exists('active_depot') ? active_depot() : null) ?? '',
     'parti_no' => '',
@@ -174,6 +176,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
             }
         }
+        // Ek alanlar (şoför, malın sahibi, müstahsil, bahçe): yalnız kolonlar kuruluysa yazılır
+        kantar_alanlari_yaz(db(), $fis_id, $_POST);
+        if (trim($fis['sofor']) !== '') ensure_definition('sofor', normalize_suggest_value('sofor_adi', $fis['sofor']));
         audit_log_event('create', 'kantar', $fis_id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
         set_flash('success', 'Mal kabul fişi oluşturuldu (#' . $fis_id . ').');
         header('Location: kantar_view.php?id=' . $fis_id);

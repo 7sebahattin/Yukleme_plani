@@ -12,6 +12,10 @@
 //   $palet_list   - get_definitions_by_type('palet_tipi') sonucu
 // =========================================================
 
+require_once __DIR__ . '/config/kantar_alanlari_core.php';
+$_kal = kantar_alanlari_durum(db());          // sofor / mal_sahibi / mustahsil / bahce kolonları var mı
+$_kal_hazir = !in_array(false, $_kal, true);
+
 $is_edit    = $is_edit    ?? false;
 $fis        = $fis        ?? [];
 $fis_id     = (int)($fis['id'] ?? 0);
@@ -84,6 +88,18 @@ $_urun_names       = array_column(get_definitions_by_type('urun'),     'name');
 $_bolge_names      = array_column(get_definitions_by_type('bolge'),    'name');
 $_depo_names_kf    = array_column(get_definitions_by_type('depo'),     'name');
 $_lokasyon_names   = array_column(get_definitions_by_type('lokasyon'), 'name');
+// Ek alanlar (şoför / malın sahibi / müstahsil / bahçe): geçmiş girişler + ilgili tanımlar birleşik öneri listesi
+$_kal_liste = [];
+foreach (['sofor' => 'sofor', 'mal_sahibi' => 'firma', 'mustahsil' => 'tedarikci', 'bahce' => null] as $_kc => $_kt) {
+    $_l = [];
+    if (!empty($_kal[$_kc])) {
+        try { $_l = array_column(db()->query("SELECT DISTINCT `$_kc` AS v FROM kantar_fisleri WHERE `$_kc` != '' ORDER BY `$_kc`")->fetchAll(), 'v'); } catch (PDOException $e) { $_l = []; }
+    }
+    if ($_kt !== null) $_l = array_merge($_l, array_column(get_definitions_by_type($_kt), 'name'));
+    $_l = array_values(array_unique(array_filter($_l, fn($x) => trim((string)$x) !== '')));
+    sort($_l);
+    $_kal_liste[$_kc] = $_l;
+}
 // Firma: tanımlar + geçmiş kantar girişleri birleşik
 $_all_firma = array_values(array_unique(array_merge($_firma_def_names, $_kf_firma_hist)));
 sort($_all_firma);
@@ -139,10 +155,14 @@ function kf_datalist(string $id, array $items): string {
     </div>
 </div>
 
+<?php if (!$_kal_hazir): ?>
+<p class="muted mk-kal-uyari">Şoför, Malın Sahibi, Müstahsil ve Bahçe alanları için veritabanı güncellemesi gerekli<?= is_admin() ? ': <a href="migrate.php#kantar-alanlari">migrate.php › Mal Kabul Alanları</a> kartını çalıştırın' : ' — yöneticiye bildirin' ?>.</p>
+<?php endif; ?>
+
 <!-- ══════════════ GENEL BİLGİLER ══════════════ -->
 <section class="card mk-card">
     <h2 class="mk-sec-title"><span aria-hidden="true">🏢</span> Genel Bilgiler</h2>
-    <div class="mk-g mk-g4">
+    <div class="mk-g mk-g5">
         <label class="mk-lbl">Fiş No
             <input type="text" name="fis_no" value="<?= h($fis['fis_no'] ?? '') ?>">
         </label>
@@ -154,6 +174,9 @@ function kf_datalist(string $id, array $items): string {
             <?php if (empty($_kf_plaka_hist)): ?>
             <small class="muted">Henüz kayıtlı plaka yok</small>
             <?php endif; ?>
+        </label>
+        <label class="mk-lbl">Şoför
+            <input type="text" name="sofor" value="<?= h($fis['sofor'] ?? '') ?>" data-mkcb="sofor" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['sofor']) ? ' disabled' : '' ?>>
         </label>
         <label class="mk-lbl">Firma Adı <span class="req">*</span>
             <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>" data-mkcb="firma" placeholder="Yazarak arayın…" data-uppercase="tr">
@@ -170,6 +193,15 @@ function kf_datalist(string $id, array $items): string {
     <div class="mk-g mk-g3">
         <label class="mk-lbl">Malın Cinsi <span class="req">*</span>
             <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-mkcb="urun" placeholder="Yazarak arayın…" data-uppercase="tr">
+        </label>
+        <label class="mk-lbl">Malın Sahibi
+            <input type="text" name="mal_sahibi" value="<?= h($fis['mal_sahibi'] ?? '') ?>" data-mkcb="mal_sahibi" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['mal_sahibi']) ? ' disabled' : '' ?>>
+        </label>
+        <label class="mk-lbl">Müstahsil
+            <input type="text" name="mustahsil" value="<?= h($fis['mustahsil'] ?? '') ?>" data-mkcb="mustahsil" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['mustahsil']) ? ' disabled' : '' ?>>
+        </label>
+        <label class="mk-lbl">Bahçe
+            <input type="text" name="bahce" value="<?= h($fis['bahce'] ?? '') ?>" data-mkcb="bahce" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['bahce']) ? ' disabled' : '' ?>>
         </label>
         <label class="mk-lbl">Geldiği Yer
             <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-mkcb="lokasyon" placeholder="Yazarak arayın…" data-uppercase="tr">
@@ -242,6 +274,7 @@ function kf_datalist(string $id, array $items): string {
 <script id="mkComboData" type="application/json"><?= json_encode([
     'firma' => array_values($_all_firma), 'urun' => array_values($_urun_names),
     'lokasyon' => array_values($_lokasyon_names), 'depo' => array_values($_depo_names_kf),
+    'sofor' => $_kal_liste['sofor'], 'mal_sahibi' => $_kal_liste['mal_sahibi'], 'mustahsil' => $_kal_liste['mustahsil'], 'bahce' => $_kal_liste['bahce'],
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 <script id="firmaListData" type="application/json"><?= json_encode(
     array_values($_all_firma), JSON_UNESCAPED_UNICODE) ?></script>

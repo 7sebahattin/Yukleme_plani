@@ -32,6 +32,7 @@ require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yaln
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/palet_fisleri_core.php'; // Palet Fişleri (loading_pallets'e kolon ekleyen kart)
+require_once __DIR__ . '/config/kantar_alanlari_core.php'; // Mal Kabul Alanları (kantar_fisleri'ne kolon ekleyen kart)
 require_once __DIR__ . '/config/kullanici_tercih.php';   // Kullanıcı Tercihleri (kullanici_tercihleri tablosu; yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
@@ -138,6 +139,7 @@ $usip_results = []; $usip_ran = false;                          // v409 Ürün S
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
 $kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
+$kal_results = []; $kal_ran = false;                              // Mal Kabul Alanları (kantar_fisleri kolonları: şoför, malın sahibi, müstahsil, bahçe)
 $pf_results = []; $pf_ran = false;                              // Palet Fişleri (loading_pallets kolonları: açıklama + müstahsil)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
@@ -392,6 +394,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pf_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'palet_fisleri', null, null, ['operation' => 'add_column', 'target' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kantar_alanlari') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kal_ran     = true;
+    $kal_results = kantar_alanlari_migrate($pdo);
+    foreach ($kal_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'kantar_alanlari', null, null, ['operation' => 'add_column', 'target' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'stok') {
@@ -987,6 +998,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="palet_fisleri">
       <button type="submit" class="btn btn-primary">Palet Fişleri Kolonlarını Ekle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kantar-alanlari'); ?>
+    <h2 style="margin-top:0;">Mal Kabul Alanları</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>kantar_fisleri</code> tablosuna <code>sofor</code>, <code>mal_sahibi</code>, <code>mustahsil</code> ve
+      <code>bahce</code> kolonlarını ekler. Mevcut veriye dokunmaz, yabancı anahtar YOK, yeniden çalıştırmak güvenlidir. Çalıştırılmazsa Mal Kabul Fişi
+      formunda bu dört alan pasif görünür ve listede çıkmaz, diğer her şey aynen çalışır. Çalıştırmadan önce veritabanı yedeği alın.
+      <?php if ($kal_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($kal_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $kalHazir = kantar_alanlari_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $kalHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $kalHazir ? '✓ Kolonlar var' : '✗ Kolonlar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kantar_alanlari">
+      <button type="submit" class="btn btn-primary">Mal Kabul Kolonlarını Ekle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

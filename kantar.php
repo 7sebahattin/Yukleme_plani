@@ -7,6 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/kullanici_tercih.php';
+require_once __DIR__ . '/config/kantar_alanlari_core.php';
 $auth_user = require_login();
 require_perm('kantar.read');
 
@@ -39,12 +40,17 @@ try {
                    LEFT JOIN users u ON u.id = al.user_id";
 } catch (PDOException $e) {}
 
+// Ek alanlar (şoför / malın sahibi / müstahsil / bahçe): kolonlar kuruluysa sorguya ve tabloya girer
+$ek = kantar_alanlari_durum($pdo);
+$ek_sel = '';
+foreach ($ek as $kolon => $var) { if ($var) $ek_sel .= ", k.`$kolon`"; }
+
 $rows = [];
 try {
     $st = $pdo->prepare(
         "SELECT k.id, k.fis_no, k.giris_tarih, k.plaka, k.firma_adi, k.malin_cinsi, k.geldigi_yer, k.depo,
                 k.palet_sayisi, k.palet_cinsi, k.kasa_sayisi, k.kasa_cinsi, k.tartim1, k.tartim2,
-                k.kasa_dara, k.palet_dara, k.kasa_dara_total, k.palet_dara_total, k.aciklama, k.created_at, {$islem_sel}
+                k.kasa_dara, k.palet_dara, k.kasa_dara_total, k.palet_dara_total, k.aciklama, k.created_at{$ek_sel}, {$islem_sel}
          FROM kantar_fisleri k
          {$islem_join}
          WHERE 1=1{$_depo_sql}
@@ -63,6 +69,18 @@ function kf_liste_kg($v): string { return number_format((int)round((float)$v), 0
 
 $can_create = can('kantar.create');
 $TERCIH_ANAHTAR = 'kantar.tablo';
+
+// Sütun sırası (başlık, süzgeç satırı ve hücreler aynı listeden): [anahtar, başlık, tür]
+$KOLONLAR = [['fis_no', 'Fiş No', ''], ['tarih', 'Tarih', ''], ['plaka', 'Plaka', '']];
+if (!empty($ek['sofor'])) $KOLONLAR[] = ['sofor', 'Şoför', ''];
+array_push($KOLONLAR, ['firma', 'Firma', ''], ['malin', 'Malın Cinsi', '']);
+if (!empty($ek['mal_sahibi'])) $KOLONLAR[] = ['mal_sahibi', 'Malın Sahibi', ''];
+if (!empty($ek['mustahsil'])) $KOLONLAR[] = ['mustahsil', 'Müstahsil', ''];
+if (!empty($ek['bahce'])) $KOLONLAR[] = ['bahce', 'Bahçe', ''];
+array_push($KOLONLAR, ['geldigi', 'Geldiği Yer', ''], ['depo', 'Depo', ''], ['palet', 'Palet', 'sayi'], ['palet_cinsi', 'Palet Cinsi', ''],
+    ['kasa', 'Kasa', 'sayi'], ['kasa_cinsi', 'Kasa Cinsi', ''], ['t1', '1. Tartım', 'sayi'], ['t2', '2. Tartım', 'sayi'],
+    ['brut', 'Tartım Net', 'sayi'], ['dara', 'Dara', 'sayi'], ['net', 'Net KG', 'sayi'], ['aciklama', 'Açıklama', ''],
+    ['islem', 'İşlem', ''], ['islem_yapan', 'İşlem Yapan', ''], ['islem_zaman', 'İşlem Tarihi', 'tarih']);
 
 render_header('Mal Kabul Fişleri');
 render_flash();
@@ -86,18 +104,13 @@ render_flash();
         <table class="pf-table kf-table" id="kfTable">
             <thead>
             <tr id="kfHead">
-                <th data-col="fis_no">Fiş No</th><th data-col="tarih">Tarih</th><th data-col="plaka">Plaka</th><th data-col="firma">Firma</th>
-                <th data-col="malin">Malın Cinsi</th><th data-col="geldigi">Geldiği Yer</th><th data-col="depo">Depo</th>
-                <th data-col="palet" data-tip="sayi">Palet</th><th data-col="palet_cinsi">Palet Cinsi</th>
-                <th data-col="kasa" data-tip="sayi">Kasa</th><th data-col="kasa_cinsi">Kasa Cinsi</th>
-                <th data-col="t1" data-tip="sayi">1. Tartım</th><th data-col="t2" data-tip="sayi">2. Tartım</th>
-                <th data-col="brut" data-tip="sayi">Tartım Net</th><th data-col="dara" data-tip="sayi">Dara</th><th data-col="net" data-tip="sayi">Net KG</th>
-                <th data-col="aciklama">Açıklama</th>
-                <th data-col="islem">İşlem</th><th data-col="islem_yapan">İşlem Yapan</th><th data-col="islem_zaman" data-tip="tarih" title="İşlem tarihi ve saati">İşlem Tarihi</th>
+                <?php foreach ($KOLONLAR as [$ck, $cl, $ct]): ?>
+                <th data-col="<?= $ck ?>"<?= $ct ? ' data-tip="' . $ct . '"' : '' ?><?= $ck === 'islem_zaman' ? ' title="İşlem tarihi ve saati"' : '' ?>><?= h($cl) ?></th>
+                <?php endforeach; ?>
             </tr>
             <tr id="kfFiltreSatiri" class="kf-filtre-satir">
-                <?php foreach (['fis_no','tarih','plaka','firma','malin','geldigi','depo','palet','palet_cinsi','kasa','kasa_cinsi','t1','t2','brut','dara','net','aciklama','islem','islem_yapan','islem_zaman'] as $c): ?>
-                <th data-col="<?= $c ?>"><input type="search" data-f="<?= $c ?>" placeholder="süz" aria-label="<?= $c ?> süz" autocomplete="off"></th>
+                <?php foreach ($KOLONLAR as [$ck]): ?>
+                <th data-col="<?= $ck ?>"><input type="search" data-f="<?= $ck ?>" placeholder="süz" aria-label="<?= $ck ?> süz" autocomplete="off"></th>
                 <?php endforeach; ?>
             </tr>
             </thead>
@@ -118,8 +131,9 @@ render_flash();
                 $cells = [
                     ['fis_no', (string)($r['fis_no'] ?: $r['id']), ''],
                     ['tarih', kf_liste_tarih($tarih_ham), ''],
-                    ['plaka', (string)$r['plaka'], ''], ['firma', (string)$r['firma_adi'], ''],
-                    ['malin', (string)$r['malin_cinsi'], ''], ['geldigi', (string)$r['geldigi_yer'], ''], ['depo', (string)$r['depo'], ''],
+                    ['plaka', (string)$r['plaka'], ''], ['sofor', (string)($r['sofor'] ?? ''), ''], ['firma', (string)$r['firma_adi'], ''],
+                    ['malin', (string)$r['malin_cinsi'], ''], ['mal_sahibi', (string)($r['mal_sahibi'] ?? ''), ''], ['mustahsil', (string)($r['mustahsil'] ?? ''), ''], ['bahce', (string)($r['bahce'] ?? ''), ''],
+                    ['geldigi', (string)$r['geldigi_yer'], ''], ['depo', (string)$r['depo'], ''],
                     ['palet', $palet_say ? (string)$palet_say : '', 'pf-num'], ['palet_cinsi', (string)$r['palet_cinsi'], ''],
                     ['kasa', $kasa_say ? (string)$kasa_say : '', 'pf-num'], ['kasa_cinsi', (string)$r['kasa_cinsi'], ''],
                     ['t1', $t1 > 0 ? kf_liste_kg($t1) : '', 'pf-num'], ['t2', $t2 > 0 ? kf_liste_kg($t2) : '', 'pf-num'],
@@ -132,7 +146,7 @@ render_flash();
                            'palet' => (string)$palet_say, 'kasa' => (string)$kasa_say, 't1' => (string)$t1, 't2' => (string)$t2, 'brut' => (string)$brut, 'dara' => (string)$dara, 'net' => (string)$net];
             ?>
                 <tr data-id="<?= (int)$r['id'] ?>" tabindex="0" title="Fişi aç">
-                <?php foreach ($cells as [$col, $text, $cls]): ?>
+                <?php foreach ($cells as [$col, $text, $cls]): if (in_array($col, ['sofor', 'mal_sahibi', 'mustahsil', 'bahce'], true) && empty($ek[$col])) continue; ?>
                     <td class="pf-cell <?= $cls ?>" data-col="<?= $col ?>" data-value="<?= h($text) ?>"<?= isset($sirala[$col]) ? ' data-sort="' . h($sirala[$col]) . '"' : '' ?>><?= h($text) ?></td>
                 <?php endforeach; ?>
                 </tr>

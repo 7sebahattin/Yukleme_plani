@@ -324,6 +324,9 @@ render_flash();
                         <?php if ($fis['firma_adi']): ?>
                         <div><span class="lbl">Firma</span><strong><?= h($fis['firma_adi']) ?></strong></div>
                         <?php endif; ?>
+                        <?php foreach (['sofor' => 'Şoför', 'mal_sahibi' => 'Malın Sahibi', 'mustahsil' => 'Müstahsil', 'bahce' => 'Bahçe'] as $_ek => $_el): if (!empty($fis[$_ek])): ?>
+                        <div><span class="lbl"><?= h($_el) ?></span><strong><?= h($fis[$_ek]) ?></strong></div>
+                        <?php endif; endforeach; ?>
                         <?php if ($fis['operator_adi']): ?>
                         <div><span class="lbl">Operatör</span><strong><?= h($fis['operator_adi']) ?></strong></div>
                         <?php endif; ?>
