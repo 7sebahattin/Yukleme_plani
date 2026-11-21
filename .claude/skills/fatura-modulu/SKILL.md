@@ -5,7 +5,7 @@ description: Fatura modülü (satis_faturalari/alis_faturalari/sevk_irsaliyeleri
 
 # Fatura (fatura_*)
 
-> v527 (Dalga A arka uç + Dalga B ön yüz). Yalnız `is_admin()` (sidebar "Fatura" grubu, `nav_muhasebe_gruplari()`). stok-modulu / cari-modulu kalıbının eşi.
+> v527 (Dalga A arka uç + Dalga B ön yüz). Kapı v550'den beri `muhasebe_modul_can` (Roller `muhasebe.fatura.*`; bkz. `rol-yonetimi`) (sidebar "Fatura" grubu, `nav_muhasebe_gruplari()`). stok-modulu / cari-modulu kalıbının eşi.
 
 ## Kapsam
 - **Belge türleri** (`fatura_turleri()`, tek başlık tablosu `fatura_belgeler.tur`): satis · satis_ihracat · satis_iade (sayfa `satis_faturalari`) · alis · alis_mustahsil · alis_iade (`alis_faturalari`) · irsaliye (`sevk_irsaliyeleri`) · siparis (`alinan_siparis_fisleri`; v527'de 302 → urun_siparis KALKTI, Ürün Siparişleri ayrı).

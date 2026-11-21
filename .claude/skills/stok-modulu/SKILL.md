@@ -5,7 +5,7 @@ description: Stok (muhasebe) modülü (stok_kartlari/tanimlari/kaydet.php + 4 fi
 
 # Stok (muhasebe) — stok_*
 
-> Plan: ayrı, INSERT-only defter; yalnız `is_admin()` (sidebar "Stok" grubu, `nav_muhasebe_gruplari()`). cari-modulu'nun aynası.
+> Plan: ayrı, INSERT-only defter; kapı v550'den beri `muhasebe_modul_can` (Roller `muhasebe.stok.*`; bkz. `rol-yonetimi`) (sidebar "Stok" grubu, `nav_muhasebe_gruplari()`). cari-modulu'nun aynası.
 > **v524 Parça A:** kartlar + tanımlar + şema + kaydet ucu (7 dal). **v524 Parça B:** 4 fiş sayfası (`stok_giris_fisleri`, `stok_cikis_fisleri`, `transfer_fisleri`, `stok_donusum_fisleri`), `fis_kaydet`(write)/`fis_iptal`(delete) dalları (A'nın 7 dalından SONRA), cari bağı, kantardan doldur.
 
 ## Kapsam
@@ -25,7 +25,7 @@ description: Stok (muhasebe) modülü (stok_kartlari/tanimlari/kaydet.php + 4 fi
 - **Miktar milli tam sayı** (ana birim × 1000; `stok_miktar_coz`/`stok_miktar_bicim`/`stok_milli`/`stok_milli_db`). lt ve m dışındaki birimler TAM SAYI (kesir → null, sessiz yuvarlama yok). KG ekranda tam sayı + binlik nokta. Para kuruş tam sayı (`cari_kurus`/`cari_tutar_bicim`).
 - **Maliyet:** hareketli ağırlıklı ortalama, ÜRÜN bazında (depolar ortak), TRY, KDV hariç. `stok_maliyet_uygula` SAF motor (DB yok) — içeride `ort` = kuruş/birim (float); DB'de `ort_sonra` = TL/birim, `q_sonra` = birim, `v_sonra` = TL. Geriye dönük yeniden değerleme YOK (id sırası). Maliyet durumu = kartın son defter satırı (`stok_maliyet_durumu`, depo filtresiz).
 - **Depo kuralı (cari'nin TERSİ):** bakiye/hareket okumaları aktif depo filtreli — YALNIZ `stok_depo_filtre()` → `depo_sql_in` (named param yok). Depo boş satır tüm depolarda görünür. Maliyet ortalaması depo filtresiz.
-- **Kapı:** `stok_can()` = `is_admin()` (TEK değişim noktası; `stok.read/write` izinlerine BAĞLANMADI — onlar stok.php/malzeme içindir). Yazan çekirdek fonksiyonlarda yetki kontrolü YOK, `audit_log_event(…, 'stok', …)` VAR.
+- **Kapı:** `stok_can()` = `muhasebe_modul_can('stok', …)` (v550; yönetici her zaman, diğerleri `muhasebe.stok.*`; bkz. `rol-yonetimi`) (TEK değişim noktası; `stok.read/write` izinlerine BAĞLANMADI — onlar stok.php/malzeme içindir). Yazan çekirdek fonksiyonlarda yetki kontrolü YOK, `audit_log_event(…, 'stok', …)` VAR.
 - **Şema yalnız `migrate.php` "Stok (muhasebe)" kartı** (`mg_kart_ac('stok')`, `ne=stok`, `stok_migrate`; CREATE TABLE IF NOT EXISTS, ALTER/FK yok; tanım tohumu yalnız tablo yeni kurulduysa). Sayfalar tablo yoksa uyarı kartı (`stok_sayfa_kapisi`), uç 503. Sistem nedenleri (`kod` dolu): adı değişmez, silinmez, pasifleşir.
 - **`stok_` dosya adı ↔ `sw.js` `SW_MUHASEBE_RE`:** `stok_` önekinin tamamı (stok_kaydet dahil) + `transfer_fis*` önbelleğe alınmaz; `/stok.php` ve `/malzeme_stok_*` KAPSAM DIŞI kalmalı. `assets/stok.*` SHELL'e girmez. Değişince APP_SURUM/SW sürümünü artır (surum-artir).
 - **Sayfalar GET-only:** sayfaya `$_POST`/SQL ekleme (static smoke denetler); her yazma `stok_kaydet.php`'ye. Cari'ye yalnız `cari_core` FONKSİYONLARIYLA (`cari_hareket_ekle(…, $kaynak)`, `cari_kaynakli_iptal`); `cari_*` tablosuna SQL yazma.

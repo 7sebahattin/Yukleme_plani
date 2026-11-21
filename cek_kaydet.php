@@ -45,13 +45,13 @@ $sayfa = static fn(mixed $sinif): string => (string)$sinif === 'senet' ? 'senet_
 try {
     switch ($islem) {
         case 'bordro_kaydet':
-            ceksenet_kapi('write');
+            ceksenet_kapi('create');
             $s = ceksenet_bordro_kaydet($pdo, $P, $uid);
             if (!empty($s['ok'])) $geri = $sayfa($s['sinif'] ?? '') . '?yon=' . urlencode((string)($s['yon'] ?? 'alinan'));
             ceksenet_cevap($s, $geri, !empty($s['tekrar']) ? 'Bordro zaten kaydedilmişti' : 'Bordro kaydedildi', $json);
 
         case 'islem_uygula':
-            ceksenet_kapi('write');
+            ceksenet_kapi('edit');
             $s = ceksenet_islem_uygula($pdo, $P, $uid);
             if (!empty($s['ok'])) $geri = $sayfa($s['sinif'] ?? '') . '?yon=' . urlencode((string)($s['yon'] ?? 'alinan'));
             ceksenet_cevap($s, $geri, !empty($s['tekrar']) ? 'İşlem zaten kaydedilmişti' : 'İşlem kaydedildi', $json);
@@ -63,17 +63,17 @@ try {
             ceksenet_cevap($s, $geri, 'Hareket iptal edildi', $json);
 
         case 'tanim_kaydet':
-            ceksenet_kapi('admin');
+            ceksenet_kapi($id > 0 ? 'edit' : 'create');
             $s = ceksenet_tanim_kaydet($pdo, $P, $uid, $id > 0 ? $id : null);
             ceksenet_cevap($s, $geri, $id > 0 ? 'Tanım güncellendi' : 'Tanım eklendi', $json);
 
         case 'tanim_durum':
-            ceksenet_kapi('admin');
+            ceksenet_kapi('edit');
             $s = ceksenet_tanim_durum($pdo, $id, !empty($P['aktif']) && (string)$P['aktif'] !== '0', $uid);   // onay kutusu: gelmediyse pasif
             ceksenet_cevap($s, $geri, 'Tanım güncellendi', $json);
 
         case 'tanim_sil':
-            ceksenet_kapi('admin');
+            ceksenet_kapi('delete');
             $s = ceksenet_tanim_sil($pdo, $id, $uid);
             ceksenet_cevap($s, $geri, 'Tanım silindi', $json);
 

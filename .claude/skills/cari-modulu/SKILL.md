@@ -5,7 +5,7 @@ description: Cari İşlemler modülü (cari_kartlari/fisler/dekontlar/tanimlari/
 
 # Cari İşlemler (cari_*)
 
-> Plan/tasarım kararları: ledger tabanlı, yalnız `is_admin()` (sidebar "Cari İşlemler" grubu, `nav_muhasebe_gruplari()`). Sayfalar `nav_muhasebe_static_smoke` istisnasıyla "çalışan modül" sayılır.
+> Plan/tasarım kararları: ledger tabanlı; kapı v550'den beri `muhasebe_modul_can` (Roller `muhasebe.cari.*`; bkz. `rol-yonetimi`) (sidebar "Cari İşlemler" grubu, `nav_muhasebe_gruplari()`). Sayfalar `nav_muhasebe_static_smoke` istisnasıyla "çalışan modül" sayılır.
 
 ## Kapsam
 - Sayfalar (kök, hepsi **GET-only**): `cari_kartlari` (master-detail: sol liste + sağ detay/ekstre; `?id=`, `?parca=detay|ekstre|kart` kısmi yanıt) · `cari_fisler` (tahsilat/ödeme/açılış) · `cari_dekontlar` (borç/alacak dekontu, virman) · `cari_tanimlari` (grup, ödeme şekli, firmalardan içe aktar) · `cari_ekstre` (yazdır/xlsx/csv).

@@ -6,7 +6,7 @@ function ok(string $ad, bool $kosul): void { global $pass, $fail; if ($kosul) { 
 $php = (string)file_get_contents(__DIR__ . '/../palet_fisleri.php');
 $js  = (string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.js');
 
-ok('yalnız yönetici kapısı', str_contains($php, "if (!is_admin()) { forbidden("));
+ok('sayfa kapısı muhasebe_sayfa_can + işlem kapıları (create/edit/delete)', str_contains($php, "if (!muhasebe_sayfa_can('palet_fisleri')) { forbidden(); }") && str_contains($php, "pf_yetki('create')") && str_contains($php, "pf_yetki('edit')") && str_contains($php, "pf_yetki('delete')"));
 ok('POST yolunda csrf_check', str_contains($php, "csrf_check(\$_POST['csrf'] ?? null)"));
 ok('tanim_ekle yalnız dört tür (palet_tipi, firma, urun, kasa_cinsi)', preg_match("/pf_tanim_turleri\(\): array \{\s*return \['palet_tipi' => 'palet', 'firma' => 'müşteri', 'urun' => 'ürün', 'kasa_cinsi' => 'kasa'\];/u", $php) === 1);
 ok('tanim_ekle beyaz liste dışı türü reddeder', str_contains($php, "isset(pf_tanim_turleri()[\$tur])"));

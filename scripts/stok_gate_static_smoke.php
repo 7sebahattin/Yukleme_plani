@@ -51,14 +51,14 @@ $calisan = ['stok_kartlari.php', 'stok_tanimlari.php'];
 foreach ($fisSayfalari as $f) {
     $s = kod($ROOT . '/' . $f);
     if (str_contains($s, 'config/stok_core.php')) $calisan[] = $f;
-    else ok("$f: yer tutucu (Parça B'de dolacak): is_admin kapısı + 'hazırlanıyor'", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST'));
+    else ok("$f: yer tutucu (Parça B'de dolacak): is_admin kapısı + 'hazırlanıyor'", (bool)preg_match('/if \(!muhasebe_(?:sayfa|grup_okuma)_can\([^)]+\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST'));
 }
 foreach ($calisan as $f) {
     $s = kod($ROOT . '/' . $f);
     ok("$f: <?php + strict_types", str_starts_with($s, '<?php') && str_contains($s, 'declare(strict_types=1)'));
-    $sira = ['require_login()', 'if (!is_admin()) { forbidden(', "stok_kapi('read')", 'stok_no_store()', 'stok_sayfa_kapisi($pdo)', 'render_header('];
+    $sira = ['require_login()', '{ forbidden(); }', "stok_kapi('read')", 'stok_no_store()', 'stok_sayfa_kapisi($pdo)', 'render_header('];
     $ps = array_map(fn($a) => $pos($s, $a), $sira);
-    ok("$f: kabuk sırası require_login → is_admin → stok_kapi('read') → stok_no_store → stok_sayfa_kapisi → render_header", !in_array(-1, $ps, true) && $ps === array_values(array_unique($ps)) && $ps == array_values((function ($x) { sort($x); return $x; })($ps)), json_encode($ps));
+    ok("$f: kabuk sırası require_login → muhasebe_sayfa_can → stok_kapi('read') → stok_no_store → stok_sayfa_kapisi → render_header", !in_array(-1, $ps, true) && $ps === array_values(array_unique($ps)) && $ps == array_values((function ($x) { sort($x); return $x; })($ps)), json_encode($ps));
     ok("$f: config/stok_core.php + stok_ui.php yüklenir", str_contains($s, 'config/stok_core.php') && str_contains($s, 'config/stok_ui.php'));
     ok("$f: stok_assets() + stok_scripts() + render_footer()", str_contains($s, 'stok_assets()') && str_contains($s, 'stok_scripts()') && str_contains($s, 'render_footer()'));
     ok("$f: yalnız GET — \$_POST YOK, csrf_check YOK, Location YOK", !str_contains($s, '$_POST') && !str_contains($s, 'csrf_check(') && !preg_match("/header\\s*\\(\\s*['\"]Location/i", $s));
@@ -79,10 +79,10 @@ preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET
 $isl = array_map(fn($m) => $m[1], $cm);
 $A = ['kart_kaydet', 'kart_durum', 'kart_sil', 'tanim_kaydet', 'tanim_durum', 'tanim_sil', 'ice_aktar'];
 ok('işlem dalları: Parça A 7 dal (Parça B: + fis_kaydet, fis_iptal)', $isl === $A || $isl === [...$A, 'fis_kaydet', 'fis_iptal'] || (array_slice($isl, 0, 7) === $A && !array_diff($isl, [...$A, 'fis_kaydet', 'fis_iptal'])), json_encode($isl));
-$yetki = ['kart_kaydet' => 'write', 'kart_durum' => 'write', 'kart_sil' => 'delete', 'tanim_kaydet' => 'admin', 'tanim_durum' => 'admin', 'tanim_sil' => 'admin', 'ice_aktar' => 'admin', 'fis_kaydet' => 'write', 'fis_iptal' => 'delete'];
+$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'", 'ice_aktar' => "'create'", 'fis_kaydet' => "'create'", 'fis_iptal' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
 foreach ($cm as $m) {
     $y = $yetki[$m[1]] ?? '?';
-    ok("dal $m[1]: stok_kapi('$y') İLK ifade; dalda tek stok_kapi; yalnız stok_ fonksiyonu", (bool)preg_match("/^\\s*stok_kapi\\('" . $y . "'\\);/", $m[2]) && substr_count($m[2], 'stok_kapi(') === 1 && !preg_match('/\bcari_[a-z_]+\(/', $m[2]), substr($m[2], 0, 80));
+    ok("dal $m[1]: stok_kapi($y) İLK ifade; dalda tek stok_kapi; yalnız stok_ fonksiyonu", (bool)preg_match("/^\\s*stok_kapi\\(" . preg_quote($y, '/') . "\\);/", $m[2]) && substr_count($m[2], 'stok_kapi(') === 1 && !preg_match('/\bcari_[a-z_]+\(/', $m[2]), substr($m[2], 0, 80));
 }
 ok('`geri` yerel beyaz liste: stok_geri_guvenli($_POST[\'geri\']) + çekirdekte ^(stok_[a-z_]+|transfer_fisleri)\\.php regex', str_contains($k, "stok_geri_guvenli(\$_POST['geri']") && str_contains((string)file_get_contents($ROOT . '/config/stok_core.php'), '^(stok_[a-z_]+|transfer_fisleri)\\.php'));
 ok('stok_kaydet.php: stok_fis_kaydet($pdo, $P, $uid) 3 argüman — uç çekirdek kaynak bağını ($kaynak) VEREMEZ', str_contains($k, 'stok_fis_kaydet($pdo, $P, $uid);') && substr_count($k, 'stok_fis_kaydet(') === 1);
@@ -124,7 +124,7 @@ foreach ($yazanlar as $fn) ok("core $fn: audit_log_event( var", ($g = govde($c, 
 $yetkili = [];
 foreach ($yazanlar as $fn) if (preg_match('/\b(can|is_admin|require_perm|stok_can|stok_kapi|cari_can|cari_kapi)\s*\(/', (string)govde($c, $fn))) $yetkili[] = $fn;
 ok('core: yazan fonksiyonlarda yetki kontrolü YOK (uçların işi)', !$yetkili, implode(',', $yetkili));
-ok('core: stok_can yalnız is_admin() (tek değişim noktası; stok.read/write izinlerine bağlanmadı)', ($g = govde($c, 'stok_can')) !== null && str_contains($g, 'is_admin()') && !str_contains($g, 'can('));
+ok('core: stok_can TEK değişim noktası: muhasebe_modul_can (Roller; v550, varsayılan kapalı)', ($g = govde($c, 'stok_can')) !== null && str_contains($g, 'muhasebe_modul_can(') && !str_contains($g, 'is_admin()'));
 ok('core: maliyet motoru SAF (stok_maliyet_uygula içinde PDO/sorgu YOK)', ($g = govde($c, 'stok_maliyet_uygula')) !== null && !preg_match('/PDO|->|audit_log_event|\$GLOBALS/', $g));
 $ui = kod($ROOT . '/config/stok_ui.php');
 ok('ui: sorgu YAZMAZ (INSERT/UPDATE/DELETE yok, ->prepare/->exec/->query yok)', !preg_match($SQL_YAZ, $ui) && !preg_match('/->(exec|prepare|query)\(/', $ui));

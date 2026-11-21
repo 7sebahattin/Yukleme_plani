@@ -16,7 +16,7 @@ require_once __DIR__ . '/config/fatura_ui.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 require_once __DIR__ . '/config/print_helpers.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_grup_okuma_can('fatura')) { forbidden(); }
 fatura_kapi('read');
 fatura_no_store();
 $pdo = db();

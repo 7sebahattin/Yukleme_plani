@@ -4,7 +4,7 @@
 //   Sol liste (GET süzgeç: ?ara= &durum=tumu|gecerli|iptal &donem=tumu|30g|bu_ay|gecen_ay) + sağ panel:
 //   ?id=N detay · ?yeni=1 form · ?kopya=ID kopya formu
 //   ?parca=detay&id=N kısmi yanıt (header/footer YOK)
-// YALNIZ GET; yazma (fis_kaydet / fis_iptal) stok_kaydet.php'de. Kapı: is_admin() tabanlı stok_kapi('read'); tablo yoksa şema uyarı kartı.
+// YALNIZ GET; yazma (fis_kaydet / fis_iptal) stok_kaydet.php'de. Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → stok_kapi('read'); tablo yoksa şema uyarı kartı.
 // Ortak gövde config/stok_ui.php stok_fis_sayfa_govde(); kurallar config/stok_core.php (Parça B).
 // =========================================================
 declare(strict_types=1);
@@ -13,7 +13,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/stok_core.php';
 require_once __DIR__ . '/config/stok_ui.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_sayfa_can('stok_donusum_fisleri')) { forbidden(); }
 stok_kapi('read');
 stok_no_store();
 $pdo = db();

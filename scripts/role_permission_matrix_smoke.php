@@ -36,13 +36,18 @@ $visit=function(array $row) use (&$visit,&$rows): void { $rows[]=$row; foreach (
 foreach ($schema as $group) foreach ($group as $row) $visit($row);
 foreach ($rows as $row) matrix_ok(is_file(dirname(__DIR__).'/'.explode('?',$row['route'])[0]),'Missing row route '.$row['route']);
 $adminRows=array_filter($rows,fn($r)=>$r['admin_only']);
-matrix_ok(count($adminRows)===42,'Admin-only sidebar inventory changed');
+// v550: yalnız admin_konsolu (4 sayfa) + Fiş Excel Yükleme + İşlem Geçmişi + Yedekler admin-only kalır; menü sayfaları Roller'den verilebilir (varsayılan kapalı).
+matrix_ok(count($adminRows)===7,'Admin-only inventory changed: '.count($adminRows));
 foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row invented permissions');
-// v548: her nav_muhasebe_gruplari() sayfası (39) admin-only satır olarak envanterde; sabit sayı = 39 katalog + gunluk_fis_yukle + audit + admin_db_backups.
-$catalogRoutes=[]; foreach (nav_muhasebe_gruplari() as [,,$pages]) foreach ($pages as $route=>$_) $catalogRoutes[]=$route;
+$catalogRoutes=[]; $adminKonsolu=[]; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) { $catalogRoutes[]=$route; if ($gk==='admin_konsolu') $adminKonsolu[]=$route; }
 matrix_ok(count($catalogRoutes)===39,'Menu catalog size changed');
 $adminRoutes=array_column($adminRows,'route');
-foreach ($catalogRoutes as $route) matrix_ok(in_array($route,$adminRoutes,true),'Catalog page missing from admin-only inventory: '.$route);
+foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'admin_konsolu page must stay admin-only: '.$route);
+$byKey=[]; foreach ($rows as $r) $byKey[$r['key']]=$r;
+foreach ($catalogRoutes as $route) if (!in_array($route,$adminKonsolu,true)) {
+    $slug=pathinfo($route,PATHINFO_FILENAME);
+    matrix_ok(isset($byKey[$slug]) && !$byKey[$slug]['admin_only'] && ($byKey[$slug]['actions']['read']['permission'] ?? '')==="muhasebe.$slug.read",'Menu page lacks grantable read row: '.$slug);
+}
 foreach (['genel_uygulamalar'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);
 foreach (['operasyon_fis','kasa','kullanici_konsolu'] as $slug) matrix_ok(isset(nav_muhasebe_gruplari()[$slug]),'Menu group missing: '.$slug);
 $codes=[]; foreach ($rows as $row) foreach ($row['actions'] as $action) $codes[]=$action['permission'];

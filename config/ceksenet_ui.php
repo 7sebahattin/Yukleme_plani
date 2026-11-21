@@ -250,7 +250,7 @@ function ceksenet_detay_html(array $o): string
     if ((string)$k['aciklama'] !== '') $d .= $sat('Açıklama', nl2br(h((string)$k['aciklama'])));
 
     $btn = '';
-    if (ceksenet_can('write')) foreach ($k['izinli'] as $i) $btn .= '<button type="button" class="btn cs-islem-btn cs-islem-btn--' . h($i) . '" data-cs-islem="' . h($i) . '">' . h(ceksenet_islem_etiketi($i, $sinif)) . '</button>';
+    if (ceksenet_can('edit')) foreach ($k['izinli'] as $i) $btn .= '<button type="button" class="btn cs-islem-btn cs-islem-btn--' . h($i) . '" data-cs-islem="' . h($i) . '">' . h(ceksenet_islem_etiketi($i, $sinif)) . '</button>';
     $btn = $btn !== '' ? '<div class="cs-islemler" role="toolbar" aria-label="İşlemler">' . $btn . '</div>' : '';
 
     $zc = '';
@@ -491,10 +491,11 @@ function ceksenet_sayfa_govde(PDO $pdo, string $sinif): string
     $S = ceksenet_siniflar()[$sinif] ?? null;
     if ($S === null) return '';
     $F = ceksenet_filtre();
-    $yazabilir = ceksenet_can('write');
+    $yazabilir = ceksenet_can('create');   // yeni bordro (create)
+    $islemYap = ceksenet_can('edit');      // durum geçişi / toplu işlem (edit) — v550
     $kasalar = kasa_secenekleri($pdo, null, true);
     $cariler = [];
-    if ($yazabilir) foreach (cari_kart_listesi($pdo, ['aktif' => 1])['satirlar'] as $c) $cariler[] = ['id' => (int)$c['id'], 'kod' => (string)$c['kod'], 'unvan' => (string)$c['unvan']];
+    if ($yazabilir || $islemYap) foreach (cari_kart_listesi($pdo, ['aktif' => 1])['satirlar'] as $c) $cariler[] = ['id' => (int)$c['id'], 'kod' => (string)$c['kod'], 'unvan' => (string)$c['unvan']];
     $ust = ceksenet_ust_menu($sinif);
 
     // Bordro formu
@@ -526,7 +527,7 @@ function ceksenet_sayfa_govde(PDO $pdo, string $sinif): string
 
     $filtreli = $F['ara'] !== '' || $F['durum'] !== 'acik' || $F['donem'] !== 'tumu' || $F['cari'] > 0;
     $kayitVar = (bool)array_filter($oz['durum'], static fn($m) => (bool)$m);
-    if ($L['satirlar']) $liste = ceksenet_liste_html($L['satirlar'], $sinif, $F, $yazabilir);
+    if ($L['satirlar']) $liste = ceksenet_liste_html($L['satirlar'], $sinif, $F, $islemYap);
     elseif ($filtreli) $liste = '<p class="cs-liste-bos">Eşleşen ' . h(mb_strtolower($S['etiket'], 'UTF-8')) . ' yok. <a href="' . h($S['sayfa'] . '?yon=' . $F['yon']) . '">Süzgeçleri temizle</a></p>';
     else $liste = ceksenet_bos('Henüz ' . mb_strtolower($S['etiket'], 'UTF-8') . ' kaydı yok', ($verilen ? 'Kendi verdiğiniz' : 'Müşteriden aldığınız') . ' ' . mb_strtolower($S['cogul'], 'UTF-8') . ' bordro ile girilir; her satır cari dekontu yazar.',
         $yeniBtn);
@@ -548,13 +549,13 @@ function ceksenet_sayfa_govde(PDO $pdo, string $sinif): string
 
     $eylemBar = '';
     if ($yazabilir) $eylemBar = '<div class="cs-eylem-bar cs-eylem-bar--liste" id="csEylemBar" role="toolbar" aria-label="İşlemler"><a class="btn btn-primary" href="' . h($yeniUrl) . '">＋ ' . ($verilen ? 'Çıkış bordrosu' : 'Giriş bordrosu') . '</a></div>';
-    $secimBar = $yazabilir ? '<div class="cs-secim-bar" id="csSecimBar" role="region" aria-label="Seçili evraklar" hidden><div class="cs-secim-ozet"><b data-secim="adet">0</b> seçili'
+    $secimBar = $islemYap ? '<div class="cs-secim-bar" id="csSecimBar" role="region" aria-label="Seçili evraklar" hidden><div class="cs-secim-ozet"><b data-secim="adet">0</b> seçili'
         . '<span class="cs-secim-tutar" data-secim="toplam"></span><span class="cs-secim-ort" data-secim="ort"></span></div><div class="cs-secim-eylem"><button type="button" class="btn btn-primary" data-cs-toplu-ac aria-expanded="false" aria-controls="csTopluMenu">Toplu işlem &#9662;</button>'
         . '<button type="button" class="btn" data-cs-sec-temizle>Temizle</button></div><div class="cs-toplu-menu" id="csTopluMenu" hidden></div></div>' : '';
 
     $kasaNot = '';
-    if ($yazabilir && !$kasalar) $kasaNot = '<div class="cs-uyari cs-uyari--bilgi cs-kasa-not" role="note"><span class="cs-uyari-ikon" aria-hidden="true">&#9432;</span><div><p>Tahsil, tahsile verme ve ödeme işlemleri için kasa / banka hesabı gerekir. <a class="btn btn-sm" href="kasa_tanimlari.php?sekme=kasa&amp;yeni=1">Kasa Tanımları\'ndan banka hesabı ekleyin</a></p></div></div>';
-    elseif ($yazabilir && !array_filter($kasalar, static fn(array $k): bool => $k['tip'] === 'banka')) $kasaNot = '<div class="cs-uyari cs-uyari--bilgi cs-kasa-not" role="note"><span class="cs-uyari-ikon" aria-hidden="true">&#9432;</span><div><p>Tahsile verme için banka tipi hesap gerekir. <a href="kasa_tanimlari.php?sekme=kasa&amp;yeni=1">Banka hesabı ekleyin</a></p></div></div>';
+    if ($islemYap && !$kasalar) $kasaNot = '<div class="cs-uyari cs-uyari--bilgi cs-kasa-not" role="note"><span class="cs-uyari-ikon" aria-hidden="true">&#9432;</span><div><p>Tahsil, tahsile verme ve ödeme işlemleri için kasa / banka hesabı gerekir. <a class="btn btn-sm" href="kasa_tanimlari.php?sekme=kasa&amp;yeni=1">Kasa Tanımları\'ndan banka hesabı ekleyin</a></p></div></div>';
+    elseif ($islemYap && !array_filter($kasalar, static fn(array $k): bool => $k['tip'] === 'banka')) $kasaNot = '<div class="cs-uyari cs-uyari--bilgi cs-kasa-not" role="note"><span class="cs-uyari-ikon" aria-hidden="true">&#9432;</span><div><p>Tahsile verme için banka tipi hesap gerekir. <a href="kasa_tanimlari.php?sekme=kasa&amp;yeni=1">Banka hesabı ekleyin</a></p></div></div>';
 
     $kmap = [];
     foreach ($kasalar as $k) $kmap[(int)$k['id']] = $k;
@@ -566,7 +567,7 @@ function ceksenet_sayfa_govde(PDO $pdo, string $sinif): string
         . ($not !== '' ? '<div class="flash flash-error" role="alert">' . h($not) . '</div>' : '') . $baslik . ceksenet_ozet_html($sinif, $F, $oz) . $kasaNot . ceksenet_filtre_html($sinif, $F, $cariAd)
         . '<div class="cs-ana"><section class="cs-sol" aria-label="' . h($S['cogul']) . '"><div class="cs-liste-govde" id="csListe">' . $liste . $sayfalama . '</div>' . $listeOz . '</section>' . $panel . '</div>'
         . $secimBar . $eylemBar
-        . ($yazabilir ? ceksenet_modal_islem($kasalar, $cariler, ceksenet_url($sinif, $F)) : '')
+        . ($islemYap ? ceksenet_modal_islem($kasalar, $cariler, ceksenet_url($sinif, $F)) : '')
         . (ceksenet_can('delete') ? ceksenet_modal_iptal(ceksenet_url($sinif, $F)) : '')
         . ceksenet_json_script('csVeri', $veri) . '</div>';
 }
@@ -635,7 +636,7 @@ function ceksenet_tanim_panel(PDO $pdo, string $tur, bool $gizli, bool $yaz, arr
 
 function ceksenet_tanimlari_govde(PDO $pdo): string
 {
-    $yaz = ceksenet_can('admin');
+    $yaz = ceksenet_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'banka');
     if (!isset(ceksenet_tanim_turleri()[$sekme])) $sekme = 'banka';
     $bankaKasalar = array_values(array_filter(kasa_secenekleri($pdo, null, true), static fn(array $k): bool => $k['tip'] === 'banka'));

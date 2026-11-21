@@ -455,7 +455,7 @@ function kasa_fisleri_govde(PDO $pdo): string
     // Eylemler (PC/tablet satır içi; <768 alt çubuk)
     $tur = ['cari_tahsilat' => ['Tahsilat', '&#9650;', 'giris'], 'cari_odeme' => ['Ödeme', '&#9660;', 'cikis'], 'gelir' => ['Gelir', '&#9650;', 'giris'], 'gider' => ['Gider', '&#9660;', 'cikis'],
         'virman' => ['Virman', '&#8644;', 'virman'], 'acilis' => ['Açılış', '&#9650;', 'giris']];
-    $yazabilir = kasa_can('write') && $aktifler;
+    $yazabilir = kasa_can('create') && $aktifler;
     $btn = '';
     foreach ($tur as $k => [$ad, $ikon, $sn]) {
         $dis = !$yazabilir || ($k === 'virman' && count($aktifler) < 2);
@@ -506,7 +506,7 @@ function kasa_fisleri_govde(PDO $pdo): string
         . '<div class="ks-liste-govde" id="ksListe">' . $liste . $sayfalama . '</div>' . kasa_ozet_html($L['ozet'], $L['toplam_satir'], count($L['satirlar']), $F['durum'], (string)$L['ozet_durum']) . '</section></div>'
         . ($yazabilir ? $altBar : '')
         . $pbUyari
-        . (kasa_can('write') && $aktifler ? kasa_modal_form($aktifler, kasa_tanim_listesi($pdo, 'gelir'), kasa_tanim_listesi($pdo, 'gider'), $cariler, $tek ? (int)$secili['id'] : 0) : '')
+        . (kasa_can('create') && $aktifler ? kasa_modal_form($aktifler, kasa_tanim_listesi($pdo, 'gelir'), kasa_tanim_listesi($pdo, 'gider'), $cariler, $tek ? (int)$secili['id'] : 0) : '')
         . (kasa_can('delete') ? kasa_modal_iptal() : '')
         . kasa_modal_detay($detay, $kapat)
         . kasa_json_script('ksVeri', $veri)
@@ -640,7 +640,7 @@ function kasa_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
 /** Tanımlar sayfası gövdesi. ?sekme=kasa|gelir|gider · ?yeni=1 (kasa sekmesinde yeni kasa modalı açık) */
 function kasa_tanimlari_govde(PDO $pdo): string
 {
-    $yaz = kasa_can('write');
+    $yaz = kasa_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'kasa');
     if (!in_array($sekme, ['kasa', 'gelir', 'gider'], true)) $sekme = 'kasa';
     $sek = ['kasa' => ['ksTabKasa', 'ksPanelKasa', 'Kasalar'], 'gelir' => ['ksTabGelir', 'ksPanelGelir', 'Gelir Kalemleri'], 'gider' => ['ksTabGider', 'ksPanelGider', 'Gider Kalemleri']];
@@ -648,7 +648,7 @@ function kasa_tanimlari_govde(PDO $pdo): string
     foreach ($sek as $k => [$tab, $panel, $ad]) {
         $say = $k === 'kasa' ? count(kasa_kart_listesi($pdo)['satirlar']) : count(kasa_tanim_listesi($pdo, $k));
         $nav .= '<a class="ks-tanim-nav-oge" role="tab" id="' . $tab . '" href="kasa_tanimlari.php?sekme=' . $k . '" data-sekme="' . $k . '" aria-selected="' . ($sekme === $k ? 'true' : 'false') . '" aria-controls="' . $panel . '">' . h($ad) . ' <small>' . $say . '</small></a>';
-        $paneller .= $k === 'kasa' ? kasa_tanim_kasa_panel($pdo, $sekme !== $k, $yaz) : kasa_tanim_panel($pdo, $k, $panel, $tab, $sekme !== $k, kasa_can('admin'));
+        $paneller .= $k === 'kasa' ? kasa_tanim_kasa_panel($pdo, $sekme !== $k, $yaz) : kasa_tanim_panel($pdo, $k, $panel, $tab, $sekme !== $k, kasa_can('tanim'));
     }
     $yeni = $yaz && $sekme === 'kasa' && ($_GET['yeni'] ?? '') === '1';
     return '<div class="kasa" id="kasa" data-sayfa="tanim"' . ($yeni ? ' data-yeni="kart"' : '') . '>' . kasa_ust_menu('tanimlar') . '<div class="ks-ustsatir"><h1>Kasa Tanımları</h1></div><div class="ks-tanim">'

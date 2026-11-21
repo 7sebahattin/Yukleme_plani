@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/role_pdks_matrix.php';
+require_once __DIR__ . '/muhasebe_roller.php';   // v550: muhasebe menüsü sayfa/işlem yetkileri (varsayılan kapalı)
 require_once __DIR__ . '/role_content.php';   // v507: sayfa içi kart/düğme (içerik) yetkileri
 
 /** Pure editor schema. Unsupported operations are absent, never implied. */
@@ -68,13 +69,31 @@ function role_permission_matrix(): array {
             $row('maliyet','Detaylı Maliyet','maliyet.php',$crud('maliyet')+['unlock'=>$a('maliyet.unlock','Kilit aç'),'admin'=>$a('maliyet.admin','Alan ve şablon yönetimi')]),
         ],
     ];
-    if (function_exists('nav_muhasebe_gruplari')) foreach (nav_muhasebe_gruplari() as $key=>[$label,$icon,$pages]) {
-        $children=[];
-        $aciklama=in_array($key, ['cari','stok','fatura'], true)
-            ? 'Çalışan modül; yalnız sistem yöneticisi (rol bazlı yetkiler sonraki faz).'
-            : 'Hazırlanan sayfa; yalnız sistem yöneticisi. İşlem yetkisi bulunmuyor.';
-        foreach ($pages as $route=>[$title,$emoji]) $children[]=$row(pathinfo($route,PATHINFO_FILENAME),$title,$route,[],[],$aciklama,true);
-        $groups[$label.' · Menü']=$children;
+    // v550 — muhasebe menüsü (admin_konsolu HARİÇ): artık Roller'den verilebilir, VARSAYILAN KAPALI (tohum/türetme yok).
+    // Her modül = grup satırı (çalışan modüllerde Ekle/Düzenle/Sil) + sayfa başına Gör alt satırı.
+    $muhasebeSatirlari = [];
+    $muhNot = 'Varsayılan kapalı; yalnız seçilen rollere açılır. Yönetici her zaman erişir.';
+    foreach (muhasebe_rol_gruplari() as $key => $g) {
+        $islemli = in_array($key, muhasebe_rol_islemli_gruplar(), true);
+        $children = [];
+        foreach ($g['sayfalar'] as $slug => $title) {
+            $acts = ['read' => $a("muhasebe.$slug.read")];
+            if ($slug === 'palet_fisleri') $acts += ['create' => $a('muhasebe.palet_fisleri.create'), 'edit' => $a('muhasebe.palet_fisleri.edit'), 'delete' => $a('muhasebe.palet_fisleri.delete')];
+            $route = $slug . '.php';
+            $children[] = $row($slug, $title, $route, $acts, [], $slug === 'palet_fisleri' ? 'Ekle = yeni ve çoğaltılan fiş; Düzenle = düzeltme; Sil = fiş silme. Kilitli kayıt için ayrıca “Kilit aç” gerekir.' : '');
+        }
+        $groupActs = $islemli ? ['create' => $a("muhasebe.$key.create"), 'edit' => $a("muhasebe.$key.edit"), 'delete' => $a("muhasebe.$key.delete")] : [];
+        $label = $key === 'raporlar_grup' ? $g['etiket'] . ' (menü)' : $g['etiket'];
+        $first = array_key_first($g['sayfalar']);
+        $muhasebeSatirlari[] = $row('muhasebe_' . $key, $label, (string)$first . '.php', $groupActs, $children,
+            $muhNot . ($islemli ? ' Ekle / Düzenle / Sil için gruptaki en az bir sayfada Gör izni de gerekir.' : ''));
+    }
+    if ($muhasebeSatirlari) $groups['Muhasebe ve operasyon menüsü'] = $muhasebeSatirlari;
+    // admin_konsolu kapsam DIŞI: Roller'de yetkisiz, yalnız yönetici satırları olarak kalır.
+    if (function_exists('nav_muhasebe_gruplari') && isset(nav_muhasebe_gruplari()['admin_konsolu'])) {
+        $ak = [];
+        foreach (nav_muhasebe_gruplari()['admin_konsolu'][2] as $route => [$title]) $ak[] = $row(pathinfo((string)$route, PATHINFO_FILENAME), (string)$title, (string)$route, [], [], 'Yalnız sistem yöneticisi.', true);
+        $groups['Admin Konsolu · Menü'] = $ak;
     }
     return $groups;
 }
@@ -174,7 +193,7 @@ function role_matrix_catalog_additions(): array {
     }
     foreach (['records'=>['loading','pallet'],'siparis'=>role_siparis_pages()] as $module=>$pages) foreach ($pages as $page) foreach (['read','create','edit','delete'] as $action) $out["$module.$page.$action"] = "$page $action";
     foreach (role_report_types() as $type=>$label) { $out["reports.$type.read"]=$label.' görüntüle'; $out["reports.$type.export"]=$label.' dışa aktar'; }
-    return $out + role_pdks_catalog() + role_content_catalog_labels();
+    return $out + role_pdks_catalog() + muhasebe_rol_katalog() + role_content_catalog_labels();
 }
 
 /**

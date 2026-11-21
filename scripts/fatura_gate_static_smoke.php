@@ -53,17 +53,17 @@ foreach ($sayfalar as $f) {
     if (str_contains($s, 'config/fatura_core.php')) { $calisan[] = $f; continue; }
     $yerTutucu[] = $f;
     if ($f === 'alinan_siparis_fisleri.php' && str_contains($s, "header('Location: urun_siparis.php', true, 302)")) {
-        ok("$f: (Dalga A) v439 302 → urun_siparis.php + is_admin kapısı korunur", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s) && !str_contains($s, 'render_header('));
+        ok("$f: (Dalga A) v439 302 → urun_siparis.php + is_admin kapısı korunur", (bool)preg_match('/if \(!muhasebe_(?:sayfa|grup_okuma)_can\([^)]+\)\) \{ forbidden\(/', $s) && !str_contains($s, 'render_header('));
     } else {
-        ok("$f: (Dalga A) yer tutucu: is_admin kapısı + 'hazırlanıyor', \$_POST yok", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST'));
+        ok("$f: (Dalga A) yer tutucu: is_admin kapısı + 'hazırlanıyor', \$_POST yok", (bool)preg_match('/if \(!muhasebe_(?:sayfa|grup_okuma)_can\([^)]+\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST'));
     }
 }
 ok('Dalga B: 5 sayfanın hepsi çalışan modül (yer tutucu / 302 kalmadı)', count($calisan) === 5 && !$yerTutucu, json_encode($yerTutucu));
 foreach ($calisan as $f) {
     $s = kod($ROOT . '/' . $f);
     ok("$f: <?php + strict_types", str_starts_with($s, '<?php') && str_contains($s, 'declare(strict_types=1)'));
-    $ps = array_map(fn($a) => $pos($s, $a), ['require_login()', 'if (!is_admin()) { forbidden(', "fatura_kapi('read')", 'fatura_no_store()', 'fatura_sayfa_kapisi($pdo)', 'render_header(']);
-    ok("$f: kabuk sırası require_login → is_admin → fatura_kapi('read') → fatura_no_store → fatura_sayfa_kapisi → render_header", $sirali($ps), json_encode($ps));
+    $ps = array_map(fn($a) => $pos($s, $a), ['require_login()', '{ forbidden(); }', "fatura_kapi('read')", 'fatura_no_store()', 'fatura_sayfa_kapisi($pdo)', 'render_header(']);
+    ok("$f: kabuk sırası require_login → muhasebe_sayfa_can → fatura_kapi('read') → fatura_no_store → fatura_sayfa_kapisi → render_header", $sirali($ps), json_encode($ps));
     ok("$f: config/fatura_core.php + fatura_ui.php yüklenir; config/cari_core.php / config/stok_core.php metni GEÇMEZ (Y3)", str_contains($s, 'config/fatura_ui.php') && !str_contains($s, 'config/cari_core.php') && !str_contains($s, 'config/stok_core.php'));
     ok("$f: fatura_assets() + fatura_scripts() + render_footer()", str_contains($s, 'fatura_assets()') && str_contains($s, 'fatura_scripts()') && str_contains($s, 'render_footer()'));
     ok("$f: yalnız GET — \$_POST YOK, csrf_check YOK, Location YOK", !str_contains($s, '$_POST') && !str_contains($s, 'csrf_check(') && !preg_match("/header\\s*\\(\\s*['\"]Location/i", $s));
@@ -84,11 +84,11 @@ ok('csrf_check, ilk fatura_ yazma çağrısından ÖNCE', $pCsrf > 0 && $pCsrf <
 preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET_ORDER);
 $isl = array_map(fn($m) => $m[1], $cm);
 ok('işlem dalları (6, bu sırayla): belge_kaydet · belge_iptal · siparis_kapat · tanim_kaydet · tanim_durum · tanim_sil', $isl === ['belge_kaydet', 'belge_iptal', 'siparis_kapat', 'tanim_kaydet', 'tanim_durum', 'tanim_sil'], json_encode($isl));
-$yetki = ['belge_kaydet' => 'write', 'belge_iptal' => 'delete', 'siparis_kapat' => 'write', 'tanim_kaydet' => 'admin', 'tanim_durum' => 'admin', 'tanim_sil' => 'admin'];
+$yetki = ['belge_kaydet' => "'create'", 'belge_iptal' => "'delete'", 'siparis_kapat' => "'edit'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
 $cagri = ['belge_kaydet' => 'fatura_kaydet(', 'belge_iptal' => 'fatura_iptal(', 'siparis_kapat' => 'fatura_siparis_kapat(', 'tanim_kaydet' => 'fatura_tanim_kaydet(', 'tanim_durum' => 'fatura_tanim_durum(', 'tanim_sil' => 'fatura_tanim_sil('];
 foreach ($cm as $m) {
     $y = $yetki[$m[1]] ?? '?';
-    ok("dal $m[1]: fatura_kapi('$y') İLK ifade; tek fatura_kapi; yalnız fatura_ fonksiyonu (cari_/stok_ çağrısı YOK); fatura_cevap", (bool)preg_match("/^\\s*fatura_kapi\\('" . $y . "'\\);/", $m[2]) && substr_count($m[2], 'fatura_kapi(') === 1
+    ok("dal $m[1]: fatura_kapi($y) İLK ifade; tek fatura_kapi; yalnız fatura_ fonksiyonu (cari_/stok_ çağrısı YOK); fatura_cevap", (bool)preg_match("/^\\s*fatura_kapi\\(" . preg_quote($y, '/') . "\\);/", $m[2]) && substr_count($m[2], 'fatura_kapi(') === 1
         && !preg_match('/\b(cari|stok)_[a-z_]+\(/', $m[2]) && str_contains($m[2], $cagri[$m[1]] ?? '#') && str_contains($m[2], 'fatura_cevap($s, $geri,'), substr($m[2], 0, 80));
 }
 ok('`geri` yerel beyaz liste: fatura_geri_guvenli($_POST[\'geri\']) + çekirdekte 5 sayfalık regex', str_contains($k, "fatura_geri_guvenli(\$_POST['geri']")
@@ -123,7 +123,7 @@ foreach ($yazanlar as $fn) ok("core $fn: audit_log_event(…, 'fatura', …) var
 $yetkili = [];
 foreach ([...$yazanlar, 'fatura_dogrula', 'fatura_tanim_dogrula'] as $fn) if (preg_match('/\b(can|is_admin|require_perm|fatura_can|fatura_kapi|stok_can|stok_kapi|cari_can|cari_kapi)\s*\(/', (string)govde($c, $fn))) $yetkili[] = $fn;
 ok('core: yazan / doğrulayan fonksiyonlarda yetki kontrolü YOK (uçların işi)', !$yetkili, implode(',', $yetkili));
-ok('core: fatura_can yalnız is_admin() (tek değişim noktası; izin kataloğuna bağlanmadı)', ($g = govde($c, 'fatura_can')) !== null && str_contains($g, 'is_admin()') && !preg_match('/\bcan\(/', $g));
+ok('core: fatura_can TEK değişim noktası: muhasebe_modul_can (Roller; v550, varsayılan kapalı)', ($g = govde($c, 'fatura_can')) !== null && str_contains($g, 'muhasebe_modul_can(') && !str_contains($g, 'is_admin()'));
 foreach (['fatura_satir_hesapla', 'fatura_toplam_hesapla', 'fatura_stok_fiyat4', 'fatura_bp_coz'] as $fn) ok("core $fn SAF (PDO/sorgu/audit/\$GLOBALS YOK)", ($g = govde($c, $fn)) !== null && !preg_match('/PDO|->|audit_log_event|\$GLOBALS/', $g));
 ok('core: istemci fatura_no ALMAZ — seri no yalnız fatura_seri_kilitle sonrası fatura_seri_no ile', str_contains((string)govde($c, 'fatura_kaydet'), '$faturaNo = fatura_seri_no(') && $pos((string)govde($c, 'fatura_kaydet'), 'fatura_seri_kilitle(') < $pos((string)govde($c, 'fatura_kaydet'), '$faturaNo = fatura_seri_no('));
 
@@ -165,7 +165,7 @@ ok('migrate.php: fatura kartı stok kartından SONRA; ✓/✗ durum satırı + f
 
 echo "\n=== 8. fatura_cikti.php: salt okunur çıktı ucu ===\n";
 $fc = kod($ROOT . '/fatura_cikti.php');
-ok('fatura_cikti: kapı sırası require_login → is_admin → fatura_kapi(\'read\') → fatura_no_store → fatura_sayfa_kapisi', $sirali(array_map(fn($a) => $pos($fc, $a), ['require_login()', 'if (!is_admin()) { forbidden(', "fatura_kapi('read')", 'fatura_no_store()', 'fatura_sayfa_kapisi($pdo)'])));
+ok('fatura_cikti: kapı sırası require_login → muhasebe_sayfa_can → fatura_kapi(\'read\') → fatura_no_store → fatura_sayfa_kapisi', $sirali(array_map(fn($a) => $pos($fc, $a), ['require_login()', '{ forbidden(); }', "fatura_kapi('read')", 'fatura_no_store()', 'fatura_sayfa_kapisi($pdo)'])));
 ok('fatura_cikti: yalnız GET — $_POST / csrf_check / SQL / ->prepare YOK; config/cari_core.php / stok_core.php metni GEÇMEZ', !str_contains($fc, '$_POST') && !str_contains($fc, 'csrf_check(') && !preg_match($SQL_YAZ, $fc) && !preg_match('/->(prepare|query|exec)\(/', $fc)
     && !str_contains($fc, 'config/cari_core.php') && !str_contains($fc, 'config/stok_core.php'));
 ok("fatura_cikti: dışa aktarım require_perm('reports.export') + export_audit('fatura', 'liste', …) + xlsx_indir; belge fatura_gorunur", str_contains($fc, "require_perm('reports.export')") && str_contains($fc, "export_audit('fatura', 'liste',")

@@ -198,10 +198,15 @@ function kasa_sayfa_kapisi(PDO $pdo): void
     exit;
 }
 
-/** Faz 1: hepsi is_admin(). TEK değişim noktası (izin kataloğuna BAĞLANMADI). $eylem: read|write|delete|admin */
+/**
+ * v550: yönetici her zaman; diğerleri Roller'den (config/muhasebe_roller.php, VARSAYILAN KAPALI).
+ * $eylem: read (gruptaki herhangi bir sayfa Gör) | create | edit | delete | write (= create VE edit, belirsiz işlemlerde fail-closed)
+ * | tanim (yalnız arayüz ipucu: Tanımlar'da yazma düğmeleri) | admin (yalnız is_admin()). Bilinmeyen eylem false.
+ * TEK değişim noktası.
+ */
 function kasa_can(string $eylem): bool
 {
-    return in_array($eylem, ['read', 'write', 'delete', 'admin'], true) && is_admin();
+    return muhasebe_modul_can('kasa', $eylem);
 }
 
 function kasa_kapi(string $eylem): void

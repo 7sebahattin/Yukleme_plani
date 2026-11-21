@@ -41,7 +41,7 @@ $id    = (int)($P['id'] ?? 0);
 try {
     switch ($islem) {
         case 'belge_kaydet':
-            fatura_kapi('write');
+            fatura_kapi('create');
             $s = fatura_kaydet($pdo, $P, $uid);
             if (!empty($s['ok'])) $geri = (fatura_tur_bilgi((string)($P['tur'] ?? ''))['sayfa'] ?? 'satis_faturalari.php') . '?id=' . (int)$s['id'];
             fatura_cevap($s, $geri, !empty($s['tekrar']) ? 'Belge zaten kaydedilmişti' : 'Belge kaydedildi', $json);
@@ -52,22 +52,22 @@ try {
             fatura_cevap($s, $geri, 'Belge iptal edildi', $json);
 
         case 'siparis_kapat':
-            fatura_kapi('write');
+            fatura_kapi('edit');
             $s = fatura_siparis_kapat($pdo, $id, (string)($P['kapali'] ?? '') === '1', (string)($P['neden'] ?? ''), $uid);
             fatura_cevap($s, $geri, (string)($P['kapali'] ?? '') === '1' ? 'Sipariş kapatıldı' : 'Sipariş yeniden açıldı', $json);
 
         case 'tanim_kaydet':
-            fatura_kapi('admin');
+            fatura_kapi($id > 0 ? 'edit' : 'create');
             $s = fatura_tanim_kaydet($pdo, $P, $uid, $id > 0 ? $id : null);
             fatura_cevap($s, $geri, $id > 0 ? 'Tanım güncellendi' : 'Tanım eklendi', $json);
 
         case 'tanim_durum':
-            fatura_kapi('admin');
+            fatura_kapi('edit');
             $s = fatura_tanim_durum($pdo, $id, !empty($P['aktif']) && (string)$P['aktif'] !== '0', $uid);   // onay kutusu: gelmediyse pasif
             fatura_cevap($s, $geri, 'Tanım güncellendi', $json);
 
         case 'tanim_sil':
-            fatura_kapi('admin');
+            fatura_kapi('delete');
             $s = fatura_tanim_sil($pdo, $id, $uid);
             fatura_cevap($s, $geri, 'Tanım silindi', $json);
 

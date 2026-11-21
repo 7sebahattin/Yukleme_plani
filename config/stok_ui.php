@@ -423,7 +423,7 @@ function stok_tanim_ice_panel(PDO $pdo, bool $gizli, bool $yaz): string
 /** Tanımlar sayfası gövdesi. ?sekme=grup|giris_neden|cikis_neden|ice_aktar */
 function stok_tanimlari_govde(PDO $pdo): string
 {
-    $yaz = stok_can('admin');
+    $yaz = stok_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'grup');
     if (!in_array($sekme, ['grup', 'giris_neden', 'cikis_neden', 'ice_aktar'], true)) $sekme = 'grup';
     try { $nYeni = count(array_filter(stok_ice_aktar_onizle($pdo), static fn($o) => $o['durum'] === 'yeni')); } catch (Throwable $e) { $nYeni = 0; }
@@ -879,7 +879,7 @@ function stok_fis_sayfa_govde(PDO $pdo, string $tur): string
     }
     if ($fis !== null) {
         $sag = stok_fis_detay_html($pdo, $fis);
-    } elseif (($yeni || $kopyaId > 0) && stok_can('write')) {
+    } elseif (($yeni || $kopyaId > 0) && stok_can('create')) {
         $o = [];
         if ($kopyaId > 0) {
             $k = stok_fis_oku($pdo, $kopyaId);

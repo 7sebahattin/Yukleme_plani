@@ -38,14 +38,14 @@ $id    = (int)($P['id'] ?? 0);
 try {
     switch ($islem) {
         case 'kart_kaydet':
-            stok_kapi('write');
+            stok_kapi($id > 0 ? 'edit' : 'create');
             $P['aktif'] = isset($P['aktif']) && (string)$P['aktif'] !== '0' ? '1' : '0';   // onay kutusu: gelmediyse pasif
             $s = stok_kart_kaydet($pdo, $P, $uid, $id > 0 ? $id : null);
             if (!empty($s['ok']) && $id <= 0 && !str_contains($geri, 'id=')) $geri = 'stok_kartlari.php?id=' . (int)$s['id'];
             stok_cevap($s, $geri, $id > 0 ? 'Stok kartı güncellendi' : 'Stok kartı kaydedildi', $json);
 
         case 'kart_durum':
-            stok_kapi('write');
+            stok_kapi('edit');
             $s = stok_kart_durum($pdo, $id, (string)($P['aktif'] ?? '') === '1', $uid);
             stok_cevap($s, $geri, 'Stok kartı güncellendi', $json);
 
@@ -56,27 +56,27 @@ try {
             stok_cevap($s, $geri, 'Stok kartı silindi', $json);
 
         case 'tanim_kaydet':
-            stok_kapi('admin');
+            stok_kapi($id > 0 ? 'edit' : 'create');
             $s = stok_tanim_kaydet($pdo, (string)($P['tur'] ?? ''), (string)($P['ad'] ?? ''), (int)($P['sira'] ?? 0), $uid, $id > 0 ? $id : null);
             stok_cevap($s, $geri, $id > 0 ? 'Tanım güncellendi' : 'Tanım eklendi', $json);
 
         case 'tanim_durum':
-            stok_kapi('admin');
+            stok_kapi('edit');
             $s = stok_tanim_durum($pdo, $id, !empty($P['aktif']) && (string)$P['aktif'] !== '0', $uid);   // onay kutusu: gelmediyse pasif
             stok_cevap($s, $geri, 'Tanım güncellendi', $json);
 
         case 'tanim_sil':
-            stok_kapi('admin');
+            stok_kapi('delete');
             $s = stok_tanim_sil($pdo, $id, $uid);
             stok_cevap($s, $geri, 'Tanım silindi', $json);
 
         case 'ice_aktar':
-            stok_kapi('admin');
+            stok_kapi('create');
             $s = stok_ice_aktar($pdo, $uid);
             stok_cevap($s, $geri, 'İçe aktarıldı: ' . (int)$s['eklenen'] . ' kart eklendi, ' . (int)$s['atlanan'] . ' atlandı', $json);
 
         case 'fis_kaydet':
-            stok_kapi('write');
+            stok_kapi('create');
             $s = stok_fis_kaydet($pdo, $P, $uid);
             $turSayfa = stok_fis_turleri()[(string)($P['tur'] ?? '')]['sayfa'] ?? 'stok_giris_fisleri.php';
             if (!empty($s['ok'])) $geri = $turSayfa . '?id=' . (int)$s['id'];

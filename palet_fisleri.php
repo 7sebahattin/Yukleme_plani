@@ -1,5 +1,5 @@
 <?php
-// Palet Fişleri — yönetim tablosu. Yalnız yönetici.
+// Palet Fişleri — yönetim tablosu. Sayfa: muhasebe.palet_fisleri.read; işlemler: .create (ekle + çoğalt) / .edit (düzelt) / .delete (sil) — varsayılan kapalı, yönetici her zaman.
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
@@ -9,7 +9,7 @@ require_once __DIR__ . '/config/palet_fisleri_core.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 require_once __DIR__ . '/config/kullanici_tercih.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_sayfa_can('palet_fisleri')) { forbidden(); }
 
 $pdo = db();
 // Şema yalnız migrate.php › "Palet Fişleri" kartından kurulur; sayfa kolon EKLEMEZ, yalnız var mı diye bakar.
@@ -18,6 +18,11 @@ $has_aciklama2 = palet_fisleri_kolon_var($pdo, 'aciklama2');
 $has_mustahsil = palet_fisleri_kolon_var($pdo, 'mustahsil_id') && palet_fisleri_kolon_var($pdo, 'mustahsil_ad');
 $cari_var = cari_hazir($pdo);
 $mustahsil_aktif = $has_mustahsil && $cari_var;
+
+/** v550: yazma işlemi kapısı (yönetici her zaman; aksi halde sayfa Gör + TÜM istenen işlem izinleri). Reddedilince 422 JSON (çağıran catch). */
+function pf_yetki(string ...$eylemler): void {
+    foreach ($eylemler as $e) if (!muhasebe_palet_can($e)) throw new RuntimeException('Bu işlem için yetkiniz yok.');
+}
 
 function pf_json(array $data, int $status = 200): void {
     http_response_code($status);
@@ -107,7 +112,8 @@ function pf_get_row(int $id): array {
                          WHERE p.id = ? AND r.type = 'yukleme'");
     $st->execute([$id]);
     $row = $st->fetch();
-    if (!$row) throw new RuntimeException('Palet fişi bulunamadı.');
+    // v550: aktif depo kapsamı — başka depoya ait palet "bulunamadı" (save/delete/duplicate buna dayanır). Deposu boş kayıt görünür.
+    if (!$row || !depot_visible_to_user((string)($row['depo'] ?? ''))) throw new RuntimeException('Palet fişi bulunamadı.');
     return $row;
 }
 
@@ -206,6 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
     try {
         $action = (string)$_POST['pf_action'];
         if ($action === 'create') {
+            pf_yetki('create');
             pf_require_note_columns();
             $firma = pf_input_text('firma', 150);
             $parti = pf_input_text('parti_no', 100);
@@ -263,6 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             pf_json(['ok' => true, 'sunucu' => true]);
         }
         if ($action === 'tanim_ekle') {
+            pf_yetki('create', 'edit');   // Ekle VE Düzelt pencerelerinden çağrılır; belirsiz → ikisi birden (fail-closed)
             $tur = (string)($_POST['tur'] ?? '');
             if (!isset(pf_tanim_turleri()[$tur])) throw new RuntimeException('Bu tür için tanım eklenemez.');
             pf_json(['ok' => true] + pf_tanim_bul_ekle($tur, (string)($_POST['ad'] ?? '')));
@@ -271,10 +279,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
         $id = max(0, (int)($_POST['id'] ?? 0));
         if ($id <= 0) throw new RuntimeException('Geçersiz palet fişi.');
         if ($action === 'save') {
+            pf_yetki('edit');
             pf_save_fields($id);
             pf_json(['ok' => true, 'row' => pf_satir_json(pf_get_row($id))]);
         }
         if ($action === 'delete') {
+            pf_yetki('delete');
             $old = pf_get_row($id);
             if ((!empty($old['locked_at']) || ($old['durum'] ?? '') === 'yuklendi') && !can('records.unlock')) throw new RuntimeException('Kilitli kayıtlar silinemez. Silmek için records.unlock yetkisi gereklidir.');
             $pdo->beginTransaction();
@@ -291,6 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             pf_json(['ok' => true]);
         }
         if ($action === 'duplicate') {
+            pf_yetki('create');   // çoğaltma = yeni fiş
             pf_require_note_columns();
             $old = pf_get_row($id);
             if ((!empty($old['locked_at']) || ($old['durum'] ?? '') === 'yuklendi') && !can('records.unlock')) throw new RuntimeException('Kilitli kayıtlar kopyalanamaz. Kopyalamak için records.unlock yetkisi gereklidir.');
@@ -325,6 +336,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
     }
 }
 
+// v550: parti önerileri de aktif depo kapsamında (loading_records, palet deposu üzerinden).
+$pf_parti_sorgu = function (string $sql) use ($pdo): PDOStatement {
+    [$ds, $dp] = depo_sql_records_in('loading_records');
+    if ($ds !== '') $sql = str_replace(" GROUP BY", " AND $ds GROUP BY", $sql);
+    $st = $pdo->prepare($sql); $st->execute($dp); return $st;
+};
 $palet_tipi_list = get_definitions_by_type('palet_tipi');
 $pf_listeler = [
     'palet' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], $palet_tipi_list),
@@ -332,7 +349,7 @@ $pf_listeler = [
     'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
     'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], get_definitions_by_type('kasa_cinsi')),
     'mustahsil' => $mustahsil_aktif ? array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['unvan']], $pdo->query('SELECT id, unvan FROM cari_kartlar WHERE aktif = 1 ORDER BY unvan LIMIT 5000')->fetchAll(PDO::FETCH_ASSOC)) : [],
-    'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pdo->query("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
+    'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pf_parti_sorgu("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
 ];
 $pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loading_records')->fetchColumn();
 $desc1_sql = $has_aciklama1 ? 'p.aciklama1' : "'' AS aciklama1";
@@ -350,6 +367,8 @@ function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $des
     [$islem_sel, $islem_join] = pf_islem_sql($pdo);
     $w = "r.type = 'yukleme' AND r.tarih >= ?";
     if (!$yuklenen) $w .= " AND COALESCE(r.durum, '') <> 'yuklendi'";
+    [$depoSql, $depoPar] = depo_sql_in('p.depo');   // v550: aktif depo (boş depo her yerde görünür kuralı depo_sql_in'de)
+    if ($depoSql !== '') $w .= " AND $depoSql";
     $st = $pdo->prepare("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
                           p.palet_tipi_id, p.kasa_cinsi_id, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql,
                           r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun, r.durum, r.locked_at,
@@ -361,7 +380,7 @@ function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $des
                    $islem_join
                    WHERE $w
                    ORDER BY r.id DESC, p.sira_no ASC, p.id DESC");
-    $st->execute([$baslangic]);
+    $st->execute([$baslangic, ...$depoPar]);
     return $st->fetchAll();
 }
 $rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql);
@@ -411,7 +430,7 @@ if ($export === 'csv' || $export === 'xlsx') {
 render_header('Palet Fişleri');
 ?>
 <link rel="stylesheet" href="assets/palet-fisleri.css?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.css') ?>">
-<section class="pf-page" id="pfPage" data-csrf="<?= h(csrf_token()) ?>">
+<section class="pf-page" id="pfPage" data-csrf="<?= h(csrf_token()) ?>" data-izin-ekle="<?= muhasebe_palet_can('create') ? '1' : '0' ?>" data-izin-duzelt="<?= muhasebe_palet_can('edit') ? '1' : '0' ?>" data-izin-sil="<?= muhasebe_palet_can('delete') ? '1' : '0' ?>" data-izin-mus="<?= muhasebe_grup_can('cari', 'create') ? '1' : '0' ?>">
     <div class="pf-top">
         <form class="pf-filtre" id="pfFiltre" method="get" action="palet_fisleri.php">
             <label class="pf-f-alan">Başlangıç Tarihi <input type="date" name="baslangic" value="<?= h($f_baslangic) ?>" required></label>
@@ -419,11 +438,11 @@ render_header('Palet Fişleri');
             <div class="pf-tb-grup" role="toolbar" aria-label="Palet fişi araçları">
                 <button type="button" class="pf-tb" data-pf="yazdir" title="Listeyi yazdırır">⎙ Yazdır</button>
                 <?php if (can('reports.export')): ?><?= export_menu('palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']), 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'xlsx']), 'Excel', 'pf-tb pf-tb-xl') ?><?php endif; ?>
-                <button type="button" class="pf-tb" data-pf="duzelt" title="Seçili palet fişini düzenler (F4 / çift tık)">✎ Düzelt</button>
+                <button type="button" class="pf-tb" data-pf="duzelt" <?= muhasebe_palet_can('edit') ? '' : 'disabled' ?> title="Seçili palet fişini düzenler (F4 / çift tık)">✎ Düzelt</button>
                 <button type="button" class="pf-tb" data-pf="bul" title="Listede ara">⌕ Bul</button>
-                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" title="Seçili palet fişini siler: ilk basış satırı kırmızı yapar, ikinci basış siler (F3 / Delete)">🗑 F3 - Sil</button>
-                <button type="button" class="pf-tb" data-pf="coglat" title="Seçili palet fişini kopyalar ve kopyayı düzeltme penceresinde açar (Ctrl+Shift+D)">⧉ Çoğalt</button>
-                <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?> title="Yeni palet fişi (F2)">＋ F2 - Ekle</button>
+                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" <?= muhasebe_palet_can('delete') ? '' : 'disabled' ?> title="Seçili palet fişini siler: ilk basış satırı kırmızı yapar, ikinci basış siler (F3 / Delete)">🗑 F3 - Sil</button>
+                <button type="button" class="pf-tb" data-pf="coglat" <?= muhasebe_palet_can('create') ? '' : 'disabled' ?> title="Seçili palet fişini kopyalar ve kopyayı düzeltme penceresinde açar (Ctrl+Shift+D)">⧉ Çoğalt</button>
+                <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2 || !muhasebe_palet_can('create')) ? 'disabled' : '' ?> title="Yeni palet fişi (F2)">＋ F2 - Ekle</button>
             </div>
         </form>
     </div>
