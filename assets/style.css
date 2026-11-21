@@ -7266,8 +7266,10 @@ html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --m
 .mk-btn-add { color: var(--mk-accent); border-color: var(--mk-accent); background: transparent; font-weight: 600; }
 .mk-form .kantar-tartim-wrap { margin-top: 0; }
 .mk-ico { font-size: 1.1rem; line-height: 1; }
-.mk-card-aciklama { display: flex; flex-direction: column; }
-.mk-aciklama { flex: 1 1 auto; min-height: 130px; resize: vertical; }
+.mk-aciklama { min-height: 84px; resize: vertical; }
+.mk-card-gorsel { display: flex; flex-direction: column; }
+.mk-card-gorsel .kantar-img-area { flex: 1 1 auto; margin-bottom: 8px; }
+.mk-card-gorsel > .btn { align-self: flex-start; }
 .mk-form .kantar-img-area { margin-bottom: 8px; min-height: 120px; }
 .mk-form .kantar-img-area.is-drag { border-color: var(--mk-accent); background: var(--mk-soft); }
 .kantar-img-ph small { display: block; margin-top: 4px; font-size: .75rem; opacity: .8; }

@@ -226,6 +226,13 @@ function kf_datalist(string $id, array $items): string {
     </div>
 </section>
 
+<!-- ══════════════ AÇIKLAMA ══════════════ -->
+<section class="card mk-card">
+    <h2 class="mk-sec-title"><span aria-hidden="true">💬</span> Açıklama</h2>
+    <textarea name="aciklama" rows="3" class="mk-aciklama"
+              placeholder="Açıklama, not veya ek bilgi girebilirsiniz..."><?= h($fis['aciklama'] ?? '') ?></textarea>
+</section>
+
 <!-- ══════════════ GRUPLANDIRMA ══════════════ -->
 <div class="grup-toggle-bar">
     <button type="button" id="grupToggleBtn" class="btn btn-ghost btn-sm">🗂 Gruplandırma Ekle</button>
@@ -300,27 +307,21 @@ function kf_datalist(string $id, array $items): string {
         </div>
     </section>
 
-    <!-- ══════════════ AÇIKLAMA ══════════════ -->
-    <section class="card mk-card mk-card-aciklama">
-        <h2 class="mk-sec-title"><span aria-hidden="true">💬</span> Açıklama</h2>
-        <textarea name="aciklama" rows="5" class="mk-aciklama"
-                  placeholder="Açıklama, not veya ek bilgi girebilirsiniz..."><?= h($fis['aciklama'] ?? '') ?></textarea>
+    <!-- ══════════════ FİŞ GÖRSELİ ══════════════ -->
+    <section class="card mk-card mk-card-gorsel">
+        <h2 class="mk-sec-title"><span aria-hidden="true">🖼</span> Fiş Görseli</h2>
+        <div class="kantar-img-area" id="kantarImgArea" role="button" tabindex="0">
+            <img id="kantarImgDisplay" class="kantar-img-display" alt="" style="display:none">
+            <div id="kantarImgPh" class="kantar-img-ph">
+                <span class="kantar-img-ph-ico" aria-hidden="true">⬆️</span>
+                Fotoğraf veya belge eklemek için tıklayın ya da sürükleyip bırakın
+                <small>JPG, PNG (Maks. 10 MB)</small>
+            </div>
+        </div>
+        <button type="button" id="kantarImgKaldir" class="btn btn-danger btn-sm" style="display:none">✕ Görseli Kaldır</button>
     </section>
 </div>
 
-<!-- ══════════════ FİŞ GÖRSELİ ══════════════ -->
-<section class="card mk-card">
-    <h2 class="mk-sec-title"><span aria-hidden="true">🖼</span> Fiş Görseli</h2>
-    <div class="kantar-img-area" id="kantarImgArea" role="button" tabindex="0">
-        <img id="kantarImgDisplay" class="kantar-img-display" alt="" style="display:none">
-        <div id="kantarImgPh" class="kantar-img-ph">
-            <span class="kantar-img-ph-ico" aria-hidden="true">⬆️</span>
-            Fotoğraf veya belge eklemek için tıklayın ya da sürükleyip bırakın
-            <small>JPG, PNG (Maks. 10 MB)</small>
-        </div>
-    </div>
-    <button type="button" id="kantarImgKaldir" class="btn btn-danger btn-sm" style="display:none">✕ Görseli Kaldır</button>
-</section>
 <input type="hidden" name="foto_data" id="kantarFotoDataInput" value="">
 
 <div class="form-foot mk-foot">
