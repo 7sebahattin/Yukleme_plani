@@ -115,7 +115,6 @@
         });
     }
     function sutunPenceresi() { if (!dlg || dlg.open) return; listeCiz(); dlg.showModal(); }
-    document.getElementById('kfSutunBtn').addEventListener('click', sutunPenceresi);
     head.addEventListener('dblclick', function (e) { if (e.target.closest('.pf-rs')) return; e.preventDefault(); clearTimeout(siralaZaman); sutunPenceresi(); });
     document.getElementById('kfSutunTamam').addEventListener('click', function () { dlg.close(); });
     document.getElementById('kfSutunKapat').addEventListener('click', function () { dlg.close(); });
@@ -205,10 +204,81 @@
         }
     });
 
+    // ── Yazdır: GÖRÜNEN liste (süzgeç + sıralama + gizli sütunlar uygulanmış hâliyle), gizli çerçeve ile ──
+    var kacis = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    function yazdir() {
+        var basliklar = Array.prototype.slice.call(head.children).filter(function (th) { return !gizli.has(th.dataset.col); });
+        var gorunen = satirlar.filter(function (r) { return !r.hidden; });
+        if (!gorunen.length) { durumYaz('Yazdırılacak kayıt yok.'); return; }
+        var SAYISAL = ['palet', 'kasa', 't1', 't2', 'brut', 'dara', 'net'];      // sağa yaslı
+        var TOPLANAN = ['palet', 'kasa', 'brut', 'dara', 'net'];                 // alt toplam (1./2. tartım toplanmaz)
+        var toplam = {};
+        var govde = gorunen.map(function (r) {
+            return '<tr>' + basliklar.map(function (th) {
+                var c = th.dataset.col, td = r.querySelector('td[data-col="' + c + '"]');
+                if (TOPLANAN.indexOf(c) >= 0) toplam[c] = (toplam[c] || 0) + (td ? parseFloat(td.dataset.sort) || 0 : 0);
+                return '<td class="' + (SAYISAL.indexOf(c) >= 0 ? 'n' : 'm') + '">' + kacis(td ? td.textContent : '') + '</td>';
+            }).join('') + '</tr>';
+        }).join('');
+        var n0 = function (v) { return Math.round(v).toLocaleString('tr-TR'); };
+        var alt = '<tr class="t">' + basliklar.map(function (th, i) {
+            var c = th.dataset.col;
+            if (TOPLANAN.indexOf(c) >= 0) return '<td class="n">' + n0(toplam[c] || 0) + '</td>';
+            return '<td>' + (i === 0 ? 'TOPLAM' : '') + '</td>';
+        }).join('') + '</tr>';
+        // Süzgeç özeti (kullanıcı neyin yazdırıldığını görsün)
+        var suz = Object.keys(filtreler).filter(function (c) { return filtreler[c]; }).map(function (c) {
+            var th = head.querySelector('th[data-col="' + c + '"]');
+            var inp = filtreSatir.querySelector('input[data-f="' + c + '"]');
+            return (th ? th.childNodes[0].textContent.trim() : c) + ': ' + (inp ? inp.value.trim() : '');
+        });
+        var yogun = basliklar.length > 15 ? 8 : basliklar.length > 10 ? 9.5 : 11;   // sütun sayısına göre yazı boyu
+        var html = '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Mal Kabul Fişleri</title><style>'
+            + '@page{size:A4 landscape;margin:9mm 8mm 11mm;@bottom-right{content:"Sayfa " counter(page) " / " counter(pages);font:9px system-ui,Arial,sans-serif;color:#555}}'
+            + '*{box-sizing:border-box}body{margin:0;font:' + yogun + 'px/1.3 system-ui,Arial,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+            + 'h1{font-size:' + (yogun + 5) + 'px;margin:0 0 2px}p{margin:0 0 7px;color:#555;font-size:' + Math.max(8, yogun - 1) + 'px}'
+            + 'table{width:100%;border-collapse:collapse;table-layout:auto}th,td{border:1px solid #8a94a0;padding:2px 4px;vertical-align:top}'
+            + 'th{background:#dfe8f2;font-weight:700;text-align:center}thead{display:table-header-group}tfoot{display:table-footer-group}tr{break-inside:avoid;page-break-inside:avoid}'
+            + 'td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}td.m{overflow-wrap:anywhere}tbody tr:nth-child(even) td{background:#f6f8fb}'
+            + 'tr.t td{font-weight:700;background:#e9eef5!important;border-top:2px solid #444}</style></head><body>'
+            + '<h1>Mal Kabul Fişleri</h1><p>' + n0(gorunen.length) + ' fiş' + (satirlar.length !== gorunen.length ? ' (toplam ' + n0(satirlar.length) + ' içinden süzülmüş)' : '')
+            + (suz.length ? ' · Süzgeç: ' + kacis(suz.join('; ')) : '') + ' · ' + new Date().toLocaleString('tr-TR') + '</p>'
+            + '<table><thead><tr>' + basliklar.map(function (th) { return '<th>' + kacis(th.childNodes[0].textContent.trim()) + '</th>'; }).join('') + '</tr></thead>'
+            + '<tbody>' + govde + alt + '</tbody></table></body></html>';
+        var cerceve = document.createElement('iframe');
+        cerceve.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+        cerceve.srcdoc = html;
+        cerceve.onload = function () {
+            try { cerceve.contentWindow.focus(); cerceve.contentWindow.print(); }
+            finally { setTimeout(function () { cerceve.remove(); }, 60000); }
+        };
+        document.body.appendChild(cerceve);
+    }
+    document.getElementById('kfYazdirBtn').addEventListener('click', yazdir);
+
+    // ── Sayfa pencere yüksekliğine ölçeklenir: tablo kalan alanı doldurur, altta boşluk kalmaz (PC + mobil) ──
+    function fitPage() {
+        var ust = page.getBoundingClientRect().top + window.scrollY;
+        if (window.innerWidth < 768) {
+            // Mobil: sayfa kaymaz; alt çubuğun (--bn-h + güvenli alan) üstünde biter, yalnız tablo kayar
+            var probe = document.createElement('div');
+            probe.style.cssText = 'position:fixed;left:-9999px;bottom:0;height:0;padding-bottom:calc(var(--bn-h, 0px) + env(safe-area-inset-bottom, 0px))';
+            document.body.appendChild(probe);
+            var altBosluk = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+            probe.remove();
+            page.style.height = Math.max(240, window.innerHeight - ust - altBosluk - 8) + 'px';
+        } else {
+            page.style.height = Math.max(320, window.innerHeight - ust - 12) + 'px';
+        }
+        filtreSatiriKonum();
+    }
+
     gizliUygula();
     varsayilanGenislikler();
     genislikUygula();
     filtreSatiriKonum();
     sonucuGuncelle();
-    window.addEventListener('resize', filtreSatiriKonum);
+    fitPage();
+    window.addEventListener('resize', fitPage);
+    window.addEventListener('load', fitPage);
 })();
