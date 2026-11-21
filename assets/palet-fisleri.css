@@ -1,6 +1,6 @@
 /* ── Renk belirteçleri: açık/koyu tema (style.css'te --surface YOK; eskiden hep beyaza düşüyordu) ── */
-.pf-page,.pf-dialog{--pf-surface:#fff;--pf-text:#162c44;--pf-muted:#63758a;--pf-bg:#eef3f8;--pf-gutter:#e4eaf1;--pf-link:#075b9e;--pf-title:#0b4f8f;--pf-ok:#0b6b2e;--pf-err:#b42318;--pf-warn:#9a5b00;--pf-hover-bg:#d5ecff;--pf-hover-text:#06365f;--pf-bul-input:#dff3f0;--pf-bul-border:#7ab8b0}
-html[data-theme="dark"] .pf-page,html[data-theme="dark"] .pf-dialog{--pf-surface:var(--card,#161d27);--pf-text:#e7ecf4;--pf-muted:#a9b6c9;--pf-bg:#0f141b;--pf-gutter:#1a2331;--pf-link:#7cc0ff;--pf-title:#8cc8ff;--pf-ok:#4fd68a;--pf-err:#ff8a82;--pf-warn:#f0b84f;--pf-hover-bg:#1d3a5c;--pf-hover-text:#e7f3ff;--pf-bul-input:#12303a;--pf-bul-border:#2c6a66}
+.pf-page,.pf-dialog{--pf-kg-bg:#dcecfb;--pf-kg-border:#8dbbe6;--pf-surface:#fff;--pf-text:#162c44;--pf-muted:#63758a;--pf-bg:#eef3f8;--pf-gutter:#e4eaf1;--pf-link:#075b9e;--pf-title:#0b4f8f;--pf-ok:#0b6b2e;--pf-err:#b42318;--pf-warn:#9a5b00;--pf-hover-bg:#d5ecff;--pf-hover-text:#06365f;--pf-bul-input:#dff3f0;--pf-bul-border:#7ab8b0}
+html[data-theme="dark"] .pf-page,html[data-theme="dark"] .pf-dialog{--pf-kg-bg:#14304d;--pf-kg-border:#2f6aa3;--pf-surface:var(--card,#161d27);--pf-text:#e7ecf4;--pf-muted:#a9b6c9;--pf-bg:#0f141b;--pf-gutter:#1a2331;--pf-link:#7cc0ff;--pf-title:#8cc8ff;--pf-ok:#4fd68a;--pf-err:#ff8a82;--pf-warn:#f0b84f;--pf-hover-bg:#1d3a5c;--pf-hover-text:#e7f3ff;--pf-bul-input:#12303a;--pf-bul-border:#2c6a66}
 .pf-page,.pf-page input,.pf-page button,.pf-page select,.pf-dialog,.pf-dialog input,.pf-dialog button,.pf-dialog select{font-family:inherit}
 main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;overflow:hidden}
 .pf-page{--pf-border:var(--border,#c9d6e4);--pf-head:#0e477c;--pf-blue:#0877d1;display:flex;flex-direction:column;gap:12px;width:100%;max-width:none;height:calc(100dvh - 132px);min-height:360px;margin:0;padding:0 0 8px;overflow:hidden}
@@ -126,9 +126,7 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-kart:hover{border-color:#0782dc;box-shadow:0 4px 12px #0b244033;transform:translateY(-1px)}
 .pf-kart:focus-visible{outline:2px solid #0782dc;outline-offset:2px}
 .pf-table-wrap{background:linear-gradient(to right,var(--pf-gutter) 22px,transparent 22px),var(--pf-surface)}
-.pf-kose{position:sticky;top:0;left:0;z-index:6;width:22px;height:34px;margin-bottom:-34px;box-sizing:border-box;background:var(--pf-head);border-right:1px solid #ffffff55;cursor:pointer}
-.pf-kose::after{content:"";position:absolute;right:3px;bottom:3px;border:5px solid transparent;border-right-color:#ffffffb0;border-bottom-color:#ffffffb0}
-.pf-kose:hover{background:#0a5ea8}
+.pf-kose{position:sticky;top:0;left:0;z-index:6;width:22px;height:34px;margin-bottom:-34px;box-sizing:border-box;background:var(--pf-head);border-right:1px solid #ffffff55}
 .pf-table{table-layout:fixed;width:max-content;min-width:0!important;margin-left:22px}
 .pf-table td{max-width:none!important}
 .pf-table th{height:34px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
@@ -215,3 +213,25 @@ html[data-theme="dark"] .pf-bul-baslik{background:linear-gradient(#2c4b70,#1f3a5
   #pfDialog .pf-dialog-foot .pf-shortcut{display:none}
 }
 .pf-kg input[name="dara_kg"]{color:var(--pf-text)}
+
+/* ── v541: palet/ambalaj dara göstergesi + Brüt/Dara/Net bandı ── */
+.pf-birimli{padding-right:112px!important}
+.pf-birim{position:absolute;right:12px;bottom:0;height:48px;display:flex;align-items:center;pointer-events:none;color:var(--pf-title);font-size:.82rem;font-weight:800;white-space:nowrap}
+.pf-birim[hidden]{display:none}
+.pf-form-grid>label.pf-kg{background:var(--pf-kg-bg);border:1px solid var(--pf-kg-border);border-radius:12px;padding:10px 12px 12px}
+@media(max-width:699px){
+  #pfDialog .pf-birimli{padding-right:84px!important}
+  #pfDialog .pf-birim{height:44px;right:10px;font-size:.74rem}
+  #pfDialog .pf-birim[data-birim="kasa"]{font-size:0}   /* dar kutuda "Dara" sözü düşer: 1,5 kg/adet */
+  #pfDialog .pf-birim[data-birim="kasa"]::after{content:attr(data-kisa);font-size:.74rem}
+  #pfDialog .pf-form-grid>label.pf-kg{padding:7px 6px 8px;border-radius:10px}
+}
+
+/* ── v542: sütun taşıma — yarı saydam hayalet başlık + bırakma çizgisi; sütun yalnız bırakınca taşınır ── */
+.pf-table th{cursor:grab}
+.pf-table th .pf-rs{cursor:col-resize}
+.pf-table th.pf-drag-armed{background:var(--pf-head);box-shadow:none;opacity:.45;cursor:grabbing}
+.pf-table td.pf-kol-soluk{opacity:.4}
+body.pf-suruklen{cursor:grabbing;user-select:none;-webkit-user-select:none}
+.pf-hayalet{position:fixed;z-index:3500;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 10px;background:#0e477c;color:#fff;font-weight:700;font-size:.88rem;border:2px solid #70d2ff;border-radius:6px;opacity:.72;box-shadow:0 8px 22px #0b244066;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-birak{position:fixed;z-index:3400;width:3px;background:#29b6ff;box-shadow:0 0 8px #29b6ff;border-radius:2px;pointer-events:none}

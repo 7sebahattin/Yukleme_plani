@@ -75,13 +75,35 @@ function pf_valid_date(string $value): bool {
     return $date !== false && $date->format('Y-m-d') === $value;
 }
 
+/**
+ * Son işlem bilgisi (Eklendi / Çoğaltıldı / Düzeltildi + zaman + kullanıcı) audit_log'tan okunur; şema değişmez.
+ * Bu sayfadan hiç işlem görmemiş paletlerde (ör. Yükleme Planı'ndan gelenler) boş kalır.
+ * audit_log / users okunamazsa sütunlar boş döner, liste yine çalışır.
+ * @return array{0:string,1:string} [SELECT parçası, JOIN parçası]
+ */
+function pf_islem_sql(PDO $pdo): array {
+    static $hazir = null;
+    if ($hazir === null) {
+        try { $pdo->query('SELECT 1 FROM audit_log LIMIT 0'); $pdo->query('SELECT 1 FROM users LIMIT 0'); $hazir = true; }
+        catch (Throwable $e) { $hazir = false; }
+    }
+    if (!$hazir) return ["NULL AS islem_kod, 0 AS islem_kopya, NULL AS islem_zaman, '' AS islem_kullanici", ''];
+    return [
+        "al.action AS islem_kod, (al.new_values LIKE '%\"duplicate_of\"%') AS islem_kopya, al.created_at AS islem_zaman, COALESCE(NULLIF(u.display_name, ''), u.username, '') AS islem_kullanici",
+        "LEFT JOIN audit_log al ON al.id = (SELECT MAX(a2.id) FROM audit_log a2 WHERE a2.module = 'palet_fisleri' AND a2.record_id = p.id AND a2.action IN ('create', 'update'))
+         LEFT JOIN users u ON u.id = al.user_id",
+    ];
+}
+
 function pf_get_row(int $id): array {
+    [$islem_sel, $islem_join] = pf_islem_sql(db());
     $st = db()->prepare("SELECT p.*, r.id AS belge_no, r.parti_no, r.firma, r.urun, r.tarih, r.durum, r.locked_at,
-                                COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi
+                                COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi, $islem_sel
                          FROM loading_pallets p
                          JOIN loading_records r ON r.id = p.loading_record_id
                          LEFT JOIN material_definitions md ON md.id = p.palet_tipi_id AND md.type = 'palet_tipi'
                          LEFT JOIN material_definitions kd ON kd.id = p.kasa_cinsi_id AND kd.type = 'kasa_cinsi'
+                         $islem_join
                          WHERE p.id = ? AND r.type = 'yukleme'");
     $st->execute([$id]);
     $row = $st->fetch();
@@ -90,8 +112,19 @@ function pf_get_row(int $id): array {
 }
 
 /** İstemciye giden tek satır (liste hücreleri + Düzelt penceresi için ek alanlar). */
+function pf_tr_tarih(?string $iso, bool $saat = false): string {
+    $t = $iso ? strtotime($iso) : false;
+    return $t ? date($saat ? 'd.m.Y H:i' : 'd.m.Y', $t) : '';
+}
+function pf_islem_adi(array $y): string {
+    $kod = (string)($y['islem_kod'] ?? '');
+    if ($kod === 'update') return 'Düzeltildi';
+    if ($kod === 'create') return !empty($y['islem_kopya']) ? 'Çoğaltıldı' : 'Eklendi';
+    return '';
+}
 function pf_satir_json(array $y): array {
     return [
+        'sube' => (string)($y['depo'] ?? ''), 'islem' => pf_islem_adi($y), 'islem_zaman' => pf_tr_tarih($y['islem_zaman'] ?? null, true), 'kullanici' => (string)($y['islem_kullanici'] ?? ''),
         'id' => (int)$y['id'], 'loading_record_id' => (int)$y['loading_record_id'], 'belge_no' => (int)$y['belge_no'], 'parti_no' => (string)$y['parti_no'],
         'palet_tipi_id' => (int)($y['palet_tipi_id'] ?? 0), 'palet_adi' => (string)$y['palet_adi'], 'firma' => (string)$y['firma'], 'urun' => (string)$y['urun'],
         'tarih' => (string)($y['tarih'] ?? ''), 'kasa_cinsi_id' => (int)($y['kasa_cinsi_id'] ?? 0), 'mustahsil_id' => (int)($y['mustahsil_id'] ?? 0),
@@ -314,16 +347,18 @@ if (!pf_valid_date($f_baslangic)) $f_baslangic = date('Y-m-d', strtotime('-90 da
 $f_yuklenen = !empty($_GET['yuklenen']);
 
 function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $desc1_sql, string $desc2_sql, string $must_sql, string $must_id_sql): array {
+    [$islem_sel, $islem_join] = pf_islem_sql($pdo);
     $w = "r.type = 'yukleme' AND r.tarih >= ?";
     if (!$yuklenen) $w .= " AND COALESCE(r.durum, '') <> 'yuklendi'";
     $st = $pdo->prepare("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
                           p.palet_tipi_id, p.kasa_cinsi_id, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql,
                           r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun, r.durum, r.locked_at,
-                          COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi
+                          p.depo, COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi, $islem_sel
                    FROM loading_pallets p
                    JOIN loading_records r ON r.id = p.loading_record_id
                    LEFT JOIN material_definitions md ON md.id = p.palet_tipi_id AND md.type = 'palet_tipi'
                    LEFT JOIN material_definitions kd ON kd.id = p.kasa_cinsi_id AND kd.type = 'kasa_cinsi'
+                   $islem_join
                    WHERE $w
                    ORDER BY r.id DESC, p.sira_no ASC, p.id DESC");
     $st->execute([$baslangic]);
@@ -337,13 +372,13 @@ if ($export === 'csv' || $export === 'xlsx') {
     require_perm('reports.export');
     $bas = ['Belge No', 'Tarih', 'Parti No', 'Palet', 'Ünvan', 'Ürün', 'Ambalaj', 'Adet', 'BRÜT', 'Dara', 'NET'];
     if ($has_mustahsil) $bas[] = 'Müstahsil';
-    array_push($bas, 'Açıklama-1', 'Açıklama-2');
+    array_push($bas, 'Açıklama-1', 'Açıklama-2', 'İşlem', 'İşlem Tarihi', 'Kullanıcı', 'Şube');
     $satirlar = [];
     foreach ($rows as $r) {
         $x = [(int)$r['belge_no'], (string)$r['tarih'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun'], (string)$r['kasa_adi'],
               (int)$r['kasa_adeti'], (float)$r['brut_kg'], (float)$r['dara_kg'], (float)$r['net_kg']];
         if ($has_mustahsil) $x[] = (string)$r['mustahsil_ad'];
-        array_push($x, (string)$r['aciklama1'], (string)$r['aciklama2']);
+        array_push($x, (string)$r['aciklama1'], (string)$r['aciklama2'], pf_islem_adi($r), pf_tr_tarih($r['islem_zaman'] ?? null, true), (string)($r['islem_kullanici'] ?? ''), (string)($r['depo'] ?? ''));
         $satirlar[] = $x;
     }
     export_audit('palet_fisleri', 'liste', $export, count($satirlar), ['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '0']);
@@ -394,18 +429,20 @@ render_header('Palet Fişleri');
     </div>
     <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.</div><?php endif; ?>
     <div class="pf-table-wrap" id="pfTableWrap" tabindex="0" aria-label="Palet fişleri tablosu">
-        <div class="pf-kose" id="pfKose" role="button" tabindex="-1" title="Çift tıklayın: sütunları içeriğe göre daralt" aria-label="Sütunları içeriğe göre daralt"></div>
+        <div class="pf-kose" aria-hidden="true"></div>
         <table class="pf-table" id="pfTable">
             <thead><tr>
-                <th data-col="belge_no">Belge No</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
+                <th data-col="belge_no">Belge No</th><th data-col="tarih">Tarih</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
                 <th data-col="kasa_adi">Ambalaj</th><th data-col="kasa_adeti">Adet</th><th data-col="brut_kg">BRÜT</th><th data-col="dara_kg">Dara</th><th data-col="net_kg">NET</th>
                 <?php if ($has_mustahsil): ?><th data-col="mustahsil_ad">Müstahsil</th><?php endif; ?>
                 <th data-col="aciklama1">Açıklama-1</th><th data-col="aciklama2">Açıklama-2</th>
+                <th data-col="islem">İşlem</th><th data-col="islem_zaman">İşlem Tarihi</th><th data-col="kullanici">Kullanıcı</th><th data-col="sube">Şube</th>
             </tr></thead>
             <tbody id="pfBody">
             <?php foreach ($rows as $r): ?>
                 <tr data-id="<?= (int)$r['id'] ?>" data-record-id="<?= (int)$r['loading_record_id'] ?>" data-urun="<?= h($r['urun']) ?>" data-tarih="<?= h($r['tarih']) ?>" data-kasa-id="<?= (int)($r['kasa_cinsi_id'] ?? 0) ?>" data-must-id="<?= (int)($r['mustahsil_id'] ?? 0) ?>" data-kilit="<?= (!empty($r['locked_at']) || ($r['durum'] ?? '') === 'yuklendi') ? 1 : 0 ?>" data-search="<?= h(mb_strtolower(implode(' ', [(string)$r['belge_no'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun']]), 'UTF-8')) ?>">
                     <td class="pf-cell" data-col="belge_no" data-value="<?= (int)$r['belge_no'] ?>"><?= (int)$r['belge_no'] ?></td>
+                    <td class="pf-cell" data-col="tarih" data-value="<?= h(pf_tr_tarih($r['tarih'])) ?>"><?= h(pf_tr_tarih($r['tarih'])) ?></td>
                     <td class="pf-cell" data-col="parti_no" data-value="<?= h($r['parti_no']) ?>"><?= h($r['parti_no']) ?></td>
                     <td class="pf-cell" data-col="palet_adi" data-value="<?= h($r['palet_tipi_id']) ?>"><?= h($r['palet_adi']) ?></td>
                     <td class="pf-cell" data-col="firma" data-value="<?= h($r['firma']) ?>"><?= h($r['firma']) ?></td>
@@ -417,6 +454,10 @@ render_header('Palet Fişleri');
                     <?php if ($has_mustahsil): ?><td class="pf-cell" data-col="mustahsil_ad" data-value="<?= h($r['mustahsil_ad']) ?>"><?= h($r['mustahsil_ad']) ?></td><?php endif; ?>
                     <td class="pf-cell" data-col="aciklama1" data-value="<?= h($r['aciklama1']) ?>"><?= h($r['aciklama1']) ?></td>
                     <td class="pf-cell" data-col="aciklama2" data-value="<?= h($r['aciklama2']) ?>"><?= h($r['aciklama2']) ?></td>
+                    <td class="pf-cell" data-col="islem" data-value="<?= h(pf_islem_adi($r)) ?>"><?= h(pf_islem_adi($r)) ?></td>
+                    <td class="pf-cell" data-col="islem_zaman" data-value="<?= h(pf_tr_tarih($r['islem_zaman'] ?? null, true)) ?>"><?= h(pf_tr_tarih($r['islem_zaman'] ?? null, true)) ?></td>
+                    <td class="pf-cell" data-col="kullanici" data-value="<?= h($r['islem_kullanici'] ?? '') ?>"><?= h($r['islem_kullanici'] ?? '') ?></td>
+                    <td class="pf-cell" data-col="sube" data-value="<?= h($r['depo'] ?? '') ?>"><?= h($r['depo'] ?? '') ?></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
@@ -442,10 +483,10 @@ render_header('Palet Fişleri');
             <label class="pf-w3">Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
             <label class="pf-w3">Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
             <label class="pf-cb pf-w6">Parti No <input name="parti_no" data-cb="parti" maxlength="100"></label>
-            <label class="pf-cb pf-w6">Palet <input name="palet" data-cb="palet"></label>
+            <label class="pf-cb pf-w6">Palet <input name="palet" data-cb="palet" class="pf-birimli"><span class="pf-birim" data-birim="palet" hidden></span></label>
             <label class="pf-cb pf-w6">Müşteri <input name="firma" data-cb="firma" maxlength="150" required></label>
             <label class="pf-cb pf-w6">Ürün <input name="urun" data-cb="urun" maxlength="150" required></label>
-            <label class="pf-cb pf-w4">Kasa Ambalaj <input name="kasa" data-cb="kasa"></label>
+            <label class="pf-cb pf-w4">Kasa Ambalaj <input name="kasa" data-cb="kasa" class="pf-birimli"><span class="pf-birim" data-birim="kasa" hidden></span></label>
             <label class="pf-w2">Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
             <label class="pf-cb pf-must pf-w6">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? '' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
             <label class="pf-kg pf-w2">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" hidden disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
