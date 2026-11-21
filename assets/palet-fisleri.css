@@ -10,7 +10,7 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-search{display:flex;align-items:center;gap:6px;max-width:300px;flex:1;min-width:160px;background:#fff;border-radius:6px;padding:0 8px;color:#345;margin-left:auto}
 .pf-search span{font-size:1.2rem;line-height:1}
 .pf-search input{width:100%;border:0;outline:0;padding:6px 0;background:transparent;color:#10253c}
-.pf-hints{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.72rem;color:#e1edf8}
+.pf-hints{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.72rem;color:#e1edf8}
 .pf-table-wrap{position:relative;flex:1;min-height:0;overflow:auto;border:1px solid var(--pf-border);border-radius:8px;background:var(--surface,#fff);overscroll-behavior:contain;scrollbar-gutter:stable}
 .pf-table{width:max(100%,1150px);border-collapse:separate;border-spacing:0;table-layout:auto;font-size:.88rem;color:var(--text,#162c44)}
 .pf-table th{position:sticky;top:0;z-index:2;background:var(--pf-head);color:#fff;padding:7px 9px;text-align:center;font-weight:700;white-space:nowrap;border-right:1px solid #ffffff35;border-bottom:1px solid #062d50;user-select:none;touch-action:pan-y}

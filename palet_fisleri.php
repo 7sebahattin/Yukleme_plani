@@ -201,7 +201,6 @@ render_header('Palet Fişleri');
 <section class="pf-page" id="pfPage" data-csrf="<?= h(csrf_token()) ?>">
     <div class="pf-top">
         <div class="pf-title"><div><h1>Palet Fişleri</h1><p>Yeni kayıtlar listenin en üstünde görünür.</p></div>
-            <button type="button" class="btn btn-primary" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?>>＋ Yeni Palet Fişi <span class="pf-shortcut">Ctrl + N</span></button>
         </div>
         <div class="pf-toolbar" role="toolbar" aria-label="Palet fişi araçları">
             <div class="pf-tb-grup">
@@ -222,7 +221,6 @@ render_header('Palet Fişleri');
             <label class="pf-f-alan">Başlangıç Tarihi <input type="date" value="<?= h(date('Y-m-d', strtotime('-3 months'))) ?>" data-pf-pasif></label>
             <label class="pf-f-alan pf-f-chk">Yüklenen Paletleri Göster <input type="checkbox" data-pf-pasif></label>
             <button type="button" class="pf-getir" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⌕ Getir</button>
-            <label class="pf-search"><span aria-hidden="true">⌕</span><input id="pfSearch" type="search" placeholder="Belge, parti, palet veya ünvan ara" autocomplete="off"></label>
             <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Kopyala: Ctrl + Shift + D</span><span>Sil: Delete</span></div>
         </div>
     </div>
