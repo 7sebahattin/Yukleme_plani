@@ -7225,3 +7225,63 @@ html[data-theme="dark"] .usr-ozet-e-var { color:#4ade80; }
     .usr-ozet-satir { flex-wrap:wrap; gap:6px 8px; }
     .usr-ozet-ad { flex-basis:100%; }
 }
+
+/* ═══ Mal Kabul Fişi formu (_kantar_form.php, v544) ═══ */
+.mk-form { --mk-accent: #12824a; --mk-soft: #e6f4ec; --mk-warn: #b45309; --mk-warn-soft: #fff1e0; }
+html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --mk-warn: #f5b062; --mk-warn-soft: #3a2a17; }
+.mk-head-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mk-head-ico { flex: 0 0 auto; width: 44px; height: 44px; }
+.mk-head h1 { margin: 0; line-height: 1.2; }
+.mk-sub { margin: 2px 0 0; font-size: .85rem; color: var(--muted); }
+.mk-card { margin-bottom: 14px; }
+.mk-sec-title {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+    padding: 8px 12px; border-radius: var(--radius-sm);
+    background: var(--mk-soft); color: var(--mk-accent);
+    font-size: .95rem; font-weight: 700;
+}
+.mk-sec-title--tartim { background: var(--mk-warn-soft); color: var(--mk-warn); }
+.mk-g { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.mk-lbl { display: block; font-size: .85rem; color: var(--muted); font-weight: 500; }
+.mk-lbl > input, .mk-lbl > select, .mk-lbl > small { display: block; margin-top: 4px; }
+.mk-lbl > small.mk-inline { display: inline; margin: 0; }
+.mk-lbl > input[type="datetime-local"] {
+    width: 100%; padding: 10px 12px; min-height: 42px; font-family: inherit; font-size: 1rem;
+    color: var(--text); background: #fff; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+}
+.mk-lbl > input[type="datetime-local"]:focus { outline: 2px solid var(--primary); outline-offset: -1px; border-color: var(--primary); }
+.mk-row2 { display: grid; grid-template-columns: 1fr; gap: 0; }
+.mk-row2 > .mk-card { margin-bottom: 14px; }
+.mk-ambalaj { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.mk-form .kp-section { margin-top: 0; }
+.mk-form .kp-section-title { text-transform: none; letter-spacing: 0; font-size: .9rem; color: var(--text); }
+.mk-form .kp-row { background: none; border: 0; padding: 0; }
+.mk-btn-add { color: var(--mk-accent); border-color: var(--mk-accent); background: transparent; font-weight: 600; }
+.mk-form .kantar-tartim-wrap { margin-top: 0; }
+.mk-ico { font-size: 1.1rem; line-height: 1; }
+.mk-card-aciklama { display: flex; flex-direction: column; }
+.mk-aciklama { flex: 1 1 auto; min-height: 130px; resize: vertical; }
+.mk-form .kantar-img-area { margin-bottom: 8px; min-height: 120px; }
+.mk-form .kantar-img-area.is-drag { border-color: var(--mk-accent); background: var(--mk-soft); }
+.kantar-img-ph small { display: block; margin-top: 4px; font-size: .75rem; opacity: .8; }
+.kantar-img-ph-ico { display: block; font-size: 1.4rem; margin-bottom: 4px; }
+.mk-foot { flex-direction: row; justify-content: space-between; align-items: center; }
+.mk-foot-left, .mk-foot-right { display: flex; gap: 8px; flex-wrap: wrap; }
+.mk-foot-right { justify-content: flex-end; }
+@media (min-width: 720px) {
+    .mk-g2 { grid-template-columns: 1fr 1fr; }
+    .mk-g4 { grid-template-columns: 1fr 1fr; }
+    .mk-g2 > .mk-span2 { grid-column: 1 / -1; }
+}
+@media (min-width: 900px) {
+    .mk-g4 { grid-template-columns: repeat(4, 1fr); }
+    .mk-row2 { grid-template-columns: 1fr 1fr; gap: 14px; }
+    .mk-ambalaj { grid-template-columns: 1fr 1fr; gap: 28px; }
+    .mk-ambalaj > .kp-section + .kp-section { border-left: 1px solid var(--border); padding-left: 28px; }
+}
+@media (max-width: 767px) {
+    .mk-foot-left, .mk-foot-right { width: 100%; }
+    .mk-foot-left .btn { flex: 1 1 0; }
+    .mk-foot-right .btn { flex: 1 1 auto; }
+    .mk-head .page-head-actions { width: 100%; }
+}

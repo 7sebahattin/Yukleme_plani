@@ -848,12 +848,12 @@ function stok_modal_kantar(PDO $pdo): string
             . ($akt ? '<span class="st-rozet">Aktarıldı · ' . h($akt['fis_no']) . '</span>' : '') . '</span></label></li>';
     }
     $govde = $ad
-        ? '<label class="st-sr" for="stKantarAra">Kantar fişi ara</label><input type="search" id="stKantarAra" class="st-kantar-ara" placeholder="Ara: kantar no, firma, ürün" autocomplete="off" data-ilk-odak>'
+        ? '<label class="st-sr" for="stKantarAra">Mal kabul fişi ara</label><input type="search" id="stKantarAra" class="st-kantar-ara" placeholder="Ara: kantar no, firma, ürün" autocomplete="off" data-ilk-odak>'
           . '<p class="st-ipucu">Net kg = tartım neti − kasa darası − palet darası (Ürün Stoğu ile aynı formül). Kantar kaydı DEĞİŞMEZ; yalnız form doldurulur.</p>'
-          . '<ul class="st-kaynak-liste" aria-label="Kantar fişleri">' . $lst . '</ul>'
-        : stok_bos('Aktarılmamış kantar fişi yok', 'Aktif depoda kantar (mal kabul) kaydı bulunmuyor.', '<a class="btn" href="kantar.php">Mal Kabul</a>', 'h3');
+          . '<ul class="st-kaynak-liste" aria-label="Mal kabul fişleri">' . $lst . '</ul>'
+        : stok_bos('Aktarılmamış mal kabul fişi yok', 'Aktif depoda kantar (mal kabul) kaydı bulunmuyor.', '<a class="btn" href="kantar.php">Mal Kabul</a>', 'h3');
     return '<div class="pm-overlay" id="stModalKantar" hidden><div class="pm-dialog st-dialog st-dialog--genis st-dialog--uzun" role="dialog" aria-modal="true" aria-labelledby="stKantarBaslik">'
-        . '<div class="pm-header"><span class="st-tutamac" aria-hidden="true"></span><h2 class="pm-title" id="stKantarBaslik">Kantar fişinden doldur</h2><button type="button" class="pm-close" data-st-kapat aria-label="Kapat">&#10005;</button></div>'
+        . '<div class="pm-header"><span class="st-tutamac" aria-hidden="true"></span><h2 class="pm-title" id="stKantarBaslik">Mal kabul fişinden doldur</h2><button type="button" class="pm-close" data-st-kapat aria-label="Kapat">&#10005;</button></div>'
         . '<form method="get" action="stok_giris_fisleri.php" data-st-kantar-form><input type="hidden" name="yeni" value="1"><div class="pm-body">' . $govde . '</div>'
         . '<div class="pm-footer"><span class="st-klavye">Enter seçer · Esc kapatır</span><button type="button" class="btn" data-st-kapat>Vazgeç</button>'
         . '<button type="submit" class="btn btn-primary"' . ($ad ? '' : ' disabled') . '>Seç</button></div></form></div></div>';
@@ -887,7 +887,7 @@ function stok_fis_sayfa_govde(PDO $pdo, string $tur): string
         }
         $kid = max(0, (int)($_GET['kantar_id'] ?? 0));
         if ($tur === 'giris' && $kid > 0 && ($kn = stok_kantar_oneri($pdo, $kid)) !== null) {
-            if (!empty($kn['aktarildi'])) $not = 'Bu kantar fişi zaten ' . $kn['aktarildi']['fis_no'] . ' ile aktarılmış.';
+            if (!empty($kn['aktarildi'])) $not = 'Bu mal kabul fişi zaten ' . $kn['aktarildi']['fis_no'] . ' ile aktarılmış.';
             else $o = ['tarih' => $kn['tarih'], 'depo' => $kn['depo'], 'cari_id' => $kn['cari_id'], 'kaynak_modul' => 'kantar', 'kaynak_id' => $kn['kantar_id'],
                 'kaynak_bilgi' => 'Kantar #' . $kn['kantar_no'] . '’ten dolduruldu · ' . stok_miktar_birim($kn['miktar_milli'], 'kg') . ' net' . ($kn['kart_id'] === null && $kn['urun'] !== '' ? ' · ürün: ' . $kn['urun'] . ' (kartı seçin)' : ''),
                 'satirlar' => [['kart_id' => $kn['kart_id'], 'kart_ara' => $kn['kart_id'] === null ? $kn['urun'] : '', 'miktar' => stok_miktar_bicim($kn['miktar_milli'], 'kg'), 'yon' => 'G']]];

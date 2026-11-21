@@ -325,7 +325,7 @@ $chip_parts[] = 'Palet: ' . $pi_label;
 <!-- Özet bar -->
 <div class="drv-totals-bar">
     <div class="t-item">
-        <span>Kantar Fişi</span>
+        <span>Mal Kabul Fişi</span>
         <strong><?= isset($rpt_snap['kantar_count']) ? (int)$rpt_snap['kantar_count'] : count($kantar_items) ?></strong>
     </div>
     <div class="t-item">
@@ -385,7 +385,7 @@ foreach ($cikma_items as $_ci) {
      1. KANTAR FİŞLERİ
 ══════════════════════════════════════════════════════ -->
 <div class="drv-section">
-    <div class="drv-section-title">Kantar Fişleri (<?= count($kantar_items) ?>)</div>
+    <div class="drv-section-title">Mal Kabul Fişleri (<?= count($kantar_items) ?>)</div>
     <?php if (!empty($kantar_items)): ?>
     <div class="drv-print-summary">
         <?php if ($k_palet_total > 0): ?><div class="drv-ps-item drv-ps-palet"><span>PALET</span><strong><?= $k_palet_total ?></strong></div><?php endif; ?>

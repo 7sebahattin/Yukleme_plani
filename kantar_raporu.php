@@ -239,7 +239,7 @@ if ($is_xlsx) {
     $ad  = fn(string $b) => ['baslik' => $b, 'tip' => 'tamsayi', 'topla' => true];
     $mt  = fn(string $b) => ['baslik' => $b];
     xlsx_indir('kantar_raporu_' . date('Y-m-d') . '.xlsx', [
-        ['ad' => 'Kantar Fişleri', 'baslik' => 'Kantar Raporu — Fiş / Firma Dağılımı', 'aciklama' => $x_ac, 'toplam' => true,
+        ['ad' => 'Mal Kabul Fişleri', 'baslik' => 'Kantar Raporu — Fiş / Firma Dağılımı', 'aciklama' => $x_ac, 'toplam' => true,
          'sutunlar' => [$mt('Fiş No'), ['baslik' => 'Tarih', 'tip' => 'tarihsaat'], $mt('Plaka'), $mt('Malın Cinsi'), $mt('Parti No'), $mt('Firma/Grup'), $mt('Depo'),
                         $ad('Palet'), $ad('Kasa'), $kg('Brüt KG'), $kg('Dara KG'), $kg('Net KG'), $mt('Tür')],
          'satirlar' => $x_sat],
@@ -380,7 +380,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 </div>
 
 <?php if (empty($entries)): ?>
-<div class="empty"><p>Kriterlere uyan kantar fişi bulunamadı.</p></div>
+<div class="empty"><p>Kriterlere uyan mal kabul fişi bulunamadı.</p></div>
 <?php else: ?>
 
 <?php if (count($fisleri) >= 2000): ?>

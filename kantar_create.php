@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_create.php - Yeni kantar fişi oluştur
+// kantar_create.php - Yeni mal kabul fişi oluştur
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -167,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         audit_log_event('create', 'kantar', $fis_id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
-        set_flash('success', 'Kantar fişi oluşturuldu (#' . $fis_id . ').');
+        set_flash('success', 'Mal kabul fişi oluşturuldu (#' . $fis_id . ').');
         header('Location: kantar_view.php?id=' . $fis_id);
         exit;
 
@@ -177,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $form_action  = 'kantar_create.php';
-$title        = 'Yeni Kantar Fişi';
+$title        = 'Yeni Mal Kabul Fişi';
 $submit_label = 'Kaydet';
 $is_edit      = false;
 

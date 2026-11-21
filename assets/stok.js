@@ -629,7 +629,7 @@
         var kf = document.querySelector('form[data-st-kantar-form]');
         if (kf) kf.addEventListener('submit', function (e) {
             var r = $('input[name="kantar_id"]:checked', kf);
-            if (!r) { e.preventDefault(); toast('Bir kantar fişi seçin.', true); return; }
+            if (!r) { e.preventDefault(); toast('Bir mal kabul fişi seçin.', true); return; }
             var o = null; try { o = JSON.parse(r.getAttribute('data-oneri') || 'null'); } catch (x) { o = null; }
             if (!o) return;   // JS verisi yoksa klasik GET (?yeni=1&kantar_id=) sunucu doldurur
             e.preventDefault();

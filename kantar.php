@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar.php - Kantar Fişleri listesi
+// kantar.php - Mal Kabul Fişleri listesi
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -48,20 +48,20 @@ try {
 
 $can_write = can('kantar.edit');
 
-render_header('Kantar');
+render_header('Mal Kabul Fişleri');
 render_flash();
 ?>
 
 <div class="page-head">
     <div>
-        <h1>⚖️ Kantar Fişleri</h1>
+        <h1>⚖️ Mal Kabul Fişleri</h1>
         <?php if (!empty($rows)): ?>
         <p class="muted">Toplam <?= count($rows) ?> fiş</p>
         <?php endif; ?>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <a href="kantar_raporu.php" class="btn btn-ghost btn-sm">📊 Rapor</a>
-        <?php if (can('kantar.create')): ?><a href="kantar_create.php" class="btn btn-primary btn-lg">+ Yeni Kantar Fişi</a><?php endif; ?>
+        <?php if (can('kantar.create')): ?><a href="kantar_create.php" class="btn btn-primary btn-lg">+ Yeni Mal Kabul Fişi</a><?php endif; ?>
     </div>
 </div>
 
@@ -78,7 +78,7 @@ render_flash();
 
 <?php if (empty($rows)): ?>
 <div class="empty">
-    <p>Bu filtreye göre kantar fişi bulunamadı.</p>
+    <p>Bu filtreye göre mal kabul fişi bulunamadı.</p>
     <?php if (can('kantar.create')): ?><a href="kantar_create.php" class="btn btn-primary">İlk fişi oluştur</a><?php endif; ?>
 </div>
 <?php else: ?>
