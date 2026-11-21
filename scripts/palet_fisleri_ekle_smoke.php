@@ -59,5 +59,19 @@ ok('tercih: kullanıcı bazlı (user_id + anahtar) tablo, beyaz liste doğrulay�
 ok('tercih kaydı sayfada kullanıcı kimliğiyle + csrf kapısı içinde', str_contains($php, "kt_yaz(\$pdo, (int)(\$auth_user['id'] ?? 0), \$anahtar, \$deger)") && str_contains($php, "csrf_check(\$_POST['csrf']"));
 ok('tablo yoksa tarayıcıya (localStorage) düşer', str_contains($js, 'localStorage.setItem(YEREL_ANAHTAR') && str_contains($php, "'tercihSunucu' => kt_hazir(\$pdo)"));
 ok('tercih tablosu yalnız migrate.php kartından (ne=kullanici_tercih), sayfa tablo yaratmaz', str_contains((string)file_get_contents(__DIR__ . '/../migrate.php'), "'kullanici_tercih'") && !str_contains($php, 'CREATE TABLE'));
+// ── Bul penceresi + Ambalaj (v538) ──
+ok('Bul: Boşluk tuşu pencereyi açar (yazı alanında/düğmede/açık pencerede değil)', str_contains($js, "event.key !== ' '") && str_contains($js, "document.querySelector('dialog[open]')") && str_contains($js, 'input,select,textarea,button'));
+ok('Bul: 9 arama biçimi (Başlayan … Eşit Olmayan), varsayılan Akıllı arama', substr_count($php, '<option value=') >= 9 && str_contains($php, '<option value="akilli" selected>Akıllı arama</option>') && str_contains($php, 'Eşit Olmayan') && str_contains($php, 'İle Başlamayan') && str_contains($php, 'Boş Olan'));
+ok('Bul: filtre seçili hücrenin sütununa uygulanır, sütunlar birlikte', str_contains($js, "selectedCell?.dataset.col") && str_contains($js, 'const filtreler = new Map()'));
+ok('Bul: onay ✔ / vazgeç ✖ düğmeleri, eski arama kutusu yok', str_contains($php, 'id="pfBulTamam"') && str_contains($php, 'id="pfBulIptal"') && !str_contains($php, 'id="pfBulKutu"'));
+ok('Seçili hücre ayrı renklenir (sabit Parti No arka planı yok)', !str_contains((string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.css'), 'td[data-col="parti_no"]{background:#0b78d0'));
+ok('Ambalaj sütunu (kasa cinsi adı): liste + Excel + tercih beyaz listesi', str_contains($php, '<th data-col="kasa_adi">Ambalaj</th>') && str_contains($php, "kd.type = 'kasa_cinsi'") && str_contains($php, "'Ambalaj'") && str_contains($kt, "'kasa_adi'"));
+// ── Mobil düzen + koyu tema (v538) ──
+$css = (string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.css');
+ok('Durum satırında sabit ipucu yazısı yok (yalnız işlem mesajı)', !str_contains($php, 'Kartlar seçili satırın partisini gösterir') && str_contains($css, '.pf-status:empty{display:none}'));
+ok('Koyu tema: --surface tanımsızdı → sayfa kendi renk belirteçlerini taşır (açık + koyu)', !str_contains($css, 'var(--surface,') && str_contains($css, 'html[data-theme="dark"] .pf-page') && str_contains($css, '--pf-surface:var(--card') && str_contains($css, '--pf-text:#e7ecf4'));
+ok('Araç çubuğu düğmeleri her temada beyaz zemin + koyu yazı', str_contains($css, 'background:#fff;color:#162c44;font:inherit;font-size:.86rem'));
+ok('Mobil: sayfa kaymaz (html/body overflow hidden), tablo kendi içinde kayar', str_contains($css, 'html:has(.pf-page),body:has(.pf-page){overflow:hidden') && str_contains($css, '.pf-table-wrap{flex:1;min-height:0;height:auto}'));
+ok('Mobil: özet kartları tek satır (7 sütun) + kısa etiket, alt çubuğun üstünde biter', str_contains($css, 'grid-template-columns:1.7fr repeat(6,minmax(0,1fr))') && str_contains($php, 'class="pf-k"') && str_contains($js, '--bn-h') && str_contains($js, 'safe-area-inset-bottom'));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
