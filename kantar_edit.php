@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_edit.php - Kantar fişi düzenle
+// kantar_edit.php - Mal kabul fişi düzenle
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $form_action  = 'kantar_edit.php?id=' . $id;
-$title        = 'Kantar Fişi Düzenle';
+$title        = 'Mal Kabul Fişi Düzenle';
 $submit_label = 'Güncelle';
 $is_edit      = true;
 

@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_view.php - Kantar fişi görüntüle + yazdır
+// kantar_view.php - Mal kabul fişi görüntüle + yazdır
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -62,7 +62,7 @@ $st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, 
 $st_g->execute([$id]);
 $gruplar = $st_g->fetchAll() ?: [];
 
-render_header('Kantar Fişi #' . ($fis['fis_no'] ?: $id));
+render_header('Mal Kabul Fişi #' . ($fis['fis_no'] ?: $id));
 render_flash();
 ?>
 
@@ -276,7 +276,7 @@ render_flash();
 <!-- Ekran başlığı -->
 <div class="page-head kv-no-print">
     <div>
-        <h1>⚖️ Kantar Fişi <?= $fis['fis_no'] ? '· ' . h($fis['fis_no']) : '#' . $id ?></h1>
+        <h1>⚖️ Mal Kabul Fişi <?= $fis['fis_no'] ? '· ' . h($fis['fis_no']) : '#' . $id ?></h1>
     </div>
     <div class="page-head-actions">
         <a href="kantar.php" class="btn btn-geri">← Liste</a>
@@ -292,7 +292,7 @@ render_flash();
         <?php if ($has_foto): ?>
         <section class="card kv-photo-card">
             <div class="kv-photo-wrap">
-                <img class="kv-photo" src="kantar_foto.php?id=<?= $id ?>" alt="Kantar fişi görseli">
+                <img class="kv-photo" src="kantar_foto.php?id=<?= $id ?>" alt="Mal kabul fişi görseli">
             </div>
         </section>
         <?php else: ?>

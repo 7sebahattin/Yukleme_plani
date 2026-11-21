@@ -978,7 +978,7 @@ function stok_depo_secenek(string $depo): ?string
     return null;
 }
 
-/** Kantar fişi (salt okunur; tablo yoksa null). */
+/** Mal kabul fişi (salt okunur; tablo yoksa null). */
 function stok_kantar_oku(PDO $pdo, int $id): ?array
 {
     if ($id <= 0) return null;
@@ -992,7 +992,7 @@ function stok_kantar_oku(PDO $pdo, int $id): ?array
     }
 }
 
-/** Kantar fişine bağlı GEÇERLİ stok fişi (çift aktarım koruması). */
+/** Mal kabul fişine bağlı GEÇERLİ stok fişi (çift aktarım koruması). */
 function stok_kantar_bagli_fis(PDO $pdo, int $kantarId): ?array
 {
     $st = $pdo->prepare("SELECT id, fis_no FROM stok_fisler WHERE kaynak_modul = 'kantar' AND kaynak_id = ? AND durum = 'gecerli' ORDER BY id LIMIT 1");
@@ -1088,9 +1088,9 @@ function stok_fis_dogrula(PDO $pdo, array $g): array
     if ($km !== '') {
         $kid = (int)($g['kaynak_id'] ?? 0);
         if ($km !== 'kantar' || $tur !== 'giris') $h['kaynak_modul'] = 'Geçersiz kaynak.';
-        elseif (($kf = stok_kantar_oku($pdo, $kid)) === null) $h['kaynak_modul'] = 'Kantar fişi bulunamadı.';
-        elseif (!depot_visible_to_user((string)$kf['depo'])) $h['kaynak_modul'] = 'Kantar fişi aktif deponuzda değil.';
-        elseif (($b = stok_kantar_bagli_fis($pdo, $kid)) !== null) { $h['kaynak_modul'] = 'Bu kantar fişi zaten ' . $b['fis_no'] . ' ile aktarılmış.'; $kod = 'kantar_aktarilmis'; }
+        elseif (($kf = stok_kantar_oku($pdo, $kid)) === null) $h['kaynak_modul'] = 'Mal kabul fişi bulunamadı.';
+        elseif (!depot_visible_to_user((string)$kf['depo'])) $h['kaynak_modul'] = 'Mal kabul fişi aktif deponuzda değil.';
+        elseif (($b = stok_kantar_bagli_fis($pdo, $kid)) !== null) { $h['kaynak_modul'] = 'Bu mal kabul fişi zaten ' . $b['fis_no'] . ' ile aktarılmış.'; $kod = 'kantar_aktarilmis'; }
         else { $v['kaynak_modul'] = 'kantar'; $v['kaynak_id'] = $kid; }
     }
 
@@ -1243,7 +1243,7 @@ function stok_fis_kaydet(PDO $pdo, array $g, int $uid, ?array $kaynak = null): a
         $s = stok_tx($pdo, function () use ($pdo, $v, $uid, $etiket): array {
             stok_kart_kilitle($pdo, array_column($v['satirlar'], 'kart_id'));
             if ($v['kaynak_modul'] === 'kantar' && ($b = stok_kantar_bagli_fis($pdo, (int)$v['kaynak_id'])) !== null) {
-                return stok_hata('Bu kantar fişi zaten ' . $b['fis_no'] . ' ile aktarılmış.', ['kod' => 'kantar_aktarilmis', 'alanlar' => ['kaynak_modul' => 'Kantar fişi aktarılmış.']]);
+                return stok_hata('Bu mal kabul fişi zaten ' . $b['fis_no'] . ' ile aktarılmış.', ['kod' => 'kantar_aktarilmis', 'alanlar' => ['kaynak_modul' => 'Mal kabul fişi aktarılmış.']]);
             }
             $eksik = stok_fis_eksikler($pdo, $v);
             if ($eksik && !$v['eksiye_izin']) return stok_hata('Yetersiz stok: bu kayıt stoğu eksiye düşürecek.', ['kod' => 'yetersiz_stok', 'eksikler' => $eksik]);
@@ -1596,7 +1596,7 @@ function stok_kantar_adaylari(PDO $pdo, int $limit = 50): array
     return $out;
 }
 
-/** Tek kantar fişi önerisi (görünür değilse null). */
+/** Tek mal kabul fişi önerisi (görünür değilse null). */
 function stok_kantar_oneri(PDO $pdo, int $id): ?array
 {
     $r = stok_kantar_oku($pdo, $id);

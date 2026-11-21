@@ -1476,7 +1476,7 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
                     📋 X Raporu Al
                 </button>
                 <button type="submit" form="gl-form-z" class="pc-drop-success"
-                        onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
+                        onclick="return confirm('Bu rapordaki mal kabul fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
                     🔒 Z Raporu Al ve Kapat
                 </button>
             </div>

@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_foto.php - Kantar fişi fotoğrafını DB'den sun
+// kantar_foto.php - Mal kabul fişi fotoğrafını DB'den sun
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
