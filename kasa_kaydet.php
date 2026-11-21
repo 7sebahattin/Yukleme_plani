@@ -42,14 +42,14 @@ $id    = (int)($P['id'] ?? 0);
 try {
     switch ($islem) {
         case 'kart_kaydet':
-            kasa_kapi('write');
+            kasa_kapi($id > 0 ? 'edit' : 'create');
             $P['aktif'] = isset($P['aktif']) && (string)$P['aktif'] !== '0' ? '1' : '0';           // onay kutusu: gelmediyse pasif
             $P['eksi_izin'] = isset($P['eksi_izin']) && (string)$P['eksi_izin'] !== '0' ? '1' : '0';   // onay kutusu: gelmediyse eksiye izin yok
             $s = kasa_kart_kaydet($pdo, $P, $uid, $id > 0 ? $id : null);
             kasa_cevap($s, $geri, $id > 0 ? 'Kasa güncellendi' : 'Kasa kaydedildi', $json);
 
         case 'kart_durum':
-            kasa_kapi('write');
+            kasa_kapi('edit');
             $s = kasa_kart_durum($pdo, $id, (string)($P['aktif'] ?? '') === '1', $uid);
             kasa_cevap($s, $geri, 'Kasa güncellendi', $json);
 
@@ -59,28 +59,28 @@ try {
             kasa_cevap($s, $geri, 'Kasa silindi', $json);
 
         case 'tanim_kaydet':
-            kasa_kapi('admin');
+            kasa_kapi($id > 0 ? 'edit' : 'create');
             $s = kasa_tanim_kaydet($pdo, (string)($P['tur'] ?? ''), (string)($P['ad'] ?? ''), (int)($P['sira'] ?? 0), $uid, $id > 0 ? $id : null);
             kasa_cevap($s, $geri, $id > 0 ? 'Tanım güncellendi' : 'Tanım eklendi', $json);
 
         case 'tanim_durum':
-            kasa_kapi('admin');
+            kasa_kapi('edit');
             $s = kasa_tanim_durum($pdo, $id, !empty($P['aktif']) && (string)$P['aktif'] !== '0', $uid);   // onay kutusu: gelmediyse pasif
             kasa_cevap($s, $geri, 'Tanım güncellendi', $json);
 
         case 'tanim_sil':
-            kasa_kapi('admin');
+            kasa_kapi('delete');
             $s = kasa_tanim_sil($pdo, $id, $uid);
             kasa_cevap($s, $geri, 'Tanım silindi', $json);
 
         case 'hareket_ekle':
-            kasa_kapi('write');
+            kasa_kapi('create');
             $s = kasa_hareket_ekle($pdo, $P, $uid);
             if (!empty($s['ok']) && (int)($P['kasa_id'] ?? 0) > 0) $geri = 'kasa_fisleri.php?kasa=' . (int)$P['kasa_id'];
             kasa_cevap($s, $geri, !empty($s['tekrar']) ? 'Hareket zaten kaydedilmişti' : 'Hareket kaydedildi', $json);
 
         case 'virman_ekle':
-            kasa_kapi('write');
+            kasa_kapi('create');
             $s = kasa_virman_ekle($pdo, $P, $uid);
             if (!empty($s['ok']) && (int)($P['kaynak_kasa_id'] ?? 0) > 0) $geri = 'kasa_fisleri.php?kasa=' . (int)$P['kaynak_kasa_id'];
             kasa_cevap($s, $geri, !empty($s['tekrar']) ? 'Virman zaten kaydedilmişti' : 'Virman kaydedildi', $json);

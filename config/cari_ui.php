@@ -892,7 +892,7 @@ function cari_tanim_ice_panel(PDO $pdo, bool $gizli, bool $yaz): string
 /** Tanımlar sayfası gövdesi. */
 function cari_tanimlari_govde(PDO $pdo): string
 {
-    $yaz = cari_can('admin');
+    $yaz = cari_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'grup');
     if (!in_array($sekme, ['grup', 'odeme_sekli', 'ice_aktar'], true)) $sekme = 'grup';
     $nGrup = count(cari_tanim_listesi($pdo, 'grup'));

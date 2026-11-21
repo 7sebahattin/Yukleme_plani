@@ -16,6 +16,7 @@ declare(strict_types=1);
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 
 require_once __DIR__ . '/hesap_calc.php';   // yalnız hesap_parse_amount (yan etkisiz)
+require_once __DIR__ . '/muhasebe_roller.php';   // v550: cari_can → muhasebe_modul_can (Roller'den, varsayılan kapalı; yan etkisiz)
 
 const CARI_TUTAR_MAX_KURUS = 99999999999999;   // 999.999.999.999,99
 
@@ -180,10 +181,15 @@ function cari_sayfa_kapisi(PDO $pdo): void
     exit;
 }
 
-/** Faz 1: hepsi is_admin(). Faz 2'nin TEK değişim noktası. $eylem: read|write|delete|admin */
+/**
+ * v550: yönetici her zaman; diğerleri Roller'den (config/muhasebe_roller.php, VARSAYILAN KAPALI).
+ * $eylem: read (gruptaki herhangi bir sayfa Gör) | create | edit | delete | write (= create VE edit, belirsiz işlemlerde fail-closed)
+ * | tanim (yalnız arayüz ipucu: Tanımlar'da yazma düğmeleri) | admin (yalnız is_admin()). Bilinmeyen eylem false.
+ * TEK değişim noktası.
+ */
 function cari_can(string $eylem): bool
 {
-    return in_array($eylem, ['read', 'write', 'delete', 'admin'], true) && is_admin();
+    return muhasebe_modul_can('cari', $eylem);
 }
 
 function cari_kapi(string $eylem): void

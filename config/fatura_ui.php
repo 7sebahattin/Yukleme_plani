@@ -403,7 +403,7 @@ function fatura_detay_html(array $b, array $kaynakBilgi = []): string
     elseif ($tur === 'siparis') {
         $birincil = $donusum('İrsaliye oluştur', 'data-irsaliye-olustur', 'sevk_irsaliyeleri.php?yeni=1&tur=irsaliye&kaynak=' . $id, true);
         $ikincil = [$donusum('Fatura oluştur', 'data-fatura-olustur', 'satis_faturalari.php?yeni=1&tur=satis&kaynak=' . $id, false), $yaz, $kop];
-        if (!$iptal && fatura_can('write')) $ikincil[] = '<button type="button" class="btn" data-ft-modal="kapat" data-id="' . $id . '" data-belge-no="' . h((string)$b['belge_no']) . '" data-kapali="' . ((int)$b['kapali'] === 1 ? '1' : '0') . '" data-geri="' . h($sayfa . '?id=' . $id) . '">' . ((int)$b['kapali'] === 1 ? 'Siparişi aç' : 'Siparişi kapat') . '</button>';
+        if (!$iptal && fatura_can('edit')) $ikincil[] = '<button type="button" class="btn" data-ft-modal="kapat" data-id="' . $id . '" data-belge-no="' . h((string)$b['belge_no']) . '" data-kapali="' . ((int)$b['kapali'] === 1 ? '1' : '0') . '" data-geri="' . h($sayfa . '?id=' . $id) . '">' . ((int)$b['kapali'] === 1 ? 'Siparişi aç' : 'Siparişi kapat') . '</button>';
     } else { $birincil = $yaz; $ikincil = [$kop]; }
     $iptBtn = $iptal || !fatura_can('delete')
         ? '<button type="button" class="btn ft-tehlike" disabled title="' . ($iptal ? 'Belge zaten iptal edildi' : 'Yetkiniz yok') . '">İptal et</button>'
@@ -902,7 +902,7 @@ function fatura_sayfa_govde(PDO $pdo, string $sinif): string
     }
     if ($b !== null) {
         $sag = fatura_detay_html($b, fatura_kaynak_satir_bilgileri($pdo, array_filter(array_column($b['satirlar'], 'kaynak_satir_id'))));
-    } elseif (($yeni || $kopyaId > 0) && fatura_can('write')) {
+    } elseif (($yeni || $kopyaId > 0) && fatura_can('create')) {
         $o = ['tur' => (string)($_GET['tur'] ?? '')];
         if ($kopyaId > 0) {
             $k = fatura_oku($pdo, $kopyaId);
@@ -940,7 +940,7 @@ function fatura_sayfa_govde(PDO $pdo, string $sinif): string
         . fatura_liste_kol_html($sinif, $F, $L, $turSay, $b !== null ? (int)$b['id'] : null, $cariler)
         . $sag . '</div>' . $cdl
         . (fatura_can('delete') ? fatura_modal_iptal($sayfa, $b) : '')
-        . ($sinif === 'siparis' && fatura_can('write') ? fatura_modal_kapat($sayfa) : '')
+        . ($sinif === 'siparis' && fatura_can('edit') ? fatura_modal_kapat($sayfa) : '')
         . ($form ? fatura_modal_kaynak($sayfa) . fatura_modal_satir() : '')
         . '</div>';
 }
@@ -1033,7 +1033,7 @@ function fatura_tanimlari_govde(PDO $pdo): string
     $sek = fatura_tanim_sekmeleri();
     $aktif = (string)($_GET['sekme'] ?? 'kdv');
     if (!isset($sek[$aktif])) $aktif = 'kdv';
-    $yaz = fatura_can('admin');
+    $yaz = fatura_can('tanim');
     $nav = ''; $pan = '';
     $aciklama = ['kdv' => 'Satırda seçilebilen KDV oranları.', 'tevkifat' => 'Başlık bazında KDV tevkifatı (pay/10). GİB kodlarını mali müşavirle doldurun.', 'kesinti' => 'Müstahsil makbuzunda net tutardan düşülen kesintiler.',
         'istisna' => 'İhracat faturasında zorunlu KDV istisna kodu.', 'seri' => 'Bizim düzenlediğimiz belgelerin resmî numara serisi (3 harf + yıl + 9 hane). Kullanılan serinin önek ve grubu değişmez.',

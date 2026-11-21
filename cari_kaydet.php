@@ -38,14 +38,14 @@ $id    = (int)($P['id'] ?? 0);
 try {
     switch ($islem) {
         case 'kart_kaydet':
-            cari_kapi('write');
+            cari_kapi($id > 0 ? 'edit' : 'create');
             $P['aktif'] = isset($P['aktif']) && (string)$P['aktif'] !== '0' ? '1' : '0';   // onay kutusu: gelmediyse pasif
             $s = cari_kart_kaydet($pdo, $P, $uid, $id > 0 ? $id : null);
             if (!empty($s['ok']) && $id <= 0 && !str_contains($geri, 'id=')) $geri = 'cari_kartlari.php?id=' . (int)$s['id'];
             cari_cevap($s, $geri, $id > 0 ? 'Cari güncellendi' : 'Cari kaydedildi', $json);
 
         case 'kart_durum':
-            cari_kapi('write');
+            cari_kapi('edit');
             $s = cari_kart_durum($pdo, $id, (string)($P['aktif'] ?? '') === '1', $uid);
             cari_cevap($s, $geri, 'Cari güncellendi', $json);
 
@@ -56,7 +56,7 @@ try {
             cari_cevap($s, $geri, 'Cari silindi', $json);
 
         case 'hareket_ekle':
-            cari_kapi('write');
+            cari_kapi('create');
             if ((string)($P['tur'] ?? '') === 'virman' && (int)($P['hedef_id'] ?? 0) > 0) {   // JS'siz yedek: tek modal → virman
                 $P['kaynak_id'] = $P['kaynak_id'] ?? ($P['cari_id'] ?? 0);
                 $s = cari_virman_ekle($pdo, $P, $uid);
@@ -66,7 +66,7 @@ try {
             cari_cevap($s, $geri, 'Kaydedildi', $json);
 
         case 'virman_ekle':
-            cari_kapi('write');
+            cari_kapi('create');
             $P['kaynak_id'] = $P['kaynak_id'] ?? ($P['cari_id'] ?? 0);
             $s = cari_virman_ekle($pdo, $P, $uid);
             cari_cevap($s, $geri, 'Virman kaydedildi', $json);
@@ -77,22 +77,22 @@ try {
             cari_cevap($s, $geri, 'Belge iptal edildi', $json);
 
         case 'tanim_kaydet':
-            cari_kapi('admin');
+            cari_kapi($id > 0 ? 'edit' : 'create');
             $s = cari_tanim_kaydet($pdo, (string)($P['tur'] ?? ''), (string)($P['ad'] ?? ''), (int)($P['sira'] ?? 0), $uid, $id > 0 ? $id : null);
             cari_cevap($s, $geri, $id > 0 ? 'Tanım güncellendi' : 'Tanım eklendi', $json);
 
         case 'tanim_durum':
-            cari_kapi('admin');
+            cari_kapi('edit');
             $s = cari_tanim_durum($pdo, $id, !empty($P['aktif']) && (string)$P['aktif'] !== '0', $uid);   // onay kutusu: gelmediyse pasif
             cari_cevap($s, $geri, 'Tanım güncellendi', $json);
 
         case 'tanim_sil':
-            cari_kapi('admin');
+            cari_kapi('delete');
             $s = cari_tanim_sil($pdo, $id, $uid);
             cari_cevap($s, $geri, 'Tanım silindi', $json);
 
         case 'ice_aktar':
-            cari_kapi('admin');
+            cari_kapi('create');
             $s = cari_ice_aktar($pdo, $uid);
             cari_cevap($s, $geri, 'İçe aktarıldı: ' . (int)$s['eklenen'] . ' kart eklendi, ' . (int)$s['atlanan'] . ' atlandı', $json);
 
