@@ -12,8 +12,6 @@
     let selectedCell = null;
     let editor = null;
     let holdTimer = 0;
-    let armedHeader = null;
-    let movingHeader = false;
     const editable = new Set(['parti_no', 'palet_adi', 'firma', 'kasa_adeti', 'brut_kg', 'dara_kg', 'aciklama1', 'aciklama2']);
 
     async function send(action, data) {
@@ -796,17 +794,15 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
         body.querySelectorAll(`td[data-col="${col}"]`).forEach(td => { en = Math.max(en, olcum.measureText(td.textContent).width + 22); });
         return Math.max(44, Math.min(1200, Math.ceil(en)));
     }
-    function sutunuDaralt(col) { tercih.genislik[col] = icerikGenisligi(col); genislikUygula(); tercihKaydet(); }
     function hepsiniDaralt() {
         Array.from(headers.children).forEach(th => { tercih.genislik[th.dataset.col] = icerikGenisligi(th.dataset.col); });
         genislikUygula(); tercihKaydet();
         setStatus('Sütunlar içeriğe göre daraltıldı.');
     }
-    document.getElementById('pfKose')?.addEventListener('dblclick', hepsiniDaralt);
-    // Başlık kenarından sürükle (Excel gibi); kenara çift tık: o sütunu daralt.
+    // Başlık kenarından sürükle (Excel gibi); sütun birleşimine (kenara) çift tık: TÜM sütunları içeriğe göre daralt.
     Array.from(headers.children).forEach(th => {
-        const tutac = document.createElement('i'); tutac.className = 'pf-rs'; tutac.title = 'Sürükleyin: genişlik · Çift tık: içeriğe göre daralt'; th.appendChild(tutac);
-        tutac.addEventListener('dblclick', event => { event.stopPropagation(); sutunuDaralt(th.dataset.col); });
+        const tutac = document.createElement('i'); tutac.className = 'pf-rs'; tutac.title = 'Sürükleyin: genişlik · Çift tık: tüm sütunları içeriğe göre daralt'; th.appendChild(tutac);
+        tutac.addEventListener('dblclick', event => { event.stopPropagation(); hepsiniDaralt(); });
         tutac.addEventListener('pointerdown', event => {
             if (event.button !== 0) return;
             event.preventDefault(); event.stopPropagation();
@@ -821,32 +817,78 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     varsayilanGenislikler();
     genislikUygula();
 
-    // Başlıklara basılı tutup sürükleyerek sütun sırası değiştir.
-    headers.addEventListener('pointerdown', event => {
-        if (event.button !== 0) return;
-        if (event.target.closest('.pf-rs')) return;
-        const th = event.target.closest('th[data-col]'); if (!th) return;
-        clearTimeout(holdTimer); armedHeader = th; movingHeader = false;
-        holdTimer = window.setTimeout(() => { movingHeader = true; th.classList.add('pf-drag-armed'); setStatus('Sütun taşınıyor — istediğiniz yere bırakın.'); }, 520);
-    });
-    headers.addEventListener('pointermove', event => {
-        if (!movingHeader || !armedHeader) return;
-        const target = Array.from(headers.children).find(th => { const r = th.getBoundingClientRect(); return event.clientX >= r.left && event.clientX <= r.right; });
-        if (!target || target === armedHeader) return;
-        const from = Array.from(headers.children).indexOf(armedHeader);
-        const to = Array.from(headers.children).indexOf(target);
-        moveColumn(from, to);
-        armedHeader = target;
-        target.classList.add('pf-drag-armed');
-    });
-    function releaseHeader() {
-        clearTimeout(holdTimer);
-        if (movingHeader) { headers.querySelectorAll('.pf-drag-armed').forEach(th => th.classList.remove('pf-drag-armed')); siraKaydet(); setStatus('Sütun sırası kaydedildi.'); }
-        movingHeader = false; armedHeader = null;
+    // Sütun sırası: başlığı tutup sürükle. Sürüklerken yarı saydam bir "hayalet" başlık imleci izler, sütun soluklaşır,
+    // bırakılacak yer mavi çizgiyle gösterilir; sütun yalnız BIRAKINCA taşınır (Esc: vazgeç). Fare: 6px hareketle başlar;
+    // dokunmatik: kısa basılı tutma (kaydırmayla karışmasın).
+    let surukle = null;   // { th, from, ghost, cizgi, sinir, x, raf }
+    function suruklemeBaslat(th, event) {
+        const r = th.getBoundingClientRect();
+        const ghost = document.createElement('div');
+        ghost.className = 'pf-hayalet'; ghost.textContent = th.childNodes[0]?.textContent || '';
+        ghost.style.width = r.width + 'px'; ghost.style.height = r.height + 'px';
+        const cizgi = document.createElement('div'); cizgi.className = 'pf-birak';
+        document.body.append(ghost, cizgi);
+        document.body.classList.add('pf-suruklen');
+        const col = th.dataset.col;
+        th.classList.add('pf-drag-armed');
+        body.querySelectorAll(`td[data-col="${col}"]`).forEach(td => td.classList.add('pf-kol-soluk'));
+        surukle = { th, from: Array.from(headers.children).indexOf(th), ghost, cizgi, sinir: 0, dx: event.clientX - r.left, x: event.clientX, raf: 0 };
+        setStatus('Sütun taşınıyor — bırakılacak yeri mavi çizgi gösterir, Esc: vazgeç.');
+        suruklemeKonum(event.clientX, event.clientY);
+        surukleKaydir();
     }
-    headers.addEventListener('pointerup', releaseHeader);
-    headers.addEventListener('pointercancel', releaseHeader);
-    headers.addEventListener('contextmenu', event => { if (movingHeader) event.preventDefault(); });
+    function suruklemeKonum(x, y) {
+        const d = surukle; if (!d) return;
+        d.x = x;
+        d.ghost.style.left = (x - d.dx) + 'px'; d.ghost.style.top = (headers.getBoundingClientRect().top) + 'px';
+        const ths = Array.from(headers.children).map(t => t.getBoundingClientRect());
+        let b = ths.length;
+        for (let i = 0; i < ths.length; i++) { if (x < ths[i].left + ths[i].width / 2) { b = i; break; } }
+        d.sinir = b;
+        const cx = b < ths.length ? ths[b].left : ths[ths.length - 1].right;
+        const w = wrap.getBoundingClientRect();
+        d.cizgi.style.left = (Math.max(w.left, Math.min(w.right - 3, cx)) - 1) + 'px';
+        d.cizgi.style.top = w.top + 'px'; d.cizgi.style.height = wrap.clientHeight + 'px';
+    }
+    function surukleKaydir() {   // kenara yaklaşınca tablo yatay kayar
+        const d = surukle; if (!d) return;
+        const w = wrap.getBoundingClientRect();
+        if (d.x > w.right - 50) wrap.scrollLeft += 14; else if (d.x < w.left + 50) wrap.scrollLeft -= 14;
+        suruklemeKonum(d.x, 0);
+        d.raf = requestAnimationFrame(surukleKaydir);
+    }
+    function suruklemeBitir(uygula) {
+        const d = surukle; if (!d) return;
+        cancelAnimationFrame(d.raf); surukle = null;
+        d.ghost.remove(); d.cizgi.remove();
+        document.body.classList.remove('pf-suruklen');
+        d.th.classList.remove('pf-drag-armed');
+        body.querySelectorAll('.pf-kol-soluk').forEach(td => td.classList.remove('pf-kol-soluk'));
+        const hedef = d.sinir > d.from ? d.sinir - 1 : d.sinir;
+        if (uygula && hedef !== d.from) { moveColumn(d.from, hedef); siraKaydet(); setStatus('Sütun sırası kaydedildi.'); }
+        else setStatus(uygula ? '' : 'Sütun taşıma vazgeçildi.');
+    }
+    headers.addEventListener('pointerdown', event => {
+        if (event.button !== 0 || event.target.closest('.pf-rs')) return;
+        const th = event.target.closest('th[data-col]'); if (!th) return;
+        const x0 = event.clientX, y0 = event.clientY, dokunmatik = event.pointerType !== 'mouse';
+        let basladi = false;
+        const temizle = () => { clearTimeout(holdTimer); window.removeEventListener('pointermove', hareket); window.removeEventListener('pointerup', bitti); window.removeEventListener('pointercancel', iptal); window.removeEventListener('keydown', tus, true); };
+        const hareket = e => {
+            if (!basladi) {
+                if (dokunmatik) { if (Math.abs(e.clientX - x0) > 10 || Math.abs(e.clientY - y0) > 10) temizle(); return; }   // kaydırıyor: taşıma değil
+                if (Math.abs(e.clientX - x0) < 6) return;
+                basladi = true; suruklemeBaslat(th, e); return;
+            }
+            e.preventDefault(); suruklemeKonum(e.clientX, e.clientY);
+        };
+        const bitti = () => { temizle(); suruklemeBitir(true); };
+        const iptal = () => { temizle(); suruklemeBitir(false); };
+        const tus = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); iptal(); } };
+        if (dokunmatik) holdTimer = window.setTimeout(() => { basladi = true; suruklemeBaslat(th, { clientX: x0, clientY: y0 }); }, 380);
+        window.addEventListener('pointermove', hareket); window.addEventListener('pointerup', bitti); window.addEventListener('pointercancel', iptal); window.addEventListener('keydown', tus, true);
+    });
+    headers.addEventListener('contextmenu', event => { if (surukle) event.preventDefault(); });
 
     // Tarih / "Yüklenen" değişince liste otomatik yenilenir (Getir düğmesi yok).
     const filtre = document.getElementById('pfFiltre');

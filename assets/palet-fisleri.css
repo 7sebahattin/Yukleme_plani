@@ -126,9 +126,7 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-kart:hover{border-color:#0782dc;box-shadow:0 4px 12px #0b244033;transform:translateY(-1px)}
 .pf-kart:focus-visible{outline:2px solid #0782dc;outline-offset:2px}
 .pf-table-wrap{background:linear-gradient(to right,var(--pf-gutter) 22px,transparent 22px),var(--pf-surface)}
-.pf-kose{position:sticky;top:0;left:0;z-index:6;width:22px;height:34px;margin-bottom:-34px;box-sizing:border-box;background:var(--pf-head);border-right:1px solid #ffffff55;cursor:pointer}
-.pf-kose::after{content:"";position:absolute;right:3px;bottom:3px;border:5px solid transparent;border-right-color:#ffffffb0;border-bottom-color:#ffffffb0}
-.pf-kose:hover{background:#0a5ea8}
+.pf-kose{position:sticky;top:0;left:0;z-index:6;width:22px;height:34px;margin-bottom:-34px;box-sizing:border-box;background:var(--pf-head);border-right:1px solid #ffffff55}
 .pf-table{table-layout:fixed;width:max-content;min-width:0!important;margin-left:22px}
 .pf-table td{max-width:none!important}
 .pf-table th{height:34px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
@@ -228,3 +226,12 @@ html[data-theme="dark"] .pf-bul-baslik{background:linear-gradient(#2c4b70,#1f3a5
   #pfDialog .pf-birim[data-birim="kasa"]::after{content:attr(data-kisa);font-size:.74rem}
   #pfDialog .pf-form-grid>label.pf-kg{padding:7px 6px 8px;border-radius:10px}
 }
+
+/* ── v542: sütun taşıma — yarı saydam hayalet başlık + bırakma çizgisi; sütun yalnız bırakınca taşınır ── */
+.pf-table th{cursor:grab}
+.pf-table th .pf-rs{cursor:col-resize}
+.pf-table th.pf-drag-armed{background:var(--pf-head);box-shadow:none;opacity:.45;cursor:grabbing}
+.pf-table td.pf-kol-soluk{opacity:.4}
+body.pf-suruklen{cursor:grabbing;user-select:none;-webkit-user-select:none}
+.pf-hayalet{position:fixed;z-index:3500;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 10px;background:#0e477c;color:#fff;font-weight:700;font-size:.88rem;border:2px solid #70d2ff;border-radius:6px;opacity:.72;box-shadow:0 8px 22px #0b244066;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-birak{position:fixed;z-index:3400;width:3px;background:#29b6ff;box-shadow:0 0 8px #29b6ff;border-radius:2px;pointer-events:none}

@@ -429,7 +429,7 @@ render_header('Palet Fişleri');
     </div>
     <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.</div><?php endif; ?>
     <div class="pf-table-wrap" id="pfTableWrap" tabindex="0" aria-label="Palet fişleri tablosu">
-        <div class="pf-kose" id="pfKose" role="button" tabindex="-1" title="Çift tıklayın: sütunları içeriğe göre daralt" aria-label="Sütunları içeriğe göre daralt"></div>
+        <div class="pf-kose" aria-hidden="true"></div>
         <table class="pf-table" id="pfTable">
             <thead><tr>
                 <th data-col="belge_no">Belge No</th><th data-col="tarih">Tarih</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>

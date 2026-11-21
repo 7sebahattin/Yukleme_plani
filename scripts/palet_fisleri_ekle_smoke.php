@@ -53,7 +53,8 @@ ok('Kartlara tıklayınca partinin palet listesi açılır', str_contains($php, 
 ok('Getir düğmesi yok; tarih/yüklenen değişince otomatik yenilenir', !str_contains($php, 'pf-getir') && str_contains($js, "requestSubmit()"));
 ok('Başlık yazısı ve kısayol ipucu satırı kaldırıldı', !str_contains($php, 'pf-title') && !str_contains($php, 'pf-hints') && !str_contains($php, 'Yeni kayıtlar listenin en üstünde'));
 ok('Buton sırası (soldan sağa): Yazdır · Excel · Düzelt · Bul · Sil · Çoğalt · Ekle', preg_match('/data-pf="yazdir".*?export_menu\(.*?data-pf="duzelt".*?data-pf="bul".*?data-pf="sil".*?data-pf="coglat".*?id="pfAdd"/s', $php) === 1);
-ok('Sol üst köşe alanı + sütun genişliği tutacı', str_contains($php, 'id="pfKose"') && str_contains($js, "className = 'pf-rs'") && str_contains($js, 'hepsiniDaralt'));
+ok('Köşe alanı tıklanmaz (çift tık işlevi kaldırıldı); sütun birleşimine (tutaç) çift tık TÜM sütunları daraltır', !str_contains($php, 'id="pfKose"') && !str_contains($js, "getElementById('pfKose')") && str_contains($js, "className = 'pf-rs'") && str_contains($js, "tutac.addEventListener('dblclick', event => { event.stopPropagation(); hepsiniDaralt(); })") && !str_contains($js, 'sutunuDaralt'));
+ok('Sütun taşıma: yarı saydam hayalet başlık + bırakma çizgisi, yalnız bırakınca taşınır, Esc vazgeçer', str_contains($js, 'function suruklemeBaslat') && str_contains($js, 'function suruklemeBitir(uygula)') && str_contains($js, "className = 'pf-hayalet'") && str_contains($js, "className = 'pf-birak'") && str_contains($js, "e.key === 'Escape'") && !str_contains($js, 'moveColumn(from, to);\n        armedHeader'));
 // ── Kullanıcı bazlı sütun tercihi (v537) ──
 $kt = (string)file_get_contents(__DIR__ . '/../config/kullanici_tercih.php');
 ok('tercih: kullanıcı bazlı (user_id + anahtar) tablo, beyaz liste doğrulayıcı', str_contains($kt, 'PRIMARY KEY (`user_id`, `anahtar`)') && str_contains($kt, "if (\$anahtar === 'palet_fisleri.tablo')"));
