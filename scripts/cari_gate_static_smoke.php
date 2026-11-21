@@ -43,7 +43,7 @@ foreach ($beklenen as $f) {
     $s = kod($ROOT . '/' . $f);
     ok("$f: <?php ile başlar, strict_types", str_starts_with($s, '<?php') && str_contains($s, 'declare(strict_types=1)'));
     ok("$f: require_login()", str_contains($s, 'require_login()'));
-    if ($f !== 'cari_kaydet.php') ok("$f: is_admin() kapısı (nav_muhasebe_static_smoke deseni)", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
+    if ($f !== 'cari_kaydet.php') ok("$f: is_admin() kapısı (nav_muhasebe_static_smoke deseni)", (bool)preg_match('/if \(!muhasebe_(?:sayfa|grup_okuma)_can\([^)]+\)\) \{ forbidden\(/', $s));
     ok("$f: cari_no_store()", str_contains($s, 'cari_no_store()'));
     ok("$f: cari_sayfa_kapisi(\$pdo) (tablo yoksa çökmez)", str_contains($s, 'cari_sayfa_kapisi('));
     ok("$f: cari_kapi( çağrısı", str_contains($s, 'cari_kapi('));
@@ -84,8 +84,8 @@ preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET
 $isl = array_map(fn($m) => $m[1], $cm);
 ok('10 işlem dalı: kart_kaydet kart_durum kart_sil hareket_ekle virman_ekle hareket_iptal tanim_kaydet tanim_durum tanim_sil ice_aktar',
     $isl === ['kart_kaydet', 'kart_durum', 'kart_sil', 'hareket_ekle', 'virman_ekle', 'hareket_iptal', 'tanim_kaydet', 'tanim_durum', 'tanim_sil', 'ice_aktar'], json_encode($isl));
-$yetki = ['kart_kaydet' => 'write', 'kart_durum' => 'write', 'kart_sil' => 'delete', 'hareket_ekle' => 'write', 'virman_ekle' => 'write', 'hareket_iptal' => 'delete', 'tanim_kaydet' => 'admin', 'tanim_durum' => 'admin', 'tanim_sil' => 'admin', 'ice_aktar' => 'admin'];
-foreach ($cm as $m) ok("dal $m[1]: cari_kapi('{$yetki[$m[1]]}') ilk ifade; dalda tek cari_kapi", (bool)preg_match("/^\\s*cari_kapi\\('" . $yetki[$m[1]] . "'\\);/", $m[2]) && substr_count($m[2], 'cari_kapi(') === 1, substr($m[2], 0, 80));
+$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'hareket_ekle' => "'create'", 'virman_ekle' => "'create'", 'hareket_iptal' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'", 'ice_aktar' => "'create'"];  // v550: tam argüman metni (edit/create/delete)
+foreach ($cm as $m) ok("dal $m[1]: cari_kapi({$yetki[$m[1]]}) ilk ifade; dalda tek cari_kapi", (bool)preg_match("/^\\s*cari_kapi\\(" . preg_quote($yetki[$m[1]], '/') . "\\);/", $m[2]) && substr_count($m[2], 'cari_kapi(') === 1, substr($m[2], 0, 80));
 ok('`geri` yerel beyaz liste: cari_geri_guvenli($_POST[\'geri\']) + çekirdekte ^cari_[a-z]+\\.php regex', str_contains($k, "cari_geri_guvenli(\$_POST['geri']") && str_contains((string)file_get_contents($ROOT . '/config/cari_core.php'), '^cari_[a-z]+\\.php'));
 ok('Location yalnız $geri ile (ham $_POST yönlendirmesi YOK)', !preg_match("/Location:\\s*'?\\s*\\.?\\s*\\\$_(POST|GET|REQUEST)/", (string)file_get_contents($ROOT . '/config/cari_core.php') . $k) && str_contains(kod($ROOT . '/config/cari_core.php'), "header('Location: ' . \$geri, true, 303)"));
 ok('cari_kaydet.php: $_GET kullanmaz; hareket tablosuna doğrudan SQL yazmaz', !str_contains($k, '$_GET') && !preg_match('/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i', $k));

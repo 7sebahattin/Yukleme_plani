@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v549');
+    define('APP_SURUM', 'v550');
 }
 
 // --- HTML kaçışı ---
@@ -446,6 +446,12 @@ function first_allowed_page(): ?string {
     foreach ($adaylar as $sayfa => $izinli) {
         if ($izinli) return $sayfa;
     }
+    // v550: yalnız muhasebe menüsü yetkisi olan rol — sayfanın KENDİ kapısı (muhasebe_sayfa_can). Başka sayfaya
+    // 302 veren sayfalar atlanır (hedefin kapısı farklı olabilir → yeni 403 olmasın).
+    $yonlendiren = ['kantar_fisleri', 'mal_kabul_fisleri', 'arac_yukleme_fisleri', 'raporlar_listeler', 'ihracat_faturasi_maliyeti', 'beyanname_siparis_proforma'];
+    foreach (muhasebe_rol_gruplari() as $__g) foreach ($__g['sayfalar'] as $__slug => $__b) {
+        if (!in_array($__slug, $yonlendiren, true) && muhasebe_sayfa_can($__slug)) return $__slug . '.php';
+    }
     return null;
 }
 
@@ -697,7 +703,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
-        <?php if ($p_adm && isset($__muh['operasyon_fis'])) foreach ($__muh['operasyon_fis'][2] as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); unset($__dosya, $__et, $__em); ?>
+        <?php if (isset($__muh['operasyon_fis'])) foreach ($__muh['operasyon_fis'][2] as $__dosya => [$__et, $__em]) if (muhasebe_sayfa_can(substr($__dosya, 0, -4))) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); unset($__dosya, $__et, $__em); ?>
         <?php if ($p_rec)  $lnk('records.php',   '🚚', 'Eski Yükleme Planı', $a_yuk);  ?>
         <?php if ($p_cik)  $lnk('cikmalar.php',  '📋', 'Eski Paletleme',  $a_cik);   ?>
         <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Eski Mal Kabul', $a_kant);  ?>
@@ -732,15 +738,17 @@ function render_desktop_sidebar(string $base): void {
         <?php foreach ($__muh as $__slug => [$__bas, $__svg, $__sayfalar]):
             if ($__slug === 'operasyon_fis') continue;   // Operasyon grubunun İÇİNDE çizilir
             $__eks = array_values(array_filter($__ek[$__slug] ?? [], fn($e) => (bool)$e[4]));
-            if (!$p_adm && !$__eks) continue;
+            // v550: sayfa, kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; admin_konsolu yalnız yönetici.
+            $__gorunen = array_filter($__sayfalar, fn($__d) => muhasebe_sayfa_can(substr((string)$__d, 0, -4)), ARRAY_FILTER_USE_KEY);
+            if (!$__gorunen && !$__eks) continue;
             $__acik = isset($__sayfalar[$ak . '.php']);
             foreach ($__eks as $__e) if ($__e[3]) $__acik = true; ?>
         <details class="sidebar-grup" data-sb-grup="<?= h($__slug) ?>"<?= $__acik ? ' open' : '' ?>>
         <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><?= $__svg ?></svg></span><span class="sidebar-section-ad"><?= h($__bas) ?></span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_adm) foreach ($__sayfalar as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); ?>
+        <?php foreach ($__gorunen as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); ?>
         <?php foreach ($__eks as [$__eh, $__ei, $__el, $__ea]) $lnk($__eh, $__ei, $__el, $__ea); ?>
         </details>
-        <?php endforeach; unset($__slug, $__bas, $__svg, $__sayfalar, $__dosya, $__et, $__em, $__eks, $__e, $__eh, $__ei, $__el, $__ea, $__acik, $__muh, $__ek); ?>
+        <?php endforeach; unset($__slug, $__bas, $__svg, $__sayfalar, $__gorunen, $__dosya, $__et, $__em, $__eks, $__e, $__eh, $__ei, $__el, $__ea, $__acik, $__muh, $__ek); ?>
         <!-- Şema Migrasyon: menüden kaldırıldı — doğrudan URL (migrate.php) ile
              admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
              tombstone. -->

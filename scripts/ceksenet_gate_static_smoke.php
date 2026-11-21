@@ -50,14 +50,14 @@ foreach (array_merge($sayfalar, is_file($ROOT . '/cek_cikti.php') ? ['cek_cikti.
     $s = kod($ROOT . '/' . $f);
     if (str_contains($s, 'config/ceksenet_core.php')) { $calisan[] = $f; continue; }
     $yerTutucu[] = $f;
-    ok("$f: yer tutucu — is_admin kapısı + 'hazırlanıyor', \$_POST yok, ceksenet_core çağrısı yok", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST') && !str_contains($s, 'ceksenet_'));
+    ok("$f: yer tutucu — is_admin kapısı + 'hazırlanıyor', \$_POST yok, ceksenet_core çağrısı yok", (bool)preg_match('/if \(!muhasebe_(?:sayfa|grup_okuma)_can\([^)]+\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST') && !str_contains($s, 'ceksenet_'));
 }
 ok('çalışan + yer tutucu sayfalar kümesi tam (' . count($calisan) . ' çalışan, ' . count($yerTutucu) . ' yer tutucu)', count($calisan) + count($yerTutucu) === count($sayfalar) + (int)is_file($ROOT . '/cek_cikti.php'));
 foreach ($calisan as $f) {
     $s = kod($ROOT . '/' . $f);
-    $ps = array_map(fn($a) => $pos($s, $a), ['require_login()', 'if (!is_admin()) { forbidden(', "ceksenet_kapi('read')", 'ceksenet_no_store()', 'ceksenet_sayfa_kapisi($pdo)', 'render_header(']);
+    $ps = array_map(fn($a) => $pos($s, $a), ['require_login()', '{ forbidden(); }', "ceksenet_kapi('read')", 'ceksenet_no_store()', 'ceksenet_sayfa_kapisi($pdo)', 'render_header(']);
     if ($f === 'cek_cikti.php') $ps = array_slice($ps, 0, 5);   // çıktı ucu sayfa gövdesi basmaz (A4 yazdır / xlsx)
-    ok("$f: kabuk sırası require_login → is_admin → ceksenet_kapi('read') → ceksenet_no_store → ceksenet_sayfa_kapisi" . ($f === 'cek_cikti.php' ? '' : ' → render_header'), $sirali($ps), json_encode($ps));
+    ok("$f: kabuk sırası require_login → muhasebe_sayfa_can → ceksenet_kapi('read') → ceksenet_no_store → ceksenet_sayfa_kapisi" . ($f === 'cek_cikti.php' ? '' : ' → render_header'), $sirali($ps), json_encode($ps));
     ok("$f: config/cari_core.php / kasa_core.php metni GEÇMEZ (çekirdek yalnız ceksenet_core)", !str_contains($s, 'config/cari_core.php') && !str_contains($s, 'config/kasa_core.php'));
     ok("$f: yalnız GET — \$_POST YOK, csrf_check YOK, Location YOK", !str_contains($s, '$_POST') && !str_contains($s, 'csrf_check(') && !preg_match("/header\\s*\\(\\s*['\"]Location/i", $s));
     ok("$f: SQL yazma YOK, ->prepare/->query YOK", !preg_match($SQL_YAZ, $s) && !preg_match('/->(prepare|query|exec)\(/', $s));
@@ -78,11 +78,11 @@ ok('csrf_check, ilk ceksenet_ yazma çağrısından ÖNCE', $pCsrf > 0 && $pCsrf
 preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET_ORDER);
 $isl = array_map(fn($m) => $m[1], $cm);
 ok('işlem dalları (6, bu sırayla): bordro_kaydet · islem_uygula · hareket_iptal · tanim_kaydet · tanim_durum · tanim_sil', $isl === ['bordro_kaydet', 'islem_uygula', 'hareket_iptal', 'tanim_kaydet', 'tanim_durum', 'tanim_sil'], json_encode($isl));
-$yetki = ['bordro_kaydet' => 'write', 'islem_uygula' => 'write', 'hareket_iptal' => 'delete', 'tanim_kaydet' => 'admin', 'tanim_durum' => 'admin', 'tanim_sil' => 'admin'];
+$yetki = ['bordro_kaydet' => "'create'", 'islem_uygula' => "'edit'", 'hareket_iptal' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
 $cagri = ['bordro_kaydet' => 'ceksenet_bordro_kaydet(', 'islem_uygula' => 'ceksenet_islem_uygula(', 'hareket_iptal' => 'ceksenet_hareket_iptal(', 'tanim_kaydet' => 'ceksenet_tanim_kaydet(', 'tanim_durum' => 'ceksenet_tanim_durum(', 'tanim_sil' => 'ceksenet_tanim_sil('];
 foreach ($cm as $m) {
     $y = $yetki[$m[1]] ?? '?';
-    ok("dal $m[1]: ceksenet_kapi('$y') İLK ifade; tek ceksenet_kapi; yalnız ceksenet_ fonksiyonu (cari_/kasa_ çağrısı YOK); ceksenet_cevap", (bool)preg_match("/^\\s*ceksenet_kapi\\('" . $y . "'\\);/", $m[2]) && substr_count($m[2], 'ceksenet_kapi(') === 1
+    ok("dal $m[1]: ceksenet_kapi($y) İLK ifade; tek ceksenet_kapi; yalnız ceksenet_ fonksiyonu (cari_/kasa_ çağrısı YOK); ceksenet_cevap", (bool)preg_match("/^\\s*ceksenet_kapi\\(" . preg_quote($y, '/') . "\\);/", $m[2]) && substr_count($m[2], 'ceksenet_kapi(') === 1
         && !preg_match('/\b(cari|kasa|stok|fatura)_[a-z_]+\(/', $m[2]) && str_contains($m[2], $cagri[$m[1]] ?? '#') && str_contains($m[2], 'ceksenet_cevap($s, $geri,'), substr($m[2], 0, 80));
 }
 ok('`geri` yerel beyaz liste: ceksenet_geri_guvenli($_POST[\'geri\']) + çekirdekte (cek_dekontu|senet_dekontu|cek_tanimlari) regex\'i', str_contains($k, "ceksenet_geri_guvenli(\$_POST['geri']")
@@ -126,7 +126,7 @@ foreach ($yazanlar as $fn) ok("core $fn: audit_log_event(…, 'ceksenet', …) v
 $yetkili = [];
 foreach ([...$yazanlar, 'ceksenet_bordro_dogrula', 'ceksenet_dekont_yaz', 'ceksenet_kasa_coz', 'ceksenet_tanim_dogrula'] as $fn) if (preg_match('/\b(can|is_admin|require_perm|ceksenet_can|ceksenet_kapi|cari_can|cari_kapi|kasa_can|kasa_kapi)\s*\(/', (string)govde($c, $fn))) $yetkili[] = $fn;
 ok('core: yazan / doğrulayan fonksiyonlarda yetki kontrolü YOK (uçların işi)', !$yetkili, implode(',', $yetkili));
-ok('core: ceksenet_can yalnız is_admin() (tek değişim noktası; izin kataloğuna bağlanmadı)', ($g = govde($c, 'ceksenet_can')) !== null && str_contains($g, 'is_admin()') && !preg_match('/\bcan\(/', $g));
+ok('core: ceksenet_can TEK değişim noktası: muhasebe_modul_can (Roller; v550, varsayılan kapalı)', ($g = govde($c, 'ceksenet_can')) !== null && str_contains($g, 'muhasebe_modul_can(') && !str_contains($g, 'is_admin()'));
 foreach (['ceksenet_portfoy_no', 'ceksenet_bordro_no', 'ceksenet_belge_no', 'ceksenet_para_db', 'ceksenet_tarih_coz', 'ceksenet_vade_coz', 'ceksenet_onay', 'ceksenet_geri_guvenli', 'ceksenet_siniflar', 'ceksenet_durumlar', 'ceksenet_islemler', 'ceksenet_izinli_islemler', 'ceksenet_ortalama_vade', 'ceksenet_durum_etiketi'] as $fn) {
     ok("core $fn SAF (PDO/sorgu/audit/\$GLOBALS YOK)", ($g = govde($c, $fn)) !== null && !preg_match('/PDO|->|audit_log_event|\$GLOBALS/', $g));
 }

@@ -39,7 +39,9 @@ foreach ($gruplar as $slug => $g) {
         $s = (string)file_get_contents($yol);
         ok("$dosya: <?php ile başlar", str_starts_with($s, '<?php'));
         ok("$dosya: require_login()", str_contains($s, 'require_login()'));
-        ok("$dosya: is_admin() kapısı", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
+        // v550: admin_konsolu yalnız is_admin(); diğer tüm menü sayfaları kendi muhasebe_sayfa_can('<slug>') kapısıyla (varsayılan kapalı, yönetici her zaman).
+        if ($slug === 'admin_konsolu') ok("$dosya: is_admin() kapısı", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
+        else ok("$dosya: muhasebe_sayfa_can('$ad') kapısı (bare is_admin gate yok)", str_contains($s, "if (!muhasebe_sayfa_can('$ad')) { forbidden(); }") && !preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
         if (preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
             $hedef = explode('?', $lm[1])[0];
             ok("$dosya: yönlendirme hedefi var ($hedef)", is_file($ROOT . '/' . $hedef));
@@ -81,7 +83,7 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: yeni fiş ve hücre işlemleri", str_contains($s, "'create'") && str_contains($s, "'save'") && str_contains($s, "'duplicate'") && str_contains($s, "'delete'"));
             ok("$dosya: BRÜT / NET başlıkları ve referans alanı yok", str_contains($s, '>BRÜT<') && str_contains($s, '>NET<') && !str_contains($s, 'Yük.Ref') && !str_contains($s, '>Ref<'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
-            ok("$dosya: yalnız yönetici kapısı (is_admin)", str_contains($s, 'is_admin()'));
+            ok("$dosya: yazma işlemleri muhasebe_palet_can ile kapılı", str_contains($s, "muhasebe_palet_can('edit')") || str_contains($s, "pf_yetki('edit')"));
             ok("$dosya: cari tablolarına YAZMAZ (cari_kart_kaydet/cari_hareket_ekle yok; yazma cari_kaydet.php)", !str_contains($s, 'cari_kart_kaydet(') && !str_contains($s, 'cari_hareket_ekle(') && !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?cari_/i', $s));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));

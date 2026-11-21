@@ -52,14 +52,14 @@ foreach (array_merge($sayfalar, is_file($ROOT . '/kasa_cikti.php') ? ['kasa_cikt
     $s = kod($ROOT . '/' . $f);
     if (str_contains($s, 'config/kasa_core.php')) { $calisan[] = $f; continue; }
     $yerTutucu[] = $f;
-    ok("$f: yer tutucu — is_admin kapısı + 'hazırlanıyor', \$_POST yok, kasa_core çağrısı yok", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST') && !str_contains($s, 'kasa_'));
+    ok("$f: yer tutucu — is_admin kapısı + 'hazırlanıyor', \$_POST yok, kasa_core çağrısı yok", (bool)preg_match('/if \(!muhasebe_(?:sayfa|grup_okuma)_can\([^)]+\)\) \{ forbidden\(/', $s) && str_contains($s, 'hazırlanıyor') && !str_contains($s, '$_POST') && !str_contains($s, 'kasa_'));
 }
 ok('çalışan + yer tutucu sayfalar kümesi tam (' . count($calisan) . ' çalışan, ' . count($yerTutucu) . ' yer tutucu)', count($calisan) + count($yerTutucu) === count($sayfalar) + (int)is_file($ROOT . '/kasa_cikti.php'));
 foreach ($calisan as $f) {
     $s = kod($ROOT . '/' . $f);
-    $ps = array_map(fn($a) => $pos($s, $a), ['require_login()', 'if (!is_admin()) { forbidden(', "kasa_kapi('read')", 'kasa_no_store()', 'kasa_sayfa_kapisi($pdo)', 'render_header(']);
+    $ps = array_map(fn($a) => $pos($s, $a), ['require_login()', '{ forbidden(); }', "kasa_kapi('read')", 'kasa_no_store()', 'kasa_sayfa_kapisi($pdo)', 'render_header(']);
     if ($f === 'kasa_cikti.php') $ps = array_slice($ps, 0, 5);   // çıktı ucu sayfa gövdesi basmaz (A4 yazdır / xlsx)
-    ok("$f: kabuk sırası require_login → is_admin → kasa_kapi('read') → kasa_no_store → kasa_sayfa_kapisi" . ($f === 'kasa_cikti.php' ? '' : ' → render_header'), $sirali($ps), json_encode($ps));
+    ok("$f: kabuk sırası require_login → muhasebe_sayfa_can → kasa_kapi('read') → kasa_no_store → kasa_sayfa_kapisi" . ($f === 'kasa_cikti.php' ? '' : ' → render_header'), $sirali($ps), json_encode($ps));
     ok("$f: config/kasa_core.php yüklenir; config/cari_core.php metni GEÇMEZ", !str_contains($s, 'config/cari_core.php'));
     ok("$f: yalnız GET — \$_POST YOK, csrf_check YOK, Location YOK", !str_contains($s, '$_POST') && !str_contains($s, 'csrf_check(') && !preg_match("/header\\s*\\(\\s*['\"]Location/i", $s));
     ok("$f: SQL yazma YOK, ->prepare/->query YOK", !preg_match($SQL_YAZ, $s) && !preg_match('/->(prepare|query|exec)\(/', $s));
@@ -81,12 +81,12 @@ preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET
 $isl = array_map(fn($m) => $m[1], $cm);
 ok('işlem dalları (9, bu sırayla): kart_kaydet · kart_durum · kart_sil · tanim_kaydet · tanim_durum · tanim_sil · hareket_ekle · virman_ekle · hareket_iptal',
     $isl === ['kart_kaydet', 'kart_durum', 'kart_sil', 'tanim_kaydet', 'tanim_durum', 'tanim_sil', 'hareket_ekle', 'virman_ekle', 'hareket_iptal'], json_encode($isl));
-$yetki = ['kart_kaydet' => 'write', 'kart_durum' => 'write', 'kart_sil' => 'delete', 'tanim_kaydet' => 'admin', 'tanim_durum' => 'admin', 'tanim_sil' => 'admin', 'hareket_ekle' => 'write', 'virman_ekle' => 'write', 'hareket_iptal' => 'delete'];
+$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'", 'hareket_ekle' => "'create'", 'virman_ekle' => "'create'", 'hareket_iptal' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
 $cagri = ['kart_kaydet' => 'kasa_kart_kaydet(', 'kart_durum' => 'kasa_kart_durum(', 'kart_sil' => 'kasa_kart_sil(', 'tanim_kaydet' => 'kasa_tanim_kaydet(', 'tanim_durum' => 'kasa_tanim_durum(', 'tanim_sil' => 'kasa_tanim_sil(',
     'hareket_ekle' => 'kasa_hareket_ekle(', 'virman_ekle' => 'kasa_virman_ekle(', 'hareket_iptal' => 'kasa_hareket_iptal('];
 foreach ($cm as $m) {
     $y = $yetki[$m[1]] ?? '?';
-    ok("dal $m[1]: kasa_kapi('$y') İLK ifade; tek kasa_kapi; yalnız kasa_ fonksiyonu (cari_ çağrısı YOK); kasa_cevap", (bool)preg_match("/^\\s*kasa_kapi\\('" . $y . "'\\);/", $m[2]) && substr_count($m[2], 'kasa_kapi(') === 1
+    ok("dal $m[1]: kasa_kapi($y) İLK ifade; tek kasa_kapi; yalnız kasa_ fonksiyonu (cari_ çağrısı YOK); kasa_cevap", (bool)preg_match("/^\\s*kasa_kapi\\(" . preg_quote($y, '/') . "\\);/", $m[2]) && substr_count($m[2], 'kasa_kapi(') === 1
         && !preg_match('/\b(cari|stok|fatura)_[a-z_]+\(/', $m[2]) && str_contains($m[2], $cagri[$m[1]] ?? '#') && str_contains($m[2], 'kasa_cevap($s, $geri,'), substr($m[2], 0, 80));
 }
 $he = '';
@@ -127,7 +127,7 @@ foreach ($yazanlar as $fn) ok("core $fn: audit_log_event(…, 'kasa', …) var",
 $yetkili = [];
 foreach ([...$yazanlar, 'kasa_hareket_ortak', 'kasa_kart_dogrula', 'kasa_eksi_uyarisi', 'kasa_eksik_hesapla'] as $fn) if (preg_match('/\b(can|is_admin|require_perm|kasa_can|kasa_kapi|cari_can|cari_kapi)\s*\(/', (string)govde($c, $fn))) $yetkili[] = $fn;
 ok('core: yazan / doğrulayan fonksiyonlarda yetki kontrolü YOK (uçların işi; kaynakli iptal yetki kontrolü yapmaz)', !$yetkili, implode(',', $yetkili));
-ok('core: kasa_can yalnız is_admin() (tek değişim noktası; izin kataloğuna bağlanmadı)', ($g = govde($c, 'kasa_can')) !== null && str_contains($g, 'is_admin()') && !preg_match('/\bcan\(/', $g));
+ok('core: kasa_can TEK değişim noktası: muhasebe_modul_can (Roller; v550, varsayılan kapalı)', ($g = govde($c, 'kasa_can')) !== null && str_contains($g, 'muhasebe_modul_can(') && !str_contains($g, 'is_admin()'));
 foreach (['kasa_belge_no', 'kasa_para_db', 'kasa_tarih_coz', 'kasa_onay', 'kasa_tur_bilgi', 'kasa_hareket_turleri', 'kasa_dahili_turler', 'kasa_geri_guvenli'] as $fn) ok("core $fn SAF (PDO/sorgu/audit/\$GLOBALS YOK)", ($g = govde($c, $fn)) !== null && !preg_match('/PDO|->|audit_log_event|\$GLOBALS/', $g));
 ok('core: para kuruş TAM SAYI — bakiye fonksiyonları cari_kurus ile (float toplama sonucu yuvarlanır); bakiye dönüş tipi int', str_contains($c, 'function kasa_bakiye(PDO $pdo, int $kasaId, ?string $bitis = null): int') && str_contains((string)govde($c, 'kasa_bakiye'), 'cari_kurus('));
 
