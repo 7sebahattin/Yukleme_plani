@@ -40,8 +40,9 @@ ok('migrasyon idempotent (kolon varsa atlar)', str_contains($core, "'durum' => '
 ok('hiçbir araç pasif değil (data-pf-pasif yok)', !str_contains($php, 'data-pf-pasif') && !str_contains($js, 'data-pf-pasif') && !str_contains($js, 'henüz çalışmıyor'));
 foreach (['coglat', 'sil', 'bul', 'duzelt', 'yazdir'] as $arac) ok("araç bağlı: $arac", str_contains($php, "data-pf=\"$arac\"") && str_contains($js, $arac));
 ok('Sil: F3 + Delete, Düzelt: F4', str_contains($js, "event.key === 'F3'") && str_contains($js, "event.key === 'F4'"));
-ok('Sil onay ister ve sunucuya delete gönderir', str_contains($js, "window.confirm(") && str_contains($js, "send('delete'"));
-ok('Çoğalt sunucu satırını listeye ekler (yeniden yükleme yok)', str_contains($js, "send('duplicate'") && !str_contains($js, 'location.reload'));
+ok('Sil: ilk basış satırı kırmızı yapar (pf-row-silinecek), ikinci basış sunucuya delete gönderir; tarayıcı onay penceresi yok', str_contains($js, "classList.add('pf-row-silinecek')") && str_contains($js, "send('delete'") && !str_contains($js, 'window.confirm(') && str_contains((string)file_get_contents(__DIR__ . '/../assets/palet-fisleri.css'), 'tr.pf-row-silinecek td'));
+ok('Sil: başka satıra geçmek / Esc / Düzelt silme işaretini kaldırır', str_contains($js, 'silmeIptal()') && str_contains($js, "event.key === 'Escape' && silinecek"));
+ok('Çoğalt sunucu satırını listeye ekler (yeniden yükleme yok) ve kopyayı Düzelt penceresinde açar', str_contains($js, "send('duplicate'") && !str_contains($js, 'location.reload') && preg_match("/send\\('duplicate'.*?satirEkle\\(r\\.row\\).*?openDialog\\('duzelt'\\)/s", $js) === 1);
 ok('Düzelt tam kayıt kaydeder (tam=1) ve müstahsili yalnız bayrakla değiştirir', str_contains($js, 'tam: 1') && str_contains($js, 'mustahsil_duzenle') && str_contains($php, "!empty(\$_POST['mustahsil_duzenle'])"));
 ok('Filtre: başlangıç tarihi + yüklenen göster (GET, yazma yok)', str_contains($php, "\$_GET['baslangic']") && str_contains($php, "COALESCE(r.durum, '') <> 'yuklendi'") && str_contains($php, 'name="baslangic"'));
 ok('Excel: reports.export kapısı + export_audit + csv/xlsx', str_contains($php, "require_perm('reports.export')") && str_contains($php, "export_audit('palet_fisleri'") && str_contains($php, 'xlsx_indir(') && str_contains($php, 'export_menu('));

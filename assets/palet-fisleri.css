@@ -181,3 +181,8 @@ body.pf-boyutlaniyor .pf-rs{background:#7cc4ff99}
 @media(max-width:360px){.pf-kart strong{font-size:.66rem}.pf-kart span{font-size:.52rem}}
 html[data-theme="dark"] .pf-dialog input::placeholder{color:#8a98ad;opacity:1}
 html[data-theme="dark"] .pf-bul-baslik{background:linear-gradient(#2c4b70,#1f3a5a);color:#e7ecf4}
+
+/* ── v539: ilk Sil'de satır kırmızı (ikinci Sil'de silinir) ── */
+.pf-table tbody tr.pf-row-silinecek td,.pf-table tbody tr.pf-row-silinecek td.pf-cell-selected{background:#c0261c!important;color:#fff!important;font-weight:700}
+.pf-table tbody tr.pf-row-silinecek td[data-col="belge_no"]::before{color:#fff}
+.pf-table tbody tr.pf-row-silinecek td.pf-cell-selected{outline-color:#ffd0cc}
