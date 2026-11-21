@@ -1,3 +1,4 @@
+.pf-page,.pf-page input,.pf-page button,.pf-page select,.pf-dialog,.pf-dialog input,.pf-dialog button,.pf-dialog select{font-family:inherit}
 main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;overflow:hidden}
 .pf-page{--pf-border:var(--border,#c9d6e4);--pf-head:#0e477c;--pf-blue:#0877d1;display:flex;flex-direction:column;gap:12px;width:100%;max-width:none;height:calc(100dvh - 132px);min-height:360px;margin:0;padding:0 0 8px;overflow:hidden}
 .pf-top{position:sticky;top:0;z-index:4;flex:none;background:var(--bg,#f4f7fb)}
