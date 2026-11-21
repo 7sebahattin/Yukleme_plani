@@ -125,9 +125,7 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-kart{cursor:pointer;transition:border-color .12s,box-shadow .12s,transform .12s}
 .pf-kart:hover{border-color:#0782dc;box-shadow:0 4px 12px #0b244033;transform:translateY(-1px)}
 .pf-kart:focus-visible{outline:2px solid #0782dc;outline-offset:2px}
-.pf-table-wrap{background:linear-gradient(to right,var(--pf-gutter) 22px,transparent 22px),var(--pf-surface)}
-.pf-kose{position:sticky;top:0;left:0;z-index:6;width:22px;height:34px;margin-bottom:-34px;box-sizing:border-box;background:var(--pf-head);border-right:1px solid #ffffff55}
-.pf-table{table-layout:fixed;width:max-content;min-width:0!important;margin-left:22px}
+.pf-table{table-layout:fixed;width:max-content;min-width:0!important}
 .pf-table td{max-width:none!important}
 .pf-table th{height:34px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
 .pf-rs{position:absolute;top:0;right:0;bottom:0;width:8px;cursor:col-resize;z-index:3}
@@ -235,3 +233,12 @@ html[data-theme="dark"] .pf-bul-baslik{background:linear-gradient(#2c4b70,#1f3a5
 body.pf-suruklen{cursor:grabbing;user-select:none;-webkit-user-select:none}
 .pf-hayalet{position:fixed;z-index:3500;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 10px;background:#0e477c;color:#fff;font-weight:700;font-size:.88rem;border:2px solid #70d2ff;border-radius:6px;opacity:.72;box-shadow:0 8px 22px #0b244066;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pf-birak{position:fixed;z-index:3400;width:3px;background:#29b6ff;box-shadow:0 0 8px #29b6ff;border-radius:2px;pointer-events:none}
+
+/* ── v543: sol şerit kaldırıldı; Sütunlar penceresi (başlığa çift tık) ── */
+.pf-sutun-dialog{width:min(380px,calc(100vw - 24px))}
+.pf-sutun-liste{display:flex;flex-direction:column;padding:8px 12px;max-height:min(62dvh,520px);overflow-y:auto}
+.pf-sutun-satir{display:flex;align-items:center;gap:12px;padding:10px 8px;border-bottom:1px solid var(--pf-border);font-weight:650;cursor:pointer;color:var(--pf-text)}
+.pf-sutun-satir:last-child{border-bottom:0}
+.pf-sutun-satir:hover{background:var(--pf-hover-bg);color:var(--pf-hover-text);border-radius:6px}
+.pf-sutun-satir input{width:20px;height:20px;flex:none;accent-color:#0b78d0}
+.pf-sutun-satir input:disabled{opacity:.5}
