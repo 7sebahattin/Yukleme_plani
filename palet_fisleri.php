@@ -386,8 +386,8 @@ render_header('Palet Fişleri');
                 <?php if (can('reports.export')): ?><?= export_menu('palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']), 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'xlsx']), 'Excel', 'pf-tb pf-tb-xl') ?><?php endif; ?>
                 <button type="button" class="pf-tb" data-pf="duzelt" title="Seçili palet fişini düzenler (F4 / çift tık)">✎ Düzelt</button>
                 <button type="button" class="pf-tb" data-pf="bul" title="Listede ara">⌕ Bul</button>
-                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" title="Seçili palet fişini siler (F3 / Delete)">🗑 F3 - Sil</button>
-                <button type="button" class="pf-tb" data-pf="coglat" title="Seçili palet fişini kopyalar (Ctrl+Shift+D)">⧉ Çoğalt</button>
+                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" title="Seçili palet fişini siler: ilk basış satırı kırmızı yapar, ikinci basış siler (F3 / Delete)">🗑 F3 - Sil</button>
+                <button type="button" class="pf-tb" data-pf="coglat" title="Seçili palet fişini kopyalar ve kopyayı düzeltme penceresinde açar (Ctrl+Shift+D)">⧉ Çoğalt</button>
                 <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?> title="Yeni palet fişi (F2)">＋ F2 - Ekle</button>
             </div>
         </form>

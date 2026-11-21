@@ -29,10 +29,17 @@
 
     function cells() { return Array.from(body.querySelectorAll('td.pf-cell')); }
     function visibleRows() { return Array.from(body.querySelectorAll('tr')).filter(row => !row.hidden); }
+    let silinecek = null;     // ilk Sil ile kırmızıya boyanan satır (ikinci Sil'de silinir)
+    function silmeIptal(mesajli) {
+        if (!silinecek) return;
+        silinecek.classList.remove('pf-row-silinecek'); silinecek = null;
+        if (mesajli) setStatus('Silme vazgeçildi.');
+    }
     function selectCell(cell) {
         if (!cell || cell.tagName !== 'TD') return;
         body.querySelectorAll('.pf-cell-selected').forEach(node => node.classList.remove('pf-cell-selected'));
         body.querySelectorAll('.pf-row-selected').forEach(node => node.classList.remove('pf-row-selected'));
+        if (silinecek && silinecek !== cell.parentElement) silmeIptal();
         cell.classList.add('pf-cell-selected');
         cell.parentElement.classList.add('pf-row-selected');
         selectedCell = cell;
@@ -200,31 +207,47 @@
         const sayac = document.getElementById('pfCount');
         if (sayac) sayac.textContent = Math.max(0, Number(String(sayac.textContent).replace(/\./g, '')) + delta).toLocaleString('tr-TR');
     }
+    // Çoğalt: seçili satır hemen kopyalanır (yeni belge no) ve kopya Düzelt penceresinde açılır;
+    // gerekirse değiştirip Güncelle ile kaydedilir, kapatılırsa kopya olduğu gibi kalır.
     async function coglat() {
         const row = seciliSatir();
         if (!row) { setStatus('Önce çoğaltılacak satırı seçin.'); return; }
+        if (dialog?.open) return;
+        silmeIptal();
         try {
             const r = await send('duplicate', { id: row.dataset.id });
             satirEkle(r.row);
             nextBelge = r.next_belge || nextBelge;
-            setStatus(`${r.row.belge_no} numaralı belge olarak kopyalandı.`);
+            setStatus(`${r.row.belge_no} numaralı belge olarak kopyalandı; gerekirse düzeltip Güncelle'ye basın.`);
+            openDialog('duzelt');
         } catch (error) { setStatus(error.message); }
     }
+    // Sil: ilk basışta satır kırmızı olur; AYNI satırda ikinci basışta (düğme / F3 / Delete) silinir.
+    // Başka satıra geçmek, Esc ya da Çoğalt/Düzelt vazgeçirir.
     async function sil() {
         const row = seciliSatir();
         if (!row) { setStatus('Önce silinecek satırı seçin.'); return; }
         const belge = row.querySelector('[data-col="belge_no"]')?.textContent.trim();
-        if (!window.confirm(`${belge} numaralı palet fişi silinsin mi? Bu işlem geri alınamaz.`)) return;
+        if (silinecek !== row) {
+            silmeIptal();
+            silinecek = row; row.classList.add('pf-row-silinecek');
+            setStatus(`${belge} numaralı palet fişi silinecek — silmek için Sil'e tekrar basın, vazgeçmek için Esc.`);
+            return;
+        }
         try {
             await send('delete', { id: row.dataset.id });
+            silinecek = null;
             const komsu = row.nextElementSibling || row.previousElementSibling;
             row.remove(); selectedCell = null;
             sayacDegis(-1);
             if (komsu) selectCell(komsu.children[0]); else refreshTotals();
             empty.hidden = body.children.length > 0;
             setStatus(`${belge} numaralı palet fişi silindi.`);
-        } catch (error) { setStatus(error.message); }
+        } catch (error) { silmeIptal(); setStatus(error.message); }
     }
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && silinecek && !document.querySelector('dialog[open]')) { event.preventDefault(); silmeIptal(true); }
+    });
     wrap.addEventListener('keydown', event => {
         if (editor || event.target.matches('input,select,textarea')) return;
         if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') { event.preventDefault(); coglat(); return; }
@@ -395,6 +418,7 @@
     function openDialog(istenen) {
         if (!dialog || dialog.open) return;
         mod = istenen === 'duzelt' ? 'duzelt' : 'ekle';
+        silmeIptal();
         if (mod === 'duzelt') {
             const tr = seciliSatir();
             if (!tr) { setStatus('Önce düzeltilecek satırı seçin.'); mod = 'ekle'; return; }
