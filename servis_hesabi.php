@@ -71,6 +71,8 @@ $kayitYetkisi = pdks_cari_can('payments');
 
 render_header('Servis Hesabı');
 render_flash();
+$base = function_exists('base_url') ? base_url() : '';
+echo '<link rel="stylesheet" href="' . h($base) . 'assets/pdks.css?v=' . (int)@filemtime(__DIR__ . '/assets/pdks.css') . '">';
 ?>
 <style>
 @media print { .topbar, .sidebar, .bottomnav, .no-print, .page-head-actions { display:none !important; } .card { box-shadow:none; } }
@@ -78,6 +80,9 @@ render_flash();
 .sv-h-kutu { border:1px solid var(--border,#ddd); border-radius:10px; padding:10px 12px; }
 .sv-h-kutu b { display:block; font-size:1.15rem; }
 .sv-h-sayi { text-align:right; white-space:nowrap; }
+.pdks-filter-bar label { display:flex; flex-direction:column; gap:4px; }
+.data-table th, .data-table td { padding:8px 12px; }
+.data-table td:first-child, .data-table td:nth-child(2) { white-space:nowrap; }
 .sv-h-soluk { color:#888; font-size:.85em; }
 </style>
 
@@ -124,7 +129,7 @@ render_flash();
     <?php endforeach; ?>
 </div>
 <div class="table-wrap">
-<table class="table">
+<table class="data-table">
     <thead><tr>
         <th>Tarih</th><th>Çavuş</th>
         <th class="sv-h-sayi">Büyük</th><th class="sv-h-sayi">Küçük</th>
@@ -176,7 +181,7 @@ render_flash();
 </div>
 <?php endif; ?>
 <div class="table-wrap">
-<table class="table">
+<table class="data-table">
     <thead><tr><th>Tarih</th><th>Yöntem</th><th>Referans / Açıklama</th><th class="sv-h-sayi">Tutar</th><th>Durum</th><th class="no-print"></th></tr></thead>
     <tbody>
     <?php if (!$odemeler): ?><tr><td colspan="6" class="muted">Bu dönemde ödeme yok.</td></tr><?php endif; ?>
