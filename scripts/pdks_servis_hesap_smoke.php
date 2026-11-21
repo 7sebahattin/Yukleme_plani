@@ -69,9 +69,11 @@ t('E5) ikinci iptal reddi', !pdks_servis_odeme_iptal((int)$r['id'], 'tekrar', 1,
 // Statik
 $k = file_get_contents($root . '/config/pdks_servis_hesap.php');
 t('F1) ödeme tablosunda DELETE yok', stripos($k, 'DELETE FROM servis_odemeleri') === false);
-$p = file_get_contents($root . '/servis_hesabi.php');
-t('F2) sayfa: csrf_check + payments kapısı + SQL yok', str_contains($p, 'csrf_check(') && str_contains($p, "require_pdks_cari('payments')") && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $p));
-t('F3) rol matrisi rotası', str_contains(file_get_contents($root . '/config/role_pdks_matrix.php'), "'servis_hesabi.php'"));
+$p = file_get_contents($root . '/servis_odemeleri.php');
+t('F2) ödemeler sayfası: csrf_check + payments kapısı + SQL yok', str_contains($p, 'csrf_check(') && str_contains($p, "require_pdks_cari('payments')") && !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $p));
+$h = file_get_contents($root . '/servis_hesabi.php');
+t('F2b) Servis Hesabı: ödeme listesi/formu YOK, ödeme sayfasına bağlantı var', !str_contains($h, 'odeme_kaydet') && !str_contains($h, 'pdks_servis_odeme_listesi') && str_contains($h, 'servis_odemeleri.php'));
+t('F3) rol matrisi rotası', str_contains(file_get_contents($root . '/config/role_pdks_matrix.php'), "'servis_hesabi.php'") && str_contains(file_get_contents($root . '/config/role_pdks_matrix.php'), "'servis_odemeleri.php'"));
 t('F4) migrate kartı', str_contains(file_get_contents($root . '/migrate.php'), "ne') ?? '') === 'pdks_servis_odeme'") || str_contains(file_get_contents($root . '/migrate.php'), "'pdks_servis_odeme'"));
 echo "\nSONUÇ: $pass geçti, $fail hata\n";
 exit($fail ? 1 : 0);

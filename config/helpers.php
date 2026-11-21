@@ -261,6 +261,7 @@ function nav_ptak_sayfalari(): array {
         // v503 Buçuklu Çıkışlar (çıkış dakikası :30 olanları düzeltme, yalnız yönetici)
         'bucuklu_cikislar.php',
         'servis_hesabi.php',   // v532 Servis Hesabı (servisçi cari)
+        'servis_odemeleri.php',   // v533 Servisçi Ödemeleri (ayrı sayfa)
         'cavus_donem_raporu.php',
         // v507 Günlük Üretim (işlenen mal + işçi başı verim)
         'gunluk_uretim.php', 'gunluk_uretim_yukle.php',
