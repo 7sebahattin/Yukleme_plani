@@ -91,3 +91,19 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-dialog-head{position:sticky;top:0;z-index:2;background:var(--surface,#fff)}
 .pf-form-grid>label.pf-must{grid-column:1/-1}
 .pf-form-grid input:disabled{background:var(--bg,#eef3f8);color:#7a8ba0;cursor:not-allowed}
+/* ── Bul / Parti Özeti / Excel menüsü ── */
+.pf-bul{display:flex;align-items:center;gap:6px;max-width:340px;flex:1;min-width:180px;background:#fff;border-radius:6px;padding:0 6px 0 8px;color:#345}
+.pf-bul[hidden]{display:none}
+.pf-bul input{width:100%;border:0;outline:0;padding:6px 0;background:transparent;color:#10253c;min-height:30px}
+.pf-bul-kapat{border:0;background:transparent;font-size:1.3rem;line-height:1;color:#567;cursor:pointer;padding:0 4px}
+.pf-ozet-dialog{width:min(760px,calc(100vw - 24px))}
+.pf-ozet-gov{padding:10px 16px 16px;overflow-x:auto}
+.pf-ozet-tablo{width:100%;border-collapse:collapse;font-size:.95rem}
+.pf-ozet-tablo th{background:var(--pf-head);color:#fff;padding:8px 10px;text-align:center;white-space:nowrap}
+.pf-ozet-tablo td{padding:7px 10px;border-bottom:1px solid var(--pf-border);white-space:nowrap}
+.pf-ozet-tablo td.pf-num{text-align:right;font-variant-numeric:tabular-nums}
+.pf-ozet-tablo tbody tr{cursor:pointer}.pf-ozet-tablo tbody tr:hover,.pf-ozet-tablo tbody tr:focus{background:#d5ecff;outline:0}
+.pf-ozet-parti{font-weight:700}
+.pf-ozet-tablo tfoot td{font-weight:800;background:var(--bg,#eef3f8);border-top:2px solid var(--pf-head)}
+.pf-tb-grup .dl-menu{display:inline-block}
+.pf-tb-grup .dl-menu .pf-tb{cursor:pointer}

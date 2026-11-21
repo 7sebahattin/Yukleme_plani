@@ -6,6 +6,7 @@ require_once __DIR__ . '/config/calc.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cari_core.php';
 require_once __DIR__ . '/config/palet_fisleri_core.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
@@ -86,6 +87,18 @@ function pf_get_row(int $id): array {
     return $row;
 }
 
+/** İstemciye giden tek satır (liste hücreleri + Düzelt penceresi için ek alanlar). */
+function pf_satir_json(array $y): array {
+    return [
+        'id' => (int)$y['id'], 'loading_record_id' => (int)$y['loading_record_id'], 'belge_no' => (int)$y['belge_no'], 'parti_no' => (string)$y['parti_no'],
+        'palet_tipi_id' => (int)($y['palet_tipi_id'] ?? 0), 'palet_adi' => (string)$y['palet_adi'], 'firma' => (string)$y['firma'], 'urun' => (string)$y['urun'],
+        'tarih' => (string)($y['tarih'] ?? ''), 'kasa_cinsi_id' => (int)($y['kasa_cinsi_id'] ?? 0), 'mustahsil_id' => (int)($y['mustahsil_id'] ?? 0),
+        'kasa_adeti' => (int)$y['kasa_adeti'], 'brut_kg' => (float)$y['brut_kg'], 'dara_kg' => (float)$y['dara_kg'], 'net_kg' => (float)$y['net_kg'],
+        'aciklama1' => (string)($y['aciklama1'] ?? ''), 'aciklama2' => (string)($y['aciklama2'] ?? ''), 'mustahsil_ad' => (string)($y['mustahsil_ad'] ?? ''),
+        'kilit' => (!empty($y['locked_at']) || ($y['durum'] ?? '') === 'yuklendi') ? 1 : 0,
+    ];
+}
+
 function pf_save_fields(int $id): void {
     pf_require_note_columns();
     $old = pf_get_row($id);
@@ -110,19 +123,47 @@ function pf_save_fields(int $id): void {
     } else {
         $palet_tipi_id = 0;
     }
+    if ($dara > $brut) throw new RuntimeException('Dara, brüt ağırlıktan büyük olamaz.');
+    // Düzelt penceresi (tam=1): tarih, ürün, kasa ve müstahsil da güncellenir.
+    $tam = !empty($_POST['tam']);
+    $urun = $old['urun']; $tarih = $old['tarih']; $kasa_id = $old['kasa_cinsi_id'] ?? null; $must_id = null; $must_ad = null; $must_dokun = false;
+    if ($tam) {
+        global $has_mustahsil;
+        $urun = pf_input_text('urun', 150);
+        $tarih = pf_input_text('tarih', 10);
+        if ($urun === '' || !pf_valid_date($tarih)) throw new RuntimeException('Ürün ve geçerli tarih zorunludur.');
+        $kasa_id = (int)($_POST['kasa_cinsi_id'] ?? 0);
+        if ($kasa_id > 0) {
+            $kdef = $pdo->prepare("SELECT id FROM material_definitions WHERE id = ? AND type = 'kasa_cinsi' AND is_active = 1");
+            $kdef->execute([$kasa_id]);
+            if (!$kdef->fetchColumn()) throw new RuntimeException('Kasa tanımı geçerli değil.');
+        } else $kasa_id = null;
+        // Müstahsil yalnız alan etkinse (kolon + Cari kurulu) ve istemci bayrak gönderdiyse değişir — aksi halde mevcut değer KORUNUR.
+        $must_dokun = $has_mustahsil && !empty($_POST['mustahsil_duzenle']);
+        if ($must_dokun) [$must_id, $must_ad] = pf_mustahsil_coz($pdo);
+    }
     $pdo->beginTransaction();
     try {
-        $pdo->prepare('UPDATE loading_records SET firma = ?, parti_no = ? WHERE id = ?')
-            ->execute([$firma, $parti, (int)$old['loading_record_id']]);
-        $sql = 'UPDATE loading_pallets SET palet_tipi_id = ?, kasa_adeti = ?, brut_kg = ?, dara_kg = ?, net_kg = ?, aciklama1 = ?, aciklama2 = ? WHERE id = ?';
-        $pdo->prepare($sql)->execute([$palet_tipi_id ?: null, $adet, $brut, $dara, $net, $aciklama1, $aciklama2, $id]);
+        if ($tam) {
+            $pdo->prepare('UPDATE loading_records SET firma = ?, parti_no = ?, urun = ?, tarih = ? WHERE id = ?')
+                ->execute([$firma, $parti, $urun, $tarih, (int)$old['loading_record_id']]);
+            $ek_set = $must_dokun ? ', mustahsil_id = ?, mustahsil_ad = ?' : '';
+            $ek_par = $must_dokun ? [$must_id, $must_ad] : [];
+            $pdo->prepare("UPDATE loading_pallets SET palet_tipi_id = ?, kasa_cinsi_id = ?, urun_cinsi = ?, kasa_adeti = ?, brut_kg = ?, dara_kg = ?, net_kg = ?, aciklama1 = ?, aciklama2 = ?$ek_set WHERE id = ?")
+                ->execute([$palet_tipi_id ?: null, $kasa_id, $urun, $adet, $brut, $dara, $net, $aciklama1, $aciklama2, ...$ek_par, $id]);
+        } else {
+            $pdo->prepare('UPDATE loading_records SET firma = ?, parti_no = ? WHERE id = ?')
+                ->execute([$firma, $parti, (int)$old['loading_record_id']]);
+            $sql = 'UPDATE loading_pallets SET palet_tipi_id = ?, kasa_adeti = ?, brut_kg = ?, dara_kg = ?, net_kg = ?, aciklama1 = ?, aciklama2 = ? WHERE id = ?';
+            $pdo->prepare($sql)->execute([$palet_tipi_id ?: null, $adet, $brut, $dara, $net, $aciklama1, $aciklama2, $id]);
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
     }
     sync_malzeme_kullanim((int)$old['loading_record_id']);
-    audit_log_event('update', 'palet_fisleri', $id, $old, ['firma' => $firma, 'parti_no' => $parti, 'kasa_adeti' => $adet, 'brut_kg' => $brut, 'dara_kg' => $dara, 'net_kg' => $net]);
+    audit_log_event('update', 'palet_fisleri', $id, $old, ['firma' => $firma, 'parti_no' => $parti, 'urun' => $urun, 'tarih' => $tarih, 'kasa_adeti' => $adet, 'brut_kg' => $brut, 'dara_kg' => $dara, 'net_kg' => $net, 'mustahsil_id' => $must_id]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
@@ -176,12 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             }
             sync_malzeme_kullanim($record_id);
             audit_log_event('create', 'palet_fisleri', $pallet_id, null, ['belge_no' => $record_id, 'firma' => $firma, 'parti_no' => $parti, 'brut_kg' => $brut, 'net_kg' => $net, 'mustahsil_id' => $must_id]);
-            $yeni = pf_get_row($pallet_id);
-            pf_json(['ok' => true, 'id' => $pallet_id, 'next_belge' => $record_id + 1, 'row' => [
-                'id' => $pallet_id, 'loading_record_id' => $record_id, 'belge_no' => (int)$yeni['belge_no'], 'parti_no' => (string)$yeni['parti_no'],
-                'palet_tipi_id' => (int)($yeni['palet_tipi_id'] ?? 0), 'palet_adi' => (string)$yeni['palet_adi'], 'firma' => (string)$yeni['firma'], 'urun' => (string)$yeni['urun'],
-                'kasa_adeti' => (int)$yeni['kasa_adeti'], 'brut_kg' => (float)$yeni['brut_kg'], 'dara_kg' => (float)$yeni['dara_kg'], 'net_kg' => (float)$yeni['net_kg'],
-                'aciklama1' => (string)($yeni['aciklama1'] ?? ''), 'aciklama2' => (string)($yeni['aciklama2'] ?? ''), 'mustahsil_ad' => (string)($yeni['mustahsil_ad'] ?? '')]]);
+            pf_json(['ok' => true, 'id' => $pallet_id, 'next_belge' => $record_id + 1, 'row' => pf_satir_json(pf_get_row($pallet_id))]);
         }
         if ($action === 'tanim_ekle') {
             $tur = (string)($_POST['tur'] ?? '');
@@ -193,7 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
         if ($id <= 0) throw new RuntimeException('Geçersiz palet fişi.');
         if ($action === 'save') {
             pf_save_fields($id);
-            pf_json(['ok' => true]);
+            pf_json(['ok' => true, 'row' => pf_satir_json(pf_get_row($id))]);
         }
         if ($action === 'delete') {
             $old = pf_get_row($id);
@@ -238,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             }
             sync_malzeme_kullanim($new_record_id);
             audit_log_event('create', 'palet_fisleri', $new_id, null, ['duplicate_of' => $id, 'belge_no' => $new_record_id]);
-            pf_json(['ok' => true, 'id' => $new_id]);
+            pf_json(['ok' => true, 'id' => $new_id, 'next_belge' => $new_record_id + 1, 'row' => pf_satir_json(pf_get_row($new_id))]);
         }
         throw new RuntimeException('Geçersiz işlem.');
     } catch (Throwable $e) {
@@ -259,16 +295,72 @@ $pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loadi
 $desc1_sql = $has_aciklama1 ? 'p.aciklama1' : "'' AS aciklama1";
 $desc2_sql = $has_aciklama2 ? 'p.aciklama2' : "'' AS aciklama2";
 $must_sql = $has_mustahsil ? 'p.mustahsil_ad' : "'' AS mustahsil_ad";
-$st = $pdo->query("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
-                          p.palet_tipi_id, $desc1_sql, $desc2_sql, $must_sql,
-                          r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun,
+$kasa_sql = 'p.kasa_cinsi_id';
+$must_id_sql = $has_mustahsil ? 'p.mustahsil_id' : 'NULL AS mustahsil_id';
+
+// Filtre (Getir): başlangıç tarihi + "Yüklenen paletleri göster". Varsayılan: son 90 gün, yüklenenler gizli.
+$f_baslangic = (string)($_GET['baslangic'] ?? '');
+if (!pf_valid_date($f_baslangic)) $f_baslangic = date('Y-m-d', strtotime('-90 days'));
+$f_yuklenen = !empty($_GET['yuklenen']);
+
+function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $desc1_sql, string $desc2_sql, string $must_sql, string $must_id_sql): array {
+    $w = "r.type = 'yukleme' AND r.tarih >= ?";
+    if (!$yuklenen) $w .= " AND COALESCE(r.durum, '') <> 'yuklendi'";
+    $st = $pdo->prepare("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
+                          p.palet_tipi_id, p.kasa_cinsi_id, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql,
+                          r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun, r.durum, r.locked_at,
                           COALESCE(md.name, p.palet_no, '') AS palet_adi
                    FROM loading_pallets p
                    JOIN loading_records r ON r.id = p.loading_record_id
                    LEFT JOIN material_definitions md ON md.id = p.palet_tipi_id AND md.type = 'palet_tipi'
-                   WHERE r.type = 'yukleme'
+                   WHERE $w
                    ORDER BY r.id DESC, p.sira_no ASC, p.id DESC");
-$rows = $st->fetchAll();
+    $st->execute([$baslangic]);
+    return $st->fetchAll();
+}
+$rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql);
+
+// Excel / CSV (aynı filtre). Ortak kapı: reports.export; her iki kolda export_audit.
+$export = (string)($_GET['export'] ?? '');
+if ($export === 'csv' || $export === 'xlsx') {
+    require_perm('reports.export');
+    $bas = ['Belge No', 'Tarih', 'Parti No', 'Palet', 'Ünvan', 'Ürün', 'Adet', 'BRÜT', 'Dara', 'NET'];
+    if ($has_mustahsil) $bas[] = 'Müstahsil';
+    array_push($bas, 'Açıklama-1', 'Açıklama-2');
+    $satirlar = [];
+    foreach ($rows as $r) {
+        $x = [(int)$r['belge_no'], (string)$r['tarih'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun'],
+              (int)$r['kasa_adeti'], (float)$r['brut_kg'], (float)$r['dara_kg'], (float)$r['net_kg']];
+        if ($has_mustahsil) $x[] = (string)$r['mustahsil_ad'];
+        array_push($x, (string)$r['aciklama1'], (string)$r['aciklama2']);
+        $satirlar[] = $x;
+    }
+    export_audit('palet_fisleri', 'liste', $export, count($satirlar), ['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '0']);
+    $dosya = 'palet_fisleri_' . date('Y-m-d');
+    if ($export === 'csv') {
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $dosya . '.csv"');
+        header('Cache-Control: no-cache');
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, $bas, ';', '"', '\\');
+        foreach ($satirlar as $x) {
+            $x[1] = $x[1] !== '' ? date('d.m.Y', strtotime($x[1])) : '';
+            foreach ([7, 8, 9] as $i) $x[$i] = number_format((float)$x[$i], 3, ',', '');   // binlik ayraçsız — aktarımda güvenli
+            fputcsv($out, $x, ';', '"', '\\');
+        }
+        fclose($out);
+        exit;
+    }
+    $tip = ['Belge No' => 'tamsayi', 'Tarih' => 'tarih', 'Adet' => 'tamsayi', 'BRÜT' => 'kg', 'Dara' => 'kg', 'NET' => 'kg'];
+    $topla = ['Adet' => true, 'BRÜT' => true, 'Dara' => true, 'NET' => true];
+    xlsx_indir($dosya . '.xlsx', [
+        ['ad' => 'Palet Fişleri', 'baslik' => 'Asya Fresh — Palet Fişleri',
+         'aciklama' => 'Başlangıç: ' . date('d.m.Y', strtotime($f_baslangic)) . ' · ' . ($f_yuklenen ? 'yüklenen paletler dahil' : 'yüklenen paletler hariç') . ' · ' . count($satirlar) . ' kayıt',
+         'sutunlar' => array_map(fn($b) => ['baslik' => $b, 'tip' => $tip[$b] ?? 'metin'] + (isset($topla[$b]) ? ['topla' => true] : []), $bas),
+         'satirlar' => $satirlar, 'toplam' => true],
+    ], 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']));
+}
 
 render_header('Palet Fişleri');
 ?>
@@ -280,24 +372,25 @@ render_header('Palet Fişleri');
         <div class="pf-toolbar" role="toolbar" aria-label="Palet fişi araçları">
             <div class="pf-tb-grup">
                 <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?>>＋ F2 - Ekle</button>
-                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⧉ Çoğalt</button>
-                <button type="button" class="pf-tb pf-tb-sil" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">🗑 F3 - Sil</button>
-                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⌕ Bul</button>
-                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">✎ Düzelt</button>
-                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">▮▮ Parti Özeti</button>
+                <button type="button" class="pf-tb" data-pf="coglat" title="Seçili palet fişini kopyalar (Ctrl+Shift+D)">⧉ Çoğalt</button>
+                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" title="Seçili palet fişini siler (F3 / Delete)">🗑 F3 - Sil</button>
+                <button type="button" class="pf-tb" data-pf="bul" title="Listede ara">⌕ Bul</button>
+                <button type="button" class="pf-tb" data-pf="duzelt" title="Seçili palet fişini düzenler (F4)">✎ Düzelt</button>
+                <button type="button" class="pf-tb" data-pf="ozet" title="Partilere göre toplamlar">▮▮ Parti Özeti</button>
             </div>
             <div class="pf-tb-grup">
-                <button type="button" class="pf-tb" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⎙ Yazdır</button>
-                <button type="button" class="pf-tb pf-tb-wp" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">◔ WhatsApp</button>
-                <button type="button" class="pf-tb pf-tb-xl" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">▦ Excel</button>
+                <button type="button" class="pf-tb" data-pf="yazdir" title="Listeyi yazdırır">⎙ Yazdır</button>
+                <button type="button" class="pf-tb pf-tb-wp" data-pf="wp" title="Seçili partinin özetini WhatsApp ile paylaşır">◔ WhatsApp</button>
+                <?php if (can('reports.export')): ?><?= export_menu('palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']), 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'xlsx']), 'Excel', 'pf-tb pf-tb-xl') ?><?php endif; ?>
             </div>
         </div>
-        <div class="pf-filtre">
-            <label class="pf-f-alan">Başlangıç Tarihi <input type="date" value="<?= h(date('Y-m-d', strtotime('-3 months'))) ?>" data-pf-pasif></label>
-            <label class="pf-f-alan pf-f-chk">Yüklenen Paletleri Göster <input type="checkbox" data-pf-pasif></label>
-            <button type="button" class="pf-getir" data-pf-pasif aria-disabled="true" title="Henüz çalışmıyor">⌕ Getir</button>
-            <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Kopyala: Ctrl + Shift + D</span><span>Sil: Delete</span></div>
-        </div>
+        <form class="pf-filtre" method="get" action="palet_fisleri.php">
+            <label class="pf-f-alan">Başlangıç Tarihi <input type="date" name="baslangic" value="<?= h($f_baslangic) ?>" required></label>
+            <label class="pf-f-alan pf-f-chk">Yüklenen Paletleri Göster <input type="checkbox" name="yuklenen" value="1" <?= $f_yuklenen ? 'checked' : '' ?>></label>
+            <button type="submit" class="pf-getir">⌕ Getir</button>
+            <label class="pf-bul" id="pfBulKutu" hidden><span aria-hidden="true">⌕</span><input id="pfBul" type="search" placeholder="Belge, parti, palet, ünvan, müstahsil ara" autocomplete="off"><button type="button" class="pf-bul-kapat" id="pfBulKapat" aria-label="Aramayı kapat">×</button></label>
+            <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Çoğalt: Ctrl + Shift + D</span><span>Sil: F3 / Delete</span><span>Düzelt: F4</span></div>
+        </form>
     </div>
     <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.</div><?php endif; ?>
     <div class="pf-table-wrap" id="pfTableWrap" tabindex="0" aria-label="Palet fişleri tablosu">
@@ -310,7 +403,7 @@ render_header('Palet Fişleri');
             </tr></thead>
             <tbody id="pfBody">
             <?php foreach ($rows as $r): ?>
-                <tr data-id="<?= (int)$r['id'] ?>" data-record-id="<?= (int)$r['loading_record_id'] ?>" data-search="<?= h(mb_strtolower(implode(' ', [(string)$r['belge_no'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun']]), 'UTF-8')) ?>">
+                <tr data-id="<?= (int)$r['id'] ?>" data-record-id="<?= (int)$r['loading_record_id'] ?>" data-urun="<?= h($r['urun']) ?>" data-tarih="<?= h($r['tarih']) ?>" data-kasa-id="<?= (int)($r['kasa_cinsi_id'] ?? 0) ?>" data-must-id="<?= (int)($r['mustahsil_id'] ?? 0) ?>" data-kilit="<?= (!empty($r['locked_at']) || ($r['durum'] ?? '') === 'yuklendi') ? 1 : 0 ?>" data-search="<?= h(mb_strtolower(implode(' ', [(string)$r['belge_no'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun']]), 'UTF-8')) ?>">
                     <td class="pf-cell" data-col="belge_no" data-value="<?= (int)$r['belge_no'] ?>"><?= (int)$r['belge_no'] ?></td>
                     <td class="pf-cell" data-col="parti_no" data-value="<?= h($r['parti_no']) ?>"><?= h($r['parti_no']) ?></td>
                     <td class="pf-cell" data-col="palet_adi" data-value="<?= h($r['palet_tipi_id']) ?>"><?= h($r['palet_adi']) ?></td>
@@ -326,7 +419,7 @@ render_header('Palet Fişleri');
             <?php endforeach; ?>
             </tbody>
         </table>
-        <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz palet fişi yok. F2 - Ekle ile başlayın.' ?></div>
+        <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Seçilen filtreye uyan palet fişi yok. Başlangıç tarihini geri alın ya da “Yüklenen Paletleri Göster”i işaretleyip Getir’e basın; ya da F2 - Ekle ile başlayın.' ?></div>
     </div>
     <div class="pf-bottom">
         <div class="pf-kart pf-kart-parti"><i aria-hidden="true">▤</i><div><span>PARTİ</span><strong data-sum="parti">—</strong></div></div>
@@ -363,6 +456,10 @@ render_header('Palet Fişleri');
         <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
     </form>
 </dialog>
-<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'mustahsilAktif' => $mustahsil_aktif, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
+<dialog class="pf-dialog pf-ozet-dialog" id="pfOzetDialog">
+    <div class="pf-dialog-head"><div><h2>Parti Özeti</h2><p>Listede görünen paletlerin partilere göre toplamı. Bir partiye tıklarsanız listede o partinin ilk satırına gidilir.</p></div><button type="button" class="pf-close" id="pfOzetKapat" aria-label="Kapat">×</button></div>
+    <div class="pf-ozet-gov"><table class="pf-ozet-tablo" id="pfOzetTablo"><thead><tr><th>Parti</th><th>Palet</th><th>Ambalaj</th><th>BRÜT</th><th>Dara</th><th>NET</th><th>Amb. Ort.</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+</dialog>
+<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'mustahsilAktif' => $mustahsil_aktif, 'baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="assets/palet-fisleri.js?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.js') ?>" defer></script>
 <?php render_footer();
