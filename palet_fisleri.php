@@ -7,6 +7,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cari_core.php';
 require_once __DIR__ . '/config/palet_fisleri_core.php';
 require_once __DIR__ . '/config/xlsx_export.php';
+require_once __DIR__ . '/config/kullanici_tercih.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
@@ -219,6 +220,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
             audit_log_event('create', 'palet_fisleri', $pallet_id, null, ['belge_no' => $record_id, 'firma' => $firma, 'parti_no' => $parti, 'brut_kg' => $brut, 'net_kg' => $net, 'mustahsil_id' => $must_id]);
             pf_json(['ok' => true, 'id' => $pallet_id, 'next_belge' => $record_id + 1, 'row' => pf_satir_json(pf_get_row($pallet_id))]);
         }
+        if ($action === 'tercih_kaydet') {
+            // Sütun genişliği/sırası: KULLANICI BAZINDA (kullanici_tercihleri). Tablo kurulu değilse istemci tarayıcıya düşer.
+            $anahtar = (string)($_POST['anahtar'] ?? '');
+            $deger = json_decode((string)($_POST['deger'] ?? ''), true);
+            if (!kt_hazir($pdo)) pf_json(['ok' => true, 'sunucu' => false]);
+            if (!kt_yaz($pdo, (int)($auth_user['id'] ?? 0), $anahtar, $deger)) throw new RuntimeException('Tercih kaydedilemedi.');
+            pf_json(['ok' => true, 'sunucu' => true]);
+        }
         if ($action === 'tanim_ekle') {
             $tur = (string)($_POST['tur'] ?? '');
             if (!isset(pf_tanim_turleri()[$tur])) throw new RuntimeException('Bu tür için tanım eklenemez.');
@@ -367,33 +376,24 @@ render_header('Palet Fişleri');
 <link rel="stylesheet" href="assets/palet-fisleri.css?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.css') ?>">
 <section class="pf-page" id="pfPage" data-csrf="<?= h(csrf_token()) ?>">
     <div class="pf-top">
-        <div class="pf-title"><div><h1>Palet Fişleri</h1><p>Yeni kayıtlar listenin en üstünde görünür.</p></div>
-        </div>
-        <div class="pf-toolbar" role="toolbar" aria-label="Palet fişi araçları">
-            <div class="pf-tb-grup">
-                <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?>>＋ F2 - Ekle</button>
-                <button type="button" class="pf-tb" data-pf="coglat" title="Seçili palet fişini kopyalar (Ctrl+Shift+D)">⧉ Çoğalt</button>
-                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" title="Seçili palet fişini siler (F3 / Delete)">🗑 F3 - Sil</button>
-                <button type="button" class="pf-tb" data-pf="bul" title="Listede ara">⌕ Bul</button>
-                <button type="button" class="pf-tb" data-pf="duzelt" title="Seçili palet fişini düzenler (F4)">✎ Düzelt</button>
-                <button type="button" class="pf-tb" data-pf="ozet" title="Partilere göre toplamlar">▮▮ Parti Özeti</button>
-            </div>
-            <div class="pf-tb-grup">
-                <button type="button" class="pf-tb" data-pf="yazdir" title="Listeyi yazdırır">⎙ Yazdır</button>
-                <button type="button" class="pf-tb pf-tb-wp" data-pf="wp" title="Seçili partinin özetini WhatsApp ile paylaşır">◔ WhatsApp</button>
-                <?php if (can('reports.export')): ?><?= export_menu('palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']), 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'xlsx']), 'Excel', 'pf-tb pf-tb-xl') ?><?php endif; ?>
-            </div>
-        </div>
-        <form class="pf-filtre" method="get" action="palet_fisleri.php">
+        <form class="pf-filtre" id="pfFiltre" method="get" action="palet_fisleri.php">
             <label class="pf-f-alan">Başlangıç Tarihi <input type="date" name="baslangic" value="<?= h($f_baslangic) ?>" required></label>
             <label class="pf-f-alan pf-f-chk">Yüklenen Paletleri Göster <input type="checkbox" name="yuklenen" value="1" <?= $f_yuklenen ? 'checked' : '' ?>></label>
-            <button type="submit" class="pf-getir">⌕ Getir</button>
             <label class="pf-bul" id="pfBulKutu" hidden><span aria-hidden="true">⌕</span><input id="pfBul" type="search" placeholder="Belge, parti, palet, ünvan, müstahsil ara" autocomplete="off"><button type="button" class="pf-bul-kapat" id="pfBulKapat" aria-label="Aramayı kapat">×</button></label>
-            <div class="pf-hints"><span>Hücre seç: tıkla</span><span>Çoğalt: Ctrl + Shift + D</span><span>Sil: F3 / Delete</span><span>Düzelt: F4</span></div>
+            <div class="pf-tb-grup" role="toolbar" aria-label="Palet fişi araçları">
+                <button type="button" class="pf-tb" data-pf="yazdir" title="Listeyi yazdırır">⎙ Yazdır</button>
+                <?php if (can('reports.export')): ?><?= export_menu('palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']), 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'xlsx']), 'Excel', 'pf-tb pf-tb-xl') ?><?php endif; ?>
+                <button type="button" class="pf-tb" data-pf="duzelt" title="Seçili palet fişini düzenler (F4 / çift tık)">✎ Düzelt</button>
+                <button type="button" class="pf-tb" data-pf="bul" title="Listede ara">⌕ Bul</button>
+                <button type="button" class="pf-tb pf-tb-sil" data-pf="sil" title="Seçili palet fişini siler (F3 / Delete)">🗑 F3 - Sil</button>
+                <button type="button" class="pf-tb" data-pf="coglat" title="Seçili palet fişini kopyalar (Ctrl+Shift+D)">⧉ Çoğalt</button>
+                <button type="button" class="pf-tb pf-tb-ekle" id="pfAdd" <?= (!$has_aciklama1 || !$has_aciklama2) ? 'disabled' : '' ?> title="Yeni palet fişi (F2)">＋ F2 - Ekle</button>
+            </div>
         </form>
     </div>
     <?php if (!$has_aciklama1 || !$has_aciklama2): ?><div class="flash flash-error">Açıklama alanları için veritabanı güncellemesi gerekli: migrate.php › Palet Fişleri kartını çalıştırın.</div><?php endif; ?>
     <div class="pf-table-wrap" id="pfTableWrap" tabindex="0" aria-label="Palet fişleri tablosu">
+        <div class="pf-kose" id="pfKose" role="button" tabindex="-1" title="Çift tıklayın: sütunları içeriğe göre daralt" aria-label="Sütunları içeriğe göre daralt"></div>
         <table class="pf-table" id="pfTable">
             <thead><tr>
                 <th data-col="belge_no">Belge No</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
@@ -422,15 +422,15 @@ render_header('Palet Fişleri');
         <div class="pf-empty" id="pfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Aramanızla eşleşen kayıt yok.' : 'Seçilen filtreye uyan palet fişi yok. Başlangıç tarihini geri alın ya da “Yüklenen Paletleri Göster”i işaretleyip Getir’e basın; ya da F2 - Ekle ile başlayın.' ?></div>
     </div>
     <div class="pf-bottom">
-        <div class="pf-kart pf-kart-parti"><i aria-hidden="true">▤</i><div><span>PARTİ</span><strong data-sum="parti">—</strong></div></div>
-        <div class="pf-kart"><i aria-hidden="true">▥</i><div><span>PALET TOPLAMI</span><strong data-sum="palet">0</strong></div></div>
-        <div class="pf-kart"><i aria-hidden="true">▢</i><div><span>AMBALAJ TOPLAMI</span><strong data-sum="adet">0</strong></div></div>
-        <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span>BRÜT</span><strong data-sum="brut">0</strong></div></div>
-        <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span>DARA</span><strong data-sum="dara">0</strong></div></div>
-        <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span>NET</span><strong data-sum="net">0</strong></div></div>
-        <div class="pf-kart"><i aria-hidden="true">▮</i><div><span>AMB. ORTALAMA</span><strong data-sum="ort">0</strong></div></div>
+        <div class="pf-kart pf-kart-parti" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▤</i><div><span>PARTİ</span><strong data-sum="parti">—</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▥</i><div><span>PALET TOPLAMI</span><strong data-sum="palet">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▢</i><div><span>AMBALAJ TOPLAMI</span><strong data-sum="adet">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>BRÜT</span><strong data-sum="brut">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>DARA</span><strong data-sum="dara">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>NET</span><strong data-sum="net">0</strong></div></div>
+        <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▮</i><div><span>AMB. ORTALAMA</span><strong data-sum="ort">0</strong></div></div>
     </div>
-    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite">Özet kartları tıklanan satırın partisini gösterir. Sütunları taşımak için başlığa basılı tutun.</span></div>
+    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite">Kartlar seçili satırın partisini gösterir; tıklarsanız partinin palet listesi açılır. Sütunları taşımak için başlığa basılı tutun, kenarından sürükleyerek genişliğini ayarlayın.</span></div>
 </section>
 
 <dialog class="pf-dialog" id="pfDialog">
@@ -457,9 +457,9 @@ render_header('Palet Fişleri');
     </form>
 </dialog>
 <dialog class="pf-dialog pf-ozet-dialog" id="pfOzetDialog">
-    <div class="pf-dialog-head"><div><h2>Parti Özeti</h2><p>Listede görünen paletlerin partilere göre toplamı. Bir partiye tıklarsanız listede o partinin ilk satırına gidilir.</p></div><button type="button" class="pf-close" id="pfOzetKapat" aria-label="Kapat">×</button></div>
-    <div class="pf-ozet-gov"><table class="pf-ozet-tablo" id="pfOzetTablo"><thead><tr><th>Parti</th><th>Palet</th><th>Ambalaj</th><th>BRÜT</th><th>Dara</th><th>NET</th><th>Amb. Ort.</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <div class="pf-dialog-head"><div><h2 id="pfOzetBaslik">Parti</h2><p id="pfOzetAlt">Partinin paletleri. Bir satıra tıklarsanız listede o palete gidilir.</p></div><button type="button" class="pf-close" id="pfOzetKapat" aria-label="Kapat">×</button></div>
+    <div class="pf-ozet-gov"><table class="pf-ozet-tablo" id="pfOzetTablo"><thead><tr></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
 </dialog>
-<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'mustahsilAktif' => $mustahsil_aktif, 'baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
+<script>window.PALET_FISLERI = <?= json_encode(['listeler' => $pf_listeler, 'sonrakiBelge' => $pf_sonraki_belge, 'mustahsilAktif' => $mustahsil_aktif, 'tercihSunucu' => kt_hazir($pdo), 'tercih' => kt_oku($pdo, (int)($auth_user['id'] ?? 0), 'palet_fisleri.tablo'), 'baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen, 'tanimTurleri' => array_keys(pf_tanim_turleri())], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="assets/palet-fisleri.js?v=<?= (int)@filemtime(__DIR__ . '/assets/palet-fisleri.js') ?>" defer></script>
 <?php render_footer();
