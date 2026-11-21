@@ -36,8 +36,15 @@ $visit=function(array $row) use (&$visit,&$rows): void { $rows[]=$row; foreach (
 foreach ($schema as $group) foreach ($group as $row) $visit($row);
 foreach ($rows as $row) matrix_ok(is_file(dirname(__DIR__).'/'.explode('?',$row['route'])[0]),'Missing row route '.$row['route']);
 $adminRows=array_filter($rows,fn($r)=>$r['admin_only']);
-matrix_ok(count($adminRows)===54,'Admin-only sidebar inventory changed');
+matrix_ok(count($adminRows)===42,'Admin-only sidebar inventory changed');
 foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row invented permissions');
+// v548: her nav_muhasebe_gruplari() sayfası (39) admin-only satır olarak envanterde; sabit sayı = 39 katalog + gunluk_fis_yukle + audit + admin_db_backups.
+$catalogRoutes=[]; foreach (nav_muhasebe_gruplari() as [,,$pages]) foreach ($pages as $route=>$_) $catalogRoutes[]=$route;
+matrix_ok(count($catalogRoutes)===39,'Menu catalog size changed');
+$adminRoutes=array_column($adminRows,'route');
+foreach ($catalogRoutes as $route) matrix_ok(in_array($route,$adminRoutes,true),'Catalog page missing from admin-only inventory: '.$route);
+foreach (['genel_uygulamalar'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);
+foreach (['operasyon_fis','kasa','kullanici_konsolu'] as $slug) matrix_ok(isset(nav_muhasebe_gruplari()[$slug]),'Menu group missing: '.$slug);
 $codes=[]; foreach ($rows as $row) foreach ($row['actions'] as $action) $codes[]=$action['permission'];
 matrix_ok(in_array('records.pallet.create',$codes,true),'Pallet create editor control absent');
 matrix_ok(in_array('reports.yukleme.read',$codes,true),'Report child editor control absent');
