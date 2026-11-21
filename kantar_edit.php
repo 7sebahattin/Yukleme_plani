@@ -5,6 +5,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/kantar_alanlari_core.php';
 $auth_user = require_login();
 require_perm('kantar.edit');
 
@@ -63,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
         'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
         'aciklama', 'depo', 'parti_no',
+        'sofor', 'mal_sahibi', 'mustahsil', 'bahce',   // ek alanlar (kolonlar migrate.php kartından)
         'tartim1', 'alibi1', 'tartim2', 'alibi2',
     ];
     foreach ($fields as $k) {
@@ -181,6 +183,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $gst->execute([$id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
             }
         }
+        // Ek alanlar: yalnız kolonlar kuruluysa yazılır
+        kantar_alanlari_yaz(db(), $id, $_POST);
+        if (trim((string)($fis['sofor'] ?? '')) !== '') ensure_definition('sofor', normalize_suggest_value('sofor_adi', (string)$fis['sofor']));
         audit_log_event('update', 'kantar', $id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
         set_flash('success', 'Fiş güncellendi.');
         header('Location: kantar_view.php?id=' . $id);

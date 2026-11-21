@@ -7322,3 +7322,10 @@ html[data-theme="dark"] .mk-cb-list li:hover, html[data-theme="dark"] .mk-cb-lis
 a.pf-tb { text-decoration: none; display: inline-flex; align-items: center; }
 .pf-tb[hidden] { display: none; }
 html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; color: #e7ecf4; border-color: #34445a; }
+
+/* Mal Kabul formu: ek alanlar (şoför / malın sahibi / müstahsil / bahçe) */
+.mk-kal-uyari { margin: 0 0 10px; font-size: .85rem; }
+.mk-form input:disabled { opacity: .55; cursor: not-allowed; }
+@media (min-width: 720px) { .mk-g5 { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 900px) { .mk-g5 { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1180px) { .mk-g5 { grid-template-columns: repeat(5, 1fr); } }
