@@ -260,6 +260,7 @@ function nav_ptak_sayfalari(): array {
         'mesai_toplu_onay.php',   // v507 Toplu Mesai Onayı
         // v503 Buçuklu Çıkışlar (çıkış dakikası :30 olanları düzeltme, yalnız yönetici)
         'bucuklu_cikislar.php',
+        'servis_hesabi.php',   // v532 Servis Hesabı (servisçi cari)
         'cavus_donem_raporu.php',
         // v507 Günlük Üretim (işlenen mal + işçi başı verim)
         'gunluk_uretim.php', 'gunluk_uretim_yukle.php',

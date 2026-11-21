@@ -54,6 +54,7 @@ require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
 require_once __DIR__ . '/config/pdks_ters.php';   // v354 Ters Kart Takip (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/pdks_servis.php';   // v299 Servis Ücreti
+require_once __DIR__ . '/config/pdks_servis_hesap.php';   // v532 Servis Hesabı (ödeme defteri)
 // Faz 9D / H-03: hakediş düzeltme/mahsup (foreman_entitlement_adjustments)
 // tablosu da AYNI sebeple BURADAN elle tetiklenir. Faz 1-9C tablolarına
 // DOKUNMAZ — yalnız KENDİ tek yeni tablosunu additive olarak ekler.
@@ -125,7 +126,8 @@ $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatler
 $pdks_yevmiye_results = []; $pdks_yevmiye_ran = false;   // v463 Rampacı yevmiye alanı
 $pdks_cift_results = []; $pdks_cift_ran = false;   // v503 çift yevmiye alanı
 $uretim_results = []; $uretim_ran = false;          // v507 Günlük Üretim tabloları
-$pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
+$pdks_servis_results = []; $pdks_servis_ran = false;
+$pdks_sodeme_results = []; $pdks_sodeme_ran = false;   // v532 Servis Ödemeleri   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
 $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
@@ -230,6 +232,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_servis_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_servis', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_servis_odeme') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_sodeme_ran     = true;
+    $pdks_sodeme_results = pdks_servis_odeme_migrate($pdo);
+    foreach ($pdks_sodeme_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_servis_odeme', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -1234,6 +1246,33 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_servis_tablolar() as $pssql) { echo h($pssql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('servis-odeme'); ?>
+    <h2 style="margin-top:0;">Servis Ödemeleri (v532)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>servis_odemeleri</code> (servisçiye yapılan ödemeler; değişmez, yalnız gerekçeli iptal).
+      Servis Hesabı sayfasının ödeme/bakiye bölümü bu tabloya bağlıdır; kurulmazsa o bölüm gizli kalır, günlük döküm çalışır.
+      <?php if ($pdks_sodeme_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_sodeme_results as $psr): ?>
+        <br>&nbsp;&nbsp;<?= h($psr['tablo']) ?>: <?= h($psr['durum']) ?> — <?= h($psr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <p style="font-weight:600;color:<?= pdks_servis_odeme_hazir($pdo) ? '#1f9d55' : '#c0392b' ?>;">
+      servis_odemeleri: <?= pdks_servis_odeme_hazir($pdo) ? '✓ Var' : '✗ Eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_servis_odeme">
+      <button type="submit" class="btn btn-primary">Servis Ödemeleri Tablosunu Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'ini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_servis_odeme_tablolar() as $pssql) { echo h($pssql) . ";\n\n"; }
       ?></pre>
     </details>
   <?php mg_kart_kapat(); ?>

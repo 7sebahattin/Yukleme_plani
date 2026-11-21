@@ -163,6 +163,14 @@ render_flash();
 </a>
 <?php endif; ?>
 
+<?php if ($p_adm || role_pdks_can('foreman_accounts')): ?>
+<a href="servis_hesabi.php" class="home-card home-card-ek">
+    <div class="home-card-icon pdks-icon-accounts" aria-hidden="true"></div>
+    <div class="home-card-title">Servis Hesabı</div>
+    <div class="home-card-sub">Servisçi günlük döküm, ödeme ve bakiye</div>
+</a>
+<?php endif; ?>
+
 <?php if ($p_adm || role_pdks_can('foreman_payments')): ?>
 <a href="cavus_odeme.php" class="home-card">
     <div class="home-card-icon pdks-icon-payments" aria-hidden="true"></div>

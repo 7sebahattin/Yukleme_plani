@@ -28,6 +28,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/pdks_faz8b.php';
 
+// v532: Servis çavuş hakedişine YAZILMAZ — servisçi ile ayrı hesaplaşılır (servis_hesabi.php,
+// config/pdks_servis_hesap.php). true yapmak eski davranışı (hakedişe ek satır) geri getirir.
+defined('PDKS_SERVIS_HAKEDISTE') || define('PDKS_SERVIS_HAKEDISTE', false);
 defined('PDKS_SERVIS_MAX_ADET') || define('PDKS_SERVIS_MAX_ADET', 99);
 defined('PDKS_SERVIS_TEKRAR_HATA') || define('PDKS_SERVIS_TEKRAR_HATA', 'Bu servis kaydı zaten gönderildi (tekrar gönderim); sayfayı yenileyin.');
 defined('PDKS_SERVIS_FINAL_HATA') || define('PDKS_SERVIS_FINAL_HATA', 'Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yeniden açın.');
@@ -345,7 +348,7 @@ function pdks_servis_listele(int $sessionId, ?PDO $pdo = null): array
 function pdks_servis_hakedis_satirlari(array $oturum, PDO $pdo): array
 {
     $sonuc = ['satirlar' => [], 'eksikler' => [], 'para' => null, 'toplam_kurus' => 0];
-    if (!pdks_servis_sema_hazir($pdo)) return $sonuc;
+    if (!PDKS_SERVIS_HAKEDISTE || !pdks_servis_sema_hazir($pdo)) return $sonuc;
     $adet = pdks_servis_toplamlar((int)$oturum['id'], $pdo);
     if (array_sum($adet) < 1) return $sonuc;
     $ucret = pdks_servis_ucret_gecerli((int)$oturum['foreman_id'], (string)$oturum['work_date'], $pdo);

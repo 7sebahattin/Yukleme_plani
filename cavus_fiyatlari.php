@@ -787,7 +787,7 @@ $cfSaatDuzeltBtn = static function (array $o): string {
         <span class="cf2-tile cf2-tile--turuncu"><?= $cfIk('servis') ?></span>
         <div class="cf2-kart-bas-metin">
             <h2>🚌 Servis Ücreti — <?= h($seciliCavus['name']) ?></h2>
-            <p class="cf2-alt">Mesai Detayı'nda eklenen BÜYÜK / KÜÇÜK servislerin birim fiyatı. Mesai tarihinde geçerli fiyat hakedişe adet × fiyat olarak yansır.</p>
+            <p class="cf2-alt">Mesai Detayı'nda eklenen BÜYÜK / KÜÇÜK servislerin birim fiyatı. Mesai tarihinde geçerli fiyat Servis Hesabı'nda adet × fiyat olarak hesaplanır (çavuş hakedişine yazılmaz).</p>
         </div>
         <?php if (!$servisGecmisi): ?>
         <p class="cf2-uyari-hap"><?= $cfIk('uyari') ?><span>Servis fiyatı tanımlı değil — tanımlanmadan mesaiye servis eklenemez.</span></p>
@@ -824,9 +824,9 @@ $cfSaatDuzeltBtn = static function (array $o): string {
             </label>
         </div>
         <?php if (!empty($svFiyatsizTarih)): ?>
-        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span><b>Fiyatı henüz olmayan servis kaydı var</b> (en eskisi <?= h(date('d.m.Y', strtotime($svFiyatsizTarih))) ?>). Geçerlilik başlangıcı bu tarihe getirildi; fiyat kaydedilince bu servisler hakedişte kendiliğinden hesaplanır.</span></p>
+        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span><b>Fiyatı henüz olmayan servis kaydı var</b> (en eskisi <?= h(date('d.m.Y', strtotime($svFiyatsizTarih))) ?>). Geçerlilik başlangıcı bu tarihe getirildi; fiyat kaydedilince bu servisler Servis Hesabı'nda kendiliğinden hesaplanır.</span></p>
         <?php endif; ?>
-        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>En az biri girilmelidir; boş bırakılan türün fiyatı yoktur (o tür için servis girilebilir ama fiyat tanımlanana kadar hakedişte hesaplanmaz). Yeni dönem eklenince önceki dönem bir gün öncesinde kapanır, eski fiyatlar silinmez. Para birimi işçi fiyatlarıyla aynı olmalıdır (farklıysa hakediş hesaplanmaz).</span></p>
+        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>En az biri girilmelidir; boş bırakılan türün fiyatı yoktur (o tür için servis girilebilir ama fiyat tanımlanana kadar Servis Hesabı'nda tutarı hesaplanmaz). Yeni dönem eklenince önceki dönem bir gün öncesinde kapanır, eski fiyatlar silinmez. </span></p>
         <div class="cf2-eylem">
             <button type="submit" class="btn btn-primary cf2-btn">+ Servis Fiyatı Dönemi Ekle</button>
         </div>

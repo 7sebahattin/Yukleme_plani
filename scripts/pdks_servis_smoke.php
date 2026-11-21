@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+defined('PDKS_SERVIS_HAKEDISTE') || define('PDKS_SERVIS_HAKEDISTE', true);   // v532: eski (hakedişe yazan) yolu denetler
 // =========================================================
 // scripts/pdks_servis_smoke.php — Servis Ücreti (v299) davranış testi.
 //
