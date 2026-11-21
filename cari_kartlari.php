@@ -5,7 +5,7 @@
 //   ?bas= &bit= &pb= &tur= &iptal=1   ekstre süzgeci               ?yeni=1  kart modalı açık gelir
 //   ?q= &tip= &grup=<slug> &bakiye=borclu|alacakli|sifir &durum=aktif|pasif   (JS'siz süzme; JS açıkken istemci süzer)
 //   ?parca=detay|ekstre|kart  kısmi yanıt (header/footer YOK): detay = #crDetay + yenilenen menüler · ekstre = #crPanelEkstre · kart = JSON
-// Kapı: is_admin() tabanlı cari_kapi('read'); tablo yoksa şema uyarı kartı. Çekirdek config/cari_core.php, işaretleme config/cari_ui.php.
+// Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → cari_kapi('read'); tablo yoksa şema uyarı kartı. Çekirdek config/cari_core.php, işaretleme config/cari_ui.php.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -13,7 +13,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cari_core.php';
 require_once __DIR__ . '/config/cari_ui.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_sayfa_can('cari_kartlari')) { forbidden(); }
 cari_kapi('read');
 cari_no_store();
 $pdo = db();

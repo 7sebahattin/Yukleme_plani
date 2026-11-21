@@ -448,17 +448,18 @@ if (nav_ptak_gorunur()):
 
 <?php endif; ?>
 
-<?php if (is_admin()): ?>
-<?php foreach (nav_muhasebe_gruplari() as $__home_group): ?>
+<?php foreach (nav_muhasebe_gruplari() as $__home_group):
+    // v550: kart, sayfanın kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; başlık yalnız görünen kart varsa.
+    $__home_gorunen = array_filter($__home_group[2], fn($__d) => muhasebe_sayfa_can(substr((string)$__d, 0, -4)), ARRAY_FILTER_USE_KEY);
+    if (!$__home_gorunen) continue; ?>
 <div class="home-section-title"><?= h($__home_group[0]) ?></div>
-<?php foreach ($__home_group[2] as $__home_href => [$__home_label, $__home_icon]): ?>
+<?php foreach ($__home_gorunen as $__home_href => [$__home_label, $__home_icon]): ?>
     <a href="<?= h($__home_href) ?>" class="home-card">
         <div class="home-card-icon" style="background:var(--primary-soft)"><?= h($__home_icon) ?></div>
         <div class="home-card-title"><?= h($__home_label) ?></div>
     </a>
 <?php endforeach; ?>
-<?php endforeach; unset($__home_group, $__home_href, $__home_label, $__home_icon); ?>
-<?php endif; ?>
+<?php endforeach; unset($__home_group, $__home_gorunen, $__home_href, $__home_label, $__home_icon); ?>
 
 </div>
 <?php if ($__rozet_gizle) {

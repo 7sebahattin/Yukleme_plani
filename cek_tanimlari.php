@@ -2,7 +2,7 @@
 // =========================================================
 // cek_tanimlari.php — Çek Tanımları: Bankalar · Çek Karneleri. YALNIZ GET; yazmalar cek_kaydet.php'de.
 //   ?sekme=banka|karne
-// Kapı: is_admin() tabanlı ceksenet_kapi('read'); tablo yoksa şema uyarı kartı. Gövde config/ceksenet_ui.php ceksenet_tanimlari_govde().
+// Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → ceksenet_kapi('read'); tablo yoksa şema uyarı kartı. Gövde config/ceksenet_ui.php ceksenet_tanimlari_govde().
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -10,7 +10,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/ceksenet_core.php';
 require_once __DIR__ . '/config/ceksenet_ui.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_sayfa_can('cek_tanimlari')) { forbidden(); }
 ceksenet_kapi('read');
 ceksenet_no_store();
 $pdo = db();

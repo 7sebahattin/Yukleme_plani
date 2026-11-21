@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_sayfa_can('sifre_degistirme')) { forbidden(); }
 render_header('Şifre Değiştirme');
 ?>
 <div class="card"><h2>Şifre Değiştirme</h2><p>Bu bölüm hazırlanıyor.</p></div>

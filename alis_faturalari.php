@@ -5,7 +5,7 @@
 //   Sol liste (GET süzgeç: ?ara= &tur= &durum=tumu|gecerli|iptal &donem=tumu|30g|bu_ay|gecen_ay|ozel (&bas= &bit=) &cari= &sd=) + sağ panel:
 //   ?id=N detay · ?yeni=1[&tur=] form · ?kopya=ID · ?yeni=1&tur=X&kaynak=ID[,ID] dönüşüm formu ·
 //   ?parca=detay|cari_ozet|kaynaklar|kaynak_satirlari kısmi yanıt (header/footer YOK).
-// YALNIZ GET; yazma fatura_kaydet.php'de. Kapı: is_admin() tabanlı fatura_kapi('read'); tablo yoksa şema uyarı kartı.
+// YALNIZ GET; yazma fatura_kaydet.php'de. Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → fatura_kapi('read'); tablo yoksa şema uyarı kartı.
 // Ortak gövde config/fatura_ui.php fatura_sayfa_govde(); kurallar config/fatura_core.php.
 // =========================================================
 declare(strict_types=1);
@@ -14,7 +14,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/fatura_core.php';
 require_once __DIR__ . '/config/fatura_ui.php';
 $auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+if (!muhasebe_sayfa_can('alis_faturalari')) { forbidden(); }
 fatura_kapi('read');
 fatura_no_store();
 $pdo = db();
