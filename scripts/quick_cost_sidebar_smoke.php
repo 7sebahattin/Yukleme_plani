@@ -21,7 +21,11 @@ $gateEnd = strpos($source, '/**', $gateStart);
 if ($gateStart === false || $gateEnd === false) throw new RuntimeException('can_hizli_maliyet source not found.');
 eval(substr($source, $gateStart, $gateEnd - $gateStart));
 function nav_ptak_sayfalari(): array { return []; }
-function nav_muhasebe_gruplari(): array { return []; }
+// v548: Eski Raporlar bağlantısı (reports.php) artık nav_muhasebe_gruplari()'ndaki 'raporlar_grup' grubunun içinde çizilir; GERÇEK katalog kaynaktan alınır (boş stub bağlantıyı gizlerdi).
+$catStart = strpos($source, 'function nav_muhasebe_gruplari(): array {');
+$catEnd = strpos($source, "\n}\n", $catStart);
+if ($catStart === false || $catEnd === false) throw new RuntimeException('nav_muhasebe_gruplari source not found.');
+eval(substr($source, $catStart, $catEnd + 2 - $catStart));
 function nav_rozet_html(int $count, bool $short): string { return ''; }
 function nav_mail_okunmamis(): int { return 0; }
 function current_user(): ?array { return null; }
@@ -78,6 +82,16 @@ $admin = false; $permissions = ['reports.read','maliyet.read','maliyet.write','m
 qc_sidebar_check(!str_contains($html, 'hizli_maliyet.php') && !str_contains($html, 'Hızlı Maliyet'), 'legacy maliyet.* user without hizli_maliyet.* cannot see link');
 qc_sidebar_check(nav_alt_izinler()['qcost'] === false, 'legacy maliyet.* user gains no mobile item');
 qc_sidebar_check($xp->query('//a[@href="/app/reports.php"]')->length === 1, 'non-admin reports access preserved');
+// v548: Eski Raporlar bağlantısı admin olmayana da çizilir, 'raporlar_grup' grubunda; grubun yer tutucu sayfaları (yalnız admin) çizilmez.
+qc_sidebar_check($xp->query('//details[@data-sb-grup="raporlar_grup"]//a[@href="/app/reports.php"]')->length === 1, 'non-admin Eski Raporlar link lives in the Raporlar group');
+qc_sidebar_check(trim($xp->query('//a[@href="/app/reports.php"]//*[contains(@class,"sidebar-link-label")]')->item(0)->textContent) === 'Eski Raporlar', 'report link label is Eski Raporlar');
+qc_sidebar_check($xp->query('//a[@href="/app/raporlar_listeler.php" or @href="/app/rapor_tanimlari.php"]')->length === 0, 'non-admin gets no placeholder report pages');
+qc_sidebar_check($xp->query('//details[@data-sb-grup="operasyon"]//a[@href="/app/reports.php"]')->length === 0, 'report link no longer inside Operasyon');
+qc_sidebar_check($xp->query('//*[contains(@class,"sidebar-user")]//*[contains(@class,"sidebar-surum")]')->length === 1 && $xp->query('//*[contains(@class,"sidebar-surum")]')->length === 1, 'version lives inside .sidebar-user (fallback without a session user)');
+$permissions = [];
+[, $xp] = sidebar('hizli_maliyet.php');
+qc_sidebar_check($xp->query('//details[@data-sb-grup="raporlar_grup"]')->length === 0, 'non-admin without reports.read gets no Raporlar group');
+$permissions = ['reports.read','maliyet.read','maliyet.write','maliyet.delete','maliyet.admin'];
 // Yetki matrisi: yalnız read / read+write / read+write+delete / yalnız write (okumasız) / hiçbiri.
 foreach ([
     [['hizli_maliyet.read'], true, true, false, false],

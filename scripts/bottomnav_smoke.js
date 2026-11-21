@@ -122,8 +122,8 @@ let bag_ctx = {};
 
 const r1 = (n) => Math.round(n * 10) / 10;
 // Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
-const SAYFA_ADI = { records: 'Yükleme Planları', cikma: 'Paletleme', beyan: 'Beyanlar', kantar: 'Mal Kabul', hks: 'Hal Bildirimi',
-    rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
+const SAYFA_ADI = { records: 'Eski Yükleme Planı', cikma: 'Eski Paletleme', beyan: 'Beyanlar', kantar: 'Eski Mal Kabul', hks: 'Hal Bildirimi',
+    rapor: 'Eski Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
     users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
 // Göreli href'i uygulama köküne göre yola çevir (base_url '../' dahil)
@@ -435,7 +435,7 @@ function guvenliAlanKurallari(barSel) {
             // durumda aktif olması gereken Raporlar DEĞİL, Ana Sayfa'dır
             // (BN-MALIYET-AKTIF-YOK düzeltmesi, bkz. anaSayfaAnahtari).
             if (homeBekAktif) ok('B', bag, 'maliyet_*: dashboard.read yok → Ana Sayfa aktif', olcAktif === 'home', JSON.stringify(d.aktifler));
-            else ok('B', bag, 'maliyet_*: Raporlar (rapor) aktif', olcAktif === 'rapor' || (olcAktif === 'more' && d.digerLabel.includes('Raporlar')), JSON.stringify(d.aktifler));
+            else ok('B', bag, 'maliyet_*: Eski Raporlar (rapor) aktif', olcAktif === 'rapor' || (olcAktif === 'more' && d.digerLabel.includes('Eski Raporlar')), JSON.stringify(d.aktifler));
         }
         ok('B', bag, 'ikonlar <img width=42/18 alt=""> assets/nav-icons/*.svg?v=',
             d.imgler.every(([w, h, alt, src]) => w === h && ['42', '18'].includes(w) && alt === '' && /assets\/nav-icons\/[a-z]+\.svg\?v=\d+$/.test(src)),
@@ -746,7 +746,7 @@ function guvenliAlanKurallari(barSel) {
         const k = sayfaBul('operator', 'home'); bag_ctx = { profil: 'operator', sayfa: 'home', w: 390 };
         const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
         const sl = await gorunenSlotlar(page);
-        ok('B', 'operator/home', 'soğuk başlangıç (çerez + kullanım yok): Yüklemeler, Bildirim, Personel, Raporlar',
+        ok('B', 'operator/home', 'soğuk başlangıç (çerez + kullanım yok): Eski Yükleme Planı, Bildirim, Personel, Eski Raporlar',
             JSON.stringify(sl) === JSON.stringify(['records', 'hks', 'ptak', 'rapor']), `[${sl}]`);
         const kul = await depo(page, 'asya_nav_kullanim_1');
         ok('B', 'operator/home', 'Ana Sayfa ziyareti sayılmadı', Array.isArray(kul) && kul.length === 0, JSON.stringify(kul));
@@ -761,7 +761,7 @@ function guvenliAlanKurallari(barSel) {
         ok('B', 'operator/kantar', 'ziyaret cihaza yazıldı (asya_nav_kullanim_<uid>)',
             Array.isArray(kul) && kul.length === 1 && kul[0][0] === 'kantar' && Math.abs(kul[0][1] - Date.now()) < 60000, JSON.stringify(kul));
         const sl = await gorunenSlotlar(page);
-        ok('B', 'operator/kantar', 'ilk ziyaret (1 > 0×1,25+0,5) en zayıf slotu (Raporlar) yerinde değiştirdi',
+        ok('B', 'operator/kantar', 'ilk ziyaret (1 > 0×1,25+0,5) en zayıf slotu (Eski Raporlar) yerinde değiştirdi',
             JSON.stringify(sl) === JSON.stringify(['records', 'hks', 'ptak', 'kantar']), `[${sl}]`);
         await page.reload(); await page.waitForTimeout(400);
         const kul2 = await depo(page, 'asya_nav_kullanim_1');
@@ -880,7 +880,7 @@ function guvenliAlanKurallari(barSel) {
         }, TASARIM);
         let d = await oku();
         ok('B', bag + '@360', '4. slot gizli, "Diğer" Kantar\'ı taşıyor (ikon + rozet + etiket + aria-current)',
-            d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Mal Kabul' && !d.kantarGor, JSON.stringify(d));
+            d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Eski Kabul' && !d.kantarGor, JSON.stringify(d));
         await page.setViewportSize({ width: 430, height: 932 }); await page.waitForTimeout(250);
         d = await oku();
         ok('B', bag + '@430', 'genişleyince "Diğer" gizlenir, Kantar slotu aktif', !d.diger && d.kantarGor && d.kantarCur === 'page' && d.digerCur === null, JSON.stringify(d));

@@ -159,7 +159,7 @@ $dashboardCatalog = [];
 foreach (nav_muhasebe_gruplari() as [$heading, , $pages]) {
     foreach ($pages as $href => [$label]) $dashboardCatalog[$href] = $label;
 }
-dashboard_check(count(nav_muhasebe_gruplari()) === 10 && count($dashboardCatalog) === 51, 'paylaşılan katalog 10 grup/51 hedef');
+dashboard_check(count(nav_muhasebe_gruplari()) === 10 && count($dashboardCatalog) === 39, 'paylaşılan katalog 10 grup/39 hedef');
 dashboard_check(!function_exists('db'), 'DB fonksiyonu/bağlantısı olmadan sunum testi');
 foreach ($dashboardProfiles as $name => $profile) {
     $html = dashboard_render($profile);
@@ -174,6 +174,49 @@ foreach ($dashboardProfiles as $name => $profile) {
         if ($link['href'] === 'index.php') continue;
         dashboard_check(in_array($link['href'], $homeHrefs, true), $name . ': sidebar hedefi ana sayfada ' . $link['href']);
         dashboard_check($homeLabels[$link['href']] === $link['label'], $name . ': sidebar/kart etiketleri aynı ' . $link['href']);
+    }
+    // v548 yerleşim değişmezleri: sidebar bağlantısı hangi <details data-sb-grup> içinde (yoksa '').
+    $sbGroupOf = function (string $href) use ($xpath, $dashboardSidebarQuery): ?string {
+        $node = $xpath->query($dashboardSidebarQuery . '[@href="' . $href . '"]')->item(0);
+        if ($node === null) return null;
+        for ($p = $node->parentNode; $p !== null; $p = $p->parentNode) {
+            if ($p instanceof DOMElement && $p->tagName === 'details') return $p->getAttribute('data-sb-grup');
+        }
+        return '';
+    };
+    // Ana Sayfa: tek bağlantı, HİÇBİR grubun (Operasyon dahil) içinde değil ve ilk grubun üstünde.
+    dashboard_check($sbGroupOf('index.php') === '', $name . ': Ana Sayfa hiçbir sidebar grubunun içinde değil');
+    $homeLink = $xpath->query($dashboardSidebarQuery . '[@href="index.php"]')->item(0);
+    dashboard_check($homeLink !== null && $xpath->query('preceding::details', $homeLink)->length === 0, $name . ': Ana Sayfa ilk grubun (Sipariş) üstünde');
+    // Sürüm: yalnız .sidebar-user içinde, çıkış butonuyla aynı kapta, tam bir kez.
+    $surumAll = $xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," sidebar-surum ")]');
+    $surumIn = $xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," sidebar-user ")]//*[contains(concat(" ",normalize-space(@class)," ")," sidebar-surum ")]');
+    dashboard_check($surumAll->length === 1 && $surumIn->length === 1 && trim($surumIn->item(0)->textContent) === APP_SURUM, $name . ': sürüm tek kez ve .sidebar-user içinde');
+    dashboard_check($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," sidebar-user ")]//a[contains(@class,"sidebar-user-logout")]')->length === 1, $name . ': sürümün yanında çıkış bağlantısı');
+    // Taşınan bağlantılar: yetkiye bağlı (admin olmasa da), yeni grubunda.
+    foreach ([['malzeme_stok.php', 'stok', can('stok.read')], ['reports.php', 'raporlar_grup', can('reports.read')], ['hesap.php', 'kullanici_konsolu', can('hesap.read') || is_admin()]] as [$movedHref, $movedGroup, $movedAllowed]) {
+        dashboard_check($sbGroupOf($movedHref) === ($movedAllowed ? $movedGroup : null), $name . ': ' . $movedHref . ' yalnız yetkiliyse ve ' . $movedGroup . ' grubunda');
+    }
+    // Eski* adlar yalnız sidebar/kart etiketi; Operasyon grubunda.
+    foreach (['records.php' => 'Eski Yükleme Planı', 'cikmalar.php' => 'Eski Paletleme', 'kantar.php' => 'Eski Mal Kabul', 'reports.php' => 'Eski Raporlar'] as $oldHref => $oldLabel) {
+        foreach ($sidebar as $link) if ($link['href'] === $oldHref) dashboard_check($link['label'] === $oldLabel, $name . ': sidebar etiketi ' . $oldLabel);
+        if (isset($homeLabels[$oldHref])) dashboard_check($homeLabels[$oldHref] === $oldLabel, $name . ': kart etiketi ' . $oldLabel);
+        if ($oldHref !== 'reports.php' && ($g = $sbGroupOf($oldHref)) !== null) dashboard_check($g === 'operasyon', $name . ': ' . $oldHref . ' Operasyon grubunda');
+    }
+    if ($profile['admin']) {
+        // Admin: katalogdaki her sayfa sidebar'da; Operasyon Fişleri Operasyon'un İÇİNDE (ayrı grup değil).
+        $catalogGroups = [];
+        foreach (nav_muhasebe_gruplari() as $slug => [, , $pages]) foreach ($pages as $href => $_) $catalogGroups[$href] = $slug;
+        foreach ($catalogGroups as $href => $slug) {
+            $expected = $slug === 'operasyon_fis' ? 'operasyon' : $slug;
+            dashboard_check($sbGroupOf($href) === $expected, $name . ': ' . $href . ' sidebar grubu ' . $expected);
+        }
+        dashboard_check($xpath->query('//details[@data-sb-grup="operasyon_fis"]')->length === 0, $name . ': operasyon_fis ayrı sidebar grubu çizilmez');
+        dashboard_check(($catalogGroups['gunluk_kurlar.php'] ?? '') === 'kasa' && ($catalogGroups['doviz_tanimlari.php'] ?? '') === 'kasa' && !isset(nav_muhasebe_gruplari()['genel_uygulamalar']), $name . ': Günlük Kurlar + Döviz Tanımları Kasa grubunda, Genel Uygulamalar yok');
+    } else {
+        // Admin olmayan: yalnız yetkili taşınan bağlantı çizilir; grubun yer tutucu sayfaları ve Operasyon Fişleri çizilmez.
+        $sbHrefs = array_column($sidebar, 'href');
+        foreach ($dashboardCatalog as $href => $label) dashboard_check(!in_array($href, $sbHrefs, true), $name . ': admin sayfası sidebar\'da yok ' . $href);
     }
     foreach (['index.php', 'migrate.php', 'depo_tasima.php', 'firma_eslestirme.php', 'logout.php'] as $excluded) {
         dashboard_check(!in_array($excluded, $homeHrefs, true), $name . ': modül olmayan/eski hedef kart değil ' . $excluded);
@@ -191,7 +234,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 70, 'admin: Ana Sayfa hariç 70 benzersiz kart');
+        dashboard_check(count($home) === 58, 'admin: Ana Sayfa hariç 58 benzersiz kart (39 katalog + 19 modül kartı)');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }

@@ -4145,7 +4145,7 @@ body.bn-yok { --bn-h: 0px; }
         position: fixed;
         left: 0; top: 0; bottom: 0;
         width: 220px;
-        overflow-y: auto;
+        overflow: hidden;   /* v548: kaydırma yalnız .sidebar-nav'da; marka + kullanıcı alanı sabit */
         background: var(--text);
         color: #fff;
         z-index: 100;
@@ -4170,7 +4170,8 @@ body.bn-yok { --bn-h: 0px; }
     .sidebar-brand-sub { font-size: .7rem; color: rgba(255,255,255,.5); }
 
     /* Menü */
-    .sidebar-nav { flex: 1; padding: 8px 10px; }
+    .sidebar-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px; }
+    .sidebar-brand, .sidebar-depo, .sidebar-user { flex-shrink: 0; }
     .sidebar-section {
         font-size: .66rem; font-weight: 700; text-transform: uppercase;
         letter-spacing: .08em; color: rgba(255,255,255,.4);
@@ -4268,6 +4269,8 @@ body.bn-yok { --bn-h: 0px; }
         transition: background .12s, color .12s;
     }
     .sidebar-user-logout:hover { background: rgba(255,255,255,.12); color: #fff; text-decoration: none; }
+    /* v548: sürüm damgası çıkış düğmesinin yanında (kullanıcı alanı içinde) */
+    .sidebar-user .sidebar-surum { margin: 0; flex-shrink: 0; font-size: .66rem; }
 
     /* İçerik alanını sidebar genişliği kadar kaydır */
     .container {
