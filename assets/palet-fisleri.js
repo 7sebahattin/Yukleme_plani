@@ -436,7 +436,7 @@
         throw new Error(`${etiket}: “${text}” kayıtlı değil. Listeden seçin ya da “+ ekle” ile tanımlayın.`);
     }
     function degerler(r) {
-        return { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma],
+        return { belge_no: [r.belge_no, r.belge_no], parti_no: [r.parti_no, r.parti_no], palet_adi: [r.palet_tipi_id || '', r.palet_adi], firma: [r.firma, r.firma], kasa_adi: [r.kasa_adi, r.kasa_adi],
             kasa_adeti: [r.kasa_adeti, fmt0(r.kasa_adeti)], brut_kg: [r.brut_kg, fmt0(r.brut_kg)], dara_kg: [r.dara_kg, fmt0(r.dara_kg)], net_kg: [r.net_kg, fmt0(r.net_kg)],
             mustahsil_ad: [r.mustahsil_ad, r.mustahsil_ad], aciklama1: [r.aciklama1, r.aciklama1], aciklama2: [r.aciklama2, r.aciklama2] };
     }
@@ -510,23 +510,91 @@
     }
     form.addEventListener('submit', event => { event.preventDefault(); submitForm(); });
 
-    // ───────── Bul (listede ara) ─────────
-    const bulKutu = document.getElementById('pfBulKutu');
-    const bulInput = document.getElementById('pfBul');
-    function bulUygula() {
-        const q = (bulInput?.value || '').trim().toLocaleLowerCase('tr-TR');
+    // ───────── Bul: seçili hücrenin SÜTUNUNDA filtre (Boşluk tuşu ya da Bul düğmesi) ─────────
+    const bulDialog = document.getElementById('pfBulDialog');
+    const bulMod = document.getElementById('pfBulMod');
+    const bulMetin = document.getElementById('pfBulMetin');
+    const filtreKutu = document.getElementById('pfFiltreler');
+    const MOD_ADI = { basla: 'Başlayan', icinde: 'İçinde geçen', esit: 'Eşit Olan', basla_degil: 'İle Başlamayan', icinde_degil: 'İçinde Geçmeyen', akilli: 'Akıllı arama', bos: 'Boş Olan', dolu: 'Dolu Olan', esit_degil: 'Eşit Olmayan' };
+    const filtreler = new Map();      // sütun → { mod, metin }  (her sütunda bir filtre; sütunlar birlikte uygulanır)
+    const kucuk = v => String(v ?? '').trim().toLocaleLowerCase('tr-TR');
+    function filtreEslesir(deger, f) {
+        const d = kucuk(deger), m = kucuk(f.metin);
+        switch (f.mod) {
+            case 'basla': return d.startsWith(m);
+            case 'icinde': return d.includes(m);
+            case 'esit': return d === m;
+            case 'basla_degil': return !d.startsWith(m);
+            case 'icinde_degil': return !d.includes(m);
+            case 'akilli': return m.split(/\s+/).filter(Boolean).every(k => d.includes(k));   // yazılan her sözcük, sırası önemsiz
+            case 'bos': return d === '';
+            case 'dolu': return d !== '';
+            case 'esit_degil': return d !== m;
+            default: return true;
+        }
+    }
+    function sutunAdi(col) { return table.tHead.rows[0].querySelector(`th[data-col="${col}"]`)?.childNodes[0]?.textContent.trim() || col; }
+    function filtreUygula() {
         let say = 0;
-        body.querySelectorAll('tr').forEach(row => { row.hidden = !!q && !row.textContent.toLocaleLowerCase('tr-TR').includes(q); if (!row.hidden) say++; });
+        body.querySelectorAll('tr').forEach(row => {
+            let gorunur = true;
+            for (const [col, f] of filtreler) { if (!filtreEslesir(row.querySelector(`[data-col="${col}"]`)?.textContent, f)) { gorunur = false; break; } }
+            row.hidden = !gorunur;
+            if (gorunur) say++;
+        });
         const sayac = document.getElementById('pfCount'); if (sayac) sayac.textContent = say.toLocaleString('tr-TR');
         empty.hidden = say > 0;
-        if (!say) empty.textContent = q ? 'Aramanızla eşleşen kayıt yok.' : 'Seçilen filtreye uyan palet fişi yok.';
-        if (q) setStatus(`${say.toLocaleString('tr-TR')} kayıt bulundu.`);
+        if (!say) empty.textContent = filtreler.size ? 'Filtreye uyan kayıt yok. Filtreyi kaldırmak için alttaki × işaretine basın.' : 'Seçilen filtreye uyan palet fişi yok.';
+        // Göstergeler (× ile tek tek kaldırılır)
+        if (filtreKutu) {
+            filtreKutu.innerHTML = ''; filtreKutu.hidden = !filtreler.size;
+            filtreler.forEach((f, col) => {
+                const chip = document.createElement('span'); chip.className = 'pf-filtre-chip';
+                const bos = f.mod === 'bos' || f.mod === 'dolu';
+                chip.textContent = `${sutunAdi(col)}: ${MOD_ADI[f.mod]}${bos ? '' : ' “' + f.metin + '”'} `;
+                const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.title = 'Filtreyi kaldır'; x.setAttribute('aria-label', `${sutunAdi(col)} filtresini kaldır`);
+                x.addEventListener('click', () => { filtreler.delete(col); filtreUygula(); });
+                chip.appendChild(x); filtreKutu.appendChild(chip);
+            });
+        }
+        const gorunen = body.querySelector('tr:not([hidden])');
+        if (selectedCell && selectedCell.parentElement.hidden && gorunen) selectCell(gorunen.children[Array.from(selectedCell.parentElement.children).indexOf(selectedCell)] || gorunen.children[0]);
     }
-    function bulAc() { if (!bulKutu) return; bulKutu.hidden = false; bulInput.focus(); bulInput.select(); }
-    function bulKapat() { if (!bulKutu) return; bulInput.value = ''; bulUygula(); bulKutu.hidden = true; wrap.focus({ preventScroll: true }); }
-    bulInput?.addEventListener('input', bulUygula);
-    bulInput?.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); bulKapat(); } });
-    document.getElementById('pfBulKapat')?.addEventListener('click', bulKapat);
+    let bulSutun = 'parti_no';
+    function bulAc() {
+        if (!bulDialog || bulDialog.open) return;
+        bulSutun = selectedCell?.dataset.col || 'parti_no';
+        const var_ = filtreler.get(bulSutun);
+        document.getElementById('pfBulBaslik').textContent = sutunAdi(bulSutun);
+        bulMod.value = var_ ? var_.mod : 'akilli';   // her açılışta Akıllı arama (ters anlamlı biçimler yanlışlıkla kalıcı olmasın)
+        bulMetin.value = var_ ? var_.metin : '';
+        bulMetinDurumu();
+        bulDialog.showModal();
+        window.setTimeout(() => { (bulMetin.disabled ? bulMod : bulMetin).focus(); bulMetin.select(); }, 30);
+    }
+    function bulMetinDurumu() { const metinsiz = bulMod.value === 'bos' || bulMod.value === 'dolu'; bulMetin.disabled = metinsiz; if (metinsiz) bulMetin.value = ''; }
+    bulMod.addEventListener('change', () => { bulMetinDurumu(); if (!bulMetin.disabled) bulMetin.focus(); });
+    document.getElementById('pfBulIptal').addEventListener('click', () => bulDialog.close());
+    // Enter seçim kutusundayken de uygular (tarayıcı varsayılanı seçim kutusunda formu göndermez; Boş/Dolu biçiminde metin kutusu kapalıdır).
+    bulDialog.addEventListener('keydown', event => { if (event.key === 'Enter' && event.target.tagName !== 'BUTTON') { event.preventDefault(); document.getElementById('pfBulForm').requestSubmit(); } });
+    document.getElementById('pfBulForm').addEventListener('submit', event => {
+        event.preventDefault();
+        const mod = bulMod.value, metin = bulMetin.value.trim();
+        if ((mod === 'bos' || mod === 'dolu') || metin !== '') filtreler.set(bulSutun, { mod, metin });
+        else filtreler.delete(bulSutun);        // metin boş + metin gerektiren biçim = bu sütunun filtresini kaldır
+        bulDialog.close();
+        filtreUygula();
+        setStatus(filtreler.size ? `${sutunAdi(bulSutun)} sütununda filtre uygulandı.` : 'Filtre kaldırıldı.');
+        wrap.focus({ preventScroll: true });
+    });
+    // Boşluk tuşu: Bul penceresi (yazı alanında/düğmede/pencere açıkken değil)
+    document.addEventListener('keydown', event => {
+        if (event.key !== ' ' || event.ctrlKey || event.altKey || event.metaKey || event.repeat) return;
+        if (document.querySelector('dialog[open]')) return;
+        if (event.target.closest?.('input,select,textarea,button,a,summary,[contenteditable="true"]')) return;
+        event.preventDefault();
+        bulAc();
+    });
 
     // ───────── Parti palet listesi (alttaki kartlara tıklayınca) ─────────
     const ozetDialog = document.getElementById('pfOzetDialog');
@@ -537,7 +605,7 @@
         if (!row) { setStatus('Önce bir satır seçin.'); return; }
         const parti = satirDeger(row, 'parti_no');
         const satirlar = Array.from(body.querySelectorAll('tr')).filter(r => satirDeger(r, 'parti_no') === parti);
-        const kolonlar = ['belge_no', 'palet_adi', 'firma', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad']
+        const kolonlar = ['belge_no', 'palet_adi', 'firma', 'kasa_adi', 'kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg', 'mustahsil_ad']
             .filter(c => table.tHead.rows[0].querySelector(`th[data-col="${c}"]`));
         const sayisal = ['kasa_adeti', 'brut_kg', 'dara_kg', 'net_kg'];
         const ad = c => table.tHead.rows[0].querySelector(`th[data-col="${c}"]`).childNodes[0]?.textContent.trim() || c;
@@ -611,7 +679,7 @@ td.n{text-align:right}tr.t td{font-weight:700;background:#f1f5f9}</style></head>
     const TERCIH_ANAHTAR = 'palet_fisleri.tablo';
     const YEREL_ANAHTAR = 'asya.palet-fisleri.tablo.v2';
     const tercihSunucu = !!window.PALET_FISLERI?.tercihSunucu;
-    const VARSAYILAN_GEN = { belge_no: 80, parti_no: 130, palet_adi: 150, firma: 200, kasa_adeti: 70, brut_kg: 80, dara_kg: 70, net_kg: 80, mustahsil_ad: 150, aciklama1: 150, aciklama2: 150 };
+    const VARSAYILAN_GEN = { belge_no: 80, parti_no: 130, palet_adi: 150, firma: 200, kasa_adi: 130, kasa_adeti: 70, brut_kg: 80, dara_kg: 70, net_kg: 80, mustahsil_ad: 150, aciklama1: 150, aciklama2: 150 };
     const headers = table.tHead.rows[0];
     let tercih = { genislik: {}, sira: [] };
     (function tercihYukle() {

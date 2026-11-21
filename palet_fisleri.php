@@ -77,10 +77,11 @@ function pf_valid_date(string $value): bool {
 
 function pf_get_row(int $id): array {
     $st = db()->prepare("SELECT p.*, r.id AS belge_no, r.parti_no, r.firma, r.urun, r.tarih, r.durum, r.locked_at,
-                                COALESCE(md.name, p.palet_no, '') AS palet_adi
+                                COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi
                          FROM loading_pallets p
                          JOIN loading_records r ON r.id = p.loading_record_id
                          LEFT JOIN material_definitions md ON md.id = p.palet_tipi_id AND md.type = 'palet_tipi'
+                         LEFT JOIN material_definitions kd ON kd.id = p.kasa_cinsi_id AND kd.type = 'kasa_cinsi'
                          WHERE p.id = ? AND r.type = 'yukleme'");
     $st->execute([$id]);
     $row = $st->fetch();
@@ -95,7 +96,7 @@ function pf_satir_json(array $y): array {
         'palet_tipi_id' => (int)($y['palet_tipi_id'] ?? 0), 'palet_adi' => (string)$y['palet_adi'], 'firma' => (string)$y['firma'], 'urun' => (string)$y['urun'],
         'tarih' => (string)($y['tarih'] ?? ''), 'kasa_cinsi_id' => (int)($y['kasa_cinsi_id'] ?? 0), 'mustahsil_id' => (int)($y['mustahsil_id'] ?? 0),
         'kasa_adeti' => (int)$y['kasa_adeti'], 'brut_kg' => (float)$y['brut_kg'], 'dara_kg' => (float)$y['dara_kg'], 'net_kg' => (float)$y['net_kg'],
-        'aciklama1' => (string)($y['aciklama1'] ?? ''), 'aciklama2' => (string)($y['aciklama2'] ?? ''), 'mustahsil_ad' => (string)($y['mustahsil_ad'] ?? ''),
+        'aciklama1' => (string)($y['aciklama1'] ?? ''), 'aciklama2' => (string)($y['aciklama2'] ?? ''), 'mustahsil_ad' => (string)($y['mustahsil_ad'] ?? ''), 'kasa_adi' => (string)($y['kasa_adi'] ?? ''),
         'kilit' => (!empty($y['locked_at']) || ($y['durum'] ?? '') === 'yuklendi') ? 1 : 0,
     ];
 }
@@ -318,10 +319,11 @@ function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $des
     $st = $pdo->prepare("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
                           p.palet_tipi_id, p.kasa_cinsi_id, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql,
                           r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun, r.durum, r.locked_at,
-                          COALESCE(md.name, p.palet_no, '') AS palet_adi
+                          COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi
                    FROM loading_pallets p
                    JOIN loading_records r ON r.id = p.loading_record_id
                    LEFT JOIN material_definitions md ON md.id = p.palet_tipi_id AND md.type = 'palet_tipi'
+                   LEFT JOIN material_definitions kd ON kd.id = p.kasa_cinsi_id AND kd.type = 'kasa_cinsi'
                    WHERE $w
                    ORDER BY r.id DESC, p.sira_no ASC, p.id DESC");
     $st->execute([$baslangic]);
@@ -333,12 +335,12 @@ $rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, 
 $export = (string)($_GET['export'] ?? '');
 if ($export === 'csv' || $export === 'xlsx') {
     require_perm('reports.export');
-    $bas = ['Belge No', 'Tarih', 'Parti No', 'Palet', 'Ünvan', 'Ürün', 'Adet', 'BRÜT', 'Dara', 'NET'];
+    $bas = ['Belge No', 'Tarih', 'Parti No', 'Palet', 'Ünvan', 'Ürün', 'Ambalaj', 'Adet', 'BRÜT', 'Dara', 'NET'];
     if ($has_mustahsil) $bas[] = 'Müstahsil';
     array_push($bas, 'Açıklama-1', 'Açıklama-2');
     $satirlar = [];
     foreach ($rows as $r) {
-        $x = [(int)$r['belge_no'], (string)$r['tarih'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun'],
+        $x = [(int)$r['belge_no'], (string)$r['tarih'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun'], (string)$r['kasa_adi'],
               (int)$r['kasa_adeti'], (float)$r['brut_kg'], (float)$r['dara_kg'], (float)$r['net_kg']];
         if ($has_mustahsil) $x[] = (string)$r['mustahsil_ad'];
         array_push($x, (string)$r['aciklama1'], (string)$r['aciklama2']);
@@ -355,7 +357,7 @@ if ($export === 'csv' || $export === 'xlsx') {
         fputcsv($out, $bas, ';', '"', '\\');
         foreach ($satirlar as $x) {
             $x[1] = $x[1] !== '' ? date('d.m.Y', strtotime($x[1])) : '';
-            foreach ([7, 8, 9] as $i) $x[$i] = number_format((float)$x[$i], 3, ',', '');   // binlik ayraçsız — aktarımda güvenli
+            foreach ([8, 9, 10] as $i) $x[$i] = number_format((float)$x[$i], 3, ',', '');   // binlik ayraçsız — aktarımda güvenli
             fputcsv($out, $x, ';', '"', '\\');
         }
         fclose($out);
@@ -379,7 +381,6 @@ render_header('Palet Fişleri');
         <form class="pf-filtre" id="pfFiltre" method="get" action="palet_fisleri.php">
             <label class="pf-f-alan">Başlangıç Tarihi <input type="date" name="baslangic" value="<?= h($f_baslangic) ?>" required></label>
             <label class="pf-f-alan pf-f-chk">Yüklenen Paletleri Göster <input type="checkbox" name="yuklenen" value="1" <?= $f_yuklenen ? 'checked' : '' ?>></label>
-            <label class="pf-bul" id="pfBulKutu" hidden><span aria-hidden="true">⌕</span><input id="pfBul" type="search" placeholder="Belge, parti, palet, ünvan, müstahsil ara" autocomplete="off"><button type="button" class="pf-bul-kapat" id="pfBulKapat" aria-label="Aramayı kapat">×</button></label>
             <div class="pf-tb-grup" role="toolbar" aria-label="Palet fişi araçları">
                 <button type="button" class="pf-tb" data-pf="yazdir" title="Listeyi yazdırır">⎙ Yazdır</button>
                 <?php if (can('reports.export')): ?><?= export_menu('palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'csv']), 'palet_fisleri.php?' . http_build_query(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'export' => 'xlsx']), 'Excel', 'pf-tb pf-tb-xl') ?><?php endif; ?>
@@ -397,7 +398,7 @@ render_header('Palet Fişleri');
         <table class="pf-table" id="pfTable">
             <thead><tr>
                 <th data-col="belge_no">Belge No</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
-                <th data-col="kasa_adeti">Adet</th><th data-col="brut_kg">BRÜT</th><th data-col="dara_kg">Dara</th><th data-col="net_kg">NET</th>
+                <th data-col="kasa_adi">Ambalaj</th><th data-col="kasa_adeti">Adet</th><th data-col="brut_kg">BRÜT</th><th data-col="dara_kg">Dara</th><th data-col="net_kg">NET</th>
                 <?php if ($has_mustahsil): ?><th data-col="mustahsil_ad">Müstahsil</th><?php endif; ?>
                 <th data-col="aciklama1">Açıklama-1</th><th data-col="aciklama2">Açıklama-2</th>
             </tr></thead>
@@ -408,6 +409,7 @@ render_header('Palet Fişleri');
                     <td class="pf-cell" data-col="parti_no" data-value="<?= h($r['parti_no']) ?>"><?= h($r['parti_no']) ?></td>
                     <td class="pf-cell" data-col="palet_adi" data-value="<?= h($r['palet_tipi_id']) ?>"><?= h($r['palet_adi']) ?></td>
                     <td class="pf-cell" data-col="firma" data-value="<?= h($r['firma']) ?>"><?= h($r['firma']) ?></td>
+                    <td class="pf-cell" data-col="kasa_adi" data-value="<?= h($r['kasa_adi']) ?>"><?= h($r['kasa_adi']) ?></td>
                     <td class="pf-cell pf-num" data-col="kasa_adeti" data-value="<?= (int)$r['kasa_adeti'] ?>"><?= number_format((int)$r['kasa_adeti'], 0, ',', '.') ?></td>
                     <td class="pf-cell pf-num" data-col="brut_kg" data-value="<?= h($r['brut_kg']) ?>"><?= number_format((float)$r['brut_kg'], 0, ',', '.') ?></td>
                     <td class="pf-cell pf-num" data-col="dara_kg" data-value="<?= h($r['dara_kg']) ?>"><?= number_format((float)$r['dara_kg'], 0, ',', '.') ?></td>
@@ -430,7 +432,7 @@ render_header('Palet Fişleri');
         <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span>NET</span><strong data-sum="net">0</strong></div></div>
         <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▮</i><div><span>AMB. ORTALAMA</span><strong data-sum="ort">0</strong></div></div>
     </div>
-    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite">Kartlar seçili satırın partisini gösterir; tıklarsanız partinin palet listesi açılır. Sütunları taşımak için başlığa basılı tutun, kenarından sürükleyerek genişliğini ayarlayın.</span></div>
+    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-filtreler" id="pfFiltreler" hidden></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite">Kartlar seçili satırın partisini gösterir; tıklarsanız partinin palet listesi açılır. Sütunları taşımak için başlığa basılı tutun, kenarından sürükleyerek genişliğini ayarlayın.</span></div>
 </section>
 
 <dialog class="pf-dialog" id="pfDialog">
@@ -454,6 +456,18 @@ render_header('Palet Fişleri');
             <label>Açıklama-2 <input name="aciklama2" maxlength="2000"></label>
         </div>
         <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
+    </form>
+</dialog>
+<dialog class="pf-dialog pf-bul-dialog" id="pfBulDialog">
+    <form id="pfBulForm" method="dialog" autocomplete="off">
+        <div class="pf-bul-baslik" id="pfBulBaslik">Parti No</div>
+        <select id="pfBulMod" aria-label="Arama biçimi">
+            <option value="basla">Başlayan</option><option value="icinde">İçinde geçen</option><option value="esit">Eşit Olan</option>
+            <option value="basla_degil">İle Başlamayan</option><option value="icinde_degil">İçinde Geçmeyen</option><option value="akilli" selected>Akıllı arama</option>
+            <option value="bos">Boş Olan</option><option value="dolu">Dolu Olan</option><option value="esit_degil">Eşit Olmayan</option>
+        </select>
+        <input id="pfBulMetin" type="text" aria-label="Aranacak değer" placeholder="Aranacak değer">
+        <div class="pf-bul-dugme"><button type="submit" class="pf-bul-tamam" id="pfBulTamam" title="Uygula (Enter)" aria-label="Uygula">✔</button><button type="button" class="pf-bul-iptal" id="pfBulIptal" title="Vazgeç (Esc)" aria-label="Vazgeç">✖</button></div>
     </form>
 </dialog>
 <dialog class="pf-dialog pf-ozet-dialog" id="pfOzetDialog">

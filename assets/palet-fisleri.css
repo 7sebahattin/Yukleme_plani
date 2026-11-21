@@ -20,7 +20,7 @@ main.container:has(> .pf-page){max-width:none;margin:0;padding:12px 14px 8px;ove
 .pf-table tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--surface,#fff) 92%,#8aaacb)}
 .pf-table tbody tr:hover td{background:color-mix(in srgb,#1488dc 10%,var(--surface,#fff))}
 .pf-table tbody tr.pf-row-selected td{background:#a9d6f7!important;color:#082b49;font-weight:700}
-.pf-table tbody tr.pf-row-selected td[data-col="parti_no"]{background:#0b78d0!important;color:#fff}
+.pf-table tbody tr.pf-row-selected td.pf-cell-selected{background:#0b78d0!important;color:#fff}
 .pf-table tbody tr.pf-row-selected td[data-col="belge_no"]::before{content:"▸";margin-right:5px;color:#0b78d0}
 .pf-table td.pf-cell-selected{outline:2px solid #0782dc;outline-offset:-2px;position:relative;z-index:1}
 .pf-table td.pf-num{text-align:right;font-variant-numeric:tabular-nums}
@@ -134,3 +134,21 @@ body.pf-boyutlaniyor{cursor:col-resize;user-select:none}
 body.pf-boyutlaniyor .pf-rs{background:#7cc4ff99}
 .pf-ozet-tablo tbody tr:hover{background:#d5ecff}
 @media(max-width:900px){.pf-filtre .pf-tb-grup{margin-left:0;flex-wrap:wrap}}
+
+/* ── v538: Bul penceresi + filtre göstergesi ── */
+.pf-bul-dialog{width:min(360px,calc(100vw - 24px));padding:0;border-radius:6px;overflow:hidden}
+.pf-bul-dialog form{padding:0}
+.pf-bul-baslik{background:linear-gradient(#a9c4e0,#7ea3c9);color:#10253c;font-weight:700;padding:6px 12px}
+.pf-bul-dialog select,.pf-bul-dialog input{display:block;width:calc(100% - 24px);margin:10px 12px 0;min-height:36px;border:1px solid var(--pf-border);border-radius:4px;padding:4px 8px;font:inherit;color:var(--text,#162c44);background:var(--surface,#fff)}
+.pf-bul-dialog input{background:#dff3f0;border-color:#7ab8b0}
+.pf-bul-dialog input:disabled{background:var(--bg,#eef3f8);opacity:.6}
+.pf-bul-dialog select:focus,.pf-bul-dialog input:focus{outline:2px solid #0782dc;outline-offset:0}
+.pf-bul-dugme{display:flex;justify-content:flex-end;gap:10px;padding:10px 14px 12px}
+.pf-bul-tamam,.pf-bul-iptal{width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #9aa9b8;color:#fff;font-size:1.05rem;line-height:1;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.pf-bul-tamam{background:#2f9e44}.pf-bul-iptal{background:#e03131}
+.pf-bul-tamam:hover,.pf-bul-iptal:hover{transform:scale(1.08);box-shadow:0 0 0 1px #0782dc,0 3px 8px #0b244040}
+.pf-filtreler{display:inline-flex;flex-wrap:wrap;gap:6px}
+.pf-filtre-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 9px;border-radius:12px;background:#d5ecff;color:#06365f;font-size:.78rem;font-weight:650}
+.pf-filtre-chip button{border:0;background:#0782dc;color:#fff;width:18px;height:18px;border-radius:50%;line-height:1;cursor:pointer;font-size:.85rem}
+.pf-filtre-chip button:hover{background:#c0261c}
+@media(max-width:767px){.pf-bul-dialog select,.pf-bul-dialog input{font-size:16px}}
