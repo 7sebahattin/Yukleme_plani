@@ -10,7 +10,7 @@
 // Saf fonksiyonlar (pc_*) DB/oturum bilmez → scripts/puantaj_cizelgesi_smoke.php.
 //
 // Ortak "tablo" yapısı (iki sekme de aynısını üretir; ekran/yazdır/Excel okur):
-//   ['tur'=>'personel'|'gunluk', 'ay'=>'YYYY-MM', 'gunler'=>pc_gunler(),
+//   ['tur'=>'personel'|'gunluk'|'giris' (v554: Puantaj Girişi — config/puantaj_giris.php kurar), 'ay'=>'YYYY-MM', 'gunler'=>pc_gunler(),
 //    'satirlar'=>[ ['id'=>int,'ad'=>str,'alt'=>str,
 //                   'hucre'=>[ 'YYYY-MM-DD' => ['k'=>'X'|'!'|'D'|'İ'|'Ü'|'R'|'T','d'=>float|int,'ilk'=>?,'son'=>?,'acik'=>int,
 //                              (elle işaret) 'isaret'=>true,'kayit'=>bool,'kayit_saat'=>float,'kayit_acik'=>int,'aciklama'=>str] ],
@@ -20,6 +20,8 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/puantaj_isaret.php';
+require_once __DIR__ . '/puantaj_giris.php';      // v554 Puantaj Girişi (bağımsız, gayri resmi sekme: kendi tabloları)
+require_once __DIR__ . '/puantaj_giris_ui.php';
 
 /** Aynı kişinin GİRİŞ→ÇIKIŞ çifti en çok bu kadar saat sürebilir; fazlası "çıkış eksik" sayılır. */
 const PC_VARDIYA_MAX_SAAT = 16;
@@ -265,22 +267,46 @@ function pc_tablo_gunluk_kur(string $ay, array $rapor, string $q = ''): array
 
 // ── Sekme / yetki ───────────────────────────────────────────
 
-function pc_sekme_adlari(): array { return ['personel' => 'Personel', 'gunluk' => 'Günlük İşçi']; }
+function pc_sekme_adlari(): array { return ['personel' => 'Personel', 'gunluk' => 'Günlük İşçi', 'giris' => 'Puantaj Girişi']; }
 
-/** Kullanıcının görebildiği sekmeler (sayfa Gör + sekmenin kaynağı Gör). Yönetici ikisini de görür. */
+/**
+ * Kullanıcının görebildiği sekmeler (sayfa Gör + sekmenin kaynağı Gör). Yönetici hepsini görür.
+ * v554: 'giris' (Puantaj Girişi) BAĞIMSIZ veridir; kaynak izni gerekmez, yalnız sayfa Düzenle (monthly_timesheet.edit).
+ * Tablo hazırlığı burada denetlenmez (pc_sekmeler_hazir).
+ */
 function pc_sekmeler(): array
 {
     if (!function_exists('role_pdks_can') || !role_pdks_can('monthly_timesheet')) return [];
     $out = [];
     if (role_pdks_can('employees')) $out[] = 'personel';
     if (role_pdks_can('daily_reports')) $out[] = 'gunluk';
+    if (role_pdks_can('monthly_timesheet', 'edit')) $out[] = 'giris';
     return $out;
 }
 
-/** İstenen sekme izinli değilse ilk izinli sekme; hiç yoksa null. */
-function pc_sekme_sec(string $istek, array $izinli): ?string
+/**
+ * pc_sekmeler() + Puantaj Girişi tablo hazırlığı. Tablolar kurulmamışsa 'giris' yalnız yöneticiye (kurulum notuyla)
+ * görünür, diğerlerinden gizlenir. Dönüş: [sekmeler, girisHazir].
+ * @return array{0:list<string>,1:bool}
+ */
+function pc_sekmeler_hazir(PDO $pdo): array
+{
+    $sek = pc_sekmeler();
+    $hazir = in_array('giris', $sek, true) && pg_hazir($pdo);
+    if (in_array('giris', $sek, true) && !$hazir && !(function_exists('is_admin') && is_admin())) {
+        $sek = array_values(array_diff($sek, ['giris']));
+    }
+    return [$sek, $hazir];
+}
+
+/**
+ * İstenen sekme izinli değilse ilk izinli sekme; hiç yoksa null.
+ * v554: sekme parametresi HİÇ verilmediyse ve Puantaj Girişi kullanılabilirse ($girisVarsayilan: tablo hazır) o açılır.
+ */
+function pc_sekme_sec(string $istek, array $izinli, bool $girisVarsayilan = true): ?string
 {
     if ($izinli === []) return null;
+    if ($istek === '' && $girisVarsayilan && in_array('giris', $izinli, true)) return 'giris';
     return in_array($istek, $izinli, true) ? $istek : $izinli[0];
 }
 
@@ -368,6 +394,7 @@ function pc_disa_hucre(string $tur, ?array $h)
 /** CSV/XLSX ortak başlık satırı. */
 function pc_disa_baslik(array $tablo): array
 {
+    if ($tablo['tur'] === 'giris') return pg_disa_baslik($tablo);
     $gunluk = $tablo['tur'] === 'gunluk';
     $b = [$gunluk ? 'Çavuş' : 'Ad Soyad', $gunluk ? 'Çavuş Kodu' : 'Sicil / Departman'];
     foreach ($tablo['gunler'] as $g) $b[] = $g['n'] . ' ' . $g['ad'];
@@ -377,6 +404,7 @@ function pc_disa_baslik(array $tablo): array
 /** CSV/XLSX ortak veri satırları + "o gün" satırı + genel toplam satırı. */
 function pc_disa_satirlar(array $tablo): array
 {
+    if ($tablo['tur'] === 'giris') return pg_disa_satirlar($tablo);
     $tur = $tablo['tur'];
     $out = [];
     foreach ($tablo['satirlar'] as $s) {
@@ -406,6 +434,7 @@ function pc_disa_satirlar(array $tablo): array
 /** XLSX sayfa tanımı (xlsx_indir()). Gün sütunları 'sayi' (sayı ya da '!' metni), toplam satırı elle (SUBTOTAL yok). */
 function pc_xlsx_sayfa(array $tablo, string $aciklama = ''): array
 {
+    if ($tablo['tur'] === 'giris') return pg_xlsx_sayfa($tablo, $aciklama);
     $gunluk = $tablo['tur'] === 'gunluk';
     $sut = [['baslik' => $gunluk ? 'Çavuş' : 'Ad Soyad'], ['baslik' => $gunluk ? 'Çavuş Kodu' : 'Sicil / Departman']];
     foreach ($tablo['gunler'] as $g) $sut[] = ['baslik' => $g['n'] . ' ' . $g['ad'], 'tip' => 'sayi'];
@@ -426,6 +455,7 @@ function pc_xlsx_sayfa(array $tablo, string $aciklama = ''): array
 /** Hücre gösterimi: [css sınıfı, iç HTML (yalnız rakam/harf), title metni (çağıran h() ile kaçırır)]. Renk + HARF birlikte. */
 function pc_hucre_goster(string $tur, ?array $h): array
 {
+    if ($tur === 'giris') return pg_hucre_goster($h);   // v554: X Y D İ Ü R T (renk + harf)
     if ($h === null) return ['pc-b', '·', ''];
     if ($tur === 'gunluk') {
         $n = (int)$h['d'];
@@ -454,6 +484,11 @@ function pc_hucre_goster(string $tur, ?array $h): array
 /** Ekrandaki/yazdırmadaki tek satır gösterge (lejant) metni. $kodlar: personelde elle işaret kodları da yazılsın (v553). */
 function pc_lejant_metni(string $tur, bool $kodlar = true): string
 {
+    if ($tur === 'giris') {
+        $m = '';
+        foreach (pg_kodlar() as $k => $kd) $m .= ($m === '' ? '' : ' · ') . $k . ' = ' . $kd['ad'];
+        return $m . ' · · = boş · gri sütun = hafta sonu';
+    }
     if ($tur === 'gunluk') return 'Sayı = o gün çalışan işçi (kart bazında) · ! = çıkışı eksik kart var · · = kayıt yok · gri sütun = hafta sonu';
     $m = 'X = geldi (altında saat) · ! = çıkış eksik';
     if ($kodlar) foreach (pi_kodlar() as $k => $kd) $m .= ' · ' . $k . ' = ' . $kd['ad'];

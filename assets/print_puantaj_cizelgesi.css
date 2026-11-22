@@ -29,6 +29,9 @@
 .pcy-tablo td.pcy-k-uc { background: #dcd2f2; }
 .pcy-tablo td.pcy-k-r { background: #fff0a0; }
 .pcy-tablo td.pcy-k-t { background: #6b7280; color: #fff; }
+.pcy-tablo td.pcy-k-cx { background: #bfe6cc; }   /* v554 X Çalıştı */
+.pcy-tablo td.pcy-k-y { background: #e3efb8; }    /* v554 Y Yarım gün */
+.pcy-tablo td.pcy-k i { font-size: 5pt; }
 .pcy-tablo .pc-kn { position: absolute; top: 0; right: 1px; font-size: 5pt; line-height: 1; }
 .pcy-lejant { font-size: 7.5pt; color: #333; margin: 4px 0 6px; }
 .pcy-not { font-size: 7.5pt; margin: 0 0 4px; }

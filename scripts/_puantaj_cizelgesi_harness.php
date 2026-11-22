@@ -9,6 +9,9 @@
 //             css (true → stil dosyalarını file:// yoluyla bağlar; tarayıcı testi için)
 //             v553: isaret_yok (true → puantaj_isaretler tablosu KURULMAZ) · isaretler [[emp, gün, kod, açıklama?],…] (tohum; gün = ayın günü sayısı) ·
 //             post {alan:değer} (→ REQUEST_METHOD=POST, $_POST; Accept JSON) · dump (true → çıkışta tablo içeriği STDERR "ISARETLER: json")
+//             v554: giris (true → puantaj_giris_* tabloları KURULUR; varsayılan KURULMAZ = migrate edilmemiş site) ·
+//             giris_kisiler [[id, ad, gorev, depo, aktif],…] · giris_gunler [[kisi_id, ayın günü, kod],…] ·
+//             dump_giris (true → çıkışta STDERR "GIRIS_KISILER: json" + "GIRIS_GUNLER: json") · tum_tablolar (true → employees/PDKS tablolarının satır sayıları STDERR "SAYILAR: json")
 // Çıkış kodu: 0 = sayfa çıktı verdi · 3 = forbidden() · 4 = sayfa istisna fırlattı. Denetim kayıtları STDERR'e "AUDIT: {json}".
 // =========================================================
 declare(strict_types=1);
@@ -136,6 +139,13 @@ if ($SEMA !== 'yok') {
         $isr = db()->prepare("INSERT INTO puantaj_isaretler (employee_id, tarih, kod, aciklama, user_id, created_at) VALUES (?,?,?,?,?,?)");
         foreach (($OPT['isaretler'] ?? []) as $r) $isr->execute([(int)$r[0], sprintf('%s-%02d', $TOHUM_AY, (int)$r[1]), $r[2], $r[3] ?? null, 1, date('Y-m-d H:i:s')]);
     }
+    if (!empty($OPT['giris'])) {   // v554 Puantaj Girişi (bağımsız): kendi iki tablosu + tohum
+        foreach (pg_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }
+        $gk = db()->prepare("INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira, created_by, created_at) VALUES (?,?,?,?,?,0,1,?)");
+        foreach (($OPT['giris_kisiler'] ?? []) as $r) $gk->execute([(int)$r[0], $r[1], $r[2] === '' ? null : $r[2], $r[3], (int)($r[4] ?? 1), date('Y-m-d H:i:s')]);
+        $gg = db()->prepare("INSERT INTO puantaj_giris_gunler (kisi_id, tarih, kod, user_id, created_at) VALUES (?,?,?,?,?)");
+        foreach (($OPT['giris_gunler'] ?? []) as $r) $gg->execute([(int)$r[0], is_string($r[1]) && str_contains($r[1], '-') ? $r[1] : sprintf('%s-%02d', $TOHUM_AY, (int)$r[1]), $r[2], 1, date('Y-m-d H:i:s')]);   // gün = ayın günü ya da tam tarih
+    }
     $ev = db()->prepare("INSERT INTO attendance_events (employee_id, card_id, event_type, source, canonical_uid_snapshot, server_event_time) VALUES (?,?,?,?,?,?)");
     $olay = function (int $e, string $t, string $z) use ($ev): void { $ev->execute([$e, 1, $t, 'usb_decimal', 'UID' . $e, $z]); };
     $m = $TOHUM_AY;
@@ -182,6 +192,17 @@ if (!empty($OPT['post'])) {   // v553 yazma ucu: form alanları $_POST'ta (role_
 if (!empty($OPT['dump'])) register_shutdown_function(function () {
     try { fwrite(STDERR, 'ISARETLER: ' . json_encode(db()->query('SELECT employee_id, tarih, kod, aciklama, user_id FROM puantaj_isaretler ORDER BY employee_id, tarih')->fetchAll(), JSON_UNESCAPED_UNICODE) . "\n"); }
     catch (Throwable $e) { fwrite(STDERR, "ISARETLER: yok\n"); }
+});
+if (!empty($OPT['dump_giris'])) register_shutdown_function(function () {
+    try {
+        fwrite(STDERR, 'GIRIS_KISILER: ' . json_encode(db()->query('SELECT id, ad, gorev, depo, aktif, sira FROM puantaj_giris_kisiler ORDER BY id')->fetchAll(), JSON_UNESCAPED_UNICODE) . "\n");
+        fwrite(STDERR, 'GIRIS_GUNLER: ' . json_encode(db()->query('SELECT kisi_id, tarih, kod, user_id FROM puantaj_giris_gunler ORDER BY kisi_id, tarih')->fetchAll(), JSON_UNESCAPED_UNICODE) . "\n");
+    } catch (Throwable $e) { fwrite(STDERR, "GIRIS_KISILER: yok\n"); }
+});
+if (!empty($OPT['tum_tablolar'])) register_shutdown_function(function () {
+    $say = [];
+    foreach (['employees', 'attendance_events', 'puantaj_isaretler'] as $t) { try { $say[$t] = (int)db()->query("SELECT COUNT(*) FROM `$t`")->fetchColumn(); } catch (Throwable $e) { $say[$t] = -1; } }
+    fwrite(STDERR, 'SAYILAR: ' . json_encode($say) . "\n");
 });
 $_SERVER['SCRIPT_NAME'] = '/' . $SAYFA;
 $_SERVER['REQUEST_URI'] = '/' . $SAYFA;
