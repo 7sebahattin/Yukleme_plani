@@ -923,6 +923,156 @@ let srv;
         }
         }   // v555 blok sonu
         }   // v554 blok sonu
+
+        // ───────── v556: AD SÜTUNU KAYBOLMASI — KÖK NEDEN REGRESYONU ─────────
+        // KÖK NEDEN: sütun sınıfı "pc-ad" idi; EasyList genel süzgeci (##.pc-ad) reklam engelleyicide (uBlock / AdBlock / AdGuard)
+        // tüm th.pc-ad hücrelerini display:none yapıyordu. Harness/Chromium'da eklenti olmadığı için önceki testler göremiyordu.
+        // Bu blok engelleyiciyi BENZETİR (kozmetik süzgeç = display:none !important stil) ve sütunun yine de görünmesini ister.
+        // MUTASYON: PCZ_MUTASYON=1 node scripts/puantaj_cizelgesi_smoke.js → sınıf adları "pc-ad"a geri çevrilir; bu blok FAIL vermelidir.
+        {
+        const v6 = '[v556] ';
+        const MUT = process.env.PCZ_MUTASYON === '1';
+        // Sayfa varyantı: head'e stil ekler; mutasyonda sınıf adlarını "pc-ad"a çevirir (HTML + CSS kopyası)
+        let vSay = 0;
+        function varyant(href, stil, mut) {
+            const dosya = decodeURIComponent(new URL(href).pathname);
+            let h = fs.readFileSync(dosya, 'utf8');
+            if (mut) {
+                const cssYol = path.join(root, 'assets/puantaj_cizelgesi.css');
+                const cssKopya = path.join(tmp, 'mut_' + (++vSay) + '.css');
+                let cssM = fs.readFileSync(cssYol, 'utf8'); const kes = cssM.indexOf('/* ── v556: kişi adı sütunu sertleştirme'); if (kes > 0) cssM = cssM.slice(0, kes);   // mutasyon = v555 durumu (sertleştirme kuralları YOK)
+                fs.writeFileSync(cssKopya, cssM.split('pc-isim-yazi').join('pc-ad-ad').split('pc-isim').join('pc-ad'));
+                h = h.split(pathToFileURL(cssYol).href).join(pathToFileURL(cssKopya).href).split('pc-isim-yazi').join('pc-ad-ad').split('pc-isim').join('pc-ad');
+            }
+            if (stil) h = h.replace('</head>', '<style id="vstil">' + stil + '</style></head>');
+            const f = path.join(tmp, 'v556_' + (++vSay) + '_' + path.basename(dosya));
+            fs.writeFileSync(f, h);
+            return pathToFileURL(f).href;
+        }
+        // EasyList'in ESKİ sınıf adlarına uyan kuralı + yaygın genel (sezgisel) süzgeç kalıplarını taklit eder
+        const ENGELLEYICI = '.pc-ad,.pc-ad-ad,.pg-ad-kap,.pg-ad-metin,.pc-col-ad,.pk-ad,.pcy-ad,.pc-adet,[class^="ad-"],[class*="-ad-"],[class$="-ad"],[class*=" ad-"],[id^="ad-"],[class*="advert"],[class*="sponsor"]{display:none!important}';
+        const OLC6 = () => {
+            const t = document.querySelector('table.pc-grid'); const wrap = document.getElementById('pcGridWrap');
+            if (!t) return { tablo: false };
+            const bas = t.querySelector('thead tr').firstElementChild;
+            const ad = [...t.querySelectorAll('tbody tr')].map(tr => { const th = tr.firstElementChild; const m = th.querySelector('span'); return { tag: th.tagName, w: th.getBoundingClientRect().width, txt: (th.textContent || '').trim() }; });
+            const tf = [...t.querySelectorAll('tfoot tr')].map(tr => tr.firstElementChild.getBoundingClientRect().width);
+            const wr = wrap.getBoundingClientRect(), br = bas.getBoundingClientRect();
+            return { tablo: true, wrapGor: wrap.offsetParent !== null, uyari: !!document.getElementById('pcIsimUyari'), yok: document.querySelector('.pc-page').classList.contains('pc-isim-yok'),
+                kose: { tag: bas.tagName, w: br.width, txt: bas.textContent.replace(/\s+/g, ' ').trim(), solda: Math.abs(br.left - wr.left) <= wrap.clientLeft + 3 }, ad, tf, sc: wrap.scrollLeft, tasar: wrap.scrollWidth > wrap.clientWidth + 1, sw: document.documentElement.scrollWidth, iw: innerWidth };
+        };
+        const adTamam = o => o.tablo && o.wrapGor && !o.uyari && !o.yok && o.kose.tag === 'TH' && o.kose.w >= 80 && o.kose.txt.length > 0 && o.ad.length > 0 && o.ad.every(a => a.tag === 'TH' && a.w >= 80 && a.txt.length > 0) && o.tf.every(w => w >= 80);
+        const SEK = { giris: [sayfalar.giris, 3], personel: [sayfalar.personel, 4], gunluk: [sayfalar.gunluk, 2] };
+
+        // (1) DOM'da reklam-süzgeci sezgisine uyan sınıf / kimlik parçası YOK ("ad", "ads", "advert", "sponsor", "banner"; ad-/-ad/-ad- dahil)
+        for (const [sk, [href]] of Object.entries(SEK).concat([['kisiler', [sayfalar.kisiler]], ['yazdir', [sayfalar.girisYazdir]]])) {
+            const pg = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+            await pg.goto(varyant(href, '', MUT)); await pg.waitForTimeout(200);
+            const kotu = await pg.evaluate(() => {
+                const bulunan = new Set(); const kural = /^(ad|ads|advert|adverts|advertisement|sponsor|sponsored|banner|promo)$/i;
+                document.querySelectorAll('.pc-page *, .pc-page, .pcy-sayfa *, table *, table').forEach(el => { [...el.classList].concat(el.id ? [el.id] : []).forEach(c => { if (c.split(/[-_]/).some(p => kural.test(p))) bulunan.add(c); }); });
+                return [...bulunan];
+            });
+            ok(v6 + sk + ': DOM\'daki hiçbir sınıf/kimlik adı "ad / ads / advert / sponsor / banner" parçası içermez (EasyList genel süzgeci bunları gizler)', kotu.length === 0, kotu.join(','));
+            await pg.close();
+        }
+
+        // (2) Engelleyici benzetimi: 3 sekme × 2 genişlik → ad sütunu YİNE görünür (süzgeç yüklemeden ÖNCE ve SONRA eklenir)
+        for (const [sk, [href, n]] of Object.entries(SEK)) {
+            for (const w of [1280, 1665]) {
+                const pg = await browser.newPage({ viewport: { width: w, height: 900 } });
+                await pg.goto(varyant(href, ENGELLEYICI, MUT)); await pg.waitForTimeout(400);
+                let o = await pg.evaluate(OLC6);
+                ok(v6 + '[' + w + ' · ' + sk + '] engelleyici benzetimi (sayfa yüklenirken var): ad sütunu görünür (köşe + ' + n + ' satır + alt toplamlar ≥ 80px, dolu metin), uyarı bandı/yedek liste YOK', adTamam(o) && o.ad.length === n, JSON.stringify(o));
+                const pg2 = await browser.newPage({ viewport: { width: w, height: 900 } });
+                await pg2.goto(varyant(href, '', MUT)); await pg2.waitForTimeout(150);
+                await pg2.addStyleTag({ content: ENGELLEYICI }); await pg2.waitForTimeout(2300);   // "görünüp kayboluyor": süzgeç SONRADAN devreye girer
+                o = await pg2.evaluate(OLC6);
+                ok(v6 + '[' + w + ' · ' + sk + '] engelleyici SONRADAN devreye girince de (görünüp kaybolma): ad sütunu görünür', adTamam(o) && o.ad.length === n, JSON.stringify(o));
+                await pg.close(); await pg2.close();
+            }
+        }
+
+        // (3) BEKÇİ: sütun BAŞKA bir sebeple gizlenirse çıkmaz yok → uyarı bandı + kişi listesi; yanlış alarm yok
+        const GIZLE = 'html body .pc-grid th:first-child, html body .pc-grid tbody th, html body .pc-grid tfoot th{display:none!important}';
+        for (const [sk, [href, n]] of Object.entries(SEK)) {
+            const pg = await browser.newPage({ viewport: { width: 1665, height: 900 } });
+            await pg.goto(varyant(href, GIZLE)); await pg.waitForTimeout(500);
+            const b = await pg.evaluate(() => { const u = document.getElementById('pcIsimUyari'); const l = document.querySelector('.pc-liste'); const g = document.getElementById('pcGridWrap'); return { uyari: !!u && u.offsetParent !== null && u.getAttribute('role') === 'alert' && /reklam engelleyici/.test(u.textContent), liste: getComputedStyle(l).display !== 'none', grid: getComputedStyle(g).display, adlar: [...document.querySelectorAll('.pc-liste .pc-isim-yazi')].map(e => e.textContent.trim()).filter(Boolean).length, tasma: document.documentElement.scrollWidth <= innerWidth + 1, cls: document.querySelector('.pc-page').classList.contains('pc-isim-yok') }; });
+            ok(v6 + '[bekçi · ' + sk + '] sütun gizlenirse: uyarı bandı (role=alert, "reklam engelleyici"), kişi listesi görünür (' + n + ' ad), ızgara gizli, taşma yok', b.uyari && b.liste && b.grid === 'none' && b.adlar === n && b.tasma && b.cls, JSON.stringify(b));
+            await pg.close();
+        }
+        {   // DOM'dan SİLİNME + gecikmeli gizleme + yanlış alarm yok
+            let pg = await browser.newPage({ viewport: { width: 1665, height: 900 } });
+            await pg.goto(varyant(sayfalar.giris, '', MUT)); await pg.waitForTimeout(150);
+            await pg.evaluate(() => document.querySelectorAll('th.pc-isim, th.pc-ad').forEach(t => t.remove())); await pg.waitForTimeout(2300);
+            const sil = await pg.evaluate(() => ({ cls: document.querySelector('.pc-page').classList.contains('pc-isim-yok'), uyari: !!document.getElementById('pcIsimUyari'), liste: getComputedStyle(document.querySelector('.pc-liste')).display }));
+            ok(v6 + '[bekçi] ad hücreleri DOM\'dan silinirse (eklenti) yedek liste + uyarı devreye girer', sil.cls && sil.uyari && sil.liste !== 'none', JSON.stringify(sil));
+            await pg.close();
+            pg = await browser.newPage({ viewport: { width: 1665, height: 900 } });
+            await pg.goto(varyant(sayfalar.giris, '', MUT)); await pg.waitForTimeout(150);
+            await pg.addStyleTag({ content: GIZLE }); await pg.waitForTimeout(2300);
+            ok(v6 + '[bekçi] sütun yüklemeden SONRA gizlenirse (gecikmeli) de yedek liste + uyarı', await pg.evaluate(() => document.querySelector('.pc-page').classList.contains('pc-isim-yok') && !!document.getElementById('pcIsimUyari')));
+            await pg.close();
+            for (const [w, dsf, ad] of [[1280, 1, 'normal'], [1665, 1.25, '%80 yakınlaştırma (dsf 1,25)'], [1024, 1.5, 'dsf 1,5'], [390, 1, 'mobil']]) {
+                pg = await browser.newPage({ viewport: { width: w, height: 900 }, deviceScaleFactor: dsf });
+                await pg.goto(sayfalar.giris); await pg.waitForTimeout(2500);
+                ok(v6 + '[bekçi] yanlış alarm yok (' + ad + ', ' + w + 'px): normal sayfada uyarı bandı çıkmaz', await pg.evaluate(() => !document.getElementById('pcIsimUyari') && !document.querySelector('.pc-page').classList.contains('pc-isim-yok')));
+                await pg.close();
+            }
+        }
+
+        // (4) Yakınlaştırma / viewport varyasyonları: ad sütunu görünür + yapışık (3 sekme × 1024…2560)
+        for (const [sk, [href, n]] of Object.entries(SEK)) {
+            for (const w of [1024, 1100, 1280, 1440, 1500, 1600, 1665, 1700, 1920, 2560]) {
+                const pg = await browser.newPage({ viewport: { width: w, height: 900 } });
+                await pg.goto(href); await pg.waitForTimeout(350);
+                const o = await pg.evaluate(OLC6);
+                const k = await pg.evaluate(() => { const wr = document.getElementById('pcGridWrap'); wr.scrollLeft = 99999; return new Promise(r => requestAnimationFrame(() => { const th = document.querySelector('tbody tr').firstElementChild; const rc = th.getBoundingClientRect(); const e = document.elementFromPoint(rc.left + 12, rc.top + 8); r({ sol: Math.abs(rc.left - wr.getBoundingClientRect().left), ust: !!e && th.contains(e) }); })); });
+                ok(v6 + '[' + w + ' · ' + sk + '] ad sütunu görünür; açılıştaki otomatik "bugüne kaydır" ad sütununu GİZLEMEZ (köşe solda); sona kaydırınca yapışık + üstte' + (o.tasar ? '' : ' (taşma yok → kaydırma yok)'), adTamam(o) && o.kose.solda && k.sol <= 2 && k.ust && (o.tasar || o.sc === 0), JSON.stringify([o.kose, o.sc, o.tasar, k]));
+                await pg.close();
+            }
+        }
+        // (5) Otomatik kaydırma güvencesi: sticky çalışmıyorsa kaydırma YAPILMAZ; taşma yoksa kaydırma yok
+        {
+            let pg = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+            await pg.goto(varyant(sayfalar.personel, 'html body .pc-grid th{position:static!important}', MUT)); await pg.waitForTimeout(400);
+            const st = await pg.evaluate(() => ({ sc: document.getElementById('pcGridWrap').scrollLeft, tasar: document.getElementById('pcGridWrap').scrollWidth > document.getElementById('pcGridWrap').clientWidth, sol: Math.abs(document.querySelector('tbody tr').firstElementChild.getBoundingClientRect().left - document.getElementById('pcGridWrap').getBoundingClientRect().left) }));
+            ok(v6 + '[otomatik kaydırma] yapışkanlık (sticky) bozuksa BUGÜNE KAYDIRMA YAPILMAZ (scrollLeft 0) → ad sütunu görünür kalır', st.tasar && st.sc === 0 && st.sol <= 2, JSON.stringify(st));
+            await pg.close();
+            pg = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+            await pg.goto(sayfalar.personel); await pg.waitForTimeout(400);
+            const st2 = await pg.evaluate(() => { const w = document.getElementById('pcGridWrap'); const b = w.querySelector('th[data-bugun]'); return { sc: w.scrollLeft, bugun: !!b }; });
+            ok(v6 + '[otomatik kaydırma] sticky sağlamsa bugüne kaydırır (scrollLeft > 0; bu ay bugün sütunu var)', st2.bugun && (st2.sc > 0 || new Date().getDate() <= 8), JSON.stringify(st2));
+            await pg.close();
+        }
+        // (6) Ortam varyasyonları: dokunmatik, retina, koyu renk şeması, hareket azaltma, zorunlu renkler
+        for (const [ad, ctxOpt] of [['dokunmatik (hasTouch)', { hasTouch: true }], ['dsf 1,25', { deviceScaleFactor: 1.25 }], ['dsf 1,5', { deviceScaleFactor: 1.5 }], ['koyu renk şeması', { colorScheme: 'dark' }], ['hareket azaltma', { reducedMotion: 'reduce' }], ['zorunlu renkler', { forcedColors: 'active' }]]) {
+            for (const [sk, [href, n]] of Object.entries(SEK)) {
+                const c = await browser.newContext(Object.assign({ viewport: { width: 1500, height: 900 } }, ctxOpt));
+                const pg = await c.newPage();
+                await pg.goto(href); await pg.waitForTimeout(350);
+                const o = await pg.evaluate(OLC6);
+                ok(v6 + '[' + ad + ' · ' + sk + '] ad sütunu görünür', adTamam(o) && o.ad.length === n, JSON.stringify(o));
+                await c.close();
+            }
+        }
+        // koyu TEMA (data-theme) + yazdırma çıktısı
+        {
+            const pg = await browser.newPage({ viewport: { width: 1500, height: 900 } });
+            await pg.goto(sayfalar.giris); await pg.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await pg.waitForTimeout(200);
+            const o = await pg.evaluate(OLC6);
+            ok(v6 + '[koyu tema] ad sütunu görünür', adTamam(o), JSON.stringify(o));
+            await pg.close();
+            for (const [sk, href] of [['personel', sayfalar.yazdir], ['giris', sayfalar.girisYazdir]]) {
+                const p2 = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+                await p2.goto(href); await p2.emulateMedia({ media: 'print' }); await p2.waitForTimeout(250);
+                const y = await p2.evaluate(() => [...document.querySelectorAll('.pcy-tablo tbody tr')].map(tr => { const c = tr.firstElementChild; return { w: c.getBoundingClientRect().width, t: c.textContent.trim().length }; }));
+                ok(v6 + '[yazdırma · ' + sk + '] ad sütunu çıktıda görünür (her satır ≥ 60px, dolu metin)', y.length > 0 && y.every(c => c.w >= 60 && c.t > 0), JSON.stringify(y));
+                await p2.close();
+            }
+        }
+        }   // v556 blok sonu
     } finally { await browser.close(); try { srv && srv.close(); } catch (_) { /* */ } }
     console.log('\nGeçen: ' + gecen + '   Kalan: ' + fail);
     process.exit(fail ? 1 : 0);

@@ -397,3 +397,13 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
     .pk-excel-tablo-kap { max-height: 34vh; }
 }
 @media print { .pg-sec-arac, .pg-cubuk, .pk-excel, .pg-gorunum, .pg-secbox, .pg-msec { display: none !important; } }
+
+/* ── v556: kişi adı sütunu sertleştirme ──
+   KÖK NEDEN: sütun sınıfı eskiden "pc-ad" idi; EasyList genel süzgeci (##.pc-ad) reklam engelleyicide onu gizliyordu.
+   Sınıf adları artık "ad" içermez (pc-isim…; data-isim). Dış bir kuralın ezmesine karşı: */
+.pc-grid th.pc-isim { display: table-cell !important; visibility: visible !important; }
+/* sütun yine de görünmezse (puantaj_cizelgesi.js bekçisi): ızgara yerine kişi listesi + uyarı bandı */
+.pc-page.pc-isim-yok .pc-grid-wrap { display: none !important; }
+.pc-page.pc-isim-yok .pc-liste { display: block !important; }
+.pc-isim-uyari { border-left-color: var(--pc-uyari); background: var(--pc-uyari-bg); color: var(--pc-uyari); }
+@media print { .pc-isim-uyari { display: none !important; } }

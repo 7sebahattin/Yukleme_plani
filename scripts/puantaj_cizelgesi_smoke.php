@@ -1518,6 +1518,33 @@ $pkB = giris_dosya_post('excel_ekle', $xe, 'e.xlsx', ['depo' => 'Depo B', 'allow
 ok("excel_ekle: AKTİF DEPO Depo B iken yeni kişiler Depo B ile damgalanır; Depo B'deki mevcut 'Örnek Kişi C' mükerrer sayılır (eklenen 5)", ($pkB['json']['ok'] ?? false) === true && $pkB['json']['eklenen'] === 5 && array_unique(array_column(array_slice($pkB['kisiler'], 1), 'depo')) === ['Depo B'], $pkB['out']);
 ok("giriş kapısı: yazma ucundaki Excel eylemleri GET ile çağrılamaz (405 JSON)", str_contains(sayfa_calistir('puantaj_giris_kaydet.php', [], array_merge($GB, ['admin' => true]))['out'], 'Geçersiz istek'));
 
+// ── v556: AD SÜTUNU KAYBOLMASI — kök neden (EasyList ##.pc-ad) statik değişmezleri ──
+// KÖK NEDEN: yapışkan ad sütununun sınıfı "pc-ad" idi; EasyList genel süzgeci reklam engelleyicide onu gizler. Sınıf/kimlik/öznitelik
+// adlarında "ad / ads / advert / sponsor / banner / promo" PARÇASI olmamalı. Tarayıcı karşılığı: puantaj_cizelgesi_smoke.js v556 bloğu.
+$v6dosyalar = ['puantaj_cizelgesi.php', 'puantaj_cizelgesi_yazdir.php', 'config/puantaj_cizelgesi.php', 'config/puantaj_giris_ui.php', 'config/puantaj_giris_kisiler_ui.php', 'assets/puantaj_cizelgesi.js', 'assets/puantaj_giris.js', 'assets/puantaj_giris_kisiler.js', 'assets/puantaj_cizelgesi.css', 'assets/print_puantaj_cizelgesi.css'];
+$v6kotu = [];
+foreach ($v6dosyalar as $f) {
+    $kod = oku($f);
+    // sınıf değerleri (class="..."), CSS seçicileri (.sinif / #kimlik), data-* öznitelik adları
+    preg_match_all('/class="([^"<>]*)"/', $kod, $m1);
+    $adaylar = [];
+    foreach ($m1[1] as $degerler) foreach (preg_split('/\s+/', trim(preg_replace('/<\?.*?\?>/s', ' ', $degerler))) as $c) if ($c !== '') $adaylar[] = $c;
+    if (str_ends_with($f, '.css')) { preg_match_all('/[.#]([A-Za-z][A-Za-z0-9_-]*)/', preg_replace('~/\*.*?\*/~s', '', $kod), $m2); foreach ($m2[1] as $c) $adaylar[] = $c; }
+    if (str_ends_with($f, '.js') || str_ends_with($f, '.php')) { preg_match_all("/classList\.(?:add|remove|toggle|contains)\('([^']+)'/", $kod, $m3); foreach ($m3[1] as $c) $adaylar[] = $c; preg_match_all('/data-([a-z][a-z0-9-]*)/', $kod, $m4); foreach ($m4[1] as $c) $adaylar[] = 'data-' . $c; }
+    foreach (array_unique($adaylar) as $c) {
+        if (preg_match('/^[0-9.]+(px|em|rem|s|ms|%|pt)?$/i', $c)) continue;
+        foreach (preg_split('/[-_]/', $c) as $parca) if (in_array(strtolower($parca), ['ad', 'ads', 'advert', 'adverts', 'advertisement', 'sponsor', 'sponsored', 'banner', 'promo'], true)) $v6kotu[] = "$f:$c";
+    }
+}
+ok('v556: puantaj dosyalarında sınıf/kimlik/data-* adı "ad / ads / advert / sponsor / banner / promo" parçası İÇERMEZ (EasyList ##.pc-ad kök nedeni)', !$v6kotu, implode(', ', array_slice(array_unique($v6kotu), 0, 8)));
+ok('v556: eski sınıf adları (pc-ad, pc-ad-ad, pk-ad, pcy-ad, pg-ad-kap, pg-ad-metin, pc-col-ad, pc-k-ad, pc-adet, data-ad) hiçbir puantaj dosyasında KALMADI', (function () use ($v6dosyalar) { foreach ($v6dosyalar as $f) if (preg_match('/(?<![\w-])(pc-ad|pc-ad-ad|pk-ad|pcy-ad|pg-ad-kap|pg-ad-metin|pc-col-ad|pc-k-ad|pc-adet|data-ad)(?![\w-])/', preg_replace(['~/\*.*?\*/~s', '~^\s*(//|\*|<!--).*$~m', '~\s//\s.*$~m'], '', oku($f)))) return false; return true; })());
+$v6css = oku('assets/puantaj_cizelgesi.css'); $v6js = oku('assets/puantaj_cizelgesi.js'); $v6php = oku('puantaj_cizelgesi.php'); $v6giris = oku('config/puantaj_giris_ui.php');
+ok('v556: CSS sertleştirme — th.pc-isim display:table-cell !important (dış kural ezemez) + yedek: .pc-isim-yok ızgarayı gizler, kişi listesini gösterir', str_contains($v6css, '.pc-grid th.pc-isim { display: table-cell !important;') && preg_match('/\.pc-page\.pc-isim-yok \.pc-grid-wrap \{ display: none !important/', $v6css) === 1 && preg_match('/\.pc-page\.pc-isim-yok \.pc-liste \{ display: block !important/', $v6css) === 1);
+ok('v556: JS bekçisi — sınıftan BAĞIMSIZ ölçer (ilk sütun TH + genişlik ≥ 40px), yüklemede + 250/1500/4000 ms + resize + load; uyarı bandı role=alert, console.warn', str_contains($v6js, 'function isimSutunuVar') && str_contains($v6js, "tagName === 'TH'") && str_contains($v6js, 'offsetWidth >= 40') && str_contains($v6js, '[250, 1500, 4000]') && str_contains($v6js, "addEventListener('resize'") && str_contains($v6js, "addEventListener('load', isimBekcisi)") && str_contains($v6js, "setAttribute('role', 'alert')") && str_contains($v6js, 'console.warn'));
+ok('v556: bugüne otomatik kaydırma YALNIZ gerçek yatay taşma + ad sütunu sağlam + sticky doğrulanınca; kaydırma sonrası ad görünmüyorsa geri alınır', str_contains($v6js, 'wrap.scrollWidth > wrap.clientWidth + 1 && isimSutunuVar()') && str_contains($v6js, "getComputedStyle(isimTh).position === 'sticky'") && str_contains($v6js, 'wrap.scrollLeft = 0;'));
+ok('v556: ızgara sınıfları yeni adlarla: th.pc-isim (3 sekme + giriş), <col class="pc-col-isim">, ad metni .pc-isim-yazi', substr_count($v6php, 'class="pc-isim') >= 5 && str_contains($v6php, '<col class="pc-col-isim">') && str_contains($v6giris, '<col class="pc-col-isim">') && str_contains($v6giris, 'class="pc-isim-yazi"') && str_contains(oku('config/puantaj_giris_kisiler_ui.php'), 'class="pk-isim"'));
+ok('v556: harness kalıcı SQLite (db_dosya) + http seçenekleri ve uçtan uca test dosyası mevcut', str_contains(oku('scripts/_puantaj_cizelgesi_harness.php'), "'db_dosya'") && str_contains(oku('scripts/_puantaj_cizelgesi_harness.php'), "\$OPT['http']") && is_file("$ROOT/scripts/puantaj_giris_e2e_smoke.js"));
+
 echo "\n----------------------------------------------\n";
 echo "Geçen: $gecen   Kalan: $fail\n";
 exit($fail > 0 ? 1 : 0);
