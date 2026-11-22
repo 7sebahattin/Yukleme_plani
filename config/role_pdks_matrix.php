@@ -23,6 +23,9 @@ function role_pdks_pages(): array {
         'ters_pool'=>['label'=>'Giriş tanımlı kart havuzu','route'=>'ters_kart_havuz.php','legacy'=>['worker_cards'],'actions'=>['read','create','edit','delete'],'note'=>'Sil, havuz üyeliğini bitirir veya sıfırlar; kart geçmişini silmez.'],
         'ters_count'=>['label'=>'Sabah kart sayımı','route'=>'ters_kart_sayim.php','legacy'=>['daily_scan'],'actions'=>['read','create','edit','delete'],'note'=>'Sil, sayımı geri alır. Mevcut çıkış sonrası yönetici sınırı korunur.'],
         'ters_report'=>['label'=>'Giriş tanımlı mutabakat','route'=>'ters_kart_mutabakat.php','legacy'=>['daily_scan','daily_reports'],'actions'=>['read']],
+        // v552: Aylık puantaj çizelgesi (salt okunur). Eski roller: günlük puantaj raporu YA DA personel kartı yetkisi olan rol sayfayı alır;
+        // yeni (ayrıntılı) roller yalnız bu satırı seçerse eski paketleri AÇMAZ ('bridge'=>false). Sekmeler kendi Gör izniyle ayrıca kapılanır.
+        'monthly_timesheet'=>['label'=>'Aylık puantaj çizelgesi','route'=>'puantaj_cizelgesi.php','legacy'=>['daily_reports','employees'],'actions'=>['read'],'bridge'=>false,'note'=>'Sayfayı açar. Personel sekmesi için Personel kartları Gör, Günlük İşçi sekmesi için Günlük puantaj raporları Gör izni de gerekir; Excel için Raporlar › Dışa aktar.'],
     ];
 }
 function role_pdks_expand_permissions(array $permissions): array {
@@ -36,7 +39,7 @@ function role_pdks_expand_permissions(array $permissions): array {
             }
         }
         // Bridges expose existing navigation and retain existing secondary guards.
-        if (in_array('attendance.'.$page.'.read',$permissions,true)) {
+        if (($policy['bridge'] ?? true) && in_array('attendance.'.$page.'.read',$permissions,true)) {
             foreach ($policy['legacy'] as $legacy) if ($legacy!=='admin' && ($detailed || in_array('attendance.'.$legacy,$original,true))) $permissions[]='attendance.'.$legacy;
         }
     }
@@ -67,6 +70,7 @@ function role_pdks_routes(): array {
         'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php','mesai_toplu_onay.php'],
         'manual_exit'=>['manuel_cikis.php'], 'ters_pool'=>['ters_kart_havuz.php'],
         'ters_count'=>['ters_kart_sayim.php'], 'ters_report'=>['ters_kart_mutabakat.php'],
+        'monthly_timesheet'=>['puantaj_cizelgesi.php','puantaj_cizelgesi_yazdir.php'],
     ] as $page=>$routes) foreach ($routes as $route) $out[$route]=$page;
     return $out;
 }

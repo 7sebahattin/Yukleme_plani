@@ -164,12 +164,12 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
     printf("%-84s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    → " . $ipucu);
 }
 
-echo "\n=== Faz 8I. personel_takip.php — admin: tam 11 aktif kart görünür (v354: +Ters Kart Takip) ===\n";
+echo "\n=== Faz 8I. personel_takip.php — admin: tam 12 aktif kart görünür (v354: +Ters Kart Takip, v552: +Puantaj Çizelgesi) ===\n";
 $IS_ADMIN = true;
 $s0 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0, 'Notice:'));
-ok('admin: tam 11 ana home-card var (v354: +Ters Kart Takip)', substr_count($s0, 'class="home-card"') === 11);
+ok('admin: tam 12 ana home-card var (v354: +Ters Kart Takip, v552: +Puantaj Çizelgesi)', substr_count($s0, 'class="home-card"') === 12);
 ok('admin: iki rapor kartı aynı bölümde yan yana',
     (bool)preg_match('/Yönetim Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
 foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Ücretleri', 'Hakedişler',
@@ -180,7 +180,7 @@ foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', '�
     ok("admin: granular '$kartAdi' ek girişi şimdilik GİZLİ (sahip kararı)", !str_contains($s0, $kartAdi));
 }
 ok('admin: Fiş Excel ek girişi korunur', str_contains($s0,'href="gunluk_fis_yukle.php"'));
-ok('admin: Fiş Excel kartı (home-card-ek) var, ana kartlar değişmedi; açıkta liste/düğme yok', str_contains($s0, 'home-card home-card-ek') && substr_count($s0, 'class="home-card"') === 11 && !str_contains($s0, 'pdks-secondary-links') && !str_contains($s0, 'pdks-context-links') && !str_contains($s0, 'KAYIT SEÇEREK'));
+ok('admin: Fiş Excel kartı (home-card-ek) var, ana kartlar değişmedi; açıkta liste/düğme yok', str_contains($s0, 'home-card home-card-ek') && substr_count($s0, 'class="home-card"') === 12 && !str_contains($s0, 'pdks-secondary-links') && !str_contains($s0, 'pdks-context-links') && !str_contains($s0, 'KAYIT SEÇEREK'));
 ok('admin: parametresiz kırık Ekstre bağlantısı yok', !str_contains($s0, 'href="cavus_ekstre.php"'));
 ok('admin: Kart Havuzu doğru hedefe ve istenen alt başlığa sahip',
     (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu.*?Nötr günlük işçi kartları ve kart yönetimi/s', $s0));

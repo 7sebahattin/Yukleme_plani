@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v551');
+    define('APP_SURUM', 'v552');
 }
 
 // --- HTML kaçışı ---
@@ -253,6 +253,7 @@ function nav_ptak_sayfalari(): array {
         'personel.php', 'personel_form.php', 'personel_kartlar.php', 'giris_cikis.php',
         'cavuslar.php', 'cavus_form.php', 'isci_kartlari.php', 'isci_tipleri.php',
         'gunluk_isci_giris_cikis.php', 'gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php',
+        'puantaj_cizelgesi.php',   // v552 Aylık Puantaj Çizelgesi (yazdır sayfası render_header çağırmaz → listede yok)
         'cavus_fiyatlari.php', 'cavus_hakedis.php', 'cavus_hakedis_detay.php',
         'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
         'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
