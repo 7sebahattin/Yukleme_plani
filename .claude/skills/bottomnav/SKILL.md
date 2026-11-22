@@ -39,8 +39,26 @@ dolan slotlar: **390px altında 3, üstünde 4** (sunucu hep 4 çizer, CSS
   dar ekranda, `.bn-more-dar`). Güncel sayfa görünen slotta değilse "Diğer"
   onun ikonunu + rozet + etiketini alır ve `aria-current="page"` taşır (dar
   ekranda 4. slot için bunu app.js yapar, genişlik değişince de). Alt sayfa
-  sidebar gibi gruplu (Operasyon / Yönetim), aktif depo rozetini gösterir,
-  Esc/✕/arka plan kapatır, odağı Diğer'e döndürür.
+  aktif depo rozetini gösterir, Esc/✕/arka plan kapatır, odağı Diğer'e döndürür.
+- **v552 — "Diğer" sayfası sidebar ile AYNI modelden çizilir.** `nav_alt_ciz()`
+  `nav_menu_modeli($base)`'yi (TEK kaynak; sidebar da onu çizer) taze çağırır
+  (render_footer'daki geç `_nav_cikma_hint` yansısın) ve `nav_alt_sheet_gruplari()`
+  ile süzer: aynı grup adı/sırası/öğe adı (Sipariş, Operasyon, Yönetim, Cari
+  İşlemler … Admin Konsolu; yetkiye göre). Yeni sayfa/grup yalnız
+  `nav_menu_modeli()` / `nav_muhasebe_gruplari()`'na eklenir — sidebar + mobil
+  birlikte güncellenir. **AKORDİYON (v551 KURAL):** kap `data-akordiyon`, grup
+  `<details class="bn-grup" data-sb-grup>`; sunucu yalnız `$g['aktif']` grubu
+  `open` basar (ilki), app.js "Menü akordiyonu" IIFE'si gerisini yönetir —
+  grup başına özel mantık YOK. Anahtarı `nav_alt_sayfalar()`'da olan VE
+  `$m['adaylar']`'da olan öğe MEVCUT `.bn-tile[data-nav]` (Sabitle/in-bar/mail
+  rozeti) kalır; anahtarsız öğe (muhasebe sayfaları, Araç Yükleme/Palet/Mal
+  Kabul Fişleri) pin'siz sade `<a class="bn-tile bn-tile-link">` (data-nav ve
+  `.go` YOK → app.js pin/sıralama kodu görmez; Sabitle modunda gitmez).
+  Anahtarsız öğe varsa "Diğer" düğmesi aday sayısından bağımsız çıkar
+  (`$sheetEk`); Ana Sayfa'nın hedefiyle aynı sayfa sheet'te tekrarlanmaz.
+  Sheet başlığı `position:sticky` (Kapat/Sabitle hep erişilir), `.bn-sheet`
+  üst boşluğu handle'dadır (yapışkan başlığın üstünde içerik görünmesin);
+  Tab sırasına `summary` dahil (app.js odak tuzağı).
 - **Kullanım YALNIZ cihazda:** `localStorage['asya_nav_kullanim_<uid>']` =
   `[[anahtar, ms], …]` (en çok 90 gün / 200 kayıt; aynı bölümde 30 dk içindeki
   art arda yüklemeler TEK ziyaret). Puan = Σ 0,5^(gün/14); Ana Sayfa sayılmaz.

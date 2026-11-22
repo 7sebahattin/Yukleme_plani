@@ -66,6 +66,15 @@ declare -A JS_KARARSIZ=(
 )
 
 # ---------------------------------------------------------
+# Tarayıcı testleri: UZUN süren (çok sayıda profil/ekran yükleyen) testler için süre ÇARPANI.
+# Varsayılan JS sınırı (JS_ZAMAN) yetmeyen test atlanmaz/gevşetilmez; yalnız sınırı büyür.
+# bottomnav_smoke: ~220 sn → v551'de mobil "Diğer" akordiyon doğrulamalarıyla ~260 sn (sınır 240).
+# ---------------------------------------------------------
+declare -A JS_ZAMAN_CARPAN=(
+    [bottomnav_smoke.js]=3
+)
+
+# ---------------------------------------------------------
 # Varsayılan PHP çalıştırmasından HARİÇ tutulanlar (adı *_test.php / *_smoke.php olsa da
 # test DEĞİL: elle çalıştırılan canlı servis / ağ denetimleri). CI canlı servise gitmesin.
 # Dosya açıkça argüman olarak verilirse yine çalışır.
@@ -267,12 +276,12 @@ for f in ${TESTLER[@]+"${TESTLER[@]}"}; do
                 goster_cikti "$f" "$log"
                 continue
             fi
-            env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$JS_ZAMAN" node "$f" >> "$log" 2>&1
+            env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$((JS_ZAMAN * ${JS_ZAMAN_CARPAN[$ad]:-1}))" node "$f" >> "$log" 2>&1
             kod=$?
             if [ "$kod" -ne 0 ] && [ -n "${JS_KARARSIZ[$ad]+x}" ]; then
                 mv "$log" "$log.1"
                 if js_hazirla "$ad" > "$log" 2>&1; then
-                    env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$JS_ZAMAN" node "$f" >> "$log" 2>&1
+                    env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$((JS_ZAMAN * ${JS_ZAMAN_CARPAN[$ad]:-1}))" node "$f" >> "$log" 2>&1
                     kod=$?
                 else
                     kod=1

@@ -80,6 +80,8 @@ eval(substr($asrc, $a, $b - $a + 3));
 $KATALOG = array_keys(array_merge(...array_values(permission_catalog())));
 
 require_once $ROOT . '/config/helpers.php';   // GERÇEK render_header/footer, first_allowed_page, nav_ptak_*
+// v552: muhasebe menüsü sayfa yetkileri (muhasebe.<sayfa>.read) auth.php permission_catalog()'unda DEĞİL, muhasebe_roller.php katalog eklerinde.
+$KATALOG = array_values(array_unique(array_merge($KATALOG, array_keys(muhasebe_rol_katalog()))));
 
 // Depo rengi: biri tanımdan (elle seçilmiş renk), biri isimden türetilen palet.
 db()->exec("CREATE TABLE IF NOT EXISTS material_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +162,20 @@ $PROFILLER = [
         'ad' => 'Özel rol: yalnız hesap.read (dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
         'rol' => ['slug' => 'hesap_tek', 'label' => 'Hesap'],
         'perms' => ['hesap.read'],
+    ],
+    // v552: "Diğer" sayfası sidebar ile AYNI modelden çizilir. Yalnız 3 aday sayfa (eskiden "Diğer" ÇIKMAZDI) + anahtarsız
+    // (pin'siz) muhasebe sayfaları → o sayfalara mobilde ulaşmak için "Diğer" düğmesi/sheet ŞART.
+    'muhasebe_sayfa' => [
+        'ad' => 'Özel rol: 3 aday + muhasebe sayfaları (cari kartları, palet fişleri)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'muhasebe_sayfa', 'label' => 'Muhasebe Sayfa'],
+        'perms' => ['dashboard.read','records.read','kantar.read','muhasebe.cari_kartlari.read','muhasebe.palet_fisleri.read'],
+    ],
+    // dashboard.read YOK + yalnız muhasebe sayfaları: Ana Sayfa ilk izinli muhasebe sayfasına (cari_kartlari.php) gider →
+    // o sayfa sheet'te İKİNCİ kez çizilmez; kalan (cari_dekontlar) için "Diğer" şart.
+    'muhasebe_tek' => [
+        'ad' => 'Özel rol: yalnız muhasebe sayfaları (dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'muhasebe_tek', 'label' => 'Muhasebe Tek'],
+        'perms' => ['muhasebe.cari_kartlari.read','muhasebe.cari_dekontlar.read'],
     ],
 ];
 foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read','frugro_only'=>'siparis.frugro.read'] as $key=>$permission) {
@@ -275,6 +291,8 @@ $SAYFALAR = [
     'hesap'       => ['self' => '/hesap.php',          'kapi' => 'hesap.php',          'bolum' => 'hesap.php',          'baslik' => 'Hesap'],
     'siparisler'  => ['self' => '/siparisler.php',     'kapi' => 'siparisler.php',     'bolum' => 'siparisler.php',     'baslik' => 'Siparişler'],
     'definitions' => ['self' => '/definitions.php',    'kapi' => 'definitions.php',    'bolum' => 'definitions.php',    'baslik' => 'Tanımlar'],
+    // v552: anahtarsız (muhasebe) sayfa — sheet'te `.bn-tile-link`; nav_aktif_anahtar() dosya slug'ı döndürür
+    'cari_kartlari' => ['self' => '/cari_kartlari.php', 'kapi' => 'cari_kartlari.php', 'bolum' => 'cari_kartlari.php', 'baslik' => 'Cari Kayıt Kartları'],
 ];
 
 // Hal Kayıt sayfasının KENDİ düzen kuralları (iframe'i bottomnav'ın üstünde
@@ -331,9 +349,12 @@ function sayfa_render(array $s, string $base_css_inline, string $file_root, stri
 }
 
 // ── Üret ──────────────────────────────────────────────────────────────────
+$muhSayfalar = [];   // v552: muhasebe menüsü sayfa dosyaları (sheet'te anahtarsız bağlantı)
+foreach (nav_muhasebe_gruplari() as [, , $__sayfalar]) foreach (array_keys($__sayfalar) as $__dosya) $muhSayfalar[] = (string)$__dosya;
 $manifest = [
     'uretim'   => date('c'),
     'anahtar_sayfa' => $ANAHTAR_SAYFA,
+    'muhasebe_sayfalar' => $muhSayfalar,
     'kok'      => $ROOT,
     'app_surum'=> APP_SURUM,
     'gates'    => $gate_meta,
@@ -347,6 +368,13 @@ foreach ($PROFILLER as $pk => $pr) {
 
     $izinli = [];
     foreach ($GATES as $hedef => [, , $kosul]) $izinli[$hedef] = (bool)$kosul();
+    // v552: muhasebe menüsü sayfaları (sheet'te anahtarsız bağlantı) — kapı: yönetici ya da muhasebe.<slug>.read;
+    // admin_konsolu grubu yalnız yönetici (muhasebe_roller.php KAPSAM DIŞI). muhasebe_sayfa_can()'dan BAĞIMSIZ yazıldı.
+    foreach (nav_muhasebe_gruplari() as $__grup => [, , $__sayfalar]) {
+        foreach ($__sayfalar as $__dosya => $_) {
+            $izinli[$__dosya] = is_admin() || ($__grup !== 'admin_konsolu' && can('muhasebe.' . substr((string)$__dosya, 0, -4) . '.read'));
+        }
+    }
 
     // Çapraz kontroller: tablo, uygulamanın KENDİ fonksiyonlarıyla ayrışmasın.
     $fap = first_allowed_page();
@@ -366,6 +394,9 @@ foreach ($PROFILLER as $pk => $pr) {
     // beklentilerde (slot sayısı, "Diğer", karo listesi) kullanılır.
     $adaylar = array_values(array_filter($adaylarHam, fn($k) => $home === null || $ANAHTAR_SAYFA[$k] !== $home));
     $soguk = array_slice(array_values(array_filter($SOGUK, fn($k) => in_array($k, $adaylar, true))), 0, 4);
+    // v552: dokta yeri olmayan (anahtarsız) izinli muhasebe sayfası var mı? (Ana Sayfa'nın hedefi hariç — dokta zaten oraya gider.)
+    // "Diğer" düğmesi/sheet bu durumda aday sayısından BAĞIMSIZ olarak çıkmalıdır.
+    $sheetEk = (bool)array_filter($muhSayfalar, fn($d) => !empty($izinli[$d]) && $d !== $home);
 
     $manifest['profiller'][$pk] = [
         'ad' => $pr['ad'], 'admin' => $pr['admin'], 'depo' => $pr['depo'],
@@ -374,6 +405,7 @@ foreach ($PROFILLER as $pk => $pr) {
         // Ana Sayfa: dashboard.read → index.php, yoksa first_allowed_page(), o da yoksa HİÇ
         'home_hedef' => $home,
         'adaylar' => $adaylar,
+        'sheet_ek' => $sheetEk,
         'soguk_slotlar' => $soguk,
         'cubuk_beklenen' => $home !== null || $adaylar !== [],
     ];
@@ -388,7 +420,7 @@ foreach ($PROFILLER as $pk => $pr) {
         $manifest['sayfalar'][] = [
             'profil' => $pk, 'sayfa' => $sk, 'dosya' => $dosya,
             'yol' => ltrim($s['self'], '/'), 'bolum' => $s['bolum'],
-            'anahtar' => $s['bolum'] === 'index.php' ? 'home' : (array_search($s['bolum'], $ANAHTAR_SAYFA, true) ?: null),
+            'anahtar' => $s['bolum'] === 'index.php' ? 'home' : (array_search($s['bolum'], $ANAHTAR_SAYFA, true) ?: (in_array($s['bolum'], $muhSayfalar, true) ? substr($s['bolum'], 0, -4) : null)),   // muhasebe sayfası: slug (nav_aktif_anahtar)
             'depo_rengi' => $pr['depo'] !== null ? depot_color($pr['depo']) : null,
         ];
     }

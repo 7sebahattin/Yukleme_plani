@@ -41,7 +41,7 @@ $c = strpos($helpers, 'function can_siparis(');
 ok('can_siparis nav_ptak_sayfalari ile render_desktop_sidebar ARASINDA (rol_kapilari_smoke eval bölgesi)',
     $a !== false && $b !== false && $c !== false && $a < $c && $c < $b);
 ok("sidebar OGL sayfa izni", str_contains($helpers, "\$p_sip   = role_matrix_page_can('siparis','ogl');"));
-ok('sidebar sipariş bağlantısı $p_sip kapılı', str_contains($helpers, "if (\$p_sip)  \$lnk('siparisler.php'"));
+ok('sidebar sipariş bağlantısı $p_sip kapılı', str_contains($helpers, "if (\$p_sip)  \$o[] = \$ge('siparisler.php'"));
 $topnavStart = strpos($helpers, '<nav class="topnav">');
 $topnavGate = $topnavStart === false ? false : strpos($helpers, "<?php if (role_matrix_page_can('siparis','ogl')): ?>", $topnavStart);
 $topnavLink = $topnavStart === false ? false : strpos($helpers, 'siparisler.php', $topnavStart);

@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v550');
+    define('APP_SURUM', 'v551');
 }
 
 // --- HTML kaçışı ---
@@ -585,7 +585,15 @@ function nav_aktif_anahtar(): ?string {
     return $a_cari;
 }
 
-function render_desktop_sidebar(string $base): void {
+/**
+ * Gezinme MENÜ MODELİ (v551) — masaüstü sidebar VE mobil "Diğer" sayfası AYNI kaynaktan çizer (TEK kaynak).
+ * Dönen: ['home' => ?öğe, 'gruplar' => [['slug','ad','svg','aktif','ogeler'=>[öğe…]], …]]
+ * öğe = ['href','ikon' (güvenilir HTML),'etiket','aktif','rozet','nav' (nav_alt_sayfalar anahtarı ya da null)].
+ * KURAL: grubun 'aktif' bayrağı = içinde aktif öğe var. Çizen taraf YALNIZ aktif grubu açık basar,
+ * diğerleri kapalı kalır (akordiyon) — yeni grup eklemek bu kuralı otomatik alır; ayrıca iş yapma.
+ * Yeni sayfa/grup eklerken BURAYA (ya da nav_muhasebe_gruplari()'na) ekle; sidebar + mobil birlikte güncellenir.
+ */
+function nav_menu_modeli(string $base): array {
     $_fn   = function_exists('can');
     $p_dash  = !$_fn || can('dashboard.read');
     $p_rec   = !$_fn || role_matrix_page_can('records','loading');
@@ -647,21 +655,92 @@ function render_desktop_sidebar(string $base): void {
     // Etkin sayfanın grubu (Yönetim ya da Operasyon) sunucuda AÇIK basılır.
     $a_ynt   = $a_def || $a_usr || $a_rol || $a_aud || $a_bkp;
 
+
+    $ge = fn(string $href, string $ikon, string $etiket, bool $aktif, ?string $nav = null, int $rozet = 0): array =>
+        ['href' => $href, 'ikon' => $ikon, 'etiket' => $etiket, 'aktif' => $aktif, 'rozet' => $rozet, 'nav' => $nav];
+    $muh = nav_muhasebe_gruplari();
+    $gruplar = [];
+    $ekle = function (string $slug, string $ad, string $svg, array $ogeler) use (&$gruplar): void {
+        $aktif = false;
+        foreach ($ogeler as $o) if ($o['aktif']) { $aktif = true; break; }
+        $gruplar[] = ['slug' => $slug, 'ad' => $ad, 'svg' => $svg, 'aktif' => $aktif, 'ogeler' => $ogeler];
+    };
+
+    if ($p_sip || $p_frg || $p_usip) {
+        $o = [];
+        if ($p_sip)  $o[] = $ge('siparisler.php', '📦', 'OGL Siparişler', $a_sip, 'siparis');
+        if ($p_frg)  $o[] = $ge('frugro_siparis.php', '📦', 'Frugro Siparişler', $a_frg, 'frugro');
+        if ($p_usip) $o[] = $ge('urun_siparis.php', '🛒', 'Siparişler', $a_usip, 'usip');
+        $ekle('siparis', 'Sipariş', '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>', $o);
+    }
+
+    $o = [];
+    if ($p_beyan) $o[] = $ge('beyanlar.php', '🧾', 'Beyanlar', $a_beyan, 'beyan');
+    if ($p_recw)  $o[] = $ge('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks, 'hks');
+    if ($p_mail)  $o[] = $ge('mail.php', '📧', 'Mail Merkezi', $a_mail, 'mail', nav_mail_okunmamis());
+    if (isset($muh['operasyon_fis'])) foreach ($muh['operasyon_fis'][2] as $d => [$et, $em]) {
+        if (muhasebe_sayfa_can(substr($d, 0, -4))) $o[] = $ge($d, $em, $et, $ak === substr($d, 0, -4));
+    }
+    if ($p_rec)  $o[] = $ge('records.php', '🚚', 'Eski Yükleme Planı', $a_yuk, 'records');
+    if ($p_cik)  $o[] = $ge('cikmalar.php', '📋', 'Eski Paletleme', $a_cik, 'cikma');
+    if ($p_kant) $o[] = $ge('kantar.php', '⚖️', 'Eski Mal Kabul', $a_kant, 'kantar');
+    if ($p_quick) $o[] = $ge('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick, 'qcost');
+    // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03): modüle tek giriş Raporlar sayfasındaki karttır;
+    // maliyet_* sayfalarında "Raporlar" vurgulu kalır ($a_rep, nav_aktif_anahtar).
+    // Personel Takibi: ikon emoji değil, dashboard kartının küçültülmüş 3B giriş/çıkış ikonu (.sbi-personel).
+    if ($p_gunluk) $o[] = $ge('personel_takip.php',
+        '<span class="sbi-personel" aria-hidden="true"><span class="sbi-personel-arrow sbi-personel-arrow-in"></span><span class="sbi-personel-arrow sbi-personel-arrow-out"></span></span>',
+        'Personel Takibi', $a_ptak, 'ptak');
+    $ekle('operasyon', 'Operasyon', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', $o);
+
+    if ($p_adm || $p_def || $p_usr) {
+        $o = [];
+        if ($p_def) $o[] = $ge('definitions.php', '⚙️', 'Tanımlar', $a_def, 'defs');
+        if ($p_usr) $o[] = $ge('users.php', '👥', 'Kullanıcılar', $a_usr, 'users');
+        if ($p_usr) $o[] = $ge('roles.php', '🛡️', 'Roller', $a_rol, 'roles');
+        if ($p_adm) $o[] = $ge('audit.php', '🧾', 'İşlem Geçmişi', $a_aud, 'audit');
+        if ($p_adm) $o[] = $ge('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp, 'backup');
+        $ekle('yonetim', 'Yönetim', '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/>', $o);
+    }
+
     // v548: Malzeme Stok → Stok, Raporlar ("Eski Raporlar") → Raporlar, Hesap → Kullanıcı Ayarları grubuna taşındı.
-    // Bu sayfalar admin olmayan rollere de açıktır → grup, yetkili bağlantısı varsa admin olmayana da çizilir
-    // (grubun KENDİ yer tutucu sayfaları yine yalnız admin'e). [href, emoji, etiket, aktif, izin]
-    $__muh = nav_muhasebe_gruplari();
-    $__ek = [
-        'stok'              => [['malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok, $p_stok]],
-        'raporlar_grup'     => [['reports.php', '📊', 'Eski Raporlar', $a_rep, $p_rep]],
-        'kullanici_konsolu' => [['hesap.php', '🏦', 'Hesap', $a_hes, $p_hes]],
+    // Bu sayfalar admin olmayan rollere de açıktır → grup, yetkili bağlantısı varsa çizilir. [href, emoji, etiket, aktif, izin, nav]
+    $ek = [
+        'stok'              => [['malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok, $p_stok, 'mstok']],
+        'raporlar_grup'     => [['reports.php', '📊', 'Eski Raporlar', $a_rep, $p_rep, 'rapor']],
+        'kullanici_konsolu' => [['hesap.php', '🏦', 'Hesap', $a_hes, $p_hes, 'hesap']],
     ];
-    $lnk = function (string $href, string $icon, string $label, bool $active, int $rozet = 0) use ($base) {
-        echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '"'
-           . ($rozet > 0 ? ' aria-label="' . h($label) . ', ' . $rozet . ' okunmamış"' : '') . '>'
-           . '<span class="sidebar-link-icon" aria-hidden="true">' . $icon . '</span>'
-           . '<span class="sidebar-link-label">' . h($label) . '</span>'
-           . nav_rozet_html($rozet, false) . '</a>';
+    foreach ($muh as $slug => [$bas, $svgYol, $sayfalar]) {
+        if ($slug === 'operasyon_fis') continue;   // Operasyon grubunun İÇİNDE çizilir
+        $o = [];
+        // v550: sayfa, kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; admin_konsolu yalnız yönetici.
+        foreach ($sayfalar as $d => [$et, $em]) {
+            if (muhasebe_sayfa_can(substr((string)$d, 0, -4))) $o[] = $ge($d, $em, $et, $ak === substr((string)$d, 0, -4));
+        }
+        foreach ($ek[$slug] ?? [] as [$eh, $ei, $el, $ea, $ep, $en]) if ($ep) $o[] = $ge($eh, $ei, $el, (bool)$ea, $en);
+        if ($o) $ekle($slug, $bas, $svgYol, $o);
+    }
+
+    return [
+        'home'    => $p_dash ? $ge('index.php', '🏠', 'Ana Sayfa', $a_home, 'home') : null,
+        'gruplar' => $gruplar,
+    ];
+}
+
+/** Grup başlığı (sidebar + mobil aynı işaretleme): ikon + ad + ok. */
+function nav_grup_ikon_svg(string $yol): string {
+    return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' . $yol . '</svg>';
+}
+
+function render_desktop_sidebar(string $base): void {
+    $m = nav_menu_modeli($base);
+    $lnk = function (array $o) use ($base) {
+        echo '<a href="' . $base . h($o['href']) . '" class="sidebar-link' . ($o['aktif'] ? ' active' : '') . '"'
+           . ($o['aktif'] ? ' aria-current="page"' : '')
+           . ($o['rozet'] > 0 ? ' aria-label="' . h($o['etiket']) . ', ' . $o['rozet'] . ' okunmamış"' : '') . '>'
+           . '<span class="sidebar-link-icon" aria-hidden="true">' . $o['ikon'] . '</span>'
+           . '<span class="sidebar-link-label">' . h($o['etiket']) . '</span>'
+           . nav_rozet_html($o['rozet'], false) . '</a>';
     };
     ?>
 <aside class="desktop-sidebar" aria-label="Masaüstü gezinme">
@@ -687,68 +766,15 @@ function render_desktop_sidebar(string $base): void {
     </a>
     <?php unset($__sdp); endif; ?>
 
-    <nav class="sidebar-nav">
-        <?php if ($p_dash) $lnk('index.php', '🏠', 'Ana Sayfa', $a_home); ?>
-        <?php if ($p_sip || $p_frg || $p_usip): ?>
-        <details class="sidebar-grup" data-sb-grup="siparis">
-        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span><span class="sidebar-section-ad">Sipariş</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_sip)  $lnk('siparisler.php', '📦', 'OGL Siparişler', $a_sip); ?>
-        <?php if ($p_frg)  $lnk('frugro_siparis.php', '📦', 'Frugro Siparişler', $a_frg); ?>
-        <?php if ($p_usip)  $lnk('urun_siparis.php', '🛒', 'Siparişler', $a_usip); ?>
+    <nav class="sidebar-nav" data-akordiyon>
+        <?php if ($m['home'] !== null) $lnk($m['home']); ?>
+        <?php /* KURAL (v551): yalnız AKTİF sayfanın grubu açık basılır, diğerleri kapalı (akordiyon) — grup başına ayrı mantık YOK. */ ?>
+        <?php foreach ($m['gruplar'] as $g): ?>
+        <details class="sidebar-grup" data-sb-grup="<?= h($g['slug']) ?>"<?= $g['aktif'] ? ' open' : '' ?>>
+        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><?= nav_grup_ikon_svg($g['svg']) ?></span><span class="sidebar-section-ad"><?= h($g['ad']) ?></span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
+        <?php foreach ($g['ogeler'] as $o) $lnk($o); ?>
         </details>
-        <?php endif; ?>
-
-        <details class="sidebar-grup" data-sb-grup="operasyon"<?= $a_ynt ? '' : ' open' ?>>
-        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="sidebar-section-ad">Operasyon</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
-        <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
-        <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail, nav_mail_okunmamis()); ?>
-        <?php if (isset($__muh['operasyon_fis'])) foreach ($__muh['operasyon_fis'][2] as $__dosya => [$__et, $__em]) if (muhasebe_sayfa_can(substr($__dosya, 0, -4))) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); unset($__dosya, $__et, $__em); ?>
-        <?php if ($p_rec)  $lnk('records.php',   '🚚', 'Eski Yükleme Planı', $a_yuk);  ?>
-        <?php if ($p_cik)  $lnk('cikmalar.php',  '📋', 'Eski Paletleme',  $a_cik);   ?>
-        <?php if ($p_kant) $lnk('kantar.php',   '⚖️', 'Eski Mal Kabul', $a_kant);  ?>
-        <?php if ($p_quick) $lnk('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick); ?>
-<?php   // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03, kullanıcı
-        // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
-        // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
-        // maliyet_* sayfalarındayken sidebar'da yönünü kaybetmesin. ?>
-        <?php
-        // Sprint Navigasyon-04 (kullanıcı isteği): ayrı "Personel" başlığı
-        // kaldırıldı, link Operasyon listesinde Hesap'ın altına taşındı.
-        // İkon emoji (🧑‍🌾) yerine index.php'nin dashboard kartındaki yeşil
-        // giriş / kırmızı çıkış 3D ikonunun (.sbi-personel, assets/style.css)
-        // sidebar ölçeğine küçültülmüş hâli — $lnk() üçüncü parametreyi
-        // ESCAPE ETMEDEN basar, bu yüzden HTML geçirilebilir.
-        if ($p_gunluk) $lnk('personel_takip.php',
-            '<span class="sbi-personel" aria-hidden="true"><span class="sbi-personel-arrow sbi-personel-arrow-in"></span><span class="sbi-personel-arrow sbi-personel-arrow-out"></span></span>',
-            'Personel Takibi', $a_ptak);
-        ?>
-        </details>
-
-        <?php if ($p_adm || $p_def || $p_usr): ?>
-        <details class="sidebar-grup" data-sb-grup="yonetim"<?= $a_ynt ? ' open' : '' ?>>
-        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="sidebar-section-ad">Yönetim</span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
-        <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
-        <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
-        <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
-        <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
-        </details>
-        <?php endif; ?>
-        <?php foreach ($__muh as $__slug => [$__bas, $__svg, $__sayfalar]):
-            if ($__slug === 'operasyon_fis') continue;   // Operasyon grubunun İÇİNDE çizilir
-            $__eks = array_values(array_filter($__ek[$__slug] ?? [], fn($e) => (bool)$e[4]));
-            // v550: sayfa, kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; admin_konsolu yalnız yönetici.
-            $__gorunen = array_filter($__sayfalar, fn($__d) => muhasebe_sayfa_can(substr((string)$__d, 0, -4)), ARRAY_FILTER_USE_KEY);
-            if (!$__gorunen && !$__eks) continue;
-            $__acik = isset($__sayfalar[$ak . '.php']);
-            foreach ($__eks as $__e) if ($__e[3]) $__acik = true; ?>
-        <details class="sidebar-grup" data-sb-grup="<?= h($__slug) ?>"<?= $__acik ? ' open' : '' ?>>
-        <summary class="sidebar-section"><span class="sidebar-section-ikon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><?= $__svg ?></svg></span><span class="sidebar-section-ad"><?= h($__bas) ?></span><span class="sidebar-section-ok" aria-hidden="true"></span></summary>
-        <?php foreach ($__gorunen as $__dosya => [$__et, $__em]) $lnk($__dosya, $__em, $__et, $ak === substr($__dosya, 0, -4)); ?>
-        <?php foreach ($__eks as [$__eh, $__ei, $__el, $__ea]) $lnk($__eh, $__ei, $__el, $__ea); ?>
-        </details>
-        <?php endforeach; unset($__slug, $__bas, $__svg, $__sayfalar, $__gorunen, $__dosya, $__et, $__em, $__eks, $__e, $__eh, $__ei, $__el, $__ea, $__acik, $__muh, $__ek); ?>
+        <?php endforeach; ?>
         <!-- Şema Migrasyon: menüden kaldırıldı — doğrudan URL (migrate.php) ile
              admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
              tombstone. -->
@@ -961,6 +987,11 @@ function nav_alt_home_anahtar(?string $home): ?string {
     foreach (nav_alt_sayfalar() as $k => $p) {
         if ($p['href'] === $home) return $k;
     }
+    // v552: yalnız muhasebe menüsü yetkisi olan rolde Ana Sayfa ilk izinli muhasebe sayfasına gider; nav_aktif_anahtar()
+    // o sayfalarda dosya slug'ını (.php'siz) döndürür → Ana Sayfa orada da aktif görünsün.
+    foreach (nav_muhasebe_gruplari() as $g) {
+        if (isset($g[2][$home])) return substr($home, 0, -4);
+    }
     return null;
 }
 
@@ -1017,16 +1048,44 @@ function nav_alt_model(): ?array {
     ];
 }
 
+/**
+ * "Diğer" sayfasının grupları (v552) — masaüstü sidebar ile AYNI model (nav_menu_modeli): aynı grup adı/sırası/öğe adı.
+ * Dönen: nav_menu_modeli()['gruplar'] biçimi; her öğeye 'aday' (bool) eklenir = nav_alt_sayfalar() anahtarı var VE
+ * $m['adaylar']'da (pin'lenebilir, MEVCUT .bn-tile işaretlemesi); değilse pin'siz sade bağlantı (muhasebe sayfaları vb.).
+ * Ana Sayfa'nın hedefiyle aynı sayfaya giden aday-olmayan öğe çizilmez (dokta Ana Sayfa zaten oraya gider) ve boş kalan grup düşer.
+ * Saf fonksiyon: DB/yetki çağrısı yok (yetki nav_menu_modeli()'nde).
+ */
+function nav_alt_sheet_gruplari(array $menu, array $m): array {
+    $out = [];
+    foreach ($menu['gruplar'] as $g) {
+        $ogeler = [];
+        foreach ($g['ogeler'] as $o) {
+            $aday = $o['nav'] !== null && in_array($o['nav'], $m['adaylar'], true);
+            if (!$aday && $m['home'] !== null && $o['href'] === $m['home']) continue;
+            $o['aday'] = $aday;
+            $ogeler[] = $o;
+        }
+        if ($ogeler) { $g['ogeler'] = $ogeler; $out[] = $g; }
+    }
+    return $out;
+}
+
 /** Alt çubuk + "Diğer" sayfası HTML'i (render_footer çağırır). */
 function nav_alt_ciz(array $m, string $base): void {
     $K       = nav_alt_sayfalar();
     $aktif   = $m['aktif'];
     $slotlar = $m['slotlar'];
     $digerSay = count($m['adaylar']);
+    // v552: "Diğer" sayfası sidebar ile AYNI modelden çizilir (grup adı/sırası/öğe adı). Model aktif bölümü çizim
+    // anında okur (render_footer'daki geç ipucu da yansısın) — bu yüzden burada taze hesaplanır.
+    $sheetGruplar = nav_alt_sheet_gruplari(nav_menu_modeli($base), $m);
+    // Dokta yeri olmayan (anahtarsız: muhasebe sayfaları) öğe varsa sheet de "Diğer" düğmesi de ŞART — yoksa o sayfalara mobilde ulaşılamaz.
+    $sheetEk = false;
+    foreach ($sheetGruplar as $__g) foreach ($__g['ogeler'] as $__o) if (!$__o['aday']) { $sheetEk = true; break 2; }
     // "Diğer" yalnız slotlara sığmayan sayfa varsa: >4 her genişlikte, tam 4
     // ise yalnız dar ekranda (orada 4. slot gizli, o sayfa Diğer'e düşer).
-    $digerVar = $digerSay > NAV_ALT_SLOT - 1;
-    $digerDar = $digerSay === NAV_ALT_SLOT;
+    $digerVar = $digerSay > NAV_ALT_SLOT - 1 || $sheetEk;
+    $digerDar = $digerSay === NAV_ALT_SLOT && !$sheetEk;
     // Güncel sayfa slotlarda değilse "Diğer" onun ikonunu alır ve aktif olur.
     // (Dar ekranda 4. slottaki sayfa için aynısını app.js yapar.)
     $digerAktif = $digerVar && $aktif !== null && $aktif !== 'home'
@@ -1084,9 +1143,7 @@ function nav_alt_ciz(array $m, string $base): void {
 
     if (!$digerVar) return;
 
-    // ── "Diğer" alt sayfası (sidebar gibi gruplu; yalnız izinli sayfalar) ──
-    $gruplar = [];
-    foreach ($m['adaylar'] as $k) $gruplar[$K[$k]['grup']][] = $k;
+    // ── "Diğer" alt sayfası: sidebar ile AYNI gruplar, AKORDİYON (v551 KURAL) — yalnız aktif grup `open`, diğerleri kapalı ──
     $depo = function_exists('active_depot') ? active_depot() : null;
     $pin  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3z"/><path d="M12 12v8"/></svg>';
     echo '<div class="bn-sheet-ovl" id="bnSheetOvl" hidden>'
@@ -1098,23 +1155,40 @@ function nav_alt_ciz(array $m, string $base): void {
     if ($depo !== null) {
         echo '<div><span class="bn-depo-chip"><i aria-hidden="true"></i>' . h($depo) . '</span></div>';
     }
-    foreach (['Operasyon', 'Yönetim'] as $g) {
-        if (empty($gruplar[$g])) continue;
-        echo '<div class="bn-sheet-sec">' . h($g) . '</div><div class="bn-sheet-grid">';
-        foreach ($gruplar[$g] as $k) {
+    echo '<div class="bn-gruplar" data-akordiyon>';
+    $acildi = false;   // birden çok grup aktif görünse bile YALNIZ ilki açık (akordiyon)
+    foreach ($sheetGruplar as $g) {
+        $ac = $g['aktif'] && !$acildi;
+        if ($ac) $acildi = true;
+        echo '<details class="bn-grup" data-sb-grup="' . h($g['slug']) . '"' . ($ac ? ' open' : '') . '>'
+            . '<summary class="bn-grup-sum"><span class="bn-grup-ikon" aria-hidden="true">' . nav_grup_ikon_svg($g['svg']) . '</span>'
+            . '<span class="bn-grup-ad">' . h($g['ad']) . '</span><span class="bn-grup-ok" aria-hidden="true"></span></summary>'
+            . '<div class="bn-sheet-grid">';
+        foreach ($g['ogeler'] as $o) {
+            $cur = (bool)$o['aktif'];
+            if (!$o['aday']) {
+                // Anahtarsız öğe: pin'siz, data-nav'sız sade bağlantı (app.js'in Sabitle/slot kodu `.bn-tile[data-nav]` + `.bn-tile .go` arar → görmezden gelir)
+                echo '<a class="bn-tile bn-tile-link' . ($cur ? ' is-current' : '') . '" href="' . h($base . $o['href']) . '"' . ($cur ? ' aria-current="page"' : '')
+                    . ($o['rozet'] > 0 ? ' aria-label="' . h($o['etiket']) . ', ' . (int)$o['rozet'] . ' okunmamış"' : '') . '>'
+                    . '<span class="bn-emoji" aria-hidden="true">' . $o['ikon'] . '</span>'
+                    . '<span class="bn-tile-ad">' . h($o['etiket']) . '</span></a>';
+                continue;
+            }
+            $k = $o['nav'];
             $p = $K[$k];
-            $cls = ($aktif === $k ? ' is-current' : '') . (in_array($k, $slotlar, true) ? ' in-bar' : '')
+            $cls = ($cur ? ' is-current' : '') . (in_array($k, $slotlar, true) ? ' in-bar' : '')
                  . (in_array($k, $m['sabit'], true) ? ' pinned' : '');
             echo '<div class="bn-tile' . $cls . '" data-nav="' . h($k) . '">'
-                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($aktif === $k ? ' aria-current="page"' : '')
+                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($cur ? ' aria-current="page"' : '')
                 . ($k === 'mail' && $mailN > 0 ? ' aria-label="' . h($p['etiket']) . ', ' . $mailN . ' okunmamış"' : '') . '>'
                 . '<img src="' . h(nav_alt_ikon_url($p, $base)) . '" width="50" height="50" alt="" decoding="async" loading="lazy">'
-                . '<span>' . h($p['etiket']) . '</span>'
+                . '<span>' . h($o['etiket']) . '</span>'
                 . ($k === 'mail' ? nav_rozet_html($mailN, false, 'nav-rozet-tile') : '') . '</a>'
                 . '<span class="bn-pin-badge" aria-hidden="true">' . $pin . '</span></div>';
         }
-        echo '</div>';
+        echo '</div></details>';
     }
+    echo '</div>';
     echo '<p class="bn-sheet-msg" id="bnSheetMsg" role="status" aria-live="polite"></p>'
         . '<p class="bn-sheet-foot" id="bnSheetFoot">Alt menüdeki slotlar en çok açtığınız sayfalarla kendiliğinden dolar. '
         . '"Sabitle" ile bir sayfayı kalıcı olarak alt menüye alabilirsiniz.</p>'
