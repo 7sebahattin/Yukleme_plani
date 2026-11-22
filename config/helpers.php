@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v554');
+    define('APP_SURUM', 'v555');
 }
 
 // --- HTML kaçışı ---
@@ -457,6 +457,20 @@ function first_allowed_page(): ?string {
 }
 
 /**
+ * v555: menüden KALDIRILAN eski sayfaların (nav_alt_sayfalar anahtarı) yeni karşılığı (muhasebe fiş sayfası slug'ı).
+ * Yeni sayfa o kullanıcıya görünüyorsa eski giriş menüde (sidebar + mobil) ÇİZİLMEZ ve eski sayfada (records.php / cikmalar.php /
+ * kantar.php ailesi) seçili görünen giriş YENİ karşılığıdır. Yeni karşılığı göremeyen rol (ör. yalnız records.read olan operatör)
+ * eski girişi KORUR — aksi halde o sayfaya menüden hiç ulaşamazdı.
+ */
+function nav_eski_esleri(): array {
+    return ['records' => 'arac_yukleme_fisleri', 'cikma' => 'palet_fisleri', 'kantar' => 'mal_kabul_fisleri'];
+}
+function nav_eski_gizli(string $anahtar): bool {
+    $es = nav_eski_esleri()[$anahtar] ?? null;
+    return $es !== null && function_exists('muhasebe_sayfa_can') && muhasebe_sayfa_can($es);
+}
+
+/**
  * Cari İşlemler ve altındaki muhasebe grupları (v435, yer tutucu sayfalar) — TEK kaynak.
  * slug => [başlık, SVG yolu, [sayfa dosyası => [etiket, emoji]]]. Anahtar = dosya adı (.php'siz).
  */
@@ -474,7 +488,7 @@ function nav_muhasebe_gruplari(): array {
         'stok' => ['Stok', '<path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/>', [
             'stok_kartlari.php' => ['Stok Kartları', '🟨'], 'stok_giris_fisleri.php' => ['Stok Giriş Fişleri', '📥'],
             'stok_cikis_fisleri.php' => ['Stok Çıkış Fişleri', '📤'], 'transfer_fisleri.php' => ['Transfer Fişleri', '🔁'],
-            'stok_donusum_fisleri.php' => ['Stok Dönüşüm Fişleri', '♻️'], 'kantar_fisleri.php' => ['Kantar Fişleri', '⚖️'],
+            // v555: Stok Dönüşüm Fişleri kaldırıldı (kullanılmayacak; sayfa 410 tombstone); Kantar Fişleri menüden kalktı.
             'stok_tanimlari.php' => ['Stok Tanımları', '🗂️']]],
         'fatura' => ['Fatura', '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/>', [
             'alis_faturalari.php' => ['Alış Faturaları', '📑'], 'satis_faturalari.php' => ['Satış Faturaları', '🧾'],
@@ -484,10 +498,7 @@ function nav_muhasebe_gruplari(): array {
         'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
             'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
             'mal_kabul_fisleri.php' => ['Mal Kabul Fişleri', '📋']]],
-        'ihracat' => ['İhracat Programı', '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>', [
-            'ihracat_faturasi_maliyeti.php' => ['İhracat Faturası ve Maliyeti', '💲'],
-            'beyanname_siparis_proforma.php' => ['Beyanname-Sipariş-Proforma', '🗒️'], 'dovizli_cari_fis.php' => ['Dövizli Cari Fiş', '💱'],
-            'ihracat_tanimlari.php' => ['İhracat Tanımları', '🗂️']]],
+        // v555: "İhracat Programı" grubu menüden kaldırıldı (sayfalar başka adlarla kullanılıyor).
         'raporlar_grup' => ['Raporlar', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', [
             'raporlar_listeler.php' => ['Raporlar-Listeler', '📊'], 'rapor_tanimlari.php' => ['Rapor Tanımları', '🗂️']]],
         // v548: "Kullanıcı Konsolu" → "Kullanıcı Ayarları"; Şube/Şirket Değiştirme + Mesajlar kalktı. Hesap sayfası sidebar'da bu gruba eklenir (render_desktop_sidebar).
@@ -667,8 +678,10 @@ function nav_menu_modeli(string $base): array {
         $gruplar[] = ['slug' => $slug, 'ad' => $ad, 'svg' => $svg, 'aktif' => $aktif, 'ogeler' => $ogeler];
     };
 
-    if ($p_sip || $p_frg || $p_usip) {
+    if ($p_beyan || $p_sip || $p_frg || $p_usip) {
         $o = [];
+        // v555: Beyanlar Operasyon'dan Sipariş grubunun EN ÜSTÜNE taşındı.
+        if ($p_beyan) $o[] = $ge('beyanlar.php', '🧾', 'Beyanlar', $a_beyan, 'beyan');
         if ($p_sip)  $o[] = $ge('siparisler.php', '📦', 'OGL Siparişler', $a_sip, 'siparis');
         if ($p_frg)  $o[] = $ge('frugro_siparis.php', '📦', 'Frugro Siparişler', $a_frg, 'frugro');
         if ($p_usip) $o[] = $ge('urun_siparis.php', '🛒', 'Siparişler', $a_usip, 'usip');
@@ -676,15 +689,18 @@ function nav_menu_modeli(string $base): array {
     }
 
     $o = [];
-    if ($p_beyan) $o[] = $ge('beyanlar.php', '🧾', 'Beyanlar', $a_beyan, 'beyan');
     if ($p_recw)  $o[] = $ge('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks, 'hks');
     if ($p_mail)  $o[] = $ge('mail.php', '📧', 'Mail Merkezi', $a_mail, 'mail', nav_mail_okunmamis());
+    // v555: eski Yükleme Planı / Paletleme / Mal Kabul girişleri menüden kalktı (yeni fiş sayfaları görünüyorsa); eski sayfalarda
+    // (records/cikmalar/kantar ailesi) SEÇİLİ görünen giriş yeni karşılığıdır — nav_eski_esleri().
+    $eskiAktif = array_flip(array_filter(array_map(fn($k) => nav_eski_gizli($k) && $ak === $k ? nav_eski_esleri()[$k] : null, array_keys(nav_eski_esleri()))));
     if (isset($muh['operasyon_fis'])) foreach ($muh['operasyon_fis'][2] as $d => [$et, $em]) {
-        if (muhasebe_sayfa_can(substr($d, 0, -4))) $o[] = $ge($d, $em, $et, $ak === substr($d, 0, -4));
+        $slug = substr($d, 0, -4);
+        if (muhasebe_sayfa_can($slug)) $o[] = $ge($d, $em, $et, $ak === $slug || isset($eskiAktif[$slug]));
     }
-    if ($p_rec)  $o[] = $ge('records.php', '🚚', 'Eski Yükleme Planı', $a_yuk, 'records');
-    if ($p_cik)  $o[] = $ge('cikmalar.php', '📋', 'Eski Paletleme', $a_cik, 'cikma');
-    if ($p_kant) $o[] = $ge('kantar.php', '⚖️', 'Eski Mal Kabul', $a_kant, 'kantar');
+    if ($p_rec && !nav_eski_gizli('records'))  $o[] = $ge('records.php', '🚚', 'Eski Yükleme Planı', $a_yuk, 'records');
+    if ($p_cik && !nav_eski_gizli('cikma'))    $o[] = $ge('cikmalar.php', '📋', 'Eski Paletleme', $a_cik, 'cikma');
+    if ($p_kant && !nav_eski_gizli('kantar'))  $o[] = $ge('kantar.php', '⚖️', 'Eski Mal Kabul', $a_kant, 'kantar');
     if ($p_quick) $o[] = $ge('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick, 'qcost');
     // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03): modüle tek giriş Raporlar sayfasındaki karttır;
     // maliyet_* sayfalarında "Raporlar" vurgulu kalır ($a_rep, nav_aktif_anahtar).
@@ -917,10 +933,10 @@ function nav_alt_izinler(): array {
     $c   = fn(string $p): bool => $fn && can($p);
     $adm = function_exists('is_admin') && is_admin();
     return [
-        'records' => role_matrix_page_can('records','loading'),            // records.php: require_perm('records.read')
-        'cikma'   => role_matrix_page_can('records','pallet'),            // cikmalar.php: require_perm('records.read')
+        'records' => role_matrix_page_can('records','loading') && !nav_eski_gizli('records'),   // records.php: require_perm('records.read'); v555: yeni karşılığı (Araç Yükleme Fişleri) görünüyorsa eski giriş yok
+        'cikma'   => role_matrix_page_can('records','pallet') && !nav_eski_gizli('cikma'),     // cikmalar.php: require_perm('records.read'); v555: yeni karşılığı Palet Fişleri
         'beyan'   => beyan_sayfa_erisimi() || $adm, // beyanlar.php: beyan_sayfa_erisimi()
-        'kantar'  => $c('kantar.read'),             // kantar.php: require_perm('kantar.read')
+        'kantar'  => $c('kantar.read') && !nav_eski_gizli('kantar'),   // kantar.php: require_perm('kantar.read'); v555: yeni karşılığı Mal Kabul Fişleri
         'hks'     => $c('hks.access'),           // halkayit/index.php: require_perm('records.write')
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
         'qcost'   => $fn && can_hizli_maliyet('read'), // hizli_maliyet.php: can_hizli_maliyet('read') — TEK kaynak (maliyet.* izni AÇMAZ)
