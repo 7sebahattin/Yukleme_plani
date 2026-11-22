@@ -50,7 +50,7 @@ function render_flash(): void {}
 
 if (!preg_match("/define\('APP_SURUM',\s*'(v\d+)'\)/", $dashboardHelperSource, $version)) throw new RuntimeException('Sürüm bulunamadı.');
 define('APP_SURUM', $version[1]);
-foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_eski_esleri', 'nav_eski_gizli', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'nav_menu_modeli', 'nav_grup_ikon_svg', 'render_desktop_sidebar'] as $functionName) {
+foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_eski_esleri', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'nav_menu_modeli', 'nav_grup_ikon_svg', 'render_desktop_sidebar'] as $functionName) {
     $functionSource = dashboard_extract_function($dashboardHelperSource, $functionName);
     eval(str_replace('__DIR__', var_export($dashboardRoot . '/config', true), $functionSource));
 }
@@ -217,15 +217,14 @@ foreach ($dashboardProfiles as $name => $profile) {
         if (isset($homeLabels[$oldHref])) dashboard_check($homeLabels[$oldHref] === $oldLabel, $name . ': kart etiketi ' . $oldLabel);
         if ($oldHref !== 'reports.php' && ($g = $sbGroupOf($oldHref)) !== null) dashboard_check($g === 'operasyon', $name . ': ' . $oldHref . ' Operasyon grubunda');
     }
-    // v555 (c)/(d): eski giriş menüde YALNIZ ham izni VAR ve yeni karşılığı GÖRÜNMÜYORSA çizilir (yeni karşılığı görünüyorsa gizli).
-    // "Eski Raporlar" (reports.php) bu kuraldan MUAF — değişmedi.
+    // v558: eski Yükleme Planı / Paletleme / Mal Kabul HİÇBİR rolde menüde ve ana sayfa kartlarında YOK (önceki v555 istisnası kalktı);
+    // yeni karşılığı sidebar'da yalnız kendi kapısıyla (muhasebe_sayfa_can). "Eski Raporlar" (reports.php) bu kuraldan MUAF.
     $sbHrefsAll = array_column($sidebar, 'href');
-    foreach (['records.php' => ['records', role_matrix_page_can('records', 'loading')], 'cikmalar.php' => ['cikma', role_matrix_page_can('records', 'pallet')], 'kantar.php' => ['kantar', can('kantar.read')]] as $oldHref => [$oldKey, $oldRaw]) {
+    foreach (['records.php' => 'records', 'cikmalar.php' => 'cikma', 'kantar.php' => 'kantar'] as $oldHref => $oldKey) {
         $newSlug = nav_eski_esleri()[$oldKey];
-        $newVisible = muhasebe_sayfa_can($newSlug);
-        dashboard_check(nav_eski_gizli($oldKey) === $newVisible, $name . ': nav_eski_gizli(' . $oldKey . ') = yeni karşılığın görünürlüğü');
-        dashboard_check(in_array($oldHref, $sbHrefsAll, true) === ($oldRaw && !$newVisible), $name . ': ' . $oldHref . ' sidebar\'da yalnız ham izin VAR + yeni karşılığı YOK iken');
-        dashboard_check(in_array($newSlug . '.php', $sbHrefsAll, true) === $newVisible, $name . ': ' . $newSlug . '.php sidebar\'da = muhasebe_sayfa_can');
+        dashboard_check(!in_array($oldHref, $sbHrefsAll, true), $name . ': ' . $oldHref . ' sidebar\'da YOK (v558)');
+        dashboard_check(!in_array($oldHref, $homeHrefs, true), $name . ': ' . $oldHref . ' ana sayfa kartı YOK (v558)');
+        dashboard_check(in_array($newSlug . '.php', $sbHrefsAll, true) === muhasebe_sayfa_can($newSlug), $name . ': ' . $newSlug . '.php sidebar\'da = muhasebe_sayfa_can');
     }
     if ($profile['admin']) {
         // Admin: katalogdaki her sayfa sidebar'da; Operasyon Fişleri Operasyon'un İÇİNDE (ayrı grup değil).
@@ -267,7 +266,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 52, 'admin: Ana Sayfa hariç 52 benzersiz kart (33 katalog + 19 modül kartı)');
+        dashboard_check(count($home) === 49, 'admin: Ana Sayfa hariç 49 benzersiz kart (33 katalog + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }
@@ -277,14 +276,18 @@ foreach ($dashboardProfiles as $name => $profile) {
     dashboard_check(in_array('hizli_maliyet.php', array_column($sidebar, 'href'), true) === $quickExpected, $name . ': Hızlı Maliyet sidebar bağlantısı kartla aynı kapı');
     if ($name === 'only_hizli_maliyet_read') dashboard_check(isset($homeLabels['hizli_maliyet.php']) && count($home) === 1, 'yalnız hizli_maliyet.read tek kart + bölüm görünür');
     foreach (['loading_only'=>['records.php','cikmalar.php'],'pallet_only'=>['cikmalar.php','records.php'],'product_orders_only'=>['urun_siparis.php','siparisler.php'],'ogl_only'=>['siparisler.php','urun_siparis.php'],'ogl_only_v3'=>['siparisler.php','frugro_siparis.php'],'frugro_only'=>['frugro_siparis.php','siparisler.php']] as $profileName=>[$yes,$no]) if ($name===$profileName) {
+        if (in_array($yes, ['records.php', 'cikmalar.php', 'kantar.php'], true)) {   // v558: eski sayfaların menü/kart girişi HİÇ yok
+            dashboard_check(!array_intersect([$yes, $no], $homeHrefs) && !array_intersect([$yes, $no], array_column($sidebar, 'href')), 'v558 eski sayfa kartı/sidebar girişi yok '.$profileName);
+            continue;
+        }
         dashboard_check(in_array($yes,$homeHrefs,true),'Detailed page visible '.$yes);
         dashboard_check(!in_array($no,$homeHrefs,true),'Sibling page denied '.$no);
         dashboard_check(in_array($yes,array_column($sidebar,'href'),true) && !in_array($no,array_column($sidebar,'href'),true),'Sidebar matches card gate '.$profileName);
     }
-    // v555 açık (tautoloji olmayan) örnekler: aynı eski izinler, yalnız yeni karşılığı farklı.
-    if ($name === 'eski_yalniz') dashboard_check(in_array('records.php', array_column($sidebar, 'href'), true) && in_array('kantar.php', array_column($sidebar, 'href'), true) && !in_array('arac_yukleme_fisleri.php', array_column($sidebar, 'href'), true), 'yalnız eski izni olan rolde eski giriş çizilir, yeni yok');
+    // v558 açık örnekler: eski izni olan rolde bile eski giriş YOK; yeni karşılık yalnız kendi kapısıyla.
+    if ($name === 'eski_yalniz') dashboard_check(!array_intersect(['records.php', 'cikmalar.php', 'kantar.php', 'arac_yukleme_fisleri.php'], array_column($sidebar, 'href')), 'yalnız eski izni olan rolde de eski giriş çizilmez (v558), yeni yok');
     if ($name === 'yeni_fis_hepsi') dashboard_check(!array_intersect(['records.php', 'cikmalar.php', 'kantar.php'], array_column($sidebar, 'href')) && count(array_intersect(['arac_yukleme_fisleri.php', 'palet_fisleri.php', 'mal_kabul_fisleri.php'], array_column($sidebar, 'href'))) === 3, 'yeni karşılıklar görünür rolde eski girişler çizilmez');
-    if ($name === 'yeni_fis_yalniz_yukleme') dashboard_check(!in_array('records.php', array_column($sidebar, 'href'), true) && in_array('kantar.php', array_column($sidebar, 'href'), true), 'karşılık BAŞINA karar: yalnız Araç Yükleme Fişleri görünen rolde Yükleme Planı gizli, Mal Kabul eski kalır');
+    if ($name === 'yeni_fis_yalniz_yukleme') dashboard_check(!in_array('records.php', array_column($sidebar, 'href'), true) && !in_array('kantar.php', array_column($sidebar, 'href'), true) && in_array('arac_yukleme_fisleri.php', array_column($sidebar, 'href'), true), 'yalnız Araç Yükleme Fişleri görünen rolde de eski girişler yok (v558)');
     if ($name === 'ogl_only') dashboard_check(in_array('frugro_siparis.php',$homeHrefs,true),'Eski (Frugro satırı öncesi) OGL rolü Frugro kartını korur');
     if ($name === 'only_defs_read') dashboard_check(isset($homeLabels['definitions.php']), 'admin olmayan tanım yetkili kartı korunur');
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');
@@ -294,7 +297,8 @@ foreach ($dashboardProfiles as $name => $profile) {
     }
 }
 $badgeXpath = dashboard_dom(dashboard_render($dashboardProfiles['admin'], true));
-foreach (['records.php' => '11', 'cikmalar.php' => '12', 'definitions.php' => '13', 'beyanlar.php' => '14', 'halkayit/index.php' => '15', 'mail.php' => '16', 'hesap.php' => '18', 'personel_takip.php' => '20', 'users.php' => '21', 'audit.php' => '22'] as $href => $badge) {
+// v558: records.php / cikmalar.php kartları (rozet 11/12) kaldırıldı.
+foreach (['definitions.php' => '13', 'beyanlar.php' => '14', 'halkayit/index.php' => '15', 'mail.php' => '16', 'hesap.php' => '18', 'personel_takip.php' => '20', 'users.php' => '21', 'audit.php' => '22'] as $href => $badge) {
     $node = $badgeXpath->query('//a[@href="' . $href . '" and contains(@class,"home-card")]//*[contains(concat(" ",normalize-space(@class)," ")," home-card-badge ")]')->item(0);
     dashboard_check($node !== null && trim($node->textContent) === $badge, 'mevcut anonim kart rozeti korunur ' . $href);
 }

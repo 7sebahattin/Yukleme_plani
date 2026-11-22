@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v557');
+    define('APP_SURUM', 'v558');
 }
 
 // --- HTML kaçışı ---
@@ -457,17 +457,13 @@ function first_allowed_page(): ?string {
 }
 
 /**
- * v555: menüden KALDIRILAN eski sayfaların (nav_alt_sayfalar anahtarı) yeni karşılığı (muhasebe fiş sayfası slug'ı).
- * Yeni sayfa o kullanıcıya görünüyorsa eski giriş menüde (sidebar + mobil) ÇİZİLMEZ ve eski sayfada (records.php / cikmalar.php /
- * kantar.php ailesi) seçili görünen giriş YENİ karşılığıdır. Yeni karşılığı göremeyen rol (ör. yalnız records.read olan operatör)
- * eski girişi KORUR — aksi halde o sayfaya menüden hiç ulaşamazdı.
+ * v558: eski Yükleme Planı / Paletleme / Mal Kabul girişleri TÜM menülerden kalktı (sidebar, mobil, tablet üst menü,
+ * ana sayfa kartları; sahip kararı — eski sistem kaldırılıyor). Sayfalar yerinde: yeni fiş sayfaları (Araç Yükleme /
+ * Mal Kabul Fişleri) onlara yönlendirir. Eski sayfadayken (nav_aktif_anahtar records/cikma/kantar) menüde SEÇİLİ görünen
+ * giriş yeni karşılığıdır: eski anahtar => yeni muhasebe fiş sayfası slug'ı.
  */
 function nav_eski_esleri(): array {
     return ['records' => 'arac_yukleme_fisleri', 'cikma' => 'palet_fisleri', 'kantar' => 'mal_kabul_fisleri'];
-}
-function nav_eski_gizli(string $anahtar): bool {
-    $es = nav_eski_esleri()[$anahtar] ?? null;
-    return $es !== null && function_exists('muhasebe_sayfa_can') && muhasebe_sayfa_can($es);
 }
 
 /**
@@ -691,16 +687,12 @@ function nav_menu_modeli(string $base): array {
     $o = [];
     if ($p_recw)  $o[] = $ge('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks, 'hks');
     if ($p_mail)  $o[] = $ge('mail.php', '📧', 'Mail Merkezi', $a_mail, 'mail', nav_mail_okunmamis());
-    // v555: eski Yükleme Planı / Paletleme / Mal Kabul girişleri menüden kalktı (yeni fiş sayfaları görünüyorsa); eski sayfalarda
-    // (records/cikmalar/kantar ailesi) SEÇİLİ görünen giriş yeni karşılığıdır — nav_eski_esleri().
-    $eskiAktif = array_flip(array_filter(array_map(fn($k) => nav_eski_gizli($k) && $ak === $k ? nav_eski_esleri()[$k] : null, array_keys(nav_eski_esleri()))));
+    // v558: eski Yükleme Planı / Paletleme / Mal Kabul girişleri menüde YOK; eski sayfalarda seçili görünen giriş yeni karşılığıdır.
+    $eskiAktif = isset(nav_eski_esleri()[(string)$ak]) ? [nav_eski_esleri()[(string)$ak] => true] : [];
     if (isset($muh['operasyon_fis'])) foreach ($muh['operasyon_fis'][2] as $d => [$et, $em]) {
         $slug = substr($d, 0, -4);
         if (muhasebe_sayfa_can($slug)) $o[] = $ge($d, $em, $et, $ak === $slug || isset($eskiAktif[$slug]));
     }
-    if ($p_rec && !nav_eski_gizli('records'))  $o[] = $ge('records.php', '🚚', 'Eski Yükleme Planı', $a_yuk, 'records');
-    if ($p_cik && !nav_eski_gizli('cikma'))    $o[] = $ge('cikmalar.php', '📋', 'Eski Paletleme', $a_cik, 'cikma');
-    if ($p_kant && !nav_eski_gizli('kantar'))  $o[] = $ge('kantar.php', '⚖️', 'Eski Mal Kabul', $a_kant, 'kantar');
     if ($p_quick) $o[] = $ge('hizli_maliyet.php', '<img src="' . h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], $base)) . '" width="20" height="20" alt="">', 'Hızlı Maliyet', $a_quick, 'qcost');
     // ⚠ Eski detaylı Maliyet girişi burada YOK (Sprint Navigasyon-03): modüle tek giriş Raporlar sayfasındaki karttır;
     // maliyet_* sayfalarında "Raporlar" vurgulu kalır ($a_rep, nav_aktif_anahtar).
@@ -932,11 +924,9 @@ function nav_alt_izinler(): array {
     $fn  = function_exists('can');
     $c   = fn(string $p): bool => $fn && can($p);
     $adm = function_exists('is_admin') && is_admin();
+    // v558: records / cikma / kantar (eski Yükleme Planı / Paletleme / Mal Kabul) aday DEĞİL — menülerden kalktı.
     return [
-        'records' => role_matrix_page_can('records','loading') && !nav_eski_gizli('records'),   // records.php: require_perm('records.read'); v555: yeni karşılığı (Araç Yükleme Fişleri) görünüyorsa eski giriş yok
-        'cikma'   => role_matrix_page_can('records','pallet') && !nav_eski_gizli('cikma'),     // cikmalar.php: require_perm('records.read'); v555: yeni karşılığı Palet Fişleri
         'beyan'   => beyan_sayfa_erisimi() || $adm, // beyanlar.php: beyan_sayfa_erisimi()
-        'kantar'  => $c('kantar.read') && !nav_eski_gizli('kantar'),   // kantar.php: require_perm('kantar.read'); v555: yeni karşılığı Mal Kabul Fişleri
         'hks'     => $c('hks.access'),           // halkayit/index.php: require_perm('records.write')
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
         'qcost'   => $fn && can_hizli_maliyet('read'), // hizli_maliyet.php: can_hizli_maliyet('read') — TEK kaynak (maliyet.* izni AÇMAZ)
@@ -1331,12 +1321,6 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php if (can_mail('read')): ?>
             <?php $__tm = nav_mail_okunmamis(); ?>
             <a href="<?= $base ?>mail.php" <?= in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true) ? 'class="active"' : '' ?><?= $__tm > 0 ? ' aria-label="Mail, ' . $__tm . ' okunmamış"' : '' ?>>Mail<?= nav_rozet_html($__tm, false) ?></a>
-            <?php endif; ?>
-            <?php if (role_matrix_page_can('records','loading')): ?>
-            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Eski Yükleme Planı</a>
-            <?php endif; ?>
-            <?php if (role_matrix_page_can('records','pallet')): ?>
-            <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Eski Paletleme</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
             <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Eski Raporlar</a>

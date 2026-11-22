@@ -307,33 +307,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
-<?php if (role_matrix_page_can('records','loading')): ?>
-    <a href="records.php" class="home-card">
-        <div class="home-card-icon" style="background:#eaf1ff">🚚</div>
-        <div class="home-card-title">Eski Yükleme Planı</div>
-        <?php if ($stats['toplam_kayit'] > 0): ?>
-        <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (role_matrix_page_can('records','pallet')): ?>
-    <a href="cikmalar.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdecea">📋</div>
-        <div class="home-card-title">Eski Paletleme</div>
-        <?php if ($stats['toplam_cikma'] > 0): ?>
-        <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (can('kantar.read')): ?>
-    <a href="kantar.php" class="home-card">
-        <div class="home-card-icon" style="background:#f0faf4">⚖️</div>
-        <div class="home-card-title">Eski Mal Kabul</div>
-    </a>
-<?php endif; ?>
-
+<?php /* v558: Eski Yükleme Planı / Eski Paletleme / Eski Mal Kabul kartları kaldırıldı (eski sistem kalkıyor). */ ?>
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
