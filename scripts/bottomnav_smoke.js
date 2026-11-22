@@ -490,8 +490,8 @@ function guvenliAlanKurallari(barSel) {
         const hks = sayfalar.find(s => s.sayfa === 'hks');
         if (hks) temsilci.push(hks);
     }
-    // Tam 4 adaylı rolde kantar 4. slottadır: dar ekranda "Diğer" onu taşımalı
-    const dortKantar = M.sayfalar.find(s => s.profil === 'dort_sayfa' && s.sayfa === 'kantar');
+    // Tam 4 adaylı rolde hesap 4. slottadır: dar ekranda "Diğer" onu taşımalı
+    const dortKantar = M.sayfalar.find(s => s.profil === 'dort_sayfa' && s.sayfa === 'hesap');
     if (dortKantar) temsilci.push(dortKantar);
     const olcumTablosu = [];
     for (const k of temsilci) {
@@ -709,6 +709,9 @@ function guvenliAlanKurallari(barSel) {
         ok('B', bag, 'gizli adaylar + slotlar = izinli adayların TAMAMI',
             JSON.stringify([...d.slotlar, ...d.gizli].sort()) === JSON.stringify([...P.adaylar].sort()),
             `slot [${d.slotlar}] gizli [${d.gizli}] beklenen [${P.adaylar}]`);
+        // v558: eski Yükleme Planı / Paletleme / Mal Kabul HİÇBİR rolde çubukta ya da "Diğer"de yok (anahtar + bağlantı)
+        const eskiKalan = [...(M.aday_degil || [])].filter(x => d.navKeys.includes(x)).concat(d.tumLink.map(h => uygulamaYolu(h, k.yol)).filter(y => ['records.php', 'cikmalar.php', 'kantar.php'].includes(y)));
+        ok('B', bag, 'v558: records/cikma/kantar öğesi/karosu/bağlantısı YOK (hiçbir profilde)', eskiKalan.length === 0, eskiKalan.join(', '));
         const kotu = d.tumLink.map(h => uygulamaYolu(h, k.yol)).filter(y => !P.izinli[y]);
         ok('B', bag, 'çubuk + "Diğer" sayfasındaki HER bağlantı izinli', kotu.length === 0, kotu.join(', '));
         if (d.karolar !== null) {
@@ -757,8 +760,8 @@ function guvenliAlanKurallari(barSel) {
         const k = sayfaBul('operator', 'home'); bag_ctx = { profil: 'operator', sayfa: 'home', w: 390 };
         const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
         const sl = await gorunenSlotlar(page);
-        ok('B', 'operator/home', 'soğuk başlangıç (çerez + kullanım yok): Eski Yükleme Planı, Bildirim, Personel, Eski Raporlar',
-            JSON.stringify(sl) === JSON.stringify(['records', 'hks', 'ptak', 'rapor']), `[${sl}]`);
+        ok('B', 'operator/home', 'soğuk başlangıç (çerez + kullanım yok): Bildirim, Personel, Eski Raporlar, Beyanlar (v558: records artık aday değil)',
+            JSON.stringify(sl) === JSON.stringify(['hks', 'ptak', 'rapor', 'beyan']), `[${sl}]`);
         const kul = await depo(page, 'asya_nav_kullanim_1');
         ok('B', 'operator/home', 'Ana Sayfa ziyareti sayılmadı', Array.isArray(kul) && kul.length === 0, JSON.stringify(kul));
         ok('A', 'operator/home', 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
@@ -766,28 +769,28 @@ function guvenliAlanKurallari(barSel) {
     }
     // 5b — ziyaret kaydı + yeniden sıralama (en zayıf slotun YERİNE girer)
     {
-        const k = sayfaBul('operator', 'kantar'); bag_ctx = { profil: 'operator', sayfa: 'kantar', w: 390 };
+        const k = sayfaBul('operator', 'hesap'); bag_ctx = { profil: 'operator', sayfa: 'hesap', w: 390 };
         const { ctx, page } = await ac(k, { w: 390, h: 844 });
         const kul = await depo(page, 'asya_nav_kullanim_1');
-        ok('B', 'operator/kantar', 'ziyaret cihaza yazıldı (asya_nav_kullanim_<uid>)',
-            Array.isArray(kul) && kul.length === 1 && kul[0][0] === 'kantar' && Math.abs(kul[0][1] - Date.now()) < 60000, JSON.stringify(kul));
+        ok('B', 'operator/hesap', 'ziyaret cihaza yazıldı (asya_nav_kullanim_<uid>)',
+            Array.isArray(kul) && kul.length === 1 && kul[0][0] === 'hesap' && Math.abs(kul[0][1] - Date.now()) < 60000, JSON.stringify(kul));
         const sl = await gorunenSlotlar(page);
-        ok('B', 'operator/kantar', 'ilk ziyaret (1 > 0×1,25+0,5) en zayıf slotu (Eski Raporlar) yerinde değiştirdi',
-            JSON.stringify(sl) === JSON.stringify(['records', 'hks', 'ptak', 'kantar']), `[${sl}]`);
+        ok('B', 'operator/hesap', 'ilk ziyaret (1 > 0×1,25+0,5) en zayıf slotu (Beyanlar: puan 0, en düşük öncelik) yerinde değiştirdi',
+            JSON.stringify(sl) === JSON.stringify(['hks', 'ptak', 'rapor', 'hesap']), `[${sl}]`);
         await page.reload(); await page.waitForTimeout(400);
         const kul2 = await depo(page, 'asya_nav_kullanim_1');
-        ok('B', 'operator/kantar', 'aynı bölümde 30 dk içinde yenileme TEK ziyaret', Array.isArray(kul2) && kul2.length === 1, JSON.stringify(kul2));
+        ok('B', 'operator/hesap', 'aynı bölümde 30 dk içinde yenileme TEK ziyaret', Array.isArray(kul2) && kul2.length === 1, JSON.stringify(kul2));
         await ctx.close();
     }
     // 5c — histerezis: puan > en zayıf × 1,25 + 0,5 olmadıkça yer değişmez
     for (const [ad, sayilar, bek] of [
-        ['kantar 2 > rapor 1×1,25+0,5 → girer (rapor\'un yerine)', { records: 3, hks: 3, ptak: 3, rapor: 1, kantar: 2 }, ['records', 'hks', 'ptak', 'kantar']],
-        ['kantar 1 ≤ rapor 1×1,25+0,5 → girmez', { records: 3, hks: 3, ptak: 3, rapor: 1, kantar: 1 }, ['records', 'hks', 'ptak', 'rapor']],
+        ['hesap 2 > beyan 1×1,25+0,5 → girer (beyan\'ın yerine)', { hks: 3, ptak: 3, rapor: 3, beyan: 1, hesap: 2 }, ['hks', 'ptak', 'rapor', 'hesap']],
+        ['hesap 1 ≤ beyan 1×1,25+0,5 → girmez', { hks: 3, ptak: 3, rapor: 3, beyan: 1, hesap: 1 }, ['hks', 'ptak', 'rapor', 'beyan']],
         // Eşik tam 1,25 çarpanına duyarlı: 3 > 2×1,25+0,5 (=3) DEĞİL; çarpan 1 olsaydı girerdi
-        ['kantar 3 ≤ rapor 2×1,25+0,5 = 3 → girmez (sınır)', { records: 4, hks: 4, ptak: 4, rapor: 2, kantar: 3 }, ['records', 'hks', 'ptak', 'rapor']],
-        // beyan en zayıfın (rapor, eşit puanda en düşük öncelik) yerine, mstok
-        // sonraki en zayıfın (ptak) yerine girer; records/hks YERİNİ korur.
-        ['çok kullanılanlar en zayıfların yerine girer, kalanlar yerini korur', { beyan: 6, mstok: 5, records: 1 }, ['records', 'hks', 'mstok', 'beyan']],
+        ['hesap 3 ≤ beyan 2×1,25+0,5 = 3 → girmez (sınır)', { hks: 4, ptak: 4, rapor: 4, beyan: 2, hesap: 3 }, ['hks', 'ptak', 'rapor', 'beyan']],
+        // mstok en zayıfın (rapor, eşit puanda en düşük öncelik) yerine, hesap sonraki en zayıfın (ptak) yerine girer;
+        // hks + beyan YERİNİ korur.
+        ['çok kullanılanlar en zayıfların yerine girer, kalanlar yerini korur', { beyan: 6, mstok: 5, hesap: 4 }, ['hks', 'hesap', 'mstok', 'beyan']],
     ]) {
         const k = sayfaBul('operator', 'home'); bag_ctx = { profil: 'operator', sayfa: 'home', w: 390 };
         const { ctx, page } = await ac(k, { w: 390, h: 844 }, { tohum: tohum(ziyaret(sayilar)) });
@@ -879,33 +882,33 @@ function guvenliAlanKurallari(barSel) {
     }
     // 5f — dar ekran: 4. slottaki güncel sayfayı "Diğer" taşır; genişleyince slota döner
     {
-        const k = sayfaBul('dort_sayfa', 'kantar'); bag_ctx = { profil: 'dort_sayfa', sayfa: 'kantar', w: 360 };
+        const k = sayfaBul('dort_sayfa', 'hesap'); bag_ctx = { profil: 'dort_sayfa', sayfa: 'hesap', w: 360 };
         const { ctx, page, hatalar } = await ac(k, { w: 360, h: 740 });
-        const bag = 'dort_sayfa/kantar';
+        const bag = 'dort_sayfa/hesap';
         const oku = () => page.evaluate((T) => {
             const m = document.querySelector(T.moreSel);
             const gor = (el) => !!el && getComputedStyle(el).display !== 'none';
             return { diger: gor(m), digerCur: m.getAttribute('aria-current'), ikon: m.querySelector('img.ni').getAttribute('src'),
                      rozet: !m.querySelector('.more-badge').hidden, etiket: m.querySelector('.bn-label').textContent,
-                     kantarCur: document.querySelector('[data-nav="kantar"]').getAttribute('aria-current'),
-                     kantarGor: gor(document.querySelector('[data-nav="kantar"]')) };
+                     slotCur: document.querySelector('[data-nav="hesap"]').getAttribute('aria-current'),
+                     slotGor: gor(document.querySelector('[data-nav="hesap"]')) };
         }, TASARIM);
         let d = await oku();
-        ok('B', bag + '@360', '4. slot gizli, "Diğer" Kantar\'ı taşıyor (ikon + rozet + etiket + aria-current)',
-            d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Eski Kabul' && !d.kantarGor, JSON.stringify(d));
+        ok('B', bag + '@360', '4. slot gizli, "Diğer" Hesap\'ı taşıyor (ikon + rozet + etiket + aria-current)',
+            d.diger && d.digerCur === 'page' && /hesap\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Hesap' && !d.slotGor, JSON.stringify(d));
         await page.setViewportSize({ width: 430, height: 932 }); await page.waitForTimeout(250);
         d = await oku();
-        ok('B', bag + '@430', 'genişleyince "Diğer" gizlenir, Kantar slotu aktif', !d.diger && d.kantarGor && d.kantarCur === 'page' && d.digerCur === null, JSON.stringify(d));
+        ok('B', bag + '@430', 'genişleyince "Diğer" gizlenir, Hesap slotu aktif', !d.diger && d.slotGor && d.slotCur === 'page' && d.digerCur === null, JSON.stringify(d));
         await page.setViewportSize({ width: 360, height: 740 }); await page.waitForTimeout(250);
         d = await oku();
-        ok('B', bag + '@360', 'daralınca yine "Diğer" taşır', d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon), JSON.stringify(d));
+        ok('B', bag + '@360', 'daralınca yine "Diğer" taşır', d.diger && d.digerCur === 'page' && /hesap\.svg/.test(d.ikon), JSON.stringify(d));
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
         await ctx.close();
     }
     // 5g — çerez yazımı (gerçek http kökeni: file:// çerez tutmaz)
     {
-        const k = sayfaBul('operator', 'kantar'); bag_ctx = { profil: 'operator', sayfa: 'kantar', w: 390 };
-        const bag = 'operator/kantar çerez';
+        const k = sayfaBul('operator', 'hesap'); bag_ctx = { profil: 'operator', sayfa: 'hesap', w: 390 };
+        const bag = 'operator/hesap çerez';
         const KOK = 'http://uygulama.test/';
         const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
         const tipler = { '.svg': 'image/svg+xml', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png' };
@@ -929,19 +932,19 @@ function guvenliAlanKurallari(barSel) {
         await page.goto(KOK + k.yol); await page.waitForTimeout(400);
         let c = (await ctx.cookies(KOK)).find(x => x.name === 'asya_nav');
         const deger = c ? decodeURIComponent(c.value) : null;
-        ok('B', bag, 'asya_nav = u:<uid>;s:<görünen sıra>;p:<sabitler>', deger === 'u:1;s:records,hks,ptak,kantar;p:', `çerez "${deger}"`);
+        ok('B', bag, 'asya_nav = u:<uid>;s:<görünen sıra>;p:<sabitler>', deger === 'u:1;s:hks,ptak,rapor,hesap;p:', `çerez "${deger}"`);
         const gun = c ? (c.expires - Date.now() / 1000) / 86400 : 0;
         ok('B', bag, 'çerez: path=/, SameSite=Lax, ~180 gün', !!c && c.path === '/' && c.sameSite === 'Lax' && gun > 179 && gun < 181,
             c ? `path ${c.path}, sameSite ${c.sameSite}, ${r1(gun)} gün` : 'çerez yok');
         await page.click(TASARIM.moreSel); await page.waitForTimeout(350);
         await page.click('#bnPinBtn');
-        await page.click('#bnSheet details.bn-grup[data-sb-grup="kullanici_konsolu"] > summary'); await page.waitForTimeout(120);   // v552: Hesap "Kullanıcı Ayarları" grubunda (kapalıydı)
-        await page.click('.bn-tile[data-nav="hesap"] .go'); await page.waitForTimeout(80);
+        await page.click('#bnSheet details.bn-grup[data-sb-grup="stok"] > summary'); await page.waitForTimeout(120);   // Malzeme Stok "Stok" grubunda (Hesap'ın grubu o sayfada zaten açık)
+        await page.click('.bn-tile[data-nav="mstok"] .go'); await page.waitForTimeout(80);
         c = (await ctx.cookies(KOK)).find(x => x.name === 'asya_nav');
         const d2 = c ? decodeURIComponent(c.value) : null;
-        // hesap sabitlenince en zayıf SABİTSİZ slot (ptak — puan 0, öncelik en düşük) çıkar;
-        // ziyaret edilen kantar kalır.
-        ok('B', bag, 'sabitlemek çereze anında yansır (p:hesap, hesap önde)', d2 === 'u:1;s:hesap,records,hks,kantar;p:hesap', `çerez "${d2}"`);
+        // mstok sabitlenince en zayıf SABİTSİZ slot (rapor — puan 0, öncelik en düşük) çıkar;
+        // ziyaret edilen hesap kalır.
+        ok('B', bag, 'sabitlemek çereze anında yansır (p:mstok, mstok önde)', d2 === 'u:1;s:mstok,hks,ptak,hesap;p:mstok', `çerez "${d2}"`);
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
         await ctx.close();
     }
@@ -1125,15 +1128,17 @@ function guvenliAlanKurallari(barSel) {
         await r.ctx.close();
     }
 
-    // 5k — v555: eski Yükleme Planı / Paletleme / Mal Kabul girişleri YALNIZ yeni karşılığı (muhasebe fiş sayfası) görünüyorsa menüden
-    //      (sidebar + mobil Diğer + alt çubuk adayları) kalkar; yeni karşılığı yoksa KORUNUR. Eski sayfalarda SEÇİLİ görünen giriş yeni karşılığıdır.
-    //      Beklenen değerler manifestin kapı tablosundan (P.izinli) türetilir — uygulamanın nav_eski_gizli()'sinden DEĞİL.
-    console.log('\n=== 5k) Eski giriş ↔ yeni karşılığı: gizleme + seçili öğe (sidebar + Diğer + alt çubuk) ===');
+    // 5k — v558: eski Yükleme Planı / Paletleme / Mal Kabul girişleri HER ROL için TÜM menülerden kalktı (sidebar + mobil Diğer + alt çubuk
+    //      adayları/dok); yeni karşılığı (muhasebe fiş sayfası) yalnız yetkisi olana görünür. Eski sayfalarda (records/cikmalar/kantar ailesi)
+    //      SEÇİLİ görünen giriş yeni karşılığıdır (kullanıcı görebiliyorsa); göremiyorsa hiçbir öğe seçili değildir.
+    //      Beklenen değerler manifestin kapı tablosundan (P.izinli) türetilir — uygulamanın nav_eski_esleri()'nden DEĞİL.
+    console.log('\n=== 5k) Eski girişler menüde YOK; eski sayfada seçili öğe = yeni karşılığı (sidebar + Diğer + alt çubuk) ===');
     const ESKI = { records: { yeni: 'arac_yukleme_fisleri.php', yeniAd: 'Araç Yükleme Fişleri', eskiAd: 'Eski Yükleme Planı', eskiHref: 'records.php' },
                    cikma:   { yeni: 'palet_fisleri.php',        yeniAd: 'Palet Fişleri',        eskiAd: 'Eski Paletleme',     eskiHref: 'cikmalar.php' },
                    kantar:  { yeni: 'mal_kabul_fisleri.php',    yeniAd: 'Mal Kabul Fişleri',    eskiAd: 'Eski Mal Kabul',     eskiHref: 'kantar.php' } };
     ok('B', 'manifest', 'eski → yeni eşleme (render kapı tablosu) = records→arac_yukleme_fisleri, cikma→palet_fisleri, kantar→mal_kabul_fisleri',
         JSON.stringify(M.eski_yeni) === JSON.stringify({ records: ESKI.records.yeni, cikma: ESKI.cikma.yeni, kantar: ESKI.kantar.yeni }), JSON.stringify(M.eski_yeni));
+    ok('B', 'manifest', 'aday olmayan anahtarlar = records, cikma, kantar', JSON.stringify(M.aday_degil) === JSON.stringify(['records', 'cikma', 'kantar']), JSON.stringify(M.aday_degil));
     const K5 = [['admin', 'records'], ['admin', 'cikmalar'], ['admin', 'kantar'], ['admin', 'record_view'], ['admin', 'cikma_view'], ['admin', 'home'],
                 ['operator', 'records'], ['operator', 'cikmalar'], ['operator', 'kantar'], ['viewer', 'kantar'], ['dort_sayfa', 'kantar'],
                 ['yeni_fis_hepsi', 'records'], ['yeni_fis_hepsi', 'cikmalar'], ['yeni_fis_hepsi', 'kantar'], ['yeni_fis_hepsi', 'home'],
@@ -1151,31 +1156,32 @@ function guvenliAlanKurallari(barSel) {
         const sbAll = sb.flatMap(g => g.ogeler), shAll = sh.flatMap(g => g.ogeler);
         const bar = await page.evaluate(() => [...document.querySelectorAll('.bn-dock [data-nav], .bottomnav [data-nav]')].map(el => el.getAttribute('data-nav')));
         for (const [ak, E] of Object.entries(ESKI)) {
-            const yeniGor = !!P.izinli[E.yeni], eskiHam = !!P.izinli[M.anahtar_sayfa[ak]];
-            const eskiBek = eskiHam && !yeniGor;   // eski giriş menüde yalnız ham izin VAR + yeni karşılığı YOK iken
+            const yeniGor = !!P.izinli[E.yeni];
             const sbEski = sbAll.some(o => uygulamaYolu(o.href, k.yol) === E.eskiHref), sbYeni = sbAll.some(o => uygulamaYolu(o.href, k.yol) === E.yeni);
-            ok('B', bag, `sidebar: ${E.eskiAd} ${eskiBek ? 'VAR' : 'YOK'} · ${E.yeniAd} ${yeniGor ? 'VAR' : 'YOK'}`, sbEski === eskiBek && sbYeni === yeniGor, `eski ${sbEski}, yeni ${sbYeni}`);
+            ok('B', bag, `sidebar: ${E.eskiAd} YOK · ${E.yeniAd} ${yeniGor ? 'VAR' : 'YOK'}`, !sbEski && sbYeni === yeniGor, `eski ${sbEski}, yeni ${sbYeni}`);
             // "Diğer" sayfası: Ana Sayfa'nın hedefiyle aynı sayfa sheet'te tekrarlanmaz (yalniz_yeni_fis: hedef palet_fisleri.php)
             const shEski = shAll.some(o => uygulamaYolu(o.href, k.yol) === E.eskiHref), shYeni = shAll.some(o => uygulamaYolu(o.href, k.yol) === E.yeni);
-            ok('B', bag, `Diğer sayfası: ${E.eskiAd} ${eskiBek ? 'VAR' : 'YOK'} · ${E.yeniAd} ${(yeniGor && E.yeni !== P.home_hedef) ? 'VAR' : 'YOK'}`, shEski === eskiBek && shYeni === (yeniGor && E.yeni !== P.home_hedef), `eski ${shEski}, yeni ${shYeni}`);
-            ok('B', bag, `alt çubuk adayı: ${ak} ${eskiBek ? 'izinli' : 'YOK'} (slot + gizli dok)`, P.adaylar.includes(ak) === eskiBek, `adaylar [${P.adaylar}]`);
-            if (!eskiBek) ok('B', bag, `alt çubukta ${ak} öğesi çizilmedi`, !bar.includes(ak), `[${bar}]`);
+            ok('B', bag, `Diğer sayfası: ${E.eskiAd} YOK · ${E.yeniAd} ${(yeniGor && E.yeni !== P.home_hedef) ? 'VAR' : 'YOK'}`, !shEski && shYeni === (yeniGor && E.yeni !== P.home_hedef), `eski ${shEski}, yeni ${shYeni}`);
+            ok('B', bag, `alt çubuk adayı: ${ak} YOK (hiçbir profilde)`, !P.adaylar.includes(ak), `adaylar [${P.adaylar}]`);
+            ok('B', bag, `alt çubukta ${ak} öğesi çizilmedi`, !bar.includes(ak), `[${bar}]`);
         }
-        // Seçili öğe: eski sayfada (records/cikma/kantar ailesi) sidebar + Diğer'de SEÇİLİ olan = yeni karşılığı; yoksa eski giriş. Anahtarsız muhasebe sayfasında kendisi.
+        // Seçili öğe: eski sayfada (records/cikma/kantar ailesi) sidebar + Diğer'de SEÇİLİ olan = yeni karşılığı; yeni karşılığı görünmüyorsa HİÇBİR öğe seçili değil.
+        // Anahtarsız muhasebe sayfasında kendisi.
         const ak = k.anahtar;
-        const seciliBek = ESKI[ak] ? (P.izinli[ESKI[ak].yeni] ? ESKI[ak].yeni : ESKI[ak].eskiHref)
+        const seciliBek = ESKI[ak] ? (P.izinli[ESKI[ak].yeni] ? ESKI[ak].yeni : 'YOK')
             : ((M.muhasebe_sayfalar || []).includes(k.bolum) ? k.bolum : null);
         if (seciliBek !== null) {
             const sbSecili = sbAll.filter(o => o.aktif).map(o => uygulamaYolu(o.href, k.yol));
-            ok('B', bag, `sidebar: tek seçili öğe = ${seciliBek}`, sbSecili.length === 1 && sbSecili[0] === seciliBek, `seçili [${sbSecili}]`);
-            if (seciliBek !== P.home_hedef) {
+            const bekDizi = seciliBek === 'YOK' ? [] : [seciliBek];
+            ok('B', bag, seciliBek === 'YOK' ? 'sidebar: seçili öğe YOK (yeni karşılığı görünmüyor, eski giriş de yok)' : `sidebar: tek seçili öğe = ${seciliBek}`, JSON.stringify(sbSecili) === JSON.stringify(bekDizi), `seçili [${sbSecili}]`);
+            if (seciliBek === 'YOK' || seciliBek !== P.home_hedef) {
                 const shSecili = shAll.filter(o => o.aktif).map(o => uygulamaYolu(o.href, k.yol));
-                ok('B', bag, `Diğer sayfası: tek seçili öğe = ${seciliBek} (sidebar ile aynı)`, shSecili.length === 1 && shSecili[0] === seciliBek, `seçili [${shSecili}]`);
+                ok('B', bag, seciliBek === 'YOK' ? 'Diğer sayfası: seçili öğe YOK' : `Diğer sayfası: tek seçili öğe = ${seciliBek} (sidebar ile aynı)`, JSON.stringify(shSecili) === JSON.stringify(bekDizi), `seçili [${shSecili}]`);
             }
-            // Seçili giriş YENİ karşılığıysa (anahtarsız) alt çubuk slotlarında hiçbir öğe aktif DEĞİL; eskiyse kendi slotu aktif (mevcut davranış, bölüm 1 denetler)
-            if (ESKI[ak] && P.izinli[ESKI[ak].yeni]) {
+            // Eski sayfada alt çubuk slotlarında hiçbir eski anahtar aktif DEĞİL (slotları yok)
+            if (ESKI[ak]) {
                 const barAktif = await page.evaluate(() => [...document.querySelectorAll('.bn-dock [aria-current="page"], .bottomnav [aria-current="page"]')].map(el => el.getAttribute('data-nav') || el.id));
-                ok('B', bag, 'yeni karşılığı seçili iken alt çubuk slotlarında eski anahtar aktif değil (yalnız Ana Sayfa/hiçbiri)', !barAktif.includes(ak), `[${barAktif}]`);
+                ok('B', bag, 'eski sayfada alt çubuk slotlarında eski anahtar aktif değil (yalnız Ana Sayfa/Diğer/hiçbiri)', !barAktif.includes(ak), `[${barAktif}]`);
             }
         }
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
@@ -1184,7 +1190,7 @@ function guvenliAlanKurallari(barSel) {
 
     // Kanıt ekran görüntüleri: gerçek çubuk 360/390/430 × açık/koyu + Hal Kayıt
     if (!NO_SHOTS) {
-        const k = sayfaBul('operator', 'kantar');
+        const k = sayfaBul('operator', 'beyanlar');
         for (const w of [360, 390, 430]) for (const koyu of [false, true]) {
             const { ctx, page } = await ac(k, { w, h: 800 }, { koyu });
             const f = path.join(SHOTS, `cubuk_${w}_${koyu ? 'koyu' : 'acik'}.png`);

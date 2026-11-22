@@ -470,22 +470,25 @@ foreach ($PROFILLER as $pk => $pr) {
         }
     }
     if ($pk === 'operator') {
+        // v558: ziyaret edilen sayfa Beyanlar (operatörde aday + soğuk 4. slot): çerez senaryoları artık eski kantar/records anahtarlarına dayanmaz.
         $senaryolar = [
-            'cerez_sahte'  => ['u:1;s:users,qcost,xyz,kantar,audit;p:qcost,roles,backup,home,more,../index', ['kantar', 'records', 'hks', 'ptak'], []],
-            'cerez_gecerli'=> ['u:1;s:beyan,kantar,records,mstok;p:hesap', ['hesap', 'beyan', 'kantar', 'records'], ['hesap']],
-            'cerez_baska'  => ['u:2;s:beyan,kantar,records,mstok;p:hesap', $soguk, []],
-            'cerez_bozuk'  => [str_repeat('s:records,', 60), $soguk, []],
+            'cerez_sahte'  => ['u:1;s:users,qcost,xyz,mstok,audit;p:qcost,roles,backup,home,more,../index', ['mstok', 'hks', 'ptak', 'rapor'], []],
+            'cerez_gecerli'=> ['u:1;s:beyan,mstok,defs,rapor;p:hesap', ['hesap', 'beyan', 'mstok', 'defs'], ['hesap']],
+            'cerez_baska'  => ['u:2;s:beyan,mstok,defs,rapor;p:hesap', $soguk, []],
+            'cerez_bozuk'  => [str_repeat('s:beyan,', 60), $soguk, []],
+            // eski anahtarlar (records/cikma/kantar) çerezde olsa da sessizce atılır
+            'cerez_eski'   => ['u:1;s:records,kantar,cikma,mstok;p:kantar', ['mstok', 'hks', 'ptak', 'rapor'], []],
         ];
         foreach ($senaryolar as $sen => [$cerez, $bekSlot, $bekSabit]) {
-            $s = $SAYFALAR['kantar'];
+            $s = $SAYFALAR['beyanlar'];
             $_COOKIE['asya_nav'] = $cerez;
             $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
             unset($_COOKIE['asya_nav']);
-            $dosya = "{$pk}__kantar__{$sen}.html";
+            $dosya = "{$pk}__beyanlar__{$sen}.html";
             file_put_contents($OUT . '/' . $dosya, $html);
             $manifest['sayfalar'][] = [
-                'profil' => $pk, 'sayfa' => "kantar+$sen", 'dosya' => $dosya,
-                'yol' => 'kantar.php', 'bolum' => 'kantar.php', 'anahtar' => 'kantar',
+                'profil' => $pk, 'sayfa' => "beyanlar+$sen", 'dosya' => $dosya,
+                'yol' => 'beyanlar.php', 'bolum' => 'beyanlar.php', 'anahtar' => 'beyan',
                 'depo_rengi' => depot_color($pr['depo']),
                 'senaryo' => ['ad' => $sen, 'cerez' => $cerez, 'slotlar' => $bekSlot, 'sabit' => $bekSabit],
             ];
