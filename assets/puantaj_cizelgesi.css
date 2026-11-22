@@ -163,7 +163,7 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
 /* ── Elle işaret menüsü (v553) ──
    Masaüstü: hücrenin yanında küçük menü (JS position:fixed koordinat verir). <768px: alt sayfa.
    z-index ≥ 600 (alt çubuk 500, topbar/sidebar 100). <form> YOK (modal-form tuzağı). */
-.pi-ovl { position: fixed; inset: 0; z-index: 599; background: transparent; }
+.pi-ovl { position: fixed; inset: 0; z-index: 600; background: transparent; }
 .pi-menu { position: fixed; z-index: 600; width: 224px; max-width: calc(100vw - 16px); padding: 8px; border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-surface); color: var(--pc-text); box-shadow: 0 8px 28px rgba(0, 0, 0, .28); }
 .pi-menu[hidden], .pi-ovl[hidden], .pi-hata[hidden] { display: none; }
 .pi-bas { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 2px 2px 6px; }
