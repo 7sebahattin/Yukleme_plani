@@ -7332,3 +7332,22 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
 @media (min-width: 720px) { .mk-g5 { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 900px) { .mk-g5 { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1180px) { .mk-g5 { grid-template-columns: repeat(5, 1fr); } }
+
+/* =========================================================
+   Sidebar hover mikro-animasyonu (v551) — yalnız fare olan masaüstü.
+   Yaygın, ölçülü kalıp: hafif zemin dolgusu + 3px sağa kayma + ikon büyümesi + sol vurgu çizgisi.
+   Yalnız transform/opacity/background geçişi (düzen hesabı yok); 160ms ease-out; azaltılmış harekette KAPALI.
+   ========================================================= */
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .sidebar-nav { overflow-x: hidden; }
+    .sidebar-link {
+        transition: background .16s ease-out, color .16s ease-out, transform .16s ease-out, border-left-color .16s ease-out;
+    }
+    .sidebar-link:hover { transform: translateX(3px); border-left-color: rgba(255,255,255,.32); }
+    .sidebar-link.active:hover { border-left-color: var(--primary); }
+    .sidebar-link-icon { transition: transform .16s ease-out; }
+    .sidebar-link:hover .sidebar-link-icon { transform: scale(1.14); }
+    .sidebar-section { transition: background .16s ease-out, color .16s ease-out; border-radius: var(--radius-sm); }
+    .sidebar-section:hover { color: rgba(255,255,255,.8); }
+    .sidebar-section-ok { transition: transform .18s ease-out; }
+}

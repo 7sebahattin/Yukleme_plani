@@ -2939,19 +2939,35 @@ function ekranAlti() {
 })();
 
 
-/* Sidebar grup başlıkları: kullanıcı tercihi yalnız cihazda; etkin sayfanın grubu hep açık. */
+/* Menü akordiyonu (v551 KURAL): sayfanın bulunduğu grup AÇIK + seçili, diğer tüm gruplar KAPALI;
+   bir başlığa basınca o açılır, diğerleri kendiliğinden kapanır. Cihazda tercih SAKLANMAZ (eski rastgele açık/kapalı kalmaz).
+   Sunucu zaten aktif grubu `open` basar; bu kod (1) hiçbir link işaretlenmemişse URL'den bulur, (2) akordiyonu işletir.
+   Kapsam: `[data-akordiyon]` kabı içindeki `details[data-sb-grup]` — masaüstü sidebar + mobil "Diğer" sayfası; yeni grup otomatik. */
 (function () {
-    var anahtar = 'asya_sb_grup';
-    var kayit = {};
-    try { kayit = JSON.parse(localStorage.getItem(anahtar) || '{}') || {}; } catch (e) { kayit = {}; }
-    document.querySelectorAll('details.sidebar-grup[data-sb-grup]').forEach(function (d) {
-        var ad = d.getAttribute('data-sb-grup');
-        var aktif = !!d.querySelector('.sidebar-link.active');
-        if (aktif) d.open = true;
-        else if (ad in kayit) d.open = !!kayit[ad];
-        d.addEventListener('toggle', function () {
-            kayit[ad] = d.open ? 1 : 0;
-            try { localStorage.setItem(anahtar, JSON.stringify(kayit)); } catch (e) {}
+    var AKTIF = '.sidebar-link.active, [aria-current="page"], .is-current';
+    function dosya(u) { try { return new URL(u, location.href).pathname.replace(/\/+$/, '').split('/').pop() || 'index.php'; } catch (e) { return ''; } }
+    document.querySelectorAll('[data-akordiyon]').forEach(function (kap) {
+        var gruplar = [].slice.call(kap.querySelectorAll('details[data-sb-grup]'));
+        if (!gruplar.length) return;
+        var aktifGrup = null;
+        gruplar.forEach(function (d) { if (!aktifGrup && d.querySelector(AKTIF)) aktifGrup = d; });
+        if (!aktifGrup) {   // sunucu hiçbir bağlantıyı işaretlemediyse: URL dosya adıyla eşleştir
+            var bu = dosya(location.pathname);
+            gruplar.forEach(function (d) {
+                if (aktifGrup) return;
+                var a = [].slice.call(d.querySelectorAll('a[href]')).filter(function (x) { return dosya(x.getAttribute('href')) === bu; })[0];
+                if (a) { a.classList.add('active'); a.setAttribute('aria-current', 'page'); aktifGrup = d; }
+            });
+        }
+        var duzenleniyor = false;
+        gruplar.forEach(function (d) { d.open = (d === aktifGrup); });
+        gruplar.forEach(function (d) {
+            d.addEventListener('toggle', function () {
+                if (!d.open || duzenleniyor) return;
+                duzenleniyor = true;
+                gruplar.forEach(function (o) { if (o !== d) o.open = false; });
+                duzenleniyor = false;
+            });
         });
     });
 })();
