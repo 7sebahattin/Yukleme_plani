@@ -127,12 +127,12 @@ $PROFILLER = [
         'perms' => ['attendance.foremen','attendance.worker_cards','attendance.daily_scan','attendance.daily_reports'],
     ],
     'dort_sayfa' => [
-        // Tam 4 aday sayfa (records+cikma, kantar, reports): 390px ve üstünde
-        // 4 slot → "Diğer" GEREKSİZ; 390 altında 4. slot gizlenir → "Diğer"
-        // (yalnız dar ekranda) o sayfayı taşır.
+        // Tam 4 aday sayfa (rapor, beyan, mstok, hesap — v558: eski records/cikma/kantar artık aday DEĞİL): 390px ve üstünde
+        // 4 slot → "Diğer" GEREKSİZ; 390 altında 4. slot (hesap) gizlenir → "Diğer" (yalnız dar ekranda) o sayfayı taşır.
+        // records.read/kantar.read bilerek durur: eski sayfalar açılabilir ama menüde HİÇBİR girişi yoktur.
         'ad' => 'Özel rol: tam 4 aday sayfa', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
         'rol' => ['slug' => 'dort', 'label' => 'Dört Sayfa'],
-        'perms' => ['dashboard.read','records.read','kantar.read','reports.read'],
+        'perms' => ['dashboard.read','records.read','kantar.read','reports.read','beyan.read','stok.read','hesap.read'],
     ],
     'ozel_pdks' => [
         // Özel rol: YALNIZ kalıcı personel PDKS izinleri (attendance.*) —
@@ -163,7 +163,7 @@ $PROFILLER = [
         'rol' => ['slug' => 'hesap_tek', 'label' => 'Hesap'],
         'perms' => ['hesap.read'],
     ],
-    // v552: "Diğer" sayfası sidebar ile AYNI modelden çizilir. Yalnız 3 aday sayfa (eskiden "Diğer" ÇIKMAZDI) + anahtarsız
+    // v552: "Diğer" sayfası sidebar ile AYNI modelden çizilir. (v558: eski 3 aday artık menüde yok → aday yok) + anahtarsız
     // (pin'siz) muhasebe sayfaları → o sayfalara mobilde ulaşmak için "Diğer" düğmesi/sheet ŞART.
     'muhasebe_sayfa' => [
         'ad' => 'Özel rol: 3 aday + muhasebe sayfaları (cari kartları, palet fişleri)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
@@ -178,11 +178,10 @@ $PROFILLER = [
         'perms' => ['muhasebe.cari_kartlari.read','muhasebe.cari_dekontlar.read'],
     ],
 ];
-// v555: eski Yükleme Planı/Paletleme/Mal Kabul girişleri (records/cikma/kantar adayları) YALNIZ yeni karşılığı (muhasebe fiş sayfası:
-// arac_yukleme_fisleri / palet_fisleri / mal_kabul_fisleri, muhasebe_sayfa_can) kullanıcıya görünüyorsa menüden (sidebar + mobil Diğer
-// + alt çubuk adayları) kalkar. Karşılığını göremeyen rol (operator, viewer, dort_sayfa…) eski girişi KORUR.
-//  · yeni_fis_hepsi      : eski izinleri + 3 yeni fiş sayfası → eski 3 aday YOK, yeni 3 muhasebe sayfası sheet'te
-//  · yeni_fis_kismi      : eski izinleri + YALNIZ Mal Kabul Fişleri → yalnız kantar adayı gizli (karşılık BAŞINA karar)
+// v558: eski Yükleme Planı/Paletleme/Mal Kabul girişleri (records/cikma/kantar) HER ROL için TÜM menülerden kalktı (sidebar, Diğer,
+// alt çubuk adayları, topnav, ana sayfa kartları). Eski sayfadayken seçili görünen giriş yeni karşılığıdır (görünüyorsa).
+//  · yeni_fis_hepsi      : eski izinleri + 3 yeni fiş sayfası → yeni 3 muhasebe sayfası sheet'te
+//  · yeni_fis_kismi      : eski izinleri + YALNIZ Mal Kabul Fişleri (eski sayfada yalnız o karşılık seçilir; records/cikma sayfasında seçili öğe YOK)
 //  · yalniz_yeni_fis     : eski izni YOK, yalnız 3 yeni fiş sayfası (dashboard.read yok → Ana Sayfa ilk izinli muhasebe sayfasına gider)
 $PROFILLER['yeni_fis_hepsi'] = ['ad' => 'Özel rol: eski izinler + 3 yeni fiş sayfası (eski girişler gizli)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
     'rol' => ['slug' => 'yeni_fis_hepsi', 'label' => 'Yeni Fiş Hepsi'],
@@ -264,6 +263,8 @@ $ANAHTAR_SAYFA = [
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
+// v558: bu anahtarlar kayıtta (nav_alt_sayfalar / nav_aktif_anahtar) durur ama ASLA aday değildir.
+$ADAY_DEGIL = ['records', 'cikma', 'kantar'];
 $ESKI_YENI_UYG = array_map(fn($x) => $x . '.php', nav_eski_esleri());
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
 $SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'frugro', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
@@ -374,6 +375,7 @@ $manifest = [
     'uretim'   => date('c'),
     'anahtar_sayfa' => $ANAHTAR_SAYFA,
     'muhasebe_sayfalar' => $muhSayfalar,
+    'aday_degil' => $ADAY_DEGIL,
     'eski_yeni' => ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php'],
     'kok'      => $ROOT,
     'app_surum'=> APP_SURUM,
@@ -404,10 +406,8 @@ foreach ($PROFILLER as $pk => $pr) {
 
     // Alt çubuk beklentileri — HEDEF SAYFA KAPILARINDAN türetilir (uygulamanın
     // nav_alt_izinler()'inden DEĞİL), sonra uygulamayla çapraz kontrol edilir.
-    // v555: eski girişi (records/cikma/kantar) kendi kapısı geçse de YENİ karşılığı (muhasebe fiş sayfası) görünüyorsa aday DEĞİLDİR.
-    // Eşleme uygulamanın nav_eski_esleri()'nden BAĞIMSIZ yazıldı ve aşağıda onunla karşılaştırılır.
-    $ESKI_YENI = ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php'];
-    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]] && !(isset($ESKI_YENI[$k]) && !empty($izinli[$ESKI_YENI[$k]]))));
+    // v558: eski girişler (records/cikma/kantar) kapıları geçse de HİÇBİR rolde aday DEĞİLDİR ($ADAY_DEGIL; uygulamanın nav_alt_izinler()'inden bağımsız yazıldı).
+    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]] && !in_array($k, $ADAY_DEGIL, true)));
     $uygAday = array_keys(array_filter(nav_alt_izinler()));
     if ($uygAday !== $adaylarHam) $uyari[] = "$pk: nav_alt_izinler() [" . implode(',', $uygAday) . "] ≠ kapı tablosu [" . implode(',', $adaylarHam) . "]";
     $home = can('dashboard.read') ? 'index.php' : $fap;
@@ -455,7 +455,7 @@ foreach ($PROFILLER as $pk => $pr) {
     if ($pk === 'admin') {
         foreach (['quick_list', 'quick_form'] as $quickPage) {
             $s = $SAYFALAR[$quickPage];
-            // v555: admin'de eski 'records' adayı artık YOK (yeni karşılığı Araç Yükleme Fişleri görünür) → eski çerezdeki 'records' sessizce atılır, slotları 'rapor' doldurur.
+            // v558: 'records' aday DEĞİL → eski çerezdeki 'records' sessizce atılır, slotları 'rapor' doldurur.
             $_COOKIE['asya_nav'] = 'u:1;s:records,hks,ptak;p:qcost';
             $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
             unset($_COOKIE['asya_nav']);
