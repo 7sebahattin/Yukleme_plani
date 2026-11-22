@@ -47,9 +47,9 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
     </thead>
     <tbody>
     <?php foreach ($kisiler as $k): $aktif = (int)$k['aktif'] === 1; ?>
-    <tr data-pk-satir="<?= (int)$k['id'] ?>" data-ad="<?= h($k['ad']) ?>" data-gorev="<?= h($k['gorev']) ?>" data-aktif="<?= $aktif ? '1' : '0' ?>" data-gun="<?= (int)$k['gun'] ?>"<?= $aktif ? '' : ' class="pk-pasif"' ?>>
+    <tr data-pk-satir="<?= (int)$k['id'] ?>" data-isim="<?= h($k['ad']) ?>" data-gorev="<?= h($k['gorev']) ?>" data-aktif="<?= $aktif ? '1' : '0' ?>" data-gun="<?= (int)$k['gun'] ?>"<?= $aktif ? '' : ' class="pk-pasif"' ?>>
         <td class="pk-c"><label class="pg-secbox"><input type="checkbox" data-pk-sec="<?= (int)$k['id'] ?>" aria-label="Seç: <?= h($k['ad']) ?>"></label></td>
-        <td class="pk-ad" data-label="Ad Soyad"><?= h($k['ad']) ?></td>
+        <td class="pk-isim" data-label="Ad Soyad"><?= h($k['ad']) ?></td>
         <td class="pk-gorev" data-label="Görev"><?= $k['gorev'] !== '' ? h($k['gorev']) : '<span class="pk-yok">—</span>' ?></td>
         <td class="pk-durum" data-label="Durum"><span class="pk-rozet <?= $aktif ? 'pk-rozet-aktif' : 'pk-rozet-pasif' ?>"><?= $aktif ? 'Aktif' : 'Pasif' ?></span></td>
         <td class="pk-sayi" data-label="Gün kaydı"><?= (int)$k['gun'] ?></td>

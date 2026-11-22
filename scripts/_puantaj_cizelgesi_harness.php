@@ -12,6 +12,7 @@
 //             v554: giris (true → puantaj_giris_* tabloları KURULUR; varsayılan KURULMAZ = migrate edilmemiş site) ·
 //             giris_kisiler [[id, ad, gorev, depo, aktif],…] · giris_gunler [[kisi_id, ayın günü, kod],…] ·
 //             dump_giris (true → çıkışta STDERR "GIRIS_KISILER: json" + "GIRIS_GUNLER: json") · tum_tablolar (true → employees/PDKS tablolarının satır sayıları STDERR "SAYILAR: json")
+//             v556: db_dosya (kalıcı SQLite dosyası; var olan dosyada şema/tohum kurulmaz) · http (true → style.css göreli 'assets/' yoluyla bağlanır)
 //             v555: files {alan:{name,tmp_name}} (→ $_FILES; gerçek HTTP yüklemesi yok → test kancası $GLOBALS['_pg_yukleme_denetimi'] kurulur) ·
 //             tmp_say (true → çıkışta STDERR "TMP_YENI: json" = istek sırasında sys_get_temp_dir()'de OLUŞAN yeni dosya adları; 'pcz_' öneki bu harness'ın kendi sayfa dosyası olduğundan sayılmaz) · sayfa tohumu: giris_kisiler satırı [id, ad, gorev, depo, aktif, sira?]
 // Çıkış kodu: 0 = sayfa çıktı verdi · 3 = forbidden() · 4 = sayfa istisna fırlattı. Denetim kayıtları STDERR'e "AUDIT: {json}".
@@ -26,7 +27,8 @@ $SAYFA = (string)($argv[1] ?? 'puantaj_cizelgesi.php');
 $GETJ = json_decode((string)($argv[2] ?? '{}'), true) ?: [];
 $OPT = json_decode((string)($argv[3] ?? '{}'), true) ?: [];
 
-$PDO_TEST = new PDO('sqlite::memory:');
+// v556: db_dosya → KALICI SQLite dosyası (istekler arası durum; uçtan uca tarayıcı testi). Dosyada 'users' tablosu varsa şema/tohum KURULMAZ (yalnız ilk istek kurar).
+$PDO_TEST = new PDO('sqlite:' . (!empty($OPT['db_dosya']) ? (string)$OPT['db_dosya'] : ':memory:'));
 $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
@@ -76,6 +78,7 @@ function render_header(string $t, bool $p = false): void {
     global $OPT, $ROOT;
     echo "<!doctype html><html lang=\"tr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" . h($t) . "</title>";
     if (!empty($OPT['css'])) echo '<link rel="stylesheet" href="file://' . $ROOT . '/assets/style.css">';
+    elseif (!empty($OPT['http'])) echo '<link rel="stylesheet" href="assets/style.css">';   // v556: yerel HTTP sunucusu (uçtan uca test) göreli yol kullanır
     echo "</head><body" . (($OPT['tema'] ?? '') === 'dark' ? ' ' : '') . "><main class=\"container\">";
 }
 function render_footer(bool $p = false): void { echo "</main></body></html>"; }
@@ -119,7 +122,8 @@ function pdks_ddl_sqlite(string $mysql): array
 // ── Şema: SEÇENEK 'sema' = 'yok' → hiç tablo yok (nazik hata testi); 'personel' → yalnız personel; varsayılan hepsi ──
 $SEMA = $OPT['sema'] ?? 'hepsi';
 $TOHUM_AY = (string)($OPT['ay'] ?? date('Y-m'));
-if ($SEMA !== 'yok') {
+$KURULU = !empty($OPT['db_dosya']) && (bool)db()->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'")->fetchColumn();
+if ($SEMA !== 'yok' && !$KURULU) {
     db()->exec("CREATE TABLE `users` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `username` VARCHAR(60) NOT NULL, `display_name` VARCHAR(150) NULL, `is_active` INTEGER NOT NULL DEFAULT 1)");
     db()->exec("INSERT INTO users (id, username, display_name) VALUES (1, 'test', 'Test Kullanıcı')");
     foreach (pdks_tablolar() as $ad => $sql) {
@@ -161,7 +165,7 @@ if ($SEMA !== 'yok') {
     $olay(5, 'GIRIS', "$m-03 08:00:00"); $olay(5, 'CIKIS', "$m-03 16:00:00");                       // pasif
     $olay(6, 'GIRIS', "$m-03 09:00:00"); $olay(6, 'CIKIS', "$m-03 17:00:00");
 }
-if ($SEMA === 'hepsi') {
+if ($SEMA === 'hepsi' && !$KURULU) {
     foreach (pdks_gunluk_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }
     foreach (pdks_gunluk_faz8a_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }
     foreach (pdks_hakedis_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }

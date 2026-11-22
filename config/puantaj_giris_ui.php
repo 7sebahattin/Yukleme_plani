@@ -56,7 +56,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
         return $a;
     };
     $uc = static function (array $s): string {
-        return '<button type="button" class="pg-uc" data-pg-kisi="' . (int)$s['id'] . '" data-ad="' . h($s['ad']) . '" data-gorev="' . h($s['alt']) . '" data-pasif="' . (!empty($s['pasif']) ? '1' : '0') . '" aria-haspopup="menu" aria-label="İşlemler: ' . h($s['ad']) . '" title="İşlemler">⋯</button>';
+        return '<button type="button" class="pg-uc" data-pg-kisi="' . (int)$s['id'] . '" data-isim="' . h($s['ad']) . '" data-gorev="' . h($s['alt']) . '" data-pasif="' . (!empty($s['pasif']) ? '1' : '0') . '" aria-haspopup="menu" aria-label="İşlemler: ' . h($s['ad']) . '" title="İşlemler">⋯</button>';
     };
 ?>
 <!-- Toplu seçim araç çubuğu: masaüstünde her zaman; <768px'te "Toplu seç" modunda hızlı seçimler açılır -->
@@ -76,10 +76,10 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
 <!-- ≥768px: çizelge ızgarası -->
 <div class="table-wrap pc-grid-wrap pg-grid-wrap" id="pcGridWrap">
 <table class="pc-grid pg-grid">
-    <colgroup><col class="pc-col-ad"></colgroup>
+    <colgroup><col class="pc-col-isim"></colgroup>
     <thead>
     <tr>
-        <th class="pc-ad pc-kose" scope="col"><span class="pg-ad-kap"><label class="pg-secbox" title="Görünen aktif kişilerin tümünü seç"><input type="checkbox" data-pg-sec-hepsi aria-label="Görünen aktif kişilerin tümünü seç"></label><span class="pg-ad-metin"><span class="pc-ad-ad">Kişi <span class="pc-adet">(<?= $say ?>)</span></span></span></span></th>
+        <th class="pc-isim pc-kose" scope="col"><span class="pg-isim-kap"><label class="pg-secbox" title="Görünen aktif kişilerin tümünü seç"><input type="checkbox" data-pg-sec-hepsi aria-label="Görünen aktif kişilerin tümünü seç"></label><span class="pg-isim-metin"><span class="pc-isim-yazi">Kişi <span class="pc-isim-sayi">(<?= $say ?>)</span></span></span></span></th>
         <?php foreach ($gunler as $g): ?>
         <th class="pc-g<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>" scope="col"<?= $g['bugun'] ? ' data-bugun' : '' ?>><button type="button" class="pg-gbtn" data-pg-gun="<?= h($g['tarih']) ?>" data-hs="<?= $g['hs'] ? '1' : '0' ?>" aria-pressed="false" title="<?= h($g['n'] . ' ' . $ayAd . ' ' . pc_gun_adlari_uzun()[$g['hg']] . ' — günü seç / seçimi kaldır') ?>"><span class="pc-gn"><?= $g['n'] ?></span><span class="pc-gk"><?= h($g['ad']) ?></span></button></th>
         <?php endforeach; ?>
@@ -92,7 +92,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <tbody>
     <?php foreach ($satirlar as $s): ?>
     <tr data-pg-satir="<?= (int)$s['id'] ?>"<?= !empty($s['pasif']) ? ' class="pg-pasif"' : '' ?>>
-        <th class="pc-ad" scope="row"><span class="pg-ad-kap"><?= empty($s['pasif']) ? '<label class="pg-secbox"><input type="checkbox" data-pg-sec="' . (int)$s['id'] . '" aria-label="Seç: ' . h($s['ad']) . '"></label>' : '<span class="pg-secbox pg-secbox-bos" aria-hidden="true"></span>' ?><span class="pg-ad-metin"><span class="pc-ad-ad"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span><?= $uc($s) ?></span></th>
+        <th class="pc-isim" scope="row"><span class="pg-isim-kap"><?= empty($s['pasif']) ? '<label class="pg-secbox"><input type="checkbox" data-pg-sec="' . (int)$s['id'] . '" aria-label="Seç: ' . h($s['ad']) . '"></label>' : '<span class="pg-secbox pg-secbox-bos" aria-hidden="true"></span>' ?><span class="pg-isim-metin"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span><?= $uc($s) ?></span></th>
         <?php foreach ($gunler as $g):
             $hh = $s['hucre'][$g['tarih']] ?? null;
             [$cls, $ic, $tt] = pg_hucre_goster($hh); ?>
@@ -107,14 +107,14 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     </tbody>
     <tfoot>
     <tr class="pc-say">
-        <th class="pc-ad" scope="row">O gün çalışan</th>
+        <th class="pc-isim" scope="row">O gün çalışan</th>
         <?php foreach ($gunler as $g): $n = (int)($tablo['gun_say'][$g['tarih']] ?? 0); ?>
         <td class="pc-h<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>" data-pg-say="<?= h($g['tarih']) ?>"><?= $n > 0 ? $n : '·' ?></td>
         <?php endforeach; ?>
         <td class="pc-oz" colspan="4"></td>
     </tr>
     <tr class="pc-genel">
-        <th class="pc-ad" scope="row">Genel toplam</th>
+        <th class="pc-isim" scope="row">Genel toplam</th>
         <td class="pc-genel-bos" colspan="<?= count($gunler) ?>"><span data-gz="kisi"><?= (int)$genel['kisi'] ?></span> kişi</td>
         <td class="pc-oz" data-gz-oz="gun"><?= h(pg_gun_fmt($genel['gun'])) ?></td>
         <td class="pc-oz" data-gz-oz="izin"><?= (int)$genel['izin'] ?></td>
@@ -138,7 +138,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <details class="pc-kisi<?= !empty($s['pasif']) ? ' pg-pasif' : '' ?>" data-emp-kisi="<?= (int)$s['id'] ?>">
         <summary>
             <?php if (empty($s['pasif'])): ?><input type="checkbox" class="pg-msec" data-pg-sec="<?= (int)$s['id'] ?>" aria-label="Seç: <?= h($s['ad']) ?>"><?php endif; ?>
-            <span class="pc-k-ad"><span class="pc-ad-ad"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
+            <span class="pc-k-isim"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
             <span class="pc-rozetler">
                 <span class="pc-rz" data-rz="gun" title="Çalışılan gün"><?= h(pg_gun_fmt($o['gun'])) ?> gün</span>
                 <span class="pc-rz" data-rz="izin" title="İzin günü"<?= (int)$o['izin'] === 0 ? ' hidden' : '' ?>><?= (int)$o['izin'] ?> izin</span>

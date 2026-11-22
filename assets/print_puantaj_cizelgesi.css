@@ -7,8 +7,8 @@
 .pcy-tablo tfoot { display: table-row-group; }
 .pcy-tablo tr { page-break-inside: avoid; break-inside: avoid; }
 .pcy-tablo thead th { background: #e7edfa; font-weight: 700; line-height: 1.1; }
-.pcy-tablo .pcy-ad { width: 34mm; text-align: left; padding: 1px 3px; white-space: nowrap; text-overflow: ellipsis; }
-.pcy-tablo .pcy-ad small { display: block; font-size: 5.5pt; color: #5b6b7f; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.pcy-tablo .pcy-isim { width: 34mm; text-align: left; padding: 1px 3px; white-space: nowrap; text-overflow: ellipsis; }
+.pcy-tablo .pcy-isim small { display: block; font-size: 5.5pt; color: #5b6b7f; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
 .pcy-tablo .pcy-oz { width: 9mm; font-weight: 700; font-variant-numeric: tabular-nums; }
 .pcy-tablo .pcy-gk { display: block; font-size: 5pt; font-weight: 400; }
 .pcy-tablo td.pcy-hs, .pcy-tablo th.pcy-hs { background: #e5e8ed; }
