@@ -52,7 +52,7 @@
         });
     }
     function silOnayi(tr) {
-        var id = tr.getAttribute('data-pk-satir'), ad = tr.getAttribute('data-ad') || '', gun = parseInt(tr.getAttribute('data-gun') || '0', 10) || 0;
+        var id = tr.getAttribute('data-pk-satir'), ad = tr.getAttribute('data-isim') || '', gun = parseInt(tr.getAttribute('data-gun') || '0', 10) || 0;
         api.pencereAc({
             baslik: 'Kişiyi sil', tamam: 'Kalıcı olarak sil', tehlike: true,
             mesaj: ad + ' ve tüm puantaj kayıtları (' + gun + ' gün kaydı) kalıcı olarak silinecek. Bu işlem geri alınamaz. Onaylıyor musunuz?',
@@ -112,7 +112,7 @@
         if (!is) return;
         var tr = b.closest('tr[data-pk-satir]');
         if (!tr) return;
-        if (is === 'duzenle') api.kisiPenceresi({ id: tr.getAttribute('data-pk-satir'), ad: tr.getAttribute('data-ad') || '', gorev: tr.getAttribute('data-gorev') || '' });
+        if (is === 'duzenle') api.kisiPenceresi({ id: tr.getAttribute('data-pk-satir'), ad: tr.getAttribute('data-isim') || '', gorev: tr.getAttribute('data-gorev') || '' });
         else if (is === 'durum') durumDegistir(tr);
         else if (is === 'sil') silOnayi(tr);
     });

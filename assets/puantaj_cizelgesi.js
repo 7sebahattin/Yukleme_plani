@@ -49,8 +49,8 @@
 
     function kisiAdi(hucre) {
         var det = hucre.closest('details.pc-kisi');
-        var el = det ? det.querySelector('.pc-ad-ad') : null;
-        if (!el) { var tr = hucre.closest('tr'); el = tr ? tr.querySelector('th .pc-ad-ad') : null; }
+        var el = det ? det.querySelector('.pc-isim-yazi') : null;
+        if (!el) { var tr = hucre.closest('tr'); el = tr ? tr.querySelector('th .pc-isim-yazi') : null; }
         return el ? el.textContent.trim() : '';
     }
     function gunMetni(tarih) {

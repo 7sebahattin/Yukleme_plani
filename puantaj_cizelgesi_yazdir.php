@@ -67,7 +67,7 @@ render_print_page_start('Aylık Puantaj Çizelgesi', 'daily', 'detail', 'landsca
     <table class="pcy-tablo">
         <thead>
         <tr>
-            <th class="pcy-ad"><?= $gunluk ? 'Çavuş' : ($giris ? 'Kişi' : 'Personel') ?> (<?= count($tablo['satirlar']) ?>)</th>
+            <th class="pcy-isim"><?= $gunluk ? 'Çavuş' : ($giris ? 'Kişi' : 'Personel') ?> (<?= count($tablo['satirlar']) ?>)</th>
             <?php foreach ($gunler as $g): ?><th class="<?= $g['hs'] ? 'pcy-hs' : '' ?>"><?= $g['n'] ?><span class="pcy-gk"><?= h($g['ad']) ?></span></th><?php endforeach; ?>
             <th class="pcy-oz">Gün</th>
             <?php if (!$giris): ?><th class="pcy-oz"><?= $gunluk ? 'İşçi-gün' : 'Saat' ?></th><th class="pcy-oz">Eksik</th><?php endif; ?>
@@ -77,7 +77,7 @@ render_print_page_start('Aylık Puantaj Çizelgesi', 'daily', 'detail', 'landsca
         <tbody>
         <?php foreach ($tablo['satirlar'] as $s): ?>
         <tr>
-            <td class="pcy-ad"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' (pasif)' : '' ?><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></td>
+            <td class="pcy-isim"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' (pasif)' : '' ?><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></td>
             <?php foreach ($gunler as $g): [$cls, $ic] = pc_hucre_goster($tur, $s['hucre'][$g['tarih']] ?? null); ?>
             <td class="<?= h(str_replace('pc-', 'pcy-', $cls)) ?><?= $g['hs'] ? ' pcy-hs' : '' ?>"><?= $ic ?></td>
             <?php endforeach; ?>
@@ -92,12 +92,12 @@ render_print_page_start('Aylık Puantaj Çizelgesi', 'daily', 'detail', 'landsca
         </tbody>
         <tfoot>
         <tr>
-            <td class="pcy-ad"><?= $gunluk ? 'O gün toplam işçi' : 'O gün çalışan' ?></td>
+            <td class="pcy-isim"><?= $gunluk ? 'O gün toplam işçi' : 'O gün çalışan' ?></td>
             <?php foreach ($gunler as $g): $n = (int)($tablo['gun_say'][$g['tarih']] ?? 0); ?><td><?= $n > 0 ? $n : '·' ?></td><?php endforeach; ?>
             <td colspan="<?= $gunluk ? 3 : ($giris ? 4 : 6) ?>"></td>
         </tr>
         <tr>
-            <td class="pcy-ad">GENEL TOPLAM (<?= (int)$genel['kisi'] ?>)</td>
+            <td class="pcy-isim">GENEL TOPLAM (<?= (int)$genel['kisi'] ?>)</td>
             <td colspan="<?= count($gunler) ?>"></td>
             <td class="pcy-oz"><?= $giris ? h(pg_gun_fmt($genel['gun'])) : (int)$genel['gun'] ?></td>
             <?php if (!$giris): ?>

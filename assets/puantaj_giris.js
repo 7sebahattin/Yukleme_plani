@@ -170,8 +170,8 @@
     }
     function kisiAdi(el) {
         var det = el.closest('details.pc-kisi');
-        var a = det ? det.querySelector('.pc-ad-ad') : null;
-        if (!a) { var tr = el.closest('tr'); a = tr ? tr.querySelector('th .pc-ad-ad') : null; }
+        var a = det ? det.querySelector('.pc-isim-yazi') : null;
+        if (!a) { var tr = el.closest('tr'); a = tr ? tr.querySelector('th .pc-isim-yazi') : null; }
         if (!a) return '';
         var t = a.firstChild ? a.firstChild.textContent : a.textContent;   // "(pasif)" etiketi ayrı <em>
         return String(t || '').trim();
@@ -209,7 +209,7 @@
     /* Kişi işlem menüsü (⋯) */
     function kisiMenusu(dugme) {
         var pasif = dugme.getAttribute('data-pasif') === '1';
-        bag = { tur: 'kisi', el: dugme, id: dugme.getAttribute('data-pg-kisi'), ad: dugme.getAttribute('data-ad') || '', gorev: dugme.getAttribute('data-gorev') || '', pasif: pasif };
+        bag = { tur: 'kisi', el: dugme, id: dugme.getAttribute('data-pg-kisi'), ad: dugme.getAttribute('data-isim') || '', gorev: dugme.getAttribute('data-gorev') || '', pasif: pasif };
         document.getElementById('pgIslemBaslik').textContent = bag.ad;
         islem.querySelectorAll('[data-pg-islem]').forEach(function (b) {
             var k = b.getAttribute('data-pg-islem');
