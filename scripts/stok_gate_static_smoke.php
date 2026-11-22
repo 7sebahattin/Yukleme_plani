@@ -158,6 +158,11 @@ ok('style.css / app.js stok sınıflarına dokunmaz', !str_contains((string)file
 ok('stok.js: yazma yalnız stok_kaydet.php; yönlendirme beyaz listesi; localStorage YOK', str_contains($js, "kaydet: 'stok_kaydet.php'") && str_contains($js, 'yonRe: /^(stok_[a-z_]+|transfer_fisleri)\\.php') && !str_contains($js, 'localStorage'));
 ok('stok.js: innerHTML yalnız sunucu kısmi yanıtı için (tek yer)', substr_count($js, 'innerHTML') === 1);
 
+echo "\n=== 6b. v558: Dönüşüm türü kaldırıldı ===\n";
+$__dz = ''; foreach (['config/stok_core.php', 'config/stok_ui.php', 'assets/stok.js', 'assets/stok.css', 'stok_kaydet.php', 'stok_giris_fisleri.php', 'stok_cikis_fisleri.php', 'transfer_fisleri.php', 'stok_kartlari.php', 'stok_tanimlari.php'] as $__f) $__dz .= kod($ROOT . '/' . $__f);
+ok('stok_core/ui/js/css/kaydet/sayfalarda donusum / dönüşüm / st-donusum izi YOK (DB ENUM yalnız migrate kartında olabilir)', !preg_match('/donusum|dönüşüm|Dönüşüm/u', $__dz));
+ok('stok_fis_turleri() yalnız giris/cikis/transfer (kaynakta DNS öneki yok)', preg_match("/'giris'\\s*=>.*'cikis'\\s*=>.*'transfer'\\s*=>/s", kod($ROOT . '/config/stok_core.php')) === 1 && !str_contains(kod($ROOT . '/config/stok_core.php'), "'DNS'"));
+
 echo "\n=== 7. Sürüm eşitliği ===\n";
 preg_match('/define\(\'APP_SURUM\',\s*\'v(\d+)\'/', (string)file_get_contents($ROOT . '/config/helpers.php'), $a);
 preg_match('/CACHE_NAME\s*=\s*[\'"]yukleme-plani-v(\d+)/', $sw, $b);

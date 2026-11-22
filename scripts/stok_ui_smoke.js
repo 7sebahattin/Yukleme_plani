@@ -8,7 +8,7 @@
 // DB gerçeği scripts/stok_ui_e2e_say.php ile okunur. Canlı DB'ye / migrasyona HİÇ dokunulmaz.
 // Bölümler: 1 kartlar masaüstü 1366 (tek ekran, süzgeç, master-detail, kart oluştur/düzenle/pasifleştir/sil) · 2 tanımlar 1366 ·
 //           3 tablet 820 · 4 mobil 390 (liste→detay→geri, alt çubuk, ≥44px, ≥16px, taşma, modal) · 5 şema yok / boş ·
-//           6 fişler 1366 (Enter/Ctrl+S giriş, master-detail, iptal, kopya, yetersiz→Yine de kaydet, transfer, dönüşüm sayfası 410 + sekme yok, kantar + cari) · 7 fiş formu 390.
+//           6 fişler 1366 (Enter/Ctrl+S giriş, master-detail, iptal, kopya, yetersiz→Yine de kaydet, transfer, dönüşüm sayfası 410 + sekme yok + v558 dönüşüm izi/reddi, kantar + cari) · 7 fiş formu 390.
 // =========================================================
 'use strict';
 const { execFileSync } = require('child_process');
@@ -340,7 +340,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await fp.fill('#stFisForm [name="evrak_no"]', 'IRS-E2E');
     await kartYaz(fp, '.st-fsatir:nth-child(1) .st-kart-ara', 'STK-0002');
     ok('Enter: kod → kart çözüldü ("STK-0002 — Biber (Dolmalık)"), bakiye ipucu, odak Miktar\'da', (await fp.inputValue('.st-fsatir:nth-child(1) .st-kart-ara')) === 'STK-0002 — Biber (Dolmalık)'
-      && /Mevcut: 2\.570 kg/.test(await metin(fp, '.st-fsatir:nth-child(1) .st-fs-ipucu') || '') && await fp.evaluate(() => document.activeElement.name === 'miktar[]'), await metin(fp, '.st-fsatir:nth-child(1) .st-fs-ipucu'));
+      && /Mevcut: 2\.120 kg/.test(await metin(fp, '.st-fsatir:nth-child(1) .st-fs-ipucu') || '') && await fp.evaluate(() => document.activeElement.name === 'miktar[]'), await metin(fp, '.st-fsatir:nth-child(1) .st-fs-ipucu'));
     await fp.keyboard.type('100'); await fp.keyboard.press('Enter');
     ok('Enter: Miktar → Birim', await fp.evaluate(() => document.activeElement.name === 'birim[]'));
     await fp.keyboard.press('Enter'); await fp.keyboard.type('20'); await fp.keyboard.press('Enter');
@@ -357,7 +357,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await yenilenmeBekle(fp, n0);
     let E = S7.say(); let son = E.fisler[E.fisler.length - 1];
     ok('Ctrl+S kaydeder: DB +1 giriş fişi (evrak IRS-E2E), detayına gidildi (?id=), toast fiş no', E.fis === E0.fis + 1 && son.tur === 'giris' && new RegExp('id=' + son.id).test(fp.url()) && (await metin(fp, '#stDetay .st-unvan')) === son.fis_no && new RegExp(son.fis_no).test(await toastMetin(fp) || ''), JSON.stringify(son));
-    ok('bakiye arttı: Biber Merkez 2.570 → 2.670 kg, Kasa +50', E.kartlar['2'].depo['Merkez Depo'] === 2670000 && E.kartlar['4'].depo['Merkez Depo'] === E0.kartlar['4'].depo['Merkez Depo'] + 50000);
+    ok('bakiye arttı: Biber Merkez 2.120 → 2.220 kg, Kasa +50', E.kartlar['2'].depo['Merkez Depo'] === 2220000 && E.kartlar['4'].depo['Merkez Depo'] === E0.kartlar['4'].depo['Merkez Depo'] + 50000);
     ok('detay: 2 satır, tutar sütunları, liste başında yeni fiş seçili', (await gorunurSay(fp, '#stDetay .st-fis-tablo tbody tr')) === 2 && (await fp.$eval('#stListe a.st-satir[aria-current="true"]', e => e.getAttribute('data-id'))) === String(son.id));
     const girisId = son.id;
 
@@ -377,7 +377,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await fp.click('#stModalIptal [data-iptal-onay]');
     await yenilenmeBekle(fp, n0);
     E = S7.say();
-    ok('iptal: DB durum iptal, Biber bakiyesi geri (2.570), detayda İPTAL şeridi', E.fisler.find(f => f.id === girisId).durum === 'iptal' && E.kartlar['2'].depo['Merkez Depo'] === 2570000 && await goster(fp, '#stDetay .st-iptal-serit'));
+    ok('iptal: DB durum iptal, Biber bakiyesi geri (2.120), detayda İPTAL şeridi', E.fisler.find(f => f.id === girisId).durum === 'iptal' && E.kartlar['2'].depo['Merkez Depo'] === 2120000 && await goster(fp, '#stDetay .st-iptal-serit'));
     await fp.click('#stDetay [data-kopya]'); await fp.waitForLoadState('load');
     ok('Kopyala → yeni form, satırlar dolu (2), "kopyalandı" bilgisi', /kopya=/.test(fp.url()) && (await gorunurSay(fp, '#stFisForm .st-fsatir')) === 2 && (await fp.inputValue('.st-fsatir:nth-child(1) .st-kart-ara')) === 'STK-0002 — Biber (Dolmalık)' && /kopyalandı/.test(await metin(fp, '[data-kaynak-bilgi]') || ''));
 
@@ -408,7 +408,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await fp.click('#stFisForm [data-kaydet]');
     await yenilenmeBekle(fp, n0);
     E = S7.say(); son = E.fisler[E.fisler.length - 1];
-    ok('transfer kaydedildi: Domates Merkez −100, Şube +100; detay "Merkez Depo → Şube Depo"', son.tur === 'transfer' && E.kartlar['1'].depo['Merkez Depo'] === 5450000 && E.kartlar['1'].depo['Şube Depo'] === 8350000 && /Merkez Depo → hedef Şube Depo|Merkez Depo.*Şube Depo/.test(await metin(fp, '#stDetay .st-meta') || ''),
+    ok('transfer kaydedildi: Domates Merkez −100, Şube +100; detay "Merkez Depo → Şube Depo"', son.tur === 'transfer' && E.kartlar['1'].depo['Merkez Depo'] === 5950000 && E.kartlar['1'].depo['Şube Depo'] === 8350000 && /Merkez Depo → hedef Şube Depo|Merkez Depo.*Şube Depo/.test(await metin(fp, '#stDetay .st-meta') || ''),
       JSON.stringify(E.kartlar['1'].depo));
     await shot(fp, 'B_transfer_pc');
     const trfTek = await fp.evaluate(() => ({ kayar: document.documentElement.scrollHeight - document.documentElement.clientHeight, tasma: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
@@ -419,6 +419,18 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     ok('dönüşüm sayfası: 410 tombstone (form yok, Stok Kartları bağlantısı var)', donYan.status() === 410 && !(await goster(fp, '#stFisForm')) && (await fp.locator('a[href="stok_kartlari.php"]').count()) === 1);
     await git(fp, 'stok_giris_fisleri.php');
     ok('sekme şeridi: Dönüşüm sekmesi YOK, 5 sekme + Kantar (Mal Kabul) bağlantısı', (await fp.locator('.st-sekmeler a[href="stok_donusum_fisleri.php"]').count()) === 0 && (await fp.locator('.st-sekmeler .st-sekme').count()) === 6);
+
+    // v558: dönüşüm türü koddan söküldü — sayfa DOM'unda iz yok; sunucu tur=donusum POST'unu reddeder (422), fiş yazılmaz.
+    const donIz = await fp.evaluate(() => document.documentElement.outerHTML.toLowerCase().indexOf('donusum') + document.documentElement.outerHTML.toLowerCase().indexOf('dönüşüm') + 2);
+    ok('v558: giriş sayfası DOM\'unda dönüşüm izi yok', donIz === 0, String(donIz));
+    const donPost = await fp.evaluate(async () => {
+        const fd = new URLSearchParams(); fd.set('islem', 'fis_kaydet'); fd.set('tur', 'donusum'); fd.set('tarih', '2026-11-13'); fd.set('depo', 'Merkez Depo');
+        fd.append('kart_id[]', '1'); fd.append('miktar[]', '5'); fd.append('yon[]', 'C'); fd.append('kart_id[]', '2'); fd.append('miktar[]', '5'); fd.append('yon[]', 'G');
+        const c = document.querySelector('input[name="csrf"]'); if (c) fd.set('csrf', c.value);
+        const r = await fetch('stok_kaydet.php', { method: 'POST', headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' }, body: fd });
+        return { st: r.status, t: (await r.text()).slice(0, 200) };
+    });
+    ok('v558: stok_kaydet tur=donusum → 4xx (Geçersiz fiş türü)', donPost.st >= 400 && donPost.st < 500, JSON.stringify(donPost));
 
     // cari seçili alış + kantardan doldur
     await git(fp, 'stok_giris_fisleri.php?yeni=1');

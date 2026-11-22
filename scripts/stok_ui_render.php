@@ -4,7 +4,7 @@
 // (geçici dosya SQLite + uydurma örnek veri; canlı DB'ye HİÇ dokunmaz; stub auth = admin). cari_ui_render.php aynası.
 //
 // Kullanım:  php scripts/stok_ui_render.php <sayfa> [parametre=deger ...] > _test_stok_<sayfa>.html
-//   sayfa: kartlar | tanimlar | giris | cikis | transfer | donusum (Parça B fiş sayfaları; yeni=1 form, id=N detay, kopya=N, kantar_id=N)
+//   sayfa: kartlar | tanimlar | giris | cikis | transfer (Parça B fiş sayfaları; yeni=1 form, id=N detay, kopya=N, kantar_id=N)
 //   Örnekler:
 //     php scripts/stok_ui_render.php kartlar id=1 > _test_stok_kartlar.html    (seçili kart + hareketler)
 //     php scripts/stok_ui_render.php kartlar                                    (seçimsiz liste)
@@ -27,8 +27,8 @@ foreach ($args as $a) {
     if ($sayfa === '') $sayfa = $a;
 }
 $dosyalar = ['kartlar' => 'stok_kartlari.php', 'tanimlar' => 'stok_tanimlari.php', 'tanimlari' => 'stok_tanimlari.php',
-    'giris' => 'stok_giris_fisleri.php', 'cikis' => 'stok_cikis_fisleri.php', 'transfer' => 'transfer_fisleri.php', 'donusum' => 'stok_donusum_fisleri.php'];
-if (!isset($dosyalar[$sayfa])) { fwrite(STDERR, "Kullanım: php scripts/stok_ui_render.php <kartlar|tanimlar|giris|cikis|transfer|donusum> [parametre=deger ...] [--sema|--bos|--yonetici-degil]\n"); exit(2); }
+    'giris' => 'stok_giris_fisleri.php', 'cikis' => 'stok_cikis_fisleri.php', 'transfer' => 'transfer_fisleri.php'];
+if (!isset($dosyalar[$sayfa])) { fwrite(STDERR, "Kullanım: php scripts/stok_ui_render.php <kartlar|tanimlar|giris|cikis|transfer> [parametre=deger ...] [--sema|--bos|--yonetici-degil]\n"); exit(2); }
 
 $db = db();
 if (!isset($bayrak['sema'])) {
