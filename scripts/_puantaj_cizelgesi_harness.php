@@ -12,6 +12,8 @@
 //             v554: giris (true → puantaj_giris_* tabloları KURULUR; varsayılan KURULMAZ = migrate edilmemiş site) ·
 //             giris_kisiler [[id, ad, gorev, depo, aktif],…] · giris_gunler [[kisi_id, ayın günü, kod],…] ·
 //             dump_giris (true → çıkışta STDERR "GIRIS_KISILER: json" + "GIRIS_GUNLER: json") · tum_tablolar (true → employees/PDKS tablolarının satır sayıları STDERR "SAYILAR: json")
+//             v555: files {alan:{name,tmp_name}} (→ $_FILES; gerçek HTTP yüklemesi yok → test kancası $GLOBALS['_pg_yukleme_denetimi'] kurulur) ·
+//             tmp_say (true → çıkışta STDERR "TMP_YENI: json" = istek sırasında sys_get_temp_dir()'de OLUŞAN yeni dosya adları; 'pcz_' öneki bu harness'ın kendi sayfa dosyası olduğundan sayılmaz) · sayfa tohumu: giris_kisiler satırı [id, ad, gorev, depo, aktif, sira?]
 // Çıkış kodu: 0 = sayfa çıktı verdi · 3 = forbidden() · 4 = sayfa istisna fırlattı. Denetim kayıtları STDERR'e "AUDIT: {json}".
 // =========================================================
 declare(strict_types=1);
@@ -141,8 +143,8 @@ if ($SEMA !== 'yok') {
     }
     if (!empty($OPT['giris'])) {   // v554 Puantaj Girişi (bağımsız): kendi iki tablosu + tohum
         foreach (pg_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }
-        $gk = db()->prepare("INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira, created_by, created_at) VALUES (?,?,?,?,?,0,1,?)");
-        foreach (($OPT['giris_kisiler'] ?? []) as $r) $gk->execute([(int)$r[0], $r[1], $r[2] === '' ? null : $r[2], $r[3], (int)($r[4] ?? 1), date('Y-m-d H:i:s')]);
+        $gk = db()->prepare("INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira, created_by, created_at) VALUES (?,?,?,?,?,?,1,?)");
+        foreach (($OPT['giris_kisiler'] ?? []) as $r) $gk->execute([(int)$r[0], $r[1], $r[2] === '' ? null : $r[2], $r[3], (int)($r[4] ?? 1), (int)($r[5] ?? 0), date('Y-m-d H:i:s')]);
         $gg = db()->prepare("INSERT INTO puantaj_giris_gunler (kisi_id, tarih, kod, user_id, created_at) VALUES (?,?,?,?,?)");
         foreach (($OPT['giris_gunler'] ?? []) as $r) $gg->execute([(int)$r[0], is_string($r[1]) && str_contains($r[1], '-') ? $r[1] : sprintf('%s-%02d', $TOHUM_AY, (int)$r[1]), $r[2], 1, date('Y-m-d H:i:s')]);   // gün = ayın günü ya da tam tarih
     }
@@ -183,6 +185,11 @@ if ($SEMA === 'hepsi') {
 
 if (!empty($OPT['debug'])) { fwrite(STDERR, 'gunluk=' . var_export(pdks_gunluk_sema_hazir(db()), true) . ' faz8a=' . var_export(pdks_gunluk_faz8a_sema_hazir(db()), true) . "\n"); foreach (['daily_worker_work_periods','worker_cards','daily_worker_card_events'] as $t) fwrite(STDERR, $t . '=' . var_export(pdks_gunluk_tablo_var(db(), $t), true) . "\n"); }
 $_GET = $GETJ; $_POST = []; $_FILES = [];
+if (!empty($OPT['files'])) {   // v555 Excel'den ekleme: gerçek yükleme yok → kanca is_uploaded_file yerine geçer
+    foreach ((array)$OPT['files'] as $alan => $f) $_FILES[$alan] = ['name' => (string)$f['name'], 'type' => 'application/octet-stream', 'tmp_name' => (string)$f['tmp_name'], 'error' => 0, 'size' => (int)@filesize((string)$f['tmp_name'])];
+    $GLOBALS['_pg_yukleme_denetimi'] = static fn(string $yol): bool => is_file($yol);
+}
+$TMP_ONCE = !empty($OPT['tmp_say']) ? array_map('basename', glob(sys_get_temp_dir() . '/*') ?: []) : [];
 $_SERVER['REQUEST_METHOD'] = 'GET';
 if (!empty($OPT['post'])) {   // v553 yazma ucu: form alanları $_POST'ta (role_pdks_require_request JSON gövdesi okumaz); yanıt JSON
     $_POST = (array)$OPT['post'];
@@ -198,6 +205,11 @@ if (!empty($OPT['dump_giris'])) register_shutdown_function(function () {
         fwrite(STDERR, 'GIRIS_KISILER: ' . json_encode(db()->query('SELECT id, ad, gorev, depo, aktif, sira FROM puantaj_giris_kisiler ORDER BY id')->fetchAll(), JSON_UNESCAPED_UNICODE) . "\n");
         fwrite(STDERR, 'GIRIS_GUNLER: ' . json_encode(db()->query('SELECT kisi_id, tarih, kod, user_id FROM puantaj_giris_gunler ORDER BY kisi_id, tarih')->fetchAll(), JSON_UNESCAPED_UNICODE) . "\n");
     } catch (Throwable $e) { fwrite(STDERR, "GIRIS_KISILER: yok\n"); }
+});
+if (!empty($OPT['tmp_say'])) register_shutdown_function(function () use ($TMP_ONCE) {
+    $simdi = array_map('basename', glob(sys_get_temp_dir() . '/*') ?: []);
+    $yeni = array_values(array_filter(array_diff($simdi, $TMP_ONCE), static fn($f) => !str_starts_with($f, 'pcz_')));   // pcz_ = bu harness'ın kendi geçici sayfası
+    fwrite(STDERR, 'TMP_YENI: ' . json_encode($yeni) . "\n");
 });
 if (!empty($OPT['tum_tablolar'])) register_shutdown_function(function () {
     $say = [];

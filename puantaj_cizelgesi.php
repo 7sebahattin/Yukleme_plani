@@ -11,7 +11,9 @@
 // puantaj_isaret_kaydet.php (fetch POST, CSRF). Tablo yoksa çizelge eskisi gibi, arayüz gizli.
 // v554: üçüncü sekme 'Puantaj Girişi' (sekme=giris) — BAĞIMSIZ, gayri resmi: kullanıcının kendi tanımladığı kişiler
 // (puantaj_giris_kisiler/gunler; employees/PDKS ile ilişkisiz). Kapı: monthly_timesheet.edit; yazma ucu
-// puantaj_giris_kaydet.php. Edit yetkisi + tablolar hazırsa VARSAYILAN sekme budur (sekme parametresi yoksa).
+// puantaj_giris_kaydet.php. v555: Puantaj Girişi İLK sekme + varsayılan açılış (sekme parametresi yoksa; kullanıcı görebiliyorsa);
+// içinde iç görünüm anahtarı [Puantaj] [Kişiler] (gorunum=kisiler: liste, düzenle/pasif/sil, toplu işlem, Excel'den ekle) ve
+// çoklu kişi × gün toplu işaretleme (assets/puantaj_giris.js). ?sablon=1 = Excel'den ekleme şablonu (xlsx) indirir (edit yetkisi).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -36,18 +38,45 @@ $csvIst = isset($_GET['csv']);
 $xlsxIst = isset($_GET['xlsx']);
 if ($csvIst || $xlsxIst) require_perm('reports.export');
 
-$sekme = (string)pc_sekme_sec((string)($_GET['sekme'] ?? ''), $sekmeler, $girisHazir);
+$sekme = (string)pc_sekme_sec((string)($_GET['sekme'] ?? ''), $sekmeler);
 $ay = pc_ay_dogrula((string)($_GET['ay'] ?? ''));
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 60);
 $pasif = in_array($sekme, ['personel', 'giris'], true) && !empty($_GET['pasif']);
 $depo = function_exists('active_depot') ? (active_depot() ?? '') : '';
 
-$tablo = $sekme === 'personel'
-    ? pc_tablo_personel($pdo, $ay, $q, $pasif)
-    : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
+// v555: Puantaj Girişi şablonu (Excel'den kişi ekleme) — yalnız Düzenle yetkisi; dosya üretir, hiçbir şey yazmaz
+if ($sekme === 'giris' && isset($_GET['sablon'])) {
+    if (!role_pdks_can('monthly_timesheet', 'edit')) forbidden('Bu işlem için yetkiniz yok.');
+    xlsx_gonder(pge_sablon_uret(), 'puantaj_kisi_sablonu.xlsx');
+}
+
+// v555: Puantaj Girişi iç görünümü: 'puantaj' (çizelge) | 'kisiler' (kişi yönetimi). Dışa aktarım her zaman çizelgedir.
+$gorunum = ($sekme === 'giris' && ($_GET['gorunum'] ?? '') === 'kisiler' && !$csvIst && !$xlsxIst) ? 'kisiler' : 'puantaj';
+$durum = in_array((string)($_GET['durum'] ?? ''), ['aktif', 'pasif'], true) ? (string)$_GET['durum'] : 'hepsi';
+$kisiVeri = null;
+if ($gorunum === 'kisiler') {
+    if (!pg_hazir($pdo)) {
+        $tablo = ['hata' => 'Puantaj Girişi tabloları henüz kurulmamış.', 'sema' => true];
+    } else {
+        try {
+            $hepsi = pg_kisiler_yonetim($pdo);
+            $kisiVeri = ['kisiler' => pg_kisiler_filtrele($hepsi, $q, $durum), 'sayac' => pg_kisi_sayaclari($hepsi)];
+            $tablo = ['tur' => 'giris', 'satirlar' => $kisiVeri['kisiler']];
+        } catch (Throwable $e) {
+            error_log('[puantaj_giris] kisiler: ' . $e->getMessage());
+            $tablo = ['hata' => 'Kişi listesi şu anda okunamadı.'];
+        }
+    }
+} else {
+    $tablo = $sekme === 'personel'
+        ? pc_tablo_personel($pdo, $ay, $q, $pasif)
+        : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
+}
 $hata = $tablo['hata'] ?? null;
 
 $param = ['sekme' => $sekme, 'ay' => $ay, 'q' => $q, 'pasif' => $pasif ? '1' : ''];
+$kisilerGorunum = $gorunum === 'kisiler';
+if ($kisilerGorunum) $param = ['sekme' => 'giris', 'gorunum' => 'kisiler', 'q' => $q, 'durum' => $durum === 'hepsi' ? '' : $durum];
 
 // v553: elle işaret arayüzü — yalnız Personel sekmesi, tablo hazır, 'edit' + kaynak (Personel kartları Gör) izni
 $piHazir = $sekme === 'personel' && $hata === null && pi_hazir($pdo);
@@ -102,11 +131,11 @@ $say = $hata === null ? count($tablo['satirlar']) : 0;
 $kisiEtiket = $gunluk ? 'Çavuş' : ($giris ? 'Kişi' : 'Personel');
 $ayUzun = pc_ay_adlari();
 ?>
-<div class="pc-page" data-tur="<?= h($tur) ?>"<?= $duzenle ? ' data-pi-url="puantaj_isaret_kaydet.php" data-pi-csrf="' . h(csrf_token()) . '"' : '' ?><?= $giris && $hata === null ? ' data-pg-url="puantaj_giris_kaydet.php" data-pg-csrf="' . h(csrf_token()) . '" data-pg-ay="' . h($ay) . '" data-pg-q="' . h($q) . '" data-pg-kodlar="' . h(pg_kodlar_json()) . '"' : '' ?>>
+<div class="pc-page" data-tur="<?= h($tur) ?>"<?= $duzenle ? ' data-pi-url="puantaj_isaret_kaydet.php" data-pi-csrf="' . h(csrf_token()) . '"' : '' ?><?= $giris && $hata === null ? ' data-pg-url="puantaj_giris_kaydet.php" data-pg-csrf="' . h(csrf_token()) . '" data-pg-ay="' . h($ay) . '" data-pg-q="' . h($q) . '" data-pg-gorunum="' . ($kisilerGorunum ? 'kisiler' : 'puantaj') . '" data-pg-kodlar="' . h(pg_kodlar_json()) . '"' : '' ?>>
 <div class="page-head">
     <div>
         <h1>📅 Aylık Puantaj Çizelgesi</h1>
-        <p class="muted" style="margin:4px 0 0"><?= h(pc_ay_basligi($ay)) ?> · <?= h($depo !== '' ? $depo : 'Tüm depolar') ?></p>
+        <p class="muted" style="margin:4px 0 0"><?= h($kisilerGorunum ? 'Puantaj Girişi · Kişiler' : pc_ay_basligi($ay)) ?> · <?= h($depo !== '' ? $depo : 'Tüm depolar') ?></p>
     </div>
     <div class="page-head-actions">
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
@@ -115,39 +144,59 @@ $ayUzun = pc_ay_adlari();
 
 <form method="get" action="puantaj_cizelgesi.php" class="pc-bar" id="pcForm">
     <input type="hidden" name="sekme" value="<?= h($sekme) ?>">
+    <?php if ($kisilerGorunum): ?><input type="hidden" name="gorunum" value="kisiler"><?php endif; ?>
+    <?php if (!$kisilerGorunum): ?>
     <div class="pc-ay">
         <a class="btn pc-ok" href="<?= h(pc_url('puantaj_cizelgesi.php', ['ay' => $onceki] + $param)) ?>" aria-label="Önceki ay" title="Önceki ay">‹</a>
         <input type="month" name="ay" value="<?= h($ay) ?>" class="pc-ay-giris" pattern="\d{4}-\d{2}" placeholder="YYYY-AA" aria-label="Ay" data-oto>
         <a class="btn pc-ok" href="<?= h(pc_url('puantaj_cizelgesi.php', ['ay' => $sonraki] + $param)) ?>" aria-label="Sonraki ay" title="Sonraki ay">›</a>
     </div>
+    <?php endif; ?>
     <input type="search" name="q" value="<?= h($q) ?>" class="pc-ara" placeholder="<?= $giris ? 'Ad veya görev ara…' : 'Ad veya sicil ara…' ?>" aria-label="<?= $giris ? 'Ad veya görev ara' : 'Ad veya sicil ara' ?>" maxlength="60" enterkeyhint="search">
-    <?php if ($sekme === 'personel' || $giris): ?>
+    <?php if ($kisilerGorunum): ?>
+    <select name="durum" class="pc-ay-giris pk-durum-sec" aria-label="Durum süzgeci" data-oto>
+        <option value="hepsi"<?= $durum === 'hepsi' ? ' selected' : '' ?>>Tümü</option>
+        <option value="aktif"<?= $durum === 'aktif' ? ' selected' : '' ?>>Aktif</option>
+        <option value="pasif"<?= $durum === 'pasif' ? ' selected' : '' ?>>Pasif</option>
+    </select>
+    <?php elseif ($sekme === 'personel' || $giris): ?>
     <label class="pc-pasif"><input type="checkbox" name="pasif" value="1" <?= $pasif ? 'checked' : '' ?> data-oto> Pasifleri de göster</label>
     <?php endif; ?>
     <noscript><button type="submit" class="btn">Göster</button></noscript>
     <?php if (count($sekmeler) > 1): ?>
     <nav class="pc-sekmeler" aria-label="Puantaj türü">
         <?php foreach ($sekmeler as $sk): ?>
-        <a href="<?= h(pc_url('puantaj_cizelgesi.php', ['sekme' => $sk] + $param)) ?>" class="pc-sekme<?= $sk === $sekme ? ' is-aktif' : '' ?>"<?= $sk === $sekme ? ' aria-current="page"' : '' ?>><?= h($adlar[$sk]) ?></a>
+        <a href="<?= h(pc_url('puantaj_cizelgesi.php', ['sekme' => $sk, 'ay' => $ay, 'q' => $q, 'pasif' => ($pasif && $sk !== 'gunluk') ? '1' : ''])) ?>" class="pc-sekme<?= $sk === $sekme ? ' is-aktif' : '' ?>"<?= $sk === $sekme ? ' aria-current="page"' : '' ?>><?= h($adlar[$sk]) ?></a>
         <?php endforeach; ?>
     </nav>
     <?php endif; ?>
     <div class="pc-aksiyon">
         <?php if ($giris && $hata === null): ?><button type="button" class="btn btn-sm btn-primary pg-ekle" data-pg-kisi-ekle>+ Kişi ekle</button><?php endif; ?>
+        <?php if ($kisilerGorunum && $hata === null): ?><button type="button" class="btn btn-sm pk-excel-ac" data-pk-excel-ac>Excel'den ekle</button><?php endif; ?>
+        <?php if (!$kisilerGorunum): ?>
         <?= $hata === null ? export_menu(pc_url('puantaj_cizelgesi.php', $param + ['csv' => '1']), pc_url('puantaj_cizelgesi.php', $param + ['xlsx' => '1']), 'Excel') : '' ?>
         <?php if ($hata === null): ?><a class="btn btn-sm btn-ghost" target="_blank" rel="noopener" href="<?= h(pc_url('puantaj_cizelgesi_yazdir.php', $param)) ?>">🖨️ Yazdır</a><?php endif; ?>
+        <?php endif; ?>
     </div>
 </form>
+<?php if ($giris && $hata === null): ?>
+<nav class="pg-gorunum" aria-label="Puantaj Girişi görünümü">
+    <a href="<?= h(pc_url('puantaj_cizelgesi.php', ['sekme' => 'giris', 'ay' => $ay, 'q' => $kisilerGorunum ? '' : $q, 'pasif' => $pasif ? '1' : ''])) ?>" class="pg-gorunum-bag<?= $kisilerGorunum ? '' : ' is-aktif' ?>"<?= $kisilerGorunum ? '' : ' aria-current="page"' ?>>📅 Puantaj</a>
+    <a href="<?= h(pc_url('puantaj_cizelgesi.php', ['sekme' => 'giris', 'gorunum' => 'kisiler', 'q' => $kisilerGorunum ? $q : ''])) ?>" class="pg-gorunum-bag<?= $kisilerGorunum ? ' is-aktif' : '' ?>"<?= $kisilerGorunum ? ' aria-current="page"' : '' ?>>👥 Kişiler</a>
+</nav>
+<?php endif; ?>
 
+<?php if (!$kisilerGorunum): ?>
 <div class="pc-lejant" id="pcLejant">
     <button type="button" class="pc-lejant-dugme" aria-expanded="false" aria-controls="pcLejantIc" title="Gösterge">ⓘ <span>Gösterge</span></button>
     <div class="pc-lejant-ic" id="pcLejantIc"><?= h(pc_lejant_metni($tur, false)) ?>
         <?php if ($giris): ?><span class="pc-kl-liste"><?php foreach (pg_kodlar() as $k => $kd): ?><span class="pc-kl pc-k pc-k-<?= h($kd['sinif']) ?>"><b><?= h($k) ?></b> <?= h($kd['ad']) ?></span><?php endforeach; ?></span>
-        <?php if ($hata === null): ?><span class="pc-kl-ipucu">Güne tıklayarak (mobilde dokunarak) işaretleyin; gün numarasına tıklamak o güne tüm görünen kişiler için tek işaret atar; kişi adının yanındaki ⋯ menüsünden düzenleyebilirsiniz.</span><?php endif; ?>
+        <?php if ($hata === null): ?><span class="pc-kl-ipucu">Hücreye tıklayarak (mobilde dokunarak) tek gün işaretleyin. Çok kişiye birden: kişi kutularını ve gün numaralarını seçin (ya da "Gün seç" kısayolları), alttaki çubuktan kodu seçip Uygula'ya basın. Kişi adının yanındaki ⋯ menüsünden düzenleyebilirsiniz.</span><?php endif; ?>
         <?php elseif ($piHazir): ?><span class="pc-kl-liste"><?php foreach (pi_kodlar() as $k => $kd): ?><span class="pc-kl pc-k pc-k-<?= h($kd['sinif']) ?>"><b><?= h($k) ?></b> <?= h($kd['ad']) ?></span><?php endforeach; ?></span><?php endif; ?>
         <?php if ($duzenle): ?><span class="pc-kl-ipucu">Güne tıklayarak (mobilde dokunarak) işaretleyin; işaret, o günün otomatik X / ! değerinin yerine geçer.</span><?php endif; ?>
     </div>
 </div>
+<?php endif; ?>
 <?php if ($piSemaNotu): ?>
 <p class="pc-not">Şema kurulumu: <a href="migrate.php#puantaj-isaret">migrate.php › Puantaj İşaretleri</a> (elle gün işaretleme için tablo henüz kurulmamış; çizelge bu olmadan da çalışır).</p>
 <?php endif; ?>
@@ -160,6 +209,7 @@ $ayUzun = pc_ay_adlari();
 
 <?php if ($hata !== null): ?>
 <div class="pc-bos" role="status"><span aria-hidden="true">⚠️</span> <?= h($hata) ?><?php if (!empty($tablo['sema'])): ?><br>Önce <a href="migrate.php#puantaj-giris">migrate.php › Puantaj Girişi</a> kartını çalıştırın.<?php endif; ?></div>
+<?php elseif ($kisilerGorunum): pg_kisiler_ekran_ciz($kisiVeri, ['q' => $q, 'durum' => $durum]); ?>
 <?php elseif ($giris): pg_ekran_ciz($tablo, ['ay' => $ay, 'q' => $q, 'pasif' => $pasif]); ?>
 <?php elseif ($say === 0): ?>
 <div class="pc-bos" role="status"><span aria-hidden="true">📭</span> <?= $q !== '' ? 'Aramanıza uyan ' . h(mb_strtolower($kisiEtiket, 'UTF-8')) . ' yok.' : h(pc_ay_basligi($ay)) . ' için ' . ($gunluk ? 'çavuş kaydı' : 'personel') . ' bulunamadı.' ?></div>
@@ -178,6 +228,7 @@ $ayUzun = pc_ay_adlari();
 <!-- ≥768px: çizelge ızgarası -->
 <div class="table-wrap pc-grid-wrap" id="pcGridWrap">
 <table class="pc-grid">
+    <colgroup><col class="pc-col-ad"></colgroup>
     <thead>
     <tr>
         <th class="pc-ad pc-kose" scope="col"><?= h($kisiEtiket) ?> <span class="pc-adet">(<?= $say ?>)</span></th>
@@ -301,4 +352,5 @@ $ayUzun = pc_ay_adlari();
 
 <script src="<?= h($base) ?>assets/puantaj_cizelgesi.js?v=<?= (int)@filemtime(__DIR__ . '/assets/puantaj_cizelgesi.js') ?>" defer></script>
 <?php if ($giris && $hata === null): ?><script src="<?= h($base) ?>assets/puantaj_giris.js?v=<?= (int)@filemtime(__DIR__ . '/assets/puantaj_giris.js') ?>" defer></script><?php endif; ?>
+<?php if ($kisilerGorunum && $hata === null): ?><script src="<?= h($base) ?>assets/puantaj_giris_kisiler.js?v=<?= (int)@filemtime(__DIR__ . '/assets/puantaj_giris_kisiler.js') ?>" defer></script><?php endif; ?>
 <?php render_footer(); ?>
