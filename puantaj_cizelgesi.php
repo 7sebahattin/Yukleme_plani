@@ -50,7 +50,7 @@ if ($csvIst || $xlsxIst) {
         header('Location: ' . pc_url('puantaj_cizelgesi.php', $param));
         exit;
     }
-    $filtre = ['sekme' => $sekme, 'ay' => $ay, 'q' => $q, 'depo' => $depo, 'pasif' => $pasif ? '1' : ''];
+    $filtre = ['sekme' => $sekme, 'ay' => $ay, 'arama' => $q !== '', 'depo' => $depo, 'pasif' => $pasif ? '1' : ''];
     $dosya = 'puantaj_cizelgesi_' . $sekme . '_' . $ay;
     $acik = array_filter([$depo !== '' ? 'Depo: ' . $depo : 'Tüm depolar', $q !== '' ? 'Arama: ' . $q : '', pc_lejant_metni($tablo['tur'])]);
     if ($xlsxIst) {
@@ -65,7 +65,10 @@ if ($csvIst || $xlsxIst) {
     fprintf($out, "\xEF\xBB\xBF");
     fputcsv($out, pc_disa_baslik($tablo), ';', '"', '\\');
     foreach (pc_disa_satirlar($tablo) as $r) {
-        foreach ($r as $i => $v) if (is_float($v)) $r[$i] = number_format($v, 2, ',', '');   // TR Excel için ondalık virgül
+        foreach ($r as $i => $v) {
+            if (is_float($v)) $r[$i] = number_format($v, 2, ',', '');   // TR Excel için ondalık virgül
+            elseif (is_string($v) && $v !== '' && strpos("=+-@\t\r", $v[0]) !== false) $r[$i] = "'" . $v;   // CSV formül enjeksiyonu koruması
+        }
         fputcsv($out, $r, ';', '"', '\\');
     }
     fclose($out);

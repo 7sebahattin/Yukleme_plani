@@ -23,6 +23,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/uretim.php';   // v507: can_uretim()
+require_once __DIR__ . '/config/puantaj_cizelgesi.php';   // v552: kart görünürlüğü = sayfanın açılabileceği sekme var mı
 $auth_user = require_login();
 role_pdks_require_request();
 
@@ -128,7 +129,7 @@ render_flash();
 </a>
 <?php endif; ?>
 
-<?php if ($p_adm || role_pdks_can('monthly_timesheet')): ?>
+<?php if (!empty(pc_sekmeler())): ?>
 <a href="puantaj_cizelgesi.php" class="home-card">
     <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
     <div class="home-card-title">Puantaj Çizelgesi</div>
