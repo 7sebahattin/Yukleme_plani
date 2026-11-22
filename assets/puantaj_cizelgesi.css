@@ -13,6 +13,12 @@
     --pc-e-bg: #fde7b8; --pc-e: #8a4300;
     --pc-bugun: #2563eb; --pc-uyari-bg: #fde7b8; --pc-uyari: #8a4300;
     --pc-accent: #1d4ed8; --pc-hover: #f2f6fd;
+    /* v553 elle işaret kodları: renk + HARF birlikte */
+    --pc-kd-bg: #f8caca; --pc-kd: #8c1d1d;     /* D Devamsız: kırmızı */
+    --pc-kiz-bg: #c9defa; --pc-kiz: #123f86;   /* İ Yıllık izin: mavi */
+    --pc-kuc-bg: #e6defa; --pc-kuc: #4a2f8a;   /* Ü Ücretsiz izin: açık mavi / lavanta */
+    --pc-kr-bg: #fff0a0; --pc-kr: #6b5600;     /* R Raporlu: sarı */
+    --pc-kt-bg: #4b5563; --pc-kt: #ffffff;     /* T Resmi tatil: koyu gri */
     color: var(--pc-text);
 }
 html[data-theme="dark"] .pc-page {
@@ -23,6 +29,11 @@ html[data-theme="dark"] .pc-page {
     --pc-e-bg: #4a3411; --pc-e: #f7c56b;
     --pc-bugun: #6aa8ff; --pc-uyari-bg: #4a3411; --pc-uyari: #f7c56b;
     --pc-accent: #8ab4ff; --pc-hover: #1d2736;
+    --pc-kd-bg: #5a2020; --pc-kd: #ffb4b4;
+    --pc-kiz-bg: #1c3a66; --pc-kiz: #a9ccff;
+    --pc-kuc-bg: #3a2f5e; --pc-kuc: #d3c4ff;
+    --pc-kr-bg: #5a4b10; --pc-kr: #ffe27a;
+    --pc-kt-bg: #8b95a5; --pc-kt: #0b1220;
 }
 
 /* ── Üst çubuk ── */
@@ -72,6 +83,23 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
 .pc-grid td.pc-x, .pc-t.pc-x { background: var(--pc-x-bg) !important; color: var(--pc-x); }
 .pc-grid td.pc-e, .pc-t.pc-e { background: var(--pc-e-bg) !important; color: var(--pc-e); }
 .pc-grid td.pc-e b { font-weight: 800; }
+/* v553 elle işaret hücreleri (D İ Ü R T): özel özelliklerle renk; hafta sonu gri (!important) bunu ezmesin */
+.pc-k-d { --k-bg: var(--pc-kd-bg); --k-fg: var(--pc-kd); }
+.pc-k-iz { --k-bg: var(--pc-kiz-bg); --k-fg: var(--pc-kiz); }
+.pc-k-uc { --k-bg: var(--pc-kuc-bg); --k-fg: var(--pc-kuc); }
+.pc-k-r { --k-bg: var(--pc-kr-bg); --k-fg: var(--pc-kr); }
+.pc-k-t { --k-bg: var(--pc-kt-bg); --k-fg: var(--pc-kt); }
+.pc-k { background: var(--k-bg); color: var(--k-fg); }
+.pc-grid td.pc-k, .pc-t.pc-k { background: var(--k-bg) !important; color: var(--k-fg); position: relative; }
+.pc-grid td.pc-k b { font-weight: 800; font-size: .9rem; }
+.pc-kn { position: absolute; top: 1px; right: 3px; font-size: .62rem; line-height: 1; opacity: .85; }
+.pc-duz { cursor: pointer; }
+.pc-grid td.pc-duz:hover { outline: 2px solid var(--pc-accent); outline-offset: -2px; }
+.pc-duz.pi-sec { outline: 2px solid var(--pc-accent); outline-offset: -2px; }
+.pc-kl-liste { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 0 0 0 8px; vertical-align: middle; }
+.pc-kl { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .74rem; white-space: nowrap; }
+.pc-kl b { font-weight: 800; }
+.pc-kl-ipucu { display: block; margin-top: 4px; }
 /* bugünün sütunu: çerçeveli (sol/sağ kenar; başlıkta + üst) */
 .pc-grid .pc-bugun { border-left: 2px solid var(--pc-bugun); border-right: 2px solid var(--pc-bugun); }
 .pc-grid thead .pc-bugun { border-top: 2px solid var(--pc-bugun); }
@@ -112,6 +140,9 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
 .pc-t-ic i { font-style: normal; font-size: .64rem; }
 .pc-t.pc-b .pc-t-ic { color: var(--pc-muted); opacity: .55; }
 .pc-t.pc-bugun { outline: 2px solid var(--pc-bugun); outline-offset: -1px; }
+.pc-t.pc-k .pc-t-n { color: inherit; opacity: .8; }
+.pc-t.pc-k .pc-t-ic b { font-size: .95rem; font-weight: 800; }
+.pc-t.pc-duz { cursor: pointer; }
 .pc-t-bas.pc-hs { background: transparent !important; }
 
 @media (max-width: 767px) {
@@ -129,4 +160,34 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
     .pc-lejant.acik .pc-lejant-ic { display: block; }
 }
 
+/* ── Elle işaret menüsü (v553) ──
+   Masaüstü: hücrenin yanında küçük menü (JS position:fixed koordinat verir). <768px: alt sayfa.
+   z-index ≥ 600 (alt çubuk 500, topbar/sidebar 100). <form> YOK (modal-form tuzağı). */
+.pi-ovl { position: fixed; inset: 0; z-index: 599; background: transparent; }
+.pi-menu { position: fixed; z-index: 600; width: 224px; max-width: calc(100vw - 16px); padding: 8px; border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-surface); color: var(--pc-text); box-shadow: 0 8px 28px rgba(0, 0, 0, .28); }
+.pi-menu[hidden], .pi-ovl[hidden], .pi-hata[hidden] { display: none; }
+.pi-bas { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 2px 2px 6px; }
+.pi-baslik { font-size: .8rem; font-weight: 600; line-height: 1.25; color: var(--pc-muted); }
+.pi-kapat { display: none; flex: none; width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--pc-text); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.pi-liste { display: flex; flex-direction: column; gap: 4px; }
+.pi-dugme { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid var(--pc-border); border-radius: 8px; background: var(--pc-surface); color: var(--pc-text); font: inherit; font-size: .88rem; text-align: left; cursor: pointer; }
+.pi-dugme.pc-k { background: var(--k-bg); color: var(--k-fg); border-color: transparent; }
+.pi-dugme b { flex: none; width: 1.4em; text-align: center; font-size: 1rem; font-weight: 800; }
+.pi-dugme[aria-pressed="true"] { outline: 2px solid var(--pc-accent); outline-offset: 1px; }
+.pi-dugme:hover:not(:disabled), .pi-dugme:focus-visible { filter: brightness(.96); outline: 2px solid var(--pc-accent); outline-offset: 1px; }
+.pi-dugme:disabled { opacity: .45; cursor: default; }
+.pi-temizle { justify-content: center; margin-top: 2px; color: var(--pc-muted); }
+.pi-hata { margin: 6px 2px 0; font-size: .8rem; color: #b42318; }
+html[data-theme="dark"] .pi-hata { color: #ff9d94; }
+.pi-menu.pi-yukleniyor { opacity: .7; pointer-events: none; }
+
+@media (max-width: 767px) {
+    .pi-ovl { background: rgba(0, 0, 0, .4); }
+    .pi-menu { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0; width: auto; max-width: none; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); border-radius: 14px 14px 0 0; border-width: 1px 0 0; }
+    .pi-baslik { font-size: .9rem; }
+    .pi-kapat { display: inline-block; }
+    .pi-dugme { min-height: 48px; font-size: 1rem; }
+}
+
+@media print { .pi-menu, .pi-ovl { display: none !important; } }
 @media print { .pc-page .pc-bar, .pc-page .pc-lejant-dugme { display: none !important; } }
