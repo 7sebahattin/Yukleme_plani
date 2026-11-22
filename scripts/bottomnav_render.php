@@ -178,6 +178,21 @@ $PROFILLER = [
         'perms' => ['muhasebe.cari_kartlari.read','muhasebe.cari_dekontlar.read'],
     ],
 ];
+// v555: eski Yükleme Planı/Paletleme/Mal Kabul girişleri (records/cikma/kantar adayları) YALNIZ yeni karşılığı (muhasebe fiş sayfası:
+// arac_yukleme_fisleri / palet_fisleri / mal_kabul_fisleri, muhasebe_sayfa_can) kullanıcıya görünüyorsa menüden (sidebar + mobil Diğer
+// + alt çubuk adayları) kalkar. Karşılığını göremeyen rol (operator, viewer, dort_sayfa…) eski girişi KORUR.
+//  · yeni_fis_hepsi      : eski izinleri + 3 yeni fiş sayfası → eski 3 aday YOK, yeni 3 muhasebe sayfası sheet'te
+//  · yeni_fis_kismi      : eski izinleri + YALNIZ Mal Kabul Fişleri → yalnız kantar adayı gizli (karşılık BAŞINA karar)
+//  · yalniz_yeni_fis     : eski izni YOK, yalnız 3 yeni fiş sayfası (dashboard.read yok → Ana Sayfa ilk izinli muhasebe sayfasına gider)
+$PROFILLER['yeni_fis_hepsi'] = ['ad' => 'Özel rol: eski izinler + 3 yeni fiş sayfası (eski girişler gizli)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+    'rol' => ['slug' => 'yeni_fis_hepsi', 'label' => 'Yeni Fiş Hepsi'],
+    'perms' => ['dashboard.read','records.read','kantar.read','reports.read','muhasebe.arac_yukleme_fisleri.read','muhasebe.palet_fisleri.read','muhasebe.mal_kabul_fisleri.read']];
+$PROFILLER['yeni_fis_kismi'] = ['ad' => 'Özel rol: eski izinler + yalnız Mal Kabul Fişleri (yalnız eski Mal Kabul gizli)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+    'rol' => ['slug' => 'yeni_fis_kismi', 'label' => 'Yeni Fiş Kısmi'],
+    'perms' => ['dashboard.read','records.read','kantar.read','reports.read','muhasebe.mal_kabul_fisleri.read']];
+$PROFILLER['yalniz_yeni_fis'] = ['ad' => 'Özel rol: yalnız 3 yeni fiş sayfası (eski izin YOK, dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+    'rol' => ['slug' => 'yalniz_yeni_fis', 'label' => 'Yalnız Yeni Fiş'],
+    'perms' => ['muhasebe.arac_yukleme_fisleri.read','muhasebe.palet_fisleri.read','muhasebe.mal_kabul_fisleri.read']];
 foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read','frugro_only'=>'siparis.frugro.read'] as $key=>$permission) {
     $PROFILLER[$key]=['ad'=>'Ayrıntılı sayfa '.$key,'admin'=>false,'depo'=>'ANONIM TEST DEPO','rol'=>['slug'=>$key,'label'=>$key],'perms'=>['dashboard.read','role.permissions.detailed',$permission]];
 }
@@ -249,6 +264,7 @@ $ANAHTAR_SAYFA = [
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
+$ESKI_YENI_UYG = array_map(fn($x) => $x . '.php', nav_eski_esleri());
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
 $SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'frugro', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
@@ -293,6 +309,9 @@ $SAYFALAR = [
     'definitions' => ['self' => '/definitions.php',    'kapi' => 'definitions.php',    'bolum' => 'definitions.php',    'baslik' => 'Tanımlar'],
     // v552: anahtarsız (muhasebe) sayfa — sheet'te `.bn-tile-link`; nav_aktif_anahtar() dosya slug'ı döndürür
     'cari_kartlari' => ['self' => '/cari_kartlari.php', 'kapi' => 'cari_kartlari.php', 'bolum' => 'cari_kartlari.php', 'baslik' => 'Cari Kayıt Kartları'],
+    // v555: yeni fiş sayfaları (eski records/cikmalar/kantar'ın yeni karşılığı) — anahtarsız muhasebe sayfası; nav_aktif_anahtar() slug döndürür
+    'arac_fis'    => ['self' => '/arac_yukleme_fisleri.php', 'kapi' => 'arac_yukleme_fisleri.php', 'bolum' => 'arac_yukleme_fisleri.php', 'baslik' => 'Araç Yükleme Fişleri'],
+    'mal_kabul_fis' => ['self' => '/mal_kabul_fisleri.php', 'kapi' => 'mal_kabul_fisleri.php', 'bolum' => 'mal_kabul_fisleri.php', 'baslik' => 'Mal Kabul Fişleri'],
 ];
 
 // Hal Kayıt sayfasının KENDİ düzen kuralları (iframe'i bottomnav'ın üstünde
@@ -355,6 +374,7 @@ $manifest = [
     'uretim'   => date('c'),
     'anahtar_sayfa' => $ANAHTAR_SAYFA,
     'muhasebe_sayfalar' => $muhSayfalar,
+    'eski_yeni' => ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php'],
     'kok'      => $ROOT,
     'app_surum'=> APP_SURUM,
     'gates'    => $gate_meta,
@@ -363,6 +383,7 @@ $manifest = [
     'sayfalar' => [],
 ];
 $uyari = [];
+if ($ESKI_YENI_UYG !== ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php']) { fwrite(STDERR, "nav_eski_esleri() eşlemesi değişti: " . json_encode($ESKI_YENI_UYG) . "\n"); exit(1); }
 foreach ($PROFILLER as $pk => $pr) {
     $PROFIL = ['perms' => $pr['perms'], 'admin' => $pr['admin'], 'depo' => $pr['depo'], 'rol' => $pr['rol']];
 
@@ -383,7 +404,10 @@ foreach ($PROFILLER as $pk => $pr) {
 
     // Alt çubuk beklentileri — HEDEF SAYFA KAPILARINDAN türetilir (uygulamanın
     // nav_alt_izinler()'inden DEĞİL), sonra uygulamayla çapraz kontrol edilir.
-    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]]));
+    // v555: eski girişi (records/cikma/kantar) kendi kapısı geçse de YENİ karşılığı (muhasebe fiş sayfası) görünüyorsa aday DEĞİLDİR.
+    // Eşleme uygulamanın nav_eski_esleri()'nden BAĞIMSIZ yazıldı ve aşağıda onunla karşılaştırılır.
+    $ESKI_YENI = ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php'];
+    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]] && !(isset($ESKI_YENI[$k]) && !empty($izinli[$ESKI_YENI[$k]]))));
     $uygAday = array_keys(array_filter(nav_alt_izinler()));
     if ($uygAday !== $adaylarHam) $uyari[] = "$pk: nav_alt_izinler() [" . implode(',', $uygAday) . "] ≠ kapı tablosu [" . implode(',', $adaylarHam) . "]";
     $home = can('dashboard.read') ? 'index.php' : $fap;
@@ -431,6 +455,7 @@ foreach ($PROFILLER as $pk => $pr) {
     if ($pk === 'admin') {
         foreach (['quick_list', 'quick_form'] as $quickPage) {
             $s = $SAYFALAR[$quickPage];
+            // v555: admin'de eski 'records' adayı artık YOK (yeni karşılığı Araç Yükleme Fişleri görünür) → eski çerezdeki 'records' sessizce atılır, slotları 'rapor' doldurur.
             $_COOKIE['asya_nav'] = 'u:1;s:records,hks,ptak;p:qcost';
             $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
             unset($_COOKIE['asya_nav']);
@@ -440,7 +465,7 @@ foreach ($PROFILLER as $pk => $pr) {
                 'profil' => $pk, 'sayfa' => $quickPage . '+pinned', 'dosya' => $dosya,
                 'yol' => ltrim($s['self'], '/'), 'bolum' => 'hizli_maliyet.php', 'anahtar' => 'qcost',
                 'depo_rengi' => depot_color($pr['depo']),
-                'senaryo' => ['ad' => 'qcost_pinned', 'cerez' => 'u:1;s:records,hks,ptak;p:qcost', 'slotlar' => ['qcost', 'records', 'hks', 'ptak'], 'sabit' => ['qcost']],
+                'senaryo' => ['ad' => 'qcost_pinned', 'cerez' => 'u:1;s:records,hks,ptak;p:qcost', 'slotlar' => ['qcost', 'hks', 'ptak', 'rapor'], 'sabit' => ['qcost']],
             ];
         }
     }

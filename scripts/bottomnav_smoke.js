@@ -987,7 +987,10 @@ function guvenliAlanKurallari(barSel) {
     })));
     const acikSlug = (page) => page.evaluate(() => [...document.querySelectorAll('#bnSheet details.bn-grup')].filter(d => d.open).map(d => d.getAttribute('data-sb-grup')));
     const PARITE = [['admin', 'home'], ['admin', 'definitions'], ['admin', 'hesap'], ['admin', 'kantar'], ['operator', 'kantar'], ['operator', 'home'], ['viewer', 'home'],
-                    ['muhasebe_sayfa', 'kantar'], ['muhasebe_sayfa', 'cari_kartlari'], ['muhasebe_tek', 'cari_kartlari']];
+                    ['muhasebe_sayfa', 'kantar'], ['muhasebe_sayfa', 'cari_kartlari'], ['muhasebe_tek', 'cari_kartlari'],
+                    // v555: eski sayfa ↔ yeni karşılığı seçimi (records/cikmalar/kantar ailesi) — sheet ve sidebar aynı girişi seçili gösterir
+                    ['admin', 'records'], ['admin', 'cikmalar'], ['admin', 'record_view'], ['admin', 'cikma_view'], ['yeni_fis_hepsi', 'records'], ['yeni_fis_hepsi', 'kantar'],
+                    ['yeni_fis_kismi', 'kantar'], ['yeni_fis_kismi', 'records'], ['muhasebe_sayfa', 'cikmalar'], ['yalniz_yeni_fis', 'arac_fis']];
     for (const [pk, sk] of PARITE) {
         const k = sayfaBul(pk, sk);
         if (!k) { ok('B', `${pk}/${sk} Diğer`, 'sayfa üretilmedi', false, 'bottomnav_render.php'); continue; }
@@ -1018,7 +1021,7 @@ function guvenliAlanKurallari(barSel) {
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
         await ctx.close();
     }
-    // Akordiyon davranışı + taşma + dokunma hedefi + yapışkan başlık (admin: en uzun menü, 12 grup) @390 ve @360
+    // Akordiyon davranışı + taşma + dokunma hedefi + yapışkan başlık (admin: en uzun menü, 11 grup) @390 ve @360
     for (const w of [390, 360]) {
         const k = sayfaBul('admin', 'home'); bag_ctx = { profil: 'admin', sayfa: 'home', w };
         const bag = `admin/home Diğer@${w}`;
@@ -1027,7 +1030,7 @@ function guvenliAlanKurallari(barSel) {
         let ac0 = await acikSlug(page);
         ok('B', bag, 'Ana Sayfa\'da aktif grup yok → açılışta HİÇBİR grup açık değil', ac0.length === 0, `[${ac0}]`);
         const slugs = await page.evaluate(() => [...document.querySelectorAll('#bnSheet details.bn-grup')].map(d => d.getAttribute('data-sb-grup')));
-        ok('B', bag, `12 grup (Sipariş…Admin Konsolu) çizildi`, slugs.length === 12, `[${slugs}]`);
+        ok('B', bag, `11 grup (Sipariş…Admin Konsolu; v555: İhracat Programı yok) çizildi`, slugs.length === 11 && !slugs.includes('ihracat'), `[${slugs}]`);
         let hepsiTamam = true; const ihlal = [];
         for (const sl of slugs) {
             await page.click(`#bnSheet details.bn-grup[data-sb-grup="${sl}"] > summary`); await page.waitForTimeout(160);
@@ -1120,6 +1123,63 @@ function guvenliAlanKurallari(barSel) {
         d = await oku(r.page);
         ok('B', 'admin/definitions', 'azaltılmış hareket: ok dönüşü geçişi yok', /^0s/.test(d.okSure), d.okSure);
         await r.ctx.close();
+    }
+
+    // 5k — v555: eski Yükleme Planı / Paletleme / Mal Kabul girişleri YALNIZ yeni karşılığı (muhasebe fiş sayfası) görünüyorsa menüden
+    //      (sidebar + mobil Diğer + alt çubuk adayları) kalkar; yeni karşılığı yoksa KORUNUR. Eski sayfalarda SEÇİLİ görünen giriş yeni karşılığıdır.
+    //      Beklenen değerler manifestin kapı tablosundan (P.izinli) türetilir — uygulamanın nav_eski_gizli()'sinden DEĞİL.
+    console.log('\n=== 5k) Eski giriş ↔ yeni karşılığı: gizleme + seçili öğe (sidebar + Diğer + alt çubuk) ===');
+    const ESKI = { records: { yeni: 'arac_yukleme_fisleri.php', yeniAd: 'Araç Yükleme Fişleri', eskiAd: 'Eski Yükleme Planı', eskiHref: 'records.php' },
+                   cikma:   { yeni: 'palet_fisleri.php',        yeniAd: 'Palet Fişleri',        eskiAd: 'Eski Paletleme',     eskiHref: 'cikmalar.php' },
+                   kantar:  { yeni: 'mal_kabul_fisleri.php',    yeniAd: 'Mal Kabul Fişleri',    eskiAd: 'Eski Mal Kabul',     eskiHref: 'kantar.php' } };
+    ok('B', 'manifest', 'eski → yeni eşleme (render kapı tablosu) = records→arac_yukleme_fisleri, cikma→palet_fisleri, kantar→mal_kabul_fisleri',
+        JSON.stringify(M.eski_yeni) === JSON.stringify({ records: ESKI.records.yeni, cikma: ESKI.cikma.yeni, kantar: ESKI.kantar.yeni }), JSON.stringify(M.eski_yeni));
+    const K5 = [['admin', 'records'], ['admin', 'cikmalar'], ['admin', 'kantar'], ['admin', 'record_view'], ['admin', 'cikma_view'], ['admin', 'home'],
+                ['operator', 'records'], ['operator', 'cikmalar'], ['operator', 'kantar'], ['viewer', 'kantar'], ['dort_sayfa', 'kantar'],
+                ['yeni_fis_hepsi', 'records'], ['yeni_fis_hepsi', 'cikmalar'], ['yeni_fis_hepsi', 'kantar'], ['yeni_fis_hepsi', 'home'],
+                ['yeni_fis_kismi', 'records'], ['yeni_fis_kismi', 'cikmalar'], ['yeni_fis_kismi', 'kantar'],
+                ['muhasebe_sayfa', 'records'], ['muhasebe_sayfa', 'cikmalar'], ['muhasebe_sayfa', 'kantar'],
+                ['yalniz_yeni_fis', 'arac_fis'], ['yalniz_yeni_fis', 'mal_kabul_fis']];
+    for (const [pk, sk] of K5) {
+        const k = sayfaBul(pk, sk);
+        if (!k) { ok('B', `${pk}/${sk} eski↔yeni`, 'sayfa üretilmedi', false, 'bottomnav_render.php'); continue; }
+        bag_ctx = { profil: pk, sayfa: sk, w: 390 };
+        const bag = `${pk}/${sk} eski↔yeni`;
+        const P = M.profiller[pk];
+        const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
+        const sb = await sidebarGruplari(page), sh = await sheetGruplari(page);
+        const sbAll = sb.flatMap(g => g.ogeler), shAll = sh.flatMap(g => g.ogeler);
+        const bar = await page.evaluate(() => [...document.querySelectorAll('.bn-dock [data-nav], .bottomnav [data-nav]')].map(el => el.getAttribute('data-nav')));
+        for (const [ak, E] of Object.entries(ESKI)) {
+            const yeniGor = !!P.izinli[E.yeni], eskiHam = !!P.izinli[M.anahtar_sayfa[ak]];
+            const eskiBek = eskiHam && !yeniGor;   // eski giriş menüde yalnız ham izin VAR + yeni karşılığı YOK iken
+            const sbEski = sbAll.some(o => uygulamaYolu(o.href, k.yol) === E.eskiHref), sbYeni = sbAll.some(o => uygulamaYolu(o.href, k.yol) === E.yeni);
+            ok('B', bag, `sidebar: ${E.eskiAd} ${eskiBek ? 'VAR' : 'YOK'} · ${E.yeniAd} ${yeniGor ? 'VAR' : 'YOK'}`, sbEski === eskiBek && sbYeni === yeniGor, `eski ${sbEski}, yeni ${sbYeni}`);
+            // "Diğer" sayfası: Ana Sayfa'nın hedefiyle aynı sayfa sheet'te tekrarlanmaz (yalniz_yeni_fis: hedef palet_fisleri.php)
+            const shEski = shAll.some(o => uygulamaYolu(o.href, k.yol) === E.eskiHref), shYeni = shAll.some(o => uygulamaYolu(o.href, k.yol) === E.yeni);
+            ok('B', bag, `Diğer sayfası: ${E.eskiAd} ${eskiBek ? 'VAR' : 'YOK'} · ${E.yeniAd} ${(yeniGor && E.yeni !== P.home_hedef) ? 'VAR' : 'YOK'}`, shEski === eskiBek && shYeni === (yeniGor && E.yeni !== P.home_hedef), `eski ${shEski}, yeni ${shYeni}`);
+            ok('B', bag, `alt çubuk adayı: ${ak} ${eskiBek ? 'izinli' : 'YOK'} (slot + gizli dok)`, P.adaylar.includes(ak) === eskiBek, `adaylar [${P.adaylar}]`);
+            if (!eskiBek) ok('B', bag, `alt çubukta ${ak} öğesi çizilmedi`, !bar.includes(ak), `[${bar}]`);
+        }
+        // Seçili öğe: eski sayfada (records/cikma/kantar ailesi) sidebar + Diğer'de SEÇİLİ olan = yeni karşılığı; yoksa eski giriş. Anahtarsız muhasebe sayfasında kendisi.
+        const ak = k.anahtar;
+        const seciliBek = ESKI[ak] ? (P.izinli[ESKI[ak].yeni] ? ESKI[ak].yeni : ESKI[ak].eskiHref)
+            : ((M.muhasebe_sayfalar || []).includes(k.bolum) ? k.bolum : null);
+        if (seciliBek !== null) {
+            const sbSecili = sbAll.filter(o => o.aktif).map(o => uygulamaYolu(o.href, k.yol));
+            ok('B', bag, `sidebar: tek seçili öğe = ${seciliBek}`, sbSecili.length === 1 && sbSecili[0] === seciliBek, `seçili [${sbSecili}]`);
+            if (seciliBek !== P.home_hedef) {
+                const shSecili = shAll.filter(o => o.aktif).map(o => uygulamaYolu(o.href, k.yol));
+                ok('B', bag, `Diğer sayfası: tek seçili öğe = ${seciliBek} (sidebar ile aynı)`, shSecili.length === 1 && shSecili[0] === seciliBek, `seçili [${shSecili}]`);
+            }
+            // Seçili giriş YENİ karşılığıysa (anahtarsız) alt çubuk slotlarında hiçbir öğe aktif DEĞİL; eskiyse kendi slotu aktif (mevcut davranış, bölüm 1 denetler)
+            if (ESKI[ak] && P.izinli[ESKI[ak].yeni]) {
+                const barAktif = await page.evaluate(() => [...document.querySelectorAll('.bn-dock [aria-current="page"], .bottomnav [aria-current="page"]')].map(el => el.getAttribute('data-nav') || el.id));
+                ok('B', bag, 'yeni karşılığı seçili iken alt çubuk slotlarında eski anahtar aktif değil (yalnız Ana Sayfa/hiçbiri)', !barAktif.includes(ak), `[${barAktif}]`);
+            }
+        }
+        ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+        await ctx.close();
     }
 
     // Kanıt ekran görüntüleri: gerçek çubuk 360/390/430 × açık/koyu + Hal Kayıt

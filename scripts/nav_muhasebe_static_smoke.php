@@ -91,5 +91,18 @@ foreach ($gruplar as $slug => $g) {
         }
     }
 }
+// v555: menüden kaldırılanlar — katalogda YOK; 4 İhracat sayfa dosyası + kantar_fisleri.php YERİNDE (deploy dosya silmez, URL'ler kırılmaz);
+// stok_donusum_fisleri.php 410 tombstone (rol_kapilari_smoke da denetler).
+$katalogDosyalari = [];
+foreach ($gruplar as $__g) foreach ($__g[2] as $__d => $_) $katalogDosyalari[] = $__d;
+ok('v555: "ihracat" (İhracat Programı) grubu katalogda yok', !isset($gruplar['ihracat']));
+foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'kantar_fisleri.php', 'stok_donusum_fisleri.php'] as $__kaldirilan) {
+    ok("v555: $__kaldirilan menü katalogunda yok", !in_array($__kaldirilan, $katalogDosyalari, true));
+}
+foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'kantar_fisleri.php'] as $__kalan) {
+    ok("v555: $__kalan dosyası yerinde (yalnız menüden/kartlardan kalktı)", is_file($ROOT . '/' . $__kalan));
+}
+$__tomb = oku('stok_donusum_fisleri.php');
+ok('v555: stok_donusum_fisleri.php 410 tombstone (≤15 satır, require/db yok)', str_contains($__tomb, 'http_response_code(410)') && substr_count($__tomb, "\n") <= 15 && !preg_match('/require|include|db\(|session_|\$_POST|\$_GET/', $__tomb));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

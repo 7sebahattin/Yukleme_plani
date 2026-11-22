@@ -55,7 +55,7 @@ ok('stok_kdv_oranlari = [0,1,10,20]', stok_kdv_oranlari() === [0, 1, 10, 20]);
 echo "\n=== 4. Fiş no / geri / sabitler ===\n";
 ok('stok_fis_no giris → GRS-2026-000123', stok_fis_no('giris', '2026-11-13', 123) === 'GRS-2026-000123');
 ok('stok_fis_no cikis/transfer/donusum önekleri', stok_fis_no('cikis', '2026-01-01', 1) === 'CKS-2026-000001' && stok_fis_no('transfer', '2026-01-01', 2) === 'TRF-2026-000002' && stok_fis_no('donusum', '2026-01-01', 3) === 'DNS-2026-000003');
-ok('stok_fis_turleri: 4 tür, sayfalar (transfer = transfer_fisleri.php)', array_keys(stok_fis_turleri()) === ['giris', 'cikis', 'transfer', 'donusum'] && stok_fis_turleri()['transfer']['sayfa'] === 'transfer_fisleri.php'
+ok('stok_fis_turleri: 4 tür, sayfalar (transfer = transfer_fisleri.php; donusum = stok_kartlari.php — v555: sayfa kaldırıldı, eski hareket bağlantısı kart sayfasına)', array_keys(stok_fis_turleri()) === ['giris', 'cikis', 'transfer', 'donusum'] && stok_fis_turleri()['transfer']['sayfa'] === 'transfer_fisleri.php'
     && stok_fis_turleri()['giris']['sayfa'] === 'stok_giris_fisleri.php' && stok_fis_turleri()['donusum']['sayfa'] === 'stok_donusum_fisleri.php');
 foreach (['stok_kartlari.php?id=3' => 'stok_kartlari.php?id=3', 'stok_tanimlari.php?sekme=grup' => 'stok_tanimlari.php?sekme=grup', 'transfer_fisleri.php' => 'transfer_fisleri.php',
     'cari_kartlari.php' => 'stok_kartlari.php', 'https://ornek.test/stok_kartlari.php' => 'stok_kartlari.php', "stok_kartlari.php\r\nX: 1" => 'stok_kartlari.php', 'stok.php' => 'stok_kartlari.php',

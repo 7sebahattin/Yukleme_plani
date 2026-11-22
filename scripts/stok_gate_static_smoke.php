@@ -46,7 +46,10 @@ ok('config/stok_core.php + stok_ui.php var; assets/stok.css|js var', is_file($RO
 ok('kantar_fisleri.php değişmedi: 302 → kantar.php, stok_core yok', str_contains(kod($ROOT . '/kantar_fisleri.php'), "header('Location: kantar.php', true, 302)") && !str_contains(kod($ROOT . '/kantar_fisleri.php'), 'stok_core'));
 
 echo "\n=== 2. Sayfa kabuğu (çalışan sayfalar) ===\n";
-$fisSayfalari = ['stok_giris_fisleri.php', 'stok_cikis_fisleri.php', 'transfer_fisleri.php', 'stok_donusum_fisleri.php'];
+$fisSayfalari = ['stok_giris_fisleri.php', 'stok_cikis_fisleri.php', 'transfer_fisleri.php'];   // v555: Dönüşüm sayfası kaldırıldı → aşağıda 410 tombstone olarak denetlenir
+// v555: stok_donusum_fisleri.php = 410 tombstone (deploy dosya silmez): ≤15 satır, require/db/oturum/kabuk YOK, kalıcı yol stok_kartlari.php.
+$tomb = kod($ROOT . '/stok_donusum_fisleri.php');
+ok('stok_donusum_fisleri.php: 410 tombstone (≤15 satır, require/db()/oturum/render_header YOK, stok_kartlari.php bağlantısı)', substr_count($tomb, "\n") <= 15 && str_contains($tomb, 'http_response_code(410)') && !preg_match('/\b(require|include)(_once)?\b|db\(\)|session_start|render_header|stok_core|\$_POST/', $tomb) && str_contains($tomb, 'stok_kartlari.php'));
 $calisan = ['stok_kartlari.php', 'stok_tanimlari.php'];
 foreach ($fisSayfalari as $f) {
     $s = kod($ROOT . '/' . $f);
@@ -108,8 +111,8 @@ preg_match_all('/UPDATE\s+`?stok_fisler`?\s+SET\s+([^"\']+?)\s+WHERE/i', $c, $um
 $setler = array_map(fn($x) => preg_replace('/\s+/', ' ', trim($x)), $um[1]);
 ok('core: stok_fisler UPDATE\'leri yalnız beyaz liste (fis_no[, cari_hareket_id] · durum=iptal + iptal_*)', !array_filter($setler, fn($x) => !preg_match('/^(fis_no = \?(, cari_hareket_id = \?)?|cari_hareket_id = \?|durum = \'iptal\', iptal_at = \?, iptal_by = \?, iptal_neden = \?)$/', $x)), json_encode($setler));
 ok('B: stok_kaydet 9 dal (A 7 + fis_kaydet + fis_iptal, bu sırayla)', $isl === [...$A, 'fis_kaydet', 'fis_iptal'], json_encode($isl));
-ok('B: 4 fiş sayfası çalışan modül (stok_core + stok_fis_parca + stok_fis_sayfa_govde, render_header\'dan ÖNCE kısmi yanıt)', count(array_filter($fisSayfalari, function ($f) use ($ROOT, $pos) {
-    $s = kod($ROOT . '/' . $f); return str_contains($s, 'config/stok_core.php') && $pos($s, 'stok_fis_parca(') > 0 && $pos($s, 'stok_fis_parca(') < $pos($s, 'render_header(') && str_contains($s, 'stok_fis_sayfa_govde('); })) === 4);
+ok('B: 3 fiş sayfası çalışan modül (stok_core + stok_fis_parca + stok_fis_sayfa_govde, render_header\'dan ÖNCE kısmi yanıt)', count(array_filter($fisSayfalari, function ($f) use ($ROOT, $pos) {
+    $s = kod($ROOT . '/' . $f); return str_contains($s, 'config/stok_core.php') && $pos($s, 'stok_fis_parca(') > 0 && $pos($s, 'stok_fis_parca(') < $pos($s, 'render_header(') && str_contains($s, 'stok_fis_sayfa_govde('); })) === 3);
 ok('B: cari bağı yalnız cari_core fonksiyonlarıyla, kaynak modül değeri stok_core\'da verilir', str_contains((string)govde($c, 'stok_fis_kaydet'), "cari_hareket_ekle(") && str_contains((string)govde($c, 'stok_fis_kaydet'), "['modul' => 'stok', 'id' => \$fid]")
     && str_contains((string)govde($c, 'stok_fis_iptal'), "cari_kaynakli_iptal(\$pdo, 'stok', \$id"));
 ok('B: kantar YALNIZ okunur (stok_core/ui\'da kantar_ tablosuna INSERT/UPDATE/DELETE yok)', !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?kantar_/i', $c . kod($ROOT . '/config/stok_ui.php')));

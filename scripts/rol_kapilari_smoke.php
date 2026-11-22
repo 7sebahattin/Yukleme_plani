@@ -253,7 +253,9 @@ $TOMBSTONES = ['admin_db_backup_download.php', 'hesap_sahipsiz.php', 'depo_tasim
                // v548: menü sadeleştirme — yer tutucu sayfalar
                'kayit_bilgisi.php', 'waap_mesaj.php', 'genel_duyurular.php', 'guncelleme_bilgisi.php', 'program_hakkinda.php',
                'program_tanimlari.php', 'diger_uygulama_tanimlari.php', 'guncellemeyi_calistir.php', 'lisans_kayit_islemleri.php',
-               'sube_degistirme.php', 'sirket_degistirme.php', 'mesajlar.php'];
+               'sube_degistirme.php', 'sirket_degistirme.php', 'mesajlar.php',
+               // v555: stok dönüşümü kullanılmayacak
+               'stok_donusum_fisleri.php'];
 $kaynaklar = array_merge(glob($ROOT . '/*.php'), glob($ROOT . '/config/*.php'), glob($ROOT . '/assets/*.js'));
 foreach ($TOMBSTONES as $t) {
     $src = (string)@file_get_contents($ROOT . '/' . $t);
