@@ -76,9 +76,14 @@ function form_hata(string $h): array
 
 // ═══ 1. Şema yok ═══
 echo "=== 1. Şema yok (tablolar kurulmamış) ===\n";
-foreach (['stok_kartlari.php', 'stok_tanimlari.php', 'stok_giris_fisleri.php', 'stok_cikis_fisleri.php', 'transfer_fisleri.php', 'stok_donusum_fisleri.php'] as $f) {
+foreach (['stok_kartlari.php', 'stok_tanimlari.php', 'stok_giris_fisleri.php', 'stok_cikis_fisleri.php', 'transfer_fisleri.php'] as $f) {
     $r = get($f);
     ok("$f: şema uyarı kartı + migrate.php#stok bağlantısı, uyarı yok", uyari_yok($r) && str_contains($r['govde'], 'Stok tabloları kurulmamış') && str_contains($r['govde'], 'migrate.php#stok'), (string)$r['hata']);
+}
+// v555: Stok Dönüşüm Fişleri sayfası kaldırıldı → 410 tombstone (şema/oturum/yönetici kapısı YOK, her istekte aynı; Stok Kartları'na kalıcı bağlantı).
+foreach ([[], ['yeni' => '1'], ['id' => '9'], ['parca' => 'detay', 'id' => '9']] as $__g) {
+    $r = get('stok_donusum_fisleri.php', $__g, ['admin' => false]);
+    ok('stok_donusum_fisleri.php ' . json_encode($__g) . ': 410 tombstone (stok_kartlari.php bağlantısı, form/csrf/şema kartı YOK)', $r['kod'] === 410 && str_contains($r['govde'], 'stok_kartlari.php') && !str_contains($r['govde'], 'stFisForm') && !str_contains($r['govde'], 'migrate.php') && !str_contains($r['govde'], 'name="csrf"') && $r['hata'] === null, (string)$r['kod'] . ' ' . (string)$r['hata']);
 }
 $r = post(['islem' => 'kart_kaydet', 'ad' => 'Deneme']);
 ok('stok_kaydet (şema yok): 503 JSON', $r['kod'] === 503 && js($r)['ok'] === false && str_contains((string)js($r)['hata'], 'kurulmamış'));
@@ -103,7 +108,7 @@ echo "\n=== 3. Boş durum ===\n";
 $r = get('stok_kartlari.php');
 ok('boş: HTTP 200, uyarı yok, başlık Stok Kartları', uyari_yok($r) && $r['kod'] === 200 && str_contains($r['govde'], '<title>') && str_contains($r['govde'], 'Stok Kartları'), (string)$r['hata']);
 ok('boş: "Henüz stok kartı yok" + Yeni kart + içe aktar bağlantısı', str_contains($r['govde'], 'Henüz stok kartı yok') && str_contains($r['govde'], 'stok_tanimlari.php?sekme=ice_aktar'));
-ok('boş: stok.css + stok.js yüklenir; sekme şeridi 7 bağlantı (Kantar dahil)', str_contains($r['govde'], 'assets/stok.css?v=') && str_contains($r['govde'], 'assets/stok.js?v=') && preg_match_all('/class="st-sekme[" ]/', bolge($r['govde'])) === 7);
+ok('boş: stok.css + stok.js yüklenir; sekme şeridi 6 bağlantı (Kartlar/Giriş/Çıkış/Transfer/Tanımlar + Kantar; v555: Dönüşüm sekmesi yok)', str_contains($r['govde'], 'assets/stok.css?v=') && str_contains($r['govde'], 'assets/stok.js?v=') && preg_match_all('/class="st-sekme[" ]/', bolge($r['govde'])) === 6 && !str_contains(bolge($r['govde']), 'stok_donusum_fisleri.php') && !str_contains(bolge($r['govde']), '>Dönüşüm<'));
 ok('boş: kart modalı kod önerisi STK-0001', str_contains($r['govde'], 'data-oneri="STK-0001"'));
 
 $O = stok_t_ornek_veri($db);
@@ -232,7 +237,7 @@ ok('?sekme=cikis_neden: Çıkış sekmesi seçili, Fire listede', (bool)preg_mat
 // ═══ 9. Fiş sayfaları (Parça B) ═══
 echo "\n=== 9. Fiş sayfaları (Parça B) ===\n";
 $FB = stok_t_ornek_fisler($db, $O);
-$sayfalar = ['giris' => 'stok_giris_fisleri.php', 'cikis' => 'stok_cikis_fisleri.php', 'transfer' => 'transfer_fisleri.php', 'donusum' => 'stok_donusum_fisleri.php'];
+$sayfalar = ['giris' => 'stok_giris_fisleri.php', 'cikis' => 'stok_cikis_fisleri.php', 'transfer' => 'transfer_fisleri.php'];   // v555: 'donusum' sayfası kaldırıldı (410); 'donusum' defter/fiş türü stok_core'da geriye uyum için durur
 foreach ($sayfalar as $tur => $f) {
     $r = get($f); $b = bolge($r['govde']);
     ok("$f: 200, uyarı yok, HTML dengeli, csrf, liste + boş detay", uyari_yok($r) && $r['kod'] === 200 && html_hata($b) === [] && form_hata($b) === [] && str_contains($b, 'id="stListe"') && str_contains($b, 'Soldan bir fiş seçin'), json_encode([html_hata($b), form_hata($b), $r['hata']]));
@@ -256,8 +261,6 @@ $r = get('stok_cikis_fisleri.php', ['yeni' => '1']); $b = bolge($r['govde']);
 ok('çıkış formu: cari yokken fiyat sütunları gizli (st-form--fiyatsiz), Kantardan doldur YOK', str_contains($b, 'st-form--fiyatsiz') && !str_contains($b, 'data-st-modal="kantar"') && !str_contains($b, 'id="stModalKantar"'));
 $r = get('transfer_fisleri.php', ['yeni' => '1']); $b = bolge($r['govde']);
 ok('transfer formu: kaynak + hedef depo + takas düğmesi; neden/cari/fiyat YOK', str_contains($b, 'name="hedef_depo"') && str_contains($b, 'data-depo-takas') && !str_contains($b, 'name="neden_id"') && !str_contains($b, 'name="cari_ara"') && !str_contains($b, 'birim_fiyat[]'));
-$r = get('stok_donusum_fisleri.php', ['yeni' => '1']); $b = bolge($r['govde']);
-ok('dönüşüm formu: Girdiler (C) + Çıktılar (G) iki tablo, fire özeti', str_contains($b, 'data-satir-ekle="C"') && str_contains($b, 'data-satir-ekle="G"') && str_contains($b, 'name="yon[]" value="C"') && str_contains($b, 'name="yon[]" value="G"') && str_contains($b, 'data-fire'));
 
 $r = get('transfer_fisleri.php', ['id' => (string)$FB['transfer']]); $b = bolge($r['govde']);
 ok('transfer detayı: TRF no, Merkez → Şube, Giden rozeti (aktif Merkez), 1.000 kg, maliyet sütunu, İptal et + Kopyala', uyari_yok($r) && html_hata($b) === [] && (bool)preg_match('/<h2 class="st-unvan">TRF-\d{4}-\d{6}<\/h2>/', $b)
@@ -266,8 +269,6 @@ $r = stok_t_istek(['dosya' => 'transfer_fisleri.php', 'get' => ['id' => (string)
 ok('aktif depo Şube: aynı transfer "Gelen" ve görünür (hedef depo)', str_contains($r['govde'], '>Gelen</span>') && str_contains($r['govde'], 'class="st-unvan">TRF-'));
 $r = stok_t_istek(['dosya' => 'stok_giris_fisleri.php', 'get' => ['id' => (string)$FB['cari_alis']], 'depolar' => ['Şube Depo'], 'aktif_depo' => 'Şube Depo']);
 ok('başka depodaki fiş: detay yok, "aktif deponuzda görünmüyor"', str_contains($r['govde'], 'aktif deponuzda görünmüyor') && !str_contains($r['govde'], 'class="st-unvan">GRS-'));
-$r = get('stok_donusum_fisleri.php', ['id' => (string)$FB['donusum']]); $b = bolge($r['govde']);
-ok('dönüşüm detayı: Girdiler / Çıktılar, fire 50 (%10,0), çıktı birim maliyeti', str_contains($b, 'Girdiler') && str_contains($b, 'Çıktılar') && str_contains($b, 'Fire / fark: <b>50</b> (%10,0)') && str_contains($b, 'Çıktı birim maliyeti'));
 $r = get('stok_giris_fisleri.php', ['id' => (string)$FB['cari_alis']]); $b = bolge($r['govde']);
 ok('cari alış detayı: cari bağlantısı, evrak, fiyat/KDV/tutar, cari hareket belge no (ADK-)', str_contains($b, 'Cari: <a href="cari_kartlari.php?id=' . $O['cari']['Örnek Tarım Ltd.'] . '">') && str_contains($b, 'Evrak: IRS-1001') && str_contains($b, 'Birim fiyat') && str_contains($b, '1,80') && (bool)preg_match('/Cari hareketi: <a[^>]*>ADK-/', $b));
 $r = get('stok_giris_fisleri.php', ['id' => (string)$FB['cari_alis'], 'parca' => 'detay'], ['server' => ['HTTP_X_REQUESTED_WITH' => 'fetch']]);
@@ -331,6 +332,6 @@ ok('kaynaklı fiş detayı: "Kaynak belge #41" rozeti, İptal et düğmesi YOK (
 $r = post(['islem' => 'fis_iptal', 'id' => (string)($kr['id'] ?? 0), 'neden' => 'Stok ekranından']);
 ok('kaynaklı fişi stok_kaydet ile iptal → 409 kaynakli, fiş geçerli kalır', $r['kod'] === 409 && js($r)['kod'] === 'kaynakli' && stok_fis_ham($db, (int)$kr['id'])['durum'] === 'gecerli', $r['govde']);
 $r = get('stok_kartlari.php', ['id' => (string)$K['Domates (Salkım)']]);
-ok('kart detayı: transfer/dönüşüm hareket fiş no bağlantıları kendi sayfalarına', (bool)preg_match('/href="transfer_fisleri\.php\?id=' . $FB['transfer'] . '">TRF-/', $r['govde']) && (bool)preg_match('/href="stok_donusum_fisleri\.php\?id=' . $FB['donusum'] . '">DNS-/', $r['govde']));
+ok('kart detayı: transfer hareket fiş no bağlantısı kendi sayfasına (v555: dönüşüm sayfası kaldırıldı; geçmiş dönüşüm fişi bağlantısı 410 sayfaya gider — bkz. rapor)', (bool)preg_match('/href="transfer_fisleri\.php\?id=' . $FB['transfer'] . '">TRF-/', $r['govde']));
 
 siparis_test_bitir();

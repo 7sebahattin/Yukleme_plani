@@ -282,7 +282,7 @@ function stok_fis_turleri(): array
         'giris'    => ['etiket' => 'Giriş Fişi',    'onek' => 'GRS', 'sayfa' => 'stok_giris_fisleri.php'],
         'cikis'    => ['etiket' => 'Çıkış Fişi',    'onek' => 'CKS', 'sayfa' => 'stok_cikis_fisleri.php'],
         'transfer' => ['etiket' => 'Transfer Fişi', 'onek' => 'TRF', 'sayfa' => 'transfer_fisleri.php'],
-        'donusum'  => ['etiket' => 'Dönüşüm Fişi',  'onek' => 'DNS', 'sayfa' => 'stok_donusum_fisleri.php'],
+        'donusum'  => ['etiket' => 'Dönüşüm Fişi',  'onek' => 'DNS', 'sayfa' => 'stok_kartlari.php'],
     ];
 }
 

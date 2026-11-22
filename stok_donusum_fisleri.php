@@ -1,29 +1,10 @@
 <?php
-// =========================================================
-// stok_donusum_fisleri.php — Dönüşüm Fişleri (Dönüşüm — girdiler ortalamadan çıkar, toplam maliyet çıktılara miktar oranıyla dağıtılır).
-//   Sol liste (GET süzgeç: ?ara= &durum=tumu|gecerli|iptal &donem=tumu|30g|bu_ay|gecen_ay) + sağ panel:
-//   ?id=N detay · ?yeni=1 form · ?kopya=ID kopya formu
-//   ?parca=detay&id=N kısmi yanıt (header/footer YOK)
-// YALNIZ GET; yazma (fis_kaydet / fis_iptal) stok_kaydet.php'de. Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → stok_kapi('read'); tablo yoksa şema uyarı kartı.
-// Ortak gövde config/stok_ui.php stok_fis_sayfa_govde(); kurallar config/stok_core.php (Parça B).
-// =========================================================
+// stok_donusum_fisleri.php — KALDIRILDI (v555, sahip kararı: stok dönüşümü kullanılmayacak).
+// Deploy repodan silinen dosyayı sunucudan SİLMEZ → 410 tombstone. DB/oturum/kabuk erişimi YOK.
+// Kalıcı yol: stok_kartlari.php
 declare(strict_types=1);
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/config/auth.php';
-require_once __DIR__ . '/config/stok_core.php';
-require_once __DIR__ . '/config/stok_ui.php';
-$auth_user = require_login();
-if (!muhasebe_sayfa_can('stok_donusum_fisleri')) { forbidden(); }
-stok_kapi('read');
-stok_no_store();
-$pdo = db();
-stok_sayfa_kapisi($pdo);
-
-if (stok_fis_parca($pdo, 'donusum')) exit;   // kısmi yanıt
-
-render_header('Dönüşüm Fişleri');
-stok_assets();
-render_flash();
-echo stok_fis_sayfa_govde($pdo, 'donusum');
-stok_scripts();
-render_footer();
+http_response_code(410);
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store');
+echo '<!doctype html><meta charset="utf-8"><title>Kaldırıldı</title>'
+    . '<p>Stok Dönüşüm Fişleri sayfası kaldırıldı. <a href="stok_kartlari.php">Stok Kartları</a></p>';

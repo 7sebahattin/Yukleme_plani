@@ -26,6 +26,11 @@ $catStart = strpos($source, 'function nav_muhasebe_gruplari(): array {');
 $catEnd = strpos($source, "\n}\n", $catStart);
 if ($catStart === false || $catEnd === false) throw new RuntimeException('nav_muhasebe_gruplari source not found.');
 eval(substr($source, $catStart, $catEnd + 2 - $catStart));
+// v555: eski Yükleme Planı/Paletleme/Mal Kabul girişlerinin yeni karşılığı yardımcıları GERÇEK kaynaktan alınır (nav_menu_modeli/nav_alt_izinler kullanır).
+$eskiStart = strpos($source, 'function nav_eski_esleri(): array {');
+$eskiEnd = strpos($source, '/**', strpos($source, 'function nav_eski_gizli(', (int)$eskiStart));
+if ($eskiStart === false || $eskiEnd === false) throw new RuntimeException('nav_eski_* source not found.');
+eval(substr($source, $eskiStart, $eskiEnd - $eskiStart));
 function nav_rozet_html(int $count, bool $short): string { return ''; }
 function nav_mail_okunmamis(): int { return 0; }
 function current_user(): ?array { return null; }

@@ -8,7 +8,7 @@
 // DB gerçeği scripts/stok_ui_e2e_say.php ile okunur. Canlı DB'ye / migrasyona HİÇ dokunulmaz.
 // Bölümler: 1 kartlar masaüstü 1366 (tek ekran, süzgeç, master-detail, kart oluştur/düzenle/pasifleştir/sil) · 2 tanımlar 1366 ·
 //           3 tablet 820 · 4 mobil 390 (liste→detay→geri, alt çubuk, ≥44px, ≥16px, taşma, modal) · 5 şema yok / boş ·
-//           6 fişler 1366 (Enter/Ctrl+S giriş, master-detail, iptal, kopya, yetersiz→Yine de kaydet, transfer, dönüşüm, kantar + cari) · 7 fiş formu 390.
+//           6 fişler 1366 (Enter/Ctrl+S giriş, master-detail, iptal, kopya, yetersiz→Yine de kaydet, transfer, dönüşüm sayfası 410 + sekme yok, kantar + cari) · 7 fiş formu 390.
 // =========================================================
 'use strict';
 const { execFileSync } = require('child_process');
@@ -414,18 +414,11 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     const trfTek = await fp.evaluate(() => ({ kayar: document.documentElement.scrollHeight - document.documentElement.clientHeight, tasma: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
     ok('[1366] transfer detayı: sayfa kaymaz, taşma yok', trfTek.kayar <= 2 && trfTek.tasma <= 0, JSON.stringify(trfTek));
 
-    // dönüşüm
-    await git(fp, 'stok_donusum_fisleri.php?yeni=1');
-    await kartYaz(fp, '.st-satirlar[data-yon="C"] .st-kart-ara', 'STK-0001');
-    await fp.keyboard.type('10');
-    await kartYaz(fp, '.st-satirlar[data-yon="G"] .st-kart-ara', 'STK-0002');
-    await fp.keyboard.type('9');
-    ok('dönüşüm formu: fire özeti 1 (%10), çıktı birim maliyeti tahmini', /^1 \(%10\)/.test(await metin(fp, '[data-top="fark"]') || '') && /₺/.test(await metin(fp, '[data-top="cikti_ort"]') || ''), await metin(fp, '[data-fire]'));
-    n0 = fpost();
-    await fp.click('#stFisForm [data-kaydet]');
-    await yenilenmeBekle(fp, n0);
-    E = S7.say(); son = E.fisler[E.fisler.length - 1];
-    ok('dönüşüm kaydedildi (DNS-), detayda Girdiler + Çıktılar', son.tur === 'donusum' && /^DNS-/.test(son.fis_no) && await goster(fp, '#stDetay .st-donusum-kol--girdi') && await goster(fp, '#stDetay .st-donusum-kol--cikti'));
+    // v555: dönüşüm sayfası kaldırıldı (410 tombstone) — tarayıcıda 410 gelir, form/sekme YOK; stok sekme şeridinde Dönüşüm bağlantısı çıkmaz.
+    const donYan = await git(fp, 'stok_donusum_fisleri.php?yeni=1');
+    ok('dönüşüm sayfası: 410 tombstone (form yok, Stok Kartları bağlantısı var)', donYan.status() === 410 && !(await goster(fp, '#stFisForm')) && (await fp.locator('a[href="stok_kartlari.php"]').count()) === 1);
+    await git(fp, 'stok_giris_fisleri.php');
+    ok('sekme şeridi: Dönüşüm sekmesi YOK, 5 sekme + Kantar (Mal Kabul) bağlantısı', (await fp.locator('.st-sekmeler a[href="stok_donusum_fisleri.php"]').count()) === 0 && (await fp.locator('.st-sekmeler .st-sekme').count()) === 6);
 
     // cari seçili alış + kantardan doldur
     await git(fp, 'stok_giris_fisleri.php?yeni=1');

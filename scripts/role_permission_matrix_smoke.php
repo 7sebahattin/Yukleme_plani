@@ -40,7 +40,8 @@ $adminRows=array_filter($rows,fn($r)=>$r['admin_only']);
 matrix_ok(count($adminRows)===7,'Admin-only inventory changed: '.count($adminRows));
 foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row invented permissions');
 $catalogRoutes=[]; $adminKonsolu=[]; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) { $catalogRoutes[]=$route; if ($gk==='admin_konsolu') $adminKonsolu[]=$route; }
-matrix_ok(count($catalogRoutes)===39,'Menu catalog size changed');
+matrix_ok(count($catalogRoutes)===33,'Menu catalog size changed (v555: 39 → 33; İhracat Programı grubu + Stok Dönüşüm/Kantar Fişleri kalktı)');
+foreach (['ihracat_faturasi_maliyeti.php','beyanname_siparis_proforma.php','dovizli_cari_fis.php','ihracat_tanimlari.php','stok_donusum_fisleri.php','kantar_fisleri.php'] as $goneRoute) matrix_ok(!in_array($goneRoute,$catalogRoutes,true),'Removed menu page reappeared: '.$goneRoute);
 $adminRoutes=array_column($adminRows,'route');
 foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'admin_konsolu page must stay admin-only: '.$route);
 $byKey=[]; foreach ($rows as $r) $byKey[$r['key']]=$r;
@@ -48,7 +49,7 @@ foreach ($catalogRoutes as $route) if (!in_array($route,$adminKonsolu,true)) {
     $slug=pathinfo($route,PATHINFO_FILENAME);
     matrix_ok(isset($byKey[$slug]) && !$byKey[$slug]['admin_only'] && ($byKey[$slug]['actions']['read']['permission'] ?? '')==="muhasebe.$slug.read",'Menu page lacks grantable read row: '.$slug);
 }
-foreach (['genel_uygulamalar'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);
+foreach (['genel_uygulamalar','ihracat'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);
 foreach (['operasyon_fis','kasa','kullanici_konsolu'] as $slug) matrix_ok(isset(nav_muhasebe_gruplari()[$slug]),'Menu group missing: '.$slug);
 $codes=[]; foreach ($rows as $row) foreach ($row['actions'] as $action) $codes[]=$action['permission'];
 matrix_ok(in_array('records.pallet.create',$codes,true),'Pallet create editor control absent');

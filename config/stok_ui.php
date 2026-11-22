@@ -22,11 +22,11 @@ function stok_scripts(): void
     echo '<script src="assets/stok.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/stok.js') . '"></script>' . "\n";
 }
 
-/** Üst sekme şeridi. $aktif: kartlar|giris|cikis|transfer|donusum|tanimlar */
+/** Üst sekme şeridi. $aktif: kartlar|giris|cikis|transfer|tanimlar */
 function stok_ust_menu(string $aktif): string
 {
     $s = ['kartlar' => ['stok_kartlari.php', 'Stok Kartları'], 'giris' => ['stok_giris_fisleri.php', 'Giriş Fişi'], 'cikis' => ['stok_cikis_fisleri.php', 'Çıkış Fişi'],
-        'transfer' => ['transfer_fisleri.php', 'Transfer'], 'donusum' => ['stok_donusum_fisleri.php', 'Dönüşüm'], 'tanimlar' => ['stok_tanimlari.php', 'Tanımlar']];
+        'transfer' => ['transfer_fisleri.php', 'Transfer'], 'tanimlar' => ['stok_tanimlari.php', 'Tanımlar']];
     $o = '<nav class="st-sekmeler" aria-label="Stok">';
     foreach ($s as $k => [$url, $ad]) $o .= '<a class="st-sekme" href="' . h($url) . '"' . ($k === $aktif ? ' aria-current="page"' : '') . '>' . h($ad) . '</a>';
     return $o . '<a class="st-sekme st-sekme--dis" href="kantar.php">Kantar (Mal Kabul)</a></nav>';
