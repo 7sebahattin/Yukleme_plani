@@ -99,7 +99,7 @@ ok('sw.js bypass fetch dinleyicisinde statik varlık kontrolünden ÖNCE', strpo
 
 echo "\n=== Gezinme ===\n";
 ok('nav_aktif_anahtar: frugro bayrağı + 6 sayfa', (bool)preg_match("/\\\$a_frg\s*=\s*in_array\(\\\$cur, \[[^\]]*'frugro_siparis\.php'[^\]]*'frugro_view\.php'[^\]]*'frugro_pkl\.php'[^\]]*'frugro_invoice\.php'[^\]]*'frugro_ayarlar\.php'[^\]]*'frugro_mail\.php'/", $helpers) && str_contains($helpers, "'frugro' => \$a_frg"));
-ok('sidebar: Frugro OGL\'nin HEMEN altında (usip\'ten önce)', (function () use ($helpers) { $a = strpos($helpers, "\$lnk('siparisler.php'"); $b = strpos($helpers, "\$lnk('frugro_siparis.php'"); $c = strpos($helpers, "\$lnk('urun_siparis.php'"); return $a && $b && $c && $a < $b && $b < $c; })());
+ok('sidebar: Frugro OGL\'nin HEMEN altında (usip\'ten önce)', (function () use ($helpers) { $a = strpos($helpers, "\$ge('siparisler.php'"); $b = strpos($helpers, "\$ge('frugro_siparis.php'"); $c = strpos($helpers, "\$ge('urun_siparis.php'"); return $a && $b && $c && $a < $b && $b < $c; })());
 ok("sidebar kapısı Frugro'nun KENDİ sayfa izni", str_contains($helpers, "\$p_frg   = role_matrix_page_can('siparis','frugro');") && !str_contains($helpers, '$p_frg   = $p_sip;'));
 ok('topnav Frugro bağlantısı', str_contains($helpers, 'frugro_siparis.php" <?= nav_aktif_anahtar() === \'frugro\''));
 ok('nav_alt_sayfalar frugro kaydı', (bool)preg_match("/'frugro'\s*=> \['href' => 'frugro_siparis\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/frugro\.svg'\]/", $helpers) && is_file($ROOT . '/assets/nav-icons/frugro.svg'));

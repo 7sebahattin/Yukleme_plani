@@ -64,7 +64,7 @@ foreach (array_merge($yeniDosyalar, [
 
 echo "\n=== 2. SIDEBAR — YALNIZ TEK 'Personel Takibi' GİRDİSİ (görev madde 1/2) ===\n";
 ok("helpers.php: 'Personel Takibi' linki var", str_contains($helpersSrc, "'Personel Takibi'"));
-ok("helpers.php: personel_takip.php'ye link veriyor", str_contains($helpersSrc, "\$lnk('personel_takip.php'"));
+ok("helpers.php: personel_takip.php'ye link veriyor", str_contains($helpersSrc, "\$ge('personel_takip.php'"));
 $eskiSidebarLinkleri = [
     "\$lnk('personel.php'", "\$lnk('personel_kartlar.php'", "\$lnk('giris_cikis.php'",
     "\$lnk('cavuslar.php'", "\$lnk('isci_kartlari.php'", "\$lnk('gunluk_isci_giris_cikis.php'",
@@ -80,7 +80,7 @@ ok("helpers.php: 'Günlük İşçi' section başlığı ARTIK YOK (tek bölüme 
 // `if ($p_gunluk) $lnk(...)` oldu, eski `if ($p_gunluk): ... endif;`
 // bloğu değil. Kapı AYNI değişkene ($p_gunluk) bağlı kalmalı.
 ok("helpers.php: Personel Takibi görünürlüğü aktif günlük işçi/hakediş/rapor izinlerine bağlı; legacy PDKS izni tek başına yeterli değil",
-    (bool)preg_match('/if \(\$p_gunluk\)\s*\$lnk\(/', $helpersSrc));
+    (bool)preg_match('/if \(\$p_gunluk\)\s*\$o\[\]\s*=\s*\$ge\(/', $helpersSrc));
 // ⚠ Sprint Navigasyon-02: liste sidebar'ın içinden nav_ptak_sayfalari()
 // fonksiyonuna taşındı — mobil bottomnav da AYNI kaynağı okuyor.
 ok("helpers.php: aktif-sayfa vurgusu TÜM konsolide alt sayfaları kapsıyor (nav_ptak_sayfalari)",

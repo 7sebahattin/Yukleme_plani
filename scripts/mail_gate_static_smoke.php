@@ -20,7 +20,7 @@ echo "=== Kapı tek kaynak ===\n";
 ok('helpers.php can_mail() tanımlı', str_contains($helpers, 'function can_mail(string $perm): bool'));
 ok('can_mail fail-closed (can() yoksa false)', (bool)preg_match("/function can_mail[^{]*\{\s*if \(!function_exists\('can'\)\) return false;/", $helpers));
 ok('sidebar $p_mail = can_mail(\'read\')', str_contains($helpers, "\$p_mail  = can_mail('read');"));
-ok('sidebar mail bağlantısı $p_mail kapılı', str_contains($helpers, "if (\$p_mail) \$lnk('mail.php'"));
+ok('sidebar mail bağlantısı $p_mail kapılı', str_contains($helpers, "if (\$p_mail)  \$o[] = \$ge('mail.php'"));
 ok('nav_alt_izinler mail = can_mail(\'read\')', str_contains($helpers, "'mail'    => \$fn && can_mail('read')"));
 ok('first_allowed_page mail.php = can_mail(\'read\')', str_contains($helpers, "'mail.php'           => can_mail('read')"));
 ok('index.php kartı can_mail(\'read\') kapılı', (bool)preg_match("/if \(can_mail\('read'\)\): \?>\s*\n\s*<a href=\"mail\.php\"/", $index));
