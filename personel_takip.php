@@ -129,7 +129,7 @@ render_flash();
 </a>
 <?php endif; ?>
 
-<?php if (!empty(pc_sekmeler())): ?>
+<?php if (!empty(pc_sekmeler_hazir(db())[0])): ?>
 <a href="puantaj_cizelgesi.php" class="home-card">
     <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
     <div class="home-card-title">Puantaj Çizelgesi</div>

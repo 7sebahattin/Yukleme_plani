@@ -110,8 +110,8 @@ $rx = '#/puantaj_cizelgesi(_yazdir)?\.php(/|$)#';
 ok('sw.js regex davranışı', preg_match($rx, '/puantaj_cizelgesi.php') && preg_match($rx, '/a/puantaj_cizelgesi_yazdir.php') && preg_match($rx, '/puantaj_cizelgesi.php/x') && !preg_match($rx, '/puantaj_cizelgesi.phps') && !preg_match($rx, '/x_puantaj_cizelgesi.html'));
 
 $takip = oku('personel_takip.php');
-ok("hub: 'Puantaj Çizelgesi' kartı düz home-card + pc_sekmeler() (sayfanın açılabileceği sekme var) ile sarılı",
-    (bool)preg_match('/<\?php if \(!empty\(pc_sekmeler\(\)\)\): \?>\s*<a href="puantaj_cizelgesi\.php" class="home-card">.*?Puantaj Çizelgesi.*?Aylık puantaj · personel ve günlük işçi.*?<\?php endif; \?>/s', $takip));
+ok("hub: 'Puantaj Çizelgesi' kartı düz home-card + pc_sekmeler_hazir() (sayfanın açılabileceği sekme var) ile sarılı",
+    (bool)preg_match('/<\?php if \(!empty\(pc_sekmeler_hazir\(db\(\)\)\[0\]\)\): \?>\s*<a href="puantaj_cizelgesi\.php" class="home-card">.*?Puantaj Çizelgesi.*?Aylık puantaj · personel ve günlük işçi.*?<\?php endif; \?>/s', $takip));
 ok('hub: $p_gunluk bayrağı monthly_timesheet\'i de sayar', (bool)preg_match('/\$p_gunluk\s*=.*role_pdks_can\(\'monthly_timesheet\'\)/', $takip));
 ok('hub: toplam düz home-card = 12', substr_count($takip, 'class="home-card"') === 12);
 

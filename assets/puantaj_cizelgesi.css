@@ -252,3 +252,6 @@ html[data-theme="dark"] .pg-tehlike { color: #ff9d94; }
 }
 .pi-ovl.pg-karart { background: rgba(0, 0, 0, .35); }
 @media print { .pg-pen, .pg-ekle, .pg-uc, .pg-mob-islem { display: none !important; } }
+
+/* v554: onay düğmesi tehlikeli işlemde (Kaldır / Ayı temizle) kırmızı */
+.pg-tehlike-dugme, .pg-tehlike-dugme:hover { background: #c0392b; border-color: #c0392b; color: #fff; }
