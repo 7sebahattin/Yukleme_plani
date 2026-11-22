@@ -2839,11 +2839,25 @@ function ekranAlti() {
         document.body.style.width = '';
         window.scrollTo(0, kilitliY);
     }
+    // v552: açılışta açık (aktif) grup görünür bölgede değilse başlığı yapışkan başlığın hemen altına kaydır
+    function aktifGrubaKaydir() {
+        var og = sheet.querySelector('details[open]');
+        if (!og) return;
+        var hd = sheet.querySelector('.bn-sheet-head'), sr = sheet.getBoundingClientRect(), r = og.getBoundingClientRect();
+        var ust = sr.top + (hd ? hd.offsetHeight : 0);
+        if (r.top < ust || r.bottom > sr.bottom) sheet.scrollTop += r.top - ust - 8;
+    }
+    // Başlığa basıp bir grup açılınca (akordiyon diğerlerini kapatır) açılan grup görünür bölgede değilse kaydır
+    sheet.addEventListener('toggle', function (e) {
+        var d = e.target;
+        if (d && d.open && d.matches && d.matches('details.bn-grup') && !ovl.hidden) requestAnimationFrame(aktifGrubaKaydir);
+    }, true);
     function ac() {
         scrollKilitle();
         ovl.hidden = false;
         more.setAttribute('aria-expanded', 'true');
         duzenle(false);
+        aktifGrubaKaydir();
         kapatBtn.focus();
     }
     function kapat() {
@@ -2877,7 +2891,7 @@ function ekranAlti() {
         if (e.key === 'Escape') { e.preventDefault(); kapat(); return; }
         if (e.key !== 'Tab') return;
         // Odak dialog içinde kalsın
-        var od = [].slice.call(sheet.querySelectorAll('button, a[href]')).filter(function (x) { return x.offsetParent !== null; });
+        var od = [].slice.call(sheet.querySelectorAll('button, a[href], summary')).filter(function (x) { return x.offsetParent !== null; });   // summary: v552 grup başlıkları da Tab sırasında
         if (!od.length) return;
         var i = od.indexOf(document.activeElement);
         if (e.shiftKey && (i <= 0)) { e.preventDefault(); od[od.length - 1].focus(); }
@@ -2886,6 +2900,12 @@ function ekranAlti() {
 
     // Sabitle modu: karoya dokunmak gitmez, sabitlemeyi açar/kapatır
     sheet.addEventListener('click', function (e) {
+        // v552: anahtarsız (muhasebe vb.) bağlantılar sabitlenemez — Sabitle modunda gitmez, nedeni yazılır
+        if (sheet.classList.contains('editing') && e.target.closest('.bn-tile-link')) {
+            e.preventDefault();
+            mesaj.textContent = 'Bu sayfa alt menüye sabitlenemez.';
+            return;
+        }
         var go = e.target.closest('.bn-tile .go');
         if (!go || !sheet.classList.contains('editing')) return;
         e.preventDefault();
@@ -2951,6 +2971,8 @@ function ekranAlti() {
         if (!gruplar.length) return;
         var aktifGrup = null;
         gruplar.forEach(function (d) { if (!aktifGrup && d.querySelector(AKTIF)) aktifGrup = d; });
+        // v552: aktif öğe bu kapta yoksa ama sunucu bir grubu açık bastıysa (Ana Sayfa'nın hedefi "Diğer"de tekrarlanmaz) sunucunun kararı geçerli
+        if (!aktifGrup) aktifGrup = gruplar.filter(function (d) { return d.open; })[0] || null;
         if (!aktifGrup) {   // sunucu hiçbir bağlantıyı işaretlemediyse: URL dosya adıyla eşleştir
             var bu = dosya(location.pathname);
             gruplar.forEach(function (d) {

@@ -987,6 +987,11 @@ function nav_alt_home_anahtar(?string $home): ?string {
     foreach (nav_alt_sayfalar() as $k => $p) {
         if ($p['href'] === $home) return $k;
     }
+    // v552: yalnız muhasebe menüsü yetkisi olan rolde Ana Sayfa ilk izinli muhasebe sayfasına gider; nav_aktif_anahtar()
+    // o sayfalarda dosya slug'ını (.php'siz) döndürür → Ana Sayfa orada da aktif görünsün.
+    foreach (nav_muhasebe_gruplari() as $g) {
+        if (isset($g[2][$home])) return substr($home, 0, -4);
+    }
     return null;
 }
 
@@ -1043,16 +1048,44 @@ function nav_alt_model(): ?array {
     ];
 }
 
+/**
+ * "Diğer" sayfasının grupları (v552) — masaüstü sidebar ile AYNI model (nav_menu_modeli): aynı grup adı/sırası/öğe adı.
+ * Dönen: nav_menu_modeli()['gruplar'] biçimi; her öğeye 'aday' (bool) eklenir = nav_alt_sayfalar() anahtarı var VE
+ * $m['adaylar']'da (pin'lenebilir, MEVCUT .bn-tile işaretlemesi); değilse pin'siz sade bağlantı (muhasebe sayfaları vb.).
+ * Ana Sayfa'nın hedefiyle aynı sayfaya giden aday-olmayan öğe çizilmez (dokta Ana Sayfa zaten oraya gider) ve boş kalan grup düşer.
+ * Saf fonksiyon: DB/yetki çağrısı yok (yetki nav_menu_modeli()'nde).
+ */
+function nav_alt_sheet_gruplari(array $menu, array $m): array {
+    $out = [];
+    foreach ($menu['gruplar'] as $g) {
+        $ogeler = [];
+        foreach ($g['ogeler'] as $o) {
+            $aday = $o['nav'] !== null && in_array($o['nav'], $m['adaylar'], true);
+            if (!$aday && $m['home'] !== null && $o['href'] === $m['home']) continue;
+            $o['aday'] = $aday;
+            $ogeler[] = $o;
+        }
+        if ($ogeler) { $g['ogeler'] = $ogeler; $out[] = $g; }
+    }
+    return $out;
+}
+
 /** Alt çubuk + "Diğer" sayfası HTML'i (render_footer çağırır). */
 function nav_alt_ciz(array $m, string $base): void {
     $K       = nav_alt_sayfalar();
     $aktif   = $m['aktif'];
     $slotlar = $m['slotlar'];
     $digerSay = count($m['adaylar']);
+    // v552: "Diğer" sayfası sidebar ile AYNI modelden çizilir (grup adı/sırası/öğe adı). Model aktif bölümü çizim
+    // anında okur (render_footer'daki geç ipucu da yansısın) — bu yüzden burada taze hesaplanır.
+    $sheetGruplar = nav_alt_sheet_gruplari(nav_menu_modeli($base), $m);
+    // Dokta yeri olmayan (anahtarsız: muhasebe sayfaları) öğe varsa sheet de "Diğer" düğmesi de ŞART — yoksa o sayfalara mobilde ulaşılamaz.
+    $sheetEk = false;
+    foreach ($sheetGruplar as $__g) foreach ($__g['ogeler'] as $__o) if (!$__o['aday']) { $sheetEk = true; break 2; }
     // "Diğer" yalnız slotlara sığmayan sayfa varsa: >4 her genişlikte, tam 4
     // ise yalnız dar ekranda (orada 4. slot gizli, o sayfa Diğer'e düşer).
-    $digerVar = $digerSay > NAV_ALT_SLOT - 1;
-    $digerDar = $digerSay === NAV_ALT_SLOT;
+    $digerVar = $digerSay > NAV_ALT_SLOT - 1 || $sheetEk;
+    $digerDar = $digerSay === NAV_ALT_SLOT && !$sheetEk;
     // Güncel sayfa slotlarda değilse "Diğer" onun ikonunu alır ve aktif olur.
     // (Dar ekranda 4. slottaki sayfa için aynısını app.js yapar.)
     $digerAktif = $digerVar && $aktif !== null && $aktif !== 'home'
@@ -1110,9 +1143,7 @@ function nav_alt_ciz(array $m, string $base): void {
 
     if (!$digerVar) return;
 
-    // ── "Diğer" alt sayfası (sidebar gibi gruplu; yalnız izinli sayfalar) ──
-    $gruplar = [];
-    foreach ($m['adaylar'] as $k) $gruplar[$K[$k]['grup']][] = $k;
+    // ── "Diğer" alt sayfası: sidebar ile AYNI gruplar, AKORDİYON (v551 KURAL) — yalnız aktif grup `open`, diğerleri kapalı ──
     $depo = function_exists('active_depot') ? active_depot() : null;
     $pin  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3z"/><path d="M12 12v8"/></svg>';
     echo '<div class="bn-sheet-ovl" id="bnSheetOvl" hidden>'
@@ -1124,23 +1155,40 @@ function nav_alt_ciz(array $m, string $base): void {
     if ($depo !== null) {
         echo '<div><span class="bn-depo-chip"><i aria-hidden="true"></i>' . h($depo) . '</span></div>';
     }
-    foreach (['Operasyon', 'Yönetim'] as $g) {
-        if (empty($gruplar[$g])) continue;
-        echo '<div class="bn-sheet-sec">' . h($g) . '</div><div class="bn-sheet-grid">';
-        foreach ($gruplar[$g] as $k) {
+    echo '<div class="bn-gruplar" data-akordiyon>';
+    $acildi = false;   // birden çok grup aktif görünse bile YALNIZ ilki açık (akordiyon)
+    foreach ($sheetGruplar as $g) {
+        $ac = $g['aktif'] && !$acildi;
+        if ($ac) $acildi = true;
+        echo '<details class="bn-grup" data-sb-grup="' . h($g['slug']) . '"' . ($ac ? ' open' : '') . '>'
+            . '<summary class="bn-grup-sum"><span class="bn-grup-ikon" aria-hidden="true">' . nav_grup_ikon_svg($g['svg']) . '</span>'
+            . '<span class="bn-grup-ad">' . h($g['ad']) . '</span><span class="bn-grup-ok" aria-hidden="true"></span></summary>'
+            . '<div class="bn-sheet-grid">';
+        foreach ($g['ogeler'] as $o) {
+            $cur = (bool)$o['aktif'];
+            if (!$o['aday']) {
+                // Anahtarsız öğe: pin'siz, data-nav'sız sade bağlantı (app.js'in Sabitle/slot kodu `.bn-tile[data-nav]` + `.bn-tile .go` arar → görmezden gelir)
+                echo '<a class="bn-tile bn-tile-link' . ($cur ? ' is-current' : '') . '" href="' . h($base . $o['href']) . '"' . ($cur ? ' aria-current="page"' : '')
+                    . ($o['rozet'] > 0 ? ' aria-label="' . h($o['etiket']) . ', ' . (int)$o['rozet'] . ' okunmamış"' : '') . '>'
+                    . '<span class="bn-emoji" aria-hidden="true">' . $o['ikon'] . '</span>'
+                    . '<span class="bn-tile-ad">' . h($o['etiket']) . '</span></a>';
+                continue;
+            }
+            $k = $o['nav'];
             $p = $K[$k];
-            $cls = ($aktif === $k ? ' is-current' : '') . (in_array($k, $slotlar, true) ? ' in-bar' : '')
+            $cls = ($cur ? ' is-current' : '') . (in_array($k, $slotlar, true) ? ' in-bar' : '')
                  . (in_array($k, $m['sabit'], true) ? ' pinned' : '');
             echo '<div class="bn-tile' . $cls . '" data-nav="' . h($k) . '">'
-                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($aktif === $k ? ' aria-current="page"' : '')
+                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($cur ? ' aria-current="page"' : '')
                 . ($k === 'mail' && $mailN > 0 ? ' aria-label="' . h($p['etiket']) . ', ' . $mailN . ' okunmamış"' : '') . '>'
                 . '<img src="' . h(nav_alt_ikon_url($p, $base)) . '" width="50" height="50" alt="" decoding="async" loading="lazy">'
-                . '<span>' . h($p['etiket']) . '</span>'
+                . '<span>' . h($o['etiket']) . '</span>'
                 . ($k === 'mail' ? nav_rozet_html($mailN, false, 'nav-rozet-tile') : '') . '</a>'
                 . '<span class="bn-pin-badge" aria-hidden="true">' . $pin . '</span></div>';
         }
-        echo '</div>';
+        echo '</div></details>';
     }
+    echo '</div>';
     echo '<p class="bn-sheet-msg" id="bnSheetMsg" role="status" aria-live="polite"></p>'
         . '<p class="bn-sheet-foot" id="bnSheetFoot">Alt menüdeki slotlar en çok açtığınız sayfalarla kendiliğinden dolar. '
         . '"Sabitle" ile bir sayfayı kalıcı olarak alt menüye alabilirsiniz.</p>'

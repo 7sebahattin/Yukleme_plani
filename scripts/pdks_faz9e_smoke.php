@@ -66,7 +66,9 @@ $fnGovde = function (string $ad) use ($helpersSrc): string {
 };
 ok9e('helpers.php: mobil bottomnav AYNI listeyi kullanıyor (sidebar ile ayrışmaz)',
     (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $fnGovde('nav_aktif_anahtar'))
-    && str_contains($fnGovde('render_desktop_sidebar'), 'nav_aktif_anahtar()')
+    && str_contains($fnGovde('nav_menu_modeli'), 'nav_aktif_anahtar()')   // v551: sidebar + mobil "Diğer" aynı modelden; v552: nav_alt_ciz modeli çağırır
+    && str_contains($fnGovde('render_desktop_sidebar'), 'nav_menu_modeli(')
+    && str_contains($fnGovde('nav_alt_ciz'), 'nav_menu_modeli(')
     && str_contains($fnGovde('nav_alt_model'), 'nav_aktif_anahtar()')
     && str_contains($fnGovde('render_footer'), 'nav_alt_ciz(')
     && !preg_match('/\$is_ptak\s*=/', $fnGovde('render_footer')));

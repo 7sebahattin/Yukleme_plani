@@ -42,6 +42,9 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                 return Array.from(document.querySelectorAll('.sidebar-nav .sidebar-link')).every(a => a.getAttribute('href') === 'index.php' || cards.has(a.getAttribute('href')));
             }), name + ' every sidebar module destination is on the home screen');
             check(await page.locator('.home-card[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' dollar asset decodes on the home card');
+            // v551: akordiyon — Hızlı Maliyet, kapalı Operasyon grubunda; görüntü çözülsün diye grubu aç
+            await page.evaluate(() => { const d = document.querySelector('details[data-sb-grup="operasyon"]'); if (d) d.open = true; });
+            await page.waitForFunction(() => { const i = document.querySelector('.sidebar-link[href="hizli_maliyet.php"] img'); return i && i.complete && i.naturalWidth > 0; });
             check(await page.locator('.sidebar-link[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.width === 20 && image.height === 20 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' sidebar reuses the dollar asset at its original icon size');
             for (const theme of ['light', 'dark']) {
                 await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
@@ -65,6 +68,9 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                 await page.evaluate(() => scrollTo(0, 0));
                 const lay = await page.evaluate(() => {
                     const r = sel => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
+                    // v551: akordiyon — yalnız aktif grup açık gelir, menü kısa kalır; kaydırma ölçümü için
+                    // (açma akordiyonu tetikler → diğerlerini kapatır; bu yüzden menüye uzun dolgu eklenir)
+                    const dolgu = document.createElement('div'); dolgu.style.height = '3000px'; document.querySelector('.sidebar-nav').appendChild(dolgu);
                     const nav = document.querySelector('.sidebar-nav');
                     const side = document.querySelector('.desktop-sidebar');
                     const before = r('.sidebar-user');
