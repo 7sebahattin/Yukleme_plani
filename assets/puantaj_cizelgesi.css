@@ -69,11 +69,11 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
 .pc-grid .pc-g { min-width: 34px; width: 34px; }
 .pc-gn { display: block; font-weight: 700; font-size: .85rem; line-height: 1.15; }
 .pc-gk { display: block; font-size: .66rem; font-weight: 500; color: var(--pc-muted); text-transform: uppercase; }
-.pc-grid .pc-ad { position: sticky; left: 0; z-index: 2; background: var(--pc-sticky); text-align: left; min-width: 190px; max-width: 240px; padding: 5px 10px; box-shadow: 1px 0 0 var(--pc-border); }
-.pc-grid thead .pc-ad { z-index: 4; background: var(--pc-head); }
-.pc-ad-ad { display: block; font-weight: 600; font-size: .85rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pc-ad small { display: block; font-weight: 400; font-size: .7rem; color: var(--pc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pc-adet { font-weight: 400; color: var(--pc-muted); }
+.pc-grid .pc-isim { position: sticky; left: 0; z-index: 2; background: var(--pc-sticky); text-align: left; min-width: 190px; max-width: 240px; padding: 5px 10px; box-shadow: 1px 0 0 var(--pc-border); }
+.pc-grid thead .pc-isim { z-index: 4; background: var(--pc-head); }
+.pc-isim-yazi { display: block; font-weight: 600; font-size: .85rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-isim small { display: block; font-weight: 400; font-size: .7rem; color: var(--pc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-isim-sayi { font-weight: 400; color: var(--pc-muted); }
 .pc-grid .pc-oz { min-width: 52px; padding: 4px 6px; font-variant-numeric: tabular-nums; font-weight: 600; }
 .pc-grid thead .pc-oz { font-weight: 600; }
 .pc-grid .pc-oz.pc-uyari { background: var(--pc-uyari-bg); color: var(--pc-uyari); }
@@ -108,9 +108,9 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
 .pc-grid .pc-bugun { border-left: 2px solid var(--pc-bugun); border-right: 2px solid var(--pc-bugun); }
 .pc-grid thead .pc-bugun { border-top: 2px solid var(--pc-bugun); }
 .pc-grid tfoot tr:last-child .pc-bugun { border-bottom: 2px solid var(--pc-bugun); }
-.pc-grid tbody tr:hover th.pc-ad, .pc-grid tbody tr:hover td:not(.pc-x):not(.pc-e):not(.pc-hs) { background: var(--pc-hover); }
+.pc-grid tbody tr:hover th.pc-isim, .pc-grid tbody tr:hover td:not(.pc-x):not(.pc-e):not(.pc-hs) { background: var(--pc-hover); }
 .pc-grid tfoot th, .pc-grid tfoot td { background: var(--pc-sticky); font-weight: 700; }
-.pc-grid tfoot .pc-ad { z-index: 2; }
+.pc-grid tfoot .pc-isim { z-index: 2; }
 .pc-grid tfoot td.pc-hs { background: var(--pc-hs) !important; }
 .pc-grid tfoot .pc-h { height: auto; padding: 5px 0; }
 .pc-grid tfoot .pc-genel-bos { text-align: left; padding: 5px 10px; font-weight: 600; color: var(--pc-muted); }
@@ -128,8 +128,8 @@ html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
 .pc-kisi summary::-webkit-details-marker { display: none; }
 .pc-kisi summary::after { content: "▾"; color: var(--pc-muted); flex: none; transition: transform .15s; }
 .pc-kisi[open] summary::after { transform: rotate(180deg); }
-.pc-k-ad { flex: 1 1 auto; min-width: 0; }
-.pc-k-ad small { display: block; font-size: .72rem; color: var(--pc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-k-isim { flex: 1 1 auto; min-width: 0; }
+.pc-k-isim small { display: block; font-size: .72rem; color: var(--pc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-rozetler { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; }
 .pc-rz { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600; background: var(--pc-head); color: var(--pc-text); white-space: nowrap; }
 .pc-rz-uyari { background: var(--pc-uyari-bg); color: var(--pc-uyari); }
@@ -204,11 +204,11 @@ html[data-theme="dark"] .pi-hata { color: #ff9d94; }
 .pg-bos { padding: 34px 16px; }
 .pg-bos p { margin: 6px 0 14px; }
 .pg-buyuk { min-height: 48px; padding: 10px 26px; font-size: 1.05rem; }
-.pg-ad-kap { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.pg-ad-metin { flex: 1 1 auto; min-width: 0; }
+.pg-isim-kap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pg-isim-metin { flex: 1 1 auto; min-width: 0; }
 .pg-uc { flex: none; width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--pc-muted); font-size: 1.15rem; line-height: 1; cursor: pointer; }
 .pg-uc:hover, .pg-uc:focus-visible { background: var(--pc-head); color: var(--pc-text); outline: 2px solid var(--pc-accent); outline-offset: -2px; }
-.pg-pasif .pc-ad-ad { opacity: .65; }
+.pg-pasif .pc-isim-yazi { opacity: .65; }
 .pg-pasif-etiket { font-style: normal; font-weight: 400; font-size: .74rem; color: var(--pc-muted); }
 .pg-gbtn { display: block; width: 100%; padding: 4px 0; margin: -4px 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .pg-gbtn:hover, .pg-gbtn:focus-visible { background: var(--pc-hover); outline: 2px solid var(--pc-accent); outline-offset: -2px; }
@@ -262,16 +262,16 @@ html[data-theme="dark"] .pg-tehlike { color: #ff9d94; }
     --pc-sec-bg: #dbe8ff; --pc-sec-tint: rgba(37, 99, 235, .13);
 }
 html[data-theme="dark"] .pc-page { --pc-sec-bg: #1f3358; --pc-sec-tint: rgba(106, 168, 255, .18); }
-.pc-grid .pc-ad { width: 210px; min-width: 210px; max-width: 260px; box-sizing: border-box; overflow: hidden; }
+.pc-grid .pc-isim { width: 210px; min-width: 210px; max-width: 260px; box-sizing: border-box; overflow: hidden; }
 /* ilk sütun genişliği <col> ile de verilir: bazı tarayıcılar tablo hücresinde min/max-width'i yok sayar; <col width> her yerde geçerlidir */
-.pc-grid col.pc-col-ad { width: 210px; min-width: 210px; }
+.pc-grid col.pc-col-isim { width: 210px; min-width: 210px; }
 .pc-grid thead th.pc-kose { left: 0; }
-.pg-ad-kap { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; }
-.pg-ad-metin { flex: 1 1 0; min-width: 0; }
+.pg-isim-kap { display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; }
+.pg-isim-metin { flex: 1 1 0; min-width: 0; }
 .pg-secbox { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 30px; margin: 0; cursor: pointer; }
 .pg-secbox input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--pc-accent); }
 .pg-secbox-bos { cursor: default; }
-.pg-grid tbody tr.pg-ksec th.pc-ad { background: var(--pc-sec-bg); box-shadow: inset 3px 0 0 var(--pc-accent), 1px 0 0 var(--pc-border); }
+.pg-grid tbody tr.pg-ksec th.pc-isim { background: var(--pc-sec-bg); box-shadow: inset 3px 0 0 var(--pc-accent), 1px 0 0 var(--pc-border); }
 
 /* gün seçimi: başlık düğmesi seçim aç/kapa; seçili sütun hücreleri hafif renklenir */
 .pg-grid thead th.pc-g.pg-gsec { background: var(--pc-sec-bg); box-shadow: inset 0 -3px 0 var(--pc-accent); }
@@ -326,7 +326,7 @@ html[data-theme="dark"] .pg-gorunum-bag.is-aktif { color: #0b1220; }
 .pk-tablo thead th { background: var(--pc-head); font-size: .8rem; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--pc-text); }
 .pk-tablo th.pk-c, .pk-tablo td.pk-c { width: 44px; padding-right: 0; }
 .pk-sayi { text-align: right !important; font-variant-numeric: tabular-nums; }
-.pk-pasif .pk-ad, .pk-pasif .pk-gorev { opacity: .65; }
+.pk-pasif .pk-isim, .pk-pasif .pk-gorev { opacity: .65; }
 .pk-yok { color: var(--pc-muted); }
 .pk-rozet { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .76rem; font-weight: 600; }
 .pk-rozet-aktif { background: var(--pc-x-bg); color: var(--pc-x); }
@@ -382,7 +382,7 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
     .pk-tablo tr { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "c ad durum" "c gorev gun" "i i i"; gap: 2px 8px; align-items: center; margin: 0 0 8px; padding: 10px; border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-surface); }
     .pk-tablo td { display: block; padding: 0; border: 0; background: transparent; }
     .pk-tablo td.pk-c { grid-area: c; width: auto; padding: 0; }
-    .pk-tablo td.pk-ad { grid-area: ad; font-weight: 600; overflow-wrap: anywhere; }
+    .pk-tablo td.pk-isim { grid-area: ad; font-weight: 600; overflow-wrap: anywhere; }
     .pk-tablo td.pk-gorev { grid-area: gorev; font-size: .82rem; color: var(--pc-muted); }
     .pk-tablo td.pk-durum { grid-area: durum; justify-self: end; min-width: 0; }
     .pk-tablo td.pk-sayi { grid-area: gun; justify-self: end; font-size: .8rem; color: var(--pc-muted); }
@@ -397,3 +397,13 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
     .pk-excel-tablo-kap { max-height: 34vh; }
 }
 @media print { .pg-sec-arac, .pg-cubuk, .pk-excel, .pg-gorunum, .pg-secbox, .pg-msec { display: none !important; } }
+
+/* ── v556: kişi adı sütunu sertleştirme ──
+   KÖK NEDEN: sütun sınıfı eskiden "pc-ad" idi; EasyList genel süzgeci (##.pc-ad) reklam engelleyicide onu gizliyordu.
+   Sınıf adları artık "ad" içermez (pc-isim…; data-isim). Dış bir kuralın ezmesine karşı: */
+.pc-grid th.pc-isim { display: table-cell !important; visibility: visible !important; }
+/* sütun yine de görünmezse (puantaj_cizelgesi.js bekçisi): ızgara yerine kişi listesi + uyarı bandı */
+.pc-page.pc-isim-yok .pc-grid-wrap { display: none !important; }
+.pc-page.pc-isim-yok .pc-liste { display: block !important; }
+.pc-isim-uyari { border-left-color: var(--pc-uyari); background: var(--pc-uyari-bg); color: var(--pc-uyari); }
+@media print { .pc-isim-uyari { display: none !important; } }

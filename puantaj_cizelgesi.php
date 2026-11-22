@@ -228,10 +228,10 @@ $ayUzun = pc_ay_adlari();
 <!-- ≥768px: çizelge ızgarası -->
 <div class="table-wrap pc-grid-wrap" id="pcGridWrap">
 <table class="pc-grid">
-    <colgroup><col class="pc-col-ad"></colgroup>
+    <colgroup><col class="pc-col-isim"></colgroup>
     <thead>
     <tr>
-        <th class="pc-ad pc-kose" scope="col"><?= h($kisiEtiket) ?> <span class="pc-adet">(<?= $say ?>)</span></th>
+        <th class="pc-isim pc-kose" scope="col"><?= h($kisiEtiket) ?> <span class="pc-isim-sayi">(<?= $say ?>)</span></th>
         <?php foreach ($gunler as $g): ?>
         <th class="pc-g<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>" scope="col" title="<?= h($g['n'] . ' ' . $ayUzun[(int)substr($ay, 5, 2)] . ' ' . pc_gun_adlari_uzun()[$g['hg']]) ?>"<?= $g['bugun'] ? ' data-bugun' : '' ?>><span class="pc-gn"><?= $g['n'] ?></span><span class="pc-gk"><?= h($g['ad']) ?></span></th>
         <?php endforeach; ?>
@@ -248,7 +248,7 @@ $ayUzun = pc_ay_adlari();
     <tbody>
     <?php foreach ($tablo['satirlar'] as $s): ?>
     <tr>
-        <th class="pc-ad" scope="row"><span class="pc-ad-ad"><?= h($s['ad']) ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></th>
+        <th class="pc-isim" scope="row"><span class="pc-isim-yazi"><?= h($s['ad']) ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></th>
         <?php foreach ($gunler as $g):
             $hh = $s['hucre'][$g['tarih']] ?? null;
             [$cls, $ic, $tt] = pc_hucre_goster($tur, $hh);
@@ -270,14 +270,14 @@ $ayUzun = pc_ay_adlari();
     </tbody>
     <tfoot>
     <tr class="pc-say">
-        <th class="pc-ad" scope="row"><?= $gunluk ? 'O gün toplam işçi' : 'O gün çalışan' ?></th>
+        <th class="pc-isim" scope="row"><?= $gunluk ? 'O gün toplam işçi' : 'O gün çalışan' ?></th>
         <?php foreach ($gunler as $g): $n = (int)($tablo['gun_say'][$g['tarih']] ?? 0); ?>
         <td class="pc-h<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>"><?= $n > 0 ? $n : '·' ?></td>
         <?php endforeach; ?>
         <td class="pc-oz" colspan="<?= $ozKol ?>"></td>
     </tr>
     <tr class="pc-genel">
-        <th class="pc-ad" scope="row">Genel toplam</th>
+        <th class="pc-isim" scope="row">Genel toplam</th>
         <td class="pc-genel-bos" colspan="<?= count($gunler) ?>"><?= (int)$genel['kisi'] ?> <?= h(mb_strtolower($kisiEtiket, 'UTF-8')) ?></td>
         <td class="pc-oz"><?= (int)$genel['gun'] ?></td>
         <td class="pc-oz"><?= $gunluk ? (int)$genel['toplam'] : h(pc_sayi_fmt($genel['toplam'])) ?></td>
@@ -310,7 +310,7 @@ $ayUzun = pc_ay_adlari();
     foreach ($tablo['satirlar'] as $s): $oz = $s['ozet']; ?>
     <details class="pc-kisi" data-emp-kisi="<?= (int)$s['id'] ?>">
         <summary>
-            <span class="pc-k-ad"><span class="pc-ad-ad"><?= h($s['ad']) ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
+            <span class="pc-k-isim"><span class="pc-isim-yazi"><?= h($s['ad']) ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
             <span class="pc-rozetler">
                 <span class="pc-rz" title="Çalışılan gün"><?= (int)$oz['gun'] ?> gün</span>
                 <span class="pc-rz" title="<?= $gunluk ? 'Toplam işçi-gün' : 'Toplam saat' ?>"><?= $gunluk ? (int)$oz['toplam'] . ' işçi' : h(pc_sayi_fmt($oz['toplam'])) . ' sa' ?></span>

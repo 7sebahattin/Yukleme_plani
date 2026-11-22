@@ -25,9 +25,53 @@
         });
     }
     var wrap = document.getElementById('pcGridWrap');
+    var tablo = wrap && wrap.querySelector('table.pc-grid');
+    var sayfaKap = document.querySelector('.pc-page');
+
+    /* ── Kişi adı sütunu bekçisi (v556) ──
+       KÖK NEDEN: yapışkan ad sütununun sınıfı eskiden "pc-ad" idi; EasyList'in genel süzgeci
+       (##.pc-ad) reklam engelleyicilerde (uBlock/AdBlock/AdGuard) bu hücreleri display:none yapıyordu
+       → sütun hiç görünmüyor ya da sayfa yüklendikten SONRA kayboluyordu. Sınıf adları "ad" içermez
+       (pc-isim). Yine de sütun herhangi bir sebeple (başka bir süzgeç, eklenti, kural çakışması)
+       görünmezse kullanıcı çıkmazda kalmasın: uyarı bandı + kişi listesi (mobildeki kart listesi). */
+    function isimSutunuVar() {
+        if (!tablo) return true;
+        var tr = tablo.querySelector('tbody tr') || tablo.querySelector('tfoot tr');
+        var c = tr && tr.firstElementChild;
+        var bas = tablo.querySelector('thead tr');
+        var b = bas && bas.firstElementChild;
+        function tamam(el) { return !!el && el.tagName === 'TH' && el.offsetWidth >= 40 && getComputedStyle(el).visibility !== 'hidden'; }
+        return tamam(c) && tamam(b);
+    }
+    function isimBekcisi() {
+        if (!wrap || !sayfaKap || wrap.offsetParent === null || sayfaKap.classList.contains('pc-isim-yok')) return;   // <768px'te ızgara zaten gizli
+        if (isimSutunuVar()) return;
+        sayfaKap.classList.add('pc-isim-yok');
+        try { console.warn('Puantaj: kişi adı sütunu görünmüyor (reklam engelleyici / eklenti olabilir); kişi listesi gösteriliyor.'); } catch (e) { /* */ }
+        if (!document.getElementById('pcIsimUyari')) {
+            var u = document.createElement('p');
+            u.id = 'pcIsimUyari'; u.className = 'pc-not pc-isim-uyari'; u.setAttribute('role', 'alert');
+            u.textContent = 'Kişi adı sütunu bu tarayıcıda gizleniyor (büyük olasılıkla bir reklam engelleyici eklentisi). Kişiler liste görünümünde gösterildi; tabloyu görmek için bu siteyi eklentide "devre dışı bırak / izin ver" listesine ekleyin.';
+            wrap.parentNode.insertBefore(u, wrap);
+        }
+    }
+    isimBekcisi();
+    [250, 1500, 4000].forEach(function (ms) { setTimeout(isimBekcisi, ms); });   // süzgeçler sayfa yüklendikten sonra da devreye girebilir ("görünüp kayboluyor")
+    var bekT = 0;
+    window.addEventListener('resize', function () { clearTimeout(bekT); bekT = setTimeout(isimBekcisi, 200); });
+    window.addEventListener('load', isimBekcisi);
+
+    /* Bugüne otomatik kaydır: YALNIZ gerçek yatay taşma varsa ve ad sütunu yapışkan olarak doğrulandıysa;
+       kaydırma sonrası ad sütunu görünür kalmıyorsa geri alınır (ad sütunu hiçbir koşulda gizlenmez). */
     var bugun = wrap && wrap.querySelector('th[data-bugun]');
-    if (wrap && bugun && wrap.offsetParent !== null) {
-        wrap.scrollLeft = Math.max(0, bugun.offsetLeft - wrap.clientWidth / 2);
+    if (wrap && bugun && wrap.offsetParent !== null && wrap.scrollWidth > wrap.clientWidth + 1 && isimSutunuVar()) {
+        var isimTh = tablo && tablo.querySelector('thead th:first-child');
+        var yapiskan = !!isimTh && getComputedStyle(isimTh).position === 'sticky';
+        if (yapiskan) {
+            wrap.scrollLeft = Math.max(0, bugun.offsetLeft - wrap.clientWidth / 2);
+            var wr = wrap.getBoundingClientRect(), ir = isimTh.getBoundingClientRect();
+            if (Math.abs(ir.left - wr.left) > wrap.clientLeft + 3 || ir.width < 40) wrap.scrollLeft = 0;
+        }
     }
 
     /* ── Elle gün işareti (v553) ── */
@@ -49,8 +93,8 @@
 
     function kisiAdi(hucre) {
         var det = hucre.closest('details.pc-kisi');
-        var el = det ? det.querySelector('.pc-ad-ad') : null;
-        if (!el) { var tr = hucre.closest('tr'); el = tr ? tr.querySelector('th .pc-ad-ad') : null; }
+        var el = det ? det.querySelector('.pc-isim-yazi') : null;
+        if (!el) { var tr = hucre.closest('tr'); el = tr ? tr.querySelector('th .pc-isim-yazi') : null; }
         return el ? el.textContent.trim() : '';
     }
     function gunMetni(tarih) {
