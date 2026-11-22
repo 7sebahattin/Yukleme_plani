@@ -38,6 +38,7 @@ require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/puantaj_isaret.php';   // Puantaj İşaretleri (v553; yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/puantaj_giris.php';    // Puantaj Girişi (v554; yalnız CREATE TABLE kartı; pg_* yardımcıları çağrı anında config/puantaj_cizelgesi.php'ye ihtiyaç duyar → migrate yalnız pg_migrate/pg_hazir çağırır)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -147,6 +148,7 @@ $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yen
 $kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
 $ceksenet_results = []; $ceksenet_ran = false;                  // Çek-Senet (3 yeni tablo)
 $pi_results = []; $pi_ran = false;                              // Puantaj İşaretleri (v553: puantaj_isaretler, 1 yeni tablo)
+$pg_results = []; $pg_ran = false;                              // Puantaj Girişi (v554: puantaj_giris_kisiler + puantaj_giris_gunler, 2 yeni tablo)
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
@@ -450,6 +452,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pi_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'puantaj_isaret', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'puantaj_giris') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pg_ran     = true;
+    $pg_results = pg_migrate($pdo);
+    foreach ($pg_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'puantaj_giris', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -1156,6 +1167,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="puantaj_isaret">
       <button type="submit" class="btn btn-primary">Puantaj İşaret Tablosunu Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('puantaj-giris'); ?>
+    <h2 style="margin-top:0;">Puantaj Girişi</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>puantaj_giris_kisiler</code> + <code>puantaj_giris_gunler</code> (Aylık Puantaj Çizelgesi › Puantaj Girişi sekmesi:
+      kullanıcının kendi tanımladığı kişilere gayri resmi / göstermelik puantaj) tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz;
+      PDKS, hakediş ve personel tablolarıyla ilişkisi yoktur). Çalıştırılmazsa sekme yalnız yöneticiye kurulum notuyla görünür, diğerlerinden gizli kalır.
+      <?php if ($pg_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pg_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $pgHazir = pg_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $pgHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $pgHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="puantaj_giris">
+      <button type="submit" class="btn btn-primary">Puantaj Girişi Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

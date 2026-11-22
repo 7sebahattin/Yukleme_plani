@@ -11,8 +11,8 @@ foreach (role_pdks_routes() as $route=>$page) {
     $grants=['role.permissions.detailed','attendance.'.$page.'.read'];
     ok($page.' read opens page',role_pdks_can($page));
     foreach (['create','edit','delete'] as $action) ok($page.' read does not grant '.$action,!role_pdks_can($page,$action));
-    // v553: puantaj_isaret_kaydet.php TEK yazma ucudur — POST her zaman monthly_timesheet.edit (içerik doğrulaması uçta); diğer her rotada bilinmeyen POST reddedilir.
-    if ($route==='puantaj_isaret_kaydet.php') ok($route.' POST = monthly_timesheet.edit (tek yazma ucu)',role_pdks_request_action($route,'POST',[],['action'=>'unknown_!','form'=>'unknown_!'])===['monthly_timesheet','edit']);
+    // v553/v554: puantaj_isaret_kaydet.php ve puantaj_giris_kaydet.php TEK yazma uçlarıdır — POST her zaman monthly_timesheet.edit (içerik doğrulaması uçta); diğer her rotada bilinmeyen POST reddedilir.
+    if ($route==='puantaj_isaret_kaydet.php' || $route==='puantaj_giris_kaydet.php') ok($route.' POST = monthly_timesheet.edit (tek yazma ucu)',role_pdks_request_action($route,'POST',[],['action'=>'unknown_!','form'=>'unknown_!'])===['monthly_timesheet','edit']);
     else ok($route.' unknown POST rejected',role_pdks_request_action($route,'POST',[],['action'=>'unknown_!','form'=>'unknown_!'])===null);
 }
 $cases=[

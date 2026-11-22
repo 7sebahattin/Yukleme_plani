@@ -9,6 +9,9 @@
 // v553: Personel sekmesinde elle gün işareti (D/İ/Ü/R/T) — yalnız 'monthly_timesheet' Düzenle
 // izni + tablo hazırsa (migrate.php › Puantaj İşaretleri) hücreler tıklanır; yazma ucu
 // puantaj_isaret_kaydet.php (fetch POST, CSRF). Tablo yoksa çizelge eskisi gibi, arayüz gizli.
+// v554: üçüncü sekme 'Puantaj Girişi' (sekme=giris) — BAĞIMSIZ, gayri resmi: kullanıcının kendi tanımladığı kişiler
+// (puantaj_giris_kisiler/gunler; employees/PDKS ile ilişkisiz). Kapı: monthly_timesheet.edit; yazma ucu
+// puantaj_giris_kaydet.php. Edit yetkisi + tablolar hazırsa VARSAYILAN sekme budur (sekme parametresi yoksa).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -26,22 +29,22 @@ $auth_user = require_login();
 role_pdks_require_request();
 if (function_exists('enforce_active_depot')) enforce_active_depot();
 
-$sekmeler = pc_sekmeler();
+$pdo = db();
+[$sekmeler, $girisHazir] = pc_sekmeler_hazir($pdo);
 if (!$sekmeler) forbidden('Bu sayfaya erişim yetkiniz yok. (Aylık puantaj çizelgesi ile Personel kartları veya Günlük puantaj raporları Gör izni gerekir.)');
 $csvIst = isset($_GET['csv']);
 $xlsxIst = isset($_GET['xlsx']);
 if ($csvIst || $xlsxIst) require_perm('reports.export');
 
-$sekme = (string)pc_sekme_sec((string)($_GET['sekme'] ?? ''), $sekmeler);
+$sekme = (string)pc_sekme_sec((string)($_GET['sekme'] ?? ''), $sekmeler, $girisHazir);
 $ay = pc_ay_dogrula((string)($_GET['ay'] ?? ''));
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 60);
-$pasif = $sekme === 'personel' && !empty($_GET['pasif']);
+$pasif = in_array($sekme, ['personel', 'giris'], true) && !empty($_GET['pasif']);
 $depo = function_exists('active_depot') ? (active_depot() ?? '') : '';
-$pdo = db();
 
 $tablo = $sekme === 'personel'
     ? pc_tablo_personel($pdo, $ay, $q, $pasif)
-    : pc_tablo_gunluk($pdo, $ay, $depo, $q);
+    : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
 $hata = $tablo['hata'] ?? null;
 
 $param = ['sekme' => $sekme, 'ay' => $ay, 'q' => $q, 'pasif' => $pasif ? '1' : ''];
@@ -60,7 +63,7 @@ if ($csvIst || $xlsxIst) {
     }
     $filtre = ['sekme' => $sekme, 'ay' => $ay, 'arama' => $q !== '', 'depo' => $depo, 'pasif' => $pasif ? '1' : ''];
     $dosya = 'puantaj_cizelgesi_' . $sekme . '_' . $ay;
-    $acik = array_filter([$depo !== '' ? 'Depo: ' . $depo : 'Tüm depolar', $q !== '' ? 'Arama: ' . $q : '', pc_lejant_metni($tablo['tur'], $piHazir)]);
+    $acik = array_filter([$depo !== '' ? 'Depo: ' . $depo : 'Tüm depolar', $q !== '' ? 'Arama: ' . $q : '', pc_lejant_metni($tablo['tur'], $piHazir), $sekme === 'giris' ? PG_BILGI_METNI : '']);
     if ($xlsxIst) {
         export_audit('pdks', 'puantaj_cizelgesi', 'xlsx', count($tablo['satirlar']), $filtre);
         xlsx_indir($dosya . '.xlsx', [pc_xlsx_sayfa($tablo, implode(' · ', $acik))],
@@ -74,7 +77,7 @@ if ($csvIst || $xlsxIst) {
     fputcsv($out, pc_disa_baslik($tablo), ';', '"', '\\');
     foreach (pc_disa_satirlar($tablo) as $r) {
         foreach ($r as $i => $v) {
-            if (is_float($v)) $r[$i] = number_format($v, 2, ',', '');   // TR Excel için ondalık virgül
+            if (is_float($v)) $r[$i] = number_format($v, $sekme === 'giris' ? 1 : 2, ',', '');   // TR Excel için ondalık virgül
             elseif (is_string($v) && $v !== '' && strpos("=+-@\t\r", $v[0]) !== false) $r[$i] = "'" . $v;   // CSV formül enjeksiyonu koruması
         }
         fputcsv($out, $r, ';', '"', '\\');
@@ -89,16 +92,17 @@ $base = base_url();
 echo '<link rel="stylesheet" href="' . $base . 'assets/puantaj_cizelgesi.css?v=' . @filemtime(__DIR__ . '/assets/puantaj_cizelgesi.css') . '">';
 render_flash();
 
-$tur = $sekme === 'gunluk' ? 'gunluk' : 'personel';
+$tur = $sekme === 'gunluk' ? 'gunluk' : ($sekme === 'giris' ? 'giris' : 'personel');
 $gunluk = $tur === 'gunluk';
+$giris = $tur === 'giris';
 $onceki = pc_ay_gez($ay, -1);
 $sonraki = pc_ay_gez($ay, 1);
 $adlar = pc_sekme_adlari();
 $say = $hata === null ? count($tablo['satirlar']) : 0;
-$kisiEtiket = $gunluk ? 'Çavuş' : 'Personel';
+$kisiEtiket = $gunluk ? 'Çavuş' : ($giris ? 'Kişi' : 'Personel');
 $ayUzun = pc_ay_adlari();
 ?>
-<div class="pc-page" data-tur="<?= h($tur) ?>"<?= $duzenle ? ' data-pi-url="puantaj_isaret_kaydet.php" data-pi-csrf="' . h(csrf_token()) . '"' : '' ?>>
+<div class="pc-page" data-tur="<?= h($tur) ?>"<?= $duzenle ? ' data-pi-url="puantaj_isaret_kaydet.php" data-pi-csrf="' . h(csrf_token()) . '"' : '' ?><?= $giris && $hata === null ? ' data-pg-url="puantaj_giris_kaydet.php" data-pg-csrf="' . h(csrf_token()) . '" data-pg-ay="' . h($ay) . '" data-pg-q="' . h($q) . '" data-pg-kodlar="' . h(pg_kodlar_json()) . '"' : '' ?>>
 <div class="page-head">
     <div>
         <h1>📅 Aylık Puantaj Çizelgesi</h1>
@@ -116,8 +120,8 @@ $ayUzun = pc_ay_adlari();
         <input type="month" name="ay" value="<?= h($ay) ?>" class="pc-ay-giris" pattern="\d{4}-\d{2}" placeholder="YYYY-AA" aria-label="Ay" data-oto>
         <a class="btn pc-ok" href="<?= h(pc_url('puantaj_cizelgesi.php', ['ay' => $sonraki] + $param)) ?>" aria-label="Sonraki ay" title="Sonraki ay">›</a>
     </div>
-    <input type="search" name="q" value="<?= h($q) ?>" class="pc-ara" placeholder="Ad veya sicil ara…" aria-label="Ad veya sicil ara" maxlength="60" enterkeyhint="search">
-    <?php if ($sekme === 'personel'): ?>
+    <input type="search" name="q" value="<?= h($q) ?>" class="pc-ara" placeholder="<?= $giris ? 'Ad veya görev ara…' : 'Ad veya sicil ara…' ?>" aria-label="<?= $giris ? 'Ad veya görev ara' : 'Ad veya sicil ara' ?>" maxlength="60" enterkeyhint="search">
+    <?php if ($sekme === 'personel' || $giris): ?>
     <label class="pc-pasif"><input type="checkbox" name="pasif" value="1" <?= $pasif ? 'checked' : '' ?> data-oto> Pasifleri de göster</label>
     <?php endif; ?>
     <noscript><button type="submit" class="btn">Göster</button></noscript>
@@ -129,6 +133,7 @@ $ayUzun = pc_ay_adlari();
     </nav>
     <?php endif; ?>
     <div class="pc-aksiyon">
+        <?php if ($giris && $hata === null): ?><button type="button" class="btn btn-sm btn-primary pg-ekle" data-pg-kisi-ekle>+ Kişi ekle</button><?php endif; ?>
         <?= $hata === null ? export_menu(pc_url('puantaj_cizelgesi.php', $param + ['csv' => '1']), pc_url('puantaj_cizelgesi.php', $param + ['xlsx' => '1']), 'Excel') : '' ?>
         <?php if ($hata === null): ?><a class="btn btn-sm btn-ghost" target="_blank" rel="noopener" href="<?= h(pc_url('puantaj_cizelgesi_yazdir.php', $param)) ?>">🖨️ Yazdır</a><?php endif; ?>
     </div>
@@ -137,19 +142,25 @@ $ayUzun = pc_ay_adlari();
 <div class="pc-lejant" id="pcLejant">
     <button type="button" class="pc-lejant-dugme" aria-expanded="false" aria-controls="pcLejantIc" title="Gösterge">ⓘ <span>Gösterge</span></button>
     <div class="pc-lejant-ic" id="pcLejantIc"><?= h(pc_lejant_metni($tur, false)) ?>
-        <?php if ($piHazir): ?><span class="pc-kl-liste"><?php foreach (pi_kodlar() as $k => $kd): ?><span class="pc-kl pc-k pc-k-<?= h($kd['sinif']) ?>"><b><?= h($k) ?></b> <?= h($kd['ad']) ?></span><?php endforeach; ?></span><?php endif; ?>
+        <?php if ($giris): ?><span class="pc-kl-liste"><?php foreach (pg_kodlar() as $k => $kd): ?><span class="pc-kl pc-k pc-k-<?= h($kd['sinif']) ?>"><b><?= h($k) ?></b> <?= h($kd['ad']) ?></span><?php endforeach; ?></span>
+        <?php if ($hata === null): ?><span class="pc-kl-ipucu">Güne tıklayarak (mobilde dokunarak) işaretleyin; gün numarasına tıklamak o güne tüm görünen kişiler için tek işaret atar; kişi adının yanındaki ⋯ menüsünden düzenleyebilirsiniz.</span><?php endif; ?>
+        <?php elseif ($piHazir): ?><span class="pc-kl-liste"><?php foreach (pi_kodlar() as $k => $kd): ?><span class="pc-kl pc-k pc-k-<?= h($kd['sinif']) ?>"><b><?= h($k) ?></b> <?= h($kd['ad']) ?></span><?php endforeach; ?></span><?php endif; ?>
         <?php if ($duzenle): ?><span class="pc-kl-ipucu">Güne tıklayarak (mobilde dokunarak) işaretleyin; işaret, o günün otomatik X / ! değerinin yerine geçer.</span><?php endif; ?>
     </div>
 </div>
 <?php if ($piSemaNotu): ?>
 <p class="pc-not">Şema kurulumu: <a href="migrate.php#puantaj-isaret">migrate.php › Puantaj İşaretleri</a> (elle gün işaretleme için tablo henüz kurulmamış; çizelge bu olmadan da çalışır).</p>
 <?php endif; ?>
+<?php if ($giris): ?>
+<p class="pc-not pg-bilgi"><?= h(PG_BILGI_METNI) ?></p>
+<?php endif; ?>
 <?php if ($gunluk): ?>
 <p class="pc-not">Günlük işçide kişi değil <strong>kart / çavuş bazında</strong> sayılır: satır = çavuş, hücre = o gün çavuşun mesaisinde giriş yapan kart sayısı.</p>
 <?php endif; ?>
 
 <?php if ($hata !== null): ?>
-<div class="pc-bos" role="status"><span aria-hidden="true">⚠️</span> <?= h($hata) ?></div>
+<div class="pc-bos" role="status"><span aria-hidden="true">⚠️</span> <?= h($hata) ?><?php if (!empty($tablo['sema'])): ?><br>Önce <a href="migrate.php#puantaj-giris">migrate.php › Puantaj Girişi</a> kartını çalıştırın.<?php endif; ?></div>
+<?php elseif ($giris): pg_ekran_ciz($tablo, ['ay' => $ay, 'q' => $q, 'pasif' => $pasif]); ?>
 <?php elseif ($say === 0): ?>
 <div class="pc-bos" role="status"><span aria-hidden="true">📭</span> <?= $q !== '' ? 'Aramanıza uyan ' . h(mb_strtolower($kisiEtiket, 'UTF-8')) . ' yok.' : h(pc_ay_basligi($ay)) . ' için ' . ($gunluk ? 'çavuş kaydı' : 'personel') . ' bulunamadı.' ?></div>
 <?php else:
@@ -289,4 +300,5 @@ $ayUzun = pc_ay_adlari();
 </div>
 
 <script src="<?= h($base) ?>assets/puantaj_cizelgesi.js?v=<?= (int)@filemtime(__DIR__ . '/assets/puantaj_cizelgesi.js') ?>" defer></script>
+<?php if ($giris && $hata === null): ?><script src="<?= h($base) ?>assets/puantaj_giris.js?v=<?= (int)@filemtime(__DIR__ . '/assets/puantaj_giris.js') ?>" defer></script><?php endif; ?>
 <?php render_footer(); ?>

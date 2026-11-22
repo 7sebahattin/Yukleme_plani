@@ -27,7 +27,7 @@ function role_pdks_pages(): array {
         // yeni (ayrıntılı) roller yalnız bu satırı seçerse eski paketleri AÇMAZ ('bridge'=>false). Sekmeler kendi Gör izniyle ayrıca kapılanır.
         // v553: 'edit' = Personel sekmesinde günü elle işaretleme (D/İ/Ü/R/T). 'legacy_actions' = eski (işaretleyicisiz) rolün OTOMATİK alacağı
         // eylemler: yalnız read — 'edit' eski rollere kendiliğinden AÇILMAZ; yalnız yönetici ya da ayrıntılı rolde açıkça seçilen rol yazabilir.
-        'monthly_timesheet'=>['label'=>'Aylık puantaj çizelgesi','route'=>'puantaj_cizelgesi.php','legacy'=>['daily_reports','employees'],'actions'=>['read','edit'],'legacy_actions'=>['read'],'bridge'=>false,'note'=>'Gör, sayfayı açar. Personel sekmesi için Personel kartları Gör, Günlük İşçi sekmesi için Günlük puantaj raporları Gör izni de gerekir; Excel için Raporlar › Dışa aktar. Düzenle: Personel sekmesinde günü elle işaretleme (Devamsız, İzin, Rapor, Resmi tatil); Personel kartları Gör izni de gerekir. Eski roller bu izni otomatik almaz.'],
+        'monthly_timesheet'=>['label'=>'Aylık puantaj çizelgesi','route'=>'puantaj_cizelgesi.php','legacy'=>['daily_reports','employees'],'actions'=>['read','edit'],'legacy_actions'=>['read'],'bridge'=>false,'note'=>'Gör, sayfayı açar. Personel sekmesi için Personel kartları Gör, Günlük İşçi sekmesi için Günlük puantaj raporları Gör izni de gerekir; Excel için Raporlar › Dışa aktar. Düzenle: Personel sekmesinde günü elle işaretleme (Devamsız, İzin, Rapor, Resmi tatil; Personel kartları Gör izni de gerekir) ve bağımsız, gayri resmi Puantaj Girişi sekmesi (kendi tanımladığınız kişilere X/Y/D/İ/Ü/R/T; başka kaynak izni gerekmez). Eski roller bu izni otomatik almaz.'],
     ];
 }
 function role_pdks_expand_permissions(array $permissions): array {
@@ -72,7 +72,7 @@ function role_pdks_routes(): array {
         'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php','mesai_toplu_onay.php'],
         'manual_exit'=>['manuel_cikis.php'], 'ters_pool'=>['ters_kart_havuz.php'],
         'ters_count'=>['ters_kart_sayim.php'], 'ters_report'=>['ters_kart_mutabakat.php'],
-        'monthly_timesheet'=>['puantaj_cizelgesi.php','puantaj_cizelgesi_yazdir.php','puantaj_isaret_kaydet.php'],
+        'monthly_timesheet'=>['puantaj_cizelgesi.php','puantaj_cizelgesi_yazdir.php','puantaj_isaret_kaydet.php','puantaj_giris_kaydet.php'],
     ] as $page=>$routes) foreach ($routes as $route) $out[$route]=$page;
     return $out;
 }
@@ -89,7 +89,7 @@ function role_pdks_request_action(string $route, string $method, array $query=[]
     if (array_key_exists('ajax',$query) && !is_string($query['ajax'])) return null;
     $action=role_pdks_scalar($post,'action'); $ajax=role_pdks_scalar($query,'ajax');
     $form=role_pdks_scalar($post,'form');
-    if ($route==='puantaj_isaret_kaydet.php') return ['monthly_timesheet','edit'];   // v553: tek yazma ucu; kod/tarih/çalışan/depo doğrulaması uçta
+    if ($route==='puantaj_isaret_kaydet.php' || $route==='puantaj_giris_kaydet.php') return ['monthly_timesheet','edit'];   // v553/v554: tek yazma uçları; kod/tarih/kişi/depo/action doğrulaması uçta
     if ($route==='personel_form.php') {
         if (in_array($action,['kart_ata','kart_durum','kart_degistir'],true)) return ['cards',$action==='kart_ata'?'create':'edit'];
         return match($action ?: 'save_employee') {'save_employee'=>['employees',(int)role_pdks_scalar($query,'id',role_pdks_scalar($post,'id'))>0?'edit':'create'], 'delete_employee'=>['employees','delete'], default=>null};
