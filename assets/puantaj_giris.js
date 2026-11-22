@@ -1,11 +1,15 @@
-/* puantaj_giris.js — Aylık Puantaj › Puantaj Girişi sekmesi (v554). Bağımsız, gayri resmi puantaj.
+/* puantaj_giris.js — Aylık Puantaj › Puantaj Girişi sekmesi (v554 → v555). Bağımsız, gayri resmi puantaj.
    Etkileşimler (hepsi fetch → puantaj_giris_kaydet.php, CSRF; <form> YOK, innerHTML YOK):
    · hücreye tıkla / dokun → kod menüsü (X Y D İ Ü R T + Temizle); başarıda hücre ve özetler YERİNDE güncellenir
      (sunucu yanıtı gerçek kaynak: hata olursa hiçbir şey değişmez)
-   · gün numarasına tıkla → o güne tüm görünen aktif kişiler için tek kod (onaylı)
+   · v555 TOPLU ATAMA: kişi kutuları (başlıkta "tümünü seç") + gün seçimi (gün numarasına tıkla = seç/kaldır; "Tüm günler /
+     Hafta içleri / Hafta sonları / Temizle") → sabit işlem çubuğu: "N kişi × M gün", kod düğmeleri, "Dolu günlerin üzerine yaz"
+     (varsayılan KAPALI), Uygula → sayfa içi onay → gun_toplu_sec; sonuç yazılan/atlanan ve ızgara yerinde güncellenir.
+     Mobil (<768px): "Toplu seç" modu (kişi kutuları + takvimde gün seçimi; takvimde uzun basış modu açar) + alt sayfa çubuğu.
    · ⋯ menüsü: Düzenle · Hafta içlerini Çalıştı yap · Ayı temizle (onaylı) · Kaldır (onaylı) / Geri al
    · + Kişi ekle penceresi
-   Kişi ekle/düzenle/kaldır sonrası sayfa aynı ay/sekmeyle yenilenir (kaydırma korunur). */
+   Kişi ekle/düzenle/kaldır sonrası sayfa aynı ay/sekmeyle yenilenir (kaydırma korunur).
+   window.pgApi: Kişiler görünümü (assets/puantaj_giris_kisiler.js) ortak yardımcıları kullanır. */
 (function () {
     'use strict';
     var sayfa = document.querySelector('.pc-page[data-pg-url]');
@@ -54,6 +58,20 @@
             method: 'POST', credentials: 'same-origin',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
             body: g.toString()
+        }).then(function (r) {
+            return r.json().catch(function () { return { ok: false, error: 'Sunucudan beklenmeyen yanıt geldi.' }; });
+        }).catch(function () { return { ok: false, error: 'bağlantı kurulamadı.' }; });
+    }
+
+    /* JSON gövdeli POST (dizi alanları için: kisi_ids[], tarihler[]) */
+    function postJson(alanlar) {
+        var govde = {};
+        Object.keys(alanlar).forEach(function (k) { govde[k] = alanlar[k]; });
+        govde.csrf = CSRF;
+        return fetch(URL_, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+            body: JSON.stringify(govde)
         }).then(function (r) {
             return r.json().catch(function () { return { ok: false, error: 'Sunucudan beklenmeyen yanıt geldi.' }; });
         }).catch(function () { return { ok: false, error: 'bağlantı kurulamadı.' }; });
@@ -110,8 +128,13 @@
         });
     }
     function degisimUygula(liste) {
+        var indeks = {};   // "kisi|tarih" → hücreler (masaüstü td + mobil takvim kutusu); büyük listelerde sorgu başına tarama YOK
+        sayfa.querySelectorAll('[data-pg][data-emp][data-tarih]').forEach(function (el) {
+            var k = el.getAttribute('data-emp') + '|' + el.getAttribute('data-tarih');
+            (indeks[k] = indeks[k] || []).push(el);
+        });
         (liste || []).forEach(function (d) {
-            sayfa.querySelectorAll('[data-pg][data-emp="' + String(d.k).replace(/[^0-9]/g, '') + '"][data-tarih="' + String(d.t).replace(/[^0-9-]/g, '') + '"]').forEach(function (el) { hucreYaz(el, d.c || ''); });
+            (indeks[String(d.k).replace(/[^0-9]/g, '') + '|' + String(d.t).replace(/[^0-9-]/g, '')] || []).forEach(function (el) { hucreYaz(el, d.c || ''); });
         });
         ozetleriHesapla();
     }
@@ -154,7 +177,7 @@
         return String(t || '').trim();
     }
 
-    /* Hücre / gün sütunu kod menüsü */
+    /* Hücre kod menüsü (tek hücre) */
     function hucreMenusu(hucre) {
         var kod = hucre.getAttribute('data-kod') || '';
         bag = { tur: 'hucre', el: hucre };
@@ -169,14 +192,6 @@
         var ilk = menu.querySelector('[data-pg-kod]:not(:disabled)');
         if (ilk && !mobil()) ilk.focus({ preventScroll: true });
     }
-    function sutunMenusu(dugme) {
-        var tarih = dugme.getAttribute('data-pg-gun') || '';
-        bag = { tur: 'sutun', el: dugme, tarih: tarih };
-        document.getElementById('pgMenuBaslik').textContent = gunMetni(tarih, true) + ' · tüm görünen kişiler';
-        menu.querySelectorAll('[data-pg-kod]').forEach(function (b) { b.disabled = false; b.setAttribute('aria-pressed', 'false'); });
-        menuAc(menu, dugme);
-        hataYaz('pgMenuHata', '');
-    }
     function kodSecildi(kod) {
         if (!bag || mesgul) return;
         if (bag.tur === 'hucre') {
@@ -188,24 +203,6 @@
                 hataYaz('pgMenuHata', 'Kaydedilemedi: ' + ((j && j.error) || 'bilinmeyen hata') + ' Lütfen tekrar deneyin.');
             });
             return;
-        }
-        if (bag.tur === 'sutun') {
-            var tarih = bag.tarih;
-            var n = sayfa.querySelectorAll('tr[data-pg-satir]:not(.pg-pasif)').length;
-            var kd = kod ? KODLAR[kod] : null;
-            hepsiniGizle();
-            pencereAc({
-                baslik: 'Tüm görünen kişilere uygula',
-                mesaj: gunMetni(tarih, true) + ' günü için ' + n + ' aktif kişiye ' + (kd ? '"' + kod + ' — ' + kd.ad + '"' : 'boş (işareti temizle)') + ' atanacak. Mevcut işaretlerin üzerine yazılır. Onaylıyor musunuz?',
-                tamam: 'Uygula',
-                is: function () {
-                    return post({ action: 'gun_sutun', tarih: tarih, kod: kod, q: Q }).then(function (j) {
-                        if (j && j.ok) { degisimUygula(j.degisim); return true; }
-                        hataYaz('pgPenHata', 'Kaydedilemedi: ' + ((j && j.error) || 'bilinmeyen hata'));
-                        return false;
-                    });
-                }
-            });
         }
     }
 
@@ -322,6 +319,117 @@
         });
     }
 
+    /* ── v555 Toplu seçim: kişi × gün ── */
+    var arac = document.getElementById('pgSecArac');
+    var cubuk = document.getElementById('pgCubuk');
+    var cubukOzet = document.getElementById('pgCubukOzet');
+    var secOzet = document.getElementById('pgSecOzet');
+    var uygula = document.getElementById('pgUygula');
+    var ustune = document.getElementById('pgUstune');
+    var onay = document.getElementById('pgCubukOnay');
+    var onayMetin = document.getElementById('pgCubukOnayMetin');
+    var secKisi = {};      // kisi id → true (yalnız AKTİF kişiler seçilebilir)
+    var secGun = {};       // tarih → true
+    var secKod = null;     // null: kod seçilmedi · '' : Temizle · 'X'…
+    var secMod = false;    // mobil "Toplu seç" modu
+    var lpZaman = null, lpAtildi = false;
+
+    function sayiAnahtar(o) { return Object.keys(o).filter(function (k) { return o[k]; }); }
+    function gunDugmeleri() { return Array.prototype.slice.call(sayfa.querySelectorAll('.pg-gbtn[data-pg-gun]')); }
+    function aktifKisiIdleri() {
+        return Array.prototype.slice.call(sayfa.querySelectorAll('tr[data-pg-satir]:not(.pg-pasif)')).map(function (tr) { return tr.getAttribute('data-pg-satir'); });
+    }
+    function secimGoster() {
+        var kisiler = sayiAnahtar(secKisi), gunler = sayiAnahtar(secGun);
+        // kişi kutuları (masaüstü + mobil) + satır/kart vurgusu
+        sayfa.querySelectorAll('input[data-pg-sec]').forEach(function (c) { c.checked = !!secKisi[c.getAttribute('data-pg-sec')]; });
+        sayfa.querySelectorAll('tr[data-pg-satir]').forEach(function (tr) { tr.classList.toggle('pg-ksec', !!secKisi[tr.getAttribute('data-pg-satir')]); });
+        sayfa.querySelectorAll('details.pc-kisi[data-emp-kisi]').forEach(function (d) { d.classList.toggle('pg-ksec', !!secKisi[d.getAttribute('data-emp-kisi')]); });
+        var hepsi = sayfa.querySelector('[data-pg-sec-hepsi]');
+        if (hepsi) {
+            var tum = aktifKisiIdleri();
+            hepsi.checked = tum.length > 0 && kisiler.length === tum.length;
+            hepsi.indeterminate = kisiler.length > 0 && kisiler.length < tum.length;
+        }
+        // gün başlıkları + sütun/takvim hücreleri
+        gunDugmeleri().forEach(function (b) {
+            var acik = !!secGun[b.getAttribute('data-pg-gun')];
+            b.setAttribute('aria-pressed', acik ? 'true' : 'false');
+            if (b.parentNode) b.parentNode.classList.toggle('pg-gsec', acik);
+        });
+        sayfa.querySelectorAll('[data-pg][data-tarih]').forEach(function (el) { el.classList.toggle('pg-gsec', !!secGun[el.getAttribute('data-tarih')]); });
+        // çubuk
+        var n = kisiler.length, m = gunler.length;
+        var ozet = n + ' kişi × ' + m + ' gün';
+        if (cubukOzet) cubukOzet.textContent = ozet;
+        if (secOzet) secOzet.textContent = (n || m) ? ozet + ' seçili' : '';
+        if (cubuk) {
+            var gorunur = n > 0 || m > 0;
+            cubuk.hidden = !gorunur;
+            sayfa.classList.toggle('pg-cubuk-acik', gorunur);
+            if (!gorunur) { onayKapat(); sonucYaz(''); cubukHata(''); }
+        }
+        if (uygula) uygula.disabled = !(n > 0 && m > 0 && secKod !== null);
+        sayfa.querySelectorAll('[data-pg-sec-kod]').forEach(function (b) { b.setAttribute('aria-pressed', secKod !== null && b.getAttribute('data-pg-sec-kod') === secKod ? 'true' : 'false'); });
+    }
+    function kisiToggle(id, acik) {
+        id = String(id).replace(/[^0-9]/g, '');
+        if (!id) return;
+        if (acik === undefined) acik = !secKisi[id];
+        if (acik) secKisi[id] = true; else delete secKisi[id];
+    }
+    function gunToggle(tarih, acik) {
+        if (!tarih) return;
+        if (acik === undefined) acik = !secGun[tarih];
+        if (acik) secGun[tarih] = true; else delete secGun[tarih];
+    }
+    function secimTemizle() { secKisi = {}; secGun = {}; onayKapat(); secimGoster(); }
+    function modAc(ac) {
+        secMod = !!ac;
+        sayfa.classList.toggle('pg-secmod', secMod);
+        sayfa.querySelectorAll('[data-pg-secmod]').forEach(function (b) { b.setAttribute('aria-pressed', secMod ? 'true' : 'false'); });
+        if (!secMod) secimTemizle();
+    }
+    function hizliGun(tur) {
+        if (tur === 'temizle') { secGun = {}; secimGoster(); return; }
+        var yeni = {};
+        gunDugmeleri().forEach(function (b) {
+            var hs = b.getAttribute('data-hs') === '1';
+            if (tur === 'tum' || (tur === 'haftaici' && !hs) || (tur === 'haftasonu' && hs)) yeni[b.getAttribute('data-pg-gun')] = true;
+        });
+        secGun = yeni; secimGoster();
+    }
+    function cubukHata(m) { hataYaz('pgCubukHata', m); }
+    function sonucYaz(m) { var e = document.getElementById('pgCubukSonuc'); if (e) { e.textContent = m || ''; e.hidden = !m; } }
+    function onayKapat() { if (onay) onay.hidden = true; if (onayMetin) onayMetin.textContent = ''; }
+    function kodAdi(kod) { return kod === '' ? 'işareti sil (Temizle)' : '"' + kod + ' — ' + ((KODLAR[kod] || {}).ad || kod) + '"'; }
+    function onayIste() {
+        if (secKod === null) return;
+        var n = sayiAnahtar(secKisi).length, m = sayiAnahtar(secGun).length;
+        if (!n || !m) return;
+        var u = !!(ustune && ustune.checked);
+        var metin = n + ' kişi için ' + m + ' gün ' + (secKod === '' ? 'işareti silinecek (dolu hücreler dahil; boşlar değişmez).' : kodAdi(secKod) + ' olarak işaretlenecek. ' + (u ? 'Dolu günlerin üzerine YAZILACAK.' : 'Yalnız boş günler doldurulur; dolu günlere dokunulmaz.')) + ' Onaylıyor musunuz?';
+        if (onayMetin) onayMetin.textContent = metin;
+        if (onay) onay.hidden = false;
+        sonucYaz(''); cubukHata('');
+    }
+    function toplu() {
+        if (mesgul || secKod === null) return;
+        var kisiler = sayiAnahtar(secKisi), gunler = sayiAnahtar(secGun).sort();
+        mesgul = true; cubuk.classList.add('pg-mesgul'); cubukHata('');
+        postJson({ action: 'gun_toplu_sec', ay: AY, kisi_ids: kisiler, tarihler: gunler, kod: secKod, ustune_yaz: !!(ustune && ustune.checked) }).then(function (j) {
+            mesgul = false; cubuk.classList.remove('pg-mesgul');
+            if (j && j.ok) {
+                degisimUygula(j.degisim);
+                onayKapat();
+                var m = j.yazilan + ' hücre ' + (j.kod === '' ? 'silindi' : 'işaretlendi') + (j.atlanan ? ', ' + j.atlanan + ' dolu gün atlandı (üzerine yazmak için kutuyu işaretleyin)' : '') + (j.degismedi ? ', ' + j.degismedi + ' hücre zaten aynıydı' : '') + (j.pasif_atlanan ? ', ' + j.pasif_atlanan + ' pasif kişi atlandı' : '') + '.';
+                sonucYaz(m);
+                return;
+            }
+            cubukHata('Kaydedilemedi: ' + ((j && j.error) || 'bilinmeyen hata'));
+        });
+    }
+
     /* ── Olaylar ── */
     sayfa.addEventListener('click', function (e) {
         var t = e.target;
@@ -334,17 +442,60 @@
             if (bag && bag.el === uc && !islem.hidden) { kapat(); return; }
             kisiMenusu(uc); return;
         }
+        if (t.closest('.pg-secbox, .pg-msec')) return;   // seçim kutuları kendi change olayını kullanır
         var gun = t.closest('[data-pg-gun]');
-        if (gun) {
-            if (bag && bag.el === gun && !menu.hidden) { kapat(); return; }
-            sutunMenusu(gun); return;
-        }
+        if (gun) { gunToggle(gun.getAttribute('data-pg-gun')); secimGoster(); return; }
         var h = t.closest('[data-pg]');
         if (h && sayfa.contains(h)) {
+            if (lpAtildi) { lpAtildi = false; e.preventDefault(); e.stopPropagation(); return; }
+            if (mobil() && secMod && h.classList.contains('pc-t')) { gunToggle(h.getAttribute('data-tarih')); secimGoster(); return; }   // Toplu seç modunda dokunma = gün seçimi
             if (bag && bag.el === h && !menu.hidden) { kapat(); return; }
             hucreMenusu(h);
         }
     }, true);
+
+    sayfa.addEventListener('change', function (e) {
+        var c = e.target;
+        if (!c || !c.getAttribute) return;
+        if (c.hasAttribute('data-pg-sec')) { kisiToggle(c.getAttribute('data-pg-sec'), c.checked); secimGoster(); return; }
+        if (c.hasAttribute('data-pg-sec-hepsi')) {
+            secKisi = {};
+            if (c.checked) aktifKisiIdleri().forEach(function (id) { secKisi[id] = true; });
+            secimGoster();
+        }
+    });
+    sayfa.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('button') : null;
+        if (!b || !sayfa.contains(b)) return;
+        if (b.hasAttribute('data-pg-gunsec')) { hizliGun(b.getAttribute('data-pg-gunsec')); return; }
+        if (b.hasAttribute('data-pg-kisisec')) {
+            var tum = aktifKisiIdleri(), hepsiSecili = tum.length > 0 && sayiAnahtar(secKisi).length === tum.length;
+            secKisi = {};
+            if (!hepsiSecili) tum.forEach(function (id) { secKisi[id] = true; });
+            secimGoster(); return;
+        }
+        if (b.hasAttribute('data-pg-secmod')) { modAc(!secMod); return; }
+        if (b.hasAttribute('data-pg-sec-kod')) { secKod = b.getAttribute('data-pg-sec-kod') || ''; onayKapat(); sonucYaz(''); secimGoster(); return; }
+        if (b.hasAttribute('data-pg-sec-temizle')) { secimTemizle(); return; }
+        if (b.hasAttribute('data-pg-uygula')) { onayIste(); return; }
+        if (b.hasAttribute('data-pg-onay-iptal')) { onayKapat(); return; }
+        if (b.hasAttribute('data-pg-onayla')) { toplu(); }
+    });
+    // mobil: takvim kutusunda UZUN BASIŞ "Toplu seç" modunu açar ve o günü seçer
+    sayfa.addEventListener('pointerdown', function (e) {
+        if (!mobil() || !e.target || !e.target.closest) return;
+        var c = e.target.closest('.pc-t[data-pg]');
+        if (!c) return;
+        lpAtildi = false;
+        clearTimeout(lpZaman);
+        lpZaman = setTimeout(function () {
+            lpAtildi = true;
+            if (!secMod) modAc(true);
+            gunToggle(c.getAttribute('data-tarih')); secimGoster();
+        }, 520);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave', 'scroll'].forEach(function (ad) { sayfa.addEventListener(ad, function () { clearTimeout(lpZaman); }, true); });
+    secimGoster();
     ovl.addEventListener('click', kapat);
     document.addEventListener('click', function (e) {
         var b = e.target && e.target.closest ? e.target.closest('button') : null;
@@ -370,6 +521,8 @@
     }
     if (wrap) wrap.addEventListener('scroll', izle, { passive: true });
     window.addEventListener('scroll', izle, { passive: true });
+
+    window.pgApi = { post: post, postJson: postJson, pencereAc: pencereAc, kisiPenceresi: kisiPenceresi, yenile: yenile, hataYaz: hataYaz, mobil: mobil, csrf: CSRF, url: URL_, ay: AY };
 
     // Yenilemeden sonra: kaydırma konumunu ve (mobilde) açık kişiyi geri getir
     var d = depooku();

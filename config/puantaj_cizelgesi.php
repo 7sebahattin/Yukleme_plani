@@ -22,6 +22,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/puantaj_isaret.php';
 require_once __DIR__ . '/puantaj_giris.php';      // v554 Puantaj Girişi (bağımsız, gayri resmi sekme: kendi tabloları)
 require_once __DIR__ . '/puantaj_giris_ui.php';
+require_once __DIR__ . '/puantaj_giris_kisiler_ui.php';   // v555 Kişiler görünümü (liste / toplu işlem / Excel'den ekle penceresi)
+require_once __DIR__ . '/puantaj_giris_excel.php';        // v555 Excel'den toplu kişi ekleme (ayrıştırıcı + şablon)
 
 /** Aynı kişinin GİRİŞ→ÇIKIŞ çifti en çok bu kadar saat sürebilir; fazlası "çıkış eksik" sayılır. */
 const PC_VARDIYA_MAX_SAAT = 16;
@@ -271,16 +273,16 @@ function pc_sekme_adlari(): array { return ['personel' => 'Personel', 'gunluk' =
 
 /**
  * Kullanıcının görebildiği sekmeler (sayfa Gör + sekmenin kaynağı Gör). Yönetici hepsini görür.
- * v554: 'giris' (Puantaj Girişi) BAĞIMSIZ veridir; kaynak izni gerekmez, yalnız sayfa Düzenle (monthly_timesheet.edit).
+ * v554: 'giris' (Puantaj Girişi) BAĞIMSIZ veridir; kaynak izni gerekmez, yalnız sayfa Düzenle (monthly_timesheet.edit). v555: sırada İLK.
  * Tablo hazırlığı burada denetlenmez (pc_sekmeler_hazir).
  */
 function pc_sekmeler(): array
 {
     if (!function_exists('role_pdks_can') || !role_pdks_can('monthly_timesheet')) return [];
     $out = [];
+    if (role_pdks_can('monthly_timesheet', 'edit')) $out[] = 'giris';   // v555: Puantaj Girişi İLK sekme (sekme çubuğu + varsayılan açılış)
     if (role_pdks_can('employees')) $out[] = 'personel';
     if (role_pdks_can('daily_reports')) $out[] = 'gunluk';
-    if (role_pdks_can('monthly_timesheet', 'edit')) $out[] = 'giris';
     return $out;
 }
 
@@ -300,13 +302,13 @@ function pc_sekmeler_hazir(PDO $pdo): array
 }
 
 /**
- * İstenen sekme izinli değilse ilk izinli sekme; hiç yoksa null.
- * v554: sekme parametresi HİÇ verilmediyse ve Puantaj Girişi kullanılabilirse ($girisVarsayilan: tablo hazır) o açılır.
+ * İstenen sekme izinli değilse (ya da hiç verilmediyse) ilk izinli sekme; hiç yoksa null.
+ * v555: Puantaj Girişi görülebiliyorsa (edit yetkisi; tablo hazır değilse yalnız yönetici, kurulum notuyla) izinli listenin BAŞINDADIR →
+ * sekme parametresi olmadan açılış Puantaj Girişi'dir; görmeyen kullanıcıda davranış eskisi gibi (Personel / Günlük İşçi).
  */
-function pc_sekme_sec(string $istek, array $izinli, bool $girisVarsayilan = true): ?string
+function pc_sekme_sec(string $istek, array $izinli): ?string
 {
     if ($izinli === []) return null;
-    if ($istek === '' && $girisVarsayilan && in_array('giris', $izinli, true)) return 'giris';
     return in_array($istek, $izinli, true) ? $istek : $izinli[0];
 }
 
