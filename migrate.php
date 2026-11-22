@@ -37,6 +37,7 @@ require_once __DIR__ . '/config/kullanici_tercih.php';   // Kullanıcı Tercihle
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/puantaj_isaret.php';   // Puantaj İşaretleri (v553; yalnız CREATE TABLE kartı)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -145,6 +146,7 @@ $stok_results = []; $stok_ran = false;                          // Stok (muhaseb
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
 $kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
 $ceksenet_results = []; $ceksenet_ran = false;                  // Çek-Senet (3 yeni tablo)
+$pi_results = []; $pi_ran = false;                              // Puantaj İşaretleri (v553: puantaj_isaretler, 1 yeni tablo)
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
@@ -439,6 +441,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($ceksenet_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'ceksenet', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'puantaj_isaret') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pi_ran     = true;
+    $pi_results = pi_migrate($pdo);
+    foreach ($pi_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'puantaj_isaret', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -1124,6 +1135,27 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="ceksenet">
       <button type="submit" class="btn btn-primary">Çek-Senet Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('puantaj-isaret'); ?>
+    <h2 style="margin-top:0;">Puantaj İşaretleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>puantaj_isaretler</code> (Aylık Puantaj Çizelgesi › Personel sekmesinde elle gün işareti: Devamsız / Yıllık izin / Ücretsiz izin / Raporlu / Resmi tatil)
+      tablosunu ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz). Çalıştırılmazsa çizelge eskisi gibi çalışır, yalnız işaretleme arayüzü gizli kalır.
+      <?php if ($pi_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pi_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $piHazir = pi_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $piHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $piHazir ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="puantaj_isaret">
+      <button type="submit" class="btn btn-primary">Puantaj İşaret Tablosunu Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

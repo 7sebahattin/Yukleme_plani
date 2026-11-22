@@ -7,6 +7,8 @@
 //   php scripts/_puantaj_cizelgesi_harness.php <sayfa.php> '<GET json>' '<seçenek json>'
 // Seçenekler: perms[] · admin · depo (aktif depo) · allowed[] (kullanıcı depoları) · ay (tohum ayı) ·
 //             css (true → stil dosyalarını file:// yoluyla bağlar; tarayıcı testi için)
+//             v553: isaret_yok (true → puantaj_isaretler tablosu KURULMAZ) · isaretler [[emp, gün, kod, açıklama?],…] (tohum; gün = ayın günü sayısı) ·
+//             post {alan:değer} (→ REQUEST_METHOD=POST, $_POST; Accept JSON) · dump (true → çıkışta tablo içeriği STDERR "ISARETLER: json")
 // Çıkış kodu: 0 = sayfa çıktı verdi · 3 = forbidden() · 4 = sayfa istisna fırlattı. Denetim kayıtları STDERR'e "AUDIT: {json}".
 // =========================================================
 declare(strict_types=1);
@@ -41,11 +43,26 @@ $AUDIT_ON = false;
 function audit_log_event(...$a): void { global $AUDIT_ON; if (!$AUDIT_ON) return; fwrite(STDERR, 'AUDIT: ' . json_encode($a, JSON_UNESCAPED_UNICODE) . "\n"); }
 function h($v): string { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8'); }
 function csrf_token(): string { return 'testcsrf'; }
-function csrf_check($t): void {}
+function csrf_check($t): void {   // gerçek csrf_check gibi: geçersizse 403 + JSON, çıkış kodu 5
+    if ($t === 'testcsrf') return;
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Güvenlik doğrulaması başarısız.', 'code' => 403], JSON_UNESCAPED_UNICODE);
+    exit(5);
+}
+function depot_visible_to_user(?string $d): bool {   // user_allowed_depots() kalıbı: aktif depo seçiliyse yalnız o; boş depo her yerde görünür
+    global $ALLOWED, $AKTIF_DEPO;
+    if ($d === null || trim($d) === '') return true;
+    $izinli = $AKTIF_DEPO !== '' ? [$AKTIF_DEPO] : $ALLOWED;
+    return in_array($d, $izinli, true);
+}
 $FLASH = [];
 function set_flash($a, $b): void { global $FLASH; $FLASH[] = [$a, $b]; }
 function render_flash(): void { global $FLASH; foreach ($FLASH as [$a, $b]) echo '<div class="flash flash-' . h($a) . '">' . h($b) . '</div>'; $FLASH = []; }
-function forbidden($m = ''): void { echo 'FORBIDDEN: ' . $m; exit(3); }
+function forbidden($m = ''): void {
+    if (!empty($GLOBALS['OPT']['post'])) { echo json_encode(['ok' => false, 'error' => (string)$m, 'code' => 403], JSON_UNESCAPED_UNICODE); }
+    else echo 'FORBIDDEN: ' . $m;
+    exit(3);
+}
 function require_perm(string $p): void { if (!can($p) && !is_admin()) forbidden("perm $p"); }
 function base_url(): string { return ''; }
 function require_login(): array { return current_user(); }
@@ -114,6 +131,11 @@ if ($SEMA !== 'yok') {
         [5, 'P005', 'Örnek Personel E', 'Ofis', 'Depo A', 'pasif'], // pasif → varsayılan gizli
         [6, 'P006', 'İsmail Örnek', 'Ofis', 'Depo A', 'aktif'],     // Türkçe arama testi
     ] as $r) $emp->execute($r);
+    if (empty($OPT['isaret_yok'])) {
+        foreach (pi_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }
+        $isr = db()->prepare("INSERT INTO puantaj_isaretler (employee_id, tarih, kod, aciklama, user_id, created_at) VALUES (?,?,?,?,?,?)");
+        foreach (($OPT['isaretler'] ?? []) as $r) $isr->execute([(int)$r[0], sprintf('%s-%02d', $TOHUM_AY, (int)$r[1]), $r[2], $r[3] ?? null, 1, date('Y-m-d H:i:s')]);
+    }
     $ev = db()->prepare("INSERT INTO attendance_events (employee_id, card_id, event_type, source, canonical_uid_snapshot, server_event_time) VALUES (?,?,?,?,?,?)");
     $olay = function (int $e, string $t, string $z) use ($ev): void { $ev->execute([$e, 1, $t, 'usb_decimal', 'UID' . $e, $z]); };
     $m = $TOHUM_AY;
@@ -152,6 +174,15 @@ if ($SEMA === 'hepsi') {
 if (!empty($OPT['debug'])) { fwrite(STDERR, 'gunluk=' . var_export(pdks_gunluk_sema_hazir(db()), true) . ' faz8a=' . var_export(pdks_gunluk_faz8a_sema_hazir(db()), true) . "\n"); foreach (['daily_worker_work_periods','worker_cards','daily_worker_card_events'] as $t) fwrite(STDERR, $t . '=' . var_export(pdks_gunluk_tablo_var(db(), $t), true) . "\n"); }
 $_GET = $GETJ; $_POST = []; $_FILES = [];
 $_SERVER['REQUEST_METHOD'] = 'GET';
+if (!empty($OPT['post'])) {   // v553 yazma ucu: form alanları $_POST'ta (role_pdks_require_request JSON gövdesi okumaz); yanıt JSON
+    $_POST = (array)$OPT['post'];
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_SERVER['HTTP_ACCEPT'] = 'application/json';
+}
+if (!empty($OPT['dump'])) register_shutdown_function(function () {
+    try { fwrite(STDERR, 'ISARETLER: ' . json_encode(db()->query('SELECT employee_id, tarih, kod, aciklama, user_id FROM puantaj_isaretler ORDER BY employee_id, tarih')->fetchAll(), JSON_UNESCAPED_UNICODE) . "\n"); }
+    catch (Throwable $e) { fwrite(STDERR, "ISARETLER: yok\n"); }
+});
 $_SERVER['SCRIPT_NAME'] = '/' . $SAYFA;
 $_SERVER['REQUEST_URI'] = '/' . $SAYFA;
 $src = file_get_contents($ROOT . '/' . $SAYFA);

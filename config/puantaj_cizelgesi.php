@@ -2,7 +2,9 @@
 // =========================================================
 // config/puantaj_cizelgesi.php — Aylık Puantaj Çizelgesi (Personel Takibi)
 //
-// SALT OKUNUR türetme: yeni tablo / şema / yazma YOK. Sayfalar
+// SALT OKUNUR türetme: bu dosya hiçbir şey yazmaz, şema kurmaz. (v553: Personel sekmesindeki
+// elle gün işareti tablosu, kurulumu ve yazma ucu config/puantaj_isaret.php + puantaj_isaret_kaydet.php'dedir;
+// burada yalnız okunur ve hücreye işlenir.) Sayfalar
 // (puantaj_cizelgesi.php, puantaj_cizelgesi_yazdir.php) ince kalır; ay/gün
 // hesabı, giriş-çıkış eşleme, pivot, özet ve Excel satırları BURADA.
 // Saf fonksiyonlar (pc_*) DB/oturum bilmez → scripts/puantaj_cizelgesi_smoke.php.
@@ -10,12 +12,14 @@
 // Ortak "tablo" yapısı (iki sekme de aynısını üretir; ekran/yazdır/Excel okur):
 //   ['tur'=>'personel'|'gunluk', 'ay'=>'YYYY-MM', 'gunler'=>pc_gunler(),
 //    'satirlar'=>[ ['id'=>int,'ad'=>str,'alt'=>str,
-//                   'hucre'=>[ 'YYYY-MM-DD' => ['k'=>'X'|'!','d'=>float|int,'ilk'=>?,'son'=>?,'acik'=>int] ],
-//                   'ozet'=>['gun'=>int,'toplam'=>float|int,'eksik'=>int] ] ],
+//                   'hucre'=>[ 'YYYY-MM-DD' => ['k'=>'X'|'!'|'D'|'İ'|'Ü'|'R'|'T','d'=>float|int,'ilk'=>?,'son'=>?,'acik'=>int,
+//                              (elle işaret) 'isaret'=>true,'kayit'=>bool,'kayit_saat'=>float,'kayit_acik'=>int,'aciklama'=>str] ],
+//                   'ozet'=>['gun','toplam','eksik'] (+ personelde 'izin','rapor','devamsiz') ] ],
 //    'gun_say'=>[tarih=>sayı], 'genel'=>['kisi','gun','toplam','eksik']]
 // Hata/şema hazır değilse yalnız ['hata'=>mesaj] döner (sayfa 500 vermez).
 // =========================================================
 declare(strict_types=1);
+require_once __DIR__ . '/puantaj_isaret.php';
 
 /** Aynı kişinin GİRİŞ→ÇIKIŞ çifti en çok bu kadar saat sürebilir; fazlası "çıkış eksik" sayılır. */
 const PC_VARDIYA_MAX_SAAT = 16;
@@ -144,16 +148,25 @@ function pc_hucre_personel(array $g): ?array
     return ['k' => $k, 'd' => round((float)$g['saat'], 4), 'ilk' => $g['ilk'], 'son' => $g['son'], 'acik' => (int)$g['acik']];
 }
 
-/** Satırların özetini, gün sayaçlarını ve genel toplamı hesaplar. */
+/** Satırların özetini, gün sayaçlarını ve genel toplamı hesaplar. Elle işaretli gün (v553) çalışılan gün/saat/eksik/gün sayacına GİRMEZ. */
 function pc_tablo_tamamla(string $tur, string $ay, array $gunler, array $satirlar): array
 {
     $gunSay = [];
     foreach ($gunler as $g) $gunSay[$g['tarih']] = 0;
-    $genel = ['kisi' => count($satirlar), 'gun' => 0, 'toplam' => 0.0, 'eksik' => 0];
+    $kodlar = pi_kodlar();
+    $kisi = $tur === 'personel';
+    $genel = ['kisi' => count($satirlar), 'gun' => 0, 'toplam' => 0.0, 'eksik' => 0] + ($kisi ? ['izin' => 0, 'rapor' => 0, 'devamsiz' => 0] : []);
     foreach ($satirlar as &$s) {
-        $oz = ['gun' => 0, 'toplam' => 0.0, 'eksik' => 0];
+        $oz = ['gun' => 0, 'toplam' => 0.0, 'eksik' => 0] + ($kisi ? ['izin' => 0, 'rapor' => 0, 'devamsiz' => 0] : []);
         foreach ($s['hucre'] as $tarih => $h) {
             if (!isset($gunSay[$tarih])) continue;   // ay dışı güvenlik
+            if ($kisi && !empty($h['isaret'])) {     // elle işaret: otomatik X/! ve altındaki kayıt hesaba girmez
+                $grup = $kodlar[$h['k']]['grup'] ?? '';
+                if ($grup === 'izin') $oz['izin']++;
+                elseif ($grup === 'rapor') $oz['rapor']++;
+                elseif ($grup === 'devamsiz') $oz['devamsiz']++;
+                continue;
+            }
             if ($tur === 'gunluk') {
                 if ((int)$h['d'] > 0) $oz['gun']++;
                 $oz['toplam'] += (int)$h['d'];
@@ -167,9 +180,7 @@ function pc_tablo_tamamla(string $tur, string $ay, array $gunler, array $satirla
         }
         if ($tur === 'gunluk') $oz['toplam'] = (int)$oz['toplam'];
         $s['ozet'] = $oz;
-        $genel['gun'] += $oz['gun'];
-        $genel['toplam'] += $oz['toplam'];
-        $genel['eksik'] += $oz['eksik'];
+        foreach ($oz as $k => $v) $genel[$k] += $v;
     }
     unset($s);
     if ($tur === 'gunluk') $genel['toplam'] = (int)$genel['toplam'];
@@ -188,8 +199,10 @@ function pc_satir_filtre(array $satirlar, string $q): array
  * SEKME 1 (saf): çalışanlar + olaylar → tablo.
  * $calisanlar: [['id','full_name','personnel_no','department'],…]
  * $olaylar: [['employee_id','event_type','server_event_time'],…] (herhangi sırada; burada sıralanır)
+ * $isaretler (v553): pi_oku() çıktısı [employee_id => [tarih => ['kod','aciklama']]] — elle işaret otomatik X/! hücresinin ÜSTÜNE geçer;
+ *   altında gerçek kayıt varsa hücrede 'kayit' ipucu taşınır, ama gün/saat/eksik/gün sayacı işaretli günden SAYILMAZ.
  */
-function pc_tablo_personel_kur(string $ay, array $calisanlar, array $olaylar, string $q = ''): array
+function pc_tablo_personel_kur(string $ay, array $calisanlar, array $olaylar, string $q = '', array $isaretler = []): array
 {
     $gunler = pc_gunler($ay);
     $gruplar = [];
@@ -204,6 +217,13 @@ function pc_tablo_personel_kur(string $ay, array $calisanlar, array $olaylar, st
             if (strncmp($tarih, $ay, 7) !== 0) continue;
             $h = pc_hucre_personel($g);
             if ($h !== null) $hucre[$tarih] = $h;
+        }
+        foreach (($isaretler[$id] ?? []) as $tarih => $isr) {
+            if (strncmp((string)$tarih, $ay, 7) !== 0 || !pi_kod_gecerli($isr['kod'] ?? null)) continue;
+            $alt = $hucre[$tarih] ?? null;
+            $hucre[$tarih] = ['k' => (string)$isr['kod'], 'd' => 0.0, 'ilk' => $alt['ilk'] ?? null, 'son' => $alt['son'] ?? null, 'acik' => 0,
+                'isaret' => true, 'kayit' => $alt !== null, 'kayit_saat' => $alt ? (float)$alt['d'] : 0.0, 'kayit_acik' => $alt ? (int)$alt['acik'] : 0,
+                'aciklama' => (string)($isr['aciklama'] ?? '')];
         }
         $alt = trim((string)($c['personnel_no'] ?? ''));
         $dep = trim((string)($c['department'] ?? ''));
@@ -312,7 +332,7 @@ function pc_tablo_personel(PDO $pdo, string $ay, string $q = '', bool $pasif = f
     }
     try {
         $v = pc_personel_oku($pdo, $ay, $pasif);
-        return pc_tablo_personel_kur($ay, $v['calisanlar'], $v['olaylar'], $q);
+        return pc_tablo_personel_kur($ay, $v['calisanlar'], $v['olaylar'], $q, pi_oku($pdo, $ay));
     } catch (Throwable $e) {
         error_log('[puantaj_cizelgesi] personel: ' . $e->getMessage());
         return ['hata' => 'Personel puantajı şu anda okunamadı.'];
@@ -341,6 +361,7 @@ function pc_disa_hucre(string $tur, ?array $h)
 {
     if ($h === null) return null;
     if ($tur === 'gunluk') return (int)$h['d'] > 0 ? (int)$h['d'] : null;
+    if (!empty($h['isaret'])) return (string)$h['k'];   // elle işaret: harf (D / İ / Ü / R / T)
     return $h['k'] === '!' ? '!' : round((float)$h['d'], 2);
 }
 
@@ -350,7 +371,7 @@ function pc_disa_baslik(array $tablo): array
     $gunluk = $tablo['tur'] === 'gunluk';
     $b = [$gunluk ? 'Çavuş' : 'Ad Soyad', $gunluk ? 'Çavuş Kodu' : 'Sicil / Departman'];
     foreach ($tablo['gunler'] as $g) $b[] = $g['n'] . ' ' . $g['ad'];
-    return array_merge($b, ['Çalışılan Gün', $gunluk ? 'Toplam İşçi-Gün' : 'Toplam Saat', 'Eksik Çıkış']);
+    return array_merge($b, ['Çalışılan Gün', $gunluk ? 'Toplam İşçi-Gün' : 'Toplam Saat', 'Eksik Çıkış'], $gunluk ? [] : ['İzin', 'Rapor', 'Devamsız']);
 }
 
 /** CSV/XLSX ortak veri satırları + "o gün" satırı + genel toplam satırı. */
@@ -365,16 +386,19 @@ function pc_disa_satirlar(array $tablo): array
         $r[] = $oz['gun'];
         $r[] = $tur === 'gunluk' ? (int)$oz['toplam'] : round((float)$oz['toplam'], 2);
         $r[] = $oz['eksik'];
+        if ($tur !== 'gunluk') array_push($r, $oz['izin'] ?? 0, $oz['rapor'] ?? 0, $oz['devamsiz'] ?? 0);
         $out[] = $r;
     }
     $say = [$tur === 'gunluk' ? 'O gün toplam işçi' : 'O gün çalışan', ''];
     foreach ($tablo['gunler'] as $g) $say[] = $tablo['gun_say'][$g['tarih']] ?? 0;
     array_push($say, '', '', '');
+    if ($tur !== 'gunluk') array_push($say, '', '', '');
     $out[] = $say;
     $ge = $tablo['genel'];
     $genel = ['GENEL TOPLAM (' . $ge['kisi'] . ($tur === 'gunluk' ? ' çavuş)' : ' kişi)'), ''];
     foreach ($tablo['gunler'] as $_) $genel[] = null;
     array_push($genel, $ge['gun'], $tur === 'gunluk' ? (int)$ge['toplam'] : round((float)$ge['toplam'], 2), $ge['eksik']);
+    if ($tur !== 'gunluk') array_push($genel, $ge['izin'] ?? 0, $ge['rapor'] ?? 0, $ge['devamsiz'] ?? 0);
     $out[] = $genel;
     return $out;
 }
@@ -388,6 +412,7 @@ function pc_xlsx_sayfa(array $tablo, string $aciklama = ''): array
     $sut[] = ['baslik' => 'Çalışılan Gün', 'tip' => 'tamsayi'];
     $sut[] = ['baslik' => $gunluk ? 'Toplam İşçi-Gün' : 'Toplam Saat', 'tip' => $gunluk ? 'tamsayi' : 'sayi'];
     $sut[] = ['baslik' => 'Eksik Çıkış', 'tip' => 'tamsayi'];
+    if (!$gunluk) foreach (['İzin', 'Rapor', 'Devamsız'] as $b) $sut[] = ['baslik' => $b, 'tip' => 'tamsayi'];
     return [
         'ad' => $gunluk ? 'Günlük İşçi' : 'Personel',
         'baslik' => 'Aylık Puantaj Çizelgesi (' . ($gunluk ? 'Günlük İşçi' : 'Personel') . ') — ' . pc_ay_basligi($tablo['ay']),
@@ -408,6 +433,16 @@ function pc_hucre_goster(string $tur, ?array $h): array
         return [$e > 0 ? 'pc-e' : 'pc-x', '<b>' . $n . '</b>' . ($e > 0 ? '<i>!</i>' : ''),
                 $n . ' işçi (kart bazında)' . ($e > 0 ? ' · ' . $e . ' kartın çıkışı eksik' : '')];
     }
+    if (!empty($h['isaret'])) {   // elle işaret (v553): harf + renk; altında gerçek kayıt varsa küçük nokta + title
+        $kd = pi_kodlar()[$h['k']] ?? ['ad' => (string)$h['k'], 'sinif' => 'd'];
+        $tt = $kd['ad'] . (($h['aciklama'] ?? '') !== '' ? ' · ' . $h['aciklama'] : '');
+        $nokta = '';
+        if (!empty($h['kayit'])) {
+            $tt .= ' · bu gün giriş/çıkış kaydı da var (' . trim((string)($h['ilk'] ?? '') . (($h['son'] ?? null) ? ' – ' . $h['son'] : '')) . ((float)($h['kayit_saat'] ?? 0) > 0 ? ', ' . pc_sayi_fmt($h['kayit_saat']) . ' saat' : '') . ((int)($h['kayit_acik'] ?? 0) > 0 ? ', çıkış eksik' : '') . '); hesaplarda işaret geçerli';
+            $nokta = '<span class="pc-kn" aria-hidden="true">•</span>';
+        }
+        return ['pc-k pc-k-' . $kd['sinif'], '<b>' . htmlspecialchars((string)$h['k'], ENT_QUOTES, 'UTF-8') . '</b>' . $nokta, $tt];
+    }
     $zaman = trim((string)($h['ilk'] ?? '') . (($h['son'] ?? null) ? ' – ' . $h['son'] : ''));
     $saat = (float)$h['d'];
     if ($h['k'] === '!') {
@@ -416,10 +451,11 @@ function pc_hucre_goster(string $tur, ?array $h): array
     return ['pc-x', '<b>X</b><i>' . pc_sayi_fmt($saat) . '</i>', trim($zaman . ' · ' . pc_sayi_fmt($saat) . ' saat')];
 }
 
-/** Ekrandaki/yazdırmadaki tek satır gösterge (lejant) metni. */
-function pc_lejant_metni(string $tur): string
+/** Ekrandaki/yazdırmadaki tek satır gösterge (lejant) metni. $kodlar: personelde elle işaret kodları da yazılsın (v553). */
+function pc_lejant_metni(string $tur, bool $kodlar = true): string
 {
-    return $tur === 'gunluk'
-        ? 'Sayı = o gün çalışan işçi (kart bazında) · ! = çıkışı eksik kart var · · = kayıt yok · gri sütun = hafta sonu'
-        : 'X = geldi (altında saat) · ! = çıkış eksik · · = kayıt yok · gri sütun = hafta sonu';
+    if ($tur === 'gunluk') return 'Sayı = o gün çalışan işçi (kart bazında) · ! = çıkışı eksik kart var · · = kayıt yok · gri sütun = hafta sonu';
+    $m = 'X = geldi (altında saat) · ! = çıkış eksik';
+    if ($kodlar) foreach (pi_kodlar() as $k => $kd) $m .= ' · ' . $k . ' = ' . $kd['ad'];
+    return $m . ' · · = kayıt yok · gri sütun = hafta sonu';
 }

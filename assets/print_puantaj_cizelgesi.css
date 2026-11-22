@@ -20,6 +20,16 @@
 .pcy-tablo td.pcy-e b { text-decoration: underline; }
 .pcy-tablo tfoot td, .pcy-tablo tfoot th { background: #fff6da; font-weight: 700; }
 .pcy-tablo td.pcy-uyari { border: 1.5px solid #9a5b06; font-weight: 800; }
+.pcy-tablo .pcy-dv { width: 12mm; }
+/* v553 elle işaret: renk + HARF + çerçeve (siyah-beyazda harf ve kalın çerçeveyle okunur) */
+.pcy-tablo td.pcy-k { position: relative; border: 1.2px solid #1f2937; }
+.pcy-tablo td.pcy-k b { font-size: 8pt; font-weight: 800; }
+.pcy-tablo td.pcy-k-d { background: #f4b6b6; }
+.pcy-tablo td.pcy-k-iz { background: #bcd4f6; }
+.pcy-tablo td.pcy-k-uc { background: #dcd2f2; }
+.pcy-tablo td.pcy-k-r { background: #fff0a0; }
+.pcy-tablo td.pcy-k-t { background: #6b7280; color: #fff; }
+.pcy-tablo .pc-kn { position: absolute; top: 0; right: 1px; font-size: 5pt; line-height: 1; }
 .pcy-lejant { font-size: 7.5pt; color: #333; margin: 4px 0 6px; }
 .pcy-not { font-size: 7.5pt; margin: 0 0 4px; }
-@media print { .pcy-tablo td.pcy-hs, .pcy-tablo th.pcy-hs, .pcy-tablo td.pcy-x, .pcy-tablo td.pcy-e { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+@media print { .pcy-tablo td.pcy-hs, .pcy-tablo th.pcy-hs, .pcy-tablo td.pcy-x, .pcy-tablo td.pcy-e, .pcy-tablo td.pcy-k { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

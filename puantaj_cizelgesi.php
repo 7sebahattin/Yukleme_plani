@@ -2,10 +2,13 @@
 // =========================================================
 // puantaj_cizelgesi.php — Aylık Puantaj Çizelgesi (Personel Takibi, v552)
 //
-// Mevcut sayfalardan AYRI, SALT OKUNUR, yalnız GET. Veri mevcut tablolardan
+// Mevcut sayfalardan AYRI, yalnız GET (sayfa hiçbir şey yazmaz). Veri mevcut tablolardan
 // türetilir (employees + attendance_events / günlük işçi toplu döküm); hesap
 // config/puantaj_cizelgesi.php içindedir. Yetki: role_pdks_can('monthly_timesheet')
 // + sekme başına kaynağın Gör izni (employees / daily_reports); Excel reports.export.
+// v553: Personel sekmesinde elle gün işareti (D/İ/Ü/R/T) — yalnız 'monthly_timesheet' Düzenle
+// izni + tablo hazırsa (migrate.php › Puantaj İşaretleri) hücreler tıklanır; yazma ucu
+// puantaj_isaret_kaydet.php (fetch POST, CSRF). Tablo yoksa çizelge eskisi gibi, arayüz gizli.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -43,6 +46,11 @@ $hata = $tablo['hata'] ?? null;
 
 $param = ['sekme' => $sekme, 'ay' => $ay, 'q' => $q, 'pasif' => $pasif ? '1' : ''];
 
+// v553: elle işaret arayüzü — yalnız Personel sekmesi, tablo hazır, 'edit' + kaynak (Personel kartları Gör) izni
+$piHazir = $sekme === 'personel' && $hata === null && pi_hazir($pdo);
+$duzenle = $piHazir && role_pdks_can('monthly_timesheet', 'edit') && role_pdks_can('employees');
+$piSemaNotu = $sekme === 'personel' && $hata === null && !$piHazir && is_admin();
+
 // ── Dışa aktarım (ekranla AYNI veri; XLSX kolu CSV'den önce) ──
 if ($csvIst || $xlsxIst) {
     if ($hata !== null) {
@@ -52,7 +60,7 @@ if ($csvIst || $xlsxIst) {
     }
     $filtre = ['sekme' => $sekme, 'ay' => $ay, 'arama' => $q !== '', 'depo' => $depo, 'pasif' => $pasif ? '1' : ''];
     $dosya = 'puantaj_cizelgesi_' . $sekme . '_' . $ay;
-    $acik = array_filter([$depo !== '' ? 'Depo: ' . $depo : 'Tüm depolar', $q !== '' ? 'Arama: ' . $q : '', pc_lejant_metni($tablo['tur'])]);
+    $acik = array_filter([$depo !== '' ? 'Depo: ' . $depo : 'Tüm depolar', $q !== '' ? 'Arama: ' . $q : '', pc_lejant_metni($tablo['tur'], $piHazir)]);
     if ($xlsxIst) {
         export_audit('pdks', 'puantaj_cizelgesi', 'xlsx', count($tablo['satirlar']), $filtre);
         xlsx_indir($dosya . '.xlsx', [pc_xlsx_sayfa($tablo, implode(' · ', $acik))],
@@ -90,7 +98,7 @@ $say = $hata === null ? count($tablo['satirlar']) : 0;
 $kisiEtiket = $gunluk ? 'Çavuş' : 'Personel';
 $ayUzun = pc_ay_adlari();
 ?>
-<div class="pc-page" data-tur="<?= h($tur) ?>">
+<div class="pc-page" data-tur="<?= h($tur) ?>"<?= $duzenle ? ' data-pi-url="puantaj_isaret_kaydet.php" data-pi-csrf="' . h(csrf_token()) . '"' : '' ?>>
 <div class="page-head">
     <div>
         <h1>📅 Aylık Puantaj Çizelgesi</h1>
@@ -128,8 +136,14 @@ $ayUzun = pc_ay_adlari();
 
 <div class="pc-lejant" id="pcLejant">
     <button type="button" class="pc-lejant-dugme" aria-expanded="false" aria-controls="pcLejantIc" title="Gösterge">ⓘ <span>Gösterge</span></button>
-    <div class="pc-lejant-ic" id="pcLejantIc"><?= h(pc_lejant_metni($tur)) ?></div>
+    <div class="pc-lejant-ic" id="pcLejantIc"><?= h(pc_lejant_metni($tur, false)) ?>
+        <?php if ($piHazir): ?><span class="pc-kl-liste"><?php foreach (pi_kodlar() as $k => $kd): ?><span class="pc-kl pc-k pc-k-<?= h($kd['sinif']) ?>"><b><?= h($k) ?></b> <?= h($kd['ad']) ?></span><?php endforeach; ?></span><?php endif; ?>
+        <?php if ($duzenle): ?><span class="pc-kl-ipucu">Güne tıklayarak (mobilde dokunarak) işaretleyin; işaret, o günün otomatik X / ! değerinin yerine geçer.</span><?php endif; ?>
+    </div>
 </div>
+<?php if ($piSemaNotu): ?>
+<p class="pc-not">Şema kurulumu: <a href="migrate.php#puantaj-isaret">migrate.php › Puantaj İşaretleri</a> (elle gün işaretleme için tablo henüz kurulmamış; çizelge bu olmadan da çalışır).</p>
+<?php endif; ?>
 <?php if ($gunluk): ?>
 <p class="pc-not">Günlük işçide kişi değil <strong>kart / çavuş bazında</strong> sayılır: satır = çavuş, hücre = o gün çavuşun mesaisinde giriş yapan kart sayısı.</p>
 <?php endif; ?>
@@ -142,6 +156,12 @@ $ayUzun = pc_ay_adlari();
     $gunler = $tablo['gunler'];
     $genel = $tablo['genel'];
     $ozBaslik = $gunluk ? 'İşçi-gün' : 'Saat';
+    $ozKol = $gunluk ? 3 : 6;   // özet sütun sayısı (personel: Gün · Saat · Eksik · İzin · Rapor · Devamsız)
+    // Düzenlenebilir hücrenin veri öznitelikleri (yalnız $duzenle): boşken salt okunur
+    $piOz = static function (int $emp, string $tarih, ?array $hh) use ($duzenle): string {
+        if (!$duzenle) return '';
+        return ' data-pi data-emp="' . $emp . '" data-tarih="' . h($tarih) . '" data-kod="' . h($hh && !empty($hh['isaret']) ? (string)$hh['k'] : '') . '"';
+    };
 ?>
 
 <!-- ≥768px: çizelge ızgarası -->
@@ -156,6 +176,11 @@ $ayUzun = pc_ay_adlari();
         <th class="pc-oz" scope="col" title="Çalışılan gün">Gün</th>
         <th class="pc-oz" scope="col" title="<?= $gunluk ? 'Toplam işçi-gün' : 'Toplam saat' ?>"><?= h($ozBaslik) ?></th>
         <th class="pc-oz" scope="col" title="Eksik çıkış">Eksik</th>
+        <?php if (!$gunluk): ?>
+        <th class="pc-oz" scope="col" title="İzin günü (Yıllık izin + Ücretsiz izin)">İzin</th>
+        <th class="pc-oz" scope="col" title="Raporlu gün">Rapor</th>
+        <th class="pc-oz" scope="col" title="Devamsız gün">Devamsız</th>
+        <?php endif; ?>
     </tr>
     </thead>
     <tbody>
@@ -163,15 +188,21 @@ $ayUzun = pc_ay_adlari();
     <tr>
         <th class="pc-ad" scope="row"><span class="pc-ad-ad"><?= h($s['ad']) ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></th>
         <?php foreach ($gunler as $g):
-            [$cls, $ic, $tt] = pc_hucre_goster($tur, $s['hucre'][$g['tarih']] ?? null);
+            $hh = $s['hucre'][$g['tarih']] ?? null;
+            [$cls, $ic, $tt] = pc_hucre_goster($tur, $hh);
             if ($gunluk && $ic !== '·') {
                 $tt = $g['n'] . ' ' . $ayUzun[(int)substr($ay, 5, 2)] . ' · ' . $tt;
             } ?>
-        <td class="pc-h <?= $cls ?><?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>"<?= $tt !== '' ? ' title="' . h($tt) . '"' : '' ?>><?= $ic ?></td>
+        <td class="pc-h <?= $cls ?><?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?><?= $duzenle ? ' pc-duz' : '' ?>"<?= $tt !== '' ? ' title="' . h($tt) . '"' : '' ?><?= $piOz((int)$s['id'], $g['tarih'], $hh) ?>><?= $ic ?></td>
         <?php endforeach; ?>
         <td class="pc-oz"><?= (int)$s['ozet']['gun'] ?></td>
         <td class="pc-oz"><?= $gunluk ? (int)$s['ozet']['toplam'] : h(pc_sayi_fmt($s['ozet']['toplam'])) ?></td>
         <td class="pc-oz<?= $s['ozet']['eksik'] >= 1 ? ' pc-uyari' : '' ?>"><?= (int)$s['ozet']['eksik'] >= 1 ? '! ' . (int)$s['ozet']['eksik'] : '0' ?></td>
+        <?php if (!$gunluk): ?>
+        <td class="pc-oz"><?= (int)$s['ozet']['izin'] ?></td>
+        <td class="pc-oz"><?= (int)$s['ozet']['rapor'] ?></td>
+        <td class="pc-oz"><?= (int)$s['ozet']['devamsiz'] ?></td>
+        <?php endif; ?>
     </tr>
     <?php endforeach; ?>
     </tbody>
@@ -181,7 +212,7 @@ $ayUzun = pc_ay_adlari();
         <?php foreach ($gunler as $g): $n = (int)($tablo['gun_say'][$g['tarih']] ?? 0); ?>
         <td class="pc-h<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>"><?= $n > 0 ? $n : '·' ?></td>
         <?php endforeach; ?>
-        <td class="pc-oz" colspan="3"></td>
+        <td class="pc-oz" colspan="<?= $ozKol ?>"></td>
     </tr>
     <tr class="pc-genel">
         <th class="pc-ad" scope="row">Genel toplam</th>
@@ -189,6 +220,11 @@ $ayUzun = pc_ay_adlari();
         <td class="pc-oz"><?= (int)$genel['gun'] ?></td>
         <td class="pc-oz"><?= $gunluk ? (int)$genel['toplam'] : h(pc_sayi_fmt($genel['toplam'])) ?></td>
         <td class="pc-oz<?= $genel['eksik'] >= 1 ? ' pc-uyari' : '' ?>"><?= (int)$genel['eksik'] >= 1 ? '! ' . (int)$genel['eksik'] : '0' ?></td>
+        <?php if (!$gunluk): ?>
+        <td class="pc-oz"><?= (int)$genel['izin'] ?></td>
+        <td class="pc-oz"><?= (int)$genel['rapor'] ?></td>
+        <td class="pc-oz"><?= (int)$genel['devamsiz'] ?></td>
+        <?php endif; ?>
     </tr>
     </tfoot>
 </table>
@@ -201,29 +237,53 @@ $ayUzun = pc_ay_adlari();
         <span class="pc-rz" title="Toplam çalışılan gün"><?= (int)$genel['gun'] ?> gün</span>
         <span class="pc-rz" title="<?= $gunluk ? 'Toplam işçi-gün' : 'Toplam saat' ?>"><?= $gunluk ? (int)$genel['toplam'] . ' işçi-gün' : h(pc_sayi_fmt($genel['toplam'])) . ' sa' ?></span>
         <span class="pc-rz<?= $genel['eksik'] >= 1 ? ' pc-rz-uyari' : '' ?>" title="Eksik çıkış"><?= (int)$genel['eksik'] ?> eksik</span>
+        <?php if (!$gunluk && ($genel['izin'] || $genel['rapor'] || $genel['devamsiz'])): ?>
+        <span class="pc-rz" title="İzin günü"><?= (int)$genel['izin'] ?> izin</span>
+        <span class="pc-rz" title="Raporlu gün"><?= (int)$genel['rapor'] ?> rapor</span>
+        <span class="pc-rz" title="Devamsız gün"><?= (int)$genel['devamsiz'] ?> devamsız</span>
+        <?php endif; ?>
     </div>
     <?php
     $ilkHg = $gunler[0]['hg'];   // ayın ilk gününün haftadaki yeri (1=Pzt)
     foreach ($tablo['satirlar'] as $s): $oz = $s['ozet']; ?>
-    <details class="pc-kisi">
+    <details class="pc-kisi" data-emp-kisi="<?= (int)$s['id'] ?>">
         <summary>
             <span class="pc-k-ad"><span class="pc-ad-ad"><?= h($s['ad']) ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
             <span class="pc-rozetler">
                 <span class="pc-rz" title="Çalışılan gün"><?= (int)$oz['gun'] ?> gün</span>
                 <span class="pc-rz" title="<?= $gunluk ? 'Toplam işçi-gün' : 'Toplam saat' ?>"><?= $gunluk ? (int)$oz['toplam'] . ' işçi' : h(pc_sayi_fmt($oz['toplam'])) . ' sa' ?></span>
                 <?php if ($oz['eksik'] >= 1): ?><span class="pc-rz pc-rz-uyari" title="Eksik çıkış">! <?= (int)$oz['eksik'] ?></span><?php endif; ?>
+                <?php if (!$gunluk && $oz['izin'] >= 1): ?><span class="pc-rz" title="İzin günü"><?= (int)$oz['izin'] ?> izin</span><?php endif; ?>
+                <?php if (!$gunluk && $oz['rapor'] >= 1): ?><span class="pc-rz" title="Raporlu gün"><?= (int)$oz['rapor'] ?> rapor</span><?php endif; ?>
+                <?php if (!$gunluk && $oz['devamsiz'] >= 1): ?><span class="pc-rz" title="Devamsız gün"><?= (int)$oz['devamsiz'] ?> devamsız</span><?php endif; ?>
             </span>
         </summary>
         <div class="pc-takvim" role="grid" aria-label="<?= h($s['ad'] . ' — ' . pc_ay_basligi($ay)) ?>">
             <?php foreach (pc_gun_adlari() as $hn => $hk): ?><span class="pc-t-bas<?= $hn >= 6 ? ' pc-hs' : '' ?>"><?= h($hk) ?></span><?php endforeach; ?>
             <?php for ($i = 1; $i < $ilkHg; $i++): ?><span class="pc-t pc-t-bos" aria-hidden="true"></span><?php endfor; ?>
             <?php foreach ($gunler as $g):
-                [$cls, $ic, $tt] = pc_hucre_goster($tur, $s['hucre'][$g['tarih']] ?? null); ?>
-            <span class="pc-t <?= $cls ?><?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>"<?= $tt !== '' ? ' title="' . h($tt) . '"' : '' ?>><span class="pc-t-n"><?= $g['n'] ?></span><span class="pc-t-ic"><?= $ic ?></span></span>
+                $hh = $s['hucre'][$g['tarih']] ?? null;
+                [$cls, $ic, $tt] = pc_hucre_goster($tur, $hh); ?>
+            <span class="pc-t <?= $cls ?><?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?><?= $duzenle ? ' pc-duz' : '' ?>"<?= $tt !== '' ? ' title="' . h($tt) . '"' : '' ?><?= $piOz((int)$s['id'], $g['tarih'], $hh) ?>><span class="pc-t-n"><?= $g['n'] ?></span><span class="pc-t-ic"><?= $ic ?></span></span>
             <?php endforeach; ?>
         </div>
     </details>
     <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<?php if ($duzenle): ?>
+<!-- Elle işaret menüsü (v553): masaüstünde hücrenin yanında küçük menü, <768px'te alt sayfa (z-index ≥ 600). <form> YOK — fetch POST. -->
+<div class="pi-ovl" id="piOvl" hidden></div>
+<div class="pi-menu" id="piMenu" role="dialog" aria-labelledby="piBaslik" hidden>
+    <div class="pi-bas"><span class="pi-baslik" id="piBaslik"></span><button type="button" class="pi-kapat" data-pi-kapat aria-label="Kapat">×</button></div>
+    <div class="pi-liste">
+        <?php foreach (pi_kodlar() as $k => $kd): ?>
+        <button type="button" class="pi-dugme pc-k pc-k-<?= h($kd['sinif']) ?>" data-pi-kod="<?= h($k) ?>"><b><?= h($k) ?></b><span><?= h($kd['ad']) ?></span></button>
+        <?php endforeach; ?>
+        <button type="button" class="pi-dugme pi-temizle" data-pi-kod="">Temizle</button>
+    </div>
+    <p class="pi-hata" id="piHata" role="alert" hidden></p>
 </div>
 <?php endif; ?>
 </div>
