@@ -94,7 +94,7 @@ ok('yeni rol: sekme izni var ama sayfa Gör yok → sayfa kapalı', pc_sekmeler(
 $GRANTS = $e1;
 ok('eski rol (daily_reports): yalnız günlük sekmesi', pc_sekmeler() === ['gunluk']);
 $GRANTS = []; $ADMIN = true;
-ok('yönetici: üç sekme (personel · günlük · v554 Puantaj Girişi sonda)', pc_sekmeler() === ['personel', 'gunluk', 'giris']);
+ok('yönetici: üç sekme, sıra Puantaj Girişi · Personel · Günlük İşçi (v555: giris İLK)', pc_sekmeler() === ['giris', 'personel', 'gunluk']);
 $ADMIN = false; $GRANTS = [];
 ok('izinsiz: sekme yok', pc_sekmeler() === []);
 ok('pc_sekme_sec: geçersiz istek → ilk izinli; boş liste → null', pc_sekme_sec('x', ['gunluk']) === 'gunluk' && pc_sekme_sec('gunluk', ['personel', 'gunluk']) === 'gunluk' && pc_sekme_sec('x', []) === null);
@@ -256,17 +256,20 @@ function sayfa_calistir(string $sayfa, array $get, array $opt): array
 {
     global $ROOT;
     $cmd = ['php', $ROOT . '/scripts/_puantaj_cizelgesi_harness.php', $sayfa, json_encode($get), json_encode($opt)];
-    $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-    $out = stream_get_contents($pipes[1]); $err = stream_get_contents($pipes[2]);
-    fclose($pipes[1]); fclose($pipes[2]);
-    return ['rc' => proc_close($p), 'out' => $out, 'err' => $err];
+    $errDosya = tempnam(sys_get_temp_dir(), 'pcze_');   // v555: stderr dosyaya (15500 satırlık dump boruyu doldurup kilitlemesin); bu testin kendi geçici dosyası — harness'in "yeni dosya" sayımı 'pcz' önekini dışlar
+    $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['file', $errDosya, 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $rc = proc_close($p);
+    $err = (string)file_get_contents($errDosya); @unlink($errDosya);
+    return ['rc' => $rc, 'out' => $out, 'err' => $err];
 }
 function satir_adlari(string $html): array { preg_match_all('/<th class="pc-ad" scope="row"><span class="pc-ad-ad">(.*?)<\/span>/', $html, $m); return $m[1]; }
 function izin(array $ham): array { return role_pdks_expand_permissions($ham); }
 $bu = date('Y-m');
 $yon = ['admin' => true, 'ay' => $bu, 'depo' => '', 'allowed' => ['Depo A']];
 
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], $yon);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], $yon);
 ok('yönetici/personel: sayfa çıktı verdi (rc 0), PHP uyarısı yok', $p['rc'] === 0 && !preg_match('/Warning:|Notice:|Fatal|Deprecated/', $p['out'] . $p['err']), $p['err'] . substr($p['out'], 0, 300));
 $ad = satir_adlari($p['out']);
 ok('depo kuralı: Depo A + atanmamış görünür; Depo B ve pasif GİZLİ', $ad === ['Örnek Personel A', 'Örnek Personel B', 'Örnek Personel C', 'İsmail Örnek'], json_encode($ad, JSON_UNESCAPED_UNICODE));
@@ -280,15 +283,15 @@ ok('GET-only: formda method=get, csrf/post yok', str_contains($p['out'], 'method
 ok('Excel menüsü + Yazdır bağlantısı (yönetici)', str_contains($p['out'], 'dl-menu') && str_contains($p['out'], 'puantaj_cizelgesi_yazdir.php?'));
 ok('mobil gösterge düğmesi (ⓘ) + ay giriş alanı type=month', str_contains($p['out'], 'pc-lejant-dugme') && str_contains($p['out'], 'type="month"'));
 
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'pasif' => '1'], $yon);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'pasif' => '1'], $yon);
 ok("'Pasifleri de göster': pasif personel eklenir (Depo B yine gizli)", in_array('Örnek Personel E', satir_adlari($p['out']), true) && !in_array('Örnek Personel D', satir_adlari($p['out']), true));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'allowed' => ['Depo A', 'Depo B']]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'allowed' => ['Depo A', 'Depo B']]);
 ok('kullanıcı iki depoya yetkili: Depo B personeli de görünür', in_array('Örnek Personel D', satir_adlari($p['out']), true));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'q' => 'ismail'], $yon);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'q' => 'ismail'], $yon);
 ok("arama 'ismail' → yalnız 'İsmail Örnek'; arama kutusu değeri korunur", satir_adlari($p['out']) === ['İsmail Örnek'] && str_contains($p['out'], 'value="ismail"'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => '2028-02'], ['admin' => true, 'ay' => '2028-02']);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => '2028-02', 'sekme' => 'personel'], ['admin' => true, 'ay' => '2028-02']);
 ok('Şubat 2028: 29 gün sütunu', preg_match_all('/class="pc-g[ "]/', $p['out']) === 29 && $p['rc'] === 0);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => 'saçma'], $yon);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => 'saçma', 'sekme' => 'personel'], $yon);
 ok('geçersiz ay → bu aya düşer (500 yok)', $p['rc'] === 0 && preg_match_all('/class="pc-g[ "]/', $p['out']) === (int)date('t'));
 
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'gunluk'], $yon);
@@ -300,32 +303,32 @@ ok('günlük arama sonucu boş → bilgi kutusu', str_contains($p['out'], 'pc-bo
 
 echo "\n=== 3b. Yetki matrisi (gerçek role_pdks_require_request) ===\n";
 $sadeceSayfa = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $sadeceSayfa, 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $sadeceSayfa, 'ay' => $bu]);
 ok('yalnız sayfa Gör (sekme izni yok) → forbidden', $p['rc'] === 3 && str_contains($p['out'], 'FORBIDDEN'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => [], 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => [], 'ay' => $bu]);
 ok('izinsiz kullanıcı → forbidden', $p['rc'] === 3);
-$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu], ['perms' => [], 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => [], 'ay' => $bu]);
 ok('yazdırma: izinsiz → forbidden', $p['rc'] === 3);
 $pers = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.employees.read']);
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'gunluk'], ['perms' => $pers, 'ay' => $bu]);
 ok('yalnız personel izni: ?sekme=gunluk istense de personel sekmesi, tek sekme → sekme çubuğu YOK', $p['rc'] === 0 && str_contains($p['out'], 'data-tur="personel"') && !str_contains($p['out'], 'class="pc-sekmeler"') && !str_contains($p['out'], 'dl-menu'), substr($p['out'], 0, 200));
 $gun = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.daily_reports.read']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $gun, 'ay' => $bu, 'depo' => '']);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $gun, 'ay' => $bu, 'depo' => '']);
 ok('yalnız günlük izni: varsayılan sekme günlük işçi', $p['rc'] === 0 && str_contains($p['out'], 'data-tur="gunluk"'));
 $ikisi = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.employees.read', 'attendance.daily_reports.read']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $ikisi, 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $ikisi, 'ay' => $bu]);
 ok('iki izin: iki sekme; reports.export yok → Excel menüsü basılmaz', $p['rc'] === 0 && preg_match_all('/class="pc-sekme[ "]/', $p['out']) === 2 && !str_contains($p['out'], 'dl-menu'));
 $eski = izin(['attendance.daily_reports']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $eski, 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $eski, 'ay' => $bu]);
 ok('ESKİ rol (attendance.daily_reports): sayfa açılır, yalnız günlük sekmesi', $p['rc'] === 0 && str_contains($p['out'], 'data-tur="gunluk"'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'csv' => '1'], ['perms' => $ikisi, 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'csv' => '1'], ['perms' => $ikisi, 'ay' => $bu]);
 ok('reports.export yok → ?csv forbidden', $p['rc'] === 3 && str_contains($p['out'], 'reports.export'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'xlsx' => '1'], ['perms' => $ikisi, 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'xlsx' => '1'], ['perms' => $ikisi, 'ay' => $bu]);
 ok('reports.export yok → ?xlsx forbidden', $p['rc'] === 3 && str_contains($p['out'], 'reports.export'));
 
 echo "\n=== 3c. CSV / XLSX / audit ===\n";
 $exp = array_merge($ikisi, ['reports.export']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'csv' => '1'], ['perms' => $exp, 'ay' => $bu]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'csv' => '1'], ['perms' => $exp, 'ay' => $bu]);
 $satirlar = preg_split('/\r?\n/', trim(substr($p['out'], 0, 3) === "\xEF\xBB\xBF" ? substr($p['out'], 3) : $p['out']));
 $ilk = str_getcsv($satirlar[0], ';', '"', '\\');
 ok('CSV: BOM + ";" ayraç + başlık (Ad Soyad;Sicil / Departman;1 …)', substr($p['out'], 0, 3) === "\xEF\xBB\xBF" && $ilk[0] === 'Ad Soyad' && $ilk[1] === 'Sicil / Departman' && count($ilk) === 2 + (int)date('t') + 6, json_encode($ilk, JSON_UNESCAPED_UNICODE));
@@ -344,7 +347,7 @@ $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'csv' => '1', 'sekme'
 ok('şema hazır değilken dışa aktarım: dosya yerine hata + yönlendirme (500 yok)', $p['rc'] === 0 && !str_contains($p['out'], 'Ad Soyad'));
 
 echo "\n=== 3d. Yazdırma sayfası ===\n";
-$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu], $yon);
+$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu, 'sekme' => 'personel'], $yon);
 ok('yazdır: rc 0, pcy-tablo, sidebar/container YOK, @page landscape', $p['rc'] === 0 && str_contains($p['out'], 'pcy-tablo') && !str_contains($p['out'], '<main class="container">') && str_contains($p['out'], 'A4 landscape'), substr($p['out'], 0, 200) . $p['err']);
 ok('yazdır: thead + tfoot, 4 kişi, lejant', str_contains($p['out'], '<thead>') && str_contains($p['out'], 'GENEL TOPLAM (4)') && str_contains($p['out'], 'pcy-lejant'));
 ok('yazdır: X hücreleri pcy-x, eksik pcy-e (renk + harf)', substr_count($p['out'], 'class="pcy-x') >= 4 && str_contains($p['out'], 'class="pcy-e'));
@@ -352,13 +355,13 @@ $p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu, 'sekme' => 'gu
 ok('yazdır (günlük): çavuş satırları + kart bazlı notu', $p['rc'] === 0 && str_contains($p['out'], 'Örnek Çavuş 1') && str_contains($p['out'], 'kart / çavuş bazında'));
 
 echo "\n=== 3e. Şema hazır değil → nazik mesaj, 500 yok ===\n";
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
 ok('personel tabloları yok: rc 0 + açıklayıcı mesaj + tablo yok', $p['rc'] === 0 && str_contains($p['out'], 'Personel tabloları henüz hazır değil') && !str_contains($p['out'], 'class="pc-grid"'), $p['err'] . substr($p['out'], 0, 300));
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'gunluk'], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
 ok('günlük şema yok: rc 0 + açıklayıcı mesaj', $p['rc'] === 0 && str_contains($p['out'], 'Günlük işçi modülü tabloları henüz hazır değil'), $p['err'] . substr($p['out'], 0, 300));
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'gunluk'], ['admin' => true, 'ay' => $bu, 'sema' => 'personel']);
 ok('yalnız personel şeması hazır: günlük sekmesi nazik mesaj, personel sekmesi çalışır', $p['rc'] === 0 && str_contains($p['out'], 'tabloları henüz hazır değil'));
-$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
+$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
 ok('yazdır + şema yok: rc 0 + mesaj', $p['rc'] === 0 && str_contains($p['out'], 'henüz hazır değil'));
 
 // ───────────────────────── 4. v553 — ELLE GÜN İŞARETİ ─────────────────────────
@@ -487,7 +490,7 @@ echo "\n=== 4e. Gerçek sayfa: arayüz yetkiye ve şemaya bağlı ===\n";
 $ISR = [[1, 3, 'İ'], [1, 6, 'D', '<script>x</script>'], [2, 10, 'R'], [2, 11, 'T'], [3, 12, 'Ü']];
 $edit = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.monthly_timesheet.edit', 'attendance.employees.read']);
 $salt = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.employees.read']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
 $say = substr_count($p['out'], ' data-pi data-emp=');
 ok('yönetici + tablo hazır: hücreler düzenlenebilir (ızgara + mobil takvim = 2 × 4 kişi × gün), data-pi-url + csrf özniteliği', $p['rc'] === 0 && $say === 2 * 4 * (int)date('t') && str_contains($p['out'], 'data-pi-url="puantaj_isaret_kaydet.php"') && str_contains($p['out'], 'data-pi-csrf="testcsrf"'), (string)$say . $p['err']);
 ok('menü: 5 kod düğmesi (D İ Ü R T) + Temizle; <form> YOK; hata alanı role=alert', $p['rc'] === 0 && preg_match_all('/data-pi-kod="[DİÜRT]"/u', $p['out']) === 5 && str_contains($p['out'], 'data-pi-kod=""') && str_contains($p['out'], 'id="piMenu"') && str_contains($p['out'], 'role="alert"') && !preg_match('/<form[^>]*method="post"/i', $p['out']));
@@ -496,38 +499,38 @@ ok('XSS: işaret açıklaması title içinde KAÇIRILIR (&lt;script&gt;), ham <s
 ok('özet sütunları: başlıkta İzin/Rapor/Devamsız; A satırı 3 Kasım X yerine İ → yalnız 4 ve 12\'si X (2 gün, 16 saat; işaretli gün sayılmaz), eksik 1', str_contains($p['out'], '>Devamsız</th>') && preg_match('/Örnek Personel A.*?<\/tr>/s', $p['out'], $ma) === 1 && substr_count($ma[0], 'pc-x') === 2 && str_contains($ma[0], '>16<') && str_contains($ma[0], '! 1'), $ma[0] ?? '');
 ok('lejant: kod rozetleri + "tıklayarak işaretleyin" ipucu (düzenleyen için)', str_contains($p['out'], 'pc-kl-liste') && str_contains($p['out'], 'Güne tıklayarak'));
 ok('mobil gösterge ⓘ arkasında (pc-lejant-ic içinde) ve özet rozetleri (izin/rapor/devamsız) basılı', str_contains($p['out'], 'pc-lejant-dugme') && preg_match('/pc-lejant-ic".*?pc-kl-liste/s', $p['out']) === 1 && str_contains($p['out'], 'devamsız</span>'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $edit, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $edit, 'ay' => $bu, 'isaretler' => $ISR]);
 ok("ayrıntılı rol + açık 'edit' + Personel kartları Gör: düzenleme açık", $p['rc'] === 0 && str_contains($p['out'], ' data-pi data-emp=') && str_contains($p['out'], 'id="piMenu"'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $salt, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $salt, 'ay' => $bu, 'isaretler' => $ISR]);
 ok("'edit' YOK: işaretler GÖRÜNÜR ama hücre salt okunur (data-pi / data-pi-url / menü / pc-duz / ipucu YOK)", $p['rc'] === 0 && str_contains($p['out'], 'pc-k pc-k-iz') && !str_contains($p['out'], 'data-pi') && !str_contains($p['out'], 'piMenu') && !str_contains($p['out'], 'pc-duz') && !str_contains($p['out'], 'Güne tıklayarak'), substr($p['out'], 0, 100));
 $eski = izin(['attendance.employees']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $eski, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $eski, 'ay' => $bu, 'isaretler' => $ISR]);
 ok("ESKİ rol (attendance.employees): sayfa açılır, 'edit' otomatik AÇILMAZ → salt okunur", $p['rc'] === 0 && str_contains($p['out'], 'data-tur="personel"') && !str_contains($p['out'], 'data-pi'));
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'gunluk'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
 ok('GÜNLÜK İŞÇİ sekmesi AYNEN: işaret arayüzü/özet sütunları/menü YOK', $p['rc'] === 0 && !str_contains($p['out'], 'data-pi') && !str_contains($p['out'], 'piMenu') && !str_contains($p['out'], '>Devamsız</th>') && !str_contains($p['out'], 'pc-kl-liste'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'isaret_yok' => true]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'isaret_yok' => true]);
 ok("tablo YOK (migrate edilmemiş): çizelge eskisi gibi çalışır (rc 0, A satırı X/!), işaretleme arayüzü gizli, yönetici için 'migrate.php#puantaj-isaret' notu", $p['rc'] === 0 && str_contains($p['out'], 'class="pc-grid"') && !str_contains($p['out'], 'data-pi') && !str_contains($p['out'], 'piMenu') && !str_contains($p['out'], 'pc-kl-liste')
     && str_contains($p['out'], 'migrate.php#puantaj-isaret') && str_contains($p['out'], 'Puantaj İşaretleri') && substr_count($p['out'], 'pc-x') >= 3, $p['err'] . substr($p['out'], 0, 200));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['perms' => $salt, 'ay' => $bu, 'isaret_yok' => true]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['perms' => $salt, 'ay' => $bu, 'isaret_yok' => true]);
 ok('tablo yok + yönetici olmayan kullanıcı: not GÖRÜNMEZ', $p['rc'] === 0 && !str_contains($p['out'], 'puantaj-isaret') && str_contains($p['out'], 'class="pc-grid"'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'sema' => 'yok']);
 ok('personel tabloları da yok: nazik hata, işaret notu/menü yok (500 yok)', $p['rc'] === 0 && str_contains($p['out'], 'henüz hazır değil') && !str_contains($p['out'], 'puantaj-isaret') && !str_contains($p['out'], 'piMenu'));
-$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
 ok('yazdırma: işaretli hücreler pcy-k pcy-k-iz/-d/-r/-t/-uc (harf), İzin/Rapor/Devamsız başlıkları, lejantta kodlar, XSS kaçırılmış (yazdırmada title yok)', $p['rc'] === 0 && str_contains($p['out'], 'pcy-k pcy-k-iz') && str_contains($p['out'], 'pcy-k pcy-k-d') && str_contains($p['out'], 'pcy-k pcy-k-t') && str_contains($p['out'], 'pcy-k pcy-k-uc') && str_contains($p['out'], '>Devamsız</th>') && str_contains($p['out'], 'D = Devamsız') && !str_contains($p['out'], '<script>x</script>') && str_contains($p['out'], 'colspan="6"'), $p['err'] . substr($p['out'], 0, 200));
-$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu], ['admin' => true, 'ay' => $bu, 'isaret_yok' => true]);
+$p = sayfa_calistir('puantaj_cizelgesi_yazdir.php', ['ay' => $bu, 'sekme' => 'personel'], ['admin' => true, 'ay' => $bu, 'isaret_yok' => true]);
 ok('yazdırma + tablo yok: lejantta kod yok, sayfa çalışır', $p['rc'] === 0 && !str_contains($p['out'], 'D = Devamsız') && str_contains($p['out'], 'pcy-tablo'));
 
 echo "\n=== 4f. CSV / XLSX: işaret harfleri + yeni özet sütunları, audit (q metni YOK) ===\n";
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'csv' => '1'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'csv' => '1'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
 $satirlar = preg_split('/\r?\n/', trim(substr($p['out'], 0, 3) === "\xEF\xBB\xBF" ? substr($p['out'], 3) : $p['out']));
 $ilk = str_getcsv($satirlar[0], ';', '"', '\\');
 $a1 = null; foreach ($satirlar as $sr) { $c = str_getcsv($sr, ';', '"', '\\'); if ($c[0] === 'Örnek Personel A') $a1 = $c; }
 ok('CSV: başlık son 3 sütun İzin;Rapor;Devamsız (38 sütun)', array_slice($ilk, -3) === ['İzin', 'Rapor', 'Devamsız'] && count($ilk) === 2 + (int)date('t') + 6, json_encode($ilk, JSON_UNESCAPED_UNICODE));
 ok('CSV: A satırı — 3. gün "İ" (formül ön eki yok), 6. gün "D"; özet 5. ve 6. sütunlar izin=1 · rapor=0 · devamsız=1', $a1 !== null && $a1[4] === 'İ' && $a1[7] === 'D' && array_slice($a1, -3) === ['1', '0', '1'], json_encode($a1, JSON_UNESCAPED_UNICODE));
 ok('CSV: audit q-metni kuralı — aranan metin audit\'e YAZILMAZ (yalnız arama:true)', str_contains($p['err'], '"report":"puantaj_cizelgesi"') && !str_contains($p['err'], 'gizli arama'));
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'csv' => '1', 'q' => 'gizli arama'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'csv' => '1', 'q' => 'gizli arama'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
 ok('CSV + q: audit filtresinde "arama":true, metin YOK', str_contains($p['err'], '"arama":true') && !str_contains($p['err'], 'gizli arama'), $p['err']);
-$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'xlsx' => '1'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'xlsx' => '1'], ['admin' => true, 'ay' => $bu, 'isaretler' => $ISR]);
 ok('XLSX (personel + işaretler): zip başlığı PK, audit xlsx', substr($p['out'], 0, 2) === 'PK' && str_contains($p['err'], '"format":"xlsx"'));
 if (is_file($ROOT . '/vendor/autoload.php') && substr($p['out'], 0, 2) === 'PK') {
     $tmp = tempnam(sys_get_temp_dir(), 'pcx') . '.xlsx'; file_put_contents($tmp, $p['out']);
@@ -682,12 +685,13 @@ ok("matris: puantaj_giris_kaydet.php rotası monthly_timesheet; POST = ['monthly
 $sira = ['require_login()', "'POST'", 'role_pdks_require_request();', "role_pdks_can('monthly_timesheet', 'edit')", 'csrf_check(', 'enforce_active_depot()', 'active_depot()', 'pg_hazir($pdo)'];
 $konum = array_map(fn($n) => strpos($kaydet, $n), $sira);
 ok('yazma ucu: kapı sırası = login → POST → rota kapısı → edit → CSRF → aktif depo → tablo hazır', !in_array(false, $konum, true) && $konum === array_values(array_unique($konum)) && $konum === (function ($k) { $s = $k; sort($s); return $s; })($konum), json_encode($konum));
-ok('yazma ucu: action beyaz liste (6 eylem), employees izni GEREKMEZ (bağımsız), depot_visible_to_user, audit_log_event puantaj_giris, doğrudan SQL yok',
-    str_contains($kaydet, "['kisi_ekle', 'kisi_duzenle', 'kisi_durum', 'gun_isaretle', 'gun_toplu', 'gun_sutun']") && !str_contains($kaydet, "role_pdks_can('employees')") && str_contains($kaydet, 'depot_visible_to_user(') && substr_count($kaydet, "'puantaj_giris'") >= 3 && !preg_match('/\b(INSERT|UPDATE|DELETE|SELECT)\s/', $kaydet));
+ok('yazma ucu: action beyaz liste (v555: 11 eylem), employees izni GEREKMEZ (bağımsız), depot_visible_to_user, audit_log_event puantaj_giris, doğrudan SQL yok',
+    str_contains($kaydet, "['kisi_ekle', 'kisi_duzenle', 'kisi_durum', 'gun_isaretle', 'gun_toplu', 'gun_sutun', 'kisi_sil', 'kisi_toplu', 'gun_toplu_sec', 'excel_onizle', 'excel_ekle']") && !str_contains($kaydet, "role_pdks_can('employees')") && str_contains($kaydet, 'depot_visible_to_user(') && substr_count($kaydet, "'puantaj_giris'") >= 3 && !preg_match('/\b(INSERT|UPDATE|DELETE|SELECT)\s/', $kaydet));
 preg_match_all("/'((?:SELECT|INSERT|UPDATE|DELETE)[^']*)'/", $kod_yorumsuz('config/puantaj_giris.php'), $sqlm);
-ok('SQL pozisyonel ?: tüm sorgu dizgelerinde adlandırılmış parametre (:ad) YOK; WHERE/VALUES içerenlerde ? var', count($sqlm[1]) >= 12 && !array_filter($sqlm[1], fn($q) => preg_match('/:[a-z_]+/', $q)) && !array_filter($sqlm[1], fn($q) => preg_match('/\b(WHERE|VALUES)\b/', $q) && !str_contains($q, '?') && !str_ends_with($q, 'WHERE ')), (string)count($sqlm[1]));   // WHERE ile biten parça: ? koşulları depo_sql_in()'den pozisyonel eklenir, (string)count($sqlm[1]));
-ok('JS: fetch POST same-origin + csrf, Esc, innerHTML YOK, <form> YOK, data-pg-url yoksa bağlanmaz; sütun/⋯/kişi ekle', !preg_match('/\.innerHTML|insertAdjacentHTML|document\.write/', $pgjs) && !str_contains($pgjs, "createElement('form')") && str_contains($pgjs, "method: 'POST'") && str_contains($pgjs, "credentials: 'same-origin'") && str_contains($pgjs, "g.set('csrf', CSRF)") && str_contains($pgjs, "'Escape'")
-    && str_contains($pgjs, ".pc-page[data-pg-url]") && str_contains($pgjs, 'data-pg-gun') && str_contains($pgjs, 'data-pg-kisi-ekle') && str_contains($pgjs, "'gun_sutun'") && str_contains($pgjs, "'gun_toplu'") && str_contains($pgjs, "'kisi_durum'"));
+ok('SQL pozisyonel ?: tüm sorgu dizgelerinde adlandırılmış parametre (:ad) YOK; WHERE/VALUES içerenlerde ? var', count($sqlm[1]) >= 12 && !array_filter($sqlm[1], fn($q) => preg_match('/:[a-z_]+/', $q)) && !array_filter($sqlm[1], fn($q) => preg_match('/\b(WHERE|VALUES)\b/', $q) && !str_contains($q, '?') && !str_ends_with($q, 'WHERE ') && !str_ends_with($q, 'IN (')), (string)count($sqlm[1]));   // WHERE ile biten parça: ? koşulları depo_sql_in()'den pozisyonel eklenir; "IN (" ile biten parça: ? yer tutucuları implode(array_fill) ile pozisyonel eklenir
+ok('JS: fetch POST same-origin + csrf, Esc, innerHTML YOK, <form> YOK, data-pg-url yoksa bağlanmaz; gün seçimi/⋯/kişi ekle/toplu atama (v555: gun_sutun artık UI\'dan çağrılmaz)', !preg_match('/\.innerHTML|insertAdjacentHTML|document\.write/', $pgjs) && !str_contains($pgjs, "createElement('form')") && str_contains($pgjs, "method: 'POST'") && str_contains($pgjs, "credentials: 'same-origin'") && str_contains($pgjs, "g.set('csrf', CSRF)") && str_contains($pgjs, "'Escape'")
+    && str_contains($pgjs, ".pc-page[data-pg-url]") && str_contains($pgjs, 'data-pg-gun') && str_contains($pgjs, 'data-pg-kisi-ekle') && !str_contains($pgjs, "'gun_sutun'") && str_contains($pgjs, "'gun_toplu'") && str_contains($pgjs, "'kisi_durum'")
+    && str_contains($pgjs, "'gun_toplu_sec'") && str_contains($pgjs, "'Content-Type': 'application/json'") && str_contains($pgjs, 'window.pgApi') && str_contains($pgjs, 'data-pg-sec-kod'));   // v555: gun_sutun UI'dan ÇIKTI (uç eylemi durur)
 $ui = oku('config/puantaj_giris_ui.php');
 ok('UI: <form> ELEMENTİ yok (.pm-dialog > form tuzağı), JS gövdesi yalnız fetch; CSS pencere z-index ≥ 600, mobil alt sayfa, 16px input, var(--surface YOK', !preg_match('/<form\b/i', $kod_yorumsuz('config/puantaj_giris_ui.php')) && (bool)preg_match('/\.pg-pen \{[^}]*z-index: 6\d\d/', $css) && (bool)preg_match('/@media \(max-width: 767px\) \{\s*\.pg-pen \{[^}]*bottom: 0/', $css) && (bool)preg_match('/\.pg-pen-alan input \{ font-size: 16px/', $css) && !preg_match('/var\(--surface/', preg_replace('#/\*.*?\*/#s', '', $css)));
 ok('CLAUDE.md: v554 puantaj satırı (Puantaj Girişi, puantaj_giris_kisiler/gunler, migrate kartı, puantaj_giris_kaydet.php, gayri resmi / employees ilişkisiz)', str_contains(oku('CLAUDE.md'), 'puantaj_giris_kisiler') && str_contains(oku('CLAUDE.md'), 'puantaj_giris_kaydet.php') && str_contains(oku('CLAUDE.md'), 'gayri resmi'));
@@ -741,30 +745,30 @@ $GRANTS = []; $ADMIN = false;
 $GRANTS = role_pdks_expand_permissions(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.monthly_timesheet.edit']);
 ok("yalnız sayfa read+edit (kaynak izni YOK): sekmeler = ['giris'] — bağımsız veri, employees/daily_reports izni gerekmez", pc_sekmeler() === ['giris']);
 $GRANTS = role_pdks_expand_permissions(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.employees.read', 'attendance.monthly_timesheet.edit']);
-ok("read+edit+Personel kartları: ['personel','giris'] (giris SONDA)", pc_sekmeler() === ['personel', 'giris']);
+ok("read+edit+Personel kartları: ['giris','personel'] (v555: giris İLK)", pc_sekmeler() === ['giris', 'personel']);
 $GRANTS = role_pdks_expand_permissions(['attendance.employees', 'attendance.daily_reports']);
 ok("eski roller (edit otomatik YOK) → giris sekmesi YOK: ['personel','gunluk']", pc_sekmeler() === ['personel', 'gunluk']);
 $GRANTS = [];
-ok("pc_sekme_sec: parametre YOK + giris izinli + tablo hazır → 'giris' VARSAYILAN; tablo hazır değil → ilk sekme", pc_sekme_sec('', ['personel', 'gunluk', 'giris']) === 'giris' && pc_sekme_sec('', ['personel', 'gunluk', 'giris'], false) === 'personel' && pc_sekme_sec('', ['giris'], false) === 'giris');
+ok("pc_sekme_sec (v555): parametre YOK → listenin İLKİ; giris görünüyorsa (listede ilk) varsayılan açılış 'giris'; görünmüyorsa eski davranış (ilk = personel)", pc_sekme_sec('', ['giris', 'personel', 'gunluk']) === 'giris' && pc_sekme_sec('', ['giris']) === 'giris' && pc_sekme_sec('', ['personel', 'gunluk']) === 'personel' && pc_sekme_sec('', ['gunluk']) === 'gunluk');
 ok("pc_sekme_sec: açık sekme isteği saygı görür (personel / gunluk / giris); geçersiz istek → ilk izinli (giris DEĞİL); giris izinli değilse eski davranış", pc_sekme_sec('personel', ['personel', 'gunluk', 'giris']) === 'personel' && pc_sekme_sec('giris', ['personel', 'giris']) === 'giris' && pc_sekme_sec('x', ['personel', 'giris']) === 'personel' && pc_sekme_sec('', ['personel', 'gunluk']) === 'personel' && pc_sekme_sec('giris', ['personel']) === 'personel' && pc_sekme_sec('', []) === null);
 ok('sekme adları: Personel · Günlük İşçi · Puantaj Girişi', pc_sekme_adlari() === ['personel' => 'Personel', 'gunluk' => 'Günlük İşçi', 'giris' => 'Puantaj Girişi']);
 $pdoHazir = new PDO('sqlite::memory:'); $pdoHazir->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $pdoHazir->exec('CREATE TABLE puantaj_giris_kisiler (id INTEGER)'); $pdoHazir->exec('CREATE TABLE puantaj_giris_gunler (id INTEGER)');
 $pdoYok = new PDO('sqlite::memory:');
 $GRANTS = role_pdks_expand_permissions(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.employees.read', 'attendance.monthly_timesheet.edit']);
-ok("pc_sekmeler_hazir: tablo HAZIR → [personel, giris] + hazır=true; tablo YOK + yetkili ama yönetici değil → giris GİZLİ ([personel], hazır=false)", pc_sekmeler_hazir($pdoHazir) === [['personel', 'giris'], true] && pc_sekmeler_hazir($pdoYok) === [['personel'], false]);
+ok("pc_sekmeler_hazir: tablo HAZIR → [giris, personel] + hazır=true; tablo YOK + yetkili ama yönetici değil → giris GİZLİ ([personel], hazır=false)", pc_sekmeler_hazir($pdoHazir) === [['giris', 'personel'], true] && pc_sekmeler_hazir($pdoYok) === [['personel'], false]);
 $GRANTS = []; $ADMIN = true;
-ok("pc_sekmeler_hazir: tablo YOK + yönetici → giris GÖRÜNÜR (kurulum notu için), hazır=false", pc_sekmeler_hazir($pdoYok) === [['personel', 'gunluk', 'giris'], false] && pc_sekmeler_hazir($pdoHazir)[1] === true);
+ok("pc_sekmeler_hazir: tablo YOK + yönetici → giris GÖRÜNÜR ve İLK (kurulum notu için), hazır=false", pc_sekmeler_hazir($pdoYok) === [['giris', 'personel', 'gunluk'], false] && pc_sekmeler_hazir($pdoHazir)[1] === true);
 $ADMIN = false; $GRANTS = [];
 
 echo "\n=== 5d. Gerçek sayfa: Puantaj Girişi sekmesi (bellek içi SQLite harness) ===\n";
 $GB = ['admin' => true, 'ay' => $bu, 'giris' => true, 'depo' => 'Depo A', 'allowed' => ['Depo A'],
     'giris_kisiler' => [[1, 'Örnek Kişi A', 'Paketçi', 'Depo A', 1], [2, 'Örnek Kişi B', '', '', 1], [3, 'Örnek Kişi C', '', 'Depo B', 1], [4, 'Örnek Kişi D', '', 'Depo A', 0], [5, 'İsmail Örnek', 'Şoför', 'Depo A', 1]],
     'giris_gunler' => [[1, 2, 'X'], [1, 3, 'Y'], [1, 4, 'D'], [1, 5, 'İ'], [2, 3, 'R'], [3, 3, 'X'], [4, 3, 'X']]];
-function giris_ad_listesi(string $html): array { preg_match_all('/<tr data-pg-satir="\d+"[^>]*>\s*<th class="pc-ad" scope="row"><span class="pg-ad-kap"><span class="pg-ad-metin"><span class="pc-ad-ad">(.*?)(?: <em|<\/span>)/s', $html, $m); return $m[1]; }
+function giris_ad_listesi(string $html): array { preg_match_all('/<tr data-pg-satir="\d+"[^>]*>\s*<th class="pc-ad" scope="row"><span class="pg-ad-kap">(?:<label class="pg-secbox">.*?<\/label>|<span class="pg-secbox pg-secbox-bos"[^>]*><\/span>)<span class="pg-ad-metin"><span class="pc-ad-ad">(.*?)(?: <em|<\/span>)/s', $html, $m); return $m[1]; }
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], $GB);
 ok('yönetici + tablolar hazır + sekme parametresi YOK → VARSAYILAN sekme Puantaj Girişi (rc 0, PHP uyarısı yok)', $p['rc'] === 0 && str_contains($p['out'], 'data-tur="giris"') && !preg_match('/Warning:|Notice:|Fatal|Deprecated/', $p['out'] . $p['err']), $p['err'] . substr($p['out'], 0, 200));
-ok('sekme çubuğu: Personel · Günlük İşçi · Puantaj Girişi (sırayla; sonuncu aktif)', preg_match_all('/class="pc-sekme[ "]/', $p['out']) === 3 && (bool)preg_match('/>Personel<\/a>\s*<a[^>]*>Günlük İşçi<\/a>\s*<a[^>]*is-aktif[^>]*>Puantaj Girişi<\/a>/', $p['out']));
+ok('sekme çubuğu (v555): Puantaj Girişi (ilk, aktif) · Personel · Günlük İşçi', preg_match_all('/class="pc-sekme[ "]/', $p['out']) === 3 && (bool)preg_match('/<a[^>]*is-aktif[^>]*>Puantaj Girişi<\/a>\s*<a[^>]*>Personel<\/a>\s*<a[^>]*>Günlük İşçi<\/a>/', $p['out']));
 ok('depo kuralı: Depo A + atanmamış görünür; Depo B kişisi ve PASİF GİZLİ', giris_ad_listesi($p['out']) === ['İsmail Örnek', 'Örnek Kişi A', 'Örnek Kişi B'], json_encode(giris_ad_listesi($p['out']), JSON_UNESCAPED_UNICODE));
 ok('lejant yedi kod + bilgi satırı "gayri resmi / göstermeliktir; PDKS, hakediş ve diğer modüllerle ilişkisi yoktur"', str_contains($p['out'], 'pg-bilgi') && str_contains($p['out'], 'Bu alan gayri resmi / göstermeliktir; PDKS, hakediş ve diğer modüllerle ilişkisi yoktur.') && preg_match_all('/class="pc-kl pc-k pc-k-(cx|y|d|iz|uc|r|t)"/', $p['out']) === 7);
 ok('+ Kişi ekle düğmesi (data-pg-kisi-ekle); Excel menüsü + Yazdır (sekme=giris)', str_contains($p['out'], 'data-pg-kisi-ekle') && str_contains($p['out'], 'dl-menu') && str_contains($p['out'], 'puantaj_cizelgesi_yazdir.php?sekme=giris'));
@@ -800,7 +804,7 @@ ok('Şubat 2028: 29 gün sütunu (artık yıl)', $p['rc'] === 0 && substr_count(
 echo "--- tablo kurulu DEĞİL (migrate edilmemiş site) ---\n";
 $YOK = array_merge($GB, ['giris' => false]);
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], $YOK);
-ok('yönetici: tablo yokken VARSAYILAN sekme eskisi gibi Personel (500 yok); sekme çubuğunda 3. sekme görünür', $p['rc'] === 0 && str_contains($p['out'], 'data-tur="personel"') && preg_match_all('/class="pc-sekme[ "]/', $p['out']) === 3 && !preg_match('/Warning:|Notice:|Fatal|Deprecated/', $p['out'] . $p['err']));
+ok('yönetici: tablo yokken de VARSAYILAN sekme Puantaj Girişi (v555) — kurulum notu görünür, 500 yok; sekme çubuğunda 3 sekme', $p['rc'] === 0 && str_contains($p['out'], 'data-tur="giris"') && str_contains($p['out'], 'migrate.php#puantaj-giris') && preg_match_all('/class="pc-sekme[ "]/', $p['out']) === 3 && !preg_match('/Warning:|Notice:|Fatal|Deprecated/', $p['out'] . $p['err']));
 $p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'giris'], $YOK);
 ok("yönetici + ?sekme=giris + tablo yok: net mesaj 'Önce migrate.php › Puantaj Girişi kartını çalıştırın' + #puantaj-giris bağlantısı; sayfa çöker/500 vermez; Kişi ekle düğmesi YOK", $p['rc'] === 0 && str_contains($p['out'], 'Puantaj Girişi tabloları henüz kurulmamış') && str_contains($p['out'], 'migrate.php#puantaj-giris') && str_contains($p['out'], 'kartını çalıştırın') && !str_contains($p['out'], 'data-pg-kisi-ekle') && !str_contains($p['out'], 'data-pg-url') && !preg_match('/Warning:|Notice:|Fatal/', $p['out'] . $p['err']), substr($p['out'], 0, 200));
 $edP = izin(['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.monthly_timesheet.edit', 'attendance.employees.read']);
@@ -1029,6 +1033,490 @@ $tumErr = aud($yaz1['err']) . aud($yaz2['err']) . aud($yaz3['err']);
 $adli = giris_post($T + ['action' => 'kisi_ekle', 'ad' => 'Çok Gizli Ad Soyad', 'gorev' => 'Çok Gizli Görev']);
 $adli2 = giris_post($T + ['action' => 'kisi_duzenle', 'kisi_id' => '1', 'ad' => 'Başka Gizli Ad', 'gorev' => 'Başka Gizli Görev']);
 ok('kisi_ekle + kisi_duzenle audit çıktısında ad / görev metni YOK (yalnız id, aktif, depo, uzunluklar)', str_contains($adli['err'], 'AUDIT:') && str_contains($adli2['err'], 'AUDIT:') && !preg_match('/Gizli|Örnek Kişi/u', aud($adli['err']) . aud($adli2['err']) . $tumErr), $adli['err'] . $adli2['err']);
+
+
+// ───────────────────────── 6. v555 — Puantaj Girişi: ilk sekme · Kişiler görünümü · Excel'den ekle · toplu kişi × gün ─────────────────────────
+echo "\n=== 6a. Statik: dosyalar, güvenlik, bağımsızlık, kapılar ===\n";
+foreach (['config/puantaj_giris_excel.php', 'config/puantaj_giris_kisiler_ui.php', 'assets/puantaj_giris_kisiler.js'] as $f) ok("$f var", is_file("$ROOT/$f"));
+foreach (['config/puantaj_giris_excel.php', 'config/puantaj_giris_kisiler_ui.php'] as $f) { exec('php -l ' . escapeshellarg("$ROOT/$f") . ' 2>&1', $o, $rc); ok("php -l $f", $rc === 0, implode(' ', $o)); $o = []; }
+exec('node --check ' . escapeshellarg("$ROOT/assets/puantaj_giris_kisiler.js") . ' 2>&1', $o, $rc); ok('node --check assets/puantaj_giris_kisiler.js', $rc === 0, implode(' ', $o)); $o = [];
+$pgx = $kod_yorumsuz('config/puantaj_giris_excel.php'); $pgkui = $kod_yorumsuz('config/puantaj_giris_kisiler_ui.php');
+$kisJs = oku('assets/puantaj_giris_kisiler.js'); $pgjs = oku('assets/puantaj_giris.js'); $css = oku('assets/puantaj_cizelgesi.css'); $kaydet = oku('puantaj_giris_kaydet.php');
+$sayfa = oku('puantaj_cizelgesi.php'); $pgl = $kod_yorumsuz('config/puantaj_giris.php');
+$v555 = $pgx . $pgkui . $kod_yorumsuz('puantaj_giris_kaydet.php') . $pgl . $kod_yorumsuz('config/puantaj_giris_ui.php');
+ok('BAĞIMSIZ (v555 dosyaları dahil): employees / attendance_* / puantaj_isaretler / daily_* / worker_* / foreman / hakediş / cavus / pdks_* çağrısına HİÇ değinmez', !preg_match('/\b(employees|attendance_\w+|puantaj_isaretler|daily_\w+|worker_\w+|foreman\w*|hakedis\w*|entitlement\w*|cavus\w*|employee_cards)\b/i', $v555) && !preg_match('/\bpdks_(?!aktif)\w+\s*\(/i', $v555));
+preg_match_all('/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|FROM|JOIN)\s+`?([a-z_]+)`?/i', $pgx . $pgl . $kod_yorumsuz('puantaj_giris_kaydet.php'), $tm2);
+$tablolar2 = array_values(array_unique(array_map('strtolower', $tm2[1]))); sort($tablolar2);
+ok('BAĞIMSIZ: SQL (Excel modülü + toplu işlemler dahil) yalnız puantaj_giris_kisiler + puantaj_giris_gunler', $tablolar2 === ['puantaj_giris_gunler', 'puantaj_giris_kisiler'], json_encode($tablolar2));
+ok('Excel güvenliği: yüklenen dosya DİSKE KAYDEDİLMEZ (move_uploaded_file / file_put_contents / copy / rename / tempnam / fopen yazma YOK); yalnız php://memory', !preg_match('/\b(move_uploaded_file|file_put_contents|tempnam|tmpfile|copy|rename|touch|unlink)\s*\(/i', $pgx . $kod_yorumsuz('puantaj_giris_kaydet.php')) && !preg_match('/fopen\s*\(\s*[^)]*[\'"][wax]\+?b?[\'"]/i', $pgx) && str_contains($pgx, "fopen('php://memory'"));
+ok('Excel güvenliği: ReadDataOnly + yalnız ilk sayfa + okuma süzgeci; getCalculatedValue / calculate() YOK; formül hücresi yalnız önbellek', str_contains($pgx, 'setReadDataOnly(true)') && str_contains($pgx, 'setLoadSheetsOnly(') && str_contains($pgx, 'IReadFilter') && !preg_match('/getCalculatedValue|->calculate\(|setCalculate/i', $pgx) && str_contains($pgx, 'getOldCalculatedValue'));
+ok('Excel güvenliği: boyut ≤ 2 MB · ≤ 500 satır · .xlsx/.csv · PK + zip denetimi (makro/dış bağlantı/gömülü/zip bombası) · is_uploaded_file varsayılanı', str_contains($pgx, 'const PGE_MAX_BAYT = 2097152') && str_contains($pgx, 'const PGE_MAX_SATIR = 500') && str_contains($pgx, "'xl/vbaproject.bin'") && str_contains($pgx, 'externallinks/') && str_contains($pgx, 'embeddings/') && str_contains($pgx, 'zip bombası') && str_contains($pgx, "'is_uploaded_file'"));
+ok('yazma ucu: dosya yükleme kancası YALNIZ test globali ($GLOBALS[_pg_yukleme_denetimi]); CSRF dosya eyleminden ÖNCE (kapı sırası değişmedi)', str_contains($kaydet, "_pg_yukleme_denetimi") && strpos($kaydet, 'csrf_check(') < strpos($kaydet, "case 'excel_onizle'") && strpos($kaydet, 'role_pdks_can(\'monthly_timesheet\', \'edit\')') < strpos($kaydet, "case 'kisi_sil'"));
+ok('yazma ucu: yeni eylemler tek-transaction yardımcılarını çağırır (pg_kisi_sil / pg_kisi_toplu / pg_gun_toplu_sec / pge_kisileri_ekle), doğrudan SQL yok, audit_log_event puantaj_giris', str_contains($kaydet, 'pg_kisi_sil($pdo') && str_contains($kaydet, 'pg_kisi_toplu($pdo') && str_contains($kaydet, 'pg_gun_toplu_sec($pdo') && str_contains($kaydet, 'pge_kisileri_ekle($pdo') && substr_count($kaydet, "'puantaj_giris'") >= 6 && !preg_match('/\b(INSERT|UPDATE|DELETE|SELECT)\s/', $kaydet));
+preg_match_all('/audit_log_event\([^;]*;/', $kod_yorumsuz('puantaj_giris_kaydet.php'), $auSeg);
+ok("yazma ucu: audit_log_event çağrılarının HİÇBİRİ ad / görev / kişi satırı taşımaz (yalnız id, sayı, mod, kod, tarih)", count($auSeg[0]) >= 6 && !array_filter($auSeg[0], fn($x) => preg_match("/'(ad|gorev)'/", $x)), json_encode($auSeg[0], JSON_UNESCAPED_UNICODE));
+ok("yazma ucu: toplu eylemlerde depo kuralı HER kişide (depot_visible_to_user döngüsü), tümü-ya-hiçbiri; kisi_ids ≤ PG_TOPLU_ID_MAX, tarihler ≤ PG_SEC_GUN_MAX", str_contains($kaydet, 'foreach ($kis as $k)') && str_contains($kaydet, 'depot_visible_to_user($k[\'depo\'])') && str_contains($kaydet, 'PG_TOPLU_ID_MAX') && str_contains($kaydet, 'PG_SEC_GUN_MAX'));
+ok('sınırlar: kişi 500 × gün 31 = 15500 (PG_SEC_HUCRE_MAX); Excel 500 satır', PG_TOPLU_ID_MAX === 500 && PG_SEC_GUN_MAX === 31 && PG_SEC_HUCRE_MAX === 15500 && PG_TOPLU_ID_MAX * PG_SEC_GUN_MAX === PG_SEC_HUCRE_MAX && PGE_MAX_SATIR === 500 && PGE_MAX_BAYT === 2 * 1024 * 1024);
+ok('JS (kişiler): innerHTML / insertAdjacentHTML / document.write / confirm( / alert( / <form> YOK; FormData + fetch; kisi_sil / kisi_toplu / excel_onizle / excel_ekle; window.pgApi', !preg_match('/\.innerHTML|insertAdjacentHTML|document\.write|\bconfirm\s*\(|\balert\s*\(|createElement\(.form.\)/', $kisJs . $pgjs) && str_contains($kisJs, 'new FormData()') && str_contains($kisJs, "'excel_onizle'") && str_contains($kisJs, "'excel_ekle'") && str_contains($kisJs, "'kisi_toplu'") && str_contains($kisJs, "'kisi_sil'") && str_contains($kisJs, 'window.pgApi') && str_contains($kisJs, 'textContent'));
+ok('UI (kişiler + puantaj): <form> ELEMENTİ yok (modal-form tuzağı); tarayıcı confirm/alert yok; sayfa kaynağında innerHTML yok', !preg_match('/<form\b/i', $pgkui . $kod_yorumsuz('config/puantaj_giris_ui.php')) && !preg_match('/\bconfirm\(|\balert\(/', $pgkui));
+ok('CSS: yeni pencereler z-index ≥ 600 (.pk-excel 601; mobil işlem çubuğu 610; perde 600); mobil alt sayfa; 16px input; koyu tema --pc-sec; var(--surface YOK', (bool)preg_match('/\.pk-excel \{[^}]*z-index: 601/', $css) && (bool)preg_match('/\.pg-cubuk \{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 610/', $css) && str_contains($css, '.pk-dosya { font-size: 16px; }') && str_contains($css, 'html[data-theme="dark"] .pc-page { --pc-sec-bg') && !preg_match('/var\(--surface/', preg_replace('#/\*.*?\*/#s', '', $css)));
+ok('CSS: AD SÜTUNU sertleştirildi — .pc-grid .pc-ad AÇIK width/min-width (içerik ölçüsüne bağlı değil), sticky left:0 korunur, z-index < 100', (bool)preg_match('/\.pc-grid \.pc-ad \{[^}]*width: 210px; min-width: 210px/', $css) && (bool)preg_match('/\.pc-grid \.pc-ad \{[^}]*position: sticky; left: 0; z-index: 2/', $css));
+ok('sayfa: sablon indirme yalnız edit yetkisiyle (forbidden) + xlsx_gonder(pge_sablon_uret()); gorunum=kisiler yalnız giris sekmesi; dışa aktarım her zaman çizelge', str_contains($sayfa, "role_pdks_can('monthly_timesheet', 'edit')) forbidden(") && str_contains($sayfa, 'xlsx_gonder(pge_sablon_uret()') && str_contains($sayfa, "\$gorunum = (\$sekme === 'giris' &&") && str_contains($sayfa, '!$csvIst && !$xlsxIst'));
+ok('CLAUDE.md: v555 satırı (ilk/varsayılan sekme, Kişiler görünümü, Excel\'den toplu ekle, gun_toplu_sec, ad sütunu)', str_contains(oku('CLAUDE.md'), 'v555') && str_contains(oku('CLAUDE.md'), 'gun_toplu_sec') && str_contains(oku('CLAUDE.md'), 'Kişiler'));
+ok('sürüm: APP_SURUM = sw.js CACHE_NAME = CLAUDE.md SW Cache (v555)', preg_match("/define\('APP_SURUM', 'v(\d+)'\)/", oku('config/helpers.php'), $m1) && preg_match("/CACHE_NAME = 'yukleme-plani-v(\d+)'/", oku('sw.js'), $m2) && preg_match('/\*\*SW Cache:\*\* `yukleme-plani-v(\d+)`/', oku('CLAUDE.md'), $m3) && $m1[1] === $m2[1] && $m2[1] === $m3[1] && (int)$m1[1] >= 555, json_encode([$m1[1] ?? null, $m2[1] ?? null, $m3[1] ?? null]));
+
+echo "\n=== 6b. Saf: Excel ayrıştırıcı (başlık · sınıflama · CSV · TR) ===\n";
+$bb = pge_baslik_bul([['Ad Soyad', 'Görev'], ['x', 'y']]);
+ok("başlık: 'Ad Soyad / Görev' → başlıklı, ad=0 görev=1, veri 1. dizinden", $bb === ['baslik' => true, 'ad' => 0, 'gorev' => 1, 'bas' => 1]);
+$bb = pge_baslik_bul([['Rapor başlığı'], ['İsim', '', 'Ünvan'], ['x']]);
+ok("başlık: 3. sütunda 'Ünvan', 2. satırda 'İsim' (üstte başlık satırı) → ad=0 görev=2 bas=2; TR duyarsız (İ/Ü)", $bb === ['baslik' => true, 'ad' => 0, 'gorev' => 2, 'bas' => 2]);
+$bb = pge_baslik_bul([['GÖREV', 'AD-SOYAD'], ['x', 'y']]);
+ok("başlık: sıra bağımsız ('GÖREV' önce, 'AD-SOYAD' sonra), noktalama/BÜYÜK harf → ad=1 görev=0", $bb['baslik'] === true && $bb['ad'] === 1 && $bb['gorev'] === 0);
+$bb = pge_baslik_bul([['Örnek Kişi A', 'Paketçi'], ['Örnek Kişi B', '']]);
+ok('başlık YOK → ilk sütun ad, ikinci sütun görev, ilk satırdan itibaren veri', $bb === ['baslik' => false, 'ad' => 0, 'gorev' => 1, 'bas' => 0]);
+$bb = pge_baslik_bul([['Ad'], ['Örnek Kişi A']]);
+ok("başlık: yalnız 'Ad' sütunu → görev yok (gorev=-1)", $bb['baslik'] === true && $bb['gorev'] === -1);
+$mevcut = [pc_fold('Örnek Kişi A'), pc_fold('Örnek Kişi D')];
+$ham = [['Ad Soyad', 'Görev'], ['Örnek Kişi Ş', 'Paketçi'], ['ÖRNEK KİŞİ Ş', ''], ['örnek kişi a', 'x'], ['', 'görevi var adı yok'], [str_repeat('ş', 121), ''], ['Örnek Kişi Ç', str_repeat('g', 81)], ['=HYPERLINK("http://x","t")', '+görev'], ['Örnek Kişi Ö', '  '], ['  Örnek   Kişi   Ü  ', "Gör\x07ev"]];
+$c = pge_satirlari_coz($ham, $mevcut);
+$dur = array_column($c['satirlar'], 'durum');
+ok('sınıflama: geçerli · dosyada tekrar (TR duyarsız) · mevcutla mükerrer · boş ad · çok uzun ad · çok uzun görev · formül metni GEÇERLİ · geçerli · sadeleşmiş geçerli',
+    $dur === ['gecerli', 'mukerrer_dosya', 'mukerrer_mevcut', 'bos', 'uzun', 'uzun', 'gecerli', 'gecerli', 'gecerli'], json_encode($dur));
+ok('özet: toplam 9 · geçerli 4 · boş 1 · uzun 2 · mükerrer 2 (mevcut 1 + dosya 1)', $c['ozet'] === ['toplam' => 9, 'gecerli' => 4, 'bos' => 1, 'uzun' => 2, 'mukerrer' => 2, 'mukerrer_mevcut' => 1, 'mukerrer_dosya' => 1], json_encode($c['ozet']));
+ok("formül gibi başlayan hücre DÜZ METİN kalır (başına ' EKLENMEZ — DB'ye olduğu gibi; ekranda h(), dışa aktarımda metin hücresi/CSV öneki)", $c['satirlar'][6]['ad'] === '=HYPERLINK("http://x","t")' && $c['satirlar'][6]['gorev'] === '+görev');
+ok('metin temizliği: denetim karakteri (BEL) atılır, ardışık boşluk tek, kırpılır; satır sayısı = başlık hariç', $c['satirlar'][8]['ad'] === 'Örnek Kişi Ü' && $c['satirlar'][8]['gorev'] === 'Gör ev' && $c['baslik'] === true);
+$on = pge_onizleme_yaniti($c);
+ok('önizleme yanıtı: özet + ilk 20 satır (burada 9) + baslik_bulundu; uzun metin 150 karaktere kırpılır', $on['gosterilen'] === 9 && count($on['ilk']) === 9 && $on['baslik_bulundu'] === true && mb_strlen($on['ilk'][4]['ad'], 'UTF-8') === 121);
+$ham500 = [['Ad Soyad']]; for ($i = 1; $i <= 500; $i++) $ham500[] = ['Örnek Kişi N' . $i];
+$c500 = pge_satirlari_coz($ham500, []);
+ok('500 satır KABUL (500 geçerli); önizleme yalnız ilk 20 satırı taşır', ($c500['ozet']['gecerli'] ?? 0) === 500 && count(pge_onizleme_yaniti($c500)['ilk']) === 20 && pge_onizleme_yaniti($c500)['gosterilen'] === 20);
+$ham501 = $ham500; $ham501[] = ['Örnek Kişi N501'];
+ok('501 satır REDDEDİLİR (hata: en çok 500 satır)', isset(pge_satirlari_coz($ham501, [])['hata']) && str_contains(pge_satirlari_coz($ham501, [])['hata'], '500'));
+ok('Türkçe karakterler korunur: Ş Ç Ğ İ Ö Ü ı; mükerrer katlaması TR duyarsız (ı/İ/i aynı)', (function () {
+    $r = pge_satirlari_coz([['Örnek Kişi Ş'], ['Örnek Kişi Ç'], ['Örnek Kişi Ğ'], ['Örnek Kişi İ'], ['Örnek Kişi ı'], ['Örnek Kişi Ö'], ['Örnek Kişi Ü']], []);
+    return array_column($r['satirlar'], 'ad') === ['Örnek Kişi Ş', 'Örnek Kişi Ç', 'Örnek Kişi Ğ', 'Örnek Kişi İ', 'Örnek Kişi ı', 'Örnek Kişi Ö', 'Örnek Kişi Ü'] && $r['ozet']['mukerrer_dosya'] === 1 && $r['ozet']['gecerli'] === 6;
+})());
+$cb = pge_satirlari_coz([['Ad', 'Görev'], ['', ''], ['x', 'g'], ['', 'g']], []);
+ok('tamamen boş satır SAYILMAZ; ad boş + görev dolu satır "bos" sayılır (toplam 2: 1 geçerli + 1 boş)', $cb['ozet']['toplam'] === 2 && $cb['ozet']['gecerli'] === 1 && $cb['ozet']['bos'] === 1);
+$csv1 = "\xEF\xBB\xBFAd Soyad;Görev\r\nÖrnek Kişi Ş;Paketçi\r\n\"Örnek; Kişi\";\"iki\nsatır\"\r\n\r\n";
+$r1 = pge_csv_coz($csv1);
+ok("CSV: UTF-8 + BOM, ayraç ';', tırnaklı alan (içinde ';' ve satır sonu), boş satır atlanır", $r1 === [['Ad Soyad', 'Görev'], ['Örnek Kişi Ş', 'Paketçi'], ['Örnek; Kişi', 'iki satır']], json_encode($r1, JSON_UNESCAPED_UNICODE));
+$r2 = pge_csv_coz("Ad,Görev\nÖrnek Kişi Ç,Depocu\n");
+ok("CSV: BOM'suz UTF-8, ayraç ','", $r2 === [['Ad', 'Görev'], ['Örnek Kişi Ç', 'Depocu']]);
+$r3 = pge_csv_coz("Ad\tGörev\nÖrnek Kişi Ğ\tDepocu\n");
+ok('CSV: sekme ayraçlı', $r3 === [['Ad', 'Görev'], ['Örnek Kişi Ğ', 'Depocu']]);
+$tr1254 = mb_convert_encoding("Ad Soyad;Görev\nÖrnek Kişi İ;Şoför\n", 'Windows-1254', 'UTF-8');
+ok('CSV: Windows-1254 (Türkçe Excel varsayılanı) → UTF-8, TR karakterler doğru', pge_csv_coz($tr1254) === [['Ad Soyad', 'Görev'], ['Örnek Kişi İ', 'Şoför']], json_encode(pge_csv_coz($tr1254), JSON_UNESCAPED_UNICODE));
+ok("CSV: hücreler pge_hucre_metin'den geçer (denetim karakteri atılır); 10 sütundan fazlası kesilir", pge_csv_coz("a\x07b;c;" . implode(';', range(1, 15)) . "\n")[0][0] === 'a b' && count(pge_csv_coz("a;b;" . implode(';', range(1, 15)) . "\n")[0]) === 10);
+ok('pge_hucre_metin: bool/dizi/null → boş; float 3.0 → "3"; 2.5 → "2.5"; başlangıç = + - @ olduğu gibi', pge_hucre_metin(true) === '' && pge_hucre_metin([1]) === '' && pge_hucre_metin(null) === '' && pge_hucre_metin(3.0) === '3' && pge_hucre_metin(2.5) === '2.5' && pge_hucre_metin('=A1') === '=A1' && pge_hucre_metin('@x') === '@x');
+
+echo "\n=== 6c. DB: kişi yönetimi + toplu işlemler (bellek içi SQLite; transaction / rollback) ===\n";
+function pg_test_db(array $kisiler = [], array $gunler = []): PDO
+{
+    $d = new PDO('sqlite::memory:'); $d->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); $d->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $d->exec('CREATE TABLE puantaj_giris_kisiler (id INTEGER PRIMARY KEY AUTOINCREMENT, ad VARCHAR(120) NOT NULL, gorev VARCHAR(80) NULL, depo VARCHAR(120) NOT NULL DEFAULT "", aktif INTEGER NOT NULL DEFAULT 1, sira INTEGER NOT NULL DEFAULT 0, created_by INTEGER NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+    $d->exec('CREATE TABLE puantaj_giris_gunler (id INTEGER PRIMARY KEY AUTOINCREMENT, kisi_id INTEGER NOT NULL, tarih TEXT NOT NULL, kod VARCHAR(4) NOT NULL, user_id INTEGER NULL, created_at TEXT NULL, updated_at TEXT NULL)');
+    $d->exec('CREATE UNIQUE INDEX uq_pg_gun ON puantaj_giris_gunler (kisi_id, tarih)');
+    foreach ($kisiler as $k) $d->prepare('INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira) VALUES (?,?,?,?,?,?)')->execute([$k[0], $k[1], $k[2], $k[3] ?? '', $k[4] ?? 1, $k[5] ?? 0]);
+    foreach ($gunler as $g) $d->prepare('INSERT INTO puantaj_giris_gunler (kisi_id, tarih, kod) VALUES (?,?,?)')->execute($g);
+    return $d;
+}
+$dk = [[1, 'Örnek Kişi B', 'Paketçi', 'Depo A', 1, 5], [2, 'Örnek Kişi A', '', 'Depo A', 1, 0], [3, 'İsmail Örnek', 'Şoför', '', 0, 0], [4, 'Çok Pasif', '', 'Depo A', 0, 0]];
+$dg = [[1, '2026-11-02', 'X'], [1, '2026-11-03', 'Y'], [1, '2026-10-30', 'R'], [2, '2026-11-02', 'X'], [3, '2026-11-02', 'D']];
+$tdb = pg_test_db($dk, $dg);
+$yon = pg_kisiler_yonetim($tdb);
+ok('pg_kisiler_yonetim: pasifler DAHİL, ad A-Z (sira yok sayılır: B kişisinin sira=5 sıralamayı etkilemez), TR duyarsız; gün kaydı sayısı (tüm aylar)', array_column($yon, 'ad') === ['Çok Pasif', 'İsmail Örnek', 'Örnek Kişi A', 'Örnek Kişi B'] && array_column($yon, 'gun', 'id') === [4 => 0, 3 => 1, 2 => 1, 1 => 3], json_encode(array_column($yon, 'gun', 'id')));
+ok('pg_kisi_sayaclari: toplam 4 · aktif 2 · pasif 2', pg_kisi_sayaclari($yon) === ['toplam' => 4, 'aktif' => 2, 'pasif' => 2]);
+ok("pg_kisiler_filtrele: durum aktif/pasif/hepsi; arama TR duyarsız ('ISMAIL', 'paket' görevde); sıra korunur", array_column(pg_kisiler_filtrele($yon, '', 'aktif'), 'id') === [2, 1] && array_column(pg_kisiler_filtrele($yon, '', 'pasif'), 'id') === [4, 3] && array_column(pg_kisiler_filtrele($yon, 'ISMAIL', 'hepsi'), 'id') === [3] && array_column(pg_kisiler_filtrele($yon, 'paket', 'hepsi'), 'id') === [1] && pg_kisiler_filtrele($yon, 'zzz', 'hepsi') === [] && count(pg_kisiler_filtrele($yon, '', 'hepsi')) === 4);
+ok('pg_kisiler_idlerle: var olanları döndürür, olmayan id sonuçta YOK (çağıran sayıyla karşılaştırır); 450 id parçalanır', array_keys(pg_kisiler_idlerle($tdb, [1, 3, 999])) === [1, 3] && pg_kisiler_idlerle($tdb, []) === [] && count(pg_kisiler_idlerle($tdb, range(1, 450))) === 4);
+
+$sil = pg_kisi_sil($tdb, pg_kisi_bul($tdb, 1));
+$kalan = $tdb->query('SELECT kisi_id, tarih FROM puantaj_giris_gunler ORDER BY id')->fetchAll();
+ok("pg_kisi_sil: kişinin TÜM gün kayıtları (3, farklı aylar dahil) + kişi silinir; diğer kişilerin kayıtları KALIR; audit {aktif, depo, gun_kaydi}, ad YOK", $sil['ok'] === true && $sil['gun_silinen'] === 3 && pg_kisi_bul($tdb, 1) === null && count($kalan) === 2 && array_map('intval', array_column($kalan, 'kisi_id')) === [2, 3] && $sil['audit'][0] === 'delete' && $sil['audit'][3] === null && $sil['audit'][2] === ['aktif' => 1, 'depo' => 'Depo A', 'gun_kaydi' => 3] && !str_contains(json_encode($sil['audit'], JSON_UNESCAPED_UNICODE), 'Örnek'));
+$tdb = pg_test_db($dk, $dg);
+$tdb->exec("CREATE TRIGGER pg_sil_engel BEFORE DELETE ON puantaj_giris_kisiler WHEN OLD.id = 1 BEGIN SELECT RAISE(ABORT, 'engel'); END");
+$s2 = pg_kisi_sil($tdb, pg_kisi_bul($tdb, 1));
+ok('pg_kisi_sil TEK transaction: kişi silinemezse gün kayıtları da GERİ ALINIR (yarım silme yok)', $s2['ok'] === false && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_gunler WHERE kisi_id = 1')->fetchColumn() === 3 && pg_kisi_bul($tdb, 1) !== null);
+
+$tdb = pg_test_db($dk, $dg);
+$ids = pg_kisiler_idlerle($tdb, [1, 2, 3, 4]);
+$t1 = pg_kisi_toplu($tdb, $ids, 'pasif');
+ok("pg_kisi_toplu pasif: aktif olanlar (1, 2) pasife alınır → etkilenen 2, zaten pasif olanlar (3, 4) atlanan 2; gün kayıtları DOKUNULMAZ (5)", $t1['ok'] && $t1['etkilenen'] === 2 && $t1['atlanan'] === 2 && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_kisiler WHERE aktif = 0')->fetchColumn() === 4 && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_gunler')->fetchColumn() === 5);
+$t2 = pg_kisi_toplu($tdb, pg_kisiler_idlerle($tdb, [1, 2, 3, 4]), 'aktif');
+ok('pg_kisi_toplu aktif: hepsi aktif (etkilenen 4)', $t2['etkilenen'] === 4 && $t2['atlanan'] === 0 && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_kisiler WHERE aktif = 1')->fetchColumn() === 4);
+$t3 = pg_kisi_toplu($tdb, pg_kisiler_idlerle($tdb, [1, 3]), 'sil');
+ok('pg_kisi_toplu sil: seçilen 2 kişi + TÜM gün kayıtları (1: 3, 3: 1 = 4) silinir; diğerleri kalır', $t3['ok'] && $t3['etkilenen'] === 2 && $t3['gun_silinen'] === 4 && array_column($tdb->query('SELECT id FROM puantaj_giris_kisiler ORDER BY id')->fetchAll(), 'id') === [2, 4] && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_gunler')->fetchColumn() === 1);
+ok('pg_kisi_toplu geçersiz işlem reddedilir', pg_kisi_toplu($tdb, [], 'yok')['ok'] === false);
+$tdb = pg_test_db($dk, $dg);
+$tdb->exec("CREATE TRIGGER pg_toplu_engel BEFORE DELETE ON puantaj_giris_kisiler WHEN OLD.id = 3 BEGIN SELECT RAISE(ABORT, 'engel'); END");
+$t4 = pg_kisi_toplu($tdb, pg_kisiler_idlerle($tdb, [1, 2, 3]), 'sil');
+ok('pg_kisi_toplu sil TEK transaction: 3. kişide hata → 1 ve 2 de GERİ ALINIR (hepsi ya da hiçbiri), gün kayıtları da', $t4['ok'] === false && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_kisiler')->fetchColumn() === 4 && (int)$tdb->query('SELECT COUNT(*) FROM puantaj_giris_gunler')->fetchColumn() === 5);
+
+$tdb = pg_test_db([[1, 'Örnek Kişi A', '', 'Depo A', 1], [2, 'Örnek Kişi B', '', 'Depo A', 1], [3, 'Örnek Kişi C', '', 'Depo A', 1], [4, 'Pasif', '', 'Depo A', 0]],
+    [[1, '2026-11-03', 'Y'], [2, '2026-11-03', 'R'], [4, '2026-11-03', 'X']]);
+$kisAll = pg_kisiler_idlerle($tdb, [1, 2, 3]);
+$d3 = ['2026-11-02', '2026-11-03', '2026-11-04'];
+$ymap = fn() => array_map(fn($r) => $r['kisi_id'] . ':' . $r['tarih'] . ':' . $r['kod'], $tdb->query('SELECT kisi_id, tarih, kod FROM puantaj_giris_gunler ORDER BY kisi_id, tarih')->fetchAll());
+$r = pg_gun_toplu_sec($tdb, '2026-11', $kisAll, $d3, 'X', false, 7, '2026-11-22');
+ok("gun_toplu_sec üstüne yaz KAPALI: yalnız BOŞLAR dolar (kişi×gün 9 − 2 dolu = 7 yazılan), dolu 2 hücre (Y, R) ATLANIR (atlanan 2); dolu değerler korunur", $r['ok'] && $r['kisi_sayisi'] === 3 && $r['gun_sayisi'] === 3 && $r['yazilan'] === 7 && $r['atlanan'] === 2 && $r['degismedi'] === 0 && in_array('1:2026-11-03:Y', $ymap(), true) && in_array('2:2026-11-03:R', $ymap(), true) && count($r['degisim']) === 7 && count($ymap()) === 10, json_encode($r));
+$r = pg_gun_toplu_sec($tdb, '2026-11', $kisAll, $d3, 'X', true, 7, '2026-11-22');
+ok('gun_toplu_sec üstüne yaz AÇIK: dolu 2 hücre X olur (yazılan 2), zaten X olanlar "degismedi" 7; atlanan 0', $r['ok'] && $r['yazilan'] === 2 && $r['atlanan'] === 0 && $r['degismedi'] === 7 && in_array('1:2026-11-03:X', $ymap(), true) && in_array('2:2026-11-03:X', $ymap(), true));
+$r = pg_gun_toplu_sec($tdb, '2026-11', pg_kisiler_idlerle($tdb, [1, 2]), ['2026-11-03', '2026-11-04'], '', false, 7, '2026-11-22');
+ok("gun_toplu_sec Temizle: üstüne yaz KAPALI olsa da seçili HÜCRELER silinir (4 hücre: 1,2 × 3,4 Kasım); seçili olmayan kişi (3) ve gün (2 Kasım) KALIR; pasif kişinin kaydı kalır", $r['ok'] && $r['yazilan'] === 4 && $r['degisim'][0]['c'] === '' && in_array('3:2026-11-03:X', $ymap(), true) && in_array('1:2026-11-02:X', $ymap(), true) && in_array('4:2026-11-03:X', $ymap(), true) && !in_array('1:2026-11-03:X', $ymap(), true), json_encode($ymap()));
+$r = pg_gun_toplu_sec($tdb, '2026-11', pg_kisiler_idlerle($tdb, [1, 4]), ['2026-11-10'], 'D', false, 7, '2026-11-22');
+ok('gun_toplu_sec: PASİF kişi atlanır (pasif_atlanan 1), aktif olana yazılır; pasif kişiye YAZILMAZ', $r['ok'] && $r['kisi_sayisi'] === 1 && $r['pasif_atlanan'] === 1 && $r['yazilan'] === 1 && !in_array('4:2026-11-10:D', $ymap(), true) && in_array('1:2026-11-10:D', $ymap(), true));
+ok('gun_toplu_sec: hepsi pasif → reddedilir', pg_gun_toplu_sec($tdb, '2026-11', pg_kisiler_idlerle($tdb, [4]), ['2026-11-10'], 'D', false, 7, '2026-11-22')['ok'] === false);
+$say0 = count($ymap());
+foreach ([['ay' => '2026-13'], ['ay' => '2026-11-01'], ['tar' => ['2026-12-01']], ['tar' => ['2026-02-30']], ['tar' => []], ['tar' => ['2026-11-1']], ['tar' => [5]], ['tar' => ['2031-11-03']], ['kod' => 'x'], ['kod' => 'Q'], ['kod' => 'XX']] as $kotu) {
+    $r = pg_gun_toplu_sec($tdb, $kotu['ay'] ?? '2026-11', $kisAll, $kotu['tar'] ?? ['2026-11-12'], $kotu['kod'] ?? 'X', false, 7, '2026-11-22');
+    ok('gun_toplu_sec geçersiz girdi reddedilir, hiçbir şey yazılmaz: ' . json_encode($kotu, JSON_UNESCAPED_UNICODE), $r['ok'] === false && count($ymap()) === $say0, json_encode($r));
+}
+$r = pg_gun_toplu_sec($tdb, '2026-11', $kisAll, array_map(fn($n) => sprintf('2026-11-%02d', $n), range(1, 30)), 'X', false, 7, '2026-11-22');
+ok('gun_toplu_sec: 30 günlük ayın TÜM günleri (kısa ay) kabul', $r['ok'] && $r['gun_sayisi'] === 30);
+$kisler501 = []; for ($i = 1; $i <= 501; $i++) $kisler501[$i] = ['id' => $i, 'ad' => 'x', 'gorev' => '', 'depo' => '', 'aktif' => 1, 'sira' => 0];
+ok('gun_toplu_sec: 501 kişi (> 500) ve 32 gün (> 31) reddedilir', pg_gun_toplu_sec($tdb, '2026-11', $kisler501, ['2026-11-02'], 'X', false, 7, '2026-11-22')['ok'] === false && pg_gun_toplu_sec($tdb, '2026-11', $kisAll, array_merge(array_map(fn($n) => sprintf('2026-11-%02d', $n), range(1, 30)), ['2026-11-31']), 'X', false, 7, '2026-11-22')['ok'] === false);
+$tdb2 = pg_test_db([[1, 'A', '', 'Depo A', 1], [2, 'B', '', 'Depo A', 1], [3, 'C', '', 'Depo A', 1]]);
+$tdb2->exec("CREATE TRIGGER pg_gun_engel BEFORE INSERT ON puantaj_giris_gunler WHEN NEW.kisi_id = 3 BEGIN SELECT RAISE(ABORT, 'engel'); END");
+$r = pg_gun_toplu_sec($tdb2, '2026-11', pg_kisiler_idlerle($tdb2, [1, 2, 3]), ['2026-11-02', '2026-11-03'], 'X', false, 7, '2026-11-22');
+ok('gun_toplu_sec TEK transaction: 3. kişide hata → 1. ve 2. kişinin yazdıkları da GERİ ALINIR', $r['ok'] === false && (int)$tdb2->query('SELECT COUNT(*) FROM puantaj_giris_gunler')->fetchColumn() === 0);
+$kisBuyuk = []; $dBuyuk = pg_test_db(); $ins = $dBuyuk->prepare('INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif) VALUES (?,?,?,?,1)');
+for ($i = 1; $i <= 500; $i++) { $ins->execute([$i, 'Örnek Kişi ' . $i, '', 'Depo A']); }
+$t0 = microtime(true);
+$rb = pg_gun_toplu_sec($dBuyuk, '2026-12', pg_kisiler_idlerle($dBuyuk, range(1, 500)), array_map(fn($n) => sprintf('2026-12-%02d', $n), range(1, 31)), 'X', false, 7, '2026-11-22');
+ok('gun_toplu_sec ÜST SINIR: 500 kişi × 31 gün = 15500 hücre tek transaction\'da yazılır (' . round(microtime(true) - $t0, 2) . ' sn)', $rb['ok'] && $rb['yazilan'] === 15500 && (int)$dBuyuk->query('SELECT COUNT(*) FROM puantaj_giris_gunler')->fetchColumn() === 15500 && count($rb['degisim']) === 15500);
+
+echo "\n=== 6d. Sayfa: sekme sırası · varsayılan açılış · Kişiler görünümü · seçim arayüzü ===\n";
+$GB2 = $GB;   // 1 A (Depo A) · 2 B (atanmamış) · 3 C (Depo B → görünmez) · 4 D (pasif) · 5 İsmail
+$p = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], $GB2);
+ok('yönetici + tablo hazır + sekme parametresi YOK → Puantaj Girişi AÇILIR; sekme sırası Puantaj Girişi · Personel · Günlük İşçi', str_contains($p['out'], 'data-tur="giris"') && (bool)preg_match('/<a[^>]*is-aktif[^>]*>Puantaj Girişi<\/a>\s*<a[^>]*>Personel<\/a>\s*<a[^>]*>Günlük İşçi<\/a>/', $p['out']));
+$p0 = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], array_merge($GB2, ['giris' => false]));
+ok('yönetici + TABLO YOK + sekme parametresi YOK → yine Puantaj Girişi (kurulum notuyla); Personel/Günlük sekmesi hâlâ açılabilir', $p0['rc'] === 0 && str_contains($p0['out'], 'data-tur="giris"') && str_contains($p0['out'], 'migrate.php#puantaj-giris') && !str_contains($p0['out'], 'data-pg-url'));
+$pEd = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], array_merge($GB2, ['admin' => false, 'perms' => $edP]));
+ok('edit rolü (+Personel kartları Gör) → varsayılan Puantaj Girişi, sekmeler [Puantaj Girişi, Personel]', $pEd['rc'] === 0 && str_contains($pEd['out'], 'data-tur="giris"') && (bool)preg_match('/is-aktif[^>]*>Puantaj Girişi<\/a>\s*<a[^>]*>Personel<\/a>/', $pEd['out']));
+$pSalt = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], array_merge($GB2, ['admin' => false, 'perms' => $salt]));
+ok('edit YOK → eski davranış AYNEN: varsayılan Personel, Puantaj Girişi sekmesi yok', $pSalt['rc'] === 0 && str_contains($pSalt['out'], 'data-tur="personel"') && !str_contains($pSalt['out'], 'Puantaj Girişi'));
+$pEski = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], array_merge($GB2, ['admin' => false, 'perms' => $eskiR]));
+ok('eski rol (employees + daily_reports) → varsayılan Personel (değişmedi)', $pEski['rc'] === 0 && str_contains($pEski['out'], 'data-tur="personel"'));
+ok('iç görünüm anahtarı: [📅 Puantaj] (aktif) + [👥 Kişiler]; Kişiler bağlantısı gorunum=kisiler; sekme çubuğu bağlantıları gorunum taşımaz', str_contains($p['out'], 'class="pg-gorunum"') && (bool)preg_match('/pg-gorunum-bag is-aktif"[^>]*aria-current="page">📅 Puantaj<\/a>\s*<a href="puantaj_cizelgesi\.php\?sekme=giris&amp;gorunum=kisiler"/', $p['out']));
+$ps = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel'], $GB2);
+ok("Personel sekmesinde iç görünüm anahtarı YOK; ?sekme=personel&gorunum=kisiler → yine Personel (gorunum yalnız giris'te)", !str_contains($ps['out'], 'pg-gorunum') && str_contains(sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'personel', 'gorunum' => 'kisiler'], $GB2)['out'], 'data-tur="personel"'));
+
+echo "--- Puantaj görünümü: ad sütunu + seçim kutuları + gün seçimi + işlem çubuğu ---\n";
+ok('AD SÜTUNU: her satırda th.pc-ad (scope=row) içinde AD metni; başlıkta köşe th.pc-kose "Kişi (3)"; th sayısı = td sayısı (kolon kayması yok)', (function () use ($p) {
+    $tr = []; preg_match_all('/<tr data-pg-satir="\d+".*?<\/tr>/s', $p['out'], $tr);
+    if (count($tr[0]) !== 3) return false;
+    foreach ($tr[0] as $row) { if (!preg_match('/<th class="pc-ad" scope="row">.*?<span class="pc-ad-ad">[^<]+/s', $row)) return false; }
+    preg_match('/<thead>.*?<\/thead>/s', $p['out'], $th); preg_match_all('/<th\b/', $th[0], $hc); preg_match_all('/<td\b/', $tr[0][0], $dc); preg_match_all('/<th\b/', $tr[0][0], $rc);
+    return str_contains($th[0], 'pc-kose') && str_contains($th[0], 'Kişi <span class="pc-adet">(3)</span>') && count($hc[0]) === (int)date('t') + 1 + 4 && count($rc[0]) + count($dc[0]) === count($hc[0]);
+})());
+$pgn = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'gunluk'], $GB2);
+ok('AD SÜTUNU sertleştirme: üç sekmenin ızgarasında da <colgroup><col class="pc-col-ad"> (ilk sütun genişliği <col> ile de verilir; hücre min/max-width\'ini yok sayan tarayıcılar için); CSS col.pc-col-ad 210px', substr_count($p['out'], '<colgroup><col class="pc-col-ad"></colgroup>') === 1 && substr_count($ps['out'], '<colgroup><col class="pc-col-ad"></colgroup>') === 1 && substr_count($pgn['out'], '<colgroup><col class="pc-col-ad"></colgroup>') === 1 && (bool)preg_match('/\.pc-grid col\.pc-col-ad \{ width: 210px; min-width: 210px; \}/', oku('assets/puantaj_cizelgesi.css')));
+ok('kişi seçim kutusu: yalnız AKTİF kişilerde (data-pg-sec 3 masaüstü + 3 mobil), pasif satırda kutu YOK (boş yer tutucu); başlıkta "tümünü seç" data-pg-sec-hepsi', substr_count($p['out'], 'data-pg-sec="') === 6 && !str_contains($p['out'], 'data-pg-sec="4"') && substr_count($p['out'], 'data-pg-sec-hepsi') === 1);
+$ppa = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu, 'sekme' => 'giris', 'pasif' => '1'], $GB2);
+ok('pasifler görünürken: pasif satırda onay kutusu YOK (pg-secbox-bos) ve ad sütunu yine dolu; "tümünü seç" yalnız aktifleri seçer (JS: tr:not(.pg-pasif))', preg_match('/<tr data-pg-satir="4" class="pg-pasif">\s*<th class="pc-ad" scope="row"><span class="pg-ad-kap"><span class="pg-secbox pg-secbox-bos"[^>]*><\/span>.*?Örnek Kişi D/s', $ppa['out']) === 1 && str_contains(oku('assets/puantaj_giris.js'), 'tr[data-pg-satir]:not(.pg-pasif)'));
+ok('gün başlığı: data-pg-gun + data-hs (hafta sonu 1/0) + aria-pressed; hızlı seçim: Tüm günler / Hafta içleri / Hafta sonları / Temizle', substr_count($p['out'], 'data-pg-gun="') === (int)date('t') && substr_count($p['out'], 'data-hs="1"') === count(array_filter(pc_gunler($bu), fn($g) => $g['hs'])) && substr_count($p['out'], 'aria-pressed="false" title=') >= (int)date('t') && str_contains($p['out'], 'data-pg-gunsec="tum"') && str_contains($p['out'], 'data-pg-gunsec="haftaici"') && str_contains($p['out'], 'data-pg-gunsec="haftasonu"') && str_contains($p['out'], 'data-pg-gunsec="temizle"'));
+ok('işlem çubuğu #pgCubuk (hidden): "N kişi × M gün", 7 kod düğmesi (X Y D İ Ü R T) + Temizle, "Dolu günlerin üzerine yaz" (VARSAYILAN KAPALI), Uygula (disabled), Seçimi kaldır, sayfa içi onay alanı', str_contains($p['out'], 'id="pgCubuk"') && (bool)preg_match('/id="pgCubuk"[^>]*hidden/', $p['out']) && substr_count($p['out'], 'data-pg-sec-kod="') === 8 && (bool)preg_match('/<input type="checkbox" id="pgUstune">/', $p['out']) && !preg_match('/id="pgUstune"[^>]*checked/', $p['out']) && (bool)preg_match('/id="pgUygula"[^>]*disabled/', $p['out']) && str_contains($p['out'], 'data-pg-sec-temizle') && str_contains($p['out'], 'id="pgCubukOnay"') && str_contains($p['out'], 'Dolu günlerin üzerine yaz'));
+ok('mobil: "Toplu seç" düğmesi (data-pg-secmod) + özet; kişi kutusu details summary içinde (pg-msec); tarayıcı confirm YOK', str_contains($p['out'], 'data-pg-secmod') && str_contains($p['out'], 'class="pg-msec"') && !preg_match('/confirm\(|alert\(/', $p['out']));
+ok('eski gün-sütunu davranışı UI\'dan ÇIKTI: sayfada "tüm görünen kişilere tek işaret" başlığı/gun_sutun YOK', !str_contains($p['out'], 'tüm görünen kişilere tek işaret') && !str_contains($p['out'], 'gun_sutun') && !str_contains(oku('assets/puantaj_giris.js'), 'gun_sutun'));
+ok('satır menüsü (⋯) KORUNDU: Düzenle · Hafta içlerini Çalıştı yap · Ayı temizle · Kaldır · Geri al; hücre menüsü (tek hücre) korundu', str_contains($p['out'], 'data-pg-islem="haftaici"') && str_contains($p['out'], 'data-pg-islem="temizle"') && str_contains($p['out'], 'data-pg-islem="kaldir"') && str_contains($p['out'], 'id="pgMenu"'));
+$pb = sayfa_calistir('puantaj_cizelgesi.php', ['ay' => $bu], array_merge($GB2, ['giris_kisiler' => [], 'giris_gunler' => []]));
+ok('boş durum: işlem çubuğu/araç çubuğu YOK, pencereler hazır (JS null-güvenli)', !str_contains($pb['out'], 'id="pgCubuk"') && !str_contains($pb['out'], 'pgSecArac') && str_contains($pb['out'], 'id="pgPen"'));
+
+echo "--- Kişiler görünümü ---\n";
+$K = ['ay' => $bu, 'sekme' => 'giris', 'gorunum' => 'kisiler'];
+$pk = sayfa_calistir('puantaj_cizelgesi.php', $K, $GB2);
+ok('Kişiler: rc 0, uyarı yok; data-pg-gorunum="kisiler"; puantaj_giris_kisiler.js yüklenir (puantaj_giris.js ÖNCE)', $pk['rc'] === 0 && !preg_match('/Warning:|Notice:|Fatal|Deprecated/', $pk['out'] . $pk['err']) && str_contains($pk['out'], 'data-pg-gorunum="kisiler"') && strpos($pk['out'], 'assets/puantaj_giris.js') < strpos($pk['out'], 'assets/puantaj_giris_kisiler.js'), $pk['err']);
+preg_match_all('/<tr data-pk-satir="(\d+)"/', $pk['out'], $mk);
+ok('Kişiler: depo kuralı (Depo A + atanmamış; Depo B GİZLİ), pasifler DAHİL; ad A-Z: İsmail · Kişi A · Kişi B · Kişi D', $mk[1] === ['5', '1', '2', '4'], json_encode($mk[1]));
+ok('sayaçlar: Toplam 4 · Aktif 3 · Pasif 1; filtre yokken "Gösterilen" çipi YOK', (bool)preg_match('/Toplam <b data-pk-say="toplam">4<\/b>.*?Aktif <b data-pk-say="aktif">3<\/b>.*?Pasif <b data-pk-say="pasif">1<\/b>/s', $pk['out']) && !str_contains($pk['out'], 'Gösterilen'));
+ok('satır: onay kutusu (data-pk-sec), ad, görev, durum rozeti, gün kaydı sayısı, İşlemler: Düzenle · Pasife al / Aktif yap · Sil; "Sil" kırmızı (pk-sil)', preg_match('/<tr data-pk-satir="1" data-ad="Örnek Kişi A" data-gorev="Paketçi" data-aktif="1" data-gun="4">.*?data-pk-sec="1".*?<td class="pk-ad" data-label="Ad Soyad">Örnek Kişi A<\/td>.*?Paketçi.*?pk-rozet-aktif">Aktif.*?<td class="pk-sayi" data-label="Gün kaydı">4<\/td>.*?data-pk-islem="duzenle".*?Pasife al.*?data-pk-islem="sil"/s', $pk['out']) === 1 && preg_match('/data-pk-satir="4".*?pk-rozet-pasif">Pasif.*?Aktif yap/s', $pk['out']) === 1 && str_contains($pk['out'], 'class="btn btn-sm pk-sil"'), substr($pk['out'], strpos($pk['out'], 'data-pk-satir="1"') - 30, 600));
+ok('toplu işlem çubuğu #pkCubuk (hidden): Pasife al · Aktif yap · Sil · Seçimi kaldır; başlıkta tümünü seç (data-pk-hepsi)', (bool)preg_match('/id="pkCubuk"[^>]*hidden/', $pk['out']) && str_contains($pk['out'], 'data-pk-toplu="pasif"') && str_contains($pk['out'], 'data-pk-toplu="aktif"') && str_contains($pk['out'], 'data-pk-toplu="sil"') && str_contains($pk['out'], 'data-pk-hepsi'));
+ok("Excel'den ekle: üst çubukta düğme (data-pk-excel-ac) + pencere #pkExcel (aria-modal, hidden): şablon bağlantısı sablon=1, dosya seçici .xlsx/.csv, önizleme tablosu, Ekle (disabled)", str_contains($pk['out'], 'data-pk-excel-ac') && (bool)preg_match('/id="pkExcel" role="dialog" aria-modal="true"[^>]*hidden/', $pk['out']) && str_contains($pk['out'], 'puantaj_cizelgesi.php?sekme=giris&amp;sablon=1') && str_contains($pk['out'], 'accept=".xlsx,.csv') && str_contains($pk['out'], 'id="pkExcelGovde"') && (bool)preg_match('/id="pkExcelEkle"[^>]*disabled/', $pk['out']));
+ok("Kişiler üst çubuk: ay oku/Excel menüsü/Yazdır YOK (çizelgeye ait); arama + durum süzgeci + sekmeler + '+ Kişi ekle' var; form GET (post yok)", !str_contains($pk['out'], 'class="pc-ay"') && !str_contains($pk['out'], 'dl-menu') && !str_contains($pk['out'], 'puantaj_cizelgesi_yazdir.php') && str_contains($pk['out'], 'name="durum"') && str_contains($pk['out'], 'name="gorunum" value="kisiler"') && str_contains($pk['out'], 'data-pg-kisi-ekle') && !preg_match('/method="post"|name="csrf"/i', $pk['out']) && substr_count($pk['out'], '<form') === 1);
+ok('Kişiler: çizelgeye ait öğeler YOK (gün başlığı, lejant, işlem çubuğu #pgCubuk, pc-grid)', !str_contains($pk['out'], 'data-pg-gun') && !str_contains($pk['out'], 'id="pcLejant"') && !str_contains($pk['out'], 'id="pgCubuk"') && !str_contains($pk['out'], 'class="pc-grid'));
+$pkd = sayfa_calistir('puantaj_cizelgesi.php', $K + ['durum' => 'pasif'], $GB2);
+preg_match_all('/<tr data-pk-satir="(\d+)"/', $pkd['out'], $m1);
+ok("durum süzgeci 'pasif' → yalnız D; 'Gösterilen 1' çipi; sayaçlar süzgeçten ETKİLENMEZ (Toplam 4)", $m1[1] === ['4'] && str_contains($pkd['out'], 'Gösterilen <b>1</b>') && str_contains($pkd['out'], 'data-pk-say="toplam">4<') && str_contains($pkd['out'], '<option value="pasif" selected>'));
+preg_match_all('/<tr data-pk-satir="(\d+)"/', sayfa_calistir('puantaj_cizelgesi.php', $K + ['durum' => 'aktif'], $GB2)['out'], $m2);
+ok("durum süzgeci 'aktif' → İsmail · A · B (pasif yok)", $m2[1] === ['5', '1', '2']);
+preg_match_all('/<tr data-pk-satir="(\d+)"/', sayfa_calistir('puantaj_cizelgesi.php', $K + ['q' => 'ISMAIL'], $GB2)['out'], $m3);
+ok("arama 'ISMAIL' (TR duyarsız) → yalnız İsmail; arama kutusu değeri korunur; geçersiz durum değeri → hepsi", $m3[1] === ['5'] && str_contains(sayfa_calistir('puantaj_cizelgesi.php', $K + ['q' => 'ISMAIL'], $GB2)['out'], 'value="ISMAIL"') && preg_match_all('/<tr data-pk-satir=/', sayfa_calistir('puantaj_cizelgesi.php', $K + ['durum' => 'saçma'], $GB2)['out']) === 4);
+$pkz = sayfa_calistir('puantaj_cizelgesi.php', $K + ['q' => 'zzz'], $GB2);
+ok('arama sonucu boş → "uyan kişi yok" mesajı, tablo yok, sayaçlar durur', str_contains($pkz['out'], 'uyan kişi yok') && !str_contains($pkz['out'], 'id="pkTablo"') && str_contains($pkz['out'], 'data-pk-say="toplam">4<'));
+$pkb = sayfa_calistir('puantaj_cizelgesi.php', $K, array_merge($GB2, ['giris_kisiler' => [], 'giris_gunler' => []]));
+ok("hiç kişi yok → 'Henüz kişi eklemediniz' + '+ Kişi ekle' + 'Excel'den ekle' büyük düğmeleri; pencereler (Excel + kişi) hazır", str_contains($pkb['out'], 'Henüz kişi eklemediniz') && str_contains($pkb['out'], 'pg-buyuk') && substr_count($pkb['out'], 'data-pk-excel-ac') >= 2 && str_contains($pkb['out'], 'id="pkExcel"') && str_contains($pkb['out'], 'id="pgPen"'));
+$pkx = sayfa_calistir('puantaj_cizelgesi.php', $K, array_merge($GB2, ['giris_kisiler' => [[1, '<script>alert(1)</script>', '"><img src=x onerror=alert(2)>', 'Depo A', 1]], 'giris_gunler' => []]));
+ok('XSS: ad/görev h() ile kaçırılır (hücre, data-ad, data-gorev, aria-label); ham <script>/<img yok', !str_contains($pkx['out'], '<script>alert(1)') && !str_contains($pkx['out'], '<img src=x') && str_contains($pkx['out'], '&lt;script&gt;alert(1)&lt;/script&gt;') && !str_contains($pkx['out'], 'data-gorev=""><img'));
+$pkt = sayfa_calistir('puantaj_cizelgesi.php', $K, array_merge($GB2, ['giris' => false]));
+ok('Kişiler + tablo YOK: nazik hata + migrate bağlantısı, 500 yok, işlem düğmeleri yok', $pkt['rc'] === 0 && str_contains($pkt['out'], 'migrate.php#puantaj-giris') && !str_contains($pkt['out'], 'data-pk-excel-ac') && !str_contains($pkt['out'], 'data-pg-url'));
+$pkp = sayfa_calistir('puantaj_cizelgesi.php', $K, array_merge($GB2, ['admin' => false, 'perms' => $salt]));
+ok('Kişiler: edit yetkisi YOK → Puantaj Girişi yok → Personel sekmesine düşer (gorunum etkisiz)', $pkp['rc'] === 0 && str_contains($pkp['out'], 'data-tur="personel"') && !str_contains($pkp['out'], 'data-pk-satir'));
+$pke = sayfa_calistir('puantaj_cizelgesi.php', $K, array_merge($GB2, ['admin' => false, 'perms' => $sadEd]));
+ok('Kişiler: yalnız sayfa read+edit rolü AÇAR (kaynak izni gerekmez)', $pke['rc'] === 0 && str_contains($pke['out'], 'data-pk-satir="1"'));
+$pkc = sayfa_calistir('puantaj_cizelgesi.php', $K + ['csv' => '1'], array_merge($GB2, ['admin' => false, 'perms' => $exp]));
+ok('gorunum=kisiler iken ?csv → ÇİZELGE CSV (kişiler görünümü dışa aktarılmaz); rc 0', $pkc['rc'] === 0 && str_contains($pkc['out'], '"Ad Soyad";Görev;"1 '), substr($pkc['out'], 0, 300) . $pkc['err']);
+
+echo "--- Excel şablonu (?sablon=1) ---\n";
+$sb = sayfa_calistir('puantaj_cizelgesi.php', ['sekme' => 'giris', 'sablon' => '1'], $GB2);
+$sbDosya = tempnam(sys_get_temp_dir(), 'pgsb_'); file_put_contents($sbDosya, $sb['out']);
+ok('şablon: yönetici → xlsx (PK), rc 0', $sb['rc'] === 0 && substr($sb['out'], 0, 2) === 'PK', substr($sb['out'], 0, 80));
+if (substr($sb['out'], 0, 2) === 'PK') {
+    $ssb = \PhpOffice\PhpSpreadsheet\IOFactory::load($sbDosya);
+    $names = $ssb->getSheetNames(); $w0 = $ssb->getSheet(0);
+    ok("şablon içeriği: sayfalar [Kişiler, Açıklama]; A1 'Ad Soyad', B1 'Görev'; iki SENTETİK örnek satır ('Örnek Kişi A', 'Örnek Kişi B'); gerçek kişi adı yok", $names === ['Kişiler', 'Açıklama'] && $w0->getCell('A1')->getValue() === 'Ad Soyad' && $w0->getCell('B1')->getValue() === 'Görev' && $w0->getCell('A2')->getValue() === 'Örnek Kişi A' && $w0->getCell('A3')->getValue() === 'Örnek Kişi B' && $w0->getCell('A4')->getValue() === null);
+    $dz = pge_dosya_dogrula(['name' => 'sablon.xlsx', 'tmp_name' => $sbDosya, 'error' => 0], fn($t) => true);
+    $hm = $dz['ok'] ? pge_dosya_oku($dz) : [];
+    $cz = pge_satirlari_coz($hm, []);
+    ok("şablon geri okunur (kendi ayrıştırıcımızdan geçer): başlık bulunur, 2 geçerli satır; 'Açıklama' sayfası OKUNMAZ (yalnız ilk sayfa)", $dz['ok'] && $cz['baslik'] === true && $cz['ozet']['toplam'] === 2 && $cz['ozet']['gecerli'] === 2 && $cz['satirlar'][0]['ad'] === 'Örnek Kişi A' && $cz['satirlar'][0]['gorev'] === 'Paketçi');
+}
+@unlink($sbDosya);
+$sb2 = sayfa_calistir('puantaj_cizelgesi.php', ['sekme' => 'giris', 'sablon' => '1'], array_merge($GB2, ['admin' => false, 'perms' => $salt]));
+ok('şablon: edit YOK → Puantaj Girişi yok → Personel sayfası (şablon DÖNMEZ)', $sb2['rc'] === 0 && substr($sb2['out'], 0, 2) !== 'PK');
+$sb3 = sayfa_calistir('puantaj_cizelgesi.php', ['sekme' => 'giris', 'sablon' => '1'], array_merge($GB2, ['admin' => false, 'perms' => $sadEd]));
+ok('şablon: yalnız sayfa read+edit rolü indirebilir', $sb3['rc'] === 0 && substr($sb3['out'], 0, 2) === 'PK');
+
+echo "\n=== 6e. Yazma ucu: kisi_sil · kisi_toplu ===\n";
+$ids_all = fn(array $kisiler) => array_column($kisiler, 'id');
+echo "--- kapılar (yeni eylemler) ---\n";
+foreach ([['kisi_sil', ['kisi_id' => '1']], ['kisi_toplu', ['kisi_ids' => ['1', '2'], 'islem' => 'sil']], ['gun_toplu_sec', ['ay' => $bu, 'kisi_ids' => ['1'], 'tarihler' => ["$bu-06"], 'kod' => 'X']]] as [$eylem, $alan]) {
+    $pk = giris_post(['action' => $eylem] + $alan, ['admin' => true]);
+    ok("$eylem: CSRF YOK → 403 + JSON (rc 5), DB yazılmadı, audit YOK", $pk['rc'] === 5 && ($pk['json']['code'] ?? 0) === 403 && count($pk['kisiler']) === 5 && count($pk['gunler']) === count($GB['giris_gunler']) && !str_contains($pk['err'], 'AUDIT:'), $pk['out']);
+    $pk = giris_post($T + ['action' => $eylem] + $alan, ['admin' => false, 'perms' => $salt]);
+    ok("$eylem: yalnız 'read' → 403 (rota kapısı), DB yazılmadı", $pk['rc'] === 3 && ($pk['json']['ok'] ?? null) === false && count($pk['kisiler']) === 5 && count($pk['gunler']) === count($GB['giris_gunler']));
+    $pk = giris_post($T + ['action' => $eylem] + $alan, ['admin' => false, 'perms' => $eskiR]);
+    ok("$eylem: ESKİ rol (edit otomatik yok) → 403", $pk['rc'] === 3 && count($pk['kisiler']) === 5);
+    $pk = giris_post($T + ['action' => $eylem] + $alan, ['depo' => '']);
+    ok("$eylem: aktif depo yok → 400", ($pk['json']['ok'] ?? null) === false && count($pk['kisiler']) === 5);
+    $pk = giris_post($T + ['action' => $eylem] + $alan, ['giris' => false]);
+    ok("$eylem: tablolar kurulmamış → 503 + migrate yönlendirmesi, DDL ATMAZ", ($pk['json']['ok'] ?? null) === false && str_contains((string)($pk['json']['error'] ?? ''), 'migrate.php') && $pk['kisiler'] === null);
+    $pk = giris_post($T + ['action' => $eylem] + $alan, ['admin' => false, 'perms' => $sadEd]);
+    ok("$eylem: yalnız sayfa read+edit rolü (kaynak izni YOK) çalıştırabilir (bağımsız veri)", ($pk['json']['ok'] ?? false) === true, $pk['out']);
+}
+
+echo "--- kisi_sil ---\n";
+$pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => '1']);
+ok('kisi_sil: kişi + TÜM gün kayıtları (4) silinir; diğer kişilerin 3 kaydı kalır; yanıt gun_silinen 4', ($pk['json']['ok'] ?? false) === true && $pk['json']['gun_silinen'] === 4 && !in_array(1, $ids_all($pk['kisiler']), true) && gun_say_kisi($pk['gunler'], 1) === 0 && count($pk['gunler']) === count($GB['giris_gunler']) - 4 && count($pk['kisiler']) === 4, $pk['out'] . $pk['err']);
+ok('kisi_sil audit: delete / puantaj_giris / id / eski {aktif, depo, gun_kaydi} / yeni null; AD YOK', str_contains($pk['err'], 'AUDIT: ["delete","puantaj_giris",1,{"aktif":1,"depo":"Depo A","gun_kaydi":4},null]') && !str_contains(aud($pk['err']), 'Örnek Kişi'), $pk['err']);
+$pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => '4']);
+ok('kisi_sil: PASİF kişi de silinebilir (gün kaydı 1 de silinir)', ($pk['json']['ok'] ?? false) === true && $pk['json']['gun_silinen'] === 1 && !in_array(4, $ids_all($pk['kisiler']), true));
+$pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => '3'], ['allowed' => ['Depo A']]);
+ok('kisi_sil: BAŞKA DEPO kişisi → 403 JSON, silinmedi, audit YOK', ($pk['json']['code'] ?? 0) === 403 && count($pk['kisiler']) === 5 && count($pk['gunler']) === count($GB['giris_gunler']) && !str_contains($pk['err'], 'AUDIT:'));
+$pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => '2']);
+ok('kisi_sil: atanmamış (boş) depolu kişi her depoda silinebilir', ($pk['json']['ok'] ?? false) === true);
+foreach (['999', 'abc', '0', '-1', '1.5', ''] as $kid) {
+    $pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => $kid]);
+    ok("kisi_sil geçersiz / olmayan kisi_id '$kid' → 400/404, hiçbir şey silinmedi", ($pk['json']['ok'] ?? null) === false && count($pk['kisiler']) === 5 && !str_contains($pk['err'], 'AUDIT:'));
+}
+$pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => ['1']]);
+ok('kisi_sil: kisi_id dizi → reddedilir', ($pk['json']['ok'] ?? null) === false && count($pk['kisiler']) === 5);
+$pk = giris_post($T + ['action' => 'kisi_sil', 'kisi_id' => '5']);
+ok('kisi_sil: employees / PDKS tablolarına dokunmaz (satır sayıları değişmez)', ($pk['json']['ok'] ?? false) === true && $pk['sayilar'] === giris_post($T + ['action' => 'sil'])['sayilar']);
+
+echo "--- kisi_toplu ---\n";
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['1', '5'], 'islem' => 'pasif']);
+ok('kisi_toplu pasif: 1 ve 5 pasif olur (etkilenen 2); gün kayıtları DOKUNULMAZ; audit TEK özet (kisi_sayisi/etkilenen/atlanan), kişi adı YOK', ($pk['json']['ok'] ?? false) === true && $pk['json']['etkilenen'] === 2 && $pk['json']['atlanan'] === 0 && array_column(array_filter($pk['kisiler'], fn($k) => in_array($k['id'], [1, 5], true)), 'aktif') === [0, 0] && count($pk['gunler']) === count($GB['giris_gunler'])
+    && substr_count($pk['err'], 'AUDIT:') === 1 && str_contains($pk['err'], 'AUDIT: ["update","puantaj_giris",null,null,{"mod":"kisi_toplu","islem":"pasif","kisi_sayisi":2,"etkilenen":2,"atlanan":0,"gun_silinen":0}]') && !str_contains(aud($pk['err']), 'Örnek'), $pk['out'] . $pk['err']);
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['4', '1'], 'islem' => 'aktif']);
+ok('kisi_toplu aktif: pasif 4 aktif olur, zaten aktif 1 "atlanan" (1 etkilenen, 1 atlanan)', ($pk['json']['ok'] ?? false) === true && $pk['json']['etkilenen'] === 1 && $pk['json']['atlanan'] === 1 && $pk['kisiler'][3]['aktif'] === 1);
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['1', '2', '4'], 'islem' => 'sil']);
+ok('kisi_toplu sil: 3 kişi + TÜM gün kayıtları (4 + 1 + 1 = 6) silinir; kalan: 3 (Depo B) ve 5; audit delete TEK özet (gun_silinen 6)', ($pk['json']['ok'] ?? false) === true && $pk['json']['etkilenen'] === 3 && $pk['json']['gun_silinen'] === 6 && $ids_all($pk['kisiler']) === [3, 5] && gun_say_kisi($pk['gunler'], 1) + gun_say_kisi($pk['gunler'], 2) + gun_say_kisi($pk['gunler'], 4) === 0 && gun_say_kisi($pk['gunler'], 3) === 1
+    && substr_count($pk['err'], 'AUDIT:') === 1 && str_contains($pk['err'], 'AUDIT: ["delete","puantaj_giris",null,null,{"mod":"kisi_toplu","islem":"sil","kisi_sayisi":3,"etkilenen":3,"atlanan":0,"gun_silinen":6}]'), $pk['out'] . $pk['err']);
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['1', '1', '1'], 'islem' => 'pasif']);
+ok('kisi_toplu: yinelenen kimlikler teke iner (kisi_sayisi 1)', ($pk['json']['ok'] ?? false) === true && $pk['json']['kisi_sayisi'] === 1);
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['1', '3'], 'islem' => 'sil'], ['allowed' => ['Depo A']]);
+ok('kisi_toplu: listede BAŞKA DEPO kişisi (3) varsa 403 ve HİÇBİRİ silinmez (hepsi ya da hiçbiri; depo kuralı HER kişide)', ($pk['json']['code'] ?? 0) === 403 && count($pk['kisiler']) === 5 && count($pk['gunler']) === count($GB['giris_gunler']) && !str_contains($pk['err'], 'AUDIT:'));
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['1', '999'], 'islem' => 'sil']);
+ok('kisi_toplu: olmayan kimlik (999) → 404 ve HİÇBİRİ silinmez', ($pk['json']['ok'] ?? null) === false && count($pk['kisiler']) === 5 && !str_contains($pk['err'], 'AUDIT:'));
+foreach ([['kisi_ids' => []], ['kisi_ids' => 'abc'], ['kisi_ids' => ['x']], ['kisi_ids' => ['1.5']], ['kisi_ids' => ['0']], ['kisi_ids' => ['-1']], ['kisi_ids' => [['1']]], ['kisi_ids' => ['1' => '1']], ['islem' => 'yok'], ['islem' => 'SIL'], ['islem' => ['sil']], ['islem' => '']] as $kotu) {
+    $pk = giris_post($T + $kotu + ['action' => 'kisi_toplu', 'kisi_ids' => ['1', '2'], 'islem' => 'sil']);
+    ok('kisi_toplu geçersiz girdi reddedilir (400), DB değişmedi: ' . json_encode($kotu, JSON_UNESCAPED_UNICODE), ($pk['json']['ok'] ?? null) === false && count($pk['kisiler']) === 5 && count($pk['gunler']) === count($GB['giris_gunler']) && !str_contains($pk['err'], 'AUDIT:'), $pk['out']);
+}
+$buyukK = []; for ($i = 1; $i <= 501; $i++) $buyukK[] = [$i, 'Örnek Kişi ' . $i, '', 'Depo A', 1];
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => array_map('strval', range(1, 501)), 'islem' => 'pasif'], ['giris_kisiler' => $buyukK, 'giris_gunler' => []]);
+ok('kisi_toplu: 501 kimlik → 400 (üst sınır 500), hiçbiri değişmedi', ($pk['json']['ok'] ?? null) === false && str_contains((string)($pk['json']['error'] ?? ''), '500') && count(array_filter($pk['kisiler'], fn($k) => $k['aktif'] === 0)) === 0, $pk['out']);
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => array_map('strval', range(1, 500)), 'islem' => 'pasif'], ['giris_kisiler' => $buyukK, 'giris_gunler' => []]);
+ok('kisi_toplu: tam 500 kimlik KABUL (500 pasif)', ($pk['json']['ok'] ?? false) === true && $pk['json']['etkilenen'] === 500 && count(array_filter($pk['kisiler'], fn($k) => $k['aktif'] === 0)) === 500);
+$pk = giris_post($T + ['action' => 'kisi_toplu', 'kisi_ids' => ['1'], 'islem' => 'sil', 'x' => 'y'], ['admin' => false, 'perms' => $sadEd, 'depo' => 'Depo A']);
+ok('kisi_toplu: ayrı JSON gövdesi ve form gövdesi aynı kapıdan geçer (dizi alanı $_POST dizisi olarak da kabul)', ($pk['json']['ok'] ?? false) === true);
+
+echo "\n=== 6f. Yazma ucu: gun_toplu_sec (çok kişi × çok gün) ===\n";
+$GM = ['kisi_ids' => ['1', '2', '5'], 'tarihler' => [$g2, "$bu-03", "$bu-04"], 'ay' => $bu];
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X'] + $GM);
+// A: 2 X(aynı), 3 Y, 4 D · B: 3 R · İsmail: boş → yazılan: B 2,4 + İsmail 3 = 5; atlanan: A3, A4, B3 = 3; degismedi: A2 = 1
+ok('gun_toplu_sec (üstüne yaz KAPALI, varsayılan): yalnız BOŞLAR dolar — yazılan 5, atlanan 3 (dolu), degismedi 1; dolu değerler (Y, D, R) korunur', ($pk['json']['ok'] ?? false) === true && $pk['json']['yazilan'] === 5 && $pk['json']['atlanan'] === 3 && $pk['json']['degismedi'] === 1 && $pk['json']['kisi_sayisi'] === 3 && $pk['json']['gun_sayisi'] === 3 && $pk['json']['pasif_atlanan'] === 0 && count($pk['json']['degisim']) === 5
+    && in_array(['kisi_id' => 1, 'tarih' => "$bu-03", 'kod' => 'Y', 'user_id' => 1], $pk['gunler'], true) && in_array(['kisi_id' => 2, 'tarih' => "$bu-03", 'kod' => 'R', 'user_id' => 1], $pk['gunler'], true), $pk['out'] . $pk['err']);
+ok("audit: TEK özet {mod, ay, kisi_sayisi, gun_sayisi, kod, ustune_yaz, yazilan, atlanan, pasif_atlanan}; gün/kişi başına audit YOK; ad YOK", substr_count($pk['err'], 'AUDIT:') === 1 && str_contains($pk['err'], 'AUDIT: ["update","puantaj_giris",null,null,{"mod":"gun_toplu_sec","ay":"' . $bu . '","kisi_sayisi":3,"gun_sayisi":3,"kod":"X","ustune_yaz":0,"yazilan":5,"atlanan":3,"pasif_atlanan":0}]') && !str_contains(aud($pk['err']), 'Örnek') && !str_contains(aud($pk['err']), 'İsmail'), $pk['err']);
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'ustune_yaz' => '1'] + $GM);
+ok("gun_toplu_sec üstüne yaz AÇIK ('1'): A3, A4, B3 de X olur → yazılan 3 + 5 = 8; atlanan 0; audit ustune_yaz 1", ($pk['json']['ok'] ?? false) === true && $pk['json']['yazilan'] === 8 && $pk['json']['atlanan'] === 0 && str_contains($pk['err'], '"ustune_yaz":1'), $pk['out']);
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'ustune_yaz' => true] + $GM);
+ok('gun_toplu_sec: ustune_yaz JSON/boolean true da kabul', ($pk['json']['ok'] ?? false) === true && $pk['json']['yazilan'] === 8);
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => ''] + $GM);
+ok("gun_toplu_sec Temizle (kod ''): ustune_yaz KAPALI olsa da seçili HÜCRELER silinir (dolu 4: A2 A3 A4 B3); boş hücreler dokunulmaz", ($pk['json']['ok'] ?? false) === true && $pk['json']['yazilan'] === 4 && $pk['json']['atlanan'] === 0 && $pk['json']['degismedi'] === 5 && count(array_filter($pk['json']['degisim'], fn($d) => $d['c'] === '')) === 4 && gun_say_kisi($pk['gunler'], 1) === 1 && gun_say_kisi($pk['gunler'], 2) === 0, $pk['out']);
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'Y', 'kisi_ids' => ['1', '4'], 'tarihler' => ["$bu-10"], 'ay' => $bu]);
+ok('gun_toplu_sec: PASİF kişi (4) ATLANIR (pasif_atlanan 1) ve rapora yazılır; aktif kişiye yazılır', ($pk['json']['ok'] ?? false) === true && $pk['json']['pasif_atlanan'] === 1 && $pk['json']['kisi_sayisi'] === 1 && $pk['json']['yazilan'] === 1 && !in_array(['kisi_id' => 4, 'tarih' => "$bu-10", 'kod' => 'Y', 'user_id' => 1], $pk['gunler'], true), $pk['out']);
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'Y', 'kisi_ids' => ['4'], 'tarihler' => ["$bu-10"], 'ay' => $bu]);
+ok('gun_toplu_sec: seçilenlerin HEPSİ pasifse → 400', ($pk['json']['ok'] ?? null) === false && str_contains((string)($pk['json']['error'] ?? ''), 'pasif'));
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'kisi_ids' => ['1', '3'], 'tarihler' => ["$bu-10"], 'ay' => $bu], ['allowed' => ['Depo A']]);
+ok('gun_toplu_sec: BAŞKA DEPO kişisi (3) listedeyse 403 ve HİÇBİR kişiye yazılmaz (depo kuralı her kişide)', ($pk['json']['code'] ?? 0) === 403 && count($pk['gunler']) === count($GB['giris_gunler']) && !str_contains($pk['err'], 'AUDIT:'));
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'kisi_ids' => ['1', '999'], 'tarihler' => ["$bu-10"], 'ay' => $bu]);
+ok('gun_toplu_sec: olmayan kişi → 404, yazılmadı', ($pk['json']['ok'] ?? null) === false && count($pk['gunler']) === count($GB['giris_gunler']));
+$ayDisi = date('Y-m-d', strtotime('first day of next month'));
+$otuzIki = array_merge(array_map(fn($n) => sprintf('%s-%02d', $bu, $n), range(1, 28)), ["$bu-01", "$bu-02", "$bu-03", "$bu-04"]);
+foreach ([['ay' => '2026-13'], ['ay' => 'abc'], ['ay' => ''], ['ay' => "$bu-01"], ['ay' => ['x']], ['tarihler' => [$ayDisi]], ['tarihler' => ['2026-02-30']], ['tarihler' => ["$bu-1"]], ['tarihler' => []], ['tarihler' => 'x'], ['tarihler' => [5]], ['tarihler' => [['a']]], ['tarihler' => $otuzIki], ['tarihler' => ["$bu-02", $ayDisi]], ['kod' => 'x'], ['kod' => 'Q'], ['kod' => 'XY'], ['kod' => ['X']], ['ustune_yaz' => 'abc'], ['ustune_yaz' => ['1']], ['kisi_ids' => []], ['kisi_ids' => 'x'], ['kisi_ids' => ['1', 'x']]] as $kotu) {
+    $pk = giris_post($T + $kotu + ['action' => 'gun_toplu_sec', 'kod' => 'X'] + $GM);
+    ok('gun_toplu_sec geçersiz girdi reddedilir (400), hiçbir şey yazılmadı, audit YOK: ' . mb_substr(json_encode($kotu, JSON_UNESCAPED_UNICODE), 0, 70), ($pk['json']['ok'] ?? null) === false && count($pk['gunler']) === count($GB['giris_gunler']) && !str_contains($pk['err'], 'AUDIT:'), $pk['out']);
+}
+$pk = giris_post($T + ['action' => 'gun_toplu_sec'] + $GM);
+ok('gun_toplu_sec: kod alanı hiç yok → reddedilir (sessizce temizleme YAPMAZ)', ($pk['json']['ok'] ?? null) === false && count($pk['gunler']) === count($GB['giris_gunler']));
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'kisi_ids' => array_map('strval', range(1, 501)), 'tarihler' => ["$bu-02"], 'ay' => $bu], ['giris_kisiler' => $buyukK, 'giris_gunler' => []]);
+ok('gun_toplu_sec: 501 kişi → 400 (üst sınır 500)', ($pk['json']['ok'] ?? null) === false && str_contains((string)($pk['json']['error'] ?? ''), '500') && $pk['gunler'] === []);
+$ay31 = date('Y-m', strtotime('first day of december this year'));
+$gunler31 = array_map(fn($n) => sprintf('%s-%02d', $ay31, $n), range(1, 31));
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'kisi_ids' => array_map('strval', range(1, 500)), 'tarihler' => $gunler31, 'ay' => $ay31], ['giris_kisiler' => $buyukK, 'giris_gunler' => []]);
+ok('gun_toplu_sec ÜST SINIR (uçtan uca): 500 kişi × 31 gün = 15500 hücre tek istekte yazılır; audit tek özet; yanıt 15500 degisim', ($pk['json']['ok'] ?? false) === true && $pk['json']['yazilan'] === 15500 && count($pk['gunler']) === 15500 && count($pk['json']['degisim']) === 15500 && substr_count($pk['err'], 'AUDIT:') === 1, substr($pk['out'], 0, 200) . $pk['err']);
+$ayBu31 = array_map(fn($n) => sprintf('%s-%02d', $bu, $n), range(1, (int)date('t')));
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'T', 'kisi_ids' => ['1'], 'tarihler' => $ayBu31, 'ay' => $bu]);
+ok('gun_toplu_sec: ayın TÜM günleri (bu ay ' . date('t') . ' gün) tek kişiye', ($pk['json']['ok'] ?? false) === true && $pk['json']['gun_sayisi'] === (int)date('t'));
+ok('gun_toplu_sec: employees / PDKS tablolarına dokunmaz', $pk['sayilar'] === giris_post($T + ['action' => 'sil'])['sayilar']);
+$pk = giris_post($T + ['action' => 'gun_toplu_sec', 'kod' => 'X', 'kisi_ids' => ['1'], 'tarihler' => ["$bu-02"], 'ay' => $bu, 'kisi_ids2' => 'ignored'], ['admin' => false, 'perms' => $sadEd]);
+ok('gun_toplu_sec: yalnız sayfa read+edit rolü yazabilir', ($pk['json']['ok'] ?? false) === true);
+ok('gun_sutun uç eylemi KORUNDU (UI çağırmaz ama uç duruyor): aynı istek hâlâ çalışır', (function () use ($T, $g6) { $r = giris_post($T + ['action' => 'gun_sutun', 'tarih' => $g6, 'kod' => 'T']); return ($r['json']['ok'] ?? false) === true && $r['json']['adet'] === 3; })());
+
+echo "\n=== 6g. Excel'den ekle: dosya doğrulama + okuma (gerçek xlsx / csv dosyaları) ===\n";
+$XDIR = sys_get_temp_dir() . '/pgxl_' . getmypid();
+@mkdir($XDIR, 0700, true);
+register_shutdown_function(function () use ($XDIR) { foreach (glob($XDIR . '/*') ?: [] as $f) @unlink($f); @rmdir($XDIR); });
+function pg_xlsx_yaz(string $yol, array $satirlar, ?callable $ek = null): string
+{
+    $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet(); $ws = $ss->getActiveSheet();
+    foreach ($satirlar as $i => $r) foreach ($r as $j => $v) {
+        if ($v === null || $v === '') continue;
+        if (is_string($v) && !str_starts_with($v, '=F:')) $ws->setCellValueExplicit([$j + 1, $i + 1], $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        elseif (is_string($v)) $ws->setCellValue([$j + 1, $i + 1], substr($v, 3));   // '=F:=1+1' → gerçek formül
+        else $ws->setCellValue([$j + 1, $i + 1], $v);
+    }
+    if ($ek) $ek($ss);
+    \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($ss, 'Xlsx')->save($yol);
+    $ss->disconnectWorksheets();
+    return $yol;
+}
+function pg_dosya_yaz(string $yol, string $icerik): string { file_put_contents($yol, $icerik); return $yol; }
+function ham_oku(string $yol, string $ad): array { $d = pge_dosya_dogrula(['name' => $ad, 'tmp_name' => $yol, 'error' => 0], fn($t) => true); return $d['ok'] ? pge_dosya_oku($d) : ['hata' => $d['hata']]; }
+
+$xs = pg_xlsx_yaz("$XDIR/a.xlsx", [['Ad Soyad', 'Görev'], ['Örnek Kişi Ş', 'Paketçi'], ['Örnek Kişi Ç', null], [null, null], ['Örnek Kişi Ğ', 'Şoför']]);
+$h1 = ham_oku($xs, 'a.xlsx');
+ok('xlsx okuma: başlık + 3 veri satırı (tamamen boş satır atlanır); TR karakterler doğru; her satır 10 sütun', $h1 === [array_pad(['Ad Soyad', 'Görev'], 10, ''), array_pad(['Örnek Kişi Ş', 'Paketçi'], 10, ''), array_pad(['Örnek Kişi Ç', ''], 10, ''), array_pad(['Örnek Kişi Ğ', 'Şoför'], 10, '')], json_encode($h1, JSON_UNESCAPED_UNICODE));
+$xf = pg_xlsx_yaz("$XDIR/f.xlsx", [['Ad Soyad', 'Görev'], ['=F:=1+1', 'x'], ['=HYPERLINK("http://x","t")', '+görev'], ['Örnek Kişi A', '@x']]);
+$zf = new ZipArchive(); $zf->open($xf); $sx = $zf->getFromName('xl/worksheets/sheet1.xml'); $zf->addFromString('xl/worksheets/sheet1.xml', str_replace('<f>1+1</f><v>2</v>', '<f>1+1</f><v>42</v>', $sx)); $zf->close();   // dosyadaki ÖNBELLEK değerini 42 yap: biz hesaplasaydık 2 çıkardı
+$hf = ham_oku($xf, 'f.xlsx');
+ok("formül ASLA hesaplanmaz: gerçek formül hücresi ('=1+1', dosyadaki önbellek 42) '42' (önbellek) olarak okunur — hesaplansaydı '2' olurdu; METİN hücresi '=HYPERLINK(...)' olduğu gibi okunur, '+görev' / '@x' düz metin", is_array($hf) && !isset($hf['hata']) && ($hf[1][0] ?? 'x') === '42' && $hf[2][0] === '=HYPERLINK("http://x","t")' && $hf[2][1] === '+görev' && $hf[3][1] === '@x', json_encode($hf, JSON_UNESCAPED_UNICODE));
+$xf2 = pg_xlsx_yaz("$XDIR/f2.xlsx", [['Ad Soyad'], ['=F:=SUM(2,3)']]);
+$zf = new ZipArchive(); $zf->open($xf2); $sx = $zf->getFromName('xl/worksheets/sheet1.xml'); $zf->addFromString('xl/worksheets/sheet1.xml', preg_replace('#<v>5</v>#', '', $sx)); $zf->close();   // önbellek YOK
+ok("formül önbelleği yoksa hücre BOŞ sayılır (HESAPLANMAZ): yalnız formül içeren satır tamamen boş satır gibi atlanır → veri satırı 0", count(ham_oku($xf2, 'f2.xlsx')) === 1 && pge_satirlari_coz(ham_oku($xf2, 'f2.xlsx'), [])['ozet']['toplam'] === 0);
+$xi = pg_xlsx_yaz("$XDIR/i.xlsx", [['Rapor Başlığı', null], ['Çalışan Adı Soyadı', 'Ünvan'], ['Örnek Kişi A', 'Depocu']], function ($ss) { $ss->createSheet()->setTitle('Diğer'); $ss->getSheet(1)->setCellValue('A1', 'Başka Sayfa Kişisi'); });
+$hi = ham_oku($xi, 'i.xlsx'); $ci = pge_satirlari_coz($hi, []);
+ok("yalnız İLK sayfa okunur (ikinci sayfadaki satır gelmez); üstte başlık/rapor satırı olsa da 'Çalışan Adı Soyadı' ≠ tanınan başlık → başlıksız: ilk sütun ad (uyarı)", count(array_filter($hi, fn($r) => str_contains(implode('', $r), 'Başka Sayfa'))) === 0 && $ci['baslik'] === false && $ci['ozet']['toplam'] === 3);
+$xl = pg_dosya_yaz("$XDIR/l.xlsx", "bu bir excel dosyası değil");
+ok('.xlsx uzantılı ama PK imzası yok → "Geçerli bir Excel" hatası', str_contains(ham_oku($xl, 'l.xlsx')['hata'] ?? '', 'Geçerli bir Excel'));
+$zm = new ZipArchive(); $zmYol = "$XDIR/makro.xlsx"; $zm->open($zmYol, ZipArchive::CREATE); $zm->addFromString('[Content_Types].xml', '<x/>'); $zm->addFromString('xl/workbook.xml', '<x/>'); $zm->addFromString('xl/vbaProject.bin', 'MZ'); $zm->close();
+ok('makro (xl/vbaProject.bin) içeren zip REDDEDİLİR', str_contains(ham_oku($zmYol, 'makro.xlsx')['hata'] ?? '', 'Makro'));
+$zd = new ZipArchive(); $zdYol = "$XDIR/dis.xlsx"; $zd->open($zdYol, ZipArchive::CREATE); $zd->addFromString('[Content_Types].xml', '<x/>'); $zd->addFromString('xl/workbook.xml', '<x/>'); $zd->addFromString('xl/externalLinks/externalLink1.xml', '<x/>'); $zd->close();
+ok('dış bağlantı (xl/externalLinks/) içeren zip REDDEDİLİR', str_contains(ham_oku($zdYol, 'dis.xlsx')['hata'] ?? '', 'dış bağlantı'));
+$ze = new ZipArchive(); $zeYol = "$XDIR/gom.xlsx"; $ze->open($zeYol, ZipArchive::CREATE); $ze->addFromString('[Content_Types].xml', '<x/>'); $ze->addFromString('xl/workbook.xml', '<x/>'); $ze->addFromString('xl/embeddings/oleObject1.bin', 'x'); $ze->close();
+ok('gömülü nesne (xl/embeddings/) içeren zip REDDEDİLİR', str_contains(ham_oku($zeYol, 'gom.xlsx')['hata'] ?? '', 'gömülü'));
+$zb = new ZipArchive(); $zbYol = "$XDIR/bomba.xlsx"; $zb->open($zbYol, ZipArchive::CREATE); $zb->addFromString('[Content_Types].xml', '<x/>'); $zb->addFromString('xl/workbook.xml', '<x/>'); $zb->addFromString('xl/worksheets/sheet1.xml', str_repeat('A', 21 * 1048576)); $zb->close();
+ok('zip bombası / dev parça (21 MB açılmış, küçük sıkıştırılmış) REDDEDİLİR', (bool)(ham_oku($zbYol, 'bomba.xlsx')['hata'] ?? '') && (filesize($zbYol) < 200000), (string)filesize($zbYol));
+$zt = new ZipArchive(); $ztYol = "$XDIR/yol.xlsx"; $zt->open($ztYol, ZipArchive::CREATE); $zt->addFromString('[Content_Types].xml', '<x/>'); $zt->addFromString('xl/workbook.xml', '<x/>'); $zt->addFromString('xl/../../evil.txt', 'x'); $zt->close();
+ok("zip yol atlatma ('..') REDDEDİLİR", (bool)(ham_oku($ztYol, 'yol.xlsx')['hata'] ?? ''));
+ok('uzantı: .xls / .xlsm / .txt / .php / uzantısız REDDEDİLİR; .csv ve .xlsx kabul', (function () use ($xs, $XDIR) {
+    foreach (['a.xls', 'a.xlsm', 'a.txt', 'a.php', 'a', 'a.xlsx.php'] as $ad) if (!str_contains(ham_oku($xs, $ad)['hata'] ?? '', 'Yalnız .xlsx ya da .csv')) return false;
+    return !isset(ham_oku($xs, 'A.XLSX')['hata']);
+})());
+ok('boş dosya REDDEDİLİR; yükleme hatası kodları (INI_SIZE → "çok büyük", NO_FILE → "seçilmedi") Türkçe mesaj', str_contains(ham_oku(pg_dosya_yaz("$XDIR/bos.csv", ''), 'bos.csv')['hata'] ?? '', 'boş') && str_contains(pge_dosya_dogrula(['error' => UPLOAD_ERR_INI_SIZE])['hata'], 'çok büyük') && str_contains(pge_dosya_dogrula(['error' => UPLOAD_ERR_NO_FILE])['hata'], 'seçilmedi'));
+ok("gerçek HTTP yüklemesi değilse (is_uploaded_file) REDDEDİLİR — kanca yokken tmp dosya kabul edilmez", str_contains(pge_dosya_dogrula(['name' => 'a.csv', 'tmp_name' => $xs, 'error' => 0])['hata'] ?? '', 'yükleme isteğiyle'));
+$buyukCsv = pg_dosya_yaz("$XDIR/buyuk.csv", "Ad\n" . str_repeat("Örnek Kişi X\n", 160000));
+ok('2 MB üstü dosya REDDEDİLİR (CSV 2,0+ MB)', filesize($buyukCsv) > 2 * 1048576 && str_contains(ham_oku($buyukCsv, 'buyuk.csv')['hata'] ?? '', 'çok büyük'), (string)filesize($buyukCsv));
+$ikili = pg_dosya_yaz("$XDIR/ikili.csv", "Ad\0Soyad\n");
+ok('.csv uzantılı ikili dosya (NUL) ve zip (PK) REDDEDİLİR', str_contains(ham_oku($ikili, 'ikili.csv')['hata'] ?? '', 'CSV değil') && str_contains(ham_oku($xs, 'sahte.csv')['hata'] ?? '', 'CSV değil'));
+$sat501 = [['Ad Soyad']]; for ($i = 1; $i <= 501; $i++) $sat501[] = ['Örnek Kişi N' . $i];
+$x501 = pg_xlsx_yaz("$XDIR/501.xlsx", $sat501);
+$h501 = ham_oku($x501, '501.xlsx');
+ok('xlsx 501 veri satırı → ayrıştırıcı "en çok 500 satır" der', isset(pge_satirlari_coz($h501, [])['hata']) && str_contains(pge_satirlari_coz($h501, [])['hata'], '500'));
+$x500 = pg_xlsx_yaz("$XDIR/500.xlsx", array_slice($sat501, 0, 501));
+ok('xlsx 500 veri satırı + başlık KABUL (500 geçerli)', (pge_satirlari_coz(ham_oku($x500, '500.xlsx'), [])['ozet']['gecerli'] ?? 0) === 500);
+ok('xlsx okuma: yalnız ilk 10 sütun (11. sütundaki değer gelmez)', (function () use ($XDIR) { $y = pg_xlsx_yaz("$XDIR/genis.xlsx", [['Ad Soyad', 'Görev', null, null, null, null, null, null, null, null, 'ON BİRİNCİ']]); $h = ham_oku($y, 'genis.xlsx'); return count($h[0]) === 10 && !in_array('ON BİRİNCİ', $h[0], true); })());
+
+echo "\n=== 6h. Excel'den ekle: yazma ucu (excel_onizle / excel_ekle; uçtan uca) ===\n";
+function giris_dosya_post(string $eylem, ?string $yol, string $ad, array $opt = [], array $post = []): array
+{
+    $opt = array_merge($opt, ['tmp_say' => true]);
+    if ($yol !== null) $opt['files'] = ['dosya' => ['name' => $ad, 'tmp_name' => $yol]];
+    $r = giris_post(['csrf' => 'testcsrf', 'action' => $eylem] + $post, $opt);
+    $r['tmp_yeni'] = preg_match('/TMP_YENI: (.*)/', $r['err'], $m) ? json_decode($m[1], true) : null;
+    return $r;
+}
+$satirlarE = [
+    ['Ad Soyad', 'Görev'],
+    ['Örnek Kişi Ş', 'Paketçi'],           // geçerli
+    ['ÖRNEK KİŞİ Ş', 'tekrar'],            // dosyada tekrar (TR duyarsız)
+    ['örnek kişi a', 'x'],                 // mevcut (1: Depo A) → mükerrer
+    ['Örnek Kişi D', ''],                  // mevcut PASİF → mükerrer
+    ['Örnek Kişi C', 'Başka depoda'],      // Depo B kişisi GÖRÜNMEZ → bu depo için GEÇERLİ
+    [null, 'adı yok'],                     // boş
+    [str_repeat('ş', 121), ''],            // çok uzun ad
+    ['Örnek Kişi Ç', str_repeat('g', 81)], // çok uzun görev
+    ['=HYPERLINK("http://x","t")', '+görev'], // formül gibi METİN → geçerli
+    ['  Örnek   Kişi   Ü  ', 'Şoför'],      // sadeleşir → geçerli
+];
+$xe = pg_xlsx_yaz("$XDIR/e.xlsx", $satirlarE);
+$on = giris_dosya_post('excel_onizle', $xe, 'e.xlsx');
+$jo = $on['json'] ?? [];
+ok("excel_onizle: ok + tur xlsx; özet toplam 10 · geçerli 4 (Ş, Kişi C [başka depo], formül metni, Ü) · boş 1 · uzun 2 · mükerrer 3 (mevcut 2 + dosya 1); başlık bulundu", ($jo['ok'] ?? false) === true && $jo['tur'] === 'xlsx' && $jo['ozet'] === ['toplam' => 10, 'gecerli' => 4, 'bos' => 1, 'uzun' => 2, 'mukerrer' => 3, 'mukerrer_mevcut' => 2, 'mukerrer_dosya' => 1] && $jo['baslik_bulundu'] === true, $on['out']);
+ok('excel_onizle: ilk 20 satır (burada 10) durumlarıyla; ham metin (formül metni, "+görev") olduğu gibi JSON\'da — HTML kaçışı ekranda (h()/textContent)', count($jo['ilk']) === 10 && $jo['ilk'][0]['durum'] === 'gecerli' && $jo['ilk'][1]['durum'] === 'mukerrer_dosya' && $jo['ilk'][2]['durum'] === 'mukerrer_mevcut' && $jo['ilk'][3]['durum'] === 'mukerrer_mevcut' && $jo['ilk'][4]['durum'] === 'gecerli' && $jo['ilk'][5]['durum'] === 'bos' && $jo['ilk'][6]['durum'] === 'uzun' && $jo['ilk'][7]['durum'] === 'uzun' && $jo['ilk'][8]['ad'] === '=HYPERLINK("http://x","t")' && $jo['ilk'][9]['ad'] === 'Örnek Kişi Ü');
+ok('excel_onizle KAYDETMEZ: kişi sayısı 5 (değişmedi), gün kayıtları değişmedi, AUDIT YOK', count($on['kisiler']) === 5 && count($on['gunler']) === count($GB['giris_gunler']) && !str_contains($on['err'], 'AUDIT:'));
+ok('DİSKE KAYDETMEZ: istek boyunca sistem geçici klasöründe YENİ dosya oluşmadı (excel_onizle)', $on['tmp_yeni'] === [], json_encode($on['tmp_yeni']));
+$ek = giris_dosya_post('excel_ekle', $xe, 'e.xlsx');
+$je = $ek['json'] ?? [];
+$yeniAdlar = array_slice(array_column($ek['kisiler'], 'ad'), 5);
+ok('excel_ekle: yalnız GEÇERLİ 4 satır eklenir (eklenen 4, atlanan 6); yeni kişiler aktif depo "Depo A" ile damgalı, aktif=1; ad sadeleştirilmiş; formül metni DÜZ METİN olarak saklanır', ($je['ok'] ?? false) === true && $je['eklenen'] === 4 && $je['atlanan'] === 6 && $yeniAdlar === ['Örnek Kişi Ş', 'Örnek Kişi C', '=HYPERLINK("http://x","t")', 'Örnek Kişi Ü'] && array_unique(array_column(array_slice($ek['kisiler'], 5), 'depo')) === ['Depo A'] && array_unique(array_column(array_slice($ek['kisiler'], 5), 'aktif')) === [1] && array_column($ek['kisiler'], 'gorev')[5] === 'Paketçi' && array_column($ek['kisiler'], 'gorev')[7] === '+görev', $ek['out'] . json_encode(array_slice($ek['kisiler'], 5), JSON_UNESCAPED_UNICODE));
+ok("excel_ekle audit: TEK özet {mod, tur, satir, eklenen, atlanan, depo}; kişi adı / görev YOK", substr_count($ek['err'], 'AUDIT:') === 1 && str_contains($ek['err'], 'AUDIT: ["create","puantaj_giris",null,null,{"mod":"excel_ekle","tur":"xlsx","satir":10,"eklenen":4,"atlanan":6,"depo":"Depo A"}]') && !preg_match('/Örnek|HYPERLINK|Paketçi/u', aud($ek['err'])), $ek['err']);
+ok('DİSKE KAYDETMEZ: excel_ekle sonrası da geçici klasörde yeni dosya YOK', $ek['tmp_yeni'] === [], json_encode($ek['tmp_yeni']));
+ok('excel_ekle employees / PDKS tablolarına dokunmaz', $ek['sayilar'] === giris_post(['csrf' => 'testcsrf', 'action' => 'sil'])['sayilar']);
+$ekb = giris_dosya_post('excel_ekle', $xe, 'e.xlsx', ['giris_kisiler' => [[1, 'Örnek Kişi Ş', '', 'Depo A', 1]], 'giris_gunler' => []]);
+ok("excel_ekle: dosyadaki bir ad zaten varsa (Örnek Kişi Ş mevcut) o satırlar EKLENMEZ (2 mükerrer); kalan 5 geçerli eklenir", ($ekb['json']['ok'] ?? false) === true && $ekb['json']['eklenen'] === 5 && $ekb['json']['atlanan'] === 5 && count($ekb['kisiler']) === 6, $ekb['out']);
+$xgecersiz = pg_xlsx_yaz("$XDIR/g.xlsx", [['Ad Soyad'], ['Örnek Kişi A'], [null], ['Örnek Kişi B']]);
+$eg = giris_dosya_post('excel_ekle', $xgecersiz, 'g.xlsx');
+ok('excel_ekle: geçerli satır yoksa (hepsi mevcutla mükerrer) → 400 "Eklenecek geçerli satır yok", yazılmadı, audit YOK', ($eg['json']['ok'] ?? null) === false && str_contains((string)($eg['json']['error'] ?? ''), 'geçerli satır yok') && count($eg['kisiler']) === 5 && !str_contains($eg['err'], 'AUDIT:'), $eg['out']);
+
+$csvP = pg_dosya_yaz("$XDIR/k.csv", "\xEF\xBB\xBFAd Soyad;Görev\r\nÖrnek Kişi Ş;Paketçi\r\n\"Örnek; Kişi Ç\";\"iki\nsatır\"\r\nörnek kişi a;x\r\n");
+$cs = giris_dosya_post('excel_onizle', $csvP, 'k.csv');
+ok('CSV önizleme: tur csv; BOM + ; ayraç + tırnaklı alan; toplam 3 · geçerli 2 · mükerrer 1 (mevcut)', ($cs['json']['ok'] ?? false) === true && $cs['json']['tur'] === 'csv' && $cs['json']['ozet']['toplam'] === 3 && $cs['json']['ozet']['gecerli'] === 2 && $cs['json']['ozet']['mukerrer_mevcut'] === 1 && $cs['json']['ilk'][1]['ad'] === 'Örnek; Kişi Ç' && $cs['json']['ilk'][1]['gorev'] === 'iki satır' && $cs['tmp_yeni'] === [], $cs['out']);
+$csk = giris_dosya_post('excel_ekle', pg_dosya_yaz("$XDIR/k2.csv", mb_convert_encoding("Ad,Görev\nÖrnek Kişi İ,Şoför\nÖrnek Kişi Ö,\n", 'Windows-1254', 'UTF-8')), 'k2.csv');
+ok('CSV ekleme: Windows-1254 + virgül ayraç; TR karakterler doğru kaydedilir (İ, Ö, Şoför)', ($csk['json']['ok'] ?? false) === true && $csk['json']['eklenen'] === 2 && array_slice(array_column($csk['kisiler'], 'ad'), 5) === ['Örnek Kişi İ', 'Örnek Kişi Ö'] && array_column($csk['kisiler'], 'gorev')[5] === 'Şoför', $csk['out']);
+$csb = giris_dosya_post('excel_ekle', pg_dosya_yaz("$XDIR/k3.csv", "Örnek Kişi Ğ;Depocu\nÖrnek Kişi Ü\n"), 'k3.csv');
+ok('CSV: başlık satırı YOK → ilk sütun ad, ikinci sütun görev; 2 kişi eklenir', ($csb['json']['ok'] ?? false) === true && $csb['json']['eklenen'] === 2 && array_slice(array_column($csb['kisiler'], 'ad'), 5) === ['Örnek Kişi Ğ', 'Örnek Kişi Ü']);
+$sat500 = []; for ($i = 1; $i <= 500; $i++) $sat500[] = 'Örnek Kişi N' . $i;
+$c500 = giris_dosya_post('excel_ekle', pg_dosya_yaz("$XDIR/500.csv", "Ad\n" . implode("\n", $sat500) . "\n"), '500.csv');
+ok('CSV 500 satır: tamamı eklenir (500 kişi, tek transaction; audit tek özet)', ($c500['json']['ok'] ?? false) === true && $c500['json']['eklenen'] === 500 && count($c500['kisiler']) === 505 && substr_count($c500['err'], 'AUDIT:') === 1, substr($c500['out'], 0, 200));
+$c501 = giris_dosya_post('excel_ekle', pg_dosya_yaz("$XDIR/501.csv", "Ad\n" . implode("\n", array_merge($sat500, ['Örnek Kişi N501'])) . "\n"), '501.csv');
+ok('CSV 501 satır → REDDEDİLİR (400, hiçbiri eklenmez, audit yok)', ($c501['json']['ok'] ?? null) === false && str_contains((string)($c501['json']['error'] ?? ''), '500') && count($c501['kisiler']) === 5 && !str_contains($c501['err'], 'AUDIT:'));
+$cb = giris_dosya_post('excel_onizle', $buyukCsv, 'buyuk.csv');
+ok('2 MB üstü dosya uçta REDDEDİLİR (400)', ($cb['json']['ok'] ?? null) === false && str_contains((string)($cb['json']['error'] ?? ''), 'çok büyük'));
+ok('makro/ikili/uzantı hataları uçta 400 JSON (yazılmadı)', ($tmp1 = giris_dosya_post('excel_ekle', $zmYol, 'makro.xlsx'))['json']['ok'] === false && count($tmp1['kisiler']) === 5 && (giris_dosya_post('excel_ekle', $xs, 'a.xls')['json']['ok'] ?? null) === false && (giris_dosya_post('excel_ekle', $ikili, 'ikili.csv')['json']['ok'] ?? null) === false);
+$bosDosya = pg_xlsx_yaz("$XDIR/bosx.xlsx", [['Ad Soyad', 'Görev']]);
+ok("başlıktan başka satır yok → 400 'Dosyada kişi satırı bulunamadı'", str_contains((string)(giris_dosya_post('excel_onizle', $bosDosya, 'bosx.xlsx')['json']['error'] ?? ''), 'kişi satırı bulunamadı'));
+$nf = giris_dosya_post('excel_onizle', null, '');
+ok('dosya alanı YOK → 400 "Dosya seçilmedi"', ($nf['json']['ok'] ?? null) === false && str_contains((string)($nf['json']['error'] ?? ''), 'Dosya seçilmedi'));
+foreach (['excel_onizle', 'excel_ekle'] as $eylem) {
+    $r0 = giris_post(['action' => $eylem], ['admin' => true, 'files' => ['dosya' => ['name' => 'e.xlsx', 'tmp_name' => $xe]]]);
+    ok("$eylem: CSRF YOK → 403 + JSON (rc 5), DB yazılmadı, audit YOK", $r0['rc'] === 5 && ($r0['json']['code'] ?? 0) === 403 && count($r0['kisiler']) === 5 && !str_contains($r0['err'], 'AUDIT:'));
+    ok("$eylem: yalnız 'read' / ESKİ rol → 403 (rota kapısı)", giris_dosya_post($eylem, $xe, 'e.xlsx', ['admin' => false, 'perms' => $salt])['rc'] === 3 && giris_dosya_post($eylem, $xe, 'e.xlsx', ['admin' => false, 'perms' => $eskiR])['rc'] === 3);
+    ok("$eylem: aktif depo yok → 400; tablolar kurulmamış → 503", (giris_dosya_post($eylem, $xe, 'e.xlsx', ['depo' => ''])['json']['ok'] ?? null) === false && str_contains((string)(giris_dosya_post($eylem, $xe, 'e.xlsx', ['giris' => false])['json']['error'] ?? ''), 'migrate.php'));
+    ok("$eylem: yalnız sayfa read+edit rolü çalıştırabilir", (giris_dosya_post($eylem, $xe, 'e.xlsx', ['admin' => false, 'perms' => $sadEd])['json']['ok'] ?? false) === true);
+}
+$pkB = giris_dosya_post('excel_ekle', $xe, 'e.xlsx', ['depo' => 'Depo B', 'allowed' => ['Depo B'], 'giris_kisiler' => [[3, 'Örnek Kişi C', '', 'Depo B', 1]], 'giris_gunler' => []]);
+ok("excel_ekle: AKTİF DEPO Depo B iken yeni kişiler Depo B ile damgalanır; Depo B'deki mevcut 'Örnek Kişi C' mükerrer sayılır (eklenen 5)", ($pkB['json']['ok'] ?? false) === true && $pkB['json']['eklenen'] === 5 && array_unique(array_column(array_slice($pkB['kisiler'], 1), 'depo')) === ['Depo B'], $pkB['out']);
+ok("giriş kapısı: yazma ucundaki Excel eylemleri GET ile çağrılamaz (405 JSON)", str_contains(sayfa_calistir('puantaj_giris_kaydet.php', [], array_merge($GB, ['admin' => true]))['out'], 'Geçersiz istek'));
 
 echo "\n----------------------------------------------\n";
 echo "Geçen: $gecen   Kalan: $fail\n";

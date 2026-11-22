@@ -474,3 +474,193 @@ function pg_sutun_uygula(PDO $pdo, string $tarih, array $kisiIdleri, string $kod
         return ['ok' => false, 'hata' => 'Toplu işlem yapılamadı.', 'adet' => 0, 'degisim' => []];
     }
 }
+
+// ── v555: Kişi yönetimi (liste · kalıcı silme · toplu işlem) ───────────────
+
+const PG_TOPLU_ID_MAX = 500;      // tek istekte en çok kişi (kisi_toplu, gun_toplu_sec)
+const PG_SEC_GUN_MAX = 31;        // gun_toplu_sec: en çok gün
+const PG_SEC_HUCRE_MAX = 15500;   // gun_toplu_sec: kişi × gün üst sınırı
+
+/**
+ * Kişiler ekranı için liste: depo kuralı (depo_sql_in) + pasifler DAHİL, ad A-Z (sira yok sayılır),
+ * her satırda kişinin TÜM aylardaki gün kaydı sayısı (gun). Hata fırlatabilir.
+ * @return list<array{id:int,ad:string,gorev:string,depo:string,aktif:int,sira:int,gun:int}>
+ */
+function pg_kisiler_yonetim(PDO $pdo): array
+{
+    $kisiler = pg_kisiler_oku($pdo, true);
+    $say = [];
+    foreach ($pdo->query('SELECT kisi_id, COUNT(*) AS n FROM puantaj_giris_gunler GROUP BY kisi_id')->fetchAll() as $r) $say[(int)$r['kisi_id']] = (int)$r['n'];
+    foreach ($kisiler as &$k) $k['gun'] = $say[$k['id']] ?? 0;
+    unset($k);
+    usort($kisiler, static fn($a, $b) => strcmp(pc_fold($a['ad']), pc_fold($b['ad'])) ?: $a['id'] <=> $b['id']);
+    return $kisiler;
+}
+
+/** Ad/görev araması (Türkçe duyarsız) + durum süzgeci ('hepsi' | 'aktif' | 'pasif'). Sıra korunur. */
+function pg_kisiler_filtrele(array $kisiler, string $q, string $durum): array
+{
+    if ($durum === 'aktif') $kisiler = array_values(array_filter($kisiler, static fn($k) => (int)$k['aktif'] === 1));
+    elseif ($durum === 'pasif') $kisiler = array_values(array_filter($kisiler, static fn($k) => (int)$k['aktif'] === 0));
+    $adaylar = [];
+    foreach ($kisiler as $i => $k) $adaylar[] = ['i' => $i, 'ad' => $k['ad'], 'alt' => $k['gorev']];
+    return array_map(static fn($r) => $kisiler[$r['i']], pc_satir_filtre($adaylar, $q));
+}
+
+/** Toplam / aktif / pasif sayaçları. */
+function pg_kisi_sayaclari(array $kisiler): array
+{
+    $aktif = 0;
+    foreach ($kisiler as $k) if ((int)$k['aktif'] === 1) $aktif++;
+    return ['toplam' => count($kisiler), 'aktif' => $aktif, 'pasif' => count($kisiler) - $aktif];
+}
+
+/** Kimliklere göre kişiler: [id => satır]. Depo süzgeci YOK (çağıran depot_visible_to_user ile denetler). Bulunamayan id sonuçta yoktur. */
+function pg_kisiler_idlerle(PDO $pdo, array $idler): array
+{
+    $out = [];
+    foreach (array_chunk(array_values($idler), 200) as $parca) {
+        $st = $pdo->prepare('SELECT id, ad, gorev, depo, aktif, sira FROM puantaj_giris_kisiler WHERE id IN (' . implode(',', array_fill(0, count($parca), '?')) . ')');
+        $st->execute($parca);
+        foreach ($st->fetchAll() as $r) {
+            $out[(int)$r['id']] = ['id' => (int)$r['id'], 'ad' => (string)$r['ad'], 'gorev' => (string)($r['gorev'] ?? ''), 'depo' => (string)($r['depo'] ?? ''), 'aktif' => (int)$r['aktif'], 'sira' => (int)$r['sira']];
+        }
+    }
+    return $out;
+}
+
+/**
+ * Kişiyi KALICI siler: önce gün kayıtları, sonra kişi — TEK transaction (geri alınamaz).
+ * Dönüş: ['ok','hata','gun_silinen','audit'=>[action,id,eski,yeni]]. Audit değerlerinde ad/görev YOK.
+ */
+function pg_kisi_sil(PDO $pdo, array $kisi): array
+{
+    $id = (int)$kisi['id'];
+    $tx = !$pdo->inTransaction();
+    try {
+        if ($tx) $pdo->beginTransaction();
+        $st = $pdo->prepare('SELECT COUNT(*) FROM puantaj_giris_gunler WHERE kisi_id = ?');
+        $st->execute([$id]);
+        $gun = (int)$st->fetchColumn();
+        $pdo->prepare('DELETE FROM puantaj_giris_gunler WHERE kisi_id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM puantaj_giris_kisiler WHERE id = ?')->execute([$id]);
+        if ($tx) $pdo->commit();
+        return ['ok' => true, 'hata' => null, 'gun_silinen' => $gun, 'audit' => ['delete', $id, ['aktif' => (int)$kisi['aktif'], 'depo' => (string)$kisi['depo'], 'gun_kaydi' => $gun], null]];
+    } catch (Throwable $e) {
+        if ($tx && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('[puantaj_giris] kisi_sil: ' . $e->getMessage());
+        return ['ok' => false, 'hata' => 'Kişi silinemedi.', 'gun_silinen' => 0, 'audit' => null];
+    }
+}
+
+/**
+ * Toplu kişi işlemi: 'pasif' | 'aktif' | 'sil'. $kisiler: [id => satır] (çağıran doğruladı). TEK transaction, hepsi ya da hiçbiri.
+ * Dönüş: ['ok','hata','etkilenen' (gerçekten değişen/silinen),'atlanan' (zaten o durumda),'gun_silinen'].
+ */
+function pg_kisi_toplu(PDO $pdo, array $kisiler, string $islem): array
+{
+    if (!in_array($islem, ['pasif', 'aktif', 'sil'], true)) return ['ok' => false, 'hata' => 'Geçersiz işlem.', 'etkilenen' => 0, 'atlanan' => 0, 'gun_silinen' => 0];
+    $etkilenen = 0; $atlanan = 0; $gunSilinen = 0;
+    $tx = !$pdo->inTransaction();
+    try {
+        if ($tx) $pdo->beginTransaction();
+        $simdi = date('Y-m-d H:i:s');
+        $sayStmt = $pdo->prepare('SELECT COUNT(*) FROM puantaj_giris_gunler WHERE kisi_id = ?');
+        $gunSil = $pdo->prepare('DELETE FROM puantaj_giris_gunler WHERE kisi_id = ?');
+        $kisiSil = $pdo->prepare('DELETE FROM puantaj_giris_kisiler WHERE id = ?');
+        $durum = $pdo->prepare('UPDATE puantaj_giris_kisiler SET aktif = ?, updated_at = ? WHERE id = ?');
+        foreach ($kisiler as $k) {
+            $id = (int)$k['id'];
+            if ($islem === 'sil') {
+                $sayStmt->execute([$id]);
+                $gunSilinen += (int)$sayStmt->fetchColumn();
+                $gunSil->execute([$id]);
+                $kisiSil->execute([$id]);
+                $etkilenen++;
+                continue;
+            }
+            $hedef = $islem === 'aktif' ? 1 : 0;
+            if ((int)$k['aktif'] === $hedef) { $atlanan++; continue; }
+            $durum->execute([$hedef, $simdi, $id]);
+            $etkilenen++;
+        }
+        if ($tx) $pdo->commit();
+        return ['ok' => true, 'hata' => null, 'etkilenen' => $etkilenen, 'atlanan' => $atlanan, 'gun_silinen' => $gunSilinen];
+    } catch (Throwable $e) {
+        if ($tx && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('[puantaj_giris] kisi_toplu: ' . $e->getMessage());
+        return ['ok' => false, 'hata' => 'Toplu işlem yapılamadı.', 'etkilenen' => 0, 'atlanan' => 0, 'gun_silinen' => 0];
+    }
+}
+
+/**
+ * ÇOK KİŞİ × ÇOK GÜN toplu işaret. $kisiler: [id => satır] (çağıran: var + depo kuralı doğruladı). $tarihler: seçili aya ait günler.
+ * $kod '' = temizle (ustune_yaz'dan bağımsız seçili hücreleri siler). Dolu hücre: $ustuneYaz kapalıysa DOKUNULMAZ (atlanan), açıksa yazılır.
+ * PASİF kişiler atlanır (pasif_atlanan). TEK transaction. Sınırlar: kişi ≤ PG_TOPLU_ID_MAX, gün ≤ PG_SEC_GUN_MAX, kişi×gün ≤ PG_SEC_HUCRE_MAX.
+ * Dönüş: ['ok','hata','kisi_sayisi' (işlenen aktif),'gun_sayisi','yazilan' (yeni + güncellenen + silinen),'atlanan','degismedi','pasif_atlanan','degisim'=>[['k','t','c'],…]].
+ */
+function pg_gun_toplu_sec(PDO $pdo, string $ay, array $kisiler, array $tarihler, string $kod, bool $ustuneYaz, ?int $userId, ?string $bugun = null): array
+{
+    $hata = static fn(string $m): array => ['ok' => false, 'hata' => $m, 'kisi_sayisi' => 0, 'gun_sayisi' => 0, 'yazilan' => 0, 'atlanan' => 0, 'degismedi' => 0, 'pasif_atlanan' => 0, 'degisim' => []];
+    if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $ay) || pc_ay_dogrula($ay, '') !== $ay) return $hata('Geçersiz ay.');
+    if ($kod !== '' && !pg_kod_gecerli($kod)) return $hata('Geçersiz işaret kodu.');
+    $gunler = [];
+    foreach ($tarihler as $t) {
+        if (!is_string($t) || strncmp($t, $ay . '-', 8) !== 0 || pi_tarih_dogrula($t, $bugun) === null) return $hata('Seçilen günlerden biri geçersiz ya da seçili aya ait değil.');
+        $gunler[$t] = true;
+    }
+    $gunler = array_keys($gunler);
+    sort($gunler);
+    if ($gunler === []) return $hata('En az bir gün seçin.');
+    if (count($gunler) > PG_SEC_GUN_MAX) return $hata('En çok ' . PG_SEC_GUN_MAX . ' gün seçilebilir.');
+    if ($kisiler === []) return $hata('En az bir kişi seçin.');
+    if (count($kisiler) > PG_TOPLU_ID_MAX) return $hata('En çok ' . PG_TOPLU_ID_MAX . ' kişi seçilebilir.');
+    $aktifler = array_values(array_filter($kisiler, static fn($k) => (int)$k['aktif'] === 1));
+    $pasifSayi = count($kisiler) - count($aktifler);
+    if ($aktifler === []) return $hata('Seçilen kişilerin hepsi pasif; işaret girilemez.');
+    if (count($aktifler) * count($gunler) > PG_SEC_HUCRE_MAX) return $hata('Seçim çok büyük (en çok ' . PG_SEC_HUCRE_MAX . ' hücre).');
+
+    $degisim = []; $yazilan = 0; $atlanan = 0; $degismedi = 0;
+    $tx = !$pdo->inTransaction();
+    try {
+        if ($tx) $pdo->beginTransaction();
+        $mevcut = [];   // [kisi_id][tarih] = kod
+        $yer = implode(',', array_fill(0, count($gunler), '?'));
+        foreach (array_chunk(array_map(static fn($k) => (int)$k['id'], $aktifler), 200) as $parca) {
+            $st = $pdo->prepare('SELECT kisi_id, tarih, kod FROM puantaj_giris_gunler WHERE kisi_id IN (' . implode(',', array_fill(0, count($parca), '?')) . ') AND tarih IN (' . $yer . ')');
+            $st->execute(array_merge($parca, $gunler));
+            foreach ($st->fetchAll() as $r) $mevcut[(int)$r['kisi_id']][substr((string)$r['tarih'], 0, 10)] = (string)$r['kod'];
+        }
+        $simdi = date('Y-m-d H:i:s');
+        $ekle = $pdo->prepare('INSERT INTO puantaj_giris_gunler (kisi_id, tarih, kod, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
+        $guncelle = $pdo->prepare('UPDATE puantaj_giris_gunler SET kod = ?, user_id = ?, updated_at = ? WHERE kisi_id = ? AND tarih = ?');
+        $sil = $pdo->prepare('DELETE FROM puantaj_giris_gunler WHERE kisi_id = ? AND tarih = ?');
+        foreach ($aktifler as $k) {
+            $kid = (int)$k['id'];
+            foreach ($gunler as $t) {
+                $var = $mevcut[$kid][$t] ?? null;
+                if ($kod === '') {
+                    if ($var === null) { $degismedi++; continue; }
+                    $sil->execute([$kid, $t]);
+                    $yazilan++; $degisim[] = ['k' => $kid, 't' => $t, 'c' => ''];
+                } elseif ($var === null) {
+                    $ekle->execute([$kid, $t, $kod, $userId, $simdi, $simdi]);
+                    $yazilan++; $degisim[] = ['k' => $kid, 't' => $t, 'c' => $kod];
+                } elseif ($var === $kod) {
+                    $degismedi++;
+                } elseif ($ustuneYaz) {
+                    $guncelle->execute([$kod, $userId, $simdi, $kid, $t]);
+                    $yazilan++; $degisim[] = ['k' => $kid, 't' => $t, 'c' => $kod];
+                } else {
+                    $atlanan++;
+                }
+            }
+        }
+        if ($tx) $pdo->commit();
+        return ['ok' => true, 'hata' => null, 'kisi_sayisi' => count($aktifler), 'gun_sayisi' => count($gunler), 'yazilan' => $yazilan, 'atlanan' => $atlanan, 'degismedi' => $degismedi, 'pasif_atlanan' => $pasifSayi, 'degisim' => $degisim];
+    } catch (Throwable $e) {
+        if ($tx && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('[puantaj_giris] gun_toplu_sec: ' . $e->getMessage());
+        return $hata('Toplu işlem yapılamadı.');
+    }
+}

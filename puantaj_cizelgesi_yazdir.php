@@ -26,7 +26,7 @@ if (function_exists('enforce_active_depot')) enforce_active_depot();
 $pdo = db();
 [$sekmeler, $girisHazir] = pc_sekmeler_hazir($pdo);
 if (!$sekmeler) forbidden('Bu sayfaya erişim yetkiniz yok.');
-$sekme = (string)pc_sekme_sec((string)($_GET['sekme'] ?? ''), $sekmeler, $girisHazir);
+$sekme = (string)pc_sekme_sec((string)($_GET['sekme'] ?? ''), $sekmeler);
 $ay = pc_ay_dogrula((string)($_GET['ay'] ?? ''));
 $q = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 60);
 $pasif = in_array($sekme, ['personel', 'giris'], true) && !empty($_GET['pasif']);

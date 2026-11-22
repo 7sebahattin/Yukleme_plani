@@ -7,6 +7,8 @@
 // (.pm-dialog > form tuzağı); pencereler z-index ≥ 600. JS tarafında innerHTML kullanılmaz.
 // Hücre/özet işaretleri (data-*) JS'in yerinde güncelleme sözleşmesidir: td[data-kod|data-tarih|data-emp],
 // td[data-oz], td[data-pg-say], [data-gz], [data-rz].
+// v555: kişi seçim kutusu (data-pg-sec) + gün seçimi (gün başlığı düğmesi data-pg-gun = seçim aç/kapa) + sabit işlem çubuğu
+// (#pgCubuk: N kişi × M gün, kod düğmeleri, "Dolu günlerin üzerine yaz", Uygula → sayfa içi onay). Mobilde "Toplu seç" modu.
 // =========================================================
 declare(strict_types=1);
 
@@ -57,14 +59,29 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
         return '<button type="button" class="pg-uc" data-pg-kisi="' . (int)$s['id'] . '" data-ad="' . h($s['ad']) . '" data-gorev="' . h($s['alt']) . '" data-pasif="' . (!empty($s['pasif']) ? '1' : '0') . '" aria-haspopup="menu" aria-label="İşlemler: ' . h($s['ad']) . '" title="İşlemler">⋯</button>';
     };
 ?>
+<!-- Toplu seçim araç çubuğu: masaüstünde her zaman; <768px'te "Toplu seç" modunda hızlı seçimler açılır -->
+<div class="pg-sec-arac" id="pgSecArac">
+    <button type="button" class="btn btn-sm pg-secmod-dugme" data-pg-secmod aria-pressed="false">☑ Toplu seç</button>
+    <div class="pg-sec-hizli" role="group" aria-label="Gün seçimi">
+        <span class="pg-sec-etiket">Gün seç:</span>
+        <button type="button" class="btn btn-sm" data-pg-gunsec="tum">Tüm günler</button>
+        <button type="button" class="btn btn-sm" data-pg-gunsec="haftaici">Hafta içleri</button>
+        <button type="button" class="btn btn-sm" data-pg-gunsec="haftasonu">Hafta sonları</button>
+        <button type="button" class="btn btn-sm" data-pg-gunsec="temizle">Temizle</button>
+        <button type="button" class="btn btn-sm pg-sec-kisiler" data-pg-kisisec="hepsi">Tüm kişiler</button>
+    </div>
+    <span class="pg-sec-ozet" id="pgSecOzet" aria-live="polite"></span>
+</div>
+
 <!-- ≥768px: çizelge ızgarası -->
 <div class="table-wrap pc-grid-wrap pg-grid-wrap" id="pcGridWrap">
 <table class="pc-grid pg-grid">
+    <colgroup><col class="pc-col-ad"></colgroup>
     <thead>
     <tr>
-        <th class="pc-ad pc-kose" scope="col">Kişi <span class="pc-adet">(<?= $say ?>)</span></th>
+        <th class="pc-ad pc-kose" scope="col"><span class="pg-ad-kap"><label class="pg-secbox" title="Görünen aktif kişilerin tümünü seç"><input type="checkbox" data-pg-sec-hepsi aria-label="Görünen aktif kişilerin tümünü seç"></label><span class="pg-ad-metin"><span class="pc-ad-ad">Kişi <span class="pc-adet">(<?= $say ?>)</span></span></span></span></th>
         <?php foreach ($gunler as $g): ?>
-        <th class="pc-g<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>" scope="col"<?= $g['bugun'] ? ' data-bugun' : '' ?>><button type="button" class="pg-gbtn" data-pg-gun="<?= h($g['tarih']) ?>" title="<?= h($g['n'] . ' ' . $ayAd . ' ' . pc_gun_adlari_uzun()[$g['hg']] . ' — tüm görünen kişilere tek işaret') ?>"><span class="pc-gn"><?= $g['n'] ?></span><span class="pc-gk"><?= h($g['ad']) ?></span></button></th>
+        <th class="pc-g<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>" scope="col"<?= $g['bugun'] ? ' data-bugun' : '' ?>><button type="button" class="pg-gbtn" data-pg-gun="<?= h($g['tarih']) ?>" data-hs="<?= $g['hs'] ? '1' : '0' ?>" aria-pressed="false" title="<?= h($g['n'] . ' ' . $ayAd . ' ' . pc_gun_adlari_uzun()[$g['hg']] . ' — günü seç / seçimi kaldır') ?>"><span class="pc-gn"><?= $g['n'] ?></span><span class="pc-gk"><?= h($g['ad']) ?></span></button></th>
         <?php endforeach; ?>
         <th class="pc-oz" scope="col" title="Çalışılan gün (X + Y/2)">Gün</th>
         <th class="pc-oz" scope="col" title="İzin günü (Yıllık izin + Ücretsiz izin)">İzin</th>
@@ -75,7 +92,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <tbody>
     <?php foreach ($satirlar as $s): ?>
     <tr data-pg-satir="<?= (int)$s['id'] ?>"<?= !empty($s['pasif']) ? ' class="pg-pasif"' : '' ?>>
-        <th class="pc-ad" scope="row"><span class="pg-ad-kap"><span class="pg-ad-metin"><span class="pc-ad-ad"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span><?= $uc($s) ?></span></th>
+        <th class="pc-ad" scope="row"><span class="pg-ad-kap"><?= empty($s['pasif']) ? '<label class="pg-secbox"><input type="checkbox" data-pg-sec="' . (int)$s['id'] . '" aria-label="Seç: ' . h($s['ad']) . '"></label>' : '<span class="pg-secbox pg-secbox-bos" aria-hidden="true"></span>' ?><span class="pg-ad-metin"><span class="pc-ad-ad"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span><?= $uc($s) ?></span></th>
         <?php foreach ($gunler as $g):
             $hh = $s['hucre'][$g['tarih']] ?? null;
             [$cls, $ic, $tt] = pg_hucre_goster($hh); ?>
@@ -120,6 +137,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <?php foreach ($satirlar as $s): $o = $s['ozet']; ?>
     <details class="pc-kisi<?= !empty($s['pasif']) ? ' pg-pasif' : '' ?>" data-emp-kisi="<?= (int)$s['id'] ?>">
         <summary>
+            <?php if (empty($s['pasif'])): ?><input type="checkbox" class="pg-msec" data-pg-sec="<?= (int)$s['id'] ?>" aria-label="Seç: <?= h($s['ad']) ?>"><?php endif; ?>
             <span class="pc-k-ad"><span class="pc-ad-ad"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
             <span class="pc-rozetler">
                 <span class="pc-rz" data-rz="gun" title="Çalışılan gün"><?= h(pg_gun_fmt($o['gun'])) ?> gün</span>
@@ -141,17 +159,47 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     </details>
     <?php endforeach; ?>
 </div>
+
+<!-- Toplu işaret çubuğu (v555): seçim varken görünür. Masaüstünde sayfa altına yapışık, <768px'te alt sayfa (z-index ≥ 600). form elemanı yok. -->
+<div class="pg-cubuk" id="pgCubuk" role="region" aria-label="Toplu işaretleme" hidden>
+    <div class="pg-cubuk-ust">
+        <strong class="pg-cubuk-ozet" id="pgCubukOzet" aria-live="polite">0 kişi × 0 gün</strong>
+        <button type="button" class="pg-cubuk-kapat" data-pg-sec-temizle aria-label="Seçimi kaldır" title="Seçimi kaldır">×</button>
+    </div>
+    <div class="pg-cubuk-kodlar" role="group" aria-label="İşaret kodu">
+        <?php foreach (pg_kodlar() as $k => $kd): ?>
+        <button type="button" class="pg-kodbtn pc-k pc-k-<?= h($kd['sinif']) ?>" data-pg-sec-kod="<?= h($k) ?>" aria-pressed="false" title="<?= h($kd['ad']) ?>"><b><?= h($k) ?></b><span><?= h($kd['ad']) ?></span></button>
+        <?php endforeach; ?>
+        <button type="button" class="pg-kodbtn pg-kodbtn-temizle" data-pg-sec-kod="" aria-pressed="false" title="Seçili hücrelerdeki işareti sil">Temizle</button>
+    </div>
+    <div class="pg-cubuk-alt">
+        <label class="pg-ustune"><input type="checkbox" id="pgUstune"> Dolu günlerin üzerine yaz</label>
+        <span class="pg-cubuk-dugmeler">
+            <button type="button" class="btn btn-sm" data-pg-sec-temizle>Seçimi kaldır</button>
+            <button type="button" class="btn btn-sm btn-primary" id="pgUygula" data-pg-uygula disabled>Uygula</button>
+        </span>
+    </div>
+    <div class="pg-cubuk-onay" id="pgCubukOnay" hidden>
+        <p id="pgCubukOnayMetin"></p>
+        <span class="pg-cubuk-dugmeler">
+            <button type="button" class="btn btn-sm" data-pg-onay-iptal>Vazgeç</button>
+            <button type="button" class="btn btn-sm btn-primary" id="pgOnayla" data-pg-onayla>Onayla</button>
+        </span>
+    </div>
+    <p class="pi-hata" id="pgCubukHata" role="alert" hidden></p>
+    <p class="pg-cubuk-sonuc" id="pgCubukSonuc" role="status" hidden></p>
+</div>
 <?php
     pg_ekran_pencereler();
 }
 
-/** Açılır pencereler (hücre kod menüsü, kişi işlem menüsü, ad/onay penceresi). <form> YOK. */
+/** Açılır pencereler (hücre kod menüsü, kişi işlem menüsü, ad/onay penceresi). form elemanı yok. */
 function pg_ekran_pencereler(): void
 {
 ?>
 <div class="pi-ovl" id="pgOvl" hidden></div>
 
-<!-- Hücre / gün sütunu kod menüsü: masaüstünde hücrenin yanında, <768px'te alt sayfa -->
+<!-- Hücre kod menüsü (tek hücre): masaüstünde hücrenin yanında, <768px'te alt sayfa -->
 <div class="pi-menu pg-menu" id="pgMenu" role="dialog" aria-labelledby="pgMenuBaslik" hidden>
     <div class="pi-bas"><span class="pi-baslik" id="pgMenuBaslik"></span><button type="button" class="pi-kapat" data-pg-kapat aria-label="Kapat">×</button></div>
     <div class="pi-liste">

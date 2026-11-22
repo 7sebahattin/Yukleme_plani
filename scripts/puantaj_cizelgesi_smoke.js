@@ -30,22 +30,23 @@ function uret(sayfa, get, ek, etiket) {
     return pathToFileURL(f).href;
 }
 const sayfalar = {
-    personel: uret('puantaj_cizelgesi.php', { ay }),
+    personel: uret('puantaj_cizelgesi.php', { ay, sekme: 'personel' }),   // v555: sekmesiz açılış artık Puantaj Girişi
     gunluk: uret('puantaj_cizelgesi.php', { ay, sekme: 'gunluk' }),
-    yazdir: uret('puantaj_cizelgesi_yazdir.php', { ay }),
+    yazdir: uret('puantaj_cizelgesi_yazdir.php', { ay, sekme: 'personel' }),
 };
 // v553 elle işaret: tohumlu işaretler (A: 3 İ [kayıt çakışır], 6 D; B: 10 R, 11 T; C: 12 Ü). Salt okunur varyant: 'edit' izni yok, tablo yok varyantı.
 const ISR = [[1, 3, 'İ'], [1, 6, 'D'], [2, 10, 'R'], [2, 11, 'T'], [3, 12, 'Ü']];
 const SALT = ['role.permissions.detailed', 'attendance.monthly_timesheet.read', 'attendance.employees.read', 'attendance.hub.read'];
-sayfalar.isaret = uret('puantaj_cizelgesi.php', { ay }, { isaretler: ISR }, 'isaret');
+sayfalar.isaret = uret('puantaj_cizelgesi.php', { ay, sekme: 'personel' }, { isaretler: ISR }, 'isaret');
 sayfalar.salt = uret('puantaj_cizelgesi.php', { ay }, { admin: false, perms: SALT, isaretler: ISR }, 'salt');
-sayfalar.yazdirIsaret = uret('puantaj_cizelgesi_yazdir.php', { ay }, { isaretler: ISR }, 'isaret');
+sayfalar.yazdirIsaret = uret('puantaj_cizelgesi_yazdir.php', { ay, sekme: 'personel' }, { isaretler: ISR }, 'isaret');
 // v554 Puantaj Girişi (bağımsız sekme): A (X Y D İ Ü R T hepsi), B, İsmail, pasif D. Tablolar yalnız bu sayfalar için KURULUR (harness 'giris').
 const GK = [[1, 'Örnek Kişi A', 'Paketçi', 'Depo A', 1], [2, 'Örnek Kişi B', '', 'Depo A', 1], [3, 'İsmail Örnek', 'Şoför', 'Depo A', 1], [4, 'Örnek Kişi D', '', 'Depo A', 0]];
 const GG = [[1, 2, 'X'], [1, 3, 'Y'], [1, 4, 'D'], [1, 5, 'İ'], [1, 6, 'Ü'], [1, 9, 'R'], [1, 10, 'T'], [2, 2, 'X'], [2, 3, 'X'], [3, 3, 'Y']];
 const GBASE = { giris: true, depo: 'Depo A', allowed: ['Depo A'], giris_kisiler: GK, giris_gunler: GG };
 sayfalar.giris = uret('puantaj_cizelgesi.php', { ay, sekme: 'giris' }, GBASE, 'g');
 sayfalar.girisPasif = uret('puantaj_cizelgesi.php', { ay, sekme: 'giris', pasif: '1' }, GBASE, 'gp');
+sayfalar.kisiler = uret('puantaj_cizelgesi.php', { ay, sekme: 'giris', gorunum: 'kisiler' }, GBASE, 'k');
 sayfalar.girisBos = uret('puantaj_cizelgesi.php', { ay, sekme: 'giris' }, Object.assign({}, GBASE, { giris_kisiler: [], giris_gunler: [] }), 'gb');
 sayfalar.girisYazdir = uret('puantaj_cizelgesi_yazdir.php', { ay, sekme: 'giris' }, GBASE, 'g');
 let fail = 0, gecen = 0;
@@ -326,12 +327,14 @@ let srv;
         // Sahte sunucu: gerçek kaydet ucu PHP testinde doğrulanır (5e); burada istemci davranışı ölçülür. 'ok' = isteğe uygun degisim döner.
         async function girisRota(pg, mod) {
             await pg.route('**/puantaj_giris_kaydet.php', async route => {
-                const kv = Object.fromEntries(new URLSearchParams(route.request().postData() || ''));
+                const ham0 = route.request().postData() || '';
+                const kv = /application\/json/.test(route.request().headers()['content-type'] || '') ? JSON.parse(ham0) : Object.fromEntries(new URLSearchParams(ham0));
                 girisIstek.push(kv);
                 if (mod === 'iptal') return route.abort();
                 if (mod && mod.status) return route.fulfill({ status: mod.status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(mod.json) });
                 let j = { ok: true, islem: kv.action };
                 if (kv.action === 'gun_isaretle') j.degisim = [{ k: +kv.kisi_id, t: kv.tarih, c: kv.kod }];
+                if (kv.action === 'gun_toplu_sec') j.degisim = kv.kisi_ids.flatMap(k => kv.tarihler.map(t => ({ k: +k, t, c: kv.kod })));
                 if (kv.action === 'gun_sutun') j.degisim = [1, 2, 3].map(k => ({ k, t: kv.tarih, c: kv.kod }));
                 if (kv.action === 'gun_toplu' && kv.mod === 'haftaici_x') j.degisim = [12, 13].map(g => ({ k: +kv.kisi_id, t: ay + '-' + String(g).padStart(2, '0'), c: 'X' }));
                 if (kv.action === 'gun_toplu' && kv.mod === 'ay_temizle') j.degisim = [2, 3, 4, 5, 6, 9, 10].map(g => ({ k: +kv.kisi_id, t: ay + '-' + String(g).padStart(2, '0'), c: '' }));
@@ -343,7 +346,7 @@ let srv;
         const gh = []; page.on('pageerror', e => gh.push(e.message));
         await page.goto(httpSayfa(sayfalar.giris)); await page.waitForTimeout(300);
         ok(gs + 'JS hatası yok; yatay taşma yok (sayfa); ızgara görünür, mobil liste gizli', gh.length === 0 && await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1) && await page.locator('.pc-grid-wrap').isVisible() && !(await page.locator('.pc-liste').isVisible()), gh.join('|'));
-        ok(gs + 'sekme çubuğu: Personel · Günlük İşçi · Puantaj Girişi (aktif)', (await page.locator('.pc-sekme').allInnerTexts()).join('|') === 'Personel|Günlük İşçi|Puantaj Girişi' && (await page.locator('.pc-sekme.is-aktif').innerText()) === 'Puantaj Girişi');
+        ok(gs + 'sekme çubuğu (v555): Puantaj Girişi (İLK, aktif) · Personel · Günlük İşçi', (await page.locator('.pc-sekme').allInnerTexts()).join('|') === 'Puantaj Girişi|Personel|Günlük İşçi' && (await page.locator('.pc-sekme.is-aktif').innerText()) === 'Puantaj Girişi');
         ok(gs + 'bilgi satırı (gayri resmi) görünür + lejant', /gayri resmi \/ göstermeliktir; PDKS, hakediş ve diğer modüllerle ilişkisi yoktur\./.test(await page.locator('.pg-bilgi').innerText()));
         const kodlar = await page.evaluate(() => {
             const o = {}; document.querySelectorAll('tbody td[data-kod]:not([data-kod=""])').forEach(td => { const k = td.getAttribute('data-kod'); if (!o[k]) o[k] = { bg: getComputedStyle(td).backgroundColor, t: td.innerText.replace(/\s+/g, '') }; });
@@ -417,19 +420,21 @@ let srv;
         ok(gs + 'Esc menüyü kapatır, vurgu kalkar', !(await page.locator('#pgMenu').isVisible()) && await page.locator('.pi-sec').count() === 0);
         await page.unroute('**/puantaj_giris_kaydet.php');
 
-        // gün sütunu başlığı → tüm görünen kişilere tek kod (onaylı)
+        // v555: gün numarası SEÇİMDİR (eski "güne tüm kişilere tek kod" onay akışı yerine): kişi kutuları + gün seçimi + işlem çubuğu
         girisIstek = [];
         await girisRota(page, 'ok');
         const gunBtn = page.locator('thead [data-pg-gun]').nth(14);
         const gunT = await gunBtn.getAttribute('data-pg-gun');
-        await gunBtn.click(); await page.waitForTimeout(150);
-        ok(gs + 'gün numarasına tıklayınca menü açılır; başlıkta "tüm görünen kişiler"; Temizle açık', /tüm görünen kişiler/.test(await page.locator('#pgMenuBaslik').innerText()) && !(await page.locator('#pgMenu [data-pg-kod=""]').isDisabled()));
-        await page.locator('#pgMenu [data-pg-kod="R"]').click(); await page.waitForTimeout(150);
-        const onay = await page.evaluate(() => ({ gor: getComputedStyle(document.getElementById('pgPen')).display !== 'none', baslik: document.getElementById('pgPenBaslik').textContent, mesaj: document.getElementById('pgPenMesaj').textContent, alan: document.getElementById('pgPenAlan').hidden, tamam: document.getElementById('pgPenTamam').textContent }));
-        ok(gs + 'kod seçilince ONAY penceresi: "3 aktif kişiye" + kod adı + "üzerine yazılır"; alan kutuları gizli; istek henüz GİTMEDİ', onay.gor && /3 aktif kişiye/.test(onay.mesaj) && /R — Raporlu/.test(onay.mesaj) && /üzerine yazılır/.test(onay.mesaj) && onay.alan && onay.tamam === 'Uygula' && girisIstek.length === 0, JSON.stringify(onay));
-        await page.locator('#pgPenTamam').click(); await page.waitForTimeout(300);
+        await gunBtn.click(); await page.waitForTimeout(100);
+        await page.locator('thead [data-pg-sec-hepsi]').check(); await page.waitForTimeout(80);
+        ok(gs + 'gün numarasına tıklamak menü AÇMAZ, günü seçer; "tümünü seç" 3 kişiyi seçer → işlem çubuğu "3 kişi × 1 gün"', (await page.locator('#pgCubukOzet').innerText()) === '3 kişi × 1 gün' && await page.evaluate(() => getComputedStyle(document.getElementById('pgMenu')).display === 'none'));
+        await page.locator('#pgCubuk [data-pg-sec-kod="R"]').click(); await page.locator('#pgUygula').click(); await page.waitForTimeout(100);
+        const onay = await page.evaluate(() => ({ gor: !document.getElementById('pgCubukOnay').hidden, mesaj: document.getElementById('pgCubukOnayMetin').textContent }));
+        ok(gs + 'Uygula: sayfa içi ONAY: "3 kişi için 1 gün" + kod adı (R — Raporlu); istek henüz GİTMEDİ', onay.gor && /3 kişi için 1 gün/.test(onay.mesaj) && /R — Raporlu/.test(onay.mesaj) && girisIstek.length === 0, JSON.stringify(onay));
+        await page.locator('#pgOnayla').click(); await page.waitForTimeout(300);
         const sut = await page.evaluate((t) => [1, 2, 3].map(k => document.querySelector('tr[data-pg-satir="' + k + '"] td[data-tarih="' + t + '"]').getAttribute('data-kod')).join('') + '|' + document.querySelector('tr[data-pg-satir="1"] td[data-oz="rapor"]').textContent + '|' + document.querySelector('td[data-gz-oz="rapor"]').textContent, gunT);
-        ok(gs + 'Uygula: tek POST {action=gun_sutun, tarih, kod=R, q} ; üç kişinin o günü R; Rapor özetleri (kişi 1 → 2, genel → 4) yerinde güncellendi', girisIstek.length === 1 && girisIstek[0].action === 'gun_sutun' && girisIstek[0].tarih === gunT && girisIstek[0].kod === 'R' && girisIstek[0].q === '' && sut === 'RRR|2|4', JSON.stringify([girisIstek, sut]));
+        ok(gs + 'Onayla: tek POST {action=gun_toplu_sec, tarihler=[o gün], kod=R, kisi_ids}; üç kişinin o günü R; Rapor özetleri (kişi 1 → 2, genel → 4) yerinde güncellendi', girisIstek.length === 1 && girisIstek[0].action === 'gun_toplu_sec' && JSON.stringify(girisIstek[0].tarihler) === JSON.stringify([gunT]) && girisIstek[0].kod === 'R' && sut === 'RRR|2|4', JSON.stringify([girisIstek, sut]));
+        await page.locator('#pgCubuk .pg-cubuk-alt [data-pg-sec-temizle]').click(); await page.waitForTimeout(80);
         await page.unroute('**/puantaj_giris_kaydet.php');
 
         // ⋯ menüsü
@@ -557,6 +562,366 @@ let srv;
         const pdf3 = await page.pdf({ format: 'A4', landscape: true, printBackground: true });
         ok('[yazdır giriş] yatay A4, 3 kişilik çizelge 1 sayfa', (pdf3.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length === 1);
         await page.close();
+
+        // ───────── v555: AD SÜTUNU GÖRÜNÜRLÜĞÜ · toplu seçim · Kişiler görünümü · Excel'den ekle ─────────
+        {
+        const v5 = '[v555] ';
+        // Sahte sunucu v2: JSON / multipart / form gövdelerini çözer; gerçek uç PHP testinde (6e–6h) doğrulanır.
+        let vIstek = [];
+        async function vRota(pg, mod) {
+            await pg.route('**/puantaj_giris_kaydet.php', async route => {
+                const ham = route.request().postData() || '';
+                const ct = route.request().headers()['content-type'] || '';
+                let kv;
+                if (/application\/json/.test(ct)) { try { kv = JSON.parse(ham); } catch (_) { kv = {}; } kv._ct = 'json'; }
+                else if (/multipart\/form-data/.test(ct)) { const m = ham.match(/name="action"\r\n\r\n([^\r\n]+)/); const f = ham.match(/filename="([^"]*)"/); kv = { action: m ? m[1] : '', _ct: 'multipart', _csrf: /name="csrf"\r\n\r\ntestcsrf/.test(ham), _dosya: f ? f[1] : '' }; }
+                else { kv = Object.fromEntries(new URLSearchParams(ham)); kv._ct = 'form'; }
+                vIstek.push(kv);
+                const yanit = (j, status) => route.fulfill({ status: status || 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(j) });
+                if (mod === 'iptal') return route.abort();
+                if (mod && mod.hata) return yanit({ ok: false, error: mod.hata }, 400);
+                if (kv.action === 'gun_toplu_sec') {
+                    const degisim = kv.kisi_ids.flatMap(k => kv.tarihler.map(t => ({ k: +k, t, c: kv.kod })));
+                    return yanit({ ok: true, islem: 'gun_toplu_sec', kisi_sayisi: kv.kisi_ids.length, gun_sayisi: kv.tarihler.length, yazilan: degisim.length, atlanan: (mod && mod.atlanan) || 0, degismedi: 0, pasif_atlanan: 0, kod: kv.kod, degisim });
+                }
+                if (kv.action === 'excel_onizle') return yanit((mod && mod.onizleme) || { ok: true, tur: 'csv', baslik_bulundu: true, gosterilen: 2, ozet: { toplam: 2, gecerli: 2, bos: 0, uzun: 0, mukerrer: 0, mukerrer_mevcut: 0, mukerrer_dosya: 0 }, ilk: [{ satir: 2, ad: 'Örnek Kişi X', gorev: 'Paketçi', durum: 'gecerli' }, { satir: 3, ad: 'Örnek Kişi Y', gorev: '', durum: 'gecerli' }] });
+                if (kv.action === 'excel_ekle') return yanit({ ok: true, islem: 'excel_ekle', eklenen: 2, atlanan: 2, ozet: {} });
+                if (kv.action === 'kisi_sil') return yanit({ ok: true, islem: 'delete', gun_silinen: 7 });
+                if (kv.action === 'kisi_toplu') return yanit({ ok: true, islem: kv.islem, kisi_sayisi: kv.kisi_ids.length, etkilenen: kv.kisi_ids.length, atlanan: 0, gun_silinen: 0 });
+                return yanit({ ok: true, islem: kv.action });
+            });
+        }
+        const girisGoruntu = async (pg) => pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+
+        // ── 1) AD SÜTUNU: 3 sekme × 1280 / 1665 — GÖRÜNÜR, dolu, hizalı, yapışkan (önceki test yalnız "position:sticky + zemin" ölçüyordu) ──
+        const sekmeBeklenti = {
+            personel: { href: sayfalar.personel, n: 4, ad: /Örnek Personel|İsmail Örnek/, alt: /P00\d/, kose: /^Personel/ },
+            gunluk: { href: sayfalar.gunluk, n: 2, ad: /Örnek Çavuş/, alt: /C00\d/, kose: /^Çavuş/ },
+            giris: { href: sayfalar.giris, n: 3, ad: /İsmail Örnek|Örnek Kişi/, alt: /Şoför|Paketçi|^$/, kose: /^Kişi/ },
+        };
+        for (const [sk, bk] of Object.entries(sekmeBeklenti)) {
+            for (const w of [1280, 1665]) {
+                const pg = await browser.newPage({ viewport: { width: w, height: 900 } });
+                await pg.goto(bk.href); await pg.waitForTimeout(300);
+                const r = await pg.evaluate(() => {
+                    const wrap = document.getElementById('pcGridWrap'); wrap.scrollLeft = 0;
+                    const wr = wrap.getBoundingClientRect();
+                    const kose = document.querySelector('thead th.pc-kose'); const kr = kose.getBoundingClientRect();
+                    const sat = [...document.querySelectorAll('tbody tr')].map(tr => {
+                        const th = tr.querySelector('th.pc-ad'); const td = tr.querySelector('td'); const r = th.getBoundingClientRect(); const rt = td.getBoundingClientRect();
+                        const ad = th.querySelector('.pc-ad-ad'); const ar = ad.getBoundingClientRect(); const cs = getComputedStyle(th); const al = th.querySelector('small');
+                        const e = document.elementFromPoint(r.left + 14, r.top + r.height / 2);
+                        return { w: r.width, txt: (ad.textContent || '').trim(), tw: ar.width, alt: al ? al.textContent.trim() : '', hiz: Math.abs((r.top + r.height / 2) - (rt.top + rt.height / 2)), icinde: r.left >= wr.left - 1 && r.right <= wr.right + 1, solda: r.right <= rt.left + 1, bg: cs.backgroundColor, fg: cs.color, ust: !!e && (e === th || th.contains(e)), disp: cs.display, vis: cs.visibility };
+                    });
+                    wrap.scrollLeft = wrap.scrollWidth;
+                    return new Promise(res => requestAnimationFrame(() => {
+                        const th0 = document.querySelector('tbody th.pc-ad'); const r2 = th0.getBoundingClientRect(); const e2 = document.elementFromPoint(r2.left + 14, r2.top + r2.height / 2);
+                        const k2 = document.querySelector('thead th.pc-kose').getBoundingClientRect();
+                        res({ wl: wr.left, kose: { w: kr.width, txt: kose.textContent.replace(/\s+/g, ' ').trim(), ic: kr.left >= wr.left - 1 }, sat, sonra: { solKalir: Math.abs(r2.left - wr.left) <= 1.5, ust: !!e2 && (e2 === th0 || th0.contains(e2)), sc: wrap.scrollLeft, koseSol: Math.abs(k2.left - wr.left) <= 1.5 } });
+                    }));
+                });
+                const luA = c => { const m = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+                const tag = '[' + w + ' ad sütunu · ' + sk + '] ';
+                ok(tag + 'köşe başlığı görünür, ≥ 80px, metin "' + bk.kose + '" ve ızgara içinde', r.kose.w >= 80 && bk.kose.test(r.kose.txt) && r.kose.ic, JSON.stringify(r.kose));
+                ok(tag + 'satır sayısı = ' + bk.n + '; HER satırda ad hücresi genişlik ≥ 80px, ad metni DOLU (' + bk.ad + ') ve görünür genişlikte (≥ 40px), display/visibility normal', r.sat.length === bk.n && r.sat.every(s => s.w >= 80 && s.tw >= 40 && bk.ad.test(s.txt) && bk.alt.test(s.alt) && s.disp !== 'none' && s.vis === 'visible'), JSON.stringify(r.sat));
+                ok(tag + 'her ad hücresi SOLDA (ilk gün hücresinin solunda), ızgaranın içinde ve satırla DİKEY HİZALI (merkez farkı ≤ 2px)', r.sat.every(s => s.solda && s.icinde && s.hiz <= 2), JSON.stringify(r.sat.map(s => [s.solda, s.icinde, s.hiz])));
+                ok(tag + 'ad hücresi üstte (başka öğe örtmüyor) ve okunur: zemin/yazı kontrastı > 0,5', r.sat.every(s => s.ust && Math.abs(luA(s.bg) - luA(s.fg)) > 0.5), JSON.stringify(r.sat.map(s => [s.ust, s.bg, s.fg])));
+                ok(tag + 'sona kadar yatay kaydırınca (' + Math.round(r.sonra.sc) + 'px) ad sütunu YERİNDE kalır (sol kenar = ızgara sol kenarı), köşe başlığı da; hâlâ üstte', r.sonra.sc >= 40 && r.sonra.solKalir && r.sonra.koseSol && r.sonra.ust, JSON.stringify(r.sonra));
+                await pg.close();
+            }
+        }
+        // mobil: kişi listesinde AD görünür (3 sekme)
+        for (const [sk, bk] of Object.entries(sekmeBeklenti)) {
+            const pg = await browser.newPage({ viewport: { width: 390, height: 844 } });
+            await pg.goto(bk.href); await pg.waitForTimeout(250);
+            const m = await pg.evaluate(() => [...document.querySelectorAll('.pc-kisi summary .pc-ad-ad')].map(e => { const r = e.getBoundingClientRect(); return { txt: e.textContent.trim(), w: r.width }; }));
+            ok('[390 ad · ' + sk + '] kişi listesinde ad görünür (metin dolu, ≥ 40px), sayfa taşmıyor', m.length === bk.n && m.every(x => bk.ad.test(x.txt) && x.w >= 40) && await girisGoruntu(pg), JSON.stringify(m));
+            await pg.close();
+        }
+
+        // ── 2) TOPLU SEÇİM (masaüstü) ──
+        {
+        const gs2 = '[1280 seçim] ';
+        const pg = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+        const eh = []; pg.on('pageerror', e => eh.push(e.message));
+        vIstek = []; await vRota(pg, 'ok');
+        await pg.goto(httpSayfa(sayfalar.giris)); await pg.waitForTimeout(300);
+        const ozetB = () => pg.evaluate(() => ({ bar: !document.getElementById('pgCubuk').hidden, ozet: document.getElementById('pgCubukOzet').textContent, ara: document.getElementById('pgSecOzet').textContent, gun: [...document.querySelectorAll('.pg-gbtn[aria-pressed="true"]')].length, kisi: [...document.querySelectorAll('tr.pg-ksec')].length, uyg: document.getElementById('pgUygula').disabled }));
+        const hsSay = await pg.evaluate(() => ({ hs: document.querySelectorAll('.pg-gbtn[data-hs="1"]').length, hi: document.querySelectorAll('.pg-gbtn[data-hs="0"]').length }));
+        let b = await ozetB();
+        ok(gs2 + 'başlangıç: işlem çubuğu GİZLİ; "Toplu seç" düğmesi masaüstünde gizli; hızlı gün seçimi görünür; 3 aktif kişi kutusu + başlıkta tümünü seç; ad sütunu dolu', !b.bar && !(await pg.locator('[data-pg-secmod]').isVisible()) && await pg.locator('.pg-sec-hizli').isVisible() && await pg.locator('tr[data-pg-satir] input[data-pg-sec]').count() === 3 && await pg.locator('thead [data-pg-sec-hepsi]').isVisible() && /İsmail Örnek/.test(await pg.locator('tbody th.pc-ad').first().innerText()), JSON.stringify(b));
+        const gbtn = pg.locator('thead .pg-gbtn').nth(14); const gT = await gbtn.getAttribute('data-pg-gun');
+        await gbtn.click(); await pg.waitForTimeout(80);
+        b = await ozetB();
+        const sel = await pg.evaluate((t) => ({ th: document.querySelector('thead .pg-gbtn[data-pg-gun="' + t + '"]').parentNode.className, td: [...document.querySelectorAll('tbody td[data-tarih="' + t + '"]')].every(x => x.classList.contains('pg-gsec')), tdDiger: [...document.querySelectorAll('tbody td[data-tarih]:not([data-tarih="' + t + '"])')].some(x => x.classList.contains('pg-gsec')), menu: getComputedStyle(document.getElementById('pgMenu')).display }), gT);
+        ok(gs2 + 'gün numarasına tıklamak MENÜ AÇMAZ, günü SEÇER: başlık vurgulu (pg-gsec), sütun hücreleri vurgulu, diğer günler değil; çubuk "0 kişi × 1 gün"; istek gitmedi', /pg-gsec/.test(sel.th) && sel.td && !sel.tdDiger && sel.menu === 'none' && b.bar && b.ozet === '0 kişi × 1 gün' && b.gun === 1 && vIstek.length === 0, JSON.stringify([sel, b]));
+        await gbtn.click(); await pg.waitForTimeout(80); b = await ozetB();
+        ok(gs2 + 'aynı güne tekrar tıklamak seçimi KALDIRIR → çubuk kaybolur', !b.bar && b.gun === 0);
+        for (const [tur, beklenen] of [['haftaici', hsSay.hi], ['haftasonu', hsSay.hs], ['tum', gunSayisi]]) {
+            await pg.locator('[data-pg-gunsec="' + tur + '"]').click(); await pg.waitForTimeout(60); b = await ozetB();
+            ok(gs2 + 'hızlı seçim "' + tur + '": ' + beklenen + ' gün seçilir; çubuk "0 kişi × ' + beklenen + ' gün"', b.gun === beklenen && b.ozet === '0 kişi × ' + beklenen + ' gün' && b.bar, JSON.stringify(b));
+        }
+        await pg.locator('[data-pg-gunsec="temizle"]').click(); await pg.waitForTimeout(60); b = await ozetB();
+        ok(gs2 + 'hızlı seçim "Temizle": hiç gün seçili değil, çubuk gizli', b.gun === 0 && !b.bar);
+        await pg.locator('tr[data-pg-satir="1"] input[data-pg-sec]').check(); await pg.waitForTimeout(60);
+        let hep = await pg.evaluate(() => { const h = document.querySelector('[data-pg-sec-hepsi]'); return { ind: h.indeterminate, chk: h.checked, satir: document.querySelectorAll('tr.pg-ksec').length, ozet: document.getElementById('pgCubukOzet').textContent, ad: getComputedStyle(document.querySelector('tr[data-pg-satir="1"] th.pc-ad')).backgroundColor }; });
+        ok(gs2 + 'tek kişi kutusu: satır vurgulu, "tümünü seç" kutusu KARARSIZ (indeterminate), çubuk "1 kişi × 0 gün"', hep.ind && !hep.chk && hep.satir === 1 && hep.ozet === '1 kişi × 0 gün', JSON.stringify(hep));
+        await pg.locator('thead [data-pg-sec-hepsi]').check(); await pg.waitForTimeout(60);
+        hep = await pg.evaluate(() => ({ satir: document.querySelectorAll('tr.pg-ksec').length, tum: [...document.querySelectorAll('tr[data-pg-satir] input[data-pg-sec]')].every(c => c.checked), ozet: document.getElementById('pgCubukOzet').textContent }));
+        ok(gs2 + 'tümünü seç: 3 aktif kişinin hepsi seçilir', hep.satir === 3 && hep.tum && hep.ozet === '3 kişi × 0 gün', JSON.stringify(hep));
+        await pg.locator('thead [data-pg-sec-hepsi]').uncheck(); await pg.waitForTimeout(60); b = await ozetB();
+        ok(gs2 + 'tümünü seç kutusunu kaldırmak seçimi temizler (çubuk gizli)', b.kisi === 0 && !b.bar);
+        // ── asıl akış ──
+        await pg.locator('thead [data-pg-sec-hepsi]').check();
+        const g14 = pg.locator('thead .pg-gbtn').nth(14), g15 = pg.locator('thead .pg-gbtn').nth(15);
+        const t14 = await g14.getAttribute('data-pg-gun'), t15 = await g15.getAttribute('data-pg-gun');
+        await g14.click(); await g15.click(); await pg.waitForTimeout(80);
+        b = await ozetB();
+        const bar1 = await pg.evaluate(() => { const c = document.getElementById('pgCubuk'); const r = c.getBoundingClientRect(); const cs = getComputedStyle(c); const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { pos: cs.position, z: +cs.zIndex, ic: r.top >= 0 && r.bottom <= innerHeight + 1, ust: !!e && c.contains(e), ustune: document.getElementById('pgUstune').checked, kod: document.querySelectorAll('#pgCubuk [data-pg-sec-kod]').length, alt: [...document.querySelectorAll('#pgCubuk .pg-cubuk-kodlar [data-pg-sec-kod]')].map(x => x.getAttribute('data-pg-sec-kod')).join(','), tasma: document.documentElement.scrollWidth <= innerWidth + 1, h: r.height }; });
+        ok(gs2 + '3 kişi × 2 gün: sabit çubuk "3 kişi × 2 gün"; sticky (sayfa altına yapışık, ekran içinde, üstte); kod düğmeleri X,Y,D,İ,Ü,R,T + Temizle; "üzerine yaz" VARSAYILAN KAPALI; Uygula PASİF (kod seçilmedi); yatay taşma yok', b.ozet === '3 kişi × 2 gün' && b.ara === '3 kişi × 2 gün seçili' && b.uyg === true && bar1.pos === 'sticky' && bar1.ic && bar1.ust && bar1.kod === 8 && bar1.alt === 'X,Y,D,İ,Ü,R,T,' && bar1.ustune === false && bar1.tasma, JSON.stringify([b, bar1]));
+        await pg.locator('#pgCubuk [data-pg-sec-kod="X"]').click(); await pg.waitForTimeout(60);
+        const kx = await pg.evaluate(() => ({ basili: document.querySelector('#pgCubuk [data-pg-sec-kod="X"]').getAttribute('aria-pressed'), diger: document.querySelector('#pgCubuk [data-pg-sec-kod="Y"]').getAttribute('aria-pressed'), uyg: document.getElementById('pgUygula').disabled }));
+        ok(gs2 + 'kod seçilince düğme basılı (aria-pressed) ve Uygula AKTİF olur; başka kod basılı değil', kx.basili === 'true' && kx.diger === 'false' && kx.uyg === false, JSON.stringify(kx));
+        await pg.locator('#pgUygula').click(); await pg.waitForTimeout(80);
+        const on1 = await pg.evaluate(() => ({ gor: !document.getElementById('pgCubukOnay').hidden, metin: document.getElementById('pgCubukOnayMetin').textContent }));
+        ok(gs2 + 'Uygula: SAYFA İÇİ onay ("3 kişi için 2 gün", kod adı, "yalnız boş günler doldurulur; dolu günlere dokunulmaz"); tarayıcı penceresi yok; istek henüz GİTMEDİ', on1.gor && /3 kişi için 2 gün/.test(on1.metin) && /X — Çalıştı/.test(on1.metin) && /Yalnız boş günler doldurulur; dolu günlere dokunulmaz/.test(on1.metin) && vIstek.length === 0, JSON.stringify(on1));
+        await pg.locator('#pgCubukOnay [data-pg-onay-iptal]').click(); await pg.waitForTimeout(60);
+        ok(gs2 + 'Vazgeç: onay kapanır, istek gitmez, seçim korunur', (await pg.locator('#pgCubukOnay').isHidden()) && vIstek.length === 0 && (await ozetB()).ozet === '3 kişi × 2 gün');
+        await pg.locator('#pgUstune').check(); await pg.locator('#pgUygula').click(); await pg.waitForTimeout(60);
+        ok(gs2 + '"Dolu günlerin üzerine yaz" işaretliyken onay metni "YAZILACAK" uyarısı verir', /Dolu günlerin üzerine YAZILACAK/.test(await pg.locator('#pgCubukOnayMetin').innerText()));
+        await pg.locator('#pgUstune').uncheck(); await pg.locator('#pgUygula').click(); await pg.waitForTimeout(60);
+        await pg.locator('#pgOnayla').click(); await pg.waitForTimeout(400);
+        const ist = vIstek[0] || {};
+        const son1 = await pg.evaluate(([a, b2]) => ({ hucre: [1, 2, 3].map(k => [a, b2].map(t => { const td = document.querySelector('tr[data-pg-satir="' + k + '"] td[data-tarih="' + t + '"]'); return td.getAttribute('data-kod') + (td.classList.contains('pc-k-cx') ? '+' : '-') + td.innerText.trim(); }).join('/')).join(' '), sonuc: document.getElementById('pgCubukSonuc').textContent, onay: document.getElementById('pgCubukOnay').hidden, gun: ['1', '2', '3'].map(k => document.querySelector('tr[data-pg-satir="' + k + '"] td[data-oz="gun"]').textContent).join('/'), genel: document.querySelector('td[data-gz-oz="gun"]').textContent }), [t14, t15]);
+        ok(gs2 + 'Onayla: TEK POST (JSON): {action=gun_toplu_sec, csrf, ay, kisi_ids=[1,2,3], tarihler=[2 gün], kod=X, ustune_yaz=false}', vIstek.length === 1 && ist._ct === 'json' && ist.action === 'gun_toplu_sec' && ist.csrf === 'testcsrf' && ist.ay === ay && JSON.stringify(ist.kisi_ids) === '["1","2","3"]' && JSON.stringify(ist.tarihler) === JSON.stringify([t14, t15].sort()) && ist.kod === 'X' && ist.ustune_yaz === false, JSON.stringify(vIstek));
+        ok(gs2 + 'ızgara YERİNDE güncellenir (sayfa yenilenmez): 3 kişi × 2 gün hücre X (renk sınıfı + harf), sonuç mesajı "6 hücre işaretlendi", onay kapanır, çubuk açık kalır', /^(X\+X\/X\+X ?){3}$/.test(son1.hucre + ' ') && /6 hücre işaretlendi/.test(son1.sonuc) && son1.onay, JSON.stringify(son1));
+        ok(gs2 + 'özetler yeniden hesaplanır: Gün sütunu (kişi 1: X + Y½ + 2 yeni X = 3,5 …) ve genel toplam', son1.gun === '2/3,5/3' || son1.gun.split('/').every(x => parseFloat(x.replace(',', '.')) >= 2), son1.gun + ' | ' + son1.genel);
+        // üstüne yaz açık + Temizle
+        vIstek = []; await pg.locator('#pgUstune').check();
+        await pg.locator('#pgCubuk [data-pg-sec-kod="Y"]').click(); await pg.locator('#pgUygula').click(); await pg.locator('#pgOnayla').click(); await pg.waitForTimeout(300);
+        ok(gs2 + 'üstüne yaz AÇIKKEN POST ustune_yaz=true (kod=Y)', vIstek.length === 1 && vIstek[0].ustune_yaz === true && vIstek[0].kod === 'Y', JSON.stringify(vIstek));
+        vIstek = [];
+        await pg.locator('#pgCubuk [data-pg-sec-kod=""]').click(); await pg.locator('#pgUygula').click(); await pg.waitForTimeout(60);
+        const tm = await pg.locator('#pgCubukOnayMetin').innerText();
+        await pg.locator('#pgOnayla').click(); await pg.waitForTimeout(300);
+        const temiz = await pg.evaluate((t) => [1, 2, 3].map(k => document.querySelector('tr[data-pg-satir="' + k + '"] td[data-tarih="' + t + '"]').getAttribute('data-kod')).join('|'), t14);
+        ok(gs2 + 'Temizle: onay "işareti silinecek"; POST kod="" ; seçili hücreler boşalır (üstüne yaz kutusundan bağımsız)', /işareti silinecek/.test(tm) && vIstek.length === 1 && vIstek[0].kod === '' && temiz === '||', tm + temiz);
+        // hata yolu
+        await pg.unroute('**/puantaj_giris_kaydet.php'); vIstek = []; await vRota(pg, { hata: 'Seçim çok büyük (en çok 15500 hücre).' });
+        const onceki = await pg.evaluate((t) => document.querySelector('tr[data-pg-satir="1"] td[data-tarih="' + t + '"]').getAttribute('data-kod'), t15);
+        await pg.locator('#pgCubuk [data-pg-sec-kod="R"]').click(); await pg.locator('#pgUygula').click(); await pg.locator('#pgOnayla').click(); await pg.waitForTimeout(300);
+        const hz = await pg.evaluate((t) => ({ h: document.getElementById('pgCubukHata').textContent, vis: !document.getElementById('pgCubukHata').hidden, kod: document.querySelector('tr[data-pg-satir="1"] td[data-tarih="' + t + '"]').getAttribute('data-kod'), bar: !document.getElementById('pgCubuk').hidden }), t15);
+        ok(gs2 + 'sunucu hatasında: nazik mesaj ("Kaydedilemedi: …") görünür, hücreler DEĞİŞMEZ (sunucu yanıtı gerçek kaynak), çubuk açık kalır, tekrar denenebilir', /Kaydedilemedi: Seçim çok büyük/.test(hz.h) && hz.vis && hz.kod === onceki && hz.bar, JSON.stringify(hz));
+        await pg.unroute('**/puantaj_giris_kaydet.php'); await vRota(pg, 'iptal');
+        await pg.locator('#pgUygula').click(); await pg.locator('#pgOnayla').click(); await pg.waitForTimeout(300);
+        ok(gs2 + 'bağlantı hatasında: "bağlantı kurulamadı" mesajı', /bağlantı kurulamadı/.test(await pg.locator('#pgCubukHata').innerText()));
+        await pg.unroute('**/puantaj_giris_kaydet.php'); await vRota(pg, 'ok');
+        // tek hücre menüsü seçim varken de çalışır
+        await pg.locator('tr[data-pg-satir="2"] td[data-pg][data-kod=""]').nth(3).click(); await pg.waitForTimeout(100);
+        ok(gs2 + 'seçim varken tek hücreye tıklamak yine kod MENÜSÜNÜ açar (iki model birlikte çalışır)', await pg.locator('#pgMenu').isVisible());
+        await pg.keyboard.press('Escape'); await pg.waitForTimeout(60);
+        // koyu tema
+        await pg.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await pg.waitForTimeout(100);
+        const kt = await pg.evaluate(() => { const g = el => getComputedStyle(el); const c = document.getElementById('pgCubuk'); const th = document.querySelector('thead .pg-gbtn[aria-pressed="true"]').parentNode; const k = document.querySelector('#pgCubuk [data-pg-sec-kod="X"]'); const tr = document.querySelector('tr.pg-ksec th.pc-ad'); return { bar: g(c).backgroundColor, barFg: g(c).color, th: g(th).boxShadow, thNormal: g(document.querySelector('thead .pg-gbtn[aria-pressed="false"]').parentNode).boxShadow, kb: g(k).backgroundColor, kf: g(k).color, tr: g(tr).backgroundColor, ustune: g(document.querySelector('.pg-ustune')).color }; });
+        ok(gs2 + 'koyu tema: işlem çubuğu koyu zemin + açık yazı; seçili gün başlığı seçili olmayandan FARKLI; kod düğmesi okunur; seçili kişi hücresi koyu', lum(kt.bar) < 0.25 && lum(kt.barFg) > 0.6 && kt.th !== kt.thNormal && Math.abs(lum(kt.kb) - lum(kt.kf)) > 0.3 && lum(kt.tr) < 0.35, JSON.stringify(kt));
+        await pg.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+        await pg.locator('#pgCubuk .pg-cubuk-alt [data-pg-sec-temizle]').click(); await pg.waitForTimeout(80); b = await ozetB();
+        ok(gs2 + 'Seçimi kaldır: çubuk gizli; seçili kişi/gün/hücre vurgusu YOK', !b.bar && b.kisi === 0 && b.gun === 0 && await pg.locator('.pg-gsec').count() === 0);
+        await pg.emulateMedia({ media: 'print' });
+        ok(gs2 + 'yazdırmada seçim kutuları / araç çubuğu / işlem çubuğu gizli', !(await pg.locator('.pg-secbox').first().isVisible()) && !(await pg.locator('#pgSecArac').isVisible()));
+        ok(gs2 + 'JS hatası yok', eh.length === 0, eh.join('|'));
+        await pg.close();
+        }
+
+        // ── 3) TOPLU SEÇİM (mobil 390) ──
+        {
+        const mg2 = '[390 seçim] ';
+        const pg = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+        const eh = []; pg.on('pageerror', e => eh.push(e.message));
+        vIstek = []; await vRota(pg, 'ok');
+        await pg.goto(httpSayfa(sayfalar.giris)); await pg.waitForTimeout(300);
+        ok(mg2 + 'başlangıçta: "Toplu seç" düğmesi görünür; hızlı seçim + kişi kutuları GİZLİ; çubuk gizli', await pg.locator('[data-pg-secmod]').isVisible() && !(await pg.locator('.pg-sec-hizli').isVisible()) && !(await pg.locator('.pg-msec').first().isVisible()) && await pg.locator('#pgCubuk').isHidden());
+        await pg.locator('[data-pg-secmod]').tap(); await pg.waitForTimeout(100);
+        ok(mg2 + '"Toplu seç" modu: düğme basılı; hızlı gün seçimi + "Tüm kişiler" + kişi kutuları (≥ 22px) görünür', (await pg.locator('[data-pg-secmod]').getAttribute('aria-pressed')) === 'true' && await pg.locator('.pg-sec-hizli').isVisible() && await pg.locator('.pg-msec').first().isVisible() && (await pg.locator('.pg-msec').first().boundingBox()).width >= 22);
+        await pg.locator('details.pc-kisi[data-emp-kisi="1"] input.pg-msec').tap(); await pg.waitForTimeout(100);
+        const k1 = await pg.evaluate(() => ({ acik: document.querySelector('details.pc-kisi[data-emp-kisi="1"]').open, sec: document.querySelector('details.pc-kisi[data-emp-kisi="1"]').classList.contains('pg-ksec'), chk: document.querySelector('details.pc-kisi[data-emp-kisi="1"] input.pg-msec').checked, ozet: document.getElementById('pgCubukOzet').textContent }));
+        ok(mg2 + 'kişi kutusuna dokunmak kişiyi SEÇER, kartı AÇMAZ (details kapalı kalır); çubuk "1 kişi × 0 gün"', k1.sec && k1.chk && !k1.acik && k1.ozet === '1 kişi × 0 gün', JSON.stringify(k1));
+        await pg.locator('details.pc-kisi[data-emp-kisi="1"] summary .pc-k-ad').tap(); await pg.waitForTimeout(150);
+        const gunHucre = pg.locator('details.pc-kisi[data-emp-kisi="1"][open] .pc-t[data-pg]');
+        await gunHucre.nth(13).tap(); await gunHucre.nth(14).tap(); await pg.waitForTimeout(100);
+        const gs3 = await pg.evaluate(() => ({ menu: getComputedStyle(document.getElementById('pgMenu')).display, sec: document.querySelectorAll('.pc-t.pg-gsec').length, ozet: document.getElementById('pgCubukOzet').textContent, acik: document.querySelector('details.pc-kisi[data-emp-kisi="1"]').open }));
+        ok(mg2 + 'Toplu seç modunda takvim gününe dokunmak GÜNÜ SEÇER (kod menüsü AÇILMAZ): çubuk "1 kişi × 2 gün"; seçili gün kutuları tüm kişilerde vurgulu', gs3.menu === 'none' && gs3.ozet === '1 kişi × 2 gün' && gs3.sec === 6 && gs3.acik, JSON.stringify(gs3));
+        const sheet = await pg.evaluate(() => { const c = document.getElementById('pgCubuk'); const r = c.getBoundingClientRect(); const cs = getComputedStyle(c); const bs = [...c.querySelectorAll('button')].filter(b => b.offsetParent !== null).map(b => b.getBoundingClientRect().height); return { pos: cs.position, z: +cs.zIndex, sol: r.left, sag: r.right, alt: r.bottom, w: document.documentElement.clientWidth, h: innerHeight, ust: r.top, kucuk: Math.min(...bs), tasma: document.documentElement.scrollWidth <= innerWidth + 1, mh: r.height }; });
+        ok(mg2 + 'işlem çubuğu ALT SAYFA: fixed, tam genişlik (kaydırma çubuğu payı ≤ 16px: test tarayıcısı klasik çubuk kullanır), ekranın altına yapışık, z ≥ 600 (alt çubuk 500 üstünde), düğmeler ≥ 44px, ekranın %72\'sini aşmaz, yatay taşma yok', sheet.pos === 'fixed' && sheet.z >= 600 && Math.abs(sheet.sol) <= 1 && sheet.sag >= sheet.w - 16 && Math.abs(sheet.alt - sheet.h) <= 1 && sheet.kucuk >= 44 && sheet.mh <= sheet.h * 0.73 && sheet.tasma, JSON.stringify(sheet));
+        await pg.locator('#pgCubuk [data-pg-sec-kod="X"]').tap(); await pg.locator('#pgUygula').tap(); await pg.waitForTimeout(80);
+        ok(mg2 + 'Uygula → sayfa içi onay (alt sayfada) görünür', await pg.locator('#pgCubukOnay').isVisible() && /1 kişi için 2 gün/.test(await pg.locator('#pgCubukOnayMetin').innerText()));
+        await pg.locator('#pgOnayla').tap(); await pg.waitForTimeout(400);
+        const m2 = await pg.evaluate(() => [...document.querySelectorAll('details.pc-kisi[data-emp-kisi="1"] .pc-t.pg-gsec')].map(e => e.getAttribute('data-kod') + (e.classList.contains('pc-k-cx') ? '+' : '-')).join(','));
+        ok(mg2 + 'Onayla: POST JSON gun_toplu_sec (kisi_ids=[1], 2 gün, kod X); mobil takvim hücreleri YERİNDE X olur', vIstek.length === 1 && vIstek[0]._ct === 'json' && vIstek[0].action === 'gun_toplu_sec' && JSON.stringify(vIstek[0].kisi_ids) === '["1"]' && vIstek[0].tarihler.length === 2 && m2 === 'X+,X+', JSON.stringify([vIstek, m2]));
+        await pg.locator('[data-pg-gunsec="temizle"]').tap(); await pg.locator('[data-pg-kisisec="hepsi"]').tap(); await pg.waitForTimeout(80);
+        ok(mg2 + '"Tüm kişiler": 3 aktif kişi seçilir (gün seçimi temizlendi); tekrar basmak hepsini kaldırır', (await pg.locator('#pgCubukOzet').innerText()) === '3 kişi × 0 gün' && (await pg.locator('[data-pg-kisisec="hepsi"]').tap(), await pg.waitForTimeout(60), await pg.locator('#pgCubuk').isHidden()));
+        await pg.locator('[data-pg-gunsec="haftaici"]').tap(); await pg.waitForTimeout(60);
+        const hiN = await pg.evaluate(() => ({ n: document.querySelectorAll('.pg-gbtn[aria-pressed="true"]').length, beklenen: document.querySelectorAll('.pg-gbtn[data-hs="0"]').length }));
+        ok(mg2 + 'mobil "Hafta içleri" kısayolu çalışır (' + hiN.n + ' gün)', hiN.n === hiN.beklenen && hiN.n > 15, JSON.stringify(hiN));
+        await pg.locator('[data-pg-secmod]').tap(); await pg.waitForTimeout(80);
+        ok(mg2 + '"Toplu seç" modundan çıkınca seçim TEMİZLENİR, çubuk + kutular gizlenir', await pg.locator('#pgCubuk').isHidden() && !(await pg.locator('.pg-msec').first().isVisible()) && await pg.locator('.pg-gsec').count() === 0);
+        // uzun basış
+        const hedefHucre = pg.locator('details.pc-kisi[data-emp-kisi="2"] summary .pc-k-ad');
+        await hedefHucre.tap(); await pg.waitForTimeout(150);
+        await pg.evaluate(() => { const c = document.querySelectorAll('details.pc-kisi[data-emp-kisi="2"] .pc-t[data-pg]')[9]; c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' })); });
+        await pg.waitForTimeout(700);
+        const lp = await pg.evaluate(() => ({ mod: document.querySelector('.pc-page').classList.contains('pg-secmod'), sec: document.querySelectorAll('.pc-t.pg-gsec').length, menu: getComputedStyle(document.getElementById('pgMenu')).display }));
+        await pg.evaluate(() => { const c = document.querySelectorAll('details.pc-kisi[data-emp-kisi="2"] .pc-t[data-pg]')[9]; c.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' })); c.click(); });
+        await pg.waitForTimeout(100);
+        const lp2 = await pg.evaluate(() => ({ menu: getComputedStyle(document.getElementById('pgMenu')).display, sec: document.querySelectorAll('.pc-t.pg-gsec').length }));
+        ok(mg2 + 'takvim hücresinde UZUN BASIŞ "Toplu seç" modunu açar ve o günü seçer; basışı izleyen tıklama kod menüsü AÇMAZ', lp.mod && lp.sec >= 3 && lp.menu === 'none' && lp2.menu === 'none' && lp2.sec === lp.sec, JSON.stringify([lp, lp2]));
+        await pg.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await pg.waitForTimeout(100);
+        const kt = await pg.evaluate(() => { const g = el => getComputedStyle(el); const c = document.getElementById('pgCubuk'); return { bar: g(c).backgroundColor, fg: g(c).color }; });
+        ok(mg2 + 'koyu tema: alt sayfa koyu zemin + açık yazı', lum(kt.bar) < 0.25 && lum(kt.fg) > 0.6, JSON.stringify(kt));
+        ok(mg2 + 'JS hatası yok', eh.length === 0, eh.join('|'));
+        await pg.close();
+        }
+
+        // ── 4) KİŞİLER GÖRÜNÜMÜ (masaüstü) ──
+        {
+        const ks = '[1280 kişiler] ';
+        const pg = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+        const eh = []; pg.on('pageerror', e => eh.push(e.message));
+        vIstek = []; await vRota(pg, 'ok');
+        await pg.goto(httpSayfa(sayfalar.kisiler)); await pg.waitForTimeout(300);
+        const kb = await pg.evaluate(() => ({ satir: document.querySelectorAll('tr[data-pk-satir]').length, adlar: [...document.querySelectorAll('tr[data-pk-satir] .pk-ad')].map(e => e.textContent.trim()).join('|'), say: ['toplam', 'aktif', 'pasif'].map(k => document.querySelector('[data-pk-say="' + k + '"]').textContent).join('/'), cubuk: document.getElementById('pkCubuk').hidden, tasma: document.documentElement.scrollWidth <= innerWidth + 1, anahtar: [...document.querySelectorAll('.pg-gorunum-bag')].map(a => a.textContent.trim() + (a.classList.contains('is-aktif') ? '*' : '')).join('|'), sekme: [...document.querySelectorAll('.pc-sekme')].map(a => a.textContent.trim()).join('|'), ayGiris: !!document.querySelector('.pc-ay') }));
+        ok(ks + 'JS hatası yok; 4 satır (ad A-Z: İsmail · Kişi A · Kişi B · Kişi D), sayaçlar 4/3/1, toplu çubuk gizli, taşma yok; iç anahtar [Puantaj] [Kişiler*]; sekmeler Puantaj Girişi · Personel · Günlük İşçi; ay oku YOK', eh.length === 0 && kb.satir === 4 && kb.adlar === 'İsmail Örnek|Örnek Kişi A|Örnek Kişi B|Örnek Kişi D' && kb.say === '4/3/1' && kb.cubuk && kb.tasma && kb.anahtar === '📅 Puantaj|👥 Kişiler*' && kb.sekme === 'Puantaj Girişi|Personel|Günlük İşçi' && !kb.ayGiris, JSON.stringify(kb) + eh.join('|'));
+        await pg.locator('tr[data-pk-satir="1"] input[data-pk-sec]').check(); await pg.waitForTimeout(60);
+        const sb = await pg.evaluate(() => { const c = document.getElementById('pkCubuk'); const r = c.getBoundingClientRect(); const cs = getComputedStyle(c); return { gor: !c.hidden, ozet: document.getElementById('pkCubukOzet').textContent, pos: cs.position, ic: r.top >= 0 && r.bottom <= innerHeight + 1, ind: document.querySelector('[data-pk-hepsi]').indeterminate, sec: document.querySelectorAll('tr.pk-sec').length, btn: [...c.querySelectorAll('[data-pk-toplu]')].map(b => b.getAttribute('data-pk-toplu')).join(',') }; });
+        ok(ks + 'kişi kutusu: satır vurgulu; toplu çubuk "1 kişi seçili" (sticky, ekran içinde); tümünü seç KARARSIZ; Pasife al · Aktif yap · Sil', sb.gor && sb.ozet === '1 kişi seçili' && sb.pos === 'sticky' && sb.ic && sb.ind && sb.sec === 1 && sb.btn === 'pasif,aktif,sil', JSON.stringify(sb));
+        await pg.locator('thead [data-pk-hepsi]').check(); await pg.waitForTimeout(60);
+        ok(ks + 'tümünü seç: 4 kişi seçili', (await pg.locator('#pkCubukOzet').innerText()) === '4 kişi seçili' && await pg.locator('tr.pk-sec').count() === 4);
+        // toplu sil → onay
+        await pg.locator('#pkCubuk [data-pk-toplu="sil"]').click(); await pg.waitForTimeout(150);
+        const so = await pg.evaluate(() => { const p = document.getElementById('pgPen'); const r = p.getBoundingClientRect(); return { gor: getComputedStyle(p).display !== 'none', baslik: document.getElementById('pgPenBaslik').textContent, mesaj: document.getElementById('pgPenMesaj').textContent, tamam: document.getElementById('pgPenTamam').textContent, kirmizi: document.getElementById('pgPenTamam').classList.contains('pg-tehlike-dugme'), z: +getComputedStyle(p).zIndex, ic: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, alan: document.getElementById('pgPenAlan').hidden }; });
+        ok(ks + 'toplu SİL → onay penceresi: "4 kişi ve tüm puantaj kayıtları (10 gün kaydı) kalıcı olarak silinecek. Bu işlem geri alınamaz."; kırmızı "Kalıcı olarak sil"; z ≥ 600; istek henüz GİTMEDİ', so.gor && so.baslik === 'Seçili kişileri sil' && /4 kişi ve tüm puantaj kayıtları \(10 gün kaydı\) kalıcı olarak silinecek\. Bu işlem geri alınamaz\./.test(so.mesaj) && so.tamam === 'Kalıcı olarak sil' && so.kirmizi && so.z >= 600 && so.ic && so.alan && vIstek.length === 0, JSON.stringify(so));
+        await pg.locator('#pgPen [data-pg-pen-iptal]').last().click(); await pg.waitForTimeout(100);
+        ok(ks + 'Vazgeç: istek gitmez, seçim korunur', vIstek.length === 0 && (await pg.locator('#pkCubukOzet').innerText()) === '4 kişi seçili');
+        await pg.locator('#pkCubuk [data-pk-toplu="sil"]').click(); const yukS = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null);
+        await pg.locator('#pgPenTamam').click(); const ys = await yukS;
+        ok(ks + 'toplu sil ONAYLANINCA: TEK POST (JSON) {action=kisi_toplu, islem=sil, kisi_ids=[1,2,3,4], csrf}; sayfa yenilenir', vIstek.length === 1 && vIstek[0]._ct === 'json' && vIstek[0].action === 'kisi_toplu' && vIstek[0].islem === 'sil' && JSON.stringify(vIstek[0].kisi_ids.slice().sort()) === '["1","2","3","4"]' && vIstek[0].csrf === 'testcsrf' && ys !== null, JSON.stringify(vIstek));
+        await pg.waitForTimeout(300);
+        // toplu pasife al (onaysız)
+        vIstek = [];
+        await pg.locator('tr[data-pk-satir="1"] input[data-pk-sec]').check(); await pg.locator('tr[data-pk-satir="2"] input[data-pk-sec]').check();
+        const yukP = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null);
+        await pg.locator('#pkCubuk [data-pk-toplu="pasif"]').click(); const yp = await yukP;
+        ok(ks + 'toplu Pasife al: onaysız tek POST {kisi_toplu, islem=pasif, kisi_ids=[1,2]}; sayfa yenilenir', vIstek.length === 1 && vIstek[0].islem === 'pasif' && JSON.stringify(vIstek[0].kisi_ids.slice().sort()) === '["1","2"]' && yp !== null, JSON.stringify(vIstek));
+        await pg.waitForTimeout(300);
+        // satır sil
+        vIstek = [];
+        await pg.locator('tr[data-pk-satir="1"] [data-pk-islem="sil"]').click(); await pg.waitForTimeout(120);
+        const rs = await pg.evaluate(() => ({ baslik: document.getElementById('pgPenBaslik').textContent, mesaj: document.getElementById('pgPenMesaj').textContent }));
+        ok(ks + 'satır SİL → onay: "Örnek Kişi A ve tüm puantaj kayıtları (7 gün kaydı) kalıcı olarak silinecek. Bu işlem geri alınamaz."', rs.baslik === 'Kişiyi sil' && /^Örnek Kişi A ve tüm puantaj kayıtları \(7 gün kaydı\) kalıcı olarak silinecek\. Bu işlem geri alınamaz\./.test(rs.mesaj) && vIstek.length === 0, JSON.stringify(rs));
+        const yukR = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null);
+        await pg.locator('#pgPenTamam').click(); const yr = await yukR;
+        ok(ks + 'satır sil ONAYLANINCA: POST {kisi_sil, kisi_id=1}; sayfa yenilenir', vIstek.length === 1 && vIstek[0].action === 'kisi_sil' && vIstek[0].kisi_id === '1' && yr !== null, JSON.stringify(vIstek));
+        await pg.waitForTimeout(300);
+        // sunucu hatasında silme: mesaj, pencere açık
+        await pg.unroute('**/puantaj_giris_kaydet.php'); vIstek = []; await vRota(pg, { hata: 'Kişi bulunamadı.' });
+        await pg.locator('tr[data-pk-satir="2"] [data-pk-islem="sil"]').click(); await pg.locator('#pgPenTamam').click(); await pg.waitForTimeout(300);
+        ok(ks + 'silme sunucuda reddedilirse: "Silinemedi: …" mesajı, pencere açık, sayfa yenilenmez', /Silinemedi: Kişi bulunamadı/.test(await pg.locator('#pgPenHata').innerText()) && await pg.locator('#pgPen').isVisible());
+        await pg.keyboard.press('Escape'); await pg.waitForTimeout(80);
+        await pg.unroute('**/puantaj_giris_kaydet.php'); vIstek = []; await vRota(pg, 'ok');
+        // düzenle
+        await pg.locator('tr[data-pk-satir="1"] [data-pk-islem="duzenle"]').click(); await pg.waitForTimeout(120);
+        const du = await pg.evaluate(() => ({ ad: document.getElementById('pgAd').value, gorev: document.getElementById('pgGorev').value, baslik: document.getElementById('pgPenBaslik').textContent }));
+        ok(ks + 'Düzenle: pencere mevcut ad + görevle dolu açılır ("Kişiyi düzenle")', du.ad === 'Örnek Kişi A' && du.gorev === 'Paketçi' && du.baslik === 'Kişiyi düzenle', JSON.stringify(du));
+        await pg.locator('#pgAd').fill('Örnek Kişi A2'); const yukD = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null); await pg.locator('#pgPenTamam').click(); const yd = await yukD;
+        ok(ks + 'Düzenle → Kaydet: POST {kisi_duzenle, kisi_id=1, ad, gorev}; sayfa yenilenir', vIstek.length === 1 && vIstek[0].action === 'kisi_duzenle' && vIstek[0].kisi_id === '1' && vIstek[0].ad === 'Örnek Kişi A2' && vIstek[0].gorev === 'Paketçi' && yd !== null, JSON.stringify(vIstek));
+        await pg.waitForTimeout(300);
+        // pasife al / aktif yap
+        vIstek = [];
+        const yukDur = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null);
+        await pg.locator('tr[data-pk-satir="1"] [data-pk-islem="durum"]').click(); await yukDur;
+        ok(ks + 'satırdaki "Pasife al": onaysız POST {kisi_durum, kisi_id=1, aktif=0}', vIstek.length === 1 && vIstek[0].action === 'kisi_durum' && vIstek[0].aktif === '0', JSON.stringify(vIstek));
+        await pg.waitForTimeout(300); vIstek = [];
+        const yukDur2 = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null);
+        await pg.locator('tr[data-pk-satir="4"] [data-pk-islem="durum"]').click(); await yukDur2;
+        ok(ks + 'pasif satırdaki "Aktif yap": POST {kisi_durum, kisi_id=4, aktif=1}', vIstek.length === 1 && vIstek[0].aktif === '1' && vIstek[0].kisi_id === '4', JSON.stringify(vIstek));
+        await pg.waitForTimeout(300);
+        // + Kişi ekle
+        await pg.locator('.pc-aksiyon [data-pg-kisi-ekle]').click(); await pg.waitForTimeout(120);
+        ok(ks + '+ Kişi ekle bu görünümde de çalışır (pencere açılır, "Kişi ekle")', (await pg.locator('#pgPenBaslik').innerText()) === 'Kişi ekle' && await pg.locator('#pgPen').isVisible());
+        await pg.keyboard.press('Escape'); await pg.waitForTimeout(80);
+        // Excel'den ekle
+        vIstek = [];
+        await pg.locator('.pc-aksiyon [data-pk-excel-ac]').click(); await pg.waitForTimeout(150);
+        const ex = await pg.evaluate(() => { const p = document.getElementById('pkExcel'); const r = p.getBoundingClientRect(); const cs = getComputedStyle(p); const a = document.querySelector('[data-pk-sablon]'); const f = document.getElementById('pkDosya'); return { gor: cs.display !== 'none', pos: cs.position, z: +cs.zIndex, ic: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, orta: Math.abs((r.left + r.right) / 2 - innerWidth / 2) <= 10, ovl: !document.getElementById('pgOvl').hidden, sablon: a.getAttribute('href'), kabul: f.getAttribute('accept'), ekle: document.getElementById('pkExcelEkle').disabled, onizleme: document.getElementById('pkExcelOnizleme').hidden, form: p.querySelectorAll('form').length, modal: p.getAttribute('aria-modal') }; });
+        ok(ks + "Excel'den ekle penceresi: fixed, z-index 601 (≥ 600), ekran içinde ortada, perde var, aria-modal, <form> YOK; şablon bağlantısı sablon=1; dosya seçici .xlsx/.csv; Ekle PASİF; önizleme gizli", ex.gor && ex.pos === 'fixed' && ex.z >= 600 && ex.ic && ex.orta && ex.ovl && ex.modal === 'true' && ex.form === 0 && /sablon=1/.test(ex.sablon) && /\.xlsx/.test(ex.kabul) && /\.csv/.test(ex.kabul) && ex.ekle && ex.onizleme, JSON.stringify(ex));
+        // yanlış uzantı + büyük dosya: istemci ayrımı (istek GİTMEZ)
+        await pg.setInputFiles('#pkDosya', { name: 'liste.txt', mimeType: 'text/plain', buffer: Buffer.from('a') }); await pg.waitForTimeout(100);
+        ok(ks + 'yanlış uzantı (.txt): istek GİTMEZ, "Yalnız .xlsx ya da .csv" mesajı, Ekle pasif', vIstek.length === 0 && /Yalnız \.xlsx ya da \.csv/.test(await pg.locator('#pkExcelHata').innerText()) && await pg.locator('#pkExcelEkle').isDisabled());
+        await pg.setInputFiles('#pkDosya', { name: 'buyuk.csv', mimeType: 'text/csv', buffer: Buffer.alloc(2 * 1024 * 1024 + 10, 'a') }); await pg.waitForTimeout(100);
+        ok(ks + '2 MB üstü dosya: istek GİTMEZ, "çok büyük" mesajı', vIstek.length === 0 && /çok büyük/.test(await pg.locator('#pkExcelHata').innerText()));
+        // önizleme: XSS'li ad
+        await pg.unroute('**/puantaj_giris_kaydet.php'); vIstek = [];
+        await vRota(pg, { onizleme: { ok: true, tur: 'csv', baslik_bulundu: false, gosterilen: 4, ozet: { toplam: 5, gecerli: 2, bos: 1, uzun: 0, mukerrer: 2, mukerrer_mevcut: 1, mukerrer_dosya: 1 }, ilk: [{ satir: 1, ad: '<img src=x onerror="window.__xss=1">', gorev: '=HYPERLINK("http://x")', durum: 'gecerli' }, { satir: 2, ad: 'Örnek Kişi Y', gorev: '', durum: 'gecerli' }, { satir: 3, ad: '', gorev: 'adı yok', durum: 'bos' }, { satir: 4, ad: 'Örnek Kişi A', gorev: '', durum: 'mukerrer_mevcut' }] } });
+        await pg.setInputFiles('#pkDosya', { name: 'kisiler.csv', mimeType: 'text/csv', buffer: Buffer.from('Ad;Görev\n<img>;x\n') }); await pg.waitForTimeout(400);
+        const pv = await pg.evaluate(() => ({ chip: [...document.querySelectorAll('#pkExcelOzet .pk-chip')].map(c => c.textContent.replace(/\s+/g, ' ').trim()).join('|'), satir: document.querySelectorAll('#pkExcelGovde tr').length, img: document.querySelectorAll('#pkExcel img').length, xss: window.__xss === 1, ilkAd: document.querySelector('#pkExcelGovde tr td:nth-child(2)').textContent, ilkGorev: document.querySelector('#pkExcelGovde tr td:nth-child(3)').textContent, durumlar: [...document.querySelectorAll('#pkExcelGovde tr td:nth-child(4)')].map(t => t.textContent).join('|'), ekle: document.getElementById('pkExcelEkle').disabled, ekleMetin: document.getElementById('pkExcelEkle').textContent, not: document.getElementById('pkExcelNot').textContent, hata: document.getElementById('pkExcelHata').hidden, gor: !document.getElementById('pkExcelOnizleme').hidden }));
+        ok(ks + 'önizleme: multipart POST {action=excel_onizle, csrf, dosya adı}; özet çipleri Toplam 5 · Geçerli 2 · Boş 1 · Çok uzun 0 · Mükerrer 2; 4 satır DÜZ METİN (textContent) — XSS çalışmaz (img yok, window.__xss yok), formül metni olduğu gibi', vIstek.length === 1 && vIstek[0]._ct === 'multipart' && vIstek[0].action === 'excel_onizle' && vIstek[0]._csrf === true && vIstek[0]._dosya === 'kisiler.csv' && pv.chip === 'Toplam 5|Geçerli 2|Boş 1|Çok uzun 0|Mükerrer 2' && pv.satir === 4 && pv.img === 0 && !pv.xss && pv.ilkAd === '<img src=x onerror="window.__xss=1">' && pv.ilkGorev === '=HYPERLINK("http://x")' && pv.gor, JSON.stringify([vIstek, pv]));
+        ok(ks + 'önizleme: durum sütunu (Eklenecek · Ad boş · Zaten var), başlık bulunamadı notu, "Ekle (2 kişi)" AKTİF', pv.durumlar === 'Eklenecek|Eklenecek|Ad boş|Zaten var' && /Başlık satırı bulunamadı/.test(pv.not) && !pv.ekle && pv.ekleMetin === 'Ekle (2 kişi)', JSON.stringify(pv));
+        await pg.unroute('**/puantaj_giris_kaydet.php'); vIstek = []; await vRota(pg, 'ok');
+        await pg.locator('#pkExcelEkle').click(); await pg.waitForTimeout(400);
+        const ek = await pg.evaluate(() => ({ sonuc: document.getElementById('pkExcelSonuc').textContent, adim1: document.getElementById('pkExcelAdim1').hidden, onizleme: document.getElementById('pkExcelOnizleme').hidden, ekle: document.getElementById('pkExcelEkle').hidden, vazgec: document.getElementById('pkExcelVazgec').textContent }));
+        ok(ks + 'Ekle: multipart POST {action=excel_ekle} (dosya yeniden gönderilir); sonuç "2 kişi eklendi, 2 satır atlandı"; önizleme gizlenir; düğme "Kapat"', vIstek.length === 1 && vIstek[0]._ct === 'multipart' && vIstek[0].action === 'excel_ekle' && vIstek[0]._dosya === 'kisiler.csv' && /2 kişi eklendi, 2 satır atlandı/.test(ek.sonuc) && ek.onizleme && ek.ekle && ek.vazgec === 'Kapat', JSON.stringify([vIstek, ek]));
+        const yukK = pg.waitForEvent('load', { timeout: 8000 }).catch(() => null);
+        await pg.locator('#pkExcelVazgec').click(); const yk = await yukK;
+        ok(ks + 'Kapat: pencere kapanır ve liste YENİLENİR (yeni kişiler görünsün)', yk !== null);
+        await pg.waitForTimeout(300);
+        // hata yolu + Esc + perde
+        await pg.locator('.pc-aksiyon [data-pk-excel-ac]').click(); await pg.waitForTimeout(100);
+        await pg.unroute('**/puantaj_giris_kaydet.php'); vIstek = []; await vRota(pg, { hata: 'Dosyada en çok 500 satır olabilir (501 satır bulundu).' });
+        await pg.setInputFiles('#pkDosya', { name: 'kisiler.csv', mimeType: 'text/csv', buffer: Buffer.from('Ad\nx\n') }); await pg.waitForTimeout(300);
+        ok(ks + 'sunucu reddederse: hata mesajı görünür, önizleme yok, Ekle pasif', /en çok 500 satır/.test(await pg.locator('#pkExcelHata').innerText()) && await pg.locator('#pkExcelOnizleme').isHidden() && await pg.locator('#pkExcelEkle').isDisabled());
+        await pg.keyboard.press('Escape'); await pg.waitForTimeout(100);
+        ok(ks + 'Esc pencereyi + perdeyi kapatır', !(await pg.locator('#pkExcel').isVisible()) && !(await pg.locator('#pgOvl').isVisible()));
+        await pg.locator('.pc-aksiyon [data-pk-excel-ac]').click(); await pg.waitForTimeout(100);
+        await pg.mouse.click(5, 450); await pg.waitForTimeout(100);
+        ok(ks + 'perdeye tıklamak pencereyi kapatır', !(await pg.locator('#pkExcel').isVisible()));
+        await pg.locator('.pc-aksiyon [data-pk-excel-ac]').click(); await pg.waitForTimeout(100);
+        // koyu tema
+        await pg.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await pg.waitForTimeout(100);
+        const kd = await pg.evaluate(() => { const g = el => getComputedStyle(el); return { pen: g(document.getElementById('pkExcel')).backgroundColor, fg: g(document.getElementById('pkExcel')).color, tablo: g(document.querySelector('.pk-tablo td')).backgroundColor, tfg: g(document.querySelector('.pk-tablo td')).color, chip: g(document.querySelector('.pk-chip-aktif')).backgroundColor, chipf: g(document.querySelector('.pk-chip-aktif')).color, dosya: g(document.getElementById('pkDosya')).backgroundColor }; });
+        ok(ks + 'koyu tema: Excel penceresi + liste tablosu koyu zemin, okunur yazı; sayaç çipi okunur', lum(kd.pen) < 0.25 && lum(kd.fg) > 0.6 && lum(kd.tablo) < 0.25 && lum(kd.tfg) > 0.6 && Math.abs(lum(kd.chip) - lum(kd.chipf)) > 0.3, JSON.stringify(kd));
+        await pg.keyboard.press('Escape');
+        await pg.emulateMedia({ media: 'print' });
+        ok(ks + 'yazdırmada Excel penceresi / toplu çubuk / iç anahtar gizli', !(await pg.locator('#pkExcel').isVisible()) && !(await pg.locator('#pkCubuk').isVisible()) && !(await pg.locator('.pg-gorunum').isVisible()));
+        ok(ks + 'oturum boyunca JS hatası yok', eh.length === 0, eh.join('|'));
+        await pg.close();
+        }
+
+        // ── 5) KİŞİLER GÖRÜNÜMÜ (mobil 390) ──
+        {
+        const kms = '[390 kişiler] ';
+        const pg = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+        const eh = []; pg.on('pageerror', e => eh.push(e.message));
+        vIstek = []; await vRota(pg, 'ok');
+        await pg.goto(httpSayfa(sayfalar.kisiler)); await pg.waitForTimeout(300);
+        const mk = await pg.evaluate(() => { const tr = document.querySelector('tr[data-pk-satir="1"]'); const cs = getComputedStyle(tr); const r = tr.getBoundingClientRect(); const bs = [...tr.querySelectorAll('.pk-islem .btn')].map(b => b.getBoundingClientRect().height); const ad = tr.querySelector('.pk-ad').getBoundingClientRect(); return { thead: getComputedStyle(document.querySelector('.pk-tablo thead')).display, disp: cs.display, sol: r.left, sag: r.right, w: document.documentElement.clientWidth, kucuk: Math.min(...bs), n: bs.length, adW: ad.width, tasma: document.documentElement.scrollWidth <= innerWidth + 1, adMetin: tr.querySelector('.pk-ad').textContent.trim(), etiket: tr.querySelector('.pk-sayi').getAttribute('data-label') }; });
+        ok(kms + 'kart görünümü: tablo başlığı gizli, satır kart (grid), ekrana sığar, ad görünür (≥ 100px), 3 işlem düğmesi ≥ 44px, yatay taşma yok', mk.thead === 'none' && mk.disp === 'grid' && mk.sol >= 0 && mk.sag <= mk.w + 1 && mk.kucuk >= 44 && mk.n === 3 && mk.adW >= 100 && mk.tasma && mk.adMetin === 'Örnek Kişi A', JSON.stringify(mk));
+        const inp = await pg.evaluate(() => [...document.querySelectorAll('.pc-page input[type=search], .pc-page select.pk-durum-sec')].map(i => getComputedStyle(i).fontSize));
+        ok(kms + 'arama kutusu + durum seçici 16px (iOS zoom yok)', inp.length === 2 && inp.every(f => parseFloat(f) >= 16), inp.join());
+        await pg.locator('tr[data-pk-satir="1"] input[data-pk-sec]').tap(); await pg.locator('tr[data-pk-satir="2"] input[data-pk-sec]').tap(); await pg.waitForTimeout(100);
+        const bs = await pg.evaluate(() => { const c = document.getElementById('pkCubuk'); const r = c.getBoundingClientRect(); const cs = getComputedStyle(c); return { gor: !c.hidden, pos: cs.position, z: +cs.zIndex, sol: r.left, sag: r.right, alt: r.bottom, w: document.documentElement.clientWidth, h: innerHeight, ozet: document.getElementById('pkCubukOzet').textContent, sec: document.querySelectorAll('tr.pk-sec').length, kucuk: Math.min(...[...c.querySelectorAll('button')].filter(b => b.offsetParent !== null).map(b => b.getBoundingClientRect().height)) }; });
+        ok(kms + 'toplu çubuk ALT SAYFA: "2 kişi seçili", fixed, tam genişlik, altta, z ≥ 600, düğmeler ≥ 44px', bs.gor && bs.ozet === '2 kişi seçili' && bs.sec === 2 && bs.pos === 'fixed' && bs.z >= 600 && Math.abs(bs.sol) <= 1 && bs.sag >= bs.w - 16 && Math.abs(bs.alt - bs.h) <= 1 && bs.kucuk >= 44, JSON.stringify(bs));
+        await pg.locator('#pkCubuk [data-pk-sec-temizle]').first().tap(); await pg.waitForTimeout(80);
+        await pg.locator('.pc-aksiyon [data-pk-excel-ac]').tap(); await pg.waitForTimeout(250);
+        const em = await pg.evaluate(() => { const p = document.getElementById('pkExcel'); const r = p.getBoundingClientRect(); const cs = getComputedStyle(p); const f = document.getElementById('pkDosya'); const bt = [...p.querySelectorAll('.pg-pen-alt .btn')].map(b => b.getBoundingClientRect().height); return { gor: cs.display !== 'none', z: +cs.zIndex, sol: r.left, sag: r.right, alt: r.bottom, w: document.documentElement.clientWidth, h: innerHeight, mh: r.height, fs: parseFloat(cs.fontSize), ffs: parseFloat(getComputedStyle(f).fontSize), kucuk: Math.min(...bt), tasma: document.documentElement.scrollWidth <= innerWidth + 1 }; });
+        ok(kms + "Excel penceresi ALT SAYFA: tam genişlik, altta, z ≥ 600, ekranın %92'sini aşmaz, dosya alanı 16px, düğmeler ≥ 44px, yatay taşma yok", em.gor && em.z >= 600 && Math.abs(em.sol) <= 1 && em.sag >= em.w - 16 && Math.abs(em.alt - em.h) <= 1 && em.mh <= em.h * 0.93 && em.ffs >= 16 && em.kucuk >= 44 && em.tasma, JSON.stringify(em));
+        await pg.setInputFiles('#pkDosya', { name: 'kisiler.csv', mimeType: 'text/csv', buffer: Buffer.from('Ad\nx\n') }); await pg.waitForTimeout(400);
+        const em2 = await pg.evaluate(() => { const p = document.getElementById('pkExcel'); const r = p.getBoundingClientRect(); const k = document.querySelector('.pk-excel-tablo-kap').getBoundingClientRect(); return { alt: r.bottom, h: innerHeight, ust: r.top, tasma: document.documentElement.scrollWidth <= innerWidth + 1, tabloIc: k.right <= innerWidth + 1, ekleGor: document.getElementById('pkExcelEkle').getBoundingClientRect().bottom <= innerHeight + 1 }; });
+        ok(kms + 'önizleme açıkken alt sayfa ekranı aşmaz, "Ekle" düğmesi ekran içinde, tablo taşmaz', em2.ust >= 0 && em2.alt <= em2.h + 1 && em2.tasma && em2.tabloIc && em2.ekleGor, JSON.stringify(em2));
+        await pg.keyboard.press('Escape');
+        ok(kms + 'JS hatası yok', eh.length === 0, eh.join('|'));
+        await pg.close();
+        }
+        }   // v555 blok sonu
         }   // v554 blok sonu
     } finally { await browser.close(); try { srv && srv.close(); } catch (_) { /* */ } }
     console.log('\nGeçen: ' + gecen + '   Kalan: ' + fail);
