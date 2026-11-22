@@ -113,7 +113,7 @@ $kisilerAl = static function (array $idler) use ($pdo): array {
 $excelCoz = static function () use ($pdo): array {
     $f = $_FILES['dosya'] ?? null;
     if (!is_array($f) || is_array($f['error'] ?? null)) pg_json(['ok' => false, 'error' => 'Dosya seçilmedi.'], 400);
-    $d = pge_dosya_dogrula($f, isset($GLOBALS['_pg_yukleme_denetimi']) && is_callable($GLOBALS['_pg_yukleme_denetimi']) ? $GLOBALS['_pg_yukleme_denetimi'] : null);
+    $d = pge_dosya_dogrula($f, PHP_SAPI === 'cli' && isset($GLOBALS['_pg_yukleme_denetimi']) && is_callable($GLOBALS['_pg_yukleme_denetimi']) ? $GLOBALS['_pg_yukleme_denetimi'] : null);
     if (!$d['ok']) pg_json(['ok' => false, 'error' => (string)$d['hata']], 400);
     $ham = pge_dosya_oku($d);
     if (isset($ham['hata'])) pg_json(['ok' => false, 'error' => (string)$ham['hata']], 400);

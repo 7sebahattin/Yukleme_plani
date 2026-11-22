@@ -375,7 +375,7 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
     .pg-cubuk-alt { flex-direction: column; align-items: stretch; }
     .pg-cubuk-dugmeler { display: flex; }
     .pg-cubuk-dugmeler .btn { flex: 1 1 0; min-height: 46px; }
-    .pc-page.pg-cubuk-acik { padding-bottom: 320px; }
+    .pc-page.pg-cubuk-acik { padding-bottom: max(320px, 72dvh); }
     .pk-wrap { border: 0; background: transparent; }
     .pk-tablo, .pk-tablo tbody { display: block; background: transparent; }
     .pk-tablo thead { display: none; }
