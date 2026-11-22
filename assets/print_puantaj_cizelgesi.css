@@ -1,0 +1,25 @@
+/* print_puantaj_cizelgesi.css — Aylık Puantaj Çizelgesi yazdırma (v552).
+   print_base.css + print_pdks.css üzerine yüklenir. Yapı çerçeve + HARF ile kurulur
+   (zemin rengi yazdırmada düşebilir); gri hafta sonu / renkli hücre yalnız ek vurgu. */
+.pcy-tablo { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7pt; color: #14202e; }
+.pcy-tablo th, .pcy-tablo td { border: 1px solid #94a3b8; padding: 1px 0; text-align: center; vertical-align: middle; overflow: hidden; }
+.pcy-tablo thead { display: table-header-group; }
+.pcy-tablo tfoot { display: table-row-group; }
+.pcy-tablo tr { page-break-inside: avoid; break-inside: avoid; }
+.pcy-tablo thead th { background: #e7edfa; font-weight: 700; line-height: 1.1; }
+.pcy-tablo .pcy-ad { width: 34mm; text-align: left; padding: 1px 3px; white-space: nowrap; text-overflow: ellipsis; }
+.pcy-tablo .pcy-ad small { display: block; font-size: 5.5pt; color: #5b6b7f; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.pcy-tablo .pcy-oz { width: 9mm; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pcy-tablo .pcy-gk { display: block; font-size: 5pt; font-weight: 400; }
+.pcy-tablo td.pcy-hs, .pcy-tablo th.pcy-hs { background: #e5e8ed; }
+.pcy-tablo td.pcy-x { background: #e4f5e9; }
+.pcy-tablo td.pcy-e { background: #fdeccb; }
+.pcy-tablo td b { display: block; font-size: 7pt; line-height: 1; }
+.pcy-tablo td i { display: block; font-style: normal; font-size: 5pt; line-height: 1; }
+.pcy-tablo td.pcy-b { color: #94a3b8; }
+.pcy-tablo td.pcy-e b { text-decoration: underline; }
+.pcy-tablo tfoot td, .pcy-tablo tfoot th { background: #fff6da; font-weight: 700; }
+.pcy-tablo td.pcy-uyari { border: 1.5px solid #9a5b06; font-weight: 800; }
+.pcy-lejant { font-size: 7.5pt; color: #333; margin: 4px 0 6px; }
+.pcy-not { font-size: 7.5pt; margin: 0 0 4px; }
+@media print { .pcy-tablo td.pcy-hs, .pcy-tablo th.pcy-hs, .pcy-tablo td.pcy-x, .pcy-tablo td.pcy-e { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

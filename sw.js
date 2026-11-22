@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v551';
+const CACHE_NAME = 'yukleme-plani-v552';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -85,6 +85,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/cavus_fis_[a-z_]+\.php(\/|$)/.test(u.pathname)) return;
   // Kayıt seçici (v468): çavuş adı + mesai listesi taşır — HİÇ önbelleğe alınmaz
   if (/\/personel_kayit_sec\.php(\/|$)/.test(u.pathname)) return;
+  // Aylık Puantaj Çizelgesi (v552): çalışan/çavuş listesi taşır — sayfa + yazdırma HİÇ önbelleğe alınmaz
+  if (/\/puantaj_cizelgesi(_yazdir)?\.php(\/|$)/.test(u.pathname)) return;
   // Ürün Siparişleri (urun_siparis*.php): firma/şoför verisi taşır, aynı kural
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Frugro Siparişler (v512): frugro_siparis/view/pkl/invoice/yukle/kaydet… müşteri/ticari veri taşır — HİÇ önbelleğe alınmaz (assets/frugro_*.js/css SHELL'de DEĞİL)

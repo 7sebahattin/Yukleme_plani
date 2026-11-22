@@ -1,0 +1,132 @@
+/* =========================================================
+   puantaj_cizelgesi.css — Aylık Puantaj Çizelgesi (v552)
+   Sayfa kendi --pc-* belirteçlerini taşır (açık + koyu tema); style.css'te
+   --surface YOKTUR, var(--surface,#fff) KULLANMA. Renk + HARF birlikte
+   (X / ! / sayı) → siyah-beyaz yazdırma ve renk körlüğünde de okunur.
+   z-index'ler < 100 (topbar/sidebar 100). overflow-x:clip kuralına dokunulmaz.
+   ========================================================= */
+.pc-page {
+    --pc-surface: #ffffff; --pc-sticky: #f3f6fb; --pc-head: #e8eef7;
+    --pc-text: #1c2230; --pc-muted: #5f6b80; --pc-border: #d5dde9;
+    --pc-hs: #eceff3; --pc-hs-head: #dfe4ec;
+    --pc-x-bg: #dcf3e3; --pc-x: #14632b;
+    --pc-e-bg: #fde7b8; --pc-e: #8a4300;
+    --pc-bugun: #2563eb; --pc-uyari-bg: #fde7b8; --pc-uyari: #8a4300;
+    --pc-accent: #1d4ed8; --pc-hover: #f2f6fd;
+    color: var(--pc-text);
+}
+html[data-theme="dark"] .pc-page {
+    --pc-surface: #161d27; --pc-sticky: #1a2331; --pc-head: #1f2a3a;
+    --pc-text: #e7ecf4; --pc-muted: #a3b0c4; --pc-border: #2c3a4e;
+    --pc-hs: #1c2431; --pc-hs-head: #263246;
+    --pc-x-bg: #173a24; --pc-x: #7fe0a0;
+    --pc-e-bg: #4a3411; --pc-e: #f7c56b;
+    --pc-bugun: #6aa8ff; --pc-uyari-bg: #4a3411; --pc-uyari: #f7c56b;
+    --pc-accent: #8ab4ff; --pc-hover: #1d2736;
+}
+
+/* ── Üst çubuk ── */
+.pc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.pc-ay { display: inline-flex; align-items: center; gap: 4px; }
+.pc-ok { padding: 8px 14px; font-size: 1.2rem; line-height: 1; min-width: 40px; }
+.pc-ay-giris { width: 10.5rem; min-height: 40px; padding: 7px 10px; border: 1px solid var(--pc-border); border-radius: 8px; background: var(--pc-surface); color: var(--pc-text); font: inherit; }
+.pc-ara { flex: 1 1 180px; max-width: 320px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--pc-border); border-radius: 8px; background: var(--pc-surface); color: var(--pc-text); font: inherit; }
+.pc-pasif { display: inline-flex; align-items: center; gap: 6px; font-size: .88rem; color: var(--pc-muted); cursor: pointer; white-space: nowrap; }
+.pc-sekmeler { display: inline-flex; border: 1px solid var(--pc-border); border-radius: 8px; overflow: hidden; background: var(--pc-surface); }
+.pc-sekme { padding: 9px 16px; font-size: .92rem; font-weight: 600; color: var(--pc-muted); text-decoration: none; white-space: nowrap; }
+.pc-sekme + .pc-sekme { border-left: 1px solid var(--pc-border); }
+.pc-sekme.is-aktif { background: var(--pc-accent); color: #fff; }
+html[data-theme="dark"] .pc-sekme.is-aktif { color: #0b1220; }
+.pc-aksiyon { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+
+/* ── Gösterge (lejant) ── */
+.pc-lejant { margin: 0 0 8px; font-size: .84rem; color: var(--pc-muted); }
+.pc-lejant-dugme { display: none; background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--pc-muted); cursor: pointer; }
+.pc-lejant-ic { display: block; }
+.pc-not { margin: 0 0 8px; padding: 8px 12px; font-size: .86rem; border-left: 3px solid var(--pc-accent); background: var(--pc-sticky); border-radius: 0 6px 6px 0; color: var(--pc-text); }
+.pc-bos { padding: 26px 16px; text-align: center; border: 1px dashed var(--pc-border); border-radius: 10px; color: var(--pc-muted); background: var(--pc-surface); }
+
+/* ── Izgara (≥768px) ── */
+.pc-grid-wrap { display: none; background: var(--pc-surface); border-color: var(--pc-border); }
+.pc-liste { display: block; }
+.pc-grid { border-collapse: separate; border-spacing: 0; font-size: .82rem; color: var(--pc-text); width: max-content; min-width: 100%; }
+.pc-grid th, .pc-grid td { border-right: 1px solid var(--pc-border); border-bottom: 1px solid var(--pc-border); padding: 0; text-align: center; background: var(--pc-surface); }
+.pc-grid thead th { position: sticky; top: 0; z-index: 3; background: var(--pc-head); font-weight: 600; padding: 4px 0; text-transform: none; letter-spacing: 0; font-size: .78rem; color: var(--pc-text); }
+.pc-grid thead th.pc-hs { background: var(--pc-hs-head); }
+.pc-grid .pc-g { min-width: 34px; width: 34px; }
+.pc-gn { display: block; font-weight: 700; font-size: .85rem; line-height: 1.15; }
+.pc-gk { display: block; font-size: .66rem; font-weight: 500; color: var(--pc-muted); text-transform: uppercase; }
+.pc-grid .pc-ad { position: sticky; left: 0; z-index: 2; background: var(--pc-sticky); text-align: left; min-width: 190px; max-width: 240px; padding: 5px 10px; box-shadow: 1px 0 0 var(--pc-border); }
+.pc-grid thead .pc-ad { z-index: 4; background: var(--pc-head); }
+.pc-ad-ad { display: block; font-weight: 600; font-size: .85rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-ad small { display: block; font-weight: 400; font-size: .7rem; color: var(--pc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-adet { font-weight: 400; color: var(--pc-muted); }
+.pc-grid .pc-oz { min-width: 52px; padding: 4px 6px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pc-grid thead .pc-oz { font-weight: 600; }
+.pc-grid .pc-oz.pc-uyari { background: var(--pc-uyari-bg); color: var(--pc-uyari); }
+.pc-h { height: 38px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.pc-h b { display: block; font-size: .82rem; }
+.pc-h i { display: block; font-style: normal; font-size: .66rem; opacity: .85; }
+.pc-h.pc-b { color: var(--pc-muted); opacity: .6; }
+.pc-hs { background: var(--pc-hs) !important; }
+.pc-grid td.pc-x, .pc-t.pc-x { background: var(--pc-x-bg) !important; color: var(--pc-x); }
+.pc-grid td.pc-e, .pc-t.pc-e { background: var(--pc-e-bg) !important; color: var(--pc-e); }
+.pc-grid td.pc-e b { font-weight: 800; }
+/* bugünün sütunu: çerçeveli (sol/sağ kenar; başlıkta + üst) */
+.pc-grid .pc-bugun { border-left: 2px solid var(--pc-bugun); border-right: 2px solid var(--pc-bugun); }
+.pc-grid thead .pc-bugun { border-top: 2px solid var(--pc-bugun); }
+.pc-grid tfoot tr:last-child .pc-bugun { border-bottom: 2px solid var(--pc-bugun); }
+.pc-grid tbody tr:hover th.pc-ad, .pc-grid tbody tr:hover td:not(.pc-x):not(.pc-e):not(.pc-hs) { background: var(--pc-hover); }
+.pc-grid tfoot th, .pc-grid tfoot td { background: var(--pc-sticky); font-weight: 700; }
+.pc-grid tfoot .pc-ad { z-index: 2; }
+.pc-grid tfoot td.pc-hs { background: var(--pc-hs) !important; }
+.pc-grid tfoot .pc-h { height: auto; padding: 5px 0; }
+.pc-grid tfoot .pc-genel-bos { text-align: left; padding: 5px 10px; font-weight: 600; color: var(--pc-muted); }
+
+@media (min-width: 768px) {
+    .pc-grid-wrap { display: block; max-width: 100%; max-height: calc(100dvh - 300px); min-height: 220px; overflow: auto; overscroll-behavior: contain; }
+    .pc-liste { display: none; }
+}
+
+/* ── Mobil (<768px): kişi listesi + ay takvimi ── */
+.pc-genel-kart { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-sticky); }
+.pc-genel-kart strong { margin-right: auto; }
+.pc-kisi { border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-surface); margin-bottom: 6px; overflow: hidden; }
+.pc-kisi summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; cursor: pointer; list-style: none; min-height: 48px; }
+.pc-kisi summary::-webkit-details-marker { display: none; }
+.pc-kisi summary::after { content: "▾"; color: var(--pc-muted); flex: none; transition: transform .15s; }
+.pc-kisi[open] summary::after { transform: rotate(180deg); }
+.pc-k-ad { flex: 1 1 auto; min-width: 0; }
+.pc-k-ad small { display: block; font-size: .72rem; color: var(--pc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-rozetler { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; }
+.pc-rz { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600; background: var(--pc-head); color: var(--pc-text); white-space: nowrap; }
+.pc-rz-uyari { background: var(--pc-uyari-bg); color: var(--pc-uyari); }
+.pc-takvim { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; padding: 8px 8px 12px; border-top: 1px solid var(--pc-border); }
+.pc-t-bas { text-align: center; font-size: .68rem; font-weight: 600; color: var(--pc-muted); padding: 2px 0; }
+.pc-t { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 46px; padding: 3px 1px; border-radius: 6px; background: var(--pc-surface); border: 1px solid var(--pc-border); font-variant-numeric: tabular-nums; }
+.pc-t-bos { border: 0; background: transparent; }
+.pc-t-n { position: absolute; top: 2px; left: 4px; font-size: .6rem; color: var(--pc-muted); }
+.pc-t.pc-x .pc-t-n, .pc-t.pc-e .pc-t-n { color: inherit; opacity: .75; }
+.pc-t-ic { display: flex; flex-direction: column; align-items: center; margin-top: 8px; line-height: 1.05; }
+.pc-t-ic b { font-size: .88rem; }
+.pc-t-ic i { font-style: normal; font-size: .64rem; }
+.pc-t.pc-b .pc-t-ic { color: var(--pc-muted); opacity: .55; }
+.pc-t.pc-bugun { outline: 2px solid var(--pc-bugun); outline-offset: -1px; }
+.pc-t-bas.pc-hs { background: transparent !important; }
+
+@media (max-width: 767px) {
+    .pc-page input[type="month"], .pc-page input[type="search"], .pc-page input[type="text"] { font-size: 16px; }
+    .pc-bar { gap: 8px; }
+    .pc-ay { width: 100%; }
+    .pc-ay-giris { flex: 1 1 auto; width: auto; min-width: 0; text-align: center; }
+    .pc-ara { max-width: none; flex: 1 1 100%; order: 3; }
+    .pc-sekmeler { order: 2; flex: 1 1 100%; }
+    .pc-sekme { flex: 1 1 0; text-align: center; }
+    .pc-pasif { order: 4; }
+    .pc-aksiyon { order: 5; flex: 1 1 100%; margin-left: 0; justify-content: flex-end; }
+    .pc-lejant-dugme { display: inline-block; }
+    .pc-lejant-ic { display: none; padding: 6px 10px; border: 1px solid var(--pc-border); border-radius: 8px; background: var(--pc-sticky); }
+    .pc-lejant.acik .pc-lejant-ic { display: block; }
+}
+
+@media print { .pc-page .pc-bar, .pc-page .pc-lejant-dugme { display: none !important; } }

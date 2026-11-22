@@ -23,6 +23,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/uretim.php';   // v507: can_uretim()
+require_once __DIR__ . '/config/puantaj_cizelgesi.php';   // v552: kart görünürlüğü = sayfanın açılabileceği sekme var mı
 $auth_user = require_login();
 role_pdks_require_request();
 
@@ -32,7 +33,7 @@ $p_adm = function_exists('is_admin') && is_admin();
 // ── Bölüm görünürlüğü — "en az BİR aktif alt-fonksiyona erişim" ──────────
 // Kalıcı PDKS izinleri bu landing için yeterli değildir; ilgili eski sayfalar
 // kendi izin kapılarıyla yerinde kalır.
-$p_gunluk   = $p_adm || ($_fn && (role_pdks_can('foremen') || role_pdks_can('worker_cards') || role_pdks_can('daily_scan') || role_pdks_can('daily_reports')));
+$p_gunluk   = $p_adm || ($_fn && (role_pdks_can('foremen') || role_pdks_can('worker_cards') || role_pdks_can('daily_scan') || role_pdks_can('daily_reports') || role_pdks_can('monthly_timesheet')));
 $p_hakcari  = $p_adm || ($_fn && (role_pdks_can('foreman_rates') || role_pdks_can('entitlements') || role_pdks_can('foreman_accounts') || role_pdks_can('foreman_payments')));
 $p_rapor    = $p_adm || ($_fn && role_pdks_can('management_reports'));
 
@@ -125,6 +126,14 @@ render_flash();
     <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
     <div class="home-card-title">Günlük Puantaj</div>
     <div class="home-card-sub">Mesai özeti ve eksik çıkışlar</div>
+</a>
+<?php endif; ?>
+
+<?php if (!empty(pc_sekmeler())): ?>
+<a href="puantaj_cizelgesi.php" class="home-card">
+    <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
+    <div class="home-card-title">Puantaj Çizelgesi</div>
+    <div class="home-card-sub">Aylık puantaj · personel ve günlük işçi</div>
 </a>
 <?php endif; ?>
 <?php if ($p_adm): ?>

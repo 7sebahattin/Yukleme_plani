@@ -119,8 +119,8 @@ ok('personel_takip.php: yalnız aktif modüllere erişimi olmayan kullanıcı fo
     str_contains($takipSrc, "if (!role_pdks_can('hub'))") && str_contains($takipSrc, 'role_pdks_require_request();'));
 ok('personel_takip.php: legacy PDKS izinleri landing erişim koşulunda kullanılmıyor',
     !str_contains($takipSrc, 'attendance.employees') && !str_contains($takipSrc, 'attendance.cards') && !str_contains($takipSrc, 'attendance.scan'));
-ok('personel_takip.php: tam 11 ana kartın (v354: +Ters Kart Takip) her biri kendi aktif hedef izniyle sarılı',
-    substr_count($takipSrc, 'class="home-card"') === 11 && substr_count($takipSrc, "role_pdks_can('") >= 11);
+ok('personel_takip.php: tam 12 ana kartın (v354: +Ters Kart Takip, v552: +Puantaj Çizelgesi) her biri kendi aktif hedef izniyle sarılı',
+    substr_count($takipSrc, 'class="home-card"') === 12 && substr_count($takipSrc, "role_pdks_can('") >= 11);
 ok('personel_takip.php: eski ana kartlar korunur; yeni personel/tip girişleri ayrı ve izinli',
     str_contains($takipSrc, 'home-card home-card-ek')
     && !str_contains($takipSrc, 'pdks-secondary-links') && !str_contains($takipSrc, 'pdks-context-links')
