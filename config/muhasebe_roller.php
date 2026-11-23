@@ -12,20 +12,19 @@ declare(strict_types=1);
  *  - İşlem (çalışan modüller cari/kasa/cek_senet/stok/fatura): `muhasebe.<grup>.create|edit|delete`.
  *  - palet_fisleri: kendi `muhasebe.palet_fisleri.create|edit|delete`.
  *  - Yer tutucu / yönlendirme sayfaları yalnız `read` alır.
- * KAPSAM DIŞI (hep is_admin): admin_konsolu grubu, audit, backup, attendance_fis.
+ * KAPSAM DIŞI (hep is_admin): Şube/Depo Tanımları (v566: Admin Konsolu grubu kalktı), audit, backup, attendance_fis.
  */
 
 /** İşlem anahtarı taşıyan çalışan modül grupları. */
 function muhasebe_rol_islemli_gruplar(): array { return ['cari', 'kasa', 'cek_senet', 'stok', 'fatura']; }
 
-/** Rol kapsamındaki (admin_konsolu HARİÇ) grup anahtarları → [etiket, [slug => başlık]]. */
+/** Rol kapsamındaki (yönetici sayfaları HARİÇ) grup anahtarları → [etiket, [slug => başlık]]. */
 function muhasebe_rol_gruplari(): array {
     static $out = null;
     if ($out !== null) return $out;
     if (!function_exists('nav_muhasebe_gruplari')) return [];   // helpers.php yüklenmeden önce önbelleğe boş yazma
     $out = [];
     foreach (nav_muhasebe_gruplari() as $grup => [$etiket, , $sayfalar]) {
-        if ($grup === 'admin_konsolu') continue;
         $liste = [];
         foreach ($sayfalar as $dosya => [$baslik]) $liste[pathinfo((string)$dosya, PATHINFO_FILENAME)] = (string)$baslik;
         $out[(string)$grup] = ['etiket' => (string)$etiket, 'sayfalar' => $liste];

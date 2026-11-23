@@ -36,14 +36,16 @@ $visit=function(array $row) use (&$visit,&$rows): void { $rows[]=$row; foreach (
 foreach ($schema as $group) foreach ($group as $row) $visit($row);
 foreach ($rows as $row) matrix_ok(is_file(dirname(__DIR__).'/'.explode('?',$row['route'])[0]),'Missing row route '.$row['route']);
 $adminRows=array_filter($rows,fn($r)=>$r['admin_only']);
-// v550: yalnız admin_konsolu (4 sayfa) + Fiş Excel Yükleme + İşlem Geçmişi + Yedekler admin-only kalır; menü sayfaları Roller'den verilebilir (varsayılan kapalı).
-matrix_ok(count($adminRows)===7,'Admin-only inventory changed: '.count($adminRows));
+// v550/v566: yalnız Şube/Depo Tanımları (2 sayfa; Admin Konsolu grubu kalktı) + Fiş Excel Yükleme + İşlem Geçmişi + Yedekler admin-only kalır; menü sayfaları Roller'den verilebilir (varsayılan kapalı).
+matrix_ok(count($adminRows)===5,'Admin-only inventory changed: '.count($adminRows));
 foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row invented permissions');
-$catalogRoutes=[]; $adminKonsolu=[]; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) { $catalogRoutes[]=$route; if ($gk==='admin_konsolu') $adminKonsolu[]=$route; }
-matrix_ok(count($catalogRoutes)===33,'Menu catalog size changed (v555: 39 → 33; İhracat Programı grubu + Stok Dönüşüm/Kantar Fişleri kalktı)');
+$catalogRoutes=[]; $adminKonsolu=['sube_tanimlari.php','depo_tanimlari.php']; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) $catalogRoutes[]=$route;
+matrix_ok(!isset(nav_muhasebe_gruplari()['admin_konsolu']),'Admin Konsolu group reappeared (v566)');
+foreach ($adminKonsolu as $route) matrix_ok(!in_array($route,$catalogRoutes,true),'Yönetim-only page leaked into muhasebe catalog: '.$route);
+matrix_ok(count($catalogRoutes)===29,'Menu catalog size changed (v555: 39 → 33; v566: Admin Konsolu 4 sayfa kalktı → 29)');
 foreach (['ihracat_faturasi_maliyeti.php','beyanname_siparis_proforma.php','dovizli_cari_fis.php','ihracat_tanimlari.php','stok_donusum_fisleri.php','kantar_fisleri.php'] as $goneRoute) matrix_ok(!in_array($goneRoute,$catalogRoutes,true),'Removed menu page reappeared: '.$goneRoute);
 $adminRoutes=array_column($adminRows,'route');
-foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'admin_konsolu page must stay admin-only: '.$route);
+foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'Şube/Depo Tanımları must stay admin-only: '.$route);
 $byKey=[]; foreach ($rows as $r) $byKey[$r['key']]=$r;
 foreach ($catalogRoutes as $route) if (!in_array($route,$adminKonsolu,true)) {
     $slug=pathinfo($route,PATHINFO_FILENAME);

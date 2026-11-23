@@ -3,7 +3,7 @@
 // scripts/muhasebe_rol_smoke.php — v550: muhasebe menüsü sayfa/işlem yetkileri (Roller'den verilebilir, VARSAYILAN KAPALI)
 //   php scripts/muhasebe_rol_smoke.php     → çıkış kodu 0 = hepsi geçti
 // (a) seed/sistem/eski roller hiç muhasebe.* üretmez · (b) sayfa/işlem kapıları · (c) admin her şeyi geçer
-// (d) admin_konsolu/audit/backup admin_only kalır · (e) her kapsam içi sayfa dosyası yeni kapıyı taşır
+// (d) sube/depo tanımları/audit/backup admin_only kalır · (e) her kapsam içi sayfa dosyası yeni kapıyı taşır
 // =========================================================
 require_once __DIR__ . '/_siparis_test_lib.php';
 require_once $ROOT . '/config/role_permission_matrix.php';
@@ -46,7 +46,7 @@ $satirlar = []; $gez = function (array $r) use (&$gez, &$satirlar): void { $sati
 foreach (role_permission_matrix() as $g) foreach ($g as $r) $gez($r);
 $kodlar = []; foreach ($satirlar as $r) foreach ($r['actions'] as $a) $kodlar[] = $a['permission'];
 foreach (array_keys($kat) as $k) ok("matriste kontrol var: $k", in_array($k, $kodlar, true));
-$beklenenSayfa = 0; foreach ($gruplar as $gk => $g) if ($gk !== 'admin_konsolu') $beklenenSayfa += count($g[2]);
+$beklenenSayfa = 0; foreach ($gruplar as $gk => $g) $beklenenSayfa += count($g[2]);
 ok("her kapsam içi sayfa ($beklenenSayfa) için .read katalogda", count(array_filter(array_keys($kat), fn($k) => str_ends_with($k, '.read'))) === $beklenenSayfa);
 ok('çalışan 5 modül grup işlemleri + palet_fisleri işlemleri (18 anahtar)', count(array_filter(array_keys($kat), fn($k) => !str_ends_with($k, '.read'))) === 18);
 $ozet = array_column(role_ozet_sema(), null, 'key');
@@ -56,8 +56,8 @@ ok('role_ozet: tek sayfa Gör → muhasebe_cari "salt" (kapalı değil)', (array
 ok('role_ozet: izin yoksa kapalı', (array_column(role_ozet([]), 'duzey', 'key')['muhasebe_cari'] ?? '') === 'kapali');
 // (d) admin_only
 $adminAnahtar = []; foreach ($satirlar as $r) if ($r['admin_only']) $adminAnahtar[] = $r['key'];
-foreach (['kullanici_tanimlari', 'sube_tanimlari', 'depo_tanimlari', 'veritabani_islemleri', 'audit', 'backup', 'attendance_fis'] as $k) ok("(d) admin_only kalır: $k", in_array($k, $adminAnahtar, true));
-ok('(d) admin_only satırı tam 7', count($adminAnahtar) === 7);
+foreach (['sube_tanimlari', 'depo_tanimlari', 'audit', 'backup', 'attendance_fis'] as $k) ok("(d) admin_only kalır: $k", in_array($k, $adminAnahtar, true));
+ok('(d) admin_only satırı tam 5', count($adminAnahtar) === 5);
 foreach ($satirlar as $r) if (in_array($r['key'], ['cari_kartlari', 'stok_kartlari', 'palet_fisleri', 'sifre_degistirme'], true)) ok("kapsam içi satır admin_only DEĞİL: {$r['key']}", !$r['admin_only']);
 
 $pf = (string)file_get_contents($ROOT . '/palet_fisleri.php');
@@ -67,7 +67,7 @@ $PERMS = ['role.permissions.detailed', 'muhasebe.cari_kartlari.read'];
 ok('cari_kartlari sayfa kapısı geçer', muhasebe_sayfa_can('cari_kartlari'));
 ok('aynı gruptaki başka sayfa geçmez (cari_fisler)', !muhasebe_sayfa_can('cari_fisler'));
 ok('stok sayfaları geçmez', !muhasebe_sayfa_can('stok_kartlari') && !muhasebe_sayfa_can('stok_giris_fisleri'));
-ok('placeholder / palet / admin_konsolu sayfaları geçmez', !muhasebe_sayfa_can('palet_fisleri') && !muhasebe_sayfa_can('gunluk_kurlar') && !muhasebe_sayfa_can('kullanici_tanimlari') && !muhasebe_sayfa_can('olmayan_sayfa'));
+ok('placeholder / palet / yönetici-only sayfaları geçmez', !muhasebe_sayfa_can('palet_fisleri') && !muhasebe_sayfa_can('gunluk_kurlar') && !muhasebe_sayfa_can('sube_tanimlari') && !muhasebe_sayfa_can('olmayan_sayfa'));
 ok('cari_can(read) true; write/create/edit/delete/admin/tanim false', cari_can('read') && !cari_can('write') && !cari_can('create') && !cari_can('edit') && !cari_can('delete') && !cari_can('admin') && !cari_can('tanim'));
 ok('stok/fatura/kasa/çek-senet okuma false', !stok_can('read') && !fatura_can('read') && !kasa_can('read') && !ceksenet_can('read'));
 ok('bilinmeyen eylem false', !cari_can('xyz') && !cari_can(''));
@@ -113,12 +113,14 @@ ok('admin: bilinmeyen eylem yine false', !cari_can('xyz'));
 $IS_ADMIN = false;
 
 echo "=== (e) sayfa dosyaları: yeni kapı, çıplak is_admin kapısı yok ===\n";
-$ak = array_keys($gruplar['admin_konsolu'][2]);
 foreach ($gruplar as $gk => $g) foreach ($g[2] as $dosya => $_) {
     $s = (string)file_get_contents($ROOT . '/' . $dosya); $ad = basename($dosya, '.php');
-    if ($gk === 'admin_konsolu') { ok("$dosya: admin_konsolu is_admin kapısı KALIR", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s)); continue; }
     ok("$dosya: muhasebe_sayfa_can('$ad') kapısı + require_login", str_contains($s, "if (!muhasebe_sayfa_can('$ad')) { forbidden(); }") && str_contains($s, 'require_login()'));
     ok("$dosya: çıplak is_admin() { forbidden kapısı YOK", !preg_match('/is_admin\(\)\)\s*\{\s*forbidden/', $s));
+}
+foreach (nav_yonetim_sayfalari() as $dosya => $_) {
+    $s = (string)file_get_contents($ROOT . '/' . $dosya);
+    ok("$dosya: yönetici-only sayfa is_admin kapısı KALIR (Roller'den verilemez)", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
 }
 foreach (['cari_ekstre' => 'cari', 'kasa_cikti' => 'kasa', 'cek_cikti' => 'cek_senet', 'fatura_cikti' => 'fatura'] as $f => $grp) {
     $s = (string)file_get_contents("$ROOT/$f.php");

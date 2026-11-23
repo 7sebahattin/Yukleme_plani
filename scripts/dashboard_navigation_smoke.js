@@ -58,9 +58,9 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                 check(await quick.evaluate(node => document.activeElement === node), name + '/' + theme + ' quick card is keyboard focusable');
                 await page.evaluate(() => scrollTo(0, 0));
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-home.png') });
-                await page.locator('.home-card[href="veritabani_islemleri.php"]').scrollIntoViewIfNeeded();
-                check(await page.locator('.home-card[href="veritabani_islemleri.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
-                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'veritabani_islemleri.php'; }), name + '/' + theme + ' scrolled-to card really is the last card');
+                await page.locator('.home-card[href="kullanici_tercihleri.php"]').scrollIntoViewIfNeeded();
+                check(await page.locator('.home-card[href="kullanici_tercihleri.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
+                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'kullanici_tercihleri.php'; }), name + '/' + theme + ' scrolled-to card really is the last card');
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-last-group.png') });
             }
             if (width >= 900) {

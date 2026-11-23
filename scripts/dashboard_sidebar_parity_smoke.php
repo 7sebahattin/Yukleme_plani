@@ -50,7 +50,7 @@ function render_flash(): void {}
 
 if (!preg_match("/define\('APP_SURUM',\s*'(v\d+)'\)/", $dashboardHelperSource, $version)) throw new RuntimeException('Sürüm bulunamadı.');
 define('APP_SURUM', $version[1]);
-foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_eski_esleri', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'nav_menu_modeli', 'nav_grup_ikon_svg', 'render_desktop_sidebar'] as $functionName) {
+foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_yonetim_sayfalari', 'nav_eski_esleri', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'nav_menu_modeli', 'nav_grup_ikon_svg', 'render_desktop_sidebar'] as $functionName) {
     $functionSource = dashboard_extract_function($dashboardHelperSource, $functionName);
     eval(str_replace('__DIR__', var_export($dashboardRoot . '/config', true), $functionSource));
 }
@@ -166,7 +166,7 @@ $dashboardCatalog = [];
 foreach (nav_muhasebe_gruplari() as [$heading, , $pages]) {
     foreach ($pages as $href => [$label]) $dashboardCatalog[$href] = $label;
 }
-dashboard_check(count(nav_muhasebe_gruplari()) === 9 && count($dashboardCatalog) === 33, 'paylaşılan katalog 9 grup/33 hedef (v555: İhracat Programı grubu + Stok Dönüşüm/Kantar Fişleri kalktı)');
+dashboard_check(count(nav_muhasebe_gruplari()) === 8 && count($dashboardCatalog) === 29 && !isset(nav_muhasebe_gruplari()['admin_konsolu']), 'paylaşılan katalog 8 grup/29 hedef (v555: İhracat Programı grubu + Stok Dönüşüm/Kantar Fişleri kalktı; v566: Admin Konsolu grubu kalktı)');
 // v555 (a): kaldırılan grup/sayfalar katalogda YOK (sayfa dosyaları durur ama menü/kart üretilmez).
 foreach (['ihracat'] as $removedGroup) dashboard_check(!isset(nav_muhasebe_gruplari()[$removedGroup]), 'İhracat Programı grubu katalogda yok');
 foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'stok_donusum_fisleri.php', 'kantar_fisleri.php'] as $removedPage) {
@@ -266,7 +266,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 49, 'admin: Ana Sayfa hariç 49 benzersiz kart (33 katalog + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
+        dashboard_check(count($home) === 47, 'admin: Ana Sayfa hariç 47 benzersiz kart (29 katalog + 2 Şube/Depo Tanımları (v566) + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }
