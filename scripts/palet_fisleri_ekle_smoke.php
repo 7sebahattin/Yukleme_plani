@@ -95,5 +95,14 @@ ok('Sol şerit/köşe sütunu kaldırıldı (tablo kenarda başlar)', !str_conta
 ok('Başlığa çift tık Sütunlar penceresini açar (tutaçta çift tık yine daraltır)', str_contains($php, 'id="pfSutunDialog"') && str_contains($php, 'id="pfSutunListe"') && str_contains($js, "headers.addEventListener('dblclick'") && str_contains($js, 'sutunPenceresiAc()') && str_contains($js, "if (event.target.closest('.pf-rs')) return; event.preventDefault(); sutunPenceresiAc()"));
 ok('Sütun göster/gizle: işaret kutuları, en az bir sütun görünür, Tümünü göster, kullanıcı bazlı kayıt (gizli)', str_contains($js, 'kutu.disabled = kutu.checked') && str_contains($js, "id=\"pfSutunHepsi\"") === false && str_contains($php, 'id="pfSutunHepsi"') && str_contains($js, 'tercih.gizli = Array.from(gizli)') && str_contains($kt, "'gizli' => []") && str_contains($kt, "\$out['gizli']"));
 ok('Gizli sütunlar gezinme (ok tuşları), yazdırma, parti listesi ve sütun taşımada atlanır', str_contains($js, 'const gorHuc = row =>') && str_contains($js, 'filter(th => !gizli.has(th.dataset.col))') && str_contains($js, '!gizli.has(c) && table.tHead') && str_contains($js, 'gizli sütunlar sayılmaz'));
+// v561: pencere yerleşimi (Tarih·Belge·Parti / Müşteri·Müstahsil / Palet·Kasa / Ürün·Adet) + yeniden adlandırma
+$sira = array_map(fn($n) => strpos($php, 'name="' . $n . '"'), ['tarih', 'belge_no', 'parti_no', 'firma', 'mustahsil', 'palet', 'kasa', 'urun', 'kasa_adeti', 'brut_kg', 'aciklama1', 'aciklama2']);
+$sirali = !in_array(false, $sira, true); for ($i = 1; $i < count($sira); $i++) if ($sira[$i] < $sira[$i - 1]) $sirali = false;
+ok('v561: pencere alan sırası Tarih·Belge·Parti / Müşteri·Müstahsil / Palet·Kasa / Ürün·Adet / Brüt·Dara·Net / Analiz·Açıklama', $sirali);
+ok('v561: Enter sırası pencere sırasıyla aynı', str_contains($js, "const alanSirasi = ['tarih', 'parti_no', 'firma', 'mustahsil', 'palet', 'kasa', 'urun', 'kasa_adeti', 'brut_kg', 'aciklama1', 'aciklama2'];"));
+ok('v561: Açıklama-1 → "Analiz Durumu", Açıklama-2 → "Açıklama" (pencere + tablo + Excel)', str_contains($php, '>Analiz Durumu <input name="aciklama1"') && str_contains($php, '>Açıklama <input name="aciklama2"') && str_contains($php, '<th data-col="aciklama1">Analiz Durumu</th>') && str_contains($php, "'Analiz Durumu', 'Açıklama',") && !str_contains($php, 'Açıklama-1') && !str_contains($php, 'Açıklama-2'));
+ok('v561: masaüstünde ilk satır 3 (pf-d2), diğerleri 2 (pf-d3) alan; Müstahsil tam satır değil', str_contains($css, '#pfDialog .pf-form-grid>label.pf-d2{grid-column:span 2}') && str_contains($css, '#pfDialog .pf-form-grid>label.pf-d3{grid-column:span 3}') && str_contains($php, 'pf-cb pf-must pf-w6 pf-d3"'));
+ok('v561: yumuşak görünüm belirteçleri açık + koyu temada tanımlı', str_contains($css, 'html[data-theme="dark"] #pfDialog{--pf-neu-bg:') && !str_contains($css, 'var(--surface,#fff)'));
+
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

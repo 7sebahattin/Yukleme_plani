@@ -287,7 +287,7 @@
     const saveBtn = document.getElementById('pfSave');
     const uyari = document.getElementById('pfUyari');
     const netBox = document.getElementById('pfNet');
-    const alanSirasi = ['tarih', 'parti_no', 'palet', 'firma', 'urun', 'kasa', 'kasa_adeti', 'mustahsil', 'brut_kg', 'aciklama1', 'aciklama2'];
+    const alanSirasi = ['tarih', 'parti_no', 'firma', 'mustahsil', 'palet', 'kasa', 'urun', 'kasa_adeti', 'brut_kg', 'aciklama1', 'aciklama2'];
     let nextBelge = window.PALET_FISLERI?.sonrakiBelge || 1;
 
     function mesaj(text, ok) { errorBox.textContent = text || ''; errorBox.classList.toggle('pf-ok', !!ok); }
