@@ -102,6 +102,36 @@ const srv = http.createServer((req, res) => {
         ok('Çavuşsuz kişide düzenle: seçim boş', (await p.evaluate(() => document.getElementById('pgCavus').value)) === '');
 
         if (process.env.PCS_SHOT) { await p.goto(KOK + '?sekme=giris&ay=' + ay); await p.waitForTimeout(400); await p.screenshot({ path: path.join(process.env.PCS_SHOT, `cizelge_${w}.png`) }); }
+        // ── v565: köşe hücresinde «Çavuş seç» (yalnız masaüstü ızgarası; <768px'te ızgara gizli) ──
+        if (w >= 768) {
+            await p.goto(KOK + '?sekme=giris&ay=' + ay); await p.waitForTimeout(450);
+            const ks = await p.evaluate(() => { const th = document.querySelector('th.pc-kose'); const s = th && th.querySelector('select[data-pg-cavus-sec]'); if (!s) return null; const r = s.getBoundingClientRect(), tr = th.getBoundingClientRect();
+                return { opt: [...s.options].map(o => o.textContent.trim()), icinde: r.left >= tr.left && r.right <= tr.right + 0.5 && r.top >= tr.top && r.bottom <= tr.bottom + 0.5, gor: r.width > 60 && r.height >= 20, secili: s.value, satir: th.parentNode.getBoundingClientRect().height, bas: th.querySelector('.pc-isim-yazi').textContent.replace(/\s+/g, ' ').trim() }; });
+            ok('Köşe hücresinde «Çavuş seç…» kutusu: seçenekler Ayşe (1) · Bekir (1) · Çavuşsuz (1)', ks && ks.opt.join('|') === 'Çavuş seç…|Çavuş Ayşe (1)|Çavuş Bekir (1)|Çavuşsuz (1)', JSON.stringify(ks));
+            ok('Köşe başlığı «Kişi (3)» (PHP uyarısı/bozuk metin YOK)', ks && ks.bas === 'Kişi (3)', JSON.stringify(ks));
+            ok('Kutu köşe hücresinin İÇİNDE ve görünür (taşmıyor); başlık satırı şişmedi (≤ 60px)', ks && ks.icinde && ks.gor && ks.satir <= 60, JSON.stringify(ks));
+            const ozet = () => p.evaluate(() => ({ oz: document.getElementById('pgSecOzet').textContent, isaretli: [...document.querySelectorAll('input[data-pg-sec]:checked')].filter(c => c.closest('tr')).map(c => c.getAttribute('data-pg-sec')).join(), sel: document.querySelector('select[data-pg-cavus-sec]').value }));
+            await p.selectOption('select[data-pg-cavus-sec]', '2'); await p.waitForTimeout(150);
+            let o1 = await ozet();
+            ok('«Çavuş Bekir» seçilince YALNIZ onun kişisi işaretlenir (B); özet «1 kişi × 0 gün seçili»', o1.isaretli === '2' && /^1 kişi × 0 gün/.test(o1.oz) && o1.sel === '2', JSON.stringify(o1));
+            await p.selectOption('select[data-pg-cavus-sec]', 'yok'); await p.waitForTimeout(150);
+            o1 = await ozet();
+            ok('«Çavuşsuz» → yalnız çavuşsuz kişi (C); önceki seçim DEĞİŞTİRİLİR (eklenmez)', o1.isaretli === '3', JSON.stringify(o1));
+            await p.evaluate(() => document.querySelector('input[data-pg-sec="1"]').click()); await p.waitForTimeout(150);
+            o1 = await ozet();
+            ok('Elle başka kişi eklenince kutu «Çavuş seç…»e döner (seçim artık tek çavuş değil)', o1.isaretli === '1,3' || o1.isaretli === '3,1', JSON.stringify(o1));
+            await p.selectOption('select[data-pg-cavus-sec]', '1'); await p.waitForTimeout(150);
+            await p.selectOption('select[data-pg-cavus-sec]', ''); await p.waitForTimeout(150);
+            o1 = await ozet();
+            ok('«Çavuş seç…» seçimi KALDIRIR', o1.isaretli === '' && o1.oz === '', JSON.stringify(o1));
+            // seçili kişilerle toplu işaretleme: Bekir'in kişisi + 2 gün + X → istek yalnız o kişiyi taşır
+            await p.selectOption('select[data-pg-cavus-sec]', '2'); await p.waitForTimeout(100);
+            await p.evaluate(() => { document.querySelectorAll('.pg-gbtn[data-pg-gun]')[0].click(); document.querySelectorAll('.pg-gbtn[data-pg-gun]')[1].click(); document.querySelector('[data-pg-sec-kod="X"]').click(); });
+            await p.waitForTimeout(150); posts.length = 0;
+            await p.evaluate(() => document.getElementById('pgUygula').click()); await p.waitForTimeout(200);
+            await p.evaluate(() => document.getElementById('pgOnayla').click()); await p.waitForTimeout(500);
+            ok('Toplu uygulama isteği: kisi_ids=[2] (yalnız seçilen çavuşun kişisi), 2 gün, kod X', posts.length >= 1 && posts[0].action === 'gun_toplu_sec' && JSON.stringify((posts[0].kisi_ids || []).map(Number)) === '[2]' && (posts[0].tarihler || []).length === 2 && posts[0].kod === 'X', JSON.stringify(posts[0]));
+        }
         // ── Çavuş süzgeci ──
         await p.goto(KOK + '?sekme=giris&ay=' + ay + '&cavus=2'); await p.waitForTimeout(400);
         const sz = await p.evaluate(() => [...document.querySelectorAll('tr[data-pg-satir] .pc-isim-yazi')].map(x => x.textContent.trim()));
