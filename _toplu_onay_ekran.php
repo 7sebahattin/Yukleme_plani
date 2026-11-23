@@ -25,7 +25,8 @@ $beklemeNedeni = static function (array $f): string {
 </div>
 
 <form method="get" class="pdks-filter-bar" data-oto-filtre>
-    <input type="date" name="tarih" value="<?= h($tarih) ?>">
+    <?php $gnDiger = ['cavus' => $cavusId, 'kaynak' => $yalnizElle ? 'elle' : '']; ?>
+    <span class="pdks-gun-gezin"><?= pdks_gun_gezin('geri', $tarih, $gnDiger) ?><input type="date" name="tarih" value="<?= h($tarih) ?>"><?= pdks_gun_gezin('ileri', $tarih, $gnDiger) ?></span>
     <select name="cavus">
         <option value="">Tüm çavuşlar</option>
         <?php foreach ($cavuslar as $c): ?><option value="<?= (int)$c['id'] ?>" <?= $cavusId === (int)$c['id'] ? 'selected' : '' ?>><?= h($c['name']) ?><?= $c['is_active'] ? '' : ' (pasif)' ?></option><?php endforeach; ?>
@@ -43,7 +44,7 @@ $beklemeNedeni = static function (array $f): string {
 <div class="card tvo-onizleme" id="tvoOnizleme">
     <strong><?= $onizleme['uygulandi'] ? 'Sonuç' : '🔍 Önizleme' ?><?= !empty($onizlemeOto) ? ' — Elle girilenleri otomatik onayla' : '' ?></strong>
     <?php if (!empty($onizlemeOto)): ?>
-    <div class="tvo-oto-ozet"><strong><?= (int)$sy['onay'] ?> kayıt onaylanacak:</strong> <?= (int)$sy['tam'] ?> Tam<?= $sy['yarim'] > 0 ? ', ' . (int)$sy['yarim'] . ' Yarım' : '' ?>, toplam <?= (int)$sy['fm_saat'] ?> sa fazla mesai (hesaplanan saatin tamamı).
+    <div class="tvo-oto-ozet"><strong><?= (int)$sy['onay'] ?> kayıt onaylanacak:</strong> <?= (int)$sy['tam'] ?> Tam<?= $sy['yarim'] > 0 ? ', ' . (int)$sy['yarim'] . ' Yarım' : '' ?><?= !empty($sy['sadece_fm']) ? ', ' . (int)$sy['sadece_fm'] . ' Sadece fazla mesai' : '' ?>, toplam <?= (int)$sy['fm_saat'] ?> sa fazla mesai (hesaplanan saatin tamamı).
         <?php if ($sy['karar'] > 0): ?><br><span class="muted"><?= (int)$sy['karar'] ?> kayıt “Karar gerekli” — otomatik onaylanmaz, aşağıdaki listeden elle karar verilir.</span><?php endif; ?></div>
     <?php endif; ?>
     <?php if (!empty($sy['fiyatsiz'])): ?><div class="tvo-uyari">⚠ <?= (int)$sy['fiyatsiz'] ?> onaylanacak kayıtta işçi tipi fiyatı yok — onay yazılır, ancak fiyat girilene dek hakediş hesaplanamaz.</div><?php endif; ?>
@@ -89,7 +90,7 @@ $beklemeNedeni = static function (array $f): string {
     <input type="hidden" name="cavus" value="<?= (int)($cavusId ?? 0) ?>">
     <div class="tvo-oto-metin">
         <strong>Elle girilenleri otomatik onayla</strong>
-        <span class="muted">Bu gün/çavuş/depoda onay bekleyen <?= (int)$elleAdet ?> elle girilmiş dönem var. Yalnız karar gerektirmeyenler onaylanır (süre Tam eşiğini karşılıyorsa Tam, fazla mesai varsa hesaplanan saatin tamamı). Kısa/çıkışsız/Tam-Yarım belirsiz olanlar ve kart okutulmuş kayıtlar onaylanmaz. Önce önizleme gösterilir.</span>
+        <span class="muted">Bu gün/çavuş/depoda onay bekleyen <?= (int)$elleAdet ?> elle girilmiş dönem var. Sınıf süreden belirlenir: Tam eşiğini (9 sa) karşılayan = Tam (+ hesaplanan fazla mesaisinin tamamı) · 3 saat ile Tam eşiği arası = Yarım · 3 saatten kısa = <strong>Sadece fazla mesai</strong> (Tam/Yarım ücreti yok, çalıştığı saat kadar fazla mesai ücreti). Çıkışsız, çok kısa (fazla mesai doğmayan) ve kart okutulmuş kayıtlar onaylanmaz. Önce önizleme gösterilir. <em>Not: yeni elle eklenen kayıtlar zaten eklenirken bu kuralla onaylanır; bu düğme eski bekleyenler içindir.</em></span>
     </div>
     <button type="submit" class="btn btn-primary">⚡ Elle girilenleri otomatik onayla (önizle)</button>
 </form>

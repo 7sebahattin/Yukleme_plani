@@ -95,6 +95,10 @@ render_flash();
 <div class="page-head">
     <h1>🕧 Buçuklu Çıkışlar</h1>
     <div class="page-head-actions">
+        <?php // v560: onay ekranına geçiş (tek günlük ekran → tarih = bu sayfadaki bitiş tarihi); yalnız Toplu Mesai Onayı kapısını geçenlere görünür. ?>
+        <?php if (pdks_faz8b_sema_hazir($pdo) && pdks_hakedis_can('entitlements_finalize') && role_pdks_can('mesai', 'read')): ?>
+        <a href="<?= h('mesai_toplu_onay.php?' . http_build_query(['tarih' => $bitis])) ?>" class="btn btn-primary">✅ Toplu Mesai Onayı</a>
+        <?php endif; ?>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>

@@ -69,6 +69,9 @@ $hakedisler = pdks_hakedis_gun_listesi($tarih, $depo, $cavusId, null, $pdo);
 $hakedisBySession = [];
 foreach ($hakedisler as $h) $hakedisBySession[(int)$h['session_id']] = $h;
 
+// v560: çavuş başına toplam fazla mesai (onaylı + bekleyen ayrı) ve servis (Büyük/Küçük) — tek toplu sorgu.
+$fmServis = $faz8bHazir ? pdks_faz8b_oturum_fm_servis_toplu(array_map(static fn($r) => (int)$r['session']['id'], $gunListesi), $pdo) : null;
+$servisSutunu = $fmServis !== null && function_exists('pdks_servis_sema_hazir') && pdks_servis_sema_hazir($pdo);
 $satirlar = [];
 foreach ($gunListesi as $row) {
     $sid = (int)$row['session']['id'];
@@ -108,7 +111,8 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 <?php endif; ?>
 
 <form method="get" class="pdks-filter-bar" data-oto-filtre>
-    <input type="date" name="tarih" value="<?= h($tarih) ?>">
+    <?php $gnDiger = ['cavus' => $cavusId, 'durum' => $durum_f]; ?>
+    <span class="pdks-gun-gezin"><?= pdks_gun_gezin('geri', $tarih, $gnDiger) ?><input type="date" name="tarih" value="<?= h($tarih) ?>"><?= pdks_gun_gezin('ileri', $tarih, $gnDiger) ?></span>
     <select name="cavus">
         <option value="">Tüm çavuşlar</option>
         <?php foreach ($cavuslar as $c): ?>
@@ -129,7 +133,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 <div class="table-wrap pc-only">
 <table class="data-table">
 <thead><tr>
-    <th>Çavuş</th><?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?><th>Toplam</th><th>Mesai Değ.</th><th>Hakediş</th><th>Durum</th><th>Uyarı</th><th>İşlem</th>
+    <th>Çavuş</th><?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?><th>Toplam</th><?php if ($fmServis !== null): ?><th title="Onaylanan fazla mesai saati (onay bekleyen ayrıca yazılır)">Fazla Mesai (sa)</th><?php endif; ?><?php if ($servisSutunu): ?><th>Servis (B / K)</th><?php endif; ?><th>Mesai Değ.</th><th>Hakediş</th><th>Durum</th><th>Uyarı</th><th>İşlem</th>
 </tr></thead>
 <tbody>
 <?php foreach ($satirlar as $s): $p=$s['puantaj']; $sess=$p['session']; $hk=$s['hakedis']; [$etkt,$ekod]=$durumEtiket[$s['hakedis_durum']]; $f8=$s['faz8b']; ?>
@@ -137,6 +141,9 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     <td class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></td>
     <?php foreach ($tipSut as $tc): ?><td><?= (int)($p['giris'][$tc['ad']] ?? 0) ?></td><?php endforeach; ?>
     <td><strong><?= (int)$p['giris_toplam'] ?></strong></td>
+    <?php $fs = $fmServis[(int)$sess['id']] ?? null; ?>
+    <?php if ($fmServis !== null): ?><td><strong><?= (int)($fs['fm_onayli'] ?? 0) ?></strong><?php if ((int)($fs['fm_bekleyen'] ?? 0) > 0): ?><span class="pdks-fm-bekleyen">+<?= (int)$fs['fm_bekleyen'] ?> sa bekliyor</span><?php endif; ?><?php if ((int)($fs['sadece_fm'] ?? 0) > 0): ?><span class="pdks-row-sub"><?= (int)$fs['sadece_fm'] ?> kişi sadece FM</span><?php endif; ?></td><?php endif; ?>
+    <?php if ($servisSutunu): ?><td class="pdks-sv-ad"><?= ((int)($fs['servis_buyuk'] ?? 0) + (int)($fs['servis_kucuk'] ?? 0)) > 0 ? 'B ' . (int)$fs['servis_buyuk'] . ' · K ' . (int)$fs['servis_kucuk'] : '—' ?></td><?php endif; ?>
     <td>
         <?php if (!$faz8bHazir): ?>—
         <?php elseif ($f8['tam_hazir']): ?><span class="pdks-badge pdks-badge-tamamlandi">Hazır</span>
@@ -168,6 +175,9 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 <div class="pdks-card-item">
     <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y',strtotime($sess['work_date']))) ?><?= $sess['depo'] ? ' / '.h($sess['depo']) : '' ?></div></div><span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span></div>
     <div class="pdks-kiosk-counter-row"><span>Toplam İşçi</span><span class="n"><strong><?= (int)$p['giris_toplam'] ?></strong></span></div>
+    <?php $fs = $fmServis[(int)$sess['id']] ?? null; ?>
+    <?php if ($fmServis !== null): ?><div class="pdks-kiosk-counter-row"><span>Fazla mesai (sa)</span><span class="n"><strong><?= (int)($fs['fm_onayli'] ?? 0) ?></strong><?php if ((int)($fs['fm_bekleyen'] ?? 0) > 0): ?> <span class="pdks-fm-bekleyen">+<?= (int)$fs['fm_bekleyen'] ?> sa bekliyor</span><?php endif; ?></span></div><?php endif; ?>
+    <?php if ($servisSutunu): ?><div class="pdks-kiosk-counter-row"><span>Servis (Büyük / Küçük)</span><span class="n"><?= (int)($fs['servis_buyuk'] ?? 0) ?> / <?= (int)($fs['servis_kucuk'] ?? 0) ?></span></div><?php endif; ?>
     <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Mesai değerlendirme: <?= $f8['tam_hazir'] ? 'Hazır' : 'Bekliyor ' . (int)$f8['hazir'] . '/' . (int)$f8['toplam'] ?></div><?php endif; ?>
     <div class="pdks-row-sub">Hakediş: <?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?></div>
     <?php if ($hk && !empty($hk['needs_recalculation'])): ?>
