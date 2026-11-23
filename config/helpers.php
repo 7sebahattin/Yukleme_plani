@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v559');
+    define('APP_SURUM', 'v560');
 }
 
 // --- HTML kaçışı ---
@@ -449,7 +449,7 @@ function first_allowed_page(): ?string {
     }
     // v550: yalnız muhasebe menüsü yetkisi olan rol — sayfanın KENDİ kapısı (muhasebe_sayfa_can). Başka sayfaya
     // 302 veren sayfalar atlanır (hedefin kapısı farklı olabilir → yeni 403 olmasın).
-    $yonlendiren = ['kantar_fisleri', 'raporlar_listeler', 'ihracat_faturasi_maliyeti', 'beyanname_siparis_proforma'];
+    $yonlendiren = ['kantar_fisleri', 'mal_kabul_fisleri', 'arac_yukleme_fisleri', 'raporlar_listeler', 'ihracat_faturasi_maliyeti', 'beyanname_siparis_proforma'];
     foreach (muhasebe_rol_gruplari() as $__g) foreach ($__g['sayfalar'] as $__slug => $__b) {
         if (!in_array($__slug, $yonlendiren, true) && muhasebe_sayfa_can($__slug)) return $__slug . '.php';
     }
