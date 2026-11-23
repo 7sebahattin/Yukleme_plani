@@ -90,7 +90,6 @@ function stok_tur_rozet(string $tur, string $neden = '', bool $ters = false): st
         'giris'    => '<span class="st-rozet st-rozet--giris"><span class="st-yon" aria-hidden="true">&#9650;</span> ' . h($neden !== '' ? $neden : 'Giriş') . '</span>',
         'cikis'    => '<span class="st-rozet ' . ($fire ? 'st-rozet--fire' : 'st-rozet--cikis') . '"><span class="st-yon" aria-hidden="true">&#9660;</span> ' . h($neden !== '' ? $neden : 'Çıkış') . '</span>',
         'transfer' => '<span class="st-rozet st-rozet--transfer"><span class="st-yon" aria-hidden="true">&#8644;</span> Transfer</span>',
-        'donusum'  => '<span class="st-rozet st-rozet--donusum"><span class="st-yon" aria-hidden="true">&#9881;</span> Dönüşüm</span>',
         default    => '<span class="st-rozet">' . h($tur) . '</span>',
     };
 }
@@ -440,7 +439,7 @@ function stok_tanimlari_govde(PDO $pdo): string
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Parça B — Fiş sayfaları (stok_giris_fisleri / stok_cikis_fisleri / transfer_fisleri / stok_donusum_fisleri)
+// Parça B — Fiş sayfaları (stok_giris_fisleri / stok_cikis_fisleri / transfer_fisleri)
 // Ortak gövde: stok_fis_sayfa_govde($pdo, $tur). Sol liste (GET süzgeç) + sağ panel: ?id= detay · ?yeni=1 / ?kopya=ID / ?kantar_id= form.
 // Kısmi yanıt: stok_fis_parca() (?parca=detay | kantar_oneri). Kancalar (assets/stok.js): #stFisForm[data-st-fis] · #stFisVeri · .st-fsatir ·
 // [data-satir-ekle] · [data-satir-sil] · [data-st-modal="iptal"|"kantar"] · #stEksik · [data-depo-takas] · #stModalIptal · #stModalKantar.
@@ -453,7 +452,6 @@ function stok_fis_metin(string $tur): array
         'giris'    => ['baslik' => 'Stok Giriş Fişleri', 'yeni' => 'Yeni Giriş Fişi', 'kisa' => 'giriş', 'sekme' => 'giris'],
         'cikis'    => ['baslik' => 'Stok Çıkış Fişleri', 'yeni' => 'Yeni Çıkış Fişi', 'kisa' => 'çıkış', 'sekme' => 'cikis'],
         'transfer' => ['baslik' => 'Transfer Fişleri', 'yeni' => 'Yeni Transfer Fişi', 'kisa' => 'transfer', 'sekme' => 'transfer'],
-        'donusum'  => ['baslik' => 'Dönüşüm Fişleri', 'yeni' => 'Yeni Dönüşüm Fişi', 'kisa' => 'dönüşüm', 'sekme' => 'donusum'],
     ][$tur] ?? ['baslik' => 'Stok Fişleri', 'yeni' => 'Yeni Fiş', 'kisa' => 'fiş', 'sekme' => ''];
 }
 
@@ -630,21 +628,7 @@ function stok_fis_detay_html(PDO $pdo, array $f): string
             ? '<button type="button" class="btn st-tehlike" disabled title="' . ($iptal ? 'Fiş zaten iptal edildi' : 'Yetkiniz yok') . '">İptal et</button>'
             : '<button type="button" class="btn st-tehlike" data-st-modal="iptal" data-id="' . $id . '" data-fis-no="' . h($f['fis_no']) . '" data-geri="' . h($sayfa . '?id=' . $id) . '">İptal et</button>'))
         . '<button type="button" class="btn" data-yazdir>Yazdır</button></div>';
-    if ($tur === 'donusum') {
-        $C = array_values(array_filter($f['satirlar'], static fn($s) => $s['yon'] === 'C'));
-        $G = array_values(array_filter($f['satirlar'], static fn($s) => $s['yon'] === 'G'));
-        $cm = array_sum(array_map(static fn($s) => (int)$s['milli'], $C)); $gm = array_sum(array_map(static fn($s) => (int)$s['milli'], $G));
-        $cv = array_sum(array_map(static fn($s) => (int)($s['maliyet_kurus'] ?? 0), $C));
-        $fark = $cm - $gm;
-        $satir = '<div class="st-donusum"><section class="st-donusum-kol st-donusum-kol--girdi"><h3 class="st-bolum-baslik"><span class="st-yon" aria-hidden="true">&#9660;</span> Girdiler <small>çıkar</small></h3>'
-            . stok_fis_satir_tablo($C, $tur, $pb, 'Girdiler') . '</section>'
-            . '<section class="st-donusum-kol st-donusum-kol--cikti"><h3 class="st-bolum-baslik"><span class="st-yon" aria-hidden="true">&#9650;</span> Çıktılar <small>girer</small></h3>'
-            . stok_fis_satir_tablo($G, $tur, $pb, 'Çıktılar') . '</section></div>'
-            . '<p class="st-fire">Fire / fark: <b>' . h(stok_miktar_bicim($fark, 'lt')) . '</b>' . ($cm > 0 ? ' (%' . h(number_format($fark / $cm * 100, 1, ',', '.')) . ')' : '')
-            . ' · Girdi maliyeti <b>' . h(cari_tutar_bicim($cv, 'TRY')) . '</b>' . ($gm > 0 ? ' · Çıktı birim maliyeti <b>' . h(cari_tutar_bicim((int)round($cv / ($gm / 1000)), 'TRY')) . '</b>' : '') . ' <span class="st-ipucu">miktarlar ana birimde</span></p>';
-    } else {
-        $satir = '<h3 class="st-bolum-baslik">Satırlar <small>' . count($f['satirlar']) . ' satır</small></h3><div class="st-hareket">' . stok_fis_satir_tablo($f['satirlar'], $tur, $pb, 'Fiş satırları') . '</div>';
-    }
+    $satir = '<h3 class="st-bolum-baslik">Satırlar <small>' . count($f['satirlar']) . ' satır</small></h3><div class="st-hareket">' . stok_fis_satir_tablo($f['satirlar'], $tur, $pb, 'Fiş satırları') . '</div>';
     return '<section class="st-detay st-fis-detay" id="stDetay" data-id="' . $id . '" data-tur="' . h($tur) . '" aria-label="Fiş detayı"><div class="st-detay-kart">'
         . '<a class="st-geri" href="' . h($sayfa) . '"><span aria-hidden="true">&#8592;</span> Liste</a>'
         . '<header class="st-baslik"><div class="st-baslik-satir"><h2 class="st-unvan">' . h($f['fis_no']) . '</h2><span class="st-baslik-rozet">' . stok_tur_rozet($tur, (string)($f['neden_ad'] ?? ''))
@@ -702,7 +686,6 @@ function stok_fis_form_tablo(string $tur, string $yon, array $satirlar, array $k
     $fiyatli = $tur === 'giris' || $tur === 'cikis';
     $tr = ''; $no = 0;
     foreach ($satirlar as $s) {
-        if (($tur === 'donusum') && ($s['yon'] ?? '') !== $yon) continue;
         $tr .= stok_fis_form_satiri($tur, $yon, $s, $kartlar[(int)($s['kart_id'] ?? 0)] ?? null, ++$no);
     }
     if ($no === 0) $tr = stok_fis_form_satiri($tur, $yon, [], null, 1);
@@ -764,15 +747,7 @@ function stok_fis_form_html(PDO $pdo, string $tur, array $o): string
     $bas .= $alan('Açıklama', '<input type="text" name="aciklama" maxlength="500" value="' . h((string)($o['aciklama'] ?? '')) . '" autocomplete="off">', 'st-alan--genis');
 
     $sat = $o['satirlar'] ?? [];
-    if ($tur === 'donusum') {
-        $govde = '<div class="st-donusum st-donusum--form"><section class="st-donusum-kol st-donusum-kol--girdi"><h4 class="st-donusum-bas"><span class="st-yon" aria-hidden="true">&#9660;</span> Girdiler <small>(çıkar)</small></h4>'
-            . stok_fis_form_tablo($tur, 'C', $sat, $kartlar, 'Girdiler') . '</section><div class="st-donusum-ok" aria-hidden="true">&#8594;</div>'
-            . '<section class="st-donusum-kol st-donusum-kol--cikti"><h4 class="st-donusum-bas"><span class="st-yon" aria-hidden="true">&#9650;</span> Çıktılar <small>(girer)</small></h4>'
-            . stok_fis_form_tablo($tur, 'G', $sat, $kartlar, 'Çıktılar') . '</section></div>'
-            . '<p class="st-fire" data-fire>Fire / fark: <b data-top="fark">0</b> · Çıktı birim maliyeti (tahmini): <b data-top="cikti_ort">—</b></p>';
-    } else {
-        $govde = stok_fis_form_tablo($tur, $tur === 'giris' ? 'G' : 'C', $sat, $kartlar, 'Fiş satırları');
-    }
+    $govde = stok_fis_form_tablo($tur, $tur === 'giris' ? 'G' : 'C', $sat, $kartlar, 'Fiş satırları');
     $kaynak = '';
     if (!empty($o['kaynak_modul'])) {
         $kaynak = '<input type="hidden" name="kaynak_modul" value="' . h((string)$o['kaynak_modul']) . '"><input type="hidden" name="kaynak_id" value="' . (int)$o['kaynak_id'] . '">';

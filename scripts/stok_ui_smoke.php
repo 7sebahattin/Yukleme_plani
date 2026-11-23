@@ -237,7 +237,7 @@ ok('?sekme=cikis_neden: Çıkış sekmesi seçili, Fire listede', (bool)preg_mat
 // ═══ 9. Fiş sayfaları (Parça B) ═══
 echo "\n=== 9. Fiş sayfaları (Parça B) ===\n";
 $FB = stok_t_ornek_fisler($db, $O);
-$sayfalar = ['giris' => 'stok_giris_fisleri.php', 'cikis' => 'stok_cikis_fisleri.php', 'transfer' => 'transfer_fisleri.php'];   // v555: 'donusum' sayfası kaldırıldı (410); 'donusum' defter/fiş türü stok_core'da geriye uyum için durur
+$sayfalar = ['giris' => 'stok_giris_fisleri.php', 'cikis' => 'stok_cikis_fisleri.php', 'transfer' => 'transfer_fisleri.php'];   // v558: dönüşüm türü/sayfası kaldırıldı (sayfa 410 tombstone)
 foreach ($sayfalar as $tur => $f) {
     $r = get($f); $b = bolge($r['govde']);
     ok("$f: 200, uyarı yok, HTML dengeli, csrf, liste + boş detay", uyari_yok($r) && $r['kod'] === 200 && html_hata($b) === [] && form_hata($b) === [] && str_contains($b, 'id="stListe"') && str_contains($b, 'Soldan bir fiş seçin'), json_encode([html_hata($b), form_hata($b), $r['hata']]));
@@ -332,6 +332,18 @@ ok('kaynaklı fiş detayı: "Kaynak belge #41" rozeti, İptal et düğmesi YOK (
 $r = post(['islem' => 'fis_iptal', 'id' => (string)($kr['id'] ?? 0), 'neden' => 'Stok ekranından']);
 ok('kaynaklı fişi stok_kaydet ile iptal → 409 kaynakli, fiş geçerli kalır', $r['kod'] === 409 && js($r)['kod'] === 'kaynakli' && stok_fis_ham($db, (int)$kr['id'])['durum'] === 'gecerli', $r['govde']);
 $r = get('stok_kartlari.php', ['id' => (string)$K['Domates (Salkım)']]);
-ok('kart detayı: transfer hareket fiş no bağlantısı kendi sayfasına (v555: dönüşüm sayfası kaldırıldı; geçmiş dönüşüm fişi bağlantısı 410 sayfaya gider — bkz. rapor)', (bool)preg_match('/href="transfer_fisleri\.php\?id=' . $FB['transfer'] . '">TRF-/', $r['govde']));
+ok('kart detayı: transfer hareket fiş no bağlantısı kendi sayfasına (v558: dönüşüm türü kaldırıldı)', (bool)preg_match('/href="transfer_fisleri\.php\?id=' . $FB['transfer'] . '">TRF-/', $r['govde']));
+
+// v558: UI'da dönüşüm izi YOK (çıktı HTML'i: yeni form + detay + liste + kart detayı; kaynak dosyalar: stok_ui/stok.js/stok.css)
+$__iz = '';
+foreach ([['transfer_fisleri.php', ['yeni' => '1']], ['transfer_fisleri.php', ['id' => (string)$FB['transfer']]], ['stok_giris_fisleri.php', ['yeni' => '1']],
+          ['stok_cikis_fisleri.php', []], ['stok_kartlari.php', ['id' => (string)$K['Domates (Salkım)']]]] as [$__d, $__q]) $__iz .= get($__d, $__q)['govde'];
+ok('v558: render edilen sayfalarda dönüşüm izi yok (st-donusum / rozet / Dönüşüm)', !preg_match('/donusum|dönüşüm|Dönüşüm|data-fire/u', $__iz));
+$__kaynak = '';
+foreach (['config/stok_ui.php', 'assets/stok.js', 'assets/stok.css'] as $__d) $__kaynak .= (string)file_get_contents(__DIR__ . '/../' . $__d);
+ok('v558: stok_ui.php / stok.js / stok.css içinde donusum / dönüşüm kalmadı', !preg_match('/donusum|dönüşüm|Dönüşüm/u', $__kaynak));
+ok('v558: stok_tur_rozet("donusum") ham metin (özel rozet yok)', stok_tur_rozet('donusum', '') === '<span class="st-rozet">donusum</span>');
+$r = post(['islem' => 'fis_kaydet', 'tur' => 'donusum', 'tarih' => date('Y-m-d'), 'depo' => 'Merkez Depo', 'kart_id' => [(string)$K['Domates (Salkım)'], (string)$K['Biber (Dolmalık)']], 'miktar' => ['5', '5'], 'birim' => ['', ''], 'yon' => ['C', 'G']]);
+ok('v558: stok_kaydet.php fis_kaydet tur=donusum → 422 "Geçersiz fiş türü", fiş yazılmadı', $r['kod'] === 422 && str_contains((string)(js($r)['hata'] ?? ''), 'Geçersiz fiş türü') && (int)$db->query("SELECT COUNT(*) FROM stok_fisler WHERE tur = 'donusum'")->fetchColumn() === 0, $r['govde']);
 
 siparis_test_bitir();

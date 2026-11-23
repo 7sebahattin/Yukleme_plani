@@ -100,3 +100,15 @@ dolan slotlar: **390px altında 3, üstünde 4** (sunucu hep 4 çizer, CSS
   Test: `node scripts/suggest_list_smoke.js`.
 
 ---
+
+## v558 — eski Yükleme Planı / Paletleme / Mal Kabul menüden TAMAMEN kalktı
+
+- `records` / `cikma` / `kantar` anahtarları HİÇBİR rolde alt çubuk adayı değildir (`nav_alt_izinler()`'te yok), sidebar / "Diğer"
+  (`nav_menu_modeli`), tablet `topnav` ve `index.php` kartlarında da girişleri yoktur. Anahtarlar yalnız `nav_alt_sayfalar()` kaydında
+  durur (`nav_aktif_anahtar()` eski sayfalarda bunları döndürür). `nav_eski_gizli()` SİLİNDİ; `nav_eski_esleri()` kaldı:
+  eski sayfadayken sidebar + Diğer'de SEÇİLİ görünen giriş yeni karşılığıdır (Araç Yükleme / Palet / Mal Kabul Fişleri; kullanıcı
+  görebiliyorsa, göremiyorsa hiçbir öğe seçili değil). v555'teki "yeni karşılığını göremeyen rol eski girişi korur" istisnası KALKTI.
+- Soğuk başlangıç artık Bildirim, Personel, Raporlar, sonra sidebar sırası (`records` aday olmadığından atlanır). Yalnız eski izinli
+  roller (loading_only/pallet_only) alt çubukta bu sayfalar için öğe görmez; Ana Sayfa hedefi `dashboard.read` yoksa `first_allowed_page()`.
+- Test: `bottomnav_render.php` `$ADAY_DEGIL` + manifest `aday_degil`; `bottomnav_smoke.js` 5k bölümü ve bölüm 1'deki "records/cikma/kantar
+  YOK" denetimi. Eski çerezde (`s:records,kantar,…`) bu anahtarlar sessizce atılır (`cerez_eski` senaryosu).

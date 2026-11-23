@@ -282,7 +282,6 @@ function stok_fis_turleri(): array
         'giris'    => ['etiket' => 'Giriş Fişi',    'onek' => 'GRS', 'sayfa' => 'stok_giris_fisleri.php'],
         'cikis'    => ['etiket' => 'Çıkış Fişi',    'onek' => 'CKS', 'sayfa' => 'stok_cikis_fisleri.php'],
         'transfer' => ['etiket' => 'Transfer Fişi', 'onek' => 'TRF', 'sayfa' => 'transfer_fisleri.php'],
-        'donusum'  => ['etiket' => 'Dönüşüm Fişi',  'onek' => 'DNS', 'sayfa' => 'stok_kartlari.php'],
     ];
 }
 
@@ -866,7 +865,7 @@ function stok_maliyet_uygula(array $d, int $q, ?int $deger): array
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Parça B — Fişler (giriş / çıkış / transfer / dönüşüm), defter yazımı, iptal, cari bağı, kantardan doldur
+// Parça B — Fişler (giriş / çıkış / transfer), defter yazımı, iptal, cari bağı, kantardan doldur
 // Fiş sonrası DEĞİŞMEZ: düzeltme = iptal (ters satırlar) + "Kopyala". Taslak YOK. stok_fisler UPDATE beyaz listesi:
 //   fis_no = ?, cari_hareket_id = ?   ·   durum = 'iptal', iptal_at = ?, iptal_by = ?, iptal_neden = ?
 // Cari'ye YALNIZ cari_core fonksiyonlarıyla: cari_hareket_ekle(..., $kaynak) · cari_kaynakli_iptal(...). Kantar YALNIZ okunur (SELECT).
@@ -1043,12 +1042,12 @@ function stok_fis_dogrula(PDO $pdo, array $g): array
         if ($n === false) $h['neden_id'] = 'Neden seçin.'; else { $v['neden_id'] = (int)$n['id']; $v['neden_ad'] = (string)$n['ad']; }
     }
 
-    // Cari (yalnız giriş/çıkış; transfer/dönüşümde YASAK)
+    // Cari (yalnız giriş/çıkış; transferde YASAK)
     $v['cari_id'] = null;
     $cariHam = trim((string)($g['cari_id'] ?? ''));
     $cariMetin = trim((string)($g['cari_ara'] ?? ''));
     if ($cariHam !== '' && $cariHam !== '0' || $cariMetin !== '') {
-        if ($tur === 'transfer' || $tur === 'donusum') $h['cari_id'] = 'Transfer/dönüşüm fişinde cari seçilmez.';
+        if ($tur === 'transfer') $h['cari_id'] = 'Transfer fişinde cari seçilmez.';
         elseif (!cari_hazir($pdo)) $h['cari_id'] = 'Cari tabloları kurulmamış.';
         else {
             $ck = null;
@@ -1106,14 +1105,13 @@ function stok_fis_dogrula(PDO $pdo, array $g): array
     $kartlar = [];
     foreach ($pdo->query('SELECT id, kod, ad, ana_birim, cevrim_birim, cevrim_katsayi, kdv_orani, barkod, aktif FROM stok_kartlar')->fetchAll(PDO::FETCH_ASSOC) as $k) $kartlar[(int)$k['id']] = $k;
     $fiyatli = $tur === 'giris' || $tur === 'cikis';
-    $satirlar = []; $topMil = 0; $topTut = 0; $topKdv = 0; $fiyatVar = false; $yonSay = ['G' => 0, 'C' => 0];
+    $satirlar = []; $topMil = 0; $topTut = 0; $topKdv = 0; $fiyatVar = false;
     foreach ($ham as $sira => $r) {
         $i = (int)$r['i']; $e = [];
         $k = stok_kart_coz($kartlar, (string)$r['kart_id'], (string)$r['kart_ara']);
         if ($k === null) $e['kart_id'] = 'Stok kartı seçin.';
         elseif ((int)$k['aktif'] !== 1) $e['kart_id'] = 'Pasif kart seçilemez.';
-        $yon = match ($tur) { 'giris' => 'G', 'cikis', 'transfer' => 'C', default => strtoupper((string)$r['yon']) };
-        if (!in_array($yon, ['G', 'C'], true)) { $e['yon'] = 'Girdi/çıktı yönü geçersiz.'; $yon = 'C'; }
+        $yon = $tur === 'giris' ? 'G' : 'C';
         $milli = null;
         if ($k !== null) {
             $ana = (string)$k['ana_birim'];
@@ -1153,14 +1151,12 @@ function stok_fis_dogrula(PDO $pdo, array $g): array
         $sa = (string)$r['satir_aciklama'];
         if (mb_strlen($sa) > 200) $e['aciklama'] = 'Satır açıklaması en çok 200 karakter.';
         if ($e) { $sh[$i] = $e; continue; }
-        $yonSay[$yon]++;
         $satirlar[] = ['sira' => $sira + 1, 'i' => $i, 'kart_id' => (int)$k['id'], 'kod' => (string)$k['kod'], 'ad' => (string)$k['ad'], 'birim' => (string)$k['ana_birim'], 'yon' => $yon, 'milli' => $milli,
             'fiyat4' => $f4, 'kdv' => $f4 !== null ? $kdv : null, 'tutar' => $tut, 'kdv_tutar' => $kdvT, 'lot' => $lot === '' ? null : $lot, 'aciklama' => $sa === '' ? null : $sa,
             'deger_try' => ($tur === 'giris' && $tut !== null) ? (int)round($tut * $kurF) : null];
-        if ($tur !== 'donusum' || $yon === 'C') $topMil += $milli;
+        $topMil += $milli;
         if ($tut !== null) { $fiyatVar = true; $topTut += $tut; $topKdv += (int)$kdvT; }
     }
-    if ($tur === 'donusum' && !$sh && $satirlar && ($yonSay['G'] === 0 || $yonSay['C'] === 0)) $h['satir'] = 'Dönüşüm fişinde en az bir girdi ve bir çıktı satırı olmalı.';
     if ($fiyatVar && $v['pb'] !== 'TRY' && $v['kur'] === null && !isset($h['kur'])) $h['kur'] = 'TL dışı para biriminde kur zorunlu.';
     if ($v['cari_id'] !== null && $topTut + $topKdv > CARI_TUTAR_MAX_KURUS) $h['satir'] = 'Fiş toplamı sınır dışı.';
     if ($h || $sh) {
@@ -1270,27 +1266,12 @@ function stok_fis_kaydet(PDO $pdo, array $g, int $uid, ?array $kaynak = null): a
             // Defter
             $dur = [];
             $hb = static fn(int $n, array $sat, string $depo, int $q, ?int $deger): array => ['fis_id' => $fid, 'satir_id' => $satirIds[$n], 'kart_id' => $sat['kart_id'], 'tarih' => $v['tarih'], 'depo' => $depo, 'q' => $q, 'deger' => $deger];
-            if ($v['tur'] === 'donusum') {
-                $girdiDeger = 0; $ciktiMil = 0; $cikti = [];
-                foreach ($v['satirlar'] as $n => $sat) {
-                    if ($sat['yon'] === 'C') $girdiDeger += -stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], -$sat['milli'], null), $uid)['deger'];
-                    else { $ciktiMil += $sat['milli']; $cikti[] = $n; }
-                }
-                $dagitilan = 0;
-                foreach ($cikti as $j => $n) {
-                    $sat = $v['satirlar'][$n];
-                    $pay = $j === count($cikti) - 1 ? $girdiDeger - $dagitilan : (int)round($girdiDeger * $sat['milli'] / $ciktiMil);
-                    $dagitilan += $pay;
-                    stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], $sat['milli'], max(0, $pay)), $uid);
-                }
-            } else {
-                foreach ($v['satirlar'] as $n => $sat) {
-                    if ($v['tur'] === 'giris') stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], $sat['milli'], $sat['deger_try']), $uid);
-                    elseif ($v['tur'] === 'cikis') stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], -$sat['milli'], null), $uid);
-                    else {   // transfer: kaynak ortalamadan çıkar, hedefe AYNI değerle girer (ürün ortalaması değişmez)
-                        $c = stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], -$sat['milli'], null), $uid);
-                        stok_hareket_yaz($pdo, $dur, $hb($n, $sat, (string)$v['hedef_depo'], $sat['milli'], -$c['deger']), $uid);
-                    }
+            foreach ($v['satirlar'] as $n => $sat) {
+                if ($v['tur'] === 'giris') stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], $sat['milli'], $sat['deger_try']), $uid);
+                elseif ($v['tur'] === 'cikis') stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], -$sat['milli'], null), $uid);
+                else {   // transfer: kaynak ortalamadan çıkar, hedefe AYNI değerle girer (ürün ortalaması değişmez)
+                    $c = stok_hareket_yaz($pdo, $dur, $hb($n, $sat, $v['depo'], -$sat['milli'], null), $uid);
+                    stok_hareket_yaz($pdo, $dur, $hb($n, $sat, (string)$v['hedef_depo'], $sat['milli'], -$c['deger']), $uid);
                 }
             }
             // Cari dekontu (yalnız cari_core fonksiyonuyla; kaynak bağı çekirdekten verilir)

@@ -196,7 +196,7 @@ function stok_t_ornek_veri(PDO $db): array
 
 /**
  * Parça B örnek fişleri — GERÇEK stok_fis_kaydet ile (stok_t_ornek_veri'den SONRA): 1 transfer (Domates Merkez → Şube 1.000 kg),
- * 1 dönüşüm (Domates 500 kg → Biber 450 kg; 50 kg fire), 1 cari bağlı alış (Kasa 200 adet × 1,80 ₺, %20 KDV).
+ * 1 cari bağlı alış (Kasa 200 adet × 1,80 ₺, %20 KDV).
  * @return array<string,int> fiş id'leri
  */
 function stok_t_ornek_fisler(PDO $db, array $O): array
@@ -209,9 +209,6 @@ function stok_t_ornek_fisler(PDO $db, array $O): array
     $r = stok_fis_kaydet($db, stok_t_fis_istek('transfer', 'Merkez Depo', [[$K['Domates (Salkım)'], '1.000']], ['tarih' => "$y-11-13", 'hedef_depo' => 'Şube Depo', 'aciklama' => 'Şubeye sevk']), 1);
     if (!$r['ok']) throw new RuntimeException('örnek transfer: ' . $r['hata']);
     $f['transfer'] = (int)$r['id'];
-    $r = stok_fis_kaydet($db, stok_t_fis_istek('donusum', 'Merkez Depo', [[$K['Domates (Salkım)'], '500', '', 'C'], [$K['Biber (Dolmalık)'], '450', '', 'G']], ['tarih' => "$y-11-13"]), 1);
-    if (!$r['ok']) throw new RuntimeException('örnek dönüşüm: ' . $r['hata']);
-    $f['donusum'] = (int)$r['id'];
     $r = stok_fis_kaydet($db, stok_t_fis_istek('giris', 'Merkez Depo', [[$K['Kasa 6\'lı Plastik'], '200', '1,80', 'G', '', '20']],
         ['tarih' => "$y-11-13", 'neden_id' => (string)$nd('giris_neden', 'Alış'), 'cari_id' => (string)$O['cari']['Örnek Tarım Ltd.'], 'evrak_no' => 'IRS-1001']), 1);
     if (!$r['ok']) throw new RuntimeException('örnek cari alış: ' . $r['hata']);

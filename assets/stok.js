@@ -410,8 +410,7 @@
         }
         function satirGuncelle(tr) {
             var k = satirKart(tr), ana = anaMiktar(tr), ip = $('.st-fs-ipucu', tr), cv = $('.st-cevrim', tr);
-            var yon = tr.getAttribute('data-yon');
-            var dusen = tur === 'cikis' || tur === 'transfer' || (tur === 'donusum' && yon === 'C');
+            var dusen = tur === 'cikis' || tur === 'transfer';
             tr.classList.remove('st-fsatir--eksik');
             if (cv) cv.textContent = k && el(tr, 'birim').value && !isNaN(ana) ? '= ' + miktarBicim(ana, k.birim) + ' ' + k.birim : '';
             if (ip) {
@@ -430,11 +429,9 @@
             }
         }
         function toplamlar() {
-            var mik = 0, tut = 0, kdv = 0, g = 0, c = 0, cDeger = 0;
+            var mik = 0, tut = 0, kdv = 0;
             satirlar().forEach(function (tr) {
                 var k = satirKart(tr), ana = anaMiktar(tr); if (!k || isNaN(ana)) return;
-                var yon = tr.getAttribute('data-yon');
-                if (tur === 'donusum') { if (yon === 'C') { c += ana; cDeger += ana * (k.ort || 0); } else g += ana; return; }
                 mik += ana;
                 var fy = sayiOku(el(tr, 'birim_fiyat') ? el(tr, 'birim_fiyat').value : '');
                 if (!isNaN(fy)) {
@@ -444,11 +441,7 @@
                 }
             });
             var set = function (ad, v) { var b = $('[data-top="' + ad + '"]', f.closest('.st-detay') || f); if (b) b.textContent = v; };
-            if (tur === 'donusum') {
-                set('miktar', miktarBicim(c, 'lt') + ' → ' + miktarBicim(g, 'lt'));
-                set('fark', miktarBicim(c - g, 'lt') + (c > 0 ? ' (%' + ((c - g) / c * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ')' : ''));
-                set('cikti_ort', g > 0 && cDeger > 0 ? para(Math.round(cDeger / g)) + ' ₺/birim' : '—');
-            } else set('miktar', miktarBicim(mik, 'lt'));
+            set('miktar', miktarBicim(mik, 'lt'));
             set('tutar', para(tut)); set('kdv', para(kdv));
         }
         function hepsi() { satirlar().forEach(satirGuncelle); toplamlar(); }

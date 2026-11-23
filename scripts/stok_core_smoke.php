@@ -5,7 +5,7 @@
 // Geçici dosya SQLite + stub auth; canlı DB'ye HİÇ dokunmaz. Kapsam: şema/tohum · kapı · miktar ayrıştırma/biçim · fiş no · geri ·
 // kart CRUD (TR-duyarsız kod, ana birim kilidi, sil/hareketli) · liste/bakiye/depo filtresi · hareket listesi (yürüyen bakiye) ·
 // maliyet motoru (ağırlıklı ortalama, eksi stok, ters satır) · tanımlar (sistem kilidi, kullanımda) · içe aktar (idempotent) · audit ·
-// Parça B (§12–19): fiş doğrulama · giriş/çıkış/transfer/dönüşüm defteri · yetersiz stok/eksiye izin · idempotent · iptal · cari bağı · kantar.
+// Parça B (§12–19): fiş doğrulama · giriş/çıkış/transfer defteri (v558: dönüşüm türü kaldırıldı) · yetersiz stok/eksiye izin · idempotent · iptal · cari bağı · kantar.
 // =========================================================
 require_once __DIR__ . '/_stok_test_lib.php';
 $db = db();
@@ -54,9 +54,9 @@ ok('stok_kdv_oranlari = [0,1,10,20]', stok_kdv_oranlari() === [0, 1, 10, 20]);
 
 echo "\n=== 4. Fiş no / geri / sabitler ===\n";
 ok('stok_fis_no giris → GRS-2026-000123', stok_fis_no('giris', '2026-11-13', 123) === 'GRS-2026-000123');
-ok('stok_fis_no cikis/transfer/donusum önekleri', stok_fis_no('cikis', '2026-01-01', 1) === 'CKS-2026-000001' && stok_fis_no('transfer', '2026-01-01', 2) === 'TRF-2026-000002' && stok_fis_no('donusum', '2026-01-01', 3) === 'DNS-2026-000003');
-ok('stok_fis_turleri: 4 tür, sayfalar (transfer = transfer_fisleri.php; donusum = stok_kartlari.php — v555: sayfa kaldırıldı, eski hareket bağlantısı kart sayfasına)', array_keys(stok_fis_turleri()) === ['giris', 'cikis', 'transfer', 'donusum'] && stok_fis_turleri()['transfer']['sayfa'] === 'transfer_fisleri.php'
-    && stok_fis_turleri()['giris']['sayfa'] === 'stok_giris_fisleri.php' && stok_fis_turleri()['donusum']['sayfa'] === 'stok_kartlari.php');
+ok('stok_fis_no cikis/transfer önekleri; bilinmeyen tür STK', stok_fis_no('cikis', '2026-01-01', 1) === 'CKS-2026-000001' && stok_fis_no('transfer', '2026-01-01', 2) === 'TRF-2026-000002'); 
+ok('stok_fis_turleri: 3 tür (v558: dönüşüm yok), sayfalar', array_keys(stok_fis_turleri()) === ['giris', 'cikis', 'transfer'] && stok_fis_turleri()['transfer']['sayfa'] === 'transfer_fisleri.php'
+    && stok_fis_turleri()['giris']['sayfa'] === 'stok_giris_fisleri.php' && !isset(stok_fis_turleri()['donusum']));
 foreach (['stok_kartlari.php?id=3' => 'stok_kartlari.php?id=3', 'stok_tanimlari.php?sekme=grup' => 'stok_tanimlari.php?sekme=grup', 'transfer_fisleri.php' => 'transfer_fisleri.php',
     'cari_kartlari.php' => 'stok_kartlari.php', 'https://ornek.test/stok_kartlari.php' => 'stok_kartlari.php', "stok_kartlari.php\r\nX: 1" => 'stok_kartlari.php', 'stok.php' => 'stok_kartlari.php',
     '/stok_kartlari.php' => 'stok_kartlari.php', '../stok_kartlari.php' => 'stok_kartlari.php'] as $g => $bek) {
@@ -289,8 +289,8 @@ $d = $hata(stok_t_fis_istek('transfer', 'Merkez Depo', [[$A, '10']], ['hedef_dep
 ok('transfer: hedef = kaynak (TR-duyarsız) reddedilir', !$d['ok'] && isset($d['alanlar']['hedef_depo']));
 $d = $hata(stok_t_fis_istek('transfer', 'Merkez Depo', [[$A, '10', '5,00']], ['hedef_depo' => 'Şube Depo']));
 ok('transfer: fiyat yasak', !$d['ok'] && isset($d['satir_hatalari'][0]['birim_fiyat']));
-$d = $hata(stok_t_fis_istek('donusum', 'Merkez Depo', [[$A, '10', '', 'C']]));
-ok('dönüşüm: yalnız girdi → en az bir girdi + bir çıktı', !$d['ok'] && isset($d['alanlar']['satir']));
+$d = $hata(stok_t_fis_istek('donusum', 'Merkez Depo', [[$A, '10', '', 'C'], [$A, '5', '', 'G']]));
+ok('v558: dönüşüm türü artık yok → "Geçersiz fiş türü" (doğrulama reddeder)', !$d['ok'] && isset($d['alanlar']['tur']) && $d['hata'] === 'Geçersiz fiş türü.');
 $d = $hata(stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '10', '5']], ['neden_id' => (string)$ALIS, 'cari_id' => '1']));
 ok('cari tabloları yokken cari seçimi reddedilir', !$d['ok'] && isset($d['alanlar']['cari_id']));
 $d = $hata(stok_t_fis_istek('giris', 'Merkez Depo', [[$A, '10', '5']], ['neden_id' => (string)$ALIS, 'para_birimi' => 'USD']));
@@ -347,7 +347,7 @@ $fis('cikis', 'Merkez Depo', [[$Ck, '8']], ['neden_id' => (string)$SATIS]);
 $r = stok_fis_iptal($db, $FC, 'Giriş hatalı', 1);
 ok('tüketilmiş girişin iptali: izin verilir, uyarı "İptal sonrası eksi bakiye" (C = −8)', $r['ok'] && str_contains((string)$r['uyari'], 'İptal sonrası eksi bakiye') && $bak($Ck) === -8000, json_encode($r, JSON_UNESCAPED_UNICODE));
 
-echo "\n=== 16. Transfer / dönüşüm ===\n";
+echo "\n=== 16. Transfer (dönüşüm: v558'de kaldırıldı) ===\n";
 $ort0 = stok_maliyet_durumu($db, $A)['ort'];
 $r = $fis('transfer', 'Merkez Depo', [[$A, '50']], ['hedef_depo' => 'Şube Depo']);
 $FT = (int)$r['id'];
@@ -361,15 +361,10 @@ $LT = stok_fis_listesi($db, 'transfer', ['bas' => '']); $LC = stok_fis_listesi($
 ok('depo filtresi: aktif Şube → transfer (hedef) listede; Merkez çıkışları görünmez', count($LT['satirlar']) === 1 && $LC['toplam_satir'] === 0);
 ok('stok_fis_gorunur: hedef depoda görünür', stok_fis_gorunur(stok_fis_ham($db, $FT)) && !stok_fis_gorunur(stok_fis_ham($db, $F1)));
 $DEPOLAR = null;
-$r = $fis('donusum', 'Merkez Depo', [[$A, '20', '', 'C'], [$Bk, '15', '', 'G'], [$Ck, '3', '', 'G']]);
-$FD = (int)$r['id'];
-$dh = []; foreach ($db->query("SELECT kart_id, miktar, deger FROM stok_hareketler WHERE fis_id = $FD ORDER BY id")->fetchAll() as $x) $dh[(int)$x['kart_id']] = cari_kurus($x['deger']);
-ok('dönüşüm: girdi A −20 kg (−200 ₺); çıktılar B/C miktar oranıyla (166,67 + 33,33 = 200 ₺, fark son satıra)', $r['ok'] && $dh[$A] === -20000 && $dh[$Bk] === 16667 && $dh[$Ck] === 3333 && str_starts_with($r['fis_no'], 'DNS-'), json_encode($dh));
-ok('dönüşüm: B ortalaması 200×15/18 ÷ 15 ≈ 11,11 ₺/kg; A bakiye 50', abs(stok_maliyet_durumu($db, $Bk)['ort'] - 1111.1333) < 0.01 && $bak($A) === 50000, json_encode(stok_maliyet_durumu($db, $Bk)));
-$r = $fis('donusum', 'Merkez Depo', [[$A, '500', '', 'C'], [$Bk, '1', '', 'G']]);
-ok('dönüşüm girdisi yetersiz → yetersiz_stok', !$r['ok'] && ($r['kod'] ?? '') === 'yetersiz_stok');
-$O = stok_fis_oku($db, $FD);
-ok('stok_fis_oku: 3 satır (kod/ad/birim), satır maliyetleri, 3 defter satırı', count($O['satirlar']) === 3 && $O['satirlar'][0]['kod'] !== '' && $O['satirlar'][0]['maliyet_kurus'] === 20000 && count($O['hareketler']) === 3);
+$r = $fis('donusum', 'Merkez Depo', [[$A, '20', '', 'C'], [$Bk, '15', '', 'G']]);
+ok('v558: dönüşüm fişi kaydedilemez (reddedilir, defter satırı yazılmaz)', !$r['ok'] && $bak($A) === 70000 && (int)$db->query("SELECT COUNT(*) FROM stok_fisler WHERE tur = 'donusum'")->fetchColumn() === 0);
+$O = stok_fis_oku($db, $FT);
+ok('stok_fis_oku: transfer 1 satır (kod/ad/birim), 2 defter satırı', count($O['satirlar']) === 1 && $O['satirlar'][0]['kod'] !== '' && count($O['hareketler']) === 2);
 $K = stok_fis_kopya(stok_fis_oku($db, $F1));
 ok('stok_fis_kopya: tarih bugün, evrak boş, miktar "100", fiyat "10,00", neden aynı', $K['tarih'] === $bugun && $K['evrak_no'] === '' && $K['satirlar'][0]['miktar'] === '100' && $K['satirlar'][0]['birim_fiyat'] === '10,00' && $K['neden_id'] === $ALIS);
 $LG = stok_fis_listesi($db, 'giris', ['bas' => '', 'durum' => 'iptal']);

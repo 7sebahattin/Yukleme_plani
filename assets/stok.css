@@ -1,9 +1,9 @@
 /* =========================================================
-   assets/stok.css — Stok (muhasebe) modülü (stok_kartlari / stok_tanimlari / 4 fiş sayfası: giriş · çıkış · transfer · dönüşüm)
+   assets/stok.css — Stok (muhasebe) modülü (stok_kartlari / stok_tanimlari / 3 fiş sayfası: giriş · çıkış · transfer)
    Yalnız bu sayfalarda yüklenir (cari.css emsali). assets/style.css'e DOKUNMAZ: yalnız `st-` önekli
    seçiciler + `.stok` kökü. `html{overflow-x:clip}` korunur, sabit px alt pay YOK (--bn-h kullanılır),
    modal z-index ≥ 600 (CLAUDE.md z-index mimarisi). Mobil öncelikli; 768 / 1024 üstüne eklenir.
-   Renk tek başına anlam taşımaz: rozetlerde metin + işaret (▲ giriş, ▼ çıkış, ⇄ transfer, ⚙ dönüşüm).
+   Renk tek başına anlam taşımaz: rozetlerde metin + işaret (▲ giriş, ▼ çıkış, ⇄ transfer).
    ========================================================= */
 
 /* ═════════ 0. Tokenlar ═════════ */
@@ -12,7 +12,6 @@
     --st-cikis: #c2312e; --st-cikis-bg: #fdecec; --st-cikis-br: #f0c0c0;
     --st-fire: #b45f06;  --st-fire-bg: #fcf2dc;  --st-fire-br: #f0d49b;
     --st-transfer: #1d6cf0; --st-transfer-bg: #eaf1ff; --st-transfer-br: #b9d0fb;
-    --st-donusum: #7c3aed;  --st-donusum-bg: #f1eafe;  --st-donusum-br: #d6c3fa;
     --st-kritik: #c2312e;
     --st-top: 59px;                          /* mobil/tablet topbar yüksekliği */
     --st-sol: 340px;                         /* ≥1024 liste sütunu */
@@ -23,7 +22,6 @@ html[data-theme="dark"] .stok {
     --st-cikis: var(--danger);  --st-cikis-bg: var(--danger-soft);  --st-cikis-br: #6b3331;
     --st-fire: var(--warn);     --st-fire-bg: var(--warn-soft);     --st-fire-br: #6b5520;
     --st-transfer: var(--primary); --st-transfer-bg: var(--primary-soft); --st-transfer-br: #2c4a7d;
-    --st-donusum: #b794f6; --st-donusum-bg: rgba(124,58,237,.18); --st-donusum-br: #4c3480;
     --st-kritik: var(--danger);
 }
 @media (max-width: 430px) { .stok { --st-top: 54px; } }
@@ -65,7 +63,6 @@ html[data-theme="dark"] .stok {
 .st-rozet--cikis    { background: var(--st-cikis-bg); border-color: var(--st-cikis-br); color: var(--st-cikis); }
 .st-rozet--fire     { background: var(--st-fire-bg); border-color: var(--st-fire-br); color: var(--st-fire); }
 .st-rozet--transfer { background: var(--st-transfer-bg); border-color: var(--st-transfer-br); color: var(--st-transfer); }
-.st-rozet--donusum  { background: var(--st-donusum-bg); border-color: var(--st-donusum-br); color: var(--st-donusum); }
 .st-rozet--iptal    { background: var(--surface-2); color: var(--muted); text-decoration: none; }
 .st-rozet--kritik   { background: var(--st-kritik); border-color: transparent; color: #fff; }
 .st-rozet--kilit    { background: var(--surface-2); color: var(--muted); font-size: .7rem; }
@@ -387,15 +384,6 @@ a.st-cip:hover { text-decoration: none; }
 .st-fis-icerik { min-width: 0; }
 .st-fis-tablo tfoot th, .st-fis-tablo tfoot td { font-weight: 700; background: var(--surface-2); }
 .st-fis-tablo tfoot th { text-align: left; }
-.st-donusum { display: grid; gap: 10px; min-width: 0; }
-.st-donusum-kol { min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); border-top: 3px solid var(--st-cikis); }
-.st-donusum-kol--cikti { border-top-color: var(--st-giris); }
-.st-donusum-kol--girdi .st-bolum-baslik, .st-donusum-kol--girdi .st-donusum-bas { color: var(--st-cikis); }
-.st-donusum-kol--cikti .st-bolum-baslik, .st-donusum-kol--cikti .st-donusum-bas { color: var(--st-giris); }
-.st-donusum-bas { margin: 0 0 6px; font-size: .9rem; }
-.st-donusum-bas small { color: var(--muted); font-weight: 400; }
-.st-donusum-ok { display: none; align-self: center; font-size: 1.4rem; color: var(--st-donusum); }
-.st-fire { margin: 8px 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--st-donusum-bg); border: 1px solid var(--st-donusum-br); font-size: .86rem; }
 
 /* — Form — */
 .st-fis-form { display: flex; flex-direction: column; min-width: 0; }
@@ -557,10 +545,6 @@ a.st-cip:hover { text-decoration: none; }
     .st-fis-detay .st-hareket-kaydir { flex: none; min-height: 0; }
     .st-fis-detay .st-iptal-serit, .st-fis-detay .st-fis-uyari { margin: 0 16px 8px; flex: none; }
     .st-fis-detay .st-not, .st-fis-detay .st-notlar { margin-left: 0; margin-right: 0; }
-    .st-donusum .st-hareket-kaydir { flex: none; }
-}
-@media (min-width: 1280px) {
-    .st-fis-detay .st-donusum { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 767px) {
     .st-eylem-bar .btn-primary { flex: none; min-width: 130px; }
