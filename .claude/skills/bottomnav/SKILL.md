@@ -44,7 +44,7 @@ dolan slotlar: **390px altında 3, üstünde 4** (sunucu hep 4 çizer, CSS
   `nav_menu_modeli($base)`'yi (TEK kaynak; sidebar da onu çizer) taze çağırır
   (render_footer'daki geç `_nav_cikma_hint` yansısın) ve `nav_alt_sheet_gruplari()`
   ile süzer: aynı grup adı/sırası/öğe adı (Sipariş, Operasyon, Yönetim, Cari
-  İşlemler … Admin Konsolu; yetkiye göre). Yeni sayfa/grup yalnız
+  İşlemler … Yönetim … Kullanıcı Ayarları; v566: Admin Konsolu grubu yok, Şube/Depo Tanımları Yönetim'de; yetkiye göre). Yeni sayfa/grup yalnız
   `nav_menu_modeli()` / `nav_muhasebe_gruplari()`'na eklenir — sidebar + mobil
   birlikte güncellenir. **AKORDİYON (v551 KURAL):** kap `data-akordiyon`, grup
   `<details class="bn-grup" data-sb-grup>`; sunucu yalnız `$g['aktif']` grubu

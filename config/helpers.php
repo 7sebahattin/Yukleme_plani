@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v565');
+    define('APP_SURUM', 'v566');
 }
 
 // --- HTML kaçışı ---
@@ -502,10 +502,17 @@ function nav_muhasebe_gruplari(): array {
             'sifre_degistirme.php' => ['Şifre Değiştirme', '🔒'], 'ajanda.php' => ['Ajanda', '📅'],
             'kullanici_tercihleri.php' => ['Kullanıcı Tercihleri', '🎛️']]],
         // v548: "Genel Uygulamalar" grubu komple kaldırıldı (Günlük Kurlar + Döviz Tanımları → Kasa).
-        'admin_konsolu' => ['Admin Konsolu', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', [
-            'kullanici_tanimlari.php' => ['Kullanıcı Tanımları', '👥'], 'sube_tanimlari.php' => ['Şube Tanımları', '🏢'],
-            'depo_tanimlari.php' => ['Depo Tanımları', '🏭'], 'veritabani_islemleri.php' => ['Veritabanı İşlemleri', '🗄️']]],
+        // v566 (sahip kararı): "Admin Konsolu" grubu kalktı; Şube/Depo Tanımları Yönetim grubuna taşındı (bkz. nav_yonetim_sayfalari()).
     ];
+}
+
+/**
+ * v566: eski "Admin Konsolu" grubundan Yönetim grubuna taşınan, YALNIZ yönetici sayfaları (dosya => [etiket, emoji]).
+ * Kullanıcı Tanımları / Veritabanı İşlemleri girişleri kalktı (Yönetim'de zaten Kullanıcılar / Veritabanı Yedekleri var;
+ * kullanici_tanimlari.php / veritabani_islemleri.php dosyaları yerinde, yalnız 302 yönlendirmesi). Sayfa kapısı is_admin().
+ */
+function nav_yonetim_sayfalari(): array {
+    return ['sube_tanimlari.php' => ['Şube Tanımları', '🏢'], 'depo_tanimlari.php' => ['Depo Tanımları', '🏭']];
 }
 
 /**
@@ -590,6 +597,8 @@ function nav_aktif_anahtar(): ?string {
     ] as $anahtar => $aktif) {
         if ($aktif) return $anahtar;
     }
+    // v566: Yönetim'e taşınan yönetici sayfaları — dosya slug'ı (muhasebe sayfalarıyla aynı sözleşme).
+    if ($a_cari === null && isset(nav_yonetim_sayfalari()[$cur])) $a_cari = substr($cur, 0, -4);
     return $a_cari;
 }
 
@@ -705,6 +714,8 @@ function nav_menu_modeli(string $base): array {
     if ($p_adm || $p_def || $p_usr) {
         $o = [];
         if ($p_def) $o[] = $ge('definitions.php', '⚙️', 'Tanımlar', $a_def, 'defs');
+        // v566: Şube / Depo Tanımları (eski Admin Konsolu) — yalnız yönetici; anahtarsız öğe (alt çubuk adayı değil).
+        if ($p_adm) foreach (nav_yonetim_sayfalari() as $d => [$et, $em]) $o[] = $ge($d, $em, $et, $ak === substr($d, 0, -4));
         if ($p_usr) $o[] = $ge('users.php', '👥', 'Kullanıcılar', $a_usr, 'users');
         if ($p_usr) $o[] = $ge('roles.php', '🛡️', 'Roller', $a_rol, 'roles');
         if ($p_adm) $o[] = $ge('audit.php', '🧾', 'İşlem Geçmişi', $a_aud, 'audit');
@@ -722,7 +733,7 @@ function nav_menu_modeli(string $base): array {
     foreach ($muh as $slug => [$bas, $svgYol, $sayfalar]) {
         if ($slug === 'operasyon_fis') continue;   // Operasyon grubunun İÇİNDE çizilir
         $o = [];
-        // v550: sayfa, kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; admin_konsolu yalnız yönetici.
+        // v550: sayfa, kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir.
         foreach ($sayfalar as $d => [$et, $em]) {
             if (muhasebe_sayfa_can(substr((string)$d, 0, -4))) $o[] = $ge($d, $em, $et, $ak === substr((string)$d, 0, -4));
         }

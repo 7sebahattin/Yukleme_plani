@@ -64,12 +64,15 @@ function role_permission_matrix(): array {
             $row('roles','Roller','roles.php',['admin'=>$a('users.admin','Kullanıcı ve rol yönetimi')]),
             $row('audit','İşlem Geçmişi','audit.php',[],[],'Yalnız sistem yöneticisi.',true),
             $row('backup','Veritabanı Yedekleri','admin_db_backups.php',[],[],'Yalnız sistem yöneticisi.',true),
+            // v566: eski Admin Konsolu'ndan taşınan Şube / Depo Tanımları (yalnız yönetici; Roller'den verilemez).
+            $row('sube_tanimlari','Şube Tanımları','sube_tanimlari.php',[],[],'Yalnız sistem yöneticisi.',true),
+            $row('depo_tanimlari','Depo Tanımları','depo_tanimlari.php',[],[],'Yalnız sistem yöneticisi.',true),
         ],
         'Raporlar altındaki diğer sayfalar'=>[
             $row('maliyet','Detaylı Maliyet','maliyet.php',$crud('maliyet')+['unlock'=>$a('maliyet.unlock','Kilit aç'),'admin'=>$a('maliyet.admin','Alan ve şablon yönetimi')]),
         ],
     ];
-    // v550 — muhasebe menüsü (admin_konsolu HARİÇ): artık Roller'den verilebilir, VARSAYILAN KAPALI (tohum/türetme yok).
+    // v550 — muhasebe menüsü (yönetici sayfaları HARİÇ): artık Roller'den verilebilir, VARSAYILAN KAPALI (tohum/türetme yok).
     // Her modül = grup satırı (çalışan modüllerde Ekle/Düzenle/Sil) + sayfa başına Gör alt satırı.
     $muhasebeSatirlari = [];
     $muhNot = 'Varsayılan kapalı; yalnız seçilen rollere açılır. Yönetici her zaman erişir.';
@@ -89,12 +92,6 @@ function role_permission_matrix(): array {
             $muhNot . ($islemli ? ' Ekle / Düzenle / Sil için gruptaki en az bir sayfada Gör izni de gerekir.' : ''));
     }
     if ($muhasebeSatirlari) $groups['Muhasebe ve operasyon menüsü'] = $muhasebeSatirlari;
-    // admin_konsolu kapsam DIŞI: Roller'de yetkisiz, yalnız yönetici satırları olarak kalır.
-    if (function_exists('nav_muhasebe_gruplari') && isset(nav_muhasebe_gruplari()['admin_konsolu'])) {
-        $ak = [];
-        foreach (nav_muhasebe_gruplari()['admin_konsolu'][2] as $route => [$title]) $ak[] = $row(pathinfo((string)$route, PATHINFO_FILENAME), (string)$title, (string)$route, [], [], 'Yalnız sistem yöneticisi.', true);
-        $groups['Admin Konsolu · Menü'] = $ak;
-    }
     return $groups;
 }
 

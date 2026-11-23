@@ -371,6 +371,7 @@ function sayfa_render(array $s, string $base_css_inline, string $file_root, stri
 // ── Üret ──────────────────────────────────────────────────────────────────
 $muhSayfalar = [];   // v552: muhasebe menüsü sayfa dosyaları (sheet'te anahtarsız bağlantı)
 foreach (nav_muhasebe_gruplari() as [, , $__sayfalar]) foreach (array_keys($__sayfalar) as $__dosya) $muhSayfalar[] = (string)$__dosya;
+foreach (array_keys(nav_yonetim_sayfalari()) as $__dosya) $muhSayfalar[] = (string)$__dosya;   // v566: Yönetim'e taşınan Şube/Depo Tanımları (anahtarsız sheet bağlantısı)
 $manifest = [
     'uretim'   => date('c'),
     'anahtar_sayfa' => $ANAHTAR_SAYFA,
@@ -392,12 +393,15 @@ foreach ($PROFILLER as $pk => $pr) {
     $izinli = [];
     foreach ($GATES as $hedef => [, , $kosul]) $izinli[$hedef] = (bool)$kosul();
     // v552: muhasebe menüsü sayfaları (sheet'te anahtarsız bağlantı) — kapı: yönetici ya da muhasebe.<slug>.read;
-    // admin_konsolu grubu yalnız yönetici (muhasebe_roller.php KAPSAM DIŞI). muhasebe_sayfa_can()'dan BAĞIMSIZ yazıldı.
+    // muhasebe_sayfa_can()'dan BAĞIMSIZ yazıldı.
     foreach (nav_muhasebe_gruplari() as $__grup => [, , $__sayfalar]) {
         foreach ($__sayfalar as $__dosya => $_) {
-            $izinli[$__dosya] = is_admin() || ($__grup !== 'admin_konsolu' && can('muhasebe.' . substr((string)$__dosya, 0, -4) . '.read'));
+            $izinli[$__dosya] = is_admin() || can('muhasebe.' . substr((string)$__dosya, 0, -4) . '.read');
         }
     }
+
+    // v566: Şube/Depo Tanımları (Yönetim grubu) yalnız yönetici; kapı TABLOSU nav_yonetim_sayfalari()'ndan BAĞIMSIZ yazıldı.
+    foreach (['sube_tanimlari.php', 'depo_tanimlari.php'] as $__dosya) $izinli[$__dosya] = is_admin();
 
     // Çapraz kontroller: tablo, uygulamanın KENDİ fonksiyonlarıyla ayrışmasın.
     $fap = first_allowed_page();

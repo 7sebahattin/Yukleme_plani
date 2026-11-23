@@ -26,6 +26,11 @@ $catStart = strpos($source, 'function nav_muhasebe_gruplari(): array {');
 $catEnd = strpos($source, "\n}\n", $catStart);
 if ($catStart === false || $catEnd === false) throw new RuntimeException('nav_muhasebe_gruplari source not found.');
 eval(substr($source, $catStart, $catEnd + 2 - $catStart));
+// v566: Şube/Depo Tanımları (Yönetim grubu) katalogu — nav_menu_modeli/nav_aktif_anahtar kullanır.
+$ynStart = strpos($source, 'function nav_yonetim_sayfalari(): array {');
+$ynEnd = strpos($source, "\n}\n", (int)$ynStart);
+if ($ynStart === false || $ynEnd === false) throw new RuntimeException('nav_yonetim_sayfalari source not found.');
+eval(substr($source, $ynStart, $ynEnd + 2 - $ynStart));
 // v555→v558: eski Yükleme Planı/Paletleme/Mal Kabul girişlerinin yeni karşılığı eşlemesi GERÇEK kaynaktan alınır (nav_menu_modeli/nav_alt_izinler kullanır).
 $eskiStart = strpos($source, 'function nav_eski_esleri(): array {');
 $eskiEnd = strpos($source, "\n}\n", (int)$eskiStart);   // v558: yalnız nav_eski_esleri() kaldı

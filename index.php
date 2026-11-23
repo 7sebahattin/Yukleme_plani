@@ -415,6 +415,13 @@ if (nav_ptak_gorunur()):
         <div class="home-card-title">Veritabanı Yedekleri</div>
         <div class="home-card-sub">Günlük otomatik</div>
     </a>
+    <?php /* v566: eski Admin Konsolu'ndan taşınan Şube / Depo Tanımları (yalnız yönetici; sidebar Yönetim grubuyla aynı) */ ?>
+    <?php foreach (nav_yonetim_sayfalari() as $__yd => [$__yl, $__ye]): ?>
+    <a href="<?= h($__yd) ?>" class="home-card">
+        <div class="home-card-icon" style="background:#e3f2fd"><?= h($__ye) ?></div>
+        <div class="home-card-title"><?= h($__yl) ?></div>
+    </a>
+    <?php endforeach; unset($__yd, $__yl, $__ye); ?>
     <!-- Şema Migrasyon: karttan kaldırıldı — doğrudan URL (migrate.php) ile
          admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
          tombstone. -->
