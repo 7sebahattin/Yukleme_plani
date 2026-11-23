@@ -153,7 +153,7 @@ ok('sayfa: tüm <?= ?> çıktıları h()/int/seçim ifadesi', !$kacissiz, $j(arr
 ok('lib: hks_gonderilen_ ile başlayan YENİ fonksiyon yok', !preg_match('/function\s+hks_gonderilen_/', $lib));
 ok('lib: hks_gonderilen_gercek_toplam + ulke_isimle + adlari kullanır (kopya değil)', str_contains($lib, 'hks_gonderilen_gercek_toplam(') && str_contains($lib, 'hks_gonderilen_ulke_isimle(') && str_contains($lib, 'hks_gonderilen_adlari('));
 $ht = (string)file_get_contents("$KOK/halkayit/.htaccess");
-ok('.htaccess: lib iki FilesMatch listesinde kapalı', substr_count($ht, 'gonderim_rapor_lib') >= 3 && preg_match_all('/FilesMatch "\^\([^"]*\|gonderim_rapor_lib\)/', $ht) === 2);
+ok('.htaccess: lib iki FilesMatch listesinde kapalı', substr_count($ht, 'gonderim_rapor_lib') >= 3 && preg_match_all('/FilesMatch "\^\([^"]*\|gonderim_rapor_lib(\||\))/', $ht) === 2);
 ok('.htaccess: sayfa (gonderim_rapor.php) kapalı listede DEĞİL', !preg_match('/\|gonderim_rapor\)/', $ht));
 $sw = (string)file_get_contents("$KOK/sw.js");
 ok('sw.js: gonderim_rapor.php önbellek dışı', str_contains($sw, '/\/halkayit\/gonderim_rapor\.php(\/|$)/.test(u.pathname)) return;'));

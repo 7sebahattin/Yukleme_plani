@@ -116,6 +116,7 @@ function role_content_catalog(): array {
                 'ui.hks.ekr_etiket'        => $i('Bildirim etiket basım', 'kart', 'hks.read', true),
                 'ui.hks.ekr_kunye'         => $i('Çoklu künye basım', 'kart', 'hks.read', true),
                 'ui.hks.gonderim_raporu'   => $i('Gönderim Raporu', 'kart', 'hks.read', true),
+                'ui.hks.rusum_borc'        => $i('Rüsum Borcu (bildirimlerden hesaplanan)', 'kart', 'hks.read', true),
             ],
             'İşlemler' => [
                 'ui.hks.gonder'         => $i('HKS’ye bildirim gönder', 'dugme', 'hks.create', false, 'Geri alınamaz ve rüsum doğurur. Kapalıyken kullanıcı taslak hazırlar ama gönderemez.'),
