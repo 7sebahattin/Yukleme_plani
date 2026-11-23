@@ -391,7 +391,7 @@ if ($export === 'csv' || $export === 'xlsx') {
     require_perm('reports.export');
     $bas = ['Belge No', 'Tarih', 'Parti No', 'Palet', 'Ünvan', 'Ürün', 'Ambalaj', 'Adet', 'BRÜT', 'Dara', 'NET'];
     if ($has_mustahsil) $bas[] = 'Müstahsil';
-    array_push($bas, 'Açıklama-1', 'Açıklama-2', 'İşlem', 'İşlem Tarihi', 'Kullanıcı', 'Şube');
+    array_push($bas, 'Analiz Durumu', 'Açıklama', 'İşlem', 'İşlem Tarihi', 'Kullanıcı', 'Şube');
     $satirlar = [];
     foreach ($rows as $r) {
         $x = [(int)$r['belge_no'], (string)$r['tarih'], (string)$r['parti_no'], (string)$r['palet_adi'], (string)$r['firma'], (string)$r['urun'], (string)$r['kasa_adi'],
@@ -453,7 +453,7 @@ render_header('Palet Fişleri');
                 <th data-col="belge_no">Belge No</th><th data-col="tarih">Tarih</th><th data-col="parti_no">Parti No</th><th data-col="palet_adi">Palet</th><th data-col="firma">Ünvan</th>
                 <th data-col="kasa_adi">Ambalaj</th><th data-col="kasa_adeti">Adet</th><th data-col="brut_kg">BRÜT</th><th data-col="dara_kg">Dara</th><th data-col="net_kg">NET</th>
                 <?php if ($has_mustahsil): ?><th data-col="mustahsil_ad">Müstahsil</th><?php endif; ?>
-                <th data-col="aciklama1">Açıklama-1</th><th data-col="aciklama2">Açıklama-2</th>
+                <th data-col="aciklama1">Analiz Durumu</th><th data-col="aciklama2">Açıklama</th>
                 <th data-col="islem">İşlem</th><th data-col="islem_zaman">İşlem Tarihi</th><th data-col="kullanici">Kullanıcı</th><th data-col="sube">Şube</th>
             </tr></thead>
             <tbody id="pfBody">
@@ -498,21 +498,21 @@ render_header('Palet Fişleri');
     <form id="pfForm" method="dialog" autocomplete="off" novalidate>
         <div class="pf-dialog-head"><div><h2>Palet Fişi Ekle</h2></div><button type="button" class="pf-close" id="pfClose" aria-label="Kapat">×</button></div>
         <div class="pf-form-grid">
-            <label class="pf-w3">Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
-            <label class="pf-w3">Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
-            <label class="pf-cb pf-w6">Parti No <input name="parti_no" data-cb="parti" maxlength="100"></label>
-            <label class="pf-cb pf-w6">Palet <input name="palet" data-cb="palet" class="pf-birimli"><span class="pf-birim" data-birim="palet" hidden></span></label>
-            <label class="pf-cb pf-w6">Müşteri <input name="firma" data-cb="firma" maxlength="150" required></label>
-            <label class="pf-cb pf-w6">Ürün <input name="urun" data-cb="urun" maxlength="150" required></label>
-            <label class="pf-cb pf-w4">Kasa Ambalaj <input name="kasa" data-cb="kasa" class="pf-birimli"><span class="pf-birim" data-birim="kasa" hidden></span></label>
-            <label class="pf-w2">Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
-            <label class="pf-cb pf-must pf-w6">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? '' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
+            <label class="pf-w3 pf-d2">Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
+            <label class="pf-w3 pf-d2">Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
+            <label class="pf-cb pf-w6 pf-d2">Parti No <input name="parti_no" data-cb="parti" maxlength="100"></label>
+            <label class="pf-cb pf-w6 pf-d3">Müşteri <input name="firma" data-cb="firma" maxlength="150" required></label>
+            <label class="pf-cb pf-must pf-w6 pf-d3">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? '' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
+            <label class="pf-cb pf-w6 pf-d3">Palet <input name="palet" data-cb="palet" class="pf-birimli"><span class="pf-birim" data-birim="palet" hidden></span></label>
+            <label class="pf-cb pf-w6 pf-d3">Kasa Ambalaj <input name="kasa" data-cb="kasa" class="pf-birimli"><span class="pf-birim" data-birim="kasa" hidden></span></label>
+            <label class="pf-cb pf-w4 pf-d3">Ürün <input name="urun" data-cb="urun" maxlength="150" required></label>
+            <label class="pf-w2 pf-d3">Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
             <label class="pf-kg pf-w2">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" hidden disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
             <label class="pf-kg pf-w2">Dara (kg) <input name="dara_kg" id="pfDara" readonly tabindex="-1" class="pf-readonly" value="0" title="Palet + kasa adedi × kasa darasından otomatik hesaplanır"></label>
             <label class="pf-kg pf-w2">Net (kg) <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0"></label>
             <div class="pf-uyari" id="pfUyari" role="status" aria-live="polite"></div>
-            <label class="pf-w6">Açıklama-1 <input name="aciklama1" maxlength="2000"></label>
-            <label class="pf-w6">Açıklama-2 <input name="aciklama2" maxlength="2000"></label>
+            <label class="pf-w6 pf-d3">Analiz Durumu <input name="aciklama1" maxlength="2000"></label>
+            <label class="pf-w6 pf-d3">Açıklama <input name="aciklama2" maxlength="2000"></label>
         </div>
         <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
     </form>
