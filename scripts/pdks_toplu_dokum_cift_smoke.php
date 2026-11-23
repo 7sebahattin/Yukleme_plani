@@ -224,7 +224,7 @@ okc('2i) faz8b şeması yoksa helper [] (kapı)', (function () use ($db) {
 echo "\n=== 3. Ekran (cavus_toplu_dokum.php) ===\n";
 $o = sayfa($ALT, 'cavus_toplu_dokum.php', ['ay' => $ay], $izinF, 'ekran');
 okc('3a) çalıştı, Fatal/Warning/Notice yok', $hataYok($o), $o[2] . substr($o[1], 0, 300));
-okc('3b) "Çift Yevmiye" başlığı Toplam İşçi\'den sonra, Servis/Hakediş\'ten önce', (bool)preg_match('~<th>Toplam İşçi</th>\s*<th class="num">Çift Yevmiye</th>\s*<th>Hakediş</th>~', $o[1]));
+okc('3b) "Çift Yevmiye" başlığı Toplam İşçi\'den sonra, Servis/Hakediş\'ten önce', (bool)preg_match('~<th class="num ctd-fm-th">5\+ Saat</th>\s*<th class="num">Çift Yevmiye</th>\s*<th class="num"[^>]*>Toplam FM \(saat\)</th>\s*(<th class="num">Servis[^<]*</th>\s*)*<th>Hakediş</th>~', $o[1]));
 okc('3c) özet kutusu Çift Yevmiye 3', (bool)preg_match('~Çift Yevmiye</div>\s*<div class="val">3</div>~', $o[1]));
 okc('3d) satırda 3 + muted kırılım "Kadın 2 · Erkek 1"', (bool)preg_match('~ctd-cift"><strong>3</strong><div class="muted"[^>]*>Kadın 2 · Erkek 1</div>~', $o[1]));
 okc('3e) özet Toplam İşçi 8 (S1 7 + S2 1; çift EKLENMEDİ)', (bool)preg_match('~Toplam İşçi</div>\s*<div class="val">8</div>~', $o[1]));
@@ -240,8 +240,8 @@ okc('3g) çiftsiz ayda Çift sütunu/kutusu yok', $hataYok($os) && !str_contains
 echo "\n=== 4. Yazdırma ===\n";
 $o = sayfa($ALT, 'cavus_toplu_dokum_yazdir.php', ['ay' => $ay], $izinF, 'yaz');
 okc('4a) çalıştı, hata yok', $hataYok($o), $o[2] . substr($o[1], 0, 300));
-okc('4b) başlık + kırılım', str_contains($o[1], '<th>Toplam İşçi</th>') && (bool)preg_match('~<th>Toplam İşçi</th>\s*<th>Çift Yevmiye</th>~', $o[1]) && str_contains($o[1], '<small>Kadın 2 · Erkek 1</small>'));
-okc('4c) tfoot: Toplam İşçi 8 → Çift 3', (bool)preg_match('~<tfoot>.*?<td class="num">8</td>\s*<td class="num">3</td>~s', $o[1]));
+okc('4b) başlık + kırılım', str_contains($o[1], '<th>Toplam İşçi</th>') && (bool)preg_match('~<th>5\+ Saat</th>\s*<th>Çift Yevmiye</th>\s*<th>Toplam FM~', $o[1]) && str_contains($o[1], '<small>Kadın 2 · Erkek 1</small>'));
+okc('4c) tfoot: Toplam İşçi 8 → Çift 3', (bool)preg_match('~<tfoot>.*?<td class="num">8</td>(\s*<td class="num">\d+</td>){5}\s*<td class="num">3</td>~s', $o[1]));
 okc('4d) özet kutusu', str_contains($o[1], '<div class="psb-label">Çift Yevmiye</div><div class="psb-value">3</div>'));
 $os = sayfa($ALT, 'cavus_toplu_dokum_yazdir.php', ['ay' => '2020-05'], $izinF, 'yazS');
 okc('4e) çiftsiz ayda yazdırmada sütun yok', $hataYok($os) && !str_contains($os[1], 'Çift Yevmiye'));
@@ -253,7 +253,7 @@ okc('5a) geçerli zip', $o[0] === 0 && str_starts_with($o[1], "PK\x03\x04") && !
 $k = \PhpOffice\PhpSpreadsheet\IOFactory::load($o[3]); @unlink($o[3]); $sh = $k->getActiveSheet();
 $bs = xlsx_satir_bul($sh, 'Tarih');
 $kC = xlsx_sutun_bul($sh, $bs, 'Çift Yevmiye (kişi)'); $kT = xlsx_sutun_bul($sh, $bs, 'Toplam İşçi'); $kodS = xlsx_sutun_bul($sh, $bs, 'Çavuş Kodu');
-okc('5b) "Çift Yevmiye (kişi)" sütunu Toplam İşçi\'nin hemen sağında', $kC !== '' && $kT !== '' && ord($kC) === ord($kT) + 1, "$kT/$kC");
+okc('5b) "Çift Yevmiye (kişi)" sütunu 1–5+ Saat\'in hemen sağında', $kC !== '' && $kT !== '' && ord($kC) === ord($kT) + 6, "$kT/$kC");
 $s1 = 0; $tp = 0;
 for ($i = $bs + 1; $i < $bs + 8; $i++) { if ($sh->getCell($kodS . $i)->getValue() === 'C1') $s1 = $i; if ($sh->getCell('A' . $i)->getValue() === 'TOPLAM') $tp = $i; }
 okc('5c) S1 hücresi 3 (sayı)', $s1 > 0 && $sh->getCell($kC . $s1)->getDataType() === 'n' && (int)$sh->getCell($kC . $s1)->getValue() === 3);

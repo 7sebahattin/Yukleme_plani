@@ -82,7 +82,7 @@ $ciftGoster = $toplamCift > 0;               // ekranla AYNI kural
 // (bir kolon dolusu "—" basmak kâğıtta yer kaybıdır).
 // Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
 $tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
-$kolonSayisi = ($finansalGosterilebilir ? 7 : 6) + PDKS_FAZ8B_OZET_FM_SUTUN + count($tipSut) + ($svGoster ? 2 : 0) + ($ciftGoster ? 1 : 0);
+$kolonSayisi = ($finansalGosterilebilir ? 8 : 7) + PDKS_FAZ8B_OZET_FM_SUTUN + count($tipSut) + ($svGoster ? 2 : 0) + ($ciftGoster ? 1 : 0);
 $mode = 'summary';
 $orientation = print_orientation($mode, $kolonSayisi);
 
@@ -131,13 +131,14 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <th>Çavuş</th>
             <?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?>
             <th>Toplam İşçi</th>
+            <?php for ($fs = 1; $fs <= PDKS_FAZ8B_OZET_FM_SUTUN; $fs++): ?><th><?= $fs ?><?= $fs === PDKS_FAZ8B_OZET_FM_SUTUN ? '+' : '.' ?> Saat</th><?php endfor; ?>
             <?php if ($ciftGoster): ?><th>Çift Yevmiye</th><?php endif; ?>
+            <th>Toplam FM (sa)</th>
             <?php if ($svGoster): ?><th>Servis — Büyük</th><th>Servis — Küçük</th><?php endif; ?>
             <?php if ($finansalGosterilebilir): ?><th>Hakediş</th><?php endif; ?>
             <th>İlk Giriş</th>
             <th>Son Çıkış</th>
             <th>Eksik Çıkış</th>
-            <?php for ($fs = 1; $fs <= PDKS_FAZ8B_OZET_FM_SUTUN; $fs++): ?><th><?= $fs ?><?= $fs === PDKS_FAZ8B_OZET_FM_SUTUN ? '+' : '.' ?> Saat</th><?php endfor; ?>
         </tr>
         </thead>
         <tbody>
@@ -148,9 +149,11 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= h($r['cavus_adi']) ?><?= $r['cavus_kodu'] !== '' ? ' (' . h($r['cavus_kodu']) . ')' : '' ?></td>
             <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($r[$tc['sutun']] ?? 0) ?></td><?php endforeach; ?>
             <td class="num"><?= (int)$r['toplam_isci'] ?></td>
+            <?php foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kv): ?><td class="num"><?= $kv > 0 ? (int)$kv : '·' ?></td><?php endforeach; ?>
             <?php if ($ciftGoster): $ciftN = (int)($r['cift'] ?? 0); $ciftKir = pdks_rapor_cift_tip_metni((array)($r['cift_tipler'] ?? [])); ?>
             <td class="num"><?php if ($ciftN > 0): ?><?= $ciftN ?><?php if ($ciftKir !== ''): ?><br><small><?= h($ciftKir) ?></small><?php endif; ?><?php else: ?>·<?php endif; ?></td>
             <?php endif; ?>
+            <td class="num"><?= (int)($r['fm_saat'] ?? 0) > 0 ? (int)$r['fm_saat'] : '·' ?></td>
             <?php if ($svGoster): foreach (['buyuk', 'kucuk'] as $svAn): $svAdet = (int)($r['servis_' . $svAn] ?? 0); $svTutar = $r['servis_' . $svAn . '_tutar'] ?? null; ?>
             <td class="num"><?php if ($svAdet > 0): ?><?= $svAdet ?><?php if ($finansalGosterilebilir && $svTutar !== null && $hakedis !== null): ?><br><small><?= h(pdks_rapor_para_formatla($svTutar)) ?> <?= h($hakedis['currency']) ?></small><?php endif; ?><?php else: ?>·<?php endif; ?></td>
             <?php endforeach; endif; ?>
@@ -160,7 +163,6 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= $r['ilk_giris'] ? h(date('H:i', strtotime($r['ilk_giris']))) : '—' ?></td>
             <td><?= $r['son_cikis'] ? h(date('H:i', strtotime($r['son_cikis']))) : '—' ?></td>
             <td class="num"><?= (int)$r['eksik_cikis'] ?></td>
-            <?php foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kv): ?><td class="num"><?= $kv > 0 ? (int)$kv : '·' ?></td><?php endforeach; ?>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($satirlar)): ?>
@@ -173,15 +175,16 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td colspan="2">TOPLAM (<?= count($satirlar) ?> mesai günü)</td>
             <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)$toplamTip[$tc['sutun']] ?></td><?php endforeach; ?>
             <td class="num"><?= $toplamIsci ?></td>
+            <?php $kvTop = array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0);
+            foreach ($satirlar as $r) foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kn => $kv) $kvTop[$kn] += $kv;
+            foreach ($kvTop as $kv): ?><td class="num"><?= (int)$kv ?></td><?php endforeach; ?>
             <?php if ($ciftGoster): ?><td class="num"><?= $toplamCift ?></td><?php endif; ?>
+            <td class="num"><?= $toplamFm ?></td>
             <?php if ($svGoster): ?><td class="num"><?= $toplamSvB ?></td><td class="num"><?= $toplamSvK ?></td><?php endif; ?>
             <?php if ($finansalGosterilebilir): ?><td>—</td><?php endif; ?>
             <td>—</td>
             <td>—</td>
             <td class="num"><?= $toplamEksik ?></td>
-            <?php $kvTop = array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0);
-            foreach ($satirlar as $r) foreach (pdks_faz8b_fm_kovalari((array)($r['fm_dagilim'] ?? [])) as $kn => $kv) $kvTop[$kn] += $kv;
-            foreach ($kvTop as $kv): ?><td class="num"><?= (int)$kv ?></td><?php endforeach; ?>
         </tr>
         </tfoot>
         <?php endif; ?>

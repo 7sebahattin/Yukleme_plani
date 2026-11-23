@@ -74,6 +74,15 @@ const satirOk = { tip: 'KADIN', worker_type_id: 1, kart_id: null, kart_no: 'KART
         await page.evaluate(() => [...document.querySelectorAll('button')].find(x => /Toplu İşlem/.test(x.textContent)).click());
         await page.waitForTimeout(400);
 
+        // ── v562: Çavuş + Tarih yan yana; «Sadece fazla mesai» Gelişmiş bölümünün içinde (varsayılan kapalı) ──
+        const y0 = await page.evaluate(() => {
+            const c = document.querySelector('#toplu .tv-cavus'), t = document.querySelector('#toplu .tv-tarih'), d = document.querySelector('#toplu details.tv-gelismis'), sf = document.getElementById('tpSfm');
+            const rc = c.getBoundingClientRect(), rt = t.getBoundingClientRect();
+            return { yanYana: Math.abs(rc.top - rt.top) < 6 && rt.left >= rc.right - 1 && rt.right <= innerWidth + 0.5, genis: window.innerWidth, icinde: !!(d && sf && d.contains(sf)), kapali: !!d && !d.open };
+        });
+        ok('Çavuş ve Tarih aynı satırda yan yana (geniş ekran)', y0.genis < 600 || y0.yanYana, JSON.stringify(y0));
+        ok('«Sadece fazla mesai» Gelişmiş bölümünün içinde ve varsayılan kapalı', y0.icinde && y0.kapali, JSON.stringify(y0));
+
         // ── Tarih kutusu ──
         const t0 = await page.evaluate(() => { const e = document.getElementById('tpTarih'); const r = e.getBoundingClientRect(); return { var: !!e, deger: e.value, max: e.max, tip: e.type, gor: r.width > 0 && r.height >= 40 && r.right <= innerWidth + 0.5, font: parseFloat(getComputedStyle(e).fontSize) }; });
         ok('Tarih kutusu: date, görünür, ≥ 40px yüksek, ekran içinde, 16px+ (iOS zoom önleme)', t0.var && t0.tip === 'date' && t0.gor && t0.font >= 16, JSON.stringify(t0));
@@ -87,7 +96,9 @@ const satirOk = { tip: 'KADIN', worker_type_id: 1, kart_id: null, kart_no: 'KART
         ok('Tarih değişince: başlık metni, "Giriş günü", çıkış günü kutuları yeni güne çekilir', t1.et === trDun && t1.giris.every(x => x === trDun) && t1.cikis.every(x => x === dun), JSON.stringify(t1));
         ok('Geçmiş güne geçince "bugün" notu gizlenir, kart listesi notu görünür', t1.bugunNot === true && t1.tarihNot === false, JSON.stringify(t1));
 
-        // ── Sadece FM + Servis ──
+        // ── Sadece FM + Servis ── (Gelişmiş bölümü içinde: görünürlük ölçümü için aç)
+        await page.evaluate(() => { document.querySelector('#toplu details.tv-gelismis').open = true; });
+        await page.waitForTimeout(100);
         const s0 = await page.evaluate(() => {
             const kisi = [...document.querySelectorAll('#tpSfm [data-sfm-kisi]')], saat = [...document.querySelectorAll('#tpSfm [data-sfm-saat]')];
             const r = e => { const b = e.getBoundingClientRect(); return b.width > 0 && b.right <= innerWidth + 0.5 && b.left >= 0; };
@@ -147,6 +158,7 @@ const satirOk = { tip: 'KADIN', worker_type_id: 1, kart_id: null, kart_no: 'KART
         onceki = { adet: 0, tipler: {}, son: null };
         await page.evaluate(() => [...document.querySelectorAll('button')].find(x => /Toplu İşlem/.test(x.textContent)).click());
         await page.waitForTimeout(350);
+        await page.evaluate(() => { document.querySelector('#toplu details.tv-gelismis').open = true; });
         await page.fill('[data-sfm-kisi]', '1'); await page.fill('[data-sfm-saat]', '1'); await page.fill('#tpReason', 'x');
         await page.click('#tpOnizleBtn'); await page.waitForTimeout(300);
         const v = await page.evaluate(() => ({ uyari: !!document.querySelector('#tpOnizle .tp-tekrar'), kaydet: document.getElementById('tpKaydetBtn').disabled }));

@@ -2832,6 +2832,13 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
 .pdks-fm-bekleyen { display: block; font-size: .75rem; color: var(--warn, #b26a00); font-weight: 600; }
 .pdks-sv-ad { white-space: nowrap; }
 
+/* v562 — Toplu İşlem: Çavuş + Tarih yan yana (aynı kutu stili); «Sadece fazla mesai» Gelişmiş içinde */
+.toplu-v2 .tv-ust > .tv-tarih { display: flex; flex-direction: column; justify-content: center; padding: 10px 14px; border-radius: 12px; background: #f1f5fb; border: 1px solid #dde6f2; margin: 0; }
+.toplu-v2 .tv-ust > .tv-tarih .form-label { font-size: .75rem; color: var(--muted); font-weight: 600; margin: 0 0 2px; }
+.toplu-v2 .tv-ust > .tv-tarih input { max-width: none; }
+.toplu-v2 .tv-gelismis > .tv-sfm { margin-top: 4px; }
+html[data-theme="dark"] .toplu-v2 .tv-ust > .tv-tarih { background: #1a2433; border-color: #2c3a50; }
+
 /* v507 — Toplu Mesai Onayı (mesai_toplu_onay.php): .tvo-* */
 .tvo-kontrol { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; padding: 14px 16px; margin-bottom: 12px; }
 .tvo-kontrol-alan label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; }
