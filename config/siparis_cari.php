@@ -109,6 +109,32 @@ function siparis_cari_para_isaretli(int $kurus): string
 }
 
 /** Gram → ekranda tam kg ("12.880"; KG ekranda tam sayı kuralı). */
+/**
+ * v569: OGL iskontosu (invoice'taki %; ör. 4) — tutarın iskonto payı (kuruş, yarım yukarı). siparis_inv_hesapla() ile AYNI formül:
+ * iskonto = intdiv(tutar × (% × 100) + 5000, 10000). İşaretli tutarda simetrik (−x → −iskonto(x)).
+ */
+function siparis_cari_iskonto(int $kurus, int $isk100): int
+{
+    if ($isk100 <= 0 || $kurus === 0) return 0;
+    $a = intdiv(abs($kurus) * $isk100 + 5000, 10000);
+    return $kurus < 0 ? -$a : $a;
+}
+
+/** v569: iskonto SONRASI (net) tutar = tutar − iskonto (OGL'nin ödediği / debit'te düştüğü taban). */
+function siparis_cari_net(int $kurus, int $isk100): int { return $kurus - siparis_cari_iskonto($kurus, $isk100); }
+
+/** v569: net tutarın brüt (iskonto öncesi, fatura üzerindeki) karşılığı — yarım yukarı. OGL debit'i nettir; brüt karşılaştırmada bununla toplanır. */
+function siparis_cari_brute(int $net, int $isk100): int
+{
+    if ($isk100 <= 0 || $isk100 >= 10000) return $net;
+    $b = 10000 - $isk100; $a = abs($net);
+    $r = intdiv(2 * $a * 10000 + $b, 2 * $b);
+    return $net < 0 ? -$r : $r;
+}
+
+/** v569: % (float, 4 = %4) → yüzde × 100 tam sayı, 0–100% sınırlı. */
+function siparis_cari_isk100(float $oran): int { return max(0, min(10000, (int)round($oran * 100))); }
+
 function siparis_cari_kg(int $gram): string
 {
     return number_format((int)round($gram / 1000), 0, ',', '.');
@@ -307,15 +333,20 @@ function siparis_cari_veri(array $okunan, array $ctx): array
     $faturaH = is_array($ctx['fatura'] ?? null) ? $ctx['fatura'] : [];
     $partiH = is_array($ctx['parti'] ?? null) ? $ctx['parti'] : [];   // sid → list<string> (siparis_cari_parti_haritasi)
     $debitH = is_array($ctx['debit'] ?? null) ? $ctx['debit'] : [];   // v492: sid → {kurus, diger_kurus, liste} (siparis_debit_harita; yalnız EUR + eşleşmiş)
+    // v569: OGL iskontosu — sevkiyatın üretilmiş invoice'ındaki % (yoksa Invoice ayarındaki varsayılan %). Tüm TUTAR toplamları iskonto SONRASI (net)
+    // hesaplanır: OGL net öder, debit note'u da net keser. Brüt (iskonto öncesi) değerler ayrıca taşınır (fiyat / kg karşılaştırması brüttür).
+    $iskVars = siparis_cari_isk100((float)($ctx['iskonto_varsayilan'] ?? 0.0));
     $out = ['yuklenmemis' => [], 'yuklenen' => [], 'fiyatli' => [], 'ozet' => [
         'yuklenmemis' => ['sevkiyat' => 0, 'palet' => 0, 'koli' => 0, 'gram' => 0],
         'yuklenen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
         'bekleyen'    => ['sevkiyat' => 0, 'koli' => 0, 'gram' => 0],
     ], 'cari' => [],
-        'kesilen' => ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0],
+        'kesilen' => ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0,
+                      'gelen_net_kurus' => 0, 'kesilen_net_kurus' => 0, 'fark_net_kurus' => 0, 'kalan_fark_net_kurus' => 0],
+        'iskonto' => ['varsayilan_100' => $iskVars, 'varsayilan_sevkiyat' => 0, 'oranlar' => []],
         'debit' => ['sevkiyat' => 0, 'kurus' => 0, 'diger_kurus' => 0],
         'varsayilan_kg' => false, 'kesildi' => (bool)($okunan['kesildi'] ?? false)];
-    $fatura = [];
+    $fatura = []; $faturaNet = [];
     foreach ((array)($okunan['rows'] ?? []) as $r) {
         $id = (int)$r['id'];
         $yuklendi = siparis_cari_yuklendi_mi($r, $bugun);
@@ -325,11 +356,15 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             'plaka' => (string)($r['plakalar'] ?? ''), 'nakliyeci' => (string)($r['nakliyeci'] ?? ''),
             'parti' => array_values(array_filter(array_map(static fn($x): string => trim((string)$x), (array)($partiH[$id] ?? [])), static fn(string $x): bool => $x !== '')),
             'yuklendi' => $yuklendi, 'fiyatli' => false, 'fiyat_tarihi' => null,
-            'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => [], 'fatura' => null, 'karsilastirma' => null, 'debit' => null];
+            'satirlar' => [], 'toplam' => ['palet' => 0, 'koli' => 0, 'gram' => 0], 'tutar' => [], 'fatura' => null, 'karsilastirma' => null, 'debit' => null,
+            'iskonto_100' => 0, 'iskonto_kaynak' => 'varsayilan', 'iskonto' => [], 'net' => []];
         $fat = (isset($faturaH[$id]) && is_array($faturaH[$id]) && (int)($faturaH[$id]['fiyat'] ?? 0) > 0)
             ? ['fiyat' => (int)$faturaH[$id]['fiyat'], 'no' => (string)($faturaH[$id]['no'] ?? ''), 'tarih' => ($faturaH[$id]['tarih'] ?? null) !== null ? (string)$faturaH[$id]['tarih'] : null]
             : null;
         $sev['fatura'] = $fat;
+        $faturaIsk = $fat !== null && isset($faturaH[$id]['iskonto']) && is_numeric($faturaH[$id]['iskonto']);
+        $isk100 = $faturaIsk ? siparis_cari_isk100((float)$faturaH[$id]['iskonto']) : $iskVars;
+        $sev['iskonto_100'] = $isk100; $sev['iskonto_kaynak'] = $faturaIsk ? 'fatura' : 'varsayilan';
         $fiyatTarihi = null;
         foreach (siparis_cari_kalem_sirala((array)($okunan['kalem'][$id] ?? [])) as $k) {
             $c = sipui_kalem_coz($k);
@@ -361,6 +396,7 @@ function siparis_cari_veri(array $okunan, array $ctx): array
             $sev['satirlar'][] = $sat;
         }
         ksort($sev['tutar']);
+        foreach ($sev['tutar'] as $pb => $kurus) { $sev['iskonto'][$pb] = siparis_cari_iskonto((int)$kurus, $isk100); $sev['net'][$pb] = (int)$kurus - $sev['iskonto'][$pb]; }
         if ($fat !== null) {   // karşılaştırma: yalnız EUR fiyatlı satırlar; fatura tutarı = toplam gram × fatura fiyatı (siparis_inv_hesapla ile aynı formül)
             $gr = 0; $pcK = 0; $n = 0;
             foreach ($sev['satirlar'] as $sa) {
@@ -371,7 +407,10 @@ function siparis_cari_veri(array $okunan, array $ctx): array
                 $faK = intdiv($gr * $fat['fiyat'] + 50000, 100000);
                 // v492: OGL fiyat farkı debit'i kesilen fazlayı kapatır → kalan = (gelen − kesilen) + debit
                 $dk = isset($debitH[$id]) && is_array($debitH[$id]) ? max(0, (int)($debitH[$id]['kurus'] ?? 0)) : 0;
-                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $pcK - $faK, 'debit_kurus' => $dk, 'kalan_fark_kurus' => $pcK - $faK + $dk];
+                // v569: debit NET (iskonto sonrası) kesilir → brüt karşılaştırmada brüt karşılığıyla (debit_brut), net karşılaştırmada kendisiyle toplanır.
+                $pcN = siparis_cari_net($pcK, $isk100); $faN = siparis_cari_net($faK, $isk100); $dkB = siparis_cari_brute($dk, $isk100);
+                $sev['karsilastirma'] = ['gram' => $gr, 'pc_kurus' => $pcK, 'fatura_kurus' => $faK, 'fark_kurus' => $pcK - $faK, 'debit_kurus' => $dk, 'kalan_fark_kurus' => $pcK - $faK + $dkB,
+                    'iskonto_100' => $isk100, 'debit_brut_kurus' => $dkB, 'pc_net_kurus' => $pcN, 'fatura_net_kurus' => $faN, 'fark_net_kurus' => $pcN - $faN, 'kalan_fark_net_kurus' => $pcN - $faN + $dk];
             }
         }
         if (isset($debitH[$id]) && is_array($debitH[$id]) && ((int)($debitH[$id]['kurus'] ?? 0) > 0 || (int)($debitH[$id]['diger_kurus'] ?? 0) > 0)) {
@@ -400,7 +439,9 @@ function siparis_cari_veri(array $okunan, array $ctx): array
         }
         if ($sev['fiyatli']) {
             $out['fiyatli'][] = $sev;
-            foreach ($sev['tutar'] as $pb => $kurus) $fatura[$pb] = ($fatura[$pb] ?? 0) + $kurus;
+            foreach ($sev['tutar'] as $pb => $kurus) { $fatura[$pb] = ($fatura[$pb] ?? 0) + $kurus; $faturaNet[$pb] = ($faturaNet[$pb] ?? 0) + (int)$sev['net'][$pb]; }
+            if ($isk100 > 0) $out['iskonto']['oranlar'][$isk100] = ($out['iskonto']['oranlar'][$isk100] ?? 0) + 1;
+            if (!$faturaIsk) $out['iskonto']['varsayilan_sevkiyat']++;
             if ($sev['karsilastirma'] !== null) {   // invoice'u üretilmiş EUR sevkiyat: kartlarda "kesilen fatura" toplamı (bakiyeye GİRMEZ)
                 $kk = $sev['karsilastirma'];
                 $out['kesilen']['sevkiyat']++;
@@ -410,12 +451,17 @@ function siparis_cari_veri(array $okunan, array $ctx): array
                 $out['kesilen']['fark_kurus'] += (int)$kk['fark_kurus'];
                 $out['kesilen']['debit_kurus'] += (int)$kk['debit_kurus'];
                 $out['kesilen']['kalan_fark_kurus'] += (int)$kk['kalan_fark_kurus'];
+                $out['kesilen']['gelen_net_kurus'] += (int)$kk['pc_net_kurus'];
+                $out['kesilen']['kesilen_net_kurus'] += (int)$kk['fatura_net_kurus'];
+                $out['kesilen']['fark_net_kurus'] += (int)$kk['fark_net_kurus'];
+                $out['kesilen']['kalan_fark_net_kurus'] += (int)$kk['kalan_fark_net_kurus'];
             }
         }
     }
     foreach (array_unique(array_merge(array_keys($fatura), array_keys($tahsilat))) as $pb) {
-        $fa = (int)($fatura[$pb] ?? 0); $ta = (int)($tahsilat[$pb] ?? 0);
-        $out['cari'][(string)$pb] = ['faturalanan' => $fa, 'tahsilat' => $ta, 'bakiye' => $fa - $ta];
+        // v569: faturalanan = iskonto SONRASI (net) gelen fiyat tutarı; bakiye = net − tahsilat (tahsilat OGL'nin net ödemesidir). brut/iskonto bilgi.
+        $br = (int)($fatura[$pb] ?? 0); $fa = (int)($faturaNet[$pb] ?? 0); $ta = (int)($tahsilat[$pb] ?? 0);
+        $out['cari'][(string)$pb] = ['faturalanan' => $fa, 'tahsilat' => $ta, 'bakiye' => $fa - $ta, 'brut' => $br, 'iskonto' => $br - $fa];
     }
     ksort($out['cari']);
     return $out;

@@ -180,9 +180,15 @@ ok('A ve C bölümleri DEĞİŞMEDİ: fatura sütunu/başlığı/sınıfı yok; 
 ok('dipnot: "Kesilen fatura fiyatı = Invoice (OGL) … Fark = gelen − kesilen: kesilen fatura gelen fiyattan yüksekse eksi (−)."', str_contains($g, "Kesilen fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat (iskonto öncesi). Fark = gelen − kesilen: kesilen fatura gelen fiyattan yüksekse eksi (−)."));
 $KART = kesit($g, 'print-summary-row', 'A) Gelen');
 ok('v488 kartlar: 6 kart (v492: + OGL debit note); Gelen fiyat tutarı + Kesilen fatura tutarı var, eski "Fiyatlı tutar" yok', substr_count($KART, 'class="print-summary-box') === 6 && str_contains($KART, 'Gelen fiyat tutarı') && str_contains($KART, 'Kesilen fatura tutarı') && !str_contains($KART, 'Fiyatlı tutar'));
-ok('v488 Kesilen fatura kartı: 45.094,00 EUR · 3 sevkiyat · gelen karşılığı 47.040,00 · fark +1.946,00', str_contains($KART, '45.094,00 EUR') && str_contains($KART, '3 sevkiyat · gelen fiyat karşılığı 47.040,00 EUR · fark +1.946,00 EUR'), $KART);
+// v569: tutarlar invoice iskontosu (%4) SONRASI — brüt 45.094,00 → net 43.290,24; gelen karşılığı net 45.158,40; fark net +1.868,16
+ok('v488/v569 Kesilen fatura kartı: net 43.290,24 EUR · 3 sevkiyat · brüt 45.094,00 · gelen karşılığı 45.158,40 · fark +1.868,16', str_contains($KART, '43.290,24 EUR') && str_contains($KART, '3 sevkiyat · brüt 45.094,00 EUR · gelen fiyat karşılığı 45.158,40 EUR · fark +1.868,16 EUR'), $KART);
+ok('v569 Gelen fiyat tutarı kartı: net 47.188,40 EUR, brüt 49.070,00 − iskonto %4 1.881,60; invoice\'suz sevkiyatta varsayılan iskonto boş uyarısı', str_contains($KART, 'iskonto sonrası') && str_contains($KART, '47.188,40 EUR')
+    && str_contains($KART, 'brüt 49.070,00 EUR − iskonto %4 1.881,60 EUR') && str_contains($KART, 'iskonto uygulanmadı (Invoice ayarında varsayılan iskonto boş)'), $KART);
 $D = kesit($g, 'D) Cari Özet', '</html>');
-ok('v488 D: "Gelen fiyat tutarı" + "Kesilen fatura" bilgi kolonu (EUR 45.094,00, USD —); "Faturalanan" YOK', str_contains($D, 'Gelen fiyat tutarı') && str_contains($D, 'Kesilen fatura <span') && str_contains($D, '45.094,00') && !str_contains($D, 'Faturalanan'));
+ok('v488/v569 D: Brüt · İskonto · Gelen fiyat tutarı (net) · Tahsilat · Bakiye · Kesilen fatura (net 43.290,24); bakiye net; "Faturalanan" YOK', str_contains($D, 'Gelen fiyat tutarı') && str_contains($D, 'Kesilen fatura <span') && str_contains($D, '43.290,24')
+    && str_contains($D, '49.070,00') && str_contains($D, '−1.881,60') && (bool)preg_match('~<strong>47\.188,40</strong>~u', $D) && !str_contains($D, 'Faturalanan'));
+$C2 = kesit($g, 'C) Fiyatlandırılmış Sevkiyatlar', 'Ödemeler (OGL');
+ok('v569 C: invoice\'lu sevkiyatta ara toplamın altında İskonto %4 (invoice) + Net tutar satırı (S1 26.390,00 → −1.055,60 → 25.334,40)', str_contains($C2, 'İskonto %4 (invoice)</td><td class="num sc-isk">−1.055,60 EUR') && str_contains($C2, 'Net tutar (EUR)</td><td class="num">25.334,40 EUR'));
 ok('cari özet (D) etkilenmez: fatura sütunu içermez', str_contains($g, 'D) Cari Özet') && !str_contains(kesit($g, 'D) Cari Özet', '</html>'), 'fiyatı / kg'));
 ok('XSS: S5 sipariş no kaçırılır; hiçbir yerde çıplak <script>alert', !str_contains($g, '<script>alert(1)') && str_contains($g, '&lt;script&gt;alert(1)&lt;/script&gt;'));
 ok('kapı/çıktı değişmedi: tfoot yok, onclick yok, form POST yok', !str_contains($g, '<tfoot') && !preg_match('/\sonclick=/i', $g) && !str_contains($g, 'method="post"'));
@@ -386,7 +392,7 @@ $B = kesit($g, $KESIT_B[0], $KESIT_B[1]);
 if ($cikti !== '') file_put_contents($cikti . '/cari_debit.html', $g);
 ok('v492 Cari: 200, hata/uyarı yok, HTML dengeli', temiz($r) && $r['kod'] === 200 && html_dengeli($g) === null, (string)$r['hata'] . ' ' . (string)html_dengeli($g));
 ok('v492 Cari: "OGL debit note" kartı 500,00 EUR (yalnız fiyat farkı debit\'i), 6 kart', str_contains($g, 'OGL debit note') && (bool)preg_match('~OGL debit note</span><span class="sc-pb">500,00 EUR</span>~u', $g) && substr_count($g, 'class="print-summary-box') === 6);
-ok('v492 Cari B: S1 grubunda debit 500,00 EUR + belge no; Kalan fark +1.956,00 EUR = +1.456,00 + 500,00', str_contains($B, '2029-200001') && (bool)preg_match('~TC810001\.10.*?500,00 EUR<span class="sc-alt">2029-200001</span></td><td class="num sc-kalan sc-fark-arti">\+1\.956,00 EUR<span class="sc-alt">fark \+1\.456,00 \+ debit 500,00</span>~su', $B), kesit($B, 'TC810001.10', 'TC810002.10') !== '' ? substr(strip_tags(kesit($B, 'TC810001.10', 'TC810002.10')), 0, 300) : '');
+ok('v492/v569 Cari B: S1 grubunda debit 500,00 EUR + belge no; Kalan fark (net, %4) +1.897,76 EUR = +1.397,76 + 500,00', str_contains($B, '2029-200001') && (bool)preg_match('~TC810001\.10.*?500,00 EUR<span class="sc-alt">2029-200001</span></td><td class="num sc-kalan sc-fark-arti">\+1\.897,76 EUR<span class="sc-alt">fark \+1\.397,76 \+ debit 500,00</span>~su', $B), kesit($B, 'TC810001.10', 'TC810002.10') !== '' ? substr(strip_tags(kesit($B, 'TC810001.10', 'TC810002.10')), 0, 300) : '');
 ok('v492 Cari B: kalite nedenli debit S6\'da "diğer nedenli … (hesaba girmez)" ile görünür, kalan fark = fark', str_contains($B, '+ diğer nedenli 2,00 EUR (hesaba girmez)'));
 ok('v492 Cari B: toplam satırı debit toplamı 500,00 EUR; aciklama notu', (bool)preg_match('~class="sc-toplam".*?500,00 EUR</td><td class="num[^"]*">[^<]*EUR</td></tr>~su', $B) && str_contains($g, 'Kalan fark = (gelen − kesilen) + debit'));
 $gen = satir_genislikleri($B);
@@ -395,8 +401,9 @@ $r = uc('siparis_denge.php'); $g = $r['govde'];
 ok('v492 Denge: 200, hata/uyarı yok, HTML dengeli', temiz($r) && $r['kod'] === 200 && html_dengeli($g) === null, (string)$r['hata'] . ' ' . (string)html_dengeli($g));
 $K = kesit($g, 'id="sdKarsi"', '</table>');
 ok('v492 Denge: özet kartı "OGL debit note" 500,00 EUR; kapatılacak tutar notu "kalan fark = fark + debit"', (bool)preg_match('~OGL debit note</span><span class="psb-value">500,00 EUR</span>~u', $g) && str_contains($g, 'kalan fark = fark + debit'));
-ok('v492 Denge: tablo başlığı "OGL debit (EUR)" + "Kümülatif kalan fark (EUR)"; S1 satırında 500,00 EUR; kümülatif KALAN (+1.956,00)', str_contains($K, 'OGL debit (EUR)') && str_contains($K, 'Kümülatif kalan fark (EUR)')
-    && (bool)preg_match('~TC810001\.10</td>.*?<td class="num">500,00 EUR</td>\s*<td class="num sc-fark-arti">\+1\.956,00</td>~su', $K));
+// v569: debit (500,00, iskonto SONRASI) fatura fiyatı tabanında brüt karşılığıyla (500 ÷ 0,96 = 520,83) toplanır → kalan +1.456,00 + 520,83
+ok('v492/v569 Denge: tablo başlığı "OGL debit (EUR)" + "Kümülatif kalan fark (EUR)"; S1 satırında 520,83 EUR (belge 500,00); kümülatif KALAN (+1.976,83)', str_contains($K, 'OGL debit (EUR)') && str_contains($K, 'Kümülatif kalan fark (EUR)')
+    && (bool)preg_match('~TC810001\.10</td>.*?<td class="num">520,83 EUR<span class="sc-alt">belge 500,00</span></td>\s*<td class="num sc-fark-arti">\+1\.976,83</td>~su', $K), $K);
 ok('v492 Denge: tüm satırlar 12 hücre', (function () use ($K): bool { $w = satir_genislikleri($K); return $w !== [] && count(array_unique($w)) === 1 && $w[0] === 12; })());
 $db->exec("DELETE FROM hks_kv WHERE anahtar LIKE 'siparis_debit_%'");
 $r = uc('siparis_cari.php'); $g = $r['govde'];
