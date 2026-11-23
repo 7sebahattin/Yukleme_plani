@@ -88,6 +88,17 @@
         yap().then(function (tamam) { if (!tamam) mesgul = false; });
     }
 
+    // v562: seçili kişileri bir çavuşa bağla (boş seçim = bağı kaldır)
+    function cavusToplu() {
+        var ids = idler(), sel = document.getElementById('pkCavusSec');
+        if (!ids.length || mesgul || !sel) return;
+        mesgul = true; cubukHata('');
+        api.postJson({ action: 'kisi_cavus', kisi_ids: ids, cavus_id: sel.value }).then(function (j) {
+            if (j && j.ok) { listeYenile(); return; }
+            mesgul = false; cubukHata('İşlem yapılamadı: ' + ((j && j.error) || 'bilinmeyen hata'));
+        });
+    }
+
     sayfa.addEventListener('change', function (e) {
         var c = e.target;
         if (!c || !c.getAttribute) return;
@@ -108,11 +119,12 @@
         if (b.hasAttribute('data-pk-excel-ac')) { excelAc(); return; }
         if (b.hasAttribute('data-pk-sec-temizle')) { sec = {}; secimGoster(); return; }
         if (b.hasAttribute('data-pk-toplu')) { topluIslem(b.getAttribute('data-pk-toplu')); return; }
+        if (b.hasAttribute('data-pk-cavus-uygula')) { cavusToplu(); return; }
         var is = b.getAttribute('data-pk-islem');
         if (!is) return;
         var tr = b.closest('tr[data-pk-satir]');
         if (!tr) return;
-        if (is === 'duzenle') api.kisiPenceresi({ id: tr.getAttribute('data-pk-satir'), ad: tr.getAttribute('data-isim') || '', gorev: tr.getAttribute('data-gorev') || '' });
+        if (is === 'duzenle') api.kisiPenceresi({ id: tr.getAttribute('data-pk-satir'), ad: tr.getAttribute('data-isim') || '', gorev: tr.getAttribute('data-gorev') || '', cavusId: tr.getAttribute('data-cavus-id') || '' });
         else if (is === 'durum') durumDegistir(tr);
         else if (is === 'sil') silOnayi(tr);
     });
@@ -183,10 +195,14 @@
         chip(ozetKap, 'Boş', o.bos || 0, '');
         chip(ozetKap, 'Çok uzun', o.uzun || 0, '');
         chip(ozetKap, 'Mükerrer', o.mukerrer || 0, 'pk-chip-pasif');
+        if (o.cavus_eslesmedi > 0) chip(ozetKap, 'Çavuş eşleşmedi', o.cavus_eslesmedi, '');
+        var cavusSut = pen.querySelectorAll('.pk-excel-tablo thead th').length > 4;   // v562: «Çavuş» sütunu yalnız kolon kuruluysa çizilir
         while (govde.firstChild) govde.removeChild(govde.firstChild);
         (j.ilk || []).forEach(function (r) {
             var tr = document.createElement('tr');
-            [String(r.satir), r.ad, r.gorev].forEach(function (m) { var td = document.createElement('td'); td.textContent = m; tr.appendChild(td); });
+            var hucreler = [String(r.satir), r.ad, r.gorev];
+            if (cavusSut) hucreler.push((r.cavus || '') + (r.cavus_durum === 'eslesmedi' ? ' (eşleşmedi → çavuşsuz)' : ''));
+            hucreler.forEach(function (m) { var td = document.createElement('td'); td.textContent = m; tr.appendChild(td); });
             var d = DURUM[r.durum] || [String(r.durum), ''];
             var td = document.createElement('td'); td.textContent = d[0]; td.className = d[1]; tr.appendChild(td);
             govde.appendChild(tr);

@@ -10,7 +10,7 @@
 //             v553: isaret_yok (true → puantaj_isaretler tablosu KURULMAZ) · isaretler [[emp, gün, kod, açıklama?],…] (tohum; gün = ayın günü sayısı) ·
 //             post {alan:değer} (→ REQUEST_METHOD=POST, $_POST; Accept JSON) · dump (true → çıkışta tablo içeriği STDERR "ISARETLER: json")
 //             v554: giris (true → puantaj_giris_* tabloları KURULUR; varsayılan KURULMAZ = migrate edilmemiş site) ·
-//             giris_kisiler [[id, ad, gorev, depo, aktif],…] · giris_gunler [[kisi_id, ayın günü, kod],…] ·
+//             giris_kisiler [[id, ad, gorev, depo, aktif, sira?, cavus_id? (v562)],…] · foremen [[id, ad, aktif],…] (v562) · giris_gunler [[kisi_id, ayın günü, kod],…] ·
 //             dump_giris (true → çıkışta STDERR "GIRIS_KISILER: json" + "GIRIS_GUNLER: json") · tum_tablolar (true → employees/PDKS tablolarının satır sayıları STDERR "SAYILAR: json")
 //             v556: db_dosya (kalıcı SQLite dosyası; var olan dosyada şema/tohum kurulmaz) · http (true → style.css göreli 'assets/' yoluyla bağlanır)
 //             v555: files {alan:{name,tmp_name}} (→ $_FILES; gerçek HTTP yüklemesi yok → test kancası $GLOBALS['_pg_yukleme_denetimi'] kurulur) ·
@@ -146,9 +146,20 @@ if ($SEMA !== 'yok' && !$KURULU) {
         foreach (($OPT['isaretler'] ?? []) as $r) $isr->execute([(int)$r[0], sprintf('%s-%02d', $TOHUM_AY, (int)$r[1]), $r[2], $r[3] ?? null, 1, date('Y-m-d H:i:s')]);
     }
     if (!empty($OPT['giris'])) {   // v554 Puantaj Girişi (bağımsız): kendi iki tablosu + tohum
-        foreach (pg_tablolar() as $ad => $sql) { [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i); }
-        $gk = db()->prepare("INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira, created_by, created_at) VALUES (?,?,?,?,?,?,1,?)");
-        foreach (($OPT['giris_kisiler'] ?? []) as $r) $gk->execute([(int)$r[0], $r[1], $r[2] === '' ? null : $r[2], $r[3], (int)($r[4] ?? 1), (int)($r[5] ?? 0), date('Y-m-d H:i:s')]);
+        foreach (pg_tablolar() as $ad => $sql) {
+            if (!empty($OPT['eski_sema'])) $sql = preg_replace('/^\s*`cavus_id`.*\R/m', '', $sql);   // v562: kolonsuz ESKİ şema (migrate edilmemiş site)
+            [$create, $ix] = pdks_ddl_sqlite($sql); db()->exec($create); foreach ($ix as $i) db()->exec($i);
+        }
+        $cavusKol = empty($OPT['eski_sema']);
+        $gk = db()->prepare($cavusKol
+            ? "INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira, cavus_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,1,?)"
+            : "INSERT INTO puantaj_giris_kisiler (id, ad, gorev, depo, aktif, sira, created_by, created_at) VALUES (?,?,?,?,?,?,1,?)");
+        foreach (($OPT['giris_kisiler'] ?? []) as $r) {
+            $v = [(int)$r[0], $r[1], $r[2] === '' ? null : $r[2], $r[3], (int)($r[4] ?? 1), (int)($r[5] ?? 0)];
+            if ($cavusKol) $v[] = isset($r[6]) && (int)$r[6] > 0 ? (int)$r[6] : null;
+            $v[] = date('Y-m-d H:i:s');
+            $gk->execute($v);
+        }
         $gg = db()->prepare("INSERT INTO puantaj_giris_gunler (kisi_id, tarih, kod, user_id, created_at) VALUES (?,?,?,?,?)");
         foreach (($OPT['giris_gunler'] ?? []) as $r) $gg->execute([(int)$r[0], is_string($r[1]) && str_contains($r[1], '-') ? $r[1] : sprintf('%s-%02d', $TOHUM_AY, (int)$r[1]), $r[2], 1, date('Y-m-d H:i:s')]);   // gün = ayın günü ya da tam tarih
     }
@@ -187,6 +198,13 @@ if ($SEMA === 'hepsi' && !$KURULU) {
     pdks_gunluk_faz8a_migrate(db());   // kart olaylarından work-period (katılım) satırlarını üretir
 }
 
+if (!empty($OPT['foremen'])) {   // v562: bağlı çavuş adayları — foremen [[id, ad, aktif],…] (YALNIZ okunur). Gerçek şemada tablo varsa (SEMA hepsi) onu kullanır, yoksa en küçük şemayı kurar.
+    try { db()->query('SELECT 1 FROM foremen LIMIT 0'); $fmVar = true; } catch (Throwable $e) { $fmVar = false; }
+    if (!$fmVar) db()->exec('CREATE TABLE foremen (id INTEGER PRIMARY KEY, code TEXT NULL, name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1)');
+    db()->exec('DELETE FROM foremen');
+    $fm = db()->prepare('INSERT INTO foremen (id, code, name, is_active) VALUES (?,?,?,?)');
+    foreach ($OPT['foremen'] as $r) $fm->execute([(int)$r[0], 'F' . (int)$r[0], (string)$r[1], (int)($r[2] ?? 1)]);
+}
 if (!empty($OPT['debug'])) { fwrite(STDERR, 'gunluk=' . var_export(pdks_gunluk_sema_hazir(db()), true) . ' faz8a=' . var_export(pdks_gunluk_faz8a_sema_hazir(db()), true) . "\n"); foreach (['daily_worker_work_periods','worker_cards','daily_worker_card_events'] as $t) fwrite(STDERR, $t . '=' . var_export(pdks_gunluk_tablo_var(db(), $t), true) . "\n"); }
 $_GET = $GETJ; $_POST = []; $_FILES = [];
 if (!empty($OPT['files'])) {   // v555 Excel'den ekleme: gerçek yükleme yok → kanca is_uploaded_file yerine geçer

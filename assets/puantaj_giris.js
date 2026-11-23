@@ -209,7 +209,7 @@
     /* Kişi işlem menüsü (⋯) */
     function kisiMenusu(dugme) {
         var pasif = dugme.getAttribute('data-pasif') === '1';
-        bag = { tur: 'kisi', el: dugme, id: dugme.getAttribute('data-pg-kisi'), ad: dugme.getAttribute('data-isim') || '', gorev: dugme.getAttribute('data-gorev') || '', pasif: pasif };
+        bag = { tur: 'kisi', el: dugme, id: dugme.getAttribute('data-pg-kisi'), ad: dugme.getAttribute('data-isim') || '', gorev: dugme.getAttribute('data-gorev') || '', cavusId: dugme.getAttribute('data-cavus-id') || '', pasif: pasif };
         document.getElementById('pgIslemBaslik').textContent = bag.ad;
         islem.querySelectorAll('[data-pg-islem]').forEach(function (b) {
             var k = b.getAttribute('data-pg-islem');
@@ -293,14 +293,17 @@
     }
     function kisiPenceresi(b) {
         var ad = document.getElementById('pgAd'), gorev = document.getElementById('pgGorev');
+        var cavus = document.getElementById('pgCavus');   // v562: yalnız «bağlı çavuş» kolonu kuruluysa vardır
         var duz = b && b.id;
         ad.value = duz ? b.ad : ''; gorev.value = duz ? b.gorev : '';
+        if (cavus) cavus.value = (duz && b.cavusId && b.cavusId !== '0') ? String(b.cavusId) : '';
         pencereAc({
             baslik: duz ? 'Kişiyi düzenle' : 'Kişi ekle', tamam: 'Kaydet', alanlar: true,
             is: function () {
                 var adDeger = ad.value.replace(/\s+/g, ' ').trim();
                 if (adDeger === '') { hataYaz('pgPenHata', 'Ad zorunludur.'); try { ad.focus(); } catch (e) { /* */ } return Promise.resolve(false); }
                 var alanlar = duz ? { action: 'kisi_duzenle', kisi_id: b.id, ad: adDeger, gorev: gorev.value } : { action: 'kisi_ekle', ad: adDeger, gorev: gorev.value };
+                if (cavus) alanlar.cavus_id = cavus.value;
                 return post(alanlar).then(function (j) {
                     if (j && j.ok) { yenile(); return true; }
                     hataYaz('pgPenHata', 'Kaydedilemedi: ' + ((j && j.error) || 'bilinmeyen hata'));

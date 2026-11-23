@@ -196,7 +196,7 @@ function pc_satir_filtre(array $satirlar, string $q): array
 {
     $q = pc_fold(trim($q));
     if ($q === '') return $satirlar;
-    return array_values(array_filter($satirlar, static fn($s) => str_contains(pc_fold($s['ad'] . ' ' . $s['alt']), $q)));
+    return array_values(array_filter($satirlar, static fn($s) => str_contains(pc_fold($s['ad'] . ' ' . $s['alt'] . ' ' . ($s['cavus'] ?? '')), $q)));
 }
 
 /**
