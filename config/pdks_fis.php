@@ -1488,6 +1488,9 @@ function pdks_fis_toplu_girdisi(array $fis, array $plan, array $secenek, string 
         'foreman_id' => (int)$fis['cavus']['id'], 'work_date' => (string)$fis['tarih'], 'depo' => (string)(function_exists('active_depot') ? active_depot() : ''),
         'reason' => 'Fiş girişi — Fiş No ' . $fis['fis_no'] . ' (Excel)', 'note' => pdks_fis_metin((string)($fis['not'] ?? ''), 500),
         'gruplar' => $gruplar, 'istek_id' => $istekId, 'coklu_grup' => true,
+        // v560: Fiş Excel'in KENDİ onay seçenekleri var (onay_fm / onay_yarim; kapalıysa dönem bekliyor kalır) — genel
+        // «kayıt anında otomatik onay» burada KAPALI (yoksa bu seçenekler yok sayılırdı).
+        'oto_onay' => false,
         'audit_ek' => [
             'kaynak' => 'fis_excel', 'fis_no' => (string)$fis['fis_no'], 'fis_rev' => (int)$fis['rev'], 'dosya_sha256' => $dosyaSha,
             'plan_hash' => (string)$plan['hash'], 'fm_modu' => (string)$plan['fm']['mod'], 'ek_yaz' => !empty($secenek['ek_yaz']),

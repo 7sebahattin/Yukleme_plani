@@ -14,6 +14,11 @@ const PDKS_TOPLU_HIZLI_GIRIS = '08:00';
 const PDKS_TOPLU_HIZLI_CIKIS = '17:00';
 const PDKS_TOPLU_HIZLI_YARIM_CIKIS = '12:30';   // sahip kararı: yarım mesai 08:00–12:30
 const PDKS_TOPLU_FM_UST_DK = 720;   // en çok 12 sa FM
+// v560 (sahip kararı): «Sadece fazla mesai» — yalnız mesai için gelip birkaç saat çalışıp giden kişiler. Tam/Yarım havuzundan
+// DÜŞMEZ, FM havuzuna GİRMEZ (ayrı kişiler). Giriş 17:00 (Tam mesai bitişi), çıkış = 17:00 + saat. Grup `fm`=true →
+// pdks_faz8j_satir_yaz() beyan 'fm' yazar; hakedişte Tam/Yarım ücreti YOK, yalnız çalışılan süre × FM ücreti.
+const PDKS_TOPLU_SADECE_FM_GIRIS = '17:00';
+const PDKS_TOPLU_SADECE_FM_TIPLER = ['KADIN', 'ERKEK', 'SERITCI'];
 
 /**
  * En büyük kalan yöntemiyle orantılı dağıtım. Tamamen tamsayı aritmetiği → deterministik.
@@ -110,7 +115,7 @@ const PDKS_TOPLU_FM_HAVUZ = ['KADIN_TAM', 'ERKEK_TAM', 'KADIN_YARIM', 'ERKEK_YAR
  * FM alan yarım kişinin çıkışı 12:30 + FM olur. Rampacı havuza girmez (yalnız Tam).
  */
 function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate): array {
-    $cik = ['gruplar' => [], 'hata' => null, 'dagilim' => [], 'fm_satirlar' => []];
+    $cik = ['gruplar' => [], 'hata' => null, 'dagilim' => [], 'fm_satirlar' => [], 'sadece_fm' => []];
     $adetler = [];   // [tipId, tur('TAM'|'YARIM'), adet]
     foreach (['tam' => 'TAM', 'yarim' => 'YARIM'] as $anahtar => $tur) {
         foreach ((is_array($hizli[$anahtar] ?? null) ? $hizli[$anahtar] : []) as $tid => $n) {
@@ -170,6 +175,21 @@ function pdks_toplu_hizli_gruplar(array $hizli, array $tipKod, string $workDate)
         }
     }
     foreach ($ciftGruplar as $cg) $cik['gruplar'][] = $cg;
+    // v560: Sadece fazla mesai — ['sadece_fm' => [tipId => ['kisi'=>n,'saat'=>s]]]; kişisi 0/boş satır yok sayılır.
+    foreach ((is_array($hizli['sadece_fm'] ?? null) ? $hizli['sadece_fm'] : []) as $tid => $r) {
+        $tid = (int)$tid;
+        if (!is_array($r)) continue;
+        $kisi = is_scalar($r['kisi'] ?? null) ? (int)$r['kisi'] : 0;
+        if ($kisi < 1) continue;
+        if ($tid < 1 || !isset($tipKod[$tid]) || !in_array($tipKod[$tid], PDKS_TOPLU_SADECE_FM_TIPLER, true)) { $cik['hata'] = 'Sadece fazla mesai yalnız Kadın / Erkek / Şeritçi için girilebilir.'; return $cik; }
+        $dk = pdks_toplu_fm_dakika($r['saat'] ?? null);
+        if ($dk === null) { $cik['hata'] = $tipKod[$tid] . ' sadece fazla mesai: saat geçersiz (0,25 saat adımıyla, en çok 12 saat).'; return $cik; }
+        [$cd, $cs] = $cikisSaat(PDKS_TOPLU_SADECE_FM_GIRIS, $dk);
+        $cik['gruplar'][] = ['worker_type_id' => $tid, 'entry_clock' => PDKS_TOPLU_SADECE_FM_GIRIS, 'exit_date' => $cd, 'exit_clock' => $cs,
+                             'kart_ids' => [], 'kartsiz_adet' => $kisi,
+                             'etiket' => $tipKod[$tid] . ' Sadece FM ' . rtrim(rtrim(number_format($dk / 60, 2, ',', ''), '0'), ',') . ' sa', 'fm' => true];
+        $cik['sadece_fm'][] = ['tip' => $tipKod[$tid], 'kisi' => $kisi, 'dk' => $dk];
+    }
     return $cik;
 }
 
@@ -183,7 +203,7 @@ function pdks_toplu_hizli_isle($hizli, string $workDate, array $istemciGruplar, 
     $cik = ['hata' => null, 'gruplar' => $istemciGruplar, 'ek' => []];
     if (!is_array($hizli)) return $cik;
     $tipKod = [];
-    foreach (['tam', 'yarim', 'cift'] as $a) {
+    foreach (['tam', 'yarim', 'cift', 'sadece_fm'] as $a) {
         foreach (array_keys(is_array($hizli[$a] ?? null) ? $hizli[$a] : []) as $tid) {
             $kod = $tipKodu((int)$tid);
             if ($kod !== null && $kod !== '') $tipKod[(int)$tid] = $kod;
@@ -196,9 +216,10 @@ function pdks_toplu_hizli_isle($hizli, string $workDate, array $istemciGruplar, 
         $cik['ek'] = [
             'coklu_grup' => true,
             'audit_ek' => ['hizli_giris' => [
-                'gruplar' => array_map(static fn($g) => ['etiket' => $g['etiket'], 'adet' => $g['kartsiz_adet'], 'cikis' => $g['exit_date'] . ' ' . $g['exit_clock'], 'cift' => !empty($g['cift']), 'yarim' => !empty($g['yarim'])], $h['gruplar']),
+                'gruplar' => array_map(static fn($g) => ['etiket' => $g['etiket'], 'adet' => $g['kartsiz_adet'], 'cikis' => $g['exit_date'] . ' ' . $g['exit_clock'], 'cift' => !empty($g['cift']), 'yarim' => !empty($g['yarim']), 'sadece_fm' => !empty($g['fm'])], $h['gruplar']),
                 'fm_dagilim' => $h['dagilim'],
                 'fm_satirlar' => $h['fm_satirlar'] ?? [],
+                'sadece_fm' => $h['sadece_fm'] ?? [],
             ]],
         ];
     }

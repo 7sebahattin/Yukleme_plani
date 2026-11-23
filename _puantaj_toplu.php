@@ -23,6 +23,14 @@ $topluSabitCavus = $topluSabitCavus ?? null;
 $topluCavuslar   = $topluCavuslar ?? [];
 $topluTrTarih    = date('d.m.Y', strtotime($topluWorkDate));
 $topluBugun      = ($topluWorkDate === date('Y-m-d'));
+// v560: servis alanı yalnız Servis Ücreti tabloları kuruluysa görünür (kurulu değilse sessizce yok; istek gelirse sunucu da reddeder).
+if (!isset($topluServisHazir)) {
+    $topluServisHazir = false;
+    try {
+        if (!function_exists('pdks_servis_sema_hazir')) require_once __DIR__ . '/config/pdks_servis.php';
+        $topluServisHazir = isset($pdo) && $pdo instanceof PDO && pdks_servis_sema_hazir($pdo);
+    } catch (Throwable $e) { $topluServisHazir = false; }
+}
 $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIMIT : 250;
 ?>
 <?php
@@ -51,7 +59,7 @@ $topluIk = function (string $ad): string {
 };
 ?>
 <dialog id="toplu" class="pm-dialog isk-card-modal isk-toplu toplu-v2" aria-labelledby="topluBaslik"
-        data-csrf="<?= h(csrf_token()) ?>" data-work-date="<?= h($topluWorkDate) ?>" data-bugun="<?= $topluBugun ? '1' : '0' ?>"
+        data-csrf="<?= h(csrf_token()) ?>" data-work-date="<?= h($topluWorkDate) ?>" data-bugun="<?= $topluBugun ? '1' : '0' ?>" data-today="<?= h(date('Y-m-d')) ?>"
         data-limit="<?= (int)$topluLimit ?>" data-url-onizle="<?= h($topluUrlOnizle) ?>" data-url-ekle="<?= h($topluUrlEkle) ?>"
         data-cavus-sabit="<?= $topluSabitCavus ? (int)$topluSabitCavus['id'] : 0 ?>"
         data-istek-id="<?= h(bin2hex(random_bytes(16))) ?>">
@@ -64,9 +72,9 @@ $topluIk = function (string $ad): string {
     <div class="tv-bilgi">
         <?= $topluIk('bilgi') ?>
         <p>
-            Mesai günü: <strong><?= h($topluTrTarih) ?></strong>. Kadın ve erkek için tek seferde kart seçerek ve/veya <strong>kartsız</strong> kişi sayısı girerek
+            Mesai günü: <strong id="tpGunEt"><?= h($topluTrTarih) ?></strong> (aşağıdaki <strong>Tarih</strong> kutusundan değiştirilebilir). Kadın ve erkek için tek seferde kart seçerek ve/veya <strong>kartsız</strong> kişi sayısı girerek
             kayıt ekleyin. Önce <strong>Önizle</strong>; hata yoksa <strong>Kaydet</strong> açılır. Tek satır bile hatalıysa hiçbir kayıt yazılmaz.
-            <?php if ($topluBugun): ?>Bugün için çıkış boş bırakılırsa kartlı kişiler içeride yazılır (kartsızda çıkış zorunludur).<?php endif; ?>
+            <span id="tpBugunNot"<?= $topluBugun ? '' : ' hidden' ?>>Bugün için çıkış boş bırakılırsa kartlı kişiler içeride yazılır (kartsızda çıkış zorunludur).</span>
         </p>
     </div>
     <div class="pdks-form-grid tv-ust">
@@ -83,6 +91,9 @@ $topluIk = function (string $ad): string {
             </select></span>
         </label>
         <?php endif; ?>
+        <label class="span-2 tv-tarih"><span class="form-label"><?= $topluIk('takvim') ?>Tarih <span class="tv-gerekli">*</span></span>
+            <input type="date" id="tpTarih" value="<?= h($topluWorkDate) ?>" max="<?= h(date('Y-m-d')) ?>" required></label>
+        <p class="muted span-2 tv-tarih-not" id="tpTarihNot" hidden>Kartlı giriş listesi pencerenin açıldığı güne göre hazırlanmıştır; farklı bir gün seçtiyseniz kart çakışmaları kayıtta sunucuda denetlenir.</p>
         <label><span class="form-label"><?= $topluIk('belge') ?>Ekleme nedeni <span class="tv-gerekli">*</span></span><textarea id="tpReason" maxlength="500" rows="2" placeholder="Örn. Kart okutma cihazı arızalıydı"></textarea></label>
         <label><span class="form-label"><?= $topluIk('balon') ?>Açıklama</span><textarea id="tpNote" maxlength="1000" rows="2" placeholder="Varsa eklemek istediğiniz açıklama..."></textarea></label>
     </div>
@@ -135,6 +146,46 @@ $topluIk = function (string $ad): string {
             <button type="button" class="btn btn-sm tv-fm-ekle" id="tpFmEkle">+ Ekle</button>
             <p class="muted tv-fm-onizleme" id="tpFmOnizleme" aria-live="polite">Fazla mesai kişileri Kadın/Erkek (Tam, Yarım) ve Şeritçi sayısına orantılı dağıtılır.</p>
         </div>
+        <?php
+        // v560 (sahip kararı): «Sadece fazla mesai» — yalnız mesai için gelip birkaç saat çalışıp giden kişiler.
+        $sfmTipler = [];
+        foreach ($hTipler as $t) {
+            $sk = pdks_gunluk_tip_kod_adindan((string)$t['name']) ?? pdks_gunluk_tip_kod_adindan((string)($t['code'] ?? ''));
+            if (in_array($sk, ['KADIN', 'ERKEK', 'SERITCI'], true)) $sfmTipler[] = [$t, $sk];
+        }
+        ?>
+        <?php if ($sfmTipler): ?>
+        <div class="tv-sfm" id="tpSfm">
+            <h4 class="tv-fm-bas"><?= $topluIk('saat') ?><span>Sadece fazla mesai</span></h4>
+            <p class="muted tv-fm-not">Yalnız mesai için gelip birkaç saat çalışıp giden kişiler (ör. 17:00–18:00). <strong>Tam/Yarım ücreti almazlar</strong>, yalnız çalıştıkları süre kadar fazla mesai ücreti alırlar. Yukarıdaki Tam/Yarım/Fazla mesai sayılarından <em>düşmezler</em> (ayrı kişilerdir); giriş 17:00 yazılır, çıkış = 17:00 + saat.</p>
+            <?php foreach ($sfmTipler as [$t, $sk]):
+                $sAd = pdks_gunluk_tip_kayit_ad($sk) ?? (string)$t['name'];
+                $sRenk = pdks_gunluk_tip_renk($sk);
+            ?>
+            <div class="tv-sfm-satir tv-grup-<?= h($sRenk) ?>">
+                <div class="tv-sfm-tip"><?= h(mb_strtoupper($sAd, 'UTF-8')) ?></div>
+                <div class="tv-sfm-kutular">
+                    <label class="tv-sfm-kutu"><span class="form-label"><em>Kişi</em></span>
+                        <input type="number" min="0" max="<?= (int)$topluLimit ?>" step="1" inputmode="numeric" value="0" aria-label="<?= h($sAd) ?> sadece fazla mesai kişi sayısı" data-sfm-kisi="<?= (int)$t['id'] ?>"></label>
+                    <label class="tv-sfm-kutu"><span class="form-label"><em>Saat</em></span>
+                        <input type="text" inputmode="decimal" maxlength="5" placeholder="Örn. 1" aria-label="<?= h($sAd) ?> sadece fazla mesai saati" data-sfm-saat="<?= (int)$t['id'] ?>"></label>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if (!empty($topluServisHazir)): ?>
+        <div class="tv-servis" id="tpServis">
+            <h4 class="tv-fm-bas"><?= $topluIk('kisiler') ?><span>Servis</span></h4>
+            <p class="muted tv-fm-not">Bu günün servis adedi (Büyük / Küçük). Kişi kayıtlarıyla <strong>aynı anda</strong> yazılır; mesaide önceden girilmiş servise <em>eklenir</em>.</p>
+            <div class="tv-sfm-kutular">
+                <label class="tv-sfm-kutu"><span class="form-label"><em>Büyük</em></span>
+                    <input type="number" min="0" max="99" step="1" inputmode="numeric" value="0" id="tpSvBuyuk" aria-label="Büyük servis adedi"></label>
+                <label class="tv-sfm-kutu"><span class="form-label"><em>Küçük</em></span>
+                    <input type="number" min="0" max="99" step="1" inputmode="numeric" value="0" id="tpSvKucuk" aria-label="Küçük servis adedi"></label>
+            </div>
+        </div>
+        <?php endif; ?>
     </section>
     <details class="tv-gelismis"><summary>Gelişmiş: saat ve kartlı giriş</summary>
     <?php foreach ($topluTipler as $t):
@@ -153,7 +204,7 @@ $topluIk = function (string $ad): string {
         <h3 class="tp-grup-baslik tv-grup-bas"><span class="tv-grup-ikon"><?= $topluIk(in_array($tRenk, ['erkek', 'rampaci', 'seritci'], true) ? $tRenk : 'kadin') ?></span><span class="tv-grup-ad"><?= h($tBaslik) ?></span> <span class="tp-sayac">0 kartlı + 0 kartsız = 0 kişi</span></h3>
         <div class="tv-grup-govde">
         <div class="pdks-form-grid tv-alanlar">
-            <div><span class="form-label">Giriş günü</span><div class="tv-ro"><?= $topluIk('takvim') ?><span><?= h($topluTrTarih) ?></span></div></div>
+            <div><span class="form-label">Giriş günü</span><div class="tv-ro"><?= $topluIk('takvim') ?><span class="tp-giris-gun"><?= h($topluTrTarih) ?></span></div></div>
             <label><span class="form-label">Çıkış günü</span><span class="tv-in"><?= $topluIk('takvim') ?><input type="date" value="<?= h($topluWorkDate) ?>" data-f="exit_date"></span></label>
             <label><span class="form-label">Giriş saati</span><span class="tv-in"><?= $topluIk('saat') ?><input type="time" data-f="entry_clock"></span></label>
             <label><span class="form-label">Çıkış saati</span><span class="tv-in"><?= $topluIk('saat') ?><input type="time" data-f="exit_clock"></span></label>
@@ -200,7 +251,9 @@ $topluIk = function (string $ad): string {
     var form = dlg.querySelector('form');
     var limit = parseInt(dlg.getAttribute('data-limit'), 10) || 250;
     var bugun = dlg.getAttribute('data-bugun') === '1';
-    var gun = dlg.getAttribute('data-work-date');
+    var gun = dlg.getAttribute('data-work-date');   // v560: tarih kutusuyla değişir
+    var gunIlk = gun, bugunTarih = dlg.getAttribute('data-today') || '';
+    var tarihEl = document.getElementById('tpTarih');
     var sabitCavus = parseInt(dlg.getAttribute('data-cavus-sabit'), 10) || 0;
     var cavusSel = document.getElementById('tpCavus');
     var gruplar = [].slice.call(dlg.querySelectorAll('.tp-grup'));
@@ -208,6 +261,14 @@ $topluIk = function (string $ad): string {
     var elMesaj = document.getElementById('tpMesaj'), elOn = document.getElementById('tpOnizle');
     var elTop = document.getElementById('tpToplam'), elAsim = document.getElementById('tpAsim');
     var onizlemeImza = null, kaydediyor = false, tumunuGoster = false, sonYanit = null;
+    // v560: «Sadece fazla mesai» kutuları, servis adetleri ve «aynı güne daha önce ekleme» onayı.
+    var sfmKisiEls = [].slice.call(dlg.querySelectorAll('[data-sfm-kisi]'));
+    var svBuyukEl = document.getElementById('tpSvBuyuk'), svKucukEl = document.getElementById('tpSvKucuk');
+    var tekrarGerekli = false;
+    function sfmSaatEl(tid) { return dlg.querySelector('[data-sfm-saat="' + tid + '"]'); }
+    function svAdet(el) { if (!el) return 0; var n = parseInt(el.value, 10); return isFinite(n) && n > 0 ? n : 0; }
+    function sfmToplam() { return sfmKisiEls.reduce(function (t, c) { return t + tamsayi(c.value); }, 0); }
+    function trTarih(iso) { return iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' + iso.slice(0, 4); }
 
     function btnYaz(b, m) { var sp = b.querySelector('.tv-bt'); (sp || b).textContent = m; }
     function alan(g, f) { return g.querySelector('[data-f="' + f + '"]'); }
@@ -318,7 +379,7 @@ $topluIk = function (string $ad): string {
         if (!b || fmSatirlari().length < 2) return;
         b.closest('[data-fm-satir]').remove(); fmOnizle(); sayaclar(); gecersiz();
     });
-    function toplamKisi() { return gruplar.reduce(function (t, g) { return t + secili(g).length + adet(g); }, hizliToplam()); }
+    function toplamKisi() { return gruplar.reduce(function (t, g) { return t + secili(g).length + adet(g); }, hizliToplam() + sfmToplam()); }
 
     // v303: tanımlı kart (label[data-tanim-foreman]) yalnız tanımlı olduğu çavuş seçiliyken görünür;
     // başka çavuşta gizlenir, seçimi kalkar ve "İlk N" seçimine girmez. Sunucu ayrıca reddeder.
@@ -366,10 +427,11 @@ $topluIk = function (string $ad): string {
                       exit_date: alan(g, 'exit_date').value, exit_clock: alan(g, 'exit_clock').value, kart_ids: ids, kartsiz_adet: m });
         });
         // istek_id: sayfa/pencere çizilirken sunucuda üretilir; Kaydet tekrarlanırsa AYNI değer gider (tekrar gönderim koruması).
-        var hz = { tam: {}, yarim: {}, cift: {}, fm: fmOku().filter(function (r) { return r.kisi > 0; }) };
+        var hz = { tam: {}, yarim: {}, cift: {}, sadece_fm: {}, fm: fmOku().filter(function (r) { return r.kisi > 0; }) };
+        sfmKisiEls.forEach(function (c) { var n = tamsayi(c.value); if (!n) return; var tid = c.getAttribute('data-sfm-kisi'); hz.sadece_fm[tid] = { kisi: n, saat: (sfmSaatEl(tid).value || '').trim() }; });
         hizliKutular.forEach(function (c) { var n = tamsayi(c.value); if (!n) return; if (c.hasAttribute('data-hizli-cift')) hz.cift[c.getAttribute('data-hizli-cift')] = n; else if (c.hasAttribute('data-hizli-yarim')) hz.yarim[c.getAttribute('data-hizli-yarim')] = n; else hz.tam[c.getAttribute('data-hizli-tam')] = n; });
         return { hizli: hz, csrf: dlg.getAttribute('data-csrf'), istek_id: dlg.getAttribute('data-istek-id'), foreman_id: cavusSel ? (parseInt(cavusSel.value, 10) || 0) : sabitCavus,
-                 work_date: gun, reason: document.getElementById('tpReason').value.trim(), note: document.getElementById('tpNote').value.trim(), gruplar: gr };
+                 work_date: gun, servis: { buyuk: svAdet(svBuyukEl), kucuk: svAdet(svKucukEl) }, reason: document.getElementById('tpReason').value.trim(), note: document.getElementById('tpNote').value.trim(), gruplar: gr };
     }
     function istemciHatalari(v) {
         var h = [];
@@ -379,6 +441,12 @@ $topluIk = function (string $ad): string {
         if (t < 1) h.push('En az bir kişi sayısı girin ya da kart seçin.');
         var fd = fmDurum();
         if (!fd.ok) h.push(fd.hata);
+        sfmKisiEls.forEach(function (c) {
+            if (!tamsayi(c.value)) return;
+            var tid = c.getAttribute('data-sfm-kisi'), ad = (c.getAttribute('aria-label') || '').replace(' sadece fazla mesai kişi sayısı', '');
+            if (fmDakika(sfmSaatEl(tid).value) === null) h.push(ad + ' sadece fazla mesai: saat geçersiz (0,25 saat adımıyla, en çok 12 saat).');
+        });
+        if (!tarihEl || !/^\d{4}-\d{2}-\d{2}$/.test(gun) || (bugunTarih && gun > bugunTarih)) h.push('Geçerli bir mesai tarihi seçin (gelecek tarih olamaz).');
         if (t > limit) h.push('Bir toplu işlemde en fazla ' + limit + ' kayıt eklenebilir (seçilen: ' + t + ').');
         v.gruplar.forEach(function (g) {
             var ad = (dlg.querySelector('.tp-grup[data-tip="' + g.worker_type_id + '"]') || {getAttribute: function () { return ''; }}).getAttribute('data-ad');
@@ -403,6 +471,11 @@ $topluIk = function (string $ad): string {
         if (!elOn.hidden) elOn.classList.add('tp-eski');
         onizlemeImza = null; btnKay.disabled = true;
     }
+    // v560: Kaydet = temiz önizleme VAR ve (daha önce ekleme uyarısı varsa) «Yine de ekle» işaretli.
+    function kaydetDurum() {
+        var cb = document.getElementById('tpTekrarOnay');
+        btnKay.disabled = onizlemeImza === null || kaydediyor || (tekrarGerekli && !(cb && cb.checked));
+    }
 
     function saat(s) {
         if (!s) return null;
@@ -419,6 +492,28 @@ $topluIk = function (string $ad): string {
             var uu = document.createElement('ul');
             y.uyarilar.forEach(function (s) { var li = document.createElement('li'); li.textContent = s; uu.appendChild(li); });
             uk.appendChild(uu); elOn.appendChild(uk);
+        }
+        // v560: aynı çavuş + günde DAHA ÖNCE elle eklenmiş kayıt → sarı uyarı + «Yine de ekle» onayı (işaretlenmeden Kaydet kapalı).
+        tekrarGerekli = false;
+        var onc = y.onceki_ekleme || null;
+        if (onc && onc.adet > 0 && satirlar.length) {
+            tekrarGerekli = true;
+            var ok = document.createElement('div'); ok.className = 'tp-uyari tp-tekrar'; ok.setAttribute('role', 'alert');
+            var dagilim = Object.keys(onc.tipler || {}).map(function (k) { return k + ' ' + onc.tipler[k]; }).join(', ');
+            var son = onc.son ? ' Son ekleme: ' + onc.son.slice(8, 10) + '.' + onc.son.slice(5, 7) + '.' + onc.son.slice(0, 4) + ' ' + onc.son.slice(11, 16) + '.' : '';
+            var pm = document.createElement('p'); pm.style.margin = '0 0 6px';
+            pm.textContent = '⚠ Bu çavuşun ' + trTarih(gun) + ' gününe daha önce ' + onc.adet + ' elle kayıt eklenmiş (' + dagilim + ').' + son + ' Üstüne tekrar eklemek istediğinizden emin olun.';
+            var lb = document.createElement('label'); lb.className = 'tp-tekrar-onay';
+            var cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'tpTekrarOnay';
+            cb.addEventListener('change', function () { kaydetDurum(); });
+            lb.appendChild(cb); lb.appendChild(document.createTextNode(' Yine de ekle'));
+            ok.appendChild(pm); ok.appendChild(lb); elOn.appendChild(ok);
+        }
+        var sv = y.servis || null;
+        if (sv && (sv.buyuk > 0 || sv.kucuk > 0) && satirlar.length) {
+            var sp = document.createElement('p'); sp.className = 'muted tp-yeni';
+            sp.textContent = 'Servis: ' + [sv.buyuk > 0 ? sv.buyuk + ' Büyük' : '', sv.kucuk > 0 ? sv.kucuk + ' Küçük' : ''].filter(Boolean).join(' + ') + ' — kayıtla birlikte eklenecek.';
+            elOn.appendChild(sp);
         }
         if (hatalar.length) {
             var kutu = document.createElement('div'); kutu.className = 'tp-genel-hata';
@@ -481,7 +576,7 @@ $topluIk = function (string $ad): string {
             btnYaz(btnOn, 'Önizle'); sayaclar();
             if (y.error) { mesaj([y.error]); return; }
             sonYanit = y; onizleCiz(y);
-            if (temizMi(y)) { onizlemeImza = JSON.stringify(v); btnKay.disabled = false; mesaj([]); }
+            if (temizMi(y)) { onizlemeImza = JSON.stringify(v); kaydetDurum(); mesaj([]); }
             else if (!(y.satirlar || []).length && (y.hatalar || []).length) { elOn.hidden = false; }
             elOn.scrollIntoView({ block: 'nearest' });
         });
@@ -491,6 +586,9 @@ $topluIk = function (string $ad): string {
         var v = temizVeri();
         if (onizlemeImza === null || JSON.stringify(v) !== onizlemeImza) { gecersiz(); mesaj(['Girdiler değişti — önce yeniden önizleyin.']); return; }
         kaydediyor = true; btnKay.disabled = true; btnOn.disabled = true; btnYaz(btnKay, 'Kaydediliyor…');
+        var cbOnay = document.getElementById('tpTekrarOnay');
+        if (tekrarGerekli && !(cbOnay && cbOnay.checked)) { btnKay.disabled = true; mesaj(['Bu güne daha önce kayıt eklenmiş — «Yine de ekle» kutusunu işaretleyin.']); return; }
+        v.onceki_onay = !!(cbOnay && cbOnay.checked);
         istek(dlg.getAttribute('data-url-ekle'), v).then(function (y) {
             if (y && y.ok === true && y.redirect) { location.href = y.redirect; return; }
             kaydediyor = false; btnYaz(btnKay, 'Kaydet'); gecersiz(); sayaclar();
@@ -498,8 +596,20 @@ $topluIk = function (string $ad): string {
         });
     });
 
-    form.addEventListener('input', function (e) { if (e.target.getAttribute('data-f') === 'ilkn') return; fmOnizle(); kartKilitleri(); sayaclar(); gecersiz(); });
-    form.addEventListener('change', function (e) { if (e.target.getAttribute('data-f') === 'ilkn') return; fmOnizle(); kartKilitleri(); sayaclar(); gecersiz(); });
+    form.addEventListener('input', function (e) { if (e.target.getAttribute('data-f') === 'ilkn' || e.target.id === 'tpTekrarOnay') return; fmOnizle(); kartKilitleri(); sayaclar(); gecersiz(); });
+    form.addEventListener('change', function (e) { if (e.target.getAttribute('data-f') === 'ilkn' || e.target.id === 'tpTekrarOnay') return; fmOnizle(); kartKilitleri(); sayaclar(); gecersiz(); });
+    // v560: mesai tarihi seçimi — çıkış günü kutuları ve etiketler yeni güne çekilir; önizleme geçersiz olur.
+    if (tarihEl) tarihEl.addEventListener('change', function () {
+        var yeni = tarihEl.value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(yeni) || (bugunTarih && yeni > bugunTarih)) { tarihEl.value = gun; mesaj(['Geçerli bir mesai tarihi seçin (gelecek tarih olamaz).']); return; }
+        gruplar.forEach(function (g) { var ex = alan(g, 'exit_date'); if (ex && (ex.value === gun || ex.value === '')) ex.value = yeni; });
+        gun = yeni; bugun = (bugunTarih !== '' && gun === bugunTarih);
+        var et = document.getElementById('tpGunEt'); if (et) et.textContent = trTarih(gun);
+        [].slice.call(dlg.querySelectorAll('.tp-giris-gun')).forEach(function (sp) { sp.textContent = trTarih(gun); });
+        var bn = document.getElementById('tpBugunNot'); if (bn) bn.hidden = !bugun;
+        var tn = document.getElementById('tpTarihNot'); if (tn) tn.hidden = gun === gunIlk;
+        mesaj([]); elOn.hidden = true; elOn.textContent = ''; gecersiz();
+    });
     gruplar.forEach(function (g) {
         // v297: kart listesi varsayılan GİZLİ. Kapatınca bu grubun seçili kartları temizlenir
         // (change olayı form dinleyicisine de ulaşır: kilitler/sayaç/önizleme geçersizliği güncellenir).
