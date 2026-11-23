@@ -281,9 +281,9 @@ echo render_print_header_html(
      ÖZET ŞABLON — Portrait A4
 ══════════════════════════════════════════════════════ -->
 
-<!-- 1. Kantar Fişleri -->
+<!-- 1. Mal Kabul Fişleri -->
 <div class="pd-section">
-<div class="pd-section-title">1. Kantar Fişleri (<?= count($kantar_items) ?>)</div>
+<div class="pd-section-title">1. Mal Kabul Fişleri (<?= count($kantar_items) ?>)</div>
 <?php if (empty($kantar_items)): ?>
     <p class="pd-empty">İşlem yok</p>
 <?php else: ?>
@@ -434,9 +434,9 @@ echo render_print_header_html(
      DETAYLI ŞABLON — Landscape A4
 ══════════════════════════════════════════════════════ -->
 
-<!-- 1. Kantar Fişleri — tam tablo -->
+<!-- 1. Mal Kabul Fişleri — tam tablo -->
 <div class="pd-section">
-<div class="pd-section-title">1. Kantar Fişleri (<?= count($kantar_items) ?>)</div>
+<div class="pd-section-title">1. Mal Kabul Fişleri (<?= count($kantar_items) ?>)</div>
 <?php if (empty($kantar_items)): ?>
     <p class="pd-empty">İşlem yok</p>
 <?php else: ?>

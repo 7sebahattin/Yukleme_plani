@@ -303,7 +303,7 @@ okcy('K10) Mesai Detayı Mesai Tanımı sütunu tek sınıflandırıcıdan', str
 okcy('K11) Faz 4 motoru (pdks_hakedis.php) çift bilmez — dokunulmadı', !str_contains(file_get_contents($root . '/config/pdks_hakedis.php'), 'double_day'));
 okcy('K12) DURUM etiketi "✅ Çıkış yapıldı" (yanıltıcı "✅ Tam" yok)', pdks_gunluk_faz8a_donem_durumu('closed')['etiket'] === '✅ Çıkış yapıldı' && pdks_gunluk_faz8a_donem_durumu('closed')['kod'] === 'tam');
 foreach (['cavus_hakedis_detay.php', 'cavus_hakedis_yazdir.php'] as $sf) {
-    okcy("K13) {$sf} 'cift' sınıfını Çift gösterir", str_contains(file_get_contents($root . '/' . $sf), "=== 'cift' ? 'Çift"));
+    okcy("K13) {$sf} 'cift' sınıfını Çift gösterir", (str_contains(file_get_contents($root . '/' . $sf), "=== 'cift' ? 'Çift") || str_contains(file_get_contents($root . '/' . $sf), 'pdks_faz8b_sinif_etiketi(')));   // v560: detay tek etiket fonksiyonundan (Çift + Sadece FM)
 }
 
 // =========================================================

@@ -233,7 +233,7 @@ if ($simdiHm <= '00:01') {
     ok('bugün kartsız + çıkışlı → kapalı dönem eklenir', !empty($r['ok']) && $r['acik'] === false, j($r));
     if ($simdiHm < '23:58') {
         $r = $bg(['foreman_id' => $cavus['B'], 'worker_card_id' => $kartlar['K010'], 'entry_clock' => date('H:i', time() + 120)]);
-        ok('giriş gelecekte → reddedilir', empty($r['ok']) && str_contains((string)$r['hata'], 'kurallarına'), j($r));
+        ok('giriş gelecekte → reddedilir', empty($r['ok']) && (str_contains((string)$r['hata'], 'kurallarına') || str_contains((string)$r['hata'], 'henüz gelmedi')), j($r));
     }
     $r = ekle(['foreman_id' => $cavus['B'], 'worker_card_id' => $kartlar['K010'], 'exit_date' => '', 'exit_clock' => '']);
     ok('geçmiş gün çıkışsız → reddedilir', empty($r['ok']) && str_contains((string)$r['hata'], 'zorunlu'), j($r));

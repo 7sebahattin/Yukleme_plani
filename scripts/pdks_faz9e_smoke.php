@@ -66,7 +66,9 @@ $fnGovde = function (string $ad) use ($helpersSrc): string {
 };
 ok9e('helpers.php: mobil bottomnav AYNI listeyi kullanıyor (sidebar ile ayrışmaz)',
     (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $fnGovde('nav_aktif_anahtar'))
-    && str_contains($fnGovde('render_desktop_sidebar'), 'nav_aktif_anahtar()')
+    && str_contains($fnGovde('nav_menu_modeli'), 'nav_aktif_anahtar()')   // v551: sidebar + mobil "Diğer" aynı modelden; v552: nav_alt_ciz modeli çağırır
+    && str_contains($fnGovde('render_desktop_sidebar'), 'nav_menu_modeli(')
+    && str_contains($fnGovde('nav_alt_ciz'), 'nav_menu_modeli(')
     && str_contains($fnGovde('nav_alt_model'), 'nav_aktif_anahtar()')
     && str_contains($fnGovde('render_footer'), 'nav_alt_ciz(')
     && !preg_match('/\$is_ptak\s*=/', $fnGovde('render_footer')));
@@ -86,8 +88,8 @@ foreach (['gunluk_puantaj_yazdir.php', 'cavus_hakedis_yazdir.php'] as $yazdirma)
     ok9e("$yazdirma: render_header()/render_footer() ÇAĞIRMIYOR (aktif-durum kavramı geçersiz)",
         !str_contains($src, 'render_header(') && !str_contains($src, 'render_footer('));
 }
-ok9e('personel_takip.php (FAZ 8I iniş yapısı; v354 +Ters Kart Takip kartı → 11 home-card)',
-    substr_count(oku9e('personel_takip.php'), 'class="home-card"') === 11);
+ok9e('personel_takip.php (FAZ 8I iniş yapısı; v354 +Ters Kart Takip, v552 +Puantaj Çizelgesi → 12 home-card)',
+    substr_count(oku9e('personel_takip.php'), 'class="home-card"') === 12);
 
 // =========================================================
 // § B — Gün kapanışı kontrol listesi

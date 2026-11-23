@@ -2839,11 +2839,25 @@ function ekranAlti() {
         document.body.style.width = '';
         window.scrollTo(0, kilitliY);
     }
+    // v552: açılışta açık (aktif) grup görünür bölgede değilse başlığı yapışkan başlığın hemen altına kaydır
+    function aktifGrubaKaydir() {
+        var og = sheet.querySelector('details[open]');
+        if (!og) return;
+        var hd = sheet.querySelector('.bn-sheet-head'), sr = sheet.getBoundingClientRect(), r = og.getBoundingClientRect();
+        var ust = sr.top + (hd ? hd.offsetHeight : 0);
+        if (r.top < ust || r.bottom > sr.bottom) sheet.scrollTop += r.top - ust - 8;
+    }
+    // Başlığa basıp bir grup açılınca (akordiyon diğerlerini kapatır) açılan grup görünür bölgede değilse kaydır
+    sheet.addEventListener('toggle', function (e) {
+        var d = e.target;
+        if (d && d.open && d.matches && d.matches('details.bn-grup') && !ovl.hidden) requestAnimationFrame(aktifGrubaKaydir);
+    }, true);
     function ac() {
         scrollKilitle();
         ovl.hidden = false;
         more.setAttribute('aria-expanded', 'true');
         duzenle(false);
+        aktifGrubaKaydir();
         kapatBtn.focus();
     }
     function kapat() {
@@ -2877,7 +2891,7 @@ function ekranAlti() {
         if (e.key === 'Escape') { e.preventDefault(); kapat(); return; }
         if (e.key !== 'Tab') return;
         // Odak dialog içinde kalsın
-        var od = [].slice.call(sheet.querySelectorAll('button, a[href]')).filter(function (x) { return x.offsetParent !== null; });
+        var od = [].slice.call(sheet.querySelectorAll('button, a[href], summary')).filter(function (x) { return x.offsetParent !== null; });   // summary: v552 grup başlıkları da Tab sırasında
         if (!od.length) return;
         var i = od.indexOf(document.activeElement);
         if (e.shiftKey && (i <= 0)) { e.preventDefault(); od[od.length - 1].focus(); }
@@ -2886,6 +2900,12 @@ function ekranAlti() {
 
     // Sabitle modu: karoya dokunmak gitmez, sabitlemeyi açar/kapatır
     sheet.addEventListener('click', function (e) {
+        // v552: anahtarsız (muhasebe vb.) bağlantılar sabitlenemez — Sabitle modunda gitmez, nedeni yazılır
+        if (sheet.classList.contains('editing') && e.target.closest('.bn-tile-link')) {
+            e.preventDefault();
+            mesaj.textContent = 'Bu sayfa alt menüye sabitlenemez.';
+            return;
+        }
         var go = e.target.closest('.bn-tile .go');
         if (!go || !sheet.classList.contains('editing')) return;
         e.preventDefault();
@@ -2939,19 +2959,37 @@ function ekranAlti() {
 })();
 
 
-/* Sidebar grup başlıkları: kullanıcı tercihi yalnız cihazda; etkin sayfanın grubu hep açık. */
+/* Menü akordiyonu (v551 KURAL): sayfanın bulunduğu grup AÇIK + seçili, diğer tüm gruplar KAPALI;
+   bir başlığa basınca o açılır, diğerleri kendiliğinden kapanır. Cihazda tercih SAKLANMAZ (eski rastgele açık/kapalı kalmaz).
+   Sunucu zaten aktif grubu `open` basar; bu kod (1) hiçbir link işaretlenmemişse URL'den bulur, (2) akordiyonu işletir.
+   Kapsam: `[data-akordiyon]` kabı içindeki `details[data-sb-grup]` — masaüstü sidebar + mobil "Diğer" sayfası; yeni grup otomatik. */
 (function () {
-    var anahtar = 'asya_sb_grup';
-    var kayit = {};
-    try { kayit = JSON.parse(localStorage.getItem(anahtar) || '{}') || {}; } catch (e) { kayit = {}; }
-    document.querySelectorAll('details.sidebar-grup[data-sb-grup]').forEach(function (d) {
-        var ad = d.getAttribute('data-sb-grup');
-        var aktif = !!d.querySelector('.sidebar-link.active');
-        if (aktif) d.open = true;
-        else if (ad in kayit) d.open = !!kayit[ad];
-        d.addEventListener('toggle', function () {
-            kayit[ad] = d.open ? 1 : 0;
-            try { localStorage.setItem(anahtar, JSON.stringify(kayit)); } catch (e) {}
+    var AKTIF = '.sidebar-link.active, [aria-current="page"], .is-current';
+    function dosya(u) { try { return new URL(u, location.href).pathname.replace(/\/+$/, '').split('/').pop() || 'index.php'; } catch (e) { return ''; } }
+    document.querySelectorAll('[data-akordiyon]').forEach(function (kap) {
+        var gruplar = [].slice.call(kap.querySelectorAll('details[data-sb-grup]'));
+        if (!gruplar.length) return;
+        var aktifGrup = null;
+        gruplar.forEach(function (d) { if (!aktifGrup && d.querySelector(AKTIF)) aktifGrup = d; });
+        // v552: aktif öğe bu kapta yoksa ama sunucu bir grubu açık bastıysa (Ana Sayfa'nın hedefi "Diğer"de tekrarlanmaz) sunucunun kararı geçerli
+        if (!aktifGrup) aktifGrup = gruplar.filter(function (d) { return d.open; })[0] || null;
+        if (!aktifGrup) {   // sunucu hiçbir bağlantıyı işaretlemediyse: URL dosya adıyla eşleştir
+            var bu = dosya(location.pathname);
+            gruplar.forEach(function (d) {
+                if (aktifGrup) return;
+                var a = [].slice.call(d.querySelectorAll('a[href]')).filter(function (x) { return dosya(x.getAttribute('href')) === bu; })[0];
+                if (a) { a.classList.add('active'); a.setAttribute('aria-current', 'page'); aktifGrup = d; }
+            });
+        }
+        var duzenleniyor = false;
+        gruplar.forEach(function (d) { d.open = (d === aktifGrup); });
+        gruplar.forEach(function (d) {
+            d.addEventListener('toggle', function () {
+                if (!d.open || duzenleniyor) return;
+                duzenleniyor = true;
+                gruplar.forEach(function (o) { if (o !== d) o.open = false; });
+                duzenleniyor = false;
+            });
         });
     });
 })();

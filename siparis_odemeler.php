@@ -16,6 +16,7 @@ require_once __DIR__ . '/config/siparis_debit.php';        // v492: debit note l
 $auth_user = require_login();
 require_siparis('read');
 if (!siparis_cari_yetkili()) forbidden('Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: reports.export)');
+icerik_kapi('siparis.odeme');   // v507
 siparis_no_store();
 
 $pdo = db();
@@ -34,6 +35,13 @@ $toplamMetin = $toplam ? implode(' · ', array_map(static fn($pb) => $para((int)
 $sut = $yaz ? 5 : 4;
 $avizVar = $hazir ? siparis_odeme_aviz_var_idleri($pdo) : [];   // v490: avizo kalemi kaydı olan ödemeler
 $avizId = $hazir ? max(0, (int)($_GET['aviz'] ?? 0)) : 0;
+$kesYaz = siparis_odeme_yetkili() && siparis_debit_kv_yazilabilir($pdo);   // v529: elle OGL kesintisi (debit) — ödeme tablosundan bağımsız (hks_kv)
+$kesSev = $kesYaz ? siparis_debit_sevkiyat_secenekleri($pdo) : [];
+$sevSecenek = static function (array $liste): string {
+    $o = '<option value="0">— Sevkiyat seçilmedi —</option>';
+    foreach ($liste as $x) $o .= '<option value="' . (int)$x['id'] . '">' . h($x['ref'] . ($x['tarih'] !== '' ? ' · ' . sipui_tarih($x['tarih']) : '')) . '</option>';
+    return $o;
+};
 
 render_header('OGL ödemeleri');
 siparis_assets();
@@ -44,6 +52,7 @@ render_flash();
     <div><h1>💳 OGL ödemeleri</h1><p class="muted"><?= count($odemeler) ?> aktif ödeme · <?= h($aralik) ?></p></div>
     <div class="page-head-actions">
       <?php if ($yaz): ?><button type="button" class="btn btn-primary btn-lg" data-od-ac="odEkleDlg">➕ Ödeme gir</button><?php endif; ?>
+      <?php if ($kesYaz): ?><button type="button" class="btn btn-lg" data-od-ac="odKesintiDlg">➖ OGL kesintisi ekle</button><?php endif; ?>
       <button type="button" class="btn btn-lg" data-od-yazdir>🖨 Ödemeleri yazdır</button>
       <a class="btn btn-lg" href="siparis_cari.php">📒 Cari Döküm</a>
       <a class="btn btn-lg" href="siparisler.php">← Siparişler</a>
@@ -75,7 +84,7 @@ render_flash();
     </table></div>
   </section>
   <section id="odAviz" class="od-aviz-panel no-print" aria-label="Avizo kalemleri"><?= $avizId > 0 ? sipui_odeme_aviz_html($pdo, $avizId) : '' ?></section>
-  <section id="odDebit" class="od-aviz-panel no-print" aria-label="OGL debit note'ları"><?= sipui_debit_html($pdo) ?></section>
+  <section id="odDebit" class="od-aviz-panel no-print" aria-label="OGL debit note'ları"><?= sipui_debit_html($pdo, 300, $kesYaz) ?></section>
   <?php if ($yaz): ?>
   <dialog id="odEkleDlg" class="pm-dialog od-dialog" aria-labelledby="odEkleBaslik">
     <form method="post" action="siparis_odeme.php" data-sip-tek>
@@ -100,6 +109,55 @@ render_flash();
         <p class="muted" data-od-ozet-yazi></p>
         <label>İptal gerekçesi (zorunlu)<input type="text" name="neden" required maxlength="255"></label>
         <p class="muted">Satır silinmez; iptal edilen ödeme Tahsilat'tan düşer.</p>
+      </div>
+      <div class="pm-footer"><button type="button" class="btn" data-od-kapat>Vazgeç</button><button type="submit" class="btn btn-danger">İptal et</button></div>
+    </form>
+  </dialog>
+  <?php endif; ?>
+  <?php if ($kesYaz): ?>
+  <dialog id="odKesintiDlg" class="pm-dialog od-dialog" aria-labelledby="odKesintiBaslik">
+    <form method="post" action="siparis_kesinti.php" enctype="multipart/form-data" data-sip-tek>
+      <div class="pm-header"><h2 class="pm-title" id="odKesintiBaslik">OGL kesintisi ekle</h2><button type="button" class="pm-close" data-od-kapat aria-label="Kapat">✕</button></div>
+      <div class="pm-body sip-form">
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="ekle"><input type="hidden" name="qs" value="<?= h($qs) ?>">
+        <p class="muted od-kes-not">OGL'nin ödemeden düştüğü kesinti (debit note). <strong>PDF yüklerseniz önce otomatik okunur</strong> (fiyat farkı ve kalite/analiz debit'leri; çok sayfalı belgeler dahil) — okunursa aşağıdaki alanlar gerekmez. Okunamazsa alanları doldurun; PDF yine belge olarak saklanır. Kesinti Ödemeler'e satır EKLEMEZ (tutar avizoda zaten düşülmüştür).</p>
+        <label>Kesinti belgesi (PDF, isteğe bağlı)<input type="file" name="pdf" accept="application/pdf,.pdf"></label>
+        <label>Sevkiyat (isteğe bağlı)<select name="sid"><?= $sevSecenek($kesSev) ?></select></label>
+        <fieldset class="od-kes-elle"><legend>Elle giriş (PDF okunamazsa)</legend>
+          <label>Belge no<input type="text" name="no" maxlength="30" placeholder="2028-107735" autocomplete="off"></label>
+          <label>Belge tarihi<input type="date" name="tarih" max="<?= h($bugun) ?>"></label>
+          <label>Tutar<input type="text" name="tutar" inputmode="decimal" placeholder="300,00" autocomplete="off"></label>
+          <label>Para birimi<select name="pb"><?php foreach (siparis_odeme_para_birimleri() as $pb): ?><option><?= h($pb) ?></option><?php endforeach; ?></select></label>
+          <label>Neden<select name="neden"><?php foreach (siparis_debit_nedenleri() as $k => $et): ?><option value="<?= h($k) ?>"<?= $k === 'kalite' ? ' selected' : '' ?>><?= h($et) ?></option><?php endforeach; ?></select></label>
+          <label>Açıklama<input type="text" name="aciklama" maxlength="120" placeholder="ör. LIDL analiz — Audit Report 016591"></label>
+          <label>İlgili fatura no (varsa)<input type="text" name="invoice_no" maxlength="30" placeholder="IHR2026000000340DI" autocomplete="off"></label>
+          <div class="od-kes-fiyat"><label>Anlaşılan fiyat (fiyat farkında)<input type="text" name="anlasilan" inputmode="decimal" placeholder="4,58"></label>
+          <label>Kesilen fiyat<input type="text" name="kesilen" inputmode="decimal" placeholder="4,60"></label></div>
+        </fieldset>
+      </div>
+      <div class="pm-footer"><button type="button" class="btn" data-od-kapat>Vazgeç</button><button type="submit" class="btn btn-primary">Kaydet</button></div>
+    </form>
+  </dialog>
+  <dialog id="odKesBaglaDlg" class="pm-dialog od-dialog" aria-labelledby="odKesBaglaBaslik">
+    <form method="post" action="siparis_kesinti.php" data-sip-tek>
+      <div class="pm-header"><h2 class="pm-title" id="odKesBaglaBaslik">Kesintiyi sevkiyata bağla</h2><button type="button" class="pm-close" data-od-kapat aria-label="Kapat">✕</button></div>
+      <div class="pm-body sip-form">
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="bagla"><input type="hidden" name="no" value=""><input type="hidden" name="qs" value="<?= h($qs) ?>">
+        <p class="muted" data-od-ozet-yazi></p>
+        <label>Sevkiyat<select name="sid"><?= $sevSecenek($kesSev) ?></select></label>
+        <p class="muted">Elle seçilen sevkiyat fatura no / LKW eşlemesinden önce gelir. "Seçilmedi" = elle bağı kaldır (otomatik eşlemeye dön).</p>
+      </div>
+      <div class="pm-footer"><button type="button" class="btn" data-od-kapat>Vazgeç</button><button type="submit" class="btn btn-primary">Kaydet</button></div>
+    </form>
+  </dialog>
+  <dialog id="odKesIptalDlg" class="pm-dialog od-dialog" aria-labelledby="odKesIptalBaslik">
+    <form method="post" action="siparis_kesinti.php" data-sip-tek>
+      <div class="pm-header"><h2 class="pm-title" id="odKesIptalBaslik">Kesintiyi iptal et</h2><button type="button" class="pm-close" data-od-kapat aria-label="Kapat">✕</button></div>
+      <div class="pm-body sip-form">
+        <?= sipui_csrf() ?><input type="hidden" name="islem" value="iptal"><input type="hidden" name="no" value=""><input type="hidden" name="qs" value="<?= h($qs) ?>">
+        <p class="muted" data-od-ozet-yazi></p>
+        <label>İptal gerekçesi (zorunlu)<input type="text" name="neden" required maxlength="255"></label>
+        <p class="muted">Kayıt silinmez; iptal edilen kesinti listeden ve kalan fark hesabından düşer. Aynı belge mailden yeniden gelirse geri gelmez.</p>
       </div>
       <div class="pm-footer"><button type="button" class="btn" data-od-kapat>Vazgeç</button><button type="submit" class="btn btn-danger">İptal et</button></div>
     </form>

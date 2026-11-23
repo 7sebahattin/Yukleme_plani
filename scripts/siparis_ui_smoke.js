@@ -44,6 +44,8 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
         if (koyu) await page.addInitScript(() => { try { localStorage.setItem('asya_tema', 'dark'); } catch (e) {} });
         // v420: "Belge yükle" kartı 5 sn sonra kendiliğinden kapanır → testlerde kapalı (0); otomatik kapanmayı sınayan senaryo süreyi opts.otoKapat ile verir
         await page.addInitScript(ms => { window.SIP_OTO_KAPAT_MS = ms; }, (opts && opts.otoKapat) || 0);
+        // v529: sayfa açılışındaki ARKA PLAN mail sorgusu testlerde kapalı (-1); otomatik sorguyu sınayan senaryo scripts/siparis_zil_smoke.js
+        await page.addInitScript(ms => { window.SIP_MAIL_OTO_MS = ms; }, (opts && typeof opts.mailOto === 'number') ? opts.mailOto : -1);
         if (hazirla) await hazirla(page);      // page.route() sayfa AÇILMADAN kurulmalı (file:// isteklerinde sonradan kurulan yönlendirme devreye girmez)
         await page.goto('file://' + path.join(OUT, sayfa + '.html'));
         if (koyu) await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
@@ -183,7 +185,7 @@ function ok(ad, v, detay) { if (v) pass++; else { fail++; console.log('FAIL ' + 
 
         // ── liste (izleyici) ──
         ({ ctx, page } = await ac('liste_viewer', w, h));
-        ok(`[${w}] izleyici listesi: yükleme formu yok, pasif düğmenin nedeni görünür`, !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(() => /Salt okunur/.test(document.querySelector('#sipSaltOkunur').textContent)));
+        ok(`[${w}] izleyici listesi: yükleme formu yok, salt okunur uyarısı YOK`, !(await gorunur(page, 'form[data-sip-upload]')) && await page.evaluate(() => !document.querySelector('#sipSaltOkunur')));
         await ctx.close();
 
         // ── detay ──

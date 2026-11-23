@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+defined('PDKS_SERVIS_HAKEDISTE') || define('PDKS_SERVIS_HAKEDISTE', true);   // v532: eski (hakedişe yazan) yolu denetler
 // =========================================================
 // scripts/pdks_servis_smoke.php — Servis Ücreti (v299) davranış testi.
 //
@@ -385,6 +386,9 @@ echo "\n=== K. STATİK ===\n";
 $ks = file_get_contents($root . '/config/pdks_servis.php');
 preg_match('/function pdks_servis_ekle\(.*?\n\}\n/s', $ks, $mE);
 $govde = $mE[0] ?? '';
+preg_match('/function pdks_servis_yaz\(.*?\n\}\n/s', $ks, $mY);   // v560: INSERT + yeniden hesap + audit TEK yazma yeri pdks_servis_yaz() (Toplu İşlem de kullanır)
+okcu('K0) ekle gövdesi yazmayı pdks_servis_yaz()\'a devreder; yaz gövdesinde INSERT + yeniden hesap + audit', str_contains($govde, 'pdks_servis_yaz(') && str_contains($mY[0] ?? '', 'INSERT INTO daily_session_services') && str_contains($mY[0] ?? '', 'pdks_faz8j_yeniden_hesap_isaretle(') && str_contains($mY[0] ?? '', "'servis_ekle'"));
+$govde .= $mY[0] ?? '';
 okcu('K1) ekle gövdesi: yetki + aktif depo + mesai kilidi + kesin hakediş + yeniden hesap + audit',
     str_contains($govde, 'pdks_faz8j_yetki()') && str_contains($govde, 'pdks_faz8j_aktif_depo_kontrol(') && str_contains($govde, 'pdks_faz8j_mesai_kilitle(')
     && str_contains($govde, "=== 'final'") && str_contains($govde, 'pdks_faz8j_yeniden_hesap_isaretle(') && str_contains($govde, "'servis_ekle'"));

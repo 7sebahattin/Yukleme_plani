@@ -1,11 +1,10 @@
 <?php
-// Program Hakkında — yer tutucu sayfa (içerik sonra eklenecek). Yalnız yönetici.
+// program_hakkinda.php — KALDIRILDI (v548, menü sadeleştirme). Yer tutucu sayfaydı; içerik yoktu.
+// Deploy repodan silinen dosyayı sunucudan SİLMEZ → 410 tombstone. DB/oturum/kabuk erişimi YOK.
+// Kalıcı yol: index.php
 declare(strict_types=1);
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/config/auth.php';
-$auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
-render_header('Program Hakkında');
-?>
-<div class="card"><h2>Program Hakkında</h2><p>Bu bölüm hazırlanıyor.</p></div>
-<?php render_footer();
+http_response_code(410);
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store');
+echo '<!doctype html><meta charset="utf-8"><title>Kaldırıldı</title>'
+    . '<p>Program Hakkında sayfası kaldırıldı. <a href="index.php">Ana Sayfa</a></p>';

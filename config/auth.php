@@ -308,6 +308,11 @@ function permission_catalog(): array {
             'hizli_maliyet.write'  => 'Hızlı Maliyet hesabı oluştur / düzenle / kopyala',
             'hizli_maliyet.delete' => 'Hızlı Maliyet kaydı sil',
         ],
+        'Günlük Üretim' => [
+            'uretim.read'   => 'Günlük Üretim raporunu görüntüle (işlenen mal, işçi başı verim)',
+            'uretim.write'  => 'Günlük üretim verisi gir (Excel / toplu / elle)',
+            'uretim.delete' => 'Günlük üretim kaydı sil',
+        ],
         'Hesap' => [
             'hesap.read'    => 'Hesabım — yalnız KENDİ hesap kayıtlarını görüntüle',
             'hesap.write'   => 'Kendi masraf kaydını oluştur / düzenle (onaylanana kadar)',

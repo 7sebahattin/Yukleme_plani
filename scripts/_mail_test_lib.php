@@ -39,7 +39,7 @@ function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = []; $IS_ADMIN = false; $UID = 1;
 function current_user(): ?array { global $UID; return $UID ? ['id' => $UID, 'username' => 'u' . $UID, 'display_name' => 'Kullanıcı ' . $UID] : null; }
-function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
+function can(string $p): bool { global $PERMS; return in_array($p, role_matrix_expand_permissions(beyan_expand_role_permissions($PERMS)), true); }   // gerçek can() gibi rol başına genişletir (v505)
 function is_admin(): bool { global $IS_ADMIN; return $IS_ADMIN; }
 function require_login(): array { return current_user(); }
 function forbidden($m = ''): void { throw new RuntimeException('forbidden: ' . $m); }

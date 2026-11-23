@@ -1,0 +1,35 @@
+/* Frugro "Mailden al" kartı (_frugro_mail_kart.php + assets/frugro_mail.js). Tokenlar style.css'ten; modal/z-index YOK. */
+.frgm { margin: 0 0 14px; min-width: 0; }
+.frgm .card-head { flex-wrap: wrap; gap: 4px 12px; }
+.frgm-soluk { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.frgm-uyari { margin: 8px 0; padding: 8px 10px; border-radius: var(--radius-sm, 8px); background: #fff7e0; color: #7a5200; font-size: .88rem; overflow-wrap: anywhere; }
+.frgm-hata { margin: 8px 0; padding: 8px 10px; border-radius: var(--radius-sm, 8px); background: var(--danger-soft); color: var(--danger); font-size: .88rem; overflow-wrap: anywhere; }
+.frgm-hata[hidden], .frgm-ilerleme[hidden] { display: none; }
+.frgm-dugmeler { margin: 10px 0 0; }
+.frgm-ilerleme { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm, 8px); background: var(--bg); }
+.frgm-ilerleme progress { flex: 1 1 160px; min-width: 120px; height: 10px; accent-color: var(--primary); }
+.frgm-ilerleme [data-frgm-ilerleme-metin] { flex: 1 1 100%; font-size: .88rem; overflow-wrap: anywhere; }
+.frgm-ilerleme-dugme { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.frgm-devam { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm, 8px); font-size: .88rem; }
+.frgm-sonuc-kart { margin: 12px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius, 12px); background: var(--card); min-width: 0; }
+.frgm-sonuc-kart .card-head h2 { font-size: .98rem; overflow-wrap: anywhere; }
+.frgm-ozet { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.frgm-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); font-size: .8rem; line-height: 1.5; }
+.frgm-chip b { font-variant-numeric: tabular-nums; }
+.frgm-chip--ok { background: #e3f6ec; color: #136b3d; border-color: transparent; }
+.frgm-chip--uyari { background: #fff1d6; color: #7a5200; border-color: transparent; }
+.frgm-chip--hata { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.frgm-tablo { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.frgm-tablo th, .frgm-tablo td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.frgm-satir--onceden { opacity: .7; }
+@media (max-width: 767px) {
+    .frgm-ilerleme-dugme { width: 100%; }
+    .frgm-ilerleme-dugme .btn { flex: 1 1 auto; }
+    .frgm-dugmeler .btn { width: 100%; }
+    .frgm-sonuc-kart { padding: 10px; }
+    .frgm-tablo thead { display: none; }
+    .frgm-tablo, .frgm-tablo tbody, .frgm-tablo tr, .frgm-tablo td { display: block; width: 100%; }
+    .frgm-tablo tr { padding: 6px 0; border-bottom: 1px solid var(--border-strong); }
+    .frgm-tablo td { border: 0; padding: 2px 0; }
+    .frgm-tablo td::before { content: attr(data-label) ": "; color: var(--muted); font-size: .78rem; }
+}

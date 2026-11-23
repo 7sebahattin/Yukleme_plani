@@ -1,0 +1,40 @@
+/* Günlük Üretim (v507) — yalnız gunluk_uretim*.php */
+.uretim-not { color: var(--muted, #667); font-size: .88em; margin: 6px 0 10px; }
+.uretim-not code { background: rgba(128,128,128,.14); padding: 1px 5px; border-radius: 4px; }
+.uretim-ay { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 14px; }
+.uretim-ay-form { margin: 0; }
+.uretim-ay-ad { font-size: 1.05em; }
+.uretim-pasif { opacity: .4; pointer-events: none; }
+.uretim-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.uretim-kpi-kart { background: var(--card, #fff); border: 1px solid rgba(128,128,128,.25); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.uretim-kpi-kart span { font-size: .8em; color: var(--muted, #667); }
+.uretim-kpi-kart strong { font-size: 1.35em; line-height: 1.2; overflow-wrap: anywhere; }
+.uretim-kpi-kart small { font-size: .75em; color: var(--muted, #667); }
+.uretim-kpi-kart.vurgu { border-color: #e07b00; box-shadow: inset 0 3px 0 #e07b00; }
+.uretim-grafik-bas { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.uretim-grafik-bas h2 { margin: 0; }
+.uretim-sec { display: flex; align-items: center; gap: 6px; font-size: .9em; }
+.uretim-canvas { position: relative; height: 340px; margin-top: 10px; }
+.uretim-canvas-kisa { height: 260px; margin-bottom: 12px; }
+.uretim-tablo tr.uretim-hf td { background: rgba(128,128,128,.07); }
+.uretim-tablo tfoot th { border-top: 2px solid rgba(128,128,128,.4); }
+.uretim-rozet { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .78em; white-space: nowrap; }
+.uretim-rozet.yeni { background: rgba(31,157,85,.15); color: #1f9d55; }
+.uretim-rozet.uyari { background: rgba(224,123,0,.16); color: #b86400; }
+.uretim-rozet.hata { background: rgba(192,57,43,.15); color: #c0392b; }
+.uretim-form { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.uretim-form textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.uretim-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.uretim-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .9em; }
+.uretim-grid .uretim-genis { grid-column: 1 / -1; }
+.uretim-onay { display: inline-flex; align-items: center; gap: 6px; font-size: .9em; }
+.uretim-btnler { display: flex; gap: 8px; flex-wrap: wrap; }
+.uretim-onizleme { border-left: 4px solid #e07b00; }
+@media (max-width: 767px) {
+  .uretim-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .uretim-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .uretim-canvas { height: 280px; }
+  .uretim-canvas-kisa { height: 230px; }
+  .uretim-form input[type=file] { max-width: 100%; }
+}
+@media print { .uretim-canvas { height: 280px; } .uretim-ay-form, .page-head-actions { display: none; } }

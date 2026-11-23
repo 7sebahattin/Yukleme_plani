@@ -83,7 +83,7 @@ $src = preg_replace('/^\s*require_perm\([^)]*\);\s*$/m', '', $src);
 $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
 $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
 // Test için modali AÇIK bas (hidden özniteliğini kaldır)
-$src = str_replace('id="rolCreateModal" class="pm-overlay" hidden', 'id="rolCreateModal" class="pm-overlay"', $src);
+// v507: tek pencere (#rolModal) JS ile açılır (rolOpenCreate / rolOpenEdit) — önceden açık basmaya gerek yok.
 
 $tmp = sys_get_temp_dir() . '/roles_render_' . getmypid() . '.php';
 file_put_contents($tmp, "<?php\n" . $src);

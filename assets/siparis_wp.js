@@ -83,8 +83,9 @@
   }
 
   // Taze veri (önbellek YOK). Hata metinleri siparis_yazdir.js getir() ile aynı ayrım.
-  function getir(id) {
-    return fetch('siparis_paylas.php?id=' + encodeURIComponent(id), { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+  // url (opsiyonel): düğmedeki data-sip-wp-url (ör. frugro_paylas.php); yoksa OGL ucu 'siparis_paylas.php' (geriye uyumlu).
+  function getir(id, url) {
+    return fetch((url ? url + '?id=' : 'siparis_paylas.php?id=') + encodeURIComponent(id), { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
       .then(function (res) {
         var ct = res.headers.get('Content-Type') || '';
         if (ct.indexOf('json') < 0) {
@@ -188,11 +189,11 @@
   var INDI = "⬇️ PNG indirildi — WhatsApp'a ekleyin.";
   var mesgul = false;   // çift tıklama koruması (aynı anda tek kart)
 
-  async function wpPaylas(id) {
+  async function wpPaylas(id, url) {
     if (mesgul) return;
     mesgul = true;
     durum('⏳ Sevkiyat kartı hazırlanıyor…', 'bilgi');
-    var uretim = getir(id).then(function (v) { return pngUret(v).then(function (blob) { return { v: v, blob: blob }; }); });
+    var uretim = getir(id, url).then(function (v) { return pngUret(v).then(function (blob) { return { v: v, blob: blob }; }); });
     uretim.catch(function () { /* aşağıda işlenir */ });
     try {
       if (!mobil && panoVar()) {
@@ -246,6 +247,7 @@
     if (!b) return;
     e.preventDefault();
     var id = parseInt(b.getAttribute('data-sip-wp'), 10);
-    if (id > 0) wpPaylas(id);
+    var url = (b.getAttribute('data-sip-wp-url') || '').replace(/[^A-Za-z0-9_.\/-]/g, '');
+    if (id > 0) wpPaylas(id, url);
   });
 })();

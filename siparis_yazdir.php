@@ -16,6 +16,7 @@ require_once __DIR__ . '/_siparis_ortak.php';
 require_once __DIR__ . '/config/siparis_yazdir.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.yazdir');   // v507
 siparis_no_store();
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');

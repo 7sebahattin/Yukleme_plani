@@ -27,8 +27,15 @@ if (!$hazir) {
     exit;
 }
 
-$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','create'));
-$sil = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
+$yaz = (can_siparis('write') && role_ogl_can('', 'create'));   // v504: yeni kayıt / belge = İşlem Bekleyen kartı Ekle
+$sil = (can_siparis('delete') && role_ogl_any('delete'));
+// v507 — içerik (kart/düğme) yetkileri: mevcut kapıya EK olarak uygulanır
+$icMail   = $yaz && icerik_can('siparis.mail_al');
+$icYukle  = $yaz && icerik_can('siparis.belge_yukle');
+$icElle   = $yaz && icerik_can('siparis.elle_ac');
+$icIsle   = $yaz && icerik_can('siparis.belge_isle');
+$icBSil   = $sil && icerik_can('siparis.belge_sil');
+$icIndir  = icerik_can('siparis.belge_indir');
 
 // ── filtreler (v382: liste + yazdırma ORTAK — config/siparis_core.php siparis_liste_filtre) ──
 $F = siparis_liste_filtre($_GET);
@@ -93,7 +100,7 @@ $uyHarita = sipui_uyari_haritasi($pdo, $listeIds);
 $dgHarita = sipui_degisim_haritasi($pdo, $listeIds);
 // v396 — sevkiyatın güncel PKL dosya adı (liste parti no'nun üstünde gösterir; TEK sorgu, partial sorgu çalıştırmaz)
 $pklHarita = [];
-if ($listeIds) {
+if ($listeIds && $icIndir) {
     try {
         $pq = $pdo->prepare("SELECT sevkiyat_id, dosya_belge_id, dosya_adi FROM siparis_pkl
             WHERE dosya_belge_id IS NOT NULL AND dosya_adi IS NOT NULL AND dosya_adi <> '' AND sevkiyat_id IN (" . implode(',', array_fill(0, count($listeIds), '?')) . ')');
@@ -115,8 +122,7 @@ try {
         COALESCE(SUM(CASE WHEN s.acik_catisma > 0 THEN 1 ELSE 0 END),0) AS catisma,
         COALESCE(SUM(CASE WHEN s.var_po = 0 THEN 1 ELSE 0 END),0) AS po
         FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND " . $acikSql . $dsql);
-    $k->execute($dprm);
-    $kpi = array_map('intval', $k->fetch(PDO::FETCH_ASSOC) ?: $kpi);
+    if ($F['okAcik']) { $k->execute($dprm); $kpi = array_map('intval', $k->fetch(PDO::FETCH_ASSOC) ?: $kpi); }
 } catch (PDOException $e) {
     error_log('[siparisler] kpi: ' . $e->getMessage());
 }
@@ -126,7 +132,7 @@ try {
         FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL ' . $dsql);
     $c->execute($dprm);
     $__say = $c->fetch(PDO::FETCH_ASSOC) ?: [];
-    $kapaliSay = (int)($__say['kapali'] ?? 0); $evrakSay = (int)($__say['evrak'] ?? 0);
+    $kapaliSay = $F['okKapali'] ? (int)($__say['kapali'] ?? 0) : 0; $evrakSay = $F['okEvrak'] ? (int)($__say['evrak'] ?? 0) : 0;
 } catch (PDOException $e) {
     error_log('[siparisler] kapali/evrak say: ' . $e->getMessage());
 }
@@ -144,6 +150,7 @@ try {
 
 // eşleşmemiş / hatalı belgeler (yalnız yazma yetkisi olana işlem düğmeleri)
 $yetim = [];
+$icYetim = icerik_can('siparis.yetim');
 try {
     [$bds, $bdp] = depo_sql_column('b.depo', ':udb');
     $y = $pdo->prepare("SELECT b.id, b.tur, b.durum, b.orijinal_ad, b.hata_mesaj, b.boyut, b.created_at, b.disk_adi FROM siparis_belgeler b
@@ -155,7 +162,7 @@ try {
 }
 // bağlama penceresi için açık sevkiyatlar (yalnız yazma)
 $acikListe = [];
-if ($yaz && $yetim) {
+if ($icIsle && $yetim) {
     try {
         $z = $pdo->prepare('SELECT s.id, s.order_ref, s.alici_adi FROM siparis_sevkiyatlar s WHERE s.deleted_at IS NULL AND ' . siparis_kapanmamis_sql() . $dsql . ' ORDER BY s.order_ref LIMIT 300');
         $z->execute($dprm);
@@ -176,7 +183,7 @@ if (isset($_SESSION['siparis_yukleme']) && is_array($_SESSION['siparis_yukleme']
 // Son sonuçlar yalnız AKTİF DEPODA yapılmış sorgulardan gösterilir; gönderen / konu yalnız izleyenin görünür posta kutularından okunur.
 $mailBlok = '';
 $mD = []; $mSon = [];
-if ($yaz && siparis_mail_yetkisi()) {
+if ($icMail && siparis_mail_yetkisi()) {
     $mUid = (int)$auth_user['id']; $mDepo = (string)(active_depot() ?? '');
     $mHazir = siparis_mail_hazir($pdo);
     $mD = ['hazir' => $mHazir, 'mail_admin' => can_mail('admin')];
@@ -198,9 +205,14 @@ if ($yaz && siparis_mail_yetkisi()) {
         }
         usort($mSon, static fn(array $a, array $b): int => $b['bitis'] <=> $a['bitis']);
         $mD['son'] = $mSon;
+        // v529: sayfa her açılışta arka planda otomatik sorgu — yalnız ayarlı + son SIPARIS_MAIL_OTO_DK dakikada sorgulanmamış türler
+        $mD['oto'] = $mD['yarim'] === null ? siparis_mail_oto_turler($pdo, array_keys(array_filter($mD['ayarli'])), time()) : [];
     }
     $mailBlok = sipui_mail_blok_html($mD);
 }
+// v529 — 🔔 bildirim zili (mail sorgusuyla gelenler; okundu bilgisi cihazda). Görünürlük: sevkiyat olayları aktif depo, ödeme/debit yalnız cari yetkili.
+$zilVar = siparis_mail_hazir($pdo);
+$zilListe = $zilVar ? siparis_bildirim_liste($pdo, (string)(active_depot() ?? ''), siparis_cari_yetkili()) : [];
 // v382 — yükleme kartı native <details>: varsayılan KAPALI; yalnız yarım kalan mail taraması varsa sunucu açık yazar ("Devam et" şeridi gizlenmesin).
 $yukleAcik = !empty($mD['yarim']);
 
@@ -224,6 +236,13 @@ $chipler = [
         'aktif' => $f_eksik === 'po'],
 ];
 
+// v504 — yetkisiz karta ait KPI çipleri gösterilmez
+$chipler = array_values(array_filter($chipler, static function (array $c) use ($F): bool {
+    if ($c['k'] === 'evrak') return $F['okEvrak'];
+    if (in_array($c['k'], ['acik', 'arac', 'yolda', 'pkl', 'mail', 'po'], true)) return $F['okAcik'];
+    return $F['okAcik'] || $F['okEvrak'] || $F['okKapali'];
+}));
+
 $sayfalama = function (array $b, string $param): string {
     if ($b['sayfa_say'] <= 1) return '';
     $o = '<nav class="pagination sip-sayfalama" aria-label="Sayfalama">';
@@ -245,6 +264,7 @@ $bolumBas = function (string $baslik, int $say, string $id, string $ek = '', str
 // başlığında (yalnız bölümde satır varsa). Veri siparis_yazdir.php'den (GET JSON, ?bolum=acik|evrak|kapali; tek durumda bolum yok)
 // her tıkta taze gelir; aynı filtre anahtarları, sayfa numaraları HARİÇ. İzleyiciye de açık (siparis.read).
 $yazdirEk = function (?string $bolumAdi): string {
+    if (!icerik_can('siparis.yazdir')) return '';
     $url = h(siparis_url(['acik_page' => null, 'evrak_page' => null, 'kapali_page' => null, 'bolum' => $bolumAdi], 'siparis_yazdir.php'));
     return '<div class="sip-bolum-eylem no-print">'
         . '<button type="button" class="btn btn-sm" data-sip-yazdir="yazdir" data-sip-yazdir-url="' . $url . '">🖨️ Yazdır</button>'
@@ -260,32 +280,30 @@ $yazdirEk = function (?string $bolumAdi): string {
       <p class="muted"><?= (int)$kpi['acik'] ?> açık · <?= (int)$evrakSay ?> evrak bekleyen · <?= (int)$kapaliSay ?> kapanan sevkiyat</p>
     </div>
     <div class="page-head-actions">
-      <?php if (siparis_cari_yetkili()): ?>
+      <?php if (siparis_cari_yetkili() && icerik_can('siparis.odeme')): ?>
         <a class="btn btn-primary btn-lg" href="siparis_odemeler.php"><?= siparis_odeme_yetkili() ? '💳 Ödeme ekle' : '💳 Ödemeler' ?></a>
       <?php endif; ?>
-      <?php if (siparis_cari_yetkili()): ?>
+      <?php if (siparis_cari_yetkili() && icerik_can('siparis.cari')): ?>
         <a class="btn btn-lg" href="siparis_cari.php">📒 Cari Döküm</a>
       <?php endif; ?>
       <div class="pc-kebab-wrap">
         <button class="btn pc-kebab" type="button" title="Diğer işlemler" aria-label="Diğer işlemler">⋮</button>
         <div class="pc-dropdown" hidden>
-          <?php if ($yaz): ?><button type="button" data-sip-ac="sipYeniModal">➕ Elle sevkiyat aç</button><?php endif; ?>
-          <a href="siparis_ayarlar.php">⚙ Ayarlar (sayaçlar, profiller)</a>
+          <?php if ($icElle): ?><button type="button" data-sip-ac="sipYeniModal">➕ Elle sevkiyat aç</button><?php endif; ?>
+          <?php if (((can_siparis('write') && (role_ogl_any('create') || role_ogl_any('edit'))) || $sil) && icerik_can('siparis.ayarlar')): ?><a href="siparis_ayarlar.php">⚙ Ayarlar (sayaçlar, profiller)</a><?php endif; ?>
         </div>
       </div>
+      <?= $zilVar ? sipui_zil_html($zilListe, (int)$auth_user['id']) : '' ?>
     </div>
   </div>
-  <?php if (!$yaz): ?>
-    <p class="sip-bilgi" id="sipSaltOkunur" role="note">Salt okunur yetkiniz var: belge yükleme, düzenleme ve durum değiştirme kapalıdır (gerekli yetki: siparis.write).</p>
-  <?php endif; ?>
-
   <?= sipui_yukleme_sonuc_html($yuklemeSonuc) ?>
 
-  <?php if ($yaz): ?>
+  <?php if ($icMail || $icYukle): ?>
   <details class="card sip-yukle" id="yukle" data-sip-yukle data-sip-yukle-uid="<?= (int)$auth_user['id'] ?>"<?= $yukleAcik ? ' open' : '' ?>>
     <summary class="sip-yukle-ozet"><?= sipui_yukle_ozet_html($mSon, $mD['yarim'] ?? null, !empty($mD['hazir'])) ?></summary>
     <div class="sip-yukle-govde">
       <?= $mailBlok ?>
+      <?php if ($icYukle): ?>
       <details class="sip-dosya-ac" id="dosya">
         <summary class="sip-dosya-ozet"><span class="sip-dosya-baslik">📥 Dosyadan yükle</span><span class="sip-dosya-ipucu">PO · Loading List · Price Confirmation · PKL</span><span class="sip-yukle-ok" aria-hidden="true">▸</span></summary>
         <form method="post" action="siparis_yukle.php" enctype="multipart/form-data" <?= sipui_yukleme_ozellikleri() ?>>
@@ -297,10 +315,12 @@ $yazdirEk = function (?string $bolumAdi): string {
           </div>
         </form>
       </details>
+      <?php endif; ?>
     </div>
   </details>
   <?php endif; ?>
 
+  <?php if (icerik_can('siparis.kpi')): ?>
   <div class="sip-kpi-kap" aria-label="Hızlı filtreler"><div class="sip-kpi">
     <?php foreach ($chipler as $c): ?>
       <a class="sip-chip<?= $c['aktif'] ? ' sip-chip--aktif' : '' ?><?= $c['k'] === 'catisma' && $c['say'] > 0 ? ' sip-chip--uyari' : '' ?>" href="<?= h($c['url']) ?>"<?= $c['aktif'] ? ' aria-current="true"' : '' ?>>
@@ -308,6 +328,7 @@ $yazdirEk = function (?string $bolumAdi): string {
       </a>
     <?php endforeach; ?>
   </div></div>
+  <?php endif; ?>
 
   <form method="get" action="siparisler.php" class="rpt-filter-card sip-filtre no-print" role="search">
     <div class="sip-filtre-ana">
@@ -374,6 +395,7 @@ $yazdirEk = function (?string $bolumAdi): string {
       }
       echo '</section>';
   };
+  if (!$F['okAcik'] && !$F['okEvrak'] && !$F['okKapali']) echo '<div class="card sip-bos"><p>Bu sayfadaki sevkiyat bölümlerinden hiçbirini görüntüleme yetkiniz yok. Yetkili kişiden Roller ekranında ilgili bölümün “Gör” iznini isteyin.</p></div>';
   if ($tek) $bolumCiz($B_tek, 'Sonuçlar', 'sipSonuclar', 'acik_page', 'Bu filtreyle eşleşen sevkiyat yok.');
   if ($B_acik !== null) $bolumCiz($B_acik, 'İşlem Bekleyen Sevkiyatlar', 'sipAcik', 'acik_page', $filtreVar ? 'Bu filtreyle eşleşen açık sevkiyat yok.' : ($yaz ? 'Henüz açık sevkiyat yok. Yukarıdan PO, Loading List ya da Price Confirmation PDF\'i yükleyin.' : 'Henüz açık sevkiyat yok.'), '⏳', 'Araç, belge, PKL ya da mail bekleyen açık işler');
   if ($B_evrak !== null) $bolumCiz($B_evrak, 'Evrak Takımı Bekleyen Sevkiyatlar', 'sipEvrak', 'evrak_page',
@@ -382,7 +404,7 @@ $yazdirEk = function (?string $bolumAdi): string {
   if ($B_kapali !== null) $bolumCiz($B_kapali, 'Kapanan Sevkiyatlar', 'sipKapali', 'kapali_page', 'Kapanan sevkiyat yok.', '✅', 'Tamamlanan kayıtlar (evrak takımı gönderildi · iptal)');
   ?>
 
-  <?php if ($yetim): ?>
+  <?php if ($yetim && $icYetim): ?>
   <details class="card sip-yetim" id="yetim"<?= $yetim && count(array_filter($yetim, fn($b) => $b['durum'] === 'hata')) > 0 ? ' open' : '' ?>>
     <summary><strong>Eşleşmemiş / hatalı belgeler</strong> <span class="sip-say"><?= count($yetim) ?></span></summary>
     <ul class="sip-yetim-liste">
@@ -396,15 +418,15 @@ $yazdirEk = function (?string $bolumAdi): string {
             <?php else: ?><span class="sip-soluk">Hiçbir sevkiyata bağlı değil.</span><?php endif; ?>
           </div>
           <div class="sip-yetim-eylem">
-            <a class="btn btn-sm" href="siparis_belge.php?id=<?= (int)$b['id'] ?>" data-sip-onizle data-id="<?= (int)$b['id'] ?>">Önizle</a>
-            <?php if ($yaz): ?>
+            <?php if ($icIndir): ?><a class="btn btn-sm" href="siparis_belge.php?id=<?= (int)$b['id'] ?>" data-sip-onizle data-id="<?= (int)$b['id'] ?>">Önizle</a><?php endif; ?>
+            <?php if ($icIsle): ?>
               <button type="button" class="btn btn-sm" data-sip-ac="sipBaglaModal" data-sip-doldur="<?= sipui_json_attr(['belge_id' => (int)$b['id'], '_yazi:belge_ad' => (string)$b['orijinal_ad']]) ?>">Sevkiyata bağla</button>
               <form method="post" action="siparis_kaydet.php" class="sip-satir-form">
                 <?= sipui_csrf() ?><input type="hidden" name="islem" value="yeniden_isle"><input type="hidden" name="belge_id" value="<?= (int)$b['id'] ?>">
                 <button type="submit" class="btn btn-sm">Yeniden işle</button>
               </form>
             <?php endif; ?>
-            <?php if ($sil): ?>
+            <?php if ($icBSil): ?>
               <form method="post" action="siparis_kaydet.php" class="sip-satir-form" data-sip-onay="Bu belge silinsin mi? Uygulanmış değerler geri alınmaz.">
                 <?= sipui_csrf() ?><input type="hidden" name="islem" value="belge_sil"><input type="hidden" name="belge_id" value="<?= (int)$b['id'] ?>">
                 <button type="submit" class="btn btn-sm btn-danger">Sil</button>
@@ -417,7 +439,7 @@ $yazdirEk = function (?string $bolumAdi): string {
   </details>
   <?php endif; ?>
 
-  <?php if ($yaz): ?>
+  <?php if ($icElle || $icIsle): ?>
   <div class="pm-overlay" id="sipYeniModal" hidden role="dialog" aria-modal="true" aria-labelledby="sipYeniBaslik">
     <div class="pm-dialog">
       <form method="post" action="siparis_kaydet.php" data-sip-tek>

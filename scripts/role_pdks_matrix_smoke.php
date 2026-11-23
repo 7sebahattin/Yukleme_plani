@@ -11,7 +11,9 @@ foreach (role_pdks_routes() as $route=>$page) {
     $grants=['role.permissions.detailed','attendance.'.$page.'.read'];
     ok($page.' read opens page',role_pdks_can($page));
     foreach (['create','edit','delete'] as $action) ok($page.' read does not grant '.$action,!role_pdks_can($page,$action));
-    ok($route.' unknown POST rejected',role_pdks_request_action($route,'POST',[],['action'=>'unknown_!','form'=>'unknown_!'])===null);
+    // v553/v554: puantaj_isaret_kaydet.php ve puantaj_giris_kaydet.php TEK yazma uçlarıdır — POST her zaman monthly_timesheet.edit (içerik doğrulaması uçta); diğer her rotada bilinmeyen POST reddedilir.
+    if ($route==='puantaj_isaret_kaydet.php' || $route==='puantaj_giris_kaydet.php') ok($route.' POST = monthly_timesheet.edit (tek yazma ucu)',role_pdks_request_action($route,'POST',[],['action'=>'unknown_!','form'=>'unknown_!'])===['monthly_timesheet','edit']);
+    else ok($route.' unknown POST rejected',role_pdks_request_action($route,'POST',[],['action'=>'unknown_!','form'=>'unknown_!'])===null);
 }
 $cases=[
  ['personel_form.php',[],['action'=>'save_employee'],[],['employees','create']],
@@ -66,7 +68,11 @@ foreach($cases as [$route,$query,$post,$json,$expected]) ok('explicit '.$route.'
 foreach(role_pdks_pages() as $page=>$policy) {
     foreach($policy['legacy'] as $legacy) {
         $old=role_pdks_expand_permissions(['attendance.'.$legacy]);
-        foreach($policy['actions'] as $action) ok('legacy '.$legacy.' expands '.$page.'.'.$action,in_array('attendance.'.$page.'.'.$action,$old,true));
+        // v553: 'legacy_actions' olan satırda (monthly_timesheet) eski roller yalnız o eylemleri alır; geri kalanı (edit) OTOMATİK AÇILMAZ.
+        foreach($policy['actions'] as $action) {
+            $beklenen = in_array($action,$policy['legacy_actions'] ?? $policy['actions'],true);
+            ok('legacy '.$legacy.($beklenen?' expands ':' does NOT expand ').$page.'.'.$action,in_array('attendance.'.$page.'.'.$action,$old,true)===$beklenen);
+        }
     }
     $readOnly=role_pdks_expand_permissions(['role.permissions.detailed','attendance.'.$page.'.read']);
     foreach(['create','edit','delete'] as $action) ok('detailed '.$page.' does not expand '.$action,!in_array('attendance.'.$page.'.'.$action,$readOnly,true));

@@ -23,6 +23,11 @@ function role_pdks_pages(): array {
         'ters_pool'=>['label'=>'Giriş tanımlı kart havuzu','route'=>'ters_kart_havuz.php','legacy'=>['worker_cards'],'actions'=>['read','create','edit','delete'],'note'=>'Sil, havuz üyeliğini bitirir veya sıfırlar; kart geçmişini silmez.'],
         'ters_count'=>['label'=>'Sabah kart sayımı','route'=>'ters_kart_sayim.php','legacy'=>['daily_scan'],'actions'=>['read','create','edit','delete'],'note'=>'Sil, sayımı geri alır. Mevcut çıkış sonrası yönetici sınırı korunur.'],
         'ters_report'=>['label'=>'Giriş tanımlı mutabakat','route'=>'ters_kart_mutabakat.php','legacy'=>['daily_scan','daily_reports'],'actions'=>['read']],
+        // v552: Aylık puantaj çizelgesi. Eski roller: günlük puantaj raporu YA DA personel kartı yetkisi olan rol sayfayı alır;
+        // yeni (ayrıntılı) roller yalnız bu satırı seçerse eski paketleri AÇMAZ ('bridge'=>false). Sekmeler kendi Gör izniyle ayrıca kapılanır.
+        // v553: 'edit' = Personel sekmesinde günü elle işaretleme (D/İ/Ü/R/T). 'legacy_actions' = eski (işaretleyicisiz) rolün OTOMATİK alacağı
+        // eylemler: yalnız read — 'edit' eski rollere kendiliğinden AÇILMAZ; yalnız yönetici ya da ayrıntılı rolde açıkça seçilen rol yazabilir.
+        'monthly_timesheet'=>['label'=>'Aylık puantaj çizelgesi','route'=>'puantaj_cizelgesi.php','legacy'=>['daily_reports','employees'],'actions'=>['read','edit'],'legacy_actions'=>['read'],'bridge'=>false,'note'=>'Gör, sayfayı açar. Personel sekmesi için Personel kartları Gör, Günlük İşçi sekmesi için Günlük puantaj raporları Gör izni de gerekir; Excel için Raporlar › Dışa aktar. Düzenle: Personel sekmesinde günü elle işaretleme (Devamsız, İzin, Rapor, Resmi tatil; Personel kartları Gör izni de gerekir) ve bağımsız, gayri resmi Puantaj Girişi sekmesi (kendi tanımladığınız kişilere X/Y/D/İ/Ü/R/T; başka kaynak izni gerekmez). Eski roller bu izni otomatik almaz.'],
     ];
 }
 function role_pdks_expand_permissions(array $permissions): array {
@@ -31,12 +36,12 @@ function role_pdks_expand_permissions(array $permissions): array {
     foreach (role_pdks_pages() as $page=>$policy) {
         if (!$detailed) foreach ($policy['legacy'] as $legacy) {
             if (in_array('attendance.'.$legacy,$original,true)) {
-                foreach ($policy['actions'] as $action) $permissions[]='attendance.'.$page.'.'.$action;
+                foreach (($policy['legacy_actions'] ?? $policy['actions']) as $action) $permissions[]='attendance.'.$page.'.'.$action;
                 break;
             }
         }
         // Bridges expose existing navigation and retain existing secondary guards.
-        if (in_array('attendance.'.$page.'.read',$permissions,true)) {
+        if (($policy['bridge'] ?? true) && in_array('attendance.'.$page.'.read',$permissions,true)) {
             foreach ($policy['legacy'] as $legacy) if ($legacy!=='admin' && ($detailed || in_array('attendance.'.$legacy,$original,true))) $permissions[]='attendance.'.$legacy;
         }
     }
@@ -61,12 +66,13 @@ function role_pdks_routes(): array {
         'daily_reports'=>['gunluk_isci_puantaj.php','gunluk_isci_puantaj_detay.php','gunluk_puantaj_yazdir.php','gunluk_puantaj_liste_yazdir.php'],
         'foreman_rates'=>['cavus_fiyatlari.php'],
         'entitlements'=>['cavus_hakedis.php','cavus_hakedis_detay.php','cavus_hakedis_yazdir.php','cavus_hakedis_liste_yazdir.php'],
-        'foreman_accounts'=>['cavus_cari.php','cavus_ekstre.php','cavus_cari_yazdir.php','cavus_ekstre_yazdir.php'],
+        'foreman_accounts'=>['servis_hesabi.php','servis_odemeleri.php','cavus_cari.php','cavus_ekstre.php','cavus_cari_yazdir.php','cavus_ekstre_yazdir.php'],
         'foreman_payments'=>['cavus_odeme.php','cavus_odeme_yazdir.php'],
         'management_reports'=>['raporlar.php','rapor_yazdir.php','cavus_donem_raporu.php','cavus_toplu_dokum.php','cavus_toplu_dokum_detay.php','cavus_toplu_dokum_yazdir.php','cavus_toplu_dokum_detay_yazdir.php'],
-        'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php'],
+        'mesai'=>['mesai_degerlendirme.php','mesai_degerlendirme_yazdir.php','mesai_toplu_onay.php'],
         'manual_exit'=>['manuel_cikis.php'], 'ters_pool'=>['ters_kart_havuz.php'],
         'ters_count'=>['ters_kart_sayim.php'], 'ters_report'=>['ters_kart_mutabakat.php'],
+        'monthly_timesheet'=>['puantaj_cizelgesi.php','puantaj_cizelgesi_yazdir.php','puantaj_isaret_kaydet.php','puantaj_giris_kaydet.php'],
     ] as $page=>$routes) foreach ($routes as $route) $out[$route]=$page;
     return $out;
 }
@@ -83,6 +89,7 @@ function role_pdks_request_action(string $route, string $method, array $query=[]
     if (array_key_exists('ajax',$query) && !is_string($query['ajax'])) return null;
     $action=role_pdks_scalar($post,'action'); $ajax=role_pdks_scalar($query,'ajax');
     $form=role_pdks_scalar($post,'form');
+    if ($route==='puantaj_isaret_kaydet.php' || $route==='puantaj_giris_kaydet.php') return ['monthly_timesheet','edit'];   // v553/v554: tek yazma uçları; kod/tarih/kişi/depo/action doğrulaması uçta
     if ($route==='personel_form.php') {
         if (in_array($action,['kart_ata','kart_durum','kart_degistir'],true)) return ['cards',$action==='kart_ata'?'create':'edit'];
         return match($action ?: 'save_employee') {'save_employee'=>['employees',(int)role_pdks_scalar($query,'id',role_pdks_scalar($post,'id'))>0?'edit':'create'], 'delete_employee'=>['employees','delete'], default=>null};
@@ -103,8 +110,10 @@ function role_pdks_request_action(string $route, string $method, array $query=[]
     if ($route==='cavus_fiyatlari.php') return match($form) {'oran','cavus_ucret','servis_ucret',''=>['foreman_rates','create'],'cavus_yontem','saat_duzelt','baslangic_geri'=>['foreman_rates','edit'],default=>null};
     if ($route==='cavus_hakedis.php') return $action==='hesapla'?['entitlements','create']:null;
     if ($route==='cavus_hakedis_detay.php') return match($action) {'duzeltme_ekle'=>['entitlements','create'],'hesapla','finalize','yeniden_ac'=>['entitlements','edit'],'duzeltme_ters_kayit'=>['entitlements','delete'],default=>null};
+    if ($route==='servis_odemeleri.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
     if ($route==='cavus_odeme.php') return match($action) {'odeme_kaydet'=>['foreman_payments','create'],'iptal'=>['foreman_payments','delete'],default=>null};
-    if ($route==='mesai_degerlendirme.php') return in_array($action,['tekli_kaydet','toplu_kaydet'],true)?['mesai','edit']:null;
+    if ($route==='mesai_degerlendirme.php') return in_array($action,['tekli_kaydet','toplu_kaydet','fm_toplu_kaydet'],true)?['mesai','edit']:null;
+    if ($route==='mesai_toplu_onay.php') return in_array($action,['uygula','oto_uygula'],true)?['mesai','edit']:(in_array($action,['onizle','oto_onizle'],true)?['mesai','read']:null);
     if ($route==='manuel_cikis.php') return ($action==='' && $form==='' && $ajax==='') ? ['manual_exit','edit'] : null;
     if ($route==='ters_kart_havuz.php') {
         if ($form==='saat' && $ajax==='') return ['ters_pool','edit'];
@@ -125,7 +134,7 @@ function role_pdks_can(string $page, string $action='read'): bool {
     if ($page==='hub' && $action==='read') { foreach (role_pdks_pages() as $child=>$policy) if ($child!=='hub' && role_pdks_can($child,'read')) return true; }
     if (can('attendance.'.$page.'.read') && ($action==='read' || can('attendance.'.$page.'.'.$action))) return true;
     // Isolated legacy callers may not invoke per-role expansion. Production expands before union.
-    if (!can('role.permissions.detailed') && in_array($action,role_pdks_pages()[$page]['actions'],true)) {
+    if (!can('role.permissions.detailed') && in_array($action,role_pdks_pages()[$page]['legacy_actions'] ?? role_pdks_pages()[$page]['actions'],true)) {
         foreach (role_pdks_pages()[$page]['legacy'] as $legacy) if (can('attendance.'.$legacy)) return true;
     }
     return false;

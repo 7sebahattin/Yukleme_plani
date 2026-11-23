@@ -21,6 +21,10 @@ $beyan = beyan_redact_fields($beyan);
 $is_deleted = !empty($beyan['deleted_at']);
 $statuses   = beyan_statuses();
 $cur_status = (string)($beyan['status'] ?? 'beyan_acildi');
+// v504 — kayıt hangi karttaysa (İşlem Bekleyen / Kapanan) o kartın Gör izni gerekir; eylemler kartın Düzenle/Sil iznine bağlı.
+if (!can_beyan_kart($cur_status, 'read')) forbidden('Bu beyanın bulunduğu bölümü görüntüleme yetkiniz yok.');
+$kart_edit   = can_beyan_kart($cur_status, 'edit');
+$kart_delete = can_beyan_kart($cur_status, 'delete');
 
 // Yükleme planı bağlantısı
 $linked_record = null;
@@ -111,13 +115,15 @@ $hks_acik = ($hks_engel === null);
 // "HKS Taslağı Oluştur"a döner. Plaka eksikliği eşleştirmeyle çözülmez; sebep
 // yanında yazılır.
 $hks_eslestir = $hks_yetki && !$is_deleted && $hks_durum_ok && !$hks_aktif
-                && !beyan_hks_eslesme_tam($beyan);
+                && !beyan_hks_eslesme_tam($beyan) && icerik_can('beyan.hks_eslestir');
 if ($hks_eslestir) {
     $hks_acik  = false;
     $hks_engel = 'Hal Bildirim bilgileri eksik (HKS firması / ürünü / ülke) — Eşleştir\'e basın, beyan verisinden doldurulur.'
                . ($hks_plaka === '' ? ' Araç plakası da girilmeli.' : '')
                . ($hks_net_kg <= 0 ? ' Net KG de girilmeli.' : '');
 }
+// v507 — içerik yetkisi: HKS taslağı oluştur düğmesi
+if ($hks_acik && !icerik_can('beyan.hks_taslak')) { $hks_acik = false; $hks_engel = 'HKS taslağı oluşturma yetkiniz yok.'; }
 $hks_firma_adi = trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
     ? (beyan_hks_firma_adlari([(string)$beyan['hks_firma_id']])[(string)$beyan['hks_firma_id']] ?? ('#' . $beyan['hks_firma_id']))
     : '';
@@ -138,7 +144,7 @@ render_flash();
 <div class="page-head">
     <div class="beyan-page-heading">
         <h1>🧾 <?= h($beyan['party_no'] ?: 'Beyan #' . $id) ?></h1>
-        <button type="button" class="btn btn-whatsapp" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
+        <?php if (icerik_can('beyan.wa_kopyala')): ?><button type="button" class="btn btn-whatsapp" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button><?php endif; ?>
         <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
         <?php if ($is_deleted): ?>
         <div style="margin-top:4px">
@@ -148,10 +154,10 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
-        <?php if (!$is_deleted && can_beyan('edit')): ?>
+        <?php if (!$is_deleted && can_beyan('edit') && $kart_edit): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary btn-duzenle">Düzenle</a>
         <?php endif; ?>
-        <?php if (!$is_deleted && can_beyan('delete')): ?>
+        <?php if (!$is_deleted && can_beyan('delete') && $kart_delete): ?>
         <form method="post" action="beyan_delete.php" style="display:inline"
               onsubmit="return confirm('Bu beyan arşivden gizlenecek. Devam edilsin mi?')">
             <input type="hidden" name="id"   value="<?= $id ?>">
@@ -181,7 +187,7 @@ $bk_ulke  = trim((string)($beyan['hks_ulke_ad'] ?? ''));
 $bk_urun  = trim((string)($beyan['hks_urun_ad'] ?? '')) ?: trim((string)($beyan['product_name'] ?? ''));
 $bk_hks   = trim((string)($beyan['hks_urun_ad'] ?? '')) !== '';   // HKS karşılığı seçilmiş mi
 $bk_kg    = $beyan['net_kg'] !== null && (float)$beyan['net_kg'] > 0;
-$bk_plaka_hizli = !$is_deleted && can_beyan('write') && can_beyan('hks.write');   // v340: hızlı plaka girişi
+$bk_plaka_hizli = !$is_deleted && can_beyan('edit') && $kart_edit && can_beyan('hks.write') && icerik_can('beyan.plaka_hizli');   // v340: hızlı plaka girişi
 $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = '', string $ic = ''): void { ?>
     <div class="bk-hucre<?= $tam ? '' : ' bk-eksik' ?>"<?= $ic !== '' ? ' data-ic="' . h($ic) . '"' : '' ?>>
         <div class="bk-etiket"><?= h($etiket) ?></div>
@@ -219,7 +225,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         <?php else: ?>
         <button type="button" class="btn" disabled>🏛 HKS Taslağı Oluştur</button>
         <span class="bk-engel"><?= h((string)$hks_engel) ?></span>
-        <?php if (($hks_aktif['durum'] ?? '') === 'silindi' && can_beyan('notify') && can_beyan('hks.write')): ?>
+        <?php if (($hks_aktif['durum'] ?? '') === 'silindi' && can_beyan('notify') && can_beyan('hks.write') && icerik_can('beyan.tekrar_aktif')): ?>
         <?php /* Elle bağ düzeltmesi: beyan_edit.php hks_bag_islem dalı (aynı kapı, CSRF, audit). */ ?>
         <form method="post" action="beyan_edit.php?id=<?= (int)$id ?>">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -350,6 +356,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 2. Ürün Bilgileri -->
+<?php if (icerik_can('beyan.kart_urun')): ?>
 <div class="beyan-section" data-bf="urun">
     <div class="beyan-section-title" data-ic="paket"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün Bilgileri</div>
     <div class="beyan-view-grid">
@@ -383,6 +390,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <?php
 // Numune (v343): Ürün Bilgileri gibi tek satır + 3B kart; yalnız doluysa.
@@ -391,6 +399,7 @@ $nm_cins = trim((string)($beyan['sample_crate_type'] ?? ''));
 $nm_brut = ($beyan['sample_gross_kg'] ?? null) !== null && (float)$beyan['sample_gross_kg'] > 0 ? fmt_kg($beyan['sample_gross_kg']) : '';
 $nm_net  = ($beyan['sample_net_kg'] ?? null) !== null && (float)$beyan['sample_net_kg'] > 0 ? fmt_kg($beyan['sample_net_kg']) : '';
 if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
+<?php if (icerik_can('beyan.kart_numune')): ?>
 <div class="beyan-section" data-bf="urun">
     <div class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune Bilgileri</div>
     <div class="beyan-view-grid">
@@ -412,6 +421,7 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
         </div>
     </div>
 </div>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php $lj_gonderici = trim((string)($beyan['sender_company_name'] ?? '')) ?: $hks_firma_adi; ?>
@@ -494,7 +504,7 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
     // duruyor, seçili olan ÇERÇEVE ile işaretli ve doğrudan sonuca gidilebilir.
     // Sunucu status_only dalında güncel satırın durum/not alanlarını değiştirir.
     $next_states = beyan_next_statuses($cur_status);   // yalnız "önerilen" işareti
-    if (!$is_deleted && can_beyan('status')):
+    if (!$is_deleted && can_beyan('status') && $kart_edit):
     ?>
     <div class="bv-durum">
         <div class="muted bv-durum-ipucu">
@@ -543,10 +553,12 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
 
 <!-- Not (v332) -->
 <?php if (trim((string)($beyan['note'] ?? '')) !== ''): ?>
+<?php if (icerik_can('beyan.kart_not')): ?>
 <div class="beyan-section" data-bf="uyari">
     <div class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</div>
     <div class="bv-not" style="white-space:pre-wrap"><?= h((string)$beyan['note']) ?></div>
 </div>
+<?php endif; ?>
 <?php endif; ?>
 
 <!-- 5. WhatsApp Ham Metni (collapsible) -->
@@ -576,6 +588,7 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
 <?php endif; ?>
 
 <!-- 7. Yükleme Planı Bağlantısı -->
+<?php if (icerik_can('beyan.kart_baglanti')): ?>
 <div class="beyan-section" data-bf="baglanti">
     <div class="beyan-section-title" data-ic="baglanti"><span class="bf-emoji" aria-hidden="true">🔗</span> Yükleme Planı Bağlantısı</div>
     <?php if ($linked_record): ?>
@@ -593,6 +606,7 @@ if ($nm_kasa !== '' || $nm_cins !== '' || $nm_brut !== '' || $nm_net !== ''): ?>
     <p class="muted" style="font-size:.82rem">Planla eşleştirmek için yükleme kayıtlarını düzenleme yetkisi gerekir.</p>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 </div><!-- /.bv -->
 

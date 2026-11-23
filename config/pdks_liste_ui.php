@@ -55,6 +55,28 @@ function pdks_oto_filtre_noscript(string $etiket = 'Filtrele'): string
 }
 
 /** Ortak script'i bir kez basar. */
+/**
+ * v560 — «1 gün geri / 1 gün ileri» düğmesi (Günlük Puantaj, Çavuş Hakediş, Toplu Mesai Onayı tarih kutusunun yanında).
+ * Düz GET bağlantısı: mevcut filtreler ($diger; boş değerler atılır) korunur, yalnız `tarih` değişir. Takvim günü (mesai
+ * günü atlamaz). İleri bugünü geçmez → bugünde pasif. Geçersiz tarih bugüne düşer. HTML döner (h() uygulanmış).
+ * @param 'geri'|'ileri' $yon
+ */
+function pdks_gun_gezin(string $yon, string $tarih, array $diger = [], string $dosya = ''): string
+{
+    $ts = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $tarih) ? strtotime($tarih) : false;
+    if ($ts === false) $ts = strtotime(date('Y-m-d'));
+    $bugun = date('Y-m-d');
+    $hedef = date('Y-m-d', strtotime(($yon === 'geri' ? '-1' : '+1') . ' day', $ts));
+    $simge = $yon === 'geri' ? '◀' : '▶';
+    $etiket = $yon === 'geri' ? '1 gün geri' : '1 gün ileri';
+    $sinif = 'btn btn-ghost pdks-gun-ok pdks-gun-ok-' . $yon;
+    if ($yon !== 'geri' && $hedef > $bugun) {
+        return '<span class="' . $sinif . ' is-pasif" aria-disabled="true" title="Bugünden sonrası yok">' . $simge . '</span>';
+    }
+    $q = http_build_query(['tarih' => $hedef] + array_filter($diger, static fn($v) => $v !== null && $v !== '' && $v !== 'tarih'));
+    return '<a href="' . htmlspecialchars($dosya . '?' . $q, ENT_QUOTES, 'UTF-8') . '" class="' . $sinif . '" aria-label="' . $etiket . ' (' . date('d.m.Y', strtotime($hedef)) . ')" title="' . $etiket . '">' . $simge . '</a>';
+}
+
 function pdks_liste_ui_js(): void
 {
     static $basildi = false;

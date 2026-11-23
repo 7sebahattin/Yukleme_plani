@@ -92,5 +92,23 @@ $f8 = (string)file_get_contents($ROOT . '/config/pdks_faz8j.php');
 t('çift bayrağı: kolon PDKS_CIFT_KOLON adıyla + fail-closed (satir_yaz)', str_contains($f8, "', ' . PDKS_CIFT_KOLON") && str_contains($f8, 'Çift yevmiye alanı kurulmamış'));
 t('çift bayrağı: yalnız coklu_grup (kod yolu)', str_contains($f8, "\$cift = \$coklu && !empty(\$g['cift'])"));
 t('INSERT dönem hâlâ TEK yerde', substr_count($f8, 'INSERT INTO daily_worker_work_periods') === 1);
+// v504 çoklu FM: JS aynası + Ekle düğmesi + sunucu tarafı satır tüketimi
+t('JS fmCokluDagit aynası (satırlar kalan havuzdan, toplam aşımı hata)', str_contains($js, 'function fmCokluDagit') && str_contains($js, 'kalan[k] -= d.dagilim[k]') && str_contains($js, 'havuzunu'));
+t('Ekle düğmesi + satır silme', str_contains($js, 'id="tpFmEkle"') && str_contains($js, 'data-fm-sil') && str_contains($js, 'FM_SATIR_UST = 20') && PDKS_TOPLU_FM_SATIR_UST === 20);
+t('satır satır düzen: tip başına .tv-hizli-satir', str_contains($js, 'tv-hizli-satir') && str_contains($js, "'KADIN' => 1, 'ERKEK' => 2, 'RAMPACI' => 3, 'SERITCI' => 4"));
+$cm = pdks_toplu_fm_coklu_dagit(['A' => 3, 'B' => 2], [['kisi' => 3, 'dk' => 60], ['kisi' => 2, 'dk' => 120]]);
+t('çoklu: iki satır havuzu tam tüketir', $cm['ok'] && $cm['toplam'] === ['A' => 3, 'B' => 2]);
+t('çoklu: toplam aşımı net hata', !pdks_toplu_fm_coklu_dagit(['A' => 3, 'B' => 2], [['kisi' => 3, 'dk' => 60], ['kisi' => 3, 'dk' => 60]])['ok']);
+// v509: Yarım kutusu grupları 'yarim' işaretini taşır (FM'li yarım dahil); Tam / Çift / Rampacı / Şeritçi taşımaz.
+$gy = pdks_toplu_hizli_gruplar(['tam' => [1 => 4, 4 => 1, 5 => 1], 'yarim' => [1 => 3, 2 => 2], 'cift' => [1 => 1], 'fm' => ['kisi' => 2, 'saat' => '1']], $tipKod, '2026-11-09');
+$yg = array_values(array_filter($gy['gruplar'], fn($x) => !empty($x['yarim'])));
+$yd = array_values(array_filter($gy['gruplar'], fn($x) => empty($x['yarim'])));
+t('v509: yarım grupları işaretli (adet 5), diğerleri işaretsiz', $gy['hata'] === null && array_sum(array_column($yg, 'kartsiz_adet')) === 5 && array_sum(array_column($yd, 'kartsiz_adet')) === 7);
+t('v509: işaretli gruplar yalnız yarım çıkışı 12:30 (+FM) — tam/çift/rampacı/şeritçi işaretsiz', count(array_filter($yg, fn($x) => !str_contains($x['etiket'], 'Yarım'))) === 0 && count(array_filter($yd, fn($x) => str_contains($x['etiket'], 'Yarım'))) === 0);
+$isy = pdks_toplu_hizli_isle(['yarim' => [1 => 1]], '2026-11-09', [], $kodFn);
+t('v509: isle audit gruplarında yarim bayrağı', ($isy['ek']['audit_ek']['hizli_giris']['gruplar'][0]['yarim'] ?? false) === true);
+t('v509: işaret yalnız coklu_grup (kod yolu) + satir_yaz beyan yazar; HTTP ucu yarim anahtarını geçirmez',
+    str_contains($f8, "\$yarim = \$coklu && !empty(\$g['yarim'])") && str_contains($f8, "!empty(\$satir['yarim']) ? 'yarim' : 'auto'")
+    && !str_contains($aj, "'yarim' =>") && !str_contains($aj, "['yarim']"));
 echo "pdks_toplu_hizli_smoke: $ok ok, $fail fail\n";
 exit($fail ? 1 : 0);

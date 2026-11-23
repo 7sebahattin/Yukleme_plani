@@ -558,6 +558,10 @@ function mail_html_sanitize(string $html, ?bool &$kesildi = null): string
             }
             if (!($c instanceof DOMElement)) continue;   // yorum / CDATA / PI düşer
             $tag = strtolower($c->localName ?? $c->nodeName);
+            // Outlook/Word HTML uses the namespaced <o:p> paragraph wrapper.
+            // libxml/PHP versions disagree on whether localName is "p" or "o:p";
+            // normalize both forms so the harmless wrapper is retained as <p>.
+            if ($tag === 'o:p') $tag = 'p';
             if (isset($dusen[$tag])) continue;
             if (!isset($izinli[$tag])) { $o .= $yaz($c, $d + 1); continue; }   // bilinmeyen: sar-aç (içerik korunur)
             $a = [];

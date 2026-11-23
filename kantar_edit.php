@@ -1,10 +1,11 @@
 <?php
 // =========================================================
-// kantar_edit.php - Kantar fişi düzenle
+// kantar_edit.php - Mal kabul fişi düzenle
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/kantar_alanlari_core.php';
 $auth_user = require_login();
 require_perm('kantar.edit');
 
@@ -22,6 +23,8 @@ if (!function_exists('_parse_kp_rows')) {
                 $birim = 0.0;
                 $list  = $tip === 'kasa' ? $kasa_list : $palet_list;
                 foreach ($list as $kd) { if ($kd['name'] === $cinsi) { $birim = (float)$kd['unit_dara_kg']; break; } }
+                // Birim dara formda düzenlenebilir: dolu gelirse o kullanılır, boşsa tanımdaki değer
+                if (isset($row['birim_dara_kg']) && trim((string)$row['birim_dara_kg']) !== '') $birim = max(0.0, round(num($row['birim_dara_kg']), 3));
                 $rows[] = ['tip' => $tip, 'cinsi' => $cinsi, 'sayisi' => $sayisi, 'birim_dara_kg' => $birim];
                 if ($tip === 'kasa') { $kasa_tot += $sayisi * $birim; $tot_kasa_say += $sayisi; if ($first_kasa === '') $first_kasa = $cinsi; }
                 else                 { $palet_tot += $sayisi * $birim; $tot_palet_say += $sayisi; if ($first_palet === '') $first_palet = $cinsi; }
@@ -56,15 +59,20 @@ $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
+    $eski_tarih = (string)($fis['giris_tarih'] ?? '');
     $fields = [
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
         'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
         'aciklama', 'depo', 'parti_no',
+        'sofor', 'mal_sahibi', 'mustahsil', 'bahce',   // ek alanlar (kolonlar migrate.php kartından)
         'tartim1', 'alibi1', 'tartim2', 'alibi2',
     ];
     foreach ($fields as $k) {
         $fis[$k] = trim((string)($_POST[$k] ?? ''));
     }
+
+    // Tarih yalnız gün olarak gelir; saat kayıtta korunur
+    $fis['giris_tarih'] = kantar_tarih_birlestir($fis['giris_tarih'], $eski_tarih);
 
     // ── Normalleştir ──────────────────────────────────────
     $fis['firma_adi']   = normalize_firma($fis['firma_adi']);
@@ -76,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Zorunlu alan kontrolü ─────────────────────────────
-    if ($fis['giris_tarih'] === '') $errors[] = 'Giriş tarihi zorunludur.';
+    if ($fis['giris_tarih'] === '') $errors[] = 'Geçerli bir tarih girin.';
     if ($fis['firma_adi']   === '') $errors[] = 'Firma adı zorunludur.';
     if ($fis['malin_cinsi'] === '') $errors[] = 'Mal cinsi zorunludur.';
     if ($fis['depo']        === '') $errors[] = 'Depo zorunludur.';
@@ -90,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ensure_definition('firma', $fis['firma_adi']);
         ensure_definition('urun',  $fis['malin_cinsi']);
         ensure_definition('depo',  $fis['depo']);
+        ensure_definition('lokasyon', $fis['geldigi_yer']);
     }
 
     if (empty($errors)) try {
@@ -98,6 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $net = max(0, $t1 - $t2);
 
         [$kp_rows, $kasa_tot_dara, $palet_tot_dara, $first_kasa, $first_palet, $tot_kasa_say, $tot_palet_say, $kasa_dara_val, $palet_dara_val] = _parse_kp_rows($_POST['kp_rows'] ?? [], $kasa_list, $palet_list);
+        // Listede olmayan palet/kasa cinsi yazıldıysa tanımlara eklenir
+        foreach ($kp_rows as $_kr) ensure_definition($_kr['tip'] === 'kasa' ? 'kasa_cinsi' : 'palet_tipi', $_kr['cinsi']);
 
         $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
         $foto_sql = '';
@@ -172,6 +183,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $gst->execute([$id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
             }
         }
+        // Ek alanlar: yalnız kolonlar kuruluysa yazılır
+        kantar_alanlari_yaz(db(), $id, $_POST);
+        if (trim((string)($fis['sofor'] ?? '')) !== '') ensure_definition('sofor', normalize_suggest_value('sofor_adi', (string)$fis['sofor']));
         audit_log_event('update', 'kantar', $id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
         set_flash('success', 'Fiş güncellendi.');
         header('Location: kantar_view.php?id=' . $id);
@@ -183,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $form_action  = 'kantar_edit.php?id=' . $id;
-$title        = 'Kantar Fişi Düzenle';
+$title        = 'Mal Kabul Fişi Düzenle';
 $submit_label = 'Güncelle';
 $is_edit      = true;
 

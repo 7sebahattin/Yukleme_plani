@@ -1,9 +1,10 @@
 <?php
-// Şube Değiştirme — mevcut sayfaya yönlendirme (v439). Yalnız yönetici; hedef kendi yetki kapısını uygular.
+// sube_degistirme.php — KALDIRILDI (v548, menü sadeleştirme). Yer tutucu sayfaydı; içerik yoktu.
+// Deploy repodan silinen dosyayı sunucudan SİLMEZ → 410 tombstone. DB/oturum/kabuk erişimi YOK.
+// Kalıcı yol: depo_sec.php
 declare(strict_types=1);
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/config/auth.php';
-$auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
-header('Location: depo_sec.php', true, 302);
-exit;
+http_response_code(410);
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store');
+echo '<!doctype html><meta charset="utf-8"><title>Kaldırıldı</title>'
+    . '<p>Şube Değiştirme sayfası kaldırıldı. <a href="depo_sec.php">Depo seçimi</a></p>';

@@ -66,7 +66,8 @@ ok('api.php taslak_lib.php\'yi require ediyor',
 
 // ── 3) Tanımsız çağrı yok ─────────────────────────────────────────────────
 $tanimli = [];
-foreach (glob("$KOK/halkayit/*.php") as $f) {
+// v526: api.php config/beyansiz_yukleme.php'yi de yükler (hks_partili_gonderim_beyana_isle).
+foreach (array_merge(glob("$KOK/halkayit/*.php"), ["$KOK/config/beyansiz_yukleme.php"]) as $f) {
     preg_match_all('/^function\s+([a-zA-Z0-9_]+)/m', oku($f), $m);
     $tanimli = array_merge($tanimli, $m[1]);
 }

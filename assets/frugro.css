@@ -1,0 +1,92 @@
+/* frugro.css — Frugro Siparişler (frugro_siparis.php, frugro_view.php). Yalnız bu sayfalarda yüklenir; style.css'e dokunmaz.
+   Renkler style.css tokenlarından gelir (açık + koyu tema otomatik). Pencere .pm-* sınıflarını kullanır (native <dialog>).
+   v515: LİSTE görünümü artık OGL ile ORTAK assets/siparis.css (.sip-mod) — bu dosyada liste kuralı YOK; yalnız Frugro'ya özel kalanlar aşağıda. */
+.frg .frg-kart { padding: 0; overflow: visible; }
+.frg [hidden] { display: none !important; }   /* hidden öznitelik display kurallarını ezemez — SİLME */
+.frg-soluk { color: var(--muted); }
+.frg-bos { padding: 24px; }
+.frg-bos-satir { padding: 34px 16px; text-align: center; color: var(--muted); }
+
+/* Frugro'ya özel: "Invoice hazır" durum rozeti (OGL'de karşılığı yok; --sip-pkl-* ile karışmasın diye ayrı mor-pembe ton) */
+.sip-mod { --frg-invoice-bg: #fde7f3; --frg-invoice-fg: #9d174d; }
+html[data-theme="dark"] .sip-mod { --frg-invoice-bg: #4a1d36; --frg-invoice-fg: #f9a8d4; }
+.sip-badge--invoice { background: var(--frg-invoice-bg); color: var(--frg-invoice-fg); }
+.frg-tutar { font-weight: 700; }
+/* açılır "Order Log yükle · Mailden al" kartı: içteki Frugro mail kartı OGL kartı gibi düz (kart içinde kart olmasın) */
+.sip-yukle .frgm { margin: 0 0 14px; padding: 14px; border: 1px solid var(--sip-sorgu-kenar, var(--border)); background: var(--sip-sorgu-bg, var(--surface-2)); box-shadow: none; }
+.sip-yukle .frgm .frgm-sonuc-kart { background: var(--sip-sorgu-kart, var(--card)); }
+.sip-yukle .frg-sonuc { margin: 10px 0 0; }
+
+/* tarih rengi: OGL v376 eşiği (geçmiş yeşil kalın, bugün turuncu kalın, ileri normal) */
+.frg-tar { font-variant-numeric: tabular-nums; }
+.frg-tar--gecmis { color: #15803d; font-weight: 700; }
+.frg-tar--bugun { color: #c2410c; font-weight: 700; }
+.frg-tar--gelecek { color: var(--text); font-weight: 400; }
+html[data-theme="dark"] .frg-tar--gecmis { color: #4ade80; }
+html[data-theme="dark"] .frg-tar--bugun { color: #fb923c; }
+.frg-pb-bekle { color: var(--warn); font-weight: 600; font-size: .85rem; }
+
+/* yükleme sonucu */
+.frg-sonuc { margin-bottom: 12px; }
+.frg-sonuc h2 { margin: 0 0 8px; font-size: 1rem; }
+.frg-ozet { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.frg-ozet span { padding: 4px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border-strong); font-size: .85rem; }
+.frg-sonuc ul { margin: 6px 0 0; padding-left: 20px; font-size: .88rem; }
+.frg-sonuc li { margin: 2px 0; }
+.frg-uyari { color: var(--warn); }
+.frg-sonuc-hata { color: var(--danger); }
+.frg-sonuc-kapat { float: right; }
+
+/* detay */
+.frg-hata { padding: 10px 14px; margin: 0 0 12px; border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger); font-size: .9rem; }
+.frg-iptal-not { padding: 12px 16px; margin-bottom: 12px; background: var(--danger-soft); color: var(--danger); }
+.frg-adim { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; }
+.frg-adim-ogesi { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--card); color: var(--muted); font-size: .82rem; }
+.frg-adim-ogesi.on { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+.frg-adim-ogesi.simdi { background: var(--primary); color: #fff; font-weight: 700; }
+.frg-izgara { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.frg-bolum { padding: 14px 16px; min-width: 0; }
+.frg-bolum h2 { margin: 0 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.frg-bilgiler { margin: 0; display: grid; gap: 8px; }
+.frg-bilgi { display: grid; grid-template-columns: minmax(110px, 38%) 1fr; gap: 8px; }
+.frg-bilgi dt { color: var(--muted); font-size: .86rem; }
+.frg-bilgi dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.frg-baglar { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.frg-bag { display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: inherit; text-decoration: none; }
+.frg-bag:hover { background: var(--primary-soft); }
+.frg-bag-ikon { font-size: 1.6rem; }
+.frg-bag b, .frg-bag small { display: block; }
+.frg-bag small { color: var(--muted); }
+.frg-eylem-satir { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.frg-sil { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+.frg-sil-onay { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .9rem; }
+.frg-zaman { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--border-strong); display: grid; gap: 12px; }
+.frg-olay { position: relative; padding-left: 12px; }
+.frg-olay::before { content: ""; position: absolute; left: -21px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
+.frg-olay-ust { font-size: .8rem; color: var(--muted); }
+.frg-olay-metin { overflow-wrap: anywhere; }
+
+/* düzenle penceresi (native <dialog class="pm-dialog">) */
+dialog.frg-dialog { padding: 0; border: 0; color: var(--text); max-width: 760px; width: 100%; margin: auto; }
+dialog.frg-dialog--dar { max-width: 480px; }
+dialog.frg-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+@media (max-width: 639px) { dialog.frg-dialog { margin: auto 0 0; max-width: 100%; } }
+.frg-fs { border: 0; margin: 0 0 14px; padding: 0; min-width: 0; }
+.frg-fs legend { padding: 0; margin-bottom: 8px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.frg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.frg-tam { grid-column: 1 / -1; }
+.frg-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.frg-f label { font-size: .85rem; font-weight: 600; }
+.frg-zorunlu { font-weight: 400; color: var(--danger); }
+.frg-f input, .frg-f select, .frg-f textarea { font: inherit; width: 100%; min-width: 0; padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+.frg-f textarea { resize: vertical; min-height: 60px; }
+.frg-f input:focus-visible, .frg-f select:focus-visible, .frg-f textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+@media (max-width: 767px) {
+    .frg-grid { grid-template-columns: minmax(0, 1fr); }
+    .frg-izgara, .frg-baglar { grid-template-columns: minmax(0, 1fr); }
+    .frg-bilgi { grid-template-columns: minmax(96px, 40%) 1fr; }
+    .frg-f input, .frg-f select, .frg-f textarea { font-size: 16px; }   /* iOS zoom önleme */
+    .frg-sil { margin-left: 0; }
+}
+@media print { .frg .no-print { display: none !important; } }

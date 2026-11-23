@@ -24,8 +24,6 @@ if (preg_match('/function nav_alt_sayfalar\(\): array \{(.*?)\n\}\n/s', $helpers
 }
 ok('nav_alt_sayfalar anahtarları okundu', count($altKeys) > 5);
 
-// Gerçek ekrana dönüşen sayfalar (yer tutucu/yönlendirme değil): Faz 0.1 (v505)
-$GERCEK = ['program_tanimlari.php', 'sube_tanimlari.php', 'depo_tanimlari.php'];
 $gorulen = [];
 foreach ($gruplar as $slug => $g) {
     ok("slug tekil: $slug", !isset($gorulen["slug:$slug"]));
@@ -41,21 +39,70 @@ foreach ($gruplar as $slug => $g) {
         $s = (string)file_get_contents($yol);
         ok("$dosya: <?php ile başlar", str_starts_with($s, '<?php'));
         ok("$dosya: require_login()", str_contains($s, 'require_login()'));
-        ok("$dosya: is_admin() kapısı", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
-        if (in_array($dosya, $GERCEK, true)) {
-            // v505: yer tutucu/yönlendirme değil, gerçek yönetim ekranı (kapı + CSRF + şablon zorunlu)
-            ok("$dosya: gerçek ekran (render_header/render_footer)", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
-            ok("$dosya: POST'lar csrf_check ile", str_contains($s, "csrf_check(\$_POST['csrf'] ?? null)"));
-        } elseif (preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
+        // v550: admin_konsolu yalnız is_admin(); diğer tüm menü sayfaları kendi muhasebe_sayfa_can('<slug>') kapısıyla (varsayılan kapalı, yönetici her zaman).
+        if ($slug === 'admin_konsolu') ok("$dosya: is_admin() kapısı", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
+        else ok("$dosya: muhasebe_sayfa_can('$ad') kapısı (bare is_admin gate yok)", str_contains($s, "if (!muhasebe_sayfa_can('$ad')) { forbidden(); }") && !preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
+        if (preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
             $hedef = explode('?', $lm[1])[0];
             ok("$dosya: yönlendirme hedefi var ($hedef)", is_file($ROOT . '/' . $hedef));
             ok("$dosya: yönlendirme exit'li", (bool)preg_match('/header\([^;]+\);\s*exit;/', $s));
             ok("$dosya: yer tutucu kartı yok", !str_contains($s, 'render_header'));
+        } elseif (str_contains($s, 'config/fatura_core.php')) {
+            // Çalışan modül (Fatura, v526 Dalga B: satış/alış faturaları, sevk irsaliyeleri, alınan sipariş fişleri, tanımlar): şema kapısı + sayfa kabuğu.
+            ok("$dosya: çalışan modül — fatura_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'fatura_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/cari_core.php') && $dosya !== 'palet_fisleri.php') {   // palet_fisleri.php cari_core'u yalnız müstahsil kartlarını OKUMAK için yükler (v535) — kendi dalında denetlenir
+            // Çalışan modül (Cari İşlemler, cari_* sayfaları): yer tutucu DEĞİL — şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
+            ok("$dosya: çalışan modül — cari_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'cari_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/stok_core.php')) {
+            // Çalışan modül (Stok, stok_* sayfaları — v524 Parça A: kartlar + tanımlar): şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda.
+            ok("$dosya: çalışan modül — stok_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'stok_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/kasa_core.php')) {
+            // Çalışan modül (Kasa, kasa_* sayfaları — v528): şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
+            ok("$dosya: çalışan modül — kasa_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'kasa_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/ceksenet_core.php')) {
+            // Çalışan modül (Çek-Senet, cek_* / senet_* sayfaları — v528): şema kapısı + sayfa kabuğu; is_admin() kapısı yukarıda zaten denetlendi.
+            ok("$dosya: çalışan modül — ceksenet_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'ceksenet_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif ($dosya === 'palet_fisleri.php') {
+            // v530: Palet Fişleri aktif, yöneticiye açık Excel tarzı tablo sayfası.
+            ok("$dosya: yönetim tablosu", str_contains($s, 'id="pfTable"'));
+            ok("$dosya: yeni fiş ve hücre işlemleri", str_contains($s, "'create'") && str_contains($s, "'save'") && str_contains($s, "'duplicate'") && str_contains($s, "'delete'"));
+            ok("$dosya: BRÜT / NET başlıkları ve referans alanı yok", str_contains($s, '>BRÜT<') && str_contains($s, '>NET<') && !str_contains($s, 'Yük.Ref') && !str_contains($s, '>Ref<'));
+            ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: yazma işlemleri muhasebe_palet_can ile kapılı", str_contains($s, "muhasebe_palet_can('edit')") || str_contains($s, "pf_yetki('edit')"));
+            ok("$dosya: cari tablolarına YAZMAZ (cari_kart_kaydet/cari_hareket_ekle yok; yazma cari_kaydet.php)", !str_contains($s, 'cari_kart_kaydet(') && !str_contains($s, 'cari_hareket_ekle(') && !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?cari_/i', $s));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
         }
     }
 }
+// v555: menüden kaldırılanlar — katalogda YOK; 4 İhracat sayfa dosyası + kantar_fisleri.php YERİNDE (deploy dosya silmez, URL'ler kırılmaz);
+// stok_donusum_fisleri.php 410 tombstone (rol_kapilari_smoke da denetler).
+$katalogDosyalari = [];
+foreach ($gruplar as $__g) foreach ($__g[2] as $__d => $_) $katalogDosyalari[] = $__d;
+ok('v555: "ihracat" (İhracat Programı) grubu katalogda yok', !isset($gruplar['ihracat']));
+foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'kantar_fisleri.php', 'stok_donusum_fisleri.php'] as $__kaldirilan) {
+    ok("v555: $__kaldirilan menü katalogunda yok", !in_array($__kaldirilan, $katalogDosyalari, true));
+}
+foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'kantar_fisleri.php'] as $__kalan) {
+    ok("v555: $__kalan dosyası yerinde (yalnız menüden/kartlardan kalktı)", is_file($ROOT . '/' . $__kalan));
+}
+$__tomb = oku('stok_donusum_fisleri.php');
+ok('v555: stok_donusum_fisleri.php 410 tombstone (≤15 satır, require/db yok)', str_contains($__tomb, 'http_response_code(410)') && substr_count($__tomb, "\n") <= 15 && !preg_match('/require|include|db\(|session_|\$_POST|\$_GET/', $__tomb));
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

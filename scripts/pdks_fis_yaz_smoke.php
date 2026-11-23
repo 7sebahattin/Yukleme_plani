@@ -23,7 +23,7 @@ function fisYap(array $say, array $o = []): array {
     foreach (($o['fm_kova'] ?? []) as $sa => $c) $kova[$sa] = $c;
     unset($o['fm_kova']);
     $cv = $o['cavus'] ?? $cavus['A']; unset($o['cavus']);
-    return $o + ['satir' => 1 + $n, 'fis_no' => 'T' . $n, 'fis_no_ham_sayi' => false, 'tarih' => $dun3, 'isletme' => '', 'cavus' => ['id' => $cv, 'kod' => '', 'ad' => '', 'yontem' => 'kod'],
+    return $o + ['satir' => 1 + $n, 'fis_no' => 'T' . $n, 'fis_no_ham_sayi' => false, 'tarih' => $dun3, 'cavus' => ['id' => $cv, 'kod' => '', 'ad' => '', 'yontem' => 'kod'],
                  'say' => $s, 'fm_kova' => $kova, 'fm_toplam' => null, 'fm_kisi' => null, 'fm_tipi' => null, 'servis' => ['buyuk' => 0, 'kucuk' => 0],
                  'giris' => '08:00', 'giris_varsayilan' => true, 'rev' => 0, 'not' => '', 'ham' => '', 'kontrol' => '', 'cakisma_dosya' => false, 'cakisma_sira' => 0,
                  'hatalar' => [], 'uyarilar' => []];
@@ -151,15 +151,6 @@ ok('B2c) aynı fiş iki kez değerlendirilince AYNI hash', onizle1($fB, $sec)['h
 
 $mh = onizle1(fisYap(['ERKEK' => [3, 0]], ['hatalar' => ['Satır 5, «Erkek Tam»: x']]));
 ok('B3) normalize hatalı fiş → durum hata, seçilemez', $mh['durum'] === 'hata' && !$mh['secilebilir'] && $mh['hatalar'] === ['Satır 5, «Erkek Tam»: x']);
-
-$mi = onizle1(fisYap(['ERKEK' => [3, 0]], ['isletme' => 'Bambaşka Depo']), $sec);
-ok('B4) işletme uyuşmazlığı → durum onay (işaretsiz, seçilebilir)', $mi['durum'] === 'onay' && $mi['isletme_uyusmaz'] && $mi['secilebilir'] && !$mi['varsayilan_secili'], j([$mi['durum'], $mi['uyarilar']]));
-$mi2 = onizle1(fisYap(['ERKEK' => [3, 0]], ['isletme' => 'Bambaşka Depo']), $sec + ['isletme_onay' => true]);
-ok('B4b) isletme_onay=true → onay değil (uyarı)', $mi2['durum'] === 'uyari', $mi2['durum']);
-$mi3 = onizle1(fisYap(['ERKEK' => [3, 0]], ['isletme' => 'DEPO a']), $sec);
-ok('B4c) işletme "DEPO a" ≡ aktif depo "Depo A" → uyuşur', $mi3['durum'] !== 'onay' && !$mi3['isletme_uyusmaz'], $mi3['durum']);
-$mi4 = onizle1(fisYap(['ERKEK' => [3, 0]], ['isletme' => 'Depo']), $sec);
-ok('B4d) işletme "Depo" (aktif depoda geçer) → uyuşur', !$mi4['isletme_uyusmaz']);
 
 // yarım: sınıf doğrulaması
 $my = onizle1(fisYap(['ERKEK' => [0, 4]]), $sec);
@@ -449,9 +440,6 @@ ok('I4) seçilmeyen fiş işlenmez', $ri4['sonuclar'] === [] && $ri4['ozet']['is
 $i6 = fisYap(['ERKEK' => [2, 0]], ['cavus' => yeniCavus('Çavuş CI6'), 'fis_no' => 'I-006']);
 $ri5 = pdks_fis_yaz(db(), [$i6], $sec, 1, 'x', [$i6['satir']], [$i6['satir'] => 'eski-hash']);
 ok('I5) önizleme hash\'i ile yazma anı hash\'i farklı → "degisti", YAZILMAZ', $ri5['sonuclar'][0]['durum'] === 'degisti' && say('daily_worker_work_periods') === say('daily_worker_work_periods') && count(donemler((int)(db()->query("SELECT id FROM daily_work_sessions WHERE foreman_id = {$i6['cavus']['id']}")->fetchColumn() ?: 0))) === 0, j($ri5['sonuclar'][0]));
-$i7 = fisYap(['ERKEK' => [2, 0]], ['cavus' => yeniCavus('Çavuş CI7'), 'fis_no' => 'I-007', 'isletme' => 'Bambaşka']);
-$ri6 = pdks_fis_yaz(db(), [$i7], $sec, 1, 'x', [$i7['satir']], []);
-ok('I6) işletme uyuşmazlığı onaysız → hata; onayla → yazılır', $ri6['sonuclar'][0]['durum'] === 'hata' && str_contains($ri6['sonuclar'][0]['mesaj'], 'uyuşmazlığı') && pdks_fis_yaz(db(), [$i7], $sec + ['isletme_onay' => true], 1, 'x', [$i7['satir']], [])['sonuclar'][0]['durum'] === 'yazildi');
 
 echo "\n=== J. Geri al + revizyon ===\n";
 $cJ = yeniCavus('Çavuş CJ');

@@ -879,3 +879,44 @@ html[data-theme="dark"] .sip-dg { box-shadow: 0 0 0 2px rgba(248, 113, 113, .35)
 
 /* v443: şoför telefonu — dokununca arama */
 .sip-dl dd .sip-tel { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+
+/* ── v529: OGL kesintisi (debit) elle giriş ── */
+.od-kes-not { margin: 0 0 4px; font-size: .9em; }
+.sip-mod fieldset.od-kes-elle { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 8px 12px 10px; margin: 6px 0 0; min-width: 0; display: grid; gap: 8px; }
+.sip-mod fieldset.od-kes-elle legend { font-weight: 600; font-size: .9em; padding: 0 4px; }
+.od-kes-fiyat { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 480px) { .od-kes-fiyat { grid-template-columns: 1fr; } }
+.od-aviz-kart .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+/* ── v529: 🔔 bildirim zili (siparisler.php sağ üst; panel z 650 — .pc-dropdown 200'ün üstünde, modal 600+ ile aynı katman) ── */
+.sip-zil { position: relative; display: inline-flex; }
+.sip-zil-btn { position: relative; min-width: 46px; justify-content: center; }
+.sip-zil-ikon { font-size: 1.15em; line-height: 1; }
+.sip-zil-btn.sip-zil-var .sip-zil-ikon { display: inline-block; animation: sipZilSalla 1.6s ease-in-out 2; transform-origin: 50% 0; }
+@keyframes sipZilSalla { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20%, 40% { transform: rotate(-14deg); } }
+@media (prefers-reduced-motion: reduce) { .sip-zil-btn.sip-zil-var .sip-zil-ikon { animation: none; } }
+.sip-zil-sayi { position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px;
+  background: #dc2626; color: #fff; font-size: 12px; font-weight: 800; line-height: 20px; text-align: center; box-shadow: 0 0 0 2px var(--card, #fff); }
+.sip-zil-sayi[hidden], .sip-zil-don[hidden] { display: none; }
+.sip-zil-don { position: absolute; bottom: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--primary, #2563eb); border-top-color: transparent; animation: sipZilDon .8s linear infinite; }
+@keyframes sipZilDon { to { transform: rotate(360deg); } }
+.sip-zil-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 650; width: min(420px, 92vw); max-height: min(70vh, 560px); overflow-y: auto;
+  background: var(--card, #fff); color: var(--text, #111827); border: 1px solid var(--border, #e5e7eb); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 10px 0 6px; text-align: left; }
+.sip-zil-panel[hidden] { display: none; }
+.sip-zil-bas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 12px 8px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.sip-zil-bas strong { font-size: 1rem; }
+.sip-zil-bas [data-sip-zil-yenile] { margin-left: auto; }
+.sip-zil-bas [data-sip-zil-yenile][hidden] { display: none; }
+.sip-zil-liste { list-style: none; margin: 0; padding: 4px 0; }
+.sip-zil-liste li a { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: start; padding: 8px 12px; color: inherit; text-decoration: none; font-size: .9rem; line-height: 1.35; }
+.sip-zil-liste li a:hover, .sip-zil-liste li a:focus-visible { background: var(--primary-soft, #eff6ff); }
+.sip-zil-liste li.sip-zil-yeni a { background: #fff7ed; font-weight: 600; box-shadow: inset 3px 0 0 #ea580c; }
+.sip-zil-oz { color: var(--muted, #6b7280); font-size: .78rem; white-space: nowrap; font-weight: 400; }
+.sip-zil-om { min-width: 0; overflow-wrap: anywhere; }
+.sip-zil-bos { padding: 14px 12px; color: var(--muted, #6b7280); }
+.sip-zil-not { margin: 4px 12px 2px; font-size: .75rem; }
+html[data-theme="dark"] .sip-zil-liste li.sip-zil-yeni a { background: rgba(234, 88, 12, .16); }
+@media (max-width: 767px) {
+  .sip-zil-panel { position: fixed; left: 8px; right: 8px; top: 64px; width: auto; max-height: calc(100vh - 64px - var(--bn-h, 64px) - 16px); }
+}
+@media print { .sip-zil { display: none !important; } }
