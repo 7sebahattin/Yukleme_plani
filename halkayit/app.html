@@ -212,6 +212,18 @@
     display:flex; align-items:center; gap:10px; padding:13px 12px; border-radius:12px;
     width:100%; box-sizing:border-box; cursor:pointer; color:var(--metin); font-size:14px; font-weight:600; text-decoration:none;
   }
+  /* v568: ana ekran sağ üst "Rüsum Borcu" kartı (son sorgunun önbelleğinden; HKS'e gitmez) */
+  #ekranMenu .ustbar { flex-wrap:wrap; }
+  /* Firma adı okunur kalsın: dar ekranda (Firmalar + ad + kart sığmazsa) kart alt satıra, sağa hizalı iner. */
+  #ekranMenu .ustbar .baslik { flex:1 1 120px; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rusum-kart { margin-left:auto; flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:1px; text-decoration:none;
+    background:var(--kart); border-radius:12px; padding:7px 12px; box-shadow:var(--golge); color:var(--metin); min-width:150px; }
+  .rusum-kart[hidden] { display:none; }
+  .rusum-kart .rk-e { font-size:11px; font-weight:700; color:var(--soluk, #6b7280); }
+  .rusum-kart .rk-d { font-size:17px; font-weight:800; color:#dc2626; font-variant-numeric:tabular-nums; line-height:1.2; }
+  .rusum-kart .rk-d.rk-sifir { color:var(--metin); }
+  .rusum-kart .rk-a { font-size:11px; color:var(--soluk, #6b7280); font-variant-numeric:tabular-nums; }
+  .rusum-kart:hover, .rusum-kart:focus-visible { outline:2px solid var(--navy); outline-offset:1px; }
   .grup-liste button:active, .grup-liste button:hover, .grup-liste a.grup-baglanti:active, .grup-liste a.grup-baglanti:hover { background:var(--cizgi); }
 
   /* Çipler */
@@ -1032,7 +1044,7 @@
   body.icx-ekr_stok #btnStok, body.icx-ekr_stok #stokBolum,
   body.icx-ekr_gelen #btnGelen,
   body.icx-gonderim_raporu #gonderilenRapor,
-  body.icx-rusum_borc #btnRusumBorc,
+  body.icx-rusum_borc #btnRusumBorc, body.icx-rusum_borc #rusumKart,
   body.icx-gonder [data-gonder],
   body.icx-taslak_kopyala [data-kopyala],
   body.icx-tekrar_gonder .g-btn-tekrar,
@@ -1059,6 +1071,11 @@
   <div class="ustbar">
     <button class="geri" id="btnFirmaDegis" title="Firma değiştir"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Firmalar</span></button>
     <div class="baslik" id="menuFirmaAd">—</div>
+    <a class="rusum-kart" id="rusumKart" href="rusum_borc.php" target="_top" title="Rüsum Borcu sayfasını aç" hidden>
+      <span class="rk-e">Vadesi geçmiş rüsum borcu</span>
+      <span class="rk-d" id="rusumKartGecmis">—</span>
+      <span class="rk-a" id="rusumKartToplam"></span>
+    </a>
   </div>
   <main>
     <div class="fav-izgara">
@@ -2001,6 +2018,7 @@ const API_ROTA = {
   'POST /api/bildirim_onizle': 'bildirim_onizle',
   'POST /api/sorgu': 'sorgu',
   'POST /api/gelen_sorgu': 'gelen_sorgu',
+  'POST /api/rusum_ozet': 'rusum_ozet',
   'POST /api/etiket': 'etiket',
   // Referanssız (Satın Alım) mal bilgileri referansları
   'POST /api/urun_listeleri': 'urun_listeleri',
@@ -2158,6 +2176,7 @@ function firmaSec(f) {
   $('menuFirmaAd').textContent = f.ad;
   ekranGoster('ekranMenu');
   taslakSayiGuncelle();
+  rusumKartYukle();
   // Firma seçilince stok otomatik sorgulanıp ana sayfada gösterilir.
   // Otomatik açılış HIZLI olsun diye 6 ay ile sınırlı; tam (5 yıllık) geçmiş
   // için "Raporlama İşlemleri → Stok Sorgulama" kullanılır.
@@ -2167,6 +2186,7 @@ function firmaSec(f) {
 
 $('btnFirmaDegis').onclick = () => {
   aktifFirma = null;
+  rusumKartNo++; $('rusumKart').hidden = true;
   delete document.body.dataset.tema;
   ekranGoster('ekranFirma');
 };
@@ -2947,6 +2967,46 @@ $('gonderilenRapor').addEventListener('click', function () {
   const id = aktifFirma && aktifFirma.id ? String(aktifFirma.id) : '';
   this.href = 'gonderim_rapor.php' + (/^[A-Za-z0-9_\-.]+$/.test(id) ? '?firma=' + encodeURIComponent(id) : '');
 });
+
+// v568: sağ üst "Rüsum Borcu" kartı. Veri rusum_borc.php'nin SON eksiksiz sorgusundan gelir (HKS'e gitmez);
+// önbellek yoksa kart "Hesaplamak için dokunun" der. Tıklayınca sayfa taze sorguyla açılır (btnRusumBorc ile aynı bağlantı).
+let rusumKartNo = 0;
+function rusumTl(v) { return Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function rusumKartBaglantisi() {
+  const id = aktifFirma && aktifFirma.id ? String(aktifFirma.id) : '';
+  return 'rusum_borc.php' + (/^[A-Za-z0-9_\-.]+$/.test(id) ? '?sorgula=1&firma=' + encodeURIComponent(id) : '');
+}
+async function rusumKartYukle() {
+  const kart = $('rusumKart');
+  if (!kart || hksIcerik.rusum_borc === false || !aktifFirma) return;
+  const no = ++rusumKartNo, firmaId = aktifFirma.id;
+  kart.hidden = false;
+  kart.href = rusumKartBaglantisi();
+  $('rusumKartGecmis').textContent = '…';
+  $('rusumKartGecmis').classList.remove('rk-sifir');
+  $('rusumKartToplam').textContent = '';
+  try {
+    const j = await api('/api/rusum_ozet', 'POST', { firmaId: firmaId });
+    if (no !== rusumKartNo || !aktifFirma || aktifFirma.id !== firmaId) return;   // firma değişti: eski yanıt atılır
+    const o = j.ozet;
+    if (!o) {
+      $('rusumKartGecmis').textContent = '—';
+      $('rusumKartToplam').textContent = 'Hesaplamak için dokunun';
+      kart.title = 'Henüz sorgulanmadı; dokununca Rüsum Borcu sayfası açılır ve sorgular';
+      return;
+    }
+    $('rusumKartGecmis').textContent = rusumTl(o.vadesiGecmis) + ' TL';
+    $('rusumKartGecmis').classList.toggle('rk-sifir', !(Number(o.vadesiGecmis) > 0));
+    $('rusumKartToplam').textContent = 'Toplam borç: ' + rusumTl(o.toplam) + ' TL' + (o.eski ? ' · eski veri' : '');
+    const z = o.zaman ? new Date(o.zaman) : null;
+    kart.title = 'Son sorgu: ' + (z && !isNaN(z) ? z.toLocaleString('tr-TR') : '—') + ' (dokununca yeniden sorgular)';
+  } catch (e) {
+    if (no !== rusumKartNo) return;
+    $('rusumKartGecmis').textContent = '—';
+    $('rusumKartToplam').textContent = 'Alınamadı';
+  }
+}
+$('rusumKart').addEventListener('click', function () { this.href = rusumKartBaglantisi(); });
 
 // v566: Borç Sorgula (rüsum) — aktif firma sayfada ön seçili ve sorgu hazır gelsin (id yalnız beyaz liste karakterleri).
 $('btnRusumBorc').addEventListener('click', function () {

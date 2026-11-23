@@ -108,6 +108,46 @@ ok('ödeme: başka firmanın işareti ayrı anahtarda', hks_rusum_odeme_oku('fir
 ok('ödeme: anahtar kısa ve güvenli karakterli', preg_match('/^rod_[0-9a-f]{12}$/', hks_rusum_odeme_anahtar("f1' OR 1=1")) === 1);
 ok('ödeme: geri al → kalkar', hks_rusum_odeme_yaz($F, '0091880872-20261020-20261027', false) && hks_rusum_odeme_oku($F) === []);
 
+// ── 6b. Toplu işaret (v568) ──
+$G1 = '0091880872-20261020-20261027'; $G2 = '0091880872-20261021-20261028'; $G3 = '0091880872-20261022-20261030';
+$FT = 'firma-toplu';
+ok('toplu: 3 grup tek çağrıda işaretlenir (3 döner)', hks_rusum_odeme_toplu_yaz($FT, [$G1, $G2, $G3], true, 'Ali', '2026-11-20') === 3 && count(hks_rusum_odeme_oku($FT)) === 3);
+ok('toplu: kayıtta tarih + kullanıcı', hks_rusum_odeme_oku($FT)[$G2] === ['t' => '2026-11-20', 'k' => 'Ali']);
+ok('toplu: 2 grup geri alınır, 1 kalır', hks_rusum_odeme_toplu_yaz($FT, [$G1, $G3], false) === 2 && array_keys(hks_rusum_odeme_oku($FT)) === [$G2]);
+ok('toplu: biri geçersizse HİÇBİRİ yazılmaz (-1)', hks_rusum_odeme_toplu_yaz($FT, [$G1, 'bozuk'], true) === -1 && array_keys(hks_rusum_odeme_oku($FT)) === [$G2]);
+ok('toplu: boş liste → -1', hks_rusum_odeme_toplu_yaz($FT, [], true) === -1);
+ok('toplu: dizi dışı değer → -1', hks_rusum_odeme_toplu_yaz($FT, [['x']], true) === -1);
+$cokluGrup = []; for ($i = 0; $i < HKS_RUSUM_TOPLU_LIMIT + 1; $i++) $cokluGrup[] = '0091880872-2026' . str_pad((string)(1000 + $i), 4, '0', STR_PAD_LEFT) . '-20261027';
+ok('toplu: tek çağrıda limit (' . HKS_RUSUM_TOPLU_LIMIT . ') aşılırsa -1', hks_rusum_odeme_toplu_yaz($FT, $cokluGrup, true) === -1);
+ok('toplu: aynı grup tekrarı tek sayılır', hks_rusum_odeme_toplu_yaz($FT, [$G1, $G1], true) === 1);
+
+// ── 6c. Önbellek + ana ekran kartı özeti (v568) ──
+$FK = 'firma-kart';
+ok('özet: önbellek yokken null (kart "Hesaplamak için dokunun")', hks_rusum_ozet($FK, '2026-11-23') === null);
+$grl = [
+    ['grup' => $G1, 'tahakkuk' => '2026-10-20', 'sonOdeme' => '2026-10-27', 'tutar' => 1900.4, 'adet' => 2],
+    ['grup' => $G2, 'tahakkuk' => '2026-10-21', 'sonOdeme' => '2026-10-28', 'tutar' => 51304.2, 'adet' => 5],
+    ['grup' => '0091880872-20261120-20261127', 'tahakkuk' => '2026-11-20', 'sonOdeme' => '2026-11-27', 'tutar' => 1000.0, 'adet' => 1],
+];
+hks_rusum_onbellek_yaz($FK, $grl, '2026-05-23', '2026-11-23', '2026-11-23T14:00:00+03:00');
+$oz = hks_rusum_ozet($FK, '2026-11-23');
+ok('özet: vadesi geçmiş 53.204,60 · toplam borç 54.204,60', abs($oz['vadesiGecmis'] - 53204.6) < 0.005 && abs($oz['toplam'] - 54204.6) < 0.005, $j($oz));
+ok('özet: sorgu aralığı + zamanı taşır, taze', $oz['bas'] === '2026-05-23' && $oz['bit'] === '2026-11-23' && $oz['zaman'] === '2026-11-23T14:00:00+03:00' && $oz['eski'] === false);
+hks_rusum_odeme_yaz($FK, $G2, true, 'Ali', '2026-11-23');
+$oz2 = hks_rusum_ozet($FK, '2026-11-23');
+ok('özet: ödendi işaretleyince kart HKS\'siz güncellenir (51.304,20 düşer)', abs($oz2['vadesiGecmis'] - 1900.4) < 0.005 && abs($oz2['toplam'] - 2900.4) < 0.005, $j($oz2));
+$oz3 = hks_rusum_ozet($FK, '2026-11-28');
+ok('özet: vade günleri geçtikçe borç vadesi geçmişe döner (28.11: 1.000,00 da vadesi geçti)', abs($oz3['vadesiGecmis'] - 2900.4) < 0.005, $j($oz3));
+ok('özet: 2 günden eski önbellek "eski" işaretlenir', hks_rusum_ozet($FK, '2026-11-26')['eski'] === true && hks_rusum_ozet($FK, '2026-11-24')['eski'] === false);
+hks_rusum_onbellek_yaz('firma-kotu', [['grup' => "x' OR 1", 'tahakkuk' => '2026-10-20', 'sonOdeme' => '2026-10-27', 'tutar' => 5.0]], 'a', 'b');
+ok('önbellek: geçersiz grup satırı yazılmaz', hks_rusum_onbellek_oku('firma-kotu')['g'] === []);
+ok('önbellek: firma başına ayrı anahtar, kısa ve güvenli', hks_rusum_ozet('baska-firma', '2026-11-23') === null && preg_match('/^rbg_[0-9a-f]{12}$/', hks_rusum_onbellek_anahtar("f1' OR 1=1")) === 1);
+ok('önbellek yazım uygunluğu: 6 aylık, bugüne yakın sorgu EVET', hks_rusum_onbellege_uygun('2026-05-23', '2026-11-23', '2026-11-23'));
+ok('önbellek yazım uygunluğu: bitişi 3 gün önce hâlâ EVET', hks_rusum_onbellege_uygun('2026-05-20', '2026-11-20', '2026-11-23'));
+ok('önbellek yazım uygunluğu: kısa aralık (30 gün) HAYIR — kart eksik toplam göstermesin', !hks_rusum_onbellege_uygun('2026-10-24', '2026-11-23', '2026-11-23'));
+ok('önbellek yazım uygunluğu: eski aralık (bitiş 10 gün önce) HAYIR', !hks_rusum_onbellege_uygun('2026-04-01', '2026-11-13', '2026-11-23'));
+ok('önbellek yazım uygunluğu: bozuk tarih HAYIR', !hks_rusum_onbellege_uygun('x', '2026-11-23', '2026-11-23'));
+
 // ── 7. Durum + toplamlar ──
 $gr = [
     ['grup' => '0091880872-20261020-20261027', 'tahakkuk' => '2026-10-20', 'sonOdeme' => '2026-10-27', 'tutar' => 1900.4, 'adet' => 2],
@@ -137,19 +177,32 @@ $lib = (string)file_get_contents("$KOK/halkayit/rusum_borc_lib.php");
 ok('sayfa: giriş + hks.access + hks.read + içerik kapısı', str_contains($sayfa, "require_login()") && str_contains($sayfa, "require_perm('hks.access')")
    && str_contains($sayfa, "role_hks_can('read')") && str_contains($sayfa, "icerik_kapi('hks.rusum_borc')"));
 ok('sayfa: POST csrf_check + hks.edit + audit', str_contains($sayfa, 'csrf_check(') && str_contains($sayfa, "role_hks_can('edit')") && str_contains($sayfa, "audit_log_event('hks_rusum_odeme'"));
-ok('sayfa: audit VKN yazmaz (yalnız tahakkuk günü)', str_contains($sayfa, "substr(\$__grup, -17, 8)") && !preg_match("/audit_log_event\([^;]*vergi/i", $sayfa));
+ok('sayfa: audit VKN yazmaz (yalnız adet + tahakkuk günü aralığı)', str_contains($sayfa, 'substr($g, -17, 8)') && str_contains($sayfa, "'tahakkuk_ilk'") && !preg_match("/audit_log_event\([^;]*vergi/i", $sayfa));
 ok('sayfa: HKS yazma/gönderim fonksiyonu YOK (salt okunur sorgu)', !preg_match('/hks_bildirim_kaydet|taslak_gonder|hks_taslak_olustur/', $sayfa . $lib));
 ok('sayfa: DDL / migration YOK (şema değişmez)', !preg_match('/CREATE TABLE|ALTER TABLE/i', $sayfa . $lib));
 ok('sayfa: yalnız hks_kv\'ye yazar', str_contains($lib, 'hks_kv_yaz(') && !preg_match('/INSERT INTO|UPDATE \w+ SET|DELETE FROM/i', $sayfa . $lib));
-ok('sayfa: "resmî borç değildir" uyarısı var', str_contains($sayfa, 'Resmî borç sorgusu değildir'));
+ok('sayfa: sarı uyarı bandı yok; yalnız "Ödemeleri manuel işaretleyiniz." (sahip kararı v568)', !str_contains($sayfa, 'Resmî borç sorgusu değildir') && str_contains($sayfa, 'Ödemeleri manuel işaretleyiniz.'));
+ok('sayfa: varsayılan başlangıç son 6 ay', str_contains($sayfa, "' -6 months'"));
+ok('sayfa: Sorgula Firma ile aynı satırda (rb-f-btn firma/tarihlerle aynı flex kabında)', preg_match('/rb-izgara.*rb-f-firma.*rb-f-tarih.*rb-f-tarih.*rb-f-btn/s', $sayfa) === 1);
+ok('sayfa: toplu işaret grup[] + tek kv yazımı (hks_rusum_odeme_toplu_yaz)', str_contains($sayfa, 'hks_rusum_odeme_toplu_yaz(') && str_contains($sayfa, "fd.append('grup[]'"));
+ok('sayfa: yazdırma kart düzenini geri alır (table-row !important) ve seçim/Bildirim/grup sütunlarını gizler', str_contains($sayfa, 'display: table-row !important') && str_contains($sayfa, '.rb-tablo .rb-col-sec'));
+ok('sayfa: önbellek yalnız eksiksiz + tam aralıklı sorguda yazılır', str_contains($sayfa, 'hks_rusum_onbellege_uygun(') && str_contains($sayfa, "kismiHata'] > 0"));
 ok('sayfa: no-store', str_contains($sayfa, 'no-store'));
 ok('lib: HKS çağrısı yalnız BildirimcininYaptigiBildirimListesi (WSDL\'de var)', substr_count($lib, "hks_soap_cagir(") === 1
    && str_contains($lib, "'BildirimServisBildirimcininYaptigiBildirimListesi'"));
 ok('.htaccess: lib doğrudan çağrıya kapalı', str_contains((string)file_get_contents("$KOK/halkayit/.htaccess"), 'rusum_borc_lib'));
 ok('sw.js: sayfa önbelleğe alınmaz', str_contains((string)file_get_contents("$KOK/sw.js"), 'rusum_borc'));
+$api = (string)file_get_contents("$KOK/halkayit/api.php");
+ok("api.php: 'rusum_ozet' salt okunur (CSRF muaf listesinde) ve case'i var", preg_match("/hks_csrf_muaf_eylemler\(\): array \{.*?'rusum_ozet'.*?\n\}/s", $api) === 1 && str_contains($api, "case 'rusum_ozet':"));
+ok("api.php: rusum_ozet içerik yetkisi ui.hks.rusum_borc'a bağlı", str_contains($api, "'rusum_ozet' => 'rusum_borc'"));
+preg_match("/case 'rusum_ozet': \{.*?\n    \}/s", $api, $__rc);
+ok('api.php: rusum_ozet HKS çağırmaz / yazmaz (yalnız önbellek okur)', isset($__rc[0]) && str_contains($__rc[0], 'hks_rusum_ozet(') && !preg_match('/hks_soap_cagir|hks_rusum_pencere|hks_rusum_tahakkuk_cek|hks_kv_yaz|INSERT|UPDATE|DELETE/', $__rc[0]));
+ok('api.php: rusum_borc_lib yüklü', str_contains($api, "require_once __DIR__ . '/rusum_borc_lib.php'"));
 $app = (string)file_get_contents("$KOK/halkayit/app.html");
 ok('app.html: Borç Sorgula düğmesi + içerik gizleme + firma bağlama', str_contains($app, 'id="btnRusumBorc"') && str_contains($app, 'body.icx-rusum_borc #btnRusumBorc')
    && str_contains($app, "'rusum_borc.php' + (/^[A-Za-z0-9_"));
+ok('app.html: sağ üst Rüsum Borcu kartı + rota + içerik gizleme', str_contains($app, 'id="rusumKart"') && str_contains($app, "'POST /api/rusum_ozet': 'rusum_ozet'") && str_contains($app, 'body.icx-rusum_borc #rusumKart')
+   && str_contains($app, 'Toplam borç: ') && str_contains($app, 'Vadesi geçmiş rüsum borcu'));
 ok('rol kataloğu: ui.hks.rusum_borc', str_contains((string)file_get_contents("$KOK/config/role_content.php"), "'ui.hks.rusum_borc'"));
 preg_match("/define\('APP_SURUM', '(v\d+)'\)/", (string)file_get_contents("$KOK/config/helpers.php"), $m1);
 preg_match("/CACHE_NAME = 'yukleme-plani-(v\d+)'/", (string)file_get_contents("$KOK/sw.js"), $m2);
