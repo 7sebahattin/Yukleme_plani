@@ -131,14 +131,14 @@ okx('1a) geçerli zip (PK) ve Fatal/Warning yok', $r[0] === 0 && str_starts_with
 $k = tdKitap($r); $sh = $k->getActiveSheet();
 $bs = xlsx_satir_bul($sh, 'Tarih');
 $basliklar = []; foreach ($sh->getRowIterator($bs, $bs) as $row) foreach ($row->getCellIterator() as $c) $basliklar[] = (string)$c->getValue();
-okx('1b) sütun sırası', array_slice($basliklar, -6) === ['FM Toplam Saat', '1. Saat', '2. Saat', '3. Saat', '4. Saat', '5+ Saat'] && array_slice($basliklar, 0, 6) === ['Tarih', 'Çavuş', 'Çavuş Kodu', 'Kadın', 'Erkek', 'Rampacı'], json_encode($basliklar, JSON_UNESCAPED_UNICODE));
+okx('1b) sütun sırası', array_slice($basliklar, -3) === ['İlk Giriş', 'Son Çıkış', 'Eksik Çıkış'] && array_slice($basliklar, 0, 6) === ['Tarih', 'Çavuş', 'Çavuş Kodu', 'Kadın', 'Erkek', 'Rampacı'] && array_slice($basliklar, array_search('Toplam İşçi', $basliklar), 7) === ['Toplam İşçi', '1. Saat', '2. Saat', '3. Saat', '4. Saat', '5+ Saat', 'Toplam FM (saat)'] && array_search('Hakediş', $basliklar) > array_search('Toplam FM (saat)', $basliklar), json_encode($basliklar, JSON_UNESCAPED_UNICODE));
 $kol = fn(string $b) => xlsx_sutun_bul($sh, $bs, $b);
 okx('1c) Hakediş/Para Birimi/Durum sütunları var', $kol('Hakediş') !== '' && $kol('Para Birimi') !== '' && $kol('Durum') !== '');
 $ilk = $bs + 1;
 // satırlar ekranla aynı sıra (tarih azalan): 31 Mart (C), 10 Mart (A, B)
 $tarihler = []; $r2 = $ilk; while ($sh->getCell('A' . $r2)->getValue() !== null && $sh->getCell('A' . $r2)->getValue() !== 'TOPLAM') { $tarihler[] = $r2; $r2++; }
 okx('1d) 3 veri satırı + TOPLAM', count($tarihler) === 3 && $sh->getCell('A' . $r2)->getValue() === 'TOPLAM', (string)count($tarihler));
-$fmS = $kol('FM Toplam Saat'); $fmK = $kol('1. Saat'); $fmD = $kol('2. Saat'); $hk = $kol('Hakediş');
+$fmS = $kol('Toplam FM (saat)'); $fmK = $kol('1. Saat'); $fmD = $kol('2. Saat'); $hk = $kol('Hakediş');
 $satirA = 0; foreach ($tarihler as $t) if ($sh->getCell($kol('Çavuş Kodu') . $t)->getValue() === 'C1' && $sh->getCell($fmS . $t)->getValue() == 6) $satirA = $t;
 okx('1e) A satırı: FM 6 sa, 1. Saat 2 kişi, 2. Saat 2 kişi', $satirA > 0 && (int)$sh->getCell($fmK . $satirA)->getValue() === 2 && (int)$sh->getCell($fmD . $satirA)->getValue() === 2, (string)$satirA);
 $c = $sh->getCell($hk . $satirA);
@@ -177,7 +177,7 @@ echo "\n=== 2. Finansal olmayan ===\n";
 $r = tdCalistir($ALT, 'attendance.management_reports,reports.export', true, 'n');
 okx('2a) üretildi', $r[0] === 0 && str_starts_with($r[1], "PK\x03\x04"), $r[3]);
 $k = tdKitap($r); $sh = $k->getActiveSheet(); $bs = xlsx_satir_bul($sh, 'Tarih');
-okx('2b) Hakediş/Para Birimi/Durum sütunları YOK, FM sütunları var', xlsx_sutun_bul($sh, $bs, 'Hakediş') === '' && xlsx_sutun_bul($sh, $bs, 'Para Birimi') === '' && xlsx_sutun_bul($sh, $bs, 'Durum') === '' && xlsx_sutun_bul($sh, $bs, 'FM Toplam Saat') !== '');
+okx('2b) Hakediş/Para Birimi/Durum sütunları YOK, FM sütunları var', xlsx_sutun_bul($sh, $bs, 'Hakediş') === '' && xlsx_sutun_bul($sh, $bs, 'Para Birimi') === '' && xlsx_sutun_bul($sh, $bs, 'Durum') === '' && xlsx_sutun_bul($sh, $bs, 'Toplam FM (saat)') !== '');
 $tum = ''; foreach ($sh->getRowIterator() as $row) foreach ($row->getCellIterator() as $c) $tum .= '|' . $c->getValue();
 okx('2c) 1500 / 800 tutarları dosyada yok', !str_contains($tum, '1500') && !str_contains($tum, '800'));
 

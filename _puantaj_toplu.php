@@ -79,9 +79,9 @@ $topluIk = function (string $ad): string {
     </div>
     <div class="pdks-form-grid tv-ust">
         <?php if ($topluSabitCavus): ?>
-        <div class="span-2 tv-cavus"><span class="tv-avatar"><?= $topluIk('kisiler') ?></span><div><span class="tv-cavus-et">Çavuş</span><strong><?= h($topluSabitCavus['name']) ?></strong></div></div>
+        <div class="tv-cavus"><span class="tv-avatar"><?= $topluIk('kisiler') ?></span><div><span class="tv-cavus-et">Çavuş</span><strong><?= h($topluSabitCavus['name']) ?></strong></div></div>
         <?php else: ?>
-        <label class="span-2 tv-cavus"><span class="tv-avatar"><?= $topluIk('kisiler') ?></span>
+        <label class="tv-cavus"><span class="tv-avatar"><?= $topluIk('kisiler') ?></span>
             <span class="tv-cavus-kap"><span class="tv-cavus-et">Çavuş <span class="tv-gerekli">*</span></span>
             <select id="tpCavus">
                 <option value="">— Çavuş seçin —</option>
@@ -91,7 +91,7 @@ $topluIk = function (string $ad): string {
             </select></span>
         </label>
         <?php endif; ?>
-        <label class="span-2 tv-tarih"><span class="form-label"><?= $topluIk('takvim') ?>Tarih <span class="tv-gerekli">*</span></span>
+        <label class="tv-tarih"><span class="form-label"><?= $topluIk('takvim') ?>Tarih <span class="tv-gerekli">*</span></span>
             <input type="date" id="tpTarih" value="<?= h($topluWorkDate) ?>" max="<?= h(date('Y-m-d')) ?>" required></label>
         <p class="muted span-2 tv-tarih-not" id="tpTarihNot" hidden>Kartlı giriş listesi pencerenin açıldığı güne göre hazırlanmıştır; farklı bir gün seçtiyseniz kart çakışmaları kayıtta sunucuda denetlenir.</p>
         <label><span class="form-label"><?= $topluIk('belge') ?>Ekleme nedeni <span class="tv-gerekli">*</span></span><textarea id="tpReason" maxlength="500" rows="2" placeholder="Örn. Kart okutma cihazı arızalıydı"></textarea></label>
@@ -146,6 +146,20 @@ $topluIk = function (string $ad): string {
             <button type="button" class="btn btn-sm tv-fm-ekle" id="tpFmEkle">+ Ekle</button>
             <p class="muted tv-fm-onizleme" id="tpFmOnizleme" aria-live="polite">Fazla mesai kişileri Kadın/Erkek (Tam, Yarım) ve Şeritçi sayısına orantılı dağıtılır.</p>
         </div>
+        <?php if (!empty($topluServisHazir)): ?>
+        <div class="tv-servis" id="tpServis">
+            <h4 class="tv-fm-bas"><?= $topluIk('kisiler') ?><span>Servis</span></h4>
+            <p class="muted tv-fm-not">Bu günün servis adedi (Büyük / Küçük). Kişi kayıtlarıyla <strong>aynı anda</strong> yazılır; mesaide önceden girilmiş servise <em>eklenir</em>.</p>
+            <div class="tv-sfm-kutular">
+                <label class="tv-sfm-kutu"><span class="form-label"><em>Büyük</em></span>
+                    <input type="number" min="0" max="99" step="1" inputmode="numeric" value="0" id="tpSvBuyuk" aria-label="Büyük servis adedi"></label>
+                <label class="tv-sfm-kutu"><span class="form-label"><em>Küçük</em></span>
+                    <input type="number" min="0" max="99" step="1" inputmode="numeric" value="0" id="tpSvKucuk" aria-label="Küçük servis adedi"></label>
+            </div>
+        </div>
+        <?php endif; ?>
+    </section>
+    <details class="tv-gelismis"><summary>Gelişmiş: saat ve kartlı giriş</summary>
         <?php
         // v560 (sahip kararı): «Sadece fazla mesai» — yalnız mesai için gelip birkaç saat çalışıp giden kişiler.
         $sfmTipler = [];
@@ -174,20 +188,6 @@ $topluIk = function (string $ad): string {
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
-        <?php if (!empty($topluServisHazir)): ?>
-        <div class="tv-servis" id="tpServis">
-            <h4 class="tv-fm-bas"><?= $topluIk('kisiler') ?><span>Servis</span></h4>
-            <p class="muted tv-fm-not">Bu günün servis adedi (Büyük / Küçük). Kişi kayıtlarıyla <strong>aynı anda</strong> yazılır; mesaide önceden girilmiş servise <em>eklenir</em>.</p>
-            <div class="tv-sfm-kutular">
-                <label class="tv-sfm-kutu"><span class="form-label"><em>Büyük</em></span>
-                    <input type="number" min="0" max="99" step="1" inputmode="numeric" value="0" id="tpSvBuyuk" aria-label="Büyük servis adedi"></label>
-                <label class="tv-sfm-kutu"><span class="form-label"><em>Küçük</em></span>
-                    <input type="number" min="0" max="99" step="1" inputmode="numeric" value="0" id="tpSvKucuk" aria-label="Küçük servis adedi"></label>
-            </div>
-        </div>
-        <?php endif; ?>
-    </section>
-    <details class="tv-gelismis"><summary>Gelişmiş: saat ve kartlı giriş</summary>
     <?php foreach ($topluTipler as $t):
         $tid = (int)$t['id'];
         $esles = []; $digerleri = [];
