@@ -127,6 +127,26 @@ $h10 = siparis_vade_hesapla($ortak(131520), siparis_vade_param([]), $BUGUN);
 ok('ortak fatura: avizo tutarı yalnız bir sevkiyatlık (131.520) → EN ESKİ (61) ödenmiş, 62 açık kalır', array_map(static fn(array $a): int => $a['sev']['id'], $h10['odenmis']) === [61] && array_map(static fn(array $a): int => $a['sev']['id'], $h10['acik']) === [62] && $h10['acik'][0]['beklenen'] === 131520, json_encode($h10['ozet']));
 $h11 = siparis_vade_hesapla($ortak(300000), siparis_vade_param([]), $BUGUN);
 ok('ortak fatura: artan tutar (300.000 − 263.040 = 36.960) mahsup havuzuna gider (açık fatura yoksa "artık" bilgisi)', $h11['ozet']['havuz_kurus'] === 36960 && $h11['ozet']['mahsup_kurus'] === 0 && (bool)array_filter($h11['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'Mahsup edilemeyen')));
+// v571 REGRESYON: eşleşmeyen avizo satırları NET sayılır (eksi iade/düzeltme/iptal satırları pozitif eşleşmeyen faturayı götürür; bilinen debit satırı hariç)
+$g12 = [
+    'sevkiyatlar' => [$sev(81, '2026-10-01'), $sev(82, '2026-10-05'), $sev(83, '2026-11-10')],
+    'fatura' => array_fill_keys([81, 82, 83], ['iskonto' => 4.0]), 'belge_toplam' => [81 => 131520, 82 => 131520, 83 => 131520],
+    'odemeler' => [['id' => 91, 'tarih' => '2026-11-09', 'kurus' => 191020, 'pb' => 'EUR', 'satirlar' => [
+        ['n' => $G(81), 't' => 'ana', 'g' => $G(81), 'z' => 131520],
+        ['n' => 'IHR2026000000888', 't' => 'ana', 'g' => 'IHR2026000000888', 'z' => 100000],                 // eşleşmeyen fatura (+)
+        ['n' => 'IHR2026000000888DI', 't' => 'duzeltme', 'g' => 'IHR2026000000888', 'z' => -40000],          // aynı faturanın iade/düzeltmesi (−)
+        ['n' => '2029-9', 't' => 'ogl_ic', 'g' => '', 'z' => -500]]]],                                       // bilinen debit note satırı (havuzdan düşülmez)
+    'harita' => [$G(81) => ['durum' => 'eslesti', 'v' => [['id' => 81]]]],
+    'debitler' => [['no' => '2029-9', 'tarih' => '2026-11-01', 'kurus' => 500, 'pb' => 'EUR', 'invoice_no' => '', 'sid' => null, 'ref' => '', 'fiyat_farki' => false, 'neden' => 'QUALITY']],
+];
+$h12 = siparis_vade_hesapla($g12, siparis_vade_param([]), $BUGUN);
+ok('eşleşmeyen havuz = 100.000 − 40.000 = 60.000 NET (eksi düzeltme satırı düşülür; bilinen debit satırı hariç) — pozitif satırı tek başına SAYMAZ', $h12['ozet']['havuz_kurus'] === 60000 && $h12['ozet']['mahsup_kurus'] === 60000, json_encode($h12['ozet']));
+ok('mutabakat: ödenen fatura (191.520) kasaya giren (191.020) + debit payı içinde; açık = 71.520 + 131.520; "tutarsız" uyarısı YOK', $h12['ozet']['odenen_fatura_kurus'] === 191520 && $h12['ozet']['acik_kurus'] === 71520 + 131520
+    && !array_filter($h12['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'DİKKAT')), json_encode($h12['ozet']));
+$g13 = $g12; $g13['odemeler'] = [['id' => 92, 'tarih' => '2026-11-09', 'kurus' => 50000, 'pb' => 'EUR', 'satirlar' => [['n' => $G(81), 't' => 'ana', 'g' => $G(81), 'z' => 131520]]]];
+$h13 = siparis_vade_hesapla($g13, siparis_vade_param([]), $BUGUN);
+ok('güvenlik ağı: ödenen fatura toplamı kasaya giren toplamdan BÜYÜKSE "DİKKAT" uyarısı çıkar', (bool)array_filter($h13['uyarilar'], static fn(array $u): bool => $u['seviye'] === 'uyari' && str_contains($u['mesaj'], 'DİKKAT')), json_encode($h13['ozet']));
+
 $g8 = ['sevkiyatlar' => [$sev(51, '2026-11-12'), $sev(52, '2026-10-20'), $sev(53, '2026-11-20')], 'fatura' => array_fill_keys([51, 52, 53], ['iskonto' => 4.0]), 'belge_toplam' => [51 => 131520, 52 => 131520, 53 => 131520],
     'odemeler' => [['id' => 61, 'tarih' => '2026-11-09', 'kurus' => 263040, 'pb' => 'EUR', 'satirlar' => [['n' => $G(51), 't' => 'ana', 'g' => $G(51), 'z' => 131520], ['n' => $G(52), 't' => 'ana', 'g' => $G(52), 'z' => 131520]]]],
     'harita' => [$G(51) => ['durum' => 'eslesti', 'v' => [['id' => 51]]], $G(52) => ['durum' => 'eslesti', 'v' => [['id' => 52]]]], 'debitler' => []];
