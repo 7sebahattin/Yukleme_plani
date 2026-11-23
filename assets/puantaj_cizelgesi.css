@@ -427,3 +427,9 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
     .pk-cavus-toplu .btn { min-height: 46px; }
 }
 @media (max-width: 767px) { .pg-mob-cavus { margin-left: auto; font-size: .8rem; color: var(--pc-muted); text-align: right; } .pg-mob-cavus b { color: var(--pc-accent); } }
+
+/* v565 — köşe (Kişi (n)) hücresinde «Çavuş seç» kutusu */
+.pg-isim-metin.pg-kose-cavus { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.pg-isim-metin.pg-kose-cavus .pc-isim-yazi { flex: 0 0 auto; }
+.pg-cavus-kose { flex: 1 1 80px; min-width: 0; max-width: 150px; height: 22px; min-height: 0; padding: 0 4px; line-height: 1; border: 1px solid var(--pc-border); border-radius: 6px; background: var(--pc-surface); color: var(--pc-text); font: inherit; font-size: .74rem; font-weight: 500; }
+.pg-cavus-kose:focus { outline: 2px solid var(--pc-accent); outline-offset: 0; }

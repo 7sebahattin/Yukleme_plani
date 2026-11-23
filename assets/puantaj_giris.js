@@ -342,12 +342,29 @@
     function aktifKisiIdleri() {
         return Array.prototype.slice.call(sayfa.querySelectorAll('tr[data-pg-satir]:not(.pg-pasif)')).map(function (tr) { return tr.getAttribute('data-pg-satir'); });
     }
+    // v565: köşedeki «Çavuş seç» kutusu — çavuşun AKTİF kişileri
+    function cavusKisileri(v) {
+        var hedef = v === 'yok' ? '0' : String(v);
+        return Array.prototype.slice.call(sayfa.querySelectorAll('tr[data-pg-satir]:not(.pg-pasif)')).filter(function (tr) { return tr.getAttribute('data-cavus') === hedef; }).map(function (tr) { return tr.getAttribute('data-pg-satir'); });
+    }
+    // Seçim tam olarak bir çavuşun kişileriyse kutu o çavuşu gösterir; aksi halde «Çavuş seç…»
+    function cavusSenk(secili) {
+        var sel = sayfa.querySelector('[data-pg-cavus-sec]');
+        if (!sel) return;
+        var anahtar = secili.slice().sort().join(',');
+        var bulunan = '';
+        if (secili.length) Array.prototype.forEach.call(sel.options, function (o) {
+            if (o.value !== '' && !bulunan && cavusKisileri(o.value).sort().join(',') === anahtar) bulunan = o.value;
+        });
+        sel.value = bulunan;
+    }
     function secimGoster() {
         var kisiler = sayiAnahtar(secKisi), gunler = sayiAnahtar(secGun);
         // kişi kutuları (masaüstü + mobil) + satır/kart vurgusu
         sayfa.querySelectorAll('input[data-pg-sec]').forEach(function (c) { c.checked = !!secKisi[c.getAttribute('data-pg-sec')]; });
         sayfa.querySelectorAll('tr[data-pg-satir]').forEach(function (tr) { tr.classList.toggle('pg-ksec', !!secKisi[tr.getAttribute('data-pg-satir')]); });
         sayfa.querySelectorAll('details.pc-kisi[data-emp-kisi]').forEach(function (d) { d.classList.toggle('pg-ksec', !!secKisi[d.getAttribute('data-emp-kisi')]); });
+        cavusSenk(kisiler);
         var hepsi = sayfa.querySelector('[data-pg-sec-hepsi]');
         if (hepsi) {
             var tum = aktifKisiIdleri();
@@ -464,6 +481,12 @@
         if (c.hasAttribute('data-pg-sec-hepsi')) {
             secKisi = {};
             if (c.checked) aktifKisiIdleri().forEach(function (id) { secKisi[id] = true; });
+            secimGoster();
+            return;
+        }
+        if (c.hasAttribute('data-pg-cavus-sec')) {   // v565: çavuş seçilince seçim YALNIZ onun kişileri olur; «Çavuş seç…» seçimi kaldırır
+            secKisi = {};
+            if (c.value !== '') cavusKisileri(c.value).forEach(function (id) { secKisi[id] = true; });
             secimGoster();
         }
     });

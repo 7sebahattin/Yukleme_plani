@@ -59,6 +59,26 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     $cavusEt = static function (array $s) use ($cavuslar): string {
         return ($cavuslar !== null && !empty($s['cavus'])) ? '<small class="pg-cavus" title="Bağlı çavuş">↳ ' . h($s['cavus']) . (!empty($s['cavus_pasif']) ? ' (pasif)' : '') . '</small>' : '';
     };
+    // v565: sol-üst köşede «Çavuş seç» (yalnız bağlı çavuş kolonu kuruluysa): çizelgedeki AKTİF kişilerin çavuşlarına göre seçenekler + sayı
+    $cavusSecenek = '';
+    if ($cavuslar !== null) {
+        $cavusSay = []; $cavusAd = [];
+        foreach ($cavuslar as $c) $cavusAd[(int)$c['id']] = (string)$c['ad'];
+        foreach ($satirlar as $s0) {
+            if (!empty($s0['pasif'])) continue;
+            $k = (int)($s0['cavus_id'] ?? 0);
+            $cavusSay[$k] = ($cavusSay[$k] ?? 0) + 1;
+        }
+        $sirali = [];
+        foreach ($cavusAd as $cid => $cad) if (!empty($cavusSay[$cid])) $sirali[$cid] = $cad;
+        foreach ($cavusSay as $cid => $n) if ($cid > 0 && !isset($sirali[$cid])) $sirali[$cid] = 'Çavuş #' . $cid;   // foremen'den silinmiş ama bağı kalmış
+        if ($sirali || !empty($cavusSay[0])) {
+            $cavusSecenek = '<select class="pg-cavus-kose" data-pg-cavus-sec aria-label="Çavuşa göre kişi seç" title="Bir çavuşun kişilerini seç (toplu işaretleme için)"><option value="">Çavuş seç…</option>';
+            foreach ($sirali as $cid => $cad) $cavusSecenek .= '<option value="' . (int)$cid . '">' . h($cad) . ' (' . (int)$cavusSay[$cid] . ')</option>';
+            if (!empty($cavusSay[0])) $cavusSecenek .= '<option value="yok">Çavuşsuz (' . (int)$cavusSay[0] . ')</option>';
+            $cavusSecenek .= '</select>';
+        }
+    }
     $uc = static function (array $s): string {
         return '<button type="button" class="pg-uc" data-pg-kisi="' . (int)$s['id'] . '" data-isim="' . h($s['ad']) . '" data-gorev="' . h($s['alt']) . '" data-cavus-id="' . (int)($s['cavus_id'] ?? 0) . '" data-pasif="' . (!empty($s['pasif']) ? '1' : '0') . '" aria-haspopup="menu" aria-label="İşlemler: ' . h($s['ad']) . '" title="İşlemler">⋯</button>';
     };
@@ -83,7 +103,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <colgroup><col class="pc-col-isim"></colgroup>
     <thead>
     <tr>
-        <th class="pc-isim pc-kose" scope="col"><span class="pg-isim-kap"><label class="pg-secbox" title="Görünen aktif kişilerin tümünü seç"><input type="checkbox" data-pg-sec-hepsi aria-label="Görünen aktif kişilerin tümünü seç"></label><span class="pg-isim-metin"><span class="pc-isim-yazi">Kişi <span class="pc-isim-sayi">(<?= $say ?>)</span></span></span></span></th>
+        <th class="pc-isim pc-kose" scope="col"><span class="pg-isim-kap"><label class="pg-secbox" title="Görünen aktif kişilerin tümünü seç"><input type="checkbox" data-pg-sec-hepsi aria-label="Görünen aktif kişilerin tümünü seç"></label><span class="pg-isim-metin<?= $cavusSecenek !== '' ? ' pg-kose-cavus' : '' ?>"><span class="pc-isim-yazi">Kişi <span class="pc-isim-sayi">(<?= $say ?>)</span></span><?= $cavusSecenek ?></span></span></th>
         <?php foreach ($gunler as $g): ?>
         <th class="pc-g<?= $g['hs'] ? ' pc-hs' : '' ?><?= $g['bugun'] ? ' pc-bugun' : '' ?>" scope="col"<?= $g['bugun'] ? ' data-bugun' : '' ?>><button type="button" class="pg-gbtn" data-pg-gun="<?= h($g['tarih']) ?>" data-hs="<?= $g['hs'] ? '1' : '0' ?>" aria-pressed="false" title="<?= h($g['n'] . ' ' . $ayAd . ' ' . pc_gun_adlari_uzun()[$g['hg']] . ' — günü seç / seçimi kaldır') ?>"><span class="pc-gn"><?= $g['n'] ?></span><span class="pc-gk"><?= h($g['ad']) ?></span></button></th>
         <?php endforeach; ?>
@@ -95,7 +115,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     </thead>
     <tbody>
     <?php foreach ($satirlar as $s): ?>
-    <tr data-pg-satir="<?= (int)$s['id'] ?>"<?= !empty($s['pasif']) ? ' class="pg-pasif"' : '' ?>>
+    <tr data-pg-satir="<?= (int)$s['id'] ?>" data-cavus="<?= (int)($s['cavus_id'] ?? 0) ?>"<?= !empty($s['pasif']) ? ' class="pg-pasif"' : '' ?>>
         <th class="pc-isim" scope="row"><span class="pg-isim-kap"><?= empty($s['pasif']) ? '<label class="pg-secbox"><input type="checkbox" data-pg-sec="' . (int)$s['id'] . '" aria-label="Seç: ' . h($s['ad']) . '"></label>' : '<span class="pg-secbox pg-secbox-bos" aria-hidden="true"></span>' ?><span class="pg-isim-metin"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?><?= $cavusEt($s) ?></span><?= $uc($s) ?></span></th>
         <?php foreach ($gunler as $g):
             $hh = $s['hucre'][$g['tarih']] ?? null;
