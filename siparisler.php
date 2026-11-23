@@ -282,6 +282,7 @@ $yazdirEk = function (?string $bolumAdi): string {
     <div class="page-head-actions">
       <?php if (siparis_cari_yetkili() && icerik_can('siparis.odeme')): ?>
         <a class="btn btn-primary btn-lg" href="siparis_odemeler.php"><?= siparis_odeme_yetkili() ? '💳 Ödeme ekle' : '💳 Ödemeler' ?></a>
+        <a class="btn btn-lg" href="siparis_vade.php">📅 Haftalık ödeme</a>
       <?php endif; ?>
       <?php if (siparis_cari_yetkili() && icerik_can('siparis.cari')): ?>
         <a class="btn btn-lg" href="siparis_cari.php">📒 Cari Döküm</a>

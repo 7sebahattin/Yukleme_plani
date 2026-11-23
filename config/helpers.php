@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v568');
+    define('APP_SURUM', 'v569');
 }
 
 // --- HTML kaçışı ---
@@ -546,7 +546,7 @@ function nav_aktif_anahtar(): ?string {
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
                                'hesap_personel.php'], true);
     $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php'], true);
-    $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_invoice.php', 'siparis_denge.php', 'siparis_kesinti.php'], true);
+    $a_sip   = in_array($cur, ['siparisler.php', 'siparis_view.php', 'siparis_pkl.php', 'siparis_belge.php', 'siparis_ayarlar.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_invoice.php', 'siparis_denge.php', 'siparis_kesinti.php', 'siparis_vade.php'], true);
     $a_usip  = $cur === 'urun_siparis.php';   // v411: Ürün Siparişleri kendi bölümü ("Siparişler")
     $a_frg   = in_array($cur, ['frugro_siparis.php', 'frugro_view.php', 'frugro_pkl.php', 'frugro_invoice.php', 'frugro_ayarlar.php', 'frugro_mail.php'], true);   // v512: Frugro Siparişler
     $a_quick = in_array($cur, ['hizli_maliyet.php', 'hizli_maliyet_form.php'], true);

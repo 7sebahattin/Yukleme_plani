@@ -54,6 +54,7 @@ render_flash();
       <?php if ($yaz): ?><button type="button" class="btn btn-primary btn-lg" data-od-ac="odEkleDlg">➕ Ödeme gir</button><?php endif; ?>
       <?php if ($kesYaz): ?><button type="button" class="btn btn-lg" data-od-ac="odKesintiDlg">➖ OGL kesintisi ekle</button><?php endif; ?>
       <button type="button" class="btn btn-lg" data-od-yazdir>🖨 Ödemeleri yazdır</button>
+      <a class="btn btn-lg" href="siparis_vade.php">📅 Haftalık ödeme</a>
       <a class="btn btn-lg" href="siparis_cari.php">📒 Cari Döküm</a>
       <a class="btn btn-lg" href="siparisler.php">← Siparişler</a>
     </div>

@@ -138,7 +138,7 @@ ok('yüklenen listesi', $refs($v['yuklenen']) === ['TC800001.10', 'TC800003.10',
 ok('fiyatlı listesi (yüklenmemiş fiyatlı dahil)', $refs($v['fiyatli']) === ['TC800001.10', 'TC800004.10', 'TC800010.10'], json_encode($refs($v['fiyatli'])));
 $tum = array_merge($refs($v['yuklenmemis']), $refs($v['yuklenen']), $refs($v['fiyatli']));
 ok('iptal / silinmiş / başka depo / çok eski hiçbir bölümde yok', !array_intersect($tum, ['TC800005.10', 'TC800006.10', 'TC800007.10', 'TC800009.10']));
-ok('cari: para birimleri ayrı, toplanmaz', $v['cari'] === ['EUR' => ['faturalanan' => 1581200, 'tahsilat' => 0, 'bakiye' => 1581200], 'USD' => ['faturalanan' => 42000, 'tahsilat' => 0, 'bakiye' => 42000]], json_encode($v['cari']));
+ok('cari: para birimleri ayrı, toplanmaz', $v['cari'] === ['EUR' => ['faturalanan' => 1581200, 'tahsilat' => 0, 'bakiye' => 1581200, 'brut' => 1581200, 'iskonto' => 0], 'USD' => ['faturalanan' => 42000, 'tahsilat' => 0, 'bakiye' => 42000, 'brut' => 42000, 'iskonto' => 0]], json_encode($v['cari']));
 $s1 = $bul($v['yuklenen'], 'TC800001.10');
 ok('s1: kalibre sırası 10, 14; pc_koli 160 esas; fiyat_tarihi = en yeni; tutar EUR 1579200', array_map(static fn(array $l): string => $l['kalibre'], $s1['satirlar']) === ['10', '14'] && $s1['satirlar'][0]['koli'] === 160
     && $s1['fiyat_tarihi'] === $bugun && $s1['tutar'] === ['EUR' => 1579200] && $s1['ulke'] === 'SIRBİSTAN' && $s1['fiyatli'] === true && $s1['yuklendi'] === true);
@@ -153,7 +153,7 @@ $s11 = $bul($v['fiyatli'], 'TC800010.10');
 ok('s11: yüklenmemiş ama fiyatlı', $s11['yuklendi'] === false && $s11['fiyatli'] === true);
 $vt = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => ['EUR' => 86480, 'TRY' => 1000]]);
 ok('tahsilat: bakiye = faturalanan − tahsilat; yalnız tahsilatlı para birimi de listelenir', array_keys($vt['cari']) === ['EUR', 'TRY', 'USD'] && $vt['cari']['EUR']['bakiye'] === 1494720
-    && $vt['cari']['TRY'] === ['faturalanan' => 0, 'tahsilat' => 1000, 'bakiye' => -1000]);
+    && $vt['cari']['TRY'] === ['faturalanan' => 0, 'tahsilat' => 1000, 'bakiye' => -1000, 'brut' => 0, 'iskonto' => 0]);
 $va = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre(['alici' => '1038529'], $bugun)), ['bugun' => $bugun, 'tahsilat' => []]);
 ok('alıcı filtresi: yalnız 1038529', $refs($va['yuklenen']) === ['TC800001.10'] && $va['yuklenmemis'] === []);
 $vd = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre(['bas' => $dun, 'bit' => $dun], $bugun)), ['bugun' => $bugun, 'tahsilat' => []]);
@@ -275,8 +275,10 @@ ok('s1 (EUR; kalibre 10 → 1,29 €/kg, 14 → 1,17 €/kg): fatura 1,10 her sa
     && $a7['karsilastirma']['fark_kurus'] === 1579200 - $a7['karsilastirma']['fatura_kurus'] && $a7['karsilastirma']['fark_kurus'] === 100800, json_encode($a7['karsilastirma']));
 ok('fatura olmayan sevkiyatta fatura/karsilastirma null, satırda fatura_kg/fark_kg null', $bul($v7['yuklenen'], 'TC800003.10')['fatura'] === null && $bul($v7['yuklenen'], 'TC800003.10')['karsilastirma'] === null && $a7['satirlar'][0]['fiyat_kg'] !== null);
 ok('v488 kesilen: yalnız invoice\'lu EUR sevkiyatlar (s1) toplanır; bakiye alanları değişmez',
-    $v7['kesilen'] === ['sevkiyat' => 1, 'gram' => 13440000, 'gelen_kurus' => 1579200, 'kesilen_kurus' => 1478400, 'fark_kurus' => 100800, 'debit_kurus' => 0, 'kalan_fark_kurus' => 100800], json_encode($v7['kesilen']));
-ok('v488 kesilen: fatura haritasız hepsi 0', $v['kesilen'] === ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0]);
+    $v7['kesilen'] === ['sevkiyat' => 1, 'gram' => 13440000, 'gelen_kurus' => 1579200, 'kesilen_kurus' => 1478400, 'fark_kurus' => 100800, 'debit_kurus' => 0, 'kalan_fark_kurus' => 100800,
+        'gelen_net_kurus' => 1579200, 'kesilen_net_kurus' => 1478400, 'fark_net_kurus' => 100800, 'kalan_fark_net_kurus' => 100800], json_encode($v7['kesilen']));
+ok('v488 kesilen: fatura haritasız hepsi 0', $v['kesilen'] === ['sevkiyat' => 0, 'gram' => 0, 'gelen_kurus' => 0, 'kesilen_kurus' => 0, 'fark_kurus' => 0, 'debit_kurus' => 0, 'kalan_fark_kurus' => 0,
+    'gelen_net_kurus' => 0, 'kesilen_net_kurus' => 0, 'fark_net_kurus' => 0, 'kalan_fark_net_kurus' => 0]);
 ok('v488 para_isaretli: + / - / sıfır', siparis_cari_para_isaretli(194600) === '+1.946,00' && siparis_cari_para_isaretli(-49000) === '-490,00' && siparis_cari_para_isaretli(0) === '0,00');
 ok('USD satırı (s4) karşılaştırılmaz, özet/cari haritasız ile aynı', $bul($v7['yuklenen'], 'TC800004.10')['karsilastirma'] === null && $v7['cari'] === $v['cari'] && $v7['ozet'] === $v['ozet']);
 // v492: OGL debit note — kesilen fazlayı kapatır (kalan = fark + debit); yalnız fiyat farkı debit'i hesaba girer
@@ -292,5 +294,30 @@ ok('v492: debit bakiyeyi / özeti DEĞİŞTİRMEZ (debit ödemeden zaten düşü
 ok('v492: debit bağlamı yoksa sevkiyat.debit null, toplamlar 0, kalan = fark', $a7['debit'] === null && $v7['debit'] === ['sevkiyat' => 0, 'kurus' => 0, 'diger_kurus' => 0] && $a7['karsilastirma']['kalan_fark_kurus'] === $a7['karsilastirma']['fark_kurus'] && $a7['karsilastirma']['debit_kurus'] === 0);
 $v9 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => [$ID['s1'] => ['fiyat' => 11000, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 0.0]], 'debit' => [$ID['s1'] => ['kurus' => -5, 'diger_kurus' => -1, 'liste' => []]]]);
 ok('v492: negatif/bozuk debit değeri 0 sayılır (kalan farkı artırmaz)', $bul($v9['yuklenen'], 'TC800001.10')['karsilastirma']['debit_kurus'] === 0 && $bul($v9['yuklenen'], 'TC800001.10')['debit'] === null);
+
+
+// v569: OGL iskontosu — tüm tutarlar iskonto SONRASI (net); debit (net kesilir) kapanan farkı tam sıfırlar
+echo "\n=== v569: OGL iskontosu (%4) — net tutarlar ===\n";
+ok('iskonto: invoice formülü (18.200 kg × 1,37 = 24.934,00 → %4 = 997,36; net 23.936,64); işaretli simetrik; brüt karşılığı yarım yukarı',
+    siparis_cari_iskonto(2493400, 400) === 99736 && siparis_cari_net(2493400, 400) === 2393664 && siparis_cari_iskonto(-12880, 400) === -515
+    && siparis_cari_brute(12365, 400) === 12880 && siparis_cari_brute(12365, 0) === 12365 && siparis_cari_isk100(4.0) === 400 && siparis_cari_isk100(150.0) === 10000);
+$v10 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => ['EUR' => 100000],
+    'fatura' => [$ID['s1'] => ['fiyat' => 11000, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 4.0]], 'iskonto_varsayilan' => 3.0]);
+$a10 = $bul($v10['yuklenen'], 'TC800001.10'); $b10 = $bul($v10['fiyatli'], 'TC800010.10');
+ok('s1: invoice iskontosu %4 → iskonto 63.168, net 1.516.032 (kaynak fatura)', $a10['iskonto_100'] === 400 && $a10['iskonto_kaynak'] === 'fatura' && $a10['iskonto'] === ['EUR' => 63168] && $a10['net'] === ['EUR' => 1516032], json_encode([$a10['iskonto'], $a10['net']]));
+ok('invoice\'u olmayan fiyatlı sevkiyat varsayılan %3 alır', $b10['iskonto_100'] === 300 && $b10['iskonto_kaynak'] === 'varsayilan' && $b10['net']['EUR'] === $b10['tutar']['EUR'] - siparis_cari_iskonto($b10['tutar']['EUR'], 300));
+$eurBrut = 1581200; $eurNet = 1516032 + $b10['net']['EUR'];
+ok('cari EUR: faturalanan = NET toplam, brut/iskonto ayrı, bakiye = net − tahsilat', $v10['cari']['EUR'] === ['faturalanan' => $eurNet, 'tahsilat' => 100000, 'bakiye' => $eurNet - 100000, 'brut' => $eurBrut, 'iskonto' => $eurBrut - $eurNet], json_encode($v10['cari']['EUR']));
+ok('karşılaştırma: brüt alanlar aynı; net alanlar iskontolu (gelen 1.516.032 / kesilen 1.419.264 / fark +96.768)', $a10['karsilastirma']['pc_kurus'] === 1579200 && $a10['karsilastirma']['fatura_kurus'] === 1478400
+    && $a10['karsilastirma']['pc_net_kurus'] === 1516032 && $a10['karsilastirma']['fatura_net_kurus'] === 1419264 && $a10['karsilastirma']['fark_net_kurus'] === 96768, json_encode($a10['karsilastirma']));
+ok('iskonto özeti: oran 400 → 1 sevkiyat, 300 → 2 (EUR s10 + USD s4); varsayılan kullanan 2', $v10['iskonto']['oranlar'] == [400 => 1, 300 => 2] && $v10['iskonto']['varsayilan_sevkiyat'] === 2 && $v10['iskonto']['varsayilan_100'] === 300, json_encode($v10['iskonto']));
+// gerçek vaka (PDF): gelen 1,36 / kesilen 1,37, 12.880 kg, %4 → fark −128,80 brüt; OGL debit 123,65 → kalan fark NET 0 (eskiden −5,15 kalıyordu)
+$db->prepare("UPDATE siparis_kalemler SET fiyat = ?, fiyat_birim = 'KG', pc_koli = 3680, etkin_koli = 3680, koli_icerik = '3,5 KG', para_birimi = 'EUR' WHERE sevkiyat_id = ? AND kalibre = '10'")->execute([1.36, $ID['s1']]);
+$db->prepare("DELETE FROM siparis_kalemler WHERE sevkiyat_id = ? AND kalibre <> '10'")->execute([$ID['s1']]);
+$v11 = siparis_cari_veri(siparis_cari_oku($db, siparis_cari_filtre([], $bugun)), ['bugun' => $bugun, 'tahsilat' => [],
+    'fatura' => [$ID['s1'] => ['fiyat' => 13700, 'no' => 'IHR2026000000001', 'tarih' => '2026-10-20', 'iskonto' => 4.0]], 'debit' => [$ID['s1'] => ['kurus' => 12365, 'diger_kurus' => 0, 'liste' => []]]]);
+$k11 = $bul($v11['yuklenen'], 'TC800001.10')['karsilastirma'];
+ok('vaka: brüt fark −12.880, net fark −12.365, debit 12.365 → kalan NET 0 ve brüt (debit brüt karşılığı 12.880) 0', $k11['fark_kurus'] === -12880 && $k11['fark_net_kurus'] === -12365
+    && $k11['debit_brut_kurus'] === 12880 && $k11['kalan_fark_net_kurus'] === 0 && $k11['kalan_fark_kurus'] === 0, json_encode($k11));
 
 siparis_test_bitir();

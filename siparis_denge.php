@@ -34,7 +34,7 @@ $f = siparis_cari_filtre($_GET, $bugun);
 $okunan = siparis_cari_oku($pdo, $f);
 $sevIdler = array_map(static fn(array $r): int => (int)$r['id'], $okunan['rows']);
 $faturaFiyat = siparis_cari_fatura_fiyatlari($pdo, $sevIdler);
-$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => $faturaFiyat, 'parti' => siparis_cari_parti_haritasi($pdo, $sevIdler), 'debit' => siparis_debit_harita($pdo)]);
+$v = siparis_cari_veri($okunan, ['bugun' => $bugun, 'tahsilat' => [], 'fatura' => $faturaFiyat, 'parti' => siparis_cari_parti_haritasi($pdo, $sevIdler), 'debit' => siparis_debit_harita($pdo), 'iskonto_varsayilan' => (float)(siparis_inv_ayar_oku($pdo)['iskonto_varsayilan'] ?? 0.0)]);
 $param = siparis_denge_param($_GET, $v);   // varsayılanlar (kg boş → ortalama kg, hedef boş → son sevkiyat PC fiyatı) cari verisinden
 $d = siparis_denge_hesapla($v, $param);
 $o = $d['ozet'];
@@ -91,6 +91,7 @@ body.print-siparis .print-sheet { max-width: 1240px; }
 .sc-uyari { font-weight: 700; color: var(--pr-warn); }
 .print-summary-box .sc-alt { display: block; margin-top: 3px; font-size: .74rem; color: var(--pr-muted); font-variant-numeric: tabular-nums; }
 .print-summary-box .sc-pb { display: block; font-size: 1rem; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+table.print-table.sc-tablo .sc-alt { display: block; margin-top: 2px; font-size: .68rem; font-weight: 400; color: var(--pr-muted); white-space: normal; }
 table.print-table.sc-tablo .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.print-table.sc-tablo tbody tr td { background: #fff; }
 table.print-table.sc-tablo tbody.sc-toplam td { background: var(--pr-total-bg); font-weight: 800; border-top: 2px solid var(--pr-ink); }
@@ -171,15 +172,15 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
     <div class="print-summary-box"><span class="psb-label">Ort. gelen fiyat</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['pc_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
     <div class="print-summary-box"><span class="psb-label">Ort. kesilen fatura fiyatı</span><span class="psb-value"><?= $o['adet'] > 0 ? h($fiyat((int)$o['fatura_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">kg ağırlıklı</span></div>
     <div class="print-summary-box <?= $o['adet'] > 0 && (int)$o['fark_ort'] !== 0 ? 'psb-warn' : 'psb-ok' ?>"><span class="psb-label">Fark / kg (gelen − kesilen)</span><span class="psb-value"><?= $o['adet'] > 0 ? h(siparis_cari_fark_metin((int)$o['fark_ort']) . ' EUR / kg') : '—' ?></span><span class="sc-alt">toplam fark: <?= h($eurI((int)$o['fark_kurus'])) ?></span></div>
-    <div class="print-summary-box"><span class="psb-label">OGL debit note</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eur((int)$o['debit_kurus'])) : '—' ?></span><span class="sc-alt">fiyat farkı olarak ödemeden düşülen</span></div>
-    <div class="print-summary-box psb-warn"><span class="psb-label">Kapatılacak tutar</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eurI($kapat)) : '—' ?></span><span class="sc-alt">kalan fark = fark + debit · + = ileride bu kadar fazla faturalanmalı</span></div>
+    <div class="print-summary-box"><span class="psb-label">OGL debit note</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eur((int)$o['debit_kurus'])) : '—' ?></span><span class="sc-alt">fiyat farkı olarak ödemeden düşülen (iskonto sonrası)<?= (int)$o['debit_brut_kurus'] !== (int)$o['debit_kurus'] ? ' · fatura fiyatı karşılığı ' . h($eur((int)$o['debit_brut_kurus'])) : '' ?></span></div>
+    <div class="print-summary-box psb-warn"><span class="psb-label">Kapatılacak tutar</span><span class="psb-value"><?= $o['adet'] > 0 ? h($eurI($kapat)) : '—' ?></span><span class="sc-alt">kalan fark = fark + debit (iskonto öncesi, fatura üzerinde) · + = ileride bu kadar fazla faturalanmalı<?= $o['adet'] > 0 && (int)$o['kalan_fark_net_kurus'] !== $kapat ? ' · iskonto sonrası tahsilata etkisi ' . h($eurI((int)$o['kalan_fark_net_kurus'])) : '' ?></span></div>
   </div>
 
   <!-- 2) Sevkiyat bazında karşılaştırma -->
   <h3 class="pr-section">Sevkiyat bazında karşılaştırma</h3>
   <?php if (!function_exists('can_beyan') || !can_beyan('read')): ?><p class="pr-note">Parti no görmek için beyan okuma yetkisi gerekir (sütun "—" gösterilir).</p><?php endif; ?>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="sdKarsi">
-    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">Gelen Fiyat / kg</th><th class="num">Kesilen fatura fiyatı / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">OGL debit (EUR)</th><th class="num">Kümülatif kalan fark (EUR)</th></tr></thead>
+    <thead><tr><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th class="num">Kg</th><th class="num">Gelen Fiyat / kg</th><th class="num">Kesilen fatura fiyatı / kg</th><th class="num">Fark / kg</th><th class="num">Fark tutar (EUR)</th><th class="num">OGL debit (EUR) <span class="sc-alt">iskonto öncesi karşılığı</span></th><th class="num">Kümülatif kalan fark (EUR)</th></tr></thead>
     <?php if (!$d['sevkiyatlar']): ?>
     <tbody><tr><td colspan="12" class="pr-empty">Karşılaştırılacak sevkiyat yok (fiyatlı + invoice kesilmiş EUR sevkiyat gerekir).</td></tr></tbody>
     <?php else: ?>
@@ -192,7 +193,7 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
         <td class="num"><?= h($fiyat((int)$s['fatura_fiyat'])) ?></td>
         <td class="num<?= $farkSinif((int)$s['fark_fiyat']) ?>"><?= h(siparis_cari_fark_metin((int)$s['fark_fiyat'])) ?></td>
         <td class="num<?= $farkSinif((int)$s['fark_kurus']) ?>"><?= h($isaretli((int)$s['fark_kurus'])) ?></td>
-        <td class="num"><?= (int)$s['debit_kurus'] > 0 ? h($eur((int)$s['debit_kurus'])) : '—' ?></td>
+        <td class="num"><?= (int)$s['debit_kurus'] > 0 ? h($eur((int)$s['debit_brut_kurus'])) . ((int)$s['debit_brut_kurus'] !== (int)$s['debit_kurus'] ? '<span class="sc-alt">belge ' . h(siparis_cari_para((int)$s['debit_kurus'])) . '</span>' : '') : '—' ?></td>
         <td class="num<?= $farkSinif((int)$s['kumulatif_fark_kurus']) ?>"><?= h($isaretli((int)$s['kumulatif_fark_kurus'])) ?></td>
       </tr>
       <?php endforeach; ?>
@@ -204,7 +205,7 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
       <td class="num"><?= h($fiyat((int)$o['fatura_ort'])) ?></td>
       <td class="num<?= $farkSinif((int)$o['fark_ort']) ?>"><?= h(siparis_cari_fark_metin((int)$o['fark_ort'])) ?></td>
       <td class="num<?= $farkSinif((int)$o['fark_kurus']) ?>"><?= h($isaretli((int)$o['fark_kurus'])) ?></td>
-      <td class="num"><?= (int)$o['debit_kurus'] > 0 ? h($eur((int)$o['debit_kurus'])) : '—' ?></td>
+      <td class="num"><?= (int)$o['debit_kurus'] > 0 ? h($eur((int)$o['debit_brut_kurus'])) : '—' ?></td>
       <td class="num<?= $farkSinif((int)$o['kalan_fark_kurus']) ?>"><?= h($isaretli((int)$o['kalan_fark_kurus'])) ?></td>
     </tr></tbody>
     <?php endif; ?>
@@ -269,7 +270,7 @@ table.print-table.sc-tablo#sdPlan th, table.print-table.sc-tablo#sdPlan td { pad
     </ul>
     <ul class="sd-notlar">
       <li>Ortalama fiyatlar kg ağırlıklıdır (Σ tutar ÷ Σ kg); sevkiyat fiyatlarının basit ortalaması DEĞİLDİR.</li>
-      <li>Kesilen fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat; Gelen fiyat (PC) = Cari Döküm'deki satır fiyatı. İkisi de iskonto ÖNCESİDİR, iskonto % karşılaştırmaya katılmaz (iki tarafta aynı oranla uygulandığı varsayılır).</li>
+      <li>Kesilen fatura fiyatı = Invoice (OGL) ekranında üretilen invoice'taki birim fiyat; Gelen fiyat (PC) = Cari Döküm'deki satır fiyatı. İkisi de iskonto ÖNCESİDİR (fatura üzerindeki fiyat); plan da iskonto öncesi fatura fiyatı önerir. OGL debit note'u iskonto SONRASI kesildiği için tabloda iskonto öncesi karşılığıyla (debit ÷ (1 − iskonto)) toplanır.</li>
       <li>Kg tabanı Cari Döküm'deki koli × koli kg'dır; invoice'ta elle farklı bir net kg girildiyse (ör. PKL toplamından farklı) gerçek fatura tutarı bundan az farklı olabilir.</li>
       <li>PC fiyatı geldikçe sayfayı yenileyin — plan her seferinde güncel farktan yeniden hesaplanır.</li>
     </ul>

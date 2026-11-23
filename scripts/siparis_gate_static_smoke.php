@@ -31,7 +31,7 @@ $sayfalar = [];
 foreach (glob($ROOT . '/siparis*.php') ?: [] as $f) $sayfalar[] = basename($f);
 sort($sayfalar);
 $BEKLENEN = ['siparis_ayarlar.php', 'siparis_belge.php', 'siparis_beyan_bagla.php', 'siparis_cari.php', 'siparis_denge.php', 'siparis_dosya.php', 'siparis_eml.php', 'siparis_invoice.php', 'siparis_kaydet.php', 'siparis_kesinti.php',
-             'siparis_mail.php', 'siparis_odeme.php', 'siparis_odemeler.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
+             'siparis_mail.php', 'siparis_odeme.php', 'siparis_odemeler.php', 'siparis_paylas.php', 'siparis_pkl.php', 'siparis_vade.php', 'siparis_view.php', 'siparis_yazdir.php', 'siparis_yukle.php', 'siparis_zip.php', 'siparisler.php'];
 
 echo "=== Kapı tek kaynak ===\n";
 ok('helpers.php can_siparis() tanımlı', str_contains($helpers, 'function can_siparis(string $perm): bool'));
@@ -95,7 +95,7 @@ foreach ($sayfalar as $f) {
     ok("$f: mutasyon POST'a bağlı", (bool)preg_match("/REQUEST_METHOD'\]\s*(!==|===)\s*'POST'/", $k));
     ok("$f: yazma kapısı require_siparis('write'|'delete'|'match') içeriyor", (bool)preg_match("/require_siparis\('(write|delete|match)'\)|can_siparis\('(write|delete|match)'\)/", $k));
 }
-foreach (['siparis_dosya.php', 'siparis_eml.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_denge.php'] as $f) {
+foreach (['siparis_dosya.php', 'siparis_eml.php', 'siparis_zip.php', 'siparis_belge.php', 'siparis_view.php', 'siparisler.php', 'siparis_ayarlar.php', 'siparis_yazdir.php', 'siparis_paylas.php', 'siparis_cari.php', 'siparis_odemeler.php', 'siparis_denge.php', 'siparis_vade.php'] as $f) {
     $k = kod_oku($f);
     if ($k === '') continue;
     // GET-only görünüm sayfaları (POST'u siparis_kaydet/… uçlarına gider): ayarlar sayfası profil/sayaç formu içerebilir → muaf.
