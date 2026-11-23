@@ -1033,7 +1033,7 @@ function guvenliAlanKurallari(barSel) {
         let ac0 = await acikSlug(page);
         ok('B', bag, 'Ana Sayfa\'da aktif grup yok → açılışta HİÇBİR grup açık değil', ac0.length === 0, `[${ac0}]`);
         const slugs = await page.evaluate(() => [...document.querySelectorAll('#bnSheet details.bn-grup')].map(d => d.getAttribute('data-sb-grup')));
-        ok('B', bag, `11 grup (Sipariş…Admin Konsolu; v555: İhracat Programı yok) çizildi`, slugs.length === 11 && !slugs.includes('ihracat'), `[${slugs}]`);
+        ok('B', bag, `10 grup (Sipariş…Yönetim…Kullanıcı Ayarları; v555: İhracat Programı yok; v566: Admin Konsolu yok) çizildi`, slugs.length === 10 && !slugs.includes('ihracat') && !slugs.includes('admin_konsolu'), `[${slugs}]`);
         let hepsiTamam = true; const ihlal = [];
         for (const sl of slugs) {
             await page.click(`#bnSheet details.bn-grup[data-sb-grup="${sl}"] > summary`); await page.waitForTimeout(160);
@@ -1056,11 +1056,11 @@ function guvenliAlanKurallari(barSel) {
         }
         ok('B', bag, 'her başlığa basınca YALNIZ o grup açılır, diğerleri kapanır (akordiyon); yatay taşma YOK; başlık + karolar ≥44px; metin kırpılmıyor', hepsiTamam, ihlal.join(' || '));
         // aynı başlığa tekrar basınca kapanır
-        await page.click('#bnSheet details.bn-grup[data-sb-grup="admin_konsolu"] > summary'); await page.waitForTimeout(160);
+        await page.click('#bnSheet details.bn-grup[data-sb-grup="yonetim"] > summary'); await page.waitForTimeout(160);
         ac0 = await acikSlug(page);
         ok('B', bag, 'açık grubun başlığına tekrar basınca kapanır', ac0.length === 0, `[${ac0}]`);
         // yapışkan başlık: en alta kaydırınca da Kapat erişilebilir
-        await page.click('#bnSheet details.bn-grup[data-sb-grup="admin_konsolu"] > summary'); await page.waitForTimeout(160);
+        await page.click('#bnSheet details.bn-grup[data-sb-grup="yonetim"] > summary'); await page.waitForTimeout(160);
         await page.evaluate(() => { const s = document.getElementById('bnSheet'); s.scrollTop = s.scrollHeight; }); await page.waitForTimeout(80);
         const yk = await page.evaluate(() => {
             const b = document.getElementById('bnSheetClose'), r = b.getBoundingClientRect(), s = document.getElementById('bnSheet');
