@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// scripts/siparis_vade_smoke.php — "OGL Haftalık Ödeme" (v569): config/siparis_vade.php saf hesabı + siparis_vade.php sayfası
+// scripts/siparis_vade_smoke.php — "OGL Haftalık Ödeme" (v570): config/siparis_vade.php saf hesabı + siparis_vade.php sayfası
 //   php scripts/siparis_vade_smoke.php        (SIPARIS_VADE_OUT=<klasör> → sayfa render'ını dosyaya döker)
 // Bellek içi SQLite + stub auth + SENTETİK veri (TC820…, IHR2026…; kişisel veri / gerçek fiyat YOK). Canlı DB'ye dokunmaz.
 // =========================================================
@@ -41,7 +41,7 @@ $girdi = [
     'belge_toplam' => [1 => 2393664, 2 => 1000000, 3 => 500000, 4 => 300000, 5 => 400000, 6 => 200000],
     'odemeler' => [
         ['id' => 11, 'tarih' => '2026-10-27', 'kurus' => 2393664, 'pb' => 'EUR', 'satirlar' => [['n' => $G(1), 't' => 'ana', 'g' => $G(1), 'z' => 2393664], ['n' => '2027-1', 't' => 'ogl_ic', 'g' => '', 'z' => -10]]],
-        ['id' => 12, 'tarih' => '2026-11-09', 'kurus' => 997000, 'pb' => 'EUR', 'satirlar' => [['n' => $G(2), 't' => 'ana', 'g' => $G(2), 'z' => 1000000], ['n' => '2029-3', 't' => 'ogl_ic', 'g' => '', 'z' => -3000], ['n' => 'IHR2026999999999', 't' => 'ana', 'g' => 'IHR2026999999999', 'z' => 5]]],
+        ['id' => 12, 'tarih' => '2026-11-09', 'kurus' => 997000, 'pb' => 'EUR', 'satirlar' => [['n' => $G(2), 't' => 'ana', 'g' => $G(2), 'z' => 1000000], ['n' => '2029-3', 't' => 'ogl_ic', 'g' => '', 'z' => -3000], ['n' => 'IHR2026999999999', 't' => 'ana', 'g' => 'IHR2026999999999', 'z' => 0]]],
         ['id' => 13, 'tarih' => '2026-11-10', 'kurus' => 7000, 'pb' => 'USD', 'satirlar' => null],
     ],
     'harita' => [$G(1) => ['durum' => 'eslesti', 'v' => [['id' => 1]]], $G(2) => ['durum' => 'eslesti', 'v' => [['id' => 2]]]],
@@ -69,7 +69,7 @@ ok('açık alacak = Σ beklenen − bekleyen kesinti = 1.375.147; ödenen yalnı
 ok('haftalar: 2 hafta, kümülatif, bu hafta işaretli', count($h['haftalar']) === 2 && $h['haftalar'][0]['bu_hafta'] === true && $h['haftalar'][1]['kumulatif'] === 792512 + 582635);
 ok('ödeme özeti: avizo eşleşmeyen fatura sayılır; gecikme istatistiği ödeme başına', $h['odemeler'][1]['eslesmeyen'] === 1 && $h['odemeler'][1]['sevkiyat'] === 1 && $h['odemeler'][0]['gecikme']['min'] === 24);
 ok('faturasız: net (iskonto sonrası) gelen tutarı', $h['faturasiz'][0]['gelen_kurus'] === 48000 && $o['faturasiz_kurus'] === 48000);
-ok('uyarılar: eşleşmeyen avizo kalemi + PC bekleyen + invoice yok + EUR dışı ödeme', count($h['uyarilar']) >= 4);
+ok('uyarılar: PC bekleyen + invoice yok + EUR dışı ödeme', count($h['uyarilar']) >= 3);
 
 echo "\n=== 3. Elle vade / gün, elle ödeme FIFO, düzeltme satırıyla kesinti ===\n";
 $h2 = siparis_vade_hesapla($girdi, siparis_vade_param(['vade' => '30', 'gun' => '5']), $BUGUN);
@@ -87,6 +87,51 @@ $h5 = siparis_vade_hesapla(['sevkiyatlar' => [$sev(3, '2026-10-26')], 'fatura' =
 ok('geçmiş ödeme yok: vade 21 gün varsayılır + uyarı; belge toplamı yoksa 1.000 kg × 1,37 − %4 = 1.315,20', $h5['param']['vade'] === SIPARIS_VADE_GUN_VARSAYILAN && $h5['acik'][0]['net'] === 131520
     && (bool)array_filter($h5['uyarilar'], static fn(array $u): bool => $u['seviye'] === 'uyari'));
 ok('baz yükleme: vade başlangıcı yükleme tarihi (fatura − 2 gün)', siparis_vade_baz_tarihi($sev(3, '2026-10-26'), 'yukleme') === '2026-10-24' && siparis_vade_baz_tarihi($sev(3, '2026-10-26'), 'fatura') === '2026-10-26');
+
+echo "\n=== 3b. v570: kısmi invoice + eşleşmeyen avizo ödemesi (FIFO mahsup) + aynı fatura no + ters tarih + yüklemeden beri gün ===\n";
+$g6 = [
+    'sevkiyatlar' => [$sev(21, '2026-10-01'), $sev(22, '2026-10-05'), $sev(23, '2026-11-10')],
+    'fatura' => array_fill_keys([21, 22, 23], ['iskonto' => 4.0]),
+    'belge_toplam' => [21 => 65760, 22 => 131520, 23 => 131520],   // 21: invoice sevkiyatın YARISINI kapsıyor (1.000 kg × 1,37 − %4 = 131.520)
+    'odemeler' => [['id' => 31, 'tarih' => '2026-11-09', 'kurus' => 165760, 'pb' => 'EUR', 'satirlar' => [
+        ['n' => $G(21), 't' => 'ana', 'g' => $G(21), 'z' => 65760], ['n' => 'IHR2026000000777', 't' => 'ana', 'g' => 'IHR2026000000777', 'z' => 100000]]]],
+    'harita' => [$G(21) => ['durum' => 'eslesti', 'v' => [['id' => 21]]]],
+    'debitler' => [],
+];
+$h6 = siparis_vade_hesapla($g6, siparis_vade_param([]), $BUGUN);
+$o6 = $h6['ozet'];
+ok('sevkiyat net = TAMAMI (131.520), belge yarım (65.760) tek başına KULLANILMAZ; invoice_kismi sayılır (65.760 eksik)', $o6['fatura_toplam_kurus'] === 3 * 131520 && $o6['invoice_kismi_sevkiyat'] === 1, json_encode($o6));
+ok('21: avizoda yarısı ödenmiş (kısmi) → ödenmiş listesinde kismi=true + net 65.760; kalan 65.760 açık listeye girer', (static function () use ($h6): bool {
+    foreach ($h6['odenmis'] as $x) if ($x['sev']['id'] === 21 && !empty($x['kismi']) && $x['net'] === 65760 && $x['elle'] === false) return true;
+    return false; })());
+ok('eşleşmeyen avizo faturası (100.000) en eski açık faturalara FIFO mahsup: 21\'in kalanı (65.760) tamamen, 22\'den 34.240 → 22 beklenen 97.280; 23 değişmez', array_map(static fn(array $a): int => $a['sev']['id'], $h6['acik']) === [22, 23]
+    && $h6['acik'][0]['beklenen'] === 97280 && $h6['acik'][0]['mahsup'] === 34240 && $h6['acik'][1]['beklenen'] === 131520 && $o6['mahsup_kurus'] === 100000 && $o6['havuz_kurus'] === 100000, json_encode($h6['acik']));
+ok('mutabakat: invoice toplamı − ödenen faturalar = açık; ödenen faturalar = toplam EUR ödeme (165.760)', $o6['odenen_fatura_kurus'] === 165760 && $o6['fatura_toplam_kurus'] - $o6['odenen_fatura_kurus'] === 97280 + 131520 && $o6['acik_kurus'] === 97280 + 131520, json_encode($o6));
+ok('uyarılar: eşleşmeyen avizo (TAHMİNİ) + kısmi invoice; eşleşmeyen sayısı özetlenir', (bool)array_filter($h6['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'eşleşmeyen 1 fatura kalemi') && str_contains($u['mesaj'], 'TAHMİNİ'))
+    && (bool)array_filter($h6['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'yalnız bir kısmını kapsıyor')));
+ok('yüklemeden beri gün: açık faturada (bugün − yükleme tarihi); 22: yükleme 03.10 → 53 gün, 23: 08.11 → 17', $h6['acik'][0]['yukleme_gun'] === 53 && $h6['acik'][1]['yukleme_gun'] === 17, json_encode(array_column($h6['acik'], 'yukleme_gun')));
+$g7 = ['sevkiyatlar' => [$sev(41, '2026-11-01'), $sev(42, '2026-11-02', ['fatura' => ['fiyat' => 13700, 'no' => $G(41), 'tarih' => '2026-11-02']])], 'fatura' => [41 => ['iskonto' => 4.0], 42 => ['iskonto' => 4.0]], 'belge_toplam' => []];
+$h7 = siparis_vade_hesapla($g7, siparis_vade_param([]), $BUGUN);
+ok('aynı fatura no iki sevkiyatta → "Ortak fatura" notu (no + iki sipariş)', (bool)array_filter($h7['uyarilar'], static fn(array $u): bool => $u['seviye'] === 'bilgi' && str_contains($u['mesaj'], 'Ortak fatura') && str_contains($u['mesaj'], $G(41)) && str_contains($u['mesaj'], 'TC820041.10') && str_contains($u['mesaj'], 'TC820042.10')));
+$ortak = static function (int $z) use ($sev, $G): array {
+    return ['sevkiyatlar' => [$sev(61, '2026-10-03'), $sev(62, '2026-10-27', ['fatura' => ['fiyat' => 13700, 'no' => $G(61), 'tarih' => '2026-10-27']])],
+        'fatura' => [61 => ['iskonto' => 4.0], 62 => ['iskonto' => 4.0]], 'belge_toplam' => [61 => 131520, 62 => 131520],
+        'odemeler' => [['id' => 71, 'tarih' => '2026-11-09', 'kurus' => $z, 'pb' => 'EUR', 'satirlar' => [['n' => $G(61), 't' => 'ana', 'g' => $G(61), 'z' => $z]]]],
+        'harita' => [$G(61) => ['durum' => 'belirsiz', 'v' => [['id' => 61], ['id' => 62]]]], 'debitler' => []];
+};
+$h9 = siparis_vade_hesapla($ortak(263040), siparis_vade_param([]), $BUGUN);
+ok('ORTAK FATURA (aynı no iki sevkiyatta): avizo tutarı iki sevkiyatı da kapsıyorsa (263.040) ikisi de ÖDENMİŞ, açık yok, havuz 0', count($h9['odenmis']) === 2 && $h9['acik'] === [] && $h9['ozet']['havuz_kurus'] === 0 && $h9['ozet']['acik_kurus'] === 0, json_encode($h9['ozet']));
+ok('ortak fatura: ödeme özetinde 2 sevkiyat; "Ortak fatura" bilgi notu (no + iki sipariş), "eşleşmeyen" uyarısı YOK', $h9['odemeler'][0]['sevkiyat'] === 2 && (bool)array_filter($h9['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'Ortak fatura') && str_contains($u['mesaj'], 'TC820061.10') && str_contains($u['mesaj'], 'TC820062.10'))
+    && !array_filter($h9['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'eşleşmeyen')));
+$h10 = siparis_vade_hesapla($ortak(131520), siparis_vade_param([]), $BUGUN);
+ok('ortak fatura: avizo tutarı yalnız bir sevkiyatlık (131.520) → EN ESKİ (61) ödenmiş, 62 açık kalır', array_map(static fn(array $a): int => $a['sev']['id'], $h10['odenmis']) === [61] && array_map(static fn(array $a): int => $a['sev']['id'], $h10['acik']) === [62] && $h10['acik'][0]['beklenen'] === 131520, json_encode($h10['ozet']));
+$h11 = siparis_vade_hesapla($ortak(300000), siparis_vade_param([]), $BUGUN);
+ok('ortak fatura: artan tutar (300.000 − 263.040 = 36.960) mahsup havuzuna gider (açık fatura yoksa "artık" bilgisi)', $h11['ozet']['havuz_kurus'] === 36960 && $h11['ozet']['mahsup_kurus'] === 0 && (bool)array_filter($h11['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'Mahsup edilemeyen')));
+$g8 = ['sevkiyatlar' => [$sev(51, '2026-11-12'), $sev(52, '2026-10-20'), $sev(53, '2026-11-20')], 'fatura' => array_fill_keys([51, 52, 53], ['iskonto' => 4.0]), 'belge_toplam' => [51 => 131520, 52 => 131520, 53 => 131520],
+    'odemeler' => [['id' => 61, 'tarih' => '2026-11-09', 'kurus' => 263040, 'pb' => 'EUR', 'satirlar' => [['n' => $G(51), 't' => 'ana', 'g' => $G(51), 'z' => 131520], ['n' => $G(52), 't' => 'ana', 'g' => $G(52), 'z' => 131520]]]],
+    'harita' => [$G(51) => ['durum' => 'eslesti', 'v' => [['id' => 51]]], $G(52) => ['durum' => 'eslesti', 'v' => [['id' => 52]]]], 'debitler' => []];
+$h8 = siparis_vade_hesapla($g8, siparis_vade_param([]), $BUGUN);
+ok('ödeme tarihinden SONRA tarihli fatura (51: −3 gün) vade öğrenmesine katılmaz: vade = 20 (52), 0/negatif değil + uyarı', $h8['param']['vade'] === 20 && $h8['ozet']['gecikme']['n'] === 1 && (bool)array_filter($h8['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'fatura tarihi ödeme tarihinden sonra')), json_encode([$h8['param'], $h8['ozet']['gecikme']]));
 
 echo "\n=== 4. Sayfa (siparis_vade.php) gerçek render ===\n";
 $db = db();
@@ -142,6 +187,7 @@ if ($cikti !== '') { @mkdir($cikti, 0777, true); file_put_contents($cikti . '/va
 ok('sayfa: hata/uyarı yok', $r['hata'] === null && !preg_match('/\b(Warning|Notice|Deprecated|Fatal error)\b:/', $g), (string)$r['hata'] . substr(strip_tags($g), 0, 300));
 ok('sayfa: başlık + bu hafta kutusu + takvim + açık faturalar + geçmiş ödemeler', str_contains($g, 'OGL Haftalık Ödeme') && str_contains($g, 'id="svBuHafta"') && str_contains($g, 'id="svHaftalar"') && str_contains($g, 'id="svAcik"') && str_contains($g, 'id="svOdemeler"'));
 ok('sayfa: 1. sevkiyat ödendi (21 gün), 2. sevkiyat (fatura −18 + 21 = +3 gün) takvimde; 4.603,20 tutarı görünür', str_contains($g, 'Ödenmiş invoice\'lar (1)') && str_contains($g, $G($S[2])) && str_contains($g, '4.603,20'));
+ok('sayfa: ödenmemiş faturada "Yüklemeden beri (gün)" sütunu + sayı (v570)', str_contains($g, 'Yüklemeden beri (gün)') && (bool)preg_match('~class="num sv-yg">\d+</td>~', $g));
 ok('sayfa: GET form, onclick yok, POST yok', str_contains($g, 'method="get" action="siparis_vade.php"') && !preg_match('/\sonclick=/i', $g) && !str_contains($g, 'method="post"'));
 $r = vd_uc('siparis_vade.php', ['vade' => 'abc']);
 ok('sayfa: geçersiz vade → hata kutusu, sayfa çalışır', $r['hata'] === null && str_contains($r['govde'], 'Parametre hatası'));
