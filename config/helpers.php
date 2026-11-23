@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v558');
+    define('APP_SURUM', 'v559');
 }
 
 // --- HTML kaçışı ---
@@ -449,7 +449,7 @@ function first_allowed_page(): ?string {
     }
     // v550: yalnız muhasebe menüsü yetkisi olan rol — sayfanın KENDİ kapısı (muhasebe_sayfa_can). Başka sayfaya
     // 302 veren sayfalar atlanır (hedefin kapısı farklı olabilir → yeni 403 olmasın).
-    $yonlendiren = ['kantar_fisleri', 'mal_kabul_fisleri', 'arac_yukleme_fisleri', 'raporlar_listeler', 'ihracat_faturasi_maliyeti', 'beyanname_siparis_proforma'];
+    $yonlendiren = ['kantar_fisleri', 'raporlar_listeler', 'ihracat_faturasi_maliyeti', 'beyanname_siparis_proforma'];
     foreach (muhasebe_rol_gruplari() as $__g) foreach ($__g['sayfalar'] as $__slug => $__b) {
         if (!in_array($__slug, $yonlendiren, true) && muhasebe_sayfa_can($__slug)) return $__slug . '.php';
     }
@@ -458,8 +458,8 @@ function first_allowed_page(): ?string {
 
 /**
  * v558: eski Yükleme Planı / Paletleme / Mal Kabul girişleri TÜM menülerden kalktı (sidebar, mobil, tablet üst menü,
- * ana sayfa kartları; sahip kararı — eski sistem kaldırılıyor). Sayfalar yerinde: yeni fiş sayfaları (Araç Yükleme /
- * Mal Kabul Fişleri) onlara yönlendirir. Eski sayfadayken (nav_aktif_anahtar records/cikma/kantar) menüde SEÇİLİ görünen
+ * ana sayfa kartları; sahip kararı — eski sistem kaldırılıyor). Sayfalar yerinde; yeni fiş sayfaları (Araç Yükleme /
+ * Mal Kabul Fişleri) onlara YÖNLENDİRMEZ (v559, yer tutucu). Eski sayfadayken (nav_aktif_anahtar records/cikma/kantar) menüde SEÇİLİ görünen
  * giriş yeni karşılığıdır: eski anahtar => yeni muhasebe fiş sayfası slug'ı.
  */
 function nav_eski_esleri(): array {
@@ -884,9 +884,9 @@ function nav_alt_sayfalar(): array {
         'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
         'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
         'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
-        'records' => ['href' => 'records.php',          'etiket' => 'Eski Yükleme Planı', 'kisa' => 'Eski Plan', 'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
-        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Eski Paletleme',      'kisa' => 'Eski Palet',  'dar' => 'Palet',      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
-        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Eski Mal Kabul',      'kisa' => 'Eski Kabul', 'dar' => 'Kabul',      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
+        'records' => ['href' => 'records.php',          'etiket' => 'Yükleme Planı',   'kisa' => 'Plan', 'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',      'kisa' => 'Palet',  'dar' => 'Palet',      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
+        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',      'kisa' => 'Kabul', 'dar' => 'Kabul',      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
         'rapor'   => ['href' => 'reports.php',          'etiket' => 'Eski Raporlar',       'kisa' => 'Eski Rapor', 'dar' => 'Rapor',      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
         'qcost'   => ['href' => 'hizli_maliyet.php',     'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/qcost.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],

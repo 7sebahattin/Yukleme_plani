@@ -122,7 +122,7 @@ let bag_ctx = {};
 
 const r1 = (n) => Math.round(n * 10) / 10;
 // Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
-const SAYFA_ADI = { records: 'Eski Yükleme Planı', cikma: 'Eski Paletleme', beyan: 'Beyanlar', kantar: 'Eski Mal Kabul', hks: 'Hal Bildirimi',
+const SAYFA_ADI = { records: 'Yükleme Planı', cikma: 'Paletleme', beyan: 'Beyanlar', kantar: 'Mal Kabul', hks: 'Hal Bildirimi',
     rapor: 'Eski Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
     users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
@@ -1133,9 +1133,9 @@ function guvenliAlanKurallari(barSel) {
     //      SEÇİLİ görünen giriş yeni karşılığıdır (kullanıcı görebiliyorsa); göremiyorsa hiçbir öğe seçili değildir.
     //      Beklenen değerler manifestin kapı tablosundan (P.izinli) türetilir — uygulamanın nav_eski_esleri()'nden DEĞİL.
     console.log('\n=== 5k) Eski girişler menüde YOK; eski sayfada seçili öğe = yeni karşılığı (sidebar + Diğer + alt çubuk) ===');
-    const ESKI = { records: { yeni: 'arac_yukleme_fisleri.php', yeniAd: 'Araç Yükleme Fişleri', eskiAd: 'Eski Yükleme Planı', eskiHref: 'records.php' },
-                   cikma:   { yeni: 'palet_fisleri.php',        yeniAd: 'Palet Fişleri',        eskiAd: 'Eski Paletleme',     eskiHref: 'cikmalar.php' },
-                   kantar:  { yeni: 'mal_kabul_fisleri.php',    yeniAd: 'Mal Kabul Fişleri',    eskiAd: 'Eski Mal Kabul',     eskiHref: 'kantar.php' } };
+    const ESKI = { records: { yeni: 'arac_yukleme_fisleri.php', yeniAd: 'Araç Yükleme Fişleri', eskiAd: 'Yükleme Planı', eskiHref: 'records.php' },
+                   cikma:   { yeni: 'palet_fisleri.php',        yeniAd: 'Palet Fişleri',        eskiAd: 'Paletleme',     eskiHref: 'cikmalar.php' },
+                   kantar:  { yeni: 'mal_kabul_fisleri.php',    yeniAd: 'Mal Kabul Fişleri',    eskiAd: 'Mal Kabul',     eskiHref: 'kantar.php' } };
     ok('B', 'manifest', 'eski → yeni eşleme (render kapı tablosu) = records→arac_yukleme_fisleri, cikma→palet_fisleri, kantar→mal_kabul_fisleri',
         JSON.stringify(M.eski_yeni) === JSON.stringify({ records: ESKI.records.yeni, cikma: ESKI.cikma.yeni, kantar: ESKI.kantar.yeni }), JSON.stringify(M.eski_yeni));
     ok('B', 'manifest', 'aday olmayan anahtarlar = records, cikma, kantar', JSON.stringify(M.aday_degil) === JSON.stringify(['records', 'cikma', 'kantar']), JSON.stringify(M.aday_degil));
