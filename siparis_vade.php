@@ -44,6 +44,22 @@ $eksi = static fn(int $k): string => $k > 0 ? '−' . siparis_cari_para($k) : '�
 $ham = static fn(string $k): string => is_string($_GET[$k] ?? null) ? trim((string)$_GET[$k]) : '';
 $bh = $v['bu_hafta'];
 $gec = $o['gecikme'];
+// v572: Motor'un yeni alanları — henüz yoksa savunmacı oku (sayfa tek başına hata vermez). Hesap YOK, yalnız gösterim.
+$al = static fn(string $k, $varsayilan) => $o[$k] ?? $v[$k] ?? $bh[$k] ?? $varsayilan;
+$bhKurus = (int)$o['bu_hafta_kurus'];
+$bhKalan = max(0, (int)($bh['kalan_kisim_kurus'] ?? 0));
+$bhKesin = isset($bh['kesin_kurus']) ? (int)$bh['kesin_kurus'] : $bhKurus - $bhKalan;
+$bhAna = $bhKalan > 0 ? $bhKesin : $bhKurus;   // büyük rakam: faturası girilmiş KESİN tutar (kalan yoksa eski rakam)
+$uy = is_array($o['uyum'] ?? null) ? $o['uyum'] : [];
+$tutarli = $uy ? (bool)($uy['tutarli'] ?? true) : true;
+$sapma = (int)($uy['sapma_kurus'] ?? 0);
+$asiri = (bool)$al('bu_hafta_asiri', false);
+$gmax = (int)$al('gecmis_odeme_max_kurus', 0);
+$kasaK = (int)($o['kasa_kurus'] ?? $o['odenen_kurus']);
+$avFark = (int)($o['avizo_fark_kurus'] ?? 0);
+$kalanTop = (int)($o['kalan_kisim_kurus'] ?? 0);
+$eksiE = static fn(int $k): string => $k > 0 ? '−' . siparis_cari_para($k) . ' EUR' : ($k < 0 ? '+' . siparis_cari_para(-$k) . ' EUR' : '0,00 EUR');   // negatif çıkan düşüm = ARTI (fazla ödeme); 0'a yuvarlanmaz
+$isaretli = static fn(int $k): string => ($k > 0 ? '+' : ($k < 0 ? '−' : '')) . siparis_cari_para(abs($k));
 $vadeMetin = $bazlar[$p['baz']] . ' + ' . (int)$p['vade'] . ' gün → ilk ' . $gunler[(int)$p['gun']];
 render_print_page_start('OGL Haftalık Ödeme', 'siparis', 'summary', 'landscape', ['print_pdks.css']);
 ?>
@@ -85,6 +101,34 @@ table.print-table.sc-tablo .sv-eksi { color: #b3261e; }
 table.print-table.sc-tablo td.sv-beklenen { font-weight: 800; }
 table.print-table.sc-tablo td.sv-yg { font-weight: 700; }
 table.print-table.sc-tablo td.sv-not { font-size: .92em; color: var(--pr-muted); }
+table.print-table.sc-tablo td.sv-not { min-width: 200px; }
+tr.sv-uyum-sapma-satir td { color: #b3261e; font-weight: 700; }
+@media print { .pr-section { break-after: avoid; } .sv-uyum, #svHaftalar { break-inside: avoid; } }
+.sv-ana .sv-kalan-satir { display: block; margin-top: 4px; font-size: .84rem; font-weight: 700; color: #7a4b00; font-variant-numeric: tabular-nums; }
+.sv-ana .sv-kalan-satir strong { color: #5a3600; }
+.sv-ana .sv-asiri { flex: 1 1 100%; margin: 0; padding: 6px 10px; border: 1px solid #e0a040; border-radius: 6px; background: #fff3dc; color: #7a4b00; font-size: .82rem; font-weight: 700; line-height: 1.4; }
+.sv-ana.sv-ana-hata { border-color: #b3261e; background: #fdecea; }
+.sv-ana.sv-ana-hata .sv-etiket { color: #7a1a14; }
+.sv-ana.sv-ana-hata .sv-tutar { font-size: 1.15rem; color: #7a1a14; font-weight: 700; }
+.sv-ana.sv-ana-hata .sv-gun, .sv-ana.sv-ana-hata .sv-detay, .sv-ana.sv-ana-hata .sv-detay strong { color: #5a1612; }
+.sv-ana .sv-hata-bant { flex: 1 1 100%; margin: 0; padding: 8px 12px; border-radius: 6px; background: #b3261e; color: #fff; font-size: .95rem; font-weight: 800; line-height: 1.35; }
+.sv-uyum { border: 1px solid #c9d6e6; border-radius: 10px; padding: 8px 12px 10px; margin: 10px 0 12px; background: #fbfdff; }
+.sv-uyum.sv-uyum-sapma { border: 2px solid #b3261e; background: #fdecea; }
+.sv-uyum h3.pr-section { margin-top: 2px; }
+table.print-table.sc-tablo.sv-uyum-tablo { max-width: 760px; }
+table.print-table.sc-tablo.sv-uyum-tablo td:first-child { width: 68%; }
+table.print-table.sc-tablo.sv-uyum-tablo tr.sv-uyum-ara td { font-weight: 800; border-top: 1px solid var(--pr-ink); background: #f2f6fb; }
+table.print-table.sc-tablo.sv-uyum-tablo tr.sv-uyum-son td { font-weight: 800; border-top: 2px solid var(--pr-ink); background: var(--pr-total-bg); }
+.sv-uyum-durum { display: inline-block; font-size: .8rem; font-weight: 800; padding: 1px 8px; border-radius: 9px; margin-left: 6px; }
+.sv-uyum-durum.sv-ok { background: #1b6e3c; color: #fff; }
+.sv-uyum-durum.sv-sapma { background: #b3261e; color: #fff; }
+.sv-uyum .sv-uyum-not { margin: 6px 0 0; font-size: .74rem; color: var(--pr-muted); }
+table.print-table.sc-tablo tbody tr.sv-kalan td { background: #fff7e2; }
+table.print-table.sc-tablo tbody tr.sv-kalan td.sv-fno { font-style: italic; }
+table.print-table.sc-tablo tbody tr.sv-kalan td.sv-not { color: #7a4b00; font-weight: 700; }
+.sv-gri { display: block; font-size: .72em; color: var(--pr-muted); font-style: normal; font-weight: 400; }
+.sv-isk { display: inline-block; font-size: .7rem; font-weight: 800; padding: 1px 6px; border-radius: 9px; background: #e67e00; color: #fff; margin-left: 4px; vertical-align: 1px; cursor: help; }
+.sv-fark-not { color: #b3261e; font-weight: 700; }
 .sv-rozet { display: inline-block; font-size: .7rem; font-weight: 800; padding: 1px 6px; border-radius: 9px; background: #1b6e3c; color: #fff; margin-left: 4px; vertical-align: 1px; }
 .sd-hata { border: 2px solid var(--pr-warn); border-radius: 6px; padding: 6px 10px; margin: 8px 0; font-size: .82rem; color: var(--pr-warn); font-weight: 700; }
 .sd-hata ul { margin: 2px 0 0 18px; padding: 0; }
@@ -92,6 +136,7 @@ table.print-table.sc-tablo td.sv-not { font-size: .92em; color: var(--pr-muted);
 .sd-uyari-liste { margin: 4px 0 0 18px; padding: 0; font-size: .8rem; }
 .sd-uyari-liste li { margin: 2px 0; }
 .sd-uyari-liste li.sd-u-uyari { font-weight: 700; color: var(--pr-warn); }
+.sd-uyari-liste li.sd-u-hata { font-weight: 800; color: #b3261e; }
 .sc-cari { break-inside: avoid; page-break-inside: avoid; }
 details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; }
 @media screen { .sc-kaydir { overflow-x: auto; -webkit-overflow-scrolling: touch; } }
@@ -101,7 +146,7 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table.print-table.sc-tablo { font-size: 7.8pt; }
   table.print-table.sc-tablo thead { display: table-header-group; }
-  table.print-table.sc-tablo tr, .sc-cari, .sd-hata, .sv-ana { break-inside: avoid; page-break-inside: avoid; }
+  table.print-table.sc-tablo tr, .sc-cari, .sd-hata, .sv-ana, .sv-uyum { break-inside: avoid; page-break-inside: avoid; }
   details.sv-gecmis > summary { list-style: none; }
 }
 </style>
@@ -137,10 +182,12 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   <?php if ($x['cari']['kesildi']): ?><p class="pr-note sd-u-uyari">İlk <?= (int)SIPARIS_CARI_LIMIT ?> sevkiyat okundu (kesildi) — eski sevkiyatlar takvime girmemiş olabilir.</p><?php endif; ?>
 
   <!-- 1) Bu hafta -->
-  <section class="sv-ana" id="svBuHafta" aria-label="Bu hafta beklenen ödeme">
+  <section class="sv-ana<?= $tutarli ? '' : ' sv-ana-hata' ?>" id="svBuHafta" aria-label="Bu hafta beklenen ödeme">
+    <?php if (!$tutarli): ?><p class="sv-hata-bant" role="alert" id="svDogrulanamadi">RAKAM DOĞRULANAMADI — patrona vermeyin. Cari bakiyeyle sapma: <?= h($isaretli($sapma)) ?> EUR</p><?php endif; ?>
     <div>
-      <span class="sv-etiket">Bu hafta OGL'den beklenen ödeme</span>
-      <span class="sv-tutar"><?= h($eur((int)$o['bu_hafta_kurus'])) ?></span>
+      <span class="sv-etiket"><?= $tutarli ? 'Bu hafta OGL\'den beklenen ödeme' . ($bhKalan > 0 ? ' — KESİN (faturası girilmiş)' : '') : 'Hesaplanan rakam (doğrulanamadı)' ?></span>
+      <span class="sv-tutar"><?= h($eur($bhAna)) ?></span>
+      <?php if ($bhKalan > 0): ?><span class="sv-kalan-satir" id="svKalanKisim">+ <strong><?= h($eur($bhKalan)) ?></strong> faturası girilmemiş kalan kısım (kesin değil) = olası toplam <strong><?= h($eur($bhKurus)) ?></strong></span><?php endif; ?>
       <span class="sv-gun"><?= h($gunAd($bh['odeme_gunu']) . ' ' . $tarih($bh['odeme_gunu'])) ?> ödeme günü</span>
     </div>
     <div class="sv-detay">
@@ -148,13 +195,34 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
       <?php if ((int)$o['bu_hafta_kesinti'] > 0): ?>OGL kesintisi düşüldü: <strong><?= h($eksi((int)$o['bu_hafta_kesinti'])) ?> EUR</strong><?= (int)$o['bekleyen_kesinti_kurus'] > 0 ? ' (önceki faturalardan bekleyen ' . h($eksi((int)$o['bekleyen_kesinti_kurus'])) . ' EUR dahil)' : '' ?><br><?php endif; ?>
       Vade: <?= h($vadeMetin) ?><?= $p['vade_oto'] ? ' (geçmiş ödemelerden)' : ' (elle)' ?>
     </div>
+    <?php if ($asiri && $gmax > 0): ?><p class="sv-asiri" id="svAsiri">⚠ Geçmiş ödemelerin en büyüğü <?= h($eur($gmax)) ?>; bu hafta tahmini <?= h($eur($bhKurus)) ?> — birikmiş gecikmişler tek seferde ödenmeyebilir.</p><?php endif; ?>
   </section>
+
+  <?php if ($uy): ?>
+  <!-- 1b) Cari bakiye uyum kontrolü -->
+  <section class="sv-uyum sc-cari<?= $tutarli ? '' : ' sv-uyum-sapma' ?>" id="svUyum" aria-label="Cari bakiye uyum kontrolü">
+    <h3 class="pr-section">Cari bakiye uyum kontrolü
+      <?php if ($tutarli): ?><span class="sv-uyum-durum sv-ok">✓ tutarlı</span><?php else: ?><span class="sv-uyum-durum sv-sapma">✗ sapma <?= h($isaretli($sapma)) ?> EUR</span><?php endif; ?></h3>
+    <div class="sc-kaydir"><table class="print-table sc-tablo sv-uyum-tablo">
+      <tbody>
+        <tr><td>Σ Invoice net tutarı (iskonto sonrası, tüm sevkiyatlar)</td><td class="num"><?= h($eur((int)$o['fatura_toplam_kurus'])) ?></td></tr>
+        <tr><td>− Kasaya giren (avizolardan gelen net ödeme)</td><td class="num"><?= h($eksiE($kasaK)) ?></td></tr>
+        <tr class="sv-uyum-ara"><td>= Cari bakiye (Cari Döküm bakiyesiyle aynı mantık)</td><td class="num"><?= h($eur((int)($uy['cari_bakiye_kurus'] ?? ((int)$o['fatura_toplam_kurus'] - $kasaK)))) ?></td></tr>
+        <tr><td>− Avizoda düşülen fark (OGL eksik ödemiş; tahsil edilmeyecek)</td><td class="num"><?= h($eksiE((int)($uy['avizo_fark_kurus'] ?? $avFark))) ?></td></tr>
+        <tr><td>− Bekleyen kesintiler (fiyat farkı + debit note; bu hafta ve sonrası)</td><td class="num"><?= h($eksiE((int)($uy['bekleyen_kesinti_kurus'] ?? $o['bekleyen_kesinti_kurus']))) ?></td></tr>
+        <?php if (!$tutarli): ?><tr class="sv-uyum-sapma-satir"><td>± Sapma (açıklanamayan fark — tablo bu yüzden toplamıyor)</td><td class="num"><?= h($isaretli($sapma)) ?> EUR</td></tr><?php endif; ?>
+        <tr class="sv-uyum-son"><td>= Açık alacak (yukarıdaki kart)</td><td class="num"><?= h($eur((int)($uy['acik_kurus'] ?? $o['acik_kurus']))) ?></td></tr>
+      </tbody>
+    </table></div>
+    <p class="sv-uyum-not"><?= $tutarli ? '✓ Rakamlar Cari bakiyeyle birebir tutuyor (sapma 0,00 EUR).' : '✗ Rakamlar Cari bakiyeyle tutmuyor — sapma ' . h($isaretli($sapma)) . ' EUR. Patrona vermeden önce kontrol edin.' ?> "Kasaya giren" avizolardan gerçekten gelen paradır; "kapanan fatura" = kasaya giren + avizoda düşülen farktır, ikisi aynı şey değildir.</p>
+  </section>
+  <?php endif; ?>
 
   <!-- 2) Özet kartlar -->
   <div class="print-summary-row">
     <div class="print-summary-box"><span class="psb-label">Gelecek hafta</span><span class="psb-value"><?= h($eur((int)$o['gelecek_hafta_kurus'])) ?></span><span class="sc-alt"><?= h($gunAd((string)$o['gelecek_odeme_gunu']) . ' ' . $tarih((string)$o['gelecek_odeme_gunu'])) ?> · <?= (int)$o['gelecek_hafta_sevkiyat'] ?> fatura</span></div>
-    <div class="print-summary-box psb-warn"><span class="psb-label">Açık alacak (ödenmemiş invoice)</span><span class="psb-value"><?= h($eur((int)$o['acik_kurus'])) ?></span><span class="sc-alt"><?= (int)$o['acik_sevkiyat'] ?> fatura · kesintiler düşülmüş · invoice toplamı <?= h(siparis_cari_para((int)$o['fatura_toplam_kurus'])) ?> − ödenen <?= h(siparis_cari_para((int)$o['odenen_fatura_kurus'])) ?><?= (int)$o['mahsup_kurus'] > 0 ? ' (tahmini mahsup ' . h(siparis_cari_para((int)$o['mahsup_kurus'])) . ' dahil)' : '' ?></span></div>
-    <div class="print-summary-box psb-ok"><span class="psb-label">Şimdiye kadar ödenen</span><span class="psb-value"><?= h($eur((int)$o['odenen_kurus'])) ?></span><span class="sc-alt"><?= (int)$o['odeme_adet'] ?> ödeme<?= $o['son_odeme'] !== null ? ' · son: ' . h($tarih((string)$o['son_odeme']['tarih']) . ' · ' . $eur((int)$o['son_odeme']['kurus'])) : '' ?></span></div>
+    <div class="print-summary-box psb-warn"><span class="psb-label">Açık alacak (ödenmemiş invoice)</span><span class="psb-value"><?= h($eur((int)$o['acik_kurus'])) ?></span><span class="sc-alt"><?= (int)$o['acik_sevkiyat'] ?> fatura · kesintiler düşülmüş · invoice toplamı <?= h(siparis_cari_para((int)$o['fatura_toplam_kurus'])) ?> − kapanan fatura <?= h(siparis_cari_para((int)$o['odenen_fatura_kurus'])) ?> (kasaya giren <?= h(siparis_cari_para($kasaK)) ?><?= $avFark > 0 ? ' + avizoda düşülen fark ' . h(siparis_cari_para($avFark)) : '' ?>)<?= (int)$o['mahsup_kurus'] > 0 ? ' · kasaya girenin ' . h(siparis_cari_para((int)$o['mahsup_kurus'])) . ' kadarı tahmini mahsup' : '' ?><?= $kalanTop > 0 ? ' · içinde faturası girilmemiş kalan kısım ' . h(siparis_cari_para($kalanTop)) . ' (kesin değil)' : '' ?></span></div>
+    <div class="print-summary-box psb-ok"><span class="psb-label">Kasaya giren (avizolardan)</span><span class="psb-value"><?= h($eur($kasaK)) ?></span><span class="sc-alt"><?= (int)$o['odeme_adet'] ?> ödeme<?= $o['son_odeme'] !== null ? ' · son: ' . h($tarih((string)$o['son_odeme']['tarih']) . ' · ' . $eur((int)$o['son_odeme']['kurus'])) : '' ?> · gerçekten gelen para<?= $avFark > 0 ? ' · kapanan fatura ' . h(siparis_cari_para((int)$o['odenen_fatura_kurus'])) . ' (avizoda düşülen fark ' . h(siparis_cari_para($avFark)) . ' dahil)' : '' ?></span></div>
     <div class="print-summary-box"><span class="psb-label">Invoice'u kesilmemiş</span><span class="psb-value"><?= (int)$o['faturasiz_sevkiyat'] ?> sevkiyat</span><span class="sc-alt"><?= (int)$o['faturasiz_kurus'] > 0 ? 'gelen fiyatla ≈ ' . h($eur((int)$o['faturasiz_kurus'])) . ' · ' : '' ?>takvime girmez</span></div>
     <div class="print-summary-box"><span class="psb-label">Geçmiş ödeme süresi</span><span class="psb-value"><?= $gec['n'] > 0 ? ((int)$gec['min'] === (int)$gec['max'] ? (int)$gec['min'] : (int)$gec['min'] . '–' . (int)$gec['max']) . ' gün' : '—' ?></span><span class="sc-alt"><?= $gec['n'] > 0 ? h(mb_strtolower($bazlar[$p['baz']])) . 'nden avizoya · ' . (int)$gec['n'] . ' fatura · medyan ' . (int)$gec['medyan'] . ' gün' : 'avizoyla eşleşmiş ödeme yok' ?></span></div>
   </div>
@@ -194,6 +262,8 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
     <tbody>
       <?php foreach ($v['acik'] as $a):
         $not = [];
+        $kalanK = !empty($a['kalan_kisim']);
+        if ($kalanK) $not[] = 'Kalan kısım — invoice girilmemiş, kesin değil';
         if ($a['gecikmis']) $not[] = 'Vadesi geçti';
         if ($a['tarihsiz']) $not[] = 'Tarih yok — bu haftaya alındı';
         if ($a['pc_yok']) $not[] = 'Gelen fiyat (PC) bekleniyor';
@@ -203,11 +273,13 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
         elseif ($a['invoice_kismi']) $not[] = 'Sistemdeki invoice sevkiyatın yalnız bir kısmı — sevkiyatın tamamı alındı';
         if ((int)$a['mahsup'] > 0) $not[] = 'Eşleşmeyen/elle ödemeden ' . siparis_cari_para((int)$a['mahsup']) . ' mahsup edildi (tahmini)';
       ?>
-      <tr class="<?= trim(($a['hafta'] === $bh['bas'] ? 'sv-bu' : '') . ($a['gecikmis'] ? ' sv-gecikmis' : '')) ?>">
+      <tr class="<?= trim(($a['hafta'] === $bh['bas'] ? 'sv-bu' : '') . ($a['gecikmis'] ? ' sv-gecikmis' : '') . ($kalanK ? ' sv-kalan' : '')) ?>">
         <td><?= h($tarih($a['odeme_gunu'])) ?></td>
         <td><?= h($tarih($a['sev']['tarih'] ?? null)) ?></td>
         <td class="num sv-yg"><?= $a['yukleme_gun'] === null ? '—' : (int)$a['yukleme_gun'] ?></td><?= siparis_cari_kimlik_html($a['sev']) ?>
-        <td><?= h((string)($a['sev']['fatura']['no'] ?? '') !== '' ? (string)$a['sev']['fatura']['no'] : '—') ?></td>
+        <?php $fNo = (string)($a['sev']['fatura']['no'] ?? ''); ?>
+        <?php if ($kalanK): ?><td class="sv-fno">— (kalan kısım · invoice girilmemiş)<?= $fNo !== '' ? '<span class="sv-gri" title="Ödenmiş faturanın numarası">ödenmiş fatura: ' . h($fNo) . '</span>' : '' ?></td>
+        <?php else: ?><td><?= h($fNo !== '' ? $fNo : '—') ?></td><?php endif; ?>
         <td><?= h($tarih($a['sev']['fatura']['tarih'] ?? null)) ?></td>
         <td><?= h($tarih($a['vade_tarih'])) ?></td>
         <td class="num"><?= h(siparis_cari_para((int)$a['net'])) ?></td>
@@ -269,12 +341,13 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   <details class="sv-gecmis">
     <summary>Ödenmiş invoice'lar (<?= count($v['odenmis']) ?>)</summary>
     <div class="sc-kaydir"><table class="print-table sc-tablo" id="svOdenmis">
-      <thead><tr><th>Ödeme tarihi</th><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th>Fatura no</th><th>Fatura tarihi</th><th class="num">Gün</th><th class="num">Fatura tutarı (EUR)</th><th class="num">Ödenen (EUR)</th></tr></thead>
+      <thead><tr><th>Ödeme tarihi</th><th>Yükleme tarihi</th><?= siparis_cari_kimlik_baslik() ?><th>Fatura no</th><th>Fatura tarihi</th><th class="num">Gün</th><th class="num">Fatura tutarı (EUR)</th><th class="num">Ödenen (EUR)</th><th>Not</th></tr></thead>
       <tbody>
-        <?php foreach ($v['odenmis'] as $od): ?>
+        <?php foreach ($v['odenmis'] as $od): $odFark = (int)($od['fark_kurus'] ?? 0); ?>
         <tr><td><?= $od['elle'] ? 'Mahsup (tahmini)' : h($tarih($od['odeme_tarih'])) . (!empty($od['kismi']) ? ' <small>(kısmi)</small>' : '') ?></td><td><?= h($tarih($od['sev']['tarih'] ?? null)) ?></td><?= siparis_cari_kimlik_html($od['sev']) ?>
           <td><?= h((string)($od['sev']['fatura']['no'] ?? '') !== '' ? (string)$od['sev']['fatura']['no'] : '—') ?></td><td><?= h($tarih($od['sev']['fatura']['tarih'] ?? null)) ?></td>
-          <td class="num"><?= $od['gecikme'] !== null ? (int)$od['gecikme'] : '—' ?></td><td class="num"><?= h(siparis_cari_para((int)$od['net'])) ?></td><td class="num"><?= h(siparis_cari_para((int)$od['odenen'])) ?></td></tr>
+          <td class="num"><?= $od['gecikme'] !== null ? (int)$od['gecikme'] : '—' ?></td><td class="num"><?= h(siparis_cari_para((int)$od['net'])) ?></td><td class="num"><?= h(siparis_cari_para((int)$od['odenen'])) ?></td>
+          <td class="sv-not"><?php if ($odFark > 0): ?><span class="sv-fark-not">avizoda <?= h(siparis_cari_para($odFark)) ?> eksik</span><?php endif; ?><?php if (!empty($od['iskonto_suphesi'])): ?><span class="sv-isk" title="Avizoda ödenen, fatura net tutarından tam %4 eksik — fatura iskontosu girilmemiş/çift uygulanmış olabilir">iskonto?</span><?php endif; ?></td></tr>
         <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -285,11 +358,11 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   <section class="sc-cari">
     <h3 class="pr-section">Uyarılar ve notlar</h3>
     <ul class="sd-uyari-liste" id="svUyarilar">
-      <?php foreach ($v['uyarilar'] as $u): ?><li class="<?= ($u['seviye'] ?? '') === 'uyari' ? 'sd-u-uyari' : '' ?>"><?= h((string)$u['mesaj']) ?></li><?php endforeach; ?>
+      <?php foreach ($v['uyarilar'] as $u): ?><li class="<?= ($u['seviye'] ?? '') === 'hata' ? 'sd-u-hata' : (($u['seviye'] ?? '') === 'uyari' ? 'sd-u-uyari' : '') ?>"><?= h((string)$u['mesaj']) ?></li><?php endforeach; ?>
       <?php if (!$v['uyarilar']): ?><li>Uyarı yok.</li><?php endif; ?>
     </ul>
     <ul class="sd-notlar">
-      <li>Ödenen faturalar OGL ödeme avizosundaki fatura numaralarından bulunur (💶 Ödeme sorgula ile alınan avizolar). Avizoda geçen ama sistemdeki bir invoice'la eşleşmeyen ödemeler en eski açık faturalara sırayla mahsup edilir — bu kısım TAHMİNİDİR. Açık alacak = Σ sevkiyat net tutarı − toplam ödenen faturalar (Cari Döküm bakiyesiyle aynı mantık).</li>
+      <li>Ödenen faturalar OGL ödeme avizosundaki fatura numaralarından bulunur (💶 Ödeme sorgula ile alınan avizolar). Avizoda geçen ama sistemdeki bir invoice'la eşleşmeyen ödemeler en eski açık faturalara sırayla mahsup edilir — bu kısım TAHMİNİDİR. Açık alacak = Σ sevkiyat net tutarı − kapanan faturalar (Cari Döküm bakiyesiyle aynı mantık). "Kasaya giren" avizolardan gelen gerçek para, "kapanan fatura" = kasaya giren + avizoda düşülen farktır; "Cari bakiye uyum kontrolü" ikisinin farkını gösterir.</li>
       <li>Vade otomatikken: geçmişte en kısa sürede ödenen faturanın süresi alınır (bu hafta tutarını şişirmez). OGL'nin vadesini biliyorsanız "Vade (gün)" kutusuna yazın.</li>
       <li>Fatura tutarı = üretilen invoice'un iskonto sonrası toplamı. Kesinti = avizoda henüz düşülmemiş OGL debit note'ları + gelen fiyat kesilenden düşükse tahmini fiyat farkı (iskonto sonrası).</li>
       <li>Vadesi geçmiş ama avizosu gelmemiş faturalar bu haftaya eklenir. Para birimleri toplanmaz; takvim yalnız EUR invoice'ları kapsar.</li>

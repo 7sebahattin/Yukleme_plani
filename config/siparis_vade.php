@@ -152,6 +152,17 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
     foreach ((array)($g['debitler'] ?? []) as $d) if (is_array($d) && trim((string)($d['no'] ?? '')) !== '') $debitNo[strtoupper(trim((string)$d['no']))] = true;
     $odemeOzet = []; $tarihler = []; $digerPb = [];
     $odenenToplam = 0; $son = null; $eslesmeyenFatura = 0;
+    // v572: faturası (fiyatı) olan sevkiyatlar — avizo tutarı yalnız bunlara yazılabilir; başka sid'e eşleşen tutar eşleşmeyen havuzuna gider (kuruş kaybolmasın)
+    $fatSet = [];
+    foreach ((array)($g['sevkiyatlar'] ?? []) as $sv) if (is_array($sv['fatura'] ?? null) && (int)($sv['fatura']['fiyat'] ?? 0) > 0) $fatSet[(int)($sv['id'] ?? 0)] = true;
+    $debitSid = [];    // v572: debit note no → sevkiyat (yalnız faturası olan sevkiyatlar; avizoda KENDİ numarasıyla geçen eksi satır o sevkiyatın kesintisidir)
+    foreach ((array)($g['debitler'] ?? []) as $d) {
+        $dn = strtoupper(trim((string)($d['no'] ?? '')));
+        if ($dn !== '' && (int)($d['sid'] ?? 0) > 0 && isset($fatSet[(int)$d['sid']])) $debitSid[$dn] = (int)$d['sid'];
+    }
+    $debitKes = 0;     // v572: avizoda kendi numarasıyla düşülen ama faturası olan bir sevkiyata bağlanamayan debit tutarı (mutlak)
+    $kalemFark = 0;    // v572: Σ (ödeme tutarı − avizo kalemleri toplamı) — 0 olmalı (kalemler eksik okunmuşsa sapma verir)
+    $avizGunToplam = [];   // v572: gün → o gün avizoyla gelen EUR toplam (geçmiş ödeme kıyası)
     foreach ((array)($g['odemeler'] ?? []) as $o) {
         $pb = strtoupper((string)($o['pb'] ?? ''));
         $k = (int)($o['kurus'] ?? 0);
@@ -160,15 +171,19 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
         $odenenToplam += $k;
         if ($t !== '') { $tarihler[] = $t; if ($son === null || $t > $son['tarih']) $son = ['tarih' => $t, 'kurus' => $k]; }
         $sat = $o['satirlar'] ?? null;
-        $oz = ['id' => (int)($o['id'] ?? 0), 'tarih' => $t, 'kurus' => $k, 'avizolu' => is_array($sat), 'sevkiyat' => 0, 'eslesmeyen' => 0, 'gecikme' => []];
-        if (!is_array($sat)) { $elleHavuz += $k; $odemeOzet[] = $oz; continue; }
+        $avizolu = is_array($sat) && $sat !== [];   // v572: kalemi olmayan (boş liste) avizo da elle girilmiş gibi sayılır — kuruş havuza girer
+        $oz = ['id' => (int)($o['id'] ?? 0), 'tarih' => $t, 'kurus' => $k, 'avizolu' => $avizolu, 'sevkiyat' => 0, 'eslesmeyen' => 0, 'gecikme' => []];
+        if (!$avizolu) { $elleHavuz += $k; $odemeOzet[] = $oz; continue; }
+        if ($t !== '') $avizGunToplam[$t] = ($avizGunToplam[$t] ?? 0) + $k;
         $buOdemeSid = [];
+        $satToplam = 0;
         foreach ($sat as $r) {
             $n = strtoupper(trim((string)($r['n'] ?? '')));
             if ($n !== '') $avizNo[$n] = true;
             $gv = (string)($r['g'] ?? '');
             $tur = (string)($r['t'] ?? '');
             $z = (int)($r['z'] ?? 0);
+            $satToplam += $z;
             $yazildi = false;   // bu satır bir sevkiyata (ya da ortak faturaya) yazıldı mı
             if ($gv !== '' && ($tur === 'ana' || $tur === 'duzeltme')) {
                 if ($tur === 'duzeltme') $duz[$gv][] = abs($z);
@@ -189,13 +204,28 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
                 }
             }
             // v571: eşleşmeyen satırlar NET sayılır — eksi satırlar (iade / düzeltme / iptal) pozitif eşleşmeyen faturaları götürür; bilinen debit note satırı (eksi) hariç
-            if (!$yazildi && !($z < 0 && isset($debitNo[$n]))) $avizNet += $z;
+            // v572: bilinen debit note'un KENDİ numarasıyla düşülen eksi satırı, debit'in sevkiyatı faturalıysa o sevkiyatın kesintisi olarak yazılır; değilse debitKes'e (hiçbir kuruş kaybolmaz)
+            if (!$yazildi) {
+                if ($z < 0 && isset($debitNo[$n])) {
+                    $ds = $debitSid[$n] ?? 0;
+                    if ($ds > 0) { $odenen[$ds] ??= ['tarih' => null, 'kurus' => 0, 'odeme_id' => 0, 'ana' => 0]; $odenen[$ds]['kurus'] += $z; }
+                    else $debitKes += -$z;
+                } else $avizNet += $z;
+            }
         }
+        $kalemFark += $k - $satToplam;
         $oz['sevkiyat'] = count($buOdemeSid);
         $odemeOzet[] = $oz;
     }
+    // v572: faturası olmayan (listede yok / fiyatsız) sevkiyata eşleşen avizo tutarı = eşleşmeyen sayılır (havuza net girer); kasadan düşmez, kaybolmaz
+    foreach ($odenen as $sid => $e) {
+        if (isset($fatSet[(int)$sid])) continue;
+        $avizNet += (int)$e['kurus'];
+        unset($odenen[$sid]);
+    }
 
     $avizHavuz = max(0, $avizNet);   // v571: pozitif eşleşmeyen kalemler YETMEZ — eksi satırlar düşülmüş NET tutar (ödenen > kasaya giren olamaz)
+    $avizNetEksi = max(0, -$avizNet);   // v572: eşleşmeyen satırların NET'i eksiyse = hiçbir faturaya bağlanamayan kesinti (OGL düşmüş)
 
     // ── 2a) ortak fatura: avizodaki tutar, aynı numarayı taşıyan sevkiyatlara EN ESKİDEN başlayarak (her biri kendi net tutarına kadar) dağıtılır ──
     if ($grup) {
@@ -252,6 +282,7 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
     // ── 3) sevkiyatlar: ödenmiş / kısmen ödenmiş / açık / faturasız ──────
     $odenmis = []; $acik = []; $faturasiz = [];
     $faturaToplam = 0; $kismiInvSay = 0; $kismiInvEksik = 0; $noSay = [];
+    $farkDiger = 0;   // v572: satıra yazılamayan kesintiler (henüz ödenmemiş sevkiyatta avizoda önceden düşülen) — avizo_fark'a girer
     foreach ((array)($g['sevkiyatlar'] ?? []) as $sev) {
         $id = (int)($sev['id'] ?? 0);
         $fat = $sev['fatura'] ?? null;
@@ -269,15 +300,25 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
         $no = trim((string)($fat['no'] ?? ''));
         if ($no !== '') $noSay[$no][] = (string)($sev['order_ref'] ?? '');
         $baz = siparis_vade_baz_tarihi($sev, (string)$param['baz']);
-        $odendi = isset($odenen[$id]) && $odenen[$id]['tarih'] !== null;
-        $ana = $odendi ? (int)$odenen[$id]['ana'] : 0;
+        $ana = isset($odenen[$id]) ? (int)$odenen[$id]['ana'] : 0;
+        $dKes = isset($odenen[$id]) ? (int)$odenen[$id]['kurus'] - $ana : 0;   // v572: avizoda bu sevkiyattan düşülen düzeltme/debit satırları (eksi)
+        $odendi = isset($odenen[$id]) && ($odenen[$id]['tarih'] !== null || $ana !== 0);
         $kalan = $net - $ana;
         $kismen = $odendi && $kalan > $tol;   // bir kısmı avizoda ödenmiş, kalanı yok (ikinci invoice/ödeme eşleşmemiş)
         if ($odendi) {
-            $gun = $baz !== null ? siparis_vade_gun_farki($baz, (string)$odenen[$id]['tarih']) : null;
-            $odenmis[] = ['sev' => $sev, 'net' => $kismen ? $ana : $net, 'baz' => $baz, 'odeme_tarih' => (string)$odenen[$id]['tarih'], 'odenen' => (int)$odenen[$id]['kurus'], 'gecikme' => $gun, 'elle' => false, 'odeme_id' => (int)$odenen[$id]['odeme_id'],
-                          'kesinti' => array_sum(array_column($bekleyenSid[$id] ?? [], 'kurus')), 'kismi' => $kismen];
+            $odTarih = $odenen[$id]['tarih'];
+            $gun = $baz !== null && $odTarih !== null ? siparis_vade_gun_farki($baz, (string)$odTarih) : null;
+            $rowNet = $kismen ? $ana : $net;
+            $rowOdenen = (int)$odenen[$id]['kurus'];
+            $fark = $rowNet - $rowOdenen;   // v572: net − avizoda ödenen (≥ 0 = OGL'nin düştüğü, tahsil edilmeyecek fark)
+            // iskonto şüphesi: sevkiyatın TAM net tutarı ile avizoda ödenen (kısmi satırda da) arasındaki eksik tam %4 mü? (kısmi ödemede kalan tutar açık listede kalır — işaretlenir, tutar DEĞİŞTİRİLMEZ)
+            $tamFark = $net - $rowOdenen;
+            $iskSup = $tamFark > 0 && $net > 0 && abs($tamFark - intdiv($net * 4 + 50, 100)) <= max(100, intdiv($net, 1000));
+            $odenmis[] = ['sev' => $sev, 'net' => $rowNet, 'baz' => $baz, 'odeme_tarih' => (string)($odTarih ?? ''), 'odenen' => $rowOdenen, 'gecikme' => $gun, 'elle' => false, 'odeme_id' => (int)$odenen[$id]['odeme_id'],
+                          'kesinti' => array_sum(array_column($bekleyenSid[$id] ?? [], 'kurus')), 'kismi' => $kismen, 'fark_kurus' => $fark, 'iskonto_suphesi' => $iskSup, 'net_tam' => $net, 'tam_fark_kurus' => $tamFark];
             if (!$kismen) continue;
+        } elseif ($dKes !== 0) {
+            $farkDiger += -$dKes;   // ödenmemiş sevkiyatın avizoda önceden düşülmüş kesintisi — satır yok, toplamda tutulur
         }
         $kesinti = $odendi ? 0 : array_sum(array_column($bekleyenSid[$id] ?? [], 'kurus'));
         $tahmini = 0;
@@ -286,8 +327,10 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
             $tahmini = intdiv(-(int)$kk['fark_kurus'] * (10000 - (int)round($isk * 100)) + 5000, 10000);
             if ($odendi) $tahmini = intdiv($tahmini * $kalan + intdiv($net, 2), max(1, $net));   // yalnız kalan kısmın payı
         }
+        // v572: faturası SİSTEMDE olmayan kısım = sevkiyat net tutarının, sistemdeki invoice'ın kapsamadığı ve henüz ödenmemiş bölümü
+        $kalanHam = $invKismi ? max(0, min($kalan, $net - max((int)$belge, $ana))) : 0;
         $acik[] = ['sev' => $sev, 'net' => $kalan, 'baz' => $baz, 'kesinti' => $kesinti, 'kesinti_liste' => $odendi ? [] : ($bekleyenSid[$id] ?? []), 'tahmini' => $tahmini,
-                   'beklenen' => $kalan - $kesinti - $tahmini, 'pc_yok' => !is_array($kk), 'mahsup' => 0, 'kismi' => $kismen, 'invoice_kismi' => $invKismi];
+                   'beklenen' => $kalan - $kesinti - $tahmini, 'pc_yok' => !is_array($kk), 'mahsup' => 0, 'kismi' => $kismen, 'invoice_kismi' => $invKismi, 'kalan_ham' => $kalanHam];
         if (!$odendi) unset($bekleyenSid[$id]);
     }
     // ödenmiş sevkiyatın avizoda düşülmemiş kesintisi → bu haftanın ödemesinden düşülür
@@ -332,11 +375,16 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
         $acik[$i]['mahsup'] = $m; $acik[$i]['beklenen'] -= $m; $havuz -= $m;
     }
     $kalanAcik = [];
+    $kesintiMahsupKapanan = 0;   // v572: tahmini mahsupla kapanan sevkiyatların henüz düşülmemiş kesintisi (fiyat farkı + debit) — "bekleyen kesinti"ye girer
     foreach ($acik as $a) {
         if ($a['mahsup'] > 0 && $a['beklenen'] <= 0) {
-            $odenmis[] = ['sev' => $a['sev'], 'net' => $a['net'], 'baz' => $a['baz'], 'odeme_tarih' => null, 'odenen' => $a['mahsup'], 'gecikme' => null, 'elle' => true, 'kesinti' => 0, 'odeme_id' => 0];
+            $kesintiMahsupKapanan += $a['kesinti'] + $a['tahmini'];
+            $odenmis[] = ['sev' => $a['sev'], 'net' => $a['net'], 'baz' => $a['baz'], 'odeme_tarih' => null, 'odenen' => $a['mahsup'], 'gecikme' => null, 'elle' => true, 'kesinti' => 0, 'odeme_id' => 0,
+                          'fark_kurus' => 0, 'iskonto_suphesi' => false];
             continue;
         }
+        $a['kalan_kisim_kurus'] = min(max(0, (int)$a['beklenen']), (int)$a['kalan_ham']);   // kesintiden/mahsuptan SONRAKİ beklenen tutarın faturasız bölümü (kesintiler önce faturalı kısımdan düşülür)
+        $a['kalan_kisim'] = $a['kalan_kisim_kurus'] > 0;
         $vt = $a['baz'] !== null ? siparis_vade_gun_ekle($a['baz'], $vade) : null;
         $od = $vt !== null ? siparis_vade_sonraki_gun($vt, $gun) : $buOdeme;
         $gecikmis = $vt !== null && $od < $buOdeme;
@@ -352,7 +400,7 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
     // ── 6) haftalık takvim ─────────────────────────────────────────────
     $hafta = [];
     $yeniHafta = static fn(string $od): array => ['bas' => siparis_vade_hafta_basi($od), 'son' => siparis_vade_gun_ekle(siparis_vade_hafta_basi($od), 6), 'odeme_gunu' => $od,
-        'sevkiyat' => 0, 'net' => 0, 'kesinti' => 0, 'beklenen' => 0, 'gecikmis_kurus' => 0, 'gecikmis_sevkiyat' => 0, 'pc_yok' => 0, 'bu_hafta' => false, 'kumulatif' => 0];
+        'sevkiyat' => 0, 'net' => 0, 'kesinti' => 0, 'beklenen' => 0, 'gecikmis_kurus' => 0, 'gecikmis_sevkiyat' => 0, 'pc_yok' => 0, 'bu_hafta' => false, 'kumulatif' => 0, 'kalan_kisim_kurus' => 0, 'kalan_kisim_sevkiyat' => 0, 'kesin_kurus' => 0];
     foreach ($kalanAcik as $a) {
         $h = $a['hafta'];
         $hafta[$h] ??= $yeniHafta($a['odeme_gunu']);
@@ -361,6 +409,8 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
         $hafta[$h]['kesinti'] += $a['kesinti'] + $a['tahmini'];
         $hafta[$h]['beklenen'] += $a['beklenen'];
         if ($a['pc_yok']) $hafta[$h]['pc_yok']++;
+        $hafta[$h]['kalan_kisim_kurus'] += $a['kalan_kisim_kurus'];
+        if ($a['kalan_kisim']) $hafta[$h]['kalan_kisim_sevkiyat']++;
         if ($a['gecikmis']) { $hafta[$h]['gecikmis_kurus'] += $a['beklenen']; $hafta[$h]['gecikmis_sevkiyat']++; }
     }
     $bekleyenToplam = array_sum(array_column($bekleyen, 'kurus'));
@@ -371,20 +421,58 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
     }
     ksort($hafta);
     $kum = 0;
-    foreach ($hafta as $h => &$w) { $kum += $w['beklenen']; $w['kumulatif'] = $kum; $w['bu_hafta'] = $h === $haftaBas; }
+    foreach ($hafta as $h => &$w) { $kum += $w['beklenen']; $w['kumulatif'] = $kum; $w['bu_hafta'] = $h === $haftaBas; if ($w['beklenen'] - $w['kalan_kisim_kurus'] < 0) $w['kalan_kisim_kurus'] = max(0, $w['beklenen']);   // bekleyen kesinti kesin kısmı aşarsa fazlası kalan kısımdan düşer (kesin ASLA eksiye düşmez)
+        $w['kesin_kurus'] = $w['beklenen'] - $w['kalan_kisim_kurus']; }   // v572: kesin + kalan kısım = beklenen
     unset($w);
     $bu = $hafta[$haftaBas] ?? $yeniHafta($buOdeme);
     $gelecekBas = siparis_vade_gun_ekle($haftaBas, 7);
     $gelecek = $hafta[$gelecekBas] ?? $yeniHafta(siparis_vade_gun_ekle($buOdeme, 7));
+
+    // ── v572: Cari bakiye uyumu (TAM eşitlik; tolerans YOK) ─────────────
+    // Cari bakiye = Σ invoice net − kasaya giren. Açık alacak + bekleyen kesinti + avizoda düşülen fark bunu EKSİKSİZ açıklamalı:
+    //   avizo_fark  = kapanan/kısmi faturalarda (net − avizoda ödenen) + henüz ödenmemiş sevkiyatta avizoda önceden düşülen kesinti
+    //                 + hiçbir faturaya bağlanamayan (eşleşmeyen net eksi / faturasız debit) kesinti
+    //   bekleyen    = açık faturalardaki (kesinti + tahmini fiyat farkı) + tahmini mahsupla kapananların kesintisi + ödenmiş faturaların düşülmemiş kesintisi
+    $kasa = $odenenToplam;
+    $farkSatir = 0;
+    foreach ($odenmis as $od) $farkSatir += (int)($od['fark_kurus'] ?? 0);
+    $avizoFark = $farkSatir + $farkDiger + $avizNetEksi + $debitKes;
+    $bekleyenKesintiTop = $kesintiMahsupKapanan + $bekleyenToplam;
+    foreach ($kalanAcik as $a) $bekleyenKesintiTop += (int)$a['kesinti'] + (int)$a['tahmini'];
+    $acikKurus = array_sum(array_column($kalanAcik, 'beklenen')) - $bekleyenToplam;
+    $cariBakiye = $faturaToplam - $kasa;
+    $sapma = $cariBakiye - $avizoFark - $bekleyenKesintiTop - $acikKurus;
+    $uyum = ['cari_bakiye_kurus' => $cariBakiye, 'avizo_fark_kurus' => $avizoFark, 'bekleyen_kesinti_kurus' => $bekleyenKesintiTop, 'acik_kurus' => $acikKurus,
+        'sapma_kurus' => $sapma, 'tutarli' => $sapma === 0,
+        // teşhis (formüle girmez): sapmanın bilinen kaynakları — ödeme artığı (açık fatura kalmadı) ve avizo kalemleri toplamı ≠ ödeme tutarı
+        'havuz_artik_kurus' => $havuz, 'kalem_fark_kurus' => $kalemFark, 'avizo_fark_satir_kurus' => $farkSatir, 'avizo_fark_diger_kurus' => $farkDiger + $avizNetEksi + $debitKes];
+    if ($sapma !== 0) {
+        $neden = [];
+        if ($havuz > 0) $neden[] = 'açık faturaya mahsup edilemeyen ödeme artığı ' . siparis_cari_para($havuz) . ' EUR';
+        if ($kalemFark !== 0) $neden[] = 'avizo kalemleri toplamı ödeme tutarından ' . siparis_cari_para(abs($kalemFark)) . ' EUR ' . ($kalemFark > 0 ? 'eksik' : 'fazla');
+        array_unshift($uyarilar, ['seviye' => 'hata', 'mesaj' => 'Rakamlar Cari bakiyeyle tutmuyor (sapma ' . siparis_cari_para_isaretli($sapma) . ' EUR) — patrona vermeden önce kontrol edin.'
+            . ($neden ? ' Bilinen kaynak: ' . implode('; ', $neden) . '.' : '')]);
+    }
+    // iskonto şüphesi: avizoda ödenen, fatura net tutarından TAM %4 eksik (fatura iskontosu girilmemiş / çift uygulanmış olabilir) — net tutar DEĞİŞTİRİLMEZ, yalnız işaretlenir
+    foreach ($odenmis as $od) {
+        if (empty($od['iskonto_suphesi'])) continue;
+        $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => 'Avizoda ödenen, fatura net tutarından tam %4 eksik: ' . (trim((string)($od['sev']['fatura']['no'] ?? '')) !== '' ? (string)$od['sev']['fatura']['no'] : (string)($od['sev']['order_ref'] ?? ''))
+            . ' — fatura iskontosu girilmemiş/çift uygulanmış olabilir (fark ' . siparis_cari_para((int)($od['tam_fark_kurus'] ?? $od['fark_kurus'])) . ' EUR; fatura ' . siparis_cari_para((int)($od['net_tam'] ?? $od['net'])) . ', avizoda ödenen ' . siparis_cari_para((int)$od['odenen']) . ').'];
+    }
+    // bu hafta rakamı geçmiş ödemelerin (gün bazında) en büyüğünden çok mu?
+    $gecmisMax = 0;
+    foreach ($avizGunToplam as $t => $k) if ($t <= $bugun && $k > $gecmisMax) $gecmisMax = $k;
+    $buAsiri = $gecmisMax > 0 && (int)$bu['beklenen'] * 4 > $gecmisMax * 5;
+    if ($buAsiri) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => 'Bu hafta rakamı geçmiş ödemelerin en büyüğünün (' . siparis_cari_para($gecmisMax) . ' EUR) 1,25 katından fazla (' . siparis_cari_para((int)$bu['beklenen']) . ' EUR): OGL birikmiş gecikmişleri tek seferde ödemeyebilir.'];
+    $kalanKisimKurus = array_sum(array_column($kalanAcik, 'kalan_kisim_kurus'));
+    $kalanKisimSev = count(array_filter($kalanAcik, static fn(array $a): bool => $a['kalan_kisim']));
+    if ($kalanKisimSev > 0) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => $kalanKisimSev . ' sevkiyatta invoice girilmemiş kalan kısım var (' . siparis_cari_para($kalanKisimKurus) . ' EUR): bu tutar kesin değil, ikinci invoice girilince netleşir.'];
 
     $dupNo = array_filter($noSay, static fn(array $l): bool => count($l) > 1);
     if ($dupNo) $uyarilar[] = ['seviye' => 'bilgi', 'mesaj' => 'Ortak fatura (aynı fatura no birden çok sevkiyatta): ' . implode(' · ', array_map(static fn($no, $l): string => $no . ' (' . implode(', ', $l) . ')', array_keys($dupNo), $dupNo))
         . ' — avizodaki bu faturanın tutarı sevkiyatlara en eskiden başlayarak dağıtıldı (her biri kendi tutarına kadar); tutar yetmezse sonraki sevkiyat açık kalır.'];
     if ($kismiInvSay > 0) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => $kismiInvSay . ' sevkiyatta sistemdeki invoice sevkiyatın yalnız bir kısmını kapsıyor (toplam ' . siparis_cari_para($kismiInvEksik) . ' EUR eksik; iki araçlı sevkiyatta ikinci invoice ayrı kesilmiş olabilir). Beklenen tutar sevkiyatın TAMAMI üzerinden hesaplandı.'];
     if ($avizHavuz > 0 || $avizHavuzKalem > 0) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => 'Avizolarda sistemdeki bir invoice\'la eşleşmeyen ' . $avizHavuzKalem . ' fatura kalemi var; eşleşmeyen iade/düzeltme satırları düşüldükten sonra NET ' . siparis_cari_para($avizHavuz) . ' EUR ödeme en eski açık faturalara sırayla mahsup edildi (TAHMİNİ; hangi faturaya ait olduğu kesin bilinmiyor).'];
-    if ($faturaToplam - array_sum(array_map(static fn(array $a): int => (int)$a['net'] - (int)$a['mahsup'], $kalanAcik)) > $odenenToplam + max(10000, intdiv($odenenToplam, 50))) {   // tolerans: avizoda düşülen debit'ler (≈ %2)
-        $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => 'DİKKAT: ödenen fatura toplamı, kasaya giren toplam ödemeden büyük çıktı — avizo kalemlerini (eşleşmeyen/iptal satırları) kontrol edin; açık alacak eksik görünüyor olabilir.'];
-    }
     if ($elleHavuz > 0) $uyarilar[] = ['seviye' => 'bilgi', 'mesaj' => 'Avizo kalemi olmayan (elle girilmiş) ' . siparis_cari_para($elleHavuz) . ' EUR ödeme de en eski açık faturalara sırayla mahsup edildi (tahmini).'];
     if ($havuz > 0) $uyarilar[] = ['seviye' => 'bilgi', 'mesaj' => 'Mahsup edilemeyen ödeme artığı: ' . siparis_cari_para($havuz) . ' EUR (açık fatura kalmadı).'];
     if ($gecikmeBozuk > 0) $uyarilar[] = ['seviye' => 'bilgi', 'mesaj' => $gecikmeBozuk . ' ödenmiş faturada fatura tarihi ödeme tarihinden sonra (ya da aynı gün) — invoice tarihi sonradan girilmiş görünüyor; bunlar vade öğrenmesine katılmadı.'];
@@ -395,7 +483,8 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
 
     return [
         'param' => ['vade' => $vade, 'vade_oto' => $vadeOto, 'gun' => $gun, 'gun_oto' => $gunOto, 'baz' => (string)$param['baz']],
-        'bu_hafta' => ['bas' => $haftaBas, 'son' => siparis_vade_gun_ekle($haftaBas, 6), 'odeme_gunu' => $buOdeme],
+        'bu_hafta' => ['bas' => $haftaBas, 'son' => siparis_vade_gun_ekle($haftaBas, 6), 'odeme_gunu' => $buOdeme,
+            'beklenen_kurus' => (int)$bu['beklenen'], 'kesin_kurus' => (int)$bu['kesin_kurus'], 'kalan_kisim_kurus' => (int)$bu['kalan_kisim_kurus']],
         'haftalar' => array_values($hafta),
         'acik' => $kalanAcik,
         'bekleyen_kesinti' => $bekleyen,
@@ -406,12 +495,17 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
             'bu_hafta_kurus' => (int)$bu['beklenen'], 'bu_hafta_sevkiyat' => (int)$bu['sevkiyat'], 'bu_hafta_gecikmis_kurus' => (int)$bu['gecikmis_kurus'],
             'bu_hafta_gecikmis_sevkiyat' => (int)$bu['gecikmis_sevkiyat'], 'bu_hafta_kesinti' => (int)$bu['kesinti'], 'bekleyen_kesinti_kurus' => $bekleyenToplam,
             'gelecek_hafta_kurus' => (int)$gelecek['beklenen'], 'gelecek_hafta_sevkiyat' => (int)$gelecek['sevkiyat'], 'gelecek_odeme_gunu' => (string)$gelecek['odeme_gunu'],
-            'acik_kurus' => array_sum(array_column($kalanAcik, 'beklenen')) - $bekleyenToplam, 'acik_sevkiyat' => count($kalanAcik),
+            'acik_kurus' => $acikKurus, 'acik_sevkiyat' => count($kalanAcik),
             'odenen_kurus' => $odenenToplam, 'son_odeme' => $son, 'odeme_adet' => count($odemeOzet),
             'faturasiz_sevkiyat' => count($faturasiz), 'faturasiz_kurus' => array_sum(array_map(static fn(array $f): int => (int)($f['gelen_kurus'] ?? 0), $faturasiz)),
             'gecikme' => $ist, 'diger_pb' => $digerPb,
             'fatura_toplam_kurus' => $faturaToplam, 'odenen_fatura_kurus' => $faturaToplam - array_sum(array_map(static fn(array $a): int => (int)$a['net'] - (int)$a['mahsup'], $kalanAcik)),
             'mahsup_kurus' => $havuzToplam - $havuz, 'havuz_kurus' => $havuzToplam, 'invoice_kismi_sevkiyat' => $kismiInvSay,
+            // v572 — Cari bakiye uyumu + faturasız kalan kısım + geçmiş ödeme kıyası
+            'kasa_kurus' => $kasa, 'avizo_fark_kurus' => $avizoFark, 'uyum' => $uyum,
+            'kalan_kisim_kurus' => $kalanKisimKurus, 'kalan_kisim_sevkiyat' => $kalanKisimSev,
+            'bu_hafta_kesin_kurus' => (int)$bu['kesin_kurus'], 'bu_hafta_kalan_kisim_kurus' => (int)$bu['kalan_kisim_kurus'],
+            'gecmis_odeme_max_kurus' => $gecmisMax, 'bu_hafta_asiri' => $buAsiri,
         ],
         'uyarilar' => $uyarilar,
     ];
