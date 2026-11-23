@@ -104,7 +104,7 @@ ok('v561: Açıklama-1 → "Analiz Durumu", Açıklama-2 → "Açıklama" (pence
 ok('v561: masaüstünde ilk satır 3 (pf-d2), diğerleri 2 (pf-d3) alan; Müstahsil tam satır değil', str_contains($css, '#pfDialog .pf-form-grid>label.pf-d2{grid-column:span 2}') && str_contains($css, '#pfDialog .pf-form-grid>label.pf-d3{grid-column:span 3}') && str_contains($php, 'pf-cb pf-must pf-w6 pf-d3"'));
 ok('v561: yumuşak görünüm belirteçleri açık + koyu temada tanımlı', str_contains($css, 'html[data-theme="dark"] #pfDialog{--pf-neu-bg:') && !str_contains($css, 'var(--surface,#fff)'));
 
-ok('v561: mobilde de aynı satırlar (12 sütun; Tarih 5 · Belge 3 · Parti 4, ikililer 6+6) + birim darası etiket satırında', str_contains($css, '#pfDialog .pf-form-grid{grid-template-columns:repeat(12,minmax(0,1fr))') && str_contains($css, 'label.pf-d2:has(input[name="tarih"]){grid-column:span 5}') && str_contains($css, '#pfDialog .pf-birimli{padding-right:8px!important}'));
+ok('v561: mobilde alanlar alt alta tam genişlik, Brüt/Dara/Net tek satırda, yumuşak görünüm', str_contains($css, '#pfDialog .pf-form-grid{grid-template-columns:repeat(3,minmax(0,1fr))') && str_contains($css, 'label.pf-d3{grid-column:1/-1;') && str_contains($css, '#pfDialog .pf-form-grid>label.pf-kg{grid-column:span 1}'));
 
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);

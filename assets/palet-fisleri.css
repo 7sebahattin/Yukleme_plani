@@ -280,27 +280,20 @@ html[data-theme="dark"] #pfDialog{--pf-neu-bg:#18202c;--pf-neu-alan:#121923;--pf
   #pfDialog .pf-dialog-foot .btn-primary{background:linear-gradient(180deg,#3b8df0,#1f6fd6);border-color:#1f6fd6;color:#fff}
 }
 
-/* ── v561: mobil (<700px) — PC ile aynı satırlar (3 / 2 / 2 / 2 / 3 / 2) + aynı yumuşak görünüm; tam ekran, sabit alt çubuk korunur ── */
+/* ── v561: mobil (<700px) — alanlar alt alta (tam genişlik), Brüt/Dara/Net tek satırda; PC ile aynı yumuşak görünüm; tam ekran, sabit alt çubuk korunur ── */
 @media(max-width:699px){
   #pfDialog{background:var(--pf-neu-bg)}
   #pfDialog .pf-dialog-head,#pfDialog .pf-dialog-foot{background:var(--pf-neu-bg);border-color:var(--pf-neu-kenar)}
   #pfDialog .pf-dialog-head h2{font-weight:800}
-  /* 12 sütun: ilk satırda Tarih geniş (5), Belge No dar (3), Parti No (4); ikili satırlar 6+6; Brüt/Dara/Net 4+4+4 */
-  #pfDialog .pf-form-grid{grid-template-columns:repeat(12,minmax(0,1fr));gap:9px 8px;padding:10px 12px 14px}
-  #pfDialog .pf-form-grid>label{color:var(--pf-neu-etiket);font-weight:650;min-width:0}
-  #pfDialog .pf-form-grid>label.pf-d2,#pfDialog .pf-form-grid>label.pf-kg{grid-column:span 4}
-  #pfDialog .pf-form-grid>label.pf-d3{grid-column:span 6}
-  #pfDialog .pf-form-grid>label.pf-d2:has(input[name="tarih"]){grid-column:span 5}
-  #pfDialog .pf-form-grid>label.pf-d2:has(input[name="belge_no"]){grid-column:span 3}
-  #pfDialog .pf-form-grid input{min-height:44px;padding:6px 8px;color:var(--pf-text);background:var(--pf-neu-alan);border:1px solid var(--pf-neu-kenar);border-radius:10px;box-shadow:inset 2px 2px 4px var(--pf-neu-koyu),inset -2px -2px 4px var(--pf-neu-acik)}
+  #pfDialog .pf-form-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 10px;padding:14px 16px 18px}
+  #pfDialog .pf-form-grid>label,#pfDialog .pf-form-grid>label.pf-d2,#pfDialog .pf-form-grid>label.pf-d3{grid-column:1/-1;color:var(--pf-neu-etiket);font-weight:650;font-size:.8rem;gap:5px;min-width:0}
+  #pfDialog .pf-form-grid>label.pf-kg{grid-column:span 1}
+  #pfDialog .pf-form-grid input{min-height:48px;padding:8px 12px;color:var(--pf-text);background:var(--pf-neu-alan);border:1px solid var(--pf-neu-kenar);border-radius:12px;box-shadow:inset 2px 2px 4px var(--pf-neu-koyu),inset -2px -2px 4px var(--pf-neu-acik)}
   #pfDialog .pf-form-grid input.pf-readonly{background:var(--pf-neu-bg);color:var(--pf-muted)}
-  #pfDialog .pf-form-grid input[type="date"]{padding:6px 4px;min-width:0}
   #pfDialog .pf-form-grid input:focus{outline:2px solid #0782dc;outline-offset:0;border-color:#0782dc}
-  /* dar kutuda birim darası kutunun İÇİNDE değil, etiket satırının sağında yazar */
-  #pfDialog .pf-birimli{padding-right:8px!important}
-  #pfDialog .pf-birim{top:0;bottom:auto;height:auto;line-height:1.2;right:2px;font-size:.68rem}
-  #pfDialog .pf-birim[data-birim="kasa"]::after{font-size:.68rem}
-  #pfDialog .pf-form-grid>label.pf-kg{margin:4px 0 6px;background:linear-gradient(145deg,var(--pf-kg-bg),var(--pf-neu-bg));border:1px solid var(--pf-neu-acik);border-radius:14px;box-shadow:3px 3px 8px var(--pf-neu-koyu),-3px -3px 8px var(--pf-neu-acik)}
+  #pfDialog .pf-birim{height:48px;right:14px}
+  #pfDialog .pf-form-grid>label.pf-kg{margin:6px 0 4px;padding:8px 8px 10px;background:linear-gradient(145deg,var(--pf-kg-bg),var(--pf-neu-bg));border:1px solid var(--pf-neu-acik);border-radius:14px;box-shadow:3px 3px 8px var(--pf-neu-koyu),-3px -3px 8px var(--pf-neu-acik)}
+  #pfDialog .pf-kg input[name="brut_kg"],#pfDialog .pf-kg input[name="dara_kg"],#pfDialog .pf-kg input[name="net_kg"]{min-height:50px;padding:4px 8px}
   #pfDialog .pf-kg input[name="brut_kg"]{background:var(--pf-surface)}
   #pfDialog .pf-dialog-foot .btn{border-radius:12px;border:1px solid var(--pf-neu-acik);box-shadow:3px 3px 8px var(--pf-neu-koyu),-3px -3px 8px var(--pf-neu-acik)}
   #pfDialog .pf-dialog-foot .btn-ghost{background:var(--pf-neu-bg);color:var(--pf-text)}
