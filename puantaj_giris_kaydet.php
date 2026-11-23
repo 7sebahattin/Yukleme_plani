@@ -3,8 +3,9 @@
 // puantaj_giris_kaydet.php — Aylık Puantaj › Puantaj Girişi (v554) — TEK YAZMA UCU
 //
 // Yalnız POST, JSON yanıt. Gövde form alanı ya da JSON olabilir. Alanlar: action (beyaz liste), csrf, + eyleme göre:
-//   kisi_ekle     : ad (1–120), gorev (≤80, opsiyonel)
-//   kisi_duzenle  : kisi_id, ad, gorev
+//   kisi_ekle     : ad (1–120), gorev (≤80, opsiyonel), cavus_id (v562, opsiyonel: bağlı çavuş = foremen.id; ''/0 = yok)
+//   kisi_duzenle  : kisi_id, ad, gorev, cavus_id (alan gönderilmezse çavuş DEĞİŞMEZ)
+//   kisi_cavus    : kisi_ids[], cavus_id (v562: seçili kişileri bir çavuşa bağlar; ''/0 = bağı kaldırır)
 //   kisi_durum    : kisi_id, aktif (0|1)        — kaldır = pasife al; gün işaretleri silinmez
 //   gun_isaretle  : kisi_id, tarih (YYYY-MM-DD), kod (X Y D İ Ü R T; '' = temizle)
 //   gun_toplu     : kisi_id, ay (YYYY-MM), mod (haftaici_x | ay_temizle)
@@ -53,7 +54,7 @@ $depo = function_exists('active_depot') ? (string)(active_depot() ?? '') : '';
 if ($depo === '') pg_json(['ok' => false, 'error' => 'Önce bir depo seçmelisiniz.'], 400);
 
 $action = $in['action'] ?? null;
-if (!is_string($action) || !in_array($action, ['kisi_ekle', 'kisi_duzenle', 'kisi_durum', 'gun_isaretle', 'gun_toplu', 'gun_sutun', 'kisi_sil', 'kisi_toplu', 'gun_toplu_sec', 'excel_onizle', 'excel_ekle'], true)) {
+if (!is_string($action) || !in_array($action, ['kisi_ekle', 'kisi_duzenle', 'kisi_durum', 'gun_isaretle', 'gun_toplu', 'gun_sutun', 'kisi_sil', 'kisi_toplu', 'kisi_cavus', 'gun_toplu_sec', 'excel_onizle', 'excel_ekle'], true)) {
     pg_json(['ok' => false, 'error' => 'Geçersiz işlem.'], 400);
 }
 
@@ -88,6 +89,15 @@ $gorevAl = static function () use ($in, $metin): string {
     return $g;
 };
 
+/** Çavuş alanı (v562): [gönderildi mi, değer]. Değer: null (bağ yok) | pozitif tamsayı; dizi/nesne/geçersiz reddedilir. */
+$cavusAl = static function () use ($in): array {
+    if (!array_key_exists('cavus_id', $in)) return [false, null];
+    $v = $in['cavus_id'];
+    if ($v === null || $v === '' || $v === 0 || $v === '0') return [true, null];
+    if (!(is_int($v) || (is_string($v) && ctype_digit($v))) || (int)$v <= 0) pg_json(['ok' => false, 'error' => 'Geçersiz çavuş.'], 400);
+    return [true, (int)$v];
+};
+
 /** Kimlik listesi: dizi (liste), 1..500 benzersiz pozitif tamsayı; aksi halde JSON hata. */
 $idListe = static function (string $k) use ($in): array {
     $v = $in[$k] ?? null;
@@ -117,7 +127,7 @@ $excelCoz = static function () use ($pdo): array {
     if (!$d['ok']) pg_json(['ok' => false, 'error' => (string)$d['hata']], 400);
     $ham = pge_dosya_oku($d);
     if (isset($ham['hata'])) pg_json(['ok' => false, 'error' => (string)$ham['hata']], 400);
-    $c = pge_satirlari_coz($ham, pge_mevcut_adlar($pdo));
+    $c = pge_satirlari_coz($ham, pge_mevcut_adlar($pdo), pg_cavus_kolon_var($pdo) ? pge_cavus_harita($pdo) : null);
     if (isset($c['hata'])) pg_json(['ok' => false, 'error' => (string)$c['hata']], 400);
     if ($c['ozet']['toplam'] === 0) pg_json(['ok' => false, 'error' => 'Dosyada kişi satırı bulunamadı.'], 400);
     return [$c, $d['tur']];
@@ -125,14 +135,16 @@ $excelCoz = static function () use ($pdo): array {
 
 switch ($action) {
     case 'kisi_ekle':
-        $s = pg_kisi_ekle($pdo, (string)$metin('ad'), $gorevAl(), $depo, $uid);
+        [$cvVar, $cvDeger] = $cavusAl();
+        $s = pg_kisi_ekle($pdo, (string)$metin('ad'), $gorevAl(), $depo, $uid, $cvDeger);
         if (!$s['ok']) pg_json(['ok' => false, 'error' => (string)$s['hata']], 400);
         $audit($s['audit']);
         pg_json(['ok' => true, 'islem' => 'create', 'kisi_id' => $s['id']]);
 
     case 'kisi_duzenle':
         $k = $kisiAl();
-        $s = pg_kisi_duzenle($pdo, $k, (string)$metin('ad'), $gorevAl());
+        [$cvVar, $cvDeger] = $cavusAl();
+        $s = pg_kisi_duzenle($pdo, $k, (string)$metin('ad'), $gorevAl(), $cvVar ? $cvDeger : false);
         if (!$s['ok']) pg_json(['ok' => false, 'error' => (string)$s['hata']], 400);
         $audit($s['audit']);
         pg_json(['ok' => true, 'islem' => $s['islem'], 'kisi_id' => $k['id']]);
@@ -174,7 +186,7 @@ switch ($action) {
         if ($kod === null || ($kod !== '' && !pg_kod_gecerli($kod))) pg_json(['ok' => false, 'error' => 'Geçersiz işaret kodu.'], 400);
         $q = mb_substr(trim((string)$metin('q')), 0, 60);
         $adaylar = [];
-        foreach (pg_kisiler_oku($pdo, false) as $kk) $adaylar[] = ['id' => $kk['id'], 'ad' => $kk['ad'], 'alt' => $kk['gorev']];
+        foreach (pg_kisiler_oku($pdo, false) as $kk) $adaylar[] = ['id' => $kk['id'], 'ad' => $kk['ad'], 'alt' => $kk['gorev'], 'cavus' => $kk['cavus']];
         $idler = array_map(static fn($r) => (int)$r['id'], pc_satir_filtre($adaylar, $q));   // ekrandaki arama süzgeciyle AYNI küme
         $s = pg_sutun_uygula($pdo, $tarih, $idler, $kod, $uid);
         if (!$s['ok']) pg_json(['ok' => false, 'error' => (string)$s['hata']], 400);
@@ -197,6 +209,16 @@ switch ($action) {
         if (!$s['ok']) pg_json(['ok' => false, 'error' => (string)$s['hata']], 500);
         if ($s['etkilenen'] > 0) audit_log_event($islem === 'sil' ? 'delete' : 'update', 'puantaj_giris', null, null, ['mod' => 'kisi_toplu', 'islem' => $islem, 'kisi_sayisi' => count($kis), 'etkilenen' => $s['etkilenen'], 'atlanan' => $s['atlanan'], 'gun_silinen' => $s['gun_silinen']]);
         pg_json(['ok' => true, 'islem' => $islem, 'kisi_sayisi' => count($kis), 'etkilenen' => $s['etkilenen'], 'atlanan' => $s['atlanan'], 'gun_silinen' => $s['gun_silinen']]);
+
+    case 'kisi_cavus':
+        $idler = $idListe('kisi_ids');
+        [$cvVar, $cvDeger] = $cavusAl();
+        if (!$cvVar) pg_json(['ok' => false, 'error' => 'Çavuş seçimi gerekli.'], 400);
+        $kis = $kisilerAl($idler);
+        $s = pg_kisi_cavus_toplu($pdo, $kis, $cvDeger);
+        if (!$s['ok']) pg_json(['ok' => false, 'error' => (string)$s['hata']], 400);
+        if ($s['etkilenen'] > 0) audit_log_event('update', 'puantaj_giris', null, null, ['mod' => 'kisi_cavus', 'cavus_id' => $s['cavus_id'], 'kisi_sayisi' => count($kis), 'etkilenen' => $s['etkilenen'], 'atlanan' => $s['atlanan']]);
+        pg_json(['ok' => true, 'islem' => 'kisi_cavus', 'kisi_sayisi' => count($kis), 'etkilenen' => $s['etkilenen'], 'atlanan' => $s['atlanan'], 'cavus_id' => $s['cavus_id']]);
 
     case 'gun_toplu_sec':
         $idler = $idListe('kisi_ids');
@@ -224,6 +246,6 @@ switch ($action) {
         $s = pge_kisileri_ekle($pdo, $c['satirlar'], $depo, $uid);
         if (!$s['ok']) pg_json(['ok' => false, 'error' => (string)$s['hata']], 500);
         $atlanan = $c['ozet']['toplam'] - $s['eklenen'];
-        if ($s['eklenen'] > 0) audit_log_event('create', 'puantaj_giris', null, null, ['mod' => 'excel_ekle', 'tur' => $tur, 'satir' => $c['ozet']['toplam'], 'eklenen' => $s['eklenen'], 'atlanan' => $atlanan, 'depo' => $depo]);
+        if ($s['eklenen'] > 0) audit_log_event('create', 'puantaj_giris', null, null, ['mod' => 'excel_ekle', 'tur' => $tur, 'satir' => $c['ozet']['toplam'], 'eklenen' => $s['eklenen'], 'atlanan' => $atlanan, 'cavus_eslesmedi' => $c['ozet']['cavus_eslesmedi'], 'depo' => $depo]);
         pg_json(['ok' => true, 'islem' => 'excel_ekle', 'eklenen' => $s['eklenen'], 'atlanan' => $atlanan, 'ozet' => $c['ozet']]);
 }

@@ -16,12 +16,14 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
     $say = $veri['sayac'];
     $q = (string)($ctx['q'] ?? '');
     $durum = (string)($ctx['durum'] ?? 'hepsi');
+    $cavuslar = $ctx['cavuslar'] ?? null;   // v562: null = «bağlı çavuş» kolonu kurulu değil → çavuş arayüzü yok
+    $cavusSuz = (string)($ctx['cavus_suz'] ?? '');
 ?>
 <div class="pk-sayac" role="status" aria-label="Kişi sayıları">
     <span class="pk-chip">Toplam <b data-pk-say="toplam"><?= (int)$say['toplam'] ?></b></span>
     <span class="pk-chip pk-chip-aktif">Aktif <b data-pk-say="aktif"><?= (int)$say['aktif'] ?></b></span>
     <span class="pk-chip pk-chip-pasif">Pasif <b data-pk-say="pasif"><?= (int)$say['pasif'] ?></b></span>
-    <?php if ($q !== '' || $durum !== 'hepsi'): ?><span class="pk-chip pk-chip-gos">Gösterilen <b><?= count($kisiler) ?></b></span><?php endif; ?>
+    <?php if ($q !== '' || $durum !== 'hepsi' || $cavusSuz !== ''): ?><span class="pk-chip pk-chip-gos">Gösterilen <b><?= count($kisiler) ?></b></span><?php endif; ?>
 </div>
 <p class="pi-hata pk-hata" id="pkHata" role="alert" hidden></p>
 <?php if ((int)$say['toplam'] === 0): ?>
@@ -40,6 +42,7 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
         <th class="pk-c" scope="col"><label class="pg-secbox" title="Görünen kişilerin tümünü seç"><input type="checkbox" data-pk-hepsi aria-label="Görünen kişilerin tümünü seç"></label></th>
         <th scope="col">Ad Soyad</th>
         <th scope="col">Görev</th>
+        <?php if ($cavuslar !== null): ?><th scope="col">Bağlı çavuş</th><?php endif; ?>
         <th scope="col">Durum</th>
         <th scope="col" class="pk-sayi" title="Bu kişinin tüm aylardaki işaretli gün sayısı">Gün kaydı</th>
         <th scope="col">İşlemler</th>
@@ -47,10 +50,11 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
     </thead>
     <tbody>
     <?php foreach ($kisiler as $k): $aktif = (int)$k['aktif'] === 1; ?>
-    <tr data-pk-satir="<?= (int)$k['id'] ?>" data-isim="<?= h($k['ad']) ?>" data-gorev="<?= h($k['gorev']) ?>" data-aktif="<?= $aktif ? '1' : '0' ?>" data-gun="<?= (int)$k['gun'] ?>"<?= $aktif ? '' : ' class="pk-pasif"' ?>>
+    <tr data-pk-satir="<?= (int)$k['id'] ?>" data-isim="<?= h($k['ad']) ?>" data-gorev="<?= h($k['gorev']) ?>" data-cavus-id="<?= (int)($k['cavus_id'] ?? 0) ?>" data-aktif="<?= $aktif ? '1' : '0' ?>" data-gun="<?= (int)$k['gun'] ?>"<?= $aktif ? '' : ' class="pk-pasif"' ?>>
         <td class="pk-c"><label class="pg-secbox"><input type="checkbox" data-pk-sec="<?= (int)$k['id'] ?>" aria-label="Seç: <?= h($k['ad']) ?>"></label></td>
         <td class="pk-isim" data-label="Ad Soyad"><?= h($k['ad']) ?></td>
         <td class="pk-gorev" data-label="Görev"><?= $k['gorev'] !== '' ? h($k['gorev']) : '<span class="pk-yok">—</span>' ?></td>
+        <?php if ($cavuslar !== null): ?><td class="pk-cavus" data-label="Bağlı çavuş"><?= $k['cavus'] !== '' ? h($k['cavus']) . (!empty($k['cavus_pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '') : '<span class="pk-yok">—</span>' ?></td><?php endif; ?>
         <td class="pk-durum" data-label="Durum"><span class="pk-rozet <?= $aktif ? 'pk-rozet-aktif' : 'pk-rozet-pasif' ?>"><?= $aktif ? 'Aktif' : 'Pasif' ?></span></td>
         <td class="pk-sayi" data-label="Gün kaydı"><?= (int)$k['gun'] ?></td>
         <td class="pk-islem">
@@ -75,6 +79,7 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
         <span class="pg-cubuk-dugmeler">
             <button type="button" class="btn btn-sm" data-pk-toplu="pasif">Pasife al</button>
             <button type="button" class="btn btn-sm" data-pk-toplu="aktif">Aktif yap</button>
+            <?php if ($cavuslar !== null): ?><span class="pk-cavus-toplu"><select id="pkCavusSec" class="pg-cavus-sec" aria-label="Seçili kişileri bağlanacak çavuş"><?= pg_cavus_secenekleri($cavuslar, '— Bağı kaldır (çavuşsuz) —') ?></select> <button type="button" class="btn btn-sm" data-pk-cavus-uygula>Çavuşa bağla</button></span><?php endif; ?>
             <button type="button" class="btn btn-sm pk-sil" data-pk-toplu="sil">Sil</button>
             <button type="button" class="btn btn-sm" data-pk-sec-temizle>Seçimi kaldır</button>
         </span>
@@ -87,7 +92,7 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
     <div class="pi-bas"><span class="pg-pen-baslik" id="pkExcelBaslik">Excel'den kişi ekle</span><button type="button" class="pi-kapat" data-pk-excel-kapat aria-label="Kapat">×</button></div>
     <div class="pk-excel-govde">
         <div id="pkExcelAdim1">
-            <p class="pk-excel-not">Sütunlar: <strong>Ad Soyad</strong> (zorunlu) ve <strong>Görev</strong> (isteğe bağlı). .xlsx ya da .csv; en çok 500 satır, 2 MB. Dosya sunucuda saklanmaz; önce önizleme gösterilir.</p>
+            <p class="pk-excel-not">Sütunlar: <strong>Ad Soyad</strong> (zorunlu)<?= $cavuslar !== null ? ', <strong>Görev</strong> ve <strong>Çavuş</strong> (isteğe bağlı; çavuş adı Personel Takibi\'ndeki aktif bir çavuşla eşleşirse bağlanır)' : ' ve <strong>Görev</strong> (isteğe bağlı)' ?>. .xlsx ya da .csv; en çok 500 satır, 2 MB. Dosya sunucuda saklanmaz; önce önizleme gösterilir.</p>
             <p class="pk-excel-satir">
                 <a class="btn btn-sm" href="<?= h(pc_url('puantaj_cizelgesi.php', ['sekme' => 'giris', 'sablon' => '1'])) ?>" data-pk-sablon>⬇ Şablon indir</a>
                 <input type="file" id="pkDosya" class="pk-dosya" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Excel ya da CSV dosyası seç">
@@ -97,7 +102,7 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
             <div class="pk-excel-ozet" id="pkExcelOzet" role="status"></div>
             <div class="pk-excel-tablo-kap">
                 <table class="pk-excel-tablo">
-                    <thead><tr><th scope="col">Sıra</th><th scope="col">Ad Soyad</th><th scope="col">Görev</th><th scope="col">Durum</th></tr></thead>
+                    <thead><tr><th scope="col">Sıra</th><th scope="col">Ad Soyad</th><th scope="col">Görev</th><?php if ($cavuslar !== null): ?><th scope="col">Çavuş</th><?php endif; ?><th scope="col">Durum</th></tr></thead>
                     <tbody id="pkExcelGovde"></tbody>
                 </table>
             </div>
@@ -112,5 +117,5 @@ function pg_kisiler_ekran_ciz(array $veri, array $ctx): void
     </div>
 </div>
 <?php
-    pg_ekran_pencereler();
+    pg_ekran_pencereler($cavuslar);
 }

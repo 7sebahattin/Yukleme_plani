@@ -32,6 +32,29 @@ function pge_gorev_basliklari(): array
     return ['gorev', 'gorevi', 'unvan', 'unvani', 'pozisyon', 'meslek', 'title', 'not', 'aciklama'];
 }
 
+/** v562: «bağlı çavuş» sütun başlığı takma adları. */
+function pge_cavus_basliklari(): array
+{
+    return ['cavus', 'cavusu', 'bagli cavus', 'bagli cavusu', 'cavus adi', 'cavus ad', 'foreman'];
+}
+
+/**
+ * v562: aktif çavuşlar → [katlanmış ad => id] (YALNIZ OKUNUR). Aynı katlanmış ada iki çavuş varsa o ad belirsizdir → eşleşmez.
+ * @return array<string,int>
+ */
+function pge_cavus_harita(PDO $pdo): array
+{
+    $h = []; $cift = [];
+    foreach (pg_cavuslar_oku($pdo) as $c) {
+        if ($c['aktif'] !== 1) continue;
+        $k = pc_fold($c['ad']);
+        if ($k === '') continue;
+        if (isset($h[$k])) $cift[$k] = true; else $h[$k] = $c['id'];
+    }
+    foreach ($cift as $k => $_) unset($h[$k]);
+    return $h;
+}
+
 /** Başlık karşılaştırması için katlama: TR duyarsız, noktalama → boşluk, tek boşluk. */
 function pge_baslik_kat(string $s): string
 {
@@ -226,33 +249,36 @@ function pge_dosya_oku(array $dogrulanmis): array
 /**
  * Ham satırlardan başlık satırını bulur (ilk PGE_BASLIK_ARAMA satırda "Ad / Ad Soyad / İsim" + isteğe bağlı "Görev / Ünvan");
  * bulunamazsa başlıksız: 1. sütun ad, 2. sütun görev, ilk satırdan itibaren veri.
- * @return array{baslik:bool,ad:int,gorev:int,bas:int}   bas = ilk veri satırının dizin numarası
+ * @return array{baslik:bool,ad:int,gorev:int,cavus:int,bas:int}   bas = ilk veri satırının dizin numarası
  */
 function pge_baslik_bul(array $satirlar): array
 {
     $adS = array_flip(pge_ad_basliklari());
     $gorS = array_flip(pge_gorev_basliklari());
+    $cavS = array_flip(pge_cavus_basliklari());
     for ($i = 0, $n = min(count($satirlar), PGE_BASLIK_ARAMA); $i < $n; $i++) {
-        $ad = -1; $gorev = -1;
+        $ad = -1; $gorev = -1; $cavus = -1;
         foreach ($satirlar[$i] as $j => $v) {
             $k = pge_baslik_kat((string)$v);
             if ($k === '') continue;
             if ($ad < 0 && isset($adS[$k])) $ad = (int)$j;
             elseif ($gorev < 0 && isset($gorS[$k])) $gorev = (int)$j;
+            elseif ($cavus < 0 && isset($cavS[$k])) $cavus = (int)$j;
         }
-        if ($ad >= 0) return ['baslik' => true, 'ad' => $ad, 'gorev' => $gorev, 'bas' => $i + 1];
+        if ($ad >= 0) return ['baslik' => true, 'ad' => $ad, 'gorev' => $gorev, 'cavus' => $cavus, 'bas' => $i + 1];
     }
-    return ['baslik' => false, 'ad' => 0, 'gorev' => 1, 'bas' => 0];
+    return ['baslik' => false, 'ad' => 0, 'gorev' => 1, 'cavus' => -1, 'bas' => 0];
 }
 
 /**
  * Ham satırları kişi satırlarına çevirir ve sınıflar.
  * durum: gecerli | bos (ad yok) | uzun (ad > 120 ya da görev > 80) | mukerrer_mevcut | mukerrer_dosya.
  * Mükerrer anahtarı: TR duyarsız katlanmış ad (aynı depoda zaten görünen kişilerle + dosya içinde). İlk geçerli satır kalır.
- * $mevcutAdlar: katlanmış ad listesi. Tamamen boş satırlar sayılmaz. 500'den çok veri satırı → ['hata'].
+ * $mevcutAdlar: katlanmış ad listesi. v562: $cavusHarita (pge_cavus_harita; null = «bağlı çavuş» kurulu değil) verilirse dosyadaki «Çavuş» sütunu
+ * adla eşlenir: eşleşirse kişi o çavuşa bağlanır ('cavus_durum'=eslesti), eşleşmezse satır YİNE eklenir ama çavuşsuz ('eslesmedi'; ozet.cavus_eslesmedi). Tamamen boş satırlar sayılmaz. 500'den çok veri satırı → ['hata'].
  * @return array{hata?:string,satirlar?:list<array>,ozet?:array,baslik?:bool}
  */
-function pge_satirlari_coz(array $ham, array $mevcutAdlar): array
+function pge_satirlari_coz(array $ham, array $mevcutAdlar, ?array $cavusHarita = null): array
 {
     $b = pge_baslik_bul($ham);
     $veri = array_values(array_filter(array_slice($ham, $b['bas']), static fn($r) => implode('', array_map('strval', $r)) !== ''));   // tamamen boş satırlar sayılmaz
@@ -260,10 +286,16 @@ function pge_satirlari_coz(array $ham, array $mevcutAdlar): array
     $mevcut = array_flip($mevcutAdlar);
     $goruldu = [];
     $satirlar = [];
-    $ozet = ['toplam' => 0, 'gecerli' => 0, 'bos' => 0, 'uzun' => 0, 'mukerrer' => 0, 'mukerrer_mevcut' => 0, 'mukerrer_dosya' => 0];
+    $ozet = ['toplam' => 0, 'gecerli' => 0, 'bos' => 0, 'uzun' => 0, 'mukerrer' => 0, 'mukerrer_mevcut' => 0, 'mukerrer_dosya' => 0, 'cavus_eslesmedi' => 0];
     foreach ($veri as $i => $r) {
         $ad = pge_hucre_metin($r[$b['ad']] ?? '');
         $gorev = $b['gorev'] >= 0 ? pge_hucre_metin($r[$b['gorev']] ?? '') : '';
+        $cavusMetin = ($cavusHarita !== null && $b['cavus'] >= 0) ? pge_hucre_metin($r[$b['cavus']] ?? '') : '';
+        $cavusId = null; $cavusDurum = '';
+        if ($cavusMetin !== '') {
+            $cavusId = $cavusHarita[pc_fold($cavusMetin)] ?? null;
+            $cavusDurum = $cavusId !== null ? 'eslesti' : 'eslesmedi';
+        }
         $satir = $b['bas'] + $i + 1;   // boş satırlar atlandığı için dosyadaki satır no'ya YAKLAŞIK sıra no; yalnız gösterim
         if ($ad === '') $durum = 'bos';
         elseif (mb_strlen($ad, 'UTF-8') > PG_AD_MAX || mb_strlen($gorev, 'UTF-8') > PG_GOREV_MAX) $durum = 'uzun';
@@ -274,11 +306,11 @@ function pge_satirlari_coz(array $ham, array $mevcutAdlar): array
             else { $durum = 'gecerli'; $goruldu[$anahtar] = true; }
         }
         $ozet['toplam']++;
-        if ($durum === 'gecerli') $ozet['gecerli']++;
+        if ($durum === 'gecerli') { $ozet['gecerli']++; if ($cavusDurum === 'eslesmedi') $ozet['cavus_eslesmedi']++; }
         elseif ($durum === 'bos') $ozet['bos']++;
         elseif ($durum === 'uzun') $ozet['uzun']++;
         else { $ozet['mukerrer']++; $ozet[$durum]++; }
-        $satirlar[] = ['satir' => $satir, 'ad' => $ad, 'gorev' => $gorev, 'durum' => $durum];
+        $satirlar[] = ['satir' => $satir, 'ad' => $ad, 'gorev' => $gorev, 'durum' => $durum, 'cavus' => mb_substr($cavusMetin, 0, 150, 'UTF-8'), 'cavus_id' => $cavusId, 'cavus_durum' => $cavusDurum];
     }
     return ['satirlar' => $satirlar, 'ozet' => $ozet, 'baslik' => $b['baslik']];
 }
@@ -288,7 +320,7 @@ function pge_onizleme_yaniti(array $cozum): array
 {
     $ilk = [];
     foreach (array_slice($cozum['satirlar'], 0, PGE_ONIZLEME_SATIR) as $s) {
-        $ilk[] = ['satir' => $s['satir'], 'ad' => mb_substr($s['ad'], 0, 150, 'UTF-8'), 'gorev' => mb_substr($s['gorev'], 0, 150, 'UTF-8'), 'durum' => $s['durum']];
+        $ilk[] = ['satir' => $s['satir'], 'ad' => mb_substr($s['ad'], 0, 150, 'UTF-8'), 'gorev' => mb_substr($s['gorev'], 0, 150, 'UTF-8'), 'durum' => $s['durum'], 'cavus' => (string)($s['cavus'] ?? ''), 'cavus_durum' => (string)($s['cavus_durum'] ?? '')];
     }
     return ['ozet' => $cozum['ozet'], 'baslik_bulundu' => (bool)$cozum['baslik'], 'ilk' => $ilk, 'gosterilen' => count($ilk)];
 }
@@ -312,12 +344,16 @@ function pge_kisileri_ekle(PDO $pdo, array $satirlar, string $depo, ?int $userId
     try {
         if ($tx) $pdo->beginTransaction();
         $simdi = date('Y-m-d H:i:s');
-        $ekle = $pdo->prepare('INSERT INTO puantaj_giris_kisiler (ad, gorev, depo, aktif, sira, created_by, created_at, updated_at) VALUES (?, ?, ?, 1, 0, ?, ?, ?)');
+        $kolonVar = pg_cavus_kolon_var($pdo);
+        $ekle = $kolonVar
+            ? $pdo->prepare('INSERT INTO puantaj_giris_kisiler (ad, gorev, cavus_id, depo, aktif, sira, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?)')
+            : $pdo->prepare('INSERT INTO puantaj_giris_kisiler (ad, gorev, depo, aktif, sira, created_by, created_at, updated_at) VALUES (?, ?, ?, 1, 0, ?, ?, ?)');
         foreach ($satirlar as $s) {
             if (($s['durum'] ?? '') !== 'gecerli') continue;
             $ad = pg_ad_dogrula($s['ad']); $gorev = pg_gorev_dogrula($s['gorev']);
             if ($ad === null || $gorev === null) continue;   // ayrıştırıcı zaten eler; kemer + askı
-            $ekle->execute([$ad, $gorev === '' ? null : $gorev, $depo, $userId, $simdi, $simdi]);
+            if ($kolonVar) $ekle->execute([$ad, $gorev === '' ? null : $gorev, isset($s['cavus_id']) && (int)$s['cavus_id'] > 0 ? (int)$s['cavus_id'] : null, $depo, $userId, $simdi, $simdi]);
+            else $ekle->execute([$ad, $gorev === '' ? null : $gorev, $depo, $userId, $simdi, $simdi]);
             $eklenen++;
         }
         if ($tx) $pdo->commit();
@@ -332,20 +368,23 @@ function pge_kisileri_ekle(PDO $pdo, array $satirlar, string $depo, ?int $userId
 // ── Şablon ──────────────────────────────────────────────────
 
 /** İndirilebilir şablon: "Kişiler" sayfası (başlık + 2 sentetik örnek satır) + "Açıklama" sayfası (okunmaz). */
-function pge_sablon_uret(): \PhpOffice\PhpSpreadsheet\Spreadsheet
+function pge_sablon_uret(bool $cavus = false): \PhpOffice\PhpSpreadsheet\Spreadsheet
 {
     xlsx_motor_yukle();
     $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $ws = $ss->getActiveSheet();
     $ws->setTitle('Kişiler');
     $metin = \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING;
-    foreach ([['Ad Soyad', 'Görev'], ['Örnek Kişi A', 'Paketçi'], ['Örnek Kişi B', '']] as $i => $satir) {
+    $sablon = $cavus ? [['Ad Soyad', 'Görev', 'Çavuş'], ['Örnek Kişi A', 'Paketçi', ''], ['Örnek Kişi B', '', '']] : [['Ad Soyad', 'Görev'], ['Örnek Kişi A', 'Paketçi'], ['Örnek Kişi B', '']];
+    foreach ($sablon as $i => $satir) {
         foreach ($satir as $j => $v) $ws->setCellValueExplicit([$j + 1, $i + 1], $v, $metin);
     }
-    $ws->getStyle('A1:B1')->getFont()->setBold(true);
-    $ws->getStyle('A1:B1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB(XLSX_RENK_BASLIK_DOLGU);
+    $son = $cavus ? 'C' : 'B';
+    $ws->getStyle('A1:' . $son . '1')->getFont()->setBold(true);
+    $ws->getStyle('A1:' . $son . '1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB(XLSX_RENK_BASLIK_DOLGU);
     $ws->getColumnDimension('A')->setWidth(36);
     $ws->getColumnDimension('B')->setWidth(28);
+    if ($cavus) $ws->getColumnDimension('C')->setWidth(28);
     $ws->freezePane('A2');
     $ac = $ss->createSheet();
     $ac->setTitle('Açıklama');
@@ -357,6 +396,7 @@ function pge_sablon_uret(): \PhpOffice\PhpSpreadsheet\Spreadsheet
         '4) En çok 500 satır ve 2 MB. Ad en çok 120, görev en çok 80 karakter. Aynı ad (büyük/küçük harf ve Türkçe harf farkı gözetilmez) zaten varsa atlanır.',
         '5) Formüller hesaplanmaz; hücreler düz metin olarak okunur.',
     ];
+    if ($cavus) $satirlar[] = '6) Çavuş sütunu isteğe bağlıdır: Personel Takibi\'ndeki AKTİF bir çavuşun adını yazın (büyük/küçük harf ve Türkçe harf farkı gözetilmez); eşleşirse kişi o çavuşa bağlanır, eşleşmezse kişi yine eklenir ama çavuşsuz kalır.';
     foreach ($satirlar as $i => $m) $ac->setCellValueExplicit([1, $i + 1], $m, $metin);
     $ac->getColumnDimension('A')->setWidth(120);
     $ac->getStyle('A1')->getFont()->setBold(true);

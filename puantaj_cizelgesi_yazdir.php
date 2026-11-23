@@ -34,7 +34,7 @@ $depo = function_exists('active_depot') ? (active_depot() ?? '') : '';
 
 $tablo = $sekme === 'personel'
     ? pc_tablo_personel($pdo, $ay, $q, $pasif)
-    : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
+    : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif, pg_cavus_suz_dogrula($_GET['cavus'] ?? '')) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
 $hata = $tablo['hata'] ?? null;
 $tur = $sekme === 'gunluk' ? 'gunluk' : ($sekme === 'giris' ? 'giris' : 'personel');
 $gunluk = $tur === 'gunluk';
@@ -77,7 +77,7 @@ render_print_page_start('Aylık Puantaj Çizelgesi', 'daily', 'detail', 'landsca
         <tbody>
         <?php foreach ($tablo['satirlar'] as $s): ?>
         <tr>
-            <td class="pcy-isim"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' (pasif)' : '' ?><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></td>
+            <td class="pcy-isim"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' (pasif)' : '' ?><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?><?php if (!empty($s['cavus'])): ?><small>Çavuş: <?= h($s['cavus']) ?></small><?php endif; ?></td>
             <?php foreach ($gunler as $g): [$cls, $ic] = pc_hucre_goster($tur, $s['hucre'][$g['tarih']] ?? null); ?>
             <td class="<?= h(str_replace('pc-', 'pcy-', $cls)) ?><?= $g['hs'] ? ' pcy-hs' : '' ?>"><?= $ic ?></td>
             <?php endforeach; ?>

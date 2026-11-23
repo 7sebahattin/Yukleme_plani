@@ -379,7 +379,7 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
     .pk-wrap { border: 0; background: transparent; }
     .pk-tablo, .pk-tablo tbody { display: block; background: transparent; }
     .pk-tablo thead { display: none; }
-    .pk-tablo tr { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "c ad durum" "c gorev gun" "i i i"; gap: 2px 8px; align-items: center; margin: 0 0 8px; padding: 10px; border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-surface); }
+    .pk-tablo tr { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "c ad durum" "c gorev gun" "c cavus cavus" "i i i"; gap: 2px 8px; align-items: center; margin: 0 0 8px; padding: 10px; border: 1px solid var(--pc-border); border-radius: 10px; background: var(--pc-surface); }
     .pk-tablo td { display: block; padding: 0; border: 0; background: transparent; }
     .pk-tablo td.pk-c { grid-area: c; width: auto; padding: 0; }
     .pk-tablo td.pk-isim { grid-area: ad; font-weight: 600; overflow-wrap: anywhere; }
@@ -407,3 +407,23 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
 .pc-page.pc-isim-yok .pc-liste { display: block !important; }
 .pc-isim-uyari { border-left-color: var(--pc-uyari); background: var(--pc-uyari-bg); color: var(--pc-uyari); }
 @media print { .pc-isim-uyari { display: none !important; } }
+
+/* v562 — Puantaj Girişi: bağlı çavuş (modal alanı, satır etiketi, süzgeç, toplu bağlama) */
+.pg-pen-alan select { display: block; width: 100%; box-sizing: border-box; min-height: 42px; padding: 8px 10px; border: 1px solid var(--pc-border); border-radius: 8px; background: var(--pc-surface); color: var(--pc-text); font: inherit; }
+.pg-pen-alan select:focus { outline: 2px solid var(--pc-accent); outline-offset: 0; }
+.pc-isim small.pg-cavus, .pc-k-isim small.pg-cavus { color: var(--pc-accent); }
+.pk-tablo td.pk-cavus { white-space: nowrap; }
+.pk-cavus-toplu { display: inline-flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.pk-cubuk .pg-cubuk-dugmeler { align-items: center; }
+.pk-cavus-toplu .pg-cavus-sec { min-height: 34px; max-width: 220px; padding: 4px 8px; border: 1px solid var(--pc-border); border-radius: 8px; background: var(--pc-surface); color: var(--pc-text); font: inherit; }
+@media (max-width: 767px) {
+    .pg-pen-alan select { font-size: 16px; min-height: 48px; }
+    .pk-cavus-sec { order: 5; flex: 1 1 100%; width: auto; }
+    .pk-tablo td.pk-cavus { grid-area: cavus; font-size: .82rem; color: var(--pc-accent); white-space: normal; }
+    .pk-tablo td.pk-cavus::before { content: "Çavuş: "; color: var(--pc-muted); }
+    .pk-tablo td.pk-cavus .pk-yok { display: none; }
+    .pk-cavus-toplu { display: flex; width: 100%; }
+    .pk-cavus-toplu .pg-cavus-sec { flex: 1 1 auto; max-width: none; min-height: 46px; font-size: 16px; }
+    .pk-cavus-toplu .btn { min-height: 46px; }
+}
+@media (max-width: 767px) { .pg-mob-cavus { margin-left: auto; font-size: .8rem; color: var(--pc-muted); text-align: right; } .pg-mob-cavus b { color: var(--pc-accent); } }

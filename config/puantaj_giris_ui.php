@@ -27,6 +27,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
 {
     $ay = (string)$ctx['ay'];
     $q = (string)($ctx['q'] ?? '');
+    $cavuslar = $ctx['cavuslar'] ?? null;   // v562: null = «bağlı çavuş» kolonu kurulu değil → hiçbir çavuş arayüzü çizilmez
     $ayUzun = pc_ay_adlari();
     $satirlar = $tablo['satirlar'];
     $say = count($satirlar);
@@ -41,7 +42,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
         } else {
             echo '<div class="pc-bos" role="status"><span aria-hidden="true">📭</span> Aktif kişi yok. "Pasifleri de göster" ile kaldırdığınız kişileri görüp geri alabilirsiniz.</div>';
         }
-        pg_ekran_pencereler();
+        pg_ekran_pencereler($cavuslar);
         return;
     }
 
@@ -55,8 +56,11 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
         if (empty($s['pasif'])) $a .= ' data-pg data-emp="' . (int)$s['id'] . '"';
         return $a;
     };
+    $cavusEt = static function (array $s) use ($cavuslar): string {
+        return ($cavuslar !== null && !empty($s['cavus'])) ? '<small class="pg-cavus" title="Bağlı çavuş">↳ ' . h($s['cavus']) . (!empty($s['cavus_pasif']) ? ' (pasif)' : '') . '</small>' : '';
+    };
     $uc = static function (array $s): string {
-        return '<button type="button" class="pg-uc" data-pg-kisi="' . (int)$s['id'] . '" data-isim="' . h($s['ad']) . '" data-gorev="' . h($s['alt']) . '" data-pasif="' . (!empty($s['pasif']) ? '1' : '0') . '" aria-haspopup="menu" aria-label="İşlemler: ' . h($s['ad']) . '" title="İşlemler">⋯</button>';
+        return '<button type="button" class="pg-uc" data-pg-kisi="' . (int)$s['id'] . '" data-isim="' . h($s['ad']) . '" data-gorev="' . h($s['alt']) . '" data-cavus-id="' . (int)($s['cavus_id'] ?? 0) . '" data-pasif="' . (!empty($s['pasif']) ? '1' : '0') . '" aria-haspopup="menu" aria-label="İşlemler: ' . h($s['ad']) . '" title="İşlemler">⋯</button>';
     };
 ?>
 <!-- Toplu seçim araç çubuğu: masaüstünde her zaman; <768px'te "Toplu seç" modunda hızlı seçimler açılır -->
@@ -92,7 +96,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <tbody>
     <?php foreach ($satirlar as $s): ?>
     <tr data-pg-satir="<?= (int)$s['id'] ?>"<?= !empty($s['pasif']) ? ' class="pg-pasif"' : '' ?>>
-        <th class="pc-isim" scope="row"><span class="pg-isim-kap"><?= empty($s['pasif']) ? '<label class="pg-secbox"><input type="checkbox" data-pg-sec="' . (int)$s['id'] . '" aria-label="Seç: ' . h($s['ad']) . '"></label>' : '<span class="pg-secbox pg-secbox-bos" aria-hidden="true"></span>' ?><span class="pg-isim-metin"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span><?= $uc($s) ?></span></th>
+        <th class="pc-isim" scope="row"><span class="pg-isim-kap"><?= empty($s['pasif']) ? '<label class="pg-secbox"><input type="checkbox" data-pg-sec="' . (int)$s['id'] . '" aria-label="Seç: ' . h($s['ad']) . '"></label>' : '<span class="pg-secbox pg-secbox-bos" aria-hidden="true"></span>' ?><span class="pg-isim-metin"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?><?= $cavusEt($s) ?></span><?= $uc($s) ?></span></th>
         <?php foreach ($gunler as $g):
             $hh = $s['hucre'][$g['tarih']] ?? null;
             [$cls, $ic, $tt] = pg_hucre_goster($hh); ?>
@@ -138,7 +142,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <details class="pc-kisi<?= !empty($s['pasif']) ? ' pg-pasif' : '' ?>" data-emp-kisi="<?= (int)$s['id'] ?>">
         <summary>
             <?php if (empty($s['pasif'])): ?><input type="checkbox" class="pg-msec" data-pg-sec="<?= (int)$s['id'] ?>" aria-label="Seç: <?= h($s['ad']) ?>"><?php endif; ?>
-            <span class="pc-k-isim"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?></span>
+            <span class="pc-k-isim"><span class="pc-isim-yazi"><?= h($s['ad']) ?><?= !empty($s['pasif']) ? ' <em class="pg-pasif-etiket">(pasif)</em>' : '' ?></span><?php if ($s['alt'] !== ''): ?><small><?= h($s['alt']) ?></small><?php endif; ?><?= $cavusEt($s) ?></span>
             <span class="pc-rozetler">
                 <span class="pc-rz" data-rz="gun" title="Çalışılan gün"><?= h(pg_gun_fmt($o['gun'])) ?> gün</span>
                 <span class="pc-rz" data-rz="izin" title="İzin günü"<?= (int)$o['izin'] === 0 ? ' hidden' : '' ?>><?= (int)$o['izin'] ?> izin</span>
@@ -146,7 +150,7 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
                 <span class="pc-rz" data-rz="devamsiz" title="Devamsız gün"<?= (int)$o['devamsiz'] === 0 ? ' hidden' : '' ?>><?= (int)$o['devamsiz'] ?> devamsız</span>
             </span>
         </summary>
-        <div class="pg-mob-islem"><?= $uc($s) ?><span class="pg-mob-yaz">İşlemler</span></div>
+        <div class="pg-mob-islem"><?= $uc($s) ?><span class="pg-mob-yaz">İşlemler</span><?php if ($cavuslar !== null && !empty($s['cavus'])): ?><span class="pg-mob-cavus">Bağlı çavuş: <b><?= h($s['cavus']) ?></b><?= !empty($s['cavus_pasif']) ? ' (pasif)' : '' ?></span><?php endif; ?></div>
         <div class="pc-takvim" role="grid" aria-label="<?= h($s['ad'] . ' — ' . pc_ay_basligi($ay)) ?>">
             <?php foreach (pc_gun_adlari() as $hn => $hk): ?><span class="pc-t-bas<?= $hn >= 6 ? ' pc-hs' : '' ?>"><?= h($hk) ?></span><?php endforeach; ?>
             <?php for ($i = 1; $i < $ilkHg; $i++): ?><span class="pc-t pc-t-bos" aria-hidden="true"></span><?php endfor; ?>
@@ -190,11 +194,19 @@ function pg_ekran_ciz(array $tablo, array $ctx): void
     <p class="pg-cubuk-sonuc" id="pgCubukSonuc" role="status" hidden></p>
 </div>
 <?php
-    pg_ekran_pencereler();
+    pg_ekran_pencereler($cavuslar);
 }
 
-/** Açılır pencereler (hücre kod menüsü, kişi işlem menüsü, ad/onay penceresi). form elemanı yok. */
-function pg_ekran_pencereler(): void
+/** v562: çavuş seçenekleri (modal + toplu çubuk): "— yok —" + çavuşlar. Pasif çavuş SEÇİLEMEZ (disabled; zaten bağlı kişide görünür kalır). */
+function pg_cavus_secenekleri(array $cavuslar, string $bosEtiket): string
+{
+    $o = '<option value="">' . h($bosEtiket) . '</option>';
+    foreach ($cavuslar as $c) $o .= '<option value="' . (int)$c['id'] . '"' . ($c['aktif'] ? '' : ' disabled') . '>' . h($c['ad']) . ($c['aktif'] ? '' : ' (pasif)') . '</option>';
+    return $o;
+}
+
+/** Açılır pencereler (hücre kod menüsü, kişi işlem menüsü, ad/onay penceresi). form elemanı yok. $cavuslar: null = çavuş alanı yok. */
+function pg_ekran_pencereler(?array $cavuslar = null): void
 {
 ?>
 <div class="pi-ovl" id="pgOvl" hidden></div>
@@ -232,6 +244,10 @@ function pg_ekran_pencereler(): void
         <input type="text" id="pgAd" maxlength="<?= PG_AD_MAX ?>" autocomplete="off" placeholder="Örnek Kişi A">
         <label for="pgGorev">Görev <span class="pg-opsiyonel">(isteğe bağlı)</span></label>
         <input type="text" id="pgGorev" maxlength="<?= PG_GOREV_MAX ?>" autocomplete="off" placeholder="Ünvan / not">
+        <?php if ($cavuslar !== null): ?>
+        <label for="pgCavus">Bağlı çavuş <span class="pg-opsiyonel">(isteğe bağlı)</span></label>
+        <select id="pgCavus" class="pg-cavus-sec"><?= pg_cavus_secenekleri($cavuslar, '— Çavuş seçilmedi —') ?></select>
+        <?php endif; ?>
     </div>
     <p class="pg-pen-mesaj" id="pgPenMesaj" hidden></p>
     <p class="pi-hata" id="pgPenHata" role="alert" hidden></p>

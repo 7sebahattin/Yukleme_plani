@@ -460,7 +460,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     $pg_results = pg_migrate($pdo);
     foreach ($pg_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'puantaj_giris', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+            audit_log_event('migrate', 'puantaj_giris', null, null, ['operation' => strpos($sr['tablo'], '.') !== false ? 'add_column' : 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -1174,8 +1174,9 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     <h2 style="margin-top:0;">Puantaj Girişi</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>puantaj_giris_kisiler</code> + <code>puantaj_giris_gunler</code> (Aylık Puantaj Çizelgesi › Puantaj Girişi sekmesi:
-      kullanıcının kendi tanımladığı kişilere gayri resmi / göstermelik puantaj) tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz;
-      PDKS, hakediş ve personel tablolarıyla ilişkisi yoktur). Çalıştırılmazsa sekme yalnız yöneticiye kurulum notuyla görünür, diğerlerinden gizli kalır.
+      kullanıcının kendi tanımladığı kişilere gayri resmi / göstermelik puantaj) tablolarını ekler; v562: kişi tablosuna «bağlı çavuş» için tek kolon
+      <code>cavus_id</code> (INT, boş olabilir) ekler (yabancı anahtar YOK, mevcut veriye dokunmaz, tekrar çalıştırmak zararsızdır). PDKS/hakediş verisine yazmaz;
+      yalnız çavuş adlarını okur. Çalıştırılmazsa sekme yalnız yöneticiye kurulum notuyla görünür; kolon eklenmezse «bağlı çavuş» alanı gizli kalır.
       <?php if ($pg_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
         <?php foreach ($pg_results as $sr): ?>
@@ -1183,12 +1184,13 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
         <?php endforeach; ?>
       <?php endif; ?>
     </p>
-    <?php $pgHazir = pg_hazir($pdo); ?>
+    <?php $pgHazir = pg_hazir($pdo); $pgCavus = $pgHazir && pg_cavus_kolon_var($pdo); ?>
     <p style="font-weight:600;color:<?= $pgHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $pgHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <?php if ($pgHazir): ?><p style="font-weight:600;color:<?= $pgCavus ? '#1f9d55' : '#c0392b' ?>;"><?= $pgCavus ? '✓ Bağlı çavuş kolonu var' : '✗ Bağlı çavuş kolonu eksik (aşağıdaki düğme ekler)' ?></p><?php endif; ?>
     <form method="post" style="margin-top:12px;">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="puantaj_giris">
-      <button type="submit" class="btn btn-primary">Puantaj Girişi Tablolarını Oluştur</button>
+      <button type="submit" class="btn btn-primary">Puantaj Girişi Tablolarını Oluştur / Güncelle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

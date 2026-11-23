@@ -47,20 +47,23 @@ $depo = function_exists('active_depot') ? (active_depot() ?? '') : '';
 // v555: Puantaj Girişi şablonu (Excel'den kişi ekleme) — yalnız Düzenle yetkisi; dosya üretir, hiçbir şey yazmaz
 if ($sekme === 'giris' && isset($_GET['sablon'])) {
     if (!role_pdks_can('monthly_timesheet', 'edit')) forbidden('Bu işlem için yetkiniz yok.');
-    xlsx_gonder(pge_sablon_uret(), 'puantaj_kisi_sablonu.xlsx');
+    xlsx_gonder(pge_sablon_uret(pg_hazir($pdo) && pg_cavus_kolon_var($pdo)), 'puantaj_kisi_sablonu.xlsx');
 }
 
 // v555: Puantaj Girişi iç görünümü: 'puantaj' (çizelge) | 'kisiler' (kişi yönetimi). Dışa aktarım her zaman çizelgedir.
 $gorunum = ($sekme === 'giris' && ($_GET['gorunum'] ?? '') === 'kisiler' && !$csvIst && !$xlsxIst) ? 'kisiler' : 'puantaj';
 $durum = in_array((string)($_GET['durum'] ?? ''), ['aktif', 'pasif'], true) ? (string)$_GET['durum'] : 'hepsi';
 $kisiVeri = null;
+// v562: «bağlı çavuş» (kolon kurulu değilse null → arayüzde hiç görünmez). Süzgeç: '' | 'yok' | çavuş id.
+$cavusListe = ($sekme === 'giris' && pg_hazir($pdo) && pg_cavus_kolon_var($pdo)) ? pg_cavuslar_oku($pdo) : null;
+$cavusF = $cavusListe !== null ? pg_cavus_suz_dogrula($_GET['cavus'] ?? '') : '';
 if ($gorunum === 'kisiler') {
     if (!pg_hazir($pdo)) {
         $tablo = ['hata' => 'Puantaj Girişi tabloları henüz kurulmamış.', 'sema' => true];
     } else {
         try {
             $hepsi = pg_kisiler_yonetim($pdo);
-            $kisiVeri = ['kisiler' => pg_kisiler_filtrele($hepsi, $q, $durum), 'sayac' => pg_kisi_sayaclari($hepsi)];
+            $kisiVeri = ['kisiler' => pg_kisiler_filtrele($hepsi, $q, $durum, $cavusF), 'sayac' => pg_kisi_sayaclari($hepsi)];
             $tablo = ['tur' => 'giris', 'satirlar' => $kisiVeri['kisiler']];
         } catch (Throwable $e) {
             error_log('[puantaj_giris] kisiler: ' . $e->getMessage());
@@ -70,13 +73,13 @@ if ($gorunum === 'kisiler') {
 } else {
     $tablo = $sekme === 'personel'
         ? pc_tablo_personel($pdo, $ay, $q, $pasif)
-        : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
+        : ($sekme === 'giris' ? pg_tablo($pdo, $ay, $q, $pasif, $cavusF) : pc_tablo_gunluk($pdo, $ay, $depo, $q));
 }
 $hata = $tablo['hata'] ?? null;
 
-$param = ['sekme' => $sekme, 'ay' => $ay, 'q' => $q, 'pasif' => $pasif ? '1' : ''];
+$param = ['sekme' => $sekme, 'ay' => $ay, 'q' => $q, 'pasif' => $pasif ? '1' : '', 'cavus' => $cavusF];
 $kisilerGorunum = $gorunum === 'kisiler';
-if ($kisilerGorunum) $param = ['sekme' => 'giris', 'gorunum' => 'kisiler', 'q' => $q, 'durum' => $durum === 'hepsi' ? '' : $durum];
+if ($kisilerGorunum) $param = ['sekme' => 'giris', 'gorunum' => 'kisiler', 'q' => $q, 'durum' => $durum === 'hepsi' ? '' : $durum, 'cavus' => $cavusF];
 
 // v553: elle işaret arayüzü — yalnız Personel sekmesi, tablo hazır, 'edit' + kaynak (Personel kartları Gör) izni
 $piHazir = $sekme === 'personel' && $hata === null && pi_hazir($pdo);
@@ -159,7 +162,15 @@ $ayUzun = pc_ay_adlari();
         <option value="aktif"<?= $durum === 'aktif' ? ' selected' : '' ?>>Aktif</option>
         <option value="pasif"<?= $durum === 'pasif' ? ' selected' : '' ?>>Pasif</option>
     </select>
-    <?php elseif ($sekme === 'personel' || $giris): ?>
+    <?php endif; ?>
+    <?php if ($cavusListe !== null): ?>
+    <select name="cavus" class="pc-ay-giris pk-cavus-sec" aria-label="Bağlı çavuşa göre süz" data-oto>
+        <option value="">Tüm çavuşlar</option>
+        <option value="yok"<?= $cavusF === 'yok' ? ' selected' : '' ?>>Çavuşsuz</option>
+        <?php foreach ($cavusListe as $cv): ?><option value="<?= (int)$cv['id'] ?>"<?= $cavusF === (string)$cv['id'] ? ' selected' : '' ?>><?= h($cv['ad']) ?><?= $cv['aktif'] ? '' : ' (pasif)' ?></option><?php endforeach; ?>
+    </select>
+    <?php endif; ?>
+    <?php if (!$kisilerGorunum && ($sekme === 'personel' || $giris)): ?>
     <label class="pc-pasif"><input type="checkbox" name="pasif" value="1" <?= $pasif ? 'checked' : '' ?> data-oto> Pasifleri de göster</label>
     <?php endif; ?>
     <noscript><button type="submit" class="btn">Göster</button></noscript>
@@ -209,8 +220,8 @@ $ayUzun = pc_ay_adlari();
 
 <?php if ($hata !== null): ?>
 <div class="pc-bos" role="status"><span aria-hidden="true">⚠️</span> <?= h($hata) ?><?php if (!empty($tablo['sema'])): ?><br>Önce <a href="migrate.php#puantaj-giris">migrate.php › Puantaj Girişi</a> kartını çalıştırın.<?php endif; ?></div>
-<?php elseif ($kisilerGorunum): pg_kisiler_ekran_ciz($kisiVeri, ['q' => $q, 'durum' => $durum]); ?>
-<?php elseif ($giris): pg_ekran_ciz($tablo, ['ay' => $ay, 'q' => $q, 'pasif' => $pasif]); ?>
+<?php elseif ($kisilerGorunum): pg_kisiler_ekran_ciz($kisiVeri, ['q' => $q, 'durum' => $durum, 'cavuslar' => $cavusListe, 'cavus_suz' => $cavusF]); ?>
+<?php elseif ($giris): pg_ekran_ciz($tablo, ['ay' => $ay, 'q' => $q, 'pasif' => $pasif, 'cavuslar' => $cavusListe]); ?>
 <?php elseif ($say === 0): ?>
 <div class="pc-bos" role="status"><span aria-hidden="true">📭</span> <?= $q !== '' ? 'Aramanıza uyan ' . h(mb_strtolower($kisiEtiket, 'UTF-8')) . ' yok.' : h(pc_ay_basligi($ay)) . ' için ' . ($gunluk ? 'çavuş kaydı' : 'personel') . ' bulunamadı.' ?></div>
 <?php else:
