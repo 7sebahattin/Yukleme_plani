@@ -112,7 +112,21 @@ ok('uyarılar: eşleşmeyen avizo (TAHMİNİ) + kısmi invoice; eşleşmeyen say
 ok('yüklemeden beri gün: açık faturada (bugün − yükleme tarihi); 22: yükleme 03.10 → 53 gün, 23: 08.11 → 17', $h6['acik'][0]['yukleme_gun'] === 53 && $h6['acik'][1]['yukleme_gun'] === 17, json_encode(array_column($h6['acik'], 'yukleme_gun')));
 $g7 = ['sevkiyatlar' => [$sev(41, '2026-11-01'), $sev(42, '2026-11-02', ['fatura' => ['fiyat' => 13700, 'no' => $G(41), 'tarih' => '2026-11-02']])], 'fatura' => [41 => ['iskonto' => 4.0], 42 => ['iskonto' => 4.0]], 'belge_toplam' => []];
 $h7 = siparis_vade_hesapla($g7, siparis_vade_param([]), $BUGUN);
-ok('aynı fatura no iki sevkiyatta → uyarı (no + iki sipariş)', (bool)array_filter($h7['uyarilar'], static fn(array $u): bool => $u['seviye'] === 'uyari' && str_contains($u['mesaj'], 'Aynı fatura no') && str_contains($u['mesaj'], $G(41)) && str_contains($u['mesaj'], 'TC820041.10') && str_contains($u['mesaj'], 'TC820042.10')));
+ok('aynı fatura no iki sevkiyatta → "Ortak fatura" notu (no + iki sipariş)', (bool)array_filter($h7['uyarilar'], static fn(array $u): bool => $u['seviye'] === 'bilgi' && str_contains($u['mesaj'], 'Ortak fatura') && str_contains($u['mesaj'], $G(41)) && str_contains($u['mesaj'], 'TC820041.10') && str_contains($u['mesaj'], 'TC820042.10')));
+$ortak = static function (int $z) use ($sev, $G): array {
+    return ['sevkiyatlar' => [$sev(61, '2026-10-03'), $sev(62, '2026-10-27', ['fatura' => ['fiyat' => 13700, 'no' => $G(61), 'tarih' => '2026-10-27']])],
+        'fatura' => [61 => ['iskonto' => 4.0], 62 => ['iskonto' => 4.0]], 'belge_toplam' => [61 => 131520, 62 => 131520],
+        'odemeler' => [['id' => 71, 'tarih' => '2026-11-09', 'kurus' => $z, 'pb' => 'EUR', 'satirlar' => [['n' => $G(61), 't' => 'ana', 'g' => $G(61), 'z' => $z]]]],
+        'harita' => [$G(61) => ['durum' => 'belirsiz', 'v' => [['id' => 61], ['id' => 62]]]], 'debitler' => []];
+};
+$h9 = siparis_vade_hesapla($ortak(263040), siparis_vade_param([]), $BUGUN);
+ok('ORTAK FATURA (aynı no iki sevkiyatta): avizo tutarı iki sevkiyatı da kapsıyorsa (263.040) ikisi de ÖDENMİŞ, açık yok, havuz 0', count($h9['odenmis']) === 2 && $h9['acik'] === [] && $h9['ozet']['havuz_kurus'] === 0 && $h9['ozet']['acik_kurus'] === 0, json_encode($h9['ozet']));
+ok('ortak fatura: ödeme özetinde 2 sevkiyat; "Ortak fatura" bilgi notu (no + iki sipariş), "eşleşmeyen" uyarısı YOK', $h9['odemeler'][0]['sevkiyat'] === 2 && (bool)array_filter($h9['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'Ortak fatura') && str_contains($u['mesaj'], 'TC820061.10') && str_contains($u['mesaj'], 'TC820062.10'))
+    && !array_filter($h9['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'eşleşmeyen')));
+$h10 = siparis_vade_hesapla($ortak(131520), siparis_vade_param([]), $BUGUN);
+ok('ortak fatura: avizo tutarı yalnız bir sevkiyatlık (131.520) → EN ESKİ (61) ödenmiş, 62 açık kalır', array_map(static fn(array $a): int => $a['sev']['id'], $h10['odenmis']) === [61] && array_map(static fn(array $a): int => $a['sev']['id'], $h10['acik']) === [62] && $h10['acik'][0]['beklenen'] === 131520, json_encode($h10['ozet']));
+$h11 = siparis_vade_hesapla($ortak(300000), siparis_vade_param([]), $BUGUN);
+ok('ortak fatura: artan tutar (300.000 − 263.040 = 36.960) mahsup havuzuna gider (açık fatura yoksa "artık" bilgisi)', $h11['ozet']['havuz_kurus'] === 36960 && $h11['ozet']['mahsup_kurus'] === 0 && (bool)array_filter($h11['uyarilar'], static fn(array $u): bool => str_contains($u['mesaj'], 'Mahsup edilemeyen')));
 $g8 = ['sevkiyatlar' => [$sev(51, '2026-11-12'), $sev(52, '2026-10-20'), $sev(53, '2026-11-20')], 'fatura' => array_fill_keys([51, 52, 53], ['iskonto' => 4.0]), 'belge_toplam' => [51 => 131520, 52 => 131520, 53 => 131520],
     'odemeler' => [['id' => 61, 'tarih' => '2026-11-09', 'kurus' => 263040, 'pb' => 'EUR', 'satirlar' => [['n' => $G(51), 't' => 'ana', 'g' => $G(51), 'z' => 131520], ['n' => $G(52), 't' => 'ana', 'g' => $G(52), 'z' => 131520]]]],
     'harita' => [$G(51) => ['durum' => 'eslesti', 'v' => [['id' => 51]]], $G(52) => ['durum' => 'eslesti', 'v' => [['id' => 52]]]], 'debitler' => []];
