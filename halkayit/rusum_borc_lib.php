@@ -156,18 +156,32 @@ function hks_rusum_odeme_oku($firmaId): array {
   $v = hks_kv_oku(hks_rusum_odeme_anahtar($firmaId), []);
   return is_array($v) ? $v : [];
 }
-// $odendi=true → işaretle, false → kaldır. Geçersiz grup → false. Dönüş: yazıldı mı.
-function hks_rusum_odeme_yaz($firmaId, string $grup, bool $odendi, string $kullanici = '', ?string $bugun = null): bool {
-  if (!hks_rusum_grup_gecerli($grup)) return false;
+// Toplu işaret: tek kv yazımıyla $gruplar'ı işaretler ($odendi=true) ya da kaldırır (false).
+// Biçimi geçersiz grup varsa HİÇBİRİ yazılmaz (-1). Dönüş: işlenen grup sayısı, hata → -1.
+// Tek çağrıda en çok HKS_RUSUM_TOPLU_LIMIT grup; ödendi sayısı HKS_RUSUM_ODEME_LIMIT'i aşmaz.
+const HKS_RUSUM_TOPLU_LIMIT = 400;
+function hks_rusum_odeme_toplu_yaz($firmaId, array $gruplar, bool $odendi, string $kullanici = '', ?string $bugun = null): int {
+  $liste = [];
+  foreach ($gruplar as $g) {
+    if (!is_string($g) || !hks_rusum_grup_gecerli($g)) return -1;
+    $liste[$g] = true;
+  }
+  if (!$liste || count($liste) > HKS_RUSUM_TOPLU_LIMIT) return -1;
   $harita = hks_rusum_odeme_oku($firmaId);
   if ($odendi) {
-    if (!isset($harita[$grup]) && count($harita) >= HKS_RUSUM_ODEME_LIMIT) return false;
-    $harita[$grup] = ['t' => $bugun ?? date('Y-m-d'), 'k' => mb_substr($kullanici, 0, 60, 'UTF-8')];
+    $yeniSayi = count(array_diff_key($liste, $harita));
+    if (count($harita) + $yeniSayi > HKS_RUSUM_ODEME_LIMIT) return -1;
+    $kayit = ['t' => $bugun ?? date('Y-m-d'), 'k' => mb_substr($kullanici, 0, 60, 'UTF-8')];
+    foreach ($liste as $g => $_) $harita[$g] = $kayit;
   } else {
-    unset($harita[$grup]);
+    foreach ($liste as $g => $_) unset($harita[$g]);
   }
   hks_kv_yaz(hks_rusum_odeme_anahtar($firmaId), $harita);
-  return true;
+  return count($liste);
+}
+// Tek grup (eski imza): $odendi=true → işaretle, false → kaldır. Dönüş: yazıldı mı.
+function hks_rusum_odeme_yaz($firmaId, string $grup, bool $odendi, string $kullanici = '', ?string $bugun = null): bool {
+  return hks_rusum_odeme_toplu_yaz($firmaId, [$grup], $odendi, $kullanici, $bugun) === 1;
 }
 
 // Saf: 'odendi' | 'gecikmis' (vadesi geçmiş, ödenmemiş) | 'odenmedi'.
@@ -198,4 +212,54 @@ function hks_rusum_durumlari_isle(array $gruplar, array $odemeHaritasi, string $
 function hks_rusum_tl(float $v): string { return number_format($v, 2, ',', '.'); }
 function hks_rusum_tarih(string $t): string {
   return preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $t, $m) ? $m[3] . '.' . $m[2] . '.' . $m[1] : $t;
+}
+
+// ── Son sorgunun önbelleği (Hal Kayıt ana ekranındaki "Rüsum Borcu" kartı için) ─────────
+// Ana ekran HER açılışta HKS'e 14 çağrı yapmasın diye: sayfa başarılı (eksiksiz) sorgulanınca
+// grup listesi hks_kv'ye yazılır; kart bunu OKUR. Ödendi işaretleri ayrı anahtarda olduğundan
+// kart işaretlemeden hemen sonra da, vade günleri geçtikçe de doğru kalır. Şema/migration YOK.
+function hks_rusum_onbellek_anahtar($firmaId): string {
+  return 'rbg_' . substr(md5((string)$firmaId), 0, 12);
+}
+// $gruplar: hks_rusum_grupla()['gruplar']. Dönüş: yazıldı mı.
+function hks_rusum_onbellek_yaz($firmaId, array $gruplar, string $bas, string $bit, ?string $zaman = null): bool {
+  $g = [];
+  foreach ($gruplar as $x) {
+    if (!hks_rusum_grup_gecerli((string)($x['grup'] ?? ''))) continue;
+    $g[] = [$x['grup'], $x['tahakkuk'], $x['sonOdeme'], (float)$x['tutar']];
+  }
+  hks_kv_yaz(hks_rusum_onbellek_anahtar($firmaId), ['t' => $zaman ?? date('c'), 'bas' => $bas, 'bit' => $bit, 'g' => $g]);
+  return true;
+}
+function hks_rusum_onbellek_oku($firmaId): ?array {
+  $v = hks_kv_oku(hks_rusum_onbellek_anahtar($firmaId), null);
+  return (is_array($v) && isset($v['g']) && is_array($v['g'])) ? $v : null;
+}
+// Hangi sorgular önbelleğe yazılır: yalnız "tam" olanlar (≥150 gün ve bugüne yakın). Kısa/eski bir aralık
+// sorgulanınca kart eksik toplam göstermesin diye önbelleği EZMEZ.
+function hks_rusum_onbellege_uygun(string $bas, string $bit, ?string $bugun = null): bool {
+  $b = DateTime::createFromFormat('!Y-m-d', $bas); $e = DateTime::createFromFormat('!Y-m-d', $bit);
+  $t = DateTime::createFromFormat('!Y-m-d', $bugun ?? date('Y-m-d'));
+  if (!$b || !$e || !$t) return false;
+  return ((int)$b->diff($e)->days + 1) >= 150 && (int)$e->diff($t)->format('%r%a') <= 3;
+}
+const HKS_RUSUM_ESKI_GUN = 2;   // önbellek bu kadar günden eskiyse kart "eski veri" der
+// Kart özeti: önbellek yoksa null. vadesiGecmis = vadesi geçmiş ödenmemiş toplam,
+// toplam = ödenmemiş toplam ("toplam borç"), zaman/bas/bit = son sorgu, eski = bayatlamış mı.
+function hks_rusum_ozet($firmaId, ?string $bugun = null, ?array $tatiller = null): ?array {
+  $o = hks_rusum_onbellek_oku($firmaId);
+  if ($o === null) return null;
+  $bugun = $bugun ?? date('Y-m-d');
+  $gruplar = [];
+  foreach ($o['g'] as $x) {
+    if (!is_array($x) || count($x) < 4) continue;
+    $gruplar[] = ['grup' => (string)$x[0], 'tahakkuk' => (string)$x[1], 'sonOdeme' => (string)$x[2], 'tutar' => (float)$x[3], 'adet' => 0];
+  }
+  $d = hks_rusum_durumlari_isle($gruplar, hks_rusum_odeme_oku($firmaId), $bugun);
+  $t = strtotime((string)($o['t'] ?? ''));
+  $eski = $t === false || (strtotime($bugun) - $t) > HKS_RUSUM_ESKI_GUN * 86400;
+  return [
+    'vadesiGecmis' => $d['toplam']['gecikmis'], 'toplam' => $d['toplam']['odenmedi'],
+    'zaman' => (string)($o['t'] ?? ''), 'bas' => (string)($o['bas'] ?? ''), 'bit' => (string)($o['bit'] ?? ''), 'eski' => $eski,
+  ];
 }

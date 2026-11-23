@@ -67,6 +67,7 @@ require_once __DIR__ . '/tekrar_gonder_lib.php';
 require_once __DIR__ . '/kunye_secim_lib.php';
 // Firma ekle/düzenle/sil: DB + audit mantığı (yetki/CSRF kapısı aşağıda, burada).
 require_once __DIR__ . '/firma_yonetim_lib.php';
+require_once __DIR__ . '/rusum_borc_lib.php';   // v568: ana ekran Rüsum Borcu kartı (rusum_ozet; salt okunur)
 // v526: elle girilen parti no'lu gönderimi beyan / beyansız yükleme tarafına işler
 // (hks_partili_gonderim_beyana_isle — hata yutar, HKS akışını kesmez).
 require_once __DIR__ . '/../config/beyansiz_yukleme.php';
@@ -216,7 +217,7 @@ function hks_csrf_muaf_eylemler(): array {
     'firmalar', 'sonlar', 'kisiler', 'csrf', 'listeler', 'kunyeler', 'stok', 'kunye_detay',
     'toplu_kunye', 'taslaklar', 'gonderilenler', 'gonderilen_tohum', 'urun_listeleri',
     'urun_cinsleri', 'sorgu', 'gelen_sorgu', 'etiket', 'bildirim_onizle', 'iller', 'ilceler', 'beldeler',
-    'isyerleri', 'ayni_plaka_bugun', 'kayitli_kisi',
+    'isyerleri', 'ayni_plaka_bugun', 'kayitli_kisi', 'rusum_ozet',
   ];
 }
 // Firma yönetimi (HKS kullanıcı adı/şifre/web servis şifresi dahil) YALNIZ yönetici:
@@ -259,6 +260,7 @@ function hks_eylem_icerigi(string $action, array $g): ?string {
     'etiket' => 'ekr_etiket',
     'stok' => 'ekr_stok',
     'gelen_sorgu' => 'ekr_gelen',
+    'rusum_ozet' => 'rusum_borc',
     'taslak_gonder', 'taslak_fiyat_yaz' => 'gonder',
     'taslak_kopya_firmaya' => 'taslak_kopyala',
     'listeler_yenile' => 'liste_guncelle',
@@ -1402,6 +1404,13 @@ try {
       $out = ['bildirimler' => $liste, 'zaman' => date('c'), 'kismiHata' => $s['kismiHata']];
       if (!count($liste)) $out['ham'] = $ham;
       hks_json_cikti($out);
+    }
+
+    // ---- RÜSUM BORCU KARTI (v568) — salt okunur; HKS'e GİTMEZ, yalnız rusum_borc.php'nin son sorgu önbelleğini okur ----
+    case 'rusum_ozet': {
+      $fid = (string)($g['firmaId'] ?? '');
+      if ($fid === '' || strlen($fid) > 80) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      hks_json_cikti(['ozet' => hks_rusum_ozet($fid)]);
     }
 
     // ---- BİLDİRİM ETİKET (2'li künye etiketleri) ----

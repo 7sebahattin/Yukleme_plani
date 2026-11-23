@@ -23,7 +23,7 @@ const ok = (ad, k, ip) => { if (!k) fail++; console.log(ad.padEnd(92) + (k ? 'OK
 
 const MUAF = ['firmalar', 'sonlar', 'kisiler', 'csrf', 'listeler', 'kunyeler', 'stok', 'kunye_detay', 'toplu_kunye', 'taslaklar',
   'gonderilenler', 'gonderilen_tohum', 'urun_listeleri', 'urun_cinsleri', 'sorgu', 'etiket', 'bildirim_onizle', 'iller', 'ilceler',
-  'beldeler', 'isyerleri', 'ayni_plaka_bugun', 'kayitli_kisi'];
+  'beldeler', 'isyerleri', 'ayni_plaka_bugun', 'kayitli_kisi', 'rusum_ozet'];   // rusum_ozet (v568): ana ekran kartı, salt okunur → api.php muaf listesinde
 const LISTELER = {
   urunler: [{ id: 1, ad: 'Nar' }], ulkeler: [{ id: 1, ad: 'Rusya' }], belgeTipleri: [{ id: 1, ad: 'Fatura' }],
   sifatlar: [{ id: 1, ad: 'İhracat' }], isletmeTurleri: [{ id: 1, ad: 'Hal' }], bildirimTurleri: [{ id: 1, ad: 'Satış' }],
@@ -97,7 +97,7 @@ const sunucu = http.createServer((q, s) => {
   const dene = (sayfa, yol, metod, govde) => sayfa.evaluate(async ([y, m, g]) => {
     try { await api(y, m, g); return { ok: true }; } catch (e) { return { ok: false, mesaj: e.message }; }
   }, [yol, metod, govde]);
-  const eylemler = () => istekler.map(i => i.action).filter(a => !['firmalar', 'sonlar', 'listeler', 'taslaklar', 'gonderilenler', 'ayni_plaka_bugun', 'kunyeler', 'stok'].includes(a));
+  const eylemler = () => istekler.map(i => i.action).filter(a => !['firmalar', 'sonlar', 'listeler', 'taslaklar', 'gonderilenler', 'ayni_plaka_bugun', 'kunyeler', 'stok', 'rusum_ozet'].includes(a));
 
   // ===== (A) bayat meta token + UI'dan taslak gönderimi =====
   let { ctx, sayfa } = await sayfaKur();
