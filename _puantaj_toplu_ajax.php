@@ -34,19 +34,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($__tpAjax, ['toplu_onizle'
             'kartsiz_adet' => $__tpI($__g['kartsiz_adet'] ?? 0),
         ];
     }
+    // v560: pencerede mesai TARİHİ seçilebilir. İstemci tarihi yalnız geçerli bir Y-m-d ve ≤ bugün ise kullanılır; aksi halde
+    // sayfanın sunucu tarihi geçerlidir (kesin doğrulama pdks_faz8j_toplu_hazirla'da: biçim, takvim, gelecek yok).
+    $__tpTarih = (string)$topluAjaxSabit['work_date'];
+    $__tpIstTarih = $__tpS($__tpIn['work_date'] ?? '');
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $__tpIstTarih) && strtotime($__tpIstTarih) !== false && $__tpIstTarih <= date('Y-m-d')) $__tpTarih = $__tpIstTarih;
     // v504: "kişi sayısı" girişi (Tam / Yarım / Çift + Fazla mesai). Gruplar ve ek anahtarlar SUNUCUDA kurulur
     // (config/pdks_toplu_hizli.php); istemci bu anahtarları gönderemez, saat/dağıtıma güvenilmez.
     require_once __DIR__ . '/config/pdks_toplu_hizli.php';
-    $__tpHz = pdks_toplu_hizli_isle($__tpIn['hizli'] ?? null, (string)$topluAjaxSabit['work_date'], $__tpGruplar, static function (int $tid) use ($pdo): ?string {
+    $__tpHz = pdks_toplu_hizli_isle($__tpIn['hizli'] ?? null, $__tpTarih, $__tpGruplar, static function (int $tid) use ($pdo): ?string {
         $tt = pdks_faz8j_desteklenen_tip($pdo, $tid);
         return $tt ? (string)($tt['code'] ?? '') : null;
     });
     if ($__tpHz['hata'] !== null) $__tpCikti(['ok' => false, 'error' => $__tpHz['hata'], 'hatalar' => [$__tpHz['hata']], 'satirlar' => [], 'ozet' => []], 200);
     $__tpV = $__tpHz['ek'] + [
         'foreman_id' => $topluAjaxSabit['foreman_id'] ?? $__tpI($__tpIn['foreman_id'] ?? 0),
-        'work_date' => (string)$topluAjaxSabit['work_date'], 'depo' => (string)$topluAjaxSabit['depo'],
+        'work_date' => $__tpTarih, 'depo' => (string)$topluAjaxSabit['depo'],
         'reason' => $__tpS($__tpIn['reason'] ?? ''), 'note' => $__tpS($__tpIn['note'] ?? ''), 'gruplar' => $__tpHz['gruplar'],
         'istek_id' => $__tpS($__tpIn['istek_id'] ?? ''),
+        // v560: servis adetleri (Büyük/Küçük) + «aynı güne daha önce ekleme» koruması (sunucu zorunlu kılar; onay istemciden gelir).
+        'servis' => ['buyuk' => $__tpI(is_array($__tpIn['servis'] ?? null) ? ($__tpIn['servis']['buyuk'] ?? 0) : 0), 'kucuk' => $__tpI(is_array($__tpIn['servis'] ?? null) ? ($__tpIn['servis']['kucuk'] ?? 0) : 0)],
+        'tekrar_kontrol' => true, 'onceki_onay' => !empty($__tpIn['onceki_onay']),
     ];
     if ($__tpAjax === 'toplu_onizle') {
         $__tpS = pdks_faz8j_toplu_onizle($__tpV, (int)$auth_user['id'], $pdo);

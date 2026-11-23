@@ -166,6 +166,9 @@ YALNIZ admin, CSRF, audit. Migration YOK.
 - **v509 — Yarım kutusu kalıcı işaret:** Kadın/Erkek Yarım (FM'li olanlar dahil) grupları `yarim=>true` taşır; `pdks_faz8j_toplu_hazirla` bunu YALNIZ `coklu_grup` (kod yolu) açıkken okur, `pdks_faz8j_satir_yaz` dönem INSERT'üne `declared_attendance_class='yarim'` yazar (diğer tüm yol 'auto'; kolon/migrasyon YOK; audit kaydına `beyan`). Amaç: Toplu Mesai Onayı «otomatik onayla» bu dönemleri Yarım onaylar (bkz. pdks-hakedis v509). Tam/Çift/Rampacı/Şeritçi işaretsiz. Mevcut eski kayıtlar işaretsiz kalır.
 - Test: `php scripts/pdks_toplu_hizli_smoke.php` · `php scripts/pdks_toplu_hizli_onizle_smoke.php` (gerçek önizleme/ekleme, A/B/C bölümleri) · `node scripts/pdks_toplu_duzen_smoke.js` · `pdks_toplu_ekle_smoke.php` · `node scripts/pdks_toplu_ekle_smoke.js`.
 
+### Toplu İşlem — Tarih, Sadece FM, Servis, «daha önce ekleme» uyarısı (v561)
+`_puantaj_toplu.php` penceresine: **Tarih** kutusu (`#tpTarih`, max=bugün; değişince çıkış günü kutuları/etiketler yeni güne çekilir, önizleme geçersiz olur), **«Sadece fazla mesai»** (Kadın/Erkek/Şeritçi kişi + saat; `data-sfm-kisi`/`data-sfm-saat`; saat 0,25 adımı, ≤12 sa), **Servis** (Büyük/Küçük, yalnız Servis tabloları kuruluysa) ve önizlemede **«daha önce ekleme» uyarısı + «Yine de ekle»** kutusu (işaretlenmeden Kaydet kapalı; sunucu mesai kilidi altında ayrıca zorunlu kılar). Kural/sunucu ayrıntısı: `pdks-hakedis` skill'i «v561». Kartlı girişte Gelişmiş bölümünün kart listesi pencerenin açıldığı güne göredir (farklı gün seçilince not gösterilir; çakışmayı sunucu denetler). Yeni kutular için `tv-sfm-*` sınıfları (`tv-hizli-satir` DEĞİL — `pdks_toplu_duzen_smoke` o satırları sayar). Test: `node scripts/pdks_toplu_v560_smoke.js` + `php scripts/pdks_elle_onay_sadece_fm_smoke.php`.
+
 ### Karışık Giriş + Otomatik Ata (v295)
 
 Kiosk GİRİŞ tip ekranında **KADIN / ERKEK / KARIŞIK**. Karışık girenler sonra Mesai

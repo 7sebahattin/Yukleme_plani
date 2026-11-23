@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : pdks_toplu_onay_calistir($topluId, $sinifKarari, $fmKarar, (int)$auth_user['id'], $depo, $uygula, $pdo, $oto, $beklenen);
         $onizlemeOto = $oto;
         if ($uygula && $r['ok']) {
-            $mesaj = $r['sayac']['onay'] . ' dönem onaylandı' . ($oto ? ' (otomatik: ' . $r['sayac']['tam'] . ' Tam' . ($r['sayac']['yarim'] > 0 ? ', ' . $r['sayac']['yarim'] . ' Yarım' : '') . ', ' . $r['sayac']['fm_saat'] . ' sa FM)' : '') . '.'
+            $mesaj = $r['sayac']['onay'] . ' dönem onaylandı' . ($oto ? ' (otomatik: ' . $r['sayac']['tam'] . ' Tam' . ($r['sayac']['yarim'] > 0 ? ', ' . $r['sayac']['yarim'] . ' Yarım' : '') . ($r['sayac']['sadece_fm'] > 0 ? ', ' . $r['sayac']['sadece_fm'] . ' Sadece FM' : '') . ', ' . $r['sayac']['fm_saat'] . ' sa FM)' : '') . '.'
                 . ($r['sayac']['fiyatsiz'] > 0 ? ' ' . $r['sayac']['fiyatsiz'] . ' kayıtta fiyat yok — fiyat girilene dek hakediş hesaplanamaz.' : '')
                 . ($r['sayac']['uygunsuz'] > 0 ? ' ' . $r['sayac']['uygunsuz'] . ' uygunsuz satır onaylanmadı.' : '')
                 . ($r['sayac']['karar'] > 0 ? ' ' . $r['sayac']['karar'] . ' satır karar beklediği için atlandı.' : '');

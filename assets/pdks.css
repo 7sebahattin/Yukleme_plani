@@ -2799,6 +2799,39 @@ html[data-theme="dark"] .tk-yontem-btn.aktif { background: #1d4ed8; border-color
     .toplu-v2 .tv-hizli-kutu { flex: 1 1 90px; max-width: none; }
 }
 
+/* v560 — Toplu İşlem: tarih seçimi, «Sadece fazla mesai», servis, «daha önce ekleme» uyarısı */
+.toplu-v2 .tv-tarih input { width: 100%; max-width: 220px; box-sizing: border-box; font-size: 16px; min-height: 44px; }
+.toplu-v2 .tv-tarih-not { margin: -4px 0 4px; font-size: .8rem; }
+.toplu-v2 .tv-sfm, .toplu-v2 .tv-servis { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #d9dee7); }
+.toplu-v2 .tv-sfm-satir { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 8px 10px; border: 1px solid var(--border, #d9dee7); border-radius: 10px; }
+.toplu-v2 .tv-sfm-tip { flex: 0 0 88px; font-weight: 700; font-size: .85rem; letter-spacing: .03em; }
+.toplu-v2 .tv-sfm-kutular { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.toplu-v2 .tv-sfm-kutu { flex: 1 1 96px; min-width: 88px; max-width: 160px; }
+.toplu-v2 .tv-sfm-kutu em { font-style: normal; opacity: .7; }
+.toplu-v2 .tv-sfm input, .toplu-v2 .tv-servis input { width: 100%; box-sizing: border-box; font-size: 16px; min-height: 44px; }
+@media (max-width: 767px) {
+    .toplu-v2 .tv-sfm-satir { flex-direction: column; align-items: stretch; gap: 6px; }
+    .toplu-v2 .tv-sfm-tip { flex: 0 0 auto; }
+    .toplu-v2 .tv-sfm-kutu { flex: 1 1 90px; max-width: none; }
+}
+.toplu-v2 .tp-tekrar { border-width: 2px; }
+.toplu-v2 .tp-tekrar-onay { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; min-height: 44px; cursor: pointer; }
+.toplu-v2 .tp-tekrar-onay input { width: 22px; height: 22px; }
+
+/* v560 — tarih kutusunun yanında «1 gün geri / ileri» (pdks_gun_gezin) */
+.pdks-gun-gezin { display: inline-flex; align-items: center; gap: 4px; }
+.pdks-gun-ok { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; text-decoration: none; line-height: 1; }
+.pdks-gun-ok.is-pasif { opacity: .4; pointer-events: none; cursor: default; }
+@media (max-width: 767px) {
+    /* Mobil: ◀ tarih ▶ tek satırı doldurur (tarih kutusu esner) */
+    .pdks-gun-gezin { display: flex; flex: 1 1 100%; width: 100%; }
+    .pdks-gun-gezin input[type="date"] { flex: 1 1 auto; min-width: 0; width: auto; }
+    .pdks-gun-ok { flex: 0 0 auto; }
+}
+/* v560 — çavuş listelerinde Fazla Mesai / Servis sütunları */
+.pdks-fm-bekleyen { display: block; font-size: .75rem; color: var(--warn, #b26a00); font-weight: 600; }
+.pdks-sv-ad { white-space: nowrap; }
+
 /* v507 — Toplu Mesai Onayı (mesai_toplu_onay.php): .tvo-* */
 .tvo-kontrol { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; padding: 14px 16px; margin-bottom: 12px; }
 .tvo-kontrol-alan label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; }

@@ -108,7 +108,7 @@ t('v509: işaretli gruplar yalnız yarım çıkışı 12:30 (+FM) — tam/çift/
 $isy = pdks_toplu_hizli_isle(['yarim' => [1 => 1]], '2026-11-09', [], $kodFn);
 t('v509: isle audit gruplarında yarim bayrağı', ($isy['ek']['audit_ek']['hizli_giris']['gruplar'][0]['yarim'] ?? false) === true);
 t('v509: işaret yalnız coklu_grup (kod yolu) + satir_yaz beyan yazar; HTTP ucu yarim anahtarını geçirmez',
-    str_contains($f8, "\$yarim = \$coklu && !empty(\$g['yarim'])") && str_contains($f8, "\$beyan = !empty(\$satir['yarim']) ? 'yarim' : 'auto'")
+    str_contains($f8, "\$yarim = \$coklu && !empty(\$g['yarim'])") && str_contains($f8, "!empty(\$satir['yarim']) ? 'yarim' : 'auto'")
     && !str_contains($aj, "'yarim' =>") && !str_contains($aj, "['yarim']"));
 echo "pdks_toplu_hizli_smoke: $ok ok, $fail fail\n";
 exit($fail ? 1 : 0);

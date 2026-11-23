@@ -99,8 +99,8 @@ const sunucu = http.createServer((req, res) => {
         await sayfa.addStyleTag({ url: KOK + '/assets/pdks.css' });
         await sayfa.waitForTimeout(300);
         const ozet = (await sayfa.locator('.tvo-oto-ozet').innerText()).replace(/\s+/g, ' ');
-        ok(`${ad}: otomatik önizleme özeti (kaç kayıt / Tam / FM saat)`, /3 kayıt onaylanacak: 3 Tam, toplam 4 sa fazla mesai/.test(ozet), ozet);
-        ok(`${ad}: otomatik uygula formu beklenen adet taşır, period_ids YOK`, (await sayfa.locator('.tvo-uygula-form input[name="beklenen"][value="3"]').count()) === 1
+        ok(`${ad}: otomatik önizleme özeti (kaç kayıt / Tam / FM saat)`, /4 kayıt onaylanacak: 3 Tam, 1 Yarım, toplam 4 sa fazla mesai/.test(ozet), ozet);
+        ok(`${ad}: otomatik uygula formu beklenen adet taşır, period_ids YOK`, (await sayfa.locator('.tvo-uygula-form input[name="beklenen"][value="4"]').count()) === 1
             && (await sayfa.locator('.tvo-uygula-form input[name="period_ids[]"]').count()) === 0
             && (await sayfa.locator('.tvo-uygula-form input[name="action"][value="oto_uygula"]').count()) === 1);
         ok(`${ad}: otomatik önizleme yatay taşma yok`, await sayfa.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
