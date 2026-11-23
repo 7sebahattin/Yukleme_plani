@@ -208,7 +208,11 @@
     border:none; background:none; width:100%; text-align:left; cursor:pointer; font-family:inherit;
     color:var(--metin); font-size:14px; font-weight:600;
   }
-  .grup-liste button:active, .grup-liste button:hover { background:var(--cizgi); }
+  .grup-liste a.grup-baglanti {
+    display:flex; align-items:center; gap:10px; padding:13px 12px; border-radius:12px;
+    width:100%; box-sizing:border-box; cursor:pointer; color:var(--metin); font-size:14px; font-weight:600; text-decoration:none;
+  }
+  .grup-liste button:active, .grup-liste button:hover, .grup-liste a.grup-baglanti:active, .grup-liste a.grup-baglanti:hover { background:var(--cizgi); }
 
   /* Çipler */
   .cipler { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
@@ -1028,6 +1032,7 @@
   body.icx-ekr_stok #btnStok, body.icx-ekr_stok #stokBolum,
   body.icx-ekr_gelen #btnGelen,
   body.icx-gonderim_raporu #gonderilenRapor,
+  body.icx-rusum_borc #btnRusumBorc,
   body.icx-gonder [data-gonder],
   body.icx-taslak_kopyala [data-kopyala],
   body.icx-tekrar_gonder .g-btn-tekrar,
@@ -1086,9 +1091,10 @@
         <button type="button" id="btnStok">📦 Stok Sorgulama</button>
         <button type="button" id="btnTopluKunye">🖨️ Bildirim Çoklu Künye Basım</button>
         <button type="button" id="btnGelen">📥 Bana Yapılan Bildirimler</button>
+        <a class="grup-baglanti" id="btnRusumBorc" href="rusum_borc.php" target="_top" title="Bildirimlerdeki rüsum tutarlarından hesaplanan borç listesi">💳 Borç Sorgula (Rüsum)</a>
         <!-- Geçmiş Dönem Borçları / Borç / Bordro / Rüsum Sorgulama: HKS web
-             servislerinde karşılığı YOK — menüden kaldırıldı. Rüsum, gönderim
-             cevabında döner ve Gönderilenler kartlarında gösterilir. -->
+             servislerinde karşılığı YOK (canlı WSDL + kılavuz 0.1.14, v566). "Borç Sorgula" ayrı sayfadır
+             (rusum_borc.php): bildirimlerdeki RusumMiktari günlere toplanır, ödendi elle işaretlenir. -->
       </div>
     </details>
 
@@ -2940,6 +2946,12 @@ $('btnGonderilenGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGun
 $('gonderilenRapor').addEventListener('click', function () {
   const id = aktifFirma && aktifFirma.id ? String(aktifFirma.id) : '';
   this.href = 'gonderim_rapor.php' + (/^[A-Za-z0-9_\-.]+$/.test(id) ? '?firma=' + encodeURIComponent(id) : '');
+});
+
+// v566: Borç Sorgula (rüsum) — aktif firma sayfada ön seçili ve sorgu hazır gelsin (id yalnız beyaz liste karakterleri).
+$('btnRusumBorc').addEventListener('click', function () {
+  const id = aktifFirma && aktifFirma.id ? String(aktifFirma.id) : '';
+  this.href = 'rusum_borc.php' + (/^[A-Za-z0-9_\-.]+$/.test(id) ? '?sorgula=1&firma=' + encodeURIComponent(id) : '');
 });
 
 async function taslakSayiGuncelle() {

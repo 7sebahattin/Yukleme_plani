@@ -44,7 +44,7 @@ foreach (array_merge(glob($root . '/*.php') ?: [], glob($root . '/halkayit/*.php
 $ozel = [   // JS/HTML'de başka biçimde bağlanan öğeler (body sınıfı: icx-<anahtar>)
     'ui.hks.ekr_bildirim' => 'icx-ekr_bildirim', 'ui.hks.ekr_taslaklar' => 'icx-ekr_taslaklar', 'ui.hks.ekr_gonderilenler' => 'icx-ekr_gonderilenler',
     'ui.hks.ekr_stok' => 'icx-ekr_stok', 'ui.hks.ekr_sorgu' => 'icx-ekr_sorgu', 'ui.hks.ekr_gelen' => 'icx-ekr_gelen', 'ui.hks.ekr_etiket' => 'icx-ekr_etiket',
-    'ui.hks.ekr_kunye' => 'icx-ekr_kunye', 'ui.hks.gonderim_raporu' => 'icx-gonderim_raporu',
+    'ui.hks.ekr_kunye' => 'icx-ekr_kunye', 'ui.hks.gonderim_raporu' => 'icx-gonderim_raporu', 'ui.hks.rusum_borc' => 'icx-rusum_borc',
 ];
 foreach ($flat as $key => $o) {
     $kisa = substr($key, 3);                 // siparis.mail_al
@@ -102,7 +102,7 @@ t('özet: yalnız Gör + salt içerik = Görüntüleme düzeyi', array_values(ar
 // 6) Uç kapıları kaynakta (kapı fonksiyonu çağrılıyor)
 foreach (['siparis_yazdir.php' => 'siparis.yazdir', 'siparis_paylas.php' => 'siparis.wp_paylas', 'siparis_zip.php' => 'siparis.zip', 'siparis_cari.php' => 'siparis.cari',
           'siparis_odemeler.php' => 'siparis.odeme', 'siparis_ayarlar.php' => 'siparis.ayarlar', 'siparis_mail.php' => 'siparis.mail_al', 'siparis_yukle.php' => 'siparis.belge_yukle',
-          'siparis_eml.php' => 'siparis.mail_taslak', 'siparis_beyan_bagla.php' => 'siparis.sev_beyan', 'halkayit/gonderim_rapor.php' => 'hks.gonderim_raporu'] as $f => $k)
+          'siparis_eml.php' => 'siparis.mail_taslak', 'siparis_beyan_bagla.php' => 'siparis.sev_beyan', 'halkayit/gonderim_rapor.php' => 'hks.gonderim_raporu', 'halkayit/rusum_borc.php' => 'hks.rusum_borc'] as $f => $k)
     t("uç kapısı: $f → $k", str_contains((string)file_get_contents($root . '/' . $f), "icerik_kapi('$k')"));
 t('siparis_kaydet: işlem → içerik haritası', str_contains((string)file_get_contents($root . '/siparis_kaydet.php'), "'belge_sil' => 'belge_sil'") && str_contains((string)file_get_contents($root . '/siparis_kaydet.php'), "'durum_evrak'"));
 t('halkayit api: içerik haritası CSRF öncesi kapıda', str_contains((string)file_get_contents($root . '/halkayit/api.php'), 'hks_eylem_icerigi($action, $g)'));
