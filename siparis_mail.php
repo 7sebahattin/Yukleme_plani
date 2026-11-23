@@ -41,7 +41,8 @@ $in = json_decode($raw, true);
 if (!is_array($in)) $in = [];
 csrf_check(is_string($in['csrf'] ?? null) ? $in['csrf'] : null);   // JSON-aware 403; ilk mutasyondan ÖNCE
 require_siparis('write');
-    if (!role_matrix_page_can('siparis','ogl', 'create')) forbidden('Bu işlem için yetkiniz yok.');
+icerik_kapi('siparis.mail_al');   // v507
+    if (!role_ogl_can('', 'create')) forbidden('Bu işlem için yetkiniz yok.');
 if (!siparis_mail_yetkisi()) forbidden('Mail sorgusu için Mail Merkezi okuma yetkisi gerekir.');
 $pdo = db();
 if (!siparis_mail_hazir($pdo)) $json(['ok' => false, 'kod' => 'kurulmadi', 'mesaj' => 'Mail sorgusu kurulu değil (Sipariş / Mail Merkezi şeması, MAIL_MASTER_KEY ya da hks_kv eksik).'], 409);
@@ -71,5 +72,6 @@ if ($r['ok'] && !empty($r['bitti']) && isset($r['son'])) {
     // sonuç tek yerde, sunucuda çizilir (kullanıcı verisi h() ile kaçırılır); gönderen/konu yalnız izleyenin görünür hesaplarından
     $r['html'] = sipui_mail_sonuc_html($pdo, $r['son'], mail_gorunur_hesap_idleri($uid, $pdo));
     unset($r['son']);
+    $r['bildirimler'] = siparis_bildirim_liste($pdo, $depo, siparis_cari_yetkili());   // v529: 🔔 zil tazelenir (arka plan sorgusu yeni geleni sessizce kaybetmesin)
 }
 $json($r, (int)($r['http'] ?? 200));

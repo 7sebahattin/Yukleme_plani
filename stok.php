@@ -463,19 +463,19 @@ $_bad_grup_sql = empty($_bad_grup_ids)
 // [count_sql, params, label, severity, url, url_label, detail_msg]
 $check_defs = [
     ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0",
-     $k_params, 'Net KG sıfır — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
+     $k_params, 'Net KG sıfır — mal kabul fişi', 'kritik', 'kantar.php', 'Mal Kabul Fişleri',
      'Stok hesabına 0 kg giriyor; tartım eksik veya hatalı.'],
     ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}depo = ''",
-     $k_params, 'Deposu boş — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
+     $k_params, 'Deposu boş — mal kabul fişi', 'kritik', 'kantar.php', 'Mal Kabul Fişleri',
      'Depo filtresiyle eşleşmez; depo bazlı stoktan hariç kalır.'],
     ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')",
-     $k_params, 'Tarihi boş/hatalı — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
+     $k_params, 'Tarihi boş/hatalı — mal kabul fişi', 'kritik', 'kantar.php', 'Mal Kabul Fişleri',
      'Tarih filtresi bu girişleri atlayabilir; döneme dahil edilemez.'],
     ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}malin_cinsi = ''",
-     $k_params, 'Mal cinsi boş — kantar fişi', 'orta', 'kantar.php', 'Kantar Fişleri',
+     $k_params, 'Mal cinsi boş — mal kabul fişi', 'orta', 'kantar.php', 'Mal Kabul Fişleri',
      'Ürün filtresiyle eşleşmez.'],
     ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}firma_adi = ''",
-     $k_params, 'Firması boş — kantar fişi', 'orta', 'kantar.php', 'Kantar Fişleri',
+     $k_params, 'Firması boş — mal kabul fişi', 'orta', 'kantar.php', 'Mal Kabul Fişleri',
      'Firma filtresiyle eşleşmez.'],
     ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.net_kg = 0",
      $qc_lp_params, 'Net KG sıfır — yükleme/çıkma paleti', 'kritik', 'records.php', 'Yüklemeler',
@@ -535,32 +535,32 @@ foreach ($check_defs as $chk) {
 $quality_detail = [];
 $qd_defs = [
     // [label, severity, url_label, count_sql, c_params, rows_sql, r_params, fix_type, fix_field]
-    ['Net KG sıfır — kantar fişi', 'kritik', 'Kantar Fişleri',
+    ['Net KG sıfır — mal kabul fişi', 'kritik', 'Mal Kabul Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
       FROM kantar_fisleri {$k_extra}net_kg = 0 ORDER BY id DESC LIMIT 20", $k_params,
      null, null],
-    ['Deposu boş — kantar fişi', 'kritik', 'Kantar Fişleri',
+    ['Deposu boş — mal kabul fişi', 'kritik', 'Mal Kabul Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}depo = ''", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
       FROM kantar_fisleri {$k_extra}depo = '' ORDER BY id DESC LIMIT 20", $k_params,
      'kantar', 'depo'],
-    ['Tarihi boş/hatalı — kantar fişi', 'kritik', 'Kantar Fişleri',
+    ['Tarihi boş/hatalı — mal kabul fişi', 'kritik', 'Mal Kabul Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
       FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')
       ORDER BY id DESC LIMIT 20", $k_params,
      'kantar', 'giris_tarih'],
-    ['Mal cinsi boş — kantar fişi', 'orta', 'Kantar Fişleri',
+    ['Mal cinsi boş — mal kabul fişi', 'orta', 'Mal Kabul Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}malin_cinsi = ''", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
       FROM kantar_fisleri {$k_extra}malin_cinsi = '' ORDER BY id DESC LIMIT 20", $k_params,
      'kantar', 'malin_cinsi'],
-    ['Firması boş — kantar fişi', 'orta', 'Kantar Fişleri',
+    ['Firması boş — mal kabul fişi', 'orta', 'Mal Kabul Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}firma_adi = ''", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
@@ -856,12 +856,12 @@ render_flash();
     <span><strong>Stok formülü:</strong> Ham Giriş (kantar) &minus; Yüklenen İyi Ürün &minus; Fire/Çıkma = Teorik Kalan.
     Kantar girişleri parti numarasına bağlı değildir; <strong>parti filtresi yalnızca yükleme ve çıkma kayıtlarını filtreler</strong>, ham girişi etkilemez.
     Eski kantar kayıtlarında <em>depo</em> boş olabilir — depo filtresi aktifken bu girişler hesaba dahil edilmez.
-    Eski kantar fişlerini düzenlemek için <a href="kantar.php">Kantar Fişleri</a> listesini kullanın.</span>
+    Eski mal kabul fişlerini düzenlemek için <a href="kantar.php">Mal Kabul Fişleri</a> listesini kullanın.</span>
 </div>
 <?php if ($_depo_bos_cnt > 0): ?>
 <div class="stok-uyari-box stok-uyari-depo" style="margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
     <span>⚠</span>
-    <span><strong><?= $_depo_bos_cnt ?> kantar fişinde depo boş</strong> — depo filtresi aktifken bu girişler hesaba dahil edilmez.
+    <span><strong><?= $_depo_bos_cnt ?> mal kabul fişinde depo boş</strong> — depo filtresi aktifken bu girişler hesaba dahil edilmez.
     Düzeltmek için <a href="stok.php?dkk_open=1<?= $f_firma !== '' ? '&firma=' . urlencode($f_firma) : '' ?>">Veri Kalite Raporunu</a> açın.</span>
 </div>
 <?php endif; ?>

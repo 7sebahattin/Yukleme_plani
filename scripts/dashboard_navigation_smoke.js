@@ -36,12 +36,15 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             page.on('pageerror', error => errors.push(error.message));
             await page.goto(fixtures.admin);
             await page.locator('.home-card[href="hizli_maliyet.php"] img').waitFor({ state: 'attached' });
-            check(await page.locator('.home-card').count() === 69, name + ' all sixty-nine admin destinations are cards');
+            check(await page.locator('.home-card').count() === 49, name + ' all forty-nine admin destinations are cards (v555: İhracat Programı 4 + Stok Dönüşüm + Kantar Fişleri kalktı; v558: Eski Yükleme Planı/Paletleme/Mal Kabul kalktı)');
             check(await page.evaluate(() => {
                 const cards = new Set(Array.from(document.querySelectorAll('.home-card')).map(a => a.getAttribute('href')));
                 return Array.from(document.querySelectorAll('.sidebar-nav .sidebar-link')).every(a => a.getAttribute('href') === 'index.php' || cards.has(a.getAttribute('href')));
             }), name + ' every sidebar module destination is on the home screen');
             check(await page.locator('.home-card[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' dollar asset decodes on the home card');
+            // v551: akordiyon — Hızlı Maliyet, kapalı Operasyon grubunda; görüntü çözülsün diye grubu aç
+            await page.evaluate(() => { const d = document.querySelector('details[data-sb-grup="operasyon"]'); if (d) d.open = true; });
+            await page.waitForFunction(() => { const i = document.querySelector('.sidebar-link[href="hizli_maliyet.php"] img'); return i && i.complete && i.naturalWidth > 0; });
             check(await page.locator('.sidebar-link[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.width === 20 && image.height === 20 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' sidebar reuses the dollar asset at its original icon size');
             for (const theme of ['light', 'dark']) {
                 await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
@@ -55,9 +58,35 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                 check(await quick.evaluate(node => document.activeElement === node), name + '/' + theme + ' quick card is keyboard focusable');
                 await page.evaluate(() => scrollTo(0, 0));
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-home.png') });
-                await page.locator('.home-card[href="lisans_kayit_islemleri.php"]').scrollIntoViewIfNeeded();
-                check(await page.locator('.home-card[href="lisans_kayit_islemleri.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
+                await page.locator('.home-card[href="veritabani_islemleri.php"]').scrollIntoViewIfNeeded();
+                check(await page.locator('.home-card[href="veritabani_islemleri.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
+                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'veritabani_islemleri.php'; }), name + '/' + theme + ' scrolled-to card really is the last card');
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-last-group.png') });
+            }
+            if (width >= 900) {
+                // v548: sidebar alt alanı SABİT (yalnız .sidebar-nav kayar); sürüm çıkış butonunun yanında, .sidebar-user içinde.
+                await page.evaluate(() => scrollTo(0, 0));
+                const lay = await page.evaluate(() => {
+                    const r = sel => { const e = document.querySelector(sel); if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
+                    // v551: akordiyon — yalnız aktif grup açık gelir, menü kısa kalır; kaydırma ölçümü için
+                    // (açma akordiyonu tetikler → diğerlerini kapatır; bu yüzden menüye uzun dolgu eklenir)
+                    const dolgu = document.createElement('div'); dolgu.style.height = '3000px'; document.querySelector('.sidebar-nav').appendChild(dolgu);
+                    const nav = document.querySelector('.sidebar-nav');
+                    const side = document.querySelector('.desktop-sidebar');
+                    const before = r('.sidebar-user');
+                    nav.scrollTop = nav.scrollHeight;                    // menüyü sonuna kaydır
+                    const after = r('.sidebar-user');
+                    return { nav: r('.sidebar-nav'), user: before, userAfter: after, surum: r('.sidebar-user .sidebar-surum'), logout: r('.sidebar-user-logout'),
+                        navScrolls: nav.scrollHeight > nav.clientHeight, sideOverflow: getComputedStyle(side).overflowY, sideScrolls: side.scrollHeight > side.clientHeight + 1,
+                        vh: innerHeight, surumOutside: document.querySelectorAll('.sidebar-surum').length - document.querySelectorAll('.sidebar-user .sidebar-surum').length };
+                });
+                check(lay.user && lay.user.bottom <= lay.vh + 1 && lay.user.top >= 0, name + ' sidebar user area stays inside the viewport');
+                check(lay.userAfter.top === lay.user.top && lay.userAfter.bottom === lay.user.bottom, name + ' user area does not move when the menu scrolls');
+                check(lay.nav.bottom <= lay.user.top + 1, name + ' scrolling menu never overlaps the pinned user area');
+                check(lay.navScrolls, name + ' admin menu is long enough to scroll inside .sidebar-nav');
+                check(lay.sideOverflow === 'hidden' && !lay.sideScrolls, name + ' sidebar itself does not scroll (only .sidebar-nav)');
+                check(lay.surum && lay.logout && lay.surum.top >= lay.user.top - 1 && lay.surum.bottom <= lay.user.bottom + 1 && lay.surumOutside === 0, name + ' version sits inside .sidebar-user');
+                check(lay.surum.right <= lay.logout.left + 1 || lay.surum.left >= lay.logout.right - 1, name + ' version does not overlap the logout button');
             }
             check(errors.length === 0, name + ' no browser exceptions: ' + errors.join(', '));
             proof.views.push({ name, width, height, themes: ['light', 'dark'], browserErrors: errors });

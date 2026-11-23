@@ -16,6 +16,7 @@ require_once __DIR__ . '/_siparis_ortak.php';
 require_once __DIR__ . '/config/siparis_wp.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.wp_paylas');   // v507
 siparis_no_store();
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -42,6 +43,7 @@ try {
     $yanit(500, ['ok' => false, 'hata' => 'Sevkiyat okunamadı.']);
 }
 if ($okunan === null) $yanit(404, ['ok' => false, 'hata' => 'Sevkiyat bulunamadı.']);
+if (!role_ogl_can((string)($okunan['sev']['durum'] ?? ''), 'read')) $yanit(403, ['ok' => false, 'hata' => 'Bu bölümdeki sevkiyatları görüntüleme yetkiniz yok.']);   // v504
 
 $veri = siparis_wp_veri($okunan, ['parti_yetki' => function_exists('can_beyan') && can_beyan('read')]);
 siparis_audit('siparis_wp_paylas', $sid, null, ['kalem' => $veri['kalem_say']], (int)$auth_user['id']);

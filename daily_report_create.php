@@ -275,7 +275,7 @@ try {
     if ($report_type === 'Z') {
         $conflict = false;
 
-        // Kantar fişleri — reported_at IS NULL kontrolü ile
+        // Mal kabul fişleri — reported_at IS NULL kontrolü ile
         if (!empty($gk_rows)) {
             $upd_k = $pdo->prepare(
                 "UPDATE kantar_fisleri

@@ -66,6 +66,15 @@ declare -A JS_KARARSIZ=(
 )
 
 # ---------------------------------------------------------
+# Tarayıcı testleri: UZUN süren (çok sayıda profil/ekran yükleyen) testler için süre ÇARPANI.
+# Varsayılan JS sınırı (JS_ZAMAN) yetmeyen test atlanmaz/gevşetilmez; yalnız sınırı büyür.
+# bottomnav_smoke: ~220 sn → v551'de mobil "Diğer" akordiyon doğrulamalarıyla ~260 sn (sınır 240).
+# ---------------------------------------------------------
+declare -A JS_ZAMAN_CARPAN=(
+    [bottomnav_smoke.js]=3
+)
+
+# ---------------------------------------------------------
 # Varsayılan PHP çalıştırmasından HARİÇ tutulanlar (adı *_test.php / *_smoke.php olsa da
 # test DEĞİL: elle çalıştırılan canlı servis / ağ denetimleri). CI canlı servise gitmesin.
 # Dosya açıkça argüman olarak verilirse yine çalışır.
@@ -88,6 +97,7 @@ declare -A PHP_HARIC=(
 #   beyan_workspace_permissions_smoke.js - (beyan_workspace_render.php kendisi)
 #   beyan_workspace_smoke.js ......... -  (satır içi fixture)
 #   beyan_yazdir_smoke.js ............ -  (beyan_ui_smoke.php --render-liste kendisi)
+#   cari_ui_smoke.js ................. -  (kendi köprü sunucusu: scripts/_cari_e2e_sunucu.js + dosya SQLite; gerçek cari_*.php + assets/cari.js)
 #   bottomnav_smoke.js ............... BOTTOMNAV_OUT=<tmp> php scripts/bottomnav_render.php  (test de BOTTOMNAV_OUT ile)
 #   buton_gorunum_smoke.js ........... PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun pdks_puantaj_dialog_render.php > _test_puantaj_liste.html
 #   export_menu_smoke.js ............. export_menu_render.php > _test_export_menu.html
@@ -115,11 +125,14 @@ declare -A PHP_HARIC=(
 #   pdks_tanimli_giris_smoke.js ...... pdks_tanimli_giris_render.php > _test_tanimli_giris.html
 #   pdks_ters_kart_smoke.js .......... -  (pdks_ters_kart_render.php kendisi)
 #   pdks_toplu_duzelt_smoke.js ....... -  (render'ı kendisi)
+#   pdks_toplu_duzen_smoke.js ........ -  (render'ı kendisi)
 #   pdks_toplu_ekle_smoke.js ......... -  (render'ı kendisi)
 #   pdks_v296b_smoke.js .............. -  (satır içi fixture)
 #   roles_modal_smoke.js ............. roles_modal_render.php > _test_roles.html
+#   users_ozet_smoke.js .............. users_ozet_render.php > _test_users.html
 #   siparis_ui_smoke.js .............. SIPARIS_UI_OUT=<tmp> php scripts/siparis_ui_render.php  (test de SIPARIS_UI_OUT ile)
 #   siparis_invoice_ui_smoke.js ...... aynı render (inv_*.html), SIPARIS_UI_OUT ile
+#   siparis_zil_smoke.js ............. aynı render (mail_son / liste / odemeler_kesinti), SIPARIS_UI_OUT ile (v529)
 #   siparis_yazdir_smoke.js .......... -  (siparis_ui_render.php + --json fixture'ları kendisi)
 #   suggest_list_smoke.js ............ -
 #   urun_siparis_smoke.js ............ URUN_SIPARIS_OUT=<tmp> php scripts/urun_siparis_render.php  (test de URUN_SIPARIS_OUT ile)
@@ -146,6 +159,9 @@ js_hazirla() {
             env "${JS_ORTAM[@]}" php scripts/bottomnav_render.php ;;
         buton_gorunum_smoke.js|pdks_geri_ptak_smoke.js)
             render_puantaj _test_puantaj_liste.html PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun ;;
+        frugro_detay_smoke.js|frugro_pkl_smoke.js)
+            JS_ORTAM=("FRUGRO_UI_OUT=$GECICI/frg-ui")
+            env "${JS_ORTAM[@]}" php scripts/frugro_ui_render.php ;;
         export_menu_smoke.js)
             php scripts/export_menu_render.php > _test_export_menu.html ;;
         mail_ui_smoke.js)
@@ -179,7 +195,9 @@ js_hazirla() {
             php scripts/pdks_tanimli_giris_render.php > _test_tanimli_giris.html ;;
         roles_modal_smoke.js)
             php scripts/roles_modal_render.php > _test_roles.html ;;
-        siparis_ui_smoke.js|siparis_invoice_ui_smoke.js)
+        users_ozet_smoke.js)
+            php scripts/users_ozet_render.php > _test_users.html ;;
+        siparis_ui_smoke.js|siparis_invoice_ui_smoke.js|siparis_zil_smoke.js)
             JS_ORTAM=("SIPARIS_UI_OUT=$GECICI/sip-ui")
             env "${JS_ORTAM[@]}" php scripts/siparis_ui_render.php ;;
         urun_siparis_smoke.js)
@@ -208,7 +226,7 @@ else
         done
     fi
     if [ "$JS_AC" = 1 ]; then
-        for f in scripts/*.js; do TESTLER+=("$f"); done
+        for f in scripts/*.js; do case "$(basename "$f")" in _*) continue ;; esac; TESTLER+=("$f"); done   # _*.js = yardımcı (test değil)
     fi
     shopt -u nullglob
 fi
@@ -258,12 +276,12 @@ for f in ${TESTLER[@]+"${TESTLER[@]}"}; do
                 goster_cikti "$f" "$log"
                 continue
             fi
-            env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$JS_ZAMAN" node "$f" >> "$log" 2>&1
+            env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$((JS_ZAMAN * ${JS_ZAMAN_CARPAN[$ad]:-1}))" node "$f" >> "$log" 2>&1
             kod=$?
             if [ "$kod" -ne 0 ] && [ -n "${JS_KARARSIZ[$ad]+x}" ]; then
                 mv "$log" "$log.1"
                 if js_hazirla "$ad" > "$log" 2>&1; then
-                    env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$JS_ZAMAN" node "$f" >> "$log" 2>&1
+                    env ${JS_ORTAM[@]+"${JS_ORTAM[@]}"} timeout "$((JS_ZAMAN * ${JS_ZAMAN_CARPAN[$ad]:-1}))" node "$f" >> "$log" 2>&1
                     kod=$?
                 else
                     kod=1

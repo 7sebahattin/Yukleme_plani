@@ -247,6 +247,7 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 }
 </style>
 
+<?php $__rozet_gizle = !icerik_can('dashboard.rozetler'); if ($__rozet_gizle) ob_start();   // v507: sayaç rozetleri ve özet satırları içerik yetkisine bağlı ?>
 <div class="home-grid">
 
 <?php if ($_ops_show): ?>
@@ -256,6 +257,12 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     <a href="siparisler.php" class="home-card">
         <div class="home-card-icon" style="background:#fdf0dc">📦</div>
         <div class="home-card-title">OGL Siparişler</div>
+    </a>
+<?php endif; ?>
+<?php if (role_matrix_page_can('siparis','frugro')): ?>
+    <a href="frugro_siparis.php" class="home-card">
+        <div class="home-card-icon" style="background:#fdf0dc">📦</div>
+        <div class="home-card-title">Frugro Siparişler</div>
     </a>
 <?php endif; ?>
 <?php if (role_matrix_page_can('siparis','urun')): ?>
@@ -300,37 +307,11 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     </a>
 <?php endif; ?>
 
-<?php if (role_matrix_page_can('records','loading')): ?>
-    <a href="records.php" class="home-card">
-        <div class="home-card-icon" style="background:#eaf1ff">🚚</div>
-        <div class="home-card-title">Yükleme Planları</div>
-        <?php if ($stats['toplam_kayit'] > 0): ?>
-        <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (role_matrix_page_can('records','pallet')): ?>
-    <a href="cikmalar.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdecea">📋</div>
-        <div class="home-card-title">Paletleme</div>
-        <?php if ($stats['toplam_cikma'] > 0): ?>
-        <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (can('kantar.read')): ?>
-    <a href="kantar.php" class="home-card">
-        <div class="home-card-icon" style="background:#f0faf4">⚖️</div>
-        <div class="home-card-title">Mal Kabul</div>
-    </a>
-<?php endif; ?>
-
+<?php /* v558: Eski Yükleme Planı / Eski Paletleme / Eski Mal Kabul kartları kaldırıldı (eski sistem kalkıyor). */ ?>
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
-        <div class="home-card-title">Raporlar</div>
+        <div class="home-card-title">Eski Raporlar</div>
     </a>
 <?php endif; ?>
 
@@ -441,19 +422,24 @@ if (nav_ptak_gorunur()):
 
 <?php endif; ?>
 
-<?php if (is_admin()): ?>
-<?php foreach (nav_muhasebe_gruplari() as $__home_group): ?>
+<?php foreach (nav_muhasebe_gruplari() as $__home_group):
+    // v550: kart, sayfanın kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; başlık yalnız görünen kart varsa.
+    $__home_gorunen = array_filter($__home_group[2], fn($__d) => muhasebe_sayfa_can(substr((string)$__d, 0, -4)), ARRAY_FILTER_USE_KEY);
+    if (!$__home_gorunen) continue; ?>
 <div class="home-section-title"><?= h($__home_group[0]) ?></div>
-<?php foreach ($__home_group[2] as $__home_href => [$__home_label, $__home_icon]): ?>
+<?php foreach ($__home_gorunen as $__home_href => [$__home_label, $__home_icon]): ?>
     <a href="<?= h($__home_href) ?>" class="home-card">
         <div class="home-card-icon" style="background:var(--primary-soft)"><?= h($__home_icon) ?></div>
         <div class="home-card-title"><?= h($__home_label) ?></div>
     </a>
 <?php endforeach; ?>
-<?php endforeach; unset($__home_group, $__home_href, $__home_label, $__home_icon); ?>
-<?php endif; ?>
+<?php endforeach; unset($__home_group, $__home_gorunen, $__home_href, $__home_label, $__home_icon); ?>
 
 </div>
+<?php if ($__rozet_gizle) {
+    // Rozet ve özet satırları HTML'e hiç yazılmaz (yalnız gizlemek sayıları kaynakta bırakırdı).
+    echo preg_replace('~<div class="home-card-(?:badge|sub)\b[^>]*>.*?</div>\s*~su', '', (string)ob_get_clean());
+} ?>
 
 <!-- Sürüm damgası — mobilde sidebar görünmediği için buraya da konur.
      "Deploy yansıdı mı?" sorusunun telefondan cevabı. -->

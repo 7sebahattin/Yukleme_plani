@@ -14,6 +14,7 @@ require_once __DIR__ . '/config/siparis_pkl.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.mail_taslak');   // v507
 siparis_no_store();
 
 $metinHata = function (int $kod, string $mesaj): void {
@@ -31,6 +32,7 @@ if (!siparis_sema_hazir($pdo)) $metinHata(503, 'Sipariş modülü henüz kurulma
 $sev = siparis_sevkiyat($pdo, (int)($_GET['sid'] ?? 0));
 if ($sev === null) $metinHata(404, 'Sevkiyat bulunamadı.');
 if (!siparis_gorunur($sev)) forbidden('Bu sevkiyat aktif depoda görünmüyor.');
+siparis_sev_kapi($sev, 'read', 'Bu bölümdeki sevkiyatları görüntüleme yetkiniz yok.');   // v504
 if (!in_array((string)$sev['durum'], ['mail_gonderildi', 'evrak_gonderildi'], true)) $metinHata(409, 'Evrak takımı taslağı yalnız mail gönderildikten sonra kurulur.');
 
 $pk = $pdo->prepare('SELECT dosya_adi FROM siparis_pkl WHERE sevkiyat_id = ?');

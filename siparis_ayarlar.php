@@ -23,10 +23,14 @@ require_once __DIR__ . '/config/siparis_invoice.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi('siparis.ayarlar');   // v507
 $pdo   = db();
 $hazir = siparis_sema_hazir($pdo);
-$yaz = (can_siparis('write') && role_matrix_page_can('siparis','ogl','edit'));
-$sil = (can_siparis('delete') && role_matrix_page_can('siparis','ogl','delete'));
+$yaz = (can_siparis('write') && role_ogl_any('edit'));
+$sil = (can_siparis('delete') && role_ogl_any('delete'));
+// v506 — yalnız Gör yetkisi olan Ayarlar'ı görmez; Ekle/Düzenle/Sil gerekir (bağlantı da aynı koşulla gizlenir)
+$ekle = (can_siparis('write') && role_ogl_any('create'));
+if (!($ekle || $yaz || $sil)) forbidden('Sipariş ayarları için ekleme, düzenleme ya da silme yetkisi gerekir.');
 $uid = (int)$auth_user['id'];
 
 if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -50,7 +54,7 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($islem === 'profil_kaydet') {
         require_siparis('write');
-    if (!role_matrix_page_can('siparis','ogl', 'edit')) forbidden('Bu işlem için yetkiniz yok.');
+    if (!role_ogl_any('edit')) forbidden('Bu işlem için yetkiniz yok.');
         $pid = (int)($_POST['profil_id'] ?? 0);
         $r = siparis_profil_kaydet($pdo, $pid > 0 ? $pid : null, [
             'ad' => (string)($_POST['ad'] ?? ''), 'uretici_adi' => (string)($_POST['uretici_adi'] ?? ''), 'ggn' => (string)($_POST['ggn'] ?? ''),

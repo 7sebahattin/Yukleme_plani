@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_delete.php - Kantar fişi sil
+// kantar_delete.php - Mal kabul fişi sil
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -44,7 +44,7 @@ render_header('Fişi Sil');
 ?>
 <div class="page-head"><h1>Fişi Sil</h1></div>
 <div class="card">
-    <p class="warn">Aşağıdaki kantar fişi ve tüm grup kayıtları kalıcı olarak silinecek. Bu işlem geri alınamaz.</p>
+    <p class="warn">Aşağıdaki mal kabul fişi ve tüm grup kayıtları kalıcı olarak silinecek. Bu işlem geri alınamaz.</p>
     <ul class="info-list">
         <li><strong>ID:</strong> #<?= (int)$fis['id'] ?></li>
         <li><strong>Fiş No:</strong> <?= h($fis['fis_no'] ?: '—') ?></li>

@@ -1,10 +1,11 @@
 <?php
 // =========================================================
-// kantar_create.php - Yeni kantar fişi oluştur
+// kantar_create.php - Yeni mal kabul fişi oluştur
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/kantar_alanlari_core.php';
 $auth_user = require_login();
 require_perm('kantar.create');
 
@@ -22,6 +23,8 @@ if (!function_exists('_parse_kp_rows')) {
                 $birim = 0.0;
                 $list  = $tip === 'kasa' ? $kasa_list : $palet_list;
                 foreach ($list as $kd) { if ($kd['name'] === $cinsi) { $birim = (float)$kd['unit_dara_kg']; break; } }
+                // Birim dara formda düzenlenebilir: dolu gelirse o kullanılır, boşsa tanımdaki değer
+                if (isset($row['birim_dara_kg']) && trim((string)$row['birim_dara_kg']) !== '') $birim = max(0.0, round(num($row['birim_dara_kg']), 3));
                 $rows[] = ['tip' => $tip, 'cinsi' => $cinsi, 'sayisi' => $sayisi, 'birim_dara_kg' => $birim];
                 if ($tip === 'kasa') { $kasa_tot += $sayisi * $birim; $tot_kasa_say += $sayisi; if ($first_kasa === '') $first_kasa = $cinsi; }
                 else                 { $palet_tot += $sayisi * $birim; $tot_palet_say += $sayisi; if ($first_palet === '') $first_palet = $cinsi; }
@@ -38,9 +41,10 @@ $palet_list = get_definitions_by_type('palet_tipi');
 
 $fis = [
     'fis_no' => '', 'plaka' => '', 'firma_adi' => '',
-    'giris_tarih' => '', 'cikis_tarih' => '', 'operator_adi' => '',
+    'giris_tarih' => date('Y-m-d\TH:i'), 'cikis_tarih' => '', 'operator_adi' => '',
     'malin_cinsi' => '', 'geldigi_yer' => '', 'gittigi_yer' => '',
     'aciklama' => '',
+    'sofor' => '', 'mal_sahibi' => '', 'mustahsil' => '', 'bahce' => '',   // ek alanlar (kolonlar migrate.php kartından)
     // Yeni fişte depo varsayılanı = aktif depo
     'depo' => (function_exists('active_depot') ? active_depot() : null) ?? '',
     'parti_no' => '',
@@ -56,6 +60,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fis[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
+    // Tarih yalnız gün olarak gelir; saat kayıtta korunur
+    $fis['giris_tarih'] = kantar_tarih_birlestir($fis['giris_tarih'], '');
+
     // ── Normalleştir ──────────────────────────────────────
     $fis['firma_adi']   = normalize_firma($fis['firma_adi']);
     $fis['malin_cinsi'] = normalize_urun($fis['malin_cinsi']);
@@ -66,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Zorunlu alan kontrolü ─────────────────────────────
-    if ($fis['giris_tarih'] === '') $errors[] = 'Giriş tarihi zorunludur.';
+    if ($fis['giris_tarih'] === '') $errors[] = 'Geçerli bir tarih girin.';
     if ($fis['firma_adi']   === '') $errors[] = 'Firma adı zorunludur.';
     if ($fis['malin_cinsi'] === '') $errors[] = 'Mal cinsi zorunludur.';
     if ($fis['depo']        === '') $errors[] = 'Depo zorunludur.';
@@ -81,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ensure_definition('firma', $fis['firma_adi']);
         ensure_definition('urun',  $fis['malin_cinsi']);
         ensure_definition('depo',  $fis['depo']);
+        ensure_definition('lokasyon', $fis['geldigi_yer']);
     }
 
     if (empty($errors)) try {
@@ -90,6 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Kasa/palet satırlarını işle
         [$kp_rows, $kasa_tot_dara, $palet_tot_dara, $first_kasa, $first_palet, $tot_kasa_say, $tot_palet_say, $kasa_dara_val, $palet_dara_val] = _parse_kp_rows($_POST['kp_rows'] ?? [], $kasa_list, $palet_list);
+        // Listede olmayan palet/kasa cinsi yazıldıysa tanımlara eklenir
+        foreach ($kp_rows as $_kr) ensure_definition($_kr['tip'] === 'kasa' ? 'kasa_cinsi' : 'palet_tipi', $_kr['cinsi']);
 
         $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
         $foto_val = (str_starts_with($foto_raw, 'data:image/')) ? $foto_raw : null;
@@ -166,8 +176,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
             }
         }
+        // Ek alanlar (şoför, malın sahibi, müstahsil, bahçe): yalnız kolonlar kuruluysa yazılır
+        kantar_alanlari_yaz(db(), $fis_id, $_POST);
+        if (trim($fis['sofor']) !== '') ensure_definition('sofor', normalize_suggest_value('sofor_adi', $fis['sofor']));
         audit_log_event('create', 'kantar', $fis_id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
-        set_flash('success', 'Kantar fişi oluşturuldu (#' . $fis_id . ').');
+        set_flash('success', 'Mal kabul fişi oluşturuldu (#' . $fis_id . ').');
         header('Location: kantar_view.php?id=' . $fis_id);
         exit;
 
@@ -177,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $form_action  = 'kantar_create.php';
-$title        = 'Yeni Kantar Fişi';
+$title        = 'Yeni Mal Kabul Fişi';
 $submit_label = 'Kaydet';
 $is_edit      = false;
 

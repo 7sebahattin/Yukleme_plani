@@ -529,9 +529,23 @@ function pdks_faz8b_donem_siniflandir(array $donem, ?array $oran = null): array
     $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null, $e['tam_dk'], $e['fm_bas_dk']);
 
     $onayliSinif = trim((string)($donem['approved_attendance_class'] ?? ''));
+    // v560 — SADECE FAZLA MESAİ (sahip kararı: yalnız mesai için gelip 1 saat çalışıp giden kişi Tam/Yarım ücreti ALMAZ,
+    // yalnız FM ücreti × çalıştığı saat alır). İki işaret: beyan 'fm' (Toplu İşlem «Sadece fazla mesai» kutusu — süre ne olursa
+    // olsun) YA DA süre Tam eşiğinin altındayken onaylı sınıf 'fm' (elle kayıt otomatik onayı, 3 saatten kısa). FM saati =
+    // TÜM süreden aynı FM kuralıyla (15 dk tolerans, başlayan saat yukarı); temel ücret YOK.
+    $fmSadece = trim((string)($donem['declared_attendance_class'] ?? '')) === 'fm'
+        || ($sure['otomatik_sinif'] === null && $onayliSinif === 'fm');
     $sinif = $sure['otomatik_sinif'];
     $sinifKaynak = 'otomatik';
-    if ($sinif === null) {
+    if ($fmSadece) {
+        $sinif = 'fm';
+        $sinifKaynak = 'sadece_fm';
+        $fmSadeceSaat = $sure['toplam_dk'] !== null ? pdks_faz8b_fm_saat((int)$sure['toplam_dk']) : 0;
+        $sure['fazla_dk'] = $sure['toplam_dk'] !== null ? (int)$sure['toplam_dk'] : 0;
+        $sure['fazla_mesai_saat'] = $fmSadeceSaat;
+        $sure['fazla_mesai_onayi_gerekli'] = $fmSadeceSaat > 0;
+        $sure['sinif_onayi_gerekli'] = false;
+    } elseif ($sinif === null) {
         $sinif = in_array($onayliSinif, ['tam', 'yarim'], true) ? $onayliSinif : null;
         $sinifKaynak = $sinif !== null ? 'muhasebe' : 'bekliyor';
     }
@@ -557,7 +571,7 @@ function pdks_faz8b_donem_siniflandir(array $donem, ?array $oran = null): array
 
     // Çift yevmiye
     $toplamDk = $sure['toplam_dk'];
-    $ciftAday = $e['cift_dk'] !== null && $toplamDk !== null && $toplamDk >= $e['cift_dk'];
+    $ciftAday = !$fmSadece && $e['cift_dk'] !== null && $toplamDk !== null && $toplamDk >= $e['cift_dk'];
     $cift = false;
     $ciftFmAday = 0;
     if ($ciftAday) {
@@ -599,7 +613,9 @@ function pdks_faz8b_donem_siniflandir(array $donem, ?array $oran = null): array
         'fazla_mesai_onay_kirpildi' => $fmKirpildi,
         // Hakedişte ödenecek FM saati (Tam: onaylı saat; Çift: çift sonrası).
         'odenecek_fm_saat' => $odenecekFm,
-        'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnaySaat !== null),
+        // v560: Sadece FM'de süre bilinmeden (çıkışsız) hazır SAYILMAZ — ücret tamamen süreden doğar.
+        'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnaySaat !== null) && (!$fmSadece || $toplamDk !== null),
+        'sadece_fm' => $fmSadece,
     ];
 
     // v463 — RAMPACI YEVMİYE: dönemde yevmiye_adedi > 0 ise sonuç EZİLİR (süre/FM/Yarım/Çift mantığı ATLANIR).
@@ -874,6 +890,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
     }
     $o = [
         'tanim' => $tanim, 'karisik' => 0, 'diger' => 0, 'yevmiye' => 0,
+        'sadece_fm' => array_fill_keys(array_keys($tanim), 0),   // v560: «Sadece FM» kişi sayısı, tip adına göre (tanim satır biçimi DEĞİŞMEDİ)
         'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0, 'fm_bas_dk' => [], 'fm_kaynak' => [],
         'fm_saat' => 0, 'fm_onayli' => 0, 'fm_bekleyen' => 0, 'fm_red' => 0,
         'servis' => array_fill_keys(array_keys(pdks_servis_turleri()), 0),
@@ -897,12 +914,29 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
         }
         if ($f['toplam_dk'] === null) { $t[(($d['_s_status'] ?? '') === 'closed') ? 'eksik' : 'suruyor']++; unset($t); continue; }
         $sinif = $f['etkin_sinif'];
-        if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++; else $t['bekliyor']++;
+        if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++;
+        elseif ($sinif === 'fm') $o['sadece_fm'][$ad]++;
+        else $t['bekliyor']++;
 
         $fm = (int)$f['fazla_mesai_saat'];
         $fmGoster = pdks_faz8b_fm_goster($f);
         if ($fmGoster > 0) $t['fm'][min($fmGoster, PDKS_FAZ8B_OZET_FM_SUTUN)]++;
         unset($t);
+
+        if ($sinif === 'fm') {
+            // v560: Sadece FM — çalışma saati = ödenen FM saati (Tam eşiği/FM başlangıcı kavramı yok; çift saymayı önler).
+            $o['sureli_kisi']++;
+            $o['ham_dk'] += (int)($f['ham_dk'] ?? $f['toplam_dk']);
+            $o['calisma_dk'] += $fm * 60;
+            $o['fm_saat'] += $fmGoster;
+            if ($fm > 0) {
+                $durum = (string)$f['fazla_mesai_durum'];
+                if ($durum === 'onayli') $o['fm_onayli'] += (int)$f['odenecek_fm_saat'];
+                elseif ($durum === 'bekliyor') $o['fm_bekleyen'] += $fm;
+                elseif ($durum === 'reddedildi') $o['fm_red'] += $fm;
+            }
+            continue;
+        }
 
         $o['sureli_kisi']++;
         $o['fm_bas_dk'][(int)$f['fm_bas_dk']] = (int)$f['fm_bas_dk'];
@@ -923,6 +957,44 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
     $o['fm_kaynak'] = array_values($o['fm_kaynak']);
     $o['servis'] = pdks_servis_toplamlar_toplu($sessionIds, $pdo);
     return $o;
+}
+
+/**
+ * v560 — Çavuş listeleri (Günlük Puantaj + Çavuş Hakediş) için OTURUM BAŞINA fazla mesai + servis toplamı. TEK `donem_sorgu`
+ * (N+1 yok); FM kuralı pdks_faz8b_fm_goster / sınıflandırıcıdan — burada FM HESABI YAZILMAZ.
+ *  fm_onayli   — ödenecek (onaylı) toplam FM saati        fm_bekleyen — onay bekleyen aday FM saati
+ *  sadece_fm   — «Sadece fazla mesai» sınıfındaki kişi sayısı
+ *  servis_buyuk / servis_kucuk — iptal edilmemiş servis adedi (Servis tabloları yoksa 0; servis_var=false)
+ * Karışık (atanmamış) ve çıkışsız dönem FM'ye katılmaz. Faz 8B şeması hazır değilse null.
+ * @return array<int,array{fm_onayli:int,fm_bekleyen:int,sadece_fm:int,servis_buyuk:int,servis_kucuk:int}>|null
+ */
+function pdks_faz8b_oturum_fm_servis_toplu(array $sessionIds, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_sema_hazir($pdo)) return null;
+    $sessionIds = array_values(array_unique(array_filter(array_map('intval', $sessionIds), static fn($i) => $i > 0)));
+    $out = [];
+    foreach ($sessionIds as $id) $out[$id] = ['fm_onayli' => 0, 'fm_bekleyen' => 0, 'sadece_fm' => 0, 'servis_buyuk' => 0, 'servis_kucuk' => 0];
+    if (!$sessionIds) return $out;
+    $ph = implode(',', array_fill(0, count($sessionIds), '?'));
+    foreach (pdks_faz8b_donem_sorgu($pdo, "p.session_id IN ($ph)", $sessionIds) as $d) {
+        if ((string)($d['worker_type_name_snapshot'] ?? '') === PDKS_GUNLUK_KARISIK_AD) continue;
+        $f = $d['faz8b'];
+        if (($f['toplam_dk'] ?? null) === null || (int)($f['yevmiye'] ?? 0) > 0) continue;
+        $sid = (int)$d['session_id'];
+        if (!isset($out[$sid])) continue;
+        if (($f['etkin_sinif'] ?? null) === 'fm') $out[$sid]['sadece_fm']++;
+        $durum = (string)($f['fazla_mesai_durum'] ?? '');
+        if ($durum === 'onayli') $out[$sid]['fm_onayli'] += (int)($f['odenecek_fm_saat'] ?? 0);
+        elseif ($durum === 'bekliyor') $out[$sid]['fm_bekleyen'] += (int)($f['fazla_mesai_saat'] ?? 0);
+    }
+    if (function_exists('pdks_servis_oturum_adetleri')) {
+        foreach (pdks_servis_oturum_adetleri($sessionIds, $pdo) as $sid => $a) {
+            $out[$sid]['servis_buyuk'] = (int)($a['BUYUK'] ?? 0);
+            $out[$sid]['servis_kucuk'] = (int)($a['KUCUK'] ?? 0);
+        }
+    }
+    return $out;
 }
 
 // =========================================================
@@ -979,7 +1051,7 @@ function pdks_faz8b_sure_metni(?array $f): string
 /** v299: sınıf kodu → ekran etiketi ('cift' → Çift). Bilinmeyen/boş → Tam. */
 function pdks_faz8b_sinif_etiketi(?string $sinif): string
 {
-    return $sinif === 'yarim' ? 'Yarım' : ($sinif === 'cift' ? 'Çift' : 'Tam');
+    return $sinif === 'yarim' ? 'Yarım' : ($sinif === 'cift' ? 'Çift' : ($sinif === 'fm' ? 'Sadece FM' : 'Tam'));
 }
 
 /**
@@ -1076,7 +1148,25 @@ function pdks_faz8b_degerlendirme_kaydet(
     $attendanceDecision = $attendanceDecision !== null ? trim($attendanceDecision) : null;
     $simdi = date('Y-m-d H:i:s');
 
-    if ($sure['sinif_onayi_gerekli']) {
+    // v560: Sadece FM — (a) zaten 'fm' sınıfındaki dönem (beyan 'fm' ya da onaylı 'fm'): onaylı sınıf AYNEN korunur
+    // (sıfırlanırsa dönem tekrar "karar bekliyor" olurdu); (b) süre Tam eşiğinin altındaki dönem için 'fm' kararı.
+    $fmSadeceKarar = false;
+    $fmSadeceSaat = 0;
+    if (!empty($sure['sadece_fm'])) {
+        $fmSadeceKarar = true;
+        $sinif = trim((string)($p['approved_attendance_class'] ?? '')) === 'fm' ? 'fm' : null;
+        $sinifUser = $sinif !== null ? ($p['approved_by_user_id'] ?? null) : null;
+        $sinifAt = $sinif !== null ? ($p['approved_at'] ?? null) : null;
+    } elseif ($sure['sinif_onayi_gerekli'] && $attendanceDecision === 'fm') {
+        if ($sure['toplam_dk'] === null) {
+            return ['ok' => false, 'hata' => 'Sadece fazla mesai kararı için çıkış saati gerekir (süre bilinmiyor).'];
+        }
+        $fmSadeceKarar = true;
+        $fmSadeceSaat = pdks_faz8b_fm_saat((int)$sure['toplam_dk']);
+        $sinif = 'fm';
+        $sinifUser = $userId;
+        $sinifAt = $simdi;
+    } elseif ($sure['sinif_onayi_gerekli']) {
         if (!in_array($attendanceDecision, ['tam', 'yarim'], true)) {
             return ['ok' => false, 'hata' => 'Kısa / çıkışı belirsiz mesai için muhasebe Tam veya Yarım kararı vermelidir.'];
         }
@@ -1093,7 +1183,7 @@ function pdks_faz8b_degerlendirme_kaydet(
         $sinifAt = null;
     }
 
-    $fmSaat = (int)$sure['fazla_mesai_saat'];
+    $fmSaat = $fmSadeceSaat > 0 ? $fmSadeceSaat : (int)$sure['fazla_mesai_saat'];
     if ($fmSaat > 0) {
         if ($overtimeApprovedHours === null || $overtimeApprovedHours < 0 || $overtimeApprovedHours > $fmSaat) {
             return ['ok' => false, 'hata' => "Fazla mesai adayı için 0 ile {$fmSaat} saat arasında onaylanan saat girilmelidir."];
@@ -2318,8 +2408,14 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         $sinifEtiket = pdks_faz8b_sinif_etiketi($sinif);
         // v503: 'cift' = Tam ücret (daily_rate) × 2 (aşağıda); süre bazlı double_day_rate artık KULLANILMAZ.
         $baseRaw = $sinif === 'yarim' ? ($oran['half_day_rate'] ?? null) : ($oran['daily_rate'] ?? null);
+        // v560: Sadece FM — temel (Tam/Yarım) ücret YOK; yalnız aşağıdaki FM ücreti. Tam fiyatı bulunmasa da hesap geçer.
+        if ($sinif === 'fm') $baseRaw = '0';
         if ($baseRaw === null || $baseRaw === '') {
-            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — ' . $sinifEtiket . ' Mesai fiyatı yok';
+            // v503: çiftte aranan fiyat Tam'dır (daily_rate) — mesaj onu söyler.
+            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — '
+                . ($sinif === 'cift'
+                    ? 'Tam Mesai fiyatı yok (çift yevmiye Tam × 2 ödenir)'
+                    : $sinifEtiket . ' Mesai fiyatı yok');
             continue;
         }
         try {
@@ -2373,7 +2469,8 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             'worker_type_code_snapshot' => $kod,
             'worker_type_name_snapshot' => (string)$d['worker_type_name_snapshot'],
             'attendance_class_snapshot' => $sinif,
-            'worker_count' => 1,
+            // v560: Sadece FM tam bir kişi-gün DEĞİLDİR → 0 (Yöntem B kişi-gün havuzuna girmez; FM saati ayrı sütunda).
+            'worker_count' => $sinif === 'fm' ? 0 : 1,
             'unit_rate' => pdks_hakedis_kurus_tl($baseKurus),
             'overtime_hours' => $fmOnaySaat,
             'overtime_mode_snapshot' => $fmOnayli ? $fmMode : null,

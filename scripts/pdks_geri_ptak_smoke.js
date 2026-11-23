@@ -45,6 +45,7 @@ function kontrast(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
                 return {
                     var: !!a, bgImg: bg, bgCol: cs ? cs.backgroundColor : '', yazi: cs ? cs.color : '',
                     tarihW: t ? t.getBoundingClientRect().width : -1,
+                    gezinW: (g => g ? g.getBoundingClientRect().width : -1)(t && t.closest('.pdks-gun-gezin')),
                     barW: t ? t.closest('.pdks-filter-bar').getBoundingClientRect().width : -1,
                     tasma: document.documentElement.scrollWidth > window.innerWidth + 1,
                 };
@@ -60,7 +61,8 @@ function kontrast(a, b) { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
                     ok('tarih kutusu masaüstünde SABİT/dar (≤ 200px)', d.tarihW > 0 && d.tarihW <= 201, String(d.tarihW));
                     ok('tarih kutusu filtre çubuğunun yarısından dar', d.tarihW < d.barW / 2, `${d.tarihW}/${d.barW}`);
                 } else {
-                    ok('tarih kutusu mobilde TAM genişlik (değişmedi)', d.tarihW >= d.barW - 2, `${d.tarihW}/${d.barW}`);
+                    // v560: tarih kutusunun iki yanına ◀ ▶ geldi (.pdks-gun-gezin) → mobilde ◀ tarih ▶ SATIRIN TAMAMINI doldurur
+                    ok('tarih kutusu (◀ tarih ▶ satırı) mobilde TAM genişlik', d.gezinW > 0 ? d.gezinW >= d.barW - 2 && d.tarihW >= d.gezinW - 2 * 60 : d.tarihW >= d.barW - 2, `${d.tarihW}/${d.gezinW}/${d.barW}`);
                 }
                 ok('yatay taşma yok', d.tasma === false);
             }

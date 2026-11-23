@@ -422,9 +422,11 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
 <?php if ($mesaiOzeti !== null): $mo = $mesaiOzeti; $moSut = pdks_gunluk_tip_sistem_sutunlari(); $moFm = range(1, PDKS_FAZ8B_OZET_FM_SUTUN);
     $moTop = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0), 'bekliyor' => 0, 'suruyor' => 0, 'eksik' => 0, 'toplam' => 0];
     foreach ($mo['tanim'] as $t) { foreach (['tam', 'yarim', 'cift', 'bekliyor', 'suruyor', 'eksik', 'toplam'] as $k) $moTop[$k] += (int)$t[$k]; foreach ($moFm as $n) $moTop['fm'][$n] += (int)$t['fm'][$n]; }
-    $moSatir = function (string $ad, array $t, bool $toplam) use ($moFm): string {
+    $moSfmTip = (array)($mo['sadece_fm'] ?? []);   // v560: tip adı => Sadece FM kişi sayısı
+    $moSfm = array_sum($moSfmTip) > 0;   // «Sadece FM» sütunu yalnız o mesaide Sadece FM kişi varsa açılır (sabit sütun düzeni bozulmaz)
+    $moSatir = function (string $ad, array $t, bool $toplam) use ($moFm, $moSfm): string {
         $td = fn(int $v): string => '<td' . ($v === 0 ? ' class="pdks-mo-sifir"' : '') . '>' . $v . '</td>';
-        $h = '<tr' . ($toplam ? ' class="pdks-mo-toplam"' : '') . '><th scope="row">' . h($ad) . '</th>' . $td((int)$t['tam']) . $td((int)$t['yarim']) . $td((int)$t['cift']);
+        $h = '<tr' . ($toplam ? ' class="pdks-mo-toplam"' : '') . '><th scope="row">' . h($ad) . '</th>' . $td((int)$t['tam']) . $td((int)$t['yarim']) . $td((int)$t['cift']) . ($moSfm ? $td((int)($t['_sfm'] ?? 0)) : '');
         foreach ($moFm as $n) $h .= $td((int)$t['fm'][$n]);
         return $h . $td((int)$t['bekliyor']) . $td((int)$t['suruyor']) . ((int)$t['eksik'] > 0 ? '<td class="pdks-mo-eksik">' . (int)$t['eksik'] . '</td>' : $td(0)) . '<td><strong>' . (int)$t['toplam'] . '</strong></td></tr>';
     }; ?>
@@ -438,11 +440,11 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
             $moKaynak = array_map(fn($k) => $moKaynakAd[$k] ?? $k, $mo['fm_kaynak']); ?>
             <?php if ($moKaynak): ?><p class="pdks-mo-kaynak">Eşik kaynağı: <?= h(implode(' · ', $moKaynak)) ?><?php if (!empty($servisFiyatLink)): ?> — <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>">Çavuş Ücretleri'nde aç</a><?php endif; ?></p><?php endif; ?>
             <div class="table-wrap"><table class="data-table pdks-mo-tablo">
-                <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><?php foreach ($moFm as $n): ?><th class="pdks-mo-fm"><?= $n === PDKS_FAZ8B_OZET_FM_SUTUN ? $n . '+ Saat' : $n . '. Saat' ?></th><?php endforeach; ?><th>Bekliyor</th><th>İçeride</th><th>Eksik Çıkış</th><th>Toplam</th></tr></thead>
+                <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><?php if ($moSfm): ?><th title="Tam/Yarım ücreti almayan, yalnız fazla mesai ücreti alan kişiler">Sadece FM</th><?php endif; ?><?php foreach ($moFm as $n): ?><th class="pdks-mo-fm"><?= $n === PDKS_FAZ8B_OZET_FM_SUTUN ? $n . '+ Saat' : $n . '. Saat' ?></th><?php endforeach; ?><th>Bekliyor</th><th>İçeride</th><th>Eksik Çıkış</th><th>Toplam</th></tr></thead>
                 <tbody>
-                <?php foreach ($moSut as $tc) echo $moSatir($tc['kisa'], $mo['tanim'][$tc['ad']], false); ?>
+                <?php foreach ($moSut as $tc) echo $moSatir($tc['kisa'], $mo['tanim'][$tc['ad']] + ['_sfm' => (int)($moSfmTip[$tc['ad']] ?? 0)], false); ?>
                 </tbody>
-                <tfoot><?= $moSatir('Toplam', $moTop, true) ?></tfoot>
+                <tfoot><?= $moSatir('Toplam', $moTop + ['_sfm' => array_sum($moSfmTip)], true) ?></tfoot>
             </table></div>
             <?php if ((int)($mo['yevmiye'] ?? 0) > 0): /* v463: yevmiyeli Rampacı — Tam sütununda KİŞİ olarak sayılır; yevmiye adedi burada */ ?><p class="pdks-mo-not"><strong>Rampacı yevmiye:</strong> <?= (int)$mo['yevmiye'] ?> (tutar = yevmiye adedi × Rampacı Tam günlük ücreti; süre/fazla mesai hesabına girmez).</p><?php endif; ?>
             <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır<?php if (count($mo['fm_bas_dk']) === 1): $moE = (int)$mo['fm_bas_dk'][0]; /* v320: örnek, uygulanan eşikten üretilir */ ?> (ör. <?= h(pdks_faz8b_dakika_etiket($moE + 71)) ?> → 1. Saat; <?= h(pdks_faz8b_dakika_etiket($moE + 180)) ?> → 3. Saat)<?php endif; ?>. Giriş ve çıkış tam saate 15 dk yakınsa o saat sayılır (07:57 / 08:14 → 08:00, 16:46 / 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>

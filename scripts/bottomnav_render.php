@@ -80,6 +80,8 @@ eval(substr($asrc, $a, $b - $a + 3));
 $KATALOG = array_keys(array_merge(...array_values(permission_catalog())));
 
 require_once $ROOT . '/config/helpers.php';   // GERÇEK render_header/footer, first_allowed_page, nav_ptak_*
+// v552: muhasebe menüsü sayfa yetkileri (muhasebe.<sayfa>.read) auth.php permission_catalog()'unda DEĞİL, muhasebe_roller.php katalog eklerinde.
+$KATALOG = array_values(array_unique(array_merge($KATALOG, array_keys(muhasebe_rol_katalog()))));
 
 // Depo rengi: biri tanımdan (elle seçilmiş renk), biri isimden türetilen palet.
 db()->exec("CREATE TABLE IF NOT EXISTS material_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,12 +127,12 @@ $PROFILLER = [
         'perms' => ['attendance.foremen','attendance.worker_cards','attendance.daily_scan','attendance.daily_reports'],
     ],
     'dort_sayfa' => [
-        // Tam 4 aday sayfa (records+cikma, kantar, reports): 390px ve üstünde
-        // 4 slot → "Diğer" GEREKSİZ; 390 altında 4. slot gizlenir → "Diğer"
-        // (yalnız dar ekranda) o sayfayı taşır.
+        // Tam 4 aday sayfa (rapor, beyan, mstok, hesap — v558: eski records/cikma/kantar artık aday DEĞİL): 390px ve üstünde
+        // 4 slot → "Diğer" GEREKSİZ; 390 altında 4. slot (hesap) gizlenir → "Diğer" (yalnız dar ekranda) o sayfayı taşır.
+        // records.read/kantar.read bilerek durur: eski sayfalar açılabilir ama menüde HİÇBİR girişi yoktur.
         'ad' => 'Özel rol: tam 4 aday sayfa', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
         'rol' => ['slug' => 'dort', 'label' => 'Dört Sayfa'],
-        'perms' => ['dashboard.read','records.read','kantar.read','reports.read'],
+        'perms' => ['dashboard.read','records.read','kantar.read','reports.read','beyan.read','stok.read','hesap.read'],
     ],
     'ozel_pdks' => [
         // Özel rol: YALNIZ kalıcı personel PDKS izinleri (attendance.*) —
@@ -161,8 +163,36 @@ $PROFILLER = [
         'rol' => ['slug' => 'hesap_tek', 'label' => 'Hesap'],
         'perms' => ['hesap.read'],
     ],
+    // v552: "Diğer" sayfası sidebar ile AYNI modelden çizilir. (v558: eski 3 aday artık menüde yok → aday yok) + anahtarsız
+    // (pin'siz) muhasebe sayfaları → o sayfalara mobilde ulaşmak için "Diğer" düğmesi/sheet ŞART.
+    'muhasebe_sayfa' => [
+        'ad' => 'Özel rol: 3 aday + muhasebe sayfaları (cari kartları, palet fişleri)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'muhasebe_sayfa', 'label' => 'Muhasebe Sayfa'],
+        'perms' => ['dashboard.read','records.read','kantar.read','muhasebe.cari_kartlari.read','muhasebe.palet_fisleri.read'],
+    ],
+    // dashboard.read YOK + yalnız muhasebe sayfaları: Ana Sayfa ilk izinli muhasebe sayfasına (cari_kartlari.php) gider →
+    // o sayfa sheet'te İKİNCİ kez çizilmez; kalan (cari_dekontlar) için "Diğer" şart.
+    'muhasebe_tek' => [
+        'ad' => 'Özel rol: yalnız muhasebe sayfaları (dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'muhasebe_tek', 'label' => 'Muhasebe Tek'],
+        'perms' => ['muhasebe.cari_kartlari.read','muhasebe.cari_dekontlar.read'],
+    ],
 ];
-foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read'] as $key=>$permission) {
+// v558: eski Yükleme Planı/Paletleme/Mal Kabul girişleri (records/cikma/kantar) HER ROL için TÜM menülerden kalktı (sidebar, Diğer,
+// alt çubuk adayları, topnav, ana sayfa kartları). Eski sayfadayken seçili görünen giriş yeni karşılığıdır (görünüyorsa).
+//  · yeni_fis_hepsi      : eski izinleri + 3 yeni fiş sayfası → yeni 3 muhasebe sayfası sheet'te
+//  · yeni_fis_kismi      : eski izinleri + YALNIZ Mal Kabul Fişleri (eski sayfada yalnız o karşılık seçilir; records/cikma sayfasında seçili öğe YOK)
+//  · yalniz_yeni_fis     : eski izni YOK, yalnız 3 yeni fiş sayfası (dashboard.read yok → Ana Sayfa ilk izinli muhasebe sayfasına gider)
+$PROFILLER['yeni_fis_hepsi'] = ['ad' => 'Özel rol: eski izinler + 3 yeni fiş sayfası (eski girişler gizli)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+    'rol' => ['slug' => 'yeni_fis_hepsi', 'label' => 'Yeni Fiş Hepsi'],
+    'perms' => ['dashboard.read','records.read','kantar.read','reports.read','muhasebe.arac_yukleme_fisleri.read','muhasebe.palet_fisleri.read','muhasebe.mal_kabul_fisleri.read']];
+$PROFILLER['yeni_fis_kismi'] = ['ad' => 'Özel rol: eski izinler + yalnız Mal Kabul Fişleri (yalnız eski Mal Kabul gizli)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+    'rol' => ['slug' => 'yeni_fis_kismi', 'label' => 'Yeni Fiş Kısmi'],
+    'perms' => ['dashboard.read','records.read','kantar.read','reports.read','muhasebe.mal_kabul_fisleri.read']];
+$PROFILLER['yalniz_yeni_fis'] = ['ad' => 'Özel rol: yalnız 3 yeni fiş sayfası (eski izin YOK, dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+    'rol' => ['slug' => 'yalniz_yeni_fis', 'label' => 'Yalnız Yeni Fiş'],
+    'perms' => ['muhasebe.arac_yukleme_fisleri.read','muhasebe.palet_fisleri.read','muhasebe.mal_kabul_fisleri.read']];
+foreach (['loading_only'=>'records.loading.read','pallet_only'=>'records.pallet.read','ogl_only'=>'siparis.ogl.read','product_orders_only'=>'siparis.urun.read','frugro_only'=>'siparis.frugro.read'] as $key=>$permission) {
     $PROFILLER[$key]=['ad'=>'Ayrıntılı sayfa '.$key,'admin'=>false,'depo'=>'ANONIM TEST DEPO','rol'=>['slug'=>$key,'label'=>$key],'perms'=>['dashboard.read','role.permissions.detailed',$permission]];
 }
 foreach ($PROFILLER as $pk => $pr) {
@@ -211,6 +241,7 @@ $GATES = [
     'hesap.php'             => ['hesap.php', "require_hesap('read');", fn() => can('hesap.read') || is_admin(), 'hesap_can(read) = is_admin() || hesap.read'],
     'mail.php'              => ['mail.php', "require_mail('read');", fn() => can('mail.read') || can('mail.admin') || is_admin(), 'can_mail(read) = mail.read || mail.admin || is_admin()'],
     'siparisler.php'        => ['siparisler.php', "require_siparis('read');", fn() => role_matrix_page_can('siparis','ogl'), 'siparis.ogl.read or admin'],
+    'frugro_siparis.php'    => ['frugro_siparis.php', "require_siparis('read', 'frugro');", fn() => role_matrix_page_can('siparis','frugro'), 'siparis.frugro.read or admin (Frugro satırı öncesi kaydedilmiş rolde OGL\'den türer)'],
     'urun_siparis.php'      => ['urun_siparis.php', "require_siparis('read', 'urun');", fn() => role_matrix_page_can('siparis','urun'), 'siparis.urun.read or admin'],
     'maliyet.php'           => ['maliyet.php', "require_maliyet('read');", fn() => can('maliyet.read') || is_admin(), 'can_maliyet(read) = maliyet.read || is_admin()'],
     'definitions.php'       => ['definitions.php', "require_perm('defs.read');", fn() => can('defs.read'), 'defs.read'],
@@ -228,12 +259,15 @@ $GATES = [
 $ANAHTAR_SAYFA = [
     'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
     'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php', 'qcost' => 'hizli_maliyet.php',
-    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'usip' => 'urun_siparis.php', 'ptak' => 'personel_takip.php',
+    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'frugro' => 'frugro_siparis.php', 'usip' => 'urun_siparis.php', 'ptak' => 'personel_takip.php',
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
+// v558: bu anahtarlar kayıtta (nav_alt_sayfalar / nav_aktif_anahtar) durur ama ASLA aday değildir.
+$ADAY_DEGIL = ['records', 'cikma', 'kantar'];
+$ESKI_YENI_UYG = array_map(fn($x) => $x . '.php', nav_eski_esleri());
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'frugro', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }
@@ -274,6 +308,11 @@ $SAYFALAR = [
     'hesap'       => ['self' => '/hesap.php',          'kapi' => 'hesap.php',          'bolum' => 'hesap.php',          'baslik' => 'Hesap'],
     'siparisler'  => ['self' => '/siparisler.php',     'kapi' => 'siparisler.php',     'bolum' => 'siparisler.php',     'baslik' => 'Siparişler'],
     'definitions' => ['self' => '/definitions.php',    'kapi' => 'definitions.php',    'bolum' => 'definitions.php',    'baslik' => 'Tanımlar'],
+    // v552: anahtarsız (muhasebe) sayfa — sheet'te `.bn-tile-link`; nav_aktif_anahtar() dosya slug'ı döndürür
+    'cari_kartlari' => ['self' => '/cari_kartlari.php', 'kapi' => 'cari_kartlari.php', 'bolum' => 'cari_kartlari.php', 'baslik' => 'Cari Kayıt Kartları'],
+    // v555: yeni fiş sayfaları (eski records/cikmalar/kantar'ın yeni karşılığı) — anahtarsız muhasebe sayfası; nav_aktif_anahtar() slug döndürür
+    'arac_fis'    => ['self' => '/arac_yukleme_fisleri.php', 'kapi' => 'arac_yukleme_fisleri.php', 'bolum' => 'arac_yukleme_fisleri.php', 'baslik' => 'Araç Yükleme Fişleri'],
+    'mal_kabul_fis' => ['self' => '/mal_kabul_fisleri.php', 'kapi' => 'mal_kabul_fisleri.php', 'bolum' => 'mal_kabul_fisleri.php', 'baslik' => 'Mal Kabul Fişleri'],
 ];
 
 // Hal Kayıt sayfasının KENDİ düzen kuralları (iframe'i bottomnav'ın üstünde
@@ -330,9 +369,14 @@ function sayfa_render(array $s, string $base_css_inline, string $file_root, stri
 }
 
 // ── Üret ──────────────────────────────────────────────────────────────────
+$muhSayfalar = [];   // v552: muhasebe menüsü sayfa dosyaları (sheet'te anahtarsız bağlantı)
+foreach (nav_muhasebe_gruplari() as [, , $__sayfalar]) foreach (array_keys($__sayfalar) as $__dosya) $muhSayfalar[] = (string)$__dosya;
 $manifest = [
     'uretim'   => date('c'),
     'anahtar_sayfa' => $ANAHTAR_SAYFA,
+    'muhasebe_sayfalar' => $muhSayfalar,
+    'aday_degil' => $ADAY_DEGIL,
+    'eski_yeni' => ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php'],
     'kok'      => $ROOT,
     'app_surum'=> APP_SURUM,
     'gates'    => $gate_meta,
@@ -341,11 +385,19 @@ $manifest = [
     'sayfalar' => [],
 ];
 $uyari = [];
+if ($ESKI_YENI_UYG !== ['records' => 'arac_yukleme_fisleri.php', 'cikma' => 'palet_fisleri.php', 'kantar' => 'mal_kabul_fisleri.php']) { fwrite(STDERR, "nav_eski_esleri() eşlemesi değişti: " . json_encode($ESKI_YENI_UYG) . "\n"); exit(1); }
 foreach ($PROFILLER as $pk => $pr) {
     $PROFIL = ['perms' => $pr['perms'], 'admin' => $pr['admin'], 'depo' => $pr['depo'], 'rol' => $pr['rol']];
 
     $izinli = [];
     foreach ($GATES as $hedef => [, , $kosul]) $izinli[$hedef] = (bool)$kosul();
+    // v552: muhasebe menüsü sayfaları (sheet'te anahtarsız bağlantı) — kapı: yönetici ya da muhasebe.<slug>.read;
+    // admin_konsolu grubu yalnız yönetici (muhasebe_roller.php KAPSAM DIŞI). muhasebe_sayfa_can()'dan BAĞIMSIZ yazıldı.
+    foreach (nav_muhasebe_gruplari() as $__grup => [, , $__sayfalar]) {
+        foreach ($__sayfalar as $__dosya => $_) {
+            $izinli[$__dosya] = is_admin() || ($__grup !== 'admin_konsolu' && can('muhasebe.' . substr((string)$__dosya, 0, -4) . '.read'));
+        }
+    }
 
     // Çapraz kontroller: tablo, uygulamanın KENDİ fonksiyonlarıyla ayrışmasın.
     $fap = first_allowed_page();
@@ -354,7 +406,8 @@ foreach ($PROFILLER as $pk => $pr) {
 
     // Alt çubuk beklentileri — HEDEF SAYFA KAPILARINDAN türetilir (uygulamanın
     // nav_alt_izinler()'inden DEĞİL), sonra uygulamayla çapraz kontrol edilir.
-    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]]));
+    // v558: eski girişler (records/cikma/kantar) kapıları geçse de HİÇBİR rolde aday DEĞİLDİR ($ADAY_DEGIL; uygulamanın nav_alt_izinler()'inden bağımsız yazıldı).
+    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]] && !in_array($k, $ADAY_DEGIL, true)));
     $uygAday = array_keys(array_filter(nav_alt_izinler()));
     if ($uygAday !== $adaylarHam) $uyari[] = "$pk: nav_alt_izinler() [" . implode(',', $uygAday) . "] ≠ kapı tablosu [" . implode(',', $adaylarHam) . "]";
     $home = can('dashboard.read') ? 'index.php' : $fap;
@@ -365,6 +418,9 @@ foreach ($PROFILLER as $pk => $pr) {
     // beklentilerde (slot sayısı, "Diğer", karo listesi) kullanılır.
     $adaylar = array_values(array_filter($adaylarHam, fn($k) => $home === null || $ANAHTAR_SAYFA[$k] !== $home));
     $soguk = array_slice(array_values(array_filter($SOGUK, fn($k) => in_array($k, $adaylar, true))), 0, 4);
+    // v552: dokta yeri olmayan (anahtarsız) izinli muhasebe sayfası var mı? (Ana Sayfa'nın hedefi hariç — dokta zaten oraya gider.)
+    // "Diğer" düğmesi/sheet bu durumda aday sayısından BAĞIMSIZ olarak çıkmalıdır.
+    $sheetEk = (bool)array_filter($muhSayfalar, fn($d) => !empty($izinli[$d]) && $d !== $home);
 
     $manifest['profiller'][$pk] = [
         'ad' => $pr['ad'], 'admin' => $pr['admin'], 'depo' => $pr['depo'],
@@ -373,6 +429,7 @@ foreach ($PROFILLER as $pk => $pr) {
         // Ana Sayfa: dashboard.read → index.php, yoksa first_allowed_page(), o da yoksa HİÇ
         'home_hedef' => $home,
         'adaylar' => $adaylar,
+        'sheet_ek' => $sheetEk,
         'soguk_slotlar' => $soguk,
         'cubuk_beklenen' => $home !== null || $adaylar !== [],
     ];
@@ -387,7 +444,7 @@ foreach ($PROFILLER as $pk => $pr) {
         $manifest['sayfalar'][] = [
             'profil' => $pk, 'sayfa' => $sk, 'dosya' => $dosya,
             'yol' => ltrim($s['self'], '/'), 'bolum' => $s['bolum'],
-            'anahtar' => $s['bolum'] === 'index.php' ? 'home' : (array_search($s['bolum'], $ANAHTAR_SAYFA, true) ?: null),
+            'anahtar' => $s['bolum'] === 'index.php' ? 'home' : (array_search($s['bolum'], $ANAHTAR_SAYFA, true) ?: (in_array($s['bolum'], $muhSayfalar, true) ? substr($s['bolum'], 0, -4) : null)),   // muhasebe sayfası: slug (nav_aktif_anahtar)
             'depo_rengi' => $pr['depo'] !== null ? depot_color($pr['depo']) : null,
         ];
     }
@@ -398,6 +455,7 @@ foreach ($PROFILLER as $pk => $pr) {
     if ($pk === 'admin') {
         foreach (['quick_list', 'quick_form'] as $quickPage) {
             $s = $SAYFALAR[$quickPage];
+            // v558: 'records' aday DEĞİL → eski çerezdeki 'records' sessizce atılır, slotları 'rapor' doldurur.
             $_COOKIE['asya_nav'] = 'u:1;s:records,hks,ptak;p:qcost';
             $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
             unset($_COOKIE['asya_nav']);
@@ -407,27 +465,30 @@ foreach ($PROFILLER as $pk => $pr) {
                 'profil' => $pk, 'sayfa' => $quickPage . '+pinned', 'dosya' => $dosya,
                 'yol' => ltrim($s['self'], '/'), 'bolum' => 'hizli_maliyet.php', 'anahtar' => 'qcost',
                 'depo_rengi' => depot_color($pr['depo']),
-                'senaryo' => ['ad' => 'qcost_pinned', 'cerez' => 'u:1;s:records,hks,ptak;p:qcost', 'slotlar' => ['qcost', 'records', 'hks', 'ptak'], 'sabit' => ['qcost']],
+                'senaryo' => ['ad' => 'qcost_pinned', 'cerez' => 'u:1;s:records,hks,ptak;p:qcost', 'slotlar' => ['qcost', 'hks', 'ptak', 'rapor'], 'sabit' => ['qcost']],
             ];
         }
     }
     if ($pk === 'operator') {
+        // v558: ziyaret edilen sayfa Beyanlar (operatörde aday + soğuk 4. slot): çerez senaryoları artık eski kantar/records anahtarlarına dayanmaz.
         $senaryolar = [
-            'cerez_sahte'  => ['u:1;s:users,qcost,xyz,kantar,audit;p:qcost,roles,backup,home,more,../index', ['kantar', 'records', 'hks', 'ptak'], []],
-            'cerez_gecerli'=> ['u:1;s:beyan,kantar,records,mstok;p:hesap', ['hesap', 'beyan', 'kantar', 'records'], ['hesap']],
-            'cerez_baska'  => ['u:2;s:beyan,kantar,records,mstok;p:hesap', $soguk, []],
-            'cerez_bozuk'  => [str_repeat('s:records,', 60), $soguk, []],
+            'cerez_sahte'  => ['u:1;s:users,qcost,xyz,mstok,audit;p:qcost,roles,backup,home,more,../index', ['mstok', 'hks', 'ptak', 'rapor'], []],
+            'cerez_gecerli'=> ['u:1;s:beyan,mstok,defs,rapor;p:hesap', ['hesap', 'beyan', 'mstok', 'defs'], ['hesap']],
+            'cerez_baska'  => ['u:2;s:beyan,mstok,defs,rapor;p:hesap', $soguk, []],
+            'cerez_bozuk'  => [str_repeat('s:beyan,', 60), $soguk, []],
+            // eski anahtarlar (records/cikma/kantar) çerezde olsa da sessizce atılır
+            'cerez_eski'   => ['u:1;s:records,kantar,cikma,mstok;p:kantar', ['mstok', 'hks', 'ptak', 'rapor'], []],
         ];
         foreach ($senaryolar as $sen => [$cerez, $bekSlot, $bekSabit]) {
-            $s = $SAYFALAR['kantar'];
+            $s = $SAYFALAR['beyanlar'];
             $_COOKIE['asya_nav'] = $cerez;
             $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
             unset($_COOKIE['asya_nav']);
-            $dosya = "{$pk}__kantar__{$sen}.html";
+            $dosya = "{$pk}__beyanlar__{$sen}.html";
             file_put_contents($OUT . '/' . $dosya, $html);
             $manifest['sayfalar'][] = [
-                'profil' => $pk, 'sayfa' => "kantar+$sen", 'dosya' => $dosya,
-                'yol' => 'kantar.php', 'bolum' => 'kantar.php', 'anahtar' => 'kantar',
+                'profil' => $pk, 'sayfa' => "beyanlar+$sen", 'dosya' => $dosya,
+                'yol' => 'beyanlar.php', 'bolum' => 'beyanlar.php', 'anahtar' => 'beyan',
                 'depo_rengi' => depot_color($pr['depo']),
                 'senaryo' => ['ad' => $sen, 'cerez' => $cerez, 'slotlar' => $bekSlot, 'sabit' => $bekSabit],
             ];

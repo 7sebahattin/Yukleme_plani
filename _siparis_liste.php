@@ -66,9 +66,9 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
             <button class="pc-kebab" type="button" title="İşlemler" aria-label="<?= h((string)$r['order_ref']) ?> işlemleri">⋮</button>
             <div class="pc-dropdown" hidden>
               <a href="siparis_view.php?id=<?= $__id ?>">📂 Aç</a>
-              <a href="siparis_zip.php?id=<?= $__id ?>">🗜 Evrak ZIP</a>
-              <a href="siparis_pkl.php?id=<?= $__id ?>">📄 PKL</a>
-              <button type="button" data-sip-wp="<?= $__id ?>" title="WhatsApp için sevkiyat kartı (görsel)">💬 WP Paylaş</button>
+              <?php if (icerik_can('siparis.zip')): ?><a href="siparis_zip.php?id=<?= $__id ?>">🗜 Evrak ZIP</a><?php endif; ?>
+              <?php if (icerik_can('siparis.sev_pkl')): ?><a href="siparis_pkl.php?id=<?= $__id ?>">📄 PKL</a><?php endif; ?>
+              <?php if (icerik_can('siparis.wp_paylas')): ?><button type="button" data-sip-wp="<?= $__id ?>" title="WhatsApp için sevkiyat kartı (görsel)">💬 WP Paylaş</button><?php endif; ?>
             </div>
           </div>
         </td>
@@ -123,9 +123,9 @@ $sec_pkl = isset($sec_pkl) && is_array($sec_pkl) ? $sec_pkl : [];
         <button class="pc-kebab" type="button" title="İşlemler" aria-label="<?= h((string)$r['order_ref']) ?> işlemleri">⋮</button>
         <div class="pc-dropdown" hidden>
           <a href="siparis_view.php?id=<?= $__id ?>">📂 Aç</a>
-          <a href="siparis_zip.php?id=<?= $__id ?>">🗜 Evrak ZIP</a>
-          <a href="siparis_pkl.php?id=<?= $__id ?>">📄 PKL</a>
-          <button type="button" data-sip-wp="<?= $__id ?>" title="WhatsApp için sevkiyat kartı (görsel)">💬 WP Paylaş</button>
+          <?php if (icerik_can('siparis.zip')): ?><a href="siparis_zip.php?id=<?= $__id ?>">🗜 Evrak ZIP</a><?php endif; ?>
+          <?php if (icerik_can('siparis.sev_pkl')): ?><a href="siparis_pkl.php?id=<?= $__id ?>">📄 PKL</a><?php endif; ?>
+          <?php if (icerik_can('siparis.wp_paylas')): ?><button type="button" data-sip-wp="<?= $__id ?>" title="WhatsApp için sevkiyat kartı (görsel)">💬 WP Paylaş</button><?php endif; ?>
         </div>
       </div>
     </article>

@@ -29,7 +29,6 @@ $fy_grup = static function (array $g, string $tarih): string {
 <div class="fy-kap" id="fisYukle" data-fy-mod="<?= h((string)$model['mod']) ?>">
 <?php if (($model['mod'] ?? '') === 'onizle' && !empty($model['ust'])): $u = $model['ust']; ?>
     <div class="fy-ust" role="note">
-        <span>İşletme: <b><?= h((string)($u['isletme'] ?? '')) ?></b></span>
         <span>Depo: <b><?= h((string)($u['depo'] ?? '')) ?></b></span>
         <span>Çavuş: <b><?= h((string)($u['cavus'] ?? '')) ?></b></span>
     </div>
@@ -100,7 +99,6 @@ $fy_grup = static function (array $g, string $tarih): string {
             <label><input type="checkbox" name="onay_yarim" value="1" <?= !empty($v['onay_yarim']) ? 'checked' : '' ?>> Yarım kişilerin kararını «Yarım» olarak kaydet</label>
             <label><input type="checkbox" name="onay_fm" value="1" <?= !empty($v['onay_fm']) ? 'checked' : '' ?>> Fazla mesai adaylarını onayla (fiş = çavuş beyanı)</label>
             <label><input type="checkbox" name="ek_yaz" value="1" <?= !empty($v['ek_yaz']) ? 'checked' : '' ?>> Mevcut kayıtlara EK yaz (mesaide kayıt varsa üzerine eklenir)</label>
-            <label><input type="checkbox" name="isletme_onay" value="1" <?= !empty($v['isletme_onay']) ? 'checked' : '' ?>> İşletme / depo uyuşmazlığı olan fişleri de yaz</label>
             <?php if (!empty($model['secenek']['ustune_yaz'])): ?>
             <p class="fy-yonerge fd-ustune-not" role="note">🔄 <b>Üstüne yaz AÇIK</b> (yükleme sırasında seçildi) — gerekçe: <b><?= h((string)($model['secenek']['ustune_gerekce'] ?? '')) ?></b>. Yalnız Fiş Excel'i ile yazılmış eski kayıtlar iptal edilir (silinmez); fiş dışı kayıtlar korunur. Vazgeçmek için «Vazgeç» deyip dosyayı seçeneksiz yeniden yükleyin.</p>
             <?php endif; ?>

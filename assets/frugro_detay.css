@@ -1,0 +1,20 @@
+/* frugro_detay.css — Frugro sipariş detayına ÖZEL küçük ekler. Düzen, kartlar, adım şeridi, pencereler assets/siparis.css'tendir
+   (.sip-mod .sip-view); burada yalnız OGL'de karşılığı olmayan parçalar. Kopya CSS YOK. */
+.frg-detay .sip-badge--invoice { background: #ede9fe; color: #5b21b6; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .frg-detay .sip-badge--invoice { background: #3b2a66; color: #ddd6fe; } }
+:root[data-theme="dark"] .frg-detay .sip-badge--invoice { background: #3b2a66; color: #ddd6fe; }
+.frg-detay .sip-h1 .sip-parti-btn { vertical-align: middle; }
+.frg-detay .sip-dd-deger { overflow-wrap: anywhere; }
+.frg-detay .frg-belge-not { margin: -4px 0 8px; font-size: .85rem; }
+.frg-detay .frg-belge { grid-template-columns: auto minmax(0, 1fr) auto; }
+.frg-detay .frg-kalibre-tablo td, .frg-detay .frg-kalibre-tablo th { vertical-align: top; }
+.frg-detay .frg-mail-ekler { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.frg-detay .frg-mail-ekler li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.frg-detay .frg-mail-uyari { color: var(--warning-text, #92400e); }
+.frg-detay .sip-mail-konu { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .frg-detay .frg-belge { grid-template-columns: auto minmax(0, 1fr); }
+  .frg-detay .frg-belge .sip-belge-eylem { grid-column: 1 / -1; }
+}
+.frg-detay .sip-mail-alici .sip-mail-metin { align-self: stretch; }
+.frg-detay .sip-mail-alici .sip-mail-metin textarea { width: 100%; box-sizing: border-box; }

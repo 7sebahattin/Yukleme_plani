@@ -28,6 +28,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/pdks_faz8b.php';
 
+// v532: Servis çavuş hakedişine YAZILMAZ — servisçi ile ayrı hesaplaşılır (servis_hesabi.php,
+// config/pdks_servis_hesap.php). true yapmak eski davranışı (hakedişe ek satır) geri getirir.
+defined('PDKS_SERVIS_HAKEDISTE') || define('PDKS_SERVIS_HAKEDISTE', false);
 defined('PDKS_SERVIS_MAX_ADET') || define('PDKS_SERVIS_MAX_ADET', 99);
 defined('PDKS_SERVIS_TEKRAR_HATA') || define('PDKS_SERVIS_TEKRAR_HATA', 'Bu servis kaydı zaten gönderildi (tekrar gönderim); sayfayı yenileyin.');
 defined('PDKS_SERVIS_FINAL_HATA') || define('PDKS_SERVIS_FINAL_HATA', 'Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yeniden açın.');
@@ -318,6 +321,27 @@ function pdks_servis_toplamlar_toplu(array $sessionIds, ?PDO $pdo = null): array
     return $t;
 }
 
+/**
+ * v560: OTURUM BAŞINA iptal edilmemiş servis adetleri (tek sorgu) — çavuş listeleri (Günlük Puantaj / Çavuş Hakediş) için.
+ * @return array<int,array{BUYUK:int,KUCUK:int}> [session_id => adetler] (servisi olmayan oturum da 0'larla döner)
+ */
+function pdks_servis_oturum_adetleri(array $sessionIds, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $sessionIds = array_values(array_unique(array_filter(array_map('intval', $sessionIds), static fn($i) => $i > 0)));
+    $sifir = array_fill_keys(array_keys(pdks_servis_turleri()), 0);
+    $out = [];
+    foreach ($sessionIds as $id) $out[$id] = $sifir;
+    if (!$sessionIds || !pdks_servis_tablo_var($pdo, 'daily_session_services')) return $out;
+    $st = $pdo->prepare("SELECT session_id, service_type, COALESCE(SUM(quantity),0) AS n FROM daily_session_services
+                          WHERE is_voided = 0 AND session_id IN (" . implode(',', array_fill(0, count($sessionIds), '?')) . ") GROUP BY session_id, service_type");
+    $st->execute($sessionIds);
+    foreach ($st->fetchAll() as $r) {
+        if (isset($sifir[(string)$r['service_type']])) $out[(int)$r['session_id']][(string)$r['service_type']] = (int)$r['n'];
+    }
+    return $out;
+}
+
 /** Mesai Detayı listesi (iptaller dahil, yeniden eskiye). */
 function pdks_servis_listele(int $sessionId, ?PDO $pdo = null): array
 {
@@ -345,7 +369,7 @@ function pdks_servis_listele(int $sessionId, ?PDO $pdo = null): array
 function pdks_servis_hakedis_satirlari(array $oturum, PDO $pdo): array
 {
     $sonuc = ['satirlar' => [], 'eksikler' => [], 'para' => null, 'toplam_kurus' => 0];
-    if (!pdks_servis_sema_hazir($pdo)) return $sonuc;
+    if (!PDKS_SERVIS_HAKEDISTE || !pdks_servis_sema_hazir($pdo)) return $sonuc;
     $adet = pdks_servis_toplamlar((int)$oturum['id'], $pdo);
     if (array_sum($adet) < 1) return $sonuc;
     $ucret = pdks_servis_ucret_gecerli((int)$oturum['foreman_id'], (string)$oturum['work_date'], $pdo);
@@ -393,6 +417,36 @@ function pdks_servis_istek_kayitli(PDO $pdo, string $istekId): bool
 // =========================================================
 
 /**
+ * Servis satırlarının TEK yazma yeri (v560: Toplu İşlem de aynı tx içinde bunu çağırır). Transaction AÇMAZ; mesai kilidi,
+ * kesin hakediş reddi, yetki/depo kapıları ve adet doğrulaması ÇAĞIRANDADIR. Tür başına 1 satır, ortak batch_id; istek_id
+ * (null olabilir) yalnız ilk satırda. Taslak hakedişi yeniden hesaplamaya işaretler + audit `servis_ekle`.
+ * @return string batch_id
+ */
+function pdks_servis_yaz(PDO $pdo, array $oturum, int $buyuk, int $kucuk, string $note, ?string $istekId, int $user, array $auditEk = []): string
+{
+    $sessionId = (int)$oturum['id'];
+    $adetler = ['BUYUK' => $buyuk, 'KUCUK' => $kucuk];
+    $batchId = 'SV' . date('Ymd') . bin2hex(random_bytes(4));
+    $ins = $pdo->prepare('INSERT INTO daily_session_services
+        (session_id, foreman_id, work_date, depo, service_type, quantity, note, batch_id, istek_id, created_by_user_id, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+    $ids = []; $ilk = true; $simdi = date('Y-m-d H:i:s');
+    foreach ($adetler as $tur => $n) {
+        if ($n < 1) continue;
+        $ins->execute([$sessionId, (int)$oturum['foreman_id'], (string)$oturum['work_date'], (string)$oturum['depo'],
+            $tur, $n, $note !== '' ? $note : null, $batchId, ($ilk && $istekId !== null) ? $istekId : null, $user, $simdi]);
+        $ids[] = (int)$pdo->lastInsertId();
+        $ilk = false;
+    }
+    pdks_faz8j_yeniden_hesap_isaretle($pdo, $sessionId);
+    pdks_faz8j_audit($pdo, $user, 'servis_ekle', $sessionId, [], [
+        'session_id' => $sessionId, 'batch_id' => $batchId, 'istek_id' => $istekId,
+        'buyuk' => $buyuk, 'kucuk' => $kucuk, 'note' => $note, 'servis_ids' => $ids,
+    ] + $auditEk, 'daily_work_sessions');
+    return $batchId;
+}
+
+/**
  * Mesaiye servis ekler (Büyük + Küçük tek gönderimde; tür başına 1 satır,
  * ortak batch_id; istek_id YALNIZ ilk satırda — UNIQUE çift gönderimi keser).
  * @return array{ok:bool, hata?:string, tekrar?:bool, batch_id?:string, buyuk?:int, kucuk?:int, fiyatsiz?:string[]}
@@ -436,23 +490,7 @@ function pdks_servis_ekle(int $sessionId, int $buyuk, int $kucuk, string $note, 
         pdks_faz8j_mesai_kilitle($pdo, $sessionId);   // İLK sorgu — bkz. pdks_faz8j_oturum_kilitle docblock
         if (pdks_servis_istek_kayitli($pdo, $istekId)) throw new RuntimeException(PDKS_SERVIS_TEKRAR_HATA);
         if (pdks_faz8j_entitlement($pdo, $sessionId) === 'final') throw new RuntimeException(PDKS_SERVIS_FINAL_HATA);
-        $batchId = 'SV' . date('Ymd') . bin2hex(random_bytes(4));
-        $ins = $pdo->prepare('INSERT INTO daily_session_services
-            (session_id, foreman_id, work_date, depo, service_type, quantity, note, batch_id, istek_id, created_by_user_id, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)');
-        $ids = []; $ilk = true; $simdi = date('Y-m-d H:i:s');
-        foreach ($adetler as $tur => $n) {
-            if ($n < 1) continue;
-            $ins->execute([$sessionId, (int)$oturum['foreman_id'], (string)$oturum['work_date'], (string)$oturum['depo'],
-                $tur, $n, $note !== '' ? $note : null, $batchId, $ilk ? $istekId : null, $user, $simdi]);
-            $ids[] = (int)$pdo->lastInsertId();
-            $ilk = false;
-        }
-        pdks_faz8j_yeniden_hesap_isaretle($pdo, $sessionId);
-        pdks_faz8j_audit($pdo, $user, 'servis_ekle', $sessionId, [], [
-            'session_id' => $sessionId, 'batch_id' => $batchId, 'istek_id' => $istekId,
-            'buyuk' => $buyuk, 'kucuk' => $kucuk, 'note' => $note, 'servis_ids' => $ids,
-        ], 'daily_work_sessions');
+        $batchId = pdks_servis_yaz($pdo, $oturum, $buyuk, $kucuk, $note, $istekId, $user);
         $pdo->commit();
         return ['ok' => true, 'batch_id' => $batchId, 'buyuk' => $buyuk, 'kucuk' => $kucuk, 'fiyatsiz' => $fiyatsiz];
     } catch (Throwable $x) {

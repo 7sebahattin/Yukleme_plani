@@ -15,6 +15,7 @@ require_once __DIR__ . '/config/siparis_pkl.php';
 require_once __DIR__ . '/_siparis_ortak.php';
 $auth_user = require_login();
 require_siparis('read');
+icerik_kapi((($_GET['eml'] ?? '') === '1') ? 'siparis.mail_taslak' : 'siparis.belge_indir');   // v507
 siparis_no_store();
 
 $metinHata = function (int $kod, string $mesaj): void {
@@ -34,6 +35,7 @@ $st->execute([$id]);
 $b = $st->fetch(PDO::FETCH_ASSOC);
 if (!$b) $metinHata(404, 'Belge bulunamadı.');
 if (!siparis_belge_gorunur($pdo, $b)) forbidden('Bu belge aktif depoda görünmüyor.');
+siparis_belge_kapi($pdo, (int)$b['id'], 'read', 'Bu belgenin bağlı olduğu bölümü görüntüleme yetkiniz yok.');   // v504
 $yol = siparis_dosya_yolu($b);
 if ($yol === null) $metinHata(404, 'Belge dosyası bulunamadı.');
 

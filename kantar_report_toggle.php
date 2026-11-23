@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_report_toggle.php — Kantar fişi raporlandı toggle
+// kantar_report_toggle.php — Mal kabul fişi raporlandı toggle
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -58,7 +58,7 @@ if ($action === 'mark') {
     audit_log_event('kantar_report_mark', 'kantar_fisleri', $id,
         ['reported_at' => null],
         ['reported_at' => $now, 'reported_by' => $by_id]);
-    set_flash('success', 'Kantar fişi raporlandı olarak işaretlendi.');
+    set_flash('success', 'Mal kabul fişi raporlandı olarak işaretlendi.');
 } else {
     $old_ra = $fis['reported_at'];
     db()->prepare("UPDATE kantar_fisleri SET reported_at=NULL, reported_by=NULL WHERE id=?")

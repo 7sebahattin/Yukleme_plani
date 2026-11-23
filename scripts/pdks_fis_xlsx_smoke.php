@@ -79,7 +79,7 @@ $dvAra = function (string $aralik) use ($ws) {
 $sheetXml = (function () use ($yol) { $z = new ZipArchive(); $z->open($yol); $x = (string)$z->getFromName('xl/worksheets/sheet1.xml'); $z->close(); return $x; })();
 $harfOf = function (string $anahtar) use ($sut) { foreach ($sut as $i => $c) if ($c['anahtar'] === $anahtar) return Coordinate::stringFromColumnIndex($i + 1); return null; };
 $fh = $harfOf('fm_tipi'); $ft = $dvAra($fh . '2:' . $fh . '151');
-ok('1) FM Tipi: LİSTE Tümü,Kadın,Erkek,Rampacı,Şeritçi,Erkek+Rampacı,Erkek+Şeritçi (≤255 karakter)', $ft && $ft->getType() === DataValidation::TYPE_LIST && str_contains($ft->getFormula1(), 'Erkek+Rampacı') && str_contains($ft->getFormula1(), 'Erkek+Şeritçi') && str_contains($ft->getFormula1(), ',Şeritçi,') && str_contains($ft->getFormula1(), 'Tümü') && strlen($ft->getFormula1()) <= 255, $ft ? $ft->getFormula1() : 'yok');
+ok('1) FM Tipi: LİSTE Tümü,Kadın,Erkek,Şeritçi,Erkek+Şeritçi (Rampacı YOK, ≤255 karakter)', $ft && $ft->getType() === DataValidation::TYPE_LIST && !str_contains($ft->getFormula1(), 'Rampacı') && str_contains($ft->getFormula1(), 'Erkek+Şeritçi') && str_contains($ft->getFormula1(), ',Şeritçi,') && str_contains($ft->getFormula1(), 'Tümü') && strlen($ft->getFormula1()) <= 255, $ft ? $ft->getFormula1() : 'yok');
 foreach ($sut as $ci => $c) {
     if ($c['tip'] !== 'tam' || $c['maks'] === null) continue;
     $harf = Coordinate::stringFromColumnIndex($ci + 1); $ust = $c['maks'];
@@ -115,6 +115,10 @@ ok('1) Örnek: ORNEK-1 Erkek Tam «12+1» ve ORNEK-4 Kadın Tam «33,5» METİN 
 ok('1) Örnek hücreler ("12+1", "33,5") yeni kurala UYAR (say_parca hatasız)', pdks_fis_say_parca('12+1', 250, 'ERKEK')['hata'] === null && pdks_fis_say_parca('33,5', 250, 'KADIN')['hata'] === null);
 ok('1) Açıklama: yeni kurallar (A+B, .5, Şeritçi, FM Tipi, toplam FM saati) anlatılmış', str_contains($aciklamaMetni, '12+1') && str_contains($aciklamaMetni, '33,5') && str_contains($aciklamaMetni, 'Şeritçi') && str_contains($aciklamaMetni, 'Toplam FM Saati') && str_contains($aciklamaMetni, 'KALKTI'));
 ok('1) OCR komutu: «+» yalnız Erkek Tam / .5 Tam / Şeritçi / toplam FM saati yolu açıkça yazılı', str_contains(pdks_fis_ocr_komutu(), '"Erkek Tam" hücresine OLDUĞU GİBİ yaz') && str_contains(pdks_fis_ocr_komutu(), '33,5') && str_contains(pdks_fis_ocr_komutu(), 'Şeritçi Tam') && str_contains(pdks_fis_ocr_komutu(), 'FM kova sütunlarını (FM 1..6 Sa) BOŞ bırak') && !str_contains(pdks_fis_ocr_komutu(), 'B -> Yarım'));
+$kmt = pdks_fis_ocr_komutu();
+ok('1b) OCR komutu: iki fiş türü, çavuş = Çavuş Adı Soyadı, 6 haneli fiş no, işletme sütunu anılmaz', str_contains($kmt, 'İŞÇİ FİŞİ') && str_contains($kmt, 'Çavuş Adı Soyadı') && str_contains($kmt, '000555') && str_contains($kmt, 'Şablonda Depo ve Çavuş sütunu YOKTUR') && !str_contains($kmt, 'İşletme, Depo ve Çavuş'));
+ok('1b) OCR komutu: parçalı Toplam Mesai, yanlış satır kişi/saat, Rampa N erkek, yıl/gelecek tarih, Bayan «+» yok', str_contains($kmt, '11 kişi 2 saat / 2 kişi 3 saat') && str_contains($kmt, 'kişi/saat mesai sayıldı') && str_contains($kmt, 'Rampa N erkek') && str_contains($kmt, 'kişi başı 1 varsayıldı') && str_contains($kmt, 'Servis Küçük = 4') && str_contains($kmt, '"202.6"') && str_contains($kmt, 'bugünden SONRAKİ') && str_contains($kmt, 'YALNIZ Erkek alanında'));
+ok('1b) OCR komutu: Rampacı FM Tipi değeri YOK; ≤ 32767 karakter', !str_contains($kmt, 'Erkek+Rampacı') && mb_strlen($kmt, 'UTF-8') <= 32767, (string)mb_strlen($kmt, 'UTF-8'));
 $ornekBasl = []; foreach ($sut as $i => $c) $ornekBasl[] = (string)$ork->getCell([$i + 1, 1])->getValue();
 ok('1) Örnek başlıkları Fişler ile aynı', $ornekBasl === $basl);
 $formul = 0; foreach ($wb->getAllSheets() as $sh) foreach ($sh->getCoordinates() as $co) if ($sh->getCell($co)->getDataType() === DataType::TYPE_FORMULA) $formul++;
@@ -165,10 +169,10 @@ $o = pdks_fis_oku($yol);
 ok('2) okundu: 3 satır (boş satır atlandı), numara 2/3/4', $o['ok'] === true && count($o['satirlar']) === 3 && array_column($o['satirlar'], 'satir') === [2, 3, 4], j([$o['ok'], $o['hata'] ?? null, array_column($o['satirlar'] ?? [], 'satir')]));
 $h1 = $o['satirlar'][0]['hucreler'] ?? [];
 ok('2) hücre tipleri: Fiş No metin (\'01410\' korunur), sayı sayı', ($h1['fis_no']['v'] ?? null) === '01410' && ($h1['fis_no']['t'] ?? '') === 's' && ($h1['kadin_tam']['v'] ?? null) === 8 && ($h1['kadin_tam']['t'] ?? '') === 'n', j($h1['fis_no'] ?? null));
-$nr = pdks_fis_normalize($o, $cav, 'Depo A');
+$nr = pdks_fis_normalize($o, $cav);
 [$f1, $f2, $f3] = $nr['fisler'];
 ok('2) fiş 1: hata YOK, tarih Excel serisinden', $f1['hatalar'] === [] && $f1['tarih'] === $gec3, j([$f1['hatalar'], $f1['tarih']]));
-ok('2) fiş 1: Fiş No 01410 (sayı değil), çavuş C005, Kadın 8, Erkek 12+1 ("12,0"/"1" metin → sayı)', $f1['fis_no'] === '01410' && !$f1['fis_no_ham_sayi'] && $f1['cavus']['id'] === (int)$cav['id'] && $f1['isletme'] === 'Depo A' && $f1['say']['KADIN']['tam'] === 8 && $f1['say']['ERKEK'] === ['tam' => 12, 'yarim' => 1], j($f1['say']));
+ok('2) fiş 1: Fiş No 01410 (sayı değil), çavuş C005, Kadın 8, Erkek 12+1 ("12,0"/"1" metin → sayı)', $f1['fis_no'] === '01410' && !$f1['fis_no_ham_sayi'] && $f1['cavus']['id'] === (int)$cav['id'] && $f1['say']['KADIN']['tam'] === 8 && $f1['say']['ERKEK'] === ['tam' => 12, 'yarim' => 1], j($f1['say']));
 ok('2) fiş 1: FM2=5, FM Tipi Erkek, giriş 0.3333333 → 08:00, servis küçük 1, not', $f1['fm_kova'][2] === 5 && $f1['fm_tipi'] === ['ERKEK'] && $f1['giris'] === '08:00' && $f1['servis'] === ['buyuk' => 0, 'kucuk' => 1] && $f1['not'] === 'Rampa', j($f1));
 ok('2) fiş 1: Ham Metin + Kontrol Notu okundu (yalnız ekran için)', str_contains($f1['ham'], 'Bayan 8') && $f1['kontrol'] === 'Erkek 12 mi 17 mi?');
 ok('2) fiş 2: sayı olarak gelen Fiş No 1411 → uyarı (baştaki sıfır)', $f2['fis_no'] === '1411' && $f2['fis_no_ham_sayi'] === true && (bool)array_filter($f2['uyarilar'], fn($x) => str_contains($x, 'sıfır')), j($f2['uyarilar']));
@@ -181,7 +185,7 @@ ok('2) fiş 3: d.m.Y olmayan Y-m-d metin tarih, giriş "09:00", Toplam FM "25" (
 // önbellekli formül (Excel'den kaydedilmiş dosya): değer okunur + UYARI (formül ÇALIŞTIRILMAZ)
 $yol = doluDosya($B, [satir(['fis_no' => 'F1', 'tarih' => $gec3, 'kadin_tam' => ['t' => 'formul', 'f' => '=1+1']])]);
 $o = ham_oku($yol);
-$nr = pdks_fis_normalize($o, $cav, 'Depo A');
+$nr = pdks_fis_normalize($o, $cav);
 ok('2) önbellekli formül: değer (2) okunur + "önbellek" uyarısı, hata YOK', $nr['fisler'][0]['hatalar'] === [] && $nr['fisler'][0]['say']['KADIN']['tam'] === 2 && (bool)array_filter($nr['fisler'][0]['uyarilar'], fn($x) => str_contains($x, 'önbellek')), j([$nr['fisler'][0]['hatalar'], $nr['fisler'][0]['uyarilar']]));
 
 // v456: gerçek xlsx turu — «33,5» METİN hücresi, gerçek float 33.5 hücresi, Erkek «12+1», Şeritçi sütunları
@@ -194,7 +198,7 @@ $yol = doluDosya($B, [
     satir(['fis_no' => 'Y6', 'tarih' => $gec3, 'kadin_tam' => '33,5', 'kadin_yarim' => 1]),
 ]);
 $o = ham_oku($yol);
-$nr = pdks_fis_normalize($o, $cav, 'Depo A');
+$nr = pdks_fis_normalize($o, $cav);
 [$y1, $y2, $y3, $y4, $y5, $y6] = $nr['fisler'];
 ok('2b) Y1: Kadın "33,5" (METİN hücre) → 33 Tam + 1 Yarım; Erkek "12+1" → 12 + Şeritçi 1; Şeritçi Yarım 2', $y1['hatalar'] === [] && $y1['say']['KADIN'] === ['tam' => 33, 'yarim' => 1] && $y1['say']['ERKEK'] === ['tam' => 12, 'yarim' => 0] && $y1['say']['SERITCI'] === ['tam' => 1, 'yarim' => 2], j([$y1['hatalar'], $y1['say']]));
 ok('2b) Y2: Kadın gerçek float 33.5 hücresi → 33 + 1 Yarım; Erkek "+2" → 2 Şeritçi', $y2['hatalar'] === [] && $y2['say']['KADIN'] === ['tam' => 33, 'yarim' => 1] && $y2['say']['ERKEK']['tam'] === 0 && $y2['say']['SERITCI'] === ['tam' => 2, 'yarim' => 0], j([$y2['hatalar'], $y2['say']]));
@@ -205,20 +209,20 @@ ok('2b) Y6: Kadın "33,5" + Kadın Yarım dolu → HATA', (bool)array_filter($y6
 // eski şablon (24 sütun, Şeritçi sütunsuz) hâlâ okunur
 $eski = array_values(array_filter($B, fn($b) => !in_array($b, ['Şeritçi Tam', 'Şeritçi Yarım'], true)));
 $yol = doluDosya($eski, [array_values(array_filter(satir(['fis_no' => 'E1', 'tarih' => $gec3, 'kadin_tam' => 5, 'erkek_tam' => 3, 'erkek_yarim' => 1]), fn($x, $i) => !in_array($i, [8, 9], true), ARRAY_FILTER_USE_BOTH))]);
-$o = ham_oku($yol); $ne = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol); $ne = pdks_fis_normalize($o, $cav);
 ok('2b) ESKİ şablon (Şeritçi sütunsuz) hâlâ okunur: Erkek Tam 3 + Yarım 1, Şeritçi 0', ($o['ok'] ?? false) && $ne['fisler'][0]['hatalar'] === [] && $ne['fisler'][0]['say']['ERKEK'] === ['tam' => 3, 'yarim' => 1] && $ne['fisler'][0]['say']['SERITCI'] === ['tam' => 0, 'yarim' => 0], j([$o['hata'] ?? null, $ne['fisler'][0] ?? null]));
 
 // v463 — Rampacı sütunları: ESKİ «Rampacı Tam / Yarım» (şablondan kalktı) tanınır; DOLUYSA net HATA, boş/0 ise sessiz; yeni Kişi/Yevmiye kuralları
 $ebas = ['Fiş No', 'Tarih', 'Erkek Tam', 'Rampacı Tam', 'Rampacı Yarım'];
 $yol = doluDosya($ebas, [['R1', $gec3, 3, 2, null], ['R2', $gec3, 3, null, 1], ['R3', $gec3, 3, 0, 0], ['R4', $gec3, 3, null, null]]);
-$o = ham_oku($yol); $ne = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol); $ne = pdks_fis_normalize($o, $cav);
 ok('2c) v463: eski «Rampacı Tam/Yarım» başlıkları TANINIR (tanınmayan sütun uyarısına düşmez)', ($o['ok'] ?? false) && ($o['bilinmeyen'] ?? ['x']) === [] && $o['uyarilar'] === [], j([$o['bilinmeyen'] ?? null, $o['uyarilar'] ?? null]));
 [$r1, $r2, $r3, $r4] = $ne['fisler'];
 ok('2c) eski «Rampacı Tam» DOLU → net HATA (yeni şablon Kişi/Yevmiye)', (bool)array_filter($r1['hatalar'], fn($x) => str_starts_with($x, 'Satır 2, «Rampacı Tam»:') && str_contains($x, 'eski şablona aittir') && str_contains($x, 'Rampacı Kişi') && str_contains($x, 'Rampacı Yevmiye')), j($r1['hatalar']));
 ok('2c) eski «Rampacı Yarım» DOLU → net HATA', (bool)array_filter($r2['hatalar'], fn($x) => str_starts_with($x, 'Satır 3, «Rampacı Yarım»:') && str_contains($x, 'eski şablona aittir')), j($r2['hatalar']));
 ok('2c) eski sütunlar 0 / boş → sessiz (para yazmaz), hata yok', $r3['hatalar'] === [] && $r4['hatalar'] === [], j([$r3['hatalar'], $r4['hatalar']]));
 $yol = doluDosya(['Fiş No', 'Tarih', 'Rampacı Kişi', 'Rampacı Yevmiye', 'Rampaci Tam'], [['K1', $gec3, 3, 5, null], ['K2', $gec3, 3, null, null], ['K3', $gec3, null, 5, null], ['K4', $gec3, 3, 2, null], ['K5', $gec3, 1, 11, null], ['K6', $gec3, '3+1', 5, null], ['K7', $gec3, 3, '4,5', null]]);
-$o = ham_oku($yol); $nk = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol); $nk = pdks_fis_normalize($o, $cav);
 [$k1, $k2, $k3, $k4, $k5, $k6, $k7] = $nk['fisler'];
 ok('2c) K1: 3 kişi 5 yevmiye → hata yok, say RAMPACI kisi=3 yevmiye=5, Tam/Yarım 0', $k1['hatalar'] === [] && $k1['say']['RAMPACI'] === ['tam' => 0, 'yarim' => 0, 'kisi' => 3, 'yevmiye' => 5], j([$k1['hatalar'], $k1['say']]));
 ok('2c) K2: kişi var, yevmiye YOK → HATA (yevmiye adedi yok)', (bool)array_filter($k2['hatalar'], fn($x) => str_contains($x, 'yevmiye adedi yok')), j($k2['hatalar']));
@@ -231,7 +235,7 @@ echo "\n=== 3. Başlık esnekliği / dosya düzeyi ===\n";
 // karıştırılmış sıra + takma adlar + fazladan sütun
 $bas = ['Bayan Tam', 'Fis No', 'Tarih', 'Gizli Sütun', 'Erkek Tam'];
 $yol = doluDosya($bas, [[8, 'X1', $gec3, 'abc', 4]]);
-$o = ham_oku($yol); $n = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol); $n = pdks_fis_normalize($o, $cav);
 ok('3) karışık sıra + takma ad ("Fis No","Bayan Tam"): alanlar doğru', ($o['ok'] ?? false) && $n['fisler'][0]['fis_no'] === 'X1' && $n['fisler'][0]['say']['KADIN']['tam'] === 8 && $n['fisler'][0]['say']['ERKEK']['tam'] === 4 && $n['fisler'][0]['hatalar'] === [], j([$o['hata'] ?? null, $n['fisler'][0] ?? null]));
 ok('3) fazladan sütun: UYARI + bilinmeyen listesi, hata değil', ($o['bilinmeyen'] ?? []) === ['Gizli Sütun'] && (bool)array_filter($o['uyarilar'] ?? [], fn($x) => str_contains($x, 'Gizli Sütun')), j([$o['bilinmeyen'] ?? null, $o['uyarilar'] ?? null]));
 // zorunlu sütun yok
@@ -240,7 +244,7 @@ $o = ham_oku($yol);
 ok('3) zorunlu sütun (Tarih) yok → hata', ($o['ok'] ?? true) === false && str_contains((string)($o['hata'] ?? ''), 'Tarih'), j($o['hata'] ?? null));
 // eski şablon (İşletme / Çavuş sütunlu) hâlâ okunur: bu sütunlar yok sayılır (uyarı), seçilen çavuş esastır
 $yol = doluDosya(['Fiş No', 'Tarih', 'İşletme', 'Çavuş Kodu', 'Çavuş Adı', 'Erkek Tam'], [['X1', $gec3, 'Depo A', 'C001', 'Ali Veli', 3]]);
-$o = ham_oku($yol); $n = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol); $n = pdks_fis_normalize($o, $cav);
 ok('3) eski şablon (İşletme/Çavuş sütunlu): sütunlar yok sayılır + uyarı, fiş seçilen çavuşa yazılır', ($o['ok'] ?? false) && count($o['bilinmeyen'] ?? []) === 3 && $n['fisler'][0]['hatalar'] === [] && $n['fisler'][0]['cavus']['id'] === (int)$cav['id'], j([$o['bilinmeyen'] ?? null, $n['fisler'][0] ?? null]));
 // yinelenen başlık
 $yol = doluDosya(['Fiş No', 'Tarih', 'Erkek Tam', 'ERKEK TAM'], [['X1', $gec3, 3, 4]]);
@@ -248,7 +252,7 @@ $o = ham_oku($yol);
 ok('3) yinelenen başlık → hata', ($o['ok'] ?? true) === false && str_contains((string)($o['hata'] ?? ''), 'iki kez'), j($o['hata'] ?? null));
 // başlık 3. satırda
 $yol = doluDosya($B, [satir(['fis_no' => 'Y1', 'tarih' => $gec3, 'erkek_tam' => 2])], 3, 'Fişler', function (Spreadsheet $ss) { $ss->getActiveSheet()->setCellValueExplicit('A1', 'Fiş Excel dosyası — başlık altta', DataType::TYPE_STRING); });
-$o = ham_oku($yol); $n = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol); $n = pdks_fis_normalize($o, $cav);
 ok('3) başlık 3. satırda → kabul, veri satırı 4', ($o['ok'] ?? false) && ($o['satirlar'][0]['satir'] ?? 0) === 4 && $n['fisler'][0]['fis_no'] === 'Y1', j([$o['hata'] ?? null, array_column($o['satirlar'] ?? [], 'satir')]));
 // başlık satırı hiç yok
 $yol = doluDosya(['a', 'b'], [[1, 2]]);
@@ -263,25 +267,25 @@ $o = ham_oku($yol);
 ok('3) sayfa adı TR-katlı eşleşir (FISLER ≡ Fişler)', ($o['ok'] ?? false) === true, j($o['hata'] ?? null));
 // ORNEK-1 + aynı fiş no iki satır
 $yol = doluDosya($B, [satir(['fis_no' => 'ORNEK-1', 'tarih' => $gec3, 'erkek_tam' => 1]), satir(['fis_no' => 'D1', 'tarih' => $gec3, 'erkek_tam' => 1]), satir(['fis_no' => 'd1', 'tarih' => $gec3, 'erkek_tam' => 1])]);
-$n = pdks_fis_normalize(ham_oku($yol), $cav, 'Depo A');
+$n = pdks_fis_normalize(ham_oku($yol), $cav);
 ok('3) ORNEK-1 fiş no → hata', (bool)array_filter($n['fisler'][0]['hatalar'], fn($x) => str_contains($x, 'Örnek')));
 ok('3) aynı Fiş No iki satırda (D1/d1) → İKİ satıra da hata', count(array_filter([$n['fisler'][1], $n['fisler'][2]], fn($f) => (bool)array_filter($f['hatalar'], fn($x) => str_contains($x, 'aynı Fiş No')))) === 2);
 // 151 / 150 fiş
 $mk = function (int $kac) use ($B, $gec3) { $sat = []; for ($i = 1; $i <= $kac; $i++) $sat[] = satir(['fis_no' => 'N' . $i, 'tarih' => $gec3, 'erkek_tam' => 1, 'ham' => str_repeat('x', 200)]); return doluDosya($B, $sat); };
-$yol151 = $mk(151); $o = ham_oku($yol151); $n = pdks_fis_normalize($o, $cav, 'Depo A');
+$yol151 = $mk(151); $o = ham_oku($yol151); $n = pdks_fis_normalize($o, $cav);
 ok('3) 151 fiş → genel hata (en çok 150)', $n['fisler'] === [] && $n['genel_hatalar'] !== [] && str_contains($n['genel_hatalar'][0], '150'), j([$n['genel_hatalar'], count($o['satirlar'] ?? [])]));
 $yol150 = $mk(150); $t0 = microtime(true); $m0 = memory_get_peak_usage(true);
-$o = ham_oku($yol150); $n = pdks_fis_normalize($o, $cav, 'Depo A');
+$o = ham_oku($yol150); $n = pdks_fis_normalize($o, $cav);
 $sure = round((microtime(true) - $t0) * 1000); $mem = round((memory_get_peak_usage(true) - $m0) / 1048576, 1);
 ok("3) 150 fiş kabul (okuma+normalize {$sure} ms, +{$mem} MB tepe bellek)", count($n['fisler']) === 150 && $n['genel_hatalar'] === [] && !array_filter($n['fisler'], fn($f) => $f['hatalar'] !== [] && !str_contains(implode('', $f['hatalar']), 'aynı çavuş')), j([count($n['fisler']), $n['genel_hatalar']]));
 ok('3) 150 fiş: süre < 15 sn ve bellek artışı < 120 MB', $sure < 15000 && $mem < 120, "$sure ms / $mem MB");
 // boş dosya
 $yol = doluDosya($B, []);
-$n = pdks_fis_normalize(ham_oku($yol), $cav, 'Depo A');
+$n = pdks_fis_normalize(ham_oku($yol), $cav);
 ok('3) yalnız başlık (veri yok) → genel hata', $n['fisler'] === [] && $n['genel_hatalar'] !== []);
 // kesinlikle aynı çavuş+gün
 $yol = doluDosya($B, [satir(['fis_no' => 'K1', 'tarih' => $gec3, 'erkek_tam' => 1]), satir(['fis_no' => 'K2', 'tarih' => $gec3, 'erkek_tam' => 1])]);
-$n = pdks_fis_normalize(ham_oku($yol), $cav, 'Depo A');
+$n = pdks_fis_normalize(ham_oku($yol), $cav);
 ok('3) aynı çavuş+gün iki fiş: hata YOK, cakisma_dosya', $n['fisler'][0]['hatalar'] === [] && $n['fisler'][1]['hatalar'] === [] && $n['fisler'][1]['cakisma_dosya'] === true);
 
 echo "\n=== 4. Yükleme güvenliği (PhpSpreadsheet'e GİRMEDEN reddedilir) ===\n";

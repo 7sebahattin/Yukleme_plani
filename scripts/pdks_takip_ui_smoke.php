@@ -63,6 +63,8 @@ require_once $ROOT . '/config/pdks_cari.php';
 require_once $ROOT . '/config/pdks_rapor.php';
 require_once $ROOT . '/config/pdks_faz8b.php';
 require_once $ROOT . '/config/print_helpers.php';
+require_once $ROOT . '/config/uretim.php';   // v507: personel_takip.php can_uretim() kullanır
+require_once $ROOT . '/config/puantaj_cizelgesi.php';   // v552: personel_takip.php kart kapısı pc_sekmeler()
 
 function pdks_ddl_sqlite(string $mysql): array
 {
@@ -143,7 +145,7 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET';
     $_SERVER['REQUEST_URI'] = '/' . $file;
     $src = file_get_contents($ROOT . '/' . $file);
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_rapor|config\/pdks_faz8b|config\/print_helpers|config\/auth)\.php\';.*$/m', '', $src);
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_rapor|config\/pdks_faz8b|config\/print_helpers|config\/uretim|config\/puantaj_cizelgesi|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
@@ -163,12 +165,12 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
     printf("%-84s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    → " . $ipucu);
 }
 
-echo "\n=== Faz 8I. personel_takip.php — admin: tam 11 aktif kart görünür (v354: +Ters Kart Takip) ===\n";
+echo "\n=== Faz 8I. personel_takip.php — admin: tam 12 aktif kart görünür (v354: +Ters Kart Takip, v552: +Puantaj Çizelgesi) ===\n";
 $IS_ADMIN = true;
 $s0 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0, 'Notice:'));
-ok('admin: tam 11 ana home-card var (v354: +Ters Kart Takip)', substr_count($s0, 'class="home-card"') === 11);
+ok('admin: tam 12 ana home-card var (v354: +Ters Kart Takip, v552: +Puantaj Çizelgesi)', substr_count($s0, 'class="home-card"') === 12);
 ok('admin: iki rapor kartı aynı bölümde yan yana',
     (bool)preg_match('/Yönetim Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
 foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Ücretleri', 'Hakedişler',
@@ -179,7 +181,7 @@ foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', '�
     ok("admin: granular '$kartAdi' ek girişi şimdilik GİZLİ (sahip kararı)", !str_contains($s0, $kartAdi));
 }
 ok('admin: Fiş Excel ek girişi korunur', str_contains($s0,'href="gunluk_fis_yukle.php"'));
-ok('admin: Fiş Excel kartı (home-card-ek) var, ana kartlar değişmedi; açıkta liste/düğme yok', str_contains($s0, 'home-card home-card-ek') && substr_count($s0, 'class="home-card"') === 11 && !str_contains($s0, 'pdks-secondary-links') && !str_contains($s0, 'pdks-context-links') && !str_contains($s0, 'KAYIT SEÇEREK'));
+ok('admin: Fiş Excel kartı (home-card-ek) var, ana kartlar değişmedi; açıkta liste/düğme yok', str_contains($s0, 'home-card home-card-ek') && substr_count($s0, 'class="home-card"') === 12 && !str_contains($s0, 'pdks-secondary-links') && !str_contains($s0, 'pdks-context-links') && !str_contains($s0, 'KAYIT SEÇEREK'));
 ok('admin: parametresiz kırık Ekstre bağlantısı yok', !str_contains($s0, 'href="cavus_ekstre.php"'));
 ok('admin: Kart Havuzu doğru hedefe ve istenen alt başlığa sahip',
     (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu.*?Nötr günlük işçi kartları ve kart yönetimi/s', $s0));

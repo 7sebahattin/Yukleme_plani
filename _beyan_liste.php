@@ -19,7 +19,9 @@ if (!isset($sec_rows)) return;
 $sec_rows = array_map('beyan_redact_fields', $sec_rows);
 $firma_adlari  = $firma_adlari  ?? [];
 $kopyala_yetki = $kopyala_yetki ?? false;
-$durum_degistir  = can_beyan('status');
+// v504: kart (İşlem Bekleyen / Kapanan) Düzenle izni — durum değiştirme ve Düzenle düğmeleri buna bağlı
+$kart_edit       = can_beyan_kart(($sec_kart ?? 'bek') === 'kap' ? 'yuklendi' : '', 'edit');
+$durum_degistir  = can_beyan('status') && $kart_edit;
 $durum_etiketleri = beyan_statuses();
 $durum_sirasi    = beyan_durum_akis_sirasi();
 $liste_url = (string)($_SERVER['REQUEST_URI'] ?? 'beyanlar.php');
@@ -195,7 +197,7 @@ $pg = static function ($i) use ($__grup): string {
 
         <div class="beyan-card-actions">
             <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-            <?php if (can_beyan('status') && $r['status'] === 'yukleme_olustu'): ?>
+            <?php if ($durum_degistir && can_beyan_kart('yuklendi', 'edit') && $r['status'] === 'yukleme_olustu'): ?>
             <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
                 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                 <input type="hidden" name="status" value="yuklendi">
@@ -204,7 +206,7 @@ $pg = static function ($i) use ($__grup): string {
                         onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
             </form>
             <?php endif; ?>
-            <?php if (can_beyan('edit')): ?>
+            <?php if (can_beyan('edit') && $kart_edit): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
             <?php endif; ?>
             <?php if ($kopyala_yetki): ?>

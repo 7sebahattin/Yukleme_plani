@@ -168,6 +168,8 @@ function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int
         if($cift!==$eskiCift) { pdks_cift_yevmiye_yaz($pdo,$pid,$cift); $old['cift_yevmiye']=$eskiCift?1:0; $auditEk['cift_yevmiye']=$cift?1:0; }
     }
     pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);   // + Çavuş Ücreti (Faz 8B eki): kardeş oturum
+    // v560: düzeltme onayları sıfırlar; ELLE eklenmiş dönem yeniden otomatik onaylanır (süre değişmiş olabilir). Onaylanamazsa bekliyor kalır.
+    if(($p['source']??'')==='manual' && $exit!==null) { require_once __DIR__ . '/pdks_toplu_onay.php'; pdks_toplu_onay_kayit_aninda($pid,$user,$pdo); }
     pdks_faz8j_audit($pdo,$user,'puantaj_duzeltme',$pid,$old,['session_id'=>$sid,'period_id'=>$pid,'worker_card_id'=>$card,'card_no'=>$cardNo,'worker_type_id_snapshot'=>$type,'worker_type_name_snapshot'=>$typeName,'entry_time'=>$entry,'exit_time'=>$exit,'status'=>$status,'reason'=>$reason,'note'=>$note,'corrected_at'=>date('Y-m-d H:i:s'),'user_id'=>$user] + $auditEk);
 }
 function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
@@ -340,8 +342,15 @@ function pdks_faz8j_tanim_kart_engeli(PDO $pdo, int $kartId, int $foremanId, str
 /** Giriş/çıkış zaman kuralı (TEK yer). $exit null = açık dönem (çağıran izin vermiş olmalı). */
 function pdks_faz8j_zaman_kurali(string $workDate, string $entry, ?string $exit, string $simdi): ?string {
     $hata = 'Giriş/çıkış zamanı mesai tarihi, 24 saat ve gelecek kurallarına uymuyor.';
-    if (substr($entry, 0, 10) !== $workDate || $entry > $simdi) return $hata;
-    if ($exit !== null && ($exit <= $entry || strtotime($exit) > strtotime($entry) + 86400 || $exit > $simdi)) return $hata;
+    if (substr($entry, 0, 10) !== $workDate) return $hata;
+    // v504: "gelecek" ayrı ve açık söylenir (bugüne toplu eklemede 08:00–17:00 gibi sabit saatler henüz gelmemiş olabilir).
+    $gelecek = static fn(string $z): string => 'Giriş/çıkış zamanı henüz gelmedi (' . substr($z, 8, 2) . '.' . substr($z, 5, 2) . '.' . substr($z, 0, 4) . ' ' . substr($z, 11, 5)
+        . ', şu an ' . substr($simdi, 11, 5) . '); gelecekteki saat girilemez.';
+    if ($entry > $simdi) return $gelecek($entry);
+    if ($exit !== null) {
+        if ($exit <= $entry || strtotime($exit) > strtotime($entry) + 86400) return $hata;
+        if ($exit > $simdi) return $gelecek($exit);
+    }
     return null;
 }
 
@@ -538,7 +547,12 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     // Yevmiye istenip kolon yoksa YAZILMAZ (fail-closed): sessizce yevmiyesiz Tam kaydı oluşmaz.
     $yevmiye = (int)($satir['yevmiye'] ?? 0);
     $kolonlar = 'session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot, entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class, work_date_snapshot, depo_snapshot, status, source';
-    $isaret = "?,?,?,?,?,?,?,?,'auto',?,?,?,?";
+    // v509: toplu ekran "Yarım" kutusu (YALNIZ kod: `coklu_grup` grubunun `yarim`i) → beyan 'yarim' (kalıcı niyet işareti;
+    // Toplu Mesai Onayı "otomatik onayla" bunu Yarım olarak onaylar). Diğer tüm yollar 'auto' (eski davranış).
+    // v560: «Sadece fazla mesai» kutusu (yalnız kod, `coklu_grup`) → beyan 'fm' (kalıcı işaret; süre ne olursa olsun
+    // Tam/Yarım ücreti YOK, yalnız FM ücreti — bkz. pdks_faz8b_donem_siniflandir `sadece_fm`).
+    $beyan = !empty($satir['fm']) ? 'fm' : (!empty($satir['yarim']) ? 'yarim' : 'auto');
+    $isaret = "?,?,?,?,?,?,?,?,'{$beyan}',?,?,?,?";
     $deger = [$sid, $card, $type, $typeName, $girisEv, $cikisEv, $entry, $exit, $workDate, $depo, $status, $kaynak];
     if ($yevmiye > 0) {
         if (!function_exists('pdks_yevmiye_hazir') || !pdks_yevmiye_hazir($pdo)) throw new RuntimeException('Rampacı yevmiye alanı kurulmamış (migrate.php › «Rampacı yevmiye alanı») — hiçbir şey yazılmadı.');
@@ -566,7 +580,14 @@ function pdks_faz8j_satir_yaz(PDO $pdo, array $oturum, array $satir, int $user, 
     if ($kaynak !== 'manual') $kayit['kaynak'] = $kaynak;
     if ($yevmiye > 0) $kayit['yevmiye'] = $yevmiye;
     if ($cift) $kayit['cift_yevmiye'] = 1;
+    if ($beyan !== 'auto') $kayit['beyan'] = $beyan;
     pdks_faz8j_audit($pdo, $user, (string)($meta['audit_action'] ?? 'puantaj_ekle'), $pid, [], $kayit);
+    // v560: elle eklenen, çıkışı olan dönem yazıldığı AN otomatik onaylanır (sahip kararı; bkz. pdks_toplu_onay_kayit_aninda).
+    // Onay verilemiyorsa (çıkışsız vb.) dönem eskisi gibi «bekliyor» kalır — kayıt yine yazılır.
+    if ($kaynak === 'manual' && $exit !== null && ($meta['oto_onay'] ?? true) !== false) {
+        require_once __DIR__ . '/pdks_toplu_onay.php';
+        pdks_toplu_onay_kayit_aninda($pid, $user, $pdo);
+    }
     return $pid;
 }
 
@@ -678,6 +699,19 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
     if ($wd > $bugun) { $h['hatalar'][] = 'Mesai tarihi gelecekte olamaz.'; return $h; }
     if ($h['reason'] === '' || mb_strlen($h['reason']) > 500) $h['hatalar'][] = 'Sebep zorunludur ve en fazla 500 karakter olabilir.';
     if (mb_strlen($h['note']) > 1000) $h['hatalar'][] = 'Not en fazla 1000 karakter olabilir.';
+    // v560 (sahip isteği): Toplu İşlem'e servis alanı — Büyük/Küçük adet; kişi kayıtlarıyla AYNI transaction'da yazılır.
+    // Opt-in (HTTP ucu doğrulanmış ints geçirir); tablolar kurulu değilse servis istenemez (sessizce atlanmaz).
+    $h['servis'] = ['buyuk' => 0, 'kucuk' => 0];
+    if (is_array($v['servis'] ?? null)) {
+        $sb = is_scalar($v['servis']['buyuk'] ?? null) ? (int)$v['servis']['buyuk'] : 0;
+        $sk = is_scalar($v['servis']['kucuk'] ?? null) ? (int)$v['servis']['kucuk'] : 0;
+        if ($sb < 0 || $sk < 0 || $sb > 99 || $sk > 99) $h['hatalar'][] = 'Servis adedi 0–99 arasında olmalıdır.';
+        elseif ($sb + $sk > 0) {
+            if (!function_exists('pdks_servis_sema_hazir')) require_once __DIR__ . '/pdks_servis.php';
+            if (!pdks_servis_sema_hazir($pdo)) $h['hatalar'][] = 'Servis Ücreti tabloları kurulmamış (migrate.php) — servis eklenemez.';
+            else $h['servis'] = ['buyuk' => $sb, 'kucuk' => $sk];
+        }
+    }
     $gruplar = $v['gruplar'] ?? null;
     if (!is_array($gruplar) || $gruplar === []) { $h['hatalar'][] = 'En az bir işçi tipi grubu girin.'; return $h; }
 
@@ -730,6 +764,10 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
         if ($cift && $grupHata === null && (!function_exists('pdks_cift_hazir') || !pdks_cift_hazir($pdo))) {
             $grupHata = 'Çift yevmiye alanı kurulmamış (migrate.php › «Çift yevmiye alanı»).';
         }
+        // v509: Yarım kutusu işareti (opt-in, yalnız kod/`coklu_grup`; HTTP ucu `yarim` anahtarını GEÇİRMEZ).
+        $yarim = $coklu && !empty($g['yarim']);
+        // v560: «Sadece fazla mesai» grubu (opt-in, yalnız kod/`coklu_grup`; HTTP ucu `fm` anahtarını GEÇİRMEZ).
+        $fmSadece = $coklu && !empty($g['fm']);
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));
         $cikis = pdks_faz8j_cikis_zamani($g);
         $exit = $cikis['ok'] ? $cikis['exit'] : null;
@@ -756,11 +794,11 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
             }
             $grupKart[$k] = true; $kartGoruldu[$k] = true;
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => false, 'kart_id' => $k, 'kart' => $kart, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye, 'cift' => $cift];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $hata, 'yevmiye' => $yevmiye, 'cift' => $cift, 'yarim' => $yarim, 'fm' => $fmSadece];
         }
         for ($n = 0; $n < $kartsizAdet; $n++) {
             $h['satirlar'][] = ['grup' => $i, 'kartsiz' => true, 'kart_id' => 0, 'kart' => null, 'tip' => $tipSatir,
-                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye, 'cift' => $cift];
+                                'entry' => (string)($entry ?? ''), 'exit' => $exit, 'hata' => $grupHata, 'yevmiye' => $yevmiye, 'cift' => $cift, 'yarim' => $yarim, 'fm' => $fmSadece];
         }
     }
     $h['hatalar'] = array_values(array_unique($h['hatalar']));
@@ -846,8 +884,29 @@ function pdks_faz8j_toplu_degerlendir(PDO $pdo, array $h, ?array $oturum, ?bool 
             pdks_faz8j_fiyatsiz_tip_uyarilari($pdo, (int)$h['foreman_id'], (string)$h['work_date'], $specs)
         ),
         'yeni_mesai' => $yeniMesai, 'session_id' => $sid,
+        // v560: aynı çavuş + gün + depoda DAHA ÖNCE elle eklenmiş kayıt (yanlışlıkla üstüne ekleme koruması).
+        'onceki_ekleme' => $sid !== null ? pdks_faz8j_toplu_onceki($pdo, $sid) : ['adet' => 0, 'tipler' => [], 'son' => null],
+        'servis' => $h['servis'] ?? ['buyuk' => 0, 'kucuk' => 0],
         '_specs' => $specs,
     ];
+}
+
+/**
+ * v560 — Mesaide (çavuş + gün + depo) DAHA ÖNCE ELLE eklenmiş (source='manual', iptal edilmemiş) dönemler. SALT OKUNUR.
+ * Kart okutarak oluşan kayıtlar sayılmaz (sahip kararı). @return array{adet:int, tipler:array<string,int>, son:?string}
+ */
+function pdks_faz8j_toplu_onceki(PDO $pdo, int $sid): array {
+    $bos = ['adet' => 0, 'tipler' => [], 'son' => null];
+    if ($sid < 1) return $bos;
+    $st = $pdo->prepare("SELECT worker_type_name_snapshot AS ad, COUNT(*) AS n, MAX(created_at) AS son FROM daily_worker_work_periods p
+        WHERE p.session_id = ? AND p.source = 'manual' AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . " GROUP BY worker_type_name_snapshot ORDER BY ad");
+    $st->execute([$sid]);
+    $o = $bos;
+    foreach ($st->fetchAll() as $r) {
+        $o['adet'] += (int)$r['n']; $o['tipler'][(string)$r['ad']] = (int)$r['n'];
+        if ($r['son'] !== null && ($o['son'] === null || (string)$r['son'] > $o['son'])) $o['son'] = (string)$r['son'];
+    }
+    return $o;
 }
 
 /**
@@ -961,6 +1020,12 @@ function pdks_faz8j_toplu_ekle(array $v, int $user, ?PDO $pdo = null): array {
         if (pdks_faz8j_entitlement($pdo, $sid) === 'final') {
             throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
         }
+        // v560: opt-in (HTTP ucu açar): aynı çavuş + gün + depoda daha önce elle eklenmiş kayıt varsa «Yine de ekle» onayı ZORUNLU.
+        // Kontrol mesai kilidi ALTINDA yapılır (eşzamanlı iki ekleme birbirini görür).
+        if (!empty($v['tekrar_kontrol']) && empty($v['onceki_onay'])) {
+            $onc = pdks_faz8j_toplu_onceki($pdo, $sid);
+            if ($onc['adet'] > 0) throw new RuntimeException('Bu çavuşun bu gününe daha önce ' . $onc['adet'] . ' elle kayıt eklenmiş — üstüne eklemek için «Yine de ekle» kutusunu işaretleyip tekrar deneyin. Hiçbir kayıt yazılmadı.');
+        }
         // Kartlar ARTAN id sırasıyla kilitlenir (eşzamanlı toplu işlemlerde kilitlenme/deadlock önlemi).
         $kilit = array_values(array_unique(array_map(fn($s) => (int)$s['kart_id'], array_filter($specs, fn($s) => !$s['kartsiz']))));
         sort($kilit, SORT_NUMERIC);
@@ -975,7 +1040,14 @@ function pdks_faz8j_toplu_ekle(array $v, int $user, ?PDO $pdo = null): array {
         foreach ($tekrar['_specs'] as $s) {
             if ($s['kartsiz']) { $s['kart'] = pdks_faz8j_kartsiz_kart_olustur($pdo, (int)$s['tip']['id'], $user); $kartsiz++; } else { $kartli++; }
             $pids[] = pdks_faz8j_satir_yaz($pdo, $oturum, $s, $user,
-                ['reason' => $h['reason'], 'note' => $h['note'], 'yeni_mesai' => $oc['yeni'], 'simdi' => $simdi, 'toplu_id' => $topluId, 'istek_id' => $istekId]);
+                ['reason' => $h['reason'], 'note' => $h['note'], 'yeni_mesai' => $oc['yeni'], 'simdi' => $simdi, 'toplu_id' => $topluId, 'istek_id' => $istekId,
+                 'oto_onay' => ($v['oto_onay'] ?? true) !== false]);   // v560: yalnız kod parametresi (Fiş Excel kapatır; HTTP ucu geçirmez)
+        }
+        // v560: servis (Büyük/Küçük) — kişi kayıtlarıyla AYNI transaction; TEK yazma yeri pdks_servis_yaz().
+        $servisYazildi = null;
+        if (($h['servis']['buyuk'] ?? 0) + ($h['servis']['kucuk'] ?? 0) > 0) {
+            $servisYazildi = ['buyuk' => (int)$h['servis']['buyuk'], 'kucuk' => (int)$h['servis']['kucuk']];
+            pdks_servis_yaz($pdo, $oturum, $servisYazildi['buyuk'], $servisYazildi['kucuk'], 'Toplu İşlem ' . $topluId, null, $user, ['toplu_id' => $topluId]);
         }
         // v446 (Fiş Excel'i): opt-in, commit'ten ÖNCE ve AYNI transaction'da. Yalnız kod parametresidir
         // (HTTP ucu geçirmez). RuntimeException atarsa aşağıdaki catch tüm yazımı geri alır.
@@ -987,7 +1059,8 @@ function pdks_faz8j_toplu_ekle(array $v, int $user, ?PDO $pdo = null): array {
             'session_id' => $sid, 'toplu_id' => $topluId, 'period_ids' => $pids, 'eklenen' => count($pids),
             'kartli' => $kartli, 'kartsiz' => $kartsiz, 'ozet' => $tekrar['ozet'], 'work_date' => (string)$oturum['work_date'],
             'yeni_mesai' => $oc['yeni'], 'reason' => $h['reason'], 'note' => $h['note'], 'added_at' => $simdi, 'user_id' => $user,
-            'istek_id' => $istekId,
+            'istek_id' => $istekId, 'servis' => $servisYazildi,
+            'onceki_onay' => !empty($v['tekrar_kontrol']) && !empty($v['onceki_onay']),
         ] + (is_array($v['audit_ek'] ?? null) ? $v['audit_ek'] : []), 'daily_work_sessions');
         $pdo->commit();
         unset($tekrar['_specs']);

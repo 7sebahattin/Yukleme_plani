@@ -15,7 +15,7 @@ function fisYap(array $say, array $o = []): array {
     $s = ['KADIN' => ['tam' => 0, 'yarim' => 0], 'ERKEK' => ['tam' => 0, 'yarim' => 0], 'RAMPACI' => ['tam' => 0, 'yarim' => 0], 'SERITCI' => ['tam' => 0, 'yarim' => 0]];
     foreach ($say as $k => [$t, $y]) $s[$k] = ['tam' => $t, 'yarim' => $y];
     $cv = $o['cavus']; unset($o['cavus']);
-    return $o + ['satir' => 1 + $n, 'fis_no' => 'T' . $n, 'fis_no_ham_sayi' => false, 'tarih' => $dun3, 'isletme' => '', 'cavus' => ['id' => $cv, 'kod' => '', 'ad' => '', 'yontem' => 'kod'],
+    return $o + ['satir' => 1 + $n, 'fis_no' => 'T' . $n, 'fis_no_ham_sayi' => false, 'tarih' => $dun3, 'cavus' => ['id' => $cv, 'kod' => '', 'ad' => '', 'yontem' => 'kod'],
                  'say' => $s, 'fm_kova' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0, 6 => 0], 'fm_toplam' => null, 'fm_kisi' => null, 'fm_tipi' => null, 'servis' => ['buyuk' => 0, 'kucuk' => 0],
                  'giris' => '08:00', 'giris_varsayilan' => true, 'rev' => 0, 'not' => '', 'ham' => '', 'kontrol' => '', 'cakisma_dosya' => false, 'cakisma_sira' => 0,
                  'hatalar' => [], 'uyarilar' => []];

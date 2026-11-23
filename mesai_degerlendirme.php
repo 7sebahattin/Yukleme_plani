@@ -162,12 +162,11 @@ foreach ($donemler as $d) { $dk = $fmDurumu($d['faz8b']); if ($dk !== '') { $fmS
 $esikOzet = [];
 foreach ($donemler as $d) {
     $f = $d['faz8b'];
-    $ozel = $f['tam_kaynak'] === 'fiyat' || $f['cift_dk'] !== null || (int)$f['fm_bas_dk'] !== (int)$f['tam_dk'] || $f['yarim_dk'] !== null;
+    $ozel = $f['tam_kaynak'] === 'fiyat' || (int)$f['fm_bas_dk'] !== (int)$f['tam_dk'] || $f['yarim_dk'] !== null;   // v503: süre bazlı çift eşiği yok
     if (!$ozel) continue;
     $par = ['Tam ' . pdks_faz8b_dakika_etiket((int)$f['tam_dk'])];
     if ((int)$f['fm_bas_dk'] !== (int)$f['tam_dk']) $par[] = 'FM başı ' . pdks_faz8b_dakika_etiket((int)$f['fm_bas_dk']);
     if ($f['yarim_dk'] !== null) $par[] = 'Yarım ' . pdks_faz8b_dakika_etiket((int)$f['yarim_dk']) . ' (bilgi)';
-    if ($f['cift_dk'] !== null) $par[] = 'Çift ' . pdks_faz8b_dakika_etiket((int)$f['cift_dk']) . ' / ' . number_format((float)$f['cift_ucret'], 2, ',', '.');
     $esikOzet[(string)$d['worker_type_name_snapshot']] = implode(' · ', $par);
 }
 
@@ -199,7 +198,7 @@ render_flash();
     <div class="pdks-row-sub" style="margin-top:6px" id="mdEsikler">
         Fiyat dönemi saatleri (mesai süresinin yerine geçer):
         <?php $i = 0; foreach ($esikOzet as $tipAd => $metin): ?><?= $i++ ? ' — ' : ' ' ?><strong><?= h($tipAd) ?>:</strong> <?= h($metin) ?><?php endforeach; ?>.
-        Çift yevmiye FM onayına bağlıdır: onaylı süre çift eşiğine ulaşırsa Tam yerine çift ücret, eşikten sonrası FM.
+        Çift yevmiye kişi başı işaretlenir (Tam × 2, FM ödenmez).
     </div>
     <?php endif; ?>
     <div class="pdks-row-sub" style="margin-top:6px">
@@ -295,7 +294,6 @@ render_flash();
         <?php else: ?>
             <span class="pdks-badge pdks-badge-eksik_cikis">Karar bekliyor</span>
         <?php endif; ?>
-        <?php if ($f['cift_aday'] && !$f['cift']): ?><div class="pdks-row-sub">Çift adayı (≥ <?= h(pdks_faz8b_dakika_etiket((int)$f['cift_dk'])) ?>) — FM onayına bağlı</div><?php endif; ?>
         <?php if ($f['yarim_alti']): ?><div class="pdks-row-sub">Yarım saatinin (<?= h(pdks_faz8b_dakika_etiket((int)$f['yarim_dk'])) ?>) altında</div><?php endif; ?>
         <?php if (!empty($f['yarim_min_ihlal'])): ?><div class="pdks-row-sub" style="color:#c0392b;font-weight:600;">⚠ 3 saatten az çalışma: Yarım sayılmaz, ücret yazılmaz</div><?php endif; ?>
     </td>
@@ -311,7 +309,6 @@ render_flash();
             <?php else: ?>
                 · <strong>Onay bekliyor</strong>
             <?php endif; ?>
-            <?php if ($f['cift']): ?><div class="pdks-row-sub">Çift sonrası ödenecek FM: <?= (int)$f['odenecek_fm_saat'] ?> saat<?= ($f['fm_modu'] ?? '') === 'fixed' ? ' (sabit FM çift gününe eklenmez)' : '' ?></div><?php endif; ?>
         <?php endif; ?>
     </td>
     <td>

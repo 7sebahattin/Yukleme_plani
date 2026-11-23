@@ -20,7 +20,7 @@ echo "=== Kapı tek kaynak ===\n";
 ok('helpers.php can_mail() tanımlı', str_contains($helpers, 'function can_mail(string $perm): bool'));
 ok('can_mail fail-closed (can() yoksa false)', (bool)preg_match("/function can_mail[^{]*\{\s*if \(!function_exists\('can'\)\) return false;/", $helpers));
 ok('sidebar $p_mail = can_mail(\'read\')', str_contains($helpers, "\$p_mail  = can_mail('read');"));
-ok('sidebar mail bağlantısı $p_mail kapılı', str_contains($helpers, "if (\$p_mail) \$lnk('mail.php'"));
+ok('sidebar mail bağlantısı $p_mail kapılı', str_contains($helpers, "if (\$p_mail)  \$o[] = \$ge('mail.php'"));
 ok('nav_alt_izinler mail = can_mail(\'read\')', str_contains($helpers, "'mail'    => \$fn && can_mail('read')"));
 ok('first_allowed_page mail.php = can_mail(\'read\')', str_contains($helpers, "'mail.php'           => can_mail('read')"));
 ok('index.php kartı can_mail(\'read\') kapılı', (bool)preg_match("/if \(can_mail\('read'\)\): \?>\s*\n\s*<a href=\"mail\.php\"/", $index));
@@ -146,7 +146,7 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, Fil
     if (preg_match('/\bmail_ek_hazirla\s*\(/', php_strip_whitespace($yol))) $ekCagiran[] = $rel;
 }
 sort($ekCagiran);
-ok('mail_ek_hazirla( yalnız tanım (mail_attach) + mail_ek.php (GET indirme) + config/siparis_mail.php (Siparişler "mailden al")', $ekCagiran === ['config/mail_attach.php', 'config/siparis_mail.php', 'mail_ek.php'], implode(',', $ekCagiran));
+ok('mail_ek_hazirla( yalnız tanım (mail_attach) + mail_ek.php (GET indirme) + config/siparis_mail.php (Siparişler "mailden al") + config/frugro_mail.php (Frugro "mailden al")', $ekCagiran === ['config/frugro_mail.php', 'config/mail_attach.php', 'config/siparis_mail.php', 'mail_ek.php'], implode(',', $ekCagiran));
 $uidParcaCagiran = [];
 foreach (glob($ROOT . '/{,config/}*.php', GLOB_BRACE) as $f) if (preg_match('/->uidParca\(/', php_strip_whitespace($f))) $uidParcaCagiran[] = substr($f, strlen($ROOT) + 1);
 sort($uidParcaCagiran);

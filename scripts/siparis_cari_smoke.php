@@ -179,7 +179,7 @@ $g = $r['govde'];
 if (($out = getenv('SIPARIS_CARI_OUT')) !== false && $out !== '') file_put_contents($out, $g);   // tarayıcı/görsel kontrol için isteğe bağlı döküm
 ok('muhasebe benzeri rol açar: 200, hata yok', $r['hata'] === null && $r['kod'] === 200, (string)$r['hata']);
 foreach (['<title>Sipariş Cari Dökümü</title>', 'A) Gelen — Yüklenmemiş Siparişler', 'B) Yüklenen Sevkiyatlar', 'C) Fiyatlandırılmış Sevkiyatlar', '15.812,00 EUR', '420,00 USD',
-    '4,1100 EUR / koli (3,5 kg)', '1,17 EUR / kg', '15.069,60 EUR', '4,2000 USD / koli (3,5 kg)', '1,20 USD / kg', 'Fiyat bekleniyor', 'Yüklenmedi',
+    '4,11 EUR / koli (3,5 kg)', '1,17 EUR / kg', '15.069,60 EUR', '4,20 USD / koli (3,5 kg)', '1,20 USD / kg', 'Fiyat bekleniyor', 'Yüklenmedi',
     'Bakiye = müşterinin bize borcu', 'Gelen fiyat tutarı', 'Kesilen fatura tutarı', 'üretilmiş invoice yok', '3,5 kg varsayıldı', 'tutara dahil değil', 'print_pdks.css', 'A4 landscape', 'window.print()', 'data-sc-yazdir'] as $parca) {
     ok('sayfa içerir: ' . $parca, str_contains($g, $parca));
 }

@@ -46,11 +46,11 @@ foreach ($servisListe as $sv) {
     <input type="hidden" name="scroll_y" value="">
     <input type="hidden" name="istek_id" value="<?= h(bin2hex(random_bytes(16))) ?>"><?php /* tekrar gönderim (çift tıklama/F5) koruması */ ?>
     <p class="sv-bilgi"><strong><?= h($oturum['foreman_name_snapshot']) ?></strong> · <?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?><br>
-        <span class="muted">Servis adedi hakedişe tür başına <b>adet × fiyat</b> olarak eklenir. Aynı mesaiye birden çok kez eklenebilir; yanlış kayıt listeden iptal edilir.</span></p>
+        <span class="muted">Servis adedi çavuş hakedişine <b>yazılmaz</b>; <a href="servis_hesabi.php">Servis Hesabı</a>nda adet × fiyat olarak ayrı hesaplanır. Aynı mesaiye birden çok kez eklenebilir; yanlış kayıt listeden iptal edilir.</span></p>
     <?php if ($servisKesin): ?>
     <p class="sv-uyari" role="alert">Bu mesainin kesinleşmiş hakedişi var — servis eklemek için önce hakedişi yeniden açın.</p>
     <?php elseif (!$svFiyatVar): ?>
-    <p class="sv-bilgi-kutu" role="status">Bu çavuş için <?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?> tarihinde servis fiyatı henüz tanımlı değil. Servis <b>yine de kaydedilir</b>; fiyat tanımlanınca hakedişte kendiliğinden hesaplanır (fiyat tanımlanana kadar bu mesainin hakedişi hesaplanamaz). Fiyatı tanımlarken <b>geçerlilik başlangıcını bu tarih ya da öncesi</b> girin.<?php if ($servisFiyatLink): ?> <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>#cfServisUcreti">Çavuş Ücretleri →</a><?php endif; ?></p>
+    <p class="sv-bilgi-kutu" role="status">Bu çavuş için <?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?> tarihinde servis fiyatı henüz tanımlı değil. Servis <b>yine de kaydedilir</b>; fiyat tanımlanınca Servis Hesabı'nda kendiliğinden hesaplanır (çavuş hakedişini etkilemez). Fiyatı tanımlarken <b>geçerlilik başlangıcını bu tarih ya da öncesi</b> girin.<?php if ($servisFiyatLink): ?> <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>#cfServisUcreti">Çavuş Ücretleri →</a><?php endif; ?></p>
     <?php endif; ?>
     <div class="sv-sayaclar">
     <?php foreach ($svTurler as $tur => $t):
@@ -87,7 +87,7 @@ foreach ($servisListe as $sv) {
     <input type="hidden" name="action" value="servis_iptal">
     <input type="hidden" name="scroll_y" value="">
     <input type="hidden" name="servis_id" id="svIptalId" value="">
-    <p style="margin:0 0 10px"><strong id="svIptalEtiket"></strong> servis kaydı iptal edilir; kayıt silinmez, listede iptal olarak kalır ve hakediş yeniden hesaplanmalıdır.</p>
+    <p style="margin:0 0 10px"><strong id="svIptalEtiket"></strong> servis kaydı iptal edilir; kayıt silinmez, listede iptal olarak kalır.</p>
     <label><span class="form-label">İptal nedeni *</span><textarea name="reason" maxlength="500" required rows="3"></textarea></label>
     <div class="isk-card-form-actions"><button class="btn btn-danger">İptal Et</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
 </form>

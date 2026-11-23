@@ -119,7 +119,13 @@ const ALANLAR = {
                     ok('v320: placeholder çavuş süresini söyler (boş = çavuş süresi (9 sa))', tamPh.includes('çavuş süresi (9 sa)'), tamPh);
                     ok('v299: gruplar Tam / Yarım / FM / Çift sırasıyla', saatDurum.gruplar.join(',') === 'tam,yarim,fm,cift', saatDurum.gruplar.join(','));
                     const gecmis = await page.locator('#cfFiyatGecmisi').innerText();
-                    ok('v299: fiyat geçmişinde saatler + çift ücret görünür', /Tam 9 saat/.test(gecmis) && /FM 9s 30dk/.test(gecmis) && /2\.000,00 TRY · 12 saat/.test(gecmis), gecmis.slice(0, 300));
+                    // v503: süre bazlı çift devre dışı — eski double_day_* tutarı görünür metinde YOK, "devre dışı (v503)" var; eski değer yalnız ipucunda (title).
+                    ok('v299: fiyat geçmişinde saatler görünür', /Tam 9 saat/.test(gecmis) && /FM 9s 30dk/.test(gecmis), gecmis.slice(0, 300));
+                    ok('v503: eski çift tutarı görünür metinde YOK, "devre dışı (v503)" var', !/2\.000,00 TRY · 12 saat/.test(gecmis) && /devre dışı \(v503\)/.test(gecmis), gecmis.slice(0, 300));
+                    const ciftTitle = await page.evaluate(() => Array.from(document.querySelectorAll('#cfFiyatGecmisi span.muted[title]')).map(e => e.title));
+                    ok('v503: eski ayar ipucunda (title "Eski ayar: 2.000,00 TRY · 12 saat")', ciftTitle.includes('Eski ayar: 2.000,00 TRY · 12 saat'), JSON.stringify(ciftTitle));
+                    const ciftAttr = await page.evaluate(() => document.querySelectorAll('[data-cift],[data-cift-ucret]').length);
+                    ok('v503: ölü data-cift / data-cift-ucret öznitelikleri yok', ciftAttr === 0, String(ciftAttr));
                 } else {
                     ok('v299: kolonlar yokken saat alanları YOK, kurulum notu görünür', saatDurum.var === 0 && saatDurum.kurulum, JSON.stringify(saatDurum));
                 }

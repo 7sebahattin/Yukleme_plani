@@ -27,7 +27,18 @@ require_once __DIR__ . '/config/mail_core.php';
 require_once __DIR__ . '/config/siparis_core.php';
 require_once __DIR__ . '/config/beyansiz_yukleme.php';   // v498 Yükleme Bildir (beyansız yükleme) tablosu
 require_once __DIR__ . '/config/urun_siparis.php';   // v409 Ürün Siparişleri (yalnız CREATE TABLE kartı)
-require_once __DIR__ . '/config/sirket_yapisi.php';   // v505 Şirket · Şube · Depo ek bilgisi (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/uretim.php';   // v507 Günlük Üretim tabloları (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/palet_fisleri_core.php'; // Palet Fişleri (loading_pallets'e kolon ekleyen kart)
+require_once __DIR__ . '/config/kantar_alanlari_core.php'; // Mal Kabul Alanları (kantar_fisleri'ne kolon ekleyen kart)
+require_once __DIR__ . '/config/kullanici_tercih.php';   // Kullanıcı Tercihleri (kullanici_tercihleri tablosu; yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/puantaj_isaret.php';   // Puantaj İşaretleri (v553; yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/puantaj_giris.php';    // Puantaj Girişi (v554; yalnız CREATE TABLE kartı; pg_* yardımcıları çağrı anında config/puantaj_cizelgesi.php'ye ihtiyaç duyar → migrate yalnız pg_migrate/pg_hazir çağırır)
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -48,6 +59,7 @@ require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
 require_once __DIR__ . '/config/pdks_ters.php';   // v354 Ters Kart Takip (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/pdks_servis.php';   // v299 Servis Ücreti
+require_once __DIR__ . '/config/pdks_servis_hesap.php';   // v532 Servis Hesabı (ödeme defteri)
 // Faz 9D / H-03: hakediş düzeltme/mahsup (foreman_entitlement_adjustments)
 // tablosu da AYNI sebeple BURADAN elle tetiklenir. Faz 1-9C tablolarına
 // DOKUNMAZ — yalnız KENDİ tek yeni tablosunu additive olarak ekler.
@@ -118,14 +130,26 @@ $pdks_ters_results = []; $pdks_ters_ran = false;   // v354 Ters Kart Takip (4 ye
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 $pdks_yevmiye_results = []; $pdks_yevmiye_ran = false;   // v463 Rampacı yevmiye alanı
 $pdks_cift_results = []; $pdks_cift_ran = false;   // v503 çift yevmiye alanı
-$pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
+$uretim_results = []; $uretim_ran = false;          // v507 Günlük Üretim tabloları
+$pdks_servis_results = []; $pdks_servis_ran = false;
+$pdks_sodeme_results = []; $pdks_sodeme_ran = false;   // v532 Servis Ödemeleri   // v299 Servis Ücreti (2 yeni tablo)
 $mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 $siparis_results = []; $siparis_ran = false;   // Siparişler v371 (10 yeni tablo)
 $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (yurt içi gümrük: 1 nullable kolon)
 $bsz_results = []; $bsz_ran = false;                            // v498 beyansiz_yukleme tablosu
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
+$frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
+$cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
+$kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
+$kal_results = []; $kal_ran = false;                              // Mal Kabul Alanları (kantar_fisleri kolonları: şoför, malın sahibi, müstahsil, bahçe)
+$pf_results = []; $pf_ran = false;                              // Palet Fişleri (loading_pallets kolonları: açıklama + müstahsil)
+$stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
+$fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
+$kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
+$ceksenet_results = []; $ceksenet_ran = false;                  // Çek-Senet (3 yeni tablo)
+$pi_results = []; $pi_ran = false;                              // Puantaj İşaretleri (v553: puantaj_isaretler, 1 yeni tablo)
+$pg_results = []; $pg_ran = false;                              // Puantaj Girişi (v554: puantaj_giris_kisiler + puantaj_giris_gunler, 2 yeni tablo)
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
-$sirket_yapisi_results = []; $sirket_yapisi_ran = false;            // v505 Şirket · Şube · Depo (4 tablo)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
 
@@ -221,6 +245,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_servis_odeme') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_sodeme_ran     = true;
+    $pdks_sodeme_results = pdks_servis_odeme_migrate($pdo);
+    foreach ($pdks_sodeme_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_servis_odeme', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_saat') {
     csrf_check($_POST['csrf'] ?? null);
     $pdks_saat_ran     = true;
@@ -239,6 +273,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'eklendi') {
             audit_log_event('migrate', 'pdks_cift', null, null,
                 ['operation' => 'add_column', 'column' => $pr['adim']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'uretim') {
+    csrf_check($_POST['csrf'] ?? null);
+    $uretim_ran     = true;
+    $uretim_results = uretim_migrate($pdo);
+    foreach ($uretim_results as $ur) {
+        if ($ur['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'uretim', null, null, ['operation' => 'create_table', 'table' => $ur['adim']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_yevmiye') {
@@ -321,13 +364,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'urun_siparis', null, null, ['operation' => 'add_column', 'column' => $sr['tablo']]);
         }
     }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'sirket_yapisi') {
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'frugro') {
     csrf_check($_POST['csrf'] ?? null);
-    $sirket_yapisi_ran     = true;
-    $sirket_yapisi_results = sirket_yapisi_migrate($pdo);
-    foreach ($sirket_yapisi_results as $sr) {
+    $frg_ran     = true;
+    $frg_results = frg_migrate($pdo);
+    foreach ($frg_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'sirket_yapisi', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+            audit_log_event('migrate', 'frugro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'cari') {
+    csrf_check($_POST['csrf'] ?? null);
+    $cari_ran     = true;
+    $cari_results = cari_migrate($pdo);
+    foreach ($cari_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'cari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kullanici_tercih') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kt_ran     = true;
+    $kt_results = kt_migrate($pdo);
+    foreach ($kt_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'kullanici_tercih', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'palet_fisleri') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pf_ran     = true;
+    $pf_results = palet_fisleri_migrate($pdo);
+    foreach ($pf_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'palet_fisleri', null, null, ['operation' => 'add_column', 'target' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kantar_alanlari') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kal_ran     = true;
+    $kal_results = kantar_alanlari_migrate($pdo);
+    foreach ($kal_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'kantar_alanlari', null, null, ['operation' => 'add_column', 'target' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'stok') {
+    csrf_check($_POST['csrf'] ?? null);
+    $stok_ran     = true;
+    $stok_results = stok_migrate($pdo);
+    foreach ($stok_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'stok', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'fatura') {
+    csrf_check($_POST['csrf'] ?? null);
+    $fatura_ran     = true;
+    $fatura_results = fatura_migrate($pdo);
+    foreach ($fatura_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'fatura', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kasa') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kasa_ran     = true;
+    $kasa_results = kasa_migrate($pdo);
+    foreach ($kasa_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'kasa', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'ceksenet') {
+    csrf_check($_POST['csrf'] ?? null);
+    $ceksenet_ran     = true;
+    $ceksenet_results = ceksenet_migrate($pdo);
+    foreach ($ceksenet_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'ceksenet', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'puantaj_isaret') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pi_ran     = true;
+    $pi_results = pi_migrate($pdo);
+    foreach ($pi_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'puantaj_isaret', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'puantaj_giris') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pg_ran     = true;
+    $pg_results = pg_migrate($pdo);
+    foreach ($pg_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'puantaj_giris', null, null, ['operation' => strpos($sr['tablo'], '.') !== false ? 'add_column' : 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'siparis_odeme') {
@@ -801,6 +934,266 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     </form>
   <?php mg_kart_kapat(); ?>
 
+  <?php mg_kart_ac('frugro'); ?>
+    <h2 style="margin-top:0;">Frugro Siparişler</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>frugro_siparisler</code>, <code>frugro_palet</code> ve <code>frugro_olaylar</code> tablolarını ekler
+      (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz). OGL Siparişler tablolarından bağımsızdır. Çalıştırılmazsa
+      Frugro sayfaları "henüz kurulmadı" der, diğer sayfalar aynen çalışır.
+      <?php if ($frg_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($frg_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $frgHazir = frg_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $frgHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $frgHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="frugro">
+      <button type="submit" class="btn btn-primary">Frugro Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('cari'); ?>
+    <h2 style="margin-top:0;">Cari İşlemler</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>cari_kartlar</code>, <code>cari_hareketler</code> ve <code>cari_tanimlar</code> tablolarını ekler
+      (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve ödeme şekli listesini bir kez tohumlar. Çalıştırılmazsa
+      Cari sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($cari_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($cari_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $cariHazir = cari_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $cariHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $cariHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="cari">
+      <button type="submit" class="btn btn-primary">Cari Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kullanici-tercih'); ?>
+    <h2 style="margin-top:0;">Kullanıcı Tercihleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>kullanici_tercihleri</code> tablosunu ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz).
+      Palet Fişleri tablosunun sütun genişliği ve sırası gibi kullanıcıya özel arayüz tercihlerini <strong>kullanıcı bazında sunucuda</strong> saklar;
+      hangi cihazdan girilirse aynı ayarlar gelir. Çalıştırılmazsa bu tercihler yalnız o tarayıcıda saklanır, diğer her şey aynen çalışır.
+      <?php if ($kt_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($kt_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $ktHazir = kt_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $ktHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ktHazir ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kullanici_tercih">
+      <button type="submit" class="btn btn-primary">Kullanıcı Tercihleri Tablosunu Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('palet-fisleri'); ?>
+    <h2 style="margin-top:0;">Palet Fişleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>loading_pallets</code> tablosuna <code>aciklama1</code>, <code>aciklama2</code>, <code>mustahsil_id</code> ve
+      <code>mustahsil_ad</code> kolonlarını (ve <code>idx_lp_mustahsil</code> indeksini) ekler. Mevcut veriye dokunmaz, yabancı anahtar YOK, yeniden
+      çalıştırmak güvenlidir. Çalıştırılmazsa Palet Fişleri sayfasında Müstahsil alanı pasif görünür, diğer her şey aynen çalışır.
+      Çalıştırmadan önce veritabanı yedeği alın.
+      <?php if ($pf_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pf_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $pfHazir = palet_fisleri_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $pfHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $pfHazir ? '✓ Kolonlar var' : '✗ Kolonlar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="palet_fisleri">
+      <button type="submit" class="btn btn-primary">Palet Fişleri Kolonlarını Ekle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kantar-alanlari'); ?>
+    <h2 style="margin-top:0;">Mal Kabul Alanları</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>kantar_fisleri</code> tablosuna <code>sofor</code>, <code>mal_sahibi</code>, <code>mustahsil</code> ve
+      <code>bahce</code> kolonlarını ekler. Mevcut veriye dokunmaz, yabancı anahtar YOK, yeniden çalıştırmak güvenlidir. Çalıştırılmazsa Mal Kabul Fişi
+      formunda bu dört alan pasif görünür ve listede çıkmaz, diğer her şey aynen çalışır. Çalıştırmadan önce veritabanı yedeği alın.
+      <?php if ($kal_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($kal_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $kalHazir = kantar_alanlari_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $kalHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $kalHazir ? '✓ Kolonlar var' : '✗ Kolonlar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kantar_alanlari">
+      <button type="submit" class="btn btn-primary">Mal Kabul Kolonlarını Ekle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('stok'); ?>
+    <h2 style="margin-top:0;">Stok (muhasebe)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>stok_kartlar</code>, <code>stok_tanimlar</code>, <code>stok_fisler</code>, <code>stok_fis_satirlar</code> ve
+      <code>stok_hareketler</code> tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve stok grubu / giriş-çıkış nedeni listesini
+      bir kez tohumlar. Bu defter Ürün Stoğu (stok.php) ve Malzeme Stok ekranlarından bağımsızdır. Çalıştırılmazsa Stok sayfaları "kurulmamış" der,
+      diğer sayfalar aynen çalışır.
+      <?php if ($stok_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($stok_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $stokHazir = stok_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $stokHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $stokHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="stok">
+      <button type="submit" class="btn btn-primary">Stok Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('fatura'); ?>
+    <h2 style="margin-top:0;">Fatura</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>fatura_belgeler</code>, <code>fatura_satirlar</code> ve <code>fatura_tanimlar</code> tablolarını ekler
+      (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve KDV / tevkifat / stopaj / Bağ-Kur / istisna / seri / teslim şekli / açıklama şablonu
+      tanımlarını bir kez tohumlar (oranlar ve kodlar mali müşavirle kontrol edilmeli). Fatura; Cari İşlemler ve Stok (muhasebe) tablolarını kullanır —
+      onlar önce kurulmalıdır. Çalıştırılmazsa Fatura sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($fatura_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($fatura_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $faturaOnkosul = array_values(array_filter([cari_hazir($pdo) ? null : 'Cari İşlemler', stok_hazir($pdo) ? null : 'Stok (muhasebe)'])); ?>
+    <?php if ($faturaOnkosul): ?>
+    <p style="color:#b7791f;font-size:.9em;">⚠ Önce şu kart(lar) çalıştırılmalı: <?= h(implode(', ', $faturaOnkosul)) ?> — tablolar kurulabilir ama Fatura sayfaları bu şemalar olmadan açılmaz.</p>
+    <?php endif; ?>
+    <?php $faturaHazir = fatura_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $faturaHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $faturaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="fatura">
+      <button type="submit" class="btn btn-primary">Fatura Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kasa'); ?>
+    <h2 style="margin-top:0;">Kasa</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>kasa_kartlar</code> (nakit kasa + banka hesabı), <code>kasa_hareketler</code> (değişmez defter) ve <code>kasa_tanimlar</code>
+      (gelir / gider kalemleri) tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve gelir / gider kalemlerini bir kez tohumlar.
+      Kasa; cari tahsilat / ödeme için Cari İşlemler tablolarını kullanır — önce o kart çalıştırılmalıdır.
+      Çalıştırılmazsa Kasa sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($kasa_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($kasa_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $kasaOnkosul = array_values(array_filter([cari_hazir($pdo) ? null : 'Cari İşlemler'])); ?>
+    <?php if ($kasaOnkosul): ?>
+    <p style="color:#b7791f;font-size:.9em;">⚠ Önce şu kart(lar) çalıştırılmalı: <?= h(implode(', ', $kasaOnkosul)) ?> — tablolar kurulabilir ama Kasa sayfaları bu şema olmadan açılmaz.</p>
+    <?php endif; ?>
+    <?php $kasaHazir = kasa_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $kasaHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $kasaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kasa">
+      <button type="submit" class="btn btn-primary">Kasa Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('ceksenet'); ?>
+    <h2 style="margin-top:0;">Çek-Senet</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>ceksenet_kayitlar</code> (alınan / verilen çek ve senetler), <code>ceksenet_hareketler</code> (değişmez durum geçmişi) ve
+      <code>ceksenet_tanimlar</code> (bankalar + çek karneleri) tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve bankaları bir kez tohumlar.
+      Çek-Senet; cari dekontları için Cari İşlemler, tahsilat / ödeme için Kasa tablolarını kullanır — önce o kartlar çalıştırılmalıdır.
+      Çalıştırılmazsa Çek-Senet sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($ceksenet_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($ceksenet_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $csOnkosul = array_values(array_filter([cari_hazir($pdo) ? null : 'Cari İşlemler', kasa_hazir($pdo) ? null : 'Kasa'])); ?>
+    <?php if ($csOnkosul): ?>
+    <p style="color:#b7791f;font-size:.9em;">⚠ Önce şu kart(lar) çalıştırılmalı: <?= h(implode(', ', $csOnkosul)) ?> — tablolar kurulabilir ama Çek-Senet sayfaları bu şemalar olmadan açılmaz.</p>
+    <?php endif; ?>
+    <?php $csHazir = ceksenet_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $csHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $csHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="ceksenet">
+      <button type="submit" class="btn btn-primary">Çek-Senet Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('puantaj-isaret'); ?>
+    <h2 style="margin-top:0;">Puantaj İşaretleri</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>puantaj_isaretler</code> (Aylık Puantaj Çizelgesi › Personel sekmesinde elle gün işareti: Devamsız / Yıllık izin / Ücretsiz izin / Raporlu / Resmi tatil)
+      tablosunu ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz). Çalıştırılmazsa çizelge eskisi gibi çalışır, yalnız işaretleme arayüzü gizli kalır.
+      <?php if ($pi_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pi_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $piHazir = pi_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $piHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $piHazir ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="puantaj_isaret">
+      <button type="submit" class="btn btn-primary">Puantaj İşaret Tablosunu Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('puantaj-giris'); ?>
+    <h2 style="margin-top:0;">Puantaj Girişi</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>puantaj_giris_kisiler</code> + <code>puantaj_giris_gunler</code> (Aylık Puantaj Çizelgesi › Puantaj Girişi sekmesi:
+      kullanıcının kendi tanımladığı kişilere gayri resmi / göstermelik puantaj) tablolarını ekler; v562: kişi tablosuna «bağlı çavuş» için tek kolon
+      <code>cavus_id</code> (INT, boş olabilir) ekler (yabancı anahtar YOK, mevcut veriye dokunmaz, tekrar çalıştırmak zararsızdır). PDKS/hakediş verisine yazmaz;
+      yalnız çavuş adlarını okur. Çalıştırılmazsa sekme yalnız yöneticiye kurulum notuyla görünür; kolon eklenmezse «bağlı çavuş» alanı gizli kalır.
+      <?php if ($pg_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pg_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $pgHazir = pg_hazir($pdo); $pgCavus = $pgHazir && pg_cavus_kolon_var($pdo); ?>
+    <p style="font-weight:600;color:<?= $pgHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $pgHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <?php if ($pgHazir): ?><p style="font-weight:600;color:<?= $pgCavus ? '#1f9d55' : '#c0392b' ?>;"><?= $pgCavus ? '✓ Bağlı çavuş kolonu var' : '✗ Bağlı çavuş kolonu eksik (aşağıdaki düğme ekler)' ?></p><?php endif; ?>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="puantaj_giris">
+      <button type="submit" class="btn btn-primary">Puantaj Girişi Tablolarını Oluştur / Güncelle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
   <?php mg_kart_ac('siparis-odeme'); ?>
     <h2 style="margin-top:0;">Siparişler — OGL ödemeleri</h2>
     <p style="color:#555;font-size:.9em;">
@@ -1024,6 +1417,33 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     </details>
   <?php mg_kart_kapat(); ?>
 
+  <?php mg_kart_ac('servis-odeme'); ?>
+    <h2 style="margin-top:0;">Servis Ödemeleri (v532)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>servis_odemeleri</code> (servisçiye yapılan ödemeler; değişmez, yalnız gerekçeli iptal).
+      Servis Hesabı sayfasının ödeme/bakiye bölümü bu tabloya bağlıdır; kurulmazsa o bölüm gizli kalır, günlük döküm çalışır.
+      <?php if ($pdks_sodeme_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_sodeme_results as $psr): ?>
+        <br>&nbsp;&nbsp;<?= h($psr['tablo']) ?>: <?= h($psr['durum']) ?> — <?= h($psr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <p style="font-weight:600;color:<?= pdks_servis_odeme_hazir($pdo) ? '#1f9d55' : '#c0392b' ?>;">
+      servis_odemeleri: <?= pdks_servis_odeme_hazir($pdo) ? '✓ Var' : '✗ Eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_servis_odeme">
+      <button type="submit" class="btn btn-primary">Servis Ödemeleri Tablosunu Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'ini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_servis_odeme_tablolar() as $pssql) { echo h($pssql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  <?php mg_kart_kapat(); ?>
+
   <?php mg_kart_ac(''); ?>
     <h2 style="margin-top:0;">Fiyat Dönemi Saatleri + Çift Yevmiye (v299)</h2>
     <p style="color:#555;font-size:.9em;">
@@ -1151,6 +1571,45 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <summary style="cursor:pointer;color:#555;">ALTER TABLE SQL'ini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_cift_kolon_tanimi() as [$pck, $pctanim]) { echo h('ALTER TABLE `' . PDKS_CIFT_TABLO . "` ADD COLUMN `{$pck}` {$pctanim};") . "\n"; }
+      ?></pre>
+    </details>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('uretim'); ?>
+    <h2 style="margin-top:0;">Günlük Üretim Tabloları (v507)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>uretim_gunluk</code> (gün + depo başına işlenen net kg / kasa / palet) ve
+      <code>uretim_gunluk_kalem</code> (Excel'deki ürün satırları). Mevcut hiçbir tabloya dokunulmaz. Kurulmadan
+      «Günlük Üretim» sayfaları net bir uyarı gösterir.
+      <?php if ($uretim_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($uretim_results as $ur): ?>
+        <br>&nbsp;&nbsp;<?= h($ur['adim']) ?>: <?= h($ur['durum']) ?> — <?= h($ur['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(uretim_tablolar()) as $utab): $ue = uretim_tablo_var($pdo, $utab); ?>
+          <tr>
+            <td><?= h($utab) ?></td>
+            <td style="color:<?= $ue ? '#1f9d55' : '#c0392b' ?>;font-weight:600;"><?= $ue ? '✓ Var' : '✗ Eksik' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="uretim">
+      <button type="submit" class="btn btn-primary">Günlük Üretim Tablolarını Kur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'ini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (uretim_tablolar() as $usql) echo h($usql) . ";\n\n";
       ?></pre>
     </details>
   <?php mg_kart_kapat(); ?>
@@ -1410,29 +1869,6 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="pdks_faz8b">
       <button type="submit" class="btn btn-primary">Faz 8B Migrasyonunu Çalıştır</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('sirket-yapisi'); ?>
-    <h2 style="margin-top:0;">Şirket · Şube · Depo (Faz 0.1)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: dört YENİ tablo oluşturur — <code>sirketler</code>, <code>subeler</code>, <code>depo_detay</code>,
-      <code>depo_sirket</code>. Mevcut tablolara ve depo tanımlarına DOKUNMAZ; ALTER ve yabancı anahtar YOK.
-      Çalıştırılınca Program Tanımları, Şube Tanımları ve Depo Tanımları sayfalarından şirket/şube/depo bilgisi girilir.
-      Çalıştırılmazsa bu üç sayfa yalnız "tablolar kurulmadı" uyarısı gösterir; diğer ekranlar aynen çalışır.
-      <?php if ($sirket_yapisi_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($sirket_yapisi_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $sirkyap = sirket_yapisi_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $sirkyap ? '#1f9d55' : '#c0392b' ?>;"><?= $sirkyap ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="sirket_yapisi">
-      <button type="submit" class="btn btn-primary">Şirket · Şube · Depo Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

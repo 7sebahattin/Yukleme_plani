@@ -24,7 +24,7 @@ foreach (['ogl','urun'] as $page) {
 foreach (['siparisler.php','siparis_view.php','siparis_pkl.php','siparis_invoice.php','siparis_ayarlar.php','siparis_belge.php'] as $file) {
     $src=file_get_contents($root.'/'.$file);
     if(!preg_match('/\$yaz\s*=\s*[^;]+;/',$src,$m))throw new RuntimeException('UI permission absent '.$file);
-    $grants=['role.permissions.detailed','siparis.urun.read','siparis.urun.edit'];eval($m[0]);order_check(!$yaz,'Product-only grant opened OGL UI '.$file);
+    $sev=['durum'=>'siparis_alindi'];$grants=['role.permissions.detailed','siparis.urun.read','siparis.urun.edit'];eval($m[0]);order_check(!$yaz,'Product-only grant opened OGL UI '.$file);
     $grants=['role.permissions.detailed','siparis.ogl.read','siparis.ogl.create'];eval($m[0]);order_check($yaz===($file==='siparisler.php'),'Create-only UI action mismatch '.$file);
 }
 $grants=['siparis.read','siparis.write'];require_siparis('read','ogl');require_siparis('read','urun');order_check(role_matrix_page_can('siparis','ogl','edit')&&role_matrix_page_can('siparis','urun','create'),'Legacy behavior changed');

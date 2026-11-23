@@ -77,6 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $crate_ct = $checked['values']['crate_count'];
     $sample_at = $checked['values']['sample_taken_at'];
     $result_at = $checked['values']['analysis_result_at'];
+    // v504 — yeni kayıt İşlem Bekleyen karta düşer; kapalı durumla açılacaksa Kapanan kartta Düzenle de gerekir.
+    if (!can_beyan_kart((string)$f['status'], 'edit') && beyan_kart_of((string)$f['status']) === 'kap') $errors[] = 'Kapanan Beyanlar bölümünde düzenleme yetkiniz olmadığı için kapalı durumla beyan açılamaz.';
     if (in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) $result_at = date('Y-m-d H:i:s');
     if (array_key_exists('sender_company_name', $_POST)) {   // Gönderici Firma: HKS adı eşleşirse id çözülür, değilse serbest ad
         if (can_beyan('hks.read') && trim((string)$_POST['sender_company_name']) === '') $errors[] = 'Gönderici Firma seçilmelidir.';

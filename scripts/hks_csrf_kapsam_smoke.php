@@ -42,7 +42,7 @@ if (preg_match('/^function hks_csrf_muaf_eylemler\(\): array \{.*?^\}/ms', $api,
 ok('hks_csrf_muaf_eylemler() dizi döndürür', is_array($muaf) && count($muaf) > 10);
 ok("muaf liste 'csrf' (token tazeleme) içerir", in_array('csrf', $muaf, true));
 $yazan = ['taslak_gonder', 'taslak_kaydet', 'taslak_sil', 'firma_kaydet', 'firma_sil', 'listeler_yenile',
-          'kisi_kaydet', 'kisi_sil', 'belirsiz_isaret_kapat', 'taslak_fiyat_yaz', 'taslak_kopya_firmaya'];
+          'kisi_kaydet', 'kisi_sil', 'belirsiz_isaret_kapat', 'taslak_fiyat_yaz', 'taslak_kopya_firmaya', 'gonderilen_fatura'];
 foreach ($yazan as $e) ok("muaf listede DEĞİL (CSRF ister): $e", !in_array($e, $muaf, true));
 ok('muaf liste tekrarsız', count($muaf) === count(array_unique($muaf)));
 

@@ -58,6 +58,9 @@ if (!(can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || 
 $govde = json_decode((string)file_get_contents('php://input'), true);
 if (!is_array($govde)) $govde = [];
 $action = (string)($_GET['action'] ?? ($govde['action'] ?? ''));
+// v507 — içerik (düğme) yetkisi: eyleme göre
+$__icerik = $action === 'eslestir' ? 'beyan.hks_eslestir' : (in_array($action, ['toplu_hazirla', 'toplu_olustur'], true) ? 'beyan.toplu_bildirim' : 'beyan.hks_taslak');
+if (!icerik_can($__icerik)) bb_cikti(['hata' => 'Bu işlem için yetkiniz yok.'], 403);
 
 // ── Beyanı yükle ──────────────────────────────────────────────────────────
 // Tekil eylemler tek beyanla çalışır; toplu eylemler kendi id listesini okur.
