@@ -93,7 +93,7 @@ $GS = [
     351  => ['TC427751.10', 'ROMANYA',   ['61/232'],            '2026-10-21', '2026-10-31', '14.730,24', '14.730,24', 0, 351],
     352  => ['TC427752.10', 'ROMANYA',   ['61/233'],            '2026-10-22', '2026-10-31', '19.149,31', '19.149,31', 0, 352],
     354  => ['TC429403.10', 'SIRBİSTAN', ['61/236', '61/235'],  '2026-10-24', '2026-10-31', '1.473,02',  '736,51',    0, 354],   // kalan 736,51
-    356  => ['TC432845.10', 'ALMANYA',   ['61/237'],            '2026-10-24', '2026-10-31', '22.176,00', '22.176,00', 0, 356],
+    356  => ['TC432845.10', 'ALMANYA',   ['61/237'],            '2026-10-24', '2026-10-31', '22.176,00', '22.176,00', -92400, 356],   // v573: gelen (PC) 1,20 < kesilen 1,25 → 887,04 debit note (2028-254916); iskonto DEĞİL
     358  => ['TC432691.10', 'SIRBİSTAN', ['61/238', '61/239'],  '2026-10-25', '2026-10-31', '2.946,05',  '1.473,02',  0, 358],   // kalan 1.473,03
     360  => ['TC432734.10', 'SIRBİSTAN', ['61/240', '61/241'],  '2026-10-26', '2026-10-31', '1.473,02',  '736,51',    -1121, 360],   // kalan 736,51; tahmini fiyat farkı → 5,38
     361  => ['TC433599.10', 'ALMANYA',   ['61/242'],            '2026-10-26', '2026-10-31', '24.304,90', '24.304,90', -314160, 361],  // tahmini 3.015,94
@@ -205,15 +205,32 @@ ok('(1) fark_kurus satırlara göre: 356 → 887,04; 343 → 64,51; 346 → 16,1
     return $f === $beklenen;
 })());
 
-echo "\n=== 3. İskonto şüphesi YALNIZ 356'da; %0,73 / %0,31 küçük farklarda false ===\n";
-$sus = []; foreach ($h['odenmis'] as $x) { if (!array_key_exists('iskonto_suphesi', $x)) { $sus = null; break; } if ($x['iskonto_suphesi']) $sus[] = (int)$x['sev']['id']; }
-ok('(3) iskonto_suphesi = true yalnız IHR…356 (22.176,00 − 21.288,96 = tam %4)', $sus === [356], vd_j($sus));
-ok('(3) küçük farklar (343/346/358/363 ≈ %0,73; 339 ≈ %0,31) iskonto şüphesi DEĞİL', $sus !== null && !array_intersect($sus, [343, 346, 358, 363, 339]));
-$isk = vd_uyarilar($h);
-$iskU = array_values(array_filter($isk, static fn(array $u): bool => str_contains((string)$u['mesaj'], '%4') && str_contains((string)$u['mesaj'], 'iskonto')));
-ok('(3) iskonto uyarısı var, 356\'yı (fatura no ya da sipariş no) ve farkı (887,04) anar; diğer küçük fark kalemlerini ANMAZ', count($iskU) >= 1
-    && (str_contains($iskU[0]['mesaj'], vd_g(356)) || str_contains($iskU[0]['mesaj'], 'TC432845.10')) && str_contains($iskU[0]['mesaj'], '887,04')
-    && !preg_match('~' . implode('|', array_map(static fn(int $n): string => vd_g($n) . '|' . preg_quote($GS[$n][0], '~'), [343, 346, 358, 363, 339])) . '~', $iskU[0]['mesaj']), vd_j($iskU));
+echo "\n=== 3. İskonto şüphesi (v573): fiyat farkı / debit note ile açıklanan fark işaretlenmez ===\n";
+$susBul = static function (array $hh): ?array { $r = []; foreach ($hh['odenmis'] as $x) { if (!array_key_exists('iskonto_suphesi', $x)) return null; if ($x['iskonto_suphesi']) $r[] = (int)$x['sev']['id']; } return $r; };
+$iskUyari = static fn(array $hh): array => array_values(array_filter(vd_uyarilar($hh), static fn(array $u): bool => str_contains((string)$u['mesaj'], '%4') && str_contains((string)$u['mesaj'], 'iskonto')));
+ok('(3) canlı veri: 356\'nın 887,04 farkı PC fiyat farkıyla (1,20 < 1,25) açıklanıyor → iskonto şüphesi YOK, uyarı YOK (v572 yanlış alarmı)', $susBul($h) === [] && $iskUyari($h) === [], vd_j($susBul($h)));
+// PC farkı olmasaydı (ör. aynı fiyat) tam %4 eksik → şüphe
+$GA = $GIRDI; foreach ($GA['sevkiyatlar'] as &$sv) if ((int)$sv['id'] === 356) $sv['karsilastirma'] = ['fark_kurus' => 0]; unset($sv);
+$hA = siparis_vade_hesapla($GA, siparis_vade_param([]), $BUGUN);
+$iA = $iskUyari($hA);
+ok('(3) fiyat farkı ve debit yokken tam %4 eksik → iskonto_suphesi yalnız 356; uyarı 356 + 887,04 anar, küçük farkları ANMAZ', $susBul($hA) === [356] && count($iA) === 1
+    && str_contains($iA[0]['mesaj'], vd_g(356)) && str_contains($iA[0]['mesaj'], '887,04')
+    && !preg_match('~' . implode('|', array_map(static fn(int $n): string => vd_g($n), [343, 346, 358, 363, 339])) . '~', $iA[0]['mesaj']), vd_j([$susBul($hA), $iA]));
+ok('(3) küçük farklar (343/346/358/363 ≈ %0,73; 339 ≈ %0,31) iskonto şüphesi DEĞİL', $susBul($hA) !== null && !array_intersect($susBul($hA), [343, 346, 358, 363, 339]));
+// Aynı durumda sevkiyata bağlı bir debit note varsa fark açıklanmış sayılır
+$GB = $GA; $GB['debitler'][] = ['no' => '2028-254916', 'tarih' => '2026-11-01', 'kurus' => T('887,04'), 'pb' => 'EUR', 'invoice_no' => '', 'sid' => 356, 'ref' => 'TC432845.10', 'fiyat_farki' => true, 'neden' => ''];
+$hB = siparis_vade_hesapla($GB, siparis_vade_param([]), $BUGUN);
+ok('(3) sevkiyata bağlı debit note varken iskonto şüphesi YOK', $susBul($hB) === [] && $iskUyari($hB) === [], vd_j($susBul($hB)));
+
+echo "\n=== 3b. Elle girilen kalıcı kesinti (v573; ör. muhasebedeki 29.10 'HESAP DÜZELTME' 27.900,00) ===\n";
+$GC = $GIRDI; $GC['debitler'][] = ['no' => 'HESAP-DUZELTME', 'tarih' => '2026-10-29', 'kurus' => T('27.900,00'), 'pb' => 'EUR', 'invoice_no' => '', 'sid' => null, 'ref' => '', 'fiyat_farki' => false, 'neden' => 'Diğer kesinti'];
+$hC = siparis_vade_hesapla($GC, siparis_vade_param([]), $BUGUN);
+ok('(3b) açık alacak 27.900 azalır (139.998,14 → 112.098,14), bekleyen kesinti 3.396,58 → 31.296,58, uyum tutarlı (sapma 0)',
+    (int)$hC['ozet']['acik_kurus'] === T('112.098,14') && (int)$hC['ozet']['uyum']['bekleyen_kesinti_kurus'] === T('31.296,58')
+    && $hC['ozet']['uyum']['sapma_kurus'] === 0 && $hC['ozet']['uyum']['tutarli'] === true, vd_j($hC['ozet']['uyum']));
+ok('(3b) bu hafta 27.900 azalır (113.790,14 → 85.890,14); kesinti listesinde görünür; kesin + kalan = beklenen; kesin ≥ 0',
+    (int)$hC['bu_hafta']['beklenen_kurus'] === T('85.890,14') && in_array('HESAP-DUZELTME', array_column($hC['bekleyen_kesinti'], 'no'), true)
+    && $hC['bu_hafta']['kesin_kurus'] + $hC['bu_hafta']['kalan_kisim_kurus'] === $hC['bu_hafta']['beklenen_kurus'] && $hC['bu_hafta']['kesin_kurus'] >= 0, vd_j($hC['bu_hafta']));
 
 echo "\n=== 4. Bu hafta aşırı mı + kalan kısım (faturası girilmemiş) ===\n";
 ok('(4) geçmiş ödeme (gün bazında) en büyüğü = 89.341,04', vd_al($h, 'gecmis_odeme_max_kurus') === T('89.341,04'), vd_j(vd_al($h, 'gecmis_odeme_max_kurus')));
@@ -227,7 +244,7 @@ $beklenenBH = vd_bh($h, 'beklenen_kurus') ?? $o['bu_hafta_kurus'];
 ok('(4) bu_hafta.kesin_kurus + kalan_kisim_kurus === beklenen_kurus (113.790,14); kalan = 15.461,38', vd_bh($h, 'kalan_kisim_kurus') === T('15.461,38') && vd_bh($h, 'kesin_kurus') !== null
     && vd_bh($h, 'kesin_kurus') + vd_bh($h, 'kalan_kisim_kurus') === $beklenenBH && $beklenenBH === T('113.790,14'), vd_j($h['bu_hafta']));
 ok('(4) bu_hafta.beklenen_kurus (varsa) === ozet.bu_hafta_kurus', vd_bh($h, 'beklenen_kurus') === null || vd_bh($h, 'beklenen_kurus') === $o['bu_hafta_kurus']);
-ok('(4) kalan kısım uyarısı: "invoice girilmemiş kalan kısım" + "kesin değil"', vd_uyari_var($h, 'invoice girilmemiş kalan kısım') && vd_uyari_var($h, 'kesin değil'), vd_j(array_column($h['uyarilar'], 'mesaj')));
+ok('(4) kalan kısım uyarısı (v573): "ikinci araç invoice\'ı sisteme girilmemiş" + 15.461,38; "kesin değil" DENMEZ (muhasebede kesilmiş)', vd_uyari_var($h, 'ikinci araç invoice') && vd_uyari_var($h, '15.461,38') && !vd_uyari_var($h, 'kesin değil'), vd_j(array_column($h['uyarilar'], 'mesaj')));
 
 // (4b) tersi: aşırı DEĞİL
 $h0 = siparis_vade_hesapla(['sevkiyatlar' => [vd_sev(1, 'TC1.10', 'X', [], '2026-11-01', '2026-11-01', T('1.000,00'), vd_g(1), null)], 'fatura' => [1 => ['iskonto' => 4.0]], 'belge_toplam' => [1 => T('1.000,00')], 'odemeler' => [], 'harita' => [], 'debitler' => []], siparis_vade_param([]), $BUGUN);

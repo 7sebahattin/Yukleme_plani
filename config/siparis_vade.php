@@ -257,12 +257,14 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
     // ── 2) kesintiler (debit note): avizoda düşülmüş mü? ───────────────
     $bekleyenSid = [];   // sid → list<debit> (henüz hiçbir avizoda düşülmemiş)
     $bekleyenSahipsiz = [];
+    $debitVarSid = [];
     $ffDebitSid = [];    // fiyat farkı debit'i (düşülmüş ya da değil) olan sevkiyatlar → tahmini kesinti hesaplanmaz
     $debitler = array_values(array_filter((array)($g['debitler'] ?? []), static fn($d): bool => is_array($d) && strtoupper((string)($d['pb'] ?? '')) === 'EUR' && (int)($d['kurus'] ?? 0) > 0));
     usort($debitler, static fn(array $a, array $b): int => strcmp((string)($a['tarih'] ?? ''), (string)($b['tarih'] ?? '')) ?: strcmp((string)$a['no'], (string)$b['no']));
     foreach ($debitler as $d) {
         $sid = (int)($d['sid'] ?? 0);
         if ($sid > 0 && !empty($d['fiyat_farki'])) $ffDebitSid[$sid] = true;
+        if ($sid > 0) $debitVarSid[$sid] = true;   // v573: bu sevkiyata bağlı HERHANGİ bir debit note — avizodaki eksik ödemeyi açıklar (iskonto şüphesi değil)
         $dusuldu = isset($avizNo[strtoupper((string)$d['no'])]);
         if (!$dusuldu) {
             $gv = siparis_odeme_aviz_no_coz((string)($d['invoice_no'] ?? ''))['govde'];
@@ -313,7 +315,11 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
             $fark = $rowNet - $rowOdenen;   // v572: net − avizoda ödenen (≥ 0 = OGL'nin düştüğü, tahsil edilmeyecek fark)
             // iskonto şüphesi: sevkiyatın TAM net tutarı ile avizoda ödenen (kısmi satırda da) arasındaki eksik tam %4 mü? (kısmi ödemede kalan tutar açık listede kalır — işaretlenir, tutar DEĞİŞTİRİLMEZ)
             $tamFark = $net - $rowOdenen;
-            $iskSup = $tamFark > 0 && $net > 0 && abs($tamFark - intdiv($net * 4 + 50, 100)) <= max(100, intdiv($net, 1000));
+            // v573: fark bir debit note'la (ör. 61-237: 887,04 fiyat farkı debit'i) ya da gelen fiyat (PC) < kesilen fiyat ile açıklanıyorsa iskonto şüphesi DEĞİL
+            //       (0,05 / 1,25 = tam %4 gibi tesadüfler yanlış alarm veriyordu)
+            $kkO = $sev['karsilastirma'] ?? null;
+            $farkAciklanir = isset($debitVarSid[$id]) || (is_array($kkO) && (int)($kkO['fark_kurus'] ?? 0) < 0);
+            $iskSup = !$farkAciklanir && $tamFark > 0 && $net > 0 && abs($tamFark - intdiv($net * 4 + 50, 100)) <= max(100, intdiv($net, 1000));
             $odenmis[] = ['sev' => $sev, 'net' => $rowNet, 'baz' => $baz, 'odeme_tarih' => (string)($odTarih ?? ''), 'odenen' => $rowOdenen, 'gecikme' => $gun, 'elle' => false, 'odeme_id' => (int)$odenen[$id]['odeme_id'],
                           'kesinti' => array_sum(array_column($bekleyenSid[$id] ?? [], 'kurus')), 'kismi' => $kismen, 'fark_kurus' => $fark, 'iskonto_suphesi' => $iskSup, 'net_tam' => $net, 'tam_fark_kurus' => $tamFark];
             if (!$kismen) continue;
@@ -466,7 +472,7 @@ function siparis_vade_hesapla(array $g, array $param, string $bugun): array
     if ($buAsiri) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => 'Bu hafta rakamı geçmiş ödemelerin en büyüğünün (' . siparis_cari_para($gecmisMax) . ' EUR) 1,25 katından fazla (' . siparis_cari_para((int)$bu['beklenen']) . ' EUR): OGL birikmiş gecikmişleri tek seferde ödemeyebilir.'];
     $kalanKisimKurus = array_sum(array_column($kalanAcik, 'kalan_kisim_kurus'));
     $kalanKisimSev = count(array_filter($kalanAcik, static fn(array $a): bool => $a['kalan_kisim']));
-    if ($kalanKisimSev > 0) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => $kalanKisimSev . ' sevkiyatta invoice girilmemiş kalan kısım var (' . siparis_cari_para($kalanKisimKurus) . ' EUR): bu tutar kesin değil, ikinci invoice girilince netleşir.'];
+    if ($kalanKisimSev > 0) $uyarilar[] = ['seviye' => 'uyari', 'mesaj' => $kalanKisimSev . ' sevkiyatta ikinci araç invoice\'ı sisteme girilmemiş (' . siparis_cari_para($kalanKisimKurus) . ' EUR): tutar sevkiyatın net tutarından hesaplandı (muhasebede kesilmiş olabilir); invoice girilirse avizodaki numarasıyla birebir eşleşir ve tahmini mahsup azalır.'];
 
     $dupNo = array_filter($noSay, static fn(array $l): bool => count($l) > 1);
     if ($dupNo) $uyarilar[] = ['seviye' => 'bilgi', 'mesaj' => 'Ortak fatura (aynı fatura no birden çok sevkiyatta): ' . implode(' · ', array_map(static fn($no, $l): string => $no . ' (' . implode(', ', $l) . ')', array_keys($dupNo), $dupNo))
