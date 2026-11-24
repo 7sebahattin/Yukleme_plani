@@ -177,4 +177,14 @@ ok('listede olmayan ad varsa HİÇBİRİ aktarılmaz', !$x['ok'] && say('loading
 $x = depo_eski_veriyi_aktar($pdo, 'KARAMAN CİHAT', $hed, []);
 ok('hiç tablo seçilmeden aktarım reddedilir (null = varsayılan, [] = seçim yok)', !$x['ok'] && str_contains($x['mesaj'], 'tablo seçilmedi'));
 
+
+echo "\n=== 14. Geri al → yeni depo adıyla damgalı satırlar → yeniden geçiş engellenmez (v575) ===\n";
+ok('geçiş açık', depo_gecis_aktif($pdo) === true);
+$pdo->exec("INSERT INTO employees (depo) VALUES ('MERKEZ DEPO'),('MERKEZ DEPO')");   // geçişten sonra yeni sistemde damgalanan satırlar
+depo_gecis_geri_al($pdo);
+ok('geri al: ayar kalktı, eski davranış; veri ve defter yerinde', depo_gecis_aktif($pdo) === false && say('depo_eski_adlar') >= 3 && say('employees', "depo = 'MERKEZ DEPO'") >= 2);
+ok('geri alınmış durumda yeni depo adı (MERKEZ DEPO) "eski" SAYILMAZ (defter yetkili)', !isset(depo_eski_adlar($pdo)[depo_anahtar('MERKEZ DEPO')]));
+ok('yeniden geçişte yeni depo adıyla damgalı satırlar ENGEL olmaz', depo_gecis_engelleri($pdo) === [], json_encode(depo_gecis_engelleri($pdo), JSON_UNESCAPED_UNICODE));
+ok('yeniden geçiş uygulanır; yeni satırlar yerinde, eski adlar defterde', depo_gecis_uygula($pdo)['ok'] === true && depo_gecis_aktif($pdo) === true && say('employees', "depo = 'MERKEZ DEPO'") >= 2);
+
 siparis_test_bitir();

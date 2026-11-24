@@ -240,7 +240,9 @@ function depo_eski_adlar(PDO $pdo): array
     if (depo_tablo_var($pdo, 'depo_eski_adlar')) {
         foreach ($pdo->query('SELECT ad_anahtar, ad, kaynak FROM `depo_eski_adlar`')->fetchAll() as $r) $out[(string)$r['ad_anahtar']] = [(string)$r['ad'], (string)$r['kaynak']];
     }
-    if (!depo_gecis_aktif($pdo)) {
+    // Defter DOLUYSA (geçiş en az bir kez yapıldı) yetkili kaynak odur: geçiş geri alınsa bile canlı tarama YAPILMAZ — yoksa yeni sistemde
+    // yeni depo adıyla damgalanan satırlar "eski" sanılır ve yeniden geçiş engellenirdi. Defter boşken (ilk geçiş öncesi) canlı tarama sürer.
+    if (!depo_gecis_aktif($pdo) && !$out) {
         foreach (depo_eski_kaynak_adlari($pdo) as $a => $v) if (!isset($out[$a])) $out[$a] = $v;
     }
     return $out;
@@ -487,8 +489,9 @@ function depo_gecis_engelleri(PDO $pdo): array
     $aktif = depo_aktif_adlar($pdo);
     if (!$aktif) $e[] = 'Önce en az bir AKTİF yeni depo tanımlayın (Yönetim › Depo Tanımları).';
     $kullanim = depo_kullanim_toplam($pdo);
+    $eskiAdlar = depo_eski_adlar($pdo);
     foreach (depo_hepsi($pdo) as $d) {
-        $n = $kullanim[(string)$d['ad_anahtar']] ?? 0;
+        $n = isset($eskiAdlar[(string)$d['ad_anahtar']]) ? ($kullanim[(string)$d['ad_anahtar']] ?? 0) : 0;
         if ($n > 0) $e[] = 'Yeni depo "' . $d['ad'] . '" adı eski verilerde ' . $n . ' satırda geçiyor → eski satırlar yeni depoya karışır. Depoyu farklı bir adla yeniden adlandırın (ya da silin).';
     }
     return $e;
