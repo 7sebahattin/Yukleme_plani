@@ -59,13 +59,12 @@ function role_permission_matrix(): array {
             $row('attendance','Personel Takibi','personel_takip.php',['read'=>$a('attendance.hub.read')],$pdks,'Gör, genel ekranı açar. Alt sayfa izinleri ayrı seçilir; alt sayfayı gören genel ekrana da ulaşabilir.'),
         ],
         'Yönetim'=>[
-            $row('defs','Tanımlar','definitions.php',['read'=>$a('defs.read'),'create'=>$a('defs.create'),'edit'=>$a('defs.edit'),'delete'=>$a('defs.admin')],[],'Silme ve gelişmiş yönetim aynı mevcut izin paketidir.'),
+            // v574: 'Tanımlar' satırı kalktı (definitions.php = 410); defs.* yetkileri ölü, menü açmaz.
             $row('users','Kullanıcılar','users.php',['read'=>$a('users.admin','Kullanıcı ve rol yönetimi')],[],'Yönetim işlemleri mevcut tek güvenlik paketiyle verilir.'),
             $row('roles','Roller','roles.php',['admin'=>$a('users.admin','Kullanıcı ve rol yönetimi')]),
             $row('audit','İşlem Geçmişi','audit.php',[],[],'Yalnız sistem yöneticisi.',true),
             $row('backup','Veritabanı Yedekleri','admin_db_backups.php',[],[],'Yalnız sistem yöneticisi.',true),
-            // v566: eski Admin Konsolu'ndan taşınan Şube / Depo Tanımları (yalnız yönetici; Roller'den verilemez).
-            $row('sube_tanimlari','Şube Tanımları','sube_tanimlari.php',[],[],'Yalnız sistem yöneticisi.',true),
+            // v566/v574: Depo Tanımları (yalnız yönetici; Roller'den verilemez). Şube Tanımları kalktı (410).
             $row('depo_tanimlari','Depo Tanımları','depo_tanimlari.php',[],[],'Yalnız sistem yöneticisi.',true),
         ],
         'Raporlar altındaki diğer sayfalar'=>[

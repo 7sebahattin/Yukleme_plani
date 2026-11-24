@@ -31,3 +31,10 @@
 @media (max-width: 767px) {
     .depo-form input[type="text"] { max-width: none; }
 }
+
+/* Koyu tema (html[data-theme="dark"]) — açık sabit renklerin karşılıkları */
+html[data-theme="dark"] .depo-not-uyari { border-left-color: #f59e0b; }
+html[data-theme="dark"] .depo-kod { background: rgba(148,163,184,.18); color: #cbd5e1; }
+html[data-theme="dark"] .depo-rozet { background: rgba(239,68,68,.2); color: #fca5a5; }
+html[data-theme="dark"] .depo-sil-btn { color: #fca5a5; border-color: rgba(239,68,68,.4); }
+html[data-theme="dark"] .depo-nokta { box-shadow: 0 0 0 1px rgba(255,255,255,.25); }

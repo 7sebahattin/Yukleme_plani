@@ -163,7 +163,7 @@ $IS_ADMIN = false;
 // first_allowed_page'in döndürdüğü her sayfa gerçekten var mı?
 foreach (['records.php','beyanlar.php','kantar.php','halkayit/index.php','reports.php',
           'malzeme_stok.php','hesap.php','mail.php','siparisler.php','maliyet.php','personel_takip.php',
-          'definitions.php','users.php'] as $sayfa) {
+          'users.php'] as $sayfa) {
     ok("hedef dosya mevcut: $sayfa", file_exists($ROOT . '/' . $sayfa));
 }
 
@@ -255,7 +255,9 @@ $TOMBSTONES = ['admin_db_backup_download.php', 'hesap_sahipsiz.php', 'depo_tasim
                'program_tanimlari.php', 'diger_uygulama_tanimlari.php', 'guncellemeyi_calistir.php', 'lisans_kayit_islemleri.php',
                'sube_degistirme.php', 'sirket_degistirme.php', 'mesajlar.php',
                // v555: stok dönüşümü kullanılmayacak
-               'stok_donusum_fisleri.php'];
+               'stok_donusum_fisleri.php',
+               // v574: Tanımlar + Şube Tanımları kalktı
+               'definitions.php', 'sube_tanimlari.php'];
 $kaynaklar = array_merge(glob($ROOT . '/*.php'), glob($ROOT . '/config/*.php'), glob($ROOT . '/assets/*.js'));
 foreach ($TOMBSTONES as $t) {
     $src = (string)@file_get_contents($ROOT . '/' . $t);

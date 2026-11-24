@@ -56,8 +56,8 @@ ok('role_ozet: tek sayfa Gör → muhasebe_cari "salt" (kapalı değil)', (array
 ok('role_ozet: izin yoksa kapalı', (array_column(role_ozet([]), 'duzey', 'key')['muhasebe_cari'] ?? '') === 'kapali');
 // (d) admin_only
 $adminAnahtar = []; foreach ($satirlar as $r) if ($r['admin_only']) $adminAnahtar[] = $r['key'];
-foreach (['sube_tanimlari', 'depo_tanimlari', 'audit', 'backup', 'attendance_fis'] as $k) ok("(d) admin_only kalır: $k", in_array($k, $adminAnahtar, true));
-ok('(d) admin_only satırı tam 5', count($adminAnahtar) === 5);
+foreach (['depo_tanimlari', 'audit', 'backup', 'attendance_fis'] as $k) ok("(d) admin_only kalır: $k", in_array($k, $adminAnahtar, true));
+ok('(d) admin_only satırı tam 4 (v574: Şube Tanımları kalktı)', count($adminAnahtar) === 4);
 foreach ($satirlar as $r) if (in_array($r['key'], ['cari_kartlari', 'stok_kartlari', 'palet_fisleri', 'sifre_degistirme'], true)) ok("kapsam içi satır admin_only DEĞİL: {$r['key']}", !$r['admin_only']);
 
 $pf = (string)file_get_contents($ROOT . '/palet_fisleri.php');

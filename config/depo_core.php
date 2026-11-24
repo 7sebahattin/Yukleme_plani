@@ -298,7 +298,7 @@ function depo_atanan_adlar(PDO $pdo, int $userId): ?array
         $st = $pdo->prepare('SELECT d.ad FROM `depo_kullanicilar` k JOIN `depolar` d ON d.id = k.depo_id WHERE k.user_id = ? AND d.aktif = 1 ORDER BY d.ad');
         $st->execute([$userId]);
         return array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN));
-    } catch (PDOException $e) { return []; }   // okunamadı → genişletme
+    } catch (PDOException $e) { return []; }   // okunamadı → fail-closed (kapsamı GENİŞLETME)
 }
 
 /** depo_id => [user_id, …] */
@@ -437,7 +437,9 @@ function depo_guncelle(PDO $pdo, int $id, array $g): array
         if ($ad !== (string)$d['ad']) $aktarilan = depo_ad_aktar($pdo, (string)$d['ad'], $ad);
         $pdo->prepare('UPDATE `depolar` SET ad = ?, ad_anahtar = ?, renk = ?, aktif = ?, updated_at = ?, updated_by = ? WHERE id = ?')
             ->execute([$ad, depo_anahtar($ad), $renk, $aktif, date('Y-m-d H:i:s'), $uid, $id]);
+        $oncekiKul = depo_kullanici_listesi($pdo)[$id] ?? [];
         if (array_key_exists('kullanicilar', $g)) depo_kullanicilari_yaz($pdo, $id, (array)$g['kullanicilar']);
+        $yeniKul = depo_kullanici_listesi($pdo)[$id] ?? [];
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -445,7 +447,7 @@ function depo_guncelle(PDO $pdo, int $id, array $g): array
         return ['ok' => false, 'hata' => 'Depo güncellenemedi.', 'aktarilan' => 0];
     }
     depo_onbellek_sifirla();
-    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $id, ['ad' => $d['ad'], 'aktif' => (int)$d['aktif']], ['ad' => $ad, 'aktif' => $aktif, 'aktarilan_satir' => $aktarilan]);
+    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $id, ['ad' => $d['ad'], 'aktif' => (int)$d['aktif'], 'kullanicilar' => $oncekiKul], ['ad' => $ad, 'aktif' => $aktif, 'aktarilan_satir' => $aktarilan, 'kullanicilar' => $yeniKul]);
     return ['ok' => true, 'hata' => '', 'aktarilan' => $aktarilan];
 }
 
