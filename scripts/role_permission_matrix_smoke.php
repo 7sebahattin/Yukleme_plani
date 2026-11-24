@@ -49,6 +49,7 @@ foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'
 $byKey=[]; foreach ($rows as $r) $byKey[$r['key']]=$r;
 foreach ($catalogRoutes as $route) if (!in_array($route,$adminKonsolu,true)) {
     $slug=pathinfo($route,PATHINFO_FILENAME);
+    if (in_array($slug,muhasebe_herkese_acik_sayfalar(),true)) { matrix_ok(!isset($byKey[$slug]),'v575: herkese açık sayfa Roller satırı OLMAMALI: '.$slug); continue; }   // oturumlu herkes; verilecek yetki yok
     matrix_ok(isset($byKey[$slug]) && !$byKey[$slug]['admin_only'] && ($byKey[$slug]['actions']['read']['permission'] ?? '')==="muhasebe.$slug.read",'Menu page lacks grantable read row: '.$slug);
 }
 foreach (['genel_uygulamalar','ihracat'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);

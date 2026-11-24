@@ -86,6 +86,19 @@ function kt_oku(PDO $pdo, int $uid, string $anahtar): ?array
     }
 }
 
+/** Kayıtlı tercihi siler (varsayılana döner). Yalnız beyaz listedeki anahtarlar. @return bool başarılı mı (kayıt yoksa da true) */
+function kt_sil(PDO $pdo, int $uid, string $anahtar): bool
+{
+    if ($uid <= 0 || !kt_hazir($pdo) || kt_dogrula($anahtar, []) === null) return false;
+    try {
+        $pdo->prepare('DELETE FROM kullanici_tercihleri WHERE user_id = ? AND anahtar = ?')->execute([$uid, $anahtar]);
+        return true;
+    } catch (PDOException $e) {
+        error_log('[kt_sil] ' . $e->getMessage());
+        return false;
+    }
+}
+
 /** @return bool başarılı mı */
 function kt_yaz(PDO $pdo, int $uid, string $anahtar, mixed $deger): bool
 {

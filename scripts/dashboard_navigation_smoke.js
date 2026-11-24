@@ -102,7 +102,7 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), profile + ' narrow layout fits');
             if (profile === 'only_stok_read') check(await page.locator('.home-card[href="malzeme_stok.php"]').count() === 1, 'stock-only card remains visible');
             if (profile === 'only_users_admin') check(await page.locator('.home-card[href="users.php"]').count() === 1, 'legitimate non-admin users permission retained');
-            if (profile === 'dashboard_only') check(await page.locator('.home-card').count() === 0, 'dashboard permission alone reveals no unauthorized module');
+            if (profile === 'dashboard_only') check(await page.locator('.home-card:not([href="sifre_degistirme.php"])').count() === 0, 'dashboard permission alone reveals no unauthorized module (v575: herkese açık Şifre Değiştirme kartı hariç)');
         }
         await context.close();
         proof.checks = checks;

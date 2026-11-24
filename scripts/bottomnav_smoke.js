@@ -471,8 +471,9 @@ function guvenliAlanKurallari(barSel) {
                 digerVar: gor(bar.querySelector(T.moreSel)),
             };
         }, TASARIM);
-        ok('B', bag, `${aciklama}: çubukta TEK öğe (Ana Sayfa), "Diğer" yok, mükerrer slot yok`,
-            d.hedefSay === 1 && d.slotlar.length === 0 && !d.digerVar, JSON.stringify(d));
+        // v575: şifre değiştirme HERKESE açık (anahtarsız karo) → mobilde ona ulaşmak için her rolde "Diğer" şart; yine de aday slot YOK, mükerrer yok.
+        ok('B', bag, `${aciklama}: çubukta Ana Sayfa + "Diğer" (şifre değiştirme herkese açık), aday slot yok, mükerrer slot yok`,
+            d.hedefSay === 2 && d.slotlar.length === 0 && d.digerVar, JSON.stringify(d));
         ok('B', bag, 'Ana Sayfa TEK aktif öğe', d.homeAktif && d.aktifSay === 1, JSON.stringify(d));
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
         await ctx.close();
@@ -688,6 +689,7 @@ function guvenliAlanKurallari(barSel) {
             karolar: ovl ? [...ovl.querySelectorAll('.bn-tile[data-nav]')].map(t => t.getAttribute('data-nav')) : null,
             linkKarolar: ovl ? [...ovl.querySelectorAll('.bn-tile-link')].map(t => ({ href: t.getAttribute('href'), dataNav: t.hasAttribute('data-nav'), go: !!t.querySelector('.go'), pin: !!t.querySelector('.bn-pin-badge') })) : [],
             acikGruplar: ovl ? [...ovl.querySelectorAll('details.bn-grup[open]')].map(d => d.getAttribute('data-sb-grup')) : [],
+            sheetGruplar: ovl ? [...ovl.querySelectorAll('details.bn-grup')].map(d => d.getAttribute('data-sb-grup')) : [],
             sbAcikGruplar: [...document.querySelectorAll('.desktop-sidebar details.sidebar-grup[open]')].map(d => d.getAttribute('data-sb-grup')),
             sabit: ovl ? [...ovl.querySelectorAll('.bn-tile.pinned')].map(t => t.getAttribute('data-nav')) : [],
             dataSabit: bar.getAttribute('data-sabit'),
@@ -721,7 +723,7 @@ function guvenliAlanKurallari(barSel) {
             ok('B', bag, 'anahtarsız karolar (muhasebe vb.): pin\'siz — data-nav yok, .go yok, iğne rozeti yok, yalnız izinli sayfaya gider',
                 d.linkKarolar.every(l => !l.dataNav && !l.go && !l.pin && P.izinli[uygulamaYolu(l.href, k.yol)]), JSON.stringify(d.linkKarolar.filter(l => l.dataNav || l.go || l.pin || !P.izinli[uygulamaYolu(l.href, k.yol)])));
             ok('B', bag, 'JS kapalı: sheet\'te en çok 1 grup açık ve sidebar\'daki açık grupla AYNI (sunucu yalnız aktif grubu açar)',
-                d.acikGruplar.length <= 1 && JSON.stringify(d.acikGruplar) === JSON.stringify(d.sbAcikGruplar), `sheet [${d.acikGruplar}] sidebar [${d.sbAcikGruplar}]`);
+                d.acikGruplar.length <= 1 && JSON.stringify(d.acikGruplar) === JSON.stringify(d.sbAcikGruplar.filter(g => d.sheetGruplar.includes(g))), `sheet [${d.acikGruplar}] sidebar [${d.sbAcikGruplar}] (sheet'teki gruplar [${d.sheetGruplar}]; aktif öğe çubuğa sabitliyse grubu sheet'te yoktur)`);
         }
         if (k.senaryo) {
             ok('B', bag, `sabitlenen = [${k.senaryo.sabit.join(', ')}] (çerez p: → karo rozeti + data-sabit)`,
@@ -901,7 +903,7 @@ function guvenliAlanKurallari(barSel) {
             d.diger && d.digerCur === 'page' && /hesap\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Hesap' && !d.slotGor, JSON.stringify(d));
         await page.setViewportSize({ width: 430, height: 932 }); await page.waitForTimeout(250);
         d = await oku();
-        ok('B', bag + '@430', 'genişleyince "Diğer" gizlenir, Hesap slotu aktif', !d.diger && d.slotGor && d.slotCur === 'page' && d.digerCur === null, JSON.stringify(d));
+        ok('B', bag + '@430', 'genişleyince Hesap slotu görünür+aktif, "Diğer" artık Hesap\'ı TAŞIMAZ (v575: şifre değiştirme karosu için "Diğer" kalır)', d.diger && d.slotGor && d.slotCur === 'page' && d.digerCur === null, JSON.stringify(d));
         await page.setViewportSize({ width: 360, height: 740 }); await page.waitForTimeout(250);
         d = await oku();
         ok('B', bag + '@360', 'daralınca yine "Diğer" taşır', d.diger && d.digerCur === 'page' && /hesap\.svg/.test(d.ikon), JSON.stringify(d));
