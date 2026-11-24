@@ -163,9 +163,10 @@ $hed = depo_ekle($pdo, ['ad' => 'Çoklu Hedef'])['id'];
 $pdo->exec("INSERT INTO daily_work_sessions (depo, kod) VALUES ('ÇOKLU HEDEF','a')");
 $x = depo_eski_veriyi_aktar($pdo, ['KARAMAN CİHAT', 'Eski Depo 2'], $hed, ['siparis_sevkiyatlar', 'daily_work_sessions']);
 ok('çoklu ad: siparis_sevkiyatlar 3 satır aktarıldı', ($x['tablo']['siparis_sevkiyatlar.depo'] ?? 0) === 3 && say('siparis_sevkiyatlar', "depo = 'ÇOKLU HEDEF'") === 3, json_encode($x, JSON_UNESCAPED_UNICODE));
-ok('benzersiz çatışması olan tablo HATA olarak raporlanır, mesajda tablo.kolon yazar', isset($x['hata']['daily_work_sessions.depo']) && str_contains($x['mesaj'], 'daily_work_sessions.depo'), json_encode($x['hata'], JSON_UNESCAPED_UNICODE));
-ok('çatışan satır yerinde kaldı (rollback), çatışmasız satır ve sağlam tablo aktarıldı (hata diğerlerini engellemez)',
-    say('daily_work_sessions', "depo = 'ESKİ DEPO 2'") === 1 && say('daily_work_sessions', "depo = 'ÇOKLU HEDEF' AND kod = 'b'") === 1 && say('siparis_sevkiyatlar', "depo = 'ÇOKLU HEDEF'") === 3 && $x['ok'] === false);
+ok('benzersiz çakışması: tablo HATA vermez, çakışan satır ATLANAN olarak sayılır ve mesajda tablo.kolon yazar', $x['hata'] === [] && ($x['atlanan']['daily_work_sessions.depo'] ?? 0) === 1 && str_contains($x['mesaj'], 'ATLANAN') && str_contains($x['mesaj'], 'daily_work_sessions.depo'), json_encode($x, JSON_UNESCAPED_UNICODE));
+ok('çakışan satır ESKİ adda kaldı (silinmedi/ezilmedi), çakışmayan satır yeni depoya geçti',
+    say('daily_work_sessions', "depo = 'ESKİ DEPO 2'") === 1 && say('daily_work_sessions', "depo = 'ÇOKLU HEDEF' AND kod = 'b'") === 1);
+ok('çakışma sonrası toplam: siparis_sevkiyatlar 3 + daily 1 satır taşındı, ok true', $x['ok'] === true && ($x['tablo']['siparis_sevkiyatlar.depo'] ?? 0) === 3 && ($x['tablo']['daily_work_sessions.depo'] ?? 0) === 1 && say('siparis_sevkiyatlar', "depo = 'ÇOKLU HEDEF'") === 3);
 $x = depo_eski_veriyi_aktar($pdo, 'KARAMAN CİHAT', $hed, ['customs_declarations']);
 ok('serbest metin tablosu yalnız açıkça seçilirse aktarılır; seçilmeyince dokunulmaz', $x['satir'] === 0);
 $x = depo_eski_veriyi_aktar($pdo, [], $hed);

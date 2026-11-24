@@ -552,34 +552,54 @@ function depo_tablo_grubu(string $t): string
 
 /**
  * Tek eski adı TÜM (ya da seçili) veri kolonlarında yeni ada çeker; HER TABLO KENDİ İŞLEMİNDE (biri hata verirse diğerleri yine aktarılır).
- * @return array{satir:int,tablo:array<string,int>,hata:array<string,string>}  tablo = "tablo.kolon" => satır; hata = "tablo.kolon" => kısa mesaj
+ * Benzersiz anahtar çakışması (SQLSTATE 23000 — ör. daily_work_sessions UNIQUE(çavuş, gün, depo): hedef depoda aynı çavuş+gün kaydı zaten var)
+ * olursa o tablo IGNORE ile yeniden denenir: çakışmayan satırlar taşınır, çakışanlar ESKİ adda KALIR ve 'atlanan' olarak sayılıp raporlanır.
+ * @return array{satir:int,tablo:array<string,int>,atlanan:array<string,int>,hata:array<string,string>}
  */
 function depo_ad_aktar_ayrintili(PDO $pdo, string $eskiAd, string $yeniAd, ?array $tablolar = null): array
 {
-    $out = ['satir' => 0, 'tablo' => [], 'hata' => []];
+    $out = ['satir' => 0, 'tablo' => [], 'atlanan' => [], 'hata' => []];
     $hedef = depo_anahtar($eskiAd);
     if ($hedef === '' || $yeniAd === '') return $out;
+    $ignore = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? 'UPDATE OR IGNORE' : 'UPDATE IGNORE';
     foreach (depo_kolonlari($pdo) as [$t, $c]) {
         if ($tablolar !== null && !in_array($t, $tablolar, true)) continue;
         $anahtar = $t . '.' . $c;
-        try {
+        $dene = function (string $update) use ($pdo, $t, $c, $hedef, $yeniAd): array {
+            $n = 0; $aday = 0;
             $pdo->beginTransaction();
-            $n = 0;
             $vals = $pdo->query("SELECT DISTINCT `$c` FROM `$t` WHERE `$c` IS NOT NULL AND `$c` <> ''")->fetchAll(PDO::FETCH_COLUMN);
             foreach ($vals as $v) {
                 $v = (string)$v;
-                if ($v !== $yeniAd && depo_anahtar($v) === $hedef) {
-                    $st = $pdo->prepare("UPDATE `$t` SET `$c` = ? WHERE `$c` = ?");
-                    $st->execute([$yeniAd, $v]);
-                    $n += $st->rowCount();
-                }
+                if ($v === $yeniAd || depo_anahtar($v) !== $hedef) continue;
+                $sc = $pdo->prepare("SELECT COUNT(*) FROM `$t` WHERE `$c` = ?"); $sc->execute([$v]); $aday += (int)$sc->fetchColumn();
+                $st = $pdo->prepare("$update `$t` SET `$c` = ? WHERE `$c` = ?");
+                $st->execute([$yeniAd, $v]);
+                $n += $st->rowCount();
             }
             $pdo->commit();
+            return [$n, $aday];
+        };
+        try {
+            [$n, ] = $dene('UPDATE');
             if ($n > 0) { $out['tablo'][$anahtar] = $n; $out['satir'] += $n; }
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
-            error_log('[depo_ad_aktar_ayrintili] ' . $anahtar . ': ' . $e->getMessage());
-            $out['hata'][$anahtar] = mb_substr(preg_replace('/\s+/', ' ', $e->getMessage()), 0, 160);
+            $benzersiz = ($e instanceof PDOException) && (string)$e->getCode() === '23000';
+            if (!$benzersiz) {
+                error_log('[depo_ad_aktar_ayrintili] ' . $anahtar . ': ' . $e->getMessage());
+                $out['hata'][$anahtar] = mb_substr((string)preg_replace('/\s+/', ' ', $e->getMessage()), 0, 160);
+                continue;
+            }
+            try {   // çakışmayanları taşı, çakışanları eski adda bırak ve say
+                [$n, $aday] = $dene($ignore);
+                if ($n > 0) { $out['tablo'][$anahtar] = $n; $out['satir'] += $n; }
+                if ($aday - $n > 0) $out['atlanan'][$anahtar] = $aday - $n;
+            } catch (Throwable $e2) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('[depo_ad_aktar_ayrintili/ignore] ' . $anahtar . ': ' . $e2->getMessage());
+                $out['hata'][$anahtar] = mb_substr((string)preg_replace('/\s+/', ' ', $e2->getMessage()), 0, 160);
+            }
         }
     }
     return $out;
@@ -589,11 +609,11 @@ function depo_ad_aktar_ayrintili(PDO $pdo, string $eskiAd, string $yeniAd, ?arra
  * ESKİ depo adı/adlarındaki veriyi YENİ bir depoya aktarır (canlı modüllerde — Personel/Sipariş vb. — eski adla damgalı
  * satırlar gizlenmesin diye). $eskiAdlar tek ad ya da ad listesi; $tablolar = yalnız seçilen tablolar (null = yedek hariç hepsi).
  * Her tablo ayrı işlemdedir: bir tabloda hata olsa da diğerleri aktarılır, hatalar mesajda tablo.kolon olarak listelenir.
- * @return array{ok:bool,mesaj:string,satir:int,tablo:array<string,int>,hata:array<string,string>}
+ * @return array{ok:bool,mesaj:string,satir:int,tablo:array<string,int>,atlanan:array<string,int>,hata:array<string,string>}
  */
 function depo_eski_veriyi_aktar(PDO $pdo, string|array $eskiAdlar, int $yeniDepoId, ?array $tablolar = null): array
 {
-    $bos = ['tablo' => [], 'hata' => []];
+    $bos = ['tablo' => [], 'atlanan' => [], 'hata' => []];
     $d = depo_getir($pdo, $yeniDepoId);
     if (!$d || !(int)$d['aktif']) return ['ok' => false, 'mesaj' => 'Hedef depo geçerli ve aktif olmalı.', 'satir' => 0] + $bos;
     $adlar = array_values(array_unique(array_filter(array_map('strval', (array)$eskiAdlar), fn($a) => trim($a) !== '')));
@@ -606,19 +626,21 @@ function depo_eski_veriyi_aktar(PDO $pdo, string|array $eskiAdlar, int $yeniDepo
         foreach (depo_kolonlari($pdo) as [$t]) if (depo_tablo_grubu($t) !== 'yedek') $tablolar[$t] = $t;
         $tablolar = array_values($tablolar);
     }
-    $toplam = 0; $tablo = []; $hata = [];
+    $toplam = 0; $tablo = []; $hata = []; $atlanan = [];
     foreach ($adlar as $a) {
         $r = depo_ad_aktar_ayrintili($pdo, $a, (string)$d['ad'], $tablolar);
         $toplam += $r['satir'];
         foreach ($r['tablo'] as $k => $n) $tablo[$k] = ($tablo[$k] ?? 0) + $n;
         foreach ($r['hata'] as $k => $m) $hata[$k] = $m;
+        foreach ($r['atlanan'] as $k => $n) $atlanan[$k] = ($atlanan[$k] ?? 0) + $n;
     }
     depo_onbellek_sifirla();
-    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $yeniDepoId, null, ['operation' => 'eski_veri_aktar', 'eski_adlar' => $adlar, 'satir' => $toplam, 'tablolar' => $tablolar, 'hatali_tablolar' => array_keys($hata)]);
+    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $yeniDepoId, null, ['operation' => 'eski_veri_aktar', 'eski_adlar' => $adlar, 'satir' => $toplam, 'tablolar' => $tablolar, 'hatali_tablolar' => array_keys($hata), 'atlanan' => $atlanan]);
     $mesaj = "$toplam satır \"{$d['ad']}\" deposuna aktarıldı";
     if ($tablo) $mesaj .= ' (' . implode(', ', array_map(fn($k, $n) => "$k: $n", array_keys($tablo), $tablo)) . ')';
     $mesaj .= '.';
-    if ($toplam === 0 && !$hata) $mesaj = 'Seçilen ad(lar) seçilen tablolarda satır bulunamadı; hiçbir satır aktarılmadı.';
+    if ($toplam === 0 && !$hata && !$atlanan) $mesaj = 'Seçilen ad(lar) seçilen tablolarda satır bulunamadı; hiçbir satır aktarılmadı.';
+    if ($atlanan) $mesaj .= ' ATLANAN (hedef depoda aynı anahtarlı kayıt zaten var, ESKİ adda kaldı): ' . implode(', ', array_map(fn($k, $n) => "$k: $n", array_keys($atlanan), $atlanan)) . '.';
     if ($hata) $mesaj .= ' HATA (aktarılmadı): ' . implode('; ', array_map(fn($k, $m) => "$k — $m", array_keys($hata), $hata));
-    return ['ok' => !$hata && $toplam > 0, 'mesaj' => $mesaj, 'satir' => $toplam, 'tablo' => $tablo, 'hata' => $hata];
+    return ['ok' => !$hata && $toplam > 0, 'mesaj' => $mesaj, 'satir' => $toplam, 'tablo' => $tablo, 'atlanan' => $atlanan, 'hata' => $hata];
 }
