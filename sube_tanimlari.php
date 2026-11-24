@@ -1,11 +1,10 @@
 <?php
-// Şube Tanımları — yer tutucu sayfa (içerik sonra eklenecek). Yalnız yönetici.
+// sube_tanimlari.php — KALDIRILDI (v574, sahip kararı: şube kavramı yok; yalnız depo).
+// Deploy repodan silinen dosyayı sunucudan SİLMEZ → 410 tombstone. DB/oturum/kabuk erişimi YOK.
+// Kalıcı yol: depo_tanimlari.php
 declare(strict_types=1);
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/config/auth.php';
-$auth_user = require_login();
-if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
-render_header('Şube Tanımları');
-?>
-<div class="card"><h2>Şube Tanımları</h2><p>Bu bölüm hazırlanıyor.</p></div>
-<?php render_footer();
+http_response_code(410);
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store');
+echo '<!doctype html><meta charset="utf-8"><title>Kaldırıldı</title>'
+    . '<p>Şube Tanımları kaldırıldı (şube kavramı yok; yalnız depo). <a href="depo_tanimlari.php">Depo Tanımları</a></p>';

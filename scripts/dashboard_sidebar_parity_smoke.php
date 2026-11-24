@@ -266,7 +266,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 47, 'admin: Ana Sayfa hariç 47 benzersiz kart (29 katalog + 2 Şube/Depo Tanımları (v566) + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
+        dashboard_check(count($home) === 45, 'admin: Ana Sayfa hariç 45 benzersiz kart (28 katalog (v574: Tanımlar kalktı) + 1 Depo Tanımları (v574: Şube kalktı) + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }
@@ -289,7 +289,7 @@ foreach ($dashboardProfiles as $name => $profile) {
     if ($name === 'yeni_fis_hepsi') dashboard_check(!array_intersect(['records.php', 'cikmalar.php', 'kantar.php'], array_column($sidebar, 'href')) && count(array_intersect(['arac_yukleme_fisleri.php', 'palet_fisleri.php', 'mal_kabul_fisleri.php'], array_column($sidebar, 'href'))) === 3, 'yeni karşılıklar görünür rolde eski girişler çizilmez');
     if ($name === 'yeni_fis_yalniz_yukleme') dashboard_check(!in_array('records.php', array_column($sidebar, 'href'), true) && !in_array('kantar.php', array_column($sidebar, 'href'), true) && in_array('arac_yukleme_fisleri.php', array_column($sidebar, 'href'), true), 'yalnız Araç Yükleme Fişleri görünen rolde de eski girişler yok (v558)');
     if ($name === 'ogl_only') dashboard_check(in_array('frugro_siparis.php',$homeHrefs,true),'Eski (Frugro satırı öncesi) OGL rolü Frugro kartını korur');
-    if ($name === 'only_defs_read') dashboard_check(isset($homeLabels['definitions.php']), 'admin olmayan tanım yetkili kartı korunur');
+    if ($name === 'only_defs_read') dashboard_check(!isset($homeLabels['definitions.php']) && !in_array('definitions.php', array_column($sidebar, 'href'), true), 'v574: Tanımlar kartı/girişi KALDIRILDI (definitions.php = 410), eski defs.read yetkisi menü açmaz');
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');
     if ($name === 'dashboard_only') dashboard_check(count($home) === 0, 'yalnız dashboard yetkisinde ilgisiz kart yok');
     foreach (['attendance.employees', 'attendance.cards', 'attendance.scan'] as $legacy) {
@@ -298,7 +298,7 @@ foreach ($dashboardProfiles as $name => $profile) {
 }
 $badgeXpath = dashboard_dom(dashboard_render($dashboardProfiles['admin'], true));
 // v558: records.php / cikmalar.php kartları (rozet 11/12) kaldırıldı.
-foreach (['definitions.php' => '13', 'beyanlar.php' => '14', 'halkayit/index.php' => '15', 'mail.php' => '16', 'hesap.php' => '18', 'personel_takip.php' => '20', 'users.php' => '21', 'audit.php' => '22'] as $href => $badge) {
+foreach (['beyanlar.php' => '14', 'halkayit/index.php' => '15', 'mail.php' => '16', 'hesap.php' => '18', 'personel_takip.php' => '20', 'users.php' => '21', 'audit.php' => '22'] as $href => $badge) {
     $node = $badgeXpath->query('//a[@href="' . $href . '" and contains(@class,"home-card")]//*[contains(concat(" ",normalize-space(@class)," ")," home-card-badge ")]')->item(0);
     dashboard_check($node !== null && trim($node->textContent) === $badge, 'mevcut anonim kart rozeti korunur ' . $href);
 }

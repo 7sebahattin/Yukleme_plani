@@ -84,9 +84,12 @@ $admin_rid  = $admin_role ? (int)$admin_role['id'] : 0;
 $valid_rids = array_map('intval', array_column($all_roles, 'id'));
 
 // ── Depolar (depo sorumluluğu için) ─────────────────────────────────────────
+// v574: yeni depo sistemi açıksa (depo_gecis_aktif) kaynak `depolar` (aktif) + `depo_kullanicilar` (ID ile atama);
+// değilse eski kaynak (material_definitions + user_depolar).
+$depo_yeni = depo_gecis_aktif($pdo);
 $all_depots = [];
 try {
-    $all_depots = $pdo->query(
+    $all_depots = $depo_yeni ? depo_aktif_adlar($pdo) : $pdo->query(
         "SELECT name FROM material_definitions WHERE type='depo' AND is_active=1 ORDER BY name"
     )->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $_e) { $all_depots = []; }
@@ -94,13 +97,18 @@ try {
 // Kullanıcı → atanmış depolar haritası
 $user_depots_map = [];
 try {
-    foreach ($pdo->query("SELECT user_id, depo FROM user_depolar")->fetchAll() as $_ud) {
-        $user_depots_map[(int)$_ud['user_id']][] = (string)$_ud['depo'];
+    if ($depo_yeni) {
+        $user_depots_map = depo_kullanici_haritasi($pdo);
+    } else {
+        foreach ($pdo->query("SELECT user_id, depo FROM user_depolar")->fetchAll() as $_ud) {
+            $user_depots_map[(int)$_ud['user_id']][] = (string)$_ud['depo'];
+        }
     }
 } catch (PDOException $_e) { $user_depots_map = []; }
 
 // Bir kullanıcının depolarını POST'tan kaydet (yalnız geçerli depo adları)
-$save_user_depots = function (int $uid, array $posted) use ($pdo, $all_depots): void {
+$save_user_depots = function (int $uid, array $posted) use ($pdo, $all_depots, $depo_yeni): void {
+    if ($depo_yeni) { depo_kullanici_depolari_yaz($pdo, $uid, $posted); return; }
     $pdo->prepare("DELETE FROM user_depolar WHERE user_id = ?")->execute([$uid]);
     if (empty($all_depots)) return;
     $ins = $pdo->prepare("INSERT IGNORE INTO user_depolar (user_id, depo) VALUES (?, ?)");

@@ -123,7 +123,7 @@ let bag_ctx = {};
 const r1 = (n) => Math.round(n * 10) / 10;
 // Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
 const SAYFA_ADI = { records: 'Yükleme Planı', cikma: 'Paletleme', beyan: 'Beyanlar', kantar: 'Mal Kabul', hks: 'Hal Bildirimi',
-    rapor: 'Eski Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi', defs: 'Tanımlar',
+    rapor: 'Eski Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', siparis: 'OGL Siparişler', ptak: 'Personel Takibi',
     users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
 // Göreli href'i uygulama köküne göre yola çevir (base_url '../' dahil)
@@ -861,10 +861,13 @@ function guvenliAlanKurallari(barSel) {
         ok('B', bag, '4 sabit anında slotlara girdi (seçilme sırasıyla)', JSON.stringify(sl) === JSON.stringify(['backup', 'audit', 'roles', 'users']), `[${sl}]`);
         ok('B', bag, 'sabitler cihaza yazıldı (asya_nav_sabit_<uid>)',
             JSON.stringify(await depo(page, 'asya_nav_sabit_1')) === JSON.stringify(['backup', 'audit', 'roles', 'users']));
-        await page.click('.bn-tile[data-nav="defs"] .go'); await page.waitForTimeout(60);
+        // v574: Yönetim grubunda yalnız 4 anahtarlı karo kaldı → 5. sabit için başka grubun karosu (akordiyon: önce o grubu aç)
+        await page.evaluate(() => document.querySelector('.bn-tile[data-nav="hesap"]').closest('details').querySelector('summary').click()); await page.waitForTimeout(150);
+        await page.click('.bn-tile[data-nav="hesap"] .go'); await page.waitForTimeout(60);
         const msg = await page.textContent('#bnSheetMsg');
         const pinli = await page.$$eval('.bn-tile.pinned', els => els.map(e => e.getAttribute('data-nav')));
-        ok('B', bag, '5. sabit reddedilir ve nedeni yazılır', !pinli.includes('defs') && /En çok 4/.test(msg), `mesaj "${msg}", sabit [${pinli}]`);
+        ok('B', bag, '5. sabit reddedilir ve nedeni yazılır', !pinli.includes('hesap') && /En çok 4/.test(msg), `mesaj "${msg}", sabit [${pinli}]`);
+        await page.click('#bnSheet details.bn-grup[data-sb-grup="yonetim"] > summary'); await page.waitForTimeout(150);   // akordiyon: Yönetim'e geri dön
         await page.click('.bn-tile[data-nav="backup"] .go'); await page.waitForTimeout(60);
         sl = await gorunenSlotlar(page);
         const sab = await depo(page, 'asya_nav_sabit_1');
@@ -989,7 +992,7 @@ function guvenliAlanKurallari(barSel) {
         }),
     })));
     const acikSlug = (page) => page.evaluate(() => [...document.querySelectorAll('#bnSheet details.bn-grup')].filter(d => d.open).map(d => d.getAttribute('data-sb-grup')));
-    const PARITE = [['admin', 'home'], ['admin', 'definitions'], ['admin', 'hesap'], ['admin', 'kantar'], ['operator', 'kantar'], ['operator', 'home'], ['viewer', 'home'],
+    const PARITE = [['admin', 'home'], ['admin', 'users'], ['admin', 'hesap'], ['admin', 'kantar'], ['operator', 'kantar'], ['operator', 'home'], ['viewer', 'home'],
                     ['muhasebe_sayfa', 'kantar'], ['muhasebe_sayfa', 'cari_kartlari'], ['muhasebe_tek', 'cari_kartlari'],
                     // v555: eski sayfa ↔ yeni karşılığı seçimi (records/cikmalar/kantar ailesi) — sheet ve sidebar aynı girişi seçili gösterir
                     ['admin', 'records'], ['admin', 'cikmalar'], ['admin', 'record_view'], ['admin', 'cikma_view'], ['yeni_fis_hepsi', 'records'], ['yeni_fis_hepsi', 'kantar'],
@@ -1079,8 +1082,8 @@ function guvenliAlanKurallari(barSel) {
     }
     // Aktif grup açılışta görünür bölgeye kaydırılır (admin/home'da değil: son gruptaki bir sayfada olsaydı) — sheet ilk açılışta kaydırma konumu
     {
-        const k = sayfaBul('admin', 'definitions'); bag_ctx = { profil: 'admin', sayfa: 'definitions', w: 390 };
-        const bag = 'admin/definitions Diğer';
+        const k = sayfaBul('admin', 'users'); bag_ctx = { profil: 'admin', sayfa: 'users', w: 390 };
+        const bag = 'admin/users Diğer';
         const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
         await page.click(TASARIM.moreSel); await page.waitForTimeout(500);
         const d = await page.evaluate(() => {
@@ -1102,7 +1105,7 @@ function guvenliAlanKurallari(barSel) {
     }
     // Koyu tema + azaltılmış hareket
     {
-        const k = sayfaBul('admin', 'definitions'); bag_ctx = { profil: 'admin', sayfa: 'definitions', w: 390 };
+        const k = sayfaBul('admin', 'users'); bag_ctx = { profil: 'admin', sayfa: 'users', w: 390 };
         const lum = (c) => { const m = c.match(/[\d.]+/g).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
         const oku = (page) => page.evaluate(() => {
             const sum = document.querySelector('#bnSheet details.bn-grup:not([open]) > summary'), cs = getComputedStyle(sum);
@@ -1112,19 +1115,19 @@ function guvenliAlanKurallari(barSel) {
         let r = await ac(k, { w: 390, h: 844 }, { koyu: true });
         await r.page.click(TASARIM.moreSel); await r.page.waitForTimeout(450);
         let d = await oku(r.page);
-        ok('B', 'admin/definitions koyu', 'koyu tema: grup başlığı koyu zemin + açık yazı, sheet koyu (belirteçler temayla değişir)', lum(d.bg) < 0.25 && lum(d.fg) > 0.6 && lum(d.sheetBg) < 0.25, JSON.stringify(d));
-        if (!NO_SHOTS) { const f = path.join(SHOTS, '390_admin_definitions_diger_koyu.png'); await r.page.screenshot({ path: f }); shots.push(f); }
+        ok('B', 'admin/users koyu', 'koyu tema: grup başlığı koyu zemin + açık yazı, sheet koyu (belirteçler temayla değişir)', lum(d.bg) < 0.25 && lum(d.fg) > 0.6 && lum(d.sheetBg) < 0.25, JSON.stringify(d));
+        if (!NO_SHOTS) { const f = path.join(SHOTS, '390_admin_users_diger_koyu.png'); await r.page.screenshot({ path: f }); shots.push(f); }
         await r.ctx.close();
         r = await ac(k, { w: 390, h: 844 });
         await r.page.click(TASARIM.moreSel); await r.page.waitForTimeout(450);
         d = await oku(r.page);
-        ok('B', 'admin/definitions açık', 'açık tema: grup başlığı açık zemin + koyu yazı (koyu kural sızmıyor)', lum(d.bg) > 0.8 && lum(d.fg) < 0.4 && lum(d.sheetBg) > 0.9, JSON.stringify(d));
-        if (!NO_SHOTS) { const f = path.join(SHOTS, '390_admin_definitions_diger.png'); await r.page.screenshot({ path: f }); shots.push(f); }
+        ok('B', 'admin/users açık', 'açık tema: grup başlığı açık zemin + koyu yazı (koyu kural sızmıyor)', lum(d.bg) > 0.8 && lum(d.fg) < 0.4 && lum(d.sheetBg) > 0.9, JSON.stringify(d));
+        if (!NO_SHOTS) { const f = path.join(SHOTS, '390_admin_users_diger.png'); await r.page.screenshot({ path: f }); shots.push(f); }
         await r.ctx.close();
         r = await ac(k, { w: 390, h: 844 }, { azHareket: true });
         await r.page.click(TASARIM.moreSel); await r.page.waitForTimeout(300);
         d = await oku(r.page);
-        ok('B', 'admin/definitions', 'azaltılmış hareket: ok dönüşü geçişi yok', /^0s/.test(d.okSure), d.okSure);
+        ok('B', 'admin/users', 'azaltılmış hareket: ok dönüşü geçişi yok', /^0s/.test(d.okSure), d.okSure);
         await r.ctx.close();
     }
 
