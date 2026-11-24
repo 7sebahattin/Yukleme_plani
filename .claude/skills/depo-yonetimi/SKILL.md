@@ -20,7 +20,7 @@ description: Depo Tanımları ve yeni depo kayıt sistemi (depo_tanimlari.php, c
 3. Geçiş açıkken `ensure_definition('depo', …)` NO-OP (eski formlar eski tanım üretemez); `depot_options`, `user_assigned_depots`, `depot_color`, `role_data_scope_options`, users.php yeni kaynaktan okur.
 4. Ad değişince `depo_ad_aktar()` TÜM keşfedilen depo kolonlarını aynı işlemde yeni ada çeker. `kod` hiç değişmez.
 5. Silme yalnız hiçbir satır o adı taşımıyorsa (`depo_sil`); kullanımdaysa pasifleştir.
-6. Eski adla damgalı CANLI modül satırları (Personel/Sipariş vb.) gizlenmesin diye migrate kartında rapor + `depo_eski_veriyi_aktar` (seçili tablolar, yeni depoya).
+6. Eski adla damgalı CANLI modül satırları (Personel/Sipariş vb.) gizlenmesin diye migrate kartında rapor + `depo_eski_veriyi_aktar` (v575: ÇOKLU eski ad `eski_ad[]` + seçili tablolar; her tablo AYRI işlemde — biri hata verirse diğerleri yine aktarılır ve mesajda `tablo.kolon — hata` yazar; tablo seçilmezse işlem yapılmaz). Tablo grupları `depo_tablo_grubu()`: canlı (varsayılan işaretli) · eski · serbest (`customs_declarations.exit_depot` = depo filtresi DEĞİL, aktarma) · yedek (`*_yedek_*`: raporda gizli, aktarılmaz).
 7. Geçiş: `depo_gecis_uygula` hiçbir veri silmez/değiştirmez; `depo_gecis_geri_al` yalnız ayar satırını kaldırır (acil durum, elle).
 
 ## Davranış kuralları

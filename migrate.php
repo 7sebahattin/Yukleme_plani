@@ -393,7 +393,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     } elseif ($adim === 'geri_al') {
         $depo_mesaj[] = depo_gecis_geri_al($pdo) ? '✓ Geçiş geri alındı (eski depo davranışı döndü; veri ve eski ad defteri aynen duruyor).' : '✗ Geri alınamadı.';
     } elseif ($adim === 'aktar') {
-        $r = depo_eski_veriyi_aktar($pdo, (string)($_POST['eski_ad'] ?? ''), (int)($_POST['yeni_depo'] ?? 0), ($_POST['tablolar'] ?? null) ? array_map('strval', (array)$_POST['tablolar']) : null);
+        // v575: çoklu eski ad (eski_ad[]) + seçili tablolar; hiç tablo işaretlenmediyse HİÇBİR tablo (null = hepsi DEĞİL — açık seçim şart)
+        $r = depo_eski_veriyi_aktar($pdo, array_map('strval', (array)($_POST['eski_ad'] ?? [])), (int)($_POST['yeni_depo'] ?? 0), array_map('strval', (array)($_POST['tablolar'] ?? [])));
         $depo_mesaj[] = ($r['ok'] ? '✓ ' : '✗ ') . $r['mesaj'];
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'cari') {
@@ -1015,40 +1016,69 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       $depoRapor = depo_kullanim_satirlari($pdo);
       $depoEski  = depo_eski_adlar($pdo);
       $depoYeni  = []; foreach (depo_hepsi($pdo) as $__d) $depoYeni[(string)$__d['ad_anahtar']] = $__d;
-      $eskiSatir = []; // eski adla damgalı veri satırları
-      foreach ($depoRapor as $__r) { $__a = depo_anahtar($__r['deger']); if (isset($depoEski[$__a]) && !isset($depoYeni[$__a])) $eskiSatir[] = $__r; }
-      $eskiTablolar = array_values(array_unique(array_map(fn($__r) => $__r['tablo'], $eskiSatir)));
+      // Eski adla damgalı satırlar: grup → "tablo.kolon" → ad anahtarı → [ad, adet] (büyük/küçük harf farkı TEK satırda birleşir; yedek tabloları gizli)
+      $eskiGrup = ['canli' => [], 'eski' => [], 'serbest' => []]; $yedekSay = 0; $adToplam = [];
+      foreach ($depoRapor as $__r) {
+          $__a = depo_anahtar($__r['deger']);
+          if (!isset($depoEski[$__a]) || isset($depoYeni[$__a])) continue;
+          $__g = depo_tablo_grubu($__r['tablo']);
+          if ($__g === 'yedek') { $yedekSay += $__r['adet']; continue; }
+          $__k = $__r['tablo'] . '.' . $__r['kolon'];
+          if (!isset($eskiGrup[$__g][$__k][$__a])) $eskiGrup[$__g][$__k][$__a] = [$__r['deger'], 0];
+          $eskiGrup[$__g][$__k][$__a][1] += $__r['adet'];
+          if (!isset($adToplam[$__a])) $adToplam[$__a] = [$__r['deger'], 'canli' => 0, 'eski' => 0, 'serbest' => 0];
+          $adToplam[$__a][$__g] += $__r['adet'];
+      }
+      $grupAd = ['canli' => 'Canlı modüller (depoya göre filtrelenir — Sipariş, Frugro, Personel/PDKS, Puantaj, Ters Kart)', 'eski' => 'Eski modüller (Yükleme, Mal Kabul, Stok, Hesap, Maliyet …)', 'serbest' => 'Serbest metin (depo filtresi DEĞİL — beyan çıkış yeri vb.; aktarmayın)'];
+      $eskiVar = $adToplam !== [];
     ?>
     <h3 style="margin:18px 0 6px;">Eski depo adıyla damgalı veri (rapor — salt okunur)</h3>
-    <?php if (!$eskiSatir): ?>
+    <?php if (!$eskiVar): ?>
       <p>✓ Eski adla damgalı veri satırı yok.</p>
     <?php else: ?>
-      <div style="overflow-x:auto;"><table class="table" style="font-size:.9em;">
-        <tr><th>Tablo</th><th>Kolon</th><th>Eski depo adı</th><th style="text-align:right">Satır</th></tr>
-        <?php foreach ($eskiSatir as $__r): ?>
-        <tr><td><code><?= h($__r['tablo']) ?></code></td><td><code><?= h($__r['kolon']) ?></code></td><td><?= h($__r['deger']) ?></td><td style="text-align:right"><?= (int)$__r['adet'] ?></td></tr>
-        <?php endforeach; ?>
-      </table></div>
-      <p style="color:#555;font-size:.9em;">Geçişten sonra bu satırlar hiçbir depo seçiminde görünmez (silinmez). Canlı kullanılan bir modüldeki (ör. Personel Takibi) satırlar görünür kalsın istiyorsanız aşağıdan yeni depoya aktarın.</p>
+      <?php foreach ($eskiGrup as $__g => $__tablolar): if (!$__tablolar) continue; ?>
+      <details style="margin:8px 0;"<?= $__g === 'canli' ? ' open' : '' ?>>
+        <summary style="cursor:pointer;font-weight:600;"><?= h($grupAd[$__g]) ?></summary>
+        <div style="overflow-x:auto;"><table class="table" style="font-size:.9em;">
+          <tr><th>Tablo.kolon</th><th>Eski depo adı</th><th style="text-align:right">Satır</th></tr>
+          <?php foreach ($__tablolar as $__k => $__adlar): foreach ($__adlar as [$__ad, $__n]): ?>
+          <tr><td><code><?= h($__k) ?></code></td><td><?= h($__ad) ?></td><td style="text-align:right"><?= (int)$__n ?></td></tr>
+          <?php endforeach; endforeach; ?>
+        </table></div>
+      </details>
+      <?php endforeach; ?>
+      <?php if ($yedekSay > 0): ?><p style="color:#777;font-size:.85em;">+ <?= (int)$yedekSay ?> satır yedek tablolarında (<code>*_yedek_*</code>) — gizlendi, aktarılmaz.</p><?php endif; ?>
+      <p style="color:#555;font-size:.9em;">Geçişten sonra bu satırlar hiçbir depo seçiminde görünmez (silinmez). <strong>Canlı modüllerdeki (Sipariş, Personel …) satırlar görünür kalsın istiyorsanız aşağıdan yeni depoya aktarın.</strong></p>
       <?php $yeniAktif = array_filter($depoYeni, fn($__d) => (int)$__d['aktif'] === 1); ?>
       <?php if ($yeniAktif): ?>
-      <form method="post" style="margin-top:10px;" onsubmit="return confirm('Seçilen eski depo adındaki satırlar yeni depoya aktarılacak. Devam edilsin mi?');">
+      <form method="post" id="depoAktarForm" style="margin-top:10px;" onsubmit="return confirm('İşaretli eski depo adlarındaki satırlar, işaretli tablolarda yeni depoya aktarılacak. Devam edilsin mi?');">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="ne" value="depo">
         <input type="hidden" name="adim" value="aktar">
-        <label>Eski depo adı:
-          <select name="eski_ad" required>
-            <?php foreach (array_unique(array_map(fn($__r) => $__r['deger'], $eskiSatir)) as $__v): ?><option value="<?= h($__v) ?>"><?= h($__v) ?></option><?php endforeach; ?>
-          </select></label>
-        <label style="margin-left:8px;">Yeni depo:
+        <div style="margin:6px 0;"><strong>1) Hangi eski depo adları?</strong>
+          <a href="#" onclick="document.querySelectorAll('#depoAktarForm input[name=\'eski_ad[]\']').forEach(function(c){c.checked=true});return false;" style="margin-left:8px;">Tümünü seç</a> ·
+          <a href="#" onclick="document.querySelectorAll('#depoAktarForm input[name=\'eski_ad[]\']').forEach(function(c){c.checked=false});return false;">Hiçbirini seçme</a></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 14px;margin-bottom:10px;">
+          <?php foreach ($adToplam as $__a => $__t): ?>
+          <label><input type="checkbox" name="eski_ad[]" value="<?= h($__t[0]) ?>" <?= $__t['canli'] > 0 ? 'checked' : '' ?>>
+            <?= h($__t[0]) ?> <span style="color:#777;font-size:.85em;">(canlı: <?= (int)$__t['canli'] ?> · eski: <?= (int)$__t['eski'] ?><?= $__t['serbest'] > 0 ? ' · serbest: ' . (int)$__t['serbest'] : '' ?>)</span></label>
+          <?php endforeach; ?>
+        </div>
+        <div style="margin:6px 0;"><strong>2) Hangi tablolar?</strong> <span style="color:#777;font-size:.85em;">(canlı modüller işaretli gelir)</span></div>
+        <?php foreach ($eskiGrup as $__g => $__tablolar): if (!$__tablolar) continue;
+              $__tbl = array_values(array_unique(array_map(fn($__k) => explode('.', (string)$__k, 2)[0], array_keys($__tablolar)))); ?>
+        <div style="margin:4px 0 8px;"><em><?= h(explode(' (', $grupAd[$__g])[0]) ?>:</em>
+          <?php foreach ($__tbl as $__t): ?><label style="margin-right:10px;"><input type="checkbox" name="tablolar[]" value="<?= h($__t) ?>" <?= $__g === 'canli' ? 'checked' : '' ?>> <?= h($__t) ?></label><?php endforeach; ?>
+        </div>
+        <?php endforeach; ?>
+        <div style="margin:6px 0;"><strong>3) Hangi yeni depoya?</strong>
           <select name="yeni_depo" required>
             <?php foreach ($yeniAktif as $__d): ?><option value="<?= (int)$__d['id'] ?>"><?= h($__d['ad']) ?> (<?= h($__d['kod']) ?>)</option><?php endforeach; ?>
-          </select></label>
-        <div style="margin:8px 0;">Yalnız şu tablolar: <?php foreach ($eskiTablolar as $__t): ?>
-          <label style="margin-right:10px;"><input type="checkbox" name="tablolar[]" value="<?= h($__t) ?>" checked> <?= h($__t) ?></label>
-        <?php endforeach; ?></div>
-        <button type="submit" class="btn btn-ghost">Seçili eski depo verisini yeni depoya aktar</button>
+          </select></div>
+        <button type="submit" class="btn btn-primary">İşaretli eski veriyi yeni depoya aktar</button>
       </form>
+      <?php else: ?>
+      <p style="color:#c0392b;">✗ Aktarım için önce en az bir AKTİF yeni depo tanımlayın (Yönetim › Depo Tanımları).</p>
       <?php endif; ?>
     <?php endif; ?>
 

@@ -223,4 +223,29 @@ ok('sonraki GET: puantaj-giris kartı HAZIR (kapalı, ✓ Hazır)', preg_match('
 $r = mig_sayfa(['csrf' => csrf(), 'ne' => 'puantaj_giris']);
 ok('ikinci POST: iki tablo da "var" (idempotent)', $r['hata'] === null && substr_count($r['html'], 'puantaj_giris_kisiler: var — Tablo zaten mevcut.') === 1 && substr_count($r['html'], 'puantaj_giris_gunler: var — Tablo zaten mevcut.') === 1);
 
+echo "\n=== v575. Depolar kartı: gruplu rapor + çoklu ad aktarımı (gerçek POST) ===\n";
+rol([], true);
+$GLOBALS['_depo_ddl_calistir'] = function (PDO $p, string $ad, string $ddl): void { [$c, $ix] = siparis_ddl_sqlite($ddl); $p->exec($c); foreach ($ix as $x) $p->exec($x); };
+$d0 = depo_migrate(db());
+db()->exec('CREATE TABLE IF NOT EXISTS ters_sayim (id INTEGER PRIMARY KEY, depo TEXT)');
+db()->exec('CREATE TABLE IF NOT EXISTS loading_pallets (id INTEGER PRIMARY KEY, depo TEXT)');
+db()->exec('CREATE TABLE IF NOT EXISTS pdks_yedek_20260924_daily_work_sessions (id INTEGER PRIMARY KEY, depo TEXT)');
+db()->exec("INSERT INTO ters_sayim (depo) VALUES ('FİNİKE'),('FİNİKE'),('Finike')");
+db()->exec("INSERT INTO loading_pallets (depo) VALUES ('FİNİKE'),('KARAMAN CİHAT')");
+db()->exec("INSERT INTO pdks_yedek_20260924_daily_work_sessions (depo) VALUES ('FİNİKE')");
+depo_onbellek_sifirla();
+$yeniId = depo_ekle(db(), ['ad' => 'Merkez Depo'])['id'];
+$r = mig_sayfa();
+ok('Depolar kartı hatasız çizilir', $r['hata'] === null, (string)$r['hata']);
+ok('rapor: büyük/küçük harf farkı TEK satırda birleşir (ters_sayim.depo FİNİKE = 3)', preg_match('#ters_sayim\.depo</code></td><td>(?:FİNİKE|Finike)</td><td style="text-align:right">3</td>#u', $r['html']) === 1);
+ok('rapor: yedek tablo gizli (+ N satır yedek notu), listede pdks_yedek tablosu YOK', str_contains($r['html'], 'yedek tablolarında') && !str_contains($r['html'], 'pdks_yedek_20260924_daily_work_sessions.depo'));
+ok('form: eski ad ÇOKLU seçim (eski_ad[]), canlı tablo işaretli, eski tablo işaretsiz',
+    str_contains($r['html'], 'name="eski_ad[]"') && preg_match('#name="tablolar\[\]" value="ters_sayim" checked#', $r['html']) === 1 && preg_match('#name="tablolar\[\]" value="loading_pallets" >#', $r['html']) === 1);
+$r = mig_sayfa(['csrf' => csrf(), 'ne' => 'depo', 'adim' => 'aktar', 'eski_ad' => ['FİNİKE', 'KARAMAN CİHAT'], 'tablolar' => ['ters_sayim'], 'yeni_depo' => (string)$yeniId]);
+ok('POST aktar: sipariş satırları (3) yeni depoya taşındı, sonuç mesajı tablo.kolon ile görünür', $r['hata'] === null && str_contains($r['html'], '✓ 3 satır') && str_contains($r['html'], 'ters_sayim.depo: 3')
+    && siparis_test_say(db(), 'ters_sayim', "depo = 'MERKEZ DEPO'") === 3, (string)$r['hata']);
+ok('seçilmeyen tablo (loading_pallets) DOKUNULMADI', siparis_test_say(db(), 'loading_pallets', "depo = 'FİNİKE'") === 1 && siparis_test_say(db(), 'loading_pallets', "depo = 'KARAMAN CİHAT'") === 1);
+$r = mig_sayfa(['csrf' => csrf(), 'ne' => 'depo', 'adim' => 'aktar', 'eski_ad' => ['FİNİKE'], 'tablolar' => [], 'yeni_depo' => (string)$yeniId]);
+ok('tablo seçilmeden POST: ✗ uyarı, hiçbir şey değişmedi', str_contains($r['html'], '✗ Aktarılacak tablo seçilmedi') && siparis_test_say(db(), 'loading_pallets', "depo = 'FİNİKE'") === 1);
+
 siparis_test_bitir();
