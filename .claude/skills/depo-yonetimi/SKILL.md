@@ -26,7 +26,8 @@ description: Depo Tanımları ve yeni depo kayıt sistemi (depo_tanimlari.php, c
 ## Davranış kuralları
 - Atama yok → kullanıcı TÜM depoları görür (eski kural korunur); atama var → yalnız atandığı AKTİF depolar; hepsi pasifse `[]`. Admin kısıtsız.
 - Roller'deki depo kapsamı (`scope.depot.*`) ad hash'iyle durur; geçişten sonra seçenekler yalnız yeni depolar. Eski adlı kapsamı olan rol fail-closed (hiç depo) olur → Roller'den yeniden kaydedin.
-- Sayfa yalnız `is_admin()`. depo_sec.php hızlı ekleme geçiş açıkken `depo_ekle()` kullanır.
+- Sayfa yalnız `is_admin()`. **v575 (sahip kararı): depo_sec.php'den "Yeni Depo Ekle" KALKTI** — depo YALNIZ Yönetim › Depo Tanımları'ndan açılır (herkes için; `defs.create` artık depo açmaz). Depo yoksa seçim ekranı yöneticiye Depo Tanımları bağlantısını, diğerlerine "yöneticinizden isteyin" notunu gösterir.
+- **Giriş + Depo Seçimi görünümü (v575):** `login.php` ve `depo_sec.php` ortak `assets/giris.css` (gradyan `.lc` kartı) kullanır; mobil mekaniği (`--app-h` script'i, tam ekran kart, `overflow-y:auto`) DEĞİŞTİRME. Depo kartları `.lc-depo` (aktif: `.lc-depo-aktif`).
 
 ## Test
 `php scripts/depo_core_smoke.php` (bellek içi SQLite; keşif, çakışma, geçiş, ad aktarımı, silme) · `php scripts/migrate_panel_smoke.php` (39 kart).

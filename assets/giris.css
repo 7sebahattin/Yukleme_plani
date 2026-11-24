@@ -1,0 +1,197 @@
+/* =========================================================
+   assets/giris.css — Giriş (login.php) ve Depo Seçimi (depo_sec.php) ortak görünümü (v575)
+   Aynı gradyan "telefon ekranı" kartı (.lc). Yalnız bu iki sayfada yüklenir; style.css'e dokunmaz.
+   Mobil (<=480px): kart tam ekran, yükseklik --app-h (login.php / depo_sec.php'deki script) — DEĞİŞTİRME.
+   Sınıf adlarında ad/ads/banner parçası YOK (reklam engelleyici süzgeci).
+   ========================================================= */
+html, body {
+    margin: 0; padding: 0;
+    min-height: 100dvh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+body {
+    background: #eef1f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+}
+html[data-theme="dark"] body { background: #0b1220; }
+
+/* Kart — gradient "telefon ekranı" görünümü: üstte logo/marka,
+   altında hap (pill) girdiler ve HEMEN ALTINDA "Giriş Yap".
+   Buton eskiden kartın EN ALTINDA beyaz bir oturma kağıdı üstündeydi;
+   mobilde klavye açılınca onun arkasında kalıyor, basmak için klavyeyi
+   kapatmak/kaydırmak gerekiyordu. Artık alanlarla aynı akışta, içerik
+   dikeyde ortalı — klavye açıkken de görünür. Kartın altına sabit
+   buton GERİ KOYMA. Renkler projenin mevcut mavisi (#1d6cf0). */
+.lc {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    max-width: 400px;
+    min-height: 560px;
+    border-radius: 32px;
+    box-shadow: 0 20px 50px rgba(15,23,42,.22);
+    background: linear-gradient(160deg, #123a9c 0%, #1d6cf0 55%, #4a92ff 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.lc-decor {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,.10);
+    filter: blur(2px);
+    pointer-events: none;
+}
+.lc-decor-a { width: 220px; height: 220px; top: -90px; right: -70px; }
+.lc-decor-b { width: 160px; height: 160px; bottom: 170px; left: -60px; background: rgba(255,255,255,.08); }
+
+.lc-brand {
+    position: relative;
+    text-align: center;
+    padding: 52px 24px 6px;
+}
+.lc-logo {
+    width: 60px; height: 60px;
+    margin: 0 auto 14px;
+    border-radius: 18px;
+    background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.35);
+    display: flex; align-items: center; justify-content: center;
+}
+.lc-logo svg { width: 28px; height: 28px; stroke: #fff; }
+.lc-brand-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.3px;
+}
+.lc-brand-sub {
+    margin-top: 2px;
+    color: rgba(255,255,255,.75);
+    font-size: .85rem;
+}
+
+.lc-body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 28px 28px 32px;
+}
+.lc-error {
+    background: rgba(255,255,255,.16);
+    border: 1px solid rgba(255,255,255,.4);
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 14px;
+    font-size: .85rem;
+    text-align: center;
+}
+.lc-pill {
+    border-radius: 999px;
+    border: 1.5px solid rgba(255,255,255,.45);
+    background: rgba(255,255,255,.12);
+    padding: 0 20px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+}
+.lc-pill:focus-within {
+    border-color: rgba(255,255,255,.85);
+    background: rgba(255,255,255,.18);
+}
+.lc-pill input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #fff;
+    font-size: 16px;
+}
+.lc-pill input::placeholder { color: rgba(255,255,255,.75); }
+.lc-sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+.lc-cta {
+    width: 100%;
+    height: 50px;
+    margin-top: 6px;
+    background: #fff;
+    color: #1d6cf0;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(15,23,42,.22);
+    transition: background .15s;
+}
+.lc-cta:hover { background: #eef4ff; }
+.lc-cta:active { background: #dbe7ff; }
+html[data-theme="dark"] .lc-cta { background: #1d6cf0; color: #fff; box-shadow: none; }
+html[data-theme="dark"] .lc-cta:hover { background: #1558c7; }
+
+@media (max-width: 480px) {
+    body { padding: 0; }
+    /* height: var(--app-h) — window.innerHeight'tan gelen GERÇEK görünür
+       yükseklik (yukarıdaki script). dvh bazı Android tarayıcılarında
+       gerçekte görüneni aşıyor, kart taştığı için "Giriş Yap" ekran
+       dışına/sistem jest çubuğunun arkasına kayıyordu. overflow-y:auto
+       ek güvenlik ağı — script çalışmadan önceki ilk çizimde bile
+       içerik hiçbir zaman tamamen erişilemez olmuyor. */
+    .lc {
+        height: var(--app-h, 100dvh);
+        min-height: var(--app-h, 100dvh);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    /* Daha az dikey boşluk — kısa ekranlarda butonun kırpılma riskini azaltır */
+    .lc-brand { padding: 28px 24px 4px; }
+    .lc-logo { width: 50px; height: 50px; margin-bottom: 10px; }
+    .lc-logo svg { width: 24px; height: 24px; }
+    .lc-body { padding-top: 20px; gap: 12px; }
+    .lc-pill { height: 46px; }
+    .lc-body { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+    .lc-cta { height: 48px; }
+}
+
+/* ── Depo seçimi (depo_sec.php) ── */
+.lc-sec { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 22px 28px 12px; }
+.lc-selam { text-align: center; color: rgba(255,255,255,.85); font-size: .85rem; margin: 0 0 2px; }
+.lc-depo {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; box-sizing: border-box; min-height: 54px;
+    padding: 0 18px;
+    border-radius: 18px;
+    border: 1.5px solid rgba(255,255,255,.45);
+    background: rgba(255,255,255,.12);
+    color: #fff; font-size: 1rem; font-weight: 600; text-align: left;
+    cursor: pointer; transition: background .15s, border-color .15s;
+}
+.lc-depo:hover, .lc-depo:focus-visible { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.85); outline: none; }
+.lc-depo-nokta { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+.lc-depo-isim { flex: 1; overflow-wrap: anywhere; }
+.lc-depo-aktif { background: #fff; color: #1d6cf0; border-color: #fff; box-shadow: 0 10px 22px rgba(15,23,42,.22); }
+.lc-depo-aktif:hover, .lc-depo-aktif:focus-visible { background: #eef4ff; border-color: #fff; }
+.lc-depo-rozet { font-size: .7rem; font-weight: 700; background: #dbeafe; color: #1d6cf0; padding: 3px 9px; border-radius: 999px; }
+.lc-bos { text-align: center; color: #fff; font-size: .9rem; line-height: 1.5; padding: 16px 12px; border-radius: 18px; background: rgba(255,255,255,.12); border: 1.5px dashed rgba(255,255,255,.45); }
+.lc-bos a { color: #fff; font-weight: 700; text-decoration: underline; }
+.lc-alt { position: relative; text-align: center; padding: 6px 28px 30px; }
+.lc-alt a { color: rgba(255,255,255,.8); font-size: .85rem; text-decoration: none; }
+.lc-alt a:hover { color: #fff; text-decoration: underline; }
+html[data-theme="dark"] .lc-depo-aktif { background: #1d6cf0; color: #fff; border-color: #1d6cf0; box-shadow: none; }
+html[data-theme="dark"] .lc-depo-aktif:hover { background: #1558c7; }
+html[data-theme="dark"] .lc-depo-rozet { background: rgba(255,255,255,.2); color: #fff; }
+@media (max-width: 480px) {
+    .lc-sec { padding: 16px 20px 8px; }
+    .lc-alt { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+}
