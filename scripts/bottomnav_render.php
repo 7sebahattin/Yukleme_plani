@@ -400,6 +400,10 @@ foreach ($PROFILLER as $pk => $pr) {
         }
     }
 
+    // v575 (sahip kararı): HER hesap kendi şifresini değiştirebilir — oturumlu her profilde izinli (rol/yetki istemez, Roller'de satırı yok);
+    // muhasebe_herkese_acik_sayfalar()'dan BAĞIMSIZ yazıldı.
+    $izinli['sifre_degistirme.php'] = true;
+
     // v566: Şube/Depo Tanımları (Yönetim grubu) yalnız yönetici; kapı TABLOSU nav_yonetim_sayfalari()'ndan BAĞIMSIZ yazıldı.
     foreach (['sube_tanimlari.php', 'depo_tanimlari.php'] as $__dosya) $izinli[$__dosya] = is_admin();
 

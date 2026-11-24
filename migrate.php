@@ -34,6 +34,7 @@ require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız
 require_once __DIR__ . '/config/palet_fisleri_core.php'; // Palet Fişleri (loading_pallets'e kolon ekleyen kart)
 require_once __DIR__ . '/config/kantar_alanlari_core.php'; // Mal Kabul Alanları (kantar_fisleri'ne kolon ekleyen kart)
 require_once __DIR__ . '/config/kullanici_tercih.php';   // Kullanıcı Tercihleri (kullanici_tercihleri tablosu; yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/ajanda_core.php';          // Ajanda (ajanda_kayitlar tablosu; yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
@@ -141,6 +142,7 @@ $usip_results = []; $usip_ran = false;                          // v409 Ürün S
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
 $kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
+$aj_results = []; $aj_ran = false;                              // Ajanda (ajanda_kayitlar)
 $kal_results = []; $kal_ran = false;                              // Mal Kabul Alanları (kantar_fisleri kolonları: şoför, malın sahibi, müstahsil, bahçe)
 $pf_results = []; $pf_ran = false;                              // Palet Fişleri (loading_pallets kolonları: açıklama + müstahsil)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
@@ -389,6 +391,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($kt_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'kullanici_tercih', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'ajanda') {
+    csrf_check($_POST['csrf'] ?? null);
+    $aj_ran     = true;
+    $aj_results = ajanda_migrate($pdo);
+    foreach ($aj_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'ajanda', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'palet_fisleri') {
@@ -997,6 +1008,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="kullanici_tercih">
       <button type="submit" class="btn btn-primary">Kullanıcı Tercihleri Tablosunu Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('ajanda'); ?>
+    <h2 style="margin-top:0;">Ajanda</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>ajanda_kayitlar</code> tablosunu ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz, yeniden çalıştırmak güvenlidir).
+      Kullanıcı Ayarları › Ajanda sayfasının kişisel görev / hatırlatma kayıtlarını saklar; her kayıt yalnız sahibi tarafından görülür.
+      Çalıştırılmazsa Ajanda sayfası kurulum notu gösterir, diğer her şey aynen çalışır.
+      <?php if ($aj_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($aj_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $ajHazir = ajanda_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $ajHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ajHazir ? '✓ Tablo var' : '✗ Tablo eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="ajanda">
+      <button type="submit" class="btn btn-primary">Ajanda Tablosunu Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

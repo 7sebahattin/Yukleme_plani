@@ -180,6 +180,15 @@ foreach ($dashboardProfiles as $name => $profile) {
     $xpath = dashboard_dom($html);
     $home = dashboard_links($xpath, $dashboardHomeQuery, 'home-card-title');
     $sidebar = dashboard_links($xpath, $dashboardSidebarQuery, 'sidebar-link-label');
+    // v575 (sahip kararı): HER hesap kendi şifresini değiştirebilir → herkese açık sayfalar HER profilde hem kartta hem sidebar'da bulunmalı;
+    // sonra listeden ayrılır ki "yalnız X yetkisinde tek kart" gibi aşağıdaki YETKİ değişmezleri anlamını korusun.
+    foreach (muhasebe_herkese_acik_sayfalar() as $__ha) {
+        $__hf = $__ha . '.php';
+        dashboard_check(in_array($__hf, array_column($home, 'href'), true), $name . ': herkese açık kart ana sayfada: ' . $__hf);
+        dashboard_check(in_array($__hf, array_column($sidebar, 'href'), true), $name . ': herkese açık bağlantı sidebar\'da: ' . $__hf);
+        $home = array_values(array_filter($home, fn($c) => $c['href'] !== $__hf));
+        $sidebar = array_values(array_filter($sidebar, fn($c) => $c['href'] !== $__hf));
+    }
     $homeHrefs = array_column($home, 'href');
     $homeLabels = array_column($home, 'label', 'href');
     dashboard_check(count($homeHrefs) === count(array_unique($homeHrefs)), $name . ': her kart hedefi bir kez');
@@ -248,13 +257,19 @@ foreach ($dashboardProfiles as $name => $profile) {
     } else {
         // Admin olmayan: yalnız yetkili taşınan bağlantı çizilir; grubun yer tutucu sayfaları ve Operasyon Fişleri çizilmez.
         $sbHrefs = array_column($sidebar, 'href');
-        foreach ($dashboardCatalog as $href => $label) dashboard_check(in_array($href, $sbHrefs, true) === muhasebe_sayfa_can(substr($href, 0, -4)), $name . ': muhasebe sayfası sidebar\'da yalnız kendi kapısı açıksa ' . $href);
+        foreach ($dashboardCatalog as $href => $label) {
+            if (in_array(substr($href, 0, -4), muhasebe_herkese_acik_sayfalar(), true)) continue;   // v575: herkese açık sayfa yukarıda ayrıca denetlendi
+            dashboard_check(in_array($href, $sbHrefs, true) === muhasebe_sayfa_can(substr($href, 0, -4)), $name . ': muhasebe sayfası sidebar\'da yalnız kendi kapısı açıksa ' . $href);
+        }
     }
     foreach (['index.php', 'migrate.php', 'depo_tasima.php', 'firma_eslestirme.php', 'logout.php'] as $excluded) {
         dashboard_check(!in_array($excluded, $homeHrefs, true), $name . ': modül olmayan/eski hedef kart değil ' . $excluded);
     }
     if ($profile['admin']) {
-        foreach ($dashboardCatalog as $href => $label) dashboard_check(($homeLabels[$href] ?? null) === $label, $name . ': ortak alt kart ' . $href);
+        foreach ($dashboardCatalog as $href => $label) {
+            if (in_array(substr($href, 0, -4), muhasebe_herkese_acik_sayfalar(), true)) continue;   // v575: herkese açık sayfa yukarıda ayrıca denetlendi
+            dashboard_check(($homeLabels[$href] ?? null) === $label, $name . ': ortak alt kart ' . $href);
+        }
         foreach (nav_muhasebe_gruplari() as [$heading]) {
             $matches = 0;
             foreach ($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-section-title ")]') as $section) if (trim($section->textContent) === $heading) $matches++;
@@ -262,11 +277,12 @@ foreach ($dashboardProfiles as $name => $profile) {
         }
     } else {
         foreach (array_merge(array_keys($dashboardCatalog), ['audit.php', 'admin_db_backups.php']) as $adminOnly) {
+            if (in_array(substr($adminOnly, 0, -4), muhasebe_herkese_acik_sayfalar(), true)) continue;   // v575: herkese açık sayfa yukarıda ayrıca denetlendi
             dashboard_check(in_array($adminOnly, $homeHrefs, true) === (isset($dashboardCatalog[$adminOnly]) && muhasebe_sayfa_can(substr($adminOnly, 0, -4))), $name . ': muhasebe/admin kartı yalnız kapısı açıksa ' . $adminOnly);
         }
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 47, 'admin: Ana Sayfa hariç 47 benzersiz kart (29 katalog + 2 Şube/Depo Tanımları (v566) + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
+        dashboard_check(count($home) === 46, 'admin: Ana Sayfa hariç 46 benzersiz kart (28 yetkili katalog sayfası + 2 Şube/Depo Tanımları (v566) + 16 modül kartı; v575: herkese açık Şifre Değiştirme kartı listeden ayrı denetlenir; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
         $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
         dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
     }
