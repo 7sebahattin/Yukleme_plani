@@ -320,12 +320,9 @@ const MOBIL = (w) => w < 768;
         await page.waitForTimeout(700);   // 400ms'lik gecikmeli kayıt
         await page.reload(); await page.waitForTimeout(300);
         ok('taslak yedeği: sayfa yenilenince yazılan metin GERİ GELİR', (await page.inputValue('#mail-tr')) === 'Taslak metni — ürün hazır, çarşamba yüklenir.', await page.inputValue('#mail-tr'));
-        // v575: alt çubuğun "Diğer" sayfası (herkese açık Şifre Değiştirme yüzünden her rolde çizilir) HER ZAMAN boş bir
-        // `#bnSheetMsg[role=status]` taşır; taslak bildirimi aranırken o canlı bölge hariç tutulur.
-        const TASLAK_DURUM = '[role="status"]:not(#bnSheetMsg)';
-        ok('taslak yedeği: hedef dil de geri gelir + "geri yüklendi" bilgisi', (await page.inputValue('#mail-dil')) === 'ru' && (await page.textContent(TASLAK_DURUM)).includes('geri yüklendi'));
-        await page.click(TASLAK_DURUM + ' button');
-        ok('taslak yedeği: "Taslağı sil" metni temizler', (await page.inputValue('#mail-tr')) === '' && (await page.$(TASLAK_DURUM)) === null);
+        ok('taslak yedeği: hedef dil de geri gelir + "geri yüklendi" bilgisi', (await page.inputValue('#mail-dil')) === 'ru' && (await page.textContent('[role="status"]:not(#bnSheetMsg)')).includes('geri yüklendi'));
+        await page.click('[role="status"]:not(#bnSheetMsg) button');
+        ok('taslak yedeği: "Taslağı sil" metni temizler', (await page.inputValue('#mail-tr')) === '' && (await page.$('[role="status"]:not(#bnSheetMsg)')) === null);
         await page.fill('#mail-tr', 'Tekrar yazıldı'); await page.waitForTimeout(700);
         await page.goto('file://' + path.join(OUT, 'onay_translated.html')); await page.waitForTimeout(300);   // aynı mesaja ait onay paneli = taslak sunucuda kayıtlı
         await page.goto('file://' + path.join(OUT, 'cevap_yaz.html')); await page.waitForTimeout(300);

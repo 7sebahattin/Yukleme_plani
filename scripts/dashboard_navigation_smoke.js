@@ -36,7 +36,7 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             page.on('pageerror', error => errors.push(error.message));
             await page.goto(fixtures.admin);
             await page.locator('.home-card[href="hizli_maliyet.php"] img').waitFor({ state: 'attached' });
-            check(await page.locator('.home-card').count() === 47, name + ' all forty-seven admin destinations are cards (v555: İhracat Programı 4 + Stok Dönüşüm + Kantar Fişleri kalktı; v558: Eski Yükleme Planı/Paletleme/Mal Kabul kalktı; v566: Admin Konsolu kalktı, Şube/Depo Tanımları Yönetim\'e taşındı — dashboard_sidebar_parity_smoke.php ile aynı 47)');
+            check(await page.locator('.home-card').count() === 45, name + ' all forty-five admin destinations are cards (v555: İhracat Programı 4 + Stok Dönüşüm + Kantar Fişleri kalktı; v558: Eski Yükleme Planı/Paletleme/Mal Kabul kalktı; v566: Admin Konsolu kalktı; v574: Tanımlar + Şube Tanımları kalktı, yalnız Depo Tanımları — dashboard_sidebar_parity_smoke.php ile aynı 45)');
             check(await page.evaluate(() => {
                 const cards = new Set(Array.from(document.querySelectorAll('.home-card')).map(a => a.getAttribute('href')));
                 return Array.from(document.querySelectorAll('.sidebar-nav .sidebar-link')).every(a => a.getAttribute('href') === 'index.php' || cards.has(a.getAttribute('href')));
@@ -102,11 +102,8 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), profile + ' narrow layout fits');
             if (profile === 'only_stok_read') check(await page.locator('.home-card[href="malzeme_stok.php"]').count() === 1, 'stock-only card remains visible');
             if (profile === 'only_users_admin') check(await page.locator('.home-card[href="users.php"]').count() === 1, 'legitimate non-admin users permission retained');
-            // v575: Şifre Değiştirme HERKESE açık (rol/yetki istemez) → yalnız dashboard yetkili rolde tek kart olarak görünür; başka modül kartı YOK.
-            if (profile === 'dashboard_only') {
-                check(await page.locator('.home-card:not([href="sifre_degistirme.php"])').count() === 0, 'dashboard permission alone reveals no unauthorized module');
-                check(await page.locator('.home-card[href="sifre_degistirme.php"]').count() === 1, 'everyone-can-use password page card stays visible');
-            }
+            if (profile === 'dashboard_only') check(await page.locator('.home-card:not([href="sifre_degistirme.php"])').count() === 0, 'dashboard permission alone reveals no unauthorized module (v575: herkese açık Şifre Değiştirme kartı hariç)');
+            if (profile === 'dashboard_only') check(await page.locator('.home-card[href="sifre_degistirme.php"]').count() === 1, 'everyone-can-use password page card stays visible');
         }
         await context.close();
         proof.checks = checks;
