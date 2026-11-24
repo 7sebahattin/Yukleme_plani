@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v573');
+    define('APP_SURUM', 'v575');
 }
 
 // --- HTML kaçışı ---
@@ -441,7 +441,6 @@ function first_allowed_page(): ?string {
         // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
         // TEK yerde durur, üçüncü bir kopya ayrışma riski doğururdu.
         'personel_takip.php' => nav_ptak_gorunur(),
-        'definitions.php'    => can('defs.read'),                       // require_perm('defs.read')
         'users.php'          => can('users.admin'),                     // require_perm('users.admin')
     ];
     foreach ($adaylar as $sayfa => $izinli) {
@@ -512,7 +511,8 @@ function nav_muhasebe_gruplari(): array {
  * kullanici_tanimlari.php / veritabani_islemleri.php dosyaları yerinde, yalnız 302 yönlendirmesi). Sayfa kapısı is_admin().
  */
 function nav_yonetim_sayfalari(): array {
-    return ['sube_tanimlari.php' => ['Şube Tanımları', '🏢'], 'depo_tanimlari.php' => ['Depo Tanımları', '🏭']];
+    // v574 (sahip kararı): Şube kavramı yok (sube_tanimlari.php = 410 tombstone); Tanımlar menüsü kalktı (definitions.php = 410).
+    return ['depo_tanimlari.php' => ['Depo Tanımları', '🏭']];
 }
 
 /**
@@ -576,7 +576,6 @@ function nav_aktif_anahtar(): ?string {
     // onlar render_header()'ı hiç çağırmaz, kendi minimal HTML iskeletini
     // kullanır (sidebar zaten hiç basılmaz, "aktif" kavramı geçersizdir).
     $a_ptak = in_array($cur, nav_ptak_sayfalari(), true);
-    $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_rol   = $cur === 'roles.php';
     $a_aud   = $cur === 'audit.php';
@@ -592,7 +591,7 @@ function nav_aktif_anahtar(): ?string {
     foreach ([
         'home' => $a_home, 'records' => $a_yuk, 'cikma' => $a_cik, 'beyan' => $a_beyan,
         'kantar' => $a_kant, 'hks' => $a_hks, 'qcost' => $a_quick, 'rapor' => $a_rep, 'mstok' => $a_mstok,
-        'hesap' => $a_hes, 'mail' => $a_mail, 'siparis' => $a_sip, 'frugro' => $a_frg, 'usip' => $a_usip, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
+        'hesap' => $a_hes, 'mail' => $a_mail, 'siparis' => $a_sip, 'frugro' => $a_frg, 'usip' => $a_usip, 'ptak' => $a_ptak, 'users' => $a_usr,
         'roles' => $a_rol, 'audit' => $a_aud, 'backup' => $a_bkp,
     ] as $anahtar => $aktif) {
         if ($aktif) return $anahtar;
@@ -619,7 +618,6 @@ function nav_menu_modeli(string $base): array {
     $p_kant  = !$_fn || can('kantar.read');
     $p_stok  = !$_fn || can('stok.read');
     $p_rep   = !$_fn || can('reports.read');
-    $p_def   = !$_fn || can('defs.read');
     $p_usr   = $_fn && can('users.admin');
     $p_adm   = function_exists('is_admin') && is_admin();
     $p_beyan = !$_fn || beyan_sayfa_erisimi() || $p_adm;
@@ -664,13 +662,12 @@ function nav_menu_modeli(string $base): array {
     if ($p_quick && basename($_SERVER['PHP_SELF'] ?? '') === 'hizli_hesapla.php') $a_quick = true;   // v478
     $a_rep   = $ak === 'rapor' && !$a_quick;
     $a_ptak  = $ak === 'ptak';
-    $a_def   = $ak === 'defs';
     $a_usr   = $ak === 'users';
     $a_rol   = $ak === 'roles';
     $a_aud   = $ak === 'audit';
     $a_bkp   = $ak === 'backup';
     // Etkin sayfanın grubu (Yönetim ya da Operasyon) sunucuda AÇIK basılır.
-    $a_ynt   = $a_def || $a_usr || $a_rol || $a_aud || $a_bkp;
+    $a_ynt   = $a_usr || $a_rol || $a_aud || $a_bkp;
 
 
     $ge = fn(string $href, string $ikon, string $etiket, bool $aktif, ?string $nav = null, int $rozet = 0): array =>
@@ -711,9 +708,8 @@ function nav_menu_modeli(string $base): array {
         'Personel Takibi', $a_ptak, 'ptak');
     $ekle('operasyon', 'Operasyon', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', $o);
 
-    if ($p_adm || $p_def || $p_usr) {
+    if ($p_adm || $p_usr) {
         $o = [];
-        if ($p_def) $o[] = $ge('definitions.php', '⚙️', 'Tanımlar', $a_def, 'defs');
         // v566: Şube / Depo Tanımları (eski Admin Konsolu) — yalnız yönetici; anahtarsız öğe (alt çubuk adayı değil).
         if ($p_adm) foreach (nav_yonetim_sayfalari() as $d => [$et, $em]) $o[] = $ge($d, $em, $et, $ak === substr($d, 0, -4));
         if ($p_usr) $o[] = $ge('users.php', '👥', 'Kullanıcılar', $a_usr, 'users');
@@ -903,7 +899,6 @@ function nav_alt_sayfalar(): array {
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
         'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
         'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
-        'defs'    => ['href' => 'definitions.php',      'etiket' => 'Tanımlar',             'kisa' => 'Tanımlar',   'dar' => null,      'renk' => '#c77d08', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/defs.svg'],
         'users'   => ['href' => 'users.php',            'etiket' => 'Kullanıcılar',         'kisa' => 'Kullanıcı',  'dar' => null,      'renk' => '#3d49b5', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/users.svg'],
         'roles'   => ['href' => 'roles.php',            'etiket' => 'Roller',               'kisa' => 'Roller',     'dar' => null,      'renk' => '#48566f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/roles.svg'],
         'audit'   => ['href' => 'audit.php',            'etiket' => 'İşlem Geçmişi',        'kisa' => 'Geçmiş',     'dar' => null,      'renk' => '#b3163f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/audit.svg'],
@@ -948,7 +943,6 @@ function nav_alt_izinler(): array {
         'frugro'  => $fn && role_matrix_page_can('siparis','frugro'), // frugro_siparis.php: require_siparis('read', 'frugro') — KENDİ sayfa izni
         'usip'    => $fn && role_matrix_page_can('siparis','urun'),    // urun_siparis.php: require_siparis('read') — aynı kapı
         'ptak'    => $fn && nav_ptak_gorunur(),     // personel_takip.php — TEK kaynak
-        'defs'    => $c('defs.read'),               // definitions.php: require_perm('defs.read')
         'users'   => $c('users.admin'),             // users.php: require_perm('users.admin')
         'roles'   => $c('users.admin'),             // roles.php: require_perm('users.admin')
         'audit'   => $adm,                          // audit.php: is_admin()
@@ -1313,7 +1307,6 @@ function render_header(string $title, bool $print_mode = false): void {
         $_nav_rec   = !function_exists('can') || can('records.read');
         $_nav_rep   = !function_exists('can') || can('reports.read');
         $_nav_stok  = !function_exists('can') || can('stok.read');
-        $_nav_def   = !function_exists('can') || can('defs.read');
         $_nav_users = function_exists('can') && can('users.admin');
         ?>
         <nav class="topnav">
@@ -1339,9 +1332,6 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php if ($_nav_stok): ?>
             <a href="<?= $base ?>stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
             <a href="<?= $base ?>malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
-            <?php endif; ?>
-            <?php if ($_nav_def): ?>
-            <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
             <?php endif; ?>
             <?php if ($_nav_users): ?>
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
@@ -2289,7 +2279,9 @@ function depot_color(string $name): string {
     static $cache = [];
     if (isset($cache[$name])) return $cache[$name];
     $stored = null;
-    try {
+    if (function_exists('depo_gecis_aktif') && depo_gecis_aktif(db())) {
+        $stored = depo_renk(db(), $name);   // v574: yeni sistem — renk `depolar.renk`
+    } else try {
         $st = db()->prepare("SELECT color FROM material_definitions WHERE type='depo' AND name = ? LIMIT 1");
         $st->execute([$name]);
         $stored = $st->fetchColumn() ?: null;
@@ -2376,6 +2368,9 @@ function sync_depot_name_in_data(string $canonical, string $old = ''): int {
 function ensure_definition(string $type, string $name): void {
     $name = tr_upper($name);
     if ($name === '') return;
+    // v574: yeni depo sistemi açıksa eski formlar `material_definitions`'a depo SESSİZCE EKLEYEMEZ (eski/yeni karışmasın);
+    // depo yalnız Yönetim › Depo Tanımları'ndan açılır.
+    if ($type === 'depo' && function_exists('depo_gecis_aktif') && depo_gecis_aktif(db())) return;
     try {
         $pdo = db();
         $st  = $pdo->prepare("SELECT name FROM material_definitions WHERE type = ?");

@@ -94,7 +94,7 @@ if ($beyanOku) {
     try {
         $beyanBaglar = siparis_beyan_baglar($pdo, $id, false);
         if ($esle && !$kapali) $beyanOneri = siparis_beyan_oneriler($pdo, $sev, 5);
-        if ($esle && $beyanQ !== '') $beyanAra = siparis_beyan_ara($pdo, $beyanQ, 10);
+        if ($esle) $beyanAra = siparis_beyan_acik_liste($pdo, $beyanQ, 30);   // v576: açıktaki beyanlar liste (q = süzgeç)
     } catch (PDOException $e) {
         error_log('[siparis_view] beyan: ' . $e->getMessage());
         $beyanHata = true;
@@ -576,7 +576,7 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
           </div>
         <?php endforeach; ?>
         <?php if ($esle): ?>
-          <?php if (!$beyanBaglar): ?><p class="sip-bilgi" role="note">Beyan otomatik eşleşmediyse parti no, beyan no ya da plaka ile arayıp elle bağlayabilirsiniz<?= can_beyan('create') ? '; beyan henüz yoksa <a href="beyan_create.php">yeni beyan oluşturun</a>' : '' ?>.</p><?php endif; ?>
+          <?php if (!$beyanBaglar): ?><p class="sip-bilgi" role="note">Beyan otomatik eşleşmediyse aşağıdaki açıktaki beyanlar listesinden seçip bağlayabilirsiniz; listede yoksa "Beyan ekle" ile elle ekleyin.</p><?php endif; ?>
           <?php if ($beyanOneri): ?>
             <h3 class="sip-grup-bas">Öneriler</h3>
             <?php foreach ($beyanOneri as $o): $b = $o['beyan']; ?>
@@ -589,18 +589,23 @@ $pklHazir = (int)$sev['var_pkl'] === 1;
               </div>
             <?php endforeach; ?>
           <?php endif; ?>
+          <h3 class="sip-grup-bas">Açıktaki beyanlar <span class="sip-soluk">(hiçbir sevkiyata bağlı değil<?= count($beyanAra) >= 30 ? ' · en yeni 30' : '' ?>)</span></h3>
           <form method="get" action="siparis_view.php#beyan" class="sip-beyan-ara"><input type="hidden" name="id" value="<?= $id ?>">
-            <label class="sip-sr" for="sipBeyanQ">Beyan ara</label>
-            <input type="search" id="sipBeyanQ" name="beyan_q" value="<?= h($beyanQ) ?>" placeholder="Beyan no, parti no ya da plaka ara…"><button type="submit" class="btn btn-sm">Ara</button></form>
-          <?php if ($beyanQ !== ''): ?>
-            <?php if (!$beyanAra): ?><p class="muted">"<?= h($beyanQ) ?>" için beyan bulunamadı.</p><?php endif; ?>
-            <?php foreach ($beyanAra as $b): ?>
-              <div class="sip-beyan-kart">
-                <div class="sip-beyan-ust"><a href="beyan_view.php?id=<?= (int)$b['id'] ?>"><strong>Beyan #<?= (int)$b['id'] ?></strong></a> <?= beyan_badge_html((string)$b['status']) ?></div>
-                <div class="sip-soluk">Parti <?= h((string)($b['party_no'] ?? '—')) ?> · <?= h(trim((string)($b['tractor_plate'] ?? '') . ' ' . (string)($b['vehicle_plate'] ?? ''))) ?: '—' ?></div>
-                <form method="post" action="siparis_beyan_bagla.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="bagla"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="beyan_id" value="<?= (int)$b['id'] ?>"><input type="hidden" name="tur" value="elle"><button type="submit" class="btn btn-sm btn-primary">Bağla</button></form>
-              </div>
-            <?php endforeach; ?>
+            <label class="sip-sr" for="sipBeyanQ">Listeyi süz</label>
+            <input type="search" id="sipBeyanQ" name="beyan_q" value="<?= h($beyanQ) ?>" placeholder="Listeyi süz: beyan no, parti no ya da plaka…"><button type="submit" class="btn btn-sm">Süz</button><?php if ($beyanQ !== ''): ?> <a class="btn btn-sm" href="siparis_view.php?id=<?= $id ?>#beyan">Temizle</a><?php endif; ?></form>
+          <?php if (!$beyanAra): ?><p class="muted"><?= $beyanQ !== '' ? '"' . h($beyanQ) . '" için açıkta beyan yok.' : 'Açıkta (bağlanmamış) beyan yok.' ?></p><?php endif; ?>
+          <div class="sip-beyan-acik" style="max-height:420px;overflow-y:auto">
+          <?php foreach ($beyanAra as $b): ?>
+            <div class="sip-beyan-kart">
+              <div class="sip-beyan-ust"><a href="beyan_view.php?id=<?= (int)$b['id'] ?>"><strong>Beyan #<?= (int)$b['id'] ?></strong></a> <?= beyan_badge_html((string)$b['status']) ?></div>
+              <div class="sip-soluk">Parti <?= h((string)($b['party_no'] ?? '—')) ?> · <?= h(trim((string)($b['tractor_plate'] ?? '') . ' ' . (string)($b['vehicle_plate'] ?? ''))) ?: '—' ?></div>
+              <div class="sip-soluk"><?= $b['net_kg'] !== null ? h(fmt_kg($b['net_kg'])) . ' kg net' : 'net —' ?> · <?= $b['pallet_count'] !== null ? (int)$b['pallet_count'] . ' palet' : 'palet —' ?></div>
+              <form method="post" action="siparis_beyan_bagla.php" class="sip-satir-form" data-sip-tek><?= sipui_csrf() ?><input type="hidden" name="islem" value="bagla"><input type="hidden" name="sid" value="<?= $id ?>"><input type="hidden" name="beyan_id" value="<?= (int)$b['id'] ?>"><input type="hidden" name="tur" value="elle"><button type="submit" class="btn btn-sm btn-primary">Bağla</button></form>
+            </div>
+          <?php endforeach; ?>
+          </div>
+          <?php if (can_beyan('create')): ?>
+            <p class="sip-bilgi" role="note">Listede yoksa: <a class="btn btn-sm btn-primary" href="beyan_create.php?sip_sid=<?= $id ?>">➕ Beyan ekle</a> — kaydedince beyan bu sevkiyata otomatik bağlanır.</p>
           <?php endif; ?>
         <?php elseif (!$esle && $beyanBaglar === []): ?>
           <p class="sip-bilgi" role="note">Beyan bağlamak için siparis.match yetkisi gerekir.</p>

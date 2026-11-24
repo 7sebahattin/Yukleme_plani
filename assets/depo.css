@@ -1,0 +1,40 @@
+/* =========================================================
+   assets/depo.css — Depo Tanımları (depo_tanimlari.php, v574)
+   Yalnız bu sayfada yüklenir. Yalnız `depo-` önekli seçiciler (EasyList süzgecine takılan
+   ad/ads/banner parçası YOK). Mobil öncelikli; sabit px alt pay yok.
+   ========================================================= */
+.depo-not { margin-bottom: 14px; }
+.depo-not p { margin: 6px 0 0; }
+.depo-not-uyari { border-left: 4px solid #d97706; }
+.depo-not-kucuk { color: var(--muted, #6b7280); font-size: .85rem; margin: 4px 0 10px; }
+.depo-form { margin-bottom: 16px; }
+.depo-form h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.depo-form input[type="text"] { width: 100%; max-width: 420px; }
+.depo-satir { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; margin: 12px 0 14px; }
+.depo-renk { display: inline-flex; align-items: center; gap: 8px; }
+.depo-renk input[type="color"] { width: 40px; height: 32px; padding: 0; border: 1px solid var(--border, #d1d5db); border-radius: 6px; background: none; }
+.depo-chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.depo-kul-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 12px; margin-bottom: 14px; }
+.depo-aksiyon { display: flex; gap: 10px; flex-wrap: wrap; }
+.depo-sil { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #d1d5db); }
+.depo-sil-btn { color: #b42318; border-color: #f0c0c0; }
+.depo-liste { list-style: none; margin: 0; padding: 0; }
+.depo-oge { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.depo-oge:last-child { border-bottom: 0; }
+.depo-pasif { opacity: .6; }
+.depo-nokta { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(0,0,0,.1); }
+.depo-bilgi { flex: 1 1 auto; min-width: 0; }
+.depo-ad { font-weight: 600; overflow-wrap: anywhere; }
+.depo-alt { color: var(--muted, #6b7280); font-size: .85rem; overflow-wrap: anywhere; }
+.depo-kod { font: 600 .72rem/1 ui-monospace, monospace; background: var(--primary-soft, #eef2ff); color: var(--muted, #475569); padding: 2px 6px; border-radius: 4px; vertical-align: middle; }
+.depo-rozet { font-size: .72rem; background: #fde8e8; color: #b42318; padding: 2px 6px; border-radius: 4px; vertical-align: middle; }
+@media (max-width: 767px) {
+    .depo-form input[type="text"] { max-width: none; }
+}
+
+/* Koyu tema (html[data-theme="dark"]) — açık sabit renklerin karşılıkları */
+html[data-theme="dark"] .depo-not-uyari { border-left-color: #f59e0b; }
+html[data-theme="dark"] .depo-kod { background: rgba(148,163,184,.18); color: #cbd5e1; }
+html[data-theme="dark"] .depo-rozet { background: rgba(239,68,68,.2); color: #fca5a5; }
+html[data-theme="dark"] .depo-sil-btn { color: #fca5a5; border-color: rgba(239,68,68,.4); }
+html[data-theme="dark"] .depo-nokta { box-shadow: 0 0 0 1px rgba(255,255,255,.25); }

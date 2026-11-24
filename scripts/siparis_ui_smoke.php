@@ -854,8 +854,13 @@ $__d0 = (string)$db->query('SELECT durum FROM siparis_sevkiyatlar WHERE id = ' .
 $db->exec("UPDATE siparis_sevkiyatlar SET durum = 'evrak_gonderildi' WHERE id = " . (int)$ID['s31']);
 $__k = sayfa('siparis_view.php', ['id' => $ID['s31']]);
 ok('v452 beyan kartı: kapalı sevkiyat + bağ yok → arama/Bağla formu VAR (elle bağlama) + yönlendirme notu', temiz($__k) && str_contains($__k['html'], 'id="sipBeyanQ"') && str_contains($__k['html'], 'Beyan otomatik eşleşmediyse') && !str_contains($__k['html'], '<h1 class="sip-h1">TC900031.10 <span class="sip-parti-btn"'));
-$__ka = sayfa('siparis_view.php', ['id' => $ID['s31'], 'beyan_q' => 'TC900001']);
-ok('v452 kapalı sevkiyatta arama sonucu "Bağla" düğmesi (tur=elle)', str_contains($__ka['html'], 'name="tur" value="elle"'));
+$db->exec("INSERT INTO customs_declarations (party_no, status, created_at, updated_at) VALUES ('ACIKLISTE-76', 'beyan_acildi', '" . date('Y-m-d H:i:s') . "', '" . date('Y-m-d H:i:s') . "')");
+$__acik = (int)$db->lastInsertId();
+$__ka = sayfa('siparis_view.php', ['id' => $ID['s31']]);
+ok('v576 açıktaki beyanlar LİSTE (arama gerekmez): bağlanmamış beyan + "Bağla" (tur=elle) + "Beyan ekle"', str_contains($__ka['html'], 'ACIKLISTE-76') && str_contains($__ka['html'], 'name="tur" value="elle"') && str_contains($__ka['html'], 'beyan_create.php?sip_sid=' . (int)$ID['s31']));
+$__kb = sayfa('siparis_view.php', ['id' => $ID['s31'], 'beyan_q' => 'TC900001']);
+ok('v576 başka sevkiyata AKTİF bağlı beyan açıktaki listede YOK (TC900001) ve süzgeç çalışır', !str_contains($__kb['html'], 'TC900001-A</strong>') && !str_contains($__kb['html'], 'ACIKLISTE-76'));
+$db->exec('DELETE FROM customs_declarations WHERE id = ' . $__acik);
 $db->exec("UPDATE siparis_sevkiyatlar SET durum = " . $db->quote($__d0) . " WHERE id = " . (int)$ID['s31']);
 rol($ADMIN, false);
 $__y = sayfa('siparis_view.php', ['id' => $ID['s31']]);

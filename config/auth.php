@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/beyan_permissions.php';
 require_once __DIR__ . '/role_permission_matrix.php';
 require_once __DIR__ . '/role_data_scope.php';
+require_once __DIR__ . '/depo_core.php';   // v574: yeni depo kayıt sistemi (geçiş açılana kadar eski davranış sürer)
 
 const SESSION_DURATION_HOURS = 24;
 const AUTH_COOKIE_NAME       = 'asya_session';
@@ -467,6 +468,10 @@ function user_assigned_depots(?int $user_id = null): ?array {
         if ($st->fetchColumn()) { return $cache[$user_id] = null; }
     } catch (PDOException $e) { return $cache[$user_id] = role_depot_scope_intersect(null, $roleScope); }
 
+    // v574: yeni depo sistemi açıksa atama `depo_kullanicilar` (ID) tablosundan okunur; eski `user_depolar` ad tablosu YOK SAYILIR.
+    if (depo_gecis_aktif(db())) {
+        return $cache[$user_id] = role_depot_scope_intersect(depo_atanan_adlar(db(), $user_id), $roleScope);
+    }
     try {
         $st = db()->prepare("SELECT depo FROM user_depolar WHERE user_id = ?");
         $st->execute([$user_id]);
@@ -493,6 +498,14 @@ const DEPOT_COOKIE_NAME = 'asya_depo';
 function depot_options(): array {
     static $cache = null;
     if ($cache !== null) return $cache;
+
+    // v574: yeni depo sistemi açıksa seçenekler YALNIZ `depolar` (aktif) kaydından gelir; eski tanımlar/serbest metin görünmez.
+    if (depo_gecis_aktif(db())) {
+        $defs = depo_aktif_adlar(db());
+        $assigned = user_assigned_depots();
+        if ($assigned !== null) $defs = array_values(array_filter($defs, fn($d) => in_array($d, $assigned, true)));
+        return $cache = $defs;
+    }
 
     $defs = [];
     try {

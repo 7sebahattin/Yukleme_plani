@@ -13,6 +13,7 @@ $ROOT = dirname(__DIR__);
 require_once $ROOT . '/config/role_permission_matrix.php';
 require_once $ROOT . '/config/role_data_scope.php';
 require_once $ROOT . '/config/beyan_permissions.php';
+require_once $ROOT . '/config/depo_core.php';   // v574: users.php yeni depo kaynağını (depo_gecis_aktif) çağırır
 $PDO_TEST = new PDO('sqlite::memory:');
 $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);

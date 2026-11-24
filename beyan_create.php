@@ -10,6 +10,9 @@ $auth_user = require_login();
 if (!can_beyan('create')) forbidden();
 
 $errors = [];
+// v576: OGL sevkiyat sayfasından "Beyan ekle" ile gelindiyse kaydedilen beyan o sevkiyata otomatik bağlanır.
+$sip_sid = (int)($_POST['sip_sid'] ?? $_GET['sip_sid'] ?? 0);
+if ($sip_sid > 0 && !(function_exists('can_siparis') && can_siparis('match'))) $sip_sid = 0;
 $f = [
     'raw_text'          => '',
     'unmatched_text'    => '',
@@ -172,7 +175,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'status'       => $f['status'],
         ]);
 
-        set_flash('success', 'Beyan başarıyla oluşturuldu.');
+        $sip_not = '';
+        if ($sip_sid > 0 && can_beyan('read')) {
+            require_once __DIR__ . '/config/siparis_core.php';
+            require_once __DIR__ . '/config/siparis_beyan.php';
+            $sev = siparis_sema_hazir(db()) ? siparis_sevkiyat(db(), $sip_sid) : null;
+            if ($sev !== null && siparis_gorunur($sev) && role_ogl_can((string)($sev['durum'] ?? ''), 'edit')) {
+                $r = siparis_beyan_bagla(db(), $sip_sid, $new_id, $user_id, 'elle', 'Sevkiyat sayfasından eklendi');
+                if ($r['ok']) {
+                    set_flash('success', 'Beyan oluşturuldu ve sevkiyata bağlandı.');
+                    header('Location: siparis_view.php?id=' . $sip_sid . '#beyan');
+                    exit;
+                }
+                $sip_not = ' Sevkiyata bağlanamadı: ' . (string)($r['hata'] ?? '');
+            } else {
+                $sip_not = ' Sevkiyata bağlanamadı (sevkiyat bulunamadı ya da yetki yok).';
+            }
+        }
+        set_flash('success', 'Beyan başarıyla oluşturuldu.' . $sip_not);
         header('Location: beyan_view.php?id=' . $new_id);
         exit;
     }
