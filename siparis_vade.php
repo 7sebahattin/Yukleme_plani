@@ -49,7 +49,7 @@ $al = static fn(string $k, $varsayilan) => $o[$k] ?? $v[$k] ?? $bh[$k] ?? $varsa
 $bhKurus = (int)$o['bu_hafta_kurus'];
 $bhKalan = max(0, (int)($bh['kalan_kisim_kurus'] ?? 0));
 $bhKesin = isset($bh['kesin_kurus']) ? (int)$bh['kesin_kurus'] : $bhKurus - $bhKalan;
-$bhAna = $bhKalan > 0 ? $bhKesin : $bhKurus;   // büyük rakam: faturası girilmiş KESİN tutar (kalan yoksa eski rakam)
+$bhAna = $bhKurus;   // v573: büyük rakam = TOPLAM beklenen (2. araç invoice'ları muhasebede kesilmiş; yalnız sisteme girilmemiş — "kesin değil" sayılmaz)
 $uy = is_array($o['uyum'] ?? null) ? $o['uyum'] : [];
 $tutarli = $uy ? (bool)($uy['tutarli'] ?? true) : true;
 $sapma = (int)($uy['sapma_kurus'] ?? 0);
@@ -185,9 +185,9 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   <section class="sv-ana<?= $tutarli ? '' : ' sv-ana-hata' ?>" id="svBuHafta" aria-label="Bu hafta beklenen ödeme">
     <?php if (!$tutarli): ?><p class="sv-hata-bant" role="alert" id="svDogrulanamadi">RAKAM DOĞRULANAMADI — patrona vermeyin. Cari bakiyeyle sapma: <?= h($isaretli($sapma)) ?> EUR</p><?php endif; ?>
     <div>
-      <span class="sv-etiket"><?= $tutarli ? 'Bu hafta OGL\'den beklenen ödeme' . ($bhKalan > 0 ? ' — KESİN (faturası girilmiş)' : '') : 'Hesaplanan rakam (doğrulanamadı)' ?></span>
+      <span class="sv-etiket"><?= $tutarli ? 'Bu hafta OGL\'den beklenen ödeme' : 'Hesaplanan rakam (doğrulanamadı)' ?></span>
       <span class="sv-tutar"><?= h($eur($bhAna)) ?></span>
-      <?php if ($bhKalan > 0): ?><span class="sv-kalan-satir" id="svKalanKisim">+ <strong><?= h($eur($bhKalan)) ?></strong> faturası girilmemiş kalan kısım (kesin değil) = olası toplam <strong><?= h($eur($bhKurus)) ?></strong></span><?php endif; ?>
+      <?php if ($bhKalan > 0): ?><span class="sv-kalan-satir" id="svKalanKisim">İçinde <strong><?= h($eur($bhKalan)) ?></strong> ikinci araç invoice'ı sisteme girilmemiş sevkiyatlardan (tutar sevkiyattan hesaplandı) · invoice'ı girilenler <strong><?= h($eur($bhKesin)) ?></strong></span><?php endif; ?>
       <span class="sv-gun"><?= h($gunAd($bh['odeme_gunu']) . ' ' . $tarih($bh['odeme_gunu'])) ?> ödeme günü</span>
     </div>
     <div class="sv-detay">
@@ -221,7 +221,7 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   <!-- 2) Özet kartlar -->
   <div class="print-summary-row">
     <div class="print-summary-box"><span class="psb-label">Gelecek hafta</span><span class="psb-value"><?= h($eur((int)$o['gelecek_hafta_kurus'])) ?></span><span class="sc-alt"><?= h($gunAd((string)$o['gelecek_odeme_gunu']) . ' ' . $tarih((string)$o['gelecek_odeme_gunu'])) ?> · <?= (int)$o['gelecek_hafta_sevkiyat'] ?> fatura</span></div>
-    <div class="print-summary-box psb-warn"><span class="psb-label">Açık alacak (ödenmemiş invoice)</span><span class="psb-value"><?= h($eur((int)$o['acik_kurus'])) ?></span><span class="sc-alt"><?= (int)$o['acik_sevkiyat'] ?> fatura · kesintiler düşülmüş · invoice toplamı <?= h(siparis_cari_para((int)$o['fatura_toplam_kurus'])) ?> − kapanan fatura <?= h(siparis_cari_para((int)$o['odenen_fatura_kurus'])) ?> (kasaya giren <?= h(siparis_cari_para($kasaK)) ?><?= $avFark > 0 ? ' + avizoda düşülen fark ' . h(siparis_cari_para($avFark)) : '' ?>)<?= (int)$o['mahsup_kurus'] > 0 ? ' · kasaya girenin ' . h(siparis_cari_para((int)$o['mahsup_kurus'])) . ' kadarı tahmini mahsup' : '' ?><?= $kalanTop > 0 ? ' · içinde faturası girilmemiş kalan kısım ' . h(siparis_cari_para($kalanTop)) . ' (kesin değil)' : '' ?></span></div>
+    <div class="print-summary-box psb-warn"><span class="psb-label">Açık alacak (ödenmemiş invoice)</span><span class="psb-value"><?= h($eur((int)$o['acik_kurus'])) ?></span><span class="sc-alt"><?= (int)$o['acik_sevkiyat'] ?> fatura · kesintiler düşülmüş · invoice toplamı <?= h(siparis_cari_para((int)$o['fatura_toplam_kurus'])) ?> − kapanan fatura <?= h(siparis_cari_para((int)$o['odenen_fatura_kurus'])) ?> (kasaya giren <?= h(siparis_cari_para($kasaK)) ?><?= $avFark > 0 ? ' + avizoda düşülen fark ' . h(siparis_cari_para($avFark)) : '' ?>)<?= (int)$o['mahsup_kurus'] > 0 ? ' · kasaya girenin ' . h(siparis_cari_para((int)$o['mahsup_kurus'])) . ' kadarı tahmini mahsup' : '' ?><?= $kalanTop > 0 ? ' · içinde 2. araç invoice\'ı sisteme girilmemiş ' . h(siparis_cari_para($kalanTop)) : '' ?></span></div>
     <div class="print-summary-box psb-ok"><span class="psb-label">Kasaya giren (avizolardan)</span><span class="psb-value"><?= h($eur($kasaK)) ?></span><span class="sc-alt"><?= (int)$o['odeme_adet'] ?> ödeme<?= $o['son_odeme'] !== null ? ' · son: ' . h($tarih((string)$o['son_odeme']['tarih']) . ' · ' . $eur((int)$o['son_odeme']['kurus'])) : '' ?> · gerçekten gelen para<?= $avFark > 0 ? ' · kapanan fatura ' . h(siparis_cari_para((int)$o['odenen_fatura_kurus'])) . ' (avizoda düşülen fark ' . h(siparis_cari_para($avFark)) . ' dahil)' : '' ?></span></div>
     <div class="print-summary-box"><span class="psb-label">Invoice'u kesilmemiş</span><span class="psb-value"><?= (int)$o['faturasiz_sevkiyat'] ?> sevkiyat</span><span class="sc-alt"><?= (int)$o['faturasiz_kurus'] > 0 ? 'gelen fiyatla ≈ ' . h($eur((int)$o['faturasiz_kurus'])) . ' · ' : '' ?>takvime girmez</span></div>
     <div class="print-summary-box"><span class="psb-label">Geçmiş ödeme süresi</span><span class="psb-value"><?= $gec['n'] > 0 ? ((int)$gec['min'] === (int)$gec['max'] ? (int)$gec['min'] : (int)$gec['min'] . '–' . (int)$gec['max']) . ' gün' : '—' ?></span><span class="sc-alt"><?= $gec['n'] > 0 ? h(mb_strtolower($bazlar[$p['baz']])) . 'nden avizoya · ' . (int)$gec['n'] . ' fatura · medyan ' . (int)$gec['medyan'] . ' gün' : 'avizoyla eşleşmiş ödeme yok' ?></span></div>
@@ -263,7 +263,7 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
       <?php foreach ($v['acik'] as $a):
         $not = [];
         $kalanK = !empty($a['kalan_kisim']);
-        if ($kalanK) $not[] = 'Kalan kısım — invoice girilmemiş, kesin değil';
+        if ($kalanK) $not[] = '2. araç invoice\'ı sisteme girilmemiş — tutar sevkiyattan hesaplandı';
         if ($a['gecikmis']) $not[] = 'Vadesi geçti';
         if ($a['tarihsiz']) $not[] = 'Tarih yok — bu haftaya alındı';
         if ($a['pc_yok']) $not[] = 'Gelen fiyat (PC) bekleniyor';
@@ -278,7 +278,7 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
         <td><?= h($tarih($a['sev']['tarih'] ?? null)) ?></td>
         <td class="num sv-yg"><?= $a['yukleme_gun'] === null ? '—' : (int)$a['yukleme_gun'] ?></td><?= siparis_cari_kimlik_html($a['sev']) ?>
         <?php $fNo = (string)($a['sev']['fatura']['no'] ?? ''); ?>
-        <?php if ($kalanK): ?><td class="sv-fno">— (kalan kısım · invoice girilmemiş)<?= $fNo !== '' ? '<span class="sv-gri" title="Ödenmiş faturanın numarası">ödenmiş fatura: ' . h($fNo) . '</span>' : '' ?></td>
+        <?php if ($kalanK): ?><td class="sv-fno">— (2. araç · invoice sisteme girilmemiş)<?= $fNo !== '' ? '<span class="sv-gri" title="Ödenmiş faturanın numarası">ödenmiş fatura: ' . h($fNo) . '</span>' : '' ?></td>
         <?php else: ?><td><?= h($fNo !== '' ? $fNo : '—') ?></td><?php endif; ?>
         <td><?= h($tarih($a['sev']['fatura']['tarih'] ?? null)) ?></td>
         <td><?= h($tarih($a['vade_tarih'])) ?></td>
@@ -295,7 +295,7 @@ details.sv-gecmis > summary { cursor: pointer; font-weight: 700; margin: 6px 0; 
   <?php if ($v['bekleyen_kesinti']): ?>
   <!-- 5) Ödenmiş faturaların henüz düşülmemiş kesintileri -->
   <h3 class="pr-section">Bu haftanın ödemesinden düşülecek kesintiler</h3>
-  <p class="pr-note">Faturası ödenmiş (ya da sevkiyatı bilinmeyen) ve henüz hiçbir avizoda düşülmemiş OGL kesintileri (debit note).</p>
+  <p class="pr-note">Faturası ödenmiş (ya da sevkiyatı bilinmeyen) ve henüz hiçbir avizoda düşülmemiş OGL kesintileri (debit note) ile Ödemeler sayfasındaki "OGL kesintisi ekle" ile elle girilen kalıcı kesintiler (ör. muhasebedeki hesap düzeltmesi).</p>
   <div class="sc-kaydir"><table class="print-table sc-tablo" id="svKesinti">
     <thead><tr><th>Belge no</th><th>Tarih</th><th>Sipariş no</th><th>Neden</th><th class="num">Tutar (EUR)</th></tr></thead>
     <tbody>
