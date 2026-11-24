@@ -1,7 +1,7 @@
 <?php
 // =========================================================
 // ajanda.php — Ajanda: KİŞİSEL görev / hatırlatma defteri (v574). Mantık config/ajanda_core.php.
-//   ?gorunum=acik|tamam|tumu   (varsayılan acik: gecikmiş · bugün · yarın · bu hafta · daha sonra)
+//   ?ay=YYYY-MM  (ay takvimi, v576)  ·  ?gun=YYYY-MM-DD (seçili gün paneli)  ·  ?gorunum=acik|tamam|tumu (alttaki liste)
 // Her kayıt yalnız sahibine aittir (yönetici dahil kimse başkasınınkini görmez); depo filtresi yok.
 // POST (PRG): ekle · guncelle · durum · sil · tamamlananlari_sil — CSRF + kullanıcı id'si oturumdan.
 // Şema: ajanda_kayitlar — yalnız migrate.php › "Ajanda" kartı; tablo yoksa kurulum notu. Kapı: muhasebe_sayfa_can.
@@ -10,6 +10,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/ajanda_core.php';
+require_once __DIR__ . '/config/ajanda_ui.php';
 $auth_user = require_login();
 if (!muhasebe_sayfa_can('ajanda')) { forbidden(); }
 header('Cache-Control: no-store');
@@ -19,6 +20,8 @@ $hazir = ajanda_hazir($pdo);
 
 $gorunum = in_array($_GET['gorunum'] ?? '', ['acik', 'tamam', 'tumu'], true) ? (string)$_GET['gorunum'] : 'acik';
 $bugun = date('Y-m-d');
+$seciliGun = ajanda_tarih_coz(is_string($_GET['gun'] ?? null) ? $_GET['gun'] : '');            // geçersizse null
+$ay = ajanda_ay_coz(is_string($_GET['ay'] ?? null) ? $_GET['ay'] : ($seciliGun !== null ? substr($seciliGun, 0, 7) : ''), $bugun);
 
 if ($hazir && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
@@ -39,11 +42,20 @@ if ($hazir && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         default               => ['ok' => false, 'mesaj' => 'Geçersiz işlem.'],
     };
     set_flash($r['ok'] ? 'success' : 'error', $r['mesaj']);
-    header('Location: ajanda.php' . ($gorunum !== 'acik' ? '?gorunum=' . $gorunum : ''));
+    // Yeni kayıt başarılıysa takvim o kaydın ayına/gününe gider; diğer işlemlerde ay + seçili gün korunur.
+    if ($islem === 'ekle' && $r['ok'] && ($yeniTarih = ajanda_tarih_coz($giris['tarih'])) !== null) { $ay = substr($yeniTarih, 0, 7); $seciliGun = $yeniTarih; }
+    header('Location: ' . ajanda_url($ay, $seciliGun, $gorunum, $seciliGun !== null));
     exit;
 }
 
 $ozet = $hazir ? ajanda_ozet($pdo, $uid, $bugun) : ['gecikmis' => 0, 'bugun' => 0, 'hafta' => 0, 'acik' => 0, 'tamam' => 0];
+$takvim = ajanda_takvim_hesapla($ay);
+$gunluk = $hazir ? ajanda_aralik_kayitlari($pdo, $uid, $takvim['basla'], $takvim['bitir']) : [];
+$seciliKayitlar = [];
+if ($seciliGun !== null) {
+    $seciliKayitlar = $gunluk[$seciliGun] ?? ($hazir ? (ajanda_aralik_kayitlari($pdo, $uid, $seciliGun, $seciliGun)[$seciliGun] ?? []) : []);
+}
+$formTarih = $seciliGun ?? $bugun;
 $kayitlar = $hazir ? ajanda_listele($pdo, $uid, $gorunum) : [];
 $gruplar = ($hazir && $gorunum === 'acik') ? ajanda_grupla($kayitlar, $bugun) : [];
 $GRUP_ADI = ['gecikmis' => 'Gecikmiş', 'bugun' => 'Bugün', 'yarin' => 'Yarın', 'hafta' => 'Bu hafta', 'sonra' => 'Daha sonra'];
@@ -113,30 +125,38 @@ echo '<link rel="stylesheet" href="assets/kullanici_ayar.css?v=' . (int)@filemti
         <?php endif; ?>
     </div>
 <?php else: ?>
-    <div class="ka-ozet">
-        <a class="ka-ozet-kutu gecikmis" href="ajanda.php"><b><?= $ozet['gecikmis'] ?></b><span>Gecikmiş</span></a>
-        <a class="ka-ozet-kutu bugun" href="ajanda.php"><b><?= $ozet['bugun'] ?></b><span>Bugün</span></a>
-        <a class="ka-ozet-kutu" href="ajanda.php"><b><?= $ozet['hafta'] ?></b><span>Önümüzdeki 7 gün</span></a>
-        <a class="ka-ozet-kutu" href="ajanda.php?gorunum=tamam"><b><?= $ozet['tamam'] ?></b><span>Tamamlanan</span></a>
-    </div>
+    <?= ajanda_takvim_html($takvim, $gunluk, $bugun, $seciliGun, $gorunum, $ozet) ?>
+
+    <?php if ($seciliGun !== null): ?>
+    <section class="card ka-gun-panel" id="ka-secili" aria-label="Seçili gün">
+        <div class="card-head">
+            <h2 class="ka-kart-baslik" style="margin:0">📌 <?= h(ajanda_tarih_etiket($seciliGun)) ?> <span class="ka-rozet<?= $seciliKayitlar ? ' ozel' : '' ?>"><?= count($seciliKayitlar) ?> kayıt</span></h2>
+            <a class="btn btn-ghost btn-sm" href="<?= h(ajanda_url($ay, null, $gorunum)) ?>">Kapat</a>
+        </div>
+        <?php if (!$seciliKayitlar): ?>
+            <p class="ka-ipucu" style="margin:0">Bu güne kayıt yok. Aşağıdaki formdan bu tarihe yeni kayıt ekleyebilirsiniz.</p>
+        <?php else: foreach ($seciliKayitlar as $r) echo $kayit_html($r, ajanda_durum_sinifi($r, $bugun) === 'gecikmis' ? 'gecikmis' : (ajanda_durum_sinifi($r, $bugun) === 'bugun' ? 'bugun' : '')); endif; ?>
+    </section>
+    <?php endif; ?>
 
     <div class="card">
-        <h2 class="ka-kart-baslik">➕ Yeni kayıt</h2>
+        <h2 class="ka-kart-baslik">➕ Yeni kayıt<?= $seciliGun !== null ? ' · ' . h(ajanda_tarih_etiket($seciliGun)) : '' ?></h2>
         <form method="post" class="ka-yeni-form">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="islem" value="ekle">
             <input class="baslik-alani" type="text" name="baslik" placeholder="Ne yapılacak? (ör. Beyan evraklarını kontrol et)" maxlength="<?= AJ_BASLIK_MAX ?>" required aria-label="Başlık">
-            <input type="date" name="tarih" value="<?= h($bugun) ?>" required aria-label="Tarih">
+            <input type="date" name="tarih" value="<?= h($formTarih) ?>" required aria-label="Tarih">
             <input class="ka-zaman" type="time" name="saat" aria-label="Saat (isteğe bağlı)">
-            <textarea class="tam" name="not_metni" placeholder="Not (isteğe bağlı)" maxlength="<?= AJ_NOT_MAX ?>" aria-label="Not"></textarea>
+            <textarea class="tam" name="not_metni" placeholder="Not (isteğe bağlı) — güne gelince takvimde görünür" maxlength="<?= AJ_NOT_MAX ?>" aria-label="Not"></textarea>
             <div class="tam"><button type="submit" class="btn btn-primary">Ajandaya ekle</button></div>
         </form>
     </div>
 
+    <h2 class="ka-liste-baslik">Tüm kayıtlar</h2>
     <nav class="ka-sekmeler" aria-label="Ajanda görünümü">
-        <a class="ka-sekme<?= $gorunum === 'acik' ? ' aktif' : '' ?>" href="ajanda.php">Açık (<?= $ozet['acik'] ?>)</a>
-        <a class="ka-sekme<?= $gorunum === 'tamam' ? ' aktif' : '' ?>" href="ajanda.php?gorunum=tamam">Tamamlanan (<?= $ozet['tamam'] ?>)</a>
-        <a class="ka-sekme<?= $gorunum === 'tumu' ? ' aktif' : '' ?>" href="ajanda.php?gorunum=tumu">Tümü</a>
+        <a class="ka-sekme<?= $gorunum === 'acik' ? ' aktif' : '' ?>" href="<?= h(ajanda_url($ay, $seciliGun, 'acik')) ?>">Açık (<?= $ozet['acik'] ?>)</a>
+        <a class="ka-sekme<?= $gorunum === 'tamam' ? ' aktif' : '' ?>" href="<?= h(ajanda_url($ay, $seciliGun, 'tamam')) ?>">Tamamlanan (<?= $ozet['tamam'] ?>)</a>
+        <a class="ka-sekme<?= $gorunum === 'tumu' ? ' aktif' : '' ?>" href="<?= h(ajanda_url($ay, $seciliGun, 'tumu')) ?>">Tümü</a>
     </nav>
 
     <?php if (!$kayitlar): ?>

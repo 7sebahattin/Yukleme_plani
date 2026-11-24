@@ -271,3 +271,66 @@ function ajanda_tarih_etiket(string $tarih): string
     static $gun = [1 => 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
     return (int)date('j', $ts) . ' ' . $ay[(int)date('n', $ts)] . ' ' . date('Y', $ts) . ' ' . $gun[(int)date('N', $ts)];
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Takvim (v576) — ay görünümü: Pazartesi başlangıçlı, 4–6 haftalık ızgara; her güne o günün kayıtları.
+// ---------------------------------------------------------------------------------------------------------------
+
+const AJ_AY_ADLARI = [1 => 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+const AJ_GUN_KISA = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+/** 'YYYY-MM' geçerli (2000–2100) ise aynen, değilse bugünün ayı. */
+function ajanda_ay_coz(string $s, string $bugun): string
+{
+    $s = trim($s);
+    if (preg_match('/^(\d{4})-(0[1-9]|1[0-2])$/', $s, $m) && (int)$m[1] >= 2000 && (int)$m[1] <= 2100) return $s;
+    return substr($bugun, 0, 7);
+}
+
+/**
+ * Ay ızgarası. @return array{ay:string, baslik:string, onceki:string, sonraki:string, basla:string, bitir:string, haftalar:list<list<string>>}
+ * haftalar: her hafta 7 'Y-m-d' (Pzt…Paz); ayın dışındaki günler de dahildir (soluk çizilir).
+ */
+function ajanda_takvim_hesapla(string $ay): array
+{
+    $ilk = $ay . '-01';
+    $gunSayisi = (int)date('t', strtotime($ilk . ' 12:00:00'));
+    $ofset = (int)date('N', strtotime($ilk . ' 12:00:00')) - 1;          // Pzt=0 … Paz=6
+    $hafta = (int)ceil(($ofset + $gunSayisi) / 7);
+    $basla = date('Y-m-d', strtotime($ilk . ' 12:00:00 -' . $ofset . ' day'));
+    $haftalar = [];
+    for ($w = 0; $w < $hafta; $w++) {
+        $satir = [];
+        for ($d = 0; $d < 7; $d++) $satir[] = date('Y-m-d', strtotime($basla . ' 12:00:00 +' . ($w * 7 + $d) . ' day'));
+        $haftalar[] = $satir;
+    }
+    $yil = (int)substr($ay, 0, 4); $ayNo = (int)substr($ay, 5, 2);
+    return [
+        'ay' => $ay,
+        'baslik' => AJ_AY_ADLARI[$ayNo] . ' ' . $yil,
+        'onceki' => date('Y-m', strtotime($ilk . ' 12:00:00 -1 month')),
+        'sonraki' => date('Y-m', strtotime($ilk . ' 12:00:00 +1 month')),
+        'basla' => $haftalar[0][0],
+        'bitir' => $haftalar[$hafta - 1][6],
+        'haftalar' => $haftalar,
+    ];
+}
+
+/**
+ * [basla, bitir] (dahil) aralığındaki TÜM kayıtlar (tamamlananlar dahil), tarihe göre gruplu; gün içinde saat sırası (saatsiz sonda).
+ * @return array<string, list<array<string,mixed>>>
+ */
+function ajanda_aralik_kayitlari(PDO $pdo, int $uid, string $basla, string $bitir): array
+{
+    if ($uid < 1 || ajanda_tarih_coz($basla) === null || ajanda_tarih_coz($bitir) === null) return [];
+    try {
+        $st = $pdo->prepare("SELECT * FROM ajanda_kayitlar WHERE user_id = ? AND tarih >= ? AND tarih <= ? ORDER BY tarih ASC, COALESCE(saat, '99:99') ASC, id ASC LIMIT 2000");
+        $st->execute([$uid, $basla, $bitir]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $out[(string)$r['tarih']][] = $r;
+        return $out;
+    } catch (Throwable $e) {
+        error_log('[ajanda_aralik] ' . get_class($e));
+        return [];
+    }
+}
