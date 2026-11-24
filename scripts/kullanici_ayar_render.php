@@ -1,7 +1,7 @@
 <?php
 // =========================================================
 // scripts/kullanici_ayar_render.php — Kullanıcı Ayarları sayfalarını GERÇEK PHP ile çizer (tarayıcı testi için)
-//   php scripts/kullanici_ayar_render.php <sifre|ajanda|tercih|ajanda_kurulmamis> > _test.html
+//   php scripts/kullanici_ayar_render.php <sifre|ajanda|ajanda_gun|ajanda_tamam|tercih|ajanda_kurulmamis> > _test.html
 // Bellek içi SQLite + siparis harness'i; canlı DB'ye dokunmaz. Çıktıdaki göreli yollar (assets/…) kök dizinden açılınca çözülür.
 // =========================================================
 require_once __DIR__ . '/_siparis_test_lib.php';
@@ -24,20 +24,25 @@ if ($which !== 'ajanda_kurulmamis') {
     $GLOBALS['_ajanda_ddl_calistir'] = function (PDO $p, string $ddl): void { [$c, $ix] = siparis_ddl_sqlite($ddl); $p->exec($c); foreach ($ix as $x) $p->exec($x); };
     ajanda_migrate($pdo);
     $bugun = date('Y-m-d');
+    $g = fn(int $d) => date('Y-m-d', strtotime(($d >= 0 ? '+' : '') . $d . ' day'));
     foreach ([
-        ['Eski beyan evraklarını kontrol et', date('Y-m-d', strtotime('-2 day')), '10:00', 'Eksik belge varsa çavuşa haber ver.'],
-        ['Hal bildirimi gönderimlerini gözden geçir', $bugun, '09:30', ''],
-        ['Haftalık ödeme listesini hazırla', $bugun, '', 'Cari bakiyelerle karşılaştır'],
-        ['Kantar raporunu yazdır', date('Y-m-d', strtotime('+1 day')), '', ''],
-        ['Ay sonu stok sayımı', date('Y-m-d', strtotime('+20 day')), '08:00', ''],
-    ] as [$b, $t, $s, $n]) ajanda_ekle($pdo, 1, ['baslik' => $b, 'tarih' => $t, 'saat' => $s, 'not_metni' => $n]);
+        ['Eski beyan evraklarını kontrol et', $g(-2), '10:00', 'Eksik belge varsa çavuşa haber ver.'],
+        ['Hal bildirimi gönderimlerini gözden geçir', $g(0), '09:30', ''],
+        ['Haftalık ödeme listesini hazırla', $g(0), '', 'Cari bakiyelerle karşılaştır'],
+        ['OGL hesabını sisteme bağla', $g(0), '14:00', "Sabit satırlar:\n- iskonto\n- vade farkı"],
+        ['Kantar raporunu yazdır', $g(0), '17:30', ''],
+        ['Yarınki sevkiyat için palet say', $g(1), '', ''],
+        ['Ay sonu stok sayımı', $g(6), '08:00', 'Depo sorumlusu ile birlikte; sayım formunu yazdır.'],
+        ['Frugro order log yükle', $g(6), '', 'Sütun sırasını kontrol et'],
+        ['Çok uzun bir başlık: gümrük müşavirinden alınacak tüm evrakların son durumu', $g(11), '11:15', ''],
+    ] as [$b, $t, $s2, $n]) ajanda_ekle($pdo, 1, ['baslik' => $b, 'tarih' => $t, 'saat' => $s2, 'not_metni' => $n]);
     ajanda_durum($pdo, 1, 3, true);
 }
 $_COOKIE['asya_session'] = 't1a';
 if (!defined('AUTH_COOKIE_NAME')) define('AUTH_COOKIE_NAME', 'asya_session');
 $IS_ADMIN = true;
 $_SERVER['REQUEST_METHOD'] = 'GET'; $_SERVER['REQUEST_URI'] = '/x.php'; $_SERVER['PHP_SELF'] = '/x.php';
-$_GET = $which === 'ajanda_tamam' ? ['gorunum' => 'tamam'] : [];
+$_GET = $which === 'ajanda_tamam' ? ['gorunum' => 'tamam'] : ($which === 'ajanda_gun' ? ['gun' => date('Y-m-d')] : []);
 $sayfa = ['sifre' => 'sifre_degistirme.php', 'tercih' => 'kullanici_tercihleri.php'][$which] ?? 'ajanda.php';
 $_SESSION['flash'] = $which === 'sifre' ? ['type' => 'error', 'msg' => 'Mevcut şifre hatalı (4 deneme hakkı kaldı).'] : null;
 // Sayfalar config/db.php + config/auth.php'yi require eder; harness bunların yerine kendi db()/current_user() saplamalarını

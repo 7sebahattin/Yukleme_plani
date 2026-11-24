@@ -9,6 +9,7 @@ require_once __DIR__ . '/_siparis_test_lib.php';
 require_once $ROOT . '/config/kullanici_tercih.php';
 require_once $ROOT . '/config/kullanici_ayar.php';
 require_once $ROOT . '/config/ajanda_core.php';
+require_once $ROOT . '/config/ajanda_ui.php';
 
 $pdo = db();
 siparis_test_diger_tablolar($pdo);   // users + audit_log (kolonları aşağıda genişletilir)
@@ -168,6 +169,57 @@ $pdo->commit();
 ok('açık kayıt tavanı: ' . AJ_ACIK_MAX . ' dolunca yeni kayıt reddedilir', !ajanda_ekle($pdo, 1, ['baslik' => 'taşan', 'tarih' => '2026-12-02'])['ok']);
 ok('tavan başka kullanıcıyı etkilemez', ajanda_ekle($pdo, 2, ['baslik' => 'serbest', 'tarih' => '2026-12-02'])['ok']);
 
+echo "\n=== 8b. Takvim (v576): ızgara hesabı ===\n";
+ok('ay_coz: geçerli ay aynen', ajanda_ay_coz('2026-03', '2026-11-24') === '2026-03');
+ok('ay_coz: bozuk değerler bugünün ayına düşer', ajanda_ay_coz('2026-13', '2026-11-24') === '2026-11' && ajanda_ay_coz('abc', '2026-11-24') === '2026-11' && ajanda_ay_coz('1999-12', '2026-11-24') === '2026-11' && ajanda_ay_coz('', '2026-11-24') === '2026-11' && ajanda_ay_coz("2026-11'; DROP", '2026-11-24') === '2026-11');
+$tk = ajanda_takvim_hesapla('2026-11');
+ok('Kasım 2026: Pzt başlangıçlı 6 hafta, 26 Eki → 6 Ara', count($tk['haftalar']) === 6 && $tk['basla'] === '2026-10-26' && $tk['bitir'] === '2026-12-06', $tk['basla'] . ' → ' . $tk['bitir']);
+ok('Kasım 2026: başlık + önceki/sonraki ay', $tk['baslik'] === 'Kasım 2026' && $tk['onceki'] === '2026-10' && $tk['sonraki'] === '2026-12');
+ok('her hafta 7 gün, günler ardışık', count(array_filter($tk['haftalar'], fn($w) => count($w) === 7)) === 6 && $tk['haftalar'][2][0] === '2026-11-09');
+ok('Şubat 2026 (Paz başlar): 5 hafta', count(ajanda_takvim_hesapla('2026-02')['haftalar']) === 5);
+$sub27 = ajanda_takvim_hesapla('2027-02');
+ok('Şubat 2027 (Pzt başlar, 28 gün): tam 4 hafta, 1 Şub → 28 Şub', count($sub27['haftalar']) === 4 && $sub27['basla'] === '2027-02-01' && $sub27['bitir'] === '2027-02-28');
+ok('Aralık → Ocak yıl geçişi', ajanda_takvim_hesapla('2026-12')['sonraki'] === '2027-01' && ajanda_takvim_hesapla('2027-01')['onceki'] === '2026-12');
+
+echo "\n=== 8c. Takvim: aralık sorgusu ===\n";
+$pdo->exec('DELETE FROM ajanda_kayitlar');
+ajanda_ekle($pdo, 1, ['baslik' => 'B-geç', 'tarih' => '2026-11-24', 'saat' => '15:00']);
+ajanda_ekle($pdo, 1, ['baslik' => 'A-saatsiz', 'tarih' => '2026-11-24']);
+ajanda_ekle($pdo, 1, ['baslik' => 'C-erken', 'tarih' => '2026-11-24', 'saat' => '08:30', 'not_metni' => 'ilk iş']);
+ajanda_ekle($pdo, 1, ['baslik' => 'D-önceki ay sonu', 'tarih' => '2026-10-28']);
+ajanda_ekle($pdo, 1, ['baslik' => 'E-aralık dışı', 'tarih' => '2027-03-01']);
+ajanda_ekle($pdo, 2, ['baslik' => 'F-BAŞKASI', 'tarih' => '2026-11-24']);
+$gk = ajanda_aralik_kayitlari($pdo, 1, $tk['basla'], $tk['bitir']);
+ok('aralık: yalnız ızgara içi + kendi kayıtları', array_keys($gk) === ['2026-10-28', '2026-11-24'] && !in_array('F-BAŞKASI', array_column($gk['2026-11-24'], 'baslik'), true));
+ok('gün içi sıra: saatli (erken→geç), saatsiz sonda', array_column($gk['2026-11-24'], 'baslik') === ['C-erken', 'B-geç', 'A-saatsiz'], implode('|', array_column($gk['2026-11-24'], 'baslik')));
+ajanda_durum($pdo, 1, (int)$gk['2026-11-24'][0]['id'], true);
+ok('aralık: tamamlananlar da gelir (takvimde üstü çizili görünür)', count(ajanda_aralik_kayitlari($pdo, 1, '2026-11-24', '2026-11-24')['2026-11-24']) === 3);
+ok('aralık: geçersiz tarih/uid → boş', ajanda_aralik_kayitlari($pdo, 1, 'x', '2026-11-24') === [] && ajanda_aralik_kayitlari($pdo, 0, $tk['basla'], $tk['bitir']) === []);
+
+echo "\n=== 8d. Takvim: HTML ===\n";
+ajanda_ekle($pdo, 1, ['baslik' => '<script>alert(1)</script>', 'tarih' => '2026-11-22', 'not_metni' => '"><img src=x onerror=alert(2)> not']);   // Pazar → sağ kolon
+for ($i = 1; $i <= 3; $i++) ajanda_ekle($pdo, 1, ['baslik' => "Kalabalık $i", 'tarih' => '2026-11-03', 'saat' => "1$i:00"]);   // 3 kayıt → "+1 daha"
+$gk = ajanda_aralik_kayitlari($pdo, 1, $tk['basla'], $tk['bitir']);
+$oz = ['gecikmis' => 1, 'bugun' => 2, 'hafta' => 3];
+$html = ajanda_takvim_html($tk, $gk, '2026-11-24', null, 'acik', $oz);
+ok('HTML: kullanıcı metni kaçışlanır (<script>/onerror ham çıkmaz)', !str_contains($html, '<script') && !str_contains($html, '<img') && str_contains($html, '&lt;script&gt;'));
+ok('HTML: baloncukta not içeriği var', str_contains($html, 'ilk iş') && str_contains($html, 'role="tooltip"'));
+ok('HTML: bugün hücresi aria-current="date"', substr_count($html, 'aria-current="date"') === 1 && (bool)preg_match('#class="ka-gun[^"]*\bbugun\b[^"]*"[^>]*aria-current="date"#', $html));
+ok('HTML: 3+ kayıtlı günde çip en çok 2 + "+1 daha"', str_contains($html, '+1 daha') && substr_count($html, 'aria-describedby="kab-2026-11-03"') === 1);
+ok('HTML: gün bağlantısı ay + gün + #ka-secili taşır (JS\'siz çalışır)', str_contains($html, 'href="ajanda.php?ay=2026-11&amp;gun=2026-11-24#ka-secili"'));
+ok('HTML: hafta sonu (sağ kolon) dolu günün baloncuğu sağa hizalı (.sag)', (bool)preg_match('#class="ka-balon sag[^"]*" id="kab-2026-11-22"#', $html));
+ok('HTML: sol/orta kolondaki günün baloncuğu .sag DEĞİL', (bool)preg_match('#class="ka-balon[^"]*" id="kab-2026-11-03"#', $html) && !preg_match('#class="ka-balon sag[^"]*" id="kab-2026-11-03"#', $html));
+ok('HTML: boş günün baloncuğu YOK', !str_contains($html, 'id="kab-2026-11-10"'));
+ok('HTML: ay dışı gün soluk işaretli', (bool)preg_match('#class="ka-gun disari[^"]*"[^>]*aria-label="28 Eki 2026#', $html));
+ok('HTML: 6 haftalık ayda alt satırlar baloncuğu YUKARI açar (.yukari)', (bool)preg_match('#class="ka-balon[^"]*yukari[^"]*"#', ajanda_takvim_html($tk, ['2026-12-02' => [['id' => 1, 'baslik' => 'x', 'tarih' => '2026-12-02', 'tamam' => 0, 'saat' => null, 'not_metni' => null]]], '2026-11-24', null, 'acik', $oz)));
+ok('HTML: ay gezinmesi önceki/sonraki bağlantıları', str_contains($html, 'href="ajanda.php?ay=2026-10"') && str_contains($html, 'href="ajanda.php?ay=2026-12"'));
+ok('HTML: bu ayda ve gün seçili değilken "Bugün" düğmesi yok', !str_contains($html, '>Bugün</a>'));
+ok('HTML: başka ayda "Bugün" düğmesi bugünün gününe/ayına döner', str_contains(ajanda_takvim_html(ajanda_takvim_hesapla('2027-01'), [], '2026-11-24', null, 'acik', $oz), 'href="ajanda.php?ay=2026-11&amp;gun=2026-11-24#ka-secili">Bugün</a>'));
+$sec = ajanda_takvim_html($tk, $gk, '2026-11-24', '2026-11-03', 'tamam', $oz);
+ok('HTML: seçili gün .secili + gorunum bağlantılarda korunur', (bool)preg_match('#class="ka-gun[^"]*\bsecili\b[^"]*"[^>]*aria-label="3 Kas 2026#', $sec) && str_contains($sec, 'gorunum=tamam'));
+ok('HTML: durum sınıfları (tamam / gecikmis / bugun / yaklasan)', str_contains($html, 'ka-cip tamam') && str_contains($html, 'ka-cip gecikmis') && str_contains($html, 'ka-cip bugun'));
+ok('HTML: özet çipleri sayıları basar', str_contains($html, '<b>1</b> Gecikmiş') && str_contains($html, '<b>2</b> Bugün'));
+
 echo "\n=== 9. Tarih etiketi ===\n";
 ok('24 Kas 2026 Salı', ajanda_tarih_etiket('2026-11-24') === '24 Kas 2026 Salı', ajanda_tarih_etiket('2026-11-24'));
 ok('1 Oca 2027 Cuma', ajanda_tarih_etiket('2027-01-01') === '1 Oca 2027 Cuma', ajanda_tarih_etiket('2027-01-01'));
@@ -212,6 +264,12 @@ ok('sifre_degistirme.php: autocomplete current/new-password', str_contains($sf, 
 ok('sifre_degistirme.php: şifre error_log/audit çağrısı yok', !preg_match('/error_log\([^)]*\$_POST|audit_log_event\([^)]*(mevcut|yeni)/', $sf));
 $aj = $oku('ajanda.php');
 ok('ajanda.php: yazmalar yalnız ajanda_* çekirdeğinden (sayfada ham INSERT/UPDATE/DELETE yok)', !preg_match('/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i', $aj));
+ok('ajanda.php: takvim (ajanda_ui + ajanda_takvim_html) + ?ay/?gun doğrulaması (ajanda_ay_coz/ajanda_tarih_coz)', str_contains($aj, "config/ajanda_ui.php") && str_contains($aj, 'ajanda_takvim_html(') && str_contains($aj, 'ajanda_ay_coz(') && str_contains($aj, 'ajanda_tarih_coz('));
+ok('ajanda_ui.php: ham SQL / $_GET / $_POST YOK (yalnız HTML üretir)', !preg_match('/\b(SELECT|INSERT|UPDATE|DELETE)\b|\$_(GET|POST|REQUEST)/', $oku('config/ajanda_ui.php')));
+$cssT = $oku('assets/kullanici_ayar.css');
+ok('takvim CSS: baloncuk hover + klavye odağı + dokunmatikte gizli + mobil nokta görünümü', str_contains($cssT, '.ka-gun:hover .ka-balon') && str_contains($cssT, '.ka-gun:focus-visible .ka-balon') && str_contains($cssT, '@media (hover: none)') && str_contains($cssT, '.ka-noktalar { display: flex;'));
+$uiSrc = $oku('config/ajanda_ui.php');
+ok('ajanda_ui.php: sınıf adında reklam engelleyici süzgeci parçası yok', !preg_match('/class="[^"]*\b(ad|ads|advert|sponsor|banner)\b[^"]*"/i', $uiSrc) && !preg_match("/'ka-[a-z-]*\b(ad|ads|advert|sponsor|banner)\b/i", $uiSrc));
 ok('ajanda.php: tablo yokken kurulum notu', str_contains($aj, 'migrate.php#ajanda') && str_contains($aj, 'ajanda_hazir('));
 $kt = $oku('kullanici_tercihleri.php');
 ok('kullanici_tercihleri.php: tablo sıfırlama beyaz listeden (ka_tablo_tercihleri)', str_contains($kt, 'isset($TABLOLAR[$anahtar])'));

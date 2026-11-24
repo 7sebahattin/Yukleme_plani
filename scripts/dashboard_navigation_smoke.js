@@ -103,6 +103,7 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             if (profile === 'only_stok_read') check(await page.locator('.home-card[href="malzeme_stok.php"]').count() === 1, 'stock-only card remains visible');
             if (profile === 'only_users_admin') check(await page.locator('.home-card[href="users.php"]').count() === 1, 'legitimate non-admin users permission retained');
             if (profile === 'dashboard_only') check(await page.locator('.home-card:not([href="sifre_degistirme.php"])').count() === 0, 'dashboard permission alone reveals no unauthorized module (v575: herkese açık Şifre Değiştirme kartı hariç)');
+            if (profile === 'dashboard_only') check(await page.locator('.home-card[href="sifre_degistirme.php"]').count() === 1, 'everyone-can-use password page card stays visible');
         }
         await context.close();
         proof.checks = checks;
