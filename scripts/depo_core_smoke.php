@@ -147,4 +147,44 @@ echo "\n=== 12. Renk / yardımcılar ===\n";
 ok('depo_renk geçerli rengi döner', depo_renk($pdo, 'ana depo') === '#2563eb' || depo_renk($pdo, 'Ana Depo') === '#2563eb');
 ok('depo_renk tanımsız ad → null', depo_renk($pdo, 'yok') === null);
 
+
+echo "\n=== 13. Çoklu ad + tablo başına hata yalıtımı + tablo grupları (v575) ===\n";
+ok('grup: yedek / serbest / canlı / eski ayrımı',
+    depo_tablo_grubu('pdks_yedek_20260924_daily_work_sessions') === 'yedek' && depo_tablo_grubu('customs_declarations') === 'serbest'
+    && depo_tablo_grubu('siparis_sevkiyatlar') === 'canli' && depo_tablo_grubu('daily_work_sessions') === 'canli' && depo_tablo_grubu('puantaj_giris_kisiler') === 'canli'
+    && depo_tablo_grubu('loading_pallets') === 'eski' && depo_tablo_grubu('material_stock_movements') === 'eski');
+$pdo->exec('CREATE TABLE siparis_sevkiyatlar (id INTEGER PRIMARY KEY, depo TEXT)');
+$pdo->exec("INSERT INTO siparis_sevkiyatlar (depo) VALUES ('KARAMAN CİHAT'),('ESKİ DEPO 2'),('ESKİ DEPO 2')");
+$pdo->exec('CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, depo TEXT, kod TEXT, UNIQUE (depo, kod))');
+$pdo->exec("INSERT INTO daily_work_sessions (depo, kod) VALUES ('ESKİ DEPO 2','a'),('YENİ ÇATIŞAN','a'),('KARAMAN CİHAT','b')");
+depo_onbellek_sifirla();
+$hed = depo_ekle($pdo, ['ad' => 'Çoklu Hedef'])['id'];
+// 'YENİ ÇATIŞAN' eski listede olmadığı için hedef adı değil; çatışmayı hedef adın kendisiyle kuruyoruz:
+$pdo->exec("INSERT INTO daily_work_sessions (depo, kod) VALUES ('ÇOKLU HEDEF','a')");
+$x = depo_eski_veriyi_aktar($pdo, ['KARAMAN CİHAT', 'Eski Depo 2'], $hed, ['siparis_sevkiyatlar', 'daily_work_sessions']);
+ok('çoklu ad: siparis_sevkiyatlar 3 satır aktarıldı', ($x['tablo']['siparis_sevkiyatlar.depo'] ?? 0) === 3 && say('siparis_sevkiyatlar', "depo = 'ÇOKLU HEDEF'") === 3, json_encode($x, JSON_UNESCAPED_UNICODE));
+ok('benzersiz çakışması: tablo HATA vermez, çakışan satır ATLANAN olarak sayılır ve mesajda tablo.kolon yazar', $x['hata'] === [] && ($x['atlanan']['daily_work_sessions.depo'] ?? 0) === 1 && str_contains($x['mesaj'], 'ATLANAN') && str_contains($x['mesaj'], 'daily_work_sessions.depo'), json_encode($x, JSON_UNESCAPED_UNICODE));
+ok('çakışan satır ESKİ adda kaldı (silinmedi/ezilmedi), çakışmayan satır yeni depoya geçti',
+    say('daily_work_sessions', "depo = 'ESKİ DEPO 2'") === 1 && say('daily_work_sessions', "depo = 'ÇOKLU HEDEF' AND kod = 'b'") === 1);
+ok('çakışma sonrası toplam: siparis_sevkiyatlar 3 + daily 1 satır taşındı, ok true', $x['ok'] === true && ($x['tablo']['siparis_sevkiyatlar.depo'] ?? 0) === 3 && ($x['tablo']['daily_work_sessions.depo'] ?? 0) === 1 && say('siparis_sevkiyatlar', "depo = 'ÇOKLU HEDEF'") === 3);
+$x = depo_eski_veriyi_aktar($pdo, 'KARAMAN CİHAT', $hed, ['customs_declarations']);
+ok('serbest metin tablosu yalnız açıkça seçilirse aktarılır; seçilmeyince dokunulmaz', $x['satir'] === 0);
+$x = depo_eski_veriyi_aktar($pdo, [], $hed);
+ok('ad seçilmeden aktarım reddedilir', !$x['ok'] && str_contains($x['mesaj'], 'seçilmedi'));
+$x = depo_eski_veriyi_aktar($pdo, ['KARAMAN CİHAT', 'Uydurma'], $hed);
+ok('listede olmayan ad varsa HİÇBİRİ aktarılmaz', !$x['ok'] && say('loading_pallets', "depo = 'ÇOKLU HEDEF'") === 0);
+
+$x = depo_eski_veriyi_aktar($pdo, 'KARAMAN CİHAT', $hed, []);
+ok('hiç tablo seçilmeden aktarım reddedilir (null = varsayılan, [] = seçim yok)', !$x['ok'] && str_contains($x['mesaj'], 'tablo seçilmedi'));
+
+
+echo "\n=== 14. Geri al → yeni depo adıyla damgalı satırlar → yeniden geçiş engellenmez (v575) ===\n";
+ok('geçiş açık', depo_gecis_aktif($pdo) === true);
+$pdo->exec("INSERT INTO employees (depo) VALUES ('MERKEZ DEPO'),('MERKEZ DEPO')");   // geçişten sonra yeni sistemde damgalanan satırlar
+depo_gecis_geri_al($pdo);
+ok('geri al: ayar kalktı, eski davranış; veri ve defter yerinde', depo_gecis_aktif($pdo) === false && say('depo_eski_adlar') >= 3 && say('employees', "depo = 'MERKEZ DEPO'") >= 2);
+ok('geri alınmış durumda yeni depo adı (MERKEZ DEPO) "eski" SAYILMAZ (defter yetkili)', !isset(depo_eski_adlar($pdo)[depo_anahtar('MERKEZ DEPO')]));
+ok('yeniden geçişte yeni depo adıyla damgalı satırlar ENGEL olmaz', depo_gecis_engelleri($pdo) === [], json_encode(depo_gecis_engelleri($pdo), JSON_UNESCAPED_UNICODE));
+ok('yeniden geçiş uygulanır; yeni satırlar yerinde, eski adlar defterde', depo_gecis_uygula($pdo)['ok'] === true && depo_gecis_aktif($pdo) === true && say('employees', "depo = 'MERKEZ DEPO'") >= 2);
+
 siparis_test_bitir();

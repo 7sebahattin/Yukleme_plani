@@ -98,167 +98,7 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <link rel="icon" type="image/png" href="assets/icon-192.png">
     <link rel="stylesheet" href="assets/style.css?v=<?= $css_v ?>">
-    <style>
-        html, body {
-            margin: 0; padding: 0;
-            min-height: 100dvh;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-        body {
-            background: #eef1f6;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            box-sizing: border-box;
-        }
-        html[data-theme="dark"] body { background: #0b1220; }
-
-        /* Kart — gradient "telefon ekranı" görünümü: üstte logo/marka,
-           altında hap (pill) girdiler ve HEMEN ALTINDA "Giriş Yap".
-           Buton eskiden kartın EN ALTINDA beyaz bir oturma kağıdı üstündeydi;
-           mobilde klavye açılınca onun arkasında kalıyor, basmak için klavyeyi
-           kapatmak/kaydırmak gerekiyordu. Artık alanlarla aynı akışta, içerik
-           dikeyde ortalı — klavye açıkken de görünür. Kartın altına sabit
-           buton GERİ KOYMA. Renkler projenin mevcut mavisi (#1d6cf0). */
-        .lc {
-            position: relative;
-            overflow: hidden;
-            width: 100%;
-            max-width: 400px;
-            min-height: 560px;
-            border-radius: 32px;
-            box-shadow: 0 20px 50px rgba(15,23,42,.22);
-            background: linear-gradient(160deg, #123a9c 0%, #1d6cf0 55%, #4a92ff 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        .lc-decor {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255,255,255,.10);
-            filter: blur(2px);
-            pointer-events: none;
-        }
-        .lc-decor-a { width: 220px; height: 220px; top: -90px; right: -70px; }
-        .lc-decor-b { width: 160px; height: 160px; bottom: 170px; left: -60px; background: rgba(255,255,255,.08); }
-
-        .lc-brand {
-            position: relative;
-            text-align: center;
-            padding: 52px 24px 6px;
-        }
-        .lc-logo {
-            width: 60px; height: 60px;
-            margin: 0 auto 14px;
-            border-radius: 18px;
-            background: rgba(255,255,255,.16);
-            border: 1px solid rgba(255,255,255,.35);
-            display: flex; align-items: center; justify-content: center;
-        }
-        .lc-logo svg { width: 28px; height: 28px; stroke: #fff; }
-        .lc-brand-title {
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: #fff;
-            letter-spacing: -0.3px;
-        }
-        .lc-brand-sub {
-            margin-top: 2px;
-            color: rgba(255,255,255,.75);
-            font-size: .85rem;
-        }
-
-        .lc-body {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            padding: 28px 28px 32px;
-        }
-        .lc-error {
-            background: rgba(255,255,255,.16);
-            border: 1px solid rgba(255,255,255,.4);
-            color: #fff;
-            padding: 10px 16px;
-            border-radius: 14px;
-            font-size: .85rem;
-            text-align: center;
-        }
-        .lc-pill {
-            border-radius: 999px;
-            border: 1.5px solid rgba(255,255,255,.45);
-            background: rgba(255,255,255,.12);
-            padding: 0 20px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-        }
-        .lc-pill:focus-within {
-            border-color: rgba(255,255,255,.85);
-            background: rgba(255,255,255,.18);
-        }
-        .lc-pill input {
-            width: 100%;
-            border: none;
-            outline: none;
-            background: transparent;
-            color: #fff;
-            font-size: 16px;
-        }
-        .lc-pill input::placeholder { color: rgba(255,255,255,.75); }
-        .lc-sr-only {
-            position: absolute; width: 1px; height: 1px;
-            padding: 0; margin: -1px; overflow: hidden;
-            clip: rect(0,0,0,0); white-space: nowrap; border: 0;
-        }
-
-        .lc-cta {
-            width: 100%;
-            height: 50px;
-            margin-top: 6px;
-            background: #fff;
-            color: #1d6cf0;
-            font-size: 1rem;
-            font-weight: 700;
-            border: none;
-            border-radius: 999px;
-            cursor: pointer;
-            box-shadow: 0 10px 22px rgba(15,23,42,.22);
-            transition: background .15s;
-        }
-        .lc-cta:hover { background: #eef4ff; }
-        .lc-cta:active { background: #dbe7ff; }
-        html[data-theme="dark"] .lc-cta { background: #1d6cf0; color: #fff; box-shadow: none; }
-        html[data-theme="dark"] .lc-cta:hover { background: #1558c7; }
-
-        @media (max-width: 480px) {
-            body { padding: 0; }
-            /* height: var(--app-h) — window.innerHeight'tan gelen GERÇEK görünür
-               yükseklik (yukarıdaki script). dvh bazı Android tarayıcılarında
-               gerçekte görüneni aşıyor, kart taştığı için "Giriş Yap" ekran
-               dışına/sistem jest çubuğunun arkasına kayıyordu. overflow-y:auto
-               ek güvenlik ağı — script çalışmadan önceki ilk çizimde bile
-               içerik hiçbir zaman tamamen erişilemez olmuyor. */
-            .lc {
-                height: var(--app-h, 100dvh);
-                min-height: var(--app-h, 100dvh);
-                overflow-y: auto;
-                -webkit-overflow-scrolling: touch;
-                border-radius: 0;
-                box-shadow: none;
-            }
-            /* Daha az dikey boşluk — kısa ekranlarda butonun kırpılma riskini azaltır */
-            .lc-brand { padding: 28px 24px 4px; }
-            .lc-logo { width: 50px; height: 50px; margin-bottom: 10px; }
-            .lc-logo svg { width: 24px; height: 24px; }
-            .lc-body { padding-top: 20px; gap: 12px; }
-            .lc-pill { height: 46px; }
-            .lc-body { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
-            .lc-cta { height: 48px; }
-        }
-    </style>
+    <link rel="stylesheet" href="assets/giris.css?v=<?= (int)@filemtime(__DIR__ . '/assets/giris.css') ?>">
 </head>
 <body>
 <form class="lc" method="post" action="login.php" autocomplete="on">
@@ -272,15 +112,13 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
 
     <div class="lc-brand">
         <div class="lc-logo">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="1" y="3" width="15" height="13"></rect>
-                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-                <circle cx="5.5" cy="18.5" r="2.5"></circle>
-                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"></path>
+                <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"></path>
             </svg>
         </div>
         <div class="lc-brand-title">Asya Fresh</div>
-        <div class="lc-brand-sub">Yükleme Planı</div>
+        <div class="lc-brand-sub">Operasyon Yönetim Sistemi</div>
     </div>
 
     <div class="lc-body">
