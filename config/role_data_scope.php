@@ -24,6 +24,13 @@ function role_data_scope_decode(array $permissions): array {
 }
 
 function role_data_scope_options(PDO $pdo): array {
+    // v574: yeni depo sistemi açıksa seçenekler YALNIZ yeni `depolar` kaydı (aktif); eski adlar ve kayıtlı eski kapsam görünmez
+    // (rol kaydedilince eski adlar kapsamdan düşer — eski/yeni karışmaz).
+    if (function_exists('depo_gecis_aktif') && depo_gecis_aktif($pdo)) {
+        $yeni = depo_aktif_adlar($pdo);
+        sort($yeni, SORT_NATURAL | SORT_FLAG_CASE);
+        return $yeni;
+    }
     $depots = [];
     foreach (["SELECT name FROM material_definitions WHERE type = 'depo'", "SELECT DISTINCT depo FROM user_depolar"] as $sql) {
         try {

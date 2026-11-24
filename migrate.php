@@ -30,6 +30,7 @@ require_once __DIR__ . '/config/urun_siparis.php';   // v409 Ürün Siparişleri
 require_once __DIR__ . '/config/uretim.php';   // v507 Günlük Üretim tabloları (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/frugro_core.php';    // Frugro Siparişler (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/cari_core.php';      // Cari İşlemler (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/depo_core.php';      // v574: Depolar kartı (auth.php de yükler; migrate_panel_smoke harness'i için açık)
 require_once __DIR__ . '/config/stok_core.php';      // Stok (muhasebe) (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/palet_fisleri_core.php'; // Palet Fişleri (loading_pallets'e kolon ekleyen kart)
 require_once __DIR__ . '/config/kantar_alanlari_core.php'; // Mal Kabul Alanları (kantar_fisleri'ne kolon ekleyen kart)
@@ -140,6 +141,7 @@ $siparis_yig_results = []; $siparis_yig_ran = false;       // Siparişler v387 (
 $bsz_results = []; $bsz_ran = false;                            // v498 beyansiz_yukleme tablosu
 $usip_results = []; $usip_ran = false;                          // v409 Ürün Siparişleri tabloları
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
+$depo_mesaj = []; $depo_ran = false;                             // Depolar (v574: yeni depo kayıt sistemi + geçiş)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
 $kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
 $aj_results = []; $aj_ran = false;                              // Ajanda (ajanda_kayitlar)
@@ -374,6 +376,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'frugro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'depo') {
+    // v574 Depolar: adım = tablolar | gecis | geri_al | aktar. Hiçbir adım veri satırı SİLMEZ.
+    csrf_check($_POST['csrf'] ?? null);
+    $depo_ran = true;
+    $adim = (string)($_POST['adim'] ?? '');
+    if ($adim === 'tablolar') {
+        foreach (depo_migrate($pdo) as $sr) {
+            $depo_mesaj[] = $sr['tablo'] . ': ' . $sr['durum'] . ' — ' . $sr['mesaj'];
+            if ($sr['durum'] === 'olusturuldu') audit_log_event('migrate', 'depolar', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    } elseif ($adim === 'gecis') {
+        if (empty($_POST['onay'])) { $depo_mesaj[] = '✗ Onay kutusu işaretlenmeden geçiş yapılmaz.'; }
+        else { $r = depo_gecis_uygula($pdo); $depo_mesaj[] = ($r['ok'] ? '✓ ' : '✗ ') . $r['mesaj']; }
+    } elseif ($adim === 'geri_al') {
+        $depo_mesaj[] = depo_gecis_geri_al($pdo) ? '✓ Geçiş geri alındı (eski depo davranışı döndü; veri ve eski ad defteri aynen duruyor).' : '✗ Geri alınamadı.';
+    } elseif ($adim === 'aktar') {
+        $r = depo_eski_veriyi_aktar($pdo, (string)($_POST['eski_ad'] ?? ''), (int)($_POST['yeni_depo'] ?? 0), ($_POST['tablolar'] ?? null) ? array_map('strval', (array)$_POST['tablolar']) : null);
+        $depo_mesaj[] = ($r['ok'] ? '✓ ' : '✗ ') . $r['mesaj'];
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'cari') {
     csrf_check($_POST['csrf'] ?? null);
@@ -965,6 +986,91 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="ne" value="frugro">
       <button type="submit" class="btn btn-primary">Frugro Tablolarını Oluştur</button>
     </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('depolar'); ?>
+    <h2 style="margin-top:0;">Depolar (yeni depo kayıt sistemi)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Şube YOK; yalnız depo. <code>depolar</code> (sabit id + değişmez kod), <code>depo_kullanicilar</code> (kullanıcı↔depo, id ile),
+      <code>depo_eski_adlar</code> (ESKİ ad defteri) ve <code>depo_ayar</code> tabloları <strong>yalnız eklenir</strong> (ALTER yok, veri silinmez).
+      Sıra: <strong>1)</strong> tabloları oluştur → <strong>2)</strong> Yönetim › Depo Tanımları'ndan yeni depoları aç, kullanıcı ata →
+      <strong>3)</strong> aşağıdaki raporu incele (eski adla damgalı satırlar canlı modüllerde — Personel/Sipariş vb. — gizlenecekse önce yeni depoya aktar) →
+      <strong>4)</strong> geçişi tamamla. Geçişle eski depo adları deftere "ESKİ" diye işlenir, hiçbir yeni listede/seçimde görünmez ve yeni depo bu adları alamaz.
+      Eski veri satırları <strong>silinmez</strong>. Geçiş yapılana kadar sistem eski davranışta kalır.
+    </p>
+    <?php if ($depo_ran): foreach ($depo_mesaj as $dm): ?><p style="margin:4px 0;font-weight:600;"><?= h($dm) ?></p><?php endforeach; endif; ?>
+    <?php
+      $depoHazir = depo_hazir($pdo);
+      $depoGecis = $depoHazir && depo_gecis_aktif($pdo);
+    ?>
+    <p style="font-weight:600;color:<?= $depoGecis ? '#1f9d55' : '#c0392b' ?>;"><?= !$depoHazir ? '✗ Tablolar eksik' : ($depoGecis ? '✓ Geçiş tamamlandı (yeni depo sistemi açık)' : '✗ Tablolar var, geçiş tamamlanmadı') ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="depo">
+      <input type="hidden" name="adim" value="tablolar">
+      <button type="submit" class="btn btn-primary">Depo Tablolarını Oluştur</button>
+    </form>
+
+    <?php if ($depoHazir):
+      $depoRapor = depo_kullanim_satirlari($pdo);
+      $depoEski  = depo_eski_adlar($pdo);
+      $depoYeni  = []; foreach (depo_hepsi($pdo) as $__d) $depoYeni[(string)$__d['ad_anahtar']] = $__d;
+      $eskiSatir = []; // eski adla damgalı veri satırları
+      foreach ($depoRapor as $__r) { $__a = depo_anahtar($__r['deger']); if (isset($depoEski[$__a]) && !isset($depoYeni[$__a])) $eskiSatir[] = $__r; }
+      $eskiTablolar = array_values(array_unique(array_map(fn($__r) => $__r['tablo'], $eskiSatir)));
+    ?>
+    <h3 style="margin:18px 0 6px;">Eski depo adıyla damgalı veri (rapor — salt okunur)</h3>
+    <?php if (!$eskiSatir): ?>
+      <p>✓ Eski adla damgalı veri satırı yok.</p>
+    <?php else: ?>
+      <div style="overflow-x:auto;"><table class="table" style="font-size:.9em;">
+        <tr><th>Tablo</th><th>Kolon</th><th>Eski depo adı</th><th style="text-align:right">Satır</th></tr>
+        <?php foreach ($eskiSatir as $__r): ?>
+        <tr><td><code><?= h($__r['tablo']) ?></code></td><td><code><?= h($__r['kolon']) ?></code></td><td><?= h($__r['deger']) ?></td><td style="text-align:right"><?= (int)$__r['adet'] ?></td></tr>
+        <?php endforeach; ?>
+      </table></div>
+      <p style="color:#555;font-size:.9em;">Geçişten sonra bu satırlar hiçbir depo seçiminde görünmez (silinmez). Canlı kullanılan bir modüldeki (ör. Personel Takibi) satırlar görünür kalsın istiyorsanız aşağıdan yeni depoya aktarın.</p>
+      <?php $yeniAktif = array_filter($depoYeni, fn($__d) => (int)$__d['aktif'] === 1); ?>
+      <?php if ($yeniAktif): ?>
+      <form method="post" style="margin-top:10px;" onsubmit="return confirm('Seçilen eski depo adındaki satırlar yeni depoya aktarılacak. Devam edilsin mi?');">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="ne" value="depo">
+        <input type="hidden" name="adim" value="aktar">
+        <label>Eski depo adı:
+          <select name="eski_ad" required>
+            <?php foreach (array_unique(array_map(fn($__r) => $__r['deger'], $eskiSatir)) as $__v): ?><option value="<?= h($__v) ?>"><?= h($__v) ?></option><?php endforeach; ?>
+          </select></label>
+        <label style="margin-left:8px;">Yeni depo:
+          <select name="yeni_depo" required>
+            <?php foreach ($yeniAktif as $__d): ?><option value="<?= (int)$__d['id'] ?>"><?= h($__d['ad']) ?> (<?= h($__d['kod']) ?>)</option><?php endforeach; ?>
+          </select></label>
+        <div style="margin:8px 0;">Yalnız şu tablolar: <?php foreach ($eskiTablolar as $__t): ?>
+          <label style="margin-right:10px;"><input type="checkbox" name="tablolar[]" value="<?= h($__t) ?>" checked> <?= h($__t) ?></label>
+        <?php endforeach; ?></div>
+        <button type="submit" class="btn btn-ghost">Seçili eski depo verisini yeni depoya aktar</button>
+      </form>
+      <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if (!$depoGecis): $depoEngel = depo_gecis_engelleri($pdo); ?>
+      <h3 style="margin:18px 0 6px;">Geçişi tamamla</h3>
+      <?php foreach ($depoEngel as $__e): ?><p style="margin:4px 0;color:#c0392b;">✗ <?= h($__e) ?></p><?php endforeach; ?>
+      <form method="post" style="margin-top:8px;">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="ne" value="depo">
+        <input type="hidden" name="adim" value="gecis">
+        <label><input type="checkbox" name="onay" value="1"> Eski depo/veri bu andan sonra gizlenecek; yeni depo sistemi açılacak (silme YOK, geri alınabilir).</label><br>
+        <button type="submit" class="btn btn-primary" <?= $depoEngel ? 'disabled' : '' ?> style="margin-top:8px;">Geçişi Tamamla</button>
+      </form>
+    <?php else: ?>
+      <form method="post" style="margin-top:14px;" onsubmit="return confirm('Geçiş geri alınsın mı? Eski depo davranışı geri döner.');">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="ne" value="depo">
+        <input type="hidden" name="adim" value="geri_al">
+        <button type="submit" class="btn btn-ghost">Geçişi geri al (acil durum)</button>
+      </form>
+    <?php endif; ?>
+    <?php endif; ?>
   <?php mg_kart_kapat(); ?>
 
   <?php mg_kart_ac('cari'); ?>

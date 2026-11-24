@@ -22,7 +22,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Hızlı depo ekleme (yalnız admin / defs.write) — yeni depo kurulumu için
     if (isset($_POST['yeni_depo']) && $is_admin_or_def) {
         $yeni = normalize_depo(trim($_POST['yeni_depo'] ?? ''));
-        if ($yeni === '' || mb_strlen($yeni) > 100) {
+        if (depo_gecis_aktif(db())) {
+            // v574: yeni depo sistemi — depo yalnız `depolar` kaydına eklenir (eski adlarla çakışma çekirdekte denetlenir). Yalnız yönetici.
+            $r = is_admin() ? depo_ekle(db(), ['ad' => $yeni, 'aktif' => 1]) : ['ok' => false, 'hata' => 'Depo eklemek için yönetici yetkisi gerekir.'];
+            if ($r['ok']) {
+                set_flash('success', 'Depo eklendi: ' . $yeni);
+                header('Location: depo_sec.php' . ($next !== '' ? '?next=' . urlencode($next) : ''));
+                exit;
+            }
+            $error = $r['hata'];
+        } elseif ($yeni === '' || mb_strlen($yeni) > 100) {
             $error = 'Geçerli bir depo adı girin (en fazla 100 karakter).';
         } else {
             ensure_definition('depo', $yeni);

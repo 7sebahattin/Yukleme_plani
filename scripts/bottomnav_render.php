@@ -244,7 +244,6 @@ $GATES = [
     'frugro_siparis.php'    => ['frugro_siparis.php', "require_siparis('read', 'frugro');", fn() => role_matrix_page_can('siparis','frugro'), 'siparis.frugro.read or admin (Frugro satırı öncesi kaydedilmiş rolde OGL\'den türer)'],
     'urun_siparis.php'      => ['urun_siparis.php', "require_siparis('read', 'urun');", fn() => role_matrix_page_can('siparis','urun'), 'siparis.urun.read or admin'],
     'maliyet.php'           => ['maliyet.php', "require_maliyet('read');", fn() => can('maliyet.read') || is_admin(), 'can_maliyet(read) = maliyet.read || is_admin()'],
-    'definitions.php'       => ['definitions.php', "require_perm('defs.read');", fn() => can('defs.read'), 'defs.read'],
     'users.php'             => ['users.php', "require_perm('users.admin');", fn() => can('users.admin'), 'users.admin'],
     'roles.php'             => ['roles.php', "require_perm('users.admin');", fn() => can('users.admin'), 'users.admin'],
     'audit.php'             => ['audit.php', "if (!is_admin())", fn() => is_admin(), 'is_admin()'],
@@ -260,14 +259,14 @@ $ANAHTAR_SAYFA = [
     'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
     'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php', 'qcost' => 'hizli_maliyet.php',
     'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'siparis' => 'siparisler.php', 'frugro' => 'frugro_siparis.php', 'usip' => 'urun_siparis.php', 'ptak' => 'personel_takip.php',
-    'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
+    'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
 // v558: bu anahtarlar kayıtta (nav_alt_sayfalar / nav_aktif_anahtar) durur ama ASLA aday değildir.
 $ADAY_DEGIL = ['records', 'cikma', 'kantar'];
 $ESKI_YENI_UYG = array_map(fn($x) => $x . '.php', nav_eski_esleri());
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'frugro', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'siparis', 'frugro', 'usip', 'beyan', 'mail', 'cikma', 'kantar', 'qcost', 'mstok', 'hesap', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }
@@ -307,7 +306,7 @@ $SAYFALAR = [
     'quick_form'  => ['self' => '/hizli_maliyet_form.php', 'kapi' => 'hizli_maliyet_form.php', 'bolum' => 'hizli_maliyet.php', 'baslik' => 'Yeni maliyet hesapla'],
     'hesap'       => ['self' => '/hesap.php',          'kapi' => 'hesap.php',          'bolum' => 'hesap.php',          'baslik' => 'Hesap'],
     'siparisler'  => ['self' => '/siparisler.php',     'kapi' => 'siparisler.php',     'bolum' => 'siparisler.php',     'baslik' => 'Siparişler'],
-    'definitions' => ['self' => '/definitions.php',    'kapi' => 'definitions.php',    'bolum' => 'definitions.php',    'baslik' => 'Tanımlar'],
+    'users'       => ['self' => '/users.php',          'kapi' => 'users.php',          'bolum' => 'users.php',          'baslik' => 'Kullanıcılar'],   // v574: Tanımlar kalktı; Yönetim sayfası örneği
     // v552: anahtarsız (muhasebe) sayfa — sheet'te `.bn-tile-link`; nav_aktif_anahtar() dosya slug'ı döndürür
     'cari_kartlari' => ['self' => '/cari_kartlari.php', 'kapi' => 'cari_kartlari.php', 'bolum' => 'cari_kartlari.php', 'baslik' => 'Cari Kayıt Kartları'],
     // v555: yeni fiş sayfaları (eski records/cikmalar/kantar'ın yeni karşılığı) — anahtarsız muhasebe sayfası; nav_aktif_anahtar() slug döndürür
@@ -404,8 +403,8 @@ foreach ($PROFILLER as $pk => $pr) {
     // muhasebe_herkese_acik_sayfalar()'dan BAĞIMSIZ yazıldı.
     $izinli['sifre_degistirme.php'] = true;
 
-    // v566: Şube/Depo Tanımları (Yönetim grubu) yalnız yönetici; kapı TABLOSU nav_yonetim_sayfalari()'ndan BAĞIMSIZ yazıldı.
-    foreach (['sube_tanimlari.php', 'depo_tanimlari.php'] as $__dosya) $izinli[$__dosya] = is_admin();
+    // v566/v574: Depo Tanımları (Yönetim grubu; Şube kalktı) yalnız yönetici; kapı TABLOSU nav_yonetim_sayfalari()'ndan BAĞIMSIZ yazıldı.
+    foreach (['depo_tanimlari.php'] as $__dosya) $izinli[$__dosya] = is_admin();
 
     // Çapraz kontroller: tablo, uygulamanın KENDİ fonksiyonlarıyla ayrışmasın.
     $fap = first_allowed_page();
@@ -481,8 +480,8 @@ foreach ($PROFILLER as $pk => $pr) {
         // v558: ziyaret edilen sayfa Beyanlar (operatörde aday + soğuk 4. slot): çerez senaryoları artık eski kantar/records anahtarlarına dayanmaz.
         $senaryolar = [
             'cerez_sahte'  => ['u:1;s:users,qcost,xyz,mstok,audit;p:qcost,roles,backup,home,more,../index', ['mstok', 'hks', 'ptak', 'rapor'], []],
-            'cerez_gecerli'=> ['u:1;s:beyan,mstok,defs,rapor;p:hesap', ['hesap', 'beyan', 'mstok', 'defs'], ['hesap']],
-            'cerez_baska'  => ['u:2;s:beyan,mstok,defs,rapor;p:hesap', $soguk, []],
+            'cerez_gecerli'=> ['u:1;s:beyan,mstok,rapor;p:hesap', ['hesap', 'beyan', 'mstok', 'rapor'], ['hesap']],
+            'cerez_baska'  => ['u:2;s:beyan,mstok,rapor;p:hesap', $soguk, []],
             'cerez_bozuk'  => [str_repeat('s:beyan,', 60), $soguk, []],
             // eski anahtarlar (records/cikma/kantar) çerezde olsa da sessizce atılır
             'cerez_eski'   => ['u:1;s:records,kantar,cikma,mstok;p:kantar', ['mstok', 'hks', 'ptak', 'rapor'], []],

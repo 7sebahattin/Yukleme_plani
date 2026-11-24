@@ -160,7 +160,7 @@ if (is_admin()) {
 $_ops_show  = is_admin() || can('records.read') || can('records.write') || beyan_sayfa_erisimi()
     || can('kantar.read') || can('reports.read') || can('stok.read') || can('hesap.read')
     || nav_ptak_gorunur() || can_hizli_maliyet('read') || can_siparis('read') || can_mail('read');
-$_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
+$_ynt_show  = can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
 render_flash();
@@ -374,16 +374,6 @@ if (nav_ptak_gorunur()):
 
 <?php if ($_ynt_show): ?>
 <div class="home-section-title">Yönetim</div>
-
-<?php if (can('defs.read')): ?>
-    <a href="definitions.php" class="home-card">
-        <div class="home-card-icon" style="background:#fcf2dc">⚙️</div>
-        <div class="home-card-title">Tanımlar</div>
-        <?php if ($stats['tanim_sayisi'] > 0): ?>
-        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$stats['tanim_sayisi'] ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
 
 <?php if (can('users.admin')): ?>
     <a href="users.php" class="home-card">
