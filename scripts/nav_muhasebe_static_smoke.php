@@ -42,7 +42,8 @@ foreach ($gruplar as $slug => $g) {
         // v550: admin_konsolu yalnız is_admin(); diğer tüm menü sayfaları kendi muhasebe_sayfa_can('<slug>') kapısıyla (varsayılan kapalı, yönetici her zaman).
         if ($slug === 'admin_konsolu') ok("$dosya: is_admin() kapısı", (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
         else ok("$dosya: muhasebe_sayfa_can('$ad') kapısı (bare is_admin gate yok)", str_contains($s, "if (!muhasebe_sayfa_can('$ad')) { forbidden(); }") && !preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $s));
-        if (preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
+        $__kendiPostu = in_array($dosya, ['sifre_degistirme.php', 'ajanda.php', 'kullanici_tercihleri.php'], true);   // v574: PRG header('Location') başka sayfaya YÖNLENDİRME değildir
+        if (!$__kendiPostu && preg_match("/header\('Location: ([^']+)'/", $s, $lm)) {
             $hedef = explode('?', $lm[1])[0];
             ok("$dosya: yönlendirme hedefi var ($hedef)", is_file($ROOT . '/' . $hedef));
             ok("$dosya: yönlendirme exit'li", (bool)preg_match('/header\([^;]+\);\s*exit;/', $s));
@@ -85,6 +86,11 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: yazma işlemleri muhasebe_palet_can ile kapılı", str_contains($s, "muhasebe_palet_can('edit')") || str_contains($s, "pf_yetki('edit')"));
             ok("$dosya: cari tablolarına YAZMAZ (cari_kart_kaydet/cari_hareket_ekle yok; yazma cari_kaydet.php)", !str_contains($s, 'cari_kart_kaydet(') && !str_contains($s, 'cari_hareket_ekle(') && !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?cari_/i', $s));
+        } elseif (in_array($dosya, ['sifre_degistirme.php', 'ajanda.php', 'kullanici_tercihleri.php'], true)) {
+            // v574: Kullanıcı Ayarları grubu çalışan sayfalar (kendi POST'u PRG + CSRF'li; ayrıntılı denetim scripts/kullanici_ayar_smoke.php).
+            ok("$dosya: çalışan sayfa — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan sayfa — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan sayfa — POST varsa csrf_check", !str_contains($s, '$_POST') || str_contains($s, "csrf_check(\$_POST['csrf']"));
         } else {
             ok("$dosya: hazırlanıyor metni", str_contains($s, 'hazırlanıyor'));
             ok("$dosya: render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
