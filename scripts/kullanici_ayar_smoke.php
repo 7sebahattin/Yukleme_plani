@@ -183,6 +183,18 @@ ok('kt_sil başkasının kaydına dokunmaz', kt_oku($pdo, 2, 'palet_fisleri.tabl
 ok('kt_sil kayıt yokken de true', kt_sil($pdo, 1, 'kantar.tablo') === true);
 ok('ka_tablo_tercihleri anahtarları kt_dogrula beyaz listesinde', array_reduce(array_keys(ka_tablo_tercihleri()), fn($c, $a) => $c && kt_dogrula($a, []) !== null, true));
 
+echo "\n=== 10b. Herkes kendi şifresini değiştirebilir (v575): menü + kapı ===\n";
+$IS_ADMIN = false; $PERMS = [];
+$menu = nav_menu_modeli('');
+$bul = function (array $m, string $href): ?array { foreach ($m['gruplar'] as $g) foreach ($g['ogeler'] ?? $g['items'] ?? [] as $o) if (($o['href'] ?? '') === $href) return $g + ['_oge' => $o]; return null; };
+$g = $bul($menu, 'sifre_degistirme.php');
+ok('yetkisiz kullanıcının menüsünde "Şifre Değiştirme" VAR', $g !== null, json_encode(array_map(fn($x) => $x['ad'] ?? '?', $menu['gruplar']), JSON_UNESCAPED_UNICODE));
+ok('…"Kullanıcı Ayarları" grubunun içinde', $g !== null && ($g['ad'] ?? '') === 'Kullanıcı Ayarları', (string)($g['ad'] ?? ''));
+ok('yetkisiz kullanıcıya Ajanda / Kullanıcı Tercihleri menüde ÇIKMAZ', $bul($menu, 'ajanda.php') === null && $bul($menu, 'kullanici_tercihleri.php') === null);
+$IS_ADMIN = true;
+ok('yönetici de görür', $bul(nav_menu_modeli(''), 'sifre_degistirme.php') !== null);
+$IS_ADMIN = false;
+
 echo "\n=== 11. Sayfa dosyaları — statik değişmezler ===\n";
 $oku = fn(string $f): string => (string)file_get_contents($ROOT . '/' . $f);
 foreach (['sifre_degistirme.php' => 'sifre_degistirme', 'ajanda.php' => 'ajanda', 'kullanici_tercihleri.php' => 'kullanici_tercihleri'] as $f => $slug) {

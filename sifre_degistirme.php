@@ -3,7 +3,8 @@
 // sifre_degistirme.php — Şifre Değiştirme: oturumdaki kullanıcının KENDİ giriş şifresi (v574).
 // Mantık config/kullanici_ayar.php ka_sifre_degistir(): mevcut şifre doğrulanır (5 hata → 60 sn bekleme), yeni şifre
 // bcrypt'lenir, bu oturum dışındaki oturumlar kapanır, audit'e yalnız olay yazılır (şifre ASLA). Şema değişikliği YOK.
-// Kapı: muhasebe_sayfa_can (Roller; varsayılan yalnız yönetici). Başkasının şifresi burada DEĞİŞMEZ (users.php › Şifre Sıfırla).
+// Kapı: oturumu açık HER kullanıcı (v575; muhasebe_herkese_acik_sayfalar — rol/yetki gerekmez, Roller'de satırı yok).
+// Başkasının şifresi burada DEĞİŞMEZ (users.php › Şifre Sıfırla).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';

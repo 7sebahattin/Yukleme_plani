@@ -119,7 +119,8 @@ ok('üst menü (tablet) Mail bağlantısında rozet', preg_match('#mail\.php"[^>
 $bn = parca($h, '<nav class="bottomnav"', '</nav>');
 ok('alt çubuk Mail karosunda rozet + bağlantı aria-label "Mail Merkezi, 3 okunmamış"',
    preg_match('#<a href="[^"]*mail\.php" class="bn-item[^"]*"[^>]*data-nav="mail"[^>]*aria-label="Mail Merkezi, 3 okunmamış"[^>]*>.*?<span class="nav-rozet" aria-hidden="true">3</span></span>#s', $bn) === 1, $bn);
-ok('rozet yalnız Mail karosunda (başka karoda yok)', substr_count($bn, 'nav-rozet') === 1 || substr_count($bn, 'class="nav-rozet') === 1, (string)substr_count($bn, 'nav-rozet'));
+// v575: "Diğer" düğmesi artık her rolde çizilir (herkese açık Şifre Değiştirme) → gizli `nav-rozet-more` sayacı da var; ASIL kural: görünür rozet YALNIZ Mail karosunda.
+ok('rozet yalnız Mail karosunda (başka karoda yok)', substr_count($bn, 'class="nav-rozet"') === 1, (string)substr_count($bn, 'class="nav-rozet"'));
 ok('alt çubuk işaretlemesi: rozet ni-wrap İÇİNDE (app.js yeni işaretleme üretmez)', preg_match('#<span class="ni-wrap"><img[^>]*><span class="nav-rozet"#', $bn) === 1);
 
 $h0 = sayfa_ciz('/index.php', ['dashboard.read', 'records.read']);

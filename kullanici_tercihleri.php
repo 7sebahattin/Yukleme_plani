@@ -58,7 +58,6 @@ try {
 }
 $ktHazir = kt_hazir($pdo);
 $aktifDepo = function_exists('active_depot') ? active_depot() : null;
-$sifreSayfasiAcik = muhasebe_sayfa_can('sifre_degistirme');
 
 render_header('Kullanıcı Tercihleri');
 echo '<link rel="stylesheet" href="assets/kullanici_ayar.css?v=' . (int)@filemtime(__DIR__ . '/assets/kullanici_ayar.css') . '">' . "\n";
@@ -159,7 +158,7 @@ echo '<link rel="stylesheet" href="assets/kullanici_ayar.css?v=' . (int)@filemti
                 <div class="card">
                     <h2 class="ka-kart-baslik">🔐 Güvenlik</h2>
                     <div class="ka-eylem" style="margin-top:0">
-                        <?php if ($sifreSayfasiAcik): ?><a class="btn btn-ghost" href="sifre_degistirme.php">Şifre değiştir</a><?php endif; ?>
+                        <a class="btn btn-ghost" href="sifre_degistirme.php">Şifre değiştir</a>
                         <button type="button" class="btn btn-ghost" data-ka-pin>Ekran kilidi PIN'i</button>
                     </div>
                     <div class="ka-ipucu" style="margin-top:8px">PIN, masaüstünde 5 dakika hareketsizlikte ekranı kilitler; giriş şifrenizden ayrıdır.</div>

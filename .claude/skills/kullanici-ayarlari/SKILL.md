@@ -5,7 +5,7 @@ description: Kullanıcı Ayarları menü grubu (sifre_degistirme.php, ajanda.php
 
 # Kullanıcı Ayarları (v574)
 
-Grup `nav_muhasebe_gruplari()['kullanici_konsolu']`; Hesap (`hesap.php`) sidebar'da aynı gruba eklenir. Üç sayfa v574'te yer tutucudan çıktı. Kapı: `muhasebe_sayfa_can('<slug>')` (Roller'den `muhasebe.<slug>.read`; **varsayılan yalnız yönetici** — sahip kararı beklemede: şifre değiştirme tüm kullanıcılara açılacaksa bu kapı/nav değişir).
+Grup `nav_muhasebe_gruplari()['kullanici_konsolu']`; Hesap (`hesap.php`) sidebar'da aynı gruba eklenir. Üç sayfa v574'te yer tutucudan çıktı. Kapı: `muhasebe_sayfa_can('<slug>')`. **Şifre Değiştirme (v575, sahip kararı: her hesap kendi şifresini değiştirebilmeli) oturumlu HERKESE açıktır** — `config/muhasebe_roller.php` `muhasebe_herkese_acik_sayfalar()` listesinde; rol/yetki istemez, Roller ekranında/kataloğunda satırı YOKTUR (`muhasebe_rol_gruplari()` onu atlar), yetkisiz rolde bile sidebar + mobil "Diğer" + ana sayfa kartında görünür. Sonuç: mobil alt çubukta her rolde "Diğer" düğmesi çizilir (aday sayısından bağımsız). Yeni "herkese açık, yalnız kendi hesabına işlem yapan" sayfa eklenirse o listeye ekle ve `bottomnav_render.php` / `dashboard_sidebar_parity_smoke.php` / `role_permission_matrix_smoke.php` bağımsız kapı tablolarını güncelle. **Ajanda ve Kullanıcı Tercihleri** varsayılan yalnız yönetici (Roller'den `muhasebe.<slug>.read` ile verilebilir).
 
 **Değişmezler**
 - Kullanıcı id'si HER ZAMAN `$auth_user['id']` (oturum); POST/GET'ten `user_id` ALINMAZ. Sayfalar kendi POST'unu işler (PRG: `set_flash` + `header('Location')` + `exit`), her POST `csrf_check`.

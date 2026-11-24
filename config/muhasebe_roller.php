@@ -18,6 +18,13 @@ declare(strict_types=1);
 /** İşlem anahtarı taşıyan çalışan modül grupları. */
 function muhasebe_rol_islemli_gruplar(): array { return ['cari', 'kasa', 'cek_senet', 'stok', 'fatura']; }
 
+/**
+ * v575 (sahip kararı): HER hesap kendi şifresini değiştirebilmeli. Bu sayfalar rol/yetki istemez — oturumu açık her kullanıcıya
+ * açıktır; Roller ekranında satırı YOKTUR (verilecek/alınacak bir yetki yok). Menü, mobil "Diğer" ve ana sayfa kartı
+ * aynı kapıdan (muhasebe_sayfa_can) beslendiği için her role görünür. Yalnız KENDİ hesabı üzerinde işlem yapan sayfalar buraya girer.
+ */
+function muhasebe_herkese_acik_sayfalar(): array { return ['sifre_degistirme']; }
+
 /** Rol kapsamındaki (yönetici sayfaları HARİÇ) grup anahtarları → [etiket, [slug => başlık]]. */
 function muhasebe_rol_gruplari(): array {
     static $out = null;
@@ -26,7 +33,11 @@ function muhasebe_rol_gruplari(): array {
     $out = [];
     foreach (nav_muhasebe_gruplari() as $grup => [$etiket, , $sayfalar]) {
         $liste = [];
-        foreach ($sayfalar as $dosya => [$baslik]) $liste[pathinfo((string)$dosya, PATHINFO_FILENAME)] = (string)$baslik;
+        foreach ($sayfalar as $dosya => [$baslik]) {
+            $slug = pathinfo((string)$dosya, PATHINFO_FILENAME);
+            if (in_array($slug, muhasebe_herkese_acik_sayfalar(), true)) continue;   // Roller'de satırı yok
+            $liste[$slug] = (string)$baslik;
+        }
         $out[(string)$grup] = ['etiket' => (string)$etiket, 'sayfalar' => $liste];
     }
     return $out;
@@ -40,6 +51,7 @@ function muhasebe_sayfa_grubu(string $slug): ?string {
 
 /** Sayfa girişi: yönetici ya da `muhasebe.<slug>.read`. Kapsam dışı / bilinmeyen slug yalnız yöneticiye açıktır (fail-closed). */
 function muhasebe_sayfa_can(string $slug): bool {
+    if (in_array($slug, muhasebe_herkese_acik_sayfalar(), true)) return function_exists('current_user') && current_user() !== null;   // v575: oturumu açık herkes
     if (function_exists('is_admin') && is_admin()) return true;
     if (!function_exists('can') || muhasebe_sayfa_grubu($slug) === null) return false;
     return can('muhasebe.' . $slug . '.read');
