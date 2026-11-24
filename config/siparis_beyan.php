@@ -116,6 +116,30 @@ function siparis_beyan_ara(PDO $pdo, string $q, int $limit = 20): array
     return array_map('siparis_beyan_ozet', $st->fetchAll(PDO::FETCH_ASSOC));
 }
 
+/**
+ * v576 — Açıktaki beyanlar: silinmemiş, "yüklendi" olmayan ve hiçbir sevkiyata AKTİF bağlı OLMAYAN beyanlar
+ * (en yeni önce). $q doluysa id / parti no / plaka ile süzülür (boşsa hepsi). Depo filtresiz; özetler gizlenmiş.
+ * @return list<array>
+ */
+function siparis_beyan_acik_liste(PDO $pdo, string $q = '', int $limit = 30): array
+{
+    $limit = max(1, min(100, $limit));
+    $kosul = ''; $par = [siparis_beyan_gizli_durum()];
+    $q = trim($q);
+    if ($q !== '') {
+        $kac = fn(string $x): string => '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $x) . '%';
+        $kosul = " AND (c.id = ? OR UPPER(c.party_no) LIKE ? ESCAPE '!' OR UPPER(c.vehicle_plate) LIKE ? ESCAPE '!' OR UPPER(c.tractor_plate) LIKE ? ESCAPE '!')";
+        $plaka = $kac(beyan_plaka_normalize($q));
+        array_push($par, preg_match('/^\d{1,10}$/', $q) ? (int)$q : -1, $kac(mb_strtoupper($q, 'UTF-8')), $plaka, $plaka);
+    }
+    $st = $pdo->prepare('SELECT ' . str_replace(', ', ', c.', 'c.' . SIPARIS_BEYAN_KOLONLAR) . " FROM customs_declarations c
+        WHERE c.deleted_at IS NULL AND COALESCE(c.status, '') <> ?
+          AND NOT EXISTS (SELECT 1 FROM siparis_beyan sb WHERE sb.beyan_id = c.id AND sb.durum = 'aktif')" . $kosul . '
+        ORDER BY c.id DESC LIMIT ' . $limit);
+    $st->execute($par);
+    return array_map('siparis_beyan_ozet', $st->fetchAll(PDO::FETCH_ASSOC));
+}
+
 /** Sevkiyatın beyan bağları (varsayılan yalnız aktif) + 'beyan' özeti (gizlenmiş). @return list<array> */
 function siparis_beyan_baglar(PDO $pdo, int $sid, bool $gecmisDahil = false): array
 {

@@ -30,6 +30,9 @@ $field = static function (string $name, string $label, string $icon, string $mod
 <div class="beyan-workspace" data-beyan-workspace>
 <form id="beyanForm" method="post" action="<?= h($form_action) ?>" class="bf beyan-workspace-form" data-beyan-form>
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <?php if (!$is_edit && !empty($sip_sid)): ?>
+    <input type="hidden" name="sip_sid" value="<?= (int)$sip_sid ?>">
+    <?php endif; ?>
     <?php if ($is_edit): ?>
     <input type="hidden" name="id" value="<?= (int)$id ?>">
     <input type="hidden" name="edit_token" value="<?= h($edit_token ?? '') ?>">
