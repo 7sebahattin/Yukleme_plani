@@ -256,35 +256,13 @@ ok('Yönetici "tum" raporu: Atanmamış YOK',           !str_contains($hy, 'Atan
 $o = run('hesap_yazdir.php', ['tarih_bas' => '2026-06-01', 'tarih_son' => '2026-06-30', 'goruntule' => 'html', 'personel' => '10']);
 ok('Yönetici ?personel=10 raporu: yalnız A',         str_contains($o, 'A_GIZLI') === false && str_contains($o, 'Kapsam: PersonelA') && !str_contains($o, 'PersonelB'));
 
-// ═══════════ K3 — ana sayfa Hesap kartı kişisel ═══════════
+// ═══════════ K3 — ana sayfa Hesap kartı kişisel (v580: kart rozet/özet sorguları kalktı) ═══════════
 echo "\n── K3: index.php Hesap kartı ──\n";
 $isrc = file_get_contents($ROOT . '/index.php');
-$ib = strpos($isrc, '// Hesap modülü özet');
-$ie = strpos($isrc, '// Stok özet');
-$blok = ($ib !== false && $ie !== false) ? substr($isrc, $ib, $ie - $ib) : '';
-ok('index: Hesap bloğu bulundu',                     $blok !== '');
-ok('index: sorgular user_id = ? ile',                substr_count($blok, 'user_id = ?') >= 2);
-ok('index: tutar yalnız TRY',                        str_contains($blok, "currency = 'TRY'"));
-ok('index: legacy is_given_to_accountant sayımı yok', !str_contains($blok, 'is_given_to_accountant'));
-db()->exec("INSERT INTO account_transactions (user_id,transaction_date,type,amount,currency,status,description)
-            VALUES (10,'" . date('Y-m-d') . "','gider',25,'TRY','submitted','A_BUGUN'),
-                   (20,'" . date('Y-m-d') . "','gider',999,'TRY','submitted','B_BUGUN'),
-                   (10,'" . date('Y-m-d') . "','gider',15,'USD','submitted','A_BUGUN_USD')");
-$bugun_ids = db()->query("SELECT id FROM account_transactions WHERE description LIKE '%_BUGUN%'")->fetchAll(PDO::FETCH_COLUMN);
-$index_hesap = function () use ($blok): array {
-    eval($blok);   // yalnız index.php'nin Hesap bloğu — stub'lı db()/can()/current_user() ile
-    return [$hesap_bugun, $hesap_bekleyen, $hesap_onay_bekleyen];
-};
-as_user(10, $OPER);
-[$bg, $bk, $ob] = $index_hesap();
-ok('index A: bugün yalnız kendi TRY (25)',           abs($bg - 25) < 0.01, (string)$bg);
-ok('index A: bekleyen yalnız kendi (4, B hariç)',     $bk === 4, (string)$bk);
-ok('index A: yönetici sayaçları 0',                  $ob === 0);
-as_user(40, $YON);
-[$bg, $bk, $ob] = $index_hesap();
-ok('index Yönetici: onay bekleyen (sahipli submitted)', $ob === 7, (string)$ob);
-ok('index: sahipsiz sayacı YOK',                     !str_contains($blok, '$hesap_sahipsiz') && !str_contains($blok, 'user_id IS NULL'));
-db()->exec("DELETE FROM account_transactions WHERE id IN (" . implode(',', $bugun_ids) . ")");
+ok('index (v580): account_transactions sorgusu yok (kişisel veri sızıntısı imkânsız)', !str_contains($isrc, 'account_transactions'));
+ok('index (v580): kart rozet/alt metin yok',                                         !str_contains($isrc, 'home-card-badge') && !str_contains($isrc, 'home-card-sub'));
+ok('index: legacy is_given_to_accountant sayımı yok',                                !str_contains($isrc, 'is_given_to_accountant'));
+ok('index: sahipsiz sayacı YOK',                                                     !str_contains($isrc, '$hesap_sahipsiz') && !str_contains($isrc, 'user_id IS NULL'));
 
 // ═══════════ O3 — liste toplamları bakiye/bekleyen ayrı ═══════════
 echo "\n── O3: liste toplamları ──\n";

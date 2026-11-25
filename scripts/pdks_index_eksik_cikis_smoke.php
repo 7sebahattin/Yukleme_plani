@@ -69,34 +69,15 @@ pdks_gunluk_migrate(db());
 
 $kadinId = (int)db()->query("SELECT id FROM worker_types WHERE code='KADIN'")->fetchColumn();
 
-// ── index.php'nin KENDİ kaynağından hesaplama bloğunu çıkar ──
+// v580: ana sayfadan tüm kart rozetleri/alt metinler kaldırıldığı için index.php'de
+// $personel_eksik_cikis sorgusu artık yok; paylaşılan pdks_gunluk_eksik_cikislar()
+// fonksiyonunun depo/çıkış/yetki davranışı doğrudan doğrulanır.
 $indexSrc = (string)file_get_contents($ROOT . '/index.php');
-if (!preg_match(
-    '/\$personel_eksik_cikis = 0;.*?\n\}\n/s',
-    $indexSrc, $mBlok
-)) {
-    fwrite(STDERR, "index.php'de \$personel_eksik_cikis hesaplama bloğu bulunamadı — kod taşınmış/yeniden adlandırılmış olabilir.\n");
-    exit(1);
-}
-// __DIR__ eval() içinde bu test dosyasının klasörüne çözülür (index.php'nin
-// DEĞİL) — require_once yolu bu yüzden GERÇEK kök dizine sabitlenir. Kod
-// SATIRLARI değişmiyor, yalnız bu TEK göreli referans çözülüyor.
-$hesaplaBlok = str_replace('__DIR__', var_export($ROOT, true), $mBlok[0]);
 
-// Blok kapıyı nav_ptak_gorunur()'den alır (sidebar/bottomnav ile TEK kaynak).
-// helpers.php'nin tamamı yüklenmez (migrasyon IIFE'si, render fonksiyonları) —
-// fonksiyonun GERÇEK tanımı oradan çıkarılır, kopya yazılmaz.
-if (!preg_match('/function nav_ptak_gorunur\(\): bool \{.*?\n\}\n/s',
-        (string)file_get_contents($ROOT . '/config/helpers.php'), $mNav)) {
-    fwrite(STDERR, "config/helpers.php'de nav_ptak_gorunur() bulunamadı.\n");
-    exit(1);
-}
-eval($mNav[0]);
-
-function pdks_idx_hesapla(string $blok): int {
-    global $personel_eksik_cikis;
-    eval($blok);
-    return $personel_eksik_cikis;
+function pdks_idx_hesapla(): int {
+    if (!role_pdks_can('daily_scan') && !role_pdks_can('daily_reports')) return 0;
+    if (!pdks_gunluk_sema_hazir(db())) return 0;
+    return count(pdks_gunluk_eksik_cikislar(date('Y-m-d'), active_depot() ?? '', null, db()));
 }
 
 $fail = 0; $gecen = 0;
@@ -109,12 +90,12 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
 echo "\n=== A. Yetkisiz kullanıcı — sorgu HİÇ çalışmaz, rozet 0 ===\n";
 $PERMS = [];
 $IS_ADMIN = false;
-$v = pdks_idx_hesapla($hesaplaBlok);
+$v = pdks_idx_hesapla();
 ok('hiçbir attendance.* izni/yönetici YOKKEN $personel_eksik_cikis = 0', $v === 0, (string)$v);
 
 echo "\n=== B. İzinli kullanıcı, EKSİK ÇIKIŞ YOK — rozet 0 ===\n";
 $PERMS = ['attendance.daily_reports'];
-$v = pdks_idx_hesapla($hesaplaBlok);
+$v = pdks_idx_hesapla();
 ok('izin VAR ama bugün hiç mesai/eksik çıkış yokken $personel_eksik_cikis = 0', $v === 0, (string)$v);
 
 echo "\n=== C. Bugün İKİ eksik çıkışlı işçi — rozet 2 ===\n";
@@ -131,48 +112,47 @@ if (!$g2['ok']) { fwrite(STDERR, 'giriş 2 hata: ' . json_encode($g2, JSON_UNESC
 
 $PERMS = [];
 $IS_ADMIN = false;
-$v = pdks_idx_hesapla($hesaplaBlok);
+$v = pdks_idx_hesapla();
 ok('yetkisiz kullanıcı için HÂLÂ 0 (izin kapısı veri varlığından BAĞIMSIZ)', $v === 0, (string)$v);
 
 $PERMS = ['attendance.daily_scan'];
-$v = pdks_idx_hesapla($hesaplaBlok);
+$v = pdks_idx_hesapla();
 ok('izinli kullanıcı için rozet = 2 (iki açık/eksik çıkışlı kart)', $v === 2, (string)$v);
 
 // Kalıcı PDKS izinleri hub üzerinden kendi sayfalarını açar; günlük işçi
 // verisine erişim sağlamaz. Eksik çıkış rozeti bu kullanıcılara gösterilmez.
 foreach (['attendance.employees', 'attendance.cards', 'attendance.scan'] as $__kalici) {
     $PERMS = [$__kalici];
-    $v = pdks_idx_hesapla($hesaplaBlok);
+    $v = pdks_idx_hesapla();
     ok("yalnız $__kalici → rozet 0 (günlük işçi Gör izni yok)", $v === 0, (string)$v);
 }
 foreach (['attendance.hub.read', 'attendance.employees.read'] as $__pageRead) {
     $PERMS = ['role.permissions.detailed', $__pageRead];
-    ok("ayrıntılı $__pageRead → günlük veri rozeti yok", pdks_idx_hesapla($hesaplaBlok) === 0);
+    ok("ayrıntılı $__pageRead → günlük veri rozeti yok", pdks_idx_hesapla() === 0);
 }
 foreach (['attendance.daily_scan.read', 'attendance.daily_reports.read'] as $__pageRead) {
     $PERMS = ['role.permissions.detailed', $__pageRead];
-    ok("ayrıntılı $__pageRead → izinli günlük veri rozeti 2", pdks_idx_hesapla($hesaplaBlok) === 2);
+    ok("ayrıntılı $__pageRead → izinli günlük veri rozeti 2", pdks_idx_hesapla() === 2);
 }
 $PERMS = ['attendance.daily_scan'];   // sonraki bölümler izinli kullanıcıyla devam eder
 
 echo "\n=== D. Başka depodaki eksik çıkış SAYILMAZ (aktif depo kapsamı) ===\n";
 global $AKTIF_DEPO;
 $AKTIF_DEPO = 'Depo B';
-$v = pdks_idx_hesapla($hesaplaBlok);
+$v = pdks_idx_hesapla();
 ok('Depo B aktifken Depo A\'nın eksik çıkışları GÖRÜNMÜYOR (rozet 0)', $v === 0, (string)$v);
 $AKTIF_DEPO = 'Depo A';
 
 echo "\n=== E. Çıkış yapılınca rozet düşer ===\n";
 $c1 = pdks_gunluk_faz8a_cikis_kaydet('111111', 'usb_decimal', $sid, 1, db());
 if (!$c1['ok']) { fwrite(STDERR, 'çıkış hata: ' . json_encode($c1, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
-$v = pdks_idx_hesapla($hesaplaBlok);
+$v = pdks_idx_hesapla();
 ok('bir kart çıkış yapınca rozet 2\'den 1\'e düşer', $v === 1, (string)$v);
 
-echo "\n=== F. index.php içindeki rozet MARKUP'ı doğru yapılandırılmış ===\n";
-ok('badge markup $personel_eksik_cikis değişkenini kullanıyor', str_contains($indexSrc, 'if ($personel_eksik_cikis > 0)'));
-ok('badge (int) ile yazdırılıyor (XSS/tip güvenliği)', str_contains($indexSrc, '<?= (int)$personel_eksik_cikis ?>'));
-ok('badge home-card-badge sınıfını kullanıyor (mevcut kart rozeti deseniyle AYNI)',
-    (bool)preg_match('/if \(\$personel_eksik_cikis > 0\): \?>\s*<div class="home-card-badge"/', $indexSrc));
+echo "\n=== F. v580: index.php temiz 3B ikon düzeni (rozet/alt metin/gereksiz sorgu yok) ===\n";
+ok('v580: index.php içinde $personel_eksik_cikis sorgusu yok', !str_contains($indexSrc, '$personel_eksik_cikis'));
+ok('v580: index.php içinde home-card-badge yok', !str_contains($indexSrc, 'home-card-badge'));
+ok('v580: index.php içinde home-card-sub yok', !str_contains($indexSrc, 'home-card-sub'));
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

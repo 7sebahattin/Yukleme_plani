@@ -2857,8 +2857,8 @@ function ekranAlti() {
         ovl.hidden = false;
         more.setAttribute('aria-expanded', 'true');
         duzenle(false);
+        try { kapatBtn.focus({ preventScroll: true }); } catch (_) { kapatBtn.focus(); }
         aktifGrubaKaydir();
-        kapatBtn.focus();
     }
     function kapat() {
         if (ovl.hidden) return;

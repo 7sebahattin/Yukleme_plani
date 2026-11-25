@@ -89,15 +89,15 @@ ok("helpers.php: aktif-sayfa vurgusu TÜM konsolide alt sayfaları kapsıyor (na
 
 echo "\n=== 9. MOBİL 'Personel' GİRİŞİ personel_takip.php'YE BAĞLI (görev madde 2) ===\n";
 ok("index.php: 'Personel' ana sayfa kartı tek kaynak nav_menu_modeli() üzerinden personel_takip.php'ye açılıyor (personel.php DEĞİL)",
-    str_contains($indexSrc, "nav_menu_modeli('')") && str_contains($indexSrc, "personel_takip.php"));
+    str_contains($indexSrc, "nav_menu_modeli('')") && str_contains($helpersSrc, "\$ge('personel_takip.php'"));
 // Bug çalışması (personel_takip): kart + rozet koşulu elle yazılmış bir
 // listeydi ve kalıcı PDKS izinlerini (employees/cards/scan) de sayıyordu —
 // yalnız attendance.employees'i olan kullanıcı kartı görüp 403 alıyordu.
 // Artık index.php doğrudan sidebar/bottomnav ile AYNI tek kaynak nav_menu_modeli()'ni okur ($p_gunluk = nav_ptak_gorunur()).
 ok("index.php: kart görünürlüğü TEK kaynak nav_menu_modeli() → nav_ptak_gorunur() ile (sidebar/bottomnav ile aynı)",
     str_contains($indexSrc, "nav_menu_modeli('')") && str_contains($helpersSrc, '$p_gunluk = nav_ptak_gorunur();'));
-ok("index.php: eksik-çıkış rozeti günlük giriş/çıkış veya puantaj Gör izniyle sınırlı",
-    str_contains($indexSrc, "if (role_pdks_can('daily_scan') || role_pdks_can('daily_reports')) {"));
+ok("index.php (v580): eksik-çıkış ana sayfa rozeti ve sorgusu kaldırıldı",
+    !str_contains($indexSrc, 'home-card-badge') && !str_contains($indexSrc, 'personel_eksik_cikis'));
 ok("index.php: kalıcı PDKS izinleri (employees/cards/scan) Personel Takibi kartını AÇMIYOR (personel_takip.php onları saymaz → 403 olurdu)",
     !preg_match('/can\(.attendance\.(employees|cards|scan).\)/', $indexSrc));
 ok("index.php: Operasyon bölümü nav_menu_modeli() üzerinden nav_ptak_gorunur()'ü sayıyor (yalnız PDKS izinli kullanıcı kartı görebilsin)",

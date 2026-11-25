@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v579');
+    define('APP_SURUM', 'v580');
 }
 
 // --- HTML kaçışı ---
@@ -708,17 +708,6 @@ function nav_menu_modeli(string $base): array {
         'Personel Takibi', $a_ptak, 'ptak');
     $ekle('operasyon', 'Operasyon', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', $o);
 
-    if ($p_adm || $p_usr) {
-        $o = [];
-        // v566: Şube / Depo Tanımları (eski Admin Konsolu) — yalnız yönetici; anahtarsız öğe (alt çubuk adayı değil).
-        if ($p_adm) foreach (nav_yonetim_sayfalari() as $d => [$et, $em]) $o[] = $ge($d, $em, $et, $ak === substr($d, 0, -4));
-        if ($p_usr) $o[] = $ge('users.php', '👥', 'Kullanıcılar', $a_usr, 'users');
-        if ($p_usr) $o[] = $ge('roles.php', '🛡️', 'Roller', $a_rol, 'roles');
-        if ($p_adm) $o[] = $ge('audit.php', '🧾', 'İşlem Geçmişi', $a_aud, 'audit');
-        if ($p_adm) $o[] = $ge('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp, 'backup');
-        $ekle('yonetim', 'Yönetim', '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/>', $o);
-    }
-
     // v548: Malzeme Stok → Stok, Raporlar ("Eski Raporlar") → Raporlar, Hesap → Kullanıcı Ayarları grubuna taşındı.
     // Bu sayfalar admin olmayan rollere de açıktır → grup, yetkili bağlantısı varsa çizilir. [href, emoji, etiket, aktif, izin, nav]
     $ek = [
@@ -735,6 +724,18 @@ function nav_menu_modeli(string $base): array {
         }
         foreach ($ek[$slug] ?? [] as [$eh, $ei, $el, $ea, $ep, $en]) if ($ep) $o[] = $ge($eh, $ei, $el, (bool)$ea, $en);
         if ($o) $ekle($slug, $bas, $svgYol, $o);
+    }
+
+    // v580 (sahip kararı): Yönetim grubu EN SONDA (Kullanıcı Ayarları'ndan sonra) — sidebar, mobil "Diğer" ve ana sayfa birlikte.
+    if ($p_adm || $p_usr) {
+        $o = [];
+        // v566: Şube / Depo Tanımları (eski Admin Konsolu) — yalnız yönetici; anahtarsız öğe (alt çubuk adayı değil).
+        if ($p_adm) foreach (nav_yonetim_sayfalari() as $d => [$et, $em]) $o[] = $ge($d, $em, $et, $ak === substr($d, 0, -4));
+        if ($p_usr) $o[] = $ge('users.php', '👥', 'Kullanıcılar', $a_usr, 'users');
+        if ($p_usr) $o[] = $ge('roles.php', '🛡️', 'Roller', $a_rol, 'roles');
+        if ($p_adm) $o[] = $ge('audit.php', '🧾', 'İşlem Geçmişi', $a_aud, 'audit');
+        if ($p_adm) $o[] = $ge('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp, 'backup');
+        $ekle('yonetim', 'Yönetim', '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/>', $o);
     }
 
     return [
@@ -981,6 +982,21 @@ function nav_alt_cerez_oku(int $uid): array {
 function nav_alt_ikon_url(array $p, string $base): string {
     $v = @filemtime(__DIR__ . '/../' . $p['ikon']);
     return $base . $p['ikon'] . '?v=' . ($v ?: 0);
+}
+
+/**
+ * v580: ana sayfa kartının 3B ikon PNG'si — assets/nav-icons/3d/<anahtar>.png?v=<filemtime>.
+ * Anahtar = sayfa dosya adı (.php'siz); klasör içi sayfalarda klasör adı (halkayit/index.php → halkayit).
+ * Dosya yoksa null → çağıran aynı sabit boyutlu kutuda emojiye düşer.
+ */
+function nav_3d_ikon_url(string $href, string $base = ''): ?string {
+    $yol = (string)(parse_url($href, PHP_URL_PATH) ?? '');
+    $anahtar = basename($yol, '.php');
+    if ($anahtar === 'index' && str_contains($yol, '/')) $anahtar = basename(dirname($yol));
+    if ($anahtar === '' || !preg_match('/^[a-z0-9_-]+$/i', $anahtar)) return null;
+    $goreli = 'assets/nav-icons/3d/' . $anahtar . '.png';
+    $v = @filemtime(__DIR__ . '/../' . $goreli);
+    return $v ? $base . $goreli . '?v=' . $v : null;
 }
 
 /**
