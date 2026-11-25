@@ -19,6 +19,7 @@ function stok_assets(): void
 
 function stok_scripts(): void
 {
+    echo '<script src="assets/doviz_oto.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/doviz_oto.js') . '"></script>' . "\n";
     echo '<script src="assets/stok.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/stok.js') . '"></script>' . "\n";
 }
 

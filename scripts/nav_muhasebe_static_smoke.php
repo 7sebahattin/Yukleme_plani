@@ -78,6 +78,12 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
             ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/doviz_core.php')) {
+            // Çalışan modül (Döviz & Günlük Kurlar — v576): şema kapısı + sayfa kabuğu + yalnız GET.
+            ok("$dosya: çalışan modül — doviz_sayfa_kapisi( (tablo yoksa uyarı kartı)", str_contains($s, 'doviz_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
         } elseif ($dosya === 'palet_fisleri.php') {
             // v530: Palet Fişleri aktif, yöneticiye açık Excel tarzı tablo sayfası.
             ok("$dosya: yönetim tablosu", str_contains($s, 'id="pfTable"'));

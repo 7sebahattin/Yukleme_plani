@@ -38,6 +38,7 @@ require_once __DIR__ . '/config/kullanici_tercih.php';   // Kullanıcı Tercihle
 require_once __DIR__ . '/config/ajanda_core.php';          // Ajanda (ajanda_kayitlar tablosu; yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/fatura_core.php';      // Fatura (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/kasa_core.php';        // Kasa (yalnız CREATE TABLE kartı)
+require_once __DIR__ . '/config/doviz_core.php';       // Döviz & Günlük Kurlar (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/ceksenet_core.php';    // Çek-Senet (yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/puantaj_isaret.php';   // Puantaj İşaretleri (v553; yalnız CREATE TABLE kartı)
 require_once __DIR__ . '/config/puantaj_giris.php';    // Puantaj Girişi (v554; yalnız CREATE TABLE kartı; pg_* yardımcıları çağrı anında config/puantaj_cizelgesi.php'ye ihtiyaç duyar → migrate yalnız pg_migrate/pg_hazir çağırır)
@@ -150,6 +151,7 @@ $pf_results = []; $pf_ran = false;                              // Palet Fişler
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
 $kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
+$doviz_results = []; $doviz_ran = false;                        // Döviz & Günlük Kurlar (2 yeni tablo)
 $ceksenet_results = []; $ceksenet_ran = false;                  // Çek-Senet (3 yeni tablo)
 $pi_results = []; $pi_ran = false;                              // Puantaj İşaretleri (v553: puantaj_isaretler, 1 yeni tablo)
 $pg_results = []; $pg_ran = false;                              // Puantaj Girişi (v554: puantaj_giris_kisiler + puantaj_giris_gunler, 2 yeni tablo)
@@ -467,6 +469,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($kasa_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'kasa', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'doviz') {
+    csrf_check($_POST['csrf'] ?? null);
+    $doviz_ran     = true;
+    $doviz_results = doviz_migrate($pdo);
+    foreach ($doviz_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'doviz', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'ceksenet') {
@@ -1288,6 +1299,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="kasa">
       <button type="submit" class="btn btn-primary">Kasa Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('doviz'); ?>
+    <h2 style="margin-top:0;">Döviz &amp; Günlük Kurlar (TCMB)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>doviz_tanimlar</code> (para birimi kartları) ve <code>doviz_kurlar</code> (günlük TCMB ve manuel kur kayıtları)
+      tablolarını ekler (ALTER ve yabancı anahtar YOK, mevcut veriye dokunmaz) ve temel para birimlerini (TRY, USD, EUR, GBP, CHF, RUB, AED, SAR) bir kez tohumlar.
+      Çalıştırılmazsa Döviz &amp; Kurlar sayfaları "kurulmamış" der, diğer sayfalar aynen çalışır.
+      <?php if ($doviz_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($doviz_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $dovizHazir = doviz_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $dovizHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $dovizHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="doviz">
+      <button type="submit" class="btn btn-primary">Döviz &amp; Kur Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

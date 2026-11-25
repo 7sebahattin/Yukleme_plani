@@ -20,6 +20,7 @@ function cari_assets(): void
 
 function cari_scripts(): void
 {
+    echo '<script src="assets/doviz_oto.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/doviz_oto.js') . '"></script>' . "\n";
     echo '<script src="assets/cari.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/cari.js') . '"></script>' . "\n";
 }
 
