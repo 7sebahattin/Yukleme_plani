@@ -433,3 +433,20 @@ html[data-theme="dark"] .pk-d-sorun { color: #ff9d94; }
 .pg-isim-metin.pg-kose-cavus .pc-isim-yazi { flex: 0 0 auto; }
 .pg-cavus-kose { flex: 1 1 80px; min-width: 0; max-width: 150px; height: 22px; min-height: 0; padding: 0 4px; line-height: 1; border: 1px solid var(--pc-border); border-radius: 6px; background: var(--pc-surface); color: var(--pc-text); font: inherit; font-size: .74rem; font-weight: 500; }
 .pg-cavus-kose:focus { outline: 2px solid var(--pc-accent); outline-offset: 0; }
+
+/* Masaüstü %80 ölçek yoğunluğu (.pg-pen-alan select >=42px ve .pg-buyuk >=48px smoke testleri için korunur) */
+@media screen and (min-width: 900px) {
+    .pc-bar { gap: 6px 10px; margin-bottom: 6px; }
+    .pc-ok { padding: 5px 10px; min-width: 34px; }
+    .pc-ay-giris, .pc-ara { min-height: 34px; padding: 5px 8px; }
+    .pc-sekme { padding: 6px 12px; }
+    .pc-grid-wrap { max-height: calc(100dvh - 230px); }
+    .pc-grid .pc-g { min-width: 28px; width: 28px; }
+    .pc-grid .pc-isim { min-width: 160px; max-width: 205px; padding: 4px 8px; }
+    .pc-grid .pc-oz { min-width: 44px; padding: 3px 5px; }
+    .pc-h { height: 30px; }
+    .pi-menu { width: 196px; padding: 6px; }
+    .pi-dugme { min-height: 30px; padding: 4px 8px; gap: 8px; }
+    .pg-pen-alan select { min-height: 42px; }
+}
+

@@ -23,8 +23,8 @@ ok('sidebar $p_mail = can_mail(\'read\')', str_contains($helpers, "\$p_mail  = c
 ok('sidebar mail bağlantısı $p_mail kapılı', str_contains($helpers, "if (\$p_mail)  \$o[] = \$ge('mail.php'"));
 ok('nav_alt_izinler mail = can_mail(\'read\')', str_contains($helpers, "'mail'    => \$fn && can_mail('read')"));
 ok('first_allowed_page mail.php = can_mail(\'read\')', str_contains($helpers, "'mail.php'           => can_mail('read')"));
-ok('index.php kartı can_mail(\'read\') kapılı', (bool)preg_match("/if \(can_mail\('read'\)\): \?>\s*\n\s*<a href=\"mail\.php\"/", $index));
-ok('index.php bölüm görünürlüğü can_mail içeriyor', str_contains($index, "|| can_mail('read');"));
+ok('index.php mail kartı tek kaynak nav_menu_modeli() ile (sidebar can_mail(\'read\') kapısıyla aynı)', str_contains($index, "nav_menu_modeli('')") && !str_contains($index, '<a href="mail.php"'));
+ok('index.php bölüm görünürlüğü nav_menu_modeli() üzerinden çizilir', str_contains($index, "nav_menu_modeli('')") && str_contains($index, "empty(\$__hg['ogeler'])"));
 ok('mail.php require_mail(\'read\')', str_contains(oku('mail.php'), "require_mail('read');"));
 ok('mail_hesaplar.php require_mail(\'admin\')', str_contains(oku('mail_hesaplar.php'), "require_mail('admin');"));
 ok('mail_hesaplar.php POST\'ta csrf_check', str_contains(oku('mail_hesaplar.php'), "csrf_check(\$_POST['csrf'] ?? null);"));

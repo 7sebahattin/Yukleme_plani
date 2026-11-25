@@ -265,16 +265,42 @@ foreach ($dashboardProfiles as $name => $profile) {
     foreach (['index.php', 'migrate.php', 'depo_tasima.php', 'firma_eslestirme.php', 'logout.php'] as $excluded) {
         dashboard_check(!in_array($excluded, $homeHrefs, true), $name . ': modül olmayan/eski hedef kart değil ' . $excluded);
     }
+    // Ana sayfa bölüm başlıkları ve her bölümdeki kart sırası, sol kenar çubuğunun boş olmayan gruplarıyla 1'e 1 aynı olmalı.
+    $sidebarGroups = [];
+    foreach ($xpath->query('//nav[contains(concat(" ",normalize-space(@class)," ")," sidebar-nav ")]/details[contains(concat(" ",normalize-space(@class)," ")," sidebar-grup ")]') as $detailsNode) {
+        $items = [];
+        foreach ($xpath->query('.//a[contains(concat(" ",normalize-space(@class)," ")," sidebar-link ")]', $detailsNode) as $linkNode) {
+            $labelNode = $xpath->query('.//*[contains(concat(" ",normalize-space(@class)," ")," sidebar-link-label ")]', $linkNode)->item(0);
+            $items[] = ['href' => $linkNode->getAttribute('href'), 'label' => $labelNode ? trim($labelNode->textContent) : ''];
+        }
+        if (!$items) continue;
+        $headingNode = $xpath->query('.//*[contains(concat(" ",normalize-space(@class)," ")," sidebar-section-ad ")]', $detailsNode)->item(0);
+        $sidebarGroups[] = ['heading' => $headingNode ? trim($headingNode->textContent) : '', 'items' => $items];
+    }
+    $homeGroups = [];
+    foreach ($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-grid ")]/*') as $childNode) {
+        if (!($childNode instanceof DOMElement)) continue;
+        $cls = ' ' . preg_replace('/\s+/', ' ', trim($childNode->getAttribute('class'))) . ' ';
+        if (str_contains($cls, ' home-section-title ')) {
+            $homeGroups[] = ['heading' => trim($childNode->textContent), 'items' => []];
+        } elseif ($childNode->tagName === 'a' && str_contains($cls, ' home-card ')) {
+            $labelNode = $xpath->query('.//*[contains(concat(" ",normalize-space(@class)," ")," home-card-title ")]', $childNode)->item(0);
+            $idx = count($homeGroups) - 1;
+            dashboard_check($idx >= 0, $name . ': kart her zaman bir bölüm başlığının altında ' . $childNode->getAttribute('href'));
+            $homeGroups[$idx]['items'][] = ['href' => $childNode->getAttribute('href'), 'label' => $labelNode ? trim($labelNode->textContent) : ''];
+        }
+    }
+    dashboard_check($homeGroups === $sidebarGroups, $name . ': ana sayfa grup başlıkları, sırası ve kartları sol kenar çubuğuyla birebir aynı');
     if ($profile['admin']) {
         foreach ($dashboardCatalog as $href => $label) {
             if (in_array(substr($href, 0, -4), muhasebe_herkese_acik_sayfalar(), true)) continue;   // v575: herkese açık sayfa yukarıda ayrıca denetlendi
             dashboard_check(($homeLabels[$href] ?? null) === $label, $name . ': ortak alt kart ' . $href);
         }
-        foreach (nav_muhasebe_gruplari() as [$heading]) {
-            $matches = 0;
-            foreach ($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-section-title ")]') as $section) if (trim($section->textContent) === $heading) $matches++;
-            dashboard_check($matches === 1, $name . ': katalog grup başlığı bir kez ' . $heading);
+        $operasyonFisHeading = 0;
+        foreach ($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-section-title ")]') as $section) {
+            if (trim($section->textContent) === 'Operasyon Fişleri') $operasyonFisHeading++;
         }
+        dashboard_check($operasyonFisHeading === 0, $name . ': Operasyon Fişleri ayrı ana sayfa başlığı çizilmez (Operasyon içinde)');
     } else {
         foreach (array_merge(array_keys($dashboardCatalog), ['audit.php', 'admin_db_backups.php']) as $adminOnly) {
             if (in_array(substr($adminOnly, 0, -4), muhasebe_herkese_acik_sayfalar(), true)) continue;   // v575: herkese açık sayfa yukarıda ayrıca denetlendi

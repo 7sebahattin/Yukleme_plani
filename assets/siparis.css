@@ -920,3 +920,21 @@ html[data-theme="dark"] .sip-zil-liste li.sip-zil-yeni a { background: rgba(234,
   .sip-zil-panel { position: fixed; left: 8px; right: 8px; top: 64px; width: auto; max-height: calc(100vh - 64px - var(--bn-h, 64px) - 16px); }
 }
 @media print { .sip-zil { display: none !important; } }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+  .sip-mod { --sip-gap: 10px; }
+  .sip-chip { min-height: 34px; padding: 5px 11px; gap: 6px; }
+  .sip-bolum-acik, .sip-bolum-kapali { padding: 10px 12px; }
+  .sip-bolum-bas { gap: 8px; margin: 4px 0 8px; }
+  .sip-yukle { padding: 11px; }
+  .sip-drop { padding: 16px 12px; }
+  .sip-filtre-panel { gap: 8px 10px; margin-top: 9px; }
+  .sip-mini-kart { padding: 8px 10px; }
+  .sip-sayfalama { gap: 8px; padding: 8px 0; }
+  .sip-zil-liste li a { padding: 6px 10px; gap: 6px; }
+  /* Smoke testleri (siparis_ui_smoke.js:153,559) >=44px bekler */
+  details[data-sip-yukle] > summary.sip-yukle-ozet,
+  [data-sip-mail-ilerleme] [data-sip-mail-devam-et] { min-height: 44px; }
+}
+

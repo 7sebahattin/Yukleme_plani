@@ -144,7 +144,7 @@ foreach (['cari_kaydet', 'stok_kaydet', 'fatura_kaydet', 'kasa_kaydet', 'cek_kay
 ok('palet_fisleri.php: create/save/delete/duplicate/tanim_ekle işlem kapıları + records.unlock/reports.export korunur', substr_count($pf, 'pf_yetki(') >= 6 && str_contains($pf, "can('records.unlock')") && str_contains($pf, "require_perm('reports.export')"));
 $sidebarBas = strpos($helpers, 'function nav_menu_modeli'); $sidebar = substr($helpers, $sidebarBas, 14000);   // v551: sidebar + mobil aynı modelden çizer
 ok('sidebar: muhasebe sayfaları muhasebe_sayfa_can ile çizilir ($p_adm kapısı değil)', str_contains($sidebar, 'muhasebe_sayfa_can(') && !str_contains($sidebar, 'if ($p_adm) foreach ($sayfalar'));
-ok('index.php kartları muhasebe_sayfa_can ile', str_contains((string)file_get_contents($ROOT . '/index.php'), 'muhasebe_sayfa_can('));
+ok('index.php kartları tek kaynak nav_menu_modeli() (muhasebe_sayfa_can) ile', str_contains((string)file_get_contents($ROOT . '/index.php'), "nav_menu_modeli('')") && str_contains($sidebar, 'muhasebe_sayfa_can('));
 ok('first_allowed_page muhasebe_sayfa_can kullanır', str_contains($helpers, "muhasebe_sayfa_can(\$__slug)"));
 ok('sw.js SW_MUHASEBE_RE değişmedi (cari/kasa/… önbelleğe alınmaz)', str_contains((string)file_get_contents($ROOT . '/sw.js'), 'SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|'));
 

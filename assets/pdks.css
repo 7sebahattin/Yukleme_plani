@@ -2998,3 +2998,17 @@ html[data-theme="dark"] .fd-fark .fd-yeni { background: rgba(80, 200, 140, .12);
 .ce-tablo tbody td:nth-child(3) { min-width: 120px; }
 .ce-tablo thead th:last-child, .ce-tablo tbody td:last-child, .ce-tablo tfoot td:last-child { position: sticky; right: 0; background: var(--card, #fff); box-shadow: -6px 0 6px -6px rgba(0,0,0,.18); }
 .ce-tablo tbody td:last-child, .ce-tablo tfoot td:last-child { white-space: nowrap; }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print ve #tpTarih/ters-kart smoke kuralları etkilenmez) */
+@media screen and (min-width: 900px) {
+    .pdks-dashboard-grid { gap: 14px; }
+    .pdks-dashboard-grid .home-card { min-height: 190px; padding: 18px; }
+    .pdks-dashboard-grid .home-card-icon { width: 102px; height: 102px; flex-basis: 102px; }
+    .ce-tablo th, .ce-tablo td { padding: 5px 5px; }
+    .tvo-kontrol { padding: 11px 13px; gap: 10px; }
+    .tvo-satir { padding: 6px 10px; gap: 8px; }
+    .toplu-v2 .tv-head { padding: 12px 16px; gap: 10px; }
+    .toplu-v2 .tv-grup-govde { padding: 11px; }
+    .cf2 button, .cf2 a.btn { min-height: 38px; }
+}
+

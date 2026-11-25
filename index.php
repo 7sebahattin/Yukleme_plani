@@ -154,13 +154,9 @@ if (is_admin()) {
 }
 
 // Bölüm görünürlükleri
-// nav_ptak_gorunur(): Personel Takibi kartı bu bölümün içinde — yalnız PDKS
-// izni olan kullanıcı (ör. yalnız attendance.foremen) bölüm kapalı olduğu
-// için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
-$_ops_show  = is_admin() || can('records.read') || can('records.write') || beyan_sayfa_erisimi()
-    || can('kantar.read') || can('reports.read') || can('stok.read') || can('hesap.read')
-    || nav_ptak_gorunur() || can_hizli_maliyet('read') || can_siparis('read') || can_mail('read');
-$_ynt_show  = can('users.admin') || is_admin();
+// Ana sayfa grup başlıkları, sıralaması, kart sırası ve yetki kapıları TEK kaynak
+// olan nav_menu_modeli('') üzerinden sol kenar çubuğu (render_desktop_sidebar) ile birebir üretilir.
+$__home_menu = nav_menu_modeli('');
 
 render_header('Ana Sayfa');
 render_flash();
@@ -245,193 +241,111 @@ if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
     left: -20px;
     border-right: 23px solid #f4262d;
 }
+@media (min-width: 900px) {
+    .personel-arrow::after {
+        border-top-width: 9px;
+        border-bottom-width: 9px;
+    }
+    .personel-arrow-in::after {
+        right: -13px;
+        border-left-width: 15px;
+    }
+    .personel-arrow-out::after {
+        left: -13px;
+        border-right-width: 15px;
+    }
+}
 </style>
 
-<?php $__rozet_gizle = !icerik_can('dashboard.rozetler'); if ($__rozet_gizle) ob_start();   // v507: sayaç rozetleri ve özet satırları içerik yetkisine bağlı ?>
-<div class="home-grid">
-
-<?php if ($_ops_show): ?>
-<div class="home-section-title">Operasyon</div>
-
-<?php if (role_matrix_page_can('siparis','ogl')): ?>
-    <a href="siparisler.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdf0dc">📦</div>
-        <div class="home-card-title">OGL Siparişler</div>
-    </a>
-<?php endif; ?>
-<?php if (role_matrix_page_can('siparis','frugro')): ?>
-    <a href="frugro_siparis.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdf0dc">📦</div>
-        <div class="home-card-title">Frugro Siparişler</div>
-    </a>
-<?php endif; ?>
-<?php if (role_matrix_page_can('siparis','urun')): ?>
-    <a href="urun_siparis.php" class="home-card">
-        <div class="home-card-icon" style="background:#fff0e2">🛒</div>
-        <div class="home-card-title">Siparişler</div>
-    </a>
-<?php endif; ?>
-
-    <?php if (!function_exists('can') || beyan_sayfa_erisimi()): ?>
-    <a href="beyanlar.php" class="home-card">
-        <div class="home-card-icon" style="background:#ede9fe">🧾</div>
-        <div class="home-card-title">Beyanlar</div>
-        <?php if ($beyan_bildirim_bekleyen > 0): ?>
-        <div class="home-card-badge" style="background:#7c3aed"
-             title="Hal Kayıt bildirimi bekleyen beyan"><?= (int)$beyan_bildirim_bekleyen ?></div>
-        <?php endif; ?>
-    </a>
-    <?php endif; ?>
-
-    <?php if (can('hks.access')): ?>
-    <a href="halkayit/index.php" class="home-card">
-        <div class="home-card-icon" style="background:#e8f0fe">🏛</div>
-        <div class="home-card-title">Hal Bildirimi</div>
-        <?php if ($hks_taslak > 0): ?>
-        <div class="home-card-badge" style="background:#6366f1"><?= (int)$hks_taslak ?></div>
-        <?php endif; ?>
-    </a>
-    <?php endif; ?>
-
-<?php if (can_mail('read')): ?>
-    <a href="mail.php" class="home-card">
-        <div class="home-card-icon" style="background:#e0f4f9">📧</div>
-        <div class="home-card-title">Mail Merkezi</div>
-        <?php if ($mail_okunmamis > 0): ?>
-        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$mail_okunmamis ?></div>
-        <div class="home-card-sub">Okunmamış: <?= (int)$mail_okunmamis ?></div>
-        <?php endif; ?>
-        <?php if ($mail_cevapsiz24 > 0): ?>
-        <div class="home-card-sub home-card-uyari" style="color:var(--danger);font-weight:600">24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail</div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php /* v558: Eski Yükleme Planı / Eski Paletleme / Eski Mal Kabul kartları kaldırıldı (eski sistem kalkıyor). */ ?>
-<?php if (can('reports.read')): ?>
-    <a href="reports.php" class="home-card">
-        <div class="home-card-icon" style="background:#faf0ff">📊</div>
-        <div class="home-card-title">Eski Raporlar</div>
-    </a>
-<?php endif; ?>
-
-<?php if (can_hizli_maliyet('read')): ?>
-    <a href="hizli_maliyet.php" class="home-card">
-        <div class="home-card-icon" style="background:transparent"><img src="assets/nav-icons/qcost.svg?v=<?= (int)@filemtime(__DIR__ . '/assets/nav-icons/qcost.svg') ?>" width="64" height="64" alt="" aria-hidden="true"></div>
-        <div class="home-card-title">Hızlı Maliyet</div>
-    </a>
-<?php endif; ?>
-
-<?php if (can('stok.read')): ?>
-    <a href="malzeme_stok.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdf2f8">📦</div>
-        <div class="home-card-title">Malzeme Stok</div>
-    </a>
-<?php endif; ?>
-
-<?php /* Kartın kapısı hesap_can('read') ile AYNI olmalı: eskiden reports.read'e
-         bakıyordu — hesap.read'i olan kullanıcı kartı GÖREMİYOR, yalnız raporu
-         olan görüp 403 yiyordu (Sprint Rol-02). */ ?>
-<?php if (can('hesap.read') || is_admin()): ?>
-    <a href="hesap.php" class="home-card">
-        <div class="home-card-icon" style="background:#fff3e0">🏦</div>
-        <div class="home-card-title">Hesap</div>
-        <?php if ($hesap_bekleyen > 0): ?>
-        <div class="home-card-badge" style="background:var(--warn)"><?= $hesap_bekleyen ?></div>
-        <?php endif; ?>
-        <?php if ($hesap_bugun > 0): ?>
-        <div class="home-card-sub">Bugün: <?= number_format($hesap_bugun, 2, ',', '.') ?> ₺</div>
-        <?php endif; ?>
-        <?php if ($hesap_yonetici && $hesap_onay_bekleyen > 0): ?>
-        <div class="home-card-sub">Onay bekleyen: <?= $hesap_onay_bekleyen ?></div>
-        <?php endif; ?>
-    </a>
-<?php endif; ?>
-
 <?php
-// Faz 7 (Sprint Navigasyon-01): bu kart artık personel_takip.php'ye açılır
-// (kalıcı personel + günlük işçi + hakediş/cari + raporlama merkezi) ve
-// GÖRÜNÜRLÜĞÜ personel_takip.php'nin KENDİ kapı mantığıyla AYNI genişlikte
-// kontrol edilir — TEK kaynak nav_ptak_gorunur() (sidebar + bottomnav ile
-// aynı fonksiyon); kart görünüp sayfa 403 veremez.
-if (nav_ptak_gorunur()):
+$__home_bg = [
+    'siparisler.php'       => '#fdf0dc',
+    'frugro_siparis.php'   => '#fdf0dc',
+    'urun_siparis.php'     => '#fff0e2',
+    'beyanlar.php'         => '#ede9fe',
+    'halkayit/index.php'   => '#e8f0fe',
+    'mail.php'             => '#e0f4f9',
+    'reports.php'          => '#faf0ff',
+    'hizli_maliyet.php'    => 'transparent',
+    'malzeme_stok.php'     => '#fdf2f8',
+    'hesap.php'            => '#fff3e0',
+    'users.php'            => '#e8eaf6',
+    'roles.php'            => '#e7eefc',
+    'audit.php'            => '#fce4ec',
+    'admin_db_backups.php' => '#e8f5e9',
+    'depo_tanimlari.php'   => '#e3f2fd',
+];
+$__rozet_gizle = !icerik_can('dashboard.rozetler');
+if ($__rozet_gizle) ob_start();   // v507: sayaç rozetleri ve özet satırları içerik yetkisine bağlı
 ?>
-    <a href="personel_takip.php" class="home-card">
+<div class="home-grid">
+<?php foreach ($__home_menu['gruplar'] as $__hg):
+    if (empty($__hg['ogeler'])) continue; ?>
+<div class="home-section-title"><?= h($__hg['ad']) ?></div>
+<?php foreach ($__hg['ogeler'] as $__ho):
+    $__href = (string)$__ho['href'];
+    $__bg   = $__home_bg[$__href] ?? 'var(--primary-soft)';
+?>
+    <a href="<?= h($__href) ?>" class="home-card">
+        <?php if ($__href === 'personel_takip.php'): ?>
         <div class="home-card-icon home-card-icon-personel" aria-hidden="true">
             <span class="personel-arrow personel-arrow-in"></span>
             <span class="personel-arrow personel-arrow-out"></span>
         </div>
-        <div class="home-card-title">Personel Takibi</div>
-        <?php if ($personel_eksik_cikis > 0): ?>
-        <div class="home-card-badge" style="background:var(--danger)"
-             title="Bugün eksik çıkışı olan mesai"><?= (int)$personel_eksik_cikis ?></div>
+        <?php elseif ($__href === 'hizli_maliyet.php'): ?>
+        <div class="home-card-icon" style="background:transparent"><img src="<?= h(nav_alt_ikon_url(nav_alt_sayfalar()['qcost'], '')) ?>" width="64" height="64" alt="" aria-hidden="true"></div>
+        <?php else: ?>
+        <div class="home-card-icon" style="background:<?= h($__bg) ?>"><?= h($__href === 'admin_db_backups.php' ? '🗄️' : (string)$__ho['ikon']) ?></div>
         <?php endif; ?>
-        <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
-    </a>
-<?php endif; ?>
-
-<?php endif; ?>
-
-<?php if ($_ynt_show): ?>
-<div class="home-section-title">Yönetim</div>
-
-<?php if (can('users.admin')): ?>
-    <a href="users.php" class="home-card">
-        <div class="home-card-icon" style="background:#e8eaf6">👥</div>
-        <div class="home-card-title">Kullanıcılar</div>
-        <?php if ($kullanici_aktif > 0): ?>
-        <div class="home-card-badge" style="background:#5c6bc0"><?= $kullanici_aktif ?></div>
+        <div class="home-card-title"><?= h($__ho['etiket']) ?></div>
+        <?php if ($__href === 'beyanlar.php'): ?>
+            <?php if ($beyan_bildirim_bekleyen > 0): ?>
+            <div class="home-card-badge" style="background:#7c3aed"
+                 title="Hal Kayıt bildirimi bekleyen beyan"><?= (int)$beyan_bildirim_bekleyen ?></div>
+            <?php endif; ?>
+        <?php elseif ($__href === 'halkayit/index.php'): ?>
+            <?php if ($hks_taslak > 0): ?>
+            <div class="home-card-badge" style="background:#6366f1"><?= (int)$hks_taslak ?></div>
+            <?php endif; ?>
+        <?php elseif ($__href === 'mail.php'): ?>
+            <?php if ($mail_okunmamis > 0): ?>
+            <div class="home-card-badge" style="background:var(--warn)"><?= (int)$mail_okunmamis ?></div>
+            <div class="home-card-sub">Okunmamış: <?= (int)$mail_okunmamis ?></div>
+            <?php endif; ?>
+            <?php if ($mail_cevapsiz24 > 0): ?>
+            <div class="home-card-sub home-card-uyari" style="color:var(--danger);font-weight:600">24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail</div>
+            <?php endif; ?>
+        <?php elseif ($__href === 'hesap.php'): ?>
+            <?php if ($hesap_bekleyen > 0): ?>
+            <div class="home-card-badge" style="background:var(--warn)"><?= $hesap_bekleyen ?></div>
+            <?php endif; ?>
+            <?php if ($hesap_bugun > 0): ?>
+            <div class="home-card-sub">Bugün: <?= number_format($hesap_bugun, 2, ',', '.') ?> ₺</div>
+            <?php endif; ?>
+            <?php if ($hesap_yonetici && $hesap_onay_bekleyen > 0): ?>
+            <div class="home-card-sub">Onay bekleyen: <?= $hesap_onay_bekleyen ?></div>
+            <?php endif; ?>
+        <?php elseif ($__href === 'personel_takip.php'): ?>
+            <?php if ($personel_eksik_cikis > 0): ?>
+            <div class="home-card-badge" style="background:var(--danger)"
+                 title="Bugün eksik çıkışı olan mesai"><?= (int)$personel_eksik_cikis ?></div>
+            <?php endif; ?>
+            <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
+        <?php elseif ($__href === 'users.php'): ?>
+            <?php if ($kullanici_aktif > 0): ?>
+            <div class="home-card-badge" style="background:#5c6bc0"><?= $kullanici_aktif ?></div>
+            <?php endif; ?>
+        <?php elseif ($__href === 'audit.php'): ?>
+            <?php if ($audit_son24h > 0): ?>
+            <div class="home-card-badge" style="background:#e91e63"><?= $audit_son24h ?></div>
+            <?php endif; ?>
+            <div class="home-card-sub">Son 24 saat</div>
+        <?php elseif ($__href === 'admin_db_backups.php'): ?>
+            <div class="home-card-sub">Günlük otomatik</div>
         <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php if (can('users.admin')): ?>
-    <a href="roles.php" class="home-card">
-        <div class="home-card-icon" style="background:#e7eefc">🛡️</div>
-        <div class="home-card-title">Roller</div>
-    </a>
-<?php endif; ?>
-<?php if (is_admin()): ?>
-    <a href="audit.php" class="home-card">
-        <div class="home-card-icon" style="background:#fce4ec">🧾</div>
-        <div class="home-card-title">İşlem Geçmişi</div>
-        <?php if ($audit_son24h > 0): ?>
-        <div class="home-card-badge" style="background:#e91e63"><?= $audit_son24h ?></div>
-        <?php endif; ?>
-        <div class="home-card-sub">Son 24 saat</div>
-    </a>
-    <a href="admin_db_backups.php" class="home-card">
-        <div class="home-card-icon" style="background:#e8f5e9">🗄️</div>
-        <div class="home-card-title">Veritabanı Yedekleri</div>
-        <div class="home-card-sub">Günlük otomatik</div>
-    </a>
-    <?php /* v566: eski Admin Konsolu'ndan taşınan Şube / Depo Tanımları (yalnız yönetici; sidebar Yönetim grubuyla aynı) */ ?>
-    <?php foreach (nav_yonetim_sayfalari() as $__yd => [$__yl, $__ye]): ?>
-    <a href="<?= h($__yd) ?>" class="home-card">
-        <div class="home-card-icon" style="background:#e3f2fd"><?= h($__ye) ?></div>
-        <div class="home-card-title"><?= h($__yl) ?></div>
-    </a>
-    <?php endforeach; unset($__yd, $__yl, $__ye); ?>
-    <!-- Şema Migrasyon: karttan kaldırıldı — doğrudan URL (migrate.php) ile
-         admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
-         tombstone. -->
-<?php endif; ?>
-
-<?php endif; ?>
-
-<?php foreach (nav_muhasebe_gruplari() as $__home_group):
-    // v550: kart, sayfanın kendi kapısıyla (muhasebe_sayfa_can) geçiyorsa çizilir; başlık yalnız görünen kart varsa.
-    $__home_gorunen = array_filter($__home_group[2], fn($__d) => muhasebe_sayfa_can(substr((string)$__d, 0, -4)), ARRAY_FILTER_USE_KEY);
-    if (!$__home_gorunen) continue; ?>
-<div class="home-section-title"><?= h($__home_group[0]) ?></div>
-<?php foreach ($__home_gorunen as $__home_href => [$__home_label, $__home_icon]): ?>
-    <a href="<?= h($__home_href) ?>" class="home-card">
-        <div class="home-card-icon" style="background:var(--primary-soft)"><?= h($__home_icon) ?></div>
-        <div class="home-card-title"><?= h($__home_label) ?></div>
     </a>
 <?php endforeach; ?>
-<?php endforeach; unset($__home_group, $__home_gorunen, $__home_href, $__home_label, $__home_icon); ?>
-
+<?php endforeach; unset($__home_menu, $__home_bg, $__hg, $__ho, $__href, $__bg); ?>
 </div>
 <?php if ($__rozet_gizle) {
     // Rozet ve özet satırları HTML'e hiç yazılmaz (yalnız gizlemek sayıları kaynakta bırakırdı).

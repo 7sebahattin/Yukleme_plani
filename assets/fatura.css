@@ -644,3 +644,16 @@ html[data-theme="dark"] .ft-toast:not(.ft-toast--hata) { background: #e7ecf4; co
 
 /* ═════════ Z. JS durum sınıfları (assets/fatura.js) ═════════ */
 .ft-yukleniyor { opacity: .55; pointer-events: none; transition: opacity .15s; }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+    .ft-tablo th, .ft-tablo td { padding: 5px 7px; }
+    .ft-eylem-bar { padding: 6px 10px; gap: 6px; }
+    .ft-eylem-bar .btn { min-height: 34px; }
+}
+@media screen and (min-width: 1024px) {
+    .fatura { --ft-sol: clamp(235px, 20vw, 285px); }
+    .ft-ana--form.ft-liste--acik { --ft-sol: clamp(235px, 20vw, 285px); }
+    .ft--tek-ekran .ft-ana { gap: 10px; }
+}
+

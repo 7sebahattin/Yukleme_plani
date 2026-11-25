@@ -106,7 +106,7 @@ ok('nav_alt_sayfalar frugro kaydı', (bool)preg_match("/'frugro'\s*=> \['href' =
 ok('nav_alt_izinler frugro = Frugro sayfa izni', str_contains($helpers, "'frugro'  => \$fn && role_matrix_page_can('siparis','frugro')"));
 ok('topnav Frugro bağlantısı Frugro sayfa izniyle', str_contains($helpers, "<?php if (role_matrix_page_can('siparis','frugro')): ?>\n            <a href=\"<?= \$base ?>frugro_siparis.php\""));
 ok('first_allowed_page Frugro adayı (sayfa kapısıyla aynı)', str_contains($helpers, "'frugro_siparis.php' => role_matrix_page_can('siparis','frugro')"));
-ok('index.php Frugro kartı Frugro sayfa izniyle', (function () use ($index) { $g = strpos($index, "<?php if (role_matrix_page_can('siparis','frugro')): ?>\n    <a href=\"frugro_siparis.php\""); return $g !== false; })());
+ok('index.php Frugro kartı tek kaynak nav_menu_modeli() ile (sidebar Frugro sayfa izniyle aynı)', str_contains($index, "nav_menu_modeli('')") && !str_contains($index, '<a href="frugro_siparis.php"'));
 ok('Roller matrisi: Frugro Siparişler KENDİ satırı (siparis.frugro.*) + sayfa listesi', str_contains(oku('config/role_permission_matrix.php'), "\$row('frugro','Frugro Siparişler','frugro_siparis.php',\$crud('siparis.frugro')") && str_contains(oku('config/role_permission_matrix.php'), "function role_siparis_pages(): array { return ['ogl','urun','frugro']; }"));
 ok("siparis.* yetkisi helpers.php'de yalnız can_siparis içinde (4 çağrı; yeni kopya yok)", substr_count($helpers, "can('siparis.") === 4);
 

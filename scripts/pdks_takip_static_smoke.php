@@ -88,20 +88,20 @@ ok("helpers.php: aktif-sayfa vurgusu TÜM konsolide alt sayfaları kapsıyor (na
     && (bool)preg_match('/function nav_ptak_sayfalari\(\): array/', $helpersSrc));
 
 echo "\n=== 9. MOBİL 'Personel' GİRİŞİ personel_takip.php'YE BAĞLI (görev madde 2) ===\n";
-ok("index.php: 'Personel' ana sayfa kartı ARTIK personel_takip.php'ye açılıyor (personel.php DEĞİL)",
-    (bool)preg_match('/href="personel_takip\.php"[^>]*class="home-card"/s', $indexSrc));
+ok("index.php: 'Personel' ana sayfa kartı tek kaynak nav_menu_modeli() üzerinden personel_takip.php'ye açılıyor (personel.php DEĞİL)",
+    str_contains($indexSrc, "nav_menu_modeli('')") && str_contains($indexSrc, "personel_takip.php"));
 // Bug çalışması (personel_takip): kart + rozet koşulu elle yazılmış bir
 // listeydi ve kalıcı PDKS izinlerini (employees/cards/scan) de sayıyordu —
 // yalnız attendance.employees'i olan kullanıcı kartı görüp 403 alıyordu.
-// Artık sidebar/bottomnav ile AYNI tek kaynak: nav_ptak_gorunur().
-ok("index.php: kart görünürlüğü TEK kaynak nav_ptak_gorunur() ile (sidebar/bottomnav ile aynı)",
-    (bool)preg_match('/if \(nav_ptak_gorunur\(\)\):\s*\?>\s*<a href="personel_takip\.php" class="home-card"/s', $indexSrc));
+// Artık index.php doğrudan sidebar/bottomnav ile AYNI tek kaynak nav_menu_modeli()'ni okur ($p_gunluk = nav_ptak_gorunur()).
+ok("index.php: kart görünürlüğü TEK kaynak nav_menu_modeli() → nav_ptak_gorunur() ile (sidebar/bottomnav ile aynı)",
+    str_contains($indexSrc, "nav_menu_modeli('')") && str_contains($helpersSrc, '$p_gunluk = nav_ptak_gorunur();'));
 ok("index.php: eksik-çıkış rozeti günlük giriş/çıkış veya puantaj Gör izniyle sınırlı",
     str_contains($indexSrc, "if (role_pdks_can('daily_scan') || role_pdks_can('daily_reports')) {"));
 ok("index.php: kalıcı PDKS izinleri (employees/cards/scan) Personel Takibi kartını AÇMIYOR (personel_takip.php onları saymaz → 403 olurdu)",
     !preg_match('/can\(.attendance\.(employees|cards|scan).\)/', $indexSrc));
-ok("index.php: Operasyon bölümü nav_ptak_gorunur()'ü de sayıyor (yalnız PDKS izinli kullanıcı kartı görebilsin)",
-    (bool)preg_match('/\$_ops_show\s*=[^;]*nav_ptak_gorunur\(\)/', $indexSrc));
+ok("index.php: Operasyon bölümü nav_menu_modeli() üzerinden nav_ptak_gorunur()'ü sayıyor (yalnız PDKS izinli kullanıcı kartı görebilsin)",
+    str_contains($indexSrc, "nav_menu_modeli('')") && str_contains($indexSrc, "empty(\$__hg['ogeler'])"));
 // Sidebar and hub use the same granular read policy; legacy package-list
 // equality would reject new independent employee/card-only roles.
 preg_match('/function nav_ptak_gorunur\(\): bool \{(.*?)\n\}/s', $helpersSrc, $__m);
