@@ -440,8 +440,8 @@ function guvenliAlanKurallari(barSel) {
             if (homeBekAktif) ok('B', bag, 'maliyet_*: dashboard.read yok → Ana Sayfa aktif', olcAktif === 'home', JSON.stringify(d.aktifler));
             else ok('B', bag, 'maliyet_*: Eski Raporlar (rapor) aktif', olcAktif === 'rapor' || (olcAktif === 'more' && d.digerLabel.includes('Eski Raporlar')), JSON.stringify(d.aktifler));
         }
-        ok('B', bag, 'ikonlar <img width=42/18 alt=""> assets/nav-icons/*.svg?v=',
-            d.imgler.every(([w, h, alt, src]) => w === h && ['42', '18'].includes(w) && alt === '' && /assets\/nav-icons\/[a-z]+\.svg\?v=\d+$/.test(src)),
+        ok('B', bag, 'ikonlar <img width=42/18 alt=""> assets/nav-icons/(3d/*.png|*.svg)?v=',
+            d.imgler.every(([w, h, alt, src]) => w === h && ['42', '18'].includes(w) && alt === '' && /assets\/nav-icons\/(3d\/[a-z0-9_]+\.png|[a-z]+\.svg)\?v=\d+$/.test(src)),
             JSON.stringify(d.imgler.filter(([w, h, alt, src]) => !(w === h && alt === '' && /nav-icons/.test(src)))));
         await ctx.close();
     }
@@ -900,13 +900,13 @@ function guvenliAlanKurallari(barSel) {
         }, TASARIM);
         let d = await oku();
         ok('B', bag + '@360', '4. slot gizli, "Diğer" Hesap\'ı taşıyor (ikon + rozet + etiket + aria-current)',
-            d.diger && d.digerCur === 'page' && /hesap\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Hesap' && !d.slotGor, JSON.stringify(d));
+            d.diger && d.digerCur === 'page' && /hesap\.png/.test(d.ikon) && d.rozet && d.etiket === 'Hesap' && !d.slotGor, JSON.stringify(d));
         await page.setViewportSize({ width: 430, height: 932 }); await page.waitForTimeout(250);
         d = await oku();
         ok('B', bag + '@430', 'genişleyince Hesap slotu görünür+aktif, "Diğer" artık Hesap\'ı TAŞIMAZ (v575: şifre değiştirme karosu için "Diğer" kalır)', d.diger && d.slotGor && d.slotCur === 'page' && d.digerCur === null, JSON.stringify(d));
         await page.setViewportSize({ width: 360, height: 740 }); await page.waitForTimeout(250);
         d = await oku();
-        ok('B', bag + '@360', 'daralınca yine "Diğer" taşır', d.diger && d.digerCur === 'page' && /hesap\.svg/.test(d.ikon), JSON.stringify(d));
+        ok('B', bag + '@360', 'daralınca yine "Diğer" taşır', d.diger && d.digerCur === 'page' && /hesap\.png/.test(d.ikon), JSON.stringify(d));
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
         await ctx.close();
     }
