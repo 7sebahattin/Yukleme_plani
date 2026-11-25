@@ -41,17 +41,31 @@ try {
             $tarih      = trim((string)($P['tarih'] ?? ''));
             $uzerineYaz = !empty($P['uzerine_yaz']) && (string)$P['uzerine_yaz'] !== '0';
             $s = doviz_tcmb_senkron($pdo, $tarih !== '' ? $tarih : null, $uid, $uzerineYaz, true);
-            $mesaj = !empty($s['ok'])
-                ? sprintf(
-                    'TCMB kurları güncellendi (%s · %d eklendi, %d güncellendi%s)',
-                    date('d.m.Y', strtotime((string)$s['tarih'])),
+            $bultenTarih = (string)($s['tarih'] ?? '');
+            if (!empty($s['ok'])) {
+                $bultenTr = date('d.m.Y', strtotime($bultenTarih));
+                $istatistik = sprintf(
+                    '%d eklendi, %d güncellendi%s',
                     (int)($s['eklenen'] ?? 0),
                     (int)($s['guncellenen'] ?? 0),
                     !empty($s['atlanan']) ? ', ' . (int)$s['atlanan'] . ' manuel korundu' : ''
-                )
-                : '';
+                );
+                if ($tarih !== '' && $bultenTarih !== '' && $bultenTarih !== $tarih) {
+                    $istenenTr = date('d.m.Y', strtotime($tarih));
+                    $mesaj = sprintf(
+                        'TCMB %s bülteni henüz yayımlanmadı (iş günleri 15:30\'da yayımlanır). En güncel bülten olan %s yüklendi (%s).',
+                        $istenenTr,
+                        $bultenTr,
+                        $istatistik
+                    );
+                } else {
+                    $mesaj = sprintf('TCMB kurları güncellendi (%s · %s)', $bultenTr, $istatistik);
+                }
+            } else {
+                $mesaj = '';
+            }
             if (!empty($s['ok']) && !str_contains($geri, 'doviz_tanimlari.php')) {
-                $geri = 'gunluk_kurlar.php?tarih=' . rawurlencode((string)$s['tarih']);
+                $geri = 'gunluk_kurlar.php?tarih=' . rawurlencode($bultenTarih);
             }
             doviz_cevap($s, $geri, $mesaj, $json);
 

@@ -52,7 +52,13 @@ function cari_bos(string $baslik, string $ack, string $eylem = '', string $etike
 
 function cari_pb_ad(string $pb): string
 {
-    return ['TRY' => 'Türk Lirası', 'USD' => 'ABD Doları', 'EUR' => 'Euro'][$pb] ?? $pb;
+    return [
+        'TRY' => 'Türk Lirası', 'USD' => 'ABD Doları', 'EUR' => 'Euro', 'GBP' => 'İngiliz Sterlini',
+        'CHF' => 'İsviçre Frangı', 'RUB' => 'Rus Rublesi', 'AED' => 'BAE Dirhemi', 'SAR' => 'Suudi Arabistan Riyali',
+        'JPY' => 'Japon Yeni', 'AUD' => 'Avustralya Doları', 'CAD' => 'Kanada Doları', 'SEK' => 'İsveç Kronu',
+        'NOK' => 'Norveç Kronu', 'DKK' => 'Danimarka Kronu', 'KWD' => 'Kuveyt Dinarı', 'CNY' => 'Çin Yuanı',
+        'QAR' => 'Katar Riyali', 'AZN' => 'Azerbaycan Manatı', 'RON' => 'Rumen Leyi', 'KZT' => 'Kazakistan Tengesi',
+    ][$pb] ?? $pb;
 }
 
 /** Bakiye yön harfi: b (borçlu) · a (alacaklı) · d (denk). */

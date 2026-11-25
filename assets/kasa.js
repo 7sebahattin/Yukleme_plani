@@ -71,7 +71,7 @@
     function kurusCoz(ham) { return tutarCoz(ham).k; }
     function paraYaz(kurus, pb) {
         var m = Math.abs(kurus), t = Math.floor(m / 100), k = String(m % 100);
-        var sym = { TRY: '₺', USD: '$', EUR: '€' }[pb] || pb || '';
+        var sym = { TRY: '₺', USD: '$', EUR: '€', GBP: '£', CHF: 'CHF', RUB: '₽', JPY: '¥', SAR: 'SAR', AED: 'AED', AUD: 'A$', CAD: 'C$', CNY: '¥', AZN: '₼' }[pb] || pb || '';
         return (kurus < 0 ? '-' : '') + String(t).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + (k.length < 2 ? '0' + k : k) + (sym ? ' ' + sym : '');
     }
 

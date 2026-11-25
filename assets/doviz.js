@@ -207,19 +207,24 @@
         function sayiCoz(str) {
             var s = String(str || '').trim().replace(/\s+/g, '');
             if (!s) return NaN;
-            var v = s.lastIndexOf(',');
-            var n = s.lastIndexOf('.');
-            if (v !== -1 && n !== -1) {
-                if (v > n) {
-                    s = s.replace(/\./g, '').replace(',', '.');
-                } else {
-                    s = s.replace(/,/g, '');
-                }
-            } else if (v !== -1) {
-                s = s.replace(',', '.');
-            }
+            // Türkçe giriş: nokta binlik ayırıcı, virgül ondalık ayırıcı
+            s = s.replace(/\./g, '').replace(',', '.');
             var num = Number(s);
             return Number.isFinite(num) && num >= 0 ? num : NaN;
+        }
+
+        function tutarCanliBicimle(ham) {
+            // Yalnız rakam ve ilk virgülü koru (nokta binlik olarak otomatik eklenir)
+            var temiz = String(ham || '').replace(/[^\d,]/g, '');
+            var virgulIdx = temiz.indexOf(',');
+            var tam = virgulIdx === -1 ? temiz : temiz.slice(0, virgulIdx);
+            var ondalik = virgulIdx === -1 ? null : temiz.slice(virgulIdx + 1).replace(/,/g, '').slice(0, 4);
+            // Baştaki fazla sıfırları sadeleştir ("0005" -> "5", "0" -> "0")
+            if (tam.length > 1) {
+                tam = tam.replace(/^0+/, '') || '0';
+            }
+            var bicimliTam = tam.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return ondalik !== null ? (bicimliTam + ',' + ondalik) : bicimliTam;
         }
 
         function trBicim(num, hane) {
@@ -277,7 +282,32 @@
             birimEl.textContent = '1 ' + kaynak + ' = ' + trBicim(oran, 4) + ' ' + hedef;
         }
 
-        if (tutarEl)  tutarEl.addEventListener('input', cevirHesapla);
+        if (tutarEl) {
+            tutarEl.addEventListener('input', function () {
+                var eski = tutarEl.value;
+                var imlec = typeof tutarEl.selectionStart === 'number' ? tutarEl.selectionStart : eski.length;
+                // İmleç öncesindeki anlamlı karakter (rakam/virgül) sayısını koru
+                var oncekiAnlamli = eski.slice(0, imlec).replace(/[^\d,]/g, '').length;
+                var yeni = tutarCanliBicimle(eski);
+                if (yeni !== eski) {
+                    tutarEl.value = yeni;
+                    var sayac = 0;
+                    var yeniPos = yeni.length;
+                    for (var pi = 0; pi < yeni.length; pi++) {
+                        if (sayac >= oncekiAnlamli) {
+                            yeniPos = pi;
+                            break;
+                        }
+                        if (/[\d,]/.test(yeni.charAt(pi))) sayac++;
+                    }
+                    if (typeof tutarEl.setSelectionRange === 'function') {
+                        try { tutarEl.setSelectionRange(yeniPos, yeniPos); } catch (ex) {}
+                    }
+                }
+                cevirHesapla();
+            });
+            tutarEl.value = tutarCanliBicimle(tutarEl.value);
+        }
         if (kaynakEl) kaynakEl.addEventListener('change', cevirHesapla);
         if (hedefEl)  hedefEl.addEventListener('change', cevirHesapla);
         if (tipEl)    tipEl.addEventListener('change', cevirHesapla);

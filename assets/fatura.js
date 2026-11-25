@@ -26,7 +26,7 @@
             alis_iade: 'alis_faturalari.php', irsaliye: 'sevk_irsaliyeleri.php', siparis: 'alinan_siparis_fisleri.php' },
         m: { ag: 'Bağlantı kesildi. Tekrar Kaydet\'e basın; belge iki kez yazılmaz.', zorunlu: 'Zorunlu alan.' }
     };
-    var SYM = { TRY: '₺', USD: '$', EUR: '€' };
+    var SYM = { TRY: '₺', USD: '$', EUR: '€', GBP: '£', CHF: 'CHF', RUB: '₽', JPY: '¥', SAR: 'SAR', AED: 'AED', AUD: 'A$', CAD: 'C$', CNY: '¥', AZN: '₼' };
     function $(s, k) { return (k || document).querySelector(s); }
     function $$(s, k) { return Array.prototype.slice.call((k || document).querySelectorAll(s)); }
     function yap(etiket, sinif, metin) { var e = document.createElement(etiket); if (sinif) e.className = sinif; if (metin != null) e.textContent = metin; return e; }

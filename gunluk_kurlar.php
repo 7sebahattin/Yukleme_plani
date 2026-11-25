@@ -72,6 +72,7 @@ $ctx = [
     'gorunum'         => $gorunum,
     'tarih'           => $tarih,
     'bugun'           => $bugun,
+    'son_tarih'       => $sonTarih,
     'onceki_gun'      => $oncekiGun,
     'sonraki_gun'     => $sonrakiGun,
     'tumu'            => $tumu,
