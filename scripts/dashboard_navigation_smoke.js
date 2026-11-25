@@ -37,15 +37,28 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             await page.goto(fixtures.admin);
             await page.locator('.home-card[href="hizli_maliyet.php"] img').waitFor({ state: 'attached' });
             check(await page.locator('.home-card').count() === 45, name + ' all forty-five admin destinations are cards (v555: İhracat Programı 4 + Stok Dönüşüm + Kantar Fişleri kalktı; v558: Eski Yükleme Planı/Paletleme/Mal Kabul kalktı; v566: Admin Konsolu kalktı; v574: Tanımlar + Şube Tanımları kalktı, yalnız Depo Tanımları — dashboard_sidebar_parity_smoke.php ile aynı 45)');
+            check(await page.locator('.home-card-badge').count() === 0, name + ' zero .home-card-badge elements on homepage (v580)');
+            check(await page.locator('.home-card-sub').count() === 0, name + ' zero .home-card-sub elements on homepage (v580)');
             check(await page.evaluate(() => {
                 const cards = new Set(Array.from(document.querySelectorAll('.home-card')).map(a => a.getAttribute('href')));
                 return Array.from(document.querySelectorAll('.sidebar-nav .sidebar-link')).every(a => a.getAttribute('href') === 'index.php' || cards.has(a.getAttribute('href')));
             }), name + ' every sidebar module destination is on the home screen');
-            check(await page.locator('.home-card[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' dollar asset decodes on the home card');
+            // v580: loading="lazy" ikonlarının tümü çözülsün diye sayfayı tarayıp tüm 45 3B PNG ikonu doğrula
+            await page.evaluate(async () => {
+                for (const img of document.querySelectorAll('.home-card-icon img')) {
+                    img.loading = 'eager';
+                    if (!img.complete) await new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); });
+                }
+            });
+            check(await page.evaluate(() => {
+                const imgs = Array.from(document.querySelectorAll('.home-card-icon img'));
+                return imgs.length === 45 && imgs.every(img => img.complete && img.naturalWidth === 128 && (img.getAttribute('src') || '').startsWith('assets/nav-icons/3d/'));
+            }), name + ' all 45 homepage 3D PNG icons decode at naturalWidth 128');
             // v551: akordiyon — Hızlı Maliyet, kapalı Operasyon grubunda; görüntü çözülsün diye grubu aç
             await page.evaluate(() => { const d = document.querySelector('details[data-sb-grup="operasyon"]'); if (d) d.open = true; });
             await page.waitForFunction(() => { const i = document.querySelector('.sidebar-link[href="hizli_maliyet.php"] img'); return i && i.complete && i.naturalWidth > 0; });
             check(await page.locator('.sidebar-link[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.width === 20 && image.height === 20 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' sidebar reuses the dollar asset at its original icon size');
+            const expectedIconPx = width >= 1280 ? 64 : (width >= 900 ? 56 : 54);
             for (const theme of ['light', 'dark']) {
                 await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
                 check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + '/' + theme + ' no horizontal page overflow');
@@ -53,29 +66,40 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                     const box = node.getBoundingClientRect();
                     return box.width >= 44 && box.height >= 44 && node.scrollWidth <= node.clientWidth + 1;
                 })), name + '/' + theme + ' all cards fit and remain touchable');
+                check(await page.locator('.home-card-icon').evaluateAll((nodes, px) => {
+                    if (nodes.length !== 45) return false;
+                    return nodes.every(node => {
+                        const cs = getComputedStyle(node);
+                        const box = node.getBoundingClientRect();
+                        return Math.abs(box.width - px) <= 0.5 && Math.abs(box.height - px) <= 0.5
+                            && cs.backgroundColor === 'rgba(0, 0, 0, 0)'
+                            && cs.boxShadow === 'none';
+                    });
+                }, expectedIconPx), name + '/' + theme + ' all 45 .home-card-icon boxes have identical ' + expectedIconPx + 'x' + expectedIconPx + ' size, transparent bg, and no box-shadow');
                 const quick = page.locator('.home-card[href="hizli_maliyet.php"]');
                 await quick.focus();
                 check(await quick.evaluate(node => document.activeElement === node), name + '/' + theme + ' quick card is keyboard focusable');
                 await page.evaluate(() => scrollTo(0, 0));
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-home.png') });
-                await page.locator('.home-card[href="hesap.php"]').scrollIntoViewIfNeeded();
-                check(await page.locator('.home-card[href="hesap.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
-                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'hesap.php'; }), name + '/' + theme + ' scrolled-to card really is the last card');
+                await page.locator('.home-card[href="admin_db_backups.php"]').scrollIntoViewIfNeeded();
+                check(await page.locator('.home-card[href="admin_db_backups.php"]').isVisible(), name + '/' + theme + ' last group (Yönetim) remains reachable by scrolling');
+                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'admin_db_backups.php'; }), name + '/' + theme + ' scrolled-to card really is the last card (admin_db_backups.php)');
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-last-group.png') });
             }
             if (width === 1440) {
                 await page.evaluate(() => scrollTo(0, 0));
                 check(await page.evaluate(() => {
                     const grid = document.querySelector('.home-grid');
-                    return grid && getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length === 8;
-                }), name + ' desktop .home-grid computes to 8 columns');
+                    return grid && getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length === 7;
+                }), name + ' desktop .home-grid computes to 7 columns (v580)');
                 check(await page.evaluate(() => {
                     const homeHeads = Array.from(document.querySelectorAll('.home-section-title')).map(el => el.textContent.trim());
                     const sbHeads = Array.from(document.querySelectorAll('.sidebar-nav details.sidebar-grup'))
                         .filter(d => d.querySelector('.sidebar-link'))
                         .map(d => { const ad = d.querySelector('.sidebar-section-ad'); return ad ? ad.textContent.trim() : ''; });
-                    return homeHeads.length === sbHeads.length && homeHeads.every((h, i) => h === sbHeads[i]);
-                }), name + ' .home-section-title sequence matches .sidebar-nav .sidebar-section-ad sequence');
+                    return homeHeads.length === sbHeads.length && homeHeads.every((h, i) => h === sbHeads[i])
+                        && homeHeads[homeHeads.length - 1] === 'Yönetim';
+                }), name + ' .home-section-title sequence matches .sidebar-nav .sidebar-section-ad sequence with Yönetim last');
                 const firstCard = page.locator('.home-card').first();
                 await firstCard.hover();
                 check(await firstCard.evaluate(card => {

@@ -49,7 +49,8 @@ $ozel = [   // JS/HTML'de başka biçimde bağlanan öğeler (body sınıfı: ic
 foreach ($flat as $key => $o) {
     $kisa = substr($key, 3);                 // siparis.mail_al
     [$sayfa, $oge] = explode('.', $kisa, 2);
-    $var = str_contains($kaynak, "'$kisa'")                                   // icerik_can('siparis.mail_al')
+    $var = $key === 'ui.dashboard.rozetler'                                   // v580: ana sayfa rozetleri kaldırıldı; eski rollerle uyum için katalogda korunur
+        || str_contains($kaynak, "'$kisa'")                                   // icerik_can('siparis.mail_al')
         || str_contains($kaynak, "'$oge'")                                     // $ic('belge_yukle') / $icerikHarita değeri
         || str_contains($kaynak, "'$sayfa.$oge'")
         || str_contains($kaynak, "'$oge' =>") || str_contains($kaynak, "'$kisa' =>")
@@ -106,7 +107,8 @@ foreach (['siparis_yazdir.php' => 'siparis.yazdir', 'siparis_paylas.php' => 'sip
     t("uç kapısı: $f → $k", str_contains((string)file_get_contents($root . '/' . $f), "icerik_kapi('$k')"));
 t('siparis_kaydet: işlem → içerik haritası', str_contains((string)file_get_contents($root . '/siparis_kaydet.php'), "'belge_sil' => 'belge_sil'") && str_contains((string)file_get_contents($root . '/siparis_kaydet.php'), "'durum_evrak'"));
 t('halkayit api: içerik haritası CSRF öncesi kapıda', str_contains((string)file_get_contents($root . '/halkayit/api.php'), 'hks_eylem_icerigi($action, $g)'));
-t('index.php: rozetler içerik yetkisine bağlı', str_contains((string)file_get_contents($root . '/index.php'), "icerik_can('dashboard.rozetler')"));
+$idxSrc = (string)file_get_contents($root . '/index.php');
+t('v580: index.php ana sayfa kartlarında rozet/alt metin yok', !str_contains($idxSrc, 'home-card-badge') && !str_contains($idxSrc, 'home-card-sub'));
 
 echo "Role content: $ok geçti, $fail kaldı\n";
 exit($fail ? 1 : 0);

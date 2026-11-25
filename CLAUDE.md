@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v579` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v580` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -141,7 +141,7 @@ yönetici onaylar. `hesap.admin`'i özel role vermek = o rol HERKESİ görür.
 | `768–899px` | Tablet: topbar görünür, sidebar gizli, 2-kolon kart grid |
 | `≥ 900px` | Desktop: **sol sidebar** (180px), topbar+bottomnav gizli; `v579` masaüstü %80 ölçek (`@media screen` kök `12px`, `body.print-mode` hariç) |
 | `≥ 1024px` | Desktop: `.pc-only` tablo görünür, `.mobile-only` kartlar gizli |
-| `≥ 1280px` | Geniş: sidebar 210px, ana sayfa (`index.php`, `nav_menu_modeli('')` ile birebir senkron) 8-kolon kart ızgarası (`.home-grid:not(.pdks-dashboard-grid)`) |
+| `≥ 1280px` | Geniş: sidebar 210px, ana sayfa (`index.php`, `nav_menu_modeli('')` ile birebir senkron) **7-kolon** kart ızgarası (`.home-grid:not(.pdks-dashboard-grid)`, `1100–1279px` 5 kolon, `900–1099px` 4 kolon). **v580:** tüm ana sayfa kartları arka plansız/çerçevesiz sabit boyutlu 3B PNG ikon kullanır (`nav_3d_ikon_url()`, `assets/nav-icons/3d/`, masaüstü 64px / 900–1279px 56px / mobil-tablet 54px); rozet (`.home-card-badge`) ve alt metin (`.home-card-sub`) kaldırıldı; Yönetim grubu sidebar + ana sayfada en sona alındı. |
 
 ### Sidebar (Sprint 32)
 

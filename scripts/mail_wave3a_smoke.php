@@ -273,7 +273,8 @@ ok('mail.php: düğme kapısı uçla AYNI koşul (can_beyan create + source.writ
 ok('config/mail_beyan.php: tüm kullanıcı metni için DB yazımı yok (INSERT/UPDATE/DELETE)', !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', (string)file_get_contents($ROOT . '/config/mail_beyan.php')));
 
 $ix = (string)file_get_contents($ROOT . '/index.php');
-ok('index.php Mail kartı: "24 saattir cevapsız N mail" — ACL kapsamlı sayaçtan, yalnız > 0 iken', str_contains($ix, 'mail_cevapsiz_eski_sayisi((int)$auth_user[\'id\'], 24)') && str_contains($ix, '24 saattir cevapsız <?= (int)$mail_cevapsiz24 ?> mail') && str_contains($ix, 'if ($mail_cevapsiz24 > 0)'));
-ok('index.php rozet sayısı kenar çubuğuyla aynı kaynaktan (nav_mail_okunmamis)', str_contains($ix, '$mail_okunmamis = nav_mail_okunmamis();'));
+$hlp = (string)file_get_contents($ROOT . '/config/helpers.php');
+ok('v580: index.php ana sayfa kartlarında rozet/alt metin ve kullanılmayan mail sorgusu yok', !str_contains($ix, 'home-card-badge') && !str_contains($ix, 'home-card-sub') && !str_contains($ix, 'mail_cevapsiz_eski_sayisi'));
+ok('sidebar mail rozeti hâlâ nav_mail_okunmamis() kaynağını kullanır', str_contains($hlp, 'nav_mail_okunmamis()'));
 
 mail_test_bitir();

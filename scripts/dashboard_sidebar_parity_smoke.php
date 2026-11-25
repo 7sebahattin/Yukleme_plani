@@ -50,7 +50,7 @@ function render_flash(): void {}
 
 if (!preg_match("/define\('APP_SURUM',\s*'(v\d+)'\)/", $dashboardHelperSource, $version)) throw new RuntimeException('Sürüm bulunamadı.');
 define('APP_SURUM', $version[1]);
-foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_yonetim_sayfalari', 'nav_eski_esleri', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'nav_menu_modeli', 'nav_grup_ikon_svg', 'render_desktop_sidebar'] as $functionName) {
+foreach (['can_mail', 'can_siparis', 'can_hizli_maliyet', 'can_yukleme_bildir', 'beyan_sayfa_erisimi', 'nav_ptak_gorunur', 'nav_muhasebe_gruplari', 'nav_yonetim_sayfalari', 'nav_eski_esleri', 'nav_alt_sayfalar', 'nav_alt_ikon_url', 'nav_3d_ikon_url', 'nav_menu_modeli', 'nav_grup_ikon_svg', 'render_desktop_sidebar'] as $functionName) {
     $functionSource = dashboard_extract_function($dashboardHelperSource, $functionName);
     eval(str_replace('__DIR__', var_export($dashboardRoot . '/config', true), $functionSource));
 }
@@ -307,10 +307,19 @@ foreach ($dashboardProfiles as $name => $profile) {
             dashboard_check(in_array($adminOnly, $homeHrefs, true) === (isset($dashboardCatalog[$adminOnly]) && muhasebe_sayfa_can(substr($adminOnly, 0, -4))), $name . ': muhasebe/admin kartı yalnız kapısı açıksa ' . $adminOnly);
         }
     }
+    // v580: ana sayfada rozet/alt metin yok; tüm kartlarda sabit 3B PNG ikonu var.
+    dashboard_check($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-card-badge ")]')->length === 0, $name . ': ana sayfada .home-card-badge yok (v580)');
+    dashboard_check($xpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-card-sub ")]')->length === 0, $name . ': ana sayfada .home-card-sub yok (v580)');
+    foreach ($xpath->query($dashboardHomeQuery) as $cardNode) {
+        $imgNode = $xpath->query('.//*[contains(concat(" ",normalize-space(@class)," ")," home-card-icon ")]/img', $cardNode)->item(0);
+        dashboard_check($imgNode !== null && str_starts_with($imgNode->getAttribute('src'), 'assets/nav-icons/3d/'), $name . ': 3B PNG ikon var ' . $cardNode->getAttribute('href'));
+    }
     if ($name === 'admin') {
         dashboard_check(count($home) === 44, 'admin: Ana Sayfa hariç 44 benzersiz kart (27 yetkili katalog sayfası (v574: Tanımlar kalktı) + 1 Depo Tanımları (v574: Şube kalktı) + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
-        $icon = $xpath->query('//a[@href="hizli_maliyet.php" and contains(@class,"home-card")]//img')->item(0);
-        dashboard_check($icon !== null && str_starts_with($icon->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: ortak sürümlü Hızlı Maliyet SVG');
+        dashboard_check(($sidebarGroups[count($sidebarGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim sidebar\'da EN SON grup (v580)');
+        dashboard_check(($homeGroups[count($homeGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim ana sayfada EN SON grup (v580)');
+        $sbQcost = $xpath->query('//nav[contains(concat(" ",normalize-space(@class)," ")," sidebar-nav ")]//a[@href="hizli_maliyet.php"]//img')->item(0);
+        dashboard_check($sbQcost !== null && str_starts_with($sbQcost->getAttribute('src'), 'assets/nav-icons/qcost.svg?v='), 'admin: sidebar Hızlı Maliyet SVG ikonu korunur');
     }
     // Hızlı Maliyet kartı/sidebar bağlantısı YALNIZ yönetici ya da hizli_maliyet.read ile (maliyet.* AÇMAZ; write/delete okumasız AÇMAZ).
     $quickExpected = $profile['admin'] || in_array('hizli_maliyet.read', $profile['permissions'], true);
@@ -338,11 +347,8 @@ foreach ($dashboardProfiles as $name => $profile) {
         if ($name === 'only_' . str_replace('.', '_', $legacy)) dashboard_check(isset($homeLabels['personel_takip.php']), 'yetkili personel alt sayfasının merkez girişi görünür: ' . $legacy);
     }
 }
-$badgeXpath = dashboard_dom(dashboard_render($dashboardProfiles['admin'], true));
-// v558: records.php / cikmalar.php kartları (rozet 11/12) kaldırıldı.
-foreach (['beyanlar.php' => '14', 'halkayit/index.php' => '15', 'mail.php' => '16', 'hesap.php' => '18', 'personel_takip.php' => '20', 'users.php' => '21', 'audit.php' => '22'] as $href => $badge) {
-    $node = $badgeXpath->query('//a[@href="' . $href . '" and contains(@class,"home-card")]//*[contains(concat(" ",normalize-space(@class)," ")," home-card-badge ")]')->item(0);
-    dashboard_check($node !== null && trim($node->textContent) === $badge, 'mevcut anonim kart rozeti korunur ' . $href);
-}
+$cleanXpath = dashboard_dom(dashboard_render($dashboardProfiles['admin'], true));
+dashboard_check($cleanXpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-card-badge ")]')->length === 0, 'v580: ana sayfada hiç .home-card-badge çizilmez');
+dashboard_check($cleanXpath->query('//*[contains(concat(" ",normalize-space(@class)," ")," home-card-sub ")]')->length === 0, 'v580: ana sayfada hiç .home-card-sub çizilmez');
 dashboard_check(!function_exists('db'), 'test sonunda DB/bootstrap hâlâ yüklenmedi');
 echo 'PASS ' . $dashboardChecks . ' dashboard/sidebar checks across ' . count($dashboardProfiles) . " anonymous profiles (no bootstrap/DB).\n";

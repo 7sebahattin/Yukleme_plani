@@ -440,13 +440,12 @@ ok('bekleyen ekran yalnizca BIR KEZ tuketiliyor',
    preg_match("/function bekleyenEkraniAc.*?bekleyenEkran = '';.*?taslakEkraniAc\(\);/s", $appHtml) === 1,
    'bayrak sifirlanmiyor — her firma degisiminde taslak ekrani acilir');
 
-// ── 14) Ana sayfa sayaci (Adim 5) ─────────────────────────────────────────
+// ── 14) v580: Ana sayfa rozetsiz 3B ikon düzeni ───────────────────────────
 $idx = oku("$KOK/index.php");
-ok('ana sayfa sayaci buton kapisinin ayni kurallarini kullaniyor',
-   strpos($idx, 'beyan_hks_uygun_durumlar()') !== false
-   && strpos($idx, "COALESCE(d.hks_urun_id,  '') <> ''") !== false
-   && strpos($idx, "b.durum IN (\" . beyan_hks_aktif_durumlar_sql() . \")") !== false,
-   'sayac ile buton kapisi ayrisirsa sayi yaniltir');
+ok('v580: ana sayfada rozet ve kullanilmayan beyan sayac sorgusu yok',
+   strpos($idx, 'home-card-badge') === false
+   && strpos($idx, '$beyan_bildirim_bekleyen') === false,
+   'v580 ana sayfa kartlarinda rozet ve gereksiz DB sorgusu bulunmamali');
 
 // ── 15) On kontrol sayfasi ────────────────────────────────────────────────
 $tani = oku("$KOK/beyan_bildirim_tani.php");

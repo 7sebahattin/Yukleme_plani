@@ -456,23 +456,27 @@ input.num, select.num { text-align: right; }
 .home-grid:not(.pdks-dashboard-grid) .home-card:focus-visible {
     outline: 2px solid var(--primary); outline-offset: 2px;
 }
+/* v580: ana sayfa ikonlarında karo arka planı/gölge/kenarlık yok — yalnız 3B ikon, sabit boyut */
 .home-grid:not(.pdks-dashboard-grid) .home-card-icon {
     position: relative;
-    isolation: isolate;
-    overflow: hidden;
-    box-shadow: var(--icon-tile-shadow);
-    transition: box-shadow .22s ease;
+    width: 54px;
+    height: 54px;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0;
+    overflow: visible;
 }
-.home-grid:not(.pdks-dashboard-grid) .home-card-icon::before {
-    content: '';
-    position: absolute; inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: var(--icon-sheen);
-    pointer-events: none;
+.home-grid:not(.pdks-dashboard-grid) .home-card-icon::before,
+.home-grid:not(.pdks-dashboard-grid) .home-card-icon::after {
+    content: none;
+    display: none;
 }
-.home-grid:not(.pdks-dashboard-grid) .home-card:hover .home-card-icon {
-    box-shadow: var(--icon-tile-shadow-hover);
+.home-grid:not(.pdks-dashboard-grid) .home-card-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
 }
 .home-grid:not(.pdks-dashboard-grid) .home-card-badge {
     box-shadow: 0 1px 3px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.25);
@@ -5465,21 +5469,11 @@ html[data-theme="dark"] {
     --icon-sheen: linear-gradient(150deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.06) 40%, rgba(255,255,255,0) 62%);
 }
 
-/* Modül ikon renkleri (index.php/reports.php'de inline
-   style="background:#hex") açık tema pasteli — koyu temada olduğu gibi
-   parlarsa göz yorar. box-shadow'u (kabartma) ETKİLEMEMESİ için filter
-   değil, ayrı bir karartma katmanı (::after, sheen'in ÜSTÜNDE) kullanılır —
-   ikon ana rengi görünür kalır, sadece tonu kısılır.
-   Kapsam Dashboard-3D bloğuyla AYNI (.pdks-dashboard-grid HARİÇ): bu katman
-   pdks sprite ikonlarının üstüne binince ikonlar sönükleşiyor ve "ikinci bir
-   kutu" gibi görünüyordu — canlı hata, 2026-09-18. */
+/* v580: ana sayfa 3B ikonları şeffaf arka planlıdır — koyu temada ::after karartma katmanı yok. */
+html[data-theme="dark"] .home-grid:not(.pdks-dashboard-grid) .home-card-icon::before,
 html[data-theme="dark"] .home-grid:not(.pdks-dashboard-grid) .home-card-icon::after {
-    content: '';
-    position: absolute; inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: rgba(8,12,18,.4);
-    pointer-events: none;
+    content: none;
+    display: none;
 }
 
 /* — Chrome yüzeyleri: topbar/sidebar açıkta lacivert (var(--text))
@@ -7398,7 +7392,7 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
 }
 
 /* =========================================================
-   MASAÜSTÜ %80 ÖLÇEK & 8-SÜTUN ANA SAYFA MİMARİSİ
+   MASAÜSTÜ %80 ÖLÇEK & 7-SÜTUN ANA SAYFA MİMARİSİ (v580)
    ---------------------------------------------------------
    Mobil (<768px), tablet (768–899px) ve @media print (1:1)
    ETKİLENMEZ. CSS `zoom` yerine kök rem (12px = 15px × 0.8) +
@@ -7498,9 +7492,9 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     }
     .home-grid:not(.pdks-dashboard-grid) .home-card {
         min-width: 0;
-        min-height: 104px;
+        min-height: 108px;
         padding: 12px 8px 10px;
-        gap: 6px;
+        gap: 7px;
         border-radius: 14px;
     }
     .home-grid:not(.pdks-dashboard-grid) .home-card:hover {
@@ -7508,10 +7502,14 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
         text-decoration: none;
     }
     .home-grid:not(.pdks-dashboard-grid) .home-card-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 13px;
-        font-size: 1.5rem;
+        width: 56px;
+        height: 56px;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0;
+        overflow: visible;
+        font-size: 1.75rem;
     }
     .home-grid:not(.pdks-dashboard-grid) .home-card-icon img {
         width: 100%;
@@ -7525,20 +7523,6 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
         max-width: 100%;
         overflow-wrap: break-word;
     }
-    .home-grid:not(.pdks-dashboard-grid) .home-card-sub {
-        font-size: .8rem;
-        line-height: 1.25;
-        margin-top: 0;
-        max-width: 100%;
-        overflow-wrap: break-word;
-    }
-    .home-grid:not(.pdks-dashboard-grid) .home-card-badge {
-        top: 6px;
-        right: 6px;
-        font-size: .78rem;
-        padding: 1px 6px;
-        min-width: 18px;
-    }
     .home-grid:not(.pdks-dashboard-grid) .home-section-title {
         color: var(--muted);
         margin-top: 10px;
@@ -7551,15 +7535,15 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     }
 }
 
-/* Orta masaüstü (1100–1279px): 6 sütun ana sayfa */
-@media screen and (min-width: 1100px) {
+/* Orta masaüstü (1100–1279px): 5 sütun ana sayfa */
+@media screen and (min-width: 1100px) and (max-width: 1279px) {
     .home-grid:not(.pdks-dashboard-grid) {
-        grid-template-columns: repeat(6, minmax(0, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 11px;
     }
 }
 
-/* Geniş masaüstü (≥1280px): 210px sidebar + 8 sütun ana sayfa */
+/* Geniş masaüstü (≥1280px): 210px sidebar + 7 sütun ana sayfa + 64px 3B ikon */
 @media screen and (min-width: 1280px) {
     .desktop-sidebar { width: 210px; }
     body:not(.print-mode) .container {
@@ -7568,18 +7552,24 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
         padding: 20px 24px 40px;
     }
     .home-grid:not(.pdks-dashboard-grid) {
-        grid-template-columns: repeat(8, minmax(0, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 12px;
     }
     .home-grid:not(.pdks-dashboard-grid) .home-card {
-        min-height: 104px;
+        min-height: 116px;
+        padding: 14px 10px 12px;
+        gap: 8px;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card-icon {
+        width: 64px;
+        height: 64px;
     }
 }
 
-/* Çok geniş masaüstü (≥1500px): kartlar arası 12px boşluk */
+/* Çok geniş masaüstü (≥1500px): kartlar arası 14px boşluk */
 @media screen and (min-width: 1500px) {
     .home-grid:not(.pdks-dashboard-grid) {
-        gap: 12px;
+        gap: 14px;
     }
 }
 
