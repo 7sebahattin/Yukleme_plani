@@ -277,8 +277,6 @@ html[data-theme="dark"] .st-toast:not(.st-toast--hata) { background: #e7ecf4; co
 .st-tanim-duzen-form .st-tanim-eylem { grid-column: 1 / -1; justify-content: flex-end; }
 .st-aktif { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px; cursor: pointer; font-size: .86rem; }
 .st-aktif input { width: 22px; height: 22px; }
-.st-ice-alt { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-.st-onizleme-tablo { display: none; margin-top: 10px; }
 .st-bilgi-kutu { margin-top: 14px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--text); font-size: .84rem; }
 
 /* ═════════ 6. Telefon (<768) dokunma/girdi kuralları ═════════ */
@@ -302,8 +300,6 @@ html[data-theme="dark"] .st-toast:not(.st-toast--hata) { background: #e7ecf4; co
     .st-tanim-ekle .btn { grid-column: auto; }
     .st-tanim-duzen-form { grid-template-columns: minmax(0, 1fr) 110px auto; }
     .st-tanim-duzen-form .st-tanim-eylem { grid-column: auto; }
-    .st-onizleme-tablo { display: block; }
-    .st-onizleme-liste { display: none; }
 }
 
 /* ═════════ 8. Masaüstü (≥1024): TEK EKRAN master-detail ═════════

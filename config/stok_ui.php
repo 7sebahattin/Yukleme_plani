@@ -159,8 +159,8 @@ function stok_liste_kol_html(array $kartlar, array $gruplar, array $F, ?int $sec
     }
     $bos = '';
     if (!$kartlar) {
-        $bos = stok_bos('Henüz stok kartı yok', 'İlk kartı ekleyin ya da Tanımlar’daki ürün ve malzemeleri tek seferde içe aktarın.',
-            '<button type="button" class="btn btn-primary" data-st-modal="kart">Yeni kart</button><a class="btn" href="stok_tanimlari.php?sekme=ice_aktar">Tanımlardan içe aktar</a>');
+        $bos = stok_bos('Henüz stok kartı yok', 'İlk stok kartını ekleyerek stok takibini başlatın.',
+            '<button type="button" class="btn btn-primary" data-st-modal="kart">Yeni kart</button>');
     }
     return '<div class="st-liste-kol" id="stListeKol"><div class="st-liste-ust">'
         . '<div class="st-arama-satir"><div class="st-arama"><svg class="st-arama-ikon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
@@ -390,49 +390,18 @@ function stok_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
     return $h . '</ul></section>';
 }
 
-/** İçe aktar paneli. */
-function stok_tanim_ice_panel(PDO $pdo, bool $gizli, bool $yaz): string
-{
-    try { $on = stok_ice_aktar_onizle($pdo); $hata = ''; }
-    catch (Throwable $e) { $on = []; $hata = 'Tanım kaynağı (ürün/malzeme tanımları) okunamadı.'; }
-    $yeni = 0; foreach ($on as $o) if ($o['durum'] === 'yeni') $yeni++;
-    $tipler = stok_kart_tipleri();
-    $tbl = ''; $lst = '';
-    foreach ($on as $o) {
-        $roz = $o['durum'] === 'yeni' ? '<span class="st-rozet st-rozet--aktif">Yeni</span>' : '<span class="st-rozet">Kartı var</span>';
-        $hedef = ($tipler[$o['hedef_tip']] ?? $o['hedef_tip']) . ' · ' . $o['ana_birim'];
-        $tbl .= '<tr><td>' . h($o['ad']) . '</td><td>' . h($o['kaynak_tur']) . '</td><td>' . h($hedef) . '</td><td>' . $roz . '</td></tr>';
-        $lst .= '<li class="st-tanim-satir"><div class="st-tanim-ad">' . h($o['ad']) . '<small>' . h($o['kaynak_tur'] . ' → ' . $hedef) . '</small></div><div class="st-tanim-eylem">' . $roz . '</div></li>';
-    }
-    $h = '<section class="st-tanim-govde" id="stPanelIce" role="tabpanel" aria-labelledby="stTabIce"' . ($gizli ? ' hidden' : '') . '><h2>Tanımlardan içe aktar</h2>'
-        . '<p>Tanımlar ekranındaki aktif <b>ürün</b> (kg) ve <b>malzeme</b> (adet) kayıtlarından stok kartı oluşturur. İsteğe bağlıdır; tekrar çalıştırmak çift kart üretmez. '
-        . 'Kart kaynağına bağlanır ama sonradan tanımda yapılan ad değişikliği karta <b>yansımaz</b>.</p>';
-    if ($hata !== '') return $h . '<div class="flash flash-error">' . h($hata) . '</div></section>';
-    if (!$on) return $h . stok_bos('İçe aktarılacak kayıt yok', 'Tanımlar ekranında aktif ürün ya da malzeme bulunmuyor.', '', 'h3') . '</section>';
-    $h .= '<div class="table-wrap st-onizleme-tablo"><table class="data-table st-tablo"><caption class="st-sr">İçe aktarma önizlemesi</caption><thead><tr><th scope="col">Ad</th><th scope="col">Kaynak tür</th><th scope="col">Hedef</th><th scope="col">Durum</th></tr></thead><tbody>' . $tbl . '</tbody></table></div>'
-        . '<ul class="st-tanim-liste st-onizleme-liste">' . $lst . '</ul>'
-        . '<div class="st-ice-alt"><span class="st-ipucu">' . $yeni . ' yeni kart eklenecek · ' . (count($on) - $yeni) . ' mevcut atlanacak</span>';
-    if ($yaz) {
-        $h .= '<form method="post" action="stok_kaydet.php" data-st-ajax data-ok="İçe aktarıldı" data-onay="' . $yeni . ' stok kartı oluşturulacak. Devam edilsin mi?" class="st-icerik"><input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
-            . '<input type="hidden" name="islem" value="ice_aktar"><input type="hidden" name="geri" value="stok_tanimlari.php?sekme=ice_aktar">'
-            . '<button type="submit" class="btn btn-primary" data-ice-aktar' . ($yeni === 0 ? ' disabled' : '') . '>' . $yeni . ' kartı içe aktar</button></form>';
-    }
-    return $h . '</div></section>';
-}
-
-/** Tanımlar sayfası gövdesi. ?sekme=grup|giris_neden|cikis_neden|ice_aktar */
+/** Tanımlar sayfası gövdesi. ?sekme=grup|giris_neden|cikis_neden */
 function stok_tanimlari_govde(PDO $pdo): string
 {
     $yaz = stok_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'grup');
-    if (!in_array($sekme, ['grup', 'giris_neden', 'cikis_neden', 'ice_aktar'], true)) $sekme = 'grup';
-    try { $nYeni = count(array_filter(stok_ice_aktar_onizle($pdo), static fn($o) => $o['durum'] === 'yeni')); } catch (Throwable $e) { $nYeni = 0; }
-    $sek = ['grup' => ['stTabGrup', 'stPanelGrup', 'Stok Grupları'], 'giris_neden' => ['stTabGiris', 'stPanelGiris', 'Giriş Nedenleri'], 'cikis_neden' => ['stTabCikis', 'stPanelCikis', 'Çıkış Nedenleri'], 'ice_aktar' => ['stTabIce', 'stPanelIce', 'İçe Aktar']];
+    if (!in_array($sekme, ['grup', 'giris_neden', 'cikis_neden'], true)) $sekme = 'grup';
+    $sek = ['grup' => ['stTabGrup', 'stPanelGrup', 'Stok Grupları'], 'giris_neden' => ['stTabGiris', 'stPanelGiris', 'Giriş Nedenleri'], 'cikis_neden' => ['stTabCikis', 'stPanelCikis', 'Çıkış Nedenleri']];
     $nav = ''; $paneller = '';
     foreach ($sek as $k => [$tab, $panel, $ad]) {
-        $say = $k === 'ice_aktar' ? $nYeni . ' yeni' : (string)count(stok_tanim_listesi($pdo, $k));
+        $say = (string)count(stok_tanim_listesi($pdo, $k));
         $nav .= '<a class="st-tanim-nav-oge" role="tab" id="' . $tab . '" href="stok_tanimlari.php?sekme=' . $k . '" data-sekme="' . $k . '" aria-selected="' . ($sekme === $k ? 'true' : 'false') . '" aria-controls="' . $panel . '">' . h($ad) . ' <small>' . h($say) . '</small></a>';
-        $paneller .= $k === 'ice_aktar' ? stok_tanim_ice_panel($pdo, $sekme !== $k, $yaz) : stok_tanim_panel($pdo, $k, $panel, $tab, $sekme !== $k, $yaz);
+        $paneller .= stok_tanim_panel($pdo, $k, $panel, $tab, $sekme !== $k, $yaz);
     }
     return '<div class="stok" id="stok">' . stok_ust_menu('tanimlar') . '<div class="st-ustsatir"><h1>Stok Tanımları</h1></div><div class="st-tanim">'
         . '<div class="st-tanim-nav" role="tablist" aria-label="Tanım türleri">' . $nav . '</div><div class="st-tanim-icerik">' . $paneller . '</div></div>'

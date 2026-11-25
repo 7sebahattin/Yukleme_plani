@@ -92,7 +92,7 @@ ok('cari_kaydet şema yok → 503 JSON', $r['kod'] === 503 && (js($r)['ok'] ?? n
 cari_t_sema_kur($db);
 echo "\n=== 2. Boş durum ===\n";
 $r = get('cari_kartlari.php');
-ok('boş: kartlar "Henüz cari yok" + İlk cariyi ekle (birincil) + içe aktar bağlantısı', uyari_yok($r) && str_contains($r['govde'], 'Henüz cari yok') && str_contains($r['govde'], 'İlk cariyi ekle') && str_contains($r['govde'], 'cari_tanimlari.php#ice-aktar'));
+ok('boş: kartlar "Henüz cari yok" + İlk cariyi ekle (birincil); içe aktar bağlantısı YOK', uyari_yok($r) && str_contains($r['govde'], 'Henüz cari yok') && str_contains($r['govde'], 'İlk cariyi ekle') && !str_contains($r['govde'], 'cari_tanimlari.php#ice-aktar') && !str_contains($r['govde'], 'Tanımlardan içe aktar'));
 ok('boş: sekme şeridi var, tek birincil düğme', str_contains($r['govde'], 'cari-sekmeler') && birincil_say(bolge($r['govde'])) === 1, (string)birincil_say(bolge($r['govde'])));
 $r = get('cari_fisler.php');
 ok('boş: fişler "Bu filtreyle kayıt yok"', uyari_yok($r) && str_contains($r['govde'], 'Bu filtreyle kayıt yok'));
@@ -219,14 +219,14 @@ ok('dekontlar geçersiz sayfa → çökme yok, boş durum', uyari_yok($r) && str
 echo "\n=== 5. Tanımlar ===\n";
 $r = get('cari_tanimlari.php');
 $b = bolge($r['govde']);
-ok('tanımlar: 3 sekme (Cari Grupları n, Ödeme Şekilleri 6, İçe Aktar 2 yeni)', str_contains($b, 'Ödeme Şekilleri <small>6</small>') && str_contains($b, 'İçe Aktar <small>2 yeni</small>') && str_contains($b, 'id="crPanelGrup"') && str_contains($b, 'id="crPanelOdeme" role="tabpanel" aria-labelledby="crTabOdeme" hidden'));
+ok('tanımlar: 2 sekme (Cari Grupları n, Ödeme Şekilleri 6; İçe Aktar yok)', str_contains($b, 'Ödeme Şekilleri <small>6</small>') && !str_contains($b, 'crTabIce') && !str_contains($b, 'crPanelIce') && str_contains($b, 'id="crPanelGrup"') && str_contains($b, 'id="crPanelOdeme" role="tabpanel" aria-labelledby="crTabOdeme" hidden'));
 ok('tanımlar: kullanılan grupta (Ambalaj) Sil YOK, ödeme şekillerinde Sil var', (bool)preg_match('/Ambalaj<small>Sıra 1 · 2 kartta kullanılıyor.*?<\/li>/s', $b, $mm) && !str_contains($mm[0], 'tanim_sil') && substr_count($b, 'value="tanim_sil"') >= 6 + 1);
 ok('tanımlar: aktif switch formu (role=switch, tanim_durum) + satır içi düzenleme formu (tanim_kaydet + id)', (bool)preg_match('/role="switch" data-id="\d+" name="aktif"/', $b) && str_contains($b, 'name="islem" value="tanim_durum"') && preg_match('/cari-tanim-satir--duzen" hidden><form[^>]*><input type="hidden" name="csrf"[^>]*><input type="hidden" name="islem" value="tanim_kaydet">/', $b) === 1);
 ok('tanımlar: bilgi kutusu (sabit listeler)', str_contains($b, 'hareket türleri sabittir'));
 ok('tanımlar: HTML denge / form csrf', html_hata($b) === [] && form_hata($b) === [], json_encode([html_hata($b), form_hata($b)]));
 $r = get('cari_tanimlari.php', ['sekme' => 'ice_aktar']);
 $b = bolge($r['govde']);
-ok('içe aktar: önizleme (2 Yeni, 3 Kartı var), "2 kartı içe aktar" düğmesi + ice_aktar formu', substr_count($b, 'cari-rozet cari-rozet--aktif">Yeni') >= 2 && str_contains($b, '2 kartı içe aktar') && str_contains($b, 'value="ice_aktar"') && str_contains($b, 'firma + tedarikçi') && str_contains($b, 'id="crPanelIce" role="tabpanel" aria-labelledby="crTabIce">'));
+ok('?sekme=ice_aktar güvenli biçimde Cari Grupları sekmesine düşer (panel yok)', uyari_yok($r) && !str_contains($b, 'crPanelIce') && !str_contains($b, 'Firmalardan içe aktar') && str_contains($b, 'id="crTabGrup" aria-selected="true"'));
 
 echo "\n=== 6. XSS kaçışı ===\n";
 $sayfalar = [['cari_kartlari.php', []], ['cari_kartlari.php', ['id' => $xid]], ['cari_kartlari.php', ['id' => $xid, 'sekme' => 'bilgiler']], ['cari_fisler.php', []], ['cari_dekontlar.php', []], ['cari_tanimlari.php', []], ['cari_ekstre.php', ['id' => $xid, 'bas' => '', 'bit' => '']]];
@@ -335,11 +335,10 @@ $r = post(['islem' => 'tanim_sil', 'id' => (string)$tid]);
 ok('tanim_sil kullanılmayan → silindi', js($r)['ok'] === true && (int)$db->query("SELECT COUNT(*) FROM cari_tanimlar WHERE id = $tid")->fetchColumn() === 0);
 $r = post(['islem' => 'tanim_kaydet', 'tur' => 'grup', 'ad' => 'X', 'sira' => '1'], true, ['admin' => false]);
 ok('tanım yazma admin değil → 403', $r['kod'] === 403);
-// içe aktar
+// eski içe aktar ucu kaldırıldı
+$k0 = say('cari_kartlar');
 $r = post(['islem' => 'ice_aktar']); $j = js($r);
-ok('ice_aktar → eklenen=2 atlanan=3; audit', ($j['ok'] ?? false) === true && $j['eklenen'] === 2 && $j['atlanan'] === 3 && say('audit_log', "action = 'cari_ice_aktar'") === 1, $r['govde']);
-$r = post(['islem' => 'ice_aktar']); $j = js($r);
-ok('ice_aktar tekrar → eklenen=0 (çift kart yok)', $j['eklenen'] === 0);
+ok('ice_aktar kaldırıldı → 422 Bilinmeyen işlem, kart eklenmez', $r['kod'] === 422 && ($j['ok'] ?? true) === false && ($j['hata'] ?? '') === 'Bilinmeyen işlem.' && say('cari_kartlar') === $k0, $r['govde']);
 $r = post(['islem' => 'bilinmeyen']);
 ok('bilinmeyen işlem → 422 JSON', $r['kod'] === 422 && (js($r)['ok'] ?? true) === false);
 

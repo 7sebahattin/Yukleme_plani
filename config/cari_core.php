@@ -1055,57 +1055,6 @@ function cari_tanim_sil(PDO $pdo, int $id, int $uid): array
     return ['ok' => true, 'hata' => null, 'id' => $id];
 }
 
-// ── İçe aktarım (material_definitions firma/tedarikci → kart; tek seferlik, idempotent) ──
-
-/**
- * @return list<array{ad:string,kaynak_turler:list<string>,hedef_tip:string,durum:string,md_id:int}>
- *   durum: yeni | var_md (md_id ile kart var) | var_unvan (aynı unvanlı kart var)
- */
-function cari_ice_aktar_onizle(PDO $pdo): array
-{
-    $rows = $pdo->query("SELECT id, name, type FROM material_definitions WHERE type IN ('firma', 'tedarikci') AND is_active = 1 ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
-    $grup = [];
-    foreach ($rows as $r) {
-        $ad = trim((string)$r['name']);
-        if ($ad === '') continue;
-        $k = cari_fold($ad);
-        $grup[$k] ??= ['ad' => $ad, 'turler' => [], 'idler' => []];
-        $grup[$k]['turler'][(string)$r['type']] = true;
-        $grup[$k]['idler'][] = (int)$r['id'];
-    }
-    $mdVar = []; $unvanVar = [];
-    foreach ($pdo->query('SELECT md_id, unvan FROM cari_kartlar')->fetchAll(PDO::FETCH_ASSOC) as $k) {
-        if ($k['md_id'] !== null) $mdVar[(int)$k['md_id']] = true;
-        $unvanVar[cari_fold((string)$k['unvan'])] = true;
-    }
-    $out = [];
-    foreach ($grup as $k => $x) {
-        $durum = 'yeni';
-        foreach ($x['idler'] as $i) if (isset($mdVar[$i])) { $durum = 'var_md'; break; }
-        if ($durum === 'yeni' && isset($unvanVar[$k])) $durum = 'var_unvan';
-        $t = array_keys($x['turler']);
-        $out[] = ['ad' => $x['ad'], 'kaynak_turler' => $t, 'hedef_tip' => count($t) > 1 ? 'ikisi' : ($t[0] === 'firma' ? 'musteri' : 'tedarikci'), 'durum' => $durum, 'md_id' => $x['idler'][0]];
-    }
-    return $out;
-}
-
-/** Yalnız `yeni` olanları ekler; tek transaction; tek özet audit. @return array{ok:bool,hata:?string,id:?int,eklenen:int,atlanan:int} */
-function cari_ice_aktar(PDO $pdo, int $uid): array
-{
-    $onizle = cari_ice_aktar_onizle($pdo);
-    $eklenen = 0; $atlanan = 0;
-    cari_tx($pdo, function () use ($pdo, $onizle, $uid, &$eklenen, &$atlanan): void {
-        $ins = $pdo->prepare('INSERT INTO cari_kartlar (kod, unvan, tip, para_birimi, aktif, md_id, created_at, created_by) VALUES (?, ?, ?, ?, 1, ?, ?, ?)');
-        foreach ($onizle as $o) {
-            if ($o['durum'] !== 'yeni' || mb_strlen($o['ad']) > 200 || mb_strlen($o['ad']) < 2) { $atlanan++; continue; }
-            $ins->execute([cari_kod_oner($pdo), $o['ad'], $o['hedef_tip'], 'TRY', $o['md_id'], date('Y-m-d H:i:s'), $uid]);
-            $eklenen++;
-        }
-    });
-    audit_log_event('cari_ice_aktar', 'cari', null, null, ['eklenen' => $eklenen, 'atlanan' => $atlanan]);
-    return ['ok' => true, 'hata' => null, 'id' => null, 'eklenen' => $eklenen, 'atlanan' => $atlanan];
-}
-
 // ── Uç yardımcıları (cari_kaydet.php / cari_ekstre.php) ──────────────────────
 
 /** `geri` yalnız yerel cari_*.php adresi (açık yönlendirme yok). */

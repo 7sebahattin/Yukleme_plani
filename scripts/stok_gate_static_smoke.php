@@ -76,13 +76,13 @@ ok('POST dışı → 405 + Allow, require_login ve csrf_check\'ten ÖNCE', $p405
 ok('csrf_check($_POST[\'csrf\']) var; JSON başlığı csrf_check\'ten ÖNCE', str_contains($k, "csrf_check(\$_POST['csrf']") && $pos($k, 'application/json') < $pCsrf);
 ok('sıra: csrf_check → stok_sayfa_kapisi → ilk stok_kapi', $pCsrf > 0 && $pCsrf < $pos($k, 'stok_sayfa_kapisi(') && $pos($k, 'stok_sayfa_kapisi(') < $pos($k, 'stok_kapi('));
 $ilkYaz = PHP_INT_MAX;
-foreach (['stok_kart_kaydet(', 'stok_kart_durum(', 'stok_kart_sil(', 'stok_tanim_kaydet(', 'stok_tanim_durum(', 'stok_tanim_sil(', 'stok_ice_aktar(', 'stok_fis_kaydet(', 'stok_fis_iptal('] as $fn) { $p = $pos($k, $fn); if ($p >= 0) $ilkYaz = min($ilkYaz, $p); }
+foreach (['stok_kart_kaydet(', 'stok_kart_durum(', 'stok_kart_sil(', 'stok_tanim_kaydet(', 'stok_tanim_durum(', 'stok_tanim_sil(', 'stok_fis_kaydet(', 'stok_fis_iptal('] as $fn) { $p = $pos($k, $fn); if ($p >= 0) $ilkYaz = min($ilkYaz, $p); }
 ok('csrf_check, ilk stok_ yazma çağrısından ÖNCE', $pCsrf > 0 && $pCsrf < $ilkYaz);
 preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET_ORDER);
 $isl = array_map(fn($m) => $m[1], $cm);
-$A = ['kart_kaydet', 'kart_durum', 'kart_sil', 'tanim_kaydet', 'tanim_durum', 'tanim_sil', 'ice_aktar'];
-ok('işlem dalları: Parça A 7 dal (Parça B: + fis_kaydet, fis_iptal)', $isl === $A || $isl === [...$A, 'fis_kaydet', 'fis_iptal'] || (array_slice($isl, 0, 7) === $A && !array_diff($isl, [...$A, 'fis_kaydet', 'fis_iptal'])), json_encode($isl));
-$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'", 'ice_aktar' => "'create'", 'fis_kaydet' => "'create'", 'fis_iptal' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
+$A = ['kart_kaydet', 'kart_durum', 'kart_sil', 'tanim_kaydet', 'tanim_durum', 'tanim_sil'];
+ok('işlem dalları: Parça A 6 dal (ice_aktar yok; Parça B: + fis_kaydet, fis_iptal)', $isl === $A || $isl === [...$A, 'fis_kaydet', 'fis_iptal'] || (array_slice($isl, 0, 6) === $A && !array_diff($isl, [...$A, 'fis_kaydet', 'fis_iptal'])), json_encode($isl));
+$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'", 'fis_kaydet' => "'create'", 'fis_iptal' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
 foreach ($cm as $m) {
     $y = $yetki[$m[1]] ?? '?';
     ok("dal $m[1]: stok_kapi($y) İLK ifade; dalda tek stok_kapi; yalnız stok_ fonksiyonu", (bool)preg_match("/^\\s*stok_kapi\\(" . preg_quote($y, '/') . "\\);/", $m[2]) && substr_count($m[2], 'stok_kapi(') === 1 && !preg_match('/\bcari_[a-z_]+\(/', $m[2]), substr($m[2], 0, 80));
@@ -110,7 +110,7 @@ ok('core: stok_fisler\'de DELETE YOK', !preg_match('/DELETE\s+FROM\s+`?stok_fisl
 preg_match_all('/UPDATE\s+`?stok_fisler`?\s+SET\s+([^"\']+?)\s+WHERE/i', $c, $um);
 $setler = array_map(fn($x) => preg_replace('/\s+/', ' ', trim($x)), $um[1]);
 ok('core: stok_fisler UPDATE\'leri yalnız beyaz liste (fis_no[, cari_hareket_id] · durum=iptal + iptal_*)', !array_filter($setler, fn($x) => !preg_match('/^(fis_no = \?(, cari_hareket_id = \?)?|cari_hareket_id = \?|durum = \'iptal\', iptal_at = \?, iptal_by = \?, iptal_neden = \?)$/', $x)), json_encode($setler));
-ok('B: stok_kaydet 9 dal (A 7 + fis_kaydet + fis_iptal, bu sırayla)', $isl === [...$A, 'fis_kaydet', 'fis_iptal'], json_encode($isl));
+ok('B: stok_kaydet 8 dal (A 6 + fis_kaydet + fis_iptal, bu sırayla)', $isl === [...$A, 'fis_kaydet', 'fis_iptal'], json_encode($isl));
 ok('B: 3 fiş sayfası çalışan modül (stok_core + stok_fis_parca + stok_fis_sayfa_govde, render_header\'dan ÖNCE kısmi yanıt)', count(array_filter($fisSayfalari, function ($f) use ($ROOT, $pos) {
     $s = kod($ROOT . '/' . $f); return str_contains($s, 'config/stok_core.php') && $pos($s, 'stok_fis_parca(') > 0 && $pos($s, 'stok_fis_parca(') < $pos($s, 'render_header(') && str_contains($s, 'stok_fis_sayfa_govde('); })) === 3);
 ok('B: cari bağı yalnız cari_core fonksiyonlarıyla, kaynak modül değeri stok_core\'da verilir', str_contains((string)govde($c, 'stok_fis_kaydet'), "cari_hareket_ekle(") && str_contains((string)govde($c, 'stok_fis_kaydet'), "['modul' => 'stok', 'id' => \$fid]")
@@ -121,7 +121,8 @@ ok('B: yetersiz_stok / kantar_aktarilmis → 409 (stok_cevap)', str_contains((st
 ok('core: cari tablolarına doğrudan SQL YOK (cari bağı yalnız cari_core fonksiyonlarıyla)', !preg_match('/\b(FROM|INTO|UPDATE|JOIN)\s+`?cari_(hareketler|kartlar|tanimlar)\b/i', $c));
 ok('core: named parametre (:ad) kullanılmaz — pozisyonel ?', !preg_match('/[ (,=]:[a-z_]{2,}\b/', $c));
 ok('core: depo filtresi yalnız depo_sql_in (depo_sql_column / depo_sql_records YOK)', str_contains($c, 'depo_sql_in(') && !str_contains($c, 'depo_sql_column(') && !str_contains($c, 'depo_sql_records'));
-$yazanlar = ['stok_kart_kaydet', 'stok_kart_durum', 'stok_kart_sil', 'stok_tanim_kaydet', 'stok_tanim_durum', 'stok_tanim_sil', 'stok_ice_aktar'];
+ok('core: material_stock_helpers.php bağımlılığı YOK (eski içe aktar kaldırıldı)', !str_contains($c, 'material_stock_helpers.php'));
+$yazanlar = ['stok_kart_kaydet', 'stok_kart_durum', 'stok_kart_sil', 'stok_tanim_kaydet', 'stok_tanim_durum', 'stok_tanim_sil'];
 foreach (['stok_fis_kaydet', 'stok_fis_iptal'] as $b) if (govde($c, $b) !== null) $yazanlar[] = $b;
 foreach ($yazanlar as $fn) ok("core $fn: audit_log_event( var", ($g = govde($c, $fn)) !== null && str_contains($g, 'audit_log_event('));
 $yetkili = [];

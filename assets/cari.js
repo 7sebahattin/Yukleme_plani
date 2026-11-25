@@ -28,7 +28,7 @@
         p: { parca: 'parca', detay: 'detay', ekstre: 'ekstre', kart: 'kart', id: 'id', sekme: 'sekme', donem: 'donem' },
         /* POST `islem` değerleri (cari_kaydet.php) */
         islem: { hareket: 'hareket_ekle', virman: 'virman_ekle', tanimDurum: 'tanim_durum',
-                 tanimKaydet: 'tanim_kaydet', tanimSil: 'tanim_sil', iceAktar: 'ice_aktar' },
+                 tanimKaydet: 'tanim_kaydet', tanimSil: 'tanim_sil' },
         /* Virman için sunucunun beklediği ek kaynak alanı (cari_id'nin kopyası) */
         virmanKaynakAlan: 'kaynak_id',
         /* Oturum/anahtar alanı adları */
@@ -554,7 +554,6 @@
             btn.dataset.kilit = ''; btn.disabled = false;
             if (s.j && s.j.ok) {
                 var msg = btn.getAttribute('data-ok') || s.j.mesaj || SOZLESME.m.kaydedildi;
-                if (islem === SOZLESME.islem.iceAktar && s.j.eklenen != null) msg = 'İçe aktarıldı: ' + s.j.eklenen + ' kart eklendi, ' + (s.j.atlanan || 0) + ' atlandı';
                 if (s.j.uyari) msg += ' — ' + s.j.uyari;
                 if (kartlarSayfasi() && /^kart_(durum)$/.test(islem)) { toast(msg); return tazele(); }
                 yenileToastla(msg, islem === 'kart_sil' ? SOZLESME.uc.kartlar : (guvenliYol(s.j.yonlendir) ? s.j.yonlendir : null));
@@ -798,9 +797,6 @@
             zorlaOdak = null;
             return;
         }
-
-        var ice = t.closest('[data-ice-aktar]');
-        if (ice) { e.preventDefault(); hizliIslem(ice, SOZLESME.islem.iceAktar); return; }
 
         var kop = t.closest('[data-kopyala]');
         if (kop) { e.preventDefault(); kopyala(kop); return; }
@@ -1236,7 +1232,7 @@
             else if (document.getElementById('crModalKart') && yeni === '1') kartAc(false, null);
             try { q.delete('yeni'); q.delete('cari'); var s = q.toString(); history.replaceState(history.state, '', location.pathname.replace(/^.*\//, '') + (s ? '?' + s : '') + location.hash); } catch (x) { /* kritik değil */ }
         }
-        /* Tanımlar: #grup / #odeme_sekli / #ice_aktar derin bağı */
+        /* Tanımlar: #grup / #odeme_sekli derin bağı */
         var h = (location.hash || '').slice(1);
         if (h) {
             var hedef = $$('.cari-tanim-nav-oge').filter(function (t) { return t.id === h || t.getAttribute('data-sekme') === h || t.getAttribute('aria-controls') === h; })[0];

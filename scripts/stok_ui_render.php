@@ -9,7 +9,7 @@
 //     php scripts/stok_ui_render.php kartlar id=1 > _test_stok_kartlar.html    (seçili kart + hareketler)
 //     php scripts/stok_ui_render.php kartlar                                    (seçimsiz liste)
 //     php scripts/stok_ui_render.php kartlar id=1 parca=detay                   (kısmi yanıt)
-//     php scripts/stok_ui_render.php tanimlar sekme=cikis_neden|ice_aktar
+//     php scripts/stok_ui_render.php tanimlar sekme=cikis_neden
 //     php scripts/stok_ui_render.php giris yeni=1 > _test_stok_giris.html       (giriş fişi formu)
 //     php scripts/stok_ui_render.php transfer id=8                              (örnek transfer fişi; --fisler örnek B fişlerini ekler)
 //   Durum anahtarları: --sema (tablolar YOK → şema uyarı kartı) · --bos (tablolar var, veri YOK) · --yonetici-degil (forbidden)

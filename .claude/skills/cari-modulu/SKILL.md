@@ -8,8 +8,8 @@ description: Cari İşlemler modülü (cari_kartlari/fisler/dekontlar/tanimlari/
 > Plan/tasarım kararları: ledger tabanlı; kapı v550'den beri `muhasebe_modul_can` (Roller `muhasebe.cari.*`; bkz. `rol-yonetimi`) (sidebar "Cari İşlemler" grubu, `nav_muhasebe_gruplari()`). Sayfalar `nav_muhasebe_static_smoke` istisnasıyla "çalışan modül" sayılır.
 
 ## Kapsam
-- Sayfalar (kök, hepsi **GET-only**): `cari_kartlari` (master-detail: sol liste + sağ detay/ekstre; `?id=`, `?parca=detay|ekstre|kart` kısmi yanıt) · `cari_fisler` (tahsilat/ödeme/açılış) · `cari_dekontlar` (borç/alacak dekontu, virman) · `cari_tanimlari` (grup, ödeme şekli, firmalardan içe aktar) · `cari_ekstre` (yazdır/xlsx/csv).
-- **Yazma TEK uç: `cari_kaydet.php`** (yalnız POST; `islem`: kart_kaydet/kart_durum/kart_sil/hareket_ekle/virman_ekle/hareket_iptal/tanim_kaydet/tanim_durum/tanim_sil/ice_aktar). Sıra: yöntem → login → `csrf_check` → şema kapısı → `cari_kapi()` → yalnız `cari_core` fonksiyonu. JSON (`X-Requested-With: fetch`): 200/422 (kod kullanimda/hareketli/zaten_iptal)/409/403/503; klasik form: 303 + flash, `geri` yalnız `^cari_[a-z]+\.php`.
+- Sayfalar (kök, hepsi **GET-only**): `cari_kartlari` (master-detail: sol liste + sağ detay/ekstre; `?id=`, `?parca=detay|ekstre|kart` kısmi yanıt) · `cari_fisler` (tahsilat/ödeme/açılış) · `cari_dekontlar` (borç/alacak dekontu, virman) · `cari_tanimlari` (grup, ödeme şekli) · `cari_ekstre` (yazdır/xlsx/csv).
+- **Yazma TEK uç: `cari_kaydet.php`** (yalnız POST; `islem`: kart_kaydet/kart_durum/kart_sil/hareket_ekle/virman_ekle/hareket_iptal/tanim_kaydet/tanim_durum/tanim_sil). Sıra: yöntem → login → `csrf_check` → şema kapısı → `cari_kapi()` → yalnız `cari_core` fonksiyonu. JSON (`X-Requested-With: fetch`): 200/422 (kod kullanimda/hareketli/zaten_iptal)/409/403/503; klasik form: 303 + flash, `geri` yalnız `^cari_[a-z]+\.php`.
 - Çekirdek `config/cari_core.php` (kurallar, DB), işaretleme `config/cari_ui.php`, istemci `assets/cari.js` + `cari.css` (style.css/app.js'e DOKUNMAZ).
 
 ## Değiştirmeden önce oku

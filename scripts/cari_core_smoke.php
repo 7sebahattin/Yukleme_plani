@@ -260,22 +260,10 @@ ok('pasif ödeme şekli yeni harekette reddedilir; yalnızAktif listesinde yok',
 ok('ödeme şekli serbest silinir', cari_tanim_sil($pdo, (int)$nakit['id'], $UID)['ok']);
 ok('olmayan tanım hata', !cari_tanim_sil($pdo, 99999, $UID)['ok'] && !cari_tanim_durum($pdo, 99999, true, $UID)['ok']);
 
-echo "\n=== 12. İçe aktarım ===\n";
-$ins = $pdo->prepare('INSERT INTO material_definitions (type, name, is_active) VALUES (?, ?, ?)');
-foreach ([['firma', 'Zeta Ihracat', 1], ['tedarikci', 'Eta Tedarik', 1], ['firma', 'Ortak Firma', 1], ['tedarikci', 'ORTAK FIRMA', 1], ['firma', 'Pasif Firma', 0], ['firma', 'Alfa Gıda', 1], ['depo', 'DEPO1', 1]] as $r) $ins->execute($r);
-$on = cari_ice_aktar_onizle($pdo);
-$by = array_column($on, null, 'ad');
-ok('önizleme: pasif/depo hariç 5 ad (ortak ad tek)', count($on) === 4 + 0 && !isset($by['Pasif Firma']) && !isset($by['DEPO1']), (string)count($on));
-ok('önizleme: tip eşlemesi + ortak ad → ikisi', $by['Zeta Ihracat']['hedef_tip'] === 'musteri' && $by['Eta Tedarik']['hedef_tip'] === 'tedarikci' && $by['Ortak Firma']['hedef_tip'] === 'ikisi');
-ok('önizleme: aynı unvanlı kart → var_unvan', $by['Alfa Gıda']['durum'] === 'var_unvan' && $by['Zeta Ihracat']['durum'] === 'yeni');
-$kartOnce = say('cari_kartlar');
-$ia = cari_ice_aktar($pdo, $UID);
-ok('içe aktarım: 3 yeni kart eklendi, 1 atlandı + özet audit', $ia['ok'] && $ia['eklenen'] === 3 && $ia['atlanan'] === 1 && say('cari_kartlar') === $kartOnce + 3 && audit_say('cari_ice_aktar') === 1);
-ok('md_id dolu + ardışık kodlar', say('cari_kartlar', 'md_id IS NOT NULL') === 3);
-$ia2 = cari_ice_aktar($pdo, $UID);
-ok('ikinci çalıştırma 0 ekler (idempotent)', $ia2['eklenen'] === 0 && say('cari_kartlar') === $kartOnce + 3);
-$by2 = array_column(cari_ice_aktar_onizle($pdo), null, 'ad');
-ok('sonra önizleme: var_md', $by2['Zeta Ihracat']['durum'] === 'var_md' && $by2['Ortak Firma']['durum'] === 'var_md');
+echo "\n=== 12. Eski içe aktarım kaldırıldı (şema md_id korunur) ===\n";
+ok('cari_ice_aktar / cari_ice_aktar_onizle kaldırıldı', !function_exists('cari_ice_aktar') && !function_exists('cari_ice_aktar_onizle'));
+$cols = array_column($pdo->query('PRAGMA table_info(cari_kartlar)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+ok('cari_kartlar.md_id şema kolonu korunur (ekleyici migrasyon)', in_array('md_id', $cols, true));
 
 echo "\n=== 12b. Sayfa/uç katmanı için çekirdek ekleri ===\n";
 $za = (int)cari_kart_kaydet($pdo, ['unvan' => 'ZZ Liste A', 'tip' => 'musteri', 'para_birimi' => 'TRY', 'aktif' => '1'], $UID)['id'];

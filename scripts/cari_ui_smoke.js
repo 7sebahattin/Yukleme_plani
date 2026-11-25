@@ -454,7 +454,7 @@ async function alanHatasi(p, kapsam, ad) { return await p.$$eval(`${kapsam} [nam
     const S3 = await ortam(); sunucular.push(S3);
     const t = await sayfa(browser, S3, { width: 1440, height: 900 });
     await git(t, 'cari_tanimlari.php');
-    ok('Tanımlar açıldı; 3 sekme; sidebar Cari Tanımları aktif', /Cari Tanımları/.test(await metin(t, 'details[data-sb-grup="cari"] a.sidebar-link.active') || '') && (await say(t, '.cari-tanim-nav-oge')) === 3);
+    ok('Tanımlar açıldı; 2 sekme (İçe Aktar yok); sidebar Cari Tanımları aktif', /Cari Tanımları/.test(await metin(t, 'details[data-sb-grup="cari"] a.sidebar-link.active') || '') && (await say(t, '.cari-tanim-nav-oge')) === 2 && !(await t.$('#crTabIce')));
     ok('yatay taşma yok', (await tasma(t)) <= 0);
     ok('Cari Grupları: 7 tanım listelenir', (await say(t, '#crPanelGrup .cari-tanim-satir:not(.cari-tanim-satir--duzen)')) === 7);
     await shot(t, 'tanimlar_1440');
@@ -503,17 +503,8 @@ async function alanHatasi(p, kapsam, ad) { return await p.$$eval(`${kapsam} [nam
     await t.click(odSatir + ' button[aria-label*="sil"]');
     await yenilenmeBekle(t, nt);
     ok('ödeme şekli silinebilir (fişe ad saklanır): Havale/EFT satırı kalktı, DB -1', !(await t.$(odSatir)) && S3.say().tanim.odeme_sekli >= 1);
-    // içe aktar
-    await t.click('#crTabIce');
-    ok('İçe Aktar sekmesi: önizleme tablosu + "N kartı içe aktar" düğmesi', await goster(t, '#crPanelIce') && /içe aktar/.test(await metin(t, '#crPanelIce [data-ice-aktar]')));
-    await shot(t, 'tanimlar_ice_1440');
-    const kart0 = S3.say().kart;
-    nt = S3.sayi(/POST \/cari_kaydet/);
-    await t.click('#crPanelIce [data-ice-aktar]');
-    await yenilenmeBekle(t, nt); await kisaBekle(t, () => !!document.querySelector('.cari-toast:not([hidden])'));
-    ok('içe aktarıldı: yeni kartlar DB\'de; toast "İçe aktarıldı"', S3.say().kart > kart0 && /İçe aktarıldı/.test(await toastMetin(t) || ''), `${kart0} → ${S3.say().kart} toast=${await toastMetin(t)}`);
-    await t.reload({ waitUntil: 'load' });
-    ok('ikinci kez içe aktar → düğme devre dışı (0 yeni kart)', !(await t.$('#crPanelIce [data-ice-aktar]')) || await t.$eval('#crPanelIce [data-ice-aktar]', e => e.disabled));
+    // eski içe aktar sekmesi kaldırıldı
+    ok('İçe Aktar sekmesi/paneli kaldırıldı (#crTabIce ve #crPanelIce yok)', !(await t.$('#crTabIce')) && !(await t.$('#crPanelIce')));
     ok('JS/konsol hatası yok (bölüm 3)', hatalar.length === 0, hatalar.join(' | '));
     await t.context().close();
 
@@ -533,7 +524,7 @@ async function alanHatasi(p, kapsam, ad) { return await p.$$eval(`${kapsam} [nam
     const S5 = await ortam('bos'); sunucular.push(S5);
     const b = await sayfa(browser, S5, { width: 1440, height: 900 });
     await git(b, 'cari_kartlari.php');
-    ok('boş durum: "Henüz cari yok" + "İlk cariyi ekle" + içe aktar bağlantısı', /Henüz cari yok/.test(await metin(b, '#crListeKol')) && await goster(b, '#crListeKol [data-cr-modal="kart"].btn-primary') && /Tanımlardan içe aktar/.test(await metin(b, '#crListeKol')));
+    ok('boş durum: "Henüz cari yok" + "İlk cariyi ekle"; içe aktar bağlantısı yok', /Henüz cari yok/.test(await metin(b, '#crListeKol')) && await goster(b, '#crListeKol [data-cr-modal="kart"].btn-primary') && !/Tanımlardan içe aktar/.test(await metin(b, '#crListeKol')));
     await shot(b, 'bos_1440');
     await b.click('#crListeKol [data-cr-modal="kart"].btn-primary');
     await modalAcik(b, 'crModalKart');

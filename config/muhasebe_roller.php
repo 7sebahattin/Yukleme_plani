@@ -79,7 +79,7 @@ function muhasebe_grup_can(string $grup, string $eylem): bool {
  * write: ikisi BİRDEN (create ve edit) — belirsiz işlemler için fail-closed · tanim: yalnız ARAYÜZ ipucu (Tanımlar
  * sayfasında yazma düğmeleri; create/edit/delete'ten biri) — uçlar kesin eylemi ister ·
  * admin: yalnız is_admin() (şema/yönetici işlemleri; bugün hiçbir uç istemez, migrate.php zaten yönetici-only).
- * Tanımlar sayfasındaki düz tanım düzenleme (tanim_kaydet/tanim_durum/tanim_sil/ice_aktar) 'admin' DEĞİL,
+ * Tanımlar sayfasındaki düz tanım düzenleme (tanim_kaydet/tanim_durum/tanim_sil) 'admin' DEĞİL,
  * create/edit/delete'e eşlenir (grup içi sade veri girişi; şema değiştirmez).
  */
 function muhasebe_modul_can(string $grup, string $eylem): bool {
