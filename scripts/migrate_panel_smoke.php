@@ -267,4 +267,19 @@ ok('seçilmeyen tablo (loading_pallets) DOKUNULMADI', siparis_test_say(db(), 'lo
 $r = mig_sayfa(['csrf' => csrf(), 'ne' => 'depo', 'adim' => 'aktar', 'eski_ad' => ['FİNİKE'], 'tablolar' => [], 'yeni_depo' => (string)$yeniId]);
 ok('tablo seçilmeden POST: ✗ uyarı, hiçbir şey değişmedi', str_contains($r['html'], '✗ Aktarılacak tablo seçilmedi') && siparis_test_say(db(), 'loading_pallets', "depo = 'FİNİKE'") === 1);
 
+echo "\n=== 13. Sekmeli görünüm (Hazır Olmayanlar / Hazır Olanlar) ===\n";
+$r = mig_sayfa();
+$hazirSayi = substr_count($r['html'], 'class="card mg-kart mg-hazir"');
+$eksikSayi = 41 - $hazirSayi;
+ok('iki sekme düğmesi var: Hazır Olmayanlar ve Hazır Olanlar',
+    str_contains($r['html'], 'data-hedef="eksik"') && str_contains($r['html'], 'data-hedef="hazir"')
+    && str_contains($r['html'], 'Hazır Olmayanlar') && str_contains($r['html'], 'Hazır Olanlar'));
+ok('sekme rozet sayıları kart sayılarıyla eşleşir',
+    str_contains($r['html'], 'mg-sekme-sayi--eksik">' . $eksikSayi . '</span>')
+    && str_contains($r['html'], 'mg-sekme-sayi--ok">' . $hazirSayi . '</span>'));
+ok('eksik kart varken varsayılan sekme "eksik"', str_contains($r['html'], 'id="mgPanel" data-sekme="eksik"'));
+ok('kartlarda data-durum="hazir" / "eksik" sayısı tutarlı',
+    substr_count($r['html'], 'style="margin:16px 0;padding:0;" data-durum="hazir"') === $hazirSayi
+    && substr_count($r['html'], 'style="margin:16px 0;padding:0;" data-durum="eksik"') === $eksikSayi);
+
 siparis_test_bitir();

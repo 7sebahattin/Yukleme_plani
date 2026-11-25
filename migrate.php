@@ -609,7 +609,7 @@ if (!function_exists('mg_durum')) {
         if ($hazir) $d['hazir']++;
         $id = (string)$d['id'];
         echo '<details class="card mg-kart ' . ($hazir ? 'mg-hazir' : 'mg-eksik') . '"' . ($id !== '' ? ' id="' . h($id) . '"' : '')
-            . ($hazir && !$post ? '' : ' open') . ' style="margin:16px 0;padding:0;">'
+            . ($hazir && !$post ? '' : ' open') . ' style="margin:16px 0;padding:0;" data-durum="' . ($hazir ? 'hazir' : 'eksik') . '">'
             . '<summary class="mg-ozet"><span class="mg-baslik">' . $baslik . '</span>'
             . '<span class="mg-rozet ' . ($hazir ? 'mg-rozet-ok' : 'mg-rozet-eksik') . '">' . ($hazir ? '✓ Hazır' : '✗ Eksik') . '</span></summary>'
             . '<div class="mg-govde">' . $html . '</div></details>';
@@ -620,7 +620,7 @@ mg_durum(true);
 render_header('Şema Migrasyon');
 ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
 ?>
-<div class="container">
+<div class="container mg-panel" id="mgPanel" data-sekme="<!--MG-SEKME-->">
   <h1 style="margin:16px 0 8px;">Şema Migrasyon Paneli</h1>
   <p style="color:#555;max-width:760px;">
     Eksik veritabanı kolonlarını ekler. Auto-migration sunucuda
@@ -2102,13 +2102,46 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
 <?php
 $mgHtml = (string)ob_get_clean();
 $mg = mg_durum();
+$eksikSayi = $mg['toplam'] - $mg['hazir'];
+$hazirSayi = $mg['hazir'];
+$aktifSekme = $eksikSayi > 0 ? 'eksik' : 'hazir';
 $mgOzet = '<p class="mg-ozet-satir">' . ($mg['hazir'] === $mg['toplam']
         ? '✓ Tüm kartlar hazır (' . $mg['toplam'] . '/' . $mg['toplam'] . ').'
         : $mg['hazir'] . ' / ' . $mg['toplam'] . ' kart hazır; eksik olanlar açık.')
-    . ' Hazır olanlar kapalı gelir — başlığa tıklayarak açın. <button type="button" class="btn btn-ghost" id="mgTumu">Tümünü aç</button></p>';
-echo str_replace('<!--MG-OZET-->', $mgOzet, $mgHtml);
+    . ' Hazır olanlar kapalı gelir — başlığa tıklayarak açın. <button type="button" class="btn btn-ghost" id="mgTumu">Tümünü aç</button></p>'
+    . '<div class="mg-sekmeler" role="tablist" aria-label="Migrasyon kartları">'
+    . '<button type="button" class="mg-sekme' . ($aktifSekme === 'eksik' ? ' aktif' : '') . '" role="tab"'
+    . ' aria-selected="' . ($aktifSekme === 'eksik' ? 'true' : 'false') . '" data-hedef="eksik">'
+    . 'Hazır Olmayanlar <span class="mg-sekme-sayi mg-sekme-sayi--eksik">' . $eksikSayi . '</span>'
+    . '</button>'
+    . '<button type="button" class="mg-sekme' . ($aktifSekme === 'hazir' ? ' aktif' : '') . '" role="tab"'
+    . ' aria-selected="' . ($aktifSekme === 'hazir' ? 'true' : 'false') . '" data-hedef="hazir">'
+    . 'Hazır Olanlar <span class="mg-sekme-sayi mg-sekme-sayi--ok">' . $hazirSayi . '</span>'
+    . '</button>'
+    . '</div>'
+    . ($eksikSayi === 0 ? '<p class="mg-bos mg-bos--eksik">✓ Tüm kartlar hazır — eksik migrasyon bulunmuyor.</p>' : '')
+    . ($hazirSayi === 0 ? '<p class="mg-bos mg-bos--hazir">Henüz hazır kart yok.</p>' : '');
+echo str_replace(['<!--MG-OZET-->', '<!--MG-SEKME-->'], [$mgOzet, $aktifSekme], $mgHtml);
 ?>
 <style>
+  .mg-sekmeler { display: flex; gap: 4px; border-bottom: 1px solid var(--border, #e2e8f0); margin: 14px 0 16px; overflow-x: auto; }
+  .mg-sekme {
+    appearance: none; background: none; border: none; border-bottom: 3px solid transparent;
+    padding: 10px 16px; margin-bottom: -1px; font: inherit; font-weight: 600;
+    color: var(--muted, #64748b); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+    white-space: nowrap; transition: color .15s, border-color .15s;
+  }
+  .mg-sekme:hover { color: var(--text, #0f172a); }
+  .mg-sekme.aktif { color: var(--primary, #2563eb); border-bottom-color: var(--primary, #2563eb); }
+  .mg-sekme:focus-visible { outline: 2px solid var(--primary, #2563eb); outline-offset: -2px; border-radius: 4px; }
+  .mg-sekme-sayi { font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .mg-sekme-sayi--eksik { color: #c0392b; background: rgba(192, 57, 43, .12); }
+  .mg-sekme-sayi--ok { color: #1f9d55; background: rgba(31, 157, 85, .12); }
+  .mg-panel[data-sekme="eksik"] .mg-kart[data-durum="hazir"] { display: none; }
+  .mg-panel[data-sekme="hazir"] .mg-kart[data-durum="eksik"] { display: none; }
+  .mg-bos { display: none; padding: 20px 16px; text-align: center; color: var(--muted, #64748b); border: 1px dashed var(--border, #cbd5e1); border-radius: 10px; margin: 16px 0; }
+  .mg-panel[data-sekme="eksik"] .mg-bos--eksik { display: block; }
+  .mg-panel[data-sekme="hazir"] .mg-bos--hazir { display: block; }
   .mg-kart > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
   .mg-kart > summary::-webkit-details-marker { display: none; }
   .mg-kart > summary::before { content: "▸"; color: var(--muted, #777); transition: transform .15s; }
@@ -2123,20 +2156,66 @@ echo str_replace('<!--MG-OZET-->', $mgOzet, $mgHtml);
 </style>
 <script>
 (function () {
-  var kartlar = function () { return Array.prototype.slice.call(document.querySelectorAll('details.mg-kart')); };
+  var panel = document.getElementById('mgPanel');
+  var sekmeler = Array.prototype.slice.call(document.querySelectorAll('.mg-sekme'));
   var dugme = document.getElementById('mgTumu');
-  if (dugme) dugme.addEventListener('click', function () {
-    var ac = kartlar().some(function (k) { return !k.open; });
-    kartlar().forEach(function (k) { k.open = ac; });
-    dugme.textContent = ac ? 'Tümünü kapat' : 'Tümünü aç';
+  function gorunurKartlar() {
+    var sekme = panel ? panel.getAttribute('data-sekme') : 'eksik';
+    var secici = 'details.mg-kart[data-durum="' + (sekme === 'hazir' ? 'hazir' : 'eksik') + '"]';
+    return Array.prototype.slice.call(document.querySelectorAll(secici));
+  }
+  function dugmeGuncelle() {
+    if (!dugme) return;
+    var liste = gorunurKartlar();
+    dugme.style.display = liste.length ? '' : 'none';
+    var ac = liste.some(function (k) { return !k.open; });
+    dugme.textContent = ac ? 'Tümünü aç' : 'Tümünü kapat';
+  }
+  function sekmeAc(ad) {
+    if (!panel || (ad !== 'eksik' && ad !== 'hazir')) return;
+    panel.setAttribute('data-sekme', ad);
+    sekmeler.forEach(function (s) {
+      var aktif = s.getAttribute('data-hedef') === ad;
+      s.classList.toggle('aktif', aktif);
+      s.setAttribute('aria-selected', aktif ? 'true' : 'false');
+    });
+    dugmeGuncelle();
+  }
+  sekmeler.forEach(function (s) {
+    s.addEventListener('click', function () {
+      sekmeAc(s.getAttribute('data-hedef'));
+    });
   });
-  // migrate.php#siparis-sofor gibi bağlantılar kapalı kartı açar
+  if (dugme) dugme.addEventListener('click', function () {
+    var liste = gorunurKartlar();
+    var ac = liste.some(function (k) { return !k.open; });
+    liste.forEach(function (k) { k.open = ac; });
+    dugmeGuncelle();
+  });
+  // migrate.php#siparis-sofor gibi bağlantılar ilgili sekmeye geçer ve kapalı kartı açar
   function hashAc() {
     var id = decodeURIComponent((location.hash || '').slice(1));
     var k = id && document.getElementById(id);
-    if (k && k.tagName === 'DETAILS') { k.open = true; k.scrollIntoView(); }
+    if (k && k.tagName === 'DETAILS') {
+      var durum = k.getAttribute('data-durum');
+      if (durum) sekmeAc(durum);
+      k.open = true;
+      k.scrollIntoView();
+    }
   }
-  hashAc(); window.addEventListener('hashchange', hashAc);
+  // POST sonrası sonuç basılan kartı ilgili sekmede göster
+  var sonucKart = Array.prototype.slice.call(document.querySelectorAll('details.mg-kart')).find(function (k) {
+    return k.textContent.indexOf('Son çalıştırma sonucu') !== -1;
+  });
+  if (sonucKart && !location.hash) {
+    var durum = sonucKart.getAttribute('data-durum');
+    if (durum) sekmeAc(durum);
+    sonucKart.open = true;
+    sonucKart.scrollIntoView({ block: 'nearest' });
+  }
+  dugmeGuncelle();
+  hashAc();
+  window.addEventListener('hashchange', hashAc);
 })();
 </script>
 <?php render_footer(); ?>
