@@ -396,16 +396,22 @@ function doviz_tx(PDO $pdo, callable $fn): mixed
 // ── TCMB XML İstemci ve Çözümleyici ─────────────────────────────────────────
 
 /** TCMB XML URL'i: bugün veya gelecek/boş → today.xml; geçmiş → YYYYMM/DDMMYYYY.xml. */
+/** Belirli bir tarih için doğrudan TCMB arşiv XML URL'si (today.xml CDN önbelleğini atlamak için). */
+function doviz_tcmb_tarih_url(string $tarih): string
+{
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $tarih, $m)) {
+        return 'https://www.tcmb.gov.tr/kurlar/today.xml';
+    }
+    return sprintf('https://www.tcmb.gov.tr/kurlar/%s%s/%s%s%s.xml', $m[1], $m[2], $m[3], $m[2], $m[1]);
+}
+
 function doviz_tcmb_url(?string $tarih = null): string
 {
     $bugun = date('Y-m-d');
     if ($tarih === null || $tarih === '' || $tarih >= $bugun) {
         return 'https://www.tcmb.gov.tr/kurlar/today.xml';
     }
-    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $tarih, $m)) {
-        return 'https://www.tcmb.gov.tr/kurlar/today.xml';
-    }
-    return sprintf('https://www.tcmb.gov.tr/kurlar/%s%s/%s%s%s.xml', $m[1], $m[2], $m[3], $m[2], $m[1]);
+    return doviz_tcmb_tarih_url($tarih);
 }
 
 /**
@@ -440,6 +446,7 @@ function doviz_http_get(string $url): array
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_USERAGENT      => 'AsyaFresh-ERP/1.0 (+TCMB-Kur)',
+            CURLOPT_HTTPHEADER     => ['Cache-Control: no-cache', 'Pragma: no-cache'],
         ]);
         $body   = curl_exec($ch);
         $err    = curl_error($ch);
@@ -459,7 +466,7 @@ function doviz_http_get(string $url): array
             'method'        => 'GET',
             'timeout'       => 8,
             'ignore_errors' => true,
-            'header'        => "User-Agent: AsyaFresh-ERP/1.0 (+TCMB-Kur)\r\n",
+            'header'        => "User-Agent: AsyaFresh-ERP/1.0 (+TCMB-Kur)\r\nCache-Control: no-cache\r\nPragma: no-cache\r\n",
         ],
         'ssl' => [
             'verify_peer'      => true,
@@ -586,7 +593,13 @@ function doviz_tcmb_senkron(PDO $pdo, ?string $tarih = null, ?int $uid = null, b
     if ($istenen === null || $istenen >= $bugun) {
         $res = doviz_http_get(doviz_tcmb_url(null));
         if (!$res['ok']) {
-            return ['ok' => false, 'hata' => 'TCMB bağlantısı başarısız: ' . ($res['hata'] ?: 'HTTP ' . $res['status'])];
+            // today.xml hata verirse doğrudan bugünün tarihli arşiv dosyasını dene
+            $resArsiv = doviz_http_get(doviz_tcmb_tarih_url($bugun));
+            if ($resArsiv['ok']) {
+                $res = $resArsiv;
+            } else {
+                return ['ok' => false, 'hata' => 'TCMB bağlantısı başarısız: ' . ($res['hata'] ?: 'HTTP ' . $res['status'])];
+            }
         }
     } else {
         $maxDeneme = $geriAra ? 6 : 1; // 0..5 gün geri
@@ -612,6 +625,17 @@ function doviz_tcmb_senkron(PDO $pdo, ?string $tarih = null, ?int $uid = null, b
     $parsed = doviz_tcmb_xml_coz($res['body']);
     if (empty($parsed['ok'])) {
         return ['ok' => false, 'hata' => (string)($parsed['hata'] ?? 'XML çözümlenemedi.')];
+    }
+
+    // Bugün istenip today.xml CDN önbelleğinden eski bülten döndüyse doğrudan bugünün tarihli XML'ini de kontrol et
+    if (($istenen === null || $istenen >= $bugun) && (string)$parsed['tarih'] < $bugun) {
+        $resBugun = doviz_http_get(doviz_tcmb_tarih_url($bugun));
+        if ($resBugun['ok']) {
+            $parsedBugun = doviz_tcmb_xml_coz($resBugun['body']);
+            if (!empty($parsedBugun['ok']) && (string)$parsedBugun['tarih'] > (string)$parsed['tarih']) {
+                $parsed = $parsedBugun;
+            }
+        }
     }
 
     $bultenTarih = (string)$parsed['tarih'];

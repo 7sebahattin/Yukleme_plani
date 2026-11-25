@@ -24,6 +24,25 @@ if (!in_array($gorunum, ['gunluk', 'gecmis'], true)) {
 
 $istenenTarih = doviz_tarih_coz($_GET['tarih'] ?? '');
 $sonTarih     = doviz_son_tarih($pdo);
+
+// İş günleri 15:30 sonrası bugünün bülteni henüz DB'de yoksa 5 dk soğuma ile otomatik TCMB kontrolü
+if (
+    $gorunum === 'gunluk'
+    && $sonTarih !== $bugun
+    && (int)date('N') <= 5
+    && date('H:i') >= '15:30'
+) {
+    $otoSon = (int)($_SESSION['_dvz_gunluk_oto'][$bugun] ?? 0);
+    if ((time() - $otoSon) >= 300) {
+        $_SESSION['_dvz_gunluk_oto'][$bugun] = time();
+        $otoUid = isset($auth_user['id']) ? (int)$auth_user['id'] : null;
+        $otoRes = doviz_tcmb_senkron($pdo, $bugun, $otoUid, false, false);
+        if (!empty($otoRes['ok']) && !empty($otoRes['tarih'])) {
+            $sonTarih = doviz_son_tarih($pdo) ?? (string)$otoRes['tarih'];
+        }
+    }
+}
+
 $tarih        = $istenenTarih ?? ($sonTarih ?? $bugun);
 
 $ts         = strtotime($tarih . ' 12:00:00');

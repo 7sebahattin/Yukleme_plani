@@ -228,5 +228,20 @@ doviz_tanim_durum($db, (int)$rubRow['id'], 'aktif', 1, 1);
 ok('RUB aktif edilince cari_para_birimleri listesine eklenir', in_array('RUB', cari_para_birimleri($db, true), true));
 ok('cari_tutar_bicim GBP ve RUB sembollerini yazar', cari_tutar_bicim(123456, 'GBP') === '1.234,56 £' && cari_tutar_bicim(50000, 'RUB') === '500,00 ₽');
 
+echo "=== 8. today.xml CDN Önbellek Geri Dönüşü (Doğrudan Tarihli Arşiv) ===\n";
+$bugun = date('Y-m-d');
+$bugunTr = date('d.m.Y');
+$dunTr = date('d.m.Y', strtotime('-1 day'));
+$bugunArsivUrl = doviz_tcmb_tarih_url($bugun);
+$XML_STALE = '<?xml version="1.0" encoding="UTF-8"?><Tarih_Date Tarih="' . $dunTr . '" Bulten_No="2026/900"><Currency Kod="USD"><Unit>1</Unit><ForexBuying>50.0000</ForexBuying><ForexSelling>50.1000</ForexSelling></Currency></Tarih_Date>';
+$XML_FRESH = '<?xml version="1.0" encoding="UTF-8"?><Tarih_Date Tarih="' . $bugunTr . '" Bulten_No="2026/901"><Currency Kod="USD"><Unit>1</Unit><ForexBuying>50.8000</ForexBuying><ForexSelling>50.9000</ForexSelling></Currency></Tarih_Date>';
+$GLOBALS['_doviz_http_get'] = static function (string $url) use ($XML_STALE, $XML_FRESH, $bugunArsivUrl): array {
+    if (str_contains($url, 'today.xml')) return ['ok' => true, 'status' => 200, 'body' => $XML_STALE, 'hata' => ''];
+    if ($url === $bugunArsivUrl) return ['ok' => true, 'status' => 200, 'body' => $XML_FRESH, 'hata' => ''];
+    return ['ok' => false, 'status' => 404, 'body' => '', 'hata' => 'HTTP 404'];
+};
+$sBugun = doviz_tcmb_senkron($db, $bugun, 1);
+ok('today.xml eski dönünce doğrudan tarihli arşivden bugünün bülteni alınır', ($sBugun['ok'] ?? false) && $sBugun['tarih'] === $bugun && $sBugun['bulten_no'] === '2026/901');
+
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
