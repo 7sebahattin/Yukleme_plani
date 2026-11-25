@@ -77,14 +77,14 @@ $p405 = $cari_pos($k, '405'); $pCsrf = $cari_pos($k, 'csrf_check(');
 ok('GET/POST dışı → 405, require_login ve csrf_check\'ten ÖNCE', $p405 > 0 && $p405 < $cari_pos($k, 'require_login()') && $p405 < $pCsrf && str_contains($k, "'POST'"));
 ok('csrf_check($_POST[\'csrf\']) var; JSON başlığı csrf_check\'ten ÖNCE (başarısızlık JSON döner)', str_contains($k, "csrf_check(\$_POST['csrf']") && $cari_pos($k, 'application/json') < $pCsrf);
 $ilkYaz = PHP_INT_MAX;
-foreach (['cari_kart_kaydet(', 'cari_kart_durum(', 'cari_kart_sil(', 'cari_hareket_ekle(', 'cari_virman_ekle(', 'cari_hareket_iptal(', 'cari_tanim_kaydet(', 'cari_tanim_durum(', 'cari_tanim_sil(', 'cari_ice_aktar('] as $fn) $ilkYaz = min($ilkYaz, $cari_pos($k, $fn));
+foreach (['cari_kart_kaydet(', 'cari_kart_durum(', 'cari_kart_sil(', 'cari_hareket_ekle(', 'cari_virman_ekle(', 'cari_hareket_iptal(', 'cari_tanim_kaydet(', 'cari_tanim_durum(', 'cari_tanim_sil('] as $fn) $ilkYaz = min($ilkYaz, $cari_pos($k, $fn));
 ok('csrf_check(, ilk cari_ yazma çağrısından ÖNCE', $pCsrf > 0 && $pCsrf < $ilkYaz);
 ok('csrf_check(, cari_sayfa_kapisi( ve cari_kapi( sırası: csrf → şema kapısı → yetki', $pCsrf < $cari_pos($k, 'cari_sayfa_kapisi(') && $cari_pos($k, 'cari_sayfa_kapisi(') < $cari_pos($k, 'cari_kapi('));
 preg_match_all("/case '([a-z_]+)':(.*?)(?=case '|default:)/s", $k, $cm, PREG_SET_ORDER);
 $isl = array_map(fn($m) => $m[1], $cm);
-ok('10 işlem dalı: kart_kaydet kart_durum kart_sil hareket_ekle virman_ekle hareket_iptal tanim_kaydet tanim_durum tanim_sil ice_aktar',
-    $isl === ['kart_kaydet', 'kart_durum', 'kart_sil', 'hareket_ekle', 'virman_ekle', 'hareket_iptal', 'tanim_kaydet', 'tanim_durum', 'tanim_sil', 'ice_aktar'], json_encode($isl));
-$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'hareket_ekle' => "'create'", 'virman_ekle' => "'create'", 'hareket_iptal' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'", 'ice_aktar' => "'create'"];  // v550: tam argüman metni (edit/create/delete)
+ok('9 işlem dalı: kart_kaydet kart_durum kart_sil hareket_ekle virman_ekle hareket_iptal tanim_kaydet tanim_durum tanim_sil (ice_aktar yok)',
+    $isl === ['kart_kaydet', 'kart_durum', 'kart_sil', 'hareket_ekle', 'virman_ekle', 'hareket_iptal', 'tanim_kaydet', 'tanim_durum', 'tanim_sil'], json_encode($isl));
+$yetki = ['kart_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'kart_durum' => "'edit'", 'kart_sil' => "'delete'", 'hareket_ekle' => "'create'", 'virman_ekle' => "'create'", 'hareket_iptal' => "'delete'", 'tanim_kaydet' => "\$id > 0 ? 'edit' : 'create'", 'tanim_durum' => "'edit'", 'tanim_sil' => "'delete'"];  // v550: tam argüman metni (edit/create/delete)
 foreach ($cm as $m) ok("dal $m[1]: cari_kapi({$yetki[$m[1]]}) ilk ifade; dalda tek cari_kapi", (bool)preg_match("/^\\s*cari_kapi\\(" . preg_quote($yetki[$m[1]], '/') . "\\);/", $m[2]) && substr_count($m[2], 'cari_kapi(') === 1, substr($m[2], 0, 80));
 ok('`geri` yerel beyaz liste: cari_geri_guvenli($_POST[\'geri\']) + çekirdekte ^cari_[a-z]+\\.php regex', str_contains($k, "cari_geri_guvenli(\$_POST['geri']") && str_contains((string)file_get_contents($ROOT . '/config/cari_core.php'), '^cari_[a-z]+\\.php'));
 ok('Location yalnız $geri ile (ham $_POST yönlendirmesi YOK)', !preg_match("/Location:\\s*'?\\s*\\.?\\s*\\\$_(POST|GET|REQUEST)/", (string)file_get_contents($ROOT . '/config/cari_core.php') . $k) && str_contains(kod($ROOT . '/config/cari_core.php'), "header('Location: ' . \$geri, true, 303)"));
@@ -106,12 +106,12 @@ preg_match_all('/UPDATE\s+cari_hareketler\s+SET\s+([^"\']+?)\s+WHERE/i', $c, $um
 $setler = array_map(fn($x) => preg_replace('/\s+/', ' ', trim($x)), $um[1]);
 ok('core: cari_hareketler UPDATE\'leri yalnız belge_no[/bagli_id] ve durum/iptal_* setleri', $setler && !array_filter($setler, fn($x) => !preg_match('/^(belge_no = \?(, bagli_id = \?)?|durum = \'iptal\', iptal_at = \?, iptal_by = \?, iptal_neden = \?)$/', $x)), json_encode($setler));
 ok('core: tutar|cari_id|tarih|para_birimi|yon UPDATE\'i YOK', !preg_match('/UPDATE\s+cari_hareketler\s+SET[^;]*\b(tutar|cari_id|tarih|para_birimi|yon)\s*=/i', $c));
-foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_kaynakli_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil', 'cari_ice_aktar'] as $fn) {
+foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_kaynakli_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil'] as $fn) {
     $g = govde($c, $fn);
     ok("core $fn: audit_log_event( var", $g !== null && str_contains($g, 'audit_log_event('));
 }
 $yetkiliCagri = [];
-foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_kaynakli_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil', 'cari_ice_aktar'] as $fn) {
+foreach (['cari_kart_kaydet', 'cari_kart_durum', 'cari_kart_sil', 'cari_hareket_ekle', 'cari_virman_ekle', 'cari_hareket_iptal', 'cari_kaynakli_iptal', 'cari_tanim_kaydet', 'cari_tanim_durum', 'cari_tanim_sil'] as $fn) {
     if (preg_match('/\b(can|is_admin|require_perm|cari_can|cari_kapi)\s*\(/', (string)govde($c, $fn))) $yetkiliCagri[] = $fn;
 }
 ok('core: yazan fonksiyonlarda yetki kontrolü YOK (uçların işi; testte saf çağrılabilir)', !$yetkiliCagri, implode(',', $yetkiliCagri));

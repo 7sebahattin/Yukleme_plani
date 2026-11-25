@@ -203,7 +203,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     // ───────────────────────────────────────── 2. TANIMLAR 1366
     console.log('\n=== 2. Tanımlar (1366x800) ===');
     await git(p, 'stok_tanimlari.php');
-    ok('tanımlar açıldı: 4 sekme, Gruplar paneli görünür', (await gorunurSay(p, '.st-tanim-nav-oge')) === 4 && await goster(p, '#stPanelGrup') && !(await goster(p, '#stPanelCikis')));
+    ok('tanımlar açıldı: 3 sekme (İçe Aktar yok), Gruplar paneli görünür', (await gorunurSay(p, '.st-tanim-nav-oge')) === 3 && !(await p.$('#stTabIce')) && await goster(p, '#stPanelGrup') && !(await goster(p, '#stPanelCikis')));
     ok('yatay taşma yok', (await tasma(p)) <= 0);
     await shot(p, 'tanimlar_1366');
     await p.fill('#stPanelGrup .st-tanim-ekle [name="ad"]', 'Kuru Gıda');
@@ -232,14 +232,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await p.click(`#stPanelGrup li[data-id="${kuru.id}"] button.st-tehlike`);
     await yenilenmeBekle(p, n0);
     ok('kullanılmayan grup silindi (onaylı)', !S1.say().tanimlar.find(t => t.id === kuru.id));
-    await p.click('#stTabIce');
-    const iceN = +((await metin(p, '#stPanelIce [data-ice-aktar]') || '').match(/^(\d+) kartı içe aktar/) || [0, 0])[1];
-    ok('İçe Aktar sekmesi: önizleme tablosu, "4 kartı içe aktar" (Kayısı, Köşebent, Şerit + adı değişen Domates)', await goster(p, '#stPanelIce .st-onizleme-tablo') && iceN === 4, String(iceN));
-    const k0 = S1.say().kart;
-    n0 = postSay(p);
-    await p.click('#stPanelIce [data-ice-aktar]');
-    await yenilenmeBekle(p, n0);
-    ok('içe aktar: DB +4 kart, toast "4 kart eklendi", düğme artık devre dışı', S1.say().kart === k0 + 4 && /4 kart eklendi/.test(await toastMetin(p) || '') && await p.$eval('#stPanelIce [data-ice-aktar]', e => e.disabled));
+    ok('İçe Aktar sekmesi/paneli kaldırıldı (#stTabIce ve #stPanelIce yok)', !(await p.$('#stTabIce')) && !(await p.$('#stPanelIce')));
     await p.context().close();
 
     // ───────────────────────────────────────── 3. TABLET 820

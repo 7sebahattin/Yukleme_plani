@@ -2,7 +2,7 @@
 // =========================================================
 // stok_kaydet.php — Stok (muhasebe): TÜM yazmaların TEK ucu (yalnız POST; GET → 405). cari_kaydet.php aynası.
 // Sıra: yöntem → require_login → csrf_check (yazmadan ÖNCE) → şema kapısı → işleme göre stok_kapi → yalnız config/stok_core.php fonksiyonu.
-// İşlemler (`islem`): kart_kaydet · kart_durum · kart_sil · tanim_kaydet · tanim_durum · tanim_sil · ice_aktar · fis_kaydet (write) · fis_iptal (delete).
+// İşlemler (`islem`): kart_kaydet · kart_durum · kart_sil · tanim_kaydet · tanim_durum · tanim_sil · fis_kaydet (write) · fis_iptal (delete).
 //   fis_kaydet: satırlar paralel dizilerle (kart_id[] kart_ara[] miktar[] birim[] birim_fiyat[] kdv_orani[] lot[] yon[]); 409 yetersiz_stok → eksiye_izin=1 ile yeniden.
 // Yanıt: fetch (X-Requested-With: fetch ya da ajax=1) → JSON {ok, id, fis_no, hata, alanlar{ad:hata}, uyari, yonlendir, kod, ...};
 //        klasik form → set_flash + 303 `geri`'ye (YALNIZ ^(stok_[a-z_]+|transfer_fisleri)\.php(\?…)?$ yerel adres; aksi stok_kartlari.php).
@@ -69,11 +69,6 @@ try {
             stok_kapi('delete');
             $s = stok_tanim_sil($pdo, $id, $uid);
             stok_cevap($s, $geri, 'Tanım silindi', $json);
-
-        case 'ice_aktar':
-            stok_kapi('create');
-            $s = stok_ice_aktar($pdo, $uid);
-            stok_cevap($s, $geri, 'İçe aktarıldı: ' . (int)$s['eklenen'] . ' kart eklendi, ' . (int)$s['atlanan'] . ' atlandı', $json);
 
         case 'fis_kaydet':
             stok_kapi('create');

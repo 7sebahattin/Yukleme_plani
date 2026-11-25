@@ -1,7 +1,7 @@
 <?php
 // =========================================================
-// stok_tanimlari.php — Stok Tanımları: Stok Grupları · Giriş Nedenleri · Çıkış Nedenleri · İçe Aktar. YALNIZ GET; yazmalar stok_kaydet.php'de.
-//   ?sekme=grup|giris_neden|cikis_neden|ice_aktar     (yazma düğmeleri yalnız stok_can('admin') için basılır)
+// stok_tanimlari.php — Stok Tanımları: Stok Grupları · Giriş Nedenleri · Çıkış Nedenleri. YALNIZ GET; yazmalar stok_kaydet.php'de.
+//   ?sekme=grup|giris_neden|cikis_neden     (yazma düğmeleri yalnız stok_can('tanim') için basılır)
 // Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → stok_kapi('read'); tablo yoksa şema uyarı kartı. Gövde config/stok_ui.php stok_tanimlari_govde().
 // =========================================================
 declare(strict_types=1);

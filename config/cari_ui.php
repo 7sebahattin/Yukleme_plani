@@ -241,8 +241,8 @@ function cari_liste_kol_html(array $kartlar, array $genel, array $gruplar, array
     foreach ($kartlar as $k) $liste .= cari_kart_satiri($k, $seciliId !== null && (int)$k['id'] === $seciliId);
     $bos = '';
     if ($genelToplam === 0) {
-        $bos = cari_bos('Henüz cari yok', 'İlk cariyi ekleyin ya da Tanımlar’daki firma ve tedarikçileri tek seferde içe aktarın.',
-            '<button type="button" class="btn btn-primary" data-cr-modal="kart">İlk cariyi ekle</button><a class="btn" href="cari_tanimlari.php#ice-aktar">Tanımlardan içe aktar</a>');
+        $bos = cari_bos('Henüz cari yok', 'İlk cari kartını ekleyerek cari takibini başlatın.',
+            '<button type="button" class="btn btn-primary" data-cr-modal="kart">İlk cariyi ekle</button>');
     }
     $filtreli = $f['q'] !== '' || $f['tip'] !== '' || $f['grup'] !== '' || $f['bakiye'] !== '' || $f['durum'] !== '';
     $yok = $genelToplam > 0 && !$kartlar;
@@ -865,56 +865,21 @@ function cari_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
     return $h . '</ul></section>';
 }
 
-/** İçe aktar paneli. */
-function cari_tanim_ice_panel(PDO $pdo, bool $gizli, bool $yaz): string
-{
-    try { $on = cari_ice_aktar_onizle($pdo); $hata = ''; }
-    catch (Throwable $e) { $on = []; $hata = 'Tanım kaynağı (firma/tedarikçi) okunamadı.'; }
-    $yeni = 0; foreach ($on as $o) if ($o['durum'] === 'yeni') $yeni++;
-    $tr = ['firma' => 'firma', 'tedarikci' => 'tedarikçi'];
-    $tbl = ''; $lst = '';
-    $tipler = cari_tipler();
-    foreach ($on as $o) {
-        $kaynak = implode(' + ', array_map(static fn($x) => $tr[$x] ?? $x, $o['kaynak_turler']));
-        $hedef = $tipler[$o['hedef_tip']] ?? $o['hedef_tip'];
-        $roz = $o['durum'] === 'yeni' ? '<span class="cari-rozet cari-rozet--aktif">Yeni</span>' : '<span class="cari-rozet">Kartı var</span>';
-        $tbl .= '<tr><td>' . h($o['ad']) . '</td><td>' . h($kaynak) . '</td><td>' . h($hedef) . '</td><td>' . $roz . '</td></tr>';
-        $lst .= '<li class="cari-tanim-satir"><div class="cari-tanim-ad">' . h($o['ad']) . '<small>' . h($kaynak . ' → ' . $hedef) . '</small></div><div class="cari-tanim-eylem">' . $roz . '</div></li>';
-    }
-    $h = '<section class="cari-tanim-govde" id="crPanelIce" role="tabpanel" aria-labelledby="crTabIce"' . ($gizli ? ' hidden' : '') . '><h2>Firmalardan içe aktar</h2>'
-        . '<p>Tanımlar ekranındaki aktif <b>firma</b> ve <b>tedarikçi</b> kayıtlarından cari kart oluşturur. Tek seferliktir; tekrar çalıştırmak çift kart üretmez, tanımlar değişmez.</p>';
-    if ($hata !== '') return $h . '<div class="flash flash-error">' . h($hata) . '</div></section>';
-    if (!$on) return $h . cari_bos('İçe aktarılacak kayıt yok', 'Tanımlar ekranında aktif firma ya da tedarikçi bulunmuyor.', '', 'h3') . '</section>';
-    $h .= '<div class="table-wrap pc-only cari-onizleme-tablo"><table class="data-table cari-tablo"><thead><tr><th>Ad</th><th>Kaynak tür</th><th>Hedef cari tipi</th><th>Durum</th></tr></thead><tbody>' . $tbl . '</tbody></table></div>'
-        . '<ul class="cari-tanim-liste mobile-only">' . $lst . '</ul>'
-        . '<div class="cari-filtre-eylem" style="justify-content:space-between;align-items:center;margin-top:12px"><span class="muted">' . $yeni . ' yeni kart eklenecek · ' . (count($on) - $yeni) . ' mevcut atlanacak</span>';
-    if ($yaz) {
-        $h .= '<form method="post" action="cari_kaydet.php" data-cr-ajax data-ok="İçe aktarıldı" style="display:contents"><input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
-            . '<input type="hidden" name="islem" value="ice_aktar"><input type="hidden" name="geri" value="cari_tanimlari.php?sekme=ice_aktar">'
-            . '<button type="submit" class="btn btn-primary" data-ice-aktar' . ($yeni === 0 ? ' disabled' : '') . '>' . $yeni . ' kartı içe aktar</button></form>';
-    }
-    return $h . '</div></section>';
-}
-
 /** Tanımlar sayfası gövdesi. */
 function cari_tanimlari_govde(PDO $pdo): string
 {
     $yaz = cari_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'grup');
-    if (!in_array($sekme, ['grup', 'odeme_sekli', 'ice_aktar'], true)) $sekme = 'grup';
+    if (!in_array($sekme, ['grup', 'odeme_sekli'], true)) $sekme = 'grup';
     $nGrup = count(cari_tanim_listesi($pdo, 'grup'));
     $nOde = count(cari_tanim_listesi($pdo, 'odeme_sekli'));
-    try { $nYeni = count(array_filter(cari_ice_aktar_onizle($pdo), static fn($o) => $o['durum'] === 'yeni')); } catch (Throwable $e) { $nYeni = 0; }
     $tab = static fn(string $id, string $panel, string $ad, string $say, bool $sec): string =>
         '<button type="button" class="cari-tanim-nav-oge" role="tab" id="' . $id . '" aria-selected="' . ($sec ? 'true' : 'false') . '" aria-controls="' . $panel . '">' . h($ad) . ' <small>' . h($say) . '</small></button>';
     return '<div class="cari" id="cari">' . cari_ust_menu('tanimlar') . '<div class="cari-ustsatir"><h1>Cari Tanımları</h1></div><div class="cari-tanim">'
         . '<div class="cari-tanim-nav" role="tablist" aria-label="Tanım türleri">'
         . $tab('crTabGrup', 'crPanelGrup', 'Cari Grupları', (string)$nGrup, $sekme === 'grup')
-        . $tab('crTabOdeme', 'crPanelOdeme', 'Ödeme Şekilleri', (string)$nOde, $sekme === 'odeme_sekli')
-        . '<span class="cari-tanim-ayrac" role="presentation"></span>'
-        . $tab('crTabIce', 'crPanelIce', 'İçe Aktar', $nYeni . ' yeni', $sekme === 'ice_aktar') . '</div><div>'
+        . $tab('crTabOdeme', 'crPanelOdeme', 'Ödeme Şekilleri', (string)$nOde, $sekme === 'odeme_sekli') . '</div><div>'
         . cari_tanim_panel($pdo, 'grup', 'crPanelGrup', 'crTabGrup', $sekme !== 'grup', $yaz)
         . cari_tanim_panel($pdo, 'odeme_sekli', 'crPanelOdeme', 'crTabOdeme', $sekme !== 'odeme_sekli', $yaz)
-        . cari_tanim_ice_panel($pdo, $sekme !== 'ice_aktar', $yaz)
         . '</div></div><p class="cari-bilgi-kutu">Cari tipi, para birimi ve hareket türleri sabittir; yalnız cari grubu ile ödeme şekli tanımlanır.</p></div>';
 }

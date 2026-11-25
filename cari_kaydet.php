@@ -3,7 +3,7 @@
 // cari_kaydet.php — Cari İşlemler: TÜM yazmaların TEK ucu (yalnız POST; GET → 405).
 // Sıra: yöntem → require_login → csrf_check (yazmadan ÖNCE) → şema kapısı → işleme göre cari_kapi → yalnız config/cari_core.php fonksiyonu.
 // İşlemler (`islem`): kart_kaydet · kart_durum · kart_sil · hareket_ekle (tur=virman + hedef_id → virman) · virman_ekle · hareket_iptal ·
-//                    tanim_kaydet · tanim_durum · tanim_sil · ice_aktar.
+//                    tanim_kaydet · tanim_durum · tanim_sil.
 // Yanıt: fetch (X-Requested-With: fetch ya da ajax=1) → JSON {ok, id, belge_no, hata, alanlar{ad:hata}, uyari, yonlendir, ...};
 //        klasik form → set_flash + 303 `geri`'ye (YALNIZ ^cari_[a-z]+\.php(\?…)?$ yerel adres; aksi cari_kartlari.php — açık yönlendirme YOK).
 // Her yazma cari_core'da audit_log_event'li. Hareket tablosuna bu dosya DOĞRUDAN yazmaz.
@@ -90,11 +90,6 @@ try {
             cari_kapi('delete');
             $s = cari_tanim_sil($pdo, $id, $uid);
             cari_cevap($s, $geri, 'Tanım silindi', $json);
-
-        case 'ice_aktar':
-            cari_kapi('create');
-            $s = cari_ice_aktar($pdo, $uid);
-            cari_cevap($s, $geri, 'İçe aktarıldı: ' . (int)$s['eklenen'] . ' kart eklendi, ' . (int)$s['atlanan'] . ' atlandı', $json);
 
         default:
             cari_cevap($yok, $geri, '', $json);

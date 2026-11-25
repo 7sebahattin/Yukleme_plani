@@ -1,7 +1,7 @@
 <?php
 // =========================================================
-// cari_tanimlari.php — Cari Tanımları: Cari Grupları · Ödeme Şekilleri · İçe Aktar. YALNIZ GET; yazmalar cari_kaydet.php'de.
-//   ?sekme=grup|odeme_sekli|ice_aktar     (yazma düğmeleri yalnız cari_can('admin') için basılır)
+// cari_tanimlari.php — Cari Tanımları: Cari Grupları · Ödeme Şekilleri. YALNIZ GET; yazmalar cari_kaydet.php'de.
+//   ?sekme=grup|odeme_sekli               (yazma düğmeleri yalnız cari_can('tanim') için basılır)
 // Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → cari_kapi('read'); tablo yoksa şema uyarı kartı. Gövde config/cari_ui.php cari_tanimlari_govde().
 // =========================================================
 declare(strict_types=1);

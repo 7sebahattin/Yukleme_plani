@@ -19,7 +19,6 @@ declare(strict_types=1);
 if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_response_code(404); exit; }
 
 require_once __DIR__ . '/cari_core.php';                // cari_tx / cari_hata / cari_kurus / cari_tutar_* / cari_fold (yan etkisiz)
-require_once __DIR__ . '/material_stock_helpers.php';   // yalnız ms_summary_types (içe aktar önizlemesi)
 
 const STOK_MIKTAR_MAX_MILLI = 999999999999;   // 999.999.999,999 ana birim
 
@@ -770,55 +769,6 @@ function stok_tanim_sil(PDO $pdo, int $id, int $uid): array
     $pdo->prepare('DELETE FROM stok_tanimlar WHERE id = ?')->execute([$id]);
     audit_log_event('delete', 'stok', $id, ['tanim' => $t['tur'], 'ad' => $t['ad']], null);
     return ['ok' => true, 'hata' => null, 'id' => $id];
-}
-
-// ── İçe aktarım (material_definitions → stok kartı; isteğe bağlı, idempotent; md_id bağı, sonraki ad değişikliği YAYILMAZ) ──
-
-/**
- * type='urun' → tip urun, kg · ms_summary_types() malzeme türleri → tip malzeme, adet. Yalnız is_active=1.
- * @return list<array{ad:string,kaynak_tur:string,hedef_tip:string,ana_birim:string,durum:string,md_id:int}>  durum: yeni | var
- */
-function stok_ice_aktar_onizle(PDO $pdo): array
-{
-    $mlz = function_exists('ms_summary_types') ? ms_summary_types() : [];
-    $turler = array_values(array_unique(array_merge(['urun'], $mlz)));
-    $st = $pdo->prepare('SELECT id, name, type FROM material_definitions WHERE is_active = 1 AND type IN (' . implode(',', array_fill(0, count($turler), '?')) . ') ORDER BY id');
-    $st->execute($turler);
-    $mdVar = []; $adVar = [];
-    foreach ($pdo->query('SELECT md_id, ad FROM stok_kartlar')->fetchAll(PDO::FETCH_ASSOC) as $k) {
-        if ($k['md_id'] !== null) $mdVar[(int)$k['md_id']] = true;
-        $adVar[cari_fold((string)$k['ad'])] = true;
-    }
-    $etiket = function_exists('definition_types') ? definition_types() : [];
-    $gorulen = []; $out = [];
-    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $ad = trim((string)$r['name']);
-        if ($ad === '') continue;
-        $k = cari_fold($ad);
-        if (isset($gorulen[$k])) continue;
-        $gorulen[$k] = true;
-        $urun = (string)$r['type'] === 'urun';
-        $out[] = ['ad' => $ad, 'kaynak_tur' => (string)($etiket[(string)$r['type']] ?? $r['type']), 'hedef_tip' => $urun ? 'urun' : 'malzeme', 'ana_birim' => $urun ? 'kg' : 'adet',
-            'durum' => (isset($mdVar[(int)$r['id']]) || isset($adVar[$k])) ? 'var' : 'yeni', 'md_id' => (int)$r['id']];
-    }
-    return $out;
-}
-
-/** Yalnız `yeni` olanları ekler; tek transaction; tek özet audit. @return array{ok:bool,hata:?string,id:?int,eklenen:int,atlanan:int} */
-function stok_ice_aktar(PDO $pdo, int $uid): array
-{
-    $onizle = stok_ice_aktar_onizle($pdo);
-    $eklenen = 0; $atlanan = 0;
-    stok_tx($pdo, function () use ($pdo, $onizle, $uid, &$eklenen, &$atlanan): void {
-        $ins = $pdo->prepare('INSERT INTO stok_kartlar (kod, ad, tip, ana_birim, kdv_orani, aktif, md_id, created_at, created_by) VALUES (?, ?, ?, ?, 1, 1, ?, ?, ?)');
-        foreach ($onizle as $o) {
-            if ($o['durum'] !== 'yeni' || mb_strlen($o['ad']) > 200 || mb_strlen($o['ad']) < 2) { $atlanan++; continue; }
-            $ins->execute([stok_kod_oner($pdo), $o['ad'], $o['hedef_tip'], $o['ana_birim'], $o['md_id'], date('Y-m-d H:i:s'), $uid]);
-            $eklenen++;
-        }
-    });
-    audit_log_event('create', 'stok', null, null, ['ice_aktar' => 'material_definitions', 'eklenen' => $eklenen, 'atlanan' => $atlanan]);
-    return ['ok' => true, 'hata' => null, 'id' => null, 'eklenen' => $eklenen, 'atlanan' => $atlanan];
 }
 
 // ── Maliyet motoru (SAF: DB yok, yan etki yok) ─────────────────────────────

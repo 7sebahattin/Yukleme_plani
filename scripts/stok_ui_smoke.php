@@ -107,7 +107,7 @@ ok('yanlış csrf → 403, kayıt yok', $r['kod'] === 403 && say('stok_kartlar')
 echo "\n=== 3. Boş durum ===\n";
 $r = get('stok_kartlari.php');
 ok('boş: HTTP 200, uyarı yok, başlık Stok Kartları', uyari_yok($r) && $r['kod'] === 200 && str_contains($r['govde'], '<title>') && str_contains($r['govde'], 'Stok Kartları'), (string)$r['hata']);
-ok('boş: "Henüz stok kartı yok" + Yeni kart + içe aktar bağlantısı', str_contains($r['govde'], 'Henüz stok kartı yok') && str_contains($r['govde'], 'stok_tanimlari.php?sekme=ice_aktar'));
+ok('boş: "Henüz stok kartı yok" + Yeni kart; içe aktar bağlantısı YOK', str_contains($r['govde'], 'Henüz stok kartı yok') && !str_contains($r['govde'], 'stok_tanimlari.php?sekme=ice_aktar') && !str_contains($r['govde'], 'Tanımlardan içe aktar'));
 ok('boş: stok.css + stok.js yüklenir; sekme şeridi 6 bağlantı (Kartlar/Giriş/Çıkış/Transfer/Tanımlar + Kantar; v555: Dönüşüm sekmesi yok)', str_contains($r['govde'], 'assets/stok.css?v=') && str_contains($r['govde'], 'assets/stok.js?v=') && preg_match_all('/class="st-sekme[" ]/', bolge($r['govde'])) === 6 && !str_contains(bolge($r['govde']), 'stok_donusum_fisleri.php') && !str_contains(bolge($r['govde']), '>Dönüşüm<'));
 ok('boş: kart modalı kod önerisi STK-0001', str_contains($r['govde'], 'data-oneri="STK-0001"'));
 
@@ -206,12 +206,13 @@ $r = post(['islem' => 'tanim_kaydet', 'tur' => 'grup', 'ad' => 'taze ürün', 's
 ok('tanim_kaydet TR-duyarsız çift ad → 422', $r['kod'] === 422 && isset(js($r)['alanlar']['ad']));
 $r = post(['islem' => 'tanim_sil', 'id' => (string)$bid]);
 ok('tanim_sil kullanılmayan → ok', js($r)['ok'] === true && stok_tanim_bul($db, $bid) === null);
+$k0 = say('stok_kartlar');
 $r = post(['islem' => 'ice_aktar', 'geri' => 'stok_tanimlari.php?sekme=ice_aktar']);
-ok('ice_aktar → eklenen 3 (Kayısı, Köşebent, Şerit; Domates var, firma/pasif hariç)', js($r)['ok'] === true && js($r)['eklenen'] === 3, $r['govde']);
+ok('ice_aktar kaldırıldı → 422 Bilinmeyen işlem, kart eklenmez', $r['kod'] === 422 && js($r)['ok'] === false && js($r)['hata'] === 'Bilinmeyen işlem.' && say('stok_kartlar') === $k0, $r['govde']);
 $r = post(['islem' => 'yok_boyle']);
 ok('bilinmeyen işlem → 422', $r['kod'] === 422 && js($r)['hata'] === 'Bilinmeyen işlem.');
-ok('audit: uçlardan gelen yazmalar audit\'te (kart_sil + tanim_sil = delete ≥ 2; ice_aktar özeti)', say('audit_log', "module = 'stok' AND action = 'delete'") >= 2
-    && say('audit_log', "module = 'stok' AND action = 'create' AND new_values LIKE '%ice_aktar%'") === 1);
+ok('audit: uçlardan gelen yazmalar audit\'te (kart_sil + tanim_sil = delete ≥ 2; create ≥ 1)', say('audit_log', "module = 'stok' AND action = 'delete'") >= 2
+    && say('audit_log', "module = 'stok' AND action = 'create'") >= 1);
 
 echo "\n=== 7. stok_kaydet: klasik form (PRG) ===\n";
 $r = post(['islem' => 'kart_kaydet', 'ad' => 'Formdan Kart', 'aktif' => '1', 'geri' => 'stok_kartlari.php'], false);
@@ -225,12 +226,12 @@ echo "\n=== 8. Tanımlar sayfası ===\n";
 $r = get('stok_tanimlari.php');
 $b = bolge($r['govde']);
 ok('tanımlar: 200, uyarı yok, HTML dengeli, csrf', uyari_yok($r) && html_hata($b) === [] && form_hata($b) === [], json_encode([html_hata($b), form_hata($b), $r['hata']]));
-ok('4 sekme (Gruplar · Giriş · Çıkış · İçe Aktar), varsayılan grup seçili; diğer paneller hidden', substr_count($b, 'class="st-tanim-nav-oge" role="tab"') === 4 && (bool)preg_match('/id="stTabGrup"[^>]*aria-selected="true"/', $b)
+ok('3 sekme (Gruplar · Giriş · Çıkış; İçe Aktar yok), varsayılan grup seçili; diğer paneller hidden', substr_count($b, 'class="st-tanim-nav-oge" role="tab"') === 3 && !str_contains($b, 'stTabIce') && !str_contains($b, 'stPanelIce') && (bool)preg_match('/id="stTabGrup"[^>]*aria-selected="true"/', $b)
     && (bool)preg_match('/id="stPanelGiris" role="tabpanel" aria-labelledby="stTabGiris" hidden/', $b));
 ok('sistem nedenleri kilit rozetli; silme formu yok, ad readonly', substr_count($b, 'st-rozet--kilit') === 10 && (bool)preg_match('/name="ad" value="Alış" maxlength="100" required readonly/', $b));
 ok('kullanılan grup (Taze Ürün) için Sil yok; aktif anahtarı role=switch', !preg_match('/aria-label="Taze Ürün sil"/', $b) && str_contains($b, 'role="switch"'));
 $r = get('stok_tanimlari.php', ['sekme' => 'ice_aktar']);
-ok('?sekme=ice_aktar: önizleme tablosu, "Kartı var" rozetleri, 0 yeni → düğme disabled', str_contains($r['govde'], 'Tanımlardan içe aktar') && str_contains($r['govde'], 'Kartı var') && str_contains($r['govde'], 'data-ice-aktar disabled'));
+ok('?sekme=ice_aktar güvenli biçimde Gruplar sekmesine düşer (panel yok)', uyari_yok($r) && !str_contains($r['govde'], 'Tanımlardan içe aktar') && !str_contains($r['govde'], 'stPanelIce') && (bool)preg_match('/id="stTabGrup"[^>]*aria-selected="true"/', $r['govde']));
 $r = get('stok_tanimlari.php', ['sekme' => 'cikis_neden']);
 ok('?sekme=cikis_neden: Çıkış sekmesi seçili, Fire listede', (bool)preg_match('/id="stTabCikis"[^>]*aria-selected="true"/', $r['govde']) && str_contains($r['govde'], 'Fire'));
 

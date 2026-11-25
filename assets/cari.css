@@ -533,10 +533,7 @@ html[data-theme="dark"] .cari-toast { background: #e7ecf4; color: #0f141b; }
     .cari-tanim-nav-oge:hover { background: var(--surface-2); }
     .cari-tanim-nav-oge[aria-selected="true"] { background: var(--primary-soft); color: var(--primary); border-color: transparent; box-shadow: inset 3px 0 0 var(--primary); }
     .cari-tanim-nav-oge[aria-selected="true"] small { color: var(--muted); }
-    .cari-tanim-ayrac { height: 1px; margin: 4px 0; background: var(--border); }
 }
-.cari-tanim-ayrac { display: none; }
-@media (min-width: 768px) { .cari-tanim-ayrac { display: block; } }
 .cari-tanim-govde { min-width: 0; padding: 14px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 .cari-tanim-govde > h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .cari-tanim-govde > p { margin: 0 0 12px; color: var(--muted); font-size: .88rem; }
@@ -559,7 +556,6 @@ html[data-theme="dark"] .cari-toast { background: #e7ecf4; color: #0f141b; }
 .cari-aktif { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px; font-size: .85rem; color: var(--muted); }
 .cari-aktif input { width: 22px; height: 22px; }
 .cari-bilgi-kutu { margin-top: 14px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--text); font-size: .84rem; }
-.cari-onizleme-tablo { margin-top: 10px; }
 
 /* ═════════ 6b. Dokunma hedefi ≥ 44px (telefon) ═════════
    style.css .btn/.btn-sm/select = 42/34px; yalnız cari sayfalarında yükseltilir. */

@@ -12,7 +12,7 @@
 //     php scripts/cari_ui_render.php kartlar id=10                                    (PASİF kart)  ·  id=13 (hareketsiz kart → boş durum)
 //     php scripts/cari_ui_render.php kartlar id=1 parca=detay | parca=ekstre | parca=kart   (kısmi yanıtlar)
 //     php scripts/cari_ui_render.php fisler | dekontlar [bas= bit= tur= pb= cari_q= durum= q= s= yeni=tahsilat]
-//     php scripts/cari_ui_render.php tanimlari sekme=odeme_sekli|ice_aktar            (sayfa adı "tanimlar" da olur)
+//     php scripts/cari_ui_render.php tanimlari sekme=odeme_sekli                      (sayfa adı "tanimlar" da olur)
 //     php scripts/cari_ui_render.php ekstre id=1                                      (yazdır görünümü)
 //   Durum anahtarları (parametre yerine ilk/son argüman): --sema (tablolar YOK → şema uyarı kartı) · --bos (tablolar var, veri YOK) · --yonetici-degil (forbidden)
 //   Örnek verideki cari id'leri (13 kart): 1 Örnek Tarım Ltd. (TRY+USD+EUR, iptal + virman) · 2 Ambalaj · 3 Nakliyat (TRY+EUR) · 4 Gıda İhracat (EUR+USD) ·

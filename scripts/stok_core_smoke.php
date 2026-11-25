@@ -234,28 +234,14 @@ ok('kullanıcı nedeni yeniden adlandırılır', $tu['ok'] && stok_tanim_kaydet(
 $db->prepare("UPDATE stok_fisler SET neden_id = ? WHERE id = ?")->execute([(int)$tu['id'], $fid]);   // YALNIZ TEST: nedeni kullanımda yap
 ok('fişte kullanılan neden silinmez', !stok_tanim_sil($db, (int)$tu['id'], 1)['ok']);
 
-echo "\n=== 10. İçe aktar ===\n";
-foreach ([['Kayısı', 'urun', 1], ['Deneme Ürün (güncel)', 'urun', 1], ['Köşebent 120 cm', 'kosebent', 1], ['Şerit 15 mm', 'serit', 1], ['Firma Örnek', 'firma', 1], ['Pasif Ürün', 'urun', 0], ['kayısı', 'urun', 1]] as [$n, $t, $a]) {
-    $db->prepare('INSERT INTO material_definitions (type, name, is_active) VALUES (?, ?, ?)')->execute([$t, $n, $a]);
-}
-$on = stok_ice_aktar_onizle($db);
-$adlar = array_column($on, 'durum', 'ad');
-ok('önizleme: firma ve pasif hariç; aynı ad (TR-duyarsız) tek; mevcut kart adı "var"', count($on) === 4 && ($adlar['Kayısı'] ?? '') === 'yeni' && ($adlar['Deneme Ürün (güncel)'] ?? '') === 'var'
-    && !isset($adlar['Firma Örnek']) && !isset($adlar['Pasif Ürün']), json_encode($on, JSON_UNESCAPED_UNICODE));
-$kos = array_values(array_filter($on, fn($o) => $o['ad'] === 'Köşebent 120 cm'))[0] ?? [];
-ok('malzeme türü → tip malzeme, adet; ürün → urun, kg', ($kos['hedef_tip'] ?? '') === 'malzeme' && ($kos['ana_birim'] ?? '') === 'adet' && $on[0]['hedef_tip'] === 'urun' && $on[0]['ana_birim'] === 'kg');
-$k0 = say('stok_kartlar');
-$r = stok_ice_aktar($db, 1);
-ok('içe aktar: 3 eklendi, 1 atlandı', $r['ok'] && $r['eklenen'] === 3 && $r['atlanan'] === 1 && say('stok_kartlar') === $k0 + 3, json_encode($r));
-ok('eklenen kartlar md_id bağlı, STK- kodlu, kdv 1, aktif', say('stok_kartlar', "md_id IS NOT NULL AND kod LIKE 'STK-%' AND aktif = 1 AND kdv_orani = 1") === 3);
-$r = stok_ice_aktar($db, 1);
-ok('ikinci kez: 0 eklendi (idempotent)', $r['ok'] && $r['eklenen'] === 0 && say('stok_kartlar') === $k0 + 3);
-$db->exec("UPDATE material_definitions SET name = 'Kayısı (Yeni Ad)' WHERE name = 'Kayısı'");
-ok('kaynakta ad değişse de md_id bağı çift kart üretmez', stok_ice_aktar($db, 1)['eklenen'] === 0 && say('stok_kartlar', "ad = 'Kayısı'") === 1);
+echo "\n=== 10. Eski içe aktar kaldırıldı (şema md_id korunur) ===\n";
+ok('stok_ice_aktar / stok_ice_aktar_onizle kaldırıldı', !function_exists('stok_ice_aktar') && !function_exists('stok_ice_aktar_onizle'));
+$stCols = array_column($db->query('PRAGMA table_info(stok_kartlar)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+ok('stok_kartlar.md_id şema kolonu korunur (ekleyici migrasyon)', in_array('md_id', $stCols, true));
 
 echo "\n=== 11. Audit ===\n";
 $son = $db->query("SELECT * FROM audit_log WHERE module = 'stok' ORDER BY id DESC LIMIT 1")->fetch();
-ok('audit satırları module=stok; içe aktar özeti', $son && $son['action'] === 'create' && str_contains((string)$son['new_values'], 'ice_aktar'));
+ok('audit satırları module=stok', $son !== false && $son['module'] === 'stok');
 ok('audit eylemleri yalnız create|update|activate|deactivate|delete', !$db->query("SELECT COUNT(*) FROM audit_log WHERE module = 'stok' AND action NOT IN ('create','update','activate','deactivate','delete')")->fetchColumn());
 
 // ═════════════════════════ PARÇA B — FİŞLER ═════════════════════════

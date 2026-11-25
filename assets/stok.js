@@ -91,7 +91,6 @@
                 f.dataset.kilit = ''; btn.forEach(function (b) { b.disabled = false; });
                 if (s.j && s.j.ok) {
                     var msg = f.getAttribute('data-ok') || S.m.kaydedildi;
-                    if (fd.get('islem') === 'ice_aktar' && s.j.eklenen != null) msg = 'İçe aktarıldı: ' + s.j.eklenen + ' kart eklendi, ' + (s.j.atlanan || 0) + ' atlandı';
                     if (s.j.uyari) msg += ' — ' + s.j.uyari;
                     yenileToastla(msg, s.j.yonlendir);
                     return;
