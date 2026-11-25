@@ -1063,6 +1063,22 @@ function init() {
     renumber();
     recalc();
     initPartiSearch();
+
+    var curEl = form.elements.currency_code;
+    var rateEl = form.elements.currency_rate;
+    var dateEl = form.elements.sheet_date;
+    if (window.DovizOto && curEl && rateEl) {
+        var kurOto = window.DovizOto.bagla({
+            form: form,
+            pbEl: curEl,
+            tarihEl: dateEl,
+            kurEl: rateEl,
+            onDoldur: function () { recalc(); }
+        });
+        curEl.addEventListener('change', function () { kurOto.guncelle(false); });
+        if (dateEl) dateEl.addEventListener('change', function () { kurOto.guncelle(false); });
+        kurOto.guncelle(false);
+    }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

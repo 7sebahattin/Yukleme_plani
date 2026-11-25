@@ -311,10 +311,30 @@
         f.elements.islem.value = tur === 'virman' ? 'virman_ekle' : 'hareket_ekle';
         f.elements.tur.value = tur;
     }
+    var ksKurOto = null;
+    function kurOtoAl() {
+        var f = document.getElementById('ksForm');
+        if (!f || !window.DovizOto || !f.elements.kur) return null;
+        if (!ksKurOto) {
+            ksKurOto = window.DovizOto.bagla({
+                form: f,
+                tarihEl: f.elements.tarih,
+                kurEl: f.elements.kur,
+                pbFn: function () {
+                    if (turForm() === 'virman') return 'TRY';
+                    var kasa = kasaBul(f.elements[kaynakKasaAd()].value);
+                    return kasa ? kasa.pb : 'TRY';
+                }
+            });
+        }
+        return ksKurOto;
+    }
     function hareketFormAc(tur, tetik) {
         var m = document.getElementById('ksModalForm'); if (!m || !VERI) return;
         var f = document.getElementById('ksForm');
         f.reset(); hataTemizle(f); eksikGizle();
+        if (f.elements.kur) f.elements.kur.dataset.kurOto = '';
+        var ko = kurOtoAl(); if (ko) ko.temizle();
         f.elements.istek_anahtari.value = rastgele();
         f.elements.eksiye_izin.value = '0';
         f.elements.cari_id.value = '';
@@ -367,7 +387,8 @@
         }
         $$('[data-pb-etiket]', f).forEach(function (e) { e.textContent = kasa ? kasa.pb : ''; });
         var kur = $('[data-kur]', f);
-        if (kur) { var goster = tur !== 'virman' && !!kasa && kasa.pb !== 'TRY'; kur.hidden = !goster; $$('input', kur).forEach(function (i) { i.disabled = !goster; }); }
+        if (kur) { var goster = tur !== 'virman' && !!kasa && kasa.pb !== 'TRY'; kur.hidden = !goster; $$('input', kur).forEach(function (i) { i.disabled = !goster; if (!goster) { i.value = ''; i.dataset.kurOto = ''; } }); }
+        var ko = kurOtoAl(); if (ko) ko.guncelle(false);
         $$('[data-bakiye-ipucu]', f).forEach(function (ip) {
             if (ip.closest('[data-turler]').hidden) { ip.textContent = ''; return; }
             if (!kasa) { ip.textContent = ''; return; }
@@ -383,6 +404,7 @@
         if (!t || !t.matches || !t.closest('#ksForm')) return;
         if (t.name === 'kaynak_kasa_id') hedefSuz();
         if (t.name === 'kasa_id' || t.name === 'kaynak_kasa_id' || t.name === 'tutar') formOzet();
+        if (t.name === 'tarih') { var ko = kurOtoAl(); if (ko) ko.guncelle(false); }
         if (t.name === 'cari_ara') cariCoz();
     });
     function eksikGizle() { var e = $('#ksEksik'); if (e) e.hidden = true; var ez = $('#ksForm [name="eksiye_izin"]'); if (ez) ez.value = '0'; }

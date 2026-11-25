@@ -20,6 +20,7 @@ function fatura_assets(): void
 
 function fatura_scripts(): void
 {
+    echo '<script src="assets/doviz_oto.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/doviz_oto.js') . '"></script>' . "\n";
     echo '<script src="assets/fatura.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/fatura.js') . '"></script>' . "\n";
 }
 

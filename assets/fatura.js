@@ -625,10 +625,15 @@
         function turKilit() { if (turSec) { var k = satirlar().some(kaynakli); turSec.setAttribute('aria-disabled', k ? 'true' : 'false'); turSec.title = k ? 'Kaynaklı satırlar var; türü değiştirmek için satırları kaldırın' : ''; } }
 
         /* — başlık: cari / pb / seri / özet — */
+        var kurOto = window.DovizOto && f.elements.kur ? window.DovizOto.bagla({
+            form: f, pbEl: f.elements.para_birimi, tarihEl: f.elements.tarih, kurEl: f.elements.kur,
+            onDoldur: function () { hesapla(); }
+        }) : null;
         function pbGuncelle(sessiz) {
             var p = f.elements.para_birimi, kur = f.elements.kur; if (!p || !kur) return;
-            kur.disabled = p.value === 'TRY'; if (kur.disabled) kur.value = '';
+            kur.disabled = p.value === 'TRY'; if (kur.disabled) { kur.value = ''; kur.dataset.kurOto = ''; }
             var et = $('[data-pb-etiket]', f); if (et) et.textContent = p.value;
+            if (kurOto) kurOto.guncelle(false);
             if (!sessiz) hesapla();
         }
         function cariGirdi(degisim) {
@@ -781,7 +786,7 @@
             hesapla();
         }
         f.addEventListener('input', function (e) {
-            var t = e.target; degis();
+            var t = e.target; if (e.isTrusted) degis();
             if (t.classList.contains('ft-kart-ara')) { kartGirdi(t, false); return; }
             if (t.name === 'cari_ara') { cariGirdi(false); return; }
             if (t.name === 'aciklama') t.removeAttribute('data-oto');
@@ -793,7 +798,7 @@
             if (t.classList.contains('ft-kart-ara')) { kartGirdi(t, true); return; }
             if (t.name === 'cari_ara') { cariGirdi(true); return; }
             if (t.name === 'para_birimi') { pbGuncelle(); if (t.value !== 'TRY' && f.elements.kur) f.elements.kur.focus(); }
-            if (t.name === 'tarih') { vadeOto(); seriOnizle(); }
+            if (t.name === 'tarih') { vadeOto(); seriOnizle(); if (kurOto) kurOto.guncelle(false); }
             if (t.name === 'seri_id') seriOnizle();
             if (t.name === 'stok_etkisi') t.setAttribute('data-dokundu', '1');
             if (t.hasAttribute('data-sablon')) {

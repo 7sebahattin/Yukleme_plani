@@ -232,8 +232,8 @@
         var ov = e.target;
         if (ov.classList && ov.classList.contains('pm-overlay') && ov === mdownHedef && acik === ov && !ov.hasAttribute('data-kirli')) modalKapat();
     });
-    document.addEventListener('input', function (e) { var ov = e.target.closest && e.target.closest('.pm-overlay'); if (ov) ov.setAttribute('data-kirli', '1'); });
-    document.addEventListener('change', function (e) { var ov = e.target.closest && e.target.closest('.pm-overlay'); if (ov) ov.setAttribute('data-kirli', '1'); });
+    document.addEventListener('input', function (e) { var ov = e.isTrusted && e.target.closest && e.target.closest('.pm-overlay'); if (ov) ov.setAttribute('data-kirli', '1'); });
+    document.addEventListener('change', function (e) { var ov = e.isTrusted && e.target.closest && e.target.closest('.pm-overlay'); if (ov) ov.setAttribute('data-kirli', '1'); });
 
     /* ═════════ Menüler (Dekont ▾, ⋯) — liste .cari kökünün sonunda ═════════ */
     var menuAcik = null, sonMenuTetik = null;
@@ -567,6 +567,8 @@
     function formSifirla(f) {
         f.reset(); hataTemizle(f);
         delete f.dataset.pbElle; delete f.dataset.kilit; f._kopya = null;
+        if (f._kurOto) f._kurOto.temizle();
+        if (f.elements.kur) f.elements.kur.dataset.kurOto = '';
         var a = f.elements[SOZLESME.alan.istek]; if (a) a.value = yeniAnahtar();
         $$('[data-cari-secici]', f).forEach(function (w) {
             if (w.hasAttribute('data-kilitli')) return;
@@ -604,12 +606,25 @@
         $$('[data-cari-etiket]', m).forEach(function (x) { x.textContent = r.value === 'virman' ? 'Kaynak cari' : 'Cari'; });
         kurUygula(f); virmanOnizle(m);
     }
+    function kurOtoAl(f) {
+        if (!f || !window.DovizOto || !f.elements.kur) return null;
+        if (!f._kurOto) {
+            f._kurOto = window.DovizOto.bagla({
+                form: f,
+                tarihEl: f.elements.tarih,
+                kurEl: f.elements.kur,
+                pbFn: function () { return ($('input[name="para_birimi"]:checked', f) || {}).value || 'TRY'; }
+            });
+        }
+        return f._kurOto;
+    }
     function kurUygula(f) {
         var k = $('[data-kur]', f); if (!k) return;
         var pb = ($('input[name="para_birimi"]:checked', f) || {}).value;
         var tr = pb === 'TRY';
         k.hidden = tr;
-        $$('input', k).forEach(function (i) { i.disabled = tr; if (tr) i.value = ''; });
+        $$('input', k).forEach(function (i) { i.disabled = tr; if (tr) { i.value = ''; i.dataset.kurOto = ''; } });
+        var ko = kurOtoAl(f); if (ko) ko.guncelle(false);
     }
     function virmanOnizle(m) {
         var o = m && $('[data-virman-onizleme]', m); if (!o) return;
@@ -688,6 +703,7 @@
         var f = $('form', m);
         if (t.name === 'tur') turUygula(m);
         if (t.name === 'para_birimi') { if (f) { f.dataset.pbElle = '1'; kurUygula(f); } virmanOnizle(m); }
+        if (t.name === 'tarih' && f) { var ko = kurOtoAl(f); if (ko) ko.guncelle(false); }
     });
 
     /* ═════════ Kart modalı ═════════ */

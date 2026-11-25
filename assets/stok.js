@@ -476,14 +476,18 @@
             if (c && f.elements.para_birimi && c.pb && f.elements.para_birimi.value !== c.pb && !fisDegistiPb) { f.elements.para_birimi.value = c.pb; pbGuncelle(); }
         }
         var fisDegistiPb = false;
+        var kurOto = window.DovizOto && f.elements.kur ? window.DovizOto.bagla({
+            form: f, pbEl: f.elements.para_birimi, tarihEl: f.elements.tarih, kurEl: f.elements.kur
+        }) : null;
         function pbGuncelle() {
             var pb = f.elements.para_birimi, kur = f.elements.kur; if (!pb || !kur) return;
-            kur.disabled = pb.value === 'TRY'; if (kur.disabled) kur.value = '';
+            kur.disabled = pb.value === 'TRY'; if (kur.disabled) { kur.value = ''; kur.dataset.kurOto = ''; }
+            if (kurOto) kurOto.guncelle(false);
         }
 
         // — olaylar —
         f.addEventListener('input', function (e) {
-            var t = e.target; fisDegistiBayrak = true;
+            var t = e.target; if (e.isTrusted) fisDegistiBayrak = true;
             if (t.classList.contains('st-kart-ara')) { kartGirdi(t, false); return; }
             if (t.name === 'cari_ara') { cariGirdi(); return; }
             var tr = t.closest('.st-fsatir'); if (tr) satirGuncelle(tr);
@@ -494,6 +498,7 @@
             if (t.classList.contains('st-kart-ara')) { kartGirdi(t, true); return; }
             if (t.name === 'cari_ara') { cariGirdi(); return; }
             if (t.name === 'para_birimi') { fisDegistiPb = true; pbGuncelle(); }
+            if (t.name === 'tarih' && kurOto) kurOto.guncelle(false);
             if (t.name === 'depo') { hepsi(); return; }
             var tr = t.closest('.st-fsatir'); if (tr) satirGuncelle(tr);
             toplamlar();
@@ -645,6 +650,7 @@
             var bil = $('[data-kaynak-bilgi]', f);
             if (bil) { bil.textContent = 'Kantar #' + o.kantar_no + '’ten dolduruldu · ' + miktarBicim(o.miktar_milli / 1000, 'kg') + ' kg net' + (!k && o.urun ? ' · ürün: ' + o.urun + ' (kartı seçin)' : ''); bil.hidden = false; }
             fisDegistiBayrak = true;
+            if (kurOto) kurOto.guncelle(false);
             hepsi();
             var od = k ? (el(tr, 'birim_fiyat') || el(tr, 'miktar')) : el(tr, 'kart_ara');
             setTimeout(function () { od.focus(); }, 40);

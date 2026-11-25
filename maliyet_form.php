@@ -905,5 +905,6 @@ window.MLY_CONFIG = <?= json_encode([
     'tplId'       => (int)$tpl_id,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
+<script src="assets/doviz_oto.js?v=<?= @filemtime(__DIR__ . '/assets/doviz_oto.js') ?: time() ?>"></script>
 <script src="assets/maliyet.js?v=<?= @filemtime(__DIR__ . '/assets/maliyet.js') ?: time() ?>"></script>
 <?php render_footer(); ?>

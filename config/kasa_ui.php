@@ -20,6 +20,7 @@ function kasa_assets(): void
 
 function kasa_scripts(): void
 {
+    echo '<script src="assets/doviz_oto.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/doviz_oto.js') . '"></script>' . "\n";
     echo '<script src="assets/kasa.js?v=' . (int)@filemtime(dirname(__DIR__) . '/assets/kasa.js') . '"></script>' . "\n";
 }
 
