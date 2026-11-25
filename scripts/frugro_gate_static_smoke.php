@@ -102,7 +102,7 @@ ok('nav_aktif_anahtar: frugro bayrağı + 6 sayfa', (bool)preg_match("/\\\$a_frg
 ok('sidebar: Frugro OGL\'nin HEMEN altında (usip\'ten önce)', (function () use ($helpers) { $a = strpos($helpers, "\$ge('siparisler.php'"); $b = strpos($helpers, "\$ge('frugro_siparis.php'"); $c = strpos($helpers, "\$ge('urun_siparis.php'"); return $a && $b && $c && $a < $b && $b < $c; })());
 ok("sidebar kapısı Frugro'nun KENDİ sayfa izni", str_contains($helpers, "\$p_frg   = role_matrix_page_can('siparis','frugro');") && !str_contains($helpers, '$p_frg   = $p_sip;'));
 ok('topnav Frugro bağlantısı', str_contains($helpers, 'frugro_siparis.php" <?= nav_aktif_anahtar() === \'frugro\''));
-ok('nav_alt_sayfalar frugro kaydı', (bool)preg_match("/'frugro'\s*=> \['href' => 'frugro_siparis\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/frugro\.svg'\]/", $helpers) && is_file($ROOT . '/assets/nav-icons/frugro.svg'));
+ok('nav_alt_sayfalar frugro kaydı', (bool)preg_match("/'frugro'\s*=> \['href' => 'frugro_siparis\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/3d\/frugro_siparis\.png'\]/", $helpers) && is_file($ROOT . '/assets/nav-icons/3d/frugro_siparis.png'));
 ok('nav_alt_izinler frugro = Frugro sayfa izni', str_contains($helpers, "'frugro'  => \$fn && role_matrix_page_can('siparis','frugro')"));
 ok('topnav Frugro bağlantısı Frugro sayfa izniyle', str_contains($helpers, "<?php if (role_matrix_page_can('siparis','frugro')): ?>\n            <a href=\"<?= \$base ?>frugro_siparis.php\""));
 ok('first_allowed_page Frugro adayı (sayfa kapısıyla aynı)', str_contains($helpers, "'frugro_siparis.php' => role_matrix_page_can('siparis','frugro')"));

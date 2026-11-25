@@ -50,9 +50,9 @@ $mobileEnd = strpos($source, 'function nav_alt_cerez_oku(', $mobileStart);
 if ($mobileStart === false || $mobileEnd === false) throw new RuntimeException('Mobile source not found.');
 eval(substr($source, $mobileStart, $mobileEnd - $mobileStart));
 $iconStart = strpos($source, 'function nav_alt_ikon_url(');
-$iconEnd = strpos($source, '/**', $iconStart);
+$iconEnd = strpos($source, 'function nav_alt_home_anahtar(', $iconStart);
 if ($iconStart === false || $iconEnd === false) throw new RuntimeException('Icon URL source not found.');
-eval(substr($source, $iconStart, $iconEnd - $iconStart));
+eval(str_replace('__DIR__', var_export(dirname(__DIR__) . '/config', true), substr($source, $iconStart, $iconEnd - $iconStart)));
 $checks = 0;
 function qc_sidebar_check(bool $value, string $label): void {
     if (!$value) throw new RuntimeException('FAIL: ' . $label);
@@ -75,10 +75,10 @@ qc_sidebar_check($xp->query('//a[@href="/app/reports.php" and contains(@class," 
 qc_sidebar_check($xp->query('//details[@data-sb-grup="operasyon" and @open]//a[@href="/app/hizli_maliyet.php"]')->length === 1, 'operation group open');
 qc_sidebar_check(nav_aktif_anahtar() === 'qcost', 'list and form share the dedicated mobile item');
 qc_sidebar_check(nav_alt_izinler()['qcost'] === true, 'admin mobile entry works without loading cost_calc');
-qc_sidebar_check($xp->query('//a[@href="/app/hizli_maliyet.php"]//img[starts-with(@src,"/app/assets/nav-icons/qcost.svg?v=") and @alt=""]')->length === 1, 'sidebar uses the shared decorative dollar asset with cache version');
+qc_sidebar_check($xp->query('//a[@href="/app/hizli_maliyet.php"]//img[starts-with(@src,"/app/assets/nav-icons/3d/hizli_maliyet.png?v=") and @alt=""]')->length === 1, 'sidebar uses the 3D hizli_maliyet icon with cache version');
 }
 qc_sidebar_check(nav_alt_sayfalar()['qcost']['href'] === 'hizli_maliyet.php' && nav_alt_sayfalar()['qcost']['etiket'] === 'Hızlı Maliyet', 'mobile button opens the record list with the requested name');
-qc_sidebar_check(nav_alt_sayfalar()['qcost']['ikon'] === 'assets/nav-icons/qcost.svg', 'mobile item uses the same dedicated dollar icon');
+qc_sidebar_check(nav_alt_sayfalar()['qcost']['ikon'] === 'assets/nav-icons/3d/hizli_maliyet.png', 'mobile item uses the same 3D hizli_maliyet icon');
 foreach (['reports.php','maliyet.php','maliyet_form.php','maliyet_view.php'] as $page) {
     [, $xp] = sidebar($page);
     qc_sidebar_check($xp->query('//a[@href="/app/reports.php" and contains(@class," active")]')->length === 1, 'existing report/cost active route retained: ' . $page);

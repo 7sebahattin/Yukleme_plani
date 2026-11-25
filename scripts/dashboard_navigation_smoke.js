@@ -52,12 +52,18 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             });
             check(await page.evaluate(() => {
                 const imgs = Array.from(document.querySelectorAll('.home-card-icon img'));
-                return imgs.length === 45 && imgs.every(img => img.complete && img.naturalWidth === 128 && (img.getAttribute('src') || '').startsWith('assets/nav-icons/3d/'));
-            }), name + ' all 45 homepage 3D PNG icons decode at naturalWidth 128');
+                return imgs.length === 45 && imgs.every(img => {
+                    const href = img.closest('.home-card')?.getAttribute('href') || '';
+                    const src = img.getAttribute('src') || '';
+                    if (href === 'personel_takip.php') return img.complete && img.naturalWidth > 0 && src.startsWith('assets/nav-icons/ptak.svg?v=');
+                    return img.complete && img.naturalWidth === 128 && src.startsWith('assets/nav-icons/3d/');
+                });
+            }), name + ' all 45 homepage icons decode cleanly (44 3D PNG 128px + Personel Takibi ptak.svg)');
             // v551: akordiyon — Hızlı Maliyet, kapalı Operasyon grubunda; görüntü çözülsün diye grubu aç
             await page.evaluate(() => { const d = document.querySelector('details[data-sb-grup="operasyon"]'); if (d) d.open = true; });
             await page.waitForFunction(() => { const i = document.querySelector('.sidebar-link[href="hizli_maliyet.php"] img'); return i && i.complete && i.naturalWidth > 0; });
-            check(await page.locator('.sidebar-link[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 64 && image.width === 20 && image.height === 20 && image.getAttribute('src').includes('assets/nav-icons/qcost.svg?v=')), name + ' sidebar reuses the dollar asset at its original icon size');
+            check(await page.locator('.sidebar-link[href="hizli_maliyet.php"] img').evaluate(image => image.complete && image.naturalWidth === 128 && image.width === 20 && image.height === 20 && image.getAttribute('src').includes('assets/nav-icons/3d/hizli_maliyet.png?v=')), name + ' sidebar uses 3D icon at 20x20');
+            check(await page.locator('.sidebar-link[href="personel_takip.php"] .sbi-personel').count() === 1, name + ' sidebar keeps .sbi-personel 3D arrow icon');
             const expectedIconPx = width >= 1280 ? 64 : (width >= 900 ? 56 : 54);
             for (const theme of ['light', 'dark']) {
                 await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);

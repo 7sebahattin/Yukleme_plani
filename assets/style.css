@@ -2671,7 +2671,7 @@ dialog.pm-dialog:not([open]) { display: none; }
 @media (min-width: 390px) { .bottomnav .bn-more-dar { display: none; } }
 .bn-sep { align-self: center; width: 1px; height: 34px; flex: 0 0 1px; background: var(--bn-dock-border); }
 .bn-item .ni-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; transition: transform .32s cubic-bezier(.34,1.56,.64,1); }
-.bn-item .ni { width: 100%; height: 100%; display: block; filter: var(--ni-idle); transition: filter .25s ease; }
+.bn-item .ni { width: 100%; height: 100%; display: block; object-fit: contain; filter: var(--ni-idle); transition: filter .25s ease; }
 .bn-item .bn-label {
     font-size: 10.5px; line-height: 1.1; font-weight: 600; color: var(--bn-label);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
@@ -2781,9 +2781,11 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
     width: 50px; height: 50px; display: grid; place-items: center; font-size: 1.55rem; line-height: 1;
     border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border);
 }
+.bn-emoji:has(img) { background: transparent; border: none; border-radius: 0; }
+.bn-emoji img { width: 50px; height: 50px; object-fit: contain; display: block; }
 .bn-tile-link.is-current { background: rgba(var(--depot-accent-rgb, 100,116,139), .12); box-shadow: inset 0 0 0 1.5px rgba(var(--depot-accent-rgb, 100,116,139), .5); }
 .bn-sheet.editing .bn-tile-link { opacity: .4; }   /* Sabitle modunda: bu sayfalar sabitlenemez */
-.bn-tile .go img { width: 50px; height: 50px; }
+.bn-tile .go img { width: 50px; height: 50px; object-fit: contain; }
 .bn-tile.is-current .go { background: rgba(var(--depot-accent-rgb, 100,116,139), .12); box-shadow: inset 0 0 0 1.5px rgba(var(--depot-accent-rgb, 100,116,139), .5); }
 .bn-tile.in-bar .go::after { content: 'alt menüde'; font-size: .6rem; font-weight: 600; color: var(--muted); }
 .bn-sheet.editing .bn-tile.in-bar .go::after { content: none; }
@@ -4242,7 +4244,8 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
         background: rgba(255,255,255,.08);
         color: #fff; text-decoration: none;
     }
-    .sidebar-link-icon { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; }
+    .sidebar-link-icon { font-size: 1rem; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; text-align: center; flex-shrink: 0; }
+    .sidebar-link-icon img { width: 20px; height: 20px; object-fit: contain; display: block; }
     .sidebar-link-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* "Personel Takibi" sidebar ikonu — index.php'nin dashboard kartındaki

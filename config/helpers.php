@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v580');
+    define('APP_SURUM', 'v581');
 }
 
 // --- HTML kaçışı ---
@@ -670,8 +670,13 @@ function nav_menu_modeli(string $base): array {
     $a_ynt   = $a_usr || $a_rol || $a_aud || $a_bkp;
 
 
-    $ge = fn(string $href, string $ikon, string $etiket, bool $aktif, ?string $nav = null, int $rozet = 0): array =>
-        ['href' => $href, 'ikon' => $ikon, 'etiket' => $etiket, 'aktif' => $aktif, 'rozet' => $rozet, 'nav' => $nav];
+    $ge = function (string $href, string $ikon, string $etiket, bool $aktif, ?string $nav = null, int $rozet = 0) use ($base): array {
+        // v581: Personel Takibi sidebar'da .sbi-personel 3B ok ikonunu korur; diğer tüm öğeler 3B PNG setini kullanır.
+        if ($href !== 'personel_takip.php' && ($u3d = nav_3d_ikon_url($href, $base)) !== null) {
+            $ikon = '<img src="' . h($u3d) . '" width="20" height="20" alt="" decoding="async">';
+        }
+        return ['href' => $href, 'ikon' => $ikon, 'etiket' => $etiket, 'aktif' => $aktif, 'rozet' => $rozet, 'nav' => $nav];
+    };
     $muh = nav_muhasebe_gruplari();
     $gruplar = [];
     $ekle = function (string $slug, string $ad, string $svg, array $ogeler) use (&$gruplar): void {
@@ -885,25 +890,25 @@ function nav_rozet_html(int $n, bool $okunur = true, string $ekSinif = '', bool 
  */
 function nav_alt_sayfalar(): array {
     return [
-        'home'    => ['href' => 'index.php',            'etiket' => 'Ana Sayfa',            'kisa' => 'Ana Sayfa',  'dar' => '',        'renk' => '#232d3e', 'grup' => '',          'ikon' => 'assets/nav-icons/home.svg'],
-        'siparis' => ['href' => 'siparisler.php',       'etiket' => 'OGL Siparişler',       'kisa' => 'OGL Sipariş','dar' => 'Sipariş',       'renk' => '#b45309', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/siparis.svg'],
-        'frugro'  => ['href' => 'frugro_siparis.php',   'etiket' => 'Frugro Siparişler',    'kisa' => 'Frugro',     'dar' => null,      'renk' => '#a21caf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/frugro.svg'],
-        'usip'    => ['href' => 'urun_siparis.php',     'etiket' => 'Siparişler',           'kisa' => 'Siparişler', 'dar' => null,      'renk' => '#c2410c', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/siparis.svg'],
-        'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
-        'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
-        'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
-        'records' => ['href' => 'records.php',          'etiket' => 'Yükleme Planı',   'kisa' => 'Plan', 'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
-        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',      'kisa' => 'Palet',  'dar' => 'Palet',      'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
-        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',      'kisa' => 'Kabul', 'dar' => 'Kabul',      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
-        'rapor'   => ['href' => 'reports.php',          'etiket' => 'Eski Raporlar',       'kisa' => 'Eski Rapor', 'dar' => 'Rapor',      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
-        'qcost'   => ['href' => 'hizli_maliyet.php',     'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/qcost.svg'],
-        'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
-        'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
+        'home'    => ['href' => 'index.php',            'etiket' => 'Ana Sayfa',            'kisa' => 'Ana Sayfa',  'dar' => '',        'renk' => '#232d3e', 'grup' => '',          'ikon' => 'assets/nav-icons/3d/index.png'],
+        'siparis' => ['href' => 'siparisler.php',       'etiket' => 'OGL Siparişler',       'kisa' => 'OGL Sipariş','dar' => 'Sipariş', 'renk' => '#b45309', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/siparisler.png'],
+        'frugro'  => ['href' => 'frugro_siparis.php',   'etiket' => 'Frugro Siparişler',    'kisa' => 'Frugro',     'dar' => null,      'renk' => '#a21caf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/frugro_siparis.png'],
+        'usip'    => ['href' => 'urun_siparis.php',     'etiket' => 'Siparişler',           'kisa' => 'Siparişler', 'dar' => null,      'renk' => '#c2410c', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/urun_siparis.png'],
+        'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/beyanlar.png'],
+        'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/halkayit.png'],
+        'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/mail.png'],
+        'records' => ['href' => 'records.php',          'etiket' => 'Yükleme Planı',        'kisa' => 'Plan',       'dar' => 'Plan',    'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/arac_yukleme_fisleri.png'],
+        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Paletleme',            'kisa' => 'Palet',      'dar' => 'Palet',   'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/palet_fisleri.png'],
+        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Mal Kabul',            'kisa' => 'Kabul',      'dar' => 'Kabul',   'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/mal_kabul_fisleri.png'],
+        'rapor'   => ['href' => 'reports.php',          'etiket' => 'Eski Raporlar',        'kisa' => 'Eski Rapor', 'dar' => 'Rapor',   'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/reports.png'],
+        'qcost'   => ['href' => 'hizli_maliyet.php',    'etiket' => 'Hızlı Maliyet',        'kisa' => 'Hızlı Maliyet', 'dar' => 'Maliyet', 'renk' => '#1d6cf0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/hizli_maliyet.png'],
+        'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/malzeme_stok.png'],
+        'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/3d/hesap.png'],
         'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
-        'users'   => ['href' => 'users.php',            'etiket' => 'Kullanıcılar',         'kisa' => 'Kullanıcı',  'dar' => null,      'renk' => '#3d49b5', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/users.svg'],
-        'roles'   => ['href' => 'roles.php',            'etiket' => 'Roller',               'kisa' => 'Roller',     'dar' => null,      'renk' => '#48566f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/roles.svg'],
-        'audit'   => ['href' => 'audit.php',            'etiket' => 'İşlem Geçmişi',        'kisa' => 'Geçmiş',     'dar' => null,      'renk' => '#b3163f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/audit.svg'],
-        'backup'  => ['href' => 'admin_db_backups.php', 'etiket' => 'Veritabanı Yedekleri', 'kisa' => 'Yedekler',   'dar' => null,      'renk' => '#3f7d0b', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/backup.svg'],
+        'users'   => ['href' => 'users.php',            'etiket' => 'Kullanıcılar',         'kisa' => 'Kullanıcı',  'dar' => null,      'renk' => '#3d49b5', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/3d/users.png'],
+        'roles'   => ['href' => 'roles.php',            'etiket' => 'Roller',               'kisa' => 'Roller',     'dar' => null,      'renk' => '#48566f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/3d/roles.png'],
+        'audit'   => ['href' => 'audit.php',            'etiket' => 'İşlem Geçmişi',        'kisa' => 'Geçmiş',     'dar' => null,      'renk' => '#b3163f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/3d/audit.png'],
+        'backup'  => ['href' => 'admin_db_backups.php', 'etiket' => 'Veritabanı Yedekleri', 'kisa' => 'Yedekler',   'dar' => null,      'renk' => '#3f7d0b', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/3d/admin_db_backups.png'],
         'more'    => ['href' => '',                     'etiket' => 'Diğer',                'kisa' => 'Diğer',      'dar' => null,      'renk' => '#6b788d', 'grup' => '',          'ikon' => 'assets/nav-icons/more.svg'],
     ];
 }
@@ -994,7 +999,8 @@ function nav_3d_ikon_url(string $href, string $base = ''): ?string {
     $anahtar = basename($yol, '.php');
     if ($anahtar === 'index' && str_contains($yol, '/')) $anahtar = basename(dirname($yol));
     if ($anahtar === '' || !preg_match('/^[a-z0-9_-]+$/i', $anahtar)) return null;
-    $goreli = 'assets/nav-icons/3d/' . $anahtar . '.png';
+    // v581 (sahip kararı): Personel Takibi yeşil/kırmızı 3B ok ikonunu (ptak.svg) korur.
+    $goreli = $anahtar === 'personel_takip' ? 'assets/nav-icons/ptak.svg' : 'assets/nav-icons/3d/' . $anahtar . '.png';
     $v = @filemtime(__DIR__ . '/../' . $goreli);
     return $v ? $base . $goreli . '?v=' . $v : null;
 }
