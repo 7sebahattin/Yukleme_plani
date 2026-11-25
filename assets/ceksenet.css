@@ -500,3 +500,14 @@ html[data-theme="dark"] .cs-toast:not(.cs-toast--hata) { background: #e7ecf4; co
 .cs-yz-imza { display: flex; justify-content: space-between; gap: 20mm; margin-top: 14mm; }
 .cs-yz-imza div { flex: 1; border-top: 1px solid #000; padding-top: 3px; text-align: center; font-size: 9pt; }
 .cs-yz-alt { margin-top: 8mm; padding-top: 3px; border-top: 1px solid #999; font-size: 8pt; color: #333; }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+    .cs-sekmeler { margin-bottom: 9px; }
+    .cs-sekme { min-height: 36px; padding: 0 11px; }
+    .cs-ozet-kart { padding: 5px 9px; }
+}
+@media screen and (min-width: 1024px) {
+    .ceksenet { --cs-panel: 340px; }
+}
+

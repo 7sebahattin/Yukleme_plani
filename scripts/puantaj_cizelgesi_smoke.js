@@ -617,7 +617,7 @@ let srv;
                     return new Promise(res => requestAnimationFrame(() => {
                         const th0 = document.querySelector('tbody th.pc-isim'); const r2 = th0.getBoundingClientRect(); const e2 = document.elementFromPoint(r2.left + 14, r2.top + r2.height / 2);
                         const k2 = document.querySelector('thead th.pc-kose').getBoundingClientRect();
-                        res({ wl: wr.left, kose: { w: kr.width, txt: kose.textContent.replace(/\s+/g, ' ').trim(), ic: kr.left >= wr.left - 1 }, sat, sonra: { solKalir: Math.abs(r2.left - wr.left) <= 1.5, ust: !!e2 && (e2 === th0 || th0.contains(e2)), sc: wrap.scrollLeft, koseSol: Math.abs(k2.left - wr.left) <= 1.5 } });
+                        res({ wl: wr.left, kose: { w: kr.width, txt: kose.textContent.replace(/\s+/g, ' ').trim(), ic: kr.left >= wr.left - 1 }, sat, sonra: { solKalir: Math.abs(r2.left - wr.left) <= 1.5, ust: !!e2 && (e2 === th0 || th0.contains(e2)), sc: wrap.scrollLeft, overflow: wrap.scrollWidth - wrap.clientWidth, koseSol: Math.abs(k2.left - wr.left) <= 1.5 } });
                     }));
                 });
                 const luA = c => { const m = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
@@ -626,7 +626,8 @@ let srv;
                 ok(tag + 'satır sayısı = ' + bk.n + '; HER satırda ad hücresi genişlik ≥ 80px, ad metni DOLU (' + bk.ad + ') ve görünür genişlikte (≥ 40px), display/visibility normal', r.sat.length === bk.n && r.sat.every(s => s.w >= 80 && s.tw >= 40 && bk.ad.test(s.txt) && bk.alt.test(s.alt) && s.disp !== 'none' && s.vis === 'visible'), JSON.stringify(r.sat));
                 ok(tag + 'her ad hücresi SOLDA (ilk gün hücresinin solunda), ızgaranın içinde ve satırla DİKEY HİZALI (merkez farkı ≤ 2px)', r.sat.every(s => s.solda && s.icinde && s.hiz <= 2), JSON.stringify(r.sat.map(s => [s.solda, s.icinde, s.hiz])));
                 ok(tag + 'ad hücresi üstte (başka öğe örtmüyor) ve okunur: zemin/yazı kontrastı > 0,5', r.sat.every(s => s.ust && Math.abs(luA(s.bg) - luA(s.fg)) > 0.5), JSON.stringify(r.sat.map(s => [s.ust, s.bg, s.fg])));
-                ok(tag + 'sona kadar yatay kaydırınca (' + Math.round(r.sonra.sc) + 'px) ad sütunu YERİNDE kalır (sol kenar = ızgara sol kenarı), köşe başlığı da; hâlâ üstte', r.sonra.sc >= 40 && r.sonra.solKalir && r.sonra.koseSol && r.sonra.ust, JSON.stringify(r.sonra));
+                const kaymaGerekli = w <= 1280 || r.sonra.overflow > 40;
+                ok(tag + 'sona kadar yatay kaydırınca (' + Math.round(r.sonra.sc) + 'px) ad sütunu YERİNDE kalır (sol kenar = ızgara sol kenarı), köşe başlığı da; hâlâ üstte', (!kaymaGerekli || r.sonra.sc >= 40) && r.sonra.solKalir && r.sonra.koseSol && r.sonra.ust, JSON.stringify(r.sonra));
                 await pg.close();
             }
         }

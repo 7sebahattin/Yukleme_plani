@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v578` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v579` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -139,9 +139,9 @@ yönetici onaylar. `hesap.admin`'i özel role vermek = o rol HERKESİ görür.
 |---|---|
 | `< 768px` | Mobil: bottomnav görünür, topbar görünür, sidebar gizli |
 | `768–899px` | Tablet: topbar görünür, sidebar gizli, 2-kolon kart grid |
-| `≥ 900px` | Desktop: **sol sidebar** (220px), topbar+bottomnav gizli |
+| `≥ 900px` | Desktop: **sol sidebar** (180px), topbar+bottomnav gizli; `v579` masaüstü %80 ölçek (`@media screen` kök `12px`, `body.print-mode` hariç) |
 | `≥ 1024px` | Desktop: `.pc-only` tablo görünür, `.mobile-only` kartlar gizli |
-| `≥ 1280px` | Geniş: sidebar 260px, max-width 1400px, 4-kolon grid |
+| `≥ 1280px` | Geniş: sidebar 210px, ana sayfa (`index.php`, `nav_menu_modeli('')` ile birebir senkron) 8-kolon kart ızgarası (`.home-grid:not(.pdks-dashboard-grid)`) |
 
 ### Sidebar (Sprint 32)
 

@@ -955,3 +955,15 @@ a.hs-tx:hover { text-decoration: none; color: var(--text); border-color: var(--b
     .hs-actions, .hs-filters, .hs-month-arrow { display: none !important; }
     .hs-balance { border: 1px solid #999; box-shadow: none; }
 }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+    .hs { --hs-gap: 10px; }
+    .hs-balance { padding: 14px 16px; }
+    .hs-cta { min-height: 36px; padding: 8px 14px; }
+    .hs-secondary .btn { min-height: 34px; }
+    .hs-month { padding: 6px 10px; }
+    .hs-month-arrow { width: 32px; height: 32px; }
+    .hs-fold > summary { padding: 9px 12px; }
+}
+

@@ -389,10 +389,16 @@ input.num, select.num { text-align: right; }
     transition: box-shadow .15s ease, transform .12s ease;
     position: relative;
 }
+.home-card:hover,
+.home-card:focus,
+.home-card:focus-visible {
+    text-decoration: none;
+}
 .home-card:hover {
     box-shadow: 0 6px 24px rgba(20,30,60,.10);
     transform: translateY(-3px);
 }
+.home-card:hover * { text-decoration: none; }
 .home-card:active { transform: translateY(-1px); }
 
 .home-card-icon {
@@ -7390,3 +7396,190 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     .sidebar-section:hover { color: rgba(255,255,255,.8); }
     .sidebar-section-ok { transition: transform .18s ease-out; }
 }
+
+/* =========================================================
+   MASAÜSTÜ %80 ÖLÇEK & 8-SÜTUN ANA SAYFA MİMARİSİ
+   ---------------------------------------------------------
+   Mobil (<768px), tablet (768–899px) ve @media print (1:1)
+   ETKİLENMEZ. CSS `zoom` yerine kök rem (12px = 15px × 0.8) +
+   masaüstü kutu yoğunluğu kullanılır → 100vh/dvh, position:fixed,
+   getBoundingClientRect(), drag-drop ve native <dialog> 1:1 kalır.
+   ========================================================= */
+
+/* Tablet (768–899px): ana sayfa 4 sütun (PDKS panosu hariç) */
+@media screen and (min-width: 768px) and (max-width: 899px) {
+    .home-grid:not(.pdks-dashboard-grid) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* Masaüstü (≥900px, yalnız ekran — print ve print-mode hariç) */
+@media screen and (min-width: 900px) {
+    /* 1) Kök %80 tipografi ölçeği (15px → 12px; tüm rem kurallarını otomatik ölçekler) */
+    html:not(:has(body.print-mode)) { font-size: 12px; }
+    body:not(.print-mode) { font-size: 1rem; }
+
+    /* 2) Sidebar (220px → 180px) & içerik alanı */
+    .desktop-sidebar { width: 180px; }
+    body:not(.print-mode) .container {
+        margin-left: 180px !important;
+        margin-right: 0 !important;
+        max-width: none !important;
+        padding: 18px 20px 36px;
+    }
+
+    .sidebar-brand { gap: 8px; padding: 12px 12px 10px; }
+    .sidebar-brand-logo { width: 28px; height: 28px; }
+    .sidebar-tema { top: 12px; right: 10px; width: 26px; height: 26px; }
+    .sidebar-depo { gap: 8px; margin: 8px 10px 4px; padding: 7px 10px; border-radius: 8px; }
+    .sidebar-nav { padding: 6px 8px; }
+    .sidebar-section { padding: 9px 7px 4px; }
+    .sidebar-link { gap: 8px; padding: 6px 9px; }
+    /* NOT: .sidebar-link img 20×20 korunur (dashboard_navigation_smoke.js:48) */
+    .sidebar-link img { width: 20px; height: 20px; }
+    .sidebar-user { gap: 6px; padding: 8px 10px; }
+    .sidebar-user-logout,
+    .sidebar-user-pin { width: 28px; height: 28px; }
+
+    /* 3) Ortak yüzeyler, başlıklar, kartlar, tablolar */
+    .page-head { gap: 10px; margin-bottom: 14px; padding-bottom: 11px; }
+    .page-head h1 { font-size: 1.55rem; }
+    .page-head-actions { gap: 7px; }
+
+    .card { padding: 14px 16px; margin-bottom: 12px; border-radius: 8px; }
+    .card-head { gap: 8px; margin-bottom: 10px; }
+    .grid { gap: 10px; }
+    .search-row { gap: 6px; margin-bottom: 12px; }
+    .form-foot { gap: 6px; margin-top: 12px; }
+    .flash { padding: 9px 12px; margin-bottom: 11px; }
+
+    /* 4) Butonlar, form kontrolleri, filtre pill'leri */
+    .btn { gap: 5px; padding: 7px 12px; min-height: 34px; }
+    .btn-sm { padding: 4px 8px; min-height: 28px; }
+    .btn-lg { padding: 9px 18px; min-height: 38px; }
+    .btn-icon { width: 32px; min-height: 32px; }
+
+    input[type="text"], input[type="search"], input[type="tel"],
+    input[type="date"], input[type="number"], input[type="email"],
+    input[type="password"], select, textarea {
+        padding: 7px 10px;
+        min-height: 34px;
+    }
+    select { padding-right: 28px; background-position: right 9px center; }
+
+    .filter-pills { gap: 6px; margin-bottom: 12px; }
+    .pill { padding: 5px 11px; }
+
+    .data-table th { padding: 9px 11px; }
+    .data-table td { padding: 8px 11px; }
+    .data-table th:first-child, .data-table td:first-child { padding-left: 12px; }
+    .data-table th:last-child,  .data-table td:last-child  { padding-right: 12px; }
+
+    /* 5) Modallar (.pm-dialog > form flex zinciri ve dialog:not([open]) korunur) */
+    .pm-header { padding: 12px 16px; }
+    .pm-body { padding: 12px 16px; }
+    .pm-footer { padding: 10px 16px; gap: 8px; }
+    .pm-calc { gap: 18px; padding: 8px 12px; margin-bottom: 10px; }
+
+    /* 6) Ekran Kilidi (sabit px tipografisini %80'e indir) */
+    .ekran-kilit-kart { max-width: 320px; padding: 22px 20px; gap: 10px; border-radius: 13px; }
+    .ekran-kilit-ikon { font-size: 29px; }
+    .ekran-kilit-kart h2 { font-size: 16px; }
+    .ekran-kilit-not { font-size: 12px; }
+    .ekran-kilit-girdi { padding: 8px 11px; font-size: 13px; }
+    .ekran-kilit-hata, .ekran-pin-bilgi, .ekran-kilit-cikis,
+    button.ekran-pin-link, .ekran-kilit-kart label { font-size: 11px; }
+    .ekran-pin-toast { padding: 8px 13px; font-size: 12px; }
+
+    /* 7) Ana sayfa karoları (yalnız .home-grid:not(.pdks-dashboard-grid)) */
+    .home-grid:not(.pdks-dashboard-grid) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card {
+        min-width: 0;
+        min-height: 104px;
+        padding: 12px 8px 10px;
+        gap: 6px;
+        border-radius: 14px;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card:hover {
+        transform: translateY(-3px) scale(1.015);
+        text-decoration: none;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 13px;
+        font-size: 1.5rem;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card-title {
+        font-size: .95rem;
+        line-height: 1.25;
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card-sub {
+        font-size: .8rem;
+        line-height: 1.25;
+        margin-top: 0;
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card-badge {
+        top: 6px;
+        right: 6px;
+        font-size: .78rem;
+        padding: 1px 6px;
+        min-width: 18px;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-section-title {
+        color: var(--muted);
+        margin-top: 10px;
+        padding-top: 10px;
+        font-size: .8rem;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-section-title:first-child {
+        margin-top: 0;
+        padding-top: 0;
+    }
+}
+
+/* Orta masaüstü (1100–1279px): 6 sütun ana sayfa */
+@media screen and (min-width: 1100px) {
+    .home-grid:not(.pdks-dashboard-grid) {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+/* Geniş masaüstü (≥1280px): 210px sidebar + 8 sütun ana sayfa */
+@media screen and (min-width: 1280px) {
+    .desktop-sidebar { width: 210px; }
+    body:not(.print-mode) .container {
+        margin-left: 210px !important;
+        max-width: none !important;
+        padding: 20px 24px 40px;
+    }
+    .home-grid:not(.pdks-dashboard-grid) {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .home-grid:not(.pdks-dashboard-grid) .home-card {
+        min-height: 104px;
+    }
+}
+
+/* Çok geniş masaüstü (≥1500px): kartlar arası 12px boşluk */
+@media screen and (min-width: 1500px) {
+    .home-grid:not(.pdks-dashboard-grid) {
+        gap: 12px;
+    }
+}
+

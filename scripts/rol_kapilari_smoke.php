@@ -208,8 +208,8 @@ ok('index.php artık dashboard.read için 403 BASMIYOR',
     'giriş akışı yine 403 tuzağına düşer');
 ok('index.php first_allowed_page() ile yönlendiriyor',
     str_contains($idx, 'first_allowed_page()'));
-ok('index.php Hesap kartı hesap.read ile kapılı (reports.read DEĞİL)',
-    (bool)preg_match("/if \(can\('hesap\.read'\) \|\| is_admin\(\)\): \?>\s*\n\s*<a href=\"hesap\.php\"/", $idx),
+ok('index.php Hesap kartı tek kaynak nav_menu_modeli() ile hesap.read kapılı (reports.read DEĞİL)',
+    str_contains($idx, "nav_menu_modeli('')") && !str_contains($idx, '<a href="hesap.php"') && (bool)preg_match("/\\\$p_hes\s*=[^\n]*can\('hesap\.read'\)/", $hsrc),
     'kart kapısı hesap_can() ile ayrışıyor');
 
 ok('sidebar \$p_hes artık reports.read\'e düşmüyor',

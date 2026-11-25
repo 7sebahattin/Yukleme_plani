@@ -562,3 +562,16 @@ a.st-cip:hover { text-decoration: none; }
 /* ═════════ Z. JS durum sınıfları (assets/stok.js) ═════════ */
 .st-yukleniyor { opacity: .55; pointer-events: none; transition: opacity .15s; }
 .stok form[data-kilit="1"], .st-dialog form[data-kilit="1"] { cursor: progress; }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+    .st-tablo th, .st-tablo td { padding: 5px 7px; }
+    .st-eylem-bar { padding: 6px 12px; }
+    .st-eylem-bar .btn { min-height: 34px; }
+}
+@media screen and (min-width: 1024px) {
+    .stok { --st-sol: 308px; }
+    .st--fis { --st-sol: 308px; }
+    .st--tek-ekran .st-ana { gap: 10px; }
+}
+

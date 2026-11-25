@@ -53,8 +53,8 @@ ok('nav_alt_sayfalar siparis kaydı (siparisler.php, ikon, grup Operasyon)',
     (bool)preg_match("/'siparis' => \['href' => 'siparisler\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/siparis\.svg'\]/", $helpers));
 ok("first_allowed_page OGL bağımsız sayfa izni", str_contains($helpers, "'siparisler.php'     => role_matrix_page_can('siparis','ogl')"));
 ok('nav_aktif_anahtar siparis bölümü', str_contains($helpers, "'siparis' => \$a_sip") && str_contains($helpers, "\$a_sip   = in_array(\$cur, ['siparisler.php'"));
-ok('index.php OGL kartı bağımsız sayfa kapılı', str_contains($index, "<?php if (role_matrix_page_can('siparis','ogl')): ?>") && strpos($index, "<?php if (role_matrix_page_can('siparis','ogl')): ?>") < strpos($index, '<a href="siparisler.php"'));
-ok('index.php bölüm görünürlüğü can_siparis içeriyor', str_contains($index, "|| can_siparis('read') || can_mail('read');"));
+ok('index.php OGL kartı tek kaynak nav_menu_modeli() ile (sidebar bağımsız sayfa kapısıyla aynı)', str_contains($index, "nav_menu_modeli('')") && !str_contains($index, '<a href="siparisler.php"'));
+ok('index.php bölüm görünürlüğü nav_menu_modeli() üzerinden çizilir (elle kopya kapı yok)', str_contains($index, "nav_menu_modeli('')") && str_contains($index, "empty(\$__hg['ogeler'])"));
 ok('siparis.* yetkileri helpers.php\'de YALNIZ can_siparis içinde okunuyor (4 çağrı)', substr_count($helpers, "can('siparis.") === 4,
     'sayım: ' . substr_count($helpers, "can('siparis."));
 foreach (['index.php', 'migrate.php'] as $f) {

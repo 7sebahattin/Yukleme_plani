@@ -717,3 +717,17 @@ body.print-cari { color: #000; }
 
 /* Özel tarih alanları: satır içi display:flex [hidden]i ezmesin (entegrasyon) */
 .cari-ozel-tarih[hidden] { display: none !important; }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+    .cari-tablo th, .cari-tablo td { padding: 6px 8px; }
+    .cari-filtre { padding: 9px 10px; margin-bottom: 9px; }
+    .cari-filtre input, .cari-filtre select { min-height: 32px; padding-top: 4px; padding-bottom: 4px; }
+    .cari-ekstre-filtre { padding: 7px 0; gap: 6px 10px; }
+    .cari-ekstre-filtre select { min-height: 34px; }
+}
+@media screen and (min-width: 1024px) {
+    .cari { --cari-sol: clamp(230px, 21vw, 285px); }
+    .cari--tek-ekran .cari-ana { gap: 10px; }
+}
+

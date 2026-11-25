@@ -58,10 +58,33 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                 check(await quick.evaluate(node => document.activeElement === node), name + '/' + theme + ' quick card is keyboard focusable');
                 await page.evaluate(() => scrollTo(0, 0));
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-home.png') });
-                await page.locator('.home-card[href="kullanici_tercihleri.php"]').scrollIntoViewIfNeeded();
-                check(await page.locator('.home-card[href="kullanici_tercihleri.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
-                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'kullanici_tercihleri.php'; }), name + '/' + theme + ' scrolled-to card really is the last card');
+                await page.locator('.home-card[href="hesap.php"]').scrollIntoViewIfNeeded();
+                check(await page.locator('.home-card[href="hesap.php"]').isVisible(), name + '/' + theme + ' last catalog group remains reachable by scrolling');
+                check(await page.evaluate(() => { const c = document.querySelectorAll('.home-card'); return c[c.length - 1].getAttribute('href') === 'hesap.php'; }), name + '/' + theme + ' scrolled-to card really is the last card');
                 await page.screenshot({ path: path.join(output, name + '-' + theme + '-last-group.png') });
+            }
+            if (width === 1440) {
+                await page.evaluate(() => scrollTo(0, 0));
+                check(await page.evaluate(() => {
+                    const grid = document.querySelector('.home-grid');
+                    return grid && getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length === 8;
+                }), name + ' desktop .home-grid computes to 8 columns');
+                check(await page.evaluate(() => {
+                    const homeHeads = Array.from(document.querySelectorAll('.home-section-title')).map(el => el.textContent.trim());
+                    const sbHeads = Array.from(document.querySelectorAll('.sidebar-nav details.sidebar-grup'))
+                        .filter(d => d.querySelector('.sidebar-link'))
+                        .map(d => { const ad = d.querySelector('.sidebar-section-ad'); return ad ? ad.textContent.trim() : ''; });
+                    return homeHeads.length === sbHeads.length && homeHeads.every((h, i) => h === sbHeads[i]);
+                }), name + ' .home-section-title sequence matches .sidebar-nav .sidebar-section-ad sequence');
+                const firstCard = page.locator('.home-card').first();
+                await firstCard.hover();
+                check(await firstCard.evaluate(card => {
+                    const title = card.querySelector('.home-card-title');
+                    const icon = card.querySelector('.home-card-icon');
+                    return getComputedStyle(card).textDecorationLine === 'none'
+                        && (!title || getComputedStyle(title).textDecorationLine === 'none')
+                        && (!icon || getComputedStyle(icon).textDecorationLine === 'none');
+                }), name + ' hovering .home-card has no text-decoration underline');
             }
             if (width >= 900) {
                 // v548: sidebar alt alanı SABİT (yalnız .sidebar-nav kayar); sürüm çıkış butonunun yanında, .sidebar-user içinde.

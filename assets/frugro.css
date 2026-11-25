@@ -90,3 +90,19 @@ dialog.frg-dialog::backdrop { background: rgba(0, 0, 0, .45); }
     .frg-sil { margin-left: 0; }
 }
 @media print { .frg .no-print { display: none !important; } }
+
+/* Masaüstü %80 ölçek yoğunluğu (mobil/tablet/print etkilenmez) */
+@media screen and (min-width: 900px) {
+    .frg-bos { padding: 18px; }
+    .frg-bos-satir { padding: 24px 12px; }
+    .frg-adim { gap: 5px; margin-bottom: 10px; }
+    .frg-adim-ogesi { padding: 4px 11px; }
+    .frg-izgara, .frg-baglar { gap: 10px; margin-bottom: 10px; }
+    .frg-bolum { padding: 11px 13px; }
+    .frg-bilgiler { gap: 6px; }
+    .frg-bag { gap: 10px; padding: 10px 13px; }
+    .frg-grid { gap: 9px; }
+    .frg-f input, .frg-f select, .frg-f textarea { padding: 6px 9px; }
+    .sip-yukle .frgm { margin-bottom: 10px; padding: 11px; }
+}
+
