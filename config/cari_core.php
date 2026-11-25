@@ -220,10 +220,56 @@ function cari_tipler(): array
     return ['musteri' => 'Müşteri', 'tedarikci' => 'Tedarikçi', 'ikisi' => 'Müşteri+Tedarikçi', 'personel' => 'Personel/Çavuş', 'diger' => 'Diğer'];
 }
 
-/** @return list<string> */
-function cari_para_birimleri(): array { return ['TRY', 'USD', 'EUR']; }
+/**
+ * Aktif para birimleri listesi: doviz_tanimlar tablosu kuruluysa aktif 3 harfli ISO kodlarını
+ * sırasıyla döndürür (TRY daima başta); tablo yoksa varsayılan ['TRY', 'USD', 'EUR'].
+ * @return list<string>
+ */
+function cari_para_birimleri(?PDO $pdo = null, bool $yenile = false): array
+{
+    static $onbellek = null;
+    static $onbellekPdoId = null;
+    $p = $pdo;
+    if ($p === null && function_exists('db')) {
+        try { $p = db(); } catch (Throwable $e) { $p = null; }
+    }
+    $pid = $p instanceof PDO ? spl_object_id($p) : 0;
+    if (!$yenile && $onbellek !== null && $onbellekPdoId === $pid) {
+        return $onbellek;
+    }
+    $varsayilan = ['TRY', 'USD', 'EUR'];
+    if (!$p instanceof PDO) {
+        return $varsayilan;
+    }
+    try {
+        $st = $p->query('SELECT kod FROM `doviz_tanimlar` WHERE aktif = 1 ORDER BY sira ASC, kod ASC');
+        $satirlar = $st ? $st->fetchAll(PDO::FETCH_COLUMN) : [];
+        $liste = [];
+        foreach ($satirlar as $kod) {
+            $k = strtoupper(trim((string)$kod));
+            if ($k !== '' && strlen($k) <= 3 && preg_match('/^[A-Z]{2,3}$/', $k) && !in_array($k, $liste, true)) {
+                $liste[] = $k;
+            }
+        }
+        if (!$liste) {
+            $onbellek = $varsayilan;
+            $onbellekPdoId = $pid;
+            return $onbellek;
+        }
+        // TRY her zaman ilk sırada olsun
+        $liste = array_values(array_diff($liste, ['TRY']));
+        array_unshift($liste, 'TRY');
+        $onbellek = $liste;
+        $onbellekPdoId = $pid;
+        return $onbellek;
+    } catch (Throwable $e) {
+        $onbellek = $varsayilan;
+        $onbellekPdoId = $pid;
+        return $onbellek;
+    }
+}
 
-/** Para birimi anahtarlı diziyi TRY, USD, EUR sırasına dizer (bilinmeyenler sona, alfabetik). */
+/** Para birimi anahtarlı diziyi aktif döviz sırasına dizer (bilinmeyenler sona, alfabetik). */
 function cari_pb_sirala(array $d): array
 {
     $sira = array_flip(cari_para_birimleri());
@@ -265,7 +311,12 @@ function cari_tutar_bicim(int $kurus, string $pb, bool $sembol = true): string
     $mut = abs($kurus);
     $s = ($kurus < 0 ? '-' : '') . number_format((float)intdiv($mut, 100), 0, ',', '.') . ',' . str_pad((string)($mut % 100), 2, '0', STR_PAD_LEFT);
     if (!$sembol) return $s;
-    $sym = ['TRY' => '₺', 'USD' => '$', 'EUR' => '€'][$pb] ?? $pb;
+    $sym = [
+        'TRY' => '₺', 'USD' => '$', 'EUR' => '€', 'GBP' => '£',
+        'CHF' => 'CHF', 'RUB' => '₽', 'JPY' => '¥', 'SAR' => 'SAR',
+        'AED' => 'AED', 'AUD' => 'A$', 'CAD' => 'C$', 'CNY' => '¥',
+        'KRW' => '₩', 'AZN' => '₼', 'KZT' => '₸',
+    ][$pb] ?? $pb;
     return $s . ' ' . $sym;
 }
 

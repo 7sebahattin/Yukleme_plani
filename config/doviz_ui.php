@@ -188,9 +188,6 @@ function doviz_gunluk_sayfa_render(array $ctx): string
         $h .= '<button type="button" class="btn dv-btn" data-dv-kur-ekle>'
             . '<span class="dv-btn-ikon" aria-hidden="true">+</span> <span>Manuel Kur Ekle</span></button>';
     }
-    if ($tanimIzni) {
-        $h .= '<a class="btn dv-btn dv-btn--tanim" href="doviz_tanimlari.php">Döviz Tanımları</a>';
-    }
     $h .= '</div>';
     $h .= '</header>';
 
@@ -217,7 +214,8 @@ function doviz_gunluk_sayfa_render(array $ctx): string
         if ($kurlar) {
             $h .= doviz_ui_gunluk_liste($kurlar, $yazabilir, $silebilir, $tarih);
         } else {
-            $h .= doviz_ui_gunluk_bos($tarih, $yazabilir, $tumu);
+            $sonTarih = isset($ctx['son_tarih']) && is_string($ctx['son_tarih']) ? $ctx['son_tarih'] : null;
+            $h .= doviz_ui_gunluk_bos($tarih, $yazabilir, $tumu, $bugun, $sonTarih);
         }
     }
 
@@ -493,18 +491,24 @@ function doviz_ui_gunluk_liste(array $kurlar, bool $yazabilir, bool $silebilir, 
 }
 
 /** Günlük kurlar boş durum kartı. */
-function doviz_ui_gunluk_bos(string $tarih, bool $yazabilir, bool $tumu): string
+function doviz_ui_gunluk_bos(string $tarih, bool $yazabilir, bool $tumu, string $bugun = '', ?string $sonTarih = null): string
 {
     $h = '<div class="dv-bos">';
     $h .= '<h2>' . h(doviz_ui_tarih_tr($tarih)) . ' tarihi için kayıtlı kur yok</h2>';
-    if (!$tumu) {
+    if ($bugun !== '' && $tarih === $bugun) {
+        $h .= '<p>TCMB günlük kurları iş günleri saat <strong>15:30</strong>\'da yayımlanır; hafta sonu ve resmî tatillerde bülten yayımlanmaz. Bugünün bülteni henüz yayımlanmadıysa en güncel bülteni görüntüleyebilir veya manuel kur ekleyebilirsiniz.</p>';
+    } elseif (!$tumu) {
         $h .= '<p>Seçili tarihte aktif para birimlerine ait kur kaydı bulunamadı. TCMB\'den kurları çekebilir veya tüm TCMB kurlarını görüntüleyebilirsiniz.</p>';
     } else {
         $h .= '<p>Seçili tarihte henüz kur verisi kaydedilmemiş. TCMB\'den anında çekebilir ya da manuel kur ekleyebilirsiniz.</p>';
     }
     $h .= '<div class="dv-bos-eylem">';
+    if ($sonTarih !== null && $sonTarih !== '' && $sonTarih !== $tarih) {
+        $h .= '<a class="btn btn-primary dv-btn" href="gunluk_kurlar.php?tarih=' . rawurlencode($sonTarih) . ($tumu ? '&tumu=1' : '') . '">En Güncel Bültene Git (' . h(doviz_ui_tarih_tr($sonTarih)) . ')</a>';
+    }
     if ($yazabilir) {
-        $h .= '<button type="button" class="btn btn-primary dv-btn" data-dv-tcmb-cek data-tarih="' . h($tarih) . '">&#8635; TCMB\'den Bugünün Kurlarını Çek</button>';
+        $btnSinif = ($sonTarih !== null && $sonTarih !== '' && $sonTarih !== $tarih) ? 'btn dv-btn' : 'btn btn-primary dv-btn';
+        $h .= '<button type="button" class="' . $btnSinif . '" data-dv-tcmb-cek data-tarih="' . h($tarih) . '">&#8635; TCMB\'den Çek</button>';
         $h .= '<button type="button" class="btn dv-btn" data-dv-kur-ekle>+ Manuel Kur Ekle</button>';
     }
     if (!$tumu) {

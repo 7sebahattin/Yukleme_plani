@@ -718,7 +718,16 @@ render_flash();
     <div class="form-section-title">💱 Döviz, Navlun ve Fatura</div>
     <div class="grid mly-grid">
         <label>Döviz
-            <input type="text" name="currency_code" id="mlyCur" value="<?= h($sheet['currency_code']) ?>" maxlength="5">
+            <?php
+            $mlyAktifPbler = ['TRY', 'USD', 'EUR', 'GBP'];
+            try {
+                $stMlyPb = $pdo->query('SELECT kod FROM `doviz_tanimlar` WHERE aktif = 1 ORDER BY sira ASC, kod ASC');
+                $dbMlyPb = $stMlyPb ? $stMlyPb->fetchAll(PDO::FETCH_COLUMN) : [];
+                if ($dbMlyPb) $mlyAktifPbler = array_values(array_unique(array_map('strtoupper', $dbMlyPb)));
+            } catch (Throwable $e) { /* doviz_tanimlar henüz kurulu değilse varsayılan kullanılır */ }
+            ?>
+            <input type="text" name="currency_code" id="mlyCur" list="mlyCurList" value="<?= h($sheet['currency_code']) ?>" maxlength="5" autocomplete="off">
+            <datalist id="mlyCurList"><?php foreach ($mlyAktifPbler as $__mpb): ?><option value="<?= h($__mpb) ?>"><?php endforeach; ?></datalist>
         </label>
         <label>Kur (1 döviz = ? TL)
             <input type="text" inputmode="decimal" name="currency_rate" value="<?= fmt_edit_num($sheet['currency_rate'], 4) ?>" data-mly="kur">

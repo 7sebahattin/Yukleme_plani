@@ -72,7 +72,7 @@
         alacak_dekont: { ad: 'Alacak Dekontu',       gruplar: '',       acik: true,  ipucu: '<b>Alacak</b> yazılır: cari alacaklanır (ör. iade, iskonto). Açıklama zorunlu.' },
         virman:        { ad: 'Cariler Arası Virman', gruplar: 'virman', acik: true,  ipucu: 'Kaynak cari <b>alacaklanır</b>, hedef cari <b>borçlanır</b>. Aynı para birimi; açıklama zorunlu.' }
     };
-    var SEMBOL = { TRY: '₺', USD: '$', EUR: '€' };
+    var SEMBOL = { TRY: '₺', USD: '$', EUR: '€', GBP: '£', CHF: 'CHF', RUB: '₽', JPY: '¥', SAR: 'SAR', AED: 'AED', AUD: 'A$', CAD: 'C$', CNY: '¥', AZN: '₼' };
     var KISAYOL_TUR = { t: 'tahsilat', o: 'odeme', d: 'borc_dekont' };
     var ODAK = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 

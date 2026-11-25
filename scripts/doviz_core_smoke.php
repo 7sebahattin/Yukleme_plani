@@ -217,5 +217,16 @@ $usdRow = doviz_tanim_oku($db, 'USD');
 $usdSil = doviz_tanim_sil($db, (int)$usdRow['id'], 1);
 ok('kur kaydı olan USD silinemez (409 kullanimda)', !($usdSil['ok'] ?? true) && ($usdSil['kod'] ?? '') === 'kullanimda');
 
+echo "=== 7. Dinamik Aktif Para Birimleri (cari_para_birimleri) ===\n";
+require_once $ROOT . '/config/cari_core.php';
+$bosDb = new PDO('sqlite::memory:');
+$bosDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+ok('tablo yokken cari_para_birimleri varsayılan [TRY, USD, EUR]', cari_para_birimleri($bosDb, true) === ['TRY', 'USD', 'EUR']);
+ok('doviz_tanimlar varken aktif dövizler döner [TRY, USD, EUR, GBP]', cari_para_birimleri($db, true) === ['TRY', 'USD', 'EUR', 'GBP']);
+$rubRow = doviz_tanim_oku($db, 'RUB');
+doviz_tanim_durum($db, (int)$rubRow['id'], 'aktif', 1, 1);
+ok('RUB aktif edilince cari_para_birimleri listesine eklenir', in_array('RUB', cari_para_birimleri($db, true), true));
+ok('cari_tutar_bicim GBP ve RUB sembollerini yazar', cari_tutar_bicim(123456, 'GBP') === '1.234,56 £' && cari_tutar_bicim(50000, 'RUB') === '500,00 ₽');
+
 echo "\n$pass geçti, $fail kaldı\n";
 exit($fail > 0 ? 1 : 0);
