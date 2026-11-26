@@ -537,10 +537,27 @@ $ay3 = $fdb->query('SELECT * FROM whatsapp_ayarlar WHERE id = 1')->fetch(PDO::FE
 ok('panel bağlantı kaydı: boş şifre alanları mevcut anahtarları korur', $ay3['evolution_url'] === 'https://evo2.ornek.local' && $ay3['evolution_api_key'] === 'evo-key-99' && $ay3['webhook_secret'] === 'wh-db-tok-88' && $ay3['ai_api_key'] === 'ai-key-77', json_encode($ay3));
 $fdb = null;
 ok('webhook DB token ile doğrulanır', whatsapp_webhook_yetkili([], ['token' => 'wh-db-tok-88'], 'wh-db-tok-88') && !whatsapp_webhook_yetkili([], ['token' => 'yanlis'], 'wh-db-tok-88'));
+$oz = whatsapp_mesaj_ozetle(['key' => ['id' => 'RD1', 'remoteJid' => GRUP, 'participant' => '905321112233@s.whatsapp.net', 'fromMe' => false], 'pushName' => 'Ali', 'message' => ['conversation' => MESAJ], 'messageTimestamp' => 1775000000]);
+ok('okuyucu özetleme: metin + gönderen + telefon + gürültü değil', $oz !== null && $oz['id'] === 'RD1' && $oz['sender_phone'] === '905321112233' && $oz['is_noise'] === false);
+ok('okuyucu özetleme: metinsiz medya atlanır', whatsapp_mesaj_ozetle(['key' => ['id' => 'RD2', 'remoteJid' => GRUP], 'message' => ['audioMessage' => ['seconds' => 3]]]) === null);
+SahteAi::$cagri = 0;
+SahteAi::$cevap = groq_yanit(plan(['plaka' => '06 ABC 777', 'firma_adi' => 'Beta Tarım', 'yukleme_yeri' => 'Antalya', 'guven_skoru' => 92]));
+$tarRes = whatsapp_secili_tarat(db(), [['id' => 'SEL1', 'jid' => GRUP, 'sender_name' => 'Veli', 'sender_phone' => '905321234567', 'text' => 'yarın 06 abc 777 antalya beta tarım 20 ton limon', 'date' => '2026-04-06']], whatsapp_ayarlar_oku(db()), true, 1, ai_servisi('groq'), $BUGUN);
+ok('seçmeli AI tarama: taslak plan açar', $tarRes['ok'] === true && $tarRes['toplam'] === 1 && $tarRes['aktarildi'] === 1 && !empty($tarRes['satirlar'][0]['record_id']), json_encode($tarRes));
+$tarRes2 = whatsapp_secili_tarat(db(), [['id' => 'SEL1', 'jid' => GRUP, 'text' => 'yarın 06 abc 777 antalya beta tarım 20 ton limon']], whatsapp_ayarlar_oku(db()), true, 1, ai_servisi('groq'), $BUGUN);
+ok('seçmeli AI tarama: zaten aktarılan mesaj tekrar AI\'a gitmez (idempotent)', $tarRes2['zaten_aktarildi'] === 1 && SahteAi::$cagri === 1);
+$zipData = whatsapp_pc_paketi_zip($ROOT . '/whatsapp-service', 'https://test.scai.tr');
+ok('PC başlatma paketi ZIP geçerli ve 3 dosyayı içerir', str_starts_with($zipData, "PK\x03\x04") && str_contains($zipData, 'PC_BASLAT.bat') && str_contains($zipData, 'docker-compose.yml') && str_contains($zipData, 'https://test.scai.tr'));
+$r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['ajax' => 'mesajlar', 'jid' => 'kotu', 'csrf' => 'test-csrf-belirteci'], 'server' => ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest']]);
+ok('panel AJAX mesajlar: geçersiz JID → 422', $r['kod'] === 422);
+$r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['ajax' => 'secili_tarat', 'mesajlar' => '[]', 'csrf' => 'test-csrf-belirteci'], 'server' => ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest']]);
+ok('panel AJAX secili_tarat: boş seçim → 422', $r['kod'] === 422);
+$r = ist(['dosya' => 'whatsapp_yonetim.php', 'get' => ['indir' => 'pc_paket']]);
+ok('panel GET ?indir=pc_paket: admin ZIP indirir', $r['kod'] === 200 && str_starts_with($r['govde'], "PK\x03\x04"));
 $r = ist(['dosya' => 'whatsapp_yonetim.php']);
 ok('panel sayfası PHP hatası/uyarısı olmadan açılır', $r['hata'] === null && $r['kod'] === 200 && !preg_match('/(Warning|Notice|Deprecated|Fatal error)/', $r['govde']), (string)$r['hata'] . substr($r['govde'], 0, 300));
 ok('panel HTML: kayıtlı gizli anahtarlar HTML\'e sızmaz', !str_contains($r['govde'], 'evo-key-99') && !str_contains($r['govde'], 'wh-db-tok-88') && !str_contains($r['govde'], 'ai-key-77'));
-foreach (['waApiKart', 'waEvoUrl', 'waTokenUret', 'waDurumRozet', 'waQrKutu', 'waGrupListe', 'waTestMetin', 'waLogKutu', 'assets/whatsapp.js', 'assets/whatsapp.css', 'name="csrf"', 'data-csrf'] as $parca) ok("panel HTML: $parca", str_contains($r['govde'], $parca));
+foreach (['waApiKart', 'waKurulumKod', 'indir=pc_paket', 'waOkuyucu', 'waSohbetGrupListe', 'waMesajAkis', 'waSeciliTarat', 'waEvoUrl', 'waTokenUret', 'waDurumRozet', 'waQrKutu', 'waGrupListe', 'waTestMetin', 'waLogKutu', 'assets/whatsapp.js', 'assets/whatsapp.css', 'name="csrf"', 'data-csrf'] as $parca) ok("panel HTML: $parca", str_contains($r['govde'], $parca));
 
 // ═══ 11. Statik kurallar ═══
 echo "=== 11. Statik kurallar ===\n";
