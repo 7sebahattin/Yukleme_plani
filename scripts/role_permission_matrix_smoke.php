@@ -42,7 +42,7 @@ foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row inve
 $catalogRoutes=[]; $adminKonsolu=['depo_tanimlari.php','whatsapp_yonetim.php']; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) $catalogRoutes[]=$route;
 matrix_ok(!isset(nav_muhasebe_gruplari()['admin_konsolu']),'Admin Konsolu group reappeared (v566)');
 foreach ($adminKonsolu as $route) matrix_ok(!in_array($route,$catalogRoutes,true),'Yönetim-only page leaked into muhasebe catalog: '.$route);
-matrix_ok(count($catalogRoutes)===29,'Menu catalog size changed (v555: 39 → 33; v566: Admin Konsolu 4 sayfa kalktı → 29)');
+matrix_ok(count($catalogRoutes)===34,'Menu catalog size changed (v587: Genel Muhasebe +5 sayfa → 34)');
 foreach (['ihracat_faturasi_maliyeti.php','beyanname_siparis_proforma.php','dovizli_cari_fis.php','ihracat_tanimlari.php','stok_donusum_fisleri.php','kantar_fisleri.php'] as $goneRoute) matrix_ok(!in_array($goneRoute,$catalogRoutes,true),'Removed menu page reappeared: '.$goneRoute);
 $adminRoutes=array_column($adminRows,'route');
 foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'Şube/Depo Tanımları must stay admin-only: '.$route);

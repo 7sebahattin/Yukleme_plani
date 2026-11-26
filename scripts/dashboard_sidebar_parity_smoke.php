@@ -166,7 +166,7 @@ $dashboardCatalog = [];
 foreach (nav_muhasebe_gruplari() as [$heading, , $pages]) {
     foreach ($pages as $href => [$label]) $dashboardCatalog[$href] = $label;
 }
-dashboard_check(count(nav_muhasebe_gruplari()) === 8 && count($dashboardCatalog) === 29 && !isset(nav_muhasebe_gruplari()['admin_konsolu']), 'paylaşılan katalog 8 grup/29 hedef (v555: İhracat Programı grubu + Stok Dönüşüm/Kantar Fişleri kalktı; v566: Admin Konsolu grubu kalktı)');
+dashboard_check(count(nav_muhasebe_gruplari()) === 9 && count($dashboardCatalog) === 34 && !isset(nav_muhasebe_gruplari()['admin_konsolu']), 'paylaşılan katalog 9 grup/34 hedef (v587: Genel Muhasebe +5 sayfa eklendi)');
 // v555 (a): kaldırılan grup/sayfalar katalogda YOK (sayfa dosyaları durur ama menü/kart üretilmez).
 foreach (['ihracat'] as $removedGroup) dashboard_check(!isset(nav_muhasebe_gruplari()[$removedGroup]), 'İhracat Programı grubu katalogda yok');
 foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'stok_donusum_fisleri.php', 'kantar_fisleri.php'] as $removedPage) {
@@ -317,7 +317,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         dashboard_check($imgNode !== null && str_starts_with($imgNode->getAttribute('src'), $beklenen), $name . ': 3B ikon var ' . $chref);
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 45, 'admin: Ana Sayfa hariç 45 benzersiz kart (27 yetkili katalog sayfası (v574: Tanımlar kalktı) + 1 Depo Tanımları (v574: Şube kalktı) + 1 WhatsApp Yükleme (v582) + 16 modül kartı; v558: eski Yükleme Planı/Paletleme/Mal Kabul kartları yok)');
+        dashboard_check(count($home) === 50, 'admin: Ana Sayfa hariç 50 benzersiz kart (32 yetkili katalog sayfası [v588: Genel Muhasebe +5] + 1 Depo Tanımları + 1 WhatsApp Yükleme + 16 modül kartı)');
         dashboard_check(($sidebarGroups[count($sidebarGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim sidebar\'da EN SON grup (v580)');
         dashboard_check(($homeGroups[count($homeGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim ana sayfada EN SON grup (v580)');
         $sbQcost = $xpath->query('//nav[contains(concat(" ",normalize-space(@class)," ")," sidebar-nav ")]//a[@href="hizli_maliyet.php"]//img')->item(0);

@@ -48,7 +48,7 @@ $kodlar = []; foreach ($satirlar as $r) foreach ($r['actions'] as $a) $kodlar[] 
 foreach (array_keys($kat) as $k) ok("matriste kontrol var: $k", in_array($k, $kodlar, true));
 $beklenenSayfa = 0; foreach ($gruplar as $gk => $g) foreach ($g[2] as $__d => $_) if (!in_array(pathinfo((string)$__d, PATHINFO_FILENAME), muhasebe_herkese_acik_sayfalar(), true)) $beklenenSayfa++;   // v575: herkese açık sayfalar (şifre değiştirme) Roller'de satır DEĞİL
 ok("her kapsam içi sayfa ($beklenenSayfa) için .read katalogda", count(array_filter(array_keys($kat), fn($k) => str_ends_with($k, '.read'))) === $beklenenSayfa);
-ok('çalışan 5 modül grup işlemleri + palet_fisleri işlemleri (18 anahtar)', count(array_filter(array_keys($kat), fn($k) => !str_ends_with($k, '.read'))) === 18);
+ok('çalışan 6 modül grup işlemleri + palet_fisleri işlemleri (21 anahtar)', count(array_filter(array_keys($kat), fn($k) => !str_ends_with($k, '.read'))) === 21);
 $ozet = array_column(role_ozet_sema(), null, 'key');
 ok('role_ozet_sema: muhasebe_cari satırı Gör sayfaları + Ekle/Düzenle/Sil içerir', isset($ozet['muhasebe_cari']) && count($ozet['muhasebe_cari']['perms']) === 4 + 3);
 $oz = role_ozet(['muhasebe.cari_kartlari.read']);

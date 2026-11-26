@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v587');
+    define('APP_SURUM', 'v588');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -547,6 +547,11 @@ function nav_muhasebe_gruplari(): array {
             'alis_faturalari.php' => ['Alış Faturaları', '📑'], 'satis_faturalari.php' => ['Satış Faturaları', '🧾'],
             'sevk_irsaliyeleri.php' => ['Sevk İrsaliyeleri', '🚚'], 'alinan_siparis_fisleri.php' => ['Alınan Sipariş Fişleri', '📦'],
             'fatura_tanimlari.php' => ['Fatura Tanımları', '🗂️']]],
+        // v587 (ERP Faz 1): Genel Muhasebe (TDHP), Yevmiye, Mizan/Mali Tablolar, e-Dönüşüm, Risk/BA-BS/Kur Farkı
+        'genel_muhasebe' => ['Genel Muhasebe', '<path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5M8 17h8"/>', [
+            'muh_hesap_plani.php' => ['TDHP Hesap Planı', '📘'], 'muh_yevmiye.php' => ['Yevmiye Fişleri', '📒'],
+            'muh_mali_tablolar.php' => ['Mizan & Mali Tablolar', '📈'], 'edonusum_belgeler.php' => ['e-Dönüşüm Belgeleri', '📨'],
+            'muh_mutabakat.php' => ['Risk, BA/BS & Kur Farkı', '⚖️']]],
         // v548: Araç Yükleme / Palet / Mal Kabul fişleri "Operasyon_fis" grubuna taşındı (sidebar'da Operasyon'un İÇİNDE çizilir).
         'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
             'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
