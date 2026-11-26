@@ -35,13 +35,17 @@ CREATE TABLE IF NOT EXISTS `whatsapp_mesaj_loglari` (
 
 -- 2) Tek satırlık (id=1) modül ayarı
 CREATE TABLE IF NOT EXISTS `whatsapp_ayarlar` (
-  `id`              TINYINT UNSIGNED NOT NULL,
-  `instance_adi`    VARCHAR(80)  NOT NULL DEFAULT '',        -- boş = config sabiti EVOLUTION_INSTANCE_NAME
-  `secili_gruplar`  TEXT         NULL,                       -- JSON: [{"jid":"1203…@g.us","ad":"Grup adı"}]; boş = tüm gruplar
-  `ai_saglayici`    VARCHAR(20)  NOT NULL DEFAULT 'groq',    -- groq | gemini
-  `otomatik_taslak` TINYINT(1)   NOT NULL DEFAULT 1,         -- 1: güveni yüksek plan otomatik taslak olur
-  `guncelleyen_id`  INT          NULL,
-  `updated_at`      DATETIME     NULL DEFAULT NULL,
+  `id`                TINYINT UNSIGNED NOT NULL,
+  `instance_adi`      VARCHAR(80)  NOT NULL DEFAULT '',        -- boş = config sabiti EVOLUTION_INSTANCE_NAME
+  `secili_gruplar`    TEXT         NULL,                       -- JSON: [{"jid":"1203…@g.us","ad":"Grup adı"}]; boş = tüm gruplar
+  `ai_saglayici`      VARCHAR(20)  NOT NULL DEFAULT 'groq',    -- groq | gemini
+  `otomatik_taslak`   TINYINT(1)   NOT NULL DEFAULT 1,         -- 1: güveni yüksek plan otomatik taslak olur
+  `evolution_url`     VARCHAR(255) NOT NULL DEFAULT '',        -- boş = config sabiti EVOLUTION_API_URL
+  `evolution_api_key` VARCHAR(255) NOT NULL DEFAULT '',        -- boş = config sabiti EVOLUTION_API_KEY
+  `webhook_secret`    VARCHAR(255) NOT NULL DEFAULT '',        -- boş = config sabiti WEBHOOK_SECRET_TOKEN
+  `ai_api_key`        VARCHAR(255) NOT NULL DEFAULT '',        -- boş = config sabiti AI_API_KEY
+  `guncelleyen_id`    INT          NULL,
+  `updated_at`        DATETIME     NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

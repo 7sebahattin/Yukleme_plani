@@ -104,10 +104,10 @@ ok('B-41a README.md güncel (auth yok uyarısı kalktı, asya.scai.tr / test.sca
     && str_contains($readme, 'halkayit/')
     && str_contains($readme, 'migrate.php')
 );
-ok('B-41b docs/ARCHITECTURE.md güncel (asya_session, halkayit/, 57 kart, sw.js allowlist, MariaDB CI)',
+ok('B-41b docs/ARCHITECTURE.md güncel (asya_session, halkayit/, 58 kart, sw.js allowlist, MariaDB CI)',
     str_contains($arch, 'asya_session')
     && str_contains($arch, 'halkayit/')
-    && str_contains($arch, '57 idempotent kart')
+    && str_contains($arch, '58 idempotent kart')
     && str_contains($arch, 'allowlist')
     && str_contains($arch, 'MariaDB 10.11')
     && !str_contains($arch, 'yukleme-plani-v8')

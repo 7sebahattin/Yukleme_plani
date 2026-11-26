@@ -27,7 +27,10 @@ function wa_t_sema(PDO $db): void
         loading_record_id INT NULL, hata_mesaji TEXT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NULL)");
     $db->exec('CREATE UNIQUE INDEX uq_wa_message_id ON whatsapp_mesaj_loglari (message_id)');
     $db->exec("CREATE TABLE whatsapp_ayarlar (id INTEGER PRIMARY KEY, instance_adi TEXT NOT NULL DEFAULT '', secili_gruplar TEXT NULL,
-        ai_saglayici TEXT NOT NULL DEFAULT 'groq', otomatik_taslak INT NOT NULL DEFAULT 1, guncelleyen_id INT NULL, updated_at TEXT NULL)");
+        ai_saglayici TEXT NOT NULL DEFAULT 'groq', otomatik_taslak INT NOT NULL DEFAULT 1,
+        evolution_url TEXT NOT NULL DEFAULT '', evolution_api_key TEXT NOT NULL DEFAULT '',
+        webhook_secret TEXT NOT NULL DEFAULT '', ai_api_key TEXT NOT NULL DEFAULT '',
+        guncelleyen_id INT NULL, updated_at TEXT NULL)");
     $db->exec("CREATE TABLE loading_records (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL DEFAULT 'yukleme', tarih TEXT, firma TEXT NOT NULL DEFAULT '',
         bolge TEXT NOT NULL DEFAULT '', urun TEXT NOT NULL DEFAULT '', on_plaka TEXT NOT NULL DEFAULT '', arka_plaka TEXT NOT NULL DEFAULT '',
         sofor_adi TEXT NOT NULL DEFAULT '', telefon TEXT NOT NULL DEFAULT '', gidecek_ulke TEXT NOT NULL DEFAULT '', durum TEXT NOT NULL DEFAULT '')");
@@ -525,9 +528,19 @@ ok('panel ayar kaydı: yönlendirme + DB güncellendi + audit', (bool)array_filt
 $fdb = null;
 $r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['islem' => 'ayar_kaydet', 'csrf' => 'yanlis']]);
 ok('panel ayar kaydı: CSRF yoksa reddedilir', str_contains($r['govde'], 'CSRF') || $r['kod'] === 403);
+$r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['islem' => 'baglanti_kaydet', 'csrf' => 'test-csrf-belirteci', 'evolution_url' => 'https://evo.ornek.local/', 'instance_adi' => 'bot_test', 'evolution_api_key' => 'evo-key-99', 'webhook_secret' => 'wh-db-tok-88', 'ai_api_key' => 'ai-key-77']]);
+$fdb = new PDO('sqlite:' . $DBDOSYA);
+$ay2 = $fdb->query('SELECT * FROM whatsapp_ayarlar WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
+ok('panel bağlantı kaydı: URL/anahtar DB\'ye yazılır + audit sırsız', (bool)array_filter($r['basliklar'], fn($b) => stripos($b, 'Location: whatsapp_yonetim.php') === 0) && $ay2['evolution_url'] === 'https://evo.ornek.local' && $ay2['evolution_api_key'] === 'evo-key-99' && $ay2['webhook_secret'] === 'wh-db-tok-88' && $ay2['ai_api_key'] === 'ai-key-77' && (int)$fdb->query("SELECT COUNT(*) FROM audit_log WHERE action = 'whatsapp_baglanti'")->fetchColumn() === 1 && !str_contains((string)$fdb->query("SELECT new_values FROM audit_log WHERE action = 'whatsapp_baglanti' LIMIT 1")->fetchColumn(), 'evo-key-99'), json_encode($ay2));
+$r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['islem' => 'baglanti_kaydet', 'csrf' => 'test-csrf-belirteci', 'evolution_url' => 'https://evo2.ornek.local', 'instance_adi' => 'bot_test', 'evolution_api_key' => '', 'webhook_secret' => '', 'ai_api_key' => '']]);
+$ay3 = $fdb->query('SELECT * FROM whatsapp_ayarlar WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
+ok('panel bağlantı kaydı: boş şifre alanları mevcut anahtarları korur', $ay3['evolution_url'] === 'https://evo2.ornek.local' && $ay3['evolution_api_key'] === 'evo-key-99' && $ay3['webhook_secret'] === 'wh-db-tok-88' && $ay3['ai_api_key'] === 'ai-key-77', json_encode($ay3));
+$fdb = null;
+ok('webhook DB token ile doğrulanır', whatsapp_webhook_yetkili([], ['token' => 'wh-db-tok-88'], 'wh-db-tok-88') && !whatsapp_webhook_yetkili([], ['token' => 'yanlis'], 'wh-db-tok-88'));
 $r = ist(['dosya' => 'whatsapp_yonetim.php']);
 ok('panel sayfası PHP hatası/uyarısı olmadan açılır', $r['hata'] === null && $r['kod'] === 200 && !preg_match('/(Warning|Notice|Deprecated|Fatal error)/', $r['govde']), (string)$r['hata'] . substr($r['govde'], 0, 300));
-foreach (['waDurumRozet', 'waQrKutu', 'waGrupListe', 'waTestMetin', 'waLogKutu', 'assets/whatsapp.js', 'assets/whatsapp.css', 'name="csrf"', 'data-csrf'] as $parca) ok("panel HTML: $parca", str_contains($r['govde'], $parca));
+ok('panel HTML: kayıtlı gizli anahtarlar HTML\'e sızmaz', !str_contains($r['govde'], 'evo-key-99') && !str_contains($r['govde'], 'wh-db-tok-88') && !str_contains($r['govde'], 'ai-key-77'));
+foreach (['waApiKart', 'waEvoUrl', 'waTokenUret', 'waDurumRozet', 'waQrKutu', 'waGrupListe', 'waTestMetin', 'waLogKutu', 'assets/whatsapp.js', 'assets/whatsapp.css', 'name="csrf"', 'data-csrf'] as $parca) ok("panel HTML: $parca", str_contains($r['govde'], $parca));
 
 // ═══ 11. Statik kurallar ═══
 echo "=== 11. Statik kurallar ===\n";
@@ -535,7 +548,7 @@ $dosyalar = ['whatsapp_yonetim.php', 'api_whatsapp_webhook.php', 'config/whatsap
 foreach ($dosyalar as $f) ok("$f: TODO/FIXME/yer tutucu yok", !preg_match('/\b(TODO|FIXME|XXX)\b/', (string)file_get_contents("$ROOT/$f")));
 $panel = (string)file_get_contents($ROOT . '/whatsapp_yonetim.php');
 ok('panel: require_login + is_admin kapısı (Roller\'den verilemez)', str_contains($panel, 'require_login()') && (bool)preg_match('/if \(!is_admin\(\)\) \{ forbidden\(/', $panel));
-ok('panel: her POST yolunda csrf_check (AJAX + form)', substr_count($panel, 'csrf_check(') === 2);
+ok('panel: her POST yolunda csrf_check (AJAX + form)', substr_count($panel, 'csrf_check(') === 3);
 $web = (string)file_get_contents($ROOT . '/api_whatsapp_webhook.php');
 ok('webhook: oturum/CSRF kullanmaz, hash_equals çekirdekte, 200 garantisi', !str_contains($web, 'require_login') && !str_contains($web, 'csrf_check') && str_contains((string)file_get_contents($ROOT . '/config/whatsapp_core.php'), 'hash_equals') && str_contains($web, 'http_response_code(200)') && !str_contains($web, 'http_response_code(4') && !str_contains($web, 'http_response_code(5'));
 ok('webhook: ölümcül hata yakalayıcı + try/catch Throwable', str_contains($web, 'register_shutdown_function') && str_contains($web, 'catch (Throwable'));

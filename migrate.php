@@ -79,6 +79,7 @@ require_once __DIR__ . '/config/uretim_bom_core.php';    // ERP-4 Üretim BOM, �
 require_once __DIR__ . '/config/onay_core.php';          // ERP-5 Merkezi Onay Akışları
 require_once __DIR__ . '/config/banka_core.php';         // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
 require_once __DIR__ . '/config/ik_bordro_core.php';     // ERP-7 İK Özlük, İzin & Resmi Bordro
+require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Planı (v591)
 require_once __DIR__ . '/config/crm_core.php';           // ERP-8 CRM & Fiyat Listeleri
 require_once __DIR__ . '/config/sabit_kiymet_core.php';  // ERP-9 Sabit Kıymet, Amortisman & Bakım
 require_once __DIR__ . '/config/finans_plan_core.php';   // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
@@ -186,6 +187,7 @@ $ubom_results = []; $ubom_ran = false;                      // ERP-4 Üretim BOM
 $onay_results = []; $onay_ran = false;                      // ERP-5 Merkezi Onay Akışları
 $banka_results = []; $banka_ran = false;                    // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
 $ik_results = []; $ik_ran = false;                          // ERP-7 İK Özlük, İzin & Resmi Bordro
+$wa_results = []; $wa_ran = false;                          // WhatsApp Yükleme Planı (v591)
 $crm_results = []; $crm_ran = false;                        // ERP-8 CRM & Fiyat Listeleri
 $sk_results = []; $sk_ran = false;                          // ERP-9 Sabit Kıymet, Amortisman & Bakım
 $fp_results = []; $fp_ran = false;                          // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
@@ -688,6 +690,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($ik_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'ik_bordro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'whatsapp') {
+    csrf_check($_POST['csrf'] ?? null);
+    $wa_ran     = true;
+    $wa_results = whatsapp_migrate($pdo);
+    foreach ($wa_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'whatsapp', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'crm_fiyat') {
@@ -2583,6 +2594,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="ik_bordro">
       <button type="submit" class="btn btn-primary">İK &amp; Resmi Bordro Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('whatsapp'); ?>
+    <h2 style="margin-top:0;">WhatsApp Yükleme Planı — Tablolar &amp; API Ayarları (v591)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>whatsapp_mesaj_loglari</code> ve <code>whatsapp_ayarlar</code> tablolarını oluşturur,
+      ekrandan API anahtarı kaydı için <code>evolution_url</code>, <code>evolution_api_key</code>, <code>webhook_secret</code>, <code>ai_api_key</code> kolonlarını ekler.
+      Mevcut tablolara dokunmaz.
+      <?php if ($wa_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($wa_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $waHazir = whatsapp_sema_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $waHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $waHazir ? '✓ Tablolar ve API kolonları hazır' : '✗ Tablo veya API kolonları eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="whatsapp">
+      <button type="submit" class="btn btn-primary">WhatsApp Tablolarını Oluştur / Güncelle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 
