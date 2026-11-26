@@ -53,6 +53,9 @@ function ok(string $ad, bool $kosul, string $ipucu = ''): void {
 }
 
 function yaris_calistir(int $n, string $dsn, string $user, string $pass, callable $fn): array {
+    // pcntl_fork() öncesi ana PDO kapatılmazsa çocuk süreçler aynı TCP soketini miras alır
+    // ve çocukta $GLOBALS['pdo'] ezildiğinde COM_QUIT göndererek ana bağlantıyı düşürür (2006).
+    $GLOBALS['pdo'] = null;
     $ana = getmypid();
     $go = sys_get_temp_dir() . '/asya_frace_go_' . $ana;
     @unlink($go);
@@ -84,6 +87,11 @@ function yaris_calistir(int $n, string $dsn, string $user, string $pass, callabl
         @unlink($f);
     }
     @unlink($go);
+    $GLOBALS['pdo'] = new PDO($dsn, $user, $pass, [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ]);
     return $out;
 }
 
