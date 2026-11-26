@@ -5119,7 +5119,7 @@ async function taslakEkraniAc() {
       };
     });
   } catch (e) {
-    kap.innerHTML = `<div class="kart"><div class="mesaj hata" style="display:block">${e.message}</div></div>`;
+    kap.innerHTML = `<div class="kart"><div class="mesaj hata" style="display:block">${eHtml(e.message)}</div></div>`;
   }
 }
 

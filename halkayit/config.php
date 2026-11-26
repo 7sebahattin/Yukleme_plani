@@ -8,6 +8,13 @@
 // Ana panel altyapısı: DB_* sabitleri + db() + config/local.php (HKS_CRED_KEY)
 require_once __DIR__ . '/../config/db.php';
 
+// Canlı dağıtımda config/db.php sunucuya özeldir; eski sürümleri local.php'yi
+// otomatik yüklemeyebilir (bkz. config/mail_core.php). require_once sayesinde
+// db.php zaten yüklediyse tekrar çalışmaz.
+if (!defined('HKS_CRED_KEY') && is_file(__DIR__ . '/../config/local.php')) {
+    require_once __DIR__ . '/../config/local.php';
+}
+
 // --- MySQL bağlantı bilgileri (panelden devralınır) ---
 define('HKS_DB_HOST', DB_HOST);
 define('HKS_DB_NAME', DB_NAME);
@@ -19,13 +26,15 @@ define('HKS_DB_CHARSET', DB_CHARSET);
 define('HKS_TABLO_ON', 'hks_');
 
 // --- Şifreleme anahtarı ---
-// Firma HKS şifreleri veritabanına AES-256 ile ŞİFRELİ yazılır.
-// Öncelik: sunucudaki config/local.php içindeki HKS_CRED_KEY (git dışında).
-// O yoksa aşağıdaki sabit kullanılır. Anahtar sonradan değişirse daha önce
-// kaydedilmiş firma şifreleri çözülemez; firmaları yeniden girmeniz gerekir.
-define('HKS_SIFRELEME_ANAHTARI', defined('HKS_CRED_KEY')
+// Firma HKS şifreleri veritabanına AES-256-GCM ile ŞİFRELİ yazılır.
+// Anahtar YALNIZCA git dışındaki config/local.php içindeki HKS_CRED_KEY sabitinden
+// (veya ortam değişkeninden) okunur. Tanımsızsa şifreleme/çözme fail-closed olarak
+// reddedilir (repoda sabit anahtar tutulmaz).
+$_hksHamAnahtar = (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY))
     ? HKS_CRED_KEY
-    : 'AsyaFresh-HKS-2026-vAq7kTz3RmNe9XuB4pWcJdH6yLgS8fKo');
+    : (string)(getenv('HKS_CRED_KEY') ?: '');
+define('HKS_SIFRELEME_ANAHTARI', strlen($_hksHamAnahtar) >= 16 ? $_hksHamAnahtar : '');
+unset($_hksHamAnahtar);
 
 // --- HKS web servis endpoint'i ---
 // GTB, 12.03.2025 duyurusuyla yeni endpoint adresleri yayımladı ve "27 Mart 2025

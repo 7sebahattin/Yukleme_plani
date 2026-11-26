@@ -25,6 +25,11 @@ if ($__hks_user === null) {
   echo json_encode(['hata' => 'Oturum gerekli. Lütfen tekrar giriş yapın.'], JSON_UNESCAPED_UNICODE);
   exit;
 }
+if (function_exists('ekran_kilit_oturum_kilitli_mi') && ekran_kilit_oturum_kilitli_mi()) {
+  http_response_code(423);
+  echo json_encode(['ok' => false, 'hata' => 'Oturum kilitli. Lütfen ekran kilidini PIN ile açın.', 'code' => 'ekran_kilitli', 'locked' => true], JSON_UNESCAPED_UNICODE);
+  exit;
+}
 if (!(can('hks.access') || (function_exists('is_admin') && is_admin()))) {
   http_response_code(403);
   echo json_encode(['hata' => 'Bu işlem için yetkiniz yok (Hal Bildirimi).'], JSON_UNESCAPED_UNICODE);

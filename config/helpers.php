@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v582');
+    define('APP_SURUM', 'v584');
 }
 
 // --- HTML kaçışı ---
@@ -54,9 +54,64 @@ function fmt_edit_num($v, int $decimals = 0): string
     return number_format($f, $decimals, ',', '.');
 }
 
+// --- Güvenli PHP oturumu (PHPSESSID) ---
+function app_session_start(): void {
+    if (session_status() !== PHP_SESSION_NONE) return;
+    if (PHP_SAPI !== 'cli' && !headers_sent()) {
+        $secure = function_exists('is_https')
+            ? is_https()
+            : ((!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+                || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+                || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
+        @ini_set('session.use_strict_mode', '1');
+        @ini_set('session.use_only_cookies', '1');
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+    session_start();
+}
+
+function app_session_regenerate(): void {
+    app_session_start();
+    if (PHP_SAPI !== 'cli' && !headers_sent()) {
+        session_regenerate_id(true);
+    }
+    $_SESSION['csrf'] = bin2hex(random_bytes(24));
+}
+
+// --- Kantar / etiket görseli doğrulama (yalnız raster JPEG/PNG/WebP + finfo; SVG/HTML ret) ---
+function kantar_foto_dogrula(string $raw, int $maxBytes = 12582912): ?array {
+    $raw = trim($raw);
+    if ($raw === '' || strlen($raw) > $maxBytes) return null;
+    if (!preg_match('#^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$#', $raw, $m)) {
+        return null;
+    }
+    $bin = base64_decode(preg_replace('/\s+/', '', $m[2]), true);
+    if ($bin === false || $bin === '') return null;
+    $allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    $detected = $m[1];
+    if (class_exists('finfo')) {
+        $fi = new finfo(FILEINFO_MIME_TYPE);
+        $real = (string)$fi->buffer($bin);
+        if (!in_array($real, $allowed, true)) return null;
+        $detected = $real;
+    }
+    return [
+        'mime' => $detected,
+        'raw'  => $bin,
+        'data' => 'data:' . $detected . ';base64,' . base64_encode($bin),
+    ];
+}
+
 // --- CSRF ---
 function csrf_token(): string {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    app_session_start();
     if (empty($_SESSION['csrf'])) {
         $_SESSION['csrf'] = bin2hex(random_bytes(24));
     }
@@ -71,7 +126,7 @@ function is_json_request(): bool {
 }
 
 function csrf_check(?string $token): void {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    app_session_start();
     // Geçerli token → sorun yok
     if (!empty($_SESSION['csrf']) && is_string($token) && hash_equals($_SESSION['csrf'], $token)) {
         return;
@@ -816,7 +871,7 @@ function render_desktop_sidebar(string $base): void {
         </div>
         <?php if (function_exists('ekran_pin_sidebar_dugme_html')) echo ekran_pin_sidebar_dugme_html(); ?>
         <span class="sidebar-surum" title="Uygulama sürümü"><?= h(APP_SURUM) ?></span>
-        <a href="<?= $base ?>logout.php" class="sidebar-user-logout" title="Çıkış Yap" aria-label="Çıkış Yap">
+        <a href="<?= $base ?>logout.php" class="sidebar-user-logout" data-logout-post="1" title="Çıkış Yap" aria-label="Çıkış Yap">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </a>
     </div>
@@ -1304,8 +1359,11 @@ function render_header(string $title, bool $print_mode = false): void {
     // body 'bn-yok' alır: --bn-h 0 olur, alt boşluk kalkar.
     $GLOBALS['_nav_alt_model'] = $print_mode ? null : nav_alt_model();
     $__body_cls = $print_mode ? 'print-mode' : ($GLOBALS['_nav_alt_model'] === null ? 'bn-yok' : '');
-    // v454: sunucu kilitliyse içerik ilk çizimde gizli gelir (kilit penceresi app.js ile açılır; yalnız masaüstü).
-    if (!$print_mode && function_exists('ekran_kilitli_mi') && current_user() !== null && ekran_kilitli_mi()) $__body_cls = trim($__body_cls . ' ekran-kilitli');
+    // v454 / Faz 1 B-17: sunucu kilitliyse içerik ilk çizimde gizli gelir (kilit penceresi app.js ile açılır; yalnız masaüstü).
+    $__ek_kilitli = function_exists('ekran_kilit_oturum_kilitli_mi')
+        ? ekran_kilit_oturum_kilitli_mi()
+        : (function_exists('ekran_kilitli_mi') && ekran_kilitli_mi());
+    if (!$print_mode && current_user() !== null && $__ek_kilitli) $__body_cls = trim($__body_cls . ' ekran-kilitli');
     // v455: PIN artık yok/pasifse (ör. yönetici sıfırladı) pencere olmayacağı için içerik gizli KALMAZ
     if (str_contains($__body_cls, 'ekran-kilitli') && ekran_pin_durum_otomatik(current_user()) !== 'var') $__body_cls = trim(str_replace('ekran-kilitli', '', $__body_cls));
 ?>
@@ -1371,7 +1429,7 @@ function render_header(string $title, bool $print_mode = false): void {
             </div>
             <button type="button" class="tema-dongu" id="temaDongu" onclick="asyaTemaDondur()"
                     title="Tema değiştir (Açık / Koyu / Sistem)" aria-label="Tema değiştir">🖥️</button>
-            <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+            <a href="<?= $base ?>logout.php" class="topnav-logout" data-logout-post="1" title="Çıkış Yap" aria-label="Çıkış Yap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
         </div>
         <?php unset($__ctu); endif; ?>
         <?php unset($__adp); ?>
@@ -1414,11 +1472,11 @@ function render_footer(bool $print_mode = false): void {
 
 // --- Flash mesaj ---
 function set_flash(string $type, string $msg): void {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    app_session_start();
     $_SESSION['flash'] = ['type' => $type, 'msg' => $msg];
 }
 function get_flash(): ?array {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    app_session_start();
     if (!empty($_SESSION['flash'])) {
         $f = $_SESSION['flash'];
         unset($_SESSION['flash']);

@@ -126,6 +126,7 @@ $error   = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_perm('users.admin');
+    $caller_is_admin = is_admin();
     $action = trim($_POST['action'] ?? '');
 
     // ─── Yeni kullanıcı oluştur ──────────────────────────────────────────
@@ -148,6 +149,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Şifreler eşleşmiyor.';
         } elseif (empty($roles_post)) {
             $error = 'En az bir rol seçmelisiniz.';
+        } elseif (!$caller_is_admin && $admin_rid > 0 && in_array($admin_rid, $roles_post, true)) {
+            $error = 'Yönetici rolü yalnızca mevcut bir yönetici tarafından atanabilir.';
         }
         if ($error === '') {
             $st = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
@@ -166,6 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $new_id = (int)$pdo->lastInsertId();
             $ins_r  = $pdo->prepare("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)");
             foreach ($roles_post as $rid) {
+                if (!$caller_is_admin && $rid === $admin_rid) continue;
                 if (in_array($rid, $valid_rids, true)) $ins_r->execute([$new_id, $rid]);
             }
             $save_user_depots($new_id, (array)($_POST['depots'] ?? []));
@@ -201,6 +205,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$old) {
             $error = 'Kullanıcı bulunamadı.';
+        } elseif (!$caller_is_admin && $admin_rid > 0 && user_has_role($pdo, $uid, $admin_rid)) {
+            $error = 'Yönetici hesapları yalnızca başka bir yönetici tarafından düzenlenebilir.';
+        } elseif (!$caller_is_admin && $admin_rid > 0 && in_array($admin_rid, $roles_post, true)) {
+            $error = 'Yönetici rolü yalnızca mevcut bir yönetici tarafından atanabilir.';
         } elseif (!valid_username($uname)) {
             $error = 'Kullanıcı adı en az 3 karakter, yalnızca harf/rakam/._@- içerebilir.';
         } elseif (empty($roles_post)) {
@@ -248,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare("DELETE FROM user_roles WHERE user_id = ?")->execute([$uid]);
                 $ins_r = $pdo->prepare("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)");
                 foreach ($roles_post as $rid) {
+                    if (!$caller_is_admin && $rid === $admin_rid) continue;
                     if (in_array($rid, $valid_rids, true)) $ins_r->execute([$uid, $rid]);
                 }
                 $save_user_depots($uid, (array)($_POST['depots'] ?? []));
@@ -285,6 +294,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $uid = (int)($_POST['id'] ?? 0);
         if ($uid === $me) {
             $error = 'Kendi hesabınızı pasif yapamazsınız.';
+        } elseif (!$caller_is_admin && $admin_rid > 0 && user_has_role($pdo, $uid, $admin_rid)) {
+            $error = 'Yönetici hesaplarının durumu yalnızca başka bir yönetici tarafından değiştirilebilir.';
         } else {
             $st = $pdo->prepare("SELECT username, is_active FROM users WHERE id = ?");
             $st->execute([$uid]);
@@ -330,17 +341,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ─── Ekran kilidi PIN sıfırlama (v455) ──────────────────────────────
     } elseif ($action === 'pin_reset') {
         $uid = (int)($_POST['id'] ?? 0);
-        $st = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $st->execute([$uid]);
-        $row = $st->fetch();
-        if (!$row) {
-            $error = 'Kullanıcı bulunamadı.';
-        } elseif (!ekran_pin_sifirla($pdo, $uid)) {
-            $error = 'PIN sıfırlanamadı (PIN deposu kullanılamıyor).';
+        if (!$caller_is_admin && $admin_rid > 0 && user_has_role($pdo, $uid, $admin_rid)) {
+            $error = 'Yönetici hesaplarının PIN\'i yalnızca başka bir yönetici tarafından sıfırlanabilir.';
         } else {
-            audit_log_event('pin_reset', 'users', $uid, null, ['username' => $row['username']]);
-            header('Location: users.php?ok=' . urlencode('PIN sıfırlandı; kullanıcı bir sonraki sayfada yeni PIN belirleyecek.'));
-            exit;
+            $st = $pdo->prepare("SELECT username FROM users WHERE id = ?");
+            $st->execute([$uid]);
+            $row = $st->fetch();
+            if (!$row) {
+                $error = 'Kullanıcı bulunamadı.';
+            } elseif (!ekran_pin_sifirla($pdo, $uid)) {
+                $error = 'PIN sıfırlanamadı (PIN deposu kullanılamıyor).';
+            } else {
+                audit_log_event('pin_reset', 'users', $uid, null, ['username' => $row['username']]);
+                header('Location: users.php?ok=' . urlencode('PIN sıfırlandı; kullanıcı bir sonraki sayfada yeni PIN belirleyecek.'));
+                exit;
+            }
         }
 
     // ─── Şifre sıfırlama ────────────────────────────────────────────────
@@ -349,7 +364,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pass1 = $_POST['password']  ?? '';
         $pass2 = $_POST['password2'] ?? '';
 
-        if ($pass1 === '') {
+        if (!$caller_is_admin && $admin_rid > 0 && user_has_role($pdo, $uid, $admin_rid)) {
+            $error = 'Yönetici hesaplarının şifresi yalnızca başka bir yönetici tarafından sıfırlanabilir.';
+        } elseif ($pass1 === '') {
             $error = 'Şifre boş olamaz.';
         } elseif (strlen($pass1) < 8) {
             $error = 'Şifre en az 8 karakter olmalı.';
@@ -706,7 +723,9 @@ render_header('Kullanıcı Yönetimi');
             <div class="usr-roles-grid">
             <?php
             $c_roles_post = ($action === 'create_user') ? array_map('intval', (array)($_POST['roles'] ?? [])) : [];
+            $caller_can_assign_admin = is_admin();
             foreach ($all_roles as $r):
+                if (!$caller_can_assign_admin && (int)$r['id'] === $admin_rid) continue;
             ?>
                 <label class="usr-role-check">
                     <input type="checkbox" name="roles[]" value="<?= $r['id'] ?>"

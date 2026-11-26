@@ -28,7 +28,14 @@ const EKRAN_KILIT_NABIZ_SN    = 300;
 // ── Sır + çerez ──────────────────────────────────────────────────────────────
 
 function ekran_kilit_sir(): string {
-    return (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY) && strlen(HKS_CRED_KEY) >= 16) ? HKS_CRED_KEY : '';
+    if (!defined('HKS_CRED_KEY') && is_file(__DIR__ . '/local.php')) {
+        require_once __DIR__ . '/local.php';
+    }
+    if (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY) && strlen(HKS_CRED_KEY) >= 16) {
+        return HKS_CRED_KEY;
+    }
+    $envKey = (string)(getenv('HKS_CRED_KEY') ?: '');
+    return strlen($envKey) >= 16 ? $envKey : '';
 }
 
 function ekran_kilit_oturum_cerezi_adi(): string {
@@ -53,6 +60,66 @@ function ekran_kilit_cerez_secenekleri(int $expires): array {
     return $o;
 }
 
+// ── Sunucu tarafı kilit kaydı (hks_kv — çerez silinerek atlatılamaz, B-17) ────
+
+function ekran_kilit_sunucu_anahtar(string $token): string {
+    return 'ekran_kl_' . substr(hash('sha256', $token), 0, 32);
+}
+
+function ekran_kilit_sunucu_pdo(?PDO $pdo = null): ?PDO {
+    if ($pdo !== null) return $pdo;
+    if (!function_exists('db')) return null;
+    try { return db(); } catch (Throwable $e) { return null; }
+}
+
+function ekran_kilit_sunucu_yaz(?PDO $pdo = null, ?string $token = null): bool {
+    $token = $token ?? (string)($_COOKIE[ekran_kilit_oturum_cerezi_adi()] ?? '');
+    if (!ekran_kilit_token_gecerli($token)) return false;
+    $p = ekran_kilit_sunucu_pdo($pdo);
+    if ($p === null) return false;
+    try {
+        $sql = 'REPLACE INTO `' . ekran_pin_kv_tablo() . '` (anahtar, deger) VALUES (?, ?)';
+        $p->prepare($sql)->execute([ekran_kilit_sunucu_anahtar($token), json_encode(['t' => time()])]);
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function ekran_kilit_sunucu_sil(?PDO $pdo = null, ?string $token = null): void {
+    $token = $token ?? (string)($_COOKIE[ekran_kilit_oturum_cerezi_adi()] ?? '');
+    if (!ekran_kilit_token_gecerli($token)) return;
+    $p = ekran_kilit_sunucu_pdo($pdo);
+    if ($p === null) return;
+    try {
+        $p->prepare('DELETE FROM `' . ekran_pin_kv_tablo() . '` WHERE anahtar = ?')
+            ->execute([ekran_kilit_sunucu_anahtar($token)]);
+    } catch (Throwable $e) {}
+}
+
+function ekran_kilit_sunucu_kilitli_mi(?PDO $pdo = null, ?string $token = null): bool {
+    if (ekran_kilit_sir() === '') return false;
+    $token = $token ?? (string)($_COOKIE[ekran_kilit_oturum_cerezi_adi()] ?? '');
+    if (!ekran_kilit_token_gecerli($token)) return false;
+    $p = ekran_kilit_sunucu_pdo($pdo);
+    if ($p === null) return false;
+    try {
+        $st = $p->prepare('SELECT deger FROM `' . ekran_pin_kv_tablo() . '` WHERE anahtar = ?');
+        $st->execute([ekran_kilit_sunucu_anahtar($token)]);
+        $raw = $st->fetchColumn();
+        if ($raw === false || $raw === null || $raw === '') return false;
+        $j = json_decode((string)$raw, true);
+        $ts = is_array($j) ? (int)($j['t'] ?? 0) : 0;
+        if ($ts > 0 && (time() - $ts) > 24 * 3600) {
+            ekran_kilit_sunucu_sil($p, $token);
+            return false;
+        }
+        return true;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 // Çerezden (ya da verilen parametrelerden) kilit durumu. Oturum/DB'ye DOKUNMAZ.
 function ekran_kilitli_mi(?string $token = null, ?string $cerez = null): bool {
     $token = $token ?? (string)($_COOKIE[ekran_kilit_oturum_cerezi_adi()] ?? '');
@@ -61,17 +128,24 @@ function ekran_kilitli_mi(?string $token = null, ?string $cerez = null): bool {
     return $beklenen !== '' && $cerez !== '' && hash_equals($beklenen, $cerez);
 }
 
-function ekran_kilitle(?string $token = null): bool {
+// Sunucu + çerez birleşik kilit durumu: çerez silinse bile sunucu kaydı kilidi korur.
+function ekran_kilit_oturum_kilitli_mi(?PDO $pdo = null, ?string $token = null): bool {
+    return ekran_kilitli_mi($token) || ekran_kilit_sunucu_kilitli_mi($pdo, $token);
+}
+
+function ekran_kilitle(?string $token = null, ?PDO $pdo = null): bool {
     $token = $token ?? (string)($_COOKIE[ekran_kilit_oturum_cerezi_adi()] ?? '');
     $deger = ekran_kilit_cookie_degeri($token);
     if ($deger === '') return false;
+    ekran_kilit_sunucu_yaz($pdo, $token);
     $ok = @setcookie(EKRAN_KILIT_COOKIE, $deger, ekran_kilit_cerez_secenekleri(time() + 24 * 3600));
     $_COOKIE[EKRAN_KILIT_COOKIE] = $deger;
     return (bool)$ok;
 }
 
-// Çerezi siler (giriş/çıkış/açma). Eski v454 oturum anahtarlarını da temizler (oturum BAŞLATMAZ).
-function ekran_kilit_temizle(): void {
+// Çerezi ve sunucu kilidini siler (giriş/çıkış/açma). Eski v454 oturum anahtarlarını da temizler (oturum BAŞLATMAZ).
+function ekran_kilit_temizle(?string $token = null, ?PDO $pdo = null): void {
+    ekran_kilit_sunucu_sil($pdo, $token);
     @setcookie(EKRAN_KILIT_COOKIE, '', ekran_kilit_cerez_secenekleri(time() - 3600));
     unset($_COOKIE[EKRAN_KILIT_COOKIE]);
     if (session_status() === PHP_SESSION_ACTIVE) {
@@ -260,7 +334,7 @@ function ekran_kilit_ac(PDO $pdo, int $uid, string $pin, ?int $simdi = null): ar
         fn(array $k) => password_verify($girdi, $k['h']),
         function (array $k) { $k['toplam_hata'] = 0; $k['bekle_bitis'] = 0; return $k; });
     if ($d['durum'] === 'ok') {
-        ekran_kilit_temizle();
+        ekran_kilit_temizle(null, $pdo);
         return ['ok' => true, 'mesaj' => '', 'kod' => '', 'bekle' => 0, 'engelli' => false, 'cikis' => false];
     }
     return ekran_pin_deneme_sonuc($d, 'PIN hatalı.');
@@ -388,7 +462,7 @@ function ekran_kilit_html(?array $user, ?string $pinDurum = null, ?bool $kilitli
             . '</form></dialog>';
     }
 
-    $kilitli = $kilitli ?? ekran_kilitli_mi();
+    $kilitli = $kilitli ?? ekran_kilit_oturum_kilitli_mi();
     return '<dialog id="ekranKilit" class="ekran-kilit" aria-labelledby="ekranKilitBaslik" data-pin="var"' . ($kilitli ? ' data-kilitli="1"' : '') . $veri . '>'
         . '<form id="ekranKilitForm" class="ekran-kilit-kart" autocomplete="off" novalidate>'
         . '<div class="ekran-kilit-ikon" aria-hidden="true">🔒</div>'

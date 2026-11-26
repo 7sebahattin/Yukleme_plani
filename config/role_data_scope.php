@@ -124,18 +124,44 @@ function role_require_record_access(int $recordId, string $action = 'read'): voi
     $type = $stmt->fetchColumn();
     $module = match ($type) { 'yukleme' => 'loading', 'cikma' => 'pallet', default => null };
     if ($module === null || !can('records.' . $module . '.' . $action)) forbidden('Bu kayıt için işlem yetkiniz yok.');
-    if (!role_current_depot_scope_restricted()) return;
+
+    $strictRole = role_current_depot_scope_restricted();
+    $allowed = function_exists('user_allowed_depots') ? user_allowed_depots() : null;
+    if (!$strictRole && $allowed === null) return;
+
     $stmt = db()->prepare('SELECT depo FROM loading_pallets WHERE loading_record_id = ?');
     $stmt->execute([$recordId]);
     $depots = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    if (!$depots) forbidden('Bu kayıt seçili depo kapsamına ait değil.');
+
+    if ($strictRole) {
+        if (!$depots) forbidden('Bu kayıt seçili depo kapsamına ait değil.');
+        foreach ($depots as $depot) {
+            if (!depot_visible_to_user($depot === null ? null : (string)$depot)) forbidden('Bu kayıt seçili depo kapsamına ait değil.');
+        }
+        return;
+    }
+
+    // Kullanıcı bazlı / aktif depo izolasyonu (B-13):
+    // Deposu atanmamış (boş) paletler mevcut "atanmamış veri kuralı" gereği erişilebilir kalır;
+    // gerçek başka depoya ait kayıt 403 ile engellenir.
+    $nonEmpty = [];
+    $hasMatch = false;
     foreach ($depots as $depot) {
-        if (!depot_visible_to_user($depot === null ? null : (string)$depot)) forbidden('Bu kayıt seçili depo kapsamına ait değil.');
+        $d = trim((string)($depot ?? ''));
+        if ($d === '') continue;
+        $nonEmpty[$d] = true;
+        if (depot_visible_to_user($d)) { $hasMatch = true; break; }
+    }
+    if (!empty($nonEmpty) && !$hasMatch) {
+        forbidden('Bu kayıt başka depoya ait. İşlem yapmak için ilgili depoya geçin.');
     }
 }
 
 function role_require_depot_value(?string $depot): void {
-    if (role_current_depot_scope_restricted() && !depot_visible_to_user($depot)) forbidden('Bu işlem seçili depo kapsamının dışında.');
+    if ((role_current_depot_scope_restricted() || (function_exists('user_allowed_depots') && user_allowed_depots() !== null))
+        && !depot_visible_to_user($depot)) {
+        forbidden('Bu işlem seçili depo kapsamının dışında.');
+    }
 }
 
 function role_require_pallet_depots(array $pallets): void {
@@ -145,10 +171,15 @@ function role_require_pallet_depots(array $pallets): void {
 }
 
 function role_require_kantar_scope(int $id): void {
-    if (!role_current_depot_scope_restricted()) return;
+    $strictRole = role_current_depot_scope_restricted();
+    $allowed = function_exists('user_allowed_depots') ? user_allowed_depots() : null;
+    if (!$strictRole && $allowed === null) return;
     $stmt = db()->prepare('SELECT depo FROM kantar_fisleri WHERE id = ?');
     $stmt->execute([$id]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$row) forbidden('Fiş bulunamadı.');
+    if (!$row) {
+        if ($strictRole) forbidden('Fiş bulunamadı.');
+        return;
+    }
     role_require_depot_value($row['depo'] === null ? null : (string)$row['depo']);
 }

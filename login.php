@@ -26,28 +26,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
-    $next     = trim($_POST['next'] ?? '');
+    $next     = safe_next_url((string)($_POST['next'] ?? ''));
+    $ip       = (string)($_SERVER['REMOTE_ADDR'] ?? '');
 
-    $user = login_user($username, $password);
-
-    if ($user === null) {
-        audit_log_event('login_failed', 'auth', null, null, ['username' => $username]);
-        $error = 'Kullanıcı adı veya şifre hatalı.';
+    $rl = login_rate_limit_check($username, $ip);
+    if (!$rl['ok']) {
+        http_response_code(429);
+        $error = 'Çok fazla hatalı giriş denemesi. ' . (int)$rl['bekle'] . ' saniye sonra tekrar deneyin.';
     } else {
-        $token = create_session((int)$user['id']);
-        if (function_exists('ekran_kilit_temizle')) ekran_kilit_temizle();   // v454: önceki oturumdan kilit kalıntısı
-        if (function_exists('ekran_pin_sayac_sifirla')) { try { ekran_pin_sayac_sifirla(db(), (int)$user['id']); } catch (Throwable $e) {} }   // v455: şifreyle girişte PIN deneme sayacı sıfırlanır
-        setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
-        audit_log_event('login_success', 'auth', null, null, null, (int)$user['id']);
+        $user = login_user($username, $password);
 
-        // Girişten sonra 2. pencere: depo seçimi (zorunlu tek depo).
-        // Güvenli yönlendirme hedefi depo_sec sonrasına taşınır (next paramı).
-        if ($next !== '' && str_starts_with($next, '/') && !str_starts_with($next, '//')) {
-            header('Location: depo_sec.php?next=' . urlencode($next));
+        if ($user === null) {
+            $failRl = login_rate_limit_record_failure($username, $ip);
+            audit_log_event('login_failed', 'auth', null, null, ['username' => $username]);
+            if ((int)$failRl['bekle'] > 0) {
+                http_response_code(429);
+                $error = 'Çok fazla hatalı giriş denemesi. ' . (int)$failRl['bekle'] . ' saniye sonra tekrar deneyin.';
+            } else {
+                $error = 'Kullanıcı adı veya şifre hatalı.';
+            }
         } else {
-            header('Location: depo_sec.php');
+            login_rate_limit_reset($username, $ip);
+            app_session_regenerate();
+            $token = create_session((int)$user['id']);
+            if (function_exists('ekran_kilit_temizle')) ekran_kilit_temizle($token);   // v454: önceki oturumdan kilit kalıntısı
+            if (function_exists('ekran_pin_sayac_sifirla')) { try { ekran_pin_sayac_sifirla(db(), (int)$user['id']); } catch (Throwable $e) {} }   // v455: şifreyle girişte PIN deneme sayacı sıfırlanır
+            setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
+            audit_log_event('login_success', 'auth', null, null, null, (int)$user['id']);
+
+            // Girişten sonra 2. pencere: depo seçimi (zorunlu tek depo).
+            // Güvenli yönlendirme hedefi depo_sec sonrasına taşınır (next paramı).
+            if ($next !== '') {
+                header('Location: depo_sec.php?next=' . urlencode($next));
+            } else {
+                header('Location: depo_sec.php');
+            }
+            exit;
         }
-        exit;
     }
 }
 

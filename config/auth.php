@@ -11,14 +11,52 @@ require_once __DIR__ . '/role_permission_matrix.php';
 require_once __DIR__ . '/role_data_scope.php';
 require_once __DIR__ . '/depo_core.php';   // v574: yeni depo kayıt sistemi (geçiş açılana kadar eski davranış sürer)
 
-const SESSION_DURATION_HOURS = 24;
-const AUTH_COOKIE_NAME       = 'asya_session';
+const SESSION_DURATION_HOURS    = 24;
+const SESSION_ABSOLUTE_MAX_DAYS = 14;
+const AUTH_COOKIE_NAME          = 'asya_session';
+const LOGIN_RL_BEKLEME          = [5 => 30, 6 => 60, 7 => 120, 8 => 300];
+const LOGIN_RL_MAX_BEKLEME      = 600;
+const LOGIN_RL_PENCERE_SN       = 900;
+
+function &auth_cache_store(): array {
+    static $store = [
+        'current_user'    => false,
+        'permissions'     => [],
+        'is_admin'        => [],
+        'primary_role'    => [],
+        'assigned_depots' => [],
+        'depot_options'   => null,
+        'active_depot'    => false,
+    ];
+    return $store;
+}
+
+function auth_reset_cache(): void {
+    $store = &auth_cache_store();
+    $store = [
+        'current_user'    => false,
+        'permissions'     => [],
+        'is_admin'        => [],
+        'primary_role'    => [],
+        'assigned_depots' => [],
+        'depot_options'   => null,
+        'active_depot'    => false,
+    ];
+}
 
 function is_https(): bool {
     if (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') return true;
     if (($_SERVER['SERVER_PORT'] ?? '') === '443') return true;
     if (strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') return true;
     return false;
+}
+
+function safe_next_url(string $next): string {
+    $next = trim($next);
+    if ($next === '' || !preg_match('#^/(?![/\\\\])[^\r\n\t\x00]*$#', $next)) return '';
+    $parts = parse_url($next);
+    if (!is_array($parts) || isset($parts['scheme']) || isset($parts['host']) || isset($parts['user'])) return '';
+    return $next;
 }
 
 function auth_cookie_options(): array {
@@ -32,13 +70,118 @@ function auth_cookie_options(): array {
     ];
 }
 
+// ── Giriş hız sınırlama (brute-force koruması, B-16; atomik dosya kilidi, şema gerektirmez) ──
+
+function login_rate_limit_dir(): string {
+    if (!empty($GLOBALS['_auth_rl_dir']) && is_string($GLOBALS['_auth_rl_dir'])) {
+        $dir = $GLOBALS['_auth_rl_dir'];
+    } else {
+        $dir = dirname(__DIR__) . '/storage/auth_rl';
+    }
+    if (!is_dir($dir)) {
+        if (!@mkdir($dir, 0750, true) && !is_dir($dir)) {
+            $dir = rtrim(sys_get_temp_dir(), '/\\') . '/asya_auth_rl';
+            if (!is_dir($dir)) @mkdir($dir, 0700, true);
+        }
+    }
+    return $dir;
+}
+
+function login_rate_limit_keys(string $username, string $ip): array {
+    $normUser = mb_strtolower(trim($username), 'UTF-8');
+    $normIp   = trim($ip) !== '' ? trim($ip) : 'unknown';
+    $keys = [hash('sha256', 'ip|' . $normIp)];
+    if ($normUser !== '') {
+        $keys[] = hash('sha256', 'user|' . $normUser . '|' . $normIp);
+    }
+    return $keys;
+}
+
+function login_rate_limit_with_file(string $key, callable $fn) {
+    $path = login_rate_limit_dir() . '/' . $key . '.json';
+    $fp = @fopen($path, 'c+');
+    if ($fp === false) return $fn(['count' => 0, 'until' => 0, 'updated' => 0], false);
+    if (!@flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return $fn(['count' => 0, 'until' => 0, 'updated' => 0], false);
+    }
+    $raw = stream_get_contents($fp);
+    $state = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+    if (!is_array($state)) $state = ['count' => 0, 'until' => 0, 'updated' => 0];
+    [$result, $newState] = $fn($state, true);
+    if ($newState === null) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        @unlink($path);
+        return $result;
+    }
+    if (is_array($newState)) {
+        rewind($fp);
+        ftruncate($fp, 0);
+        fwrite($fp, (string)json_encode($newState));
+        fflush($fp);
+    }
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return $result;
+}
+
+function login_rate_limit_check(string $username, string $ip, ?int $now = null): array {
+    $now = $now ?? time();
+    $maxWait = 0;
+    foreach (login_rate_limit_keys($username, $ip) as $key) {
+        $wait = (int)login_rate_limit_with_file($key, static function (array $st) use ($now): array {
+            $updated = (int)($st['updated'] ?? 0);
+            $until   = (int)($st['until'] ?? 0);
+            if ($until <= $now && $updated > 0 && ($now - $updated) > LOGIN_RL_PENCERE_SN) {
+                return [0, null];
+            }
+            return [max(0, $until - $now), false];
+        });
+        if ($wait > $maxWait) $maxWait = $wait;
+    }
+    return ['ok' => $maxWait === 0, 'bekle' => $maxWait];
+}
+
+function login_rate_limit_record_failure(string $username, string $ip, ?int $now = null): array {
+    $now = $now ?? time();
+    $maxWait = 0;
+    foreach (login_rate_limit_keys($username, $ip) as $key) {
+        $wait = (int)login_rate_limit_with_file($key, static function (array $st) use ($now): array {
+            $updated = (int)($st['updated'] ?? 0);
+            $count   = (int)($st['count'] ?? 0);
+            if ($updated > 0 && ($now - $updated) > LOGIN_RL_PENCERE_SN) {
+                $count = 0;
+            }
+            $count++;
+            $bekle = 0;
+            if ($count >= 5) {
+                $bekle = LOGIN_RL_BEKLEME[$count] ?? LOGIN_RL_MAX_BEKLEME;
+            }
+            $until = $bekle > 0 ? ($now + $bekle) : 0;
+            return [$bekle, ['count' => $count, 'until' => $until, 'updated' => $now]];
+        });
+        if ($wait > $maxWait) $maxWait = $wait;
+    }
+    return ['ok' => $maxWait === 0, 'bekle' => $maxWait];
+}
+
+function login_rate_limit_reset(string $username, string $ip): void {
+    foreach (login_rate_limit_keys($username, $ip) as $key) {
+        $path = login_rate_limit_dir() . '/' . $key . '.json';
+        if (is_file($path)) @unlink($path);
+    }
+}
+
 function current_user(): ?array {
-    static $cache = false;
-    if ($cache !== false) return ($cache === null) ? null : $cache;
+    $store = &auth_cache_store();
+    if ($store['current_user'] !== false) {
+        return ($store['current_user'] === null) ? null : $store['current_user'];
+    }
 
     $token = $_COOKIE[AUTH_COOKIE_NAME] ?? '';
     if ($token === '' || strlen($token) !== 64) {
-        $cache = null;
+        $store['current_user'] = null;
         return null;
     }
 
@@ -46,16 +189,18 @@ function current_user(): ?array {
         $pdo = db();
         $st  = $pdo->prepare("
             SELECT u.id, u.username, u.email, u.display_name, u.is_active,
-                   us.token, us.expires_at
+                   us.token, us.expires_at, us.created_at
             FROM user_sessions us
             JOIN users u ON u.id = us.user_id
-            WHERE us.token = ? AND us.expires_at > NOW()
+            WHERE us.token = ?
+              AND us.expires_at > NOW()
+              AND us.created_at >= TIMESTAMPADD(DAY, -?, NOW())
         ");
-        $st->execute([$token]);
+        $st->execute([$token, SESSION_ABSOLUTE_MAX_DAYS]);
         $row = $st->fetch();
 
         if (!$row || !(bool)$row['is_active']) {
-            $cache = null;
+            $store['current_user'] = null;
             return null;
         }
 
@@ -66,12 +211,58 @@ function current_user(): ?array {
         // Cookie süresini de yenile
         setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
 
-        $cache = $row;
-        return $cache;
+        $store['current_user'] = $row;
+        return $store['current_user'];
     } catch (PDOException $e) {
-        $cache = null;
+        $store['current_user'] = null;
         return null;
     }
+}
+
+// Sunucu tarafı ekran kilidi zorlaması (B-17):
+// Oturum sunucuda kilitliyse asya_kilit çerezi silinse bile hiçbir sayfa verisi / API dönmez.
+function enforce_screen_unlock(): void {
+    $user = current_user();
+    if ($user === null) return;
+
+    $cur = basename($_SERVER['PHP_SELF'] ?? '');
+    if (in_array($cur, ['ekran_kilit.php', 'logout.php', 'login.php'], true)) return;
+
+    if (!function_exists('ekran_kilit_oturum_kilitli_mi')) return;
+    if (!ekran_kilit_oturum_kilitli_mi()) return;
+    if (function_exists('ekran_pin_durum_otomatik') && ekran_pin_durum_otomatik($user) === 'pasif') return;
+
+    $is_json = (function_exists('is_json_request') && is_json_request())
+        || (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET');
+
+    http_response_code(423);
+    if (!headers_sent()) header('Cache-Control: no-store');
+
+    if ($is_json) {
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'     => false,
+            'error'  => 'Oturum kilitli. Lütfen ekran kilidini PIN ile açın.',
+            'code'   => 'ekran_kilitli',
+            'locked' => true,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // Minimal kilitli ekran: hassas sayfa verisi HİÇ çizilmez; PIN açılınca sayfa yenilenir.
+    $base  = function_exists('base_url') ? base_url() : '';
+    $css_v = file_exists(__DIR__ . '/../assets/style.css') ? (int)filemtime(__DIR__ . '/../assets/style.css') : 0;
+    $js_v  = file_exists(__DIR__ . '/../assets/app.js') ? (int)filemtime(__DIR__ . '/../assets/app.js') : 0;
+    $dlg   = function_exists('ekran_kilit_html') ? ekran_kilit_html($user, 'var', true) : '';
+    $dlg   = str_replace('data-kilitli="1"', 'data-kilitli="1" data-reload="1"', $dlg);
+    echo '<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        . '<title>Oturum Kilitli · Asya Fresh</title>'
+        . '<link rel="stylesheet" href="' . h($base) . 'assets/style.css?v=' . $css_v . '">'
+        . '</head><body class="ekran-kilitli">'
+        . $dlg
+        . '<script src="' . h($base) . 'assets/app.js?v=' . $js_v . '"></script>'
+        . '</body></html>';
+    exit;
 }
 
 function require_login(): array {
@@ -81,6 +272,7 @@ function require_login(): array {
         header('Location: ' . base_url() . 'login.php' . ($next !== '' ? '?next=' . $next : ''));
         exit;
     }
+    enforce_screen_unlock();
     if (function_exists('enforce_active_depot')) enforce_active_depot();
     return $user;
 }
@@ -101,6 +293,9 @@ function create_session(int $user_id): string {
 
 function destroy_session(string $token): void {
     if ($token === '') return;
+    if (function_exists('ekran_kilit_sunucu_sil')) {
+        ekran_kilit_sunucu_sil(null, $token);
+    }
     try {
         db()->prepare("DELETE FROM user_sessions WHERE token = ?")->execute([$token]);
     } catch (PDOException $e) {}
@@ -133,27 +328,38 @@ function login_user(string $username_or_email, string $password): ?array {
 }
 
 function logout_user(): void {
-    $token = $_COOKIE[AUTH_COOKIE_NAME] ?? '';
+    $token = (string)($_COOKIE[AUTH_COOKIE_NAME] ?? '');
     if ($token !== '') {
         destroy_session($token);
     }
-    setcookie(AUTH_COOKIE_NAME, '', [
+    $expired = [
         'expires'  => time() - 3600,
         'path'     => '/',
         'domain'   => '',
         'secure'   => is_https(),
         'httponly' => true,
         'samesite' => 'Lax',
-    ]);
-    // Static cache temizle
-    // (Bir sonraki current_user() çağrısında session bulunamayacak)
+    ];
+    @setcookie(AUTH_COOKIE_NAME, '', $expired);
+    unset($_COOKIE[AUTH_COOKIE_NAME]);
+    if (defined('DEPOT_COOKIE_NAME')) {
+        @setcookie(DEPOT_COOKIE_NAME, '', $expired);
+        unset($_COOKIE[DEPOT_COOKIE_NAME]);
+    }
+    auth_reset_cache();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        unset($_SESSION['csrf'], $_SESSION['sifre_onay']);
+        if (PHP_SAPI !== 'cli' && !headers_sent()) {
+            @session_regenerate_id(true);
+        }
+    }
 }
 
 // ── Yetki Sistemi ─────────────────────────────────────────
 
 function user_permissions(int $user_id): array {
-    static $cache = [];
-    if (isset($cache[$user_id])) return $cache[$user_id];
+    $store = &auth_cache_store();
+    if (isset($store['permissions'][$user_id])) return $store['permissions'][$user_id];
     try {
         $st = db()->prepare("
             SELECT rp.role_id, rp.permission
@@ -166,11 +372,11 @@ function user_permissions(int $user_id): array {
         foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) $roles[(int)$row['role_id']][] = $row['permission'];
         $effective = [];
         foreach ($roles as $permissions) $effective = array_merge($effective, role_matrix_expand_permissions(beyan_expand_role_permissions($permissions)));
-        $cache[$user_id] = array_values(array_unique($effective));
+        $store['permissions'][$user_id] = array_values(array_unique($effective));
     } catch (PDOException $e) {
-        $cache[$user_id] = [];
+        $store['permissions'][$user_id] = [];
     }
-    return $cache[$user_id];
+    return $store['permissions'][$user_id];
 }
 
 function can(string $permission): bool {
@@ -182,16 +388,9 @@ function can(string $permission): bool {
 function is_admin(): bool {
     $user = current_user();
     if ($user === null) return false;
-    // user_permissions() ile aynı desen: istek başına, kullanıcı id'sine göre
-    // önbellek. sidebar/bottomnav tek render'da is_admin()'i birden çok kez
-    // çağırıyor (nav_ptak_gorunur, first_allowed_page, render_desktop_sidebar…);
-    // önbellek olmadan her çağrı ayrı bir DB sorgusu demekti.
-    // ⚠ Önbellek TEK istek boyunca geçerlidir: user_roles'a yazan her yol
-    // (bugün yalnız users.php) yazdıktan sonra yönlendirip exit etmeli —
-    // aynı istekte is_admin()'i yeniden okursa ESKİ değeri görür.
-    static $cache = [];
+    $store = &auth_cache_store();
     $uid = (int)$user['id'];
-    if (isset($cache[$uid])) return $cache[$uid];
+    if (isset($store['is_admin'][$uid])) return $store['is_admin'][$uid];
     try {
         $st = db()->prepare("
             SELECT 1 FROM user_roles ur
@@ -200,18 +399,18 @@ function is_admin(): bool {
             LIMIT 1
         ");
         $st->execute([$uid]);
-        return $cache[$uid] = (bool)$st->fetchColumn();
+        return $store['is_admin'][$uid] = (bool)$st->fetchColumn();
     } catch (PDOException $e) {
-        return $cache[$uid] = false;
+        return $store['is_admin'][$uid] = false;
     }
 }
 
 function user_primary_role(): ?array {
     $user = current_user();
     if ($user === null) return null;
-    static $role_cache = [];
+    $store = &auth_cache_store();
     $uid = (int)$user['id'];
-    if (isset($role_cache[$uid])) return $role_cache[$uid];
+    if (array_key_exists($uid, $store['primary_role'])) return $store['primary_role'][$uid];
     try {
         $st = db()->prepare("
             SELECT r.slug, r.label
@@ -228,11 +427,11 @@ function user_primary_role(): ?array {
             LIMIT 1
         ");
         $st->execute([$uid]);
-        $role_cache[$uid] = $st->fetch() ?: null;
+        $store['primary_role'][$uid] = $st->fetch() ?: null;
     } catch (PDOException $e) {
-        $role_cache[$uid] = null;
+        $store['primary_role'][$uid] = null;
     }
-    return $role_cache[$uid];
+    return $store['primary_role'][$uid];
 }
 
 // ── Yetki Kataloğu (Roller ekranı) ────────────────────────
@@ -410,6 +609,7 @@ function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
     $base  = function_exists('base_url') ? base_url() : '';
     $css_v = file_exists(__DIR__ . '/../assets/style.css') ? filemtime(__DIR__ . '/../assets/style.css') : 0;
     $msg_h = htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+    $csrf_h = function_exists('csrf_token') ? htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') : '';
     echo "<!doctype html><html lang='tr'><head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
@@ -430,7 +630,10 @@ function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
   <div class='fb-msg'>{$msg_h}</div>
   <div class='fb-actions'>
     <a href='{$base}index.php' class='btn btn-primary'>Ana Sayfa</a>
-    <a href='{$base}logout.php' class='btn btn-ghost'>Çıkış Yap</a>
+    <form method='post' action='{$base}logout.php' style='display:inline;margin:0'>
+      <input type='hidden' name='csrf' value='{$csrf_h}'>
+      <button type='submit' class='btn btn-ghost'>Çıkış Yap</button>
+    </form>
   </div>
 </div>
 </body></html>";
@@ -439,22 +642,22 @@ function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
 
 // ── Depo Sorumluluğu (çoklu depo) ─────────────────────────
 //
-// Kural (fail-open):
+// Kural (DB hatasında fail-closed, B-38):
 //   • Admin            → null  (kısıtsız, tüm depolar)
 //   • Atama YOK         → null  (kısıtsız — mevcut kullanıcılar etkilenmez)
 //   • Atama VAR         → ['Depo A', 'Depo B', ...] (yalnız bunları görür)
-//   • Tablo yok / hata  → null  (fail-open: kimseyi kilitleme)
+//   • DB okuma hatası   → []    (fail-closed: hata anında kapsam genişlemez)
 //
 // null döndüğünde çağıran taraf HİÇ filtre uygulamaz (her şeyi gösterir).
 function user_assigned_depots(?int $user_id = null): ?array {
-    static $cache = [];
+    $store = &auth_cache_store();
 
     if ($user_id === null) {
         $u = current_user();
         if ($u === null) return [];        // giriş yok → hiçbir şey
         $user_id = (int)$u['id'];
     }
-    if (array_key_exists($user_id, $cache)) return $cache[$user_id];
+    if (array_key_exists($user_id, $store['assigned_depots'])) return $store['assigned_depots'][$user_id];
 
     $roleScope = role_user_depot_scope($user_id);
 
@@ -465,22 +668,22 @@ function user_assigned_depots(?int $user_id = null): ?array {
             WHERE ur.user_id = ? AND r.slug = 'admin' LIMIT 1
         ");
         $st->execute([$user_id]);
-        if ($st->fetchColumn()) { return $cache[$user_id] = null; }
-    } catch (PDOException $e) { return $cache[$user_id] = role_depot_scope_intersect(null, $roleScope); }
+        if ($st->fetchColumn()) { return $store['assigned_depots'][$user_id] = null; }
+    } catch (PDOException $e) { return $store['assigned_depots'][$user_id] = []; }
 
     // v574: yeni depo sistemi açıksa atama `depo_kullanicilar` (ID) tablosundan okunur; eski `user_depolar` ad tablosu YOK SAYILIR.
     if (depo_gecis_aktif(db())) {
-        return $cache[$user_id] = role_depot_scope_intersect(depo_atanan_adlar(db(), $user_id), $roleScope);
+        return $store['assigned_depots'][$user_id] = role_depot_scope_intersect(depo_atanan_adlar(db(), $user_id), $roleScope);
     }
     try {
         $st = db()->prepare("SELECT depo FROM user_depolar WHERE user_id = ?");
         $st->execute([$user_id]);
         $rows = array_values(array_filter(array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN)), fn($d) => $d !== ''));
         // Atama yoksa kısıtsız (null); varsa o listeyle sınırlı
-        return $cache[$user_id] = role_depot_scope_intersect((count($rows) === 0) ? null : $rows, $roleScope);
+        return $store['assigned_depots'][$user_id] = role_depot_scope_intersect((count($rows) === 0) ? null : $rows, $roleScope);
     } catch (PDOException $e) {
-        // Preserve explicit role scope even if legacy assignment lookup fails.
-        return $cache[$user_id] = role_depot_scope_intersect(null, $roleScope);
+        // Fail-closed: DB okuma hatasında kapsam genişletilmez.
+        return $store['assigned_depots'][$user_id] = [];
     }
 }
 
@@ -496,15 +699,15 @@ const DEPOT_COOKIE_NAME = 'asya_depo';
 // ∩ user_depolar ataması (varsa). Atanan ama tanımda olmayan depo da listelenir
 // (eski serbest-metin veriler kaybolmasın).
 function depot_options(): array {
-    static $cache = null;
-    if ($cache !== null) return $cache;
+    $store = &auth_cache_store();
+    if ($store['depot_options'] !== null) return $store['depot_options'];
 
     // v574: yeni depo sistemi açıksa seçenekler YALNIZ `depolar` (aktif) kaydından gelir; eski tanımlar/serbest metin görünmez.
     if (depo_gecis_aktif(db())) {
         $defs = depo_aktif_adlar(db());
         $assigned = user_assigned_depots();
         if ($assigned !== null) $defs = array_values(array_filter($defs, fn($d) => in_array($d, $assigned, true)));
-        return $cache = $defs;
+        return $store['depot_options'] = $defs;
     }
 
     $defs = [];
@@ -520,21 +723,21 @@ function depot_options(): array {
             if ($a !== '' && !in_array($a, $defs, true)) $defs[] = $a;
         }
     }
-    return $cache = $defs;
+    return $store['depot_options'] = $defs;
 }
 
 // Geçerli aktif depo — cookie'den okunur, seçilebilir listeye göre doğrulanır.
 // null → henüz seçilmemiş / geçersiz (require_login depo seçimine yönlendirir).
 function active_depot(): ?string {
-    static $cache = false;
-    if ($cache !== false) return $cache;
+    $store = &auth_cache_store();
+    if ($store['active_depot'] !== false) return $store['active_depot'];
 
-    if (current_user() === null) return $cache = null;
+    if (current_user() === null) return $store['active_depot'] = null;
 
     $raw = trim((string)($_COOKIE[DEPOT_COOKIE_NAME] ?? ''));
-    if ($raw === '' || mb_strlen($raw) > 150) return $cache = null;
-    if (!in_array($raw, depot_options(), true)) return $cache = null;
-    return $cache = $raw;
+    if ($raw === '' || mb_strlen($raw) > 150) return $store['active_depot'] = null;
+    if (!in_array($raw, depot_options(), true)) return $store['active_depot'] = null;
+    return $store['active_depot'] = $raw;
 }
 
 function set_active_depot(string $depo): void {
@@ -542,6 +745,8 @@ function set_active_depot(string $depo): void {
     $opts['expires'] = time() + 180 * 24 * 3600; // 180 gün — depo tercihi kalıcı
     setcookie(DEPOT_COOKIE_NAME, $depo, $opts);
     $_COOKIE[DEPOT_COOKIE_NAME] = $depo; // aynı istek içinde de geçerli olsun
+    $store = &auth_cache_store();
+    $store['active_depot'] = $depo;
 }
 
 // Aktif depo seçilmeden hiçbir sayfa açılmaz (zorunlu tek depo).
@@ -686,6 +891,7 @@ function require_perm(string $permission): void {
         header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
         exit;
     }
+    enforce_screen_unlock();
     enforce_active_depot();
     if (!can($permission)) {
         forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: {$permission})");

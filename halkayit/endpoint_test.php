@@ -87,7 +87,10 @@ function endpoint_dene(string $kalip, array $cfg): array {
 
 $sonuc = null;
 $firmaAd = '';
-if (($_POST['firmaId'] ?? '') !== '') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    csrf_check($_POST['csrf'] ?? null);
+}
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['firmaId'] ?? '') !== '') {
     $st = $db->prepare('SELECT * FROM ' . hks_tablo('firmalar') . ' WHERE id = ?');
     $st->execute([$_POST['firmaId']]);
     if ($f = $st->fetch()) {
@@ -104,6 +107,7 @@ if (($_POST['firmaId'] ?? '') !== '') {
         ];
     }
 }
+$csrf = csrf_token();
 ?>
 <!doctype html>
 <html lang="tr">
@@ -139,6 +143,7 @@ if (($_POST['firmaId'] ?? '') !== '') {
      <b>Güvenli:</b> yalnızca ülke listesi okur — bildirim OLUŞTURMAZ, rüsum doğurmaz.</p>
 
   <form method="post" class="card">
+    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
     <label>Firma seçin (kimlik bilgileri için)</label>
     <select name="firmaId" required>
       <option value="">— seçiniz —</option>

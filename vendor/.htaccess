@@ -1,0 +1,10 @@
+# vendor/ — Tüm web erişimi kapalı (yalnız PHP autoload ile yüklenir)
+Options -Indexes
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

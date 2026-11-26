@@ -31,8 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $onceki !== '' ? ['depo' => $onceki] : null, ['depo' => $sec]);
             }
             // Güvenli yönlendirme: yalnız site içi yol
-            if ($next !== '' && str_starts_with($next, '/') && !str_starts_with($next, '//')) {
-                header('Location: ' . $next);
+            $safeNext = safe_next_url($next);
+            if ($safeNext !== '') {
+                header('Location: ' . $safeNext);
             } else {
                 header('Location: index.php');
             }
@@ -132,7 +133,12 @@ $kullanici = $user['display_name'] ?: $user['username'];
         <?php endif; ?>
     </div>
 
-    <div class="lc-alt"><a href="logout.php">Çıkış Yap</a></div>
+    <div class="lc-alt">
+        <form method="post" action="logout.php" style="display:inline">
+            <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+            <button type="submit" style="background:none;border:0;color:rgba(255,255,255,.8);font-size:.85rem;cursor:pointer;padding:4px 8px;text-decoration:underline">Çıkış Yap</button>
+        </form>
+    </div>
 </div>
 </body>
 </html>

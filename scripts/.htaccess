@@ -1,6 +1,11 @@
 # scripts/ — Tüm web erişimi kapalı
 # Bu klasördeki dosyalar yalnızca CLI (komut satırı) ile çalıştırılabilir.
-# Web üzerinden erişim tamamen engellendi.
+Options -Indexes
 
-Order deny,allow
-Deny from all
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
