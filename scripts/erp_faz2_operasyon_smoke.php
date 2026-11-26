@@ -209,8 +209,9 @@ ok('erp_op_kaydet.php POST-only (405), require_login, csrf_check ve erp_op_kapi 
     str_contains($postSrc, 'http_response_code(405)') && str_contains($postSrc, 'require_login()') && str_contains($postSrc, 'csrf_check(') && str_contains($postSrc, 'erp_op_kapi(')
 );
 $swSrc = (string)file_get_contents($ROOT . '/sw.js');
-ok('sw.js ERP Faz 2 uçlarını önbellek dışı tutar ve v589',
-    str_contains($swSrc, "CACHE_NAME = 'yukleme-plani-v589'") && str_contains($swSrc, 'wms_|yukleme_v2|satinalma_|uretim_bom|erp_op_')
+$swVer = preg_match("/CACHE_NAME\s*=\s*'yukleme-plani-v(\d+)'/", $swSrc, $swm) ? (int)$swm[1] : 0;
+ok('sw.js ERP Faz 2 uçlarını önbellek dışı tutar ve v589+',
+    $swVer >= 589 && str_contains($swSrc, 'wms_|yukleme_v2|satinalma_|uretim_bom|erp_op_')
 );
 
 echo "\nÖZET: $pass geçti, $fail kaldı\n";

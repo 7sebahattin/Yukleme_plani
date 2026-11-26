@@ -76,7 +76,10 @@ require_once __DIR__ . '/config/wms_stok_core.php';      // ERP-11b Stok Ayrım�
 require_once __DIR__ . '/config/yukleme_v2_core.php';    // Yeni Araç Yükleme Fişleri (v2)
 require_once __DIR__ . '/config/satinalma_core.php';     // ERP-3 Satın Alma & 3-Way Match
 require_once __DIR__ . '/config/uretim_bom_core.php';    // ERP-4 Üretim BOM, İş Emirleri & MRP
-require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Planı (v590)
+require_once __DIR__ . '/config/onay_core.php';          // ERP-5 Merkezi Onay Akışları
+require_once __DIR__ . '/config/banka_core.php';         // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
+require_once __DIR__ . '/config/ik_bordro_core.php';     // ERP-7 İK Özlük, İzin & Resmi Bordro
+require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Planı (v591)
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -178,7 +181,10 @@ $wms_results = []; $wms_ran = false;                        // ERP-11b Stok Ayr�
 $yv2_results = []; $yv2_ran = false;                        // Yeni Araç Yükleme Fişleri (v2)
 $sa_results = []; $sa_ran = false;                          // ERP-3 Satın Alma & 3-Way Match
 $ubom_results = []; $ubom_ran = false;                      // ERP-4 Üretim BOM, İş Emirleri & MRP
-$wa_results = []; $wa_ran = false;                          // WhatsApp Yükleme Planı (v590)
+$onay_results = []; $onay_ran = false;                      // ERP-5 Merkezi Onay Akışları
+$banka_results = []; $banka_ran = false;                    // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
+$ik_results = []; $ik_ran = false;                          // ERP-7 İK Özlük, İzin & Resmi Bordro
+$wa_results = []; $wa_ran = false;                          // WhatsApp Yükleme Planı (v591)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -651,6 +657,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($ubom_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'uretim_bom', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'onay_akislari') {
+    csrf_check($_POST['csrf'] ?? null);
+    $onay_ran     = true;
+    $onay_results = onay_migrate($pdo);
+    foreach ($onay_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'onay_akislari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'banka_mutabakat') {
+    csrf_check($_POST['csrf'] ?? null);
+    $banka_ran     = true;
+    $banka_results = banka_migrate($pdo);
+    foreach ($banka_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'banka_mutabakat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'ik_bordro') {
+    csrf_check($_POST['csrf'] ?? null);
+    $ik_ran     = true;
+    $ik_results = ik_bordro_migrate($pdo);
+    foreach ($ik_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'ik_bordro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'whatsapp') {
@@ -2467,8 +2500,72 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     </form>
   <?php mg_kart_kapat(); ?>
 
+  <?php mg_kart_ac('onay-akislari'); ?>
+    <h2 style="margin-top:0;">Merkezi Onay Akışları Motoru (ERP-5)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>onay_kurallari</code> (limit bazlı sıralı/paralel kademeler), <code>onay_talepleri</code>,
+      <code>onay_adimlari</code> ve <code>onay_vekaletler</code> (tarih aralıklı delegasyon) tablolarını ekler.
+      <?php if ($onay_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($onay_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $onayHazir = onay_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $onayHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $onayHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="onay_akislari">
+      <button type="submit" class="btn btn-primary">Onay Akışları Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('banka-mutabakat'); ?>
+    <h2 style="margin-top:0;">Banka Entegrasyonu, MT940/CSV Mutabakat, Kredi &amp; POS (ERP-6)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>banka_hesaplari</code>, <code>banka_ekstreler</code> (MT940/CSV + otomatik fatura eşleştirme),
+      <code>banka_krediler</code>, <code>banka_kredi_taksitler</code> (TDHP 300/780/102) ve <code>banka_pos_hareketler</code> (komisyon &amp; bloke) tablolarını ekler.
+      <?php if ($banka_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($banka_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $bankaHazir = banka_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $bankaHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $bankaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="banka_mutabakat">
+      <button type="submit" class="btn btn-primary">Banka / Kredi / POS Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('ik-bordro'); ?>
+    <h2 style="margin-top:0;">İK Özlük, 4857 Yıllık İzin &amp; Resmi Bordro (ERP-7)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>ik_ozluk</code>, <code>ik_izinler</code> (4857 kıdem bazlı yıllık izin + Onay Akışı),
+      <code>ik_bordro_donemler</code> ve <code>ik_bordro_satirlar</code> (SGK, kümülatif GV dilimleri, asgari ücret istisnası, DV + TDHP 770/335/360/361 tahakkuk) tablolarını ekler.
+      Mevcut PDKS tablolarına dokunmaz.
+      <?php if ($ik_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($ik_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $ikHazir = ik_bordro_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $ikHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ikHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="ik_bordro">
+      <button type="submit" class="btn btn-primary">İK &amp; Resmi Bordro Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
   <?php mg_kart_ac('whatsapp'); ?>
-    <h2 style="margin-top:0;">WhatsApp Yükleme Planı — Tablolar &amp; API Ayarları (v590)</h2>
+    <h2 style="margin-top:0;">WhatsApp Yükleme Planı — Tablolar &amp; API Ayarları (v591)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>whatsapp_mesaj_loglari</code> ve <code>whatsapp_ayarlar</code> tablolarını oluşturur,
       ekrandan API anahtarı kaydı için <code>evolution_url</code>, <code>evolution_api_key</code>, <code>webhook_secret</code>, <code>ai_api_key</code> kolonlarını ekler.

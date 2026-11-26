@@ -1,0 +1,79 @@
+/* =========================================================
+ * assets/erp_yonetim.css — ERP Faz 3 (Onay Akışları, Banka Mutabakat & İK/Bordro)
+ * ========================================================= */
+
+:root {
+  --ey-bg: #ffffff;
+  --ey-bg-soft: #f8fafc;
+  --ey-border: #e2e8f0;
+  --ey-text: #0f172a;
+  --ey-muted: #475569;
+  --ey-primary: #1d4ed8;
+  --ey-primary-soft: rgba(29, 78, 216, 0.1);
+  --ey-ok: #15803d;
+  --ey-ok-soft: rgba(21, 128, 61, 0.12);
+  --ey-warn: #b45309;
+  --ey-warn-soft: rgba(180, 83, 9, 0.14);
+  --ey-err: #b91c1c;
+  --ey-err-soft: rgba(185, 28, 28, 0.12);
+}
+
+html[data-theme="dark"] {
+  --ey-bg: #111827;
+  --ey-bg-soft: #1f2937;
+  --ey-border: #334155;
+  --ey-text: #f1f5f9;
+  --ey-muted: #cbd5e1;
+  --ey-primary: #60a5fa;
+  --ey-primary-soft: rgba(96, 165, 250, 0.16);
+  --ey-ok: #4ade80;
+  --ey-ok-soft: rgba(74, 222, 128, 0.16);
+  --ey-warn: #fbbf24;
+  --ey-warn-soft: rgba(251, 191, 36, 0.18);
+  --ey-err: #f87171;
+  --ey-err-soft: rgba(248, 113, 113, 0.18);
+}
+
+.ey-wrap { max-width: 1380px; margin: 0 auto; padding: 8px 0 36px; color: var(--ey-text); }
+.ey-sekmeler { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--ey-border); margin: 0 0 16px; padding-bottom: 4px; }
+.ey-sekme { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem; color: var(--ey-muted); border: 1px solid transparent; }
+.ey-sekme:hover { background: var(--ey-bg-soft); color: var(--ey-text); }
+.ey-sekme[aria-current="page"] { background: var(--ey-primary-soft); color: var(--ey-primary); border-color: var(--ey-primary); }
+.ey-kart { background: var(--ey-bg); border: 1px solid var(--ey-border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+.ey-kart h2, .ey-kart h3 { margin: 0 0 12px; color: var(--ey-text); }
+.ey-baslik-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.ey-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.ey-kpi { background: var(--ey-bg-soft); border: 1px solid var(--ey-border); border-radius: 10px; padding: 12px 14px; }
+.ey-kpi-etiket { font-size: 0.8rem; font-weight: 600; color: var(--ey-muted); margin-bottom: 4px; }
+.ey-kpi-deger { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ey-kpi-deger.ok { color: var(--ey-ok); }
+.ey-kpi-deger.warn { color: var(--ey-warn); }
+.ey-kpi-deger.err { color: var(--ey-err); }
+.ey-filtre { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
+.ey-alan { display: flex; flex-direction: column; gap: 4px; min-width: 130px; }
+.ey-alan label { font-size: 0.8rem; font-weight: 600; color: var(--ey-muted); }
+.ey-alan input, .ey-alan select, .ey-alan textarea { padding: 8px 10px; border: 1px solid var(--ey-border); border-radius: 8px; background: var(--ey-bg); color: var(--ey-text); font: inherit; }
+.ey-tablo-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ey-tablo { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.ey-tablo th, .ey-tablo td { padding: 8px 10px; border-bottom: 1px solid var(--ey-border); text-align: left; vertical-align: middle; }
+.ey-tablo th { background: var(--ey-bg-soft); color: var(--ey-muted); font-weight: 700; font-size: 0.82rem; white-space: nowrap; }
+.ey-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ey-kod { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+.ey-rozet { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
+.ey-rozet--ok { background: var(--ey-ok-soft); color: var(--ey-ok); }
+.ey-rozet--warn { background: var(--ey-warn-soft); color: var(--ey-warn); }
+.ey-rozet--err { background: var(--ey-err-soft); color: var(--ey-err); }
+.ey-rozet--bilgi { background: var(--ey-primary-soft); color: var(--ey-primary); }
+.ey-eylem-satir { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ey-inline-form { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.ey-uyari { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border-radius: 12px; border: 1px solid var(--ey-warn); background: var(--ey-warn-soft); margin: 16px 0; }
+
+@media (max-width: 767px) {
+  .ey-alan { width: 100%; min-width: 0; }
+  .ey-alan input, .ey-alan select, .ey-alan textarea { font-size: 16px; }
+}
+
+@media print {
+  .ey-sekmeler, .ey-filtre, form { display: none !important; }
+  .ey-kart { border: none; padding: 0; }
+}
