@@ -83,6 +83,7 @@ require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Pl
 require_once __DIR__ . '/config/crm_core.php';           // ERP-8 CRM & Fiyat Listeleri
 require_once __DIR__ . '/config/sabit_kiymet_core.php';  // ERP-9 Sabit Kıymet, Amortisman & Bakım
 require_once __DIR__ . '/config/finans_plan_core.php';   // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
+require_once __DIR__ . '/config/bi_rapor_core.php';      // ERP Faz 5 Yeni Raporlama & Dinamik BI Merkezi
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -191,6 +192,7 @@ $wa_results = []; $wa_ran = false;                          // WhatsApp Yükleme
 $crm_results = []; $crm_ran = false;                        // ERP-8 CRM & Fiyat Listeleri
 $sk_results = []; $sk_ran = false;                          // ERP-9 Sabit Kıymet, Amortisman & Bakım
 $fp_results = []; $fp_ran = false;                          // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
+$bi_results = []; $bi_ran = false;                          // ERP Faz 5 Yeni Raporlama & Dinamik BI Merkezi
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -726,6 +728,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($fp_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'finans_planlama', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'bi_raporlama') {
+    csrf_check($_POST['csrf'] ?? null);
+    $bi_ran     = true;
+    $bi_results = bi_rapor_migrate($pdo);
+    foreach ($bi_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'bi_raporlama', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -2679,6 +2690,27 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="finans_planlama">
       <button type="submit" class="btn btn-primary">Bütçe &amp; Nakit Akış Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('bi-raporlama'); ?>
+    <h2 style="margin-top:0;">Yeni Raporlama Merkezi &amp; Dinamik BI Tasarımcısı (ERP Faz 5)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>bi_rapor_sablonlari</code> (dinamik sütun/filtre/sıralama şablonları) ve
+      <code>bi_rapor_zamanlama</code> (zamanlanmış e-posta/CSV dağıtımı) tablolarını ekler. Mevcut <code>reports.php</code> korunur.
+      <?php if ($bi_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($bi_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $biHazir = bi_rapor_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $biHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $biHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="bi_raporlama">
+      <button type="submit" class="btn btn-primary">BI Raporlama Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>

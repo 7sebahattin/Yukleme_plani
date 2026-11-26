@@ -1,0 +1,68 @@
+/* =========================================================
+   assets/bi_rapor.css — ERP Faz 5 Raporlama & Dinamik BI Merkezi
+   ========================================================= */
+:root {
+  --bi-bg: #ffffff;
+  --bi-bg-soft: #f8fafc;
+  --bi-border: #e2e8f0;
+  --bi-text: #0f172a;
+  --bi-muted: #475569;
+  --bi-accent: #1d4ed8;
+  --bi-ok: #15803d;
+  --bi-warn: #b45309;
+  --bi-warn-bg: #fef3c7;
+  --bi-err: #b91c1c;
+}
+html[data-theme="dark"] {
+  --bi-bg: #111827;
+  --bi-bg-soft: #1e293b;
+  --bi-border: #334155;
+  --bi-text: #f1f5f9;
+  --bi-muted: #94a3b8;
+  --bi-accent: #60a5fa;
+  --bi-ok: #4ade80;
+  --bi-warn: #fbbf24;
+  --bi-warn-bg: rgba(245, 158, 11, 0.16);
+  --bi-err: #f87171;
+}
+
+.bi-wrap { max-width: 1400px; margin: 0 auto; padding: 12px 14px 36px; color: var(--bi-text); }
+.bi-sekmeler { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--bi-border); padding-bottom: 8px; }
+.bi-sekme { padding: 7px 13px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: .88rem; color: var(--bi-muted); border: 1px solid transparent; }
+.bi-sekme:hover { background: var(--bi-bg-soft); color: var(--bi-text); }
+.bi-sekme[aria-current="page"] { background: var(--bi-accent); color: #fff; }
+.bi-kart { background: var(--bi-bg); border: 1px solid var(--bi-border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.bi-kart h2, .bi-kart h3 { margin: 0 0 12px; font-size: 1.05rem; }
+.bi-uyari { display: flex; gap: 14px; align-items: flex-start; background: var(--bi-warn-bg); border: 1px solid var(--bi-warn); border-radius: 12px; padding: 16px; }
+.bi-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.bi-kpi { background: var(--bi-bg-soft); border: 1px solid var(--bi-border); border-left: 4px solid var(--bi-accent); border-radius: 10px; padding: 12px; }
+.bi-kpi--ok { border-left-color: var(--bi-ok); }
+.bi-kpi--warn { border-left-color: var(--bi-warn); }
+.bi-kpi--err { border-left-color: var(--bi-err); }
+.bi-kpi-baslik { font-size: .78rem; font-weight: 700; color: var(--bi-muted); text-transform: uppercase; }
+.bi-kpi-deger { font-size: 1.25rem; font-weight: 800; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.bi-kpi-alt { font-size: .78rem; color: var(--bi-muted); }
+.bi-filtre { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+.bi-alan { display: flex; flex-direction: column; gap: 4px; min-width: 130px; }
+.bi-alan label { font-size: .78rem; font-weight: 600; color: var(--bi-muted); }
+.bi-alan input, .bi-alan select { padding: 7px 10px; border: 1px solid var(--bi-border); border-radius: 8px; background: var(--bi-bg); color: var(--bi-text); font: inherit; }
+.bi-chk-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.bi-chk { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--bi-border); border-radius: 8px; background: var(--bi-bg); font-size: .84rem; cursor: pointer; }
+.bi-tablo-wrap { overflow-x: auto; }
+.bi-tablo { width: 100%; border-collapse: collapse; font-size: .87rem; }
+.bi-tablo th, .bi-tablo td { padding: 8px 10px; border-bottom: 1px solid var(--bi-border); text-align: left; }
+.bi-tablo th { background: var(--bi-bg-soft); color: var(--bi-muted); font-size: .77rem; text-transform: uppercase; }
+.bi-tablo tfoot td { background: var(--bi-bg-soft); border-top: 2px solid var(--bi-border); }
+.bi-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bi-kod { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+.bi-eylem-satir { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bi-inline-form { display: inline-flex; margin: 0; }
+
+@media (max-width: 768px) {
+  .bi-alan { flex: 1 1 100%; }
+  .bi-alan input, .bi-alan select { font-size: 16px; }
+}
+@media print {
+  .bi-sekmeler, .bi-filtre, .bi-eylem-satir, .btn { display: none !important; }
+  .bi-kart { border: none; padding: 0; }
+}
