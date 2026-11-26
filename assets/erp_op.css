@@ -1,0 +1,90 @@
+/* =========================================================
+ * assets/erp_op.css — ERP Faz 2 (Stok/WMS, Araç Yükleme v2, Satın Alma, Üretim BOM/MRP)
+ * Ad alanı: .eop-*  |  Aydınlık + html[data-theme="dark"] + @media print
+ * ========================================================= */
+
+:root {
+  --eop-bg: #ffffff;
+  --eop-bg-soft: #f8fafc;
+  --eop-border: #e2e8f0;
+  --eop-text: #0f172a;
+  --eop-muted: #475569;
+  --eop-primary: #1d4ed8;
+  --eop-primary-soft: rgba(29, 78, 216, 0.1);
+  --eop-ok: #15803d;
+  --eop-ok-soft: rgba(21, 128, 61, 0.12);
+  --eop-warn: #b45309;
+  --eop-warn-soft: rgba(180, 83, 9, 0.14);
+  --eop-err: #b91c1c;
+  --eop-err-soft: rgba(185, 28, 28, 0.12);
+}
+
+html[data-theme="dark"] {
+  --eop-bg: #111827;
+  --eop-bg-soft: #1f2937;
+  --eop-border: #334155;
+  --eop-text: #f1f5f9;
+  --eop-muted: #cbd5e1;
+  --eop-primary: #60a5fa;
+  --eop-primary-soft: rgba(96, 165, 250, 0.16);
+  --eop-ok: #4ade80;
+  --eop-ok-soft: rgba(74, 222, 128, 0.16);
+  --eop-warn: #fbbf24;
+  --eop-warn-soft: rgba(251, 191, 36, 0.18);
+  --eop-err: #f87171;
+  --eop-err-soft: rgba(248, 113, 113, 0.18);
+}
+
+.eop-wrap { max-width: 1380px; margin: 0 auto; padding: 8px 0 36px; color: var(--eop-text); }
+.eop-sekmeler { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--eop-border); margin: 0 0 16px; padding-bottom: 4px; }
+.eop-sekme { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem; color: var(--eop-muted); border: 1px solid transparent; }
+.eop-sekme:hover { background: var(--eop-bg-soft); color: var(--eop-text); }
+.eop-sekme[aria-current="page"] { background: var(--eop-primary-soft); color: var(--eop-primary); border-color: var(--eop-primary); }
+
+.eop-kart { background: var(--eop-bg); border: 1px solid var(--eop-border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+.eop-kart h2, .eop-kart h3 { margin: 0 0 12px; color: var(--eop-text); }
+.eop-baslik-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.eop-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.eop-kpi { background: var(--eop-bg-soft); border: 1px solid var(--eop-border); border-radius: 10px; padding: 12px 14px; }
+.eop-kpi-etiket { font-size: 0.8rem; font-weight: 600; color: var(--eop-muted); margin-bottom: 4px; }
+.eop-kpi-deger { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.eop-kpi-deger.ok { color: var(--eop-ok); }
+.eop-kpi-deger.warn { color: var(--eop-warn); }
+.eop-kpi-deger.err { color: var(--eop-err); }
+
+.eop-filtre { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
+.eop-alan { display: flex; flex-direction: column; gap: 4px; min-width: 130px; }
+.eop-alan label { font-size: 0.8rem; font-weight: 600; color: var(--eop-muted); }
+.eop-alan input, .eop-alan select, .eop-alan textarea { padding: 8px 10px; border: 1px solid var(--eop-border); border-radius: 8px; background: var(--eop-bg); color: var(--eop-text); font: inherit; }
+
+.eop-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.eop-tablo-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.eop-tablo { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.eop-tablo th, .eop-tablo td { padding: 8px 10px; border-bottom: 1px solid var(--eop-border); text-align: left; vertical-align: middle; }
+.eop-tablo th { background: var(--eop-bg-soft); color: var(--eop-muted); font-weight: 700; font-size: 0.82rem; white-space: nowrap; }
+.eop-tablo tr:hover td { background: var(--eop-bg-soft); }
+.eop-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eop-kod { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+
+.eop-rozet { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; white-space: nowrap; }
+.eop-rozet--ok { background: var(--eop-ok-soft); color: var(--eop-ok); }
+.eop-rozet--warn { background: var(--eop-warn-soft); color: var(--eop-warn); }
+.eop-rozet--err { background: var(--eop-err-soft); color: var(--eop-err); }
+.eop-rozet--bilgi { background: var(--eop-primary-soft); color: var(--eop-primary); }
+
+.eop-eylem-satir { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.eop-inline-form { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.eop-uyari { display: flex; gap: 14px; align-items: flex-start; padding: 18px; border-radius: 12px; border: 1px solid var(--eop-warn); background: var(--eop-warn-soft); margin: 16px 0; }
+.eop-ozet-bar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 10px; background: var(--eop-bg-soft); border: 1px solid var(--eop-border); margin: 10px 0; font-weight: 600; }
+
+@media (max-width: 767px) {
+  .eop-alan { width: 100%; min-width: 0; }
+  .eop-alan input, .eop-alan select, .eop-alan textarea,
+  .eop-tablo input, .eop-tablo select { font-size: 16px; }
+  .eop-grid-2 { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .eop-sekmeler, .eop-filtre, form { display: none !important; }
+  .eop-kart { border: none; padding: 0; }
+}
