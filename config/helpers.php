@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v598');
+    define('APP_SURUM', 'v599');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -217,6 +217,7 @@ function definition_types(): array {
         'cikis_nedeni'  => 'Çıkış Nedeni',
         'bolge'         => 'Bölge',
         'urun'          => 'Ürün',
+        'urun_cesidi'   => 'Ürün Cinsi',
         'marka'         => 'Marka',
         'lokasyon'      => 'Lokasyon',
         'kasa_cinsi'    => 'Kasa Cinsi',
@@ -258,7 +259,7 @@ function definition_types(): array {
 // tek yerde güncellenir (önceden 4 ayrı kopya vardı).
 function non_material_definition_types(): array {
     return [
-        'firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon', 'cikis_nedeni',
+        'firma', 'tedarikci', 'depo', 'bolge', 'urun', 'urun_cesidi', 'marka', 'lokasyon', 'cikis_nedeni',
         'alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim', 'gidecek_ulke',
     ];
 }
@@ -566,7 +567,7 @@ function nav_muhasebe_gruplari(): array {
             'finans_planlama.php' => ['Bütçe, Aging & Nakit Akış', '📊']]],
         // v548: Araç Yükleme / Palet / Mal Kabul fişleri "Operasyon_fis" grubuna taşındı (sidebar'da Operasyon'un İÇİNDE çizilir).
         'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
-            'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
+            'arac_yukleme_fisleri.php' => ['Yükleme Planları', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
             'mal_kabul_fisleri.php' => ['Mal Kabul Fişleri', '📋']]],
         // v555: "İhracat Programı" grubu menüden kaldırıldı (sayfalar başka adlarla kullanılıyor).
         // v593 (ERP Faz 5): Yeni Raporlama & BI Merkezi + Dinamik BI Rapor Tasarımcısı (rapor_tanimlari.php)
@@ -1524,10 +1525,16 @@ function db_has_column(string $table, string $column): bool {
     $key = $table . '::' . $column;
     if (array_key_exists($key, $cache)) return $cache[$key];
     try {
-        // NOT: "SHOW COLUMNS ... LIKE ?" native prepared statement'ta (EMULATE_PREPARES=false)
-        // güvenilir çalışmaz → tüm kolonları çekip PHP'de kontrol et.
-        $tbl  = str_replace('`', '', $table);
-        $cols = db()->query("SHOW COLUMNS FROM `$tbl`")->fetchAll(PDO::FETCH_COLUMN);
+        $pdo = db();
+        $tbl = str_replace('`', '', $table);
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            $rows = $pdo->query("PRAGMA table_info(`$tbl`)")->fetchAll(PDO::FETCH_ASSOC);
+            $cols = array_map(static fn(array $r): string => (string)($r['name'] ?? ''), $rows);
+        } else {
+            // NOT: "SHOW COLUMNS ... LIKE ?" native prepared statement'ta (EMULATE_PREPARES=false)
+            // güvenilir çalışmaz → tüm kolonları çekip PHP'de kontrol et.
+            $cols = $pdo->query("SHOW COLUMNS FROM `$tbl`")->fetchAll(PDO::FETCH_COLUMN);
+        }
         $cache[$key] = in_array($column, $cols, true);
     } catch (PDOException $e) {
         $cache[$key] = false;
@@ -1551,8 +1558,14 @@ function ensure_column(string $table, string $column, string $alterSql): bool {
         db()->exec($alterSql);
     } catch (Throwable $e) { /* yetki yoksa aşağıda kullanıcıya bildirilir */ }
     try {
-        $tbl  = str_replace('`', '', $table);
-        $cols = db()->query("SHOW COLUMNS FROM `$tbl`")->fetchAll(PDO::FETCH_COLUMN);
+        $pdo = db();
+        $tbl = str_replace('`', '', $table);
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            $rows = $pdo->query("PRAGMA table_info(`$tbl`)")->fetchAll(PDO::FETCH_ASSOC);
+            $cols = array_map(static fn(array $r): string => (string)($r['name'] ?? ''), $rows);
+        } else {
+            $cols = $pdo->query("SHOW COLUMNS FROM `$tbl`")->fetchAll(PDO::FETCH_COLUMN);
+        }
         return in_array($column, $cols, true);
     } catch (Throwable $e) { return false; }
 }
@@ -2526,6 +2539,7 @@ function record_suggest_fields(): array {
         'arka_plaka'      => ['type' => 'arka_plaka',      'label' => 'arka plaka',      'max' => 30,  'upper' => true],
         'ulasim'          => ['type' => 'ulasim',          'label' => 'ulaşım',          'max' => 100, 'upper' => true],
         'gidecek_ulke'    => ['type' => 'gidecek_ulke',    'label' => 'gideceği ülke',    'max' => 100, 'upper' => true],
+        'urun_cesidi'     => ['type' => 'urun_cesidi',     'label' => 'cinsi',            'max' => 150, 'upper' => true],
         // DİKKAT: loading_records.brand VARCHAR(20) — tanım adı 150'ye kadar
         // olabilir ama kayda 20'den fazlası yazılamaz, o yüzden sınır 20.
         'brand'           => ['type' => 'marka',           'label' => 'marka',           'max' => 20,  'upper' => true],
@@ -2550,6 +2564,67 @@ function suggest_value_is_meaningful(string $v): bool {
     return $v !== '' && (bool)preg_match('/[\p{L}\p{N}]/u', $v);
 }
 
+// ── Mevcut ürün listesi (tanımlar + ürün stok kartları + kantar) ──
+// Yükleme Planları formunda "Ürün" alanı için tek kaynak:
+//   1) material_definitions (type='urun', is_active=1)
+//   2) stok_kartlar (tip='urun', aktif=1)
+//   3) kantar_fisleri (aktif depo kapsamındaki malin_cinsi değerleri)
+// TR-büyük harfe normalize edilir, tekilleştirilir ve Türkçe alfabetik sıralanır.
+function mevcut_urun_listesi(): array {
+    $seen = [];
+    $add = static function ($raw) use (&$seen): void {
+        $u = tr_upper(trim((string)$raw));
+        if ($u !== '') {
+            $seen[$u] = $u;
+        }
+    };
+
+    try {
+        foreach (get_definitions_by_type('urun') as $d) {
+            $add($d['name'] ?? '');
+        }
+    } catch (Throwable $e) {
+        // material_definitions yoksa / erişilemezse devam
+    }
+
+    try {
+        $rows = db()->query("SELECT ad FROM stok_kartlar WHERE tip = 'urun' AND aktif = 1")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($rows as $ad) {
+            $add($ad);
+        }
+    } catch (Throwable $e) {
+        // stok_kartlar tablosu henüz kurulmamış olabilir
+    }
+
+    try {
+        $where = "malin_cinsi IS NOT NULL AND TRIM(malin_cinsi) <> ''";
+        $params = [];
+        if (function_exists('depo_sql_in')) {
+            [$dsql, $dparams] = depo_sql_in('depo');
+            if ($dsql !== '') {
+                $where .= " AND $dsql";
+                $params = $dparams;
+            }
+        }
+        $st = db()->prepare("SELECT DISTINCT malin_cinsi FROM kantar_fisleri WHERE $where");
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $mc) {
+            $add($mc);
+        }
+    } catch (Throwable $e) {
+        // kantar_fisleri tablosu henüz yoksa sessiz geç
+    }
+
+    $list = array_values($seen);
+    if (class_exists('Collator')) {
+        $col = new Collator('tr_TR');
+        usort($list, static fn(string $a, string $b): int => (int)$col->compare($a, $b) ?: strcmp($a, $b));
+    } else {
+        usort($list, static fn(string $a, string $b): int => strcoll($a, $b) ?: strcmp($a, $b));
+    }
+    return $list;
+}
+
 // ── loading_records metin kolonlarının uzunluk sınırları ───
 // INSERT/UPDATE öncesi kırpma için. Strict mode'da uzun değer hata
 // verir, strict değilse SESSİZCE kırpılır — ikisi de istenmez.
@@ -2558,7 +2633,7 @@ function loading_record_text_limits(): array {
         'firma' => 150, 'bolge' => 150, 'parti_no' => 80, 'gumruk' => 150,
         'sofor_adi' => 150, 'fatura_no' => 80, 'casus_no' => 80,
         'on_plaka' => 30, 'arka_plaka' => 30, 'nakliye_sirketi' => 150,
-        'telefon' => 40, 'ulasim' => 100, 'gidecek_ulke' => 100, 'alici' => 150, 'urun' => 150,
+        'telefon' => 40, 'ulasim' => 100, 'gidecek_ulke' => 100, 'alici' => 150, 'urun' => 150, 'urun_cesidi' => 150,
         'etiket' => 255, 'cikis_nedeni' => 100, 'brand' => 20,
     ];
 }

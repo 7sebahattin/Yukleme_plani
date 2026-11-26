@@ -189,16 +189,21 @@ foreach ($pallets as $p) {
     }
 }
 
-// ── Ürün cinsi grupları ───────────────────────────────────
+// ── Ürün / Cinsi grupları ─────────────────────────────────
+$rec_urun_cesidi   = trim((string)($record['urun_cesidi'] ?? ''));
+$has_any_pal_cesit = false;
 $urun_groups = [];
 foreach ($pallets as $p) {
-    $u = trim($p['urun_cinsi'] ?? '');
+    $u  = trim((string)($p['urun_cinsi'] ?? ''));
+    $pc = trim((string)($p['urun_cesidi'] ?? ''));
+    if ($pc !== '') $has_any_pal_cesit = true;
     if ($u === '') $u = '—';
-    if (!isset($urun_groups[$u])) $urun_groups[$u] = ['kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
-    $urun_groups[$u]['kasa'] += (int)$p['kasa_adeti'];
-    $urun_groups[$u]['brut'] += (float)$p['brut_kg'];
-    $urun_groups[$u]['dara'] += (float)$p['dara_kg'];
-    $urun_groups[$u]['net']  += (float)$p['net_kg'];
+    $uk = $pc !== '' ? ($u . ' — ' . $pc) : $u;
+    if (!isset($urun_groups[$uk])) $urun_groups[$uk] = ['kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
+    $urun_groups[$uk]['kasa'] += (int)$p['kasa_adeti'];
+    $urun_groups[$uk]['brut'] += (float)$p['brut_kg'];
+    $urun_groups[$uk]['dara'] += (float)$p['dara_kg'];
+    $urun_groups[$uk]['net']  += (float)$p['net_kg'];
 }
 
 // ── Depo grupları ─────────────────────────────────────────
@@ -372,7 +377,7 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
     </tr>
     <tr>
       <th>BÖLGE</th><td><?= h($record['bolge'] ?? '—') ?></td>
-      <th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?></td>
+      <th>ÜRÜN<?= $rec_urun_cesidi !== '' ? ' / CİNSİ' : '' ?></th><td><?= h($record['urun'] ?? '—') ?><?php if ($rec_urun_cesidi !== ''): ?> <span style="color:#444">/ <?= h($rec_urun_cesidi) ?></span><?php endif; ?></td>
     </tr>
     <tr>
       <th>TARİH</th><td><?= h(fmt_date($record['tarih'])) ?></td>
@@ -561,7 +566,7 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
       <th>ALICI</th><td><?= h($record['alici'] ?? '—') ?></td>
     </tr>
     <tr>
-      <th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?></td>
+      <th>ÜRÜN<?= $rec_urun_cesidi !== '' ? ' / CİNSİ' : '' ?></th><td><?= h($record['urun'] ?? '—') ?><?php if ($rec_urun_cesidi !== ''): ?> / <?= h($rec_urun_cesidi) ?><?php endif; ?></td>
       <th>MARKA</th><td><?= h($brand_label) ?></td>
       <th>ÜRÜN SAHİBİ</th><td><?= $urun_sahibi_adi !== '' ? h($urun_sahibi_adi) : '—' ?></td>
     </tr>
@@ -594,13 +599,14 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
         <th class="num" style="width:52px">Dara KG</th>
         <th class="num" style="width:52px">Net KG</th>
         <th>Kasa Cinsi</th>
-        <th>Ürün Cinsi</th>
+        <th><?= $has_any_pal_cesit ? 'Ürün' : 'Ürün Cinsi' ?></th>
+        <?php if ($has_any_pal_cesit): ?><th>Cinsi</th><?php endif; ?>
         <th>Depo</th>
       </tr>
     </thead>
     <tbody>
     <?php if (empty($pallets)): ?>
-      <tr><td colspan="10" style="text-align:center;color:#999">Palet kaydı yok.</td></tr>
+      <tr><td colspan="<?= $has_any_pal_cesit ? 11 : 10 ?>" style="text-align:center;color:#999">Palet kaydı yok.</td></tr>
     <?php endif; ?>
     <?php foreach ($pallets as $i => $p): ?>
       <tr class="<?= ($i % 2 === 1) ? 'row-odd' : '' ?> print-avoid-break">
@@ -613,6 +619,7 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
         <td class="num" style="font-weight:600"><?= h(fmt_kg($p['net_kg'])) ?></td>
         <td><?= h($p['kasa_cinsi_adi'] ?? '—') ?></td>
         <td><?= h($p['urun_cinsi'] ?? '—') ?></td>
+        <?php if ($has_any_pal_cesit): ?><td><?= h(trim((string)($p['urun_cesidi'] ?? '')) ?: '—') ?></td><?php endif; ?>
         <td><?= h($p['depo'] ?? '—') ?></td>
       </tr>
     <?php endforeach; ?>
@@ -625,7 +632,7 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
         <td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
         <td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
         <td class="num" style="font-weight:bold"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td>
-        <td colspan="3"></td>
+        <td colspan="<?= $has_any_pal_cesit ? 4 : 3 ?>"></td>
       </tr>
     </tfoot>
   </table>

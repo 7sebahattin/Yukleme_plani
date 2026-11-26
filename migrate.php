@@ -90,6 +90,8 @@ require_once __DIR__ . '/config/bi_rapor_core.php';      // ERP Faz 5 Yeni Rapor
 $migrations = [
     ['loading_records', 'ulasim',         "ALTER TABLE `loading_records` ADD COLUMN `ulasim` VARCHAR(100) NOT NULL DEFAULT ''"],
     ['loading_records', 'gidecek_ulke',   "ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''"],
+    ['loading_records', 'urun_cesidi',    "ALTER TABLE `loading_records` ADD COLUMN `urun_cesidi` VARCHAR(150) NOT NULL DEFAULT ''"],
+    ['loading_pallets', 'urun_cesidi',    "ALTER TABLE `loading_pallets` ADD COLUMN `urun_cesidi` VARCHAR(150) NOT NULL DEFAULT ''"],
     ['loading_records', 'brand',          "ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL"],
     ['loading_records', 'urun_sahibi_id', "ALTER TABLE `loading_records` ADD COLUMN `urun_sahibi_id` INT NULL DEFAULT NULL"],
     ['loading_records', 'type',           "ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'"],

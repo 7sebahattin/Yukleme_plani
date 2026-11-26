@@ -370,29 +370,46 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
        data-list-back="<?= $_lpage ?>" data-record-id="<?= (int)$id ?>">← Liste</a>
     <div class="rv-actions">
         <?php if ((!$_is_locked || $_can_unlock) && can('records.' . (($record['type'] ?? '') === 'cikma' ? 'pallet' : 'loading') . '.edit')): ?>
-        <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
+        <a href="record_edit.php?id=<?= (int)$id ?>" class="btn rv-act-btn">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span>Düzenle</span>
+        </a>
         <?php endif; ?>
-        <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
-        <div class="pc-kebab-wrap">
-            <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
-            <div class="pc-dropdown" hidden>
-                <?php if ($maliyet_links): ?>
-                <a href="maliyet_view.php?id=<?= (int)$maliyet_links[0]['id'] ?>">
-                    🧮 Maliyet<?= count($maliyet_links) > 1 ? ' (' . count($maliyet_links) . ')' : '' ?>
-                </a>
-                <?php elseif ($_is_maliyet_eligible && can_maliyet('create')): ?>
-                <a href="maliyet_form.php?record=<?= (int)$id ?>">🧮 Maliyet Oluştur</a>
-                <?php endif; ?>
-                <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>
-                <a href="print_loading.php?id=<?= (int)$id ?>&mode=summary" target="_blank">📄 Özet Yazdır</a>
-                <?php endif; ?>
-                <?php if (can('reports.export')): ?>
-                <a href="record_excel_template.php?id=<?= (int)$id ?>">📊 Excel İndir</a>
-                <?php endif; ?>
-                <button type="button" id="bmOpenBtn">📦 Malzeme Çıkışı</button>
-                <button type="button" id="kalanOpenBtn">📊 Kalan Palet Hesapla</button>
-            </div>
-        </div>
+        <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary rv-act-btn" target="_blank">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            <span>Yazdır</span>
+        </a>
+        <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>
+        <a href="print_loading.php?id=<?= (int)$id ?>&mode=summary" class="btn rv-act-btn" target="_blank">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span>Özet Yazdır</span>
+        </a>
+        <?php endif; ?>
+        <?php if (can('reports.export')): ?>
+        <a href="record_excel_template.php?id=<?= (int)$id ?>" class="btn rv-act-btn">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>
+            <span>Excel İndir</span>
+        </a>
+        <?php endif; ?>
+        <button type="button" id="bmOpenBtn" class="btn rv-act-btn">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            <span>Malzeme Çıkışı</span>
+        </button>
+        <button type="button" id="kalanOpenBtn" class="btn rv-act-btn">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <span>Kalan Palet Hesapla</span>
+        </button>
+        <?php if ($maliyet_links): ?>
+        <a href="maliyet_view.php?id=<?= (int)$maliyet_links[0]['id'] ?>" class="btn rv-act-btn">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="8" y1="18" x2="8" y2="18.01"/><line x1="12" y1="18" x2="16" y2="18"/></svg>
+            <span>Maliyet<?= count($maliyet_links) > 1 ? ' (' . count($maliyet_links) . ')' : '' ?></span>
+        </a>
+        <?php elseif ($_is_maliyet_eligible && can_maliyet('create')): ?>
+        <a href="maliyet_form.php?record=<?= (int)$id ?>" class="btn rv-act-btn">
+            <svg class="rv-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10.01"/><line x1="12" y1="10" x2="12" y2="10.01"/><line x1="16" y1="10" x2="16" y2="10.01"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/><line x1="8" y1="18" x2="8" y2="18.01"/><line x1="12" y1="18" x2="16" y2="18"/></svg>
+            <span>Maliyet Oluştur</span>
+        </a>
+        <?php endif; ?>
     </div>
 </div>
 <?php else: ?>
@@ -444,6 +461,9 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
         <div class="info-grid">
             <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
             <div><span class="lbl">Ürün</span><strong><?= h($record['urun'] ?: '—') ?></strong></div>
+            <?php if (!empty($record['urun_cesidi'])): ?>
+            <div><span class="lbl">Cinsi</span><strong><?= h($record['urun_cesidi']) ?></strong></div>
+            <?php endif; ?>
             <div><span class="lbl">Depo</span><strong><?= h($depo_str ?: '—') ?></strong></div>
             <div><span class="lbl">Bölge</span><strong><?= h($record['bolge'] ?: '—') ?></strong></div>
             <?php if ($_rv_is_yukleme): ?>
@@ -516,7 +536,8 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
             <th>Size</th>
             <th>Kasa Cinsi</th>
             <th>Palet Tipi</th>
-            <th>Ürün Cinsi</th>
+            <th>Ürün</th>
+            <th>Cinsi</th>
             <th>Depo</th>
             <th class="num">Brüt KG</th>
             <th class="num">Dara KG</th>
@@ -525,7 +546,7 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
         </thead>
         <tbody>
         <?php if (empty($pallets)): ?>
-            <tr><td colspan="10" class="muted center">Palet kaydı yok.</td></tr>
+            <tr><td colspan="11" class="muted center">Palet kaydı yok.</td></tr>
         <?php endif; ?>
         <?php foreach ($pallets as $p): ?>
             <tr>
@@ -535,6 +556,7 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
                 <td><?= h(kasa_label($p['kasa_cinsi_adi'], $p['kasa_cinsi_kg'])) ?></td>
                 <td><?= h(kasa_label($p['palet_tipi_adi'], $p['palet_tipi_kg'])) ?></td>
                 <td><?= h($p['urun_cinsi']) ?></td>
+                <td><?= h(($p['urun_cesidi'] ?? '') !== '' ? $p['urun_cesidi'] : '—') ?></td>
                 <td><?= h($p['depo']) ?></td>
                 <td class="num"><?= h(fmt_kg($p['brut_kg'])) ?></td>
                 <td class="num"><?= h(fmt_kg($p['dara_kg'])) ?></td>
@@ -546,7 +568,7 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
         <tr class="totals-row">
             <td class="right strong">TOPLAM</td>
             <td class="num strong"><?= (int)$tot['toplam_kasa'] ?></td>
-            <td colspan="5"></td>
+            <td colspan="6"></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
             <td class="num strong tot-orange"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
             <td class="num strong tot-orange"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td>
@@ -567,7 +589,10 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
                 <div class="vc-kasa"><?= (int)$p['kasa_adeti'] ?> kasa</div>
             </div>
             <div class="vc-grid">
-                <div><span>Ürün Cinsi</span><strong><?= h($p['urun_cinsi'] ?: '—') ?></strong></div>
+                <div><span>Ürün</span><strong><?= h($p['urun_cinsi'] ?: '—') ?></strong></div>
+                <?php if (!empty($p['urun_cesidi'])): ?>
+                <div><span>Cinsi</span><strong><?= h($p['urun_cesidi']) ?></strong></div>
+                <?php endif; ?>
                 <div><span>Depo</span><strong><?= h($p['depo'] ?: '—') ?></strong></div>
                 <div><span>Kasa Cinsi</span><strong><?= h(kasa_label($p['kasa_cinsi_adi'], $p['kasa_cinsi_kg'])) ?></strong></div>
                 <div><span>Palet Tipi</span><strong><?= h(kasa_label($p['palet_tipi_adi'], $p['palet_tipi_kg'])) ?></strong></div>
@@ -655,7 +680,7 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
     <table class="cikma-info-table">
         <tr>
             <th>FİRMA</th><td><?= h($record['firma'] ?? '—') ?></td>
-            <th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?></td>
+            <th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?><?php if (!empty($record['urun_cesidi'])): ?> / <?= h($record['urun_cesidi']) ?><?php endif; ?></td>
             <th>DEPO</th><td><?= h($depo_str) ?></td>
             <th>TARİH</th><td><?= h(fmt_date($record['tarih'])) ?></td>
         </tr>
@@ -668,7 +693,7 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
             <th>Size</th>
             <th>Kasa Cinsi</th>
             <th>Palet Tipi</th>
-            <th>Ürün Cinsi</th>
+            <th>Ürün</th>
             <th>Depo</th>
             <th class="num">Kasa Sayısı</th>
             <th class="num">Brüt KG</th>
@@ -680,13 +705,17 @@ $_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
         <?php if (empty($pallets)): ?>
             <tr><td colspan="10" style="text-align:center;color:#999">Palet kaydı yok.</td></tr>
         <?php endif; ?>
-        <?php foreach ($pallets as $p): ?>
+        <?php foreach ($pallets as $p):
+            $_ck_u1 = trim((string)($p['urun_cinsi'] ?? ''));
+            $_ck_u2 = trim((string)($p['urun_cesidi'] ?? ''));
+            $_ck_ud = ($_ck_u1 !== '' && $_ck_u2 !== '') ? ($_ck_u1 . ' / ' . $_ck_u2) : ($_ck_u1 !== '' ? $_ck_u1 : ($_ck_u2 !== '' ? $_ck_u2 : '—'));
+        ?>
             <tr>
                 <td><?= h($p['palet_no'] ?? '—') ?></td>
                 <td><?= h($p['size'] ?: '—') ?></td>
                 <td><?= h($p['kasa_cinsi_adi'] ?: '—') ?></td>
                 <td><?= h($p['palet_tipi_adi'] ?: '—') ?></td>
-                <td><?= h($p['urun_cinsi'] ?: '—') ?></td>
+                <td><?= h($_ck_ud) ?></td>
                 <td><?= h($p['depo'] ?: '—') ?></td>
                 <td class="num"><?= (int)$p['kasa_adeti'] ?></td>
                 <td class="num"><?= h(fmt_kg($p['brut_kg'])) ?></td>
@@ -779,7 +808,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
                     </div>
                     <div class="cell-pair asya-urun-cell">
                         <span>ÜRÜN</span>
-                        <strong><?= h($record['urun']) ?></strong>
+                        <strong><?= h($record['urun']) ?><?php if (!empty($record['urun_cesidi'])): ?> / <?= h($record['urun_cesidi']) ?><?php endif; ?></strong>
                     </div>
                 </div>
                 <?php $_etiket_foto = trim((string)($record['etiket_foto'] ?? '')); ?>
@@ -822,12 +851,19 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
                 <th class="w-dara">DARA<br>KG</th>
                 <th class="w-net">NET<br>KG</th>
                 <th class="w-kc">KASA CİNSİ</th>
-                <th class="w-uc">ÜRÜN CİNSİ</th>
+                <th class="w-uc">ÜRÜN</th>
                 <th class="w-depo">DEPO</th>
             </tr>
             </thead>
             <tbody>
-            <?php for ($i = 0; $i < $grid_rows; $i++): $p = $pallets_grid[$i]; ?>
+            <?php for ($i = 0; $i < $grid_rows; $i++): $p = $pallets_grid[$i];
+                $_asya_urun = '';
+                if ($p) {
+                    $_au1 = trim((string)($p['urun_cinsi'] ?? ''));
+                    $_au2 = trim((string)($p['urun_cesidi'] ?? ''));
+                    $_asya_urun = ($_au1 !== '' && $_au2 !== '') ? ($_au1 . ' / ' . $_au2) : ($_au1 !== '' ? $_au1 : $_au2);
+                }
+            ?>
                 <tr>
                     <td class="row-no"><?= $i + 1 ?></td>
                     <td class="num"><?= $p ? (int)$p['kasa_adeti'] : '' ?></td>
@@ -836,7 +872,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
                     <td class="num"><?= $p ? h(fmt_kg($p['dara_kg'])) : '' ?></td>
                     <td class="num"><?= $p ? h(fmt_kg($p['net_kg'])) : '' ?></td>
                     <td class="small"><?= $p ? h($p['kasa_cinsi_adi']) : '' ?></td>
-                    <td class="small"><?= $p ? h($p['urun_cinsi']) : '' ?></td>
+                    <td class="small"><?= h($_asya_urun) ?></td>
                     <td class="small"><?= $p ? h($p['depo']) : '' ?></td>
                 </tr>
             <?php endfor; ?>
@@ -1062,38 +1098,26 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
 
     <div class="pm-body">
 
-      <!-- ── Tek malzeme paneli ── -->
-      <div class="bm-panel" id="bmPanelSingle">
-        <div class="pm-grid" style="margin-bottom:12px">
-          <label class="pm-label pm-span2">
-            <span>Malzeme *</span>
-            <select id="bmMaterial">
-              <option value="">-- malzeme seçiniz --</option>
-              <?php
-              $bm_by_type = [];
-              foreach ($bm_materials as $m) {
-                  if (!in_array($m['type'], $bm_allowed_types, true)) continue;
-                  $bm_by_type[$m['type']][] = $m;
-              }
-              foreach ($bm_by_type as $btype => $blist):
-                  $blabel = $type_labels[$btype] ?? $btype;
-              ?>
-              <optgroup label="<?= h($blabel) ?>">
-                <?php foreach ($blist as $bm): ?>
-                <option value="<?= (int)$bm['id'] ?>" data-unit="<?= h($bm['unit_dara_kg']) ?>"><?= h($bm['name']) ?> (<?= h(fmt_unit_kg($bm['unit_dara_kg'])) ?> kg)</option>
-                <?php endforeach; ?>
-              </optgroup>
-              <?php endforeach; ?>
-            </select>
-          </label>
-          <label class="pm-label">
-            <span>Adet *</span>
-            <input type="text" inputmode="decimal" id="bmQty" value="1" placeholder="Adet" class="num">
-          </label>
-          <div class="pm-label" style="justify-content:flex-end;padding-top:4px">
-            <span id="bmDaraPreview" class="bm-dara-preview"></span>
+      <!-- ── Çoklu malzeme tablo paneli ── -->
+      <div class="bm-panel" id="bmPanelSingle" style="margin-bottom:10px">
+        <div class="mat-table-wrap table-wrap">
+          <table class="mat-pick-table" id="bmMatTable">
+            <thead>
+              <tr>
+                <th>Malzeme Cinsi</th>
+                <th>Malzeme Adı</th>
+                <th>Adet</th>
+                <th class="mat-col-act"></th>
+              </tr>
+            </thead>
+            <tbody id="bmMatTbody"></tbody>
+          </table>
+          <div class="mat-table-foot">
+            <button type="button" class="btn btn-sm btn-ghost mat-add-extra-row" id="bmAddRowBtn">+ Satır Ekle</button>
+            <span id="bmSelInfo" class="muted" style="font-size:.8rem"></span>
           </div>
         </div>
+        <div id="bmSelectedList" class="mat-selected-list"></div>
       </div>
 
       <!-- ── Şablonlar paneli ── -->
@@ -1126,6 +1150,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
 
       <!-- ── Palet seçimi (her iki modda ortak) ── -->
       <div class="bm-pallets-head">
+        <div class="bm-pallets-title" style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:0 12px 2px">Uygulanacak Paletler</div>
         <label class="bm-check-label">
           <input type="checkbox" id="bmAll" checked>
           <strong>Tüm Paletler</strong>
@@ -1166,20 +1191,30 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
     var allCb    = document.getElementById('bmAll');
     var applyBtn = document.getElementById('bmApply');
 
-    /* ── PHP malzeme listesi (şablon formu için) ── */
+    /* ── PHP malzeme ve tür listesi ── */
     <?php
+    $bm_types_list = [];
+    foreach ($bm_allowed_types as $tkey) {
+        $bm_types_list[] = [
+            'key'   => $tkey,
+            'label' => $type_labels[$tkey] ?? $tkey,
+        ];
+    }
     $bm_mat_list = [];
     foreach ($bm_materials as $m) {
         if (!in_array($m['type'], $bm_allowed_types, true)) continue;
         $bm_mat_list[] = [
-            'id'   => (int)$m['id'],
-            'name' => $m['name'],
-            'type' => $type_labels[$m['type']] ?? $m['type'],
-            'unit' => (float)$m['unit_dara_kg'],
+            'id'       => (int)$m['id'],
+            'name'     => $m['name'],
+            'type'     => $type_labels[$m['type']] ?? $m['type'],
+            'type_key' => $m['type'],
+            'unit'     => (float)$m['unit_dara_kg'],
         ];
     }
     ?>
-    var BM_MATS = <?= json_encode($bm_mat_list) ?>;
+    var BM_TYPES = <?= json_encode($bm_types_list, JSON_UNESCAPED_UNICODE) ?>;
+    var BM_MATS  = <?= json_encode($bm_mat_list, JSON_UNESCAPED_UNICODE) ?>;
+    var bmNeedsReload = false;
 
     /* ── Yardımcılar ── */
     /* Türkçe/İngilizce sayı formatını güvenli çöz: "1.234,5"→1234.5, "1,234.5"→1234.5,
@@ -1235,17 +1270,184 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
         });
     });
 
+    /* ── Malzeme tablo UI ── */
+    var bmTbody    = document.getElementById('bmMatTbody');
+    var bmAddRowBtn = document.getElementById('bmAddRowBtn');
+    var bmSelInfo  = document.getElementById('bmSelInfo');
+    var bmSelList  = document.getElementById('bmSelectedList');
+
+    var activeTypes = BM_TYPES.filter(function(t) {
+        return BM_MATS.some(function(m) { return m.type_key === t.key; });
+    });
+
+    function populateMatNames(nameSel, typeKey) {
+        nameSel.innerHTML = '';
+        var emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '-- seçiniz --';
+        nameSel.appendChild(emptyOpt);
+        BM_MATS.forEach(function(m) {
+            if (m.type_key !== typeKey) return;
+            var opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name;
+            nameSel.appendChild(opt);
+        });
+    }
+
+    function syncBmSelection() {
+        if (!bmTbody) return;
+        var selected = [];
+        bmTbody.querySelectorAll('tr').forEach(function(tr) {
+            var nameSel = tr.querySelector('.mat-pick-name');
+            var qtyInp  = tr.querySelector('.mat-pick-qty');
+            if (!nameSel || !qtyInp) return;
+            var mid = parseInt(nameSel.value, 10) || 0;
+            var qty = parseN(qtyInp.value);
+            var isSel = (mid > 0 && qty > 0);
+            tr.classList.toggle('is-selected', isSel);
+            if (isSel) {
+                var opt = nameSel.options[nameSel.selectedIndex];
+                selected.push({
+                    tr: tr,
+                    nameSel: nameSel,
+                    qtyInp: qtyInp,
+                    mid: mid,
+                    name: opt ? opt.textContent : '',
+                    qty: qty
+                });
+            }
+        });
+
+        if (bmSelInfo) {
+            bmSelInfo.textContent = selected.length > 0 ? (selected.length + ' malzeme seçildi') : '';
+        }
+        if (bmSelList) {
+            bmSelList.innerHTML = '';
+            selected.forEach(function(item) {
+                var chip = document.createElement('span');
+                chip.className = 'mat-chip';
+                chip.innerHTML = '<span>' + esc(item.name) + ' × ' + esc(fmtN(item.qty)) + '</span>';
+                var del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'mat-chip-rm';
+                del.title = 'Seçimi kaldır';
+                del.textContent = '×';
+                del.addEventListener('click', function() {
+                    item.nameSel.value = '';
+                    item.qtyInp.value = '';
+                    syncBmSelection();
+                });
+                chip.appendChild(del);
+                bmSelList.appendChild(chip);
+            });
+        }
+    }
+
+    function createBmRow(typeKey, isExtra) {
+        var tr = document.createElement('tr');
+        tr.className = 'mat-pick-row';
+        var chosenKey = typeKey || (activeTypes[0] ? activeTypes[0].key : '');
+
+        var tdType = document.createElement('td');
+        var typeSel = document.createElement('select');
+        typeSel.className = 'mat-pick-type';
+        activeTypes.forEach(function(t) {
+            var opt = document.createElement('option');
+            opt.value = t.key;
+            opt.textContent = t.label;
+            if (t.key === chosenKey) opt.selected = true;
+            typeSel.appendChild(opt);
+        });
+        tdType.appendChild(typeSel);
+
+        var tdName = document.createElement('td');
+        var nameSel = document.createElement('select');
+        nameSel.className = 'mat-pick-name';
+        populateMatNames(nameSel, chosenKey);
+        tdName.appendChild(nameSel);
+
+        var tdQty = document.createElement('td');
+        var qtyInp = document.createElement('input');
+        qtyInp.type = 'text';
+        qtyInp.inputMode = 'decimal';
+        qtyInp.className = 'num mat-pick-qty';
+        qtyInp.placeholder = '0';
+        tdQty.appendChild(qtyInp);
+
+        var tdAct = document.createElement('td');
+        tdAct.className = 'mat-col-act';
+        if (isExtra) {
+            var delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'mat-row-del';
+            delBtn.title = 'Satırı kaldır';
+            delBtn.textContent = '×';
+            delBtn.addEventListener('click', function() {
+                tr.remove();
+                syncBmSelection();
+            });
+            tdAct.appendChild(delBtn);
+        }
+
+        typeSel.addEventListener('change', function() {
+            populateMatNames(nameSel, typeSel.value);
+            qtyInp.value = '';
+            syncBmSelection();
+        });
+        nameSel.addEventListener('change', function() {
+            if (nameSel.value !== '') {
+                if (parseN(qtyInp.value) <= 0) qtyInp.value = '1';
+            } else {
+                qtyInp.value = '';
+            }
+            syncBmSelection();
+        });
+        qtyInp.addEventListener('input', syncBmSelection);
+
+        tr.appendChild(tdType);
+        tr.appendChild(tdName);
+        tr.appendChild(tdQty);
+        tr.appendChild(tdAct);
+        return tr;
+    }
+
+    function initBmTable() {
+        if (!bmTbody) return;
+        bmTbody.innerHTML = '';
+        activeTypes.forEach(function(t) {
+            bmTbody.appendChild(createBmRow(t.key, false));
+        });
+        syncBmSelection();
+    }
+
+    if (bmAddRowBtn) {
+        bmAddRowBtn.addEventListener('click', function() {
+            if (!activeTypes.length) return;
+            var row = createBmRow(activeTypes[0].key, true);
+            bmTbody.appendChild(row);
+            var sel = row.querySelector('.mat-pick-name');
+            if (sel) sel.focus();
+        });
+    }
+
+    initBmTable();
+
     /* ── Açma/Kapama ── */
     function openModal() {
         overlay.style.display = 'flex';
         document.body.style.overflow = 'hidden';
         statusEl.textContent = '';
+        if (bmTbody && !bmTbody.children.length) initBmTable();
         if (activeTab === 'tpl') loadTemplates();
         if (activeTab === 'remove') loadExtraMaterials();
     }
     function closeModal() {
         overlay.style.display = 'none';
         document.body.style.overflow = '';
+        if (bmNeedsReload) {
+            location.reload();
+        }
     }
     if (openBtn) openBtn.addEventListener('click', openModal);
     document.getElementById('bmClose').addEventListener('click', closeModal);
@@ -1269,28 +1471,33 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
     }
     document.querySelectorAll('.bm-pallet-cb').forEach(function(cb) { cb.addEventListener('change', updateCount); });
 
-    /* ── Tek malzeme: dara önizlemesi ── */
-    var matSel  = document.getElementById('bmMaterial');
-    var qtyInp  = document.getElementById('bmQty');
-    var preview = document.getElementById('bmDaraPreview');
-    function updatePreview() {
-        var opt  = matSel.options[matSel.selectedIndex];
-        var unit = opt && opt.dataset.unit ? parseN(opt.dataset.unit) : 0;
-        var qty  = parseN(qtyInp.value);
-        preview.textContent = (unit && qty) ? 'Dara: ' + fmtN(unit * qty) + ' kg' : '';
-    }
-    matSel.addEventListener('change', updatePreview);
-    qtyInp.addEventListener('input',  updatePreview);
-
-    /* ── Tek malzeme: Uygula ── */
+    /* ── Çoklu malzeme: Uygula ── */
     applyBtn.addEventListener('click', function() {
-        var mid = parseInt(matSel.value);
-        var qty = parseN(qtyInp.value);
-        if (!mid)       { alert('Malzeme seçiniz.'); return; }
-        if (qty <= 0)   { alert('Geçerli bir adet giriniz.'); return; }
+        var materials = [];
+        if (bmTbody) {
+            bmTbody.querySelectorAll('tr').forEach(function(tr) {
+                var nameSel = tr.querySelector('.mat-pick-name');
+                var qtyInp  = tr.querySelector('.mat-pick-qty');
+                if (!nameSel || !qtyInp) return;
+                var mid = parseInt(nameSel.value, 10) || 0;
+                var qty = parseN(qtyInp.value);
+                if (mid > 0 && qty > 0) {
+                    materials.push({material_id: mid, quantity: qty});
+                }
+            });
+        }
+        if (!materials.length) {
+            statusEl.textContent = 'En az bir malzeme ve adet seçiniz.';
+            statusEl.style.color = 'var(--danger)';
+            return;
+        }
         var ids = getSelectedPalletIds();
-        if (!ids.length){ alert('En az bir palet seçiniz.'); return; }
-        sendMaterials([{material_id: mid, quantity: qty}], ids, applyBtn);
+        if (!ids.length) {
+            statusEl.textContent = 'En az bir palet seçiniz.';
+            statusEl.style.color = 'var(--danger)';
+            return;
+        }
+        sendMaterials(materials, ids, applyBtn);
     });
 
     /* ── API: malzeme gönder ── */
@@ -1308,7 +1515,9 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
         .then(function(data) {
             if (triggerBtn) triggerBtn.disabled = false;
             if (data.ok) {
-                statusEl.textContent = '✓ ' + data.updated + ' palete eklendi.';
+                bmNeedsReload = true;
+                initBmTable();
+                statusEl.textContent = '✓ ' + materials.length + ' malzeme ' + data.updated + ' palete eklendi ve stoktan düşüldü.';
                 statusEl.style.color = 'var(--success)';
                 loadExtraMaterials();
             } else {
@@ -1568,6 +1777,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
         .then(function(data) {
             if (btn) btn.disabled = false;
             if (data.ok) {
+                bmNeedsReload = true;
                 if (rmStatus) { rmStatus.textContent = '✓ ' + data.deleted + ' malzeme silindi.'; rmStatus.style.color = 'var(--success)'; }
                 loadExtraMaterials();
             } else {

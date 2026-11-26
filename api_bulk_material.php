@@ -87,6 +87,7 @@ function ms_recompute_pallet(PDO $pdo, int $pid): void {
         'palet_no' => $pallet['palet_no'], 'kasa_adeti' => $pallet['kasa_adeti'], 'size' => $pallet['size'],
         'brut_kg' => $pallet['brut_kg'], 'kasa_cinsi_id' => $pallet['kasa_cinsi_id'],
         'palet_tipi_id' => $pallet['palet_tipi_id'], 'urun_cinsi' => $pallet['urun_cinsi'],
+        'urun_cesidi' => $pallet['urun_cesidi'] ?? '',
         'depo' => $pallet['depo'], 'materials' => $mats,
     ]);
     $pdo->prepare("UPDATE loading_pallets SET dara_kg=?, net_kg=? WHERE id=?")
@@ -196,6 +197,7 @@ if (($body['action'] ?? '') === 'delete') {
             'kasa_cinsi_id' => $pallet['kasa_cinsi_id'],
             'palet_tipi_id' => $pallet['palet_tipi_id'],
             'urun_cinsi'    => $pallet['urun_cinsi'],
+            'urun_cesidi'   => $pallet['urun_cesidi'] ?? '',
             'depo'          => $pallet['depo'],
             'materials'     => $mats,
         ]);
@@ -259,12 +261,15 @@ if (($body['action'] ?? '') === 'delete_material_all_pallets') {
 
 // Eski (tekli) format → yeni array formatına çevir
 if (!empty($body['material_id'])) {
-    $materials_input = [['material_id' => (int)$body['material_id'], 'quantity' => parse_decimal($body['quantity'] ?? 1)]];
+    $mid = (int)$body['material_id'];
+    $qty = array_key_exists('quantity', $body) ? parse_decimal($body['quantity']) : 1.0;
+    $materials_input = ($mid > 0 && $qty > 0) ? [['material_id' => $mid, 'quantity' => $qty]] : [];
 } else {
     $materials_input = [];
     foreach ((array)($body['materials'] ?? []) as $m) {
+        if (!is_array($m)) continue;
         $mid = (int)($m['material_id'] ?? 0);
-        $qty = parse_decimal($m['quantity'] ?? 1);
+        $qty = array_key_exists('quantity', $m) ? parse_decimal($m['quantity']) : 1.0;
         if ($mid > 0 && $qty > 0) $materials_input[] = ['material_id' => $mid, 'quantity' => $qty];
     }
 }
@@ -389,6 +394,7 @@ try {
             'kasa_cinsi_id' => $pallet['kasa_cinsi_id'],
             'palet_tipi_id' => $pallet['palet_tipi_id'],
             'urun_cinsi'    => $pallet['urun_cinsi'],
+            'urun_cesidi'   => $pallet['urun_cesidi'] ?? '',
             'depo'          => $pallet['depo'],
             'materials'     => $mats,
         ]);
@@ -399,6 +405,15 @@ try {
 
     $pdo->commit();
     sync_malzeme_kullanim($record_id);   // palet malzemesi eklendi → stok hareketlerini güncelle
+    $added_summary = [];
+    foreach ($materials_input as $m) {
+        $mname = (string)($mats_db[$m['material_id']]['name'] ?? ('#' . $m['material_id']));
+        $added_summary[] = $mname . ' x' . $m['quantity'];
+    }
+    audit_log_event('bulk_add_materials', 'records', $record_id, null, [
+        'malzemeler'   => implode(', ', array_slice($added_summary, 0, 15)),
+        'palet_sayisi' => count($valid_ids),
+    ]);
     echo json_encode(['ok' => true, 'updated' => count($valid_ids)]);
 
 } catch (Throwable $e) {

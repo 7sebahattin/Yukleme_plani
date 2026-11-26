@@ -60,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'bolge'           => trim((string)($_POST['bolge'] ?? '')),
         'tarih'           => trim((string)($_POST['tarih'] ?? '')) ?: null,
         'urun'            => trim((string)($_POST['urun'] ?? '')),
+        'urun_cesidi'     => trim((string)($_POST['urun_cesidi'] ?? '')),
     ];
     if ($edit_is_cikma) {
         $record['cikis_nedeni'] = trim((string)($_POST['cikis_nedeni'] ?? ''));
@@ -98,14 +99,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             && empty($rp['kasa_cinsi_id'])
             && empty($rp['palet_tipi_id'])
             && trim((string)($rp['urun_cinsi'] ?? '')) === ''
+            && trim((string)($rp['urun_cesidi'] ?? '')) === ''
         );
         if ($is_empty) continue;
         $computed[] = compute_pallet_row($rp);
     }
 
     // Normalize
-    $record['firma'] = normalize_firma($record['firma']);
-    $record['urun']  = normalize_urun($record['urun']);
+    $record['firma']       = normalize_firma($record['firma']);
+    $record['urun']        = normalize_urun($record['urun']);
+    $record['urun_cesidi'] = tr_upper($record['urun_cesidi']);
     foreach (['bolge', 'parti_no', 'gumruk', 'alici', 'sofor_adi', 'fatura_no', 'casus_no', 'on_plaka', 'arka_plaka', 'nakliye_sirketi'] as $_tf) {
         if (isset($record[$_tf]) && $record[$_tf] !== '') $record[$_tf] = tr_upper($record[$_tf]);
     }
@@ -141,12 +144,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Palet ürün alanı: boşsa kayıt ürününden doldur, doluysa normalize et
+    // Palet ürün ve cinsi alanları: boşsa kayıt değerinden doldur, doluysa normalize et
     foreach ($computed as &$p) {
         if ($p['urun_cinsi'] === '') {
             $p['urun_cinsi'] = $record['urun'];
         } else {
             $p['urun_cinsi'] = normalize_urun($p['urun_cinsi']);
+        }
+        if ($p['urun_cesidi'] === '' && $record['urun_cesidi'] !== '') {
+            $p['urun_cesidi'] = $record['urun_cesidi'];
+        } elseif ($p['urun_cesidi'] !== '') {
+            $p['urun_cesidi'] = mb_substr(tr_upper($p['urun_cesidi']), 0, 150, 'UTF-8');
         }
     }
     unset($p);
@@ -171,9 +179,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         ensure_definition('firma', $record['firma']);
         ensure_definition('urun',  $record['urun']);
+        if ($record['urun_cesidi'] !== '') ensure_definition('urun_cesidi', $record['urun_cesidi']);
         foreach ($computed as $p) {
-            if (!empty($p['depo']))       ensure_definition('depo', $p['depo']);
-            if (!empty($p['urun_cinsi'])) ensure_definition('urun', $p['urun_cinsi']);
+            if (!empty($p['depo']))        ensure_definition('depo', $p['depo']);
+            if (!empty($p['urun_cinsi']))  ensure_definition('urun', $p['urun_cinsi']);
+            if (!empty($p['urun_cesidi'])) ensure_definition('urun_cesidi', $p['urun_cesidi']);
         }
     }
 
@@ -186,31 +196,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_old_row->execute([':id' => $id]);
             $_audit_old = $_old_row->fetch() ?: null;
 
-            $pdo->beginTransaction();
-
-            // brand / urun_sahibi_id / ulasim / gidecek_ulke kolonları yoksa (migration çalışmadıysa) çıkar — defansif
+            // brand / urun_sahibi_id / ulasim / gidecek_ulke / urun_cesidi kolonları yoksa (migration çalışmadıysa) çıkar — defansif
             $has_brand        = !$edit_is_cikma && db_has_column('loading_records', 'brand');
             $has_urun_sahibi  = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
             $has_ulasim       = !$edit_is_cikma && db_has_column('loading_records', 'ulasim');
             $has_gidecek_ulke = !$edit_is_cikma && ensure_column('loading_records', 'gidecek_ulke',
                 "ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''");
+            $has_rec_cesit    = ensure_column('loading_records', 'urun_cesidi',
+                "ALTER TABLE `loading_records` ADD COLUMN `urun_cesidi` VARCHAR(150) NOT NULL DEFAULT ''");
+            $has_pal_cesit    = ensure_column('loading_pallets', 'urun_cesidi',
+                "ALTER TABLE `loading_pallets` ADD COLUMN `urun_cesidi` VARCHAR(150) NOT NULL DEFAULT ''");
             if (!$has_brand)       { unset($record['brand']); }
             if (!$has_urun_sahibi) { unset($record['urun_sahibi_id']); }
+
+            $pdo->beginTransaction();
 
             if ($edit_is_cikma) {
                 $st = $pdo->prepare(
                     "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun,
-                        cikis_nedeni=:cikis_nedeni
+                        cikis_nedeni=:cikis_nedeni"
+                        . ($has_rec_cesit ? ", urun_cesidi=:urun_cesidi" : "") . "
                      WHERE id=:id"
                 );
-                $st->execute([
+                $cikma_params = [
                     ':firma'        => $record['firma'],
                     ':bolge'        => $record['bolge'],
                     ':tarih'        => $record['tarih'],
                     ':urun'         => $record['urun'],
                     ':cikis_nedeni' => $record['cikis_nedeni'],
                     ':id'           => $id,
-                ]);
+                ];
+                if ($has_rec_cesit) {
+                    $cikma_params[':urun_cesidi'] = $record['urun_cesidi'] ?? '';
+                }
+                $st->execute($cikma_params);
             } else {
                 $st = $pdo->prepare(
                     "UPDATE loading_records SET
@@ -220,6 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
                         tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket"
+                        . ($has_rec_cesit    ? ", urun_cesidi=:urun_cesidi"       : "")
                         . ($has_ulasim       ? ", ulasim=:ulasim"                 : "")
                         . ($has_gidecek_ulke ? ", gidecek_ulke=:gidecek_ulke"     : "")
                         . ($has_brand        ? ", brand=:brand"                   : "")
@@ -246,6 +266,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':etiket'          => $record['etiket'],
                     ':id'              => $id,
                 ];
+                if ($has_rec_cesit) {
+                    $upd_params[':urun_cesidi'] = $record['urun_cesidi'] ?? '';
+                }
                 if ($has_ulasim) {
                     $upd_params[':ulasim'] = $record['ulasim'] ?? '';
                 }
@@ -268,9 +291,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st_p = $pdo->prepare(
                 "INSERT INTO loading_pallets
                  (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg,
-                  kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi)
+                  kasa_cinsi_id, palet_tipi_id, urun_cinsi"
+                  . ($has_pal_cesit ? ", urun_cesidi" : "")
+                  . ", depo, sira_no, islendi)
                  VALUES
-                 (:r, :pno, :ka, :sz, :br, :da, :nt, :kc, :pt, :uc, :dp, :sn, :is)"
+                 (:r, :pno, :ka, :sz, :br, :da, :nt, :kc, :pt, :uc"
+                  . ($has_pal_cesit ? ", :ucs" : "")
+                  . ", :dp, :sn, :is)"
             );
             $st_m = $pdo->prepare(
                 "INSERT INTO pallet_materials
@@ -278,7 +305,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  VALUES (:p, :m, :q, :t)"
             );
             foreach ($computed as $i => $p) {
-                $st_p->execute([
+                $p_params = [
                     ':r'  => $id,
                     ':pno'=> $p['palet_no'],
                     ':ka' => $p['kasa_adeti'],
@@ -292,7 +319,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':dp' => $p['depo'],
                     ':sn' => $i,
                     ':is' => $p['islendi'] ?? 0,
-                ]);
+                ];
+                if ($has_pal_cesit) {
+                    $p_params[':ucs'] = $p['urun_cesidi'] ?? '';
+                }
+                $st_p->execute($p_params);
                 $pid = (int)$pdo->lastInsertId();
                 foreach ($p['materials'] as $m) {
                     $st_m->execute([

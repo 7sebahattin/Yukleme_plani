@@ -17,7 +17,7 @@ $type_labels     = definition_types();
 
 // Stored values for selects (may not be in definitions list)
 $_firma_names  = array_column($firma_list,  'name');
-$_urun_names   = array_column($urun_list,   'name');
+$_urun_names   = function_exists('mevcut_urun_listesi') ? mevcut_urun_listesi() : array_column($urun_list, 'name');
 $_depo_names   = array_column($depo_list,   'name');
 $_bolge_names  = array_column($bolge_list,  'name');
 $_cur_firma    = $record['firma']         ?? '';
@@ -144,6 +144,9 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
                 <select name="urun" id="genelUrun"><?= sel_opt('urun', $_cur_urun, $_urun_names) ?></select>
                 <?php if (empty($_urun_names)): ?><small class="muted">Tanımlar → Ürünler'den ekleyin</small><?php endif; ?>
             </label>
+            <label>Cinsi
+                <input type="text" name="urun_cesidi" id="genelUrunCesidi" value="<?= h($record['urun_cesidi'] ?? '') ?>" data-uppercase="tr" placeholder="Ör: Big Top, Sultani…" <?= suggest_attrs('urun_cesidi') ?>>
+            </label>
             <label>Depo
                 <select name="depo_varsayilan" id="genelDepo"><?= sel_opt('depo', $_cur_depo, $_depo_names) ?></select>
                 <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
@@ -241,55 +244,11 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
         <h2>Yükleme Planı (Paletler)</h2>
         <div class="pallet-actions">
             <div class="pallet-sec-btns">
-                <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="yapistirAcBtn">📋 Yapıştır</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu Raporla</button>
             </div>
             <button type="button" class="btn btn-primary pallet-add-main" id="addPalletBtn">+ Yeni Palet Ekle</button>
-        </div>
-    </div>
-
-    <!-- Excel Yükleme Paneli -->
-    <div id="excelPanel" class="toplu-panel" style="display:none">
-        <div class="toplu-panel-head">
-            <strong>📥 Excel'den Yükle</strong>
-            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-                <a href="excel_ornek_palet.php" class="btn btn-sm btn-ghost" download>⬇ Örnek İndir</a>
-                <button type="button" id="excelKapat" class="btn btn-sm btn-ghost">✕</button>
-            </div>
-        </div>
-        <label id="excelDropZone" class="excel-drop-zone" for="excelFile">
-            <span>📂 Excel dosyasını buraya sürükleyin veya tıklayın</span>
-            <small>.xlsx &nbsp;·&nbsp; .xls &nbsp;·&nbsp; .csv</small>
-        </label>
-        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none">
-
-        <div id="excelPreviewWrap" style="display:none">
-            <div class="toplu-tablo-wrap" style="margin-top:10px">
-                <table class="toplu-tablo">
-                    <thead><tr>
-                        <th>#</th><th>Palet No</th><th>Kasa Adeti</th><th>Brüt KG</th><th></th>
-                    </tr></thead>
-                    <tbody id="excelTbody"></tbody>
-                </table>
-            </div>
-
-            <div class="excel-bulk-section">
-                <strong style="font-size:.85rem">Tüm Satırlara Uygula:</strong>
-                <div class="excel-bulk-grid">
-                    <label>Kasa Cinsi<select id="excelKasaCinsi"></select></label>
-                    <label>Palet Tipi<select id="excelPaletTipi"></select></label>
-                    <label>Depo<select id="excelDepo"></select></label>
-                    <label>Ürün Cinsi<select id="excelUrunCinsi"><option value="">—</option></select></label>
-                </div>
-            </div>
-
-            <div class="toplu-actions" style="margin-top:10px">
-                <button type="button" id="excelListeyeEkle" class="btn btn-primary">
-                    ✓ Listeye Ekle (<span id="excelRowCount">0</span> palet)
-                </button>
-            </div>
         </div>
     </div>
 
@@ -317,6 +276,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
                         <th>Palet Tipi</th>
                         <th>Depo</th>
                         <th>Ürün</th>
+                        <th>Cinsi</th>
                         <th class="tp-num">Dara</th>
                         <th class="tp-num">Net</th>
                         <th></th>
@@ -342,7 +302,13 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
             </div>
         </div>
 
-        <div class="yp-cols">
+        <div class="yp-cols yp-cols-4">
+            <div class="yp-col">
+                <label class="yp-col-head" for="ypPaletNo">Palet No sütunu <span class="yp-ops">opsiyonel</span></label>
+                <textarea id="ypPaletNo" class="yp-ta" rows="6" spellcheck="false" autocomplete="off"
+                          placeholder="1&#10;2&#10;3&#10;…"></textarea>
+                <small class="yp-col-info" id="ypPaletNoInfo">otomatik</small>
+            </div>
             <div class="yp-col">
                 <label class="yp-col-head" for="ypKasa">Kasa Adeti sütunu</label>
                 <textarea id="ypKasa" class="yp-ta" rows="6" spellcheck="false" autocomplete="off"
@@ -365,7 +331,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
         <p class="yp-hint">
             Excel'de sütunu seçip kopyalayın, ilgili kutuya yapıştırın — satır sırası korunur.
             Birden fazla sütunu birlikte kopyalarsanız soldan sağa otomatik dağıtılır.
-            Size boş bırakılabilir; tek bir değer yazarsanız tüm satırlara uygulanır.
+            Palet No boş bırakılırsa otomatik numaralanır; Size tek bir değer yazılırsa tüm satırlara uygulanır.
         </p>
 
         <div class="excel-bulk-section">
@@ -374,7 +340,32 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
                 <label><span>Kasa Cinsi <span class="req">*</span></span><select id="ypKasaCinsi"></select></label>
                 <label><span>Palet Tipi <span class="req">*</span></span><select id="ypPaletTipi"></select></label>
                 <label><span>Depo <span class="req">*</span></span><select id="ypDepo"></select></label>
-                <label><span>Ürün Cinsi</span><select id="ypUrun"></select></label>
+                <label><span>Ürün</span><select id="ypUrun"></select></label>
+                <label><span>Cinsi</span><input type="text" id="ypUrunCesidi" data-uppercase="tr" placeholder="Ör: Big Top, Sultani…"></label>
+            </div>
+        </div>
+
+        <div class="yp-mat-section">
+            <div class="materials-block-head">
+                <span>Ek Malzemeler (tüm satırlara uygulanır)</span>
+                <button type="button" class="btn btn-sm btn-ghost" id="ypMatToggle">+ Malzeme Ekle</button>
+            </div>
+            <div id="ypMatSelectedList" class="mat-selected-list"></div>
+            <div id="ypMatTableWrap" class="mat-table-wrap table-wrap" style="display:none">
+                <table class="mat-pick-table">
+                    <thead>
+                        <tr>
+                            <th>Malzeme Cinsi</th>
+                            <th>Malzeme Adı</th>
+                            <th>Adet</th>
+                            <th class="mat-col-act"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ypMatTbody"></tbody>
+                </table>
+                <div class="mat-table-foot">
+                    <button type="button" class="btn btn-sm btn-ghost mat-add-extra-row" id="ypAddMatRow">+ Satır Ekle</button>
+                </div>
             </div>
         </div>
 
@@ -384,7 +375,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
             <div class="toplu-tablo-wrap" style="margin-top:10px">
                 <table class="toplu-tablo yp-onizleme">
                     <thead><tr>
-                        <th>#</th><th>Kasa Adeti</th><th>Brüt KG</th><th>Size</th>
+                        <th>Palet No</th><th>Kasa Adeti</th><th>Brüt KG</th><th>Size</th><th>Ürün</th><th>Cinsi</th>
                         <th class="tp-num">Dara</th><th class="tp-num">Net</th>
                     </tr></thead>
                     <tbody id="ypTbody"></tbody>
@@ -458,8 +449,9 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
         'brut_kg'    => isset($p['brut_kg'])    ? (float)$p['brut_kg']    : null,
         'dara_kg'    => isset($p['dara_kg'])    ? (float)$p['dara_kg']    : null,
         'net_kg'     => isset($p['net_kg'])     ? (float)$p['net_kg']     : null,
-        'kasa_adeti' => isset($p['kasa_adeti']) ? (int)  $p['kasa_adeti'] : null,
-        'islendi'    => !empty($p['islendi'])   ? true                    : false,
+        'kasa_adeti'  => isset($p['kasa_adeti']) ? (int)  $p['kasa_adeti'] : null,
+        'urun_cesidi' => (string)($p['urun_cesidi'] ?? ''),
+        'islendi'     => !empty($p['islendi'])   ? true                    : false,
         // Malzeme miktarlarını TEMİZ sayı olarak ver: DB "90.000" → 90.
         // (Aksi halde num() '.'yi binlik ayırıcı sanıp 90→90000 yapıyordu.)
         'materials'  => array_map(fn($m) => [
@@ -472,7 +464,6 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
 <script id="soforTelefonData" type="application/json"><?= json_encode($_sofor_tel, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="urunListData" type="application/json"><?= json_encode($_urun_names, JSON_UNESCAPED_UNICODE) ?></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 </form>
 
@@ -524,8 +515,12 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
           <select id="pmPaletTipi"><option value="">-- palet tipi seçiniz --</option></select>
         </label>
         <label class="pm-label">
-          <span>Ürün Cinsi</span>
-          <select id="pmUrunCinsi"><option value="">-- ürün cinsi seçiniz --</option></select>
+          <span>Ürün</span>
+          <select id="pmUrunCinsi"><option value="">-- ürün seçiniz --</option></select>
+        </label>
+        <label class="pm-label">
+          <span>Cinsi</span>
+          <input type="text" id="pmUrunCesidi" data-uppercase="tr" placeholder="Ör: Big Top, Sultani…">
         </label>
         <label class="pm-label pm-span2">
           <span>Depo <span class="req">*</span></span>
@@ -537,12 +532,29 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
       <div class="materials-block" style="margin-top:16px">
         <div class="materials-block-head">
           <span>Ek malzemeler / dara kalemleri</span>
-          <button type="button" class="btn btn-sm" id="pmAddMaterial">+ Malzeme</button>
+          <button type="button" class="btn btn-sm" id="pmAddMaterial">+ Malzeme Ekle</button>
         </div>
-        <div id="pmMaterialsList"></div>
+        <div id="pmMaterialsList" class="mat-selected-list"></div>
+        <div id="pmMatTableWrap" class="mat-table-wrap table-wrap" style="display:none">
+          <table class="mat-pick-table" id="pmMatTable">
+            <thead>
+              <tr>
+                <th>Malzeme Cinsi</th>
+                <th>Malzeme Adı</th>
+                <th>Adet</th>
+                <th class="mat-col-act"></th>
+              </tr>
+            </thead>
+            <tbody id="pmMatTbody"></tbody>
+          </table>
+          <div class="mat-table-foot">
+            <button type="button" class="btn btn-sm btn-ghost mat-add-extra-row" id="pmAddMatRow">+ Satır Ekle</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="pm-footer">
+      <button type="button" class="btn btn-danger pm-del-btn" id="pmDelete" style="display:none">✕ Paleti Sil</button>
       <button type="button" class="btn btn-ghost" id="pmCancel">İptal</button>
       <button type="button" class="btn btn-primary" id="pmSave">Kaydet</button>
     </div>
@@ -561,6 +573,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
 
     document.addEventListener('click', function (e) {
         if (e.target.closest('#pmSave') ||
+            e.target.closest('#pmDelete') ||
             e.target.closest('#addPalletBtn') ||
             e.target.closest('[data-del]')) {
             dirty = true;
