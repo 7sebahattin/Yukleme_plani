@@ -72,6 +72,10 @@ require_once __DIR__ . '/config/hesap_calc.php';         // B-01 hesap_migrate(t
 require_once __DIR__ . '/config/muhasebe_core.php';      // ERP-1 Genel Muhasebe (TDHP)
 require_once __DIR__ . '/config/edonusum_core.php';      // ERP-2 e-Dönüşüm (UBL-TR 1.2)
 require_once __DIR__ . '/config/erp_mutabakat_core.php'; // ERP-11a Cari Risk Limiti & Kur Farkı Değerleme
+require_once __DIR__ . '/config/wms_stok_core.php';      // ERP-11b Stok Ayrımı (Seçenek A) & WMS
+require_once __DIR__ . '/config/yukleme_v2_core.php';    // Yeni Araç Yükleme Fişleri (v2)
+require_once __DIR__ . '/config/satinalma_core.php';     // ERP-3 Satın Alma & 3-Way Match
+require_once __DIR__ . '/config/uretim_bom_core.php';    // ERP-4 Üretim BOM, İş Emirleri & MRP
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -169,6 +173,10 @@ $perf_idx_results = []; $perf_idx_ran = false;              // B-29 Performans c
 $muh_results = []; $muh_ran = false;                        // ERP-1 Genel Muhasebe (TDHP)
 $edonusum_results = []; $edonusum_ran = false;              // ERP-2 e-Dönüşüm (UBL-TR 1.2)
 $erp_mut_results = []; $erp_mut_ran = false;                // ERP-11a Cari Risk Limiti & Kur Farkı Değerleme
+$wms_results = []; $wms_ran = false;                        // ERP-11b Stok Ayrımı (Seçenek A) & WMS
+$yv2_results = []; $yv2_ran = false;                        // Yeni Araç Yükleme Fişleri (v2)
+$sa_results = []; $sa_ran = false;                          // ERP-3 Satın Alma & 3-Way Match
+$ubom_results = []; $ubom_ran = false;                      // ERP-4 Üretim BOM, İş Emirleri & MRP
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -605,6 +613,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($erp_mut_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'erp_mutabakat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'wms_stok') {
+    csrf_check($_POST['csrf'] ?? null);
+    $wms_ran     = true;
+    $wms_results = wms_stok_migrate($pdo);
+    foreach ($wms_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'wms_stok', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'yukleme_v2') {
+    csrf_check($_POST['csrf'] ?? null);
+    $yv2_ran     = true;
+    $yv2_results = yukleme_v2_migrate($pdo);
+    foreach ($yv2_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'yukleme_v2', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'satinalma') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sa_ran     = true;
+    $sa_results = satinalma_migrate($pdo);
+    foreach ($sa_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'satinalma', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'uretim_bom') {
+    csrf_check($_POST['csrf'] ?? null);
+    $ubom_ran     = true;
+    $ubom_results = uretim_bom_migrate($pdo);
+    foreach ($ubom_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'uretim_bom', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -2322,6 +2366,93 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="erp_mutabakat">
       <button type="submit" class="btn btn-primary">Risk Limiti &amp; Kur Farkı Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('wms-stok'); ?>
+    <h2 style="margin-top:0;">Stok Ayrımı (Seçenek A) &amp; WMS (ERP-11b)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>stok_prof_wms</code> (Ürün vs Malzeme/Ambalaj grubu, dara, min/maks, FIFO/TDHP),
+      <code>wms_raflar</code> (depo içi raf lokasyonları) ve <code>wms_lotlar</code> (Lot/SKT/FIFO) tablolarını ekler.
+      Mevcut <code>stok_kartlar</code> tablosuna ALTER yapılmaz.
+      <?php if ($wms_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($wms_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $wmsHazir = wms_stok_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $wmsHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $wmsHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="wms_stok">
+      <button type="submit" class="btn btn-primary">Stok / WMS Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('yukleme-v2'); ?>
+    <h2 style="margin-top:0;">Yeni Araç Yükleme Fişleri (v2)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>yukleme_v2_fisler</code> ve <code>yukleme_v2_paletler</code> tablolarını oluşturur
+      (satır bazlı palet güncelleme, canlı dara/net, kilit/revizyon ve WMS FIFO sevk düşümü). Eski <code>loading_records</code> korunur.
+      <?php if ($yv2_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($yv2_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $yv2Hazir = yukleme_v2_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $yv2Hazir ? '#1f9d55' : '#c0392b' ?>;"><?= $yv2Hazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="yukleme_v2">
+      <button type="submit" class="btn btn-primary">Yeni Araç Yükleme (v2) Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('satinalma'); ?>
+    <h2 style="margin-top:0;">Satın Alma &amp; 3-Way Match (ERP-3)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>sa_talepler</code>, <code>sa_talep_satirlar</code>, <code>sa_teklifler</code>,
+      <code>sa_siparisler</code>, <code>sa_siparis_satirlar</code>, <code>sa_mal_kabul</code>, <code>sa_mal_kabul_satirlar</code>
+      ve <code>sa_eslestirmeler</code> (Sipariş–İrsaliye–Fatura 3'lü eşleştirme) tablolarını ekler.
+      <?php if ($sa_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($sa_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $saHazir = satinalma_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $saHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $saHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="satinalma">
+      <button type="submit" class="btn btn-primary">Satın Alma Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('uretim-bom'); ?>
+    <h2 style="margin-top:0;">Üretim Reçetesi (BOM), İş Emirleri &amp; MRP (ERP-4)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>uretim_bom</code>, <code>uretim_bom_satirlar</code>, <code>uretim_is_emirleri</code>,
+      <code>uretim_is_emri_sarf</code> ve <code>uretim_lot_iz</code> (Lot-to-Lot izlenebilirlik) tablolarını ekler.
+      Mevcut <code>gunluk_uretim.php</code> etkilenmez.
+      <?php if ($ubom_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($ubom_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $ubomHazir = uretim_bom_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $ubomHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ubomHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="uretim_bom">
+      <button type="submit" class="btn btn-primary">Üretim BOM / MRP Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>

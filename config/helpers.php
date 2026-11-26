@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v588');
+    define('APP_SURUM', 'v589');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -552,6 +552,10 @@ function nav_muhasebe_gruplari(): array {
             'muh_hesap_plani.php' => ['TDHP Hesap Planı', '📘'], 'muh_yevmiye.php' => ['Yevmiye Fişleri', '📒'],
             'muh_mali_tablolar.php' => ['Mizan & Mali Tablolar', '📈'], 'edonusum_belgeler.php' => ['e-Dönüşüm Belgeleri', '📨'],
             'muh_mutabakat.php' => ['Risk, BA/BS & Kur Farkı', '⚖️']]],
+        // v589 (ERP Faz 2): Stok/WMS (Seçenek A), Yeni Araç Yükleme (v2), Satın Alma & 3-Way Match, Üretim BOM/MRP
+        'erp_operasyon' => ['ERP Operasyon & Tedarik', '<path d="M3 7h18M5 7v12h14V7M9 11h6M9 15h4"/>', [
+            'wms_stok_yonetim.php' => ['Ürün & Malzeme Stok / WMS', '📦'], 'yukleme_v2.php' => ['Yeni Araç Yükleme (v2)', '🚚'],
+            'satinalma_yonetim.php' => ['Satın Alma & 3-Way Match', '🛒'], 'uretim_bom.php' => ['Üretim BOM & MRP', '🏭']]],
         // v548: Araç Yükleme / Palet / Mal Kabul fişleri "Operasyon_fis" grubuna taşındı (sidebar'da Operasyon'un İÇİNDE çizilir).
         'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
             'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],

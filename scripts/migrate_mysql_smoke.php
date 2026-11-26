@@ -44,6 +44,10 @@ require_once $ROOT . '/config/kantar_alanlari_core.php';
 require_once $ROOT . '/config/muhasebe_core.php';
 require_once $ROOT . '/config/edonusum_core.php';
 require_once $ROOT . '/config/erp_mutabakat_core.php';
+require_once $ROOT . '/config/wms_stok_core.php';
+require_once $ROOT . '/config/yukleme_v2_core.php';
+require_once $ROOT . '/config/satinalma_core.php';
+require_once $ROOT . '/config/uretim_bom_core.php';
 
 $passCnt = 0; $failCnt = 0;
 function ok(string $ad, bool $kosul, string $ipucu = ''): void {
@@ -81,6 +85,10 @@ $adimlar = [
     'muhasebe_migrate'              => static fn() => muhasebe_migrate($pdo),
     'edonusum_migrate'              => static fn() => edonusum_migrate($pdo),
     'erp_mutabakat_migrate'         => static fn() => erp_mutabakat_migrate($pdo),
+    'wms_stok_migrate'              => static fn() => wms_stok_migrate($pdo),
+    'yukleme_v2_migrate'            => static fn() => yukleme_v2_migrate($pdo),
+    'satinalma_migrate'             => static fn() => satinalma_migrate($pdo),
+    'uretim_bom_migrate'            => static fn() => uretim_bom_migrate($pdo),
 ];
 
 // 1. tur + 2. tur (2x idempotency)
@@ -94,9 +102,10 @@ foreach ([1, 2] as $tur) {
 
 $pidx = cekirdek_perf_indeksler_durum($pdo);
 ok('B-29 tüm performans composite indeksleri MariaDB üzerinde hazır', $pidx['hazir'], json_encode($pidx));
-ok('Muhasebe & ERP Faz 1 şemaları hazır (cari/stok/fatura/kasa/doviz/ceksenet/muhasebe/edonusum/mutabakat)',
+ok('Muhasebe & ERP Faz 1-2 şemaları hazır',
     cari_hazir($pdo) && stok_hazir($pdo) && fatura_hazir($pdo) && kasa_hazir($pdo) && doviz_hazir($pdo) && ceksenet_hazir($pdo)
     && muh_hazir($pdo) && edonusum_hazir($pdo) && erp_mutabakat_hazir($pdo)
+    && wms_stok_hazir($pdo) && yukleme_v2_hazir($pdo) && satinalma_hazir($pdo) && uretim_bom_hazir($pdo)
 );
 
 echo "\nÖZET: $passCnt geçti, $failCnt kaldı\n";
