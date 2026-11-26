@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `test.scai.tr` (ayrı DB; eski `nuverna.derspros.com.tr` artık kullanılmıyor)  
 **Ana Dal:** `main` (özellik dalları PR ile merge edilir)  
-**SW Cache:** `yukleme-plani-v586` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v587` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
@@ -38,6 +38,7 @@ Sürüm sürüm modül kuralları token tasarrufu için `.claude/skills/<ad>/SKI
 | `cek-senet` | Çek-Senet (cek_*/senet_*/ceksenet_*; alınan/verilen çek + senet, durum makinesi, bordro, ortalama vade) |
 | `depo-yonetimi` | Depo Tanımları (v574; depolar/depo_kullanicilar/depo_eski_adlar/depo_ayar; eski depo+veri ESKİ defteri, geçiş, kullanıcı ataması) |
 | `kullanici-ayarlari` | Kullanıcı Ayarları grubu (şifre değiştirme, kişisel ajanda, kullanıcı tercihleri; v574) |
+| `whatsapp-modulu` | WhatsApp Yükleme Planı (v582; Evolution API + Groq/Gemini AI, webhook, taslak yükleme planı, `whatsapp_*`) |
 
 ---
 
@@ -67,6 +68,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Kasa (varsayılan yalnız admin; Roller'den `muhasebe.*` ile verilebilir (v550); v528) | `kasa_fisleri` · `kasa_tanimlari` · `kasa_kaydet` (TEK yazma ucu, POST) · `kasa_cikti` (kasa defteri yazdır / xlsx-csv, GET) | `kasa_core` · `kasa_ui` | `kasa.css` · `kasa.js` | `kasa_{core,gate_static,ui}_smoke` · `kasa_ui_smoke.js` |
 | Çek-Senet (varsayılan yalnız admin; Roller'den `muhasebe.*` ile verilebilir (v550); v528) | `cek_dekontu` · `senet_dekontu` · `cek_tanimlari` · `cek_kaydet` (TEK yazma ucu, POST) · `cek_cikti` (bordro yazdır / liste xlsx-csv, GET) | `ceksenet_core` · `ceksenet_ui` | `ceksenet.css` · `ceksenet.js` | `ceksenet_{core,gate_static,ui}_smoke` · `ceksenet_ui_smoke.js` |
 | Kullanıcı Ayarları (v574; kapı `muhasebe_sayfa_can`, varsayılan yalnız admin; **v575: `sifre_degistirme` oturumlu HERKESE açık** — `muhasebe_herkese_acik_sayfalar()`, Roller'de satırı yok, her rolde menü + mobil "Diğer" + ana sayfa kartı) | `sifre_degistirme` · `ajanda` (kişisel; tablo `ajanda_kayitlar` yalnız migrate.php › "Ajanda" kartı) · `kullanici_tercihleri` | `kullanici_ayar` · `ajanda_core` · `ajanda_ui` (v576 ay takvimi + hover baloncuğu) · `kullanici_tercih` (`kt_sil`) | `kullanici_ayar.css` · `kullanici_ayar.js` | `kullanici_ayar_smoke` (+ `kullanici_ayar_render.php`) · `ajanda_takvim_smoke.js` |
+| WhatsApp Yükleme Planı (v582, yalnız admin) | `whatsapp_yonetim` · `api_whatsapp_webhook` (Evolution → MESSAGES_UPSERT, her koşulda 200) | `whatsapp_config` · `whatsapp_core` · `WhatsAppService` · `AIParserService` | `whatsapp.css` · `whatsapp.js` · `whatsapp-service/` (docker-compose) · `docs/sql/whatsapp_migration.sql` | `whatsapp_smoke` (+ `_whatsapp_istek`) |
 | Yönetim | `depo_tanimlari` (v574, `config/depo_core.php`) · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
 | **Kaldırılan / 410 tombstone** | `definitions` (v574, Tanımlar) · `sube_tanimlari` (v574, şube yok) · `admin_db_backup_download` · `hesap_sahipsiz` · `depo_tasima` · `firma_eslestirme` · `fix_brand` · `repair_xz_tables` · `faz8b_migrate` · `record_new` · v548: `kayit_bilgisi` · `waap_mesaj` · `genel_duyurular` · `guncelleme_bilgisi` · `program_hakkinda` · `program_tanimlari` · `diger_uygulama_tanimlari` · `guncellemeyi_calistir` · `lisans_kayit_islemleri` · `sube_degistirme` · `sirket_degistirme` · `mesajlar` | — | — | `rol_kapilari_smoke` (değişmezleri denetler) |
 | Klasörler | `scripts/` (testler + `create_admin_user`, `deploy*`, `db_backup_cron`) · `scripts/arsiv/` (biten tek seferlik araçlar; çalıştırılmaz) · `docs/` · `docs/arsiv/` (biten faz/sprint belgeleri) · `tools/arsiv/` · `templates/excel/` · `storage/` (yedekler) · `uploads/` · `vendor/` | | | |

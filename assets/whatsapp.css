@@ -1,0 +1,72 @@
+/* =========================================================
+   assets/whatsapp.css — WhatsApp Yükleme Planı yönetim sayfası. Önek: wa-
+   Renkler yalnız style.css belirteçlerinden (açık/koyu tema otomatik).
+   NOT: sınıf adlarında `ad`/`ads`/`banner`/`sponsor` parçası YOK (reklam engelleyici süzgeci, bkz. CLAUDE.md v556).
+   ========================================================= */
+.wa-sayfa { max-width: 1280px; margin: 0 auto; }
+.wa-giris { color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
+.wa-kart { margin-bottom: 16px; }
+.wa-kart-baslik { font-size: 1.05rem; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wa-ikincil { color: var(--muted); font-size: .82rem; margin: 4px 0 0; line-height: 1.4; }
+.wa-eylem { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.wa-not { border-left: 4px solid var(--border-strong); margin-bottom: 14px; }
+.wa-not-uyari { border-left-color: var(--warn); background: var(--warn-soft); }
+.wa-not p { margin: 6px 0 0; }
+.wa-sayfa code { font-size: .85em; background: var(--primary-soft); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+
+/* Rozetler */
+.wa-rozet { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600; background: var(--border); color: var(--text); white-space: nowrap; }
+.wa-rozet.wa-tamam, .wa-rozet.wa-open { background: var(--success-soft); color: var(--success); }
+.wa-rozet.wa-hazir { background: var(--primary-soft); color: var(--primary); }
+.wa-rozet.wa-bekliyor, .wa-rozet.wa-connecting { background: var(--warn-soft); color: var(--warn); }
+.wa-rozet.wa-eksik { background: var(--warn-soft); color: var(--warn); }
+.wa-rozet.wa-hata, .wa-rozet.wa-close { background: var(--danger-soft); color: var(--danger); }
+.wa-rozet.wa-pasif { background: var(--border); color: var(--muted); }
+
+/* Bağlantı + QR */
+.wa-baglanti { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.wa-baglanti-bilgi { flex: 1 1 280px; min-width: 0; }
+.wa-qr { flex: 0 0 auto; padding: 10px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); line-height: 0; }
+.wa-qr img { width: 240px; height: 240px; max-width: 100%; image-rendering: pixelated; }
+
+/* Grup listesi */
+.wa-grup-liste { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 14px; max-height: 320px; overflow-y: auto; }
+.wa-grup-liste li { min-width: 0; }
+.wa-onay { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; padding: 6px 8px; border-radius: var(--radius-sm); }
+.wa-onay:hover { background: var(--primary-soft); }
+.wa-onay input[type=checkbox] { margin-top: 3px; flex: 0 0 auto; }
+.wa-onay span { min-width: 0; overflow-wrap: anywhere; }
+.wa-onay small { display: block; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.wa-onay-buyuk { padding-left: 0; }
+.wa-ayar-izgara { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 14px; }
+.wa-ayar-izgara select { max-width: 100%; }
+
+/* AI test */
+#waTestMetin { width: 100%; box-sizing: border-box; resize: vertical; }
+.wa-test-sonuc { margin-top: 12px; }
+.wa-test-ozet { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.wa-json { margin: 0; padding: 12px; background: var(--primary-soft); border-radius: var(--radius-sm); overflow: auto; max-height: 360px; font-size: .8rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+
+/* Günlük tablosu */
+.wa-bos { color: var(--muted); padding: 18px 4px; }
+.wa-log td { vertical-align: top; }
+.wa-zaman { white-space: nowrap; }
+.wa-mesaj { max-width: 340px; overflow-wrap: anywhere; font-size: .86rem; }
+.wa-plaka { font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.wa-hata-not { color: var(--danger); }
+.wa-islem { white-space: nowrap; }
+.wa-islem .btn { margin: 0 4px 4px 0; }
+
+/* Mobil (<768px): tablo satırları kart olur */
+@media (max-width: 767px) {
+    .wa-qr img { width: 100%; height: auto; }
+    .wa-log, .wa-log tbody, .wa-log tr, .wa-log td { display: block; width: 100%; box-sizing: border-box; }
+    .wa-log thead { display: none; }
+    .wa-log tr { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; padding: 8px 12px; background: var(--card); }
+    .wa-log td { border: 0; padding: 4px 0; text-align: left; }
+    .wa-log td.num { text-align: left; }
+    .wa-log td::before { content: attr(data-et); display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .wa-mesaj { max-width: none; }
+    .wa-islem { white-space: normal; }
+    .wa-grup-liste { grid-template-columns: 1fr; }
+}

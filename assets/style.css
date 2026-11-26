@@ -613,6 +613,9 @@ input.num, select.num { text-align: right; }
 /* ── PC tablo durum satırı ── */
 .data-table tr.tr-islendi > td { background: #fffbeb; }
 .data-table tr.tr-yuklendi > td { background: #f0fdf4; }
+.data-table tr.tr-taslak > td { background: #f5f3ff; }
+.record-card.durum-taslak { border-color: #7c3aed; background: #f5f3ff; }
+.badge-taslak { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; background: #ede9fe; color: #6d28d9; white-space: nowrap; }
 
 /* ── Durum butonları ── */
 .btn-durum-islendi {
@@ -687,6 +690,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .pill.active-islendi { background: #f59e0b; color: #fff; border-color: #f59e0b; }
 .pill.active-yuklendi { background: #10b981; color: #fff; border-color: #10b981; }
+.pill.active-taslak { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 .pill:hover { text-decoration: none; }
 
 .switch { display: inline-flex; align-items: center; gap: 8px; }
@@ -5533,6 +5537,9 @@ html[data-theme="dark"] .ms-edit-modal { background: var(--card); color: var(--t
 html[data-theme="dark"] .record-card.durum-islendi { background: #2b2410; }
 html[data-theme="dark"] .record-card.durum-yuklendi { background: #122b20; }
 html[data-theme="dark"] .data-table tr.tr-islendi > td { background: #2b2410; }
+html[data-theme="dark"] .data-table tr.tr-taslak > td { background: #1f1a33; }
+html[data-theme="dark"] .record-card.durum-taslak { background: #1f1a33; border-color: #7c3aed; }
+html[data-theme="dark"] .badge-taslak { background: #2e2250; color: #c4b5fd; }
 html[data-theme="dark"] .data-table tr.tr-yuklendi > td { background: #122b20; }
 
 /* — Print sayfaları HER temada açık kalır (kağıt çıktısı bozulmaz) — */

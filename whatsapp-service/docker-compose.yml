@@ -1,0 +1,147 @@
+# =============================================================================
+# whatsapp-service/docker-compose.yml — Evolution API v2 (Baileys) + PostgreSQL + Redis
+# Yükleme Planı WhatsApp modülü için 7/24 çalışan mesaj köprüsü.
+#
+# Kurulum (sunucuda, bu klasörde):
+#   cp .env.example .env     # değerleri doldur (anahtarlar: openssl rand -hex 32)
+#   docker compose up -d
+#   docker compose logs -f evolution-api
+#
+# Oturum (QR ile bağlanan WhatsApp hattı) `evolution_instances` volume'unda ve
+# PostgreSQL'de saklanır → sunucu/konteyner yeniden başlasa da yeniden QR gerekmez.
+# `restart: always` → makine açılınca servisler kendiliğinden kalkar.
+# =============================================================================
+name: yukleme-plani-whatsapp
+
+services:
+  evolution-api:
+    image: atendai/evolution-api:${EVOLUTION_IMAGE_TAG:-v2.2.3}
+    container_name: yp_evolution_api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Varsayılan yalnız yerel arayüz: API anahtarı olsa da internete AÇMA.
+    # PHP uygulaması başka makinedeyse HTTPS'li ters vekil (nginx/caddy) arkasına al
+    # ya da EVOLUTION_BIND=0.0.0.0 yapıp güvenlik duvarında yalnız uygulama IP'sine izin ver.
+    ports:
+      - "${EVOLUTION_BIND:-127.0.0.1}:${EVOLUTION_PORT:-8080}:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+    environment:
+      # --- Sunucu ---
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
+      LOG_LEVEL: ERROR,WARN,DEBUG,INFO,LOG,VERBOSE,DARK,WEBHOOKS
+      LOG_BAILEYS: error
+      DEL_INSTANCE: "false"
+      # --- Kimlik doğrulama (global API anahtarı = config/local.php › EVOLUTION_API_KEY) ---
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?EVOLUTION_API_KEY .env içinde tanımlı olmalı}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      # --- Kalıcı veri: PostgreSQL (oturum + mesaj geçmişi → /chat/findMessages) ---
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-evolution}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env içinde tanımlı olmalı}@postgres:5432/${POSTGRES_DB:-evolution}?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: yukleme_plani
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_LABELS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      # --- Önbellek: Redis ---
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: yp_evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      # --- Webhook: yalnız MESSAGES_UPSERT (başka olay PHP'ye gönderilmez) ---
+      # URL, gizli anahtarı `token` parametresiyle taşır; PHP tarafı hash_equals ile doğrular.
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_URL: ${WEBHOOK_URL:?WEBHOOK_URL .env içinde tanımlı olmalı}
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+      WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "false"
+      WEBHOOK_EVENTS_MESSAGES_SET: "false"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "false"
+      WEBHOOK_EVENTS_MESSAGES_DELETE: "false"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "false"
+      WEBHOOK_EVENTS_CONTACTS_SET: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "false"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_SET: "false"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "false"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_DELETE: "false"
+      WEBHOOK_EVENTS_GROUPS_UPSERT: "false"
+      WEBHOOK_EVENTS_GROUPS_UPDATE: "false"
+      WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "false"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "false"
+      WEBHOOK_EVENTS_CALL: "false"
+      WEBHOOK_EVENTS_TYPEBOT_START: "false"
+      WEBHOOK_EVENTS_TYPEBOT_CHANGE_STATUS: "false"
+      WEBHOOK_REQUEST_TIMEOUT_MS: 10000
+      # --- İstemci kimliği + diğer ---
+      CONFIG_SESSION_PHONE_CLIENT: Yukleme Plani
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      QRCODE_LIMIT: 30
+      QRCODE_COLOR: "#175197"
+      LANGUAGE: pt-BR
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - evolution_net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: yp_evolution_postgres
+    restart: always
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evolution}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env içinde tanımlı olmalı}
+      POSTGRES_DB: ${POSTGRES_DB:-evolution}
+    volumes:
+      - evolution_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evolution} -d ${POSTGRES_DB:-evolution}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Dış port YOK: yalnız evolution_net içinden erişilir.
+    networks:
+      - evolution_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: yp_evolution_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - evolution_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - evolution_net
+
+volumes:
+  evolution_instances:
+  evolution_postgres:
+  evolution_redis:
+
+networks:
+  evolution_net:
+    driver: bridge
