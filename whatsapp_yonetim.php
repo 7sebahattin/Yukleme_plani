@@ -122,6 +122,19 @@ function wa_log_tablosu(array $rows, array $ayar): string
     return (string)ob_get_clean();
 }
 
+// ── PC tek-tık kurulum paketi indirme (yalnız admin) ─────────
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['indir'] ?? '') === 'pc_paket') {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'asya.scai.tr');
+    $zip    = whatsapp_pc_paketi_zip(__DIR__ . '/whatsapp-service', $scheme . '://' . $host);
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="whatsapp-pc-kurulum.zip"');
+    header('Content-Length: ' . strlen($zip));
+    header('Cache-Control: no-store');
+    echo $zip;
+    exit;
+}
+
 // ── AJAX uçları (POST + CSRF) ─────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     header('Content-Type: application/json; charset=utf-8');   // csrf_check JSON hata dönsün
@@ -149,6 +162,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             wa_json(['ok' => true, 'gruplar' => $svc->fetchGroups()]);
         }
 
+        if ($islem === 'mesajlar') {                    // WhatsApp Web tarzı grup mesaj akışı
+            $jid = trim((string)($_POST['jid'] ?? ''));
+            if (!preg_match('/^[0-9A-Za-z._\-]+@g\.us$/', $jid)) {
+                wa_json(['ok' => false, 'hata' => 'Geçersiz grup kimliği.'], 422);
+            }
+            $limit = max(10, min(200, (int)($_POST['limit'] ?? 80)));
+            $ham = $svc->fetchMessages($jid, $limit);
+            $liste = [];
+            foreach ($ham as $m) {
+                $o = whatsapp_mesaj_ozetle($m);
+                if ($o !== null) $liste[] = $o;
+            }
+            $liste = whatsapp_mesajlari_isaretle($pdo, $liste);
+            wa_json(['ok' => true, 'mesajlar' => $liste]);
+        }
+
         if ($islem === 'test') {                        // WhatsApp'a dokunmadan AI ayrıştırma simülasyonu (DB'ye YAZMAZ)
             $metin = trim((string)($_POST['metin'] ?? ''));
             if ($metin === '') wa_json(['ok' => false, 'hata' => 'Test metni boş.'], 422);
@@ -164,6 +193,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         }
 
         if (!$hazir) wa_json(['ok' => false, 'hata' => 'WhatsApp tabloları kurulmamış (docs/sql/whatsapp_migration.sql).'], 503);
+
+        if ($islem === 'secili_tarat') {                // Seçili mesajları AI ile taratıp taslak oluştur
+            $secili = json_decode((string)($_POST['mesajlar'] ?? '[]'), true);
+            if (!is_array($secili) || $secili === []) {
+                wa_json(['ok' => false, 'hata' => 'Önce en az bir mesaj seçin.'], 422);
+            }
+            $taslakAc = ($_POST['taslak_ac'] ?? '1') !== '0';
+            $ozet = whatsapp_secili_tarat($pdo, $secili, $ayar, $taslakAc, $uid);
+            whatsapp_denetle('whatsapp_toplu_tarat', 'whatsapp', null, null, [
+                'toplam' => $ozet['toplam'], 'aktarildi' => $ozet['aktarildi'],
+                'hazir' => $ozet['hazir'], 'eksik_bilgi' => $ozet['eksik_bilgi'], 'ai_hata' => $ozet['ai_hata'],
+            ]);
+            wa_json($ozet + ['html' => wa_log_tablosu(whatsapp_son_mesajlar($pdo, 25), $ayar)]);
+        }
 
         if ($islem === 'loglar') {
             wa_json(['ok' => true, 'html' => wa_log_tablosu(whatsapp_son_mesajlar($pdo, 25), $ayar)]);
@@ -282,6 +325,21 @@ render_flash();
         <summary class="wa-kart-baslik" style="cursor:pointer;">0 · Sunucu &amp; API Anahtarları
             <span class="wa-rozet <?= $eksikYapilandirma ? 'wa-eksik' : 'wa-tamam' ?>"><?= $eksikYapilandirma ? 'Eksik alan var' : 'Yapılandırıldı' ?></span>
         </summary>
+        <div class="wa-pc-kutu">
+            <div>
+                <strong>Kendi Windows PC'nizde 1 tıkla başlatın:</strong>
+                <span class="wa-ikincil">Paketi indirip çıkarın, <code>PC_BASLAT.bat</code> dosyasına çift tıklayın. Docker + tünel otomatik açılır ve kurulum kodu panonuza kopyalanır.</span>
+            </div>
+            <a class="btn btn-sm btn-primary" href="whatsapp_yonetim.php?indir=pc_paket">PC Başlatma Paketini İndir (.zip)</a>
+        </div>
+        <div class="wa-hizli-kutu">
+            <label class="form-label" for="waKurulumKod">Hızlı Kurulum Kodu (PC betiğinin panoya kopyaladığı kodu buraya yapıştırın)</label>
+            <div class="wa-eylem" style="margin-top:4px;">
+                <input type="text" id="waKurulumKod" placeholder="WA-KURULUM:eyJldm9sdXRpb25fdXJsIjoi…" autocomplete="off" style="flex:1;min-width:220px;">
+                <button type="button" class="btn btn-ghost" id="waKurulumUygula">Alanları doldur</button>
+            </div>
+            <p class="wa-ikincil" id="waKurulumNot"></p>
+        </div>
         <form method="post" id="waBaglantiForm" autocomplete="off" style="margin-top:12px;">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="islem" value="baglanti_kaydet">
@@ -341,10 +399,52 @@ render_flash();
         </div>
     </section>
 
-    <!-- 2) Grup seçimi + ayarlar -->
-    <section class="card wa-kart" id="waGruplar">
-        <h2 class="wa-kart-baslik">2 · Dinlenecek gruplar &amp; ayarlar</h2>
-        <form method="post" id="waAyarForm" autocomplete="off">
+    <!-- 2) Canlı Sohbet & Seçmeli AI Tarama (WhatsApp Web görünümü) -->
+    <section class="card wa-kart" id="waOkuyucu">
+        <h2 class="wa-kart-baslik">2 · Canlı Sohbet &amp; Seçmeli AI Tarama
+            <button type="button" class="btn btn-sm btn-primary" id="waSohbetGrupYukle">Grupları Yükle</button>
+            <span class="wa-ikincil" id="waSohbetDurum"></span>
+        </h2>
+        <div class="wa-sohbet-kabuk">
+            <aside class="wa-sohbet-sol">
+                <input type="search" id="waGrupAra" placeholder="Grup ara…" autocomplete="off">
+                <ul class="wa-sohbet-gruplar" id="waSohbetGrupListe">
+                    <li class="wa-bos">Önce "Grupları Yükle"ye tıklayın (hat bağlandığında otomatik de yüklenir).</li>
+                </ul>
+            </aside>
+            <div class="wa-sohbet-sag">
+                <div class="wa-filtre-bar">
+                    <input type="search" id="waMesajAra" placeholder="Mesaj / plaka / firma / gönderen filtrele…" autocomplete="off" style="flex:1 1 200px;">
+                    <input type="date" id="waTarihBas" title="Başlangıç tarihi">
+                    <input type="date" id="waTarihBit" title="Bitiş tarihi">
+                    <select id="waMesajLimit" title="Çekilecek mesaj sayısı">
+                        <option value="50">Son 50</option>
+                        <option value="100" selected>Son 100</option>
+                        <option value="200">Son 200</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-ghost" id="waMesajYenile" disabled>Yenile</button>
+                </div>
+                <div class="wa-filtre-alt">
+                    <label class="wa-onay"><input type="checkbox" id="waSadeceAday"><span>Yalnız yükleme adayları (sohbeti gizle)</span></label>
+                    <label class="wa-onay"><input type="checkbox" id="waAktarilanGizle"><span>Plana aktarılanları gizle</span></label>
+                    <label class="wa-onay"><input type="checkbox" id="waTaslakOtomatik" checked><span>Uygun olanları otomatik taslak yap</span></label>
+                </div>
+                <div class="wa-secim-bar">
+                    <label class="wa-onay"><input type="checkbox" id="waTumunuSec"><span>Görünürleri seç</span></label>
+                    <span class="wa-ikincil" id="waSecimBilgi">0 mesaj seçili</span>
+                    <button type="button" class="btn btn-sm btn-primary" id="waSeciliTarat" disabled>Seçilileri AI ile Tarat &amp; Taslak Çıkar</button>
+                </div>
+                <div class="wa-mesaj-akis" id="waMesajAkis">
+                    <div class="wa-bos">Soldan bir WhatsApp grubu seçin; mesajlar burada görünür, filtreleyip istediklerinizi AI ile taratabilirsiniz.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3) Grup seçimi + otomatik ayarlar -->
+    <details class="card wa-kart" id="waGruplar">
+        <summary class="wa-kart-baslik" style="cursor:pointer;">3 · Otomatik dinleme &amp; AI ayarları</summary>
+        <form method="post" id="waAyarForm" autocomplete="off" style="margin-top:12px;">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="islem" value="ayar_kaydet">
             <ul class="wa-grup-liste" id="waGrupListe">
@@ -376,23 +476,25 @@ render_flash();
             </div>
             <div class="wa-eylem"><button type="submit" class="btn btn-primary"<?= $hazir ? '' : ' disabled' ?>>Ayarları kaydet</button></div>
         </form>
-    </section>
+    </details>
 
-    <!-- 3) AI test simülatörü -->
-    <section class="card wa-kart" id="waTest">
-        <h2 class="wa-kart-baslik">3 · AI ayrıştırma testi</h2>
-        <p class="wa-ikincil">WhatsApp'a mesaj atmadan örnek bir mesajı yapıştırın; çıktı veritabanına <strong>yazılmaz</strong>.</p>
-        <textarea id="waTestMetin" rows="4" maxlength="3000" placeholder="Örn: yarın 34 KL 4589 dorse 06 ABC 123 mersin depodan 24.500 kg limon yüklenecek, şoför Ali 0532 111 22 33"></textarea>
-        <div class="wa-eylem"><button type="button" class="btn btn-primary" id="waTestGonder">Ayrıştır</button><span class="wa-ikincil" id="waTestDurum"></span></div>
-        <div id="waTestSonuc" class="wa-test-sonuc" hidden>
-            <div id="waTestOzet" class="wa-test-ozet"></div>
-            <pre id="waTestJson" class="wa-json"></pre>
+    <!-- 4) AI test simülatörü -->
+    <details class="card wa-kart" id="waTest">
+        <summary class="wa-kart-baslik" style="cursor:pointer;">4 · AI ayrıştırma testi (elle metin deneme)</summary>
+        <div style="margin-top:10px;">
+            <p class="wa-ikincil">WhatsApp'a mesaj atmadan örnek bir mesajı yapıştırın; çıktı veritabanına <strong>yazılmaz</strong>.</p>
+            <textarea id="waTestMetin" rows="4" maxlength="3000" placeholder="Örn: yarın 34 KL 4589 dorse 06 ABC 123 mersin depodan 24.500 kg limon yüklenecek, şoför Ali 0532 111 22 33"></textarea>
+            <div class="wa-eylem"><button type="button" class="btn btn-primary" id="waTestGonder">Ayrıştır</button><span class="wa-ikincil" id="waTestDurum"></span></div>
+            <div id="waTestSonuc" class="wa-test-sonuc" hidden>
+                <div id="waTestOzet" class="wa-test-ozet"></div>
+                <pre id="waTestJson" class="wa-json"></pre>
+            </div>
         </div>
-    </section>
+    </details>
 
-    <!-- 4) Canlı mesaj günlüğü -->
+    <!-- 5) Taranan son 25 mesaj & taslak onayları -->
     <section class="card wa-kart" id="waGunluk">
-        <h2 class="wa-kart-baslik">4 · Son 25 mesaj <button type="button" class="btn btn-sm btn-ghost" id="waLogYenile">Yenile</button></h2>
+        <h2 class="wa-kart-baslik">5 · Taranan Son 25 Mesaj &amp; Taslaklar <button type="button" class="btn btn-sm btn-ghost" id="waLogYenile">Yenile</button></h2>
         <div id="waLogKutu"><?= $hazir ? wa_log_tablosu($loglar, $ayar) : '<div class="wa-bos">Tablolar kurulduktan sonra mesajlar burada görünür.</div>' ?></div>
     </section>
 </div>

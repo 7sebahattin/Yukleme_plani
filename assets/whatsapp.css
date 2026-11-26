@@ -47,6 +47,35 @@
 .wa-test-ozet { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .wa-json { margin: 0; padding: 12px; background: var(--primary-soft); border-radius: var(--radius-sm); overflow: auto; max-height: 360px; font-size: .8rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 
+/* PC kurulum & hızlı kod kutusu */
+.wa-pc-kutu { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; margin-top: 10px; border-radius: var(--radius-sm); background: var(--primary-soft); border: 1px solid var(--border); }
+.wa-hizli-kutu { margin-top: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+/* Canlı Sohbet & Seçmeli AI Tarama (WhatsApp Web görünümü) */
+.wa-sohbet-kabuk { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.wa-sohbet-sol { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; background: var(--bg); min-width: 0; }
+.wa-sohbet-sol input[type=search] { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+.wa-sohbet-gruplar { list-style: none; margin: 0; padding: 0; max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.wa-sohbet-grup-btn { width: 100%; text-align: left; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); cursor: pointer; display: block; }
+.wa-sohbet-grup-btn:hover { background: var(--primary-soft); }
+.wa-sohbet-grup-btn.wa-secili { background: var(--primary-soft); border-color: var(--primary); font-weight: 600; }
+.wa-sohbet-grup-btn small { display: block; color: var(--muted); font-size: .74rem; margin-top: 2px; }
+.wa-sohbet-sag { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; background: var(--bg); min-width: 0; }
+.wa-filtre-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.wa-filtre-alt { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.wa-filtre-alt .wa-onay { padding: 2px 4px; font-size: .84rem; }
+.wa-secim-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.wa-secim-bar .wa-onay { padding: 2px 4px; font-weight: 600; }
+.wa-mesaj-akis { max-height: 460px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+.wa-balon { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); cursor: pointer; }
+.wa-balon:hover { border-color: var(--primary); }
+.wa-balon.wa-isaretli { border-color: var(--primary); background: var(--primary-soft); }
+.wa-balon.wa-gurultu { opacity: .72; }
+.wa-balon input[type=checkbox] { margin-top: 4px; flex: 0 0 auto; }
+.wa-balon-govde { flex: 1 1 auto; min-width: 0; }
+.wa-balon-ust { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: .82rem; }
+.wa-balon-metin { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.45; }
+
 /* Günlük tablosu */
 .wa-bos { color: var(--muted); padding: 18px 4px; }
 .wa-log td { vertical-align: top; }
@@ -60,6 +89,9 @@
 /* Mobil (<768px): tablo satırları kart olur */
 @media (max-width: 767px) {
     .wa-qr img { width: 100%; height: auto; }
+    .wa-sohbet-kabuk { grid-template-columns: 1fr; }
+    .wa-sohbet-gruplar { max-height: 220px; }
+    .wa-mesaj-akis { max-height: 360px; }
     .wa-log, .wa-log tbody, .wa-log tr, .wa-log td { display: block; width: 100%; box-sizing: border-box; }
     .wa-log thead { display: none; }
     .wa-log tr { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; padding: 8px 12px; background: var(--card); }

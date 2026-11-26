@@ -653,3 +653,160 @@ function whatsapp_son_mesajlar(PDO $db, int $limit = 25): array
     }
     return $out;
 }
+
+/**
+ * Evolution /chat/findMessages kaydını WhatsApp Web tarzı okuyucu satırına dönüştürür.
+ * Metinsiz medya/sistem olayları null döner.
+ */
+function whatsapp_mesaj_ozetle(array $m): ?array
+{
+    $key = is_array($m['key'] ?? null) ? $m['key'] : [];
+    $id  = trim((string)($key['id'] ?? ''));
+    $jid = trim((string)($key['remoteJid'] ?? ''));
+    if ($id === '' || strlen($id) > 120 || $jid === '') return null;
+    $metin = whatsapp_mesaj_metni(is_array($m['message'] ?? null) ? $m['message'] : null);
+    if ($metin === '') return null;
+
+    $katilimci = (string)($key['participant'] ?? $m['participant'] ?? '');
+    $telefon = whatsapp_jid_telefon($katilimci);
+    if ($telefon === '') {
+        foreach (['participantPn', 'senderPn', 'participantAlt'] as $alan) {
+            $t = whatsapp_jid_telefon((string)($key[$alan] ?? $m[$alan] ?? ''));
+            if ($t !== '') { $telefon = $t; break; }
+        }
+    }
+    $tsRaw = $m['messageTimestamp'] ?? 0;
+    if (is_array($tsRaw)) $tsRaw = $tsRaw['low'] ?? 0;
+    $ts = (is_numeric($tsRaw) && (int)$tsRaw > 946684800) ? (int)$tsRaw : time();
+
+    return [
+        'id'           => $id,
+        'jid'          => $jid,
+        'sender_name'  => mb_substr(trim((string)($m['pushName'] ?? '')), 0, 150, 'UTF-8'),
+        'sender_phone' => $telefon,
+        'text'         => mb_substr($metin, 0, 4000, 'UTF-8'),
+        'timestamp'    => $ts,
+        'date'         => date('Y-m-d', $ts),
+        'time'         => date('d.m H:i', $ts),
+        'from_me'      => ($key['fromMe'] ?? false) === true,
+        'is_noise'     => isNoiseMessage($metin),
+        'log_durum'    => null,
+        'record_id'    => null,
+    ];
+}
+
+/**
+ * Okuyucuda listelenen mesajlara daha önce taranmış/aktarılmış bilgisini ekler.
+ * @param list<array<string,mixed>> $mesajlar
+ * @return list<array<string,mixed>>
+ */
+function whatsapp_mesajlari_isaretle(PDO $db, array $mesajlar): array
+{
+    if ($mesajlar === [] || !whatsapp_tablolar_hazir($db)) return $mesajlar;
+    $idler = array_values(array_unique(array_filter(array_map(static fn(array $x): string => (string)($x['id'] ?? ''), $mesajlar), 'strlen')));
+    if ($idler === []) return $mesajlar;
+    $yer = implode(', ', array_fill(0, count($idler), '?'));
+    $st = $db->prepare('SELECT message_id, durum, loading_record_id FROM whatsapp_mesaj_loglari WHERE message_id IN (' . $yer . ')');
+    $st->execute($idler);
+    $harita = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $harita[(string)$r['message_id']] = ['durum' => (string)$r['durum'], 'record_id' => $r['loading_record_id'] !== null ? (int)$r['loading_record_id'] : null];
+    }
+    foreach ($mesajlar as &$x) {
+        $mid = (string)($x['id'] ?? '');
+        if (isset($harita[$mid])) {
+            $x['log_durum'] = $harita[$mid]['durum'];
+            $x['record_id'] = $harita[$mid]['record_id'];
+        }
+    }
+    unset($x);
+    return $mesajlar;
+}
+
+/**
+ * Kullanıcının WhatsApp Web tarzı okuyucudan seçtiği mesajları AI ile tarar, loga kaydeder ve (açıksa) taslak plan açar.
+ * @param list<array<string,mixed>> $secili
+ * @return array{ok:bool, toplam:int, aktarildi:int, hazir:int, eksik_bilgi:int, alakasiz:int, ai_hata:int, zaten_aktarildi:int, satirlar:list<array{id:string, durum:string, record_id:?int}>}
+ */
+function whatsapp_secili_tarat(PDO $db, array $secili, array $ayar, bool $taslakAc = true, ?int $kullaniciId = null, ?AIParserService $ai = null, ?DateTimeImmutable $simdi = null): array
+{
+    $ozet = ['ok' => true, 'toplam' => 0, 'aktarildi' => 0, 'hazir' => 0, 'eksik_bilgi' => 0, 'alakasiz' => 0, 'ai_hata' => 0, 'zaten_aktarildi' => 0, 'satirlar' => []];
+    $etkinAyar = $ayar;
+    $etkinAyar['otomatik_taslak'] = $taslakAc;
+
+    foreach (array_slice($secili, 0, 20) as $item) {
+        if (!is_array($item)) continue;
+        $mid   = trim((string)($item['id'] ?? ''));
+        $jid   = trim((string)($item['jid'] ?? ''));
+        $metin = trim((string)($item['text'] ?? ''));
+        if ($mid === '' || strlen($mid) > 120 || $jid === '' || $metin === '') continue;
+        $ozet['toplam']++;
+
+        $st = $db->prepare('SELECT id, loading_record_id FROM whatsapp_mesaj_loglari WHERE message_id = ?');
+        $st->execute([$mid]);
+        $var = $st->fetch(PDO::FETCH_ASSOC);
+        if (is_array($var) && !empty($var['loading_record_id'])) {
+            $ozet['zaten_aktarildi']++;
+            $ozet['satirlar'][] = ['id' => $mid, 'durum' => 'aktarildi', 'record_id' => (int)$var['loading_record_id']];
+            continue;
+        }
+
+        if (is_array($var)) {
+            $logId = (int)$var['id'];
+        } else {
+            $ad    = mb_substr(trim((string)($item['sender_name'] ?? '')), 0, 150, 'UTF-8');
+            $tel   = mb_substr(trim((string)($item['sender_phone'] ?? '')), 0, 50, 'UTF-8');
+            $isGrp = str_ends_with($jid, '@g.us') ? 1 : 0;
+            $db->prepare('INSERT INTO whatsapp_mesaj_loglari (message_id, remote_jid, is_group, sender_name, sender_phone, raw_message, durum, created_at)
+                          VALUES (?, ?, ?, ?, ?, ?, \'isleniyor\', ?)')
+               ->execute([$mid, $jid, $isGrp, $ad, $tel, mb_substr($metin, 0, 4000, 'UTF-8'), wa_simdi()]);
+            $logId = (int)$db->lastInsertId();
+        }
+
+        $tarih = (string)($item['date'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tarih)) $tarih = date('Y-m-d');
+        $sonDurum = whatsapp_kaydi_ayristir($db, $logId, $metin, $tarih, $etkinAyar, $ai, $simdi);
+        if (isset($ozet[$sonDurum])) $ozet[$sonDurum]++;
+
+        $rSt = $db->prepare('SELECT loading_record_id FROM whatsapp_mesaj_loglari WHERE id = ?');
+        $rSt->execute([$logId]);
+        $rid = $rSt->fetchColumn();
+        $ozet['satirlar'][] = ['id' => $mid, 'durum' => $sonDurum, 'record_id' => $rid ? (int)$rid : null];
+    }
+    return $ozet;
+}
+
+/**
+ * Windows PC tek-tık başlatma paketini (docker-compose.yml + PC_BASLAT.bat + pc_kur_ve_baslat.ps1)
+ * harici PHP eklentisine ihtiyaç duymadan saf PHP ZIP (store/method 0) olarak üretir.
+ */
+function whatsapp_pc_paketi_zip(string $serviceDir, string $siteBase): string
+{
+    $siteBase = rtrim(trim($siteBase), '/');
+    if (!preg_match('#^https?://[^\s\'"<>]+$#i', $siteBase)) $siteBase = 'https://asya.scai.tr';
+
+    $ps1 = (string)@file_get_contents($serviceDir . '/pc_kur_ve_baslat.ps1');
+    $ps1 = str_replace("https://asya.scai.tr", $siteBase, $ps1);
+
+    $dosyalar = [
+        'whatsapp-pc/docker-compose.yml'    => (string)@file_get_contents($serviceDir . '/docker-compose.yml'),
+        'whatsapp-pc/PC_BASLAT.bat'         => (string)@file_get_contents($serviceDir . '/PC_BASLAT.bat'),
+        'whatsapp-pc/pc_kur_ve_baslat.ps1'  => $ps1,
+    ];
+
+    $veri = '';
+    $merkez = '';
+    $sayac = 0;
+    foreach ($dosyalar as $yol => $icerik) {
+        if ($icerik === '') continue;
+        $crc = crc32($icerik);
+        $boy = strlen($icerik);
+        $adBoy = strlen($yol);
+        $ofset = strlen($veri);
+        $veri .= "\x50\x4b\x03\x04" . pack('vvvvvVVVvv', 20, 0, 0, 0, 0, $crc, $boy, $boy, $adBoy, 0) . $yol . $icerik;
+        $merkez .= "\x50\x4b\x01\x02" . pack('vvvvvvVVVvvvvvVV', 20, 20, 0, 0, 0, 0, $crc, $boy, $boy, $adBoy, 0, 0, 0, 0, 0, $ofset) . $yol;
+        $sayac++;
+    }
+    $son = "\x50\x4b\x05\x06" . pack('vvvvVVv', 0, 0, $sayac, $sayac, strlen($merkez), strlen($veri), 0);
+    return $veri . $merkez . $son;
+}
