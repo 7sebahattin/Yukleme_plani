@@ -84,6 +84,12 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
             ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
+        } elseif (str_contains($s, 'config/muhasebe_core.php')) {
+            // Çalışan modül (ERP Faz 1: Genel Muhasebe / e-Dönüşüm / Risk-BA-BS-Kur Farkı — v587): şema kapısı + sayfa kabuğu + yalnız GET.
+            ok("$dosya: çalışan modül — muh_sayfa_kapisi/edonusum_sayfa_kapisi", str_contains($s, 'muh_sayfa_kapisi(') || str_contains($s, 'edonusum_sayfa_kapisi('));
+            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
+            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
+            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
         } elseif ($dosya === 'palet_fisleri.php') {
             // v530: Palet Fişleri aktif, yöneticiye açık Excel tarzı tablo sayfası.
             ok("$dosya: yönetim tablosu", str_contains($s, 'id="pfTable"'));

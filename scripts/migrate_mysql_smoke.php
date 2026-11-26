@@ -41,6 +41,9 @@ require_once $ROOT . '/config/kullanici_tercih.php';
 require_once $ROOT . '/config/ajanda_core.php';
 require_once $ROOT . '/config/palet_fisleri_core.php';
 require_once $ROOT . '/config/kantar_alanlari_core.php';
+require_once $ROOT . '/config/muhasebe_core.php';
+require_once $ROOT . '/config/edonusum_core.php';
+require_once $ROOT . '/config/erp_mutabakat_core.php';
 
 $passCnt = 0; $failCnt = 0;
 function ok(string $ad, bool $kosul, string $ipucu = ''): void {
@@ -75,6 +78,9 @@ $adimlar = [
     'kantar_alanlari_migrate'       => static fn() => kantar_alanlari_migrate($pdo),
     'kantar_fisno_uniq_migrate'     => static fn() => kantar_fisno_uniq_migrate($pdo),
     'cekirdek_perf_indeksler'       => static fn() => cekirdek_perf_indeksler_migrate($pdo),
+    'muhasebe_migrate'              => static fn() => muhasebe_migrate($pdo),
+    'edonusum_migrate'              => static fn() => edonusum_migrate($pdo),
+    'erp_mutabakat_migrate'         => static fn() => erp_mutabakat_migrate($pdo),
 ];
 
 // 1. tur + 2. tur (2x idempotency)
@@ -88,8 +94,9 @@ foreach ([1, 2] as $tur) {
 
 $pidx = cekirdek_perf_indeksler_durum($pdo);
 ok('B-29 tüm performans composite indeksleri MariaDB üzerinde hazır', $pidx['hazir'], json_encode($pidx));
-ok('Muhasebe şemaları hazır (cari/stok/fatura/kasa/doviz/ceksenet)',
+ok('Muhasebe & ERP Faz 1 şemaları hazır (cari/stok/fatura/kasa/doviz/ceksenet/muhasebe/edonusum/mutabakat)',
     cari_hazir($pdo) && stok_hazir($pdo) && fatura_hazir($pdo) && kasa_hazir($pdo) && doviz_hazir($pdo) && ceksenet_hazir($pdo)
+    && muh_hazir($pdo) && edonusum_hazir($pdo) && erp_mutabakat_hazir($pdo)
 );
 
 echo "\nÖZET: $passCnt geçti, $failCnt kaldı\n";

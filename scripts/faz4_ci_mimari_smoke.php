@@ -104,18 +104,18 @@ ok('B-41a README.md güncel (auth yok uyarısı kalktı, asya.scai.tr / test.sca
     && str_contains($readme, 'halkayit/')
     && str_contains($readme, 'migrate.php')
 );
-ok('B-41b docs/ARCHITECTURE.md güncel (asya_session, halkayit/, 44 kart, sw.js allowlist, MariaDB CI)',
+ok('B-41b docs/ARCHITECTURE.md güncel (asya_session, halkayit/, 47 kart, sw.js allowlist, MariaDB CI)',
     str_contains($arch, 'asya_session')
     && str_contains($arch, 'halkayit/')
-    && str_contains($arch, '44 idempotent kart')
+    && str_contains($arch, '47 idempotent kart')
     && str_contains($arch, 'allowlist')
     && str_contains($arch, 'MariaDB 10.11')
     && !str_contains($arch, 'yukleme-plani-v8')
 );
-ok('B-41c CLAUDE.md güncel (eski branch adı kalktı, test.scai.tr ve v586 eşit)',
+ok('B-41c CLAUDE.md güncel (eski branch adı kalktı, test.scai.tr ve v587 eşit)',
     !str_contains($claude, 'claude/fix-records-print-mobile-WuKdT')
     && str_contains($claude, 'test.scai.tr')
-    && str_contains($claude, 'yukleme-plani-v586')
+    && str_contains($claude, 'yukleme-plani-v587')
 );
 
 fwrite(STDOUT, "\nÖZET: $pass geçti, $fail kaldı\n");

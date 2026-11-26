@@ -69,6 +69,9 @@ require_once __DIR__ . '/config/pdks_servis_hesap.php';   // v532 Servis Hesabı
 require_once __DIR__ . '/config/pdks_faz9d.php';
 require_once __DIR__ . '/config/cekirdek_migrate.php';   // B-01 Çekirdek şema + B-23 Mal Kabul fis_no UNIQUE
 require_once __DIR__ . '/config/hesap_calc.php';         // B-01 hesap_migrate(true)
+require_once __DIR__ . '/config/muhasebe_core.php';      // ERP-1 Genel Muhasebe (TDHP)
+require_once __DIR__ . '/config/edonusum_core.php';      // ERP-2 e-Dönüşüm (UBL-TR 1.2)
+require_once __DIR__ . '/config/erp_mutabakat_core.php'; // ERP-11a Cari Risk Limiti & Kur Farkı Değerleme
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -163,6 +166,9 @@ $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (
 $cekirdek_results = []; $cekirdek_ran = false;             // B-01 Çekirdek şema (db + helpers + hesap)
 $kf_uniq_result = null; $kf_uniq_ran = false;               // B-23 kantar_fisleri.fis_no UNIQUE indeksi
 $perf_idx_results = []; $perf_idx_ran = false;              // B-29 Performans composite indeksleri
+$muh_results = []; $muh_ran = false;                        // ERP-1 Genel Muhasebe (TDHP)
+$edonusum_results = []; $edonusum_ran = false;              // ERP-2 e-Dönüşüm (UBL-TR 1.2)
+$erp_mut_results = []; $erp_mut_ran = false;                // ERP-11a Cari Risk Limiti & Kur Farkı Değerleme
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -573,6 +579,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         audit_log_event('migrate', 'perf_indeksler', null, null, [
             'operation' => 'add_composite_indexes', 'indexes' => $eklenen,
         ]);
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'genel_muhasebe') {
+    csrf_check($_POST['csrf'] ?? null);
+    $muh_ran     = true;
+    $muh_results = muhasebe_migrate($pdo);
+    foreach ($muh_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'genel_muhasebe', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'edonusum') {
+    csrf_check($_POST['csrf'] ?? null);
+    $edonusum_ran     = true;
+    $edonusum_results = edonusum_migrate($pdo);
+    foreach ($edonusum_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'edonusum', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'erp_mutabakat') {
+    csrf_check($_POST['csrf'] ?? null);
+    $erp_mut_ran     = true;
+    $erp_mut_results = erp_mutabakat_migrate($pdo);
+    foreach ($erp_mut_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'erp_mutabakat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
@@ -2225,6 +2258,70 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="perf_indeksler">
       <button type="submit" class="btn btn-primary">Performans İndekslerini Ekle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('genel-muhasebe'); ?>
+    <h2 style="margin-top:0;">Genel Muhasebe (TDHP — ERP-1)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>muh_hesap_plani</code>, <code>muh_mali_donemler</code>, <code>muh_fisler</code> ve
+      <code>muh_fis_satirlar</code> tablolarını oluşturur, standart Türkiye Tek Düzen Hesap Planını (100–799) ve aktif mali yılı bir kez tohumlar.
+      Mevcut tablolara ALTER yapılmaz.
+      <?php if ($muh_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($muh_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $muhHazir = muh_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $muhHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $muhHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="genel_muhasebe">
+      <button type="submit" class="btn btn-primary">Genel Muhasebe Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('edonusum'); ?>
+    <h2 style="margin-top:0;">e-Dönüşüm (e-Fatura / e-Arşiv / e-İrsaliye — ERP-2)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>edonusum_zarflar</code> (giden UBL-TR 1.2 zarfları &amp; ETTN) ve <code>edonusum_gelen</code>
+      (gelen kutusu kabul/red yanıtları) tablolarını ekler. Mevcut tablolara ALTER yapılmaz.
+      <?php if ($edonusum_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($edonusum_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $edonHazir = edonusum_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $edonHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $edonHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="edonusum">
+      <button type="submit" class="btn btn-primary">e-Dönüşüm Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('erp-mutabakat'); ?>
+    <h2 style="margin-top:0;">Cari Risk Limiti &amp; Kur Farkı Değerleme (ERP-11a)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>cari_kredi_limitleri</code> (cari kredi/risk limitleri ve blokaj) ve <code>kur_farki_degerlemeler</code>
+      (dönem sonu 646/656 döviz kur farkı değerleme defteri) tablolarını ekler. Mevcut tablolara ALTER yapılmaz.
+      <?php if ($erp_mut_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($erp_mut_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $erpMutHazir = erp_mutabakat_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $erpMutHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $erpMutHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="erp_mutabakat">
+      <button type="submit" class="btn btn-primary">Risk Limiti &amp; Kur Farkı Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>
