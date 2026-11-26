@@ -54,6 +54,7 @@ require_once $ROOT . '/config/ik_bordro_core.php';
 require_once $ROOT . '/config/crm_core.php';
 require_once $ROOT . '/config/sabit_kiymet_core.php';
 require_once $ROOT . '/config/finans_plan_core.php';
+require_once $ROOT . '/config/bi_rapor_core.php';
 
 $passCnt = 0; $failCnt = 0;
 function ok(string $ad, bool $kosul, string $ipucu = ''): void {
@@ -101,6 +102,7 @@ $adimlar = [
     'crm_migrate'                   => static fn() => crm_migrate($pdo),
     'sabit_kiymet_migrate'          => static fn() => sabit_kiymet_migrate($pdo),
     'finans_plan_migrate'           => static fn() => finans_plan_migrate($pdo),
+    'bi_rapor_migrate'              => static fn() => bi_rapor_migrate($pdo),
 ];
 
 // 1. tur + 2. tur (2x idempotency)
@@ -114,12 +116,12 @@ foreach ([1, 2] as $tur) {
 
 $pidx = cekirdek_perf_indeksler_durum($pdo);
 ok('B-29 tüm performans composite indeksleri MariaDB üzerinde hazır', $pidx['hazir'], json_encode($pidx));
-ok('Muhasebe & ERP Faz 1-4 şemaları hazır',
+ok('Muhasebe & ERP Faz 1-5 şemaları hazır',
     cari_hazir($pdo) && stok_hazir($pdo) && fatura_hazir($pdo) && kasa_hazir($pdo) && doviz_hazir($pdo) && ceksenet_hazir($pdo)
     && muh_hazir($pdo) && edonusum_hazir($pdo) && erp_mutabakat_hazir($pdo)
     && wms_stok_hazir($pdo) && yukleme_v2_hazir($pdo) && satinalma_hazir($pdo) && uretim_bom_hazir($pdo)
     && onay_hazir($pdo) && banka_hazir($pdo) && ik_bordro_hazir($pdo)
-    && crm_hazir($pdo) && sabit_kiymet_hazir($pdo) && finans_plan_hazir($pdo)
+    && crm_hazir($pdo) && sabit_kiymet_hazir($pdo) && finans_plan_hazir($pdo) && bi_rapor_hazir($pdo)
 );
 
 echo "\nÖZET: $passCnt geçti, $failCnt kaldı\n";

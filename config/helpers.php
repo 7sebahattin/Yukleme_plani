@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v593');
+    define('APP_SURUM', 'v594');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -569,8 +569,10 @@ function nav_muhasebe_gruplari(): array {
             'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
             'mal_kabul_fisleri.php' => ['Mal Kabul Fişleri', '📋']]],
         // v555: "İhracat Programı" grubu menüden kaldırıldı (sayfalar başka adlarla kullanılıyor).
+        // v593 (ERP Faz 5): Yeni Raporlama & BI Merkezi + Dinamik BI Rapor Tasarımcısı (rapor_tanimlari.php)
         'raporlar_grup' => ['Raporlar', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', [
-            'raporlar_listeler.php' => ['Raporlar-Listeler', '📊'], 'rapor_tanimlari.php' => ['Rapor Tanımları', '🗂️']]],
+            'rapor_merkezi.php' => ['Raporlama & BI Merkezi', '📈'], 'rapor_tanimlari.php' => ['Dinamik BI Tasarımcısı', '🗂️'],
+            'raporlar_listeler.php' => ['Raporlar-Listeler', '📊']]],
         // v548: "Kullanıcı Konsolu" → "Kullanıcı Ayarları"; Şube/Şirket Değiştirme + Mesajlar kalktı. Hesap sayfası sidebar'da bu gruba eklenir (render_desktop_sidebar).
         'kullanici_konsolu' => ['Kullanıcı Ayarları', '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 15-5 16 0"/>', [
             'sifre_degistirme.php' => ['Şifre Değiştirme', '🔒'], 'ajanda.php' => ['Ajanda', '📅'],
