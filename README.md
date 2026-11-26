@@ -1,103 +1,62 @@
-# Yükleme Planı
+# Asya Fresh — Operasyon ve ERP Yönetim Paneli (`Yukleme_plani`)
 
-PHP 8 + MySQL ile geliştirilmiş, mobil öncelikli **yükleme planı** uygulaması.
-Asya Fresh / Excel "Yükleme Planı" mantığını web tabanına taşır.
+PHP 8.3 + MySQL/MariaDB ile geliştirilmiş, çerçevesiz (vanilla PHP + vanilla JS/CSS), mobil öncelikli ve PWA destekli tarım ihracat operasyon ve ön muhasebe yönetim sistemi.
 
-## Özellikler
+- **Canlı:** `https://asya.scai.tr`
+- **Test:** `https://test.scai.tr`
+- **Ana Dal:** `main` (GitHub Push Webhook → otomatik deploy; bkz. `docs/DEPLOY_WORKFLOW.md`)
 
-- Genel kayıt + nakliye + yükleme planı (palet) bilgileri
-- Palet bazında: kasa adeti, size, brüt kg
-- **Otomatik dara hesaplama**: kasa cinsi (× kasa adeti) + palet tipi + ek malzemeler
-- **Net = Brüt − Dara** otomatik
-- Anlık alt toplamlar (kasa, brüt, dara, net)
-- Tanımlar ekranı: kasa cinsi, palet tipi, şapka, köşebent, şerit, casus, kasa etiketi, minti, kenar kartonu, taban kağıdı, şale, viyol, köşe karton, kraft kağıt, file, diğer
-- Mobilde kart tasarımı, PC'de Excel benzeri tablo girişi
-- Enter / Tab ile hızlı geçiş
-- Yazdırılabilir kayıt görünümü (A4 yatay)
-- CSRF koruma + prepared statement (SQL injection güvenliği)
-- Hesaplamalar hem JS'de anlık hem PHP'de yeniden yapılır
+## Ana Modüller
 
-## Kurulum
+- **Siparişler & Sevkiyat:** OGL Siparişler (`siparisler.php`), Frugro Siparişler (`frugro_siparis.php`, PKL/Fatura PDF & XLSX), Ürün Siparişleri (`urun_siparis.php`), Beyanlar (`beyanlar.php`), Palet Fişleri (`palet_fisleri.php`), Mal Kabul / Kantar (`kantar.php`).
+- **Hal Kayıt Sistemi (HKS):** `halkayit/` altında gömülü SPA + SOAP entegrasyonu (`hks_firmalar`, taslaklar, gönderilenler, rüsum borç, kişi havuzu; şifreler AES-256-GCM ile şifrelenir).
+- **Personel Takibi (PDKS):** Kart/NFC giriş-çıkış kiosku (`giris_cikis.php`), Günlük İşçi & Çavuş Hakediş (`config/pdks_hakedis.php`), Ters Kart Takip, Aylık Puantaj Çizelgesi, Günlük Üretim.
+- **Muhasebe Çekirdeği (INSERT-Only Defter):** Cari (`cari_*`), Stok (`stok_*`), Fatura (`fatura_*`), Kasa (`kasa_*`), Çek-Senet (`cek_*`), Döviz & Günlük Kurlar (`gunluk_kurlar.php`, TCMB XML).
+- **Maliyet & Hesap:** Maliyet Hesabı (`maliyet_*.php`), Hızlı Maliyet / Hızlı Hesapla, Personel Hesap/Avans (`hesap_*.php`).
+- **Mail Merkezi:** Çok hesaplı IMAP/SMTP senkronizasyonu (`mail.php`), isteğe bağlı çeviri ve onaylı giden kutusu.
+- **Yönetim & Güvenlik:** Rol/izin matrisi (`roles.php`, `users.php`), depo kapsamı (`depo_sec.php`), denetim izi (`audit_log`), masaüstü PIN ekran kilidi (`ekran_kilit.php`), şifreli DB yedekleme (`admin_db_backups.php`), sağlık kontrolü (`health.php`).
 
-### 1) Veritabanı
+## Kurulum ve Yapılandırma
+
+1. **Gereksinimler:** PHP 8.3+ (`pdo_mysql`, `mbstring`, `openssl`, `gd`, `zip`, `intl`, `fileinfo`, `xml`, `curl`), MySQL 8 / MariaDB 10.11+.
+2. **Yerel Sırlar (`config/local.php`, `.gitignore`'da):**
+   ```php
+   <?php
+   define('HKS_CRED_KEY', '<en-az-32-karakter-rastgele-anahtar>');
+   define('MAIL_MASTER_KEY', '<base64-32-byte-anahtar>');       // opsiyonel (Mail Merkezi)
+   define('HEALTH_CHECK_TOKEN', '<en-az-16-karakter-token>');   // opsiyonel (health.php)
+   // Yerel/CI ortamında DB bilgilerini ezmek için (opsiyonel):
+   // define('DB_LOCAL_HOST', '127.0.0.1');
+   // define('DB_LOCAL_NAME', 'asya_dev');
+   // define('DB_LOCAL_USER', 'root');
+   // define('DB_LOCAL_PASS', '');
+   ```
+   İzinler: `chmod 600 config/local.php`.
+3. **Veritabanı Şema Migrasyonu:**
+   Çalışma zamanında otomatik DDL çalıştırılmaz (B-01). Yönetici oturumu ile `migrate.php` üzerinden ilgili kartlar (44 idempotent kart) kontrollü olarak çalıştırılır.
+
+## Testler ve CI/CD
+
+Tüm testler bellek içi SQLite veya ayrı MariaDB test veritabanı üzerinde çalışır; canlı veritabanına veya dış servislere asla bağlanmaz.
+
 ```bash
-mysql -u root -p < database.sql
-```
-veya phpMyAdmin'den `database.sql` dosyasını içe aktarın.
+# Tüm PHP smoke ve birim testleri
+bash scripts/tum_testler.sh
 
-### 2) DB bağlantı bilgileri
-`config/db.php` dosyasındaki sabitleri düzenleyin:
-```php
-const DB_HOST = 'localhost';
-const DB_NAME = 'yukleme_plani';
-const DB_USER = 'root';
-const DB_PASS = '';
-```
+# Tarayıcı testleri (Playwright)
+bash scripts/tum_testler.sh --yalniz-js
 
-### 3) Web sunucu
-- PHP 8.0+ (PDO_MySQL açık olmalı)
-- Apache, Nginx veya `php -S localhost:8000` ile çalıştırın
-- Klasörü web kök dizinine kopyalayın → `index.php`'ye gidin
-
-```bash
-# Hızlı test
-php -S 0.0.0.0:8000
+# MariaDB 10.11 entegrasyon ve eşzamanlılık (FOR UPDATE) testleri
+ASYA_TEST_MYSQL_DSN='mysql:host=127.0.0.1;dbname=asya_test;charset=utf8mb4' \
+ASYA_TEST_MYSQL_USER=root ASYA_TEST_MYSQL_PASS=secret \
+  php scripts/migrate_mysql_smoke.php && php scripts/mysql_finans_race_smoke.php
 ```
 
-## Klasör Yapısı
+GitHub Actions (`.github/workflows/testler.yml`) her PR ve `main` push'unda `php`, `php-lint`, `js` (Playwright) ve `mysql-integration` (MariaDB 10.11) işlerini çalıştırır.
 
-```
-yukleme_plani/
-├── config/
-│   ├── db.php          # PDO bağlantı + ortak yardımcılar
-│   └── calc.php        # Sunucu tarafı dara/net hesaplaması
-├── assets/
-│   ├── style.css       # Mobil öncelikli stil
-│   └── app.js          # Dinamik palet + anlık hesaplama
-├── _form.php           # Create/edit ortak form gövdesi
-├── index.php           # Kayıt listesi
-├── record_create.php   # Yeni kayıt
-├── record_edit.php     # Kayıt düzenle
-├── record_view.php     # Görüntüle + ?print=1 ile yazdır
-├── record_delete.php   # Sil (önce onay)
-├── definitions.php     # Tanımlar yönetimi
-├── database.sql        # DB şeması + örnek tanımlar
-└── README.md
-```
+## Ek Dokümantasyon
 
-## Hesaplama Mantığı
-
-Bir palet satırı için:
-
-```
-kasa_dara_total = kasa_adeti × seçilen_kasa_cinsi.unit_dara_kg
-palet_dara      = seçilen_palet_tipi.unit_dara_kg
-extra_dara      = SUM( malzeme.unit_dara_kg × adet )
-
-dara_kg = kasa_dara_total + palet_dara + extra_dara
-net_kg  = max(0, brut_kg − dara_kg)
-```
-
-Bu hesap iki yerde yapılır:
-- `assets/app.js` → kullanıcı yazdıkça anlık olarak
-- `config/calc.php` → form POST edildiğinde sunucuda yeniden (güvenlik)
-
-## Yazdırma / PDF
-
-`Görüntüle` ekranında **Yazdır** butonu yeni sekmede sayfayı açar.
-- Tarayıcı yazdırma diyalogundan PDF olarak da kaydedilebilir.
-- A4 yatay boyutta, baskı için optimize edilmiştir.
-
-## Güvenlik Notları
-
-- Tüm sorgularda `PDO::prepare` + named/positional parametreler.
-- Tüm form gönderimlerinde CSRF token doğrulaması.
-- Tüm çıktı `htmlspecialchars` ile kaçışlanır.
-- Çoklu kullanıcı veya kimlik doğrulama eklenecekse `definitions.php`,
-  `record_*` dosyalarına oturum (login) kontrolü eklenmelidir.
-
-## Bilinen Sınırlar / İleri Geliştirme
-
-- Auth/login yok — yerel ağ veya tek kullanıcı için tasarlandı.
-- Excel'e dışa aktarım eklenebilir (PhpSpreadsheet).
-- Çok sayıda kayıt için sayfalama eklenebilir (şu an 500 ile sınırlı).
+- `docs/ARCHITECTURE.md` — Gerçek teknik mimari, oturum, yetki, defter ve önbellek tasarımı
+- `docs/DEPLOY_WORKFLOW.md` — `asya.scai.tr` / `test.scai.tr` webhook deploy akışı
+- `docs/MAIL_OPERATIONS.md` — Mail Merkezi kurulum, anahtar rotasyonu ve cron ayarları
+- `CLAUDE.md` — Modül kuralları ve skill dizini

@@ -47,23 +47,39 @@ if (file_exists(__DIR__ . '/local.php')) {
 }
 
 // --- DB AYARLARI ---
+// NOT: Bu 4 const satırı canlı sunucudaki deploy.php (smart_merge_db) tarafından
+// korunur — sözdizimini değiştirmeyin. Yerel/CI ortamında config/local.php içinde
+// DB_LOCAL_HOST/NAME/USER/PASS veya ortam değişkeni (ASYA_DB_*) ile ezilebilir.
 const DB_HOST    = 'localhost';
 const DB_NAME    = 'yukleme_plani';
 const DB_USER    = 'root';
 const DB_PASS    = '';
 const DB_CHARSET = 'utf8mb4';
 
+/** @return array{host:string,name:string,user:string,pass:string,charset:string} */
+function db_config_resolve(): array {
+    $envPass = getenv('ASYA_DB_PASS');
+    return [
+        'host'    => defined('DB_LOCAL_HOST')    ? (string)DB_LOCAL_HOST    : ((string)(getenv('ASYA_DB_HOST') ?: DB_HOST)),
+        'name'    => defined('DB_LOCAL_NAME')    ? (string)DB_LOCAL_NAME    : ((string)(getenv('ASYA_DB_NAME') ?: DB_NAME)),
+        'user'    => defined('DB_LOCAL_USER')    ? (string)DB_LOCAL_USER    : ((string)(getenv('ASYA_DB_USER') ?: DB_USER)),
+        'pass'    => defined('DB_LOCAL_PASS')    ? (string)DB_LOCAL_PASS    : ($envPass !== false ? (string)$envPass : DB_PASS),
+        'charset' => defined('DB_LOCAL_CHARSET') ? (string)DB_LOCAL_CHARSET : ((string)(getenv('ASYA_DB_CHARSET') ?: DB_CHARSET)),
+    ];
+}
+
 function db(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn  = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
+        $cfg  = db_config_resolve();
+        $dsn  = 'mysql:host=' . $cfg['host'] . ';dbname=' . $cfg['name'] . ';charset=' . $cfg['charset'];
         $opts = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ];
         try {
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $opts);
+            $pdo = new PDO($dsn, $cfg['user'], $cfg['pass'], $opts);
         } catch (PDOException $e) {
             error_log('[db_connect] ' . $e->getMessage());
             http_response_code(500);
