@@ -629,6 +629,7 @@ function frgp_pdf(array $v): ?string
         if (is_file($oto)) require_once $oto;
     }
     if (!class_exists(\Dompdf\Dompdf::class)) return null;
+    if (function_exists('export_prepare_runtime')) export_prepare_runtime(256, 120);
     $opt = new \Dompdf\Options();
     $opt->set('defaultFont', 'DejaVu Sans');
     $opt->set('isRemoteEnabled', false);
@@ -651,6 +652,7 @@ function frgp_pdf(array $v): ?string
 function frgp_xlsx(array $v): ?string
 {
     if (!function_exists('xlsx_olustur')) require_once __DIR__ . '/xlsx_export.php';
+    if (function_exists('export_prepare_runtime')) export_prepare_runtime(256, 120);
     xlsx_motor_yukle();
     $bilgi = [['SUPPLIER', 'ASYA FRESH - TURKIYE'], ['REGION', $v['bolge']], ['PARTI NO', $v['parti_no']], ['TRANSPORTER', $v['nakliyeci']], ['TEMPERATURE', $v['sicaklik']],
         ['DEPARTURE DATE', trim($v['tarih'] . ' ' . $v['saat'])], ['LORRY NUMBER', $v['plaka']], ['ID LOGGER', $v['logger']], ['ID LOGGER PALET', $v['logger_palet'] ?? ''], ['DRIVER', $v['sofor']],

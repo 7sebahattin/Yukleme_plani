@@ -92,12 +92,12 @@ const TASARIM = {
 //   BN-HKS-IFRAME-ORTUSME → halkayit/index.php padding'i var(--bn-h)
 const BILINEN = {};
 
-// Ekranlar: < 768 çubuk GÖRÜNÜR; 768–899 tablet (topbar), ≥ 900 sidebar
+// Ekranlar: < 900 çubuk GÖRÜNÜR (mobil + tablet, B-33); ≥ 900 sidebar
 const EKRANLAR = [
     { w: 320, h: 568 }, { w: 360, h: 740 }, { w: 390, h: 844 }, { w: 430, h: 932 },
-    { w: 767, h: 1024 }, { w: 768, h: 1024 }, { w: 900, h: 800 }, { w: 1024, h: 768 },
+    { w: 767, h: 1024 }, { w: 768, h: 1024 }, { w: 800, h: 1024 }, { w: 900, h: 800 }, { w: 1024, h: 768 },
 ];
-const MOBIL_MAX = 767;
+const MOBIL_MAX = 899;
 
 // ── Sayaçlar ──────────────────────────────────────────────────────────────
 const say = { A: { ok: 0, hata: 0 }, B: { ok: 0, hata: 0 }, xfail: 0, xpass: 0 };

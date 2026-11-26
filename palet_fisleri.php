@@ -100,6 +100,51 @@ function pf_islem_sql(PDO $pdo): array {
     ];
 }
 
+/**
+ * B-28: Liste satırları için son işlem bilgisini tek batch sorguyla doldurur (satır başı correlated subquery yerine).
+ * @param list<array<string,mixed>> $rows
+ * @return list<array<string,mixed>>
+ */
+function pf_islem_batch(PDO $pdo, array $rows): array {
+    if ($rows === []) return $rows;
+    $ids = array_values(array_unique(array_map(static fn(array $r): int => (int)$r['id'], $rows)));
+    $map = [];
+    try {
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $st = $pdo->prepare(
+                "SELECT al.record_id, al.action AS islem_kod,
+                        (al.new_values LIKE '%\"duplicate_of\"%') AS islem_kopya,
+                        al.created_at AS islem_zaman,
+                        COALESCE(NULLIF(u.display_name, ''), u.username, '') AS islem_kullanici
+                 FROM audit_log al
+                 INNER JOIN (
+                     SELECT record_id, MAX(id) AS max_id
+                     FROM audit_log
+                     WHERE module = 'palet_fisleri' AND action IN ('create', 'update') AND record_id IN ($ph)
+                     GROUP BY record_id
+                 ) mx ON mx.max_id = al.id
+                 LEFT JOIN users u ON u.id = al.user_id"
+            );
+            $st->execute($chunk);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $a) {
+                $map[(int)$a['record_id']] = $a;
+            }
+        }
+    } catch (Throwable $e) {
+        // audit_log / users okunamazsa sütunlar boş döner, liste yine çalışır
+    }
+    foreach ($rows as &$r) {
+        $a = $map[(int)$r['id']] ?? null;
+        $r['islem_kod']       = $a['islem_kod'] ?? null;
+        $r['islem_kopya']     = (int)($a['islem_kopya'] ?? 0);
+        $r['islem_zaman']     = $a['islem_zaman'] ?? null;
+        $r['islem_kullanici'] = (string)($a['islem_kullanici'] ?? '');
+    }
+    unset($r);
+    return $rows;
+}
+
 function pf_get_row(int $id): array {
     [$islem_sel, $islem_join] = pf_islem_sql(db());
     $st = db()->prepare("SELECT p.*, r.id AS belge_no, r.parti_no, r.firma, r.urun, r.tarih, r.durum, r.locked_at,
@@ -336,6 +381,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pf_action'])) {
     }
 }
 
+// B-28: Müstahsil (cari_kartlar) AJAX araması — 5000 satırlık başlangıç yükü yerine anlık LIMIT 25 arama
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['mustahsil_ara'])) {
+    if (!$mustahsil_aktif) pf_json(['ok' => true, 'items' => []]);
+    $q = mb_substr(trim((string)$_GET['mustahsil_ara']), 0, 100, 'UTF-8');
+    if ($q === '') pf_json(['ok' => true, 'items' => []]);
+    $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+    $st = $pdo->prepare("SELECT id, unvan FROM cari_kartlar WHERE aktif = 1 AND unvan LIKE ? ORDER BY unvan LIMIT 25");
+    $st->execute([$like]);
+    $items = array_map(static fn(array $x): array => ['id' => (int)$x['id'], 'name' => (string)$x['unvan']], $st->fetchAll(PDO::FETCH_ASSOC));
+    pf_json(['ok' => true, 'items' => $items]);
+}
+
 // v550: parti önerileri de aktif depo kapsamında (loading_records, palet deposu üzerinden).
 $pf_parti_sorgu = function (string $sql) use ($pdo): PDOStatement {
     [$ds, $dp] = depo_sql_records_in('loading_records');
@@ -348,7 +405,8 @@ $pf_listeler = [
     'firma' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('firma')),
     'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
     'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], get_definitions_by_type('kasa_cinsi')),
-    'mustahsil' => $mustahsil_aktif ? array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['unvan']], $pdo->query('SELECT id, unvan FROM cari_kartlar WHERE aktif = 1 ORDER BY unvan LIMIT 5000')->fetchAll(PDO::FETCH_ASSOC)) : [],
+    // B-28: 5000 satır peşin yüklenmez; istemci yazdıkça ?mustahsil_ara=... ile çeker.
+    'mustahsil' => [],
     'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pf_parti_sorgu("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
 ];
 $pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loading_records')->fetchColumn();
@@ -362,31 +420,47 @@ $must_id_sql = $has_mustahsil ? 'p.mustahsil_id' : 'NULL AS mustahsil_id';
 $f_baslangic = (string)($_GET['baslangic'] ?? '');
 if (!pf_valid_date($f_baslangic)) $f_baslangic = date('Y-m-d', strtotime('-90 days'));
 $f_yuklenen = !empty($_GET['yuklenen']);
+$export = (string)($_GET['export'] ?? '');
+$pf_per_page = 250;
+$pf_page = max(1, (int)($_GET['sayfa'] ?? 1));
 
-function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $desc1_sql, string $desc2_sql, string $must_sql, string $must_id_sql): array {
-    [$islem_sel, $islem_join] = pf_islem_sql($pdo);
+function pf_liste_getir(PDO $pdo, string $baslangic, bool $yuklenen, string $desc1_sql, string $desc2_sql, string $must_sql, string $must_id_sql, ?int $limit = null, int $offset = 0): array {
     $w = "r.type = 'yukleme' AND r.tarih >= ?";
     if (!$yuklenen) $w .= " AND COALESCE(r.durum, '') <> 'yuklendi'";
     [$depoSql, $depoPar] = depo_sql_in('p.depo');   // v550: aktif depo (boş depo her yerde görünür kuralı depo_sql_in'de)
     if ($depoSql !== '') $w .= " AND $depoSql";
+    $limSql = $limit !== null ? ' LIMIT ' . max(1, $limit) . ' OFFSET ' . max(0, $offset) : '';
     $st = $pdo->prepare("SELECT p.id, p.loading_record_id, p.palet_no, p.kasa_adeti, p.size, p.brut_kg, p.dara_kg, p.net_kg,
                           p.palet_tipi_id, p.kasa_cinsi_id, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql,
                           r.id AS belge_no, r.tarih, r.parti_no, r.firma, r.urun, r.durum, r.locked_at,
-                          p.depo, COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi, $islem_sel
+                          p.depo, COALESCE(md.name, p.palet_no, '') AS palet_adi, COALESCE(kd.name, '') AS kasa_adi
                    FROM loading_pallets p
                    JOIN loading_records r ON r.id = p.loading_record_id
                    LEFT JOIN material_definitions md ON md.id = p.palet_tipi_id AND md.type = 'palet_tipi'
                    LEFT JOIN material_definitions kd ON kd.id = p.kasa_cinsi_id AND kd.type = 'kasa_cinsi'
-                   $islem_join
                    WHERE $w
-                   ORDER BY r.id DESC, p.sira_no ASC, p.id DESC");
+                   ORDER BY r.id DESC, p.sira_no ASC, p.id DESC$limSql");
     $st->execute([$baslangic, ...$depoPar]);
-    return $st->fetchAll();
+    return pf_islem_batch($pdo, $st->fetchAll());
 }
-$rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql);
+
+$pf_total = 0;
+$pf_total_pages = 1;
+if ($export === 'csv' || $export === 'xlsx') {
+    $rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql);
+} else {
+    $wCnt = "r.type = 'yukleme' AND r.tarih >= ?" . ($f_yuklenen ? '' : " AND COALESCE(r.durum, '') <> 'yuklendi'");
+    [$depoCntSql, $depoCntPar] = depo_sql_in('p.depo');
+    if ($depoCntSql !== '') $wCnt .= " AND $depoCntSql";
+    $stCnt = $pdo->prepare("SELECT COUNT(*) FROM loading_pallets p JOIN loading_records r ON r.id = p.loading_record_id WHERE $wCnt");
+    $stCnt->execute([$f_baslangic, ...$depoCntPar]);
+    $pf_total = (int)$stCnt->fetchColumn();
+    $pf_total_pages = max(1, (int)ceil($pf_total / $pf_per_page));
+    $pf_page = min($pf_page, $pf_total_pages);
+    $rows = pf_liste_getir($pdo, $f_baslangic, $f_yuklenen, $desc1_sql, $desc2_sql, $must_sql, $must_id_sql, $pf_per_page, ($pf_page - 1) * $pf_per_page);
+}
 
 // Excel / CSV (aynı filtre). Ortak kapı: reports.export; her iki kolda export_audit.
-$export = (string)($_GET['export'] ?? '');
 if ($export === 'csv' || $export === 'xlsx') {
     require_perm('reports.export');
     $bas = ['Belge No', 'Tarih', 'Parti No', 'Palet', 'Ünvan', 'Ürün', 'Ambalaj', 'Adet', 'BRÜT', 'Dara', 'NET'];
@@ -491,7 +565,11 @@ render_header('Palet Fişleri');
         <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">⚖</i><div><span><em class="pf-u">NET</em><em class="pf-k">NET</em></span><strong data-sum="net">0</strong></div></div>
         <div class="pf-kart" role="button" tabindex="0" data-pf-liste title="Partinin palet listesini aç"><i aria-hidden="true">▮</i><div><span><em class="pf-u">AMB. ORTALAMA</em><em class="pf-k">ORT.</em></span><strong data-sum="ort">0</strong></div></div>
     </div>
-    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong></span><span class="pf-filtreler" id="pfFiltreler" hidden></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite"></span></div>
+    <div class="pf-foot"><span>T.Kayıt: <strong id="pfCount"><?= count($rows) ?></strong><?php if ($pf_total > count($rows)): ?> / <?= $pf_total ?><?php endif; ?></span><?php if ($pf_total_pages > 1): ?><span class="pf-sayfalama" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px"><?php
+        $pf_pg_url = static fn(int $p): string => 'palet_fisleri.php?' . http_build_query(array_filter(['baslangic' => $f_baslangic, 'yuklenen' => $f_yuklenen ? '1' : '', 'sayfa' => $p > 1 ? (string)$p : ''], static fn($v) => $v !== ''));
+        if ($pf_page > 1): ?><a class="btn btn-sm btn-ghost" href="<?= h($pf_pg_url($pf_page - 1)) ?>" aria-label="Önceki sayfa">‹ Önceki</a><?php endif; ?>
+        <span>Sayfa <?= $pf_page ?> / <?= $pf_total_pages ?></span>
+        <?php if ($pf_page < $pf_total_pages): ?><a class="btn btn-sm btn-ghost" href="<?= h($pf_pg_url($pf_page + 1)) ?>" aria-label="Sonraki sayfa">Sonraki ›</a><?php endif; ?></span><?php endif; ?><span class="pf-filtreler" id="pfFiltreler" hidden></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite"></span></div>
 </section>
 
 <dialog class="pf-dialog" id="pfDialog">

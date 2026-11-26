@@ -43,5 +43,7 @@ try {
     db()->prepare("UPDATE loading_records SET etiket_foto=? WHERE id=?")->execute([$data, $id]);
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+    error_log('[api_etiket_foto] ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'Etiket fotoğrafı kaydedilemedi.'], JSON_UNESCAPED_UNICODE);
 }

@@ -59,14 +59,14 @@ body.hk-page .hk-frame {
     width: 100%;
     height: 100%;
     border: 0;
-    background: #eef4f7;
+    background: var(--bg, #eef4f7);
 }
 
-/* Mobil: alt gezinme çubuğu (fixed) için yer bırak — iframe onun üstünde biter.
+/* Mobil + Tablet (<900px): alt gezinme çubuğu (fixed) için yer bırak — iframe onun üstünde biter (B-33).
    --bn-h (style.css :root) çubuğun ölçülen kutusudur (dok + alt boşluk); sabit
    bir px yazma — eski 58px çubuk büyüyünce iframe'in altı çubuğun arkasında
    kalıyordu. Çubuk basılmayan rolde (body.bn-yok) --bn-h 0 olur. */
-@media (max-width: 767px) {
+@media (max-width: 899px) {
     body.hk-page .container {
         padding-bottom: calc(var(--bn-h) + env(safe-area-inset-bottom, 0px)) !important;
     }

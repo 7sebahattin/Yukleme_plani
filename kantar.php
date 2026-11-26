@@ -29,36 +29,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'terci
 // Depo sorumluluğu kısıtı (kantar_fisleri.depo)
 [$_depo_sql, $_depo_params] = depo_sql_column('k.depo');
 
-// Son işlem (Eklendi / Düzeltildi + kim + ne zaman) audit_log'tan okunur; şema değişmez.
-// audit_log / users okunamazsa sütunlar boş döner, liste yine çalışır.
-$islem_sel = "NULL AS islem_kod, NULL AS islem_zaman, '' AS islem_kullanici";
-$islem_join = '';
-try {
-    $pdo->query('SELECT 1 FROM audit_log LIMIT 0'); $pdo->query('SELECT 1 FROM users LIMIT 0');
-    $islem_sel = "al.action AS islem_kod, al.created_at AS islem_zaman, COALESCE(NULLIF(u.display_name, ''), u.username, '') AS islem_kullanici";
-    $islem_join = "LEFT JOIN audit_log al ON al.id = (SELECT MAX(a2.id) FROM audit_log a2 WHERE a2.module = 'kantar' AND a2.record_id = k.id AND a2.action IN ('create', 'update'))
-                   LEFT JOIN users u ON u.id = al.user_id";
-} catch (PDOException $e) {}
-
 // Ek alanlar (şoför / malın sahibi / müstahsil / bahçe): kolonlar kuruluysa sorguya ve tabloya girer
 $ek = kantar_alanlari_durum($pdo);
 $ek_sel = '';
 foreach ($ek as $kolon => $var) { if ($var) $ek_sel .= ", k.`$kolon`"; }
 
+$kf_per_page = 250;
+$kf_page = max(1, (int)($_GET['sayfa'] ?? 1));
+$kf_total = 0;
+$kf_total_pages = 1;
 $rows = [];
 try {
+    $stCnt = $pdo->prepare("SELECT COUNT(*) FROM kantar_fisleri k WHERE 1=1{$_depo_sql}");
+    $stCnt->execute($_depo_params);
+    $kf_total = (int)$stCnt->fetchColumn();
+    $kf_total_pages = max(1, (int)ceil($kf_total / $kf_per_page));
+    $kf_page = min($kf_page, $kf_total_pages);
+    $kf_offset = ($kf_page - 1) * $kf_per_page;
+
     $st = $pdo->prepare(
         "SELECT k.id, k.fis_no, k.giris_tarih, k.plaka, k.firma_adi, k.malin_cinsi, k.geldigi_yer, k.depo,
                 k.palet_sayisi, k.palet_cinsi, k.kasa_sayisi, k.kasa_cinsi, k.tartim1, k.tartim2,
-                k.kasa_dara, k.palet_dara, k.kasa_dara_total, k.palet_dara_total, k.aciklama, k.created_at{$ek_sel}, {$islem_sel}
+                k.kasa_dara, k.palet_dara, k.kasa_dara_total, k.palet_dara_total, k.aciklama, k.created_at{$ek_sel}
          FROM kantar_fisleri k
-         {$islem_join}
          WHERE 1=1{$_depo_sql}
          ORDER BY CAST(k.fis_no AS UNSIGNED) DESC, k.id DESC
-         LIMIT 2000"
+         LIMIT {$kf_per_page} OFFSET {$kf_offset}"
     );
     $st->execute($_depo_params);
     $rows = $st->fetchAll();
+
+    // B-28: Son işlem bilgisini yalnız bu sayfadaki kayıtlar için tek batch sorguyla çek
+    if ($rows !== []) {
+        $ids = array_values(array_unique(array_map(static fn(array $r): int => (int)$r['id'], $rows)));
+        $amap = [];
+        try {
+            foreach (array_chunk($ids, 500) as $chunk) {
+                $ph = implode(',', array_fill(0, count($chunk), '?'));
+                $stA = $pdo->prepare(
+                    "SELECT al.record_id, al.action AS islem_kod, al.created_at AS islem_zaman,
+                            COALESCE(NULLIF(u.display_name, ''), u.username, '') AS islem_kullanici
+                     FROM audit_log al
+                     INNER JOIN (
+                         SELECT record_id, MAX(id) AS max_id
+                         FROM audit_log
+                         WHERE module = 'kantar' AND action IN ('create', 'update') AND record_id IN ($ph)
+                         GROUP BY record_id
+                     ) mx ON mx.max_id = al.id
+                     LEFT JOIN users u ON u.id = al.user_id"
+                );
+                $stA->execute($chunk);
+                foreach ($stA->fetchAll(PDO::FETCH_ASSOC) as $a) {
+                    $amap[(int)$a['record_id']] = $a;
+                }
+            }
+        } catch (PDOException $e) {}
+        foreach ($rows as &$r) {
+            $a = $amap[(int)$r['id']] ?? null;
+            $r['islem_kod']       = $a['islem_kod'] ?? null;
+            $r['islem_zaman']     = $a['islem_zaman'] ?? null;
+            $r['islem_kullanici'] = (string)($a['islem_kullanici'] ?? '');
+        }
+        unset($r);
+    }
 } catch (PDOException $e) {}
 
 function kf_liste_tarih(?string $v, bool $saat = false): string {
@@ -163,7 +196,7 @@ render_flash();
         <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span><em class="pf-u">DARA</em><em class="pf-k">DARA</em></span><strong data-sum="dara">0</strong></div></div>
         <div class="pf-kart"><i aria-hidden="true">⚖</i><div><span><em class="pf-u">NET KG</em><em class="pf-k">NET</em></span><strong data-sum="net">0</strong></div></div>
     </div>
-    <div class="pf-foot"><span>T.Kayıt: <strong id="kfCount"><?= count($rows) ?></strong></span><span class="pf-status" id="kfStatus" role="status" aria-live="polite"></span></div>
+    <div class="pf-foot"><span>T.Kayıt: <strong id="kfCount"><?= count($rows) ?></strong><?php if ($kf_total > count($rows)): ?> / <?= $kf_total ?><?php endif; ?></span><?php if ($kf_total_pages > 1): ?><span class="pf-sayfalama" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px"><?php if ($kf_page > 1): ?><a class="btn btn-sm btn-ghost" href="kantar.php<?= $kf_page - 1 > 1 ? '?sayfa=' . ($kf_page - 1) : '' ?>" aria-label="Önceki sayfa">‹ Önceki</a><?php endif; ?><span>Sayfa <?= $kf_page ?> / <?= $kf_total_pages ?></span><?php if ($kf_page < $kf_total_pages): ?><a class="btn btn-sm btn-ghost" href="kantar.php?sayfa=<?= $kf_page + 1 ?>" aria-label="Sonraki sayfa">Sonraki ›</a><?php endif; ?></span><?php endif; ?><span class="pf-status" id="kfStatus" role="status" aria-live="polite"></span></div>
 </section>
 <dialog class="pf-dialog pf-sutun-dialog" id="kfSutunDialog">
     <div class="pf-dialog-head"><div><h2>Sütunlar</h2></div><button type="button" class="pf-close" id="kfSutunKapat" aria-label="Kapat">×</button></div>

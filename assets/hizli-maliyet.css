@@ -256,3 +256,12 @@
     .qc-page .btn, .qc-workspace .btn { min-height: 44px; }
 }
 
+/* B-36: Koyu tema kontrast güvencesi */
+html[data-theme="dark"] .qc-page input:not([type="hidden"]),
+html[data-theme="dark"] .qc-page select,
+html[data-theme="dark"] .qc-page textarea {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+}
+

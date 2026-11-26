@@ -162,6 +162,7 @@ $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
 $cekirdek_results = []; $cekirdek_ran = false;             // B-01 Çekirdek şema (db + helpers + hesap)
 $kf_uniq_result = null; $kf_uniq_ran = false;               // B-23 kantar_fisleri.fis_no UNIQUE indeksi
+$perf_idx_results = []; $perf_idx_ran = false;              // B-29 Performans composite indeksleri
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -561,6 +562,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     if (($kf_uniq_result['durum'] ?? '') === 'olusturuldu') {
         audit_log_event('migrate', 'kantar', null, null, [
             'operation' => 'add_unique_index', 'table' => 'kantar_fisleri', 'index' => 'uq_kf_fis_no',
+        ]);
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'perf_indeksler') {
+    csrf_check($_POST['csrf'] ?? null);
+    $perf_idx_ran     = true;
+    $perf_idx_results = cekirdek_perf_indeksler_migrate($pdo);
+    $eklenen = array_values(array_map(static fn(array $r): string => (string)$r['adim'], array_filter($perf_idx_results, static fn(array $r): bool => ($r['durum'] ?? '') === 'olusturuldu')));
+    if ($eklenen !== []) {
+        audit_log_event('migrate', 'perf_indeksler', null, null, [
+            'operation' => 'add_composite_indexes', 'indexes' => $eklenen,
         ]);
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -2180,6 +2191,40 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="kantar_fisno_uniq">
       <button type="submit" class="btn btn-primary">UNIQUE İndeksi Ekle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('perf-indeksler'); ?>
+    <h2 style="margin-top:0;">Performans — Composite İndeksler</h2>
+    <p style="color:#555;font-size:.9em;">
+      B-29: <code>audit_log(module, record_id, action, id)</code>, <code>loading_records(type, durum, tarih, id)</code>,
+      <code>loading_pallets(loading_record_id, depo, islendi)</code> ve <code>kantar_fisleri(giris_tarih, depo)</code>
+      composite indekslerini idempotent olarak ekler (veri değiştirmez).
+    </p>
+    <?php $__pidx = cekirdek_perf_indeksler_durum($pdo); ?>
+    <p>
+      <?php if ($__pidx['hazir']): ?>
+        <strong style="color:#1f9d55;">✓ Tüm performans composite indeksleri mevcut (<?= count($__pidx['mevcut']) ?>/<?= count(cekirdek_perf_indeksler_tanim()) ?>).</strong>
+      <?php else: ?>
+        <strong style="color:#c0392b;">✗ Eksik performans indeksleri var (<?= count($__pidx['mevcut']) ?>/<?= count(cekirdek_perf_indeksler_tanim()) ?> hazır).</strong>
+        <?php if ($__pidx['eksik']): ?><br>Eksik: <code><?= h(implode(', ', $__pidx['eksik'])) ?></code><?php endif; ?>
+        <?php if ($__pidx['tablo_yok']): ?><br>Tablo yok: <code><?= h(implode(', ', $__pidx['tablo_yok'])) ?></code><?php endif; ?>
+      <?php endif; ?>
+    </p>
+    <?php if ($perf_idx_ran): ?>
+      <div style="margin:10px 0;padding:10px;border:1px solid #d0d7de;border-radius:6px;">
+        <strong>Son çalıştırma sonucu:</strong>
+        <ul style="margin:6px 0 0 18px;">
+          <?php foreach ($perf_idx_results as $__pr): ?>
+            <li><code><?= h((string)$__pr['adim']) ?></code>: <b><?= h((string)$__pr['durum']) ?></b> — <?= h((string)$__pr['mesaj']) ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="perf_indeksler">
+      <button type="submit" class="btn btn-primary">Performans İndekslerini Ekle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>

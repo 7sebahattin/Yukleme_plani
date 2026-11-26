@@ -1,9 +1,8 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v584';
+const CACHE_NAME = 'yukleme-plani-v585';
 
-// Uygulama kabuğunu önbellekle
+// Uygulama kabuğunu önbellekle (B-30: yalnız kimliksiz statik varlıklar; .php HTML asla önbelleğe alınmaz)
 const SHELL = [
-  './index.php',
   './assets/style.css',
   './assets/app.js',
   './assets/maliyet.css',
@@ -64,7 +63,11 @@ self.addEventListener('activate', function(e) {
 // Muhasebe sayfa adları (stok.php, kantar.php, malzeme_stok*.php, records.php vb. KAPSANMAZ: ön ek + '_' ya da tam ad)
 var SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|alis_fat|satis_fat|sevk_irs|dovizli|doviz_kaydet|api_doviz_kur|transfer_fis|ihracat_|stok_|kantar_fisleri|palet_fisleri|mal_kabul_fisleri|arac_yukleme|alinan_siparis|beyanname_siparis|rapor_tanimlari|raporlar_listeler|sifre_deg|sube_|sirket_deg|kullanici_(tanimlari|tercihleri)|depo_tanimlari|veritabani_islemleri|ajanda|mesajlar|gunluk_kurlar|doviz_tanimlari|kayit_bilgisi|waap_|genel_duyurular|guncelleme|program_|diger_uygulama|lisans_)[a-z_]*\.php(\/|$)/;
 
-// Network-first: önce ağ dene, başarısız olursa önbellekten sun
+// B-30 Beyaz Liste (Allowlist): Yalnız aynı-köken /assets/* ve /manifest.json önbelleklenebilir.
+// Hiçbir kimlikli .php sayfası, API yanıtı veya indirme CacheStorage'a yazılmaz.
+var SW_STATIK_IZIN_RE = /\/(assets\/.+\.(?:css|js|svg|png|jpe?g|webp|ico|woff2?|ttf)|manifest\.json)$/i;
+
+// Network-first (yalnız statik allowlist varlıkları için): önce ağ dene, başarısız olursa önbellekten sun
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
   // Veritabanı yedeği ve her türlü indirme SW'ye HİÇ uğramaz (respondWith yok):
@@ -96,13 +99,12 @@ self.addEventListener('fetch', function(e) {
   if (/\/api_beyansiz_yukleme\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
   if (SW_MUHASEBE_RE.test(u.pathname)) return;
+  // B-30 Kesin Beyaz Liste Kapısı: aynı-köken statik varlıklar dışındaki TÜM istekler (.php vb.) ağdan geçer, önbelleğe yazılmaz.
+  if (u.origin !== self.location.origin || !SW_STATIK_IZIN_RE.test(u.pathname)) return;
   e.respondWith(
     fetch(e.request).then(function(response) {
       // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.
-      // 'no-store' burada ÖLÇÜT DEĞİL: PHP oturumu (session.cache_limiter=nocache)
-      // her sayfaya no-store basar; ölçüt olsaydı çevrimdışı sayfa yedeği biterdi.
       var cd = response.headers.get('Content-Disposition') || '';
-      // Opaque (CDN, ör. xlsx betiği) yanıtlar eskisi gibi önbelleğe girer — durumları okunamaz.
       if (/attachment/i.test(cd) || (response.type === 'basic' && !response.ok)) {
         return response;
       }
@@ -112,11 +114,9 @@ self.addEventListener('fetch', function(e) {
       });
       return response;
     }).catch(function() {
-      // Alt çubuk ikonları sayfada ?v=<filemtime> ile istenir; SHELL'deki
-      // sorgusuz kopya çevrimdışında YALNIZ bu klasör için yedek olarak sunulur
-      // (başka sayfalarda sorgu farklı içerik demektir, yok sayılmaz).
+      // B-42: /assets/ altındaki tüm varlıklar ?v=<filemtime> ile istenir; çevrimdışında sorgusuz SHELL kopyasına düş.
       return caches.match(e.request).then(function(r) {
-        if (r || e.request.url.indexOf('/assets/nav-icons/') === -1) return r;
+        if (r || u.pathname.indexOf('/assets/') === -1) return r;
         return caches.match(e.request, { ignoreSearch: true });
       });
     })
