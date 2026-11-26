@@ -350,7 +350,31 @@
                 return true;
             } catch (error) { mesaj(error.message); return false; }
         }
-        input.addEventListener('input', () => { delete input.dataset.id; render(); });
+        let mustTimer = null, mustSeq = 0;
+        async function mustahsilAra(qRaw) {
+            const seq = ++mustSeq;
+            try {
+                const res = await fetch('palet_fisleri.php?mustahsil_ara=' + encodeURIComponent(qRaw), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const r = await res.json().catch(() => null);
+                if (seq !== mustSeq || !r || !r.ok || !Array.isArray(r.items)) return;
+                const list = L().mustahsil || (L().mustahsil = []);
+                r.items.forEach(it => {
+                    if (!list.some(x => x.id === it.id)) list.push({ id: it.id, name: it.name });
+                });
+                if (document.activeElement === input) render();
+            } catch (_) { /* ağ hatasında yerel liste/ekleme yine çalışır */ }
+        }
+        input.addEventListener('input', () => {
+            delete input.dataset.id;
+            render();
+            if (kind === 'mustahsil') {
+                clearTimeout(mustTimer);
+                const qRaw = input.value.trim();
+                if (qRaw.length >= 1) mustTimer = setTimeout(() => mustahsilAra(qRaw), 180);
+            }
+        });
         input.addEventListener('blur', () => setTimeout(close, 120));
         input.addEventListener('keydown', async event => {
             if (box.hidden) return;

@@ -19,15 +19,29 @@ if (!can('dashboard.read')) {
     forbidden('Hesabınıza henüz hiçbir sayfa için yetki tanımlanmamış. Lütfen sistem yöneticinize başvurun.');
 }
 
-// ── DB-Backup-01: Admin girişinde günlük otomatik yedek ───
+// ── DB-Backup-01 / B-32: Admin girişinde günlük otomatik yedek (yanıtı bloklamadan) ───
 $db_backup_result = null;
 $db_backup_eski   = null;   // DB-Backup-02: son başarılı yedek yok/eski ise uyarı metni
 if (is_admin()) {
     require_once __DIR__ . '/config/db_backup_helpers.php';
-    try {
-        $db_backup_result = create_daily_backup_if_needed(db(), (int)($auth_user['id'] ?? 0));
-    } catch (Throwable $_bkp_err) {
-        // backup hatası ana sayfayı çökertmemeli
+    $_bkp_cron_only = defined('DB_BACKUP_CRON_ONLY') && (bool)DB_BACKUP_CRON_ONLY;
+    $_bkp_uid = (int)($auth_user['id'] ?? 0);
+    if (!$_bkp_cron_only) {
+        if (function_exists('fastcgi_finish_request')) {
+            // B-32: PHP-FPM/LiteSpeed altında yanıt tarayıcıya aktarıldıktan sonra arka planda çalışır (dashboard'u dondurmaz).
+            register_shutdown_function(static function () use ($_bkp_uid): void {
+                if (session_status() === PHP_SESSION_ACTIVE) @session_write_close();
+                @fastcgi_finish_request();
+                try { create_daily_backup_if_needed(db(), $_bkp_uid); } catch (Throwable $_e) { error_log('[db_backup_shutdown] ' . $_e->getMessage()); }
+            });
+        } else {
+            try {
+                if (session_status() === PHP_SESSION_ACTIVE) @session_write_close();
+                $db_backup_result = create_daily_backup_if_needed(db(), $_bkp_uid);
+            } catch (Throwable $_bkp_err) {
+                error_log('[db_backup_index] ' . $_bkp_err->getMessage());
+            }
+        }
     }
     if ($db_backup_result === null) {
         try {

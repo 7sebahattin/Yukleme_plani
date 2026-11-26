@@ -294,6 +294,7 @@ if ($is_csv) {
 // Bu sınır 2. sayfanın başlığında kullanıcıya da yazılır ki rakamlar
 // karşılaştırılırken yanlış varsayım yapılmasın.
 if ($is_xlsx) {
+    if (function_exists('export_prepare_runtime')) export_prepare_runtime(256, 120);
     $autoload = __DIR__ . '/vendor/autoload.php';
     if (!is_file($autoload)) { http_response_code(500); die('Excel motoru (PhpSpreadsheet) bulunamadı.'); }
     require_once $autoload;

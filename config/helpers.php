@@ -13,12 +13,76 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v584');
+    define('APP_SURUM', 'v585');
 }
 
 // --- HTML kaçışı ---
 function h($v): string {
     return htmlspecialchars((string)($v ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+// --- HTML / <script> içi güvenli JSON (B-42) ---
+function json_html($v): string {
+    $j = json_encode($v, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    return $j !== false ? $j : 'null';
+}
+
+// --- Hafif önbellek katmanı: APCu varsa APCu, yoksa istek-içi bellek (B-30) ---
+function _app_cache_key(string $key): string {
+    $ns = (defined('DB_NAME') ? (string)DB_NAME : 'app') . ':' . (defined('APP_SURUM') ? (string)APP_SURUM : 'v0');
+    return 'asya:' . $ns . ':' . $key;
+}
+function app_cache_get(string $key, bool &$hit = false) {
+    $k = _app_cache_key($key);
+    if (isset($GLOBALS['_app_cache_mem']) && array_key_exists($k, $GLOBALS['_app_cache_mem'])) {
+        $hit = true;
+        return $GLOBALS['_app_cache_mem'][$k];
+    }
+    if (function_exists('apcu_fetch') && (PHP_SAPI !== 'cli' || ini_get('apc.enable_cli'))) {
+        $ok = false;
+        $val = @apcu_fetch($k, $ok);
+        if ($ok) { $GLOBALS['_app_cache_mem'][$k] = $val; $hit = true; return $val; }
+    }
+    $hit = false;
+    return null;
+}
+function app_cache_set(string $key, $val, int $ttl = 60): void {
+    $k = _app_cache_key($key);
+    $GLOBALS['_app_cache_mem'][$k] = $val;
+    if (function_exists('apcu_store') && (PHP_SAPI !== 'cli' || ini_get('apc.enable_cli'))) {
+        @apcu_store($k, $val, max(1, $ttl));
+    }
+}
+function app_cache_del(string $key): void {
+    $k = _app_cache_key($key);
+    unset($GLOBALS['_app_cache_mem'][$k]);
+    if (function_exists('apcu_delete') && (PHP_SAPI !== 'cli' || ini_get('apc.enable_cli'))) {
+        @apcu_delete($k);
+    }
+}
+
+// --- Ağır PDF / Excel dışa aktarım çalışma ortamı hazırlığı (B-31) ---
+function export_prepare_runtime(int $memMb = 256, int $sec = 120): void {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
+    $lim = ini_get('memory_limit');
+    if ($lim !== false && $lim !== '-1') {
+        $v = trim((string)$lim);
+        $n = (int)$v;
+        $bytes = match (strtolower(substr($v, -1))) {
+            'g' => $n * 1073741824,
+            'm' => $n * 1048576,
+            'k' => $n * 1024,
+            default => $n,
+        };
+        if ($bytes < $memMb * 1048576) {
+            @ini_set('memory_limit', $memMb . 'M');
+        }
+    }
+    if (PHP_SAPI !== 'cli') {
+        @set_time_limit($sec);
+    }
 }
 
 // --- Sayı parse (virgül/nokta tolere) ---
@@ -1292,7 +1356,7 @@ function render_header(string $title, bool $print_mode = false): void {
 <html lang="tr">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="<?= h($token) ?>">
     <meta name="theme-color" content="#1d6cf0">
     <meta name="mobile-web-app-capable" content="yes">
@@ -1390,6 +1454,9 @@ function render_header(string $title, bool $print_mode = false): void {
         $_nav_users = function_exists('can') && can('users.admin');
         ?>
         <nav class="topnav">
+            <?php if (!function_exists('can') || can('dashboard.read')): ?>
+            <a href="<?= $base ?>index.php" <?= $cur === 'index.php' ? 'class="active"' : '' ?>>Ana Sayfa</a>
+            <?php endif; ?>
             <?php if (role_matrix_page_can('siparis','ogl')): ?>
             <a href="<?= $base ?>siparisler.php" <?= nav_aktif_anahtar() === 'siparis' ? 'class="active"' : '' ?>>OGL Siparişler</a>
             <?php endif; ?>
@@ -1486,7 +1553,8 @@ function get_flash(): ?array {
 function render_flash(): void {
     $f = get_flash();
     if ($f) {
-        echo '<div class="flash flash-' . h($f['type']) . '">' . h($f['msg']) . '</div>';
+        $role = ($f['type'] ?? '') === 'error' ? 'alert' : 'status';
+        echo '<div class="flash flash-' . h($f['type']) . '" role="' . $role . '" aria-live="polite">' . h($f['msg']) . '</div>';
     }
 }
 

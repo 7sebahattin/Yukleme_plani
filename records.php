@@ -139,7 +139,20 @@ if ($sort !== '') {
         r.id DESC";
 }
 
-$sql = "SELECT r.*,
+$_rec_cols = [
+    'r.id', 'r.tarih', 'r.firma', 'r.parti_no', 'r.alici', 'r.bolge', 'r.urun', 'r.casus_no',
+    'r.durum', 'r.gumruk', 'r.sofor_adi', 'r.on_plaka', 'r.arka_plaka', 'r.nakliye_sirketi',
+    'r.ulasim', 'r.gidecek_ulke', 'r.telefon', 'r.fatura_no', 'r.nakliye_bedeli', 'r.avans',
+    'r.created_at', 'r.updated_at', 'r.urun_sahibi_id',
+];
+foreach (['brand', 'etiket', 'locked_at', 'revision_reason'] as $_opt_col) {
+    if (db_has_column('loading_records', $_opt_col)) {
+        $_rec_cols[] = 'r.' . $_opt_col;
+    }
+}
+$_rec_sel = implode(', ', $_rec_cols);
+
+$sql = "SELECT {$_rec_sel},
                COUNT(p.id)                   AS toplam_palet,
                COALESCE(SUM(p.kasa_adeti),0) AS toplam_kasa,
                COALESCE(SUM(p.brut_kg),0)    AS toplam_brut,

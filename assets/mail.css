@@ -94,7 +94,8 @@ a.mail-oge:hover { background: var(--surface-2); }
 .mail-sekmeler a.aktif { color: var(--primary); border-bottom-color: var(--primary); }
 .mail-metin { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
 .mail-metin--ham { white-space: pre-wrap; font-family: inherit; margin: 0; }
-.mail-govde { display: block; width: 100%; height: 62vh; min-height: 280px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; }
+.mail-govde { display: block; width: 100%; height: 62vh; min-height: 280px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card, #fff); }
+html[data-theme="dark"] .mail-govde { background: #161d27; color-scheme: dark; }
 .mail-thread { margin-top: 12px; font-size: .88rem; }
 .mail-thread ul { margin: 6px 0 0; padding-left: 18px; }
 .mail-cevapbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

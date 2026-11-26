@@ -390,4 +390,104 @@ if (!function_exists('cekirdek_tablo_var')) {
             return ['ok' => false, 'durum' => 'hata', 'mesaj' => 'İndeks eklenemedi: ' . $e->getMessage()];
         }
     }
+
+    /**
+     * B-29: Performans composite indeks tanımları.
+     * @return list<array{tablo:string,indeks:string,kolonlar:list<string>}>
+     */
+    function cekirdek_perf_indeksler_tanim(): array
+    {
+        return [
+            ['tablo' => 'audit_log',       'indeks' => 'idx_audit_mod_rec_act_id',    'kolonlar' => ['module', 'record_id', 'action', 'id']],
+            ['tablo' => 'loading_records', 'indeks' => 'idx_lr_type_durum_tarih_id',  'kolonlar' => ['type', 'durum', 'tarih', 'id']],
+            ['tablo' => 'loading_pallets', 'indeks' => 'idx_lp_rec_depo_islendi',     'kolonlar' => ['loading_record_id', 'depo', 'islendi']],
+            ['tablo' => 'kantar_fisleri',  'indeks' => 'idx_kf_tarih_depo',           'kolonlar' => ['giris_tarih', 'depo']],
+        ];
+    }
+
+    /** B-29: İndeks mevcut mu? (MySQL + SQLite uyumlu, salt okunur) */
+    function cekirdek_indeks_var(PDO $pdo, string $tablo, string $indeks): bool
+    {
+        if (!cekirdek_tablo_var($pdo, $tablo)) return false;
+        try {
+            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+                foreach ($pdo->query("PRAGMA index_list(`$tablo`)")->fetchAll(PDO::FETCH_ASSOC) as $ix) {
+                    if ((string)($ix['name'] ?? '') === $indeks) return true;
+                }
+                return false;
+            }
+            $st = $pdo->prepare("SHOW INDEX FROM `$tablo` WHERE Key_name = ?");
+            $st->execute([$indeks]);
+            return $st->rowCount() > 0;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
+    /**
+     * B-29: Composite indeks durum özeti (salt okunur).
+     * @return array{hazir:bool,mevcut:list<string>,eksik:list<string>,tablo_yok:list<string>}
+     */
+    function cekirdek_perf_indeksler_durum(PDO $pdo): array
+    {
+        $mevcut = []; $eksik = []; $tabloYok = [];
+        foreach (cekirdek_perf_indeksler_tanim() as $t) {
+            $etiket = $t['tablo'] . '.' . $t['indeks'];
+            if (!cekirdek_tablo_var($pdo, $t['tablo'])) {
+                $tabloYok[] = $etiket;
+            } elseif (cekirdek_indeks_var($pdo, $t['tablo'], $t['indeks'])) {
+                $mevcut[] = $etiket;
+            } else {
+                $eksik[] = $etiket;
+            }
+        }
+        return [
+            'hazir'     => ($eksik === [] && $tabloYok === [] && count($mevcut) === count(cekirdek_perf_indeksler_tanim())),
+            'mevcut'    => $mevcut,
+            'eksik'     => $eksik,
+            'tablo_yok' => $tabloYok,
+        ];
+    }
+
+    /**
+     * B-29: Eksik performans composite indekslerini idempotent olarak ekler (yalnız migrate.php).
+     * @return list<array{adim:string,durum:string,mesaj:string}>
+     */
+    function cekirdek_perf_indeksler_migrate(PDO $pdo): array
+    {
+        $out = [];
+        $sqlite = ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite');
+        foreach (cekirdek_perf_indeksler_tanim() as $t) {
+            $ad = $t['tablo'] . '.' . $t['indeks'];
+            if (!cekirdek_tablo_var($pdo, $t['tablo'])) {
+                $out[] = ['adim' => $ad, 'durum' => 'atlandi', 'mesaj' => 'Tablo yok.'];
+                continue;
+            }
+            if (cekirdek_indeks_var($pdo, $t['tablo'], $t['indeks'])) {
+                $out[] = ['adim' => $ad, 'durum' => 'var', 'mesaj' => 'İndeks zaten mevcut.'];
+                continue;
+            }
+            $eksikKol = [];
+            foreach ($t['kolonlar'] as $kol) {
+                if (!cekirdek_kolon_var($pdo, $t['tablo'], $kol)) $eksikKol[] = $kol;
+            }
+            if ($eksikKol !== []) {
+                $out[] = ['adim' => $ad, 'durum' => 'atlandi', 'mesaj' => 'Eksik kolon: ' . implode(', ', $eksikKol)];
+                continue;
+            }
+            $kolSql = implode(', ', array_map(static fn(string $c): string => "`$c`", $t['kolonlar']));
+            try {
+                if ($sqlite) {
+                    $pdo->exec("CREATE INDEX `{$t['indeks']}` ON `{$t['tablo']}` ($kolSql)");
+                } else {
+                    $pdo->exec("ALTER TABLE `{$t['tablo']}` ADD INDEX `{$t['indeks']}` ($kolSql)");
+                }
+                $out[] = ['adim' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Composite indeks eklendi (' . implode(', ', $t['kolonlar']) . ').'];
+            } catch (PDOException $e) {
+                error_log('[cekirdek_perf_indeksler_migrate] ' . $ad . ': ' . $e->getMessage());
+                $out[] = ['adim' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+            }
+        }
+        return $out;
+    }
 }

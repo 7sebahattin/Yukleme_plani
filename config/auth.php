@@ -189,7 +189,7 @@ function current_user(): ?array {
         $pdo = db();
         $st  = $pdo->prepare("
             SELECT u.id, u.username, u.email, u.display_name, u.is_active,
-                   us.token, us.expires_at, us.created_at
+                   us.token, us.expires_at, us.created_at, us.last_seen_at
             FROM user_sessions us
             JOIN users u ON u.id = us.user_id
             WHERE us.token = ?
@@ -204,12 +204,19 @@ function current_user(): ?array {
             return null;
         }
 
-        // Sliding expiry: MySQL NOW() kullan — PHP timezone uyumsuzluğunu önler
-        $pdo->prepare("UPDATE user_sessions SET last_seen_at = NOW(), expires_at = TIMESTAMPADD(HOUR, ?, NOW()) WHERE token = ?")
-            ->execute([SESSION_DURATION_HOURS, $token]);
-
-        // Cookie süresini de yenile
-        setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
+        // B-42: Sliding expiry yazımını son güncellemeden >300 sn geçtiyse çalıştır (her istekte WRITE engeli)
+        $lastSeenTs = !empty($row['last_seen_at']) ? strtotime((string)$row['last_seen_at']) : 0;
+        if ($lastSeenTs === 0 || (time() - $lastSeenTs) > 300) {
+            $pdo->prepare("UPDATE user_sessions SET last_seen_at = NOW(), expires_at = TIMESTAMPADD(HOUR, ?, NOW()) WHERE token = ?")
+                ->execute([SESSION_DURATION_HOURS, $token]);
+            setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
+            // %1 olasılıkla süresi dolmuş oturumları temizle (GC)
+            if (mt_rand(1, 100) === 1) {
+                try {
+                    $pdo->exec("DELETE FROM user_sessions WHERE expires_at < NOW() LIMIT 500");
+                } catch (PDOException $e) {}
+            }
+        }
 
         $store['current_user'] = $row;
         return $store['current_user'];

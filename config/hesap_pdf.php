@@ -650,6 +650,7 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
 function hesap_report_pdf(array $d): ?string
 {
     if (!class_exists(\Dompdf\Dompdf::class)) return null;
+    if (function_exists('export_prepare_runtime')) export_prepare_runtime(256, 120);
 
     $opt = new \Dompdf\Options();
     $opt->set('defaultFont', 'DejaVu Sans');   // Türkçe + ₺ glif desteği

@@ -419,10 +419,15 @@ function xlsx_indir(string $dosyaAdi, array $sayfalar, string $csvUrl = '', arra
 {
     $hucre = xlsx_hucre_sayisi($sayfalar);
     if ($hucre > XLSX_MAX_HUCRE) xlsx_cok_buyuk($hucre, $csvUrl);
-    // Sınır içindeki en büyük rapor için pay bırak (yalnız düşükse yükselt)
-    $lim = ini_get('memory_limit');
-    if ($lim !== false && $lim !== '-1' && xlsx_bayt((string)$lim) < 256 * 1048576) @ini_set('memory_limit', '256M');
-    @set_time_limit(120);
+    // B-31: Oturum kilidini serbest bırak + bellek/süre sınırı (yalnız düşükse yükselt)
+    if (function_exists('export_prepare_runtime')) {
+        export_prepare_runtime(256, 120);
+    } else {
+        if (session_status() === PHP_SESSION_ACTIVE) @session_write_close();
+        $lim = ini_get('memory_limit');
+        if ($lim !== false && $lim !== '-1' && xlsx_bayt((string)$lim) < 256 * 1048576) @ini_set('memory_limit', '256M');
+        @set_time_limit(120);
+    }
     xlsx_gonder(xlsx_olustur($sayfalar, $ozellik), $dosyaAdi);
 }
 

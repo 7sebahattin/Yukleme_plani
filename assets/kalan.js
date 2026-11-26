@@ -99,14 +99,31 @@
 
     $('kalanSaveTarget')?.addEventListener('click', async () => {
         const btn = $('kalanSaveTarget');
-        const d = await api('save_target', {
-            record_id: RECORD_ID,
-            target_kg: $('kalanTargetKg').value,
-            target_pallet_count: $('kalanTargetPc').value,
-        }, 'POST');
-        if (d.ok) {
-            btn.textContent = '✓ Kaydedildi';
-            setTimeout(() => { btn.textContent = 'Kaydet'; }, 2000);
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        const prevLabel = btn.textContent || 'Kaydet';
+        btn.textContent = 'Kaydediliyor…';
+        try {
+            const d = await api('save_target', {
+                record_id: RECORD_ID,
+                target_kg: $('kalanTargetKg').value,
+                target_pallet_count: $('kalanTargetPc').value,
+            }, 'POST');
+            if (d && d.ok) {
+                btn.textContent = '✓ Kaydedildi';
+                setTimeout(() => { btn.textContent = prevLabel; }, 2000);
+            } else {
+                btn.textContent = '⚠ Hata';
+                setTimeout(() => { btn.textContent = prevLabel; }, 2500);
+                window.alert((d && d.error) || 'Hedef kaydedilemedi.');
+            }
+        } catch (err) {
+            btn.textContent = prevLabel;
+            window.alert('Bağlantı hatası. Tekrar deneyin.');
+        } finally {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
         }
     });
 
