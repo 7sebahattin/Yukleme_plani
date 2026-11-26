@@ -18,6 +18,7 @@ if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
 
 require_once __DIR__ . '/db_tx_helpers.php';
 require_once __DIR__ . '/muhasebe_core.php';
+require_once __DIR__ . '/edonusum_elogo.php';
 
 // ── Entegratör Adaptör Arayüzü ─────────────────────────────────────────────
 
@@ -95,11 +96,206 @@ final class EdonusumTestProvider implements EdonusumProviderInterface
     }
 }
 
-function edonusum_provider(?EdonusumProviderInterface $ozel = null): EdonusumProviderInterface
+/** @return array<string,mixed> */
+function edonusum_ayar_varsayilan(): array
+{
+    $ortam = strtolower(edonusum_env('ELOGO_ORTAM', 'test')) === 'canli' ? 'canli' : 'test';
+    $sag   = strtolower(edonusum_env('EDONUSUM_PROVIDER', 'sandbox_test'));
+    if (!in_array($sag, ['sandbox_test', 'elogo'], true)) $sag = 'sandbox_test';
+    return [
+        'saglayici'           => $sag,
+        'ortam'               => $ortam,
+        'servis_url'          => edonusum_env('ELOGO_SERVIS_URL', ''),
+        'kullanici_adi'       => edonusum_env('ELOGO_USERNAME', ''),
+        'sifre_kayitli'       => edonusum_env('ELOGO_PASSWORD', '') !== '',
+        'gb_etiket'           => edonusum_env('ELOGO_GB_ETIKET', ''),
+        'pk_etiket'           => edonusum_env('ELOGO_PK_ETIKET', ''),
+        'xslt_efatura_uuid'   => edonusum_env('ELOGO_XSLT_EFATURA', ''),
+        'xslt_earsiv_uuid'    => edonusum_env('ELOGO_XSLT_EARSIV', ''),
+        'xslt_eirsaliye_uuid' => edonusum_env('ELOGO_XSLT_EIRSALIYE', ''),
+        'seri_efatura'        => 'ASY',
+        'seri_earsiv'         => 'ASA',
+        'seri_eirsaliye'      => 'ASI',
+        'firma_vkn'           => edonusum_env('EDONUSUM_FIRMA_VKN', '1111111111'),
+        'firma_unvan'         => edonusum_env('EDONUSUM_FIRMA_UNVAN', 'ASYA FRESH TARIM GIDA İHRACAT LTD. ŞTİ.'),
+        'firma_vergi_dairesi' => edonusum_env('EDONUSUM_FIRMA_VD', ''),
+        'firma_il'            => edonusum_env('EDONUSUM_FIRMA_IL', 'ANTALYA'),
+        'firma_ilce'          => edonusum_env('EDONUSUM_FIRMA_ILCE', 'KEPEZ'),
+        'firma_adres'         => edonusum_env('EDONUSUM_FIRMA_ADRES', ''),
+        'otomatik_imza'       => 0,
+        'son_test_at'         => null,
+        'son_test_durum'      => null,
+        'son_test_mesaj'      => null,
+    ];
+}
+
+/** UI güvenli ayar okuyucu (şifre düz metin döndürülmez; yalnız sifre_kayitli bayrağı verilir). @return array<string,mixed> */
+function edonusum_ayar_getir(?PDO $pdo = null): array
+{
+    $v = edonusum_ayar_varsayilan();
+    if ($pdo === null || !db_table_exists($pdo, 'edonusum_ayarlar')) {
+        return $v;
+    }
+    try {
+        $r = $pdo->query('SELECT * FROM `edonusum_ayarlar` WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($r)) return $v;
+        foreach ($v as $k => $def) {
+            if ($k === 'sifre_kayitli') continue;
+            if (array_key_exists($k, $r) && $r[$k] !== null && $r[$k] !== '') {
+                $v[$k] = is_int($def) ? (int)$r[$k] : (string)$r[$k];
+            }
+        }
+        $v['sifre_kayitli'] = (!empty($r['sifre_enc'])) || edonusum_env('ELOGO_PASSWORD', '') !== '';
+        $v['son_test_at'] = $r['son_test_at'] ?? null;
+        $v['son_test_durum'] = $r['son_test_durum'] ?? null;
+        $v['son_test_mesaj'] = $r['son_test_mesaj'] ?? null;
+    } catch (PDOException $e) {
+        // Varsayılanla devam
+    }
+    return $v;
+}
+
+/** İç kullanım: şifresi çözülmüş e-Logo yapılandırması. @return array<string,mixed> */
+function edonusum_ayar_cozulu(?PDO $pdo = null): array
+{
+    $a = edonusum_ayar_getir($pdo);
+    $sifre = '';
+    if ($pdo !== null && db_table_exists($pdo, 'edonusum_ayarlar')) {
+        try {
+            $enc = $pdo->query('SELECT sifre_enc FROM `edonusum_ayarlar` WHERE id = 1')->fetchColumn();
+            if (is_string($enc) && $enc !== '') {
+                $coz = edonusum_sifre_coz($enc);
+                if ($coz !== null) $sifre = $coz;
+            }
+        } catch (PDOException $e) {}
+    }
+    if ($sifre === '') {
+        $sifre = edonusum_env('ELOGO_PASSWORD', '');
+    }
+    $a['sifre'] = $sifre;
+    return $a;
+}
+
+/** @return array{ok:bool,mesaj?:string,hata?:string,kod?:int} */
+function edonusum_ayar_kaydet(PDO $pdo, array $g, int $uid): array
+{
+    $sag = trim((string)($g['saglayici'] ?? 'sandbox_test'));
+    if (!in_array($sag, ['sandbox_test', 'elogo'], true)) {
+        return ['ok' => false, 'hata' => 'Geçersiz entegratör sağlayıcısı.', 'kod' => 422];
+    }
+    $ortam = trim((string)($g['ortam'] ?? 'test')) === 'canli' ? 'canli' : 'test';
+    $hamUrl = trim((string)($g['servis_url'] ?? ''));
+    $servisUrl = '';
+    if ($hamUrl !== '') {
+        $guvenli = edonusum_elogo_url_guvenli($hamUrl);
+        if ($guvenli === null) {
+            return ['ok' => false, 'hata' => 'Servis adresi yalnızca HTTPS ve *.elogo.com.tr / *.logo.com.tr alan adında olmalıdır.', 'kod' => 422];
+        }
+        $servisUrl = $guvenli;
+    }
+
+    $kullanici = mb_substr(trim((string)($g['kullanici_adi'] ?? '')), 0, 120, 'UTF-8');
+    $yeniSifre = (string)($g['sifre'] ?? '');
+    $sifreTemizle = !empty($g['sifre_temizle']);
+    $mevcutEnc = null;
+    try {
+        $e = $pdo->query('SELECT sifre_enc FROM `edonusum_ayarlar` WHERE id = 1')->fetchColumn();
+        if (is_string($e) && $e !== '') $mevcutEnc = $e;
+    } catch (PDOException $e) {}
+
+    $sifreEnc = $mevcutEnc;
+    if ($sifreTemizle) {
+        $sifreEnc = null;
+    } elseif ($yeniSifre !== '') {
+        $enc = edonusum_sifre_sifrele($yeniSifre);
+        if ($enc === null) {
+            return [
+                'ok'   => false,
+                'hata' => 'Şifre şifrelenemedi: config/local.php içinde HKS_CRED_KEY (veya EDONUSUM_CRED_KEY, en az 16 karakter) tanımlı olmalıdır.',
+                'kod'  => 500,
+            ];
+        }
+        $sifreEnc = $enc;
+    }
+
+    $vkn = preg_replace('/\D/', '', (string)($g['firma_vkn'] ?? '')) ?? '';
+    if ($vkn !== '' && strlen($vkn) !== 10 && strlen($vkn) !== 11) {
+        return ['ok' => false, 'hata' => 'Firma VKN 10, TCKN 11 hane olmalıdır.', 'kod' => 422];
+    }
+    $seriTemiz = static function (string $s, string $def): string {
+        $s = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $s) ?? '');
+        return strlen($s) === 3 ? $s : $def;
+    };
+    $seriEf  = $seriTemiz((string)($g['seri_efatura'] ?? 'ASY'), 'ASY');
+    $seriEa  = $seriTemiz((string)($g['seri_earsiv'] ?? 'ASA'), 'ASA');
+    $seriEi  = $seriTemiz((string)($g['seri_eirsaliye'] ?? 'ASI'), 'ASI');
+
+    $gb  = mb_substr(trim((string)($g['gb_etiket'] ?? '')), 0, 160, 'UTF-8');
+    $pk  = mb_substr(trim((string)($g['pk_etiket'] ?? '')), 0, 160, 'UTF-8');
+    $xEf = mb_substr(trim((string)($g['xslt_efatura_uuid'] ?? '')), 0, 64, 'UTF-8');
+    $xEa = mb_substr(trim((string)($g['xslt_earsiv_uuid'] ?? '')), 0, 64, 'UTF-8');
+    $xEi = mb_substr(trim((string)($g['xslt_eirsaliye_uuid'] ?? '')), 0, 64, 'UTF-8');
+    $unvan = mb_substr(trim((string)($g['firma_unvan'] ?? '')), 0, 200, 'UTF-8');
+    $vd    = mb_substr(trim((string)($g['firma_vergi_dairesi'] ?? '')), 0, 120, 'UTF-8');
+    $il    = mb_substr(trim((string)($g['firma_il'] ?? '')), 0, 80, 'UTF-8');
+    $ilce  = mb_substr(trim((string)($g['firma_ilce'] ?? '')), 0, 80, 'UTF-8');
+    $adres = mb_substr(trim((string)($g['firma_adres'] ?? '')), 0, 300, 'UTF-8');
+    $otoImza = !empty($g['otomatik_imza']) ? 1 : 0;
+    $simdi = date('Y-m-d H:i:s');
+
+    return db_tx($pdo, static function (PDO $p) use (
+        $sag, $ortam, $servisUrl, $kullanici, $sifreEnc, $gb, $pk,
+        $xEf, $xEa, $xEi, $seriEf, $seriEa, $seriEi,
+        $vkn, $unvan, $vd, $il, $ilce, $adres, $otoImza, $uid, $simdi
+    ): array {
+        $var = (int)$p->query('SELECT COUNT(*) FROM `edonusum_ayarlar` WHERE id = 1')->fetchColumn() > 0;
+        if ($var) {
+            $p->prepare(
+                'UPDATE `edonusum_ayarlar`
+                 SET saglayici=?, ortam=?, servis_url=?, kullanici_adi=?, sifre_enc=?, gb_etiket=?, pk_etiket=?,
+                     xslt_efatura_uuid=?, xslt_earsiv_uuid=?, xslt_eirsaliye_uuid=?,
+                     seri_efatura=?, seri_earsiv=?, seri_eirsaliye=?,
+                     firma_vkn=?, firma_unvan=?, firma_vergi_dairesi=?, firma_il=?, firma_ilce=?, firma_adres=?,
+                     otomatik_imza=?, guncelleyen_id=?, guncelleme_at=?
+                 WHERE id = 1'
+            )->execute([
+                $sag, $ortam, $servisUrl, $kullanici, $sifreEnc, $gb, $pk,
+                $xEf, $xEa, $xEi, $seriEf, $seriEa, $seriEi,
+                $vkn, $unvan, $vd, $il, $ilce, $adres, $otoImza, $uid ?: null, $simdi,
+            ]);
+        } else {
+            $p->prepare(
+                'INSERT INTO `edonusum_ayarlar`
+                 (id, saglayici, ortam, servis_url, kullanici_adi, sifre_enc, gb_etiket, pk_etiket,
+                  xslt_efatura_uuid, xslt_earsiv_uuid, xslt_eirsaliye_uuid,
+                  seri_efatura, seri_earsiv, seri_eirsaliye,
+                  firma_vkn, firma_unvan, firma_vergi_dairesi, firma_il, firma_ilce, firma_adres,
+                  otomatik_imza, guncelleyen_id, guncelleme_at)
+                 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([
+                $sag, $ortam, $servisUrl, $kullanici, $sifreEnc, $gb, $pk,
+                $xEf, $xEa, $xEi, $seriEf, $seriEa, $seriEi,
+                $vkn, $unvan, $vd, $il, $ilce, $adres, $otoImza, $uid ?: null, $simdi,
+            ]);
+        }
+        if (function_exists('audit_log_event')) {
+            audit_log_event('update', 'edonusum_ayar', 1, null, [
+                'saglayici' => $sag, 'ortam' => $ortam, 'kullanici_adi' => $kullanici, 'sifre_degisti' => ($sifreEnc !== null),
+            ]);
+        }
+        return ['ok' => true, 'mesaj' => 'e-Dönüşüm / e-Logo entegratör ayarları kaydedildi.'];
+    });
+}
+
+function edonusum_provider(?EdonusumProviderInterface $ozel = null, ?PDO $pdo = null): EdonusumProviderInterface
 {
     if ($ozel !== null) return $ozel;
     if (isset($GLOBALS['_edonusum_provider']) && $GLOBALS['_edonusum_provider'] instanceof EdonusumProviderInterface) {
         return $GLOBALS['_edonusum_provider'];
+    }
+    $ayar = edonusum_ayar_cozulu($pdo);
+    if (($ayar['saglayici'] ?? 'sandbox_test') === 'elogo') {
+        return new EdonusumElogoProvider($ayar);
     }
     return new EdonusumTestProvider();
 }
@@ -109,7 +305,7 @@ function edonusum_provider(?EdonusumProviderInterface $ozel = null): EdonusumPro
 /** @return list<string> */
 function edonusum_tablolar(): array
 {
-    return ['edonusum_zarflar', 'edonusum_gelen'];
+    return ['edonusum_zarflar', 'edonusum_gelen', 'edonusum_ayarlar'];
 }
 
 /** @return list<string> */
@@ -173,7 +369,7 @@ function edonusum_migrate(PDO $pdo): array
             `genel_toplam` DECIMAL(16,2) NOT NULL DEFAULT 0.00,
             `durum` VARCHAR(20) NOT NULL DEFAULT 'taslak',
             `saglayici` VARCHAR(40) NOT NULL DEFAULT 'sandbox_test',
-            `zarf_uuid` VARCHAR(36) NULL,
+            `zarf_uuid` VARCHAR(64) NULL,
             `yanit_kod` VARCHAR(20) NULL,
             `yanit_mesaj` VARCHAR(500) NULL,
             `ubl_xml` $xmlCol NULL,
@@ -200,6 +396,34 @@ function edonusum_migrate(PDO $pdo): array
             `yanit_user_id` INT NULL,
             `ubl_xml` $xmlCol NULL,
             `alindi_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )$eng",
+        'edonusum_ayarlar' => "CREATE TABLE IF NOT EXISTS `edonusum_ayarlar` (
+            `id` INT PRIMARY KEY,
+            `saglayici` VARCHAR(30) NOT NULL DEFAULT 'sandbox_test',
+            `ortam` VARCHAR(16) NOT NULL DEFAULT 'test',
+            `servis_url` VARCHAR(255) NOT NULL DEFAULT '',
+            `kullanici_adi` VARCHAR(120) NOT NULL DEFAULT '',
+            `sifre_enc` TEXT NULL,
+            `gb_etiket` VARCHAR(160) NOT NULL DEFAULT '',
+            `pk_etiket` VARCHAR(160) NOT NULL DEFAULT '',
+            `xslt_efatura_uuid` VARCHAR(64) NOT NULL DEFAULT '',
+            `xslt_earsiv_uuid` VARCHAR(64) NOT NULL DEFAULT '',
+            `xslt_eirsaliye_uuid` VARCHAR(64) NOT NULL DEFAULT '',
+            `seri_efatura` VARCHAR(8) NOT NULL DEFAULT 'ASY',
+            `seri_earsiv` VARCHAR(8) NOT NULL DEFAULT 'ASA',
+            `seri_eirsaliye` VARCHAR(8) NOT NULL DEFAULT 'ASI',
+            `firma_vkn` VARCHAR(20) NOT NULL DEFAULT '',
+            `firma_unvan` VARCHAR(200) NOT NULL DEFAULT '',
+            `firma_vergi_dairesi` VARCHAR(120) NOT NULL DEFAULT '',
+            `firma_il` VARCHAR(80) NOT NULL DEFAULT '',
+            `firma_ilce` VARCHAR(80) NOT NULL DEFAULT '',
+            `firma_adres` VARCHAR(300) NOT NULL DEFAULT '',
+            `otomatik_imza` TINYINT NOT NULL DEFAULT 0,
+            `son_test_at` DATETIME NULL,
+            `son_test_durum` VARCHAR(20) NULL,
+            `son_test_mesaj` VARCHAR(500) NULL,
+            `guncelleyen_id` INT NULL,
+            `guncelleme_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         )$eng",
     ];
 
@@ -259,12 +483,33 @@ function edonusum_xml_escape(string $v): string
     return htmlspecialchars($v, ENT_XML1 | ENT_QUOTES, 'UTF-8');
 }
 
+function edonusum_birim_kodu(string $birim): string
+{
+    $b = mb_strtolower(trim($birim), 'UTF-8');
+    return match ($b) {
+        'kg', 'kgm', 'kilogram' => 'KGM',
+        'gr', 'g', 'grm'        => 'GRM',
+        'ton', 'tne'            => 'TNE',
+        'adet', 'ad', 'c62', 'niu' => 'C62',
+        'kasa', 'koli', 'cs'    => 'CS',
+        'palet', 'pf'           => 'PF',
+        'lt', 'litre', 'ltr'    => 'LTR',
+        'm', 'metre', 'mtr'     => 'MTR',
+        'paket', 'pk'           => 'PK',
+        default                 => preg_match('/^[A-Z0-9]{2,3}$/', strtoupper($b)) ? strtoupper($b) : 'C62',
+    };
+}
+
 /**
  * Standart GİB UBL-TR 1.2 XML üretir (Invoice / DespatchAdvice).
  * @param array{
  *   ettn:string, belge_turu:string, senaryo:string, belge_no:string, tarih:string,
- *   para_birimi:string, gonderen_vkn?:string, gonderen_unvan?:string,
- *   alici_vkn:string, alici_unvan:string, ara_toplam:float, kdv_toplam:float, genel_toplam:float,
+ *   saat?:string, para_birimi:string,
+ *   gonderen_vkn?:string, gonderen_unvan?:string, gonderen_vd?:string,
+ *   gonderen_il?:string, gonderen_ilce?:string, gonderen_adres?:string,
+ *   alici_vkn:string, alici_unvan:string, alici_vd?:string,
+ *   alici_il?:string, alici_ilce?:string, alici_adres?:string,
+ *   ara_toplam:float, kdv_toplam:float, genel_toplam:float,
  *   satirlar:list<array{ad:string,miktar:float,birim?:string,birim_fiyat:float,kdv_oran:float,tutar:float}>
  * } $veri
  */
@@ -275,11 +520,22 @@ function edonusum_ubl_xml_uret(array $veri): string
     $senaryo  = (string)($veri['senaryo'] ?? 'TICARIFATURA');
     $belgeNo  = (string)$veri['belge_no'];
     $tarih    = (string)$veri['tarih'];
+    $saat     = (string)($veri['saat'] ?? date('H:i:s'));
     $pb       = strtoupper((string)($veri['para_birimi'] ?? 'TRY'));
-    $gVkn     = preg_replace('/\D/', '', (string)($veri['gonderen_vkn'] ?? (defined('EDONUSUM_FIRMA_VKN') ? EDONUSUM_FIRMA_VKN : '1111111111'))) ?: '1111111111';
-    $gUnvan   = (string)($veri['gonderen_unvan'] ?? (defined('EDONUSUM_FIRMA_UNVAN') ? EDONUSUM_FIRMA_UNVAN : 'ASYA FRESH TARIM GIDA İHRACAT LTD. ŞTİ.'));
+    $gVkn     = preg_replace('/\D/', '', (string)($veri['gonderen_vkn'] ?? edonusum_env('EDONUSUM_FIRMA_VKN', '1111111111'))) ?: '1111111111';
+    $gUnvan   = trim((string)($veri['gonderen_unvan'] ?? edonusum_env('EDONUSUM_FIRMA_UNVAN', 'ASYA FRESH TARIM GIDA İHRACAT LTD. ŞTİ.'))) ?: 'ASYA FRESH TARIM GIDA İHRACAT LTD. ŞTİ.';
+    $gVd      = trim((string)($veri['gonderen_vd'] ?? edonusum_env('EDONUSUM_FIRMA_VD', '')));
+    $gIl      = trim((string)($veri['gonderen_il'] ?? edonusum_env('EDONUSUM_FIRMA_IL', 'ANTALYA'))) ?: 'ANTALYA';
+    $gIlce    = trim((string)($veri['gonderen_ilce'] ?? edonusum_env('EDONUSUM_FIRMA_ILCE', 'KEPEZ'))) ?: 'MERKEZ';
+    $gAdres   = trim((string)($veri['gonderen_adres'] ?? edonusum_env('EDONUSUM_FIRMA_ADRES', '')));
+
     $aVkn     = preg_replace('/\D/', '', (string)($veri['alici_vkn'] ?? '')) ?: '11111111111';
-    $aUnvan   = (string)($veri['alici_unvan'] ?? 'ALICI');
+    $aUnvan   = trim((string)($veri['alici_unvan'] ?? 'ALICI')) ?: 'ALICI';
+    $aVd      = trim((string)($veri['alici_vd'] ?? ''));
+    $aIl      = trim((string)($veri['alici_il'] ?? '')) ?: 'TÜRKİYE';
+    $aIlce    = trim((string)($veri['alici_ilce'] ?? '')) ?: 'MERKEZ';
+    $aAdres   = trim((string)($veri['alici_adres'] ?? ''));
+
     $ara      = round((float)($veri['ara_toplam'] ?? 0), 2);
     $kdv      = round((float)($veri['kdv_toplam'] ?? 0), 2);
     $genel    = round((float)($veri['genel_toplam'] ?? ($ara + $kdv)), 2);
@@ -292,6 +548,32 @@ function edonusum_ubl_xml_uret(array $veri): string
     $gScheme = strlen($gVkn) === 11 ? 'TCKN' : 'VKN';
     $aScheme = strlen($aVkn) === 11 ? 'TCKN' : 'VKN';
     $invType = $tur === 'emustahsil' ? 'MUSTAHSIL' : 'SATIS';
+    $genelOran = $ara > 0 ? round(($kdv / $ara) * 100.0, 2) : 0.0;
+
+    $partyXml = static function (string $scheme, string $vkn, string $unvan, string $vd, string $il, string $ilce, string $adres) use ($e): string {
+        $p = '<cac:Party>'
+            . '<cac:PartyIdentification><cbc:ID schemeID="' . $scheme . '">' . $e($vkn) . '</cbc:ID></cac:PartyIdentification>';
+        if ($scheme === 'VKN') {
+            $p .= '<cac:PartyName><cbc:Name>' . $e($unvan) . '</cbc:Name></cac:PartyName>';
+        }
+        $p .= '<cac:PostalAddress>'
+            . ($adres !== '' ? '<cbc:StreetName>' . $e($adres) . '</cbc:StreetName>' : '')
+            . '<cbc:CitySubdivisionName>' . $e($ilce) . '</cbc:CitySubdivisionName>'
+            . '<cbc:CityName>' . $e($il) . '</cbc:CityName>'
+            . '<cac:Country><cbc:Name>TÜRKİYE</cbc:Name></cac:Country>'
+            . '</cac:PostalAddress>';
+        if ($vd !== '') {
+            $p .= '<cac:PartyTaxScheme><cac:TaxScheme><cbc:Name>' . $e($vd) . '</cbc:Name></cac:TaxScheme></cac:PartyTaxScheme>';
+        }
+        if ($scheme === 'TCKN') {
+            $parca = preg_split('/\s+/', trim($unvan)) ?: [$unvan];
+            $soyad = count($parca) > 1 ? (string)array_pop($parca) : $unvan;
+            $ad    = trim(implode(' ', $parca)) ?: $unvan;
+            $p .= '<cac:Person><cbc:FirstName>' . $e($ad) . '</cbc:FirstName><cbc:FamilyName>' . $e($soyad) . '</cbc:FamilyName></cac:Person>';
+        }
+        $p .= '</cac:Party>';
+        return $p;
+    };
 
     $xml  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     if ($tur === 'eirsaliye') {
@@ -305,20 +587,15 @@ function edonusum_ubl_xml_uret(array $veri): string
         $xml .= '  <cbc:CopyIndicator>false</cbc:CopyIndicator>' . "\n";
         $xml .= '  <cbc:UUID>' . $e($ettn) . '</cbc:UUID>' . "\n";
         $xml .= '  <cbc:IssueDate>' . $e($tarih) . '</cbc:IssueDate>' . "\n";
+        $xml .= '  <cbc:IssueTime>' . $e($saat) . '</cbc:IssueTime>' . "\n";
         $xml .= '  <cbc:DespatchAdviceTypeCode>SEVK</cbc:DespatchAdviceTypeCode>' . "\n";
         $xml .= '  <cbc:LineCountNumeric>' . count($satirlar) . '</cbc:LineCountNumeric>' . "\n";
-        $xml .= '  <cac:DespatchSupplierParty><cac:Party>'
-              . '<cac:PartyIdentification><cbc:ID schemeID="' . $gScheme . '">' . $e($gVkn) . '</cbc:ID></cac:PartyIdentification>'
-              . '<cac:PartyName><cbc:Name>' . $e($gUnvan) . '</cbc:Name></cac:PartyName>'
-              . '</cac:Party></cac:DespatchSupplierParty>' . "\n";
-        $xml .= '  <cac:DeliveryCustomerParty><cac:Party>'
-              . '<cac:PartyIdentification><cbc:ID schemeID="' . $aScheme . '">' . $e($aVkn) . '</cbc:ID></cac:PartyIdentification>'
-              . '<cac:PartyName><cbc:Name>' . $e($aUnvan) . '</cbc:Name></cac:PartyName>'
-              . '</cac:Party></cac:DeliveryCustomerParty>' . "\n";
+        $xml .= '  <cac:DespatchSupplierParty>' . $partyXml($gScheme, $gVkn, $gUnvan, $gVd, $gIl, $gIlce, $gAdres) . '</cac:DespatchSupplierParty>' . "\n";
+        $xml .= '  <cac:DeliveryCustomerParty>' . $partyXml($aScheme, $aVkn, $aUnvan, $aVd, $aIl, $aIlce, $aAdres) . '</cac:DeliveryCustomerParty>' . "\n";
         foreach ($satirlar as $i => $s) {
             $xml .= '  <cac:DespatchLine>'
                   . '<cbc:ID>' . ($i + 1) . '</cbc:ID>'
-                  . '<cbc:DeliveredQuantity unitCode="' . $e((string)($s['birim'] ?? 'KGM')) . '">' . $fmt((float)$s['miktar']) . '</cbc:DeliveredQuantity>'
+                  . '<cbc:DeliveredQuantity unitCode="' . $e(edonusum_birim_kodu((string)($s['birim'] ?? 'KGM'))) . '">' . $fmt((float)$s['miktar']) . '</cbc:DeliveredQuantity>'
                   . '<cac:Item><cbc:Name>' . $e((string)$s['ad']) . '</cbc:Name></cac:Item>'
                   . '</cac:DespatchLine>' . "\n";
         }
@@ -336,20 +613,16 @@ function edonusum_ubl_xml_uret(array $veri): string
     $xml .= '  <cbc:CopyIndicator>false</cbc:CopyIndicator>' . "\n";
     $xml .= '  <cbc:UUID>' . $e($ettn) . '</cbc:UUID>' . "\n";
     $xml .= '  <cbc:IssueDate>' . $e($tarih) . '</cbc:IssueDate>' . "\n";
+    $xml .= '  <cbc:IssueTime>' . $e($saat) . '</cbc:IssueTime>' . "\n";
     $xml .= '  <cbc:InvoiceTypeCode>' . $e($invType) . '</cbc:InvoiceTypeCode>' . "\n";
     $xml .= '  <cbc:DocumentCurrencyCode>' . $e($pb) . '</cbc:DocumentCurrencyCode>' . "\n";
     $xml .= '  <cbc:LineCountNumeric>' . count($satirlar) . '</cbc:LineCountNumeric>' . "\n";
-    $xml .= '  <cac:AccountingSupplierParty><cac:Party>'
-          . '<cac:PartyIdentification><cbc:ID schemeID="' . $gScheme . '">' . $e($gVkn) . '</cbc:ID></cac:PartyIdentification>'
-          . '<cac:PartyName><cbc:Name>' . $e($gUnvan) . '</cbc:Name></cac:PartyName>'
-          . '</cac:Party></cac:AccountingSupplierParty>' . "\n";
-    $xml .= '  <cac:AccountingCustomerParty><cac:Party>'
-          . '<cac:PartyIdentification><cbc:ID schemeID="' . $aScheme . '">' . $e($aVkn) . '</cbc:ID></cac:PartyIdentification>'
-          . '<cac:PartyName><cbc:Name>' . $e($aUnvan) . '</cbc:Name></cac:PartyName>'
-          . '</cac:Party></cac:AccountingCustomerParty>' . "\n";
+    $xml .= '  <cac:AccountingSupplierParty>' . $partyXml($gScheme, $gVkn, $gUnvan, $gVd, $gIl, $gIlce, $gAdres) . '</cac:AccountingSupplierParty>' . "\n";
+    $xml .= '  <cac:AccountingCustomerParty>' . $partyXml($aScheme, $aVkn, $aUnvan, $aVd, $aIl, $aIlce, $aAdres) . '</cac:AccountingCustomerParty>' . "\n";
     $xml .= '  <cac:TaxTotal><cbc:TaxAmount currencyID="' . $e($pb) . '">' . $fmt($kdv) . '</cbc:TaxAmount>'
           . '<cac:TaxSubtotal><cbc:TaxableAmount currencyID="' . $e($pb) . '">' . $fmt($ara) . '</cbc:TaxableAmount>'
           . '<cbc:TaxAmount currencyID="' . $e($pb) . '">' . $fmt($kdv) . '</cbc:TaxAmount>'
+          . '<cbc:Percent>' . $fmt($genelOran) . '</cbc:Percent>'
           . '<cac:TaxCategory><cac:TaxScheme><cbc:Name>KDV</cbc:Name><cbc:TaxTypeCode>0015</cbc:TaxTypeCode></cac:TaxScheme></cac:TaxCategory>'
           . '</cac:TaxSubtotal></cac:TaxTotal>' . "\n";
     $xml .= '  <cac:LegalMonetaryTotal>'
@@ -365,7 +638,7 @@ function edonusum_ubl_xml_uret(array $veri): string
         $satirKdv = round($satirTutar * $oran / 100.0, 2);
         $xml .= '  <cac:InvoiceLine>'
               . '<cbc:ID>' . ($i + 1) . '</cbc:ID>'
-              . '<cbc:InvoicedQuantity unitCode="' . $e((string)($s['birim'] ?? 'KGM')) . '">' . $fmt((float)$s['miktar']) . '</cbc:InvoicedQuantity>'
+              . '<cbc:InvoicedQuantity unitCode="' . $e(edonusum_birim_kodu((string)($s['birim'] ?? 'KGM'))) . '">' . $fmt((float)$s['miktar']) . '</cbc:InvoicedQuantity>'
               . '<cbc:LineExtensionAmount currencyID="' . $e($pb) . '">' . $fmt($satirTutar) . '</cbc:LineExtensionAmount>'
               . '<cac:TaxTotal><cbc:TaxAmount currencyID="' . $e($pb) . '">' . $fmt($satirKdv) . '</cbc:TaxAmount>'
               . '<cac:TaxSubtotal><cbc:TaxableAmount currencyID="' . $e($pb) . '">' . $fmt($satirTutar) . '</cbc:TaxableAmount>'
@@ -381,36 +654,188 @@ function edonusum_ubl_xml_uret(array $veri): string
     return $xml;
 }
 
+// ── Entegratör Bağlantı Testi, Mükellef Sorgulama ve Gelen Kutusu Senkronizasyonu ──
+
+/** @return array{ok:bool,mesaj?:string,hata?:string,kod?:int} */
+function edonusum_baglanti_test(PDO $pdo, ?EdonusumProviderInterface $prov = null): array
+{
+    $provider = edonusum_provider($prov, $pdo);
+    if ($provider instanceof EdonusumElogoProvider) {
+        $res = $provider->baglantiTest();
+    } else {
+        $res = [
+            'ok'    => true,
+            'mesaj' => 'Sandbox (Test Simülasyonu) sağlayıcısı aktif. Gerçek e-Logo testi için sağlayıcıyı "e-Logo Özel Entegratör" seçip kaydedin.',
+        ];
+    }
+
+    if (db_table_exists($pdo, 'edonusum_ayarlar')) {
+        try {
+            $var = (int)$pdo->query('SELECT COUNT(*) FROM `edonusum_ayarlar` WHERE id = 1')->fetchColumn() > 0;
+            $dur = !empty($res['ok']) ? 'ok' : 'hata';
+            $msg = mb_substr((string)($res['mesaj'] ?? $res['hata'] ?? ''), 0, 500, 'UTF-8');
+            if ($var) {
+                $pdo->prepare('UPDATE `edonusum_ayarlar` SET son_test_at=?, son_test_durum=?, son_test_mesaj=? WHERE id = 1')
+                    ->execute([date('Y-m-d H:i:s'), $dur, $msg]);
+            }
+        } catch (PDOException $e) {}
+    }
+
+    if (empty($res['ok'])) {
+        return ['ok' => false, 'hata' => (string)($res['hata'] ?? 'Bağlantı testi başarısız.'), 'kod' => 502];
+    }
+    return ['ok' => true, 'mesaj' => (string)($res['mesaj'] ?? 'Bağlantı başarılı.')];
+}
+
+/** @return array{ok:bool,kayitli:bool,posta_kutusu:?string,gb_etiket?:?string,unvan?:string,saglayici:string,hata?:string} */
+function edonusum_mukellef_sorgula(PDO $pdo, string $vknTckn, string $belgeTuru = 'efatura', ?EdonusumProviderInterface $prov = null): array
+{
+    $provider = edonusum_provider($prov, $pdo);
+    $res = ($provider instanceof EdonusumElogoProvider)
+        ? $provider->mukellefSorgula($vknTckn, $belgeTuru)
+        : $provider->mukellefSorgula($vknTckn);
+    $res['saglayici'] = $provider->ad();
+    return $res;
+}
+
+/**
+ * Entegratörden gelen e-Fatura / e-İrsaliye belgelerini çeker ve `edonusum_gelen` tablosuna ekler (ETTN bazında idempotent).
+ * @return array{ok:bool,eklenen?:int,atlanan?:int,toplam?:int,mesaj?:string,hata?:string,kod?:int}
+ */
+function edonusum_gelen_senkronize(PDO $pdo, string $bas, string $bit, string $belgeTuru = 'efatura', int $uid = 0, ?EdonusumProviderInterface $prov = null): array
+{
+    if (!muh_tarih_gecerli($bas) || !muh_tarih_gecerli($bit)) {
+        return ['ok' => false, 'hata' => 'Geçerli başlangıç ve bitiş tarihi (YYYY-AA-GG) girin.', 'kod' => 422];
+    }
+    if ($bas > $bit) {
+        return ['ok' => false, 'hata' => 'Başlangıç tarihi bitiş tarihinden büyük olamaz.', 'kod' => 422];
+    }
+    $tur = in_array($belgeTuru, ['efatura', 'eirsaliye'], true) ? $belgeTuru : 'efatura';
+    $provider = edonusum_provider($prov, $pdo);
+    $res = ($provider instanceof EdonusumElogoProvider)
+        ? $provider->gelenKutusuCek($bas, $bit, $tur)
+        : $provider->gelenKutusuCek($bas, $bit);
+    if (empty($res['ok'])) {
+        return ['ok' => false, 'hata' => (string)($res['hata'] ?? 'Gelen kutusu çekilemedi.'), 'kod' => 502];
+    }
+
+    $belgeler = is_array($res['belgeler'] ?? null) ? $res['belgeler'] : [];
+    $eklenen = 0;
+    $atlanan = 0;
+
+    db_tx($pdo, static function (PDO $p) use ($belgeler, $tur, &$eklenen, &$atlanan): void {
+        $stVar = $p->prepare('SELECT id FROM `edonusum_gelen` WHERE ettn = ? LIMIT 1');
+        $stIns = $p->prepare(
+            "INSERT INTO `edonusum_gelen`
+             (ettn, belge_turu, senaryo, belge_no, tarih, gonderen_vkn, gonderen_unvan, para_birimi, ara_toplam, kdv_toplam, genel_toplam, durum, ubl_xml)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'bekliyor', ?)"
+        );
+        foreach ($belgeler as $b) {
+            $ettn = trim((string)($b['ettn'] ?? ''));
+            if ($ettn === '') continue;
+            $stVar->execute([$ettn]);
+            if ($stVar->fetchColumn() !== false) {
+                $atlanan++;
+                continue;
+            }
+            $stIns->execute([
+                mb_substr($ettn, 0, 36, 'UTF-8'),
+                (string)($b['belge_turu'] ?? $tur),
+                mb_substr((string)($b['senaryo'] ?? 'TICARIFATURA'), 0, 30, 'UTF-8'),
+                mb_substr((string)($b['belge_no'] ?? substr($ettn, 0, 16)), 0, 40, 'UTF-8'),
+                muh_tarih_gecerli((string)($b['tarih'] ?? '')) ? (string)$b['tarih'] : date('Y-m-d'),
+                mb_substr((string)($b['gonderen_vkn'] ?? ''), 0, 20, 'UTF-8'),
+                mb_substr((string)($b['gonderen_unvan'] ?? ''), 0, 200, 'UTF-8'),
+                mb_substr(strtoupper((string)($b['para_birimi'] ?? 'TRY')), 0, 10, 'UTF-8'),
+                round((float)($b['ara_toplam'] ?? 0), 2),
+                round((float)($b['kdv_toplam'] ?? 0), 2),
+                round((float)($b['genel_toplam'] ?? 0), 2),
+                isset($b['ubl_xml']) ? (string)$b['ubl_xml'] : null,
+            ]);
+            $eklenen++;
+        }
+    });
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('sync', 'edonusum_gelen', null, null, [
+            'saglayici' => $provider->ad(), 'bas' => $bas, 'bit' => $bit, 'tur' => $tur, 'eklenen' => $eklenen, 'atlanan' => $atlanan, 'uid' => $uid,
+        ]);
+    }
+    return [
+        'ok'      => true,
+        'eklenen' => $eklenen,
+        'atlanan' => $atlanan,
+        'toplam'  => count($belgeler),
+        'mesaj'   => sprintf('Gelen kutusu senkronize edildi (%s): %d yeni belge eklendi, %d mevcut atlandı.', $provider->ad(), $eklenen, $atlanan),
+    ];
+}
+
 // ── Giden Zarf İşlemleri ───────────────────────────────────────────────────
 
 /** @return array{ok:bool,id?:int,ettn?:string,hata?:string,kod?:int} */
 function edonusum_zarf_olustur(PDO $pdo, array $g, int $uid, ?EdonusumProviderInterface $prov = null): array
 {
+    $ayar     = edonusum_ayar_getir($pdo);
     $tur      = (string)($g['belge_turu'] ?? 'efatura');
     $senaryo  = (string)($g['senaryo'] ?? ($tur === 'earsiv' ? 'EARSIVFATURA' : ($tur === 'eirsaliye' ? 'TEMELIRSALIYE' : 'TICARIFATURA')));
     $belgeNo  = trim((string)($g['belge_no'] ?? ''));
     $tarih    = trim((string)($g['tarih'] ?? date('Y-m-d')));
     $vkn      = preg_replace('/\D/', '', (string)($g['alici_vkn'] ?? '')) ?? '';
     $unvan    = mb_substr(trim((string)($g['alici_unvan'] ?? '')), 0, 200, 'UTF-8');
+    $aliciVd  = trim((string)($g['alici_vd'] ?? ''));
+    $aliciIl  = trim((string)($g['alici_il'] ?? ''));
+    $aliciIlce = trim((string)($g['alici_ilce'] ?? ''));
+    $aliciAdres = trim((string)($g['alici_adres'] ?? ''));
     $pb       = strtoupper(trim((string)($g['para_birimi'] ?? 'TRY')));
     $ara      = max(0.0, muh_tutar_coz($g['ara_toplam'] ?? 0));
     $kdv      = max(0.0, muh_tutar_coz($g['kdv_toplam'] ?? 0));
     $genel    = muh_tutar_coz($g['genel_toplam'] ?? 0);
     if ($genel <= 0.0) $genel = round($ara + $kdv, 2);
+    $satirlar = is_array($g['satirlar'] ?? null) ? $g['satirlar'] : [];
     $faturaId = isset($g['fatura_id']) && (int)$g['fatura_id'] > 0 ? (int)$g['fatura_id'] : null;
+
     if ($faturaId !== null && db_table_exists($pdo, 'fatura_belgeler')) {
         try {
-            $stF = $pdo->prepare("SELECT belge_no, fatura_no, tarih, cari_vergi_no, cari_unvan, para_birimi, net_toplam, kdv_toplam, genel_toplam FROM `fatura_belgeler` WHERE id = ? AND durum = 'gecerli'");
+            $stF = $pdo->prepare("SELECT * FROM `fatura_belgeler` WHERE id = ? AND durum = 'gecerli'");
             $stF->execute([$faturaId]);
             if ($ft = $stF->fetch(PDO::FETCH_ASSOC)) {
-                if ($belgeNo === '') $belgeNo = trim((string)($ft['fatura_no'] ?: $ft['belge_no']));
-                if (trim((string)($g['tarih'] ?? '')) === '') $tarih = (string)$ft['tarih'];
+                if ($belgeNo === '') $belgeNo = trim((string)(($ft['fatura_no'] ?? '') ?: ($ft['belge_no'] ?? '')));
+                if (trim((string)($g['tarih'] ?? '')) === '' && !empty($ft['tarih'])) $tarih = (string)$ft['tarih'];
                 if ($vkn === '') $vkn = preg_replace('/\D/', '', (string)($ft['cari_vergi_no'] ?? '')) ?? '';
                 if ($unvan === '') $unvan = mb_substr(trim((string)($ft['cari_unvan'] ?? '')), 0, 200, 'UTF-8');
-                if (trim((string)($g['para_birimi'] ?? '')) === '') $pb = strtoupper((string)($ft['para_birimi'] ?? 'TRY'));
-                if ($ara <= 0.0) $ara = round((float)$ft['net_toplam'], 2);
-                if ($kdv <= 0.0) $kdv = round((float)$ft['kdv_toplam'], 2);
-                if ($genel <= 0.0) $genel = round((float)$ft['genel_toplam'], 2);
+                if (trim((string)($g['para_birimi'] ?? '')) === '' && !empty($ft['para_birimi'])) $pb = strtoupper((string)$ft['para_birimi']);
+                if ($ara <= 0.0) $ara = round((float)($ft['net_toplam'] ?? 0), 2);
+                if ($kdv <= 0.0) $kdv = round((float)($ft['kdv_toplam'] ?? 0), 2);
+                if ($genel <= 0.0) $genel = round((float)($ft['genel_toplam'] ?? 0), 2);
+
+                if ($aliciVd === '' && !empty($ft['cari_id']) && db_table_exists($pdo, 'cari_kartlar')) {
+                    try {
+                        $stC = $pdo->prepare('SELECT vergi_dairesi, il, ilce, adres FROM `cari_kartlar` WHERE id = ?');
+                        $stC->execute([(int)$ft['cari_id']]);
+                        if ($ck = $stC->fetch(PDO::FETCH_ASSOC)) {
+                            $aliciVd    = trim((string)($ck['vergi_dairesi'] ?? ''));
+                            $aliciIl    = trim((string)($ck['il'] ?? ''));
+                            $aliciIlce  = trim((string)($ck['ilce'] ?? ''));
+                            $aliciAdres = trim((string)($ck['adres'] ?? ''));
+                        }
+                    } catch (PDOException $e) {}
+                }
+                if ($satirlar === [] && db_table_exists($pdo, 'fatura_satirlar')) {
+                    try {
+                        $stS = $pdo->prepare('SELECT urun_adi, miktar, birim, birim_fiyat, kdv_orani, net_tutar FROM `fatura_satirlar` WHERE belge_id = ? ORDER BY sira ASC, id ASC');
+                        $stS->execute([$faturaId]);
+                        foreach ($stS->fetchAll(PDO::FETCH_ASSOC) as $sr) {
+                            $satirlar[] = [
+                                'ad'          => trim((string)($sr['urun_adi'] ?? '')) ?: 'Mal/Hizmet',
+                                'miktar'      => (float)($sr['miktar'] ?? 1),
+                                'birim'       => (string)($sr['birim'] ?? 'KGM'),
+                                'birim_fiyat' => (float)($sr['birim_fiyat'] ?? 0),
+                                'kdv_oran'    => (float)($sr['kdv_orani'] ?? 0),
+                                'tutar'       => (float)($sr['net_tutar'] ?? 0),
+                            ];
+                        }
+                    } catch (PDOException $e) {}
+                }
             }
         } catch (PDOException $e) {
             // Opsiyonel okuma hatası manuel girişe engel olmaz
@@ -421,13 +846,14 @@ function edonusum_zarf_olustur(PDO $pdo, array $g, int $uid, ?EdonusumProviderIn
     if (!muh_tarih_gecerli($tarih)) return ['ok' => false, 'hata' => 'Geçersiz belge tarihi.', 'kod' => 422];
     if (strlen($vkn) !== 10 && strlen($vkn) !== 11) return ['ok' => false, 'hata' => 'Alıcı VKN (10) veya TCKN (11) hane olmalıdır.', 'kod' => 422];
     if ($unvan === '') return ['ok' => false, 'hata' => 'Alıcı ünvanı zorunludur.', 'kod' => 422];
-    if ($belgeNo === '') $belgeNo = 'ASY' . date('Y', strtotime($tarih)) . str_pad((string)random_int(1, 999999999), 9, '0', STR_PAD_LEFT);
     if (!preg_match('/^[A-Z]{3}$/', $pb)) $pb = 'TRY';
 
-    $provider = edonusum_provider($prov);
+    $provider = edonusum_provider($prov, $pdo);
     $pk = null;
     if ($tur === 'efatura' || $tur === 'eirsaliye') {
-        $mk = $provider->mukellefSorgula($vkn);
+        $mk = ($provider instanceof EdonusumElogoProvider)
+            ? $provider->mukellefSorgula($vkn, $tur)
+            : $provider->mukellefSorgula($vkn);
         if (!empty($mk['ok']) && !empty($mk['kayitli'])) {
             $pk = (string)($mk['posta_kutusu'] ?? '');
         } elseif ($tur === 'efatura') {
@@ -436,20 +862,39 @@ function edonusum_zarf_olustur(PDO $pdo, array $g, int $uid, ?EdonusumProviderIn
         }
     }
 
+    if ($belgeNo === '') {
+        $seri = match ($tur) {
+            'earsiv'    => (string)($ayar['seri_earsiv'] ?? 'ASA'),
+            'eirsaliye' => (string)($ayar['seri_eirsaliye'] ?? 'ASI'),
+            default     => (string)($ayar['seri_efatura'] ?? 'ASY'),
+        };
+        $belgeNo = $seri . date('Y', strtotime($tarih)) . str_pad((string)random_int(1, 999999999), 9, '0', STR_PAD_LEFT);
+    }
+
     $ettn = edonusum_uuid_v4();
     $ubl  = edonusum_ubl_xml_uret([
-        'ettn'         => $ettn,
-        'belge_turu'   => $tur,
-        'senaryo'      => $senaryo,
-        'belge_no'     => $belgeNo,
-        'tarih'        => $tarih,
-        'para_birimi'  => $pb,
-        'alici_vkn'    => $vkn,
-        'alici_unvan'  => $unvan,
-        'ara_toplam'   => $ara,
-        'kdv_toplam'   => $kdv,
-        'genel_toplam' => $genel,
-        'satirlar'     => is_array($g['satirlar'] ?? null) ? $g['satirlar'] : [],
+        'ettn'           => $ettn,
+        'belge_turu'     => $tur,
+        'senaryo'        => $senaryo,
+        'belge_no'       => $belgeNo,
+        'tarih'          => $tarih,
+        'para_birimi'    => $pb,
+        'gonderen_vkn'   => (string)($ayar['firma_vkn'] ?? ''),
+        'gonderen_unvan' => (string)($ayar['firma_unvan'] ?? ''),
+        'gonderen_vd'    => (string)($ayar['firma_vergi_dairesi'] ?? ''),
+        'gonderen_il'    => (string)($ayar['firma_il'] ?? ''),
+        'gonderen_ilce'  => (string)($ayar['firma_ilce'] ?? ''),
+        'gonderen_adres' => (string)($ayar['firma_adres'] ?? ''),
+        'alici_vkn'      => $vkn,
+        'alici_unvan'    => $unvan,
+        'alici_vd'       => $aliciVd,
+        'alici_il'       => $aliciIl,
+        'alici_ilce'     => $aliciIlce,
+        'alici_adres'    => $aliciAdres,
+        'ara_toplam'     => $ara,
+        'kdv_toplam'     => $kdv,
+        'genel_toplam'   => $genel,
+        'satirlar'       => $satirlar,
     ]);
 
     return db_tx($pdo, static function (PDO $p) use ($ettn, $tur, $senaryo, $faturaId, $belgeNo, $tarih, $vkn, $unvan, $pk, $pb, $ara, $kdv, $genel, $provider, $ubl, $uid): array {
@@ -477,7 +922,7 @@ function edonusum_zarf_olustur(PDO $pdo, array $g, int $uid, ?EdonusumProviderIn
 /** @return array{ok:bool,zarf_uuid?:string,hata?:string,kod?:int} */
 function edonusum_zarf_gonder(PDO $pdo, int $id, int $uid, ?EdonusumProviderInterface $prov = null): array
 {
-    $provider = edonusum_provider($prov);
+    $provider = edonusum_provider($prov, $pdo);
     return db_tx($pdo, static function (PDO $p) use ($id, $uid, $provider): array {
         $st = $p->prepare('SELECT * FROM `edonusum_zarflar` WHERE id = ?' . db_for_update($p));
         $st->execute([$id]);
@@ -491,7 +936,7 @@ function edonusum_zarf_gonder(PDO $pdo, int $id, int $uid, ?EdonusumProviderInte
         $p->prepare('UPDATE `edonusum_zarflar` SET durum=?, saglayici=?, zarf_uuid=?, yanit_kod=?, yanit_mesaj=?, guncelleme_at=? WHERE id=?')
             ->execute([$yeniDurum, $provider->ad(), $yanit['zarf_uuid'] ?? null, $yanit['kod'] ?? null, $yanit['mesaj'] ?? ($yanit['hata'] ?? ''), date('Y-m-d H:i:s'), $id]);
         if (function_exists('audit_log_event')) {
-            audit_log_event('send', 'edonusum_zarf', $id, ['durum' => $z['durum']], ['durum' => $yeniDurum, 'uid' => $uid]);
+            audit_log_event('send', 'edonusum_zarf', $id, ['durum' => $z['durum']], ['durum' => $yeniDurum, 'saglayici' => $provider->ad(), 'uid' => $uid]);
         }
         if (empty($yanit['ok'])) {
             return ['ok' => false, 'hata' => (string)($yanit['hata'] ?? 'Gönderim hatası.'), 'kod' => 502];
@@ -503,17 +948,20 @@ function edonusum_zarf_gonder(PDO $pdo, int $id, int $uid, ?EdonusumProviderInte
 /** @return array{ok:bool,durum?:string,hata?:string,kod?:int} */
 function edonusum_zarf_durum_sorgula(PDO $pdo, int $id, ?EdonusumProviderInterface $prov = null): array
 {
-    $provider = edonusum_provider($prov);
+    $provider = edonusum_provider($prov, $pdo);
     return db_tx($pdo, static function (PDO $p) use ($id, $provider): array {
         $st = $p->prepare('SELECT * FROM `edonusum_zarflar` WHERE id = ?' . db_for_update($p));
         $st->execute([$id]);
         $z = $st->fetch(PDO::FETCH_ASSOC);
         if (!$z) return ['ok' => false, 'hata' => 'Zarf bulunamadı.', 'kod' => 404];
-        $res = $provider->durumSorgula((string)$z['ettn'], $z['zarf_uuid'] ? (string)$z['zarf_uuid'] : null);
-        if (empty($res['ok'])) return ['ok' => false, 'hata' => 'Durum sorgulanamadı.', 'kod' => 502];
+        $res = ($provider instanceof EdonusumElogoProvider)
+            ? $provider->durumSorgula((string)$z['ettn'], $z['zarf_uuid'] ? (string)$z['zarf_uuid'] : null, (string)$z['belge_turu'])
+            : $provider->durumSorgula((string)$z['ettn'], $z['zarf_uuid'] ? (string)$z['zarf_uuid'] : null);
+        if (empty($res['ok'])) return ['ok' => false, 'hata' => (string)($res['hata'] ?? 'Durum sorgulanamadı.'), 'kod' => 502];
         $d = (string)($res['durum'] ?? $z['durum']);
-        $p->prepare('UPDATE `edonusum_zarflar` SET durum=?, yanit_kod=?, yanit_mesaj=?, guncelleme_at=? WHERE id=?')
-            ->execute([$d, $res['kod'] ?? null, $res['mesaj'] ?? null, date('Y-m-d H:i:s'), $id]);
+        $envId = !empty($res['zarf_uuid']) ? (string)$res['zarf_uuid'] : ($z['zarf_uuid'] ? (string)$z['zarf_uuid'] : null);
+        $p->prepare('UPDATE `edonusum_zarflar` SET durum=?, zarf_uuid=?, yanit_kod=?, yanit_mesaj=?, guncelleme_at=? WHERE id=?')
+            ->execute([$d, $envId, $res['kod'] ?? null, $res['mesaj'] ?? null, date('Y-m-d H:i:s'), $id]);
         return ['ok' => true, 'durum' => $d, 'mesaj' => (string)($res['mesaj'] ?? 'Durum güncellendi: ' . $d)];
     });
 }
@@ -527,7 +975,7 @@ function edonusum_gelen_yanitla(PDO $pdo, int $id, string $yanit, string $neden,
     if (!in_array($yanit, ['kabul', 'red'], true)) return ['ok' => false, 'hata' => 'Yanıt kabul veya red olmalıdır.', 'kod' => 422];
     $neden = mb_substr(trim($neden), 0, 500, 'UTF-8');
     if ($yanit === 'red' && $neden === '') return ['ok' => false, 'hata' => 'Red işlemi için gerekçe zorunludur.', 'kod' => 422];
-    $provider = edonusum_provider($prov);
+    $provider = edonusum_provider($prov, $pdo);
 
     return db_tx($pdo, static function (PDO $p) use ($id, $yanit, $neden, $uid, $provider): array {
         $st = $p->prepare('SELECT * FROM `edonusum_gelen` WHERE id = ?' . db_for_update($p));

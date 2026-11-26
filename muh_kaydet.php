@@ -132,6 +132,30 @@ try {
             $s = edonusum_gelen_yanitla($pdo, $id, (string)($P['yanit'] ?? ''), (string)($P['neden'] ?? ''), $uid);
             muh_cevap($s, $geri, 'Gelen belge yanıtlandı.', $json);
 
+        case 'edonusum_ayar_kaydet':
+            if (!is_admin()) { forbidden(); }
+            edonusum_sayfa_kapisi($pdo, $json);
+            $s = edonusum_ayar_kaydet($pdo, $P, $uid);
+            muh_cevap($s, 'edonusum_belgeler.php?sekme=ayarlar', 'e-Logo entegratör ayarları kaydedildi.', $json);
+
+        case 'edonusum_baglanti_test':
+            muh_kapi('edit');
+            edonusum_sayfa_kapisi($pdo, $json);
+            $s = edonusum_baglanti_test($pdo);
+            muh_cevap($s, 'edonusum_belgeler.php?sekme=ayarlar', 'e-Logo bağlantısı doğrulandı.', $json);
+
+        case 'edonusum_gelen_cek':
+            muh_kapi('edit');
+            edonusum_sayfa_kapisi($pdo, $json);
+            $s = edonusum_gelen_senkronize(
+                $pdo,
+                trim((string)($P['bas'] ?? date('Y-m-01'))),
+                trim((string)($P['bit'] ?? date('Y-m-d'))),
+                trim((string)($P['belge_turu'] ?? 'efatura')),
+                $uid
+            );
+            muh_cevap($s, 'edonusum_belgeler.php?sekme=gelen', 'Gelen kutusu senkronize edildi.', $json);
+
         case 'risk_limit_kaydet':
             muh_kapi('edit');
             erp_mutabakat_sayfa_kapisi($pdo, $json);
