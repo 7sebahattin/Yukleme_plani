@@ -9,7 +9,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cost_calc.php';
 $auth_user = require_login();
-require_perm('records.read');
+if (!function_exists('muhasebe_sayfa_can') || !muhasebe_sayfa_can('arac_yukleme_fisleri')) { require_perm('records.read'); }
 
 $id = (int)($_GET['id'] ?? 0);
 role_require_record_access($id, 'read');

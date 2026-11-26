@@ -123,7 +123,9 @@ function role_require_record_access(int $recordId, string $action = 'read'): voi
     $stmt->execute([$recordId]);
     $type = $stmt->fetchColumn();
     $module = match ($type) { 'yukleme' => 'loading', 'cikma' => 'pallet', default => null };
-    if ($module === null || !can('records.' . $module . '.' . $action)) forbidden('Bu kayıt için işlem yetkiniz yok.');
+    $viaMuhasebeYukleme = $module === 'loading' && $action === 'read'
+        && function_exists('muhasebe_sayfa_can') && muhasebe_sayfa_can('arac_yukleme_fisleri');
+    if ($module === null || (!$viaMuhasebeYukleme && !can('records.' . $module . '.' . $action))) forbidden('Bu kayıt için işlem yetkiniz yok.');
 
     $strictRole = role_current_depot_scope_restricted();
     $allowed = function_exists('user_allowed_depots') ? user_allowed_depots() : null;

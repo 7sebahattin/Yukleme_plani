@@ -553,20 +553,42 @@ function cari_kart_durum(PDO $pdo, int $id, bool $aktif, int $uid): array
     return ['ok' => true, 'hata' => null, 'id' => $id, 'uyari' => $uyari];
 }
 
-/** Fiziksel silme YALNIZ hiç hareket satırı (iptaller dahil) yoksa. */
+/** MySQL: cari kart satırlarını FOR UPDATE ile kilitler (sabit sıra: artan id). SQLite: no-op. @param list<int> $ids */
+function cari_kart_kilitle(PDO $pdo, array $ids): void
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn(int $x): bool => $x > 0)));
+    if (!$ids || $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') return;
+    sort($ids);
+    $pdo->prepare('SELECT id FROM cari_kartlar WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY id FOR UPDATE')->execute($ids);
+}
+
+/** Fiziksel silme YALNIZ hiçbir modülde hareket/belge satırı (iptaller dahil) yoksa; transaction + FOR UPDATE altında. */
 function cari_kart_sil(PDO $pdo, int $id, int $uid): array
 {
-    $k = cari_kart_oku($pdo, $id);
-    if ($k === null) return cari_hata('Cari kart bulunamadı.');
-    $st = $pdo->prepare('SELECT COUNT(*) FROM cari_hareketler WHERE cari_id = ?');
-    $st->execute([$id]);
-    if ((int)$st->fetchColumn() > 0) {
-        return cari_hata('Hareketi olan cari silinemez; pasifleştirin.', ['kod' => 'hareketli']);
-    }
-    $pdo->prepare('DELETE FROM cari_kartlar WHERE id = ?')->execute([$id]);
-    unset($k['grup_adi']);
-    audit_log_event('delete', 'cari', $id, $k, null);
-    return ['ok' => true, 'hata' => null, 'id' => $id];
+    require_once __DIR__ . '/muhasebe_referans.php';
+    $k = cari_tx($pdo, function () use ($pdo, $id): array {
+        cari_kart_kilitle($pdo, [$id]);
+        $kart = cari_kart_oku($pdo, $id);
+        if ($kart === null) return cari_hata('Cari kart bulunamadı.');
+
+        $st = $pdo->prepare('SELECT COUNT(*) FROM cari_hareketler WHERE cari_id = ?');
+        $st->execute([$id]);
+        if ((int)$st->fetchColumn() > 0) {
+            return cari_hata('Hareketi olan cari silinemez; pasifleştirin.', ['kod' => 'hareketli']);
+        }
+        if (($engel = muhasebe_kart_referans_kontrol($pdo, 'cari', $id)) !== null) {
+            return cari_hata($engel, ['kod' => 'hareketli']);
+        }
+
+        $pdo->prepare('DELETE FROM cari_kartlar WHERE id = ?')->execute([$id]);
+        unset($kart['grup_adi']);
+        return ['ok' => true, 'hata' => null, 'id' => $id, '_kart' => $kart];
+    });
+    if (empty($k['ok'])) return $k;
+    $eskiKart = $k['_kart'];
+    unset($k['_kart']);
+    audit_log_event('delete', 'cari', $id, $eskiKart, null);
+    return $k;
 }
 
 /**

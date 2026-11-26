@@ -9,7 +9,7 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/kullanici_tercih.php';
 require_once __DIR__ . '/config/kantar_alanlari_core.php';
 $auth_user = require_login();
-require_perm('kantar.read');
+if (!function_exists('muhasebe_sayfa_can') || !muhasebe_sayfa_can('mal_kabul_fisleri')) { require_perm('kantar.read'); }
 
 $pdo = db();
 

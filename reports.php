@@ -7,7 +7,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
-if (($_GET['export'] ?? '') !== '') { require_perm('reports.read'); require_perm('reports.export'); }
+if (($_GET['export'] ?? '') !== '') { if (!function_exists('muhasebe_sayfa_can') || !muhasebe_sayfa_can('raporlar_listeler')) { require_perm('reports.read'); } require_perm('reports.export'); }
+elseif (function_exists('muhasebe_sayfa_can') && muhasebe_sayfa_can('raporlar_listeler')) { /* B-25: raporlar_listeler.php 302 geçiş senkronu */ }
 else { require_perm('reports.read'); }
 
 $type      = trim($_GET['type']      ?? '');
