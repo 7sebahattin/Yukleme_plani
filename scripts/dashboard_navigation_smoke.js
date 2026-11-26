@@ -36,14 +36,14 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             page.on('pageerror', error => errors.push(error.message));
             await page.goto(fixtures.admin);
             await page.locator('.home-card[href="hizli_maliyet.php"] img').waitFor({ state: 'attached' });
-            check(await page.locator('.home-card').count() === 45, name + ' all forty-five admin destinations are cards (v555: İhracat Programı 4 + Stok Dönüşüm + Kantar Fişleri kalktı; v558: Eski Yükleme Planı/Paletleme/Mal Kabul kalktı; v566: Admin Konsolu kalktı; v574: Tanımlar + Şube Tanımları kalktı, yalnız Depo Tanımları — dashboard_sidebar_parity_smoke.php ile aynı 45)');
+            check(await page.locator('.home-card').count() === 46, name + ' all forty-six admin destinations are cards (v555: İhracat Programı 4 + Stok Dönüşüm + Kantar Fişleri kalktı; v558: Eski Yükleme Planı/Paletleme/Mal Kabul kalktı; v566: Admin Konsolu kalktı; v574: Tanımlar + Şube Tanımları kalktı, yalnız Depo Tanımları; v582: + WhatsApp Yükleme — dashboard_sidebar_parity_smoke.php ile aynı 46)');
             check(await page.locator('.home-card-badge').count() === 0, name + ' zero .home-card-badge elements on homepage (v580)');
             check(await page.locator('.home-card-sub').count() === 0, name + ' zero .home-card-sub elements on homepage (v580)');
             check(await page.evaluate(() => {
                 const cards = new Set(Array.from(document.querySelectorAll('.home-card')).map(a => a.getAttribute('href')));
                 return Array.from(document.querySelectorAll('.sidebar-nav .sidebar-link')).every(a => a.getAttribute('href') === 'index.php' || cards.has(a.getAttribute('href')));
             }), name + ' every sidebar module destination is on the home screen');
-            // v580: loading="lazy" ikonlarının tümü çözülsün diye sayfayı tarayıp tüm 45 3B PNG ikonu doğrula
+            // v580: loading="lazy" ikonlarının tümü çözülsün diye sayfayı tarayıp tüm 46 3B PNG ikonu doğrula
             await page.evaluate(async () => {
                 for (const img of document.querySelectorAll('.home-card-icon img')) {
                     img.loading = 'eager';
@@ -52,13 +52,13 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
             });
             check(await page.evaluate(() => {
                 const imgs = Array.from(document.querySelectorAll('.home-card-icon img'));
-                return imgs.length === 45 && imgs.every(img => {
+                return imgs.length === 46 && imgs.every(img => {
                     const href = img.closest('.home-card')?.getAttribute('href') || '';
                     const src = img.getAttribute('src') || '';
                     if (href === 'personel_takip.php') return img.complete && img.naturalWidth > 0 && src.startsWith('assets/nav-icons/ptak.svg?v=');
                     return img.complete && img.naturalWidth === 128 && src.startsWith('assets/nav-icons/3d/');
                 });
-            }), name + ' all 45 homepage icons decode cleanly (44 3D PNG 128px + Personel Takibi ptak.svg)');
+            }), name + ' all 46 homepage icons decode cleanly (45 3D PNG 128px + Personel Takibi ptak.svg)');
             // v551: akordiyon — Hızlı Maliyet, kapalı Operasyon grubunda; görüntü çözülsün diye grubu aç
             await page.evaluate(() => { const d = document.querySelector('details[data-sb-grup="operasyon"]'); if (d) d.open = true; });
             await page.waitForFunction(() => { const i = document.querySelector('.sidebar-link[href="hizli_maliyet.php"] img'); return i && i.complete && i.naturalWidth > 0; });
@@ -73,7 +73,7 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                     return box.width >= 44 && box.height >= 44 && node.scrollWidth <= node.clientWidth + 1;
                 })), name + '/' + theme + ' all cards fit and remain touchable');
                 check(await page.locator('.home-card-icon').evaluateAll((nodes, px) => {
-                    if (nodes.length !== 45) return false;
+                    if (nodes.length !== 46) return false;
                     return nodes.every(node => {
                         const cs = getComputedStyle(node);
                         const box = node.getBoundingClientRect();
@@ -81,7 +81,7 @@ const proof = { anonymous: true, liveApplication: false, physicalMobileDevice: f
                             && cs.backgroundColor === 'rgba(0, 0, 0, 0)'
                             && cs.boxShadow === 'none';
                     });
-                }, expectedIconPx), name + '/' + theme + ' all 45 .home-card-icon boxes have identical ' + expectedIconPx + 'x' + expectedIconPx + ' size, transparent bg, and no box-shadow');
+                }, expectedIconPx), name + '/' + theme + ' all 46 .home-card-icon boxes have identical ' + expectedIconPx + 'x' + expectedIconPx + ' size, transparent bg, and no box-shadow');
                 const quick = page.locator('.home-card[href="hizli_maliyet.php"]');
                 await quick.focus();
                 check(await quick.evaluate(node => document.activeElement === node), name + '/' + theme + ' quick card is keyboard focusable');

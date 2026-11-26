@@ -112,10 +112,12 @@ ok('B-41b docs/ARCHITECTURE.md güncel (asya_session, halkayit/, 47 kart, sw.js 
     && str_contains($arch, 'MariaDB 10.11')
     && !str_contains($arch, 'yukleme-plani-v8')
 );
-ok('B-41c CLAUDE.md güncel (eski branch adı kalktı, test.scai.tr ve v587 eşit)',
+$swCache = preg_match("/const CACHE_NAME = '(yukleme-plani-v\\d+)';/", oku('sw.js'), $swM) ? $swM[1] : '';
+ok('B-41c CLAUDE.md güncel (eski branch adı kalktı, test.scai.tr ve sw.js sürümü eşit)',
     !str_contains($claude, 'claude/fix-records-print-mobile-WuKdT')
     && str_contains($claude, 'test.scai.tr')
-    && str_contains($claude, 'yukleme-plani-v587')
+    && $swCache !== ''
+    && str_contains($claude, $swCache)
 );
 
 fwrite(STDOUT, "\nÖZET: $pass geçti, $fail kaldı\n");

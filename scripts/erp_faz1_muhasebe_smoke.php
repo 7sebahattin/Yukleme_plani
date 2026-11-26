@@ -254,8 +254,8 @@ ok('edonusum_xml.php require_login, muhasebe_sayfa_can ve nosniff başlığı ta
     && str_contains($xmlSrc, 'X-Content-Type-Options: nosniff')
 );
 $swSrc = (string)file_get_contents($ROOT . '/sw.js');
-ok('sw.js muh_|edonusum_ sayfalarını önbellek dışı tutar ve v587',
-    str_contains($swSrc, "CACHE_NAME = 'yukleme-plani-v587'") && str_contains($swSrc, 'muh_|edonusum_')
+ok('sw.js muh_|edonusum_ sayfalarını önbellek dışı tutar ve v588',
+    str_contains($swSrc, "CACHE_NAME = 'yukleme-plani-v588'") && str_contains($swSrc, 'muh_|edonusum_')
 );
 
 echo "\nÖZET: $pass geçti, $fail kaldı\n";

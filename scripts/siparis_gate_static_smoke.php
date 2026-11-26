@@ -49,8 +49,8 @@ ok('topnav OGL bağlantısı bağımsız sayfa kapılı', $topnavGate !== false 
 ok('Ürün Siparişler ayrı sayfa kapısı kullanır', str_contains($helpers, "role_matrix_page_can('siparis','urun')") && str_contains(oku('urun_siparis.php'), "require_siparis('read', 'urun');"));
 ok('OGL route kapısı açık sayfa parametresi ve gerçek read kontrolü içerir', str_contains($core, "string \$page = 'ogl'") && str_contains($core, "role_matrix_page_can('siparis',\$page,'read')"));
 ok("nav_alt_izinler OGL bağımsız sayfa izni", str_contains($helpers, "'siparis' => \$fn && role_matrix_page_can('siparis','ogl')"));
-ok('nav_alt_sayfalar siparis kaydı (siparisler.php, ikon, grup Operasyon)',
-    (bool)preg_match("/'siparis' => \['href' => 'siparisler\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/siparis\.svg'\]/", $helpers));
+ok('nav_alt_sayfalar siparis kaydı (siparisler.php, 3B ikon (v580), grup Operasyon)',
+    (bool)preg_match("/'siparis' => \['href' => 'siparisler\.php',[^\n]*'grup' => 'Operasyon', 'ikon' => 'assets\/nav-icons\/3d\/siparisler\.png'\]/", $helpers));
 ok("first_allowed_page OGL bağımsız sayfa izni", str_contains($helpers, "'siparisler.php'     => role_matrix_page_can('siparis','ogl')"));
 ok('nav_aktif_anahtar siparis bölümü', str_contains($helpers, "'siparis' => \$a_sip") && str_contains($helpers, "\$a_sip   = in_array(\$cur, ['siparisler.php'"));
 ok('index.php OGL kartı tek kaynak nav_menu_modeli() ile (sidebar bağımsız sayfa kapısıyla aynı)', str_contains($index, "nav_menu_modeli('')") && !str_contains($index, '<a href="siparisler.php"'));

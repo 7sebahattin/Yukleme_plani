@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v587';
+const CACHE_NAME = 'yukleme-plani-v588';
 
 // Uygulama kabuğunu önbellekle (B-30: yalnız kimliksiz statik varlıklar; .php HTML asla önbelleğe alınmaz)
 const SHELL = [
@@ -95,6 +95,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/urun_siparis(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
   // Frugro Siparişler (v512): frugro_siparis/view/pkl/invoice/yukle/kaydet… müşteri/ticari veri taşır — HİÇ önbelleğe alınmaz (assets/frugro_*.js/css SHELL'de DEĞİL)
   if (/\/frugro(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;
+  // WhatsApp Yükleme Planı (v582): grup mesajları + şoför telefonu taşır — sayfa ve webhook HİÇ önbelleğe alınmaz
+  if (/\/(whatsapp_yonetim|api_whatsapp_webhook)\.php(\/|$)/.test(u.pathname)) return;
   // Yükleme Bildir (v498): kişi/firma ad listesi döndürür, HİÇ önbelleğe alınmaz
   if (/\/api_beyansiz_yukleme\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
