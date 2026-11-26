@@ -90,7 +90,14 @@ try {
 
     // ── 3) B-15: HKS_CRED_KEY fail-closed, AES-256-GCM + .htaccess ────────────
     $hkCfg = (string)file_get_contents($ROOT . '/halkayit/config.php');
-    ok('B-15a halkayit/config.php içinde sabit fallback anahtar YOK', !str_contains($hkCfg, 'AsyaFresh-HKS-2026-'));
+    $hkDb  = (string)file_get_contents($ROOT . '/halkayit/db.php');
+    $ekSrc = (string)file_get_contents($ROOT . '/config/ekran_kilit.php');
+    ok('B-15a halkayit/config.php içinde sabit fallback anahtar YOK + local.php doğrudan yüklenir',
+        !str_contains($hkCfg, 'AsyaFresh-HKS-2026-')
+        && str_contains($hkCfg, "/../config/local.php")
+        && str_contains($hkDb, "/config/local.php")
+        && str_contains($ekSrc, "/local.php")
+    );
 
     // Subprocess: HKS_CRED_KEY tanımsızken hks_sifrele fail-closed exception atmalı
     $cmd = escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg(

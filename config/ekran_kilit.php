@@ -28,7 +28,14 @@ const EKRAN_KILIT_NABIZ_SN    = 300;
 // ── Sır + çerez ──────────────────────────────────────────────────────────────
 
 function ekran_kilit_sir(): string {
-    return (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY) && strlen(HKS_CRED_KEY) >= 16) ? HKS_CRED_KEY : '';
+    if (!defined('HKS_CRED_KEY') && is_file(__DIR__ . '/local.php')) {
+        require_once __DIR__ . '/local.php';
+    }
+    if (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY) && strlen(HKS_CRED_KEY) >= 16) {
+        return HKS_CRED_KEY;
+    }
+    $envKey = (string)(getenv('HKS_CRED_KEY') ?: '');
+    return strlen($envKey) >= 16 ? $envKey : '';
 }
 
 function ekran_kilit_oturum_cerezi_adi(): string {
