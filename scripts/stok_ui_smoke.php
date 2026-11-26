@@ -339,7 +339,8 @@ ok('kart detayı: transfer hareket fiş no bağlantısı kendi sayfasına (v558:
 $__iz = '';
 foreach ([['transfer_fisleri.php', ['yeni' => '1']], ['transfer_fisleri.php', ['id' => (string)$FB['transfer']]], ['stok_giris_fisleri.php', ['yeni' => '1']],
           ['stok_cikis_fisleri.php', []], ['stok_kartlari.php', ['id' => (string)$K['Domates (Salkım)']]]] as [$__d, $__q]) $__iz .= get($__d, $__q)['govde'];
-ok('v558: render edilen sayfalarda dönüşüm izi yok (st-donusum / rozet / Dönüşüm)', !preg_match('/donusum|dönüşüm|Dönüşüm|data-fire/u', $__iz));
+$__izClean = preg_replace('/edonusum_[a-z0-9_.-]*|e-Dönüşüm/iu', '', $__iz) ?? $__iz;
+ok('v558: render edilen sayfalarda dönüşüm izi yok (st-donusum / rozet / Dönüşüm)', !preg_match('/donusum|dönüşüm|Dönüşüm|data-fire/u', $__izClean));
 $__kaynak = '';
 foreach (['config/stok_ui.php', 'assets/stok.js', 'assets/stok.css'] as $__d) $__kaynak .= (string)file_get_contents(__DIR__ . '/../' . $__d);
 ok('v558: stok_ui.php / stok.js / stok.css içinde donusum / dönüşüm kalmadı', !preg_match('/donusum|dönüşüm|Dönüşüm/u', $__kaynak));

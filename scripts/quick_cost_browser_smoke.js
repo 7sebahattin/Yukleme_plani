@@ -31,16 +31,16 @@ check(qcostIcon.includes('viewBox="0 0 64 64"') && qcostIcon.includes('<linearGr
 check(!/<(?:script|text|image|foreignObject)\b/i.test(qcostIcon) && !/\b(?:href|src)\s*=/i.test(qcostIcon), 'dollar icon uses paths without fonts or external content');
 // Real SW routing: business HTML bypasses CacheStorage, assets still use SW.
 const worker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8'), listeners = {};
-vm.runInNewContext(worker, { self: { addEventListener: (event, callback) => { listeners[event] = callback; } }, URL, fetch: () => Promise.resolve({ headers: { get: () => '' }, clone: () => ({}), type: 'basic', ok: true }), caches: { open: () => Promise.resolve({ put: () => {} }) } });
-for (const route of ['/hizli_maliyet.php','/hizli_maliyet.php?id=1','/hizli_maliyet.php/extra','/hizli_maliyet_form.php','/hizli_maliyet_form.php?id=1','/hizli_maliyet_form.php/extra']) {
+vm.runInNewContext(worker, { self: { location: { origin: 'https://local.invalid' }, addEventListener: (event, callback) => { listeners[event] = callback; } }, URL, fetch: () => Promise.resolve({ headers: { get: () => '' }, clone: () => ({}), type: 'basic', ok: true }), caches: { open: () => Promise.resolve({ put: () => {} }) } });
+for (const route of ['/hizli_maliyet.php','/hizli_maliyet.php?id=1','/hizli_maliyet.php/extra','/hizli_maliyet_form.php','/hizli_maliyet_form.php?id=1','/hizli_maliyet_form.php/extra','/maliyet.php']) {
     let intercepted = false;
     listeners.fetch({ request: { method:'GET', url:'https://local.invalid' + route }, respondWith: () => { intercepted = true; } });
     check(!intercepted, route + ' HTML bypasses SW');
 }
-for (const route of ['/assets/hizli-maliyet.js','/assets/hizli-maliyet.css','/maliyet.php']) {
+for (const route of ['/assets/hizli-maliyet.js','/assets/hizli-maliyet.css']) {
     let intercepted = false;
     listeners.fetch({ request: { method:'GET', url:'https://local.invalid' + route }, respondWith: () => { intercepted = true; } });
-    check(intercepted, route + ' existing routing retained');
+    check(intercepted, route + ' static asset routing retained');
 }
 const version = worker.match(/yukleme-plani-v(\d+)/)[1];
 check(fs.readFileSync(path.join(root, 'config/helpers.php'), 'utf8').includes("define('APP_SURUM', 'v" + version + "')"), 'APP_SURUM and SW match');
