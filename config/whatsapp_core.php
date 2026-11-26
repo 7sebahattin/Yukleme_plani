@@ -146,8 +146,9 @@ function wa_kolon_var(PDO $db, string $tablo, string $kolon): bool
             }
             return false;
         }
-        $st = $db->prepare('SHOW COLUMNS FROM `' . str_replace('`', '', $tablo) . '` LIKE ?');
-        $st->execute([$kolon]);
+        // MySQL/MariaDB native prepared statements (ATTR_EMULATE_PREPARES=false) SHOW COLUMNS ... LIKE ? desteklemez
+        $st = $db->prepare('SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1');
+        $st->execute([$tablo, $kolon]);
         return (bool)$st->fetchColumn();
     } catch (Throwable $e) {
         return false;
