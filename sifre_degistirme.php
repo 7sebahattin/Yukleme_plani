@@ -22,6 +22,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $s = fn(string $k): string => is_string($_POST[$k] ?? null) ? $_POST[$k] : '';
     $r = ka_sifre_degistir($pdo, $uid, $s('mevcut'), $s('yeni'), $s('yeni2'), (string)($_COOKIE[AUTH_COOKIE_NAME] ?? ''));
     if ($r['ok']) {
+        app_session_regenerate();
         set_flash('success', $r['mesaj']);
         header('Location: sifre_degistirme.php');
         exit;

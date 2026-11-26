@@ -29,7 +29,10 @@ function sifre_onay_dogrula(PDO $pdo, int $userId, string $sifre, string $baglam
 {
     $simdi = $simdi ?? time();
     if (!preg_match('/^[a-z0-9_]{1,40}$/D', $baglam)) return ['ok' => false, 'mesaj' => 'Geçersiz onay bağlamı.', 'bekle' => 0];
-    if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli' && !headers_sent()) @session_start();
+    if (session_status() === PHP_SESSION_NONE && PHP_SAPI !== 'cli' && !headers_sent()) {
+        if (function_exists('app_session_start')) app_session_start();
+        else @session_start();
+    }
     $durum = $_SESSION['sifre_onay'][$baglam] ?? [];
     $hata = (int)($durum['hata'] ?? 0);
     $bekle = (int)($durum['bekle'] ?? 0);

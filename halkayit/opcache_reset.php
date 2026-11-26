@@ -1,10 +1,6 @@
 <?php
 // =============================================================================
-// HAL KAYIT — OPcache Teşhis & Sıfırlama (tek seferlik yardımcı)
-// Canlıda PHP dosya değişikliği etki etmiyorsa (opcache eski derlenmiş kodu
-// sunuyorsa) bu sayfa opcache'i sıfırlar. Yeni bir dosya olduğu için kendisi
-// opcache'ten etkilenmez. Yalnızca admin erişebilir.
-// Kullanım: giriş yaptıktan sonra /halkayit/opcache_reset.php adresini aç.
+// HAL KAYIT — OPcache Teşhis & Sıfırlama (yalnız admin, POST + CSRF)
 // =============================================================================
 declare(strict_types=1);
 
@@ -17,33 +13,51 @@ if (!is_admin()) {
     die('Bu sayfa yalnızca yöneticiye açıktır.');
 }
 
-header('Content-Type: text/plain; charset=utf-8');
-
-// 1) Diskteki hks_soap.php gerçekten güncel mi? (dosya okuması opcache'ten bağımsız)
 $soap_path = __DIR__ . '/hks_soap.php';
 $src = @file_get_contents($soap_path);
 $guncel = ($src !== false)
     && strpos($src, 'function hks_stok_ozet') !== false
     && strpos($src, 'BildirimServisBildirimSorgu') !== false;
 
-echo "== Hal Kayıt — OPcache Teşhis ==\n\n";
-echo "hks_soap.php yolu   : {$soap_path}\n";
-echo "Dosya değişiklik zm : " . (@filemtime($soap_path) ? date('Y-m-d H:i:s', filemtime($soap_path)) : '?') . "\n";
-echo "Diskteki stok kodu  : " . ($guncel ? "GUNCEL (BildirimServisBildirimSorgu)" : "ESKI (ReferansKunyeler) - deploy edilmemis!") . "\n\n";
-
-// 2) OPcache sıfırla
-if (function_exists('opcache_reset')) {
-    $ok = @opcache_reset();
-    echo "opcache_reset()     : " . ($ok ? "OK — önbellek sıfırlandı ✔" : "false (opcache kapalı ya da zaten boş)") . "\n";
-} else {
-    echo "opcache_reset()     : YOK — bu sunucuda OPcache etkin değil.\n";
+$resetMesaj = null;
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    csrf_check($_POST['csrf'] ?? null);
+    if (function_exists('opcache_reset')) {
+        $ok = @opcache_reset();
+        $resetMesaj = $ok ? 'OK — OPcache sıfırlandı.' : 'OPcache kapalı ya da zaten boş.';
+    } else {
+        $resetMesaj = 'Bu sunucuda OPcache etkin değil.';
+    }
 }
 
-echo "\nSonuç:\n";
-if (!$guncel) {
-    echo "  • Diskteki dosya ESKİ. Deploy hks_soap.php'yi güncellememiş.\n";
-    echo "    En son 'main' dalını sunucuya çekin / dosyayı yeniden yükleyin.\n";
-} else {
-    echo "  • Dosya güncel. OPcache sıfırlandıysa Stok Sorgulama artık çalışır.\n";
-    echo "    Panele dönüp 'Stok Sorgulama' → 'Yenile' deneyin.\n";
-}
+$csrf = csrf_token();
+header('Content-Type: text/html; charset=utf-8');
+?><!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hal Kayıt — OPcache Teşhis</title>
+<style>
+  body { font: 15px/1.6 system-ui, sans-serif; max-width: 620px; margin: 28px auto; padding: 0 16px; background: #0f172a; color: #e2e8f0; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px; margin-bottom: 14px; }
+  button { padding: 10px 18px; border: 0; border-radius: 8px; background: #f97316; color: #111; font-weight: 700; cursor: pointer; }
+  .ok { color: #4ade80; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1 style="margin-top:0;font-size:18px">Hal Kayıt — OPcache Teşhis</h1>
+    <p><strong>Dosya:</strong> <?= h(basename($soap_path)) ?></p>
+    <p><strong>Değişiklik zamanı:</strong> <?= h(@filemtime($soap_path) ? date('Y-m-d H:i:s', (int)filemtime($soap_path)) : '?') ?></p>
+    <p><strong>Stok kodu durumu:</strong> <?= $guncel ? 'GÜNCEL (BildirimServisBildirimSorgu)' : 'ESKİ (deploy edilmemiş)' ?></p>
+    <?php if ($resetMesaj !== null): ?>
+      <p class="ok"><?= h($resetMesaj) ?></p>
+    <?php endif; ?>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+      <button type="submit">OPcache Sıfırla</button>
+    </form>
+  </div>
+</body>
+</html>

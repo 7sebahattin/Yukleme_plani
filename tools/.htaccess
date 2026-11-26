@@ -1,5 +1,11 @@
 # tools/ — Tüm web erişimi kapalı.
-# Buradakiler geliştirme/teşhis araçlarıdır (Android kaynak kodu vb.),
-# web üzerinden servis edilmeleri gerekmez. scripts/ ile aynı politika.
-Order deny,allow
-Deny from all
+# Buradakiler geliştirme/teşhis araçlarıdır, web üzerinden servis edilmeleri gerekmez.
+Options -Indexes
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

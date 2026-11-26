@@ -147,8 +147,12 @@ Kurulum sırası (deploy'u hiç kesmez):
 | Doğru imza + push `main` | `200 Deploy tamamlandı: …` |
 
 Ayrıca: repo/branch **sabit** (payload'dan okunmaz), eşzamanlı iki teslimat için
-`flock` kilidi (ikincisi `409`, dosyalar iç içe yazılmaz), ZIP yolları için
-zip-slip koruması (`..` içeren girdi atlanır).
+`flock` kilidi (`storage/.deploy.lock`, ikincisi `409`, dosyalar iç içe yazılmaz),
+ZIP yolları için zip-slip koruması (`..` içeren girdi atlanır), `smart_merge_db()`
+için `preg_replace_callback` (şifredeki `$1`/`\1` karakterleri bozulmaz), loglar
+web'e kapalı `storage/deploy.log`'a yazılır ve deploy sonunda `opcache_reset()`
+çağrılır. (`scripts/deploy.php` CLI betiğindeki `config/db.php` ezme hatası ve
+zip-slip eksikliği de v582'de giderilmiştir.)
 
 ---
 
