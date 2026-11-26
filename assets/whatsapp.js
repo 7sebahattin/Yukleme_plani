@@ -21,6 +21,28 @@
         }).catch(function () { return { ok: false, hata: 'Sunucuya ulaşılamadı.' }; });
     }
 
+    /* ── 0) Rastgele Webhook Secret Token üret ── */
+    var tokBtn = $('waTokenUret'), tokInput = $('waWhSecret'), whOniz = $('waWebhookOnizleme');
+    var whTaban = kok.getAttribute('data-webhook-url') || '';
+    function whOnizle(v) {
+        if (!whOniz || !whTaban) return;
+        whOniz.textContent = 'Evolution .env › WEBHOOK_URL=' + whTaban + '?token=' + (v || '<TOKEN>');
+    }
+    if (tokBtn && tokInput) {
+        tokBtn.addEventListener('click', function () {
+            var arr = new Uint8Array(24);
+            if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(arr);
+            else for (var i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+            var hex = Array.prototype.map.call(arr, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+            tokInput.type = 'text';
+            tokInput.value = hex;
+            whOnizle(hex);
+            tokInput.focus();
+            tokInput.select();
+        });
+        tokInput.addEventListener('input', function () { whOnizle(tokInput.value.trim()); });
+    }
+
     /* ── 1) Bağlantı: 5 sn'de bir durum; QR yalnız gerektiğinde ── */
     var rozet = $('waDurumRozet'), not = $('waDurumNot'), qrKutu = $('waQrKutu'), qrImg = $('waQrImg');
     var qrZaman = 0, mesgul = false, sonDurum = '';

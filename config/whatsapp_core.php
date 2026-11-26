@@ -113,15 +113,22 @@ function whatsapp_kritik_dolu(array $p): bool
 }
 
 /** Webhook gizli anahtarı: `X-Webhook-Secret` | `Authorization: Bearer` | `?token=` — sabit zamanlı karşılaştırma; anahtar tanımsızsa HİÇBİR istek geçmez. */
-function whatsapp_webhook_yetkili(array $server, array $get): bool
+function whatsapp_webhook_yetkili(array $server, array $get, ?string $dbAnahtar = null): bool
 {
-    $beklenen = (string)WEBHOOK_SECRET_TOKEN;
-    if ($beklenen === '') return false;
+    $beklenenler = [];
+    if ($dbAnahtar !== null && $dbAnahtar !== '') $beklenenler[] = $dbAnahtar;
+    $sabit = (string)WEBHOOK_SECRET_TOKEN;
+    if ($sabit !== '' && !in_array($sabit, $beklenenler, true)) $beklenenler[] = $sabit;
+    if ($beklenenler === []) return false;
+
     $adaylar = [(string)($server['HTTP_X_WEBHOOK_SECRET'] ?? ''), (string)($get['token'] ?? '')];
     $auth = (string)($server['HTTP_AUTHORIZATION'] ?? $server['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
     if (stripos($auth, 'Bearer ') === 0) $adaylar[] = trim(substr($auth, 7));
     foreach ($adaylar as $a) {
-        if ($a !== '' && hash_equals($beklenen, $a)) return true;
+        if ($a === '') continue;
+        foreach ($beklenenler as $beklenen) {
+            if (hash_equals($beklenen, $a)) return true;
+        }
     }
     return false;
 }
@@ -159,15 +166,122 @@ function whatsapp_tablolar_hazir(PDO $db): bool
     }
 }
 
+/** Tablolar + panel API kolonlarının tamamı mevcut mu? (migrate.php kartı için) */
+function whatsapp_sema_hazir(PDO $db): bool
+{
+    if (!whatsapp_tablolar_hazir($db)) return false;
+    foreach (['evolution_url', 'evolution_api_key', 'webhook_secret', 'ai_api_key'] as $k) {
+        if (!wa_kolon_var($db, 'whatsapp_ayarlar', $k)) return false;
+    }
+    return true;
+}
+
+/**
+ * İdempotent şema kurulumu/güncellemesi (migrate.php › WhatsApp kartı).
+ * Mevcut tablolara dokunmaz; yalnız whatsapp_mesaj_loglari + whatsapp_ayarlar (ve eksik API kolonları) ekler.
+ * @return list<array{tablo:string, durum:string, mesaj:string}>
+ */
+function whatsapp_migrate(PDO $db): array
+{
+    $sqlite = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    $sonuc = [];
+    $tablolar = [
+        'whatsapp_mesaj_loglari' => $sqlite
+            ? "CREATE TABLE IF NOT EXISTS whatsapp_mesaj_loglari (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT NOT NULL UNIQUE, remote_jid TEXT NOT NULL,
+                is_group INTEGER NOT NULL DEFAULT 0, sender_name TEXT NOT NULL DEFAULT '', sender_phone TEXT NOT NULL DEFAULT '',
+                raw_message TEXT NOT NULL, parsed_data TEXT NULL, durum TEXT NOT NULL DEFAULT 'eksik_bilgi',
+                plaka TEXT NULL, yukleme_tarihi TEXT NULL, guven_skoru INTEGER NOT NULL DEFAULT 0,
+                loading_record_id INTEGER NULL, hata_mesaji TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NULL
+              )"
+            : "CREATE TABLE IF NOT EXISTS `whatsapp_mesaj_loglari` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT, `message_id` VARCHAR(120) NOT NULL, `remote_jid` VARCHAR(100) NOT NULL,
+                `is_group` TINYINT(1) NOT NULL DEFAULT 0, `sender_name` VARCHAR(150) NOT NULL DEFAULT '', `sender_phone` VARCHAR(50) NOT NULL DEFAULT '',
+                `raw_message` TEXT NOT NULL, `parsed_data` LONGTEXT NULL, `durum` VARCHAR(30) NOT NULL DEFAULT 'eksik_bilgi',
+                `plaka` VARCHAR(30) NULL, `yukleme_tarihi` DATE NULL, `guven_skoru` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+                `loading_record_id` INT NULL, `hata_mesaji` VARCHAR(255) NULL, `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` DATETIME NULL DEFAULT NULL, PRIMARY KEY (`id`), UNIQUE KEY `uq_wa_message_id` (`message_id`),
+                KEY `idx_wa_durum_id` (`durum`, `id`), KEY `idx_wa_jid` (`remote_jid`),
+                KEY `idx_wa_plaka_tarih` (`plaka`, `yukleme_tarihi`), KEY `idx_wa_record` (`loading_record_id`)
+              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        'whatsapp_ayarlar' => $sqlite
+            ? "CREATE TABLE IF NOT EXISTS whatsapp_ayarlar (
+                id INTEGER PRIMARY KEY, instance_adi TEXT NOT NULL DEFAULT '', secili_gruplar TEXT NULL,
+                ai_saglayici TEXT NOT NULL DEFAULT 'groq', otomatik_taslak INTEGER NOT NULL DEFAULT 1,
+                evolution_url TEXT NOT NULL DEFAULT '', evolution_api_key TEXT NOT NULL DEFAULT '',
+                webhook_secret TEXT NOT NULL DEFAULT '', ai_api_key TEXT NOT NULL DEFAULT '',
+                guncelleyen_id INTEGER NULL, updated_at TEXT NULL
+              )"
+            : "CREATE TABLE IF NOT EXISTS `whatsapp_ayarlar` (
+                `id` TINYINT UNSIGNED NOT NULL, `instance_adi` VARCHAR(80) NOT NULL DEFAULT '', `secili_gruplar` TEXT NULL,
+                `ai_saglayici` VARCHAR(20) NOT NULL DEFAULT 'groq', `otomatik_taslak` TINYINT(1) NOT NULL DEFAULT 1,
+                `evolution_url` VARCHAR(255) NOT NULL DEFAULT '', `evolution_api_key` VARCHAR(255) NOT NULL DEFAULT '',
+                `webhook_secret` VARCHAR(255) NOT NULL DEFAULT '', `ai_api_key` VARCHAR(255) NOT NULL DEFAULT '',
+                `guncelleyen_id` INT NULL, `updated_at` DATETIME NULL DEFAULT NULL, PRIMARY KEY (`id`)
+              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    ];
+    foreach ($tablolar as $ad => $ddl) {
+        $onceVar = false;
+        try { $db->query('SELECT 1 FROM `' . $ad . '` LIMIT 0'); $onceVar = true; } catch (Throwable $e) {}
+        try {
+            $db->exec($ddl);
+            $sonuc[] = ['tablo' => $ad, 'durum' => $onceVar ? 'mevcut' : 'olusturuldu', 'mesaj' => $onceVar ? 'Tablo zaten mevcut.' : 'Tablo oluşturuldu.'];
+        } catch (Throwable $e) {
+            $sonuc[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+    foreach (['evolution_url', 'evolution_api_key', 'webhook_secret', 'ai_api_key'] as $kolon) {
+        if (wa_kolon_var($db, 'whatsapp_ayarlar', $kolon)) {
+            $sonuc[] = ['tablo' => 'whatsapp_ayarlar.' . $kolon, 'durum' => 'mevcut', 'mesaj' => 'Kolon zaten mevcut.'];
+            continue;
+        }
+        try {
+            $tip = $sqlite ? "TEXT NOT NULL DEFAULT ''" : "VARCHAR(255) NOT NULL DEFAULT ''";
+            $db->exec('ALTER TABLE whatsapp_ayarlar ADD COLUMN ' . $kolon . ' ' . $tip);
+            $sonuc[] = ['tablo' => 'whatsapp_ayarlar.' . $kolon, 'durum' => 'olusturuldu', 'mesaj' => 'Kolon eklendi.'];
+        } catch (Throwable $e) {
+            $sonuc[] = ['tablo' => 'whatsapp_ayarlar.' . $kolon, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+    try {
+        if (!(bool)$db->query('SELECT 1 FROM whatsapp_ayarlar WHERE id = 1')->fetchColumn()) {
+            $db->exec("INSERT INTO whatsapp_ayarlar (id, instance_adi, secili_gruplar, ai_saglayici, otomatik_taslak) VALUES (1, '', '[]', 'groq', 1)");
+        }
+    } catch (Throwable $e) {
+        $sonuc[] = ['tablo' => 'whatsapp_ayarlar(id=1)', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+    }
+    return $sonuc;
+}
+
 /**
  * Etkin ayarlar: tablodaki satır (id=1) → yoksa/boşsa config sabitleri.
- * @return array{instance_adi:string, secili_gruplar:list<array{jid:string,ad:string}>, ai_saglayici:string, otomatik_taslak:bool, kayitli:bool}
+ * @return array{instance_adi:string, secili_gruplar:list<array{jid:string,ad:string}>, ai_saglayici:string, otomatik_taslak:bool,
+ *               evolution_url:string, evolution_api_key:string, webhook_secret:string, ai_api_key:string,
+ *               db_baglanti_kolon:bool, kayitli:bool}
  */
 function whatsapp_ayarlar_oku(PDO $db): array
 {
-    $a = ['instance_adi' => (string)EVOLUTION_INSTANCE_NAME, 'secili_gruplar' => [], 'ai_saglayici' => (string)AI_PROVIDER, 'otomatik_taslak' => true, 'kayitli' => false];
+    $dbKolon = wa_kolon_var($db, 'whatsapp_ayarlar', 'evolution_url')
+        && wa_kolon_var($db, 'whatsapp_ayarlar', 'evolution_api_key')
+        && wa_kolon_var($db, 'whatsapp_ayarlar', 'webhook_secret')
+        && wa_kolon_var($db, 'whatsapp_ayarlar', 'ai_api_key');
+    $a = [
+        'instance_adi'      => (string)EVOLUTION_INSTANCE_NAME,
+        'secili_gruplar'    => [],
+        'ai_saglayici'      => (string)AI_PROVIDER,
+        'otomatik_taslak'   => true,
+        'evolution_url'     => (string)EVOLUTION_API_URL,
+        'evolution_api_key' => (string)EVOLUTION_API_KEY,
+        'webhook_secret'    => (string)WEBHOOK_SECRET_TOKEN,
+        'ai_api_key'        => (string)AI_API_KEY,
+        'db_baglanti_kolon' => $dbKolon,
+        'kayitli'           => false,
+    ];
     try {
-        $r = $db->query('SELECT instance_adi, secili_gruplar, ai_saglayici, otomatik_taslak FROM whatsapp_ayarlar WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
+        $sec = $dbKolon
+            ? 'instance_adi, secili_gruplar, ai_saglayici, otomatik_taslak, evolution_url, evolution_api_key, webhook_secret, ai_api_key'
+            : 'instance_adi, secili_gruplar, ai_saglayici, otomatik_taslak';
+        $r = $db->query('SELECT ' . $sec . ' FROM whatsapp_ayarlar WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         $r = false;
     }
@@ -176,6 +290,12 @@ function whatsapp_ayarlar_oku(PDO $db): array
         if (trim((string)$r['instance_adi']) !== '') $a['instance_adi'] = trim((string)$r['instance_adi']);
         if (in_array((string)$r['ai_saglayici'], ['groq', 'gemini'], true)) $a['ai_saglayici'] = (string)$r['ai_saglayici'];
         $a['otomatik_taslak'] = (int)$r['otomatik_taslak'] === 1;
+        if ($dbKolon) {
+            if (trim((string)($r['evolution_url'] ?? '')) !== '')     $a['evolution_url']     = rtrim(trim((string)$r['evolution_url']), '/');
+            if (trim((string)($r['evolution_api_key'] ?? '')) !== '') $a['evolution_api_key'] = trim((string)$r['evolution_api_key']);
+            if (trim((string)($r['webhook_secret'] ?? '')) !== '')    $a['webhook_secret']    = trim((string)$r['webhook_secret']);
+            if (trim((string)($r['ai_api_key'] ?? '')) !== '')        $a['ai_api_key']        = trim((string)$r['ai_api_key']);
+        }
         $j = json_decode((string)($r['secili_gruplar'] ?? ''), true);
         if (is_array($j)) {
             foreach ($j as $g) {
@@ -190,6 +310,72 @@ function whatsapp_ayarlar_oku(PDO $db): array
         }
     }
     return $a;
+}
+
+/** Etkin ayarlardan Evolution istemcisi kurar (DB > config sabiti). */
+function whatsapp_service_kur(array $ayar, ?callable $transport = null): WhatsAppService
+{
+    $url  = trim((string)($ayar['evolution_url'] ?? '')) !== '' ? (string)$ayar['evolution_url'] : (string)EVOLUTION_API_URL;
+    $key  = (string)($ayar['evolution_api_key'] ?? '');
+    if ($key === '') $key = (string)EVOLUTION_API_KEY;
+    $inst = trim((string)($ayar['instance_adi'] ?? '')) !== '' ? (string)$ayar['instance_adi'] : (string)EVOLUTION_INSTANCE_NAME;
+    return new WhatsAppService($url, $key, $inst, $transport);
+}
+
+/** Etkin ayarlardan AI istemcisi kurar (DB > config sabiti). */
+function whatsapp_ai_kur(array $ayar, ?callable $transport = null): AIParserService
+{
+    $sag = strtolower(trim((string)($ayar['ai_saglayici'] ?? '')));
+    if (!in_array($sag, ['groq', 'gemini'], true)) $sag = (string)AI_PROVIDER;
+    $key = (string)($ayar['ai_api_key'] ?? '');
+    if ($key === '') $key = (string)AI_API_KEY;
+    return new AIParserService($sag, $key, wa_etkin_model($sag), $transport);
+}
+
+/**
+ * Panelden girilen bağlantı & API anahtarlarını kaydeder.
+ * Gizli alanlar boş gönderilirse mevcut kayıtlı değer korunur (URL güncellerken anahtarlar silinmez).
+ * @return array{ok:bool, hata?:string, degisen?:list<string>}
+ */
+function whatsapp_baglanti_kaydet(PDO $db, array $girdi, ?int $kullaniciId): array
+{
+    if (!whatsapp_sema_hazir($db)) {
+        return ['ok' => false, 'hata' => 'Bağlantı ayarları kolonları eksik; önce migrate.php › WhatsApp kartını çalıştırın.'];
+    }
+    $url  = rtrim(trim((string)($girdi['evolution_url'] ?? '')), '/');
+    if ($url !== '' && !preg_match('#^https?://[^\s]{3,240}$#i', $url)) {
+        return ['ok' => false, 'hata' => 'Evolution API URL geçersiz (http:// veya https:// ile başlamalı).'];
+    }
+    $inst = trim((string)($girdi['instance_adi'] ?? ''));
+    if ($inst !== '' && !preg_match('/^[0-9A-Za-z._\-]{1,80}$/', $inst)) {
+        return ['ok' => false, 'hata' => 'Oturum adı yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir.'];
+    }
+
+    $mevcut = $db->query('SELECT instance_adi, evolution_url, evolution_api_key, webhook_secret, ai_api_key FROM whatsapp_ayarlar WHERE id = 1')->fetch(PDO::FETCH_ASSOC);
+    $var = is_array($mevcut);
+    $evoKey = trim((string)($girdi['evolution_api_key'] ?? ''));
+    $whTok  = trim((string)($girdi['webhook_secret'] ?? ''));
+    $aiKey  = trim((string)($girdi['ai_api_key'] ?? ''));
+
+    $yeniEvoKey = $evoKey !== '' ? mb_substr($evoKey, 0, 255, 'UTF-8') : (string)($mevcut['evolution_api_key'] ?? '');
+    $yeniWhTok  = $whTok  !== '' ? mb_substr($whTok,  0, 255, 'UTF-8') : (string)($mevcut['webhook_secret'] ?? '');
+    $yeniAiKey  = $aiKey  !== '' ? mb_substr($aiKey,  0, 255, 'UTF-8') : (string)($mevcut['ai_api_key'] ?? '');
+
+    if ($var) {
+        $db->prepare('UPDATE whatsapp_ayarlar SET instance_adi = ?, evolution_url = ?, evolution_api_key = ?, webhook_secret = ?, ai_api_key = ?, guncelleyen_id = ?, updated_at = ? WHERE id = 1')
+           ->execute([$inst, $url, $yeniEvoKey, $yeniWhTok, $yeniAiKey, $kullaniciId, wa_simdi()]);
+    } else {
+        $db->prepare('INSERT INTO whatsapp_ayarlar (id, instance_adi, secili_gruplar, ai_saglayici, otomatik_taslak, evolution_url, evolution_api_key, webhook_secret, ai_api_key, guncelleyen_id, updated_at) VALUES (1, ?, \'[]\', ?, 1, ?, ?, ?, ?, ?, ?)')
+           ->execute([$inst, (string)AI_PROVIDER, $url, $yeniEvoKey, $yeniWhTok, $yeniAiKey, $kullaniciId, wa_simdi()]);
+    }
+
+    $degisen = [];
+    if ($url !== (string)($mevcut['evolution_url'] ?? '')) $degisen[] = 'evolution_url';
+    if ($inst !== (string)($mevcut['instance_adi'] ?? '')) $degisen[] = 'instance_adi';
+    if ($evoKey !== '') $degisen[] = 'evolution_api_key';
+    if ($whTok !== '')  $degisen[] = 'webhook_secret';
+    if ($aiKey !== '')  $degisen[] = 'ai_api_key';
+    return ['ok' => true, 'degisen' => $degisen];
 }
 
 /** @param list<array{jid:string,ad:string}> $gruplar */
@@ -324,7 +510,7 @@ function whatsapp_tek_mesaj_isle(PDO $db, array $m, array $izinli, array $ayar, 
 function whatsapp_kaydi_ayristir(PDO $db, int $logId, string $metin, string $mesajTarihi, array $ayar, ?AIParserService $ai = null, ?DateTimeImmutable $simdi = null): string
 {
     try {
-        $ai ??= AIParserService::fromConfig($ayar['ai_saglayici']);
+        $ai ??= whatsapp_ai_kur($ayar);
         $p = $ai->parseMessage($metin, $simdi);
     } catch (Throwable $e) {   // AIParserException + beklenmeyen her şey: satır 'isleniyor'da ASILI KALMASIN
         $db->prepare('UPDATE whatsapp_mesaj_loglari SET durum = \'ai_hata\', hata_mesaji = ?, updated_at = ? WHERE id = ?')

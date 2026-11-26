@@ -24,7 +24,18 @@ function whatsapp_ayarlar_oku_yok(): array
 {
     $g = [];
     foreach ((array)ALLOWED_GROUP_JIDS as $jid) if (is_string($jid)) $g[] = ['jid' => $jid, 'ad' => $jid];
-    return ['instance_adi' => (string)EVOLUTION_INSTANCE_NAME, 'secili_gruplar' => $g, 'ai_saglayici' => (string)AI_PROVIDER, 'otomatik_taslak' => true, 'kayitli' => false];
+    return [
+        'instance_adi'      => (string)EVOLUTION_INSTANCE_NAME,
+        'secili_gruplar'    => $g,
+        'ai_saglayici'      => (string)AI_PROVIDER,
+        'otomatik_taslak'   => true,
+        'evolution_url'     => (string)EVOLUTION_API_URL,
+        'evolution_api_key' => (string)EVOLUTION_API_KEY,
+        'webhook_secret'    => (string)WEBHOOK_SECRET_TOKEN,
+        'ai_api_key'        => (string)AI_API_KEY,
+        'db_baglanti_kolon' => false,
+        'kayitli'           => false,
+    ];
 }
 
 function wa_json(array $d, int $kod = 200): void
@@ -118,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     $islem = (string)$_POST['ajax'];
 
     try {
-        $svc = WhatsAppService::fromConfig($ayar['instance_adi']);
+        $svc = whatsapp_service_kur($ayar);
 
         if ($islem === 'durum') {                       // 5 sn'de bir: ucuz durum sorgusu (+ istenirse QR)
             $durum = $svc->getConnectionState();
@@ -141,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         if ($islem === 'test') {                        // WhatsApp'a dokunmadan AI ayrıştırma simülasyonu (DB'ye YAZMAZ)
             $metin = trim((string)($_POST['metin'] ?? ''));
             if ($metin === '') wa_json(['ok' => false, 'hata' => 'Test metni boş.'], 422);
-            $ai = AIParserService::fromConfig($ayar['ai_saglayici']);
+            $ai = whatsapp_ai_kur($ayar);
             $gurultu = isNoiseMessage($metin);
             $p = $ai->parseMessage($metin);
             $p['plaka_ham']    = $p['plaka'];
@@ -190,6 +201,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     }
 }
 
+// ── Bağlantı & API anahtarları kaydı (POST + CSRF) ────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'baglanti_kaydet') {
+    csrf_check($_POST['csrf'] ?? null);
+    $res = whatsapp_baglanti_kaydet($pdo, $_POST, $uid);
+    if ($res['ok']) {
+        whatsapp_denetle('whatsapp_baglanti', 'whatsapp', 1, null, ['degisen' => $res['degisen']]);
+        set_flash('success', 'Bağlantı ve API ayarları kaydedildi.');
+    } else {
+        set_flash('error', (string)($res['hata'] ?? 'Ayarlar kaydedilemedi.'));
+    }
+    header('Location: whatsapp_yonetim.php');
+    exit;
+}
+
 // ── Ayar kaydı (klasik form POST) ─────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'ayar_kaydet') {
     csrf_check($_POST['csrf'] ?? null);
@@ -214,15 +239,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['islem'] ?? '') === 'ayar_k
 // ── Sayfa ─────────────────────────────────────────────────────
 $loglar = $hazir ? whatsapp_son_mesajlar($pdo, 25) : [];
 $eksikYapilandirma = [];
-if ((string)EVOLUTION_API_KEY === '') $eksikYapilandirma[] = 'EVOLUTION_API_KEY';
-if ((string)WEBHOOK_SECRET_TOKEN === '') $eksikYapilandirma[] = 'WEBHOOK_SECRET_TOKEN';
-if ((string)AI_API_KEY === '') $eksikYapilandirma[] = 'AI_API_KEY';
+if ($ayar['evolution_api_key'] === '') $eksikYapilandirma[] = 'EVOLUTION_API_KEY';
+if ($ayar['webhook_secret'] === '')    $eksikYapilandirma[] = 'WEBHOOK_SECRET_TOKEN';
+if ($ayar['ai_api_key'] === '')        $eksikYapilandirma[] = 'AI_API_KEY';
+$semaTam = $hazir && !empty($ayar['db_baglanti_kolon']);
+$scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host    = (string)($_SERVER['HTTP_HOST'] ?? 'asya.scai.tr');
+$webhookTaban = $scheme . '://' . $host . '/api_whatsapp_webhook.php';
 
 render_header('WhatsApp Yükleme Planı');
 echo '<link rel="stylesheet" href="assets/whatsapp.css?v=' . (int)@filemtime(__DIR__ . '/assets/whatsapp.css') . '">' . "\n";
 render_flash();
 ?>
-<div class="wa-sayfa" id="waSayfa" data-csrf="<?= h(csrf_token()) ?>">
+<div class="wa-sayfa" id="waSayfa" data-csrf="<?= h(csrf_token()) ?>" data-webhook-url="<?= h($webhookTaban) ?>">
     <div class="page-head">
         <h1>WhatsApp Yükleme Planı</h1>
     </div>
@@ -232,23 +261,75 @@ render_flash();
     <?php if (!$hazir): ?>
     <div class="card wa-not wa-not-uyari">
         <strong>WhatsApp tabloları kurulmamış.</strong>
-        <p><code>docs/sql/whatsapp_migration.sql</code> dosyasını (phpMyAdmin › SQL) çalıştırın. Tablolar yokken webhook gelen mesajları <em>kaydetmeden</em> yok sayar.</p>
+        <p><a class="btn btn-sm btn-primary" href="migrate.php#whatsapp">Şema Migrasyon Paneli › WhatsApp</a> kartından tek tıkla kurabilirsiniz (veya <code>docs/sql/whatsapp_migration.sql</code>).</p>
+    </div>
+    <?php elseif (!$semaTam): ?>
+    <div class="card wa-not wa-not-uyari">
+        <strong>Ekrandan API anahtarı kaydetmek için şema güncellemesi gerekiyor.</strong>
+        <p><a class="btn btn-sm btn-primary" href="migrate.php#whatsapp">Şema Migrasyon Paneli › WhatsApp</a> kartını bir kez çalıştırın; mevcut kayıtlarınız etkilenmez.</p>
     </div>
     <?php endif; ?>
     <?php if ($eksikYapilandirma): ?>
     <div class="card wa-not wa-not-uyari">
         <strong>Eksik yapılandırma:</strong> <?= h(implode(', ', $eksikYapilandirma)) ?>.
-        <p><code>config/local.php</code> içine <code>define('SABİT', 'değer');</code> olarak ekleyin (sabit listesi: <code>config/whatsapp_config.php</code>).
+        <p>Aşağıdaki <strong>Sunucu &amp; API Anahtarları</strong> bölümünden girebilir veya <code>config/local.php</code> dosyasına ekleyebilirsiniz.
         Webhook gizli anahtarı tanımlı değilken webhook hiçbir isteği kabul etmez.</p>
     </div>
     <?php endif; ?>
+
+    <!-- 0) Sunucu & API Anahtarları -->
+    <details class="card wa-kart" id="waApiKart"<?= ($eksikYapilandirma || !$semaTam) ? ' open' : '' ?>>
+        <summary class="wa-kart-baslik" style="cursor:pointer;">0 · Sunucu &amp; API Anahtarları
+            <span class="wa-rozet <?= $eksikYapilandirma ? 'wa-eksik' : 'wa-tamam' ?>"><?= $eksikYapilandirma ? 'Eksik alan var' : 'Yapılandırıldı' ?></span>
+        </summary>
+        <form method="post" id="waBaglantiForm" autocomplete="off" style="margin-top:12px;">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="islem" value="baglanti_kaydet">
+            <div class="wa-ayar-izgara">
+                <div>
+                    <label class="form-label" for="waEvoUrl">Evolution API URL</label>
+                    <input type="url" name="evolution_url" id="waEvoUrl" value="<?= h($ayar['evolution_url']) ?>" placeholder="https://evo.siteniz.com" maxlength="255">
+                    <p class="wa-ikincil">Cloudflare Tunnel veya VDS üzerindeki Evolution API adresi.</p>
+                </div>
+                <div>
+                    <label class="form-label" for="waInstance">Oturum (Instance) Adı</label>
+                    <input type="text" name="instance_adi" id="waInstance" value="<?= h($ayar['instance_adi']) ?>" placeholder="yukleme_plani_bot" maxlength="80">
+                    <p class="wa-ikincil">Boş bırakılırsa <code>yukleme_plani_bot</code> kullanılır.</p>
+                </div>
+                <div>
+                    <label class="form-label" for="waEvoKey">Evolution API Key
+                        <?php if ($ayar['evolution_api_key'] !== ''): ?><span class="wa-rozet wa-tamam">Kayıtlı</span><?php endif; ?>
+                    </label>
+                    <input type="password" name="evolution_api_key" id="waEvoKey" value="" placeholder="<?= $ayar['evolution_api_key'] !== '' ? 'Kayıtlı — değiştirmek için yeni anahtar girin' : 'whatsapp-service/.env › EVOLUTION_API_KEY' ?>" maxlength="255" autocomplete="new-password">
+                </div>
+                <div>
+                    <label class="form-label" for="waAiKey">AI API Key (Groq / Gemini)
+                        <?php if ($ayar['ai_api_key'] !== ''): ?><span class="wa-rozet wa-tamam">Kayıtlı</span><?php endif; ?>
+                    </label>
+                    <input type="password" name="ai_api_key" id="waAiKey" value="" placeholder="<?= $ayar['ai_api_key'] !== '' ? 'Kayıtlı — değiştirmek için yeni anahtar girin' : 'gsk_… veya AIza…' ?>" maxlength="255" autocomplete="new-password">
+                </div>
+                <div style="grid-column:1 / -1;">
+                    <label class="form-label" for="waWhSecret">Webhook Secret Token
+                        <?php if ($ayar['webhook_secret'] !== ''): ?><span class="wa-rozet wa-tamam">Kayıtlı</span><?php endif; ?>
+                    </label>
+                    <div class="wa-eylem" style="margin-top:4px;">
+                        <input type="password" name="webhook_secret" id="waWhSecret" value="" placeholder="<?= $ayar['webhook_secret'] !== '' ? 'Kayıtlı — değiştirmek için yeni token girin' : 'Güçlü gizli token veya Rastgele üret' ?>" maxlength="255" autocomplete="new-password" style="flex:1;min-width:220px;">
+                        <button type="button" class="btn btn-ghost" id="waTokenUret">Rastgele üret</button>
+                    </div>
+                    <p class="wa-ikincil" id="waWebhookOnizleme">Evolution <code>.env</code> dosyasındaki <code>WEBHOOK_URL</code>: <code><?= h($webhookTaban) ?>?token=&lt;TOKEN&gt;</code></p>
+                </div>
+            </div>
+            <p class="wa-ikincil">Güvenlik gereği kayıtlı anahtarlar ekranda tekrar gösterilmez; boş bırakılan şifre alanları mevcut değerini korur.</p>
+            <div class="wa-eylem"><button type="submit" class="btn btn-primary"<?= $semaTam ? '' : ' disabled' ?>>Bağlantı ayarlarını kaydet</button></div>
+        </form>
+    </details>
 
     <!-- 1) Bağlantı & QR -->
     <section class="card wa-kart" id="waBaglanti">
         <h2 class="wa-kart-baslik">1 · Bağlantı <span class="wa-rozet wa-pasif" id="waDurumRozet">Kontrol ediliyor…</span></h2>
         <div class="wa-baglanti">
             <div class="wa-baglanti-bilgi">
-                <p class="wa-ikincil">Oturum: <code><?= h($ayar['instance_adi']) ?></code> · Evolution: <code><?= h((string)EVOLUTION_API_URL) ?></code></p>
+                <p class="wa-ikincil">Oturum: <code><?= h($ayar['instance_adi']) ?></code> · Evolution: <code><?= h($ayar['evolution_url']) ?></code></p>
                 <p id="waDurumNot" class="wa-ikincil"></p>
                 <div class="wa-eylem">
                     <button type="button" class="btn btn-primary" id="waQrIste">QR kod al / oturum oluştur</button>

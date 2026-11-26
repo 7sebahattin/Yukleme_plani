@@ -56,8 +56,18 @@ try {
     require_once __DIR__ . '/config/db.php';
     require_once __DIR__ . '/config/whatsapp_core.php';
 
-    // 1) Güvenlik
-    if (!whatsapp_webhook_yetkili($_SERVER, $_GET)) {
+    // 1) Güvenlik (önce config sabiti, değilse DB'deki panel token'ı)
+    $yetkili = whatsapp_webhook_yetkili($_SERVER, $_GET);
+    if (!$yetkili) {
+        try {
+            $pdo = db();
+            $dbSecret = whatsapp_tablolar_hazir($pdo) ? (string)(whatsapp_ayarlar_oku($pdo)['webhook_secret'] ?? '') : '';
+            if ($dbSecret !== '') $yetkili = whatsapp_webhook_yetkili($_SERVER, $_GET, $dbSecret);
+        } catch (Throwable $e) {
+            $yetkili = false;
+        }
+    }
+    if (!$yetkili) {
         error_log('[whatsapp] webhook yetkisiz istek: ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
         wa_yanit(['ok' => false, 'yok_sayildi' => 'yetkisiz']);
         exit;

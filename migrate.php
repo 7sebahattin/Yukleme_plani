@@ -76,6 +76,7 @@ require_once __DIR__ . '/config/wms_stok_core.php';      // ERP-11b Stok Ayrım�
 require_once __DIR__ . '/config/yukleme_v2_core.php';    // Yeni Araç Yükleme Fişleri (v2)
 require_once __DIR__ . '/config/satinalma_core.php';     // ERP-3 Satın Alma & 3-Way Match
 require_once __DIR__ . '/config/uretim_bom_core.php';    // ERP-4 Üretim BOM, İş Emirleri & MRP
+require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Planı (v590)
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -177,6 +178,7 @@ $wms_results = []; $wms_ran = false;                        // ERP-11b Stok Ayr�
 $yv2_results = []; $yv2_ran = false;                        // Yeni Araç Yükleme Fişleri (v2)
 $sa_results = []; $sa_ran = false;                          // ERP-3 Satın Alma & 3-Way Match
 $ubom_results = []; $ubom_ran = false;                      // ERP-4 Üretim BOM, İş Emirleri & MRP
+$wa_results = []; $wa_ran = false;                          // WhatsApp Yükleme Planı (v590)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -649,6 +651,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($ubom_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'uretim_bom', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'whatsapp') {
+    csrf_check($_POST['csrf'] ?? null);
+    $wa_ran     = true;
+    $wa_results = whatsapp_migrate($pdo);
+    foreach ($wa_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'whatsapp', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -2453,6 +2464,28 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="uretim_bom">
       <button type="submit" class="btn btn-primary">Üretim BOM / MRP Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('whatsapp'); ?>
+    <h2 style="margin-top:0;">WhatsApp Yükleme Planı — Tablolar &amp; API Ayarları (v590)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>whatsapp_mesaj_loglari</code> ve <code>whatsapp_ayarlar</code> tablolarını oluşturur,
+      ekrandan API anahtarı kaydı için <code>evolution_url</code>, <code>evolution_api_key</code>, <code>webhook_secret</code>, <code>ai_api_key</code> kolonlarını ekler.
+      Mevcut tablolara dokunmaz.
+      <?php if ($wa_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($wa_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $waHazir = whatsapp_sema_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $waHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $waHazir ? '✓ Tablolar ve API kolonları hazır' : '✗ Tablo veya API kolonları eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="whatsapp">
+      <button type="submit" class="btn btn-primary">WhatsApp Tablolarını Oluştur / Güncelle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>
