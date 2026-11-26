@@ -122,19 +122,41 @@ function hks_kv_onekli($onek) {
   return $out;
 }
 
-// --- Şifreleme (AES-256-CBC) ---
+// --- Şifreleme (AES-256-GCM; eski AES-256-CBC kayıtları geriye uyumlu çözülür) ---
+function hks_sifreleme_anahtari_ham(): string {
+    if (!defined('HKS_SIFRELEME_ANAHTARI') || !is_string(HKS_SIFRELEME_ANAHTARI) || strlen(HKS_SIFRELEME_ANAHTARI) < 16) {
+        throw new RuntimeException('HKS_CRED_KEY tanımlı değil (config/local.php).');
+    }
+    return hash('sha256', HKS_SIFRELEME_ANAHTARI, true);
+}
 function hks_sifrele($duz) {
-  $anahtar = hash('sha256', HKS_SIFRELEME_ANAHTARI, true);
-  $iv = openssl_random_pseudo_bytes(16);
-  $sifreli = openssl_encrypt($duz, 'aes-256-cbc', $anahtar, OPENSSL_RAW_DATA, $iv);
-  return base64_encode($iv . $sifreli);
+    $anahtar = hks_sifreleme_anahtari_ham();
+    $iv = random_bytes(12);
+    $tag = '';
+    $sifreli = openssl_encrypt((string)$duz, 'aes-256-gcm', $anahtar, OPENSSL_RAW_DATA, $iv, $tag, 'hks_cred_v1', 16);
+    if ($sifreli === false || strlen($tag) !== 16) {
+        throw new RuntimeException('HKS şifreleme başarısız.');
+    }
+    return 'gcm1:' . base64_encode($iv . $tag . $sifreli);
 }
 function hks_coz($sifreli) {
-  $anahtar = hash('sha256', HKS_SIFRELEME_ANAHTARI, true);
-  $ham = base64_decode($sifreli);
-  if ($ham === false || strlen($ham) < 17) return '';
-  $iv = substr($ham, 0, 16);
-  $govde = substr($ham, 16);
-  $duz = openssl_decrypt($govde, 'aes-256-cbc', $anahtar, OPENSSL_RAW_DATA, $iv);
-  return $duz === false ? '' : $duz;
+    $sifreli = (string)$sifreli;
+    if ($sifreli === '') return '';
+    $anahtar = hks_sifreleme_anahtari_ham();
+    if (str_starts_with($sifreli, 'gcm1:')) {
+        $ham = base64_decode(substr($sifreli, 5), true);
+        if ($ham === false || strlen($ham) < 28) return '';
+        $iv = substr($ham, 0, 12);
+        $tag = substr($ham, 12, 16);
+        $govde = substr($ham, 28);
+        $duz = openssl_decrypt($govde, 'aes-256-gcm', $anahtar, OPENSSL_RAW_DATA, $iv, $tag, 'hks_cred_v1');
+        return $duz === false ? '' : $duz;
+    }
+    // Geriye uyumlu eski AES-256-CBC çözümü
+    $ham = base64_decode($sifreli, true);
+    if ($ham === false || strlen($ham) < 17) return '';
+    $iv = substr($ham, 0, 16);
+    $govde = substr($ham, 16);
+    $duz = openssl_decrypt($govde, 'aes-256-cbc', $anahtar, OPENSSL_RAW_DATA, $iv);
+    return $duz === false ? '' : $duz;
 }

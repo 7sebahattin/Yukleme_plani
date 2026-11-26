@@ -895,7 +895,7 @@ function ekranAlti() {
                 <div class="pc-body">
                     <div class="pc-title">Palet ${escHtml(p.palet_no || (i + 1))}${p.size ? ' · ' + escHtml(p.size) : ''}</div>
                     <div class="pc-stats">
-                        <span><strong${kasaWarn ? ' class="pc-warn"' : ''}>${p.kasa_adeti}</strong> kasa</span>
+                        <span><strong${kasaWarn ? ' class="pc-warn"' : ''}>${escHtml(p.kasa_adeti)}</strong> kasa</span>
                         <span>Brüt <strong${brutWarn ? ' class="pc-warn"' : ''}>${fmtKg(Math.round(br))}</strong></span>
                     </div>
                     <div class="pc-stats pc-stats-dara">
@@ -3145,7 +3145,10 @@ function ekranAlti() {
         if (!O.pinGecerli(girdi.value)) { hataGoster('PIN 4–8 haneli rakamlardan oluşmalı.'); girdi.focus(); return; }
         btn.disabled = true;
         O.gonder({ islem: 'ac', pin: girdi.value }).then(function (j) {
-            if (j.ok) { btn.disabled = false; kapat(true); return; }
+            if (j.ok) {
+                if (dlg.hasAttribute('data-reload')) { location.reload(); return; }
+                btn.disabled = false; kapat(true); return;
+            }
             if (j.durum === 401) { O.girise(j); return; }
             hataGoster(j.durum === 422 ? (j.error || 'PIN hatalı.') : O.hataMetni(j));
             girdi.value = '';
@@ -3297,5 +3300,27 @@ function ekranAlti() {
                 bekleZ = setTimeout(function () { btn.disabled = false; hataGoster(''); }, bekle * 1000);
             } else btn.disabled = false;
         }).catch(function () { btn.disabled = false; hataGoster('Bağlantı hatası. Tekrar deneyin.'); });
+    });
+})();
+
+/* Çıkış bağlantıları: 1 tıkta POST + CSRF ile çıkış (GET Logout CSRF engeli, B-38) */
+(function () {
+    document.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest ? e.target.closest('a[data-logout-post="1"]') : null;
+        if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (!meta || !meta.content) return; // token yoksa GET onay sayfasına düş
+        e.preventDefault();
+        var f = document.createElement('form');
+        f.method = 'POST';
+        f.action = a.getAttribute('href') || 'logout.php';
+        f.style.display = 'none';
+        var inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'csrf';
+        inp.value = meta.content;
+        f.appendChild(inp);
+        document.body.appendChild(f);
+        f.submit();
     });
 })();

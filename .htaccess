@@ -1,3 +1,49 @@
-php_value post_max_size 20M
-php_value upload_max_filesize 20M
-php_value max_input_vars 5000
+# Kök .htaccess — Güvenlik başlıkları, hassas dosya koruması ve PHP limitleri
+Options -Indexes
+
+# PHP-FPM / LSAPI uyumluluğu için mod_php direktifleri IfModule ile sarılır
+<IfModule mod_php.c>
+    php_value post_max_size 20M
+    php_value upload_max_filesize 20M
+    php_value max_input_vars 5000
+</IfModule>
+<IfModule mod_php8.c>
+    php_value post_max_size 20M
+    php_value upload_max_filesize 20M
+    php_value max_input_vars 5000
+</IfModule>
+
+# Gizli/meta dosyalar ve hassas uzantılara doğrudan HTTP erişimini kapat
+# (manifest.json PWA için açık kalır; composer.json / composer.lock kapalıdır)
+<FilesMatch "(^\.git|^\.env|^\.deploy\.lock$|^deploy\.log$|^composer\.(json|lock)$|\.(md|sql|bak|log|ini|sh)$)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Temel HTTP güvenlik başlıkları
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Gzip sıkıştırma (CSS/JS/SVG/JSON/HTML)
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json image/svg+xml
+</IfModule>
+
+# Statik varlıklar için tarayıcı önbelleği (?v=filemtime ile sürüm kırılır)
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 30 days"
+    ExpiresByType application/javascript "access plus 30 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
+</IfModule>

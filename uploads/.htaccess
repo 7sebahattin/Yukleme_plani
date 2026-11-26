@@ -1,12 +1,25 @@
 # uploads/ — PHP çalıştırma ve script execution tamamen kapalı
 # Sadece statik dosya servis (indirme/görüntüleme) aktif
-
-php_flag engine off
-php_flag cgi.force_redirect off
-AddType application/octet-stream .php .php3 .php4 .php5 .phtml .pl .py .cgi .asp .aspx .sh
 Options -ExecCGI -Indexes
-RemoveHandler .php .phtml .php3 .php4 .php5
 
-# CGI handler'ları kaldır
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+<FilesMatch "\.(?i:php|phtml|php[3-8]|phar|pl|py|cgi|asp|aspx|sh)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+AddType application/octet-stream .php .php3 .php4 .php5 .phtml .phar .pl .py .cgi .asp .aspx .sh
+RemoveHandler .php .phtml .php3 .php4 .php5 .phar
 RemoveType application/x-httpd-php
 RemoveType application/x-httpd-php-source

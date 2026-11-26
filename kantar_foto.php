@@ -18,16 +18,12 @@ $row = $st->fetch();
 
 if (!$row || empty($row['foto_data'])) { http_response_code(404); exit; }
 
-$data = $row['foto_data'];
-if (!preg_match('#^data:(image/[a-zA-Z+]+);base64,(.+)$#s', $data, $m)) {
-    http_response_code(404); exit;
-}
+$parsed = kantar_foto_dogrula((string)$row['foto_data']);
+if ($parsed === null) { http_response_code(415); exit; }
 
-$mime = $m[1];
-$raw  = base64_decode($m[2], true);
-if ($raw === false) { http_response_code(500); exit; }
-
-header('Content-Type: ' . $mime);
-header('Cache-Control: public, max-age=86400');
-header('Content-Length: ' . strlen($raw));
-echo $raw;
+header('Content-Type: ' . $parsed['mime']);
+header('X-Content-Type-Options: nosniff');
+header("Content-Security-Policy: sandbox; default-src 'none'; img-src 'self'");
+header('Cache-Control: private, max-age=86400');
+header('Content-Length: ' . strlen($parsed['raw']));
+echo $parsed['raw'];

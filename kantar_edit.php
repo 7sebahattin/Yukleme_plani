@@ -94,6 +94,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Net KG sıfırdan büyük olmalıdır (1. tartım > 2. tartım).';
     }
 
+    $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
+    $foto_sql = '';
+    $foto_val = null;
+    if ($foto_raw === '__clear__') {
+        $foto_sql = ', foto_data=NULL';
+    } elseif ($foto_raw !== '') {
+        $foto_parsed = kantar_foto_dogrula($foto_raw);
+        if ($foto_parsed === null) {
+            $errors[] = 'Geçersiz veya desteklenmeyen fotoğraf biçimi (yalnızca JPEG, PNG, WebP).';
+        } else {
+            $foto_sql = ', foto_data=?';
+            $foto_val = $foto_parsed['data'];
+        }
+    }
+
     if (empty($errors)) {
         ensure_definition('firma', $fis['firma_adi']);
         ensure_definition('urun',  $fis['malin_cinsi']);
@@ -109,16 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         [$kp_rows, $kasa_tot_dara, $palet_tot_dara, $first_kasa, $first_palet, $tot_kasa_say, $tot_palet_say, $kasa_dara_val, $palet_dara_val] = _parse_kp_rows($_POST['kp_rows'] ?? [], $kasa_list, $palet_list);
         // Listede olmayan palet/kasa cinsi yazıldıysa tanımlara eklenir
         foreach ($kp_rows as $_kr) ensure_definition($_kr['tip'] === 'kasa' ? 'kasa_cinsi' : 'palet_tipi', $_kr['cinsi']);
-
-        $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
-        $foto_sql = '';
-        $foto_val = null;
-        if ($foto_raw === '__clear__') {
-            $foto_sql = ', foto_data=NULL';
-        } elseif (str_starts_with($foto_raw, 'data:image/')) {
-            $foto_sql = ', foto_data=?';
-            $foto_val = $foto_raw;
-        }
 
         $params = [
             $fis['fis_no'],

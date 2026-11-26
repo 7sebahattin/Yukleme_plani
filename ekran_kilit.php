@@ -51,7 +51,7 @@ function ekran_kilit_hata_yanit(array $r, int $uid, string $kaynak): void {
     if ($kod === 'cikis') {
         audit_log_event('pin_cikis', 'auth', null, null, null, $uid);
         logout_user();
-        ekran_kilit_temizle();
+        ekran_kilit_temizle(null, db());
         ekran_kilit_hata_json((string)$r['mesaj'], 'cikis', 401, ['cikis' => true, 'login' => true]);
     }
     if ($kod === 'pasif') ekran_kilit_hata_json((string)$r['mesaj'], 'pasif', 503);
@@ -66,8 +66,8 @@ function ekran_kilit_hata_yanit(array $r, int $uid, string $kaynak): void {
 
 if ($islem === 'nabiz') {
     $durum = ekran_pin_durum($pdo, $uid);
-    $kilitli = $durum === 'var' && ekran_kilitli_mi();
-    if ($kilitli) ekran_kilitle();   // çerez süresini tazeler
+    $kilitli = $durum === 'var' && ekran_kilit_oturum_kilitli_mi($pdo);
+    if ($kilitli) ekran_kilitle(null, $pdo);   // çerez ve sunucu süresini tazeler
     ekran_kilit_json(['ok' => true, 'kilitli' => $kilitli, 'pin' => $durum]);
 }
 
@@ -75,7 +75,7 @@ if ($islem === 'kilitle') {
     $durum = ekran_pin_durum($pdo, $uid);
     if ($durum === 'pasif') ekran_kilit_hata_json('PIN özelliği şu an kullanılamıyor.', 'pasif', 503);
     if ($durum === 'yok') ekran_kilit_hata_json('Önce bir PIN belirlemeniz gerekiyor.', 'yok', 409);
-    if (!ekran_kilitle()) ekran_kilit_hata_json('PIN özelliği şu an kullanılamıyor.', 'pasif', 503);
+    if (!ekran_kilitle(null, $pdo)) ekran_kilit_hata_json('PIN özelliği şu an kullanılamıyor.', 'pasif', 503);
     audit_log_event('ekran_kilit', 'auth', null, null, ['neden' => 'hareketsizlik']);
     ekran_kilit_json(['ok' => true, 'kilitli' => true]);
 }
@@ -91,7 +91,7 @@ if ($islem === 'ac') {
 
 if ($islem === 'kur') {
     // Ekran kilitliyken (ör. yönetici PIN'i sıfırladı) PIN kurulamaz: kilitli ekran başındaki biri yeni PIN belirleyip içeri giremesin.
-    if (ekran_kilitli_mi()) {
+    if (ekran_kilit_oturum_kilitli_mi($pdo)) {
         ekran_kilit_json(['ok' => false, 'error' => 'Ekran kilitli. Çıkış yapıp şifrenizle tekrar giriş yapın, sonra yeni PIN belirleyin.', 'kod' => 'kilitli'], 409);
     }
     $r = ekran_pin_kur($pdo, $uid, $s('pin'), $s('pin2'));

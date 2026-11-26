@@ -19,13 +19,12 @@ define('HKS_DB_CHARSET', DB_CHARSET);
 define('HKS_TABLO_ON', 'hks_');
 
 // --- Şifreleme anahtarı ---
-// Firma HKS şifreleri veritabanına AES-256 ile ŞİFRELİ yazılır.
-// Öncelik: sunucudaki config/local.php içindeki HKS_CRED_KEY (git dışında).
-// O yoksa aşağıdaki sabit kullanılır. Anahtar sonradan değişirse daha önce
-// kaydedilmiş firma şifreleri çözülemez; firmaları yeniden girmeniz gerekir.
-define('HKS_SIFRELEME_ANAHTARI', defined('HKS_CRED_KEY')
+// Firma HKS şifreleri veritabanına AES-256-GCM ile ŞİFRELİ yazılır.
+// Anahtar YALNIZCA git dışındaki config/local.php içindeki HKS_CRED_KEY sabitinden okunur.
+// Tanımsızsa şifreleme/çözme fail-closed olarak reddedilir (repoda sabit anahtar tutulmaz).
+define('HKS_SIFRELEME_ANAHTARI', (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY) && strlen(HKS_CRED_KEY) >= 16)
     ? HKS_CRED_KEY
-    : 'AsyaFresh-HKS-2026-vAq7kTz3RmNe9XuB4pWcJdH6yLgS8fKo');
+    : '');
 
 // --- HKS web servis endpoint'i ---
 // GTB, 12.03.2025 duyurusuyla yeni endpoint adresleri yayımladı ve "27 Mart 2025

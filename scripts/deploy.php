@@ -18,15 +18,19 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $work_dir = dirname(__DIR__);
-$logfile  = $work_dir . '/deploy.log';
+$log_dir  = $work_dir . '/storage';
+$logfile  = (is_dir($log_dir) || @mkdir($log_dir, 0755, true))
+    ? $log_dir . '/deploy.log'
+    : $work_dir . '/deploy.log';
 
 function log_msg(string $msg): void {
     global $logfile;
-    file_put_contents($logfile, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
+    @file_put_contents($logfile, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
 }
 
 /**
  * config/db.php'yi günceller ama DB kimlik bilgilerini (HOST/NAME/USER/PASS) korur.
+ * preg_replace_callback kullanır: şifredeki $0/$1/\1 karakterleri bozulmaz.
  */
 function smart_merge_db(string $dest_path, string $new_content): void {
     if (!file_exists($dest_path)) {
@@ -37,22 +41,18 @@ function smart_merge_db(string $dest_path, string $new_content): void {
     $old = file_get_contents($dest_path);
     $keys = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'];
     foreach ($keys as $k) {
-        if (preg_match('/const\s+' . $k . '\s*=\s*\'([^\']*)\';/', $old, $m)) {
-            $new_content = preg_replace(
-                '/const\s+' . $k . '\s*=\s*\'[^\']*\';/',
-                "const $k = '" . addslashes($m[1]) . "';",
-                $new_content
+        if (preg_match('/const\s+' . $k . '\s*=\s*\'((?:\\\\.|[^\'\\\\])*)\';/', $old, $m)) {
+            $rawLiteral = $m[1];
+            $new_content = preg_replace_callback(
+                '/const\s+' . $k . '\s*=\s*\'(?:\\\\.|[^\'\\\\])*\';/',
+                static fn(): string => "const {$k} = '{$rawLiteral}';",
+                $new_content,
+                1
             );
         }
     }
     file_put_contents($dest_path, $new_content);
     log_msg('  config/db.php güncellendi (DB bilgileri korundu)');
-}
-
-// CLI'den mi çalışıyor kontrol et
-if (PHP_SAPI !== 'cli') {
-    http_response_code(403);
-    die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
 }
 
 $repo   = $argv[1] ?? '7sebahattin/Yukleme_plani';
@@ -70,7 +70,7 @@ if (function_exists('curl_init')) {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_USERAGENT      => 'Deploy-Script/3.0',
+        CURLOPT_USERAGENT      => 'Deploy-Script/3.1',
         CURLOPT_TIMEOUT        => 60,
     ]);
     $zip_content = curl_exec($ch);
@@ -89,7 +89,7 @@ if (!$zip_content) {
 
 log_msg('ZIP indirildi: ' . strlen($zip_content) . ' bytes');
 
-$tmp = sys_get_temp_dir() . '/deploy_' . time() . '.zip';
+$tmp = sys_get_temp_dir() . '/deploy_' . getmypid() . '_' . time() . '.zip';
 if (file_put_contents($tmp, $zip_content) === false) {
     log_msg('ERROR: Geçici dosya yazılamadı');
     exit(1);
@@ -111,7 +111,7 @@ if ($zip->open($tmp) !== true) {
 
 $repo_name = basename($repo);
 $prefix    = $repo_name . '-' . $branch . '/';
-$protected = ['deploy.php', 'deploy.log', '.htaccess', 'scripts/.htaccess'];
+$protected = ['deploy.php', 'deploy.log', 'storage/deploy.log', '.htaccess', 'scripts/.htaccess'];
 $updated   = 0;
 $skipped   = 0;
 
@@ -120,19 +120,27 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
     if (strpos($entry, $prefix) !== 0) continue;
     $rel = substr($entry, strlen($prefix));
     if ($rel === '') continue;
+
+    // Zip-slip koruması: arşivdeki yol depo kökünün dışına çıkamaz
+    if (strpos($rel, '..') !== false || $rel[0] === '/' || strpos($rel, "\0") !== false) {
+        log_msg("  ŞÜPHELİ YOL atlandı: $rel");
+        $skipped++;
+        continue;
+    }
+
     if (substr($rel, -1) === '/') {
         $dir = $work_dir . '/' . rtrim($rel, '/');
         if (!is_dir($dir)) mkdir($dir, 0755, true);
         continue;
     }
     if (in_array($rel, $protected, true)) {
-        if ($rel === 'config/db.php') {
-            smart_merge_db($work_dir . '/config/db.php', $zip->getFromIndex($i));
-            $updated++;
-        } else {
-            log_msg("  KORUMA: $rel atlandı");
-            $skipped++;
-        }
+        log_msg("  KORUMA: $rel atlandı");
+        $skipped++;
+        continue;
+    }
+    if ($rel === 'config/db.php') {
+        smart_merge_db($work_dir . '/config/db.php', (string)$zip->getFromIndex($i));
+        $updated++;
         continue;
     }
     $dest     = $work_dir . '/' . $rel;
@@ -148,6 +156,9 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
 
 $zip->close();
 @unlink($tmp);
+if (function_exists('opcache_reset')) {
+    @opcache_reset();
+}
 
 log_msg("✓ Deploy tamamlandı: $updated dosya güncellendi, $skipped dosya atlandı");
 echo "Deploy tamamlandı: $updated güncellendi, $skipped atlandı\n";

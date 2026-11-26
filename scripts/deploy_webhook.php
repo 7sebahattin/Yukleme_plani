@@ -43,11 +43,14 @@ const DEPLOY_BRANCH = 'main';
 
 // Deploy'un ÜZERİNE YAZMAYACAĞI dosyalar (depo köküne göre).
 // config/db.php listede değil; o smart_merge_db() ile birleştirilir.
-const DEPLOY_PROTECTED = ['deploy.php', 'deploy.log', '.htaccess', 'scripts/.htaccess'];
+const DEPLOY_PROTECTED = ['deploy.php', 'deploy.log', 'storage/deploy.log', '.htaccess', 'scripts/.htaccess'];
 // ─────────────────────────────────────────────────────────────────────
 
 $work_dir = __DIR__;
-$logfile  = $work_dir . '/deploy.log';
+$log_dir  = $work_dir . '/storage';
+$logfile  = (is_dir($log_dir) || @mkdir($log_dir, 0755, true))
+    ? $log_dir . '/deploy.log'
+    : $work_dir . '/deploy.log';
 
 function log_msg(string $msg): void {
     global $logfile;
@@ -63,7 +66,10 @@ function cikis(int $kod, string $mesaj, bool $logla = true): never {
     exit;
 }
 
-/** config/db.php'yi günceller ama DB kimlik bilgilerini KORUR. */
+/**
+ * config/db.php'yi günceller ama DB kimlik bilgilerini KORUR.
+ * preg_replace_callback kullanır: şifredeki $0/$1/\1 karakterleri bozulmaz.
+ */
 function smart_merge_db(string $dest_path, string $new_content): void {
     if (!file_exists($dest_path)) {
         file_put_contents($dest_path, $new_content);
@@ -72,11 +78,13 @@ function smart_merge_db(string $dest_path, string $new_content): void {
     }
     $old = file_get_contents($dest_path);
     foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $k) {
-        if (preg_match('/const\s+' . $k . '\s*=\s*\'([^\']*)\';/', $old, $m)) {
-            $new_content = preg_replace(
-                '/const\s+' . $k . '\s*=\s*\'[^\']*\';/',
-                "const $k = '" . addslashes($m[1]) . "';",
-                $new_content
+        if (preg_match('/const\s+' . $k . '\s*=\s*\'((?:\\\\.|[^\'\\\\])*)\';/', $old, $m)) {
+            $rawLiteral = $m[1];
+            $new_content = preg_replace_callback(
+                '/const\s+' . $k . '\s*=\s*\'(?:\\\\.|[^\'\\\\])*\';/',
+                static fn(): string => "const {$k} = '{$rawLiteral}';",
+                $new_content,
+                1
             );
         }
     }
@@ -125,7 +133,8 @@ if ($ref !== 'refs/heads/' . DEPLOY_BRANCH) {
 // ── 4) Eşzamanlılık kilidi ───────────────────────────────────────────
 // İki teslimat aynı anda gelirse dosyalar iç içe yazılır ve site yarım
 // kalmış bir karışıma döner. İkincisi beklemez, reddedilir.
-$kilit = @fopen($work_dir . '/.deploy.lock', 'c');
+$kilit_yolu = is_dir($log_dir) ? ($log_dir . '/.deploy.lock') : ($work_dir . '/.deploy.lock');
+$kilit = @fopen($kilit_yolu, 'c');
 if ($kilit === false || !flock($kilit, LOCK_EX | LOCK_NB)) {
     cikis(409, 'Başka bir deploy sürüyor, bu istek atlandı.');
 }
@@ -211,6 +220,9 @@ $zip->close();
 @unlink($tmp);
 flock($kilit, LOCK_UN);
 fclose($kilit);
+if (function_exists('opcache_reset')) {
+    @opcache_reset();
+}
 
 // Bu cümle docs/DEPLOY_WORKFLOW.md'de "parmak izi" olarak geçiyor —
 // GitHub'ın Response sekmesinde bunu arıyoruz. Metni değiştirirsen orayı da güncelle.
