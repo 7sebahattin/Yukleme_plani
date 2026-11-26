@@ -34,3 +34,6 @@ storage/mail/*
 # Sipariş modülü belgeleri (yüklenen PDF/XLSX ve üretilen PKL) — sunucuda üretilir, depoya girmez
 storage/siparis/*
 !storage/siparis/.htaccess
+
+# WhatsApp servis sırları (Evolution API anahtarı, PostgreSQL parolası, webhook belirteci) — yalnız .env.example girer
+whatsapp-service/.env

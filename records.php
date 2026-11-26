@@ -81,7 +81,7 @@ $_sort_cols = [
 ];
 if (!array_key_exists($sort, $_sort_cols)) $sort = '';
 
-if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
+if (!in_array($durum_filter, ['islendi', 'yuklendi', 'taslak'], true)) $durum_filter = '';
 if ($tarih_bas !== '' && !valid_date($tarih_bas)) $tarih_bas = '';
 if ($tarih_bit !== '' && !valid_date($tarih_bit)) $tarih_bit = '';
 
@@ -134,7 +134,7 @@ if ($sort !== '') {
     $order = "ORDER BY " . $_sort_cols[$sort] . " " . strtoupper($sort_dir_lc) . ", r.id DESC";
 } else {
     $order = "ORDER BY
-        CASE WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
+        CASE WHEN r.durum='taslak' THEN -1 WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
         COALESCE(r.tarih,'0000-00-00') DESC,
         r.id DESC";
 }
@@ -247,6 +247,8 @@ render_flash();
        class="pill<?= $durum_filter === 'islendi' ? ' active-islendi' : '' ?>">🟠 İşlendi</a>
     <a href="<?= rec_url(['durum' => 'yuklendi','page' => '']) ?>"
        class="pill<?= $durum_filter === 'yuklendi' ? ' active-yuklendi' : '' ?>">🟢 Yüklendi</a>
+    <a href="<?= rec_url(['durum' => 'taslak',  'page' => '']) ?>"
+       class="pill<?= $durum_filter === 'taslak' ? ' active-taslak' : '' ?>">📱 WhatsApp Taslak</a>
 </div>
 
 <?php if (empty($rows)): ?>
@@ -298,7 +300,7 @@ render_flash();
                 $durum   = $r['durum'] ?? '';
                 $locked  = !empty($r['locked_at']);
             ?>
-                <tr class="rec-main-row <?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
+                <tr class="rec-main-row <?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : ($durum === 'taslak' ? 'tr-taslak' : '')) ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
                     data-durum="<?= h($durum) ?>"
                     data-tarih="<?= h($r['tarih'] ?? '') ?>"
@@ -313,6 +315,7 @@ render_flash();
                     <td>
                         <?= h($r['firma']) ?>
                         <?php if ($locked): ?><span class="badge-locked">🔒</span><?php endif; ?>
+                        <?php if ($durum === 'taslak'): ?><span class="badge-taslak" title="WhatsApp mesajından otomatik eklendi — onay bekliyor">📱 Taslak</span><?php endif; ?>
                     </td>
                     <td><?= h($r['parti_no']) ?></td>
                     <td><?= h($r['alici']) ?></td>
@@ -326,7 +329,10 @@ render_flash();
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                        <?php if ($durum !== 'yuklendi' && !$locked): ?>
+                        <?php if ($durum === 'taslak' && !$locked): ?>
+                        <button type="button" class="btn btn-sm btn-primary" data-durum-action="onayla">Onayla</button>
+                        <?php endif; ?>
+                        <?php if ($durum !== 'yuklendi' && $durum !== 'taslak' && !$locked): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
                                 data-durum-action="islendi">
@@ -446,6 +452,7 @@ render_flash();
                         ?>
                         <strong><?= h($firma_label) ?><?= $ft ? ' <span class="record-card-tarih">· ' . h($ft) . '</span>' : '' ?></strong>
                         <?php if ($locked): ?><span class="badge-locked">🔒 Kilitli</span><?php endif; ?>
+                        <?php if ($durum === 'taslak'): ?><span class="badge-taslak">📱 Taslak</span><?php endif; ?>
                         <?php if ($r['parti_no'] || $r['casus_no']): ?><div class="record-card-firma"><?php
                             if ($r['parti_no']) echo 'Parti: ' . h($r['parti_no']);
                             if ($r['parti_no'] && $r['casus_no']) echo ' · ';
@@ -493,7 +500,10 @@ render_flash();
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                    <?php if ($durum !== 'yuklendi' && !$locked): ?>
+                    <?php if ($durum === 'taslak' && !$locked): ?>
+                    <button type="button" class="btn btn-sm btn-primary" data-durum-action="onayla">Onayla</button>
+                    <?php endif; ?>
+                    <?php if ($durum !== 'yuklendi' && $durum !== 'taslak' && !$locked): ?>
                     <button type="button"
                             class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
                             data-durum-action="islendi">
@@ -706,7 +716,13 @@ render_flash();
         var action       = btn.dataset.durumAction;
         var currentDurum = container.dataset.durum || '';
 
-        if (action === 'islendi') {
+        if (action === 'onayla') {
+            // WhatsApp taslağı → normal plan ('' = Planlandı); satır/kart yapısı değiştiği için sayfa yenilenir
+            if (!confirm('WhatsApp taslağı onaylansın mı? Plan normal kayıt olur.')) return;
+            btn.disabled = true;
+            submitDurum(container, btn, '', '', function () { location.reload(); });
+
+        } else if (action === 'islendi') {
             var msg = currentDurum === 'islendi' ? 'İşlendi iptal edilsin mi?' : 'Ürün işlendi mi?';
             var targetDurum = currentDurum === 'islendi' ? '' : 'islendi';
             if (!confirm(msg)) return;
