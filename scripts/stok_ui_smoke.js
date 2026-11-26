@@ -413,8 +413,11 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     await git(fp, 'stok_giris_fisleri.php');
     ok('sekme şeridi: Dönüşüm sekmesi YOK, 5 sekme + Kantar (Mal Kabul) bağlantısı', (await fp.locator('.st-sekmeler a[href="stok_donusum_fisleri.php"]').count()) === 0 && (await fp.locator('.st-sekmeler .st-sekme').count()) === 6);
 
-    // v558: dönüşüm türü koddan söküldü — sayfa DOM'unda iz yok; sunucu tur=donusum POST'unu reddeder (422), fiş yazılmaz.
-    const donIz = await fp.evaluate(() => document.documentElement.outerHTML.toLowerCase().indexOf('donusum') + document.documentElement.outerHTML.toLowerCase().indexOf('dönüşüm') + 2);
+    // v558: dönüşüm türü koddan söküldü — sayfa DOM'unda iz yok (sidebar'daki ERP-2 e-Dönüşüm bağlantısı hariç); sunucu tur=donusum POST'unu reddeder (422), fiş yazılmaz.
+    const donIz = await fp.evaluate(() => {
+        const html = document.documentElement.outerHTML.toLowerCase().replace(/edonusum_[a-z0-9_.-]*|e-dönüşüm/g, '');
+        return html.indexOf('donusum') + html.indexOf('dönüşüm') + 2;
+    });
     ok('v558: giriş sayfası DOM\'unda dönüşüm izi yok', donIz === 0, String(donIz));
     const donPost = await fp.evaluate(async () => {
         const fd = new URLSearchParams(); fd.set('islem', 'fis_kaydet'); fd.set('tur', 'donusum'); fd.set('tarih', '2026-11-13'); fd.set('depo', 'Merkez Depo');

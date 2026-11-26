@@ -320,7 +320,7 @@
     document.addEventListener('input', function (e) { var t = e.target; if (t && t.classList && t.classList.contains('ft-buyuk')) { var p = t.selectionStart; t.value = t.value.toLocaleUpperCase('tr-TR').replace(/İ/g, 'I'); try { t.setSelectionRange(p, p); } catch (x) { /* yok */ } } });
 
     /* ═════════ Satır menüsü (⋯) — position:fixed (kaydırma kabında kesilmez) ═════════ */
-    var MENU = null, menuSatir = null, menuTetik = null;
+    var MENU = null, menuSatir = null, menuTetik = null, menuAcZaman = 0;
     function menuKapat(odak) { if (!MENU) return; MENU.hidden = true; if (odak && menuTetik && document.contains(menuTetik)) menuTetik.focus(); menuSatir = null; menuTetik = null; }
     function menuAc(btn) {
         if (!MENU) {
@@ -337,17 +337,22 @@
                 else { var d = $('.ft-sx', tr); if (mobil()) SF.sheetAc(tr, 'lot'); else if (d) { d.open = true; var i = $('input', d); if (i) i.focus(); } }
             });
             document.addEventListener('click', function (e) { if (MENU && !MENU.hidden && !MENU.contains(e.target) && !(e.target.closest && e.target.closest('[data-satir-menu]'))) menuKapat(false); });
-            window.addEventListener('scroll', function () { menuKapat(false); }, true);
+            window.addEventListener('scroll', function (e) {
+                if (!MENU || MENU.hidden) return;
+                if (Date.now() - menuAcZaman < 150) return;
+                if (e.target && e.target.nodeType === 1 && menuTetik && !e.target.contains(menuTetik)) return;
+                menuKapat(false);
+            }, true);
             window.addEventListener('resize', function () { menuKapat(false); });
         }
-        menuSatir = btn.closest('.ft-fsatir'); menuTetik = btn;
+        menuSatir = btn.closest('.ft-fsatir'); menuTetik = btn; menuAcZaman = Date.now();
         $('[data-satir-ayrinti]', MENU).hidden = false;
         MENU.hidden = false;
         var r = btn.getBoundingClientRect(), w = MENU.offsetWidth, h = MENU.offsetHeight;
         var alt = window.innerHeight - r.bottom;
         MENU.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
         MENU.style.top = (alt > h + 8 ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px';
-        var ilk = $('button', MENU); if (ilk) ilk.focus();
+        var ilk = $('button', MENU); if (ilk) { try { ilk.focus({ preventScroll: true }); } catch (x) { ilk.focus(); } }
     }
 
     /* ═════════════════════════ Belge formu ═════════════════════════ */

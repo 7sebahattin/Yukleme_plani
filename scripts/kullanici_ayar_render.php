@@ -34,6 +34,7 @@ if ($which !== 'ajanda_kurulmamis') {
         ['Yarınki sevkiyat için palet say', $g(1), '', ''],
         ['Ay sonu stok sayımı', $g(6), '08:00', 'Depo sorumlusu ile birlikte; sayım formunu yazdır.'],
         ['Frugro order log yükle', $g(6), '', 'Sütun sırasını kontrol et'],
+        ['Hafta sonu soğuk hava kontrolü', date('Y-m-d', strtotime('first saturday of ' . date('Y-m'))), '10:30', 'Hafta sonu nöbet notu'],
         ['Çok uzun bir başlık: gümrük müşavirinden alınacak tüm evrakların son durumu', $g(11), '11:15', ''],
     ] as [$b, $t, $s2, $n]) ajanda_ekle($pdo, 1, ['baslik' => $b, 'tarih' => $t, 'saat' => $s2, 'not_metni' => $n]);
     ajanda_durum($pdo, 1, 3, true);

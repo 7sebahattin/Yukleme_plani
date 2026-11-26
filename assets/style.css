@@ -5129,8 +5129,8 @@ html[data-theme="dark"] body:not(.print-mode) .ara-sec-bos { background: #2a1616
     font-size: .85rem; max-width: calc(100vw - 24px);
 }
 .bb-engel td { background: #fffbeb; }
-@media (max-width: 767px) {
-    /* Bottomnav ile çakışmasın — onun üstüne otur */
+@media (max-width: 899px) {
+    /* Bottomnav ile çakışmasın — onun üstüne otur (B-35: <900px) */
     .bb-bar { bottom: calc(var(--bn-h) + 8px + env(safe-area-inset-bottom, 0px)); }
     .bb-bar .btn { white-space: nowrap; }
 }

@@ -1038,7 +1038,7 @@ function guvenliAlanKurallari(barSel) {
         let ac0 = await acikSlug(page);
         ok('B', bag, 'Ana Sayfa\'da aktif grup yok → açılışta HİÇBİR grup açık değil', ac0.length === 0, `[${ac0}]`);
         const slugs = await page.evaluate(() => [...document.querySelectorAll('#bnSheet details.bn-grup')].map(d => d.getAttribute('data-sb-grup')));
-        ok('B', bag, `10 grup (Sipariş…Yönetim…Kullanıcı Ayarları; v555: İhracat Programı yok; v566: Admin Konsolu yok) çizildi`, slugs.length === 10 && !slugs.includes('ihracat') && !slugs.includes('admin_konsolu'), `[${slugs}]`);
+        ok('B', bag, `14 grup (Sipariş…ERP Faz 1–4…Raporlar…Kullanıcı Ayarları…Yönetim; ihracat ve admin_konsolu yok) çizildi`, slugs.length === 14 && !slugs.includes('ihracat') && !slugs.includes('admin_konsolu'), `[${slugs}]`);
         let hepsiTamam = true; const ihlal = [];
         for (const sl of slugs) {
             await page.click(`#bnSheet details.bn-grup[data-sb-grup="${sl}"] > summary`); await page.waitForTimeout(160);
