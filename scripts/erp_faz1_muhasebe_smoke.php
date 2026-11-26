@@ -144,7 +144,7 @@ ok('Kapalı mali döneme yeni fiş girişi REDDEDİLİR', empty($kapaliDeneme['o
 echo "\n=== 6. ERP-2: e-Dönüşüm (UBL-TR 1.2 XML, ETTN UUIDv4, Gönder/Sorgula, Gelen Kabul/Red) ===\n";
 $e1 = edonusum_migrate($pdo);
 $e2 = edonusum_migrate($pdo);
-ok('edonusum_migrate 2x idempotent ve edonusum_hazir() true', edonusum_hazir($pdo) && count($e1) === 2 && $e2[0]['durum'] === 'var');
+ok('edonusum_migrate 2x idempotent ve edonusum_hazir() true', edonusum_hazir($pdo) && count($e1) === 3 && $e2[0]['durum'] === 'var');
 
 // Mevcut faturadan otomatik doldurma (fatura_id=1) testi
 $zInv = edonusum_zarf_olustur($pdo, ['fatura_id' => 1, 'belge_turu' => 'efatura'], 1);

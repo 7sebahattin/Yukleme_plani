@@ -2418,8 +2418,8 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
   <?php mg_kart_ac('edonusum'); ?>
     <h2 style="margin-top:0;">e-Dönüşüm (e-Fatura / e-Arşiv / e-İrsaliye — ERP-2)</h2>
     <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>edonusum_zarflar</code> (giden UBL-TR 1.2 zarfları &amp; ETTN) ve <code>edonusum_gelen</code>
-      (gelen kutusu kabul/red yanıtları) tablolarını ekler. Mevcut tablolara ALTER yapılmaz.
+      Yalnız ekleyici migrasyon: <code>edonusum_zarflar</code> (giden UBL-TR 1.2 zarfları &amp; ETTN), <code>edonusum_gelen</code>
+      (gelen kutusu kabul/red yanıtları) ve <code>edonusum_ayarlar</code> (e-Logo Özel Entegratör SOAP bağlantı/firma ayarları) tablolarını ekler. Mevcut tablolara ALTER yapılmaz.
       <?php if ($edonusum_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
         <?php foreach ($edonusum_results as $sr): ?>

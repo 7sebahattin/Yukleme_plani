@@ -491,10 +491,35 @@ function muh_mali_tablolar_render(string $sekme, array $veri, array $hareketHesa
 
 // ── 4) e-Dönüşüm (e-Fatura / e-Arşiv / e-İrsaliye / e-Müstahsil) ───────────
 
-function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $faturalar, array $filtre, bool $yazabilir): string
-{
+function edonusum_render(
+    string $sekme,
+    array $zarflar,
+    array $gelenler,
+    array $faturalar,
+    array $filtre,
+    bool $yazabilir,
+    ?array $ayar = null,
+    ?string $aktifSaglayici = null,
+    ?array $mukellefSonuc = null,
+    bool $adminMi = false
+): string {
     $csrf = function_exists('csrf_token') ? csrf_token() : '';
     $turler = edonusum_belge_turleri();
+    $ayar = $ayar ?? edonusum_ayar_varsayilan();
+    $sagAd = $aktifSaglayici ?? edonusum_provider()->ad();
+    $elogoAktif = str_starts_with($sagAd, 'elogo');
+
+    $sagEtiket = match ($sagAd) {
+        'elogo_canli' => 'e-Logo CANLI',
+        'elogo_test'  => 'e-Logo TEST / DEMO',
+        default       => 'Sandbox (Test)',
+    };
+    $sagRozetCls = match ($sagAd) {
+        'elogo_canli' => 'muh-rozet--ok',
+        'elogo_test'  => 'muh-rozet--warn',
+        default       => 'muh-rozet--bilgi',
+    };
+
     $durumRozet = static function (string $d): string {
         return match ($d) {
             'onaylandi', 'kabul' => '<span class="muh-rozet muh-rozet--ok">' . h(strtoupper($d)) . '</span>',
@@ -508,7 +533,8 @@ function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $
     $o .= '<div class="muh-kart"><div class="muh-baslik-bar"><div class="muh-eylem-satir">'
         . '<a class="' . ($sekme === 'giden' ? 'btn btn-primary' : 'btn btn-ghost') . '" href="edonusum_belgeler.php?sekme=giden">Giden Zarflar (' . count($zarflar) . ')</a>'
         . '<a class="' . ($sekme === 'gelen' ? 'btn btn-primary' : 'btn btn-ghost') . '" href="edonusum_belgeler.php?sekme=gelen">Gelen Kutusu Kabul/Red (' . count($gelenler) . ')</a>'
-        . '</div><span class="muh-rozet muh-rozet--bilgi">Sağlayıcı: ' . h(edonusum_provider()->ad()) . ' · UBL-TR 1.2</span></div>';
+        . '<a class="' . ($sekme === 'ayarlar' ? 'btn btn-primary' : 'btn btn-ghost') . '" href="edonusum_belgeler.php?sekme=ayarlar">e-Logo Ayarları &amp; Mükellef</a>'
+        . '</div><span class="muh-rozet ' . $sagRozetCls . '">Sağlayıcı: ' . h($sagEtiket) . ' · UBL-TR 1.2</span></div>';
 
     if ($sekme === 'giden') {
         if ($yazabilir) {
@@ -530,7 +556,7 @@ function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $
             }
             $o .= '</select></div>';
             $o .= '<div class="muh-alan"><label>Senaryo</label><select name="senaryo"><option value="TICARIFATURA">TICARIFATURA</option><option value="TEMELFATURA">TEMELFATURA</option><option value="EARSIVFATURA">EARSIVFATURA</option><option value="TEMELIRSALIYE">TEMELIRSALIYE</option></select></div>';
-            $o .= '<div class="muh-alan"><label>Belge No</label><input name="belge_no" placeholder="ASY2026000000001" maxlength="40"></div>';
+            $o .= '<div class="muh-alan"><label>Belge No</label><input name="belge_no" placeholder="Boş bırakılırsa seriden üretilir" maxlength="40"></div>';
             $o .= '<div class="muh-alan"><label>Tarih</label><input type="date" name="tarih" value="' . h(date('Y-m-d')) . '"></div>';
             $o .= '<div class="muh-alan"><label>Alıcı VKN / TCKN</label><input name="alici_vkn" placeholder="10 veya 11 hane" maxlength="11"></div>';
             $o .= '<div class="muh-alan" style="flex:1;min-width:200px;"><label>Alıcı Ünvan</label><input name="alici_unvan" placeholder="Alıcı firma ünvanı"></div>';
@@ -552,6 +578,9 @@ function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $
                 . '<td>' . $durumRozet($d) . ($z['yanit_mesaj'] ? '<div style="font-size:.75rem;color:var(--muh-muted);">' . h((string)$z['yanit_mesaj']) . '</div>' : '') . '</td>'
                 . '<td><div class="muh-eylem-satir">'
                 . '<a class="btn btn-ghost" style="padding:4px 8px;font-size:.8rem;" href="edonusum_xml.php?id=' . (int)$z['id'] . '">XML</a>';
+            if ($elogoAktif && in_array($d, ['gonderildi', 'onaylandi'], true)) {
+                $o .= '<a class="btn btn-ghost" style="padding:4px 8px;font-size:.8rem;" target="_blank" rel="noopener" href="edonusum_xml.php?id=' . (int)$z['id'] . '&amp;format=pdf">PDF</a>';
+            }
             if ($yazabilir && in_array($d, ['taslak', 'hata'], true)) {
                 $o .= '<form method="post" action="muh_kaydet.php" class="muh-inline-form">'
                     . '<input type="hidden" name="csrf" value="' . h($csrf) . '">'
@@ -574,7 +603,18 @@ function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $
             $o .= '<tr><td colspan="7" style="text-align:center;color:var(--muh-muted);">Henüz giden e-Dönüşüm zarfı yok.</td></tr>';
         }
         $o .= '</tbody></table></div>';
-    } else {
+    } elseif ($sekme === 'gelen') {
+        if ($yazabilir) {
+            $o .= '<form method="post" action="muh_kaydet.php" class="muh-filtre" style="padding:12px;background:var(--muh-bg-soft);border-radius:10px;border:1px solid var(--muh-border);margin-bottom:14px;">'
+                . '<input type="hidden" name="csrf" value="' . h($csrf) . '">'
+                . '<input type="hidden" name="islem" value="edonusum_gelen_cek">'
+                . '<input type="hidden" name="geri" value="edonusum_belgeler.php?sekme=gelen">'
+                . '<div class="muh-alan"><label>Başlangıç</label><input type="date" name="bas" value="' . h(date('Y-m-01')) . '" required></div>'
+                . '<div class="muh-alan"><label>Bitiş</label><input type="date" name="bit" value="' . h(date('Y-m-d')) . '" required></div>'
+                . '<div class="muh-alan"><label>Belge Türü</label><select name="belge_turu"><option value="efatura">e-Fatura</option><option value="eirsaliye">e-İrsaliye</option></select></div>'
+                . '<button type="submit" class="btn btn-primary">e-Logo Gelen Kutusunu Çek</button>'
+                . '</form>';
+        }
         $o .= '<div class="muh-tablo-wrap"><table class="muh-tablo"><thead><tr>'
             . '<th>Belge No / ETTN</th><th>Tarih</th><th>Gönderen</th><th class="muh-num">Tutar</th><th>Durum</th><th>Yanıt (Kabul / Red)</th></tr></thead><tbody>';
         foreach ($gelenler as $g) {
@@ -583,10 +623,13 @@ function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $
                 . '<td>' . h(muh_tarih_fmt((string)$g['tarih'])) . '</td>'
                 . '<td>' . h((string)$g['gonderen_unvan']) . '<div style="font-size:.78rem;color:var(--muh-muted);">VKN: ' . h((string)$g['gonderen_vkn']) . '</div></td>'
                 . '<td class="muh-num">' . h(muh_tutar_fmt((float)$g['genel_toplam'])) . ' ' . h((string)$g['para_birimi']) . '</td>'
-                . '<td>' . $durumRozet($d) . ($g['yanit_neden'] ? '<div style="font-size:.78rem;color:var(--muh-muted);">' . h((string)$g['yanit_neden']) . '</div>' : '') . '</td><td>';
+                . '<td>' . $durumRozet($d) . ($g['yanit_neden'] ? '<div style="font-size:.78rem;color:var(--muh-muted);">' . h((string)$g['yanit_neden']) . '</div>' : '') . '</td><td><div class="muh-eylem-satir">'
+                . '<a class="btn btn-ghost" style="padding:4px 8px;font-size:.8rem;" href="edonusum_xml.php?kaynak=gelen&amp;id=' . (int)$g['id'] . '">XML</a>';
+            if ($elogoAktif) {
+                $o .= '<a class="btn btn-ghost" style="padding:4px 8px;font-size:.8rem;" target="_blank" rel="noopener" href="edonusum_xml.php?kaynak=gelen&amp;id=' . (int)$g['id'] . '&amp;format=pdf">PDF</a>';
+            }
             if ($yazabilir && $d === 'bekliyor') {
-                $o .= '<div class="muh-eylem-satir">'
-                    . '<form method="post" action="muh_kaydet.php" class="muh-inline-form">'
+                $o .= '<form method="post" action="muh_kaydet.php" class="muh-inline-form">'
                     . '<input type="hidden" name="csrf" value="' . h($csrf) . '">'
                     . '<input type="hidden" name="islem" value="edonusum_gelen_yanit">'
                     . '<input type="hidden" name="id" value="' . (int)$g['id'] . '">'
@@ -600,16 +643,136 @@ function edonusum_render(string $sekme, array $zarflar, array $gelenler, array $
                     . '<input type="hidden" name="yanit" value="red">'
                     . '<input type="hidden" name="geri" value="edonusum_belgeler.php?sekme=gelen">'
                     . '<input type="text" name="neden" placeholder="Red nedeni..." style="padding:4px 8px;font-size:.8rem;width:140px;border:1px solid var(--muh-border);border-radius:6px;background:var(--muh-bg);color:var(--muh-text);">'
-                    . '<button type="submit" class="btn btn-danger" style="padding:4px 8px;font-size:.8rem;">Reddet</button></form></div>';
+                    . '<button type="submit" class="btn btn-danger" style="padding:4px 8px;font-size:.8rem;">Reddet</button></form>';
             } else {
                 $o .= '<span style="color:var(--muh-muted);font-size:.82rem;">Tamamlandı</span>';
             }
-            $o .= '</td></tr>';
+            $o .= '</div></td></tr>';
         }
         if ($gelenler === []) {
             $o .= '<tr><td colspan="6" style="text-align:center;color:var(--muh-muted);">Gelen kutusunda belge yok.</td></tr>';
         }
         $o .= '</tbody></table></div>';
+    } else {
+        // ── 3. Sekme: e-Logo Özel Entegratör Ayarları, Bağlantı Testi & GİB Mükellef Sorgulama ──
+        $ortam = (string)($ayar['ortam'] ?? 'test');
+        $sag   = (string)($ayar['saglayici'] ?? 'sandbox_test');
+        $sifreKayitli = !empty($ayar['sifre_kayitli']);
+
+        $o .= '<div style="display:grid;gap:16px;">';
+        // Bağlantı Durumu & Test Şeridi
+        $o .= '<div class="muh-kart" style="background:var(--muh-bg-soft);margin-bottom:0;">'
+            . '<div class="muh-baslik-bar"><div>'
+            . '<strong>e-Logo Web Servis Bağlantısı (PostBoxService SOAP 1.1)</strong>'
+            . '<div style="font-size:.82rem;color:var(--muh-muted);margin-top:4px;">'
+            . 'Canlı: <code>https://pb.elogo.com.tr/PostBoxService.svc</code> · Test/Demo: <code>https://pb-demo.elogo.com.tr/PostBoxService.svc</code>'
+            . '</div>';
+        if (!empty($ayar['son_test_at'])) {
+            $tCls = ($ayar['son_test_durum'] ?? '') === 'ok' ? 'muh-rozet--ok' : 'muh-rozet--err';
+            $o .= '<div style="margin-top:8px;font-size:.82rem;">'
+                . '<span class="muh-rozet ' . $tCls . '">Son Test: ' . h((string)$ayar['son_test_at']) . '</span> '
+                . h((string)($ayar['son_test_mesaj'] ?? '')) . '</div>';
+        }
+        $o .= '</div>';
+        if ($yazabilir) {
+            $o .= '<form method="post" action="muh_kaydet.php" class="muh-inline-form">'
+                . '<input type="hidden" name="csrf" value="' . h($csrf) . '">'
+                . '<input type="hidden" name="islem" value="edonusum_baglanti_test">'
+                . '<button type="submit" class="btn btn-primary">Bağlantıyı Test Et (e-Logo Login)</button></form>';
+        }
+        $o .= '</div></div>';
+
+        // GİB Mükellef / Posta Kutusu Sorgulama Aracı
+        $o .= '<div class="muh-kart" style="margin-bottom:0;">'
+            . '<h3 style="margin:0 0 10px;">GİB e-Fatura / e-İrsaliye Mükellef Sorgula</h3>'
+            . '<form method="get" action="edonusum_belgeler.php" class="muh-filtre" style="margin-bottom:0;">'
+            . '<input type="hidden" name="sekme" value="ayarlar">'
+            . '<div class="muh-alan"><label>VKN / TCKN</label><input name="sorgu_vkn" value="' . h((string)($mukellefSonuc['vkn'] ?? '')) . '" placeholder="10 veya 11 hane" maxlength="11" required></div>'
+            . '<div class="muh-alan"><label>Belge Türü</label><select name="sorgu_tur">'
+            . '<option value="efatura"' . (($mukellefSonuc['tur'] ?? 'efatura') === 'efatura' ? ' selected' : '') . '>e-Fatura (EINVOICE)</option>'
+            . '<option value="eirsaliye"' . (($mukellefSonuc['tur'] ?? '') === 'eirsaliye' ? ' selected' : '') . '>e-İrsaliye (DESPATCHADVICE)</option>'
+            . '</select></div>'
+            . '<button type="submit" class="btn btn-ghost">GİB Mükellef Sorgula</button>'
+            . '</form>';
+        if ($mukellefSonuc !== null) {
+            if (empty($mukellefSonuc['ok'])) {
+                $o .= '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--muh-err,#dc2626);font-size:.86rem;">'
+                    . '<strong>Sorgu Hatası:</strong> ' . h((string)($mukellefSonuc['hata'] ?? 'Bilinmeyen hata')) . '</div>';
+            } else {
+                $kayitli = !empty($mukellefSonuc['kayitli']);
+                $o .= '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--muh-bg-soft);border:1px solid var(--muh-border);font-size:.86rem;">'
+                    . '<span class="muh-rozet ' . ($kayitli ? 'muh-rozet--ok' : 'muh-rozet--warn') . '">'
+                    . ($kayitli ? 'MÜKELLEF KAYITLI' : 'MÜKELLEF DEĞİL (e-Arşiv Kesilir)') . '</span> '
+                    . '<strong>' . h((string)($mukellefSonuc['unvan'] ?? '')) . '</strong>'
+                    . (!empty($mukellefSonuc['posta_kutusu']) ? ' · PK: <code>' . h((string)$mukellefSonuc['posta_kutusu']) . '</code>' : '')
+                    . (!empty($mukellefSonuc['gb_etiket']) ? ' · GB: <code>' . h((string)$mukellefSonuc['gb_etiket']) . '</code>' : '')
+                    . ' <span style="color:var(--muh-muted);">(' . h((string)($mukellefSonuc['saglayici'] ?? '')) . ')</span></div>';
+            }
+        }
+        $o .= '</div>';
+
+        // Entegratör & Firma Ayar Formu (Yalnız Admin kaydeder)
+        $o .= '<div class="muh-kart" style="margin-bottom:0;">'
+            . '<h3 style="margin:0 0 6px;">e-Logo Web Servis &amp; Firma Başlık Ayarları</h3>'
+            . '<p style="margin:0 0 12px;font-size:.83rem;color:var(--muh-muted);">'
+            . 'Not: e-Logo portal şifresi değil, e-Logo destek/portal üzerinden tanımlı <strong>Web Servis Kullanıcı Adı ve Şifresi</strong> girilmelidir. Şifre veritabanında AES-256-GCM ile şifreli saklanır.'
+            . '</p>';
+        if (!$adminMi) {
+            $o .= '<div class="muh-rozet muh-rozet--warn">Entegratör ayarlarını yalnızca yönetici (admin) değiştirebilir.</div>';
+        } else {
+            $o .= '<form method="post" action="muh_kaydet.php">'
+                . '<input type="hidden" name="csrf" value="' . h($csrf) . '">'
+                . '<input type="hidden" name="islem" value="edonusum_ayar_kaydet">'
+                . '<div class="muh-filtre">'
+                . '<div class="muh-alan"><label>Aktif Sağlayıcı</label><select name="saglayici">'
+                . '<option value="sandbox_test"' . ($sag === 'sandbox_test' ? ' selected' : '') . '>Sandbox (Test Simülasyonu)</option>'
+                . '<option value="elogo"' . ($sag === 'elogo' ? ' selected' : '') . '>e-Logo Özel Entegratör (Gerçek SOAP)</option>'
+                . '</select></div>'
+                . '<div class="muh-alan"><label>e-Logo Ortam</label><select name="ortam">'
+                . '<option value="test"' . ($ortam === 'test' ? ' selected' : '') . '>Test / Demo (pb-demo.elogo.com.tr)</option>'
+                . '<option value="canli"' . ($ortam === 'canli' ? ' selected' : '') . '>Canlı (pb.elogo.com.tr)</option>'
+                . '</select></div>'
+                . '<div class="muh-alan" style="flex:1;min-width:240px;"><label>Özel Servis URL (Opsiyonel — boşsa ortam varsayılanı)</label>'
+                . '<input name="servis_url" value="' . h((string)($ayar['servis_url'] ?? '')) . '" placeholder="https://pb.elogo.com.tr/PostBoxService.svc"></div>'
+                . '</div>'
+                . '<div class="muh-filtre">'
+                . '<div class="muh-alan" style="min-width:200px;"><label>e-Logo Web Servis Kullanıcı Adı (genelde VKN)</label>'
+                . '<input name="kullanici_adi" value="' . h((string)($ayar['kullanici_adi'] ?? '')) . '" autocomplete="username" maxlength="120"></div>'
+                . '<div class="muh-alan" style="min-width:220px;"><label>Web Servis Şifresi ' . ($sifreKayitli ? '<span class="muh-rozet muh-rozet--ok">Kayıtlı</span>' : '<span class="muh-rozet muh-rozet--warn">Girilmedi</span>') . '</label>'
+                . '<input type="password" name="sifre" value="" autocomplete="new-password" placeholder="' . ($sifreKayitli ? 'Değiştirmek için yeni şifre girin' : 'e-Logo web servis şifresi') . '"></div>'
+                . '<div class="muh-alan"><label>İmzalama Kipi</label><select name="otomatik_imza">'
+                . '<option value="0"' . (empty($ayar['otomatik_imza']) ? ' selected' : '') . '>e-Logo HSM İmzalar (SIGNED=0 — Önerilen)</option>'
+                . '<option value="1"' . (!empty($ayar['otomatik_imza']) ? ' selected' : '') . '>Önceden İmzalı (SIGNED=1)</option>'
+                . '</select></div>'
+                . '</div>'
+                . '<h4 style="margin:14px 0 8px;">Firma UBL-TR Başlık &amp; Seri Bilgileri</h4>'
+                . '<div class="muh-filtre">'
+                . '<div class="muh-alan"><label>Firma VKN / TCKN</label><input name="firma_vkn" value="' . h((string)($ayar['firma_vkn'] ?? '')) . '" maxlength="11"></div>'
+                . '<div class="muh-alan" style="flex:1;min-width:240px;"><label>Firma Resmi Ünvanı</label><input name="firma_unvan" value="' . h((string)($ayar['firma_unvan'] ?? '')) . '" maxlength="200"></div>'
+                . '<div class="muh-alan"><label>Vergi Dairesi</label><input name="firma_vergi_dairesi" value="' . h((string)($ayar['firma_vergi_dairesi'] ?? '')) . '" maxlength="120"></div>'
+                . '</div>'
+                . '<div class="muh-filtre">'
+                . '<div class="muh-alan"><label>İl</label><input name="firma_il" value="' . h((string)($ayar['firma_il'] ?? '')) . '" maxlength="80"></div>'
+                . '<div class="muh-alan"><label>İlçe</label><input name="firma_ilce" value="' . h((string)($ayar['firma_ilce'] ?? '')) . '" maxlength="80"></div>'
+                . '<div class="muh-alan" style="flex:1;min-width:240px;"><label>Açık Adres</label><input name="firma_adres" value="' . h((string)($ayar['firma_adres'] ?? '')) . '" maxlength="300"></div>'
+                . '</div>'
+                . '<div class="muh-filtre">'
+                . '<div class="muh-alan"><label>e-Fatura Seri (3 harf)</label><input name="seri_efatura" value="' . h((string)($ayar['seri_efatura'] ?? 'ASY')) . '" maxlength="3"></div>'
+                . '<div class="muh-alan"><label>e-Arşiv Seri (3 harf)</label><input name="seri_earsiv" value="' . h((string)($ayar['seri_earsiv'] ?? 'ASA')) . '" maxlength="3"></div>'
+                . '<div class="muh-alan"><label>e-İrsaliye Seri (3 harf)</label><input name="seri_eirsaliye" value="' . h((string)($ayar['seri_eirsaliye'] ?? 'ASI')) . '" maxlength="3"></div>'
+                . '<div class="muh-alan" style="min-width:220px;"><label>GB Etiketi (Opsiyonel)</label><input name="gb_etiket" value="' . h((string)($ayar['gb_etiket'] ?? '')) . '" placeholder="urn:mail:defaultgb@..."></div>'
+                . '<div class="muh-alan" style="min-width:220px;"><label>PK Etiketi (Opsiyonel)</label><input name="pk_etiket" value="' . h((string)($ayar['pk_etiket'] ?? '')) . '" placeholder="urn:mail:defaultpk@..."></div>'
+                . '</div>'
+                . '<details style="margin:8px 0 14px;"><summary style="cursor:pointer;font-size:.85rem;color:var(--muh-muted);">Gelişmiş: e-Logo XSLT Tasarım UUID Bilgileri (Opsiyonel)</summary>'
+                . '<div class="muh-filtre" style="margin-top:8px;">'
+                . '<div class="muh-alan" style="flex:1;"><label>e-Fatura XSLT UUID</label><input name="xslt_efatura_uuid" value="' . h((string)($ayar['xslt_efatura_uuid'] ?? '')) . '" maxlength="64"></div>'
+                . '<div class="muh-alan" style="flex:1;"><label>e-Arşiv XSLT UUID</label><input name="xslt_earsiv_uuid" value="' . h((string)($ayar['xslt_earsiv_uuid'] ?? '')) . '" maxlength="64"></div>'
+                . '<div class="muh-alan" style="flex:1;"><label>e-İrsaliye XSLT UUID</label><input name="xslt_eirsaliye_uuid" value="' . h((string)($ayar['xslt_eirsaliye_uuid'] ?? '')) . '" maxlength="64"></div>'
+                . '</div></details>'
+                . '<button type="submit" class="btn btn-primary">e-Logo Ayarlarını Kaydet</button>'
+                . '</form>';
+        }
+        $o .= '</div></div>';
     }
 
     $o .= '</div></div>';
