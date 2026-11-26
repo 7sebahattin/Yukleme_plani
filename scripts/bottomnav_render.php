@@ -310,7 +310,7 @@ $SAYFALAR = [
     // v552: anahtarsız (muhasebe) sayfa — sheet'te `.bn-tile-link`; nav_aktif_anahtar() dosya slug'ı döndürür
     'cari_kartlari' => ['self' => '/cari_kartlari.php', 'kapi' => 'cari_kartlari.php', 'bolum' => 'cari_kartlari.php', 'baslik' => 'Cari Kayıt Kartları'],
     // v555: yeni fiş sayfaları (eski records/cikmalar/kantar'ın yeni karşılığı) — anahtarsız muhasebe sayfası; nav_aktif_anahtar() slug döndürür
-    'arac_fis'    => ['self' => '/arac_yukleme_fisleri.php', 'kapi' => 'arac_yukleme_fisleri.php', 'bolum' => 'arac_yukleme_fisleri.php', 'baslik' => 'Araç Yükleme Fişleri'],
+    'arac_fis'    => ['self' => '/arac_yukleme_fisleri.php', 'kapi' => 'arac_yukleme_fisleri.php', 'bolum' => 'arac_yukleme_fisleri.php', 'baslik' => 'Yükleme Planları'],
     'mal_kabul_fis' => ['self' => '/mal_kabul_fisleri.php', 'kapi' => 'mal_kabul_fisleri.php', 'bolum' => 'mal_kabul_fisleri.php', 'baslik' => 'Mal Kabul Fişleri'],
 ];
 

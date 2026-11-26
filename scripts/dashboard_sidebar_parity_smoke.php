@@ -100,7 +100,7 @@ $dashboardProfiles['frugro_only']=dashboard_profile('frugro_only',false,['role.p
 $dashboardProfiles['legacy_maliyet'] = dashboard_profile('legacy_maliyet', false, ['records.read', 'maliyet.read', 'maliyet.write', 'maliyet.delete']);
 $dashboardProfiles['hizli_rw'] = dashboard_profile('hizli_rw', false, ['hizli_maliyet.read', 'hizli_maliyet.write']);
 // v555: eski Yükleme Planı/Paletleme/Mal Kabul girişleri YALNIZ yeni karşılığı (muhasebe fiş sayfası) kullanıcıya görünüyorsa menüden kalkar.
-// yeni_fis_hepsi = eski izinleri + 3 yeni fiş sayfası → eski giriş YOK, yeni var; yeni_fis_yalniz_yukleme = yalnız Araç Yükleme Fişleri;
+// yeni_fis_hepsi = eski izinleri + 3 yeni fiş sayfası → eski giriş YOK, yeni var; yeni_fis_yalniz_yukleme = yalnız Yükleme Planları;
 // eski_yalniz = eski izinleri var, yeni karşılığı YOK (operatör benzeri) → eski giriş KORUNUR.
 $dashboardProfiles['yeni_fis_hepsi'] = dashboard_profile('yeni_fis_hepsi', false, ['records.read', 'kantar.read', 'muhasebe.arac_yukleme_fisleri.read', 'muhasebe.palet_fisleri.read', 'muhasebe.mal_kabul_fisleri.read']);
 $dashboardProfiles['yeni_fis_yalniz_yukleme'] = dashboard_profile('yeni_fis_yalniz_yukleme', false, ['records.read', 'kantar.read', 'muhasebe.arac_yukleme_fisleri.read']);
@@ -342,7 +342,7 @@ foreach ($dashboardProfiles as $name => $profile) {
     // v558 açık örnekler: eski izni olan rolde bile eski giriş YOK; yeni karşılık yalnız kendi kapısıyla.
     if ($name === 'eski_yalniz') dashboard_check(!array_intersect(['records.php', 'cikmalar.php', 'kantar.php', 'arac_yukleme_fisleri.php'], array_column($sidebar, 'href')), 'yalnız eski izni olan rolde de eski giriş çizilmez (v558), yeni yok');
     if ($name === 'yeni_fis_hepsi') dashboard_check(!array_intersect(['records.php', 'cikmalar.php', 'kantar.php'], array_column($sidebar, 'href')) && count(array_intersect(['arac_yukleme_fisleri.php', 'palet_fisleri.php', 'mal_kabul_fisleri.php'], array_column($sidebar, 'href'))) === 3, 'yeni karşılıklar görünür rolde eski girişler çizilmez');
-    if ($name === 'yeni_fis_yalniz_yukleme') dashboard_check(!in_array('records.php', array_column($sidebar, 'href'), true) && !in_array('kantar.php', array_column($sidebar, 'href'), true) && in_array('arac_yukleme_fisleri.php', array_column($sidebar, 'href'), true), 'yalnız Araç Yükleme Fişleri görünen rolde de eski girişler yok (v558)');
+    if ($name === 'yeni_fis_yalniz_yukleme') dashboard_check(!in_array('records.php', array_column($sidebar, 'href'), true) && !in_array('kantar.php', array_column($sidebar, 'href'), true) && in_array('arac_yukleme_fisleri.php', array_column($sidebar, 'href'), true), 'yalnız Yükleme Planları görünen rolde de eski girişler yok (v558)');
     if ($name === 'ogl_only') dashboard_check(in_array('frugro_siparis.php',$homeHrefs,true),'Eski (Frugro satırı öncesi) OGL rolü Frugro kartını korur');
     if ($name === 'only_defs_read') dashboard_check(!isset($homeLabels['definitions.php']) && !in_array('definitions.php', array_column($sidebar, 'href'), true), 'v574: Tanımlar kartı/girişi KALDIRILDI (definitions.php = 410), eski defs.read yetkisi menü açmaz');
     if ($name === 'only_users_admin') dashboard_check(isset($homeLabels['users.php']), 'admin olmayan kullanıcı yönetimi kartı korunur');

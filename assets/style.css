@@ -1854,7 +1854,7 @@ dialog.pm-dialog:not([open]) { display: none; }
     .pm-overlay { align-items: center; padding: 20px; }
     .pm-dialog {
         border-radius: var(--radius);
-        max-width: 600px;
+        max-width: 700px;
         max-height: 90vh;
         animation: pmScaleIn .18s cubic-bezier(.32,.72,0,1);
     }
@@ -1892,9 +1892,13 @@ dialog.pm-dialog:not([open]) { display: none; }
     background: var(--bg);
     border-radius: 0 0 var(--radius) var(--radius);
 }
+.pm-footer .pm-del-btn {
+    margin-right: auto;
+}
 @media (max-width: 639px) {
-    .pm-footer { border-radius: 0; }
-    .pm-footer .btn { flex: 1; justify-content: center; }
+    .pm-footer { border-radius: 0; flex-wrap: wrap; gap: 8px; }
+    .pm-footer .btn { flex: 1 1 auto; justify-content: center; }
+    .pm-footer .pm-del-btn { flex: 0 0 auto; margin-right: auto; }
 }
 
 /* Canlı hesap şeridi */
@@ -1943,6 +1947,164 @@ dialog.pm-dialog:not([open]) { display: none; }
     .pm-span2 { grid-column: 1; }
 }
 
+/* ── Ortak Malzeme Seçim Tablosu (Palet Modal + Toplu Malzeme + Yapıştır) ── */
+.mat-table-wrap {
+    margin-top: 8px;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 10px;
+    overflow-x: auto;
+    background: var(--card);
+}
+.mat-pick-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .84rem;
+    table-layout: fixed;
+}
+.mat-pick-table thead th {
+    padding: 6px 8px;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    background: var(--surface-2, #f8fafc);
+    text-align: left;
+    white-space: nowrap;
+}
+.mat-pick-table thead th:nth-child(1) { width: 30%; }
+.mat-pick-table thead th:nth-child(2) { width: 46%; }
+.mat-pick-table thead th:nth-child(3) { width: 18%; min-width: 72px; text-align: right; }
+.mat-pick-table thead th.mat-col-act,
+.mat-pick-table thead th:nth-child(4) { width: 6%; min-width: 30px; text-align: center; padding: 6px 2px; }
+.mat-pick-table td {
+    padding: 5px 6px;
+    vertical-align: middle;
+    border-top: 1px solid var(--border, #e2e8f0);
+}
+.mat-pick-table td.mat-col-act {
+    width: 30px;
+    text-align: center;
+    padding: 4px 2px;
+}
+.mat-pick-table select.mat-pick-type,
+.mat-pick-table select.mat-pick-name,
+.mat-pick-table input.mat-pick-qty {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: .84rem;
+    box-sizing: border-box;
+}
+.mat-pick-table select.mat-pick-type,
+.mat-pick-table select.mat-pick-name {
+    padding-right: 26px;
+    text-overflow: ellipsis;
+}
+.mat-pick-table input.mat-pick-qty {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.mat-pick-table tr.mat-pick-row {
+    transition: background-color .15s ease;
+}
+.mat-pick-table tr.mat-pick-row.is-selected {
+    background-color: rgba(37, 99, 235, 0.08);
+}
+.mat-row-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .15s ease, background-color .15s ease;
+}
+.mat-row-del:hover,
+.mat-row-del:focus-visible {
+    color: var(--danger);
+    background: var(--danger-soft);
+    outline: none;
+}
+.mat-table-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border, #e2e8f0);
+    background: var(--surface-2, #f8fafc);
+}
+.mat-selected-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.mat-selected-list:empty {
+    display: none;
+    margin-top: 0;
+}
+.mat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 500;
+    background: rgba(37, 99, 235, .1);
+    color: var(--primary, #1d4ed8);
+    border: 1px solid rgba(37, 99, 235, .2);
+    max-width: 100%;
+}
+.mat-chip-rm {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: .95rem;
+    line-height: 1;
+    padding: 0 2px;
+    opacity: .75;
+    transition: opacity .15s ease;
+}
+.mat-chip-rm:hover,
+.mat-chip-rm:focus-visible {
+    opacity: 1;
+    outline: none;
+}
+.yp-mat-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border, #cbd5e1);
+}
+@media (max-width: 767px) {
+    .mat-pick-table {
+        table-layout: auto;
+        min-width: 440px;
+    }
+    .mat-pick-table select.mat-pick-type,
+    .mat-pick-table select.mat-pick-name,
+    .mat-pick-table input.mat-pick-qty {
+        font-size: 16px;
+        min-height: 38px;
+    }
+    .mat-pick-table input.mat-pick-qty {
+        min-width: 72px;
+    }
+}
+
 /* ── Palet kart listesi ── */
 .pallet-cards {
     display: flex; flex-direction: column; gap: 8px;
@@ -1959,6 +2121,18 @@ dialog.pm-dialog:not([open]) { display: none; }
     transition: border-color .15s;
 }
 .pallet-card:hover { border-color: var(--primary); }
+.pallet-card.pc-clickable {
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.pallet-card.pc-clickable:hover {
+    border-color: var(--primary, #2563eb);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, .08);
+}
+.pallet-card.pc-clickable:focus-visible {
+    outline: 2px solid var(--primary, #2563eb);
+    outline-offset: 2px;
+}
 .pc-num-wrap {
     display: flex; flex-direction: column; align-items: center;
     gap: 4px; flex-shrink: 0;
@@ -1997,6 +2171,29 @@ dialog.pm-dialog:not([open]) { display: none; }
 .pc-stats strong { color: var(--text); font-weight: 600; }
 .pc-stats strong.pc-warn { color: #ef4444; font-weight: 700; }
 .pc-meta { font-size: .78rem; color: var(--muted); margin-top: 3px; }
+.pc-mat-desktop {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin-top: 5px;
+}
+.pc-mat-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: .74rem;
+    background: var(--surface-2, #f1f5f9);
+    color: var(--text, #334155);
+    border: 1px solid var(--border, #e2e8f0);
+}
+.pc-mat-mobile {
+    display: none;
+}
+@media (max-width: 767px) {
+    .pc-mat-desktop { display: none; }
+    .pc-mat-mobile { display: inline; }
+}
 
 /* Palet aksiyon butonları */
 .pallet-actions {
@@ -2018,11 +2215,11 @@ dialog.pm-dialog:not([open]) { display: none; }
     white-space: nowrap;
     text-align: center;
 }
-/* Mobil: 4 ikincil buton düzensiz sarmasın — sabit 2×2 ızgara, 44px dokunma hedefi */
+/* Mobil: 3 ikincil buton eşit 3 sütun ızgara, 44px dokunma hedefi */
 @media (max-width: 767px) {
     .pallet-sec-btns {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 6px;
     }
     .pallet-sec-btns .btn {
@@ -2030,7 +2227,9 @@ dialog.pm-dialog:not([open]) { display: none; }
         min-height: 44px;
         padding-left: 4px;
         padding-right: 4px;
-        font-size: .8rem;
+        font-size: .78rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 }
 .pallet-add-main {
@@ -2819,12 +3018,41 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 @media print { .bottomnav, .bn-sheet-ovl { display: none !important; } }
 
 /* ── record_view.php yeni buton düzeni ── */
-.rv-head { align-items: center; }
+.rv-head { align-items: center; flex-wrap: wrap; gap: 8px; }
 .rv-back { flex-shrink: 0; }
-.rv-actions { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.rv-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.rv-actions .rv-act-btn,
+.rv-act-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    font-size: .84rem;
+    padding: 7px 11px;
+}
+.rv-ico {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    display: block;
+}
 @media (max-width: 767px) {
+    .rv-head { flex-wrap: wrap; gap: 8px; }
     .rv-head .rv-back { font-size: .8rem; padding: 6px 10px; }
+    .rv-actions { gap: 5px; max-width: 100%; }
     .rv-actions .btn { font-size: .8rem; padding: 6px 10px; }
+    .rv-actions .rv-act-btn,
+    .rv-act-btn {
+        padding: 6px 9px;
+        font-size: .78rem;
+        gap: 5px;
+    }
 }
 
 /* ── record_view: iki kolon düzen + malzeme sidebar ── */
@@ -3310,6 +3538,14 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
     grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
 }
+.yp-cols.yp-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1023px) {
+    .yp-cols.yp-cols-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
 .yp-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .yp-col-head {
     font-size: .8rem; font-weight: 700; color: var(--text);
@@ -3376,7 +3612,8 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 
 @media (max-width: 767px) {
     /* Mobil: sütunlar alt alta, yazı 16px (iOS zoom önleme), dokunma hedefleri büyük */
-    .yp-cols { grid-template-columns: 1fr; gap: 12px; }
+    .yp-cols,
+    .yp-cols.yp-cols-4 { grid-template-columns: 1fr; gap: 12px; }
     .yp-ta { font-size: 16px; min-height: 140px; }
     .yp-uygula { width: 100%; min-height: 50px; font-size: 1rem; border-radius: 12px; }
     .yp-mode-row { flex-direction: column; gap: 10px; }
@@ -5627,6 +5864,20 @@ html[data-theme="dark"] .durum-opt-active.durum-opt-beklemede { background: #1d2
      @media print kuralları yazdırmada zaten beyaza zorlar) — */
 html[data-theme="dark"] .print-sheet { background: var(--card); }
 html[data-theme="dark"] .rv-materials-col { background: var(--card); }
+html[data-theme="dark"] .mat-pick-table tr.mat-pick-row.is-selected { background-color: rgba(59, 130, 246, 0.16); }
+html[data-theme="dark"] .mat-chip {
+    background: rgba(77, 141, 255, .16);
+    color: #93c5fd;
+    border-color: rgba(77, 141, 255, .32);
+}
+html[data-theme="dark"] .pallet-card.pc-clickable:hover {
+    box-shadow: 0 2px 10px rgba(77, 141, 255, .18);
+}
+html[data-theme="dark"] .pc-mat-tag {
+    background: var(--surface-2, #1a2331);
+    color: var(--text, #e7ecf4);
+    border-color: var(--border, #273140);
+}
 
 /* — Rapor rozetleri: pastel → koyu ton — */
 html[data-theme="dark"] .rpt-badge.badge-islendi  { background: #3a2c0a; color: #fbbf24; }

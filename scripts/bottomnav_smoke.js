@@ -1138,7 +1138,7 @@ function guvenliAlanKurallari(barSel) {
     //      SEÇİLİ görünen giriş yeni karşılığıdır (kullanıcı görebiliyorsa); göremiyorsa hiçbir öğe seçili değildir.
     //      Beklenen değerler manifestin kapı tablosundan (P.izinli) türetilir — uygulamanın nav_eski_esleri()'nden DEĞİL.
     console.log('\n=== 5k) Eski girişler menüde YOK; eski sayfada seçili öğe = yeni karşılığı (sidebar + Diğer + alt çubuk) ===');
-    const ESKI = { records: { yeni: 'arac_yukleme_fisleri.php', yeniAd: 'Araç Yükleme Fişleri', eskiAd: 'Yükleme Planı', eskiHref: 'records.php' },
+    const ESKI = { records: { yeni: 'arac_yukleme_fisleri.php', yeniAd: 'Yükleme Planları', eskiAd: 'Yükleme Planı', eskiHref: 'records.php' },
                    cikma:   { yeni: 'palet_fisleri.php',        yeniAd: 'Palet Fişleri',        eskiAd: 'Paletleme',     eskiHref: 'cikmalar.php' },
                    kantar:  { yeni: 'mal_kabul_fisleri.php',    yeniAd: 'Mal Kabul Fişleri',    eskiAd: 'Mal Kabul',     eskiHref: 'kantar.php' } };
     ok('B', 'manifest', 'eski → yeni eşleme (render kapı tablosu) = records→arac_yukleme_fisleri, cikma→palet_fisleri, kantar→mal_kabul_fisleri',

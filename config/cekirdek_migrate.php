@@ -57,6 +57,8 @@ if (!function_exists('cekirdek_tablo_var')) {
             ['loading_records', 'reported_at'],
             ['loading_records', 'ulasim'],
             ['loading_records', 'gidecek_ulke'],
+            ['loading_records', 'urun_cesidi'],
+            ['loading_pallets', 'urun_cesidi'],
             ['loading_records', 'locked_at'],
             ['kantar_fisleri', 'reported_at'],
             ['kantar_fisleri', 'report_id'],
@@ -94,6 +96,7 @@ if (!function_exists('cekirdek_tablo_var')) {
                 'urun_sahibi_id' => "ALTER TABLE `loading_records` ADD COLUMN `urun_sahibi_id` INT NULL DEFAULT NULL",
                 'ulasim'         => "ALTER TABLE `loading_records` ADD COLUMN `ulasim` VARCHAR(100) NOT NULL DEFAULT ''",
                 'gidecek_ulke'   => "ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''",
+                'urun_cesidi'    => "ALTER TABLE `loading_records` ADD COLUMN `urun_cesidi` VARCHAR(150) NOT NULL DEFAULT ''",
             ];
             foreach ($lrCols as $col => $sql) {
                 if (!cekirdek_kolon_var($pdo, 'loading_records', $col)) {
@@ -291,6 +294,12 @@ if (!function_exists('cekirdek_tablo_var')) {
                 $pdo->exec("ALTER TABLE `loading_pallets` ADD COLUMN `reported_at` DATETIME NULL, ADD COLUMN `reported_by` INT NULL, ADD COLUMN `report_id` INT NULL");
                 $ekle('loading_pallets.reported_at', 'eklendi', 'Kolonlar eklendi.');
             } catch (PDOException $e) { $ekle('loading_pallets.reported_at', 'hata', $e->getMessage()); }
+        }
+        if (cekirdek_tablo_var($pdo, 'loading_pallets') && !cekirdek_kolon_var($pdo, 'loading_pallets', 'urun_cesidi')) {
+            try {
+                $pdo->exec("ALTER TABLE `loading_pallets` ADD COLUMN `urun_cesidi` VARCHAR(150) NOT NULL DEFAULT ''");
+                $ekle('loading_pallets.urun_cesidi', 'eklendi', 'Kolon eklendi.');
+            } catch (PDOException $e) { $ekle('loading_pallets.urun_cesidi', 'hata', $e->getMessage()); }
         }
 
         if (cekirdek_tablo_var($pdo, 'cost_sheets') && !cekirdek_kolon_var($pdo, 'cost_sheets', 'record_id')) {

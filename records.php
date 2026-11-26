@@ -145,7 +145,7 @@ $_rec_cols = [
     'r.ulasim', 'r.gidecek_ulke', 'r.telefon', 'r.fatura_no', 'r.nakliye_bedeli', 'r.avans',
     'r.created_at', 'r.updated_at', 'r.urun_sahibi_id',
 ];
-foreach (['brand', 'etiket', 'locked_at', 'revision_reason'] as $_opt_col) {
+foreach (['brand', 'etiket', 'locked_at', 'revision_reason', 'urun_cesidi'] as $_opt_col) {
     if (db_has_column('loading_records', $_opt_col)) {
         $_rec_cols[] = 'r.' . $_opt_col;
     }
@@ -226,13 +226,13 @@ if (!empty($rows)) {
 
 $can_unlock = function_exists('can') && can('records.unlock');
 
-render_header('Kayıtlar');
+render_header('Yükleme Planları');
 render_flash();
 ?>
 
 <div class="page-head">
     <div>
-        <h1 style="color:#166534">Yükleme Kayıtları</h1>
+        <h1 style="color:#166534">Yükleme Planları</h1>
         <p class="muted">
             Toplam <?= $total ?> kayıt
             <?php if ($total_pages > 1): ?>
@@ -333,7 +333,12 @@ render_flash();
                     <td><?= h($r['parti_no']) ?></td>
                     <td><?= h($r['alici']) ?></td>
                     <td><?= h($r['bolge']) ?></td>
-                    <td><?= h($r['urun']) ?></td>
+                    <td>
+                        <?= h($r['urun']) ?>
+                        <?php if (isset($r['urun_cesidi']) && trim((string)$r['urun_cesidi']) !== ''): ?>
+                        <div class="muted" style="font-size:.75rem"><?= h($r['urun_cesidi']) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td class="td-casus-no"><?= h($r['casus_no']) ?></td>
                     <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
@@ -490,7 +495,8 @@ render_flash();
                 <div class="record-card-body">
                     <?php if ($r['alici']): ?><div style="color:#c56a00;font-weight:600"><span class="lbl">Alıcı:</span> <?= h($r['alici']) ?></div><?php endif; ?>
                     <?php if ($r['bolge']): ?><div><span class="lbl">Bölge:</span> <?= h($r['bolge']) ?></div><?php endif; ?>
-                    <?php if ($r['urun']): ?><div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?></div><?php endif; ?>
+                    <?php $_rc_cesit = isset($r['urun_cesidi']) ? trim((string)$r['urun_cesidi']) : ''; ?>
+                    <?php if ($r['urun'] || $_rc_cesit !== ''): ?><div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?><?php if ($_rc_cesit !== ''): ?> <span class="muted" style="font-size:.82rem">(<?= h($_rc_cesit) ?>)</span><?php endif; ?></div><?php endif; ?>
                     <?php $plaka = trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /'); ?>
                     <?php if ($plaka): ?><div><span class="lbl">Plaka:</span> <?= h($plaka) ?></div><?php endif; ?>
                 </div>
