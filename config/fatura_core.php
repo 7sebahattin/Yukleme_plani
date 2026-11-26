@@ -767,11 +767,12 @@ function fatura_seri_son_tarih(PDO $pdo, int $seriId, int $yil): ?string
     return $t === false || $t === null ? null : substr((string)$t, 0, 10);
 }
 
-/** Aynı cari + aynı sınıf + aynı (elle) fatura_no'lu GEÇERLİ belge (mükerrer koruması). */
-function fatura_mukerrer_bul(PDO $pdo, string $sinif, int $cariId, string $faturaNo): ?array
+/** Aynı cari + aynı sınıf + aynı (elle) fatura_no'lu GEÇERLİ belge (mükerrer koruması). $kilitle=true: MySQL tx içinde FOR UPDATE (B-23). */
+function fatura_mukerrer_bul(PDO $pdo, string $sinif, int $cariId, string $faturaNo, bool $kilitle = false): ?array
 {
     $tl = fatura_sinif_turleri($sinif);
-    $st = $pdo->prepare("SELECT id, belge_no FROM fatura_belgeler WHERE cari_id = ? AND fatura_no = ? AND durum = 'gecerli' AND tur IN (" . implode(',', array_fill(0, count($tl), '?')) . ') ORDER BY id LIMIT 1');
+    $lock = ($kilitle && $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') ? ' FOR UPDATE' : '';
+    $st = $pdo->prepare("SELECT id, belge_no FROM fatura_belgeler WHERE cari_id = ? AND fatura_no = ? AND durum = 'gecerli' AND tur IN (" . implode(',', array_fill(0, count($tl), '?')) . ') ORDER BY id LIMIT 1' . $lock);
     $st->execute([$cariId, $faturaNo, ...$tl]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     return $r === false ? null : $r;
@@ -1458,8 +1459,9 @@ function fatura_kaydet(PDO $pdo, array $g, int $uid): array
     $ic = null; $stokMap = [];
     try {
         $s = fatura_tx($pdo, function () use ($pdo, $v, $bilgi, $uid, &$ic, &$stokMap): array {
-            // (a) kartlar → (b) kaynak belgeler → (c) seri  (sabit kilit sırası; kilitlerden önce düz SELECT yok)
+            // (a) kartlar → (b) cari → (c) kaynak belgeler → (d) seri  (sabit kilit sırası; kilitlerden önce düz SELECT yok)
             stok_kart_kilitle($pdo, array_values(array_filter(array_column($v['satirlar'], 'kart_id'))));
+            cari_kart_kilitle($pdo, [(int)$v['cari_id']]);
             fatura_belge_kilitle($pdo, $v['kaynak_belgeler']);
             $sira = null; $faturaNo = $v['fatura_no'];
             if ($v['seri'] !== null) {
@@ -1472,7 +1474,7 @@ function fatura_kaydet(PDO $pdo, array $g, int $uid): array
                 $ilk = $kk['h'] ? (string)reset($kk['h']) : 'Satır ' . (array_key_first($kk['sh']) + 1) . ': ' . (string)reset($kk['sh'][array_key_first($kk['sh'])]);
                 return fatura_hata($ilk, ['alanlar' => $kk['h'], 'satir_hatalari' => $kk['sh']] + ($kk['kod'] !== null ? ['kod' => $kk['kod']] : []));
             }
-            if ($bilgi['duzenleyen'] === 'karsi' && $faturaNo !== null && ($m = fatura_mukerrer_bul($pdo, (string)$bilgi['sinif'], $v['cari_id'], $faturaNo)) !== null) {
+            if ($bilgi['duzenleyen'] === 'karsi' && $faturaNo !== null && ($m = fatura_mukerrer_bul($pdo, (string)$bilgi['sinif'], $v['cari_id'], $faturaNo, true)) !== null) {
                 return fatura_hata('Bu cari için aynı numaralı belge zaten var: ' . $m['belge_no'] . '.', ['kod' => 'mukerrer', 'alanlar' => ['fatura_no' => 'Mükerrer belge numarası.']]);
             }
             if ($v['seri'] !== null && ($son = fatura_seri_son_tarih($pdo, $v['seri']['id'], (int)$v['seri_yil'])) !== null && $son > $v['tarih']) {

@@ -1,114 +1,42 @@
-# Mimari Notlar
+# Teknik Mimari (`docs/ARCHITECTURE.md`)
 
-## Core Stack
+## 1. Temel Yığın
 
-- PHP 8, PDO/MySQL, vanilla JS, tek CSS + tek JS dosyası
-- PWA: `manifest.json` + `sw.js` (network-first, CACHE_NAME: `yukleme-plani-v8`)
-- Çerçeve yok, ORM yok, build tool yok
+- **Arka Uç:** PHP 8.3+ (`strict_types=1`), PDO MySQL/MariaDB (`EMULATE_PREPARES=false`), çerçevesiz modüler çekirdekler (`config/*_core.php`).
+- **Bağımlılıklar (`vendor/`):** `phpoffice/phpspreadsheet` (XLSX), `dompdf/dompdf` (PDF).
+- **Ön Yüz:** Vanilla JS & CSS — ortak kabuk (`assets/style.css`, `assets/app.js`) + modül bazlı ayrıştırılmış CSS/JS dosyaları (`cari`, `stok`, `fatura`, `kasa`, `ceksenet`, `doviz`, `pdks`, `mail`, `hesap`, `maliyet`, `hizli-maliyet`, `frugro_pkl`, `palet-fisleri`, `kalan`).
+- **PWA / Service Worker:** `manifest.json` (`orientation: any`) + `sw.js` (sıkı statik varlık allowlist'i: yalnız `/assets/*` ve `manifest.json` önbelleklenir; hiçbir kimlikli `.php` sayfası `CacheStorage`'a yazılmaz). Sürüm damgası `config/helpers.php` (`APP_SURUM`), `sw.js` (`CACHE_NAME`) ve `CLAUDE.md` arasında eşit tutulur.
 
-## Giriş Noktaları
+## 2. Çekirdek Önyükleme ve Veritabanı
 
-Her sayfa üst kısımda şunu çağırır:
-```php
-require_once __DIR__ . '/config/db.php';   // PDO + auto-migration + helpers.php yükler
-require_once __DIR__ . '/config/auth.php'; // session, require_login, can(), is_admin()
-$auth_user = require_login();              // oturum yoksa login'e yönlendirir
-require_perm('records.read');              // yetki yoksa 403
-```
+- **`config/db.php`:** Web isteklerinde `display_errors=0`, yapısal JSON `set_exception_handler`, `config/local.php` yükleme, `db_config_resolve()` (`DB_LOCAL_*` / `ASYA_DB_*` ezme desteği + canlı `deploy.php` `smart_merge_db` uyumu) ve tekil `db(): PDO` bağlantısı.
+- **Tek PDO Paylaşımı:** `halkayit/db.php` (`hks_db()`) aynı DB hedeflendiğinde `db()` bağlantısını paylaşır; ek MySQL bağlantısı açmaz.
+- **Facade ve Alt Yardımcılar:** `config/helpers.php` çekirdek kabuğu, `config/db_tx_helpers.php` (`db_tx`, `db_table_exists`, `db_for_update`), `config/cache_export_helpers.php` (`json_html`, `app_cache_*`, `export_prepare_runtime`), `config/role_permission_matrix.php`, `config/muhasebe_roller.php`, `config/muhasebe_referans.php` modüllerini birleştirir.
+- **Sıfır Çalışma Zamanı DDL:** Tüm şema ve indeks güncellemeleri yalnızca yönetici tarafından `migrate.php` (44 idempotent kart) üzerinden yürütülür (`config/cekirdek_migrate.php` ve modül `*_migrate()` fonksiyonları).
 
-## Auth Akışı
+## 3. Kimlik Doğrulama, Oturum ve Yetkilendirme
 
-```
-login.php → session_start → $_SESSION['user_id'] set
-→ require_login() her sayfada session kontrolü
-→ can('perm.name') yetki kontrolü
-→ is_admin() admin özel işlemler
-→ logout.php → session_destroy
-```
+- **Kalıcı Oturum (`asya_session`):** `config/auth.php` token tabanlı `user_sessions` tablosunu kullanır (`HttpOnly`, `SameSite=Lax`, HTTPS'de `Secure`, 14 gün mutlak ömür, >300 sn aralıklı sliding güncelleme ve olasılıksal GC).
+- **Brute-Force Koruması:** `login.php` IP + kullanıcı bazlı atomik `flock` artımlı bekleme (`storage/auth_rl`, HTTP 429).
+- **PHP Oturumu (`PHPSESSID`):** `app_session_start()` (`Strict`, `HttpOnly`, `SameSite=Lax`), CSRF token ve flash mesajlar için kullanılır; girişte `app_session_regenerate()`.
+- **Masaüstü Ekran Kilidi:** `config/ekran_kilit.php` + `ekran_kilit.php` — sunucu tarafı `hks_kv` kilidi (`HTTP 423 Locked`), PIN karma anahtarı `config/local.php` (`HKS_CRED_KEY`).
+- **RBAC + Depo İzolasyonu:** `roles` / `role_permissions` + `config/role_data_scope.php` (aktif depo kapsamı `user_allowed_depots()` fail-closed) + `config/muhasebe_roller.php` (muhasebe sayfa/işlem kapıları).
 
-## Render Sistemi
+## 4. Muhasebe ve Operasyon Çekirdekleri
 
-```php
-render_header($title)           // HTML head + topbar + desktop sidebar (≥900px)
-render_desktop_sidebar($base)   // config/helpers.php — permission'lı sidebar
-render_footer()                 // bottomnav (<768px) + notlar modal
-render_flash()                  // flash mesaj göster
-```
+- **Katman İzolasyonu:** `cari_core`, `stok_core`, `fatura_core`, `kasa_core`, `ceksenet_core`, `doviz_core` her biri kendi tablolarına tek yazıcıdır. Çapraz modül silme referans kontrolleri `config/muhasebe_referans.php` üzerinden yapılır.
+- **INSERT-Only Defter ve Kilitler:** `stok_hareketler`, `cari_hareketler`, `kasa_hareketler`, `ceksenet_hareketler` değiştirilmez defter mantığıyla çalışır; iptaller ters hareketle işlenir. MySQL `REPEATABLE READ` altında eşzamanlı işlemlerde `FOR UPDATE` kilitleri (`stok_maliyet_durumu`, `fatura_kaydet`, `ceksenet_bordro_kaydet`, `pdks_hakedis_hesapla/finalize`) uygulanır.
+- **Hal Kayıt (`halkayit/`):** `halkayit/index.php` ana panel kabuğunu çizer; `halkayit/app.php` / `app.html` ve `halkayit/api.php` (ana panel `asya_session` + `hks.access` + CSRF korumalı) SOAP servislerini çağırır. Firma şifreleri `HKS_CRED_KEY` ile `gcm1:` (AES-256-GCM, fail-closed) şifrelenir.
 
-Print sayfalarında: `render_header($title, true)` → sidebar/bottomnav/SW yok.
+## 5. Gezinme ve Duyarlı Düzen
 
-## Veritabanı Yapısı
+- **Mobil + Tablet (`<900px`):** `topbar` (sticky, Ana Sayfa + depo seçici + çıkış) + `bottomnav` (fixed alt çubuk + "Diğer" akordiyon alt sayfası).
+- **Masaüstü (`≥900px`):** `desktop-sidebar` (sol sabit menü, tek `--sb-w` değişkeni: `180px` / `≥1280px` `210px`); topbar ve bottomnav gizlenir.
+- **Yazdırma (`@media print` / `print_mode`):** Tüm gezinme kabuğu gizlenir.
 
-```
-loading_records     type='yukleme'|'cikma', durum='islendi'|'yuklendi'|''
-  └─ loading_pallets
-       └─ pallet_materials
+## 6. Gözlemlenebilirlik, Yedekleme ve CI/CD
 
-material_definitions  kasa/palet/malzeme tanımları
-material_templates / material_template_items
-
-account_transactions / account_files   Hesap modülü
-
-users / roles / role_permissions       Auth
-
-audit_log    action, module, record_id, old_values(JSON), new_values(JSON)
-
-kantar_gruplar / kantar_kayitlar
-hks_firmalar / hks_taslaklar / hks_gonderilenler / hks_kv · beyan_hks_bildirim · hks_eslesme
-material_stock_movements
-```
-
-## Kayıt Lifecycle
-
-```
-Oluştur → durum='' (taslak)
-→ durum='islendi' (işlendi butonu)
-→ durum='yuklendi' + locked_at/by set (yüklendi butonu → KİLİTLENİR)
-→ Unlock: records.unlock yetkisi + revision_reason zorunlu → locked_at/by NULL, unlocked_at/by set
-```
-
-## Stok Mantığı
-
-`stok.php` — `loading_pallets` üzerinden palet bazlı ürün stok hesabı.  
-`malzeme_stok.php` — `material_stock_movements` (giriş/çıkış) üzerinden malzeme takibi.  
-Negatif stok uyarısı gösterilir, fiziksel engel yok.
-
-## Kantar Mantığı
-
-`kantar.php` — tır/araç brüt/dara/net tartım. `kantar_gruplar` ile firma eşleme.  
-`kantar_view.php` — detay + yazdırma.  
-`kantar_raporu.php` — toplu rapor.
-
-## HKS Modülü (`hks/`)
-
-`hks/helpers.php` → `config/auth.php` + `require_login()` yükler (her HKS sayfasında).  
-`HksClient::sendNotification()` → dış API çağrısı → `api_send.php` sonucunu audit'e yazar.  
-`.htaccess` — `HksClient/HksRepository/HksConfig/helpers.php`'e doğrudan HTTP erişim kapalı.
-
-## Hesaplama
-
-`config/calc.php` — dara/net PHP hesabı.  
-`assets/app.js` — dara/net JS hesabı (gerçek zamanlı form).  
-**Kural:** Ham dara sakla, yalnızca toplamı yuvarla (per-palet yuvarlama birikimli hataya yol açar).
-
-## Audit
-
-```php
-audit_log_event('action', 'module', $record_id, $old_vals, $new_vals);
-// İç try/catch — asla exception fırlatmaz, asla caller'ı bozmaz
-// _audit_sanitize() — password/token/csrf/cookie/foto_data filtreler, >1000 char truncate
-```
-
-## CSS/JS Mimarisi
-
-- Tek CSS: `assets/style.css` (~4000 satır) — mobil-önce, Sprint 32'de sidebar eklendi
-- Tek JS: `assets/app.js` — palet form, kebab menu, durum AJAX
-- Ayrı JS: `assets/kalan.js` (kalan modal), `assets/app.js` CSRF header ekli
-- CSS media queries: `<768` mobil, `768-899` tablet, `≥900` desktop sidebar, `≥1024` pc-only tablo, `≥1280` geniş
-
-## Navigasyon
-
-**Mobil (<900px):** `topbar` (sticky) + `bottomnav` (fixed bottom, 5 sekme)  
-**Desktop (≥900px):** `desktop-sidebar` (fixed left, 220px) — topbar ve bottomnav gizlenir  
-**Geniş (≥1280px):** sidebar 260px  
-**Print:** topbar/sidebar/bottomnav gizli, container margin sıfır
+- **Denetim İzi (`audit_log`):** `_audit_sanitize()` hassas anahtarları (`password`, `pin`, `token`, `csrf`, `cookie`) maskeler. Eski kayıtlar `scripts/audit_retention_cron.php` ile `storage/audit_archive/audit_YYYY-MM.jsonl.gz` olarak arşivlenebilir.
+- **Veritabanı Yedeği:** `scripts/db_backup_cron.php` (veya PHP-FPM altında `fastcgi_finish_request()` sonrası engellemesiz günlük tetikleme) gzip doğrulamalı yedek alır (`storage/backups/db`).
+- **Sağlık Ucu:** `health.php` (`HEALTH_CHECK_TOKEN` veya `is_admin()` korumalı) DB ping JSON yanıtı döner.
+- **CI/CD (`.github/workflows/testler.yml`):** `php` (230+ SQLite/statik smoke testi), `php-lint` (paralel `php -l`), `js` (Playwright) ve `mysql-integration` (gerçek MariaDB 10.11 üzerinde 2× migrasyon idempotency + `pcntl_fork` `FOR UPDATE` yarış testleri).

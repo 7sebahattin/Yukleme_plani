@@ -967,3 +967,19 @@ a.hs-tx:hover { text-decoration: none; color: var(--text); border-color: var(--b
     .hs-fold > summary { padding: 9px 12px; }
 }
 
+/* B-36: Koyu tema kontrast güvencesi */
+html[data-theme="dark"] .hs-card,
+html[data-theme="dark"] .hs-sheet {
+    background: var(--card);
+    color: var(--text);
+    border-color: var(--border);
+}
+html[data-theme="dark"] .hs-amount-input,
+html[data-theme="dark"] .hs-field input,
+html[data-theme="dark"] .hs-field select,
+html[data-theme="dark"] .hs-field textarea {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+}
+

@@ -1,6 +1,6 @@
 # Deploy Workflow — "Canlıya Al" Talimatı
 
-**Proje:** Yükleme Planı — canlı `asya.scai.tr` · test `nuverna.derspros.com.tr`
+**Proje:** Yükleme Planı — canlı `asya.scai.tr` · test `test.scai.tr`
 **Kapsam:** Kullanıcı "canlıya al" / "yayına al" / "deploy et" dediğinde Claude'un izleyeceği adımlar.
 **Not:** Bu dosya Claude'un kendi hafızası için yazıldı (CLAUDE.md'den referans verilir). Kullanıcı bu süreci değiştirirse burayı güncelle.
 
@@ -9,19 +9,19 @@
 ## Özet (tek cümle)
 
 **`main`'e merge = canlıya çıktı.** Repoda bir GitHub **webhook**'u var; `main`'e her push'ta
-sunucudaki `https://asya.scai.tr/deploy.php` (canlı) ve `https://nuverna.derspros.com.tr/deploy.php`
+sunucudaki `https://asya.scai.tr/deploy.php` (canlı) ve `https://test.scai.tr/deploy.php`
 (test) tetikleniyor ve dosyalar dakikalar
 içinde canlıya iniyor. Claude'un yapması gereken tek şey PR açıp merge etmek; **kullanıcıdan
 elle bir şey çalıştırmasını İSTEME.**
 
 ---
 
-## 0. İki site (2026-09-27'den beri)
+## 0. İki site
 
 | | Canlı | Test |
 |---|---|---|
-| Adres | `https://asya.scai.tr` | `https://nuverna.derspros.com.tr` |
-| cPanel klasörü | `/asya.scai.tr` | `/nuverna.derspros.com.tr` |
+| Adres | `https://asya.scai.tr` | `https://test.scai.tr` |
+| cPanel klasörü | `/asya.scai.tr` | `/test.scai.tr` |
 | Veritabanı | `derspros_asya` | `derspros_yukleme_plani` |
 
 - Aynı cPanel hesabı (`talom.wlsrv.com`, kullanıcı `derspros`), aynı PHP 8.3.
@@ -31,8 +31,7 @@ elle bir şey çalıştırmasını İSTEME.**
   YAPMA:** deploy `config/db.php`'yi repodaki `root`/boş şifre hâliyle yazar, site açılmaz.
 - `scai.tr` DNS'i hosting.com.tr'de (`ns1/ns2.hosting.com.tr`); cPanel'e domain eklemek
   zone'u kendiliğinden açmadı, destek talebiyle açıldı. SSL: Let's Encrypt (cPanel SSL/TLS Wizard).
-- `derspros.com.tr` 25.12.2026'da bitiyor ve yenilenmeyecek → test sitesi o tarihte kapanır.
-  Gerekirse test `test.scai.tr` altına aynı yöntemle taşınır.
+- Eski `nuverna.derspros.com.tr` artık kullanılmıyor; test ortamı `test.scai.tr` altındadır.
 - Şu an iki site de `main`'i izler: merge edilen her şey test ve canlıya birlikte iner.
 
 ---
@@ -71,8 +70,8 @@ Merge'den sonra **kimsenin bir şey yapmasına gerek yok.** (Doğrulandı: 2026-
 repo Settings → Webhooks ekranından.)
 
 ```
-main'e merge  →  GitHub push webhook'ları  →  https://asya.scai.tr/deploy.php            (canlı)
-                                          →  https://nuverna.derspros.com.tr/deploy.php (test)
+main'e merge  →  GitHub push webhook'ları  →  https://asya.scai.tr/deploy.php (canlı)
+                                          →  https://test.scai.tr/deploy.php (test)
               →  main.zip indirilir    →  dosyaların üzerine yazılır  →  canlı
 ```
 
@@ -80,12 +79,12 @@ main'e merge  →  GitHub push webhook'ları  →  https://asya.scai.tr/deploy.p
 
 | Alan | Değer |
 |---|---|
-| Payload URL | `https://asya.scai.tr/deploy.php` (canlı) · `https://nuverna.derspros.com.tr/deploy.php` (test) — iki ayrı webhook |
+| Payload URL | `https://asya.scai.tr/deploy.php` (canlı) · `https://test.scai.tr/deploy.php` (test) — iki ayrı webhook |
 | Content type | `application/json` |
 | Olay | Just the **push** event |
 | SSL verification | Açık |
 | Aktif | ✔ |
-| **Secret** | **BOŞ** — bkz. aşağıdaki güvenlik notu |
+| **Secret** | `asya.scai.tr` için tanımlı (HMAC-SHA256) — bkz. aşağıdaki güvenlik notu |
 
 **Ölçülen gecikme:** v216 13:20'de merge edildi, 13:24'te canlıda görüldü → ~4 dakika.
 

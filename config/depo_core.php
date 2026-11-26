@@ -202,27 +202,88 @@ function depo_kullanim_toplam(PDO $pdo): array
 }
 
 /**
- * Bir depo adını TÜM veri kolonlarında yeni ada çeker (TR-duyarsız eşleşme). Dönen: güncellenen satır sayısı.
- * $tablolar verilirse yalnız o tablolar (eski → yeni depoya aktarım aracı); null = hepsi.
+ * Birbirine bağlı INSERT-only muhasebe defter grupları (B-19).
+ * Aynı gruptaki mevcut tablolar ayrı ayrı aktarılamaz; birlikte ve tek transaction içinde aktarılır.
+ * Yeni ERP tablolarında metin `depo` yerine sabit `depo_id` FK standardı uygulanır.
+ * @return array<string,list<string>>
  */
-function depo_ad_aktar(PDO $pdo, string $eskiAd, string $yeniAd, ?array $tablolar = null): int
+function depo_atomik_gruplar(): array
+{
+    return [
+        'stok_fatura_defteri' => ['fatura_belgeler', 'stok_fisler', 'stok_hareketler'],
+        'ceksenet_defteri'    => ['ceksenet_kayitlar', 'ceksenet_hareketler'],
+        'kasa_defteri'        => ['kasa_kartlar', 'kasa_hareketler'],
+    ];
+}
+
+/**
+ * Seçilen tablo listesinde bölünmüş atomik defter grubu var mı?
+ * Varsa açıklayıcı hata metni, yoksa null döner. Yalnız DB'de depo kolonu bulunan tablolar zorunlu eş sayılır.
+ */
+function depo_atomik_eksik_kontrol(PDO $pdo, array $seciliTablolar): ?string
+{
+    $mevcut = [];
+    foreach (depo_kolonlari($pdo) as [$t]) $mevcut[$t] = true;
+    $secili = array_fill_keys(array_map('strval', $seciliTablolar), true);
+    foreach (depo_atomik_gruplar() as $grup => $uyeler) {
+        $mevcutUyeler = array_values(array_filter($uyeler, static fn(string $t): bool => isset($mevcut[$t])));
+        if (count($mevcutUyeler) < 2) continue;
+        $var = array_values(array_filter($mevcutUyeler, static fn(string $t): bool => isset($secili[$t])));
+        if ($var && count($var) !== count($mevcutUyeler)) {
+            $eksik = array_values(array_diff($mevcutUyeler, $var));
+            return 'Bağlı defter tabloları ayrı aktarılamaz (' . implode(' + ', $mevcutUyeler)
+                 . '). Eksik tablo(lar): ' . implode(', ', $eksik) . '.';
+        }
+    }
+    return null;
+}
+
+/**
+ * Bir depo adını TÜM veri kolonlarında yeni ada çeker (TR-duyarsız eşleşme). Dönen: güncellenen satır sayısı.
+ * $tablolar verilirse yalnız o tablolar (atomik defter grupları bölünemez); null = hepsi.
+ * Tek transaction garantisi (dış transaction varsa katılır). $tabloDetay verilirse tablo.kolon => satır sayısı dolar.
+ */
+function depo_ad_aktar(PDO $pdo, string $eskiAd, string $yeniAd, ?array $tablolar = null, ?array &$tabloDetay = null): int
 {
     $hedef = depo_anahtar($eskiAd);
     if ($hedef === '' || $yeniAd === '') return 0;
+    if ($tablolar !== null) {
+        $eksik = depo_atomik_eksik_kontrol($pdo, $tablolar);
+        if ($eksik !== null) throw new InvalidArgumentException($eksik);
+    }
+    $detay = [];
     $toplam = 0;
-    foreach (depo_kolonlari($pdo) as [$t, $c]) {
-        if ($tablolar !== null && !in_array($t, $tablolar, true)) continue;
-        try {
+    $kendiTx = !$pdo->inTransaction();
+    try {
+        if ($kendiTx) $pdo->beginTransaction();
+        foreach (depo_kolonlari($pdo) as [$t, $c]) {
+            if ($tablolar !== null && !in_array($t, $tablolar, true)) continue;
             $vals = $pdo->query("SELECT DISTINCT `$c` FROM `$t` WHERE `$c` IS NOT NULL AND `$c` <> ''")->fetchAll(PDO::FETCH_COLUMN);
+            $kolSay = 0;
             foreach ($vals as $v) {
                 $v = (string)$v;
                 if ($v !== $yeniAd && depo_anahtar($v) === $hedef) {
                     $st = $pdo->prepare("UPDATE `$t` SET `$c` = ? WHERE `$c` = ?");
                     $st->execute([$yeniAd, $v]);
-                    $toplam += $st->rowCount();
+                    $kolSay += $st->rowCount();
                 }
             }
-        } catch (PDOException $e) { error_log('[depo_ad_aktar] ' . $t . '.' . $c . ': ' . $e->getMessage()); throw $e; }
+            if ($kolSay > 0) {
+                $detay[$t . '.' . $c] = $kolSay;
+                $toplam += $kolSay;
+            }
+        }
+        if ($kendiTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if ($kendiTx && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('[depo_ad_aktar] ' . $e->getMessage());
+        throw $e;
+    }
+    if ($tabloDetay !== null) $tabloDetay = $detay;
+    if ($kendiTx && $toplam > 0 && function_exists('audit_log_event')) {
+        audit_log_event('update', 'depolar', null, ['eski_ad' => $eskiAd], [
+            'operation' => 'depo_ad_aktar', 'yeni_ad' => $yeniAd, 'satir' => $toplam, 'etkilenen_tablolar' => $detay,
+        ]);
     }
     return $toplam;
 }
@@ -431,12 +492,12 @@ function depo_guncelle(PDO $pdo, int $id, array $g): array
     if ($h !== '') return ['ok' => false, 'hata' => $h, 'aktarilan' => 0];
     $h = depo_ad_cakisma($pdo, $ad, $id);
     if ($h !== '') return ['ok' => false, 'hata' => $h, 'aktarilan' => 0];
-    $uid = depo_uid(); $aktarilan = 0;
+    $uid = depo_uid(); $aktarilan = 0; $aktarDetay = [];
     $aktif = array_key_exists('aktif', $g) ? (empty($g['aktif']) ? 0 : 1) : (int)$d['aktif'];
     $renk  = array_key_exists('renk', $g) ? depo_renk_dogrula($g['renk']) : ($d['renk'] ?? null);
     try {
         $pdo->beginTransaction();
-        if ($ad !== (string)$d['ad']) $aktarilan = depo_ad_aktar($pdo, (string)$d['ad'], $ad);
+        if ($ad !== (string)$d['ad']) $aktarilan = depo_ad_aktar($pdo, (string)$d['ad'], $ad, null, $aktarDetay);
         $pdo->prepare('UPDATE `depolar` SET ad = ?, ad_anahtar = ?, renk = ?, aktif = ?, updated_at = ?, updated_by = ? WHERE id = ?')
             ->execute([$ad, depo_anahtar($ad), $renk, $aktif, date('Y-m-d H:i:s'), $uid, $id]);
         $oncekiKul = depo_kullanici_listesi($pdo)[$id] ?? [];
@@ -449,7 +510,7 @@ function depo_guncelle(PDO $pdo, int $id, array $g): array
         return ['ok' => false, 'hata' => 'Depo güncellenemedi.', 'aktarilan' => 0];
     }
     depo_onbellek_sifirla();
-    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $id, ['ad' => $d['ad'], 'aktif' => (int)$d['aktif'], 'kullanicilar' => $oncekiKul], ['ad' => $ad, 'aktif' => $aktif, 'aktarilan_satir' => $aktarilan, 'kullanicilar' => $yeniKul]);
+    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $id, ['ad' => $d['ad'], 'aktif' => (int)$d['aktif'], 'kullanicilar' => $oncekiKul], ['ad' => $ad, 'aktif' => $aktif, 'aktarilan_satir' => $aktarilan, 'aktarilan_tablolar' => $aktarDetay, 'kullanicilar' => $yeniKul]);
     return ['ok' => true, 'hata' => '', 'aktarilan' => $aktarilan];
 }
 
@@ -554,9 +615,10 @@ function depo_tablo_grubu(string $t): string
 }
 
 /**
- * Tek eski adı TÜM (ya da seçili) veri kolonlarında yeni ada çeker; HER TABLO KENDİ İŞLEMİNDE (biri hata verirse diğerleri yine aktarılır).
- * Benzersiz anahtar çakışması (SQLSTATE 23000 — ör. daily_work_sessions UNIQUE(çavuş, gün, depo): hedef depoda aynı çavuş+gün kaydı zaten var)
- * olursa o tablo IGNORE ile yeniden denenir: çakışmayan satırlar taşınır, çakışanlar ESKİ adda KALIR ve 'atlanan' olarak sayılıp raporlanır.
+ * Tek eski adı TÜM (ya da seçili) veri kolonlarında yeni ada çeker.
+ * Atomik muhasebe defter grupları (depo_atomik_gruplar) TEK transaction içinde birlikte aktarılır (kısmi aktarım YOK — B-19).
+ * Bağımsız operasyonel tablolarda her tablo kendi işlemindedir; benzersiz anahtar çakışması (SQLSTATE 23000) olursa
+ * çakışmayan satırlar taşınır, çakışanlar ESKİ adda KALIR ve 'atlanan' olarak sayılıp raporlanır.
  * @return array{satir:int,tablo:array<string,int>,atlanan:array<string,int>,hata:array<string,string>}
  */
 function depo_ad_aktar_ayrintili(PDO $pdo, string $eskiAd, string $yeniAd, ?array $tablolar = null): array
@@ -564,9 +626,61 @@ function depo_ad_aktar_ayrintili(PDO $pdo, string $eskiAd, string $yeniAd, ?arra
     $out = ['satir' => 0, 'tablo' => [], 'atlanan' => [], 'hata' => []];
     $hedef = depo_anahtar($eskiAd);
     if ($hedef === '' || $yeniAd === '') return $out;
-    $ignore = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? 'UPDATE OR IGNORE' : 'UPDATE IGNORE';
+    if ($tablolar !== null) {
+        $eksik = depo_atomik_eksik_kontrol($pdo, $tablolar);
+        if ($eksik !== null) {
+            $out['hata']['atomik_grup'] = $eksik;
+            return $out;
+        }
+    }
+
+    // Tablo → atomik grup haritası
+    $grupHarita = [];
+    foreach (depo_atomik_gruplar() as $gAd => $uyeler) {
+        foreach ($uyeler as $u) $grupHarita[$u] = $gAd;
+    }
+
+    $atomikKumeler = [];
+    $tekiller = [];
     foreach (depo_kolonlari($pdo) as [$t, $c]) {
         if ($tablolar !== null && !in_array($t, $tablolar, true)) continue;
+        if (isset($grupHarita[$t])) {
+            $atomikKumeler[$grupHarita[$t]][] = [$t, $c];
+        } else {
+            $tekiller[] = [$t, $c];
+        }
+    }
+
+    // 1) Atomik muhasebe defter kümeleri: grup bazında TEK transaction (ya hep ya hiç)
+    foreach ($atomikKumeler as $gAd => $ciftler) {
+        $grupDetay = []; $grupSatir = 0;
+        try {
+            $pdo->beginTransaction();
+            foreach ($ciftler as [$t, $c]) {
+                $vals = $pdo->query("SELECT DISTINCT `$c` FROM `$t` WHERE `$c` IS NOT NULL AND `$c` <> ''")->fetchAll(PDO::FETCH_COLUMN);
+                $n = 0;
+                foreach ($vals as $v) {
+                    $v = (string)$v;
+                    if ($v === $yeniAd || depo_anahtar($v) !== $hedef) continue;
+                    $st = $pdo->prepare("UPDATE `$t` SET `$c` = ? WHERE `$c` = ?");
+                    $st->execute([$yeniAd, $v]);
+                    $n += $st->rowCount();
+                }
+                if ($n > 0) { $grupDetay[$t . '.' . $c] = $n; $grupSatir += $n; }
+            }
+            $pdo->commit();
+            foreach ($grupDetay as $k => $n) $out['tablo'][$k] = ($out['tablo'][$k] ?? 0) + $n;
+            $out['satir'] += $grupSatir;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('[depo_ad_aktar_ayrintili/atomik:' . $gAd . '] ' . $e->getMessage());
+            $out['hata'][$gAd] = mb_substr((string)preg_replace('/\s+/', ' ', $e->getMessage()), 0, 160);
+        }
+    }
+
+    // 2) Bağımsız tablolar: tablo başına transaction + UNIQUE çakışmada güvenli IGNORE
+    $ignore = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? 'UPDATE OR IGNORE' : 'UPDATE IGNORE';
+    foreach ($tekiller as [$t, $c]) {
         $anahtar = $t . '.' . $c;
         $dene = function (string $update) use ($pdo, $t, $c, $hedef, $yeniAd): array {
             $n = 0; $aday = 0;
@@ -611,7 +725,7 @@ function depo_ad_aktar_ayrintili(PDO $pdo, string $eskiAd, string $yeniAd, ?arra
 /**
  * ESKİ depo adı/adlarındaki veriyi YENİ bir depoya aktarır (canlı modüllerde — Personel/Sipariş vb. — eski adla damgalı
  * satırlar gizlenmesin diye). $eskiAdlar tek ad ya da ad listesi; $tablolar = yalnız seçilen tablolar (null = yedek hariç hepsi).
- * Her tablo ayrı işlemdedir: bir tabloda hata olsa da diğerleri aktarılır, hatalar mesajda tablo.kolon olarak listelenir.
+ * Bağlı muhasebe defter çiftleri (stok/fatura, çek-senet, kasa) ayrı seçilemez; birlikte tek transaction ile aktarılır (B-19).
  * @return array{ok:bool,mesaj:string,satir:int,tablo:array<string,int>,atlanan:array<string,int>,hata:array<string,string>}
  */
 function depo_eski_veriyi_aktar(PDO $pdo, string|array $eskiAdlar, int $yeniDepoId, ?array $tablolar = null): array
@@ -629,6 +743,9 @@ function depo_eski_veriyi_aktar(PDO $pdo, string|array $eskiAdlar, int $yeniDepo
         foreach (depo_kolonlari($pdo) as [$t]) if (depo_tablo_grubu($t) !== 'yedek') $tablolar[$t] = $t;
         $tablolar = array_values($tablolar);
     }
+    if (($atomikHata = depo_atomik_eksik_kontrol($pdo, $tablolar)) !== null) {
+        return ['ok' => false, 'mesaj' => $atomikHata, 'satir' => 0, 'tablo' => [], 'atlanan' => [], 'hata' => ['atomik_grup' => $atomikHata]];
+    }
     $toplam = 0; $tablo = []; $hata = []; $atlanan = [];
     foreach ($adlar as $a) {
         $r = depo_ad_aktar_ayrintili($pdo, $a, (string)$d['ad'], $tablolar);
@@ -638,7 +755,10 @@ function depo_eski_veriyi_aktar(PDO $pdo, string|array $eskiAdlar, int $yeniDepo
         foreach ($r['atlanan'] as $k => $n) $atlanan[$k] = ($atlanan[$k] ?? 0) + $n;
     }
     depo_onbellek_sifirla();
-    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $yeniDepoId, null, ['operation' => 'eski_veri_aktar', 'eski_adlar' => $adlar, 'satir' => $toplam, 'tablolar' => $tablolar, 'hatali_tablolar' => array_keys($hata), 'atlanan' => $atlanan]);
+    if (function_exists('audit_log_event')) audit_log_event('update', 'depolar', $yeniDepoId, null, [
+        'operation' => 'eski_veri_aktar', 'eski_adlar' => $adlar, 'satir' => $toplam,
+        'tablolar' => $tablolar, 'etkilenen_tablolar' => $tablo, 'hatali_tablolar' => array_keys($hata), 'atlanan' => $atlanan,
+    ]);
     $mesaj = "$toplam satır \"{$d['ad']}\" deposuna aktarıldı";
     if ($tablo) $mesaj .= ' (' . implode(', ', array_map(fn($k, $n) => "$k: $n", array_keys($tablo), $tablo)) . ')';
     $mesaj .= '.';

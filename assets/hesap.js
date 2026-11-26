@@ -81,12 +81,16 @@
 
     /* ══════════ 3. Durum geçişi ══════════ */
 
-    HesapUI.durum = function (id, hedef, gerekceZorunlu) {
+    var durumBusy = false;
+    HesapUI.durum = function (id, hedef, gerekceZorunlu, btn) {
+        if (durumBusy) return;
         var not = '';
         if (gerekceZorunlu) {
             not = window.prompt('Gerekçe (zorunlu):') || '';
             if (!not.trim()) { window.alert('Gerekçe girilmeden işlem yapılamaz.'); return; }
         }
+        durumBusy = true;
+        if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
         var body = new URLSearchParams({ id: id, durum: hedef, not: not, csrf: csrf() });
         fetch('hesap_durum.php', {
             method: 'POST',
@@ -95,10 +99,16 @@
         })
         .then(function (r) { return r.json(); })
         .then(function (d) {
-            if (d.ok) window.location.reload();
-            else window.alert(d.msg || 'İşlem başarısız.');
+            if (d && d.ok) { window.location.reload(); return; }
+            durumBusy = false;
+            if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+            window.alert((d && d.msg) || 'İşlem başarısız.');
         })
-        .catch(function () { window.alert('Bağlantı hatası.'); });
+        .catch(function () {
+            durumBusy = false;
+            if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+            window.alert('Bağlantı hatası.');
+        });
     };
 
     function initDurumButtons() {
@@ -107,7 +117,8 @@
                 HesapUI.durum(
                     btn.getAttribute('data-hs-id'),
                     btn.getAttribute('data-hs-durum'),
-                    btn.getAttribute('data-hs-not') === '1'
+                    btn.getAttribute('data-hs-not') === '1',
+                    btn
                 );
             });
         });

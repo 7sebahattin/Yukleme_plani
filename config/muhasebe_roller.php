@@ -25,6 +25,20 @@ function muhasebe_rol_islemli_gruplar(): array { return ['cari', 'kasa', 'cek_se
  */
 function muhasebe_herkese_acik_sayfalar(): array { return ['sifre_degistirme']; }
 
+/**
+ * Geçiş dönemi 302 yönlendirme sayfaları → hedef sayfa eşlemesi (B-25).
+ * Bu slug'lardan birine muhasebe.<slug>.read izni verilen rol, yönlendirildiği hedef
+ * sayfada da (yalnız okuma) kabul edilir; menüde görünüp 403 alma çelişkisi oluşmaz.
+ * @return array<string,string>
+ */
+function muhasebe_yonlendirme_hedefleri(): array {
+    return [
+        'arac_yukleme_fisleri' => 'records.php',
+        'mal_kabul_fisleri'    => 'kantar.php',
+        'raporlar_listeler'    => 'reports.php',
+    ];
+}
+
 /** Rol kapsamındaki (yönetici sayfaları HARİÇ) grup anahtarları → [etiket, [slug => başlık]]. */
 function muhasebe_rol_gruplari(): array {
     static $out = null;

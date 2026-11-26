@@ -57,6 +57,28 @@ try {
         exit;
     }
 
+    // B-42: Dış TCMB isteği (oto_cek) için tarih sınırı ve oturum başına hız sınırı (60 sn içinde en çok 15 çekim)
+    if ($otoCek && $tarih !== '') {
+        $cozTarih = doviz_tarih_coz($tarih);
+        if ($cozTarih === null || $cozTarih < '2000-01-01' || $cozTarih > date('Y-m-d', strtotime('+7 days'))) {
+            $otoCek = false;
+        }
+    }
+    if ($otoCek) {
+        app_session_start();
+        $now = time();
+        $gecmis = array_values(array_filter(
+            (array)($_SESSION['_doviz_oto_ts'] ?? []),
+            static fn($ts): bool => is_int($ts) && ($now - $ts) < 60
+        ));
+        if (count($gecmis) >= 15) {
+            $otoCek = false;
+        } else {
+            $gecmis[] = $now;
+            $_SESSION['_doviz_oto_ts'] = $gecmis;
+        }
+    }
+
     $sonuc = doviz_kur_bul($pdo, $kod, $tarih !== '' ? $tarih : null, $tip !== '' ? $tip : null, $otoCek);
     echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {

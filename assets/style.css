@@ -137,8 +137,8 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 /* Mobil alt çubuk yüksekliği (dok ~84px + alt boşluk 8px; güvenli alan HARİÇ).
    Çubuğa göre yer bırakan her kural bunu kullanır — bkz. Bottom Navigation. */
 :root { --bn-h: 92px; }
-@media (min-width: 768px) { :root { --bn-h: 0px; } }
-@media (max-width: 767px) {
+@media (min-width: 900px) { :root { --bn-h: 0px; } }
+@media (max-width: 899px) {
     .container { padding-bottom: calc(var(--bn-h) + 12px + env(safe-area-inset-bottom, 0px)); }
 }
 
@@ -2635,7 +2635,7 @@ dialog.pm-dialog:not([open]) { display: none; }
     --bn-label-on: #1c2230;
     --ni-idle: saturate(.62) brightness(1.03);
 }
-@media (max-width: 767px) {
+@media (max-width: 899px) {
     .bottomnav { display: block; }
 }
 /* Aktif depo şeridi — dokun üst kenarında, depo rengi DEĞİŞKENİNİ izler */
@@ -2709,7 +2709,7 @@ body.bn-yok { --bn-h: 0px; }
     overscroll-behavior: contain;
 }
 .bn-sheet-ovl[hidden] { display: none !important; }
-@media (min-width: 768px) { .bn-sheet-ovl { display: none !important; } }
+@media (min-width: 900px) { .bn-sheet-ovl { display: none !important; } }
 .bn-sheet {
     width: 100%; max-height: 84vh; max-height: 84dvh; overflow-y: auto; overscroll-behavior: contain;
     background: var(--card); color: var(--text);
@@ -3035,10 +3035,11 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
     display: block; width: 100%; box-sizing: border-box;
     margin-top: 5px; padding: 9px 11px;
     border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-    font-size: .95rem; background: #f8fafc;
+    font-size: .95rem; background: var(--bg); color: var(--text);
 }
-.def3-field input:focus, .def3-field select:focus { border-color: var(--primary); background: #fff; outline: none; }
-.def3-field select:disabled { opacity: .7; background: #eef2f7; }
+.def3-field input:focus, .def3-field select:focus { border-color: var(--primary); background: var(--card); }
+.def3-field input:focus-visible, .def3-field select:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.def3-field select:disabled { opacity: .7; background: var(--surface-2, var(--bg)); }
 
 /* Depo renk seçici (definitions.php sol panel) */
 .def3-color-field small { display: block; margin-top: 5px; font-size: .74rem; }
@@ -3046,7 +3047,7 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 .def3-color-row input[type="color"] {
     width: 46px; height: 38px; padding: 3px;
     margin-top: 0; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-    cursor: pointer; background: #fff;
+    cursor: pointer; background: var(--card);
 }
 .def3-color-row input[type="color"].is-auto { border-style: dashed; border-color: var(--muted); }
 .def3-color-row .btn { margin-top: 0; }
@@ -3061,13 +3062,13 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 .def3-active { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: .88rem; font-weight: 600; }
 .def3-panel-meta {
     font-size: .78rem; color: var(--muted);
-    background: #f8fafc; border: 1px solid var(--border);
+    background: var(--bg); border: 1px solid var(--border);
     border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 12px;
 }
 .def3-panel-actions { display: flex; gap: 8px; }
 .def3-panel-actions .btn-primary { flex: 1; }
 .def3-del { color: #dc2626; }
-.def3-del:hover { background: #fef2f2; }
+.def3-del:hover { background: rgba(220, 38, 38, .12); }
 
 /* ── Sağ liste ── */
 .def3-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -3078,9 +3079,10 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 .def3-search input[type="search"] {
     flex: 1; padding: 9px 12px;
     border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-    font-size: .95rem; background: #f8fafc;
+    font-size: .95rem; background: var(--bg); color: var(--text);
 }
-.def3-search input[type="search"]:focus { border-color: var(--primary); background: #fff; outline: none; }
+.def3-search input[type="search"]:focus { border-color: var(--primary); background: var(--card); }
+.def3-search input[type="search"]:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .def3-showoff { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); white-space: nowrap; }
 
 /* Bölüm sekmeleri — tıklanan başlığın içeriği altta listelenir */
@@ -3091,11 +3093,11 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 .def3-tab {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 14px; border-radius: 999px;
-    background: #f1f5f9; border: 1.5px solid transparent;
+    background: var(--surface-2, var(--bg)); border: 1.5px solid transparent;
     font: inherit; font-size: .84rem; font-weight: 700; color: var(--text);
     cursor: pointer; transition: background .12s, border-color .12s, color .12s;
 }
-.def3-tab:hover { border-color: var(--primary); background: #eff6ff; }
+.def3-tab:hover { border-color: var(--primary); background: var(--primary-soft, rgba(29, 108, 240, .1)); }
 .def3-tab.active { background: var(--primary); color: #fff; }
 .def3-tab-count {
     font-size: .7rem; font-weight: 800;
@@ -4199,7 +4201,7 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
         flex-direction: column;
         position: fixed;
         left: 0; top: 0; bottom: 0;
-        width: 220px;
+        width: var(--sb-w, 180px);
         overflow: hidden;   /* v548: kaydırma yalnız .sidebar-nav'da; marka + kullanıcı alanı sabit */
         background: var(--text);
         color: #fff;
@@ -4338,10 +4340,10 @@ a.bn-tile.bn-tile-link:focus-visible { outline: 2px solid var(--depot-accent, va
 }
 
 @media (min-width: 1280px) {
-    /* Geniş ekranda sidebar ve içerik genişler */
-    .desktop-sidebar { width: 260px; }
+    /* Geniş ekranda sidebar genişliği tek --sb-w token'ı ile yönetilir (B-42) */
+    :root { --sb-w: 210px; }
     .container {
-        margin-left: 260px !important;
+        margin-left: var(--sb-w, 210px) !important;
         max-width: none !important;
     }
     /* 1280px'de sidebar daha geniş olduğu için 4 kolon yeterlice alan bulur */
@@ -7423,13 +7425,18 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     html:not(:has(body.print-mode)) { font-size: 12px; }
     body:not(.print-mode) { font-size: 1rem; }
 
-    /* 2) Sidebar (220px → 180px) & içerik alanı */
-    .desktop-sidebar { width: 180px; }
+    /* 2) Sidebar (tek --sb-w kaynağı) & içerik alanı (B-42) */
+    :root { --sb-w: 180px; }
+    .desktop-sidebar { width: var(--sb-w); }
     body:not(.print-mode) .container {
-        margin-left: 180px !important;
+        margin-left: var(--sb-w) !important;
         margin-right: 0 !important;
         max-width: none !important;
         padding: 18px 20px 36px;
+    }
+    /* B-42: 12px kök ölçeklemede 11px altına düşen küçük etiket/ipucu yazıları için okunabilirlik tabanı */
+    .muted, .hint, .field-hint, .sidebar-section, .home-section-title, small {
+        font-size: max(11px, .82rem);
     }
 
     .sidebar-brand { gap: 8px; padding: 12px 12px 10px; }
@@ -7555,9 +7562,10 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
 
 /* Geniş masaüstü (≥1280px): 210px sidebar + 7 sütun ana sayfa + 64px 3B ikon */
 @media screen and (min-width: 1280px) {
-    .desktop-sidebar { width: 210px; }
+    :root { --sb-w: 210px; }
+    .desktop-sidebar { width: var(--sb-w); }
     body:not(.print-mode) .container {
-        margin-left: 210px !important;
+        margin-left: var(--sb-w) !important;
         max-width: none !important;
         padding: 20px 24px 40px;
     }

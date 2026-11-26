@@ -78,3 +78,66 @@ jobs:
 
       - name: Tarayıcı testleri
         run: bash scripts/tum_testler.sh --yalniz-js -v
+
+  php-lint:
+    name: PHP sözdizimi (php -l)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: none
+
+      - name: Paralel php -l taraması
+        run: |
+          find . -type f -name '*.php' -not -path './vendor/*' -not -path './.git/*' -print0 \
+            | xargs -0 -n 1 -P 4 php -l > /dev/null
+
+  mysql-integration:
+    name: MariaDB 10.11 entegrasyon ve yarış testleri
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: asya_ci_password
+          MYSQL_DATABASE: asya_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      ASYA_TEST_MYSQL_DSN: 'mysql:host=127.0.0.1;port=3306;dbname=asya_test;charset=utf8mb4'
+      ASYA_TEST_MYSQL_USER: 'root'
+      ASYA_TEST_MYSQL_PASS: 'asya_ci_password'
+      MAIL_TEST_MYSQL_DSN: 'mysql:host=127.0.0.1;port=3306;dbname=asya_test;charset=utf8mb4'
+      MAIL_TEST_MYSQL_USER: 'root'
+      MAIL_TEST_MYSQL_PASS: 'asya_ci_password'
+      TEST_ATLAMA_HATA: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mysqli, pdo_sqlite, sqlite3, gd, mbstring, zip, intl, curl, dom, xml, xmlwriter, fileinfo, iconv, pcntl, posix
+          ini-values: memory_limit=-1, date.timezone=UTC, display_errors=Off
+          coverage: none
+          tools: none
+
+      - name: Migrasyon 2x idempotency testi (MariaDB)
+        run: php scripts/migrate_mysql_smoke.php
+
+      - name: Finans ve PDKS FOR UPDATE yarış testleri (MariaDB)
+        run: php scripts/mysql_finans_race_smoke.php
+
+      - name: Mail outbox yarış testi (MariaDB)
+        run: php scripts/mail_race_mysql_smoke.php

@@ -14,13 +14,15 @@ if (realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) { http_r
 
 function doviz_head_varlik(): void
 {
-    $v = defined('APP_SURUM') ? (string)APP_SURUM : '1';
+    $p = dirname(__DIR__) . '/assets/doviz.css';
+    $v = is_file($p) ? (string)@filemtime($p) : (defined('APP_SURUM') ? (string)APP_SURUM : '1');
     echo '<link rel="stylesheet" href="assets/doviz.css?v=' . rawurlencode($v) . '">' . "\n";
 }
 
 function doviz_scripts(): void
 {
-    $v = defined('APP_SURUM') ? (string)APP_SURUM : '1';
+    $p = dirname(__DIR__) . '/assets/doviz.js';
+    $v = is_file($p) ? (string)@filemtime($p) : (defined('APP_SURUM') ? (string)APP_SURUM : '1');
     echo '<script src="assets/doviz.js?v=' . rawurlencode($v) . '"></script>' . "\n";
 }
 

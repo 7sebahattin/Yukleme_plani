@@ -12,6 +12,7 @@ require_login();
 require_perm('records.read');
 require_perm('reports.export');   // tüm dışa aktarımların ortak kapısı
 require_once __DIR__ . '/config/xlsx_export.php';   // export_audit()
+if (function_exists('export_prepare_runtime')) export_prepare_runtime(256, 120);
 
 $autoload = __DIR__ . '/vendor/autoload.php';
 if (!is_file($autoload)) { http_response_code(500); die('Excel motoru (PhpSpreadsheet) bulunamadı.'); }

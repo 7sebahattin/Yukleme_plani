@@ -306,11 +306,11 @@ for f in ${TESTLER[@]+"${TESTLER[@]}"}; do
         HATA=$((HATA + 1)); HATALILAR+=("$f")
         if [ "$kod" -eq 124 ]; then echo "FAIL $f (zaman aşımı)"; else echo "FAIL $f (çıkış $kod)"; fi
         goster_cikti "$f" "$log"
-    elif [[ "$f" == *.js ]] && grep -qE '(Playwright|Chromium).*(ATLANDI|atlandı)' "$log"; then
-        # Test kendini atladı (Playwright/Chromium yok) — hata değil, ama sayılır
+    elif grep -qE '(^ATLANDI\b|(Playwright|Chromium).*(ATLANDI|atlandı))' "$log"; then
+        # Test kendini atladı (Playwright/Chromium ya da MySQL DSN yok) — sayılır; TEST_ATLAMA_HATA=1 ile fail eder
         if [ "$ATLAMA_HATA" = 1 ]; then
             HATA=$((HATA + 1)); HATALILAR+=("$f")
-            echo "FAIL $f (tarayıcı testi kendini ATLADI; TEST_ATLAMA_HATA=1)"
+            echo "FAIL $f (test kendini ATLADI; TEST_ATLAMA_HATA=1)"
             goster_cikti "$f" "$log"
         else
             ATLANAN=$((ATLANAN + 1)); ATLANANLAR+=("$f — $(grep -m1 -E 'ATLANDI|atlandı' "$log")")

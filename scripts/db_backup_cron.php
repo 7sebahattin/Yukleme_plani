@@ -13,6 +13,12 @@
 // Kilit (.backup.lock) sayfa ile paylaşılır; otomatik deneme freni
 // (3 deneme / 30 dk) UYGULANMAZ, 17:00 kuralı YOKTUR.
 // Çıktı: "OK <dosya> <boyut>" (exit 0) · "BUSY" / "SKIP" (exit 0) · "FAIL <hata>" (exit 1)
+//
+// Önerilen cPanel Cron (her gün 03:15; aktif edildiğinde config/local.php'de
+// define('DB_BACKUP_CRON_ONLY', true); tanımlanarak web tetiklemesi kapatılabilir):
+//   15 3 * * * /usr/local/bin/php /home/derspros/asya.scai.tr/scripts/db_backup_cron.php >> /home/derspros/asya.scai.tr/storage/backups/cron.log 2>&1
+// Opsiyonel off-site (Cloudflare R2 / S3 — rclone ile şifreli kopya):
+//   30 3 * * * /usr/bin/rclone copy /home/derspros/asya.scai.tr/storage/backups/db remote:asyafresh-backups/db --include "*.sql.gz" --max-age 48h
 // =========================================================
 declare(strict_types=1);
 

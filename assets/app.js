@@ -2087,13 +2087,24 @@ function ekranAlti() {
                 list.style.top    = (r.bottom + 3) + 'px';
             }
         }
-        // Açıkken sayfa/kapsayıcı kaydırılırsa liste input'la birlikte gitsin
-        window.addEventListener('scroll', positionList, true);
-        window.addEventListener('resize', positionList);
+        var posBound = false;
+        function bindPosListeners() {
+            if (posBound) return;
+            posBound = true;
+            window.addEventListener('scroll', positionList, true);
+            window.addEventListener('resize', positionList);
+        }
+        function unbindPosListeners() {
+            if (!posBound) return;
+            posBound = false;
+            window.removeEventListener('scroll', positionList, true);
+            window.removeEventListener('resize', positionList);
+        }
 
         function close() {
             list.hidden = true;
             active = -1;
+            unbindPosListeners();
             // Satır içi konum stillerini temizle — CSS varsayılanına dön
             list.style.position = '';
             list.style.top      = '';
@@ -2235,7 +2246,8 @@ function ekranAlti() {
             }
             list.hidden = list.childNodes.length === 0;
             active = -1;
-            positionList();   // satırlar eklendikten SONRA — yükseklik ölçülebilsin
+            if (list.hidden) { unbindPosListeners(); }
+            else { bindPosListeners(); positionList(); }   // satırlar eklendikten SONRA — yükseklik ölçülebilsin
         }
 
         function rows() { return list.querySelectorAll('.ms-sug-row'); }
@@ -3324,3 +3336,67 @@ function ekranAlti() {
         f.submit();
     });
 })();
+
+/* B-34: POST formlarında çift gönderim (double-submit) koruması + bfcache sıfırlama */
+(function () {
+    function resetForms() {
+        document.querySelectorAll('form[data-asya-submitting="1"]').forEach(function (f) {
+            delete f.dataset.asyaSubmitting;
+            f.querySelectorAll('[data-asya-submit-disabled="1"]').forEach(function (b) {
+                b.disabled = false;
+                b.removeAttribute('aria-busy');
+                delete b.dataset.asyaSubmitDisabled;
+            });
+        });
+    }
+    document.addEventListener('submit', function (e) {
+        var f = e.target;
+        if (!f || f.tagName !== 'FORM') return;
+        if (e.defaultPrevented) return;
+        var method = (f.getAttribute('method') || 'get').toLowerCase();
+        if (method !== 'post') return;
+        if (f.dataset.noDoubleSubmitGuard === '1' || (f.getAttribute('target') || '') === '_blank') return;
+        if (f.dataset.asyaSubmitting === '1') {
+            e.preventDefault();
+            return;
+        }
+        f.dataset.asyaSubmitting = '1';
+        var submitter = e.submitter || f.querySelector('button[type="submit"], input[type="submit"]');
+        if (submitter && !submitter.disabled) {
+            // Submit butonunun name/value değeri POST'a dahil olsun diye bir sonraki tick'te devre dışı bırak
+            setTimeout(function () {
+                if (f.dataset.asyaSubmitting === '1') {
+                    submitter.disabled = true;
+                    submitter.setAttribute('aria-busy', 'true');
+                    submitter.dataset.asyaSubmitDisabled = '1';
+                }
+            }, 0);
+        }
+    });
+    window.addEventListener('pageshow', function (ev) { if (ev.persisted) resetForms(); else resetForms(); });
+})();
+
+/* B-42: Ortak erişilebilirlik odak tuzağı (modal/dialog için reusable focusTrap) */
+window.asyaFocusTrap = function (container) {
+    if (!container) return function () {};
+    var sel = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    function onKey(e) {
+        if (e.key !== 'Tab') return;
+        var nodes = Array.prototype.slice.call(container.querySelectorAll(sel)).filter(function (el) {
+            return el.offsetParent !== null && !el.closest('[hidden]');
+        });
+        if (!nodes.length) return;
+        var first = nodes[0], last = nodes[nodes.length - 1];
+        if (e.shiftKey) {
+            if (document.activeElement === first || !container.contains(document.activeElement)) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else if (document.activeElement === last || !container.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+    container.addEventListener('keydown', onKey);
+    return function () { container.removeEventListener('keydown', onKey); };
+};
