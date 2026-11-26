@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v590');
+    define('APP_SURUM', 'v591');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -560,6 +560,10 @@ function nav_muhasebe_gruplari(): array {
         'erp_yonetim' => ['Yönetişim, Banka & İK', '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/>', [
             'onay_merkezi.php' => ['Onay Akışları Merkezi', '✅'], 'banka_yonetim.php' => ['Banka Mutabakat & Kredi', '🏦'],
             'ik_bordro.php' => ['İK & Resmi Bordro', '👥']]],
+        // v591 (ERP Faz 4): CRM & Fiyat Listeleri, Sabit Kıymet/Amortisman/Bakım, Bütçe/Aging/Nakit Akış
+        'erp_planlama' => ['CRM, Sabit Kıymet & Planlama', '<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>', [
+            'crm_yonetim.php' => ['CRM & Fiyat Listeleri', '🤝'], 'sabit_kiymet.php' => ['Sabit Kıymet & Bakım', '🏗️'],
+            'finans_planlama.php' => ['Bütçe, Aging & Nakit Akış', '📊']]],
         // v548: Araç Yükleme / Palet / Mal Kabul fişleri "Operasyon_fis" grubuna taşındı (sidebar'da Operasyon'un İÇİNDE çizilir).
         'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
             'arac_yukleme_fisleri.php' => ['Araç Yükleme Fişleri', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],

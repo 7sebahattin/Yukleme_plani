@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v590';
+const CACHE_NAME = 'yukleme-plani-v591';
 
 // Uygulama kabuğunu önbellekle (B-30: yalnız kimliksiz statik varlıklar; .php HTML asla önbelleğe alınmaz)
 const SHELL = [
@@ -61,7 +61,7 @@ self.addEventListener('activate', function(e) {
 });
 
 // Muhasebe sayfa adları (stok.php, kantar.php, malzeme_stok*.php, records.php vb. KAPSANMAZ: ön ek + '_' ya da tam ad)
-var SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|alis_fat|satis_fat|sevk_irs|dovizli|doviz_kaydet|api_doviz_kur|transfer_fis|ihracat_|stok_|muh_|edonusum_|wms_|yukleme_v2|satinalma_|uretim_bom|erp_op_|onay_|banka_|ik_bordro|erp_yonetim_|kantar_fisleri|palet_fisleri|mal_kabul_fisleri|arac_yukleme|alinan_siparis|beyanname_siparis|rapor_tanimlari|raporlar_listeler|sifre_deg|sube_|sirket_deg|kullanici_(tanimlari|tercihleri)|depo_tanimlari|veritabani_islemleri|ajanda|mesajlar|gunluk_kurlar|doviz_tanimlari|kayit_bilgisi|waap_|genel_duyurular|guncelleme|program_|diger_uygulama|lisans_)[a-z0-9_]*\.php(\/|$)/;
+var SW_MUHASEBE_RE = /\/(cari|kasa|cek|senet|fatura|alis_fat|satis_fat|sevk_irs|dovizli|doviz_kaydet|api_doviz_kur|transfer_fis|ihracat_|stok_|muh_|edonusum_|wms_|yukleme_v2|satinalma_|uretim_bom|erp_op_|onay_|banka_|ik_bordro|erp_yonetim_|crm_|sabit_kiymet|finans_planlama|erp_plan_|kantar_fisleri|palet_fisleri|mal_kabul_fisleri|arac_yukleme|alinan_siparis|beyanname_siparis|rapor_tanimlari|raporlar_listeler|sifre_deg|sube_|sirket_deg|kullanici_(tanimlari|tercihleri)|depo_tanimlari|veritabani_islemleri|ajanda|mesajlar|gunluk_kurlar|doviz_tanimlari|kayit_bilgisi|waap_|genel_duyurular|guncelleme|program_|diger_uygulama|lisans_)[a-z0-9_]*\.php(\/|$)/;
 
 // B-30 Beyaz Liste (Allowlist): Yalnız aynı-köken /assets/* ve /manifest.json önbelleklenebilir.
 // Hiçbir kimlikli .php sayfası, API yanıtı veya indirme CacheStorage'a yazılmaz.

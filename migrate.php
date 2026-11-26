@@ -79,6 +79,9 @@ require_once __DIR__ . '/config/uretim_bom_core.php';    // ERP-4 Üretim BOM, �
 require_once __DIR__ . '/config/onay_core.php';          // ERP-5 Merkezi Onay Akışları
 require_once __DIR__ . '/config/banka_core.php';         // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
 require_once __DIR__ . '/config/ik_bordro_core.php';     // ERP-7 İK Özlük, İzin & Resmi Bordro
+require_once __DIR__ . '/config/crm_core.php';           // ERP-8 CRM & Fiyat Listeleri
+require_once __DIR__ . '/config/sabit_kiymet_core.php';  // ERP-9 Sabit Kıymet, Amortisman & Bakım
+require_once __DIR__ . '/config/finans_plan_core.php';   // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -183,6 +186,9 @@ $ubom_results = []; $ubom_ran = false;                      // ERP-4 Üretim BOM
 $onay_results = []; $onay_ran = false;                      // ERP-5 Merkezi Onay Akışları
 $banka_results = []; $banka_ran = false;                    // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
 $ik_results = []; $ik_ran = false;                          // ERP-7 İK Özlük, İzin & Resmi Bordro
+$crm_results = []; $crm_ran = false;                        // ERP-8 CRM & Fiyat Listeleri
+$sk_results = []; $sk_ran = false;                          // ERP-9 Sabit Kıymet, Amortisman & Bakım
+$fp_results = []; $fp_ran = false;                          // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -682,6 +688,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($ik_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'ik_bordro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'crm_fiyat') {
+    csrf_check($_POST['csrf'] ?? null);
+    $crm_ran     = true;
+    $crm_results = crm_migrate($pdo);
+    foreach ($crm_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'crm_fiyat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'sabit_kiymet') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sk_ran     = true;
+    $sk_results = sabit_kiymet_migrate($pdo);
+    foreach ($sk_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'sabit_kiymet', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'finans_planlama') {
+    csrf_check($_POST['csrf'] ?? null);
+    $fp_ran     = true;
+    $fp_results = finans_plan_migrate($pdo);
+    foreach ($fp_results as $sr) {
+        if ($sr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'finans_planlama', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -2550,6 +2583,69 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="ik_bordro">
       <button type="submit" class="btn btn-primary">İK &amp; Resmi Bordro Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('crm-fiyat'); ?>
+    <h2 style="margin-top:0;">CRM, Fiyat Listeleri, Teklif &amp; Kalite Claim (ERP-8)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>crm_firsatlar</code>, <code>crm_aktiviteler</code>, <code>crm_fiyat_listeleri</code>,
+      <code>crm_fiyat_satirlar</code>, <code>crm_teklifler</code> (tek tık siparişe dönüşüm) ve <code>crm_claimler</code> tablolarını ekler.
+      <?php if ($crm_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($crm_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $crmHazir = crm_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $crmHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $crmHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="crm_fiyat">
+      <button type="submit" class="btn btn-primary">CRM &amp; Fiyat Listesi Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('sabit-kiymet'); ?>
+    <h2 style="margin-top:0;">Sabit Kıymet, Amortisman &amp; Periyodik Bakım (ERP-9)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>sk_kartlar</code>, <code>sk_amortismanlar</code> (Normal / Azalan Bakiyeler + TDHP 770/730→257 yevmiye)
+      ve <code>sk_bakimlar</code> (makine/araç bakım geçmişi) tablolarını ekler.
+      <?php if ($sk_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($sk_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $skHazir = sabit_kiymet_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $skHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $skHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="sabit_kiymet">
+      <button type="submit" class="btn btn-primary">Sabit Kıymet &amp; Bakım Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('finans-planlama'); ?>
+    <h2 style="margin-top:0;">Bütçe, Vade Yaşlandırma (Aging) &amp; Nakit Akış (ERP-10)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>fp_butceler</code> (TDHP gerçekleşen sapma kontrolü) ve <code>fp_nakit_kalemler</code>
+      (30/60/90/120+ gün Aging &amp; 90 günlük haftalık Nakit Akış Projeksiyonu) tablolarını ekler.
+      <?php if ($fp_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($fp_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $fpHazir = finans_plan_hazir($pdo); ?>
+    <p style="font-weight:600;color:<?= $fpHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $fpHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="finans_planlama">
+      <button type="submit" class="btn btn-primary">Bütçe &amp; Nakit Akış Tablolarını Oluştur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>
