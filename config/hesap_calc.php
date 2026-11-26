@@ -31,20 +31,21 @@ declare(strict_types=1);
  * is_given_to_accountant SİLİNMEZ; hesap_transition() her durum değişiminde onu
  * senkron tutar, böylece eski sorgular (export, fiş PDF) bozulmadan çalışır.
  */
-function hesap_migrate(): void
+function hesap_migrate(bool $calistir = false): array
 {
-    static $done = false;
-    if ($done) return;
-    $done = true;
+    // B-01: Normal sayfa isteklerinde DDL / SHOW COLUMNS / backfill UPDATE çalıştırılmaz.
+    // Yalnızca migrate.php › Çekirdek Şema kartı hesap_migrate(true) ile açıkça tetikler.
+    if (!$calistir) return [];
 
+    $rapor = [];
     $pdo = db();
 
     try { $pdo->query("SELECT 1 FROM `account_transactions` LIMIT 0"); }
-    catch (PDOException $e) { return; }   // tablo henüz yok — db.php oluşturacak
+    catch (PDOException $e) { return [['adim' => 'hesap', 'durum' => 'atlandi', 'mesaj' => 'account_transactions tablosu henüz yok.']]; }
 
     try {
         $cols = $pdo->query("SHOW COLUMNS FROM `account_transactions`")->fetchAll(PDO::FETCH_COLUMN);
-    } catch (PDOException $e) { return; }
+    } catch (PDOException $e) { return []; }
 
     $add = [
         'user_id'      => "ADD COLUMN `user_id`      INT NULL",
@@ -66,19 +67,14 @@ function hesap_migrate(): void
     if (!empty($parts)) {
         try {
             $pdo->exec("ALTER TABLE `account_transactions` " . implode(', ', $parts));
+            $rapor[] = ['adim' => 'account_transactions.kolonlar', 'durum' => 'eklendi', 'mesaj' => count($parts) . ' kolon eklendi.'];
         } catch (PDOException $e) {
             error_log('[hesap_migrate columns] ' . $e->getMessage());
-            return;
+            $rapor[] = ['adim' => 'account_transactions.kolonlar', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+            return $rapor;
         }
     }
 
-    // Geri dolum — kendinden idempotent, marker gerektirmez.
-    // status kolonu DEFAULT 'submitted' ile gelir; muhasebeye verilmiş eski kayıtlar
-    // bu yüzden yanlışlıkla "gönderildi" görünür. Onları 'approved'a çekiyoruz.
-    // Koşul yalnız geri doldurulmamış eski satırlarla eşleşir: hesap_transition()
-    // status ile is_given_to_accountant'ı her zaman senkron tuttuğu için gerçek bir
-    // 'submitted' kaydında is_given_to_accountant her zaman 0'dır.
-    // (migrate.php kolonu önce eklemiş olsa bile bu düzeltme çalışır.)
     try {
         $n = $pdo->exec("UPDATE `account_transactions`
                             SET `status` = 'approved'
@@ -106,9 +102,13 @@ function hesap_migrate(): void
         try {
             $st = $pdo->prepare("SHOW INDEX FROM `account_transactions` WHERE Key_name = ?");
             $st->execute([$key]);
-            if ($st->rowCount() === 0) $pdo->exec($sql);
+            if ($st->rowCount() === 0) {
+                $pdo->exec($sql);
+                $rapor[] = ['adim' => "account_transactions.$key", 'durum' => 'eklendi', 'mesaj' => 'İndeks eklendi.'];
+            }
         } catch (PDOException $e) { /* indeks yoksa sessiz geç */ }
     }
+    return $rapor;
 }
 
 // ─────────────────────────────────────────────────────────

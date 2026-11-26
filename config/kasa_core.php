@@ -505,16 +505,27 @@ function kasa_kart_durum(PDO $pdo, int $id, bool $aktif, int $uid): array
     return ['ok' => true, 'hata' => null, 'id' => $id, 'uyari' => $uyari];
 }
 
-/** Fiziksel silme YALNIZ hiç hareket satırı (iptaller dahil) yoksa; aksi 409 hareketli. */
+/** Fiziksel silme YALNIZ hiçbir modülde hareket/belge/karne bağı (iptaller dahil) yoksa; transaction + FOR UPDATE altında; aksi 409 hareketli. */
 function kasa_kart_sil(PDO $pdo, int $id, int $uid): array
 {
-    $k = kasa_kart_oku($pdo, $id);
-    if ($k === null) return kasa_hata('Kasa bulunamadı.');
-    if (($r = kasa_depo_ret($k)) !== null) return $r;
-    if (kasa_kart_hareket_say($pdo, $id) > 0) return kasa_hata('Hareketi olan kasa silinemez; pasifleştirin.', ['kod' => 'hareketli']);
-    $pdo->prepare('DELETE FROM kasa_kartlar WHERE id = ?')->execute([$id]);
-    audit_log_event('delete', 'kasa', $id, ['kayit' => 'kart'] + $k, null);
-    return ['ok' => true, 'hata' => null, 'id' => $id];
+    require_once __DIR__ . '/muhasebe_referans.php';
+    $s = kasa_tx($pdo, function () use ($pdo, $id): array {
+        kasa_kart_kilitle($pdo, [$id]);
+        $k = kasa_kart_oku($pdo, $id);
+        if ($k === null) return kasa_hata('Kasa bulunamadı.');
+        if (($r = kasa_depo_ret($k)) !== null) return $r;
+        if (kasa_kart_hareket_say($pdo, $id) > 0) return kasa_hata('Hareketi olan kasa silinemez; pasifleştirin.', ['kod' => 'hareketli']);
+        if (($engel = muhasebe_kart_referans_kontrol($pdo, 'kasa', $id)) !== null) {
+            return kasa_hata($engel, ['kod' => 'hareketli']);
+        }
+        $pdo->prepare('DELETE FROM kasa_kartlar WHERE id = ?')->execute([$id]);
+        return ['ok' => true, 'hata' => null, 'id' => $id, '_kart' => $k];
+    });
+    if (empty($s['ok'])) return $s;
+    $eskiKart = $s['_kart'];
+    unset($s['_kart']);
+    audit_log_event('delete', 'kasa', $id, ['kayit' => 'kart'] + $eskiKart, null);
+    return $s;
 }
 
 /**

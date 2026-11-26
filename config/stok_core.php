@@ -553,16 +553,27 @@ function stok_kart_durum(PDO $pdo, int $id, bool $aktif, int $uid): array
     return ['ok' => true, 'hata' => null, 'id' => $id, 'uyari' => $uyari];
 }
 
-/** Fiziksel silme YALNIZ hiç fiş satırı / defter satırı (iptaller dahil) yoksa. */
+/** Fiziksel silme YALNIZ hiç fiş/defter/belge satırı (iptaller dahil) yoksa; transaction + FOR UPDATE altında. */
 function stok_kart_sil(PDO $pdo, int $id, int $uid): array
 {
-    $k = stok_kart_oku($pdo, $id);
-    if ($k === null) return stok_hata('Stok kartı bulunamadı.');
-    if (stok_kart_hareket_say($pdo, $id) > 0) return stok_hata('Hareketi olan stok kartı silinemez; pasifleştirin.', ['kod' => 'hareketli']);
-    $pdo->prepare('DELETE FROM stok_kartlar WHERE id = ?')->execute([$id]);
-    unset($k['grup_adi']);
-    audit_log_event('delete', 'stok', $id, ['kart' => $k], null);
-    return ['ok' => true, 'hata' => null, 'id' => $id];
+    require_once __DIR__ . '/muhasebe_referans.php';
+    $s = stok_tx($pdo, function () use ($pdo, $id): array {
+        stok_kart_kilitle($pdo, [$id]);
+        $k = stok_kart_oku($pdo, $id);
+        if ($k === null) return stok_hata('Stok kartı bulunamadı.');
+        if (stok_kart_hareket_say($pdo, $id) > 0) return stok_hata('Hareketi olan stok kartı silinemez; pasifleştirin.', ['kod' => 'hareketli']);
+        if (($engel = muhasebe_kart_referans_kontrol($pdo, 'stok', $id)) !== null) {
+            return stok_hata($engel, ['kod' => 'hareketli']);
+        }
+        $pdo->prepare('DELETE FROM stok_kartlar WHERE id = ?')->execute([$id]);
+        unset($k['grup_adi']);
+        return ['ok' => true, 'hata' => null, 'id' => $id, '_kart' => $k];
+    });
+    if (empty($s['ok'])) return $s;
+    $eskiKart = $s['_kart'];
+    unset($s['_kart']);
+    audit_log_event('delete', 'stok', $id, ['kart' => $eskiKart], null);
+    return $s;
 }
 
 // ── Okuyucular (bakiye / maliyet / hareket) ─────────────────────────────────
@@ -625,10 +636,11 @@ function stok_bakiyeler_toplu(PDO $pdo, array $ids): array
     return $out;
 }
 
-/** Kartın son defter satırındaki maliyet durumu (depo FİLTRESİZ; ürün bazında ortak). @return array{q:int,v:int,ort:float} q milli, v kuruş, ort kuruş/birim */
-function stok_maliyet_durumu(PDO $pdo, int $kartId): array
+/** Kartın son defter satırındaki maliyet durumu (depo FİLTRESİZ; ürün bazında ortak). $kilitle=true: MySQL tx içinde FOR UPDATE ile REPEATABLE READ eski görüntü riskini kapatır (B-05). @return array{q:int,v:int,ort:float} q milli, v kuruş, ort kuruş/birim */
+function stok_maliyet_durumu(PDO $pdo, int $kartId, bool $kilitle = false): array
 {
-    $st = $pdo->prepare('SELECT q_sonra, v_sonra, ort_sonra FROM stok_hareketler WHERE kart_id = ? ORDER BY id DESC LIMIT 1');
+    $lock = ($kilitle && $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') ? ' FOR UPDATE' : '';
+    $st = $pdo->prepare('SELECT q_sonra, v_sonra, ort_sonra FROM stok_hareketler WHERE kart_id = ? ORDER BY id DESC LIMIT 1' . $lock);
     $st->execute([$kartId]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if ($r === false) return ['q' => 0, 'v' => 0, 'ort' => 0.0];
@@ -841,7 +853,7 @@ function stok_kart_kilitle(PDO $pdo, array $ids): void
 function stok_hareket_yaz(PDO $pdo, array &$durumlar, array $h, int $uid): array
 {
     $kart = (int)$h['kart_id'];
-    if (!isset($durumlar[$kart])) $durumlar[$kart] = stok_maliyet_durumu($pdo, $kart);
+    if (!isset($durumlar[$kart])) $durumlar[$kart] = stok_maliyet_durumu($pdo, $kart, true);
     $r = stok_maliyet_uygula($durumlar[$kart], (int)$h['q'], isset($h['deger']) ? (int)$h['deger'] : null);
     $pdo->prepare('INSERT INTO stok_hareketler (fis_id, satir_id, kart_id, tarih, depo, miktar, deger, q_sonra, v_sonra, ort_sonra, ters_id, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([(int)$h['fis_id'], isset($h['satir_id']) ? (int)$h['satir_id'] : null, $kart, (string)$h['tarih'], (string)$h['depo'], stok_milli_db((int)$h['q']),
@@ -946,10 +958,11 @@ function stok_kantar_oku(PDO $pdo, int $id): ?array
     }
 }
 
-/** Mal kabul fişine bağlı GEÇERLİ stok fişi (çift aktarım koruması). */
-function stok_kantar_bagli_fis(PDO $pdo, int $kantarId): ?array
+/** Mal kabul fişine bağlı GEÇERLİ stok fişi (çift aktarım koruması). $kilitle=true: MySQL tx içinde FOR UPDATE (B-23). */
+function stok_kantar_bagli_fis(PDO $pdo, int $kantarId, bool $kilitle = false): ?array
 {
-    $st = $pdo->prepare("SELECT id, fis_no FROM stok_fisler WHERE kaynak_modul = 'kantar' AND kaynak_id = ? AND durum = 'gecerli' ORDER BY id LIMIT 1");
+    $lock = ($kilitle && $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') ? ' FOR UPDATE' : '';
+    $st = $pdo->prepare("SELECT id, fis_no FROM stok_fisler WHERE kaynak_modul = 'kantar' AND kaynak_id = ? AND durum = 'gecerli' ORDER BY id LIMIT 1" . $lock);
     $st->execute([$kantarId]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     return $r === false ? null : $r;
@@ -1130,9 +1143,10 @@ function stok_fis_istek_bul(PDO $pdo, string $anahtar): ?array
 
 /**
  * Fiş bu stok düşüşünü karşılıyor mu? Depo bazında (kart, depo) net azalış > mevcut ise eksik. Okuma depo filtresiz (aynı depo, doğrudan).
+ * $kilitle=true: MySQL tx içinde FOR UPDATE ile REPEATABLE READ eski görüntü riskini kapatır (B-05).
  * @return list<array{kart_id:int,kod:string,ad:string,depo:string,birim:string,istenen_milli:int,mevcut_milli:int,eksik_milli:int}>
  */
-function stok_fis_eksikler(PDO $pdo, array $v): array
+function stok_fis_eksikler(PDO $pdo, array $v, bool $kilitle = false): array
 {
     $delta = []; $bilgi = [];
     foreach ($v['satirlar'] as $s) {
@@ -1147,7 +1161,8 @@ function stok_fis_eksikler(PDO $pdo, array $v): array
         else $isle($v['depo'], $s['yon'] === 'G' ? $s['milli'] : -$s['milli']);
     }
     $out = [];
-    $st = $pdo->prepare('SELECT COALESCE(SUM(miktar), 0) FROM stok_hareketler WHERE kart_id = ? AND depo = ?');
+    $lock = ($kilitle && $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') ? ' FOR UPDATE' : '';
+    $st = $pdo->prepare('SELECT COALESCE(SUM(miktar), 0) FROM stok_hareketler WHERE kart_id = ? AND depo = ?' . $lock);
     foreach ($delta as $k => $d) {
         if ($d >= 0) continue;
         $b = $bilgi[$k];
@@ -1193,10 +1208,16 @@ function stok_fis_kaydet(PDO $pdo, array $g, int $uid, ?array $kaynak = null): a
     try {
         $s = stok_tx($pdo, function () use ($pdo, $v, $uid, $etiket): array {
             stok_kart_kilitle($pdo, array_column($v['satirlar'], 'kart_id'));
-            if ($v['kaynak_modul'] === 'kantar' && ($b = stok_kantar_bagli_fis($pdo, (int)$v['kaynak_id'])) !== null) {
-                return stok_hata('Bu mal kabul fişi zaten ' . $b['fis_no'] . ' ile aktarılmış.', ['kod' => 'kantar_aktarilmis', 'alanlar' => ['kaynak_modul' => 'Mal kabul fişi aktarılmış.']]);
+            if ($v['kaynak_modul'] === 'kantar') {
+                // Eşzamanlı çift kantar aktarım yarışını kapat: kaynak kantar satırını FOR UPDATE ile kilitle (B-23)
+                if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+                    $pdo->prepare('SELECT id FROM kantar_fisleri WHERE id = ? FOR UPDATE')->execute([(int)$v['kaynak_id']]);
+                }
+                if (($b = stok_kantar_bagli_fis($pdo, (int)$v['kaynak_id'], true)) !== null) {
+                    return stok_hata('Bu mal kabul fişi zaten ' . $b['fis_no'] . ' ile aktarılmış.', ['kod' => 'kantar_aktarilmis', 'alanlar' => ['kaynak_modul' => 'Mal kabul fişi aktarılmış.']]);
+                }
             }
-            $eksik = stok_fis_eksikler($pdo, $v);
+            $eksik = stok_fis_eksikler($pdo, $v, true);
             if ($eksik && !$v['eksiye_izin']) return stok_hata('Yetersiz stok: bu kayıt stoğu eksiye düşürecek.', ['kod' => 'yetersiz_stok', 'eksikler' => $eksik]);
             $uyari = $eksik ? stok_eksik_uyari($eksik) : null;
             $simdi = date('Y-m-d H:i:s');
@@ -1287,12 +1308,19 @@ function stok_fis_iptal(PDO $pdo, int $id, string $neden, int $uid, ?string $kay
     if ($f['durum'] === 'iptal') return stok_hata('Fiş zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
     $fk = (string)($f['kaynak_modul'] ?? '');
     if ($fk !== '' && $fk !== 'kantar' && $fk !== $kaynakModul) return stok_hata('Bu fiş başka bir belgeden üretildi; o belgeden iptal edin.', ['kod' => 'kaynakli']);
+    // B-05: kart_id listesini transaction DIŞINDA oku ki transaction'ın İLK satırında stok_kart_kilitle() çalışsın (REPEATABLE READ eski görüntü önlemi).
+    $stKart = $pdo->prepare('SELECT DISTINCT kart_id FROM stok_hareketler WHERE fis_id = ? AND ters_id IS NULL');
+    $stKart->execute([$id]);
+    $onKartIds = array_map('intval', $stKart->fetchAll(PDO::FETCH_COLUMN));
     try {
-        $s = stok_tx($pdo, function () use ($pdo, $f, $id, $neden, $uid): array {
-            $st = $pdo->prepare('SELECT * FROM stok_hareketler WHERE fis_id = ? AND ters_id IS NULL ORDER BY id DESC');
+        $s = stok_tx($pdo, function () use ($pdo, $f, $id, $neden, $uid, $onKartIds): array {
+            stok_kart_kilitle($pdo, $onKartIds);
+            $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+            $st = $pdo->prepare('SELECT * FROM stok_hareketler WHERE fis_id = ? AND ters_id IS NULL ORDER BY id DESC' . $lock);
             $st->execute([$id]);
             $har = $st->fetchAll(PDO::FETCH_ASSOC);
-            stok_kart_kilitle($pdo, array_map(static fn(array $h): int => (int)$h['kart_id'], $har));
+            $eksikKart = array_diff(array_map(static fn(array $h): int => (int)$h['kart_id'], $har), $onKartIds);
+            if ($eksikKart) stok_kart_kilitle($pdo, array_values($eksikKart));
             $up = $pdo->prepare("UPDATE stok_fisler SET durum = 'iptal', iptal_at = ?, iptal_by = ?, iptal_neden = ? WHERE id = ? AND durum = 'gecerli'");
             $up->execute([date('Y-m-d H:i:s'), $uid, $neden, $id]);
             if ($up->rowCount() !== 1) return stok_hata('Fiş zaten iptal edilmiş.', ['kod' => 'zaten_iptal']);
@@ -1311,7 +1339,7 @@ function stok_fis_iptal(PDO $pdo, int $id, string $neden, int $uid, ?string $kay
             }
             $eksik = [];
             if ($etki) {
-                $bs = $pdo->prepare('SELECT COALESCE(SUM(h.miktar), 0) AS m, k.kod, k.ad, k.ana_birim FROM stok_hareketler h JOIN stok_kartlar k ON k.id = h.kart_id WHERE h.kart_id = ? AND h.depo = ? GROUP BY k.kod, k.ad, k.ana_birim');
+                $bs = $pdo->prepare('SELECT COALESCE(SUM(h.miktar), 0) AS m, k.kod, k.ad, k.ana_birim FROM stok_hareketler h JOIN stok_kartlar k ON k.id = h.kart_id WHERE h.kart_id = ? AND h.depo = ? GROUP BY k.kod, k.ad, k.ana_birim' . $lock);
                 foreach ($etki as [$kart, $depo]) {
                     $bs->execute([$kart, $depo]);
                     $r = $bs->fetch(PDO::FETCH_ASSOC);

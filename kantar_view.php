@@ -6,7 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('kantar.read');
+if (!function_exists('muhasebe_sayfa_can') || !muhasebe_sayfa_can('mal_kabul_fisleri')) { require_perm('kantar.read'); }
 
 $id = (int)($_GET['id'] ?? 0);
 role_require_kantar_scope($id);

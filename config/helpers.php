@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v583');
+    define('APP_SURUM', 'v584');
 }
 
 // --- HTML kaçışı ---
@@ -479,11 +479,11 @@ function first_allowed_page(): ?string {
     $adm = function_exists('is_admin') && is_admin();
 
     $adaylar = [
-        'records.php'        => role_matrix_page_can('records','loading'),                    // require_perm('records.read')
+        'records.php'        => role_matrix_page_can('records','loading'),                    // records.php: records.loading.read || muhasebe_sayfa_can('arac_yukleme_fisleri')
         'beyanlar.php'       => beyan_sayfa_erisimi(),                  // beyanlar.php: beyan_sayfa_erisimi()
-        'kantar.php'         => can('kantar.read'),                     // require_perm('kantar.read')
-        'halkayit/index.php' => can('hks.access'),                   // require_perm('records.write')
-        'reports.php'        => can('reports.read'),                    // require_perm('reports.read')
+        'kantar.php'         => can('kantar.read'),                     // kantar.php: kantar.read || muhasebe_sayfa_can('mal_kabul_fisleri')
+        'halkayit/index.php' => can('hks.access'),                      // halkayit/index.php: require_perm('hks.access')
+        'reports.php'        => can('reports.read'),                    // reports.php: reports.read || muhasebe_sayfa_can('raporlar_listeler')
         'malzeme_stok.php'   => can('stok.read'),                       // require_perm('stok.read')
         'hesap.php'          => can('hesap.read') || $adm,              // hesap_can('read')
         'mail.php'           => can_mail('read'),                       // mail.php: can_mail('read')
@@ -502,7 +502,7 @@ function first_allowed_page(): ?string {
         if ($izinli) return $sayfa;
     }
     // v550: yalnız muhasebe menüsü yetkisi olan rol — sayfanın KENDİ kapısı (muhasebe_sayfa_can). Başka sayfaya
-    // 302 veren sayfalar atlanır (hedefin kapısı farklı olabilir → yeni 403 olmasın).
+    // 302 veren sayfalar iniş sayfası olarak atlanır; doğrudan açıldığında hedef sayfa kapısı B-25 ile senkrondur.
     $yonlendiren = ['kantar_fisleri', 'mal_kabul_fisleri', 'arac_yukleme_fisleri', 'raporlar_listeler', 'ihracat_faturasi_maliyeti', 'beyanname_siparis_proforma'];
     foreach (muhasebe_rol_gruplari() as $__g) foreach ($__g['sayfalar'] as $__slug => $__b) {
         if (!in_array($__slug, $yonlendiren, true) && muhasebe_sayfa_can($__slug)) return $__slug . '.php';
@@ -512,9 +512,9 @@ function first_allowed_page(): ?string {
 
 /**
  * v558: eski Yükleme Planı / Paletleme / Mal Kabul girişleri TÜM menülerden kalktı (sidebar, mobil, tablet üst menü,
- * ana sayfa kartları; sahip kararı — eski sistem kaldırılıyor). Sayfalar yerinde; yeni fiş sayfaları (Araç Yükleme /
- * Mal Kabul Fişleri) onlara YÖNLENDİRMEZ (v559, yer tutucu). Eski sayfadayken (nav_aktif_anahtar records/cikma/kantar) menüde SEÇİLİ görünen
- * giriş yeni karşılığıdır: eski anahtar => yeni muhasebe fiş sayfası slug'ı.
+ * ana sayfa kartları; sahip kararı — eski sistem kaldırılıyor). Geçiş döneminde `arac_yukleme_fisleri.php` → `records.php`
+ * ve `mal_kabul_fisleri.php` → `kantar.php` 302 yönlendirmesi yapar (okuma kapıları B-25 ile senkrondur). Eski sayfadayken
+ * (nav_aktif_anahtar records/cikma/kantar) menüde SEÇİLİ görünen giriş yeni karşılığıdır: eski anahtar => yeni muhasebe fiş sayfası slug'ı.
  */
 function nav_eski_esleri(): array {
     return ['records' => 'arac_yukleme_fisleri', 'cikma' => 'palet_fisleri', 'kantar' => 'mal_kabul_fisleri'];
@@ -1531,10 +1531,11 @@ function ensure_column(string $table, string $column, string $alterSql): bool {
 }
 endif;
 
-// --- Tek seferlik otomatik migrasyon ---
-(function () {
+// --- Çekirdek şema migrasyonu (B-01: artık her istekte OTOMATİK çalışmaz; yalnız migrate.php › Çekirdek Şema kartından çağrılır) ---
+function cekirdek_helpers_migrate(?PDO $pdo = null): array {
+    $rapor = [];
     try {
-        $pdo = db();
+        $pdo = $pdo ?? db();
         // 1) loading_records.type kolonu
         try {
             $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
@@ -1759,7 +1760,7 @@ endif;
             `currency`               VARCHAR(5) NOT NULL DEFAULT 'TRY',
             `payment_method`         VARCHAR(30) NOT NULL DEFAULT 'nakit',
             `person_company`         VARCHAR(200) NOT NULL DEFAULT '',
-            `description`            TEXT NOT NULL DEFAULT '',
+            `description`            TEXT NULL,
             `document_no`            VARCHAR(100) NOT NULL DEFAULT '',
             `has_invoice`            TINYINT(1) NOT NULL DEFAULT 0,
             `is_for_company`         TINYINT(1) NOT NULL DEFAULT 1,
@@ -1771,7 +1772,7 @@ endif;
             `review_note`            VARCHAR(500) NOT NULL DEFAULT '',
             `paid_at`                DATETIME NULL,
             `depo`                   VARCHAR(150) NOT NULL DEFAULT '',
-            `notes`                  TEXT NOT NULL DEFAULT '',
+            `notes`                  TEXT NULL,
             `has_files`              TINYINT(1) NOT NULL DEFAULT 0,
             `created_at`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at`             TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
@@ -2236,8 +2237,11 @@ endif;
             error_log('[Beyan-Bildirim-01 MIGRATION] ' . $e->getMessage());
         }
 
-    } catch (PDOException $e) {}
-})();
+    } catch (PDOException $e) {
+        $rapor[] = ['adim' => 'cekirdek_helpers', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+    }
+    return $rapor;
+}
 
 function _audit_sanitize(array $data): array {
     static $blocked = ['password', 'password_hash', 'token', 'csrf', 'cookie', 'foto_data', 'session', 'asya_session', 'http_cookie'];

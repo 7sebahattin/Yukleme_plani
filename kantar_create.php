@@ -112,87 +112,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Listede olmayan palet/kasa cinsi yazıldıysa tanımlara eklenir
         foreach ($kp_rows as $_kr) ensure_definition($_kr['tip'] === 'kasa' ? 'kasa_cinsi' : 'palet_tipi', $_kr['cinsi']);
 
-        db()->prepare(
-            "INSERT INTO kantar_fisleri
-             (fis_no, plaka, firma_adi, giris_tarih, cikis_tarih, operator_adi,
-              malin_cinsi, geldigi_yer, gittigi_yer,
-              palet_sayisi, palet_cinsi, kasa_cinsi, kasa_sayisi,
-              aciklama, depo, parti_no,
-              tartim1, alibi1, tartim2, alibi2, net_kg,
-              kasa_dara, palet_dara, kasa_dara_total, palet_dara_total, foto_data)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )->execute([
-            $fis['fis_no'],
-            strtoupper($fis['plaka']),
-            $fis['firma_adi'],
-            $fis['giris_tarih'],
-            $fis['cikis_tarih'],
-            $fis['operator_adi'],
-            $fis['malin_cinsi'],
-            $fis['geldigi_yer'],
-            $fis['gittigi_yer'],
-            $tot_palet_say,
-            $first_palet,
-            $first_kasa,
-            $tot_kasa_say,
-            $fis['aciklama'],
-            $fis['depo'],
-            $fis['parti_no'],
-            $t1,
-            $fis['alibi1'],
-            $t2,
-            $fis['alibi2'],
-            $net,
-            $kasa_dara_val,
-            $palet_dara_val,
-            $kasa_tot_dara,
-            $palet_tot_dara,
-            $foto_val,
-        ]);
-        $fis_id = (int)db()->lastInsertId();
+        $pdo = db();
+        $txAcildi = !$pdo->inTransaction();
+        if ($txAcildi) $pdo->beginTransaction();
 
-        // Fiş no boşsa ID'yi kullan; çakışma varsa "-2", "-3" şeklinde benzersiz yap
-        if ($fis['fis_no'] === '') {
-            $base   = (string)$fis_id;
-            $try    = $base;
-            $suffix = 1;
-            $chk    = db()->prepare("SELECT COUNT(*) FROM kantar_fisleri WHERE fis_no = ? AND id != ?");
-            do {
-                $chk->execute([$try, $fis_id]);
-                if ((int)$chk->fetchColumn() === 0) break;
-                $try = $base . '-' . (++$suffix);
-            } while (true);
-            db()->prepare("UPDATE kantar_fisleri SET fis_no = ? WHERE id = ?")->execute([$try, $fis_id]);
-        }
+        // Boş fis_no ile eşzamanlı INSERT'ler UNIQUE(fis_no) üzerinde çakışmasın diye geçici benzersiz yer tutucu
+        $elleFisNo = $fis['fis_no'] !== '';
+        $ilkFisNo  = $elleFisNo ? $fis['fis_no'] : ('__TMP_' . bin2hex(random_bytes(8)));
 
-        // Kasa/palet satırlarını kaydet
-        if (!empty($kp_rows)) {
-            $kp_st = db()->prepare("INSERT INTO kantar_kasa_palet_satir (fis_id, tip, cinsi, sayisi, birim_dara_kg) VALUES (?,?,?,?,?)");
-            foreach ($kp_rows as $row) {
-                $kp_st->execute([$fis_id, $row['tip'], $row['cinsi'], $row['sayisi'], $row['birim_dara_kg']]);
+        if ($elleFisNo) {
+            $dupSt = $pdo->prepare('SELECT id FROM kantar_fisleri WHERE fis_no = ? LIMIT 1');
+            $dupSt->execute([$ilkFisNo]);
+            if ($dupSt->fetchColumn()) {
+                if ($txAcildi && $pdo->inTransaction()) $pdo->rollBack();
+                $errors[] = 'Bu fiş numarası zaten kayıtlı: ' . $fis['fis_no'];
             }
         }
 
-        // Grupları kaydet
-        if (!empty($_POST['gruplar']) && is_array($_POST['gruplar'])) {
-            $gst = db()->prepare("INSERT INTO kantar_gruplar (fis_id, sira, grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg, brut_kg) VALUES (?,?,?,?,?,?,?,?)");
-            $sira = 0;
-            foreach ($_POST['gruplar'] as $g) {
-                $ga = normalize_firma(trim((string)($g['grup_adi'] ?? '')));
-                if ($ga === '') continue;
-                ensure_definition('firma', $ga);
-                $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
-            }
-        }
-        // Ek alanlar (şoför, malın sahibi, müstahsil, bahçe): yalnız kolonlar kuruluysa yazılır
-        kantar_alanlari_yaz(db(), $fis_id, $_POST);
-        if (trim($fis['sofor']) !== '') ensure_definition('sofor', normalize_suggest_value('sofor_adi', $fis['sofor']));
-        audit_log_event('create', 'kantar', $fis_id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
-        set_flash('success', 'Mal kabul fişi oluşturuldu (#' . $fis_id . ').');
-        header('Location: kantar_view.php?id=' . $fis_id);
-        exit;
+        if (empty($errors)) {
+            $pdo->prepare(
+                "INSERT INTO kantar_fisleri
+                 (fis_no, plaka, firma_adi, giris_tarih, cikis_tarih, operator_adi,
+                  malin_cinsi, geldigi_yer, gittigi_yer,
+                  palet_sayisi, palet_cinsi, kasa_cinsi, kasa_sayisi,
+                  aciklama, depo, parti_no,
+                  tartim1, alibi1, tartim2, alibi2, net_kg,
+                  kasa_dara, palet_dara, kasa_dara_total, palet_dara_total, foto_data)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )->execute([
+                $ilkFisNo,
+                strtoupper($fis['plaka']),
+                $fis['firma_adi'],
+                $fis['giris_tarih'],
+                $fis['cikis_tarih'],
+                $fis['operator_adi'],
+                $fis['malin_cinsi'],
+                $fis['geldigi_yer'],
+                $fis['gittigi_yer'],
+                $tot_palet_say,
+                $first_palet,
+                $first_kasa,
+                $tot_kasa_say,
+                $fis['aciklama'],
+                $fis['depo'],
+                $fis['parti_no'],
+                $t1,
+                $fis['alibi1'],
+                $t2,
+                $fis['alibi2'],
+                $net,
+                $kasa_dara_val,
+                $palet_dara_val,
+                $kasa_tot_dara,
+                $palet_tot_dara,
+                $foto_val,
+            ]);
+            $fis_id = (int)$pdo->lastInsertId();
 
+            // Fiş no boşsa ID'yi kullan; çakışma (UNIQUE 23000 dahil) varsa "-2", "-3" şeklinde yeniden dene (B-23)
+            if (!$elleFisNo) {
+                $base   = (string)$fis_id;
+                $try    = $base;
+                $suffix = 1;
+                $chk    = $pdo->prepare("SELECT COUNT(*) FROM kantar_fisleri WHERE fis_no = ? AND id != ?");
+                $updNo  = $pdo->prepare("UPDATE kantar_fisleri SET fis_no = ? WHERE id = ?");
+                $atandi = false;
+                for ($deneme = 0; $deneme < 50; $deneme++) {
+                    $chk->execute([$try, $fis_id]);
+                    if ((int)$chk->fetchColumn() > 0) {
+                        $try = $base . '-' . (++$suffix);
+                        continue;
+                    }
+                    try {
+                        $updNo->execute([$try, $fis_id]);
+                        $atandi = true;
+                        break;
+                    } catch (PDOException $ue) {
+                        if ((string)$ue->getCode() !== '23000') throw $ue;
+                        $try = $base . '-' . (++$suffix);
+                    }
+                }
+                if (!$atandi) throw new RuntimeException('Benzersiz fiş numarası üretilemedi.');
+            }
+
+            // Kasa/palet satırlarını kaydet
+            if (!empty($kp_rows)) {
+                $kp_st = $pdo->prepare("INSERT INTO kantar_kasa_palet_satir (fis_id, tip, cinsi, sayisi, birim_dara_kg) VALUES (?,?,?,?,?)");
+                foreach ($kp_rows as $row) {
+                    $kp_st->execute([$fis_id, $row['tip'], $row['cinsi'], $row['sayisi'], $row['birim_dara_kg']]);
+                }
+            }
+
+            // Grupları kaydet
+            if (!empty($_POST['gruplar']) && is_array($_POST['gruplar'])) {
+                $gst = $pdo->prepare("INSERT INTO kantar_gruplar (fis_id, sira, grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg, brut_kg) VALUES (?,?,?,?,?,?,?,?)");
+                $sira = 0;
+                foreach ($_POST['gruplar'] as $g) {
+                    $ga = normalize_firma(trim((string)($g['grup_adi'] ?? '')));
+                    if ($ga === '') continue;
+                    ensure_definition('firma', $ga);
+                    $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
+                }
+            }
+            // Ek alanlar (şoför, malın sahibi, müstahsil, bahçe): yalnız kolonlar kuruluysa yazılır
+            kantar_alanlari_yaz($pdo, $fis_id, $_POST);
+            if ($txAcildi && $pdo->inTransaction()) $pdo->commit();
+            if (trim($fis['sofor']) !== '') ensure_definition('sofor', normalize_suggest_value('sofor_adi', $fis['sofor']));
+            audit_log_event('create', 'kantar', $fis_id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
+            set_flash('success', 'Mal kabul fişi oluşturuldu (#' . $fis_id . ').');
+            header('Location: kantar_view.php?id=' . $fis_id);
+            exit;
+        }
+
+    } catch (PDOException $e) {
+        if (isset($txAcildi) && $txAcildi && isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+        if ((string)$e->getCode() === '23000' && $fis['fis_no'] !== '') {
+            $errors[] = 'Bu fiş numarası zaten kayıtlı: ' . $fis['fis_no'];
+        } else {
+            error_log('[kantar_create] ' . $e->getMessage());
+            $errors[] = 'Kayıt hatası: fiş kaydedilemedi.';
+        }
     } catch (Throwable $e) {
+        if (isset($txAcildi) && $txAcildi && isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('[kantar_create] ' . $e->getMessage());
         $errors[] = 'Kayıt hatası: ' . $e->getMessage();
     } // end if empty($errors) try
 }

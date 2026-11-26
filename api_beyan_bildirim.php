@@ -21,8 +21,6 @@
 //  • v498: BİRİM FİYAT burada girilmez/önerilmez. Taslak fiyatsız yazılır
 //    (ortak.fiyatBekliyor=true); fiyat Hal Kayıt'ta GÖNDERİM anında girilir
 //    (halkayit/api.php taslak_fiyat_yaz). Fiyatsız taslak gönderilemez (fail-closed).
-//  • BİLİNEN HATA (kapsam dışı): 'hazirla' yanıtındaki `$ulkeMetni` tanımsızdır
-//    (plan ülke metni); v498 kapsamında DEĞİŞTİRİLMEDİ.
 // =============================================================================
 declare(strict_types=1);
 
@@ -263,6 +261,10 @@ case 'hazirla': {
     }
 
     $plan = bb_bagli_plan($beyan);
+    $ulkeMetni = trim((string)($plan['gidecek_ulke'] ?? ''));
+    if ($ulkeMetni === '') {
+        $ulkeMetni = trim((string)($beyan['hks_ulke_ad'] ?? ''));
+    }
 
     // Eşleştirme BEYANDAN gelir (kalıcı alanlar) — bu ekranda seçilmez.
     // Firma adı hks_firmalar'dan çözülür; firma silinmişse id gösterilir.

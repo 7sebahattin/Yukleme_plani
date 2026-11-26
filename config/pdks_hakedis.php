@@ -543,152 +543,178 @@ function pdks_hakedis_oran_gecmisi(int $foremanId, ?PDO $pdo = null): array
 function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?");
-    $st->execute([$sessionId]);
-    $oturum = $st->fetch();
-    if (!$oturum) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+    $kendiTx = !$pdo->inTransaction();
+    $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+    $rollbackIfOwn = static function () use ($pdo, $kendiTx): void {
+        if ($kendiTx && $pdo->inTransaction()) $pdo->rollBack();
+    };
 
-    $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id = ?");
-    $stE->execute([$sessionId]);
-    $mevcut = $stE->fetch();
-    if (function_exists('can') && can('role.permissions.detailed') && !role_pdks_can('entitlements', $mevcut ? 'edit' : 'create')) {
-        return ['ok'=>false, 'kod'=>'yetki_yok', 'hata'=>'Hakediş oluşturma veya düzenleme yetkiniz yok.'];
-    }
-    if ($mevcut && $mevcut['status'] === 'final') {
-        return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ — otomatik yeniden hesaplanamaz.'];
-    }
-
-    // v295: atanmamış Karışık dönem varken hakediş HESAPLANMAZ (fail-closed, açık mesaj).
-    if (($karisikEngel = pdks_hakedis_karisik_engeli($sessionId, $pdo)) !== null) {
-        return $karisikEngel;
-    }
-
-    // v463 — RAMPACI YEVMİYE guard'ı (savunma): yevmiyeli dönem (yevmiye_adedi > 0) YALNIZ Faz 8B motoruyla
-    // fiyatlanır (yevmiye × Tam tarife). Bu eski COUNT-tabanlı motor yevmiyeyi bilmez; yevmiyeli dönem varken
-    // hesap REDDEDİLİR. `function_exists()`'e GÜVENİLMEZ (pdks_faz8b.php yüklü olmayabilir): kolon doğrudan
-    // sorgulanır; kolon yoksa (PDOException) yevmiyeli dönem de yoktur.
     try {
-        $stYev = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND yevmiye_adedi IS NOT NULL AND yevmiye_adedi > 0");
-        $stYev->execute([$sessionId]);
-        if ((int)$stYev->fetchColumn() > 0) {
-            return ['ok' => false, 'kod' => 'yevmiye_faz8b_gerekli',
-                     'hata' => 'Bu mesaide yevmiyeli (Rampacı) kayıt var. Hakediş yalnız Faz 8B motoruyla hesaplanabilir.'];
+        if ($kendiTx) $pdo->beginTransaction();
+
+        $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?$lock");
+        $st->execute([$sessionId]);
+        $oturum = $st->fetch();
+        if (!$oturum) { $rollbackIfOwn(); return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.']; }
+
+        $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id = ?$lock");
+        $stE->execute([$sessionId]);
+        $mevcut = $stE->fetch();
+        if (function_exists('can') && can('role.permissions.detailed') && !role_pdks_can('entitlements', $mevcut ? 'edit' : 'create')) {
+            $rollbackIfOwn();
+            return ['ok'=>false, 'kod'=>'yetki_yok', 'hata'=>'Hakediş oluşturma veya düzenleme yetkiniz yok.'];
         }
-    } catch (PDOException $e) {
-        // yevmiye_adedi kolonu kurulmamış → yevmiyeli dönem yok.
-    }
-
-    // ⚠ FAZ 8A MALİ GÜVENLİK KAPISI (görev talimatı §23 — "Do NOT allow the
-    // old Phase 4 entitlement engine to silently produce financially
-    // incorrect results from NEW Phase 8A Tam/Yarım periods"): bu oturumun
-    // EN AZ bir mesai dönemi declared_attendance_class != 'tam' ise (yani
-    // Yarım Mesai olarak beyan edilmişse), hakediş TAMAMEN REDDEDİLİR —
-    // yarım günü tam gün fiyatıyla FİYATLAMAK yerine güvenle DURULUR. Faz
-    // 8B'nin Tam/Yarım oran mimarisi gelene kadar bu oturum finansal olarak
-    // KESİNLEŞTİRİLEMEZ/hesaplanamaz. Tümü 'tam' (veya Faz 8A henüz aktif
-    // değilse/geriye aktarılmış eski dönemlerse — bunlar hep 'tam' yazılır,
-    // bkz. pdks_gunluk_faz8a_backfill()) oturumlar bu kapıdan ETKİLENMEZ,
-    // COUNT tabanlı fiyatlama AYNEN çalışmaya devam eder.
-    if (function_exists('pdks_gunluk_faz8a_sema_hazir') && pdks_gunluk_faz8a_sema_hazir($pdo)) {
-        $stYarim = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND declared_attendance_class <> 'tam'");
-        $stYarim->execute([$sessionId]);
-        if ((int)$stYarim->fetchColumn() > 0) {
-            return ['ok' => false, 'kod' => 'faz8a_degerlendirme_gerekli',
-                     'hata' => 'Bu mesai kaydı yeni Tam/Yarım mesai modelini kullanıyor. '
-                             . 'Hakediş Faz 8B mesai değerlendirmesi tamamlanmadan kesinleştirilemez.'];
+        if ($mevcut && $mevcut['status'] === 'final') {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ — otomatik yeniden hesaplanamaz.'];
         }
-    }
 
-    $sayim = function_exists('pdks_gunluk_oturum_kart_sayimi') ? pdks_gunluk_oturum_kart_sayimi($sessionId, $pdo) : [];
-    if (!$sayim) {
-        return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Bu mesaide hiç GİRİŞ kaydı yok — hesaplanacak işçi yok.'];
-    }
-
-    $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden bir zaman ASLA alınmaz.
-    $satirlar = []; $toplamKurus = 0; $eksikTipler = []; $paraBirimleri = [];
-    $stKod = $pdo->prepare("SELECT code FROM worker_types WHERE id = ?");
-    foreach ($sayim as $s) {
-        $tipId = $s['tip_id'] !== null ? (int)$s['tip_id'] : null;
-        $ad    = (string)$s['tip_ad'];
-        $adet  = (int)$s['n'];
-        if ($tipId === null) {
-            $eksikTipler[] = $ad !== '' ? $ad : 'Bilinmeyen tip';
-            continue;
+        // v295: atanmamış Karışık dönem varken hakediş HESAPLANMAZ (fail-closed, açık mesaj).
+        if (($karisikEngel = pdks_hakedis_karisik_engeli($sessionId, $pdo)) !== null) {
+            $rollbackIfOwn();
+            return $karisikEngel;
         }
-        $oran = pdks_hakedis_oran_gecerli((int)$oturum['foreman_id'], $tipId, (string)$oturum['work_date'], $pdo);
-        if ($oran === null) {
-            $eksikTipler[] = $ad;
-            continue;
+
+        // v463 — RAMPACI YEVMİYE guard'ı (savunma): yevmiyeli dönem (yevmiye_adedi > 0) YALNIZ Faz 8B motoruyla
+        // fiyatlanır (yevmiye × Tam tarife). Bu eski COUNT-tabanlı motor yevmiyeyi bilmez; yevmiyeli dönem varken
+        // hesap REDDEDİLİR. `function_exists()`'e GÜVENİLMEZ (pdks_faz8b.php yüklü olmayabilir): kolon doğrudan
+        // sorgulanır; kolon yoksa (PDOException) yevmiyeli dönem de yoktur.
+        try {
+            $stYev = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND yevmiye_adedi IS NOT NULL AND yevmiye_adedi > 0");
+            $stYev->execute([$sessionId]);
+            if ((int)$stYev->fetchColumn() > 0) {
+                $rollbackIfOwn();
+                return ['ok' => false, 'kod' => 'yevmiye_faz8b_gerekli',
+                         'hata' => 'Bu mesaide yevmiyeli (Rampacı) kayıt var. Hakediş yalnız Faz 8B motoruyla hesaplanabilir.'];
+            }
+        } catch (PDOException $e) {
+            // yevmiye_adedi kolonu kurulmamış → yevmiyeli dönem yok.
         }
-        $stKod->execute([$tipId]);
-        $kod = (string)($stKod->fetchColumn() ?: '');
 
-        // ⚠ Para birimi İSTEMCİDEN değil, UYGULANAN oranın KENDİSİNDEN okunur
-        // (bkz. fonksiyon docblock'u) — $paraBirimleri anahtar kümesi aşağıda
-        // "birden fazla para birimi karıştı mı" kontrolü için kullanılır.
-        $oranParaBirimi = (string)($oran['currency'] !== '' ? $oran['currency'] : 'TRY');
-        $paraBirimleri[$oranParaBirimi] = true;
+        // ⚠ FAZ 8A MALİ GÜVENLİK KAPISI (görev talimatı §23 — "Do NOT allow the
+        // old Phase 4 entitlement engine to silently produce financially
+        // incorrect results from NEW Phase 8A Tam/Yarım periods"): bu oturumun
+        // EN AZ bir mesai dönemi declared_attendance_class != 'tam' ise (yani
+        // Yarım Mesai olarak beyan edilmişse), hakediş TAMAMEN REDDEDİLİR —
+        // yarım günü tam gün fiyatıyla FİYATLAMAK yerine güvenle DURULUR. Faz
+        // 8B'nin Tam/Yarım oran mimarisi gelene kadar bu oturum finansal olarak
+        // KESİNLEŞTİRİLEMEZ/hesaplanamaz. Tümü 'tam' (veya Faz 8A henüz aktif
+        // değilse/geriye aktarılmış eski dönemlerse — bunlar hep 'tam' yazılır,
+        // bkz. pdks_gunluk_faz8a_backfill()) oturumlar bu kapıdan ETKİLENMEZ,
+        // COUNT tabanlı fiyatlama AYNEN çalışmaya devam eder.
+        if (function_exists('pdks_gunluk_faz8a_sema_hazir') && pdks_gunluk_faz8a_sema_hazir($pdo)) {
+            $stYarim = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND declared_attendance_class <> 'tam'");
+            $stYarim->execute([$sessionId]);
+            if ((int)$stYarim->fetchColumn() > 0) {
+                $rollbackIfOwn();
+                return ['ok' => false, 'kod' => 'faz8a_degerlendirme_gerekli',
+                         'hata' => 'Bu mesai kaydı yeni Tam/Yarım mesai modelini kullanıyor. '
+                                 . 'Hakediş Faz 8B mesai değerlendirmesi tamamlanmadan kesinleştirilemez.'];
+            }
+        }
 
-        $birimKurus  = pdks_hakedis_tl_kurus((string)$oran['daily_rate']);
-        $satirKurus  = $birimKurus * $adet;   // ⚠ int × int — TAM sonuç, ondalık hata YOK.
-        $toplamKurus += $satirKurus;
-        $satirlar[] = [
-            'worker_type_id' => $tipId,
-            'worker_type_code_snapshot' => $kod,
-            'worker_type_name_snapshot' => $ad,
-            'worker_count' => $adet,
-            'unit_rate' => pdks_hakedis_kurus_tl($birimKurus),
-            'line_total' => pdks_hakedis_kurus_tl($satirKurus),
-        ];
-    }
+        $sayim = function_exists('pdks_gunluk_oturum_kart_sayimi') ? pdks_gunluk_oturum_kart_sayimi($sessionId, $pdo) : [];
+        if (!$sayim) {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Bu mesaide hiç GİRİŞ kaydı yok — hesaplanacak işçi yok.'];
+        }
 
-    // ⚠ "VALIDATE FIRST" — bu satırdan ÖNCE hiçbir DELETE/UPDATE/INSERT
-    // ÇALIŞMADI. Karışık para birimi burada tespit edilip erken dönülürse
-    // mevcut TASLAK (varsa) DOKUNULMADAN kalır — kısmi/yarım bir yazım
-    // (fix talimatı madde 4: "must NOT partially modify") OLUŞMAZ.
-    if (count($paraBirimleri) > 1) {
-        return ['ok' => false, 'kod' => 'karisik_para_birimi',
-                 'hata' => 'Bu mesai için farklı para birimlerinde fiyatlar tanımlanmış. Hakediş oluşturulamaz.'];
-    }
-    // Hiç eşleşen oran yoksa (tüm tipler eksik) türetilecek bir para birimi
-    // de yoktur — toplam zaten 0'dır ve pdks_hakedis_finalize() birazdan
-    // 'oran_eksik' ile REDDEDECEKTİR; bu geçici/finansal-anlamsız durumda
-    // 'TRY' yalnız bir YER TUTUCUDUR, hiçbir gerçek tutara ETİKET OLMAZ.
-    $paraBirimi = $paraBirimleri !== [] ? (string)array_key_first($paraBirimleri) : 'TRY';
+        $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden bir zaman ASLA alınmaz.
+        $satirlar = []; $toplamKurus = 0; $eksikTipler = []; $paraBirimleri = [];
+        $stKod = $pdo->prepare("SELECT code FROM worker_types WHERE id = ?");
+        foreach ($sayim as $s) {
+            $tipId = $s['tip_id'] !== null ? (int)$s['tip_id'] : null;
+            $ad    = (string)$s['tip_ad'];
+            $adet  = (int)$s['n'];
+            if ($tipId === null) {
+                $eksikTipler[] = $ad !== '' ? $ad : 'Bilinmeyen tip';
+                continue;
+            }
+            $oran = pdks_hakedis_oran_gecerli((int)$oturum['foreman_id'], $tipId, (string)$oturum['work_date'], $pdo);
+            if ($oran === null) {
+                $eksikTipler[] = $ad;
+                continue;
+            }
+            $stKod->execute([$tipId]);
+            $kod = (string)($stKod->fetchColumn() ?: '');
 
-    if ($mevcut) {
-        $pdo->prepare("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?")->execute([(int)$mevcut['id']]);
-        $upd = $pdo->prepare(
-            "UPDATE foreman_daily_entitlements
-                SET status='draft', currency=?, total_amount=?, calculated_at=?, calculated_by_user_id=?, updated_at=?
-              WHERE id=?"
+            // ⚠ Para birimi İSTEMCİDEN değil, UYGULANAN oranın KENDİSİNDEN okunur
+            // (bkz. fonksiyon docblock'u) — $paraBirimleri anahtar kümesi aşağıda
+            // "birden fazla para birimi karıştı mı" kontrolü için kullanılır.
+            $oranParaBirimi = (string)($oran['currency'] !== '' ? $oran['currency'] : 'TRY');
+            $paraBirimleri[$oranParaBirimi] = true;
+
+            $birimKurus  = pdks_hakedis_tl_kurus((string)$oran['daily_rate']);
+            $satirKurus  = $birimKurus * $adet;   // ⚠ int × int — TAM sonuç, ondalık hata YOK.
+            $toplamKurus += $satirKurus;
+            $satirlar[] = [
+                'worker_type_id' => $tipId,
+                'worker_type_code_snapshot' => $kod,
+                'worker_type_name_snapshot' => $ad,
+                'worker_count' => $adet,
+                'unit_rate' => pdks_hakedis_kurus_tl($birimKurus),
+                'line_total' => pdks_hakedis_kurus_tl($satirKurus),
+            ];
+        }
+
+        // ⚠ "VALIDATE FIRST" — bu satırdan ÖNCE hiçbir DELETE/UPDATE/INSERT
+        // ÇALIŞMADI. Karışık para birimi burada tespit edilip erken dönülürse
+        // mevcut TASLAK (varsa) DOKUNULMADAN kalır — kısmi/yarım bir yazım
+        // (fix talimatı madde 4: "must NOT partially modify") OLUŞMAZ.
+        if (count($paraBirimleri) > 1) {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'karisik_para_birimi',
+                     'hata' => 'Bu mesai için farklı para birimlerinde fiyatlar tanımlanmış. Hakediş oluşturulamaz.'];
+        }
+        // Hiç eşleşen oran yoksa (tüm tipler eksik) türetilecek bir para birimi
+        // de yoktur — toplam zaten 0'dır ve pdks_hakedis_finalize() birazdan
+        // 'oran_eksik' ile REDDEDECEKTİR; bu geçici/finansal-anlamsız durumda
+        // 'TRY' yalnız bir YER TUTUCUDUR, hiçbir gerçek tutara ETİKET OLMAZ.
+        $paraBirimi = $paraBirimleri !== [] ? (string)array_key_first($paraBirimleri) : 'TRY';
+
+        if ($mevcut) {
+            $upd = $pdo->prepare(
+                "UPDATE foreman_daily_entitlements
+                    SET status='draft', currency=?, total_amount=?, calculated_at=?, calculated_by_user_id=?, updated_at=?
+                  WHERE id=? AND status='draft'"
+            );
+            $upd->execute([$paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId, $simdi, (int)$mevcut['id']]);
+            if ($upd->rowCount() !== 1) {
+                $rollbackIfOwn();
+                return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ — otomatik yeniden hesaplanamaz.'];
+            }
+            $pdo->prepare("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?")->execute([(int)$mevcut['id']]);
+            $entId = (int)$mevcut['id'];
+        } else {
+            $ins = $pdo->prepare(
+                "INSERT INTO foreman_daily_entitlements
+                    (session_id, foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo,
+                     status, currency, total_amount, calculated_at, calculated_by_user_id)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+            );
+            $ins->execute([
+                $sessionId, $oturum['foreman_id'], $oturum['foreman_name_snapshot'] ?? '', $oturum['foreman_code_snapshot'] ?? '',
+                $oturum['work_date'], $oturum['depo'], 'draft', $paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId,
+            ]);
+            $entId = (int)$pdo->lastInsertId();
+        }
+
+        $insL = $pdo->prepare(
+            "INSERT INTO foreman_daily_entitlement_lines
+                (entitlement_id, worker_type_id, worker_type_code_snapshot, worker_type_name_snapshot, worker_count, unit_rate, line_total)
+             VALUES (?,?,?,?,?,?,?)"
         );
-        $upd->execute([$paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId, $simdi, (int)$mevcut['id']]);
-        $entId = (int)$mevcut['id'];
-    } else {
-        $ins = $pdo->prepare(
-            "INSERT INTO foreman_daily_entitlements
-                (session_id, foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo,
-                 status, currency, total_amount, calculated_at, calculated_by_user_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
-        );
-        $ins->execute([
-            $sessionId, $oturum['foreman_id'], $oturum['foreman_name_snapshot'] ?? '', $oturum['foreman_code_snapshot'] ?? '',
-            $oturum['work_date'], $oturum['depo'], 'draft', $paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId,
-        ]);
-        $entId = (int)$pdo->lastInsertId();
+        foreach ($satirlar as $sl) {
+            $insL->execute([$entId, $sl['worker_type_id'], $sl['worker_type_code_snapshot'], $sl['worker_type_name_snapshot'], $sl['worker_count'], $sl['unit_rate'], $sl['line_total']]);
+        }
+
+        if ($kendiTx) $pdo->commit();
+    } catch (Throwable $e) {
+        $rollbackIfOwn();
+        throw $e;
     }
 
-    $insL = $pdo->prepare(
-        "INSERT INTO foreman_daily_entitlement_lines
-            (entitlement_id, worker_type_id, worker_type_code_snapshot, worker_type_name_snapshot, worker_count, unit_rate, line_total)
-         VALUES (?,?,?,?,?,?,?)"
-    );
-    foreach ($satirlar as $sl) {
-        $insL->execute([$entId, $sl['worker_type_id'], $sl['worker_type_code_snapshot'], $sl['worker_type_name_snapshot'], $sl['worker_count'], $sl['unit_rate'], $sl['line_total']]);
-    }
-
-    if (function_exists('audit_log_event')) {
+    if ($kendiTx && function_exists('audit_log_event')) {
         audit_log_event('calculate', 'foreman_daily_entitlements', $entId, null, [
             'session_id' => $sessionId, 'total_amount' => pdks_hakedis_kurus_tl($toplamKurus), 'eksik_tipler' => $eksikTipler,
         ]);
@@ -713,45 +739,68 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
 function pdks_hakedis_finalize(int $sessionId, int $userId, bool $eksikCikisOnayi, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?");
-    $st->execute([$sessionId]);
-    $oturum = $st->fetch();
-    if (!$oturum) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+    $kendiTx = !$pdo->inTransaction();
+    $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+    $rollbackIfOwn = static function () use ($pdo, $kendiTx): void {
+        if ($kendiTx && $pdo->inTransaction()) $pdo->rollBack();
+    };
 
-    if ((string)$oturum['status'] !== 'closed') {
-        return ['ok' => false, 'kod' => 'oturum_acik',
-                 'hata' => 'Mesai AÇIK — hakediş yalnız KAPALI mesai için KESİNLEŞTİRİLEBİLİR. Önce mesaiyi kapatın.'];
+    try {
+        if ($kendiTx) $pdo->beginTransaction();
+
+        $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?$lock");
+        $st->execute([$sessionId]);
+        $oturum = $st->fetch();
+        if (!$oturum) { $rollbackIfOwn(); return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.']; }
+
+        if ((string)$oturum['status'] !== 'closed') {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'oturum_acik',
+                     'hata' => 'Mesai AÇIK — hakediş yalnız KAPALI mesai için KESİNLEŞTİRİLEBİLİR. Önce mesaiyi kapatın.'];
+        }
+
+        if (!function_exists('pdks_gunluk_oturum_ozet')) {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'gunluk_yuklu_degil', 'hata' => 'Günlük İşçi modülü yüklü değil.'];
+        }
+        $ozet = pdks_gunluk_oturum_ozet($sessionId, $pdo);
+        $eksikToplam = (int)($ozet['eksik_toplam'] ?? 0);
+        if ($eksikToplam > 0 && !$eksikCikisOnayi) {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'eksik_cikis_onay_gerekli',
+                     'hata' => 'Bu mesai eksik çıkışla kapatılmıştır. Devam etmek için açık onay gerekir.',
+                     'eksik_toplam' => $eksikToplam];
+        }
+
+        $hesap = pdks_hakedis_hesapla($sessionId, $userId, $pdo);
+        if (!$hesap['ok']) { $rollbackIfOwn(); return $hesap; }
+
+        if (!empty($hesap['eksik_tipler'])) {
+            $rollbackIfOwn();
+            $tarihGoster = date('d.m.Y', strtotime((string)$oturum['work_date']));
+            $ilkEksik = $hesap['eksik_tipler'][0];
+            return ['ok' => false, 'kod' => 'oran_eksik',
+                     'hata' => $ilkEksik . ' işçi tipi için ' . $tarihGoster . ' tarihinde geçerli fiyat bulunamadı.',
+                     'eksik_tipler' => $hesap['eksik_tipler']];
+        }
+
+        $simdi = date('Y-m-d H:i:s');
+        $upd = $pdo->prepare(
+            "UPDATE foreman_daily_entitlements
+                SET status='final', finalized_at=?, finalized_by_user_id=?, missing_exit_ack=?, updated_at=?
+              WHERE id=? AND status='draft'"
+        );
+        $upd->execute([$simdi, $userId, $eksikToplam > 0 ? 1 : 0, $simdi, (int)$hesap['entitlement_id']]);
+        if ($upd->rowCount() !== 1) {
+            $rollbackIfOwn();
+            return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ.'];
+        }
+
+        if ($kendiTx) $pdo->commit();
+    } catch (Throwable $e) {
+        $rollbackIfOwn();
+        throw $e;
     }
-
-    if (!function_exists('pdks_gunluk_oturum_ozet')) {
-        return ['ok' => false, 'kod' => 'gunluk_yuklu_degil', 'hata' => 'Günlük İşçi modülü yüklü değil.'];
-    }
-    $ozet = pdks_gunluk_oturum_ozet($sessionId, $pdo);
-    $eksikToplam = (int)($ozet['eksik_toplam'] ?? 0);
-    if ($eksikToplam > 0 && !$eksikCikisOnayi) {
-        return ['ok' => false, 'kod' => 'eksik_cikis_onay_gerekli',
-                 'hata' => 'Bu mesai eksik çıkışla kapatılmıştır. Devam etmek için açık onay gerekir.',
-                 'eksik_toplam' => $eksikToplam];
-    }
-
-    $hesap = pdks_hakedis_hesapla($sessionId, $userId, $pdo);
-    if (!$hesap['ok']) return $hesap;
-
-    if (!empty($hesap['eksik_tipler'])) {
-        $tarihGoster = date('d.m.Y', strtotime((string)$oturum['work_date']));
-        $ilkEksik = $hesap['eksik_tipler'][0];
-        return ['ok' => false, 'kod' => 'oran_eksik',
-                 'hata' => $ilkEksik . ' işçi tipi için ' . $tarihGoster . ' tarihinde geçerli fiyat bulunamadı.',
-                 'eksik_tipler' => $hesap['eksik_tipler']];
-    }
-
-    $simdi = date('Y-m-d H:i:s');
-    $upd = $pdo->prepare(
-        "UPDATE foreman_daily_entitlements
-            SET status='final', finalized_at=?, finalized_by_user_id=?, missing_exit_ack=?, updated_at=?
-          WHERE id=?"
-    );
-    $upd->execute([$simdi, $userId, $eksikToplam > 0 ? 1 : 0, $simdi, (int)$hesap['entitlement_id']]);
 
     if (function_exists('audit_log_event')) {
         audit_log_event('finalize', 'foreman_daily_entitlements', (int)$hesap['entitlement_id'], null, [

@@ -67,6 +67,8 @@ require_once __DIR__ . '/config/pdks_servis_hesap.php';   // v532 Servis Hesabı
 // tablosu da AYNI sebeple BURADAN elle tetiklenir. Faz 1-9C tablolarına
 // DOKUNMAZ — yalnız KENDİ tek yeni tablosunu additive olarak ekler.
 require_once __DIR__ . '/config/pdks_faz9d.php';
+require_once __DIR__ . '/config/cekirdek_migrate.php';   // B-01 Çekirdek şema + B-23 Mal Kabul fis_no UNIQUE
+require_once __DIR__ . '/config/hesap_calc.php';         // B-01 hesap_migrate(true)
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -158,6 +160,8 @@ $pg_results = []; $pg_ran = false;                              // Puantaj Giri�
 $siparis_od_results = []; $siparis_od_ran = false;               // Siparişler v399 (OGL ödemeleri tablosu)
 $siparis_sofor_results = []; $siparis_sofor_ran = false;   // Siparişler v377 (şoför adı/telefon: 2 nullable kolon)
 $siparis_eg_result = null; $siparis_eg_ran = false;        // Siparişler v400 (evrak takımı adımı: tek seferlik VERİ geçişi, şema değişmez)
+$cekirdek_results = []; $cekirdek_ran = false;             // B-01 Çekirdek şema (db + helpers + hesap)
+$kf_uniq_result = null; $kf_uniq_ran = false;               // B-23 kantar_fisleri.fis_no UNIQUE indeksi
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -542,6 +546,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'pdks_cavus_b', null, null,
                 ['operation' => 'add_column', 'column' => $pr['tablo']]);
         }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'cekirdek_sema') {
+    csrf_check($_POST['csrf'] ?? null);
+    $cekirdek_ran     = true;
+    $cekirdek_results = cekirdek_sema_calistir($pdo);
+    audit_log_event('migrate', 'cekirdek_sema', null, null, [
+        'operation' => 'cekirdek_sema', 'adim_sayisi' => count($cekirdek_results),
+    ]);
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kantar_fisno_uniq') {
+    csrf_check($_POST['csrf'] ?? null);
+    $kf_uniq_ran    = true;
+    $kf_uniq_result = kantar_fisno_uniq_migrate($pdo);
+    if (($kf_uniq_result['durum'] ?? '') === 'olusturuldu') {
+        audit_log_event('migrate', 'kantar', null, null, [
+            'operation' => 'add_unique_index', 'table' => 'kantar_fisleri', 'index' => 'uq_kf_fis_no',
+        ]);
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
@@ -1075,7 +1095,7 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
             <?= h($__t[0]) ?> <span style="color:#777;font-size:.85em;">(canlı: <?= (int)$__t['canli'] ?> · eski: <?= (int)$__t['eski'] ?><?= $__t['serbest'] > 0 ? ' · serbest: ' . (int)$__t['serbest'] : '' ?>)</span></label>
           <?php endforeach; ?>
         </div>
-        <div style="margin:6px 0;"><strong>2) Hangi tablolar?</strong> <span style="color:#777;font-size:.85em;">(canlı modüller işaretli gelir)</span></div>
+        <div style="margin:6px 0;"><strong>2) Hangi tablolar?</strong> <span style="color:#777;font-size:.85em;">(canlı modüller işaretli gelir; bağlı muhasebe defterleri — <code>fatura_belgeler+stok_fisler+stok_hareketler</code>, <code>ceksenet_kayitlar+ceksenet_hareketler</code>, <code>kasa_kartlar+kasa_hareketler</code> — yalnız birlikte aktarılır)</span></div>
         <?php foreach ($eskiGrup as $__g => $__tablolar): if (!$__tablolar) continue;
               $__tbl = array_values(array_unique(array_map(fn($__k) => explode('.', (string)$__k, 2)[0], array_keys($__tablolar)))); ?>
         <div style="margin:4px 0 8px;"><em><?= h(explode(' (', $grupAd[$__g])[0]) ?>:</em>
@@ -2096,6 +2116,70 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     <form method="post" style="margin-top:16px;">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <button type="submit" class="btn btn-primary">Eksik Kolonları Ekle</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('cekirdek-sema'); ?>
+    <h2 style="margin-top:0;">Çekirdek Şema (Tablolar, Kolonlar, Roller &amp; Hesap)</h2>
+    <p style="color:#555;font-size:.9em;">
+      B-01: Her HTTP isteğinde çalışan otomatik DDL / <code>SHOW COLUMNS</code> / backfill migrasyonları kaldırıldı.
+      Eksik çekirdek tabloları, kolonları, rol tohumları ve <code>account_transactions</code> indeksleri yalnız buradan (admin) kurulur.
+    </p>
+    <?php $__cekDurum = cekirdek_sema_durum($pdo); ?>
+    <p>
+      <?php if ($__cekDurum['hazir']): ?>
+        <strong style="color:#1f9d55;">✓ Tüm çekirdek tablolar ve kolonlar hazır.</strong>
+      <?php else: ?>
+        <strong style="color:#c0392b;">✗ Eksik çekirdek şema öğeleri var (<?= count($__cekDurum['eksikler']) ?>):</strong>
+        <code><?= h(implode(', ', array_slice($__cekDurum['eksikler'], 0, 12))) ?><?= count($__cekDurum['eksikler']) > 12 ? ' …' : '' ?></code>
+      <?php endif; ?>
+    </p>
+    <?php if ($cekirdek_ran): ?>
+      <div style="margin:10px 0;padding:10px;border:1px solid #d0d7de;border-radius:6px;">
+        <strong>Son çalıştırma sonucu:</strong>
+        <ul style="margin:6px 0 0 18px;">
+          <?php foreach ($cekirdek_results as $__cr): ?>
+            <li><code><?= h((string)$__cr['adim']) ?></code>: <b><?= h((string)$__cr['durum']) ?></b> — <?= h((string)$__cr['mesaj']) ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="cekirdek_sema">
+      <button type="submit" class="btn btn-primary">Çekirdek Şema Migrasyonunu Çalıştır</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('kantar-fisno-uniq'); ?>
+    <h2 style="margin-top:0;">Mal Kabul — Fiş No Benzersizlik (UNIQUE)</h2>
+    <p style="color:#555;font-size:.9em;">
+      B-23: <code>kantar_fisleri.fis_no</code> için <code>uq_kf_fis_no</code> UNIQUE indeksi ekler.
+      Mevcut veride boş veya mükerrer <code>fis_no</code> varsa veri değiştirmez, çakışma sayısını bildirir.
+    </p>
+    <?php $__kfu = kantar_fisno_uniq_durum($pdo); ?>
+    <p>
+      <?php if (!$__kfu['tablo_var']): ?>
+        <strong style="color:#c0392b;">✗ <code>kantar_fisleri</code> tablosu henüz yok.</strong>
+      <?php elseif ($__kfu['indeks_var']): ?>
+        <strong style="color:#1f9d55;">✓ <code>uq_kf_fis_no</code> UNIQUE indeksi mevcut.</strong>
+      <?php else: ?>
+        <strong style="color:#c0392b;">✗ <code>uq_kf_fis_no</code> UNIQUE indeksi eksik.</strong>
+        <?php if ($__kfu['bos_say'] > 0 || $__kfu['mukerrer_say'] > 0): ?>
+          <br><span style="color:#c0392b;">Ön engel: <?= (int)$__kfu['bos_say'] ?> boş, <?= (int)$__kfu['mukerrer_say'] ?> mükerrer fiş no<?php if ($__kfu['ornekler']): ?> (<?= h(implode(', ', $__kfu['ornekler'])) ?>)<?php endif; ?>.</span>
+        <?php endif; ?>
+      <?php endif; ?>
+    </p>
+    <?php if ($kf_uniq_ran && is_array($kf_uniq_result)): ?>
+      <div style="margin:10px 0;padding:10px;border:1px solid #d0d7de;border-radius:6px;">
+        <strong>Son çalıştırma sonucu:</strong>
+        <code>uq_kf_fis_no</code>: <b><?= h((string)$kf_uniq_result['durum']) ?></b> — <?= h((string)$kf_uniq_result['mesaj']) ?>
+      </div>
+    <?php endif; ?>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="kantar_fisno_uniq">
+      <button type="submit" class="btn btn-primary">UNIQUE İndeksi Ekle</button>
     </form>
   <?php mg_kart_kapat(); ?>
 </div>

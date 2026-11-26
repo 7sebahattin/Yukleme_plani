@@ -7,7 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.loading.read');
+if (!function_exists('muhasebe_sayfa_can') || !muhasebe_sayfa_can('arac_yukleme_fisleri')) { require_perm('records.loading.read'); }
 
 function fmt_tarih_tr(?string $d): string {
     if (!$d) return '';

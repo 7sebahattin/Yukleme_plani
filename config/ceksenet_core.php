@@ -780,12 +780,14 @@ function ceksenet_mukerrer_mu(string $sinif, array $a, array $b): bool
     return $ha === '' || $hb === '' || $ha === $hb;
 }
 
-/** Mükerrer evrak (bkz. ceksenet_mukerrer_mu); iade / iptal edilenler sayılmaz. Senette kontrol yok. Not: kilitsiz okur — yarışı bordro tx'inin cari kilidi daraltır, tam kapatmaz. */
-function ceksenet_mukerrer_bul(PDO $pdo, string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId): ?array
+/** Mükerrer evrak (bkz. ceksenet_mukerrer_mu); iade / iptal edilenler sayılmaz. Senette kontrol yok. $kilitle=true: MySQL tx içinde FOR UPDATE ile seri_no yarışını kapatır (B-23). */
+function ceksenet_mukerrer_bul(PDO $pdo, string $sinif, string $yon, string $bankaAd, string $hesapNo, string $seriNo, ?int $karneId, bool $kilitle = false): ?array
 {
     if ($sinif !== 'cek') return null;
-    $nocase = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? ' COLLATE NOCASE' : '';   // MySQL karşılaştırması zaten harf-duyarsız
-    $st = $pdo->prepare("SELECT * FROM ceksenet_kayitlar WHERE sinif = 'cek' AND yon = ? AND seri_no = ?$nocase AND durum NOT IN ('iade', 'iptal') ORDER BY id");
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $nocase = $driver === 'sqlite' ? ' COLLATE NOCASE' : '';   // MySQL karşılaştırması zaten harf-duyarsız
+    $lock = ($kilitle && $driver === 'mysql') ? ' FOR UPDATE' : '';
+    $st = $pdo->prepare("SELECT * FROM ceksenet_kayitlar WHERE sinif = 'cek' AND yon = ? AND seri_no = ?$nocase AND durum NOT IN ('iade', 'iptal') ORDER BY id$lock");
     $st->execute([$yon, $seriNo]);
     $a = ['banka' => $bankaAd, 'hesap' => $hesapNo, 'seri' => $seriNo, 'kasa' => ceksenet_karne_kasa_id($pdo, $karneId)];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
@@ -933,9 +935,9 @@ function ceksenet_bordro_kaydet(PDO $pdo, array $g, int $uid): array
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $ilkHid = null; $kayitlar = [];
             foreach ($v['satirlar'] as $n => $r) {
-                // Son kontrol (yazma sırasında; aynı bordroda önceki satırlar zaten yazıldı → onlar da yakalanır). KİLİTSİZ okur: tam kapatmaz, yarışı cari kilidi daraltır.
+                // Son kontrol (yazma sırasında; aynı bordroda önceki satırlar zaten yazıldı → onlar da yakalanır). MySQL'de FOR UPDATE ile seri_no yarışı kapatılır (B-23).
                 // Hata → HEPSİ geri alınır (closure'dan `return hata` YOK: cari_tx commit ederdi → yarım bordro).
-                if (($m = ceksenet_mukerrer_bul($pdo, $v['sinif'], $v['yon'], (string)$r['banka_ad'], (string)$r['hesap_no'], $r['seri_no'], $r['karne_id'])) !== null) {
+                if (($m = ceksenet_mukerrer_bul($pdo, $v['sinif'], $v['yon'], (string)$r['banka_ad'], (string)$r['hesap_no'], $r['seri_no'], $r['karne_id'], true)) !== null) {
                     $mk = ['kod' => 'mukerrer', 'satir_hatalari' => [$r['i'] => ['seri_no' => 'Zaten kayıtlı: ' . $m['portfoy_no'] . '.']]];
                     throw new RuntimeException('Satır ' . ($r['i'] + 1) . ': bu numara zaten kayıtlı (' . $m['portfoy_no'] . ').', CEKSENET_IC_HATA);
                 }
