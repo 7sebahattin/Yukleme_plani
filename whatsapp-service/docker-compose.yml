@@ -15,7 +15,7 @@ name: yukleme-plani-whatsapp
 
 services:
   evolution-api:
-    image: atendai/evolution-api:${EVOLUTION_IMAGE_TAG:-v2.2.3}
+    image: evoapicloud/evolution-api:${EVOLUTION_IMAGE_TAG:-v2.3.7}
     container_name: yp_evolution_api
     restart: always
     depends_on:

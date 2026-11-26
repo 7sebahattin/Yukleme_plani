@@ -30,13 +30,13 @@ function New-HexSecret([int]$bytes = 24) {
 }
 
 Write-Host '============================================================' -ForegroundColor Green
-Write-Host '  WhatsApp Yukleme Plani — Otomatik PC Kurulum & Baslatici  ' -ForegroundColor Green
+Write-Host '  WhatsApp Yukleme Plani - Otomatik PC Kurulum & Baslatici  ' -ForegroundColor Green
 Write-Host '============================================================' -ForegroundColor Green
 
 # 1) Docker Desktop kontrol / kurulum
 Write-Step '1/5 Docker kontrol ediliyor...'
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Write-Host 'Docker Desktop bulunamadi; winget ile kuruluyor (birkaç dakika surebilir)...' -ForegroundColor Yellow
+    Write-Host 'Docker Desktop bulunamadi; winget ile kuruluyor (birkac dakika surebilir)...' -ForegroundColor Yellow
     winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
     Refresh-Path
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -84,6 +84,10 @@ if (-not $cfExe) {
     if (Test-Path $fallbackCf) { $cfExe = $fallbackCf }
 }
 if (-not $cfExe) {
+    $fallbackCf86 = "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe"
+    if (Test-Path $fallbackCf86) { $cfExe = $fallbackCf86 }
+}
+if (-not $cfExe) {
     throw 'cloudflared bulunamadi. PowerShell penceresini kapatip PC_BASLAT.bat dosyasini yeniden calistirin.'
 }
 Write-Host "cloudflared hazir: $cfExe" -ForegroundColor Green
@@ -94,6 +98,11 @@ $envPath = Join-Path $Dir '.env'
 $evoKey  = ''
 $whToken = ''
 if (Test-Path $envPath) {
+    $rawEnv = Get-Content $envPath -Raw
+    if ($rawEnv -match 'EVOLUTION_IMAGE_TAG=v2\.2\.3') {
+        $rawEnv = $rawEnv -replace 'EVOLUTION_IMAGE_TAG=v2\.2\.3', 'EVOLUTION_IMAGE_TAG=v2.3.7'
+        [System.IO.File]::WriteAllText($envPath, $rawEnv, [System.Text.UTF8Encoding]::new($false))
+    }
     foreach ($line in Get-Content $envPath) {
         if ($line -match '^EVOLUTION_API_KEY=(.+)$') { $evoKey = $Matches[1].Trim() }
         if ($line -match '^WEBHOOK_URL=.*[?&]token=([^&\s]+)') { $whToken = $Matches[1].Trim() }
@@ -105,7 +114,7 @@ if ($evoKey -eq '' -or $whToken -eq '') {
     $pgPass = New-HexSecret 20
     $envBody = @(
         "EVOLUTION_API_KEY=$evoKey"
-        'EVOLUTION_IMAGE_TAG=v2.2.3'
+        'EVOLUTION_IMAGE_TAG=v2.3.7'
         'EVOLUTION_BIND=127.0.0.1'
         'EVOLUTION_PORT=8080'
         'EVOLUTION_SERVER_URL=http://localhost:8080'
