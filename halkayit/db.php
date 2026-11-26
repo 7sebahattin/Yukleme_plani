@@ -9,10 +9,16 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/kisi_havuzu_lib.php';   // hks_kisi_tablo_hazirla (Kişi Havuzu)
 
-// --- PDO bağlantısı (tekil) ---
+// --- PDO bağlantısı (tekil — B-37: ana panel ile aynı DB'de db() paylaşılır) ---
 function hks_db() {
   static $pdo = null;
   if ($pdo !== null) return $pdo;
+  if (function_exists('db')
+      && defined('DB_HOST') && defined('DB_NAME') && defined('DB_USER')
+      && HKS_DB_HOST === DB_HOST && HKS_DB_NAME === DB_NAME && HKS_DB_USER === DB_USER) {
+    $pdo = db();
+    return $pdo;
+  }
   $dsn = 'mysql:host=' . HKS_DB_HOST . ';dbname=' . HKS_DB_NAME . ';charset=' . HKS_DB_CHARSET;
   $pdo = new PDO($dsn, HKS_DB_USER, HKS_DB_PASS, [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

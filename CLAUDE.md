@@ -6,8 +6,8 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 Çerçeve yok — saf PHP, vanilla JS; ortak `assets/style.css` / `assets/app.js` ile gerektiğinde sayfaya özel CSS/JS dosyaları.
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `test.scai.tr` (ayrı DB; eski `nuverna.derspros.com.tr` artık kullanılmıyor)  
-**Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v585` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**Ana Dal:** `main` (özellik dalları PR ile merge edilir)  
+**SW Cache:** `yukleme-plani-v586` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ## Modül Skill'leri (ayrıntılı kurallar)
 
