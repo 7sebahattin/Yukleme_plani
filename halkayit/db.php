@@ -124,10 +124,34 @@ function hks_kv_onekli($onek) {
 
 // --- Şifreleme (AES-256-GCM; eski AES-256-CBC kayıtları geriye uyumlu çözülür) ---
 function hks_sifreleme_anahtari_ham(): string {
-    if (!defined('HKS_SIFRELEME_ANAHTARI') || !is_string(HKS_SIFRELEME_ANAHTARI) || strlen(HKS_SIFRELEME_ANAHTARI) < 16) {
-        throw new RuntimeException('HKS_CRED_KEY tanımlı değil (config/local.php).');
+    $anahtar = '';
+    if (defined('HKS_SIFRELEME_ANAHTARI') && is_string(HKS_SIFRELEME_ANAHTARI) && strlen(HKS_SIFRELEME_ANAHTARI) >= 16) {
+        $anahtar = HKS_SIFRELEME_ANAHTARI;
+    } else {
+        $localPath = dirname(__DIR__) . '/config/local.php';
+        if (!defined('HKS_CRED_KEY') && is_file($localPath)) {
+            require_once $localPath;
+        }
+        if (defined('HKS_CRED_KEY') && is_string(HKS_CRED_KEY) && strlen(HKS_CRED_KEY) >= 16) {
+            $anahtar = HKS_CRED_KEY;
+        } else {
+            $envKey = (string)(getenv('HKS_CRED_KEY') ?: '');
+            if (strlen($envKey) >= 16) {
+                $anahtar = $envKey;
+            }
+        }
     }
-    return hash('sha256', HKS_SIFRELEME_ANAHTARI, true);
+    if ($anahtar === '') {
+        $localPath = dirname(__DIR__) . '/config/local.php';
+        if (!is_file($localPath)) {
+            throw new RuntimeException('HKS_CRED_KEY tanımlı değil: config/local.php dosyası bulunamadı.');
+        }
+        if (!defined('HKS_CRED_KEY')) {
+            throw new RuntimeException('HKS_CRED_KEY tanımlı değil: config/local.php içinde HKS_CRED_KEY sabiti eksik.');
+        }
+        throw new RuntimeException('HKS_CRED_KEY geçersiz: config/local.php içindeki anahtar en az 16 karakter olmalı.');
+    }
+    return hash('sha256', $anahtar, true);
 }
 function hks_sifrele($duz) {
     $anahtar = hks_sifreleme_anahtari_ham();
