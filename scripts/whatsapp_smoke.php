@@ -311,6 +311,7 @@ $bj = array_column($bir, null, 'jid');
 ok('birleştirme: tüm gruplar + kişiler, grup adı/üye fetchGroups\'tan', count($bir) === 6 && $bj['120363000000000001@g.us']['ad'] === 'alfa Sevkiyat' && $bj['120363000000000001@g.us']['uye'] === 3 && $bj['120363000000000001@g.us']['son'] === 1775000500 && $bj['905321112233@s.whatsapp.net']['tur'] === 'kisi', json_encode(array_column($bir, 'jid')));
 ok('birleştirme: son etkinlik en üstte', $bir[0]['jid'] === '120363000000000001@g.us' && $bir[1]['jid'] === '905321112233@s.whatsapp.net');
 ok('birleştirme: hattın üyesi olmadığı eski grup listelenmez', !isset(whatsapp_sohbetleri_birlestir([], [['jid' => '120363999@g.us', 'ad' => 'Eski', 'tur' => 'grup', 'telefon' => '', 'son' => 5]])[0]));
+ok('birleştirme: fetchGroups hata verirse findChats grupları yedek olarak gösterilir', count(whatsapp_sohbetleri_birlestir([], [['jid' => '120363999@g.us', 'ad' => 'Yedek Grup', 'tur' => 'grup', 'telefon' => '', 'son' => 5]], false)) === 1);
 
 // sendTextMessage
 $ist = [];
