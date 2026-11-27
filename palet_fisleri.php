@@ -399,15 +399,79 @@ $pf_parti_sorgu = function (string $sql) use ($pdo): PDOStatement {
     if ($ds !== '') $sql = str_replace(" GROUP BY", " AND $ds GROUP BY", $sql);
     $st = $pdo->prepare($sql); $st->execute($dp); return $st;
 };
+$pf_fold = static function (string $s): string {
+    static $map = ['İ'=>'i','I'=>'i','Ş'=>'s','Ğ'=>'g','Ü'=>'u','Ö'=>'o','Ç'=>'c','ı'=>'i','ş'=>'s','ğ'=>'g','ü'=>'u','ö'=>'o','ç'=>'c'];
+    return strtolower(trim(strtr($s, $map)));
+};
+$pf_son3_sirala = static function (array $items, array $son3Names) use ($pf_fold): array {
+    $byFold = [];
+    foreach ($items as $it) {
+        $n = trim((string)($it['name'] ?? ''));
+        if ($n === '') continue;
+        $byFold[$pf_fold($n)] = $it;
+    }
+    $seen = [];
+    $ust = [];
+    foreach ($son3Names as $v) {
+        $v = trim((string)$v);
+        if ($v === '') continue;
+        $k = $pf_fold($v);
+        if (isset($seen[$k]) || !isset($byFold[$k])) continue;
+        $seen[$k] = true;
+        $row = $byFold[$k];
+        $row['recent'] = true;
+        $ust[] = $row;
+        if (count($ust) >= 3) break;
+    }
+    $kalan = [];
+    foreach ($byFold as $k => $row) {
+        if (isset($seen[$k])) continue;
+        $seen[$k] = true;
+        $kalan[] = $row;
+    }
+    usort($kalan, static fn($a, $b) => strcmp($pf_fold((string)$a['name']), $pf_fold((string)$b['name'])));
+    return array_merge($ust, $kalan);
+};
+$pf_son3_cek = static function (string $sql) use ($pdo): array {
+    try {
+        return array_values(array_filter(array_map('trim', $pdo->query($sql)->fetchAll(PDO::FETCH_COLUMN)), static fn($x) => $x !== ''));
+    } catch (Throwable $e) {
+        return [];
+    }
+};
 $palet_tipi_list = get_definitions_by_type('palet_tipi');
+$pf_palet_ham = array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], $palet_tipi_list);
+$pf_firma_ham = array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('firma'));
+$pf_urun_ham  = array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun'));
+$pf_kasa_ham  = array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], get_definitions_by_type('kasa_cinsi'));
+$pf_parti_ham = $pf_parti_sorgu("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+$pf_parti_son3 = array_slice($pf_parti_ham, 0, 3);
+$pf_parti_items = array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pf_parti_ham);
+
+$pf_palet_son3 = $pf_son3_cek("SELECT d.name FROM loading_pallets p INNER JOIN material_definitions d ON d.id = p.palet_tipi_id GROUP BY p.palet_tipi_id, d.name ORDER BY MAX(p.id) DESC LIMIT 3");
+$pf_firma_son3 = $pf_son3_cek("SELECT firma FROM loading_pallets WHERE firma <> '' GROUP BY firma ORDER BY MAX(id) DESC LIMIT 3");
+$pf_urun_son3  = $pf_son3_cek("SELECT urun FROM loading_pallets WHERE urun <> '' GROUP BY urun ORDER BY MAX(id) DESC LIMIT 3");
+$pf_kasa_son3  = $pf_son3_cek("SELECT d.name FROM loading_pallets p INNER JOIN material_definitions d ON d.id = p.kasa_cinsi_id GROUP BY p.kasa_cinsi_id, d.name ORDER BY MAX(p.id) DESC LIMIT 3");
+// B-28: 5000 satır peşin yüklenmez; yalnız en son kullanılan 3 müstahsil ön-öneri olarak gelir, istemci yazdıkça ?mustahsil_ara=... ile çeker.
+$pf_must_son3 = [];
+if ($mustahsil_aktif) {
+    try {
+        $stM3 = $pdo->query("SELECT mustahsil_id AS id, mustahsil_ad AS name FROM loading_pallets WHERE mustahsil_id > 0 AND mustahsil_ad <> '' GROUP BY mustahsil_id, mustahsil_ad ORDER BY MAX(id) DESC LIMIT 3");
+        foreach ($stM3->fetchAll() as $rm) {
+            $pf_must_son3[] = ['id' => (int)$rm['id'], 'name' => (string)$rm['name'], 'recent' => true];
+        }
+    } catch (Throwable $e) {
+        $pf_must_son3 = [];
+    }
+}
+
 $pf_listeler = [
-    'palet' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], $palet_tipi_list),
-    'firma' => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('firma')),
-    'urun'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name']], get_definitions_by_type('urun')),
-    'kasa'  => array_map(fn($x) => ['id' => (int)$x['id'], 'name' => (string)$x['name'], 'unit' => (float)($x['unit_dara_kg'] ?? 0)], get_definitions_by_type('kasa_cinsi')),
-    // B-28: 5000 satır peşin yüklenmez; istemci yazdıkça ?mustahsil_ara=... ile çeker.
-    'mustahsil' => [],
-    'parti' => array_map(fn($x) => ['id' => 0, 'name' => (string)$x], $pf_parti_sorgu("SELECT parti_no FROM loading_records WHERE type = 'yukleme' AND parti_no <> '' GROUP BY parti_no ORDER BY MAX(id) DESC LIMIT 300")->fetchAll(PDO::FETCH_COLUMN)),
+    'palet'     => $pf_son3_sirala($pf_palet_ham, $pf_palet_son3),
+    'firma'     => $pf_son3_sirala($pf_firma_ham, $pf_firma_son3),
+    'urun'      => $pf_son3_sirala($pf_urun_ham,  $pf_urun_son3),
+    'kasa'      => $pf_son3_sirala($pf_kasa_ham,  $pf_kasa_son3),
+    'mustahsil' => $pf_must_son3,
+    'parti'     => $pf_son3_sirala($pf_parti_items, $pf_parti_son3),
 ];
 $pf_sonraki_belge = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) + 1 FROM loading_records')->fetchColumn();
 $desc1_sql = $has_aciklama1 ? 'p.aciklama1' : "'' AS aciklama1";
@@ -572,29 +636,119 @@ render_header('Palet Fişleri');
         <?php if ($pf_page < $pf_total_pages): ?><a class="btn btn-sm btn-ghost" href="<?= h($pf_pg_url($pf_page + 1)) ?>" aria-label="Sonraki sayfa">Sonraki ›</a><?php endif; ?></span><?php endif; ?><span class="pf-filtreler" id="pfFiltreler" hidden></span><span class="pf-status" id="pfStatus" role="status" aria-live="polite"></span></div>
 </section>
 
-<dialog class="pf-dialog" id="pfDialog">
-    <form id="pfForm" method="dialog" autocomplete="off" novalidate>
-        <div class="pf-dialog-head"><div><h2>Palet Fişi Ekle</h2></div><button type="button" class="pf-close" id="pfClose" aria-label="Kapat">×</button></div>
-        <div class="pf-form-grid">
-            <label class="pf-w3 pf-d2">Tarih <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required></label>
-            <label class="pf-w3 pf-d2">Belge No <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir"></label>
-            <label class="pf-cb pf-w6 pf-d2">Parti No <input name="parti_no" data-cb="parti" maxlength="100"></label>
-            <label class="pf-cb pf-w6 pf-d3">Müşteri <input name="firma" data-cb="firma" maxlength="150" required></label>
-            <label class="pf-cb pf-must pf-w6 pf-d3">Müstahsil <input name="mustahsil" data-cb="mustahsil" maxlength="200" placeholder="<?= $mustahsil_aktif ? '' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>></label>
-            <label class="pf-cb pf-w6 pf-d3">Palet <input name="palet" data-cb="palet" class="pf-birimli"><span class="pf-birim" data-birim="palet" hidden></span></label>
-            <label class="pf-cb pf-w6 pf-d3">Kasa Ambalaj <input name="kasa" data-cb="kasa" class="pf-birimli"><span class="pf-birim" data-birim="kasa" hidden></span></label>
-            <label class="pf-cb pf-w4 pf-d3">Ürün <input name="urun" data-cb="urun" maxlength="150" required></label>
-            <label class="pf-w2 pf-d3">Kasa Adedi <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0"></label>
-            <label class="pf-kg pf-w2">Brüt (kg) <span class="pf-kg-satir"><input name="brut_kg" inputmode="decimal" autocomplete="off"><button type="button" class="btn btn-ghost pf-kantar" hidden disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button></span></label>
-            <label class="pf-kg pf-w2">Dara (kg) <input name="dara_kg" id="pfDara" readonly tabindex="-1" class="pf-readonly" value="0" title="Palet + kasa adedi × kasa darasından otomatik hesaplanır"></label>
-            <label class="pf-kg pf-w2">Net (kg) <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0"></label>
-            <div class="pf-uyari" id="pfUyari" role="status" aria-live="polite"></div>
-            <label class="pf-w6 pf-d3">Analiz Durumu <input name="aciklama1" maxlength="2000"></label>
-            <label class="pf-w6 pf-d3">Açıklama <input name="aciklama2" maxlength="2000"></label>
+<div class="mk-win pf-win" id="pfDialog" hidden role="dialog" aria-modal="false" aria-labelledby="pfWinTitle">
+    <div class="mk-win-bar" id="pfWinBar">
+        <div class="mk-win-bar-left">
+            <span class="mk-win-bar-ico" aria-hidden="true">📦</span>
+            <h2 class="mk-win-bar-title" id="pfWinTitle">Palet Fişi Ekle</h2>
         </div>
-        <div class="pf-dialog-foot"><span id="pfFormError" class="pf-error" role="alert"></span><button type="button" class="btn btn-ghost" id="pfCancel">Kapat</button><button type="submit" class="btn btn-primary" id="pfSave">Kaydet <span class="pf-shortcut">F10</span></button></div>
-    </form>
-</dialog>
+        <div class="mk-win-ctrl">
+            <button type="button" class="mk-win-btn" data-pf-win-min title="Küçült" aria-label="Küçült">—</button>
+            <button type="button" class="mk-win-btn" data-pf-win-max title="Büyüt / Küçült" aria-label="Büyüt / Küçült">□</button>
+            <button type="button" class="mk-win-btn mk-win-btn--close" id="pfClose" title="Kapat" aria-label="Kapat">✕</button>
+        </div>
+    </div>
+    <div class="mk-win-body">
+        <form id="pfForm" class="mk-form mk-form-win pf-form-win" autocomplete="off" novalidate>
+            <div class="mk-form-scroll pf-win-scroll">
+                <!-- Genel Bilgiler kartı -->
+                <section class="card mk-card pf-card-genel">
+                    <h3 class="mk-sec-title"><span aria-hidden="true">📋</span> Genel Bilgiler</h3>
+                    <div class="mk-g pf-g-top">
+                        <label class="mk-lbl pf-w3 pf-d2">Tarih <span class="req">*</span>
+                            <input name="tarih" type="date" value="<?= date('Y-m-d') ?>" required>
+                        </label>
+                        <label class="mk-lbl pf-w3 pf-d2">Belge No
+                            <input name="belge_no" id="pfBelgeNo" value="<?= (int)$pf_sonraki_belge ?>" readonly tabindex="-1" class="pf-readonly" title="Otomatik verilir">
+                        </label>
+                        <label class="mk-lbl pf-cb pf-w6 pf-d2">Parti No
+                            <input name="parti_no" data-cb="parti" maxlength="100" autocomplete="off">
+                        </label>
+                        <label class="mk-lbl pf-cb pf-w6 pf-d3">Müşteri <span class="req">*</span>
+                            <input name="firma" data-cb="firma" maxlength="150" required autocomplete="off">
+                        </label>
+                        <label class="mk-lbl pf-cb pf-must pf-w6 pf-d3">Müstahsil
+                            <input name="mustahsil" data-cb="mustahsil" maxlength="200" autocomplete="off" placeholder="<?= $mustahsil_aktif ? '' : ($has_mustahsil ? 'Cari İşlemler kurulu değil' : 'Kurulu değil: migrate.php › Palet Fişleri') ?>" <?= $mustahsil_aktif ? '' : 'disabled' ?>>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Ambalaj & Ürün (sol) + Tartım Bilgileri (sağ) yan yana -->
+                <div class="pf-cards-row">
+                    <section class="card mk-card pf-card-ambalaj">
+                        <h3 class="mk-sec-title"><span aria-hidden="true">📦</span> Palet, Ambalaj ve Ürün</h3>
+                        <div class="mk-g pf-g-amb">
+                            <label class="mk-lbl pf-cb pf-w6 pf-d3">Palet
+                                <input name="palet" data-cb="palet" class="pf-birimli" autocomplete="off">
+                                <span class="pf-birim" data-birim="palet" hidden></span>
+                            </label>
+                            <label class="mk-lbl pf-cb pf-w6 pf-d3">Kasa Ambalaj
+                                <input name="kasa" data-cb="kasa" class="pf-birimli" autocomplete="off">
+                                <span class="pf-birim" data-birim="kasa" hidden></span>
+                            </label>
+                            <label class="mk-lbl pf-cb pf-w4 pf-d3">Ürün <span class="req">*</span>
+                                <input name="urun" data-cb="urun" maxlength="150" required autocomplete="off">
+                            </label>
+                            <label class="mk-lbl pf-w2 pf-d3">Kasa Adedi
+                                <input name="kasa_adeti" inputmode="numeric" type="number" min="0" value="0" autocomplete="off">
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="card mk-card pf-card-tartim">
+                        <h3 class="mk-sec-title mk-sec-title--tartim"><span aria-hidden="true">⚖️</span> Tartım Bilgileri</h3>
+                        <div class="pf-kg-grid">
+                            <label class="mk-lbl pf-kg pf-w2">Brüt (kg)
+                                <span class="pf-kg-satir">
+                                    <input name="brut_kg" inputmode="decimal" autocomplete="off" autocorrect="off" spellcheck="false">
+                                    <button type="button" class="btn btn-ghost pf-kantar" hidden disabled title="Kantar entegrasyonu sonra bağlanacak">Kantardan al</button>
+                                </span>
+                            </label>
+                            <label class="mk-lbl pf-kg pf-w2">Dara (kg)
+                                <input name="dara_kg" id="pfDara" readonly tabindex="-1" class="pf-readonly" value="0" title="Palet + kasa adedi × kasa darasından otomatik hesaplanır">
+                            </label>
+                            <label class="mk-lbl pf-kg pf-kg-net pf-w2">Net (kg)
+                                <input name="net_kg" id="pfNet" readonly tabindex="-1" class="pf-readonly" value="0">
+                            </label>
+                        </div>
+                        <div class="pf-uyari" id="pfUyari" role="status" aria-live="polite"></div>
+                    </section>
+                </div>
+
+                <!-- Analiz & Açıklama kartı -->
+                <section class="card mk-card pf-card-not">
+                    <h3 class="mk-sec-title"><span aria-hidden="true">📝</span> Analiz ve Açıklama</h3>
+                    <div class="mk-g pf-g-not">
+                        <label class="mk-lbl pf-w6 pf-d3">Analiz Durumu <input name="aciklama1" maxlength="2000" autocomplete="off"></label>
+                        <label class="mk-lbl pf-w6 pf-d3">Açıklama <input name="aciklama2" maxlength="2000" autocomplete="off"></label>
+                    </div>
+                </section>
+            </div>
+            <div class="form-foot mk-foot pf-dialog-foot">
+                <span id="pfFormError" class="pf-error" role="alert"></span>
+                <div class="mk-foot-right">
+                    <button type="button" class="btn btn-ghost" id="pfCancel">✕ Kapat</button>
+                    <button type="submit" class="btn btn-primary" id="pfSave">✓ Kaydet <span class="pf-shortcut">F10</span></button>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="mk-win-rh" data-dir="n"></div>
+    <div class="mk-win-rh" data-dir="s"></div>
+    <div class="mk-win-rh" data-dir="e"></div>
+    <div class="mk-win-rh" data-dir="w"></div>
+    <div class="mk-win-rh" data-dir="ne"></div>
+    <div class="mk-win-rh" data-dir="nw"></div>
+    <div class="mk-win-rh" data-dir="se"></div>
+    <div class="mk-win-rh" data-dir="sw"></div>
+</div>
+<div class="mk-win-dock" id="pfWinDock" hidden>
+    <button type="button" class="mk-win-dock-restore" data-pf-win-restore title="Pencereyi geri yükle">
+        <span aria-hidden="true">📦</span>
+        <span id="pfWinDockTitle">Palet Fişi Ekle</span>
+    </button>
+    <button type="button" class="mk-win-dock-close" data-pf-win-close title="Kapat" aria-label="Kapat">✕</button>
+</div>
 <dialog class="pf-dialog pf-bul-dialog" id="pfBulDialog">
     <form id="pfBulForm" method="dialog" autocomplete="off">
         <div class="pf-bul-baslik" id="pfBulBaslik">Parti No</div>

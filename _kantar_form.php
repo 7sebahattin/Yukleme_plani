@@ -362,6 +362,7 @@ if (!function_exists('kf_datalist')) {
                     <div class="kantar-tartim-fields">
                         <span class="mk-ico" aria-hidden="true">🚚</span>
                         <input type="text" name="tartim1" id="tartim1" inputmode="decimal"
+                               autocomplete="off" autocorrect="off" spellcheck="false"
                                class="num kantar-tartim-input"
                                value="<?= h(fmt_tartim($fis['tartim1'] ?? '')) ?>" placeholder="">
                         <span class="kantar-tartim-unit">kg</span>
@@ -372,6 +373,7 @@ if (!function_exists('kf_datalist')) {
                     <div class="kantar-tartim-fields">
                         <span class="mk-ico" aria-hidden="true">🚚</span>
                         <input type="text" name="tartim2" id="tartim2" inputmode="decimal"
+                               autocomplete="off" autocorrect="off" spellcheck="false"
                                class="num kantar-tartim-input"
                                value="<?= h(fmt_tartim($fis['tartim2'] ?? '')) ?>" placeholder="">
                         <span class="kantar-tartim-unit">kg</span>
