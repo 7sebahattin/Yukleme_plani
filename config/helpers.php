@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v602');
+    define('APP_SURUM', 'v603');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -591,7 +591,7 @@ function nav_muhasebe_gruplari(): array {
 function nav_yonetim_sayfalari(): array {
     // v574 (sahip kararı): Şube kavramı yok (sube_tanimlari.php = 410 tombstone); Tanımlar menüsü kalktı (definitions.php = 410).
     // v582: WhatsApp Yükleme Planı (Evolution API + AI) — yalnız yönetici; Roller'de admin-only satır
-    return ['depo_tanimlari.php' => ['Depo Tanımları', '🏭'], 'whatsapp_yonetim.php' => ['WhatsApp Yükleme', '💬']];
+    return ['depo_tanimlari.php' => ['Depo Tanımları', '🏭'], 'whatsapp_yonetim.php' => ['WhatsApp Senkron', '💬']];
 }
 
 /**

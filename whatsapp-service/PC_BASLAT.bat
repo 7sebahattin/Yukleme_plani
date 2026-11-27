@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title WhatsApp Yukleme Plani — PC Baglanti Baslatici
+title WhatsApp Senkron — PC Baglanti Baslatici
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0pc_kur_ve_baslat.ps1"
 if errorlevel 1 (
     echo.

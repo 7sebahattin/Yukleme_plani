@@ -67,7 +67,7 @@ function role_permission_matrix(): array {
             // v566/v574: Depo Tanımları (yalnız yönetici; Roller'den verilemez). Şube Tanımları kalktı (410).
             $row('depo_tanimlari','Depo Tanımları','depo_tanimlari.php',[],[],'Yalnız sistem yöneticisi.',true),
             // v582: WhatsApp Yükleme Planı (Evolution API + AI; yalnız yönetici, Roller'den verilemez)
-            $row('whatsapp_yonetim','WhatsApp Yükleme Planı','whatsapp_yonetim.php',[],[],'Yalnız sistem yöneticisi.',true),
+            $row('whatsapp_yonetim','WhatsApp Senkron','whatsapp_yonetim.php',[],[],'Yalnız sistem yöneticisi.',true),
         ],
         'Raporlar altındaki diğer sayfalar'=>[
             $row('maliyet','Detaylı Maliyet','maliyet.php',$crud('maliyet')+['unlock'=>$a('maliyet.unlock','Kilit aç'),'admin'=>$a('maliyet.admin','Alan ve şablon yönetimi')]),

@@ -2611,7 +2611,7 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
   <?php mg_kart_kapat(); ?>
 
   <?php mg_kart_ac('whatsapp'); ?>
-    <h2 style="margin-top:0;">WhatsApp Yükleme Planı — Tablolar &amp; API Ayarları (v591)</h2>
+    <h2 style="margin-top:0;">WhatsApp Senkron — Tablolar &amp; API Ayarları (v591)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>whatsapp_mesaj_loglari</code> ve <code>whatsapp_ayarlar</code> tablolarını oluşturur,
       ekrandan API anahtarı kaydı için <code>evolution_url</code>, <code>evolution_api_key</code>, <code>webhook_secret</code>, <code>ai_api_key</code> kolonlarını ekler.
