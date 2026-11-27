@@ -705,7 +705,7 @@ function whatsapp_mesaj_ozetle(array $m): ?array
  * @param list<array{jid:string, ad:string, tur:string, telefon:string, son:int}> $sohbetler
  * @return list<array{jid:string, ad:string, tur:string, uye:int, telefon:string, son:int}>
  */
-function whatsapp_sohbetleri_birlestir(array $gruplar, array $sohbetler): array
+function whatsapp_sohbetleri_birlestir(array $gruplar, array $sohbetler, bool $grupListesiTam = true): array
 {
     $out = [];
     foreach ($gruplar as $g) {
@@ -717,8 +717,9 @@ function whatsapp_sohbetleri_birlestir(array $gruplar, array $sohbetler): array
         $jid = (string)($s['jid'] ?? '');
         if ($jid === '') continue;
         if (isset($out[$jid])) { $out[$jid]['son'] = max($out[$jid]['son'], (int)($s['son'] ?? 0)); continue; }
-        if (($s['tur'] ?? '') !== 'kisi') continue;   // hattın artık üyesi olmadığı eski gruplar listelenmez
-        $out[$jid] = ['jid' => $jid, 'ad' => (string)($s['ad'] ?? $jid), 'tur' => 'kisi', 'uye' => 0, 'telefon' => (string)($s['telefon'] ?? ''), 'son' => (int)($s['son'] ?? 0)];
+        $tur = ($s['tur'] ?? '') === 'grup' ? 'grup' : 'kisi';
+        if ($tur === 'grup' && $grupListesiTam) continue;   // hattın artık üyesi olmadığı eski gruplar listelenmez
+        $out[$jid] = ['jid' => $jid, 'ad' => (string)($s['ad'] ?? $jid), 'tur' => $tur, 'uye' => 0, 'telefon' => (string)($s['telefon'] ?? ''), 'son' => (int)($s['son'] ?? 0)];
     }
     $out = array_values($out);
     usort($out, static fn(array $a, array $b): int => ($b['son'] <=> $a['son']) ?: strcasecmp($a['ad'], $b['ad']));

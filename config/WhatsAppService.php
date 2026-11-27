@@ -19,7 +19,7 @@ final class WhatsAppException extends RuntimeException
 
 final class WhatsAppService
 {
-    private const MAX_YANIT = 8388608; // 8 MB (fetchAllGroups büyük olabilir)
+    private const MAX_YANIT = 16777216; // 16 MB (fetchAllGroups / findChats büyük olabilir)
 
     /** @var callable */
     private $transport;
@@ -103,7 +103,7 @@ final class WhatsAppService
      */
     public function fetchGroups(): array
     {
-        $r = $this->istek('GET', '/group/fetchAllGroups/' . rawurlencode($this->instance) . '?getParticipants=false');
+        $r = $this->istek('GET', '/group/fetchAllGroups/' . rawurlencode($this->instance) . '?getParticipants=false', null, [], 45);
         $liste = is_array($r['data']) ? $r['data'] : [];
         $out = [];
         foreach ($liste as $g) {
@@ -127,7 +127,7 @@ final class WhatsAppService
      */
     public function fetchChats(): array
     {
-        $r = $this->istek('POST', '/chat/findChats/' . rawurlencode($this->instance), ['where' => new stdClass()], [400, 404]);
+        $r = $this->istek('POST', '/chat/findChats/' . rawurlencode($this->instance), ['where' => new stdClass()], [400, 404], 45);
         if ($r['status'] === 400 || $r['status'] === 404) return [];
         $liste = $r['data'];
         if (isset($liste['chats']) && is_array($liste['chats'])) $liste = $liste['chats'];
@@ -195,7 +195,7 @@ final class WhatsAppService
             'where'  => ['key' => ['remoteJid' => $remoteJid]],
             'page'   => 1,
             'offset' => $limit,
-        ]);
+        ], [], 30);
         $d = $r['data'];
         // v2: {messages:{total,pages,currentPage,records:[…]}} · eski: doğrudan liste
         if (isset($d['messages']['records']) && is_array($d['messages']['records'])) $d = $d['messages']['records'];
@@ -229,7 +229,7 @@ final class WhatsAppService
      * @param list<int> $kabulEdilenHatalar  bu HTTP kodları istisna atmaz (çağıran status'a bakar)
      * @return array{status:int, data:mixed}
      */
-    private function istek(string $metod, string $yol, ?array $govde = null, array $kabulEdilenHatalar = []): array
+    private function istek(string $metod, string $yol, ?array $govde = null, array $kabulEdilenHatalar = [], ?int $timeout = null): array
     {
         if ($this->baseUrl === '' || !preg_match('#^https?://#i', $this->baseUrl)) {
             throw new WhatsAppException('EVOLUTION_API_URL geçersiz (http:// ya da https:// ile başlamalı).');
@@ -243,7 +243,7 @@ final class WhatsAppService
             $basliklar[] = 'Content-Type: application/json';
         }
         try {
-            $y = ($this->transport)($metod, $this->baseUrl . $yol, $basliklar, $json, $this->timeout);
+            $y = ($this->transport)($metod, $this->baseUrl . $yol, $basliklar, $json, max($this->timeout, $timeout ?? $this->timeout));
         } catch (WhatsAppException $e) {
             throw $e;
         } catch (Throwable $e) {
@@ -270,6 +270,7 @@ final class WhatsAppService
             CURLOPT_HTTPHEADER     => $basliklar,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_ENCODING       => '',
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT        => max(3, $timeout),
             CURLOPT_USERAGENT      => 'AsyaFresh-WhatsApp/1',

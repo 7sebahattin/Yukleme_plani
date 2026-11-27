@@ -139,6 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['indir'] ?? '') === 'pc_paket
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     header('Content-Type: application/json; charset=utf-8');   // csrf_check JSON hata dönsün
     csrf_check($_POST['csrf'] ?? null);
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();   // uzun Evolution/AI çağrıları paralel istekleri kilitlemesin
     $islem = (string)$_POST['ajax'];
 
     try {
@@ -162,14 +163,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             wa_json(['ok' => true, 'gruplar' => $svc->fetchGroups()]);
         }
 
-        if ($islem === 'sohbetler') {                   // Okuyucu sol listesi: gruplar + kişisel sohbetler
-            $gruplar = $svc->fetchGroups();
-            try {
-                $sohbetler = $svc->fetchChats();
-            } catch (WhatsAppException $e) {
-                $sohbetler = [];                        // kişi listesi alınamazsa gruplar yine gösterilir
-            }
-            wa_json(['ok' => true, 'sohbetler' => whatsapp_sohbetleri_birlestir($gruplar, $sohbetler)]);
+        if ($islem === 'sohbetler') {                   // Okuyucu sol listesi: gruplar + kişisel sohbetler (biri yavaşsa diğeri yine döner)
+            $sohbetler = []; $gruplar = [];
+            $sohbetHata = null; $grupHata = null;
+            try { $sohbetler = $svc->fetchChats(); } catch (WhatsAppException $e) { $sohbetHata = $e; }
+            try { $gruplar = $svc->fetchGroups(); } catch (WhatsAppException $e) { $grupHata = $e; }
+            if ($sohbetHata !== null && $grupHata !== null) throw $grupHata;
+            wa_json(['ok' => true, 'sohbetler' => whatsapp_sohbetleri_birlestir($gruplar, $sohbetler, $grupHata === null)]);
         }
 
         if ($islem === 'cikis') {                       // Oturumu kapat → yeniden QR (geçmiş mesajlar yeniden senkronlanır)
