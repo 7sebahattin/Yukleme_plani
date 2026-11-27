@@ -318,16 +318,15 @@ $scheme  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' 
 $host    = (string)($_SERVER['HTTP_HOST'] ?? 'asya.scai.tr');
 $webhookTaban = $scheme . '://' . $host . '/api_whatsapp_webhook.php';
 
-render_header('WhatsApp Yükleme Planı');
+render_header('WhatsApp Senkron');
 echo '<link rel="stylesheet" href="assets/whatsapp.css?v=' . (int)@filemtime(__DIR__ . '/assets/whatsapp.css') . '">' . "\n";
 render_flash();
 ?>
 <div class="wa-sayfa" id="waSayfa" data-csrf="<?= h(csrf_token()) ?>" data-webhook-url="<?= h($webhookTaban) ?>">
     <div class="page-head">
-        <h1>WhatsApp Yükleme Planı</h1>
+        <h1>WhatsApp Senkron</h1>
     </div>
-    <p class="wa-giris">Lojistik WhatsApp gruplarındaki dağınık mesajlardan plaka, şoför, firma, yer, tonaj ve tarihi yapay zekâ ile ayıklar; güveni yüksek olanları
-        <strong>taslak</strong> yükleme planı olarak ekler. Taslaklar siz <em>Onayla</em>ya basana kadar normal plan sayılmaz.</p>
+    <p class="wa-giris">WhatsApp grup ve sohbet mesajlarını canlı okuyun; seçtiğiniz mesajlardan yapay zekâ ile <strong>beyan</strong> veya <strong>yükleme planı</strong> taslaklarını hazırlayıp kontrol ederek sisteme aktarın.</p>
 
     <?php if (!$hazir): ?>
     <div class="card wa-not wa-not-uyari">

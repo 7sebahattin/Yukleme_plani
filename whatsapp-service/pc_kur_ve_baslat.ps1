@@ -30,7 +30,7 @@ function New-HexSecret([int]$bytes = 24) {
 }
 
 Write-Host '============================================================' -ForegroundColor Green
-Write-Host '  WhatsApp Yukleme Plani - Otomatik PC Kurulum & Baslatici  ' -ForegroundColor Green
+Write-Host '  WhatsApp Senkron - Otomatik PC Kurulum & Baslatici  ' -ForegroundColor Green
 Write-Host '============================================================' -ForegroundColor Green
 
 # 1) Docker Desktop kontrol / kurulum
