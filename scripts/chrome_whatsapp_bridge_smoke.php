@@ -415,5 +415,12 @@ $procErr = cw_bridge_process_message($pdo, [
 ], ['id' => 1], 1, $mockQuotaAi);
 ok('AI 429 kota hatası düzgün HTTP 429 olarak döner', $procErr['ok'] === false && $procErr['http_status'] === 429);
 
+// ── 7. Chrome Eklentisi Tek-Tık ZIP Paketi ────────────────
+$extZip = cw_bridge_extension_zip($root . '/chrome-extension/asya-whatsapp-bridge');
+ok('eklenti ZIP geçerli PKZIP başlığıyla üretilir', strncmp($extZip, "PK\x03\x04", 4) === 0 && strlen($extZip) > 5000);
+foreach (['manifest.json', 'service-worker.js', 'content.js', 'popup.html', 'popup.css', 'popup.js', 'README.md'] as $zf) {
+    ok("eklenti ZIP dosyasını içerir: {$zf}", str_contains($extZip, 'asya-whatsapp-bridge/' . $zf));
+}
+
 echo "chrome_whatsapp_bridge_smoke.php: {$tests} test, {$fails} başarısız\n";
 exit($fails === 0 ? 0 : 1);
