@@ -121,6 +121,70 @@ final class WhatsAppService
     }
 
     /**
+     * Evolution'ın kayıtlı sohbet listesi (/chat/findChats): kişisel (@s.whatsapp.net / @lid) ve grup (@g.us)
+     * sohbetleri, son etkinlik zamanıyla. Evolution'da DATABASE_SAVE_DATA_CHATS=true olmalı; uç yoksa/eskiyse [] döner.
+     * @return list<array{jid:string, ad:string, tur:string, telefon:string, son:int}>  en son etkinlik önce
+     */
+    public function fetchChats(): array
+    {
+        $r = $this->istek('POST', '/chat/findChats/' . rawurlencode($this->instance), ['where' => new stdClass()], [400, 404]);
+        if ($r['status'] === 400 || $r['status'] === 404) return [];
+        $liste = $r['data'];
+        if (isset($liste['chats']) && is_array($liste['chats'])) $liste = $liste['chats'];
+        if (!is_array($liste) || ($liste !== [] && !array_is_list($liste))) return [];
+        $out = [];
+        foreach ($liste as $c) {
+            if (!is_array($c)) continue;
+            $jid = trim((string)($c['remoteJid'] ?? $c['id'] ?? ''));
+            if (!preg_match('/^[0-9A-Za-z._:\-]+@(g\.us|s\.whatsapp\.net|lid)$/', $jid) || isset($out[$jid])) continue;
+            $grup = str_ends_with($jid, '@g.us');
+            $son  = $c['lastMessage'] ?? null;
+            $ad   = trim((string)($c['name'] ?? $c['pushName'] ?? ''));
+            if ($ad === '' && !$grup && is_array($son) && (($son['key']['fromMe'] ?? false) !== true)) {
+                $ad = trim((string)($son['pushName'] ?? ''));
+            }
+            $tel = '';
+            if (!$grup) {
+                foreach ([$jid, (string)($c['remoteJidAlt'] ?? ''), (string)($son['key']['remoteJidAlt'] ?? '')] as $aday) {
+                    $n = self::jidTelefon($aday);
+                    if ($n !== '') { $tel = $n; break; }
+                }
+            }
+            $ts = 0;
+            if (is_array($son)) {
+                $t = $son['messageTimestamp'] ?? 0;
+                if (is_array($t)) $t = $t['low'] ?? 0;
+                $ts = is_numeric($t) ? (int)$t : 0;
+            }
+            if ($ts <= 0 && is_string($c['updatedAt'] ?? null)) $ts = (int)(strtotime($c['updatedAt']) ?: 0);
+            $out[$jid] = [
+                'jid'     => $jid,
+                'ad'      => mb_substr($ad !== '' ? $ad : ($tel !== '' ? '+' . $tel : $jid), 0, 150, 'UTF-8'),
+                'tur'     => $grup ? 'grup' : 'kisi',
+                'telefon' => $tel,
+                'son'     => $ts,
+            ];
+        }
+        $out = array_values($out);
+        usort($out, static fn(array $a, array $b): int => ($b['son'] <=> $a['son']) ?: strcasecmp($a['ad'], $b['ad']));
+        return $out;
+    }
+
+    /** WhatsApp oturumunu kapatır (yeniden QR okutunca telefon son mesaj geçmişini tekrar gönderir). */
+    public function logout(): void
+    {
+        $this->istek('DELETE', '/instance/logout/' . rawurlencode($this->instance), null, [400, 404]);
+    }
+
+    /** "905321234567@s.whatsapp.net" → "905321234567"; @lid / grup / geçersiz → ''. */
+    private static function jidTelefon(string $jid): string
+    {
+        if (!str_ends_with($jid, '@s.whatsapp.net')) return '';
+        $n = preg_replace('/\D/', '', explode(':', explode('@', $jid)[0])[0]) ?? '';
+        return (strlen($n) >= 8 && strlen($n) <= 15) ? $n : '';
+    }
+
+    /**
      * Geçmiş mesajları /chat/findMessages ile çeker (Evolution'da DATABASE_SAVE_DATA_NEW_MESSAGE=true olmalı).
      * @return list<array>  Evolution kayıtları (key, pushName, message, messageTimestamp …), en yeni önce
      */

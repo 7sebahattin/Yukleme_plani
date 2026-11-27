@@ -670,7 +670,10 @@ function whatsapp_mesaj_ozetle(array $m): ?array
     $katilimci = (string)($key['participant'] ?? $m['participant'] ?? '');
     $telefon = whatsapp_jid_telefon($katilimci);
     if ($telefon === '') {
-        foreach (['participantPn', 'senderPn', 'participantAlt'] as $alan) {
+        $alanlar = ['participantPn', 'senderPn', 'participantAlt'];
+        // Kişisel sohbette gönderen = sohbetin kendisi (bizden gitmediyse)
+        if (!str_ends_with($jid, '@g.us') && ($key['fromMe'] ?? false) !== true) $alanlar = array_merge(['remoteJid', 'remoteJidAlt'], $alanlar);
+        foreach ($alanlar as $alan) {
             $t = whatsapp_jid_telefon((string)($key[$alan] ?? $m[$alan] ?? ''));
             if ($t !== '') { $telefon = $t; break; }
         }
@@ -693,6 +696,33 @@ function whatsapp_mesaj_ozetle(array $m): ?array
         'log_durum'    => null,
         'record_id'    => null,
     ];
+}
+
+/**
+ * Okuyucunun sol listesi: gruplar (fetchGroups → ad/üye) + kayıtlı sohbetler (fetchChats → kişiler, son etkinlik).
+ * Gruplar her zaman listelenir; son etkinliği olan sohbetler WhatsApp Web'deki gibi en üstte.
+ * @param list<array{jid:string, ad:string, uye:int}> $gruplar
+ * @param list<array{jid:string, ad:string, tur:string, telefon:string, son:int}> $sohbetler
+ * @return list<array{jid:string, ad:string, tur:string, uye:int, telefon:string, son:int}>
+ */
+function whatsapp_sohbetleri_birlestir(array $gruplar, array $sohbetler): array
+{
+    $out = [];
+    foreach ($gruplar as $g) {
+        $jid = (string)($g['jid'] ?? '');
+        if ($jid === '') continue;
+        $out[$jid] = ['jid' => $jid, 'ad' => (string)($g['ad'] ?? $jid), 'tur' => 'grup', 'uye' => (int)($g['uye'] ?? 0), 'telefon' => '', 'son' => 0];
+    }
+    foreach ($sohbetler as $s) {
+        $jid = (string)($s['jid'] ?? '');
+        if ($jid === '') continue;
+        if (isset($out[$jid])) { $out[$jid]['son'] = max($out[$jid]['son'], (int)($s['son'] ?? 0)); continue; }
+        if (($s['tur'] ?? '') !== 'kisi') continue;   // hattın artık üyesi olmadığı eski gruplar listelenmez
+        $out[$jid] = ['jid' => $jid, 'ad' => (string)($s['ad'] ?? $jid), 'tur' => 'kisi', 'uye' => 0, 'telefon' => (string)($s['telefon'] ?? ''), 'son' => (int)($s['son'] ?? 0)];
+    }
+    $out = array_values($out);
+    usort($out, static fn(array $a, array $b): int => ($b['son'] <=> $a['son']) ?: strcasecmp($a['ad'], $b['ad']));
+    return $out;
 }
 
 /**

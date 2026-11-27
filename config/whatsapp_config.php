@@ -15,7 +15,7 @@
 //   ALLOWED_GROUP_JIDS       Dinlenecek grup JID dizisi                 (varsayılan [] → tüm gruplar; panelden seçim DB'de, onu ezer)
 //   AI_PROVIDER              'groq' | 'gemini'                          (varsayılan groq; panelden seçim DB'de, onu ezer)
 //   AI_API_KEY               Groq / Google AI Studio anahtarı           (varsayılan '')
-//   AI_MODEL                 Model adı (groq: llama-4-scout, gemini: gemini-2.5-flash)
+//   AI_MODEL                 Model adı (groq: openai/gpt-oss-120b, gemini: gemini-3.5-flash-lite)
 //   AI_MIN_CONFIDENCE        Otomatik taslak güven eşiği 0-100          (varsayılan 75)
 // =========================================================
 declare(strict_types=1);
@@ -44,13 +44,19 @@ if (!defined('AI_PROVIDER')) {
     unset($__p);
 }
 if (!defined('AI_API_KEY'))  define('AI_API_KEY', wa_env('AI_API_KEY'));
-if (!defined('AI_MODEL'))    define('AI_MODEL', wa_env('AI_MODEL', AI_PROVIDER === 'gemini' ? 'gemini-2.5-flash' : 'meta-llama/llama-4-scout-17b-16e-instruct'));
+if (!defined('AI_MODEL'))    define('AI_MODEL', wa_env('AI_MODEL', AI_PROVIDER === 'gemini' ? 'gemini-3.5-flash-lite' : 'openai/gpt-oss-120b'));
 if (!defined('AI_MIN_CONFIDENCE')) define('AI_MIN_CONFIDENCE', max(0, min(100, (int)wa_env('AI_MIN_CONFIDENCE', '75'))));
 
 /** Sağlayıcıya göre varsayılan model (panelden sağlayıcı değişince AI_MODEL başka sağlayıcıya ait kalmasın). */
 function wa_varsayilan_model(string $saglayici): string
 {
-    return $saglayici === 'gemini' ? 'gemini-2.5-flash' : 'meta-llama/llama-4-scout-17b-16e-instruct';
+    return $saglayici === 'gemini' ? 'gemini-3.5-flash-lite' : 'openai/gpt-oss-120b';
+}
+
+/** Sağlayıcının kapattığı modeller (HTTP 404 "model does not exist" / yeni kullanıcıya kapalı) → güncel varsayılana yönlendirilir. */
+function wa_kapali_model_mi(string $model): bool
+{
+    return (bool)preg_match('#^(meta-llama/llama-4-|qwen/qwen3-32b$|llama-3\.[13]-|llama3-|gemma2-|deepseek-r1-distill|moonshotai/kimi-k2-instruct|gemini-1\.|gemini-2\.0-|gemini-2\.5-(flash|pro)$)#', $model);
 }
 
 /**
@@ -59,6 +65,6 @@ function wa_varsayilan_model(string $saglayici): string
  */
 function wa_etkin_model(string $saglayici): string
 {
-    if ($saglayici === AI_PROVIDER) return AI_MODEL;
+    if ($saglayici === AI_PROVIDER && !wa_kapali_model_mi((string)AI_MODEL)) return AI_MODEL;
     return wa_varsayilan_model($saglayici);
 }

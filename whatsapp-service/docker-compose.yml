@@ -49,10 +49,12 @@ services:
       DATABASE_SAVE_DATA_INSTANCE: "true"
       DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
       DATABASE_SAVE_MESSAGE_UPDATE: "false"
-      DATABASE_SAVE_DATA_CONTACTS: "false"
-      DATABASE_SAVE_DATA_CHATS: "false"
+      # Sohbet/kişi listesi (okuyucunun "Kişiler" sekmesi → /chat/findChats) ve QR eşleşmesinde telefonun
+      # gönderdiği son mesaj geçmişi kaydedilir; kapalıyken okuyucu yalnız eşleşmeden SONRA gelen mesajları görür.
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
       DATABASE_SAVE_DATA_LABELS: "false"
-      DATABASE_SAVE_DATA_HISTORIC: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
       # --- Önbellek: Redis ---
       CACHE_REDIS_ENABLED: "true"
       CACHE_REDIS_URI: redis://redis:6379/6

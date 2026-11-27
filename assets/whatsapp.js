@@ -106,6 +106,16 @@
     }
     $('waQrIste').addEventListener('click', function () { durumSor(true, true); });
     $('waDurumYenile').addEventListener('click', function () { durumSor(false, false); });
+    if ($('waCikisYap')) $('waCikisYap').addEventListener('click', function () {
+        if (!window.confirm('WhatsApp oturumu kapatılacak ve yeni QR gösterilecek. Telefonla QR\'ı yeniden okuttuğunuzda son mesaj geçmişi tekrar yüklenir. Devam edilsin mi?')) return;
+        var b = this; b.disabled = true;
+        post({ ajax: 'cikis' }).then(function (r) {
+            b.disabled = false;
+            if (!r.ok) { window.alert(r.hata || 'Oturum kapatılamadı.'); return; }
+            sohbetIlkYuklendi = false;
+            durumSor(true, true);
+        });
+    });
 
     /* ── 2) Canlı Sohbet & Seçmeli AI Tarama (WhatsApp Web görünümü) ── */
     var sohbetGrupListe = $('waSohbetGrupListe'), sohbetDurum = $('waSohbetDurum'), grupAra = $('waGrupAra');
@@ -113,7 +123,7 @@
     var mesajLimit = $('waMesajLimit'), mesajYenile = $('waMesajYenile');
     var sadeceAday = $('waSadeceAday'), aktarilanGizle = $('waAktarilanGizle'), taslakOtomatik = $('waTaslakOtomatik');
     var tumunuSec = $('waTumunuSec'), secimBilgi = $('waSecimBilgi'), seciliTaratBtn = $('waSeciliTarat');
-    var tumGruplar = [], aktifGrup = null, aktifMesajlar = [], seciliIdler = {};
+    var tumGruplar = [], aktifGrup = null, aktifMesajlar = [], seciliIdler = {}, aktifTur = '';
     var DURUM_ROZET = {
         aktarildi: ['wa-tamam', 'Plana aktarıldı'],
         hazir: ['wa-hazir', 'Hazır'],
@@ -123,16 +133,26 @@
         isleniyor: ['wa-bekliyor', 'İşleniyor…']
     };
 
+    function sonEtkinlik(ts) {
+        if (!ts) return '';
+        var d = new Date(ts * 1000), simdi = new Date();
+        if (d.toDateString() === simdi.toDateString()) return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+    }
+
     function sohbetGruplariCiz() {
         if (!sohbetGrupListe) return;
         var q = (grupAra ? grupAra.value.trim().toLocaleLowerCase('tr-TR') : '');
         sohbetGrupListe.textContent = '';
         var bulunan = tumGruplar.filter(function (g) {
-            return !q || g.ad.toLocaleLowerCase('tr-TR').indexOf(q) !== -1 || g.jid.indexOf(q) !== -1;
+            if (aktifTur && g.tur !== aktifTur) return false;
+            return !q || g.ad.toLocaleLowerCase('tr-TR').indexOf(q) !== -1 || g.jid.indexOf(q) !== -1 || (g.telefon || '').indexOf(q) !== -1;
         });
         if (!bulunan.length) {
             var bos = document.createElement('li'); bos.className = 'wa-bos';
-            bos.textContent = tumGruplar.length ? 'Aramayla eşleşen grup yok.' : 'Grup bulunamadı.';
+            bos.textContent = !tumGruplar.length ? 'Sohbet bulunamadı.'
+                : (q ? 'Aramayla eşleşen sohbet yok.'
+                    : (aktifTur === 'kisi' ? 'Kişisel sohbet yok. Evolution güncellendikten sonra "Oturumu kapat & yeniden bağlan" ile QR\'ı yeniden okutun.' : 'Bu sekmede sohbet yok.'));
             sohbetGrupListe.appendChild(bos);
             return;
         }
@@ -141,8 +161,15 @@
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'wa-sohbet-grup-btn' + (aktifGrup && aktifGrup.jid === g.jid ? ' wa-secili' : '');
-            var title = document.createElement('div'); title.textContent = g.ad;
-            var sm = document.createElement('small'); sm.textContent = (g.uye ? g.uye + ' üye' : 'WhatsApp grubu');
+            var title = document.createElement('div'); title.className = 'wa-sohbet-isim';
+            var adSp = document.createElement('span'); adSp.textContent = (g.tur === 'kisi' ? '👤 ' : '👥 ') + g.ad;
+            title.appendChild(adSp);
+            if (g.son) {
+                var zt = document.createElement('span'); zt.className = 'wa-ikincil'; zt.textContent = sonEtkinlik(g.son);
+                title.appendChild(zt);
+            }
+            var sm = document.createElement('small');
+            sm.textContent = g.tur === 'kisi' ? (g.telefon ? '+' + g.telefon : 'Kişisel sohbet') : (g.uye ? g.uye + ' üye' : 'WhatsApp grubu');
             btn.appendChild(title); btn.appendChild(sm);
             btn.addEventListener('click', function () {
                 aktifGrup = g;
@@ -159,16 +186,27 @@
         if (!sohbetGrupListe) return;
         var btn = $('waSohbetGrupYukle');
         if (btn) btn.disabled = true;
-        if (sohbetDurum) sohbetDurum.textContent = 'Gruplar yükleniyor…';
-        post({ ajax: 'gruplar' }).then(function (r) {
+        if (sohbetDurum) sohbetDurum.textContent = 'Sohbetler yükleniyor…';
+        post({ ajax: 'sohbetler' }).then(function (r) {
             if (btn) btn.disabled = false;
             if (!r.ok) {
-                if (sohbetDurum) sohbetDurum.textContent = r.hata || 'Gruplar alınamadı.';
+                if (sohbetDurum) sohbetDurum.textContent = r.hata || 'Sohbetler alınamadı.';
                 return;
             }
-            tumGruplar = r.gruplar || [];
-            if (sohbetDurum) sohbetDurum.textContent = tumGruplar.length + ' grup yüklendi.';
+            tumGruplar = r.sohbetler || [];
+            var grupSay = tumGruplar.filter(function (g) { return g.tur === 'grup'; }).length;
+            if (sohbetDurum) sohbetDurum.textContent = grupSay + ' grup, ' + (tumGruplar.length - grupSay) + ' kişi yüklendi.';
             sohbetGruplariCiz();
+        });
+    }
+
+    if ($('waSohbetSekme')) {
+        Array.prototype.forEach.call($('waSohbetSekme').querySelectorAll('.wa-sekme'), function (b) {
+            b.addEventListener('click', function () {
+                aktifTur = b.getAttribute('data-tur') || '';
+                Array.prototype.forEach.call($('waSohbetSekme').querySelectorAll('.wa-sekme'), function (x) { x.classList.toggle('wa-secili', x === b); });
+                sohbetGruplariCiz();
+            });
         });
     }
 
@@ -206,7 +244,7 @@
         mesajAkis.textContent = '';
         if (!aktifGrup) {
             var d0 = document.createElement('div'); d0.className = 'wa-bos';
-            d0.textContent = 'Soldan bir WhatsApp grubu seçin.';
+            d0.textContent = 'Soldan bir grup ya da kişi seçin.';
             mesajAkis.appendChild(d0);
             secimSayaciniGuncelle();
             return;
@@ -214,7 +252,7 @@
         var listeM = gorunurMesajlar();
         if (!listeM.length) {
             var d1 = document.createElement('div'); d1.className = 'wa-bos';
-            d1.textContent = aktifMesajlar.length ? 'Filtrelere uyan mesaj yok.' : 'Bu grupta kayıtlı metin mesajı bulunamadı (yeni mesaj geldikçe burada görünür).';
+            d1.textContent = aktifMesajlar.length ? 'Filtrelere uyan mesaj yok.' : 'Bu sohbette kayıtlı metin mesajı yok. Yeni mesajlar geldikçe burada görünür; eski mesajlar için PC paketini güncelleyip yukarıdan "Oturumu kapat & yeniden bağlan" ile QR\'ı yeniden okutun.';
             mesajAkis.appendChild(d1);
             secimSayaciniGuncelle();
             return;
