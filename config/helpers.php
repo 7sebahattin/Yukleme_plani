@@ -777,6 +777,7 @@ function nav_menu_modeli(string $base): array {
     $o = [];
     if ($p_recw)  $o[] = $ge('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks, 'hks');
     if ($p_mail)  $o[] = $ge('mail.php', '📧', 'Mail Merkezi', $a_mail, 'mail', nav_mail_okunmamis());
+    if ($p_beyan) $o[] = $ge('whatsapp_beyan_aktar.php', '💬', 'WhatsApp Veri Çek', basename($_SERVER['PHP_SELF'] ?? '') === 'whatsapp_beyan_aktar.php');
     // v558: eski Yükleme Planı / Paletleme / Mal Kabul girişleri menüde YOK; eski sayfalarda seçili görünen giriş yeni karşılığıdır.
     $eskiAktif = isset(nav_eski_esleri()[(string)$ak]) ? [nav_eski_esleri()[(string)$ak] => true] : [];
     if (isset($muh['operasyon_fis'])) foreach ($muh['operasyon_fis'][2] as $d => [$et, $em]) {

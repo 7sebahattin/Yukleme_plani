@@ -317,7 +317,7 @@ foreach ($dashboardProfiles as $name => $profile) {
         dashboard_check($imgNode !== null && str_starts_with($imgNode->getAttribute('src'), $beklenen), $name . ': 3B ikon var ' . $chref);
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 61, 'admin: Ana Sayfa hariç 61 benzersiz kart (43 yetkili katalog sayfası [v593: Raporlama & BI Merkezi +1] + 1 Depo Tanımları + 1 WhatsApp Yükleme + 16 modül kartı)');
+        dashboard_check(count($home) === 62, 'admin: Ana Sayfa hariç 62 benzersiz kart (43 yetkili katalog sayfası [v593: Raporlama & BI Merkezi +1] + 1 Depo Tanımları + 1 WhatsApp Yükleme + 1 WhatsApp Veri Çek + 16 modül kartı)');
         dashboard_check(($sidebarGroups[count($sidebarGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim sidebar\'da EN SON grup (v580)');
         dashboard_check(($homeGroups[count($homeGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim ana sayfada EN SON grup (v580)');
         $sbQcost = $xpath->query('//nav[contains(concat(" ",normalize-space(@class)," ")," sidebar-nav ")]//a[@href="hizli_maliyet.php"]//img')->item(0);
