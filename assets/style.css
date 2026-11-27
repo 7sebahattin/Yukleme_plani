@@ -7603,9 +7603,10 @@ html[data-theme="dark"] .mk-form { --mk-accent: #5fd39a; --mk-soft: #17332a; --m
     border: 1px solid var(--primary); border-radius: var(--radius-sm); box-shadow: 0 10px 28px rgba(11, 36, 64, .25);
 }
 .mk-cb-list[hidden] { display: none; }
-.mk-cb-list li { padding: 10px 12px; border-radius: 6px; font-weight: 600; font-size: .95rem; cursor: pointer; }
+.mk-cb-list li { padding: 7px 10px; border-radius: 5px; font-weight: 600; font-size: .86rem; cursor: pointer; }
 .mk-cb-list li:hover, .mk-cb-list li.mk-cb-aktif { background: var(--primary-soft); color: var(--primary); }
-.mk-cb-list li.mk-cb-ekle { color: var(--mk-accent, #12824a); font-weight: 800; border-top: 1px dashed var(--border); }
+.mk-cb-list li.mk-cb-son-bitis { border-bottom: 1px dashed var(--border); margin-bottom: 3px; padding-bottom: 8px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.mk-cb-list li.mk-cb-ekle { color: var(--mk-accent, #12824a); font-weight: 800; border-top: 1px dashed var(--border); margin-top: 2px; }
 .mk-form .kp-row > .mk-cb { flex: 1 1 100%; min-width: 0; }
 html[data-theme="dark"] .mk-cb-list li:hover, html[data-theme="dark"] .mk-cb-list li.mk-cb-aktif { background: #1c2a40; color: #8ab8ff; }
 
