@@ -47,9 +47,9 @@ final class SahteAi
     public static array $son = [];
     public static $cevap;
 }
-function ai_servisi(string $saglayici = 'groq'): AIParserService
+function ai_servisi(string $saglayici = 'groq', ?string $model = null): AIParserService
 {
-    return new AIParserService($saglayici, 'test-anahtar', $saglayici === 'groq' ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'gemini-2.5-flash',
+    return new AIParserService($saglayici, 'test-anahtar', $model ?? ($saglayici === 'groq' ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'gemini-2.5-flash'),
         function (string $url, array $basliklar, string $govde, int $timeout): array {
             SahteAi::$cagri++;
             SahteAi::$son = ['url' => $url, 'basliklar' => $basliklar, 'govde' => json_decode($govde, true)];
@@ -186,6 +186,14 @@ ok('Gemini: x-goog-api-key başlığı', in_array('x-goog-api-key: test-anahtar'
 ok('Gemini: responseMimeType + responseSchema', $g['govde']['generationConfig']['responseMimeType'] === 'application/json' && $g['govde']['generationConfig']['responseSchema']['type'] === 'OBJECT');
 ok('Gemini: systemInstruction tarihli', str_contains($g['govde']['systemInstruction']['parts'][0]['text'], '2026-11-26'));
 ok('Gemini 2.5 Flash: thinkingBudget 0', ($g['govde']['generationConfig']['thinkingConfig']['thinkingBudget'] ?? null) === 0);
+SahteAi::$cevap = groq_yanit(plan());
+ai_servisi('groq', 'openai/gpt-oss-120b')->parseMessage(MESAJ, $sim);
+$g = SahteAi::$son;
+ok('Groq gpt-oss: strict AÇIK + reasoning_effort low + akıl yürütme payı', ($g['govde']['response_format']['json_schema']['strict'] ?? null) === true && ($g['govde']['reasoning_effort'] ?? '') === 'low' && $g['govde']['max_completion_tokens'] === 2000);
+SahteAi::$cevap = ['status' => 200, 'body' => json_encode($gem)];
+ai_servisi('gemini', 'gemini-3.5-flash-lite')->parseMessage(MESAJ, $sim);
+$g3 = SahteAi::$son['govde']['generationConfig'];
+ok('Gemini 3.x: temperature YOK, thinkingLevel low (thinkingBudget değil)', !isset($g3['temperature']) && ($g3['thinkingConfig']['thinkingLevel'] ?? '') === 'low' && !isset($g3['thinkingConfig']['thinkingBudget']));
 ok('Gemini: sonuç şemaya zorlanmış', $p['firma_adi'] === 'Örnek Tarım' && array_keys($p) === $alanlar);
 SahteAi::$cevap = ['status' => 200, 'body' => json_encode(['candidates' => [['content' => ['parts' => [['text' => "```json\n" . json_encode(plan()) . "\n```"]]]]]])];
 ok('kod bloğuna sarılmış JSON da çözülür', ai_servisi('gemini')->parseMessage(MESAJ, $sim)['plaka'] === '34 KL 4589');
@@ -273,6 +281,36 @@ evo(fn() => ['status' => 200, 'body' => '[]'])->fetchMessages(GRUP, 999);
 $son = end($ist);
 ok('fetchMessages: POST /chat/findMessages, where.key.remoteJid, limit en çok 200', $son['m'] === 'POST' && str_contains($son['u'], '/chat/findMessages/') && $son['b']['where']['key']['remoteJid'] === GRUP && $son['b']['offset'] === 200);
 ok('fetchMessages: beklenmeyen gövde → boş liste', evo(fn() => ['status' => 200, 'body' => '{"x":1}'])->fetchMessages(GRUP) === []);
+
+// fetchChats (kişisel sohbetler) + logout
+$sohbetYanit = [
+    ['remoteJid' => '905321112233@s.whatsapp.net', 'pushName' => 'Mehmet Nakliye', 'lastMessage' => ['messageTimestamp' => 1775000300, 'key' => ['fromMe' => false]]],
+    ['remoteJid' => '120363000000000001@g.us', 'name' => 'alfa Sevkiyat', 'lastMessage' => ['messageTimestamp' => 1775000500]],
+    ['remoteJid' => '123456789012345@lid', 'lastMessage' => ['pushName' => 'Ayşe', 'messageTimestamp' => 1775000100, 'key' => ['fromMe' => false, 'remoteJidAlt' => '905339998877@s.whatsapp.net']]],
+    ['remoteJid' => '905321112233@s.whatsapp.net', 'pushName' => 'Tekrar'],
+    ['remoteJid' => 'status@broadcast'],
+    ['remoteJid' => '905440001122@s.whatsapp.net', 'updatedAt' => '2026-01-01T10:00:00.000Z'],
+];
+$ist = [];
+$c = evo(fn() => ['status' => 200, 'body' => json_encode($sohbetYanit)])->fetchChats();
+$son = end($ist);
+ok('fetchChats: POST /chat/findChats/{instance}', $son['m'] === 'POST' && str_contains($son['u'], '/chat/findChats/yukleme_plani_bot'));
+ok('fetchChats: kişi + grup, status@broadcast ve tekrarlar düşer', array_column($c, 'jid') === ['120363000000000001@g.us', '905321112233@s.whatsapp.net', '123456789012345@lid', '905440001122@s.whatsapp.net'], json_encode(array_column($c, 'jid')));
+$cj = array_column($c, null, 'jid');
+ok('fetchChats: tür + ad (pushName / lastMessage.pushName / telefon)', $cj['905321112233@s.whatsapp.net']['tur'] === 'kisi' && $cj['905321112233@s.whatsapp.net']['ad'] === 'Mehmet Nakliye' && $cj['123456789012345@lid']['ad'] === 'Ayşe' && $cj['905440001122@s.whatsapp.net']['ad'] === '+905440001122' && $cj['120363000000000001@g.us']['tur'] === 'grup');
+ok('fetchChats: @lid için telefon remoteJidAlt\'tan', $cj['123456789012345@lid']['telefon'] === '905339998877' && $cj['905321112233@s.whatsapp.net']['telefon'] === '905321112233');
+ok('fetchChats: updatedAt yedek zaman', $cj['905440001122@s.whatsapp.net']['son'] === strtotime('2026-01-01T10:00:00.000Z'));
+ok('fetchChats: 404 (eski Evolution) → boş liste, hata değil', evo(fn() => ['status' => 404, 'body' => '{}'])->fetchChats() === []);
+ok('fetchChats: beklenmeyen gövde → boş liste', evo(fn() => ['status' => 200, 'body' => '{"x":1}'])->fetchChats() === []);
+$ist = [];
+evo(fn() => ['status' => 200, 'body' => '{"status":"SUCCESS"}'])->logout();
+$son = end($ist);
+ok('logout: DELETE /instance/logout/{instance}', $son['m'] === 'DELETE' && str_contains($son['u'], '/instance/logout/yukleme_plani_bot'));
+$bir = whatsapp_sohbetleri_birlestir($g, $c);
+$bj = array_column($bir, null, 'jid');
+ok('birleştirme: tüm gruplar + kişiler, grup adı/üye fetchGroups\'tan', count($bir) === 6 && $bj['120363000000000001@g.us']['ad'] === 'alfa Sevkiyat' && $bj['120363000000000001@g.us']['uye'] === 3 && $bj['120363000000000001@g.us']['son'] === 1775000500 && $bj['905321112233@s.whatsapp.net']['tur'] === 'kisi', json_encode(array_column($bir, 'jid')));
+ok('birleştirme: son etkinlik en üstte', $bir[0]['jid'] === '120363000000000001@g.us' && $bir[1]['jid'] === '905321112233@s.whatsapp.net');
+ok('birleştirme: hattın üyesi olmadığı eski grup listelenmez', !isset(whatsapp_sohbetleri_birlestir([], [['jid' => '120363999@g.us', 'ad' => 'Eski', 'tur' => 'grup', 'telefon' => '', 'son' => 5]])[0]));
 
 // sendTextMessage
 $ist = [];
@@ -424,7 +462,9 @@ $a = whatsapp_ayarlar_oku(db());
 ok('ayar kaydet/oku: geçersiz JID düşer, tekilleşir', count($a['secili_gruplar']) === 1 && $a['secili_gruplar'][0]['jid'] === GRUP && $a['ai_saglayici'] === 'gemini' && $a['otomatik_taslak'] === false && $a['kayitli'] === true);
 whatsapp_ayarlar_kaydet(db(), [], 'openai', true, 5);
 ok('bilinmeyen sağlayıcı groq\'a döner', whatsapp_ayarlar_oku(db())['ai_saglayici'] === 'groq');
-ok('wa_etkin_model: sağlayıcı değişince model o sağlayıcıya ait', wa_etkin_model('gemini') === 'gemini-2.5-flash' && wa_etkin_model('groq') === 'meta-llama/llama-4-scout-17b-16e-instruct');
+ok('wa_etkin_model: sağlayıcı değişince model o sağlayıcıya ait (güncel varsayılanlar)', wa_etkin_model('gemini') === 'gemini-3.5-flash-lite' && wa_etkin_model('groq') === 'openai/gpt-oss-120b');
+ok('kapatılan modeller tanınır (Groq llama-4 / qwen3-32b, Gemini 2.x)', wa_kapali_model_mi('meta-llama/llama-4-scout-17b-16e-instruct') && wa_kapali_model_mi('qwen/qwen3-32b') && wa_kapali_model_mi('gemini-2.5-flash') && wa_kapali_model_mi('llama-3.3-70b-versatile'));
+ok('güncel modeller kapalı sayılmaz', !wa_kapali_model_mi('openai/gpt-oss-120b') && !wa_kapali_model_mi('gemini-3.5-flash-lite') && !wa_kapali_model_mi('gemini-2.5-flash-lite'));
 ok('config varsayılanları: URL / instance / eşik', EVOLUTION_API_URL === 'http://localhost:8080' && EVOLUTION_INSTANCE_NAME === 'yukleme_plani_bot' && AI_MIN_CONFIDENCE === 75 && AI_PROVIDER === 'groq' && ALLOWED_GROUP_JIDS === []);
 ok('son mesajlar: en yeni önce, plan durumu birleşir', whatsapp_son_mesajlar(db(), 3)[0]['id'] > whatsapp_son_mesajlar(db(), 3)[2]['id'] && count(whatsapp_son_mesajlar(db(), 3)) === 3);
 
@@ -540,6 +580,8 @@ ok('webhook DB token ile doğrulanır', whatsapp_webhook_yetkili([], ['token' =>
 $oz = whatsapp_mesaj_ozetle(['key' => ['id' => 'RD1', 'remoteJid' => GRUP, 'participant' => '905321112233@s.whatsapp.net', 'fromMe' => false], 'pushName' => 'Ali', 'message' => ['conversation' => MESAJ], 'messageTimestamp' => 1775000000]);
 ok('okuyucu özetleme: metin + gönderen + telefon + gürültü değil', $oz !== null && $oz['id'] === 'RD1' && $oz['sender_phone'] === '905321112233' && $oz['is_noise'] === false);
 ok('okuyucu özetleme: metinsiz medya atlanır', whatsapp_mesaj_ozetle(['key' => ['id' => 'RD2', 'remoteJid' => GRUP], 'message' => ['audioMessage' => ['seconds' => 3]]]) === null);
+$ozKisi = whatsapp_mesaj_ozetle(['key' => ['id' => 'RD3', 'remoteJid' => '905334445566@s.whatsapp.net', 'fromMe' => false], 'pushName' => 'Veli', 'message' => ['conversation' => MESAJ], 'messageTimestamp' => 1775000010]);
+ok('okuyucu özetleme: kişisel sohbette telefon remoteJid\'den gelir', $ozKisi !== null && $ozKisi['sender_phone'] === '905334445566' && $ozKisi['sender_name'] === 'Veli');
 SahteAi::$cagri = 0;
 SahteAi::$cevap = groq_yanit(plan(['plaka' => '06 ABC 777', 'firma_adi' => 'Beta Tarım', 'yukleme_yeri' => 'Antalya', 'guven_skoru' => 92]));
 $tarRes = whatsapp_secili_tarat(db(), [['id' => 'SEL1', 'jid' => GRUP, 'sender_name' => 'Veli', 'sender_phone' => '905321234567', 'text' => 'yarın 06 abc 777 antalya beta tarım 20 ton limon', 'date' => '2026-04-06']], whatsapp_ayarlar_oku(db()), true, 1, ai_servisi('groq'), $BUGUN);

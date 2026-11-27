@@ -99,7 +99,8 @@ final class AIParserService
         $govde = [
             'model'       => $this->model,
             'temperature' => 0,
-            'max_completion_tokens' => 800,
+            // gpt-oss akıl yürütme modelidir: düşük çaba + akıl yürütme jetonları için pay
+            'max_completion_tokens' => str_contains($this->model, 'gpt-oss') ? 2000 : 800,
             'messages'    => [
                 ['role' => 'system', 'content' => $sistem],
                 ['role' => 'user',   'content' => self::kullaniciIcerigi($metin)],
@@ -109,11 +110,12 @@ final class AIParserService
                 'json_schema' => array_filter([
                     'name'   => 'yukleme_plani',
                     'schema' => self::semaOpenAi(),
-                    // strict yalnız gpt-oss modellerinde garanti; llama-4'te en iyi çaba (PHP sanitize zaten doğrular)
+                    // strict yalnız gpt-oss modellerinde garanti; diğerlerinde en iyi çaba (PHP sanitize zaten doğrular)
                     'strict' => str_contains($this->model, 'gpt-oss') ? true : null,
                 ], static fn($v) => $v !== null),
             ],
         ];
+        if (str_contains($this->model, 'gpt-oss')) $govde['reasoning_effort'] = 'low';
         $y = $this->http(self::GROQ_URL, ['Authorization: Bearer ' . $this->apiKey], $govde);
         $d = $this->yanitCoz($y);
         $icerik = $d['choices'][0]['message']['content'] ?? null;
@@ -131,6 +133,12 @@ final class AIParserService
         ];
         // 2.5 Flash'ta düşünme kapatılır: yapılandırılmış çıkarım için gereksiz gecikme/maliyet
         if (preg_match('/^gemini-2\.5-flash(-lite)?$/', $this->model)) $gen['thinkingConfig'] = ['thinkingBudget' => 0];
+        // Gemini 3+: örnekleme parametreleri kaldırıldı, thinkingBudget yerine thinkingLevel
+        if (preg_match('/^gemini-([3-9]|\d{2,})/', $this->model)) {
+            unset($gen['temperature']);
+            $gen['maxOutputTokens'] = 2000;
+            $gen['thinkingConfig'] = ['thinkingLevel' => 'low'];
+        }
         $govde = [
             'systemInstruction' => ['parts' => [['text' => $sistem]]],
             'contents'          => [['role' => 'user', 'parts' => [['text' => self::kullaniciIcerigi($metin)]]]],

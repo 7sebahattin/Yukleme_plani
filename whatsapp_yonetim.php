@@ -162,10 +162,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             wa_json(['ok' => true, 'gruplar' => $svc->fetchGroups()]);
         }
 
-        if ($islem === 'mesajlar') {                    // WhatsApp Web tarzı grup mesaj akışı
+        if ($islem === 'sohbetler') {                   // Okuyucu sol listesi: gruplar + kişisel sohbetler
+            $gruplar = $svc->fetchGroups();
+            try {
+                $sohbetler = $svc->fetchChats();
+            } catch (WhatsAppException $e) {
+                $sohbetler = [];                        // kişi listesi alınamazsa gruplar yine gösterilir
+            }
+            wa_json(['ok' => true, 'sohbetler' => whatsapp_sohbetleri_birlestir($gruplar, $sohbetler)]);
+        }
+
+        if ($islem === 'cikis') {                       // Oturumu kapat → yeniden QR (geçmiş mesajlar yeniden senkronlanır)
+            $svc->logout();
+            whatsapp_denetle('whatsapp_cikis', 'whatsapp', null, null, ['instance' => $ayar['instance_adi']]);
+            wa_json(['ok' => true, 'durum' => $svc->getConnectionState()]);
+        }
+
+        if ($islem === 'mesajlar') {                    // WhatsApp Web tarzı sohbet mesaj akışı (grup ya da kişi; yalnız elle okuma)
             $jid = trim((string)($_POST['jid'] ?? ''));
-            if (!preg_match('/^[0-9A-Za-z._\-]+@g\.us$/', $jid)) {
-                wa_json(['ok' => false, 'hata' => 'Geçersiz grup kimliği.'], 422);
+            if (!preg_match('/^[0-9A-Za-z._:\-]+@(g\.us|s\.whatsapp\.net|lid)$/', $jid)) {
+                wa_json(['ok' => false, 'hata' => 'Geçersiz sohbet kimliği.'], 422);
             }
             $limit = max(10, min(200, (int)($_POST['limit'] ?? 80)));
             $ham = $svc->fetchMessages($jid, $limit);
@@ -392,6 +408,7 @@ render_flash();
                 <div class="wa-eylem">
                     <button type="button" class="btn btn-primary" id="waQrIste">QR kod al / oturum oluştur</button>
                     <button type="button" class="btn btn-ghost" id="waDurumYenile">Durumu yenile</button>
+                    <button type="button" class="btn btn-ghost" id="waCikisYap" title="Oturumu kapatır; QR'ı yeniden okutunca telefon son mesaj geçmişini tekrar gönderir">Oturumu kapat &amp; yeniden bağlan</button>
                 </div>
                 <p class="wa-ikincil">WhatsApp › Bağlı cihazlar › Cihaz bağla ile QR'ı okutun. QR süresi dolarsa otomatik yenilenir; bağlanınca bu alan kendiliğinden kapanır.</p>
             </div>
@@ -402,14 +419,19 @@ render_flash();
     <!-- 2) Canlı Sohbet & Seçmeli AI Tarama (WhatsApp Web görünümü) -->
     <section class="card wa-kart" id="waOkuyucu">
         <h2 class="wa-kart-baslik">2 · Canlı Sohbet &amp; Seçmeli AI Tarama
-            <button type="button" class="btn btn-sm btn-primary" id="waSohbetGrupYukle">Grupları Yükle</button>
+            <button type="button" class="btn btn-sm btn-primary" id="waSohbetGrupYukle">Sohbetleri Yükle</button>
             <span class="wa-ikincil" id="waSohbetDurum"></span>
         </h2>
         <div class="wa-sohbet-kabuk">
             <aside class="wa-sohbet-sol">
-                <input type="search" id="waGrupAra" placeholder="Grup ara…" autocomplete="off">
+                <div class="wa-sekmeler" role="tablist" id="waSohbetSekme">
+                    <button type="button" class="wa-sekme wa-secili" data-tur="">Tümü</button>
+                    <button type="button" class="wa-sekme" data-tur="grup">Gruplar</button>
+                    <button type="button" class="wa-sekme" data-tur="kisi">Kişiler</button>
+                </div>
+                <input type="search" id="waGrupAra" placeholder="Sohbet ara…" autocomplete="off">
                 <ul class="wa-sohbet-gruplar" id="waSohbetGrupListe">
-                    <li class="wa-bos">Önce "Grupları Yükle"ye tıklayın (hat bağlandığında otomatik de yüklenir).</li>
+                    <li class="wa-bos">Önce "Sohbetleri Yükle"ye tıklayın (hat bağlandığında otomatik de yüklenir).</li>
                 </ul>
             </aside>
             <div class="wa-sohbet-sag">
@@ -435,7 +457,7 @@ render_flash();
                     <button type="button" class="btn btn-sm btn-primary" id="waSeciliTarat" disabled>Seçilileri AI ile Tarat &amp; Taslak Çıkar</button>
                 </div>
                 <div class="wa-mesaj-akis" id="waMesajAkis">
-                    <div class="wa-bos">Soldan bir WhatsApp grubu seçin; mesajlar burada görünür, filtreleyip istediklerinizi AI ile taratabilirsiniz.</div>
+                    <div class="wa-bos">Soldan bir grup ya da kişi seçin; mesajlar burada görünür, filtreleyip istediklerinizi AI ile taratabilirsiniz.</div>
                 </div>
             </div>
         </div>
