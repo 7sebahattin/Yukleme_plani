@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
         'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
         'aciklama', 'depo', 'parti_no',
-        'sofor', 'mal_sahibi', 'mustahsil', 'bahce',   // ek alanlar (kolonlar migrate.php kartından)
+        'sofor', 'mal_sahibi', 'mustahsil', 'bahce', 'urun_fiyati',   // ek alanlar (kolonlar migrate.php kartından)
         'tartim1', 'alibi1', 'tartim2', 'alibi2',
     ];
     foreach ($fields as $k) {
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Zorunlu alan kontrolü ─────────────────────────────
     if ($fis['giris_tarih'] === '') $errors[] = 'Geçerli bir tarih girin.';
     if ($fis['firma_adi']   === '') $errors[] = 'Firma adı zorunludur.';
-    if ($fis['malin_cinsi'] === '') $errors[] = 'Mal cinsi zorunludur.';
+    if ($fis['malin_cinsi'] === '') $errors[] = 'Ürün zorunludur.';
     if ($fis['depo']        === '') $errors[] = 'Depo zorunludur.';
     $_t1c = num($fis['tartim1']);
     $_t2c = num($fis['tartim2']);

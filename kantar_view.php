@@ -337,7 +337,15 @@ render_flash();
                         <div><span class="lbl">Çıkış</span><strong><?= h(fmt_datetime($fis['cikis_tarih'])) ?></strong></div>
                         <?php endif; ?>
                         <?php if ($fis['malin_cinsi']): ?>
-                        <div><span class="lbl">Malın Cinsi</span><strong><?= h($fis['malin_cinsi']) ?></strong></div>
+                        <div><span class="lbl">Ürün</span><strong><?= h($fis['malin_cinsi']) ?></strong></div>
+                        <?php endif; ?>
+                        <?php
+                        $urun_fiyati_val = (isset($fis['urun_fiyati']) && $fis['urun_fiyati'] !== '' && is_numeric($fis['urun_fiyati']))
+                            ? (float)$fis['urun_fiyati'] : 0.0;
+                        ?>
+                        <?php if ($urun_fiyati_val > 0): ?>
+                        <div><span class="lbl">Ürün Fiyatı</span><strong><?= number_format($urun_fiyati_val, 2, ',', '.') ?> ₺/kg</strong></div>
+                        <div><span class="lbl">Toplam Tutar</span><strong><?= number_format($net_hesap * $urun_fiyati_val, 2, ',', '.') ?> ₺</strong></div>
                         <?php endif; ?>
                         <?php if ($fis['geldigi_yer']): ?>
                         <div><span class="lbl">Geldiği Yer</span><strong><?= h($fis['geldigi_yer']) ?></strong></div>

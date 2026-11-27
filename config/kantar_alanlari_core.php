@@ -4,10 +4,11 @@
 //
 // kantar_fisleri'ne EK kolonlar. YALNIZ migrate.php "Mal Kabul Alanları" kartından çağrılır (açık GO ile);
 // sayfalar (kantar_create/edit/kantar.php/kantar_view) kolon yoksa ilgili alanı pasif/gizli gösterir, ALTER ATMAZ.
-//   sofor      — şoför (Genel Bilgiler)
-//   mal_sahibi — malın sahibi (Malzeme ve Depo)
-//   mustahsil  — müstahsil (Malzeme ve Depo; serbest ad)
-//   bahce      — bahçe (Malzeme ve Depo)
+//   sofor       — şoför (Genel Bilgiler)
+//   mal_sahibi  — malın sahibi (Malzeme ve Depo)
+//   mustahsil   — müstahsil (Malzeme ve Depo; serbest ad)
+//   bahce       — bahçe (Malzeme ve Depo)
+//   urun_fiyati — ürün fiyatı (₺/kg; DECIMAL(12,2) NULL)
 // Yalnız ekleyici: mevcut veriye dokunmaz, yabancı anahtar YOK.
 // =========================================================
 declare(strict_types=1);
@@ -16,10 +17,11 @@ declare(strict_types=1);
 function kantar_alanlari_kolonlar(): array
 {
     return [
-        'sofor'      => "ADD COLUMN `sofor` VARCHAR(150) NOT NULL DEFAULT ''",
-        'mal_sahibi' => "ADD COLUMN `mal_sahibi` VARCHAR(150) NOT NULL DEFAULT ''",
-        'mustahsil'  => "ADD COLUMN `mustahsil` VARCHAR(150) NOT NULL DEFAULT ''",
-        'bahce'      => "ADD COLUMN `bahce` VARCHAR(150) NOT NULL DEFAULT ''",
+        'sofor'       => "ADD COLUMN `sofor` VARCHAR(150) NOT NULL DEFAULT ''",
+        'mal_sahibi'  => "ADD COLUMN `mal_sahibi` VARCHAR(150) NOT NULL DEFAULT ''",
+        'mustahsil'   => "ADD COLUMN `mustahsil` VARCHAR(150) NOT NULL DEFAULT ''",
+        'bahce'       => "ADD COLUMN `bahce` VARCHAR(150) NOT NULL DEFAULT ''",
+        'urun_fiyati' => "ADD COLUMN `urun_fiyati` DECIMAL(12,2) NULL DEFAULT NULL",
     ];
 }
 
@@ -50,7 +52,8 @@ function kantar_alanlari_hazir(PDO $pdo): bool
 
 /**
  * Formdan gelen ek alanları fişe yazar. Yalnız VAR olan kolonlar güncellenir (kolon yoksa sessizce atlanır).
- * Değerler TR-büyük harfe çevrilir, kolon uzunluğuna (150) göre kırpılır.
+ * Metin değerleri TR-büyük harfe çevrilir, kolon uzunluğuna (150) göre kırpılır.
+ * Sayısal kolonlar (urun_fiyati) boşsa NULL, doluysa >=0 ve 2 ondalığa yuvarlanarak yazılır.
  * @param array<string,mixed> $post
  */
 function kantar_alanlari_yaz(PDO $pdo, int $fis_id, array $post): void
@@ -59,6 +62,20 @@ function kantar_alanlari_yaz(PDO $pdo, int $fis_id, array $post): void
     $set = []; $par = [];
     foreach ($durum as $kolon => $var) {
         if (!$var || !array_key_exists($kolon, $post)) continue;
+        if ($kolon === 'urun_fiyati') {
+            $raw = trim((string)$post[$kolon]);
+            if ($raw === '') {
+                $v = null;
+            } else {
+                $s = str_replace([' ', "\xc2\xa0"], '', $raw);
+                if (str_contains($s, ',')) {
+                    $s = str_replace(',', '.', str_replace('.', '', $s));
+                }
+                $v = is_numeric($s) ? round(max(0.0, (float)$s), 2) : null;
+            }
+            $set[] = "`$kolon` = ?"; $par[] = $v;
+            continue;
+        }
         $v = trim((string)preg_replace('/\s+/u', ' ', (string)$post[$kolon]));
         $v = $v === '' ? '' : mb_substr(tr_upper($v), 0, 150, 'UTF-8');
         $set[] = "`$kolon` = ?"; $par[] = $v;
