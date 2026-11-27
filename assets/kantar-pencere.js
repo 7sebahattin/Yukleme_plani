@@ -9,7 +9,7 @@
     var dock = document.getElementById('mkWinDock');
     var maxBtn = win.querySelector('[data-mk-win-max]');
 
-    var MIN_W = 540;
+    var MIN_W = 380;
     var MIN_H = 360;
 
     var isOpen = false;
@@ -62,9 +62,9 @@
     function centerWindow() {
         var vw = window.innerWidth;
         var vh = window.innerHeight;
-        var width = Math.min(1180, Math.max(MIN_W, vw - 48));
+        var width = Math.min(1280, Math.max(MIN_W, vw - 40));
         if (width > vw - 16) width = Math.max(320, vw - 16);
-        var height = Math.min(Math.round(vh * 0.88), 780);
+        var height = Math.min(Math.round(vh * 0.88), 760);
         if (height > vh - 16) height = Math.max(240, vh - 16);
         var left = Math.max(12, Math.round((vw - width) / 2));
         var top = Math.max(12, Math.round((vh - height) / 2));

@@ -7842,30 +7842,27 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     }
 }
 
-/* ═══ Mal Kabul Fişi kompakt düzen + Windows-tarzı yüzen pencere (v604) ═══ */
-.mk-form .mk-card { padding: 12px 14px; margin-bottom: 10px; }
+/* ═══ Mal Kabul Fişi kompakt düzen + Windows-tarzı yüzen pencere (v605) ═══ */
+.mk-form .mk-card { padding: 12px 14px; margin-bottom: 10px; min-width: 0; }
 .mk-form .mk-sec-title { margin: 0 0 8px; padding: 6px 10px; font-size: .88rem; }
 .mk-form .mk-g { gap: 8px 10px; }
-.mk-form .mk-lbl { font-size: .8rem; }
+.mk-form .mk-lbl { font-size: .8rem; min-width: 0; }
 .mk-form .mk-lbl > input,
 .mk-form .mk-lbl > select,
 .mk-form .mk-lbl > small,
 .mk-form .mk-lbl > .mk-cb { margin-top: 3px; }
 .mk-form .mk-row2 > .mk-card { margin-bottom: 10px; }
 .mk-form .mk-head { margin-bottom: 10px; }
-.mk-form .mk-foot { margin-top: 10px; }
 
-/* 6 eşit sütunlu grid (≥1024px: 6, 768–1023px: 3, 480–767px: 2, <480px: 1) */
-.mk-g6 { grid-template-columns: 1fr; }
-@media (min-width: 480px) {
-    .mk-g6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Kaydırılabilir form gövdesi + Container Query kökü (pencere daraltılınca anında alt satıra iner) */
+.mk-form-scroll {
+    container-type: inline-size;
+    container-name: mkform;
+    min-width: 0;
 }
-@media (min-width: 768px) {
-    .mk-g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (min-width: 1024px) {
-    .mk-g6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-}
+
+/* 6 eşit sütunlu grid — viewport + container uyumlu */
+.mk-g6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
 /* Tek satır kompakt açıklama alanı */
 .mk-aciklama-compact {
@@ -7878,12 +7875,12 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     box-sizing: border-box;
 }
 
-/* Ambalaj (sol) + Tartım & Fiyat (sağ) yan yana düzen */
+/* 3 sütunlu ana düzen: Ambalaj (sol) + Tartım & Ürün Fiyatı (orta) + Fiş Görseli (sağ) */
 .mk-row-at {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(280px, 1.15fr) minmax(250px, 1fr) minmax(210px, .85fr);
     gap: 10px;
-    align-items: start;
+    align-items: stretch;
     margin-bottom: 10px;
 }
 .mk-row-at > .mk-card,
@@ -7894,9 +7891,21 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     gap: 10px;
     min-width: 0;
 }
-@media (min-width: 900px) {
-    .mk-row-at { grid-template-columns: 1.2fr 1fr; }
+
+/* Sağ sütundaki Fiş Görseli kartı */
+.mk-card-gorsel-side {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
+.mk-card-gorsel-side .kantar-img-area {
+    flex: 1 1 auto;
+    min-height: 180px;
+    padding: 12px;
+    margin-bottom: 6px;
+}
+.mk-card-gorsel-side .kantar-img-ph { font-size: .82rem; line-height: 1.35; }
+.mk-card-gorsel-side .kantar-img-ph-ico { font-size: 1.15rem; margin-bottom: 4px; }
 
 /* Ambalaj içinde üst üste Palet + Kasa yığını */
 .mk-ambalaj.mk-ambalaj-stack,
@@ -7944,6 +7953,7 @@ html[data-theme="dark"] .mk-fiyat-card {
     border: 1px solid rgba(29, 78, 216, .22);
     min-height: 40px;
     box-sizing: border-box;
+    min-width: 0;
 }
 html[data-theme="dark"] .mk-fiyat-summary,
 html[data-theme="dark"] .mk-fiyat-toplam {
@@ -7974,40 +7984,104 @@ html[data-theme="dark"] .mk-fiyat-toplam {
     font-size: .78rem;
     color: var(--muted);
 }
-@media (max-width: 479px) {
+
+/* Gruplandırma satırı */
+.mk-grup-row { margin-bottom: 4px; }
+.mk-grup-row .grup-toggle-bar { margin-bottom: 8px; }
+.mk-grup-row #grupSection { margin-bottom: 0; }
+
+/* ── Container Queries: pencere daraltıldıkça kartlar ve sütunlar anında alt satıra iner ── */
+@container mkform (max-width: 980px) {
+    .mk-g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mk-row-at {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+    }
+    .mk-card-gorsel-side { grid-column: 1 / -1; }
+    .mk-card-gorsel-side .kantar-img-area { min-height: 105px; }
+}
+@container mkform (max-width: 700px) {
+    .mk-row-at { grid-template-columns: 1fr; }
+    .mk-card-gorsel-side { grid-column: auto; }
+}
+@container mkform (max-width: 620px) {
+    .mk-g6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container mkform (max-width: 440px) {
+    .mk-g6 { grid-template-columns: 1fr; }
     .mk-fiyat-grid { grid-template-columns: 1fr; }
 }
 
-/* Alt satır: Gruplandırma (sol) + kompakt Fiş Görseli (sağ) */
-.mk-bottom-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    align-items: start;
-    margin-bottom: 10px;
+/* Viewport fallback (eski tarayıcılar için) */
+@media (max-width: 1023px) {
+    .mk-g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mk-row-at { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+    .mk-card-gorsel-side { grid-column: 1 / -1; }
 }
-.mk-bottom-grup { min-width: 0; }
-.mk-bottom-grup .grup-toggle-bar { margin-bottom: 8px; }
-.mk-bottom-grup #grupSection { margin-bottom: 0; }
-@media (min-width: 900px) {
-    .mk-bottom-row { grid-template-columns: 1.4fr 1fr; }
+@media (max-width: 767px) {
+    .mk-g6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mk-row-at { grid-template-columns: 1fr; }
+    .mk-card-gorsel-side { grid-column: auto; }
 }
-.mk-card-gorsel-compact { margin-bottom: 0; }
-.mk-card-gorsel-compact .kantar-img-area { min-height: 88px; padding: 10px; margin-bottom: 6px; }
-.mk-card-gorsel-compact .kantar-img-ph { font-size: .82rem; line-height: 1.35; }
-.mk-card-gorsel-compact .kantar-img-ph-ico { font-size: 1.1rem; margin-bottom: 2px; }
+@media (max-width: 479px) {
+    .mk-g6 { grid-template-columns: 1fr; }
+    .mk-fiyat-grid { grid-template-columns: 1fr; }
+}
 
-/* Pencere içi form kompaktlığı */
+/* Sabit alt işlem çubuğu (Kamera, Galeri, İptal, Kaydet) */
+.mk-form .mk-foot {
+    margin: 0;
+    padding: 9px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--surface, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+html[data-theme="dark"] .mk-form .mk-foot {
+    background: var(--surface, #171f2e);
+    border-top-color: rgba(148, 163, 184, .22);
+}
+.mk-form:not(.mk-form-win) .mk-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin-top: 10px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: 0 -4px 14px rgba(15, 23, 42, .08);
+}
+
+/* Pencere içi form: üst kaydırılabilir alan + altta sabit işlem çubuğu */
+.mk-form-win {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+.mk-form-win .mk-form-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px 12px 12px;
+    -webkit-overflow-scrolling: touch;
+}
 .mk-form-win .mk-card { padding: 10px 12px; margin-bottom: 8px; }
-.mk-form-win .mk-row-at,
-.mk-form-win .mk-bottom-row { gap: 8px; margin-bottom: 8px; }
+.mk-form-win .mk-row-at { gap: 8px; margin-bottom: 8px; }
 .mk-form-win .mk-col-tartim { gap: 8px; }
-.mk-form-win .mk-foot { margin-top: 8px; padding-top: 8px; }
+.mk-form-win .mk-foot {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    box-shadow: 0 -3px 12px rgba(15, 23, 42, .08);
+    z-index: 10;
+}
 
 /* ── Windows-tarzı yüzen pencere (#mkWin / #mkWinDock) ── */
 .mk-win[hidden],
 .mk-win-dock[hidden] { display: none !important; }
-
 .mk-win-dragging {
     user-select: none !important;
     -webkit-user-select: none !important;
@@ -8024,7 +8098,7 @@ html[data-theme="dark"] .mk-fiyat-toplam {
     border-radius: 10px;
     box-shadow: 0 22px 56px rgba(10, 22, 40, .34), 0 4px 14px rgba(10, 22, 40, .14);
     overflow: hidden;
-    min-width: 540px;
+    min-width: 380px;
     min-height: 360px;
     max-width: 100vw;
     max-height: 100vh;
@@ -8117,9 +8191,11 @@ html[data-theme="dark"] .mk-win-bar {
 
 .mk-win-body {
     flex: 1 1 auto;
-    overflow: auto;
-    padding: 12px 14px 16px;
-    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
 }
 
 /* 8 yönlü boyutlandırma tutamaçları */
@@ -8194,7 +8270,10 @@ html[data-theme="dark"] .mk-win-dock {
     .mk-win-bar { cursor: default; height: 44px; }
     .mk-win-rh,
     .mk-win [data-mk-win-max] { display: none !important; }
-    .mk-win-body { padding: 10px 10px 24px; }
+    .mk-form-win .mk-form-scroll { padding: 10px 10px 14px; }
+    .mk-form-win .mk-foot {
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
     .mk-win-dock { right: 12px; bottom: 72px; }
 }
 
