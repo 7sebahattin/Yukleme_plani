@@ -462,5 +462,16 @@ ok('TAHTA KASA: 4.680 satırından crate_count 4680 çözülür', (int)$fbVal['f
 ok('MOSKOVA ifadesinden HKS ülkesi RUSYA (643) eşleştirilir', $fbVal['form_fields']['hks_ulke_id'] === '643');
 ok('alıcı firma yanlışlıkla sender_company_name olduysa temizlenir', $fbVal['form_fields']['sender_company_name'] === '');
 
+// RUSYA FEDERASYONU + BEYAZ RUSYA aynı katalogdayken çakışma regresyon testi
+$hksDisambig = [
+    ['id' => '112', 'ad' => 'BEYAZ RUSYA'],
+    ['id' => '643', 'ad' => 'RUSYA FEDERASYONU'],
+    ['id' => '368', 'ad' => 'IRAK'],
+];
+ok('BEYAZ RUSYA varken MOSKOVA → RUSYA FEDERASYONU (643) seçilir',
+    cw_bridge_infer_country_from_text('ALICI: SÜLEYMAN MOSKOVA', $hksDisambig)['id'] === '643');
+ok('BEYAZ RUSYA varken RUSYA → RUSYA FEDERASYONU (643) seçilir',
+    cw_bridge_match_hks_country('RUSYA', $hksDisambig)['id'] === '643');
+
 echo "chrome_whatsapp_bridge_smoke.php: {$tests} test, {$fails} başarısız\n";
 exit($fails === 0 ? 0 : 1);
