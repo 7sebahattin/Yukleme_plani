@@ -595,6 +595,34 @@ $r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['ajax' => 'mesajlar', 'j
 ok('panel AJAX mesajlar: geçersiz JID → 422', $r['kod'] === 422);
 $r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['ajax' => 'secili_tarat', 'mesajlar' => '[]', 'csrf' => 'test-csrf-belirteci'], 'server' => ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest']]);
 ok('panel AJAX secili_tarat: boş seçim → 422', $r['kod'] === 422);
+$r = ist(['dosya' => 'whatsapp_yonetim.php', 'post' => ['ajax' => 'beyan_taslak', 'metin' => '', 'csrf' => 'test-csrf-belirteci'], 'server' => ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest']]);
+ok('panel AJAX beyan_taslak: boş metin → 422', $r['kod'] === 422);
+
+// AI beyan ayrıştırma + tek kullanımlık oturum taslağı
+$beyanJson = [
+    'party_no' => '61-67', 'buyer_name' => 'Grand Trade', 'exit_depot' => 'Renova',
+    'transport_type' => 'Denizyolu', 'line_type' => 'DAP Novorossiysk',
+    'sender_company_name' => null, 'country_name' => 'Rusya',
+    'tractor_plate' => '34 kl 4589', 'vehicle_plate' => null,
+    'driver_name' => null, 'driver_phone' => null,
+    'product_name' => 'Kapya', 'product_variety' => null, 'brand' => null,
+    'pallet_count' => 26, 'crate_count' => '5.552', 'crate_type' => 'Plastik',
+    'gross_kg' => '13.660', 'net_kg' => '11.146',
+    'sample_crate_count' => null, 'sample_crate_type' => null, 'sample_gross_kg' => null, 'sample_net_kg' => null,
+    'company_name' => null, 'contact_person' => 'Mehmet Bey', 'company_address' => null,
+    'note' => 'SİPARİŞ KODU: PGT-794884 | 10 PALET (Adetli) + 16 PALET',
+];
+SahteAi::$cevap = ['status' => 200, 'body' => json_encode(['choices' => [['message' => ['content' => json_encode($beyanJson, JSON_UNESCAPED_UNICODE)]]]])];
+$bp = ai_servisi('groq', 'openai/gpt-oss-120b')->parseBeyan("Yeni beyan\n61-67 parti\nKapya");
+ok('parseBeyan: Türkçe binlik sayılar + tüm alanlar', $bp['party_no'] === '61-67' && $bp['pallet_count'] === 26 && $bp['crate_count'] === 5552 && $bp['gross_kg'] === 13660.0 && $bp['net_kg'] === 11146.0 && $bp['product_name'] === 'Kapya');
+ok('parseBeyan: yeni_beyan JSON şeması strict=true', (SahteAi::$son['govde']['response_format']['json_schema']['name'] ?? '') === 'yeni_beyan' && (SahteAi::$son['govde']['response_format']['json_schema']['strict'] ?? null) === true);
+$bt = whatsapp_beyan_taslak_hazirla("Yeni beyan\n61-67 parti\nKapya", whatsapp_ayarlar_oku(db()), 77, ai_servisi('groq', 'openai/gpt-oss-120b'));
+ok('beyan taslak hazırla: büyük harf + boşluksuz plaka + raw_text', $bt['alanlar']['party_no'] === '61-67' && $bt['alanlar']['product_name'] === 'KAPYA' && $bt['alanlar']['tractor_plate'] === '34KL4589' && $bt['alanlar']['gross_kg'] === '13660' && str_contains($bt['alanlar']['raw_text'], '61-67'));
+ok('beyan taslak al: başka kullanıcı okuyamaz', whatsapp_beyan_taslak_al(99) === null);
+whatsapp_beyan_taslak_hazirla("Yeni beyan\n61-67 parti\nKapya", whatsapp_ayarlar_oku(db()), 77, ai_servisi('groq', 'openai/gpt-oss-120b'));
+$al1 = whatsapp_beyan_taslak_al(77);
+$al2 = whatsapp_beyan_taslak_al(77);
+ok('beyan taslak al: tek kullanımlık (ikinci okuma null)', $al1 !== null && $al1['alanlar']['buyer_name'] === 'GRAND TRADE' && $al2 === null);
 $r = ist(['dosya' => 'whatsapp_yonetim.php', 'get' => ['indir' => 'pc_paket']]);
 ok('panel GET ?indir=pc_paket: admin ZIP indirir', $r['kod'] === 200 && str_starts_with($r['govde'], "PK\x03\x04"));
 $r = ist(['dosya' => 'whatsapp_yonetim.php']);
