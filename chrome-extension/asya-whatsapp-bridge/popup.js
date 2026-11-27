@@ -111,6 +111,18 @@ async function initAuth() {
     if (schemaRes.ok && schemaRes.schema) {
       state.schema = schemaRes.schema;
     }
+
+    // Sayfa içi "AI ile Ayrıştır" tıklamasıyla açıldıysa doğrudan onu ayrıştır
+    const pendRes = await sendBg({ type: 'CONSUME_PENDING_PARSE' });
+    if (pendRes.ok && pendRes.pending && pendRes.pending.item) {
+      await handleParseFromPage(pendRes.pending);
+    } else {
+      // WhatsApp Web sekmesindeysek otomatik tara ve mesajların yanına butonları yerleştir
+      const waTab = await getActiveWhatsAppTab();
+      if (waTab) {
+        await handleScan(true);
+      }
+    }
   } else {
     state.connected = false;
     el.connDot.classList.remove('ok');
@@ -163,11 +175,27 @@ async function getActiveWhatsAppTab() {
   return tab;
 }
 
-async function handleScan() {
+async function syncInlineButtonsOnTab() {
+  if (!state.scanResult) return;
+  const tab = await getActiveWhatsAppTab();
+  if (!tab) return;
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: 'RENDER_INLINE_BUTTONS',
+      candidates: state.scanResult.candidates || [],
+      duplicates: state.duplicates || {},
+      baseUrl: state.baseUrl
+    });
+  } catch (_) {}
+}
+
+async function handleScan(silentOnNoChat = false) {
   showAlert('', '');
   const tab = await getActiveWhatsAppTab();
   if (!tab) {
-    showAlert('err', 'Lütfen önce Chrome\'da https://web.whatsapp.com sekmesini ve ilgili grubu açın.');
+    if (!silentOnNoChat) {
+      showAlert('err', 'Lütfen önce Chrome\'da https://web.whatsapp.com sekmesini ve ilgili grubu açın.');
+    }
     return;
   }
 
@@ -177,11 +205,17 @@ async function handleScan() {
 
   let scanRes;
   try {
-    scanRes = await chrome.tabs.sendMessage(tab.id, { type: 'SCAN_CHAT', limit });
+    scanRes = await chrome.tabs.sendMessage(tab.id, {
+      type: 'SCAN_CHAT',
+      limit,
+      baseUrl: state.baseUrl
+    });
   } catch (err) {
     el.btnScan.disabled = false;
     el.btnScan.textContent = 'BU GRUBU TARA';
-    showAlert('err', 'WhatsApp Web sayfasına bağlanılamadı. WhatsApp Web sekmesini yenileyip tekrar deneyin.');
+    if (!silentOnNoChat) {
+      showAlert('err', 'WhatsApp Web sayfasına bağlanılamadı. WhatsApp Web sekmesini yenileyip tekrar deneyin.');
+    }
     return;
   }
 
@@ -189,7 +223,9 @@ async function handleScan() {
   el.btnScan.textContent = 'BU GRUBU TARA';
 
   if (!scanRes || !scanRes.ok) {
-    showAlert('err', (scanRes && scanRes.error) || 'Sohbet okunamadı.');
+    if (!silentOnNoChat) {
+      showAlert('err', (scanRes && scanRes.error) || 'Sohbet okunamadı.');
+    }
     return;
   }
 
@@ -209,6 +245,8 @@ async function handleScan() {
     }
   }
 
+  // WhatsApp Web mesajlarının yanındaki butonları güncel mükerrer bilgisiyle çiz
+  await syncInlineButtonsOnTab();
   renderScanResults();
 }
 
@@ -281,34 +319,46 @@ function renderScanResults() {
   }
 }
 
-async function handleParseItem(item, buttonEl) {
+async function handleParseItem(item, buttonEl = null, chatOverride = null) {
   showAlert('', '');
   if (!state.schema) {
     const sRes = await sendBg({ type: 'GET_SCHEMA' });
     if (sRes.ok && sRes.schema) state.schema = sRes.schema;
   }
 
-  buttonEl.disabled = true;
-  const oldLabel = buttonEl.textContent;
-  buttonEl.textContent = 'AI ayrıştırıyor…';
+  let oldLabel = '';
+  if (buttonEl) {
+    buttonEl.disabled = true;
+    oldLabel = buttonEl.textContent;
+    buttonEl.textContent = 'AI ayrıştırıyor…';
+  } else {
+    showAlert('ok', 'Seçilen WhatsApp mesajı yapay zekâ ile ayrıştırılıyor…');
+  }
+
+  const chatName = (chatOverride && chatOverride.chat_name) || (state.scanResult ? state.scanResult.chat_name : '');
+  const chatType = (chatOverride && chatOverride.chat_type) || (state.scanResult ? state.scanResult.chat_type : 'unknown');
 
   const res = await sendBg({
     type: 'PARSE_MESSAGE',
-    chat_name: state.scanResult ? state.scanResult.chat_name : '',
-    chat_type: state.scanResult ? state.scanResult.chat_type : 'unknown',
+    chat_name: chatName,
+    chat_type: chatType,
     source_message_id: item.source_message_id || '',
     sender_name: item.sender_name || '',
     message_timestamp: item.message_timestamp || '',
     raw_text: item.raw_text || ''
   });
 
-  buttonEl.disabled = false;
-  buttonEl.textContent = oldLabel;
+  if (buttonEl) {
+    buttonEl.disabled = false;
+    buttonEl.textContent = oldLabel;
+  }
 
   if (!res.ok) {
     showAlert('err', res.error || 'Yapay zekâ ayrıştırması başarısız oldu.');
     return;
   }
+
+  showAlert('', '');
 
   if (res.duplicate && res.declaration_id) {
     showAlert('warn', res.message || `Bu mesaj için zaten #${res.declaration_id} numaralı beyan oluşturulmuş.`);
@@ -316,6 +366,7 @@ async function handleParseItem(item, buttonEl) {
   }
 
   state.activeReview = {
+    client_id: item.client_id || '',
     bridge_message_id: res.bridge_message_id,
     duplicate: Boolean(res.duplicate),
     duplicate_message: res.message || '',
@@ -324,16 +375,31 @@ async function handleParseItem(item, buttonEl) {
     ai_result: res.ai_result || {},
     duplicate_reference_warnings: res.duplicate_reference_warnings || [],
     source: res.source || {
-      chat_name: state.scanResult ? state.scanResult.chat_name : '',
-      chat_type: state.scanResult ? state.scanResult.chat_type : 'unknown',
+      chat_name: chatName,
+      chat_type: chatType,
       sender_name: item.sender_name || '',
       message_timestamp: item.message_timestamp || '',
       raw_text: item.raw_text || ''
     }
   };
 
+  el.btnApproveDraft.disabled = false;
+  el.btnApproveDraft.textContent = 'Onayla ve Taslak Oluştur';
   renderReviewScreen();
   setView('review');
+}
+
+async function handleParseFromPage(pending) {
+  if (!pending || !pending.item) return;
+  if (!state.connected) {
+    showAlert('warn', 'Önce eklentiyi Asya hesabınızla eşleştirin.');
+    setView('pair');
+    return;
+  }
+  await handleParseItem(pending.item, null, {
+    chat_name: pending.chat_name || '',
+    chat_type: pending.chat_type || 'unknown'
+  });
 }
 
 function renderReviewScreen() {
@@ -537,11 +603,22 @@ async function handleApproveDraft(evt) {
   `;
   el.btnApproveDraft.disabled = true;
   el.btnApproveDraft.textContent = `Taslak Oluşturuldu (#${declId})`;
+
+  if (state.activeReview.client_id) {
+    state.duplicates[state.activeReview.client_id] = {
+      duplicate: true,
+      bridge_message_id: state.activeReview.bridge_message_id,
+      status: 'draft_created',
+      declaration_id: declId
+    };
+    await syncInlineButtonsOnTab();
+    renderScanResults();
+  }
 }
 
 el.btnPair.addEventListener('click', handlePair);
 el.btnDisconnect.addEventListener('click', handleDisconnect);
-el.btnScan.addEventListener('click', handleScan);
+el.btnScan.addEventListener('click', () => handleScan(false));
 el.chkShowAll.addEventListener('change', renderScanResults);
 el.btnBackToList.addEventListener('click', () => {
   showAlert('', '');
@@ -550,5 +627,13 @@ el.btnBackToList.addEventListener('click', () => {
   setView('scan');
 });
 el.reviewForm.addEventListener('submit', handleApproveDraft);
+
+// WhatsApp Web içindeki "AI ile Ayrıştır" butonuna basıldığında canlı yakala
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'TRIGGER_PARSE_FROM_PAGE' && msg.pending) {
+    sendBg({ type: 'CONSUME_PENDING_PARSE' }).catch(() => {});
+    handleParseFromPage(msg.pending);
+  }
+});
 
 initAuth();

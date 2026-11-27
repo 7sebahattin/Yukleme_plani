@@ -301,7 +301,8 @@
         source_message_id: sourceMsgId,
         sender_name: senderName || 'Bilinmeyen',
         message_timestamp: msgTs,
-        raw_text: rawText
+        raw_text: rawText,
+        _domNode: node
       });
     }
 
@@ -311,6 +312,97 @@
       total_loaded: parsed.length,
       detectedGroupFromSenders: seenSenders.size >= 2
     };
+  }
+
+  function stripDomRefs(list) {
+    return list.map((item) => {
+      const copy = Object.assign({}, item);
+      delete copy._domNode;
+      return copy;
+    });
+  }
+
+  let lastNodeMap = new Map();
+  let lastChatMeta = { chat_name: '', chat_type: 'unknown' };
+
+  function clearInlineButtons(doc) {
+    if (!doc || !doc.querySelectorAll) return;
+    doc.querySelectorAll('[data-asya-bridge-bar="1"]').forEach((el) => el.remove());
+  }
+
+  function injectInlineButtons(doc, candidates, duplicates, baseUrl) {
+    if (!doc || !doc.createElement) return;
+    clearInlineButtons(doc);
+
+    const apiBase = String(baseUrl || 'https://asya.scai.tr').replace(/\/+$/, '');
+    const dupMap = duplicates || {};
+
+    for (const cand of candidates) {
+      const node = lastNodeMap.get(cand.client_id);
+      if (!node || !node.isConnected) continue;
+
+      const dup = dupMap[cand.client_id] || null;
+      const bar = doc.createElement('div');
+      bar.setAttribute('data-asya-bridge-bar', '1');
+      bar.setAttribute('data-asya-client-id', cand.client_id);
+      bar.style.cssText =
+        'display:flex;align-items:center;gap:6px;margin:4px 0 6px 52px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;z-index:2;position:relative;';
+
+      if (dup && dup.declaration_id) {
+        const link = doc.createElement('a');
+        link.href = `${apiBase}/beyan_view.php?id=${Number(dup.declaration_id)}`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = `✓ Aktarıldı (#${Number(dup.declaration_id)}) · Beyanı Aç`;
+        link.style.cssText =
+          'display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11.5px;font-weight:600;text-decoration:none;cursor:pointer;';
+        bar.appendChild(link);
+      } else {
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.textContent = dup ? '✨ İncelemeyi Aç (AI)' : '✨ AI ile Ayrıştır';
+        btn.style.cssText =
+          'display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;background:#16a34a;color:#ffffff;border:none;font-size:11.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.12);';
+        btn.addEventListener('mouseenter', () => { btn.style.background = '#15803d'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = '#16a34a'; });
+        btn.addEventListener('click', (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          btn.disabled = true;
+          btn.textContent = '⏳ Sağ panelde açılıyor…';
+          if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+            chrome.runtime.sendMessage({
+              type: 'OPEN_SIDE_PANEL_AND_PARSE',
+              chat_name: lastChatMeta.chat_name,
+              chat_type: lastChatMeta.chat_type,
+              item: {
+                client_id: cand.client_id,
+                source_message_id: cand.source_message_id,
+                sender_name: cand.sender_name,
+                message_timestamp: cand.message_timestamp,
+                raw_text: cand.raw_text,
+                score: cand.score,
+                reasons: cand.reasons,
+                merged_count: cand.merged_count
+              }
+            }, () => {
+              setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = '✨ AI ile Ayrıştır';
+              }, 1200);
+            });
+          }
+        });
+        bar.appendChild(btn);
+
+        const tag = doc.createElement('span');
+        tag.textContent = `Asya Beyan Adayı · %${cand.score}`;
+        tag.style.cssText = 'font-size:11px;color:#475569;background:#f1f5f9;padding:3px 7px;border-radius:999px;';
+        bar.appendChild(tag);
+      }
+
+      node.appendChild(bar);
+    }
   }
 
   function scanActiveChat(doc, limit) {
@@ -328,34 +420,68 @@
       chatType = 'group';
     }
 
-    const candidates = detectBeyanCandidates(extracted.messages);
+    lastNodeMap = new Map();
+    for (const m of extracted.messages) {
+      if (m._domNode) lastNodeMap.set(m.client_id, m._domNode);
+    }
+    lastChatMeta = {
+      chat_name: chatInfo.chat_name || 'Adsız Sohbet',
+      chat_type: chatType
+    };
+
+    const cleanMessages = stripDomRefs(extracted.messages);
+    const candidates = detectBeyanCandidates(cleanMessages);
 
     return {
       ok: true,
-      chat_name: chatInfo.chat_name || 'Adsız Sohbet',
-      chat_type: chatType,
+      chat_name: lastChatMeta.chat_name,
+      chat_type: lastChatMeta.chat_type,
       limit: Number(limit) || 50,
-      scanned_count: extracted.messages.length,
+      scanned_count: cleanMessages.length,
       total_loaded_in_dom: extracted.total_loaded,
       candidates,
-      all_messages: extracted.messages
+      all_messages: cleanMessages
     };
   }
 
   // Chrome runtime mesaj dinleyici (yalnız tarayıcı eklenti ortamında)
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-      if (!msg || msg.type !== 'SCAN_CHAT') return false;
-      try {
-        const result = scanActiveChat(document, msg.limit || 50);
-        sendResponse(result);
-      } catch (err) {
-        sendResponse({
-          ok: false,
-          error: 'Sohbet taranırken hata oluştu: ' + (err && err.message ? err.message : String(err))
-        });
+      if (!msg || typeof msg.type !== 'string') return false;
+
+      if (msg.type === 'SCAN_CHAT') {
+        try {
+          const result = scanActiveChat(document, msg.limit || 50);
+          if (result.ok) {
+            injectInlineButtons(document, result.candidates, msg.duplicates || {}, msg.baseUrl);
+          }
+          sendResponse(result);
+        } catch (err) {
+          sendResponse({
+            ok: false,
+            error: 'Sohbet taranırken hata oluştu: ' + (err && err.message ? err.message : String(err))
+          });
+        }
+        return true;
       }
-      return true;
+
+      if (msg.type === 'RENDER_INLINE_BUTTONS') {
+        try {
+          injectInlineButtons(document, msg.candidates || [], msg.duplicates || {}, msg.baseUrl);
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ ok: false, error: err && err.message ? err.message : String(err) });
+        }
+        return true;
+      }
+
+      if (msg.type === 'CLEAR_INLINE_BUTTONS') {
+        clearInlineButtons(document);
+        sendResponse({ ok: true });
+        return true;
+      }
+
+      return false;
     });
   }
 
