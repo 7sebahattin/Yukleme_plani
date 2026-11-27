@@ -31,9 +31,11 @@ ok('host_permissions yalnız web.whatsapp.com ve asya.scai.tr',
   manifest.host_permissions.length === 2 &&
   manifest.host_permissions.includes('https://web.whatsapp.com/*') &&
   manifest.host_permissions.includes('https://asya.scai.tr/*'));
-ok('minimal Chrome izinleri (activeTab + storage)',
+ok('minimal Chrome izinleri (activeTab + storage + sidePanel)',
   Array.isArray(manifest.permissions) &&
-  manifest.permissions.every((p) => ['activeTab', 'storage'].includes(p)));
+  manifest.permissions.every((p) => ['activeTab', 'storage', 'sidePanel'].includes(p)));
+ok('side_panel sağ yan panel tanımlı',
+  manifest.side_panel && manifest.side_panel.default_path === 'popup.html');
 ok('content_scripts yalnız web.whatsapp.com ile eşleşir',
   manifest.content_scripts.length === 1 &&
   manifest.content_scripts[0].matches.length === 1 &&

@@ -2,6 +2,7 @@
 // service-worker.js — Asya WhatsApp Web Bridge (Manifest V3)
 //
 // Tüm Asya API isteklerini arka plan service worker üzerinden yönetir.
+// Eklenti ikonu tıklandığında Chrome sağ yan panelini (Side Panel) açar.
 // Content script hiçbir zaman doğrudan harici ağ isteği yapmaz.
 // =========================================================
 'use strict';
@@ -12,8 +13,20 @@ const STORAGE_KEYS = {
   TOKEN: 'asya_bridge_token',
   USER: 'asya_bridge_user',
   DEVICE_LABEL: 'asya_bridge_device_label',
-  SCHEMA_CACHE: 'asya_bridge_schema_cache'
+  SCHEMA_CACHE: 'asya_bridge_schema_cache',
+  PENDING_PARSE: 'asya_bridge_pending_parse'
 };
+
+// Eklenti ikonuna tıklayınca sağ tarafta sabit Side Panel açılsın
+if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  }
+});
 
 function getApiUrl(action) {
   const base = DEFAULT_API_BASE.replace(/\/+$/, '');
@@ -89,7 +102,7 @@ async function apiRequest(action, method = 'GET', payload = null, requireAuth = 
   return Object.assign({ status: response.status }, json);
 }
 
-async function handleMessage(msg) {
+async function handleMessage(msg, sender) {
   if (!msg || typeof msg.type !== 'string') {
     return { ok: false, error: 'Geçersiz istek.' };
   }
@@ -179,13 +192,43 @@ async function handleMessage(msg) {
       return await apiRequest('recent', 'GET', null, true);
     }
 
+    case 'OPEN_SIDE_PANEL_AND_PARSE': {
+      const pending = {
+        ts: Date.now(),
+        chat_name: msg.chat_name || '',
+        chat_type: msg.chat_type || 'unknown',
+        item: msg.item || null
+      };
+      await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_PARSE]: pending });
+      if (chrome.sidePanel && chrome.sidePanel.open && sender && sender.tab && sender.tab.id) {
+        try {
+          await chrome.sidePanel.open({ tabId: sender.tab.id });
+        } catch (_) {
+          // Panel zaten açıksa veya kullanıcı jesti süresi geçtiyse aşağıda runtime mesajı yine iletir
+        }
+      }
+      chrome.runtime.sendMessage({ type: 'TRIGGER_PARSE_FROM_PAGE', pending }).catch(() => {});
+      return { ok: true };
+    }
+
+    case 'CONSUME_PENDING_PARSE': {
+      const data = await chrome.storage.local.get([STORAGE_KEYS.PENDING_PARSE]);
+      const pending = data[STORAGE_KEYS.PENDING_PARSE] || null;
+      await chrome.storage.local.remove([STORAGE_KEYS.PENDING_PARSE]);
+      // 60 saniyeden eski bekleyen istekleri yok say
+      if (!pending || (Date.now() - (pending.ts || 0)) > 60000) {
+        return { ok: true, pending: null };
+      }
+      return { ok: true, pending };
+    }
+
     default:
       return { ok: false, error: `Bilinmeyen işlem: ${msg.type}` };
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  handleMessage(msg)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  handleMessage(msg, sender)
     .then((res) => sendResponse(res))
     .catch((err) => sendResponse({ ok: false, error: err && err.message ? err.message : 'Beklenmeyen hata.' }));
   return true;
