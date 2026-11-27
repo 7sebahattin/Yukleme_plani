@@ -88,7 +88,89 @@ if ($fis_id > 0) {
     }
 }
 
-// Otomatik tamamlama / seçim listeleri
+// Otomatik tamamlama / seçim listeleri — en son 3 işlem üstte, kalanı alfabetik sıralı
+if (!function_exists('kf_tr_fold')) {
+    function kf_tr_fold(string $s): string {
+        static $map = ['İ'=>'i','I'=>'i','Ş'=>'s','Ğ'=>'g','Ü'=>'u','Ö'=>'o','Ç'=>'c','ı'=>'i','ş'=>'s','ğ'=>'g','ü'=>'u','ö'=>'o','ç'=>'c'];
+        return strtolower(trim(strtr($s, $map)));
+    }
+}
+if (!function_exists('kf_son3_kolon')) {
+    function kf_son3_kolon(string $kolon): array {
+        static $izinli = ['firma_adi','malin_cinsi','geldigi_yer','depo','sofor','mal_sahibi','mustahsil','bahce'];
+        if (!in_array($kolon, $izinli, true)) return [];
+        try {
+            $sql = "SELECT `$kolon` AS v FROM kantar_fisleri WHERE `$kolon` != '' GROUP BY `$kolon` ORDER BY MAX(id) DESC LIMIT 3";
+            return array_values(array_filter(array_map('trim', array_column(db()->query($sql)->fetchAll(), 'v')), fn($x) => $x !== ''));
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+}
+if (!function_exists('kf_son3_sirala')) {
+    function kf_son3_sirala(array $tum, array $son3): array {
+        $seen = [];
+        $ust = [];
+        foreach ($son3 as $v) {
+            $v = trim((string)$v);
+            if ($v === '') continue;
+            $k = kf_tr_fold($v);
+            if (isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $ust[] = $v;
+            if (count($ust) >= 3) break;
+        }
+        $kalan = [];
+        foreach ($tum as $v) {
+            $v = trim((string)$v);
+            if ($v === '') continue;
+            $k = kf_tr_fold($v);
+            if (isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $kalan[] = $v;
+        }
+        usort($kalan, fn($a, $b) => strcmp(kf_tr_fold($a), kf_tr_fold($b)));
+        return ['liste' => array_merge($ust, $kalan), 'son' => count($ust)];
+    }
+}
+if (!function_exists('kf_son3_kp')) {
+    function kf_son3_kp(string $tip, array $defs): array {
+        $son3 = [];
+        try {
+            $st = db()->prepare("SELECT cinsi FROM kantar_kasa_palet_satir WHERE tip = ? AND cinsi != '' GROUP BY cinsi ORDER BY MAX(id) DESC LIMIT 3");
+            $st->execute([$tip]);
+            $son3 = array_values(array_filter(array_map('trim', array_column($st->fetchAll(), 'cinsi')), fn($x) => $x !== ''));
+        } catch (PDOException $e) {
+            $son3 = [];
+        }
+        $byFold = [];
+        foreach ($defs as $d) {
+            $n = trim((string)($d['name'] ?? ''));
+            if ($n === '') continue;
+            $byFold[kf_tr_fold($n)] = ['name' => $n, 'dara' => (float)($d['unit_dara_kg'] ?? 0)];
+        }
+        $seen = [];
+        $ust = [];
+        foreach ($son3 as $v) {
+            $k = kf_tr_fold($v);
+            if (isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $row = $byFold[$k] ?? ['name' => $v, 'dara' => 0.0];
+            $row['recent'] = true;
+            $ust[] = $row;
+            if (count($ust) >= 3) break;
+        }
+        $kalan = [];
+        foreach ($byFold as $k => $row) {
+            if (isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $kalan[] = $row;
+        }
+        usort($kalan, fn($a, $b) => strcmp(kf_tr_fold($a['name']), kf_tr_fold($b['name'])));
+        return array_merge($ust, $kalan);
+    }
+}
+
 $_kf_firma_hist    = array_column(db()->query("SELECT DISTINCT firma_adi FROM kantar_fisleri WHERE firma_adi!='' ORDER BY firma_adi")->fetchAll(), 'firma_adi');
 $_kf_plaka_hist    = array_column(db()->query("SELECT DISTINCT plaka FROM kantar_fisleri WHERE plaka!='' ORDER BY plaka")->fetchAll(), 'plaka');
 $_firma_def_names  = array_column(get_definitions_by_type('firma'),    'name');
@@ -96,21 +178,43 @@ $_urun_names       = array_column(get_definitions_by_type('urun'),     'name');
 $_bolge_names      = array_column(get_definitions_by_type('bolge'),    'name');
 $_depo_names_kf    = array_column(get_definitions_by_type('depo'),     'name');
 $_lokasyon_names   = array_column(get_definitions_by_type('lokasyon'), 'name');
-// Ek alanlar (şoför / malın sahibi / müstahsil / bahçe): geçmiş girişler + ilgili tanımlar birleşik öneri listesi
+
+$_mk_combo_son = [];
+$_kf_urun_hist = array_column(db()->query("SELECT DISTINCT malin_cinsi FROM kantar_fisleri WHERE malin_cinsi!='' ORDER BY malin_cinsi")->fetchAll(), 'malin_cinsi');
+$_kf_lok_hist  = array_column(db()->query("SELECT DISTINCT geldigi_yer FROM kantar_fisleri WHERE geldigi_yer!='' ORDER BY geldigi_yer")->fetchAll(), 'geldigi_yer');
+
+$_r_firma = kf_son3_sirala(array_merge($_firma_def_names, $_kf_firma_hist), kf_son3_kolon('firma_adi'));
+$_all_firma = $_r_firma['liste'];
+$_mk_combo_son['firma'] = $_r_firma['son'];
+
+$_r_urun = kf_son3_sirala(array_merge($_urun_names, $_kf_urun_hist), kf_son3_kolon('malin_cinsi'));
+$_urun_names = $_r_urun['liste'];
+$_mk_combo_son['urun'] = $_r_urun['son'];
+
+$_r_lok = kf_son3_sirala(array_merge($_lokasyon_names, $_kf_lok_hist), kf_son3_kolon('geldigi_yer'));
+$_lokasyon_names = $_r_lok['liste'];
+$_mk_combo_son['lokasyon'] = $_r_lok['son'];
+
+$_r_depo = kf_son3_sirala($_depo_names_kf, kf_son3_kolon('depo'));
+$_depo_names_kf = $_r_depo['liste'];
+$_mk_combo_son['depo'] = $_r_depo['son'];
+
+// Ek alanlar (şoför / malın sahibi / müstahsil / bahçe): son 3 işlem üstte + kalanı alfabetik
 $_kal_liste = [];
 foreach (['sofor' => 'sofor', 'mal_sahibi' => 'firma', 'mustahsil' => 'tedarikci', 'bahce' => null] as $_kc => $_kt) {
     $_l = [];
+    $_s3 = [];
     if (!empty($_kal[$_kc])) {
         try { $_l = array_column(db()->query("SELECT DISTINCT `$_kc` AS v FROM kantar_fisleri WHERE `$_kc` != '' ORDER BY `$_kc`")->fetchAll(), 'v'); } catch (PDOException $e) { $_l = []; }
+        $_s3 = kf_son3_kolon($_kc);
     }
     if ($_kt !== null) $_l = array_merge($_l, array_column(get_definitions_by_type($_kt), 'name'));
-    $_l = array_values(array_unique(array_filter($_l, fn($x) => trim((string)$x) !== '')));
-    sort($_l);
-    $_kal_liste[$_kc] = $_l;
+    $_rk = kf_son3_sirala($_l, $_s3);
+    $_kal_liste[$_kc] = $_rk['liste'];
+    $_mk_combo_son[$_kc] = $_rk['son'];
 }
-// Firma: tanımlar + geçmiş kantar girişleri birleşik
-$_all_firma = array_values(array_unique(array_merge($_firma_def_names, $_kf_firma_hist)));
-sort($_all_firma);
+$_kasa_combo_data  = kf_son3_kp('kasa',  $kasa_list);
+$_palet_combo_data = kf_son3_kp('palet', $palet_list);
 
 if (!function_exists('kf_sel_opt')) {
     function kf_sel_opt(string $stored, array $names, string $ph = '-- seçiniz --'): string {
@@ -188,35 +292,35 @@ if (!function_exists('kf_datalist')) {
                    autocomplete="off">
         </label>
         <label class="mk-lbl">Şoför
-            <input type="text" name="sofor" value="<?= h($fis['sofor'] ?? '') ?>" data-mkcb="sofor" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['sofor']) ? ' disabled' : '' ?>>
+            <input type="text" name="sofor" value="<?= h($fis['sofor'] ?? '') ?>" data-mkcb="sofor" data-uppercase="tr"<?= empty($_kal['sofor']) ? ' disabled' : '' ?>>
         </label>
         <label class="mk-lbl">Firma Adı <span class="req">*</span>
-            <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>" data-mkcb="firma" placeholder="Yazarak arayın…" data-uppercase="tr">
+            <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>" data-mkcb="firma" data-uppercase="tr">
         </label>
         <label class="mk-lbl">Tarih <span class="req">*</span>
             <input type="date" name="giris_tarih" value="<?= h(substr((string)($fis['giris_tarih'] ?? ''), 0, 10)) ?>">
         </label>
         <label class="mk-lbl">Depo <span class="req">*</span>
-            <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>" data-mkcb="depo" data-mkcb-ekle="0" placeholder="Yazarak arayın…">
+            <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>" data-mkcb="depo" data-mkcb-ekle="0">
         </label>
 
         <label class="mk-lbl">Ürün <span class="req">*</span>
-            <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-mkcb="urun" placeholder="Yazarak arayın…" data-uppercase="tr">
+            <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-mkcb="urun" data-uppercase="tr">
         </label>
         <label class="mk-lbl">Malın Sahibi
-            <input type="text" name="mal_sahibi" value="<?= h($fis['mal_sahibi'] ?? '') ?>" data-mkcb="mal_sahibi" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['mal_sahibi']) ? ' disabled' : '' ?>>
+            <input type="text" name="mal_sahibi" value="<?= h($fis['mal_sahibi'] ?? '') ?>" data-mkcb="mal_sahibi" data-uppercase="tr"<?= empty($_kal['mal_sahibi']) ? ' disabled' : '' ?>>
         </label>
         <label class="mk-lbl">Müstahsil
-            <input type="text" name="mustahsil" value="<?= h($fis['mustahsil'] ?? '') ?>" data-mkcb="mustahsil" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['mustahsil']) ? ' disabled' : '' ?>>
+            <input type="text" name="mustahsil" value="<?= h($fis['mustahsil'] ?? '') ?>" data-mkcb="mustahsil" data-uppercase="tr"<?= empty($_kal['mustahsil']) ? ' disabled' : '' ?>>
         </label>
         <label class="mk-lbl">Bahçe
-            <input type="text" name="bahce" value="<?= h($fis['bahce'] ?? '') ?>" data-mkcb="bahce" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['bahce']) ? ' disabled' : '' ?>>
+            <input type="text" name="bahce" value="<?= h($fis['bahce'] ?? '') ?>" data-mkcb="bahce" data-uppercase="tr"<?= empty($_kal['bahce']) ? ' disabled' : '' ?>>
         </label>
         <label class="mk-lbl">Geldiği Yer
-            <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-mkcb="lokasyon" placeholder="Yazarak arayın…" data-uppercase="tr">
+            <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-mkcb="lokasyon" data-uppercase="tr">
         </label>
         <label class="mk-lbl">Açıklama
-            <textarea name="aciklama" rows="1" class="mk-aciklama mk-aciklama-compact" placeholder="Açıklama, not..."><?= h($fis['aciklama'] ?? '') ?></textarea>
+            <textarea name="aciklama" rows="1" class="mk-aciklama mk-aciklama-compact"><?= h($fis['aciklama'] ?? '') ?></textarea>
         </label>
     </div>
 </section>
@@ -354,13 +458,14 @@ if (!function_exists('kf_datalist')) {
     'firma' => array_values($_all_firma), 'urun' => array_values($_urun_names),
     'lokasyon' => array_values($_lokasyon_names), 'depo' => array_values($_depo_names_kf),
     'sofor' => $_kal_liste['sofor'], 'mal_sahibi' => $_kal_liste['mal_sahibi'], 'mustahsil' => $_kal_liste['mustahsil'], 'bahce' => $_kal_liste['bahce'],
+    '_son' => $_mk_combo_son,
 ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 <script id="firmaListData" type="application/json"><?= json_encode(
     array_values($_all_firma), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="grupInitData" type="application/json"><?= json_encode(
     array_values($_grup_list), JSON_UNESCAPED_UNICODE) ?></script>
-<script id="kasaListData"  type="application/json"><?= json_encode(array_map(fn($k) => ['name' => $k['name'], 'dara' => (float)$k['unit_dara_kg']], $kasa_list),  JSON_UNESCAPED_UNICODE) ?></script>
-<script id="paletListData" type="application/json"><?= json_encode(array_map(fn($k) => ['name' => $k['name'], 'dara' => (float)$k['unit_dara_kg']], $palet_list), JSON_UNESCAPED_UNICODE) ?></script>
+<script id="kasaListData"  type="application/json"><?= json_encode($_kasa_combo_data,  JSON_UNESCAPED_UNICODE) ?></script>
+<script id="paletListData" type="application/json"><?= json_encode($_palet_combo_data, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="kpInitData"    type="application/json"><?= json_encode(array_values($_kp_rows), JSON_UNESCAPED_UNICODE) ?></script>
 
 <input type="hidden" name="foto_data" id="kantarFotoDataInput" value="">
@@ -1011,7 +1116,7 @@ function _addKpRow(tip, cinsi, sayisi, birimDara) {
     div.dataset.tip = tip;
     div.innerHTML =
         '<input type="hidden" name="kp_rows[' + n + '][tip]" value="' + esc(tip) + '">' +
-        '<input type="text" name="kp_rows[' + n + '][cinsi]" class="kp-cinsi" placeholder="Yazarak arayın…" value="' + esc(cinsi || '') + '">' +
+        '<input type="text" name="kp_rows[' + n + '][cinsi]" class="kp-cinsi" value="' + esc(cinsi || '') + '">' +
         '<input type="text" inputmode="numeric" name="kp_rows[' + n + '][sayisi]" class="num kp-sayisi" placeholder="Adet" value="' + esc(sayisi != null ? String(sayisi) : '') + '">' +
         '<label class="kp-dara-lbl" title="Birim dara (kg/adet) — seçimle gelir, değiştirilebilir">Dara <input type="text" inputmode="decimal" name="kp_rows[' + n + '][birim_dara_kg]" class="num kp-dara" placeholder="0" value="' + (birimDara != null ? esc(fmtInput(birimDara)) : '') + '"> kg</label>' +
         '<span class="kp-calc">= <strong class="kp-toplam-val">0 kg</strong></span>' +
