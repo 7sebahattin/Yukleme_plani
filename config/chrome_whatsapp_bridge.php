@@ -864,7 +864,44 @@ function cw_bridge_resolve_ai_service(PDO $pdo, ?callable $transport = null): AI
 // ── AI Çıktısını Katalog ve Kurallarla Doğrulama ──────────
 
 /**
+ * Şehir / İngilizce ülke adı → Türkçe ülke adı eşleme tablosu.
+ * @return array<string, string>
+ */
+function cw_bridge_country_alias_map(): array
+{
+    return [
+        'russia' => 'rusya', 'russian federation' => 'rusya', 'rusya federasyonu' => 'rusya', 'rusya' => 'rusya',
+        'moscow' => 'rusya', 'moskova' => 'rusya', 'novorossiysk' => 'rusya', 'novorossisk' => 'rusya',
+        'krasnodar' => 'rusya', 'sochi' => 'rusya', 'soci' => 'rusya', 'petersburg' => 'rusya',
+        'peterburg' => 'rusya', 'rostov' => 'rusya', 'kazan' => 'rusya', 'samara' => 'rusya', 'yekaterinburg' => 'rusya',
+        'iraq' => 'irak', 'irak' => 'irak', 'erbil' => 'irak', 'bagdat' => 'irak', 'baghdad' => 'irak',
+        'zaho' => 'irak', 'zakho' => 'irak', 'suleymaniye' => 'irak', 'basra' => 'irak', 'musul' => 'irak',
+        'romania' => 'romanya', 'romanya' => 'romanya', 'bukres' => 'romanya', 'bucharest' => 'romanya', 'kostence' => 'romanya', 'constanta' => 'romanya',
+        'bulgaria' => 'bulgaristan', 'bulgaristan' => 'bulgaristan', 'sofya' => 'bulgaristan', 'sofia' => 'bulgaristan', 'varna' => 'bulgaristan', 'plovdiv' => 'bulgaristan',
+        'poland' => 'polonya', 'polonya' => 'polonya', 'varsova' => 'polonya', 'warsaw' => 'polonya', 'krakow' => 'polonya', 'gdansk' => 'polonya',
+        'germany' => 'almanya', 'almanya' => 'almanya', 'berlin' => 'almanya', 'munih' => 'almanya', 'munich' => 'almanya', 'frankfurt' => 'almanya', 'hamburg' => 'almanya',
+        'ukraine' => 'ukrayna', 'ukrayna' => 'ukrayna', 'kiev' => 'ukrayna', 'kyiv' => 'ukrayna', 'odessa' => 'ukrayna', 'lviv' => 'ukrayna',
+        'moldova' => 'moldova', 'kisinev' => 'moldova', 'chisinau' => 'moldova',
+        'georgia' => 'gurcistan', 'gurcistan' => 'gurcistan', 'tiflis' => 'gurcistan', 'tbilisi' => 'gurcistan', 'batum' => 'gurcistan', 'batumi' => 'gurcistan',
+        'azerbaijan' => 'azerbaycan', 'azerbaycan' => 'azerbaycan', 'baku' => 'azerbaycan',
+        'belarus' => 'belarus', 'minsk' => 'belarus',
+        'serbia' => 'sirbistan', 'sirbistan' => 'sirbistan', 'belgrad' => 'sirbistan', 'belgrade' => 'sirbistan',
+        'hungary' => 'macaristan', 'macaristan' => 'macaristan', 'budapeste' => 'macaristan', 'budapest' => 'macaristan',
+        'netherlands' => 'hollanda', 'hollanda' => 'hollanda', 'rotterdam' => 'hollanda', 'amsterdam' => 'hollanda',
+        'greece' => 'yunanistan', 'yunanistan' => 'yunanistan', 'atina' => 'yunanistan', 'selanik' => 'yunanistan',
+    ];
+}
+
+function cw_bridge_norm_ascii_tr(string $s): string
+{
+    $s = mb_strtolower(trim($s), 'UTF-8');
+    $s = strtr($s, ['ı' => 'i', 'İ' => 'i', 'i̇' => 'i', 'ş' => 's', 'ç' => 'c', 'ğ' => 'g', 'ö' => 'o', 'ü' => 'u']);
+    return (string)preg_replace('/\s+/u', ' ', $s);
+}
+
+/**
  * HKS ülke adından katalog ID'si çözer (uydurma ID üretmez).
+ * Şehir ve İngilizce ülke takma adlarını da destekler (MOSKOVA/RUSSIA → RUSYA FEDERASYONU).
  * @param list<array{id:string, ad:string}> $ulkeler
  * @return array{id:?string, ad:?string}
  */
@@ -872,21 +909,20 @@ function cw_bridge_match_hks_country(?string $countryName, array $ulkeler): arra
 {
     $c = trim((string)$countryName);
     if ($c === '' || !$ulkeler) return ['id' => null, 'ad' => null];
-    $norm = static function (string $s): string {
-        if (function_exists('hks_eslesme_norm')) return hks_eslesme_norm($s);
-        $s = mb_strtolower(trim($s), 'UTF-8');
-        return strtr($s, ['ı' => 'i', 'İ' => 'i', 'ş' => 's', 'ç' => 'c', 'ğ' => 'g', 'ö' => 'o', 'ü' => 'u']);
-    };
-    $target = $norm($c);
+    $target = cw_bridge_norm_ascii_tr($c);
+    $aliases = cw_bridge_country_alias_map();
+    if (isset($aliases[$target])) {
+        $target = $aliases[$target];
+    }
     foreach ($ulkeler as $u) {
-        if ($norm((string)($u['ad'] ?? '')) === $target) {
+        if (cw_bridge_norm_ascii_tr((string)($u['ad'] ?? '')) === $target) {
             return ['id' => (string)$u['id'], 'ad' => (string)$u['ad']];
         }
     }
-    // Kısmi eşleşme yalnız tekilse kabul edilir (belirsizse null)
+    // Kısmi eşleşme yalnız tekilse kabul edilir (ör. "rusya" → "RUSYA FEDERASYONU")
     $partial = [];
     foreach ($ulkeler as $u) {
-        $n = $norm((string)($u['ad'] ?? ''));
+        $n = cw_bridge_norm_ascii_tr((string)($u['ad'] ?? ''));
         if ($n !== '' && (str_contains($n, $target) || str_contains($target, $n))) {
             $partial[] = $u;
         }
@@ -895,6 +931,32 @@ function cw_bridge_match_hks_country(?string $countryName, array $ulkeler): arra
         return ['id' => (string)$partial[0]['id'], 'ad' => (string)$partial[0]['ad']];
     }
     return ['id' => null, 'ad' => null];
+}
+
+/**
+ * Ham metin / adres / alıcı / hat bilgilerinden şehir veya ülke adına göre HKS ülkesini çözer.
+ * @param list<array{id:string, ad:string}> $ulkeler
+ * @return array{id:?string, ad:?string, matched_token:?string}
+ */
+function cw_bridge_infer_country_from_text(string $haystack, array $ulkeler): array
+{
+    if (trim($haystack) === '' || !$ulkeler) return ['id' => null, 'ad' => null, 'matched_token' => null];
+    $normHay = cw_bridge_norm_ascii_tr($haystack);
+    foreach (cw_bridge_country_alias_map() as $token => $trCountry) {
+        if (preg_match('/(?<![a-z0-9])' . preg_quote($token, '/') . '(?![a-z0-9])/u', $normHay)) {
+            $m = cw_bridge_match_hks_country($trCountry, $ulkeler);
+            if ($m['id'] !== null) {
+                return ['id' => $m['id'], 'ad' => $m['ad'], 'matched_token' => $token];
+            }
+        }
+    }
+    foreach ($ulkeler as $u) {
+        $adNorm = cw_bridge_norm_ascii_tr((string)($u['ad'] ?? ''));
+        if (strlen($adNorm) >= 4 && preg_match('/(?<![a-z0-9])' . preg_quote($adNorm, '/') . '(?![a-z0-9])/u', $normHay)) {
+            return ['id' => (string)$u['id'], 'ad' => (string)$u['ad'], 'matched_token' => $adNorm];
+        }
+    }
+    return ['id' => null, 'ad' => null, 'matched_token' => null];
 }
 
 /**
@@ -977,6 +1039,31 @@ function cw_bridge_validate_and_match_ai(PDO $pdo, array $aiOut, array $schema, 
         if ($v !== null && $v !== '') $form[$nk] = $v;
     }
 
+    // Deterministik destek 1: DENİZYOLU(YEŞİLHAT) / KARAYOLU (KIRMIZI HAT) parantezli hat
+    if ($form['line_type'] === '' && preg_match('/\b(DEN[İI]ZYOLU|KARAYOLU|HAVAYOLU|RO-RO)\s*\(\s*([^)\r\n]{2,40})\s*\)/ui', $rawText, $lm)) {
+        if ($form['transport_type'] === '') $form['transport_type'] = $upper(trim($lm[1]));
+        $hat = $upper(trim($lm[2]));
+        $hat = (string)preg_replace('/^(YEŞİL|KIRMIZI|SARI|MAVİ)HAT$/u', '$1 HAT', $hat);
+        $form['line_type'] = $hat;
+        $uncertain = array_values(array_diff($uncertain, ['line_type']));
+    }
+
+    // Deterministik destek 2: KASA satırındaki adet (TAHTA KASA: 4.680 / PLASTİK: 2.704 KASA / KASA: 500)
+    if ($form['crate_count'] === '' && preg_match_all('/^[^\r\n]*\bKASA\b[^\r\n]*$/umi', $rawText, $kasaSatirlari)) {
+        $toplamKasa = 0;
+        foreach ($kasaSatirlari[0] as $ks) {
+            if (preg_match('/\bNUMUNE\b/ui', $ks)) continue;
+            if (preg_match('/\b(\d{1,3}(?:\.\d{3})+|\d{1,6})\b/', $ks, $km)) {
+                $n = (int)str_replace('.', '', $km[1]);
+                if ($n > 0 && $n <= 1000000) $toplamKasa += $n;
+            }
+        }
+        if ($toplamKasa > 0) {
+            $form['crate_count'] = $toplamKasa;
+            $uncertain = array_values(array_diff($uncertain, ['crate_count']));
+        }
+    }
+
     if (!empty($aiFields['tractor_plate'])) {
         $form['tractor_plate'] = function_exists('beyan_plaka_normalize')
             ? mb_substr(beyan_plaka_normalize((string)$aiFields['tractor_plate']), 0, 20, 'UTF-8')
@@ -1002,7 +1089,7 @@ function cw_bridge_validate_and_match_ai(PDO $pdo, array $aiOut, array $schema, 
         'ulke'  => ['matched' => false, 'id' => null, 'ad' => null, 'extracted' => $aiFields['country_name'] ?? null],
     ];
 
-    // Gönderici Firma: mevcut HKS firmalarıyla eşleştir, yeni kayıt oluşturma
+    // Gönderici Firma: mevcut HKS firmalarıyla eşleştir; alıcı veya yabancı gümrük firması yanlışlıkla geldiyse temizle
     if (!empty($aiFields['sender_company_name'])) {
         $rawSender = trim((string)$aiFields['sender_company_name']);
         if (function_exists('beyan_gonderici_coz')) {
@@ -1013,7 +1100,13 @@ function cw_bridge_validate_and_match_ai(PDO $pdo, array $aiOut, array $schema, 
         } else {
             $form['sender_company_name'] = mb_substr($rawSender, 0, 150, 'UTF-8');
         }
-        if (!$hksMatches['firma']['matched']) {
+        $normSender = cw_bridge_norm_ascii_tr((string)$form['sender_company_name']);
+        $normBuyer  = cw_bridge_norm_ascii_tr((string)$form['buyer_name']);
+        $normComp   = cw_bridge_norm_ascii_tr((string)$form['company_name']);
+        if (!$hksMatches['firma']['matched'] && $normSender !== '' && ($normSender === $normBuyer || $normSender === $normComp)) {
+            $form['sender_company_name'] = '';
+            $form['hks_firma_id'] = '';
+        } elseif (!$hksMatches['firma']['matched']) {
             $uncertain[] = 'sender_company_name';
         }
     }
@@ -1030,12 +1123,22 @@ function cw_bridge_validate_and_match_ai(PDO $pdo, array $aiOut, array $schema, 
         }
     }
 
-    // HKS Ülke: country_name üzerinden katalog eşleşmesi
+    // HKS Ülke: önce AI country_name, eşleşmezse metin/adres/alıcı/hat içinden şehir-ülke çıkarımı
     $cm = cw_bridge_match_hks_country(isset($aiFields['country_name']) ? (string)$aiFields['country_name'] : null, $schema['hks_ulkeler'] ?? []);
+    if ($cm['id'] === null && !empty($schema['hks_ulkeler'])) {
+        $inferred = cw_bridge_infer_country_from_text(
+            implode("\n", [$form['company_address'], $form['buyer_name'], $form['line_type'], $rawText]),
+            $schema['hks_ulkeler']
+        );
+        if ($inferred['id'] !== null) {
+            $cm = ['id' => $inferred['id'], 'ad' => $inferred['ad']];
+        }
+    }
     if ($cm['id'] !== null) {
         $form['hks_ulke_id'] = $cm['id'];
         $form['hks_ulke_ad'] = (string)$cm['ad'];
-        $hksMatches['ulke'] = ['matched' => true, 'id' => $cm['id'], 'ad' => $cm['ad'], 'extracted' => $aiFields['country_name'] ?? null];
+        $hksMatches['ulke'] = ['matched' => true, 'id' => $cm['id'], 'ad' => $cm['ad'], 'extracted' => $aiFields['country_name'] ?? $cm['ad']];
+        $uncertain = array_values(array_diff($uncertain, ['hks_ulke_id']));
     } elseif (!empty($aiFields['country_name'])) {
         $uncertain[] = 'hks_ulke_id';
     }

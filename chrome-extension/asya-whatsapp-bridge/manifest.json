@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Asya WhatsApp Web Bridge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "WhatsApp Web sağ yan panelinde ve beyan mesajlarının yanında AI ile Ayrıştır butonu sunarak mevcut Asya Yeni Beyan formuna taslak oluşturur.",
   "permissions": [
     "activeTab",

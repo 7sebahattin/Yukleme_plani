@@ -222,6 +222,48 @@ async function handleMessage(msg, sender) {
       return { ok: true, pending };
     }
 
+    case 'OPEN_IN_ASYA_APP': {
+      const targetUrl = String(msg.url || '').trim();
+      let parsed;
+      try {
+        parsed = new URL(targetUrl);
+      } catch (_) {
+        return { ok: false, error: 'Geçersiz URL.' };
+      }
+      if (parsed.protocol !== 'https:' || !ALLOWED_BASE_HOSTS.has(parsed.hostname)) {
+        return { ok: false, error: 'Yalnızca Asya adresleri açılabilir.' };
+      }
+
+      try {
+        const tabs = await chrome.tabs.query({ url: 'https://asya.scai.tr/*' });
+        if (tabs && tabs.length) {
+          // Önce yüklü PWA / App penceresindeki sekmeyi tercih et, yoksa mevcut Asya sekmesini kullan
+          let chosen = tabs[0];
+          for (const t of tabs) {
+            try {
+              const w = await chrome.windows.get(t.windowId);
+              if (w && (w.type === 'app' || w.type === 'popup')) {
+                chosen = t;
+                break;
+              }
+            } catch (_) {}
+          }
+          await chrome.tabs.update(chosen.id, { url: targetUrl, active: true });
+          await chrome.windows.update(chosen.windowId, { focused: true });
+          return { ok: true, mode: 'existing_app' };
+        }
+      } catch (_) {}
+
+      // Açık Asya penceresi yoksa uygulama penceresi olarak aç
+      try {
+        await chrome.windows.create({ url: targetUrl, type: 'popup', width: 1200, height: 840, focused: true });
+        return { ok: true, mode: 'app_window' };
+      } catch (_) {
+        await chrome.tabs.create({ url: targetUrl, active: true });
+        return { ok: true, mode: 'tab' };
+      }
+    }
+
     default:
       return { ok: false, error: `Bilinmeyen işlem: ${msg.type}` };
   }
