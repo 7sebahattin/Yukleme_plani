@@ -841,3 +841,93 @@ function whatsapp_pc_paketi_zip(string $serviceDir, string $siteBase): string
     $son = "\x50\x4b\x05\x06" . pack('vvvvVVv', 0, 0, $sayac, $sayac, strlen($merkez), strlen($veri), 0);
     return $veri . $merkez . $son;
 }
+
+const WA_BEYAN_OTURUM = 'wa_beyan_taslak';
+const WA_BEYAN_TTL    = 600;   // saniye (tek kullanımlık oturum taslağı)
+
+/**
+ * WhatsApp mesajını AI ile Yeni Beyan alanlarına ayrıştırır ve oturumda tek kullanımlık saklar.
+ * HİÇBİR şey veritabanına yazılmaz; kullanıcı beyan_create.php?wa_taslak=1 ekranında kontrol edip Kaydet'e basar.
+ * @return array{alanlar:array<string,string>, dolu:int, ai:string, model:string}
+ * @throws AIParserException
+ */
+function whatsapp_beyan_taslak_hazirla(string $metin, array $ayar, int $userId, ?AIParserService $ai = null): array
+{
+    $metin = trim(str_replace(["\r\n", "\r"], "\n", $metin));
+    if ($metin === '') throw new AIParserException('Beyan metni boş.', 'perm');
+    $ai ??= whatsapp_ai_kur($ayar);
+    $p = $ai->parseBeyan($metin);
+
+    $buyuk = static fn(string $s): string => function_exists('tr_upper') ? tr_upper($s) : mb_strtoupper($s, 'UTF-8');
+    $sayiYaz = static function ($v): string {
+        if ($v === null || $v === '') return '';
+        if (is_int($v) || (is_float($v) && floor($v) === $v)) return (string)(int)$v;
+        return rtrim(rtrim(str_replace('.', ',', sprintf('%.3f', (float)$v)), '0'), ',');
+    };
+
+    $alanlar = ['raw_text' => mb_substr($metin, 0, 20000, 'UTF-8')];
+    $buyukAlanlar = [
+        'party_no', 'buyer_name', 'exit_depot', 'transport_type', 'line_type',
+        'product_name', 'product_variety', 'brand', 'crate_type', 'sample_crate_type',
+        'company_name', 'contact_person', 'company_address', 'driver_name',
+    ];
+    foreach ($buyukAlanlar as $k) {
+        if (!empty($p[$k])) $alanlar[$k] = $buyuk((string)$p[$k]);
+    }
+    if (!empty($p['sender_company_name'])) $alanlar['sender_company_name'] = (string)$p['sender_company_name'];
+    if (!empty($p['note']))                $alanlar['note'] = mb_substr((string)$p['note'], 0, 2000, 'UTF-8');
+
+    foreach (['tractor_plate', 'vehicle_plate'] as $pk) {
+        if (!empty($p[$pk])) {
+            $pl = (string)$p[$pk];
+            $alanlar[$pk] = function_exists('beyan_plaka_normalize') ? beyan_plaka_normalize($pl) : strtoupper((string)preg_replace('/\s+/', '', $pl));
+        }
+    }
+    if (!empty($p['driver_phone'])) {
+        $tel = (string)$p['driver_phone'];
+        $alanlar['driver_phone'] = function_exists('beyan_telefon_normalize') ? beyan_telefon_normalize($tel) : $tel;
+    }
+    foreach (['pallet_count', 'crate_count', 'gross_kg', 'net_kg', 'sample_crate_count', 'sample_gross_kg', 'sample_net_kg'] as $nk) {
+        $sv = $sayiYaz($p[$nk] ?? null);
+        if ($sv !== '') $alanlar[$nk] = $sv;
+    }
+
+    // Ülke adı / hat bilgisinden HKS ülke eşleştirme (varsa dropdown otomatik seçili gelir)
+    $ulkeAday = array_values(array_filter([(string)($p['country_name'] ?? ''), (string)($p['line_type'] ?? '')], 'strlen'));
+    if ($ulkeAday !== [] && function_exists('bb_katalog') && function_exists('bb_ulke_tahmin')) {
+        try {
+            $kat = bb_katalog();
+            if (!empty($kat['ulkeler'])) {
+                $t = bb_ulke_tahmin($ulkeAday, $kat['ulkeler']);
+                if (!empty($t['id'])) $alanlar['hks_ulke_id'] = (string)$t['id'];
+            }
+        } catch (Throwable $e) {}
+    }
+
+    if (session_status() === PHP_SESSION_NONE && !headers_sent()) @session_start();
+    $_SESSION[WA_BEYAN_OTURUM] = [
+        'u'       => $userId,
+        't'       => time(),
+        'alanlar' => $alanlar,
+        'ai'      => $ai->saglayici(),
+        'model'   => $ai->model(),
+    ];
+    $dolu = max(0, count($alanlar) - 1);   // raw_text hariç dolan alan sayısı
+    return ['alanlar' => $alanlar, 'dolu' => $dolu, 'ai' => $ai->saglayici(), 'model' => $ai->model()];
+}
+
+/**
+ * Yeni Beyan formu için TEK KULLANIMLIK okuma: kayıt silinir; süre dolmuş veya başka kullanıcıya aitse null.
+ * @return array{alanlar:array<string,string>, ai:string, model:string}|null
+ */
+function whatsapp_beyan_taslak_al(int $userId): ?array
+{
+    if (session_status() === PHP_SESSION_NONE && !headers_sent()) @session_start();
+    $t = $_SESSION[WA_BEYAN_OTURUM] ?? null;
+    unset($_SESSION[WA_BEYAN_OTURUM]);
+    if (!is_array($t) || (int)($t['u'] ?? 0) !== $userId || (time() - (int)($t['t'] ?? 0)) > WA_BEYAN_TTL) return null;
+    $alanlar = is_array($t['alanlar'] ?? null) ? $t['alanlar'] : [];
+    if ($alanlar === []) return null;
+    return ['alanlar' => $alanlar, 'ai' => (string)($t['ai'] ?? ''), 'model' => (string)($t['model'] ?? '')];
+}
+

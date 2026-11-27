@@ -122,7 +122,7 @@
     var mesajAkis = $('waMesajAkis'), mesajAra = $('waMesajAra'), tarihBas = $('waTarihBas'), tarihBit = $('waTarihBit');
     var mesajLimit = $('waMesajLimit'), mesajYenile = $('waMesajYenile');
     var sadeceAday = $('waSadeceAday'), aktarilanGizle = $('waAktarilanGizle'), taslakOtomatik = $('waTaslakOtomatik');
-    var tumunuSec = $('waTumunuSec'), secimBilgi = $('waSecimBilgi'), seciliTaratBtn = $('waSeciliTarat');
+    var tumunuSec = $('waTumunuSec'), secimBilgi = $('waSecimBilgi'), seciliTaratBtn = $('waSeciliTarat'), beyanOlusturBtn = $('waBeyanOlustur');
     var tumGruplar = [], aktifGrup = null, aktifMesajlar = [], seciliIdler = {}, aktifTur = '';
     var DURUM_ROZET = {
         aktarildi: ['wa-tamam', 'Plana aktarıldı'],
@@ -233,10 +233,28 @@
         var seciliSayi = Object.keys(seciliIdler).filter(function (k) { return seciliIdler[k]; }).length;
         if (secimBilgi) secimBilgi.textContent = seciliSayi + ' mesaj seçili (tek seferde en çok 20)';
         if (seciliTaratBtn) seciliTaratBtn.disabled = seciliSayi === 0;
+        if (beyanOlusturBtn) beyanOlusturBtn.disabled = seciliSayi === 0;
         if (tumunuSec) {
             var gor = gorunurMesajlar();
             tumunuSec.checked = gor.length > 0 && gor.every(function (m) { return !!seciliIdler[m.id]; });
         }
+    }
+
+    function beyanOlusturMetinden(metin, btn) {
+        metin = (metin || '').trim();
+        if (!metin) return;
+        if (btn) btn.disabled = true;
+        if (beyanOlusturBtn) beyanOlusturBtn.disabled = true;
+        if (sohbetDurum) sohbetDurum.textContent = 'AI beyan metnini ayrıştırıyor, Yeni Beyan ekranı hazırlanıyor…';
+        post({ ajax: 'beyan_taslak', metin: metin }).then(function (r) {
+            if (!r.ok) {
+                if (btn) btn.disabled = false;
+                secimSayaciniGuncelle();
+                if (sohbetDurum) sohbetDurum.textContent = r.hata || 'Beyan ayrıştırılamadı.';
+                return;
+            }
+            window.location.href = r.redirect || 'beyan_create.php?wa_taslak=1';
+        });
     }
 
     function mesajlariCiz() {
@@ -296,6 +314,16 @@
                 lnk.addEventListener('click', function (ev) { ev.stopPropagation(); });
                 sag.appendChild(lnk);
             }
+            var byBtn = document.createElement('button');
+            byBtn.type = 'button';
+            byBtn.className = 'btn btn-sm btn-ghost';
+            byBtn.textContent = 'Beyan Oluştur';
+            byBtn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                beyanOlusturMetinden(m.text, byBtn);
+            });
+            sag.appendChild(byBtn);
             var saat = document.createElement('span'); saat.className = 'wa-ikincil'; saat.textContent = m.time || m.date;
             sag.appendChild(saat);
             ust.appendChild(sol); ust.appendChild(sag);
@@ -339,6 +367,16 @@
                 else delete seciliIdler[m.id];
             });
             mesajlariCiz();
+        });
+    }
+    if (beyanOlusturBtn) {
+        beyanOlusturBtn.addEventListener('click', function () {
+            var paket = aktifMesajlar.filter(function (m) { return !!seciliIdler[m.id]; }).slice(0, 5);
+            if (!paket.length) return;
+            // Birden fazla mesaj seçildiyse kronolojik sırada birleştir (parçalı beyan mesajları için)
+            paket.sort(function (a, b) { return (a.timestamp || 0) - (b.timestamp || 0); });
+            var metin = paket.map(function (m) { return m.text || ''; }).filter(Boolean).join('\n\n');
+            beyanOlusturMetinden(metin, beyanOlusturBtn);
         });
     }
     if (seciliTaratBtn) {

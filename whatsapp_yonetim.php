@@ -139,8 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['indir'] ?? '') === 'pc_paket
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
     header('Content-Type: application/json; charset=utf-8');   // csrf_check JSON hata dönsün
     csrf_check($_POST['csrf'] ?? null);
-    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();   // uzun Evolution/AI çağrıları paralel istekleri kilitlemesin
     $islem = (string)$_POST['ajax'];
+    // beyan_taslak oturuma tek kullanımlık taslak yazar; diğer uzun çağrılar oturum kilidini bırakır
+    if ($islem !== 'beyan_taslak' && session_status() === PHP_SESSION_ACTIVE) session_write_close();
 
     try {
         $svc = whatsapp_service_kur($ayar);
@@ -192,6 +193,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             }
             $liste = whatsapp_mesajlari_isaretle($pdo, $liste);
             wa_json(['ok' => true, 'mesajlar' => $liste]);
+        }
+
+        if ($islem === 'beyan_taslak') {                // Seçili beyan mesajını AI ile ayrıştır → Yeni Beyan ekranını dolu aç (KAYDETMEZ)
+            if (!function_exists('can_beyan') || !can_beyan('create')) {
+                wa_json(['ok' => false, 'hata' => 'Yeni beyan oluşturma yetkiniz yok.'], 403);
+            }
+            $metin = trim((string)($_POST['metin'] ?? ''));
+            if ($metin === '') wa_json(['ok' => false, 'hata' => 'Beyan metni boş.'], 422);
+            $res = whatsapp_beyan_taslak_hazirla($metin, $ayar, $uid);
+            whatsapp_denetle('whatsapp_beyan_taslak', 'whatsapp', null, null, ['dolu_alan' => $res['dolu'], 'ai' => $res['ai'], 'model' => $res['model']]);
+            wa_json(['ok' => true, 'redirect' => 'beyan_create.php?wa_taslak=1', 'dolu' => $res['dolu']]);
         }
 
         if ($islem === 'test') {                        // WhatsApp'a dokunmadan AI ayrıştırma simülasyonu (DB'ye YAZMAZ)
@@ -454,7 +466,10 @@ render_flash();
                 <div class="wa-secim-bar">
                     <label class="wa-onay"><input type="checkbox" id="waTumunuSec"><span>Görünürleri seç</span></label>
                     <span class="wa-ikincil" id="waSecimBilgi">0 mesaj seçili</span>
-                    <button type="button" class="btn btn-sm btn-primary" id="waSeciliTarat" disabled>Seçilileri AI ile Tarat &amp; Taslak Çıkar</button>
+                    <div class="wa-eylem" style="margin-left:auto;">
+                        <button type="button" class="btn btn-sm btn-primary" id="waBeyanOlustur" disabled>Beyan Oluştur (AI)</button>
+                        <button type="button" class="btn btn-sm btn-ghost" id="waSeciliTarat" disabled>Yükleme Planı Taslağı Çıkar</button>
+                    </div>
                 </div>
                 <div class="wa-mesaj-akis" id="waMesajAkis">
                     <div class="wa-bos">Soldan bir grup ya da kişi seçin; mesajlar burada görünür, filtreleyip istediklerinizi AI ile taratabilirsiniz.</div>
