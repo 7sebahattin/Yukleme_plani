@@ -1404,9 +1404,9 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
   <?php mg_kart_ac('kantar-alanlari'); ?>
     <h2 style="margin-top:0;">Mal Kabul Alanları</h2>
     <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>kantar_fisleri</code> tablosuna <code>sofor</code>, <code>mal_sahibi</code>, <code>mustahsil</code> ve
-      <code>bahce</code> kolonlarını ekler. Mevcut veriye dokunmaz, yabancı anahtar YOK, yeniden çalıştırmak güvenlidir. Çalıştırılmazsa Mal Kabul Fişi
-      formunda bu dört alan pasif görünür ve listede çıkmaz, diğer her şey aynen çalışır. Çalıştırmadan önce veritabanı yedeği alın.
+      Yalnız ekleyici migrasyon: <code>kantar_fisleri</code> tablosuna <code>sofor</code>, <code>mal_sahibi</code>, <code>mustahsil</code>,
+      <code>bahce</code> ve <code>urun_fiyati</code> (Ürün Fiyatı) kolonlarını ekler. Mevcut veriye dokunmaz, yabancı anahtar YOK, yeniden çalıştırmak güvenlidir. Çalıştırılmazsa Mal Kabul Fişi
+      formunda bu beş alan pasif görünür ve listede çıkmaz, diğer her şey aynen çalışır. Çalıştırmadan önce veritabanı yedeği alın.
       <?php if ($kal_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
         <?php foreach ($kal_results as $sr): ?>

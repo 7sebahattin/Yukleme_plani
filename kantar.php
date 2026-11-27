@@ -106,7 +106,7 @@ $TERCIH_ANAHTAR = 'kantar.tablo';
 // Sütun sırası (başlık, süzgeç satırı ve hücreler aynı listeden): [anahtar, başlık, tür]
 $KOLONLAR = [['fis_no', 'Fiş No', ''], ['tarih', 'Tarih', ''], ['plaka', 'Plaka', '']];
 if (!empty($ek['sofor'])) $KOLONLAR[] = ['sofor', 'Şoför', ''];
-array_push($KOLONLAR, ['firma', 'Firma', ''], ['malin', 'Malın Cinsi', '']);
+array_push($KOLONLAR, ['firma', 'Firma', ''], ['malin', 'Ürün', '']);
 if (!empty($ek['mal_sahibi'])) $KOLONLAR[] = ['mal_sahibi', 'Malın Sahibi', ''];
 if (!empty($ek['mustahsil'])) $KOLONLAR[] = ['mustahsil', 'Müstahsil', ''];
 if (!empty($ek['bahce'])) $KOLONLAR[] = ['bahce', 'Bahçe', ''];
@@ -129,7 +129,7 @@ render_flash();
             <div class="pf-tb-grup">
                 <button type="button" class="pf-tb" id="kfYazdirBtn" title="Görünen listeyi (süzgeç ve sütun ayarıyla) yazdırır">⎙ Yazdır</button>
                 <button type="button" class="pf-tb" id="kfFiltreTemizle" title="Tüm süzgeçleri kaldırır" hidden>✕ Süzgeçleri temizle</button>
-                <?php if ($can_create): ?><a href="kantar_create.php" class="pf-tb pf-tb-ekle" title="Yeni mal kabul fişi">＋ Yeni Mal Kabul Fişi</a><?php endif; ?>
+                <?php if ($can_create): ?><button type="button" class="pf-tb pf-tb-ekle" data-mk-win-open title="Yeni mal kabul fişi">＋ Yeni Mal Kabul Fişi</button><?php endif; ?>
             </div>
         </div>
     </div>
@@ -186,7 +186,7 @@ render_flash();
             <?php endforeach; ?>
             </tbody>
         </table>
-        <div class="pf-empty" id="kfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Süzgeçlerle eşleşen fiş yok.' : 'Henüz mal kabul fişi yok.' ?><?php if (!$rows && $can_create): ?> <a href="kantar_create.php">İlk fişi oluşturun</a><?php endif; ?></div>
+        <div class="pf-empty" id="kfEmpty" <?= $rows ? 'hidden' : '' ?>><?= $rows ? 'Süzgeçlerle eşleşen fiş yok.' : 'Henüz mal kabul fişi yok.' ?><?php if (!$rows && $can_create): ?> <button type="button" class="pf-tb pf-tb-ekle" data-mk-win-open>İlk fişi oluşturun</button><?php endif; ?></div>
     </div>
     <div class="pf-bottom" id="kfOzet">
         <div class="pf-kart"><i aria-hidden="true">▤</i><div><span><em class="pf-u">FİŞ</em><em class="pf-k">FİŞ</em></span><strong data-sum="fis">0</strong></div></div>
@@ -203,6 +203,66 @@ render_flash();
     <div class="pf-sutun-liste" id="kfSutunListe"></div>
     <div class="pf-dialog-foot"><button type="button" class="btn btn-ghost" id="kfSutunHepsi" style="margin-right:auto">Tümünü göster</button><button type="button" class="btn btn-primary" id="kfSutunTamam">Tamam</button></div>
 </dialog>
+<?php if ($can_create):
+    $kantar_window_mode = true;
+    $kasa_list          = get_definitions_by_type('kasa_cinsi');
+    $palet_list         = get_definitions_by_type('palet_tipi');
+    $form_action        = 'kantar_create.php';
+    $title              = 'Yeni Mal Kabul Fişi';
+    $page_title         = $title;
+    $submit_label       = 'Kaydet';
+    $is_edit            = false;
+    $errors             = [];
+    $existing_gruplar   = [];
+    $existing_kp        = [];
+    $fis = [
+        'fis_no' => '', 'plaka' => '', 'firma_adi' => '',
+        'giris_tarih' => date('Y-m-d\TH:i'), 'cikis_tarih' => '', 'operator_adi' => '',
+        'malin_cinsi' => '', 'geldigi_yer' => '', 'gittigi_yer' => '',
+        'aciklama' => '',
+        'sofor' => '', 'mal_sahibi' => '', 'mustahsil' => '', 'bahce' => '',
+        'depo' => (function_exists('active_depot') ? active_depot() : null) ?? '',
+        'parti_no' => '',
+        'tartim1' => '', 'alibi1' => '',
+        'tartim2' => '', 'alibi2' => '',
+        'foto_data' => '',
+        'urun_fiyati' => '',
+    ];
+    $_mk_auto_open = isset($_GET['yeni']) ? '1' : '0';
+?>
+<div id="mkWin" class="mk-win" role="dialog" aria-modal="false" aria-labelledby="mkWinTitle" data-auto-open="<?= $_mk_auto_open ?>" hidden>
+    <div class="mk-win-bar" id="mkWinBar">
+        <div class="mk-win-bar-left">
+            <span class="mk-win-bar-ico" aria-hidden="true">⚖️</span>
+            <span class="mk-win-bar-title" id="mkWinTitle">Yeni Mal Kabul Fişi</span>
+        </div>
+        <div class="mk-win-ctrl">
+            <button type="button" class="mk-win-btn" data-mk-win-min title="Küçült" aria-label="Küçült">—</button>
+            <button type="button" class="mk-win-btn" data-mk-win-max title="Büyüt / Küçült" aria-label="Büyüt / Küçült">□</button>
+            <button type="button" class="mk-win-btn mk-win-btn--close" data-mk-win-close title="Kapat" aria-label="Kapat">✕</button>
+        </div>
+    </div>
+    <div class="mk-win-body" id="mkWinBody">
+        <?php require __DIR__ . '/_kantar_form.php'; ?>
+    </div>
+    <div class="mk-win-rh" data-dir="n" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="s" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="e" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="w" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="ne" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="nw" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="se" aria-hidden="true"></div>
+    <div class="mk-win-rh" data-dir="sw" aria-hidden="true"></div>
+</div>
+<div id="mkWinDock" class="mk-win-dock" hidden>
+    <button type="button" class="mk-win-dock-restore" data-mk-win-restore title="Pencereyi geri yükle">
+        <span aria-hidden="true">⚖️</span>
+        <span>Yeni Mal Kabul Fişi</span>
+    </button>
+    <button type="button" class="mk-win-dock-close" data-mk-win-close title="Kapat" aria-label="Kapat">✕</button>
+</div>
+<script src="assets/kantar-pencere.js?v=<?= h(APP_SURUM) ?>" defer></script>
+<?php endif; ?>
 <script>window.KANTAR_LISTE = <?= json_encode(['tercihSunucu' => kt_hazir($pdo), 'tercih' => kt_oku($pdo, (int)($auth_user['id'] ?? 0), $TERCIH_ANAHTAR), 'anahtar' => $TERCIH_ANAHTAR], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
 <script src="assets/kantar-liste.js?v=<?= (int)@filemtime(__DIR__ . '/assets/kantar-liste.js') ?>" defer></script>
 <?php render_footer(); ?>

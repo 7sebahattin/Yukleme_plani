@@ -7842,3 +7842,364 @@ html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; c
     }
 }
 
+/* ═══ Mal Kabul Fişi kompakt düzen + Windows-tarzı yüzen pencere (v604) ═══ */
+.mk-form .mk-card { padding: 12px 14px; margin-bottom: 10px; }
+.mk-form .mk-sec-title { margin: 0 0 8px; padding: 6px 10px; font-size: .88rem; }
+.mk-form .mk-g { gap: 8px 10px; }
+.mk-form .mk-lbl { font-size: .8rem; }
+.mk-form .mk-lbl > input,
+.mk-form .mk-lbl > select,
+.mk-form .mk-lbl > small,
+.mk-form .mk-lbl > .mk-cb { margin-top: 3px; }
+.mk-form .mk-row2 > .mk-card { margin-bottom: 10px; }
+.mk-form .mk-head { margin-bottom: 10px; }
+.mk-form .mk-foot { margin-top: 10px; }
+
+/* 6 eşit sütunlu grid (≥1024px: 6, 768–1023px: 3, 480–767px: 2, <480px: 1) */
+.mk-g6 { grid-template-columns: 1fr; }
+@media (min-width: 480px) {
+    .mk-g6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 768px) {
+    .mk-g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+    .mk-g6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+/* Tek satır kompakt açıklama alanı */
+.mk-aciklama-compact {
+    min-height: 34px;
+    height: 34px;
+    padding: 6px 8px;
+    resize: vertical;
+    line-height: 1.3;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Ambalaj (sol) + Tartım & Fiyat (sağ) yan yana düzen */
+.mk-row-at {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: start;
+    margin-bottom: 10px;
+}
+.mk-row-at > .mk-card,
+.mk-col-tartim > .mk-card { margin-bottom: 0; }
+.mk-col-tartim {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+@media (min-width: 900px) {
+    .mk-row-at { grid-template-columns: 1.2fr 1fr; }
+}
+
+/* Ambalaj içinde üst üste Palet + Kasa yığını */
+.mk-ambalaj.mk-ambalaj-stack,
+.mk-ambalaj-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.mk-ambalaj.mk-ambalaj-stack > .kp-section + .kp-section,
+.mk-ambalaj-stack > .kp-section + .kp-section {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    border-left: 0;
+    padding-left: 0;
+}
+
+/* Birim Fiyat & Toplam Tutar kartı */
+.mk-fiyat-card {
+    --mk-fiyat: #1d4ed8;
+    --mk-fiyat-soft: #eff6ff;
+}
+html[data-theme="dark"] .mk-fiyat-card {
+    --mk-fiyat: #7cb3ff;
+    --mk-fiyat-soft: #17253a;
+}
+.mk-fiyat-card .mk-sec-title,
+.mk-sec-title--fiyat {
+    background: var(--mk-fiyat-soft);
+    color: var(--mk-fiyat);
+}
+.mk-fiyat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-items: end;
+}
+.mk-fiyat-summary,
+.mk-fiyat-toplam {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--mk-fiyat-soft);
+    border: 1px solid rgba(29, 78, 216, .22);
+    min-height: 40px;
+    box-sizing: border-box;
+}
+html[data-theme="dark"] .mk-fiyat-summary,
+html[data-theme="dark"] .mk-fiyat-toplam {
+    border-color: rgba(124, 179, 255, .28);
+}
+.mk-fiyat-summary-lbl,
+.mk-fiyat-toplam-lbl {
+    font-size: .74rem;
+    color: var(--muted);
+    font-weight: 600;
+    line-height: 1.2;
+}
+.mk-fiyat-summary-val,
+.mk-fiyat-toplam-val {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--mk-fiyat);
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+}
+.mk-fiyat-summary-hint {
+    font-size: .7rem;
+    color: var(--muted);
+    line-height: 1.2;
+}
+.mk-fiyat-hint {
+    margin-top: 8px;
+    font-size: .78rem;
+    color: var(--muted);
+}
+@media (max-width: 479px) {
+    .mk-fiyat-grid { grid-template-columns: 1fr; }
+}
+
+/* Alt satır: Gruplandırma (sol) + kompakt Fiş Görseli (sağ) */
+.mk-bottom-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: start;
+    margin-bottom: 10px;
+}
+.mk-bottom-grup { min-width: 0; }
+.mk-bottom-grup .grup-toggle-bar { margin-bottom: 8px; }
+.mk-bottom-grup #grupSection { margin-bottom: 0; }
+@media (min-width: 900px) {
+    .mk-bottom-row { grid-template-columns: 1.4fr 1fr; }
+}
+.mk-card-gorsel-compact { margin-bottom: 0; }
+.mk-card-gorsel-compact .kantar-img-area { min-height: 88px; padding: 10px; margin-bottom: 6px; }
+.mk-card-gorsel-compact .kantar-img-ph { font-size: .82rem; line-height: 1.35; }
+.mk-card-gorsel-compact .kantar-img-ph-ico { font-size: 1.1rem; margin-bottom: 2px; }
+
+/* Pencere içi form kompaktlığı */
+.mk-form-win .mk-card { padding: 10px 12px; margin-bottom: 8px; }
+.mk-form-win .mk-row-at,
+.mk-form-win .mk-bottom-row { gap: 8px; margin-bottom: 8px; }
+.mk-form-win .mk-col-tartim { gap: 8px; }
+.mk-form-win .mk-foot { margin-top: 8px; padding-top: 8px; }
+
+/* ── Windows-tarzı yüzen pencere (#mkWin / #mkWinDock) ── */
+.mk-win[hidden],
+.mk-win-dock[hidden] { display: none !important; }
+
+.mk-win-dragging {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+.mk-win {
+    position: fixed;
+    z-index: 850;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg, #f4f6f9);
+    color: var(--text);
+    border: 1px solid rgba(15, 23, 42, .18);
+    border-radius: 10px;
+    box-shadow: 0 22px 56px rgba(10, 22, 40, .34), 0 4px 14px rgba(10, 22, 40, .14);
+    overflow: hidden;
+    min-width: 540px;
+    min-height: 360px;
+    max-width: 100vw;
+    max-height: 100vh;
+}
+html[data-theme="dark"] .mk-win {
+    background: var(--bg, #101622);
+    border-color: rgba(148, 163, 184, .28);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .65), 0 0 0 1px rgba(148, 163, 184, .16);
+}
+
+.mk-win.is-max {
+    left: 8px !important;
+    top: 8px !important;
+    width: calc(100vw - 16px) !important;
+    height: calc(100vh - 16px) !important;
+    border-radius: 6px;
+}
+.mk-win.is-max .mk-win-rh { display: none; }
+
+.mk-win-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    height: 38px;
+    padding: 0 6px 0 12px;
+    background: linear-gradient(180deg, #1b3556 0%, #142944 100%);
+    color: #f8fafc;
+    cursor: move;
+    user-select: none;
+    -webkit-user-select: none;
+    border-bottom: 1px solid rgba(255, 255, 255, .1);
+}
+html[data-theme="dark"] .mk-win-bar {
+    background: linear-gradient(180deg, #1e293b 0%, #151e2c 100%);
+    border-bottom-color: rgba(148, 163, 184, .18);
+}
+
+.mk-win-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.mk-win-bar-ico {
+    font-size: 1rem;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+.mk-win-bar-title {
+    font-size: .88rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mk-win-ctrl {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+.mk-win-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: #e2e8f0;
+    width: 34px;
+    height: 28px;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .9rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .12s ease, color .12s ease;
+}
+.mk-win-btn:hover {
+    background: rgba(255, 255, 255, .16);
+    color: #fff;
+}
+.mk-win-btn--close:hover {
+    background: #dc2626;
+    color: #fff;
+}
+
+.mk-win-body {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 12px 14px 16px;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 8 yönlü boyutlandırma tutamaçları */
+.mk-win-rh {
+    position: absolute;
+    z-index: 12;
+}
+.mk-win-rh[data-dir="n"]  { top: 0; left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.mk-win-rh[data-dir="s"]  { bottom: 0; left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+.mk-win-rh[data-dir="e"]  { top: 8px; bottom: 8px; right: 0; width: 6px; cursor: ew-resize; }
+.mk-win-rh[data-dir="w"]  { top: 8px; bottom: 8px; left: 0; width: 6px; cursor: ew-resize; }
+.mk-win-rh[data-dir="ne"] { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.mk-win-rh[data-dir="nw"] { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.mk-win-rh[data-dir="se"] { bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.mk-win-rh[data-dir="sw"] { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+
+/* Küçültülmüş pencere görev çubuğu hapı (#mkWinDock) */
+.mk-win-dock {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 860;
+    display: inline-flex;
+    align-items: center;
+    background: #142944;
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 999px;
+    box-shadow: 0 12px 30px rgba(10, 22, 40, .35);
+    overflow: hidden;
+}
+html[data-theme="dark"] .mk-win-dock {
+    background: #1e293b;
+    border-color: rgba(148, 163, 184, .32);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .6);
+}
+.mk-win-dock-restore,
+.mk-win-dock-close {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .85rem;
+    font-weight: 700;
+    padding: 9px 14px;
+    transition: background .12s ease;
+}
+.mk-win-dock-restore:hover { background: rgba(255, 255, 255, .12); }
+.mk-win-dock-close {
+    padding: 9px 12px;
+    border-left: 1px solid rgba(255, 255, 255, .14);
+}
+.mk-win-dock-close:hover { background: #dc2626; color: #fff; }
+
+/* Mobil (<768px): tam ekran sayfa görünümü */
+@media (max-width: 767px) {
+    .mk-win {
+        inset: 0 !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-width: 0;
+        min-height: 0;
+        border-radius: 0;
+        border: 0;
+    }
+    .mk-win-bar { cursor: default; height: 44px; }
+    .mk-win-rh,
+    .mk-win [data-mk-win-max] { display: none !important; }
+    .mk-win-body { padding: 10px 10px 24px; }
+    .mk-win-dock { right: 12px; bottom: 72px; }
+}
+
+@media print {
+    .mk-win, .mk-win-dock { display: none !important; }
+}
+
+

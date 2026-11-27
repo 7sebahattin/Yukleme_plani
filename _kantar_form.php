@@ -17,20 +17,28 @@ $_kal = kantar_alanlari_durum(db());          // sofor / mal_sahibi / mustahsil 
 $_kal_hazir = !in_array(false, $_kal, true);
 
 $is_edit    = $is_edit    ?? false;
+$is_window  = !empty($kantar_window_mode);
 $fis        = $fis        ?? [];
 $fis_id     = (int)($fis['id'] ?? 0);
 $kasa_list  = $kasa_list  ?? [];
 $palet_list = $palet_list ?? [];
 
+$_uf_raw = $fis['urun_fiyati'] ?? '';
+$urun_fiyati_val = ($_uf_raw !== '' && $_uf_raw !== null && (float)$_uf_raw > 0)
+    ? number_format((float)$_uf_raw, 2, '.', '')
+    : '';
+
 // DB'den gelen DECIMAL değerlerini input-safe formata çevir: ondalık virgül, binlik ayırıcı YOK
 // Örn: 13960.5 → "13960,5" | 13960.0 → "13960" | 0.48 → "0,48"
-function fmt_tartim($v): string {
-    $f = (float)$v;
-    if ($f <= 0) return '';
-    $s = number_format($f, 3, ',', '');  // "13960,000" — no thousands dot
-    $s = rtrim($s, '0');                  // "13960,"
-    if (str_ends_with($s, ',')) $s = rtrim($s, ','); // "13960"
-    return $s;
+if (!function_exists('fmt_tartim')) {
+    function fmt_tartim($v): string {
+        $f = (float)$v;
+        if ($f <= 0) return '';
+        $s = number_format($f, 3, ',', '');  // "13960,000" — no thousands dot
+        $s = rtrim($s, '0');                  // "13960,"
+        if (str_ends_with($s, ',')) $s = rtrim($s, ','); // "13960"
+        return $s;
+    }
 }
 
 // Mevcut gruplar (edit modunda DB'den)
@@ -117,15 +125,17 @@ if (!function_exists('kf_sel_opt')) {
         return $out;
     }
 }
-function kf_datalist(string $id, array $items): string {
-    $out = '<datalist id="' . htmlspecialchars($id, ENT_QUOTES) . '">';
-    foreach ($items as $v) {
-        $out .= '<option value="' . htmlspecialchars($v, ENT_QUOTES) . '">';
+if (!function_exists('kf_datalist')) {
+    function kf_datalist(string $id, array $items): string {
+        $out = '<datalist id="' . htmlspecialchars($id, ENT_QUOTES) . '">';
+        foreach ($items as $v) {
+            $out .= '<option value="' . htmlspecialchars($v, ENT_QUOTES) . '">';
+        }
+        return $out . '</datalist>';
     }
-    return $out . '</datalist>';
 }
 ?>
-<form method="post" action="<?= h($form_action) ?>" id="kantarForm" class="mk-form">
+<form method="post" action="<?= h($form_action) ?>" id="kantarForm" class="mk-form<?= $is_window ? ' mk-form-win' : '' ?>">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 <?php if ($is_edit): ?>
 <input type="hidden" name="id" value="<?= $fis_id ?>">
@@ -135,6 +145,9 @@ function kf_datalist(string $id, array $items): string {
 <input type="hidden" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
 <?php endif; ?>
 
+<?php if ($is_window): ?>
+<div class="flash flash-error" id="mkWinErrors" style="display:none"></div>
+<?php else: ?>
 <div class="page-head mk-head">
     <div class="mk-head-title">
         <img class="mk-head-ico" src="assets/nav-icons/kantar.svg" alt="" width="44" height="44">
@@ -154,15 +167,16 @@ function kf_datalist(string $id, array $items): string {
         <button type="submit" class="btn btn-primary btn-lg">✓ <?= h($submit_label) ?></button>
     </div>
 </div>
-
-<?php if (!$_kal_hazir): ?>
-<p class="muted mk-kal-uyari">Şoför, Malın Sahibi, Müstahsil ve Bahçe alanları için veritabanı güncellemesi gerekli<?= is_admin() ? ': <a href="migrate.php#kantar-alanlari">migrate.php › Mal Kabul Alanları</a> kartını çalıştırın' : ' — yöneticiye bildirin' ?>.</p>
 <?php endif; ?>
 
-<!-- ══════════════ GENEL BİLGİLER ══════════════ -->
-<section class="card mk-card">
-    <h2 class="mk-sec-title"><span aria-hidden="true">🏢</span> Genel Bilgiler</h2>
-    <div class="mk-g mk-g5">
+<?php if (!$_kal_hazir): ?>
+<p class="muted mk-kal-uyari">Şoför, Malın Sahibi, Müstahsil, Bahçe ve Ürün Fiyatı alanları için veritabanı güncellemesi gerekli<?= is_admin() ? ': <a href="migrate.php#kantar-alanlari">migrate.php › Mal Kabul Alanları</a> kartını çalıştırın' : ' — yöneticiye bildirin' ?>.</p>
+<?php endif; ?>
+
+<!-- ══════════════ GENEL, ÜRÜN VE DEPO BİLGİLERİ ══════════════ -->
+<section class="card mk-card mk-card-genel">
+    <h2 class="mk-sec-title"><span aria-hidden="true">📋</span> Genel, Ürün ve Depo Bilgileri</h2>
+    <div class="mk-g mk-g6">
         <label class="mk-lbl">Fiş No
             <input type="text" name="fis_no" value="<?= h($fis['fis_no'] ?? '') ?>">
         </label>
@@ -171,9 +185,6 @@ function kf_datalist(string $id, array $items): string {
             <input type="text" name="plaka" list="kfPlakaDl"
                    value="<?= h($fis['plaka'] ?? '') ?>" style="text-transform:uppercase"
                    autocomplete="off">
-            <?php if (empty($_kf_plaka_hist)): ?>
-            <small class="muted">Henüz kayıtlı plaka yok</small>
-            <?php endif; ?>
         </label>
         <label class="mk-lbl">Şoför
             <input type="text" name="sofor" value="<?= h($fis['sofor'] ?? '') ?>" data-mkcb="sofor" placeholder="Yazarak arayın…" data-uppercase="tr"<?= empty($_kal['sofor']) ? ' disabled' : '' ?>>
@@ -184,14 +195,11 @@ function kf_datalist(string $id, array $items): string {
         <label class="mk-lbl">Tarih <span class="req">*</span>
             <input type="date" name="giris_tarih" value="<?= h(substr((string)($fis['giris_tarih'] ?? ''), 0, 10)) ?>">
         </label>
-    </div>
-</section>
+        <label class="mk-lbl">Depo <span class="req">*</span>
+            <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>" data-mkcb="depo" data-mkcb-ekle="0" placeholder="Yazarak arayın…">
+        </label>
 
-<!-- ══════════════ MALZEME VE DEPO ══════════════ -->
-<section class="card mk-card">
-    <h2 class="mk-sec-title"><span aria-hidden="true">📦</span> Malzeme ve Depo</h2>
-    <div class="mk-g mk-g3">
-        <label class="mk-lbl">Malın Cinsi <span class="req">*</span>
+        <label class="mk-lbl">Ürün <span class="req">*</span>
             <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-mkcb="urun" placeholder="Yazarak arayın…" data-uppercase="tr">
         </label>
         <label class="mk-lbl">Malın Sahibi
@@ -206,70 +214,141 @@ function kf_datalist(string $id, array $items): string {
         <label class="mk-lbl">Geldiği Yer
             <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-mkcb="lokasyon" placeholder="Yazarak arayın…" data-uppercase="tr">
         </label>
-        <label class="mk-lbl">Depo <span class="req">*</span> <small class="muted mk-inline">(stok için)</small>
-            <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>" data-mkcb="depo" data-mkcb-ekle="0" placeholder="Yazarak arayın…">
+        <label class="mk-lbl">Açıklama
+            <textarea name="aciklama" rows="1" class="mk-aciklama mk-aciklama-compact" placeholder="Açıklama, not..."><?= h($fis['aciklama'] ?? '') ?></textarea>
         </label>
     </div>
 </section>
 
-<!-- ══════════════ AMBALAJ BİLGİLERİ ══════════════ -->
-<section class="card mk-card">
-    <h2 class="mk-sec-title"><span aria-hidden="true">🧱</span> Ambalaj Bilgileri</h2>
-    <div class="mk-ambalaj">
-        <!-- Palet Türleri -->
-        <div class="kp-section">
-            <div class="kp-section-head">
-                <span class="kp-section-title">Palet Türleri</span>
-                <button type="button" id="addPaletRowBtn" class="btn btn-sm mk-btn-add">+ Palet Ekle</button>
+<!-- ══════════════ AMBALAJ + TARTIM & ÜRÜN FİYATI ══════════════ -->
+<div class="mk-row-at">
+    <!-- Ambalaj Bilgileri -->
+    <section class="card mk-card mk-card-ambalaj">
+        <h2 class="mk-sec-title"><span aria-hidden="true">📦</span> Ambalaj Bilgileri</h2>
+        <div class="mk-ambalaj mk-ambalaj-stack">
+            <!-- Palet Türleri -->
+            <div class="kp-section">
+                <div class="kp-section-head">
+                    <span class="kp-section-title">Palet Türleri</span>
+                    <button type="button" id="addPaletRowBtn" class="btn btn-sm mk-btn-add">+ Palet Ekle</button>
+                </div>
+                <div id="paletRowList" class="kp-row-list"></div>
+                <div class="kp-total-row">Palet Dara Toplamı: <strong id="paletDaraTotal">—</strong></div>
             </div>
-            <div id="paletRowList" class="kp-row-list"></div>
-            <div class="kp-total-row">Palet Dara Toplamı: <strong id="paletDaraTotal">—</strong></div>
-        </div>
-        <!-- Kasa Türleri -->
-        <div class="kp-section">
-            <div class="kp-section-head">
-                <span class="kp-section-title">Kasa Türleri</span>
-                <button type="button" id="addKasaRowBtn" class="btn btn-sm mk-btn-add">+ Kasa Ekle</button>
+            <!-- Kasa Türleri -->
+            <div class="kp-section">
+                <div class="kp-section-head">
+                    <span class="kp-section-title">Kasa Türleri</span>
+                    <button type="button" id="addKasaRowBtn" class="btn btn-sm mk-btn-add">+ Kasa Ekle</button>
+                </div>
+                <div id="kasaRowList" class="kp-row-list"></div>
+                <div class="kp-total-row">Kasa Dara Toplamı: <strong id="kasaDaraTotal">—</strong></div>
             </div>
-            <div id="kasaRowList" class="kp-row-list"></div>
-            <div class="kp-total-row">Kasa Dara Toplamı: <strong id="kasaDaraTotal">—</strong></div>
         </div>
+    </section>
+
+    <!-- Tartım Bilgileri + Ürün Fiyatı -->
+    <div class="mk-col-tartim">
+        <section class="card mk-card mk-card-tartim">
+            <h2 class="mk-sec-title mk-sec-title--tartim"><span aria-hidden="true">⚖️</span> Tartım Bilgileri</h2>
+            <div class="kantar-tartim-wrap">
+                <div class="kantar-tartim-row">
+                    <div class="kantar-tartim-no">1. Tartım <span class="req">*</span></div>
+                    <div class="kantar-tartim-fields">
+                        <span class="mk-ico" aria-hidden="true">🚚</span>
+                        <input type="text" name="tartim1" id="tartim1" inputmode="decimal"
+                               class="num kantar-tartim-input"
+                               value="<?= h(fmt_tartim($fis['tartim1'] ?? '')) ?>" placeholder="">
+                        <span class="kantar-tartim-unit">kg</span>
+                    </div>
+                </div>
+                <div class="kantar-tartim-row">
+                    <div class="kantar-tartim-no">2. Tartım <span class="req">*</span></div>
+                    <div class="kantar-tartim-fields">
+                        <span class="mk-ico" aria-hidden="true">🚚</span>
+                        <input type="text" name="tartim2" id="tartim2" inputmode="decimal"
+                               class="num kantar-tartim-input"
+                               value="<?= h(fmt_tartim($fis['tartim2'] ?? '')) ?>" placeholder="">
+                        <span class="kantar-tartim-unit">kg</span>
+                    </div>
+                </div>
+                <div class="kantar-net-satir">
+                    <span class="kantar-net-lbl">Tartım Net</span>
+                    <span class="kantar-net-val" id="fisNetKg">—</span>
+                </div>
+            </div>
+
+            <!-- Brüt / Dara / Net hesap özeti (otomatik güncellenir) -->
+            <div id="kantarNetHesap" class="kantar-net-hesap" style="display:none">
+                <div class="knh-row"><span>Brüt (Tartım Neti)</span><strong id="knhBrut">—</strong></div>
+                <div class="knh-row"><span>Dara (Kasa + Palet)</span><strong id="knhDara">—</strong></div>
+                <div class="knh-row knh-net-row"><span>Net KG</span><strong id="knhNet">—</strong></div>
+            </div>
+        </section>
+
+        <section class="card mk-card mk-fiyat-card" id="urunFiyatiCard">
+            <h2 class="mk-sec-title"><span aria-hidden="true">💰</span> Ürün Fiyatı</h2>
+            <div class="mk-fiyat-grid">
+                <label class="mk-lbl">Birim Fiyat (₺/kg)
+                    <input type="number" name="urun_fiyati" id="urunFiyati" step="0.01" min="0" inputmode="decimal" placeholder="0,00" value="<?= h($urun_fiyati_val) ?>">
+                </label>
+                <div class="mk-fiyat-summary">
+                    <span class="mk-fiyat-summary-lbl">Toplam Tutar</span>
+                    <strong id="urunToplamTutar" class="mk-fiyat-summary-val">—</strong>
+                    <small class="mk-fiyat-summary-hint">Net kg × Birim Fiyat</small>
+                </div>
+            </div>
+            <?php if (empty($_kal['urun_fiyati'])): ?>
+            <div class="mk-fiyat-hint">Kaydetmek için migrate.php › Mal Kabul Alanları çalıştırın.</div>
+            <?php endif; ?>
+        </section>
     </div>
-</section>
-
-<!-- ══════════════ AÇIKLAMA ══════════════ -->
-<section class="card mk-card">
-    <h2 class="mk-sec-title"><span aria-hidden="true">💬</span> Açıklama</h2>
-    <textarea name="aciklama" rows="3" class="mk-aciklama"
-              placeholder="Açıklama, not veya ek bilgi girebilirsiniz..."><?= h($fis['aciklama'] ?? '') ?></textarea>
-</section>
-
-<!-- ══════════════ GRUPLANDIRMA ══════════════ -->
-<div class="grup-toggle-bar">
-    <button type="button" id="grupToggleBtn" class="btn btn-ghost btn-sm">🗂 Gruplandırma Ekle</button>
 </div>
 
-<section class="card" id="grupSection"<?= empty($_grup_list) ? ' style="display:none"' : '' ?>>
-    <div class="card-head">
-        <h2>🗂 Gruplandırma</h2>
-        <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
-    </div>
-    <div class="card-body">
-        <p class="muted" style="margin-bottom:10px;font-size:.85rem">
-            Her firma/grup için palet ve kasa adetini girin. Brüt, toplam palet oranına göre dağıtılır.
-        </p>
-        <div id="grupFormList"></div>
-        <div id="grupSumRow" class="grup-sum-row" style="display:none">
-            <span class="grup-sum-lbl">Toplam</span>
-            <div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>
-            <span class="grup-calc-op">−</span>
-            <div class="grup-calc-item"><span class="grup-calc-lbl">Dara</span><strong class="gc-dara grup-calc-val">—</strong></div>
-            <span class="grup-calc-op">=</span>
-            <div class="grup-calc-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-val grup-calc-net-val">—</strong></div>
+<!-- ══════════════ GRUPLANDIRMA & FİŞ GÖRSELİ ══════════════ -->
+<div class="mk-bottom-row">
+    <div class="mk-bottom-grup">
+        <div class="grup-toggle-bar">
+            <button type="button" id="grupToggleBtn" class="btn btn-ghost btn-sm">🗂 Gruplandırma Ekle</button>
         </div>
-        <div id="grupSapmaRow" class="grup-sapma-row" style="display:none"></div>
+
+        <section class="card" id="grupSection"<?= empty($_grup_list) ? ' style="display:none"' : '' ?>>
+            <div class="card-head">
+                <h2>🗂 Gruplandırma</h2>
+                <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
+            </div>
+            <div class="card-body">
+                <p class="muted" style="margin-bottom:10px;font-size:.85rem">
+                    Her firma/grup için palet ve kasa adetini girin. Brüt, toplam palet oranına göre dağıtılır.
+                </p>
+                <div id="grupFormList"></div>
+                <div id="grupSumRow" class="grup-sum-row" style="display:none">
+                    <span class="grup-sum-lbl">Toplam</span>
+                    <div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>
+                    <span class="grup-calc-op">−</span>
+                    <div class="grup-calc-item"><span class="grup-calc-lbl">Dara</span><strong class="gc-dara grup-calc-val">—</strong></div>
+                    <span class="grup-calc-op">=</span>
+                    <div class="grup-calc-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-val grup-calc-net-val">—</strong></div>
+                </div>
+                <div id="grupSapmaRow" class="grup-sapma-row" style="display:none"></div>
+            </div>
+        </section>
     </div>
-</section>
+
+    <!-- ══════════════ FİŞ GÖRSELİ ══════════════ -->
+    <section class="card mk-card mk-card-gorsel mk-card-gorsel-compact">
+        <h2 class="mk-sec-title"><span aria-hidden="true">🖼</span> Fiş Görseli</h2>
+        <div class="kantar-img-area" id="kantarImgArea" role="button" tabindex="0">
+            <img id="kantarImgDisplay" class="kantar-img-display" alt="" style="display:none">
+            <div id="kantarImgPh" class="kantar-img-ph">
+                <span class="kantar-img-ph-ico" aria-hidden="true">⬆️</span>
+                Fotoğraf veya belge eklemek için tıklayın ya da sürükleyip bırakın
+                <small>JPG, PNG (Maks. 10 MB)</small>
+            </div>
+        </div>
+        <button type="button" id="kantarImgKaldir" class="btn btn-danger btn-sm" style="display:none">✕ Görseli Kaldır</button>
+    </section>
+</div>
 
 <script id="mkComboData" type="application/json"><?= json_encode([
     'firma' => array_values($_all_firma), 'urun' => array_values($_urun_names),
@@ -283,60 +362,6 @@ function kf_datalist(string $id, array $items): string {
 <script id="kasaListData"  type="application/json"><?= json_encode(array_map(fn($k) => ['name' => $k['name'], 'dara' => (float)$k['unit_dara_kg']], $kasa_list),  JSON_UNESCAPED_UNICODE) ?></script>
 <script id="paletListData" type="application/json"><?= json_encode(array_map(fn($k) => ['name' => $k['name'], 'dara' => (float)$k['unit_dara_kg']], $palet_list), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="kpInitData"    type="application/json"><?= json_encode(array_values($_kp_rows), JSON_UNESCAPED_UNICODE) ?></script>
-
-<div class="mk-row2">
-    <!-- ══════════════ TARTIM BİLGİLERİ ══════════════ -->
-    <section class="card mk-card">
-        <h2 class="mk-sec-title mk-sec-title--tartim"><span aria-hidden="true">⚖️</span> Tartım Bilgileri</h2>
-        <div class="kantar-tartim-wrap">
-            <div class="kantar-tartim-row">
-                <div class="kantar-tartim-no">1. Tartım <span class="req">*</span></div>
-                <div class="kantar-tartim-fields">
-                    <span class="mk-ico" aria-hidden="true">🚚</span>
-                    <input type="text" name="tartim1" id="tartim1" inputmode="decimal"
-                           class="num kantar-tartim-input"
-                           value="<?= h(fmt_tartim($fis['tartim1'] ?? '')) ?>" placeholder="">
-                    <span class="kantar-tartim-unit">kg</span>
-                </div>
-            </div>
-            <div class="kantar-tartim-row">
-                <div class="kantar-tartim-no">2. Tartım <span class="req">*</span></div>
-                <div class="kantar-tartim-fields">
-                    <span class="mk-ico" aria-hidden="true">🚚</span>
-                    <input type="text" name="tartim2" id="tartim2" inputmode="decimal"
-                           class="num kantar-tartim-input"
-                           value="<?= h(fmt_tartim($fis['tartim2'] ?? '')) ?>" placeholder="">
-                    <span class="kantar-tartim-unit">kg</span>
-                </div>
-            </div>
-            <div class="kantar-net-satir">
-                <span class="kantar-net-lbl">Tartım Net</span>
-                <span class="kantar-net-val" id="fisNetKg">—</span>
-            </div>
-        </div>
-
-        <!-- Brüt / Dara / Net hesap özeti (otomatik güncellenir) -->
-        <div id="kantarNetHesap" class="kantar-net-hesap" style="display:none">
-            <div class="knh-row"><span>Brüt (Tartım Neti)</span><strong id="knhBrut">—</strong></div>
-            <div class="knh-row"><span>Dara (Kasa + Palet)</span><strong id="knhDara">—</strong></div>
-            <div class="knh-row knh-net-row"><span>Net KG</span><strong id="knhNet">—</strong></div>
-        </div>
-    </section>
-
-    <!-- ══════════════ FİŞ GÖRSELİ ══════════════ -->
-    <section class="card mk-card mk-card-gorsel">
-        <h2 class="mk-sec-title"><span aria-hidden="true">🖼</span> Fiş Görseli</h2>
-        <div class="kantar-img-area" id="kantarImgArea" role="button" tabindex="0">
-            <img id="kantarImgDisplay" class="kantar-img-display" alt="" style="display:none">
-            <div id="kantarImgPh" class="kantar-img-ph">
-                <span class="kantar-img-ph-ico" aria-hidden="true">⬆️</span>
-                Fotoğraf veya belge eklemek için tıklayın ya da sürükleyip bırakın
-                <small>JPG, PNG (Maks. 10 MB)</small>
-            </div>
-        </div>
-        <button type="button" id="kantarImgKaldir" class="btn btn-danger btn-sm" style="display:none">✕ Görseli Kaldır</button>
-    </section>
-</div>
 
 <input type="hidden" name="foto_data" id="kantarFotoDataInput" value="">
 
@@ -352,7 +377,11 @@ function kf_datalist(string $id, array $items): string {
         </label>
     </div>
     <div class="mk-foot-right">
+        <?php if ($is_window): ?>
+        <button type="button" class="btn btn-ghost" data-mk-win-close>✕ İptal</button>
+        <?php else: ?>
         <a href="kantar.php" class="btn btn-ghost">✕ İptal</a>
+        <?php endif; ?>
         <?php if ($is_edit): ?>
         <a href="kantar_delete.php?id=<?= $fis_id ?>"
            class="btn btn-danger"
@@ -708,6 +737,25 @@ calcNet();
 /* ─── Brüt / Dara / Net canlı hesap ─── */
 var kantarKasaDaraTotal  = 0;
 var kantarPaletDaraTotal = 0;
+function updateFiyatCalc(netKg) {
+    var tutarEl  = document.getElementById('urunToplamTutar');
+    var fiyatInp = document.getElementById('urunFiyati');
+    if (!tutarEl || !fiyatInp) return;
+    if (netKg == null) {
+        var t1   = parseNum(document.getElementById('tartim1').value);
+        var t2   = parseNum(document.getElementById('tartim2').value);
+        var brut = Math.max(0, t1 - t2);
+        var dara = kantarKasaDaraTotal + kantarPaletDaraTotal;
+        netKg    = Math.max(0, brut - dara);
+    }
+    var fiyat = parseNum(fiyatInp.value);
+    if (fiyat > 0 && netKg > 0) {
+        var toplam = netKg * fiyat;
+        tutarEl.textContent = toplam.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+    } else {
+        tutarEl.textContent = '—';
+    }
+}
 function updateLiveCalc() {
     var t1  = parseNum(document.getElementById('tartim1').value);
     var t2  = parseNum(document.getElementById('tartim2').value);
@@ -723,6 +771,12 @@ function updateLiveCalc() {
     } else {
         calcEl.style.display = 'none';
     }
+    updateFiyatCalc(Math.max(0, net));
+}
+var _urunFiyatiInp = document.getElementById('urunFiyati');
+if (_urunFiyatiInp) {
+    _urunFiyatiInp.addEventListener('input',  function() { updateFiyatCalc(); });
+    _urunFiyatiInp.addEventListener('change', function() { updateFiyatCalc(); });
 }
 
 /* ══════════════════════════════════════════
@@ -1219,6 +1273,96 @@ document.getElementById('mRaporYazdir').addEventListener('click', function() {
         document.body.classList.remove('kh-print');
     }, { once: true });
 });
+
+<?php if ($is_window): ?>
+/* ══════════════════════════════════════════
+   PENCERE MODU — AJAX KAYIT
+   ══════════════════════════════════════════ */
+(function() {
+    var form   = document.getElementById('kantarForm');
+    var errBox = document.getElementById('mkWinErrors');
+    if (!form) return;
+    var submitting = false;
+
+    function showWinErrors(list) {
+        if (!errBox) return;
+        if (!list || !list.length) {
+            errBox.style.display = 'none';
+            errBox.innerHTML = '';
+            return;
+        }
+        if (list.length === 1) {
+            errBox.innerHTML = esc(list[0]);
+        } else {
+            errBox.innerHTML = '<ul style="margin:0;padding-left:18px">' +
+                list.map(function(m) { return '<li>' + esc(m) + '</li>'; }).join('') +
+                '</ul>';
+        }
+        errBox.style.display = '';
+        var winBody = form.closest('.mk-win-body');
+        if (winBody) {
+            winBody.scrollTop = 0;
+        } else {
+            errBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (submitting) return;
+        if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
+
+        submitting = true;
+        showWinErrors([]);
+
+        var submitBtns = Array.from(form.querySelectorAll('button[type="submit"]'));
+        var origLabels = submitBtns.map(function(b) { return b.innerHTML; });
+        submitBtns.forEach(function(b) {
+            b.disabled = true;
+            b.textContent = 'Kaydediliyor…';
+        });
+
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+        .then(function(res) {
+            return res.json().catch(function() {
+                return { ok: false, errors: ['Sunucu yanıtı okunamadı (HTTP ' + res.status + ').'] };
+            });
+        })
+        .then(function(data) {
+            if (data && data.ok) {
+                window.dispatchEvent(new CustomEvent('mk-win-saved', { detail: data }));
+            } else {
+                var errs = [];
+                if (data && Array.isArray(data.errors) && data.errors.length) {
+                    errs = data.errors;
+                } else if (data && (data.error || data.message)) {
+                    errs = [data.error || data.message];
+                } else {
+                    errs = ['Kayıt sırasında bir hata oluştu.'];
+                }
+                showWinErrors(errs);
+            }
+        })
+        .catch(function() {
+            showWinErrors(['Sunucuya bağlanılamadı. Lütfen tekrar deneyin.']);
+        })
+        .finally(function() {
+            submitting = false;
+            submitBtns.forEach(function(b, i) {
+                b.disabled = false;
+                b.innerHTML = origLabels[i];
+            });
+        });
+    });
+})();
+<?php endif; ?>
 
 })();
 </script>
