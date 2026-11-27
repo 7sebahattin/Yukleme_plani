@@ -145,6 +145,7 @@ if (!function_exists('kf_datalist')) {
 <input type="hidden" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
 <?php endif; ?>
 
+<div class="mk-form-scroll">
 <?php if ($is_window): ?>
 <div class="flash flash-error" id="mkWinErrors" style="display:none"></div>
 <?php else: ?>
@@ -220,7 +221,7 @@ if (!function_exists('kf_datalist')) {
     </div>
 </section>
 
-<!-- ══════════════ AMBALAJ + TARTIM & ÜRÜN FİYATI ══════════════ -->
+<!-- ══════════════ AMBALAJ + TARTIM & ÜRÜN FİYATI + FİŞ GÖRSELİ ══════════════ -->
 <div class="mk-row-at">
     <!-- Ambalaj Bilgileri -->
     <section class="card mk-card mk-card-ambalaj">
@@ -303,40 +304,9 @@ if (!function_exists('kf_datalist')) {
             <?php endif; ?>
         </section>
     </div>
-</div>
 
-<!-- ══════════════ GRUPLANDIRMA & FİŞ GÖRSELİ ══════════════ -->
-<div class="mk-bottom-row">
-    <div class="mk-bottom-grup">
-        <div class="grup-toggle-bar">
-            <button type="button" id="grupToggleBtn" class="btn btn-ghost btn-sm">🗂 Gruplandırma Ekle</button>
-        </div>
-
-        <section class="card" id="grupSection"<?= empty($_grup_list) ? ' style="display:none"' : '' ?>>
-            <div class="card-head">
-                <h2>🗂 Gruplandırma</h2>
-                <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
-            </div>
-            <div class="card-body">
-                <p class="muted" style="margin-bottom:10px;font-size:.85rem">
-                    Her firma/grup için palet ve kasa adetini girin. Brüt, toplam palet oranına göre dağıtılır.
-                </p>
-                <div id="grupFormList"></div>
-                <div id="grupSumRow" class="grup-sum-row" style="display:none">
-                    <span class="grup-sum-lbl">Toplam</span>
-                    <div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>
-                    <span class="grup-calc-op">−</span>
-                    <div class="grup-calc-item"><span class="grup-calc-lbl">Dara</span><strong class="gc-dara grup-calc-val">—</strong></div>
-                    <span class="grup-calc-op">=</span>
-                    <div class="grup-calc-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-val grup-calc-net-val">—</strong></div>
-                </div>
-                <div id="grupSapmaRow" class="grup-sapma-row" style="display:none"></div>
-            </div>
-        </section>
-    </div>
-
-    <!-- ══════════════ FİŞ GÖRSELİ ══════════════ -->
-    <section class="card mk-card mk-card-gorsel mk-card-gorsel-compact">
+    <!-- Fiş Görseli (Ambalaj + Tartım & Ürün Fiyatı sağında) -->
+    <section class="card mk-card mk-card-gorsel mk-card-gorsel-side">
         <h2 class="mk-sec-title"><span aria-hidden="true">🖼</span> Fiş Görseli</h2>
         <div class="kantar-img-area" id="kantarImgArea" role="button" tabindex="0">
             <img id="kantarImgDisplay" class="kantar-img-display" alt="" style="display:none">
@@ -349,6 +319,36 @@ if (!function_exists('kf_datalist')) {
         <button type="button" id="kantarImgKaldir" class="btn btn-danger btn-sm" style="display:none">✕ Görseli Kaldır</button>
     </section>
 </div>
+
+<!-- ══════════════ GRUPLANDIRMA ══════════════ -->
+<div class="mk-grup-row">
+    <div class="grup-toggle-bar">
+        <button type="button" id="grupToggleBtn" class="btn btn-ghost btn-sm">🗂 Gruplandırma Ekle</button>
+    </div>
+
+    <section class="card" id="grupSection"<?= empty($_grup_list) ? ' style="display:none"' : '' ?>>
+        <div class="card-head">
+            <h2>🗂 Gruplandırma</h2>
+            <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
+        </div>
+        <div class="card-body">
+            <p class="muted" style="margin-bottom:10px;font-size:.85rem">
+                Her firma/grup için palet ve kasa adetini girin. Brüt, toplam palet oranına göre dağıtılır.
+            </p>
+            <div id="grupFormList"></div>
+            <div id="grupSumRow" class="grup-sum-row" style="display:none">
+                <span class="grup-sum-lbl">Toplam</span>
+                <div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>
+                <span class="grup-calc-op">−</span>
+                <div class="grup-calc-item"><span class="grup-calc-lbl">Dara</span><strong class="gc-dara grup-calc-val">—</strong></div>
+                <span class="grup-calc-op">=</span>
+                <div class="grup-calc-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-val grup-calc-net-val">—</strong></div>
+            </div>
+            <div id="grupSapmaRow" class="grup-sapma-row" style="display:none"></div>
+        </div>
+    </section>
+</div>
+</div><!-- /.mk-form-scroll -->
 
 <script id="mkComboData" type="application/json"><?= json_encode([
     'firma' => array_values($_all_firma), 'urun' => array_values($_urun_names),
@@ -1299,9 +1299,9 @@ document.getElementById('mRaporYazdir').addEventListener('click', function() {
                 '</ul>';
         }
         errBox.style.display = '';
-        var winBody = form.closest('.mk-win-body');
-        if (winBody) {
-            winBody.scrollTop = 0;
+        var scrollEl = form.querySelector('.mk-form-scroll') || form.closest('.mk-win-body');
+        if (scrollEl) {
+            scrollEl.scrollTop = 0;
         } else {
             errBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
