@@ -261,14 +261,18 @@
       const textEls = Array.from(node.querySelectorAll('span.selectable-text, div.selectable-text'));
       if (!textEls.length) continue;
 
-      // Alıntılanan (quoted) metni ayıklamak için asıl mesaj bloğundaki selectable-text'i al
+      // Alıntılanan (quoted) yanıt önizlemesini hariç tutarak yalnız asıl mesaj metnini al
+      const isInsideQuote = (el) =>
+        Boolean(el.closest && el.closest('[data-testid="quoted-message"], [aria-label*="Alıntı"], [aria-label*="Quoted"], div[role="button"]'));
+
       let rawText = '';
       if (copyable) {
-        const innerTexts = Array.from(copyable.querySelectorAll('span.selectable-text'));
+        const innerTexts = Array.from(copyable.querySelectorAll('span.selectable-text')).filter((el) => !isInsideQuote(el));
         rawText = innerTexts.map((el) => el.innerText || el.textContent || '').join('\n').trim();
       }
       if (!rawText) {
         rawText = textEls
+          .filter((el) => !isInsideQuote(el))
           .map((el) => el.innerText || el.textContent || '')
           .join('\n')
           .trim();

@@ -141,16 +141,33 @@ final class AIParserService
         $sistem = self::beyanBridgeSistemTalimati($baglam);
         $deneme = 0;
         $sonHata = null;
+        $jsonObjectFallback = false;
         while ($deneme <= max(0, $maxRetry)) {
             try {
-                $ham = $this->saglayici === 'groq'
-                    ? $this->groqCagir($sistem, $metin, 'yeni_beyan_bridge', self::beyanBridgeSemaOpenAi(), 2200)
-                    : $this->geminiCagir($sistem, $metin, self::beyanBridgeSemaGemini(), 2200);
+                if ($this->saglayici === 'groq') {
+                    $ham = $this->groqCagir(
+                        $sistem,
+                        $metin,
+                        'yeni_beyan_bridge',
+                        $jsonObjectFallback ? null : self::beyanBridgeSemaOpenAi(),
+                        2200,
+                        $jsonObjectFallback
+                    );
+                } else {
+                    $ham = $this->geminiCagir($sistem, $metin, self::beyanBridgeSemaGemini(), 2200);
+                }
                 $j = json_decode(self::jsonCikar($ham), true);
                 if (!is_array($j)) throw new AIParserException('AI geçerli JSON döndürmedi.', 'temp');
                 return self::sanitizeBeyanBridge($j, $baglam);
             } catch (AIParserException $e) {
                 $sonHata = $e;
+                // Groq json_schema doğrulama hatasında (HTTP 400) json_object kipine düşerek tekrar dene
+                $schemaFail = ($this->saglayici === 'groq' && $e->httpStatus === 400 && !$jsonObjectFallback
+                    && (str_contains($e->getMessage(), 'schema') || str_contains($e->getMessage(), 'json_validate')));
+                if ($schemaFail) {
+                    $jsonObjectFallback = true;
+                    continue;
+                }
                 if ($e->tur !== 'temp' || $deneme >= max(0, $maxRetry)) {
                     throw $e;
                 }
@@ -162,9 +179,30 @@ final class AIParserService
 
     // ── Sağlayıcı çağrıları ───────────────────────────────────
 
-    private function groqCagir(string $sistem, string $metin, string $semaAdi = 'yukleme_plani', ?array $sema = null, ?int $maxTokens = null): string
-    {
+    private function groqCagir(
+        string $sistem,
+        string $metin,
+        string $semaAdi = 'yukleme_plani',
+        ?array $sema = null,
+        ?int $maxTokens = null,
+        bool $useJsonObject = false
+    ): string {
         $varsayilanMax = str_contains($this->model, 'gpt-oss') ? 2000 : 1200;
+        if ($useJsonObject) {
+            $responseFormat = ['type' => 'json_object'];
+        } else {
+            // İç içe yeni_beyan_bridge şemasında Groq strict doğrulaması HTTP 400 verebildiğinden
+            // strict yalnız düz şemalarda açılır; PHP sanitizeBeyanBridge tüm alanları sıkı doğrular.
+            $useStrict = str_contains($this->model, 'gpt-oss') && $semaAdi !== 'yeni_beyan_bridge';
+            $responseFormat = [
+                'type' => 'json_schema',
+                'json_schema' => array_filter([
+                    'name'   => $semaAdi,
+                    'schema' => $sema ?? self::semaOpenAi(),
+                    'strict' => $useStrict ? true : null,
+                ], static fn($v) => $v !== null),
+            ];
+        }
         $govde = [
             'model'       => $this->model,
             'temperature' => 0,
@@ -174,15 +212,7 @@ final class AIParserService
                 ['role' => 'system', 'content' => $sistem],
                 ['role' => 'user',   'content' => self::kullaniciIcerigi($metin)],
             ],
-            'response_format' => [
-                'type' => 'json_schema',
-                'json_schema' => array_filter([
-                    'name'   => $semaAdi,
-                    'schema' => $sema ?? self::semaOpenAi(),
-                    // strict yalnız gpt-oss modellerinde garanti; diğerlerinde en iyi çaba (PHP sanitize zaten doğrular)
-                    'strict' => str_contains($this->model, 'gpt-oss') ? true : null,
-                ], static fn($v) => $v !== null),
-            ],
+            'response_format' => $responseFormat,
         ];
         if (str_contains($this->model, 'gpt-oss')) $govde['reasoning_effort'] = 'low';
         $y = $this->http(self::GROQ_URL, ['Authorization: Bearer ' . $this->apiKey], $govde);
