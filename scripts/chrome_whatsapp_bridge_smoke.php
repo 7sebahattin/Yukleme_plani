@@ -254,6 +254,25 @@ ok('parseBeyanBridge is_beyan=true döner', $parsedAi['is_beyan'] === true);
 ok('Türkçe binlik sayı doğru çevrilir (6.400 -> 6400)', $parsedAi['fields']['gross_kg'] === 6400.0 && $parsedAi['fields']['net_kg'] === 5800.0);
 ok('düşük güvenli alan uncertain_fields içine alınır', in_array('brand', $parsedAi['uncertain_fields'], true));
 
+// Groq HTTP 400 json_schema doğrulama hatasında json_object fallback testi
+$fbCalls = 0;
+$fbBodyTypes = [];
+$mockSchemaFbAi = new AIParserService('groq', 'test-key', 'openai/gpt-oss-120b', function ($u, $h, $b) use (&$fbCalls, &$fbBodyTypes, $mockPayload): array {
+    $fbCalls++;
+    $req = json_decode($b, true);
+    $fbBodyTypes[] = (string)($req['response_format']['type'] ?? '');
+    if ($fbCalls === 1) {
+        return ['status' => 400, 'body' => '{"error":{"message":"Generated JSON does not match the expected schema."}}'];
+    }
+    return [
+        'status' => 200,
+        'body' => json_encode(['choices' => [['message' => ['content' => json_encode($mockPayload, JSON_UNESCAPED_UNICODE)]]]]),
+    ];
+});
+$fbRes = $mockSchemaFbAi->parseBeyanBridge('Sentetik fallback testi', ['schema_version' => $schema['version'], 'fields' => $schema['fields']]);
+ok('Groq HTTP 400 schema hatasında json_object kipine düşüp başarıyla çözer',
+    $fbCalls === 2 && $fbBodyTypes === ['json_schema', 'json_object'] && $fbRes['is_beyan'] === true);
+
 // Çelişki ve beyan-olmayan mesaj sanitizer testleri
 $conflictSan = AIParserService::sanitizeBeyanBridge([
     'is_beyan' => true,
