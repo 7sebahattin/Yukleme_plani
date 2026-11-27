@@ -919,7 +919,18 @@ function cw_bridge_match_hks_country(?string $countryName, array $ulkeler): arra
             return ['id' => (string)$u['id'], 'ad' => (string)$u['ad']];
         }
     }
-    // Kısmi eşleşme yalnız tekilse kabul edilir (ör. "rusya" → "RUSYA FEDERASYONU")
+    // Önek eşleşmesi: "rusya" → "RUSYA FEDERASYONU" ("BEYAZ RUSYA" ile çakışmaz!)
+    $prefix = [];
+    foreach ($ulkeler as $u) {
+        $n = cw_bridge_norm_ascii_tr((string)($u['ad'] ?? ''));
+        if ($n !== '' && (str_starts_with($n, $target . ' ') || str_starts_with($n, $target . '(') || str_starts_with($n, $target . '/'))) {
+            $prefix[] = $u;
+        }
+    }
+    if (count($prefix) === 1) {
+        return ['id' => (string)$prefix[0]['id'], 'ad' => (string)$prefix[0]['ad']];
+    }
+    // Kısmi eşleşme yalnız tekilse kabul edilir (belirsizse null)
     $partial = [];
     foreach ($ulkeler as $u) {
         $n = cw_bridge_norm_ascii_tr((string)($u['ad'] ?? ''));
