@@ -302,7 +302,14 @@
         return { id: Number(r.id), name: ad };
     }
 
-    // Yazdıkça bul — yoksa "+ ekle" (parti serbest metindir, ekleme satırı yok)
+    const fold = v => String(v ?? '')
+        .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/Ş/g, 's').replace(/Ğ/g, 'g')
+        .replace(/Ü/g, 'u').replace(/Ö/g, 'o').replace(/Ç/g, 'c')
+        .replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c')
+        .toLowerCase().trim();
+
+    // İmleç gelince (focus/click) + yazdıkça bul: en son 3 işlem üstte, kalanı alfabetik; yoksa "+ ekle"
     function makeCombo(input) {
         const kind = input.dataset.cb;
         const canAdd = kind !== 'parti' && (kind !== 'mustahsil' || izin('Mus'));   // yeni müstahsil = cari_kaydet (cari Ekle yetkisi)
@@ -312,12 +319,24 @@
         let items = [], active = -1;
         const kaynak = () => L()[kind] || [];
         function close() { box.hidden = true; active = -1; }
+        function updateActive() {
+            const lis = box.querySelectorAll('li');
+            lis.forEach((li, i) => {
+                const on = i === active;
+                li.classList.toggle('pf-cb-aktif', on);
+                if (on && typeof li.scrollIntoView === 'function') li.scrollIntoView({ block: 'nearest' });
+            });
+        }
         function draw() {
             box.innerHTML = '';
             items.forEach((it, i) => {
                 const li = document.createElement('li');
                 li.setAttribute('role', 'option');
-                li.className = (it.type === 'ekle' ? 'pf-cb-ekle ' : '') + (i === active ? 'pf-cb-aktif' : '');
+                const cls = [];
+                if (it.type === 'ekle') cls.push('pf-cb-ekle');
+                if (it.sonBitis) cls.push('pf-cb-son-bitis');
+                if (i === active) cls.push('pf-cb-aktif');
+                li.className = cls.join(' ');
                 li.textContent = it.type === 'ekle' ? `+ “${it.ad}” ekle` : it.x.name;
                 li.addEventListener('pointerdown', e => { e.preventDefault(); choose(it); });
                 box.appendChild(li);
@@ -325,14 +344,31 @@
             box.hidden = !items.length;
         }
         function render() {
-            const q = trUp(input.value);
-            if (!q) { items = []; close(); return; }     // odaklanınca ya da boşken liste açılmaz; yazınca açılır
+            if (input.disabled || input.readOnly) { close(); return; }
+            const raw = input.value.trim();
+            const q = fold(raw);
             const all = kaynak();
-            const skor = x => { const n = trUp(x.name); return n === q ? 0 : n.startsWith(q) ? 1 : 2; };
-            items = (q ? all.filter(x => trUp(x.name).includes(q)).sort((a, b) => skor(a) - skor(b)) : all).slice(0, 8).map(x => ({ type: 'var', x }));
-            const tam = q && all.some(x => trUp(x.name) === q);
-            if (canAdd && q && !tam) items.push({ type: 'ekle', ad: q });
-            active = (kind !== 'parti' && q && items.length) ? 0 : -1;
+            items = [];
+            if (!q) {
+                let lastRecentIdx = -1;
+                for (let i = 0; i < all.length; i++) {
+                    if (all[i].recent) lastRecentIdx = i;
+                    items.push({ type: 'var', x: all[i] });
+                }
+                if (lastRecentIdx >= 0 && lastRecentIdx < items.length - 1) {
+                    items[lastRecentIdx].sonBitis = true;
+                }
+                active = -1;
+            } else {
+                const skor = x => { const n = fold(x.name); return n === q ? 0 : n.startsWith(q) ? 1 : 2; };
+                const matched = all.filter(x => fold(x.name).includes(q))
+                    .map((x, idx) => ({ x, idx, s: skor(x) }))
+                    .sort((a, b) => (a.s - b.s) || (a.idx - b.idx));
+                items = matched.map(m => ({ type: 'var', x: m.x }));
+                const tam = all.some(x => fold(x.name) === q);
+                if (canAdd && !tam) items.push({ type: 'ekle', ad: trUp(raw) });
+                active = -1;
+            }
             draw();
         }
         async function choose(it) {
@@ -366,6 +402,8 @@
                 if (document.activeElement === input) render();
             } catch (_) { /* ağ hatasında yerel liste/ekleme yine çalışır */ }
         }
+        input.addEventListener('focus', render);
+        input.addEventListener('click', () => { if (box.hidden) render(); });
         input.addEventListener('input', () => {
             delete input.dataset.id;
             render();
@@ -375,13 +413,16 @@
                 if (qRaw.length >= 1) mustTimer = setTimeout(() => mustahsilAra(qRaw), 180);
             }
         });
-        input.addEventListener('blur', () => setTimeout(close, 120));
+        input.addEventListener('blur', () => setTimeout(close, 150));
         input.addEventListener('keydown', async event => {
-            if (box.hidden) return;
-            if (event.key === 'ArrowDown') { event.preventDefault(); active = Math.min(items.length - 1, active + 1); draw(); }
-            else if (event.key === 'ArrowUp') { event.preventDefault(); active = Math.max(0, active - 1); draw(); }
+            if (box.hidden) {
+                if (event.key === 'ArrowDown') { event.preventDefault(); render(); }
+                return;
+            }
+            if (event.key === 'ArrowDown') { event.preventDefault(); active = Math.min(items.length - 1, active + 1); updateActive(); }
+            else if (event.key === 'ArrowUp') { event.preventDefault(); active = Math.max(0, active - 1); updateActive(); }
             else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-            else if (event.key === 'Enter' && active >= 0) { event.preventDefault(); event.stopPropagation(); if (await choose(items[active])) siradaki(input); }
+            else if (event.key === 'Enter' && active >= 0 && items[active]) { event.preventDefault(); event.stopPropagation(); if (await choose(items[active])) siradaki(input); }
         });
     }
     function alan(name) { return form.elements[name]; }
@@ -447,10 +488,166 @@
     ['brut_kg', 'parti_no'].forEach(n => alan(n).addEventListener('input', hesapla));
     ['palet', 'kasa', 'kasa_adeti'].forEach(n => alan(n).addEventListener('input', daraOtomatik));
 
+    // ── Windows-tarzı yüzen pencere yönetimi (#pfDialog / #pfWinDock) ──
+    const pfWinBar = document.getElementById('pfWinBar');
+    const pfWinDock = document.getElementById('pfWinDock');
+    const pfMaxBtn = dialog?.querySelector('[data-pf-win-max]');
+    const pfDockTitle = document.getElementById('pfWinDockTitle');
+    const PF_MIN_W = 380, PF_MIN_H = 340;
+    let pfMinimized = false, pfMaximized = false, pfHasRect = false;
+    let pfRect = { left: 0, top: 0, width: 0, height: 0 }, pfSavedRect = null;
+    if (dialog && typeof dialog.open === 'undefined') {
+        Object.defineProperty(dialog, 'open', { get() { return !dialog.hidden; } });
+    }
+    const pfIsMobile = () => window.innerWidth < 768;
+    const pfApplyRect = r => {
+        dialog.style.left = Math.round(r.left) + 'px';
+        dialog.style.top = Math.round(r.top) + 'px';
+        dialog.style.width = Math.round(r.width) + 'px';
+        dialog.style.height = Math.round(r.height) + 'px';
+    };
+    const pfClearRect = () => { dialog.style.left = dialog.style.top = dialog.style.width = dialog.style.height = ''; };
+    const pfClampRect = r => {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const minW = Math.min(PF_MIN_W, Math.max(320, vw - 16));
+        const minH = Math.min(PF_MIN_H, Math.max(240, vh - 16));
+        const w = Math.max(minW, Math.min(r.width, vw));
+        const h = Math.max(minH, Math.min(r.height, vh));
+        const left = Math.max(Math.min(0, 120 - w), Math.min(r.left, Math.max(0, vw - 120)));
+        const top = Math.max(0, Math.min(r.top, Math.max(0, vh - 44)));
+        return { left, top, width: w, height: h };
+    };
+    const pfCenterWin = () => {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const width = Math.min(960, Math.max(PF_MIN_W, vw - 40));
+        const height = Math.min(Math.round(vh * 0.86), 640);
+        pfRect = pfClampRect({ left: Math.round((vw - width) / 2), top: Math.round((vh - height) / 2), width, height });
+        pfHasRect = true;
+        pfApplyRect(pfRect);
+    };
+    const pfSyncMaxIcon = () => { if (pfMaxBtn) pfMaxBtn.textContent = pfMaximized ? '❐' : '□'; };
+    function pfShowWin() {
+        pfMinimized = false;
+        if (pfWinDock) pfWinDock.hidden = true;
+        dialog.hidden = false;
+        if (pfIsMobile()) { pfClearRect(); }
+        else if (pfMaximized) { dialog.classList.add('is-max'); pfClearRect(); }
+        else { dialog.classList.remove('is-max'); if (!pfHasRect) pfCenterWin(); else { pfRect = pfClampRect(pfRect); pfApplyRect(pfRect); } }
+        pfSyncMaxIcon();
+    }
+    function closePfWin() {
+        dialog.hidden = true;
+        pfMinimized = false;
+        if (pfWinDock) pfWinDock.hidden = true;
+        if (mod === 'duzelt') { mod = 'ekle'; duzenlenen = null; formSifirla(); }
+    }
+    function pfMinimizeWin() {
+        if (!dialog.open) return;
+        pfMinimized = true;
+        dialog.hidden = true;
+        if (pfWinDock) pfWinDock.hidden = false;
+    }
+    function pfToggleMax() {
+        if (pfIsMobile()) return;
+        if (pfMaximized) {
+            pfMaximized = false;
+            dialog.classList.remove('is-max');
+            pfRect = pfClampRect(pfSavedRect || pfRect);
+            pfApplyRect(pfRect);
+        } else {
+            pfSavedRect = { ...pfRect };
+            pfMaximized = true;
+            dialog.classList.add('is-max');
+            pfClearRect();
+        }
+        pfSyncMaxIcon();
+    }
+    if (dialog) {
+        dialog.close = closePfWin;
+        dialog.querySelector('[data-pf-win-min]')?.addEventListener('click', pfMinimizeWin);
+        pfMaxBtn?.addEventListener('click', pfToggleMax);
+        pfWinDock?.querySelector('[data-pf-win-restore]')?.addEventListener('click', pfShowWin);
+        pfWinDock?.querySelector('[data-pf-win-close]')?.addEventListener('click', closePfWin);
+        pfWinBar?.addEventListener('dblclick', e => { if (!e.target.closest('button')) pfToggleMax(); });
+        // Başlık çubuğundan sürükleme
+        pfWinBar?.addEventListener('pointerdown', e => {
+            if (e.button !== 0 || pfIsMobile() || e.target.closest('button')) return;
+            e.preventDefault();
+            if (pfMaximized) {
+                const ratio = e.clientX / Math.max(1, window.innerWidth);
+                const r = pfSavedRect || { width: Math.min(960, window.innerWidth - 40), height: Math.min(Math.round(window.innerHeight * 0.86), 640) };
+                pfMaximized = false;
+                dialog.classList.remove('is-max');
+                pfRect = pfClampRect({ left: e.clientX - r.width * ratio, top: Math.max(0, e.clientY - 18), width: r.width, height: r.height });
+                pfApplyRect(pfRect);
+                pfSyncMaxIcon();
+            }
+            const sx = e.clientX, sy = e.clientY, orig = { ...pfRect };
+            document.body.classList.add('mk-win-dragging');
+            const onMove = ev => {
+                pfRect = pfClampRect({ left: orig.left + (ev.clientX - sx), top: orig.top + (ev.clientY - sy), width: orig.width, height: orig.height });
+                pfApplyRect(pfRect);
+            };
+            const onUp = () => {
+                document.body.classList.remove('mk-win-dragging');
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+            };
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+        });
+        // 8 yönlü boyutlandırma
+        dialog.querySelectorAll('.mk-win-rh').forEach(rh => {
+            rh.addEventListener('pointerdown', e => {
+                if (e.button !== 0 || pfIsMobile() || pfMaximized) return;
+                e.preventDefault();
+                const dir = rh.dataset.dir || '';
+                const sx = e.clientX, sy = e.clientY, orig = { ...pfRect };
+                document.body.classList.add('mk-win-dragging');
+                const onMove = ev => {
+                    const dx = ev.clientX - sx, dy = ev.clientY - sy;
+                    let { left, top, width, height } = orig;
+                    if (dir.includes('e')) width = orig.width + dx;
+                    if (dir.includes('s')) height = orig.height + dy;
+                    if (dir.includes('w')) {
+                        const nw = Math.max(PF_MIN_W, orig.width - dx);
+                        left = orig.left + (orig.width - nw);
+                        width = nw;
+                    }
+                    if (dir.includes('n')) {
+                        const nh = Math.max(PF_MIN_H, orig.height - dy);
+                        top = Math.max(0, orig.top + (orig.height - nh));
+                        height = orig.top + orig.height - top;
+                    }
+                    pfRect = pfClampRect({ left, top, width, height });
+                    pfApplyRect(pfRect);
+                };
+                const onUp = () => {
+                    document.body.classList.remove('mk-win-dragging');
+                    window.removeEventListener('pointermove', onMove);
+                    window.removeEventListener('pointerup', onUp);
+                };
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+            });
+        });
+        window.addEventListener('resize', () => {
+            if (!dialog.open) return;
+            if (pfIsMobile()) pfClearRect();
+            else if (!pfMaximized) { pfRect = pfClampRect(pfRect); pfApplyRect(pfRect); }
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && dialog.open && !dialog.querySelector('.pf-cb-list:not([hidden])')) {
+                e.preventDefault();
+                closePfWin();
+            }
+        });
+    }
+
     let mod = 'ekle';          // 'ekle' | 'duzelt'
     let duzenlenen = null;     // Düzelt modunda satır (tr)
     let orijinal = {};         // Düzelt: değişmemiş müşteri/ürün kayıtlı tanım olmasa da kabul edilir (eski serbest metin kayıtlar)
-    const baslikEl = dialog.querySelector('.pf-dialog-head h2');
+    const baslikEl = document.getElementById('pfWinTitle');
     function bugun() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
     function formSifirla() {
         form.reset();
@@ -483,7 +680,8 @@
         hesapla();
     }
     function openDialog(istenen) {
-        if (!dialog || dialog.open) return;
+        if (!dialog) return;
+        if (dialog.open) return;
         if (!izin(istenen === 'duzelt' ? 'Duzelt' : 'Ekle')) { setStatus('Bu işlem için yetkiniz yok.'); return; }
         mod = istenen === 'duzelt' ? 'duzelt' : 'ekle';
         if (mod === 'duzelt') {
@@ -492,26 +690,27 @@
             duzenlenen = tr;
             formDoldur(tr);
             if (baslikEl) baslikEl.textContent = 'Palet Fişi Düzelt';
-            saveBtn.innerHTML = 'Güncelle <span class="pf-shortcut">F10</span>';
+            if (pfDockTitle) pfDockTitle.textContent = 'Palet Fişi Düzelt';
+            saveBtn.innerHTML = '✓ Güncelle <span class="pf-shortcut">F10</span>';
         } else {
             duzenlenen = null;
             if (baslikEl) baslikEl.textContent = 'Palet Fişi Ekle';
-            saveBtn.innerHTML = 'Kaydet <span class="pf-shortcut">F10</span>';
+            if (pfDockTitle) pfDockTitle.textContent = 'Palet Fişi Ekle';
+            saveBtn.innerHTML = '✓ Kaydet <span class="pf-shortcut">F10</span>';
             alan('belge_no').value = String(nextBelge);
         }
         mesaj('');
-        dialog.showModal();
+        pfShowWin();
         const hazir = alan('parti_no').value && alan('firma').value;
         const hedef = (mod === 'duzelt' || hazir) ? alan('brut_kg') : alan('parti_no');
         hedef.focus(); if (hedef.select) hedef.select();
     }
-    dialog.addEventListener('close', () => { if (mod === 'duzelt') { mod = 'ekle'; duzenlenen = null; formSifirla(); } });
     document.getElementById('pfAdd')?.addEventListener('click', () => openDialog('ekle'));
     document.addEventListener('keydown', event => {
         if (event.key === 'F2' && !dialog.open && !event.target.matches('input,textarea,select')) { event.preventDefault(); openDialog('ekle'); }
     });
-    document.getElementById('pfClose').addEventListener('click', () => dialog.close());
-    document.getElementById('pfCancel').addEventListener('click', () => dialog.close());
+    document.getElementById('pfClose').addEventListener('click', closePfWin);
+    document.getElementById('pfCancel').addEventListener('click', closePfWin);
 
     // Listede yok mu? Tam eşleşme varsa id'yi bul; yoksa hata (kullanıcı "+ ekle" ile tanımlasın).
     function coz(name, zorunlu, etiket) {
