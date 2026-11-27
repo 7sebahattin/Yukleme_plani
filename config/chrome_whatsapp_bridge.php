@@ -1483,3 +1483,103 @@ function cw_bridge_create_beyan_draft(
         'view_url'       => 'beyan_view.php?id=' . $newId,
     ];
 }
+
+// ── Chrome Eklentisi Tek-Tık ZIP Paketi (saf PHP, ext-zip gerektirmez) ──
+
+/**
+ * chrome-extension/asya-whatsapp-bridge klasörünü tek-tık indirilebilir
+ * asya-whatsapp-bridge.zip (PKZIP store biçimi) olarak bellek içinde üretir.
+ */
+function cw_bridge_extension_zip(string $extDir): string
+{
+    $allowedFiles = [
+        'manifest.json',
+        'service-worker.js',
+        'content.js',
+        'popup.html',
+        'popup.css',
+        'popup.js',
+        'README.md',
+    ];
+    $dir = rtrim($extDir, '/\\');
+    $entries = [];
+    foreach ($allowedFiles as $name) {
+        $path = $dir . '/' . $name;
+        if (!is_file($path)) {
+            throw new RuntimeException('Chrome eklenti dosyası bulunamadı: ' . $name);
+        }
+        $data = file_get_contents($path);
+        if ($data === false) {
+            throw new RuntimeException('Chrome eklenti dosyası okunamadı: ' . $name);
+        }
+        $entries['asya-whatsapp-bridge/' . $name] = $data;
+    }
+
+    $localData = '';
+    $centralDir = '';
+    $offset = 0;
+    $count = 0;
+
+    foreach ($entries as $zipName => $data) {
+        $crc  = crc32($data);
+        $size = strlen($data);
+        $nameLen = strlen($zipName);
+
+        // Local file header (30 bytes + filename + data)
+        $localHeader = pack(
+            'VvvvvvVVVvv',
+            0x04034b50, // signature
+            20,         // version needed
+            0x0800,     // UTF-8 flag
+            0,          // method: store
+            0,          // mod time
+            0,          // mod date
+            $crc,
+            $size,
+            $size,
+            $nameLen,
+            0           // extra len
+        );
+        $localData .= $localHeader . $zipName . $data;
+
+        // Central directory header (46 bytes + filename)
+        $centralDir .= pack(
+            'VvvvvvvVVVvvvvvVV',
+            0x02014b50, // signature
+            20,         // version made by
+            20,         // version needed
+            0x0800,     // UTF-8 flag
+            0,          // method: store
+            0,          // mod time
+            0,          // mod date
+            $crc,
+            $size,
+            $size,
+            $nameLen,
+            0,          // extra len
+            0,          // comment len
+            0,          // disk start
+            0,          // internal attrs
+            0,          // external attrs
+            $offset
+        ) . $zipName;
+
+        $offset += strlen($localHeader) + $nameLen + $size;
+        $count++;
+    }
+
+    $eocd = pack(
+        'VvvvvVVv',
+        0x06054b50, // EOCD signature
+        0,          // disk number
+        0,          // disk with CD
+        $count,
+        $count,
+        strlen($centralDir),
+        $offset,
+        0           // comment len
+    );
+
+    return $localData . $centralDir . $eocd;
+}
+

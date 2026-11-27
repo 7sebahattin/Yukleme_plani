@@ -18,6 +18,17 @@ if (!can_beyan('read') && !can_beyan('create')) {
     forbidden();
 }
 
+// Chrome eklentisi tek-tık ZIP indirme
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['indir'] ?? '') === 'chrome_eklenti') {
+    $zip = cw_bridge_extension_zip(__DIR__ . '/chrome-extension/asya-whatsapp-bridge');
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="asya-whatsapp-bridge.zip"');
+    header('Content-Length: ' . strlen($zip));
+    header('Cache-Control: no-store');
+    echo $zip;
+    exit;
+}
+
 $pdo = db();
 cw_bridge_ensure_schema($pdo);
 $userId = (int)($auth_user['id'] ?? 0);
@@ -155,6 +166,7 @@ render_flash();
             <p class="muted">WhatsApp Web Chrome eklentisi ile beyan mesajlarını yapay zekâ eşleştirmesiyle inceleyip Yeni Beyan taslağı oluşturun.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="whatsapp_beyan_aktar.php?indir=chrome_eklenti" class="btn btn-primary">📦 Chrome Eklentisini İndir (.zip)</a>
             <a href="beyanlar.php" class="btn btn-ghost">Beyanlar</a>
             <?php if ($canCreate): ?><a href="beyan_create.php" class="btn btn-secondary">+ Manuel Yeni Beyan</a><?php endif; ?>
         </div>
@@ -306,15 +318,20 @@ render_flash();
 
     <div class="cwb-grid">
         <div class="cwb-card">
-            <h2>1. Chrome Eklentisi Eşleştirme</h2>
-            <p class="muted" style="font-size:13px;margin:0 0 10px;">
-                Tek kullanımlık, 10 dakika geçerli eşleştirme kodu üretin ve Chrome eklentisine yapıştırın. Token sunucuda hash olarak saklanır ve istediğiniz zaman iptal edilebilir.
-            </p>
-            <form method="post" action="whatsapp_beyan_aktar.php">
-                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <input type="hidden" name="op" value="create_pairing">
-                <button type="submit" class="btn btn-primary">🔑 Yeni Eşleştirme Kodu Üret</button>
-            </form>
+            <h2>1. Chrome Eklentisi Kurulum ve Eşleştirme</h2>
+            <ol class="muted" style="font-size:12.5px;margin:0 0 12px;padding-left:18px;line-height:1.6;">
+                <li>Aşağıdan <strong>Chrome Eklentisini İndir (.zip)</strong> deyip ZIP dosyasını bir klasöre çıkarın.</li>
+                <li>Chrome'da <code>chrome://extensions</code> açın → sağ üstten <strong>Geliştirici modu</strong>nu açın → <strong>Paketlenmemiş öğe yükle</strong> ile çıkardığınız <code>asya-whatsapp-bridge</code> klasörünü seçin.</li>
+                <li>Aşağıdan tek kullanımlık kod üretip eklentiye yapıştırın ve <strong>Bağlan</strong>'a basın.</li>
+            </ol>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <a href="whatsapp_beyan_aktar.php?indir=chrome_eklenti" class="btn btn-secondary">📦 Chrome Eklentisini İndir (.zip)</a>
+                <form method="post" action="whatsapp_beyan_aktar.php" style="display:inline;">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="op" value="create_pairing">
+                    <button type="submit" class="btn btn-primary">🔑 Yeni Eşleştirme Kodu Üret</button>
+                </form>
+            </div>
 
             <?php if ($newPairing !== null): ?>
             <div class="cwb-code-box" id="cwbPairingResult">
