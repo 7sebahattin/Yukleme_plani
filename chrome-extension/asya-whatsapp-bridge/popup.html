@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Asya WhatsApp Web Bridge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot" id="connDot" aria-hidden="true"></span>
+        <div>
+          <h1>Asya WhatsApp Bridge</h1>
+          <div class="sub" id="connSummary">Bağlantı kontrol ediliyor…</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <a href="https://asya.scai.tr/whatsapp_beyan_aktar.php" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-xs">Asya Panel</a>
+        <button type="button" id="btnDisconnect" class="btn btn-ghost btn-xs" hidden>Çıkış</button>
+      </div>
+    </header>
+
+    <div id="globalAlert" class="alert" role="alert" hidden></div>
+
+    <!-- 1. Eşleştirme Ekranı -->
+    <section id="viewPair" class="card" hidden>
+      <h2>Asya Hesabıyla Eşleştir</h2>
+      <p class="muted">
+        Asya uygulamasında <strong>WhatsApp Beyan Aktar</strong> ekranından tek kullanımlık eşleştirme kodu üretip aşağıya girin.
+      </p>
+      <div class="form-row">
+        <label for="pairCode">Eşleştirme Kodu</label>
+        <input type="text" id="pairCode" placeholder="ASYA-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="form-row">
+        <label for="pairDevice">Cihaz Adı (isteğe bağlı)</label>
+        <input type="text" id="pairDevice" placeholder="Ofis Chrome" value="Chrome Eklentisi" maxlength="80">
+      </div>
+      <div class="actions-row">
+        <button type="button" id="btnPair" class="btn btn-primary">Bağlan</button>
+        <a href="https://asya.scai.tr/whatsapp_beyan_aktar.php" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Kod Al</a>
+      </div>
+    </section>
+
+    <!-- 2. Ana Tarama Ekranı -->
+    <section id="viewScan" hidden>
+      <div class="scan-bar card">
+        <div class="scan-controls">
+          <div class="limit-wrap">
+            <label for="scanLimit">Mesaj limiti</label>
+            <select id="scanLimit">
+              <option value="50" selected>Son 50 mesaj</option>
+              <option value="100">Son 100 mesaj</option>
+              <option value="200">Son 200 mesaj</option>
+            </select>
+          </div>
+          <button type="button" id="btnScan" class="btn btn-primary btn-scan">BU GRUBU TARA</button>
+        </div>
+        <p class="hint">
+          Yalnızca açık WhatsApp Web sohbetinde ekranda yüklenmiş mesajlar okunur. Daha eski mesajlar için WhatsApp'ta yukarı kaydırıp tekrar tarayın.
+        </p>
+      </div>
+
+      <div id="chatMeta" class="chat-meta" hidden></div>
+
+      <div id="listToolbar" class="list-toolbar" hidden>
+        <span id="candidateSummary" class="muted"></span>
+        <label class="toggle-all">
+          <input type="checkbox" id="chkShowAll">
+          Tüm metin mesajlarını göster
+        </label>
+      </div>
+
+      <div id="messageList" class="message-list"></div>
+    </section>
+
+    <!-- 3. İki Bölümlü İnceleme ve Onay Ekranı -->
+    <section id="viewReview" hidden>
+      <div class="review-header">
+        <div>
+          <h2>Beyan Taslağı İnceleme</h2>
+          <div id="reviewSub" class="sub"></div>
+        </div>
+        <div class="review-header-actions">
+          <a id="linkOpenInAsya" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-xs" hidden>Asya'da Aç</a>
+          <button type="button" id="btnBackToList" class="btn btn-ghost btn-xs">← Listeye Dön</button>
+        </div>
+      </div>
+
+      <div id="reviewAlerts"></div>
+
+      <div class="review-split">
+        <!-- A. WhatsApp Kaynak Mesajı -->
+        <div class="card review-source">
+          <h3>A. WhatsApp Kaynak Mesajı</h3>
+          <div id="reviewSourceMeta" class="source-meta"></div>
+          <pre id="reviewSourceText" class="raw-box"></pre>
+          <div id="reviewAiExplain" class="ai-explain" hidden></div>
+        </div>
+
+        <!-- B. Beyan Bilgileri (Gerçek Yeni Beyan Formu) -->
+        <div class="card review-form-card">
+          <h3>B. Beyan Bilgileri</h3>
+          <form id="reviewForm">
+            <div id="reviewFieldsContainer"></div>
+            <div class="review-footer">
+              <div class="muted small">
+                Onayınız sonrası mevcut Asya Yeni Beyan altyapısında taslak oluşturulur; resmî HKS bildirimi gönderilmez.
+              </div>
+              <button type="submit" id="btnApproveDraft" class="btn btn-primary">
+                Onayla ve Taslak Oluştur
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
