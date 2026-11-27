@@ -441,5 +441,26 @@ foreach (['manifest.json', 'service-worker.js', 'content.js', 'popup.html', 'pop
     ok("eklenti ZIP dosyasını içerir: {$zf}", str_contains($extZip, 'asya-whatsapp-bridge/' . $zf));
 }
 
+// ── 8. Şehir/Ülke Çıkarımı + Deterministik Alan Destekleri ─
+$fbVal = cw_bridge_validate_and_match_ai($pdo, [
+    'fields' => [
+        'party_no' => '61-272',
+        'buyer_name' => 'TUNCAY MOSKOVA',
+        'sender_company_name' => 'TUNCAY MOSKOVA', // alıcı yanlışlıkla göndericiye yazıldıysa temizlenmeli
+        'transport_type' => 'DENİZYOLU',
+        'line_type' => null,
+        'crate_type' => 'TAHTA',
+        'crate_count' => null,
+        'country_name' => null,
+    ],
+    'uncertain_fields' => ['line_type', 'crate_count', 'hks_ulke_id'],
+    'conflicts' => [],
+    'missing_required' => [],
+], $schema, "DENİZYOLU(YEŞİLHAT)\nTAHTA KASA: 4.680\nALICI: TUNCAY MOSKOVA");
+ok('DENİZYOLU(YEŞİLHAT) satırından line_type YEŞİL HAT çözülür', $fbVal['form_fields']['line_type'] === 'YEŞİL HAT');
+ok('TAHTA KASA: 4.680 satırından crate_count 4680 çözülür', (int)$fbVal['form_fields']['crate_count'] === 4680);
+ok('MOSKOVA ifadesinden HKS ülkesi RUSYA (643) eşleştirilir', $fbVal['form_fields']['hks_ulke_id'] === '643');
+ok('alıcı firma yanlışlıkla sender_company_name olduysa temizlenir', $fbVal['form_fields']['sender_company_name'] === '');
+
 echo "chrome_whatsapp_bridge_smoke.php: {$tests} test, {$fails} başarısız\n";
 exit($fails === 0 ? 0 : 1);

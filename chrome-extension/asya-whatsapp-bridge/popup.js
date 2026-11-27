@@ -383,8 +383,7 @@ async function handleParseItem(item, buttonEl = null, chatOverride = null) {
     }
   };
 
-  el.btnApproveDraft.disabled = false;
-  el.btnApproveDraft.textContent = 'Onayla ve Taslak Oluştur';
+  resetApproveButton();
   renderReviewScreen();
   setView('review');
 }
@@ -596,13 +595,22 @@ async function handleApproveDraft(evt) {
   const declId = Number(res.declaration_id);
   const viewUrl = `${state.baseUrl}/${res.view_url || ('beyan_view.php?id=' + declId)}`;
   el.reviewAlerts.innerHTML = `
-    <div class="alert ok">
+    <div class="alert ok" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
       <strong>Beyan taslağı #${declId} oluşturuldu!</strong>
-      <a href="${escapeHtml(viewUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-xs" style="margin-left:8px;">Asya'da Aç</a>
+      <button type="button" class="btn btn-primary btn-xs" data-open-asya="${escapeHtml(viewUrl)}">📄 Beyana Git (#${declId})</button>
     </div>
   `;
-  el.btnApproveDraft.disabled = true;
-  el.btnApproveDraft.textContent = `Taslak Oluşturuldu (#${declId})`;
+  const openBtnTop = el.reviewAlerts.querySelector('[data-open-asya]');
+  if (openBtnTop) {
+    openBtnTop.addEventListener('click', () => sendBg({ type: 'OPEN_IN_ASYA_APP', url: viewUrl }));
+  }
+
+  // Alt kısımdaki onay butonunu doğrudan "Beyana Git" butonuna dönüştür (yukarı kaydırmaya gerek kalmasın)
+  el.btnApproveDraft.disabled = false;
+  el.btnApproveDraft.type = 'button';
+  el.btnApproveDraft.textContent = `📄 Beyana Git (#${declId})`;
+  el.btnApproveDraft.dataset.openAsyaUrl = viewUrl;
+  el.btnApproveDraft.onclick = () => sendBg({ type: 'OPEN_IN_ASYA_APP', url: viewUrl });
 
   if (state.activeReview.client_id) {
     state.duplicates[state.activeReview.client_id] = {
@@ -616,14 +624,21 @@ async function handleApproveDraft(evt) {
   }
 }
 
+function resetApproveButton() {
+  el.btnApproveDraft.disabled = false;
+  el.btnApproveDraft.type = 'submit';
+  el.btnApproveDraft.textContent = 'Onayla ve Taslak Oluştur';
+  delete el.btnApproveDraft.dataset.openAsyaUrl;
+  el.btnApproveDraft.onclick = null;
+}
+
 el.btnPair.addEventListener('click', handlePair);
 el.btnDisconnect.addEventListener('click', handleDisconnect);
 el.btnScan.addEventListener('click', () => handleScan(false));
 el.chkShowAll.addEventListener('change', renderScanResults);
 el.btnBackToList.addEventListener('click', () => {
   showAlert('', '');
-  el.btnApproveDraft.disabled = false;
-  el.btnApproveDraft.textContent = 'Onayla ve Taslak Oluştur';
+  resetApproveButton();
   setView('scan');
 });
 el.reviewForm.addEventListener('submit', handleApproveDraft);
