@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Asya WhatsApp Web Bridge",
+  "version": "1.0.0",
+  "description": "WhatsApp Web gruplarındaki beyan mesajlarını yapay zekâ ile mevcut Asya Yeni Beyan formuna eşleştirir ve kullanıcı onayıyla taslak oluşturur.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "https://asya.scai.tr/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Asya WhatsApp Web Bridge",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
