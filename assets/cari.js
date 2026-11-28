@@ -1095,7 +1095,11 @@
         var d = donemAdi(c);
         $$('.cari-cip', c.parentNode).forEach(function (x) { x.setAttribute('aria-pressed', String(x === c)); });
         var oz = $('.cari-ozel-tarih', form); if (oz) oz.hidden = d !== 'ozel';
-        if (d === 'ozel') { var bi = $('input[name="bas"]', form); if (bi) bi.focus(); return; }
+        if (d === 'ozel') {
+            /* Önceki çipin (ör. "Bu yıl") yanıtı hâlâ yoldaysa geç gelince paneli yeniden çizer ve tarih alanlarını gizlerdi → bekleyen yüklemeyi geçersiz kıl. */
+            ekstreSeq++; yukleniyor(document.getElementById('crPanelEkstre'), false);
+            var bi = $('input[name="bas"]', form); if (bi) bi.focus(); return;
+        }
         var t = donemTarih(d); if (!t) return;
         if (form.elements.bas) form.elements.bas.value = t[0]; if (form.elements.bit) form.elements.bit.value = t[1];
         ekstreYukle(form);
