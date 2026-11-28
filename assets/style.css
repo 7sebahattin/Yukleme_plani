@@ -7629,6 +7629,214 @@ a.pf-tb { text-decoration: none; display: inline-flex; align-items: center; }
 .pf-tb[hidden] { display: none; }
 html[data-theme="dark"] #kfPage .pf-tb:not(.pf-tb-ekle) { background: #1d2735; color: #e7ecf4; border-color: #34445a; }
 
+/* ═══ Yükleme Planları listesi (records.php, assets/records-liste.js; görünüm palet-fisleri.css ile ortak) ═══ */
+.rec-btn-yeni,
+#recPage .rec-btn-yeni,
+a.pf-tb.rec-btn-yeni {
+    background: #16a34a;
+    border-color: #15803d;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+}
+.rec-btn-yeni:hover,
+#recPage .rec-btn-yeni:hover,
+a.pf-tb.rec-btn-yeni:hover {
+    background: #15803d;
+    border-color: #166534;
+    color: #fff;
+}
+.rec-btn-yeni:active,
+#recPage .rec-btn-yeni:active,
+a.pf-tb.rec-btn-yeni:active {
+    background: #166534;
+    border-color: #14532d;
+    color: #fff;
+}
+html[data-theme="dark"] #recPage .pf-tb:not(.pf-tb-ekle):not(.rec-btn-yeni) {
+    background: #1d2735;
+    color: #e7ecf4;
+    border-color: #34445a;
+}
+html[data-theme="dark"] #recPage .pf-tb:not(.pf-tb-ekle):not(.rec-btn-yeni):hover {
+    background: #253447;
+    border-color: #4b6584;
+    color: #fff;
+}
+
+.rec-table tbody tr.rec-main-row,
+.rec-table tbody tr.rec-main-row > td { cursor: pointer; }
+.rec-table tbody tr.rec-main-row:focus { outline: 2px solid #0877d1; outline-offset: -2px; }
+.rec-table tbody tr.rec-main-row.rec-row-expanded td {
+    background: color-mix(in srgb, #0877d1 12%, var(--pf-surface));
+}
+.rec-table thead tr#recHead th:not(.rec-exp-th) { cursor: grab; user-select: none; }
+.rec-table thead tr#recHead th.rec-exp-th { cursor: default; text-align: center; padding: 5px 4px; }
+.rec-table th.rec-sirali-art::after { content: " ▲"; font-size: .7em; }
+.rec-table th.rec-sirali-azal::after { content: " ▼"; font-size: .7em; }
+.rec-table thead tr.rec-filtre-satir th {
+    top: 0;
+    z-index: 2;
+    padding: 3px 4px;
+    cursor: default;
+    font-weight: 400;
+    background: var(--pf-bg);
+    border-bottom: 2px solid var(--pf-head);
+}
+.rec-filtre-satir input[type="search"] {
+    width: 100%;
+    min-height: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--pf-border);
+    border-radius: 4px;
+    background: var(--pf-surface);
+    color: var(--pf-text);
+    box-sizing: border-box;
+}
+.rec-filtre-satir input[type="search"]::placeholder { color: var(--pf-muted); opacity: 1; }
+@media (min-width: 768px) { .rec-filtre-satir input[type="search"] { font-size: .8rem; } }
+
+.rec-table td.rec-exp-td {
+    text-align: center;
+    padding: 0 4px !important;
+    cursor: pointer;
+    width: 40px;
+}
+.rec-exp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pf-muted);
+    font-size: .95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform .16s ease, background .14s ease, color .14s ease;
+}
+.rec-exp-btn:hover {
+    background: var(--pf-hover-bg);
+    color: var(--pf-hover-text);
+}
+.rec-exp-btn:focus-visible {
+    outline: 2px solid #0877d1;
+    outline-offset: 1px;
+}
+.rec-exp-btn.is-open {
+    transform: rotate(90deg);
+    color: var(--pf-link);
+    background: var(--pf-hover-bg);
+}
+
+.rec-table tr.rec-detail-row[hidden] { display: none; }
+.rec-table tr.rec-detail-row > td {
+    white-space: normal !important;
+    height: auto !important;
+    cursor: default !important;
+    background: var(--pf-bg) !important;
+    padding: 10px 14px !important;
+    border-bottom: 2px solid var(--pf-border);
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+.rec-detail-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px 22px;
+    align-items: flex-start;
+}
+.rec-detail-item {
+    display: flex;
+    flex-direction: column;
+    min-width: 90px;
+}
+.rdi-label {
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: var(--pf-muted, var(--muted));
+    font-weight: 700;
+}
+.rdi-value {
+    font-size: .85rem;
+    color: var(--pf-text, var(--text));
+    margin-top: 1px;
+}
+.rec-detail-empty {
+    color: var(--pf-muted, var(--muted));
+    font-style: italic;
+    font-size: .85rem;
+}
+.rec-detail-stok {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 28px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--pf-border, var(--border));
+}
+.rds-block { min-width: 200px; }
+.rds-block-em { flex: 1 1 220px; }
+.rds-title {
+    font-size: .66rem;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: var(--pf-muted, var(--muted));
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+.rds-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    font-size: .84rem;
+    color: var(--pf-text, var(--text));
+    padding: 2px 0;
+    max-width: 280px;
+}
+.rds-row.rds-total {
+    border-top: 1px solid var(--pf-border, var(--border));
+    margin-top: 3px;
+    padding-top: 4px;
+    font-weight: 700;
+}
+.rds-em-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+.rds-em-item {
+    display: flex;
+    flex-direction: column;
+    background: var(--pf-surface, var(--card));
+    border: 1px solid var(--pf-border, var(--border));
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 110px;
+}
+.rds-em-name {
+    font-size: .82rem;
+    color: var(--pf-text, var(--text));
+    font-weight: 600;
+}
+.rds-em-meta {
+    font-size: .72rem;
+    color: var(--pf-muted, var(--muted));
+    margin-top: 1px;
+}
+
+#recPage .rec-bottom { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 767px) {
+    #recPage .rec-bottom { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+.rec-table .td-son-duz { font-size: .7rem; color: var(--pf-muted); margin-left: 5px; }
+.rec-table .rec-cesit-sub { font-size: .74rem; color: var(--pf-muted); margin-left: 4px; }
+
 /* Mal Kabul formu: ek alanlar (şoför / malın sahibi / müstahsil / bahçe) */
 .mk-kal-uyari { margin: 0 0 10px; font-size: .85rem; }
 .mk-form input:disabled { opacity: .55; cursor: not-allowed; }

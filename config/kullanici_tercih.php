@@ -68,6 +68,9 @@ function kt_dogrula(string $anahtar, mixed $deger): ?array
     if ($anahtar === 'kantar.tablo') {
         return kt_tablo_temizle($deger, ['fis_no', 'tarih', 'plaka', 'sofor', 'firma', 'malin', 'mal_sahibi', 'mustahsil', 'bahce', 'geldigi', 'depo', 'palet', 'palet_cinsi', 'kasa', 'kasa_cinsi', 't1', 't2', 'brut', 'dara', 'net', 'aciklama', 'islem', 'islem_yapan', 'islem_zaman']);
     }
+    if ($anahtar === 'records.tablo') {
+        return kt_tablo_temizle($deger, ['tarih', 'urun_sahibi', 'firma', 'parti_no', 'alici', 'bolge', 'urun', 'casus_no', 'palet', 'kasa', 'brut', 'dara', 'net']);
+    }
     return null;
 }
 
