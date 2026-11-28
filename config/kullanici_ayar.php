@@ -142,5 +142,6 @@ function ka_tablo_tercihleri(): array
     return [
         'palet_fisleri.tablo' => ['Palet Fişleri', 'asya.palet-fisleri.tablo.v2'],
         'kantar.tablo'        => ['Mal Kabul (Kantar)', 'kantar.tablo.v1'],
+        'records.tablo'       => ['Yükleme Planları', 'asya.records.tablo.v1'],
     ];
 }
