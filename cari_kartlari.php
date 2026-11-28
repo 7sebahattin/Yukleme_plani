@@ -52,7 +52,7 @@ if ($parca !== '') {
 $tip = (string)($_GET['tip'] ?? '');
 $F = [
     'q' => mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100),
-    'tip' => isset(cari_tipler()[$tip]) ? $tip : '',
+    'tip' => isset(cari_tipler($pdo, true)[$tip]) ? $tip : '',
     'grup' => mb_substr(trim((string)($_GET['grup'] ?? '')), 0, 100),
     'bakiye' => in_array((string)($_GET['bakiye'] ?? ''), ['borclu', 'alacakli', 'sifir'], true) ? (string)$_GET['bakiye'] : '',
     'durum' => in_array((string)($_GET['durum'] ?? ''), ['aktif', 'pasif'], true) ? (string)$_GET['durum'] : '',
@@ -104,7 +104,7 @@ render_flash();
   <div class="cari-menu-ortu" hidden></div>
   <?= $menuler ?>
   <?= cari_modal_hareket(['geri' => $kart !== null ? 'cari_kartlari.php?id=' . (int)$kart['id'] : 'cari_kartlari.php', 'tur' => 'tahsilat', 'kilitli' => $kilitli, 'odeme' => $odeme]) ?>
-  <?= cari_modal_kart(['geri' => 'cari_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => cari_kod_oner($pdo)]) ?>
+  <?= cari_modal_kart(['geri' => 'cari_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => cari_kod_oner($pdo), 'ek' => cari_ek_hazir($pdo), 'tipler' => cari_tipler($pdo, true), 'aktif_tipler' => cari_tipler($pdo)]) ?>
   <?= cari_modal_iptal('cari_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : '')) ?>
   <?= cari_json_script('crCariVeri', cari_veri_dizisi($tum['satirlar'])) ?>
 </div>

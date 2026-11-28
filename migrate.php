@@ -153,6 +153,7 @@ $usip_results = []; $usip_ran = false;                          // v409 Ürün S
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $depo_mesaj = []; $depo_ran = false;                             // Depolar (v574: yeni depo kayıt sistemi + geçiş)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
+$cari_ek_results = []; $cari_ek_ran = false;                    // Cari ek şema (v611: tipler, TCKN/doğum tarihi, hızlı bayrağı)
 $kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
 $aj_results = []; $aj_ran = false;                              // Ajanda (ajanda_kayitlar)
 $kal_results = []; $kal_ran = false;                              // Mal Kabul Alanları (kantar_fisleri kolonları: şoför, malın sahibi, müstahsil, bahçe)
@@ -514,6 +515,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($cari_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'cari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'cari_ek') {
+    csrf_check($_POST['csrf'] ?? null);
+    $cari_ek_ran     = true;
+    $cari_ek_results = cari_ek_migrate($pdo);
+    foreach ($cari_ek_results as $sr) {
+        if (in_array($sr['durum'], ['eklendi', 'kaldirildi'], true)) {
+            audit_log_event('migrate', 'cari', null, null, ['operation' => 'cari_ek', 'step' => $sr['adim']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kullanici_tercih') {
@@ -1321,6 +1331,34 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="cari">
       <button type="submit" class="btn btn-primary">Cari Tablolarını Oluştur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('cari-ek'); ?>
+    <h2 style="margin-top:0;">Cari — Tipler · TCKN/Doğum tarihi · Hızlı ekleme</h2>
+    <p style="color:#555;font-size:.9em;">
+      Cari İşlemler tabloları kurulduktan sonra çalıştırılır (idempotent): <code>cari_tanimlar.kod</code> (+ <code>(tur, kod)</code> indeksi),
+      <code>cari_kartlar.tckn</code> · <code>dogum_tarihi</code> · <code>hizli</code> (+ <code>tckn</code>, <code>vergi_no</code> arama indeksleri) kolonlarını ekler,
+      eski Tanımlar bağını (<code>cari_kartlar.md_id</code> ve indeksi) kaldırır ve 8 sistem cari tipini
+      (Müşteri · Tedarikçi · Müşteri+Tedarikçi · Personel/Çavuş · Diğer · Müstahsil · Nakliyeci · Gümrükçü) bir kez tohumlar. Mevcut cari verisi silinmez.
+      Çalıştırılmazsa cari tipi sabit liste olarak kalır, TCKN / doğum tarihi / hızlı ekleme alanları gizlidir; diğer her şey aynen çalışır.
+      <?php if ($cari_ek_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($cari_ek_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['adim']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $cariEkOnkosul = !cari_hazir($pdo); $cariEkHazir = !$cariEkOnkosul && cari_ek_hazir($pdo) && !cari_ek_kolon_var($pdo, 'cari_kartlar', 'md_id'); ?>
+    <?php if ($cariEkOnkosul): ?>
+    <p style="font-weight:600;color:#c0392b;">✗ Önce yukarıdaki "Cari İşlemler" kartını çalıştırın.</p>
+    <?php else: ?>
+    <p style="font-weight:600;color:<?= $cariEkHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $cariEkHazir ? '✓ Ek şema hazır' : '✗ Ek şema eksik' ?></p>
+    <?php endif; ?>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="cari_ek">
+      <button type="submit" class="btn btn-primary"<?= $cariEkOnkosul ? ' disabled' : '' ?>>Cari Ek Şemasını Kur</button>
     </form>
   <?php mg_kart_kapat(); ?>
 

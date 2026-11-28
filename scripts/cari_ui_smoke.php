@@ -97,7 +97,7 @@ ok('boş: sekme şeridi var, tek birincil düğme', str_contains($r['govde'], 'c
 $r = get('cari_fisler.php');
 ok('boş: fişler "Bu filtreyle kayıt yok"', uyari_yok($r) && str_contains($r['govde'], 'Bu filtreyle kayıt yok'));
 $r = get('cari_tanimlari.php');
-ok('boş: tanımlar — ödeme şekilleri tohumu 6 satır, grup listesi boş durum', uyari_yok($r) && substr_count($r['govde'], 'data-tanim-duzen') === 6 && str_contains($r['govde'], 'Henüz tanım yok'));
+ok('boş: tanımlar — ödeme şekilleri tohumu 6 + sistem cari tipleri 8 satır, grup listesi boş durum', uyari_yok($r) && substr_count($r['govde'], 'data-tanim-duzen') === 14 && str_contains($r['govde'], 'Henüz tanım yok'));
 
 // ═══ 3. Dolu ═══
 $V = cari_t_ornek_veri($db);
@@ -406,6 +406,40 @@ if (is_file($tmp)) {
     ok('liste xlsx (fiş): sayfalar [Cari Fişler, Para Birimi Özeti]; formül yok', $ss->getSheetNames() === ['Cari Fişler', 'Para Birimi Özeti'] && !str_contains(json_encode($ss->getSheet(0)->toArray()), '"=SUB'));
     $ss->disconnectWorksheets(); @unlink($tmp);
 } else ok('liste xlsx üretildi', false, $r['govde'] . ($r['hata'] ?? ''));
+
+echo "\n=== 9b. v611: Cari tipi tanımı · hızlı kart · müstahsil/TCKN alanları ===\n";
+$hz = cari_kart_hizli_ekle($db, ['unvan' => 'Hızlı Eklenen Örnek', 'tip' => 'mustahsil'], 1);
+$r = get('cari_kartlari.php');
+$b = bolge($r['govde']);
+ok('liste: hızlı kart ayrı sınıf + data-hizli + rozet + eksik listesi', uyari_yok($r) && (bool)preg_match('/<a class="cari-kart cari-kart--hizli" href="cari_kartlari\.php\?id=' . (int)$hz['id'] . '"[^>]*data-hizli="1"/', $b) && str_contains($b, 'Hızlı eklendi — eksikleri tamamlayın') && str_contains($b, 'Eksik: Telefon'), (string)($r['hata'] ?? ''));
+ok('liste: normal kartlar hızlı sınıfı taşımaz (yalnız 1 hızlı)', substr_count($b, 'cari-kart--hizli') === 1 && substr_count($b, 'data-hizli="1"') === 1);
+ok('liste: HTML denge / yinelenen id yok (hızlı satır dahil)', html_hata($b) === [], json_encode(html_hata($b)));
+ok('kart modalı: TCKN + Doğum tarihi (gizli, yalnız müstahsilde) + Vergi no (VKN, 10 hane) + vurgu kancaları', str_contains($b, 'name="tckn"') && (bool)preg_match('/data-cr-mustahsil-alan hidden><span>Doğum tarihi<\/span><input type="date" name="dogum_tarihi"/', $b) && str_contains($b, 'name="vergi_no" maxlength="10"') && substr_count($b, 'data-cr-vurgu="mustahsil"') === 3 && substr_count($b, 'HKS için önerilir') === 3);
+ok('kart modalı: tip seçeneklerinde 8 sistem tipi (Müstahsil, Nakliyeci, Gümrükçü dahil)', str_contains($b, '<option value="mustahsil">Müstahsil</option>') && str_contains($b, '<option value="nakliyeci">Nakliyeci</option>') && str_contains($b, '<option value="gumrukcu">Gümrükçü</option>'));
+$r = get('cari_kartlari.php', ['id' => $hz['id']]);
+$j = js(fetch_get('cari_kartlari.php', ['id' => $hz['id'], 'parca' => 'kart']));
+ok('parca=kart JSON: hizli=1, eksik=[telefon], tckn/dogum_tarihi alanları, md_id YOK', ($j['kart']['hizli'] ?? null) === 1 && ($j['kart']['eksik'] ?? null) === ['telefon'] && array_key_exists('tckn', $j['kart'] ?? []) && array_key_exists('dogum_tarihi', $j['kart'] ?? []) && !str_contains(json_encode($j), 'md_id'));
+ok('detay: hızlı bant + Düzenle; Bilgiler panelinde TCKN + (müstahsil) Doğum tarihi', uyari_yok($r) && str_contains($r['govde'], 'cari-hizli-bant') && str_contains($r['govde'], '>TCKN<') && str_contains($r['govde'], '>Doğum tarihi<'));
+$r = get('cari_tanimlari.php', ['sekme' => 'tip']);
+$b = bolge($r['govde']);
+ok('tanımlar: "Cari Tipi" sekmesi + 8 sistem satırı, sistem tipi için SİL YOK', uyari_yok($r) && str_contains($b, 'id="crTabTip"') && str_contains($b, 'id="crPanelTip"') && substr_count($b, 'Sistem tipi') === 8 && !preg_match('/aria-label="Müşteri sil"/', $b), (string)($r['hata'] ?? ''));
+ok('tanımlar: Müşteri + Tedarikçi aktif anahtarı disabled; diğer sistem tipleri değil', (bool)preg_match('/data-id="\d+" name="aktif" value="1" checked disabled title="Bu sistem tipi pasif yapılamaz" aria-label="Müşteri aktif"/', $b) && !preg_match('/disabled[^>]*aria-label="Müstahsil aktif"/', $b));
+cari_tanim_kaydet($db, 'tip', 'Komisyoncu Örnek', 90, 1);
+$r = get('cari_tanimlari.php', ['sekme' => 'tip']);
+ok('tanımlar: kullanıcı tipi satırı + Sil düğmesi (kullanılmıyor)', str_contains($r['govde'], 'aria-label="Komisyoncu Örnek sil"'));
+$rt = post(['islem' => 'tanim_kaydet', 'tur' => 'tip', 'ad' => 'Kooperatif Örnek', 'sira' => '95']);
+ok('cari_kaydet: tip ekleme JSON ok', $rt['kod'] === 200 && (js($rt)['ok'] ?? null) === true);
+$sis = (int)$db->query("SELECT id FROM cari_tanimlar WHERE tur = 'tip' AND kod = 'musteri'")->fetchColumn();
+$rs = post(['islem' => 'tanim_sil', 'id' => (string)$sis]);
+ok('cari_kaydet: sistem tipi silme → 422 JSON', $rs['kod'] === 422 && (js($rs)['ok'] ?? null) === false);
+$rp = post(['islem' => 'tanim_durum', 'id' => (string)$sis, 'aktif' => '0']);
+ok('cari_kaydet: Müşteri pasifleştirme → 422 JSON', $rp['kod'] === 422 && (js($rp)['ok'] ?? null) === false);
+$rk = post(['islem' => 'kart_kaydet', 'unvan' => 'Kimlik Hatalı Örnek', 'tip' => 'musteri', 'vergi_no' => '1234567890', 'para_birimi' => 'TRY', 'aktif' => '1']);
+ok('cari_kaydet: algoritması geçersiz VKN → 422 + alanlar.vergi_no', $rk['kod'] === 422 && isset((js($rk)['alanlar'] ?? [])['vergi_no']));
+$rk2 = post(['islem' => 'kart_kaydet', 'id' => (string)$hz['id'], 'unvan' => 'Hızlı Eklenen Örnek', 'tip' => 'mustahsil', 'para_birimi' => 'TRY', 'aktif' => '1']);
+ok('cari_kaydet: hızlı kart eksikli kaydedilir → ok + eksikler + uyarı (JSON)', $rk2['kod'] === 200 && (js($rk2)['eksikler'] ?? null) === ['Telefon'] && str_contains((string)(js($rk2)['uyari'] ?? ''), 'Telefon'));
+$rk3 = post(['islem' => 'kart_kaydet', 'id' => (string)$hz['id'], 'unvan' => 'Hızlı Eklenen Örnek', 'tip' => 'mustahsil', 'telefon' => '0 555 000 00 07', 'para_birimi' => 'TRY', 'aktif' => '1']);
+ok('cari_kaydet: telefon girilince hizli=0', $rk3['kod'] === 200 && (int)$db->query('SELECT hizli FROM cari_kartlar WHERE id = ' . (int)$hz['id'])->fetchColumn() === 0);
 
 echo "\n=== 10. Ham çıktı denetimi (render betiği) ===\n";
 foreach (['kartlar id=1', 'fisler', 'dekontlar', 'tanimlar', 'ekstre id=1'] as $a) {
