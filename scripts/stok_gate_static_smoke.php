@@ -98,11 +98,19 @@ $ihlal = []; $cariIhlal = [];
 $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($ROOT, FilesystemIterator::SKIP_DOTS));
 foreach ($it as $f) {
     $yol = $f->getPathname();
-    if (!str_ends_with($yol, '.php') || preg_match('#/(vendor|scripts|storage|\.git|\.claude|node_modules)/#', $yol)) continue;
-    if ($yol === $ROOT . '/config/stok_core.php') continue;
+    if (!str_ends_with($yol, '.php') || preg_match('#/(vendor|scripts|storage|\.git|\.claude|node_modules)/#', substr($yol, strlen($ROOT)))) continue;   // ROOT'a göreli (worktree yolu .claude/ içerir)
+    if ($yol === $ROOT . '/config/stok_core.php' || $yol === $ROOT . '/config/stok_ek_sema.php') continue;   // v611 ek şema: aşağıda ayrıca denetlenir
     if (preg_match('/\b(INSERT\s+(?:IGNORE\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+`?stok_(hareketler|fisler|fis_satirlar|kartlar|tanimlar)\b/i', kod($yol))) $ihlal[] = substr($yol, strlen($ROOT) + 1);
 }
-ok('stok_* tablolarına INSERT/UPDATE/DELETE yazan başka dosya YOK (config/stok_core.php hariç)', !$ihlal, implode(',', $ihlal));
+ok('stok_* tablolarına INSERT/UPDATE/DELETE yazan başka dosya YOK (config/stok_core.php + stok_ek_sema.php hariç)', !$ihlal, implode(',', $ihlal));
+$ekS = kod($ROOT . '/config/stok_ek_sema.php');
+preg_match_all('/\b(INSERT\s+(?:IGNORE\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+`?(stok_[a-z_]+)/i', $ekS, $ekY, PREG_SET_ORDER);
+ok('v611 stok_ek_sema.php: yalnız INSERT INTO stok_tanimlar (ambalaj tipi tohumu); UPDATE/DELETE yok; ALTER yalnız stok_kartlar', $ekY !== [] && !array_filter($ekY, fn($m) => strtoupper(preg_replace('/\s+/', ' ', $m[1])) !== 'INSERT INTO' || $m[2] !== 'stok_tanimlar')
+    && !preg_match('/ALTER\s+TABLE\s+`?(?!stok_kartlar\b)\w+/i', $ekS) && !preg_match('/\bDROP\s+TABLE\b|\bTRUNCATE\b/i', $ekS), json_encode($ekY));
+ok('v611 stok_ek_sema.php: stok_core.php sonunda yüklenir; stok_ek_migrate( tek çağıran migrate.php', str_ends_with(rtrim(kod($ROOT . '/config/stok_core.php')), "require_once __DIR__ . '/stok_ek_sema.php';")
+    && (function () use ($ROOT): bool { $c = []; foreach (glob($ROOT . '/*.php') as $f) if (preg_match('/\bstok_ek_migrate\s*\(/', kod($f))) $c[] = basename($f); return $c === ['migrate.php']; })());
+ok('v611 stok_tablolar(): yeni kurulum DDL\'i 5 ek kolonu içerir, md_id / idx_stk_md YOK', ($tb = (string)(govde($c ?? kod($ROOT . '/config/stok_core.php'), 'stok_tablolar') ?? '')) !== ''
+    && !str_contains($tb, 'md_id') && count(array_filter(['ambalaj_tip_id', 'birim_dara_kg', 'hks_urun_id', 'hks_urun_ad', 'hizli'], fn($k) => str_contains($tb, "`$k`"))) === 5);
 $c = kod($ROOT . '/config/stok_core.php');
 ok('core: stok_hareketler\'de UPDATE / DELETE YOK (INSERT-only defter)', !preg_match('/(UPDATE\s+`?stok_hareketler|DELETE\s+FROM\s+`?stok_hareketler)/i', $c));
 ok('core: stok_fis_satirlar\'da UPDATE / DELETE YOK (insert sonrası değişmez)', !preg_match('/(UPDATE\s+`?stok_fis_satirlar|DELETE\s+FROM\s+`?stok_fis_satirlar)/i', $c));

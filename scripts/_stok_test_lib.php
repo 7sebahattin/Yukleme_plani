@@ -14,6 +14,7 @@ require_once __DIR__ . '/_siparis_test_lib.php';
 require_once $ROOT . '/config/cari_core.php';
 require_once $ROOT . '/config/stok_core.php';
 require_once $ROOT . '/config/stok_ui.php';
+require_once $ROOT . '/config/depo_core.php';   // v611: stok fişi yalnız yeni depo sistemi açıkken (depo_gecis_aktif) yazılır
 
 $STOK_T_DB = (string)(getenv('STOK_E2E_DB') ?: '');
 if ($STOK_T_DB === '') {
@@ -30,6 +31,45 @@ $PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
 if (!$STOK_T_MEVCUT) {
     siparis_test_diger_tablolar($PDO_TEST);   // users + audit_log
     $PDO_TEST->exec('CREATE TABLE material_definitions (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, name TEXT, is_active INT DEFAULT 1)');
+    stok_t_depo_gecis($PDO_TEST, true);       // varsayılan: yeni depo sistemi AÇIK (depot_options stub'ı $DEPO_SECENEK'i döner)
+}
+
+/** v611 YALNIZ TEST: yeni depo sistemi geçişini aç/kapat (depo tabloları gerçek depo_migrate ile; önbellek sıfırlanır). */
+function stok_t_depo_gecis(PDO $db, bool $acik): void
+{
+    $GLOBALS['_depo_ddl_calistir'] = function (PDO $p, string $ad, string $ddl): void {
+        [$c, $ix] = siparis_ddl_sqlite($ddl);
+        $p->exec($c);
+        foreach ($ix as $x) $p->exec($x);
+    };
+    depo_migrate($db);
+    $db->exec("DELETE FROM depo_ayar WHERE anahtar = 'gecis_tarihi'");
+    if ($acik) $db->prepare("INSERT INTO depo_ayar (anahtar, deger, updated_at) VALUES ('gecis_tarihi', ?, ?)")->execute([date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+    depo_onbellek_sifirla();
+}
+
+/**
+ * v611 YALNIZ TEST: canlıdaki v611 ÖNCESİ stok_kartlar şemasını taklit eder (5 ek kolon + indeksleri YOK, eski md_id + idx_stk_md VAR).
+ * Fail-soft (stok_ek_hazir() false) ve stok_ek_migrate idempotentlik testleri için. Yeni bir PDO ile çağrılmalı (stok_ek_hazir olumlu sonucu önbellekler).
+ */
+function stok_t_eski_kart_semasi(PDO $db): void
+{
+    foreach (array_keys(stok_ek_indeksleri()) as $ix) $db->exec("DROP INDEX IF EXISTS `$ix`");
+    foreach (stok_ek_kolonlari() as [$k]) $db->exec("ALTER TABLE stok_kartlar DROP COLUMN `$k`");
+    $db->exec('ALTER TABLE stok_kartlar ADD COLUMN `md_id` INT NULL DEFAULT NULL');
+    $db->exec('CREATE INDEX `idx_stk_md` ON stok_kartlar (`md_id`)');
+}
+
+/** v611 YALNIZ TEST: HKS ürün kataloğu önbelleği (hks_kv.listeler_cache; bb_katalog okur). $urunler = [[id, ad], …]; null → tablo kaldırılır. */
+function stok_t_hks_katalog(PDO $db, ?array $urunler): void
+{
+    $db->exec('DROP TABLE IF EXISTS hks_kv');
+    if ($urunler !== null) {
+        $db->exec('CREATE TABLE hks_kv (anahtar TEXT PRIMARY KEY, deger TEXT)');
+        $l = array_map(static fn(array $u): array => ['id' => (string)$u[0], 'ad' => (string)$u[1]], $urunler);
+        $db->prepare("INSERT INTO hks_kv (anahtar, deger) VALUES ('listeler_cache', ?)")->execute([json_encode(['urunler' => $l, 'zaman' => date('c')], JSON_UNESCAPED_UNICODE)]);
+    }
+    stok_hks_urunler(true);
 }
 
 /** Alt süreçte tek istek çalıştırır. @return array{govde:string,kod:int,basliklar:list<string>,flash:?array,hata:?string} */
@@ -175,6 +215,23 @@ function stok_t_ornek_veri(PDO $db): array
     $f['c2'] = stok_t_fis($db, 'cikis', "$y-11-12", 'Merkez Depo', [[$K('Domates (Salkım)'), 'Merkez Depo', -2400000, null]], 'Satış/Sevk');
     $f['g5'] = stok_t_fis($db, 'giris', "$y-11-10", 'Merkez Depo', [[$K('Sıvı Gübre'), 'Merkez Depo', 12500, 62500]], 'Alış');
     stok_kart_durum($db, $K('Limon (Yerli)'), false, 1);
+    // v611 ek alanlar (şema yeni kurulum DDL'iyle hazır): Ambalaj Tipi tohumu (Kasa, Palet) + uydurma HKS kataloğu +
+    //   Kasa kartı = Kasa ambalajı 1,8 kg dara · Euro Palet = Palet 25 kg · Domates = HKS "Domates" · Biber = HIZLI eklenmiş (HKS ürün eksik).
+    if (stok_ek_hazir($db)) {
+        stok_ek_migrate($db);
+        stok_t_hks_katalog($db, [['101', 'Domates'], ['102', 'Biber Dolma'], ['103', 'Patlıcan'], ['104', 'Limon'], ['105', 'Kayısı']]);
+        $amb = []; foreach (stok_tanim_listesi($db, 'ambalaj_tip') as $t) $amb[(string)$t['kod']] = (int)$t['id'];
+        foreach ([['Kasa 6\'lı Plastik', ['ambalaj_tip_id' => (string)$amb['kasa'], 'birim_dara_kg' => '1,8']], ['Euro Palet', ['ambalaj_tip_id' => (string)$amb['palet'], 'birim_dara_kg' => '25']],
+            ['Domates (Salkım)', ['hks_urun_id' => '101']]] as [$ad, $ek]) {
+            $k0 = stok_kart_oku($db, $K($ad));
+            $r = stok_kart_kaydet($db, ['ad' => $k0['ad'], 'kod' => $k0['kod'], 'tip' => $k0['tip'], 'grup_id' => (string)$k0['grup_id'], 'ana_birim' => $k0['ana_birim'],
+                'cevrim_birim' => (string)($k0['cevrim_birim'] ?? ''), 'cevrim_katsayi' => $k0['cevrim_katsayi'] !== null ? stok_miktar_bicim(stok_milli($k0['cevrim_katsayi']), 'lt') : '',
+                'kdv_orani' => (string)$k0['kdv_orani'], 'barkod' => (string)($k0['barkod'] ?? ''), 'kritik_seviye' => $k0['kritik_seviye'] !== null ? stok_miktar_bicim(stok_milli($k0['kritik_seviye']), $k0['ana_birim']) : '',
+                'notlar' => (string)($k0['notlar'] ?? ''), 'aktif' => '1'] + $ek, 1, $K($ad));
+            if (!$r['ok']) throw new RuntimeException('örnek ek alan: ' . $r['hata']);
+        }
+        $db->prepare('UPDATE stok_kartlar SET hizli = 1 WHERE id = ?')->execute([$K('Biber (Dolmalık)')]);   // YALNIZ TEST: hızlı eklenmiş kart taklidi
+    }
     // Cari (uydurma firmalar) + kantar (salt okunur kaynak) — Parça B fiş formu
     stok_t_cari_kur($db);
     $cari = [];

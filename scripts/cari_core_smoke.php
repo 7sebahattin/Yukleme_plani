@@ -34,7 +34,7 @@ ok('migrate: 3 tablo olusturuldu', count($m) === 3 && count(array_filter($m, fn(
 ok('migrate sonrası cari_hazir true', cari_hazir($pdo) === true);
 ok('ödeme şekli tohumu 6 satır', say('cari_tanimlar', "tur = 'odeme_sekli'") === 6);
 $m2 = cari_migrate($pdo);
-ok('migrate tekrar: hepsi var, tohum çoğalmadı', count(array_filter($m2, fn($r) => $r['durum'] === 'var')) === 3 && say('cari_tanimlar') === 6);
+ok('migrate tekrar: hepsi var, tohum çoğalmadı (6 ödeme şekli + 8 sistem cari tipi)', count(array_filter($m2, fn($r) => $r['durum'] === 'var')) === 3 && say('cari_tanimlar') === 14 && say('cari_tanimlar', "tur = 'tip'") === 8);
 
 echo "\n=== 2. Yetki ===\n";
 ok('admin: cari_can true', cari_can('read') && cari_can('write') && cari_can('delete') && cari_can('admin'));
@@ -260,10 +260,10 @@ ok('pasif ödeme şekli yeni harekette reddedilir; yalnızAktif listesinde yok',
 ok('ödeme şekli serbest silinir', cari_tanim_sil($pdo, (int)$nakit['id'], $UID)['ok']);
 ok('olmayan tanım hata', !cari_tanim_sil($pdo, 99999, $UID)['ok'] && !cari_tanim_durum($pdo, 99999, true, $UID)['ok']);
 
-echo "\n=== 12. Eski içe aktarım kaldırıldı (şema md_id korunur) ===\n";
+echo "\n=== 12. Eski içe aktarım kaldırıldı (v611: md_id şemadan düştü) ===\n";
 ok('cari_ice_aktar / cari_ice_aktar_onizle kaldırıldı', !function_exists('cari_ice_aktar') && !function_exists('cari_ice_aktar_onizle'));
 $cols = array_column($pdo->query('PRAGMA table_info(cari_kartlar)')->fetchAll(PDO::FETCH_ASSOC), 'name');
-ok('cari_kartlar.md_id şema kolonu korunur (ekleyici migrasyon)', in_array('md_id', $cols, true));
+ok('cari_kartlar.md_id yeni kurulumda YOK (v611: Tanımlar bağı koptu); tckn/dogum_tarihi/hizli var', !in_array('md_id', $cols, true) && in_array('tckn', $cols, true) && in_array('dogum_tarihi', $cols, true) && in_array('hizli', $cols, true));
 
 echo "\n=== 12b. Sayfa/uç katmanı için çekirdek ekleri ===\n";
 $za = (int)cari_kart_kaydet($pdo, ['unvan' => 'ZZ Liste A', 'tip' => 'musteri', 'para_birimi' => 'TRY', 'aktif' => '1'], $UID)['id'];

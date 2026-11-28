@@ -13,6 +13,7 @@
     --st-fire: #b45f06;  --st-fire-bg: #fcf2dc;  --st-fire-br: #f0d49b;
     --st-transfer: #1d6cf0; --st-transfer-bg: #eaf1ff; --st-transfer-br: #b9d0fb;
     --st-kritik: #c2312e;
+    --st-hizli: #6d28d9; --st-hizli-bg: #f4effe; --st-hizli-br: #d8c7fa;   /* v611 hızlı eklenen kart (eksikleri tamamlanacak) */
     --st-top: 59px;                          /* mobil/tablet topbar yüksekliği */
     --st-sol: 340px;                         /* ≥1024 liste sütunu */
     min-width: 0;
@@ -23,6 +24,7 @@ html[data-theme="dark"] .stok {
     --st-fire: var(--warn);     --st-fire-bg: var(--warn-soft);     --st-fire-br: #6b5520;
     --st-transfer: var(--primary); --st-transfer-bg: var(--primary-soft); --st-transfer-br: #2c4a7d;
     --st-kritik: var(--danger);
+    --st-hizli: #c4b5fd; --st-hizli-bg: #261d3d; --st-hizli-br: #4c3d7a;
 }
 @media (max-width: 430px) { .stok { --st-top: 54px; } }
 @media (min-width: 900px) { .stok { --st-top: 0px; } }
@@ -547,6 +549,28 @@ a.st-cip:hover { text-decoration: none; }
     .st-ozet-adim { display: inline-flex; }
     .st-fsatir-sil { width: 44px; height: 44px; }
     .st-kaynak-satir { min-height: 64px; }
+}
+
+/* ═════════ 8c. v611 — ambalaj tipi · birim dara · HKS ürün · hızlı eklenen kart ═════════
+   Hızlı kart: kendi --st-hizli* belirteçleri (açık + koyu tema); renk tek başına anlam taşımaz → rozet metni + görünür eksik listesi. */
+.st-satir-ek, .st-satir-hizli { grid-column: 1; min-width: 0; font-size: .76rem; color: var(--muted); }
+.st-satir-ek { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-satir-hizli { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-top: 2px; }
+.st-rozet--hizli { background: var(--st-hizli-bg); border-color: var(--st-hizli-br); color: var(--st-hizli); white-space: normal; }
+.st-hizli-eksik { color: var(--st-hizli); font-weight: 600; overflow-wrap: anywhere; }
+.st-satir.st-satir--hizli { background: var(--st-hizli-bg); border-color: var(--st-hizli-br); box-shadow: inset 4px 0 0 var(--st-hizli); }
+.st-satir.st-satir--hizli:hover { background: var(--st-hizli-bg); filter: brightness(.98); }
+.st-satir.st-satir--hizli[aria-current="true"] { border-color: var(--primary); box-shadow: inset 4px 0 0 var(--st-hizli), 0 0 0 1px var(--primary); }
+.st-hizli-uyari { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--st-hizli-bg); border: 1px solid var(--st-hizli-br); border-left: 4px solid var(--st-hizli); font-size: .86rem; color: var(--text); overflow-wrap: anywhere; }
+.st-hizli-uyari b { color: var(--st-hizli); }
+.st-ek-kurulum { overflow-wrap: anywhere; }
+.st-depo-gecis { margin-bottom: 10px; }
+.st-depo-gecis p { margin: 0 0 6px; }
+@media (min-width: 1024px) {
+    .st-satir.st-satir--hizli { border: 0; border-bottom: 1px solid var(--st-hizli-br); border-radius: 0; }
+    .st-satir.st-satir--hizli[aria-current="true"] { background: var(--primary-soft); box-shadow: inset 4px 0 0 var(--st-hizli); }
+    .st-hizli-uyari { margin: 0 16px 8px; flex: none; }
+    .st--tek-ekran > .st-ek-kurulum { margin: 0 0 8px; }
 }
 
 /* ═════════ 9. Yazdırma ═════════ */

@@ -5,6 +5,8 @@ description: Fatura modülü (satis_faturalari/alis_faturalari/sevk_irsaliyeleri
 
 # Fatura (fatura_*)
 
+**v611 — Stok bağı + depo kuralı (davranış notu, fatura kodu DEĞİŞMEDİ):** stoklu fatura `stok_fis_kaydet()` ile stok fişi üretir; v611'den beri `stok_fis_dogrula` Depo Tanımları geçişi (`depo_gecis_aktif()`) kapalıyken HER stok fişini reddeder (`kod depo_gecis`). `fatura_core.php` depoyu hâlâ `stok_depo_secenek()` ile ön-doğruladığı için geçiş kapalıyken stoklu fatura işlem ortasında `depo_gecis` hatasıyla düşer (transaction geri alınır, yarım kayıt kalmaz). Fatura formuna depo-geçiş uyarısı eklemek ayrı iş; bkz. stok-modulu v611.
+
 > v527 (Dalga A arka uç + Dalga B ön yüz). Kapı v550'den beri `muhasebe_modul_can` (Roller `muhasebe.fatura.*`; bkz. `rol-yonetimi`) (sidebar "Fatura" grubu, `nav_muhasebe_gruplari()`). stok-modulu / cari-modulu kalıbının eşi.
 
 ## Kapsam

@@ -5,6 +5,7 @@
 // Geçici dosya SQLite + stub auth; canlı DB'ye HİÇ dokunmaz. Kapsam: şema/tohum · kapı · miktar ayrıştırma/biçim · fiş no · geri ·
 // kart CRUD (TR-duyarsız kod, ana birim kilidi, sil/hareketli) · liste/bakiye/depo filtresi · hareket listesi (yürüyen bakiye) ·
 // maliyet motoru (ağırlıklı ortalama, eksi stok, ters satır) · tanımlar (sistem kilidi, kullanımda) · içe aktar (idempotent) · audit ·
+// v611 (§20–24): ek şema fail-soft + migrate idempotent + md_id · dara ayrıştırma · ambalaj/HKS · hızlı ekleme/eksikler · Depo Tanımları kuralı.
 // Parça B (§12–19): fiş doğrulama · giriş/çıkış/transfer defteri (v558: dönüşüm türü kaldırıldı) · yetersiz stok/eksiye izin · idempotent · iptal · cari bağı · kantar.
 // =========================================================
 require_once __DIR__ . '/_stok_test_lib.php';
@@ -49,7 +50,8 @@ foreach ([[18450000, 'kg', '18.450'], [1250500, 'lt', '1.250,5'], [-350000, 'kg'
 ok('stok_milli_db: 1250500 → "1250.500", -350000 → "-350.000", 5 → "0.005"', stok_milli_db(1250500) === '1250.500' && stok_milli_db(-350000) === '-350.000' && stok_milli_db(5) === '0.005');
 ok('stok_milli: "1250.500" → 1250500; null → 0', stok_milli('1250.500') === 1250500 && stok_milli(null) === 0 && stok_milli(12.5) === 12500);
 ok('stok_birim_tam_mi: kg/adet/kasa tam; lt/m kesirli', stok_birim_tam_mi('kg') && stok_birim_tam_mi('adet') && stok_birim_tam_mi('kasa') && !stok_birim_tam_mi('lt') && !stok_birim_tam_mi('m'));
-ok('stok_birimler: 8 birim', array_keys(stok_birimler()) === ['kg', 'adet', 'kasa', 'palet', 'paket', 'koli', 'lt', 'm']);
+ok('stok_birimler: 11 birim (v611: + rulo, top, set; hepsi tam sayı)', array_keys(stok_birimler()) === ['kg', 'adet', 'kasa', 'palet', 'paket', 'koli', 'lt', 'm', 'rulo', 'top', 'set']
+    && stok_birim_tam_mi('rulo') && stok_birim_tam_mi('top') && stok_birim_tam_mi('set') && stok_miktar_coz('2,5', 'rulo') === null && stok_miktar_coz('3', 'set') === 3000);
 ok('stok_kdv_oranlari = [0,1,10,20]', stok_kdv_oranlari() === [0, 1, 10, 20]);
 
 echo "\n=== 4. Fiş no / geri / sabitler ===\n";
@@ -234,10 +236,10 @@ ok('kullanıcı nedeni yeniden adlandırılır', $tu['ok'] && stok_tanim_kaydet(
 $db->prepare("UPDATE stok_fisler SET neden_id = ? WHERE id = ?")->execute([(int)$tu['id'], $fid]);   // YALNIZ TEST: nedeni kullanımda yap
 ok('fişte kullanılan neden silinmez', !stok_tanim_sil($db, (int)$tu['id'], 1)['ok']);
 
-echo "\n=== 10. Eski içe aktar kaldırıldı (şema md_id korunur) ===\n";
+echo "\n=== 10. Eski içe aktar kaldırıldı (v611: yeni kurulumda md_id YOK) ===\n";
 ok('stok_ice_aktar / stok_ice_aktar_onizle kaldırıldı', !function_exists('stok_ice_aktar') && !function_exists('stok_ice_aktar_onizle'));
 $stCols = array_column($db->query('PRAGMA table_info(stok_kartlar)')->fetchAll(PDO::FETCH_ASSOC), 'name');
-ok('stok_kartlar.md_id şema kolonu korunur (ekleyici migrasyon)', in_array('md_id', $stCols, true));
+ok('v611: yeni kurulum stok_kartlar\'da md_id YOK; 5 ek kolon VAR', !in_array('md_id', $stCols, true) && !array_diff(['ambalaj_tip_id', 'birim_dara_kg', 'hks_urun_id', 'hks_urun_ad', 'hizli'], $stCols));
 
 echo "\n=== 11. Audit ===\n";
 $son = $db->query("SELECT * FROM audit_log WHERE module = 'stok' ORDER BY id DESC LIMIT 1")->fetch();
@@ -455,5 +457,181 @@ ok('kaynaklı fiş ikinci iptal → zaten_iptal', !$r['ok'] && ($r['kod'] ?? '')
 $KF3 = (int)$fis('giris', 'Merkez Depo', [[$A, '2', '1']], ['neden_id' => (string)$ALIS])['id'];
 $r = stok_fis_iptal($db, $KF3, 'Kaynaksız fiş', 1, 'fatura');
 ok('kaynaksız fiş modül parametresiyle de iptal edilir (geriye uyumlu)', $r['ok'] && stok_fis_ham($db, $KF3)['durum'] === 'iptal');
+
+// ═════════════════════════════════════════════════════════════════════════════
+// v611 — ek kart alanları (ambalaj tipi · birim dara · HKS ürün · hızlı bayrağı) + Depo Tanımları kuralı
+// ═════════════════════════════════════════════════════════════════════════════
+echo "\n=== 20. v611 — ek şema: fail-soft (eski şema) + stok_ek_migrate idempotent + md_id düşer ===\n";
+$eskiYol = sys_get_temp_dir() . '/stok_t_eski_' . getmypid() . '_' . bin2hex(random_bytes(3)) . '.sqlite';
+register_shutdown_function(static function () use ($eskiYol): void { @unlink($eskiYol); });
+$e = new PDO('sqlite:' . $eskiYol);
+$e->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$e->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+stok_t_sema_kur($e);
+stok_t_eski_kart_semasi($e);   // canlıdaki v611 öncesi şema
+$eKol = fn(): array => array_column($e->query('PRAGMA table_info(stok_kartlar)')->fetchAll(), 'name');
+$eIx = fn(): array => array_column($e->query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'stok_kartlar'")->fetchAll(), 'name');
+ok('eski şema: stok_ek_hazir() = false; stok_ek_durum: kolon yok, md_id var, tohum yok', !stok_ek_hazir($e) && ($ed = stok_ek_durum($e)) && !$ed['kolonlar'] && !$ed['md_id_yok'] && !$ed['tohum'] && !$ed['hazir'] && in_array('md_id', $eKol(), true));
+$r = stok_kart_kaydet($e, ['ad' => 'Eski Şema Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'ambalaj_tip_id' => 'xx', 'birim_dara_kg' => 'abc', 'hks_urun_id' => 'yok'], 1);
+$ek1 = $r['ok'] ? stok_kart_oku($e, (int)$r['id']) : null;
+ok('eski şema: kart kaydı YAPILIR, ek alan girdileri yok sayılır (geçersiz değer hata vermez), satırda hizli/ambalaj_adi anahtarı yok', $ek1 !== null && !array_key_exists('hizli', $ek1) && !array_key_exists('ambalaj_adi', $ek1) && !array_key_exists('birim_dara_kg', $ek1), json_encode($r, JSON_UNESCAPED_UNICODE));
+$eid = (int)$r['id'];
+ok('eski şema: stok_kart_listesi çalışır', count(stok_kart_listesi($e)['satirlar']) === 1);
+ok('eski şema: ambalaj_tip tanım listesi boş; ambalaj_tip kaydı kurulum mesajıyla reddedilir', stok_tanim_listesi($e, 'ambalaj_tip') === [] && ($tr = stok_tanim_kaydet($e, 'ambalaj_tip', 'Çuval', 10, 1)) && !$tr['ok'] && str_contains((string)$tr['hata'], 'migrate.php'));
+$hr = stok_kart_hizli_ekle($e, ['ad' => 'Eski Hızlı', 'tip' => 'urun', 'ana_birim' => 'kg', 'ambalaj_tip_id' => '1'], 1);
+ok('eski şema: stok_kart_hizli_ekle normal kart açar (hizli=false, eksik listesi boş, bayrak yazılmaz)', $hr['ok'] && $hr['hizli'] === false && $hr['eksik_alanlar'] === [] && stok_kart_oku($e, (int)$hr['id']) !== null, json_encode($hr, JSON_UNESCAPED_UNICODE));
+$m1 = stok_ek_migrate($e);
+$durumSay = static function (array $rap, string $d): int { return count(array_filter($rap, static fn($x) => $x['durum'] === $d)); };
+ok('stok_ek_migrate (1.): 5 kolon + 3 indeks + 2 tohum eklendi, md_id kaldırıldı, hata yok', $durumSay($m1, 'eklendi') === 10 && $durumSay($m1, 'kaldirildi') === 1 && $durumSay($m1, 'hata') === 0, json_encode($m1, JSON_UNESCAPED_UNICODE));
+ok('migrate sonrası: md_id + idx_stk_md YOK; 5 kolon + idx_stk_ambalaj/hks/hizli VAR', !in_array('md_id', $eKol(), true) && !in_array('idx_stk_md', $eIx(), true)
+    && !array_diff(['ambalaj_tip_id', 'birim_dara_kg', 'hks_urun_id', 'hks_urun_ad', 'hizli'], $eKol()) && !array_diff(['idx_stk_ambalaj', 'idx_stk_hks', 'idx_stk_hizli'], $eIx()));
+ok('migrate sonrası: stok_ek_hazir + stok_ek_durum hazır; mevcut kart korunur (hizli=0 varsayılan)', stok_ek_hazir($e) && stok_ek_durum($e)['hazir'] && ($k = stok_kart_oku($e, $eid)) && $k['ad'] === 'Eski Şema Kartı' && (int)$k['hizli'] === 0);
+ok('Ambalaj Tipi sistem tohumu: Kasa (kasa) + Palet (palet), kod dolu', array_column(stok_tanim_listesi($e, 'ambalaj_tip'), 'kod', 'ad') === ['Kasa' => 'kasa', 'Palet' => 'palet']);
+$m2 = stok_ek_migrate($e);
+ok('stok_ek_migrate (2.): idempotent — hepsi "var", hata yok, tohum çoğalmaz', $durumSay($m2, 'var') === count($m2) && count($m2) === 11 && count(stok_tanim_listesi($e, 'ambalaj_tip')) === 2, json_encode($m2, JSON_UNESCAPED_UNICODE));
+$bos = new PDO('sqlite::memory:'); $bos->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+ok('stok tabloları yokken stok_ek_migrate tek "hata" satırı (önce Stok kartı)', ($mb = stok_ek_migrate($bos)) && count($mb) === 1 && $mb[0]['durum'] === 'hata' && !stok_ek_hazir($bos));
+$eKasa = (int)array_column(stok_tanim_listesi($e, 'ambalaj_tip'), 'id', 'kod')['kasa'];
+ok('sistem ambalaj tipi SİLİNEMEZ', !($sr = stok_tanim_sil($e, $eKasa, 1))['ok'] && ($sr['kod'] ?? '') === 'kullanimda' && stok_tanim_bul($e, $eKasa) !== null);
+ok('sistem ambalaj tipinin adı değişmez (kod sistem), sırası değişir', !($sr = stok_tanim_kaydet($e, 'ambalaj_tip', 'Kasa Plastik', 10, 1, $eKasa))['ok'] && ($sr['kod'] ?? '') === 'sistem'
+    && stok_tanim_kaydet($e, 'ambalaj_tip', 'Kasa', 5, 1, $eKasa)['ok'] && (int)stok_tanim_bul($e, $eKasa)['sira'] === 5);
+ok('sistem ambalaj tipi pasifleştirilir / yeniden aktifleşir', stok_tanim_durum($e, $eKasa, false, 1)['ok'] && (int)stok_tanim_bul($e, $eKasa)['aktif'] === 0 && stok_tanim_durum($e, $eKasa, true, 1)['ok']);
+$tc = stok_tanim_kaydet($e, 'ambalaj_tip', 'Çuval', 30, 1);
+ok('kullanıcı ambalaj tipi eklenir (kodsuz) ve kullanılmıyorsa silinir', $tc['ok'] && stok_tanim_sil($e, (int)$tc['id'], 1)['ok']);
+$r = stok_kart_kaydet($e, ['ad' => 'Kasalı Kart', 'tip' => 'malzeme', 'ana_birim' => 'adet', 'ambalaj_tip_id' => (string)$eKasa, 'birim_dara_kg' => '1,8'], 1);
+ok('ambalaj tipi kullanım sayısı = onu kullanan stok kartı sayısı (Kasa: 1)', $r['ok'] && (int)array_column(stok_tanim_listesi($e, 'ambalaj_tip'), 'kullanim', 'kod')['kasa'] === 1);
+$tc2 = stok_tanim_kaydet($e, 'ambalaj_tip', 'Sandık', 40, 1);
+stok_kart_kaydet($e, ['ad' => 'Sandıklı Kart', 'tip' => 'malzeme', 'ana_birim' => 'adet', 'ambalaj_tip_id' => (string)$tc2['id'], 'birim_dara_kg' => '12'], 1);
+ok('kullanılan KULLANICI ambalaj tipi silinemez (kullanimda)', !($sr = stok_tanim_sil($e, (int)$tc2['id'], 1))['ok'] && ($sr['kod'] ?? '') === 'kullanimda');
+
+echo "\n=== 21. v611 — birim dara ayrıştırma / biçim (100× hata koruması) ===\n";
+foreach ([['1,8', 1800], ['1.8', 1800], ['0,250', 250], ['0.500', 500], ['25', 25000], ['1000', 1000000], ['1.000,000', 1000000], ['0', 0], [' 2,5 ', 2500], [1.8, 1800], [2, 2000],
+    ['1.234,5', null], ['1.000,5', null], ['1000,001', null], ['1001', null], ['-1', null], ['1,2345', null], ['abc', null], ['1.2.3', null], ['1,8,1', null], ['12.500.000', null], ['', null], [[], null], [true, null], [null, null], ['1.23,4', null]] as [$g, $bek]) {
+    ok('stok_dara_coz(' . json_encode($g) . ') = ' . json_encode($bek), stok_dara_coz($g) === $bek, json_encode(stok_dara_coz($g)));
+}
+foreach ([[1800, '1,8'], [250, '0,25'], [25000, '25'], [1000000, '1.000'], [0, '0'], [1234, '1,234']] as [$g, $bek]) ok("stok_dara_bicim($g) = $bek", stok_dara_bicim($g) === $bek, stok_dara_bicim($g));
+
+echo "\n=== 22. v611 — kart ek alanları: ambalaj · dara zorunluluğu · HKS ürün ===\n";
+stok_ek_migrate($db);   // ana test DB'si yeni kurulum DDL'iyle zaten hazır → yalnız tohum
+$AMB = array_column(stok_tanim_listesi($db, 'ambalaj_tip'), 'id', 'kod');
+$KASA = (int)$AMB['kasa']; $PALET = (int)$AMB['palet'];
+$GRUP = (int)stok_tanim_listesi($db, 'grup')[0]['id'];
+stok_t_hks_katalog($db, null);
+ok('HKS kataloğu yokken stok_hks_urunler() = null', stok_hks_urunler(true) === null);
+$r = stok_kart_kaydet($db, ['ad' => 'Ambalajlı Ürün', 'tip' => 'urun', 'ana_birim' => 'kg', 'ambalaj_tip_id' => (string)$KASA, 'birim_dara_kg' => '1,8', 'hks_urun_id' => '999'], 1);
+$K1 = (int)($r['id'] ?? 0); $k = $K1 ? stok_kart_oku($db, $K1) : [];
+ok('katalog yokken kayıt ENGELLENMEZ: ambalaj Kasa, dara 1.800 (DECIMAL), HKS boş; ambalaj_adi okunur', $r['ok'] && (int)$k['ambalaj_tip_id'] === $KASA && stok_milli($k['birim_dara_kg']) === 1800 && $k['hks_urun_id'] === null && $k['ambalaj_adi'] === 'Kasa', json_encode($r, JSON_UNESCAPED_UNICODE));
+$hata = [
+    'ambalaj seçili + dara boş → zorunlu' => [['ambalaj_tip_id' => (string)$KASA, 'birim_dara_kg' => ''], 'birim_dara_kg'],
+    'ambalaj seçili + dara 0 → zorunlu' => [['ambalaj_tip_id' => (string)$KASA, 'birim_dara_kg' => '0'], 'birim_dara_kg'],
+    'dara 1.234,5 (aralık dışı)' => [['birim_dara_kg' => '1.234,5'], 'birim_dara_kg'],
+    'dara harf' => [['birim_dara_kg' => '1,8kg'], 'birim_dara_kg'],
+    'ambalaj = grup tanımı id\'si' => [['ambalaj_tip_id' => (string)$GRUP, 'birim_dara_kg' => '1'], 'ambalaj_tip_id'],
+    'ambalaj harf' => [['ambalaj_tip_id' => 'kasa', 'birim_dara_kg' => '1'], 'ambalaj_tip_id'],
+];
+foreach ($hata as $ad => [$g, $alan]) {
+    $r = stok_kart_kaydet($db, ['ad' => 'Hatalı Ek Kart', 'tip' => 'malzeme', 'ana_birim' => 'adet'] + $g, 1);
+    ok("ek alan reddi: $ad → alanlar.$alan", !$r['ok'] && isset($r['alanlar'][$alan]), json_encode($r, JSON_UNESCAPED_UNICODE));
+}
+$r = stok_kart_kaydet($db, ['ad' => 'Darasız Kart', 'tip' => 'malzeme', 'ana_birim' => 'adet', 'birim_dara_kg' => '0'], 1);
+ok('ambalaj yokken dara 0 kabul (0–1.000 aralığı)', $r['ok'] && stok_milli(stok_kart_oku($db, (int)$r['id'])['birim_dara_kg']) === 0);
+$r = stok_kart_kaydet($db, ['ad' => 'Paletli Kart', 'tip' => 'malzeme', 'ana_birim' => 'adet', 'ambalaj_tip_id' => (string)$PALET, 'birim_dara_kg' => '25'], 1);
+$KP = (int)$r['id'];
+stok_tanim_durum($db, $PALET, false, 1);
+$r = stok_kart_kaydet($db, ['ad' => 'Yeni Paletli', 'tip' => 'malzeme', 'ana_birim' => 'adet', 'ambalaj_tip_id' => (string)$PALET, 'birim_dara_kg' => '25'], 1);
+ok('PASİF ambalaj tipi yeni kartta seçilemez', !$r['ok'] && str_contains((string)($r['alanlar']['ambalaj_tip_id'] ?? ''), 'Pasif'));
+$r = stok_kart_kaydet($db, ['ad' => 'Paletli Kart (güncel)', 'tip' => 'malzeme', 'ana_birim' => 'adet', 'ambalaj_tip_id' => (string)$PALET, 'birim_dara_kg' => '25'], 1, $KP);
+ok('pasif tip kartın MEVCUT değeriyse düzenlemede kalır', $r['ok'] && (int)stok_kart_oku($db, $KP)['ambalaj_tip_id'] === $PALET);
+stok_tanim_durum($db, $PALET, true, 1);
+$au = audit_say('update');
+$r = stok_kart_kaydet($db, ['ad' => 'Paletli Kart (güncel)', 'kod' => stok_kart_oku($db, $KP)['kod'], 'tip' => 'malzeme', 'ana_birim' => 'adet', 'ambalaj_tip_id' => (string)$PALET, 'birim_dara_kg' => '25,000'], 1, $KP);
+ok('dara sayısal karşılaştırma: "25,000" = 25 → değişiklik yok, audit yok', $r['ok'] && audit_say('update') === $au);
+$r = stok_kart_kaydet($db, ['ad' => 'Paletli Kart (güncel)', 'tip' => 'malzeme', 'ana_birim' => 'adet'], 1, $KP);
+ok('girdide ek alan anahtarı YOKSA düzenleme ek alanlara dokunmaz', $r['ok'] && (int)stok_kart_oku($db, $KP)['ambalaj_tip_id'] === $PALET && stok_milli(stok_kart_oku($db, $KP)['birim_dara_kg']) === 25000);
+
+stok_t_hks_katalog($db, [['201', 'Domates'], ['202', 'Biber'], ['203', 'Biber'], ['204', 'Kayısı']]);
+ok('katalog varken stok_hks_urunler() 4 ürün', count(stok_hks_urunler() ?? []) === 4);
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '201', 'hks_urun_ad' => 'Sahte Ad'], 1);
+$KH = (int)($r['id'] ?? 0);
+ok('HKS id 201 → kaydedilen ad KATALOGDAN ("Domates"; istemcinin adı yok sayılır)', $r['ok'] && stok_kart_oku($db, $KH)['hks_urun_id'] === '201' && stok_kart_oku($db, $KH)['hks_urun_ad'] === 'Domates');
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '', 'hks_urun_ara' => 'kayısı'], 1, $KH);
+ok('JS kapalı yolu: hks_urun_ara metni TR-duyarsız tam adla çözülür (kayısı → 204 Kayısı)', $r['ok'] && stok_kart_oku($db, $KH)['hks_urun_id'] === '204' && stok_kart_oku($db, $KH)['hks_urun_ad'] === 'Kayısı');
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_ara' => 'Biber'], 1, $KH);
+ok('aynı adlı iki katalog ürünü ("Biber") → belirsiz, alan hatası (hks_urun_ara), kayıt değişmez', !$r['ok'] && isset($r['alanlar']['hks_urun_ara']) && stok_kart_oku($db, $KH)['hks_urun_id'] === '204');
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_ara' => 'Biber (#203)'], 1, $KH);
+ok('"Ad (#id)" datalist yazımı → 203', $r['ok'] && stok_kart_oku($db, $KH)['hks_urun_id'] === '203');
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '999'], 1, $KH);
+ok('katalogda olmayan HKS id → alan hatası', !$r['ok'] && isset($r['alanlar']['hks_urun_ara']));
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '', 'hks_urun_ara' => ''], 1, $KH);
+ok('HKS alanı boşaltılır → id/ad NULL', $r['ok'] && stok_kart_oku($db, $KH)['hks_urun_id'] === null && stok_kart_oku($db, $KH)['hks_urun_ad'] === null);
+stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '201'], 1, $KH);
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'malzeme', 'ana_birim' => 'kg', 'hks_urun_id' => '201'], 1, $KH);
+ok('tip ürün DEĞİLSE HKS id/ad boşalır', $r['ok'] && stok_kart_oku($db, $KH)['hks_urun_id'] === null);
+stok_kart_kaydet($db, ['ad' => 'HKS Kartı', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '201'], 1, $KH);
+stok_t_hks_katalog($db, null);
+$r = stok_kart_kaydet($db, ['ad' => 'HKS Kartı (katalogsuz)', 'tip' => 'urun', 'ana_birim' => 'kg', 'hks_urun_id' => '', 'hks_urun_ara' => ''], 1, $KH);
+ok('katalog okunamıyorsa kayıt yapılır ve mevcut HKS seçimine DOKUNULMAZ', $r['ok'] && stok_kart_oku($db, $KH)['ad'] === 'HKS Kartı (katalogsuz)' && stok_kart_oku($db, $KH)['hks_urun_id'] === '201');
+ok('halkayit/HKS tablolarına yazma yok: stok_core/ui/ek_sema\'da hks_ tablosuna INSERT/UPDATE/DELETE yok', !preg_match('/(INSERT\s+INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+`?(hks_|\{\$on\})/i',
+    (string)file_get_contents($ROOT . '/config/stok_core.php') . file_get_contents($ROOT . '/config/stok_ui.php') . file_get_contents($ROOT . '/config/stok_ek_sema.php')));
+
+echo "\n=== 23. v611 — hızlı ekleme + TEK eksik kuralı ===\n";
+foreach ([
+    'eksiksiz ürün' => [['grup_id' => 3, 'ana_birim' => 'kg', 'tip' => 'urun', 'hks_urun_id' => '201'], []],
+    'grup yok' => [['grup_id' => null, 'ana_birim' => 'kg', 'tip' => 'malzeme'], ['grup_id']],
+    'ana birim boş' => [['grup_id' => 1, 'ana_birim' => '', 'tip' => 'malzeme'], ['ana_birim']],
+    'ürün + HKS yok' => [['grup_id' => 1, 'ana_birim' => 'kg', 'tip' => 'urun', 'hks_urun_id' => ''], ['hks_urun_id']],
+    'malzeme HKS istemez' => [['grup_id' => 1, 'ana_birim' => 'adet', 'tip' => 'malzeme'], []],
+    'ambalaj + dara 0' => [['grup_id' => 1, 'ana_birim' => 'adet', 'tip' => 'malzeme', 'ambalaj_tip_id' => 2, 'birim_dara_kg' => '0.000'], ['birim_dara_kg']],
+    'ambalaj + dara boş' => [['grup_id' => 1, 'ana_birim' => 'adet', 'tip' => 'malzeme', 'ambalaj_tip_id' => '2', 'birim_dara_kg' => null], ['birim_dara_kg']],
+    'ambalaj yok + dara yok' => [['grup_id' => 1, 'ana_birim' => 'adet', 'tip' => 'malzeme', 'ambalaj_tip_id' => null], []],
+    'hepsi eksik' => [['tip' => 'urun', 'ambalaj_tip_id' => 1], ['grup_id', 'ana_birim', 'hks_urun_id', 'birim_dara_kg']],
+] as $ad => [$kart, $bek]) ok("stok_kart_eksikler: $ad → " . json_encode($bek), stok_kart_eksikler($kart) === $bek, json_encode(stok_kart_eksikler($kart)));
+foreach (['ad', 'tip', 'ana_birim'] as $z) {
+    $g = ['ad' => 'Hızlı X', 'tip' => 'urun', 'ana_birim' => 'kg']; unset($g[$z]);
+    $r = stok_kart_hizli_ekle($db, $g, 1);
+    ok("hızlı ekle: $z zorunlu → alanlar.$z", !$r['ok'] && isset($r['alanlar'][$z]));
+}
+stok_t_hks_katalog($db, [['201', 'Domates'], ['204', 'Kayısı']]);
+$ac = audit_say('create'); $oner = stok_kod_oner($db);
+$r = stok_kart_hizli_ekle($db, ['ad' => 'Hızlı Ürün', 'tip' => 'urun', 'ana_birim' => 'kg', 'ambalaj_tip_id' => (string)$KASA], 1);
+$KZ = (int)($r['id'] ?? 0); $kz = $KZ ? stok_kart_oku($db, $KZ) : [];
+ok('hızlı ekle: hizli=1, aktif, kod otomatik (' . $oner . '), ambalaj var dara yok (esnek) → eksik grup + HKS + dara', $r['ok'] && $r['hizli'] === true && (int)$kz['hizli'] === 1 && (int)$kz['aktif'] === 1 && $r['stok_kod'] === $oner && $kz['kod'] === $oner
+    && $r['eksik_alanlar'] === ['grup_id', 'hks_urun_id', 'birim_dara_kg'], json_encode($r, JSON_UNESCAPED_UNICODE));
+ok('hızlı ekle: audit create + "hizli":1', audit_say('create') === $ac + 1 && say('audit_log', "module = 'stok' AND action = 'create' AND record_id = ? AND new_values LIKE ?", [$KZ, '%"hizli":1%']) === 1);
+$r = stok_kart_hizli_ekle($db, ['ad' => 'Hızlı Kayısı', 'tip' => 'urun', 'ana_birim' => 'kg', 'grup_id' => (string)$GRUP, 'hks_urun_ad' => 'Kayısı'], 1);
+ok('hızlı ekle: hks_urun_ad katalogdan ADLA çözülür (204); eksik yok ama bayrak yine 1 (gözden geçirilecek)', $r['ok'] && stok_kart_oku($db, (int)$r['id'])['hks_urun_id'] === '204' && $r['eksik_alanlar'] === [] && (int)stok_kart_oku($db, (int)$r['id'])['hizli'] === 1);
+$r = stok_kart_hizli_ekle($db, ['ad' => 'Hızlı Hatalı', 'tip' => 'urun', 'ana_birim' => 'kg', 'birim_dara_kg' => '5000'], 1);
+ok('hızlı ekle: geçersiz dara yine REDDEDİLİR (yalnız zorunluluk esner)', !$r['ok'] && isset($r['alanlar']['birim_dara_kg']));
+$L = stok_kart_listesi($db); $lz = null; foreach ($L['satirlar'] as $x) if ((int)$x['id'] === $KZ) $lz = $x;
+ok('liste satırı hizli=1 + ambalaj_adi Kasa taşır', $lz !== null && (int)$lz['hizli'] === 1 && $lz['ambalaj_adi'] === 'Kasa');
+$r = stok_kart_kaydet($db, ['ad' => 'Hızlı Ürün', 'kod' => $kz['kod'], 'tip' => 'urun', 'ana_birim' => 'kg', 'grup_id' => (string)$GRUP, 'ambalaj_tip_id' => (string)$KASA, 'birim_dara_kg' => ''], 1, $KZ);
+ok('normal formdan kayıt, eksik VAR (HKS + dara) → kayıt YAPILIR (dara esnek), hizli=1 KALIR, uyarı + eksik_alanlar döner', $r['ok'] && (int)stok_kart_oku($db, $KZ)['hizli'] === 1 && (int)stok_kart_oku($db, $KZ)['grup_id'] === $GRUP
+    && ($r['eksik_alanlar'] ?? null) === ['hks_urun_id', 'birim_dara_kg'] && str_contains((string)($r['uyari'] ?? ''), 'HKS ürün') && str_contains((string)$r['uyari'], 'Birim dara'), json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = stok_kart_kaydet($db, ['ad' => 'Hızlı Ürün', 'kod' => $kz['kod'], 'tip' => 'urun', 'ana_birim' => 'kg', 'grup_id' => (string)$GRUP, 'ambalaj_tip_id' => (string)$KASA, 'birim_dara_kg' => '1,5', 'hks_urun_id' => '201'], 1, $KZ);
+ok('eksikler tamamlanınca hizli=0 (renk normale döner), uyarı yok', $r['ok'] && (int)stok_kart_oku($db, $KZ)['hizli'] === 0 && !isset($r['uyari']) && !isset($r['hizli']), json_encode($r, JSON_UNESCAPED_UNICODE));
+$r = stok_kart_kaydet($db, ['ad' => 'Hızlı Ürün', 'kod' => $kz['kod'], 'tip' => 'urun', 'ana_birim' => 'kg', 'grup_id' => (string)$GRUP, 'ambalaj_tip_id' => (string)$KASA, 'birim_dara_kg' => ''], 1, $KZ);
+ok('bayrak indikten sonra kart NORMAL: ambalaj seçiliyken dara boş artık hata', !$r['ok'] && isset($r['alanlar']['birim_dara_kg']));
+$r = stok_kart_kaydet($db, ['ad' => 'Normal Eksik', 'tip' => 'urun', 'ana_birim' => 'kg'], 1);
+ok('normal formdan YENİ kart eksikli olsa da hizli=0 (bayrak yalnız hızlı eklemede)', $r['ok'] && (int)stok_kart_oku($db, (int)$r['id'])['hizli'] === 0 && !isset($r['uyari']));
+stok_t_hks_katalog($db, null);
+
+echo "\n=== 24. v611 — depo kuralı: fiş depoları yalnız Depo Tanımları (geçiş) ===\n";
+ok('geçiş açık: stok_depo_gecis_acik + seçenekler = depot_options (Merkez + Şube)', stok_depo_gecis_acik($db) && stok_depo_secenekleri($db) === ['Merkez Depo', 'Şube Depo']);
+ok('stok_depo_gecerli: TR-duyarsız yazım listeden döner; listede olmayan null', stok_depo_gecerli($db, 'MERKEZ DEPO') === 'Merkez Depo' && stok_depo_gecerli($db, 'Eski Depo') === null && stok_depo_gecerli($db, '') === null);
+$f0 = say('stok_fisler'); $h0 = say('stok_hareketler');
+$r = $fis('giris', 'Eski Depo', [[$A, '5', '1']], ['neden_id' => (string)$ALIS]);
+ok('geçiş açık + Depo Tanımları\'nda olmayan depo → alanlar.depo (aktif değil), yazılmaz', !$r['ok'] && str_contains((string)($r['alanlar']['depo'] ?? ''), 'Depo Tanımları') && say('stok_fisler') === $f0);
+$r = $fis('transfer', 'Merkez Depo', [[$A, '1']], ['hedef_depo' => 'Eski Depo']);
+ok('transfer hedefi Depo Tanımları dışında → alanlar.hedef_depo', !$r['ok'] && str_contains((string)($r['alanlar']['hedef_depo'] ?? ''), 'Depo Tanımları') && say('stok_fisler') === $f0);
+stok_t_depo_gecis($db, false);
+ok('geçiş KAPALI: stok_depo_secenekleri = [] (eski depolar seçilemez)', !stok_depo_gecis_acik($db) && stok_depo_secenekleri($db) === []);
+foreach ([['giris', ['neden_id' => (string)$ALIS]], ['cikis', ['neden_id' => (string)$SATIS, 'eksiye_izin' => '1']], ['transfer', ['hedef_depo' => 'Şube Depo']]] as [$tr, $ek]) {
+    $r = $fis($tr, 'Merkez Depo', [[$A, '1', $tr === 'transfer' ? '' : '1']], $ek);
+    ok("geçiş KAPALI: $tr fişi REDDEDİLİR (kod depo_gecis, mesaj), hiçbir şey yazılmaz", !$r['ok'] && ($r['kod'] ?? '') === 'depo_gecis' && $r['hata'] === STOK_DEPO_GECIS_MESAJ && say('stok_fisler') === $f0 && say('stok_hareketler') === $h0, json_encode($r, JSON_UNESCAPED_UNICODE));
+}
+ok('geçiş KAPALI: Kantardan doldur önerisi depo boş gelir (Depo Tanımları dışı depo önerilmez)', stok_kantar_satir_oneri(['id' => 1, 'fis_no' => '1', 'giris_tarih' => $bugun, 'firma_adi' => '', 'malin_cinsi' => '', 'depo' => 'Merkez Depo', 'net_kg' => 10], [], [], stok_depo_secenekleri($db))['depo'] === '');
+ok('geçiş KAPALI: mevcut fiş listesi/okuma etkilenmez', count(stok_fis_listesi($db, 'giris')['satirlar']) > 0 && stok_fis_oku($db, $KF1) !== null);
+stok_t_depo_gecis($db, true);
+ok('geçiş yeniden açık: fiş kaydı çalışır', $fis('giris', 'Merkez Depo', [[$A, '1', '1']], ['neden_id' => (string)$ALIS])['ok']);
 
 siparis_test_bitir();

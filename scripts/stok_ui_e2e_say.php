@@ -11,10 +11,13 @@ require_once __DIR__ . '/_stok_test_lib.php';
 $db = db();
 $one = static fn(string $q): int => (int)$db->query($q)->fetchColumn();
 $kartlar = [];
-foreach ($db->query('SELECT id, kod, ad, aktif, ana_birim, kritik_seviye, cevrim_birim, cevrim_katsayi, grup_id FROM stok_kartlar ORDER BY id')->fetchAll() as $k) {
+$ekVar = stok_ek_hazir($db);   // v611 ek alanlar (eski şemada yok)
+foreach ($db->query('SELECT * FROM stok_kartlar ORDER BY id')->fetchAll() as $k) {
     $kartlar[(int)$k['id']] = ['kod' => $k['kod'], 'ad' => $k['ad'], 'aktif' => (int)$k['aktif'], 'birim' => $k['ana_birim'], 'kritik' => $k['kritik_seviye'] !== null ? stok_milli($k['kritik_seviye']) : null,
         'cevrim_birim' => $k['cevrim_birim'], 'cevrim' => $k['cevrim_katsayi'] !== null ? stok_milli($k['cevrim_katsayi']) : null, 'grup_id' => $k['grup_id'] !== null ? (int)$k['grup_id'] : null,
-        'bakiye' => stok_bakiye($db, (int)$k['id'])['toplam_milli']];
+        'bakiye' => stok_bakiye($db, (int)$k['id'])['toplam_milli']]
+        + ($ekVar ? ['hizli' => (int)$k['hizli'], 'ambalaj_tip_id' => $k['ambalaj_tip_id'] !== null ? (int)$k['ambalaj_tip_id'] : null, 'dara' => $k['birim_dara_kg'] !== null ? stok_milli($k['birim_dara_kg']) : null,
+            'hks_urun_id' => $k['hks_urun_id'], 'hks_urun_ad' => $k['hks_urun_ad']] : ['md_id_var' => array_key_exists('md_id', $k)]);
 }
 $tanim = []; foreach ($db->query('SELECT tur, COUNT(*) n FROM stok_tanimlar GROUP BY tur')->fetchAll() as $r) $tanim[$r['tur']] = (int)$r['n'];
 $bh = stok_bakiye_haritasi($db);

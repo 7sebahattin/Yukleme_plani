@@ -69,6 +69,10 @@ $adimlar = [
     'depo_migrate'                  => static fn() => depo_migrate($pdo),
     'cari_migrate'                  => static fn() => cari_migrate($pdo),
     'stok_migrate'                  => static fn() => stok_migrate($pdo),
+    'stok_ek_migrate'               => static function () use ($pdo): void {   // v611: hata satırı da başarısızlıktır
+        $h = array_filter(stok_ek_migrate($pdo), static fn($r) => $r['durum'] === 'hata');
+        if ($h) throw new RuntimeException(json_encode(array_values($h), JSON_UNESCAPED_UNICODE));
+    },
     'fatura_migrate'                => static fn() => fatura_migrate($pdo),
     'kasa_migrate'                  => static fn() => kasa_migrate($pdo),
     'doviz_migrate'                 => static fn() => doviz_migrate($pdo),
@@ -93,6 +97,13 @@ foreach ([1, 2] as $tur) {
         ok("Tur $tur — $ad hatasız tamamlandı", $hata === null, (string)$hata);
     }
 }
+
+// v611: canlıdaki v611 ÖNCESİ stok_kartlar (hizli yok, md_id + idx_stk_md var) → stok_ek_migrate MySQL yolu (DROP INDEX + DROP COLUMN)
+$pdo->exec('ALTER TABLE `stok_kartlar` DROP INDEX `idx_stk_hizli`, DROP COLUMN `hizli`, ADD COLUMN `md_id` INT NULL DEFAULT NULL, ADD INDEX `idx_stk_md` (`md_id`)');
+$sek = stok_ek_migrate($pdo);
+$sekD = array_column($sek, 'durum', 'adim');
+ok('v611 stok_ek_migrate (MariaDB, eski şema): hizli + idx_stk_hizli eklendi, md_id kaldırıldı, hata yok', ($sekD['stok_kartlar.hizli'] ?? '') === 'eklendi' && ($sekD['stok_kartlar.idx_stk_hizli'] ?? '') === 'eklendi'
+    && ($sekD['stok_kartlar.md_id'] ?? '') === 'kaldirildi' && !in_array('hata', $sekD, true) && stok_ek_durum($pdo)['hazir'], json_encode($sek, JSON_UNESCAPED_UNICODE));
 
 $pidx = cekirdek_perf_indeksler_durum($pdo);
 ok('B-29 tüm performans composite indeksleri MariaDB üzerinde hazır', $pidx['hazir'], json_encode($pidx));

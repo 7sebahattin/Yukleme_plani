@@ -3,7 +3,7 @@
 // scripts/stok_ui_smoke.php — Stok (muhasebe) sayfaları/uçları: GERÇEK HTML/JSON üzerinde PHP düzeyi testler (Parça A + B fiş sayfaları)
 //   php scripts/stok_ui_smoke.php        → çıkış kodu 0 = hepsi geçti
 // Her istek ALT SÜREÇTE (scripts/_stok_istek.php) gerçek exit/header ile çalışır; DB geçici dosya SQLite + uydurma veri. Canlı DB'ye dokunmaz.
-// Kapsam: şema yok · yönetici değil · boş · dolu (kritik/pasif/iptal/2 depo) · kısmi yanıt · XSS · HTML denge · csrf · stok_kaydet JSON/PRG · tanımlar.
+// Kapsam (v611 §11: ek alanlar, hızlı kart, depo kuralı, fail-soft eski şema): şema yok · yönetici değil · boş · dolu (kritik/pasif/iptal/2 depo) · kısmi yanıt · XSS · HTML denge · csrf · stok_kaydet JSON/PRG · tanımlar.
 // =========================================================
 require_once __DIR__ . '/_stok_test_lib.php';
 
@@ -139,7 +139,7 @@ ok('hareket tablosu: 6 satır (iptal fişi 2 satır dahil), en yeni önce (CKS s
 ok('iptal satırları soluk (st-iptal) + İPTAL / İptal (ters) rozetleri', substr_count($tbl, '<tr class="st-iptal"') === 2 && str_contains($tbl, 'İPTAL') && str_contains($tbl, 'İptal (ters)'));
 ok('fire rozeti turuncu (st-rozet--fire), giriş yeşil, işaretler ▲▼', str_contains($tbl, 'st-rozet st-rozet--fire') && str_contains($tbl, 'st-rozet st-rozet--giris') && str_contains($tbl, '&#9650;') && str_contains($tbl, '&#9660;'));
 ok('fiş no bağlantıları tür sayfasına ?id= ile', (bool)preg_match('/href="stok_giris_fisleri\.php\?id=\d+">GRS-\d{4}-\d{6}</', $tbl));
-ok('KG ekranda tam sayı (virgüllü kg yok)', !preg_match('/\d,\d+ kg/', $b) && !preg_match('/[+−-]\d[\d.]*,\d+<\/span>/', $tbl));
+ok('KG ekranda tam sayı (virgüllü kg yok; v611 birim dara ondalıklı kalır: "1,8 kg dara")', !preg_match('/\d,\d+ kg(?! dara)/', preg_replace('/Birim dara: [\d.,]+ kg/', '', $b)) && str_contains($b, '1,8 kg dara') && !preg_match('/[+−-]\d[\d.]*,\d+<\/span>/', $tbl));
 ok('mobil hareket kartları da basılır (aynı veri)', substr_count($b, '<article class="st-hk') === 6);
 ok('işlemler: Düzenle (modal) · Pasifleştir (kart_durum aktif=0) · Sil DEVRE DIŞI (hareketli)', str_contains($b, 'data-st-modal="kart" data-duzenle="1"') && (bool)preg_match('/name="islem" value="kart_durum"><input type="hidden" name="id" value="\d+"><input type="hidden" name="aktif" value="0">/', $b)
     && (bool)preg_match('/<button type="button" class="btn st-tehlike" disabled title="Hareketi olan kart silinemez/', $b));
@@ -226,9 +226,9 @@ echo "\n=== 8. Tanımlar sayfası ===\n";
 $r = get('stok_tanimlari.php');
 $b = bolge($r['govde']);
 ok('tanımlar: 200, uyarı yok, HTML dengeli, csrf', uyari_yok($r) && html_hata($b) === [] && form_hata($b) === [], json_encode([html_hata($b), form_hata($b), $r['hata']]));
-ok('3 sekme (Gruplar · Giriş · Çıkış; İçe Aktar yok), varsayılan grup seçili; diğer paneller hidden', substr_count($b, 'class="st-tanim-nav-oge" role="tab"') === 3 && !str_contains($b, 'stTabIce') && !str_contains($b, 'stPanelIce') && (bool)preg_match('/id="stTabGrup"[^>]*aria-selected="true"/', $b)
+ok('4 sekme (Gruplar · Giriş · Çıkış · v611 Ambalaj Tipleri; İçe Aktar yok), varsayılan grup seçili; diğer paneller hidden', substr_count($b, 'class="st-tanim-nav-oge" role="tab"') === 4 && str_contains($b, 'id="stTabAmbalaj"') && !str_contains($b, 'stTabIce') && !str_contains($b, 'stPanelIce') && (bool)preg_match('/id="stTabGrup"[^>]*aria-selected="true"/', $b)
     && (bool)preg_match('/id="stPanelGiris" role="tabpanel" aria-labelledby="stTabGiris" hidden/', $b));
-ok('sistem nedenleri kilit rozetli; silme formu yok, ad readonly', substr_count($b, 'st-rozet--kilit') === 10 && (bool)preg_match('/name="ad" value="Alış" maxlength="100" required readonly/', $b));
+ok('sistem tanımları (10 neden + v611 Kasa/Palet ambalaj tipi) kilit rozetli; silme formu yok, ad readonly', substr_count($b, 'st-rozet--kilit') === 12 && !preg_match('/aria-label="(Kasa|Palet) sil"/', $b) && (bool)preg_match('/name="ad" value="Alış" maxlength="100" required readonly/', $b));
 ok('kullanılan grup (Taze Ürün) için Sil yok; aktif anahtarı role=switch', !preg_match('/aria-label="Taze Ürün sil"/', $b) && str_contains($b, 'role="switch"'));
 $r = get('stok_tanimlari.php', ['sekme' => 'ice_aktar']);
 ok('?sekme=ice_aktar güvenli biçimde Gruplar sekmesine düşer (panel yok)', uyari_yok($r) && !str_contains($r['govde'], 'Tanımlardan içe aktar') && !str_contains($r['govde'], 'stPanelIce') && (bool)preg_match('/id="stTabGrup"[^>]*aria-selected="true"/', $r['govde']));
@@ -347,5 +347,76 @@ ok('v558: stok_ui.php / stok.js / stok.css içinde donusum / dönüşüm kalmad�
 ok('v558: stok_tur_rozet("donusum") ham metin (özel rozet yok)', stok_tur_rozet('donusum', '') === '<span class="st-rozet">donusum</span>');
 $r = post(['islem' => 'fis_kaydet', 'tur' => 'donusum', 'tarih' => date('Y-m-d'), 'depo' => 'Merkez Depo', 'kart_id' => [(string)$K['Domates (Salkım)'], (string)$K['Biber (Dolmalık)']], 'miktar' => ['5', '5'], 'birim' => ['', ''], 'yon' => ['C', 'G']]);
 ok('v558: stok_kaydet.php fis_kaydet tur=donusum → 422 "Geçersiz fiş türü", fiş yazılmadı', $r['kod'] === 422 && str_contains((string)(js($r)['hata'] ?? ''), 'Geçersiz fiş türü') && (int)$db->query("SELECT COUNT(*) FROM stok_fisler WHERE tur = 'donusum'")->fetchColumn() === 0, $r['govde']);
+
+// ═══ 11. v611 — ambalaj tipi · birim dara · HKS ürün · hızlı eklenen kart · Depo Tanımları kuralı ═══
+echo "\n=== 11. v611 (ek alanlar, hızlı kart, depo kuralı, fail-soft) ===\n";
+$r = get('stok_kartlari.php', ['id' => (string)$K['Biber (Dolmalık)']]);
+$b = bolge($r['govde']);
+ok('kartlar (ek şema hazır): 200, uyarı yok, HTML dengeli, form/csrf sağlam', uyari_yok($r) && html_hata($b) === [] && form_hata($b) === [], json_encode([html_hata($b), form_hata($b), $r['hata']]));
+ok('hızlı kart (Biber) listede AYRI SINIF + data-hizli + görünür rozet ve eksik listesi', substr_count($b, 'st-satir--hizli') === 1 && str_contains($b, 'data-hizli="1"')
+    && str_contains($b, 'Hızlı eklendi — eksikleri tamamlayın') && str_contains($b, '<span class="st-hizli-eksik">Eksik: HKS ürün</span>'));
+ok('detay: "Hızlı eklendi" bandı + #stKartVeri hizli=1, eksikler=[hks_urun_id]', str_contains($b, 'class="st-hizli-uyari"') && (bool)preg_match('/"hizli":1,"eksikler":\["hks_urun_id"\]/', $r['govde']));
+ok('modal: Ambalaj · HKS bölümü (ambalaj select Kasa/Palet, dara inputmode=decimal, HKS datalist 5 ürün + gizli id)', str_contains($b, 'data-st-ek') && (bool)preg_match('/<select name="ambalaj_tip_id"[^>]*><option value="">— yok —<\/option><option value="\d+">Kasa<\/option><option value="\d+">Palet<\/option>/', $b)
+    && str_contains($b, 'name="birim_dara_kg" inputmode="decimal"') && preg_match('#<datalist id="stHksListe">(.*?)</datalist>#s', $b, $dlm) === 1 && substr_count($dlm[1], '<option value=') === 5 && str_contains($dlm[1], '<option value="Biber Dolma" data-id="102">') && str_contains($b, '<input type="hidden" name="hks_urun_id" value="">'));
+ok('liste: Kasa satırında "Kasa · 1,8 kg dara", Domates satırında "HKS: Domates"', str_contains($b, '<span class="st-satir-ek">Kasa · 1,8 kg dara</span>') && str_contains($b, '<span class="st-satir-ek">HKS: Domates</span>'));
+$kb = stok_kart_oku($db, $K['Biber (Dolmalık)']);
+$biberPost = ['islem' => 'kart_kaydet', 'id' => (string)$K['Biber (Dolmalık)'], 'ad' => $kb['ad'], 'kod' => $kb['kod'], 'tip' => 'urun', 'grup_id' => (string)$kb['grup_id'], 'ana_birim' => 'kg', 'kdv_orani' => '1', 'aktif' => '1',
+    'ambalaj_tip_id' => '', 'birim_dara_kg' => '', 'hks_urun_id' => '', 'hks_urun_ara' => '', 'geri' => 'stok_kartlari.php?id=' . $K['Biber (Dolmalık)']];
+$r = post($biberPost);
+ok('stok_kaydet kart_kaydet (hızlı kart, HKS hâlâ eksik) → 200 ok, uyari "Hızlı eklenen kartta eksikler var: HKS ürün", eksik_alanlar', $r['kod'] === 200 && js($r)['ok'] === true
+    && js($r)['uyari'] === 'Hızlı eklenen kartta eksikler var: HKS ürün' && js($r)['eksik_alanlar'] === ['hks_urun_id'] && (int)stok_kart_oku($db, $K['Biber (Dolmalık)'])['hizli'] === 1, $r['govde']);
+$r = post(['hks_urun_ara' => 'biber dolma'] + $biberPost);
+ok('HKS ürün ADLA (JS kapalı yolu) → 102, bayrak indi (hizli=0), uyarı yok', js($r)['ok'] === true && js($r)['uyari'] === null && stok_kart_oku($db, $K['Biber (Dolmalık)'])['hks_urun_id'] === '102' && (int)stok_kart_oku($db, $K['Biber (Dolmalık)'])['hizli'] === 0, $r['govde']);
+$kk = stok_kart_oku($db, $K['Kasa 6\'lı Plastik']);
+$r = post(['islem' => 'kart_kaydet', 'id' => (string)$kk['id'], 'ad' => $kk['ad'], 'kod' => $kk['kod'], 'tip' => 'malzeme', 'grup_id' => (string)$kk['grup_id'], 'ana_birim' => 'adet', 'kdv_orani' => '20', 'aktif' => '1',
+    'ambalaj_tip_id' => (string)$kk['ambalaj_tip_id'], 'birim_dara_kg' => '']);
+ok('normal kart: ambalaj seçili + dara boş → 422 alanlar.birim_dara_kg; DB dara 1.800 kalır', $r['kod'] === 422 && isset(js($r)['alanlar']['birim_dara_kg']) && stok_milli(stok_kart_oku($db, (int)$kk['id'])['birim_dara_kg']) === 1800, $r['govde']);
+$r = get('stok_tanimlari.php', ['sekme' => 'ambalaj_tip']);
+$b = bolge($r['govde']);
+ok('tanımlar ?sekme=ambalaj_tip: Ambalaj Tipleri paneli seçili, Kasa/Palet "kartta kullanılıyor", HTML dengeli', uyari_yok($r) && html_hata($b) === [] && (bool)preg_match('/id="stTabAmbalaj"[^>]*aria-selected="true"/', $b)
+    && str_contains($b, 'id="stPanelAmbalaj"') && str_contains($b, '1 kartta kullanılıyor') && str_contains($b, 'Yeni ambalaj tipi'));
+$r = post(['islem' => 'tanim_sil', 'id' => (string)array_column(stok_tanim_listesi($db, 'ambalaj_tip'), 'id', 'kod')['palet']]);
+ok('stok_kaydet tanim_sil sistem ambalaj tipi → 409 kullanimda', $r['kod'] === 409 && js($r)['kod'] === 'kullanimda', $r['govde']);
+stok_t_hks_katalog($db, [['901', '<img src=x onerror=alert(1)>']]);
+$r = get('stok_kartlari.php');
+ok('XSS: HKS katalog adı datalist\'te kaçışlanır', !str_contains($r['govde'], '<img src=x') && str_contains($r['govde'], '&lt;img src=x onerror=alert(1)&gt;'));
+stok_t_hks_katalog($db, null);
+$r = get('stok_kartlari.php', ['id' => (string)$K['Domates (Salkım)']]);
+ok('katalog okunamıyor: HKS alanı pasif + not, datalist yok; seçili ad detayda yine görünür', str_contains($r['govde'], 'HKS ürün kataloğu okunamadı') && !str_contains($r['govde'], 'id="stHksListe"') && str_contains($r['govde'], 'HKS ürün: Domates'));
+
+// Depo kuralı: yeni depo sistemi geçişi KAPALI → form uyarısı + uçta 422 (hiçbir şey yazılmaz)
+stok_t_depo_gecis($db, false);
+$r = get('stok_giris_fisleri.php', ['yeni' => '1']);
+$b = bolge($r['govde']);
+ok('geçiş kapalı: giriş formu uyarı (data-depo-gecis) + Kaydet disabled + depo seçeneği yok, HTML dengeli', uyari_yok($r) && html_hata($b) === [] && str_contains($b, 'data-depo-gecis') && str_contains($b, 'nda yeni depo sistemine geçişi tamamlayın.')
+    && (bool)preg_match('/data-kaydet disabled/', $b) && (bool)preg_match('/<select name="depo" required><option value="">Depo Tanımları geçişi bekleniyor<\/option><\/select>/', $b), substr($b, 0, 300));
+$f0 = say('stok_fisler');
+$r = post(['islem' => 'fis_kaydet', 'tur' => 'giris', 'tarih' => date('Y-m-d'), 'depo' => 'Merkez Depo', 'neden_id' => (string)stok_tanim_listesi($db, 'giris_neden')[0]['id'],
+    'kart_id' => [(string)$K['Domates (Salkım)']], 'kart_ara' => [''], 'miktar' => ['5'], 'birim' => [''], 'birim_fiyat' => [''], 'kdv_orani' => [''], 'lot' => [''], 'yon' => ['G']]);
+ok('geçiş kapalı: stok_kaydet fis_kaydet → 422, kod depo_gecis, mesaj; fiş yazılmadı', $r['kod'] === 422 && js($r)['kod'] === 'depo_gecis' && js($r)['hata'] === STOK_DEPO_GECIS_MESAJ && say('stok_fisler') === $f0, $r['govde']);
+ok('geçiş kapalı: mevcut fiş detayı görüntülenir', str_contains(get('transfer_fisleri.php', ['id' => (string)$FB['transfer']])['govde'], 'TRF-'));
+stok_t_depo_gecis($db, true);
+
+// Fail-soft: v611 ÖNCESİ şema (ayrı dosya DB) — alanlar yok, yöneticiye kurulum notu, kayıt çalışır
+$anaDb = $STOK_T_DB;
+$STOK_T_DB = sys_get_temp_dir() . '/stok_t_eski_ui_' . getmypid() . '_' . bin2hex(random_bytes(3)) . '.sqlite';
+register_shutdown_function(static function () use ($STOK_T_DB): void { @unlink($STOK_T_DB); });
+$e = new PDO('sqlite:' . $STOK_T_DB); $e->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); $e->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+siparis_test_diger_tablolar($e);
+stok_t_depo_gecis($e, true);
+stok_t_sema_kur($e);
+stok_t_eski_kart_semasi($e);
+$eid = (int)stok_kart_kaydet($e, ['ad' => 'Eski Şema Ürünü', 'tip' => 'urun', 'ana_birim' => 'kg'], 1)['id'];
+$r = get('stok_kartlari.php', ['id' => (string)$eid]);
+$b = bolge($r['govde']);
+ok('eski şema: kartlar 200, uyarı yok, HTML dengeli; Ambalaj · HKS bölümü YOK; yöneticiye migrate.php#stok-ek notu', uyari_yok($r) && html_hata($b) === [] && !str_contains($b, 'data-st-ek') && !str_contains($b, 'st-satir--hizli')
+    && str_contains($b, 'href="migrate.php#stok-ek"') && !str_contains($r['govde'], '"hizli"'), json_encode([html_hata($b), $r['hata']]));
+$r = get('stok_kartlari.php', ['id' => (string)$eid], ['admin' => false, 'perms' => ['muhasebe.stok_kartlari.read', 'muhasebe.stok.read']]);
+ok('eski şema: yönetici OLMAYANA (Roller izinli) kurulum notu gösterilmez', str_contains($r['govde'], 'Eski Şema Ürünü') && !str_contains($r['govde'], 'migrate.php#stok-ek'), substr(strip_tags($r['govde']), 0, 200));
+$r = post(['islem' => 'kart_kaydet', 'id' => (string)$eid, 'ad' => 'Eski Şema Ürünü 2', 'kod' => 'STK-0001', 'tip' => 'urun', 'ana_birim' => 'kg', 'kdv_orani' => '1', 'aktif' => '1', 'ambalaj_tip_id' => '7', 'birim_dara_kg' => 'x']);
+ok('eski şema: stok_kaydet kart_kaydet 200 (ek alan girdileri yok sayılır)', $r['kod'] === 200 && js($r)['ok'] === true && stok_kart_oku($e, $eid)['ad'] === 'Eski Şema Ürünü 2', $r['govde']);
+$r = get('stok_tanimlari.php');
+ok('eski şema: tanımlar 3 sekme (Ambalaj Tipleri yok)', substr_count(bolge($r['govde']), 'class="st-tanim-nav-oge" role="tab"') === 3 && !str_contains($r['govde'], 'stTabAmbalaj'));
+$STOK_T_DB = $anaDb;
 
 siparis_test_bitir();

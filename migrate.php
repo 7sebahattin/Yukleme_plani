@@ -153,11 +153,13 @@ $usip_results = []; $usip_ran = false;                          // v409 Ürün S
 $frg_results = []; $frg_ran = false;                            // Frugro Siparişler (3 yeni tablo)
 $depo_mesaj = []; $depo_ran = false;                             // Depolar (v574: yeni depo kayıt sistemi + geçiş)
 $cari_results = []; $cari_ran = false;                          // Cari İşlemler (3 yeni tablo)
+$cari_ek_results = []; $cari_ek_ran = false;                    // Cari ek şema (v611: tipler, TCKN/doğum tarihi, hızlı bayrağı)
 $kt_results = []; $kt_ran = false;                              // Kullanıcı Tercihleri (kullanici_tercihleri)
 $aj_results = []; $aj_ran = false;                              // Ajanda (ajanda_kayitlar)
 $kal_results = []; $kal_ran = false;                              // Mal Kabul Alanları (kantar_fisleri kolonları: şoför, malın sahibi, müstahsil, bahçe)
 $pf_results = []; $pf_ran = false;                              // Palet Fişleri (loading_pallets kolonları: açıklama + müstahsil)
 $stok_results = []; $stok_ran = false;                          // Stok (muhasebe) (5 yeni tablo)
+$stok_ek_results = []; $stok_ek_ran = false;                    // v611 Stok kartı ek alanları (5 kolon + md_id kaldırma + ambalaj tipi tohumu)
 $fatura_results = []; $fatura_ran = false;                      // Fatura (3 yeni tablo)
 $kasa_results = []; $kasa_ran = false;                          // Kasa (3 yeni tablo)
 $doviz_results = []; $doviz_ran = false;                        // Döviz & Günlük Kurlar (2 yeni tablo)
@@ -516,6 +518,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'cari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'cari_ek') {
+    csrf_check($_POST['csrf'] ?? null);
+    $cari_ek_ran     = true;
+    $cari_ek_results = cari_ek_migrate($pdo);
+    foreach ($cari_ek_results as $sr) {
+        if (in_array($sr['durum'], ['eklendi', 'kaldirildi'], true)) {
+            audit_log_event('migrate', 'cari', null, null, ['operation' => 'cari_ek', 'step' => $sr['adim']]);
+        }
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'kullanici_tercih') {
     csrf_check($_POST['csrf'] ?? null);
     $kt_ran     = true;
@@ -559,6 +570,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($stok_results as $sr) {
         if ($sr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'stok', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'stok_ek') {
+    csrf_check($_POST['csrf'] ?? null);
+    $stok_ek_ran     = true;
+    $stok_ek_results = stok_ek_migrate($pdo);
+    foreach ($stok_ek_results as $sr) {
+        if (in_array($sr['durum'], ['eklendi', 'kaldirildi'], true)) {
+            audit_log_event('migrate', 'stok', null, null, ['operation' => $sr['durum'] === 'kaldirildi' ? 'drop_column' : 'stok_ek', 'target' => $sr['adim']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'fatura') {
@@ -1324,6 +1344,34 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     </form>
   <?php mg_kart_kapat(); ?>
 
+  <?php mg_kart_ac('cari-ek'); ?>
+    <h2 style="margin-top:0;">Cari — Tipler · TCKN/Doğum tarihi · Hızlı ekleme</h2>
+    <p style="color:#555;font-size:.9em;">
+      Cari İşlemler tabloları kurulduktan sonra çalıştırılır (idempotent): <code>cari_tanimlar.kod</code> (+ <code>(tur, kod)</code> indeksi),
+      <code>cari_kartlar.tckn</code> · <code>dogum_tarihi</code> · <code>hizli</code> (+ <code>tckn</code>, <code>vergi_no</code> arama indeksleri) kolonlarını ekler,
+      eski Tanımlar bağını (<code>cari_kartlar.md_id</code> ve indeksi) kaldırır ve 8 sistem cari tipini
+      (Müşteri · Tedarikçi · Müşteri+Tedarikçi · Personel/Çavuş · Diğer · Müstahsil · Nakliyeci · Gümrükçü) bir kez tohumlar. Mevcut cari verisi silinmez.
+      Çalıştırılmazsa cari tipi sabit liste olarak kalır, TCKN / doğum tarihi / hızlı ekleme alanları gizlidir; diğer her şey aynen çalışır.
+      <?php if ($cari_ek_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($cari_ek_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['adim']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $cariEkOnkosul = !cari_hazir($pdo); $cariEkHazir = !$cariEkOnkosul && cari_ek_tam_hazir($pdo); ?>
+    <?php if ($cariEkOnkosul): ?>
+    <p style="font-weight:600;color:#c0392b;">✗ Önce yukarıdaki "Cari İşlemler" kartını çalıştırın.</p>
+    <?php else: ?>
+    <p style="font-weight:600;color:<?= $cariEkHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $cariEkHazir ? '✓ Ek şema hazır' : '✗ Ek şema eksik' ?></p>
+    <?php endif; ?>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="cari_ek">
+      <button type="submit" class="btn btn-primary"<?= $cariEkOnkosul ? ' disabled' : '' ?>>Cari Ek Şemasını Kur</button>
+    </form>
+  <?php mg_kart_kapat(); ?>
+
   <?php mg_kart_ac('kullanici-tercih'); ?>
     <h2 style="margin-top:0;">Kullanıcı Tercihleri</h2>
     <p style="color:#555;font-size:.9em;">
@@ -1434,6 +1482,37 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
       <input type="hidden" name="ne" value="stok">
       <button type="submit" class="btn btn-primary">Stok Tablolarını Oluştur</button>
     </form>
+  <?php mg_kart_kapat(); ?>
+
+  <?php mg_kart_ac('stok-ek'); ?>
+    <h2 style="margin-top:0;">Stok — Ambalaj tipi · Dara · HKS ürün · Hızlı ekleme</h2>
+    <p style="color:#555;font-size:.9em;">
+      <code>stok_kartlar</code> tablosuna 5 kolon ekler — <code>ambalaj_tip_id</code> (INT), <code>birim_dara_kg</code> (DECIMAL 10,3),
+      <code>hks_urun_id</code> (VARCHAR 40), <code>hks_urun_ad</code> (VARCHAR 150), <code>hizli</code> (TINYINT, varsayılan 0) — ve indekslerini kurar;
+      kullanılmayan eski Tanımlar bağını (<code>md_id</code> + <code>idx_stk_md</code>) KALDIRIR; Ambalaj Tipi sistem tanımlarını (Kasa, Palet) eksikse ekler.
+      Tekrar çalıştırmak güvenlidir (idempotent). Çalıştırılmazsa Stok Kartları bu alanlar olmadan aynen çalışır. Önce yukarıdaki Stok (muhasebe) kartı kurulu olmalı.
+      <?php if ($stok_ek_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($stok_ek_results as $sr): ?>
+        <br>&nbsp;&nbsp;<?= h($sr['adim']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <?php $stokEk = stok_hazir($pdo) ? stok_ek_durum($pdo) : ['hazir' => false, 'kolonlar' => false, 'indeksler' => false, 'md_id_yok' => false, 'tohum' => false]; ?>
+    <p style="font-weight:600;color:<?= $stokEk['hazir'] ? '#1f9d55' : '#c0392b' ?>;"><?= $stokEk['hazir'] ? '✓ Kolonlar, indeksler ve Ambalaj Tipi tanımları hazır' : '✗ Eksik: ' . h(implode(', ', array_keys(array_filter(['kolonlar' => !$stokEk['kolonlar'], 'indeksler' => !$stokEk['indeksler'], 'eski md_id kaldırılmadı' => !$stokEk['md_id_yok'], 'ambalaj tipi tohumu' => !$stokEk['tohum']])))) ?></p>
+    <form method="post" style="margin-top:12px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="stok_ek">
+      <button type="submit" class="btn btn-primary">Stok Ek Alanlarını Kur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">ALTER SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (stok_ek_kolonlari() as [$skol, $stan]) { echo h("ALTER TABLE `stok_kartlar` ADD COLUMN `$skol` $stan;") . "\n"; }
+        foreach (stok_ek_indeksleri() as $six => $skol) { echo h("CREATE INDEX `$six` ON `stok_kartlar` (`$skol`);") . "\n"; }
+        echo h('ALTER TABLE `stok_kartlar` DROP INDEX `idx_stk_md`;') . "\n" . h('ALTER TABLE `stok_kartlar` DROP COLUMN `md_id`;') . "\n";
+      ?></pre>
+    </details>
   <?php mg_kart_kapat(); ?>
 
   <?php mg_kart_ac('fatura'); ?>

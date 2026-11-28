@@ -2,11 +2,13 @@
 // =========================================================
 // config/stok_core.php — Stok (muhasebe) modülü çekirdeği (include-only; yalnız fonksiyon bildirir)
 //
-// 5 tablo: stok_kartlar · stok_tanimlar (grup / giriş nedeni / çıkış nedeni) · stok_fisler · stok_fis_satirlar ·
+// 5 tablo: stok_kartlar · stok_tanimlar (grup / giriş nedeni / çıkış nedeni / v611 ambalaj tipi) · stok_fisler · stok_fis_satirlar ·
 //          stok_hareketler (TEK defter; INSERT-only — UPDATE/DELETE YOK).
 // Bu defter Ürün Stoğu (stok.php: kantar − yükleme türetimi) ve Malzeme Stok (material_stock_movements) ekranlarından
 // BAĞIMSIZDIR; onları okumaz, onlar da bunu okumaz (kantar için tek istisna: Parça B'de salt okunur ön-doldurma).
 // Şema YALNIZ migrate.php "Stok (muhasebe)" kartından kurulur (stok_migrate; ALTER ve FK YOK, GO kuralı).
+// v611 ek kart alanları (ambalaj tipi · birim dara · HKS ürün · hızlı bayrağı) ayrı kart: config/stok_ek_sema.php (stok_ek_migrate; ALTER yalnız orada).
+//   Kolonlar yokken stok_ek_hazir() false → bu alanlar okunmaz/yazılmaz (fail-soft). Fiş depoları yalnız Depo Tanımları (stok_depo_secenekleri).
 // Miktar PHP'de "milli" TAM SAYI (ana birim × 1000), DB'de DECIMAL(14,3). Para PHP'de kuruş TAM SAYI, DB'de DECIMAL(15,2).
 // Maliyet: hareketli ağırlıklı ortalama, ÜRÜN bazında (depolar ortak), TRY, KDV hariç (stok_maliyet_uygula SAF motor).
 //   Motor içinde ort = kuruş / ana birim (float); DB'de ort_sonra = TL / ana birim, q_sonra = ana birim, v_sonra = TL.
@@ -42,7 +44,11 @@ function stok_tablolar(): array
   `kritik_seviye`  DECIMAL(14,3)  NULL DEFAULT NULL,
   `notlar`         TEXT           NULL,
   `aktif`          TINYINT(1)     NOT NULL DEFAULT 1,
-  `md_id`          INT            NULL DEFAULT NULL,
+  `ambalaj_tip_id` INT            NULL DEFAULT NULL,
+  `birim_dara_kg`  DECIMAL(10,3)  NULL DEFAULT NULL,
+  `hks_urun_id`    VARCHAR(40)    NULL DEFAULT NULL,
+  `hks_urun_ad`    VARCHAR(150)   NULL DEFAULT NULL,
+  `hizli`          TINYINT(1)     NOT NULL DEFAULT 0,
   `created_at`     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_by`     INT            NULL DEFAULT NULL,
   `updated_at`     DATETIME       NULL DEFAULT NULL,
@@ -51,8 +57,10 @@ function stok_tablolar(): array
   KEY `idx_stk_ad` (`ad`),
   KEY `idx_stk_tip_aktif` (`tip`, `aktif`),
   KEY `idx_stk_grup` (`grup_id`),
-  KEY `idx_stk_md` (`md_id`),
-  KEY `idx_stk_barkod` (`barkod`)
+  KEY `idx_stk_barkod` (`barkod`),
+  KEY `idx_stk_ambalaj` (`ambalaj_tip_id`),
+  KEY `idx_stk_hks` (`hks_urun_id`),
+  KEY `idx_stk_hizli` (`hizli`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC",
 
         'stok_tanimlar' => "CREATE TABLE IF NOT EXISTS `stok_tanimlar` (
@@ -259,7 +267,8 @@ function stok_no_store(): void { cari_no_store(); }
 /** @return array<string,string> birim kodu → etiket */
 function stok_birimler(): array
 {
-    return ['kg' => 'kg', 'adet' => 'adet', 'kasa' => 'kasa', 'palet' => 'palet', 'paket' => 'paket', 'koli' => 'koli', 'lt' => 'lt', 'm' => 'm'];
+    return ['kg' => 'kg', 'adet' => 'adet', 'kasa' => 'kasa', 'palet' => 'palet', 'paket' => 'paket', 'koli' => 'koli', 'lt' => 'lt', 'm' => 'm',
+        'rulo' => 'rulo', 'top' => 'top', 'set' => 'set'];   // v611: rulo/top/set tam sayı birimleri
 }
 
 /** Kesir kabul etmeyen (tam sayı) birim mi? lt ve m dışındakiler tam sayıdır (kg dahil: ekranda tam sayı kuralı). */
@@ -269,7 +278,7 @@ function stok_birim_tam_mi(string $birim): bool { return !in_array($birim, ['lt'
 function stok_kart_tipleri(): array { return ['urun' => 'Ürün', 'malzeme' => 'Malzeme', 'diger' => 'Diğer']; }
 
 /** @return array<string,string> */
-function stok_tanim_turleri(): array { return ['grup' => 'Stok Grubu', 'giris_neden' => 'Giriş Nedeni', 'cikis_neden' => 'Çıkış Nedeni']; }
+function stok_tanim_turleri(): array { return ['grup' => 'Stok Grubu', 'giris_neden' => 'Giriş Nedeni', 'cikis_neden' => 'Çıkış Nedeni', 'ambalaj_tip' => 'Ambalaj Tipi']; }
 
 /** @return list<int> */
 function stok_kdv_oranlari(): array { return [0, 1, 10, 20]; }
@@ -346,6 +355,42 @@ function stok_katsayi_coz(mixed $ham): ?string
     return $m === null ? null : stok_milli_db($m);
 }
 
+const STOK_DARA_MAX_GRAM = 1000000;   // v611 birim dara üst sınırı: 1.000 kg (gram)
+
+/**
+ * v611 birim dara (kg) → gram tam sayı (kg × 1000). 0–1.000 kg, en çok 3 ondalık; eksi/boş/çöp → null.
+ * Virgül varsa ondalık ayırıcıdır ("1,8", "0,250"; binlik noktalı "1.000,5" → 1000,5); virgül YOKSA nokta ondalıktır ("1.8", "0.500" = 0,5 kg).
+ * Böylece "0.500" asla 500 kg olmaz (100×/1000× hata riski); "1.234,5" gibi aralık dışı değerler reddedilir. Sessiz yuvarlama YOK.
+ */
+function stok_dara_coz(mixed $ham): ?int
+{
+    if (is_array($ham) || is_object($ham) || is_bool($ham) || $ham === null) return null;
+    if (is_int($ham)) $s = (string)$ham;
+    elseif (is_float($ham)) $s = rtrim(rtrim(sprintf('%.6F', $ham), '0'), '.');
+    else $s = preg_replace('/[\s\x{00A0}]+/u', '', trim((string)$ham)) ?? '';
+    if ($s === '') return null;
+    if (str_contains($s, ',')) {
+        if (substr_count($s, ',') > 1) return null;
+        [$tam, $kes] = explode(',', $s, 2);
+        if (str_contains($tam, '.')) {
+            if (!preg_match('/^\d{1,3}(\.\d{3})+$/', $tam)) return null;   // "1.000,5": nokta yalnız binlik grubu olabilir
+            $tam = str_replace('.', '', $tam);
+        }
+        $s = $tam . '.' . $kes;
+    }
+    if (!preg_match('/^(\d{1,7})(?:\.(\d{1,3}))?$/', $s, $m)) return null;
+    $gram = (int)$m[1] * 1000 + (int)str_pad($m[2] ?? '', 3, '0');
+    return $gram > STOK_DARA_MAX_GRAM ? null : $gram;
+}
+
+/** gram → "1,8" / "0,25" / "12" / "1.000" (ekranda virgüllü; sondaki sıfırlar atılır). */
+function stok_dara_bicim(int $gram): string
+{
+    $tam = number_format((float)intdiv($gram, 1000), 0, ',', '.');
+    $k = rtrim(str_pad((string)($gram % 1000), 3, '0', STR_PAD_LEFT), '0');
+    return $tam . ($k !== '' ? ',' . $k : '');
+}
+
 /** `geri` yalnız yerel stok_*.php / transfer_fisleri.php adresi (açık yönlendirme yok). */
 function stok_geri_guvenli(mixed $g): string
 {
@@ -369,7 +414,7 @@ function stok_cevap(array $s, string $geri, string $okMesaj, bool $json): never
             'ok' => $ok, 'id' => $s['id'] ?? null, 'fis_no' => $s['fis_no'] ?? null, 'hata' => $ok ? null : (string)($s['hata'] ?? 'İşlem yapılamadı.'),
             'alanlar' => (object)($s['alanlar'] ?? []), 'uyari' => $s['uyari'] ?? null, 'yonlendir' => $geri, 'tekrar' => !empty($s['tekrar']),
             'kod' => $s['kod'] ?? null, 'eksikler' => $s['eksikler'] ?? null, 'eklenen' => $s['eklenen'] ?? null, 'atlanan' => $s['atlanan'] ?? null,
-            'satir_hatalari' => (object)($s['satir_hatalari'] ?? []), 'aktarilan' => $s['aktarilan'] ?? null,
+            'satir_hatalari' => (object)($s['satir_hatalari'] ?? []), 'aktarilan' => $s['aktarilan'] ?? null, 'eksik_alanlar' => $s['eksik_alanlar'] ?? null,
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -384,7 +429,8 @@ function stok_cevap(array $s, string $geri, string $okMesaj, bool $json): never
 
 // ── Kart ────────────────────────────────────────────────────────────────────
 
-const STOK_KART_ALANLAR = ['kod', 'ad', 'tip', 'grup_id', 'ana_birim', 'cevrim_birim', 'cevrim_katsayi', 'kdv_orani', 'barkod', 'kritik_seviye', 'notlar', 'aktif'];
+const STOK_KART_ALANLAR = ['kod', 'ad', 'tip', 'grup_id', 'ana_birim', 'cevrim_birim', 'cevrim_katsayi', 'kdv_orani', 'barkod', 'kritik_seviye', 'notlar', 'aktif',
+    'ambalaj_tip_id', 'birim_dara_kg', 'hks_urun_id', 'hks_urun_ad', 'hizli'];   // son 5: v611 ek alanlar (yalnız stok_ek_hazir() iken)
 
 /** STK-0001 …: en büyük STK-\d+ + 1. */
 function stok_kod_oner(PDO $pdo): string
@@ -398,8 +444,12 @@ function stok_kod_oner(PDO $pdo): string
 
 function stok_kod_normalize(string $k): string { return mb_strtoupper(trim(strtr($k, ['i' => 'İ'])), 'UTF-8'); }
 
-/** @return array{ok:bool,veri?:array,hatalar?:array<string,string>} */
-function stok_kart_dogrula(PDO $pdo, array $g, ?int $id): array
+/**
+ * $o: eski (?array, düzenlenen kartın satırı) · hizli (bool: stok_kart_hizli_ekle — ambalaj seçiliyken dara zorunluluğu esner).
+ * v611 ek alanlar YALNIZ stok_ek_hazir() iken okunur; düzenlemede girdide anahtarı OLMAYAN ek alan değişmez.
+ * @return array{ok:bool,veri?:array,hatalar?:array<string,string>}
+ */
+function stok_kart_dogrula(PDO $pdo, array $g, ?int $id, array $o = []): array
 {
     $h = []; $v = [];
     $ad = trim((string)($g['ad'] ?? ''));
@@ -470,12 +520,186 @@ function stok_kart_dogrula(PDO $pdo, array $g, ?int $id): array
 
     if (array_key_exists('aktif', $g)) $v['aktif'] = !empty($g['aktif']) && (string)$g['aktif'] !== '0' ? 1 : 0;
 
+    if (stok_ek_hazir($pdo)) stok_kart_ek_dogrula($pdo, $g, $id, $o, $v, $h);
+
     return $h ? ['ok' => false, 'hatalar' => $h] : ['ok' => true, 'veri' => $v];
+}
+
+/**
+ * v611 ek alanlar (stok_kart_dogrula'nın parçası; yalnız stok_ek_hazir() iken). $v / $h yerinde doldurulur.
+ *  ambalaj_tip_id: boş = yok; aktif 'ambalaj_tip' tanımı (pasif tip yalnız kartın MEVCUT değeriyse kalır).
+ *  birim_dara_kg: stok_dara_coz (0–1.000 kg, ≤3 ondalık). Ambalaj tipi seçiliyse dara > 0 ZORUNLU — hızlı ekleme ve hızlı bayraklı kartta
+ *    yumuşak (kayıt yapılır, kart "eksik" kalır: stok_kart_eksikler).
+ *  hks_urun_id/hks_urun_ad: yalnız tip=urun; id (ya da JS kapalıyken hks_urun_ara metni) bb_katalog() ürünlerinden doğrulanır, ad KATALOGDAN kopyalanır.
+ *    Katalog okunamazsa alana dokunulmaz (kayıt engellenmez). Tip ürün değilse ikisi de boşalır.
+ */
+function stok_kart_ek_dogrula(PDO $pdo, array $g, ?int $id, array $o, array &$v, array &$h): void
+{
+    $eski = $o['eski'] ?? null;
+    if ($id !== null && $eski === null) $eski = stok_kart_oku($pdo, $id);
+    $yeni = $id === null;
+    $metin = static fn(mixed $x): string => is_scalar($x) ? trim((string)$x) : '';
+
+    if ($yeni || array_key_exists('ambalaj_tip_id', $g)) {
+        $a = $metin($g['ambalaj_tip_id'] ?? '');
+        if ($a === '' || $a === '0') {
+            $v['ambalaj_tip_id'] = null;
+        } elseif (!ctype_digit($a)) {
+            $h['ambalaj_tip_id'] = 'Geçersiz ambalaj tipi.';
+        } else {
+            $st = $pdo->prepare("SELECT aktif FROM stok_tanimlar WHERE id = ? AND tur = 'ambalaj_tip'");
+            $st->execute([(int)$a]);
+            $ak = $st->fetchColumn();
+            if ($ak === false) $h['ambalaj_tip_id'] = 'Geçersiz ambalaj tipi.';
+            elseif ((int)$ak !== 1 && (int)($eski['ambalaj_tip_id'] ?? 0) !== (int)$a) $h['ambalaj_tip_id'] = 'Pasif ambalaj tipi seçilemez.';
+            else $v['ambalaj_tip_id'] = (int)$a;
+        }
+    }
+    if ($yeni || array_key_exists('birim_dara_kg', $g)) {
+        $dh = $g['birim_dara_kg'] ?? null;
+        if ($dh === null || (is_string($dh) && trim($dh) === '')) {
+            $v['birim_dara_kg'] = null;
+        } else {
+            $gr = stok_dara_coz($dh);
+            if ($gr === null) $h['birim_dara_kg'] = 'Birim dara 0–1.000 kg arası, en çok 3 ondalık olmalı (ör. 1,8).';
+            else $v['birim_dara_kg'] = stok_milli_db($gr);
+        }
+    }
+    $esnek = !empty($o['hizli']) || (int)($eski['hizli'] ?? 0) === 1;
+    $sonAmb = array_key_exists('ambalaj_tip_id', $v) ? $v['ambalaj_tip_id'] : ($eski['ambalaj_tip_id'] ?? null);
+    $sonDara = array_key_exists('birim_dara_kg', $v) ? $v['birim_dara_kg'] : ($eski['birim_dara_kg'] ?? null);
+    if (!$esnek && (int)$sonAmb > 0 && !isset($h['ambalaj_tip_id']) && !isset($h['birim_dara_kg']) && stok_milli(is_scalar($sonDara) ? $sonDara : null) <= 0) {
+        $h['birim_dara_kg'] = 'Ambalaj tipi seçiliyse birim dara zorunlu (0 kg\'dan büyük).';
+    }
+
+    $tip = $v['tip'] ?? null;
+    if ($tip !== null && $tip !== 'urun') {
+        $v['hks_urun_id'] = null; $v['hks_urun_ad'] = null;
+    } elseif ($tip === 'urun' && ($yeni || array_key_exists('hks_urun_id', $g) || array_key_exists('hks_urun_ara', $g))) {
+        $kat = stok_hks_urunler();
+        if ($kat !== null) {
+            $hid = $metin($g['hks_urun_id'] ?? '');
+            $ara = $metin($g['hks_urun_ara'] ?? '');
+            if ($hid === '' && $ara === '') {
+                $v['hks_urun_id'] = null; $v['hks_urun_ad'] = null;
+            } elseif (($u = stok_hks_urun_bul($kat, $hid, $ara)) === null) {
+                $h['hks_urun_ara'] = 'HKS ürünü katalogda bulunamadı; listeden seçin.';
+            } else {
+                $v['hks_urun_id'] = $u['id']; $v['hks_urun_ad'] = $u['ad'];
+            }
+        }
+    }
+}
+
+/**
+ * HKS ürün kataloğu (bb_katalog() — hks_kv.listeler_cache, SALT OKUNUR; halkayit/ ve HKS tablolarına YAZILMAZ).
+ * @return list<array{id:string,ad:string}>|null  null = katalog okunamadı/boş (alan pasif, kayıt engellenmez)
+ */
+function stok_hks_urunler(bool $tazele = false): ?array
+{
+    static $onbellek = false;
+    if ($onbellek !== false && !$tazele) return $onbellek;
+    $l = [];
+    if (function_exists('bb_katalog')) {
+        try { $k = bb_katalog(); } catch (Throwable $e) { $k = []; }
+        foreach ((array)($k['urunler'] ?? []) as $u) {
+            $uid = trim((string)($u['id'] ?? '')); $ad = trim((string)($u['ad'] ?? ''));
+            if ($uid !== '' && $ad !== '' && strlen($uid) <= 40) $l[] = ['id' => $uid, 'ad' => mb_substr($ad, 0, 150)];
+        }
+    }
+    return $onbellek = ($l ?: null);
+}
+
+/** Katalogda id (birebir) ya da metin (tam ad, TR-duyarsız, TEK eşleşme; "Ad (#id)" yazımı da) → ürün. */
+function stok_hks_urun_bul(array $katalog, string $id, string $metin = ''): ?array
+{
+    if ($id !== '') foreach ($katalog as $u) if ((string)$u['id'] === $id) return $u;
+    $metin = trim($metin);
+    if ($metin === '') return null;
+    if (preg_match('/\(#([^()]{1,40})\)\s*$/u', $metin, $m)) foreach ($katalog as $u) if ((string)$u['id'] === $m[1]) return $u;
+    $bul = null;
+    foreach ($katalog as $u) if (cari_fold((string)$u['ad']) === cari_fold($metin)) { if ($bul !== null) return null; $bul = $u; }
+    return $bul;
+}
+
+/**
+ * v611 TEK eksik kuralı (hızlı eklenen kartın tamamlanması): grup boş · ana birim boş · tip=urun ve HKS ürün boş · ambalaj tipi dolu ve dara boş/0.
+ * SAF (DB yok). @return list<string> alan anahtarları (grup_id | ana_birim | hks_urun_id | birim_dara_kg); etiketler stok_kart_eksik_etiketleri()
+ */
+function stok_kart_eksikler(array $kart): array
+{
+    $e = [];
+    if ((int)($kart['grup_id'] ?? 0) <= 0) $e[] = 'grup_id';
+    if (trim((string)($kart['ana_birim'] ?? '')) === '') $e[] = 'ana_birim';
+    if ((string)($kart['tip'] ?? '') === 'urun' && trim((string)($kart['hks_urun_id'] ?? '')) === '') $e[] = 'hks_urun_id';
+    if ((int)($kart['ambalaj_tip_id'] ?? 0) > 0 && stok_milli(is_scalar($kart['birim_dara_kg'] ?? null) ? $kart['birim_dara_kg'] : null) <= 0) $e[] = 'birim_dara_kg';
+    return $e;
+}
+
+/** @return array<string,string> */
+function stok_kart_eksik_etiketleri(): array
+{
+    return ['grup_id' => 'Stok grubu', 'ana_birim' => 'Ana birim', 'hks_urun_id' => 'HKS ürün', 'birim_dara_kg' => 'Birim dara'];
+}
+
+/** Kartın yeni satırını yazar (stok_kart_kaydet + stok_kart_hizli_ekle ortak INSERT'i). @return int|null yeni id (çakışmada null) */
+function stok_kart_ekle_yaz(PDO $pdo, array $v, int $uid): ?int
+{
+    $kol = array_keys($v);
+    $sql = 'INSERT INTO stok_kartlar (' . implode(',', $kol) . ', created_at, created_by) VALUES (' . implode(',', array_fill(0, count($kol), '?')) . ', ?, ?)';
+    try {
+        $pdo->prepare($sql)->execute([...array_values($v), date('Y-m-d H:i:s'), $uid]);
+    } catch (PDOException $e) {
+        return null;
+    }
+    return (int)$pdo->lastInsertId();
+}
+
+/**
+ * v611 Hızlı ekleme (başka ekranlardan; ortak "Hızlı Ekle" penceresi/uç BURADA YOK — yetki/CSRF çağıranın işi).
+ * Asgari alan: ad, tip, ana_birim; isteğe bağlı grup_id, ambalaj_tip_id, birim_dara_kg, hks_urun_id (ya da hks_urun_ad: katalogdan ADLA çözülür), kdv_orani.
+ * Kod otomatik (stok_kod_oner), aktif=1, hizli=1 (Stok Kartları listesinde ayrı renk + "eksikleri tamamlayın"); dara zorunluluğu esner.
+ * stok_ek_hazir() false ise ek alanlar ve bayrak YOK sayılır: normal kart açılır (hizli=false döner). Audit `create` + hizli.
+ * @return array{ok:bool,hata:?string,id?:int,stok_kod?:string,hizli?:bool,eksik_alanlar?:list<string>,alanlar?:array}
+ */
+function stok_kart_hizli_ekle(PDO $pdo, array $girdi, int $uid): array
+{
+    $h = [];
+    foreach (['ad' => 'Ad zorunlu.', 'tip' => 'Kart tipi zorunlu.', 'ana_birim' => 'Ana birim zorunlu.'] as $k => $m) {
+        if (!is_scalar($girdi[$k] ?? null) || trim((string)$girdi[$k]) === '') $h[$k] = $m;
+    }
+    if ($h) return stok_hata((string)reset($h), ['alanlar' => $h]);
+    $ek = stok_ek_hazir($pdo);
+    $g = ['ad' => (string)$girdi['ad'], 'kod' => '', 'tip' => (string)$girdi['tip'], 'ana_birim' => (string)$girdi['ana_birim'],
+        'grup_id' => $girdi['grup_id'] ?? '', 'kdv_orani' => $girdi['kdv_orani'] ?? 1, 'aktif' => '1'];
+    if ($ek) {
+        $g['ambalaj_tip_id'] = $girdi['ambalaj_tip_id'] ?? '';
+        $g['birim_dara_kg'] = $girdi['birim_dara_kg'] ?? '';
+        $g['hks_urun_id'] = $girdi['hks_urun_id'] ?? '';
+        $g['hks_urun_ara'] = $girdi['hks_urun_ad'] ?? '';
+    }
+    $d = stok_kart_dogrula($pdo, $g, null, ['hizli' => true]);
+    if (!$d['ok']) return stok_hata((string)reset($d['hatalar']), ['alanlar' => $d['hatalar']]);
+    $v = $d['veri'];
+    $v['aktif'] = 1;
+    if ($ek) $v['hizli'] = 1;
+    $yid = stok_kart_ekle_yaz($pdo, $v, $uid);
+    if ($yid === null) return stok_hata('Stok kartı kaydedilemedi (kod çakışması olabilir).');
+    audit_log_event('create', 'stok', $yid, null, ['kart' => $v, 'hizli' => $ek ? 1 : 0]);
+    return ['ok' => true, 'hata' => null, 'id' => $yid, 'stok_kod' => (string)$v['kod'], 'hizli' => $ek, 'eksik_alanlar' => $ek ? stok_kart_eksikler($v) : []];
+}
+
+/** Kart sorgusunun SELECT/JOIN parçası (v611: ek şema hazırsa ambalaj tipi adı). */
+function stok_kart_secim_sql(PDO $pdo): string
+{
+    return stok_ek_hazir($pdo)
+        ? 'SELECT k.*, t.ad AS grup_adi, a.ad AS ambalaj_adi FROM stok_kartlar k LEFT JOIN stok_tanimlar t ON t.id = k.grup_id LEFT JOIN stok_tanimlar a ON a.id = k.ambalaj_tip_id'
+        : 'SELECT k.*, t.ad AS grup_adi FROM stok_kartlar k LEFT JOIN stok_tanimlar t ON t.id = k.grup_id';
 }
 
 function stok_kart_oku(PDO $pdo, int $id): ?array
 {
-    $st = $pdo->prepare('SELECT k.*, t.ad AS grup_adi FROM stok_kartlar k LEFT JOIN stok_tanimlar t ON t.id = k.grup_id WHERE k.id = ?');
+    $st = $pdo->prepare(stok_kart_secim_sql($pdo) . ' WHERE k.id = ?');
     $st->execute([$id]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     return $r === false ? null : $r;
@@ -497,24 +721,30 @@ function stok_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
         $eski = stok_kart_oku($pdo, $id);
         if ($eski === null) return stok_hata('Stok kartı bulunamadı.');
     }
-    $d = stok_kart_dogrula($pdo, $g, $id);
+    $d = stok_kart_dogrula($pdo, $g, $id, ['eski' => $eski]);
     if (!$d['ok']) return stok_hata((string)reset($d['hatalar']), ['alanlar' => $d['hatalar']]);
     $v = $d['veri'];
     if ($eski !== null && (string)$eski['ana_birim'] !== (string)$v['ana_birim'] && stok_kart_hareket_say($pdo, $id) > 0) {
         return stok_hata('Hareketi olan kartın ana birimi değiştirilemez.', ['alanlar' => ['ana_birim' => 'Hareketli kartta ana birim kilitli.']]);
     }
     $simdi = date('Y-m-d H:i:s');
+    // v611 hızlı bayrağı: normal formdan kayıt eksiksizse bayrak İNER; eksik varsa kayıt yapılır, bayrak (yalnız zaten hızlıysa) KALIR.
+    $hizliEk = [];
+    if (stok_ek_hazir($pdo)) {
+        $eksik = stok_kart_eksikler(array_merge($eski ?? [], $v));
+        $kalir = $eski !== null && (int)($eski['hizli'] ?? 0) === 1 && $eksik !== [];
+        $v['hizli'] = $kalir ? 1 : 0;
+        if ($kalir) {
+            $et = stok_kart_eksik_etiketleri();
+            $hizliEk = ['hizli' => true, 'eksik_alanlar' => $eksik,
+                'uyari' => 'Hızlı eklenen kartta eksikler var: ' . implode(', ', array_map(static fn(string $k): string => $et[$k] ?? $k, $eksik))];
+        }
+    }
 
     if ($id === null) {
         $v += ['aktif' => 1];
-        $kol = array_keys($v);
-        $sql = 'INSERT INTO stok_kartlar (' . implode(',', $kol) . ', created_at, created_by) VALUES (' . implode(',', array_fill(0, count($kol), '?')) . ', ?, ?)';
-        try {
-            $pdo->prepare($sql)->execute([...array_values($v), $simdi, $uid]);
-        } catch (PDOException $e) {
-            return stok_hata('Stok kartı kaydedilemedi (kod çakışması olabilir).');
-        }
-        $yid = (int)$pdo->lastInsertId();
+        $yid = stok_kart_ekle_yaz($pdo, $v, $uid);
+        if ($yid === null) return stok_hata('Stok kartı kaydedilemedi (kod çakışması olabilir).');
         audit_log_event('create', 'stok', $yid, null, ['kart' => $v]);
         return ['ok' => true, 'hata' => null, 'id' => $yid];
     }
@@ -522,7 +752,7 @@ function stok_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
     $fark = []; $eskiFark = [];
     foreach ($v as $k => $nv) {
         $ev = $eski[$k] ?? null;
-        $esit = ($ev === null && $nv === null) || ($ev !== null && $nv !== null && (in_array($k, ['cevrim_katsayi', 'kritik_seviye'], true) ? abs((float)$ev - (float)$nv) < 0.0005 : (string)$ev === (string)$nv));
+        $esit = ($ev === null && $nv === null) || ($ev !== null && $nv !== null && (in_array($k, ['cevrim_katsayi', 'kritik_seviye', 'birim_dara_kg'], true) ? abs((float)$ev - (float)$nv) < 0.0005 : (string)$ev === (string)$nv));
         if (!$esit) { $fark[$k] = $nv; $eskiFark[$k] = $ev; }
     }
     if ($fark) {
@@ -534,7 +764,7 @@ function stok_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
         }
         audit_log_event('update', 'stok', $id, ['kart' => $eskiFark], ['kart' => $fark]);
     }
-    return ['ok' => true, 'hata' => null, 'id' => $id];
+    return ['ok' => true, 'hata' => null, 'id' => $id] + $hizliEk;
 }
 
 /** Pasife alırken bakiye sıfırdan farklıysa yine izin verir, `uyari` döner. */
@@ -602,7 +832,7 @@ function stok_kart_listesi(PDO $pdo, array $f = []): array
     if (!empty($f['grup_id'])) { $w[] = 'k.grup_id = ?'; $p[] = (int)$f['grup_id']; }
     if (!empty($f['tip'])) { $w[] = 'k.tip = ?'; $p[] = (string)$f['tip']; }
     if (isset($f['aktif']) && $f['aktif'] !== '' && $f['aktif'] !== null) { $w[] = 'k.aktif = ?'; $p[] = (int)$f['aktif']; }
-    $st = $pdo->prepare('SELECT k.*, t.ad AS grup_adi FROM stok_kartlar k LEFT JOIN stok_tanimlar t ON t.id = k.grup_id WHERE ' . implode(' AND ', $w) . ' ORDER BY k.ad, k.id');
+    $st = $pdo->prepare(stok_kart_secim_sql($pdo) . ' WHERE ' . implode(' AND ', $w) . ' ORDER BY k.ad, k.id');
     $st->execute($p);
     $kartlar = $st->fetchAll(PDO::FETCH_ASSOC);
     $bak = stok_bakiyeler_toplu($pdo, array_map(static fn(array $k): int => (int)$k['id'], $kartlar));
@@ -711,13 +941,25 @@ function stok_kart_secenekleri(PDO $pdo): array
 
 // ── Tanım ───────────────────────────────────────────────────────────────────
 
-/** Kullanım sayısıyla (grup: kart sayısı; neden: fiş sayısı). @return list<array> */
+/** Tanımı kullanan satır sayısı alt sorgusu ($ref = tanım id ifadesi): grup / ambalaj tipi → kart sayısı; neden → fiş sayısı. */
+function stok_tanim_kullanim_sql(string $tur, string $ref): string
+{
+    return match ($tur) {
+        'grup'        => "(SELECT COUNT(*) FROM stok_kartlar k WHERE k.grup_id = $ref)",
+        'ambalaj_tip' => "(SELECT COUNT(*) FROM stok_kartlar k WHERE k.ambalaj_tip_id = $ref)",
+        default       => "(SELECT COUNT(*) FROM stok_fisler f WHERE f.neden_id = $ref)",
+    };
+}
+
+/** v611: Ambalaj tipi tanımları yalnız ek şema (stok_kartlar.ambalaj_tip_id) kuruluyken kullanılır. */
+const STOK_EK_SEMA_MESAJ = 'Ambalaj tipi · dara · HKS ürün alanları için yönetici: migrate.php › "Stok — Ambalaj tipi · Dara · HKS ürün · Hızlı ekleme" kartını basın.';
+
+/** Kullanım sayısıyla (grup / ambalaj tipi: kart sayısı; neden: fiş sayısı). Ambalaj tipi ek şema yokken []. @return list<array> */
 function stok_tanim_listesi(PDO $pdo, string $tur, bool $yalnizAktif = false): array
 {
     if (!isset(stok_tanim_turleri()[$tur])) return [];
-    $kul = $tur === 'grup'
-        ? '(SELECT COUNT(*) FROM stok_kartlar k WHERE k.grup_id = t.id)'
-        : '(SELECT COUNT(*) FROM stok_fisler f WHERE f.neden_id = t.id)';
+    if ($tur === 'ambalaj_tip' && !stok_ek_hazir($pdo)) return [];
+    $kul = stok_tanim_kullanim_sql($tur, 't.id');
     $st = $pdo->prepare("SELECT t.*, $kul AS kullanim FROM stok_tanimlar t WHERE t.tur = ?" . ($yalnizAktif ? ' AND t.aktif = 1' : '') . ' ORDER BY t.sira, t.ad, t.id');
     $st->execute([$tur]);
     return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -735,6 +977,7 @@ function stok_tanim_bul(PDO $pdo, int $id): ?array
 function stok_tanim_kaydet(PDO $pdo, string $tur, string $ad, int $sira, int $uid, ?int $id = null): array
 {
     if (!isset(stok_tanim_turleri()[$tur])) return stok_hata('Geçersiz tanım türü.');
+    if ($tur === 'ambalaj_tip' && !stok_ek_hazir($pdo)) return stok_hata(STOK_EK_SEMA_MESAJ);
     $ad = trim($ad);
     if ($ad === '' || mb_strlen($ad) > 100) return stok_hata('Ad 1-100 karakter olmalı.', ['alanlar' => ['ad' => 'Ad 1-100 karakter olmalı.']]);
     if ($sira < 0 || $sira > 99999) return stok_hata('Sıra 0-99999 olmalı.', ['alanlar' => ['sira' => 'Sıra 0-99999 olmalı.']]);
@@ -775,7 +1018,8 @@ function stok_tanim_sil(PDO $pdo, int $id, int $uid): array
     $t = stok_tanim_bul($pdo, $id);
     if ($t === null) return stok_hata('Tanım bulunamadı.');
     if (!empty($t['kod'])) return stok_hata('Sistem tanımı silinemez; pasifleştirebilirsiniz.', ['kod' => 'kullanimda']);
-    $s = $pdo->prepare($t['tur'] === 'grup' ? 'SELECT COUNT(*) FROM stok_kartlar WHERE grup_id = ?' : 'SELECT COUNT(*) FROM stok_fisler WHERE neden_id = ?');
+    if ($t['tur'] === 'ambalaj_tip' && !stok_ek_hazir($pdo)) return stok_hata(STOK_EK_SEMA_MESAJ);
+    $s = $pdo->prepare('SELECT ' . stok_tanim_kullanim_sql((string)$t['tur'], '?'));
     $s->execute([$id]);
     if ((int)$s->fetchColumn() > 0) return stok_hata('Bu tanım kullanılıyor; silmek yerine pasifleştirin.', ['kod' => 'kullanimda']);
     $pdo->prepare('DELETE FROM stok_tanimlar WHERE id = ?')->execute([$id]);
@@ -934,7 +1178,7 @@ function stok_kart_coz(array $kartlar, string $id, string $metin): ?array
     return $bul;
 }
 
-/** Depo seçeneklerinde var mı (TR-duyarsız) → seçenekteki yazım; yoksa null. */
+/** Depo seçeneklerinde (depot_options) var mı (TR-duyarsız) → yazım; yoksa null. Stok fişi DEĞİL stok_depo_gecerli kullanır (v611); bu yalnız dış modüllerin eski çağrısı. */
 function stok_depo_secenek(string $depo): ?string
 {
     $depo = trim($depo);
@@ -942,6 +1186,41 @@ function stok_depo_secenek(string $depo): ?string
     foreach (depot_options() as $o) if ((string)$o === $depo) return (string)$o;
     foreach (depot_options() as $o) if (depo_fold((string)$o) === depo_fold($depo)) return (string)$o;
     return null;
+}
+
+/** v611 depo kuralı: fiş depoları YALNIZ Depo Tanımları'ndan (yeni depo sistemi). Geçiş kapalıyken fiş kaydı reddedilir. */
+const STOK_DEPO_GECIS_MESAJ = 'Önce Depo Tanımları\'nda yeni depo sistemine geçişi tamamlayın.';
+
+/** Yeni depo sistemi (depo_tanimlari.php geçişi) açık mı? depo_core yüklü değilse false (fail-closed). */
+function stok_depo_gecis_acik(PDO $pdo): bool
+{
+    return function_exists('depo_gecis_aktif') && depo_gecis_aktif($pdo);
+}
+
+/**
+ * Stok fişinde seçilebilecek depolar (kaynak + hedef + Kantardan doldur): geçiş açıksa depot_options() — o da geçiş açıkken
+ * `depolar` (aktif) ∩ kullanıcı ataması döner; geçiş kapalıysa [] (eski serbest metin / Tanımlar depoları seçilemez). @return list<string>
+ */
+function stok_depo_secenekleri(PDO $pdo): array
+{
+    if (!stok_depo_gecis_acik($pdo)) return [];
+    return array_values(array_filter(array_map('strval', depot_options()), static fn(string $d): bool => trim($d) !== ''));
+}
+
+/** Depo listede var mı (önce birebir, sonra TR-duyarsız) → listedeki yazım; yoksa null. @param list<string> $liste */
+function stok_depo_listede(array $liste, ?string $depo): ?string
+{
+    $depo = trim((string)$depo);
+    if ($depo === '') return null;
+    foreach ($liste as $o) if ((string)$o === $depo) return (string)$o;
+    foreach ($liste as $o) if (depo_fold((string)$o) === depo_fold($depo)) return (string)$o;
+    return null;
+}
+
+/** Fiş deposu geçerli mi (stok_depo_secenekleri içinde)? → yazımı; değilse null. */
+function stok_depo_gecerli(PDO $pdo, ?string $depo): ?string
+{
+    return stok_depo_listede(stok_depo_secenekleri($pdo), $depo);
 }
 
 /** Mal kabul fişi (salt okunur; tablo yoksa null). */
@@ -979,19 +1258,24 @@ function stok_fis_dogrula(PDO $pdo, array $g): array
     $tur = (string)($g['tur'] ?? '');
     if (!isset(stok_fis_turleri()[$tur])) return ['ok' => false, 'hata' => 'Geçersiz fiş türü.', 'alanlar' => ['tur' => 'Geçersiz fiş türü.']];
     $v['tur'] = $tur;
+    // v611: depo YALNIZ Depo Tanımları'ndan; yeni depo sistemine geçilmeden stok fişi yazılmaz.
+    if (!stok_depo_gecis_acik($pdo)) return ['ok' => false, 'hata' => STOK_DEPO_GECIS_MESAJ, 'alanlar' => ['depo' => STOK_DEPO_GECIS_MESAJ], 'kod' => 'depo_gecis'];
+    $depolar = stok_depo_secenekleri($pdo);
 
     $tarih = stok_tarih_coz($g['tarih'] ?? '');
     if ($tarih === null) $h['tarih'] = 'Geçerli bir tarih girin.'; else $v['tarih'] = $tarih;
 
-    $depo = stok_depo_secenek((string)($g['depo'] ?? ''));
-    if ($depo === null) $h['depo'] = 'Depo seçin.';
+    $dHam = trim((string)(is_scalar($g['depo'] ?? null) ? $g['depo'] : ''));
+    $depo = stok_depo_listede($depolar, $dHam);
+    if ($depo === null) $h['depo'] = $dHam === '' ? 'Depo seçin.' : 'Bu depo Depo Tanımları\'nda aktif değil ya da size atanmamış.';
     elseif (!depot_visible_to_user($depo)) $h['depo'] = 'Bu depo aktif deponuzda değil; önce depo değiştirin.';
     else $v['depo'] = $depo;
 
     $v['hedef_depo'] = null;
     if ($tur === 'transfer') {
-        $hd = stok_depo_secenek((string)($g['hedef_depo'] ?? ''));
-        if ($hd === null) $h['hedef_depo'] = 'Hedef depoyu seçin.';
+        $hHam = trim((string)(is_scalar($g['hedef_depo'] ?? null) ? $g['hedef_depo'] : ''));
+        $hd = stok_depo_listede($depolar, $hHam);
+        if ($hd === null) $h['hedef_depo'] = $hHam === '' ? 'Hedef depoyu seçin.' : 'Hedef depo Depo Tanımları\'nda aktif değil ya da size atanmamış.';
         elseif ($depo !== null && depo_fold($hd) === depo_fold($depo)) $h['hedef_depo'] = 'Hedef depo kaynak depodan farklı olmalı.';
         else $v['hedef_depo'] = $hd;
     }
@@ -1509,11 +1793,11 @@ function stok_kantar_net_milli(array $k): int
 }
 
 /** Kantar satırı → form önerisi. @param array<string,int> $kartFold ad/kod fold → kart id  @param array<string,int> $cariFold unvan fold → cari id */
-function stok_kantar_satir_oneri(array $r, array $kartFold, array $cariFold): array
+function stok_kantar_satir_oneri(array $r, array $kartFold, array $cariFold, array $depolar = []): array
 {
     $ham = substr(trim((string)$r['giris_tarih']), 0, 10);
     $tarih = stok_tarih_coz($ham) ?? date('Y-m-d');
-    $depo = stok_depo_secenek((string)$r['depo']) ?? (function_exists('active_depot') ? (string)(active_depot() ?? '') : '');
+    $depo = stok_depo_listede($depolar, (string)$r['depo']) ?? stok_depo_listede($depolar, function_exists('active_depot') ? (string)(active_depot() ?? '') : '') ?? '';   // v611: yalnız Depo Tanımları depoları
     $urun = trim((string)$r['malin_cinsi']); $firma = trim((string)$r['firma_adi']);
     return ['kantar_id' => (int)$r['id'], 'kantar_no' => (string)$r['fis_no'], 'tarih' => $tarih, 'tarih_ham' => (string)$r['giris_tarih'], 'depo' => $depo,
         'miktar_milli' => stok_kantar_net_milli($r), 'firma' => $firma, 'urun' => $urun,
@@ -1555,8 +1839,8 @@ function stok_kantar_adaylari(PDO $pdo, int $limit = 50): array
     $st->execute($ids);
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $b) $bag[(int)$b['kaynak_id']] ??= ['id' => (int)$b['id'], 'fis_no' => (string)$b['fis_no']];
     [$kf, $cf] = stok_kantar_haritalar($pdo);
-    $out = [];
-    foreach ($rows as $r) $out[] = stok_kantar_satir_oneri($r, $kf, $cf) + ['aktarildi' => $bag[(int)$r['id']] ?? null];
+    $out = []; $depolar = stok_depo_secenekleri($pdo);
+    foreach ($rows as $r) $out[] = stok_kantar_satir_oneri($r, $kf, $cf, $depolar) + ['aktarildi' => $bag[(int)$r['id']] ?? null];
     return $out;
 }
 
@@ -1566,5 +1850,8 @@ function stok_kantar_oneri(PDO $pdo, int $id): ?array
     $r = stok_kantar_oku($pdo, $id);
     if ($r === null || !depot_visible_to_user((string)$r['depo'])) return null;
     [$kf, $cf] = stok_kantar_haritalar($pdo);
-    return stok_kantar_satir_oneri($r, $kf, $cf) + ['aktarildi' => stok_kantar_bagli_fis($pdo, $id)];
+    return stok_kantar_satir_oneri($r, $kf, $cf, stok_depo_secenekleri($pdo)) + ['aktarildi' => stok_kantar_bagli_fis($pdo, $id)];
 }
+
+// v611: ek kart alanları şeması (stok_ek_hazir / stok_ek_migrate) — yalnız fonksiyon bildirir.
+require_once __DIR__ . '/stok_ek_sema.php';

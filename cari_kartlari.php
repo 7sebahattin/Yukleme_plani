@@ -12,6 +12,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cari_core.php';
 require_once __DIR__ . '/config/cari_ui.php';
+require_once __DIR__ . '/config/hizli_kart.php';      // v611 Faz 2: ortak Hızlı Ekle (yalnız cari türü; stok çekirdeği yüklenmez)
+require_once __DIR__ . '/config/hizli_kart_ui.php';
 $auth_user = require_login();
 if (!muhasebe_sayfa_can('cari_kartlari')) { forbidden(); }
 cari_kapi('read');
@@ -52,7 +54,7 @@ if ($parca !== '') {
 $tip = (string)($_GET['tip'] ?? '');
 $F = [
     'q' => mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100),
-    'tip' => isset(cari_tipler()[$tip]) ? $tip : '',
+    'tip' => isset(cari_tipler($pdo, true)[$tip]) ? $tip : '',
     'grup' => mb_substr(trim((string)($_GET['grup'] ?? '')), 0, 100),
     'bakiye' => in_array((string)($_GET['bakiye'] ?? ''), ['borclu', 'alacakli', 'sifir'], true) ? (string)$_GET['bakiye'] : '',
     'durum' => in_array((string)($_GET['durum'] ?? ''), ['aktif', 'pasif'], true) ? (string)$_GET['durum'] : '',
@@ -91,6 +93,10 @@ if ($kart !== null) {
     $detay = '<section class="cari-detay" id="crDetay" aria-label="Cari detayı"><div class="cari-detay-bos">Soldan bir cari seçin</div></section>';
 }
 
+// v611 Faz 2: "⚡ Hızlı ekle" — yalnız cari oluşturma izni + ek şema hazırsa (aksi düğme/pencere çizilmez). Başarıda yeni karta gidilir (hızlı renkli satır).
+$hkSecenek = hizli_kart_secenekler($pdo, ['cari']);
+$hkDugme = hizli_kart_dugme_html('cari', ['git' => 'cari_kartlari.php?id={id}'], $pdo);
+
 render_header('Cari Kayıt Kartları');
 cari_assets();
 render_flash();
@@ -98,16 +104,17 @@ render_flash();
 <div class="cari cari--tek-ekran" id="cari"<?= ($_GET['yeni'] ?? '') === '1' ? ' data-yeni="kart"' : '' ?>>
   <?= cari_ust_menu('kartlar') ?>
   <div class="cari-ana<?= $kart !== null ? ' cari-ana--detay' : '' ?>">
-    <?= cari_liste_kol_html($kartlar, $genel, $gruplar, $F, $kart !== null ? (int)$kart['id'] : null, $filtreli ? count($tum['satirlar']) : count($kartlar)) ?>
+    <?= cari_liste_kol_html($kartlar, $genel, $gruplar, $F, $kart !== null ? (int)$kart['id'] : null, $filtreli ? count($tum['satirlar']) : count($kartlar), $hkDugme) ?>
     <?= $detay ?>
   </div>
   <div class="cari-menu-ortu" hidden></div>
   <?= $menuler ?>
   <?= cari_modal_hareket(['geri' => $kart !== null ? 'cari_kartlari.php?id=' . (int)$kart['id'] : 'cari_kartlari.php', 'tur' => 'tahsilat', 'kilitli' => $kilitli, 'odeme' => $odeme]) ?>
-  <?= cari_modal_kart(['geri' => 'cari_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => cari_kod_oner($pdo)]) ?>
+  <?= cari_modal_kart(['geri' => 'cari_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => cari_kod_oner($pdo), 'ek' => cari_ek_hazir($pdo), 'tipler' => cari_tipler($pdo, true), 'aktif_tipler' => cari_tipler($pdo)]) ?>
   <?= cari_modal_iptal('cari_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : '')) ?>
   <?= cari_json_script('crCariVeri', cari_veri_dizisi($tum['satirlar'])) ?>
 </div>
 <?php
 cari_scripts();
+echo hizli_kart_bilesen_html($hkSecenek);   // v611 Faz 2: ortak pencere (sayfa betiğinden SONRA; kendi CSS/JS'i içinde)
 render_footer();

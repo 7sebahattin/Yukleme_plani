@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v610';
+const CACHE_NAME = 'yukleme-plani-v611';
 
 // Uygulama kabuğunu önbellekle (B-30: yalnız kimliksiz statik varlıklar; .php HTML asla önbelleğe alınmaz)
 const SHELL = [
@@ -99,6 +99,8 @@ self.addEventListener('fetch', function(e) {
   if (/\/(whatsapp_yonetim|api_whatsapp_webhook)\.php(\/|$)/.test(u.pathname)) return;
   // Yükleme Bildir (v498): kişi/firma ad listesi döndürür, HİÇ önbelleğe alınmaz
   if (/\/api_beyansiz_yukleme\.php(\/|$)/.test(u.pathname)) return;
+  // Hızlı Cari / Stok Ekle ucu (v611 Faz 2): kart seçenekleri + yeni kart yanıtı — HİÇ önbelleğe alınmaz (B-30 zaten .php'yi dışlar; açık kural)
+  if (/\/api_hizli_kart\.php(\/|$)/.test(u.pathname)) return;
   // Muhasebe yer tutucu/gelecek sayfaları (nav_muhasebe_gruplari, v439): cari/kasa/çek-senet/fatura/ihracat/ayarlar — önbelleğe alınmaz
   if (SW_MUHASEBE_RE.test(u.pathname)) return;
   // B-30 Kesin Beyaz Liste Kapısı: aynı-köken statik varlıklar dışındaki TÜM istekler (.php vb.) ağdan geçer, önbelleğe yazılmaz.

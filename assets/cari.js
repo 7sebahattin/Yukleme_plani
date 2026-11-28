@@ -713,6 +713,38 @@
         if (s) { try { var v = JSON.parse(s.textContent || 'null'); if (v && (!id || !v.id || String(v.id) === String(id))) return v; } catch (x) { /* sıradakine geç */ } }
         return null;
     }
+    /* v611: müstahsil vurgusu (TCKN / Telefon / Doğum tarihi), doğum tarihi yalnız müstahsilde, pasif tip seçeneği, hızlı kart eksik vurgusu */
+    var EKSIK_ALAN = { unvan: ['unvan'], tip: ['tip'], kimlik: ['vergi_no', 'tckn'], iletisim: ['telefon', 'adres'], telefon: ['telefon'] };
+    function mustahsilUygula(m) {
+        var f = m && $('form', m); if (!f || !f.elements.tip) return;
+        var must = f.elements.tip.value === 'mustahsil';
+        $$('[data-cr-mustahsil-alan]', m).forEach(function (el) { el.hidden = !must; $$('input', el).forEach(function (x) { x.disabled = !must; }); });
+        $$('[data-cr-vurgu="mustahsil"]', m).forEach(function (el) { el.classList.toggle('cari-vurgu', must); });
+        $$('[data-cr-mustahsil-ipucu]', m).forEach(function (el) { el.hidden = !must; });
+    }
+    function kartEkUygula(m, f, v) {
+        $$('.cari-eksik', m).forEach(function (x) { x.classList.remove('cari-eksik'); });
+        if (f.elements.tip && f.elements.tip.options) {
+            Array.prototype.forEach.call(f.elements.tip.options, function (o) {
+                if (o.getAttribute('data-pasif') === '1') o.disabled = !(v && String(v.tip) === o.value);
+            });
+        }
+        mustahsilUygula(m);
+        ((v && v.hizli && v.eksik) || []).forEach(function (k) {
+            (EKSIK_ALAN[k] || []).forEach(function (ad) {
+                var e = f.elements[ad]; var l = e && e.closest ? e.closest('.pm-label') : null;
+                if (l) l.classList.add('cari-eksik');
+            });
+        });
+    }
+    document.addEventListener('change', function (e) {
+        var t = e.target, m = t.closest && t.closest('#crModalKart'); if (!m) return;
+        if (t.name === 'tip') mustahsilUygula(m);
+    });
+    document.addEventListener('input', function (e) {
+        var t = e.target, l = t.closest && t.closest('#crModalKart .cari-eksik');
+        if (l && String(t.value || '').trim() !== '') l.classList.remove('cari-eksik');
+    });
     function kartAc(duzenle, opener) {
         var m = document.getElementById('crModalKart'); if (!m) return;
         var f = $('form', m); if (!f) return;
@@ -723,6 +755,7 @@
             var b = $('#crKartBaslik', m); if (b) b.textContent = duzenle ? SOZLESME.m.duzenleCari : SOZLESME.m.yeniCari;
             var kb = $('.cari-kayit-bilgi', m); if (kb) { kb.hidden = !(duzenle && v && v.kayit_bilgi); if (!kb.hidden) kb.textContent = v.kayit_bilgi; }
             if (duzenle && v) { doldur(f, v); if (f.elements.id && v.id != null) f.elements.id.value = v.id; }
+            kartEkUygula(m, f, duzenle ? v : null);
             modalAc('crModalKart', opener, geriOdak);
         }
         if (!duzenle) { ac(null); return; }
@@ -1062,7 +1095,11 @@
         var d = donemAdi(c);
         $$('.cari-cip', c.parentNode).forEach(function (x) { x.setAttribute('aria-pressed', String(x === c)); });
         var oz = $('.cari-ozel-tarih', form); if (oz) oz.hidden = d !== 'ozel';
-        if (d === 'ozel') { var bi = $('input[name="bas"]', form); if (bi) bi.focus(); return; }
+        if (d === 'ozel') {
+            /* Önceki çipin (ör. "Bu yıl") yanıtı hâlâ yoldaysa geç gelince paneli yeniden çizer ve tarih alanlarını gizlerdi → bekleyen yüklemeyi geçersiz kıl. */
+            ekstreSeq++; yukleniyor(document.getElementById('crPanelEkstre'), false);
+            var bi = $('input[name="bas"]', form); if (bi) bi.focus(); return;
+        }
         var t = donemTarih(d); if (!t) return;
         if (form.elements.bas) form.elements.bas.value = t[0]; if (form.elements.bit) form.elements.bit.value = t[1];
         ekstreYukle(form);

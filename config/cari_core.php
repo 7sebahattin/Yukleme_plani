@@ -34,6 +34,8 @@ function cari_tablolar(): array
   `grup_id`       INT           NULL DEFAULT NULL,
   `vergi_dairesi` VARCHAR(100)  NULL DEFAULT NULL,
   `vergi_no`      VARCHAR(20)   NULL DEFAULT NULL,
+  `tckn`          CHAR(11)      NULL DEFAULT NULL,
+  `dogum_tarihi`  DATE          NULL DEFAULT NULL,
   `yetkili`       VARCHAR(150)  NULL DEFAULT NULL,
   `telefon`       VARCHAR(40)   NULL DEFAULT NULL,
   `eposta`        VARCHAR(150)  NULL DEFAULT NULL,
@@ -45,7 +47,7 @@ function cari_tablolar(): array
   `vade_gun`      INT           NULL DEFAULT NULL,
   `notlar`        TEXT          NULL,
   `aktif`         TINYINT(1)    NOT NULL DEFAULT 1,
-  `md_id`         INT           NULL DEFAULT NULL,
+  `hizli`         TINYINT(1)    NOT NULL DEFAULT 0,
   `created_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_by`    INT           NULL DEFAULT NULL,
   `updated_at`    DATETIME      NULL DEFAULT NULL,
@@ -54,7 +56,8 @@ function cari_tablolar(): array
   KEY `idx_cari_unvan` (`unvan`),
   KEY `idx_cari_tip_aktif` (`tip`, `aktif`),
   KEY `idx_cari_grup` (`grup_id`),
-  KEY `idx_cari_md` (`md_id`)
+  KEY `idx_cari_tckn` (`tckn`),
+  KEY `idx_cari_vergi` (`vergi_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC",
 
         'cari_hareketler' => "CREATE TABLE IF NOT EXISTS `cari_hareketler` (
@@ -93,12 +96,14 @@ function cari_tablolar(): array
   `id`         INT AUTO_INCREMENT PRIMARY KEY,
   `tur`        VARCHAR(20)   NOT NULL,
   `ad`         VARCHAR(100)  NOT NULL,
+  `kod`        VARCHAR(20)   NULL DEFAULT NULL,
   `sira`       INT           NOT NULL DEFAULT 0,
   `aktif`      TINYINT(1)    NOT NULL DEFAULT 1,
   `created_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_by` INT           NULL DEFAULT NULL,
   UNIQUE KEY `uq_carit_tur_ad` (`tur`, `ad`),
-  KEY `idx_carit_tur` (`tur`, `aktif`, `sira`)
+  KEY `idx_carit_tur` (`tur`, `aktif`, `sira`),
+  KEY `idx_carit_tur_kod` (`tur`, `kod`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC",
     ];
 }
@@ -141,6 +146,7 @@ function cari_migrate(PDO $pdo): array
                         $ins->execute(['odeme_sekli', $o, ($i + 1) * 10, date('Y-m-d H:i:s')]);
                     }
                 }
+                cari_ek_tip_tohumla($pdo);   // v611: yeni kurulumda sistem cari tipleri (kod kolonu CREATE'te hazır)
             }
         } catch (PDOException $e) {
             error_log('[cari_migrate] ' . $ad . ': ' . $e->getMessage());
@@ -214,10 +220,48 @@ function cari_no_store(): void
 
 // ── Sabitler / biçim ────────────────────────────────────────────────────────
 
-/** @return array<string,string> */
-function cari_tipler(): array
+/** v611 öncesi sabit tip listesi (şema hazır değilken / tip satırı yokken YEDEK). @return array<string,string> */
+function cari_tipler_sabit(): array
 {
     return ['musteri' => 'Müşteri', 'tedarikci' => 'Tedarikçi', 'ikisi' => 'Müşteri+Tedarikçi', 'personel' => 'Personel/Çavuş', 'diger' => 'Diğer'];
+}
+
+/** cari_tipler() istek içi önbelleğini (tüm PDO'lar için) sıfırlar; tip yazan her işlev çağırır. */
+function cari_tipler_onbellek_sifirla(): void
+{
+    $GLOBALS['_cari_tipler_onbellek'] = [];
+}
+
+/**
+ * Cari tipleri: kod → ad. Şema hazırsa (cari_ek_hazir) ve tur='tip' satırı varsa tanımlardan (sıra, ad),
+ * yoksa v611 öncesi sabit 5'li liste. $pasifDahil=false → yalnız aktif tipler (yeni kart seçimi / doğrulama);
+ * true → pasifler de (etiket çözme, süzgeç). PDO verilmezse db() denenir (hata → sabit liste).
+ * @return array<string,string>
+ */
+function cari_tipler(?PDO $pdo = null, bool $pasifDahil = false): array
+{
+    if ($pdo === null && function_exists('db')) {
+        try { $pdo = db(); } catch (Throwable $e) { $pdo = null; }
+    }
+    if (!$pdo instanceof PDO) return cari_tipler_sabit();
+    $k = spl_object_id($pdo);
+    $oc = $GLOBALS['_cari_tipler_onbellek'][$k] ?? null;
+    if ($oc === null) {
+        $tum = []; $aktif = [];
+        if (cari_ek_hazir($pdo)) {
+            try {
+                $st = $pdo->query("SELECT kod, ad, aktif FROM cari_tanimlar WHERE tur = 'tip' AND kod IS NOT NULL AND kod <> '' ORDER BY sira, ad, id");
+                foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                    $tum[(string)$r['kod']] = (string)$r['ad'];
+                    if ((int)$r['aktif'] === 1) $aktif[(string)$r['kod']] = (string)$r['ad'];
+                }
+            } catch (PDOException $e) { $tum = []; $aktif = []; }
+        }
+        if (!$tum) { $tum = $aktif = cari_tipler_sabit(); }
+        $oc = ['tum' => $tum, 'aktif' => $aktif];
+        $GLOBALS['_cari_tipler_onbellek'][$k] = $oc;
+    }
+    return $pasifDahil ? $oc['tum'] : $oc['aktif'];
 }
 
 /**
@@ -296,7 +340,7 @@ function cari_hareket_turleri(): array
 function cari_tur_bilgi(string $tur): ?array { return cari_hareket_turleri()[$tur] ?? null; }
 
 /** @return array<string,string> */
-function cari_tanim_turleri(): array { return ['grup' => 'Cari Grubu', 'odeme_sekli' => 'Ödeme Şekli']; }
+function cari_tanim_turleri(): array { return ['grup' => 'Cari Grubu', 'odeme_sekli' => 'Ödeme Şekli', 'tip' => 'Cari Tipi']; }
 
 /** DECIMAL/string/float → kuruş (yuvarlanmış tam sayı). */
 function cari_kurus(string|int|float|null $v): int
@@ -416,8 +460,12 @@ function cari_kart_dogrula(PDO $pdo, array $g, ?int $id): array
         else $v['kod'] = $kod;
     }
 
+    $ek = cari_ek_hazir($pdo);   // v611: yeni alanlar yalnız ek şema kuruluysa
+    $eski = null;
+    if ($id !== null) { $st0 = $pdo->prepare('SELECT * FROM cari_kartlar WHERE id = ?'); $st0->execute([$id]); $eski = $st0->fetch(PDO::FETCH_ASSOC) ?: null; }
     $tip = (string)($g['tip'] ?? 'musteri');
-    if (!isset(cari_tipler()[$tip])) $h['tip'] = 'Geçersiz cari tipi.'; else $v['tip'] = $tip;
+    // Aktif tipler seçilebilir; pasif tip yalnız o tipteki MEVCUT kartta (kendi tipini korurken) geçerlidir
+    if (!isset(cari_tipler($pdo)[$tip]) && !($eski !== null && (string)$eski['tip'] === $tip && isset(cari_tipler($pdo, true)[$tip]))) $h['tip'] = 'Geçersiz cari tipi.'; else $v['tip'] = $tip;
     $pb = (string)($g['para_birimi'] ?? 'TRY');
     if (!in_array($pb, cari_para_birimleri(), true)) $h['para_birimi'] = 'Geçersiz para birimi.'; else $v['para_birimi'] = $pb;
 
@@ -435,9 +483,41 @@ function cari_kart_dogrula(PDO $pdo, array $g, ?int $id): array
     $metin('il', 60); $metin('ulke', 60); $metin('notlar', 5000);
 
     $vn = preg_replace('/\s+/', '', (string)($g['vergi_no'] ?? '')) ?? '';
-    if ($vn === '') $v['vergi_no'] = null;
-    elseif (!preg_match('/^\d{10}$|^\d{11}$/', $vn)) $h['vergi_no'] = 'Vergi no 10 ya da 11 rakam olmalı.';
-    else $v['vergi_no'] = $vn;
+    if ($vn === '') {
+        $v['vergi_no'] = null;
+    } elseif (!$ek) {
+        if (!preg_match('/^\d{10}$|^\d{11}$/', $vn)) $h['vergi_no'] = 'Vergi no 10 ya da 11 rakam olmalı.'; else $v['vergi_no'] = $vn;
+    } else {
+        // v611: VKN 10 hane + algoritma; kartın kayıtlı (eski) değeri değişmediyse biçim yeniden sorulmaz, tekillik yine denetlenir
+        $degismedi = $eski !== null && (string)($eski['vergi_no'] ?? '') === $vn;
+        if (!$degismedi && !preg_match('/^\d{10}$/', $vn)) $h['vergi_no'] = 'Vergi no (VKN) 10 haneli olmalı; T.C. kimlik no için TCKN alanını kullanın.';
+        elseif (!$degismedi && !cari_vkn_gecerli($vn)) $h['vergi_no'] = 'Geçerli bir vergi kimlik numarası (VKN) girin.';
+        elseif (($c = cari_kimlik_cakisma($pdo, 'vergi_no', $vn, $id)) !== null) $h['vergi_no'] = 'Bu vergi no başka bir cari kartta kayıtlı: ' . $c['kod'] . ' · ' . $c['unvan'] . '.';
+        else $v['vergi_no'] = $vn;
+    }
+
+    if ($ek) {
+        $tc = preg_replace('/\s+/', '', (string)($g['tckn'] ?? '')) ?? '';
+        if ($tc === '') {
+            $v['tckn'] = null;
+        } elseif (!preg_match('/^\d{11}$/', $tc) || !cari_tckn_gecerli($tc)) {
+            $h['tckn'] = 'Geçerli bir 11 haneli T.C. kimlik numarası girin.';
+        } elseif (($c = cari_kimlik_cakisma($pdo, 'tckn', $tc, $id)) !== null) {
+            $h['tckn'] = 'Bu TCKN (' . cari_tckn_maske($tc) . ') başka bir cari kartta kayıtlı: ' . $c['kod'] . ' · ' . $c['unvan'] . '.';
+        } else {
+            $v['tckn'] = $tc;
+        }
+        // Doğum tarihi yalnız tip = müstahsil iken; aksi halde NULL yazılır
+        $dt = trim((string)($g['dogum_tarihi'] ?? ''));
+        if (($v['tip'] ?? '') !== 'mustahsil' || $dt === '') {
+            $v['dogum_tarihi'] = null;
+        } else {
+            if (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})$/', $dt, $dm)) $dt = $dm[3] . '-' . $dm[2] . '-' . $dm[1];
+            if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dt, $dm) || !checkdate((int)$dm[2], (int)$dm[3], (int)$dm[1]) || $dt < '1900-01-01') $h['dogum_tarihi'] = 'Geçerli bir doğum tarihi girin.';
+            elseif ($dt > date('Y-m-d')) $h['dogum_tarihi'] = 'Doğum tarihi gelecekte olamaz.';
+            else $v['dogum_tarihi'] = $dt;
+        }
+    }
 
     $ep = trim((string)($g['eposta'] ?? ''));
     if ($ep === '') $v['eposta'] = null;
@@ -493,8 +573,20 @@ function cari_kart_oku(PDO $pdo, int $id): ?array
     return $r === false ? null : $r;
 }
 
-/** @return array{ok:bool,hata:?string,id:?int,alanlar?:array} */
-function cari_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
+/** Audit için kişisel veri alanlarını (TCKN / doğum tarihi / telefon) değer yerine var-yok bayrağına çevirir. */
+function cari_kart_audit_veri(array $v): array
+{
+    foreach (['tckn', 'dogum_tarihi', 'telefon', 'vergi_no'] as $k) {   // VKN de: şahıs müstahsilde kişisel kimliktir
+        if (array_key_exists($k, $v)) $v[$k] = ($v[$k] !== null && $v[$k] !== '') ? '[var]' : '[yok]';
+    }
+    return $v;
+}
+
+/**
+ * $hizli = true YALNIZ cari_kart_hizli_ekle() verir (POST'tan okunmaz): yeni kart hizli=1 damgalanır.
+ * @return array{ok:bool,hata:?string,id:?int,alanlar?:array,eksikler?:list<string>,eksik_alanlar?:list<string>,uyari?:string}
+ */
+function cari_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null, bool $hizli = false): array
 {
     $eski = null;
     if ($id !== null) {
@@ -504,10 +596,12 @@ function cari_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
     $d = cari_kart_dogrula($pdo, $g, $id);
     if (!$d['ok']) return cari_hata((string)reset($d['hatalar']), ['alanlar' => $d['hatalar']]);
     $v = $d['veri'];
+    $ek = cari_ek_hazir($pdo);
     $simdi = date('Y-m-d H:i:s');
 
     if ($id === null) {
         $v += ['aktif' => 1];
+        if ($ek) $v['hizli'] = $hizli ? 1 : 0;
         $kol = array_keys($v);
         $sql = 'INSERT INTO cari_kartlar (' . implode(',', $kol) . ', created_at, created_by) VALUES (' . implode(',', array_fill(0, count($kol), '?')) . ', ?, ?)';
         try {
@@ -516,10 +610,18 @@ function cari_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
             return cari_hata('Cari kart kaydedilemedi (kod çakışması olabilir).');
         }
         $yid = (int)$pdo->lastInsertId();
-        audit_log_event('create', 'cari', $yid, null, $v);
-        return ['ok' => true, 'hata' => null, 'id' => $yid];
+        audit_log_event('create', 'cari', $yid, null, cari_kart_audit_veri($v));
+        $son = ['ok' => true, 'hata' => null, 'id' => $yid];
+        if ($ek && $hizli) { $son['eksik_alanlar'] = array_keys(cari_kart_eksik_alanlar($v)); $son['eksikler'] = cari_kart_eksikler($v); }
+        return $son;
     }
 
+    // Hızlı eklenen kart: eksikler tamamlandıysa hizli=0 (renk normale döner); eksik varsa kayıt yapılır, hizli=1 kalır
+    $kalanEksik = [];
+    if ($ek && (int)($eski['hizli'] ?? 0) === 1) {
+        $kalanEksik = cari_kart_eksik_alanlar($v + $eski);
+        $v['hizli'] = $kalanEksik ? 1 : 0;
+    }
     $fark = []; $eskiFark = [];
     foreach ($v as $k => $nv) {
         if (($eski[$k] ?? null) != $nv || (($eski[$k] ?? null) === null) !== ($nv === null)) { $fark[$k] = $nv; $eskiFark[$k] = $eski[$k] ?? null; }
@@ -531,9 +633,32 @@ function cari_kart_kaydet(PDO $pdo, array $g, int $uid, ?int $id = null): array
         } catch (PDOException $e) {
             return cari_hata('Cari kart güncellenemedi (kod çakışması olabilir).');
         }
-        audit_log_event('update', 'cari', $id, $eskiFark, $fark);
+        audit_log_event('update', 'cari', $id, cari_kart_audit_veri($eskiFark), cari_kart_audit_veri($fark));
     }
-    return ['ok' => true, 'hata' => null, 'id' => $id];
+    $son = ['ok' => true, 'hata' => null, 'id' => $id];
+    if ($kalanEksik) {
+        $son['eksik_alanlar'] = array_keys($kalanEksik);
+        $son['eksikler'] = array_values($kalanEksik);
+        $son['uyari'] = 'Eksik alanlar: ' . implode(', ', $son['eksikler']);
+    }
+    return $son;
+}
+
+/**
+ * Hızlı cari ekleme (ortak "Hızlı Ekle" penceresi Faz 2'de; burada yalnız çekirdek).
+ * Asgari: unvan + tip; opsiyonel telefon, vergi_no, tckn. Kod otomatik; hizli=1; tekillik/biçim kuralları normal kartla AYNI.
+ * Ek şema (cari_ek_hazir) kurulu değilse reddeder.
+ * @return array{ok:bool,hata:?string,id:?int,kod?:string,unvan?:string,eksikler?:list<string>,alanlar?:array}
+ */
+function cari_kart_hizli_ekle(PDO $pdo, array $girdi, int $uid): array
+{
+    if (!cari_ek_hazir($pdo)) return cari_hata('Hızlı cari ekleme için Şema Migrasyon › "Cari — Tipler · TCKN/Doğum tarihi · Hızlı ekleme" kartı çalıştırılmalı.');
+    $g = ['kod' => '', 'unvan' => $girdi['unvan'] ?? '', 'tip' => $girdi['tip'] ?? '', 'para_birimi' => 'TRY', 'aktif' => '1'];
+    foreach (['telefon', 'vergi_no', 'tckn'] as $a) if (isset($girdi[$a])) $g[$a] = $girdi[$a];
+    $s = cari_kart_kaydet($pdo, $g, $uid, null, true);
+    if (!$s['ok']) return $s;
+    $k = cari_kart_oku($pdo, (int)$s['id']);
+    return $s + ['kod' => (string)($k['kod'] ?? ''), 'unvan' => (string)($k['unvan'] ?? '')];
 }
 
 /** Pasife alırken bakiye sıfırdan farklıysa yine izin verir, `uyari` döner. */
@@ -587,7 +712,7 @@ function cari_kart_sil(PDO $pdo, int $id, int $uid): array
     if (empty($k['ok'])) return $k;
     $eskiKart = $k['_kart'];
     unset($k['_kart']);
-    audit_log_event('delete', 'cari', $id, $eskiKart, null);
+    audit_log_event('delete', 'cari', $id, cari_kart_audit_veri($eskiKart), null);   // v611: kişisel veri maskeli
     return $k;
 }
 
@@ -1012,21 +1137,39 @@ function cari_ekstre(PDO $pdo, int $cari_id, array $f): array
 
 // ── Tanım ───────────────────────────────────────────────────────────────────
 
-/** Kullanım sayısıyla (grup: kart sayısı; ödeme şekli: hareket sayısı). @return list<array> */
+/** Kullanım sayısıyla (grup: kart sayısı; tip: o tipteki kart sayısı; ödeme şekli: hareket sayısı). @return list<array> */
 function cari_tanim_listesi(PDO $pdo, string $tur, bool $yalnizAktif = false): array
 {
     if (!isset(cari_tanim_turleri()[$tur])) return [];
-    $kul = $tur === 'grup'
-        ? '(SELECT COUNT(*) FROM cari_kartlar k WHERE k.grup_id = t.id)'
-        : '(SELECT COUNT(*) FROM cari_hareketler h WHERE h.odeme_sekli = t.ad)';
+    if ($tur === 'tip' && !cari_ek_hazir($pdo)) return [];
+    $kul = match ($tur) {
+        'grup' => '(SELECT COUNT(*) FROM cari_kartlar k WHERE k.grup_id = t.id)',
+        'tip' => '(SELECT COUNT(*) FROM cari_kartlar k WHERE k.tip = t.kod)',
+        default => '(SELECT COUNT(*) FROM cari_hareketler h WHERE h.odeme_sekli = t.ad)',
+    };
     $st = $pdo->prepare("SELECT t.*, $kul AS kullanim FROM cari_tanimlar t WHERE t.tur = ?" . ($yalnizAktif ? ' AND t.aktif = 1' : '') . ' ORDER BY t.sira, t.ad, t.id');
     $st->execute([$tur]);
     return $st->fetchAll(PDO::FETCH_ASSOC);
 }
 
+/** Kullanıcı tipi için kart tipi KODU üretir: ad'dan ASCII slug (≤20), çakışır/boşsa t<sayı>; sistem kodları ve mevcut kodlarla çakışmaz. */
+function cari_tip_kod_uret(PDO $pdo, string $ad): string
+{
+    $kodlar = array_map('strval', $pdo->query("SELECT kod FROM cari_tanimlar WHERE tur = 'tip' AND kod IS NOT NULL AND kod <> ''")->fetchAll(PDO::FETCH_COLUMN));
+    $kullanilan = array_flip(array_merge($kodlar, array_keys(cari_ek_sistem_tipleri())));
+    $slug = strtr($ad, ['ç' => 'c', 'Ç' => 'c', 'ğ' => 'g', 'Ğ' => 'g', 'ı' => 'i', 'İ' => 'i', 'I' => 'i', 'ö' => 'o', 'Ö' => 'o', 'ş' => 's', 'Ş' => 's', 'ü' => 'u', 'Ü' => 'u']);
+    $slug = substr((string)preg_replace('/[^a-z0-9]+/', '', strtolower($slug)), 0, 20);
+    if ($slug !== '' && !isset($kullanilan[$slug])) return $slug;
+    $n = (int)$pdo->query('SELECT COALESCE(MAX(id), 0) FROM cari_tanimlar')->fetchColumn() + 1;
+    while (isset($kullanilan['t' . $n])) $n++;
+    return 't' . $n;
+}
+
+/** Ad (+ sıra) kaydı. 'tip' türünde yeni satır kod alır (otomatik); düzenlemede kod ASLA değişmez (sistem tipinin adı değişebilir). */
 function cari_tanim_kaydet(PDO $pdo, string $tur, string $ad, int $sira, int $uid, ?int $id = null): array
 {
     if (!isset(cari_tanim_turleri()[$tur])) return cari_hata('Geçersiz tanım türü.');
+    if ($tur === 'tip' && !cari_ek_hazir($pdo)) return cari_hata('Cari tipleri için Şema Migrasyon › "Cari — Tipler · TCKN/Doğum tarihi · Hızlı ekleme" kartı çalıştırılmalı.');
     $ad = trim($ad);
     if ($ad === '' || mb_strlen($ad) > 100) return cari_hata('Ad 1-100 karakter olmalı.', ['alanlar' => ['ad' => 'Ad 1-100 karakter olmalı.']]);
     $st = $pdo->prepare('SELECT id, ad FROM cari_tanimlar WHERE tur = ?');
@@ -1038,13 +1181,21 @@ function cari_tanim_kaydet(PDO $pdo, string $tur, string $ad, int $sira, int $ui
     }
     if ($id !== null && $eski === null) return cari_hata('Tanım bulunamadı.');
     if ($id === null) {
-        $pdo->prepare('INSERT INTO cari_tanimlar (tur, ad, sira, aktif, created_at, created_by) VALUES (?, ?, ?, 1, ?, ?)')
-            ->execute([$tur, $ad, $sira, date('Y-m-d H:i:s'), $uid]);
+        if ($tur === 'tip') {
+            $kod = cari_tip_kod_uret($pdo, $ad);
+            $pdo->prepare('INSERT INTO cari_tanimlar (tur, ad, kod, sira, aktif, created_at, created_by) VALUES (?, ?, ?, ?, 1, ?, ?)')
+                ->execute([$tur, $ad, $kod, $sira, date('Y-m-d H:i:s'), $uid]);
+        } else {
+            $pdo->prepare('INSERT INTO cari_tanimlar (tur, ad, sira, aktif, created_at, created_by) VALUES (?, ?, ?, 1, ?, ?)')
+                ->execute([$tur, $ad, $sira, date('Y-m-d H:i:s'), $uid]);
+        }
         $yid = (int)$pdo->lastInsertId();
+        if ($tur === 'tip') cari_tipler_onbellek_sifirla();
         audit_log_event('create', 'cari', $yid, null, ['tanim' => $tur, 'ad' => $ad, 'sira' => $sira]);
         return ['ok' => true, 'hata' => null, 'id' => $yid];
     }
     $pdo->prepare('UPDATE cari_tanimlar SET ad = ?, sira = ? WHERE id = ?')->execute([$ad, $sira, $id]);
+    if ($tur === 'tip') cari_tipler_onbellek_sifirla();
     audit_log_event('update', 'cari', $id, ['tanim' => $tur, 'ad' => $eski['ad']], ['tanim' => $tur, 'ad' => $ad, 'sira' => $sira]);
     return ['ok' => true, 'hata' => null, 'id' => $id];
 }
@@ -1055,12 +1206,16 @@ function cari_tanim_durum(PDO $pdo, int $id, bool $aktif, int $uid): array
     $st->execute([$id]);
     $t = $st->fetch(PDO::FETCH_ASSOC);
     if ($t === false) return cari_hata('Tanım bulunamadı.');
+    if ($t['tur'] === 'tip' && !$aktif && in_array((string)($t['kod'] ?? ''), ['musteri', 'tedarikci'], true)) {
+        return cari_hata('Müşteri ve Tedarikçi tipleri pasif yapılamaz.', ['kod' => 'sistem']);
+    }
     $pdo->prepare('UPDATE cari_tanimlar SET aktif = ? WHERE id = ?')->execute([$aktif ? 1 : 0, $id]);
+    if ($t['tur'] === 'tip') cari_tipler_onbellek_sifirla();
     audit_log_event($aktif ? 'activate' : 'deactivate', 'cari', $id, ['tanim' => $t['tur'], 'ad' => $t['ad'], 'aktif' => (int)$t['aktif']], ['aktif' => $aktif ? 1 : 0]);
     return ['ok' => true, 'hata' => null, 'id' => $id];
 }
 
-/** Grup bir kartta kullanılıyorsa silinemez (pasif önerilir); ödeme şekli serbest silinir (hareket adı anlık görüntü taşır). */
+/** Grup / kullanıcı tipi bir kartta kullanılıyorsa silinemez (pasif önerilir); sistem tipi hiç silinemez; ödeme şekli serbest silinir (hareket adı anlık görüntü taşır). */
 function cari_tanim_sil(PDO $pdo, int $id, int $uid): array
 {
     $st = $pdo->prepare('SELECT * FROM cari_tanimlar WHERE id = ?');
@@ -1072,7 +1227,15 @@ function cari_tanim_sil(PDO $pdo, int $id, int $uid): array
         $s->execute([$id]);
         if ((int)$s->fetchColumn() > 0) return cari_hata('Bu grup carilerde kullanılıyor; silmek yerine pasifleştirin.', ['kod' => 'kullanimda']);
     }
+    if ($t['tur'] === 'tip') {
+        if (cari_ek_sistem_tip_mi((string)($t['kod'] ?? ''))) return cari_hata('Sistem cari tipi silinemez; adı değiştirilebilir, gerekirse pasifleştirilir.', ['kod' => 'sistem']);
+        $s = $pdo->prepare('SELECT COUNT(*) FROM cari_kartlar WHERE tip = ?');
+        $s->execute([(string)($t['kod'] ?? '')]);
+        $n = (int)$s->fetchColumn();
+        if ($n > 0) return cari_hata('Bu tip ' . $n . ' cari kartta kullanılıyor; silmek yerine pasifleştirin.', ['kod' => 'kullanimda']);
+    }
     $pdo->prepare('DELETE FROM cari_tanimlar WHERE id = ?')->execute([$id]);
+    if ($t['tur'] === 'tip') cari_tipler_onbellek_sifirla();
     audit_log_event('delete', 'cari', $id, ['tanim' => $t['tur'], 'ad' => $t['ad']], null);
     return ['ok' => true, 'hata' => null, 'id' => $id];
 }
@@ -1097,6 +1260,7 @@ function cari_cevap(array $s, string $geri, string $okMesaj, bool $json): never
             'ok' => $ok, 'id' => $s['id'] ?? null, 'belge_no' => $s['belge_no'] ?? null, 'hata' => $ok ? null : (string)($s['hata'] ?? 'İşlem yapılamadı.'),
             'alanlar' => (object)($s['alanlar'] ?? []), 'uyari' => $s['uyari'] ?? null, 'yonlendir' => $geri, 'tekrar' => !empty($s['tekrar']),
             'kod' => $s['kod'] ?? null, 'eklenen' => $s['eklenen'] ?? null, 'atlanan' => $s['atlanan'] ?? null,
+            'eksikler' => $s['eksikler'] ?? null, 'eksik_alanlar' => $s['eksik_alanlar'] ?? null,
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -1116,3 +1280,6 @@ function cari_csv_ac(string $ad): mixed
     fwrite($o, "\xEF\xBB\xBF");
     return $o;
 }
+
+// v611: cari ek şeması (tipler tanımlardan · TCKN / doğum tarihi · hızlı bayrağı); yalnız fonksiyon bildirir
+require_once __DIR__ . '/cari_ek_sema.php';
