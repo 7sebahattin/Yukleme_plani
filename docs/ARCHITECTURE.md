@@ -12,7 +12,7 @@
 - **`config/db.php`:** Web isteklerinde `display_errors=0`, yapısal JSON `set_exception_handler`, `config/local.php` yükleme, `db_config_resolve()` (`DB_LOCAL_*` / `ASYA_DB_*` ezme desteği + canlı `deploy.php` `smart_merge_db` uyumu) ve tekil `db(): PDO` bağlantısı.
 - **Tek PDO Paylaşımı:** `halkayit/db.php` (`hks_db()`) aynı DB hedeflendiğinde `db()` bağlantısını paylaşır; ek MySQL bağlantısı açmaz.
 - **Facade ve Alt Yardımcılar:** `config/helpers.php` çekirdek kabuğu, `config/db_tx_helpers.php` (`db_tx`, `db_table_exists`, `db_for_update`), `config/cache_export_helpers.php` (`json_html`, `app_cache_*`, `export_prepare_runtime`), `config/role_permission_matrix.php`, `config/muhasebe_roller.php`, `config/muhasebe_referans.php` modüllerini birleştirir.
-- **Sıfır Çalışma Zamanı DDL:** Tüm şema ve indeks güncellemeleri yalnızca yönetici tarafından `migrate.php` (59 idempotent kart) üzerinden yürütülür (`config/cekirdek_migrate.php` ve modül `*_migrate()` fonksiyonları; ERP Faz 1: `muhasebe_core.php`, `edonusum_core.php`, `erp_mutabakat_core.php`; ERP Faz 2: `wms_stok_core.php`, `yukleme_v2_core.php`, `satinalma_core.php`, `uretim_bom_core.php`; ERP Faz 3: `onay_core.php`, `banka_core.php`, `ik_bordro_core.php`; ERP Faz 4: `crm_core.php`, `sabit_kiymet_core.php`, `finans_plan_core.php`; ERP Faz 5: `bi_rapor_core.php`).
+- **Sıfır Çalışma Zamanı DDL:** Tüm şema ve indeks güncellemeleri yalnızca yönetici tarafından `migrate.php` (50 idempotent kart) üzerinden yürütülür (`config/cekirdek_migrate.php` ve modül `*_migrate()` fonksiyonları; ERP Faz 1: `muhasebe_core.php`, `edonusum_core.php`, `erp_mutabakat_core.php`; ERP Faz 5: `bi_rapor_core.php`).
 
 ## 3. Kimlik Doğrulama, Oturum ve Yetkilendirme
 

@@ -31,6 +31,8 @@ function wa_env(string $ad, string $varsayilan = ''): string
     return ($v === false || $v === '') ? $varsayilan : (string)$v;
 }
 
+// v609 (sahip kararı): WhatsApp Senkron sayfası ve işlevleri gizli/devre dışı (yeniden açmak için local.php veya env: WHATSAPP_SENKRON_AKTIF=1).
+if (!defined('WHATSAPP_SENKRON_AKTIF'))  define('WHATSAPP_SENKRON_AKTIF', wa_env('WHATSAPP_SENKRON_AKTIF', '0') === '1');
 if (!defined('EVOLUTION_API_URL'))       define('EVOLUTION_API_URL', rtrim(wa_env('EVOLUTION_API_URL', 'http://localhost:8080'), '/'));
 if (!defined('EVOLUTION_API_KEY'))       define('EVOLUTION_API_KEY', wa_env('EVOLUTION_API_KEY'));
 if (!defined('EVOLUTION_INSTANCE_NAME')) define('EVOLUTION_INSTANCE_NAME', wa_env('EVOLUTION_INSTANCE_NAME', 'yukleme_plani_bot'));

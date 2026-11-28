@@ -44,16 +44,6 @@ require_once $ROOT . '/config/kantar_alanlari_core.php';
 require_once $ROOT . '/config/muhasebe_core.php';
 require_once $ROOT . '/config/edonusum_core.php';
 require_once $ROOT . '/config/erp_mutabakat_core.php';
-require_once $ROOT . '/config/wms_stok_core.php';
-require_once $ROOT . '/config/yukleme_v2_core.php';
-require_once $ROOT . '/config/satinalma_core.php';
-require_once $ROOT . '/config/uretim_bom_core.php';
-require_once $ROOT . '/config/onay_core.php';
-require_once $ROOT . '/config/banka_core.php';
-require_once $ROOT . '/config/ik_bordro_core.php';
-require_once $ROOT . '/config/crm_core.php';
-require_once $ROOT . '/config/sabit_kiymet_core.php';
-require_once $ROOT . '/config/finans_plan_core.php';
 require_once $ROOT . '/config/bi_rapor_core.php';
 
 $passCnt = 0; $failCnt = 0;
@@ -92,16 +82,6 @@ $adimlar = [
     'muhasebe_migrate'              => static fn() => muhasebe_migrate($pdo),
     'edonusum_migrate'              => static fn() => edonusum_migrate($pdo),
     'erp_mutabakat_migrate'         => static fn() => erp_mutabakat_migrate($pdo),
-    'wms_stok_migrate'              => static fn() => wms_stok_migrate($pdo),
-    'yukleme_v2_migrate'            => static fn() => yukleme_v2_migrate($pdo),
-    'satinalma_migrate'             => static fn() => satinalma_migrate($pdo),
-    'uretim_bom_migrate'            => static fn() => uretim_bom_migrate($pdo),
-    'onay_migrate'                  => static fn() => onay_migrate($pdo),
-    'banka_migrate'                 => static fn() => banka_migrate($pdo),
-    'ik_bordro_migrate'             => static fn() => ik_bordro_migrate($pdo),
-    'crm_migrate'                   => static fn() => crm_migrate($pdo),
-    'sabit_kiymet_migrate'          => static fn() => sabit_kiymet_migrate($pdo),
-    'finans_plan_migrate'           => static fn() => finans_plan_migrate($pdo),
     'bi_rapor_migrate'              => static fn() => bi_rapor_migrate($pdo),
 ];
 
@@ -116,12 +96,9 @@ foreach ([1, 2] as $tur) {
 
 $pidx = cekirdek_perf_indeksler_durum($pdo);
 ok('B-29 tüm performans composite indeksleri MariaDB üzerinde hazır', $pidx['hazir'], json_encode($pidx));
-ok('Muhasebe & ERP Faz 1-5 şemaları hazır',
+ok('Muhasebe & ERP Faz 1/5 şemaları hazır',
     cari_hazir($pdo) && stok_hazir($pdo) && fatura_hazir($pdo) && kasa_hazir($pdo) && doviz_hazir($pdo) && ceksenet_hazir($pdo)
-    && muh_hazir($pdo) && edonusum_hazir($pdo) && erp_mutabakat_hazir($pdo)
-    && wms_stok_hazir($pdo) && yukleme_v2_hazir($pdo) && satinalma_hazir($pdo) && uretim_bom_hazir($pdo)
-    && onay_hazir($pdo) && banka_hazir($pdo) && ik_bordro_hazir($pdo)
-    && crm_hazir($pdo) && sabit_kiymet_hazir($pdo) && finans_plan_hazir($pdo) && bi_rapor_hazir($pdo)
+    && muh_hazir($pdo) && edonusum_hazir($pdo) && erp_mutabakat_hazir($pdo) && bi_rapor_hazir($pdo)
 );
 
 echo "\nÖZET: $passCnt geçti, $failCnt kaldı\n";

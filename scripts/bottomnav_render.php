@@ -403,8 +403,8 @@ foreach ($PROFILLER as $pk => $pr) {
     // muhasebe_herkese_acik_sayfalar()'dan BAĞIMSIZ yazıldı.
     $izinli['sifre_degistirme.php'] = true;
 
-    // v566/v574: Depo Tanımları (Yönetim grubu; Şube kalktı) yalnız yönetici; kapı TABLOSU nav_yonetim_sayfalari()'ndan BAĞIMSIZ yazıldı.
-    foreach (['depo_tanimlari.php', 'whatsapp_yonetim.php'] as $__dosya) $izinli[$__dosya] = is_admin();
+    // v566/v574/v609: Depo Tanımları (Yönetim grubu; Şube kalktı, WhatsApp Senkron gizli) yalnız yönetici; kapı TABLOSU nav_yonetim_sayfalari()'ndan BAĞIMSIZ yazıldı.
+    foreach (['depo_tanimlari.php'] as $__dosya) $izinli[$__dosya] = is_admin();
 
     // Çapraz kontroller: tablo, uygulamanın KENDİ fonksiyonlarıyla ayrışmasın.
     $fap = first_allowed_page();

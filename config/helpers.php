@@ -13,7 +13,7 @@ require_once __DIR__ . '/role_permission_matrix.php';
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v609');
+    define('APP_SURUM', 'v610');
 }
 
 require_once __DIR__ . '/db_tx_helpers.php';
@@ -553,18 +553,7 @@ function nav_muhasebe_gruplari(): array {
             'muh_hesap_plani.php' => ['TDHP Hesap Planı', '📘'], 'muh_yevmiye.php' => ['Yevmiye Fişleri', '📒'],
             'muh_mali_tablolar.php' => ['Mizan & Mali Tablolar', '📈'], 'edonusum_belgeler.php' => ['e-Dönüşüm Belgeleri', '📨'],
             'muh_mutabakat.php' => ['Risk, BA/BS & Kur Farkı', '⚖️']]],
-        // v589 (ERP Faz 2): Stok/WMS (Seçenek A), Yeni Araç Yükleme (v2), Satın Alma & 3-Way Match, Üretim BOM/MRP
-        'erp_operasyon' => ['ERP Operasyon & Tedarik', '<path d="M3 7h18M5 7v12h14V7M9 11h6M9 15h4"/>', [
-            'wms_stok_yonetim.php' => ['Ürün & Malzeme Stok / WMS', '📦'], 'yukleme_v2.php' => ['Yeni Araç Yükleme (v2)', '🚚'],
-            'satinalma_yonetim.php' => ['Satın Alma & 3-Way Match', '🛒'], 'uretim_bom.php' => ['Üretim BOM & MRP', '🏭']]],
-        // v590 (ERP Faz 3): Merkezi Onay Akışları, Banka Mutabakat/Kredi/POS, İK Özlük/İzin/Resmi Bordro
-        'erp_yonetim' => ['Yönetişim, Banka & İK', '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/>', [
-            'onay_merkezi.php' => ['Onay Akışları Merkezi', '✅'], 'banka_yonetim.php' => ['Banka Mutabakat & Kredi', '🏦'],
-            'ik_bordro.php' => ['İK & Resmi Bordro', '👥']]],
-        // v591 (ERP Faz 4): CRM & Fiyat Listeleri, Sabit Kıymet/Amortisman/Bakım, Bütçe/Aging/Nakit Akış
-        'erp_planlama' => ['CRM, Sabit Kıymet & Planlama', '<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>', [
-            'crm_yonetim.php' => ['CRM & Fiyat Listeleri', '🤝'], 'sabit_kiymet.php' => ['Sabit Kıymet & Bakım', '🏗️'],
-            'finans_planlama.php' => ['Bütçe, Aging & Nakit Akış', '📊']]],
+        // v609 (sahip kararı): ERP Faz 2 (erp_operasyon), Faz 3 (erp_yonetim) ve Faz 4 (erp_planlama) tamamen kaldırıldı (13 sayfa 410 tombstone).
         // v548: Araç Yükleme / Palet / Mal Kabul fişleri "Operasyon_fis" grubuna taşındı (sidebar'da Operasyon'un İÇİNDE çizilir).
         'operasyon_fis' => ['Operasyon Fişleri', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', [
             'arac_yukleme_fisleri.php' => ['Yükleme Planları', '🚛'], 'palet_fisleri.php' => ['Palet Fişleri', '🧱'],
@@ -590,8 +579,12 @@ function nav_muhasebe_gruplari(): array {
  */
 function nav_yonetim_sayfalari(): array {
     // v574 (sahip kararı): Şube kavramı yok (sube_tanimlari.php = 410 tombstone); Tanımlar menüsü kalktı (definitions.php = 410).
-    // v582: WhatsApp Yükleme Planı (Evolution API + AI) — yalnız yönetici; Roller'de admin-only satır
-    return ['depo_tanimlari.php' => ['Depo Tanımları', '🏭'], 'whatsapp_yonetim.php' => ['WhatsApp Senkron', '💬']];
+    // v609 (sahip kararı): WhatsApp Senkron (whatsapp_yonetim.php) gizlendi; yalnız WHATSAPP_SENKRON_AKTIF === true iken görünür.
+    $sayfalar = ['depo_tanimlari.php' => ['Depo Tanımları', '🏭']];
+    if (defined('WHATSAPP_SENKRON_AKTIF') && WHATSAPP_SENKRON_AKTIF) {
+        $sayfalar['whatsapp_yonetim.php'] = ['WhatsApp Senkron', '💬'];
+    }
+    return $sayfalar;
 }
 
 /**

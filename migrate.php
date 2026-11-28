@@ -72,17 +72,7 @@ require_once __DIR__ . '/config/hesap_calc.php';         // B-01 hesap_migrate(t
 require_once __DIR__ . '/config/muhasebe_core.php';      // ERP-1 Genel Muhasebe (TDHP)
 require_once __DIR__ . '/config/edonusum_core.php';      // ERP-2 e-Dönüşüm (UBL-TR 1.2)
 require_once __DIR__ . '/config/erp_mutabakat_core.php'; // ERP-11a Cari Risk Limiti & Kur Farkı Değerleme
-require_once __DIR__ . '/config/wms_stok_core.php';      // ERP-11b Stok Ayrımı (Seçenek A) & WMS
-require_once __DIR__ . '/config/yukleme_v2_core.php';    // Yeni Araç Yükleme Fişleri (v2)
-require_once __DIR__ . '/config/satinalma_core.php';     // ERP-3 Satın Alma & 3-Way Match
-require_once __DIR__ . '/config/uretim_bom_core.php';    // ERP-4 Üretim BOM, İş Emirleri & MRP
-require_once __DIR__ . '/config/onay_core.php';          // ERP-5 Merkezi Onay Akışları
-require_once __DIR__ . '/config/banka_core.php';         // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
-require_once __DIR__ . '/config/ik_bordro_core.php';     // ERP-7 İK Özlük, İzin & Resmi Bordro
-require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Planı (v591)
-require_once __DIR__ . '/config/crm_core.php';           // ERP-8 CRM & Fiyat Listeleri
-require_once __DIR__ . '/config/sabit_kiymet_core.php';  // ERP-9 Sabit Kıymet, Amortisman & Bakım
-require_once __DIR__ . '/config/finans_plan_core.php';   // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
+require_once __DIR__ . '/config/whatsapp_core.php';      // WhatsApp Yükleme Planı (v591; v609'da WHATSAPP_SENKRON_AKTIF ile gizli)
 require_once __DIR__ . '/config/bi_rapor_core.php';      // ERP Faz 5 Yeni Raporlama & Dinamik BI Merkezi
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
@@ -183,18 +173,99 @@ $perf_idx_results = []; $perf_idx_ran = false;              // B-29 Performans c
 $muh_results = []; $muh_ran = false;                        // ERP-1 Genel Muhasebe (TDHP)
 $edonusum_results = []; $edonusum_ran = false;              // ERP-2 e-Dönüşüm (UBL-TR 1.2)
 $erp_mut_results = []; $erp_mut_ran = false;                // ERP-11a Cari Risk Limiti & Kur Farkı Değerleme
-$wms_results = []; $wms_ran = false;                        // ERP-11b Stok Ayrımı (Seçenek A) & WMS
-$yv2_results = []; $yv2_ran = false;                        // Yeni Araç Yükleme Fişleri (v2)
-$sa_results = []; $sa_ran = false;                          // ERP-3 Satın Alma & 3-Way Match
-$ubom_results = []; $ubom_ran = false;                      // ERP-4 Üretim BOM, İş Emirleri & MRP
-$onay_results = []; $onay_ran = false;                      // ERP-5 Merkezi Onay Akışları
-$banka_results = []; $banka_ran = false;                    // ERP-6 Banka Entegrasyonu, Mutabakat, Kredi & POS
-$ik_results = []; $ik_ran = false;                          // ERP-7 İK Özlük, İzin & Resmi Bordro
 $wa_results = []; $wa_ran = false;                          // WhatsApp Yükleme Planı (v591)
-$crm_results = []; $crm_ran = false;                        // ERP-8 CRM & Fiyat Listeleri
-$sk_results = []; $sk_ran = false;                          // ERP-9 Sabit Kıymet, Amortisman & Bakım
-$fp_results = []; $fp_ran = false;                          // ERP-10 Bütçe, Vade Yaşlandırma & Nakit Akış
 $bi_results = []; $bi_ran = false;                          // ERP Faz 5 Yeni Raporlama & Dinamik BI Merkezi
+$erp_temizle_results = []; $erp_temizle_ran = false;        // v609: Kaldırılan ERP Faz 2/3/4 tabloları & test verisi temizliği
+
+if (!function_exists('erp_faz234_tablolari')) {
+    /** Kaldırılan ERP Faz 2/3/4 modüllerine özel 42 tablo (alt → üst sırada). */
+    function erp_faz234_tablolari(): array
+    {
+        return [
+            // Faz 2 (18)
+            'wms_lotlar', 'wms_raflar', 'stok_prof_wms',
+            'yukleme_v2_paletler', 'yukleme_v2_fisler',
+            'sa_eslestirmeler', 'sa_mal_kabul_satirlar', 'sa_mal_kabul', 'sa_siparis_satirlar', 'sa_siparisler', 'sa_teklifler', 'sa_talep_satirlar', 'sa_talepler',
+            'uretim_lot_iz', 'uretim_is_emri_sarf', 'uretim_is_emirleri', 'uretim_bom_satirlar', 'uretim_bom',
+            // Faz 3 (13)
+            'onay_vekaletler', 'onay_adimlari', 'onay_talepleri', 'onay_kurallari',
+            'banka_pos_hareketler', 'banka_kredi_taksitler', 'banka_krediler', 'banka_ekstreler', 'banka_hesaplari',
+            'ik_bordro_satirlar', 'ik_bordro_donemler', 'ik_izinler', 'ik_ozluk',
+            // Faz 4 (11)
+            'crm_claimler', 'crm_teklifler', 'crm_fiyat_satirlar', 'crm_fiyat_listeleri', 'crm_aktiviteler', 'crm_firsatlar',
+            'sk_bakimlar', 'sk_amortismanlar', 'sk_kartlar',
+            'fp_nakit_kalemler', 'fp_butceler',
+        ];
+    }
+
+    /** Hâlâ DB'de bulunan ERP Faz 2/3/4 tabloları. */
+    function erp_faz234_mevcut_tablolar(PDO $pdo): array
+    {
+        $mevcut = [];
+        foreach (erp_faz234_tablolari() as $t) {
+            if (mig_table_exists($pdo, $t)) $mevcut[] = $t;
+        }
+        return $mevcut;
+    }
+
+    /** Idempotent temizlik: 42 tabloyu siler + artık role_permissions / bi_rapor_sablonlari satırlarını temizler. */
+    function erp_faz234_temizle(PDO $pdo): array
+    {
+        $sonuc = [];
+        $driver = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'mysql') {
+            $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+        }
+        try {
+            foreach (erp_faz234_tablolari() as $t) {
+                if (!mig_table_exists($pdo, $t)) continue;
+                try {
+                    $pdo->exec("DROP TABLE IF EXISTS `$t`");
+                    $sonuc[] = ['tablo' => $t, 'durum' => 'silindi', 'mesaj' => 'Tablo ve verileri silindi.'];
+                } catch (Throwable $e) {
+                    $sonuc[] = ['tablo' => $t, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+                }
+            }
+        } finally {
+            if ($driver === 'mysql') {
+                $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+            }
+        }
+        // Artık rol izinlerini temizle
+        if (mig_table_exists($pdo, 'role_permissions')) {
+            try {
+                $st = $pdo->prepare(
+                    "DELETE FROM `role_permissions` WHERE `permission` LIKE 'muhasebe.erp_operasyon.%' "
+                    . "OR `permission` LIKE 'muhasebe.erp_yonetim.%' "
+                    . "OR `permission` LIKE 'muhasebe.erp_planlama.%' "
+                    . "OR `permission` IN ('muhasebe.wms_stok_yonetim.read','muhasebe.yukleme_v2.read','muhasebe.satinalma_yonetim.read','muhasebe.uretim_bom.read','muhasebe.onay_merkezi.read','muhasebe.banka_yonetim.read','muhasebe.ik_bordro.read','muhasebe.crm_yonetim.read','muhasebe.sabit_kiymet.read','muhasebe.finans_planlama.read')"
+                );
+                $st->execute();
+                $n = $st->rowCount();
+                if ($n > 0) $sonuc[] = ['tablo' => 'role_permissions', 'durum' => 'silindi', 'mesaj' => "$n artık rol izni temizlendi."];
+            } catch (Throwable $e) {
+                $sonuc[] = ['tablo' => 'role_permissions', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+            }
+        }
+        // Kaldırılan veri kaynaklarına bağlı BI şablon/zamanlama satırlarını temizle
+        if (mig_table_exists($pdo, 'bi_rapor_sablonlari')) {
+            try {
+                $eskiKaynaklar = "'wms_lotlar','yukleme_v2','satinalma','uretim','onay_talepleri','banka_ekstreler','ik_bordro','crm_firsatlar','sabit_kiymetler','butce_sapma'";
+                if (mig_table_exists($pdo, 'bi_rapor_zamanlama')) {
+                    $pdo->exec("DELETE FROM `bi_rapor_zamanlama` WHERE `sablon_id` IN (SELECT `id` FROM `bi_rapor_sablonlari` WHERE `veri_kaynagi` IN ($eskiKaynaklar))");
+                }
+                $n = (int)$pdo->exec("DELETE FROM `bi_rapor_sablonlari` WHERE `veri_kaynagi` IN ($eskiKaynaklar)");
+                if ($n > 0) $sonuc[] = ['tablo' => 'bi_rapor_sablonlari', 'durum' => 'silindi', 'mesaj' => "$n artık BI şablonu temizlendi."];
+            } catch (Throwable $e) {
+                $sonuc[] = ['tablo' => 'bi_rapor_sablonlari', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+            }
+        }
+        if ($sonuc === []) {
+            $sonuc[] = ['tablo' => 'tümü', 'durum' => 'temiz', 'mesaj' => 'Silinecek ERP Faz 2/3/4 tablosu veya artık kayıt bulunmadı.'];
+        }
+        return $sonuc;
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -633,69 +704,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'erp_mutabakat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'wms_stok') {
-    csrf_check($_POST['csrf'] ?? null);
-    $wms_ran     = true;
-    $wms_results = wms_stok_migrate($pdo);
-    foreach ($wms_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'wms_stok', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'yukleme_v2') {
-    csrf_check($_POST['csrf'] ?? null);
-    $yv2_ran     = true;
-    $yv2_results = yukleme_v2_migrate($pdo);
-    foreach ($yv2_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'yukleme_v2', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'satinalma') {
-    csrf_check($_POST['csrf'] ?? null);
-    $sa_ran     = true;
-    $sa_results = satinalma_migrate($pdo);
-    foreach ($sa_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'satinalma', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'uretim_bom') {
-    csrf_check($_POST['csrf'] ?? null);
-    $ubom_ran     = true;
-    $ubom_results = uretim_bom_migrate($pdo);
-    foreach ($ubom_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'uretim_bom', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'onay_akislari') {
-    csrf_check($_POST['csrf'] ?? null);
-    $onay_ran     = true;
-    $onay_results = onay_migrate($pdo);
-    foreach ($onay_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'onay_akislari', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'banka_mutabakat') {
-    csrf_check($_POST['csrf'] ?? null);
-    $banka_ran     = true;
-    $banka_results = banka_migrate($pdo);
-    foreach ($banka_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'banka_mutabakat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'ik_bordro') {
-    csrf_check($_POST['csrf'] ?? null);
-    $ik_ran     = true;
-    $ik_results = ik_bordro_migrate($pdo);
-    foreach ($ik_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'ik_bordro', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'whatsapp') {
     csrf_check($_POST['csrf'] ?? null);
     $wa_ran     = true;
@@ -705,31 +713,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
             audit_log_event('migrate', 'whatsapp', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
         }
     }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'crm_fiyat') {
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'erp_faz234_temizle') {
     csrf_check($_POST['csrf'] ?? null);
-    $crm_ran     = true;
-    $crm_results = crm_migrate($pdo);
-    foreach ($crm_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'crm_fiyat', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'sabit_kiymet') {
-    csrf_check($_POST['csrf'] ?? null);
-    $sk_ran     = true;
-    $sk_results = sabit_kiymet_migrate($pdo);
-    foreach ($sk_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'sabit_kiymet', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'finans_planlama') {
-    csrf_check($_POST['csrf'] ?? null);
-    $fp_ran     = true;
-    $fp_results = finans_plan_migrate($pdo);
-    foreach ($fp_results as $sr) {
-        if ($sr['durum'] === 'olusturuldu') {
-            audit_log_event('migrate', 'finans_planlama', null, null, ['operation' => 'create_table', 'table' => $sr['tablo']]);
+    $erp_temizle_ran     = true;
+    $erp_temizle_results = erp_faz234_temizle($pdo);
+    foreach ($erp_temizle_results as $sr) {
+        if ($sr['durum'] === 'silindi') {
+            audit_log_event('migrate', 'erp_faz234_temizle', null, null, ['operation' => 'drop_table', 'table' => $sr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'bi_raporlama') {
@@ -2459,163 +2449,12 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     </form>
   <?php mg_kart_kapat(); ?>
 
-  <?php mg_kart_ac('wms-stok'); ?>
-    <h2 style="margin-top:0;">Stok Ayrımı (Seçenek A) &amp; WMS (ERP-11b)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>stok_prof_wms</code> (Ürün vs Malzeme/Ambalaj grubu, dara, min/maks, FIFO/TDHP),
-      <code>wms_raflar</code> (depo içi raf lokasyonları) ve <code>wms_lotlar</code> (Lot/SKT/FIFO) tablolarını ekler.
-      Mevcut <code>stok_kartlar</code> tablosuna ALTER yapılmaz.
-      <?php if ($wms_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($wms_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $wmsHazir = wms_stok_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $wmsHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $wmsHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="wms_stok">
-      <button type="submit" class="btn btn-primary">Stok / WMS Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('yukleme-v2'); ?>
-    <h2 style="margin-top:0;">Yeni Araç Yükleme Fişleri (v2)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>yukleme_v2_fisler</code> ve <code>yukleme_v2_paletler</code> tablolarını oluşturur
-      (satır bazlı palet güncelleme, canlı dara/net, kilit/revizyon ve WMS FIFO sevk düşümü). Eski <code>loading_records</code> korunur.
-      <?php if ($yv2_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($yv2_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $yv2Hazir = yukleme_v2_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $yv2Hazir ? '#1f9d55' : '#c0392b' ?>;"><?= $yv2Hazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="yukleme_v2">
-      <button type="submit" class="btn btn-primary">Yeni Araç Yükleme (v2) Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('satinalma'); ?>
-    <h2 style="margin-top:0;">Satın Alma &amp; 3-Way Match (ERP-3)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>sa_talepler</code>, <code>sa_talep_satirlar</code>, <code>sa_teklifler</code>,
-      <code>sa_siparisler</code>, <code>sa_siparis_satirlar</code>, <code>sa_mal_kabul</code>, <code>sa_mal_kabul_satirlar</code>
-      ve <code>sa_eslestirmeler</code> (Sipariş–İrsaliye–Fatura 3'lü eşleştirme) tablolarını ekler.
-      <?php if ($sa_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($sa_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $saHazir = satinalma_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $saHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $saHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="satinalma">
-      <button type="submit" class="btn btn-primary">Satın Alma Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('uretim-bom'); ?>
-    <h2 style="margin-top:0;">Üretim Reçetesi (BOM), İş Emirleri &amp; MRP (ERP-4)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>uretim_bom</code>, <code>uretim_bom_satirlar</code>, <code>uretim_is_emirleri</code>,
-      <code>uretim_is_emri_sarf</code> ve <code>uretim_lot_iz</code> (Lot-to-Lot izlenebilirlik) tablolarını ekler.
-      Mevcut <code>gunluk_uretim.php</code> etkilenmez.
-      <?php if ($ubom_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($ubom_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $ubomHazir = uretim_bom_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $ubomHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ubomHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="uretim_bom">
-      <button type="submit" class="btn btn-primary">Üretim BOM / MRP Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('onay-akislari'); ?>
-    <h2 style="margin-top:0;">Merkezi Onay Akışları Motoru (ERP-5)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>onay_kurallari</code> (limit bazlı sıralı/paralel kademeler), <code>onay_talepleri</code>,
-      <code>onay_adimlari</code> ve <code>onay_vekaletler</code> (tarih aralıklı delegasyon) tablolarını ekler.
-      <?php if ($onay_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($onay_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $onayHazir = onay_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $onayHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $onayHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="onay_akislari">
-      <button type="submit" class="btn btn-primary">Onay Akışları Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('banka-mutabakat'); ?>
-    <h2 style="margin-top:0;">Banka Entegrasyonu, MT940/CSV Mutabakat, Kredi &amp; POS (ERP-6)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>banka_hesaplari</code>, <code>banka_ekstreler</code> (MT940/CSV + otomatik fatura eşleştirme),
-      <code>banka_krediler</code>, <code>banka_kredi_taksitler</code> (TDHP 300/780/102) ve <code>banka_pos_hareketler</code> (komisyon &amp; bloke) tablolarını ekler.
-      <?php if ($banka_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($banka_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $bankaHazir = banka_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $bankaHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $bankaHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="banka_mutabakat">
-      <button type="submit" class="btn btn-primary">Banka / Kredi / POS Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('ik-bordro'); ?>
-    <h2 style="margin-top:0;">İK Özlük, 4857 Yıllık İzin &amp; Resmi Bordro (ERP-7)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>ik_ozluk</code>, <code>ik_izinler</code> (4857 kıdem bazlı yıllık izin + Onay Akışı),
-      <code>ik_bordro_donemler</code> ve <code>ik_bordro_satirlar</code> (SGK, kümülatif GV dilimleri, asgari ücret istisnası, DV + TDHP 770/335/360/361 tahakkuk) tablolarını ekler.
-      Mevcut PDKS tablolarına dokunmaz.
-      <?php if ($ik_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($ik_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $ikHazir = ik_bordro_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $ikHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $ikHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="ik_bordro">
-      <button type="submit" class="btn btn-primary">İK &amp; Resmi Bordro Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
   <?php mg_kart_ac('whatsapp'); ?>
-    <h2 style="margin-top:0;">WhatsApp Senkron — Tablolar &amp; API Ayarları (v591)</h2>
+    <h2 style="margin-top:0;">WhatsApp — Tablolar &amp; API Ayarları (v591)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>whatsapp_mesaj_loglari</code> ve <code>whatsapp_ayarlar</code> tablolarını oluşturur,
       ekrandan API anahtarı kaydı için <code>evolution_url</code>, <code>evolution_api_key</code>, <code>webhook_secret</code>, <code>ai_api_key</code> kolonlarını ekler.
-      Mevcut tablolara dokunmaz.
+      Mevcut tablolara dokunmaz. (WhatsApp Senkron arayüzü v609'da gizlidir; <code>whatsapp_ayarlar</code> Chrome Bridge tarafından da okunur.)
       <?php if ($wa_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
         <?php foreach ($wa_results as $sr): ?>
@@ -2632,66 +2471,27 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
     </form>
   <?php mg_kart_kapat(); ?>
 
-  <?php mg_kart_ac('crm-fiyat'); ?>
-    <h2 style="margin-top:0;">CRM, Fiyat Listeleri, Teklif &amp; Kalite Claim (ERP-8)</h2>
+  <?php mg_kart_ac('erp-faz234-temizle'); ?>
+    <h2 style="margin-top:0;">ERP Faz 2–3–4 Tablo &amp; Test Verisi Temizliği (v609)</h2>
     <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>crm_firsatlar</code>, <code>crm_aktiviteler</code>, <code>crm_fiyat_listeleri</code>,
-      <code>crm_fiyat_satirlar</code>, <code>crm_teklifler</code> (tek tık siparişe dönüşüm) ve <code>crm_claimler</code> tablolarını ekler.
-      <?php if ($crm_ran): ?>
+      Kaldırılan <strong>ERP Operasyon &amp; Tedarik</strong>, <strong>Yönetişim, Banka &amp; İK</strong> ve
+      <strong>CRM, Sabit Kıymet &amp; Planlama</strong> modüllerine ait 42 tabloyu, içlerindeki test verilerini ve artık rol/BI kayıtlarını kalıcı olarak siler.
+      Aktif modüllere (Sipariş, Beyan, HKS, PDKS, Cari, Kasa, Fatura, Stok, Genel Muhasebe) dokunmaz.
+      <?php if ($erp_temizle_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($crm_results as $sr): ?>
+        <?php foreach ($erp_temizle_results as $sr): ?>
         <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
         <?php endforeach; ?>
       <?php endif; ?>
     </p>
-    <?php $crmHazir = crm_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $crmHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $crmHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="crm_fiyat">
-      <button type="submit" class="btn btn-primary">CRM &amp; Fiyat Listesi Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('sabit-kiymet'); ?>
-    <h2 style="margin-top:0;">Sabit Kıymet, Amortisman &amp; Periyodik Bakım (ERP-9)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>sk_kartlar</code>, <code>sk_amortismanlar</code> (Normal / Azalan Bakiyeler + TDHP 770/730→257 yevmiye)
-      ve <code>sk_bakimlar</code> (makine/araç bakım geçmişi) tablolarını ekler.
-      <?php if ($sk_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($sk_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
+    <?php $erpFaz234Mevcut = erp_faz234_mevcut_tablolar($pdo); $erpTemiz = ($erpFaz234Mevcut === []); ?>
+    <p style="font-weight:600;color:<?= $erpTemiz ? '#1f9d55' : '#c0392b' ?>;">
+      <?= $erpTemiz ? '✓ Temiz (kaldırılan ERP Faz 2/3/4 tablosu yok)' : ('✗ ' . count($erpFaz234Mevcut) . ' adet ERP Faz 2/3/4 tablosu hâlâ mevcut: ' . h(implode(', ', array_slice($erpFaz234Mevcut, 0, 8))) . (count($erpFaz234Mevcut) > 8 ? '…' : '')) ?>
     </p>
-    <?php $skHazir = sabit_kiymet_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $skHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $skHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
+    <form method="post" style="margin-top:12px;" onsubmit="return confirm('Kaldırılan ERP Faz 2/3/4 tabloları ve içlerindeki tüm test verileri kalıcı olarak silinecek. Devam edilsin mi?');">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="sabit_kiymet">
-      <button type="submit" class="btn btn-primary">Sabit Kıymet &amp; Bakım Tablolarını Oluştur</button>
-    </form>
-  <?php mg_kart_kapat(); ?>
-
-  <?php mg_kart_ac('finans-planlama'); ?>
-    <h2 style="margin-top:0;">Bütçe, Vade Yaşlandırma (Aging) &amp; Nakit Akış (ERP-10)</h2>
-    <p style="color:#555;font-size:.9em;">
-      Yalnız ekleyici migrasyon: <code>fp_butceler</code> (TDHP gerçekleşen sapma kontrolü) ve <code>fp_nakit_kalemler</code>
-      (30/60/90/120+ gün Aging &amp; 90 günlük haftalık Nakit Akış Projeksiyonu) tablolarını ekler.
-      <?php if ($fp_ran): ?>
-      <br><strong>Son çalıştırma sonucu:</strong>
-        <?php foreach ($fp_results as $sr): ?>
-        <br>&nbsp;&nbsp;<?= h($sr['tablo']) ?>: <?= h($sr['durum']) ?> — <?= h($sr['mesaj']) ?>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </p>
-    <?php $fpHazir = finans_plan_hazir($pdo); ?>
-    <p style="font-weight:600;color:<?= $fpHazir ? '#1f9d55' : '#c0392b' ?>;"><?= $fpHazir ? '✓ Tablolar var' : '✗ Tablolar eksik' ?></p>
-    <form method="post" style="margin-top:12px;">
-      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-      <input type="hidden" name="ne" value="finans_planlama">
-      <button type="submit" class="btn btn-primary">Bütçe &amp; Nakit Akış Tablolarını Oluştur</button>
+      <input type="hidden" name="ne" value="erp_faz234_temizle">
+      <button type="submit" class="btn btn-primary"><?= $erpTemiz ? 'Artık Rol / BI Kayıtlarını Tekrar Kontrol Et' : 'ERP Faz 2/3/4 Tablolarını ve Test Verilerini Sil' ?></button>
     </form>
   <?php mg_kart_kapat(); ?>
 

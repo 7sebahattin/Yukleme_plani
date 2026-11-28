@@ -497,7 +497,9 @@ function ist(array $spec): array
 {
     global $DBDOSYA, $ROOT;
     $spec += ['get' => [], 'post' => [], 'server' => [], 'admin' => true, 'uid' => 1, 'db' => $DBDOSYA];
-    $env = 'WA_T_SPEC=' . escapeshellarg(base64_encode((string)json_encode($spec, JSON_UNESCAPED_UNICODE)));
+    $aktif = array_key_exists('senkron_aktif', $spec) ? ($spec['senkron_aktif'] ? '1' : '0') : '1';
+    unset($spec['senkron_aktif']);
+    $env = 'WHATSAPP_SENKRON_AKTIF=' . $aktif . ' WA_T_SPEC=' . escapeshellarg(base64_encode((string)json_encode($spec, JSON_UNESCAPED_UNICODE)));
     if (isset($spec['body'])) {
         $bf = sys_get_temp_dir() . '/wa_t_body_' . getmypid() . '.json';
         file_put_contents($bf, $spec['body']);
@@ -512,7 +514,15 @@ function ist(array $spec): array
 }
 function jsn(array $r): array { $j = json_decode(trim($r['govde']), true); return is_array($j) ? $j : ['_cozulemedi' => $r['govde']]; }
 
+// v609: Varsayılan gizli/devre dışı durum doğrulaması (WHATSAPP_SENKRON_AKTIF=0)
 $govde = json_encode(upsert('WH1', MESAJ));
+$rGizliWh = ist(['senkron_aktif' => false, 'dosya' => 'api_whatsapp_webhook.php', 'server' => ['REQUEST_METHOD' => 'POST'], 'get' => ['token' => 'test-secret-123'], 'body' => $govde]);
+ok('v609 gizli webhook: WHATSAPP_SENKRON_AKTIF=0 → HTTP 200 + devre_disi, işlem YOK', $rGizliWh['kod'] === 200 && (jsn($rGizliWh)['yok_sayildi'] ?? '') === 'devre_disi', $rGizliWh['govde']);
+$rGizliPanel = ist(['senkron_aktif' => false, 'dosya' => 'whatsapp_yonetim.php']);
+ok('v609 gizli panel GET: WHATSAPP_SENKRON_AKTIF=0 → HTTP 404', $rGizliPanel['kod'] === 404 && str_contains($rGizliPanel['govde'], 'gizlidir'), $rGizliPanel['govde']);
+$rGizliAjax = ist(['senkron_aktif' => false, 'dosya' => 'whatsapp_yonetim.php', 'post' => ['ajax' => 'durum', 'csrf' => 'test-csrf-belirteci'], 'server' => ['HTTP_X_REQUESTED_WITH' => 'XMLHttpRequest']]);
+ok('v609 gizli panel AJAX: WHATSAPP_SENKRON_AKTIF=0 → HTTP 404 JSON', $rGizliAjax['kod'] === 404 && (jsn($rGizliAjax)['ok'] ?? null) === false, $rGizliAjax['govde']);
+
 $r = ist(['dosya' => 'api_whatsapp_webhook.php', 'server' => ['REQUEST_METHOD' => 'POST'], 'get' => [], 'body' => $govde]);
 ok('webhook: token yok → HTTP 200 + yetkisiz (retry fırtınası yok), işlem YOK', $r['kod'] === 200 && (jsn($r)['yok_sayildi'] ?? '') === 'yetkisiz' && $r['hata'] === null, $r['govde']);
 $r = ist(['dosya' => 'api_whatsapp_webhook.php', 'server' => ['REQUEST_METHOD' => 'POST'], 'get' => ['token' => 'yanlis'], 'body' => $govde]);

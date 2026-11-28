@@ -166,10 +166,10 @@ $dashboardCatalog = [];
 foreach (nav_muhasebe_gruplari() as [$heading, , $pages]) {
     foreach ($pages as $href => [$label]) $dashboardCatalog[$href] = $label;
 }
-dashboard_check(count(nav_muhasebe_gruplari()) === 12 && count($dashboardCatalog) === 45 && !isset(nav_muhasebe_gruplari()['admin_konsolu']), 'paylaşılan katalog 12 grup/45 hedef (v593: Raporlama & BI Merkezi +1 sayfa eklendi)');
-// v555 (a): kaldırılan grup/sayfalar katalogda YOK (sayfa dosyaları durur ama menü/kart üretilmez).
-foreach (['ihracat'] as $removedGroup) dashboard_check(!isset(nav_muhasebe_gruplari()[$removedGroup]), 'İhracat Programı grubu katalogda yok');
-foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'stok_donusum_fisleri.php', 'kantar_fisleri.php'] as $removedPage) {
+dashboard_check(count(nav_muhasebe_gruplari()) === 9 && count($dashboardCatalog) === 35 && !isset(nav_muhasebe_gruplari()['admin_konsolu']), 'paylaşılan katalog 9 grup/35 hedef (v609: ERP Faz 2/3/4 kaldırıldı)');
+// v555/v609: kaldırılan grup/sayfalar katalogda YOK.
+foreach (['ihracat', 'erp_operasyon', 'erp_yonetim', 'erp_planlama'] as $removedGroup) dashboard_check(!isset(nav_muhasebe_gruplari()[$removedGroup]), 'kaldırılan grup katalogda yok: ' . $removedGroup);
+foreach (['ihracat_faturasi_maliyeti.php', 'beyanname_siparis_proforma.php', 'dovizli_cari_fis.php', 'ihracat_tanimlari.php', 'stok_donusum_fisleri.php', 'kantar_fisleri.php', 'wms_stok_yonetim.php', 'yukleme_v2.php', 'satinalma_yonetim.php', 'uretim_bom.php', 'onay_merkezi.php', 'banka_yonetim.php', 'ik_bordro.php', 'crm_yonetim.php', 'sabit_kiymet.php', 'finans_planlama.php'] as $removedPage) {
     dashboard_check(!isset($dashboardCatalog[$removedPage]), 'katalogda yok: ' . $removedPage);
 }
 dashboard_check(array_keys(nav_eski_esleri()) === ['records', 'cikma', 'kantar'] && array_values(nav_eski_esleri()) === ['arac_yukleme_fisleri', 'palet_fisleri', 'mal_kabul_fisleri'], 'eski → yeni karşılık eşlemesi (records/cikma/kantar)');
@@ -317,7 +317,8 @@ foreach ($dashboardProfiles as $name => $profile) {
         dashboard_check($imgNode !== null && str_starts_with($imgNode->getAttribute('src'), $beklenen), $name . ': 3B ikon var ' . $chref);
     }
     if ($name === 'admin') {
-        dashboard_check(count($home) === 62, 'admin: Ana Sayfa hariç 62 benzersiz kart (43 yetkili katalog sayfası [v593: Raporlama & BI Merkezi +1] + 1 Depo Tanımları + 1 WhatsApp Yükleme + 1 WhatsApp Veri Çek + 16 modül kartı)');
+        dashboard_check(count($home) === 51, 'admin: Ana Sayfa hariç 51 benzersiz kart (33 yetkili katalog sayfası [v609: ERP Faz 2/3/4 kaldırıldı] + 1 Depo Tanımları + 1 WhatsApp Veri Çek + 16 modül kartı; WhatsApp Senkron gizli)');
+        dashboard_check(!in_array('whatsapp_yonetim.php', $homeHrefs, true), 'admin: WhatsApp Senkron ana sayfada gizli (v609)');
         dashboard_check(($sidebarGroups[count($sidebarGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim sidebar\'da EN SON grup (v580)');
         dashboard_check(($homeGroups[count($homeGroups) - 1]['heading'] ?? '') === 'Yönetim', 'admin: Yönetim ana sayfada EN SON grup (v580)');
         $sbQcost = $xpath->query('//nav[contains(concat(" ",normalize-space(@class)," ")," sidebar-nav ")]//a[@href="hizli_maliyet.php"]//img')->item(0);
