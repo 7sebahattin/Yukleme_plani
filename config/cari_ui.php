@@ -216,8 +216,9 @@ function cari_kart_satiri(array $k, bool $secili): string
  * Sol sütun: arama + çipler + özet + liste.
  * @param list<array> $kartlar (bakiyeler dolu)  @param array $genel cari_genel_ozet  @param list<array> $gruplar aktif grup tanımları
  * @param array{q:string,tip:string,grup:string,bakiye:string,durum:string,kesildi:bool} $f
+ * @param string $ekDugme v611 Faz 2: "+ Yeni"nin yanına (hizli_kart_dugme_html — izin/şema yoksa '')
  */
-function cari_liste_kol_html(array $kartlar, array $genel, array $gruplar, array $f, ?int $seciliId, int $genelToplam): string
+function cari_liste_kol_html(array $kartlar, array $genel, array $gruplar, array $f, ?int $seciliId, int $genelToplam, string $ekDugme = ''): string
 {
     $say = ['tumu' => 0, 'b' => 0, 'a' => 0, 'pasif' => 0];
     foreach ($kartlar as $k) {
@@ -258,7 +259,7 @@ function cari_liste_kol_html(array $kartlar, array $genel, array $gruplar, array
         . '<div class="cari-arama-satir"><div class="cari-arama"><svg class="cari-arama-ikon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
         . '<label class="cari-sr" for="crArama">Cari ara: ünvan, kod, vergi no</label>'
         . '<input type="search" id="crArama" placeholder="Ünvan, kod veya vergi no ara" autocomplete="off" aria-controls="crListe" value="' . h($f['q']) . '"><kbd class="cari-arama-ipucu" aria-hidden="true">/</kbd></div>'
-        . '<button type="button" class="btn" data-cr-modal="kart" title="Yeni cari (N)">+ Yeni</button></div>'
+        . '<button type="button" class="btn" data-cr-modal="kart" title="Yeni cari (N)">+ Yeni</button>' . $ekDugme . '</div>'
         . '<div class="cari-cipler" role="group" aria-label="Bakiye durumu">' . $cip . '</div>'
         . '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">'
         . '<select data-filtre="tip" aria-label="Cari tipi" style="min-height:44px">' . $tipOpt . '</select>'

@@ -12,6 +12,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/stok_core.php';
 require_once __DIR__ . '/config/stok_ui.php';
+require_once __DIR__ . '/config/hizli_kart.php';      // v611 Faz 2: ortak Hızlı Ekle (stok türü)
+require_once __DIR__ . '/config/hizli_kart_ui.php';
 $auth_user = require_login();
 if (!muhasebe_sayfa_can('stok_kartlari')) { forbidden(); }
 stok_kapi('read');
@@ -51,6 +53,10 @@ if ($kart !== null) {
         . ($selId > 0 ? 'Stok kartı bulunamadı. Soldan bir kart seçin' : 'Soldan bir stok kartı seçin') . '</div></section>';
 }
 
+// v611 Faz 2: "⚡ Hızlı ekle" — yalnız stok oluşturma izni + ek şema hazırsa (aksi düğme/pencere çizilmez). Başarıda yeni karta gidilir (hızlı renkli satır).
+$hkSecenek = hizli_kart_secenekler($pdo, ['stok']);
+$hkDugme = hizli_kart_dugme_html('stok', ['git' => 'stok_kartlari.php?id={id}'], $pdo);
+
 render_header('Stok Kartları');
 stok_assets();
 render_flash();
@@ -59,7 +65,7 @@ render_flash();
   <?= stok_ust_menu('kartlar') ?>
   <?= !$ekHazir && is_admin() ? '<p class="st-not st-ek-kurulum" role="note">' . h(STOK_EK_SEMA_MESAJ) . ' <a href="migrate.php#stok-ek">Şema Migrasyon</a></p>' : '' ?>
   <div class="st-ana<?= $kart !== null ? ' st-ana--detay' : '' ?>">
-    <?= stok_liste_kol_html($L['satirlar'], $gruplar, $F, $kart !== null ? (int)$kart['id'] : null, $L['kesildi']) ?>
+    <?= stok_liste_kol_html($L['satirlar'], $gruplar, $F, $kart !== null ? (int)$kart['id'] : null, $L['kesildi'], $hkDugme) ?>
     <?= $detay ?>
   </div>
   <?= stok_modal_kart(['geri' => 'stok_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => stok_kod_oner($pdo),
@@ -67,4 +73,5 @@ render_flash();
 </div>
 <?php
 stok_scripts();
+echo hizli_kart_bilesen_html($hkSecenek);   // v611 Faz 2: ortak pencere (sayfa betiğinden SONRA; kendi CSS/JS'i içinde)
 render_footer();

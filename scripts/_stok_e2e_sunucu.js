@@ -37,13 +37,15 @@ function govdeCoz(tip, buf) {
       const ad = (parca.slice(0, i).match(/name="([^"]*)"/) || [])[1]; if (ad === undefined) continue;
       alanEkle(o, ad, Buffer.from(parca.slice(i + 4).replace(/\r\n$/, ''), 'latin1').toString('utf8'));
     }
+  } else if (/application\/json/i.test(tip)) {   // v611 Faz 2 (api_hizli_kart.php): JSON gövde → $_POST (CLI'de php://input yok)
+    try { const j = JSON.parse(buf.toString('utf8') || '{}'); if (j && typeof j === 'object' && !Array.isArray(j)) Object.assign(o, j); } catch (e) { /* bozuk gövde → boş */ }
   } else {
     for (const [k, v] of new URLSearchParams(buf.toString('utf8'))) alanEkle(o, k, v);
   }
   return o;
 }
 // Kabuk göreli yolları (../../assets/…, ../../stok_x.php) betiğin konumuna göre hesaplar → kök mutlak yola çevrilir.
-const kokYol = h => h.replace(/(href|src|action)="(?:\.\.?\/)+((?:assets\/|stok_|transfer_fisleri|manifest\.json|index\.php)[^"]*)"/g, '$1="/$2"');
+const kokYol = h => h.replace(/(href|src|action)="(?:\.\.?\/)+((?:assets\/|stok_|cari_|api_hizli_kart|transfer_fisleri|manifest\.json|index\.php)[^"]*)"/g, '$1="/$2"');
 
 /** @param {{db:string, sid?:string, admin?:boolean}} o @returns {Promise<{url:string, kapat:()=>Promise<void>, istekler:any[]}>} */
 async function baslat(o) {
@@ -56,7 +58,7 @@ async function baslat(o) {
       if (fs.existsSync(f) && fs.statSync(f).isFile()) { rs.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); return fs.createReadStream(f).pipe(rs); }
       rs.writeHead(404); return rs.end();
     }
-    if (!/^(stok_[a-z_]+|transfer_fisleri)\.php$/.test(ad) || !fs.existsSync(path.join(ROOT, ad))) { rs.writeHead(404, { 'Content-Type': 'text/plain' }); return rs.end('yok: ' + ad); }
+    if (!/^(stok_[a-z_]+|transfer_fisleri|cari_[a-z_]+|api_hizli_kart)\.php$/.test(ad) || !fs.existsSync(path.join(ROOT, ad))) { rs.writeHead(404, { 'Content-Type': 'text/plain' }); return rs.end('yok: ' + ad); }
     const parcalar = [];
     rq.on('data', c => parcalar.push(c));
     rq.on('end', () => {

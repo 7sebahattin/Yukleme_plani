@@ -169,8 +169,9 @@ function stok_kart_satiri(array $k, bool $secili, bool $gizli): string
  * Sol sütun: arama + çipler + tip/grup + özet + liste.
  * @param list<array> $kartlar stok_kart_listesi satırları (tümü)  @param list<array> $gruplar aktif grup tanımları
  * @param array{ara:string,tip:string,grup:int,durum:string} $F
+ * @param string $ekDugme v611 Faz 2: "+ Yeni"nin yanına basılan düğme (hizli_kart_dugme_html — izin/şema yoksa '')
  */
-function stok_liste_kol_html(array $kartlar, array $gruplar, array $F, ?int $seciliId, bool $kesildi): string
+function stok_liste_kol_html(array $kartlar, array $gruplar, array $F, ?int $seciliId, bool $kesildi, string $ekDugme = ''): string
 {
     $say = ['aktif' => 0, 'pasif' => 0, 'tumu' => count($kartlar), 'kritik' => 0];
     foreach ($kartlar as $k) {
@@ -203,7 +204,7 @@ function stok_liste_kol_html(array $kartlar, array $gruplar, array $F, ?int $sec
         . '<div class="st-arama-satir"><div class="st-arama"><svg class="st-arama-ikon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
         . '<label class="st-sr" for="stArama">Stok kartı ara: kod, ad, barkod</label>'
         . '<input type="search" id="stArama" placeholder="Ara: kod, ad, barkod" autocomplete="off" aria-controls="stListe" value="' . h($F['ara']) . '"><kbd class="st-arama-ipucu" aria-hidden="true">/</kbd></div>'
-        . '<button type="button" class="btn btn-primary" data-st-modal="kart" title="Yeni stok kartı">+ Yeni</button></div>'
+        . '<button type="button" class="btn btn-primary" data-st-modal="kart" title="Yeni stok kartı">+ Yeni</button>' . $ekDugme . '</div>'
         . '<div class="st-cipler" role="group" aria-label="Kart durumu">' . $cip . '</div>'
         . '<div class="st-filtre-satir"><select data-filtre="tip" aria-label="Kart tipi">' . $tipOpt . '</select>'
         . '<select data-filtre="grup" aria-label="Stok grubu">' . $grpOpt . '</select></div></div>'

@@ -40,6 +40,8 @@ listede olmayan adı ÇALIŞTIRMA (uydurma test adı yok).
 | `urun_siparis*` · `config/urun_siparis.php` · `assets/usip.*` | `urun_siparis_smoke.php` · `urun_siparis_smoke.js` |
 | `hesap*` · `config/hesap_*` · `assets/hesap.*` | `hesap_smoke.php` · `hesap_ui_smoke.php` · `hesap_izolasyon_smoke.php` · `hesap_pdf_smoke.php` |
 | `cari*` · `config/cari_*` · `assets/cari.*` · `scripts/_cari_*` | `cari_core_smoke.php` · `cari_ek_smoke.php` · `cari_gate_static_smoke.php` · `cari_ui_smoke.php` (alt süreçle gerçek sayfa/uç çalıştırır; ~5 sn) · `nav_muhasebe_static_smoke.php` · `migrate_panel_smoke.php` · tarayıcı için `php scripts/cari_ui_render.php <kartlar\|fisler\|dekontlar\|tanimlar\|ekstre> [param=değer …] > _test_cari_<sayfa>.html` |
+| `stok*` · `transfer_fisleri.php` · `config/stok_*` · `assets/stok.*` · `scripts/_stok_*` | `stok_core_smoke.php` · `stok_gate_static_smoke.php` · `stok_ui_smoke.php` · `stok_ui_smoke.js` · `nav_muhasebe_static_smoke.php` · `migrate_panel_smoke.php` |
+| `api_hizli_kart.php` · `config/hizli_kart*.php` · `assets/hizli_kart.*` · `cari_kartlari.php` · `stok_kartlari.php` · `scripts/_stok_e2e_sunucu.js` | `hizli_kart_smoke.php` · `hizli_kart_smoke.js` (+ cari/stok satırlarının testleri) |
 | `mail*` · `config/mail_*` | `mail_*_smoke.php` (`mail_race_mysql_smoke.php` MySQL yoksa kendini ATLAR) · `mail_ui_smoke.js` (önce `MAIL_UI_OUT=… php scripts/mail_ui_render.php`) · `mail_gate_static_smoke.php` |
 | `maliyet*` · `config/cost_*` | `cost_link_smoke.php` |
 | `record*` · `_form.php` · `templates/excel/*` | `record_excel_smoke.php` |
