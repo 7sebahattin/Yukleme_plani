@@ -211,14 +211,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['mail_taslak'] ?? '') === '1'
     }
 }
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['wa_taslak'] ?? '') === '1') {
-    require_once __DIR__ . '/config/whatsapp_core.php';
-    $wt = whatsapp_beyan_taslak_al((int)($auth_user['id'] ?? 0));
-    if ($wt !== null) {
-        foreach ($wt['alanlar'] as $wk => $wv) {
-            if (array_key_exists($wk, $f)) $f[$wk] = (string)$wv;
+    require_once __DIR__ . '/config/whatsapp_config.php';
+    if (defined('WHATSAPP_SENKRON_AKTIF') && WHATSAPP_SENKRON_AKTIF) {
+        require_once __DIR__ . '/config/whatsapp_core.php';
+        $wt = whatsapp_beyan_taslak_al((int)($auth_user['id'] ?? 0));
+        if ($wt !== null) {
+            foreach ($wt['alanlar'] as $wk => $wv) {
+                if (array_key_exists($wk, $f)) $f[$wk] = (string)$wv;
+            }
+            $mail_taslak_bilgi = 'WhatsApp beyan mesajı AI ile ayrıştırılıp alanlara dolduruldu. Henüz KAYDEDİLMEDİ — '
+                . 'alanları kontrol edip hata varsa düzeltin, sonra Kaydet\'e basın.';
         }
-        $mail_taslak_bilgi = 'WhatsApp beyan mesajı AI ile ayrıştırılıp alanlara dolduruldu. Henüz KAYDEDİLMEDİ — '
-            . 'alanları kontrol edip hata varsa düzeltin, sonra Kaydet\'e basın.';
     }
 }
 

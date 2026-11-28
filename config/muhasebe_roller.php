@@ -16,7 +16,7 @@ declare(strict_types=1);
  */
 
 /** İşlem anahtarı taşıyan çalışan modül grupları. */
-function muhasebe_rol_islemli_gruplar(): array { return ['cari', 'kasa', 'cek_senet', 'stok', 'fatura', 'genel_muhasebe', 'erp_operasyon', 'erp_yonetim', 'erp_planlama', 'raporlar_grup']; }
+function muhasebe_rol_islemli_gruplar(): array { return ['cari', 'kasa', 'cek_senet', 'stok', 'fatura', 'genel_muhasebe', 'raporlar_grup']; }
 
 /**
  * v575 (sahip kararı): HER hesap kendi şifresini değiştirebilmeli. Bu sayfalar rol/yetki istemez — oturumu açık her kullanıcıya

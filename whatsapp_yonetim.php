@@ -14,6 +14,20 @@ require_once __DIR__ . '/config/whatsapp_core.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
+if (!defined('WHATSAPP_SENKRON_AKTIF') || !WHATSAPP_SENKRON_AKTIF) {
+    http_response_code(404);
+    header('Cache-Control: no-store');
+    if (isset($_POST['ajax']) || str_contains((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'hata' => 'WhatsApp Senkron modülü şu anda gizli/devre dışı.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><meta charset="utf-8"><title>Sayfa Gizli</title>'
+        . '<p>WhatsApp Senkron sayfası şu anda gizlidir. <a href="index.php">Ana Sayfa</a></p>';
+    exit;
+}
+
 $pdo    = db();
 $uid    = (int)($auth_user['id'] ?? 0);
 $hazir  = whatsapp_tablolar_hazir($pdo);

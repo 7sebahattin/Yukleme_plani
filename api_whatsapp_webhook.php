@@ -56,6 +56,11 @@ try {
     require_once __DIR__ . '/config/db.php';
     require_once __DIR__ . '/config/whatsapp_core.php';
 
+    if (!defined('WHATSAPP_SENKRON_AKTIF') || !WHATSAPP_SENKRON_AKTIF) {
+        wa_yanit(['ok' => false, 'yok_sayildi' => 'devre_disi']);
+        exit;
+    }
+
     // 1) Güvenlik (önce config sabiti, değilse DB'deki panel token'ı)
     $yetkili = whatsapp_webhook_yetkili($_SERVER, $_GET);
     if (!$yetkili) {

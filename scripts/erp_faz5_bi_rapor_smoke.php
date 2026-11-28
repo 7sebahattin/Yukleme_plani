@@ -16,14 +16,7 @@ if (!function_exists('csrf_token')) {
     function csrf_token(): string { return 'test-csrf-token'; }
 }
 require_once $ROOT . '/config/muhasebe_core.php';
-require_once $ROOT . '/config/wms_stok_core.php';
-require_once $ROOT . '/config/yukleme_v2_core.php';
-require_once $ROOT . '/config/onay_core.php';
-require_once $ROOT . '/config/banka_core.php';
-require_once $ROOT . '/config/ik_bordro_core.php';
-require_once $ROOT . '/config/crm_core.php';
-require_once $ROOT . '/config/sabit_kiymet_core.php';
-require_once $ROOT . '/config/finans_plan_core.php';
+require_once $ROOT . '/config/edonusum_core.php';
 require_once $ROOT . '/config/bi_rapor_core.php';
 require_once $ROOT . '/config/bi_rapor_ui.php';
 
@@ -47,52 +40,36 @@ function ok(string $ad, bool $kosul, string $ipucu = ''): void {
 // ── 1) 2× İdempotent Migrasyon ──────────────────────────────────────────────
 echo "=== 1. Migrasyonlar (2× İdempotent) ===\n";
 muhasebe_migrate($pdo);
-yukleme_v2_migrate($pdo);
-banka_migrate($pdo);
-crm_migrate($pdo);
-sabit_kiymet_migrate($pdo);
+edonusum_migrate($pdo);
 bi_rapor_migrate($pdo);
 $rBi2 = bi_rapor_migrate($pdo);
 
 ok('BI Raporlama tabloları hazır ve 2. tur idempotent',
     bi_rapor_hazir($pdo) && !in_array('olusturuldu', array_column($rBi2, 'durum'), true)
 );
-ok('12 ERP modülü BI veri kaynakları kataloğunda tanımlı', count(bi_veri_kaynaklari()) === 12);
+ok('2 aktif ERP modülü BI veri kaynakları kataloğunda tanımlı (v609)', count(bi_veri_kaynaklari()) === 2);
 
 // ── 2) Örnek ERP Verileri & Konsolide Yönetici Özeti ────────────────────────
 echo "\n=== 2. Konsolide Yönetici Özeti (KPI) ===\n";
-yukleme_v2_fis_kaydet($pdo, [
-    'tarih'        => '2026-05-15',
-    'depo'         => 'MERKEZ',
-    'plaka'        => '33ABC123',
-    'firma_unvan'  => 'EuroFresh GmbH',
-    'gidecek_ulke' => 'Almanya',
-    'paletler'     => [
-        ['palet_no' => 'P1', 'urun_ad' => 'Kiraz', 'kasa_adeti' => 100, 'kasa_dara_kg' => 1.0, 'palet_dara_kg' => 22, 'brut_kg' => 1122],
-    ],
-], 1);
-banka_hesap_kaydet($pdo, ['kod' => 'BNK-BI', 'banka_ad' => 'İş Bankası', 'acilis_bakiye' => 250000], 1);
-crm_firsat_kaydet($pdo, ['musteri_ad' => '=HYPERLINK("http://evil")', 'baslik' => 'Test Fırsat', 'asama' => 'teklif', 'tahmini_tutar' => 100000, 'olasilik_yuzde' => 50], 1);
-sk_kart_kaydet($pdo, ['kod' => 'SK-BI-1', 'ad' => 'Soğuk Hava Kompresörü', 'alis_tarih' => '2026-05-01', 'alis_bedeli' => 150000, 'faydali_omur_yil' => 5], 1);
+$pdo->exec("INSERT INTO muh_fisler (fis_no, tarih, tur, aciklama, durum, toplam_borc, toplam_alacak) VALUES ('YEV-BI-01', '2026-05-15', 'mahsup', 'EuroFresh İhracat Tahakkuk', 'onayli', 250000.00, 250000.00)");
+$pdo->exec("INSERT INTO edonusum_zarflar (ettn, belge_no, belge_turu, tarih, alici_unvan, para_birimi, ara_toplam, kdv_toplam, genel_toplam, durum) VALUES ('11111111-1111-4111-8111-111111111111', 'EF-BI-01', 'e_fatura', '2026-05-16', '=HYPERLINK(\"http://evil\")', 'TRY', 100000.00, 20000.00, 120000.00, 'gonderildi')");
 
 $kpis = bi_yonetici_ozeti($pdo, '2026-05-01', '2026-05-31');
-ok('Yönetici özeti Yükleme v2 (1000 kg), Banka (250.000), CRM (50.000), Sabit Kıymet (150.000) hesapladı',
-    isset($kpis['yukleme_v2'], $kpis['banka'], $kpis['crm'], $kpis['sabit_kiymet'])
-    && str_contains($kpis['yukleme_v2']['deger'], '1.000')
-    && str_contains($kpis['banka']['deger'], '250.000')
-    && str_contains($kpis['crm']['deger'], '50.000')
-    && str_contains($kpis['sabit_kiymet']['deger'], '150.000'),
+ok('Yönetici özeti Genel Muhasebe (250.000) ve e-Dönüşüm (120.000) hesapladı',
+    isset($kpis['muhasebe'], $kpis['edonusum'])
+    && str_contains($kpis['muhasebe']['deger'], '250.000')
+    && str_contains($kpis['edonusum']['deger'], '120.000'),
     json_encode($kpis, JSON_UNESCAPED_UNICODE)
 );
 
 // ── 3) Dinamik BI Şablon CRUD + Katı Allowlist + CSV Formula Koruması ───────
 echo "\n=== 3. Dinamik BI Tasarımcısı, Sorgu Motoru & CSV Güvenliği ===\n";
 $sb = bi_sablon_kaydet($pdo, [
-    'kod'            => 'RPR-SEVK-01',
-    'ad'             => 'İhracat Yükleme Raporu',
-    'veri_kaynagi'   => 'yukleme_v2',
-    'sutunlar'       => ['fis_no', 'tarih', 'firma_unvan', 'toplam_net_kg', 'DROP TABLE users;--'], // geçersiz sütun reddedilmeli
-    'siralama_sutun' => 'toplam_net_kg; DROP TABLE users', // geçersiz sıralama id'ye düşmeli
+    'kod'            => 'RPR-MUH-01',
+    'ad'             => 'Aylık Yevmiye Raporu',
+    'veri_kaynagi'   => 'genel_muhasebe',
+    'sutunlar'       => ['fis_no', 'tarih', 'aciklama', 'toplam_borc', 'DROP TABLE users;--'], // geçersiz sütun reddedilmeli
+    'siralama_sutun' => 'toplam_borc; DROP TABLE users', // geçersiz sıralama id'ye düşmeli
     'siralama_yon'   => 'DESC',
     'limit_satir'    => 100,
 ], 1);
@@ -102,16 +79,16 @@ ok('BI şablonu kaydedildi ve geçersiz sütun/sıralama allowlist ile temizlend
 
 $sbRow = $pdo->query('SELECT * FROM bi_rapor_sablonlari WHERE id = ' . (int)$sb['id'])->fetch();
 $cal = bi_sablon_calistir($pdo, $sbRow, ['bas_tarih' => '2026-05-01', 'bit_tarih' => '2026-05-31', 'ara' => 'EuroFresh']);
-ok('Dinamik BI sorgu motoru doğru satırı ve sayısal toplamı (1000.00 kg) üretti',
+ok('Dinamik BI sorgu motoru doğru satırı ve sayısal toplamı (250000.00) üretti',
     !empty($cal['ok']) && $cal['kayit_sayisi'] === 1
     && !isset($cal['sutunlar']['DROP TABLE users;--'])
-    && abs((float)($cal['toplamlar']['toplam_net_kg'] ?? 0) - 1000.0) < 0.01,
+    && abs((float)($cal['toplamlar']['toplam_borc'] ?? 0) - 250000.0) < 0.01,
     json_encode($cal)
 );
 
 // B-33 CSV Formula Injection Koruması (=HYPERLINK başına tek tırnak koymalı)
-$calCrm = bi_sablon_calistir($pdo, ['veri_kaynagi' => 'crm_firsatlar', 'sutunlar' => ['musteri_ad', 'tahmini_tutar']]);
-$csv = bi_csv_uret($calCrm['sutunlar'], $calCrm['satirlar']);
+$calEd = bi_sablon_calistir($pdo, ['veri_kaynagi' => 'edonusum', 'sutunlar' => ['alici_unvan', 'genel_toplam']]);
+$csv = bi_csv_uret($calEd['sutunlar'], $calEd['satirlar']);
 ok('CSV dışa aktarma UTF-8 BOM taşır ve =HYPERLINK hücrelerini tek tırnakla etkisizleştirir (B-33)',
     str_starts_with($csv, "\xEF\xBB\xBF") && str_contains($csv, "\"'=HYPERLINK"),
     $csv
@@ -129,7 +106,7 @@ echo "\n=== 4. UI Render & Statik Güvenlik ===\n";
 $hMerkez = bi_rapor_merkezi_render([
     'kpis'       => $kpis,
     'sablonlar'  => bi_sablon_listesi($pdo),
-    'sec_kaynak' => 'yukleme_v2',
+    'sec_kaynak' => 'genel_muhasebe',
     'sec_sablon' => (int)$sb['id'],
     'bas_tarih'  => '2026-05-01',
     'bit_tarih'  => '2026-05-31',
@@ -137,13 +114,13 @@ $hMerkez = bi_rapor_merkezi_render([
     'sonuc'      => $cal,
 ]);
 $hTanim = bi_rapor_tanimlari_render([
-    'sec_kaynak'   => 'yukleme_v2',
+    'sec_kaynak'   => 'genel_muhasebe',
     'sablonlar'    => bi_sablon_listesi($pdo),
     'zamanlamalar' => bi_zamanlama_listesi($pdo),
 ], true);
 
 ok('Raporlama Merkezi & Dinamik BI Tasarımcısı sıfır PHP uyarısı ile çizildi',
-    $warnings === [] && str_contains($hMerkez, 'İhracat Yükleme Raporu') && str_contains($hTanim, 'yonetim@asya.scai.tr'),
+    $warnings === [] && str_contains($hMerkez, 'Aylık Yevmiye Raporu') && str_contains($hTanim, 'yonetim@asya.scai.tr'),
     implode('; ', $warnings)
 );
 

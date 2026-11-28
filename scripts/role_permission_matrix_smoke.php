@@ -37,22 +37,23 @@ foreach ($schema as $group) foreach ($group as $row) $visit($row);
 foreach ($rows as $row) matrix_ok(is_file(dirname(__DIR__).'/'.explode('?',$row['route'])[0]),'Missing row route '.$row['route']);
 $adminRows=array_filter($rows,fn($r)=>$r['admin_only']);
 // v550/v566: yalnız Şube/Depo Tanımları (2 sayfa; Admin Konsolu grubu kalktı) + Fiş Excel Yükleme + İşlem Geçmişi + Yedekler admin-only kalır; menü sayfaları Roller'den verilebilir (varsayılan kapalı).
-matrix_ok(count($adminRows)===5,'Admin-only inventory changed: '.count($adminRows));
+matrix_ok(count($adminRows)===4,'Admin-only inventory changed: '.count($adminRows));
 foreach ($adminRows as $row) matrix_ok($row['actions']===[],'Admin-only row invented permissions');
-$catalogRoutes=[]; $adminKonsolu=['depo_tanimlari.php','whatsapp_yonetim.php']; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) $catalogRoutes[]=$route;
+$catalogRoutes=[]; $adminKonsolu=['depo_tanimlari.php']; foreach (nav_muhasebe_gruplari() as $gk=>[,,$pages]) foreach ($pages as $route=>$_) $catalogRoutes[]=$route;
 matrix_ok(!isset(nav_muhasebe_gruplari()['admin_konsolu']),'Admin Konsolu group reappeared (v566)');
 foreach ($adminKonsolu as $route) matrix_ok(!in_array($route,$catalogRoutes,true),'Yönetim-only page leaked into muhasebe catalog: '.$route);
-matrix_ok(count($catalogRoutes)===45,'Menu catalog size changed (v593: Raporlama & BI Merkezi +1 sayfa → 45)');
-foreach (['ihracat_faturasi_maliyeti.php','beyanname_siparis_proforma.php','dovizli_cari_fis.php','ihracat_tanimlari.php','stok_donusum_fisleri.php','kantar_fisleri.php'] as $goneRoute) matrix_ok(!in_array($goneRoute,$catalogRoutes,true),'Removed menu page reappeared: '.$goneRoute);
+matrix_ok(count($catalogRoutes)===35,'Menu catalog size changed (v609: ERP Faz 2/3/4 kaldırıldı → 35)');
+foreach (['ihracat_faturasi_maliyeti.php','beyanname_siparis_proforma.php','dovizli_cari_fis.php','ihracat_tanimlari.php','stok_donusum_fisleri.php','kantar_fisleri.php','wms_stok_yonetim.php','yukleme_v2.php','satinalma_yonetim.php','uretim_bom.php','onay_merkezi.php','banka_yonetim.php','ik_bordro.php','crm_yonetim.php','sabit_kiymet.php','finans_planlama.php'] as $goneRoute) matrix_ok(!in_array($goneRoute,$catalogRoutes,true),'Removed menu page reappeared: '.$goneRoute);
 $adminRoutes=array_column($adminRows,'route');
 foreach ($adminKonsolu as $route) matrix_ok(in_array($route,$adminRoutes,true),'Şube/Depo Tanımları must stay admin-only: '.$route);
+matrix_ok(!in_array('whatsapp_yonetim.php',$adminRoutes,true),'WhatsApp Senkron must stay hidden by default (v609)');
 $byKey=[]; foreach ($rows as $r) $byKey[$r['key']]=$r;
 foreach ($catalogRoutes as $route) if (!in_array($route,$adminKonsolu,true)) {
     $slug=pathinfo($route,PATHINFO_FILENAME);
     if (in_array($slug,muhasebe_herkese_acik_sayfalar(),true)) { matrix_ok(!isset($byKey[$slug]),'v575: herkese açık sayfa Roller satırı OLMAMALI: '.$slug); continue; }   // oturumlu herkes; verilecek yetki yok
     matrix_ok(isset($byKey[$slug]) && !$byKey[$slug]['admin_only'] && ($byKey[$slug]['actions']['read']['permission'] ?? '')==="muhasebe.$slug.read",'Menu page lacks grantable read row: '.$slug);
 }
-foreach (['genel_uygulamalar','ihracat'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);
+foreach (['genel_uygulamalar','ihracat','erp_operasyon','erp_yonetim','erp_planlama'] as $gone) matrix_ok(!isset(nav_muhasebe_gruplari()[$gone]),'Removed menu group reappeared: '.$gone);
 foreach (['operasyon_fis','kasa','kullanici_konsolu'] as $slug) matrix_ok(isset(nav_muhasebe_gruplari()[$slug]),'Menu group missing: '.$slug);
 $codes=[]; foreach ($rows as $row) foreach ($row['actions'] as $action) $codes[]=$action['permission'];
 matrix_ok(in_array('records.pallet.create',$codes,true),'Pallet create editor control absent');

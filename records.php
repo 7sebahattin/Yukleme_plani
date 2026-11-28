@@ -260,8 +260,10 @@ render_flash();
        class="pill<?= $durum_filter === 'islendi' ? ' active-islendi' : '' ?>">🟠 İşlendi</a>
     <a href="<?= rec_url(['durum' => 'yuklendi','page' => '']) ?>"
        class="pill<?= $durum_filter === 'yuklendi' ? ' active-yuklendi' : '' ?>">🟢 Yüklendi</a>
+    <?php if (defined('WHATSAPP_SENKRON_AKTIF') && WHATSAPP_SENKRON_AKTIF): ?>
     <a href="<?= rec_url(['durum' => 'taslak',  'page' => '']) ?>"
        class="pill<?= $durum_filter === 'taslak' ? ' active-taslak' : '' ?>">📱 WhatsApp Taslak</a>
+    <?php endif; ?>
 </div>
 
 <?php if (empty($rows)): ?>

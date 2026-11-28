@@ -15,7 +15,7 @@ bi_no_store();
 $pdo = db();
 bi_rapor_sayfa_kapisi($pdo);
 
-$secKaynak = trim((string)($_GET['kaynak'] ?? 'yukleme_v2'));
+$secKaynak = trim((string)($_GET['kaynak'] ?? 'genel_muhasebe'));
 $veri = [
     'sec_kaynak'   => $secKaynak,
     'sablonlar'    => bi_sablon_listesi($pdo),

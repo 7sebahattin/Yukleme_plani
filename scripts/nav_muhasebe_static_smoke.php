@@ -90,24 +90,6 @@ foreach ($gruplar as $slug => $g) {
             ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
             ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
             ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
-        } elseif (str_contains($s, 'config/wms_stok_core.php')) {
-            // Çalışan modül (ERP Faz 2: WMS Stok / Yeni Araç Yükleme v2 / Satın Alma / Üretim BOM-MRP — v589): şema kapısı + sayfa kabuğu + yalnız GET.
-            ok("$dosya: çalışan modül — sayfa_kapisi(", str_contains($s, '_sayfa_kapisi('));
-            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
-            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
-            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
-        } elseif (str_contains($s, 'config/onay_core.php')) {
-            // Çalışan modül (ERP Faz 3: Onay Akışları / Banka Mutabakat-Kredi-POS / İK Özlük-İzin-Bordro — v590): şema kapısı + sayfa kabuğu + yalnız GET.
-            ok("$dosya: çalışan modül — sayfa_kapisi(", str_contains($s, '_sayfa_kapisi('));
-            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
-            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
-            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
-        } elseif (str_contains($s, 'config/crm_core.php')) {
-            // Çalışan modül (ERP Faz 4: CRM & Fiyat Listeleri / Sabit Kıymet & Bakım / Bütçe-Aging-Nakit Akış — v592): şema kapısı + sayfa kabuğu + yalnız GET.
-            ok("$dosya: çalışan modül — sayfa_kapisi(", str_contains($s, '_sayfa_kapisi('));
-            ok("$dosya: çalışan modül — render_header/render_footer", str_contains($s, 'render_header(') && str_contains($s, 'render_footer()'));
-            ok("$dosya: çalışan modül — yer tutucu metni YOK", !str_contains($s, 'hazırlanıyor'));
-            ok("$dosya: çalışan modül — yalnız GET (\$_POST yok)", !str_contains($s, '$_POST'));
         } elseif (str_contains($s, 'config/bi_rapor_core.php')) {
             // Çalışan modül (ERP Faz 5: Yeni Raporlama & Dinamik BI Merkezi — v593): şema kapısı + sayfa kabuğu + yalnız GET.
             ok("$dosya: çalışan modül — bi_rapor_sayfa_kapisi(", str_contains($s, 'bi_rapor_sayfa_kapisi('));

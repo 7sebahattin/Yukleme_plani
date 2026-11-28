@@ -257,7 +257,11 @@ $TOMBSTONES = ['admin_db_backup_download.php', 'hesap_sahipsiz.php', 'depo_tasim
                // v555: stok dönüşümü kullanılmayacak
                'stok_donusum_fisleri.php',
                // v574: Tanımlar + Şube Tanımları kalktı
-               'definitions.php', 'sube_tanimlari.php'];
+               'definitions.php', 'sube_tanimlari.php',
+               // v609: ERP Faz 2/3/4 (erp_operasyon, erp_yonetim, erp_planlama) kaldırıldı
+               'wms_stok_yonetim.php', 'yukleme_v2.php', 'satinalma_yonetim.php', 'uretim_bom.php', 'erp_op_kaydet.php',
+               'onay_merkezi.php', 'banka_yonetim.php', 'ik_bordro.php', 'erp_yonetim_kaydet.php',
+               'crm_yonetim.php', 'sabit_kiymet.php', 'finans_planlama.php', 'erp_plan_kaydet.php'];
 $kaynaklar = array_merge(glob($ROOT . '/*.php'), glob($ROOT . '/config/*.php'), glob($ROOT . '/assets/*.js'));
 foreach ($TOMBSTONES as $t) {
     $src = (string)@file_get_contents($ROOT . '/' . $t);

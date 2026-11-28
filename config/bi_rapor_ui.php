@@ -167,8 +167,8 @@ function bi_rapor_tanimlari_render(array $veri, bool $yazabilir): string
     $kaynaklar  = bi_veri_kaynaklari();
     $sablonlar  = $veri['sablonlar'] ?? [];
     $zamanlama  = $veri['zamanlamalar'] ?? [];
-    $secKaynak  = (string)($veri['sec_kaynak'] ?? 'yukleme_v2');
-    if (!isset($kaynaklar[$secKaynak])) $secKaynak = 'yukleme_v2';
+    $secKaynak  = (string)($veri['sec_kaynak'] ?? 'genel_muhasebe');
+    if (!isset($kaynaklar[$secKaynak])) $secKaynak = (string)array_key_first($kaynaklar);
 
     $o = '<div class="bi-wrap">' . bi_ust_menu('rapor_tanimlari');
 
