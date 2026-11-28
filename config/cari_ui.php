@@ -184,7 +184,9 @@ function cari_satir_norm(array $h, string $cariUnvan = ''): array
 
 function cari_kart_satiri(array $k, bool $secili): string
 {
-    $tipler = cari_tipler();
+    $tipler = cari_tipler(null, true);
+    $hizli = (int)($k['hizli'] ?? 0) === 1;   // yalnız ek şema kuruluysa kolon gelir
+    $eksikler = $hizli ? cari_kart_eksikler($k) : [];
     $bak = $k['bakiyeler'] ?? [];
     $harfler = [];
     foreach ($bak as $b) $harfler[cari_yon_h((int)$b)] = true;
@@ -199,10 +201,15 @@ function cari_kart_satiri(array $k, bool $secili): string
     foreach ($bak as $pb => $b) $chip .= cari_bk((int)$b, (string)$pb);
     if ($chip === '') $chip = cari_bk(0, (string)$k['para_birimi']);
     if ($pasif) $chip .= '<span class="cari-rozet cari-rozet--pasif">Pasif</span>';
-    return '<li><a class="cari-kart' . ($pasif ? ' cari-kart--pasif' : '') . '" href="cari_kartlari.php?id=' . (int)$k['id'] . '" data-id="' . (int)$k['id'] . '"'
+    $hizliHtml = $hizli
+        ? '<span class="cari-hizli-not"><span class="cari-rozet cari-rozet--hizli">Hızlı eklendi — eksikleri tamamlayın</span>'
+            . ($eksikler ? '<span class="cari-hizli-eksik">Eksik: ' . h(implode(', ', $eksikler)) . '</span>' : '') . '</span>'
+        : '';
+    return '<li><a class="cari-kart' . ($pasif ? ' cari-kart--pasif' : '') . ($hizli ? ' cari-kart--hizli' : '') . '" href="cari_kartlari.php?id=' . (int)$k['id'] . '" data-id="' . (int)$k['id'] . '"'
+        . ($hizli ? ' data-hizli="1"' : '')
         . ' data-ara="' . h($ara) . '" data-bakiye="' . h($hs) . '" data-tip="' . h($k['tip']) . '" data-grup="' . h($grup !== '' ? cari_slug($grup) : '') . '" data-pasif="' . ($pasif ? '1' : '0') . '"'
         . ($secili ? ' aria-current="true"' : '') . '>'
-        . '<span class="cari-kart-ad">' . h($k['unvan']) . '</span><span class="cari-kart-alt">' . h($alt) . '</span><span class="cari-kart-bk">' . $chip . '</span></a></li>';
+        . '<span class="cari-kart-ad">' . h($k['unvan']) . '</span><span class="cari-kart-alt">' . h($alt) . '</span><span class="cari-kart-bk">' . $chip . '</span>' . $hizliHtml . '</a></li>';
 }
 
 /**
@@ -225,7 +232,7 @@ function cari_liste_kol_html(array $kartlar, array $genel, array $gruplar, array
         $cip .= '<button type="button" class="cari-cip" data-filtre="bakiye" data-deger="' . h($d) . '" aria-pressed="' . ($d === $bas ? 'true' : 'false') . '">' . h($ad) . ' <span class="cari-cip-say">' . $n . '</span></button>';
     }
     $tipOpt = '<option value="">Tüm tipler</option>';
-    foreach (cari_tipler() as $v => $ad) $tipOpt .= '<option value="' . h($v) . '"' . ($f['tip'] === $v ? ' selected' : '') . '>' . h($ad) . '</option>';
+    foreach (cari_tipler(null, true) as $v => $ad) $tipOpt .= '<option value="' . h($v) . '"' . ($f['tip'] === $v ? ' selected' : '') . '>' . h($ad) . '</option>';
     $grpOpt = '<option value="">Tüm gruplar</option>';
     foreach ($gruplar as $g) { $sl = cari_slug((string)$g['ad']); $grpOpt .= '<option value="' . h($sl) . '"' . ($f['grup'] === $sl ? ' selected' : '') . '>' . h($g['ad']) . '</option>'; }
 
@@ -270,13 +277,14 @@ function cari_liste_kol_html(array $kartlar, array $genel, array $gruplar, array
 function cari_kart_json(array $k): array
 {
     $a = [];
-    foreach (['id', 'kod', 'unvan', 'tip', 'grup_id', 'vergi_dairesi', 'vergi_no', 'yetkili', 'telefon', 'eposta', 'adres', 'il', 'ulke', 'iban', 'para_birimi', 'vade_gun', 'notlar', 'aktif'] as $f) {
+    foreach (['id', 'kod', 'unvan', 'tip', 'grup_id', 'vergi_dairesi', 'vergi_no', 'tckn', 'dogum_tarihi', 'yetkili', 'telefon', 'eposta', 'adres', 'il', 'ulke', 'iban', 'para_birimi', 'vade_gun', 'notlar', 'aktif'] as $f) {
         $a[$f] = $k[$f] ?? null;
     }
+    $a['hizli'] = (int)($k['hizli'] ?? 0);
+    $a['eksik'] = $a['hizli'] === 1 ? array_keys(cari_kart_eksik_alanlar($k)) : [];
     $a['id'] = (int)$k['id']; $a['aktif'] = (int)$k['aktif'];
     $a['grup_id'] = $k['grup_id'] !== null && $k['grup_id'] !== '' ? (int)$k['grup_id'] : null;
-    $a['kayit'] = 'Oluşturma: ' . cari_tarih_tr((string)substr((string)($k['created_at'] ?? ''), 0, 10)) . ' ' . substr((string)($k['created_at'] ?? ''), 11, 5)
-        . ($k['md_id'] !== null && $k['md_id'] !== '' ? ' · Tanımlardan içe aktarıldı (#' . (int)$k['md_id'] . ')' : '');
+    $a['kayit'] = 'Oluşturma: ' . cari_tarih_tr((string)substr((string)($k['created_at'] ?? ''), 0, 10)) . ' ' . substr((string)($k['created_at'] ?? ''), 11, 5);
     return $a;
 }
 
@@ -369,7 +377,7 @@ function cari_detay_html(PDO $pdo, array $k, array $E, string $sekme = 'ekstre')
     $id = (int)$k['id'];
     $pasif = (int)$k['aktif'] !== 1;
     $dis = $pasif ? ' disabled' : '';
-    $tipler = cari_tipler();
+    $tipler = cari_tipler($pdo, true);
     $bak = cari_pb_sirala(cari_bakiye($pdo, $id));
     $meta = '<span>' . h($k['kod']) . '</span><span class="cari-rozet cari-rozet--tip">' . h($tipler[$k['tip']] ?? $k['tip']) . '</span>'
         . (!empty($k['grup_adi']) ? '<span class="cari-rozet">' . h($k['grup_adi']) . '</span>' : '')
@@ -395,6 +403,12 @@ function cari_detay_html(PDO $pdo, array $k, array $E, string $sekme = 'ekstre')
         . '<div class="cari-islem-ek"><a class="btn cari-islem-pc" href="' . h($ekstreUrl . '&bicim=yazdir') . '" target="_blank" rel="noopener">Ekstre Yazdır</a>' . $xlsx
         . '<button type="button" class="btn cari-menu-dugme--dar" data-cari-menu-ac aria-haspopup="menu" aria-expanded="false" aria-controls="crMenuDiger" aria-label="Diğer işlemler">&#8943;</button></div></div>';
     $uyari = $pasif ? '<div class="flash flash-error" style="margin:0 0 8px">Bu cari pasif: yeni hareket girilemez. Mevcut hareketler iptal edilebilir.</div>' : '';
+    if ((int)($k['hizli'] ?? 0) === 1) {
+        $ekl = cari_kart_eksikler($k);
+        $uyari .= '<div class="cari-hizli-bant" role="status"><b>Hızlı eklendi — eksikleri tamamlayın</b>'
+            . ($ekl ? '<span>Eksik: ' . h(implode(', ', $ekl)) . '</span>' : '<span>Eksik alan kalmadı; kartı kaydedince normal renge döner.</span>')
+            . '<button type="button" class="btn btn-sm" data-cr-modal="kart" data-duzenle="1">Düzenle</button></div>';
+    }
     $bilgSek = $sekme === 'bilgiler';
     $altsekme = '<div class="cari-altsekmeler" role="tablist" aria-label="Cari bölümleri">'
         . '<button type="button" class="cari-altsekme" role="tab" id="crSekmeEkstre" aria-selected="' . ($bilgSek ? 'false' : 'true') . '" aria-controls="crPanelEkstre">Ekstre</button>'
@@ -414,6 +428,8 @@ function cari_detay_html(PDO $pdo, array $k, array $E, string $sekme = 'ekstre')
         . cari_bilgi_oge('E-posta', !empty($k['eposta']) ? '<a href="mailto:' . h($k['eposta']) . '">' . h($k['eposta']) . '</a>' : $yok)
         . cari_bilgi_oge('Vade', $k['vade_gun'] !== null && $k['vade_gun'] !== '' ? h((string)$k['vade_gun']) . ' gün' : $yok)
         . cari_bilgi_oge('Vergi dairesi / no', h(implode(' · ', array_filter([(string)($k['vergi_dairesi'] ?? ''), (string)($k['vergi_no'] ?? '')], static fn($v) => $v !== ''))) ?: $yok)
+        . (array_key_exists('tckn', $k) ? cari_bilgi_oge('TCKN', !empty($k['tckn']) ? h((string)$k['tckn']) : $yok) : '')
+        . ((($k['tip'] ?? '') === 'mustahsil' && array_key_exists('dogum_tarihi', $k)) ? cari_bilgi_oge('Doğum tarihi', !empty($k['dogum_tarihi']) ? h(cari_tarih_tr((string)$k['dogum_tarihi'])) : $yok) : '')
         . cari_bilgi_oge('Adres', $adres !== '' ? h($adres) : $yok)
         . cari_bilgi_oge('IBAN', $iban !== '' ? '<span class="cari-bilgi-satir"><span>' . h($ibanGor) . '</span><button type="button" class="cari-kopyala" data-kopyala="' . h($iban) . '">Kopyala</button></span>' : $yok, true)
         . cari_bilgi_oge('Notlar', !empty($k['notlar']) ? nl2br(h($k['notlar'])) : $yok, true)
@@ -576,7 +592,12 @@ function cari_modal_hareket(array $o): string
 /** Kart modalı (#crModalKart): yeni/düzenle. $o: geri, gruplar (aktif tanımlar), kod_oneri. */
 function cari_modal_kart(array $o): string
 {
-    $tipOpt = ''; foreach (cari_tipler() as $v => $ad) $tipOpt .= '<option value="' . h($v) . '">' . h($ad) . '</option>';
+    $ek = !empty($o['ek']);   // ek şema (TCKN / doğum tarihi / hızlı) kuruluysa true
+    $tipOpt = '';
+    foreach (($o['tipler'] ?? cari_tipler(null, true)) as $v => $ad) {
+        $pasifTip = isset($o['aktif_tipler']) && !isset($o['aktif_tipler'][$v]);
+        $tipOpt .= '<option value="' . h($v) . '"' . ($pasifTip ? ' data-pasif="1"' : '') . '>' . h($ad . ($pasifTip ? ' (pasif)' : '')) . '</option>';
+    }
     $grpOpt = '<option value="">Seçiniz</option>'; foreach ($o['gruplar'] as $g) $grpOpt .= '<option value="' . (int)$g['id'] . '">' . h($g['ad']) . '</option>';
     $pbR = ''; foreach (cari_para_birimleri() as $i => $pb) $pbR .= '<label class="cari-seg"><input type="radio" name="para_birimi" value="' . $pb . '"' . ($i === 0 ? ' checked' : '') . '><span>' . $pb . '</span></label>';
     ob_start(); ?>
@@ -603,7 +624,8 @@ function cari_modal_kart(array $o): string
         <fieldset class="cari-bolum"><legend>İletişim</legend>
           <div class="cari-form-grid cari-form-grid--2">
             <label class="pm-label"><span>Yetkili</span><input type="text" name="yetkili" maxlength="150" autocomplete="off"></label>
-            <label class="pm-label"><span>Telefon</span><input type="tel" name="telefon" maxlength="40" autocomplete="off" inputmode="tel"></label>
+            <label class="pm-label" data-cr-vurgu="mustahsil"><span>Telefon</span><input type="tel" name="telefon" maxlength="40" autocomplete="off" inputmode="tel">
+              <?php if ($ek): ?><span class="cari-ipucu cari-vurgu-ipucu" data-cr-mustahsil-ipucu hidden>HKS için önerilir</span><?php endif; ?></label>
             <label class="pm-label cari-span2"><span>E-posta</span><input type="email" name="eposta" maxlength="150" autocomplete="off" inputmode="email"></label>
             <label class="pm-label cari-span2"><span>Adres</span><textarea name="adres" rows="2" maxlength="500"></textarea></label>
             <label class="pm-label"><span>İl</span><input type="text" name="il" maxlength="60" autocomplete="off"></label>
@@ -612,7 +634,15 @@ function cari_modal_kart(array $o): string
         <fieldset class="cari-bolum"><legend>Vergi ve banka</legend>
           <div class="cari-form-grid cari-form-grid--2">
             <label class="pm-label"><span>Vergi dairesi</span><input type="text" name="vergi_dairesi" maxlength="100" autocomplete="off"></label>
+<?php if ($ek): ?>
+            <label class="pm-label"><span>Vergi no (VKN)</span><input type="text" name="vergi_no" maxlength="10" inputmode="numeric" autocomplete="off"><span class="cari-ipucu">10 hane</span></label>
+            <label class="pm-label" data-cr-vurgu="mustahsil"><span>TCKN</span><input type="text" name="tckn" maxlength="11" inputmode="numeric" autocomplete="off"><span class="cari-ipucu">11 hane · T.C. kimlik no</span>
+              <span class="cari-ipucu cari-vurgu-ipucu" data-cr-mustahsil-ipucu hidden>HKS için önerilir</span></label>
+            <label class="pm-label" data-cr-vurgu="mustahsil" data-cr-mustahsil-alan hidden><span>Doğum tarihi</span><input type="date" name="dogum_tarihi" autocomplete="off">
+              <span class="cari-ipucu cari-vurgu-ipucu" data-cr-mustahsil-ipucu hidden>HKS için önerilir</span></label>
+<?php else: ?>
             <label class="pm-label"><span>Vergi / TC no</span><input type="text" name="vergi_no" maxlength="11" inputmode="numeric" autocomplete="off"><span class="cari-ipucu">10 veya 11 rakam</span></label>
+<?php endif; ?>
             <label class="pm-label cari-span2"><span>IBAN</span><input type="text" name="iban" maxlength="40" autocomplete="off" placeholder="TR00 0000 0000 0000 0000 0000 00" style="text-transform:uppercase"></label>
             <label class="pm-label"><span>Vade (gün)</span><input type="number" name="vade_gun" min="0" max="365" inputmode="numeric"></label>
           </div></fieldset>
@@ -817,19 +847,21 @@ function cari_hareket_sayfa_govde(PDO $pdo, string $sinif): string
 function cari_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId, bool $gizli, bool $yaz): string
 {
     $grup = $tur === 'grup';
+    $tip = $tur === 'tip';
     $liste = cari_tanim_listesi($pdo, $tur);
     $csrf = h(csrf_token());
     $geri = 'cari_tanimlari.php?sekme=' . $tur;
     $max = 0; foreach ($liste as $t) $max = max($max, (int)$t['sira']);
     $oneri = $max + ($max > 0 && $max % 10 === 0 ? 10 : 1);
     $h = '<section class="cari-tanim-govde" id="' . $panelId . '" role="tabpanel" aria-labelledby="' . $tabId . '"' . ($gizli ? ' hidden' : '') . '>'
-        . '<h2>' . ($grup ? 'Cari Grupları' : 'Ödeme Şekilleri') . '</h2><p>'
+        . '<h2>' . ($grup ? 'Cari Grupları' : ($tip ? 'Cari Tipleri' : 'Ödeme Şekilleri')) . '</h2><p>'
         . ($grup ? 'Cari kartlarını sınıflandırır; listede filtre olarak kullanılır. Kartta kullanılan grup silinemez, pasifleştirilir.'
-                 : 'Tahsilat ve ödeme fişlerinde seçilir. Adı değişirse eski fişler değişmez (fişe yazıldığı ad saklanır).') . '</p>';
+                 : ($tip ? 'Cari kartındaki "Cari tipi" listesi. Sistem tiplerinin adı değiştirilebilir ama silinemez (Müşteri ve Tedarikçi pasif de yapılamaz). Kartta kullanılan tip silinemez, pasifleştirilir; pasif tip yeni kartta seçilemez.'
+                 : 'Tahsilat ve ödeme fişlerinde seçilir. Adı değişirse eski fişler değişmez (fişe yazıldığı ad saklanır).')) . '</p>';
     if ($yaz) {
         $h .= '<form class="cari-tanim-ekle" method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım eklendi" novalidate><input type="hidden" name="csrf" value="' . $csrf . '">'
             . '<input type="hidden" name="islem" value="tanim_kaydet"><input type="hidden" name="tur" value="' . $tur . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
-            . '<label class="pm-label"><span>' . ($grup ? 'Yeni grup adı' : 'Yeni ödeme şekli') . '</span><input type="text" name="ad" maxlength="100" autocomplete="off" required></label>'
+            . '<label class="pm-label"><span>' . ($grup ? 'Yeni grup adı' : ($tip ? 'Yeni cari tipi' : 'Yeni ödeme şekli')) . '</span><input type="text" name="ad" maxlength="100" autocomplete="off" required></label>'
             . '<label class="pm-label"><span>Sıra</span><input type="number" name="sira" value="' . $oneri . '" inputmode="numeric"></label>'
             . '<button type="submit" class="btn btn-primary">+ Ekle</button></form>';
     }
@@ -837,15 +869,17 @@ function cari_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
     $h .= '<ul class="cari-tanim-liste">';
     foreach ($liste as $t) {
         $id = (int)$t['id']; $aktif = (int)$t['aktif'] === 1; $kul = (int)$t['kullanim'];
-        $alt = 'Sıra ' . (int)$t['sira'] . ($kul > 0 ? ' · ' . $kul . ($grup ? ' kartta kullanılıyor' : ' harekette kullanıldı') : '');
+        $sistem = $tip && cari_ek_sistem_tip_mi((string)($t['kod'] ?? ''));
+        $kilitliPasif = $sistem && !(cari_ek_sistem_tipleri()[(string)$t['kod']][2] ?? true);   // Müşteri / Tedarikçi
+        $alt = 'Sıra ' . (int)$t['sira'] . ($sistem ? ' · Sistem tipi' : '') . ($kul > 0 ? ' · ' . $kul . (($grup || $tip) ? ' kartta kullanılıyor' : ' harekette kullanıldı') : '');
         $h .= '<li class="cari-tanim-satir' . ($aktif ? '' : ' cari-tanim-satir--pasif') . '" data-id="' . $id . '"><div class="cari-tanim-ad">' . h($t['ad']) . '<small>' . h($alt) . '</small></div><div class="cari-tanim-eylem">';
         if ($yaz) {
             $h .= '<form method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım güncellendi" style="display:contents"><input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="islem" value="tanim_durum">'
                 . '<input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
-                . '<label class="cari-aktif"><input type="checkbox" role="switch" data-id="' . $id . '" name="aktif" value="1"' . ($aktif ? ' checked' : '') . ' aria-label="' . h($t['ad']) . ' aktif"><span>Aktif</span></label>'
+                . '<label class="cari-aktif"><input type="checkbox" role="switch" data-id="' . $id . '" name="aktif" value="1"' . ($aktif ? ' checked' : '') . ($kilitliPasif ? ' disabled title="Bu sistem tipi pasif yapılamaz"' : '') . ' aria-label="' . h($t['ad']) . ' aktif"><span>Aktif</span></label>'
                 . '<noscript><button type="submit" class="btn btn-sm">Uygula</button></noscript></form>'
                 . '<button type="button" class="btn btn-sm" data-tanim-duzen aria-label="' . h($t['ad']) . ' düzenle">Düzenle</button>';
-            if (!$grup || $kul === 0) {
+            if (!$sistem && (!($grup || $tip) || $kul === 0)) {
                 $h .= '<form method="post" action="cari_kaydet.php" data-cr-ajax data-ok="Tanım silindi" style="display:contents"><input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="islem" value="tanim_sil">'
                     . '<input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
                     . '<button type="submit" class="btn btn-sm" aria-label="' . h($t['ad']) . ' sil" onclick="return confirm(\'Bu tanım silinecek. Emin misiniz?\')">Sil</button></form>';
@@ -870,16 +904,25 @@ function cari_tanimlari_govde(PDO $pdo): string
 {
     $yaz = cari_can('tanim');
     $sekme = (string)($_GET['sekme'] ?? 'grup');
-    if (!in_array($sekme, ['grup', 'odeme_sekli'], true)) $sekme = 'grup';
+    $tipVar = cari_ek_hazir($pdo);
+    if (!in_array($sekme, ['grup', 'odeme_sekli', 'tip'], true) || ($sekme === 'tip' && !$tipVar)) $sekme = 'grup';
     $nGrup = count(cari_tanim_listesi($pdo, 'grup'));
     $nOde = count(cari_tanim_listesi($pdo, 'odeme_sekli'));
+    $nTip = count(cari_tanim_listesi($pdo, 'tip'));
     $tab = static fn(string $id, string $panel, string $ad, string $say, bool $sec): string =>
         '<button type="button" class="cari-tanim-nav-oge" role="tab" id="' . $id . '" aria-selected="' . ($sec ? 'true' : 'false') . '" aria-controls="' . $panel . '">' . h($ad) . ' <small>' . h($say) . '</small></button>';
     return '<div class="cari" id="cari">' . cari_ust_menu('tanimlar') . '<div class="cari-ustsatir"><h1>Cari Tanımları</h1></div><div class="cari-tanim">'
         . '<div class="cari-tanim-nav" role="tablist" aria-label="Tanım türleri">'
         . $tab('crTabGrup', 'crPanelGrup', 'Cari Grupları', (string)$nGrup, $sekme === 'grup')
+        . ($tipVar ? $tab('crTabTip', 'crPanelTip', 'Cari Tipi', (string)$nTip, $sekme === 'tip') : '')
         . $tab('crTabOdeme', 'crPanelOdeme', 'Ödeme Şekilleri', (string)$nOde, $sekme === 'odeme_sekli') . '</div><div>'
         . cari_tanim_panel($pdo, 'grup', 'crPanelGrup', 'crTabGrup', $sekme !== 'grup', $yaz)
+        . ($tipVar ? cari_tanim_panel($pdo, 'tip', 'crPanelTip', 'crTabTip', $sekme !== 'tip', $yaz) : '')
         . cari_tanim_panel($pdo, 'odeme_sekli', 'crPanelOdeme', 'crTabOdeme', $sekme !== 'odeme_sekli', $yaz)
-        . '</div></div><p class="cari-bilgi-kutu">Cari tipi, para birimi ve hareket türleri sabittir; yalnız cari grubu ile ödeme şekli tanımlanır.</p></div>';
+        . '</div></div>'
+        . ($tipVar
+            ? '<p class="cari-bilgi-kutu">Para birimi ve hareket türleri sabittir; cari tipi, cari grubu ve ödeme şekli tanımlanır.</p>'
+            : '<p class="cari-bilgi-kutu">Para birimi ve hareket türleri sabittir; cari grubu ile ödeme şekli tanımlanır.'
+              . (is_admin() ? ' Cari tiplerini tanımlayabilmek için <a href="migrate.php#cari-ek">Şema Migrasyon › Cari — Tipler · TCKN/Doğum tarihi · Hızlı ekleme</a> kartını çalıştırın.' : '') . '</p>')
+        . '</div>';
 }

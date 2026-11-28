@@ -454,7 +454,7 @@ async function alanHatasi(p, kapsam, ad) { return await p.$$eval(`${kapsam} [nam
     const S3 = await ortam(); sunucular.push(S3);
     const t = await sayfa(browser, S3, { width: 1440, height: 900 });
     await git(t, 'cari_tanimlari.php');
-    ok('Tanımlar açıldı; 2 sekme (İçe Aktar yok); sidebar Cari Tanımları aktif', /Cari Tanımları/.test(await metin(t, 'details[data-sb-grup="cari"] a.sidebar-link.active') || '') && (await say(t, '.cari-tanim-nav-oge')) === 2 && !(await t.$('#crTabIce')));
+    ok('Tanımlar açıldı; 3 sekme (Grup · Tip · Ödeme; İçe Aktar yok); sidebar Cari Tanımları aktif', /Cari Tanımları/.test(await metin(t, 'details[data-sb-grup="cari"] a.sidebar-link.active') || '') && (await say(t, '.cari-tanim-nav-oge')) === 3 && !(await t.$('#crTabIce')));
     ok('yatay taşma yok', (await tasma(t)) <= 0);
     ok('Cari Grupları: 7 tanım listelenir', (await say(t, '#crPanelGrup .cari-tanim-satir:not(.cari-tanim-satir--duzen)')) === 7);
     await shot(t, 'tanimlar_1440');
@@ -740,6 +740,103 @@ async function alanHatasi(p, kapsam, ad) { return await p.$$eval(`${kapsam} [nam
     ok('yazdır sayfası: sidebar/bottomnav YOK (temiz çıktı), yatay taşma yok', !(await yeniSekme.$('.sidebar, .bottomnav')) && (await tasma(yeniSekme)) <= 0);
     await yeniSekme.screenshot({ path: SHOT ? path.join(SHOT, 'ekstre_yazdir_1440.png') : undefined }).catch(() => {});
     await y.context().close();
+
+    // ───────────────────────────────────────── 9. v611 — Cari tipi · TCKN/doğum tarihi · müstahsil vurgusu · hızlı kart
+    console.log('\n=== 9. v611: tipler · müstahsil vurgusu · hızlı kart (1440 + 390 + koyu tema) ===');
+    const hata0 = hatalar.length;   // önceki bölümlerin geç gelen (beklenen) hata olayları bu bölümü ilgilendirmez
+    const S9 = await ortam('ek'); sunucular.push(S9);
+    const e = await sayfa(browser, S9, { width: 1440, height: 900 });
+    await git(e, 'cari_kartlari.php');
+    const hizliMetin = await e.$$eval('.cari-kart--hizli', l => l.map(x => x.textContent.replace(/\s+/g, ' ')));
+    ok('liste: 2 hızlı kart (ayrı sınıf + rozet + eksik listesi); normal müstahsil kartı hızlı değil', hizliMetin.length === 2 && hizliMetin.every(m => /Hızlı eklendi — eksikleri tamamlayın/.test(m)) && hizliMetin.some(m => /Eksik: Telefon/.test(m)) && hizliMetin.some(m => /Eksik: Vergi no veya TCKN/.test(m)), JSON.stringify(hizliMetin));
+    const renkler = await e.evaluate(() => { const h = getComputedStyle(document.querySelector('.cari-kart--hizli')).backgroundColor, n = getComputedStyle(document.querySelector('.cari-kart:not(.cari-kart--hizli)')).backgroundColor; return { h, n }; });
+    ok('hızlı kart arka planı normal karttan FARKLI (açık tema)', renkler.h !== renkler.n && renkler.h !== 'rgba(0, 0, 0, 0)', JSON.stringify(renkler));
+    await e.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const koyu = await e.evaluate(() => getComputedStyle(document.querySelector('.cari-kart--hizli')).backgroundColor);
+    ok('hızlı kart rengi KOYU temada da ayrı (açık temadan farklı belirteç)', koyu !== renkler.n && koyu !== renkler.h, koyu + ' vs ' + renkler.h);
+    await shot(e, 'v611_hizli_koyu_1440');
+    await e.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    await shot(e, 'v611_hizli_acik_1440');
+    ok('yatay taşma yok (liste)', (await tasma(e)) <= 0);
+
+    await e.click('[data-cr-modal="kart"]:not([data-duzenle])');
+    ok('yeni kart modalı: TCKN alanı + VKN maxlength=10; doğum tarihi (müşteri) GİZLİ; vurgu yok', await modalAcik(e, 'crModalKart') && await goster(e, '#crModalKart input[name="tckn"]') && !(await goster(e, '#crModalKart input[name="dogum_tarihi"]')) && (await e.$eval('#crModalKart input[name="vergi_no"]', i => i.maxLength)) === 10 && (await say(e, '#crModalKart .cari-vurgu')) === 0);
+    await e.selectOption('#crModalKart select[name="tip"]', 'mustahsil');
+    const vur = await e.evaluate(() => { const m = document.getElementById('crModalKart'); const l = n => m.querySelector('[name="' + n + '"]').closest('.pm-label'); const gor = el => !!el.getClientRects().length;
+      return { dogum: gor(m.querySelector('[name="dogum_tarihi"]')), n: m.querySelectorAll('.cari-vurgu').length, ipucu: [...m.querySelectorAll('[data-cr-mustahsil-ipucu]')].filter(gor).length, bg: getComputedStyle(l('tckn')).backgroundColor, bgNormal: getComputedStyle(l('yetkili')).backgroundColor, bgTel: getComputedStyle(l('telefon')).backgroundColor }; });
+    ok('tip=müstahsil: doğum tarihi GÖRÜNÜR; TCKN/Telefon/Doğum 3 alan vurgulu + 3 "HKS için önerilir"; vurgu rengi normalden farklı', vur.dogum && vur.n === 3 && vur.ipucu === 3 && vur.bg !== vur.bgNormal && vur.bgTel === vur.bg, JSON.stringify(vur));
+    await shot(e, 'v611_kart_modal_mustahsil_1440');
+    await e.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const vurK = await e.evaluate(() => { const m = document.getElementById('crModalKart'); return { bg: getComputedStyle(m.querySelector('[name="tckn"]').closest('.pm-label')).backgroundColor, bgN: getComputedStyle(m.querySelector('[name="yetkili"]').closest('.pm-label')).backgroundColor }; });
+    ok('müstahsil vurgusu KOYU temada da ayrı belirteç', vurK.bg !== vurK.bgN && vurK.bg !== vur.bg, JSON.stringify(vurK));
+    await shot(e, 'v611_kart_modal_mustahsil_koyu_1440');
+    await e.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    await e.selectOption('#crModalKart select[name="tip"]', 'tedarikci');
+    ok('tip müstahsilden çıkınca doğum tarihi gizlenir, vurgu kalkar', !(await goster(e, '#crModalKart input[name="dogum_tarihi"]')) && (await say(e, '#crModalKart .cari-vurgu')) === 0);
+    await e.selectOption('#crModalKart select[name="tip"]', 'mustahsil');
+    await e.fill('#crModalKart input[name="unvan"]', 'Kimlik Deneme Müstahsil');
+    await e.fill('#crModalKart input[name="tckn"]', '10000000147');
+    await e.click('#crModalKart button[type="submit"]');
+    ok('bozuk TCKN → alan hatası (kayıt yok)', await kisaBekle(e, () => !!document.querySelector('#crModalKart [name="tckn"]').closest('.pm-label').querySelector('.cari-hata')) && /kimlik/.test(await alanHatasi(e, '#crModalKart', 'tckn') || ''));
+    await e.fill('#crModalKart input[name="tckn"]', '10000000146');
+    await e.click('#crModalKart button[type="submit"]');
+    await kisaBekle(e, () => { const h = document.querySelector('#crModalKart [name="tckn"]').closest('.pm-label').querySelector('.cari-hata'); return h && /kayıtlı/.test(h.textContent); });
+    const tekil = await alanHatasi(e, '#crModalKart', 'tckn') || '';
+    ok('aynı TCKN → ENGEL; mesaj eski kartın kodu + ünvanı, TCKN tam değer YOK (maskeli)', /Normal Müstahsil Örnek/.test(tekil) && /C\d{5}/.test(tekil) && !/10000000146/.test(tekil) && /10\*{7}46/.test(tekil), tekil);
+    ok('tekillik reddinde kayıt yapılmadı (3 kart)', S9.say().kart === 3, JSON.stringify(S9.say()));
+    await e.click('#crModalKart [data-cr-kapat]');
+
+    // hızlı kartı düzenle: eksik vurgusu → telefon gir → hızlı bayrağı kalkar
+    await e.click('.cari-kart--hizli:has-text("Hızlı Müstahsil Örnek")');
+    ok('detay: hızlı bant + eksik listesi', await kisaBekle(e, () => !!document.querySelector('#crDetay .cari-hizli-bant')) && /Eksik: Telefon/.test(await metin(e, '#crDetay .cari-hizli-bant') || ''));
+    await e.click('#crDetay .cari-hizli-bant [data-cr-modal="kart"]');
+    ok('Düzenle: modal açıldı, doğum alanı görünür, Telefon alanı EKSİK vurgulu', await modalAcik(e, 'crModalKart') && await goster(e, '#crModalKart input[name="dogum_tarihi"]') && await e.$eval('#crModalKart [name="telefon"]', i => i.closest('.pm-label').classList.contains('cari-eksik')));
+    await e.fill('#crModalKart input[name="telefon"]', '0 555 000 00 09');
+    ok('telefon yazılınca eksik vurgusu kalkar', !(await e.$eval('#crModalKart [name="telefon"]', i => i.closest('.pm-label').classList.contains('cari-eksik'))));
+    const n9 = S9.sayi(/POST \/cari_kaydet/);
+    await e.click('#crModalKart button[type="submit"]');
+    await yenilenmeBekle(e, n9);
+    await git(e, 'cari_kartlari.php');
+    ok('kaydedilince hızlı bayrağı kalktı (1 hızlı kart kaldı: Hızlı Müşteri Örnek)', (await say(e, '.cari-kart--hizli')) === 1 && /Hızlı Müşteri Örnek/.test(await metin(e, '.cari-kart--hizli') || ''));
+    await e.click('.cari-kart--hizli');
+    await kisaBekle(e, () => !!document.querySelector('#crDetay .cari-hizli-bant'));
+    await e.click('#crDetay .cari-hizli-bant [data-cr-modal="kart"]');
+    await modalAcik(e, 'crModalKart');
+    ok('hâlâ eksik hızlı kart: Vergi no + TCKN alanları vurgulu, Telefon değil', await e.$eval('#crModalKart [name="vergi_no"]', i => i.closest('.pm-label').classList.contains('cari-eksik')) && await e.$eval('#crModalKart [name="tckn"]', i => i.closest('.pm-label').classList.contains('cari-eksik')) && !(await e.$eval('#crModalKart [name="telefon"]', i => i.closest('.pm-label').classList.contains('cari-eksik'))));
+    await e.click('#crModalKart [data-cr-kapat]');
+
+    // tanımlar: Cari Tipi
+    await git(e, 'cari_tanimlari.php');
+    await e.click('#crTabTip');
+    ok('Cari Tipi sekmesi: panel açılır, 8 sistem tipi', await goster(e, '#crPanelTip') && !(await goster(e, '#crPanelGrup')) && (await say(e, '#crPanelTip .cari-tanim-satir:not(.cari-tanim-satir--duzen)')) === 8);
+    ok('Müşteri + Tedarikçi aktif anahtarı DEVRE DIŞI; Müstahsil anahtarı açık', await e.$eval('#crPanelTip input[aria-label="Müşteri aktif"]', i => i.disabled) && await e.$eval('#crPanelTip input[aria-label="Tedarikçi aktif"]', i => i.disabled) && !(await e.$eval('#crPanelTip input[aria-label="Müstahsil aktif"]', i => i.disabled)));
+    ok('sistem tiplerinde SİL düğmesi yok; "Sistem tipi" notu 8 satırda', !(await e.$('#crPanelTip button[aria-label$=" sil"]')) && (await e.$$eval('#crPanelTip .cari-tanim-ad small', l => l.filter(x => /Sistem tipi/.test(x.textContent)).length)) === 8);
+    const ntp = S9.sayi(/POST \/cari_kaydet/);
+    await e.fill('#crPanelTip form.cari-tanim-ekle input[name="ad"]', 'Komisyoncu Örnek');
+    await e.click('#crPanelTip form.cari-tanim-ekle button[type="submit"]');
+    await yenilenmeBekle(e, ntp);
+    await kisaBekle(e, () => /Komisyoncu Örnek/.test(document.getElementById('crPanelTip').textContent));
+    ok('kullanıcı tipi eklendi (9 satır) ve SİL düğmesi var', (await say(e, '#crPanelTip .cari-tanim-satir:not(.cari-tanim-satir--duzen)')) === 9 && !!(await e.$('#crPanelTip button[aria-label="Komisyoncu Örnek sil"]')));
+    await git(e, 'cari_kartlari.php');
+    await e.click('[data-cr-modal="kart"]:not([data-duzenle])'); await modalAcik(e, 'crModalKart');
+    ok('kart modalı tip listesi yeni tipi içerir (9 seçenek)', (await e.$$eval('#crModalKart select[name="tip"] option', o => o.length)) === 9 && await e.$$eval('#crModalKart select[name="tip"] option', o => o.some(x => x.textContent === 'Komisyoncu Örnek')));
+    ok('JS/konsol hatası yok (bölüm 9, masaüstü)', hatalar.length === hata0, hatalar.slice(hata0).join(' | '));
+    await e.context().close();
+
+    // mobil 390
+    const mm9 = await sayfa(browser, S9, { width: 390, height: 844 }, { dokunmatik: true });
+    await git(mm9, 'cari_kartlari.php');
+    ok('mobil: hızlı kart ayrı renkte + rozet görünür, yatay taşma yok', (await say(mm9, '.cari-kart--hizli')) === 1 && await goster(mm9, '.cari-kart--hizli .cari-rozet--hizli') && (await tasma(mm9)) <= 0);
+    await shot(mm9, 'v611_hizli_mobil_390');
+    await mm9.tap('#crListeKol [data-cr-modal="kart"]'); await modalAcik(mm9, 'crModalKart');
+    await mm9.selectOption('#crModalKart select[name="tip"]', 'mustahsil');
+    const mob = await mm9.evaluate(() => { const m = document.getElementById('crModalKart'); const fs = n => parseFloat(getComputedStyle(m.querySelector('[name="' + n + '"]')).fontSize);
+      return { tckn: fs('tckn'), dogum: fs('dogum_tarihi'), vergi: fs('vergi_no'), telefon: fs('telefon'), vurgu: m.querySelectorAll('.cari-vurgu').length, gorunur: !!m.querySelector('[name="dogum_tarihi"]').getClientRects().length, bg: getComputedStyle(m.querySelector('[name="tckn"]').closest('.pm-label')).backgroundColor, bgN: getComputedStyle(m.querySelector('[name="yetkili"]').closest('.pm-label')).backgroundColor }; });
+    ok('mobil: yeni TCKN / Doğum tarihi / VKN girdileri ≥16px', mob.tckn >= 16 && mob.dogum >= 16 && mob.vergi >= 16 && mob.telefon >= 16, JSON.stringify(mob));
+    ok('mobil: müstahsil vurgusu görünür (3 alan, farklı zemin), doğum tarihi görünür, taşma yok', mob.vurgu === 3 && mob.gorunur && mob.bg !== mob.bgN && (await tasma(mm9)) <= 0, JSON.stringify(mob));
+    await shot(mm9, 'v611_kart_modal_mustahsil_mobil_390');
+    ok('JS/konsol hatası yok (bölüm 9, mobil)', hatalar.length === hata0, hatalar.slice(hata0).join(' | '));
+    await mm9.context().close();
 
     ok('toplam: PHP alt süreç hatası yok (köprü kaydı)', sunucular.every(s => s.istekler.every(i => !i.hata)), JSON.stringify(sunucular.flatMap(s => s.istekler.filter(i => i.hata).map(i => i.url + ' ' + i.hata)).slice(0, 3)));
   } catch (e) {
