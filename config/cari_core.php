@@ -576,7 +576,7 @@ function cari_kart_oku(PDO $pdo, int $id): ?array
 /** Audit için kişisel veri alanlarını (TCKN / doğum tarihi / telefon) değer yerine var-yok bayrağına çevirir. */
 function cari_kart_audit_veri(array $v): array
 {
-    foreach (['tckn', 'dogum_tarihi', 'telefon'] as $k) {
+    foreach (['tckn', 'dogum_tarihi', 'telefon', 'vergi_no'] as $k) {   // VKN de: şahıs müstahsilde kişisel kimliktir
         if (array_key_exists($k, $v)) $v[$k] = ($v[$k] !== null && $v[$k] !== '') ? '[var]' : '[yok]';
     }
     return $v;
@@ -712,7 +712,7 @@ function cari_kart_sil(PDO $pdo, int $id, int $uid): array
     if (empty($k['ok'])) return $k;
     $eskiKart = $k['_kart'];
     unset($k['_kart']);
-    audit_log_event('delete', 'cari', $id, $eskiKart, null);
+    audit_log_event('delete', 'cari', $id, cari_kart_audit_veri($eskiKart), null);   // v611: kişisel veri maskeli
     return $k;
 }
 

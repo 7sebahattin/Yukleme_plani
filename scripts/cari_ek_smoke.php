@@ -84,6 +84,15 @@ ok('migrate ikinci kez: hepsi var, hiçbir şey eklenmedi/kaldırılmadı', !arr
 ok('tohum çoğalmadı (8 sistem tipi)', (int)$eski->query("SELECT COUNT(*) FROM cari_tanimlar WHERE tur = 'tip'")->fetchColumn() === 8);
 $eskiTipler = cari_tipler($eski);
 ok('tip sırası/adları: Müşteri, Tedarikçi, Müşteri+Tedarikçi, Personel/Çavuş, Diğer, Müstahsil, Nakliyeci, Gümrükçü', array_keys($eskiTipler) === ['musteri', 'tedarikci', 'ikisi', 'personel', 'diger', 'mustahsil', 'nakliyeci', 'gumrukcu'] && $eskiTipler['gumrukcu'] === 'Gümrükçü');
+ok('kart "tam hazır": kolon + indeks + 8 tip tohumu', cari_ek_tam_hazir($eski));
+$eski->exec("DELETE FROM cari_tanimlar WHERE tur = 'tip' AND kod = 'gumrukcu'");
+ok('bir sistem tipi eksikse kart "tam hazır" DEĞİL (✗ kalır)', cari_ek_hazir($eski) && !cari_ek_tam_hazir($eski));
+cari_ek_migrate($eski);
+ok('migrate eksik tipi tamamlar → yeniden tam hazır', cari_ek_tam_hazir($eski));
+$eski->exec('DROP INDEX `idx_cari_vergi`');
+ok('bir indeks eksikse kart "tam hazır" DEĞİL', !cari_ek_tam_hazir($eski));
+cari_ek_migrate($eski);
+ok('migrate eksik indeksi tamamlar', cari_ek_tam_hazir($eski));
 $bos = new PDO('sqlite::memory:'); $bos->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 ok('cari tabloları yokken migrate hata satırı döner (çökmez)', cari_ek_migrate($bos)[0]['durum'] === 'hata');
 
@@ -224,11 +233,20 @@ $g4 = kart($pdo, ['unvan' => 'Hızlı Müstahsil', 'tip' => 'mustahsil', 'telefo
 ok('müstahsil hızlı: telefon girilince tamamlanır (TCKN/doğum olmadan hizli=0)', $ms3['ok'] && ($ms3['eksik_alanlar'] ?? []) === ['telefon'] && $g4['ok'] && (int)cari_kart_oku($pdo, (int)$ms3['id'])['hizli'] === 0);
 ok('liste: hizli kolonu satırda gelir', (int)(array_values(array_filter(cari_kart_listesi($pdo)['satirlar'], fn($s) => (int)$s['id'] === (int)$h2['id']))[0]['hizli'] ?? 0) === 1);
 
+echo "\n=== 10b. Silme audit'i de maskeli (v611 kural denetimi) ===\n";
+$silT = t_tckn('567890123'); $silV = t_vkn('333333333');
+$sk = kart($pdo, ['unvan' => 'Silinecek Müstahsil', 'tip' => 'mustahsil', 'tckn' => $silT, 'vergi_no' => $silV, 'telefon' => '0 555 000 00 09', 'dogum_tarihi' => '1970-02-03']);
+$sr = $sk['ok'] ? cari_kart_sil($pdo, (int)$sk['id'], $UID) : ['ok' => false];
+$silAudit = json_encode($pdo->query("SELECT old_values FROM audit_log WHERE module = 'cari' AND action = 'delete' AND record_id = " . (int)($sk['id'] ?? 0))->fetchAll(), JSON_UNESCAPED_UNICODE);
+ok('silme yapıldı ve audit satırı var', $sk['ok'] && !empty($sr['ok']) && str_contains((string)$silAudit, 'Silinecek Müstahsil'), json_encode($sr, JSON_UNESCAPED_UNICODE));
+ok('silme audit\'inde TCKN / VKN / telefon / doğum tarihi değeri yok', !str_contains($silAudit, $silT) && !str_contains($silAudit, $silV) && !str_contains($silAudit, '0 555 000 00 09') && !str_contains($silAudit, '1970-02-03'), $silAudit);
+
 echo "\n=== 11. Audit: kişisel veri DEĞER olarak yazılmaz ===\n";
 $tum = json_encode($pdo->query("SELECT old_values, new_values FROM audit_log WHERE module = 'cari'")->fetchAll(), JSON_UNESCAPED_UNICODE);
 ok('audit\'te TCKN değeri yok', !str_contains($tum, $t1) && !str_contains($tum, $t2));
 ok('audit\'te doğum tarihi değeri yok', !str_contains($tum, '1975-04-09'));
 ok('audit\'te telefon değeri yok', !str_contains($tum, '0 555 000 00 0'));
+ok('audit\'te VKN değeri yok', !str_contains($tum, $v1) && !str_contains($tum, $v2));
 ok('audit\'te var/yok bayrağı var', str_contains($tum, '[var]') && str_contains($tum, '[yok]'));
 
 echo "\n=== 12. Palet fişleri müstahsil bağı (tip=tedarikci) çalışmaya devam eder ===\n";

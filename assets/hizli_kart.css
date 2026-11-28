@@ -64,7 +64,7 @@ html[data-theme="dark"] .hk-overlay, html[data-theme="dark"] .hk-toast {
 .hk-klavye { margin-right: auto; align-self: center; font-size: .76rem; color: var(--muted); }
 .hk-dialog .pm-footer .btn { min-height: 44px; }
 .hk-dialog [data-hk-kaydet][aria-busy="true"] { opacity: .7; cursor: progress; }
-html.hk-acik, html.hk-acik body { overflow: hidden; }
+html.hk-acik body { overflow: hidden; }   /* yalnız body kilitlenir (iOS: html'e overflow verme) */
 
 /* Düğme (Cari/Stok Kartları araç çubuğu) */
 .hk-dugme { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }

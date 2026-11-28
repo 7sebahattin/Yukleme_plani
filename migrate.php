@@ -1359,7 +1359,7 @@ ob_start();   // panel gövdesi: kart sayacı özet satırına en sonda işlenir
         <?php endforeach; ?>
       <?php endif; ?>
     </p>
-    <?php $cariEkOnkosul = !cari_hazir($pdo); $cariEkHazir = !$cariEkOnkosul && cari_ek_hazir($pdo) && !cari_ek_kolon_var($pdo, 'cari_kartlar', 'md_id'); ?>
+    <?php $cariEkOnkosul = !cari_hazir($pdo); $cariEkHazir = !$cariEkOnkosul && cari_ek_tam_hazir($pdo); ?>
     <?php if ($cariEkOnkosul): ?>
     <p style="font-weight:600;color:#c0392b;">✗ Önce yukarıdaki "Cari İşlemler" kartını çalıştırın.</p>
     <?php else: ?>

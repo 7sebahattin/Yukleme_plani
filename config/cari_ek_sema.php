@@ -76,6 +76,21 @@ function cari_ek_hazir(PDO $pdo): bool
 }
 
 /** Sistem tiplerini ekler; eksik olanı tamamlar, var olana dokunmaz (idempotent). @return int eklenen sayısı */
+/** migrate.php kartının "✓ hazır" koşulu: kolonlar + indeksler + md_id yok + 8 sistem tipi tohumu tam. */
+function cari_ek_tam_hazir(PDO $pdo): bool
+{
+    if (!cari_ek_hazir($pdo) || cari_ek_kolon_var($pdo, 'cari_kartlar', 'md_id')) return false;
+    foreach ([['cari_tanimlar', 'idx_carit_tur_kod'], ['cari_kartlar', 'idx_cari_tckn'], ['cari_kartlar', 'idx_cari_vergi']] as [$t, $ix]) {
+        if (!cari_ek_indeks_var($pdo, $t, $ix)) return false;
+    }
+    try {
+        $kodlar = array_keys(cari_ek_sistem_tipleri());
+        $st = $pdo->prepare("SELECT COUNT(DISTINCT kod) FROM cari_tanimlar WHERE tur = 'tip' AND kod IN (" . implode(',', array_fill(0, count($kodlar), '?')) . ')');
+        $st->execute($kodlar);
+        return (int)$st->fetchColumn() === count($kodlar);
+    } catch (PDOException $e) { return false; }
+}
+
 function cari_ek_tip_tohumla(PDO $pdo): int
 {
     $eklenen = 0;
