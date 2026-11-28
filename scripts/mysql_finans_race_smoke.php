@@ -35,6 +35,7 @@ function depot_options(): array { return ['RACE_DEPO']; }
 function user_allowed_depots(?array $u = null): ?array { return null; }
 function depo_sql_in(string $col, ?array $depots = null): array { return ['', []]; }
 function depot_visible_to_user(?string $d): bool { return true; }
+function depo_gecis_aktif(PDO $p): bool { return true; }   // v611: stok fişi yalnız yeni depo sistemi açıkken (stok_depo_gecis_acik)
 function is_admin(): bool { return true; }
 function can(string $p): bool { return true; }
 

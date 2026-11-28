@@ -4,6 +4,7 @@
 //   ?id=N            seçili kart (mobilde liste yerine detay)            ?yeni=1  kart modalı açık gelir
 //   ?ara= &tip= &grup=<id> &durum=aktif|pasif|tumu|kritik   (sunucuda `hidden` ile süzülür; JS açıkken istemci süzer)
 //   ?parca=detay     kısmi yanıt (header/footer YOK): #stDetay bölümü (JS master-detail)
+//   v611: ek şema hazırsa (stok_ek_hazir) ambalaj tipi · birim dara · HKS ürün alanları + hızlı eklenen kart rengi; değilse yöneticiye kurulum notu.
 // Kapı: muhasebe_sayfa_can (Roller; varsayılan kapalı, yönetici her zaman) → stok_kapi('read'); tablo yoksa şema uyarı kartı. Çekirdek config/stok_core.php, işaretleme config/stok_ui.php.
 // =========================================================
 declare(strict_types=1);
@@ -41,6 +42,7 @@ $F = [
 ];
 $L = stok_kart_listesi($pdo);
 $gruplar = stok_tanim_listesi($pdo, 'grup', true);
+$ekHazir = stok_ek_hazir($pdo);   // v611: ambalaj tipi · birim dara · HKS ürün · hızlı bayrağı (kolonlar yoksa alanlar gizli)
 
 if ($kart !== null) {
     $detay = stok_detay_html($pdo, $kart);
@@ -55,11 +57,13 @@ render_flash();
 ?>
 <div class="stok st--tek-ekran" id="stok"<?= ($_GET['yeni'] ?? '') === '1' ? ' data-yeni="kart"' : '' ?>>
   <?= stok_ust_menu('kartlar') ?>
+  <?= !$ekHazir && is_admin() ? '<p class="st-not st-ek-kurulum" role="note">' . h(STOK_EK_SEMA_MESAJ) . ' <a href="migrate.php#stok-ek">Şema Migrasyon</a></p>' : '' ?>
   <div class="st-ana<?= $kart !== null ? ' st-ana--detay' : '' ?>">
     <?= stok_liste_kol_html($L['satirlar'], $gruplar, $F, $kart !== null ? (int)$kart['id'] : null, $L['kesildi']) ?>
     <?= $detay ?>
   </div>
-  <?= stok_modal_kart(['geri' => 'stok_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => stok_kod_oner($pdo)]) ?>
+  <?= stok_modal_kart(['geri' => 'stok_kartlari.php' . ($kart !== null ? '?id=' . (int)$kart['id'] : ''), 'gruplar' => $gruplar, 'kod_oneri' => stok_kod_oner($pdo),
+      'ek' => $ekHazir, 'ambalajlar' => $ekHazir ? stok_tanim_listesi($pdo, 'ambalaj_tip') : [], 'hks' => $ekHazir ? stok_hks_urunler() : null, 'yonetici' => is_admin()]) ?>
 </div>
 <?php
 stok_scripts();

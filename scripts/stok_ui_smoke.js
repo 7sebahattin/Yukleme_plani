@@ -203,7 +203,7 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     // ───────────────────────────────────────── 2. TANIMLAR 1366
     console.log('\n=== 2. Tanımlar (1366x800) ===');
     await git(p, 'stok_tanimlari.php');
-    ok('tanımlar açıldı: 3 sekme (İçe Aktar yok), Gruplar paneli görünür', (await gorunurSay(p, '.st-tanim-nav-oge')) === 3 && !(await p.$('#stTabIce')) && await goster(p, '#stPanelGrup') && !(await goster(p, '#stPanelCikis')));
+    ok('tanımlar açıldı: 4 sekme (v611 + Ambalaj Tipleri; İçe Aktar yok), Gruplar paneli görünür', (await gorunurSay(p, '.st-tanim-nav-oge')) === 4 && !(await p.$('#stTabIce')) && await goster(p, '#stPanelGrup') && !(await goster(p, '#stPanelCikis')));
     ok('yatay taşma yok', (await tasma(p)) <= 0);
     await shot(p, 'tanimlar_1366');
     await p.fill('#stPanelGrup .st-tanim-ekle [name="ad"]', 'Kuru Gıda');
@@ -487,6 +487,107 @@ const kucukYazi = (p, kapsam) => p.evaluate(k => [...document.querySelectorAll(k
     ok('[390] dokunarak kaydedildi → fiş detayı (tam ekran), Euro Palet +14', /id=\d+/.test(fm.url()) && await goster(fm, '#stDetay .st-unvan') && S7.say().kartlar['5'].depo['Merkez Depo'] === (E2.kartlar['5'].depo['Merkez Depo'] || 0) + 14000, fm.url() + ' | ' + (await metin(fm, '.st-form-hata') || '') + ' | ' + JSON.stringify(S7.say().kartlar['5'].depo) + ' ' + JSON.stringify(E2.kartlar['5'].depo));
     ok('[390] fiş detayı: satırlar kart görünümünde, taşma yok', (await gorunurSay(fm, '#stDetay .st-hk')) === 1 && (await tasma(fm)) <= 0);
     await fm.context().close();
+
+    // ───────────────────────────────────────── 8. v611 — ambalaj tipi · birim dara · HKS ürün · hızlı eklenen kart
+    console.log('\n=== 8. v611 ambalaj · dara · HKS · hızlı (1366 / 390) ===');
+    const S8 = await ortam(); sunucular.push(S8);
+    const v = await sayfa(browser, S8, { width: 1366, height: 800 });
+    await git(v, 'stok_kartlari.php');
+    const renk = (p, id) => p.$eval(`#stListe a.st-satir[data-id="${id}"]`, e => getComputedStyle(e).backgroundColor + '|' + getComputedStyle(e).boxShadow);
+    const hz = await renk(v, 2), nr = await renk(v, 3);
+    ok('[1366] hızlı eklenen kart (Biber) AYRI RENKTE (arka plan + sol şerit normal satırdan farklı)', /st-satir--hizli/.test(await v.$eval('#stListe a.st-satir[data-id="2"]', e => e.className)) && hz !== nr && hz.split('|')[0] !== nr.split('|')[0], hz + ' vs ' + nr);
+    ok('[1366] hızlı satır: görünür rozet "Hızlı eklendi — eksikleri tamamlayın" + "Eksik: HKS ürün"', /Hızlı eklendi — eksikleri tamamlayın/.test(await metin(v, '#stListe a[data-id="2"] .st-rozet--hizli') || '') && /Eksik: HKS ürün/.test(await metin(v, '#stListe a[data-id="2"] .st-hizli-eksik') || '') && await goster(v, '#stListe a[data-id="2"] .st-hizli-eksik'));
+    ok('[1366] liste satırında ambalaj + dara + HKS bilgisi (Kasa · 1,8 kg dara / HKS: Domates)', /Kasa · 1,8 kg dara/.test(await metin(v, '#stListe a[data-id="4"] .st-satir-ek') || '') && /HKS: Domates/.test(await metin(v, '#stListe a[data-id="1"] .st-satir-ek') || ''));
+    await v.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await bekle(100);
+    const hzK = await renk(v, 2), nrK = await renk(v, 3);
+    ok('[1366] koyu tema: hızlı satır rengi koyu belirteçle değişir ve normal satırdan ayrık kalır', hzK.split('|')[0] !== hz.split('|')[0] && hzK.split('|')[0] !== nrK.split('|')[0], hzK + ' / ' + nrK);
+    await v.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    ok('[1366] yatay taşma yok', (await tasma(v)) <= 0);
+    await shot(v, 'v611_hizli_pc');
+    await git(v, 'stok_kartlari.php?id=2'); await detayBekle(v, 2);
+    ok('[1366] hızlı kart detayı: "Hızlı eklendi" bandı + eksik listesi', /Eksikleri tamamlayın: HKS ürün/.test(await metin(v, '#stDetay .st-hizli-uyari') || ''));
+    await v.click('#stDetay [data-st-modal="kart"][data-duzenle="1"]'); await modalAcik(v, 'stModalKart');
+    ok('[1366] Düzenle: Ambalaj · HKS bölümü görünür; eksik HKS alanı VURGULU (aria-invalid + uyarı)', await goster(v, '#stModalKart [data-st-ek]') && await goster(v, '#stModalKart [data-st-hks-alan]')
+      && (await v.$eval('#stModalKart [name="hks_urun_ara"]', e => e.getAttribute('aria-invalid'))) === 'true' && /Eksik/.test(await metin(v, '#stModalKart [data-st-hks-alan] .st-hata') || ''));
+    await v.fill('#stModalKart [name="hks_urun_ara"]', 'Biber Dolma');
+    ok('[1366] HKS listeden seçim: yazınca katalog eşleşmesi gizli id\'ye (102) yazılır', (await v.inputValue('#stModalKart [name="hks_urun_id"]')) === '102' && /Seçildi/.test(await metin(v, '#stModalKart [data-hks-ipucu]') || ''));
+    let n8 = postSay(v);
+    await v.click('#stModalKart button[type="submit"]');
+    await yenilenmeBekle(v, n8);
+    let D8 = S8.say();
+    ok('[1366] eksik tamamlandı → DB hizli=0, HKS 102 + ad katalogdan ("Biber Dolma"); satır rengi normale döndü', D8.kartlar['2'].hizli === 0 && D8.kartlar['2'].hks_urun_id === '102' && D8.kartlar['2'].hks_urun_ad === 'Biber Dolma'
+      && !/st-satir--hizli/.test(await v.$eval('#stListe a.st-satir[data-id="2"]', e => e.className)) && !(await v.$('#stDetay .st-hizli-uyari')), JSON.stringify(D8.kartlar['2']));
+    await git(v, 'stok_kartlari.php?id=4'); await detayBekle(v, 4);
+    await v.click('#stDetay [data-st-modal="kart"][data-duzenle="1"]'); await modalAcik(v, 'stModalKart');
+    ok('[1366] Kasa kartı: ambalaj tipi Kasa seçili, dara "1,8"; malzeme kartında HKS alanı gizli', (await v.$eval('#stModalKart [name="ambalaj_tip_id"]', e => e.options[e.selectedIndex].text)) === 'Kasa'
+      && (await v.inputValue('#stModalKart [name="birim_dara_kg"]')) === '1,8' && !(await goster(v, '#stModalKart [data-st-hks-alan]')) && await goster(v, '#stModalKart [data-dara-zorunlu]'));
+    await v.fill('#stModalKart [name="birim_dara_kg"]', '');
+    await v.click('#stModalKart button[type="submit"]');
+    ok('[1366] ambalaj seçiliyken dara boş → sunucu alan hatası (zorunlu), DB dara değişmez', await kisaBekle(v, () => { const e = document.querySelector('#stModalKart .st-hata'); return e && /zorunlu/.test(e.textContent); }) && S8.say().kartlar['4'].dara === 1800);
+    await v.fill('#stModalKart [name="birim_dara_kg"]', '1.234,5');
+    await v.click('#stModalKart button[type="submit"]');
+    ok('[1366] dara "1.234,5" (aralık dışı) reddedilir', await kisaBekle(v, () => { const e = document.querySelector('#stModalKart .st-hata'); return e && /0–1\.000 kg/.test(e.textContent); }) && S8.say().kartlar['4'].dara === 1800);
+    await v.fill('#stModalKart [name="birim_dara_kg"]', '2.5');
+    n8 = postSay(v);
+    await v.click('#stModalKart button[type="submit"]');
+    await yenilenmeBekle(v, n8);
+    ok('[1366] dara "2.5" (nokta ondalık) → DB 2,5 kg (2500 g); detayda "Birim dara: 2,5 kg"', S8.say().kartlar['4'].dara === 2500 && /Birim dara: 2,5 kg/.test(await metin(v, '#stDetay .st-meta') || ''));
+    await git(v, 'stok_tanimlari.php?sekme=ambalaj_tip');
+    ok('[1366] Tanımlar › Ambalaj Tipleri: Kasa + Palet sistem (kilitli, Sil yok), kullanım "1 kartta kullanılıyor"', await goster(v, '#stPanelAmbalaj') && (await gorunurSay(v, '#stPanelAmbalaj .st-rozet--kilit')) === 2
+      && !(await v.$('#stPanelAmbalaj button.st-tehlike')) && /1 kartta kullanılıyor/.test(await metin(v, '#stPanelAmbalaj .st-tanim-liste') || ''));
+    await v.fill('#stPanelAmbalaj .st-tanim-ekle [name="ad"]', 'Çuval');
+    n8 = postSay(v);
+    await v.keyboard.press('Enter');
+    await yenilenmeBekle(v, n8);
+    ok('[1366] yeni ambalaj tipi eklendi (DB ambalaj_tip 3), silinebilir (kullanılmıyor)', S8.say().tanim.ambalaj_tip === 3 && !!(await v.$('#stPanelAmbalaj button.st-tehlike[aria-label="Çuval sil"]')));
+    await v.context().close();
+
+    const S9 = await ortam(); sunucular.push(S9);
+    const vm = await sayfa(browser, S9, { width: 390, height: 844 }, { dokunmatik: true });
+    await git(vm, 'stok_kartlari.php');
+    const hzM = await renk(vm, 2), nrM = await renk(vm, 3);
+    ok('[390] hızlı kart mobil kartta da AYRI RENKTE + rozet + eksik metni görünür', hzM.split('|')[0] !== nrM.split('|')[0] && await goster(vm, '#stListe a[data-id="2"] .st-rozet--hizli') && await goster(vm, '#stListe a[data-id="2"] .st-hizli-eksik'), hzM + ' vs ' + nrM);
+    ok('[390] liste: yatay taşma yok; ambalaj/HKS bilgisi mobil kartta görünür', (await tasma(vm)) <= 0 && await goster(vm, '#stListe a[data-id="4"] .st-satir-ek'));
+    await shot(vm, 'v611_hizli_mobil');
+    await git(vm, 'stok_kartlari.php?id=2'); await detayBekle(vm, 2);
+    ok('[390] hızlı kart detayı: bant görünür, taşma yok', await goster(vm, '#stDetay .st-hizli-uyari') && (await tasma(vm)) <= 0);
+    await vm.tap('#stDetay [data-st-modal="kart"][data-duzenle="1"]'); await modalAcik(vm, 'stModalKart'); await bekle(300);
+    const ekM = await vm.evaluate(() => [...document.querySelectorAll('#stModalKart [name="ambalaj_tip_id"], #stModalKart [name="birim_dara_kg"], #stModalKart [name="hks_urun_ara"]')]
+      .map(e => ({ n: e.name, fs: parseFloat(getComputedStyle(e).fontSize), h: Math.round(e.getBoundingClientRect().height), g: e.getClientRects().length > 0 })));
+    ok('[390] yeni alanlar (ambalaj/dara/HKS) görünür, font ≥ 16px, yükseklik ≥ 44px', ekM.length === 3 && ekM.every(x => x.g && x.fs >= 16 && x.h >= 44), JSON.stringify(ekM));
+    ok('[390] modal taşmıyor (yatay)', (await tasma(vm)) <= 0);
+    await shot(vm, 'v611_modal_mobil');
+    await vm.context().close();
+
+    // fail-soft: v611 ÖNCESİ şema (ek kolon yok) — alanlar gizli, yöneticiye kurulum notu, kayıt çalışır
+    const S10 = await ortam('eski'); sunucular.push(S10);
+    const ve = await sayfa(browser, S10, { width: 1366, height: 800 });
+    await git(ve, 'stok_kartlari.php?id=1'); await detayBekle(ve, 1);
+    ok('[eski şema] Stok Kartları açılır; hızlı rengi/ek bilgi YOK; yöneticiye migrate.php#stok-ek notu', !(await ve.$('.st-satir--hizli')) && !(await ve.$('.st-satir-ek')) && await goster(ve, '.st-ek-kurulum a[href="migrate.php#stok-ek"]'));
+    await ve.click('#stDetay [data-st-modal="kart"][data-duzenle="1"]'); await modalAcik(ve, 'stModalKart');
+    ok('[eski şema] modalda Ambalaj · HKS bölümü YOK (yalnız kurulum notu)', !(await ve.$('#stModalKart [data-st-ek]')) && await goster(ve, '#stModalKart .st-ek-kurulum'));
+    await ve.fill('#stModalKart [name="ad"]', 'Domates (Eski Şema)');
+    let n10 = ve.srv.sayi(/^POST \/stok_kaydet/);
+    await ve.click('#stModalKart button[type="submit"]');
+    await yenilenmeBekle(ve, n10);
+    const D10 = S10.say();
+    ok('[eski şema] kart kaydı ÇALIŞIR (ek alan yazılmaz; md_id kolonu yerinde)', D10.kartlar['1'].ad === 'Domates (Eski Şema)' && D10.kartlar['1'].md_id_var === true && D10.kartlar['1'].hizli === undefined, JSON.stringify(D10.kartlar['1']));
+    await git(ve, 'stok_tanimlari.php');
+    ok('[eski şema] Tanımlar: 3 sekme (Ambalaj Tipleri yok) + kurulum notu', (await gorunurSay(ve, '.st-tanim-nav-oge')) === 3 && await goster(ve, '.st-ek-kurulum'));
+    await ve.context().close();
+
+    // depo kuralı: yeni depo sistemi geçişi KAPALI → fiş formu uyarı + Kaydet kapalı; mevcut fişler görüntülenir
+    const S11 = await ortam('gecissiz'); sunucular.push(S11);
+    const vg = await sayfa(browser, S11, { width: 1366, height: 800 });
+    await git(vg, 'stok_giris_fisleri.php?yeni=1');
+    ok('[geçiş kapalı] giriş formu: "Önce Depo Tanımları\'nda yeni depo sistemine geçişi tamamlayın." uyarısı, Kaydet kapalı, depo listesi boş', /Önce Depo Tanımları'nda yeni depo sistemine geçişi tamamlayın\./.test(await metin(vg, '[data-depo-gecis]') || '')
+      && await vg.$eval('#stFisForm [data-kaydet]', e => e.disabled) && (await vg.$eval('#stFisForm [name="depo"]', e => [...e.options].map(o => o.value).join('|'))) === '');
+    await git(vg, 'transfer_fisleri.php?yeni=1');
+    ok('[geçiş kapalı] transfer formu: hedef depo listesinde depo yok, uyarı görünür', await goster(vg, '[data-depo-gecis]') && (await vg.$eval('#stFisForm [name="hedef_depo"]', e => e.options.length)) === 1);
+    const gf = S11.say().fisler.find(f => f.tur === 'transfer');
+    await git(vg, 'transfer_fisleri.php?id=' + gf.id);
+    ok('[geçiş kapalı] mevcut fiş detayı yine görüntülenir', /TRF-/.test(await metin(vg, '#stDetay .st-unvan') || ''));
+    await vg.context().close();
 
     ok('köprü: PHP alt süreç hatası yok', !sunucular.some(x => x.istekler.some(i => i.hata)), JSON.stringify(sunucular.flatMap(x => x.istekler.filter(i => i.hata)).slice(0, 3)));
     ok('tarayıcı: JS hatası / 5xx yok', hatalar.length === 0, hatalar.slice(0, 5).join(' | '));

@@ -111,21 +111,58 @@ function stok_kart_eslesir(array $k, array $F): bool
     return true;
 }
 
+/** v611: kart satırı ek şemayı taşıyor mu? (stok_ek_hazir() iken SELECT k.* bu kolonları getirir; yoksa tüm v611 görünümü kapalı) */
+function stok_kart_ek_var(array $k): bool
+{
+    foreach (['ambalaj_tip_id', 'birim_dara_kg', 'hks_urun_id', 'hks_urun_ad', 'hizli'] as $a) if (!array_key_exists($a, $k)) return false;   // yarım kalmış migrasyonda da kapalı
+    return true;
+}
+
+/** v611: hızlı eklenmiş (bayraklı) kart mı? */
+function stok_kart_hizli_mi(array $k): bool { return stok_kart_ek_var($k) && (int)$k['hizli'] === 1; }
+
+/** v611: "Kasa · dara 1,8 kg" / "HKS: Domates" kısa bilgi parçaları (boşsa []). @return list<string> */
+function stok_kart_ek_bilgi(array $k): array
+{
+    if (!stok_kart_ek_var($k)) return [];
+    $o = [];
+    $amb = (string)($k['ambalaj_adi'] ?? '');
+    $dara = $k['birim_dara_kg'] !== null && $k['birim_dara_kg'] !== '' ? stok_dara_bicim(stok_milli($k['birim_dara_kg'])) . ' kg dara' : '';
+    if ($amb !== '' || $dara !== '') $o[] = implode(' · ', array_filter([$amb, $dara], static fn($x) => $x !== ''));
+    if ((string)($k['hks_urun_ad'] ?? '') !== '') $o[] = 'HKS: ' . $k['hks_urun_ad'];
+    return $o;
+}
+
+/** v611: eksik alan etiketleri (görünür metin; hızlı kart). */
+function stok_kart_eksik_metin(array $k): string
+{
+    $et = stok_kart_eksik_etiketleri();
+    return implode(' · ', array_map(static fn(string $a): string => $et[$a] ?? $a, stok_kart_eksikler($k)));
+}
+
 function stok_kart_satiri(array $k, bool $secili, bool $gizli): string
 {
     $tipler = stok_kart_tipleri();
     $pasif = (int)$k['aktif'] !== 1;
     $kritik = !$pasif && !empty($k['kritik']);
+    $hizli = stok_kart_hizli_mi($k);
     $grup = (string)($k['grup_adi'] ?? '');
-    $ara = stok_kucuk(implode(' ', array_filter([(string)$k['kod'], (string)$k['ad'], (string)($k['barkod'] ?? ''), $grup], static fn($x) => $x !== '')));
+    $ekBilgi = stok_kart_ek_bilgi($k);
+    $ara = stok_kucuk(implode(' ', array_filter([(string)$k['kod'], (string)$k['ad'], (string)($k['barkod'] ?? ''), $grup, ...$ekBilgi], static fn($x) => $x !== '')));
     $alt = implode(' · ', array_filter([(string)$k['kod'], $tipler[$k['tip']] ?? '', $grup], static fn($x) => $x !== ''));
     $sag = '<span class="st-miktar' . ((int)$k['bakiye_milli'] < 0 ? ' st-miktar--eksi' : '') . '">' . h(stok_miktar_birim((int)$k['bakiye_milli'], (string)$k['ana_birim'])) . '</span>'
         . ($kritik ? '<span class="st-rozet st-rozet--kritik">Kritik</span>' : '')
         . ($pasif ? '<span class="st-rozet st-rozet--pasif">Pasif</span>' : '');
-    return '<li' . ($gizli ? ' hidden' : '') . '><a class="st-satir' . ($pasif ? ' st-satir--pasif' : '') . '" href="stok_kartlari.php?id=' . (int)$k['id'] . '" data-id="' . (int)$k['id'] . '"'
+    $ek = $ekBilgi ? '<span class="st-satir-ek">' . h(implode(' · ', $ekBilgi)) . '</span>' : '';
+    if ($hizli) {
+        $eks = stok_kart_eksik_metin($k);
+        $ek .= '<span class="st-satir-hizli"><span class="st-rozet st-rozet--hizli">Hızlı eklendi — ' . ($eks !== '' ? 'eksikleri tamamlayın' : 'kontrol edip kaydedin') . '</span>'
+            . ($eks !== '' ? '<span class="st-hizli-eksik">Eksik: ' . h($eks) . '</span>' : '') . '</span>';
+    }
+    return '<li' . ($gizli ? ' hidden' : '') . '><a class="st-satir' . ($pasif ? ' st-satir--pasif' : '') . ($hizli ? ' st-satir--hizli' : '') . '" href="stok_kartlari.php?id=' . (int)$k['id'] . '" data-id="' . (int)$k['id'] . '"'
         . ' data-ara="' . h($ara) . '" data-tip="' . h($k['tip']) . '" data-grup="' . (int)($k['grup_id'] ?? 0) . '" data-pasif="' . ($pasif ? '1' : '0') . '" data-kritik="' . ($kritik ? '1' : '0') . '"'
-        . ($secili ? ' aria-current="true"' : '') . '>'
-        . '<span class="st-satir-ust">' . h($k['ad']) . '</span><span class="st-satir-alt">' . h($alt) . '</span><span class="st-satir-sag">' . $sag . '</span></a></li>';
+        . ($hizli ? ' data-hizli="1"' : '') . ($secili ? ' aria-current="true"' : '') . '>'
+        . '<span class="st-satir-ust">' . h($k['ad']) . '</span><span class="st-satir-alt">' . h($alt) . '</span>' . $ek . '<span class="st-satir-sag">' . $sag . '</span></a></li>';
 }
 
 /**
@@ -190,7 +227,12 @@ function stok_kart_json(array $k): array
         'kdv_orani' => (int)$k['kdv_orani'], 'barkod' => (string)($k['barkod'] ?? ''),
         'kritik_seviye' => $k['kritik_seviye'] !== null && $k['kritik_seviye'] !== '' ? stok_miktar_bicim(stok_milli($k['kritik_seviye']), $tam ? 'kg' : 'lt') : '',
         'notlar' => (string)($k['notlar'] ?? ''), 'aktif' => (int)$k['aktif'],
-    ];
+    ] + (stok_kart_ek_var($k) ? [   // v611 ek alanlar (yalnız stok_ek_hazir)
+        'ambalaj_tip_id' => (int)($k['ambalaj_tip_id'] ?? 0) > 0 ? (int)$k['ambalaj_tip_id'] : null,
+        'birim_dara_kg' => $k['birim_dara_kg'] !== null && $k['birim_dara_kg'] !== '' ? stok_dara_bicim(stok_milli($k['birim_dara_kg'])) : '',
+        'hks_urun_id' => (string)($k['hks_urun_id'] ?? ''), 'hks_urun_ad' => (string)($k['hks_urun_ad'] ?? ''),
+        'hizli' => (int)$k['hizli'], 'eksikler' => stok_kart_hizli_mi($k) ? stok_kart_eksikler($k) : [],
+    ] : []);
 }
 
 /** Hareket tablosu (≥768) + kartları (<768) — aynı veriden iki kez; CSS biri dışında gizler. */
@@ -240,6 +282,19 @@ function stok_detay_html(PDO $pdo, array $k): string
         . '<span>KDV %' . (int)$k['kdv_orani'] . '</span>'
         . (!empty($k['barkod']) ? '<span>Barkod: ' . h($k['barkod']) . '</span>' : '')
         . ($km !== null ? '<span>Kritik seviye: ' . h(stok_miktar_birim($km, $birim)) . '</span>' : '');
+    if (stok_kart_ek_var($k)) {   // v611: ambalaj tipi · birim dara · HKS ürün
+        $dara = $k['birim_dara_kg'] !== null && $k['birim_dara_kg'] !== '' ? stok_dara_bicim(stok_milli($k['birim_dara_kg'])) . ' kg' : '';
+        $meta .= (!empty($k['ambalaj_adi']) ? '<span>Ambalaj: ' . h($k['ambalaj_adi']) . '</span>' : '')
+            . ($dara !== '' ? '<span>Birim dara: ' . h($dara) . '</span>' : '')
+            . (!empty($k['hks_urun_ad']) ? '<span>HKS ürün: ' . h($k['hks_urun_ad']) . '</span>' : '');
+    }
+    $hizliUyari = '';
+    if (stok_kart_hizli_mi($k)) {
+        $eks = stok_kart_eksik_metin($k);
+        $hizliUyari = '<div class="st-hizli-uyari" role="note"><span class="st-rozet st-rozet--hizli">Hızlı eklendi</span> '
+            . ($eks !== '' ? 'Eksikleri tamamlayın: <b>' . h($eks) . '</b>. ' : 'Bilgileri kontrol edin. ')
+            . '<span class="st-ipucu">Düzenle ile eksiksiz kaydedince işaret kalkar.</span></div>';
+    }
 
     $csrf = h(csrf_token());
     $geri = 'stok_kartlari.php?id=' . $id;
@@ -270,7 +325,7 @@ function stok_detay_html(PDO $pdo, array $k): string
         . '<a class="st-geri" href="stok_kartlari.php"><span aria-hidden="true">&#8592;</span> Liste</a>'
         . '<header class="st-baslik"><div class="st-baslik-satir"><h2 class="st-unvan">' . h($k['ad']) . '</h2><span class="st-rozet ' . ($pasif ? 'st-rozet--pasif' : 'st-rozet--aktif') . '">' . ($pasif ? 'Pasif' : 'Aktif') . '</span></div>'
         . '<div class="st-meta">' . $meta . '</div></header>'
-        . $islemler . $uyari
+        . $islemler . $uyari . $hizliUyari
         . '<div class="st-bakiyeler" role="group" aria-label="Bakiye ve maliyet">' . $kutu . '</div>'
         . stok_bagimsiz_not()
         . '<h3 class="st-bolum-baslik">Hareketler <small>' . (count($hareketler) >= 200 ? 'son 200' : count($hareketler) . ' satır') . '</small></h3>'
@@ -282,7 +337,50 @@ function stok_detay_html(PDO $pdo, array $k): string
 
 // ── Modal ───────────────────────────────────────────────────────────────────
 
-/** Kart modalı (#stModalKart). @param array{geri:string,gruplar:list<array>,kod_oneri:string} $o */
+/** HKS ürün → datalist etiketi (ad; aynı ad birden çoksa "Ad (#id)"). @param list<array{id:string,ad:string}> $katalog @return array<string,string> id → etiket */
+function stok_hks_etiketleri(array $katalog): array
+{
+    $say = [];
+    foreach ($katalog as $u) { $f = cari_fold((string)$u['ad']); $say[$f] = ($say[$f] ?? 0) + 1; }
+    $o = [];
+    foreach ($katalog as $u) $o[(string)$u['id']] = $say[cari_fold((string)$u['ad'])] > 1 ? $u['ad'] . ' (#' . $u['id'] . ')' : (string)$u['ad'];
+    return $o;
+}
+
+/**
+ * v611 kart modalı ek bölümü: Ambalaj tipi · Birim dara · HKS ürün (yalnız $o['ek'] = stok_ek_hazir()). Ek şema yoksa yalnız YÖNETİCİYE kurulum notu.
+ * $o: ek (bool), ambalajlar (tüm ambalaj_tip tanımları; pasifler "(pasif)"), hks (?list katalog; null = okunamadı), yonetici (bool).
+ */
+function stok_modal_kart_ek(array $o): string
+{
+    if (empty($o['ek'])) {
+        return !empty($o['yonetici'])
+            ? '<p class="st-not st-ek-kurulum" role="note">' . h(STOK_EK_SEMA_MESAJ) . ' <a href="migrate.php#stok-ek">Şema Migrasyon</a></p>' : '';
+    }
+    $amb = '<option value="">— yok —</option>';
+    foreach ($o['ambalajlar'] ?? [] as $a) $amb .= '<option value="' . (int)$a['id'] . '">' . h($a['ad'] . ((int)$a['aktif'] === 1 ? '' : ' (pasif)')) . '</option>';
+    $kat = $o['hks'] ?? null;
+    if ($kat !== null) {
+        $dl = '<datalist id="stHksListe">';
+        foreach (stok_hks_etiketleri($kat) as $hid => $et) $dl .= '<option value="' . h($et) . '" data-id="' . h((string)$hid) . '"></option>';
+        $dl .= '</datalist>';
+        $hks = '<input type="hidden" name="hks_urun_id" value="">'
+            . '<input type="text" name="hks_urun_ara" list="stHksListe" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Yazın: HKS ürün adı" data-st-hks>'
+            . '<span class="st-ipucu" data-hks-ipucu aria-live="polite">Hal Bildirimi ürün kataloğundan seçin</span>' . $dl;
+    } else {
+        $hks = '<input type="text" disabled placeholder="Katalog okunamadı" aria-describedby="stHksYok">'
+            . '<span class="st-ipucu" id="stHksYok">HKS ürün kataloğu okunamadı (Hal Bildirimi listeleri henüz alınmamış); alan şimdilik pasif, kayıt engellenmez.</span>';
+    }
+    return '<fieldset class="st-bolum" data-st-ek><legend>Ambalaj · HKS</legend><div class="st-form-grid st-form-grid--2">'
+        . '<label class="pm-label"><span>Ambalaj tipi</span><select name="ambalaj_tip_id" data-st-ambalaj>' . $amb . '</select></label>'
+        . '<label class="pm-label"><span>Birim dara (kg) <b class="st-zorunlu" data-dara-zorunlu hidden aria-hidden="true">*</b></span>'
+        . '<input type="text" name="birim_dara_kg" inputmode="decimal" maxlength="12" autocomplete="off" placeholder="ör. 1,8">'
+        . '<span class="st-ipucu">Bir kasa / palet darası; ambalaj tipi seçiliyse zorunlu</span></label>'
+        . '<label class="pm-label st-span2" data-st-hks-alan><span>HKS ürün <small class="st-ipucu">yalnız Ürün tipi</small></span>' . $hks . '</label>'
+        . '</div></fieldset>';
+}
+
+/** Kart modalı (#stModalKart). @param array{geri:string,gruplar:list<array>,kod_oneri:string,ek?:bool,ambalajlar?:list<array>,hks?:?array,yonetici?:bool} $o */
 function stok_modal_kart(array $o): string
 {
     $tipOpt = ''; foreach (stok_kart_tipleri() as $v => $ad) $tipOpt .= '<option value="' . h($v) . '">' . h($ad) . '</option>';
@@ -318,6 +416,7 @@ function stok_modal_kart(array $o): string
             <label class="pm-label"><span>Çevrim birimi</span><select name="cevrim_birim"><?= $cbOpt ?></select></label>
             <label class="pm-label"><span>Katsayı (1 çevrim = ? ana)</span><input type="text" name="cevrim_katsayi" inputmode="decimal" autocomplete="off" placeholder="ör. 8"></label>
           </div></fieldset>
+        <?= stok_modal_kart_ek($o) ?>
         <fieldset class="st-bolum"><legend>Diğer</legend>
           <div class="st-form-grid st-form-grid--2">
             <label class="pm-label"><span>Barkod</span><input type="text" name="barkod" maxlength="60" autocomplete="off" inputmode="numeric"></label>
@@ -339,14 +438,15 @@ function stok_modal_kart(array $o): string
 
 function stok_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId, bool $gizli, bool $yaz): string
 {
-    $grup = $tur === 'grup';
+    $grup = $tur === 'grup' || $tur === 'ambalaj_tip';   // kullanım = kart sayısı
     $liste = stok_tanim_listesi($pdo, $tur);
     $csrf = h(csrf_token());
     $geri = 'stok_tanimlari.php?sekme=' . $tur;
     $max = 0; foreach ($liste as $t) $max = max($max, (int)$t['sira']);
     $oneri = $max + 10;
-    $baslik = ['grup' => 'Stok Grupları', 'giris_neden' => 'Giriş Nedenleri', 'cikis_neden' => 'Çıkış Nedenleri'][$tur];
+    $baslik = ['grup' => 'Stok Grupları', 'giris_neden' => 'Giriş Nedenleri', 'cikis_neden' => 'Çıkış Nedenleri', 'ambalaj_tip' => 'Ambalaj Tipleri'][$tur];
     $ack = ['grup' => 'Stok kartlarını sınıflandırır; listede filtre olarak kullanılır. Kartta kullanılan grup silinemez, pasifleştirilir.',
+        'ambalaj_tip' => 'Stok kartında seçilir (kasa, palet…); seçilen kartta birim dara zorunludur. Kilitli satırlar sistem tanımıdır: adı değişmez, silinmez; pasifleştirilebilir. Kartta kullanılan tip silinemez.',
         'giris_neden' => 'Giriş fişinde seçilir (alış, açılış/devir…). Kilitli satırlar sistem nedenidir: adı değişmez, silinmez; pasifleştirilebilir.',
         'cikis_neden' => 'Çıkış fişinde seçilir (satış, sarf, fire…). Kilitli satırlar sistem nedenidir: adı değişmez, silinmez; pasifleştirilebilir.'][$tur];
     $h = '<section class="st-tanim-govde" id="' . $panelId . '" role="tabpanel" aria-labelledby="' . $tabId . '"' . ($gizli ? ' hidden' : '') . '><h2>' . h($baslik) . '</h2><p>' . h($ack) . '</p>';
@@ -363,7 +463,7 @@ function stok_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
         $id = (int)$t['id']; $aktif = (int)$t['aktif'] === 1; $kul = (int)$t['kullanim']; $sistem = !empty($t['kod']);
         $alt = 'Sıra ' . (int)$t['sira'] . ($kul > 0 ? ' · ' . $kul . ($grup ? ' kartta kullanılıyor' : ' fişte kullanıldı') : '');
         $h .= '<li class="st-tanim-satir' . ($aktif ? '' : ' st-tanim-satir--pasif') . '" data-id="' . $id . '"><div class="st-tanim-ad">' . h($t['ad'])
-            . ($sistem ? ' <span class="st-rozet st-rozet--kilit" title="Sistem nedeni: adı değişmez, silinmez">&#128274; Sistem</span>' : '') . '<small>' . h($alt) . '</small></div><div class="st-tanim-eylem">';
+            . ($sistem ? ' <span class="st-rozet st-rozet--kilit" title="Sistem tanımı: adı değişmez, silinmez">&#128274; Sistem</span>' : '') . '<small>' . h($alt) . '</small></div><div class="st-tanim-eylem">';
         if ($yaz) {
             $h .= '<form method="post" action="stok_kaydet.php" data-st-ajax data-ok="Tanım güncellendi" class="st-icerik"><input type="hidden" name="csrf" value="' . $csrf . '"><input type="hidden" name="islem" value="tanim_durum">'
                 . '<input type="hidden" name="id" value="' . $id . '"><input type="hidden" name="geri" value="' . h($geri) . '">'
@@ -390,13 +490,15 @@ function stok_tanim_panel(PDO $pdo, string $tur, string $panelId, string $tabId,
     return $h . '</ul></section>';
 }
 
-/** Tanımlar sayfası gövdesi. ?sekme=grup|giris_neden|cikis_neden */
+/** Tanımlar sayfası gövdesi. ?sekme=grup|giris_neden|cikis_neden|ambalaj_tip (v611; ambalaj sekmesi yalnız stok_ek_hazir) */
 function stok_tanimlari_govde(PDO $pdo): string
 {
     $yaz = stok_can('tanim');
-    $sekme = (string)($_GET['sekme'] ?? 'grup');
-    if (!in_array($sekme, ['grup', 'giris_neden', 'cikis_neden'], true)) $sekme = 'grup';
+    $ek = stok_ek_hazir($pdo);
     $sek = ['grup' => ['stTabGrup', 'stPanelGrup', 'Stok Grupları'], 'giris_neden' => ['stTabGiris', 'stPanelGiris', 'Giriş Nedenleri'], 'cikis_neden' => ['stTabCikis', 'stPanelCikis', 'Çıkış Nedenleri']];
+    if ($ek) $sek['ambalaj_tip'] = ['stTabAmbalaj', 'stPanelAmbalaj', 'Ambalaj Tipleri'];
+    $sekme = (string)($_GET['sekme'] ?? 'grup');
+    if (!isset($sek[$sekme])) $sekme = 'grup';
     $nav = ''; $paneller = '';
     foreach ($sek as $k => [$tab, $panel, $ad]) {
         $say = (string)count(stok_tanim_listesi($pdo, $k));
@@ -405,7 +507,8 @@ function stok_tanimlari_govde(PDO $pdo): string
     }
     return '<div class="stok" id="stok">' . stok_ust_menu('tanimlar') . '<div class="st-ustsatir"><h1>Stok Tanımları</h1></div><div class="st-tanim">'
         . '<div class="st-tanim-nav" role="tablist" aria-label="Tanım türleri">' . $nav . '</div><div class="st-tanim-icerik">' . $paneller . '</div></div>'
-        . '<p class="st-bilgi-kutu">Kart tipi, birim listesi ve KDV oranları sabittir; yalnız stok grubu ile giriş/çıkış nedenleri tanımlanır. ' . h('Bu defter Ürün Stoğu (stok.php) ve Malzeme Stok ekranlarından bağımsızdır.') . '</p></div>';
+        . (!$ek && is_admin() ? '<p class="st-not st-ek-kurulum" role="note">' . h(STOK_EK_SEMA_MESAJ) . ' <a href="migrate.php#stok-ek">Şema Migrasyon</a></p>' : '')
+        . '<p class="st-bilgi-kutu">Kart tipi, birim listesi ve KDV oranları sabittir; yalnız stok grubu, giriş/çıkış nedenleri' . ($ek ? ' ve ambalaj tipleri' : '') . ' tanımlanır. ' . h('Bu defter Ürün Stoğu (stok.php) ve Malzeme Stok ekranlarından bağımsızdır.') . '</p></div>';
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -679,11 +782,15 @@ function stok_fis_form_html(PDO $pdo, string $tur, array $o): string
     foreach (stok_kart_secenekleri($pdo) as $k) $kartlar[$k['id']] = $k + ['ort' => $ort[$k['id']] ?? 0.0];
     $cariler = $fiyatli ? stok_cari_secenekleri($pdo) : [];
     $aktif = function_exists('active_depot') ? (string)(active_depot() ?? '') : '';
-    $depolar = depot_options();
+    // v611: depolar YALNIZ Depo Tanımları'ndan (yeni depo sistemi); geçiş kapalıysa liste boş, form uyarı gösterir, Kaydet kapalı (sunucu da reddeder).
+    $gecis = stok_depo_gecis_acik($pdo);
+    $depolar = stok_depo_secenekleri($pdo);
     $depo = (string)($o['depo'] ?? '') !== '' ? (string)$o['depo'] : $aktif;
     $depoOpt = '';
     foreach ($depolar as $d) if (depot_visible_to_user((string)$d)) $depoOpt .= '<option value="' . h($d) . '"' . ($d === $depo ? ' selected' : '') . '>' . h($d) . '</option>';
-    if ($depoOpt === '') $depoOpt = '<option value="">Depo tanımı yok</option>';
+    if ($depoOpt === '') $depoOpt = '<option value="">' . ($gecis ? 'Depo tanımı yok' : 'Depo Tanımları geçişi bekleniyor') . '</option>';
+    $gecisUyari = $gecis ? '' : '<div class="st-uyari st-depo-gecis" role="alert" data-depo-gecis><span class="st-uyari-ikon" aria-hidden="true">&#9888;</span><div><p><b>' . h(STOK_DEPO_GECIS_MESAJ) . '</b> '
+        . 'Stok fişi yalnız Depo Tanımları\'ndaki aktif depolarla kaydedilir.</p>' . (is_admin() ? '<a class="btn" href="depo_tanimlari.php">Depo Tanımları</a>' : '') . '</div></div>';
     $alan = static fn(string $etiket, string $ic, string $sinif = ''): string => '<label class="pm-label st-alan' . ($sinif !== '' ? ' ' . $sinif : '') . '"><span>' . $etiket . '</span>' . $ic . '</label>';
     $z = ' <b class="st-zorunlu" aria-hidden="true">*</b>';
     $bas = $alan('Tarih' . $z, '<input type="date" name="tarih" value="' . h((string)($o['tarih'] ?? date('Y-m-d'))) . '" required>');
@@ -739,6 +846,7 @@ function stok_fis_form_html(PDO $pdo, string $tur, array $o): string
         . '<input type="hidden" name="istek_anahtari" value="' . h(bin2hex(random_bytes(12))) . '"><input type="hidden" name="eksiye_izin" value="0"><input type="hidden" name="geri" value="' . h($sayfa . '?yeni=1') . '">' . $kaynak
         . '<header class="st-form-bas"><h2 class="st-unvan">' . h($M['yeni']) . ' ' . stok_tur_rozet($tur) . '</h2>'
         . ($tur === 'giris' ? '<button type="button" class="btn" data-st-modal="kantar">Kantardan doldur</button>' : '') . '</header>'
+        . $gecisUyari
         . '<div class="st-kaynak-bilgi" data-kaynak-bilgi' . ($bilgi === '' ? ' hidden' : '') . '>' . h($bilgi) . '</div>'
         . '<div class="flash flash-error st-form-hata" role="alert" hidden></div>'
         . '<div class="st-eksik" id="stEksik" role="alertdialog" aria-labelledby="stEksikBaslik" aria-describedby="stEksikAck" hidden><h3 id="stEksikBaslik">Yetersiz stok</h3>'
@@ -753,7 +861,7 @@ function stok_fis_form_html(PDO $pdo, string $tur, array $o): string
         . '<div class="st-eylem-bar"><div class="st-ozet-bar" aria-live="polite"><span class="st-ozet-adim"><span class="st-adim" aria-hidden="true">3</span></span><span>Toplam <b data-top="miktar">0</b></span>'
         . ($fiyatli ? '<span class="st-fs-fiyat-ozet">Tutar <b data-top="tutar">0,00</b></span><span class="st-fs-fiyat-ozet">KDV <b data-top="kdv">0,00</b></span>' : '') . '</div>'
         . '<span class="st-klavye">Enter sonraki alan · Ctrl+S kaydet · Esc</span>'
-        . '<a class="btn st-vazgec" href="' . h($sayfa) . '">Vazgeç</a><button type="submit" class="btn btn-primary" data-kaydet>Kaydet</button></div>'
+        . '<a class="btn st-vazgec" href="' . h($sayfa) . '">Vazgeç</a><button type="submit" class="btn btn-primary" data-kaydet' . ($gecis ? '' : ' disabled title="' . h(STOK_DEPO_GECIS_MESAJ) . '"') . '>Kaydet</button></div>'
         . '</form>' . $datalist
         . '<template id="stSatirSablon">' . $sablonSatir . '</template>'
         . stok_json_script('stFisVeri', $veri)

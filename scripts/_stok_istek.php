@@ -8,6 +8,7 @@
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') exit(1);
 require_once __DIR__ . '/_siparis_test_lib.php';
+require_once dirname(__DIR__) . '/config/depo_core.php';   // v611: stok fişi yalnız yeni depo sistemi açıkken (depo_gecis_aktif)
 
 $spec = json_decode((string)base64_decode((string)getenv('STOK_T_SPEC'), true), true);
 if (!is_array($spec)) { fwrite(STDERR, "STOK_T_SPEC çözülemedi\n"); exit(2); }

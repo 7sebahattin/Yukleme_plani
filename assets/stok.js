@@ -136,17 +136,54 @@
         if (!s) return null;
         try { return JSON.parse(s.textContent); } catch (x) { return null; }
     }
+    /* v611 ek alanlar (Ambalaj tipi · Birim dara · HKS ürün) — yalnız sunucu [data-st-ek] bölümünü çizdiyse */
+    var EKSIK_ALAN = { grup_id: 'grup_id', ana_birim: 'ana_birim', hks_urun_id: 'hks_urun_ara', birim_dara_kg: 'birim_dara_kg' };
+    function hksOption(f, metin) {
+        var dl = document.getElementById('stHksListe'); if (!dl || !metin) return null;
+        var q = trKucuk(String(metin).trim()), bul = null, n = 0;
+        $$('option', dl).forEach(function (o) { if (trKucuk(o.value) === q) { bul = o; n++; } });
+        return n === 1 ? bul : null;
+    }
+    function hksEsle(f) {
+        var ara = f.elements.hks_urun_ara, gz = f.elements.hks_urun_id; if (!ara || !gz) return;
+        var o = hksOption(f, ara.value), ip = $('[data-hks-ipucu]', f);
+        gz.value = o ? (o.getAttribute('data-id') || '') : '';
+        if (ip) ip.textContent = !ara.value.trim() ? 'Hal Bildirimi ürün kataloğundan seçin' : (o ? 'Seçildi: ' + o.value : 'Katalogda yok — listeden seçin');
+    }
+    function ekGuncelle(f) {
+        if (!$('[data-st-ek]', f)) return;
+        var hk = $('[data-st-hks-alan]', f); if (hk) hk.hidden = f.elements.tip.value !== 'urun';
+        var z = $('[data-dara-zorunlu]', f), a = f.elements.ambalaj_tip_id; if (z && a) z.hidden = !a.value;
+    }
+    function eksikVurgula(f, liste) {
+        (liste || []).forEach(function (k) { alanHata(f, EKSIK_ALAN[k] || k, 'Eksik — tamamlayın (hızlı eklendi)'); });
+    }
+    document.addEventListener('input', function (e) { var t = e.target; if (t && t.name === 'hks_urun_ara' && t.form) hksEsle(t.form); });
+    document.addEventListener('change', function (e) {
+        var t = e.target; if (!t || !t.form || !t.form.closest || !t.form.closest('#stModalKart')) return;
+        if (t.name === 'hks_urun_ara') hksEsle(t.form);
+        if (t.name === 'tip' || t.name === 'ambalaj_tip_id') ekGuncelle(t.form);
+    });
+
     function kartModalAc(duzenle, tetik) {
         var m = document.getElementById('stModalKart'); if (!m) return;
         var f = $('form', m);
         f.reset(); hataTemizle(f);
+        if (f.elements.hks_urun_id) f.elements.hks_urun_id.value = '';   // gizli alan reset() ile temizlenmez
         var v = duzenle ? kartVeri() : null;
         var kilit = $('[data-birim-kilit]', m);
         if (v) {
             $('#stKartBaslik', m).textContent = 'Kartı düzenle';
-            ['kod', 'ad', 'tip', 'ana_birim', 'cevrim_birim', 'cevrim_katsayi', 'kdv_orani', 'barkod', 'kritik_seviye', 'notlar'].forEach(function (k) {
+            ['kod', 'ad', 'tip', 'ana_birim', 'cevrim_birim', 'cevrim_katsayi', 'kdv_orani', 'barkod', 'kritik_seviye', 'notlar', 'ambalaj_tip_id', 'birim_dara_kg', 'hks_urun_id'].forEach(function (k) {
                 var el = f.elements[k]; if (el) el.value = v[k] == null ? '' : String(v[k]);
             });
+            if (f.elements.hks_urun_ara) {
+                var et = '';
+                if (v.hks_urun_id) { var dl = document.getElementById('stHksListe'); $$('option', dl || document.createElement('i')).forEach(function (o) { if (o.getAttribute('data-id') === String(v.hks_urun_id)) et = o.value; }); }
+                f.elements.hks_urun_ara.value = et || v.hks_urun_ad || '';
+                hksEsle(f);
+                if (v.hks_urun_id && !f.elements.hks_urun_id.value) f.elements.hks_urun_id.value = String(v.hks_urun_id);   // katalogdan düşmüş eski seçim korunur (sunucu doğrular)
+            }
             f.elements.grup_id.value = v.grup_id == null ? '' : String(v.grup_id);
             f.elements.aktif.checked = v.aktif === 1;
             f.elements.id.value = String(v.id);
@@ -161,7 +198,9 @@
             f.elements.geri.value = S.kartlar;
             if (kilit) kilit.hidden = true;
         }
+        ekGuncelle(f);
         modalAc('stModalKart', tetik);
+        if (v && v.hizli === 1 && v.eksikler && v.eksikler.length) eksikVurgula(f, v.eksikler);
     }
     document.addEventListener('click', function (e) {
         var t = e.target.closest ? e.target.closest('[data-st-modal], [data-st-kapat]') : null;
